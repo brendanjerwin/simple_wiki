@@ -5913,6 +5913,238 @@ var _ = Describe("Checklist gRPC round-trip", func() {
 	})
 })
 
+var _ = Describe("MergeFrontmatter deep merge integration behavior", func() {
+	const pageName = "test-page"
+	var (
+		server                *v1.Server
+		ctx                   context.Context
+		mockPageReaderMutator *MockPageReaderMutator
+	)
+
+	BeforeEach(func() {
+		ctx = context.Background()
+		mockPageReaderMutator = &MockPageReaderMutator{}
+		server = mustNewServer(mockPageReaderMutator, nil, nil)
+	})
+
+	Describe("deep merge preserves nested keys not in the merge payload", func() {
+		var (
+			getResp  *apiv1.GetFrontmatterResponse
+			getErr   error
+			metadata map[string]any
+		)
+
+		When("merging a partial nested object into existing frontmatter with sibling keys", func() {
+			BeforeEach(func() {
+				mockPageReaderMutator.Frontmatter = map[string]any{
+					"title": "My Page",
+					"metadata": map[string]any{
+						"author":  "alice",
+						"version": "1.0",
+					},
+				}
+
+				partialFm := map[string]any{
+					"metadata": map[string]any{
+						"version": "2.0",
+					},
+				}
+				fmPb, err := structpb.NewStruct(partialFm)
+				Expect(err).NotTo(HaveOccurred())
+
+				_, mergeErr := server.MergeFrontmatter(ctx, &apiv1.MergeFrontmatterRequest{
+					Page:        pageName,
+					Frontmatter: fmPb,
+				})
+				Expect(mergeErr).NotTo(HaveOccurred())
+
+				getResp, getErr = server.GetFrontmatter(ctx, &apiv1.GetFrontmatterRequest{
+					Page: pageName,
+				})
+				Expect(getErr).NotTo(HaveOccurred())
+				Expect(getResp).NotTo(BeNil())
+				fm := getResp.Frontmatter.AsMap()
+				var ok bool
+				metadata, ok = fm["metadata"].(map[string]any)
+				Expect(ok).To(BeTrue(), "metadata should be map[string]any")
+			})
+
+			It("should merge nested frontmatter while preserving sibling keys", func() {
+				Expect(metadata["version"]).To(Equal("2.0"))
+				Expect(metadata["author"]).To(Equal("alice"))
+				Expect(getResp.Frontmatter.AsMap()["title"]).To(Equal("My Page"))
+			})
+		})
+	})
+
+	Describe("shallow keys merge correctly", func() {
+		var (
+			getResp *apiv1.GetFrontmatterResponse
+			getErr  error
+		)
+
+		When("merging new and updated scalar keys into existing frontmatter", func() {
+			BeforeEach(func() {
+				mockPageReaderMutator.Frontmatter = map[string]any{
+					"title":  "Old Title",
+					"author": "alice",
+				}
+
+				mergeFm := map[string]any{
+					"title": "New Title",
+					"extra": "added",
+				}
+				fmPb, err := structpb.NewStruct(mergeFm)
+				Expect(err).NotTo(HaveOccurred())
+
+				_, mergeErr := server.MergeFrontmatter(ctx, &apiv1.MergeFrontmatterRequest{
+					Page:        pageName,
+					Frontmatter: fmPb,
+				})
+				Expect(mergeErr).NotTo(HaveOccurred())
+
+				getResp, getErr = server.GetFrontmatter(ctx, &apiv1.GetFrontmatterRequest{
+					Page: pageName,
+				})
+				Expect(getErr).NotTo(HaveOccurred())
+				Expect(getResp).NotTo(BeNil())
+			})
+
+			It("should overwrite updated keys, add new keys, and preserve untouched keys", func() {
+				fm := getResp.Frontmatter.AsMap()
+				Expect(fm["title"]).To(Equal("New Title"))
+				Expect(fm["extra"]).To(Equal("added"))
+				Expect(fm["author"]).To(Equal("alice"))
+			})
+		})
+	})
+
+	Describe("arrays are replaced, not merged", func() {
+		var (
+			getResp *apiv1.GetFrontmatterResponse
+			getErr  error
+			tags    []any
+		)
+
+		When("merging a payload with an array value over an existing array", func() {
+			BeforeEach(func() {
+				mockPageReaderMutator.Frontmatter = map[string]any{
+					"tags": []any{"old-tag-1", "old-tag-2", "old-tag-3"},
+				}
+
+				mergeFm := map[string]any{
+					"tags": []any{"new-tag"},
+				}
+				fmPb, err := structpb.NewStruct(mergeFm)
+				Expect(err).NotTo(HaveOccurred())
+
+				_, mergeErr := server.MergeFrontmatter(ctx, &apiv1.MergeFrontmatterRequest{
+					Page:        pageName,
+					Frontmatter: fmPb,
+				})
+				Expect(mergeErr).NotTo(HaveOccurred())
+
+				getResp, getErr = server.GetFrontmatter(ctx, &apiv1.GetFrontmatterRequest{
+					Page: pageName,
+				})
+				Expect(getErr).NotTo(HaveOccurred())
+				Expect(getResp).NotTo(BeNil())
+				var ok bool
+				tags, ok = getResp.Frontmatter.AsMap()["tags"].([]any)
+				Expect(ok).To(BeTrue(), "tags should be []any")
+			})
+
+			It("should replace the array entirely with only the new element", func() {
+				Expect(tags).To(Equal([]any{"new-tag"}))
+			})
+		})
+	})
+
+	Describe("edge case: empty merge payload", func() {
+		var (
+			getResp *apiv1.GetFrontmatterResponse
+			getErr  error
+		)
+
+		When("MergeFrontmatter is called with an empty Frontmatter struct", func() {
+			BeforeEach(func() {
+				mockPageReaderMutator.Frontmatter = map[string]any{
+					"title": "Existing Title",
+					"metadata": map[string]any{
+						"author": "alice",
+					},
+				}
+
+				_, mergeErr := server.MergeFrontmatter(ctx, &apiv1.MergeFrontmatterRequest{
+					Page:        pageName,
+					Frontmatter: &structpb.Struct{},
+				})
+				Expect(mergeErr).NotTo(HaveOccurred())
+
+				getResp, getErr = server.GetFrontmatter(ctx, &apiv1.GetFrontmatterRequest{
+					Page: pageName,
+				})
+				Expect(getErr).NotTo(HaveOccurred())
+				Expect(getResp).NotTo(BeNil())
+			})
+
+			It("should preserve all existing frontmatter when merging an empty payload", func() {
+				fm := getResp.Frontmatter.AsMap()
+				Expect(fm["title"]).To(Equal("Existing Title"))
+				metadata, ok := fm["metadata"].(map[string]any)
+				Expect(ok).To(BeTrue(), "metadata should be map[string]any")
+				Expect(metadata["author"]).To(Equal("alice"))
+			})
+		})
+	})
+
+	Describe("edge case: merging into empty frontmatter", func() {
+		var (
+			getResp  *apiv1.GetFrontmatterResponse
+			getErr   error
+			metadata map[string]any
+		)
+
+		When("the page has no existing frontmatter", func() {
+			BeforeEach(func() {
+				mockPageReaderMutator.Err = os.ErrNotExist
+
+				newFm := map[string]any{
+					"title": "Brand New Page",
+					"metadata": map[string]any{
+						"author": "bob",
+					},
+				}
+				fmPb, err := structpb.NewStruct(newFm)
+				Expect(err).NotTo(HaveOccurred())
+
+				_, mergeErr := server.MergeFrontmatter(ctx, &apiv1.MergeFrontmatterRequest{
+					Page:        pageName,
+					Frontmatter: fmPb,
+				})
+				Expect(mergeErr).NotTo(HaveOccurred())
+
+				// Reset error so GetFrontmatter can read the written data
+				mockPageReaderMutator.Err = nil
+
+				getResp, getErr = server.GetFrontmatter(ctx, &apiv1.GetFrontmatterRequest{
+					Page: pageName,
+				})
+				Expect(getErr).NotTo(HaveOccurred())
+				Expect(getResp).NotTo(BeNil())
+				var ok bool
+				metadata, ok = getResp.Frontmatter.AsMap()["metadata"].(map[string]any)
+				Expect(ok).To(BeTrue(), "metadata should be map[string]any")
+			})
+
+			It("should write the full merge payload as the initial frontmatter", func() {
+				Expect(getResp.Frontmatter.AsMap()["title"]).To(Equal("Brand New Page"))
+				Expect(metadata["author"]).To(Equal("bob"))
+			})
+		})
+	})
+})
+
 var _ = Describe("NewServer", func() {
 	var buildInfo v1.BuildInfo
 
