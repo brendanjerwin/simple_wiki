@@ -247,7 +247,9 @@ func (*mockChatBufferManager) HasPageChannelSubscriber(string) bool {
 	return false
 }
 
-func (*mockChatBufferManager) RequestInstance(string) {}
+func (*mockChatBufferManager) RequestInstance(string) {
+	// no-op: satisfies interface; mock does not manage chat instances
+}
 
 func (*mockChatBufferManager) SubscribeToInstanceRequests() (<-chan string, func()) {
 	ch := make(chan string, 10)
