@@ -272,14 +272,16 @@ func (d *poolDaemon) evictLeastActive() {
 }
 
 // wikiChatClient implements acp.Client — handles ACP callbacks from the agent.
-// It collects agent message chunks and posts them to the wiki as chat replies.
+// It streams agent responses to the wiki in real-time: the first text chunk
+// creates a new chat reply, subsequent chunks edit it in place. Tool calls
+// are shown as emoji reactions on the message.
 type wikiChatClient struct {
 	page       string
 	wikiURL    string
 	mu         sync.Mutex
 	textBuf    strings.Builder
-	replyToID  string
-	lastMsgID  string
+	replyToID  string    // set before each prompt to thread responses
+	currentMsg string    // message ID of the in-progress streaming reply
 	chatClient apiv1connect.ChatServiceClient
 }
 
@@ -295,42 +297,90 @@ func newWikiChatClient(page, wikiURL string) *wikiChatClient {
 func (c *wikiChatClient) SessionUpdate(_ context.Context, n acp.SessionNotification) error {
 	u := n.Update
 
-	if u.AgentMessageChunk != nil {
+	switch {
+	case u.AgentMessageChunk != nil:
 		content := u.AgentMessageChunk.Content
-		if content.Text != nil {
+		if content.Text == nil {
+			return nil
+		}
+
+		c.mu.Lock()
+		c.textBuf.WriteString(content.Text.Text)
+		fullText := c.textBuf.String()
+		msgID := c.currentMsg
+		replyTo := c.replyToID
+		c.mu.Unlock()
+
+		if msgID == "" {
+			// First chunk — create the reply message
+			resp, err := c.chatClient.SendChatReply(context.Background(), connect.NewRequest(&apiv1.SendChatReplyRequest{
+				Page:      c.page,
+				Content:   fullText,
+				ReplyToId: replyTo,
+			}))
+			if err != nil {
+				log.Printf("Failed to create streaming reply for %q: %v", c.page, err)
+				return nil
+			}
 			c.mu.Lock()
-			c.textBuf.WriteString(content.Text.Text)
+			c.currentMsg = resp.Msg.MessageId
 			c.mu.Unlock()
+		} else {
+			// Subsequent chunks — edit the existing message
+			_, err := c.chatClient.EditChatMessage(context.Background(), connect.NewRequest(&apiv1.EditChatMessageRequest{
+				MessageId:  msgID,
+				NewContent: fullText,
+			}))
+			if err != nil {
+				log.Printf("Failed to update streaming reply for %q: %v", c.page, err)
+			}
+		}
+
+	case u.ToolCall != nil:
+		// Show tool calls as a reaction on the current message
+		c.mu.Lock()
+		msgID := c.currentMsg
+		c.mu.Unlock()
+
+		if msgID != "" {
+			_, _ = c.chatClient.ReactToMessage(context.Background(), connect.NewRequest(&apiv1.ReactToMessageRequest{
+				MessageId: msgID,
+				Emoji:     "🔧",
+			}))
+		}
+		log.Printf("[%s] Tool call: %s (%s)", c.page, u.ToolCall.Title, u.ToolCall.Status)
+
+	case u.AgentThoughtChunk != nil:
+		// Log thoughts but don't show in chat
+		if u.AgentThoughtChunk.Content.Text != nil {
+			log.Printf("[%s] Thinking: %s", c.page, truncate(u.AgentThoughtChunk.Content.Text.Text, 100))
 		}
 	}
 
 	return nil
 }
 
-// flushResponse sends accumulated text as a chat reply and resets the buffer.
-func (c *wikiChatClient) flushResponse(replyToID string) {
+// beginTurn prepares for a new prompt turn — resets the streaming state.
+func (c *wikiChatClient) beginTurn(replyToID string) {
 	c.mu.Lock()
-	text := c.textBuf.String()
 	c.textBuf.Reset()
+	c.replyToID = replyToID
+	c.currentMsg = ""
 	c.mu.Unlock()
+}
 
-	if text == "" {
-		return
-	}
-
-	resp, err := c.chatClient.SendChatReply(context.Background(), connect.NewRequest(&apiv1.SendChatReplyRequest{
-		Page:      c.page,
-		Content:   text,
-		ReplyToId: replyToID,
-	}))
-	if err != nil {
-		log.Printf("Failed to send chat reply for %q: %v", c.page, err)
-		return
-	}
-
+// endTurn cleans up after a prompt turn completes.
+func (c *wikiChatClient) endTurn() {
 	c.mu.Lock()
-	c.lastMsgID = resp.Msg.MessageId
+	c.currentMsg = ""
 	c.mu.Unlock()
+}
+
+func truncate(s string, max int) string {
+	if len(s) <= max {
+		return s
+	}
+	return s[:max] + "..."
 }
 
 func (c *wikiChatClient) RequestPermission(_ context.Context, p acp.RequestPermissionRequest) (acp.RequestPermissionResponse, error) {
@@ -555,19 +605,20 @@ func (d *poolDaemon) bridgeMessages(ctx context.Context, entry *instanceEntry, w
 
 		entry.touch()
 
+		// Prepare for streaming response
+		chatClient.beginTurn(msg.Id)
+
 		// Send as ACP prompt — blocks until the agent completes its turn.
-		// During the turn, SessionUpdate collects text chunks.
+		// During the turn, SessionUpdate streams text chunks to the wiki in real-time.
 		_, err := entry.conn.Prompt(ctx, acp.PromptRequest{
 			SessionId: entry.sessionID,
 			Prompt:    []acp.ContentBlock{acp.TextBlock(msg.Content)},
 		})
 		if err != nil {
 			log.Printf("Failed to send prompt to agent for %q: %v", entry.page, err)
-			continue
 		}
 
-		// Prompt returned — flush accumulated response as a chat reply
-		chatClient.flushResponse(msg.Id)
+		chatClient.endTurn()
 	}
 
 	if err := stream.Err(); err != nil {

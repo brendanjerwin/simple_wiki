@@ -3,6 +3,8 @@ package main
 import (
 	"bytes"
 	"context"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"time"
 
@@ -404,9 +406,16 @@ var _ = Describe("wikiChatClient", func() {
 			)
 
 			BeforeEach(func() {
-				client = &wikiChatClient{
-					page: "test-page",
-				}
+				// Set up a mock server that accepts SendChatReply and EditChatMessage
+				mux := http.NewServeMux()
+				mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+					w.Header().Set("Content-Type", "application/json")
+					_, _ = w.Write([]byte(`{"messageId":"msg-1"}`))
+				})
+				server := httptest.NewServer(mux)
+				DeferCleanup(server.Close)
+
+				client = newWikiChatClient("test-page", server.URL)
 
 				chunk1 := acp.SessionNotification{
 					SessionId: "session-1",
@@ -490,33 +499,43 @@ var _ = Describe("wikiChatClient", func() {
 		})
 	})
 
-	Describe("flushResponse", func() {
-		When("there is accumulated text", func() {
+	Describe("beginTurn", func() {
+		When("called", func() {
 			var client *wikiChatClient
 
 			BeforeEach(func() {
 				client = newWikiChatClient("my-page", "http://localhost:1")
-				client.textBuf.WriteString("Hello world!")
-				// flushResponse will fail to connect (no real server) but that's OK —
-				// we're testing buffer behavior
-				client.flushResponse("msg-123")
+				client.textBuf.WriteString("leftover text")
+				client.currentMsg = "old-msg"
+				client.beginTurn("reply-123")
 			})
 
-			It("should clear the text buffer after flushing", func() {
+			It("should reset the text buffer", func() {
 				Expect(client.textBuf.String()).To(BeEmpty())
+			})
+
+			It("should set the replyToID", func() {
+				Expect(client.replyToID).To(Equal("reply-123"))
+			})
+
+			It("should clear the current message ID", func() {
+				Expect(client.currentMsg).To(BeEmpty())
 			})
 		})
+	})
 
-		When("there is no accumulated text", func() {
+	Describe("endTurn", func() {
+		When("called", func() {
 			var client *wikiChatClient
 
 			BeforeEach(func() {
 				client = newWikiChatClient("my-page", "http://localhost:1")
-				client.flushResponse("msg-123")
+				client.currentMsg = "some-msg"
+				client.endTurn()
 			})
 
-			It("should not crash", func() {
-				Expect(client.textBuf.String()).To(BeEmpty())
+			It("should clear the current message ID", func() {
+				Expect(client.currentMsg).To(BeEmpty())
 			})
 		})
 	})
