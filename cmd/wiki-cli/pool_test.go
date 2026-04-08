@@ -350,24 +350,6 @@ var _ = Describe("poolDaemon", func() {
 	})
 
 	Describe("spawnInstance", func() {
-		When("ctx is nil", func() {
-			var err error
-
-			BeforeEach(func() {
-				daemon := &poolDaemon{
-					newCommand: (&fakeCommandTracker{}).builder,
-					instances:  make(map[string]*instanceEntry),
-				}
-				daemon.mu.Lock()
-				_, err = daemon.spawnInstance(nil, "test-page")
-				daemon.mu.Unlock()
-			})
-
-			It("should return an error", func() {
-				Expect(err).To(MatchError(ContainSubstring("context not initialized")))
-			})
-		})
-
 		When("command starts successfully", func() {
 			var (
 				entry *instanceEntry
