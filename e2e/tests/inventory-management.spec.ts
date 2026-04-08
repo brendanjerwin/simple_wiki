@@ -1,4 +1,5 @@
 import { test, expect, APIRequestContext } from '@playwright/test';
+import { COMPONENT_LOAD_TIMEOUT_MS, IDENTIFIER_GENERATE_TIMEOUT_MS } from './constants.js';
 
 // Tests for inventory management features:
 // 1. Creating an inventory item via the add-item dialog (UI)
@@ -7,12 +8,10 @@ import { test, expect, APIRequestContext } from '@playwright/test';
 // 4. Searching for item locations (FindItemLocation API)
 // 5. Moving an inventory item between containers (UI + API verification)
 
-// Timeouts
-const COMPONENT_LOAD_TIMEOUT_MS = 15000;
+// Timeouts (local — not shared across spec files)
 const SAVE_TIMEOUT_MS = 15000;
 const DIALOG_APPEAR_TIMEOUT_MS = 5000;
 const MENU_APPEAR_TIMEOUT_MS = 5000;
-const IDENTIFIER_GENERATE_TIMEOUT_MS = 10000;
 
 // Per-run identifier suffix to prevent collisions between parallel CI workers/branches.
 // Uses GITHUB_RUN_ID (a numeric CI run identifier) when available; falls back to the
