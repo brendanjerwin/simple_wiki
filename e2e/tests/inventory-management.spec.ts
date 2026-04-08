@@ -9,9 +9,10 @@ import { test, expect, APIRequestContext } from '@playwright/test';
 
 // Timeouts
 const COMPONENT_LOAD_TIMEOUT_MS = 15000;
-const SAVE_TIMEOUT_MS = 10000;
+const SAVE_TIMEOUT_MS = 15000;
 const DIALOG_APPEAR_TIMEOUT_MS = 5000;
 const MENU_APPEAR_TIMEOUT_MS = 5000;
+const IDENTIFIER_GENERATE_TIMEOUT_MS = 10000;
 
 // Per-run identifier suffix to prevent collisions between parallel CI workers/branches.
 // Uses GITHUB_RUN_ID (a numeric CI run identifier) when available; falls back to the
@@ -168,8 +169,9 @@ This is an E2E test inventory container.`);
 
       // The "Add Item" button is disabled until the identifier is auto-generated
       // (an async gRPC call to GenerateIdentifier). Wait for it to become enabled.
+      // This requires debounce (300ms) + gRPC round-trip, so use a longer timeout.
       const addButton = dialog.locator('button', { hasText: 'Add Item' });
-      await expect(addButton).toBeEnabled({ timeout: DIALOG_APPEAR_TIMEOUT_MS });
+      await expect(addButton).toBeEnabled({ timeout: IDENTIFIER_GENERATE_TIMEOUT_MS });
 
       // Submit the form and wait for the page to reload.
       // On success, the component calls window.location.reload(), which keeps the same URL.

@@ -99,7 +99,7 @@ test.describe('InsertNewPageDialog E2E Tests', () => {
 
     // Should render Cancel and Create Page buttons
     await expect(dialog.locator('button.button-secondary')).toContainText('Cancel');
-    await expect(dialog.locator('button.button-primary')).toContainText('Create Page');
+    await expect(dialog.locator('.footer button.button-primary')).toContainText('Create Page');
   });
 
   test('should close dialog when clicking Cancel button', async ({ page }) => {
@@ -128,7 +128,9 @@ test.describe('InsertNewPageDialog E2E Tests', () => {
     await expect(dialog.locator('.dialog')).toBeVisible({ timeout: DIALOG_TIMEOUT_MS });
 
     // Click the backdrop element (behind the dialog panel)
-    await dialog.locator('.backdrop').click();
+    // Use position: { x: 10, y: 10 } to click near the top-left corner, which is
+    // guaranteed to be outside the centered dialog panel.
+    await dialog.locator('.backdrop').click({ position: { x: 10, y: 10 } });
 
     // Dialog should close
     await expect(dialog.locator('.dialog')).not.toBeVisible();
@@ -160,7 +162,7 @@ test.describe('InsertNewPageDialog E2E Tests', () => {
     await expect(dialog.locator('.dialog')).toBeVisible({ timeout: DIALOG_TIMEOUT_MS });
 
     // Create Page button should be disabled when no identifier is set
-    await expect(dialog.locator('button.button-primary')).toBeDisabled();
+    await expect(dialog.locator('.footer button.button-primary')).toBeDisabled();
   });
 
   test('should enable Create Page button after entering a title', async ({ page }) => {
@@ -179,7 +181,7 @@ test.describe('InsertNewPageDialog E2E Tests', () => {
     await titleInput.fill(`E2E Test Title ${timestamp}`);
 
     // Wait for the identifier to be generated and Create Page button to become enabled
-    await expect(dialog.locator('button.button-primary')).toBeEnabled({
+    await expect(dialog.locator('.footer button.button-primary')).toBeEnabled({
       timeout: IDENTIFIER_GENERATE_TIMEOUT_MS,
     });
   });
@@ -211,7 +213,7 @@ test.describe('InsertNewPageDialog E2E Tests', () => {
     }, uniqueIdentifier);
 
     // Wait for Create Page button to become enabled after Lit re-render
-    const createButton = dialog.locator('button.button-primary');
+    const createButton = dialog.locator('.footer button.button-primary');
     await expect(createButton).toBeEnabled({ timeout: DIALOG_TIMEOUT_MS });
 
     // Click Create Page — this triggers the gRPC CreatePage call
@@ -295,6 +297,6 @@ test.describe('InsertNewPageDialog E2E Tests', () => {
     await expect(titleInput).toHaveValue('');
 
     // Create Page button should be disabled (no identifier after reset)
-    await expect(dialog.locator('button.button-primary')).toBeDisabled();
+    await expect(dialog.locator('.footer button.button-primary')).toBeDisabled();
   });
 });
