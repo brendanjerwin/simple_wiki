@@ -49,7 +49,7 @@ test.describe('Chat Panel', () => {
     });
 
     test('should render the chat FAB button on page load', async ({ page }) => {
-      // The FAB button is present in the shadow DOM (shows disabled style when Claude not connected)
+      // The FAB button is present in the shadow DOM (shows disabled style when assistant not connected)
       const fab = page.locator('page-chat-panel .fab');
       await expect(fab).toBeAttached({ timeout: PANEL_INTERACTION_TIMEOUT_MS });
     });
@@ -136,7 +136,7 @@ test.describe('Chat Panel', () => {
     test('should include persona name in disconnected banner when persona is configured', async ({ page }) => {
       await setChatPanelProperty(page, 'persona', 'Aria');
 
-      // Open the panel (Claude not connected — disconnected banner shows persona name)
+      // Open the panel (assistant not connected — disconnected banner shows persona name)
       await openChatPanel(page);
 
       const disconnectedBanner = page.locator('page-chat-panel .status-banner.disconnected');
@@ -190,15 +190,15 @@ test.describe('Chat Panel', () => {
       await navigateAndWait(page);
     });
 
-    test('should show the disconnected status banner when Claude is not available', async ({ page }) => {
+    test('should show the disconnected status banner when assistant is not available', async ({ page }) => {
       await openChatPanel(page);
 
-      // Should show disconnected banner (Claude not configured in E2E server)
+      // Should show disconnected banner (assistant not configured in E2E server)
       const disconnectedBanner = page.locator('page-chat-panel .status-banner.disconnected');
       await expect(disconnectedBanner).toBeAttached({ timeout: PANEL_INTERACTION_TIMEOUT_MS });
     });
 
-    test('should disable textarea and send button when Claude is not connected', async ({ page }) => {
+    test('should disable textarea and send button when assistant is not connected', async ({ page }) => {
       await openChatPanel(page);
 
       // Textarea and send button should be disabled
@@ -206,22 +206,22 @@ test.describe('Chat Panel', () => {
       await expect(page.locator('page-chat-panel .send-button')).toBeDisabled({ timeout: PANEL_INTERACTION_TIMEOUT_MS });
     });
 
-    test('should enable textarea and send button when Claude is connected', async ({ page }) => {
+    test('should enable textarea and send button when assistant is connected', async ({ page }) => {
       await openChatPanel(page);
 
-      // Simulate Claude becoming connected
-      await setChatPanelProperty(page, 'claudeConnected', true);
+      // Simulate assistant becoming connected
+      await setChatPanelProperty(page, 'agentConnected', true);
 
       // Textarea and send button should now be enabled
       await expect(page.locator('page-chat-panel textarea')).toBeEnabled({ timeout: PANEL_INTERACTION_TIMEOUT_MS });
       await expect(page.locator('page-chat-panel .send-button')).toBeEnabled({ timeout: PANEL_INTERACTION_TIMEOUT_MS });
     });
 
-    test('should allow typing in the message textarea when Claude is connected', async ({ page }) => {
+    test('should allow typing in the message textarea when assistant is connected', async ({ page }) => {
       await openChatPanel(page);
 
-      // Simulate Claude becoming connected
-      await setChatPanelProperty(page, 'claudeConnected', true);
+      // Simulate assistant becoming connected
+      await setChatPanelProperty(page, 'agentConnected', true);
 
       // Type a message in the textarea
       const textarea = page.locator('page-chat-panel textarea');
@@ -242,8 +242,8 @@ test.describe('Chat Panel', () => {
 
       await openChatPanel(page);
 
-      // Simulate Claude becoming connected
-      await setChatPanelProperty(page, 'claudeConnected', true);
+      // Simulate assistant becoming connected
+      await setChatPanelProperty(page, 'agentConnected', true);
 
       const textarea = page.locator('page-chat-panel textarea');
       await expect(textarea).toBeEnabled({ timeout: PANEL_INTERACTION_TIMEOUT_MS });

@@ -311,13 +311,13 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
   declare error: Error | null;
 
   @state()
-  declare claudeConnected: boolean;
+  declare agentConnected: boolean;
 
   @state()
   declare poolConnected: boolean;
 
   @state()
-  declare claudeStarting: boolean;
+  declare agentStarting: boolean;
 
   private pendingMessage: string | null = null;
   private readonly messagesById = new Map<string, ChatMessageState>();
@@ -342,9 +342,9 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
     this.streamState = 'disconnected';
     this.waitingForAssistant = false;
     this.error = null;
-    this.claudeConnected = false;
+    this.agentConnected = false;
     this.poolConnected = false;
-    this.claudeStarting = false;
+    this.agentStarting = false;
     this.chatClient = createClient(ChatService, getGrpcWebTransport());
     this.markdownRenderer = new ChatMarkdownRenderer();
     this._handleVisibilityChange = this.handleVisibilityChange.bind(this);
@@ -421,7 +421,7 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
   }
 
   private get _chatAvailable(): boolean {
-    return this.poolConnected || this.claudeConnected;
+    return this.poolConnected || this.agentConnected;
   }
 
   private _renderFab() {
@@ -439,14 +439,14 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
   }
 
   private _renderDisconnectedBanner() {
-    if (this.claudeStarting) {
+    if (this.agentStarting) {
       return html`<div class="status-banner reconnecting">Starting assistant...</div>`;
     }
     if (!this._chatAvailable) {
       const disconnectedText = this.persona ? this.persona + ' is not connected' : 'Not connected';
       return html`<div class="status-banner disconnected">${disconnectedText}</div>`;
     }
-    if (this.poolConnected && !this.claudeConnected && !this.claudeStarting) {
+    if (this.poolConnected && !this.agentConnected && !this.agentStarting) {
       return html`<div class="status-banner">Send a message to start</div>`;
     }
     if (this.streamState === 'disconnected' && this.error) {
@@ -637,16 +637,16 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
         page: this.page,
       });
       const response = await this.chatClient.getChatStatus(request);
-      const wasConnected = this.claudeConnected;
-      const wasStarting = this.claudeStarting;
-      this.claudeConnected = response.connected;
+      const wasConnected = this.agentConnected;
+      const wasStarting = this.agentStarting;
+      this.agentConnected = response.connected;
       this.poolConnected = response.poolConnected;
-      this.claudeStarting = response.starting;
+      this.agentStarting = response.starting;
 
       // Adjust poll rate based on state
       this.adjustPollRate();
 
-      // If Claude just connected and we have a pending message, auto-send it
+      // If agent just connected and we have a pending message, auto-send it
       if (!wasConnected && response.connected && this.pendingMessage) {
         const content = this.pendingMessage;
         this.pendingMessage = null;
@@ -664,7 +664,7 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
         }
       }
 
-      // If Claude just connected and panel was open, re-focus input
+      // If agent just connected and panel was open, re-focus input
       if (!wasConnected && response.connected && this.drawerOpen) {
         this.focusInput();
       }
@@ -674,14 +674,14 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
         this.error = null;
       }
     } catch {
-      this.claudeConnected = false;
+      this.agentConnected = false;
       this.poolConnected = false;
-      this.claudeStarting = false;
+      this.agentStarting = false;
     }
   }
 
   private adjustPollRate(): void {
-    const desiredIntervalMs = this.claudeStarting ? STATUS_POLL_STARTING_MS : STATUS_POLL_INTERVAL_MS;
+    const desiredIntervalMs = this.agentStarting ? STATUS_POLL_STARTING_MS : STATUS_POLL_INTERVAL_MS;
 
     // Only restart the timer if the interval needs to change
     if (this.statusPollTimer) {

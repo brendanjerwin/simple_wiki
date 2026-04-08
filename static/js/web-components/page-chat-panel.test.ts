@@ -41,7 +41,7 @@ describe('PageChatPanel', () => {
     resetForTesting();
   });
 
-  describe('when Claude is not connected', () => {
+  describe('when agent is not connected', () => {
     let el: PageChatPanel;
 
     beforeEach(async () => {
@@ -89,7 +89,7 @@ describe('PageChatPanel', () => {
     beforeEach(async () => {
       localStorageStub.getItem.returns(null);
       el = await fixture(html`<page-chat-panel page="test-page" persona="TestPersona"></page-chat-panel>`);
-      el.claudeConnected = true;
+      el.agentConnected = true;
       await el.updateComplete;
     });
 
@@ -115,7 +115,7 @@ describe('PageChatPanel', () => {
     beforeEach(async () => {
       localStorageStub.getItem.returns(null);
       el = await fixture(html`<page-chat-panel page="test-page" persona="TestPersona"></page-chat-panel>`);
-      el.claudeConnected = true;
+      el.agentConnected = true;
       await el.updateComplete;
       const fab = el.shadowRoot!.querySelector('.fab') as HTMLElement;
       fab.click();
@@ -143,7 +143,7 @@ describe('PageChatPanel', () => {
     beforeEach(async () => {
       localStorageStub.getItem.returns(null);
       el = await fixture(html`<page-chat-panel page="test-page" persona="TestPersona"></page-chat-panel>`);
-      el.claudeConnected = true;
+      el.agentConnected = true;
       await el.updateComplete;
       const fab = el.shadowRoot!.querySelector('.fab') as HTMLElement;
       fab.click();
@@ -323,7 +323,7 @@ describe('PageChatPanel', () => {
     beforeEach(async () => {
       localStorageStub.getItem.returns('true');
       el = await fixture(html`<page-chat-panel page="test-page" persona="TestPersona"></page-chat-panel>`);
-      el.claudeConnected = true;
+      el.agentConnected = true;
       el.streamState = 'disconnected';
       el.error = new Error('Connection lost');
       await el.updateComplete;
@@ -379,13 +379,13 @@ describe('PageChatPanel', () => {
     });
   });
 
-  describe('when Claude is connected', () => {
+  describe('when agent is connected', () => {
     let el: PageChatPanel;
 
     beforeEach(async () => {
       localStorageStub.getItem.returns('true');
       el = await fixture(html`<page-chat-panel page="test-page" persona="TestPersona"></page-chat-panel>`);
-      el.claudeConnected = true;
+      el.agentConnected = true;
       await el.updateComplete;
     });
 
@@ -704,7 +704,7 @@ describe('PageChatPanel', () => {
     beforeEach(async () => {
       localStorageStub.getItem.returns('true');
       el = await fixture(html`<page-chat-panel page="test-page" persona="TestPersona"></page-chat-panel>`);
-      el.claudeConnected = true;
+      el.agentConnected = true;
       el.streamState = 'disconnected';
       el.error = new Error('Connection lost');
       await el.updateComplete;
@@ -837,7 +837,7 @@ describe('PageChatPanel', () => {
     beforeEach(async () => {
       localStorageStub.getItem.returns(null);
       el = await fixture(html`<page-chat-panel page="test-page" persona="TestPersona"></page-chat-panel>`);
-      el.claudeConnected = true;
+      el.agentConnected = true;
       await el.updateComplete;
     });
 
@@ -1476,15 +1476,15 @@ describe('PageChatPanel pollChatStatus and sendMessage', () => {
         await el.updateComplete;
       });
 
-      it('should set claudeConnected to true', () => {
-        expect(el.claudeConnected).to.equal(true);
+      it('should set agentConnected to true', () => {
+        expect(el.agentConnected).to.equal(true);
       });
     });
 
     describe('when getChatStatus returns connected=false', () => {
 
       beforeEach(async () => {
-        el.claudeConnected = true;
+        el.agentConnected = true;
         // eslint-disable-next-line @typescript-eslint/no-explicit-any -- replacing private chatClient for testing
         (el as any).chatClient = {
           getChatStatus: stub().resolves({ connected: false }),
@@ -1494,15 +1494,15 @@ describe('PageChatPanel pollChatStatus and sendMessage', () => {
         await el.updateComplete;
       });
 
-      it('should set claudeConnected to false', () => {
-        expect(el.claudeConnected).to.equal(false);
+      it('should set agentConnected to false', () => {
+        expect(el.agentConnected).to.equal(false);
       });
     });
 
     describe('when getChatStatus throws', () => {
 
       beforeEach(async () => {
-        el.claudeConnected = true;
+        el.agentConnected = true;
         // eslint-disable-next-line @typescript-eslint/no-explicit-any -- replacing private chatClient for testing
         (el as any).chatClient = {
           getChatStatus: stub().rejects(new Error('network error')),
@@ -1512,16 +1512,16 @@ describe('PageChatPanel pollChatStatus and sendMessage', () => {
         await el.updateComplete;
       });
 
-      it('should set claudeConnected to false', () => {
-        expect(el.claudeConnected).to.equal(false);
+      it('should set agentConnected to false', () => {
+        expect(el.agentConnected).to.equal(false);
       });
     });
 
-    describe('when Claude just connected while panel is open', () => {
+    describe('when agent just connected while panel is open', () => {
       let focusInputSpy: SinonSpy;
 
       beforeEach(async () => {
-        el.claudeConnected = false;
+        el.agentConnected = false;
         el.drawerOpen = true;
         await el.updateComplete;
         focusInputSpy = spy(el as unknown as { focusInput: () => void }, 'focusInput');
@@ -1547,7 +1547,7 @@ describe('PageChatPanel pollChatStatus and sendMessage', () => {
 
       beforeEach(async () => {
         el.page = 'test-page';
-        el.claudeConnected = true;
+        el.agentConnected = true;
         el.drawerOpen = true;
         await el.updateComplete;
         sendMessageStub = stub().resolves();
@@ -1569,7 +1569,7 @@ describe('PageChatPanel pollChatStatus and sendMessage', () => {
 
       beforeEach(async () => {
         el.page = 'test-page';
-        el.claudeConnected = true;
+        el.agentConnected = true;
         el.drawerOpen = true;
         await el.updateComplete;
         sendMessageStub = stub().resolves();
@@ -1596,7 +1596,7 @@ describe('PageChatPanel pollChatStatus and sendMessage', () => {
 
       beforeEach(async () => {
         el.page = 'test-page';
-        el.claudeConnected = true;
+        el.agentConnected = true;
         el.drawerOpen = true;
         await el.updateComplete;
         const connectError = new ConnectError('service unavailable', Code.Unavailable);
@@ -1627,7 +1627,7 @@ describe('PageChatPanel pollChatStatus and sendMessage', () => {
 
       beforeEach(async () => {
         el.page = 'test-page';
-        el.claudeConnected = true;
+        el.agentConnected = true;
         el.drawerOpen = true;
         await el.updateComplete;
         // eslint-disable-next-line @typescript-eslint/no-explicit-any -- replacing private chatClient for testing

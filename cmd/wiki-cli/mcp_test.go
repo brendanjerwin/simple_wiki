@@ -77,8 +77,8 @@ var _ = Describe("buildMCPCommand", func() {
 		Expect(cmd.Usage).NotTo(BeEmpty())
 	})
 
-	It("should include the url and page flags", func() {
-		Expect(cmd.Flags).To(HaveLen(2))
+	It("should include the url flag", func() {
+		Expect(cmd.Flags).To(HaveLen(1))
 	})
 
 	It("should have a non-nil action", func() {
@@ -107,7 +107,7 @@ var _ = Describe("setupMCPServer", func() {
 		var err error
 
 		BeforeEach(func() {
-			s, httpClient, err = setupMCPServer("http://localhost:1", channelInstructions, nil)
+			s, httpClient, err = setupMCPServer("http://localhost:1", nil)
 		})
 
 		It("should not error", func() {
@@ -905,7 +905,7 @@ var _ = Describe("setupMCPServer experimental capability hook", func() {
 		var response mcp.JSONRPCMessage
 
 		BeforeEach(func() {
-			s, _, err := setupMCPServer("http://localhost:1", channelInstructions, nil)
+			s, _, err := setupMCPServer("http://localhost:1", nil)
 			Expect(err).NotTo(HaveOccurred())
 
 			// Send a real initialize message to trigger the OnAfterInitialize hook
