@@ -14,12 +14,12 @@ export type PopupPosition = 'auto' | 'left' | 'right';
  * Allows tests to control timer behavior deterministically.
  */
 export interface TimerProvider {
-  setTimeout(callback: () => void, delayMs: number): number;
-  clearTimeout(id: number): void;
+  setTimeout(callback: () => void, delayMs: number): ReturnType<typeof globalThis.setTimeout>;
+  clearTimeout(id: ReturnType<typeof globalThis.setTimeout>): void;
 }
 
 /**
- * Default timer provider using browser's native setTimeout/clearTimeout.
+ * Default timer provider using the runtime's global setTimeout/clearTimeout.
  */
 export const defaultTimerProvider: TimerProvider = {
   setTimeout: (callback, delayMs) => globalThis.setTimeout(callback, delayMs),
@@ -179,7 +179,7 @@ export class ConfirmationInterlockButton extends LitElement {
   @state()
   declare _computedPosition: 'left' | 'right';
 
-  private _disarmTimerId: number | undefined;
+  private _disarmTimerId: ReturnType<typeof globalThis.setTimeout> | undefined;
   private _previouslyFocusedElement: HTMLElement | null = null;
 
   constructor() {
@@ -246,7 +246,7 @@ export class ConfirmationInterlockButton extends LitElement {
     );
     if (focusableElements.length === 0) return;
     const firstFocusable = focusableElements[0]!;
-    const lastFocusable = focusableElements.at(-1)!;
+    const lastFocusable = focusableElements[focusableElements.length - 1]!;
     const activeEl = this.shadowRoot?.activeElement;
     if (e.shiftKey) {
       if (activeEl === firstFocusable) {

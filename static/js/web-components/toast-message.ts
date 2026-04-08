@@ -202,7 +202,7 @@ export class ToastMessage extends LitElement {
   @property({ type: Object })
   declare augmentedError?: AugmentedError;
 
-  private timeoutId?: number;
+  private timeoutId?: ReturnType<typeof globalThis.setTimeout>;
 
   constructor() {
     super();
