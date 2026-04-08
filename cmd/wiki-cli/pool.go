@@ -583,6 +583,18 @@ func (d *poolDaemon) bridgeMessages(ctx context.Context, entry *instanceEntry, w
 	return errors.New("stream closed by server")
 }
 
+// chatPreamble is prepended to the first prompt to establish the interactive chat context.
+const chatPreamble = `You are in an INTERACTIVE CHAT session with a user on a wiki page. This is a conversation, not a coding task.
+
+CRITICAL: Respond quickly and conversationally. Do NOT explore the codebase, run startup hooks, or do extensive initialization. The user is waiting for your reply in a chat window.
+
+- Keep responses concise and conversational
+- Use the wiki MCP tools only when the user asks you to read or edit pages
+- You can update the [ai_agent_chat_context] section in the page's frontmatter to remember things for next time
+- Each message you receive is from a user chatting on this wiki page
+
+`
+
 // injectPageContext fetches the page's ai_agent_chat_context frontmatter and sends
 // it as the initial ACP prompt to establish context.
 func (d *poolDaemon) injectPageContext(ctx context.Context, entry *instanceEntry) {
@@ -592,11 +604,10 @@ func (d *poolDaemon) injectPageContext(ctx context.Context, entry *instanceEntry
 	fmResp, err := fmClient.GetFrontmatter(ctx, connect.NewRequest(&apiv1.GetFrontmatterRequest{Page: entry.page}))
 	if err != nil {
 		log.Printf("Failed to fetch frontmatter for page %q: %v", entry.page, err)
-		// Send error context to agent
 		_, _ = entry.conn.Prompt(ctx, acp.PromptRequest{
 			SessionId: entry.sessionID,
-			Prompt: []acp.ContentBlock{acp.TextBlock(fmt.Sprintf(
-				"[System] Failed to fetch frontmatter for page '%s': %v. Page context is unavailable for this session. Do NOT attempt to create or modify the [ai_agent_chat_context] section.",
+			Prompt: []acp.ContentBlock{acp.TextBlock(chatPreamble + fmt.Sprintf(
+				"You are the assistant for wiki page '%s'. Failed to fetch page context: %v. Do NOT attempt to create or modify the [ai_agent_chat_context] section.",
 				entry.page, err,
 			))},
 		})
@@ -608,8 +619,8 @@ func (d *poolDaemon) injectPageContext(ctx context.Context, entry *instanceEntry
 	if !ok {
 		_, _ = entry.conn.Prompt(ctx, acp.PromptRequest{
 			SessionId: entry.sessionID,
-			Prompt: []acp.ContentBlock{acp.TextBlock(fmt.Sprintf(
-				"[System] You are the assistant for wiki page '%s'. No [ai_agent_chat_context] section found in the page's frontmatter. You can create one using the MergeFrontmatter MCP tool to store per-page instructions and memory for future sessions.",
+			Prompt: []acp.ContentBlock{acp.TextBlock(chatPreamble + fmt.Sprintf(
+				"You are the assistant for wiki page '%s'. No [ai_agent_chat_context] section exists yet. You can create one using the MergeFrontmatter MCP tool to store per-page memory for future sessions.",
 				entry.page,
 			))},
 		})
@@ -624,8 +635,8 @@ func (d *poolDaemon) injectPageContext(ctx context.Context, entry *instanceEntry
 
 	_, _ = entry.conn.Prompt(ctx, acp.PromptRequest{
 		SessionId: entry.sessionID,
-		Prompt: []acp.ContentBlock{acp.TextBlock(fmt.Sprintf(
-			"[System] You are the assistant for wiki page '%s'. Here is the [ai_agent_chat_context] from the page's frontmatter — this is your per-page working memory:\n```json\n%s\n```\nUpdate it using the MergeFrontmatter MCP tool when you learn something worth remembering.",
+		Prompt: []acp.ContentBlock{acp.TextBlock(chatPreamble + fmt.Sprintf(
+			"You are the assistant for wiki page '%s'. Here is your per-page working memory from [ai_agent_chat_context]:\n```json\n%s\n```\nUpdate it using the MergeFrontmatter MCP tool when you learn something worth remembering.",
 			entry.page, string(contextJSON),
 		))},
 	})
