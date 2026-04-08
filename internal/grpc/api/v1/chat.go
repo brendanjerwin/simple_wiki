@@ -109,6 +109,7 @@ func (s *Server) SubscribeChat(req *apiv1.SubscribeChatRequest, stream apiv1.Cha
 							MessageId:  event.Edit.MessageID,
 							NewContent: event.Edit.NewContent,
 							Timestamp:  timestamppb.New(event.Edit.Timestamp),
+							Streaming:  event.Edit.Streaming,
 						},
 					},
 				}
@@ -196,7 +197,7 @@ func (s *Server) EditChatMessage(_ context.Context, req *apiv1.EditChatMessageRe
 		return nil, status.Error(codes.InvalidArgument, "new_content is required")
 	}
 
-	err := s.chatBufferManager.EditMessage(req.MessageId, req.NewContent)
+	err := s.chatBufferManager.EditMessage(req.MessageId, req.NewContent, req.Streaming)
 	if err != nil {
 		if errors.Is(err, chatbuffer.ErrMessageNotFound) {
 			return nil, status.Errorf(codes.NotFound, "message not found: %s", req.MessageId)

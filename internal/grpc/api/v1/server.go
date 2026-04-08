@@ -49,7 +49,7 @@ const (
 type ChatBufferManager interface {
 	AddUserMessage(page, content, senderName string) (string, error)
 	AddAssistantMessage(page, content, replyToID string) (string, error)
-	EditMessage(messageID, newContent string) error
+	EditMessage(messageID, newContent string, streaming bool) error
 	AddReaction(messageID, emoji, reactor string) error
 	GetMessages(page string) []*chatbuffer.Message
 	SubscribeToPage(page string) (<-chan chatbuffer.Event, func())

@@ -792,7 +792,7 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
         await this.addMessage(event.event.value);
         break;
       case 'edit':
-        await this.editMessage(event.event.value.messageId, event.event.value.newContent);
+        await this.editMessage(event.event.value.messageId, event.event.value.newContent, event.event.value.streaming);
         break;
       case 'reaction':
         this.addReaction(
@@ -848,7 +848,7 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
     }
   }
 
-  private async editMessage(messageId: string, newContent: string): Promise<void> {
+  private async editMessage(messageId: string, newContent: string, streaming = false): Promise<void> {
     const msg = this.messagesById.get(messageId);
     if (!msg) return;
 
@@ -863,8 +863,16 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
 
     msg.content = newContent;
     msg.renderedHtml = renderedHtml;
-    msg.edited = true;
+    if (!streaming) {
+      msg.edited = true;
+    }
     this.messages = [...this.messages]; // trigger re-render
+
+    // Auto-scroll during streaming if user hasn't scrolled up
+    if (streaming && !this.userHasScrolled) {
+      await this.updateComplete;
+      this.scrollToBottom();
+    }
   }
 
   private addReaction(messageId: string, emoji: string, reactor: string): void {

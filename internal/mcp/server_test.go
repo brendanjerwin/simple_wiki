@@ -86,7 +86,7 @@ func (noOpChatBufferManager) AddUserMessage(string, string, string) (string, err
 func (noOpChatBufferManager) AddAssistantMessage(string, string, string) (string, error) {
 	return "", nil
 }
-func (noOpChatBufferManager) EditMessage(string, string) error {
+func (noOpChatBufferManager) EditMessage(string, string, bool) error {
 	return nil
 }
 func (noOpChatBufferManager) AddReaction(string, string, string) error {

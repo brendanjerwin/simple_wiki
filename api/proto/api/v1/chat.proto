@@ -87,6 +87,9 @@ message ChatMessageEdit {
   string message_id = 1;
   string new_content = 2;
   google.protobuf.Timestamp timestamp = 3;
+  // When true, this is a streaming content update (e.g., from an ACP agent),
+  // not a user-initiated edit. The frontend should not show "(edited)".
+  bool streaming = 4;
 }
 
 // ChatReaction represents a reaction added to a message.
@@ -131,6 +134,9 @@ message SendChatReplyResponse {
 message EditChatMessageRequest {
   string message_id = 1;   // message to edit
   string new_content = 2;  // new markdown content
+  // When true, this is a streaming update from an ACP agent.
+  // The edit event will carry this flag so the frontend can suppress "(edited)".
+  bool streaming = 3;
 }
 
 // EditChatMessageResponse is the response for EditChatMessage.

@@ -236,7 +236,7 @@ var _ = Describe("Manager", func() {
 				eventChan, unsubPage = manager.SubscribeToPage("test-page")
 				DeferCleanup(unsubPage)
 
-				err = manager.EditMessage(messageID, "Edited content")
+				err = manager.EditMessage(messageID, "Edited content", false)
 			})
 
 			It("should not error", func() {
@@ -262,7 +262,7 @@ var _ = Describe("Manager", func() {
 			var err error
 
 			BeforeEach(func() {
-				err = manager.EditMessage("nonexistent-id", "New content")
+				err = manager.EditMessage("nonexistent-id", "New content", false)
 			})
 
 			It("should return ErrMessageNotFound", func() {
@@ -283,7 +283,7 @@ var _ = Describe("Manager", func() {
 				messageID, _ = manager.AddUserMessage("page1", "Message", "user")
 				_, _ = manager.AddAssistantMessage("page2", "Other", "")
 
-				err = manager.EditMessage(messageID, "Updated")
+				err = manager.EditMessage(messageID, "Updated", false)
 			})
 
 			It("should find and update the message", func() {

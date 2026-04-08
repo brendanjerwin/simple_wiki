@@ -141,7 +141,7 @@ func (m *mockChatBufferManager) AddAssistantMessage(page, content, replyToID str
 	return messageID, nil
 }
 
-func (m *mockChatBufferManager) EditMessage(messageID, newContent string) error {
+func (m *mockChatBufferManager) EditMessage(messageID, newContent string, _ bool) error {
 	if m.editMessageError != nil {
 		return m.editMessageError
 	}

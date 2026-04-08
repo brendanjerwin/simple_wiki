@@ -66,6 +66,7 @@ type EditEvent struct {
 	MessageID  string
 	NewContent string
 	Timestamp  time.Time
+	Streaming  bool // true for ACP streaming updates, false for user edits
 }
 
 // ReactionEvent represents a reaction added to a message.
@@ -359,7 +360,9 @@ func hasReaction(msg *Message, emoji, reactor string) bool {
 }
 
 // EditMessage updates the content of an existing message.
-func (m *Manager) EditMessage(messageID, newContent string) error {
+// If streaming is true, the edit event carries a streaming flag so the frontend
+// can suppress the "(edited)" indicator for ACP streaming updates.
+func (m *Manager) EditMessage(messageID, newContent string, streaming bool) error {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
@@ -380,6 +383,7 @@ func (m *Manager) EditMessage(messageID, newContent string) error {
 					MessageID:  messageID,
 					NewContent: newContent,
 					Timestamp:  time.Now(),
+					Streaming:  streaming,
 				},
 			})
 			return nil

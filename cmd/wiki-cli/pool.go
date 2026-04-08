@@ -326,10 +326,11 @@ func (c *wikiChatClient) SessionUpdate(_ context.Context, n acp.SessionNotificat
 			c.currentMsg = resp.Msg.MessageId
 			c.mu.Unlock()
 		} else {
-			// Subsequent chunks — edit the existing message
+			// Subsequent chunks — streaming update (not a user edit)
 			_, err := c.chatClient.EditChatMessage(context.Background(), connect.NewRequest(&apiv1.EditChatMessageRequest{
 				MessageId:  msgID,
 				NewContent: fullText,
+				Streaming:  true,
 			}))
 			if err != nil {
 				log.Printf("Failed to update streaming reply for %q: %v", c.page, err)
