@@ -231,7 +231,7 @@ export class ToastMessage extends LitElement {
 
     if (shouldAutoClose && this.timeoutSeconds > 0) {
       this.clearTimeout();
-      this.timeoutId = window.setTimeout(() => {
+      this.timeoutId = globalThis.setTimeout(() => {
         this.hide();
       }, this.timeoutSeconds * 1000);
     }
@@ -249,7 +249,7 @@ export class ToastMessage extends LitElement {
 
   private clearTimeout(): void {
     if (this.timeoutId !== undefined) {
-      window.clearTimeout(this.timeoutId);
+      globalThis.clearTimeout(this.timeoutId);
       delete this.timeoutId;
     }
   }

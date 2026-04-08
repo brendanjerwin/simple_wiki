@@ -22,8 +22,8 @@ export interface TimerProvider {
  * Default timer provider using browser's native setTimeout/clearTimeout.
  */
 export const defaultTimerProvider: TimerProvider = {
-  setTimeout: (callback, delayMs) => window.setTimeout(callback, delayMs),
-  clearTimeout: (id) => window.clearTimeout(id),
+  setTimeout: (callback, delayMs) => globalThis.setTimeout(callback, delayMs),
+  clearTimeout: (id) => globalThis.clearTimeout(id),
 };
 
 /**
@@ -246,7 +246,7 @@ export class ConfirmationInterlockButton extends LitElement {
     );
     if (focusableElements.length === 0) return;
     const firstFocusable = focusableElements[0]!;
-    const lastFocusable = focusableElements[focusableElements.length - 1]!;
+    const lastFocusable = focusableElements.at(-1)!;
     const activeEl = this.shadowRoot?.activeElement;
     if (e.shiftKey) {
       if (activeEl === firstFocusable) {
