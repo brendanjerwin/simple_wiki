@@ -47,6 +47,13 @@ func (s *Server) SendMessage(ctx context.Context, req *apiv1.SendChatMessageRequ
 		return nil, status.Errorf(codes.Internal, "failed to add message: %v", err)
 	}
 
+	// If a pool daemon is connected but no per-page subscriber exists for this page,
+	// request an instance. The message was stored and delivered to global subscribers,
+	// but only a per-page ACP instance can properly handle the chat.
+	if s.chatBufferManager.HasInstanceRequestSubscribers() && !s.chatBufferManager.HasPageChannelSubscriber(req.Page) {
+		s.chatBufferManager.RequestInstance(req.Page)
+	}
+
 	return &apiv1.SendChatMessageResponse{
 		MessageId: messageID,
 	}, nil
@@ -265,7 +272,14 @@ func (s *Server) GetChatStatus(_ context.Context, req *apiv1.GetChatStatusReques
 	}
 
 	if req.Page != "" {
-		resp.Connected = s.chatBufferManager.HasPageChannelSubscriber(req.Page) || s.chatBufferManager.HasChannelSubscribers()
+		// When a pool daemon is connected, only per-page subscribers count as "connected"
+		// for that page. Global channel subscribers (e.g., wiki-cli mcp for tool use)
+		// should not prevent the pool from spawning page-specific instances.
+		if resp.PoolConnected {
+			resp.Connected = s.chatBufferManager.HasPageChannelSubscriber(req.Page)
+		} else {
+			resp.Connected = s.chatBufferManager.HasPageChannelSubscriber(req.Page) || s.chatBufferManager.HasChannelSubscribers()
+		}
 		resp.Starting = resp.PoolConnected && s.chatBufferManager.IsInstanceRequested(req.Page)
 	} else {
 		resp.Connected = s.chatBufferManager.HasChannelSubscribers()
