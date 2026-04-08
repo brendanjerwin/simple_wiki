@@ -20,20 +20,19 @@ type Matrix struct {
 	Include []Group `json:"include"`
 }
 
-func main() {
+func listPackages() ([]string, error) {
 	goPath, err := exec.LookPath("go")
 	if err != nil {
-		_, _ = fmt.Fprintln(os.Stderr, "go not found:", err)
-		os.Exit(1)
+		return nil, fmt.Errorf("go not found: %w", err)
 	}
 
 	cmd := exec.Command(goPath, "list", "./...")
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
-		panic(err)
+		return nil, fmt.Errorf("stdout pipe: %w", err)
 	}
 	if err := cmd.Start(); err != nil {
-		panic(err)
+		return nil, fmt.Errorf("start command: %w", err)
 	}
 
 	var packages []string
@@ -46,9 +45,13 @@ func main() {
 	}
 
 	if err := cmd.Wait(); err != nil {
-		panic(err)
+		return nil, fmt.Errorf("command wait: %w", err)
 	}
 
+	return packages, nil
+}
+
+func buildMatrix(packages []string) Matrix {
 	groups := make([][]string, numGroups)
 	for i, pkg := range packages {
 		groups[i%numGroups] = append(groups[i%numGroups], pkg)
@@ -64,23 +67,47 @@ func main() {
 		}
 	}
 
-	jsonMatrix, err := json.Marshal(matrix)
-	if err != nil {
-		panic(err)
-	}
+	return matrix
+}
 
+func writeOutput(jsonMatrix []byte) error {
 	outputFile := os.Getenv("GITHUB_OUTPUT")
 	if outputFile == "" {
 		// Fallback for local testing
 		_, _ = fmt.Println(string(jsonMatrix))
-		return
+		return nil
 	}
+
 	f, err := os.OpenFile(outputFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
-		panic(err)
+		return fmt.Errorf("open output file: %w", err)
 	}
 	defer f.Close()
+
 	if _, err := f.WriteString(fmt.Sprintf("matrix=%s\n", string(jsonMatrix))); err != nil {
-		panic(err)
+		return fmt.Errorf("write output: %w", err)
+	}
+
+	return nil
+}
+
+func main() {
+	packages, err := listPackages()
+	if err != nil {
+		_, _ = fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+
+	matrix := buildMatrix(packages)
+
+	jsonMatrix, err := json.Marshal(matrix)
+	if err != nil {
+		_, _ = fmt.Fprintln(os.Stderr, "marshal matrix:", err)
+		os.Exit(1)
+	}
+
+	if err := writeOutput(jsonMatrix); err != nil {
+		_, _ = fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
 	}
 }
