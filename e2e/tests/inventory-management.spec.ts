@@ -182,7 +182,11 @@ This is an E2E test inventory container.`);
         page.waitForNavigation({ waitUntil: 'load', timeout: SAVE_TIMEOUT_MS }),
         addButton.click(),
       ]);
-      await expect(page).toHaveURL(`**/${CONTAINER_A}/view`);
+      // Use url().toContain() rather than toHaveURL(glob) — Playwright prepends baseURL to
+      // glob patterns, making '**/${CONTAINER_A}/view' resolve to
+      // 'http://localhost:8090/**/e2einvcontainera.../view' which requires an extra path
+      // segment between the host and the identifier and never matches the root-level path.
+      expect(page.url()).toContain(`/${CONTAINER_A}/view`);
     });
   });
 
@@ -341,7 +345,9 @@ This is an E2E test inventory container.`);
         page.waitForNavigation({ waitUntil: 'load', timeout: SAVE_TIMEOUT_MS }),
         moveToButton.first().click(),
       ]);
-      await expect(page).toHaveURL(`**/${API_ITEM}/view`);
+      // Use url().toContain() rather than toHaveURL(glob) for the same reason as the
+      // add-item test: baseURL prepending breaks glob matching at root-level paths.
+      expect(page.url()).toContain(`/${API_ITEM}/view`);
     });
 
     test('should reflect the move in FindItemLocation after the dialog move', async ({ request }) => {
