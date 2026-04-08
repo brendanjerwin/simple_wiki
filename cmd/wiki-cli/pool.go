@@ -280,6 +280,7 @@ type wikiChatClient struct {
 	wikiURL    string
 	mu         sync.Mutex
 	textBuf    strings.Builder
+	thoughtBuf strings.Builder
 	replyToID  string    // set before each prompt to thread responses
 	currentMsg string    // message ID of the in-progress streaming reply
 	chatClient apiv1connect.ChatServiceClient
@@ -306,7 +307,7 @@ func (c *wikiChatClient) SessionUpdate(_ context.Context, n acp.SessionNotificat
 
 		c.mu.Lock()
 		c.textBuf.WriteString(content.Text.Text)
-		fullText := c.textBuf.String()
+		fullText := c.buildFullText()
 		msgID := c.currentMsg
 		replyTo := c.replyToID
 		c.mu.Unlock()
@@ -352,9 +353,40 @@ func (c *wikiChatClient) SessionUpdate(_ context.Context, n acp.SessionNotificat
 		log.Printf("[%s] Tool call: %s (%s)", c.page, u.ToolCall.Title, u.ToolCall.Status)
 
 	case u.AgentThoughtChunk != nil:
-		// Log thoughts but don't show in chat
 		if u.AgentThoughtChunk.Content.Text != nil {
 			log.Printf("[%s] Thinking: %s", c.page, truncate(u.AgentThoughtChunk.Content.Text.Text, 100))
+
+			c.mu.Lock()
+			c.thoughtBuf.WriteString(u.AgentThoughtChunk.Content.Text.Text)
+			thoughtText := c.buildFullText()
+			msgID := c.currentMsg
+			replyTo := c.replyToID
+			c.mu.Unlock()
+
+			// Stream the thinking indicator to chat so the user sees activity
+			if msgID == "" {
+				resp, err := c.chatClient.SendChatReply(context.Background(), connect.NewRequest(&apiv1.SendChatReplyRequest{
+					Page:      c.page,
+					Content:   thoughtText,
+					ReplyToId: replyTo,
+				}))
+				if err != nil {
+					log.Printf("Failed to create streaming reply for %q: %v", c.page, err)
+				} else {
+					c.mu.Lock()
+					c.currentMsg = resp.Msg.MessageId
+					c.mu.Unlock()
+				}
+			} else {
+				_, err := c.chatClient.EditChatMessage(context.Background(), connect.NewRequest(&apiv1.EditChatMessageRequest{
+					MessageId:  msgID,
+					NewContent: thoughtText,
+					Streaming:  true,
+				}))
+				if err != nil {
+					log.Printf("Failed to update streaming reply for %q: %v", c.page, err)
+				}
+			}
 		}
 	}
 
@@ -362,9 +394,24 @@ func (c *wikiChatClient) SessionUpdate(_ context.Context, n acp.SessionNotificat
 }
 
 // beginTurn prepares for a new prompt turn — resets the streaming state.
+// buildFullText returns the combined response text, prepending any accumulated
+// thinking content as a collapsible markdown <details> section.
+// Must be called with c.mu held.
+func (c *wikiChatClient) buildFullText() string {
+	thought := c.thoughtBuf.String()
+	response := c.textBuf.String()
+
+	if thought == "" {
+		return response
+	}
+
+	return "<details><summary>Thinking...</summary>\n\n" + thought + "\n\n</details>\n\n" + response
+}
+
 func (c *wikiChatClient) beginTurn(replyToID string) {
 	c.mu.Lock()
 	c.textBuf.Reset()
+	c.thoughtBuf.Reset()
 	c.replyToID = replyToID
 	c.currentMsg = ""
 	c.mu.Unlock()

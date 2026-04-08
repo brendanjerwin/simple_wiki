@@ -440,16 +440,22 @@ var _ = Describe("wikiChatClient", func() {
 			})
 		})
 
-		When("receiving a non-agent-message update", func() {
+		When("receiving a thought chunk", func() {
 			var (
 				client *wikiChatClient
 				err    error
 			)
 
 			BeforeEach(func() {
-				client = &wikiChatClient{
-					page: "test-page",
-				}
+				mux := http.NewServeMux()
+				mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+					w.Header().Set("Content-Type", "application/json")
+					_, _ = w.Write([]byte(`{"messageId":"msg-1"}`))
+				})
+				server := httptest.NewServer(mux)
+				DeferCleanup(server.Close)
+
+				client = newWikiChatClient("test-page", server.URL)
 
 				thought := acp.SessionNotification{
 					SessionId: "session-1",
@@ -462,8 +468,8 @@ var _ = Describe("wikiChatClient", func() {
 				Expect(err).NotTo(HaveOccurred())
 			})
 
-			It("should not accumulate any text", func() {
-				Expect(client.textBuf.String()).To(BeEmpty())
+			It("should accumulate thought text", func() {
+				Expect(client.thoughtBuf.String()).To(Equal("thinking..."))
 			})
 		})
 
