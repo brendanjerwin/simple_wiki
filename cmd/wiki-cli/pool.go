@@ -109,8 +109,7 @@ The daemon should be run in a directory containing your agent configuration
 			},
 			cli.StringFlag{
 				Name:  "agent-path",
-				Value: "claude",
-				Usage: "Path to ACP-compatible agent binary",
+				Usage: "Path to ACP-compatible agent binary (required)",
 			},
 			cli.BoolFlag{
 				Name:  "no-systemd",
@@ -131,9 +130,14 @@ The daemon should be run in a directory containing your agent configuration
 				log.Println("Systemd not available or disabled — using direct process management")
 			}
 
+			agentPath := c.String("agent-path")
+			if agentPath == "" {
+				return errors.New("--agent-path is required: provide the path to an ACP-compatible agent binary")
+			}
+
 			d := &poolDaemon{
 				wikiURL:      normalizedURL,
-				agentPath:    c.String("agent-path"),
+				agentPath:    agentPath,
 				useSystemd:   useSystemd,
 				maxInstances: c.Int("max-instances"),
 				idleTimeout:  c.Duration("idle-timeout"),
