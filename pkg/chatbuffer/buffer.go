@@ -570,16 +570,21 @@ func (m *Manager) HasPageChannelSubscriber(page string) bool {
 // RequestInstance records that a page needs a Claude instance and notifies pool daemon subscribers.
 // Deduplicates: if the page already has a subscriber or was recently requested, this is a no-op.
 func (m *Manager) RequestInstance(page string) {
-	// Don't request if page already has a subscriber
+	// Don't request if page already has a per-page subscriber
 	if m.HasPageChannelSubscriber(page) {
 		return
 	}
 
-	m.channelSubscribersMu.RLock()
-	hasGlobal := len(m.channelSubscribers) > 0
-	m.channelSubscribersMu.RUnlock()
-	if hasGlobal {
-		return
+	// If a pool daemon is connected, skip the global subscriber check —
+	// global MCP subscribers handle tool access, not chat.
+	// Only skip instance request when no pool daemon exists AND global subscribers exist.
+	if !m.HasInstanceRequestSubscribers() {
+		m.channelSubscribersMu.RLock()
+		hasGlobal := len(m.channelSubscribers) > 0
+		m.channelSubscribersMu.RUnlock()
+		if hasGlobal {
+			return
+		}
 	}
 
 	m.instanceMu.Lock()
