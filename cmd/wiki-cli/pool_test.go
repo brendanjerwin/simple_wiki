@@ -242,7 +242,7 @@ var _ = Describe("poolDaemon", func() {
 						},
 					},
 				}
-				daemon.ensureInstance("existing-page")
+				daemon.ensureInstance(context.Background(), "existing-page")
 			})
 
 			It("should update lastActive instead of spawning", func() {
@@ -261,7 +261,6 @@ var _ = Describe("poolDaemon", func() {
 				daemon = &poolDaemon{
 					maxInstances: 2,
 					newCommand:   (&fakeCommandTracker{shouldFailStart: true}).builder,
-					ctx:          context.Background(),
 					instances: map[string]*instanceEntry{
 						"page-a": {
 							page:       "page-a",
@@ -275,7 +274,7 @@ var _ = Describe("poolDaemon", func() {
 						},
 					},
 				}
-				daemon.ensureInstance("page-c")
+				daemon.ensureInstance(context.Background(), "page-c")
 			})
 
 			It("should not evict any instance when spawn fails", func() {
@@ -301,7 +300,6 @@ var _ = Describe("poolDaemon", func() {
 				daemon = &poolDaemon{
 					maxInstances: 2,
 					newCommand:   tracker.builder,
-					ctx:          context.Background(),
 					instances: map[string]*instanceEntry{
 						"page-a": {
 							page:       "page-a",
@@ -315,7 +313,7 @@ var _ = Describe("poolDaemon", func() {
 						},
 					},
 				}
-				daemon.ensureInstance("page-c")
+				daemon.ensureInstance(context.Background(), "page-c")
 			})
 
 			It("should evict the least recently active instance", func() {
@@ -340,10 +338,9 @@ var _ = Describe("poolDaemon", func() {
 				daemon = &poolDaemon{
 					maxInstances: 5,
 					newCommand:   tracker.builder,
-					ctx:          context.Background(),
 					instances:    make(map[string]*instanceEntry),
 				}
-				daemon.ensureInstance("new-page")
+				daemon.ensureInstance(context.Background(), "new-page")
 			})
 
 			It("should add the instance", func() {
@@ -362,7 +359,7 @@ var _ = Describe("poolDaemon", func() {
 					instances:  make(map[string]*instanceEntry),
 				}
 				daemon.mu.Lock()
-				_, err = daemon.spawnInstance("test-page")
+				_, err = daemon.spawnInstance(nil, "test-page")
 				daemon.mu.Unlock()
 			})
 
@@ -382,11 +379,10 @@ var _ = Describe("poolDaemon", func() {
 				DeferCleanup(tracker.cleanup)
 				daemon := &poolDaemon{
 					newCommand: tracker.builder,
-					ctx:        context.Background(),
 					instances:  make(map[string]*instanceEntry),
 				}
 				daemon.mu.Lock()
-				entry, err = daemon.spawnInstance("test-page")
+				entry, err = daemon.spawnInstance(context.Background(), "test-page")
 				daemon.mu.Unlock()
 			})
 
@@ -413,11 +409,10 @@ var _ = Describe("poolDaemon", func() {
 			BeforeEach(func() {
 				daemon := &poolDaemon{
 					newCommand: (&fakeCommandTracker{shouldFailStart: true}).builder,
-					ctx:        context.Background(),
 					instances:  make(map[string]*instanceEntry),
 				}
 				daemon.mu.Lock()
-				_, err = daemon.spawnInstance("test-page")
+				_, err = daemon.spawnInstance(context.Background(), "test-page")
 				daemon.mu.Unlock()
 			})
 
@@ -620,13 +615,10 @@ var _ = Describe("poolDaemon", func() {
 
 	Describe("run", func() {
 		When("context is cancelled immediately", func() {
-			var (
-				daemon *poolDaemon
-				err    error
-			)
+			var err error
 
 			BeforeEach(func() {
-				daemon = &poolDaemon{
+				daemon := &poolDaemon{
 					wikiURL:      "http://localhost:1",
 					maxInstances: 5,
 					idleTimeout:  30 * time.Minute,
@@ -640,10 +632,6 @@ var _ = Describe("poolDaemon", func() {
 
 			It("should return nil", func() {
 				Expect(err).NotTo(HaveOccurred())
-			})
-
-			It("should set the daemon context", func() {
-				Expect(daemon.ctx).NotTo(BeNil())
 			})
 		})
 	})
