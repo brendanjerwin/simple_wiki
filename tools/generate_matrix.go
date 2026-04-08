@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -31,6 +32,8 @@ func listPackages() ([]string, error) {
 	if err != nil {
 		return nil, fmt.Errorf("stdout pipe: %w", err)
 	}
+	var stderrBuffer bytes.Buffer
+	cmd.Stderr = &stderrBuffer
 	if err := cmd.Start(); err != nil {
 		return nil, fmt.Errorf("start command: %w", err)
 	}
@@ -45,7 +48,11 @@ func listPackages() ([]string, error) {
 	}
 
 	if err := cmd.Wait(); err != nil {
-		return nil, fmt.Errorf("command wait: %w", err)
+		errMsg := fmt.Sprintf("command wait: %v", err)
+		if stderrBuffer.Len() > 0 {
+			errMsg += "\n" + stderrBuffer.String()
+		}
+		return nil, fmt.Errorf("%s", errMsg)
 	}
 
 	return packages, nil
@@ -57,7 +64,7 @@ func buildMatrix(packages []string) Matrix {
 		groups[i%numGroups] = append(groups[i%numGroups], pkg)
 	}
 
-	var matrix Matrix
+	matrix := Matrix{Include: []Group{}}
 	for i, groupPackages := range groups {
 		if len(groupPackages) > 0 {
 			matrix.Include = append(matrix.Include, Group{
