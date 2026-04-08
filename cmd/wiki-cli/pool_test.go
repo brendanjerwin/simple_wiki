@@ -265,12 +265,16 @@ var _ = Describe("poolDaemon", func() {
 						"page-a": {
 							page:       "page-a",
 							lastActive: time.Now().Add(-20 * time.Minute),
-							cancel:     func() {},
+							cancel: func() {
+								// no-op: satisfies context.CancelFunc for testing
+							},
 						},
 						"page-b": {
 							page:       "page-b",
 							lastActive: time.Now().Add(-5 * time.Minute),
-							cancel:     func() {},
+							cancel: func() {
+								// no-op: satisfies context.CancelFunc for testing
+							},
 						},
 					},
 				}
@@ -304,12 +308,16 @@ var _ = Describe("poolDaemon", func() {
 						"page-a": {
 							page:       "page-a",
 							lastActive: time.Now().Add(-20 * time.Minute),
-							cancel:     func() {},
+							cancel: func() {
+								// no-op: satisfies context.CancelFunc for testing
+							},
 						},
 						"page-b": {
 							page:       "page-b",
 							lastActive: time.Now().Add(-5 * time.Minute),
-							cancel:     func() {},
+							cancel: func() {
+								// no-op: satisfies context.CancelFunc for testing
+							},
 						},
 					},
 				}
@@ -415,17 +423,23 @@ var _ = Describe("poolDaemon", func() {
 						"new-page": {
 							page:       "new-page",
 							lastActive: time.Now(),
-							cancel:     func() {},
+							cancel: func() {
+								// no-op: satisfies context.CancelFunc for testing
+							},
 						},
 						"old-page": {
 							page:       "old-page",
 							lastActive: time.Now().Add(-30 * time.Minute),
-							cancel:     func() {},
+							cancel: func() {
+								// no-op: satisfies context.CancelFunc for testing
+							},
 						},
 						"mid-page": {
 							page:       "mid-page",
 							lastActive: time.Now().Add(-10 * time.Minute),
-							cancel:     func() {},
+							cancel: func() {
+								// no-op: satisfies context.CancelFunc for testing
+							},
 						},
 					},
 				}
@@ -565,12 +579,16 @@ var _ = Describe("poolDaemon", func() {
 						"idle-page": {
 							page:       "idle-page",
 							lastActive: time.Now().Add(-20 * time.Minute),
-							cancel:     func() {},
+							cancel: func() {
+								// no-op: satisfies context.CancelFunc for testing
+							},
 						},
 						"active-page": {
 							page:       "active-page",
 							lastActive: time.Now(),
-							cancel:     func() {},
+							cancel: func() {
+								// no-op: satisfies context.CancelFunc for testing
+							},
 						},
 					},
 				}
