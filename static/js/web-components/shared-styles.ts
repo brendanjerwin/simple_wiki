@@ -44,9 +44,9 @@ export const colorCSS = css`
 
 export const forceDarkTokensCSS = css`
   .force-dark {
-    /* Surfaces */
-    --color-surface-primary: #1e1e1e;
-    --color-surface-elevated: #2d2d2d;
+    /* Surfaces — elevated must be lighter than editor-surface (#2d2d2d) for contrast */
+    --color-surface-primary: var(--color-editor-surface);
+    --color-surface-elevated: var(--color-editor-surface-elevated);
     --color-surface-sunken: #141414;
     --color-surface-overlay: rgba(0, 0, 0, 0.7);
 
