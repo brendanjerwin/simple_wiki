@@ -20,7 +20,7 @@ function createTestTimerProvider(): TimerProvider & {
     setTimeout: (callback: () => void, _delayMs: number): ReturnType<typeof globalThis.setTimeout> => {
       pendingCallback = callback;
       wasCleared = false;
-      return 1 as ReturnType<typeof globalThis.setTimeout>; // Return a dummy timer ID
+      return 1 as unknown as ReturnType<typeof globalThis.setTimeout>; // Return a dummy timer ID
     },
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     clearTimeout: (_id: ReturnType<typeof globalThis.setTimeout>): void => {
