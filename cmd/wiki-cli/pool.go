@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -10,40 +11,28 @@ import (
 	"os"
 	"os/exec"
 	"regexp"
+	"strings"
 	"sync"
 	"time"
 
 	"connectrpc.com/connect"
+	acp "github.com/coder/acp-go-sdk"
+
 	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
 	"github.com/brendanjerwin/simple_wiki/gen/go/api/v1/apiv1connect"
 	cli "gopkg.in/urfave/cli.v1"
 )
 
 const (
-	defaultMaxInstances        = 5
-	defaultIdleTimeoutMinutes  = 30
+	defaultMaxInstances       = 5
+	defaultIdleTimeoutMinutes = 30
 )
 
-// commandStarter starts and waits on commands. *exec.Cmd satisfies this interface.
-type commandStarter interface {
-	Start() error
-	Wait() error
-}
-
-// commandBuilder creates a command for the given arguments. Injected for testing.
-// In production this is exec.CommandContext.
-type commandBuilder func(ctx context.Context, name string, arg ...string) commandStarter
-
-// execCommandBuilder is the production commandBuilder wrapping exec.CommandContext.
-func execCommandBuilder(ctx context.Context, name string, arg ...string) commandStarter {
-	return exec.CommandContext(ctx, name, arg...)
-}
-
-// instanceEntry tracks a running Claude Code instance for a page.
+// instanceEntry tracks a running agent instance for a page.
 type instanceEntry struct {
 	page       string
-	unitName   string
-	cmd        commandStarter
+	conn       *acp.ClientSideConnection
+	sessionID  acp.SessionId
 	cancel     context.CancelFunc
 	lastActive time.Time
 	mu         sync.Mutex
@@ -61,14 +50,13 @@ func (e *instanceEntry) idleSince() time.Duration {
 	return time.Since(e.lastActive)
 }
 
-// poolDaemon manages per-page Claude Code instances.
+// poolDaemon manages per-page agent instances via ACP.
 type poolDaemon struct {
 	wikiURL      string
-	claudePath   string
+	agentPath    string
 	useSystemd   bool
 	maxInstances int
 	idleTimeout  time.Duration
-	newCommand   commandBuilder
 
 	ctx       context.Context
 	instances map[string]*instanceEntry
@@ -91,27 +79,28 @@ func isSystemdAvailable() bool {
 func buildPoolCommand(urlFlag cli.StringFlag) cli.Command {
 	return cli.Command{
 		Name:  "pool",
-		Usage: "Manage per-page Claude Code instances",
+		Usage: "Manage per-page AI agent instances via ACP",
 		Description: `Runs a pool daemon that subscribes to instance requests from the wiki server
-and spawns dedicated Claude Code instances per page on demand.
+and spawns dedicated AI agent instances per page on demand using the Agent
+Client Protocol (ACP).
 
-Each instance gets its own wiki-cli MCP subprocess scoped to a specific page,
-with the page's frontmatter ai_agent_chat_context injected as initial context.
+Each agent gets its own session with the wiki MCP server for page tools,
+and receives the page's ai_agent_chat_context frontmatter as initial context.
 
-When running under systemd, instances are spawned as transient units for
-per-page journal logging (journalctl -u wiki-chat-<page>).
+When running under systemd, agent processes are spawned as transient units
+for per-page journal logging (journalctl -u wiki-chat-<page>).
 
 Example:
   wiki-cli pool --url https://wiki.monster-orfe.ts.net --max-instances 5
 
-The daemon should be run in a directory containing your Claude agent configuration
-(CLAUDE.md, agent files, etc.) as Claude Code will use that directory's context.`,
+The daemon should be run in a directory containing your agent configuration
+(CLAUDE.md, agent files, etc.) as the agent will use that directory's context.`,
 		Flags: []cli.Flag{
 			urlFlag,
 			cli.IntFlag{
 				Name:  "max-instances",
 				Value: defaultMaxInstances,
-				Usage: "Maximum concurrent Claude instances",
+				Usage: "Maximum concurrent agent instances",
 			},
 			cli.DurationFlag{
 				Name:  "idle-timeout",
@@ -119,9 +108,9 @@ The daemon should be run in a directory containing your Claude agent configurati
 				Usage: "Reclaim idle instances after this duration",
 			},
 			cli.StringFlag{
-				Name:  "claude-path",
+				Name:  "agent-path",
 				Value: "claude",
-				Usage: "Path to claude binary",
+				Usage: "Path to ACP-compatible agent binary",
 			},
 			cli.BoolFlag{
 				Name:  "no-systemd",
@@ -137,18 +126,17 @@ The daemon should be run in a directory containing your Claude agent configurati
 
 			useSystemd := isSystemdAvailable() && !c.Bool("no-systemd")
 			if useSystemd {
-				log.Println("Systemd detected — instances will be spawned as transient units")
+				log.Println("Systemd detected — agent processes will be spawned as transient units")
 			} else {
 				log.Println("Systemd not available or disabled — using direct process management")
 			}
 
 			d := &poolDaemon{
 				wikiURL:      normalizedURL,
-				claudePath:   c.String("claude-path"),
+				agentPath:    c.String("agent-path"),
 				useSystemd:   useSystemd,
 				maxInstances: c.Int("max-instances"),
 				idleTimeout:  c.Duration("idle-timeout"),
-				newCommand:   execCommandBuilder,
 				instances:    make(map[string]*instanceEntry),
 			}
 
@@ -232,7 +220,7 @@ func (d *poolDaemon) subscribeAndHandle(ctx context.Context) error {
 	return errors.New("stream closed by server")
 }
 
-// ensureInstance spawns a Claude instance for a page if one doesn't already exist.
+// ensureInstance spawns an agent instance for a page if one doesn't already exist.
 func (d *poolDaemon) ensureInstance(page string) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
@@ -244,15 +232,13 @@ func (d *poolDaemon) ensureInstance(page string) {
 		return
 	}
 
-	// Spawn new instance first, then evict if needed — avoids dropping a working
-	// instance when the spawn fails.
+	// Spawn new instance first, then evict if needed.
 	entry, err := d.spawnInstance(page)
 	if err != nil {
 		log.Printf("Failed to spawn instance for %q: %v", page, err)
 		return
 	}
 
-	// At capacity? Evict least recently active to make room.
 	if len(d.instances) >= d.maxInstances {
 		d.evictLeastActive()
 	}
@@ -281,35 +267,116 @@ func (d *poolDaemon) evictLeastActive() {
 	}
 }
 
-// buildMCPServerArg builds the --mcp-server flag value for a page-scoped wiki-cli MCP instance.
-func buildMCPServerArg(wikiCLIBin, wikiURL, page string) string {
-	return fmt.Sprintf("%s mcp --url %s --page %s", wikiCLIBin, wikiURL, page)
+// wikiChatClient implements acp.Client — handles ACP callbacks from the agent.
+// It collects agent message chunks and posts them to the wiki as chat replies.
+type wikiChatClient struct {
+	page       string
+	wikiURL    string
+	mu         sync.Mutex
+	textBuf    strings.Builder
+	replyToID  string
+	lastMsgID  string
+	chatClient apiv1connect.ChatServiceClient
 }
 
-// buildDirectClaudeArgs builds the argument list for spawning Claude directly.
-// Returns (binary, args, unitName="").
-func buildDirectClaudeArgs(claudePath, mcpServerCmd string) (string, []string, string) {
-	return claudePath, []string{
-		"--channels", "wiki-channel:wiki-channel",
-		"--mcp-server", mcpServerCmd,
-	}, ""
+func newWikiChatClient(page, wikiURL string) *wikiChatClient {
+	httpClient := &http.Client{}
+	return &wikiChatClient{
+		page:       page,
+		wikiURL:    wikiURL,
+		chatClient: apiv1connect.NewChatServiceClient(httpClient, wikiURL),
+	}
 }
 
-// buildSystemdClaudeArgs builds the argument list for spawning Claude via systemd-run.
-// Returns (binary, args, unitName).
-func buildSystemdClaudeArgs(claudePath, mcpServerCmd, page string) (string, []string, string) {
-	unitName := "wiki-chat-" + sanitizeUnitName(page)
-	return "systemd-run", []string{
-		"--user",
-		"--unit=" + unitName,
-		"--scope",
-		claudePath,
-		"--channels", "wiki-channel:wiki-channel",
-		"--mcp-server", mcpServerCmd,
-	}, unitName
+func (c *wikiChatClient) SessionUpdate(_ context.Context, n acp.SessionNotification) error {
+	u := n.Update
+
+	if u.AgentMessageChunk != nil {
+		content := u.AgentMessageChunk.Content
+		if content.Text != nil {
+			c.mu.Lock()
+			c.textBuf.WriteString(content.Text.Text)
+			c.mu.Unlock()
+		}
+	}
+
+	return nil
 }
 
-// spawnInstance starts a Claude Code process for a page.
+// flushResponse sends accumulated text as a chat reply and resets the buffer.
+func (c *wikiChatClient) flushResponse(replyToID string) {
+	c.mu.Lock()
+	text := c.textBuf.String()
+	c.textBuf.Reset()
+	c.mu.Unlock()
+
+	if text == "" {
+		return
+	}
+
+	resp, err := c.chatClient.SendChatReply(context.Background(), connect.NewRequest(&apiv1.SendChatReplyRequest{
+		Page:      c.page,
+		Content:   text,
+		ReplyToId: replyToID,
+	}))
+	if err != nil {
+		log.Printf("Failed to send chat reply for %q: %v", c.page, err)
+		return
+	}
+
+	c.mu.Lock()
+	c.lastMsgID = resp.Msg.MessageId
+	c.mu.Unlock()
+}
+
+func (c *wikiChatClient) RequestPermission(_ context.Context, p acp.RequestPermissionRequest) (acp.RequestPermissionResponse, error) {
+	// Auto-approve all permissions — the agent is trusted
+	if len(p.Options) == 0 {
+		return acp.RequestPermissionResponse{
+			Outcome: acp.RequestPermissionOutcome{
+				Cancelled: &acp.RequestPermissionOutcomeCancelled{},
+			},
+		}, nil
+	}
+	return acp.RequestPermissionResponse{
+		Outcome: acp.RequestPermissionOutcome{
+			Selected: &acp.RequestPermissionOutcomeSelected{OptionId: p.Options[0].OptionId},
+		},
+	}, nil
+}
+
+// File system operations — deny all, agent should use wiki MCP tools
+func (*wikiChatClient) ReadTextFile(_ context.Context, _ acp.ReadTextFileRequest) (acp.ReadTextFileResponse, error) {
+	return acp.ReadTextFileResponse{}, errors.New("file system access not available — use wiki MCP tools")
+}
+
+func (*wikiChatClient) WriteTextFile(_ context.Context, _ acp.WriteTextFileRequest) (acp.WriteTextFileResponse, error) {
+	return acp.WriteTextFileResponse{}, errors.New("file system access not available — use wiki MCP tools")
+}
+
+// Terminal operations — deny all
+func (*wikiChatClient) CreateTerminal(_ context.Context, _ acp.CreateTerminalRequest) (acp.CreateTerminalResponse, error) {
+	return acp.CreateTerminalResponse{}, errors.New("terminal access not available")
+}
+
+func (*wikiChatClient) KillTerminalCommand(_ context.Context, _ acp.KillTerminalCommandRequest) (acp.KillTerminalCommandResponse, error) {
+	return acp.KillTerminalCommandResponse{}, errors.New("terminal access not available")
+}
+
+func (*wikiChatClient) TerminalOutput(_ context.Context, _ acp.TerminalOutputRequest) (acp.TerminalOutputResponse, error) {
+	return acp.TerminalOutputResponse{}, errors.New("terminal access not available")
+}
+
+func (*wikiChatClient) ReleaseTerminal(_ context.Context, _ acp.ReleaseTerminalRequest) (acp.ReleaseTerminalResponse, error) {
+	return acp.ReleaseTerminalResponse{}, errors.New("terminal access not available")
+}
+
+func (*wikiChatClient) WaitForTerminalExit(_ context.Context, _ acp.WaitForTerminalExitRequest) (acp.WaitForTerminalExitResponse, error) {
+	return acp.WaitForTerminalExitResponse{}, errors.New("terminal access not available")
+}
+
+// spawnInstance starts an ACP agent process for a page, performs the handshake,
+// creates a session with wiki MCP tools, and starts the message bridge.
 // Must be called with d.mu held.
 func (d *poolDaemon) spawnInstance(page string) (*instanceEntry, error) {
 	if d.ctx == nil {
@@ -317,53 +384,247 @@ func (d *poolDaemon) spawnInstance(page string) (*instanceEntry, error) {
 	}
 	ctx, cancel := context.WithCancel(d.ctx)
 
-	wikiCLIBin, err := os.Executable()
+	// Spawn agent process
+	var cmd *exec.Cmd
+	if d.useSystemd {
+		unitName := "wiki-chat-" + sanitizeUnitName(page)
+		cmd = exec.CommandContext(ctx, "systemd-run",
+			"--user",
+			"--unit="+unitName,
+			"--scope",
+			d.agentPath,
+		)
+	} else {
+		cmd = exec.CommandContext(ctx, d.agentPath)
+		cmd.Stderr = newPrefixWriter(os.Stderr, page)
+	}
+
+	stdinPipe, err := cmd.StdinPipe()
 	if err != nil {
 		cancel()
-		return nil, fmt.Errorf("failed to find wiki-cli binary: %w", err)
+		return nil, fmt.Errorf("stdin pipe: %w", err)
+	}
+	stdoutPipe, err := cmd.StdoutPipe()
+	if err != nil {
+		cancel()
+		return nil, fmt.Errorf("stdout pipe: %w", err)
 	}
 
-	mcpServerCmd := buildMCPServerArg(wikiCLIBin, d.wikiURL, page)
-	var binary string
-	var args []string
-	var unitName string
-	if d.useSystemd {
-		binary, args, unitName = buildSystemdClaudeArgs(d.claudePath, mcpServerCmd, page)
-	} else {
-		binary, args, unitName = buildDirectClaudeArgs(d.claudePath, mcpServerCmd)
-	}
-
-	cmd := d.newCommand(ctx, binary, args...)
 	if err := cmd.Start(); err != nil {
 		cancel()
-		return nil, fmt.Errorf("failed to start claude for page %q: %w", page, err)
+		return nil, fmt.Errorf("start agent for page %q: %w", page, err)
+	}
+
+	// Monitor process exit
+	go func() {
+		waitErr := cmd.Wait()
+		if waitErr != nil && ctx.Err() == nil {
+			log.Printf("Agent for %q exited: %v", page, waitErr)
+		} else {
+			log.Printf("Agent for %q exited cleanly", page)
+		}
+	}()
+
+	// Create ACP client connection
+	chatClient := newWikiChatClient(page, d.wikiURL)
+	conn := acp.NewClientSideConnection(chatClient, stdinPipe, stdoutPipe)
+
+	// ACP handshake
+	_, err = conn.Initialize(ctx, acp.InitializeRequest{
+		ProtocolVersion: acp.ProtocolVersionNumber,
+		ClientCapabilities: acp.ClientCapabilities{
+			Fs: acp.FileSystemCapability{
+				ReadTextFile:  false,
+				WriteTextFile: false,
+			},
+			Terminal: false,
+		},
+	})
+	if err != nil {
+		cancel()
+		return nil, fmt.Errorf("ACP handshake failed for page %q: %w", page, err)
+	}
+
+	// Build MCP server config for the wiki
+	wikiCLIBin, execErr := os.Executable()
+	if execErr != nil {
+		cancel()
+		return nil, fmt.Errorf("failed to find wiki-cli binary: %w", execErr)
+	}
+
+	cwd, _ := os.Getwd()
+
+	// Create session with wiki MCP server
+	sess, err := conn.NewSession(ctx, acp.NewSessionRequest{
+		Cwd: cwd,
+		McpServers: []acp.McpServer{{
+			Stdio: &acp.McpServerStdio{
+				Name:    "wiki",
+				Command: wikiCLIBin,
+				Args:    []string{"mcp", "--url", d.wikiURL},
+				Env:     []acp.EnvVariable{},
+			},
+		}},
+	})
+	if err != nil {
+		cancel()
+		return nil, fmt.Errorf("ACP session creation failed for page %q: %w", page, err)
 	}
 
 	entry := &instanceEntry{
 		page:       page,
-		unitName:   unitName,
-		cmd:        cmd,
-		lastActive: time.Now(),
+		conn:       conn,
+		sessionID:  sess.SessionId,
 		cancel:     cancel,
+		lastActive: time.Now(),
 	}
 
-	// Monitor process exit in background
-	go func() {
-		waitErr := cmd.Wait()
-		if waitErr != nil {
-			log.Printf("Claude instance for %q exited: %v", page, waitErr)
-		} else {
-			log.Printf("Claude instance for %q exited cleanly", page)
-		}
-
-		d.mu.Lock()
-		if current, ok := d.instances[page]; ok && current == entry {
-			delete(d.instances, page)
-		}
-		d.mu.Unlock()
-	}()
+	// Inject page context and start message bridge
+	go d.runMessageBridge(ctx, entry, chatClient)
 
 	return entry, nil
+}
+
+// runMessageBridge fetches page context, sends it as the initial prompt, then
+// subscribes to user messages and forwards them as ACP prompts.
+func (d *poolDaemon) runMessageBridge(ctx context.Context, entry *instanceEntry, chatClient *wikiChatClient) {
+	page := entry.page
+
+	// Fetch and inject page context
+	d.injectPageContext(ctx, entry)
+
+	// Subscribe to page messages
+	httpClient := &http.Client{}
+	wikiClient := apiv1connect.NewChatServiceClient(httpClient, d.wikiURL)
+	fmClient := apiv1connect.NewFrontmatterClient(httpClient, d.wikiURL)
+	_ = fmClient // used in injectPageContext
+
+	backoffMs := initialBackoffMs
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
+
+		start := time.Now()
+		err := d.bridgeMessages(ctx, entry, wikiClient, chatClient)
+		if err == nil {
+			return
+		}
+
+		delayMs, nextMs := computeBackoffAfterFailure(backoffMs, time.Since(start))
+		log.Printf("Message bridge for %q error: %v. Reconnecting in %dms...", page, err, delayMs)
+
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(time.Duration(delayMs) * time.Millisecond):
+		}
+
+		backoffMs = nextMs
+	}
+}
+
+// bridgeMessages subscribes to page chat messages and forwards them as ACP prompts.
+func (d *poolDaemon) bridgeMessages(ctx context.Context, entry *instanceEntry, wikiClient apiv1connect.ChatServiceClient, chatClient *wikiChatClient) error {
+	stream, err := wikiClient.SubscribePageChatMessages(ctx, connect.NewRequest(&apiv1.SubscribePageChatMessagesRequest{
+		Page: entry.page,
+	}))
+	if err != nil {
+		if ctx.Err() != nil {
+			return nil
+		}
+		return fmt.Errorf("failed to subscribe to page messages: %w", err)
+	}
+	defer func() { _ = stream.Close() }()
+
+	log.Printf("Message bridge connected for page %q", entry.page)
+
+	for stream.Receive() {
+		msg := stream.Msg()
+
+		// Only forward user messages
+		if msg.Sender != apiv1.Sender_USER {
+			continue
+		}
+
+		entry.touch()
+
+		// Send as ACP prompt — blocks until the agent completes its turn.
+		// During the turn, SessionUpdate collects text chunks.
+		_, err := entry.conn.Prompt(ctx, acp.PromptRequest{
+			SessionId: entry.sessionID,
+			Prompt:    []acp.ContentBlock{acp.TextBlock(msg.Content)},
+		})
+		if err != nil {
+			log.Printf("Failed to send prompt to agent for %q: %v", entry.page, err)
+			continue
+		}
+
+		// Prompt returned — flush accumulated response as a chat reply
+		chatClient.flushResponse(msg.Id)
+	}
+
+	if err := stream.Err(); err != nil {
+		if ctx.Err() != nil {
+			return nil
+		}
+		return fmt.Errorf("stream error: %w", err)
+	}
+
+	if ctx.Err() != nil {
+		return nil
+	}
+	return errors.New("stream closed by server")
+}
+
+// injectPageContext fetches the page's ai_agent_chat_context frontmatter and sends
+// it as the initial ACP prompt to establish context.
+func (d *poolDaemon) injectPageContext(ctx context.Context, entry *instanceEntry) {
+	httpClient := &http.Client{}
+	fmClient := apiv1connect.NewFrontmatterClient(httpClient, d.wikiURL)
+
+	fmResp, err := fmClient.GetFrontmatter(ctx, connect.NewRequest(&apiv1.GetFrontmatterRequest{Page: entry.page}))
+	if err != nil {
+		log.Printf("Failed to fetch frontmatter for page %q: %v", entry.page, err)
+		// Send error context to agent
+		_, _ = entry.conn.Prompt(ctx, acp.PromptRequest{
+			SessionId: entry.sessionID,
+			Prompt: []acp.ContentBlock{acp.TextBlock(fmt.Sprintf(
+				"[System] Failed to fetch frontmatter for page '%s': %v. Page context is unavailable for this session. Do NOT attempt to create or modify the [ai_agent_chat_context] section.",
+				entry.page, err,
+			))},
+		})
+		return
+	}
+
+	fm := fmResp.Msg.Frontmatter.AsMap()
+	agentContext, ok := fm["ai_agent_chat_context"]
+	if !ok {
+		_, _ = entry.conn.Prompt(ctx, acp.PromptRequest{
+			SessionId: entry.sessionID,
+			Prompt: []acp.ContentBlock{acp.TextBlock(fmt.Sprintf(
+				"[System] You are the assistant for wiki page '%s'. No [ai_agent_chat_context] section found in the page's frontmatter. You can create one using the MergeFrontmatter MCP tool to store per-page instructions and memory for future sessions.",
+				entry.page,
+			))},
+		})
+		return
+	}
+
+	contextJSON, err := json.MarshalIndent(agentContext, "", "  ")
+	if err != nil {
+		log.Printf("Failed to marshal ai_agent_chat_context for page %q: %v", entry.page, err)
+		return
+	}
+
+	_, _ = entry.conn.Prompt(ctx, acp.PromptRequest{
+		SessionId: entry.sessionID,
+		Prompt: []acp.ContentBlock{acp.TextBlock(fmt.Sprintf(
+			"[System] You are the assistant for wiki page '%s'. Here is the [ai_agent_chat_context] from the page's frontmatter — this is your per-page working memory:\n```json\n%s\n```\nUpdate it using the MergeFrontmatter MCP tool when you learn something worth remembering.",
+			entry.page, string(contextJSON),
+		))},
+	})
 }
 
 // stopInstanceLocked stops an instance. Must be called with d.mu held.
@@ -374,24 +635,6 @@ func (d *poolDaemon) stopInstanceLocked(page string) {
 	}
 
 	entry.cancel()
-
-	if entry.unitName != "" {
-		stopCtx, stopCancel := context.WithTimeout(context.Background(), 5*time.Second)
-		stopCmd := d.newCommand(stopCtx, "systemctl", "--user", "stop", entry.unitName+".scope")
-		if err := stopCmd.Start(); err != nil {
-			log.Printf("Failed to start systemctl stop for %q: %v", entry.unitName, err)
-			stopCancel()
-		} else {
-			// Wait in background so we don't block while holding d.mu
-			go func() {
-				defer stopCancel()
-				if err := stopCmd.Wait(); err != nil {
-					log.Printf("Failed to stop systemd unit %q: %v", entry.unitName, err)
-				}
-			}()
-		}
-	}
-
 	delete(d.instances, page)
 }
 
@@ -460,4 +703,3 @@ func (pw *prefixWriter) Write(p []byte) (int, error) {
 
 	return len(p), nil
 }
-

@@ -8,6 +8,7 @@ require (
 	connectrpc.com/vanguard v0.4.0
 	github.com/adrg/frontmatter v0.2.0
 	github.com/blevesearch/bleve v1.0.14
+	github.com/coder/acp-go-sdk v0.6.3
 	github.com/gabriel-vasile/mimetype v1.4.13
 	github.com/gin-contrib/multitemplate v1.1.1
 	github.com/gin-contrib/sessions v1.1.0
