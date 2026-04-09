@@ -223,8 +223,9 @@ test.describe('Z-Index Token System (ADR-0008)', () => {
 
         // Use the Playwright viewport size to compute center coordinates
         const viewport = page.viewportSize();
-        const centerX = (viewport?.width ?? 1280) / 2;
-        const centerY = (viewport?.height ?? 720) / 2;
+        if (!viewport) throw new Error('page.viewportSize() returned null — no viewport configured');
+        const centerX = viewport.width / 2;
+        const centerY = viewport.height / 2;
 
         // The dialog backdrop covers the full viewport; at center the dialog should be topmost
         topmostTagAtCenter = await getTopmostCustomElementTagAt(page, centerX, centerY);
