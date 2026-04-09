@@ -311,6 +311,7 @@ test.describe('Z-Index Token System (ADR-0008)', () => {
       test.beforeEach(async ({ page }) => {
         await openPageImportDialog(page);
 
+        await expect(page.locator('system-info')).toBeAttached({ timeout: MENU_APPEAR_TIMEOUT_MS });
         const zIndexes = await page.evaluate(() => {
           const drawer = document.querySelector('system-info');
           const modal = document.querySelector('page-import-dialog');
