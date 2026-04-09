@@ -377,7 +377,10 @@ var _ = Describe("Handlers", func() {
 				// This avoids mutating site.PathToData, which would race with background indexing goroutines.
 				dirInfo, err := os.Stat(tmpDir)
 				Expect(err).NotTo(HaveOccurred())
-				originalPermissions = dirInfo.Mode()
+				originalPermissions = dirInfo.Mode().Perm()
+				// Note: os.Chmod permission semantics are enforced on Linux/macOS only;
+				// CI runs on Linux so this is safe, but tests on Windows may not reproduce
+				// the intended write failure.
 				err = os.Chmod(tmpDir, 0550) // Read + execute, but no write
 				Expect(err).NotTo(HaveOccurred())
 
@@ -394,7 +397,7 @@ var _ = Describe("Handlers", func() {
 
 			AfterEach(func() {
 				// Restore permissions so the outer AfterEach can clean up tmpDir
-				_ = os.Chmod(tmpDir, originalPermissions)
+				Expect(os.Chmod(tmpDir, originalPermissions)).To(Succeed())
 			})
 
 			It("should return a 500 status code", func() {
