@@ -230,16 +230,7 @@ export class AugmentErrorService {
     if (typeof error === 'string') {
       message = error;
     } else if (error !== null && error !== undefined) {
-      // Try to stringify the object to preserve information.
-      // JSON.stringify returns undefined (without throwing) for values like functions
-      // or symbols, so we fall back to String() coercion in that case too.
-      try {
-        message = JSON.stringify(error) ?? String(error);
-      } catch {
-        // If JSON.stringify fails (e.g. circular reference), fall back to String(...)
-        // coercion to preserve a readable representation when possible
-        message = String(error);
-      }
+      message = error instanceof Error ? error.message : String(error);
     } else {
       message = 'An unknown error occurred';
     }
