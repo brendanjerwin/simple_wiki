@@ -479,6 +479,7 @@ describe('PageChatPanel', () => {
         replyToId: '',
         reactions: [{ emoji: '👍', reactors: ['alice'], count: 1 }],
         edited: false,
+        toolCalls: [],
         sequence: 0n,
       };
       (el as unknown as { messagesById: Map<string, ChatMessageState> }).messagesById.set('msg-1', msgState);
@@ -663,6 +664,7 @@ describe('PageChatPanel', () => {
         replyToId: '',
         reactions: [],
         edited: false,
+        toolCalls: [],
         sequence: 0n,
       };
       (el as unknown as { messagesById: Map<string, ChatMessageState> }).messagesById.set('edit-msg', msgState);
@@ -1249,6 +1251,7 @@ describe('PageChatPanel stream methods', () => {
           replyToId: '',
           reactions: [],
           edited: false,
+          toolCalls: [],
           sequence: 0n,
         };
         // eslint-disable-next-line @typescript-eslint/no-explicit-any -- accessing private field for testing
@@ -1287,6 +1290,7 @@ describe('PageChatPanel stream methods', () => {
           replyToId: '',
           reactions: [],
           edited: false,
+          toolCalls: [],
           sequence: 0n,
         };
         // eslint-disable-next-line @typescript-eslint/no-explicit-any -- accessing private field for testing

@@ -27,6 +27,12 @@ const MAX_RECONNECT_DELAY_MS = 30000;
 const STATUS_POLL_INTERVAL_MS = 15000;
 const STATUS_POLL_STARTING_MS = 3000;
 
+export interface ToolCallState {
+  toolCallId: string;
+  title: string;
+  status: string;
+}
+
 export interface ChatMessageState {
   id: string;
   sender: Sender;
@@ -38,6 +44,7 @@ export interface ChatMessageState {
   reactions: ReactionGroup[];
   edited: boolean;
   sequence: bigint;
+  toolCalls: ToolCallState[];
 }
 
 declare global {
@@ -498,6 +505,7 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
                     ?edited=${msg.edited}
                     reply-to-id=${msg.replyToId}
                     .reactions=${msg.reactions}
+                    .toolCalls=${msg.toolCalls}
                     @scroll-to-message=${this._handleScrollToMessage}
                   ></chat-message-bubble>
                 `,
@@ -794,6 +802,14 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
       case 'edit':
         await this.editMessage(event.event.value.messageId, event.event.value.newContent, event.event.value.streaming);
         break;
+      case 'toolCall':
+        this.updateToolCall(
+          event.event.value.messageId,
+          event.event.value.toolCallId,
+          event.event.value.title,
+          event.event.value.status,
+        );
+        break;
       case 'reaction':
         this.addReaction(
           event.event.value.messageId,
@@ -830,6 +846,7 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
       reactions: groupReactions(msg.reactions),
       edited: false,
       sequence: msg.sequence,
+      toolCalls: [],
     };
 
     const existing = this.messagesById.get(msg.id);
@@ -873,6 +890,21 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
       await this.updateComplete;
       this.scrollToBottom();
     }
+  }
+
+  private updateToolCall(messageId: string, toolCallId: string, title: string, status: string): void {
+    const msg = this.messagesById.get(messageId);
+    if (!msg) return;
+
+    const existing = msg.toolCalls.find((tc) => tc.toolCallId === toolCallId);
+    if (existing) {
+      existing.title = title;
+      existing.status = status;
+      msg.toolCalls = [...msg.toolCalls];
+    } else {
+      msg.toolCalls = [...msg.toolCalls, { toolCallId, title, status }];
+    }
+    this.messages = [...this.messages];
   }
 
   private addReaction(messageId: string, emoji: string, reactor: string): void {
