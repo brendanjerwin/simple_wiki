@@ -246,7 +246,7 @@ export class ConfirmationInterlockButton extends LitElement {
     );
     if (focusableElements.length === 0) return;
     const firstFocusable = focusableElements[0]!;
-    const lastFocusable = focusableElements[focusableElements.length - 1]!;
+    const lastFocusable = focusableElements.at(-1)!;
     const activeEl = this.shadowRoot?.activeElement;
     if (e.shiftKey) {
       if (activeEl === firstFocusable) {
