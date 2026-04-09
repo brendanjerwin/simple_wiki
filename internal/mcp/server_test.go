@@ -140,6 +140,8 @@ func (noOpChatBufferManager) IsInstanceRequested(string) bool {
 	return false
 }
 
+func (noOpChatBufferManager) NotifyToolCall(string, string, string, string, string) {}
+
 func mustNewAPIServer() *grpcapi.Server {
 	srv, err := grpcapi.NewServer(
 		grpcapi.BuildInfo{Commit: "test-commit", BuildTime: time.Now()},

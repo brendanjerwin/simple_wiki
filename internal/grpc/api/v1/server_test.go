@@ -523,6 +523,8 @@ func (noOpChatBufferManager) IsInstanceRequested(string) bool {
 	return false
 }
 
+func (noOpChatBufferManager) NotifyToolCall(string, string, string, string, string) {}
+
 // noOpPageReaderMutator is a minimal mock for tests that don't need page operations.
 type noOpPageReaderMutator struct{}
 

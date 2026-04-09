@@ -262,6 +262,8 @@ func (*mockChatBufferManager) IsInstanceRequested(string) bool {
 	return false
 }
 
+func (*mockChatBufferManager) NotifyToolCall(string, string, string, string, string) {}
+
 func (m *mockChatBufferManager) channelSubscriberCount() int {
 	m.mu.Lock()
 	defer m.mu.Unlock()

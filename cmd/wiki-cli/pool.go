@@ -339,18 +339,43 @@ func (c *wikiChatClient) SessionUpdate(_ context.Context, n acp.SessionNotificat
 		}
 
 	case u.ToolCall != nil:
-		// Show tool calls as a reaction on the current message
 		c.mu.Lock()
 		msgID := c.currentMsg
 		c.mu.Unlock()
 
 		if msgID != "" {
-			_, _ = c.chatClient.ReactToMessage(context.Background(), connect.NewRequest(&apiv1.ReactToMessageRequest{
-				MessageId: msgID,
-				Emoji:     "🔧",
+			_, _ = c.chatClient.SendToolCallNotification(context.Background(), connect.NewRequest(&apiv1.SendToolCallNotificationRequest{
+				Page:       c.page,
+				MessageId:  msgID,
+				ToolCallId: string(u.ToolCall.ToolCallId),
+				Title:      u.ToolCall.Title,
+				Status:     string(u.ToolCall.Status),
 			}))
 		}
 		log.Printf("[%s] Tool call: %s (%s)", c.page, u.ToolCall.Title, u.ToolCall.Status)
+
+	case u.ToolCallUpdate != nil:
+		c.mu.Lock()
+		msgID := c.currentMsg
+		c.mu.Unlock()
+
+		if msgID != "" {
+			status := ""
+			if u.ToolCallUpdate.Status != nil {
+				status = string(*u.ToolCallUpdate.Status)
+			}
+			title := ""
+			if u.ToolCallUpdate.Title != nil {
+				title = *u.ToolCallUpdate.Title
+			}
+			_, _ = c.chatClient.SendToolCallNotification(context.Background(), connect.NewRequest(&apiv1.SendToolCallNotificationRequest{
+				Page:       c.page,
+				MessageId:  msgID,
+				ToolCallId: string(u.ToolCallUpdate.ToolCallId),
+				Title:      title,
+				Status:     status,
+			}))
+		}
 
 	case u.AgentThoughtChunk != nil:
 		if u.AgentThoughtChunk.Content.Text != nil {

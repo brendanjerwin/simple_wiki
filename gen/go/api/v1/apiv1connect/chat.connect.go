@@ -59,6 +59,9 @@ const (
 	// ChatServiceSubscribeInstanceRequestsProcedure is the fully-qualified name of the ChatService's
 	// SubscribeInstanceRequests RPC.
 	ChatServiceSubscribeInstanceRequestsProcedure = "/api.v1.ChatService/SubscribeInstanceRequests"
+	// ChatServiceSendToolCallNotificationProcedure is the fully-qualified name of the ChatService's
+	// SendToolCallNotification RPC.
+	ChatServiceSendToolCallNotificationProcedure = "/api.v1.ChatService/SendToolCallNotification"
 )
 
 // These variables are the protoreflect.Descriptor objects for the RPCs defined in this package.
@@ -73,6 +76,7 @@ var (
 	chatServiceGetChatStatusMethodDescriptor             = chatServiceServiceDescriptor.Methods().ByName("GetChatStatus")
 	chatServiceSubscribePageChatMessagesMethodDescriptor = chatServiceServiceDescriptor.Methods().ByName("SubscribePageChatMessages")
 	chatServiceSubscribeInstanceRequestsMethodDescriptor = chatServiceServiceDescriptor.Methods().ByName("SubscribeInstanceRequests")
+	chatServiceSendToolCallNotificationMethodDescriptor  = chatServiceServiceDescriptor.Methods().ByName("SendToolCallNotification")
 )
 
 // ChatServiceClient is a client for the api.v1.ChatService service.
@@ -104,6 +108,9 @@ type ChatServiceClient interface {
 	// SubscribeInstanceRequests is called by the wiki-cli pool daemon.
 	// Streams page names that need a Claude instance spawned.
 	SubscribeInstanceRequests(context.Context, *connect.Request[v1.SubscribeInstanceRequestsRequest]) (*connect.ServerStreamForClient[v1.InstanceRequest], error)
+	// SendToolCallNotification is called by the pool daemon or ACP client
+	// when the agent invokes a tool. The notification is broadcast to page subscribers.
+	SendToolCallNotification(context.Context, *connect.Request[v1.SendToolCallNotificationRequest]) (*connect.Response[v1.SendToolCallNotificationResponse], error)
 }
 
 // NewChatServiceClient constructs a client for the api.v1.ChatService service. By default, it uses
@@ -170,6 +177,12 @@ func NewChatServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 			connect.WithSchema(chatServiceSubscribeInstanceRequestsMethodDescriptor),
 			connect.WithClientOptions(opts...),
 		),
+		sendToolCallNotification: connect.NewClient[v1.SendToolCallNotificationRequest, v1.SendToolCallNotificationResponse](
+			httpClient,
+			baseURL+ChatServiceSendToolCallNotificationProcedure,
+			connect.WithSchema(chatServiceSendToolCallNotificationMethodDescriptor),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -184,6 +197,7 @@ type chatServiceClient struct {
 	getChatStatus             *connect.Client[v1.GetChatStatusRequest, v1.GetChatStatusResponse]
 	subscribePageChatMessages *connect.Client[v1.SubscribePageChatMessagesRequest, v1.ChatMessage]
 	subscribeInstanceRequests *connect.Client[v1.SubscribeInstanceRequestsRequest, v1.InstanceRequest]
+	sendToolCallNotification  *connect.Client[v1.SendToolCallNotificationRequest, v1.SendToolCallNotificationResponse]
 }
 
 // SendMessage calls api.v1.ChatService.SendMessage.
@@ -231,6 +245,11 @@ func (c *chatServiceClient) SubscribeInstanceRequests(ctx context.Context, req *
 	return c.subscribeInstanceRequests.CallServerStream(ctx, req)
 }
 
+// SendToolCallNotification calls api.v1.ChatService.SendToolCallNotification.
+func (c *chatServiceClient) SendToolCallNotification(ctx context.Context, req *connect.Request[v1.SendToolCallNotificationRequest]) (*connect.Response[v1.SendToolCallNotificationResponse], error) {
+	return c.sendToolCallNotification.CallUnary(ctx, req)
+}
+
 // ChatServiceHandler is an implementation of the api.v1.ChatService service.
 type ChatServiceHandler interface {
 	// SendMessage sends a user chat message in the context of a page.
@@ -260,6 +279,9 @@ type ChatServiceHandler interface {
 	// SubscribeInstanceRequests is called by the wiki-cli pool daemon.
 	// Streams page names that need a Claude instance spawned.
 	SubscribeInstanceRequests(context.Context, *connect.Request[v1.SubscribeInstanceRequestsRequest], *connect.ServerStream[v1.InstanceRequest]) error
+	// SendToolCallNotification is called by the pool daemon or ACP client
+	// when the agent invokes a tool. The notification is broadcast to page subscribers.
+	SendToolCallNotification(context.Context, *connect.Request[v1.SendToolCallNotificationRequest]) (*connect.Response[v1.SendToolCallNotificationResponse], error)
 }
 
 // NewChatServiceHandler builds an HTTP handler from the service implementation. It returns the path
@@ -322,6 +344,12 @@ func NewChatServiceHandler(svc ChatServiceHandler, opts ...connect.HandlerOption
 		connect.WithSchema(chatServiceSubscribeInstanceRequestsMethodDescriptor),
 		connect.WithHandlerOptions(opts...),
 	)
+	chatServiceSendToolCallNotificationHandler := connect.NewUnaryHandler(
+		ChatServiceSendToolCallNotificationProcedure,
+		svc.SendToolCallNotification,
+		connect.WithSchema(chatServiceSendToolCallNotificationMethodDescriptor),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/api.v1.ChatService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case ChatServiceSendMessageProcedure:
@@ -342,6 +370,8 @@ func NewChatServiceHandler(svc ChatServiceHandler, opts ...connect.HandlerOption
 			chatServiceSubscribePageChatMessagesHandler.ServeHTTP(w, r)
 		case ChatServiceSubscribeInstanceRequestsProcedure:
 			chatServiceSubscribeInstanceRequestsHandler.ServeHTTP(w, r)
+		case ChatServiceSendToolCallNotificationProcedure:
+			chatServiceSendToolCallNotificationHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -385,4 +415,8 @@ func (UnimplementedChatServiceHandler) SubscribePageChatMessages(context.Context
 
 func (UnimplementedChatServiceHandler) SubscribeInstanceRequests(context.Context, *connect.Request[v1.SubscribeInstanceRequestsRequest], *connect.ServerStream[v1.InstanceRequest]) error {
 	return connect.NewError(connect.CodeUnimplemented, errors.New("api.v1.ChatService.SubscribeInstanceRequests is not implemented"))
+}
+
+func (UnimplementedChatServiceHandler) SendToolCallNotification(context.Context, *connect.Request[v1.SendToolCallNotificationRequest]) (*connect.Response[v1.SendToolCallNotificationResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("api.v1.ChatService.SendToolCallNotification is not implemented"))
 }

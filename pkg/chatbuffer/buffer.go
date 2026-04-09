@@ -50,6 +50,7 @@ type Event struct {
 	Message   *Message
 	Edit      *EditEvent
 	Reaction  *ReactionEvent
+	ToolCall  *ToolCallEvent
 }
 
 // EventType identifies the type of chat event.
@@ -59,6 +60,7 @@ const (
 	EventTypeNewMessage EventType = iota
 	EventTypeEdit
 	EventTypeReaction
+	EventTypeToolCall
 )
 
 // EditEvent represents a message edit.
@@ -67,6 +69,14 @@ type EditEvent struct {
 	NewContent string
 	Timestamp  time.Time
 	Streaming  bool // true for ACP streaming updates, false for user edits
+}
+
+// ToolCallEvent represents an agent tool invocation notification.
+type ToolCallEvent struct {
+	MessageID  string
+	ToolCallID string
+	Title      string
+	Status     string // "pending", "running", "complete", "error"
 }
 
 // ReactionEvent represents a reaction added to a message.
@@ -430,6 +440,24 @@ func (m *Manager) AddReaction(messageID, emoji, reactor string) error {
 	}
 
 	return ErrMessageNotFound
+}
+
+// NotifyToolCall sends a tool call notification to page subscribers.
+// This is ephemeral — not stored in the buffer, only streamed to active subscribers.
+func (m *Manager) NotifyToolCall(page, messageID, toolCallID, title, toolStatus string) {
+	buf := m.getOrCreateBuffer(page)
+	buf.mu.Lock()
+	buf.lastAccess = time.Now()
+
+	buf.unlockAndNotify(Event{
+		Type: EventTypeToolCall,
+		ToolCall: &ToolCallEvent{
+			MessageID:  messageID,
+			ToolCallID: toolCallID,
+			Title:      title,
+			Status:     toolStatus,
+		},
+	})
 }
 
 // GetMessages returns all messages for a page.

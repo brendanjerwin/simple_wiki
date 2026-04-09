@@ -62,6 +62,7 @@ type ChatBufferManager interface {
 	SubscribeToInstanceRequests() (<-chan string, func())
 	HasInstanceRequestSubscribers() bool
 	IsInstanceRequested(page string) bool
+	NotifyToolCall(page, messageID, toolCallID, title, toolStatus string)
 }
 
 // computeContentHash computes a SHA256 hash of the given markdown content,

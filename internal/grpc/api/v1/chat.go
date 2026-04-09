@@ -123,6 +123,17 @@ func (s *Server) SubscribeChat(req *apiv1.SubscribeChatRequest, stream apiv1.Cha
 						},
 					},
 				}
+			case chatbuffer.EventTypeToolCall:
+				protoEvent = &apiv1.ChatEvent{
+					Event: &apiv1.ChatEvent_ToolCall{
+						ToolCall: &apiv1.ChatToolCall{
+							MessageId:  event.ToolCall.MessageID,
+							ToolCallId: event.ToolCall.ToolCallID,
+							Title:      event.ToolCall.Title,
+							Status:     event.ToolCall.Status,
+						},
+					},
+				}
 			default:
 				// Unknown event type — skip without sending
 			}
@@ -338,4 +349,18 @@ func (s *Server) SubscribeInstanceRequests(_ *apiv1.SubscribeInstanceRequestsReq
 			return stream.Context().Err()
 		}
 	}
+}
+
+// SendToolCallNotification implements the SendToolCallNotification RPC.
+// Broadcasts a tool call event to all page subscribers.
+func (s *Server) SendToolCallNotification(_ context.Context, req *apiv1.SendToolCallNotificationRequest) (*apiv1.SendToolCallNotificationResponse, error) {
+	if req.Page == "" {
+		return nil, status.Error(codes.InvalidArgument, errPageRequired)
+	}
+	if req.MessageId == "" {
+		return nil, status.Error(codes.InvalidArgument, "message_id is required")
+	}
+
+	s.chatBufferManager.NotifyToolCall(req.Page, req.MessageId, req.ToolCallId, req.Title, req.Status)
+	return &apiv1.SendToolCallNotificationResponse{}, nil
 }

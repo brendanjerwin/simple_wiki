@@ -45,6 +45,10 @@ service ChatService {
   // SubscribeInstanceRequests is called by the wiki-cli pool daemon.
   // Streams page names that need a Claude instance spawned.
   rpc SubscribeInstanceRequests(SubscribeInstanceRequestsRequest) returns (stream InstanceRequest) {}
+
+  // SendToolCallNotification is called by the pool daemon or ACP client
+  // when the agent invokes a tool. The notification is broadcast to page subscribers.
+  rpc SendToolCallNotification(SendToolCallNotificationRequest) returns (SendToolCallNotificationResponse) {}
 }
 
 // Sender identifies who sent a chat message.
@@ -79,7 +83,16 @@ message ChatEvent {
     ChatMessage new_message = 1;
     ChatMessageEdit edit = 2;
     ChatReaction reaction = 3;
+    ChatToolCall tool_call = 4;
   }
+}
+
+// ChatToolCall represents a tool invocation by the assistant.
+message ChatToolCall {
+  string message_id = 1;    // the assistant message this tool is part of
+  string tool_call_id = 2;  // unique ID for this tool call
+  string title = 3;         // human-readable description (e.g., "Reading page...")
+  string status = 4;        // "pending", "running", "complete", "error"
 }
 
 // ChatMessageEdit represents an edit to an existing message.
@@ -180,3 +193,15 @@ message SubscribeInstanceRequestsRequest {}
 message InstanceRequest {
   string page = 1;  // page identifier that needs an instance
 }
+
+// SendToolCallNotificationRequest is the request for SendToolCallNotification.
+message SendToolCallNotificationRequest {
+  string page = 1;           // page identifier
+  string message_id = 2;     // the assistant message this tool is part of
+  string tool_call_id = 3;   // unique ID for this tool call
+  string title = 4;          // human-readable description
+  string status = 5;         // "pending", "running", "complete", "error"
+}
+
+// SendToolCallNotificationResponse is the response for SendToolCallNotification.
+message SendToolCallNotificationResponse {}

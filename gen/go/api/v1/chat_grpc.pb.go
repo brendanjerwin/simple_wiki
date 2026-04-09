@@ -28,6 +28,7 @@ const (
 	ChatService_GetChatStatus_FullMethodName             = "/api.v1.ChatService/GetChatStatus"
 	ChatService_SubscribePageChatMessages_FullMethodName = "/api.v1.ChatService/SubscribePageChatMessages"
 	ChatService_SubscribeInstanceRequests_FullMethodName = "/api.v1.ChatService/SubscribeInstanceRequests"
+	ChatService_SendToolCallNotification_FullMethodName  = "/api.v1.ChatService/SendToolCallNotification"
 )
 
 // ChatServiceClient is the client API for ChatService service.
@@ -65,6 +66,9 @@ type ChatServiceClient interface {
 	// SubscribeInstanceRequests is called by the wiki-cli pool daemon.
 	// Streams page names that need a Claude instance spawned.
 	SubscribeInstanceRequests(ctx context.Context, in *SubscribeInstanceRequestsRequest, opts ...grpc.CallOption) (ChatService_SubscribeInstanceRequestsClient, error)
+	// SendToolCallNotification is called by the pool daemon or ACP client
+	// when the agent invokes a tool. The notification is broadcast to page subscribers.
+	SendToolCallNotification(ctx context.Context, in *SendToolCallNotificationRequest, opts ...grpc.CallOption) (*SendToolCallNotificationResponse, error)
 }
 
 type chatServiceClient struct {
@@ -257,6 +261,16 @@ func (x *chatServiceSubscribeInstanceRequestsClient) Recv() (*InstanceRequest, e
 	return m, nil
 }
 
+func (c *chatServiceClient) SendToolCallNotification(ctx context.Context, in *SendToolCallNotificationRequest, opts ...grpc.CallOption) (*SendToolCallNotificationResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SendToolCallNotificationResponse)
+	err := c.cc.Invoke(ctx, ChatService_SendToolCallNotification_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // ChatServiceServer is the server API for ChatService service.
 // All implementations must embed UnimplementedChatServiceServer
 // for forward compatibility
@@ -292,6 +306,9 @@ type ChatServiceServer interface {
 	// SubscribeInstanceRequests is called by the wiki-cli pool daemon.
 	// Streams page names that need a Claude instance spawned.
 	SubscribeInstanceRequests(*SubscribeInstanceRequestsRequest, ChatService_SubscribeInstanceRequestsServer) error
+	// SendToolCallNotification is called by the pool daemon or ACP client
+	// when the agent invokes a tool. The notification is broadcast to page subscribers.
+	SendToolCallNotification(context.Context, *SendToolCallNotificationRequest) (*SendToolCallNotificationResponse, error)
 	mustEmbedUnimplementedChatServiceServer()
 }
 
@@ -325,6 +342,9 @@ func (UnimplementedChatServiceServer) SubscribePageChatMessages(*SubscribePageCh
 }
 func (UnimplementedChatServiceServer) SubscribeInstanceRequests(*SubscribeInstanceRequestsRequest, ChatService_SubscribeInstanceRequestsServer) error {
 	return status.Errorf(codes.Unimplemented, "method SubscribeInstanceRequests not implemented")
+}
+func (UnimplementedChatServiceServer) SendToolCallNotification(context.Context, *SendToolCallNotificationRequest) (*SendToolCallNotificationResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method SendToolCallNotification not implemented")
 }
 func (UnimplementedChatServiceServer) mustEmbedUnimplementedChatServiceServer() {}
 
@@ -513,6 +533,24 @@ func (x *chatServiceSubscribeInstanceRequestsServer) Send(m *InstanceRequest) er
 	return x.ServerStream.SendMsg(m)
 }
 
+func _ChatService_SendToolCallNotification_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SendToolCallNotificationRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ChatServiceServer).SendToolCallNotification(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ChatService_SendToolCallNotification_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ChatServiceServer).SendToolCallNotification(ctx, req.(*SendToolCallNotificationRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // ChatService_ServiceDesc is the grpc.ServiceDesc for ChatService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -539,6 +577,10 @@ var ChatService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetChatStatus",
 			Handler:    _ChatService_GetChatStatus_Handler,
+		},
+		{
+			MethodName: "SendToolCallNotification",
+			Handler:    _ChatService_SendToolCallNotification_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{
