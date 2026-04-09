@@ -361,24 +361,28 @@ var _ = Describe("Handlers", func() {
 			var response map[string]any
 			var pageName string
 			var newText string
-			var originalDataPath string
+			var originalPermissions os.FileMode
 
 			BeforeEach(func() {
 				pageName = "test_update_fail"
 				newText = "new content"
+
+				// Verify the page doesn't exist yet; the test relies on the handler
+				// trying to CREATE a new file (which will fail in a read-only directory).
 				p, err := site.ReadPage(wikipage.PageIdentifier(pageName))
 				Expect(err).NotTo(HaveOccurred())
-				_ = site.UpdatePageContent(wikipage.PageIdentifier(p.Identifier), "some content")
+				Expect(p.IsNew()).To(BeTrue())
 
-				// Create a read-only directory to cause save failure
-				readOnlyDir, err := os.MkdirTemp("", "readonly")
+				// Make the data directory read-only to cause save failure.
+				// This avoids mutating site.PathToData, which would race with background indexing goroutines.
+				dirInfo, err := os.Stat(tmpDir)
 				Expect(err).NotTo(HaveOccurred())
-				err = os.Chmod(readOnlyDir, 0550) // Read + execute, but no write
+				originalPermissions = dirInfo.Mode().Perm()
+				// Note: os.Chmod permission semantics are enforced on Linux/macOS only;
+				// CI runs on Linux so this is safe, but tests on Windows may not reproduce
+				// the intended write failure.
+				err = os.Chmod(tmpDir, 0550) // Read + execute, but no write
 				Expect(err).NotTo(HaveOccurred())
-
-				// Change data path to read-only directory
-				originalDataPath = site.PathToData
-				site.PathToData = readOnlyDir
 
 				body, _ := json.Marshal(map[string]any{
 					"page":       pageName,
@@ -392,8 +396,8 @@ var _ = Describe("Handlers", func() {
 			})
 
 			AfterEach(func() {
-				// Restore original data path
-				site.PathToData = originalDataPath
+				// Restore permissions so the outer AfterEach can clean up tmpDir
+				Expect(os.Chmod(tmpDir, originalPermissions)).To(Succeed())
 			})
 
 			It("should return a 500 status code", func() {
