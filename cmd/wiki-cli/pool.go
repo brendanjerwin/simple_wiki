@@ -310,9 +310,6 @@ func buildSystemdClaudeArgs(claudePath, mcpServerCmd, page string) (string, []st
 // spawnInstance starts a Claude Code process for a page.
 // Must be called with d.mu held.
 func (d *poolDaemon) spawnInstance(ctx context.Context, page string) (*instanceEntry, error) {
-	if ctx == nil {
-		return nil, errors.New("pool daemon context not initialized")
-	}
 	ctx, cancel := context.WithCancel(ctx)
 
 	wikiCLIBin, err := os.Executable()
