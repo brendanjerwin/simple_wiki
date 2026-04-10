@@ -391,7 +391,8 @@ func (m *mockInstanceRequestStreamServer) Context() context.Context {
 
 func (*mockInstanceRequestStreamServer) SetHeader(metadata.MD) error   { return nil }
 func (*mockInstanceRequestStreamServer) SendHeader(metadata.MD) error  { return nil }
-func (*mockInstanceRequestStreamServer) SetTrailer(metadata.MD)        { /* no-op: trailer metadata not needed in tests */ }
+func (*mockInstanceRequestStreamServer) SetTrailer(metadata.MD)        { // no-op: trailer metadata not needed in tests
+}
 func (*mockInstanceRequestStreamServer) SendMsg(any) error             { return nil }
 func (*mockInstanceRequestStreamServer) RecvMsg(any) error             { return nil }
 
