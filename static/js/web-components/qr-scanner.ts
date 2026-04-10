@@ -475,16 +475,16 @@ export class QrScanner extends LitElement {
    * Add event listeners for scroll/resize to keep portal video positioned
    */
   private _addRepositionListeners(): void {
-    window.addEventListener('scroll', this._repositionHandler, QrScanner.SCROLL_LISTENER_OPTIONS);
-    window.addEventListener('resize', this._repositionHandler, QrScanner.RESIZE_LISTENER_OPTIONS);
+    globalThis.addEventListener('scroll', this._repositionHandler, QrScanner.SCROLL_LISTENER_OPTIONS);
+    globalThis.addEventListener('resize', this._repositionHandler, QrScanner.RESIZE_LISTENER_OPTIONS);
   }
 
   /**
    * Remove scroll/resize event listeners
    */
   private _removeRepositionListeners(): void {
-    window.removeEventListener('scroll', this._repositionHandler, QrScanner.SCROLL_LISTENER_OPTIONS);
-    window.removeEventListener('resize', this._repositionHandler, QrScanner.RESIZE_LISTENER_OPTIONS);
+    globalThis.removeEventListener('scroll', this._repositionHandler, QrScanner.SCROLL_LISTENER_OPTIONS);
+    globalThis.removeEventListener('resize', this._repositionHandler, QrScanner.RESIZE_LISTENER_OPTIONS);
   }
 
   /**
