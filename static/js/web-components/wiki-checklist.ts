@@ -1,4 +1,4 @@
-import { html, css, LitElement, nothing } from 'lit';
+import { html, LitElement, nothing } from 'lit';
 import { property, state } from 'lit/decorators.js';
 import { createClient } from '@connectrpc/connect';
 import { create, type JsonObject } from '@bufbuild/protobuf';
@@ -18,25 +18,17 @@ import {
 } from './shared-styles.js';
 import { AugmentErrorService, type AugmentedError } from './augment-error-service.js';
 import './error-display.js';
+import { parseTaggedInput, composeTaggedText } from './checklist-tag-parser.js';
+import type { ChecklistItem, ChecklistData } from './checklist-tag-parser.js';
+import { extractChecklistData, asRecord } from './checklist-data-service.js';
+import { reorderItems, ChecklistDragManager } from './checklist-drag-manager.js';
+import type { DragReorderHandler } from './checklist-drag-manager.js';
+import { wikiChecklistStyles } from './wiki-checklist-styles.js';
+
+export type { ChecklistItem, ChecklistData };
 
 // Polling interval in milliseconds
 const POLL_INTERVAL_MS = 10000;
-
-// Long-press delay in milliseconds before initiating touch drag
-const LONG_PRESS_DELAY_MS = 400;
-
-// Movement threshold in pixels; exceeding this cancels the long-press
-const LONG_PRESS_MOVE_THRESHOLD_PX = 10;
-
-export interface ChecklistItem {
-  text: string;
-  checked: boolean;
-  tags: string[];
-}
-
-export interface ChecklistData {
-  items: ChecklistItem[];
-}
 
 /**
  * WikiChecklist - A fully API-driven interactive checklist component.
@@ -49,321 +41,14 @@ export interface ChecklistData {
  * @example
  * <wiki-checklist list-name="grocery_list" page="my-page"></wiki-checklist>
  */
-export class WikiChecklist extends LitElement {
+export class WikiChecklist extends LitElement implements DragReorderHandler {
   static override readonly styles = [
     foundationCSS,
     buttonCSS,
     inputCSS,
     pillCSS,
     zIndexCSS,
-    css`
-      :host {
-        display: block;
-        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto',
-          'Oxygen', 'Ubuntu', 'Cantarell', sans-serif;
-        color: var(--color-text-primary);
-      }
-
-      .checklist-container {
-        border: 1px solid var(--color-border-subtle);
-        border-radius: 8px;
-        background: var(--color-surface-primary);
-        padding: 16px;
-        max-width: 600px;
-      }
-
-      .checklist-header {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        margin-bottom: 12px;
-      }
-
-      .checklist-title {
-        font-size: 18px;
-        font-weight: 600;
-        margin: 0;
-        color: var(--color-text-primary);
-      }
-
-      .header-actions {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-      }
-
-      .saving-indicator {
-        font-size: 12px;
-        color: var(--color-info);
-      }
-
-      .loading {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        padding: 16px;
-        color: var(--color-text-secondary);
-        font-size: 14px;
-      }
-
-      .empty-state {
-        padding: 16px;
-        text-align: center;
-        color: var(--color-text-muted);
-        font-size: 14px;
-      }
-
-      .items-list {
-        list-style: none;
-        margin: 0;
-        padding: 0;
-      }
-
-      .item-row {
-        display: flex;
-        align-items: flex-start;
-        gap: 8px;
-        padding: 6px 4px;
-        border-radius: 4px;
-        transition: background 0.1s ease;
-        position: relative;
-      }
-
-      .item-row:hover {
-        background: var(--color-hover-overlay);
-      }
-
-      .item-checkbox {
-        flex-shrink: 0;
-        width: 16px;
-        height: 16px;
-        margin-top: 2px;
-        cursor: pointer;
-        accent-color: var(--color-action-primary);
-      }
-
-      .item-content {
-        display: flex;
-        flex: 1;
-        align-items: center;
-        gap: 4px;
-        flex-wrap: wrap;
-        min-width: 0;
-      }
-
-      .item-text {
-        flex: 1 1 auto;
-        min-width: 80px;
-        font-size: 14px;
-        border: none;
-        background: transparent;
-        color: var(--color-text-primary);
-        padding: 2px 4px;
-        border-radius: 3px;
-        font-family: inherit;
-        transition: background 0.1s ease;
-      }
-
-      .item-text:focus {
-        outline: none;
-        background: var(--color-hover-overlay);
-      }
-
-      .item-checked .item-text {
-        text-decoration: line-through;
-        opacity: 0.6;
-        color: var(--color-text-muted);
-      }
-
-      .item-display-text {
-        flex: 1 1 auto;
-        min-width: 80px;
-        font-size: 14px;
-        padding: 2px 4px;
-        cursor: text;
-        overflow-wrap: break-word;
-      }
-
-      .item-display-text:focus {
-        outline: 2px solid var(--color-action-primary);
-        outline-offset: 1px;
-        border-radius: 3px;
-      }
-
-      .item-checked .item-display-text {
-        text-decoration: line-through;
-        opacity: 0.6;
-        color: var(--color-text-muted);
-      }
-
-      /* .item-tag-badge styles provided by pillCSS */
-
-      .remove-btn {
-        background: none;
-        border: none;
-        cursor: pointer;
-        color: var(--color-border-default);
-        font-size: 16px;
-        padding: 2px 4px;
-        border-radius: 3px;
-        line-height: 1;
-        flex-shrink: 0;
-        transition: color 0.15s ease;
-      }
-
-      .remove-btn:hover {
-        color: var(--color-error);
-      }
-
-      .drag-handle {
-        flex-shrink: 0;
-        cursor: grab;
-        color: var(--color-border-default);
-        font-size: 14px;
-        padding: 2px 2px;
-        margin-top: 2px;
-        line-height: 1;
-        user-select: none;
-        transition: color 0.15s ease;
-      }
-
-      .drag-handle:hover {
-        color: var(--color-text-muted);
-      }
-
-      .drag-handle:active {
-        cursor: grabbing;
-      }
-
-      .item-row.dragging {
-        opacity: 0.4;
-      }
-
-      .item-row.drag-over-before::before {
-        content: '';
-        position: absolute;
-        top: -1px;
-        left: 0;
-        right: 0;
-        height: 2px;
-        background: var(--color-action-link);
-        border-radius: 1px;
-      }
-
-      .item-row.drag-over-after::after {
-        content: '';
-        position: absolute;
-        bottom: -1px;
-        left: 0;
-        right: 0;
-        height: 2px;
-        background: var(--color-action-link);
-        border-radius: 1px;
-      }
-
-      :host(.touch-dragging) {
-        touch-action: none;
-        user-select: none;
-      }
-
-      .drag-handle.long-press-pending {
-        color: var(--color-action-link);
-        transform: scale(1.2);
-      }
-
-      .touch-drag-ghost {
-        position: fixed;
-        z-index: var(--z-modal);
-        pointer-events: none;
-        opacity: 0.85;
-        background: var(--color-surface-primary);
-        box-shadow: var(--shadow-medium);
-        border-radius: 4px;
-      }
-
-      .tag-filter-bar {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 6px;
-        margin-bottom: 8px;
-      }
-
-      /* .tag-pill, .tag-pill-active, .tag-filter-clear styles provided by pillCSS */
-
-      .delete-checked-btn {
-        font-size: 12px;
-        padding: 3px 8px;
-        background: none;
-        border: none;
-        color: var(--color-text-muted);
-        cursor: pointer;
-        font-family: inherit;
-        transition: color 0.15s ease;
-      }
-
-      .delete-checked-btn:hover {
-        color: var(--color-error);
-      }
-
-      .add-item {
-        display: flex;
-        gap: 8px;
-        margin-top: 12px;
-        align-items: center;
-      }
-
-      .add-text-input {
-        flex: 1;
-        padding: 6px 10px;
-        border: 1px solid var(--color-border-default);
-        border-radius: 4px;
-        font-size: 14px;
-        font-family: inherit;
-        min-width: 0;
-        box-sizing: border-box;
-        background: var(--color-surface-primary);
-        color: var(--color-text-primary);
-      }
-
-      .add-text-input:focus {
-        outline: none;
-        border-color: var(--color-action-primary);
-        box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-action-primary) 15%, transparent);
-      }
-
-      .add-btn {
-        padding: 6px 14px;
-        background: var(--color-action-primary);
-        color: var(--color-text-inverse);
-        border: none;
-        border-radius: 4px;
-        font-size: 14px;
-        cursor: pointer;
-        font-family: inherit;
-        transition: background 0.2s ease;
-        white-space: nowrap;
-        flex-shrink: 0;
-      }
-
-      .add-btn:hover:not(:disabled) {
-        background: var(--color-action-primary-hover);
-      }
-
-      .add-btn:disabled {
-        opacity: 0.6;
-        cursor: not-allowed;
-      }
-
-      .error-wrapper {
-        margin-top: 8px;
-      }
-
-      @media (max-width: 480px) {
-        .checklist-container {
-          padding: 12px;
-        }
-      }
-    `,
+    wikiChecklistStyles,
   ];
 
   @property({ type: String, attribute: 'list-name' })
@@ -395,35 +80,18 @@ export class WikiChecklist extends LitElement {
   @state()
   private declare newItemText: string;
 
-  // Drag-and-drop state for items
-  @state()
-  private declare _dragSourceItemIndex: number | null;
-
-  @state()
-  private declare _dragOverItemIndex: number | null;
-
-  @state()
-  private declare _dragOverItemPosition: 'before' | 'after';
-
-  // Touch drag state
+  // Touch drag active state - needs to be @state so renders update
   @state()
   declare _touchDragActive: boolean;
 
-  private _longPressTimerId: ReturnType<typeof setTimeout> | null = null;
-  private _longPressHandleIndex: number | null = null;
-  private _touchStartX = 0;
-  private _touchStartY = 0;
-  private _touchGhostEl: HTMLElement | null = null;
-
-  // Bound listener references for proper cleanup
-  private _boundTouchMove: ((e: TouchEvent) => void) | null = null;
-  private _boundTouchEnd: ((e: TouchEvent) => void) | null = null;
-  private _boundTouchCancel: ((e: TouchEvent) => void) | null = null;
   private _boundHandleVisibilityChange: (() => void) | null = null;
+
 
   private pollingTimer: ReturnType<typeof setInterval> | null = null;
 
   readonly client = createClient(Frontmatter, getGrpcWebTransport());
+
+  private readonly _dragManager: ChecklistDragManager;
 
   constructor() {
     super();
@@ -436,10 +104,79 @@ export class WikiChecklist extends LitElement {
     this.filterTags = [];
     this.editingIndex = null;
     this.newItemText = '';
-    this._dragSourceItemIndex = null;
-    this._dragOverItemIndex = null;
-    this._dragOverItemPosition = 'before';
     this._touchDragActive = false;
+
+    this._dragManager = new ChecklistDragManager(this);
+  }
+
+  // DragReorderHandler implementation
+  onDragStateChanged(): void {
+    this._touchDragActive = this._dragManager.touchDragActive;
+    this.requestUpdate();
+  }
+
+  async onReorder(fromIndex: number, toInsertIndex: number): Promise<void> {
+    const newItems = reorderItems(this.items, fromIndex, toInsertIndex);
+    this.items = newItems;
+    await this._persistData(newItems);
+  }
+
+  onError(err: unknown): void {
+    this.error = AugmentErrorService.augmentError(err, 'touch reorder');
+  }
+
+  getShadowRoot(): ShadowRoot | null {
+    return this.shadowRoot;
+  }
+
+  getHostElement(): HTMLElement {
+    return this;
+  }
+
+  // Expose drag state properties for test access (tests use WikiChecklistInternal interface)
+  get _dragSourceItemIndex(): number | null {
+    return this._dragManager.dragSourceItemIndex;
+  }
+
+  set _dragSourceItemIndex(value: number | null) {
+    this._dragManager.dragSourceItemIndex = value;
+  }
+
+  get _dragOverItemIndex(): number | null {
+    return this._dragManager.dragOverItemIndex;
+  }
+
+  set _dragOverItemIndex(value: number | null) {
+    this._dragManager.dragOverItemIndex = value;
+  }
+
+  get _dragOverItemPosition(): 'before' | 'after' {
+    return this._dragManager.dragOverItemPosition;
+  }
+
+  set _dragOverItemPosition(value: 'before' | 'after') {
+    this._dragManager.dragOverItemPosition = value;
+  }
+
+  get _longPressHandleIndex(): number | null {
+    return this._dragManager.longPressHandleIndex;
+  }
+
+  // Touch drag internals exposed for tests
+  get _longPressTimerId(): ReturnType<typeof setTimeout> | null {
+    return this._dragManager.longPressTimerId;
+  }
+
+  get _touchStartX(): number {
+    return this._dragManager.touchStartX;
+  }
+
+  get _touchStartY(): number {
+    return this._dragManager.touchStartY;
+  }
+
+  get _touchGhostEl(): HTMLElement | null {
+    return this._dragManager.touchGhostEl;
   }
 
   override connectedCallback(): void {
@@ -469,7 +206,7 @@ export class WikiChecklist extends LitElement {
       document.removeEventListener('visibilitychange', this._boundHandleVisibilityChange);
       this._boundHandleVisibilityChange = null;
     }
-    this._cleanupTouchDrag();
+    this._dragManager.cleanup();
   }
 
   private _handleVisibilityChange(): void {
@@ -489,67 +226,31 @@ export class WikiChecklist extends LitElement {
       .replaceAll(/\b\w/g, c => c.toUpperCase());
   }
 
+  // Public thin wrappers delegating to module-level functions
+
   /**
-   * Extract tags from a raw checklist item record.
-   * Prefers new `tags` array format; falls back to old `tag` string.
+   * Parse all `:tag` tokens from the input string.
+   * Tags are lowercased for case-agnostic grouping.
    */
-  private _parseItemTags(r: Record<string, unknown>): string[] {
-    if (Array.isArray(r['tags'])) {
-      return r['tags'].filter(
-        (t): t is string => typeof t === 'string' && t !== ''
-      );
-    }
-    if (typeof r['tag'] === 'string' && r['tag']) {
-      return [r['tag']];
-    }
-    return [];
+  parseTaggedInput(input: string): { tags: string[]; text: string } {
+    return parseTaggedInput(input);
   }
 
   /**
-   * Parse a single raw checklist item into a ChecklistItem, or return null if invalid.
+   * Compose structured item data into the editable `:tag` text format.
    */
-  /**
-   * Narrow `value` to a non-null, non-array object, or return null.
-   */
-  private _asRecord(value: unknown): Record<string, unknown> | null {
-    if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- narrowed above: non-null, non-array object
-    return value as Record<string, unknown>;
-  }
-
-  private _parseChecklistItem(raw: unknown): ChecklistItem | null {
-    const r = this._asRecord(raw);
-    if (!r) return null;
-    return {
-      text: typeof r['text'] === 'string' ? r['text'] : '',
-      checked: Boolean(r['checked']),
-      tags: this._parseItemTags(r),
-    };
+  composeTaggedText(item: ChecklistItem): string {
+    return composeTaggedText(item);
   }
 
   /**
    * Extract ChecklistData from the raw frontmatter object.
-   * Backward-compatible: reads both `tag` (old string) and `tags` (new array).
    */
   extractChecklistData(
     frontmatter: JsonObject,
     listName: string
   ): ChecklistData {
-    const checklistsObj = this._asRecord(frontmatter['checklists']);
-    if (!checklistsObj) return { items: [] };
-
-    const listObj = this._asRecord(checklistsObj[listName]);
-    if (!listObj) return { items: [] };
-
-    const rawItems = listObj['items'];
-    if (!Array.isArray(rawItems)) return { items: [] };
-
-    const items: ChecklistItem[] = [];
-    for (const raw of rawItems) {
-      const item = this._parseChecklistItem(raw);
-      if (item) items.push(item);
-    }
-    return { items };
+    return extractChecklistData(frontmatter, listName);
   }
 
   /**
@@ -583,6 +284,18 @@ export class WikiChecklist extends LitElement {
   }
 
   /**
+   * Move an item from fromIndex to the position specified by toInsertIndex.
+   * Thin wrapper delegating to the pure reorderItems function.
+   */
+  reorderItems(
+    items: ChecklistItem[],
+    fromIndex: number,
+    toInsertIndex: number
+  ): ChecklistItem[] {
+    return reorderItems(items, fromIndex, toInsertIndex);
+  }
+
+  /**
    * Fetch checklist data from GetFrontmatter and update state.
    */
   private async fetchData(): Promise<void> {
@@ -593,10 +306,7 @@ export class WikiChecklist extends LitElement {
     try {
       const request = create(GetFrontmatterRequestSchema, { page: this.page });
       const response = await this.client.getFrontmatter(request);
-      const { items } = this.extractChecklistData(
-        response.frontmatter ?? {},
-        this.listName
-      );
+      const { items } = extractChecklistData(response.frontmatter ?? {}, this.listName);
       this.items = items;
       this.error = null;
     } catch (err) {
@@ -609,7 +319,11 @@ export class WikiChecklist extends LitElement {
   /**
    * Read-modify-write: get current frontmatter, update checklists key, merge back.
    */
-  private async persistData(
+  async persistData(newItems: ChecklistItem[]): Promise<void> {
+    await this._persistData(newItems);
+  }
+
+  private async _persistData(
     newItems: ChecklistItem[]
   ): Promise<void> {
     if (!this.page) {
@@ -640,8 +354,8 @@ export class WikiChecklist extends LitElement {
       };
 
       // Update the checklists key
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- _asRecord narrows to non-null object; values originate from parsed JSON and are valid JsonValues
-      const existingChecklists = (this._asRecord(currentFrontmatter['checklists']) ?? {}) as JsonObject;
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- asRecord narrows to non-null object; values originate from parsed JSON and are valid JsonValues
+      const existingChecklists = (asRecord(currentFrontmatter['checklists']) ?? {}) as JsonObject;
       const updatedChecklists: JsonObject = {
         ...existingChecklists,
         [this.listName]: checklistData,
@@ -655,7 +369,7 @@ export class WikiChecklist extends LitElement {
 
       // Update local state from the response
       if (mergeResponse.frontmatter) {
-        const { items } = this.extractChecklistData(
+        const { items } = extractChecklistData(
           mergeResponse.frontmatter,
           this.listName
         );
@@ -674,22 +388,13 @@ export class WikiChecklist extends LitElement {
       i === index ? { ...item, checked: !item.checked } : item
     );
     this.items = newItems;
-    await this.persistData(newItems);
+    await this._persistData(newItems);
   }
 
   private async _handleRemoveItem(index: number): Promise<void> {
     const newItems = this.items.filter((_, i) => i !== index);
     this.items = newItems;
-    await this.persistData(newItems);
-  }
-
-  /**
-   * Compose structured item data into the editable `:tag` text format.
-   * e.g. { text: "milk", tags: ["dairy", "fridge"] } → "milk :dairy :fridge"
-   */
-  composeTaggedText(item: ChecklistItem): string {
-    if (item.tags.length === 0) return item.text;
-    return item.text + item.tags.map(t => ` :${t}`).join('');
+    await this._persistData(newItems);
   }
 
   private async _enterEditMode(index: number): Promise<void> {
@@ -701,20 +406,20 @@ export class WikiChecklist extends LitElement {
     const input = this.shadowRoot?.querySelector<HTMLInputElement>('.item-text');
     const item = this.items[index];
     if (input && item) {
-      input.value = this.composeTaggedText(item);
+      input.value = composeTaggedText(item);
       input.focus();
     }
   }
 
   private async _handleItemTextBlur(index: number, value: string): Promise<void> {
     this.editingIndex = null;
-    const { tags, text } = this.parseTaggedInput(value);
+    const { tags, text } = parseTaggedInput(value);
     if (!text) return;
     const newItems = this.items.map((item, i) =>
       i === index ? { ...item, text, tags } : item
     );
     this.items = newItems;
-    await this.persistData(newItems);
+    await this._persistData(newItems);
   }
 
   private _handleItemTextKeydown(
@@ -730,43 +435,14 @@ export class WikiChecklist extends LitElement {
     }
   }
 
-  /**
-   * Parse all `:tag` tokens from the input string.
-   * A tag token is a colon followed by a non-whitespace word.
-   * Tags are lowercased for case-agnostic grouping.
-   * Examples:
-   *   "milk :dairy :fridge"  -> { tags: ["dairy", "fridge"], text: "milk" }
-   *   ":dairy milk :fridge"  -> { tags: ["dairy", "fridge"], text: "milk" }
-   *   "buy :dairy milk"      -> { tags: ["dairy"], text: "buy milk" }
-   *   "just milk"            -> { tags: [], text: "just milk" }
-   */
-  parseTaggedInput(input: string) {
-    const tags: string[] = [];
-    let text = input;
-    const tagPattern = /:(\S+)/g;
-    let match: RegExpExecArray | null;
-
-    while ((match = tagPattern.exec(input)) !== null) {
-      const tag = match[1]?.trim().toLowerCase();
-      if (tag) {
-        tags.push(tag);
-      }
-    }
-
-    // Remove all :tag tokens from the text
-    text = input.replaceAll(/:(\S+)/g, '').replaceAll(/\s+/g, ' ').trim();
-
-    return { tags, text };
-  }
-
   private async _handleAddItem(): Promise<void> {
-    const { tags, text } = this.parseTaggedInput(this.newItemText);
+    const { tags, text } = parseTaggedInput(this.newItemText);
     if (!text) return;
     const newItem: ChecklistItem = { text, checked: false, tags };
     const newItems = [...this.items, newItem];
     this.items = newItems;
     this.newItemText = '';
-    await this.persistData(newItems);
+    await this._persistData(newItems);
   }
 
   private _handleNewItemKeydown(event: KeyboardEvent): void {
@@ -783,281 +459,57 @@ export class WikiChecklist extends LitElement {
     }
   }
 
-  /**
-   * Move an item from fromIndex to the position specified by toInsertIndex
-   * in the resulting array (before removal of the source item).
-   *
-   * For example: reorderItems([A,B,C,D], 3, 0) moves D to position 0,
-   * resulting in [D,A,B,C].
-   */
-  reorderItems(
-    items: ChecklistItem[],
-    fromIndex: number,
-    toInsertIndex: number
-  ): ChecklistItem[] {
-    if (fromIndex < 0 || fromIndex >= items.length) return items;
-    if (toInsertIndex < 0 || toInsertIndex > items.length) return items;
-    const result = [...items];
-    const [item] = result.splice(fromIndex, 1);
-    if (!item) return items;
-    const adjustedIndex =
-      fromIndex < toInsertIndex ? toInsertIndex - 1 : toInsertIndex;
-    result.splice(adjustedIndex, 0, item);
-    return result;
+  // Drag handler delegation methods (kept on component for template bindings and test access)
+  _handleDragHandleMousedown(e: MouseEvent): void {
+    this._dragManager.handleDragHandleMousedown(e);
   }
 
-  private _clearDragState(): void {
-    this._dragSourceItemIndex = null;
-    this._dragOverItemIndex = null;
+  _handleItemDragStart(e: DragEvent, index: number): void {
+    this._dragManager.handleItemDragStart(e, index);
   }
 
-  private _handleDragHandleMousedown(e: MouseEvent): void {
-    if (!(e.target instanceof HTMLElement)) return;
-    const row = e.target.closest('.item-row');
-    if (row instanceof HTMLElement) {
-      row.draggable = true;
-    }
+  _handleItemDragOver(e: DragEvent, index: number): void {
+    this._dragManager.handleItemDragOver(e, index);
   }
 
-  private _handleItemDragStart(e: DragEvent, index: number): void {
-    this._dragSourceItemIndex = index;
-    if (e.dataTransfer) {
-      e.dataTransfer.effectAllowed = 'move';
-      e.dataTransfer.setData('text/plain', String(index));
-    }
+  _handleItemDragLeave(e: DragEvent): void {
+    this._dragManager.handleItemDragLeave(e);
   }
 
-  private _handleItemDragOver(
-    e: DragEvent,
-    index: number
-  ): void {
-    if (this._dragSourceItemIndex === null) {
-      return;
-    }
-    e.preventDefault();
-    if (e.dataTransfer) {
-      e.dataTransfer.dropEffect = 'move';
-    }
-    if (!(e.currentTarget instanceof HTMLElement)) return;
-    const rect = e.currentTarget.getBoundingClientRect();
-    const midY = rect.top + rect.height / 2;
-    this._dragOverItemIndex = index;
-    this._dragOverItemPosition = e.clientY < midY ? 'before' : 'after';
+  async _handleItemDrop(e: DragEvent, targetIndex: number): Promise<void> {
+    await this._dragManager.handleItemDrop(e, targetIndex);
   }
 
-  private async _handleItemDrop(
-    e: DragEvent,
-    targetIndex: number
-  ): Promise<void> {
-    e.preventDefault();
-    const sourceIndex = this._dragSourceItemIndex;
-    if (sourceIndex === null) {
-      this._clearDragState();
-      return;
-    }
-
-    const position = this._dragOverItemPosition;
-    const insertIndex =
-      position === 'before' ? targetIndex : targetIndex + 1;
-
-    const newItems = this.reorderItems(this.items, sourceIndex, insertIndex);
-
-    this._clearDragState();
-    this.items = newItems;
-    await this.persistData(newItems);
-  }
-
-  private _handleItemDragEnd(e: DragEvent): void {
-    if (e.currentTarget instanceof HTMLElement) {
-      e.currentTarget.draggable = false;
-    }
-    this._clearDragState();
-  }
-
-  private _handleItemDragLeave(e: DragEvent): void {
-    if (
-      e.currentTarget instanceof HTMLElement &&
-      e.relatedTarget instanceof Node &&
-      e.currentTarget.contains(e.relatedTarget)
-    ) {
-      return;
-    }
-    this._dragOverItemIndex = null;
+  _handleItemDragEnd(e: DragEvent): void {
+    this._dragManager.handleItemDragEnd(e);
   }
 
   _handleTouchStart(e: TouchEvent, index: number): void {
-    const touch = e.changedTouches[0];
-    if (!touch) return;
-
-    // Cancel any existing long-press
-    this._cancelLongPress();
-
-    this._touchStartX = touch.clientX;
-    this._touchStartY = touch.clientY;
-    this._longPressHandleIndex = index;
-
-    // Register document-level listeners for move/end/cancel
-    this._boundTouchMove = (ev: TouchEvent) => this._handleTouchMove(ev);
-    this._boundTouchEnd = () => { void this._handleTouchEnd(); };
-    this._boundTouchCancel = () => this._handleTouchCancel();
-    document.addEventListener('touchmove', this._boundTouchMove, { passive: false });
-    document.addEventListener('touchend', this._boundTouchEnd);
-    document.addEventListener('touchcancel', this._boundTouchCancel);
-
-    this._longPressTimerId = setTimeout(() => {
-      this._longPressTimerId = null;
-      this._startTouchDrag(index, touch);
-    }, LONG_PRESS_DELAY_MS);
+    this._dragManager.handleTouchStart(e, index);
   }
 
-  private _handleActiveDragTouchMove(e: TouchEvent, touch: Touch): void {
-    // Active drag: prevent scrolling, move ghost, compute drop target
-    e.preventDefault();
-    this._moveGhost(touch.clientX, touch.clientY);
-
-    const elementUnderFinger = this.shadowRoot?.elementFromPoint(touch.clientX, touch.clientY);
-
-    // Walk up to find the .item-row and read data-index
-    const row = elementUnderFinger?.closest('.item-row');
-    if (!(row instanceof HTMLElement)) return;
-
-    const indexAttr = row.dataset['index'];
-    if (indexAttr === undefined) return;
-
-    const targetIndex = Number.parseInt(indexAttr, 10);
-    const rect = row.getBoundingClientRect();
-    const midY = rect.top + rect.height / 2;
-    this._dragOverItemIndex = targetIndex;
-    this._dragOverItemPosition = touch.clientY < midY ? 'before' : 'after';
+  _handleTouchMove(e: TouchEvent): void {
+    this._dragManager.handleTouchMove(e);
   }
 
-  private _handlePreDragTouchMove(touch: Touch): void {
-    // Pre-drag: check if finger moved beyond threshold (user is scrolling)
-    const dx = touch.clientX - this._touchStartX;
-    const dy = touch.clientY - this._touchStartY;
-    const distancePx = Math.hypot(dx, dy);
-    if (distancePx > LONG_PRESS_MOVE_THRESHOLD_PX) {
-      this._cancelLongPress();
-      this._removeDocumentTouchListeners();
-    }
+  async _handleTouchEnd(): Promise<void> {
+    await this._dragManager.handleTouchEnd();
   }
 
-  private _handleTouchMove(e: TouchEvent): void {
-    const touch = e.changedTouches[0];
-    if (!touch) return;
-
-    if (this._touchDragActive) {
-      this._handleActiveDragTouchMove(e, touch);
-    } else if (this._longPressTimerId !== null) {
-      this._handlePreDragTouchMove(touch);
-    }
-  }
-
-  private async _handleTouchEnd(): Promise<void> {
-    try {
-      if (this._touchDragActive) {
-        // Commit the reorder
-        const sourceIndex = this._dragSourceItemIndex;
-        const targetIndex = this._dragOverItemIndex;
-        const position = this._dragOverItemPosition;
-
-        this._cleanupTouchDrag();
-
-        if (sourceIndex !== null && targetIndex !== null) {
-          const insertIndex = position === 'before' ? targetIndex : targetIndex + 1;
-          const newItems = this.reorderItems(this.items, sourceIndex, insertIndex);
-          this.items = newItems;
-          await this.persistData(newItems);
-        }
-      } else {
-        // Touch ended before long-press fired
-        this._cancelLongPress();
-        this._removeDocumentTouchListeners();
-      }
-    } catch (err) {
-      this.error = AugmentErrorService.augmentError(err, 'touch reorder');
-    }
-  }
-
-  private _handleTouchCancel(): void {
-    this._cleanupTouchDrag();
+  _handleTouchCancel(): void {
+    this._dragManager.handleTouchCancel();
   }
 
   _startTouchDrag(index: number, touch: Touch): void {
-    this._touchDragActive = true;
-    this._dragSourceItemIndex = index;
-    this._longPressHandleIndex = null;
+    this._dragManager.startTouchDrag(index, touch);
+  }
 
-    // Add touch-dragging class to host
-    this.classList.add('touch-dragging');
-
-    // Create ghost element from the source row
-    const rows = this.shadowRoot?.querySelectorAll('.item-row');
-    const sourceRow = rows?.[index];
-    if (sourceRow instanceof HTMLElement) {
-      const cloned = sourceRow.cloneNode(true);
-      if (!(cloned instanceof HTMLElement)) return;
-      const ghost = cloned;
-      ghost.classList.add('touch-drag-ghost');
-      // Size the ghost to match the source row
-      const rect = sourceRow.getBoundingClientRect();
-      ghost.style.width = `${rect.width}px`;
-      this._moveGhost(touch.clientX, touch.clientY, ghost);
-      this.shadowRoot?.appendChild(ghost);
-      this._touchGhostEl = ghost;
-    }
+  _cancelLongPress(): void {
+    this._dragManager.cancelLongPress();
   }
 
   _cleanupTouchDrag(): void {
-    this._cancelLongPress();
-
-    // Remove ghost
-    if (this._touchGhostEl) {
-      this._touchGhostEl.remove();
-      this._touchGhostEl = null;
-    }
-
-    // Remove document listeners
-    this._removeDocumentTouchListeners();
-
-    // Reset state
-    this._touchDragActive = false;
-    this._dragSourceItemIndex = null;
-    this._dragOverItemIndex = null;
-    this._longPressHandleIndex = null;
-
-    // Remove host class
-    this.classList.remove('touch-dragging');
-  }
-
-  private _cancelLongPress(): void {
-    if (this._longPressTimerId !== null) {
-      clearTimeout(this._longPressTimerId);
-      this._longPressTimerId = null;
-    }
-    this._longPressHandleIndex = null;
-  }
-
-  private _removeDocumentTouchListeners(): void {
-    if (this._boundTouchMove) {
-      document.removeEventListener('touchmove', this._boundTouchMove);
-      this._boundTouchMove = null;
-    }
-    if (this._boundTouchEnd) {
-      document.removeEventListener('touchend', this._boundTouchEnd);
-      this._boundTouchEnd = null;
-    }
-    if (this._boundTouchCancel) {
-      document.removeEventListener('touchcancel', this._boundTouchCancel);
-      this._boundTouchCancel = null;
-    }
-  }
-
-  private _moveGhost(clientX: number, clientY: number, ghost?: HTMLElement): void {
-    const el = ghost ?? this._touchGhostEl;
-    if (!el) return;
-    el.style.left = `${clientX}px`;
-    el.style.top = `${clientY - 20}px`;
+    this._dragManager.cleanup();
   }
 
   private _renderItemEditInput(index: number) {
@@ -1100,10 +552,10 @@ export class WikiChecklist extends LitElement {
     item: ChecklistItem,
     index: number
   ) {
-    const isDragging = this._dragSourceItemIndex === index;
-    const isDragOver = this._dragOverItemIndex === index;
+    const isDragging = this._dragManager.dragSourceItemIndex === index;
+    const isDragOver = this._dragManager.dragOverItemIndex === index;
     const dragOverClass = isDragOver
-      ? `drag-over-${this._dragOverItemPosition}`
+      ? `drag-over-${this._dragManager.dragOverItemPosition}`
       : '';
 
     return html`
@@ -1118,7 +570,7 @@ export class WikiChecklist extends LitElement {
         @dragend="${(e: DragEvent) => this._handleItemDragEnd(e)}"
       >
         <span
-          class="drag-handle ${this._longPressHandleIndex === index ? 'long-press-pending' : ''}"
+          class="drag-handle ${this._dragManager.longPressHandleIndex === index ? 'long-press-pending' : ''}"
           aria-hidden="true"
           @mousedown="${(e: MouseEvent) => this._handleDragHandleMousedown(e)}"
           @touchstart="${(e: TouchEvent) => this._handleTouchStart(e, index)}"
@@ -1152,7 +604,7 @@ export class WikiChecklist extends LitElement {
   private async _handleDeleteChecked(): Promise<void> {
     const newItems = this.items.filter(item => !item.checked);
     this.items = newItems;
-    await this.persistData(newItems);
+    await this._persistData(newItems);
   }
 
   private _renderTagFilterBar() {
