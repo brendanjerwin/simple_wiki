@@ -20,7 +20,7 @@ import { AugmentErrorService, type AugmentedError } from './augment-error-servic
 import './error-display.js';
 
 // Polling interval in milliseconds
-const POLL_INTERVAL_MS = 3000;
+const POLL_INTERVAL_MS = 10000;
 
 // Long-press delay in milliseconds before initiating touch drag
 const LONG_PRESS_DELAY_MS = 400;
@@ -419,6 +419,7 @@ export class WikiChecklist extends LitElement {
   private _boundTouchMove: ((e: TouchEvent) => void) | null = null;
   private _boundTouchEnd: ((e: TouchEvent) => void) | null = null;
   private _boundTouchCancel: ((e: TouchEvent) => void) | null = null;
+  private _boundHandleVisibilityChange: (() => void) | null = null;
 
   private pollingTimer: ReturnType<typeof setInterval> | null = null;
 
@@ -449,8 +450,10 @@ export class WikiChecklist extends LitElement {
       this.loading = true;
       void this.fetchData();
     }
+    this._boundHandleVisibilityChange = () => { this._handleVisibilityChange(); };
+    document.addEventListener('visibilitychange', this._boundHandleVisibilityChange);
     this.pollingTimer = setInterval(() => {
-      if (this.page) {
+      if (this.page && !document.hidden && !this.saving) {
         void this.fetchData();
       }
     }, POLL_INTERVAL_MS);
@@ -462,7 +465,17 @@ export class WikiChecklist extends LitElement {
       clearInterval(this.pollingTimer);
       this.pollingTimer = null;
     }
+    if (this._boundHandleVisibilityChange !== null) {
+      document.removeEventListener('visibilitychange', this._boundHandleVisibilityChange);
+      this._boundHandleVisibilityChange = null;
+    }
     this._cleanupTouchDrag();
+  }
+
+  private _handleVisibilityChange(): void {
+    if (!document.hidden && this.page && !this.saving) {
+      void this.fetchData();
+    }
   }
 
   /**

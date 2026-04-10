@@ -1465,7 +1465,7 @@ describe('WikiChecklist', () => {
         freshEl = buildElement('test-page', 'test_list');
         getFrontmatterStub = stubGetFrontmatter(freshEl);
         document.body.appendChild(freshEl);
-        clock.tick(3001);
+        clock.tick(10001);
       });
 
       afterEach(() => {
@@ -1537,7 +1537,7 @@ describe('WikiChecklist', () => {
         await pollingEl.updateComplete;
         await pollingEl.updateComplete;
 
-        await clock.tickAsync(3001);
+        await clock.tickAsync(10001);
         await pollingEl.updateComplete;
       });
 
@@ -1551,6 +1551,90 @@ describe('WikiChecklist', () => {
 
       it('should reflect checked state changes from the API after a poll', () => {
         expect(pollingEl.items[0]?.checked).to.be.true;
+      });
+    });
+
+    describe('when tab is hidden during polling interval', () => {
+      let getFrontmatterStub: SinonStub;
+      let freshEl: WikiChecklist;
+      let callCountWhenHidden: number;
+
+      beforeEach(() => {
+        sinon.stub(document, 'hidden').get(() => true);
+
+        freshEl = buildElement('test-page', 'test_list');
+        getFrontmatterStub = stubGetFrontmatter(freshEl);
+        document.body.appendChild(freshEl);
+        // initial connectedCallback fetch happened (page was set), reset count
+        callCountWhenHidden = getFrontmatterStub.callCount;
+        clock.tick(10001);
+      });
+
+      afterEach(() => {
+        freshEl.remove();
+      });
+
+      it('should not call getFrontmatter during the polling interval', () => {
+        expect(getFrontmatterStub.callCount).to.equal(callCountWhenHidden);
+      });
+    });
+
+    describe('when tab becomes visible after being hidden', () => {
+      let getFrontmatterStub: SinonStub;
+      let freshEl: WikiChecklist;
+      let callCountBeforeVisible: number;
+
+      beforeEach(async () => {
+        let isHidden = true;
+        sinon.stub(document, 'hidden').get(() => isHidden);
+
+        freshEl = buildElement('test-page', 'test_list');
+        getFrontmatterStub = stubGetFrontmatter(freshEl);
+        document.body.appendChild(freshEl);
+
+        // Tab is hidden — polling interval fires but should be skipped
+        await clock.tickAsync(10001);
+        callCountBeforeVisible = getFrontmatterStub.callCount;
+
+        // Simulate tab becoming visible
+        isHidden = false;
+        document.dispatchEvent(new Event('visibilitychange'));
+        await freshEl.updateComplete;
+      });
+
+      afterEach(() => {
+        freshEl.remove();
+      });
+
+      it('should immediately call getFrontmatter when tab becomes visible', () => {
+        expect(getFrontmatterStub.callCount).to.be.greaterThan(callCountBeforeVisible);
+      });
+    });
+
+    describe('when a save is in progress during polling interval', () => {
+      let getFrontmatterStub: SinonStub;
+      let freshEl: WikiChecklist;
+      let callCountBeforeSave: number;
+
+      beforeEach(async () => {
+        freshEl = buildElement('test-page', 'test_list');
+        getFrontmatterStub = stubGetFrontmatter(freshEl);
+        document.body.appendChild(freshEl);
+        await freshEl.updateComplete;
+
+        callCountBeforeSave = getFrontmatterStub.callCount;
+
+        // Simulate save in progress
+        freshEl.saving = true;
+        clock.tick(10001);
+      });
+
+      afterEach(() => {
+        freshEl.remove();
+      });
+
+      it('should not call getFrontmatter while saving', () => {
+        expect(getFrontmatterStub.callCount).to.equal(callCountBeforeSave);
       });
     });
   });
