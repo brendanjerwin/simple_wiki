@@ -226,33 +226,6 @@ export class WikiChecklist extends LitElement implements DragReorderHandler {
       .replaceAll(/\b\w/g, c => c.toUpperCase());
   }
 
-  // Public thin wrappers delegating to module-level functions
-
-  /**
-   * Parse all `:tag` tokens from the input string.
-   * Tags are lowercased for case-agnostic grouping.
-   */
-  parseTaggedInput(input: string): { tags: string[]; text: string } {
-    return parseTaggedInput(input);
-  }
-
-  /**
-   * Compose structured item data into the editable `:tag` text format.
-   */
-  composeTaggedText(item: ChecklistItem): string {
-    return composeTaggedText(item);
-  }
-
-  /**
-   * Extract ChecklistData from the raw frontmatter object.
-   */
-  extractChecklistData(
-    frontmatter: JsonObject,
-    listName: string
-  ): ChecklistData {
-    return extractChecklistData(frontmatter, listName);
-  }
-
   /**
    * Return sorted unique tags from current items.
    */
@@ -284,18 +257,6 @@ export class WikiChecklist extends LitElement implements DragReorderHandler {
   }
 
   /**
-   * Move an item from fromIndex to the position specified by toInsertIndex.
-   * Thin wrapper delegating to the pure reorderItems function.
-   */
-  reorderItems(
-    items: ChecklistItem[],
-    fromIndex: number,
-    toInsertIndex: number
-  ): ChecklistItem[] {
-    return reorderItems(items, fromIndex, toInsertIndex);
-  }
-
-  /**
    * Fetch checklist data from GetFrontmatter and update state.
    */
   private async fetchData(): Promise<void> {
@@ -319,10 +280,6 @@ export class WikiChecklist extends LitElement implements DragReorderHandler {
   /**
    * Read-modify-write: get current frontmatter, update checklists key, merge back.
    */
-  async persistData(newItems: ChecklistItem[]): Promise<void> {
-    await this._persistData(newItems);
-  }
-
   private async _persistData(
     newItems: ChecklistItem[]
   ): Promise<void> {
