@@ -230,11 +230,11 @@ export class AugmentErrorService {
     if (typeof error === 'string') {
       message = error;
     } else if (error !== null && error !== undefined) {
-      if (typeof error === 'object' && !(error instanceof Error)) {
+      if (typeof error === 'object') {
         try {
-          message = JSON.stringify(error);
+          message = JSON.stringify(error) ?? String(error);
         } catch {
-          message = '[object Object]';
+          message = String(error);
         }
       } else {
         message = String(error);
