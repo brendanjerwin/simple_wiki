@@ -8,6 +8,7 @@ import {
   GetChatStatusRequestSchema,
   SendChatMessageRequestSchema,
   SubscribeChatRequestSchema,
+  CancelAgentPromptRequestSchema,
   Sender,
   type ChatMessage,
   type ChatEvent,
@@ -176,6 +177,22 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
         display: flex;
         align-items: center;
         gap: 6px;
+      }
+
+      .stop-button {
+        margin-left: auto;
+        background: rgba(220, 53, 69, 0.15);
+        border: 1px solid rgba(220, 53, 69, 0.4);
+        border-radius: 4px;
+        color: var(--color-error);
+        padding: 2px 8px;
+        cursor: pointer;
+        font-size: 0.75rem;
+        flex-shrink: 0;
+      }
+
+      .stop-button:hover {
+        background: rgba(220, 53, 69, 0.3);
       }
 
       .thinking-dots {
@@ -518,6 +535,9 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
                 <span></span><span></span><span></span>
               </span>
               ${this._thinkingText}
+              <button class="stop-button" @click=${this._handleStopClick} aria-label="Stop">
+                Stop
+              </button>
             </div>`
           : nothing}
 
@@ -582,6 +602,18 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
 
   private _handleSendClick() {
     this.sendMessage();
+  }
+
+  private async _handleStopClick() {
+    try {
+      const request = create(CancelAgentPromptRequestSchema, {
+        page: this.page,
+      });
+      await this.chatClient.cancelAgentPrompt(request);
+      this.waitingForAssistant = false;
+    } catch (err) {
+      this.error = err instanceof Error ? err : new Error(String(err));
+    }
   }
 
   private _handleScroll(e: Event) {

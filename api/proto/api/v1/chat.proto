@@ -49,6 +49,14 @@ service ChatService {
   // SendToolCallNotification is called by the pool daemon or ACP client
   // when the agent invokes a tool. The notification is broadcast to page subscribers.
   rpc SendToolCallNotification(SendToolCallNotificationRequest) returns (SendToolCallNotificationResponse) {}
+
+  // CancelAgentPrompt cancels an in-progress agent prompt for a page.
+  // Called by the frontend "Stop" button.
+  rpc CancelAgentPrompt(CancelAgentPromptRequest) returns (CancelAgentPromptResponse) {}
+
+  // SubscribePageCancellations is called by the pool daemon per page.
+  // Streams a signal when CancelAgentPrompt is called for that page.
+  rpc SubscribePageCancellations(SubscribePageCancellationsRequest) returns (stream PageCancellation) {}
 }
 
 // Sender identifies who sent a chat message.
@@ -205,3 +213,19 @@ message SendToolCallNotificationRequest {
 
 // SendToolCallNotificationResponse is the response for SendToolCallNotification.
 message SendToolCallNotificationResponse {}
+
+// CancelAgentPromptRequest is the request for CancelAgentPrompt.
+message CancelAgentPromptRequest {
+  string page = 1;  // page identifier whose agent prompt should be cancelled
+}
+
+// CancelAgentPromptResponse is the response for CancelAgentPrompt.
+message CancelAgentPromptResponse {}
+
+// SubscribePageCancellationsRequest is the request for SubscribePageCancellations.
+message SubscribePageCancellationsRequest {
+  string page = 1;  // page identifier to subscribe to cancellations for
+}
+
+// PageCancellation is streamed when CancelAgentPrompt is called for a page.
+message PageCancellation {}

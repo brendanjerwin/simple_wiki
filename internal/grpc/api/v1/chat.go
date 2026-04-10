@@ -301,14 +301,28 @@ func (s *Server) GetChatStatus(_ context.Context, req *apiv1.GetChatStatusReques
 }
 
 // SubscribePageChatMessages implements the SubscribePageChatMessages RPC.
-// Streams new user messages for a specific page to per-page Claude instances.
+// Streams user messages for a specific page. Replays existing unprocessed user
+// messages first, then streams new ones. This ensures the first message that
+// triggered the instance spawn is delivered to the agent.
 func (s *Server) SubscribePageChatMessages(req *apiv1.SubscribePageChatMessagesRequest, stream apiv1.ChatService_SubscribePageChatMessagesServer) error {
 	if req.Page == "" {
 		return status.Error(codes.InvalidArgument, errPageRequired)
 	}
 
-	msgChan, unsubscribe := s.chatBufferManager.SubscribeToPageChannel(req.Page)
+	// Use replay subscription to get existing messages + new ones atomically
+	existingMessages, msgChan, unsubscribe := s.chatBufferManager.SubscribeToPageChannelWithReplay(req.Page)
 	defer unsubscribe()
+
+	// Replay existing user messages (the first message that triggered spawn)
+	for _, msg := range existingMessages {
+		if msg.Sender != "user" {
+			continue
+		}
+		protoMsg := bufferMessageToProto(msg)
+		if err := stream.Send(protoMsg); err != nil {
+			return err
+		}
+	}
 
 	for {
 		select {
@@ -344,6 +358,48 @@ func (s *Server) SubscribeInstanceRequests(_ *apiv1.SubscribeInstanceRequestsReq
 			if err := stream.Send(&apiv1.InstanceRequest{Page: page}); err != nil {
 				return err
 			}
+
+		case <-stream.Context().Done():
+			return stream.Context().Err()
+		}
+	}
+}
+
+// CancelAgentPrompt implements the CancelAgentPrompt RPC.
+// Cancels an in-progress agent prompt for a page.
+func (s *Server) CancelAgentPrompt(_ context.Context, req *apiv1.CancelAgentPromptRequest) (*apiv1.CancelAgentPromptResponse, error) {
+	if req.Page == "" {
+		return nil, status.Error(codes.InvalidArgument, errPageRequired)
+	}
+
+	s.chatBufferManager.CancelPage(req.Page)
+	return &apiv1.CancelAgentPromptResponse{}, nil
+}
+
+// SubscribePageCancellations implements the SubscribePageCancellations RPC.
+// Streams a signal when CancelAgentPrompt is called for the subscribed page.
+func (s *Server) SubscribePageCancellations(req *apiv1.SubscribePageCancellationsRequest, stream apiv1.ChatService_SubscribePageCancellationsServer) error {
+	if req.Page == "" {
+		return status.Error(codes.InvalidArgument, errPageRequired)
+	}
+
+	cancelChan, unsubscribe := s.chatBufferManager.SubscribeToCancellation(req.Page)
+	defer unsubscribe()
+
+	for {
+		select {
+		case _, ok := <-cancelChan:
+			if !ok {
+				return nil
+			}
+
+			if err := stream.Send(&apiv1.PageCancellation{}); err != nil {
+				return err
+			}
+
+			// Re-subscribe after receiving a signal (one-shot channel)
+			unsubscribe()
+			cancelChan, unsubscribe = s.chatBufferManager.SubscribeToCancellation(req.Page)
 
 		case <-stream.Context().Done():
 			return stream.Context().Err()

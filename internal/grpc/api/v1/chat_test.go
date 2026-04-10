@@ -238,6 +238,11 @@ func (m *mockChatBufferManager) HasChannelSubscribers() bool {
 	return len(m.channelSubscribers) > 0
 }
 
+func (*mockChatBufferManager) SubscribeToPageChannelWithReplay(string) ([]*chatbuffer.Message, <-chan *chatbuffer.Message, func()) {
+	ch := make(chan *chatbuffer.Message, 10)
+	return nil, ch, func() { close(ch) }
+}
+
 func (*mockChatBufferManager) SubscribeToPageChannel(string) (<-chan *chatbuffer.Message, func()) {
 	ch := make(chan *chatbuffer.Message, 10)
 	return ch, func() { close(ch) }
@@ -263,6 +268,15 @@ func (*mockChatBufferManager) IsInstanceRequested(string) bool {
 }
 
 func (*mockChatBufferManager) NotifyToolCall(string, string, string, string, string) {}
+
+func (*mockChatBufferManager) CancelPage(string) bool {
+	return false
+}
+
+func (*mockChatBufferManager) SubscribeToCancellation(string) (<-chan struct{}, func()) {
+	ch := make(chan struct{}, 1)
+	return ch, func() {}
+}
 
 func (m *mockChatBufferManager) channelSubscriberCount() int {
 	m.mu.Lock()

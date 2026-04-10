@@ -278,12 +278,14 @@ func (d *poolDaemon) evictLeastActive() {
 type wikiChatClient struct {
 	page       string
 	wikiURL    string
-	mu         sync.Mutex
-	textBuf    strings.Builder
-	thoughtBuf strings.Builder
-	replyToID  string    // set before each prompt to thread responses
-	currentMsg string    // message ID of the in-progress streaming reply
-	chatClient apiv1connect.ChatServiceClient
+	mu              sync.Mutex
+	textBuf         strings.Builder
+	thoughtBuf      strings.Builder
+	permissionNotes strings.Builder
+	planEntries     []acp.PlanEntry
+	replyToID       string // set before each prompt to thread responses
+	currentMsg      string // message ID of the in-progress streaming reply
+	chatClient      apiv1connect.ChatServiceClient
 }
 
 func newWikiChatClient(page, wikiURL string) *wikiChatClient {
@@ -413,6 +415,40 @@ func (c *wikiChatClient) SessionUpdate(_ context.Context, n acp.SessionNotificat
 				}
 			}
 		}
+
+	case u.Plan != nil:
+		c.mu.Lock()
+		c.planEntries = u.Plan.Entries
+		fullText := c.buildFullText()
+		msgID := c.currentMsg
+		replyTo := c.replyToID
+		c.mu.Unlock()
+
+		log.Printf("[%s] Plan update: %d entries", c.page, len(u.Plan.Entries))
+
+		if msgID == "" {
+			resp, err := c.chatClient.SendChatReply(context.Background(), connect.NewRequest(&apiv1.SendChatReplyRequest{
+				Page:      c.page,
+				Content:   fullText,
+				ReplyToId: replyTo,
+			}))
+			if err != nil {
+				log.Printf("Failed to create streaming reply for %q: %v", c.page, err)
+			} else {
+				c.mu.Lock()
+				c.currentMsg = resp.Msg.MessageId
+				c.mu.Unlock()
+			}
+		} else {
+			_, err := c.chatClient.EditChatMessage(context.Background(), connect.NewRequest(&apiv1.EditChatMessageRequest{
+				MessageId:  msgID,
+				NewContent: fullText,
+				Streaming:  true,
+			}))
+			if err != nil {
+				log.Printf("Failed to update streaming reply for %q: %v", c.page, err)
+			}
+		}
 	}
 
 	return nil
@@ -425,18 +461,52 @@ func (c *wikiChatClient) SessionUpdate(_ context.Context, n acp.SessionNotificat
 func (c *wikiChatClient) buildFullText() string {
 	thought := c.thoughtBuf.String()
 	response := c.textBuf.String()
+	permissions := c.permissionNotes.String()
 
+	var result string
 	if thought == "" {
-		return response
+		result = response
+	} else {
+		result = "<details><summary>Thinking...</summary>\n\n" + thought + "\n\n</details>\n\n" + response
 	}
 
-	return "<details><summary>Thinking...</summary>\n\n" + thought + "\n\n</details>\n\n" + response
+	if len(c.planEntries) > 0 {
+		result += "\n\n" + c.buildPlanSection()
+	}
+
+	if permissions != "" {
+		result += "\n\n" + permissions
+	}
+
+	return result
+}
+
+// buildPlanSection renders plan entries as a markdown checklist.
+// Must be called with c.mu held.
+func (c *wikiChatClient) buildPlanSection() string {
+	var sb strings.Builder
+	sb.WriteString("**Plan:**\n")
+
+	for _, entry := range c.planEntries {
+		switch entry.Status {
+		case acp.PlanEntryStatusCompleted:
+			sb.WriteString("- [x] " + entry.Content + "\n")
+		case acp.PlanEntryStatusInProgress:
+			sb.WriteString("- 🔄 " + entry.Content + "\n")
+		default: // pending
+			sb.WriteString("- [ ] " + entry.Content + "\n")
+		}
+	}
+
+	return sb.String()
 }
 
 func (c *wikiChatClient) beginTurn(replyToID string) {
 	c.mu.Lock()
 	c.textBuf.Reset()
 	c.thoughtBuf.Reset()
+	c.permissionNotes.Reset()
+	c.planEntries = nil
 	c.replyToID = replyToID
 	c.currentMsg = ""
 	c.mu.Unlock()
@@ -457,17 +527,37 @@ func truncate(s string, max int) string {
 }
 
 func (c *wikiChatClient) RequestPermission(_ context.Context, p acp.RequestPermissionRequest) (acp.RequestPermissionResponse, error) {
-	// Auto-approve all permissions — the agent is trusted
+	// Auto-approve all permissions — the agent is trusted.
+	// Log and notify the chat so the user sees what was granted.
+	title := string(p.ToolCall.ToolCallId)
+	if p.ToolCall.Title != nil {
+		title = *p.ToolCall.Title
+	}
+
 	if len(p.Options) == 0 {
+		log.Printf("[%s] Permission request cancelled (no options): %s", c.page, title)
+
+		c.mu.Lock()
+		fmt.Fprintf(&c.permissionNotes, "> \U0001F510 **Permission cancelled** (no options): %s\n", title)
+		c.mu.Unlock()
+
 		return acp.RequestPermissionResponse{
 			Outcome: acp.RequestPermissionOutcome{
 				Cancelled: &acp.RequestPermissionOutcomeCancelled{},
 			},
 		}, nil
 	}
+
+	selected := p.Options[0]
+	log.Printf("[%s] Permission granted: %s — %s", c.page, title, selected.Name)
+
+	c.mu.Lock()
+	fmt.Fprintf(&c.permissionNotes, "> \U0001F510 **Permission granted:** %s — %s\n", title, selected.Name)
+	c.mu.Unlock()
+
 	return acp.RequestPermissionResponse{
 		Outcome: acp.RequestPermissionOutcome{
-			Selected: &acp.RequestPermissionOutcomeSelected{OptionId: p.Options[0].OptionId},
+			Selected: &acp.RequestPermissionOutcomeSelected{OptionId: selected.OptionId},
 		},
 	}, nil
 }
@@ -654,6 +744,8 @@ func (d *poolDaemon) runMessageBridge(ctx context.Context, entry *instanceEntry,
 }
 
 // bridgeMessages subscribes to page chat messages and forwards them as ACP prompts.
+// It also subscribes to cancellation signals so the frontend "Stop" button can
+// cancel an in-progress prompt.
 func (d *poolDaemon) bridgeMessages(ctx context.Context, entry *instanceEntry, wikiClient apiv1connect.ChatServiceClient, chatClient *wikiChatClient) error {
 	stream, err := wikiClient.SubscribePageChatMessages(ctx, connect.NewRequest(&apiv1.SubscribePageChatMessagesRequest{
 		Page: entry.page,
@@ -665,6 +757,33 @@ func (d *poolDaemon) bridgeMessages(ctx context.Context, entry *instanceEntry, w
 		return fmt.Errorf("failed to subscribe to page messages: %w", err)
 	}
 	defer func() { _ = stream.Close() }()
+
+	// Subscribe to cancellation signals for this page
+	cancelStream, cancelErr := wikiClient.SubscribePageCancellations(ctx, connect.NewRequest(&apiv1.SubscribePageCancellationsRequest{
+		Page: entry.page,
+	}))
+	if cancelErr != nil {
+		log.Printf("Warning: failed to subscribe to cancellations for %q: %v", entry.page, cancelErr)
+	}
+
+	// Channel that receives cancel signals from the cancellation stream
+	cancelChan := make(chan struct{}, 1)
+	if cancelStream != nil {
+		go func() {
+			defer close(cancelChan)
+			for cancelStream.Receive() {
+				select {
+				case cancelChan <- struct{}{}:
+				default:
+				}
+			}
+		}()
+	}
+	defer func() {
+		if cancelStream != nil {
+			_ = cancelStream.Close()
+		}
+	}()
 
 	log.Printf("Message bridge connected for page %q", entry.page)
 
@@ -681,14 +800,34 @@ func (d *poolDaemon) bridgeMessages(ctx context.Context, entry *instanceEntry, w
 		// Prepare for streaming response
 		chatClient.beginTurn(msg.Id)
 
+		// Create a cancellable context for this prompt
+		promptCtx, promptCancel := context.WithCancel(ctx)
+
+		// Listen for cancel signals during this prompt
+		go func() {
+			select {
+			case <-cancelChan:
+				log.Printf("Cancelling prompt for page %q", entry.page)
+				promptCancel()
+			case <-promptCtx.Done():
+			}
+		}()
+
 		// Send as ACP prompt — blocks until the agent completes its turn.
 		// During the turn, SessionUpdate streams text chunks to the wiki in real-time.
-		_, err := entry.conn.Prompt(ctx, acp.PromptRequest{
+		_, promptErr := entry.conn.Prompt(promptCtx, acp.PromptRequest{
 			SessionId: entry.sessionID,
 			Prompt:    []acp.ContentBlock{acp.TextBlock(msg.Content)},
 		})
-		if err != nil {
-			log.Printf("Failed to send prompt to agent for %q: %v", entry.page, err)
+		promptCancel() // Clean up the cancel goroutine
+
+		if promptErr != nil {
+			if promptCtx.Err() != nil && ctx.Err() == nil {
+				// Prompt was cancelled by user, not by parent context shutdown
+				log.Printf("Prompt cancelled for page %q", entry.page)
+			} else {
+				log.Printf("Failed to send prompt to agent for %q: %v", entry.page, promptErr)
+			}
 		}
 
 		chatClient.endTurn()

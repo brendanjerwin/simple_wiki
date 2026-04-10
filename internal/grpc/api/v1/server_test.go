@@ -497,6 +497,12 @@ func (noOpChatBufferManager) HasChannelSubscribers() bool {
 	return false
 }
 
+func (noOpChatBufferManager) SubscribeToPageChannelWithReplay(string) ([]*chatbuffer.Message, <-chan *chatbuffer.Message, func()) {
+	ch := make(chan *chatbuffer.Message)
+	close(ch)
+	return nil, ch, func() {}
+}
+
 func (noOpChatBufferManager) SubscribeToPageChannel(string) (<-chan *chatbuffer.Message, func()) {
 	ch := make(chan *chatbuffer.Message)
 	close(ch)
@@ -524,6 +530,15 @@ func (noOpChatBufferManager) IsInstanceRequested(string) bool {
 }
 
 func (noOpChatBufferManager) NotifyToolCall(string, string, string, string, string) {}
+
+func (noOpChatBufferManager) CancelPage(string) bool {
+	return false
+}
+
+func (noOpChatBufferManager) SubscribeToCancellation(string) (<-chan struct{}, func()) {
+	ch := make(chan struct{}, 1)
+	return ch, func() {}
+}
 
 // noOpPageReaderMutator is a minimal mock for tests that don't need page operations.
 type noOpPageReaderMutator struct{}

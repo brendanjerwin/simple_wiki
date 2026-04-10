@@ -109,6 +109,9 @@ type Manager struct {
 	instanceRequestChans []chan string         // pool daemon subscribers
 	instanceMu           sync.RWMutex
 
+	cancelFuncs   map[string][]chan struct{} // page → cancellation signal subscribers
+	cancelFuncsMu sync.Mutex
+
 	done chan struct{}
 }
 
@@ -120,6 +123,7 @@ func NewManager() *Manager {
 		pageChannelSubscribers: make(map[string][]chan *Message),
 		instanceRequests:       make(map[string]time.Time),
 		instanceRequestChans:   make([]chan string, 0),
+		cancelFuncs:            make(map[string][]chan struct{}),
 		done:                   make(chan struct{}),
 	}
 
@@ -592,6 +596,44 @@ func (m *Manager) SubscribeToPageChannel(page string) (<-chan *Message, func()) 
 	return msgChan, unsubscribe
 }
 
+// SubscribeToPageChannelWithReplay atomically subscribes to a page channel and returns
+// existing messages, preventing the first message from being lost between spawn and subscribe.
+func (m *Manager) SubscribeToPageChannelWithReplay(page string) ([]*Message, <-chan *Message, func()) {
+	buf := m.getOrCreateBuffer(page)
+	buf.mu.Lock()
+
+	// Create page channel subscription
+	m.pageChannelSubscribersMu.Lock()
+	msgChan := make(chan *Message, 100)
+	m.pageChannelSubscribers[page] = append(m.pageChannelSubscribers[page], msgChan)
+	m.pageChannelSubscribersMu.Unlock()
+
+	// Copy existing messages under the buffer lock
+	messages := make([]*Message, len(buf.messages))
+	for i, msg := range buf.messages {
+		messages[i] = msg.clone()
+	}
+	buf.mu.Unlock()
+
+	unsubscribe := func() {
+		m.pageChannelSubscribersMu.Lock()
+		defer m.pageChannelSubscribersMu.Unlock()
+		subs := m.pageChannelSubscribers[page]
+		for i, subscriber := range subs {
+			if subscriber == msgChan {
+				m.pageChannelSubscribers[page] = append(subs[:i], subs[i+1:]...)
+				close(msgChan)
+				break
+			}
+		}
+		if len(m.pageChannelSubscribers[page]) == 0 {
+			delete(m.pageChannelSubscribers, page)
+		}
+	}
+
+	return messages, msgChan, unsubscribe
+}
+
 // HasPageChannelSubscriber returns true if a per-page channel subscriber exists for the given page.
 func (m *Manager) HasPageChannelSubscriber(page string) bool {
 	m.pageChannelSubscribersMu.RLock()
@@ -670,6 +712,56 @@ func (m *Manager) HasInstanceRequestSubscribers() bool {
 	m.instanceMu.RLock()
 	defer m.instanceMu.RUnlock()
 	return len(m.instanceRequestChans) > 0
+}
+
+// CancelPage signals cancellation for an in-progress agent prompt on the given page.
+// Returns true if any cancellation subscribers were notified.
+func (m *Manager) CancelPage(page string) bool {
+	m.cancelFuncsMu.Lock()
+	defer m.cancelFuncsMu.Unlock()
+
+	chans, ok := m.cancelFuncs[page]
+	if !ok || len(chans) == 0 {
+		return false
+	}
+
+	// Signal all subscribers, then remove them (one-shot)
+	for _, ch := range chans {
+		select {
+		case ch <- struct{}{}:
+		default:
+		}
+	}
+	delete(m.cancelFuncs, page)
+	return true
+}
+
+// SubscribeToCancellation returns a channel that receives a signal when CancelPage is called
+// for the given page. The returned unsubscribe function removes the subscription.
+func (m *Manager) SubscribeToCancellation(page string) (<-chan struct{}, func()) {
+	m.cancelFuncsMu.Lock()
+	defer m.cancelFuncsMu.Unlock()
+
+	ch := make(chan struct{}, 1)
+	m.cancelFuncs[page] = append(m.cancelFuncs[page], ch)
+
+	unsubscribe := func() {
+		m.cancelFuncsMu.Lock()
+		defer m.cancelFuncsMu.Unlock()
+
+		chans := m.cancelFuncs[page]
+		for i, c := range chans {
+			if c == ch {
+				m.cancelFuncs[page] = append(chans[:i], chans[i+1:]...)
+				break
+			}
+		}
+		if len(m.cancelFuncs[page]) == 0 {
+			delete(m.cancelFuncs, page)
+		}
+	}
+
+	return ch, unsubscribe
 }
 
 // IsInstanceRequested returns true if a Claude instance has been requested for the given page

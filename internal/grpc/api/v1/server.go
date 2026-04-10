@@ -57,12 +57,15 @@ type ChatBufferManager interface {
 	SubscribeToChannel() (<-chan *chatbuffer.Message, func())
 	HasChannelSubscribers() bool
 	SubscribeToPageChannel(page string) (<-chan *chatbuffer.Message, func())
+	SubscribeToPageChannelWithReplay(page string) ([]*chatbuffer.Message, <-chan *chatbuffer.Message, func())
 	HasPageChannelSubscriber(page string) bool
 	RequestInstance(page string)
 	SubscribeToInstanceRequests() (<-chan string, func())
 	HasInstanceRequestSubscribers() bool
 	IsInstanceRequested(page string) bool
 	NotifyToolCall(page, messageID, toolCallID, title, toolStatus string)
+	CancelPage(page string) bool
+	SubscribeToCancellation(page string) (<-chan struct{}, func())
 }
 
 // computeContentHash computes a SHA256 hash of the given markdown content,
