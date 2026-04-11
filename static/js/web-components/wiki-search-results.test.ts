@@ -12,6 +12,7 @@ interface WikiSearchResultsElement extends HTMLElement {
   inventoryOnly: boolean;
   totalUnfilteredCount: number;
   _handleClickOutside: (event: Event) => void;
+  _handleKeydown: (event: KeyboardEvent) => void;
   close: () => void;
   updateComplete: Promise<boolean>;
   shadowRoot: ShadowRoot;
