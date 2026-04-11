@@ -714,10 +714,12 @@ func (d *poolDaemon) spawnInstance(page string) (*instanceEntry, error) {
 func (d *poolDaemon) runMessageBridge(ctx context.Context, entry *instanceEntry, chatClient *wikiChatClient) {
 	page := entry.page
 
+	log.Printf("[%s] Bridge: fetching page context...", page)
 	// Fetch page context (but don't send it as a prompt yet — prepend to first message)
 	chatClient.mu.Lock()
 	chatClient.pageContext = d.fetchPageContext(ctx, page)
 	chatClient.mu.Unlock()
+	log.Printf("[%s] Bridge: page context fetched, subscribing to messages...", page)
 
 	// Subscribe to page messages FIRST — this ensures we don't miss the triggering message
 	httpClient := &http.Client{}
