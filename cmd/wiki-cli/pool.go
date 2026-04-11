@@ -285,6 +285,7 @@ type wikiChatClient struct {
 	planEntries     []acp.PlanEntry
 	replyToID       string // set before each prompt to thread responses
 	currentMsg      string // message ID of the in-progress streaming reply
+	pageContext     string // context to prepend to the first user message
 	chatClient      apiv1connect.ChatServiceClient
 }
 
@@ -391,7 +392,10 @@ func (c *wikiChatClient) SessionUpdate(_ context.Context, n acp.SessionNotificat
 			c.mu.Unlock()
 
 			// Stream the thinking indicator to chat so the user sees activity
-			if msgID == "" {
+			// Skip if thought text is too short to be meaningful
+			if strings.TrimSpace(c.thoughtBuf.String()) == "" {
+				// Nothing meaningful to show yet
+			} else if msgID == "" {
 				resp, err := c.chatClient.SendChatReply(context.Background(), connect.NewRequest(&apiv1.SendChatReplyRequest{
 					Page:      c.page,
 					Content:   thoughtText,
@@ -702,19 +706,20 @@ func (d *poolDaemon) spawnInstance(page string) (*instanceEntry, error) {
 	return entry, nil
 }
 
-// runMessageBridge fetches page context, sends it as the initial prompt, then
-// subscribes to user messages and forwards them as ACP prompts.
+// runMessageBridge subscribes to user messages and forwards them as ACP prompts.
+// Page context is prepended to the first user message rather than sent as a
+// separate prompt, ensuring the bridge is listening before any prompt is sent.
 func (d *poolDaemon) runMessageBridge(ctx context.Context, entry *instanceEntry, chatClient *wikiChatClient) {
 	page := entry.page
 
-	// Fetch and inject page context
-	d.injectPageContext(ctx, entry)
+	// Fetch page context (but don't send it as a prompt yet — prepend to first message)
+	chatClient.mu.Lock()
+	chatClient.pageContext = d.fetchPageContext(ctx, page)
+	chatClient.mu.Unlock()
 
-	// Subscribe to page messages
+	// Subscribe to page messages FIRST — this ensures we don't miss the triggering message
 	httpClient := &http.Client{}
 	wikiClient := apiv1connect.NewChatServiceClient(httpClient, d.wikiURL)
-	fmClient := apiv1connect.NewFrontmatterClient(httpClient, d.wikiURL)
-	_ = fmClient // used in injectPageContext
 
 	backoffMs := initialBackoffMs
 	for {
@@ -813,11 +818,21 @@ func (d *poolDaemon) bridgeMessages(ctx context.Context, entry *instanceEntry, w
 			}
 		}()
 
+		// Prepend page context to the first user message so the agent gets
+		// context + question in one prompt (no separate context turn that blocks the bridge).
+		promptText := msg.Content
+		chatClient.mu.Lock()
+		if chatClient.pageContext != "" {
+			promptText = chatClient.pageContext + "\n\n---\n\nUser message: " + msg.Content
+			chatClient.pageContext = "" // only prepend once
+		}
+		chatClient.mu.Unlock()
+
 		// Send as ACP prompt — blocks until the agent completes its turn.
 		// During the turn, SessionUpdate streams text chunks to the wiki in real-time.
 		_, promptErr := entry.conn.Prompt(promptCtx, acp.PromptRequest{
 			SessionId: entry.sessionID,
-			Prompt:    []acp.ContentBlock{acp.TextBlock(msg.Content)},
+			Prompt:    []acp.ContentBlock{acp.TextBlock(promptText)},
 		})
 		promptCancel() // Clean up the cancel goroutine
 
@@ -851,58 +866,53 @@ const chatPreamble = `You are in an INTERACTIVE CHAT session with a user on a wi
 
 CRITICAL: Respond quickly and conversationally. Do NOT explore the codebase, run startup hooks, or do extensive initialization. The user is waiting for your reply in a chat window.
 
+Rules:
 - Keep responses concise and conversational
 - Use the wiki MCP tools only when the user asks you to read or edit pages
-- You can update the [ai_agent_chat_context] section in the page's frontmatter to remember things for next time
 - Each message you receive is from a user chatting on this wiki page
+
+CONTINUITY: After each conversation, update the [ai_agent_chat_context] section in the page's frontmatter (via MergeFrontmatter MCP tool) with:
+- A brief summary of what was discussed
+- Any goals, decisions, or action items the user mentioned
+- Key context that would help you continue the conversation next time
+This is your per-page memory — without it you have no history between sessions. Always maintain it.
 
 `
 
-// injectPageContext fetches the page's ai_agent_chat_context frontmatter and sends
-// it as the initial ACP prompt to establish context.
-func (d *poolDaemon) injectPageContext(ctx context.Context, entry *instanceEntry) {
+// fetchPageContext retrieves the page's ai_agent_chat_context frontmatter and returns
+// it as a text string to prepend to the first user message.
+func (d *poolDaemon) fetchPageContext(ctx context.Context, page string) string {
 	httpClient := &http.Client{}
 	fmClient := apiv1connect.NewFrontmatterClient(httpClient, d.wikiURL)
 
-	fmResp, err := fmClient.GetFrontmatter(ctx, connect.NewRequest(&apiv1.GetFrontmatterRequest{Page: entry.page}))
+	fmResp, err := fmClient.GetFrontmatter(ctx, connect.NewRequest(&apiv1.GetFrontmatterRequest{Page: page}))
 	if err != nil {
-		log.Printf("Failed to fetch frontmatter for page %q: %v", entry.page, err)
-		_, _ = entry.conn.Prompt(ctx, acp.PromptRequest{
-			SessionId: entry.sessionID,
-			Prompt: []acp.ContentBlock{acp.TextBlock(chatPreamble + fmt.Sprintf(
-				"You are the assistant for wiki page '%s'. Failed to fetch page context: %v. Do NOT attempt to create or modify the [ai_agent_chat_context] section.",
-				entry.page, err,
-			))},
-		})
-		return
+		log.Printf("Failed to fetch frontmatter for page %q: %v", page, err)
+		return chatPreamble + fmt.Sprintf(
+			"You are the assistant for wiki page '%s'. Failed to fetch page context: %v. Do NOT attempt to create or modify the [ai_agent_chat_context] section.",
+			page, err,
+		)
 	}
 
 	fm := fmResp.Msg.Frontmatter.AsMap()
 	agentContext, ok := fm["ai_agent_chat_context"]
 	if !ok {
-		_, _ = entry.conn.Prompt(ctx, acp.PromptRequest{
-			SessionId: entry.sessionID,
-			Prompt: []acp.ContentBlock{acp.TextBlock(chatPreamble + fmt.Sprintf(
-				"You are the assistant for wiki page '%s'. No [ai_agent_chat_context] section exists yet. You can create one using the MergeFrontmatter MCP tool to store per-page memory for future sessions.",
-				entry.page,
-			))},
-		})
-		return
+		return chatPreamble + fmt.Sprintf(
+			"You are the assistant for wiki page '%s'. No [ai_agent_chat_context] section exists yet. You can create one using the MergeFrontmatter MCP tool to store per-page memory for future sessions.",
+			page,
+		)
 	}
 
 	contextJSON, err := json.MarshalIndent(agentContext, "", "  ")
 	if err != nil {
-		log.Printf("Failed to marshal ai_agent_chat_context for page %q: %v", entry.page, err)
-		return
+		log.Printf("Failed to marshal ai_agent_chat_context for page %q: %v", page, err)
+		return chatPreamble + fmt.Sprintf("You are the assistant for wiki page '%s'.", page)
 	}
 
-	_, _ = entry.conn.Prompt(ctx, acp.PromptRequest{
-		SessionId: entry.sessionID,
-		Prompt: []acp.ContentBlock{acp.TextBlock(chatPreamble + fmt.Sprintf(
-			"You are the assistant for wiki page '%s'. Here is your per-page working memory from [ai_agent_chat_context]:\n```json\n%s\n```\nUpdate it using the MergeFrontmatter MCP tool when you learn something worth remembering.",
-			entry.page, string(contextJSON),
-		))},
-	})
+	return chatPreamble + fmt.Sprintf(
+		"You are the assistant for wiki page '%s'. Here is your per-page working memory from [ai_agent_chat_context]:\n```json\n%s\n```\nUpdate it using the MergeFrontmatter MCP tool when you learn something worth remembering.",
+		page, string(contextJSON),
+	)
 }
 
 // stopInstanceLocked stops an instance. Must be called with d.mu held.
