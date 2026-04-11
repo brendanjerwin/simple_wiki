@@ -609,6 +609,8 @@ func (d *poolDaemon) spawnInstance(page string) (*instanceEntry, error) {
 	var cmd *exec.Cmd
 	if d.useSystemd {
 		unitName := "wiki-chat-" + sanitizeUnitName(page)
+		// Stop any stale scope unit from a previous spawn
+		_ = exec.Command("systemctl", "--user", "stop", unitName+".scope").Run()
 		cmd = exec.CommandContext(ctx, "systemd-run",
 			"--user",
 			"--unit="+unitName,
