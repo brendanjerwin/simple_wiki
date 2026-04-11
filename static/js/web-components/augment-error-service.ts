@@ -232,7 +232,7 @@ export class AugmentErrorService {
     } else if (error !== null && error !== undefined) {
       if (typeof error === 'object') {
         try {
-          message = JSON.stringify(error) ?? String(error);
+          message = JSON.stringify(error);
         } catch {
           message = String(error);
         }
