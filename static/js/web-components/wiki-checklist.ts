@@ -24,7 +24,7 @@ import { reorderItems, ChecklistDragManager } from './checklist-drag-manager.js'
 import type { DragReorderHandler } from './checklist-drag-manager.js';
 import { wikiChecklistStyles } from './wiki-checklist-styles.js';
 
-import type { ChecklistItem, ChecklistData } from './checklist-tag-parser.js';
+import type { ChecklistItem } from './checklist-tag-parser.js';
 export type { ChecklistItem, ChecklistData } from './checklist-tag-parser.js';
 
 // Polling interval in milliseconds
