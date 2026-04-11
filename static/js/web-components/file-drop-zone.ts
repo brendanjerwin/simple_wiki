@@ -81,6 +81,19 @@ export class FileDropZone extends LitElement {
         font-size: 16px;
         font-weight: 500;
       }
+
+      /* Visually hidden but announced by screen readers */
+      .sr-only {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        white-space: nowrap;
+        border: 0;
+      }
     `,
   ];
 
@@ -200,17 +213,37 @@ export class FileDropZone extends LitElement {
     }
   }
 
+  private _statusMessage(): string {
+    if (this.uploading) return 'Uploading file, please wait…';
+    if (this.dragging) return 'Drop file to upload';
+    return '';
+  }
+
   override render() {
     return html`
       ${sharedStyles}
       <div
         class="drop-zone"
+        role="region"
+        aria-label="File upload area"
+        aria-busy="${this.uploading ? 'true' : 'false'}"
         @dragenter=${this._onDragEnter}
         @dragover=${this._onDragOver}
         @dragleave=${this._onDragLeave}
         @drop=${this._onDrop}
       >
         <slot></slot>
+
+        <!-- Persistent live region: announces drag/upload status changes -->
+        <div class="sr-only" role="status" aria-live="polite" aria-atomic="true">
+          ${this._statusMessage()}
+        </div>
+
+        <!-- Persistent alert region: announces errors -->
+        <div class="sr-only" role="alert" aria-atomic="true">
+          ${this.error ? this.error.message : ''}
+        </div>
+
         ${this.dragging
           ? html`
               <div class="drop-overlay">

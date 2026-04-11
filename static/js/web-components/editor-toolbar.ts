@@ -5,6 +5,10 @@ import { buttonCSS, colorCSS, foundationCSS } from './shared-styles.js';
 /**
  * EditorToolbar provides a horizontal toolbar for mobile editing.
  * It displays formatting and upload buttons that are always visible.
+ *
+ * Keyboard navigation:
+ * - ArrowLeft / ArrowRight moves focus between toolbar buttons.
+ * - Escape closes the upload dropdown menu and returns focus to the toggle.
  */
 export class EditorToolbar extends LitElement {
   @property({ type: Boolean, attribute: 'has-selection' })
@@ -220,6 +224,35 @@ export class EditorToolbar extends LitElement {
     }
   };
 
+  readonly _handleToolbarKeydown = (event: KeyboardEvent): void => {
+    if (event.key === 'Escape' && this._uploadMenuOpen) {
+      event.preventDefault();
+      this._uploadMenuOpen = false;
+      this.shadowRoot?.querySelector<HTMLButtonElement>('.upload-btn-toggle')?.focus();
+      return;
+    }
+
+    if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') {
+      event.preventDefault();
+      const buttons = Array.from(
+        this.shadowRoot?.querySelectorAll<HTMLButtonElement>('button:not([disabled])') ?? []
+      );
+      if (buttons.length === 0) return;
+
+      const activeEl = this.shadowRoot?.activeElement;
+      const currentIndex =
+        activeEl instanceof HTMLButtonElement ? buttons.indexOf(activeEl) : -1;
+
+      let nextIndex: number;
+      if (event.key === 'ArrowRight') {
+        nextIndex = currentIndex < buttons.length - 1 ? currentIndex + 1 : 0;
+      } else {
+        nextIndex = currentIndex > 0 ? currentIndex - 1 : buttons.length - 1;
+      }
+      buttons[nextIndex]?.focus();
+    }
+  };
+
   private _dispatchEvent(eventName: string): void {
     this.dispatchEvent(new CustomEvent(eventName, {
       bubbles: true,
@@ -263,18 +296,44 @@ export class EditorToolbar extends LitElement {
 
   override render() {
     return html`
-      <div class="toolbar">
-        <button class="toolbar-btn" data-action="bold" @click="${this._handleBold}" ?disabled="${!this.hasSelection}" title="Bold">
+      <div
+        class="toolbar"
+        role="toolbar"
+        aria-label="Editor toolbar"
+        @keydown="${this._handleToolbarKeydown}"
+      >
+        <button
+          class="toolbar-btn"
+          data-action="bold"
+          @click="${this._handleBold}"
+          ?disabled="${!this.hasSelection}"
+          title="Bold"
+          aria-label="Bold"
+        >
           <strong class="btn-icon">B</strong>
         </button>
-        <button class="toolbar-btn" data-action="italic" @click="${this._handleItalic}" ?disabled="${!this.hasSelection}" title="Italic">
+        <button
+          class="toolbar-btn"
+          data-action="italic"
+          @click="${this._handleItalic}"
+          ?disabled="${!this.hasSelection}"
+          title="Italic"
+          aria-label="Italic"
+        >
           <em class="btn-icon">I</em>
         </button>
-        <button class="toolbar-btn" data-action="link" @click="${this._handleLink}" ?disabled="${!this.hasSelection}" title="Insert Link">
+        <button
+          class="toolbar-btn"
+          data-action="link"
+          @click="${this._handleLink}"
+          ?disabled="${!this.hasSelection}"
+          title="Insert Link"
+          aria-label="Insert Link"
+        >
           <span class="btn-icon">&#128279;</span>
         </button>
 
-        <div class="separator"></div>
+        <div class="separator" role="separator"></div>
 
         <!-- Upload dropdown: main button for image, dropdown for file -->
         <div class="upload-dropdown">
@@ -284,6 +343,7 @@ export class EditorToolbar extends LitElement {
               data-action="upload-image"
               @click="${this._handleUploadImage}"
               title="Upload Image"
+              aria-label="Upload Image"
             >
               <span class="btn-icon">&#128247;</span>
             </button>
@@ -291,16 +351,20 @@ export class EditorToolbar extends LitElement {
               class="upload-btn-toggle"
               @click="${this._handleToggleUploadMenu}"
               title="More upload options"
+              aria-label="More upload options"
+              aria-expanded="${this._uploadMenuOpen ? 'true' : 'false'}"
+              aria-haspopup="menu"
             >
               <span class="dropdown-arrow ${this._uploadMenuOpen ? 'open' : ''}">&#9660;</span>
             </button>
           </div>
           ${this._uploadMenuOpen ? html`
-            <div class="upload-dropdown-menu">
+            <div class="upload-dropdown-menu" role="menu" aria-label="Upload options">
               <button
                 class="upload-dropdown-item"
                 data-action="upload-file"
                 @click="${this._handleUploadFile}"
+                role="menuitem"
               >
                 <span>&#128196;</span> Upload File
               </button>
@@ -308,14 +372,26 @@ export class EditorToolbar extends LitElement {
           ` : nothing}
         </div>
 
-        <button class="toolbar-btn" data-action="new-page" @click="${this._handleNewPage}" title="Create &amp; Link New Page">
+        <button
+          class="toolbar-btn"
+          data-action="new-page"
+          @click="${this._handleNewPage}"
+          title="Create &amp; Link New Page"
+          aria-label="Create and Link New Page"
+        >
           <span class="btn-icon">&#10010;</span>
         </button>
 
         <div class="spacer"></div>
 
         ${this.hideExit ? nothing : html`
-          <button class="toolbar-btn exit-btn" data-action="exit" @click="${this._handleExit}" title="Done Editing">
+          <button
+            class="toolbar-btn exit-btn"
+            data-action="exit"
+            @click="${this._handleExit}"
+            title="Done Editing"
+            aria-label="Done Editing"
+          >
             <span class="btn-icon">&#10003;</span> Done
           </button>
         `}
