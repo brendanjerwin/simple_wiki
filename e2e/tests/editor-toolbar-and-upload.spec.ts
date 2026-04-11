@@ -222,8 +222,8 @@ test.describe('editor-toolbar', () => {
         await expect(
           page.locator('wiki-editor editor-toolbar .upload-dropdown-menu'),
         ).toBeVisible();
-        // Click outside the toolbar
-        await page.locator('body').click({ position: { x: 10, y: 10 } });
+        // Click outside the toolbar — use the textarea which is always below the toolbar
+        await page.locator('wiki-editor textarea').click();
       });
 
       test('upload dropdown menu is closed', async ({ page }) => {
@@ -272,11 +272,15 @@ test.describe('file-drop-zone', () => {
         await gotoEditPage(page);
         await waitForEditorReady(page);
 
-        // Uploads are disabled by default on the editor page; dispatch drag anyway
+        // Explicitly disable uploads then dispatch drag (server config may have uploads enabled)
         await page.evaluate(() => {
           const wikiEditor = document.querySelector('wiki-editor');
-          const fileDropZone = wikiEditor?.shadowRoot?.querySelector('file-drop-zone');
-          const dropZoneEl = fileDropZone?.shadowRoot?.querySelector('.drop-zone');
+          const fileDropZone = wikiEditor?.shadowRoot?.querySelector('file-drop-zone') as
+            | (HTMLElement & { allowUploads: boolean })
+            | null;
+          if (!fileDropZone) return;
+          fileDropZone.allowUploads = false;
+          const dropZoneEl = fileDropZone.shadowRoot?.querySelector('.drop-zone');
           dropZoneEl?.dispatchEvent(new DragEvent('dragenter', { bubbles: true, cancelable: true }));
         });
       });
@@ -348,8 +352,10 @@ test.describe('file-drop-zone', () => {
         await expect(page.locator('wiki-editor file-drop-zone error-display')).toBeVisible();
 
         // Click the Dismiss button inside the error-display shadow DOM
+        // Must chain locators separately — CSS selectors cannot pierce shadow DOM boundaries
         await page
-          .locator('wiki-editor file-drop-zone error-display .action-button')
+          .locator('wiki-editor file-drop-zone error-display')
+          .locator('.action-button')
           .click();
       });
 
