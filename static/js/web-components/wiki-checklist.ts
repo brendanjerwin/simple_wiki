@@ -469,6 +469,33 @@ export class WikiChecklist extends LitElement implements DragReorderHandler {
     this._dragManager.cleanup();
   }
 
+  _handleDragHandleKeydown(event: KeyboardEvent, index: number): void {
+    if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      if (index > 0) {
+        void this._keyboardMoveItem(index, 'up');
+      }
+    } else if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      if (index < this.items.length - 1) {
+        void this._keyboardMoveItem(index, 'down');
+      }
+    }
+  }
+
+  private async _keyboardMoveItem(fromIndex: number, direction: 'up' | 'down'): Promise<void> {
+    const toInsertIndex = direction === 'up' ? fromIndex - 1 : fromIndex + 2;
+    const newIndex = direction === 'up' ? fromIndex - 1 : fromIndex + 1;
+    const newItems = reorderItems(this.items, fromIndex, toInsertIndex);
+    this.items = newItems;
+    void this._persistData(newItems);
+
+    await this.updateComplete;
+    const handles = this.shadowRoot?.querySelectorAll<HTMLElement>('.drag-handle');
+    const handle = handles?.[newIndex];
+    handle?.focus();
+  }
+
   private _renderItemEditInput(index: number) {
     return html`
       <input
@@ -528,9 +555,12 @@ export class WikiChecklist extends LitElement implements DragReorderHandler {
       >
         <span
           class="drag-handle ${this._dragManager.longPressHandleIndex === index ? 'long-press-pending' : ''}"
-          aria-hidden="true"
+          tabindex="0"
+          role="button"
+          aria-label="Reorder item. Use arrow keys to move up or down."
           @mousedown="${(e: MouseEvent) => this._handleDragHandleMousedown(e)}"
           @touchstart="${(e: TouchEvent) => this._handleTouchStart(e, index)}"
+          @keydown="${(e: KeyboardEvent) => this._handleDragHandleKeydown(e, index)}"
         >\u2807</span>
         <input
           type="checkbox"
