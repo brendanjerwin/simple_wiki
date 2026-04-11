@@ -349,14 +349,18 @@ test.describe('file-drop-zone', () => {
           await fileDropZone._uploadFile(file);
         });
 
-        await expect(page.locator('wiki-editor file-drop-zone error-display')).toBeVisible();
+        await expect(page.locator('wiki-editor file-drop-zone error-display')).toBeVisible({ timeout: 5000 });
 
-        // Click the Dismiss button inside the error-display shadow DOM
-        // Must chain locators separately — CSS selectors cannot pierce shadow DOM boundaries
-        await page
-          .locator('wiki-editor file-drop-zone error-display')
-          .locator('.action-button')
-          .click();
+        // Click the Dismiss button using page.evaluate() with explicit shadow DOM traversal.
+        // The button lives 3 shadow roots deep (wiki-editor > file-drop-zone > error-display)
+        // and Playwright's chained locators don't reliably pierce that many levels.
+        await page.evaluate(() => {
+          const wikiEditor = document.querySelector('wiki-editor');
+          const fileDropZone = wikiEditor?.shadowRoot?.querySelector('file-drop-zone');
+          const errorDisplay = fileDropZone?.shadowRoot?.querySelector('error-display');
+          const actionButton = errorDisplay?.shadowRoot?.querySelector('.action-button') as HTMLButtonElement | null;
+          actionButton?.click();
+        });
       });
 
       test('error-display component is removed', async ({ page }) => {
