@@ -671,12 +671,14 @@ func (m *Manager) RequestInstance(page string) {
 
 	m.instanceRequests[page] = time.Now()
 
-	// Notify all pool daemon subscribers
+	// Notify exactly one pool daemon subscriber to prevent duplicate spawns.
+	// Try each subscriber in order; use the first one that accepts.
 	for _, ch := range m.instanceRequestChans {
 		select {
 		case ch <- page:
+			return
 		default:
-			// Don't block if subscriber is slow
+			// Subscriber is full, try next
 		}
 	}
 }

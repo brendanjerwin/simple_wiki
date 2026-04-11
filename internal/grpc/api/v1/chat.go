@@ -313,14 +313,16 @@ func (s *Server) SubscribePageChatMessages(req *apiv1.SubscribePageChatMessagesR
 	existingMessages, msgChan, unsubscribe := s.chatBufferManager.SubscribeToPageChannelWithReplay(req.Page)
 	defer unsubscribe()
 
-	// Replay existing user messages (the first message that triggered spawn)
-	for _, msg := range existingMessages {
-		if msg.Sender != "user" {
-			continue
-		}
-		protoMsg := bufferMessageToProto(msg)
-		if err := stream.Send(protoMsg); err != nil {
-			return err
+	// Replay only the last user message — this is the one that triggered the
+	// instance spawn. Replaying all messages would cause the agent to re-process
+	// the entire conversation history from the buffer.
+	for i := len(existingMessages) - 1; i >= 0; i-- {
+		if existingMessages[i].Sender == "user" {
+			protoMsg := bufferMessageToProto(existingMessages[i])
+			if err := stream.Send(protoMsg); err != nil {
+				return err
+			}
+			break
 		}
 	}
 
