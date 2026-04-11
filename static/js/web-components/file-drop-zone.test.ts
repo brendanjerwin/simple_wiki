@@ -87,6 +87,99 @@ describe('FileDropZone', () => {
     });
   });
 
+  describe('ARIA attributes', () => {
+    beforeEach(async () => {
+      el = await fixture(html`<file-drop-zone></file-drop-zone>`);
+    });
+
+    it('should have role="region" on the drop zone', () => {
+      const dropZone = el.shadowRoot?.querySelector('.drop-zone');
+      expect(dropZone?.getAttribute('role')).to.equal('region');
+    });
+
+    it('should have aria-label on the drop zone', () => {
+      const dropZone = el.shadowRoot?.querySelector('.drop-zone');
+      expect(dropZone?.getAttribute('aria-label')).to.equal('File upload area');
+    });
+
+    it('should have aria-busy="false" when not uploading', () => {
+      const dropZone = el.shadowRoot?.querySelector('.drop-zone');
+      expect(dropZone?.getAttribute('aria-busy')).to.equal('false');
+    });
+
+    it('should have a polite live region for status', () => {
+      const liveRegion = el.shadowRoot?.querySelector('[role="status"][aria-live="polite"]');
+      expect(liveRegion).to.exist;
+    });
+
+    it('should have an alert region for errors', () => {
+      const alertRegion = el.shadowRoot?.querySelector('[role="alert"]');
+      expect(alertRegion).to.exist;
+    });
+  });
+
+  describe('when uploading', () => {
+    let stubClient: StubClient;
+
+    beforeEach(async () => {
+      el = await fixture(html`<file-drop-zone allow-uploads></file-drop-zone>`);
+      stubClient = createStubClient();
+      // Never-resolving promise to keep upload in progress
+      stubClient.uploadFile.returns(new Promise(() => {}));
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- stub client matches the shape needed for testing
+      el.setClient(stubClient as unknown as Parameters<FileDropZone['setClient']>[0]);
+
+      const file = createFile('test.txt', 100);
+      const fileList = { 0: file, length: 1 } as unknown as FileList;
+      const event = createDragEvent('drop', {
+        dataTransfer: { files: fileList, dropEffect: 'none' } as unknown as DataTransfer,
+      });
+
+      const dropZone = el.shadowRoot?.querySelector('.drop-zone');
+      dropZone?.dispatchEvent(event);
+
+      await new Promise(resolve => setTimeout(resolve, 10));
+      await el.updateComplete;
+    });
+
+    it('should have aria-busy="true"', () => {
+      const dropZone = el.shadowRoot?.querySelector('.drop-zone');
+      expect(dropZone?.getAttribute('aria-busy')).to.equal('true');
+    });
+
+    it('should announce uploading status in the live region', () => {
+      const liveRegion = el.shadowRoot?.querySelector('[role="status"]');
+      expect(liveRegion?.textContent?.trim()).to.include('Uploading');
+    });
+  });
+
+  describe('when an error occurs', () => {
+    beforeEach(async () => {
+      el = await fixture(html`<file-drop-zone allow-uploads max-upload-mb="1"></file-drop-zone>`);
+
+      const stubClient = createStubClient();
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- stub client matches the shape needed for testing
+      el.setClient(stubClient as unknown as Parameters<FileDropZone['setClient']>[0]);
+
+      const file = createFile('big.txt', 2 * 1024 * 1024);
+      const fileList = { 0: file, length: 1 } as unknown as FileList;
+      const event = createDragEvent('drop', {
+        dataTransfer: { files: fileList, dropEffect: 'none' } as unknown as DataTransfer,
+      });
+
+      const dropZone = el.shadowRoot?.querySelector('.drop-zone');
+      dropZone?.dispatchEvent(event);
+
+      await new Promise(resolve => setTimeout(resolve, 10));
+      await el.updateComplete;
+    });
+
+    it('should announce error in the alert region', () => {
+      const alertRegion = el.shadowRoot?.querySelector('[role="alert"]');
+      expect(alertRegion?.textContent?.trim()).to.not.equal('');
+    });
+  });
+
   describe('slot content', () => {
     beforeEach(async () => {
       el = await fixture(html`

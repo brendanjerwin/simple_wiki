@@ -19,6 +19,153 @@ describe('EditorToolbar', () => {
     expect(toolbar.tagName.toLowerCase()).to.equal('editor-toolbar');
   });
 
+  describe('ARIA attributes', () => {
+    let toolbarDiv: HTMLElement | null | undefined;
+
+    beforeEach(() => {
+      toolbarDiv = toolbar.shadowRoot?.querySelector<HTMLElement>('.toolbar');
+    });
+
+    it('should have role="toolbar" on the toolbar container', () => {
+      expect(toolbarDiv?.getAttribute('role')).to.equal('toolbar');
+    });
+
+    it('should have aria-label on the toolbar container', () => {
+      expect(toolbarDiv?.getAttribute('aria-label')).to.equal('Editor toolbar');
+    });
+
+    it('should have aria-label on the bold button', () => {
+      const btn = toolbar.shadowRoot?.querySelector<HTMLButtonElement>('[data-action="bold"]');
+      expect(btn?.getAttribute('aria-label')).to.equal('Bold');
+    });
+
+    it('should have aria-label on the italic button', () => {
+      const btn = toolbar.shadowRoot?.querySelector<HTMLButtonElement>('[data-action="italic"]');
+      expect(btn?.getAttribute('aria-label')).to.equal('Italic');
+    });
+
+    it('should have aria-label on the link button', () => {
+      const btn = toolbar.shadowRoot?.querySelector<HTMLButtonElement>('[data-action="link"]');
+      expect(btn?.getAttribute('aria-label')).to.equal('Insert Link');
+    });
+
+    it('should have aria-label on the upload image button', () => {
+      const btn = toolbar.shadowRoot?.querySelector<HTMLButtonElement>('[data-action="upload-image"]');
+      expect(btn?.getAttribute('aria-label')).to.equal('Upload Image');
+    });
+
+    it('should have aria-label on the new page button', () => {
+      const btn = toolbar.shadowRoot?.querySelector<HTMLButtonElement>('[data-action="new-page"]');
+      expect(btn?.getAttribute('aria-label')).to.equal('Create and Link New Page');
+    });
+
+    it('should have aria-label on the exit button', () => {
+      const btn = toolbar.shadowRoot?.querySelector<HTMLButtonElement>('[data-action="exit"]');
+      expect(btn?.getAttribute('aria-label')).to.equal('Done Editing');
+    });
+  });
+
+  describe('upload dropdown toggle ARIA', () => {
+    let toggleBtn: HTMLButtonElement | null | undefined;
+
+    beforeEach(() => {
+      toggleBtn = toolbar.shadowRoot?.querySelector<HTMLButtonElement>('.upload-btn-toggle');
+    });
+
+    it('should have aria-haspopup="menu"', () => {
+      expect(toggleBtn?.getAttribute('aria-haspopup')).to.equal('menu');
+    });
+
+    it('should have aria-expanded="false" when closed', () => {
+      expect(toggleBtn?.getAttribute('aria-expanded')).to.equal('false');
+    });
+
+    describe('when dropdown is opened', () => {
+      beforeEach(async () => {
+        toggleBtn?.click();
+        await toolbar.updateComplete;
+        toggleBtn = toolbar.shadowRoot?.querySelector<HTMLButtonElement>('.upload-btn-toggle');
+      });
+
+      it('should have aria-expanded="true"', () => {
+        expect(toggleBtn?.getAttribute('aria-expanded')).to.equal('true');
+      });
+
+      it('should have role="menu" on the dropdown menu', () => {
+        const menu = toolbar.shadowRoot?.querySelector('.upload-dropdown-menu');
+        expect(menu?.getAttribute('role')).to.equal('menu');
+      });
+
+      it('should have role="menuitem" on the upload file button', () => {
+        const item = toolbar.shadowRoot?.querySelector('[data-action="upload-file"]');
+        expect(item?.getAttribute('role')).to.equal('menuitem');
+      });
+    });
+  });
+
+  describe('keyboard navigation', () => {
+    describe('when Escape is pressed while dropdown is open', () => {
+      let toggleBtn: HTMLButtonElement | null | undefined;
+
+      beforeEach(async () => {
+        toggleBtn = toolbar.shadowRoot?.querySelector<HTMLButtonElement>('.upload-btn-toggle');
+        toggleBtn?.click();
+        await toolbar.updateComplete;
+
+        const toolbarDiv = toolbar.shadowRoot?.querySelector<HTMLElement>('.toolbar');
+        toolbarDiv?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+        await toolbar.updateComplete;
+      });
+
+      it('should close the dropdown', () => {
+        const menu = toolbar.shadowRoot?.querySelector('.upload-dropdown-menu');
+        expect(menu).to.not.exist;
+      });
+    });
+
+    describe('when ArrowRight is pressed from an enabled button', () => {
+      let toolbarDiv: HTMLElement | null | undefined;
+
+      beforeEach(async () => {
+        // Enable all format buttons so we can navigate through them
+        toolbar.hasSelection = true;
+        await toolbar.updateComplete;
+
+        toolbarDiv = toolbar.shadowRoot?.querySelector<HTMLElement>('.toolbar');
+        const boldBtn = toolbar.shadowRoot?.querySelector<HTMLButtonElement>('[data-action="bold"]');
+        boldBtn?.focus();
+        toolbarDiv?.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+        await toolbar.updateComplete;
+      });
+
+      it('should move focus to the next enabled button', () => {
+        const italicBtn = toolbar.shadowRoot?.querySelector<HTMLButtonElement>('[data-action="italic"]');
+        expect(toolbar.shadowRoot?.activeElement).to.equal(italicBtn);
+      });
+    });
+
+    describe('when ArrowLeft is pressed from an enabled button', () => {
+      let toolbarDiv: HTMLElement | null | undefined;
+
+      beforeEach(async () => {
+        // Enable all format buttons so we can navigate through them
+        toolbar.hasSelection = true;
+        await toolbar.updateComplete;
+
+        toolbarDiv = toolbar.shadowRoot?.querySelector<HTMLElement>('.toolbar');
+        const italicBtn = toolbar.shadowRoot?.querySelector<HTMLButtonElement>('[data-action="italic"]');
+        italicBtn?.focus();
+        toolbarDiv?.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true }));
+        await toolbar.updateComplete;
+      });
+
+      it('should move focus to the previous enabled button', () => {
+        const boldBtn = toolbar.shadowRoot?.querySelector<HTMLButtonElement>('[data-action="bold"]');
+        expect(toolbar.shadowRoot?.activeElement).to.equal(boldBtn);
+      });
+    });
+  });
+
   describe('when has-selection is not set', () => {
     let boldBtn: HTMLButtonElement | null | undefined;
     let italicBtn: HTMLButtonElement | null | undefined;
