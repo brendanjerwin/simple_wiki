@@ -19,13 +19,13 @@ import {
 import { AugmentErrorService, type AugmentedError } from './augment-error-service.js';
 import './error-display.js';
 import { parseTaggedInput, composeTaggedText } from './checklist-tag-parser.js';
-import type { ChecklistItem, ChecklistData } from './checklist-tag-parser.js';
 import { extractChecklistData, asRecord } from './checklist-data-service.js';
 import { reorderItems, ChecklistDragManager } from './checklist-drag-manager.js';
 import type { DragReorderHandler } from './checklist-drag-manager.js';
 import { wikiChecklistStyles } from './wiki-checklist-styles.js';
 
-export type { ChecklistItem, ChecklistData };
+import type { ChecklistItem } from './checklist-tag-parser.js';
+export type { ChecklistItem, ChecklistData } from './checklist-tag-parser.js';
 
 // Polling interval in milliseconds
 const POLL_INTERVAL_MS = 10000;
