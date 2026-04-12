@@ -823,7 +823,9 @@ func (d *poolDaemon) bridgeMessages(ctx context.Context, entry *instanceEntry, w
 				select {
 				case <-ticker.C:
 					entry.touch()
+					log.Printf("[%s] Heartbeat: touched lastActive", entry.page)
 				case <-promptCtx.Done():
+					log.Printf("[%s] Heartbeat: stopped (prompt done)", entry.page)
 					return
 				}
 			}
