@@ -32,6 +32,7 @@ const (
 	ChatService_CancelAgentPrompt_FullMethodName          = "/api.v1.ChatService/CancelAgentPrompt"
 	ChatService_SubscribePageCancellations_FullMethodName = "/api.v1.ChatService/SubscribePageCancellations"
 	ChatService_RespondToPermission_FullMethodName        = "/api.v1.ChatService/RespondToPermission"
+	ChatService_RequestPermissionFromUser_FullMethodName  = "/api.v1.ChatService/RequestPermissionFromUser"
 )
 
 // ChatServiceClient is the client API for ChatService service.
@@ -80,6 +81,9 @@ type ChatServiceClient interface {
 	SubscribePageCancellations(ctx context.Context, in *SubscribePageCancellationsRequest, opts ...grpc.CallOption) (ChatService_SubscribePageCancellationsClient, error)
 	// RespondToPermission is called by the frontend when the user responds to a permission request.
 	RespondToPermission(ctx context.Context, in *RespondToPermissionRequest, opts ...grpc.CallOption) (*RespondToPermissionResponse, error)
+	// RequestPermissionFromUser is called by the pool daemon to forward a permission request
+	// to the user via chat and block until the user responds.
+	RequestPermissionFromUser(ctx context.Context, in *RequestPermissionFromUserRequest, opts ...grpc.CallOption) (*RequestPermissionFromUserResponse, error)
 }
 
 type chatServiceClient struct {
@@ -335,6 +339,16 @@ func (c *chatServiceClient) RespondToPermission(ctx context.Context, in *Respond
 	return out, nil
 }
 
+func (c *chatServiceClient) RequestPermissionFromUser(ctx context.Context, in *RequestPermissionFromUserRequest, opts ...grpc.CallOption) (*RequestPermissionFromUserResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RequestPermissionFromUserResponse)
+	err := c.cc.Invoke(ctx, ChatService_RequestPermissionFromUser_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // ChatServiceServer is the server API for ChatService service.
 // All implementations must embed UnimplementedChatServiceServer
 // for forward compatibility
@@ -381,6 +395,9 @@ type ChatServiceServer interface {
 	SubscribePageCancellations(*SubscribePageCancellationsRequest, ChatService_SubscribePageCancellationsServer) error
 	// RespondToPermission is called by the frontend when the user responds to a permission request.
 	RespondToPermission(context.Context, *RespondToPermissionRequest) (*RespondToPermissionResponse, error)
+	// RequestPermissionFromUser is called by the pool daemon to forward a permission request
+	// to the user via chat and block until the user responds.
+	RequestPermissionFromUser(context.Context, *RequestPermissionFromUserRequest) (*RequestPermissionFromUserResponse, error)
 	mustEmbedUnimplementedChatServiceServer()
 }
 
@@ -426,6 +443,9 @@ func (UnimplementedChatServiceServer) SubscribePageCancellations(*SubscribePageC
 }
 func (UnimplementedChatServiceServer) RespondToPermission(context.Context, *RespondToPermissionRequest) (*RespondToPermissionResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RespondToPermission not implemented")
+}
+func (UnimplementedChatServiceServer) RequestPermissionFromUser(context.Context, *RequestPermissionFromUserRequest) (*RequestPermissionFromUserResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method RequestPermissionFromUser not implemented")
 }
 func (UnimplementedChatServiceServer) mustEmbedUnimplementedChatServiceServer() {}
 
@@ -689,6 +709,24 @@ func _ChatService_RespondToPermission_Handler(srv interface{}, ctx context.Conte
 	return interceptor(ctx, in, info, handler)
 }
 
+func _ChatService_RequestPermissionFromUser_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RequestPermissionFromUserRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ChatServiceServer).RequestPermissionFromUser(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ChatService_RequestPermissionFromUser_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ChatServiceServer).RequestPermissionFromUser(ctx, req.(*RequestPermissionFromUserRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // ChatService_ServiceDesc is the grpc.ServiceDesc for ChatService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -727,6 +765,10 @@ var ChatService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "RespondToPermission",
 			Handler:    _ChatService_RespondToPermission_Handler,
+		},
+		{
+			MethodName: "RequestPermissionFromUser",
+			Handler:    _ChatService_RequestPermissionFromUser_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

@@ -1269,3 +1269,7 @@ var _ = Describe("ChatService", func() {
 		})
 	})
 })
+
+func (*mockChatBufferManager) RequestPermission(string, string, string, string, []chatbuffer.PermissionOption) string {
+	return ""
+}

@@ -535,7 +535,7 @@ func truncate(s string, max int) string {
 	return s[:max] + "..."
 }
 
-func (c *wikiChatClient) RequestPermission(_ context.Context, p acp.RequestPermissionRequest) (acp.RequestPermissionResponse, error) {
+func (c *wikiChatClient) RequestPermission(ctx context.Context, p acp.RequestPermissionRequest) (acp.RequestPermissionResponse, error) {
 	// Auto-approve all permissions — the agent is trusted.
 	title := string(p.ToolCall.ToolCallId)
 	if p.ToolCall.Title != nil {
@@ -551,20 +551,67 @@ func (c *wikiChatClient) RequestPermission(_ context.Context, p acp.RequestPermi
 		}, nil
 	}
 
-	log.Printf("[%s] Permission requested: %s (%d options)", c.page, title, len(p.Options))
+	log.Printf("[%s] Permission requested from user: %s (%d options)", c.page, title, len(p.Options))
 
-	// TODO: Forward to user via RespondToPermission RPC and block until response.
-	// For now, auto-approve with notification in chat.
-	selected := p.Options[0]
-	log.Printf("[%s] Permission auto-approved: %s — %s", c.page, title, selected.Name)
+	// Forward to user via the wiki chat UI and block until they respond.
+	requestID := fmt.Sprintf("perm-%d", time.Now().UnixNano())
+
+	var protoOptions []*apiv1.ChatPermissionOption
+	for _, opt := range p.Options {
+		protoOptions = append(protoOptions, &apiv1.ChatPermissionOption{
+			OptionId: string(opt.OptionId),
+			Label:    opt.Name,
+		})
+	}
+
+	resp, err := c.chatClient.RequestPermissionFromUser(ctx, connect.NewRequest(&apiv1.RequestPermissionFromUserRequest{
+		Page:        c.page,
+		RequestId:   requestID,
+		Title:       title,
+		Description: title,
+		Options:     protoOptions,
+	}))
+	if err != nil {
+		log.Printf("[%s] Permission request failed: %v — auto-approving", c.page, err)
+		// Fallback to auto-approve if the relay fails
+		selected := p.Options[0]
+		return acp.RequestPermissionResponse{
+			Outcome: acp.RequestPermissionOutcome{
+				Selected: &acp.RequestPermissionOutcomeSelected{OptionId: selected.OptionId},
+			},
+		}, nil
+	}
+
+	selectedID := resp.Msg.SelectedOptionId
+	if selectedID == "" {
+		log.Printf("[%s] Permission denied by user: %s", c.page, title)
+		c.mu.Lock()
+		fmt.Fprintf(&c.permissionNotes, "> \U0001F510 **Permission denied:** %s\n", title)
+		c.mu.Unlock()
+		return acp.RequestPermissionResponse{
+			Outcome: acp.RequestPermissionOutcome{
+				Cancelled: &acp.RequestPermissionOutcomeCancelled{},
+			},
+		}, nil
+	}
+
+	// Find the selected option name for logging
+	selectedName := selectedID
+	for _, opt := range p.Options {
+		if string(opt.OptionId) == selectedID {
+			selectedName = opt.Name
+			break
+		}
+	}
+	log.Printf("[%s] Permission granted by user: %s — %s", c.page, title, selectedName)
 
 	c.mu.Lock()
-	fmt.Fprintf(&c.permissionNotes, "> \U0001F510 **Permission auto-approved:** %s — %s\n", title, selected.Name)
+	fmt.Fprintf(&c.permissionNotes, "> \U0001F510 **Permission granted:** %s — %s\n", title, selectedName)
 	c.mu.Unlock()
 
 	return acp.RequestPermissionResponse{
 		Outcome: acp.RequestPermissionOutcome{
-			Selected: &acp.RequestPermissionOutcomeSelected{OptionId: selected.OptionId},
+			Selected: &acp.RequestPermissionOutcomeSelected{OptionId: acp.PermissionOptionId(selectedID)},
 		},
 	}, nil
 }

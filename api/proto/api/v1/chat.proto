@@ -60,6 +60,10 @@ service ChatService {
 
   // RespondToPermission is called by the frontend when the user responds to a permission request.
   rpc RespondToPermission(RespondToPermissionRequest) returns (RespondToPermissionResponse) {}
+
+  // RequestPermissionFromUser is called by the pool daemon to forward a permission request
+  // to the user via chat and block until the user responds.
+  rpc RequestPermissionFromUser(RequestPermissionFromUserRequest) returns (RequestPermissionFromUserResponse) {}
 }
 
 // Sender identifies who sent a chat message.
@@ -258,3 +262,17 @@ message RespondToPermissionRequest {
 
 // RespondToPermissionResponse is the response for RespondToPermission.
 message RespondToPermissionResponse {}
+
+// RequestPermissionFromUserRequest is sent by the pool daemon to ask the user.
+message RequestPermissionFromUserRequest {
+  string page = 1;
+  string request_id = 2;
+  string title = 3;
+  string description = 4;
+  repeated ChatPermissionOption options = 5;
+}
+
+// RequestPermissionFromUserResponse returns the user's choice.
+message RequestPermissionFromUserResponse {
+  string selected_option_id = 1;  // empty = cancelled/denied
+}

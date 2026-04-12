@@ -71,6 +71,9 @@ const (
 	// ChatServiceRespondToPermissionProcedure is the fully-qualified name of the ChatService's
 	// RespondToPermission RPC.
 	ChatServiceRespondToPermissionProcedure = "/api.v1.ChatService/RespondToPermission"
+	// ChatServiceRequestPermissionFromUserProcedure is the fully-qualified name of the ChatService's
+	// RequestPermissionFromUser RPC.
+	ChatServiceRequestPermissionFromUserProcedure = "/api.v1.ChatService/RequestPermissionFromUser"
 )
 
 // These variables are the protoreflect.Descriptor objects for the RPCs defined in this package.
@@ -89,6 +92,7 @@ var (
 	chatServiceCancelAgentPromptMethodDescriptor          = chatServiceServiceDescriptor.Methods().ByName("CancelAgentPrompt")
 	chatServiceSubscribePageCancellationsMethodDescriptor = chatServiceServiceDescriptor.Methods().ByName("SubscribePageCancellations")
 	chatServiceRespondToPermissionMethodDescriptor        = chatServiceServiceDescriptor.Methods().ByName("RespondToPermission")
+	chatServiceRequestPermissionFromUserMethodDescriptor  = chatServiceServiceDescriptor.Methods().ByName("RequestPermissionFromUser")
 )
 
 // ChatServiceClient is a client for the api.v1.ChatService service.
@@ -131,6 +135,9 @@ type ChatServiceClient interface {
 	SubscribePageCancellations(context.Context, *connect.Request[v1.SubscribePageCancellationsRequest]) (*connect.ServerStreamForClient[v1.PageCancellation], error)
 	// RespondToPermission is called by the frontend when the user responds to a permission request.
 	RespondToPermission(context.Context, *connect.Request[v1.RespondToPermissionRequest]) (*connect.Response[v1.RespondToPermissionResponse], error)
+	// RequestPermissionFromUser is called by the pool daemon to forward a permission request
+	// to the user via chat and block until the user responds.
+	RequestPermissionFromUser(context.Context, *connect.Request[v1.RequestPermissionFromUserRequest]) (*connect.Response[v1.RequestPermissionFromUserResponse], error)
 }
 
 // NewChatServiceClient constructs a client for the api.v1.ChatService service. By default, it uses
@@ -221,6 +228,12 @@ func NewChatServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 			connect.WithSchema(chatServiceRespondToPermissionMethodDescriptor),
 			connect.WithClientOptions(opts...),
 		),
+		requestPermissionFromUser: connect.NewClient[v1.RequestPermissionFromUserRequest, v1.RequestPermissionFromUserResponse](
+			httpClient,
+			baseURL+ChatServiceRequestPermissionFromUserProcedure,
+			connect.WithSchema(chatServiceRequestPermissionFromUserMethodDescriptor),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -239,6 +252,7 @@ type chatServiceClient struct {
 	cancelAgentPrompt          *connect.Client[v1.CancelAgentPromptRequest, v1.CancelAgentPromptResponse]
 	subscribePageCancellations *connect.Client[v1.SubscribePageCancellationsRequest, v1.PageCancellation]
 	respondToPermission        *connect.Client[v1.RespondToPermissionRequest, v1.RespondToPermissionResponse]
+	requestPermissionFromUser  *connect.Client[v1.RequestPermissionFromUserRequest, v1.RequestPermissionFromUserResponse]
 }
 
 // SendMessage calls api.v1.ChatService.SendMessage.
@@ -306,6 +320,11 @@ func (c *chatServiceClient) RespondToPermission(ctx context.Context, req *connec
 	return c.respondToPermission.CallUnary(ctx, req)
 }
 
+// RequestPermissionFromUser calls api.v1.ChatService.RequestPermissionFromUser.
+func (c *chatServiceClient) RequestPermissionFromUser(ctx context.Context, req *connect.Request[v1.RequestPermissionFromUserRequest]) (*connect.Response[v1.RequestPermissionFromUserResponse], error) {
+	return c.requestPermissionFromUser.CallUnary(ctx, req)
+}
+
 // ChatServiceHandler is an implementation of the api.v1.ChatService service.
 type ChatServiceHandler interface {
 	// SendMessage sends a user chat message in the context of a page.
@@ -346,6 +365,9 @@ type ChatServiceHandler interface {
 	SubscribePageCancellations(context.Context, *connect.Request[v1.SubscribePageCancellationsRequest], *connect.ServerStream[v1.PageCancellation]) error
 	// RespondToPermission is called by the frontend when the user responds to a permission request.
 	RespondToPermission(context.Context, *connect.Request[v1.RespondToPermissionRequest]) (*connect.Response[v1.RespondToPermissionResponse], error)
+	// RequestPermissionFromUser is called by the pool daemon to forward a permission request
+	// to the user via chat and block until the user responds.
+	RequestPermissionFromUser(context.Context, *connect.Request[v1.RequestPermissionFromUserRequest]) (*connect.Response[v1.RequestPermissionFromUserResponse], error)
 }
 
 // NewChatServiceHandler builds an HTTP handler from the service implementation. It returns the path
@@ -432,6 +454,12 @@ func NewChatServiceHandler(svc ChatServiceHandler, opts ...connect.HandlerOption
 		connect.WithSchema(chatServiceRespondToPermissionMethodDescriptor),
 		connect.WithHandlerOptions(opts...),
 	)
+	chatServiceRequestPermissionFromUserHandler := connect.NewUnaryHandler(
+		ChatServiceRequestPermissionFromUserProcedure,
+		svc.RequestPermissionFromUser,
+		connect.WithSchema(chatServiceRequestPermissionFromUserMethodDescriptor),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/api.v1.ChatService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case ChatServiceSendMessageProcedure:
@@ -460,6 +488,8 @@ func NewChatServiceHandler(svc ChatServiceHandler, opts ...connect.HandlerOption
 			chatServiceSubscribePageCancellationsHandler.ServeHTTP(w, r)
 		case ChatServiceRespondToPermissionProcedure:
 			chatServiceRespondToPermissionHandler.ServeHTTP(w, r)
+		case ChatServiceRequestPermissionFromUserProcedure:
+			chatServiceRequestPermissionFromUserHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -519,4 +549,8 @@ func (UnimplementedChatServiceHandler) SubscribePageCancellations(context.Contex
 
 func (UnimplementedChatServiceHandler) RespondToPermission(context.Context, *connect.Request[v1.RespondToPermissionRequest]) (*connect.Response[v1.RespondToPermissionResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("api.v1.ChatService.RespondToPermission is not implemented"))
+}
+
+func (UnimplementedChatServiceHandler) RequestPermissionFromUser(context.Context, *connect.Request[v1.RequestPermissionFromUserRequest]) (*connect.Response[v1.RequestPermissionFromUserResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("api.v1.ChatService.RequestPermissionFromUser is not implemented"))
 }

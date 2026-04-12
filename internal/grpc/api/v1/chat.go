@@ -458,3 +458,32 @@ func (s *Server) RespondToPermission(_ context.Context, req *apiv1.RespondToPerm
 	s.chatBufferManager.RespondToPermission(req.RequestId, req.SelectedOptionId)
 	return &apiv1.RespondToPermissionResponse{}, nil
 }
+
+// RequestPermissionFromUser implements the RequestPermissionFromUser RPC.
+// Called by the pool daemon to forward a permission request to the user.
+// Blocks until the user responds via RespondToPermission.
+func (s *Server) RequestPermissionFromUser(_ context.Context, req *apiv1.RequestPermissionFromUserRequest) (*apiv1.RequestPermissionFromUserResponse, error) {
+	if req.Page == "" {
+		return nil, status.Error(codes.InvalidArgument, errPageRequired)
+	}
+	if req.RequestId == "" {
+		return nil, status.Error(codes.InvalidArgument, "request_id is required")
+	}
+
+	// Convert proto options to buffer options
+	opts := make([]chatbuffer.PermissionOption, len(req.Options))
+	for i, o := range req.Options {
+		opts[i] = chatbuffer.PermissionOption{
+			OptionID:    o.OptionId,
+			Label:       o.Label,
+			Description: o.Description,
+		}
+	}
+
+	// This blocks until the user responds
+	selectedID := s.chatBufferManager.RequestPermission(req.Page, req.RequestId, req.Title, req.Description, opts)
+
+	return &apiv1.RequestPermissionFromUserResponse{
+		SelectedOptionId: selectedID,
+	}, nil
+}
