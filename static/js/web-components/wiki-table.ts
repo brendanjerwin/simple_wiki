@@ -98,7 +98,6 @@ export class WikiTable extends LitElement {
         border: 1px solid var(--color-border-default);
         border-radius: 16px;
         overflow: hidden;
-        cursor: pointer;
         font-size: 12px;
         user-select: none;
       }
@@ -108,6 +107,17 @@ export class WikiTable extends LitElement {
         color: var(--color-text-secondary);
         transition: all 0.15s ease;
         white-space: nowrap;
+        border: none;
+        background: none;
+        cursor: pointer;
+        font-size: inherit;
+        font-family: inherit;
+        line-height: inherit;
+      }
+
+      .view-toggle-option:focus-visible {
+        outline: 2px solid var(--color-action-link);
+        outline-offset: -2px;
       }
 
       .view-toggle-active {
@@ -468,9 +478,25 @@ export class WikiTable extends LitElement {
     this.popoverColumnIndex = columnIndex;
   }
 
-  private _toggleCardView(): void {
-    this.cardViewActive = !this.cardViewActive;
+  private _setView(isCardView: boolean): void {
+    this.cardViewActive = isCardView;
   }
+
+  private readonly _handleViewToggleKeydown = (e: KeyboardEvent): void => {
+    if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+      e.preventDefault();
+      if (!this.cardViewActive) {
+        this.cardViewActive = true;
+        this.shadowRoot?.querySelector<HTMLElement>('[data-view="cards"]')?.focus();
+      }
+    } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (this.cardViewActive) {
+        this.cardViewActive = false;
+        this.shadowRoot?.querySelector<HTMLElement>('[data-view="table"]')?.focus();
+      }
+    }
+  };
 
   private _clearAllFilters(): void {
     this.tableFilters = new Map();
@@ -591,10 +617,26 @@ export class WikiTable extends LitElement {
             class="view-toggle"
             role="radiogroup"
             aria-label="View mode"
-            @click=${this._toggleCardView}
+            @keydown=${this._handleViewToggleKeydown}
           >
-            <span class="view-toggle-option ${this.cardViewActive ? '' : 'view-toggle-active'}">\u25A4<span class="view-toggle-text"> table</span></span>
-            <span class="view-toggle-option ${this.cardViewActive ? 'view-toggle-active' : ''}">\u229E<span class="view-toggle-text"> cards</span></span>
+            <button
+              type="button"
+              role="radio"
+              class="view-toggle-option ${this.cardViewActive ? '' : 'view-toggle-active'}"
+              aria-checked="${!this.cardViewActive}"
+              tabindex="${this.cardViewActive ? -1 : 0}"
+              data-view="table"
+              @click=${() => this._setView(false)}
+            >\u25A4<span class="view-toggle-text"> table</span></button>
+            <button
+              type="button"
+              role="radio"
+              class="view-toggle-option ${this.cardViewActive ? 'view-toggle-active' : ''}"
+              aria-checked="${this.cardViewActive}"
+              tabindex="${this.cardViewActive ? 0 : -1}"
+              data-view="cards"
+              @click=${() => this._setView(true)}
+            >\u229E<span class="view-toggle-text"> cards</span></button>
           </div>
         </div>
       </div>
