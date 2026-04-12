@@ -61,6 +61,84 @@ describe('FrontmatterEditorDialog', () => {
     it('should have no error by default', () => {
       expect(el.augmentedError).to.be.undefined;
     });
+
+    it('should render a native dialog element', () => {
+      const dialog = el.shadowRoot?.querySelector('dialog');
+      expect(dialog).to.exist;
+    });
+
+    it('should not have the dialog open by default', () => {
+      const dialog = el.shadowRoot?.querySelector('dialog');
+      expect(dialog?.open).to.be.false;
+    });
+  });
+
+  describe('when openDialog is called', () => {
+    beforeEach(async () => {
+      el.openDialog('test-page');
+      await Promise.race([
+        el.updateComplete,
+        timeout(5000, 'Component update timed out'),
+      ]);
+    });
+
+    it('should open the native dialog', () => {
+      const dialog = el.shadowRoot?.querySelector('dialog');
+      expect(dialog?.open).to.be.true;
+    });
+
+    it('should set open property to true', () => {
+      expect(el.open).to.be.true;
+    });
+  });
+
+  describe('when close is called while dialog is open', () => {
+    beforeEach(async () => {
+      el.openDialog('test-page');
+      await Promise.race([
+        el.updateComplete,
+        timeout(5000, 'Component update timed out'),
+      ]);
+      el.close();
+      await Promise.race([
+        el.updateComplete,
+        timeout(5000, 'Component update timed out'),
+      ]);
+    });
+
+    it('should close the native dialog', () => {
+      const dialog = el.shadowRoot?.querySelector('dialog');
+      expect(dialog?.open).to.be.false;
+    });
+
+    it('should set open property to false', () => {
+      expect(el.open).to.be.false;
+    });
+  });
+
+  describe('when Escape key is pressed while dialog is open', () => {
+    let cancelSpy: sinon.SinonSpy;
+
+    beforeEach(async () => {
+      cancelSpy = sinon.spy(el, '_handleCancel' as keyof typeof el);
+      el.openDialog('test-page');
+      await Promise.race([
+        el.updateComplete,
+        timeout(5000, 'Component update timed out'),
+      ]);
+
+      const dialog = el.shadowRoot?.querySelector('dialog');
+      const cancelEvent = new Event('cancel', { cancelable: true });
+      dialog?.dispatchEvent(cancelEvent);
+      await Promise.race([
+        el.updateComplete,
+        timeout(5000, 'Component update timed out'),
+      ]);
+    });
+
+    it('should call _handleCancel', () => {
+      expect(cancelSpy).to.have.been.calledOnce;
+    });
   });
 
   describe('_renderContent', () => {

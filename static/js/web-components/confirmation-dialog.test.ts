@@ -19,6 +19,18 @@ describe('ConfirmationDialog', () => {
     expect(el.hasAttribute('open')).to.be.false;
   });
 
+  it('should render a native dialog element', async () => {
+    await el.updateComplete;
+    const dialog = el.shadowRoot?.querySelector('dialog');
+    expect(dialog).to.exist;
+  });
+
+  it('should not have the native dialog open by default', async () => {
+    await el.updateComplete;
+    const dialog = el.shadowRoot?.querySelector('dialog');
+    expect(dialog?.open).to.be.false;
+  });
+
   describe('when opening the dialog', () => {
     beforeEach(() => {
       el.openDialog({
@@ -193,14 +205,38 @@ describe('ConfirmationDialog', () => {
       });
     });
 
-    describe('when clicking overlay', () => {
+    describe('when clicking the dialog backdrop (dialog element itself)', () => {
       beforeEach(async () => {
         await el.updateComplete;
-        const overlay = el.shadowRoot?.querySelector<HTMLElement>('.overlay');
-        overlay?.click();
+        const dialog = el.shadowRoot?.querySelector<HTMLElement>('dialog');
+        // Simulate clicking the dialog element directly (backdrop click)
+        if (dialog) {
+          const clickEvent = new MouseEvent('click', { bubbles: true, composed: true });
+          Object.defineProperty(clickEvent, 'target', { value: dialog });
+          Object.defineProperty(clickEvent, 'currentTarget', { value: dialog });
+          dialog.dispatchEvent(clickEvent);
+        }
       });
 
       it('should dispatch cancel event', () => {
+        expect(cancelSpy).to.have.been.calledOnce;
+      });
+
+      it('should close the dialog', () => {
+        expect(el.hasAttribute('open')).to.be.false;
+      });
+    });
+
+    describe('when native dialog cancel event fires (Escape key)', () => {
+      beforeEach(async () => {
+        await el.updateComplete;
+        const dialog = el.shadowRoot?.querySelector('dialog');
+        const cancelEvent = new Event('cancel', { cancelable: true });
+        dialog?.dispatchEvent(cancelEvent);
+        await el.updateComplete;
+      });
+
+      it('should dispatch cancel event to listeners', () => {
         expect(cancelSpy).to.have.been.calledOnce;
       });
 

@@ -45,52 +45,35 @@ import type { SectionChangeEventDetail } from './event-types.js';
 export class FrontmatterEditorDialog extends LitElement {
   static override readonly styles = dialogStyles(css`
       :host {
-        position: fixed;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        z-index: var(--z-modal);
-        display: none;
+        display: block;
       }
 
-      :host([open]) {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        animation: fadeIn 0.2s ease-out;
-      }
-
-      .backdrop {
-        position: fixed;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        background: rgba(0, 0, 0, 0.5);
-      }
-
-      .dialog {
+      dialog {
+        padding: 0;
+        border: none;
+        border-radius: 8px;
         background: var(--color-surface-elevated);
         max-width: 600px;
         width: 90%;
         max-height: 80vh;
-        display: flex;
         flex-direction: column;
-        position: relative;
-        z-index: 1;
+        box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
         animation: slideIn 0.2s ease-out;
-        border-radius: 8px;
+        overflow: hidden;
+      }
+
+      dialog[open] {
+        display: flex;
+      }
+
+      dialog::backdrop {
+        background: rgba(0, 0, 0, 0.5);
+        animation: fadeIn 0.2s ease-out;
       }
 
       /* Mobile-first responsive behavior */
       @media (max-width: 768px) {
-        :host([open]) {
-          align-items: stretch;
-          justify-content: stretch;
-        }
-
-        .dialog {
+        dialog {
           width: 100%;
           height: 100%;
           max-width: none;
@@ -174,6 +157,7 @@ export class FrontmatterEditorDialog extends LitElement {
   declare workingFrontmatter?: JsonObject;
 
   private readonly client = createClient(Frontmatter, getGrpcWebTransport());
+  private _previouslyFocusedElement: Element | null = null;
 
   constructor() {
     super();
@@ -199,21 +183,27 @@ export class FrontmatterEditorDialog extends LitElement {
     this.requestUpdate();
   };
 
-  override connectedCallback(): void {
-    super.connectedCallback();
-    // Handle escape key to close dialog
-    document.addEventListener('keydown', this._handleKeydown);
-  }
-
-  override disconnectedCallback(): void {
-    super.disconnectedCallback();
-    document.removeEventListener('keydown', this._handleKeydown);
-  }
-
-  public readonly _handleKeydown = (event: KeyboardEvent): void => {
-    if (event.key === 'Escape' && this.open) {
-      this._handleCancel();
+  override updated(changedProperties: Map<PropertyKey, unknown>): void {
+    super.updated(changedProperties);
+    if (changedProperties.has('open')) {
+      const dialog = this.shadowRoot?.querySelector('dialog');
+      if (!dialog) return;
+      if (this.open && !dialog.open) {
+        this._previouslyFocusedElement = document.activeElement;
+        dialog.showModal();
+      } else if (!this.open && dialog.open) {
+        dialog.close();
+        if (this._previouslyFocusedElement instanceof HTMLElement) {
+          this._previouslyFocusedElement.focus();
+        }
+        this._previouslyFocusedElement = null;
+      }
     }
+  }
+
+  private readonly _handleDialogCancel = (event: Event): void => {
+    event.preventDefault();
+    this._handleCancel();
   };
 
   public openDialog(page: string): void {
@@ -331,9 +321,8 @@ export class FrontmatterEditorDialog extends LitElement {
   override render() {
     return html`
       ${sharedStyles}
-      <div class="backdrop"></div>
-      <div class="dialog system-font border-radius box-shadow">
-        <div class="dialog-header">
+      <dialog @cancel="${this._handleDialogCancel}">
+        <div class="dialog-header system-font">
           <h2 class="dialog-title">Edit Frontmatter</h2>
         </div>
         <div class="content">
@@ -347,7 +336,7 @@ export class FrontmatterEditorDialog extends LitElement {
             ${this.saving ? 'Saving...' : 'Save'}
           </button>
         </div>
-      </div>
+      </dialog>
     `;
   }
 }

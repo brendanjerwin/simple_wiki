@@ -12,6 +12,7 @@ interface WikiSearchResultsElement extends HTMLElement {
   inventoryOnly: boolean;
   totalUnfilteredCount: number;
   _handleClickOutside: (event: Event) => void;
+  _handleKeydown: (event: KeyboardEvent) => void;
   close: () => void;
   updateComplete: Promise<boolean>;
   shadowRoot: ShadowRoot;
@@ -145,6 +146,35 @@ describe('WikiSearchResults', () => {
     it('should render the filter divider', () => {
       const divider = el.shadowRoot?.querySelector('.filter-divider');
       expect(divider).to.exist;
+    });
+
+    it('should have role="dialog" on the popover', () => {
+      const popover = el.shadowRoot?.querySelector('.popover');
+      expect(popover?.getAttribute('role')).to.equal('dialog');
+    });
+
+    it('should have aria-modal="true" on the popover', () => {
+      const popover = el.shadowRoot?.querySelector('.popover');
+      expect(popover?.getAttribute('aria-modal')).to.equal('true');
+    });
+
+    it('should have aria-label on the popover', () => {
+      const popover = el.shadowRoot?.querySelector('.popover');
+      expect(popover?.getAttribute('aria-label')).to.equal('Search Results');
+    });
+  });
+
+  describe('when Tab key is pressed within the popover', () => {
+    beforeEach(async () => {
+      el.open = true;
+      el.results = [{ Identifier: 'test', Title: 'Test', FragmentHTML: 'Test content' }];
+      await el.updateComplete;
+    });
+
+    it('should handle Tab key via keydown handler', () => {
+      const tabEvent = new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true });
+      // Should not throw when Tab is pressed
+      expect(() => el._handleKeydown(tabEvent)).to.not.throw();
     });
   });
 

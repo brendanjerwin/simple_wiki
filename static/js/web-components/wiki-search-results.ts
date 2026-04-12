@@ -199,11 +199,52 @@ class WikiSearchResults extends LitElement {
   };
 
   public readonly _handleKeydown = (event: KeyboardEvent): void => {
-    if (this.open && event.key === 'Escape') {
+    if (!this.open) return;
+
+    if (event.key === 'Escape') {
       event.preventDefault();
       this.close();
+      return;
+    }
+
+    if (event.key === 'Tab') {
+      this._trapFocus(event);
     }
   };
+
+  private _trapFocus(event: KeyboardEvent): void {
+    const popover = this.shadowRoot?.querySelector('.popover');
+    if (!popover) return;
+
+    const focusableSelectors = [
+      'a[href]',
+      'button:not([disabled])',
+      'input:not([disabled])',
+      '[tabindex]:not([tabindex="-1"])',
+    ].join(', ');
+
+    const focusableElements = Array.from(
+      popover.querySelectorAll<HTMLElement>(focusableSelectors)
+    );
+
+    if (focusableElements.length === 0) return;
+
+    const firstFocusable = focusableElements[0]!;
+    const lastFocusable = focusableElements[focusableElements.length - 1]!;
+    const activeEl = this.shadowRoot?.activeElement;
+
+    if (event.shiftKey) {
+      if (activeEl === firstFocusable) {
+        event.preventDefault();
+        lastFocusable.focus();
+      }
+    } else {
+      if (activeEl === lastFocusable) {
+        event.preventDefault();
+        firstFocusable.focus();
+      }
+    }
+  }
 
   constructor() {
     super();
@@ -353,7 +394,11 @@ class WikiSearchResults extends LitElement {
 
     return html`
             ${sharedStyles}
-            <div class="popover border-radius-large box-shadow-light" @click="${this.handlePopoverClick}">
+            <div class="popover border-radius-large box-shadow-light"
+                 role="dialog"
+                 aria-modal="true"
+                 aria-label="Search Results"
+                 @click="${this.handlePopoverClick}">
                 <div class="title-bar">
                     <h2><i class="fa-solid fa-search"></i> Search Results</h2>
                     <span class="filter-divider">|</span>
