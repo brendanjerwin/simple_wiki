@@ -423,13 +423,18 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
   }
 
   private _renderFab() {
-    if (!this._fabVisible || this.drawerOpen) return nothing;
+    // Keep FAB in DOM when our drawer is open so focus can be returned to it on close.
+    // When _fabVisible is false and our drawer is closed (another drawer is open), omit entirely.
+    if (!this._fabVisible && !this.drawerOpen) return nothing;
     const fabClass = this._chatAvailable ? 'fab' : 'fab disabled';
     return html`
       <button
         class="${fabClass}"
+        ?hidden=${!this._fabVisible || this.drawerOpen}
         @click=${this.toggleDrawer}
         aria-label=${this.persona ? 'Chat with ' + this.persona : 'Open chat'}
+        aria-expanded=${this.drawerOpen}
+        aria-controls="chat-panel"
       >
         <i class="fa-solid fa-robot"></i>
       </button>
@@ -461,7 +466,7 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
       ${sharedStyles}
       ${this._renderFab()}
 
-      <div class="panel ${this.drawerOpen ? 'open' : ''}" ?inert=${!this.drawerOpen}>
+      <div id="chat-panel" class="panel ${this.drawerOpen ? 'open' : ''}" ?inert=${!this.drawerOpen}>
         <div class="panel-header">
           <span class="panel-title">${this.persona}</span>
           <button class="close-button" @click=${this.closeDrawer} aria-label="Close chat">
@@ -551,6 +556,10 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
   override closeDrawer(): void {
     super.closeDrawer();
     try { localStorage.setItem(STORAGE_KEY, 'false'); } catch { /* */ }
+    this.updateComplete.then(() => {
+      const fab = this.shadowRoot?.querySelector<HTMLButtonElement>('.fab');
+      fab?.focus();
+    });
   }
 
   setAmbientVisible(visible: boolean): void {
