@@ -18,6 +18,7 @@ interface WikiChecklistInternal {
   _handleItemDrop(e: DragEvent, targetIndex: number): Promise<void>;
   _handleItemDragEnd(e: DragEvent): void;
   _handleDragHandleMousedown(e: MouseEvent): void;
+  _handleDragHandleKeydown(e: KeyboardEvent, index: number): void;
   _dragSourceItemIndex: number | null;
   _dragOverItemIndex: number | null;
   _dragOverItemPosition: 'before' | 'after';
@@ -1647,6 +1648,117 @@ describe('WikiChecklist', () => {
 
       it('should not render item rows as statically draggable', () => {
         expect(rows?.[0]?.getAttribute('draggable')).to.not.equal('true');
+      });
+
+      it('should render drag handles with tabindex="0" for keyboard access', () => {
+        expect(handles?.[0]?.getAttribute('tabindex')).to.equal('0');
+      });
+
+      it('should render drag handles with role="button"', () => {
+        expect(handles?.[0]?.getAttribute('role')).to.equal('button');
+      });
+
+      it('should render drag handles with an aria-label', () => {
+        expect(handles?.[0]?.getAttribute('aria-label')).to.exist;
+        expect(handles?.[0]?.getAttribute('aria-label')).to.not.be.empty;
+      });
+
+      it('should NOT have aria-hidden on drag handles', () => {
+        expect(handles?.[0]?.getAttribute('aria-hidden')).to.be.null;
+      });
+    });
+
+    describe('keyboard reorder', () => {
+      let internal: WikiChecklistInternal;
+
+      beforeEach(async () => {
+        internal = el as unknown as WikiChecklistInternal;
+
+        sinon
+          .stub(el.client, 'mergeFrontmatter')
+          .resolves(create(MergeFrontmatterResponseSchema, {}));
+
+        el.error = null;
+        el.loading = false;
+        el.items = [
+          { text: 'Item A', checked: false, tags: [] },
+          { text: 'Item B', checked: false, tags: [] },
+          { text: 'Item C', checked: false, tags: [] },
+        ];
+        await el.updateComplete;
+      });
+
+      describe('when ArrowUp is pressed on a drag handle (not the first item)', () => {
+        beforeEach(async () => {
+          const event = new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true, cancelable: true });
+          internal._handleDragHandleKeydown(event, 1);
+          await el.updateComplete;
+        });
+
+        it('should move the item up by one position', () => {
+          expect(el.items[0]?.text).to.equal('Item B');
+          expect(el.items[1]?.text).to.equal('Item A');
+          expect(el.items[2]?.text).to.equal('Item C');
+        });
+      });
+
+      describe('when ArrowDown is pressed on a drag handle (not the last item)', () => {
+        beforeEach(async () => {
+          const event = new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true });
+          internal._handleDragHandleKeydown(event, 1);
+          await el.updateComplete;
+        });
+
+        it('should move the item down by one position', () => {
+          expect(el.items[0]?.text).to.equal('Item A');
+          expect(el.items[1]?.text).to.equal('Item C');
+          expect(el.items[2]?.text).to.equal('Item B');
+        });
+      });
+
+      describe('when ArrowUp is pressed on the first item', () => {
+        let originalItems: ChecklistItem[];
+
+        beforeEach(async () => {
+          originalItems = [...el.items];
+          const event = new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true, cancelable: true });
+          internal._handleDragHandleKeydown(event, 0);
+          await el.updateComplete;
+        });
+
+        it('should not reorder items', () => {
+          expect(el.items.map(i => i.text)).to.deep.equal(originalItems.map(i => i.text));
+        });
+      });
+
+      describe('when ArrowDown is pressed on the last item', () => {
+        let originalItems: ChecklistItem[];
+
+        beforeEach(async () => {
+          originalItems = [...el.items];
+          const event = new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true });
+          internal._handleDragHandleKeydown(event, 2);
+          await el.updateComplete;
+        });
+
+        it('should not reorder items', () => {
+          expect(el.items.map(i => i.text)).to.deep.equal(originalItems.map(i => i.text));
+        });
+      });
+
+      describe('when other keys are pressed on a drag handle', () => {
+        let originalItems: ChecklistItem[];
+
+        beforeEach(async () => {
+          originalItems = [...el.items];
+          const event = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true });
+          internal._handleDragHandleKeydown(event, 1);
+          await el.updateComplete;
+        });
+
+        it('should not reorder items', () => {
+          expect(el.items.map(i => i.text)).to.deep.equal(originalItems.map(i => i.text));
+        });
       });
     });
 
