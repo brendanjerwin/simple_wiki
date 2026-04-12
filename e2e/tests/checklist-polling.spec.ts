@@ -98,7 +98,7 @@ title = "Checklist Polling Test Page"
       // Track GetFrontmatter calls made after the component has finished its initial load.
       // These represent poll-cycle requests, not the initial data fetch.
       let pollCallCount = 0;
-      await page.route('**/api.v1.FrontmatterService/GetFrontmatter', route => {
+      await page.route('**/api.v1.Frontmatter/GetFrontmatter', route => {
         pollCallCount++;
         return route.continue();
       });
@@ -131,10 +131,16 @@ title = "Checklist Polling Test Page"
         timeout: COMPONENT_LOAD_TIMEOUT_MS,
       });
 
-      // Simulate the tab going hidden first so we have a clear starting point
+      // Simulate the tab going hidden first so we have a clear starting point.
+      // Set both document.hidden and document.visibilityState for a complete simulation.
       await page.evaluate(() => {
         Object.defineProperty(document, 'hidden', {
           value: true,
+          configurable: true,
+          writable: true,
+        });
+        Object.defineProperty(document, 'visibilityState', {
+          value: 'hidden',
           configurable: true,
           writable: true,
         });
@@ -144,16 +150,22 @@ title = "Checklist Polling Test Page"
       // Install the route interceptor after initial load so we only count
       // the fetch triggered by the visibility restore, not the initial load.
       let visibilityRestoreFetchCount = 0;
-      await page.route('**/api.v1.FrontmatterService/GetFrontmatter', route => {
+      await page.route('**/api.v1.Frontmatter/GetFrontmatter', route => {
         visibilityRestoreFetchCount++;
         return route.continue();
       });
 
       // Simulate the tab becoming visible again — the _handleVisibilityChange handler
-      // must call fetchData() immediately when document.hidden becomes false
+      // must call fetchData() immediately when document.hidden becomes false.
+      // Set both document.hidden and document.visibilityState for a complete simulation.
       await page.evaluate(() => {
         Object.defineProperty(document, 'hidden', {
           value: false,
+          configurable: true,
+          writable: true,
+        });
+        Object.defineProperty(document, 'visibilityState', {
+          value: 'visible',
           configurable: true,
           writable: true,
         });
@@ -170,7 +182,7 @@ title = "Checklist Polling Test Page"
   test.describe('save state - prevents concurrent saves', () => {
     test('should disable checkboxes while a save is in progress', async ({ page }) => {
       // Delay MergeFrontmatter to hold the component in saving=true long enough to assert on
-      await page.route('**/api.v1.FrontmatterService/MergeFrontmatter', async route => {
+      await page.route('**/api.v1.Frontmatter/MergeFrontmatter', async route => {
         await new Promise<void>(resolve => setTimeout(resolve, 2000));
         await route.continue();
       });
@@ -228,7 +240,7 @@ title = "Checklist Polling Test Page"
 
     test('should produce exactly one MergeFrontmatter request per checkbox toggle', async ({ page }) => {
       let mergeCallCount = 0;
-      await page.route('**/api.v1.FrontmatterService/MergeFrontmatter', async route => {
+      await page.route('**/api.v1.Frontmatter/MergeFrontmatter', async route => {
         mergeCallCount++;
         await route.continue();
       });
