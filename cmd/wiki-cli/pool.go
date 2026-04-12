@@ -814,6 +814,21 @@ func (d *poolDaemon) bridgeMessages(ctx context.Context, entry *instanceEntry, w
 		// Create a cancellable context for this prompt
 		promptCtx, promptCancel := context.WithCancel(ctx)
 
+		// Keep the instance alive while the prompt is processing.
+		// Without this, the idle reaper kills the instance during long prompts.
+		go func() {
+			ticker := time.NewTicker(1 * time.Minute)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-ticker.C:
+					entry.touch()
+				case <-promptCtx.Done():
+					return
+				}
+			}
+		}()
+
 		// Listen for cancel signals during this prompt
 		go func() {
 			select {
