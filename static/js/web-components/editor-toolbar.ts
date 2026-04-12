@@ -224,6 +224,26 @@ export class EditorToolbar extends LitElement {
     }
   };
 
+  private _handleArrowNavigation(event: KeyboardEvent): void {
+    event.preventDefault();
+    const buttons = Array.from(
+      this.shadowRoot?.querySelectorAll<HTMLButtonElement>('button:not([disabled])') ?? []
+    );
+    if (buttons.length === 0) return;
+
+    const activeEl = this.shadowRoot?.activeElement;
+    const currentIndex =
+      activeEl instanceof HTMLButtonElement ? buttons.indexOf(activeEl) : -1;
+
+    let nextIndex: number;
+    if (event.key === 'ArrowRight') {
+      nextIndex = currentIndex < buttons.length - 1 ? currentIndex + 1 : 0;
+    } else {
+      nextIndex = currentIndex > 0 ? currentIndex - 1 : buttons.length - 1;
+    }
+    buttons[nextIndex]?.focus();
+  }
+
   readonly _handleToolbarKeydown = (event: KeyboardEvent): void => {
     if (event.key === 'Escape' && this._uploadMenuOpen) {
       event.preventDefault();
@@ -233,23 +253,7 @@ export class EditorToolbar extends LitElement {
     }
 
     if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') {
-      event.preventDefault();
-      const buttons = Array.from(
-        this.shadowRoot?.querySelectorAll<HTMLButtonElement>('button:not([disabled])') ?? []
-      );
-      if (buttons.length === 0) return;
-
-      const activeEl = this.shadowRoot?.activeElement;
-      const currentIndex =
-        activeEl instanceof HTMLButtonElement ? buttons.indexOf(activeEl) : -1;
-
-      let nextIndex: number;
-      if (event.key === 'ArrowRight') {
-        nextIndex = currentIndex < buttons.length - 1 ? currentIndex + 1 : 0;
-      } else {
-        nextIndex = currentIndex > 0 ? currentIndex - 1 : buttons.length - 1;
-      }
-      buttons[nextIndex]?.focus();
+      this._handleArrowNavigation(event);
     }
   };
 
