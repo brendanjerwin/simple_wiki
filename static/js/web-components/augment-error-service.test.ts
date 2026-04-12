@@ -284,7 +284,7 @@ describe('AugmentErrorService', () => {
           augmented = AugmentErrorService.augmentError(circularObj);
         });
 
-        it('should fall back to String() coercion when JSON.stringify fails', () => {
+        it('should fall back to Object.prototype.toString when JSON.stringify fails', () => {
           expect(augmented.message).to.equal('[object Object]');
         });
 
@@ -486,9 +486,9 @@ describe('coerceThirdPartyError', () => {
       result = coerceThirdPartyError({ code: 500 }, 'operation failed');
     });
 
-    it('should return Error with stringified object', () => {
+    it('should return Error with JSON stringified object', () => {
       expect(result).to.be.instanceof(Error);
-      expect(result.message).to.equal('[object Object]');
+      expect(result.message).to.equal('{"code":500}');
     });
   });
 

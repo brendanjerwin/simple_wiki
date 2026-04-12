@@ -20,6 +20,13 @@ export function coerceThirdPartyError(err: unknown, errorContext: string): Error
     return new Error(err);
   }
   if (err !== null && err !== undefined) {
+    if (typeof err === 'object') {
+      try {
+        return new Error(JSON.stringify(err));
+      } catch {
+        return new Error(Object.prototype.toString.call(err));
+      }
+    }
     return new Error(String(err));
   }
   return new Error(errorContext);
@@ -234,7 +241,7 @@ export class AugmentErrorService {
         try {
           message = JSON.stringify(error);
         } catch {
-          message = String(error);
+          message = Object.prototype.toString.call(error);
         }
       } else {
         message = String(error);
