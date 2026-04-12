@@ -767,6 +767,8 @@ func (d *poolDaemon) bridgeMessages(ctx context.Context, entry *instanceEntry, w
 	}
 	defer func() { _ = stream.Close() }()
 
+	log.Printf("[%s] Bridge: message stream connected, setting up cancellation...", entry.page)
+
 	// Subscribe to cancellation signals for this page
 	cancelStream, cancelErr := wikiClient.SubscribePageCancellations(ctx, connect.NewRequest(&apiv1.SubscribePageCancellationsRequest{
 		Page: entry.page,
