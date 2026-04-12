@@ -769,30 +769,23 @@ func (d *poolDaemon) bridgeMessages(ctx context.Context, entry *instanceEntry, w
 
 	log.Printf("[%s] Bridge: message stream connected, setting up cancellation...", entry.page)
 
-	// Subscribe to cancellation signals for this page
-	cancelStream, cancelErr := wikiClient.SubscribePageCancellations(ctx, connect.NewRequest(&apiv1.SubscribePageCancellationsRequest{
-		Page: entry.page,
-	}))
-	if cancelErr != nil {
-		log.Printf("Warning: failed to subscribe to cancellations for %q: %v", entry.page, cancelErr)
-	}
-
-	// Channel that receives cancel signals from the cancellation stream
+	// Subscribe to cancellation signals in a goroutine to avoid blocking.
+	// Connect server-streaming over HTTP/1.1 may block until first data.
 	cancelChan := make(chan struct{}, 1)
-	if cancelStream != nil {
-		go func() {
-			defer close(cancelChan)
-			for cancelStream.Receive() {
-				select {
-				case cancelChan <- struct{}{}:
-				default:
-				}
+	go func() {
+		cancelStream, cancelErr := wikiClient.SubscribePageCancellations(ctx, connect.NewRequest(&apiv1.SubscribePageCancellationsRequest{
+			Page: entry.page,
+		}))
+		if cancelErr != nil {
+			log.Printf("Warning: failed to subscribe to cancellations for %q: %v", entry.page, cancelErr)
+			return
+		}
+		defer func() { _ = cancelStream.Close() }()
+		for cancelStream.Receive() {
+			select {
+			case cancelChan <- struct{}{}:
+			default:
 			}
-		}()
-	}
-	defer func() {
-		if cancelStream != nil {
-			_ = cancelStream.Close()
 		}
 	}()
 
