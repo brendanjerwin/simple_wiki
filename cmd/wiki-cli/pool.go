@@ -796,9 +796,11 @@ func (d *poolDaemon) bridgeMessages(ctx context.Context, entry *instanceEntry, w
 
 		// Only forward user messages
 		if msg.Sender != apiv1.Sender_USER {
+			log.Printf("[%s] Bridge: skipping non-user message (sender=%s)", entry.page, msg.Sender)
 			continue
 		}
 
+		log.Printf("[%s] Bridge: received user message %q: %s", entry.page, msg.Id, truncate(msg.Content, 80))
 		entry.touch()
 
 		// Prepare for streaming response
@@ -828,7 +830,7 @@ func (d *poolDaemon) bridgeMessages(ctx context.Context, entry *instanceEntry, w
 		chatClient.mu.Unlock()
 
 		// Send as ACP prompt — blocks until the agent completes its turn.
-		// During the turn, SessionUpdate streams text chunks to the wiki in real-time.
+		log.Printf("[%s] Bridge: sending prompt (%d chars)...", entry.page, len(promptText))
 		_, promptErr := entry.conn.Prompt(promptCtx, acp.PromptRequest{
 			SessionId: entry.sessionID,
 			Prompt:    []acp.ContentBlock{acp.TextBlock(promptText)},
