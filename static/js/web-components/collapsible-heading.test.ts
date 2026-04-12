@@ -231,6 +231,55 @@ describe('CollapsibleHeading', () => {
     });
   });
 
+  describe('aria-label accessibility', () => {
+    let el: CollapsibleHeading;
+
+    beforeEach(async () => {
+      sinon.stub(Storage.prototype, 'getItem').returns(null);
+      el = await fixture<CollapsibleHeading>(html`
+        <collapsible-heading heading-level="2">
+          <h2 slot="heading" id="my-section">My Section</h2>
+          <p>Content</p>
+        </collapsible-heading>
+      `);
+    });
+
+    it('should have aria-label on the toggle button derived from heading text', () => {
+      const button = el.shadowRoot?.querySelector('.ch-toggle');
+      expect(button?.getAttribute('aria-label')).to.equal('Toggle My Section');
+    });
+
+    it('should have an id on the content div', () => {
+      const content = el.shadowRoot?.querySelector('.ch-content');
+      expect(content?.id).to.not.be.empty;
+    });
+
+    it('should have aria-controls on the toggle button matching the content div id', () => {
+      const button = el.shadowRoot?.querySelector('.ch-toggle');
+      const content = el.shadowRoot?.querySelector('.ch-content');
+      expect(button?.getAttribute('aria-controls')).to.equal(content?.id);
+    });
+  });
+
+  describe('aria-label accessibility when heading has no text', () => {
+    let el: CollapsibleHeading;
+
+    beforeEach(async () => {
+      sinon.stub(Storage.prototype, 'getItem').returns(null);
+      el = await fixture<CollapsibleHeading>(html`
+        <collapsible-heading heading-level="1">
+          <h1 slot="heading" id="empty-heading"></h1>
+          <p>Content</p>
+        </collapsible-heading>
+      `);
+    });
+
+    it('should fall back to "Toggle section" aria-label', () => {
+      const button = el.shadowRoot?.querySelector('.ch-toggle');
+      expect(button?.getAttribute('aria-label')).to.equal('Toggle section');
+    });
+  });
+
   describe('when the heading has no id', () => {
     let el: CollapsibleHeading;
     let localStorageSetStub: SinonStub;
