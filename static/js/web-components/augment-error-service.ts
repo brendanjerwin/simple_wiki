@@ -27,7 +27,7 @@ export function coerceThirdPartyError(err: unknown, errorContext: string): Error
         return new Error(Object.prototype.toString.call(err));
       }
     }
-    return new Error(String(err as number | boolean | bigint | symbol));
+    return new Error(String(err));
   }
   return new Error(errorContext);
 }
@@ -244,7 +244,7 @@ export class AugmentErrorService {
           message = Object.prototype.toString.call(error);
         }
       } else {
-        message = String(error as number | boolean | bigint | symbol | ((...args: unknown[]) => unknown));
+        message = String(error);
       }
     } else {
       message = 'An unknown error occurred';
