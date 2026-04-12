@@ -88,6 +88,10 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
         cursor: not-allowed;
       }
 
+      button[hidden] {
+        display: none !important;
+      }
+
       .panel {
         position: fixed;
         top: 48px;
