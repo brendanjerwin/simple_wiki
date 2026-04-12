@@ -315,6 +315,11 @@ func (c *wikiChatClient) SessionUpdate(_ context.Context, n acp.SessionNotificat
 		replyTo := c.replyToID
 		c.mu.Unlock()
 
+		// Skip if there's no meaningful text yet
+		if strings.TrimSpace(c.textBuf.String()) == "" {
+			return nil
+		}
+
 		if msgID == "" {
 			// First chunk — create the reply message
 			resp, err := c.chatClient.SendChatReply(context.Background(), connect.NewRequest(&apiv1.SendChatReplyRequest{
