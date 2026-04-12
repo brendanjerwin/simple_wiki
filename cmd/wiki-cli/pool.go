@@ -537,7 +537,6 @@ func truncate(s string, max int) string {
 
 func (c *wikiChatClient) RequestPermission(_ context.Context, p acp.RequestPermissionRequest) (acp.RequestPermissionResponse, error) {
 	// Auto-approve all permissions — the agent is trusted.
-	// Log and notify the chat so the user sees what was granted.
 	title := string(p.ToolCall.ToolCallId)
 	if p.ToolCall.Title != nil {
 		title = *p.ToolCall.Title
@@ -545,11 +544,6 @@ func (c *wikiChatClient) RequestPermission(_ context.Context, p acp.RequestPermi
 
 	if len(p.Options) == 0 {
 		log.Printf("[%s] Permission request cancelled (no options): %s", c.page, title)
-
-		c.mu.Lock()
-		fmt.Fprintf(&c.permissionNotes, "> \U0001F510 **Permission cancelled** (no options): %s\n", title)
-		c.mu.Unlock()
-
 		return acp.RequestPermissionResponse{
 			Outcome: acp.RequestPermissionOutcome{
 				Cancelled: &acp.RequestPermissionOutcomeCancelled{},
@@ -557,11 +551,15 @@ func (c *wikiChatClient) RequestPermission(_ context.Context, p acp.RequestPermi
 		}, nil
 	}
 
+	log.Printf("[%s] Permission requested: %s (%d options)", c.page, title, len(p.Options))
+
+	// TODO: Forward to user via RespondToPermission RPC and block until response.
+	// For now, auto-approve with notification in chat.
 	selected := p.Options[0]
-	log.Printf("[%s] Permission granted: %s — %s", c.page, title, selected.Name)
+	log.Printf("[%s] Permission auto-approved: %s — %s", c.page, title, selected.Name)
 
 	c.mu.Lock()
-	fmt.Fprintf(&c.permissionNotes, "> \U0001F510 **Permission granted:** %s — %s\n", title, selected.Name)
+	fmt.Fprintf(&c.permissionNotes, "> \U0001F510 **Permission auto-approved:** %s — %s\n", title, selected.Name)
 	c.mu.Unlock()
 
 	return acp.RequestPermissionResponse{

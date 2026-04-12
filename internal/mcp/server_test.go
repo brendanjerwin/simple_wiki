@@ -157,6 +157,10 @@ func (noOpChatBufferManager) SubscribeToCancellation(string) (<-chan struct{}, f
 	return ch, func() {}
 }
 
+func (noOpChatBufferManager) EmitPermissionRequest(string, *chatbuffer.PermissionRequestEvent) {}
+
+func (noOpChatBufferManager) RespondToPermission(string, string) {}
+
 func mustNewAPIServer() *grpcapi.Server {
 	srv, err := grpcapi.NewServer(
 		grpcapi.BuildInfo{Commit: "test-commit", BuildTime: time.Now()},

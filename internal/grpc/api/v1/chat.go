@@ -134,6 +134,28 @@ func (s *Server) SubscribeChat(req *apiv1.SubscribeChatRequest, stream apiv1.Cha
 						},
 					},
 				}
+
+			case chatbuffer.EventTypePermissionRequest:
+				options := make([]*apiv1.ChatPermissionOption, len(event.PermissionRequest.Options))
+				for i, opt := range event.PermissionRequest.Options {
+					options[i] = &apiv1.ChatPermissionOption{
+						OptionId:    opt.OptionID,
+						Label:       opt.Label,
+						Description: opt.Description,
+					}
+				}
+				protoEvent = &apiv1.ChatEvent{
+					Event: &apiv1.ChatEvent_PermissionRequest{
+						PermissionRequest: &apiv1.ChatPermissionRequest{
+							RequestId:   event.PermissionRequest.RequestID,
+							Page:        event.PermissionRequest.Page,
+							Title:       event.PermissionRequest.Title,
+							Description: event.PermissionRequest.Description,
+							Options:     options,
+						},
+					},
+				}
+
 			default:
 				// Unknown event type — skip without sending
 			}
@@ -421,4 +443,18 @@ func (s *Server) SendToolCallNotification(_ context.Context, req *apiv1.SendTool
 
 	s.chatBufferManager.NotifyToolCall(req.Page, req.MessageId, req.ToolCallId, req.Title, req.Status)
 	return &apiv1.SendToolCallNotificationResponse{}, nil
+}
+
+// RespondToPermission implements the RespondToPermission RPC.
+// Called by the frontend when the user responds to a permission request.
+func (s *Server) RespondToPermission(_ context.Context, req *apiv1.RespondToPermissionRequest) (*apiv1.RespondToPermissionResponse, error) {
+	if req.RequestId == "" {
+		return nil, status.Error(codes.InvalidArgument, "request_id is required")
+	}
+	if req.SelectedOptionId == "" {
+		return nil, status.Error(codes.InvalidArgument, "selected_option_id is required")
+	}
+
+	s.chatBufferManager.RespondToPermission(req.RequestId, req.SelectedOptionId)
+	return &apiv1.RespondToPermissionResponse{}, nil
 }

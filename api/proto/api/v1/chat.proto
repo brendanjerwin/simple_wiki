@@ -57,6 +57,9 @@ service ChatService {
   // SubscribePageCancellations is called by the pool daemon per page.
   // Streams a signal when CancelAgentPrompt is called for that page.
   rpc SubscribePageCancellations(SubscribePageCancellationsRequest) returns (stream PageCancellation) {}
+
+  // RespondToPermission is called by the frontend when the user responds to a permission request.
+  rpc RespondToPermission(RespondToPermissionRequest) returns (RespondToPermissionResponse) {}
 }
 
 // Sender identifies who sent a chat message.
@@ -92,7 +95,24 @@ message ChatEvent {
     ChatMessageEdit edit = 2;
     ChatReaction reaction = 3;
     ChatToolCall tool_call = 4;
+    ChatPermissionRequest permission_request = 5;
   }
+}
+
+// ChatPermissionRequest is sent to the browser when the agent needs user authorization.
+message ChatPermissionRequest {
+  string request_id = 1;   // unique ID to correlate the response
+  string page = 2;         // page this permission is for
+  string title = 3;        // human-readable description of what's being requested
+  string description = 4;  // detailed explanation
+  repeated ChatPermissionOption options = 5;
+}
+
+// ChatPermissionOption is a choice the user can select.
+message ChatPermissionOption {
+  string option_id = 1;
+  string label = 2;
+  string description = 3;
 }
 
 // ChatToolCall represents a tool invocation by the assistant.
@@ -229,3 +249,12 @@ message SubscribePageCancellationsRequest {
 
 // PageCancellation is streamed when CancelAgentPrompt is called for a page.
 message PageCancellation {}
+
+// RespondToPermissionRequest is the request for RespondToPermission.
+message RespondToPermissionRequest {
+  string request_id = 1;           // correlates to ChatPermissionRequest.request_id
+  string selected_option_id = 2;   // the option_id the user chose (empty = cancelled)
+}
+
+// RespondToPermissionResponse is the response for RespondToPermission.
+message RespondToPermissionResponse {}

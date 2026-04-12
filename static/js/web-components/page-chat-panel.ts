@@ -9,9 +9,11 @@ import {
   SendChatMessageRequestSchema,
   SubscribeChatRequestSchema,
   CancelAgentPromptRequestSchema,
+  RespondToPermissionRequestSchema,
   Sender,
   type ChatMessage,
   type ChatEvent,
+  type ChatPermissionRequest,
   type Reaction,
 } from '../gen/api/v1/chat_pb.js';
 import { ChatMarkdownRenderer } from './chat-markdown-renderer.js';
@@ -32,6 +34,13 @@ export interface ToolCallState {
   toolCallId: string;
   title: string;
   status: string;
+}
+
+export interface PermissionRequestState {
+  requestId: string;
+  title: string;
+  description: string;
+  options: { optionId: string; label: string; description: string }[];
 }
 
 export interface ChatMessageState {
@@ -292,6 +301,58 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
         padding: 24px;
       }
 
+      .permission-prompt {
+        padding: 10px 12px;
+        margin: 0;
+        background: rgba(255, 193, 7, 0.1);
+        border-top: 1px solid rgba(255, 193, 7, 0.3);
+        flex-shrink: 0;
+      }
+
+      .permission-title {
+        font-size: 0.8rem;
+        font-weight: 600;
+        color: var(--color-warning);
+        margin-bottom: 4px;
+      }
+
+      .permission-description {
+        font-size: 0.8rem;
+        color: var(--color-text-primary);
+        margin-bottom: 8px;
+        line-height: 1.4;
+      }
+
+      .permission-options {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+      }
+
+      .permission-btn {
+        background: var(--color-chat-user-bg);
+        border: 1px solid var(--color-editor-border);
+        border-radius: 4px;
+        color: var(--color-chat-user-text);
+        padding: 4px 10px;
+        cursor: pointer;
+        font-size: 0.8rem;
+      }
+
+      .permission-btn:hover {
+        background: var(--color-chat-user-bg-hover);
+      }
+
+      .permission-btn.cancel {
+        background: rgba(220, 53, 69, 0.15);
+        border-color: rgba(220, 53, 69, 0.4);
+        color: var(--color-error);
+      }
+
+      .permission-btn.cancel:hover {
+        background: rgba(220, 53, 69, 0.3);
+      }
+
       @media (max-width: 768px) {
         .panel {
           top: 0;
@@ -343,6 +404,9 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
   @state()
   declare agentStarting: boolean;
 
+  @state()
+  declare pendingPermission: PermissionRequestState | null;
+
   private pendingMessage: string | null = null;
   private readonly messagesById = new Map<string, ChatMessageState>();
   private streamSubscription: AbortController | undefined;
@@ -369,6 +433,7 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
     this.agentConnected = false;
     this.poolConnected = false;
     this.agentStarting = false;
+    this.pendingPermission = null;
     this.chatClient = createClient(ChatService, getGrpcWebTransport());
     this.markdownRenderer = new ChatMarkdownRenderer();
     this._handleVisibilityChange = this.handleVisibilityChange.bind(this);
@@ -541,6 +606,8 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
             </div>`
           : nothing}
 
+        ${this._renderPermissionPrompt()}
+
         <div class="input-area" @click=${this._focusTextarea}>
           <textarea
             placeholder="${placeholder}"
@@ -630,6 +697,62 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
     );
     if (target) {
       target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }
+
+  private _renderPermissionPrompt() {
+    if (!this.pendingPermission) return nothing;
+    const { title, description, options } = this.pendingPermission;
+    return html`
+      <div class="permission-prompt">
+        <div class="permission-title">🔐 Permission requested</div>
+        <div class="permission-description">${title}: ${description}</div>
+        <div class="permission-options">
+          ${options.map(
+            (opt) => html`
+              <button
+                class="permission-btn"
+                @click=${() => this._respondToPermission(opt.optionId)}
+                title=${opt.description}
+              >
+                ${opt.label}
+              </button>
+            `,
+          )}
+          <button class="permission-btn cancel" @click=${() => this._respondToPermission('')}>
+            Deny
+          </button>
+        </div>
+      </div>
+    `;
+  }
+
+  private setPermissionRequest(request: ChatPermissionRequest): void {
+    this.pendingPermission = {
+      requestId: request.requestId,
+      title: request.title,
+      description: request.description,
+      options: request.options.map((opt) => ({
+        optionId: opt.optionId,
+        label: opt.label,
+        description: opt.description,
+      })),
+    };
+  }
+
+  private async _respondToPermission(optionId: string): Promise<void> {
+    if (!this.pendingPermission) return;
+    const requestId = this.pendingPermission.requestId;
+    this.pendingPermission = null;
+
+    try {
+      const request = create(RespondToPermissionRequestSchema, {
+        requestId,
+        selectedOptionId: optionId,
+      });
+      await this.chatClient.respondToPermission(request);
+    } catch (err) {
+      this.error = err instanceof Error ? err : new Error(String(err));
     }
   }
 
@@ -848,6 +971,9 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
           event.event.value.emoji,
           event.event.value.reactor,
         );
+        break;
+      case 'permissionRequest':
+        this.setPermissionRequest(event.event.value);
         break;
     }
   }

@@ -278,6 +278,10 @@ func (*mockChatBufferManager) SubscribeToCancellation(string) (<-chan struct{}, 
 	return ch, func() {}
 }
 
+func (*mockChatBufferManager) EmitPermissionRequest(string, *chatbuffer.PermissionRequestEvent) {}
+
+func (*mockChatBufferManager) RespondToPermission(string, string) {}
+
 func (m *mockChatBufferManager) channelSubscriberCount() int {
 	m.mu.Lock()
 	defer m.mu.Unlock()

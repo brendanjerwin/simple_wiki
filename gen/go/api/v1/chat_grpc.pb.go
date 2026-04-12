@@ -31,6 +31,7 @@ const (
 	ChatService_SendToolCallNotification_FullMethodName   = "/api.v1.ChatService/SendToolCallNotification"
 	ChatService_CancelAgentPrompt_FullMethodName          = "/api.v1.ChatService/CancelAgentPrompt"
 	ChatService_SubscribePageCancellations_FullMethodName = "/api.v1.ChatService/SubscribePageCancellations"
+	ChatService_RespondToPermission_FullMethodName        = "/api.v1.ChatService/RespondToPermission"
 )
 
 // ChatServiceClient is the client API for ChatService service.
@@ -77,6 +78,8 @@ type ChatServiceClient interface {
 	// SubscribePageCancellations is called by the pool daemon per page.
 	// Streams a signal when CancelAgentPrompt is called for that page.
 	SubscribePageCancellations(ctx context.Context, in *SubscribePageCancellationsRequest, opts ...grpc.CallOption) (ChatService_SubscribePageCancellationsClient, error)
+	// RespondToPermission is called by the frontend when the user responds to a permission request.
+	RespondToPermission(ctx context.Context, in *RespondToPermissionRequest, opts ...grpc.CallOption) (*RespondToPermissionResponse, error)
 }
 
 type chatServiceClient struct {
@@ -322,6 +325,16 @@ func (x *chatServiceSubscribePageCancellationsClient) Recv() (*PageCancellation,
 	return m, nil
 }
 
+func (c *chatServiceClient) RespondToPermission(ctx context.Context, in *RespondToPermissionRequest, opts ...grpc.CallOption) (*RespondToPermissionResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RespondToPermissionResponse)
+	err := c.cc.Invoke(ctx, ChatService_RespondToPermission_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // ChatServiceServer is the server API for ChatService service.
 // All implementations must embed UnimplementedChatServiceServer
 // for forward compatibility
@@ -366,6 +379,8 @@ type ChatServiceServer interface {
 	// SubscribePageCancellations is called by the pool daemon per page.
 	// Streams a signal when CancelAgentPrompt is called for that page.
 	SubscribePageCancellations(*SubscribePageCancellationsRequest, ChatService_SubscribePageCancellationsServer) error
+	// RespondToPermission is called by the frontend when the user responds to a permission request.
+	RespondToPermission(context.Context, *RespondToPermissionRequest) (*RespondToPermissionResponse, error)
 	mustEmbedUnimplementedChatServiceServer()
 }
 
@@ -408,6 +423,9 @@ func (UnimplementedChatServiceServer) CancelAgentPrompt(context.Context, *Cancel
 }
 func (UnimplementedChatServiceServer) SubscribePageCancellations(*SubscribePageCancellationsRequest, ChatService_SubscribePageCancellationsServer) error {
 	return status.Errorf(codes.Unimplemented, "method SubscribePageCancellations not implemented")
+}
+func (UnimplementedChatServiceServer) RespondToPermission(context.Context, *RespondToPermissionRequest) (*RespondToPermissionResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method RespondToPermission not implemented")
 }
 func (UnimplementedChatServiceServer) mustEmbedUnimplementedChatServiceServer() {}
 
@@ -653,6 +671,24 @@ func (x *chatServiceSubscribePageCancellationsServer) Send(m *PageCancellation) 
 	return x.ServerStream.SendMsg(m)
 }
 
+func _ChatService_RespondToPermission_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RespondToPermissionRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ChatServiceServer).RespondToPermission(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ChatService_RespondToPermission_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ChatServiceServer).RespondToPermission(ctx, req.(*RespondToPermissionRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // ChatService_ServiceDesc is the grpc.ServiceDesc for ChatService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -687,6 +723,10 @@ var ChatService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "CancelAgentPrompt",
 			Handler:    _ChatService_CancelAgentPrompt_Handler,
+		},
+		{
+			MethodName: "RespondToPermission",
+			Handler:    _ChatService_RespondToPermission_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

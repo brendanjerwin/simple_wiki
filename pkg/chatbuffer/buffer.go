@@ -44,13 +44,30 @@ type Reaction struct {
 	Reactor string
 }
 
+// PermissionOption represents a single option in a permission request.
+type PermissionOption struct {
+	OptionID    string
+	Label       string
+	Description string
+}
+
+// PermissionRequestEvent represents a permission request sent to the browser.
+type PermissionRequestEvent struct {
+	Page        string
+	RequestID   string
+	Title       string
+	Description string
+	Options     []PermissionOption
+}
+
 // Event represents a chat event that can be streamed to subscribers.
 type Event struct {
-	Type      EventType
-	Message   *Message
-	Edit      *EditEvent
-	Reaction  *ReactionEvent
-	ToolCall  *ToolCallEvent
+	Type              EventType
+	Message           *Message
+	Edit              *EditEvent
+	Reaction          *ReactionEvent
+	ToolCall          *ToolCallEvent
+	PermissionRequest *PermissionRequestEvent
 }
 
 // EventType identifies the type of chat event.
@@ -61,6 +78,7 @@ const (
 	EventTypeEdit
 	EventTypeReaction
 	EventTypeToolCall
+	EventTypePermissionRequest
 )
 
 // EditEvent represents a message edit.
@@ -112,6 +130,9 @@ type Manager struct {
 	cancelFuncs   map[string][]chan struct{} // page → cancellation signal subscribers
 	cancelFuncsMu sync.Mutex
 
+	pendingPermissions   map[string]chan string // request_id → response channel
+	pendingPermissionsMu sync.Mutex
+
 	done chan struct{}
 }
 
@@ -124,6 +145,7 @@ func NewManager() *Manager {
 		instanceRequests:       make(map[string]time.Time),
 		instanceRequestChans:   make([]chan string, 0),
 		cancelFuncs:            make(map[string][]chan struct{}),
+		pendingPermissions:     make(map[string]chan string),
 		done:                   make(chan struct{}),
 	}
 
@@ -777,4 +799,63 @@ func (m *Manager) IsInstanceRequested(page string) bool {
 	defer m.instanceMu.RUnlock()
 	ts, ok := m.instanceRequests[page]
 	return ok && time.Since(ts) < 2*time.Minute
+}
+
+// RequestPermission emits a permission request event to page subscribers and blocks
+// until a response arrives via RespondToPermission. Returns the selected option ID.
+func (m *Manager) RequestPermission(page, requestID, title, description string, options []PermissionOption) string {
+	// Create a response channel and register it
+	responseChan := make(chan string, 1)
+
+	m.pendingPermissionsMu.Lock()
+	m.pendingPermissions[requestID] = responseChan
+	m.pendingPermissionsMu.Unlock()
+
+	// Emit the permission request event to page subscribers
+	m.EmitPermissionRequest(page, &PermissionRequestEvent{
+		Page:        page,
+		RequestID:   requestID,
+		Title:       title,
+		Description: description,
+		Options:     options,
+	})
+
+	// Block until a response arrives
+	selectedOptionID := <-responseChan
+
+	// Clean up
+	m.pendingPermissionsMu.Lock()
+	delete(m.pendingPermissions, requestID)
+	m.pendingPermissionsMu.Unlock()
+
+	return selectedOptionID
+}
+
+// EmitPermissionRequest sends a permission request event to all subscribers of the given page.
+func (m *Manager) EmitPermissionRequest(page string, event *PermissionRequestEvent) {
+	buf := m.getOrCreateBuffer(page)
+	buf.mu.Lock()
+	buf.lastAccess = time.Now()
+
+	buf.unlockAndNotify(Event{
+		Type:              EventTypePermissionRequest,
+		PermissionRequest: event,
+	})
+}
+
+// RespondToPermission delivers a permission response to the waiting RequestPermission call.
+func (m *Manager) RespondToPermission(requestID, selectedOptionID string) {
+	m.pendingPermissionsMu.Lock()
+	responseChan, ok := m.pendingPermissions[requestID]
+	m.pendingPermissionsMu.Unlock()
+
+	if !ok {
+		return
+	}
+
+	select {
+	case responseChan <- selectedOptionID:
+	default:
+		// Channel already has a response or was closed
+	}
 }

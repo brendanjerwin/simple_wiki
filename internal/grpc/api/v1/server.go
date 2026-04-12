@@ -66,6 +66,8 @@ type ChatBufferManager interface {
 	NotifyToolCall(page, messageID, toolCallID, title, toolStatus string)
 	CancelPage(page string) bool
 	SubscribeToCancellation(page string) (<-chan struct{}, func())
+	EmitPermissionRequest(page string, event *chatbuffer.PermissionRequestEvent)
+	RespondToPermission(requestID, selectedOptionID string)
 }
 
 // computeContentHash computes a SHA256 hash of the given markdown content,

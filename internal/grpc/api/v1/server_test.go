@@ -540,6 +540,10 @@ func (noOpChatBufferManager) SubscribeToCancellation(string) (<-chan struct{}, f
 	return ch, func() {}
 }
 
+func (noOpChatBufferManager) EmitPermissionRequest(string, *chatbuffer.PermissionRequestEvent) {}
+
+func (noOpChatBufferManager) RespondToPermission(string, string) {}
+
 // noOpPageReaderMutator is a minimal mock for tests that don't need page operations.
 type noOpPageReaderMutator struct{}
 

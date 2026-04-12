@@ -833,6 +833,141 @@ describe('PageChatPanel', () => {
     });
   });
 
+  describe('permission prompt rendering', () => {
+    let el: PageChatPanel;
+
+    beforeEach(async () => {
+      localStorageStub.getItem.returns('true');
+      el = await fixture(html`<page-chat-panel page="test-page" persona="TestPersona"></page-chat-panel>`);
+      el.agentConnected = true;
+      await el.updateComplete;
+    });
+
+    describe('when pendingPermission is null', () => {
+
+      it('should not render the permission prompt', () => {
+        const prompt = el.shadowRoot!.querySelector('.permission-prompt');
+        expect(prompt).to.equal(null);
+      });
+    });
+
+    describe('when pendingPermission is set', () => {
+
+      beforeEach(async () => {
+        el.pendingPermission = {
+          requestId: 'req-1',
+          title: 'File Access',
+          description: 'Read /etc/passwd',
+          options: [
+            { optionId: 'allow', label: 'Allow', description: 'Allow this access' },
+            { optionId: 'allow-all', label: 'Allow All', description: 'Allow all file access' },
+          ],
+        };
+        await el.updateComplete;
+      });
+
+      it('should render the permission prompt', () => {
+        const prompt = el.shadowRoot!.querySelector('.permission-prompt');
+        expect(prompt).to.exist;
+      });
+
+      it('should render the permission title', () => {
+        const title = el.shadowRoot!.querySelector('.permission-title');
+        expect(title).to.exist;
+        expect(title!.textContent).to.contain('Permission requested');
+      });
+
+      it('should render the description with title', () => {
+        const desc = el.shadowRoot!.querySelector('.permission-description');
+        expect(desc).to.exist;
+        expect(desc!.textContent).to.contain('File Access');
+        expect(desc!.textContent).to.contain('Read /etc/passwd');
+      });
+
+      it('should render option buttons', () => {
+        const buttons = el.shadowRoot!.querySelectorAll('.permission-btn:not(.cancel)');
+        expect(buttons.length).to.equal(2);
+        expect(buttons[0]!.textContent).to.contain('Allow');
+        expect(buttons[1]!.textContent).to.contain('Allow All');
+      });
+
+      it('should render the deny button', () => {
+        const cancelBtn = el.shadowRoot!.querySelector('.permission-btn.cancel');
+        expect(cancelBtn).to.exist;
+        expect(cancelBtn!.textContent).to.contain('Deny');
+      });
+    });
+
+    describe('when an option button is clicked', () => {
+      let respondToPermissionStub: SinonStub;
+
+      beforeEach(async () => {
+        respondToPermissionStub = stub().resolves();
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- replacing private chatClient for testing
+        (el as any).chatClient = { respondToPermission: respondToPermissionStub };
+        el.pendingPermission = {
+          requestId: 'req-1',
+          title: 'File Access',
+          description: 'Read file',
+          options: [
+            { optionId: 'allow', label: 'Allow', description: 'Allow this access' },
+          ],
+        };
+        await el.updateComplete;
+
+        const optionBtn = el.shadowRoot!.querySelector('.permission-btn:not(.cancel)') as HTMLButtonElement;
+        optionBtn.click();
+        await el.updateComplete;
+      });
+
+      it('should call respondToPermission on the client', () => {
+        expect(respondToPermissionStub.callCount).to.equal(1);
+      });
+
+      it('should clear pendingPermission', () => {
+        expect(el.pendingPermission).to.equal(null);
+      });
+
+      it('should remove the permission prompt from the DOM', () => {
+        const prompt = el.shadowRoot!.querySelector('.permission-prompt');
+        expect(prompt).to.equal(null);
+      });
+    });
+
+    describe('when the deny button is clicked', () => {
+      let respondToPermissionStub: SinonStub;
+
+      beforeEach(async () => {
+        respondToPermissionStub = stub().resolves();
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- replacing private chatClient for testing
+        (el as any).chatClient = { respondToPermission: respondToPermissionStub };
+        el.pendingPermission = {
+          requestId: 'req-deny',
+          title: 'File Access',
+          description: 'Read file',
+          options: [
+            { optionId: 'allow', label: 'Allow', description: 'Allow this access' },
+          ],
+        };
+        await el.updateComplete;
+
+        const cancelBtn = el.shadowRoot!.querySelector('.permission-btn.cancel') as HTMLButtonElement;
+        cancelBtn.click();
+        await el.updateComplete;
+      });
+
+      it('should call respondToPermission with empty optionId', () => {
+        expect(respondToPermissionStub.callCount).to.equal(1);
+        const callArg = respondToPermissionStub.firstCall.args[0];
+        expect(callArg.selectedOptionId).to.equal('');
+      });
+
+      it('should clear pendingPermission', () => {
+        expect(el.pendingPermission).to.equal(null);
+      });
+    });
+  });
+
   describe('Ctrl+Space global keyboard shortcut', () => {
     let el: PageChatPanel;
 
@@ -1311,6 +1446,41 @@ describe('PageChatPanel stream methods', () => {
         const reactions = el.messages[0]!.reactions;
         expect(reactions).to.have.length(1);
         expect(reactions[0]!.emoji).to.equal('👍');
+      });
+    });
+
+    describe('when event is permissionRequest', () => {
+
+      beforeEach(async () => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- calling private method for testing
+        await (el as any).handleChatEvent({
+          event: {
+            case: 'permissionRequest',
+            value: {
+              requestId: 'perm-1',
+              title: 'Tool Use',
+              description: 'Run shell command',
+              options: [
+                { optionId: 'allow', label: 'Allow', description: 'Allow once' },
+              ],
+            },
+          },
+        });
+        await el.updateComplete;
+      });
+
+      it('should set pendingPermission', () => {
+        expect(el.pendingPermission).to.not.equal(null);
+        expect(el.pendingPermission!.requestId).to.equal('perm-1');
+      });
+
+      it('should map the title from the event', () => {
+        expect(el.pendingPermission!.title).to.equal('Tool Use');
+      });
+
+      it('should map options from the event', () => {
+        expect(el.pendingPermission!.options).to.have.length(1);
+        expect(el.pendingPermission!.options[0]!.optionId).to.equal('allow');
       });
     });
 

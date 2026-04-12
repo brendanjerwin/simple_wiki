@@ -68,6 +68,9 @@ const (
 	// ChatServiceSubscribePageCancellationsProcedure is the fully-qualified name of the ChatService's
 	// SubscribePageCancellations RPC.
 	ChatServiceSubscribePageCancellationsProcedure = "/api.v1.ChatService/SubscribePageCancellations"
+	// ChatServiceRespondToPermissionProcedure is the fully-qualified name of the ChatService's
+	// RespondToPermission RPC.
+	ChatServiceRespondToPermissionProcedure = "/api.v1.ChatService/RespondToPermission"
 )
 
 // These variables are the protoreflect.Descriptor objects for the RPCs defined in this package.
@@ -85,6 +88,7 @@ var (
 	chatServiceSendToolCallNotificationMethodDescriptor   = chatServiceServiceDescriptor.Methods().ByName("SendToolCallNotification")
 	chatServiceCancelAgentPromptMethodDescriptor          = chatServiceServiceDescriptor.Methods().ByName("CancelAgentPrompt")
 	chatServiceSubscribePageCancellationsMethodDescriptor = chatServiceServiceDescriptor.Methods().ByName("SubscribePageCancellations")
+	chatServiceRespondToPermissionMethodDescriptor        = chatServiceServiceDescriptor.Methods().ByName("RespondToPermission")
 )
 
 // ChatServiceClient is a client for the api.v1.ChatService service.
@@ -125,6 +129,8 @@ type ChatServiceClient interface {
 	// SubscribePageCancellations is called by the pool daemon per page.
 	// Streams a signal when CancelAgentPrompt is called for that page.
 	SubscribePageCancellations(context.Context, *connect.Request[v1.SubscribePageCancellationsRequest]) (*connect.ServerStreamForClient[v1.PageCancellation], error)
+	// RespondToPermission is called by the frontend when the user responds to a permission request.
+	RespondToPermission(context.Context, *connect.Request[v1.RespondToPermissionRequest]) (*connect.Response[v1.RespondToPermissionResponse], error)
 }
 
 // NewChatServiceClient constructs a client for the api.v1.ChatService service. By default, it uses
@@ -209,6 +215,12 @@ func NewChatServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 			connect.WithSchema(chatServiceSubscribePageCancellationsMethodDescriptor),
 			connect.WithClientOptions(opts...),
 		),
+		respondToPermission: connect.NewClient[v1.RespondToPermissionRequest, v1.RespondToPermissionResponse](
+			httpClient,
+			baseURL+ChatServiceRespondToPermissionProcedure,
+			connect.WithSchema(chatServiceRespondToPermissionMethodDescriptor),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -226,6 +238,7 @@ type chatServiceClient struct {
 	sendToolCallNotification   *connect.Client[v1.SendToolCallNotificationRequest, v1.SendToolCallNotificationResponse]
 	cancelAgentPrompt          *connect.Client[v1.CancelAgentPromptRequest, v1.CancelAgentPromptResponse]
 	subscribePageCancellations *connect.Client[v1.SubscribePageCancellationsRequest, v1.PageCancellation]
+	respondToPermission        *connect.Client[v1.RespondToPermissionRequest, v1.RespondToPermissionResponse]
 }
 
 // SendMessage calls api.v1.ChatService.SendMessage.
@@ -288,6 +301,11 @@ func (c *chatServiceClient) SubscribePageCancellations(ctx context.Context, req 
 	return c.subscribePageCancellations.CallServerStream(ctx, req)
 }
 
+// RespondToPermission calls api.v1.ChatService.RespondToPermission.
+func (c *chatServiceClient) RespondToPermission(ctx context.Context, req *connect.Request[v1.RespondToPermissionRequest]) (*connect.Response[v1.RespondToPermissionResponse], error) {
+	return c.respondToPermission.CallUnary(ctx, req)
+}
+
 // ChatServiceHandler is an implementation of the api.v1.ChatService service.
 type ChatServiceHandler interface {
 	// SendMessage sends a user chat message in the context of a page.
@@ -326,6 +344,8 @@ type ChatServiceHandler interface {
 	// SubscribePageCancellations is called by the pool daemon per page.
 	// Streams a signal when CancelAgentPrompt is called for that page.
 	SubscribePageCancellations(context.Context, *connect.Request[v1.SubscribePageCancellationsRequest], *connect.ServerStream[v1.PageCancellation]) error
+	// RespondToPermission is called by the frontend when the user responds to a permission request.
+	RespondToPermission(context.Context, *connect.Request[v1.RespondToPermissionRequest]) (*connect.Response[v1.RespondToPermissionResponse], error)
 }
 
 // NewChatServiceHandler builds an HTTP handler from the service implementation. It returns the path
@@ -406,6 +426,12 @@ func NewChatServiceHandler(svc ChatServiceHandler, opts ...connect.HandlerOption
 		connect.WithSchema(chatServiceSubscribePageCancellationsMethodDescriptor),
 		connect.WithHandlerOptions(opts...),
 	)
+	chatServiceRespondToPermissionHandler := connect.NewUnaryHandler(
+		ChatServiceRespondToPermissionProcedure,
+		svc.RespondToPermission,
+		connect.WithSchema(chatServiceRespondToPermissionMethodDescriptor),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/api.v1.ChatService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case ChatServiceSendMessageProcedure:
@@ -432,6 +458,8 @@ func NewChatServiceHandler(svc ChatServiceHandler, opts ...connect.HandlerOption
 			chatServiceCancelAgentPromptHandler.ServeHTTP(w, r)
 		case ChatServiceSubscribePageCancellationsProcedure:
 			chatServiceSubscribePageCancellationsHandler.ServeHTTP(w, r)
+		case ChatServiceRespondToPermissionProcedure:
+			chatServiceRespondToPermissionHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -487,4 +515,8 @@ func (UnimplementedChatServiceHandler) CancelAgentPrompt(context.Context, *conne
 
 func (UnimplementedChatServiceHandler) SubscribePageCancellations(context.Context, *connect.Request[v1.SubscribePageCancellationsRequest], *connect.ServerStream[v1.PageCancellation]) error {
 	return connect.NewError(connect.CodeUnimplemented, errors.New("api.v1.ChatService.SubscribePageCancellations is not implemented"))
+}
+
+func (UnimplementedChatServiceHandler) RespondToPermission(context.Context, *connect.Request[v1.RespondToPermissionRequest]) (*connect.Response[v1.RespondToPermissionResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("api.v1.ChatService.RespondToPermission is not implemented"))
 }
