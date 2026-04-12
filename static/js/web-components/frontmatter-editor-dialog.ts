@@ -56,11 +56,14 @@ export class FrontmatterEditorDialog extends LitElement {
         max-width: 600px;
         width: 90%;
         max-height: 80vh;
-        display: flex;
         flex-direction: column;
         box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
         animation: slideIn 0.2s ease-out;
         overflow: hidden;
+      }
+
+      dialog[open] {
+        display: flex;
       }
 
       dialog::backdrop {
