@@ -27,11 +27,16 @@ async function addFocusedTriggerButton(page: Page): Promise<void> {
  */
 async function openConfirmationDialog(page: Page): Promise<void> {
   await page.evaluate(async () => {
+    // Ensure the custom element is fully registered before creating an instance
+    await customElements.whenDefined('confirmation-dialog');
     let dialog = document.querySelector('confirmation-dialog') as any;
     if (!dialog) {
       dialog = document.createElement('confirmation-dialog');
       document.body.appendChild(dialog);
     }
+    // Wait for Lit's first render BEFORE calling openDialog() so the shadow DOM
+    // (including the native <dialog> element) exists when showModal() fires.
+    await dialog.updateComplete;
     dialog.openDialog({
       message: 'Test Confirmation',
       description: 'Accessibility test dialog.',
@@ -39,7 +44,7 @@ async function openConfirmationDialog(page: Page): Promise<void> {
       cancelText: 'Cancel',
       confirmVariant: 'primary',
     });
-    // Wait for Lit's render cycle to complete so showModal() is called before returning
+    // Wait for the render cycle triggered by openDialog() to complete
     await dialog.updateComplete;
   });
 }
@@ -156,7 +161,7 @@ test.describe('Dialog Accessibility E2E Tests', () => {
 
         // Focus should move inside the dialog's shadow root after showModal()
         const focusedIsInsideDialog = await page.locator('confirmation-dialog dialog').evaluate(
-          (dlg) => dlg.matches(':focus-within')
+          (dlg) => dlg.contains((dlg.getRootNode() as Document | ShadowRoot).activeElement)
         );
 
         expect(focusedIsInsideDialog).toBe(true);
@@ -203,7 +208,7 @@ test.describe('Dialog Accessibility E2E Tests', () => {
           await page.keyboard.press('Tab');
 
           const focusedIsInsideDialog = await page.locator('confirmation-dialog dialog').evaluate(
-            (dlg) => dlg.matches(':focus-within')
+            (dlg) => dlg.contains((dlg.getRootNode() as Document | ShadowRoot).activeElement)
           );
 
           expect(focusedIsInsideDialog).toBe(true);
@@ -363,7 +368,7 @@ test.describe('Dialog Accessibility E2E Tests', () => {
           await page.keyboard.press('Tab');
 
           const focusedIsInsideDialog = await page.locator('frontmatter-editor-dialog dialog').evaluate(
-            (dlg) => dlg.matches(':focus-within')
+            (dlg) => dlg.contains((dlg.getRootNode() as Document | ShadowRoot).activeElement)
           );
 
           expect(focusedIsInsideDialog).toBe(true);
