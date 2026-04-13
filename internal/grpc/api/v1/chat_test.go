@@ -19,10 +19,9 @@ import (
 
 // mockChatBufferManager is a test implementation of ChatBufferManager.
 type mockChatBufferManager struct {
-	mu                   sync.Mutex
-	messages             map[string][]*chatbuffer.Message
-	channelSubscribers   []chan *chatbuffer.Message
-	pageSubscribers      map[string][]chan chatbuffer.Event
+	mu              sync.Mutex
+	messages        map[string][]*chatbuffer.Message
+	pageSubscribers map[string][]chan chatbuffer.Event
 	addUserMessageError  error
 	addAssistantError    error
 	editMessageError     error
@@ -78,19 +77,6 @@ func (m *mockChatBufferManager) sendEventToPage(page string, event chatbuffer.Ev
 	}
 }
 
-// sendMessageToChannel sends a message to all channel subscribers (for testing)
-func (m *mockChatBufferManager) sendMessageToChannel(msg *chatbuffer.Message) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	for _, ch := range m.channelSubscribers {
-		select {
-		case ch <- msg:
-		default:
-		}
-	}
-}
-
 func (m *mockChatBufferManager) AddUserMessage(page, content, senderName string) (string, error) {
 	if m.addUserMessageError != nil {
 		return "", m.addUserMessageError
@@ -110,14 +96,6 @@ func (m *mockChatBufferManager) AddUserMessage(page, content, senderName string)
 	}
 
 	m.messages[page] = append(m.messages[page], msg)
-
-	// Notify channel subscribers
-	for _, ch := range m.channelSubscribers {
-		select {
-		case ch <- msg:
-		default:
-		}
-	}
 
 	// Notify page subscribers
 	event := chatbuffer.Event{
@@ -239,34 +217,6 @@ func (m *mockChatBufferManager) SubscribeToPageWithReplay(page string) ([]*chatb
 	return messages, ch, unsubscribe
 }
 
-func (m *mockChatBufferManager) SubscribeToChannel() (<-chan *chatbuffer.Message, func()) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	ch := make(chan *chatbuffer.Message, 10)
-	m.channelSubscribers = append(m.channelSubscribers, ch)
-
-	unsubscribe := func() {
-		m.mu.Lock()
-		defer m.mu.Unlock()
-		for i, subscriber := range m.channelSubscribers {
-			if subscriber == ch {
-				m.channelSubscribers = append(m.channelSubscribers[:i], m.channelSubscribers[i+1:]...)
-				close(ch)
-				break
-			}
-		}
-	}
-
-	return ch, unsubscribe
-}
-
-func (m *mockChatBufferManager) HasChannelSubscribers() bool {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	return len(m.channelSubscribers) > 0
-}
-
 func (m *mockChatBufferManager) SubscribeToPageChannelWithReplay(string) ([]*chatbuffer.Message, <-chan *chatbuffer.Message, func()) {
 	if m.pageChannelChan != nil {
 		return m.pageChannelReplayMessages, m.pageChannelChan, func() {}
@@ -325,12 +275,6 @@ func (m *mockChatBufferManager) RespondToPermission(requestID, selectedOptionID 
 	m.respondToPermissionCalls = append(m.respondToPermissionCalls, respondToPermissionArgs{requestID, selectedOptionID})
 }
 
-func (m *mockChatBufferManager) channelSubscriberCount() int {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	return len(m.channelSubscribers)
-}
-
 func (m *mockChatBufferManager) pageSubscriberCount(page string) int {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -386,7 +330,7 @@ func (*mockChatStreamServer) SetTrailer(metadata.MD) {
 func (*mockChatStreamServer) SendMsg(any) error             { return nil }
 func (*mockChatStreamServer) RecvMsg(any) error             { return nil }
 
-// mockChatMessagesStreamServer is a mock for testing SubscribeChatMessages.
+// mockChatMessagesStreamServer is a mock for testing SubscribePageChatMessages.
 type mockChatMessagesStreamServer struct {
 	mu          sync.Mutex
 	messages    []*apiv1.ChatMessage
@@ -1070,30 +1014,7 @@ var _ = Describe("ChatService", func() {
 	})
 
 	Describe("GetChatStatus", func() {
-		When("Claude channel subscriber is connected", func() {
-			var (
-				resp *apiv1.GetChatStatusResponse
-				err  error
-			)
-
-			BeforeEach(func() {
-				// Subscribe to channel to simulate a connected Claude
-				_, unsubscribe := chatManager.SubscribeToChannel()
-				DeferCleanup(unsubscribe)
-
-				resp, err = server.GetChatStatus(ctx, &apiv1.GetChatStatusRequest{})
-			})
-
-			It("should not error", func() {
-				Expect(err).NotTo(HaveOccurred())
-			})
-
-			It("should return connected true", func() {
-				Expect(resp.Connected).To(BeTrue())
-			})
-		})
-
-		When("no Claude channel subscriber is connected", func() {
+		When("called without a page parameter", func() {
 			var (
 				resp *apiv1.GetChatStatusResponse
 				err  error
@@ -1136,108 +1057,6 @@ var _ = Describe("ChatService", func() {
 
 			It("should return starting false when no instance requested", func() {
 				Expect(resp.Starting).To(BeFalse())
-			})
-		})
-	})
-
-	Describe("SubscribeChatMessages", func() {
-		When("subscribing to channel messages", func() {
-			var (
-				req          *apiv1.SubscribeChatMessagesRequest
-				streamServer *mockChatMessagesStreamServer
-			)
-
-			BeforeEach(func() {
-				req = &apiv1.SubscribeChatMessagesRequest{}
-				streamServer = &mockChatMessagesStreamServer{contextDone: true}
-
-				_ = server.SubscribeChatMessages(req, streamServer)
-			})
-
-			It("should not error", func() {
-				// Test passes if no panic or error
-				Expect(true).To(BeTrue())
-			})
-		})
-
-		When("receiving new channel messages", func() {
-			var (
-				req          *apiv1.SubscribeChatMessagesRequest
-				streamServer *mockChatMessagesStreamServer
-			)
-
-			BeforeEach(func() {
-				req = &apiv1.SubscribeChatMessagesRequest{}
-				streamServer = &mockChatMessagesStreamServer{}
-
-				// Run subscription in background
-				go func() {
-					_ = server.SubscribeChatMessages(req, streamServer)
-				}()
-
-				// Wait for subscription to be registered before sending messages
-				Eventually(chatManager.channelSubscriberCount, "1s", "10ms").Should(BeNumerically(">=", 1))
-
-				// Trigger a channel message using mock helper
-				msg := &chatbuffer.Message{
-					ID:      "channel-msg",
-					Sender:  "user",
-					Content: "Channel message",
-					Page:    "some-page",
-				}
-				chatManager.sendMessageToChannel(msg)
-
-				// Wait for message to be processed
-				Eventually(streamServer.GetMessageCount, "1s", "10ms").Should(BeNumerically(">=", 1))
-
-				// Cancel context to stop subscription
-				streamServer.contextDone = true
-			})
-
-			It("should stream channel messages", func() {
-				Expect(streamServer.GetMessageCount()).To(BeNumerically(">=", 1))
-			})
-		})
-
-		When("send fails", func() {
-			var (
-				req          *apiv1.SubscribeChatMessagesRequest
-				streamServer *mockChatMessagesStreamServer
-				doneCh       chan struct{}
-			)
-
-			BeforeEach(func() {
-				req = &apiv1.SubscribeChatMessagesRequest{}
-				streamServer = &mockChatMessagesStreamServer{
-					sendErr: status.Error(codes.Internal, "send failed"),
-				}
-				doneCh = make(chan struct{})
-
-				// Run subscription in background; close doneCh when it returns
-				go func() {
-					_ = server.SubscribeChatMessages(req, streamServer)
-					close(doneCh)
-				}()
-
-				// Wait for subscription to be registered before sending messages
-				Eventually(chatManager.channelSubscriberCount, "1s", "10ms").Should(BeNumerically(">=", 1))
-
-				// Trigger a channel message that will fail to send using mock helper
-				msg := &chatbuffer.Message{
-					ID:      "channel-msg",
-					Sender:  "user",
-					Content: "This will fail",
-					Page:    "some-page",
-				}
-				chatManager.sendMessageToChannel(msg)
-
-				// Wait for the subscription goroutine to exit after the send error
-				Eventually(doneCh, "1s", "10ms").Should(BeClosed())
-			})
-
-			It("should handle send error", func() {
-				// Test passes if no panic occurs
-				Expect(true).To(BeTrue())
 			})
 		})
 	})
@@ -1686,10 +1505,6 @@ var _ = Describe("ChatService", func() {
 				chatManager.hasInstanceRequestSubscriberVal = true
 				chatManager.hasPageChannelSubscriberVal = false
 
-				// Add a global channel subscriber — should NOT make connected true when pool is connected
-				_, unsubscribe := chatManager.SubscribeToChannel()
-				DeferCleanup(unsubscribe)
-
 				resp, err = server.GetChatStatus(ctx, &apiv1.GetChatStatusRequest{Page: "test-page"})
 			})
 
@@ -1701,7 +1516,7 @@ var _ = Describe("ChatService", func() {
 				Expect(resp.PoolConnected).To(BeTrue())
 			})
 
-			It("should return connected false because pool mode uses per-page subscribers only", func() {
+			It("should return connected false because per-page subscribers are required", func() {
 				Expect(resp.Connected).To(BeFalse())
 			})
 		})
@@ -1725,40 +1540,6 @@ var _ = Describe("ChatService", func() {
 
 			It("should return starting true", func() {
 				Expect(resp.Starting).To(BeTrue())
-			})
-		})
-
-		When("no pool is connected and page has no subscriber but global subscriber exists", func() {
-			var (
-				resp *apiv1.GetChatStatusResponse
-				err  error
-			)
-
-			BeforeEach(func() {
-				chatManager.hasInstanceRequestSubscriberVal = false
-				chatManager.hasPageChannelSubscriberVal = false
-
-				// Add a global channel subscriber — should make connected true when no pool
-				_, unsubscribe := chatManager.SubscribeToChannel()
-				DeferCleanup(unsubscribe)
-
-				resp, err = server.GetChatStatus(ctx, &apiv1.GetChatStatusRequest{Page: "test-page"})
-			})
-
-			It("should not error", func() {
-				Expect(err).NotTo(HaveOccurred())
-			})
-
-			It("should return pool_connected false", func() {
-				Expect(resp.PoolConnected).To(BeFalse())
-			})
-
-			It("should return connected true because global subscribers count without pool", func() {
-				Expect(resp.Connected).To(BeTrue())
-			})
-
-			It("should return starting false because no pool is connected", func() {
-				Expect(resp.Starting).To(BeFalse())
 			})
 		})
 	})

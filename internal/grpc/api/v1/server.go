@@ -54,8 +54,6 @@ type ChatBufferManager interface {
 	GetMessages(page string) []*chatbuffer.Message
 	SubscribeToPage(page string) (<-chan chatbuffer.Event, func())
 	SubscribeToPageWithReplay(page string) ([]*chatbuffer.Message, <-chan chatbuffer.Event, func())
-	SubscribeToChannel() (<-chan *chatbuffer.Message, func())
-	HasChannelSubscribers() bool
 	SubscribeToPageChannel(page string) (<-chan *chatbuffer.Message, func())
 	SubscribeToPageChannelWithReplay(page string) ([]*chatbuffer.Message, <-chan *chatbuffer.Message, func())
 	HasPageChannelSubscriber(page string) bool

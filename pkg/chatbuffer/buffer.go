@@ -115,10 +115,8 @@ type pageBuffer struct {
 
 // Manager manages chat message buffers for all pages.
 type Manager struct {
-	buffers              map[string]*pageBuffer
-	mu                   sync.RWMutex
-	channelSubscribers   []chan *Message
-	channelSubscribersMu sync.RWMutex
+	buffers map[string]*pageBuffer
+	mu      sync.RWMutex
 
 	pageChannelSubscribers   map[string][]chan *Message // page → per-page MCP subscribers
 	pageChannelSubscribersMu sync.RWMutex
@@ -140,7 +138,6 @@ type Manager struct {
 func NewManager() *Manager {
 	m := &Manager{
 		buffers:                make(map[string]*pageBuffer),
-		channelSubscribers:     make([]chan *Message, 0),
 		pageChannelSubscribers: make(map[string][]chan *Message),
 		instanceRequests:       make(map[string]time.Time),
 		instanceRequestChans:   make([]chan string, 0),
@@ -222,18 +219,13 @@ func (m *Manager) getOrCreateBuffer(page string) *pageBuffer {
 }
 
 // AddUserMessage adds a user message to the buffer and notifies subscribers.
-// Returns ErrNoSubscribers if no channel subscribers (global or page-level) are connected;
+// Returns ErrNoSubscribers if no page-level channel subscribers or pool daemon are connected;
 // in that case the message is NOT stored and page subscribers are NOT notified.
 func (m *Manager) AddUserMessage(page, content, senderName string) (string, error) {
 	// Check for channel subscribers BEFORE writing to the buffer so that if
 	// ErrNoSubscribers is returned, the message was never stored and page
 	// subscribers were never notified.
-	// Allow sending if there are global subscribers OR page-specific subscribers.
-	m.channelSubscribersMu.RLock()
-	hasGlobal := len(m.channelSubscribers) > 0
-	m.channelSubscribersMu.RUnlock()
-
-	if !hasGlobal && !m.HasPageChannelSubscriber(page) {
+	if !m.HasPageChannelSubscriber(page) && !m.HasInstanceRequestSubscribers() {
 		return "", ErrNoSubscribers
 	}
 
@@ -266,27 +258,13 @@ func (m *Manager) AddUserMessage(page, content, senderName string) (string, erro
 		Message: &msgCopy,
 	})
 
-	// Publish to global channel subscribers (wiki-cli mcp without --page).
-	// Acquire channelSubscribersMu after releasing buf.mu to maintain
-	// a consistent lock ordering and avoid deadlock.
-	m.channelSubscribersMu.RLock()
-	msgCopy2 := *msg
-	for _, subscriber := range m.channelSubscribers {
-		select {
-		case subscriber <- &msgCopy2:
-		default:
-			// Don't block if subscriber is slow
-		}
-	}
-	m.channelSubscribersMu.RUnlock()
-
-	// Publish to page-specific channel subscribers (wiki-cli mcp --page).
+	// Publish to page-specific channel subscribers (wiki-cli mcp --page / ACP pool).
 	m.pageChannelSubscribersMu.RLock()
 	if subs, ok := m.pageChannelSubscribers[page]; ok {
-		msgCopy3 := *msg
+		msgCopy2 := *msg
 		for _, subscriber := range subs {
 			select {
-			case subscriber <- &msgCopy3:
+			case subscriber <- &msgCopy2:
 			default:
 				// Don't block if subscriber is slow
 			}
@@ -535,39 +513,6 @@ func (m *Manager) SubscribeToPageWithReplay(page string) ([]*Message, <-chan Eve
 	return messages, eventChan, buf.makeUnsubscribeFn(eventChan)
 }
 
-// SubscribeToChannel subscribes to all user messages across all pages.
-// This is used by wiki-cli mcp to receive messages for Claude.
-// Returns a channel that receives messages and an unsubscribe function.
-func (m *Manager) SubscribeToChannel() (<-chan *Message, func()) {
-	m.channelSubscribersMu.Lock()
-	defer m.channelSubscribersMu.Unlock()
-
-	msgChan := make(chan *Message, 100) // Buffer messages
-	m.channelSubscribers = append(m.channelSubscribers, msgChan)
-
-	unsubscribe := func() {
-		m.channelSubscribersMu.Lock()
-		defer m.channelSubscribersMu.Unlock()
-
-		for i, subscriber := range m.channelSubscribers {
-			if subscriber == msgChan {
-				m.channelSubscribers = append(m.channelSubscribers[:i], m.channelSubscribers[i+1:]...)
-				close(msgChan)
-				break
-			}
-		}
-	}
-
-	return msgChan, unsubscribe
-}
-
-// HasChannelSubscribers returns true if there are any channel subscribers.
-func (m *Manager) HasChannelSubscribers() bool {
-	m.channelSubscribersMu.RLock()
-	defer m.channelSubscribersMu.RUnlock()
-	return len(m.channelSubscribers) > 0
-}
-
 // GetMessageByID retrieves a message by its ID across all pages.
 func (m *Manager) GetMessageByID(messageID string) (*Message, error) {
 	m.mu.RLock()
@@ -669,18 +614,6 @@ func (m *Manager) RequestInstance(page string) {
 	// Don't request if page already has a per-page subscriber
 	if m.HasPageChannelSubscriber(page) {
 		return
-	}
-
-	// If a pool daemon is connected, skip the global subscriber check —
-	// global MCP subscribers handle tool access, not chat.
-	// Only skip instance request when no pool daemon exists AND global subscribers exist.
-	if !m.HasInstanceRequestSubscribers() {
-		m.channelSubscribersMu.RLock()
-		hasGlobal := len(m.channelSubscribers) > 0
-		m.channelSubscribersMu.RUnlock()
-		if hasGlobal {
-			return
-		}
 	}
 
 	m.instanceMu.Lock()

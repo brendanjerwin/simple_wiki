@@ -869,45 +869,6 @@ func (x *SubscribeChatRequest) GetPage() string {
 	return ""
 }
 
-// SubscribeChatMessagesRequest is the request for SubscribeChatMessages.
-type SubscribeChatMessagesRequest struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
-	unknownFields protoimpl.UnknownFields
-}
-
-func (x *SubscribeChatMessagesRequest) Reset() {
-	*x = SubscribeChatMessagesRequest{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_api_v1_chat_proto_msgTypes[11]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
-}
-
-func (x *SubscribeChatMessagesRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*SubscribeChatMessagesRequest) ProtoMessage() {}
-
-func (x *SubscribeChatMessagesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_chat_proto_msgTypes[11]
-	if protoimpl.UnsafeEnabled && x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use SubscribeChatMessagesRequest.ProtoReflect.Descriptor instead.
-func (*SubscribeChatMessagesRequest) Descriptor() ([]byte, []int) {
-	return file_api_v1_chat_proto_rawDescGZIP(), []int{11}
-}
-
 // SendChatReplyRequest is the request for SendChatReply.
 type SendChatReplyRequest struct {
 	state         protoimpl.MessageState
@@ -922,7 +883,7 @@ type SendChatReplyRequest struct {
 func (x *SendChatReplyRequest) Reset() {
 	*x = SendChatReplyRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_api_v1_chat_proto_msgTypes[12]
+		mi := &file_api_v1_chat_proto_msgTypes[11]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -935,7 +896,7 @@ func (x *SendChatReplyRequest) String() string {
 func (*SendChatReplyRequest) ProtoMessage() {}
 
 func (x *SendChatReplyRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_chat_proto_msgTypes[12]
+	mi := &file_api_v1_chat_proto_msgTypes[11]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -948,7 +909,7 @@ func (x *SendChatReplyRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SendChatReplyRequest.ProtoReflect.Descriptor instead.
 func (*SendChatReplyRequest) Descriptor() ([]byte, []int) {
-	return file_api_v1_chat_proto_rawDescGZIP(), []int{12}
+	return file_api_v1_chat_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *SendChatReplyRequest) GetPage() string {
@@ -984,7 +945,7 @@ type SendChatReplyResponse struct {
 func (x *SendChatReplyResponse) Reset() {
 	*x = SendChatReplyResponse{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_api_v1_chat_proto_msgTypes[13]
+		mi := &file_api_v1_chat_proto_msgTypes[12]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -997,7 +958,7 @@ func (x *SendChatReplyResponse) String() string {
 func (*SendChatReplyResponse) ProtoMessage() {}
 
 func (x *SendChatReplyResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_chat_proto_msgTypes[13]
+	mi := &file_api_v1_chat_proto_msgTypes[12]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1010,7 +971,7 @@ func (x *SendChatReplyResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SendChatReplyResponse.ProtoReflect.Descriptor instead.
 func (*SendChatReplyResponse) Descriptor() ([]byte, []int) {
-	return file_api_v1_chat_proto_rawDescGZIP(), []int{13}
+	return file_api_v1_chat_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *SendChatReplyResponse) GetMessageId() string {
@@ -1036,7 +997,7 @@ type EditChatMessageRequest struct {
 func (x *EditChatMessageRequest) Reset() {
 	*x = EditChatMessageRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_api_v1_chat_proto_msgTypes[14]
+		mi := &file_api_v1_chat_proto_msgTypes[13]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1049,7 +1010,7 @@ func (x *EditChatMessageRequest) String() string {
 func (*EditChatMessageRequest) ProtoMessage() {}
 
 func (x *EditChatMessageRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_chat_proto_msgTypes[14]
+	mi := &file_api_v1_chat_proto_msgTypes[13]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1062,7 +1023,7 @@ func (x *EditChatMessageRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EditChatMessageRequest.ProtoReflect.Descriptor instead.
 func (*EditChatMessageRequest) Descriptor() ([]byte, []int) {
-	return file_api_v1_chat_proto_rawDescGZIP(), []int{14}
+	return file_api_v1_chat_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *EditChatMessageRequest) GetMessageId() string {
@@ -1096,7 +1057,7 @@ type EditChatMessageResponse struct {
 func (x *EditChatMessageResponse) Reset() {
 	*x = EditChatMessageResponse{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_api_v1_chat_proto_msgTypes[15]
+		mi := &file_api_v1_chat_proto_msgTypes[14]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1109,7 +1070,7 @@ func (x *EditChatMessageResponse) String() string {
 func (*EditChatMessageResponse) ProtoMessage() {}
 
 func (x *EditChatMessageResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_chat_proto_msgTypes[15]
+	mi := &file_api_v1_chat_proto_msgTypes[14]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1122,7 +1083,7 @@ func (x *EditChatMessageResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EditChatMessageResponse.ProtoReflect.Descriptor instead.
 func (*EditChatMessageResponse) Descriptor() ([]byte, []int) {
-	return file_api_v1_chat_proto_rawDescGZIP(), []int{15}
+	return file_api_v1_chat_proto_rawDescGZIP(), []int{14}
 }
 
 // ReactToMessageRequest is the request for ReactToMessage.
@@ -1138,7 +1099,7 @@ type ReactToMessageRequest struct {
 func (x *ReactToMessageRequest) Reset() {
 	*x = ReactToMessageRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_api_v1_chat_proto_msgTypes[16]
+		mi := &file_api_v1_chat_proto_msgTypes[15]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1151,7 +1112,7 @@ func (x *ReactToMessageRequest) String() string {
 func (*ReactToMessageRequest) ProtoMessage() {}
 
 func (x *ReactToMessageRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_chat_proto_msgTypes[16]
+	mi := &file_api_v1_chat_proto_msgTypes[15]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1164,7 +1125,7 @@ func (x *ReactToMessageRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReactToMessageRequest.ProtoReflect.Descriptor instead.
 func (*ReactToMessageRequest) Descriptor() ([]byte, []int) {
-	return file_api_v1_chat_proto_rawDescGZIP(), []int{16}
+	return file_api_v1_chat_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *ReactToMessageRequest) GetMessageId() string {
@@ -1191,7 +1152,7 @@ type ReactToMessageResponse struct {
 func (x *ReactToMessageResponse) Reset() {
 	*x = ReactToMessageResponse{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_api_v1_chat_proto_msgTypes[17]
+		mi := &file_api_v1_chat_proto_msgTypes[16]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1204,7 +1165,7 @@ func (x *ReactToMessageResponse) String() string {
 func (*ReactToMessageResponse) ProtoMessage() {}
 
 func (x *ReactToMessageResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_chat_proto_msgTypes[17]
+	mi := &file_api_v1_chat_proto_msgTypes[16]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1217,7 +1178,7 @@ func (x *ReactToMessageResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReactToMessageResponse.ProtoReflect.Descriptor instead.
 func (*ReactToMessageResponse) Descriptor() ([]byte, []int) {
-	return file_api_v1_chat_proto_rawDescGZIP(), []int{17}
+	return file_api_v1_chat_proto_rawDescGZIP(), []int{16}
 }
 
 // GetChatStatusRequest is the request for GetChatStatus.
@@ -1227,14 +1188,13 @@ type GetChatStatusRequest struct {
 	unknownFields protoimpl.UnknownFields
 
 	// Optional page identifier. If set, checks for a page-specific instance.
-	// If empty, falls back to global subscriber check.
 	Page string `protobuf:"bytes,1,opt,name=page,proto3" json:"page,omitempty"`
 }
 
 func (x *GetChatStatusRequest) Reset() {
 	*x = GetChatStatusRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_api_v1_chat_proto_msgTypes[18]
+		mi := &file_api_v1_chat_proto_msgTypes[17]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1247,7 +1207,7 @@ func (x *GetChatStatusRequest) String() string {
 func (*GetChatStatusRequest) ProtoMessage() {}
 
 func (x *GetChatStatusRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_chat_proto_msgTypes[18]
+	mi := &file_api_v1_chat_proto_msgTypes[17]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1260,7 +1220,7 @@ func (x *GetChatStatusRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetChatStatusRequest.ProtoReflect.Descriptor instead.
 func (*GetChatStatusRequest) Descriptor() ([]byte, []int) {
-	return file_api_v1_chat_proto_rawDescGZIP(), []int{18}
+	return file_api_v1_chat_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *GetChatStatusRequest) GetPage() string {
@@ -1276,7 +1236,7 @@ type GetChatStatusResponse struct {
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
-	// Whether a Claude channel subscriber is connected for the requested page (or globally).
+	// Whether a Claude channel subscriber is connected for the requested page.
 	Connected bool `protobuf:"varint,1,opt,name=connected,proto3" json:"connected,omitempty"`
 	// Whether an instance has been requested but is not yet connected.
 	Starting bool `protobuf:"varint,2,opt,name=starting,proto3" json:"starting,omitempty"`
@@ -1287,7 +1247,7 @@ type GetChatStatusResponse struct {
 func (x *GetChatStatusResponse) Reset() {
 	*x = GetChatStatusResponse{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_api_v1_chat_proto_msgTypes[19]
+		mi := &file_api_v1_chat_proto_msgTypes[18]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1300,7 +1260,7 @@ func (x *GetChatStatusResponse) String() string {
 func (*GetChatStatusResponse) ProtoMessage() {}
 
 func (x *GetChatStatusResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_chat_proto_msgTypes[19]
+	mi := &file_api_v1_chat_proto_msgTypes[18]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1313,7 +1273,7 @@ func (x *GetChatStatusResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetChatStatusResponse.ProtoReflect.Descriptor instead.
 func (*GetChatStatusResponse) Descriptor() ([]byte, []int) {
-	return file_api_v1_chat_proto_rawDescGZIP(), []int{19}
+	return file_api_v1_chat_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *GetChatStatusResponse) GetConnected() bool {
@@ -1349,7 +1309,7 @@ type SubscribePageChatMessagesRequest struct {
 func (x *SubscribePageChatMessagesRequest) Reset() {
 	*x = SubscribePageChatMessagesRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_api_v1_chat_proto_msgTypes[20]
+		mi := &file_api_v1_chat_proto_msgTypes[19]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1362,7 +1322,7 @@ func (x *SubscribePageChatMessagesRequest) String() string {
 func (*SubscribePageChatMessagesRequest) ProtoMessage() {}
 
 func (x *SubscribePageChatMessagesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_chat_proto_msgTypes[20]
+	mi := &file_api_v1_chat_proto_msgTypes[19]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1375,7 +1335,7 @@ func (x *SubscribePageChatMessagesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SubscribePageChatMessagesRequest.ProtoReflect.Descriptor instead.
 func (*SubscribePageChatMessagesRequest) Descriptor() ([]byte, []int) {
-	return file_api_v1_chat_proto_rawDescGZIP(), []int{20}
+	return file_api_v1_chat_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *SubscribePageChatMessagesRequest) GetPage() string {
@@ -1395,7 +1355,7 @@ type SubscribeInstanceRequestsRequest struct {
 func (x *SubscribeInstanceRequestsRequest) Reset() {
 	*x = SubscribeInstanceRequestsRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_api_v1_chat_proto_msgTypes[21]
+		mi := &file_api_v1_chat_proto_msgTypes[20]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1408,7 +1368,7 @@ func (x *SubscribeInstanceRequestsRequest) String() string {
 func (*SubscribeInstanceRequestsRequest) ProtoMessage() {}
 
 func (x *SubscribeInstanceRequestsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_chat_proto_msgTypes[21]
+	mi := &file_api_v1_chat_proto_msgTypes[20]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1421,7 +1381,7 @@ func (x *SubscribeInstanceRequestsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SubscribeInstanceRequestsRequest.ProtoReflect.Descriptor instead.
 func (*SubscribeInstanceRequestsRequest) Descriptor() ([]byte, []int) {
-	return file_api_v1_chat_proto_rawDescGZIP(), []int{21}
+	return file_api_v1_chat_proto_rawDescGZIP(), []int{20}
 }
 
 // InstanceRequest is streamed by SubscribeInstanceRequests when a page needs a Claude instance.
@@ -1436,7 +1396,7 @@ type InstanceRequest struct {
 func (x *InstanceRequest) Reset() {
 	*x = InstanceRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_api_v1_chat_proto_msgTypes[22]
+		mi := &file_api_v1_chat_proto_msgTypes[21]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1449,7 +1409,7 @@ func (x *InstanceRequest) String() string {
 func (*InstanceRequest) ProtoMessage() {}
 
 func (x *InstanceRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_chat_proto_msgTypes[22]
+	mi := &file_api_v1_chat_proto_msgTypes[21]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1462,7 +1422,7 @@ func (x *InstanceRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use InstanceRequest.ProtoReflect.Descriptor instead.
 func (*InstanceRequest) Descriptor() ([]byte, []int) {
-	return file_api_v1_chat_proto_rawDescGZIP(), []int{22}
+	return file_api_v1_chat_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *InstanceRequest) GetPage() string {
@@ -1488,7 +1448,7 @@ type SendToolCallNotificationRequest struct {
 func (x *SendToolCallNotificationRequest) Reset() {
 	*x = SendToolCallNotificationRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_api_v1_chat_proto_msgTypes[23]
+		mi := &file_api_v1_chat_proto_msgTypes[22]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1501,7 +1461,7 @@ func (x *SendToolCallNotificationRequest) String() string {
 func (*SendToolCallNotificationRequest) ProtoMessage() {}
 
 func (x *SendToolCallNotificationRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_chat_proto_msgTypes[23]
+	mi := &file_api_v1_chat_proto_msgTypes[22]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1514,7 +1474,7 @@ func (x *SendToolCallNotificationRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SendToolCallNotificationRequest.ProtoReflect.Descriptor instead.
 func (*SendToolCallNotificationRequest) Descriptor() ([]byte, []int) {
-	return file_api_v1_chat_proto_rawDescGZIP(), []int{23}
+	return file_api_v1_chat_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *SendToolCallNotificationRequest) GetPage() string {
@@ -1562,7 +1522,7 @@ type SendToolCallNotificationResponse struct {
 func (x *SendToolCallNotificationResponse) Reset() {
 	*x = SendToolCallNotificationResponse{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_api_v1_chat_proto_msgTypes[24]
+		mi := &file_api_v1_chat_proto_msgTypes[23]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1575,7 +1535,7 @@ func (x *SendToolCallNotificationResponse) String() string {
 func (*SendToolCallNotificationResponse) ProtoMessage() {}
 
 func (x *SendToolCallNotificationResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_chat_proto_msgTypes[24]
+	mi := &file_api_v1_chat_proto_msgTypes[23]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1588,7 +1548,7 @@ func (x *SendToolCallNotificationResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SendToolCallNotificationResponse.ProtoReflect.Descriptor instead.
 func (*SendToolCallNotificationResponse) Descriptor() ([]byte, []int) {
-	return file_api_v1_chat_proto_rawDescGZIP(), []int{24}
+	return file_api_v1_chat_proto_rawDescGZIP(), []int{23}
 }
 
 // CancelAgentPromptRequest is the request for CancelAgentPrompt.
@@ -1603,7 +1563,7 @@ type CancelAgentPromptRequest struct {
 func (x *CancelAgentPromptRequest) Reset() {
 	*x = CancelAgentPromptRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_api_v1_chat_proto_msgTypes[25]
+		mi := &file_api_v1_chat_proto_msgTypes[24]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1616,7 +1576,7 @@ func (x *CancelAgentPromptRequest) String() string {
 func (*CancelAgentPromptRequest) ProtoMessage() {}
 
 func (x *CancelAgentPromptRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_chat_proto_msgTypes[25]
+	mi := &file_api_v1_chat_proto_msgTypes[24]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1629,7 +1589,7 @@ func (x *CancelAgentPromptRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CancelAgentPromptRequest.ProtoReflect.Descriptor instead.
 func (*CancelAgentPromptRequest) Descriptor() ([]byte, []int) {
-	return file_api_v1_chat_proto_rawDescGZIP(), []int{25}
+	return file_api_v1_chat_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *CancelAgentPromptRequest) GetPage() string {
@@ -1649,7 +1609,7 @@ type CancelAgentPromptResponse struct {
 func (x *CancelAgentPromptResponse) Reset() {
 	*x = CancelAgentPromptResponse{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_api_v1_chat_proto_msgTypes[26]
+		mi := &file_api_v1_chat_proto_msgTypes[25]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1662,7 +1622,7 @@ func (x *CancelAgentPromptResponse) String() string {
 func (*CancelAgentPromptResponse) ProtoMessage() {}
 
 func (x *CancelAgentPromptResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_chat_proto_msgTypes[26]
+	mi := &file_api_v1_chat_proto_msgTypes[25]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1675,7 +1635,7 @@ func (x *CancelAgentPromptResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CancelAgentPromptResponse.ProtoReflect.Descriptor instead.
 func (*CancelAgentPromptResponse) Descriptor() ([]byte, []int) {
-	return file_api_v1_chat_proto_rawDescGZIP(), []int{26}
+	return file_api_v1_chat_proto_rawDescGZIP(), []int{25}
 }
 
 // SubscribePageCancellationsRequest is the request for SubscribePageCancellations.
@@ -1690,7 +1650,7 @@ type SubscribePageCancellationsRequest struct {
 func (x *SubscribePageCancellationsRequest) Reset() {
 	*x = SubscribePageCancellationsRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_api_v1_chat_proto_msgTypes[27]
+		mi := &file_api_v1_chat_proto_msgTypes[26]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1703,7 +1663,7 @@ func (x *SubscribePageCancellationsRequest) String() string {
 func (*SubscribePageCancellationsRequest) ProtoMessage() {}
 
 func (x *SubscribePageCancellationsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_chat_proto_msgTypes[27]
+	mi := &file_api_v1_chat_proto_msgTypes[26]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1716,7 +1676,7 @@ func (x *SubscribePageCancellationsRequest) ProtoReflect() protoreflect.Message 
 
 // Deprecated: Use SubscribePageCancellationsRequest.ProtoReflect.Descriptor instead.
 func (*SubscribePageCancellationsRequest) Descriptor() ([]byte, []int) {
-	return file_api_v1_chat_proto_rawDescGZIP(), []int{27}
+	return file_api_v1_chat_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *SubscribePageCancellationsRequest) GetPage() string {
@@ -1736,7 +1696,7 @@ type PageCancellation struct {
 func (x *PageCancellation) Reset() {
 	*x = PageCancellation{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_api_v1_chat_proto_msgTypes[28]
+		mi := &file_api_v1_chat_proto_msgTypes[27]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1749,7 +1709,7 @@ func (x *PageCancellation) String() string {
 func (*PageCancellation) ProtoMessage() {}
 
 func (x *PageCancellation) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_chat_proto_msgTypes[28]
+	mi := &file_api_v1_chat_proto_msgTypes[27]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1762,7 +1722,7 @@ func (x *PageCancellation) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PageCancellation.ProtoReflect.Descriptor instead.
 func (*PageCancellation) Descriptor() ([]byte, []int) {
-	return file_api_v1_chat_proto_rawDescGZIP(), []int{28}
+	return file_api_v1_chat_proto_rawDescGZIP(), []int{27}
 }
 
 // RespondToPermissionRequest is the request for RespondToPermission.
@@ -1778,7 +1738,7 @@ type RespondToPermissionRequest struct {
 func (x *RespondToPermissionRequest) Reset() {
 	*x = RespondToPermissionRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_api_v1_chat_proto_msgTypes[29]
+		mi := &file_api_v1_chat_proto_msgTypes[28]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1791,7 +1751,7 @@ func (x *RespondToPermissionRequest) String() string {
 func (*RespondToPermissionRequest) ProtoMessage() {}
 
 func (x *RespondToPermissionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_chat_proto_msgTypes[29]
+	mi := &file_api_v1_chat_proto_msgTypes[28]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1804,7 +1764,7 @@ func (x *RespondToPermissionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RespondToPermissionRequest.ProtoReflect.Descriptor instead.
 func (*RespondToPermissionRequest) Descriptor() ([]byte, []int) {
-	return file_api_v1_chat_proto_rawDescGZIP(), []int{29}
+	return file_api_v1_chat_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *RespondToPermissionRequest) GetRequestId() string {
@@ -1831,7 +1791,7 @@ type RespondToPermissionResponse struct {
 func (x *RespondToPermissionResponse) Reset() {
 	*x = RespondToPermissionResponse{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_api_v1_chat_proto_msgTypes[30]
+		mi := &file_api_v1_chat_proto_msgTypes[29]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1844,7 +1804,7 @@ func (x *RespondToPermissionResponse) String() string {
 func (*RespondToPermissionResponse) ProtoMessage() {}
 
 func (x *RespondToPermissionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_chat_proto_msgTypes[30]
+	mi := &file_api_v1_chat_proto_msgTypes[29]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1857,7 +1817,7 @@ func (x *RespondToPermissionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RespondToPermissionResponse.ProtoReflect.Descriptor instead.
 func (*RespondToPermissionResponse) Descriptor() ([]byte, []int) {
-	return file_api_v1_chat_proto_rawDescGZIP(), []int{30}
+	return file_api_v1_chat_proto_rawDescGZIP(), []int{29}
 }
 
 // RequestPermissionFromUserRequest is sent by the pool daemon to ask the user.
@@ -1876,7 +1836,7 @@ type RequestPermissionFromUserRequest struct {
 func (x *RequestPermissionFromUserRequest) Reset() {
 	*x = RequestPermissionFromUserRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_api_v1_chat_proto_msgTypes[31]
+		mi := &file_api_v1_chat_proto_msgTypes[30]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1889,7 +1849,7 @@ func (x *RequestPermissionFromUserRequest) String() string {
 func (*RequestPermissionFromUserRequest) ProtoMessage() {}
 
 func (x *RequestPermissionFromUserRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_chat_proto_msgTypes[31]
+	mi := &file_api_v1_chat_proto_msgTypes[30]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1902,7 +1862,7 @@ func (x *RequestPermissionFromUserRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RequestPermissionFromUserRequest.ProtoReflect.Descriptor instead.
 func (*RequestPermissionFromUserRequest) Descriptor() ([]byte, []int) {
-	return file_api_v1_chat_proto_rawDescGZIP(), []int{31}
+	return file_api_v1_chat_proto_rawDescGZIP(), []int{30}
 }
 
 func (x *RequestPermissionFromUserRequest) GetPage() string {
@@ -1952,7 +1912,7 @@ type RequestPermissionFromUserResponse struct {
 func (x *RequestPermissionFromUserResponse) Reset() {
 	*x = RequestPermissionFromUserResponse{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_api_v1_chat_proto_msgTypes[32]
+		mi := &file_api_v1_chat_proto_msgTypes[31]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1965,7 +1925,7 @@ func (x *RequestPermissionFromUserResponse) String() string {
 func (*RequestPermissionFromUserResponse) ProtoMessage() {}
 
 func (x *RequestPermissionFromUserResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_chat_proto_msgTypes[32]
+	mi := &file_api_v1_chat_proto_msgTypes[31]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1978,7 +1938,7 @@ func (x *RequestPermissionFromUserResponse) ProtoReflect() protoreflect.Message 
 
 // Deprecated: Use RequestPermissionFromUserResponse.ProtoReflect.Descriptor instead.
 func (*RequestPermissionFromUserResponse) Descriptor() ([]byte, []int) {
-	return file_api_v1_chat_proto_rawDescGZIP(), []int{32}
+	return file_api_v1_chat_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *RequestPermissionFromUserResponse) GetSelectedOptionId() string {
@@ -2091,9 +2051,7 @@ var file_api_v1_chat_proto_rawDesc = []byte{
 	0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x09, 0x6d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65,
 	0x49, 0x64, 0x22, 0x2a, 0x0a, 0x14, 0x53, 0x75, 0x62, 0x73, 0x63, 0x72, 0x69, 0x62, 0x65, 0x43,
 	0x68, 0x61, 0x74, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x12, 0x0a, 0x04, 0x70, 0x61,
-	0x67, 0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x04, 0x70, 0x61, 0x67, 0x65, 0x22, 0x1e,
-	0x0a, 0x1c, 0x53, 0x75, 0x62, 0x73, 0x63, 0x72, 0x69, 0x62, 0x65, 0x43, 0x68, 0x61, 0x74, 0x4d,
-	0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x73, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x22, 0x64,
+	0x67, 0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x04, 0x70, 0x61, 0x67, 0x65, 0x22, 0x64,
 	0x0a, 0x14, 0x53, 0x65, 0x6e, 0x64, 0x43, 0x68, 0x61, 0x74, 0x52, 0x65, 0x70, 0x6c, 0x79, 0x52,
 	0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x12, 0x0a, 0x04, 0x70, 0x61, 0x67, 0x65, 0x18, 0x01,
 	0x20, 0x01, 0x28, 0x09, 0x52, 0x04, 0x70, 0x61, 0x67, 0x65, 0x12, 0x18, 0x0a, 0x07, 0x63, 0x6f,
@@ -2190,7 +2148,7 @@ var file_api_v1_chat_proto_rawDesc = []byte{
 	0x6e, 0x64, 0x65, 0x72, 0x12, 0x16, 0x0a, 0x12, 0x53, 0x45, 0x4e, 0x44, 0x45, 0x52, 0x5f, 0x55,
 	0x4e, 0x53, 0x50, 0x45, 0x43, 0x49, 0x46, 0x49, 0x45, 0x44, 0x10, 0x00, 0x12, 0x08, 0x0a, 0x04,
 	0x55, 0x53, 0x45, 0x52, 0x10, 0x01, 0x12, 0x0d, 0x0a, 0x09, 0x41, 0x53, 0x53, 0x49, 0x53, 0x54,
-	0x41, 0x4e, 0x54, 0x10, 0x02, 0x32, 0x94, 0x0a, 0x0a, 0x0b, 0x43, 0x68, 0x61, 0x74, 0x53, 0x65,
+	0x41, 0x4e, 0x54, 0x10, 0x02, 0x32, 0xbc, 0x09, 0x0a, 0x0b, 0x43, 0x68, 0x61, 0x74, 0x53, 0x65,
 	0x72, 0x76, 0x69, 0x63, 0x65, 0x12, 0x50, 0x0a, 0x0b, 0x53, 0x65, 0x6e, 0x64, 0x4d, 0x65, 0x73,
 	0x73, 0x61, 0x67, 0x65, 0x12, 0x1e, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x76, 0x31, 0x2e, 0x53, 0x65,
 	0x6e, 0x64, 0x43, 0x68, 0x61, 0x74, 0x4d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x52, 0x65, 0x71,
@@ -2200,82 +2158,77 @@ var file_api_v1_chat_proto_rawDesc = []byte{
 	0x72, 0x69, 0x62, 0x65, 0x43, 0x68, 0x61, 0x74, 0x12, 0x1c, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x76,
 	0x31, 0x2e, 0x53, 0x75, 0x62, 0x73, 0x63, 0x72, 0x69, 0x62, 0x65, 0x43, 0x68, 0x61, 0x74, 0x52,
 	0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x11, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x76, 0x31, 0x2e,
-	0x43, 0x68, 0x61, 0x74, 0x45, 0x76, 0x65, 0x6e, 0x74, 0x22, 0x00, 0x30, 0x01, 0x12, 0x56, 0x0a,
-	0x15, 0x53, 0x75, 0x62, 0x73, 0x63, 0x72, 0x69, 0x62, 0x65, 0x43, 0x68, 0x61, 0x74, 0x4d, 0x65,
-	0x73, 0x73, 0x61, 0x67, 0x65, 0x73, 0x12, 0x24, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x76, 0x31, 0x2e,
-	0x53, 0x75, 0x62, 0x73, 0x63, 0x72, 0x69, 0x62, 0x65, 0x43, 0x68, 0x61, 0x74, 0x4d, 0x65, 0x73,
-	0x73, 0x61, 0x67, 0x65, 0x73, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x13, 0x2e, 0x61,
-	0x70, 0x69, 0x2e, 0x76, 0x31, 0x2e, 0x43, 0x68, 0x61, 0x74, 0x4d, 0x65, 0x73, 0x73, 0x61, 0x67,
-	0x65, 0x22, 0x00, 0x30, 0x01, 0x12, 0x4e, 0x0a, 0x0d, 0x53, 0x65, 0x6e, 0x64, 0x43, 0x68, 0x61,
-	0x74, 0x52, 0x65, 0x70, 0x6c, 0x79, 0x12, 0x1c, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x76, 0x31, 0x2e,
-	0x53, 0x65, 0x6e, 0x64, 0x43, 0x68, 0x61, 0x74, 0x52, 0x65, 0x70, 0x6c, 0x79, 0x52, 0x65, 0x71,
-	0x75, 0x65, 0x73, 0x74, 0x1a, 0x1d, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x76, 0x31, 0x2e, 0x53, 0x65,
-	0x6e, 0x64, 0x43, 0x68, 0x61, 0x74, 0x52, 0x65, 0x70, 0x6c, 0x79, 0x52, 0x65, 0x73, 0x70, 0x6f,
-	0x6e, 0x73, 0x65, 0x22, 0x00, 0x12, 0x54, 0x0a, 0x0f, 0x45, 0x64, 0x69, 0x74, 0x43, 0x68, 0x61,
-	0x74, 0x4d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x12, 0x1e, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x76,
-	0x31, 0x2e, 0x45, 0x64, 0x69, 0x74, 0x43, 0x68, 0x61, 0x74, 0x4d, 0x65, 0x73, 0x73, 0x61, 0x67,
-	0x65, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x1f, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x76,
-	0x31, 0x2e, 0x45, 0x64, 0x69, 0x74, 0x43, 0x68, 0x61, 0x74, 0x4d, 0x65, 0x73, 0x73, 0x61, 0x67,
-	0x65, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x22, 0x00, 0x12, 0x51, 0x0a, 0x0e, 0x52,
-	0x65, 0x61, 0x63, 0x74, 0x54, 0x6f, 0x4d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x12, 0x1d, 0x2e,
-	0x61, 0x70, 0x69, 0x2e, 0x76, 0x31, 0x2e, 0x52, 0x65, 0x61, 0x63, 0x74, 0x54, 0x6f, 0x4d, 0x65,
-	0x73, 0x73, 0x61, 0x67, 0x65, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x1e, 0x2e, 0x61,
-	0x70, 0x69, 0x2e, 0x76, 0x31, 0x2e, 0x52, 0x65, 0x61, 0x63, 0x74, 0x54, 0x6f, 0x4d, 0x65, 0x73,
-	0x73, 0x61, 0x67, 0x65, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x22, 0x00, 0x12, 0x4e,
-	0x0a, 0x0d, 0x47, 0x65, 0x74, 0x43, 0x68, 0x61, 0x74, 0x53, 0x74, 0x61, 0x74, 0x75, 0x73, 0x12,
-	0x1c, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x76, 0x31, 0x2e, 0x47, 0x65, 0x74, 0x43, 0x68, 0x61, 0x74,
-	0x53, 0x74, 0x61, 0x74, 0x75, 0x73, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x1d, 0x2e,
-	0x61, 0x70, 0x69, 0x2e, 0x76, 0x31, 0x2e, 0x47, 0x65, 0x74, 0x43, 0x68, 0x61, 0x74, 0x53, 0x74,
-	0x61, 0x74, 0x75, 0x73, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x22, 0x00, 0x12, 0x5e,
-	0x0a, 0x19, 0x53, 0x75, 0x62, 0x73, 0x63, 0x72, 0x69, 0x62, 0x65, 0x50, 0x61, 0x67, 0x65, 0x43,
-	0x68, 0x61, 0x74, 0x4d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x73, 0x12, 0x28, 0x2e, 0x61, 0x70,
-	0x69, 0x2e, 0x76, 0x31, 0x2e, 0x53, 0x75, 0x62, 0x73, 0x63, 0x72, 0x69, 0x62, 0x65, 0x50, 0x61,
-	0x67, 0x65, 0x43, 0x68, 0x61, 0x74, 0x4d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x73, 0x52, 0x65,
-	0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x13, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x76, 0x31, 0x2e, 0x43,
-	0x68, 0x61, 0x74, 0x4d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x22, 0x00, 0x30, 0x01, 0x12, 0x62,
-	0x0a, 0x19, 0x53, 0x75, 0x62, 0x73, 0x63, 0x72, 0x69, 0x62, 0x65, 0x49, 0x6e, 0x73, 0x74, 0x61,
-	0x6e, 0x63, 0x65, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x73, 0x12, 0x28, 0x2e, 0x61, 0x70,
-	0x69, 0x2e, 0x76, 0x31, 0x2e, 0x53, 0x75, 0x62, 0x73, 0x63, 0x72, 0x69, 0x62, 0x65, 0x49, 0x6e,
-	0x73, 0x74, 0x61, 0x6e, 0x63, 0x65, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x73, 0x52, 0x65,
-	0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x17, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x76, 0x31, 0x2e, 0x49,
-	0x6e, 0x73, 0x74, 0x61, 0x6e, 0x63, 0x65, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x22, 0x00,
-	0x30, 0x01, 0x12, 0x6f, 0x0a, 0x18, 0x53, 0x65, 0x6e, 0x64, 0x54, 0x6f, 0x6f, 0x6c, 0x43, 0x61,
-	0x6c, 0x6c, 0x4e, 0x6f, 0x74, 0x69, 0x66, 0x69, 0x63, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x12, 0x27,
-	0x2e, 0x61, 0x70, 0x69, 0x2e, 0x76, 0x31, 0x2e, 0x53, 0x65, 0x6e, 0x64, 0x54, 0x6f, 0x6f, 0x6c,
-	0x43, 0x61, 0x6c, 0x6c, 0x4e, 0x6f, 0x74, 0x69, 0x66, 0x69, 0x63, 0x61, 0x74, 0x69, 0x6f, 0x6e,
-	0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x28, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x76, 0x31,
-	0x2e, 0x53, 0x65, 0x6e, 0x64, 0x54, 0x6f, 0x6f, 0x6c, 0x43, 0x61, 0x6c, 0x6c, 0x4e, 0x6f, 0x74,
-	0x69, 0x66, 0x69, 0x63, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73,
-	0x65, 0x22, 0x00, 0x12, 0x5a, 0x0a, 0x11, 0x43, 0x61, 0x6e, 0x63, 0x65, 0x6c, 0x41, 0x67, 0x65,
-	0x6e, 0x74, 0x50, 0x72, 0x6f, 0x6d, 0x70, 0x74, 0x12, 0x20, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x76,
-	0x31, 0x2e, 0x43, 0x61, 0x6e, 0x63, 0x65, 0x6c, 0x41, 0x67, 0x65, 0x6e, 0x74, 0x50, 0x72, 0x6f,
-	0x6d, 0x70, 0x74, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x21, 0x2e, 0x61, 0x70, 0x69,
-	0x2e, 0x76, 0x31, 0x2e, 0x43, 0x61, 0x6e, 0x63, 0x65, 0x6c, 0x41, 0x67, 0x65, 0x6e, 0x74, 0x50,
-	0x72, 0x6f, 0x6d, 0x70, 0x74, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x22, 0x00, 0x12,
-	0x65, 0x0a, 0x1a, 0x53, 0x75, 0x62, 0x73, 0x63, 0x72, 0x69, 0x62, 0x65, 0x50, 0x61, 0x67, 0x65,
-	0x43, 0x61, 0x6e, 0x63, 0x65, 0x6c, 0x6c, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x73, 0x12, 0x29, 0x2e,
-	0x61, 0x70, 0x69, 0x2e, 0x76, 0x31, 0x2e, 0x53, 0x75, 0x62, 0x73, 0x63, 0x72, 0x69, 0x62, 0x65,
-	0x50, 0x61, 0x67, 0x65, 0x43, 0x61, 0x6e, 0x63, 0x65, 0x6c, 0x6c, 0x61, 0x74, 0x69, 0x6f, 0x6e,
-	0x73, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x18, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x76,
-	0x31, 0x2e, 0x50, 0x61, 0x67, 0x65, 0x43, 0x61, 0x6e, 0x63, 0x65, 0x6c, 0x6c, 0x61, 0x74, 0x69,
-	0x6f, 0x6e, 0x22, 0x00, 0x30, 0x01, 0x12, 0x60, 0x0a, 0x13, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e,
-	0x64, 0x54, 0x6f, 0x50, 0x65, 0x72, 0x6d, 0x69, 0x73, 0x73, 0x69, 0x6f, 0x6e, 0x12, 0x22, 0x2e,
-	0x61, 0x70, 0x69, 0x2e, 0x76, 0x31, 0x2e, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x64, 0x54, 0x6f,
-	0x50, 0x65, 0x72, 0x6d, 0x69, 0x73, 0x73, 0x69, 0x6f, 0x6e, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73,
-	0x74, 0x1a, 0x23, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x76, 0x31, 0x2e, 0x52, 0x65, 0x73, 0x70, 0x6f,
-	0x6e, 0x64, 0x54, 0x6f, 0x50, 0x65, 0x72, 0x6d, 0x69, 0x73, 0x73, 0x69, 0x6f, 0x6e, 0x52, 0x65,
-	0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x22, 0x00, 0x12, 0x72, 0x0a, 0x19, 0x52, 0x65, 0x71, 0x75,
-	0x65, 0x73, 0x74, 0x50, 0x65, 0x72, 0x6d, 0x69, 0x73, 0x73, 0x69, 0x6f, 0x6e, 0x46, 0x72, 0x6f,
-	0x6d, 0x55, 0x73, 0x65, 0x72, 0x12, 0x28, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x76, 0x31, 0x2e, 0x52,
-	0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x50, 0x65, 0x72, 0x6d, 0x69, 0x73, 0x73, 0x69, 0x6f, 0x6e,
-	0x46, 0x72, 0x6f, 0x6d, 0x55, 0x73, 0x65, 0x72, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a,
-	0x29, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x76, 0x31, 0x2e, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74,
-	0x50, 0x65, 0x72, 0x6d, 0x69, 0x73, 0x73, 0x69, 0x6f, 0x6e, 0x46, 0x72, 0x6f, 0x6d, 0x55, 0x73,
-	0x65, 0x72, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x22, 0x00, 0x42, 0x3a, 0x5a, 0x38,
-	0x67, 0x69, 0x74, 0x68, 0x75, 0x62, 0x2e, 0x63, 0x6f, 0x6d, 0x2f, 0x62, 0x72, 0x65, 0x6e, 0x64,
-	0x61, 0x6e, 0x6a, 0x65, 0x72, 0x77, 0x69, 0x6e, 0x2f, 0x73, 0x69, 0x6d, 0x70, 0x6c, 0x65, 0x5f,
-	0x77, 0x69, 0x6b, 0x69, 0x2f, 0x67, 0x65, 0x6e, 0x2f, 0x67, 0x6f, 0x2f, 0x61, 0x70, 0x69, 0x2f,
-	0x76, 0x31, 0x3b, 0x61, 0x70, 0x69, 0x76, 0x31, 0x62, 0x06, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x33,
+	0x43, 0x68, 0x61, 0x74, 0x45, 0x76, 0x65, 0x6e, 0x74, 0x22, 0x00, 0x30, 0x01, 0x12, 0x4e, 0x0a,
+	0x0d, 0x53, 0x65, 0x6e, 0x64, 0x43, 0x68, 0x61, 0x74, 0x52, 0x65, 0x70, 0x6c, 0x79, 0x12, 0x1c,
+	0x2e, 0x61, 0x70, 0x69, 0x2e, 0x76, 0x31, 0x2e, 0x53, 0x65, 0x6e, 0x64, 0x43, 0x68, 0x61, 0x74,
+	0x52, 0x65, 0x70, 0x6c, 0x79, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x1d, 0x2e, 0x61,
+	0x70, 0x69, 0x2e, 0x76, 0x31, 0x2e, 0x53, 0x65, 0x6e, 0x64, 0x43, 0x68, 0x61, 0x74, 0x52, 0x65,
+	0x70, 0x6c, 0x79, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x22, 0x00, 0x12, 0x54, 0x0a,
+	0x0f, 0x45, 0x64, 0x69, 0x74, 0x43, 0x68, 0x61, 0x74, 0x4d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65,
+	0x12, 0x1e, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x76, 0x31, 0x2e, 0x45, 0x64, 0x69, 0x74, 0x43, 0x68,
+	0x61, 0x74, 0x4d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74,
+	0x1a, 0x1f, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x76, 0x31, 0x2e, 0x45, 0x64, 0x69, 0x74, 0x43, 0x68,
+	0x61, 0x74, 0x4d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73,
+	0x65, 0x22, 0x00, 0x12, 0x51, 0x0a, 0x0e, 0x52, 0x65, 0x61, 0x63, 0x74, 0x54, 0x6f, 0x4d, 0x65,
+	0x73, 0x73, 0x61, 0x67, 0x65, 0x12, 0x1d, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x76, 0x31, 0x2e, 0x52,
+	0x65, 0x61, 0x63, 0x74, 0x54, 0x6f, 0x4d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x52, 0x65, 0x71,
+	0x75, 0x65, 0x73, 0x74, 0x1a, 0x1e, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x76, 0x31, 0x2e, 0x52, 0x65,
+	0x61, 0x63, 0x74, 0x54, 0x6f, 0x4d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x52, 0x65, 0x73, 0x70,
+	0x6f, 0x6e, 0x73, 0x65, 0x22, 0x00, 0x12, 0x4e, 0x0a, 0x0d, 0x47, 0x65, 0x74, 0x43, 0x68, 0x61,
+	0x74, 0x53, 0x74, 0x61, 0x74, 0x75, 0x73, 0x12, 0x1c, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x76, 0x31,
+	0x2e, 0x47, 0x65, 0x74, 0x43, 0x68, 0x61, 0x74, 0x53, 0x74, 0x61, 0x74, 0x75, 0x73, 0x52, 0x65,
+	0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x1d, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x76, 0x31, 0x2e, 0x47,
+	0x65, 0x74, 0x43, 0x68, 0x61, 0x74, 0x53, 0x74, 0x61, 0x74, 0x75, 0x73, 0x52, 0x65, 0x73, 0x70,
+	0x6f, 0x6e, 0x73, 0x65, 0x22, 0x00, 0x12, 0x5e, 0x0a, 0x19, 0x53, 0x75, 0x62, 0x73, 0x63, 0x72,
+	0x69, 0x62, 0x65, 0x50, 0x61, 0x67, 0x65, 0x43, 0x68, 0x61, 0x74, 0x4d, 0x65, 0x73, 0x73, 0x61,
+	0x67, 0x65, 0x73, 0x12, 0x28, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x76, 0x31, 0x2e, 0x53, 0x75, 0x62,
+	0x73, 0x63, 0x72, 0x69, 0x62, 0x65, 0x50, 0x61, 0x67, 0x65, 0x43, 0x68, 0x61, 0x74, 0x4d, 0x65,
+	0x73, 0x73, 0x61, 0x67, 0x65, 0x73, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x13, 0x2e,
+	0x61, 0x70, 0x69, 0x2e, 0x76, 0x31, 0x2e, 0x43, 0x68, 0x61, 0x74, 0x4d, 0x65, 0x73, 0x73, 0x61,
+	0x67, 0x65, 0x22, 0x00, 0x30, 0x01, 0x12, 0x62, 0x0a, 0x19, 0x53, 0x75, 0x62, 0x73, 0x63, 0x72,
+	0x69, 0x62, 0x65, 0x49, 0x6e, 0x73, 0x74, 0x61, 0x6e, 0x63, 0x65, 0x52, 0x65, 0x71, 0x75, 0x65,
+	0x73, 0x74, 0x73, 0x12, 0x28, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x76, 0x31, 0x2e, 0x53, 0x75, 0x62,
+	0x73, 0x63, 0x72, 0x69, 0x62, 0x65, 0x49, 0x6e, 0x73, 0x74, 0x61, 0x6e, 0x63, 0x65, 0x52, 0x65,
+	0x71, 0x75, 0x65, 0x73, 0x74, 0x73, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x17, 0x2e,
+	0x61, 0x70, 0x69, 0x2e, 0x76, 0x31, 0x2e, 0x49, 0x6e, 0x73, 0x74, 0x61, 0x6e, 0x63, 0x65, 0x52,
+	0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x22, 0x00, 0x30, 0x01, 0x12, 0x6f, 0x0a, 0x18, 0x53, 0x65,
+	0x6e, 0x64, 0x54, 0x6f, 0x6f, 0x6c, 0x43, 0x61, 0x6c, 0x6c, 0x4e, 0x6f, 0x74, 0x69, 0x66, 0x69,
+	0x63, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x12, 0x27, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x76, 0x31, 0x2e,
+	0x53, 0x65, 0x6e, 0x64, 0x54, 0x6f, 0x6f, 0x6c, 0x43, 0x61, 0x6c, 0x6c, 0x4e, 0x6f, 0x74, 0x69,
+	0x66, 0x69, 0x63, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a,
+	0x28, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x76, 0x31, 0x2e, 0x53, 0x65, 0x6e, 0x64, 0x54, 0x6f, 0x6f,
+	0x6c, 0x43, 0x61, 0x6c, 0x6c, 0x4e, 0x6f, 0x74, 0x69, 0x66, 0x69, 0x63, 0x61, 0x74, 0x69, 0x6f,
+	0x6e, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x22, 0x00, 0x12, 0x5a, 0x0a, 0x11, 0x43,
+	0x61, 0x6e, 0x63, 0x65, 0x6c, 0x41, 0x67, 0x65, 0x6e, 0x74, 0x50, 0x72, 0x6f, 0x6d, 0x70, 0x74,
+	0x12, 0x20, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x76, 0x31, 0x2e, 0x43, 0x61, 0x6e, 0x63, 0x65, 0x6c,
+	0x41, 0x67, 0x65, 0x6e, 0x74, 0x50, 0x72, 0x6f, 0x6d, 0x70, 0x74, 0x52, 0x65, 0x71, 0x75, 0x65,
+	0x73, 0x74, 0x1a, 0x21, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x76, 0x31, 0x2e, 0x43, 0x61, 0x6e, 0x63,
+	0x65, 0x6c, 0x41, 0x67, 0x65, 0x6e, 0x74, 0x50, 0x72, 0x6f, 0x6d, 0x70, 0x74, 0x52, 0x65, 0x73,
+	0x70, 0x6f, 0x6e, 0x73, 0x65, 0x22, 0x00, 0x12, 0x65, 0x0a, 0x1a, 0x53, 0x75, 0x62, 0x73, 0x63,
+	0x72, 0x69, 0x62, 0x65, 0x50, 0x61, 0x67, 0x65, 0x43, 0x61, 0x6e, 0x63, 0x65, 0x6c, 0x6c, 0x61,
+	0x74, 0x69, 0x6f, 0x6e, 0x73, 0x12, 0x29, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x76, 0x31, 0x2e, 0x53,
+	0x75, 0x62, 0x73, 0x63, 0x72, 0x69, 0x62, 0x65, 0x50, 0x61, 0x67, 0x65, 0x43, 0x61, 0x6e, 0x63,
+	0x65, 0x6c, 0x6c, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x73, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74,
+	0x1a, 0x18, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x76, 0x31, 0x2e, 0x50, 0x61, 0x67, 0x65, 0x43, 0x61,
+	0x6e, 0x63, 0x65, 0x6c, 0x6c, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x22, 0x00, 0x30, 0x01, 0x12, 0x60,
+	0x0a, 0x13, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x64, 0x54, 0x6f, 0x50, 0x65, 0x72, 0x6d, 0x69,
+	0x73, 0x73, 0x69, 0x6f, 0x6e, 0x12, 0x22, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x76, 0x31, 0x2e, 0x52,
+	0x65, 0x73, 0x70, 0x6f, 0x6e, 0x64, 0x54, 0x6f, 0x50, 0x65, 0x72, 0x6d, 0x69, 0x73, 0x73, 0x69,
+	0x6f, 0x6e, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x23, 0x2e, 0x61, 0x70, 0x69, 0x2e,
+	0x76, 0x31, 0x2e, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x64, 0x54, 0x6f, 0x50, 0x65, 0x72, 0x6d,
+	0x69, 0x73, 0x73, 0x69, 0x6f, 0x6e, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x22, 0x00,
+	0x12, 0x72, 0x0a, 0x19, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x50, 0x65, 0x72, 0x6d, 0x69,
+	0x73, 0x73, 0x69, 0x6f, 0x6e, 0x46, 0x72, 0x6f, 0x6d, 0x55, 0x73, 0x65, 0x72, 0x12, 0x28, 0x2e,
+	0x61, 0x70, 0x69, 0x2e, 0x76, 0x31, 0x2e, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x50, 0x65,
+	0x72, 0x6d, 0x69, 0x73, 0x73, 0x69, 0x6f, 0x6e, 0x46, 0x72, 0x6f, 0x6d, 0x55, 0x73, 0x65, 0x72,
+	0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x29, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x76, 0x31,
+	0x2e, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x50, 0x65, 0x72, 0x6d, 0x69, 0x73, 0x73, 0x69,
+	0x6f, 0x6e, 0x46, 0x72, 0x6f, 0x6d, 0x55, 0x73, 0x65, 0x72, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e,
+	0x73, 0x65, 0x22, 0x00, 0x42, 0x3a, 0x5a, 0x38, 0x67, 0x69, 0x74, 0x68, 0x75, 0x62, 0x2e, 0x63,
+	0x6f, 0x6d, 0x2f, 0x62, 0x72, 0x65, 0x6e, 0x64, 0x61, 0x6e, 0x6a, 0x65, 0x72, 0x77, 0x69, 0x6e,
+	0x2f, 0x73, 0x69, 0x6d, 0x70, 0x6c, 0x65, 0x5f, 0x77, 0x69, 0x6b, 0x69, 0x2f, 0x67, 0x65, 0x6e,
+	0x2f, 0x67, 0x6f, 0x2f, 0x61, 0x70, 0x69, 0x2f, 0x76, 0x31, 0x3b, 0x61, 0x70, 0x69, 0x76, 0x31,
+	0x62, 0x06, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x33,
 }
 
 var (
@@ -2291,7 +2244,7 @@ func file_api_v1_chat_proto_rawDescGZIP() []byte {
 }
 
 var file_api_v1_chat_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_api_v1_chat_proto_msgTypes = make([]protoimpl.MessageInfo, 33)
+var file_api_v1_chat_proto_msgTypes = make([]protoimpl.MessageInfo, 32)
 var file_api_v1_chat_proto_goTypes = []interface{}{
 	(Sender)(0),                               // 0: api.v1.Sender
 	(*ChatMessage)(nil),                       // 1: api.v1.ChatMessage
@@ -2305,33 +2258,32 @@ var file_api_v1_chat_proto_goTypes = []interface{}{
 	(*SendChatMessageRequest)(nil),            // 9: api.v1.SendChatMessageRequest
 	(*SendChatMessageResponse)(nil),           // 10: api.v1.SendChatMessageResponse
 	(*SubscribeChatRequest)(nil),              // 11: api.v1.SubscribeChatRequest
-	(*SubscribeChatMessagesRequest)(nil),      // 12: api.v1.SubscribeChatMessagesRequest
-	(*SendChatReplyRequest)(nil),              // 13: api.v1.SendChatReplyRequest
-	(*SendChatReplyResponse)(nil),             // 14: api.v1.SendChatReplyResponse
-	(*EditChatMessageRequest)(nil),            // 15: api.v1.EditChatMessageRequest
-	(*EditChatMessageResponse)(nil),           // 16: api.v1.EditChatMessageResponse
-	(*ReactToMessageRequest)(nil),             // 17: api.v1.ReactToMessageRequest
-	(*ReactToMessageResponse)(nil),            // 18: api.v1.ReactToMessageResponse
-	(*GetChatStatusRequest)(nil),              // 19: api.v1.GetChatStatusRequest
-	(*GetChatStatusResponse)(nil),             // 20: api.v1.GetChatStatusResponse
-	(*SubscribePageChatMessagesRequest)(nil),  // 21: api.v1.SubscribePageChatMessagesRequest
-	(*SubscribeInstanceRequestsRequest)(nil),  // 22: api.v1.SubscribeInstanceRequestsRequest
-	(*InstanceRequest)(nil),                   // 23: api.v1.InstanceRequest
-	(*SendToolCallNotificationRequest)(nil),   // 24: api.v1.SendToolCallNotificationRequest
-	(*SendToolCallNotificationResponse)(nil),  // 25: api.v1.SendToolCallNotificationResponse
-	(*CancelAgentPromptRequest)(nil),          // 26: api.v1.CancelAgentPromptRequest
-	(*CancelAgentPromptResponse)(nil),         // 27: api.v1.CancelAgentPromptResponse
-	(*SubscribePageCancellationsRequest)(nil), // 28: api.v1.SubscribePageCancellationsRequest
-	(*PageCancellation)(nil),                  // 29: api.v1.PageCancellation
-	(*RespondToPermissionRequest)(nil),        // 30: api.v1.RespondToPermissionRequest
-	(*RespondToPermissionResponse)(nil),       // 31: api.v1.RespondToPermissionResponse
-	(*RequestPermissionFromUserRequest)(nil),  // 32: api.v1.RequestPermissionFromUserRequest
-	(*RequestPermissionFromUserResponse)(nil), // 33: api.v1.RequestPermissionFromUserResponse
-	(*timestamppb.Timestamp)(nil),             // 34: google.protobuf.Timestamp
+	(*SendChatReplyRequest)(nil),              // 12: api.v1.SendChatReplyRequest
+	(*SendChatReplyResponse)(nil),             // 13: api.v1.SendChatReplyResponse
+	(*EditChatMessageRequest)(nil),            // 14: api.v1.EditChatMessageRequest
+	(*EditChatMessageResponse)(nil),           // 15: api.v1.EditChatMessageResponse
+	(*ReactToMessageRequest)(nil),             // 16: api.v1.ReactToMessageRequest
+	(*ReactToMessageResponse)(nil),            // 17: api.v1.ReactToMessageResponse
+	(*GetChatStatusRequest)(nil),              // 18: api.v1.GetChatStatusRequest
+	(*GetChatStatusResponse)(nil),             // 19: api.v1.GetChatStatusResponse
+	(*SubscribePageChatMessagesRequest)(nil),  // 20: api.v1.SubscribePageChatMessagesRequest
+	(*SubscribeInstanceRequestsRequest)(nil),  // 21: api.v1.SubscribeInstanceRequestsRequest
+	(*InstanceRequest)(nil),                   // 22: api.v1.InstanceRequest
+	(*SendToolCallNotificationRequest)(nil),   // 23: api.v1.SendToolCallNotificationRequest
+	(*SendToolCallNotificationResponse)(nil),  // 24: api.v1.SendToolCallNotificationResponse
+	(*CancelAgentPromptRequest)(nil),          // 25: api.v1.CancelAgentPromptRequest
+	(*CancelAgentPromptResponse)(nil),         // 26: api.v1.CancelAgentPromptResponse
+	(*SubscribePageCancellationsRequest)(nil), // 27: api.v1.SubscribePageCancellationsRequest
+	(*PageCancellation)(nil),                  // 28: api.v1.PageCancellation
+	(*RespondToPermissionRequest)(nil),        // 29: api.v1.RespondToPermissionRequest
+	(*RespondToPermissionResponse)(nil),       // 30: api.v1.RespondToPermissionResponse
+	(*RequestPermissionFromUserRequest)(nil),  // 31: api.v1.RequestPermissionFromUserRequest
+	(*RequestPermissionFromUserResponse)(nil), // 32: api.v1.RequestPermissionFromUserResponse
+	(*timestamppb.Timestamp)(nil),             // 33: google.protobuf.Timestamp
 }
 var file_api_v1_chat_proto_depIdxs = []int32{
 	0,  // 0: api.v1.ChatMessage.sender:type_name -> api.v1.Sender
-	34, // 1: api.v1.ChatMessage.timestamp:type_name -> google.protobuf.Timestamp
+	33, // 1: api.v1.ChatMessage.timestamp:type_name -> google.protobuf.Timestamp
 	2,  // 2: api.v1.ChatMessage.reactions:type_name -> api.v1.Reaction
 	1,  // 3: api.v1.ChatEvent.new_message:type_name -> api.v1.ChatMessage
 	7,  // 4: api.v1.ChatEvent.edit:type_name -> api.v1.ChatMessageEdit
@@ -2339,38 +2291,36 @@ var file_api_v1_chat_proto_depIdxs = []int32{
 	6,  // 6: api.v1.ChatEvent.tool_call:type_name -> api.v1.ChatToolCall
 	4,  // 7: api.v1.ChatEvent.permission_request:type_name -> api.v1.ChatPermissionRequest
 	5,  // 8: api.v1.ChatPermissionRequest.options:type_name -> api.v1.ChatPermissionOption
-	34, // 9: api.v1.ChatMessageEdit.timestamp:type_name -> google.protobuf.Timestamp
+	33, // 9: api.v1.ChatMessageEdit.timestamp:type_name -> google.protobuf.Timestamp
 	5,  // 10: api.v1.RequestPermissionFromUserRequest.options:type_name -> api.v1.ChatPermissionOption
 	9,  // 11: api.v1.ChatService.SendMessage:input_type -> api.v1.SendChatMessageRequest
 	11, // 12: api.v1.ChatService.SubscribeChat:input_type -> api.v1.SubscribeChatRequest
-	12, // 13: api.v1.ChatService.SubscribeChatMessages:input_type -> api.v1.SubscribeChatMessagesRequest
-	13, // 14: api.v1.ChatService.SendChatReply:input_type -> api.v1.SendChatReplyRequest
-	15, // 15: api.v1.ChatService.EditChatMessage:input_type -> api.v1.EditChatMessageRequest
-	17, // 16: api.v1.ChatService.ReactToMessage:input_type -> api.v1.ReactToMessageRequest
-	19, // 17: api.v1.ChatService.GetChatStatus:input_type -> api.v1.GetChatStatusRequest
-	21, // 18: api.v1.ChatService.SubscribePageChatMessages:input_type -> api.v1.SubscribePageChatMessagesRequest
-	22, // 19: api.v1.ChatService.SubscribeInstanceRequests:input_type -> api.v1.SubscribeInstanceRequestsRequest
-	24, // 20: api.v1.ChatService.SendToolCallNotification:input_type -> api.v1.SendToolCallNotificationRequest
-	26, // 21: api.v1.ChatService.CancelAgentPrompt:input_type -> api.v1.CancelAgentPromptRequest
-	28, // 22: api.v1.ChatService.SubscribePageCancellations:input_type -> api.v1.SubscribePageCancellationsRequest
-	30, // 23: api.v1.ChatService.RespondToPermission:input_type -> api.v1.RespondToPermissionRequest
-	32, // 24: api.v1.ChatService.RequestPermissionFromUser:input_type -> api.v1.RequestPermissionFromUserRequest
-	10, // 25: api.v1.ChatService.SendMessage:output_type -> api.v1.SendChatMessageResponse
-	3,  // 26: api.v1.ChatService.SubscribeChat:output_type -> api.v1.ChatEvent
-	1,  // 27: api.v1.ChatService.SubscribeChatMessages:output_type -> api.v1.ChatMessage
-	14, // 28: api.v1.ChatService.SendChatReply:output_type -> api.v1.SendChatReplyResponse
-	16, // 29: api.v1.ChatService.EditChatMessage:output_type -> api.v1.EditChatMessageResponse
-	18, // 30: api.v1.ChatService.ReactToMessage:output_type -> api.v1.ReactToMessageResponse
-	20, // 31: api.v1.ChatService.GetChatStatus:output_type -> api.v1.GetChatStatusResponse
-	1,  // 32: api.v1.ChatService.SubscribePageChatMessages:output_type -> api.v1.ChatMessage
-	23, // 33: api.v1.ChatService.SubscribeInstanceRequests:output_type -> api.v1.InstanceRequest
-	25, // 34: api.v1.ChatService.SendToolCallNotification:output_type -> api.v1.SendToolCallNotificationResponse
-	27, // 35: api.v1.ChatService.CancelAgentPrompt:output_type -> api.v1.CancelAgentPromptResponse
-	29, // 36: api.v1.ChatService.SubscribePageCancellations:output_type -> api.v1.PageCancellation
-	31, // 37: api.v1.ChatService.RespondToPermission:output_type -> api.v1.RespondToPermissionResponse
-	33, // 38: api.v1.ChatService.RequestPermissionFromUser:output_type -> api.v1.RequestPermissionFromUserResponse
-	25, // [25:39] is the sub-list for method output_type
-	11, // [11:25] is the sub-list for method input_type
+	12, // 13: api.v1.ChatService.SendChatReply:input_type -> api.v1.SendChatReplyRequest
+	14, // 14: api.v1.ChatService.EditChatMessage:input_type -> api.v1.EditChatMessageRequest
+	16, // 15: api.v1.ChatService.ReactToMessage:input_type -> api.v1.ReactToMessageRequest
+	18, // 16: api.v1.ChatService.GetChatStatus:input_type -> api.v1.GetChatStatusRequest
+	20, // 17: api.v1.ChatService.SubscribePageChatMessages:input_type -> api.v1.SubscribePageChatMessagesRequest
+	21, // 18: api.v1.ChatService.SubscribeInstanceRequests:input_type -> api.v1.SubscribeInstanceRequestsRequest
+	23, // 19: api.v1.ChatService.SendToolCallNotification:input_type -> api.v1.SendToolCallNotificationRequest
+	25, // 20: api.v1.ChatService.CancelAgentPrompt:input_type -> api.v1.CancelAgentPromptRequest
+	27, // 21: api.v1.ChatService.SubscribePageCancellations:input_type -> api.v1.SubscribePageCancellationsRequest
+	29, // 22: api.v1.ChatService.RespondToPermission:input_type -> api.v1.RespondToPermissionRequest
+	31, // 23: api.v1.ChatService.RequestPermissionFromUser:input_type -> api.v1.RequestPermissionFromUserRequest
+	10, // 24: api.v1.ChatService.SendMessage:output_type -> api.v1.SendChatMessageResponse
+	3,  // 25: api.v1.ChatService.SubscribeChat:output_type -> api.v1.ChatEvent
+	13, // 26: api.v1.ChatService.SendChatReply:output_type -> api.v1.SendChatReplyResponse
+	15, // 27: api.v1.ChatService.EditChatMessage:output_type -> api.v1.EditChatMessageResponse
+	17, // 28: api.v1.ChatService.ReactToMessage:output_type -> api.v1.ReactToMessageResponse
+	19, // 29: api.v1.ChatService.GetChatStatus:output_type -> api.v1.GetChatStatusResponse
+	1,  // 30: api.v1.ChatService.SubscribePageChatMessages:output_type -> api.v1.ChatMessage
+	22, // 31: api.v1.ChatService.SubscribeInstanceRequests:output_type -> api.v1.InstanceRequest
+	24, // 32: api.v1.ChatService.SendToolCallNotification:output_type -> api.v1.SendToolCallNotificationResponse
+	26, // 33: api.v1.ChatService.CancelAgentPrompt:output_type -> api.v1.CancelAgentPromptResponse
+	28, // 34: api.v1.ChatService.SubscribePageCancellations:output_type -> api.v1.PageCancellation
+	30, // 35: api.v1.ChatService.RespondToPermission:output_type -> api.v1.RespondToPermissionResponse
+	32, // 36: api.v1.ChatService.RequestPermissionFromUser:output_type -> api.v1.RequestPermissionFromUserResponse
+	24, // [24:37] is the sub-list for method output_type
+	11, // [11:24] is the sub-list for method input_type
 	11, // [11:11] is the sub-list for extension type_name
 	11, // [11:11] is the sub-list for extension extendee
 	0,  // [0:11] is the sub-list for field type_name
@@ -2515,18 +2465,6 @@ func file_api_v1_chat_proto_init() {
 			}
 		}
 		file_api_v1_chat_proto_msgTypes[11].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*SubscribeChatMessagesRequest); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_api_v1_chat_proto_msgTypes[12].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*SendChatReplyRequest); i {
 			case 0:
 				return &v.state
@@ -2538,7 +2476,7 @@ func file_api_v1_chat_proto_init() {
 				return nil
 			}
 		}
-		file_api_v1_chat_proto_msgTypes[13].Exporter = func(v interface{}, i int) interface{} {
+		file_api_v1_chat_proto_msgTypes[12].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*SendChatReplyResponse); i {
 			case 0:
 				return &v.state
@@ -2550,7 +2488,7 @@ func file_api_v1_chat_proto_init() {
 				return nil
 			}
 		}
-		file_api_v1_chat_proto_msgTypes[14].Exporter = func(v interface{}, i int) interface{} {
+		file_api_v1_chat_proto_msgTypes[13].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*EditChatMessageRequest); i {
 			case 0:
 				return &v.state
@@ -2562,7 +2500,7 @@ func file_api_v1_chat_proto_init() {
 				return nil
 			}
 		}
-		file_api_v1_chat_proto_msgTypes[15].Exporter = func(v interface{}, i int) interface{} {
+		file_api_v1_chat_proto_msgTypes[14].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*EditChatMessageResponse); i {
 			case 0:
 				return &v.state
@@ -2574,7 +2512,7 @@ func file_api_v1_chat_proto_init() {
 				return nil
 			}
 		}
-		file_api_v1_chat_proto_msgTypes[16].Exporter = func(v interface{}, i int) interface{} {
+		file_api_v1_chat_proto_msgTypes[15].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*ReactToMessageRequest); i {
 			case 0:
 				return &v.state
@@ -2586,7 +2524,7 @@ func file_api_v1_chat_proto_init() {
 				return nil
 			}
 		}
-		file_api_v1_chat_proto_msgTypes[17].Exporter = func(v interface{}, i int) interface{} {
+		file_api_v1_chat_proto_msgTypes[16].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*ReactToMessageResponse); i {
 			case 0:
 				return &v.state
@@ -2598,7 +2536,7 @@ func file_api_v1_chat_proto_init() {
 				return nil
 			}
 		}
-		file_api_v1_chat_proto_msgTypes[18].Exporter = func(v interface{}, i int) interface{} {
+		file_api_v1_chat_proto_msgTypes[17].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*GetChatStatusRequest); i {
 			case 0:
 				return &v.state
@@ -2610,7 +2548,7 @@ func file_api_v1_chat_proto_init() {
 				return nil
 			}
 		}
-		file_api_v1_chat_proto_msgTypes[19].Exporter = func(v interface{}, i int) interface{} {
+		file_api_v1_chat_proto_msgTypes[18].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*GetChatStatusResponse); i {
 			case 0:
 				return &v.state
@@ -2622,7 +2560,7 @@ func file_api_v1_chat_proto_init() {
 				return nil
 			}
 		}
-		file_api_v1_chat_proto_msgTypes[20].Exporter = func(v interface{}, i int) interface{} {
+		file_api_v1_chat_proto_msgTypes[19].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*SubscribePageChatMessagesRequest); i {
 			case 0:
 				return &v.state
@@ -2634,7 +2572,7 @@ func file_api_v1_chat_proto_init() {
 				return nil
 			}
 		}
-		file_api_v1_chat_proto_msgTypes[21].Exporter = func(v interface{}, i int) interface{} {
+		file_api_v1_chat_proto_msgTypes[20].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*SubscribeInstanceRequestsRequest); i {
 			case 0:
 				return &v.state
@@ -2646,7 +2584,7 @@ func file_api_v1_chat_proto_init() {
 				return nil
 			}
 		}
-		file_api_v1_chat_proto_msgTypes[22].Exporter = func(v interface{}, i int) interface{} {
+		file_api_v1_chat_proto_msgTypes[21].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*InstanceRequest); i {
 			case 0:
 				return &v.state
@@ -2658,7 +2596,7 @@ func file_api_v1_chat_proto_init() {
 				return nil
 			}
 		}
-		file_api_v1_chat_proto_msgTypes[23].Exporter = func(v interface{}, i int) interface{} {
+		file_api_v1_chat_proto_msgTypes[22].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*SendToolCallNotificationRequest); i {
 			case 0:
 				return &v.state
@@ -2670,7 +2608,7 @@ func file_api_v1_chat_proto_init() {
 				return nil
 			}
 		}
-		file_api_v1_chat_proto_msgTypes[24].Exporter = func(v interface{}, i int) interface{} {
+		file_api_v1_chat_proto_msgTypes[23].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*SendToolCallNotificationResponse); i {
 			case 0:
 				return &v.state
@@ -2682,7 +2620,7 @@ func file_api_v1_chat_proto_init() {
 				return nil
 			}
 		}
-		file_api_v1_chat_proto_msgTypes[25].Exporter = func(v interface{}, i int) interface{} {
+		file_api_v1_chat_proto_msgTypes[24].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*CancelAgentPromptRequest); i {
 			case 0:
 				return &v.state
@@ -2694,7 +2632,7 @@ func file_api_v1_chat_proto_init() {
 				return nil
 			}
 		}
-		file_api_v1_chat_proto_msgTypes[26].Exporter = func(v interface{}, i int) interface{} {
+		file_api_v1_chat_proto_msgTypes[25].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*CancelAgentPromptResponse); i {
 			case 0:
 				return &v.state
@@ -2706,7 +2644,7 @@ func file_api_v1_chat_proto_init() {
 				return nil
 			}
 		}
-		file_api_v1_chat_proto_msgTypes[27].Exporter = func(v interface{}, i int) interface{} {
+		file_api_v1_chat_proto_msgTypes[26].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*SubscribePageCancellationsRequest); i {
 			case 0:
 				return &v.state
@@ -2718,7 +2656,7 @@ func file_api_v1_chat_proto_init() {
 				return nil
 			}
 		}
-		file_api_v1_chat_proto_msgTypes[28].Exporter = func(v interface{}, i int) interface{} {
+		file_api_v1_chat_proto_msgTypes[27].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*PageCancellation); i {
 			case 0:
 				return &v.state
@@ -2730,7 +2668,7 @@ func file_api_v1_chat_proto_init() {
 				return nil
 			}
 		}
-		file_api_v1_chat_proto_msgTypes[29].Exporter = func(v interface{}, i int) interface{} {
+		file_api_v1_chat_proto_msgTypes[28].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*RespondToPermissionRequest); i {
 			case 0:
 				return &v.state
@@ -2742,7 +2680,7 @@ func file_api_v1_chat_proto_init() {
 				return nil
 			}
 		}
-		file_api_v1_chat_proto_msgTypes[30].Exporter = func(v interface{}, i int) interface{} {
+		file_api_v1_chat_proto_msgTypes[29].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*RespondToPermissionResponse); i {
 			case 0:
 				return &v.state
@@ -2754,7 +2692,7 @@ func file_api_v1_chat_proto_init() {
 				return nil
 			}
 		}
-		file_api_v1_chat_proto_msgTypes[31].Exporter = func(v interface{}, i int) interface{} {
+		file_api_v1_chat_proto_msgTypes[30].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*RequestPermissionFromUserRequest); i {
 			case 0:
 				return &v.state
@@ -2766,7 +2704,7 @@ func file_api_v1_chat_proto_init() {
 				return nil
 			}
 		}
-		file_api_v1_chat_proto_msgTypes[32].Exporter = func(v interface{}, i int) interface{} {
+		file_api_v1_chat_proto_msgTypes[31].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*RequestPermissionFromUserResponse); i {
 			case 0:
 				return &v.state
@@ -2792,7 +2730,7 @@ func file_api_v1_chat_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: file_api_v1_chat_proto_rawDesc,
 			NumEnums:      1,
-			NumMessages:   33,
+			NumMessages:   32,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

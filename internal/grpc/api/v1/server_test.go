@@ -488,15 +488,6 @@ func (noOpChatBufferManager) SubscribeToPageWithReplay(string) ([]*chatbuffer.Me
 	close(ch)
 	return nil, ch, noopUnsubscribe
 }
-func (noOpChatBufferManager) SubscribeToChannel() (<-chan *chatbuffer.Message, func()) {
-	ch := make(chan *chatbuffer.Message)
-	close(ch)
-	return ch, noopUnsubscribe
-}
-func (noOpChatBufferManager) HasChannelSubscribers() bool {
-	return false
-}
-
 func (noOpChatBufferManager) SubscribeToPageChannelWithReplay(string) ([]*chatbuffer.Message, <-chan *chatbuffer.Message, func()) {
 	ch := make(chan *chatbuffer.Message)
 	close(ch)

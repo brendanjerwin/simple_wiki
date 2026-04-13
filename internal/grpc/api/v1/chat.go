@@ -48,8 +48,7 @@ func (s *Server) SendMessage(ctx context.Context, req *apiv1.SendChatMessageRequ
 	}
 
 	// If a pool daemon is connected but no per-page subscriber exists for this page,
-	// request an instance. The message was stored and delivered to global subscribers,
-	// but only a per-page ACP instance can properly handle the chat.
+	// request an instance so the pool can spawn one.
 	if s.chatBufferManager.HasInstanceRequestSubscribers() && !s.chatBufferManager.HasPageChannelSubscriber(req.Page) {
 		s.chatBufferManager.RequestInstance(req.Page)
 	}
@@ -172,34 +171,6 @@ func (s *Server) SubscribeChat(req *apiv1.SubscribeChatRequest, stream apiv1.Cha
 	}
 }
 
-// SubscribeChatMessages implements the SubscribeChatMessages RPC.
-// Streams all new user messages across all pages to channel server subscribers.
-// This is how wiki-cli mcp receives messages to forward to the channel subscriber.
-func (s *Server) SubscribeChatMessages(_ *apiv1.SubscribeChatMessagesRequest, stream apiv1.ChatService_SubscribeChatMessagesServer) error {
-	// Subscribe to all user messages
-	msgChan, unsubscribe := s.chatBufferManager.SubscribeToChannel()
-	defer unsubscribe()
-
-	// Stream messages as they arrive
-	for {
-		select {
-		case msg, ok := <-msgChan:
-			if !ok {
-				// Channel closed
-				return nil
-			}
-
-			protoMsg := bufferMessageToProto(msg)
-			if err := stream.Send(protoMsg); err != nil {
-				return err
-			}
-
-		case <-stream.Context().Done():
-			return stream.Context().Err()
-		}
-	}
-}
-
 // SendChatReply implements the SendChatReply RPC.
 // Called by wiki-cli mcp when the assistant uses the reply tool.
 func (s *Server) SendChatReply(_ context.Context, req *apiv1.SendChatReplyRequest) (*apiv1.SendChatReplyResponse, error) {
@@ -299,24 +270,16 @@ func bufferMessageToProto(msg *chatbuffer.Message) *apiv1.ChatMessage {
 
 // GetChatStatus implements the GetChatStatus RPC.
 // Returns whether a Claude channel subscriber is currently connected.
-// If a page is specified, checks for page-specific subscribers. Otherwise falls back to global check.
+// If a page is specified, checks for page-specific subscribers.
+// If page is empty, returns only pool connection status.
 func (s *Server) GetChatStatus(_ context.Context, req *apiv1.GetChatStatusRequest) (*apiv1.GetChatStatusResponse, error) {
 	resp := &apiv1.GetChatStatusResponse{
 		PoolConnected: s.chatBufferManager.HasInstanceRequestSubscribers(),
 	}
 
 	if req.Page != "" {
-		// When a pool daemon is connected, only per-page subscribers count as "connected"
-		// for that page. Global channel subscribers (e.g., wiki-cli mcp for tool use)
-		// should not prevent the pool from spawning page-specific instances.
-		if resp.PoolConnected {
-			resp.Connected = s.chatBufferManager.HasPageChannelSubscriber(req.Page)
-		} else {
-			resp.Connected = s.chatBufferManager.HasPageChannelSubscriber(req.Page) || s.chatBufferManager.HasChannelSubscribers()
-		}
+		resp.Connected = s.chatBufferManager.HasPageChannelSubscriber(req.Page)
 		resp.Starting = resp.PoolConnected && s.chatBufferManager.IsInstanceRequested(req.Page)
-	} else {
-		resp.Connected = s.chatBufferManager.HasChannelSubscribers()
 	}
 
 	return resp, nil

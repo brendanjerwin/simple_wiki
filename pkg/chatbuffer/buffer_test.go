@@ -27,14 +27,10 @@ var _ = Describe("Manager", func() {
 		It("should create a new manager", func() {
 			Expect(manager).NotTo(BeNil())
 		})
-
-		It("should have no channel subscribers initially", func() {
-			Expect(manager.HasChannelSubscribers()).To(BeFalse())
-		})
 	})
 
 	Describe("AddUserMessage", func() {
-		When("no channel subscribers are connected", func() {
+		When("no page subscribers or pool daemon are connected", func() {
 			var (
 				messageID string
 				err       error
@@ -53,7 +49,7 @@ var _ = Describe("Manager", func() {
 			})
 		})
 
-		When("channel subscriber is connected", func() {
+		When("page channel subscriber is connected", func() {
 			var (
 				msgChan   <-chan *chatbuffer.Message
 				messageID string
@@ -62,7 +58,7 @@ var _ = Describe("Manager", func() {
 
 			BeforeEach(func() {
 				var unsubscribe func()
-				msgChan, unsubscribe = manager.SubscribeToChannel()
+				msgChan, unsubscribe = manager.SubscribeToPageChannel("test-page")
 				DeferCleanup(unsubscribe)
 
 				messageID, err = manager.AddUserMessage("test-page", "Hello, world!", "alice")
@@ -76,7 +72,7 @@ var _ = Describe("Manager", func() {
 				Expect(messageID).NotTo(BeEmpty())
 			})
 
-			It("should notify channel subscribers", func() {
+			It("should notify page channel subscribers", func() {
 				Eventually(msgChan).Should(Receive(And(
 					HaveField("Content", "Hello, world!"),
 					HaveField("Sender", "user"),
@@ -93,8 +89,8 @@ var _ = Describe("Manager", func() {
 			)
 
 			BeforeEach(func() {
-				// Subscribe to channel first (required for user messages)
-				_, unsubChan := manager.SubscribeToChannel()
+				// Subscribe to page channel (required for user messages)
+				_, unsubChan := manager.SubscribeToPageChannel("test-page")
 				DeferCleanup(unsubChan)
 
 				var unsubPage func()
@@ -117,7 +113,7 @@ var _ = Describe("Manager", func() {
 			var messages []*chatbuffer.Message
 
 			BeforeEach(func() {
-				_, unsub := manager.SubscribeToChannel()
+				_, unsub := manager.SubscribeToPageChannel("test-page")
 				DeferCleanup(unsub)
 
 				// Add MaxMessagesPerPage + 10 messages
@@ -174,7 +170,7 @@ var _ = Describe("Manager", func() {
 			)
 
 			BeforeEach(func() {
-				_, unsub := manager.SubscribeToChannel()
+				_, unsub := manager.SubscribeToPageChannel("test-page")
 				DeferCleanup(unsub)
 
 				// Add initial user message
@@ -227,7 +223,7 @@ var _ = Describe("Manager", func() {
 			)
 
 			BeforeEach(func() {
-				_, unsubChan := manager.SubscribeToChannel()
+				_, unsubChan := manager.SubscribeToPageChannel("test-page")
 				DeferCleanup(unsubChan)
 
 				messageID, _ = manager.AddUserMessage("test-page", "Original", "user")
@@ -277,8 +273,8 @@ var _ = Describe("Manager", func() {
 			)
 
 			BeforeEach(func() {
-				_, unsub := manager.SubscribeToChannel()
-				DeferCleanup(unsub)
+				_, unsub1 := manager.SubscribeToPageChannel("page1")
+				DeferCleanup(unsub1)
 
 				messageID, _ = manager.AddUserMessage("page1", "Message", "user")
 				_, _ = manager.AddAssistantMessage("page2", "Other", "")
@@ -304,7 +300,7 @@ var _ = Describe("Manager", func() {
 			)
 
 			BeforeEach(func() {
-				_, unsub := manager.SubscribeToChannel()
+				_, unsub := manager.SubscribeToPageChannel("test-page")
 				DeferCleanup(unsub)
 
 				messageID, _ = manager.AddUserMessage("test-page", "Message", "user")
@@ -344,7 +340,7 @@ var _ = Describe("Manager", func() {
 			)
 
 			BeforeEach(func() {
-				_, unsub := manager.SubscribeToChannel()
+				_, unsub := manager.SubscribeToPageChannel("test-page")
 				DeferCleanup(unsub)
 
 				messageID, _ = manager.AddUserMessage("test-page", "Message", "user")
@@ -368,7 +364,7 @@ var _ = Describe("Manager", func() {
 			)
 
 			BeforeEach(func() {
-				_, unsub := manager.SubscribeToChannel()
+				_, unsub := manager.SubscribeToPageChannel("test-page")
 				DeferCleanup(unsub)
 
 				messageID, _ = manager.AddUserMessage("test-page", "Message", "user")
@@ -418,7 +414,7 @@ var _ = Describe("Manager", func() {
 			)
 
 			BeforeEach(func() {
-				_, unsub := manager.SubscribeToChannel()
+				_, unsub := manager.SubscribeToPageChannel("test-page")
 				DeferCleanup(unsub)
 
 				messageID, _ = manager.AddUserMessage("test-page", "Message", "user")
@@ -457,7 +453,7 @@ var _ = Describe("Manager", func() {
 			)
 
 			BeforeEach(func() {
-				_, unsub := manager.SubscribeToChannel()
+				_, unsub := manager.SubscribeToPageChannel("test-page")
 				DeferCleanup(unsub)
 
 				messageID, _ = manager.AddUserMessage("test-page", "Find me", "user")
@@ -501,7 +497,7 @@ var _ = Describe("Manager", func() {
 			)
 
 			BeforeEach(func() {
-				_, unsub := manager.SubscribeToChannel()
+				_, unsub := manager.SubscribeToPageChannel("page2")
 				DeferCleanup(unsub)
 
 				_, _ = manager.AddAssistantMessage("page1", "Message 1", "")
@@ -556,8 +552,8 @@ var _ = Describe("Manager", func() {
 			)
 
 			BeforeEach(func() {
-				_, unsub := manager.SubscribeToChannel()
-				DeferCleanup(unsub)
+				_, unsubPage := manager.SubscribeToPageChannel("test-page")
+				DeferCleanup(unsubPage)
 
 				var unsub1, unsub2 func()
 				chan1, unsub1 = manager.SubscribeToPage("test-page")
@@ -575,99 +571,12 @@ var _ = Describe("Manager", func() {
 		})
 	})
 
-	Describe("SubscribeToChannel", func() {
-		When("subscribing to channel", func() {
-			var (
-				msgChan     <-chan *chatbuffer.Message
-				unsubscribe func()
-			)
-
-			BeforeEach(func() {
-				msgChan, unsubscribe = manager.SubscribeToChannel()
-			})
-
-			It("should return a channel", func() {
-				Expect(msgChan).NotTo(BeNil())
-			})
-
-			It("should mark as having channel subscribers", func() {
-				Expect(manager.HasChannelSubscribers()).To(BeTrue())
-			})
-
-			When("unsubscribing", func() {
-				BeforeEach(func() {
-					unsubscribe()
-				})
-
-				It("should close the channel", func() {
-					Eventually(msgChan).Should(BeClosed())
-				})
-
-				It("should mark as not having channel subscribers", func() {
-					Expect(manager.HasChannelSubscribers()).To(BeFalse())
-				})
-			})
-		})
-
-		When("multiple channel subscribers", func() {
-			var (
-				chan1 <-chan *chatbuffer.Message
-				chan2 <-chan *chatbuffer.Message
-			)
-
-			BeforeEach(func() {
-				var unsub1, unsub2 func()
-				chan1, unsub1 = manager.SubscribeToChannel()
-				chan2, unsub2 = manager.SubscribeToChannel()
-				DeferCleanup(unsub1)
-				DeferCleanup(unsub2)
-
-				_, _ = manager.AddUserMessage("test-page", "Message", "user")
-			})
-
-			It("should notify all channel subscribers", func() {
-				Eventually(chan1).Should(Receive(HaveField("Content", "Message")))
-				Eventually(chan2).Should(Receive(HaveField("Content", "Message")))
-			})
-		})
-	})
-
-	Describe("HasChannelSubscribers", func() {
-		When("no subscribers", func() {
-			It("should return false", func() {
-				Expect(manager.HasChannelSubscribers()).To(BeFalse())
-			})
-		})
-
-		When("subscriber exists", func() {
-			BeforeEach(func() {
-				_, unsub := manager.SubscribeToChannel()
-				DeferCleanup(unsub)
-			})
-
-			It("should return true", func() {
-				Expect(manager.HasChannelSubscribers()).To(BeTrue())
-			})
-		})
-
-		When("subscriber unsubscribes", func() {
-			BeforeEach(func() {
-				_, unsub := manager.SubscribeToChannel()
-				unsub()
-			})
-
-			It("should return false", func() {
-				Expect(manager.HasChannelSubscribers()).To(BeFalse())
-			})
-		})
-	})
-
 	Describe("Message sequencing", func() {
 		When("adding multiple messages to same page", func() {
 			var messages []*chatbuffer.Message
 
 			BeforeEach(func() {
-				_, unsub := manager.SubscribeToChannel()
+				_, unsub := manager.SubscribeToPageChannel("test-page")
 				DeferCleanup(unsub)
 
 				_, _ = manager.AddUserMessage("test-page", "First", "user")
@@ -689,7 +598,8 @@ var _ = Describe("Manager", func() {
 			var page1Msgs, page2Msgs []*chatbuffer.Message
 
 			BeforeEach(func() {
-				_, unsub := manager.SubscribeToChannel()
+				// Use instance request subscriber to allow sending to any page
+				_, unsub := manager.SubscribeToInstanceRequests()
 				DeferCleanup(unsub)
 
 				_, _ = manager.AddUserMessage("page1", "A", "user")
@@ -713,7 +623,7 @@ var _ = Describe("Manager", func() {
 			var messages []*chatbuffer.Message
 
 			BeforeEach(func() {
-				_, unsub := manager.SubscribeToChannel()
+				_, unsub := manager.SubscribeToPageChannel("test-page")
 				DeferCleanup(unsub)
 
 				_, _ = manager.AddUserMessage("test-page", "Message", "user")
@@ -776,8 +686,9 @@ var _ = Describe("Manager", func() {
 				msgChan, unsub = manager.SubscribeToPageChannel("test-page")
 				DeferCleanup(unsub)
 
-				_, globalUnsub := manager.SubscribeToChannel()
-				DeferCleanup(globalUnsub)
+				// Use instance request subscriber to allow sending to other-page
+				_, poolUnsub := manager.SubscribeToInstanceRequests()
+				DeferCleanup(poolUnsub)
 
 				_, _ = manager.AddUserMessage("other-page", "Hello", "user1")
 			})
@@ -876,19 +787,6 @@ var _ = Describe("Manager", func() {
 		When("a page channel subscriber already exists", func() {
 			BeforeEach(func() {
 				_, unsub := manager.SubscribeToPageChannel("test-page")
-				DeferCleanup(unsub)
-
-				manager.RequestInstance("test-page")
-			})
-
-			It("should not mark as requested", func() {
-				Expect(manager.IsInstanceRequested("test-page")).To(BeFalse())
-			})
-		})
-
-		When("a global channel subscriber exists", func() {
-			BeforeEach(func() {
-				_, unsub := manager.SubscribeToChannel()
 				DeferCleanup(unsub)
 
 				manager.RequestInstance("test-page")
@@ -1476,7 +1374,7 @@ var _ = Describe("Manager", func() {
 			var messages []*chatbuffer.Message
 
 			BeforeEach(func() {
-				_, unsub := manager.SubscribeToChannel()
+				_, unsub := manager.SubscribeToPageChannel("concurrent-page")
 				DeferCleanup(unsub)
 
 				done := make(chan bool)

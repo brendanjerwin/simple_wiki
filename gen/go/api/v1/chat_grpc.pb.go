@@ -21,7 +21,6 @@ const _ = grpc.SupportPackageIsVersion8
 const (
 	ChatService_SendMessage_FullMethodName                = "/api.v1.ChatService/SendMessage"
 	ChatService_SubscribeChat_FullMethodName              = "/api.v1.ChatService/SubscribeChat"
-	ChatService_SubscribeChatMessages_FullMethodName      = "/api.v1.ChatService/SubscribeChatMessages"
 	ChatService_SendChatReply_FullMethodName              = "/api.v1.ChatService/SendChatReply"
 	ChatService_EditChatMessage_FullMethodName            = "/api.v1.ChatService/EditChatMessage"
 	ChatService_ReactToMessage_FullMethodName             = "/api.v1.ChatService/ReactToMessage"
@@ -49,9 +48,6 @@ type ChatServiceClient interface {
 	// SubscribeChat subscribes to all chat events for a page.
 	// Replays existing buffer contents on connect, then streams new events.
 	SubscribeChat(ctx context.Context, in *SubscribeChatRequest, opts ...grpc.CallOption) (ChatService_SubscribeChatClient, error)
-	// SubscribeChatMessages is called by wiki-cli mcp at startup.
-	// Streams all new user messages (from all pages) as they arrive from browsers.
-	SubscribeChatMessages(ctx context.Context, in *SubscribeChatMessagesRequest, opts ...grpc.CallOption) (ChatService_SubscribeChatMessagesClient, error)
 	// SendChatReply is called by wiki-cli mcp when Claude uses the reply tool.
 	// Accepts optional reply_to message ID for threading.
 	SendChatReply(ctx context.Context, in *SendChatReplyRequest, opts ...grpc.CallOption) (*SendChatReplyResponse, error)
@@ -137,39 +133,6 @@ func (x *chatServiceSubscribeChatClient) Recv() (*ChatEvent, error) {
 	return m, nil
 }
 
-func (c *chatServiceClient) SubscribeChatMessages(ctx context.Context, in *SubscribeChatMessagesRequest, opts ...grpc.CallOption) (ChatService_SubscribeChatMessagesClient, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	stream, err := c.cc.NewStream(ctx, &ChatService_ServiceDesc.Streams[1], ChatService_SubscribeChatMessages_FullMethodName, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	x := &chatServiceSubscribeChatMessagesClient{ClientStream: stream}
-	if err := x.ClientStream.SendMsg(in); err != nil {
-		return nil, err
-	}
-	if err := x.ClientStream.CloseSend(); err != nil {
-		return nil, err
-	}
-	return x, nil
-}
-
-type ChatService_SubscribeChatMessagesClient interface {
-	Recv() (*ChatMessage, error)
-	grpc.ClientStream
-}
-
-type chatServiceSubscribeChatMessagesClient struct {
-	grpc.ClientStream
-}
-
-func (x *chatServiceSubscribeChatMessagesClient) Recv() (*ChatMessage, error) {
-	m := new(ChatMessage)
-	if err := x.ClientStream.RecvMsg(m); err != nil {
-		return nil, err
-	}
-	return m, nil
-}
-
 func (c *chatServiceClient) SendChatReply(ctx context.Context, in *SendChatReplyRequest, opts ...grpc.CallOption) (*SendChatReplyResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(SendChatReplyResponse)
@@ -212,7 +175,7 @@ func (c *chatServiceClient) GetChatStatus(ctx context.Context, in *GetChatStatus
 
 func (c *chatServiceClient) SubscribePageChatMessages(ctx context.Context, in *SubscribePageChatMessagesRequest, opts ...grpc.CallOption) (ChatService_SubscribePageChatMessagesClient, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	stream, err := c.cc.NewStream(ctx, &ChatService_ServiceDesc.Streams[2], ChatService_SubscribePageChatMessages_FullMethodName, cOpts...)
+	stream, err := c.cc.NewStream(ctx, &ChatService_ServiceDesc.Streams[1], ChatService_SubscribePageChatMessages_FullMethodName, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -245,7 +208,7 @@ func (x *chatServiceSubscribePageChatMessagesClient) Recv() (*ChatMessage, error
 
 func (c *chatServiceClient) SubscribeInstanceRequests(ctx context.Context, in *SubscribeInstanceRequestsRequest, opts ...grpc.CallOption) (ChatService_SubscribeInstanceRequestsClient, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	stream, err := c.cc.NewStream(ctx, &ChatService_ServiceDesc.Streams[3], ChatService_SubscribeInstanceRequests_FullMethodName, cOpts...)
+	stream, err := c.cc.NewStream(ctx, &ChatService_ServiceDesc.Streams[2], ChatService_SubscribeInstanceRequests_FullMethodName, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -298,7 +261,7 @@ func (c *chatServiceClient) CancelAgentPrompt(ctx context.Context, in *CancelAge
 
 func (c *chatServiceClient) SubscribePageCancellations(ctx context.Context, in *SubscribePageCancellationsRequest, opts ...grpc.CallOption) (ChatService_SubscribePageCancellationsClient, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	stream, err := c.cc.NewStream(ctx, &ChatService_ServiceDesc.Streams[4], ChatService_SubscribePageCancellations_FullMethodName, cOpts...)
+	stream, err := c.cc.NewStream(ctx, &ChatService_ServiceDesc.Streams[3], ChatService_SubscribePageCancellations_FullMethodName, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -363,9 +326,6 @@ type ChatServiceServer interface {
 	// SubscribeChat subscribes to all chat events for a page.
 	// Replays existing buffer contents on connect, then streams new events.
 	SubscribeChat(*SubscribeChatRequest, ChatService_SubscribeChatServer) error
-	// SubscribeChatMessages is called by wiki-cli mcp at startup.
-	// Streams all new user messages (from all pages) as they arrive from browsers.
-	SubscribeChatMessages(*SubscribeChatMessagesRequest, ChatService_SubscribeChatMessagesServer) error
 	// SendChatReply is called by wiki-cli mcp when Claude uses the reply tool.
 	// Accepts optional reply_to message ID for threading.
 	SendChatReply(context.Context, *SendChatReplyRequest) (*SendChatReplyResponse, error)
@@ -410,9 +370,6 @@ func (UnimplementedChatServiceServer) SendMessage(context.Context, *SendChatMess
 }
 func (UnimplementedChatServiceServer) SubscribeChat(*SubscribeChatRequest, ChatService_SubscribeChatServer) error {
 	return status.Errorf(codes.Unimplemented, "method SubscribeChat not implemented")
-}
-func (UnimplementedChatServiceServer) SubscribeChatMessages(*SubscribeChatMessagesRequest, ChatService_SubscribeChatMessagesServer) error {
-	return status.Errorf(codes.Unimplemented, "method SubscribeChatMessages not implemented")
 }
 func (UnimplementedChatServiceServer) SendChatReply(context.Context, *SendChatReplyRequest) (*SendChatReplyResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method SendChatReply not implemented")
@@ -496,27 +453,6 @@ type chatServiceSubscribeChatServer struct {
 }
 
 func (x *chatServiceSubscribeChatServer) Send(m *ChatEvent) error {
-	return x.ServerStream.SendMsg(m)
-}
-
-func _ChatService_SubscribeChatMessages_Handler(srv interface{}, stream grpc.ServerStream) error {
-	m := new(SubscribeChatMessagesRequest)
-	if err := stream.RecvMsg(m); err != nil {
-		return err
-	}
-	return srv.(ChatServiceServer).SubscribeChatMessages(m, &chatServiceSubscribeChatMessagesServer{ServerStream: stream})
-}
-
-type ChatService_SubscribeChatMessagesServer interface {
-	Send(*ChatMessage) error
-	grpc.ServerStream
-}
-
-type chatServiceSubscribeChatMessagesServer struct {
-	grpc.ServerStream
-}
-
-func (x *chatServiceSubscribeChatMessagesServer) Send(m *ChatMessage) error {
 	return x.ServerStream.SendMsg(m)
 }
 
@@ -775,11 +711,6 @@ var ChatService_ServiceDesc = grpc.ServiceDesc{
 		{
 			StreamName:    "SubscribeChat",
 			Handler:       _ChatService_SubscribeChat_Handler,
-			ServerStreams: true,
-		},
-		{
-			StreamName:    "SubscribeChatMessages",
-			Handler:       _ChatService_SubscribeChatMessages_Handler,
 			ServerStreams: true,
 		},
 		{

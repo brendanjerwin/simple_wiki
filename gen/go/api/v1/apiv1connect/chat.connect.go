@@ -38,9 +38,6 @@ const (
 	// ChatServiceSubscribeChatProcedure is the fully-qualified name of the ChatService's SubscribeChat
 	// RPC.
 	ChatServiceSubscribeChatProcedure = "/api.v1.ChatService/SubscribeChat"
-	// ChatServiceSubscribeChatMessagesProcedure is the fully-qualified name of the ChatService's
-	// SubscribeChatMessages RPC.
-	ChatServiceSubscribeChatMessagesProcedure = "/api.v1.ChatService/SubscribeChatMessages"
 	// ChatServiceSendChatReplyProcedure is the fully-qualified name of the ChatService's SendChatReply
 	// RPC.
 	ChatServiceSendChatReplyProcedure = "/api.v1.ChatService/SendChatReply"
@@ -81,7 +78,6 @@ var (
 	chatServiceServiceDescriptor                          = v1.File_api_v1_chat_proto.Services().ByName("ChatService")
 	chatServiceSendMessageMethodDescriptor                = chatServiceServiceDescriptor.Methods().ByName("SendMessage")
 	chatServiceSubscribeChatMethodDescriptor              = chatServiceServiceDescriptor.Methods().ByName("SubscribeChat")
-	chatServiceSubscribeChatMessagesMethodDescriptor      = chatServiceServiceDescriptor.Methods().ByName("SubscribeChatMessages")
 	chatServiceSendChatReplyMethodDescriptor              = chatServiceServiceDescriptor.Methods().ByName("SendChatReply")
 	chatServiceEditChatMessageMethodDescriptor            = chatServiceServiceDescriptor.Methods().ByName("EditChatMessage")
 	chatServiceReactToMessageMethodDescriptor             = chatServiceServiceDescriptor.Methods().ByName("ReactToMessage")
@@ -103,9 +99,6 @@ type ChatServiceClient interface {
 	// SubscribeChat subscribes to all chat events for a page.
 	// Replays existing buffer contents on connect, then streams new events.
 	SubscribeChat(context.Context, *connect.Request[v1.SubscribeChatRequest]) (*connect.ServerStreamForClient[v1.ChatEvent], error)
-	// SubscribeChatMessages is called by wiki-cli mcp at startup.
-	// Streams all new user messages (from all pages) as they arrive from browsers.
-	SubscribeChatMessages(context.Context, *connect.Request[v1.SubscribeChatMessagesRequest]) (*connect.ServerStreamForClient[v1.ChatMessage], error)
 	// SendChatReply is called by wiki-cli mcp when Claude uses the reply tool.
 	// Accepts optional reply_to message ID for threading.
 	SendChatReply(context.Context, *connect.Request[v1.SendChatReplyRequest]) (*connect.Response[v1.SendChatReplyResponse], error)
@@ -160,12 +153,6 @@ func NewChatServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 			httpClient,
 			baseURL+ChatServiceSubscribeChatProcedure,
 			connect.WithSchema(chatServiceSubscribeChatMethodDescriptor),
-			connect.WithClientOptions(opts...),
-		),
-		subscribeChatMessages: connect.NewClient[v1.SubscribeChatMessagesRequest, v1.ChatMessage](
-			httpClient,
-			baseURL+ChatServiceSubscribeChatMessagesProcedure,
-			connect.WithSchema(chatServiceSubscribeChatMessagesMethodDescriptor),
 			connect.WithClientOptions(opts...),
 		),
 		sendChatReply: connect.NewClient[v1.SendChatReplyRequest, v1.SendChatReplyResponse](
@@ -241,7 +228,6 @@ func NewChatServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 type chatServiceClient struct {
 	sendMessage                *connect.Client[v1.SendChatMessageRequest, v1.SendChatMessageResponse]
 	subscribeChat              *connect.Client[v1.SubscribeChatRequest, v1.ChatEvent]
-	subscribeChatMessages      *connect.Client[v1.SubscribeChatMessagesRequest, v1.ChatMessage]
 	sendChatReply              *connect.Client[v1.SendChatReplyRequest, v1.SendChatReplyResponse]
 	editChatMessage            *connect.Client[v1.EditChatMessageRequest, v1.EditChatMessageResponse]
 	reactToMessage             *connect.Client[v1.ReactToMessageRequest, v1.ReactToMessageResponse]
@@ -263,11 +249,6 @@ func (c *chatServiceClient) SendMessage(ctx context.Context, req *connect.Reques
 // SubscribeChat calls api.v1.ChatService.SubscribeChat.
 func (c *chatServiceClient) SubscribeChat(ctx context.Context, req *connect.Request[v1.SubscribeChatRequest]) (*connect.ServerStreamForClient[v1.ChatEvent], error) {
 	return c.subscribeChat.CallServerStream(ctx, req)
-}
-
-// SubscribeChatMessages calls api.v1.ChatService.SubscribeChatMessages.
-func (c *chatServiceClient) SubscribeChatMessages(ctx context.Context, req *connect.Request[v1.SubscribeChatMessagesRequest]) (*connect.ServerStreamForClient[v1.ChatMessage], error) {
-	return c.subscribeChatMessages.CallServerStream(ctx, req)
 }
 
 // SendChatReply calls api.v1.ChatService.SendChatReply.
@@ -333,9 +314,6 @@ type ChatServiceHandler interface {
 	// SubscribeChat subscribes to all chat events for a page.
 	// Replays existing buffer contents on connect, then streams new events.
 	SubscribeChat(context.Context, *connect.Request[v1.SubscribeChatRequest], *connect.ServerStream[v1.ChatEvent]) error
-	// SubscribeChatMessages is called by wiki-cli mcp at startup.
-	// Streams all new user messages (from all pages) as they arrive from browsers.
-	SubscribeChatMessages(context.Context, *connect.Request[v1.SubscribeChatMessagesRequest], *connect.ServerStream[v1.ChatMessage]) error
 	// SendChatReply is called by wiki-cli mcp when Claude uses the reply tool.
 	// Accepts optional reply_to message ID for threading.
 	SendChatReply(context.Context, *connect.Request[v1.SendChatReplyRequest]) (*connect.Response[v1.SendChatReplyResponse], error)
@@ -386,12 +364,6 @@ func NewChatServiceHandler(svc ChatServiceHandler, opts ...connect.HandlerOption
 		ChatServiceSubscribeChatProcedure,
 		svc.SubscribeChat,
 		connect.WithSchema(chatServiceSubscribeChatMethodDescriptor),
-		connect.WithHandlerOptions(opts...),
-	)
-	chatServiceSubscribeChatMessagesHandler := connect.NewServerStreamHandler(
-		ChatServiceSubscribeChatMessagesProcedure,
-		svc.SubscribeChatMessages,
-		connect.WithSchema(chatServiceSubscribeChatMessagesMethodDescriptor),
 		connect.WithHandlerOptions(opts...),
 	)
 	chatServiceSendChatReplyHandler := connect.NewUnaryHandler(
@@ -466,8 +438,6 @@ func NewChatServiceHandler(svc ChatServiceHandler, opts ...connect.HandlerOption
 			chatServiceSendMessageHandler.ServeHTTP(w, r)
 		case ChatServiceSubscribeChatProcedure:
 			chatServiceSubscribeChatHandler.ServeHTTP(w, r)
-		case ChatServiceSubscribeChatMessagesProcedure:
-			chatServiceSubscribeChatMessagesHandler.ServeHTTP(w, r)
 		case ChatServiceSendChatReplyProcedure:
 			chatServiceSendChatReplyHandler.ServeHTTP(w, r)
 		case ChatServiceEditChatMessageProcedure:
@@ -505,10 +475,6 @@ func (UnimplementedChatServiceHandler) SendMessage(context.Context, *connect.Req
 
 func (UnimplementedChatServiceHandler) SubscribeChat(context.Context, *connect.Request[v1.SubscribeChatRequest], *connect.ServerStream[v1.ChatEvent]) error {
 	return connect.NewError(connect.CodeUnimplemented, errors.New("api.v1.ChatService.SubscribeChat is not implemented"))
-}
-
-func (UnimplementedChatServiceHandler) SubscribeChatMessages(context.Context, *connect.Request[v1.SubscribeChatMessagesRequest], *connect.ServerStream[v1.ChatMessage]) error {
-	return connect.NewError(connect.CodeUnimplemented, errors.New("api.v1.ChatService.SubscribeChatMessages is not implemented"))
 }
 
 func (UnimplementedChatServiceHandler) SendChatReply(context.Context, *connect.Request[v1.SendChatReplyRequest]) (*connect.Response[v1.SendChatReplyResponse], error) {

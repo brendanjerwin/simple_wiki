@@ -1,8 +1,6 @@
 package main
 
 import (
-	"context"
-	"errors"
 	"fmt"
 	"log"
 	"math"
@@ -13,38 +11,28 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
-	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
 	"github.com/brendanjerwin/simple_wiki/gen/go/api/v1/apiv1connect"
 	"github.com/brendanjerwin/simple_wiki/gen/go/api/v1/apiv1mcp"
-	"github.com/mark3labs/mcp-go/mcp"
 	mcpserver "github.com/mark3labs/mcp-go/server"
 	cli "gopkg.in/urfave/cli.v1"
 )
 
 const (
-	initialBackoffMs         = 1000
-	maxBackoffMs             = 30000
-	backoffMultiplier        = 2.0
-	channelNotificationTopic = "notifications/claude/channel"
+	initialBackoffMs  = 1000
+	maxBackoffMs      = 30000
+	backoffMultiplier = 2.0
 )
 
-// buildMCPCommand creates the `mcp` subcommand that runs a stdio MCP server with channel capability.
+// buildMCPCommand creates the `mcp` subcommand that runs a stdio MCP server with wiki API tools.
 func buildMCPCommand(urlFlag cli.StringFlag) cli.Command {
 	return cli.Command{
 		Name:  "mcp",
-		Usage: "Run a stdio MCP server with Claude Code channel capability",
+		Usage: "Run a stdio MCP server with wiki API tools",
 		Description: `Starts a Model Context Protocol (MCP) server that communicates via stdio.
-This server exposes all wiki API tools and implements the Claude Code channel protocol
-for bidirectional chat integration.
-
-The server subscribes to user messages from the wiki and emits them as channel notifications.
-Claude can respond using the reply, edit_message, and react tools.
+This server exposes all wiki API tools for use by Claude Code.
 
 Example:
   wiki-cli mcp --url https://wiki.monster-orfe.ts.net
-
-This command is designed to be spawned as a subprocess by Claude Code via:
-  claude --channels wiki-channel:wiki-channel
 `,
 		Flags: []cli.Flag{
 			urlFlag,
@@ -56,65 +44,25 @@ This command is designed to be spawned as a subprocess by Claude Code via:
 	}
 }
 
-// setupMCPServer creates the MCP server with channel capability and establishes
-// the HTTP client for Connect protocol. The caller is responsible for managing the httpClient.
-// onInitialized is called after the MCP init handshake completes — use it to start
-// work that may write to stdout (e.g., channel notifications) so it doesn't race
-// with the init response.
-func setupMCPServer(_ string, onInitialized func()) (*mcpserver.MCPServer, *http.Client, error) {
-	// Add hook to inject claude/channel experimental capability
-	hooks := &mcpserver.Hooks{
-		OnAfterInitialize: []mcpserver.OnAfterInitializeFunc{
-			func(_ context.Context, _ any, _ *mcp.InitializeRequest, result *mcp.InitializeResult) {
-				if result.Capabilities.Experimental == nil {
-					result.Capabilities.Experimental = make(map[string]any)
-				}
-				result.Capabilities.Experimental["claude/channel"] = map[string]any{}
-
-				if onInitialized != nil {
-					onInitialized()
-				}
-			},
-		},
-	}
-
-	// Create MCP server with instructions and hooks
+// setupMCPServer creates the MCP server and establishes the HTTP client for Connect protocol.
+// The caller is responsible for managing the httpClient.
+func setupMCPServer(_ string) (*mcpserver.MCPServer, *http.Client, error) {
+	// Create MCP server
 	s := mcpserver.NewMCPServer(
 		"simple-wiki",
 		version,
-		mcpserver.WithInstructions(globalModeInstructions),
-		mcpserver.WithHooks(hooks),
 		mcpserver.WithToolCapabilities(false),
 	)
 
-	// Create HTTP client for Connect protocol. No global Timeout is set here so
-	// long-lived streaming requests (e.g., chat subscriptions) are not forcibly
-	// cancelled by the client. Per-request contexts handle deadlines instead.
+	// Create HTTP client for Connect protocol.
 	httpClient := &http.Client{}
 
 	return s, httpClient, nil
 }
 
-// runMCPServer starts the stdio MCP server with channel capability and maintains
-// a streaming subscription to the wiki's ChatService.
+// runMCPServer starts the stdio MCP server with wiki API tools.
 func runMCPServer(baseURL string) error {
-	// Defer chat subscription until after MCP init handshake completes.
-	// Starting it earlier would send channel notifications to stdout before
-	// Claude Code has finished the init exchange, breaking the MCP protocol.
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	var (
-		mcpServer *mcpserver.MCPServer
-		clients   *apiClients
-	)
-	onInitialized := func() {
-		go maintainChatSubscription(ctx, mcpServer, clients.chat)
-	}
-
-	var httpClient *http.Client
-	var err error
-	mcpServer, httpClient, err = setupMCPServer(baseURL, onInitialized)
+	mcpServer, httpClient, err := setupMCPServer(baseURL)
 	if err != nil {
 		return err
 	}
@@ -126,7 +74,7 @@ func runMCPServer(baseURL string) error {
 	}
 
 	// Create Connect clients and register MCP tool handlers
-	clients = createAPIClients(httpClient, normalizedURL)
+	clients := createAPIClients(httpClient, normalizedURL)
 	registerToolHandlers(mcpServer, clients)
 
 	// Redirect Go's default logger to stderr explicitly (it already defaults
@@ -213,124 +161,3 @@ func computeBackoffAfterFailure(currentBackoffMs int, streamDuration time.Durati
 	nextBackoffMs = int(math.Min(float64(delayMs)*backoffMultiplier, maxBackoffMs))
 	return delayMs, nextBackoffMs
 }
-
-// maintainChatSubscription maintains a streaming Connect protocol subscription to SubscribeChatMessages.
-// It automatically reconnects with exponential backoff if the stream fails.
-// After a healthy long-running stream drops, the backoff resets to initialBackoffMs so
-// the next reconnect is fast. Rapid consecutive failures accumulate exponential backoff.
-func maintainChatSubscription(ctx context.Context, s *mcpserver.MCPServer, client apiv1connect.ChatServiceClient) {
-	backoffMs := initialBackoffMs
-
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		default:
-		}
-
-		start := time.Now()
-
-		// Try to subscribe
-		err := subscribeToChatMessages(ctx, s, client)
-		if err == nil {
-			// Clean disconnect (context cancelled)
-			return
-		}
-
-		delayMs, nextMs := computeBackoffAfterFailure(backoffMs, time.Since(start))
-
-		// Log error and reconnect with backoff
-		log.Printf("Chat subscription error: %v. Reconnecting in %dms...", err, delayMs)
-
-		select {
-		case <-ctx.Done():
-			return
-		case <-time.After(time.Duration(delayMs) * time.Millisecond):
-		}
-
-		backoffMs = nextMs
-	}
-}
-
-// chatMessageReceiver is the minimal interface for reading from a Connect server-streaming response.
-// It is satisfied by *connect.ServerStreamForClient[apiv1.ChatMessage].
-type chatMessageReceiver interface {
-	Receive() bool
-	Msg() *apiv1.ChatMessage
-	Err() error
-	Close() error
-}
-
-// subscribeToChatMessages establishes a streaming subscription to user messages using Connect protocol
-// and emits them as Claude Code channel notifications.
-func subscribeToChatMessages(ctx context.Context, s *mcpserver.MCPServer, client apiv1connect.ChatServiceClient) error {
-	// Subscribe to chat messages (server streaming) using Connect protocol
-	stream, err := client.SubscribeChatMessages(ctx, connect.NewRequest(&apiv1.SubscribeChatMessagesRequest{}))
-	if err != nil {
-		// Context cancellation is not an error
-		if ctx.Err() != nil {
-			return nil
-		}
-		return fmt.Errorf("failed to subscribe: %w", err)
-	}
-	defer func() { _ = stream.Close() }()
-
-	// Log successful connection
-	log.Println("Chat subscription established")
-
-	return receiveChatMessages(ctx, s, stream)
-}
-
-// receiveChatMessages reads messages from stream and emits USER messages as channel notifications.
-// Returns nil only when the context is cancelled; returns a non-nil error otherwise (including
-// on a clean server-side EOF) so that maintainChatSubscription can reconnect.
-func receiveChatMessages(ctx context.Context, s *mcpserver.MCPServer, stream chatMessageReceiver) error {
-	for stream.Receive() {
-		msg := stream.Msg()
-
-		// Only emit user messages (assistant messages come from Claude itself)
-		if msg.Sender != apiv1.Sender_USER {
-			continue
-		}
-
-		// Emit channel notification to all clients
-		// The notification params include the message content and metadata
-		s.SendNotificationToAllClients(
-			channelNotificationTopic,
-			map[string]any{
-				"content": msg.Content,
-				"meta": map[string]any{
-					"page":       msg.Page,
-					"sender":     "user",
-					"message_id": msg.Id,
-				},
-			},
-		)
-	}
-
-	// Check for stream error (nil means clean EOF from server)
-	if err := stream.Err(); err != nil {
-		// Context cancellation is not an error
-		if ctx.Err() != nil {
-			return nil
-		}
-		return fmt.Errorf("stream error: %w", err)
-	}
-
-	// Clean EOF: server closed the stream. If context is still active, signal
-	// reconnect by returning a non-nil error; maintainChatSubscription treats
-	// nil as a clean client-side shutdown.
-	if ctx.Err() != nil {
-		return nil
-	}
-	return errors.New("stream closed by server")
-}
-
-// globalModeInstructions are the server instructions passed to the agent in global (non-page-scoped) mode.
-const globalModeInstructions = `Messages arrive as <channel> tags with page, sender, and message_id attributes. You have three tools for responding:
-- api_v1_ChatService_SendChatReply: Send a new message. Use reply_to_id to thread a response to a specific message.
-- api_v1_ChatService_EditChatMessage: Edit one of your previous messages by ID.
-- api_v1_ChatService_ReactToMessage: Add an emoji reaction to any message by ID.
-
-Use wiki MCP tools to read/edit pages. Keep responses conversational and concise.`
-

@@ -18,10 +18,6 @@ service ChatService {
   // Replays existing buffer contents on connect, then streams new events.
   rpc SubscribeChat(SubscribeChatRequest) returns (stream ChatEvent) {}
 
-  // SubscribeChatMessages is called by wiki-cli mcp at startup.
-  // Streams all new user messages (from all pages) as they arrive from browsers.
-  rpc SubscribeChatMessages(SubscribeChatMessagesRequest) returns (stream ChatMessage) {}
-
   // SendChatReply is called by wiki-cli mcp when Claude uses the reply tool.
   // Accepts optional reply_to message ID for threading.
   rpc SendChatReply(SendChatReplyRequest) returns (SendChatReplyResponse) {}
@@ -160,9 +156,6 @@ message SubscribeChatRequest {
   string page = 1;  // page identifier
 }
 
-// SubscribeChatMessagesRequest is the request for SubscribeChatMessages.
-message SubscribeChatMessagesRequest {}
-
 // SendChatReplyRequest is the request for SendChatReply.
 message SendChatReplyRequest {
   string page = 1;          // page identifier
@@ -199,13 +192,12 @@ message ReactToMessageResponse {}
 // GetChatStatusRequest is the request for GetChatStatus.
 message GetChatStatusRequest {
   // Optional page identifier. If set, checks for a page-specific instance.
-  // If empty, falls back to global subscriber check.
   string page = 1;
 }
 
 // GetChatStatusResponse is the response for GetChatStatus.
 message GetChatStatusResponse {
-  // Whether a Claude channel subscriber is connected for the requested page (or globally).
+  // Whether a Claude channel subscriber is connected for the requested page.
   bool connected = 1;
   // Whether an instance has been requested but is not yet connected.
   bool starting = 2;
