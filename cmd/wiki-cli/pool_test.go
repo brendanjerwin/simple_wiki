@@ -3,9 +3,11 @@ package main
 import (
 	"bytes"
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"time"
 
 	"connectrpc.com/connect"
@@ -19,6 +21,138 @@ import (
 	. "github.com/onsi/gomega"
 	cli "gopkg.in/urfave/cli.v1"
 )
+
+// stubChatServiceHandler is a mock Connect handler for the ChatService
+// that tracks which RPCs were called and returns predefined responses.
+type stubChatServiceHandler struct {
+	apiv1connect.UnimplementedChatServiceHandler
+	sendReplyID    string
+	sendReplyErr   error
+	editErr        error
+	sendReplyCalled bool
+	editCalled      bool
+}
+
+func (h *stubChatServiceHandler) SendChatReply(_ context.Context, _ *connect.Request[apiv1.SendChatReplyRequest]) (*connect.Response[apiv1.SendChatReplyResponse], error) {
+	h.sendReplyCalled = true
+	if h.sendReplyErr != nil {
+		return nil, h.sendReplyErr
+	}
+	return connect.NewResponse(&apiv1.SendChatReplyResponse{
+		MessageId: h.sendReplyID,
+	}), nil
+}
+
+func (h *stubChatServiceHandler) EditChatMessage(_ context.Context, _ *connect.Request[apiv1.EditChatMessageRequest]) (*connect.Response[apiv1.EditChatMessageResponse], error) {
+	h.editCalled = true
+	if h.editErr != nil {
+		return nil, h.editErr
+	}
+	return connect.NewResponse(&apiv1.EditChatMessageResponse{}), nil
+}
+
+// mockChatReplier is a mock implementation of the chatReplier interface
+// for unit testing without HTTP servers.
+type mockChatReplier struct {
+	sendReplyReq     *apiv1.SendChatReplyRequest
+	sendReplyResp    *apiv1.SendChatReplyResponse
+	sendReplyErr     error
+	sendReplyCalled  bool
+
+	editReq          *apiv1.EditChatMessageRequest
+	editResp         *apiv1.EditChatMessageResponse
+	editErr          error
+	editCalled       bool
+
+	toolNotifyReq    *apiv1.SendToolCallNotificationRequest
+	toolNotifyCalled bool
+	toolNotifyErr    error
+
+	permReq          *apiv1.RequestPermissionFromUserRequest
+	permResp         *apiv1.RequestPermissionFromUserResponse
+	permErr          error
+	permCalled       bool
+}
+
+func (m *mockChatReplier) SendChatReply(_ context.Context, req *connect.Request[apiv1.SendChatReplyRequest]) (*connect.Response[apiv1.SendChatReplyResponse], error) {
+	m.sendReplyCalled = true
+	m.sendReplyReq = req.Msg
+	if m.sendReplyErr != nil {
+		return nil, m.sendReplyErr
+	}
+	resp := m.sendReplyResp
+	if resp == nil {
+		resp = &apiv1.SendChatReplyResponse{MessageId: "mock-msg-1"}
+	}
+	return connect.NewResponse(resp), nil
+}
+
+func (m *mockChatReplier) EditChatMessage(_ context.Context, req *connect.Request[apiv1.EditChatMessageRequest]) (*connect.Response[apiv1.EditChatMessageResponse], error) {
+	m.editCalled = true
+	m.editReq = req.Msg
+	if m.editErr != nil {
+		return nil, m.editErr
+	}
+	resp := m.editResp
+	if resp == nil {
+		resp = &apiv1.EditChatMessageResponse{}
+	}
+	return connect.NewResponse(resp), nil
+}
+
+func (m *mockChatReplier) SendToolCallNotification(_ context.Context, req *connect.Request[apiv1.SendToolCallNotificationRequest]) (*connect.Response[apiv1.SendToolCallNotificationResponse], error) {
+	m.toolNotifyCalled = true
+	m.toolNotifyReq = req.Msg
+	if m.toolNotifyErr != nil {
+		return nil, m.toolNotifyErr
+	}
+	return connect.NewResponse(&apiv1.SendToolCallNotificationResponse{}), nil
+}
+
+func (m *mockChatReplier) RequestPermissionFromUser(_ context.Context, req *connect.Request[apiv1.RequestPermissionFromUserRequest]) (*connect.Response[apiv1.RequestPermissionFromUserResponse], error) {
+	m.permCalled = true
+	m.permReq = req.Msg
+	if m.permErr != nil {
+		return nil, m.permErr
+	}
+	resp := m.permResp
+	if resp == nil {
+		resp = &apiv1.RequestPermissionFromUserResponse{}
+	}
+	return connect.NewResponse(resp), nil
+}
+
+// mockACPAgent is a mock implementation of the acpAgent interface.
+type mockACPAgent struct {
+	initResp    acp.InitializeResponse
+	initErr     error
+	initCalled  bool
+
+	sessionResp acp.NewSessionResponse
+	sessionErr  error
+	sessionCalled bool
+
+	promptResp  acp.PromptResponse
+	promptErr   error
+	promptCalled bool
+	promptReq    *acp.PromptRequest
+}
+
+func (m *mockACPAgent) Initialize(_ context.Context, _ acp.InitializeRequest) (acp.InitializeResponse, error) {
+	m.initCalled = true
+	return m.initResp, m.initErr
+}
+
+func (m *mockACPAgent) NewSession(_ context.Context, _ acp.NewSessionRequest) (acp.NewSessionResponse, error) {
+	m.sessionCalled = true
+	return m.sessionResp, m.sessionErr
+}
+
+func (m *mockACPAgent) Prompt(_ context.Context, req acp.PromptRequest) (acp.PromptResponse, error) {
+	m.promptCalled = true
+	m.promptReq = &req
+	return m.promptResp, m.promptErr
+}
 
 var _ = Describe("sanitizeUnitName", func() {
 	When("given a simple identifier", func() {
@@ -1119,6 +1253,529 @@ var _ = Describe("InstanceState", func() {
 	})
 })
 
+var _ = Describe("buildPromptText", func() {
+	When("the chat client has page context set", func() {
+		var result string
+		var client *wikiChatClient
+
+		BeforeEach(func() {
+			client = newWikiChatClient("test-page", "http://localhost:1")
+			client.pageContext = "You are an assistant for page X."
+			result = buildPromptText(client, "Hello there")
+		})
+
+		It("should prepend the page context to the message", func() {
+			Expect(result).To(HavePrefix("You are an assistant for page X."))
+		})
+
+		It("should include the user message after the separator", func() {
+			Expect(result).To(ContainSubstring("User message: Hello there"))
+		})
+
+		It("should include a separator between context and message", func() {
+			Expect(result).To(ContainSubstring("---"))
+		})
+
+		It("should consume the page context so it is only prepended once", func() {
+			Expect(client.pageContext).To(BeEmpty())
+		})
+	})
+
+	When("the chat client has no page context", func() {
+		var result string
+
+		BeforeEach(func() {
+			client := newWikiChatClient("test-page", "http://localhost:1")
+			client.pageContext = ""
+			result = buildPromptText(client, "Just a message")
+		})
+
+		It("should return only the message content", func() {
+			Expect(result).To(Equal("Just a message"))
+		})
+	})
+
+	When("called twice with page context initially set", func() {
+		var firstResult string
+		var secondResult string
+
+		BeforeEach(func() {
+			client := newWikiChatClient("test-page", "http://localhost:1")
+			client.pageContext = "Some context"
+			firstResult = buildPromptText(client, "First message")
+			secondResult = buildPromptText(client, "Second message")
+		})
+
+		It("should include context in the first call", func() {
+			Expect(firstResult).To(ContainSubstring("Some context"))
+		})
+
+		It("should not include context in the second call", func() {
+			Expect(secondResult).To(Equal("Second message"))
+		})
+	})
+})
+
+var _ = Describe("streamOrCreateReply", func() {
+	When("no current message exists (msgID is empty)", func() {
+		var (
+			client       *wikiChatClient
+			receivedPath string
+		)
+
+		BeforeEach(func() {
+			handler := &stubChatServiceHandler{
+				sendReplyID: "new-msg-id",
+			}
+			mux := http.NewServeMux()
+			path, h := apiv1connect.NewChatServiceHandler(handler)
+			mux.Handle(path, h)
+			server := httptest.NewServer(mux)
+			DeferCleanup(server.Close)
+
+			client = newWikiChatClient("test-page", server.URL)
+			client.replyToID = "parent-msg"
+
+			_ = receivedPath
+			client.streamOrCreateReply("", "parent-msg", "Hello world")
+		})
+
+		It("should create a new message and store the message ID", func() {
+			Expect(client.currentMsg).To(Equal("new-msg-id"))
+		})
+	})
+
+	When("a current message already exists", func() {
+		var (
+			client  *wikiChatClient
+			handler *stubChatServiceHandler
+		)
+
+		BeforeEach(func() {
+			handler = &stubChatServiceHandler{
+				sendReplyID: "should-not-be-used",
+			}
+			mux := http.NewServeMux()
+			path, h := apiv1connect.NewChatServiceHandler(handler)
+			mux.Handle(path, h)
+			server := httptest.NewServer(mux)
+			DeferCleanup(server.Close)
+
+			client = newWikiChatClient("test-page", server.URL)
+			client.currentMsg = "existing-msg"
+
+			client.streamOrCreateReply("existing-msg", "parent-msg", "Updated text")
+		})
+
+		It("should not change the current message ID", func() {
+			Expect(client.currentMsg).To(Equal("existing-msg"))
+		})
+
+		It("should have called EditChatMessage", func() {
+			Expect(handler.editCalled).To(BeTrue())
+		})
+
+		It("should not have called SendChatReply", func() {
+			Expect(handler.sendReplyCalled).To(BeFalse())
+		})
+	})
+
+	When("creating a new message fails", func() {
+		var client *wikiChatClient
+
+		BeforeEach(func() {
+			handler := &stubChatServiceHandler{
+				sendReplyErr: connect.NewError(connect.CodeInternal, errors.New("server error")),
+			}
+			mux := http.NewServeMux()
+			path, h := apiv1connect.NewChatServiceHandler(handler)
+			mux.Handle(path, h)
+			server := httptest.NewServer(mux)
+			DeferCleanup(server.Close)
+
+			client = newWikiChatClient("test-page", server.URL)
+			client.streamOrCreateReply("", "parent-msg", "Hello")
+		})
+
+		It("should not set a current message ID", func() {
+			Expect(client.currentMsg).To(BeEmpty())
+		})
+	})
+})
+
+var _ = Describe("buildAgentCmd", func() {
+	When("systemd is disabled", func() {
+		var daemon *poolDaemon
+		var cmd *exec.Cmd
+
+		BeforeEach(func() {
+			daemon = &poolDaemon{
+				agentPath:  "/usr/bin/my-agent",
+				useSystemd: false,
+			}
+			cmd = daemon.buildAgentCmd(context.Background(), "test-page")
+		})
+
+		It("should use the agent path directly as the command", func() {
+			Expect(cmd.Path).To(Equal("/usr/bin/my-agent"))
+		})
+
+		It("should not include systemd-run arguments", func() {
+			Expect(cmd.Args).NotTo(ContainElement("systemd-run"))
+		})
+
+		It("should have stderr configured with a prefix writer", func() {
+			Expect(cmd.Stderr).NotTo(BeNil())
+		})
+	})
+
+	When("systemd is enabled", func() {
+		var daemon *poolDaemon
+		var cmd *exec.Cmd
+
+		BeforeEach(func() {
+			daemon = &poolDaemon{
+				agentPath:  "/usr/bin/my-agent",
+				useSystemd: true,
+			}
+			cmd = daemon.buildAgentCmd(context.Background(), "my/test page")
+		})
+
+		It("should use systemd-run as the command", func() {
+			Expect(cmd.Args[0]).To(Equal("systemd-run"))
+		})
+
+		It("should include the --user flag", func() {
+			Expect(cmd.Args).To(ContainElement("--user"))
+		})
+
+		It("should include the --scope flag", func() {
+			Expect(cmd.Args).To(ContainElement("--scope"))
+		})
+
+		It("should include a sanitized unit name", func() {
+			Expect(cmd.Args).To(ContainElement("--unit=wiki-chat-my-test-page"))
+		})
+
+		It("should include the agent path as the last argument", func() {
+			Expect(cmd.Args[len(cmd.Args)-1]).To(Equal("/usr/bin/my-agent"))
+		})
+	})
+})
+
+var _ = Describe("chatPreamble", func() {
+	It("should describe the interactive chat context", func() {
+		Expect(chatPreamble).To(ContainSubstring("INTERACTIVE CHAT"))
+	})
+
+	It("should mention responding quickly", func() {
+		Expect(chatPreamble).To(ContainSubstring("Respond quickly"))
+	})
+
+	It("should mention wiki MCP tools", func() {
+		Expect(chatPreamble).To(ContainSubstring("wiki MCP tools"))
+	})
+
+	It("should mention MergeFrontmatter for memory updates", func() {
+		Expect(chatPreamble).To(ContainSubstring("MergeFrontmatter"))
+	})
+
+	It("should describe the ai_agent_chat_context memory mechanism", func() {
+		Expect(chatPreamble).To(ContainSubstring("ai_agent_chat_context"))
+	})
+
+	It("should mention the required memory fields", func() {
+		Expect(chatPreamble).To(ContainSubstring("last_conversation_summary"))
+		Expect(chatPreamble).To(ContainSubstring("user_goals"))
+		Expect(chatPreamble).To(ContainSubstring("pending_items"))
+		Expect(chatPreamble).To(ContainSubstring("key_context"))
+		Expect(chatPreamble).To(ContainSubstring("last_updated"))
+	})
+})
+
+var _ = Describe("validTransitions map", func() {
+	It("should allow Spawning to transition to Initializing and Dead only", func() {
+		Expect(validTransitions[StateSpawning]).To(ConsistOf(StateInitializing, StateDead))
+	})
+
+	It("should allow Initializing to transition to BridgeConnecting and Dead only", func() {
+		Expect(validTransitions[StateInitializing]).To(ConsistOf(StateBridgeConnecting, StateDead))
+	})
+
+	It("should allow BridgeConnecting to transition to Idle and Dead only", func() {
+		Expect(validTransitions[StateBridgeConnecting]).To(ConsistOf(StateIdle, StateDead))
+	})
+
+	It("should allow Idle to transition to Prompting and Stopping only", func() {
+		Expect(validTransitions[StateIdle]).To(ConsistOf(StatePrompting, StateStopping))
+	})
+
+	It("should allow Prompting to transition to Idle, PermissionPending, Stopping, and Dead", func() {
+		Expect(validTransitions[StatePrompting]).To(ConsistOf(StateIdle, StatePermissionPending, StateStopping, StateDead))
+	})
+
+	It("should allow PermissionPending to transition to Prompting, Stopping, and Dead", func() {
+		Expect(validTransitions[StatePermissionPending]).To(ConsistOf(StatePrompting, StateStopping, StateDead))
+	})
+
+	It("should allow Stopping to transition to Dead only", func() {
+		Expect(validTransitions[StateStopping]).To(ConsistOf(StateDead))
+	})
+
+	It("should not allow Dead to transition to any state", func() {
+		Expect(validTransitions[StateDead]).To(BeEmpty())
+	})
+
+	It("should have entries for all defined states", func() {
+		allStates := []InstanceState{
+			StateSpawning, StateInitializing, StateBridgeConnecting,
+			StateIdle, StatePrompting, StatePermissionPending,
+			StateStopping, StateDead,
+		}
+		for _, s := range allStates {
+			_, ok := validTransitions[s]
+			Expect(ok).To(BeTrue(), "validTransitions should have an entry for %s", s)
+		}
+	})
+})
+
+var _ = Describe("permissionCancelledResponse", func() {
+	When("called", func() {
+		var resp acp.RequestPermissionResponse
+
+		BeforeEach(func() {
+			resp = permissionCancelledResponse()
+		})
+
+		It("should have a Cancelled outcome", func() {
+			Expect(resp.Outcome.Cancelled).NotTo(BeNil())
+		})
+
+		It("should not have a Selected outcome", func() {
+			Expect(resp.Outcome.Selected).To(BeNil())
+		})
+	})
+})
+
+var _ = Describe("permissionSelectedResponse", func() {
+	When("called with an option ID", func() {
+		var resp acp.RequestPermissionResponse
+
+		BeforeEach(func() {
+			resp = permissionSelectedResponse("opt-42")
+		})
+
+		It("should have a Selected outcome", func() {
+			Expect(resp.Outcome.Selected).NotTo(BeNil())
+		})
+
+		It("should contain the correct option ID", func() {
+			Expect(resp.Outcome.Selected.OptionId).To(Equal(acp.PermissionOptionId("opt-42")))
+		})
+
+		It("should not have a Cancelled outcome", func() {
+			Expect(resp.Outcome.Cancelled).To(BeNil())
+		})
+	})
+})
+
+var _ = Describe("processPermissionResponse", func() {
+	When("the selected ID is empty (user denied)", func() {
+		var (
+			client *wikiChatClient
+			resp   acp.RequestPermissionResponse
+			err    error
+		)
+
+		BeforeEach(func() {
+			client = newWikiChatClient("test-page", "http://localhost:1")
+			options := []acp.PermissionOption{
+				{OptionId: "opt-1", Name: "Allow"},
+			}
+			resp, err = client.processPermissionResponse("", options, "Edit file")
+		})
+
+		It("should not return an error", func() {
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should return a cancelled response", func() {
+			Expect(resp.Outcome.Cancelled).NotTo(BeNil())
+		})
+
+		It("should record the denial in permission notes", func() {
+			Expect(client.permissionNotes.String()).To(ContainSubstring("Permission denied"))
+			Expect(client.permissionNotes.String()).To(ContainSubstring("Edit file"))
+		})
+	})
+
+	When("the selected ID matches an option", func() {
+		var (
+			client *wikiChatClient
+			resp   acp.RequestPermissionResponse
+			err    error
+		)
+
+		BeforeEach(func() {
+			client = newWikiChatClient("test-page", "http://localhost:1")
+			options := []acp.PermissionOption{
+				{OptionId: "opt-1", Name: "Allow Once"},
+				{OptionId: "opt-2", Name: "Allow Always"},
+			}
+			resp, err = client.processPermissionResponse("opt-2", options, "Write file")
+		})
+
+		It("should not return an error", func() {
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should return a selected response with the correct option", func() {
+			Expect(resp.Outcome.Selected).NotTo(BeNil())
+			Expect(resp.Outcome.Selected.OptionId).To(Equal(acp.PermissionOptionId("opt-2")))
+		})
+
+		It("should record the grant with the option name in permission notes", func() {
+			Expect(client.permissionNotes.String()).To(ContainSubstring("Permission granted"))
+			Expect(client.permissionNotes.String()).To(ContainSubstring("Allow Always"))
+		})
+	})
+
+	When("the selected ID does not match any option", func() {
+		var (
+			client *wikiChatClient
+			resp   acp.RequestPermissionResponse
+			err    error
+		)
+
+		BeforeEach(func() {
+			client = newWikiChatClient("test-page", "http://localhost:1")
+			options := []acp.PermissionOption{
+				{OptionId: "opt-1", Name: "Allow"},
+			}
+			resp, err = client.processPermissionResponse("unknown-opt", options, "Delete file")
+		})
+
+		It("should not return an error", func() {
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should return a selected response with the unknown option ID", func() {
+			Expect(resp.Outcome.Selected).NotTo(BeNil())
+			Expect(resp.Outcome.Selected.OptionId).To(Equal(acp.PermissionOptionId("unknown-opt")))
+		})
+
+		It("should use the selected ID as the name in permission notes", func() {
+			Expect(client.permissionNotes.String()).To(ContainSubstring("unknown-opt"))
+		})
+	})
+})
+
+var _ = Describe("wikiChatClient file system and terminal denials", func() {
+	var client *wikiChatClient
+
+	BeforeEach(func() {
+		client = &wikiChatClient{page: "test-page"}
+	})
+
+	Describe("ReadTextFile", func() {
+		When("called", func() {
+			var err error
+
+			BeforeEach(func() {
+				_, err = client.ReadTextFile(context.Background(), acp.ReadTextFileRequest{})
+			})
+
+			It("should return an error about using wiki MCP tools", func() {
+				Expect(err).To(MatchError(ContainSubstring("wiki MCP tools")))
+			})
+		})
+	})
+
+	Describe("WriteTextFile", func() {
+		When("called", func() {
+			var err error
+
+			BeforeEach(func() {
+				_, err = client.WriteTextFile(context.Background(), acp.WriteTextFileRequest{})
+			})
+
+			It("should return an error about using wiki MCP tools", func() {
+				Expect(err).To(MatchError(ContainSubstring("wiki MCP tools")))
+			})
+		})
+	})
+
+	Describe("CreateTerminal", func() {
+		When("called", func() {
+			var err error
+
+			BeforeEach(func() {
+				_, err = client.CreateTerminal(context.Background(), acp.CreateTerminalRequest{})
+			})
+
+			It("should return an error about terminal access", func() {
+				Expect(err).To(MatchError(ContainSubstring("terminal access not available")))
+			})
+		})
+	})
+
+	Describe("KillTerminalCommand", func() {
+		When("called", func() {
+			var err error
+
+			BeforeEach(func() {
+				_, err = client.KillTerminalCommand(context.Background(), acp.KillTerminalCommandRequest{})
+			})
+
+			It("should return an error about terminal access", func() {
+				Expect(err).To(MatchError(ContainSubstring("terminal access not available")))
+			})
+		})
+	})
+
+	Describe("TerminalOutput", func() {
+		When("called", func() {
+			var err error
+
+			BeforeEach(func() {
+				_, err = client.TerminalOutput(context.Background(), acp.TerminalOutputRequest{})
+			})
+
+			It("should return an error about terminal access", func() {
+				Expect(err).To(MatchError(ContainSubstring("terminal access not available")))
+			})
+		})
+	})
+
+	Describe("ReleaseTerminal", func() {
+		When("called", func() {
+			var err error
+
+			BeforeEach(func() {
+				_, err = client.ReleaseTerminal(context.Background(), acp.ReleaseTerminalRequest{})
+			})
+
+			It("should return an error about terminal access", func() {
+				Expect(err).To(MatchError(ContainSubstring("terminal access not available")))
+			})
+		})
+	})
+
+	Describe("WaitForTerminalExit", func() {
+		When("called", func() {
+			var err error
+
+			BeforeEach(func() {
+				_, err = client.WaitForTerminalExit(context.Background(), acp.WaitForTerminalExitRequest{})
+			})
+
+			It("should return an error about terminal access", func() {
+				Expect(err).To(MatchError(ContainSubstring("terminal access not available")))
+			})
+		})
+	})
+})
+
 var _ = Describe("instanceEntry setState", func() {
 	Describe("valid transitions", func() {
 		When("transitioning from Spawning to Initializing", func() {
@@ -1364,5 +2021,867 @@ var _ = Describe("instanceEntry setState", func() {
 				Expect(state).To(Equal(StateIdle))
 			})
 		})
+	})
+})
+
+var _ = Describe("handleAgentMessage (mock-based)", func() {
+	Describe("first chunk creates a reply", func() {
+		When("no current message exists and text is non-empty", func() {
+			var (
+				client *wikiChatClient
+				mock   *mockChatReplier
+				err    error
+			)
+
+			BeforeEach(func() {
+				mock = &mockChatReplier{
+					sendReplyResp: &apiv1.SendChatReplyResponse{MessageId: "new-msg-42"},
+				}
+				client = &wikiChatClient{
+					page:       "test-page",
+					chatClient: mock,
+					replyToID:  "parent-1",
+				}
+
+				chunk := &acp.SessionUpdateAgentMessageChunk{
+					Content: acp.TextBlock("Hello from agent"),
+				}
+				err = client.handleAgentMessage(chunk)
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should call SendChatReply", func() {
+				Expect(mock.sendReplyCalled).To(BeTrue())
+			})
+
+			It("should send the correct page", func() {
+				Expect(mock.sendReplyReq.Page).To(Equal("test-page"))
+			})
+
+			It("should send the correct reply-to ID", func() {
+				Expect(mock.sendReplyReq.ReplyToId).To(Equal("parent-1"))
+			})
+
+			It("should store the new message ID", func() {
+				Expect(client.currentMsg).To(Equal("new-msg-42"))
+			})
+
+			It("should not call EditChatMessage", func() {
+				Expect(mock.editCalled).To(BeFalse())
+			})
+		})
+	})
+
+	Describe("subsequent chunks edit the existing message", func() {
+		When("a current message already exists", func() {
+			var (
+				client *wikiChatClient
+				mock   *mockChatReplier
+				err    error
+			)
+
+			BeforeEach(func() {
+				mock = &mockChatReplier{}
+				client = &wikiChatClient{
+					page:       "test-page",
+					chatClient: mock,
+					currentMsg: "existing-msg-1",
+				}
+				client.textBuf.WriteString("Previous text. ")
+
+				chunk := &acp.SessionUpdateAgentMessageChunk{
+					Content: acp.TextBlock("More text"),
+				}
+				err = client.handleAgentMessage(chunk)
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should call EditChatMessage", func() {
+				Expect(mock.editCalled).To(BeTrue())
+			})
+
+			It("should edit the correct message", func() {
+				Expect(mock.editReq.MessageId).To(Equal("existing-msg-1"))
+			})
+
+			It("should set streaming to true", func() {
+				Expect(mock.editReq.Streaming).To(BeTrue())
+			})
+
+			It("should not call SendChatReply", func() {
+				Expect(mock.sendReplyCalled).To(BeFalse())
+			})
+
+			It("should accumulate the text", func() {
+				Expect(client.textBuf.String()).To(Equal("Previous text. More text"))
+			})
+		})
+	})
+
+	Describe("whitespace-only text is skipped", func() {
+		When("the chunk contains only whitespace", func() {
+			var (
+				client *wikiChatClient
+				mock   *mockChatReplier
+				err    error
+			)
+
+			BeforeEach(func() {
+				mock = &mockChatReplier{}
+				client = &wikiChatClient{
+					page:       "test-page",
+					chatClient: mock,
+				}
+
+				chunk := &acp.SessionUpdateAgentMessageChunk{
+					Content: acp.TextBlock("   \n  "),
+				}
+				err = client.handleAgentMessage(chunk)
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should not call SendChatReply", func() {
+				Expect(mock.sendReplyCalled).To(BeFalse())
+			})
+
+			It("should not call EditChatMessage", func() {
+				Expect(mock.editCalled).To(BeFalse())
+			})
+		})
+	})
+
+	Describe("non-text content is skipped", func() {
+		When("the chunk has no text field", func() {
+			var (
+				client *wikiChatClient
+				mock   *mockChatReplier
+				err    error
+			)
+
+			BeforeEach(func() {
+				mock = &mockChatReplier{}
+				client = &wikiChatClient{
+					page:       "test-page",
+					chatClient: mock,
+				}
+
+				chunk := &acp.SessionUpdateAgentMessageChunk{
+					Content: acp.ImageBlock("base64data", "image/png"),
+				}
+				err = client.handleAgentMessage(chunk)
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should not call any chat methods", func() {
+				Expect(mock.sendReplyCalled).To(BeFalse())
+				Expect(mock.editCalled).To(BeFalse())
+			})
+		})
+	})
+})
+
+var _ = Describe("handleThought (mock-based)", func() {
+	Describe("non-empty thought text", func() {
+		When("there is no current message", func() {
+			var (
+				client *wikiChatClient
+				mock   *mockChatReplier
+			)
+
+			BeforeEach(func() {
+				mock = &mockChatReplier{
+					sendReplyResp: &apiv1.SendChatReplyResponse{MessageId: "thought-msg-1"},
+				}
+				client = &wikiChatClient{
+					page:       "test-page",
+					chatClient: mock,
+					replyToID:  "parent-1",
+				}
+
+				chunk := &acp.SessionUpdateAgentThoughtChunk{
+					Content: acp.TextBlock("Let me think..."),
+				}
+				client.handleThought(chunk)
+			})
+
+			It("should accumulate the thought text", func() {
+				Expect(client.thoughtBuf.String()).To(Equal("Let me think..."))
+			})
+
+			It("should call SendChatReply to create a new message", func() {
+				Expect(mock.sendReplyCalled).To(BeTrue())
+			})
+
+			It("should store the message ID", func() {
+				Expect(client.currentMsg).To(Equal("thought-msg-1"))
+			})
+		})
+	})
+
+	Describe("empty thought is skipped", func() {
+		When("the thought text is nil", func() {
+			var (
+				client *wikiChatClient
+				mock   *mockChatReplier
+			)
+
+			BeforeEach(func() {
+				mock = &mockChatReplier{}
+				client = &wikiChatClient{
+					page:       "test-page",
+					chatClient: mock,
+				}
+
+				chunk := &acp.SessionUpdateAgentThoughtChunk{
+					Content: acp.ImageBlock("data", "image/png"),
+				}
+				client.handleThought(chunk)
+			})
+
+			It("should not call any chat methods", func() {
+				Expect(mock.sendReplyCalled).To(BeFalse())
+				Expect(mock.editCalled).To(BeFalse())
+			})
+
+			It("should not accumulate any text", func() {
+				Expect(client.thoughtBuf.String()).To(BeEmpty())
+			})
+		})
+	})
+
+	Describe("whitespace-only thought is skipped", func() {
+		When("the thought text is only whitespace", func() {
+			var (
+				client *wikiChatClient
+				mock   *mockChatReplier
+			)
+
+			BeforeEach(func() {
+				mock = &mockChatReplier{}
+				client = &wikiChatClient{
+					page:       "test-page",
+					chatClient: mock,
+				}
+
+				chunk := &acp.SessionUpdateAgentThoughtChunk{
+					Content: acp.TextBlock("   "),
+				}
+				client.handleThought(chunk)
+			})
+
+			It("should not call any chat methods", func() {
+				Expect(mock.sendReplyCalled).To(BeFalse())
+				Expect(mock.editCalled).To(BeFalse())
+			})
+		})
+	})
+})
+
+var _ = Describe("handleToolCall (mock-based)", func() {
+	When("a current message exists", func() {
+		var (
+			mock *mockChatReplier
+		)
+
+		BeforeEach(func() {
+			mock = &mockChatReplier{}
+			client := &wikiChatClient{
+				page:       "test-page",
+				chatClient: mock,
+				currentMsg: "msg-99",
+			}
+
+			tc := &acp.SessionUpdateToolCall{
+				ToolCallId: "tc-1",
+				Title:      "Read file",
+				Status:     acp.ToolCallStatusInProgress,
+			}
+			client.handleToolCall(tc)
+		})
+
+		It("should call SendToolCallNotification", func() {
+			Expect(mock.toolNotifyCalled).To(BeTrue())
+		})
+
+		It("should send the correct page", func() {
+			Expect(mock.toolNotifyReq.Page).To(Equal("test-page"))
+		})
+
+		It("should send the correct message ID", func() {
+			Expect(mock.toolNotifyReq.MessageId).To(Equal("msg-99"))
+		})
+
+		It("should send the correct tool call ID", func() {
+			Expect(mock.toolNotifyReq.ToolCallId).To(Equal("tc-1"))
+		})
+
+		It("should send the correct title", func() {
+			Expect(mock.toolNotifyReq.Title).To(Equal("Read file"))
+		})
+	})
+
+	When("no current message exists", func() {
+		var mock *mockChatReplier
+
+		BeforeEach(func() {
+			mock = &mockChatReplier{}
+			client := &wikiChatClient{
+				page:       "test-page",
+				chatClient: mock,
+			}
+
+			tc := &acp.SessionUpdateToolCall{
+				ToolCallId: "tc-1",
+				Title:      "Read file",
+				Status:     acp.ToolCallStatusInProgress,
+			}
+			client.handleToolCall(tc)
+		})
+
+		It("should not call SendToolCallNotification", func() {
+			Expect(mock.toolNotifyCalled).To(BeFalse())
+		})
+	})
+})
+
+var _ = Describe("handleToolCallUpdate (mock-based)", func() {
+	When("a current message exists and status/title are set", func() {
+		var mock *mockChatReplier
+
+		BeforeEach(func() {
+			mock = &mockChatReplier{}
+			client := &wikiChatClient{
+				page:       "test-page",
+				chatClient: mock,
+				currentMsg: "msg-77",
+			}
+
+			status := acp.ToolCallStatusCompleted
+			title := "Write file"
+			tcu := &acp.SessionToolCallUpdate{
+				ToolCallId: "tc-2",
+				Status:     &status,
+				Title:      &title,
+			}
+			client.handleToolCallUpdate(tcu)
+		})
+
+		It("should call SendToolCallNotification", func() {
+			Expect(mock.toolNotifyCalled).To(BeTrue())
+		})
+
+		It("should send the correct title", func() {
+			Expect(mock.toolNotifyReq.Title).To(Equal("Write file"))
+		})
+
+		It("should send the correct status", func() {
+			Expect(mock.toolNotifyReq.Status).To(Equal(string(acp.ToolCallStatusCompleted)))
+		})
+	})
+
+	When("no current message exists", func() {
+		var mock *mockChatReplier
+
+		BeforeEach(func() {
+			mock = &mockChatReplier{}
+			client := &wikiChatClient{
+				page:       "test-page",
+				chatClient: mock,
+			}
+
+			tcu := &acp.SessionToolCallUpdate{
+				ToolCallId: "tc-2",
+			}
+			client.handleToolCallUpdate(tcu)
+		})
+
+		It("should not call SendToolCallNotification", func() {
+			Expect(mock.toolNotifyCalled).To(BeFalse())
+		})
+	})
+
+	When("status and title are nil", func() {
+		var mock *mockChatReplier
+
+		BeforeEach(func() {
+			mock = &mockChatReplier{}
+			client := &wikiChatClient{
+				page:       "test-page",
+				chatClient: mock,
+				currentMsg: "msg-77",
+			}
+
+			tcu := &acp.SessionToolCallUpdate{
+				ToolCallId: "tc-3",
+			}
+			client.handleToolCallUpdate(tcu)
+		})
+
+		It("should call SendToolCallNotification with empty strings", func() {
+			Expect(mock.toolNotifyCalled).To(BeTrue())
+			Expect(mock.toolNotifyReq.Title).To(BeEmpty())
+			Expect(mock.toolNotifyReq.Status).To(BeEmpty())
+		})
+	})
+})
+
+var _ = Describe("streamOrCreateReply (mock-based)", func() {
+	When("no current message exists", func() {
+		var (
+			client *wikiChatClient
+			mock   *mockChatReplier
+		)
+
+		BeforeEach(func() {
+			mock = &mockChatReplier{
+				sendReplyResp: &apiv1.SendChatReplyResponse{MessageId: "new-msg-77"},
+			}
+			client = &wikiChatClient{
+				page:       "test-page",
+				chatClient: mock,
+			}
+			client.streamOrCreateReply("", "parent-1", "Hello")
+		})
+
+		It("should call SendChatReply", func() {
+			Expect(mock.sendReplyCalled).To(BeTrue())
+		})
+
+		It("should store the returned message ID", func() {
+			Expect(client.currentMsg).To(Equal("new-msg-77"))
+		})
+
+		It("should send the correct content", func() {
+			Expect(mock.sendReplyReq.Content).To(Equal("Hello"))
+		})
+
+		It("should send the correct reply-to ID", func() {
+			Expect(mock.sendReplyReq.ReplyToId).To(Equal("parent-1"))
+		})
+	})
+
+	When("a current message exists", func() {
+		var mock *mockChatReplier
+
+		BeforeEach(func() {
+			mock = &mockChatReplier{}
+			client := &wikiChatClient{
+				page:       "test-page",
+				chatClient: mock,
+				currentMsg: "existing-msg",
+			}
+			client.streamOrCreateReply("existing-msg", "parent-1", "Updated")
+		})
+
+		It("should call EditChatMessage", func() {
+			Expect(mock.editCalled).To(BeTrue())
+		})
+
+		It("should not call SendChatReply", func() {
+			Expect(mock.sendReplyCalled).To(BeFalse())
+		})
+
+		It("should send the correct message ID to edit", func() {
+			Expect(mock.editReq.MessageId).To(Equal("existing-msg"))
+		})
+
+		It("should set streaming to true", func() {
+			Expect(mock.editReq.Streaming).To(BeTrue())
+		})
+	})
+
+	When("SendChatReply fails", func() {
+		var (
+			client *wikiChatClient
+			mock   *mockChatReplier
+		)
+
+		BeforeEach(func() {
+			mock = &mockChatReplier{
+				sendReplyErr: errors.New("connection refused"),
+			}
+			client = &wikiChatClient{
+				page:       "test-page",
+				chatClient: mock,
+			}
+			client.streamOrCreateReply("", "parent-1", "Hello")
+		})
+
+		It("should not store a message ID", func() {
+			Expect(client.currentMsg).To(BeEmpty())
+		})
+	})
+})
+
+var _ = Describe("RequestPermission (mock-based)", func() {
+	When("the permission request has no options", func() {
+		var (
+			client *wikiChatClient
+			resp   acp.RequestPermissionResponse
+			err    error
+		)
+
+		BeforeEach(func() {
+			mock := &mockChatReplier{}
+			client = &wikiChatClient{
+				page:       "test-page",
+				chatClient: mock,
+			}
+
+			req := acp.RequestPermissionRequest{
+				ToolCall: acp.RequestPermissionToolCall{
+					ToolCallId: "tc-1",
+				},
+				Options: []acp.PermissionOption{},
+			}
+			resp, err = client.RequestPermission(context.Background(), req)
+		})
+
+		It("should not return an error", func() {
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should return a cancelled response", func() {
+			Expect(resp.Outcome.Cancelled).NotTo(BeNil())
+		})
+	})
+
+	When("the user grants permission", func() {
+		var (
+			client *wikiChatClient
+			mock   *mockChatReplier
+			resp   acp.RequestPermissionResponse
+			err    error
+		)
+
+		BeforeEach(func() {
+			mock = &mockChatReplier{
+				permResp: &apiv1.RequestPermissionFromUserResponse{
+					SelectedOptionId: "opt-allow",
+				},
+			}
+			client = &wikiChatClient{
+				page:       "test-page",
+				chatClient: mock,
+				entry: &instanceEntry{
+					page:  "test-page",
+					state: StatePrompting,
+				},
+			}
+
+			title := "Edit file.txt"
+			req := acp.RequestPermissionRequest{
+				ToolCall: acp.RequestPermissionToolCall{
+					ToolCallId: "tc-1",
+					Title:      &title,
+				},
+				Options: []acp.PermissionOption{
+					{OptionId: "opt-allow", Name: "Allow"},
+					{OptionId: "opt-deny", Name: "Deny"},
+				},
+			}
+			resp, err = client.RequestPermission(context.Background(), req)
+		})
+
+		It("should not return an error", func() {
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should call RequestPermissionFromUser", func() {
+			Expect(mock.permCalled).To(BeTrue())
+		})
+
+		It("should forward the page name", func() {
+			Expect(mock.permReq.Page).To(Equal("test-page"))
+		})
+
+		It("should forward the title", func() {
+			Expect(mock.permReq.Title).To(Equal("Edit file.txt"))
+		})
+
+		It("should forward the options", func() {
+			Expect(mock.permReq.Options).To(HaveLen(2))
+			Expect(mock.permReq.Options[0].OptionId).To(Equal("opt-allow"))
+			Expect(mock.permReq.Options[0].Label).To(Equal("Allow"))
+		})
+
+		It("should return a selected response with the chosen option", func() {
+			Expect(resp.Outcome.Selected).NotTo(BeNil())
+			Expect(resp.Outcome.Selected.OptionId).To(Equal(acp.PermissionOptionId("opt-allow")))
+		})
+
+		It("should record the grant in permission notes", func() {
+			Expect(client.permissionNotes.String()).To(ContainSubstring("Permission granted"))
+			Expect(client.permissionNotes.String()).To(ContainSubstring("Allow"))
+		})
+
+		It("should transition state to PermissionPending and back", func() {
+			// After the deferred setState back to Prompting, the entry should be Prompting
+			Expect(client.entry.State()).To(Equal(StatePrompting))
+		})
+	})
+
+	When("the user denies permission (empty selectedOptionId)", func() {
+		var (
+			client *wikiChatClient
+			resp   acp.RequestPermissionResponse
+			err    error
+		)
+
+		BeforeEach(func() {
+			mock := &mockChatReplier{
+				permResp: &apiv1.RequestPermissionFromUserResponse{
+					SelectedOptionId: "",
+				},
+			}
+			client = &wikiChatClient{
+				page:       "test-page",
+				chatClient: mock,
+				entry: &instanceEntry{
+					page:  "test-page",
+					state: StatePrompting,
+				},
+			}
+
+			title := "Delete data"
+			req := acp.RequestPermissionRequest{
+				ToolCall: acp.RequestPermissionToolCall{
+					ToolCallId: "tc-2",
+					Title:      &title,
+				},
+				Options: []acp.PermissionOption{
+					{OptionId: "opt-allow", Name: "Allow"},
+				},
+			}
+			resp, err = client.RequestPermission(context.Background(), req)
+		})
+
+		It("should not return an error", func() {
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should return a cancelled response", func() {
+			Expect(resp.Outcome.Cancelled).NotTo(BeNil())
+		})
+
+		It("should record the denial in permission notes", func() {
+			Expect(client.permissionNotes.String()).To(ContainSubstring("Permission denied"))
+			Expect(client.permissionNotes.String()).To(ContainSubstring("Delete data"))
+		})
+	})
+
+	When("the wiki server returns an error", func() {
+		var (
+			resp acp.RequestPermissionResponse
+			err  error
+		)
+
+		BeforeEach(func() {
+			mock := &mockChatReplier{
+				permErr: errors.New("server unavailable"),
+			}
+			client := &wikiChatClient{
+				page:       "test-page",
+				chatClient: mock,
+			}
+
+			title := "Write file"
+			req := acp.RequestPermissionRequest{
+				ToolCall: acp.RequestPermissionToolCall{
+					ToolCallId: "tc-3",
+					Title:      &title,
+				},
+				Options: []acp.PermissionOption{
+					{OptionId: "opt-allow", Name: "Allow"},
+					{OptionId: "opt-deny", Name: "Deny"},
+				},
+			}
+			resp, err = client.RequestPermission(context.Background(), req)
+		})
+
+		It("should not return an error (auto-approves)", func() {
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should auto-approve with the first option", func() {
+			Expect(resp.Outcome.Selected).NotTo(BeNil())
+			Expect(resp.Outcome.Selected.OptionId).To(Equal(acp.PermissionOptionId("opt-allow")))
+		})
+	})
+})
+
+var _ = Describe("forwardUserMessage (mock-based)", func() {
+	When("forwarding a user message to the agent", func() {
+		var (
+			mockAgent *mockACPAgent
+			mockChat  *mockChatReplier
+			entry     *instanceEntry
+			client    *wikiChatClient
+		)
+
+		BeforeEach(func() {
+			mockAgent = &mockACPAgent{}
+			mockChat = &mockChatReplier{
+				sendReplyResp: &apiv1.SendChatReplyResponse{MessageId: "reply-1"},
+			}
+
+			entry = &instanceEntry{
+				page:       "test-page",
+				conn:       mockAgent,
+				sessionID:  "session-1",
+				lastActive: time.Now().Add(-5 * time.Minute),
+				state:      StateIdle,
+			}
+
+			client = &wikiChatClient{
+				page:       "test-page",
+				chatClient: mockChat,
+			}
+
+			cancelChan := make(chan struct{})
+			msg := &apiv1.ChatMessage{
+				Id:      "user-msg-1",
+				Content: "What is this page about?",
+				Sender:  apiv1.Sender_USER,
+			}
+
+			forwardUserMessage(context.Background(), entry, client, cancelChan, msg)
+		})
+
+		It("should call Prompt on the ACP agent", func() {
+			Expect(mockAgent.promptCalled).To(BeTrue())
+		})
+
+		It("should send the correct session ID", func() {
+			Expect(mockAgent.promptReq.SessionId).To(Equal(acp.SessionId("session-1")))
+		})
+
+		It("should include the user message content in the prompt", func() {
+			Expect(mockAgent.promptReq.Prompt).To(HaveLen(1))
+			Expect(mockAgent.promptReq.Prompt[0].Text).NotTo(BeNil())
+			Expect(mockAgent.promptReq.Prompt[0].Text.Text).To(ContainSubstring("What is this page about?"))
+		})
+
+		It("should update lastActive on the entry", func() {
+			Expect(entry.idleSince()).To(BeNumerically("<", time.Second))
+		})
+
+		It("should clear the current message after the turn ends", func() {
+			Expect(client.currentMsg).To(BeEmpty())
+		})
+
+		It("should transition back to Idle after prompting", func() {
+			Expect(entry.State()).To(Equal(StateIdle))
+		})
+	})
+
+	When("the agent prompt fails", func() {
+		var (
+			mockAgent *mockACPAgent
+			entry     *instanceEntry
+		)
+
+		BeforeEach(func() {
+			mockAgent = &mockACPAgent{
+				promptErr: errors.New("agent crashed"),
+			}
+			mockChat := &mockChatReplier{}
+
+			entry = &instanceEntry{
+				page:       "test-page",
+				conn:       mockAgent,
+				sessionID:  "session-1",
+				lastActive: time.Now(),
+				state:      StateIdle,
+			}
+
+			client := &wikiChatClient{
+				page:       "test-page",
+				chatClient: mockChat,
+			}
+
+			cancelChan := make(chan struct{})
+			msg := &apiv1.ChatMessage{
+				Id:      "user-msg-2",
+				Content: "Do something",
+				Sender:  apiv1.Sender_USER,
+			}
+
+			forwardUserMessage(context.Background(), entry, client, cancelChan, msg)
+		})
+
+		It("should still transition back to Idle", func() {
+			Expect(entry.State()).To(Equal(StateIdle))
+		})
+	})
+
+	When("page context is available for the first message", func() {
+		var (
+			mockAgent *mockACPAgent
+		)
+
+		BeforeEach(func() {
+			mockAgent = &mockACPAgent{}
+			mockChat := &mockChatReplier{
+				sendReplyResp: &apiv1.SendChatReplyResponse{MessageId: "reply-1"},
+			}
+
+			entry := &instanceEntry{
+				page:       "test-page",
+				conn:       mockAgent,
+				sessionID:  "session-1",
+				lastActive: time.Now(),
+				state:      StateIdle,
+			}
+
+			client := &wikiChatClient{
+				page:        "test-page",
+				chatClient:  mockChat,
+				pageContext: "You are the assistant for page X.",
+			}
+
+			cancelChan := make(chan struct{})
+			msg := &apiv1.ChatMessage{
+				Id:      "user-msg-3",
+				Content: "Hello",
+				Sender:  apiv1.Sender_USER,
+			}
+
+			forwardUserMessage(context.Background(), entry, client, cancelChan, msg)
+		})
+
+		It("should include the page context in the prompt", func() {
+			Expect(mockAgent.promptReq.Prompt[0].Text.Text).To(ContainSubstring("You are the assistant for page X."))
+		})
+
+		It("should include the user message after the context", func() {
+			Expect(mockAgent.promptReq.Prompt[0].Text.Text).To(ContainSubstring("User message: Hello"))
+		})
+	})
+})
+
+var _ = Describe("interface compliance", func() {
+	It("should satisfy chatReplier with the connect ChatServiceClient", func() {
+		var _ chatReplier = (apiv1connect.ChatServiceClient)(nil)
+	})
+
+	It("should satisfy pageMessageSource with the connect ChatServiceClient", func() {
+		var _ pageMessageSource = (apiv1connect.ChatServiceClient)(nil)
+	})
+
+	It("should satisfy acpAgent with *acp.ClientSideConnection", func() {
+		var _ acpAgent = (*acp.ClientSideConnection)(nil)
 	})
 })

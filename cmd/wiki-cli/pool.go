@@ -85,7 +85,7 @@ var validTransitions = map[InstanceState][]InstanceState{
 // instanceEntry tracks a running agent instance for a page.
 type instanceEntry struct {
 	page       string
-	conn       *acp.ClientSideConnection
+	conn       acpAgent
 	sessionID  acp.SessionId
 	cancel     context.CancelFunc
 	lastActive time.Time
@@ -360,6 +360,30 @@ func (d *poolDaemon) evictLeastActive() {
 	}
 }
 
+// chatReplier is the interface for sending chat replies to the wiki.
+// Extracted from apiv1connect.ChatServiceClient for testability.
+type chatReplier interface {
+	SendChatReply(context.Context, *connect.Request[apiv1.SendChatReplyRequest]) (*connect.Response[apiv1.SendChatReplyResponse], error)
+	EditChatMessage(context.Context, *connect.Request[apiv1.EditChatMessageRequest]) (*connect.Response[apiv1.EditChatMessageResponse], error)
+	SendToolCallNotification(context.Context, *connect.Request[apiv1.SendToolCallNotificationRequest]) (*connect.Response[apiv1.SendToolCallNotificationResponse], error)
+	RequestPermissionFromUser(context.Context, *connect.Request[apiv1.RequestPermissionFromUserRequest]) (*connect.Response[apiv1.RequestPermissionFromUserResponse], error)
+}
+
+// pageMessageSource subscribes to page messages and cancellations.
+// Extracted from apiv1connect.ChatServiceClient for testability.
+type pageMessageSource interface {
+	SubscribePageChatMessages(context.Context, *connect.Request[apiv1.SubscribePageChatMessagesRequest]) (*connect.ServerStreamForClient[apiv1.ChatMessage], error)
+	SubscribePageCancellations(context.Context, *connect.Request[apiv1.SubscribePageCancellationsRequest]) (*connect.ServerStreamForClient[apiv1.PageCancellation], error)
+}
+
+// acpAgent provides session and prompt capabilities.
+// Extracted from *acp.ClientSideConnection for testability.
+type acpAgent interface {
+	Initialize(context.Context, acp.InitializeRequest) (acp.InitializeResponse, error)
+	NewSession(context.Context, acp.NewSessionRequest) (acp.NewSessionResponse, error)
+	Prompt(context.Context, acp.PromptRequest) (acp.PromptResponse, error)
+}
+
 // wikiChatClient implements acp.Client — handles ACP callbacks from the agent.
 // It streams agent responses to the wiki in real-time: the first text chunk
 // creates a new chat reply, subsequent chunks edit it in place. Tool calls
@@ -375,7 +399,7 @@ type wikiChatClient struct {
 	replyToID       string // set before each prompt to thread responses
 	currentMsg      string // message ID of the in-progress streaming reply
 	pageContext     string // context to prepend to the first user message
-	chatClient      apiv1connect.ChatServiceClient
+	chatClient      chatReplier
 	entry           *instanceEntry // back-reference for state transitions
 }
 
@@ -945,7 +969,7 @@ func (d *poolDaemon) runMessageBridge(ctx context.Context, entry *instanceEntry,
 // bridgeMessages subscribes to page chat messages and forwards them as ACP prompts.
 // It also subscribes to cancellation signals so the frontend "Stop" button can
 // cancel an in-progress prompt.
-func (*poolDaemon) bridgeMessages(ctx context.Context, entry *instanceEntry, wikiClient apiv1connect.ChatServiceClient, chatClient *wikiChatClient) error {
+func (*poolDaemon) bridgeMessages(ctx context.Context, entry *instanceEntry, wikiClient pageMessageSource, chatClient *wikiChatClient) error {
 	stream, err := wikiClient.SubscribePageChatMessages(ctx, connect.NewRequest(&apiv1.SubscribePageChatMessagesRequest{
 		Page: entry.page,
 	}))
@@ -994,7 +1018,7 @@ func (*poolDaemon) bridgeMessages(ctx context.Context, entry *instanceEntry, wik
 
 // subscribeCancellations starts a background goroutine that listens for cancellation
 // signals on the given page and forwards them to the returned channel.
-func subscribeCancellations(ctx context.Context, wikiClient apiv1connect.ChatServiceClient, page string) <-chan struct{} {
+func subscribeCancellations(ctx context.Context, wikiClient pageMessageSource, page string) <-chan struct{} {
 	cancelChan := make(chan struct{}, 1)
 	go func() {
 		cancelStream, cancelErr := wikiClient.SubscribePageCancellations(ctx, connect.NewRequest(&apiv1.SubscribePageCancellationsRequest{
