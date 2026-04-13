@@ -1049,7 +1049,7 @@ var _ = Describe("poolDaemon fetchPageContext", func() {
 		})
 
 		It("should indicate no context exists yet", func() {
-			Expect(result).To(ContainSubstring("No [ai_agent_chat_context] section exists yet"))
+			Expect(result).To(ContainSubstring("No [ai_agent_chat_context] exists yet"))
 		})
 
 		It("should suggest creating one with MergeFrontmatter", func() {
@@ -1084,6 +1084,311 @@ var _ = Describe("poolDaemon fetchPageContext", func() {
 
 		It("should warn against modifying the context section", func() {
 			Expect(result).To(ContainSubstring("Do NOT attempt to create or modify"))
+		})
+	})
+})
+
+var _ = Describe("InstanceState", func() {
+
+	Describe("String", func() {
+
+		When("called on each state", func() {
+			It("should return Spawning for StateSpawning", func() {
+				Expect(StateSpawning.String()).To(Equal("Spawning"))
+			})
+
+			It("should return Initializing for StateInitializing", func() {
+				Expect(StateInitializing.String()).To(Equal("Initializing"))
+			})
+
+			It("should return BridgeConnecting for StateBridgeConnecting", func() {
+				Expect(StateBridgeConnecting.String()).To(Equal("BridgeConnecting"))
+			})
+
+			It("should return Idle for StateIdle", func() {
+				Expect(StateIdle.String()).To(Equal("Idle"))
+			})
+
+			It("should return Prompting for StatePrompting", func() {
+				Expect(StatePrompting.String()).To(Equal("Prompting"))
+			})
+
+			It("should return PermissionPending for StatePermissionPending", func() {
+				Expect(StatePermissionPending.String()).To(Equal("PermissionPending"))
+			})
+
+			It("should return Stopping for StateStopping", func() {
+				Expect(StateStopping.String()).To(Equal("Stopping"))
+			})
+
+			It("should return Dead for StateDead", func() {
+				Expect(StateDead.String()).To(Equal("Dead"))
+			})
+		})
+
+		When("called on an unknown state value", func() {
+			var result string
+
+			BeforeEach(func() {
+				result = InstanceState(99).String()
+			})
+
+			It("should return Unknown with the numeric value", func() {
+				Expect(result).To(Equal("Unknown(99)"))
+			})
+		})
+	})
+})
+
+var _ = Describe("instanceEntry setState", func() {
+
+	Describe("valid transitions", func() {
+
+		When("transitioning from Spawning to Initializing", func() {
+			var err error
+
+			BeforeEach(func() {
+				entry := &instanceEntry{page: "test", state: StateSpawning}
+				err = entry.setState(StateInitializing)
+			})
+
+			It("should succeed", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+		})
+
+		When("transitioning from Spawning to Dead", func() {
+			var err error
+
+			BeforeEach(func() {
+				entry := &instanceEntry{page: "test", state: StateSpawning}
+				err = entry.setState(StateDead)
+			})
+
+			It("should succeed", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+		})
+
+		When("transitioning from Initializing to BridgeConnecting", func() {
+			var err error
+
+			BeforeEach(func() {
+				entry := &instanceEntry{page: "test", state: StateInitializing}
+				err = entry.setState(StateBridgeConnecting)
+			})
+
+			It("should succeed", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+		})
+
+		When("transitioning from BridgeConnecting to Idle", func() {
+			var err error
+
+			BeforeEach(func() {
+				entry := &instanceEntry{page: "test", state: StateBridgeConnecting}
+				err = entry.setState(StateIdle)
+			})
+
+			It("should succeed", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+		})
+
+		When("transitioning from Idle to Prompting", func() {
+			var err error
+
+			BeforeEach(func() {
+				entry := &instanceEntry{page: "test", state: StateIdle}
+				err = entry.setState(StatePrompting)
+			})
+
+			It("should succeed", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+		})
+
+		When("transitioning from Idle to Stopping", func() {
+			var err error
+
+			BeforeEach(func() {
+				entry := &instanceEntry{page: "test", state: StateIdle}
+				err = entry.setState(StateStopping)
+			})
+
+			It("should succeed", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+		})
+
+		When("transitioning from Prompting to Idle", func() {
+			var err error
+
+			BeforeEach(func() {
+				entry := &instanceEntry{page: "test", state: StatePrompting}
+				err = entry.setState(StateIdle)
+			})
+
+			It("should succeed", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+		})
+
+		When("transitioning from Prompting to PermissionPending", func() {
+			var err error
+
+			BeforeEach(func() {
+				entry := &instanceEntry{page: "test", state: StatePrompting}
+				err = entry.setState(StatePermissionPending)
+			})
+
+			It("should succeed", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+		})
+
+		When("transitioning from PermissionPending to Prompting", func() {
+			var err error
+
+			BeforeEach(func() {
+				entry := &instanceEntry{page: "test", state: StatePermissionPending}
+				err = entry.setState(StatePrompting)
+			})
+
+			It("should succeed", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+		})
+
+		When("transitioning from Stopping to Dead", func() {
+			var err error
+
+			BeforeEach(func() {
+				entry := &instanceEntry{page: "test", state: StateStopping}
+				err = entry.setState(StateDead)
+			})
+
+			It("should succeed", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+		})
+	})
+
+	Describe("invalid transitions", func() {
+
+		When("transitioning from Dead to Idle", func() {
+			var err error
+
+			BeforeEach(func() {
+				entry := &instanceEntry{page: "test", state: StateDead}
+				err = entry.setState(StateIdle)
+			})
+
+			It("should return an error", func() {
+				Expect(err).To(MatchError(ContainSubstring("invalid state transition: Dead -> Idle")))
+			})
+		})
+
+		When("transitioning from Idle to Initializing", func() {
+			var err error
+
+			BeforeEach(func() {
+				entry := &instanceEntry{page: "test", state: StateIdle}
+				err = entry.setState(StateInitializing)
+			})
+
+			It("should return an error", func() {
+				Expect(err).To(MatchError(ContainSubstring("invalid state transition: Idle -> Initializing")))
+			})
+		})
+
+		When("transitioning from Spawning to Idle", func() {
+			var err error
+
+			BeforeEach(func() {
+				entry := &instanceEntry{page: "test", state: StateSpawning}
+				err = entry.setState(StateIdle)
+			})
+
+			It("should return an error", func() {
+				Expect(err).To(MatchError(ContainSubstring("invalid state transition: Spawning -> Idle")))
+			})
+		})
+
+		When("transitioning from Dead to Spawning", func() {
+			var err error
+
+			BeforeEach(func() {
+				entry := &instanceEntry{page: "test", state: StateDead}
+				err = entry.setState(StateSpawning)
+			})
+
+			It("should return an error", func() {
+				Expect(err).To(MatchError(ContainSubstring("invalid state transition: Dead -> Spawning")))
+			})
+		})
+
+		When("transitioning from BridgeConnecting to Prompting", func() {
+			var err error
+
+			BeforeEach(func() {
+				entry := &instanceEntry{page: "test", state: StateBridgeConnecting}
+				err = entry.setState(StatePrompting)
+			})
+
+			It("should return an error", func() {
+				Expect(err).To(MatchError(ContainSubstring("invalid state transition: BridgeConnecting -> Prompting")))
+			})
+		})
+	})
+
+	Describe("state updates correctly", func() {
+
+		When("transitioning through a full lifecycle", func() {
+			var entry *instanceEntry
+			var errors []error
+
+			BeforeEach(func() {
+				entry = &instanceEntry{page: "lifecycle-test", state: StateSpawning}
+				errors = nil
+				errors = append(errors, entry.setState(StateInitializing))
+				errors = append(errors, entry.setState(StateBridgeConnecting))
+				errors = append(errors, entry.setState(StateIdle))
+				errors = append(errors, entry.setState(StatePrompting))
+				errors = append(errors, entry.setState(StatePermissionPending))
+				errors = append(errors, entry.setState(StatePrompting))
+				errors = append(errors, entry.setState(StateIdle))
+				errors = append(errors, entry.setState(StateStopping))
+				errors = append(errors, entry.setState(StateDead))
+			})
+
+			It("should complete all transitions without error", func() {
+				for _, err := range errors {
+					Expect(err).NotTo(HaveOccurred())
+				}
+			})
+
+			It("should end in Dead state", func() {
+				Expect(entry.State()).To(Equal(StateDead))
+			})
+		})
+	})
+
+	Describe("State", func() {
+
+		When("called on an entry", func() {
+			var entry *instanceEntry
+			var state InstanceState
+
+			BeforeEach(func() {
+				entry = &instanceEntry{page: "test", state: StateIdle}
+				state = entry.State()
+			})
+
+			It("should return the current state", func() {
+				Expect(state).To(Equal(StateIdle))
+			})
 		})
 	})
 })

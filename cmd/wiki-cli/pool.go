@@ -28,6 +28,55 @@ const (
 	defaultIdleTimeoutMinutes = 30
 )
 
+// InstanceState represents the lifecycle state of an agent instance.
+type InstanceState int
+
+const (
+	StateSpawning          InstanceState = iota
+	StateInitializing      // handshake done, session being created
+	StateBridgeConnecting  // subscribing to page messages
+	StateIdle              // bridge connected, waiting for user messages
+	StatePrompting         // Prompt call in progress
+	StatePermissionPending // waiting for user permission response
+	StateStopping          // being shut down
+	StateDead              // terminated
+)
+
+func (s InstanceState) String() string {
+	switch s {
+	case StateSpawning:
+		return "Spawning"
+	case StateInitializing:
+		return "Initializing"
+	case StateBridgeConnecting:
+		return "BridgeConnecting"
+	case StateIdle:
+		return "Idle"
+	case StatePrompting:
+		return "Prompting"
+	case StatePermissionPending:
+		return "PermissionPending"
+	case StateStopping:
+		return "Stopping"
+	case StateDead:
+		return "Dead"
+	default:
+		return fmt.Sprintf("Unknown(%d)", int(s))
+	}
+}
+
+// validTransitions defines the legal state transitions for an instance.
+var validTransitions = map[InstanceState][]InstanceState{
+	StateSpawning:          {StateInitializing, StateDead},
+	StateInitializing:      {StateBridgeConnecting, StateDead},
+	StateBridgeConnecting:  {StateIdle, StateDead},
+	StateIdle:              {StatePrompting, StateStopping},
+	StatePrompting:         {StateIdle, StatePermissionPending, StateStopping, StateDead},
+	StatePermissionPending: {StatePrompting, StateStopping, StateDead},
+	StateStopping:          {StateDead},
+	StateDead:              {},
+}
+
 // instanceEntry tracks a running agent instance for a page.
 type instanceEntry struct {
 	page       string
@@ -35,6 +84,7 @@ type instanceEntry struct {
 	sessionID  acp.SessionId
 	cancel     context.CancelFunc
 	lastActive time.Time
+	state      InstanceState
 	mu         sync.Mutex
 }
 
@@ -48,6 +98,40 @@ func (e *instanceEntry) idleSince() time.Duration {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	return time.Since(e.lastActive)
+}
+
+// setState transitions the instance to a new state. It validates that the
+// transition is legal according to validTransitions and logs the change.
+// Must be called without e.mu held — it acquires the lock internally.
+func (e *instanceEntry) setState(newState InstanceState) error {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	return e.setStateLocked(newState)
+}
+
+// setStateLocked transitions the instance to a new state while the mutex is
+// already held. It validates the transition and logs the change.
+func (e *instanceEntry) setStateLocked(newState InstanceState) error {
+	oldState := e.state
+	allowed := validTransitions[oldState]
+
+	for _, s := range allowed {
+		if s == newState {
+			e.state = newState
+			log.Printf("[%s] State: %s -> %s", e.page, oldState, newState)
+			return nil
+		}
+	}
+
+	return fmt.Errorf("[%s] invalid state transition: %s -> %s", e.page, oldState, newState)
+}
+
+// State returns the current state of the instance (thread-safe).
+func (e *instanceEntry) State() InstanceState {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.state
 }
 
 // poolDaemon manages per-page agent instances via ACP.
@@ -287,6 +371,7 @@ type wikiChatClient struct {
 	currentMsg      string // message ID of the in-progress streaming reply
 	pageContext     string // context to prepend to the first user message
 	chatClient      apiv1connect.ChatServiceClient
+	entry           *instanceEntry // back-reference for state transitions
 }
 
 func newWikiChatClient(page, wikiURL string) *wikiChatClient {
@@ -536,7 +621,17 @@ func truncate(s string, max int) string {
 }
 
 func (c *wikiChatClient) RequestPermission(ctx context.Context, p acp.RequestPermissionRequest) (acp.RequestPermissionResponse, error) {
-	// Auto-approve all permissions — the agent is trusted.
+	if c.entry != nil {
+		if err := c.entry.setState(StatePermissionPending); err != nil {
+			log.Printf("%v", err)
+		}
+		defer func() {
+			if err := c.entry.setState(StatePrompting); err != nil {
+				log.Printf("%v", err)
+			}
+		}()
+	}
+
 	title := string(p.ToolCall.ToolCallId)
 	if p.ToolCall.Title != nil {
 		title = *p.ToolCall.Title
@@ -750,7 +845,12 @@ func (d *poolDaemon) spawnInstance(page string) (*instanceEntry, error) {
 		sessionID:  sess.SessionId,
 		cancel:     cancel,
 		lastActive: time.Now(),
+		state:      StateInitializing,
 	}
+	log.Printf("[%s] State: Spawning -> Initializing", page)
+
+	// Wire up back-reference so permission callbacks can transition state
+	chatClient.entry = entry
 
 	// Inject page context and start message bridge
 	go d.runMessageBridge(ctx, entry, chatClient)
@@ -763,6 +863,10 @@ func (d *poolDaemon) spawnInstance(page string) (*instanceEntry, error) {
 // separate prompt, ensuring the bridge is listening before any prompt is sent.
 func (d *poolDaemon) runMessageBridge(ctx context.Context, entry *instanceEntry, chatClient *wikiChatClient) {
 	page := entry.page
+
+	if err := entry.setState(StateBridgeConnecting); err != nil {
+		log.Printf("%v", err)
+	}
 
 	log.Printf("[%s] Bridge: fetching page context...", page)
 	// Fetch page context (but don't send it as a prompt yet — prepend to first message)
@@ -841,6 +945,10 @@ func (d *poolDaemon) bridgeMessages(ctx context.Context, entry *instanceEntry, w
 
 	log.Printf("Message bridge connected for page %q", entry.page)
 
+	if err := entry.setState(StateIdle); err != nil {
+		log.Printf("%v", err)
+	}
+
 	for stream.Receive() {
 		msg := stream.Msg()
 
@@ -897,6 +1005,10 @@ func (d *poolDaemon) bridgeMessages(ctx context.Context, entry *instanceEntry, w
 		chatClient.mu.Unlock()
 
 		// Send as ACP prompt — blocks until the agent completes its turn.
+		if err := entry.setState(StatePrompting); err != nil {
+			log.Printf("%v", err)
+		}
+
 		log.Printf("[%s] Bridge: sending prompt (%d chars)...", entry.page, len(promptText))
 		_, promptErr := entry.conn.Prompt(promptCtx, acp.PromptRequest{
 			SessionId: entry.sessionID,
@@ -911,6 +1023,10 @@ func (d *poolDaemon) bridgeMessages(ctx context.Context, entry *instanceEntry, w
 			} else {
 				log.Printf("Failed to send prompt to agent for %q: %v", entry.page, promptErr)
 			}
+		}
+
+		if err := entry.setState(StateIdle); err != nil {
+			log.Printf("%v", err)
 		}
 
 		chatClient.endTurn()
@@ -939,11 +1055,39 @@ Rules:
 - Use the wiki MCP tools only when the user asks you to read or edit pages
 - Each message you receive is from a user chatting on this wiki page
 
-CONTINUITY: After each conversation, update the [ai_agent_chat_context] section in the page's frontmatter (via MergeFrontmatter MCP tool) with:
-- A brief summary of what was discussed
-- Any goals, decisions, or action items the user mentioned
-- Key context that would help you continue the conversation next time
-This is your per-page memory — without it you have no history between sessions. Always maintain it.
+## MANDATORY: Update Your Memory After EVERY Response
+
+You have NO chat history between sessions. The ONLY way to maintain continuity is the
+[ai_agent_chat_context] section in this page's frontmatter. Without it, you start every
+session completely blank.
+
+REQUIREMENT: Before you finish responding to EVERY message, you MUST call the
+MergeFrontmatter MCP tool to update [ai_agent_chat_context]. This is not optional.
+Do it every single turn, even for short exchanges.
+
+Update it with a structured object containing these fields:
+- "last_conversation_summary": 1-2 sentence summary of this exchange
+- "user_goals": array of goals or preferences the user has mentioned (accumulate across sessions)
+- "pending_items": array of action items that need follow-up
+- "key_context": important facts, decisions, or preferences to remember
+- "last_updated": current date/time
+
+Example MergeFrontmatter call:
+` + "```" + `json
+{
+  "ai_agent_chat_context": {
+    "last_conversation_summary": "User asked me to help reorganize the project roadmap section. I restructured it into Q1/Q2 milestones.",
+    "user_goals": ["reorganize roadmap", "keep page concise"],
+    "pending_items": ["add Q3 milestones when user provides them"],
+    "key_context": "User prefers bullet points over tables for roadmap items. This page tracks the Alpha project.",
+    "last_updated": "2025-01-15T10:30:00Z"
+  }
+}
+` + "```" + `
+
+IMPORTANT: Merge new information with existing context — do not discard previous entries
+from user_goals or key_context unless they are no longer relevant. Accumulate knowledge
+across sessions.
 
 `
 
@@ -966,7 +1110,9 @@ func (d *poolDaemon) fetchPageContext(ctx context.Context, page string) string {
 	agentContext, ok := fm["ai_agent_chat_context"]
 	if !ok {
 		return chatPreamble + fmt.Sprintf(
-			"You are the assistant for wiki page '%s'. No [ai_agent_chat_context] section exists yet. You can create one using the MergeFrontmatter MCP tool to store per-page memory for future sessions.",
+			"You are the assistant for wiki page '%s'. No [ai_agent_chat_context] exists yet — this is your first session on this page.\n\n"+
+			"You MUST create it now by calling MergeFrontmatter after your first response. Use the structured format described above "+
+			"(last_conversation_summary, user_goals, pending_items, key_context, last_updated).",
 			page,
 		)
 	}
@@ -978,7 +1124,12 @@ func (d *poolDaemon) fetchPageContext(ctx context.Context, page string) string {
 	}
 
 	return chatPreamble + fmt.Sprintf(
-		"You are the assistant for wiki page '%s'. Here is your per-page working memory from [ai_agent_chat_context]:\n```json\n%s\n```\nUpdate it using the MergeFrontmatter MCP tool when you learn something worth remembering.",
+		"You are the assistant for wiki page '%s'.\n\n"+
+			"## Your Restored Memory (from [ai_agent_chat_context])\n\n"+
+			"This is everything you remember from previous sessions. Review it before responding:\n\n"+
+			"```json\n%s\n```\n\n"+
+			"REMINDER: You MUST update this memory via MergeFrontmatter before finishing your response. "+
+			"Merge new information with the existing data above — do not overwrite fields, accumulate them.",
 		page, string(contextJSON),
 	)
 }
@@ -990,7 +1141,20 @@ func (d *poolDaemon) stopInstanceLocked(page string) {
 		return
 	}
 
+	entry.mu.Lock()
+	if err := entry.setStateLocked(StateStopping); err != nil {
+		log.Printf("%v", err)
+	}
+	entry.mu.Unlock()
+
 	entry.cancel()
+
+	entry.mu.Lock()
+	if err := entry.setStateLocked(StateDead); err != nil {
+		log.Printf("%v", err)
+	}
+	entry.mu.Unlock()
+
 	delete(d.instances, page)
 }
 
