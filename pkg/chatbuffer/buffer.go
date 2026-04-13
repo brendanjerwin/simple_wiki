@@ -1,6 +1,7 @@
 package chatbuffer
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"sync"
@@ -735,14 +736,22 @@ func (m *Manager) IsInstanceRequested(page string) bool {
 }
 
 // RequestPermission emits a permission request event to page subscribers and blocks
-// until a response arrives via RespondToPermission. Returns the selected option ID.
-func (m *Manager) RequestPermission(page, requestID, title, description string, options []PermissionOption) string {
+// until a response arrives via RespondToPermission or the context is cancelled.
+// Returns the selected option ID, or empty string if cancelled.
+func (m *Manager) RequestPermission(ctx context.Context, page, requestID, title, description string, options []PermissionOption) string {
 	// Create a response channel and register it
 	responseChan := make(chan string, 1)
 
 	m.pendingPermissionsMu.Lock()
 	m.pendingPermissions[requestID] = responseChan
 	m.pendingPermissionsMu.Unlock()
+
+	// Ensure cleanup on all exit paths
+	defer func() {
+		m.pendingPermissionsMu.Lock()
+		delete(m.pendingPermissions, requestID)
+		m.pendingPermissionsMu.Unlock()
+	}()
 
 	// Emit the permission request event to page subscribers
 	m.EmitPermissionRequest(page, &PermissionRequestEvent{
@@ -753,15 +762,13 @@ func (m *Manager) RequestPermission(page, requestID, title, description string, 
 		Options:     options,
 	})
 
-	// Block until a response arrives
-	selectedOptionID := <-responseChan
-
-	// Clean up
-	m.pendingPermissionsMu.Lock()
-	delete(m.pendingPermissions, requestID)
-	m.pendingPermissionsMu.Unlock()
-
-	return selectedOptionID
+	// Block until a response arrives or context is cancelled
+	select {
+	case selectedOptionID := <-responseChan:
+		return selectedOptionID
+	case <-ctx.Done():
+		return ""
+	}
 }
 
 // EmitPermissionRequest sends a permission request event to all subscribers of the given page.

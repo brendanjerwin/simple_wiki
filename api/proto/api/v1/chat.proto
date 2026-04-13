@@ -6,9 +6,9 @@ import "google/protobuf/timestamp.proto";
 
 option go_package = "github.com/brendanjerwin/simple_wiki/gen/go/api/v1;apiv1";
 
-// ChatService brokers chat messages between browsers and the Claude Code channel.
-// Browsers send user messages and subscribe to chat events. The wiki-cli MCP server
-// subscribes to receive user messages and sends back assistant replies, edits, and reactions.
+// ChatService brokers chat messages between browsers and an AI agent.
+// Browsers send user messages and subscribe to chat events. The pool daemon
+// manages agent instances that send back assistant replies, edits, and reactions.
 service ChatService {
   // SendMessage sends a user chat message in the context of a page.
   // Returns the assigned message ID.
@@ -18,20 +18,20 @@ service ChatService {
   // Replays existing buffer contents on connect, then streams new events.
   rpc SubscribeChat(SubscribeChatRequest) returns (stream ChatEvent) {}
 
-  // SendChatReply is called by wiki-cli mcp when Claude uses the reply tool.
+  // SendChatReply is called by the pool daemon when the agent uses the reply tool.
   // Accepts optional reply_to message ID for threading.
   rpc SendChatReply(SendChatReplyRequest) returns (SendChatReplyResponse) {}
 
-  // EditChatMessage is called by wiki-cli mcp when Claude uses the edit_message tool.
+  // EditChatMessage is called by the pool daemon when the agent uses the edit_message tool.
   // Updates an existing message's content.
   rpc EditChatMessage(EditChatMessageRequest) returns (EditChatMessageResponse) {}
 
-  // ReactToMessage is called by wiki-cli mcp when Claude uses the react tool.
+  // ReactToMessage is called by the pool daemon when the agent uses the react tool.
   // Adds an emoji reaction to a message.
   rpc ReactToMessage(ReactToMessageRequest) returns (ReactToMessageResponse) {}
 
-  // GetChatStatus returns whether Claude is currently connected (a channel subscriber exists).
-  // Used by the chat panel to disable the UI when Claude is unavailable.
+  // GetChatStatus returns whether an agent is currently connected for a page.
+  // Used by the chat panel to disable the UI when no agent is available.
   rpc GetChatStatus(GetChatStatusRequest) returns (GetChatStatusResponse) {}
 
   // SubscribePageChatMessages is called by wiki-cli mcp --page at startup.
@@ -39,7 +39,7 @@ service ChatService {
   rpc SubscribePageChatMessages(SubscribePageChatMessagesRequest) returns (stream ChatMessage) {}
 
   // SubscribeInstanceRequests is called by the wiki-cli pool daemon.
-  // Streams page names that need a Claude instance spawned.
+  // Streams page names that need an agent instance spawned.
   rpc SubscribeInstanceRequests(SubscribeInstanceRequestsRequest) returns (stream InstanceRequest) {}
 
   // SendToolCallNotification is called by the pool daemon or ACP client
@@ -197,7 +197,7 @@ message GetChatStatusRequest {
 
 // GetChatStatusResponse is the response for GetChatStatus.
 message GetChatStatusResponse {
-  // Whether a Claude channel subscriber is connected for the requested page.
+  // Whether an agent is connected for the requested page.
   bool connected = 1;
   // Whether an instance has been requested but is not yet connected.
   bool starting = 2;
@@ -213,7 +213,7 @@ message SubscribePageChatMessagesRequest {
 // SubscribeInstanceRequestsRequest is the request for SubscribeInstanceRequests.
 message SubscribeInstanceRequestsRequest {}
 
-// InstanceRequest is streamed by SubscribeInstanceRequests when a page needs a Claude instance.
+// InstanceRequest is streamed by SubscribeInstanceRequests when a page needs an agent instance.
 message InstanceRequest {
   string page = 1;  // page identifier that needs an instance
 }

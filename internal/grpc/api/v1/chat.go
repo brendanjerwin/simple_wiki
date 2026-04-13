@@ -372,7 +372,7 @@ func (s *Server) SubscribePageCancellations(req *apiv1.SubscribePageCancellation
 	}
 
 	cancelChan, unsubscribe := s.chatBufferManager.SubscribeToCancellation(req.Page)
-	defer unsubscribe()
+	defer func() { unsubscribe() }()
 
 	for {
 		select {
@@ -415,10 +415,7 @@ func (s *Server) RespondToPermission(_ context.Context, req *apiv1.RespondToPerm
 	if req.RequestId == "" {
 		return nil, status.Error(codes.InvalidArgument, "request_id is required")
 	}
-	if req.SelectedOptionId == "" {
-		return nil, status.Error(codes.InvalidArgument, "selected_option_id is required")
-	}
-
+	// Empty selected_option_id means cancelled/denied per proto contract
 	s.chatBufferManager.RespondToPermission(req.RequestId, req.SelectedOptionId)
 	return &apiv1.RespondToPermissionResponse{}, nil
 }
@@ -426,7 +423,7 @@ func (s *Server) RespondToPermission(_ context.Context, req *apiv1.RespondToPerm
 // RequestPermissionFromUser implements the RequestPermissionFromUser RPC.
 // Called by the pool daemon to forward a permission request to the user.
 // Blocks until the user responds via RespondToPermission.
-func (s *Server) RequestPermissionFromUser(_ context.Context, req *apiv1.RequestPermissionFromUserRequest) (*apiv1.RequestPermissionFromUserResponse, error) {
+func (s *Server) RequestPermissionFromUser(ctx context.Context, req *apiv1.RequestPermissionFromUserRequest) (*apiv1.RequestPermissionFromUserResponse, error) {
 	if req.Page == "" {
 		return nil, status.Error(codes.InvalidArgument, errPageRequired)
 	}
@@ -445,7 +442,7 @@ func (s *Server) RequestPermissionFromUser(_ context.Context, req *apiv1.Request
 	}
 
 	// This blocks until the user responds
-	selectedID := s.chatBufferManager.RequestPermission(req.Page, req.RequestId, req.Title, req.Description, opts)
+	selectedID := s.chatBufferManager.RequestPermission(ctx, req.Page, req.RequestId, req.Title, req.Description, opts)
 
 	return &apiv1.RequestPermissionFromUserResponse{
 		SelectedOptionId: selectedID,

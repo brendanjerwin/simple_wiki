@@ -1995,7 +1995,7 @@ var _ = Describe("ChatService", func() {
 	})
 })
 
-func (m *mockChatBufferManager) RequestPermission(page, requestID, title, description string, options []chatbuffer.PermissionOption) string {
+func (m *mockChatBufferManager) RequestPermission(_ context.Context, page, requestID, title, description string, options []chatbuffer.PermissionOption) string {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.requestPermissionCalls = append(m.requestPermissionCalls, requestPermissionArgs{page, requestID, title, description, options})

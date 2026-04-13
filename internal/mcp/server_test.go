@@ -2,6 +2,7 @@
 package mcp_test
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -417,6 +418,6 @@ var _ = Describe("NewStreamableHTTPHandler", func() {
 	})
 })
 
-func (noOpChatBufferManager) RequestPermission(string, string, string, string, []chatbuffer.PermissionOption) string {
+func (noOpChatBufferManager) RequestPermission(_ context.Context, _ string, _ string, _ string, _ string, _ []chatbuffer.PermissionOption) string {
 	return ""
 }

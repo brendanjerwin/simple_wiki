@@ -2,6 +2,7 @@
 package chatbuffer_test
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -975,6 +976,7 @@ var _ = Describe("Manager", func() {
 				go func() {
 					defer close(done)
 					selectedOption = manager.RequestPermission(
+						context.Background(),
 						"test-page",
 						"req-1",
 						"Allow Edit",
@@ -1009,6 +1011,7 @@ var _ = Describe("Manager", func() {
 
 				go func() {
 					manager.RequestPermission(
+						context.Background(),
 						"test-page",
 						"req-2",
 						"Allow Edit",
@@ -1091,6 +1094,7 @@ var _ = Describe("Manager", func() {
 				go func() {
 					defer close(done)
 					selectedOption = manager.RequestPermission(
+						context.Background(),
 						"test-page",
 						"req-respond-1",
 						"Title",

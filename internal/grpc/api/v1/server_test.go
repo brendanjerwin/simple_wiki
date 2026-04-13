@@ -6842,6 +6842,6 @@ var _ = Describe("makeReportJobCallback", func() {
 	})
 })
 
-func (noOpChatBufferManager) RequestPermission(string, string, string, string, []chatbuffer.PermissionOption) string {
+func (noOpChatBufferManager) RequestPermission(_ context.Context, _ string, _ string, _ string, _ string, _ []chatbuffer.PermissionOption) string {
 	return ""
 }

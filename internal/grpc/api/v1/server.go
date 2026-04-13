@@ -49,7 +49,7 @@ type ChatBufferManager interface {
 	NotifyToolCall(page, messageID, toolCallID, title, toolStatus string)
 	CancelPage(page string) bool
 	SubscribeToCancellation(page string) (<-chan struct{}, func())
-	RequestPermission(page, requestID, title, description string, options []chatbuffer.PermissionOption) string
+	RequestPermission(ctx context.Context, page, requestID, title, description string, options []chatbuffer.PermissionOption) string
 	EmitPermissionRequest(page string, event *chatbuffer.PermissionRequestEvent)
 	RespondToPermission(requestID, selectedOptionID string)
 }

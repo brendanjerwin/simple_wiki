@@ -871,7 +871,12 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
     const viewport = window.visualViewport;
     if (viewport) {
       panel.style.height = `${viewport.height}px`;
-      panel.style.top = `${viewport.offsetTop}px`;
+      // Only override top when viewport is offset (e.g., mobile keyboard open)
+      if (viewport.offsetTop > 0) {
+        panel.style.top = `${viewport.offsetTop}px`;
+      } else {
+        panel.style.removeProperty('top');
+      }
     }
   }
 
