@@ -12,7 +12,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file api/v1/chat.proto.
  */
 export const file_api_v1_chat: GenFile = /*@__PURE__*/
-  fileDesc("ChFhcGkvdjEvY2hhdC5wcm90bxIGYXBpLnYxIugBCgtDaGF0TWVzc2FnZRIKCgJpZBgBIAEoCRIeCgZzZW5kZXIYAiABKA4yDi5hcGkudjEuU2VuZGVyEg8KB2NvbnRlbnQYAyABKAkSLQoJdGltZXN0YW1wGAQgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIMCgRwYWdlGAUgASgJEhAKCHNlcXVlbmNlGAYgASgDEhMKC3NlbmRlcl9uYW1lGAcgASgJEhMKC3JlcGx5X3RvX2lkGAggASgJEiMKCXJlYWN0aW9ucxgJIAMoCzIQLmFwaS52MS5SZWFjdGlvbiIqCghSZWFjdGlvbhINCgVlbW9qaRgBIAEoCRIPCgdyZWFjdG9yGAIgASgJIpMBCglDaGF0RXZlbnQSKgoLbmV3X21lc3NhZ2UYASABKAsyEy5hcGkudjEuQ2hhdE1lc3NhZ2VIABInCgRlZGl0GAIgASgLMhcuYXBpLnYxLkNoYXRNZXNzYWdlRWRpdEgAEigKCHJlYWN0aW9uGAMgASgLMhQuYXBpLnYxLkNoYXRSZWFjdGlvbkgAQgcKBWV2ZW50ImkKD0NoYXRNZXNzYWdlRWRpdBISCgptZXNzYWdlX2lkGAEgASgJEhMKC25ld19jb250ZW50GAIgASgJEi0KCXRpbWVzdGFtcBgDIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAiQgoMQ2hhdFJlYWN0aW9uEhIKCm1lc3NhZ2VfaWQYASABKAkSDQoFZW1vamkYAiABKAkSDwoHcmVhY3RvchgDIAEoCSI3ChZTZW5kQ2hhdE1lc3NhZ2VSZXF1ZXN0EgwKBHBhZ2UYASABKAkSDwoHY29udGVudBgCIAEoCSItChdTZW5kQ2hhdE1lc3NhZ2VSZXNwb25zZRISCgptZXNzYWdlX2lkGAEgASgJIiQKFFN1YnNjcmliZUNoYXRSZXF1ZXN0EgwKBHBhZ2UYASABKAkiHgocU3Vic2NyaWJlQ2hhdE1lc3NhZ2VzUmVxdWVzdCJKChRTZW5kQ2hhdFJlcGx5UmVxdWVzdBIMCgRwYWdlGAEgASgJEg8KB2NvbnRlbnQYAiABKAkSEwoLcmVwbHlfdG9faWQYAyABKAkiKwoVU2VuZENoYXRSZXBseVJlc3BvbnNlEhIKCm1lc3NhZ2VfaWQYASABKAkiQQoWRWRpdENoYXRNZXNzYWdlUmVxdWVzdBISCgptZXNzYWdlX2lkGAEgASgJEhMKC25ld19jb250ZW50GAIgASgJIhkKF0VkaXRDaGF0TWVzc2FnZVJlc3BvbnNlIjoKFVJlYWN0VG9NZXNzYWdlUmVxdWVzdBISCgptZXNzYWdlX2lkGAEgASgJEg0KBWVtb2ppGAIgASgJIhgKFlJlYWN0VG9NZXNzYWdlUmVzcG9uc2UiJAoUR2V0Q2hhdFN0YXR1c1JlcXVlc3QSDAoEcGFnZRgBIAEoCSJUChVHZXRDaGF0U3RhdHVzUmVzcG9uc2USEQoJY29ubmVjdGVkGAEgASgIEhAKCHN0YXJ0aW5nGAIgASgIEhYKDnBvb2xfY29ubmVjdGVkGAMgASgIIjAKIFN1YnNjcmliZVBhZ2VDaGF0TWVzc2FnZXNSZXF1ZXN0EgwKBHBhZ2UYASABKAkiIgogU3Vic2NyaWJlSW5zdGFuY2VSZXF1ZXN0c1JlcXVlc3QiHwoPSW5zdGFuY2VSZXF1ZXN0EgwKBHBhZ2UYASABKAkqOQoGU2VuZGVyEhYKElNFTkRFUl9VTlNQRUNJRklFRBAAEggKBFVTRVIQARINCglBU1NJU1RBTlQQAjKKBgoLQ2hhdFNlcnZpY2USUAoLU2VuZE1lc3NhZ2USHi5hcGkudjEuU2VuZENoYXRNZXNzYWdlUmVxdWVzdBofLmFwaS52MS5TZW5kQ2hhdE1lc3NhZ2VSZXNwb25zZSIAEkQKDVN1YnNjcmliZUNoYXQSHC5hcGkudjEuU3Vic2NyaWJlQ2hhdFJlcXVlc3QaES5hcGkudjEuQ2hhdEV2ZW50IgAwARJWChVTdWJzY3JpYmVDaGF0TWVzc2FnZXMSJC5hcGkudjEuU3Vic2NyaWJlQ2hhdE1lc3NhZ2VzUmVxdWVzdBoTLmFwaS52MS5DaGF0TWVzc2FnZSIAMAESTgoNU2VuZENoYXRSZXBseRIcLmFwaS52MS5TZW5kQ2hhdFJlcGx5UmVxdWVzdBodLmFwaS52MS5TZW5kQ2hhdFJlcGx5UmVzcG9uc2UiABJUCg9FZGl0Q2hhdE1lc3NhZ2USHi5hcGkudjEuRWRpdENoYXRNZXNzYWdlUmVxdWVzdBofLmFwaS52MS5FZGl0Q2hhdE1lc3NhZ2VSZXNwb25zZSIAElEKDlJlYWN0VG9NZXNzYWdlEh0uYXBpLnYxLlJlYWN0VG9NZXNzYWdlUmVxdWVzdBoeLmFwaS52MS5SZWFjdFRvTWVzc2FnZVJlc3BvbnNlIgASTgoNR2V0Q2hhdFN0YXR1cxIcLmFwaS52MS5HZXRDaGF0U3RhdHVzUmVxdWVzdBodLmFwaS52MS5HZXRDaGF0U3RhdHVzUmVzcG9uc2UiABJeChlTdWJzY3JpYmVQYWdlQ2hhdE1lc3NhZ2VzEiguYXBpLnYxLlN1YnNjcmliZVBhZ2VDaGF0TWVzc2FnZXNSZXF1ZXN0GhMuYXBpLnYxLkNoYXRNZXNzYWdlIgAwARJiChlTdWJzY3JpYmVJbnN0YW5jZVJlcXVlc3RzEiguYXBpLnYxLlN1YnNjcmliZUluc3RhbmNlUmVxdWVzdHNSZXF1ZXN0GhcuYXBpLnYxLkluc3RhbmNlUmVxdWVzdCIAMAFCOlo4Z2l0aHViLmNvbS9icmVuZGFuamVyd2luL3NpbXBsZV93aWtpL2dlbi9nby9hcGkvdjE7YXBpdjFiBnByb3RvMw", [file_google_protobuf_timestamp]);
+  fileDesc("ChFhcGkvdjEvY2hhdC5wcm90bxIGYXBpLnYxIugBCgtDaGF0TWVzc2FnZRIKCgJpZBgBIAEoCRIeCgZzZW5kZXIYAiABKA4yDi5hcGkudjEuU2VuZGVyEg8KB2NvbnRlbnQYAyABKAkSLQoJdGltZXN0YW1wGAQgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIMCgRwYWdlGAUgASgJEhAKCHNlcXVlbmNlGAYgASgDEhMKC3NlbmRlcl9uYW1lGAcgASgJEhMKC3JlcGx5X3RvX2lkGAggASgJEiMKCXJlYWN0aW9ucxgJIAMoCzIQLmFwaS52MS5SZWFjdGlvbiIqCghSZWFjdGlvbhINCgVlbW9qaRgBIAEoCRIPCgdyZWFjdG9yGAIgASgJIvsBCglDaGF0RXZlbnQSKgoLbmV3X21lc3NhZ2UYASABKAsyEy5hcGkudjEuQ2hhdE1lc3NhZ2VIABInCgRlZGl0GAIgASgLMhcuYXBpLnYxLkNoYXRNZXNzYWdlRWRpdEgAEigKCHJlYWN0aW9uGAMgASgLMhQuYXBpLnYxLkNoYXRSZWFjdGlvbkgAEikKCXRvb2xfY2FsbBgEIAEoCzIULmFwaS52MS5DaGF0VG9vbENhbGxIABI7ChJwZXJtaXNzaW9uX3JlcXVlc3QYBSABKAsyHS5hcGkudjEuQ2hhdFBlcm1pc3Npb25SZXF1ZXN0SABCBwoFZXZlbnQijAEKFUNoYXRQZXJtaXNzaW9uUmVxdWVzdBISCgpyZXF1ZXN0X2lkGAEgASgJEgwKBHBhZ2UYAiABKAkSDQoFdGl0bGUYAyABKAkSEwoLZGVzY3JpcHRpb24YBCABKAkSLQoHb3B0aW9ucxgFIAMoCzIcLmFwaS52MS5DaGF0UGVybWlzc2lvbk9wdGlvbiJNChRDaGF0UGVybWlzc2lvbk9wdGlvbhIRCglvcHRpb25faWQYASABKAkSDQoFbGFiZWwYAiABKAkSEwoLZGVzY3JpcHRpb24YAyABKAkiVwoMQ2hhdFRvb2xDYWxsEhIKCm1lc3NhZ2VfaWQYASABKAkSFAoMdG9vbF9jYWxsX2lkGAIgASgJEg0KBXRpdGxlGAMgASgJEg4KBnN0YXR1cxgEIAEoCSJ8Cg9DaGF0TWVzc2FnZUVkaXQSEgoKbWVzc2FnZV9pZBgBIAEoCRITCgtuZXdfY29udGVudBgCIAEoCRItCgl0aW1lc3RhbXAYAyABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEhEKCXN0cmVhbWluZxgEIAEoCCJCCgxDaGF0UmVhY3Rpb24SEgoKbWVzc2FnZV9pZBgBIAEoCRINCgVlbW9qaRgCIAEoCRIPCgdyZWFjdG9yGAMgASgJIjcKFlNlbmRDaGF0TWVzc2FnZVJlcXVlc3QSDAoEcGFnZRgBIAEoCRIPCgdjb250ZW50GAIgASgJIi0KF1NlbmRDaGF0TWVzc2FnZVJlc3BvbnNlEhIKCm1lc3NhZ2VfaWQYASABKAkiJAoUU3Vic2NyaWJlQ2hhdFJlcXVlc3QSDAoEcGFnZRgBIAEoCSJKChRTZW5kQ2hhdFJlcGx5UmVxdWVzdBIMCgRwYWdlGAEgASgJEg8KB2NvbnRlbnQYAiABKAkSEwoLcmVwbHlfdG9faWQYAyABKAkiKwoVU2VuZENoYXRSZXBseVJlc3BvbnNlEhIKCm1lc3NhZ2VfaWQYASABKAkiVAoWRWRpdENoYXRNZXNzYWdlUmVxdWVzdBISCgptZXNzYWdlX2lkGAEgASgJEhMKC25ld19jb250ZW50GAIgASgJEhEKCXN0cmVhbWluZxgDIAEoCCIZChdFZGl0Q2hhdE1lc3NhZ2VSZXNwb25zZSI6ChVSZWFjdFRvTWVzc2FnZVJlcXVlc3QSEgoKbWVzc2FnZV9pZBgBIAEoCRINCgVlbW9qaRgCIAEoCSIYChZSZWFjdFRvTWVzc2FnZVJlc3BvbnNlIiQKFEdldENoYXRTdGF0dXNSZXF1ZXN0EgwKBHBhZ2UYASABKAkiVAoVR2V0Q2hhdFN0YXR1c1Jlc3BvbnNlEhEKCWNvbm5lY3RlZBgBIAEoCBIQCghzdGFydGluZxgCIAEoCBIWCg5wb29sX2Nvbm5lY3RlZBgDIAEoCCIwCiBTdWJzY3JpYmVQYWdlQ2hhdE1lc3NhZ2VzUmVxdWVzdBIMCgRwYWdlGAEgASgJIiIKIFN1YnNjcmliZUluc3RhbmNlUmVxdWVzdHNSZXF1ZXN0Ih8KD0luc3RhbmNlUmVxdWVzdBIMCgRwYWdlGAEgASgJIngKH1NlbmRUb29sQ2FsbE5vdGlmaWNhdGlvblJlcXVlc3QSDAoEcGFnZRgBIAEoCRISCgptZXNzYWdlX2lkGAIgASgJEhQKDHRvb2xfY2FsbF9pZBgDIAEoCRINCgV0aXRsZRgEIAEoCRIOCgZzdGF0dXMYBSABKAkiIgogU2VuZFRvb2xDYWxsTm90aWZpY2F0aW9uUmVzcG9uc2UiKAoYQ2FuY2VsQWdlbnRQcm9tcHRSZXF1ZXN0EgwKBHBhZ2UYASABKAkiGwoZQ2FuY2VsQWdlbnRQcm9tcHRSZXNwb25zZSIxCiFTdWJzY3JpYmVQYWdlQ2FuY2VsbGF0aW9uc1JlcXVlc3QSDAoEcGFnZRgBIAEoCSISChBQYWdlQ2FuY2VsbGF0aW9uIkwKGlJlc3BvbmRUb1Blcm1pc3Npb25SZXF1ZXN0EhIKCnJlcXVlc3RfaWQYASABKAkSGgoSc2VsZWN0ZWRfb3B0aW9uX2lkGAIgASgJIh0KG1Jlc3BvbmRUb1Blcm1pc3Npb25SZXNwb25zZSKXAQogUmVxdWVzdFBlcm1pc3Npb25Gcm9tVXNlclJlcXVlc3QSDAoEcGFnZRgBIAEoCRISCgpyZXF1ZXN0X2lkGAIgASgJEg0KBXRpdGxlGAMgASgJEhMKC2Rlc2NyaXB0aW9uGAQgASgJEi0KB29wdGlvbnMYBSADKAsyHC5hcGkudjEuQ2hhdFBlcm1pc3Npb25PcHRpb24iPwohUmVxdWVzdFBlcm1pc3Npb25Gcm9tVXNlclJlc3BvbnNlEhoKEnNlbGVjdGVkX29wdGlvbl9pZBgBIAEoCSo5CgZTZW5kZXISFgoSU0VOREVSX1VOU1BFQ0lGSUVEEAASCAoEVVNFUhABEg0KCUFTU0lTVEFOVBACMrwJCgtDaGF0U2VydmljZRJQCgtTZW5kTWVzc2FnZRIeLmFwaS52MS5TZW5kQ2hhdE1lc3NhZ2VSZXF1ZXN0Gh8uYXBpLnYxLlNlbmRDaGF0TWVzc2FnZVJlc3BvbnNlIgASRAoNU3Vic2NyaWJlQ2hhdBIcLmFwaS52MS5TdWJzY3JpYmVDaGF0UmVxdWVzdBoRLmFwaS52MS5DaGF0RXZlbnQiADABEk4KDVNlbmRDaGF0UmVwbHkSHC5hcGkudjEuU2VuZENoYXRSZXBseVJlcXVlc3QaHS5hcGkudjEuU2VuZENoYXRSZXBseVJlc3BvbnNlIgASVAoPRWRpdENoYXRNZXNzYWdlEh4uYXBpLnYxLkVkaXRDaGF0TWVzc2FnZVJlcXVlc3QaHy5hcGkudjEuRWRpdENoYXRNZXNzYWdlUmVzcG9uc2UiABJRCg5SZWFjdFRvTWVzc2FnZRIdLmFwaS52MS5SZWFjdFRvTWVzc2FnZVJlcXVlc3QaHi5hcGkudjEuUmVhY3RUb01lc3NhZ2VSZXNwb25zZSIAEk4KDUdldENoYXRTdGF0dXMSHC5hcGkudjEuR2V0Q2hhdFN0YXR1c1JlcXVlc3QaHS5hcGkudjEuR2V0Q2hhdFN0YXR1c1Jlc3BvbnNlIgASXgoZU3Vic2NyaWJlUGFnZUNoYXRNZXNzYWdlcxIoLmFwaS52MS5TdWJzY3JpYmVQYWdlQ2hhdE1lc3NhZ2VzUmVxdWVzdBoTLmFwaS52MS5DaGF0TWVzc2FnZSIAMAESYgoZU3Vic2NyaWJlSW5zdGFuY2VSZXF1ZXN0cxIoLmFwaS52MS5TdWJzY3JpYmVJbnN0YW5jZVJlcXVlc3RzUmVxdWVzdBoXLmFwaS52MS5JbnN0YW5jZVJlcXVlc3QiADABEm8KGFNlbmRUb29sQ2FsbE5vdGlmaWNhdGlvbhInLmFwaS52MS5TZW5kVG9vbENhbGxOb3RpZmljYXRpb25SZXF1ZXN0GiguYXBpLnYxLlNlbmRUb29sQ2FsbE5vdGlmaWNhdGlvblJlc3BvbnNlIgASWgoRQ2FuY2VsQWdlbnRQcm9tcHQSIC5hcGkudjEuQ2FuY2VsQWdlbnRQcm9tcHRSZXF1ZXN0GiEuYXBpLnYxLkNhbmNlbEFnZW50UHJvbXB0UmVzcG9uc2UiABJlChpTdWJzY3JpYmVQYWdlQ2FuY2VsbGF0aW9ucxIpLmFwaS52MS5TdWJzY3JpYmVQYWdlQ2FuY2VsbGF0aW9uc1JlcXVlc3QaGC5hcGkudjEuUGFnZUNhbmNlbGxhdGlvbiIAMAESYAoTUmVzcG9uZFRvUGVybWlzc2lvbhIiLmFwaS52MS5SZXNwb25kVG9QZXJtaXNzaW9uUmVxdWVzdBojLmFwaS52MS5SZXNwb25kVG9QZXJtaXNzaW9uUmVzcG9uc2UiABJyChlSZXF1ZXN0UGVybWlzc2lvbkZyb21Vc2VyEiguYXBpLnYxLlJlcXVlc3RQZXJtaXNzaW9uRnJvbVVzZXJSZXF1ZXN0GikuYXBpLnYxLlJlcXVlc3RQZXJtaXNzaW9uRnJvbVVzZXJSZXNwb25zZSIAQjpaOGdpdGh1Yi5jb20vYnJlbmRhbmplcndpbi9zaW1wbGVfd2lraS9nZW4vZ28vYXBpL3YxO2FwaXYxYgZwcm90bzM", [file_google_protobuf_timestamp]);
 
 /**
  * ChatMessage represents a single chat message.
@@ -142,6 +142,18 @@ export type ChatEvent = Message<"api.v1.ChatEvent"> & {
      */
     value: ChatReaction;
     case: "reaction";
+  } | {
+    /**
+     * @generated from field: api.v1.ChatToolCall tool_call = 4;
+     */
+    value: ChatToolCall;
+    case: "toolCall";
+  } | {
+    /**
+     * @generated from field: api.v1.ChatPermissionRequest permission_request = 5;
+     */
+    value: ChatPermissionRequest;
+    case: "permissionRequest";
   } | { case: undefined; value?: undefined };
 };
 
@@ -151,6 +163,124 @@ export type ChatEvent = Message<"api.v1.ChatEvent"> & {
  */
 export const ChatEventSchema: GenMessage<ChatEvent> = /*@__PURE__*/
   messageDesc(file_api_v1_chat, 2);
+
+/**
+ * ChatPermissionRequest is sent to the browser when the agent needs user authorization.
+ *
+ * @generated from message api.v1.ChatPermissionRequest
+ */
+export type ChatPermissionRequest = Message<"api.v1.ChatPermissionRequest"> & {
+  /**
+   * unique ID to correlate the response
+   *
+   * @generated from field: string request_id = 1;
+   */
+  requestId: string;
+
+  /**
+   * page this permission is for
+   *
+   * @generated from field: string page = 2;
+   */
+  page: string;
+
+  /**
+   * human-readable description of what's being requested
+   *
+   * @generated from field: string title = 3;
+   */
+  title: string;
+
+  /**
+   * detailed explanation
+   *
+   * @generated from field: string description = 4;
+   */
+  description: string;
+
+  /**
+   * @generated from field: repeated api.v1.ChatPermissionOption options = 5;
+   */
+  options: ChatPermissionOption[];
+};
+
+/**
+ * Describes the message api.v1.ChatPermissionRequest.
+ * Use `create(ChatPermissionRequestSchema)` to create a new message.
+ */
+export const ChatPermissionRequestSchema: GenMessage<ChatPermissionRequest> = /*@__PURE__*/
+  messageDesc(file_api_v1_chat, 3);
+
+/**
+ * ChatPermissionOption is a choice the user can select.
+ *
+ * @generated from message api.v1.ChatPermissionOption
+ */
+export type ChatPermissionOption = Message<"api.v1.ChatPermissionOption"> & {
+  /**
+   * @generated from field: string option_id = 1;
+   */
+  optionId: string;
+
+  /**
+   * @generated from field: string label = 2;
+   */
+  label: string;
+
+  /**
+   * @generated from field: string description = 3;
+   */
+  description: string;
+};
+
+/**
+ * Describes the message api.v1.ChatPermissionOption.
+ * Use `create(ChatPermissionOptionSchema)` to create a new message.
+ */
+export const ChatPermissionOptionSchema: GenMessage<ChatPermissionOption> = /*@__PURE__*/
+  messageDesc(file_api_v1_chat, 4);
+
+/**
+ * ChatToolCall represents a tool invocation by the assistant.
+ *
+ * @generated from message api.v1.ChatToolCall
+ */
+export type ChatToolCall = Message<"api.v1.ChatToolCall"> & {
+  /**
+   * the assistant message this tool is part of
+   *
+   * @generated from field: string message_id = 1;
+   */
+  messageId: string;
+
+  /**
+   * unique ID for this tool call
+   *
+   * @generated from field: string tool_call_id = 2;
+   */
+  toolCallId: string;
+
+  /**
+   * human-readable description (e.g., "Reading page...")
+   *
+   * @generated from field: string title = 3;
+   */
+  title: string;
+
+  /**
+   * "pending", "running", "complete", "error"
+   *
+   * @generated from field: string status = 4;
+   */
+  status: string;
+};
+
+/**
+ * Describes the message api.v1.ChatToolCall.
+ * Use `create(ChatToolCallSchema)` to create a new message.
+ */
+export const ChatToolCallSchema: GenMessage<ChatToolCall> = /*@__PURE__*/
+  messageDesc(file_api_v1_chat, 5);
 
 /**
  * ChatMessageEdit represents an edit to an existing message.
@@ -172,6 +302,14 @@ export type ChatMessageEdit = Message<"api.v1.ChatMessageEdit"> & {
    * @generated from field: google.protobuf.Timestamp timestamp = 3;
    */
   timestamp?: Timestamp;
+
+  /**
+   * When true, this is a streaming content update (e.g., from an ACP agent),
+   * not a user-initiated edit. The frontend should not show "(edited)".
+   *
+   * @generated from field: bool streaming = 4;
+   */
+  streaming: boolean;
 };
 
 /**
@@ -179,7 +317,7 @@ export type ChatMessageEdit = Message<"api.v1.ChatMessageEdit"> & {
  * Use `create(ChatMessageEditSchema)` to create a new message.
  */
 export const ChatMessageEditSchema: GenMessage<ChatMessageEdit> = /*@__PURE__*/
-  messageDesc(file_api_v1_chat, 3);
+  messageDesc(file_api_v1_chat, 6);
 
 /**
  * ChatReaction represents a reaction added to a message.
@@ -208,7 +346,7 @@ export type ChatReaction = Message<"api.v1.ChatReaction"> & {
  * Use `create(ChatReactionSchema)` to create a new message.
  */
 export const ChatReactionSchema: GenMessage<ChatReaction> = /*@__PURE__*/
-  messageDesc(file_api_v1_chat, 4);
+  messageDesc(file_api_v1_chat, 7);
 
 /**
  * SendChatMessageRequest is the request for SendMessage.
@@ -236,7 +374,7 @@ export type SendChatMessageRequest = Message<"api.v1.SendChatMessageRequest"> & 
  * Use `create(SendChatMessageRequestSchema)` to create a new message.
  */
 export const SendChatMessageRequestSchema: GenMessage<SendChatMessageRequest> = /*@__PURE__*/
-  messageDesc(file_api_v1_chat, 5);
+  messageDesc(file_api_v1_chat, 8);
 
 /**
  * SendChatMessageResponse is the response for SendMessage.
@@ -257,7 +395,7 @@ export type SendChatMessageResponse = Message<"api.v1.SendChatMessageResponse"> 
  * Use `create(SendChatMessageResponseSchema)` to create a new message.
  */
 export const SendChatMessageResponseSchema: GenMessage<SendChatMessageResponse> = /*@__PURE__*/
-  messageDesc(file_api_v1_chat, 6);
+  messageDesc(file_api_v1_chat, 9);
 
 /**
  * SubscribeChatRequest is the request for SubscribeChat.
@@ -278,22 +416,7 @@ export type SubscribeChatRequest = Message<"api.v1.SubscribeChatRequest"> & {
  * Use `create(SubscribeChatRequestSchema)` to create a new message.
  */
 export const SubscribeChatRequestSchema: GenMessage<SubscribeChatRequest> = /*@__PURE__*/
-  messageDesc(file_api_v1_chat, 7);
-
-/**
- * SubscribeChatMessagesRequest is the request for SubscribeChatMessages.
- *
- * @generated from message api.v1.SubscribeChatMessagesRequest
- */
-export type SubscribeChatMessagesRequest = Message<"api.v1.SubscribeChatMessagesRequest"> & {
-};
-
-/**
- * Describes the message api.v1.SubscribeChatMessagesRequest.
- * Use `create(SubscribeChatMessagesRequestSchema)` to create a new message.
- */
-export const SubscribeChatMessagesRequestSchema: GenMessage<SubscribeChatMessagesRequest> = /*@__PURE__*/
-  messageDesc(file_api_v1_chat, 8);
+  messageDesc(file_api_v1_chat, 10);
 
 /**
  * SendChatReplyRequest is the request for SendChatReply.
@@ -328,7 +451,7 @@ export type SendChatReplyRequest = Message<"api.v1.SendChatReplyRequest"> & {
  * Use `create(SendChatReplyRequestSchema)` to create a new message.
  */
 export const SendChatReplyRequestSchema: GenMessage<SendChatReplyRequest> = /*@__PURE__*/
-  messageDesc(file_api_v1_chat, 9);
+  messageDesc(file_api_v1_chat, 11);
 
 /**
  * SendChatReplyResponse is the response for SendChatReply.
@@ -349,7 +472,7 @@ export type SendChatReplyResponse = Message<"api.v1.SendChatReplyResponse"> & {
  * Use `create(SendChatReplyResponseSchema)` to create a new message.
  */
 export const SendChatReplyResponseSchema: GenMessage<SendChatReplyResponse> = /*@__PURE__*/
-  messageDesc(file_api_v1_chat, 10);
+  messageDesc(file_api_v1_chat, 12);
 
 /**
  * EditChatMessageRequest is the request for EditChatMessage.
@@ -370,6 +493,14 @@ export type EditChatMessageRequest = Message<"api.v1.EditChatMessageRequest"> & 
    * @generated from field: string new_content = 2;
    */
   newContent: string;
+
+  /**
+   * When true, this is a streaming update from an ACP agent.
+   * The edit event will carry this flag so the frontend can suppress "(edited)".
+   *
+   * @generated from field: bool streaming = 3;
+   */
+  streaming: boolean;
 };
 
 /**
@@ -377,7 +508,7 @@ export type EditChatMessageRequest = Message<"api.v1.EditChatMessageRequest"> & 
  * Use `create(EditChatMessageRequestSchema)` to create a new message.
  */
 export const EditChatMessageRequestSchema: GenMessage<EditChatMessageRequest> = /*@__PURE__*/
-  messageDesc(file_api_v1_chat, 11);
+  messageDesc(file_api_v1_chat, 13);
 
 /**
  * EditChatMessageResponse is the response for EditChatMessage.
@@ -392,7 +523,7 @@ export type EditChatMessageResponse = Message<"api.v1.EditChatMessageResponse"> 
  * Use `create(EditChatMessageResponseSchema)` to create a new message.
  */
 export const EditChatMessageResponseSchema: GenMessage<EditChatMessageResponse> = /*@__PURE__*/
-  messageDesc(file_api_v1_chat, 12);
+  messageDesc(file_api_v1_chat, 14);
 
 /**
  * ReactToMessageRequest is the request for ReactToMessage.
@@ -420,7 +551,7 @@ export type ReactToMessageRequest = Message<"api.v1.ReactToMessageRequest"> & {
  * Use `create(ReactToMessageRequestSchema)` to create a new message.
  */
 export const ReactToMessageRequestSchema: GenMessage<ReactToMessageRequest> = /*@__PURE__*/
-  messageDesc(file_api_v1_chat, 13);
+  messageDesc(file_api_v1_chat, 15);
 
 /**
  * ReactToMessageResponse is the response for ReactToMessage.
@@ -435,7 +566,7 @@ export type ReactToMessageResponse = Message<"api.v1.ReactToMessageResponse"> & 
  * Use `create(ReactToMessageResponseSchema)` to create a new message.
  */
 export const ReactToMessageResponseSchema: GenMessage<ReactToMessageResponse> = /*@__PURE__*/
-  messageDesc(file_api_v1_chat, 14);
+  messageDesc(file_api_v1_chat, 16);
 
 /**
  * GetChatStatusRequest is the request for GetChatStatus.
@@ -445,7 +576,6 @@ export const ReactToMessageResponseSchema: GenMessage<ReactToMessageResponse> = 
 export type GetChatStatusRequest = Message<"api.v1.GetChatStatusRequest"> & {
   /**
    * Optional page identifier. If set, checks for a page-specific instance.
-   * If empty, falls back to global subscriber check.
    *
    * @generated from field: string page = 1;
    */
@@ -457,7 +587,7 @@ export type GetChatStatusRequest = Message<"api.v1.GetChatStatusRequest"> & {
  * Use `create(GetChatStatusRequestSchema)` to create a new message.
  */
 export const GetChatStatusRequestSchema: GenMessage<GetChatStatusRequest> = /*@__PURE__*/
-  messageDesc(file_api_v1_chat, 15);
+  messageDesc(file_api_v1_chat, 17);
 
 /**
  * GetChatStatusResponse is the response for GetChatStatus.
@@ -466,7 +596,7 @@ export const GetChatStatusRequestSchema: GenMessage<GetChatStatusRequest> = /*@_
  */
 export type GetChatStatusResponse = Message<"api.v1.GetChatStatusResponse"> & {
   /**
-   * Whether a Claude channel subscriber is connected for the requested page (or globally).
+   * Whether a Claude channel subscriber is connected for the requested page.
    *
    * @generated from field: bool connected = 1;
    */
@@ -492,7 +622,7 @@ export type GetChatStatusResponse = Message<"api.v1.GetChatStatusResponse"> & {
  * Use `create(GetChatStatusResponseSchema)` to create a new message.
  */
 export const GetChatStatusResponseSchema: GenMessage<GetChatStatusResponse> = /*@__PURE__*/
-  messageDesc(file_api_v1_chat, 16);
+  messageDesc(file_api_v1_chat, 18);
 
 /**
  * SubscribePageChatMessagesRequest is the request for SubscribePageChatMessages.
@@ -513,7 +643,7 @@ export type SubscribePageChatMessagesRequest = Message<"api.v1.SubscribePageChat
  * Use `create(SubscribePageChatMessagesRequestSchema)` to create a new message.
  */
 export const SubscribePageChatMessagesRequestSchema: GenMessage<SubscribePageChatMessagesRequest> = /*@__PURE__*/
-  messageDesc(file_api_v1_chat, 17);
+  messageDesc(file_api_v1_chat, 19);
 
 /**
  * SubscribeInstanceRequestsRequest is the request for SubscribeInstanceRequests.
@@ -528,7 +658,7 @@ export type SubscribeInstanceRequestsRequest = Message<"api.v1.SubscribeInstance
  * Use `create(SubscribeInstanceRequestsRequestSchema)` to create a new message.
  */
 export const SubscribeInstanceRequestsRequestSchema: GenMessage<SubscribeInstanceRequestsRequest> = /*@__PURE__*/
-  messageDesc(file_api_v1_chat, 18);
+  messageDesc(file_api_v1_chat, 20);
 
 /**
  * InstanceRequest is streamed by SubscribeInstanceRequests when a page needs a Claude instance.
@@ -549,7 +679,246 @@ export type InstanceRequest = Message<"api.v1.InstanceRequest"> & {
  * Use `create(InstanceRequestSchema)` to create a new message.
  */
 export const InstanceRequestSchema: GenMessage<InstanceRequest> = /*@__PURE__*/
-  messageDesc(file_api_v1_chat, 19);
+  messageDesc(file_api_v1_chat, 21);
+
+/**
+ * SendToolCallNotificationRequest is the request for SendToolCallNotification.
+ *
+ * @generated from message api.v1.SendToolCallNotificationRequest
+ */
+export type SendToolCallNotificationRequest = Message<"api.v1.SendToolCallNotificationRequest"> & {
+  /**
+   * page identifier
+   *
+   * @generated from field: string page = 1;
+   */
+  page: string;
+
+  /**
+   * the assistant message this tool is part of
+   *
+   * @generated from field: string message_id = 2;
+   */
+  messageId: string;
+
+  /**
+   * unique ID for this tool call
+   *
+   * @generated from field: string tool_call_id = 3;
+   */
+  toolCallId: string;
+
+  /**
+   * human-readable description
+   *
+   * @generated from field: string title = 4;
+   */
+  title: string;
+
+  /**
+   * "pending", "running", "complete", "error"
+   *
+   * @generated from field: string status = 5;
+   */
+  status: string;
+};
+
+/**
+ * Describes the message api.v1.SendToolCallNotificationRequest.
+ * Use `create(SendToolCallNotificationRequestSchema)` to create a new message.
+ */
+export const SendToolCallNotificationRequestSchema: GenMessage<SendToolCallNotificationRequest> = /*@__PURE__*/
+  messageDesc(file_api_v1_chat, 22);
+
+/**
+ * SendToolCallNotificationResponse is the response for SendToolCallNotification.
+ *
+ * @generated from message api.v1.SendToolCallNotificationResponse
+ */
+export type SendToolCallNotificationResponse = Message<"api.v1.SendToolCallNotificationResponse"> & {
+};
+
+/**
+ * Describes the message api.v1.SendToolCallNotificationResponse.
+ * Use `create(SendToolCallNotificationResponseSchema)` to create a new message.
+ */
+export const SendToolCallNotificationResponseSchema: GenMessage<SendToolCallNotificationResponse> = /*@__PURE__*/
+  messageDesc(file_api_v1_chat, 23);
+
+/**
+ * CancelAgentPromptRequest is the request for CancelAgentPrompt.
+ *
+ * @generated from message api.v1.CancelAgentPromptRequest
+ */
+export type CancelAgentPromptRequest = Message<"api.v1.CancelAgentPromptRequest"> & {
+  /**
+   * page identifier whose agent prompt should be cancelled
+   *
+   * @generated from field: string page = 1;
+   */
+  page: string;
+};
+
+/**
+ * Describes the message api.v1.CancelAgentPromptRequest.
+ * Use `create(CancelAgentPromptRequestSchema)` to create a new message.
+ */
+export const CancelAgentPromptRequestSchema: GenMessage<CancelAgentPromptRequest> = /*@__PURE__*/
+  messageDesc(file_api_v1_chat, 24);
+
+/**
+ * CancelAgentPromptResponse is the response for CancelAgentPrompt.
+ *
+ * @generated from message api.v1.CancelAgentPromptResponse
+ */
+export type CancelAgentPromptResponse = Message<"api.v1.CancelAgentPromptResponse"> & {
+};
+
+/**
+ * Describes the message api.v1.CancelAgentPromptResponse.
+ * Use `create(CancelAgentPromptResponseSchema)` to create a new message.
+ */
+export const CancelAgentPromptResponseSchema: GenMessage<CancelAgentPromptResponse> = /*@__PURE__*/
+  messageDesc(file_api_v1_chat, 25);
+
+/**
+ * SubscribePageCancellationsRequest is the request for SubscribePageCancellations.
+ *
+ * @generated from message api.v1.SubscribePageCancellationsRequest
+ */
+export type SubscribePageCancellationsRequest = Message<"api.v1.SubscribePageCancellationsRequest"> & {
+  /**
+   * page identifier to subscribe to cancellations for
+   *
+   * @generated from field: string page = 1;
+   */
+  page: string;
+};
+
+/**
+ * Describes the message api.v1.SubscribePageCancellationsRequest.
+ * Use `create(SubscribePageCancellationsRequestSchema)` to create a new message.
+ */
+export const SubscribePageCancellationsRequestSchema: GenMessage<SubscribePageCancellationsRequest> = /*@__PURE__*/
+  messageDesc(file_api_v1_chat, 26);
+
+/**
+ * PageCancellation is streamed when CancelAgentPrompt is called for a page.
+ *
+ * @generated from message api.v1.PageCancellation
+ */
+export type PageCancellation = Message<"api.v1.PageCancellation"> & {
+};
+
+/**
+ * Describes the message api.v1.PageCancellation.
+ * Use `create(PageCancellationSchema)` to create a new message.
+ */
+export const PageCancellationSchema: GenMessage<PageCancellation> = /*@__PURE__*/
+  messageDesc(file_api_v1_chat, 27);
+
+/**
+ * RespondToPermissionRequest is the request for RespondToPermission.
+ *
+ * @generated from message api.v1.RespondToPermissionRequest
+ */
+export type RespondToPermissionRequest = Message<"api.v1.RespondToPermissionRequest"> & {
+  /**
+   * correlates to ChatPermissionRequest.request_id
+   *
+   * @generated from field: string request_id = 1;
+   */
+  requestId: string;
+
+  /**
+   * the option_id the user chose (empty = cancelled)
+   *
+   * @generated from field: string selected_option_id = 2;
+   */
+  selectedOptionId: string;
+};
+
+/**
+ * Describes the message api.v1.RespondToPermissionRequest.
+ * Use `create(RespondToPermissionRequestSchema)` to create a new message.
+ */
+export const RespondToPermissionRequestSchema: GenMessage<RespondToPermissionRequest> = /*@__PURE__*/
+  messageDesc(file_api_v1_chat, 28);
+
+/**
+ * RespondToPermissionResponse is the response for RespondToPermission.
+ *
+ * @generated from message api.v1.RespondToPermissionResponse
+ */
+export type RespondToPermissionResponse = Message<"api.v1.RespondToPermissionResponse"> & {
+};
+
+/**
+ * Describes the message api.v1.RespondToPermissionResponse.
+ * Use `create(RespondToPermissionResponseSchema)` to create a new message.
+ */
+export const RespondToPermissionResponseSchema: GenMessage<RespondToPermissionResponse> = /*@__PURE__*/
+  messageDesc(file_api_v1_chat, 29);
+
+/**
+ * RequestPermissionFromUserRequest is sent by the pool daemon to ask the user.
+ *
+ * @generated from message api.v1.RequestPermissionFromUserRequest
+ */
+export type RequestPermissionFromUserRequest = Message<"api.v1.RequestPermissionFromUserRequest"> & {
+  /**
+   * @generated from field: string page = 1;
+   */
+  page: string;
+
+  /**
+   * @generated from field: string request_id = 2;
+   */
+  requestId: string;
+
+  /**
+   * @generated from field: string title = 3;
+   */
+  title: string;
+
+  /**
+   * @generated from field: string description = 4;
+   */
+  description: string;
+
+  /**
+   * @generated from field: repeated api.v1.ChatPermissionOption options = 5;
+   */
+  options: ChatPermissionOption[];
+};
+
+/**
+ * Describes the message api.v1.RequestPermissionFromUserRequest.
+ * Use `create(RequestPermissionFromUserRequestSchema)` to create a new message.
+ */
+export const RequestPermissionFromUserRequestSchema: GenMessage<RequestPermissionFromUserRequest> = /*@__PURE__*/
+  messageDesc(file_api_v1_chat, 30);
+
+/**
+ * RequestPermissionFromUserResponse returns the user's choice.
+ *
+ * @generated from message api.v1.RequestPermissionFromUserResponse
+ */
+export type RequestPermissionFromUserResponse = Message<"api.v1.RequestPermissionFromUserResponse"> & {
+  /**
+   * empty = cancelled/denied
+   *
+   * @generated from field: string selected_option_id = 1;
+   */
+  selectedOptionId: string;
+};
+
+/**
+ * Describes the message api.v1.RequestPermissionFromUserResponse.
+ * Use `create(RequestPermissionFromUserResponseSchema)` to create a new message.
+ */
+export const RequestPermissionFromUserResponseSchema: GenMessage<RequestPermissionFromUserResponse> = /*@__PURE__*/
+  messageDesc(file_api_v1_chat, 31);
 
 /**
  * Sender identifies who sent a chat message.
@@ -608,17 +977,6 @@ export const ChatService: GenService<{
     methodKind: "server_streaming";
     input: typeof SubscribeChatRequestSchema;
     output: typeof ChatEventSchema;
-  },
-  /**
-   * SubscribeChatMessages is called by wiki-cli mcp at startup.
-   * Streams all new user messages (from all pages) as they arrive from browsers.
-   *
-   * @generated from rpc api.v1.ChatService.SubscribeChatMessages
-   */
-  subscribeChatMessages: {
-    methodKind: "server_streaming";
-    input: typeof SubscribeChatMessagesRequestSchema;
-    output: typeof ChatMessageSchema;
   },
   /**
    * SendChatReply is called by wiki-cli mcp when Claude uses the reply tool.
@@ -685,6 +1043,60 @@ export const ChatService: GenService<{
     methodKind: "server_streaming";
     input: typeof SubscribeInstanceRequestsRequestSchema;
     output: typeof InstanceRequestSchema;
+  },
+  /**
+   * SendToolCallNotification is called by the pool daemon or ACP client
+   * when the agent invokes a tool. The notification is broadcast to page subscribers.
+   *
+   * @generated from rpc api.v1.ChatService.SendToolCallNotification
+   */
+  sendToolCallNotification: {
+    methodKind: "unary";
+    input: typeof SendToolCallNotificationRequestSchema;
+    output: typeof SendToolCallNotificationResponseSchema;
+  },
+  /**
+   * CancelAgentPrompt cancels an in-progress agent prompt for a page.
+   * Called by the frontend "Stop" button.
+   *
+   * @generated from rpc api.v1.ChatService.CancelAgentPrompt
+   */
+  cancelAgentPrompt: {
+    methodKind: "unary";
+    input: typeof CancelAgentPromptRequestSchema;
+    output: typeof CancelAgentPromptResponseSchema;
+  },
+  /**
+   * SubscribePageCancellations is called by the pool daemon per page.
+   * Streams a signal when CancelAgentPrompt is called for that page.
+   *
+   * @generated from rpc api.v1.ChatService.SubscribePageCancellations
+   */
+  subscribePageCancellations: {
+    methodKind: "server_streaming";
+    input: typeof SubscribePageCancellationsRequestSchema;
+    output: typeof PageCancellationSchema;
+  },
+  /**
+   * RespondToPermission is called by the frontend when the user responds to a permission request.
+   *
+   * @generated from rpc api.v1.ChatService.RespondToPermission
+   */
+  respondToPermission: {
+    methodKind: "unary";
+    input: typeof RespondToPermissionRequestSchema;
+    output: typeof RespondToPermissionResponseSchema;
+  },
+  /**
+   * RequestPermissionFromUser is called by the pool daemon to forward a permission request
+   * to the user via chat and block until the user responds.
+   *
+   * @generated from rpc api.v1.ChatService.RequestPermissionFromUser
+   */
+  requestPermissionFromUser: {
+    methodKind: "unary";
+    input: typeof RequestPermissionFromUserRequestSchema;
+    output: typeof RequestPermissionFromUserResponseSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_api_v1_chat, 0);

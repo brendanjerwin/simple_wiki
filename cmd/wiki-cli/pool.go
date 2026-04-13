@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -10,42 +11,85 @@ import (
 	"os"
 	"os/exec"
 	"regexp"
+	"strings"
 	"sync"
 	"time"
 
 	"connectrpc.com/connect"
+	acp "github.com/coder/acp-go-sdk"
+
 	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
 	"github.com/brendanjerwin/simple_wiki/gen/go/api/v1/apiv1connect"
 	cli "gopkg.in/urfave/cli.v1"
 )
 
 const (
-	defaultMaxInstances        = 5
-	defaultIdleTimeoutMinutes  = 30
+	defaultMaxInstances       = 5
+	defaultIdleTimeoutMinutes = 30
+
+	logFmtStateTransitionErr    = "%v"
+	errTerminalAccessUnavailable = "terminal access not available"
+	truncateLimitForLog          = 100
+	truncateLimitForBridge       = 80
 )
 
-// commandStarter starts and waits on commands. *exec.Cmd satisfies this interface.
-type commandStarter interface {
-	Start() error
-	Wait() error
+// InstanceState represents the lifecycle state of an agent instance.
+type InstanceState int
+
+const (
+	StateSpawning          InstanceState = iota
+	StateInitializing      // handshake done, session being created
+	StateBridgeConnecting  // subscribing to page messages
+	StateIdle              // bridge connected, waiting for user messages
+	StatePrompting         // Prompt call in progress
+	StatePermissionPending // waiting for user permission response
+	StateStopping          // being shut down
+	StateDead              // terminated
+)
+
+func (s InstanceState) String() string {
+	switch s {
+	case StateSpawning:
+		return "Spawning"
+	case StateInitializing:
+		return "Initializing"
+	case StateBridgeConnecting:
+		return "BridgeConnecting"
+	case StateIdle:
+		return "Idle"
+	case StatePrompting:
+		return "Prompting"
+	case StatePermissionPending:
+		return "PermissionPending"
+	case StateStopping:
+		return "Stopping"
+	case StateDead:
+		return "Dead"
+	default:
+		return fmt.Sprintf("Unknown(%d)", int(s))
+	}
 }
 
-// commandBuilder creates a command for the given arguments. Injected for testing.
-// In production this is exec.CommandContext.
-type commandBuilder func(ctx context.Context, name string, arg ...string) commandStarter
-
-// execCommandBuilder is the production commandBuilder wrapping exec.CommandContext.
-func execCommandBuilder(ctx context.Context, name string, arg ...string) commandStarter {
-	return exec.CommandContext(ctx, name, arg...)
+// validTransitions defines the legal state transitions for an instance.
+var validTransitions = map[InstanceState][]InstanceState{
+	StateSpawning:          {StateInitializing, StateDead},
+	StateInitializing:      {StateBridgeConnecting, StateDead},
+	StateBridgeConnecting:  {StateIdle, StateDead},
+	StateIdle:              {StatePrompting, StateStopping},
+	StatePrompting:         {StateIdle, StatePermissionPending, StateStopping, StateDead},
+	StatePermissionPending: {StatePrompting, StateStopping, StateDead},
+	StateStopping:          {StateDead},
+	StateDead:              {},
 }
 
-// instanceEntry tracks a running Claude Code instance for a page.
+// instanceEntry tracks a running agent instance for a page.
 type instanceEntry struct {
 	page       string
-	unitName   string
-	cmd        commandStarter
+	conn       acpAgent
+	sessionID  acp.SessionId
 	cancel     context.CancelFunc
 	lastActive time.Time
+	state      InstanceState
 	mu         sync.Mutex
 }
 
@@ -61,15 +105,49 @@ func (e *instanceEntry) idleSince() time.Duration {
 	return time.Since(e.lastActive)
 }
 
-// poolDaemon manages per-page Claude Code instances.
+// setState transitions the instance to a new state. It validates that the
+// transition is legal according to validTransitions and logs the change.
+// Must be called without e.mu held — it acquires the lock internally.
+func (e *instanceEntry) setState(newState InstanceState) error {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	return e.setStateLocked(newState)
+}
+
+// setStateLocked transitions the instance to a new state while the mutex is
+// already held. It validates the transition and logs the change.
+func (e *instanceEntry) setStateLocked(newState InstanceState) error {
+	oldState := e.state
+	allowed := validTransitions[oldState]
+
+	for _, s := range allowed {
+		if s == newState {
+			e.state = newState
+			log.Printf("[%s] State: %s -> %s", e.page, oldState, newState)
+			return nil
+		}
+	}
+
+	return fmt.Errorf("[%s] invalid state transition: %s -> %s", e.page, oldState, newState)
+}
+
+// State returns the current state of the instance (thread-safe).
+func (e *instanceEntry) State() InstanceState {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.state
+}
+
+// poolDaemon manages per-page agent instances via ACP.
 type poolDaemon struct {
 	wikiURL      string
-	claudePath   string
+	agentPath    string
 	useSystemd   bool
 	maxInstances int
 	idleTimeout  time.Duration
-	newCommand   commandBuilder
 
+	ctx       context.Context
 	instances map[string]*instanceEntry
 	mu        sync.Mutex
 }
@@ -90,27 +168,28 @@ func isSystemdAvailable() bool {
 func buildPoolCommand(urlFlag cli.StringFlag) cli.Command {
 	return cli.Command{
 		Name:  "pool",
-		Usage: "Manage per-page Claude Code instances",
+		Usage: "Manage per-page AI agent instances via ACP",
 		Description: `Runs a pool daemon that subscribes to instance requests from the wiki server
-and spawns dedicated Claude Code instances per page on demand.
+and spawns dedicated AI agent instances per page on demand using the Agent
+Client Protocol (ACP).
 
-Each instance gets its own wiki-cli MCP subprocess scoped to a specific page,
-with the page's frontmatter ai_agent_chat_context injected as initial context.
+Each agent gets its own session with the wiki MCP server for page tools,
+and receives the page's ai_agent_chat_context frontmatter as initial context.
 
-When running under systemd, instances are spawned as transient units for
-per-page journal logging (journalctl -u wiki-chat-<page>).
+When running under systemd, agent processes are spawned as transient units
+for per-page journal logging (journalctl -u wiki-chat-<page>).
 
 Example:
   wiki-cli pool --url https://wiki.monster-orfe.ts.net --max-instances 5
 
-The daemon should be run in a directory containing your Claude agent configuration
-(CLAUDE.md, agent files, etc.) as Claude Code will use that directory's context.`,
+The daemon should be run in a directory containing your agent configuration
+(CLAUDE.md, agent files, etc.) as the agent will use that directory's context.`,
 		Flags: []cli.Flag{
 			urlFlag,
 			cli.IntFlag{
 				Name:  "max-instances",
 				Value: defaultMaxInstances,
-				Usage: "Maximum concurrent Claude instances",
+				Usage: "Maximum concurrent agent instances",
 			},
 			cli.DurationFlag{
 				Name:  "idle-timeout",
@@ -118,9 +197,8 @@ The daemon should be run in a directory containing your Claude agent configurati
 				Usage: "Reclaim idle instances after this duration",
 			},
 			cli.StringFlag{
-				Name:  "claude-path",
-				Value: "claude",
-				Usage: "Path to claude binary",
+				Name:  "agent-path",
+				Usage: "Path to ACP-compatible agent binary (required)",
 			},
 			cli.BoolFlag{
 				Name:  "no-systemd",
@@ -136,18 +214,22 @@ The daemon should be run in a directory containing your Claude agent configurati
 
 			useSystemd := isSystemdAvailable() && !c.Bool("no-systemd")
 			if useSystemd {
-				log.Println("Systemd detected — instances will be spawned as transient units")
+				log.Println("Systemd detected — agent processes will be spawned as transient units")
 			} else {
 				log.Println("Systemd not available or disabled — using direct process management")
 			}
 
+			agentPath := c.String("agent-path")
+			if agentPath == "" {
+				return errors.New("--agent-path is required: provide the path to an ACP-compatible agent binary")
+			}
+
 			d := &poolDaemon{
 				wikiURL:      normalizedURL,
-				claudePath:   c.String("claude-path"),
+				agentPath:    agentPath,
 				useSystemd:   useSystemd,
 				maxInstances: c.Int("max-instances"),
 				idleTimeout:  c.Duration("idle-timeout"),
-				newCommand:   execCommandBuilder,
 				instances:    make(map[string]*instanceEntry),
 			}
 
@@ -158,6 +240,7 @@ The daemon should be run in a directory containing your Claude agent configurati
 
 // run starts the pool daemon's main loop.
 func (d *poolDaemon) run(ctx context.Context) error {
+	d.ctx = ctx
 	log.Printf("Pool daemon starting (max=%d, idle-timeout=%s, wiki=%s)", d.maxInstances, d.idleTimeout, d.wikiURL)
 
 	// Start the idle reaper
@@ -214,7 +297,7 @@ func (d *poolDaemon) subscribeAndHandle(ctx context.Context) error {
 	for stream.Receive() {
 		req := stream.Msg()
 		log.Printf("Instance requested for page %q", req.Page)
-		d.ensureInstance(ctx, req.Page)
+		d.ensureInstance(req.Page)
 	}
 
 	if err := stream.Err(); err != nil {
@@ -230,8 +313,8 @@ func (d *poolDaemon) subscribeAndHandle(ctx context.Context) error {
 	return errors.New("stream closed by server")
 }
 
-// ensureInstance spawns a Claude instance for a page if one doesn't already exist.
-func (d *poolDaemon) ensureInstance(ctx context.Context, page string) {
+// ensureInstance spawns an agent instance for a page if one doesn't already exist.
+func (d *poolDaemon) ensureInstance(page string) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
@@ -242,15 +325,13 @@ func (d *poolDaemon) ensureInstance(ctx context.Context, page string) {
 		return
 	}
 
-	// Spawn new instance first, then evict if needed — avoids dropping a working
-	// instance when the spawn fails.
-	entry, err := d.spawnInstance(ctx, page)
+	// Spawn new instance first, then evict if needed.
+	entry, err := d.spawnInstance(page)
 	if err != nil {
 		log.Printf("Failed to spawn instance for %q: %v", page, err)
 		return
 	}
 
-	// At capacity? Evict least recently active to make room.
 	if len(d.instances) >= d.maxInstances {
 		d.evictLeastActive()
 	}
@@ -279,86 +360,856 @@ func (d *poolDaemon) evictLeastActive() {
 	}
 }
 
-// buildMCPServerArg builds the --mcp-server flag value for a page-scoped wiki-cli MCP instance.
-func buildMCPServerArg(wikiCLIBin, wikiURL, page string) string {
-	return fmt.Sprintf("%s mcp --url %s --page %s", wikiCLIBin, wikiURL, page)
+// chatReplier is the interface for sending chat replies to the wiki.
+// Extracted from apiv1connect.ChatServiceClient for testability.
+type chatReplier interface {
+	SendChatReply(context.Context, *connect.Request[apiv1.SendChatReplyRequest]) (*connect.Response[apiv1.SendChatReplyResponse], error)
+	EditChatMessage(context.Context, *connect.Request[apiv1.EditChatMessageRequest]) (*connect.Response[apiv1.EditChatMessageResponse], error)
+	SendToolCallNotification(context.Context, *connect.Request[apiv1.SendToolCallNotificationRequest]) (*connect.Response[apiv1.SendToolCallNotificationResponse], error)
+	RequestPermissionFromUser(context.Context, *connect.Request[apiv1.RequestPermissionFromUserRequest]) (*connect.Response[apiv1.RequestPermissionFromUserResponse], error)
 }
 
-// buildDirectClaudeArgs builds the argument list for spawning Claude directly.
-// Returns (binary, args, unitName="").
-func buildDirectClaudeArgs(claudePath, mcpServerCmd string) (string, []string, string) {
-	return claudePath, []string{
-		"--channels", "wiki-channel:wiki-channel",
-		"--mcp-server", mcpServerCmd,
-	}, ""
+// pageMessageSource subscribes to page messages and cancellations.
+// Extracted from apiv1connect.ChatServiceClient for testability.
+type pageMessageSource interface {
+	SubscribePageChatMessages(context.Context, *connect.Request[apiv1.SubscribePageChatMessagesRequest]) (*connect.ServerStreamForClient[apiv1.ChatMessage], error)
+	SubscribePageCancellations(context.Context, *connect.Request[apiv1.SubscribePageCancellationsRequest]) (*connect.ServerStreamForClient[apiv1.PageCancellation], error)
 }
 
-// buildSystemdClaudeArgs builds the argument list for spawning Claude via systemd-run.
-// Returns (binary, args, unitName).
-func buildSystemdClaudeArgs(claudePath, mcpServerCmd, page string) (string, []string, string) {
-	unitName := "wiki-chat-" + sanitizeUnitName(page)
-	return "systemd-run", []string{
-		"--user",
-		"--unit=" + unitName,
-		"--scope",
-		claudePath,
-		"--channels", "wiki-channel:wiki-channel",
-		"--mcp-server", mcpServerCmd,
-	}, unitName
+// acpAgent provides session and prompt capabilities.
+// Extracted from *acp.ClientSideConnection for testability.
+type acpAgent interface {
+	Initialize(context.Context, acp.InitializeRequest) (acp.InitializeResponse, error)
+	NewSession(context.Context, acp.NewSessionRequest) (acp.NewSessionResponse, error)
+	Prompt(context.Context, acp.PromptRequest) (acp.PromptResponse, error)
 }
 
-// spawnInstance starts a Claude Code process for a page.
+// wikiChatClient implements acp.Client — handles ACP callbacks from the agent.
+// It streams agent responses to the wiki in real-time: the first text chunk
+// creates a new chat reply, subsequent chunks edit it in place. Tool calls
+// are shown as emoji reactions on the message.
+type wikiChatClient struct {
+	page       string
+	wikiURL    string
+	mu              sync.Mutex
+	textBuf         strings.Builder
+	thoughtBuf      strings.Builder
+	permissionNotes strings.Builder
+	planEntries     []acp.PlanEntry
+	replyToID       string // set before each prompt to thread responses
+	currentMsg      string // message ID of the in-progress streaming reply
+	pageContext     string // context to prepend to the first user message
+	chatClient      chatReplier
+	entry           *instanceEntry // back-reference for state transitions
+}
+
+func newWikiChatClient(page, wikiURL string) *wikiChatClient {
+	httpClient := &http.Client{}
+	return &wikiChatClient{
+		page:       page,
+		wikiURL:    wikiURL,
+		chatClient: apiv1connect.NewChatServiceClient(httpClient, wikiURL),
+	}
+}
+
+func (c *wikiChatClient) SessionUpdate(_ context.Context, n acp.SessionNotification) error {
+	u := n.Update
+
+	switch {
+	case u.AgentMessageChunk != nil:
+		return c.handleAgentMessage(u.AgentMessageChunk)
+	case u.ToolCall != nil:
+		c.handleToolCall(u.ToolCall)
+	case u.ToolCallUpdate != nil:
+		c.handleToolCallUpdate(u.ToolCallUpdate)
+	case u.AgentThoughtChunk != nil:
+		c.handleThought(u.AgentThoughtChunk)
+	case u.Plan != nil:
+		c.handlePlan(u.Plan)
+	default:
+		// Unknown update type — nothing to do
+	}
+
+	return nil
+}
+
+// handleAgentMessage processes an agent text chunk: accumulates text and streams
+// the reply to the wiki chat (creating a new message or editing the existing one).
+func (c *wikiChatClient) handleAgentMessage(chunk *acp.SessionUpdateAgentMessageChunk) error {
+	content := chunk.Content
+	if content.Text == nil {
+		return nil
+	}
+
+	c.mu.Lock()
+	_, _ = c.textBuf.WriteString(content.Text.Text)
+	fullText := c.buildFullText()
+	msgID := c.currentMsg
+	replyTo := c.replyToID
+	c.mu.Unlock()
+
+	if strings.TrimSpace(c.textBuf.String()) == "" {
+		return nil
+	}
+
+	if msgID == "" {
+		resp, err := c.chatClient.SendChatReply(context.Background(), connect.NewRequest(&apiv1.SendChatReplyRequest{
+			Page:      c.page,
+			Content:   fullText,
+			ReplyToId: replyTo,
+		}))
+		if err != nil {
+			log.Printf("Failed to create streaming reply for %q: %v", c.page, err)
+			return nil
+		}
+		c.mu.Lock()
+		c.currentMsg = resp.Msg.MessageId
+		c.mu.Unlock()
+	} else {
+		_, err := c.chatClient.EditChatMessage(context.Background(), connect.NewRequest(&apiv1.EditChatMessageRequest{
+			MessageId:  msgID,
+			NewContent: fullText,
+			Streaming:  true,
+		}))
+		if err != nil {
+			log.Printf("Failed to update streaming reply for %q: %v", c.page, err)
+		}
+	}
+
+	return nil
+}
+
+// handleToolCall sends a tool call notification to the wiki chat.
+func (c *wikiChatClient) handleToolCall(tc *acp.SessionUpdateToolCall) {
+	c.mu.Lock()
+	msgID := c.currentMsg
+	c.mu.Unlock()
+
+	if msgID != "" {
+		_, _ = c.chatClient.SendToolCallNotification(context.Background(), connect.NewRequest(&apiv1.SendToolCallNotificationRequest{
+			Page:       c.page,
+			MessageId:  msgID,
+			ToolCallId: string(tc.ToolCallId),
+			Title:      tc.Title,
+			Status:     string(tc.Status),
+		}))
+	}
+	log.Printf("[%s] Tool call: %s (%s)", c.page, tc.Title, tc.Status)
+}
+
+// handleToolCallUpdate sends an updated tool call notification to the wiki chat.
+func (c *wikiChatClient) handleToolCallUpdate(tcu *acp.SessionToolCallUpdate) {
+	c.mu.Lock()
+	msgID := c.currentMsg
+	c.mu.Unlock()
+
+	if msgID == "" {
+		return
+	}
+
+	status := ""
+	if tcu.Status != nil {
+		status = string(*tcu.Status)
+	}
+	title := ""
+	if tcu.Title != nil {
+		title = *tcu.Title
+	}
+	_, _ = c.chatClient.SendToolCallNotification(context.Background(), connect.NewRequest(&apiv1.SendToolCallNotificationRequest{
+		Page:       c.page,
+		MessageId:  msgID,
+		ToolCallId: string(tcu.ToolCallId),
+		Title:      title,
+		Status:     status,
+	}))
+}
+
+// handleThought accumulates thinking text and streams it as a collapsible section.
+func (c *wikiChatClient) handleThought(chunk *acp.SessionUpdateAgentThoughtChunk) {
+	if chunk.Content.Text == nil {
+		return
+	}
+
+	log.Printf("[%s] Thinking: %s", c.page, truncate(chunk.Content.Text.Text, truncateLimitForLog))
+
+	c.mu.Lock()
+	_, _ = c.thoughtBuf.WriteString(chunk.Content.Text.Text)
+	thoughtText := c.buildFullText()
+	msgID := c.currentMsg
+	replyTo := c.replyToID
+	c.mu.Unlock()
+
+	if strings.TrimSpace(c.thoughtBuf.String()) == "" {
+		return
+	}
+
+	c.streamOrCreateReply(msgID, replyTo, thoughtText)
+}
+
+// handlePlan updates the plan entries and streams the updated text to the chat.
+func (c *wikiChatClient) handlePlan(plan *acp.SessionUpdatePlan) {
+	c.mu.Lock()
+	c.planEntries = plan.Entries
+	fullText := c.buildFullText()
+	msgID := c.currentMsg
+	replyTo := c.replyToID
+	c.mu.Unlock()
+
+	log.Printf("[%s] Plan update: %d entries", c.page, len(plan.Entries))
+
+	c.streamOrCreateReply(msgID, replyTo, fullText)
+}
+
+// streamOrCreateReply either creates a new streaming reply or edits the existing one.
+func (c *wikiChatClient) streamOrCreateReply(msgID, replyTo, text string) {
+	if msgID == "" {
+		resp, err := c.chatClient.SendChatReply(context.Background(), connect.NewRequest(&apiv1.SendChatReplyRequest{
+			Page:      c.page,
+			Content:   text,
+			ReplyToId: replyTo,
+		}))
+		if err != nil {
+			log.Printf("Failed to create streaming reply for %q: %v", c.page, err)
+		} else {
+			c.mu.Lock()
+			c.currentMsg = resp.Msg.MessageId
+			c.mu.Unlock()
+		}
+	} else {
+		_, err := c.chatClient.EditChatMessage(context.Background(), connect.NewRequest(&apiv1.EditChatMessageRequest{
+			MessageId:  msgID,
+			NewContent: text,
+			Streaming:  true,
+		}))
+		if err != nil {
+			log.Printf("Failed to update streaming reply for %q: %v", c.page, err)
+		}
+	}
+}
+
+// beginTurn prepares for a new prompt turn — resets the streaming state.
+// buildFullText returns the combined response text, prepending any accumulated
+// thinking content as a collapsible markdown <details> section.
+// Must be called with c.mu held.
+func (c *wikiChatClient) buildFullText() string {
+	thought := c.thoughtBuf.String()
+	response := c.textBuf.String()
+	permissions := c.permissionNotes.String()
+
+	var result string
+	if thought == "" {
+		result = response
+	} else {
+		result = "<details><summary>Thinking...</summary>\n\n" + thought + "\n\n</details>\n\n" + response
+	}
+
+	if len(c.planEntries) > 0 {
+		result += "\n\n" + c.buildPlanSection()
+	}
+
+	if permissions != "" {
+		result += "\n\n" + permissions
+	}
+
+	return result
+}
+
+// buildPlanSection renders plan entries as a markdown checklist.
+// Must be called with c.mu held.
+func (c *wikiChatClient) buildPlanSection() string {
+	var sb strings.Builder
+	_, _ = sb.WriteString("**Plan:**\n")
+
+	for _, entry := range c.planEntries {
+		switch entry.Status {
+		case acp.PlanEntryStatusCompleted:
+			_, _ = sb.WriteString("- [x] " + entry.Content + "\n")
+		case acp.PlanEntryStatusInProgress:
+			_, _ = sb.WriteString("- 🔄 " + entry.Content + "\n")
+		default: // pending
+			_, _ = sb.WriteString("- [ ] " + entry.Content + "\n")
+		}
+	}
+
+	return sb.String()
+}
+
+func (c *wikiChatClient) beginTurn(replyToID string) {
+	c.mu.Lock()
+	c.textBuf.Reset()
+	c.thoughtBuf.Reset()
+	c.permissionNotes.Reset()
+	c.planEntries = nil
+	c.replyToID = replyToID
+	c.currentMsg = ""
+	c.mu.Unlock()
+}
+
+// endTurn cleans up after a prompt turn completes.
+func (c *wikiChatClient) endTurn() {
+	c.mu.Lock()
+	c.currentMsg = ""
+	c.mu.Unlock()
+}
+
+func truncate(s string, limit int) string {
+	if len(s) <= limit {
+		return s
+	}
+	return s[:limit] + "..."
+}
+
+func (c *wikiChatClient) RequestPermission(ctx context.Context, p acp.RequestPermissionRequest) (acp.RequestPermissionResponse, error) {
+	if c.entry != nil {
+		if err := c.entry.setState(StatePermissionPending); err != nil {
+			log.Printf(logFmtStateTransitionErr, err)
+		}
+		defer func() {
+			if err := c.entry.setState(StatePrompting); err != nil {
+				log.Printf(logFmtStateTransitionErr, err)
+			}
+		}()
+	}
+
+	title := string(p.ToolCall.ToolCallId)
+	if p.ToolCall.Title != nil {
+		title = *p.ToolCall.Title
+	}
+
+	if len(p.Options) == 0 {
+		log.Printf("[%s] Permission request cancelled (no options): %s", c.page, title)
+		return permissionCancelledResponse(), nil
+	}
+
+	log.Printf("[%s] Permission requested from user: %s (%d options)", c.page, title, len(p.Options))
+
+	return c.relayPermissionToUser(ctx, p, title)
+}
+
+// relayPermissionToUser forwards the permission request to the wiki chat UI and
+// blocks until the user responds.
+func (c *wikiChatClient) relayPermissionToUser(ctx context.Context, p acp.RequestPermissionRequest, title string) (acp.RequestPermissionResponse, error) {
+	requestID := fmt.Sprintf("perm-%d", time.Now().UnixNano())
+
+	var protoOptions []*apiv1.ChatPermissionOption
+	for _, opt := range p.Options {
+		protoOptions = append(protoOptions, &apiv1.ChatPermissionOption{
+			OptionId: string(opt.OptionId),
+			Label:    opt.Name,
+		})
+	}
+
+	resp, err := c.chatClient.RequestPermissionFromUser(ctx, connect.NewRequest(&apiv1.RequestPermissionFromUserRequest{
+		Page:        c.page,
+		RequestId:   requestID,
+		Title:       title,
+		Description: title,
+		Options:     protoOptions,
+	}))
+	if err != nil {
+		log.Printf("[%s] Permission request failed: %v — auto-approving", c.page, err)
+		selected := p.Options[0]
+		return permissionSelectedResponse(selected.OptionId), nil
+	}
+
+	return c.processPermissionResponse(resp.Msg.SelectedOptionId, p.Options, title)
+}
+
+// processPermissionResponse interprets the user's selection (or denial) and
+// records it in the permission notes buffer.
+func (c *wikiChatClient) processPermissionResponse(selectedID string, options []acp.PermissionOption, title string) (acp.RequestPermissionResponse, error) {
+	if selectedID == "" {
+		log.Printf("[%s] Permission denied by user: %s", c.page, title)
+		c.mu.Lock()
+		_, _ = fmt.Fprintf(&c.permissionNotes, "> \U0001F510 **Permission denied:** %s\n", title)
+		c.mu.Unlock()
+		return permissionCancelledResponse(), nil
+	}
+
+	selectedName := selectedID
+	for _, opt := range options {
+		if string(opt.OptionId) == selectedID {
+			selectedName = opt.Name
+			break
+		}
+	}
+	log.Printf("[%s] Permission granted by user: %s — %s", c.page, title, selectedName)
+
+	c.mu.Lock()
+	_, _ = fmt.Fprintf(&c.permissionNotes, "> \U0001F510 **Permission granted:** %s — %s\n", title, selectedName)
+	c.mu.Unlock()
+
+	return permissionSelectedResponse(acp.PermissionOptionId(selectedID)), nil
+}
+
+func permissionCancelledResponse() acp.RequestPermissionResponse {
+	return acp.RequestPermissionResponse{
+		Outcome: acp.RequestPermissionOutcome{
+			Cancelled: &acp.RequestPermissionOutcomeCancelled{},
+		},
+	}
+}
+
+func permissionSelectedResponse(optionID acp.PermissionOptionId) acp.RequestPermissionResponse {
+	return acp.RequestPermissionResponse{
+		Outcome: acp.RequestPermissionOutcome{
+			Selected: &acp.RequestPermissionOutcomeSelected{OptionId: optionID},
+		},
+	}
+}
+
+// File system operations — deny all, agent should use wiki MCP tools
+func (*wikiChatClient) ReadTextFile(_ context.Context, _ acp.ReadTextFileRequest) (acp.ReadTextFileResponse, error) {
+	return acp.ReadTextFileResponse{}, errors.New("file system access not available — use wiki MCP tools")
+}
+
+func (*wikiChatClient) WriteTextFile(_ context.Context, _ acp.WriteTextFileRequest) (acp.WriteTextFileResponse, error) {
+	return acp.WriteTextFileResponse{}, errors.New("file system access not available — use wiki MCP tools")
+}
+
+// Terminal operations — deny all
+func (*wikiChatClient) CreateTerminal(_ context.Context, _ acp.CreateTerminalRequest) (acp.CreateTerminalResponse, error) {
+	return acp.CreateTerminalResponse{}, errors.New(errTerminalAccessUnavailable)
+}
+
+func (*wikiChatClient) KillTerminalCommand(_ context.Context, _ acp.KillTerminalCommandRequest) (acp.KillTerminalCommandResponse, error) {
+	return acp.KillTerminalCommandResponse{}, errors.New(errTerminalAccessUnavailable)
+}
+
+func (*wikiChatClient) TerminalOutput(_ context.Context, _ acp.TerminalOutputRequest) (acp.TerminalOutputResponse, error) {
+	return acp.TerminalOutputResponse{}, errors.New(errTerminalAccessUnavailable)
+}
+
+func (*wikiChatClient) ReleaseTerminal(_ context.Context, _ acp.ReleaseTerminalRequest) (acp.ReleaseTerminalResponse, error) {
+	return acp.ReleaseTerminalResponse{}, errors.New(errTerminalAccessUnavailable)
+}
+
+func (*wikiChatClient) WaitForTerminalExit(_ context.Context, _ acp.WaitForTerminalExitRequest) (acp.WaitForTerminalExitResponse, error) {
+	return acp.WaitForTerminalExitResponse{}, errors.New(errTerminalAccessUnavailable)
+}
+
+// spawnInstance starts an ACP agent process for a page, performs the handshake,
+// creates a session with wiki MCP tools, and starts the message bridge.
 // Must be called with d.mu held.
-func (d *poolDaemon) spawnInstance(ctx context.Context, page string) (*instanceEntry, error) {
-	ctx, cancel := context.WithCancel(ctx)
+func (d *poolDaemon) spawnInstance(page string) (*instanceEntry, error) {
+	if d.ctx == nil {
+		return nil, errors.New("pool daemon context not initialized")
+	}
+	ctx, cancel := context.WithCancel(d.ctx)
 
-	wikiCLIBin, err := os.Executable()
+	conn, chatClient, err := d.startAgentProcess(ctx, page)
 	if err != nil {
 		cancel()
-		return nil, fmt.Errorf("failed to find wiki-cli binary: %w", err)
+		return nil, err
 	}
 
-	mcpServerCmd := buildMCPServerArg(wikiCLIBin, d.wikiURL, page)
-	var binary string
-	var args []string
-	var unitName string
-	if d.useSystemd {
-		binary, args, unitName = buildSystemdClaudeArgs(d.claudePath, mcpServerCmd, page)
-	} else {
-		binary, args, unitName = buildDirectClaudeArgs(d.claudePath, mcpServerCmd)
-	}
-
-	cmd := d.newCommand(ctx, binary, args...)
-	if err := cmd.Start(); err != nil {
+	sess, err := d.initializeACPSession(ctx, conn, page)
+	if err != nil {
 		cancel()
-		return nil, fmt.Errorf("failed to start claude for page %q: %w", page, err)
+		return nil, err
 	}
 
 	entry := &instanceEntry{
 		page:       page,
-		unitName:   unitName,
-		cmd:        cmd,
-		lastActive: time.Now(),
+		conn:       conn,
+		sessionID:  sess.SessionId,
 		cancel:     cancel,
+		lastActive: time.Now(),
+		state:      StateInitializing,
 	}
+	log.Printf("[%s] State: Spawning -> Initializing", page)
 
-	// Monitor process exit in background
-	go func() {
-		waitErr := cmd.Wait()
-		if waitErr != nil {
-			log.Printf("Claude instance for %q exited: %v", page, waitErr)
-		} else {
-			log.Printf("Claude instance for %q exited cleanly", page)
-		}
-
-		d.mu.Lock()
-		if current, ok := d.instances[page]; ok && current == entry {
-			delete(d.instances, page)
-		}
-		d.mu.Unlock()
-	}()
+	chatClient.entry = entry
+	go d.runMessageBridge(ctx, entry, chatClient)
 
 	return entry, nil
+}
+
+// startAgentProcess spawns the ACP agent binary (optionally via systemd), performs
+// the ACP handshake, and returns the ready connection and chat client.
+func (d *poolDaemon) startAgentProcess(ctx context.Context, page string) (*acp.ClientSideConnection, *wikiChatClient, error) {
+	cmd := d.buildAgentCmd(ctx, page)
+
+	stdinPipe, err := cmd.StdinPipe()
+	if err != nil {
+		return nil, nil, fmt.Errorf("stdin pipe: %w", err)
+	}
+	stdoutPipe, err := cmd.StdoutPipe()
+	if err != nil {
+		return nil, nil, fmt.Errorf("stdout pipe: %w", err)
+	}
+
+	if err := cmd.Start(); err != nil {
+		return nil, nil, fmt.Errorf("start agent for page %q: %w", page, err)
+	}
+
+	go func() {
+		waitErr := cmd.Wait()
+		if waitErr != nil && ctx.Err() == nil {
+			log.Printf("Agent for %q exited: %v", page, waitErr)
+		} else {
+			log.Printf("Agent for %q exited cleanly", page)
+		}
+	}()
+
+	chatClient := newWikiChatClient(page, d.wikiURL)
+	conn := acp.NewClientSideConnection(chatClient, stdinPipe, stdoutPipe)
+
+	_, err = conn.Initialize(ctx, acp.InitializeRequest{
+		ProtocolVersion: acp.ProtocolVersionNumber,
+		ClientCapabilities: acp.ClientCapabilities{
+			Fs: acp.FileSystemCapability{
+				ReadTextFile:  false,
+				WriteTextFile: false,
+			},
+			Terminal: false,
+		},
+	})
+	if err != nil {
+		return nil, nil, fmt.Errorf("ACP handshake failed for page %q: %w", page, err)
+	}
+
+	return conn, chatClient, nil
+}
+
+// buildAgentCmd constructs the exec.Cmd for the agent process, using systemd-run
+// when systemd integration is enabled.
+func (d *poolDaemon) buildAgentCmd(ctx context.Context, page string) *exec.Cmd {
+	if d.useSystemd {
+		unitName := "wiki-chat-" + sanitizeUnitName(page)
+		_ = exec.Command("systemctl", "--user", "stop", unitName+".scope").Run()
+		return exec.CommandContext(ctx, "systemd-run",
+			"--user",
+			"--unit="+unitName,
+			"--scope",
+			d.agentPath,
+		)
+	}
+
+	cmd := exec.CommandContext(ctx, d.agentPath)
+	cmd.Stderr = newPrefixWriter(os.Stderr, page)
+	return cmd
+}
+
+// initializeACPSession creates an ACP session with the wiki MCP server configured.
+func (d *poolDaemon) initializeACPSession(ctx context.Context, conn *acp.ClientSideConnection, page string) (acp.NewSessionResponse, error) {
+	wikiCLIBin, execErr := os.Executable()
+	if execErr != nil {
+		return acp.NewSessionResponse{}, fmt.Errorf("failed to find wiki-cli binary: %w", execErr)
+	}
+
+	cwd, _ := os.Getwd()
+
+	sess, err := conn.NewSession(ctx, acp.NewSessionRequest{
+		Cwd: cwd,
+		McpServers: []acp.McpServer{{
+			Stdio: &acp.McpServerStdio{
+				Name:    "wiki",
+				Command: wikiCLIBin,
+				Args:    []string{"mcp", "--url", d.wikiURL},
+				Env:     []acp.EnvVariable{},
+			},
+		}},
+	})
+	if err != nil {
+		return acp.NewSessionResponse{}, fmt.Errorf("ACP session creation failed for page %q: %w", page, err)
+	}
+
+	return sess, nil
+}
+
+// runMessageBridge subscribes to user messages and forwards them as ACP prompts.
+// Page context is prepended to the first user message rather than sent as a
+// separate prompt, ensuring the bridge is listening before any prompt is sent.
+func (d *poolDaemon) runMessageBridge(ctx context.Context, entry *instanceEntry, chatClient *wikiChatClient) {
+	page := entry.page
+
+	if err := entry.setState(StateBridgeConnecting); err != nil {
+		log.Printf(logFmtStateTransitionErr, err)
+	}
+
+	log.Printf("[%s] Bridge: fetching page context...", page)
+	// Fetch page context (but don't send it as a prompt yet — prepend to first message)
+	chatClient.mu.Lock()
+	chatClient.pageContext = d.fetchPageContext(ctx, page)
+	chatClient.mu.Unlock()
+	log.Printf("[%s] Bridge: page context fetched, subscribing to messages...", page)
+
+	// Subscribe to page messages FIRST — this ensures we don't miss the triggering message
+	httpClient := &http.Client{}
+	wikiClient := apiv1connect.NewChatServiceClient(httpClient, d.wikiURL)
+
+	backoffMs := initialBackoffMs
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
+
+		start := time.Now()
+		err := d.bridgeMessages(ctx, entry, wikiClient, chatClient)
+		if err == nil {
+			return
+		}
+
+		delayMs, nextMs := computeBackoffAfterFailure(backoffMs, time.Since(start))
+		log.Printf("Message bridge for %q error: %v. Reconnecting in %dms...", page, err, delayMs)
+
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(time.Duration(delayMs) * time.Millisecond):
+		}
+
+		backoffMs = nextMs
+	}
+}
+
+// bridgeMessages subscribes to page chat messages and forwards them as ACP prompts.
+// It also subscribes to cancellation signals so the frontend "Stop" button can
+// cancel an in-progress prompt.
+func (*poolDaemon) bridgeMessages(ctx context.Context, entry *instanceEntry, wikiClient pageMessageSource, chatClient *wikiChatClient) error {
+	stream, err := wikiClient.SubscribePageChatMessages(ctx, connect.NewRequest(&apiv1.SubscribePageChatMessagesRequest{
+		Page: entry.page,
+	}))
+	if err != nil {
+		if ctx.Err() != nil {
+			return nil
+		}
+		return fmt.Errorf("failed to subscribe to page messages: %w", err)
+	}
+	defer func() { _ = stream.Close() }()
+
+	log.Printf("[%s] Bridge: message stream connected, setting up cancellation...", entry.page)
+
+	cancelChan := subscribeCancellations(ctx, wikiClient, entry.page)
+
+	log.Printf("Message bridge connected for page %q", entry.page)
+
+	if err := entry.setState(StateIdle); err != nil {
+		log.Printf(logFmtStateTransitionErr, err)
+	}
+
+	for stream.Receive() {
+		msg := stream.Msg()
+
+		// Only forward user messages
+		if msg.Sender != apiv1.Sender_USER {
+			log.Printf("[%s] Bridge: skipping non-user message (sender=%s)", entry.page, msg.Sender)
+			continue
+		}
+
+		forwardUserMessage(ctx, entry, chatClient, cancelChan, msg)
+	}
+
+	if err := stream.Err(); err != nil {
+		if ctx.Err() != nil {
+			return nil
+		}
+		return fmt.Errorf("stream error: %w", err)
+	}
+
+	if ctx.Err() != nil {
+		return nil
+	}
+	return errors.New("stream closed by server")
+}
+
+// subscribeCancellations starts a background goroutine that listens for cancellation
+// signals on the given page and forwards them to the returned channel.
+func subscribeCancellations(ctx context.Context, wikiClient pageMessageSource, page string) <-chan struct{} {
+	cancelChan := make(chan struct{}, 1)
+	go func() {
+		cancelStream, cancelErr := wikiClient.SubscribePageCancellations(ctx, connect.NewRequest(&apiv1.SubscribePageCancellationsRequest{
+			Page: page,
+		}))
+		if cancelErr != nil {
+			log.Printf("Warning: failed to subscribe to cancellations for %q: %v", page, cancelErr)
+			return
+		}
+		defer func() { _ = cancelStream.Close() }()
+		for cancelStream.Receive() {
+			select {
+			case cancelChan <- struct{}{}:
+			default:
+			}
+		}
+	}()
+	return cancelChan
+}
+
+// forwardUserMessage processes a single user message from the chat stream: prepares
+// context, sends it as an ACP prompt, and manages heartbeats and cancellation.
+func forwardUserMessage(ctx context.Context, entry *instanceEntry, chatClient *wikiChatClient, cancelChan <-chan struct{}, msg *apiv1.ChatMessage) {
+	log.Printf("[%s] Bridge: received user message %q: %s", entry.page, msg.Id, truncate(msg.Content, truncateLimitForBridge))
+	entry.touch()
+
+	chatClient.beginTurn(msg.Id)
+	defer chatClient.endTurn()
+
+	promptCtx, promptCancel := context.WithCancel(ctx)
+	defer promptCancel()
+
+	go heartbeatWhilePrompting(promptCtx, entry)
+
+	go listenForCancelSignal(promptCtx, promptCancel, cancelChan, entry.page)
+
+	promptText := buildPromptText(chatClient, msg.Content)
+
+	if err := entry.setState(StatePrompting); err != nil {
+		log.Printf(logFmtStateTransitionErr, err)
+	}
+
+	log.Printf("[%s] Bridge: sending prompt (%d chars)...", entry.page, len(promptText))
+	_, promptErr := entry.conn.Prompt(promptCtx, acp.PromptRequest{
+		SessionId: entry.sessionID,
+		Prompt:    []acp.ContentBlock{acp.TextBlock(promptText)},
+	})
+
+	if promptErr != nil {
+		if promptCtx.Err() != nil && ctx.Err() == nil {
+			log.Printf("Prompt cancelled for page %q", entry.page)
+		} else {
+			log.Printf("Failed to send prompt to agent for %q: %v", entry.page, promptErr)
+		}
+	}
+
+	if err := entry.setState(StateIdle); err != nil {
+		log.Printf(logFmtStateTransitionErr, err)
+	}
+}
+
+// heartbeatWhilePrompting periodically touches the instance entry to prevent the
+// idle reaper from killing it during long-running prompts.
+func heartbeatWhilePrompting(ctx context.Context, entry *instanceEntry) {
+	ticker := time.NewTicker(1 * time.Minute)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ticker.C:
+			entry.touch()
+			log.Printf("[%s] Heartbeat: touched lastActive", entry.page)
+		case <-ctx.Done():
+			log.Printf("[%s] Heartbeat: stopped (prompt done)", entry.page)
+			return
+		}
+	}
+}
+
+// listenForCancelSignal waits for either a cancel signal from the user or for
+// the prompt context to finish, cancelling the prompt if requested.
+func listenForCancelSignal(ctx context.Context, cancel context.CancelFunc, cancelChan <-chan struct{}, page string) {
+	select {
+	case <-cancelChan:
+		log.Printf("Cancelling prompt for page %q", page)
+		cancel()
+	case <-ctx.Done():
+	}
+}
+
+// buildPromptText prepends page context to the user message content if available,
+// consuming the context so it is only prepended once.
+func buildPromptText(chatClient *wikiChatClient, messageContent string) string {
+	chatClient.mu.Lock()
+	defer chatClient.mu.Unlock()
+
+	if chatClient.pageContext == "" {
+		return messageContent
+	}
+
+	promptText := chatClient.pageContext + "\n\n---\n\nUser message: " + messageContent
+	chatClient.pageContext = "" // only prepend once
+	return promptText
+}
+
+// chatPreamble is prepended to the first prompt to establish the interactive chat context.
+const chatPreamble = `You are in an INTERACTIVE CHAT session with a user on a wiki page. This is a conversation, not a coding task.
+
+CRITICAL: Respond quickly and conversationally. Do NOT explore the codebase, run startup hooks, or do extensive initialization. The user is waiting for your reply in a chat window.
+
+Rules:
+- Keep responses concise and conversational
+- Use the wiki MCP tools only when the user asks you to read or edit pages
+- Each message you receive is from a user chatting on this wiki page
+
+## MANDATORY: Update Your Memory After EVERY Response
+
+You have NO chat history between sessions. The ONLY way to maintain continuity is the
+[ai_agent_chat_context] section in this page's frontmatter. Without it, you start every
+session completely blank.
+
+REQUIREMENT: Before you finish responding to EVERY message, you MUST call the
+MergeFrontmatter MCP tool to update [ai_agent_chat_context]. This is not optional.
+Do it every single turn, even for short exchanges.
+
+Update it with a structured object containing these fields:
+- "last_conversation_summary": 1-2 sentence summary of this exchange
+- "user_goals": array of goals or preferences the user has mentioned (accumulate across sessions)
+- "pending_items": array of action items that need follow-up
+- "key_context": important facts, decisions, or preferences to remember
+- "last_updated": current date/time
+
+Example MergeFrontmatter call:
+` + "```" + `json
+{
+  "ai_agent_chat_context": {
+    "last_conversation_summary": "User asked me to help reorganize the project roadmap section. I restructured it into Q1/Q2 milestones.",
+    "user_goals": ["reorganize roadmap", "keep page concise"],
+    "pending_items": ["add Q3 milestones when user provides them"],
+    "key_context": "User prefers bullet points over tables for roadmap items. This page tracks the Alpha project.",
+    "last_updated": "2025-01-15T10:30:00Z"
+  }
+}
+` + "```" + `
+
+IMPORTANT: Merge new information with existing context — do not discard previous entries
+from user_goals or key_context unless they are no longer relevant. Accumulate knowledge
+across sessions.
+
+`
+
+// fetchPageContext retrieves the page's ai_agent_chat_context frontmatter and returns
+// it as a text string to prepend to the first user message.
+func (d *poolDaemon) fetchPageContext(ctx context.Context, page string) string {
+	httpClient := &http.Client{}
+	fmClient := apiv1connect.NewFrontmatterClient(httpClient, d.wikiURL)
+
+	fmResp, err := fmClient.GetFrontmatter(ctx, connect.NewRequest(&apiv1.GetFrontmatterRequest{Page: page}))
+	if err != nil {
+		log.Printf("Failed to fetch frontmatter for page %q: %v", page, err)
+		return chatPreamble + fmt.Sprintf(
+			"You are the assistant for wiki page '%s'. Failed to fetch page context: %v. Do NOT attempt to create or modify the [ai_agent_chat_context] section.",
+			page, err,
+		)
+	}
+
+	fm := fmResp.Msg.Frontmatter.AsMap()
+	agentContext, ok := fm["ai_agent_chat_context"]
+	if !ok {
+		return chatPreamble + fmt.Sprintf(
+			"You are the assistant for wiki page '%s'. No [ai_agent_chat_context] exists yet — this is your first session on this page.\n\n"+
+			"You MUST create it now by calling MergeFrontmatter after your first response. Use the structured format described above "+
+			"(last_conversation_summary, user_goals, pending_items, key_context, last_updated).",
+			page,
+		)
+	}
+
+	contextJSON, err := json.MarshalIndent(agentContext, "", "  ")
+	if err != nil {
+		log.Printf("Failed to marshal ai_agent_chat_context for page %q: %v", page, err)
+		return chatPreamble + fmt.Sprintf("You are the assistant for wiki page '%s'.", page)
+	}
+
+	return chatPreamble + fmt.Sprintf(
+		"You are the assistant for wiki page '%s'.\n\n"+
+			"## Your Restored Memory (from [ai_agent_chat_context])\n\n"+
+			"This is everything you remember from previous sessions. Review it before responding:\n\n"+
+			"```json\n%s\n```\n\n"+
+			"REMINDER: You MUST update this memory via MergeFrontmatter before finishing your response. "+
+			"Merge new information with the existing data above — do not overwrite fields, accumulate them.",
+		page, string(contextJSON),
+	)
 }
 
 // stopInstanceLocked stops an instance. Must be called with d.mu held.
@@ -368,24 +1219,19 @@ func (d *poolDaemon) stopInstanceLocked(page string) {
 		return
 	}
 
+	entry.mu.Lock()
+	if err := entry.setStateLocked(StateStopping); err != nil {
+		log.Printf(logFmtStateTransitionErr, err)
+	}
+	entry.mu.Unlock()
+
 	entry.cancel()
 
-	if entry.unitName != "" {
-		stopCtx, stopCancel := context.WithTimeout(context.Background(), 5*time.Second)
-		stopCmd := d.newCommand(stopCtx, "systemctl", "--user", "stop", entry.unitName+".scope")
-		if err := stopCmd.Start(); err != nil {
-			log.Printf("Failed to start systemctl stop for %q: %v", entry.unitName, err)
-			stopCancel()
-		} else {
-			// Wait in background so we don't block while holding d.mu
-			go func() {
-				defer stopCancel()
-				if err := stopCmd.Wait(); err != nil {
-					log.Printf("Failed to stop systemd unit %q: %v", entry.unitName, err)
-				}
-			}()
-		}
+	entry.mu.Lock()
+	if err := entry.setStateLocked(StateDead); err != nil {
+		log.Printf(logFmtStateTransitionErr, err)
 	}
+	entry.mu.Unlock()
 
 	delete(d.instances, page)
 }
@@ -455,4 +1301,3 @@ func (pw *prefixWriter) Write(p []byte) (int, error) {
 
 	return len(p), nil
 }
-

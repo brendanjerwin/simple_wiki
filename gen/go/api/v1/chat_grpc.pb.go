@@ -19,15 +19,19 @@ import (
 const _ = grpc.SupportPackageIsVersion8
 
 const (
-	ChatService_SendMessage_FullMethodName               = "/api.v1.ChatService/SendMessage"
-	ChatService_SubscribeChat_FullMethodName             = "/api.v1.ChatService/SubscribeChat"
-	ChatService_SubscribeChatMessages_FullMethodName     = "/api.v1.ChatService/SubscribeChatMessages"
-	ChatService_SendChatReply_FullMethodName             = "/api.v1.ChatService/SendChatReply"
-	ChatService_EditChatMessage_FullMethodName           = "/api.v1.ChatService/EditChatMessage"
-	ChatService_ReactToMessage_FullMethodName            = "/api.v1.ChatService/ReactToMessage"
-	ChatService_GetChatStatus_FullMethodName             = "/api.v1.ChatService/GetChatStatus"
-	ChatService_SubscribePageChatMessages_FullMethodName = "/api.v1.ChatService/SubscribePageChatMessages"
-	ChatService_SubscribeInstanceRequests_FullMethodName = "/api.v1.ChatService/SubscribeInstanceRequests"
+	ChatService_SendMessage_FullMethodName                = "/api.v1.ChatService/SendMessage"
+	ChatService_SubscribeChat_FullMethodName              = "/api.v1.ChatService/SubscribeChat"
+	ChatService_SendChatReply_FullMethodName              = "/api.v1.ChatService/SendChatReply"
+	ChatService_EditChatMessage_FullMethodName            = "/api.v1.ChatService/EditChatMessage"
+	ChatService_ReactToMessage_FullMethodName             = "/api.v1.ChatService/ReactToMessage"
+	ChatService_GetChatStatus_FullMethodName              = "/api.v1.ChatService/GetChatStatus"
+	ChatService_SubscribePageChatMessages_FullMethodName  = "/api.v1.ChatService/SubscribePageChatMessages"
+	ChatService_SubscribeInstanceRequests_FullMethodName  = "/api.v1.ChatService/SubscribeInstanceRequests"
+	ChatService_SendToolCallNotification_FullMethodName   = "/api.v1.ChatService/SendToolCallNotification"
+	ChatService_CancelAgentPrompt_FullMethodName          = "/api.v1.ChatService/CancelAgentPrompt"
+	ChatService_SubscribePageCancellations_FullMethodName = "/api.v1.ChatService/SubscribePageCancellations"
+	ChatService_RespondToPermission_FullMethodName        = "/api.v1.ChatService/RespondToPermission"
+	ChatService_RequestPermissionFromUser_FullMethodName  = "/api.v1.ChatService/RequestPermissionFromUser"
 )
 
 // ChatServiceClient is the client API for ChatService service.
@@ -44,9 +48,6 @@ type ChatServiceClient interface {
 	// SubscribeChat subscribes to all chat events for a page.
 	// Replays existing buffer contents on connect, then streams new events.
 	SubscribeChat(ctx context.Context, in *SubscribeChatRequest, opts ...grpc.CallOption) (ChatService_SubscribeChatClient, error)
-	// SubscribeChatMessages is called by wiki-cli mcp at startup.
-	// Streams all new user messages (from all pages) as they arrive from browsers.
-	SubscribeChatMessages(ctx context.Context, in *SubscribeChatMessagesRequest, opts ...grpc.CallOption) (ChatService_SubscribeChatMessagesClient, error)
 	// SendChatReply is called by wiki-cli mcp when Claude uses the reply tool.
 	// Accepts optional reply_to message ID for threading.
 	SendChatReply(ctx context.Context, in *SendChatReplyRequest, opts ...grpc.CallOption) (*SendChatReplyResponse, error)
@@ -65,6 +66,20 @@ type ChatServiceClient interface {
 	// SubscribeInstanceRequests is called by the wiki-cli pool daemon.
 	// Streams page names that need a Claude instance spawned.
 	SubscribeInstanceRequests(ctx context.Context, in *SubscribeInstanceRequestsRequest, opts ...grpc.CallOption) (ChatService_SubscribeInstanceRequestsClient, error)
+	// SendToolCallNotification is called by the pool daemon or ACP client
+	// when the agent invokes a tool. The notification is broadcast to page subscribers.
+	SendToolCallNotification(ctx context.Context, in *SendToolCallNotificationRequest, opts ...grpc.CallOption) (*SendToolCallNotificationResponse, error)
+	// CancelAgentPrompt cancels an in-progress agent prompt for a page.
+	// Called by the frontend "Stop" button.
+	CancelAgentPrompt(ctx context.Context, in *CancelAgentPromptRequest, opts ...grpc.CallOption) (*CancelAgentPromptResponse, error)
+	// SubscribePageCancellations is called by the pool daemon per page.
+	// Streams a signal when CancelAgentPrompt is called for that page.
+	SubscribePageCancellations(ctx context.Context, in *SubscribePageCancellationsRequest, opts ...grpc.CallOption) (ChatService_SubscribePageCancellationsClient, error)
+	// RespondToPermission is called by the frontend when the user responds to a permission request.
+	RespondToPermission(ctx context.Context, in *RespondToPermissionRequest, opts ...grpc.CallOption) (*RespondToPermissionResponse, error)
+	// RequestPermissionFromUser is called by the pool daemon to forward a permission request
+	// to the user via chat and block until the user responds.
+	RequestPermissionFromUser(ctx context.Context, in *RequestPermissionFromUserRequest, opts ...grpc.CallOption) (*RequestPermissionFromUserResponse, error)
 }
 
 type chatServiceClient struct {
@@ -118,39 +133,6 @@ func (x *chatServiceSubscribeChatClient) Recv() (*ChatEvent, error) {
 	return m, nil
 }
 
-func (c *chatServiceClient) SubscribeChatMessages(ctx context.Context, in *SubscribeChatMessagesRequest, opts ...grpc.CallOption) (ChatService_SubscribeChatMessagesClient, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	stream, err := c.cc.NewStream(ctx, &ChatService_ServiceDesc.Streams[1], ChatService_SubscribeChatMessages_FullMethodName, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	x := &chatServiceSubscribeChatMessagesClient{ClientStream: stream}
-	if err := x.ClientStream.SendMsg(in); err != nil {
-		return nil, err
-	}
-	if err := x.ClientStream.CloseSend(); err != nil {
-		return nil, err
-	}
-	return x, nil
-}
-
-type ChatService_SubscribeChatMessagesClient interface {
-	Recv() (*ChatMessage, error)
-	grpc.ClientStream
-}
-
-type chatServiceSubscribeChatMessagesClient struct {
-	grpc.ClientStream
-}
-
-func (x *chatServiceSubscribeChatMessagesClient) Recv() (*ChatMessage, error) {
-	m := new(ChatMessage)
-	if err := x.ClientStream.RecvMsg(m); err != nil {
-		return nil, err
-	}
-	return m, nil
-}
-
 func (c *chatServiceClient) SendChatReply(ctx context.Context, in *SendChatReplyRequest, opts ...grpc.CallOption) (*SendChatReplyResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(SendChatReplyResponse)
@@ -193,7 +175,7 @@ func (c *chatServiceClient) GetChatStatus(ctx context.Context, in *GetChatStatus
 
 func (c *chatServiceClient) SubscribePageChatMessages(ctx context.Context, in *SubscribePageChatMessagesRequest, opts ...grpc.CallOption) (ChatService_SubscribePageChatMessagesClient, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	stream, err := c.cc.NewStream(ctx, &ChatService_ServiceDesc.Streams[2], ChatService_SubscribePageChatMessages_FullMethodName, cOpts...)
+	stream, err := c.cc.NewStream(ctx, &ChatService_ServiceDesc.Streams[1], ChatService_SubscribePageChatMessages_FullMethodName, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -226,7 +208,7 @@ func (x *chatServiceSubscribePageChatMessagesClient) Recv() (*ChatMessage, error
 
 func (c *chatServiceClient) SubscribeInstanceRequests(ctx context.Context, in *SubscribeInstanceRequestsRequest, opts ...grpc.CallOption) (ChatService_SubscribeInstanceRequestsClient, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	stream, err := c.cc.NewStream(ctx, &ChatService_ServiceDesc.Streams[3], ChatService_SubscribeInstanceRequests_FullMethodName, cOpts...)
+	stream, err := c.cc.NewStream(ctx, &ChatService_ServiceDesc.Streams[2], ChatService_SubscribeInstanceRequests_FullMethodName, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -257,6 +239,79 @@ func (x *chatServiceSubscribeInstanceRequestsClient) Recv() (*InstanceRequest, e
 	return m, nil
 }
 
+func (c *chatServiceClient) SendToolCallNotification(ctx context.Context, in *SendToolCallNotificationRequest, opts ...grpc.CallOption) (*SendToolCallNotificationResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SendToolCallNotificationResponse)
+	err := c.cc.Invoke(ctx, ChatService_SendToolCallNotification_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *chatServiceClient) CancelAgentPrompt(ctx context.Context, in *CancelAgentPromptRequest, opts ...grpc.CallOption) (*CancelAgentPromptResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CancelAgentPromptResponse)
+	err := c.cc.Invoke(ctx, ChatService_CancelAgentPrompt_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *chatServiceClient) SubscribePageCancellations(ctx context.Context, in *SubscribePageCancellationsRequest, opts ...grpc.CallOption) (ChatService_SubscribePageCancellationsClient, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &ChatService_ServiceDesc.Streams[3], ChatService_SubscribePageCancellations_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &chatServiceSubscribePageCancellationsClient{ClientStream: stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+type ChatService_SubscribePageCancellationsClient interface {
+	Recv() (*PageCancellation, error)
+	grpc.ClientStream
+}
+
+type chatServiceSubscribePageCancellationsClient struct {
+	grpc.ClientStream
+}
+
+func (x *chatServiceSubscribePageCancellationsClient) Recv() (*PageCancellation, error) {
+	m := new(PageCancellation)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
+func (c *chatServiceClient) RespondToPermission(ctx context.Context, in *RespondToPermissionRequest, opts ...grpc.CallOption) (*RespondToPermissionResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RespondToPermissionResponse)
+	err := c.cc.Invoke(ctx, ChatService_RespondToPermission_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *chatServiceClient) RequestPermissionFromUser(ctx context.Context, in *RequestPermissionFromUserRequest, opts ...grpc.CallOption) (*RequestPermissionFromUserResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RequestPermissionFromUserResponse)
+	err := c.cc.Invoke(ctx, ChatService_RequestPermissionFromUser_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // ChatServiceServer is the server API for ChatService service.
 // All implementations must embed UnimplementedChatServiceServer
 // for forward compatibility
@@ -271,9 +326,6 @@ type ChatServiceServer interface {
 	// SubscribeChat subscribes to all chat events for a page.
 	// Replays existing buffer contents on connect, then streams new events.
 	SubscribeChat(*SubscribeChatRequest, ChatService_SubscribeChatServer) error
-	// SubscribeChatMessages is called by wiki-cli mcp at startup.
-	// Streams all new user messages (from all pages) as they arrive from browsers.
-	SubscribeChatMessages(*SubscribeChatMessagesRequest, ChatService_SubscribeChatMessagesServer) error
 	// SendChatReply is called by wiki-cli mcp when Claude uses the reply tool.
 	// Accepts optional reply_to message ID for threading.
 	SendChatReply(context.Context, *SendChatReplyRequest) (*SendChatReplyResponse, error)
@@ -292,6 +344,20 @@ type ChatServiceServer interface {
 	// SubscribeInstanceRequests is called by the wiki-cli pool daemon.
 	// Streams page names that need a Claude instance spawned.
 	SubscribeInstanceRequests(*SubscribeInstanceRequestsRequest, ChatService_SubscribeInstanceRequestsServer) error
+	// SendToolCallNotification is called by the pool daemon or ACP client
+	// when the agent invokes a tool. The notification is broadcast to page subscribers.
+	SendToolCallNotification(context.Context, *SendToolCallNotificationRequest) (*SendToolCallNotificationResponse, error)
+	// CancelAgentPrompt cancels an in-progress agent prompt for a page.
+	// Called by the frontend "Stop" button.
+	CancelAgentPrompt(context.Context, *CancelAgentPromptRequest) (*CancelAgentPromptResponse, error)
+	// SubscribePageCancellations is called by the pool daemon per page.
+	// Streams a signal when CancelAgentPrompt is called for that page.
+	SubscribePageCancellations(*SubscribePageCancellationsRequest, ChatService_SubscribePageCancellationsServer) error
+	// RespondToPermission is called by the frontend when the user responds to a permission request.
+	RespondToPermission(context.Context, *RespondToPermissionRequest) (*RespondToPermissionResponse, error)
+	// RequestPermissionFromUser is called by the pool daemon to forward a permission request
+	// to the user via chat and block until the user responds.
+	RequestPermissionFromUser(context.Context, *RequestPermissionFromUserRequest) (*RequestPermissionFromUserResponse, error)
 	mustEmbedUnimplementedChatServiceServer()
 }
 
@@ -304,9 +370,6 @@ func (UnimplementedChatServiceServer) SendMessage(context.Context, *SendChatMess
 }
 func (UnimplementedChatServiceServer) SubscribeChat(*SubscribeChatRequest, ChatService_SubscribeChatServer) error {
 	return status.Errorf(codes.Unimplemented, "method SubscribeChat not implemented")
-}
-func (UnimplementedChatServiceServer) SubscribeChatMessages(*SubscribeChatMessagesRequest, ChatService_SubscribeChatMessagesServer) error {
-	return status.Errorf(codes.Unimplemented, "method SubscribeChatMessages not implemented")
 }
 func (UnimplementedChatServiceServer) SendChatReply(context.Context, *SendChatReplyRequest) (*SendChatReplyResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method SendChatReply not implemented")
@@ -325,6 +388,21 @@ func (UnimplementedChatServiceServer) SubscribePageChatMessages(*SubscribePageCh
 }
 func (UnimplementedChatServiceServer) SubscribeInstanceRequests(*SubscribeInstanceRequestsRequest, ChatService_SubscribeInstanceRequestsServer) error {
 	return status.Errorf(codes.Unimplemented, "method SubscribeInstanceRequests not implemented")
+}
+func (UnimplementedChatServiceServer) SendToolCallNotification(context.Context, *SendToolCallNotificationRequest) (*SendToolCallNotificationResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method SendToolCallNotification not implemented")
+}
+func (UnimplementedChatServiceServer) CancelAgentPrompt(context.Context, *CancelAgentPromptRequest) (*CancelAgentPromptResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method CancelAgentPrompt not implemented")
+}
+func (UnimplementedChatServiceServer) SubscribePageCancellations(*SubscribePageCancellationsRequest, ChatService_SubscribePageCancellationsServer) error {
+	return status.Errorf(codes.Unimplemented, "method SubscribePageCancellations not implemented")
+}
+func (UnimplementedChatServiceServer) RespondToPermission(context.Context, *RespondToPermissionRequest) (*RespondToPermissionResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method RespondToPermission not implemented")
+}
+func (UnimplementedChatServiceServer) RequestPermissionFromUser(context.Context, *RequestPermissionFromUserRequest) (*RequestPermissionFromUserResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method RequestPermissionFromUser not implemented")
 }
 func (UnimplementedChatServiceServer) mustEmbedUnimplementedChatServiceServer() {}
 
@@ -375,27 +453,6 @@ type chatServiceSubscribeChatServer struct {
 }
 
 func (x *chatServiceSubscribeChatServer) Send(m *ChatEvent) error {
-	return x.ServerStream.SendMsg(m)
-}
-
-func _ChatService_SubscribeChatMessages_Handler(srv interface{}, stream grpc.ServerStream) error {
-	m := new(SubscribeChatMessagesRequest)
-	if err := stream.RecvMsg(m); err != nil {
-		return err
-	}
-	return srv.(ChatServiceServer).SubscribeChatMessages(m, &chatServiceSubscribeChatMessagesServer{ServerStream: stream})
-}
-
-type ChatService_SubscribeChatMessagesServer interface {
-	Send(*ChatMessage) error
-	grpc.ServerStream
-}
-
-type chatServiceSubscribeChatMessagesServer struct {
-	grpc.ServerStream
-}
-
-func (x *chatServiceSubscribeChatMessagesServer) Send(m *ChatMessage) error {
 	return x.ServerStream.SendMsg(m)
 }
 
@@ -513,6 +570,99 @@ func (x *chatServiceSubscribeInstanceRequestsServer) Send(m *InstanceRequest) er
 	return x.ServerStream.SendMsg(m)
 }
 
+func _ChatService_SendToolCallNotification_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SendToolCallNotificationRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ChatServiceServer).SendToolCallNotification(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ChatService_SendToolCallNotification_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ChatServiceServer).SendToolCallNotification(ctx, req.(*SendToolCallNotificationRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _ChatService_CancelAgentPrompt_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CancelAgentPromptRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ChatServiceServer).CancelAgentPrompt(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ChatService_CancelAgentPrompt_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ChatServiceServer).CancelAgentPrompt(ctx, req.(*CancelAgentPromptRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _ChatService_SubscribePageCancellations_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(SubscribePageCancellationsRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(ChatServiceServer).SubscribePageCancellations(m, &chatServiceSubscribePageCancellationsServer{ServerStream: stream})
+}
+
+type ChatService_SubscribePageCancellationsServer interface {
+	Send(*PageCancellation) error
+	grpc.ServerStream
+}
+
+type chatServiceSubscribePageCancellationsServer struct {
+	grpc.ServerStream
+}
+
+func (x *chatServiceSubscribePageCancellationsServer) Send(m *PageCancellation) error {
+	return x.ServerStream.SendMsg(m)
+}
+
+func _ChatService_RespondToPermission_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RespondToPermissionRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ChatServiceServer).RespondToPermission(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ChatService_RespondToPermission_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ChatServiceServer).RespondToPermission(ctx, req.(*RespondToPermissionRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _ChatService_RequestPermissionFromUser_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RequestPermissionFromUserRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ChatServiceServer).RequestPermissionFromUser(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ChatService_RequestPermissionFromUser_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ChatServiceServer).RequestPermissionFromUser(ctx, req.(*RequestPermissionFromUserRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // ChatService_ServiceDesc is the grpc.ServiceDesc for ChatService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -540,16 +690,27 @@ var ChatService_ServiceDesc = grpc.ServiceDesc{
 			MethodName: "GetChatStatus",
 			Handler:    _ChatService_GetChatStatus_Handler,
 		},
+		{
+			MethodName: "SendToolCallNotification",
+			Handler:    _ChatService_SendToolCallNotification_Handler,
+		},
+		{
+			MethodName: "CancelAgentPrompt",
+			Handler:    _ChatService_CancelAgentPrompt_Handler,
+		},
+		{
+			MethodName: "RespondToPermission",
+			Handler:    _ChatService_RespondToPermission_Handler,
+		},
+		{
+			MethodName: "RequestPermissionFromUser",
+			Handler:    _ChatService_RequestPermissionFromUser_Handler,
+		},
 	},
 	Streams: []grpc.StreamDesc{
 		{
 			StreamName:    "SubscribeChat",
 			Handler:       _ChatService_SubscribeChat_Handler,
-			ServerStreams: true,
-		},
-		{
-			StreamName:    "SubscribeChatMessages",
-			Handler:       _ChatService_SubscribeChatMessages_Handler,
 			ServerStreams: true,
 		},
 		{
@@ -560,6 +721,11 @@ var ChatService_ServiceDesc = grpc.ServiceDesc{
 		{
 			StreamName:    "SubscribeInstanceRequests",
 			Handler:       _ChatService_SubscribeInstanceRequests_Handler,
+			ServerStreams: true,
+		},
+		{
+			StreamName:    "SubscribePageCancellations",
+			Handler:       _ChatService_SubscribePageCancellations_Handler,
 			ServerStreams: true,
 		},
 	},

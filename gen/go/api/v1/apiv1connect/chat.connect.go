@@ -38,9 +38,6 @@ const (
 	// ChatServiceSubscribeChatProcedure is the fully-qualified name of the ChatService's SubscribeChat
 	// RPC.
 	ChatServiceSubscribeChatProcedure = "/api.v1.ChatService/SubscribeChat"
-	// ChatServiceSubscribeChatMessagesProcedure is the fully-qualified name of the ChatService's
-	// SubscribeChatMessages RPC.
-	ChatServiceSubscribeChatMessagesProcedure = "/api.v1.ChatService/SubscribeChatMessages"
 	// ChatServiceSendChatReplyProcedure is the fully-qualified name of the ChatService's SendChatReply
 	// RPC.
 	ChatServiceSendChatReplyProcedure = "/api.v1.ChatService/SendChatReply"
@@ -59,20 +56,39 @@ const (
 	// ChatServiceSubscribeInstanceRequestsProcedure is the fully-qualified name of the ChatService's
 	// SubscribeInstanceRequests RPC.
 	ChatServiceSubscribeInstanceRequestsProcedure = "/api.v1.ChatService/SubscribeInstanceRequests"
+	// ChatServiceSendToolCallNotificationProcedure is the fully-qualified name of the ChatService's
+	// SendToolCallNotification RPC.
+	ChatServiceSendToolCallNotificationProcedure = "/api.v1.ChatService/SendToolCallNotification"
+	// ChatServiceCancelAgentPromptProcedure is the fully-qualified name of the ChatService's
+	// CancelAgentPrompt RPC.
+	ChatServiceCancelAgentPromptProcedure = "/api.v1.ChatService/CancelAgentPrompt"
+	// ChatServiceSubscribePageCancellationsProcedure is the fully-qualified name of the ChatService's
+	// SubscribePageCancellations RPC.
+	ChatServiceSubscribePageCancellationsProcedure = "/api.v1.ChatService/SubscribePageCancellations"
+	// ChatServiceRespondToPermissionProcedure is the fully-qualified name of the ChatService's
+	// RespondToPermission RPC.
+	ChatServiceRespondToPermissionProcedure = "/api.v1.ChatService/RespondToPermission"
+	// ChatServiceRequestPermissionFromUserProcedure is the fully-qualified name of the ChatService's
+	// RequestPermissionFromUser RPC.
+	ChatServiceRequestPermissionFromUserProcedure = "/api.v1.ChatService/RequestPermissionFromUser"
 )
 
 // These variables are the protoreflect.Descriptor objects for the RPCs defined in this package.
 var (
-	chatServiceServiceDescriptor                         = v1.File_api_v1_chat_proto.Services().ByName("ChatService")
-	chatServiceSendMessageMethodDescriptor               = chatServiceServiceDescriptor.Methods().ByName("SendMessage")
-	chatServiceSubscribeChatMethodDescriptor             = chatServiceServiceDescriptor.Methods().ByName("SubscribeChat")
-	chatServiceSubscribeChatMessagesMethodDescriptor     = chatServiceServiceDescriptor.Methods().ByName("SubscribeChatMessages")
-	chatServiceSendChatReplyMethodDescriptor             = chatServiceServiceDescriptor.Methods().ByName("SendChatReply")
-	chatServiceEditChatMessageMethodDescriptor           = chatServiceServiceDescriptor.Methods().ByName("EditChatMessage")
-	chatServiceReactToMessageMethodDescriptor            = chatServiceServiceDescriptor.Methods().ByName("ReactToMessage")
-	chatServiceGetChatStatusMethodDescriptor             = chatServiceServiceDescriptor.Methods().ByName("GetChatStatus")
-	chatServiceSubscribePageChatMessagesMethodDescriptor = chatServiceServiceDescriptor.Methods().ByName("SubscribePageChatMessages")
-	chatServiceSubscribeInstanceRequestsMethodDescriptor = chatServiceServiceDescriptor.Methods().ByName("SubscribeInstanceRequests")
+	chatServiceServiceDescriptor                          = v1.File_api_v1_chat_proto.Services().ByName("ChatService")
+	chatServiceSendMessageMethodDescriptor                = chatServiceServiceDescriptor.Methods().ByName("SendMessage")
+	chatServiceSubscribeChatMethodDescriptor              = chatServiceServiceDescriptor.Methods().ByName("SubscribeChat")
+	chatServiceSendChatReplyMethodDescriptor              = chatServiceServiceDescriptor.Methods().ByName("SendChatReply")
+	chatServiceEditChatMessageMethodDescriptor            = chatServiceServiceDescriptor.Methods().ByName("EditChatMessage")
+	chatServiceReactToMessageMethodDescriptor             = chatServiceServiceDescriptor.Methods().ByName("ReactToMessage")
+	chatServiceGetChatStatusMethodDescriptor              = chatServiceServiceDescriptor.Methods().ByName("GetChatStatus")
+	chatServiceSubscribePageChatMessagesMethodDescriptor  = chatServiceServiceDescriptor.Methods().ByName("SubscribePageChatMessages")
+	chatServiceSubscribeInstanceRequestsMethodDescriptor  = chatServiceServiceDescriptor.Methods().ByName("SubscribeInstanceRequests")
+	chatServiceSendToolCallNotificationMethodDescriptor   = chatServiceServiceDescriptor.Methods().ByName("SendToolCallNotification")
+	chatServiceCancelAgentPromptMethodDescriptor          = chatServiceServiceDescriptor.Methods().ByName("CancelAgentPrompt")
+	chatServiceSubscribePageCancellationsMethodDescriptor = chatServiceServiceDescriptor.Methods().ByName("SubscribePageCancellations")
+	chatServiceRespondToPermissionMethodDescriptor        = chatServiceServiceDescriptor.Methods().ByName("RespondToPermission")
+	chatServiceRequestPermissionFromUserMethodDescriptor  = chatServiceServiceDescriptor.Methods().ByName("RequestPermissionFromUser")
 )
 
 // ChatServiceClient is a client for the api.v1.ChatService service.
@@ -83,9 +99,6 @@ type ChatServiceClient interface {
 	// SubscribeChat subscribes to all chat events for a page.
 	// Replays existing buffer contents on connect, then streams new events.
 	SubscribeChat(context.Context, *connect.Request[v1.SubscribeChatRequest]) (*connect.ServerStreamForClient[v1.ChatEvent], error)
-	// SubscribeChatMessages is called by wiki-cli mcp at startup.
-	// Streams all new user messages (from all pages) as they arrive from browsers.
-	SubscribeChatMessages(context.Context, *connect.Request[v1.SubscribeChatMessagesRequest]) (*connect.ServerStreamForClient[v1.ChatMessage], error)
 	// SendChatReply is called by wiki-cli mcp when Claude uses the reply tool.
 	// Accepts optional reply_to message ID for threading.
 	SendChatReply(context.Context, *connect.Request[v1.SendChatReplyRequest]) (*connect.Response[v1.SendChatReplyResponse], error)
@@ -104,6 +117,20 @@ type ChatServiceClient interface {
 	// SubscribeInstanceRequests is called by the wiki-cli pool daemon.
 	// Streams page names that need a Claude instance spawned.
 	SubscribeInstanceRequests(context.Context, *connect.Request[v1.SubscribeInstanceRequestsRequest]) (*connect.ServerStreamForClient[v1.InstanceRequest], error)
+	// SendToolCallNotification is called by the pool daemon or ACP client
+	// when the agent invokes a tool. The notification is broadcast to page subscribers.
+	SendToolCallNotification(context.Context, *connect.Request[v1.SendToolCallNotificationRequest]) (*connect.Response[v1.SendToolCallNotificationResponse], error)
+	// CancelAgentPrompt cancels an in-progress agent prompt for a page.
+	// Called by the frontend "Stop" button.
+	CancelAgentPrompt(context.Context, *connect.Request[v1.CancelAgentPromptRequest]) (*connect.Response[v1.CancelAgentPromptResponse], error)
+	// SubscribePageCancellations is called by the pool daemon per page.
+	// Streams a signal when CancelAgentPrompt is called for that page.
+	SubscribePageCancellations(context.Context, *connect.Request[v1.SubscribePageCancellationsRequest]) (*connect.ServerStreamForClient[v1.PageCancellation], error)
+	// RespondToPermission is called by the frontend when the user responds to a permission request.
+	RespondToPermission(context.Context, *connect.Request[v1.RespondToPermissionRequest]) (*connect.Response[v1.RespondToPermissionResponse], error)
+	// RequestPermissionFromUser is called by the pool daemon to forward a permission request
+	// to the user via chat and block until the user responds.
+	RequestPermissionFromUser(context.Context, *connect.Request[v1.RequestPermissionFromUserRequest]) (*connect.Response[v1.RequestPermissionFromUserResponse], error)
 }
 
 // NewChatServiceClient constructs a client for the api.v1.ChatService service. By default, it uses
@@ -126,12 +153,6 @@ func NewChatServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 			httpClient,
 			baseURL+ChatServiceSubscribeChatProcedure,
 			connect.WithSchema(chatServiceSubscribeChatMethodDescriptor),
-			connect.WithClientOptions(opts...),
-		),
-		subscribeChatMessages: connect.NewClient[v1.SubscribeChatMessagesRequest, v1.ChatMessage](
-			httpClient,
-			baseURL+ChatServiceSubscribeChatMessagesProcedure,
-			connect.WithSchema(chatServiceSubscribeChatMessagesMethodDescriptor),
 			connect.WithClientOptions(opts...),
 		),
 		sendChatReply: connect.NewClient[v1.SendChatReplyRequest, v1.SendChatReplyResponse](
@@ -170,20 +191,54 @@ func NewChatServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 			connect.WithSchema(chatServiceSubscribeInstanceRequestsMethodDescriptor),
 			connect.WithClientOptions(opts...),
 		),
+		sendToolCallNotification: connect.NewClient[v1.SendToolCallNotificationRequest, v1.SendToolCallNotificationResponse](
+			httpClient,
+			baseURL+ChatServiceSendToolCallNotificationProcedure,
+			connect.WithSchema(chatServiceSendToolCallNotificationMethodDescriptor),
+			connect.WithClientOptions(opts...),
+		),
+		cancelAgentPrompt: connect.NewClient[v1.CancelAgentPromptRequest, v1.CancelAgentPromptResponse](
+			httpClient,
+			baseURL+ChatServiceCancelAgentPromptProcedure,
+			connect.WithSchema(chatServiceCancelAgentPromptMethodDescriptor),
+			connect.WithClientOptions(opts...),
+		),
+		subscribePageCancellations: connect.NewClient[v1.SubscribePageCancellationsRequest, v1.PageCancellation](
+			httpClient,
+			baseURL+ChatServiceSubscribePageCancellationsProcedure,
+			connect.WithSchema(chatServiceSubscribePageCancellationsMethodDescriptor),
+			connect.WithClientOptions(opts...),
+		),
+		respondToPermission: connect.NewClient[v1.RespondToPermissionRequest, v1.RespondToPermissionResponse](
+			httpClient,
+			baseURL+ChatServiceRespondToPermissionProcedure,
+			connect.WithSchema(chatServiceRespondToPermissionMethodDescriptor),
+			connect.WithClientOptions(opts...),
+		),
+		requestPermissionFromUser: connect.NewClient[v1.RequestPermissionFromUserRequest, v1.RequestPermissionFromUserResponse](
+			httpClient,
+			baseURL+ChatServiceRequestPermissionFromUserProcedure,
+			connect.WithSchema(chatServiceRequestPermissionFromUserMethodDescriptor),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // chatServiceClient implements ChatServiceClient.
 type chatServiceClient struct {
-	sendMessage               *connect.Client[v1.SendChatMessageRequest, v1.SendChatMessageResponse]
-	subscribeChat             *connect.Client[v1.SubscribeChatRequest, v1.ChatEvent]
-	subscribeChatMessages     *connect.Client[v1.SubscribeChatMessagesRequest, v1.ChatMessage]
-	sendChatReply             *connect.Client[v1.SendChatReplyRequest, v1.SendChatReplyResponse]
-	editChatMessage           *connect.Client[v1.EditChatMessageRequest, v1.EditChatMessageResponse]
-	reactToMessage            *connect.Client[v1.ReactToMessageRequest, v1.ReactToMessageResponse]
-	getChatStatus             *connect.Client[v1.GetChatStatusRequest, v1.GetChatStatusResponse]
-	subscribePageChatMessages *connect.Client[v1.SubscribePageChatMessagesRequest, v1.ChatMessage]
-	subscribeInstanceRequests *connect.Client[v1.SubscribeInstanceRequestsRequest, v1.InstanceRequest]
+	sendMessage                *connect.Client[v1.SendChatMessageRequest, v1.SendChatMessageResponse]
+	subscribeChat              *connect.Client[v1.SubscribeChatRequest, v1.ChatEvent]
+	sendChatReply              *connect.Client[v1.SendChatReplyRequest, v1.SendChatReplyResponse]
+	editChatMessage            *connect.Client[v1.EditChatMessageRequest, v1.EditChatMessageResponse]
+	reactToMessage             *connect.Client[v1.ReactToMessageRequest, v1.ReactToMessageResponse]
+	getChatStatus              *connect.Client[v1.GetChatStatusRequest, v1.GetChatStatusResponse]
+	subscribePageChatMessages  *connect.Client[v1.SubscribePageChatMessagesRequest, v1.ChatMessage]
+	subscribeInstanceRequests  *connect.Client[v1.SubscribeInstanceRequestsRequest, v1.InstanceRequest]
+	sendToolCallNotification   *connect.Client[v1.SendToolCallNotificationRequest, v1.SendToolCallNotificationResponse]
+	cancelAgentPrompt          *connect.Client[v1.CancelAgentPromptRequest, v1.CancelAgentPromptResponse]
+	subscribePageCancellations *connect.Client[v1.SubscribePageCancellationsRequest, v1.PageCancellation]
+	respondToPermission        *connect.Client[v1.RespondToPermissionRequest, v1.RespondToPermissionResponse]
+	requestPermissionFromUser  *connect.Client[v1.RequestPermissionFromUserRequest, v1.RequestPermissionFromUserResponse]
 }
 
 // SendMessage calls api.v1.ChatService.SendMessage.
@@ -194,11 +249,6 @@ func (c *chatServiceClient) SendMessage(ctx context.Context, req *connect.Reques
 // SubscribeChat calls api.v1.ChatService.SubscribeChat.
 func (c *chatServiceClient) SubscribeChat(ctx context.Context, req *connect.Request[v1.SubscribeChatRequest]) (*connect.ServerStreamForClient[v1.ChatEvent], error) {
 	return c.subscribeChat.CallServerStream(ctx, req)
-}
-
-// SubscribeChatMessages calls api.v1.ChatService.SubscribeChatMessages.
-func (c *chatServiceClient) SubscribeChatMessages(ctx context.Context, req *connect.Request[v1.SubscribeChatMessagesRequest]) (*connect.ServerStreamForClient[v1.ChatMessage], error) {
-	return c.subscribeChatMessages.CallServerStream(ctx, req)
 }
 
 // SendChatReply calls api.v1.ChatService.SendChatReply.
@@ -231,6 +281,31 @@ func (c *chatServiceClient) SubscribeInstanceRequests(ctx context.Context, req *
 	return c.subscribeInstanceRequests.CallServerStream(ctx, req)
 }
 
+// SendToolCallNotification calls api.v1.ChatService.SendToolCallNotification.
+func (c *chatServiceClient) SendToolCallNotification(ctx context.Context, req *connect.Request[v1.SendToolCallNotificationRequest]) (*connect.Response[v1.SendToolCallNotificationResponse], error) {
+	return c.sendToolCallNotification.CallUnary(ctx, req)
+}
+
+// CancelAgentPrompt calls api.v1.ChatService.CancelAgentPrompt.
+func (c *chatServiceClient) CancelAgentPrompt(ctx context.Context, req *connect.Request[v1.CancelAgentPromptRequest]) (*connect.Response[v1.CancelAgentPromptResponse], error) {
+	return c.cancelAgentPrompt.CallUnary(ctx, req)
+}
+
+// SubscribePageCancellations calls api.v1.ChatService.SubscribePageCancellations.
+func (c *chatServiceClient) SubscribePageCancellations(ctx context.Context, req *connect.Request[v1.SubscribePageCancellationsRequest]) (*connect.ServerStreamForClient[v1.PageCancellation], error) {
+	return c.subscribePageCancellations.CallServerStream(ctx, req)
+}
+
+// RespondToPermission calls api.v1.ChatService.RespondToPermission.
+func (c *chatServiceClient) RespondToPermission(ctx context.Context, req *connect.Request[v1.RespondToPermissionRequest]) (*connect.Response[v1.RespondToPermissionResponse], error) {
+	return c.respondToPermission.CallUnary(ctx, req)
+}
+
+// RequestPermissionFromUser calls api.v1.ChatService.RequestPermissionFromUser.
+func (c *chatServiceClient) RequestPermissionFromUser(ctx context.Context, req *connect.Request[v1.RequestPermissionFromUserRequest]) (*connect.Response[v1.RequestPermissionFromUserResponse], error) {
+	return c.requestPermissionFromUser.CallUnary(ctx, req)
+}
+
 // ChatServiceHandler is an implementation of the api.v1.ChatService service.
 type ChatServiceHandler interface {
 	// SendMessage sends a user chat message in the context of a page.
@@ -239,9 +314,6 @@ type ChatServiceHandler interface {
 	// SubscribeChat subscribes to all chat events for a page.
 	// Replays existing buffer contents on connect, then streams new events.
 	SubscribeChat(context.Context, *connect.Request[v1.SubscribeChatRequest], *connect.ServerStream[v1.ChatEvent]) error
-	// SubscribeChatMessages is called by wiki-cli mcp at startup.
-	// Streams all new user messages (from all pages) as they arrive from browsers.
-	SubscribeChatMessages(context.Context, *connect.Request[v1.SubscribeChatMessagesRequest], *connect.ServerStream[v1.ChatMessage]) error
 	// SendChatReply is called by wiki-cli mcp when Claude uses the reply tool.
 	// Accepts optional reply_to message ID for threading.
 	SendChatReply(context.Context, *connect.Request[v1.SendChatReplyRequest]) (*connect.Response[v1.SendChatReplyResponse], error)
@@ -260,6 +332,20 @@ type ChatServiceHandler interface {
 	// SubscribeInstanceRequests is called by the wiki-cli pool daemon.
 	// Streams page names that need a Claude instance spawned.
 	SubscribeInstanceRequests(context.Context, *connect.Request[v1.SubscribeInstanceRequestsRequest], *connect.ServerStream[v1.InstanceRequest]) error
+	// SendToolCallNotification is called by the pool daemon or ACP client
+	// when the agent invokes a tool. The notification is broadcast to page subscribers.
+	SendToolCallNotification(context.Context, *connect.Request[v1.SendToolCallNotificationRequest]) (*connect.Response[v1.SendToolCallNotificationResponse], error)
+	// CancelAgentPrompt cancels an in-progress agent prompt for a page.
+	// Called by the frontend "Stop" button.
+	CancelAgentPrompt(context.Context, *connect.Request[v1.CancelAgentPromptRequest]) (*connect.Response[v1.CancelAgentPromptResponse], error)
+	// SubscribePageCancellations is called by the pool daemon per page.
+	// Streams a signal when CancelAgentPrompt is called for that page.
+	SubscribePageCancellations(context.Context, *connect.Request[v1.SubscribePageCancellationsRequest], *connect.ServerStream[v1.PageCancellation]) error
+	// RespondToPermission is called by the frontend when the user responds to a permission request.
+	RespondToPermission(context.Context, *connect.Request[v1.RespondToPermissionRequest]) (*connect.Response[v1.RespondToPermissionResponse], error)
+	// RequestPermissionFromUser is called by the pool daemon to forward a permission request
+	// to the user via chat and block until the user responds.
+	RequestPermissionFromUser(context.Context, *connect.Request[v1.RequestPermissionFromUserRequest]) (*connect.Response[v1.RequestPermissionFromUserResponse], error)
 }
 
 // NewChatServiceHandler builds an HTTP handler from the service implementation. It returns the path
@@ -278,12 +364,6 @@ func NewChatServiceHandler(svc ChatServiceHandler, opts ...connect.HandlerOption
 		ChatServiceSubscribeChatProcedure,
 		svc.SubscribeChat,
 		connect.WithSchema(chatServiceSubscribeChatMethodDescriptor),
-		connect.WithHandlerOptions(opts...),
-	)
-	chatServiceSubscribeChatMessagesHandler := connect.NewServerStreamHandler(
-		ChatServiceSubscribeChatMessagesProcedure,
-		svc.SubscribeChatMessages,
-		connect.WithSchema(chatServiceSubscribeChatMessagesMethodDescriptor),
 		connect.WithHandlerOptions(opts...),
 	)
 	chatServiceSendChatReplyHandler := connect.NewUnaryHandler(
@@ -322,14 +402,42 @@ func NewChatServiceHandler(svc ChatServiceHandler, opts ...connect.HandlerOption
 		connect.WithSchema(chatServiceSubscribeInstanceRequestsMethodDescriptor),
 		connect.WithHandlerOptions(opts...),
 	)
+	chatServiceSendToolCallNotificationHandler := connect.NewUnaryHandler(
+		ChatServiceSendToolCallNotificationProcedure,
+		svc.SendToolCallNotification,
+		connect.WithSchema(chatServiceSendToolCallNotificationMethodDescriptor),
+		connect.WithHandlerOptions(opts...),
+	)
+	chatServiceCancelAgentPromptHandler := connect.NewUnaryHandler(
+		ChatServiceCancelAgentPromptProcedure,
+		svc.CancelAgentPrompt,
+		connect.WithSchema(chatServiceCancelAgentPromptMethodDescriptor),
+		connect.WithHandlerOptions(opts...),
+	)
+	chatServiceSubscribePageCancellationsHandler := connect.NewServerStreamHandler(
+		ChatServiceSubscribePageCancellationsProcedure,
+		svc.SubscribePageCancellations,
+		connect.WithSchema(chatServiceSubscribePageCancellationsMethodDescriptor),
+		connect.WithHandlerOptions(opts...),
+	)
+	chatServiceRespondToPermissionHandler := connect.NewUnaryHandler(
+		ChatServiceRespondToPermissionProcedure,
+		svc.RespondToPermission,
+		connect.WithSchema(chatServiceRespondToPermissionMethodDescriptor),
+		connect.WithHandlerOptions(opts...),
+	)
+	chatServiceRequestPermissionFromUserHandler := connect.NewUnaryHandler(
+		ChatServiceRequestPermissionFromUserProcedure,
+		svc.RequestPermissionFromUser,
+		connect.WithSchema(chatServiceRequestPermissionFromUserMethodDescriptor),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/api.v1.ChatService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case ChatServiceSendMessageProcedure:
 			chatServiceSendMessageHandler.ServeHTTP(w, r)
 		case ChatServiceSubscribeChatProcedure:
 			chatServiceSubscribeChatHandler.ServeHTTP(w, r)
-		case ChatServiceSubscribeChatMessagesProcedure:
-			chatServiceSubscribeChatMessagesHandler.ServeHTTP(w, r)
 		case ChatServiceSendChatReplyProcedure:
 			chatServiceSendChatReplyHandler.ServeHTTP(w, r)
 		case ChatServiceEditChatMessageProcedure:
@@ -342,6 +450,16 @@ func NewChatServiceHandler(svc ChatServiceHandler, opts ...connect.HandlerOption
 			chatServiceSubscribePageChatMessagesHandler.ServeHTTP(w, r)
 		case ChatServiceSubscribeInstanceRequestsProcedure:
 			chatServiceSubscribeInstanceRequestsHandler.ServeHTTP(w, r)
+		case ChatServiceSendToolCallNotificationProcedure:
+			chatServiceSendToolCallNotificationHandler.ServeHTTP(w, r)
+		case ChatServiceCancelAgentPromptProcedure:
+			chatServiceCancelAgentPromptHandler.ServeHTTP(w, r)
+		case ChatServiceSubscribePageCancellationsProcedure:
+			chatServiceSubscribePageCancellationsHandler.ServeHTTP(w, r)
+		case ChatServiceRespondToPermissionProcedure:
+			chatServiceRespondToPermissionHandler.ServeHTTP(w, r)
+		case ChatServiceRequestPermissionFromUserProcedure:
+			chatServiceRequestPermissionFromUserHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -357,10 +475,6 @@ func (UnimplementedChatServiceHandler) SendMessage(context.Context, *connect.Req
 
 func (UnimplementedChatServiceHandler) SubscribeChat(context.Context, *connect.Request[v1.SubscribeChatRequest], *connect.ServerStream[v1.ChatEvent]) error {
 	return connect.NewError(connect.CodeUnimplemented, errors.New("api.v1.ChatService.SubscribeChat is not implemented"))
-}
-
-func (UnimplementedChatServiceHandler) SubscribeChatMessages(context.Context, *connect.Request[v1.SubscribeChatMessagesRequest], *connect.ServerStream[v1.ChatMessage]) error {
-	return connect.NewError(connect.CodeUnimplemented, errors.New("api.v1.ChatService.SubscribeChatMessages is not implemented"))
 }
 
 func (UnimplementedChatServiceHandler) SendChatReply(context.Context, *connect.Request[v1.SendChatReplyRequest]) (*connect.Response[v1.SendChatReplyResponse], error) {
@@ -385,4 +499,24 @@ func (UnimplementedChatServiceHandler) SubscribePageChatMessages(context.Context
 
 func (UnimplementedChatServiceHandler) SubscribeInstanceRequests(context.Context, *connect.Request[v1.SubscribeInstanceRequestsRequest], *connect.ServerStream[v1.InstanceRequest]) error {
 	return connect.NewError(connect.CodeUnimplemented, errors.New("api.v1.ChatService.SubscribeInstanceRequests is not implemented"))
+}
+
+func (UnimplementedChatServiceHandler) SendToolCallNotification(context.Context, *connect.Request[v1.SendToolCallNotificationRequest]) (*connect.Response[v1.SendToolCallNotificationResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("api.v1.ChatService.SendToolCallNotification is not implemented"))
+}
+
+func (UnimplementedChatServiceHandler) CancelAgentPrompt(context.Context, *connect.Request[v1.CancelAgentPromptRequest]) (*connect.Response[v1.CancelAgentPromptResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("api.v1.ChatService.CancelAgentPrompt is not implemented"))
+}
+
+func (UnimplementedChatServiceHandler) SubscribePageCancellations(context.Context, *connect.Request[v1.SubscribePageCancellationsRequest], *connect.ServerStream[v1.PageCancellation]) error {
+	return connect.NewError(connect.CodeUnimplemented, errors.New("api.v1.ChatService.SubscribePageCancellations is not implemented"))
+}
+
+func (UnimplementedChatServiceHandler) RespondToPermission(context.Context, *connect.Request[v1.RespondToPermissionRequest]) (*connect.Response[v1.RespondToPermissionResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("api.v1.ChatService.RespondToPermission is not implemented"))
+}
+
+func (UnimplementedChatServiceHandler) RequestPermissionFromUser(context.Context, *connect.Request[v1.RequestPermissionFromUserRequest]) (*connect.Response[v1.RequestPermissionFromUserResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("api.v1.ChatService.RequestPermissionFromUser is not implemented"))
 }

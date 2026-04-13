@@ -2,6 +2,7 @@
 package mcp_test
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -86,7 +87,7 @@ func (noOpChatBufferManager) AddUserMessage(string, string, string) (string, err
 func (noOpChatBufferManager) AddAssistantMessage(string, string, string) (string, error) {
 	return "", nil
 }
-func (noOpChatBufferManager) EditMessage(string, string) error {
+func (noOpChatBufferManager) EditMessage(string, string, bool) error {
 	return nil
 }
 func (noOpChatBufferManager) AddReaction(string, string, string) error {
@@ -105,13 +106,10 @@ func (noOpChatBufferManager) SubscribeToPageWithReplay(string) ([]*chatbuffer.Me
 	close(ch)
 	return nil, ch, noopUnsubscribe
 }
-func (noOpChatBufferManager) SubscribeToChannel() (<-chan *chatbuffer.Message, func()) {
+func (noOpChatBufferManager) SubscribeToPageChannelWithReplay(string) ([]*chatbuffer.Message, <-chan *chatbuffer.Message, func()) {
 	ch := make(chan *chatbuffer.Message)
 	close(ch)
-	return ch, noopUnsubscribe
-}
-func (noOpChatBufferManager) HasChannelSubscribers() bool {
-	return false
+	return nil, ch, func() {}
 }
 
 func (noOpChatBufferManager) SubscribeToPageChannel(string) (<-chan *chatbuffer.Message, func()) {
@@ -145,6 +143,21 @@ func (noOpChatBufferManager) HasInstanceRequestSubscribers() bool {
 func (noOpChatBufferManager) IsInstanceRequested(string) bool {
 	return false
 }
+
+func (noOpChatBufferManager) NotifyToolCall(string, string, string, string, string) {}
+
+func (noOpChatBufferManager) CancelPage(string) bool {
+	return false
+}
+
+func (noOpChatBufferManager) SubscribeToCancellation(string) (<-chan struct{}, func()) {
+	ch := make(chan struct{}, 1)
+	return ch, func() {}
+}
+
+func (noOpChatBufferManager) EmitPermissionRequest(string, *chatbuffer.PermissionRequestEvent) {}
+
+func (noOpChatBufferManager) RespondToPermission(string, string) {}
 
 func mustNewAPIServer() *grpcapi.Server {
 	srv, err := grpcapi.NewServer(
@@ -404,3 +417,7 @@ var _ = Describe("NewStreamableHTTPHandler", func() {
 		})
 	})
 })
+
+func (noOpChatBufferManager) RequestPermission(_ context.Context, _ string, _ string, _ string, _ string, _ []chatbuffer.PermissionOption) string {
+	return ""
+}
