@@ -658,7 +658,9 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
     try { localStorage.setItem(STORAGE_KEY, 'false'); } catch { /* */ }
     this.updateComplete.then(() => {
       const fab = this.shadowRoot?.querySelector<HTMLElement>('.fab');
-      fab?.focus();
+      if (fab && !fab.hidden) {
+        fab.focus();
+      }
     });
   }
 

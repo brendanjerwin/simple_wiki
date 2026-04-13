@@ -557,7 +557,7 @@ var _ = Describe("ChatService", func() {
 			})
 		})
 
-		When("no channel subscribers are connected", func() {
+		When("no agent subscribers are connected", func() {
 			var (
 				req *apiv1.SendChatMessageRequest
 				err error
@@ -579,7 +579,7 @@ var _ = Describe("ChatService", func() {
 				st, ok := status.FromError(err)
 				Expect(ok).To(BeTrue())
 				Expect(st.Code()).To(Equal(codes.Unavailable))
-				Expect(st.Message()).To(ContainSubstring("no channel subscriber connected"))
+				Expect(st.Message()).To(ContainSubstring("no agent subscriber connected"))
 			})
 		})
 	})

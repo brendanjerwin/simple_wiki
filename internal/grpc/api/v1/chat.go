@@ -42,7 +42,7 @@ func (s *Server) SendMessage(ctx context.Context, req *apiv1.SendChatMessageRequ
 		if errors.Is(err, chatbuffer.ErrNoSubscribers) {
 			// Request an instance from the pool daemon before returning the error
 			s.chatBufferManager.RequestInstance(req.Page)
-			return nil, status.Error(codes.Unavailable, "no channel subscriber connected")
+			return nil, status.Error(codes.Unavailable, "no agent subscriber connected")
 		}
 		return nil, status.Errorf(codes.Internal, "failed to add message: %v", err)
 	}
