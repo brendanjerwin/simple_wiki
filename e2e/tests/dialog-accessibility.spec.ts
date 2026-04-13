@@ -22,31 +22,25 @@ async function addFocusedTriggerButton(page: Page): Promise<void> {
 }
 
 /**
- * Opens the ConfirmationDialog via JavaScript evaluation.
- * The component is already registered via the JS bundle.
+ * Opens the ConfirmationDialog via the real #erasePage user flow.
+ *
+ * pageDeleteService pre-creates <confirmation-dialog id="page-deletion-dialog">
+ * at module load time, so showModal() fires on an already-rendered element —
+ * no Lit initialization timing issues. Polls via waitForFunction until the
+ * native <dialog> is actually open and has layout (handles browser paint delay).
  */
 async function openConfirmationDialog(page: Page): Promise<void> {
-  await page.evaluate(async () => {
-    // Ensure the custom element is fully registered before creating an instance
-    await customElements.whenDefined('confirmation-dialog');
-    let dialog = document.querySelector('confirmation-dialog') as any;
-    if (!dialog) {
-      dialog = document.createElement('confirmation-dialog');
-      document.body.appendChild(dialog);
-    }
-    // Wait for Lit's first render BEFORE calling openDialog() so the shadow DOM
-    // (including the native <dialog> element) exists when showModal() fires.
-    await dialog.updateComplete;
-    dialog.openDialog({
-      message: 'Test Confirmation',
-      description: 'Accessibility test dialog.',
-      confirmText: 'Confirm',
-      cancelText: 'Cancel',
-      confirmVariant: 'primary',
-    });
-    // Wait for the render cycle triggered by openDialog() to complete
-    await dialog.updateComplete;
-  });
+  await page.locator('.tools-menu').hover();
+  await page.locator('#erasePage').click();
+  await page.waitForFunction(
+    () => {
+      const host = document.querySelector('confirmation-dialog');
+      const dlg = host?.shadowRoot?.querySelector('dialog');
+      return dlg?.open === true && (dlg?.offsetHeight ?? 0) > 0;
+    },
+    undefined,
+    { timeout: DIALOG_TIMEOUT_MS }
+  );
 }
 
 /**
@@ -97,7 +91,8 @@ test.describe('Dialog Accessibility E2E Tests', () => {
           return labelEl?.textContent?.trim() ?? null;
         });
 
-        expect(labelText).toBe('Test Confirmation');
+        // The real message from pageDeleteService.confirmAndDeletePage()
+        expect(labelText).toBe('Are you sure you want to delete this page?');
       });
 
       test('uses a native dialog element providing implicit role="dialog"', async ({ page }) => {
@@ -167,32 +162,34 @@ test.describe('Dialog Accessibility E2E Tests', () => {
         expect(focusedIsInsideDialog).toBe(true);
       });
 
-      test('restores focus to previously focused element when closed via Cancel button', async ({ page }) => {
+      test('restores focus to the trigger element when closed via Cancel button', async ({ page }) => {
         await page.goto('/home/edit');
         await expect(page.locator('wiki-editor textarea')).toBeVisible({ timeout: COMPONENT_LOAD_TIMEOUT_MS });
 
-        await addFocusedTriggerButton(page);
+        // The hover+click on #erasePage moves focus there; dialog captures it and
+        // restores focus to #erasePage after close.
         await openConfirmationDialog(page);
         await expect(page.locator('confirmation-dialog dialog')).toBeVisible({ timeout: DIALOG_TIMEOUT_MS });
 
         await page.locator('confirmation-dialog dialog .button-cancel').click();
         await expect(page.locator('confirmation-dialog dialog')).not.toBeVisible();
 
-        await expect(page.locator('#e2e-trigger-button')).toBeFocused();
+        await expect(page.locator('#erasePage')).toBeFocused();
       });
 
-      test('restores focus to previously focused element when closed via Escape key', async ({ page }) => {
+      test('restores focus to the trigger element when closed via Escape key', async ({ page }) => {
         await page.goto('/home/edit');
         await expect(page.locator('wiki-editor textarea')).toBeVisible({ timeout: COMPONENT_LOAD_TIMEOUT_MS });
 
-        await addFocusedTriggerButton(page);
+        // The hover+click on #erasePage moves focus there; dialog captures it and
+        // restores focus to #erasePage after close.
         await openConfirmationDialog(page);
         await expect(page.locator('confirmation-dialog dialog')).toBeVisible({ timeout: DIALOG_TIMEOUT_MS });
 
         await page.keyboard.press('Escape');
         await expect(page.locator('confirmation-dialog dialog')).not.toBeVisible();
 
-        await expect(page.locator('#e2e-trigger-button')).toBeFocused();
+        await expect(page.locator('#erasePage')).toBeFocused();
       });
 
       test('traps focus within dialog when Tab key is pressed', async ({ page }) => {
@@ -228,7 +225,8 @@ test.describe('Dialog Accessibility E2E Tests', () => {
         await expect(page.locator('confirmation-dialog dialog')).toBeVisible({ timeout: DIALOG_TIMEOUT_MS });
 
         const cancelButton = page.locator('confirmation-dialog dialog .button-cancel');
-        const confirmButton = page.locator('confirmation-dialog dialog .button-primary');
+        // confirmVariant is 'danger' from pageDeleteService, so the confirm button has class button-danger
+        const confirmButton = page.locator('confirmation-dialog dialog .button-danger');
 
         await cancelButton.focus();
         await expect(cancelButton).toBeFocused();
