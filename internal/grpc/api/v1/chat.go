@@ -93,72 +93,7 @@ func (s *Server) SubscribeChat(req *apiv1.SubscribeChatRequest, stream apiv1.Cha
 				return nil
 			}
 
-			var protoEvent *apiv1.ChatEvent
-			switch event.Type {
-			case chatbuffer.EventTypeNewMessage:
-				protoEvent = &apiv1.ChatEvent{
-					Event: &apiv1.ChatEvent_NewMessage{
-						NewMessage: bufferMessageToProto(event.Message),
-					},
-				}
-			case chatbuffer.EventTypeEdit:
-				protoEvent = &apiv1.ChatEvent{
-					Event: &apiv1.ChatEvent_Edit{
-						Edit: &apiv1.ChatMessageEdit{
-							MessageId:  event.Edit.MessageID,
-							NewContent: event.Edit.NewContent,
-							Timestamp:  timestamppb.New(event.Edit.Timestamp),
-							Streaming:  event.Edit.Streaming,
-						},
-					},
-				}
-			case chatbuffer.EventTypeReaction:
-				protoEvent = &apiv1.ChatEvent{
-					Event: &apiv1.ChatEvent_Reaction{
-						Reaction: &apiv1.ChatReaction{
-							MessageId: event.Reaction.MessageID,
-							Emoji:     event.Reaction.Emoji,
-							Reactor:   event.Reaction.Reactor,
-						},
-					},
-				}
-			case chatbuffer.EventTypeToolCall:
-				protoEvent = &apiv1.ChatEvent{
-					Event: &apiv1.ChatEvent_ToolCall{
-						ToolCall: &apiv1.ChatToolCall{
-							MessageId:  event.ToolCall.MessageID,
-							ToolCallId: event.ToolCall.ToolCallID,
-							Title:      event.ToolCall.Title,
-							Status:     event.ToolCall.Status,
-						},
-					},
-				}
-
-			case chatbuffer.EventTypePermissionRequest:
-				options := make([]*apiv1.ChatPermissionOption, len(event.PermissionRequest.Options))
-				for i, opt := range event.PermissionRequest.Options {
-					options[i] = &apiv1.ChatPermissionOption{
-						OptionId:    opt.OptionID,
-						Label:       opt.Label,
-						Description: opt.Description,
-					}
-				}
-				protoEvent = &apiv1.ChatEvent{
-					Event: &apiv1.ChatEvent_PermissionRequest{
-						PermissionRequest: &apiv1.ChatPermissionRequest{
-							RequestId:   event.PermissionRequest.RequestID,
-							Page:        event.PermissionRequest.Page,
-							Title:       event.PermissionRequest.Title,
-							Description: event.PermissionRequest.Description,
-							Options:     options,
-						},
-					},
-				}
-
-			default:
-				// Unknown event type — skip without sending
-			}
-
+			protoEvent := bufferEventToProto(event)
 			if protoEvent != nil {
 				if err := stream.Send(protoEvent); err != nil {
 					return err
@@ -235,6 +170,72 @@ func (s *Server) ReactToMessage(_ context.Context, req *apiv1.ReactToMessageRequ
 }
 
 // bufferMessageToProto converts a chatbuffer.Message to a protobuf ChatMessage.
+// bufferEventToProto converts a chatbuffer.Event to a protobuf ChatEvent.
+func bufferEventToProto(event chatbuffer.Event) *apiv1.ChatEvent {
+	switch event.Type {
+	case chatbuffer.EventTypeNewMessage:
+		return &apiv1.ChatEvent{
+			Event: &apiv1.ChatEvent_NewMessage{
+				NewMessage: bufferMessageToProto(event.Message),
+			},
+		}
+	case chatbuffer.EventTypeEdit:
+		return &apiv1.ChatEvent{
+			Event: &apiv1.ChatEvent_Edit{
+				Edit: &apiv1.ChatMessageEdit{
+					MessageId:  event.Edit.MessageID,
+					NewContent: event.Edit.NewContent,
+					Timestamp:  timestamppb.New(event.Edit.Timestamp),
+					Streaming:  event.Edit.Streaming,
+				},
+			},
+		}
+	case chatbuffer.EventTypeReaction:
+		return &apiv1.ChatEvent{
+			Event: &apiv1.ChatEvent_Reaction{
+				Reaction: &apiv1.ChatReaction{
+					MessageId: event.Reaction.MessageID,
+					Emoji:     event.Reaction.Emoji,
+					Reactor:   event.Reaction.Reactor,
+				},
+			},
+		}
+	case chatbuffer.EventTypeToolCall:
+		return &apiv1.ChatEvent{
+			Event: &apiv1.ChatEvent_ToolCall{
+				ToolCall: &apiv1.ChatToolCall{
+					MessageId:  event.ToolCall.MessageID,
+					ToolCallId: event.ToolCall.ToolCallID,
+					Title:      event.ToolCall.Title,
+					Status:     event.ToolCall.Status,
+				},
+			},
+		}
+	case chatbuffer.EventTypePermissionRequest:
+		options := make([]*apiv1.ChatPermissionOption, len(event.PermissionRequest.Options))
+		for i, opt := range event.PermissionRequest.Options {
+			options[i] = &apiv1.ChatPermissionOption{
+				OptionId:    opt.OptionID,
+				Label:       opt.Label,
+				Description: opt.Description,
+			}
+		}
+		return &apiv1.ChatEvent{
+			Event: &apiv1.ChatEvent_PermissionRequest{
+				PermissionRequest: &apiv1.ChatPermissionRequest{
+					RequestId:   event.PermissionRequest.RequestID,
+					Page:        event.PermissionRequest.Page,
+					Title:       event.PermissionRequest.Title,
+					Description: event.PermissionRequest.Description,
+					Options:     options,
+				},
+			},
+		}
+	default:
+		return nil
+	}
+}
+
 func bufferMessageToProto(msg *chatbuffer.Message) *apiv1.ChatMessage {
 	var sender apiv1.Sender
 	switch msg.Sender {

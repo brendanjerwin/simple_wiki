@@ -21,7 +21,6 @@ import (
 )
 
 var _ = Describe("sanitizeUnitName", func() {
-
 	When("given a simple identifier", func() {
 		var result string
 
@@ -114,9 +113,7 @@ var _ = Describe("buildPoolCommand", func() {
 })
 
 var _ = Describe("instanceEntry", func() {
-
 	Describe("touch", func() {
-
 		When("called on an entry with stale lastActive", func() {
 			var entry *instanceEntry
 
@@ -135,7 +132,6 @@ var _ = Describe("instanceEntry", func() {
 	})
 
 	Describe("idleSince", func() {
-
 		When("entry was recently active", func() {
 			var idle time.Duration
 
@@ -165,9 +161,7 @@ var _ = Describe("instanceEntry", func() {
 })
 
 var _ = Describe("poolDaemon", func() {
-
 	Describe("evictLeastActive", func() {
-
 		When("multiple instances exist", func() {
 			var daemon *poolDaemon
 
@@ -225,7 +219,6 @@ var _ = Describe("poolDaemon", func() {
 	})
 
 	Describe("stopInstanceLocked", func() {
-
 		When("instance exists", func() {
 			var (
 				daemon   *poolDaemon
@@ -275,7 +268,6 @@ var _ = Describe("poolDaemon", func() {
 	})
 
 	Describe("stopAll", func() {
-
 		When("instances are running", func() {
 			var (
 				daemon    *poolDaemon
@@ -328,7 +320,6 @@ var _ = Describe("poolDaemon", func() {
 	})
 
 	Describe("reapIdleInstances", func() {
-
 		When("an instance exceeds idle timeout", func() {
 			var daemon *poolDaemon
 
@@ -370,7 +361,6 @@ var _ = Describe("poolDaemon", func() {
 	})
 
 	Describe("run", func() {
-
 		When("context is cancelled immediately", func() {
 			var (
 				daemon *poolDaemon
@@ -401,9 +391,7 @@ var _ = Describe("poolDaemon", func() {
 })
 
 var _ = Describe("wikiChatClient", func() {
-
 	Describe("SessionUpdate", func() {
-
 		When("receiving agent message chunks", func() {
 			var (
 				client *wikiChatClient
@@ -553,7 +541,6 @@ var _ = Describe("wikiChatClient", func() {
 })
 
 var _ = Describe("prefixWriter", func() {
-
 	When("writing a complete line", func() {
 		var buf bytes.Buffer
 
@@ -600,7 +587,6 @@ var _ = Describe("prefixWriter", func() {
 })
 
 var _ = Describe("truncate", func() {
-
 	When("the string is shorter than the max", func() {
 		var result string
 
@@ -663,7 +649,6 @@ var _ = Describe("truncate", func() {
 })
 
 var _ = Describe("wikiChatClient buildFullText", func() {
-
 	When("only text is present", func() {
 		var result string
 
@@ -803,7 +788,6 @@ var _ = Describe("wikiChatClient buildFullText", func() {
 })
 
 var _ = Describe("wikiChatClient SessionUpdate with Plan", func() {
-
 	When("receiving a plan update", func() {
 		var (
 			client *wikiChatClient
@@ -855,7 +839,6 @@ var _ = Describe("wikiChatClient SessionUpdate with Plan", func() {
 })
 
 var _ = Describe("wikiChatClient SessionUpdate with ToolCall", func() {
-
 	When("receiving a tool call with no current message", func() {
 		var (
 			client *wikiChatClient
@@ -917,7 +900,6 @@ var _ = Describe("wikiChatClient SessionUpdate with ToolCall", func() {
 })
 
 var _ = Describe("wikiChatClient beginTurn", func() {
-
 	When("called with accumulated state", func() {
 		var client *wikiChatClient
 
@@ -983,7 +965,6 @@ func (h *stubFrontmatterHandler) GetFrontmatter(_ context.Context, req *connect.
 }
 
 var _ = Describe("poolDaemon fetchPageContext", func() {
-
 	When("the page has ai_agent_chat_context in frontmatter", func() {
 		var result string
 
@@ -1089,9 +1070,7 @@ var _ = Describe("poolDaemon fetchPageContext", func() {
 })
 
 var _ = Describe("InstanceState", func() {
-
 	Describe("String", func() {
-
 		When("called on each state", func() {
 			It("should return Spawning for StateSpawning", func() {
 				Expect(StateSpawning.String()).To(Equal("Spawning"))
@@ -1141,9 +1120,7 @@ var _ = Describe("InstanceState", func() {
 })
 
 var _ = Describe("instanceEntry setState", func() {
-
 	Describe("valid transitions", func() {
-
 		When("transitioning from Spawning to Initializing", func() {
 			var err error
 
@@ -1276,7 +1253,6 @@ var _ = Describe("instanceEntry setState", func() {
 	})
 
 	Describe("invalid transitions", func() {
-
 		When("transitioning from Dead to Idle", func() {
 			var err error
 
@@ -1344,7 +1320,6 @@ var _ = Describe("instanceEntry setState", func() {
 	})
 
 	Describe("state updates correctly", func() {
-
 		When("transitioning through a full lifecycle", func() {
 			var entry *instanceEntry
 			var errors []error
@@ -1376,7 +1351,6 @@ var _ = Describe("instanceEntry setState", func() {
 	})
 
 	Describe("State", func() {
-
 		When("called on an entry", func() {
 			var entry *instanceEntry
 			var state InstanceState
