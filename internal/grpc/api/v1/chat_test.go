@@ -1329,21 +1329,30 @@ var _ = Describe("ChatService", func() {
 			})
 		})
 
-		When("selected_option_id is empty", func() {
-			var err error
+		When("selected_option_id is empty (cancelled/denied)", func() {
+			var (
+				resp *apiv1.RespondToPermissionResponse
+				err  error
+			)
 
 			BeforeEach(func() {
-				_, err = server.RespondToPermission(ctx, &apiv1.RespondToPermissionRequest{
+				resp, err = server.RespondToPermission(ctx, &apiv1.RespondToPermissionRequest{
 					RequestId:        "req-1",
 					SelectedOptionId: "",
 				})
 			})
 
-			It("should return InvalidArgument error", func() {
-				st, ok := status.FromError(err)
-				Expect(ok).To(BeTrue())
-				Expect(st.Code()).To(Equal(codes.InvalidArgument))
-				Expect(st.Message()).To(ContainSubstring("selected_option_id is required"))
+			It("should not error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should return a response", func() {
+				Expect(resp).NotTo(BeNil())
+			})
+
+			It("should forward empty option to buffer manager", func() {
+				Expect(chatManager.respondToPermissionCalls).To(HaveLen(1))
+				Expect(chatManager.respondToPermissionCalls[0].selectedOptionID).To(BeEmpty())
 			})
 		})
 
