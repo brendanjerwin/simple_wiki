@@ -18,7 +18,7 @@ require (
 	github.com/jcelliott/lumber v0.0.0-20160324203708-dd349441af25
 	github.com/k3a/html2text v1.4.0
 	github.com/karalabe/usb v0.0.2
-	github.com/mark3labs/mcp-go v0.47.0
+	github.com/mark3labs/mcp-go v0.47.1
 	github.com/mborders/artifex v0.5.1
 	github.com/microcosm-cc/bluemonday v1.0.27
 	github.com/onsi/ginkgo/v2 v2.28.1
@@ -39,8 +39,8 @@ require (
 	go.opentelemetry.io/otel/sdk v1.43.0
 	go.opentelemetry.io/otel/sdk/metric v1.43.0
 	go.opentelemetry.io/otel/trace v1.43.0
-	golang.org/x/net v0.52.0
-	golang.org/x/text v0.35.0
+	golang.org/x/net v0.53.0
+	golang.org/x/text v0.36.0
 	google.golang.org/grpc v1.80.0
 	google.golang.org/protobuf v1.36.11
 	gopkg.in/urfave/cli.v1 v1.20.0
@@ -129,12 +129,12 @@ require (
 	go4.org/mem v0.0.0-20240501181205-ae6ca9944745 // indirect
 	go4.org/netipx v0.0.0-20231129151722-fdeea329fbba // indirect
 	golang.org/x/arch v0.22.0 // indirect
-	golang.org/x/crypto v0.49.0 // indirect
+	golang.org/x/crypto v0.50.0 // indirect
 	golang.org/x/exp v0.0.0-20250620022241-b7579e27df2b // indirect
-	golang.org/x/mod v0.33.0 // indirect
+	golang.org/x/mod v0.34.0 // indirect
 	golang.org/x/sync v0.20.0 // indirect
-	golang.org/x/sys v0.42.0 // indirect
-	golang.org/x/tools v0.42.0 // indirect
+	golang.org/x/sys v0.43.0 // indirect
+	golang.org/x/tools v0.43.0 // indirect
 	golang.zx2c4.com/wireguard/windows v0.5.3 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20260401024825-9d38bb4040a9 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260401024825-9d38bb4040a9 // indirect
