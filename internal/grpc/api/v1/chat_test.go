@@ -27,6 +27,35 @@ type mockChatBufferManager struct {
 	addAssistantError    error
 	editMessageError     error
 	addReactionError     error
+
+	// Tracking fields for new handler tests
+	notifyToolCallCalls       []notifyToolCallArgs
+	cancelPageCalls           []string
+	respondToPermissionCalls  []respondToPermissionArgs
+	requestPermissionCalls    []requestPermissionArgs
+	requestPermissionResponse string
+
+	// Configurable return values for status methods
+	hasPageChannelSubscriberVal    bool
+	hasInstanceRequestSubscriberVal bool
+	isInstanceRequestedVal         bool
+
+	// Configurable replay messages for SubscribeToPageChannelWithReplay
+	pageChannelReplayMessages []*chatbuffer.Message
+	pageChannelChan           chan *chatbuffer.Message
+}
+
+type notifyToolCallArgs struct {
+	page, messageID, toolCallID, title, toolStatus string
+}
+
+type respondToPermissionArgs struct {
+	requestID, selectedOptionID string
+}
+
+type requestPermissionArgs struct {
+	page, requestID, title, description string
+	options                             []chatbuffer.PermissionOption
 }
 
 func newMockChatBufferManager() *mockChatBufferManager {
@@ -238,9 +267,12 @@ func (m *mockChatBufferManager) HasChannelSubscribers() bool {
 	return len(m.channelSubscribers) > 0
 }
 
-func (*mockChatBufferManager) SubscribeToPageChannelWithReplay(string) ([]*chatbuffer.Message, <-chan *chatbuffer.Message, func()) {
+func (m *mockChatBufferManager) SubscribeToPageChannelWithReplay(string) ([]*chatbuffer.Message, <-chan *chatbuffer.Message, func()) {
+	if m.pageChannelChan != nil {
+		return m.pageChannelReplayMessages, m.pageChannelChan, func() {}
+	}
 	ch := make(chan *chatbuffer.Message, 10)
-	return nil, ch, func() { close(ch) }
+	return m.pageChannelReplayMessages, ch, func() { close(ch) }
 }
 
 func (*mockChatBufferManager) SubscribeToPageChannel(string) (<-chan *chatbuffer.Message, func()) {
@@ -248,8 +280,8 @@ func (*mockChatBufferManager) SubscribeToPageChannel(string) (<-chan *chatbuffer
 	return ch, func() { close(ch) }
 }
 
-func (*mockChatBufferManager) HasPageChannelSubscriber(string) bool {
-	return false
+func (m *mockChatBufferManager) HasPageChannelSubscriber(string) bool {
+	return m.hasPageChannelSubscriberVal
 }
 
 func (*mockChatBufferManager) RequestInstance(string) {}
@@ -259,18 +291,25 @@ func (*mockChatBufferManager) SubscribeToInstanceRequests() (<-chan string, func
 	return ch, func() { close(ch) }
 }
 
-func (*mockChatBufferManager) HasInstanceRequestSubscribers() bool {
-	return false
+func (m *mockChatBufferManager) HasInstanceRequestSubscribers() bool {
+	return m.hasInstanceRequestSubscriberVal
 }
 
-func (*mockChatBufferManager) IsInstanceRequested(string) bool {
-	return false
+func (m *mockChatBufferManager) IsInstanceRequested(string) bool {
+	return m.isInstanceRequestedVal
 }
 
-func (*mockChatBufferManager) NotifyToolCall(string, string, string, string, string) {}
+func (m *mockChatBufferManager) NotifyToolCall(page, messageID, toolCallID, title, toolStatus string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.notifyToolCallCalls = append(m.notifyToolCallCalls, notifyToolCallArgs{page, messageID, toolCallID, title, toolStatus})
+}
 
-func (*mockChatBufferManager) CancelPage(string) bool {
-	return false
+func (m *mockChatBufferManager) CancelPage(page string) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.cancelPageCalls = append(m.cancelPageCalls, page)
+	return true
 }
 
 func (*mockChatBufferManager) SubscribeToCancellation(string) (<-chan struct{}, func()) {
@@ -280,7 +319,11 @@ func (*mockChatBufferManager) SubscribeToCancellation(string) (<-chan struct{}, 
 
 func (*mockChatBufferManager) EmitPermissionRequest(string, *chatbuffer.PermissionRequestEvent) {}
 
-func (*mockChatBufferManager) RespondToPermission(string, string) {}
+func (m *mockChatBufferManager) RespondToPermission(requestID, selectedOptionID string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.respondToPermissionCalls = append(m.respondToPermissionCalls, respondToPermissionArgs{requestID, selectedOptionID})
+}
 
 func (m *mockChatBufferManager) channelSubscriberCount() int {
 	m.mu.Lock()
@@ -1268,8 +1311,462 @@ var _ = Describe("ChatService", func() {
 			})
 		})
 	})
+
+	Describe("SendToolCallNotification", func() {
+		When("page is empty", func() {
+			var err error
+
+			BeforeEach(func() {
+				_, err = server.SendToolCallNotification(ctx, &apiv1.SendToolCallNotificationRequest{
+					Page:      "",
+					MessageId: "msg-1",
+				})
+			})
+
+			It("should return InvalidArgument error", func() {
+				st, ok := status.FromError(err)
+				Expect(ok).To(BeTrue())
+				Expect(st.Code()).To(Equal(codes.InvalidArgument))
+				Expect(st.Message()).To(ContainSubstring("page is required"))
+			})
+		})
+
+		When("message_id is empty", func() {
+			var err error
+
+			BeforeEach(func() {
+				_, err = server.SendToolCallNotification(ctx, &apiv1.SendToolCallNotificationRequest{
+					Page:      "test-page",
+					MessageId: "",
+				})
+			})
+
+			It("should return InvalidArgument error", func() {
+				st, ok := status.FromError(err)
+				Expect(ok).To(BeTrue())
+				Expect(st.Code()).To(Equal(codes.InvalidArgument))
+				Expect(st.Message()).To(ContainSubstring("message_id is required"))
+			})
+		})
+
+		When("request is valid", func() {
+			var (
+				resp *apiv1.SendToolCallNotificationResponse
+				err  error
+			)
+
+			BeforeEach(func() {
+				resp, err = server.SendToolCallNotification(ctx, &apiv1.SendToolCallNotificationRequest{
+					Page:       "test-page",
+					MessageId:  "msg-1",
+					ToolCallId: "tc-1",
+					Title:      "Reading file",
+					Status:     "running",
+				})
+			})
+
+			It("should not error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should return a response", func() {
+				Expect(resp).NotTo(BeNil())
+			})
+
+			It("should call NotifyToolCall with correct arguments", func() {
+				Expect(chatManager.notifyToolCallCalls).To(HaveLen(1))
+				call := chatManager.notifyToolCallCalls[0]
+				Expect(call.page).To(Equal("test-page"))
+				Expect(call.messageID).To(Equal("msg-1"))
+				Expect(call.toolCallID).To(Equal("tc-1"))
+				Expect(call.title).To(Equal("Reading file"))
+				Expect(call.toolStatus).To(Equal("running"))
+			})
+		})
+	})
+
+	Describe("CancelAgentPrompt", func() {
+		When("page is empty", func() {
+			var err error
+
+			BeforeEach(func() {
+				_, err = server.CancelAgentPrompt(ctx, &apiv1.CancelAgentPromptRequest{
+					Page: "",
+				})
+			})
+
+			It("should return InvalidArgument error", func() {
+				st, ok := status.FromError(err)
+				Expect(ok).To(BeTrue())
+				Expect(st.Code()).To(Equal(codes.InvalidArgument))
+				Expect(st.Message()).To(ContainSubstring("page is required"))
+			})
+		})
+
+		When("request is valid", func() {
+			var (
+				resp *apiv1.CancelAgentPromptResponse
+				err  error
+			)
+
+			BeforeEach(func() {
+				resp, err = server.CancelAgentPrompt(ctx, &apiv1.CancelAgentPromptRequest{
+					Page: "test-page",
+				})
+			})
+
+			It("should not error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should return a response", func() {
+				Expect(resp).NotTo(BeNil())
+			})
+
+			It("should call CancelPage with the correct page", func() {
+				Expect(chatManager.cancelPageCalls).To(HaveLen(1))
+				Expect(chatManager.cancelPageCalls[0]).To(Equal("test-page"))
+			})
+		})
+	})
+
+	Describe("RespondToPermission", func() {
+		When("request_id is empty", func() {
+			var err error
+
+			BeforeEach(func() {
+				_, err = server.RespondToPermission(ctx, &apiv1.RespondToPermissionRequest{
+					RequestId:        "",
+					SelectedOptionId: "allow",
+				})
+			})
+
+			It("should return InvalidArgument error", func() {
+				st, ok := status.FromError(err)
+				Expect(ok).To(BeTrue())
+				Expect(st.Code()).To(Equal(codes.InvalidArgument))
+				Expect(st.Message()).To(ContainSubstring("request_id is required"))
+			})
+		})
+
+		When("selected_option_id is empty", func() {
+			var err error
+
+			BeforeEach(func() {
+				_, err = server.RespondToPermission(ctx, &apiv1.RespondToPermissionRequest{
+					RequestId:        "req-1",
+					SelectedOptionId: "",
+				})
+			})
+
+			It("should return InvalidArgument error", func() {
+				st, ok := status.FromError(err)
+				Expect(ok).To(BeTrue())
+				Expect(st.Code()).To(Equal(codes.InvalidArgument))
+				Expect(st.Message()).To(ContainSubstring("selected_option_id is required"))
+			})
+		})
+
+		When("request is valid", func() {
+			var (
+				resp *apiv1.RespondToPermissionResponse
+				err  error
+			)
+
+			BeforeEach(func() {
+				resp, err = server.RespondToPermission(ctx, &apiv1.RespondToPermissionRequest{
+					RequestId:        "req-1",
+					SelectedOptionId: "allow",
+				})
+			})
+
+			It("should not error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should return a response", func() {
+				Expect(resp).NotTo(BeNil())
+			})
+
+			It("should call RespondToPermission with correct arguments", func() {
+				Expect(chatManager.respondToPermissionCalls).To(HaveLen(1))
+				call := chatManager.respondToPermissionCalls[0]
+				Expect(call.requestID).To(Equal("req-1"))
+				Expect(call.selectedOptionID).To(Equal("allow"))
+			})
+		})
+	})
+
+	Describe("RequestPermissionFromUser", func() {
+		When("page is empty", func() {
+			var err error
+
+			BeforeEach(func() {
+				_, err = server.RequestPermissionFromUser(ctx, &apiv1.RequestPermissionFromUserRequest{
+					Page:      "",
+					RequestId: "req-1",
+				})
+			})
+
+			It("should return InvalidArgument error", func() {
+				st, ok := status.FromError(err)
+				Expect(ok).To(BeTrue())
+				Expect(st.Code()).To(Equal(codes.InvalidArgument))
+				Expect(st.Message()).To(ContainSubstring("page is required"))
+			})
+		})
+
+		When("request_id is empty", func() {
+			var err error
+
+			BeforeEach(func() {
+				_, err = server.RequestPermissionFromUser(ctx, &apiv1.RequestPermissionFromUserRequest{
+					Page:      "test-page",
+					RequestId: "",
+				})
+			})
+
+			It("should return InvalidArgument error", func() {
+				st, ok := status.FromError(err)
+				Expect(ok).To(BeTrue())
+				Expect(st.Code()).To(Equal(codes.InvalidArgument))
+				Expect(st.Message()).To(ContainSubstring("request_id is required"))
+			})
+		})
+
+		When("request is valid", func() {
+			var (
+				resp *apiv1.RequestPermissionFromUserResponse
+				err  error
+			)
+
+			BeforeEach(func() {
+				chatManager.requestPermissionResponse = "allow-once"
+
+				resp, err = server.RequestPermissionFromUser(ctx, &apiv1.RequestPermissionFromUserRequest{
+					Page:        "test-page",
+					RequestId:   "req-1",
+					Title:       "Execute command",
+					Description: "Run npm install",
+					Options: []*apiv1.ChatPermissionOption{
+						{OptionId: "allow-once", Label: "Allow", Description: "Allow this action"},
+						{OptionId: "deny", Label: "Deny", Description: "Deny this action"},
+					},
+				})
+			})
+
+			It("should not error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should return the selected option from the buffer", func() {
+				Expect(resp.SelectedOptionId).To(Equal("allow-once"))
+			})
+
+			It("should call RequestPermission with correct arguments", func() {
+				Expect(chatManager.requestPermissionCalls).To(HaveLen(1))
+				call := chatManager.requestPermissionCalls[0]
+				Expect(call.page).To(Equal("test-page"))
+				Expect(call.requestID).To(Equal("req-1"))
+				Expect(call.title).To(Equal("Execute command"))
+				Expect(call.description).To(Equal("Run npm install"))
+				Expect(call.options).To(HaveLen(2))
+				Expect(call.options[0].OptionID).To(Equal("allow-once"))
+				Expect(call.options[1].OptionID).To(Equal("deny"))
+			})
+		})
+	})
+
+	Describe("SubscribePageChatMessages with replay", func() {
+		When("buffer has existing messages including user messages", func() {
+			var (
+				streamServer *mockChatMessagesStreamServer
+				doneCh       chan struct{}
+			)
+
+			BeforeEach(func() {
+				chatManager.pageChannelReplayMessages = []*chatbuffer.Message{
+					{ID: "msg-1", Sender: "user", Content: "First user message", Page: "test-page"},
+					{ID: "msg-2", Sender: "assistant", Content: "Reply", Page: "test-page"},
+					{ID: "msg-3", Sender: "user", Content: "Latest user message", Page: "test-page"},
+				}
+
+				streamServer = &mockChatMessagesStreamServer{contextDone: true}
+				doneCh = make(chan struct{})
+
+				go func() {
+					defer close(doneCh)
+					_ = server.SubscribePageChatMessages(
+						&apiv1.SubscribePageChatMessagesRequest{Page: "test-page"},
+						streamServer,
+					)
+				}()
+
+				Eventually(doneCh, "1s", "10ms").Should(BeClosed())
+			})
+
+			It("should replay only the last user message", func() {
+				Expect(streamServer.GetMessageCount()).To(Equal(1))
+			})
+
+			It("should replay the correct message", func() {
+				streamServer.mu.Lock()
+				defer streamServer.mu.Unlock()
+				Expect(streamServer.messages[0].Id).To(Equal("msg-3"))
+				Expect(streamServer.messages[0].Content).To(Equal("Latest user message"))
+			})
+		})
+
+		When("buffer has only assistant messages", func() {
+			var (
+				streamServer *mockChatMessagesStreamServer
+				doneCh       chan struct{}
+			)
+
+			BeforeEach(func() {
+				chatManager.pageChannelReplayMessages = []*chatbuffer.Message{
+					{ID: "msg-1", Sender: "assistant", Content: "Hello", Page: "test-page"},
+					{ID: "msg-2", Sender: "assistant", Content: "World", Page: "test-page"},
+				}
+
+				streamServer = &mockChatMessagesStreamServer{contextDone: true}
+				doneCh = make(chan struct{})
+
+				go func() {
+					defer close(doneCh)
+					_ = server.SubscribePageChatMessages(
+						&apiv1.SubscribePageChatMessagesRequest{Page: "test-page"},
+						streamServer,
+					)
+				}()
+
+				Eventually(doneCh, "1s", "10ms").Should(BeClosed())
+			})
+
+			It("should not replay any messages", func() {
+				Expect(streamServer.GetMessageCount()).To(Equal(0))
+			})
+		})
+	})
+
+	Describe("GetChatStatus page-aware", func() {
+		When("pool is connected and page has a subscriber", func() {
+			var (
+				resp *apiv1.GetChatStatusResponse
+				err  error
+			)
+
+			BeforeEach(func() {
+				chatManager.hasInstanceRequestSubscriberVal = true
+				chatManager.hasPageChannelSubscriberVal = true
+
+				resp, err = server.GetChatStatus(ctx, &apiv1.GetChatStatusRequest{Page: "test-page"})
+			})
+
+			It("should not error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should return pool_connected true", func() {
+				Expect(resp.PoolConnected).To(BeTrue())
+			})
+
+			It("should return connected true", func() {
+				Expect(resp.Connected).To(BeTrue())
+			})
+		})
+
+		When("pool is connected but page has no subscriber", func() {
+			var (
+				resp *apiv1.GetChatStatusResponse
+				err  error
+			)
+
+			BeforeEach(func() {
+				chatManager.hasInstanceRequestSubscriberVal = true
+				chatManager.hasPageChannelSubscriberVal = false
+
+				// Add a global channel subscriber — should NOT make connected true when pool is connected
+				_, unsubscribe := chatManager.SubscribeToChannel()
+				DeferCleanup(unsubscribe)
+
+				resp, err = server.GetChatStatus(ctx, &apiv1.GetChatStatusRequest{Page: "test-page"})
+			})
+
+			It("should not error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should return pool_connected true", func() {
+				Expect(resp.PoolConnected).To(BeTrue())
+			})
+
+			It("should return connected false because pool mode uses per-page subscribers only", func() {
+				Expect(resp.Connected).To(BeFalse())
+			})
+		})
+
+		When("pool is connected and instance is requested for page", func() {
+			var (
+				resp *apiv1.GetChatStatusResponse
+				err  error
+			)
+
+			BeforeEach(func() {
+				chatManager.hasInstanceRequestSubscriberVal = true
+				chatManager.isInstanceRequestedVal = true
+
+				resp, err = server.GetChatStatus(ctx, &apiv1.GetChatStatusRequest{Page: "test-page"})
+			})
+
+			It("should not error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should return starting true", func() {
+				Expect(resp.Starting).To(BeTrue())
+			})
+		})
+
+		When("no pool is connected and page has no subscriber but global subscriber exists", func() {
+			var (
+				resp *apiv1.GetChatStatusResponse
+				err  error
+			)
+
+			BeforeEach(func() {
+				chatManager.hasInstanceRequestSubscriberVal = false
+				chatManager.hasPageChannelSubscriberVal = false
+
+				// Add a global channel subscriber — should make connected true when no pool
+				_, unsubscribe := chatManager.SubscribeToChannel()
+				DeferCleanup(unsubscribe)
+
+				resp, err = server.GetChatStatus(ctx, &apiv1.GetChatStatusRequest{Page: "test-page"})
+			})
+
+			It("should not error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should return pool_connected false", func() {
+				Expect(resp.PoolConnected).To(BeFalse())
+			})
+
+			It("should return connected true because global subscribers count without pool", func() {
+				Expect(resp.Connected).To(BeTrue())
+			})
+
+			It("should return starting false because no pool is connected", func() {
+				Expect(resp.Starting).To(BeFalse())
+			})
+		})
+	})
 })
 
-func (*mockChatBufferManager) RequestPermission(string, string, string, string, []chatbuffer.PermissionOption) string {
-	return ""
+func (m *mockChatBufferManager) RequestPermission(page, requestID, title, description string, options []chatbuffer.PermissionOption) string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.requestPermissionCalls = append(m.requestPermissionCalls, requestPermissionArgs{page, requestID, title, description, options})
+	return m.requestPermissionResponse
 }

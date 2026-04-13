@@ -8,7 +8,12 @@ import (
 	"os"
 	"time"
 
+	"connectrpc.com/connect"
 	acp "github.com/coder/acp-go-sdk"
+	"google.golang.org/protobuf/types/known/structpb"
+
+	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
+	"github.com/brendanjerwin/simple_wiki/gen/go/api/v1/apiv1connect"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -590,6 +595,495 @@ var _ = Describe("prefixWriter", func() {
 
 		It("should prefix each line", func() {
 			Expect(buf.String()).To(Equal("[pg] line1\n[pg] line2\n"))
+		})
+	})
+})
+
+var _ = Describe("truncate", func() {
+
+	When("the string is shorter than the max", func() {
+		var result string
+
+		BeforeEach(func() {
+			result = truncate("hello", 10)
+		})
+
+		It("should return the string unchanged", func() {
+			Expect(result).To(Equal("hello"))
+		})
+	})
+
+	When("the string is exactly the max length", func() {
+		var result string
+
+		BeforeEach(func() {
+			result = truncate("12345", 5)
+		})
+
+		It("should return the string unchanged", func() {
+			Expect(result).To(Equal("12345"))
+		})
+	})
+
+	When("the string exceeds the max length", func() {
+		var result string
+
+		BeforeEach(func() {
+			result = truncate("hello world", 5)
+		})
+
+		It("should truncate and add ellipsis", func() {
+			Expect(result).To(Equal("hello..."))
+		})
+	})
+
+	When("the string is empty", func() {
+		var result string
+
+		BeforeEach(func() {
+			result = truncate("", 10)
+		})
+
+		It("should return an empty string", func() {
+			Expect(result).To(BeEmpty())
+		})
+	})
+
+	When("max is zero", func() {
+		var result string
+
+		BeforeEach(func() {
+			result = truncate("hello", 0)
+		})
+
+		It("should return just the ellipsis", func() {
+			Expect(result).To(Equal("..."))
+		})
+	})
+})
+
+var _ = Describe("wikiChatClient buildFullText", func() {
+
+	When("only text is present", func() {
+		var result string
+
+		BeforeEach(func() {
+			client := &wikiChatClient{}
+			client.textBuf.WriteString("Hello world")
+			client.mu.Lock()
+			result = client.buildFullText()
+			client.mu.Unlock()
+		})
+
+		It("should return just the text", func() {
+			Expect(result).To(Equal("Hello world"))
+		})
+	})
+
+	When("thought and text are both present", func() {
+		var result string
+
+		BeforeEach(func() {
+			client := &wikiChatClient{}
+			client.thoughtBuf.WriteString("Let me think about this")
+			client.textBuf.WriteString("Here is my answer")
+			client.mu.Lock()
+			result = client.buildFullText()
+			client.mu.Unlock()
+		})
+
+		It("should wrap thought in a details block", func() {
+			Expect(result).To(ContainSubstring("<details><summary>Thinking...</summary>"))
+			Expect(result).To(ContainSubstring("Let me think about this"))
+			Expect(result).To(ContainSubstring("</details>"))
+		})
+
+		It("should include the response text after the details block", func() {
+			Expect(result).To(ContainSubstring("Here is my answer"))
+		})
+	})
+
+	When("plan entries are present", func() {
+		var result string
+
+		BeforeEach(func() {
+			client := &wikiChatClient{}
+			client.textBuf.WriteString("Working on it")
+			client.planEntries = []acp.PlanEntry{
+				{Content: "Step 1", Status: acp.PlanEntryStatusCompleted},
+				{Content: "Step 2", Status: acp.PlanEntryStatusInProgress},
+				{Content: "Step 3", Status: acp.PlanEntryStatusPending},
+			}
+			client.mu.Lock()
+			result = client.buildFullText()
+			client.mu.Unlock()
+		})
+
+		It("should include the plan section", func() {
+			Expect(result).To(ContainSubstring("**Plan:**"))
+		})
+
+		It("should show completed entries with checkmarks", func() {
+			Expect(result).To(ContainSubstring("- [x] Step 1"))
+		})
+
+		It("should show in-progress entries with spinner emoji", func() {
+			Expect(result).To(ContainSubstring("- 🔄 Step 2"))
+		})
+
+		It("should show pending entries with empty checkboxes", func() {
+			Expect(result).To(ContainSubstring("- [ ] Step 3"))
+		})
+	})
+
+	When("permission notes are present", func() {
+		var result string
+
+		BeforeEach(func() {
+			client := &wikiChatClient{}
+			client.textBuf.WriteString("Done")
+			client.permissionNotes.WriteString("> 🔐 **Permission granted:** edit — Allow\n")
+			client.mu.Lock()
+			result = client.buildFullText()
+			client.mu.Unlock()
+		})
+
+		It("should append the permission notes", func() {
+			Expect(result).To(ContainSubstring("Permission granted"))
+		})
+	})
+
+	When("all sections are present", func() {
+		var result string
+
+		BeforeEach(func() {
+			client := &wikiChatClient{}
+			client.thoughtBuf.WriteString("Thinking hard")
+			client.textBuf.WriteString("Final answer")
+			client.planEntries = []acp.PlanEntry{
+				{Content: "Do the thing", Status: acp.PlanEntryStatusCompleted},
+			}
+			client.permissionNotes.WriteString("> 🔐 **Permission granted:** x\n")
+			client.mu.Lock()
+			result = client.buildFullText()
+			client.mu.Unlock()
+		})
+
+		It("should include thought details", func() {
+			Expect(result).To(ContainSubstring("<details>"))
+		})
+
+		It("should include the response", func() {
+			Expect(result).To(ContainSubstring("Final answer"))
+		})
+
+		It("should include the plan", func() {
+			Expect(result).To(ContainSubstring("**Plan:**"))
+		})
+
+		It("should include the permission notes", func() {
+			Expect(result).To(ContainSubstring("Permission granted"))
+		})
+	})
+
+	When("everything is empty", func() {
+		var result string
+
+		BeforeEach(func() {
+			client := &wikiChatClient{}
+			client.mu.Lock()
+			result = client.buildFullText()
+			client.mu.Unlock()
+		})
+
+		It("should return an empty string", func() {
+			Expect(result).To(BeEmpty())
+		})
+	})
+})
+
+var _ = Describe("wikiChatClient SessionUpdate with Plan", func() {
+
+	When("receiving a plan update", func() {
+		var (
+			client *wikiChatClient
+			err    error
+		)
+
+		BeforeEach(func() {
+			mux := http.NewServeMux()
+			mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(`{"messageId":"msg-1"}`))
+			})
+			server := httptest.NewServer(mux)
+			DeferCleanup(server.Close)
+
+			client = newWikiChatClient("test-page", server.URL)
+
+			planNotification := acp.SessionNotification{
+				SessionId: "session-1",
+				Update: acp.UpdatePlan(
+					acp.PlanEntry{Content: "Analyze code", Status: acp.PlanEntryStatusCompleted},
+					acp.PlanEntry{Content: "Write tests", Status: acp.PlanEntryStatusInProgress},
+					acp.PlanEntry{Content: "Submit PR", Status: acp.PlanEntryStatusPending},
+				),
+			}
+			err = client.SessionUpdate(context.Background(), planNotification)
+		})
+
+		It("should not return an error", func() {
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should store the plan entries", func() {
+			Expect(client.planEntries).To(HaveLen(3))
+		})
+
+		It("should preserve the entry content", func() {
+			Expect(client.planEntries[0].Content).To(Equal("Analyze code"))
+			Expect(client.planEntries[1].Content).To(Equal("Write tests"))
+			Expect(client.planEntries[2].Content).To(Equal("Submit PR"))
+		})
+
+		It("should preserve the entry statuses", func() {
+			Expect(client.planEntries[0].Status).To(Equal(acp.PlanEntryStatusCompleted))
+			Expect(client.planEntries[1].Status).To(Equal(acp.PlanEntryStatusInProgress))
+			Expect(client.planEntries[2].Status).To(Equal(acp.PlanEntryStatusPending))
+		})
+	})
+})
+
+var _ = Describe("wikiChatClient SessionUpdate with ToolCall", func() {
+
+	When("receiving a tool call with no current message", func() {
+		var (
+			client *wikiChatClient
+			err    error
+		)
+
+		BeforeEach(func() {
+			client = &wikiChatClient{
+				page: "test-page",
+			}
+
+			toolCallUpdate := acp.SessionNotification{
+				SessionId: "session-1",
+				Update:    acp.StartToolCall("tc-1", "Read file"),
+			}
+			err = client.SessionUpdate(context.Background(), toolCallUpdate)
+		})
+
+		It("should not return an error", func() {
+			Expect(err).NotTo(HaveOccurred())
+		})
+	})
+
+	When("receiving a tool call with a current message", func() {
+		var (
+			client      *wikiChatClient
+			err         error
+			requestPath string
+		)
+
+		BeforeEach(func() {
+			mux := http.NewServeMux()
+			mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+				requestPath = r.URL.Path
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(`{}`))
+			})
+			server := httptest.NewServer(mux)
+			DeferCleanup(server.Close)
+
+			client = newWikiChatClient("test-page", server.URL)
+			client.currentMsg = "msg-42"
+
+			toolCallUpdate := acp.SessionNotification{
+				SessionId: "session-1",
+				Update:    acp.StartToolCall("tc-1", "Read file"),
+			}
+			err = client.SessionUpdate(context.Background(), toolCallUpdate)
+		})
+
+		It("should not return an error", func() {
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should send a tool call notification to the server", func() {
+			Expect(requestPath).To(ContainSubstring("SendToolCallNotification"))
+		})
+	})
+})
+
+var _ = Describe("wikiChatClient beginTurn", func() {
+
+	When("called with accumulated state", func() {
+		var client *wikiChatClient
+
+		BeforeEach(func() {
+			client = newWikiChatClient("my-page", "http://localhost:1")
+			client.textBuf.WriteString("leftover text")
+			client.thoughtBuf.WriteString("leftover thought")
+			client.permissionNotes.WriteString("leftover permissions")
+			client.planEntries = []acp.PlanEntry{
+				{Content: "old step", Status: acp.PlanEntryStatusCompleted},
+			}
+			client.currentMsg = "old-msg"
+			client.beginTurn("reply-456")
+		})
+
+		It("should reset the text buffer", func() {
+			Expect(client.textBuf.String()).To(BeEmpty())
+		})
+
+		It("should reset the thought buffer", func() {
+			Expect(client.thoughtBuf.String()).To(BeEmpty())
+		})
+
+		It("should reset the permission notes", func() {
+			Expect(client.permissionNotes.String()).To(BeEmpty())
+		})
+
+		It("should clear the plan entries", func() {
+			Expect(client.planEntries).To(BeNil())
+		})
+
+		It("should set the replyToID", func() {
+			Expect(client.replyToID).To(Equal("reply-456"))
+		})
+
+		It("should clear the current message ID", func() {
+			Expect(client.currentMsg).To(BeEmpty())
+		})
+	})
+})
+
+// stubFrontmatterHandler is a mock Connect handler for the Frontmatter service
+// that returns predefined frontmatter data.
+type stubFrontmatterHandler struct {
+	apiv1connect.UnimplementedFrontmatterHandler
+	frontmatter map[string]any
+	err         error
+}
+
+func (h *stubFrontmatterHandler) GetFrontmatter(_ context.Context, req *connect.Request[apiv1.GetFrontmatterRequest]) (*connect.Response[apiv1.GetFrontmatterResponse], error) {
+	if h.err != nil {
+		return nil, h.err
+	}
+
+	s, err := structpb.NewStruct(h.frontmatter)
+	if err != nil {
+		return nil, err
+	}
+
+	return connect.NewResponse(&apiv1.GetFrontmatterResponse{
+		Frontmatter: s,
+	}), nil
+}
+
+var _ = Describe("poolDaemon fetchPageContext", func() {
+
+	When("the page has ai_agent_chat_context in frontmatter", func() {
+		var result string
+
+		BeforeEach(func() {
+			handler := &stubFrontmatterHandler{
+				frontmatter: map[string]any{
+					"title": "Test Page",
+					"ai_agent_chat_context": map[string]any{
+						"summary": "We discussed testing",
+						"goals":   "Add more test coverage",
+					},
+				},
+			}
+			mux := http.NewServeMux()
+			path, h := apiv1connect.NewFrontmatterHandler(handler)
+			mux.Handle(path, h)
+			server := httptest.NewServer(mux)
+			DeferCleanup(server.Close)
+
+			daemon := &poolDaemon{wikiURL: server.URL}
+			result = daemon.fetchPageContext(context.Background(), "test-page")
+		})
+
+		It("should include the chat preamble", func() {
+			Expect(result).To(HavePrefix(chatPreamble))
+		})
+
+		It("should include the page name", func() {
+			Expect(result).To(ContainSubstring("test-page"))
+		})
+
+		It("should include the context JSON", func() {
+			Expect(result).To(ContainSubstring("We discussed testing"))
+			Expect(result).To(ContainSubstring("Add more test coverage"))
+		})
+
+		It("should mention MergeFrontmatter for updates", func() {
+			Expect(result).To(ContainSubstring("MergeFrontmatter"))
+		})
+	})
+
+	When("the page has no ai_agent_chat_context", func() {
+		var result string
+
+		BeforeEach(func() {
+			handler := &stubFrontmatterHandler{
+				frontmatter: map[string]any{
+					"title": "Test Page",
+				},
+			}
+			mux := http.NewServeMux()
+			path, h := apiv1connect.NewFrontmatterHandler(handler)
+			mux.Handle(path, h)
+			server := httptest.NewServer(mux)
+			DeferCleanup(server.Close)
+
+			daemon := &poolDaemon{wikiURL: server.URL}
+			result = daemon.fetchPageContext(context.Background(), "test-page")
+		})
+
+		It("should include the chat preamble", func() {
+			Expect(result).To(HavePrefix(chatPreamble))
+		})
+
+		It("should indicate no context exists yet", func() {
+			Expect(result).To(ContainSubstring("No [ai_agent_chat_context] section exists yet"))
+		})
+
+		It("should suggest creating one with MergeFrontmatter", func() {
+			Expect(result).To(ContainSubstring("MergeFrontmatter"))
+		})
+	})
+
+	When("the frontmatter service returns an error", func() {
+		var result string
+
+		BeforeEach(func() {
+			handler := &stubFrontmatterHandler{
+				err: connect.NewError(connect.CodeNotFound, nil),
+			}
+			mux := http.NewServeMux()
+			path, h := apiv1connect.NewFrontmatterHandler(handler)
+			mux.Handle(path, h)
+			server := httptest.NewServer(mux)
+			DeferCleanup(server.Close)
+
+			daemon := &poolDaemon{wikiURL: server.URL}
+			result = daemon.fetchPageContext(context.Background(), "test-page")
+		})
+
+		It("should include the chat preamble", func() {
+			Expect(result).To(HavePrefix(chatPreamble))
+		})
+
+		It("should include a failure message", func() {
+			Expect(result).To(ContainSubstring("Failed to fetch page context"))
+		})
+
+		It("should warn against modifying the context section", func() {
+			Expect(result).To(ContainSubstring("Do NOT attempt to create or modify"))
 		})
 	})
 })

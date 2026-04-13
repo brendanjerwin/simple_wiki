@@ -1004,6 +1004,473 @@ var _ = Describe("Manager", func() {
 		})
 	})
 
+	Describe("NotifyToolCall", func() {
+		When("a page subscriber is listening", func() {
+			var eventChan <-chan chatbuffer.Event
+
+			BeforeEach(func() {
+				var unsub func()
+				eventChan, unsub = manager.SubscribeToPage("test-page")
+				DeferCleanup(unsub)
+
+				manager.NotifyToolCall("test-page", "msg-1", "tc-1", "Read File", "running")
+			})
+
+			It("should emit a tool call event", func() {
+				Eventually(eventChan).Should(Receive(And(
+					HaveField("Type", chatbuffer.EventTypeToolCall),
+					HaveField("ToolCall.MessageID", "msg-1"),
+					HaveField("ToolCall.ToolCallID", "tc-1"),
+					HaveField("ToolCall.Title", "Read File"),
+					HaveField("ToolCall.Status", "running"),
+				)))
+			})
+		})
+
+		When("subscribers exist on different pages", func() {
+			var (
+				otherChan <-chan chatbuffer.Event
+			)
+
+			BeforeEach(func() {
+				var unsub func()
+				otherChan, unsub = manager.SubscribeToPage("other-page")
+				DeferCleanup(unsub)
+
+				manager.NotifyToolCall("test-page", "msg-1", "tc-1", "Read File", "running")
+			})
+
+			It("should not deliver to subscribers on other pages", func() {
+				Consistently(otherChan).ShouldNot(Receive())
+			})
+		})
+
+		When("no page subscribers exist", func() {
+			It("should not panic", func() {
+				Expect(func() {
+					manager.NotifyToolCall("test-page", "msg-1", "tc-1", "Read File", "running")
+				}).NotTo(Panic())
+			})
+		})
+
+		When("checking stored messages after notification", func() {
+			var messages []*chatbuffer.Message
+
+			BeforeEach(func() {
+				manager.NotifyToolCall("test-page", "msg-1", "tc-1", "Read File", "running")
+				messages = manager.GetMessages("test-page")
+			})
+
+			It("should not store tool call events in the buffer", func() {
+				Expect(messages).To(BeEmpty())
+			})
+		})
+	})
+
+	Describe("RequestPermission", func() {
+		When("a response is provided via RespondToPermission", func() {
+			var selectedOption string
+
+			BeforeEach(func() {
+				done := make(chan struct{})
+
+				go func() {
+					defer close(done)
+					selectedOption = manager.RequestPermission(
+						"test-page",
+						"req-1",
+						"Allow Edit",
+						"Do you want to allow editing?",
+						[]chatbuffer.PermissionOption{
+							{OptionID: "yes", Label: "Yes", Description: "Allow"},
+							{OptionID: "no", Label: "No", Description: "Deny"},
+						},
+					)
+				}()
+
+				// Give the goroutine time to register the pending permission
+				time.Sleep(50 * time.Millisecond)
+
+				manager.RespondToPermission("req-1", "yes")
+
+				Eventually(done, 2*time.Second).Should(BeClosed())
+			})
+
+			It("should return the selected option ID", func() {
+				Expect(selectedOption).To(Equal("yes"))
+			})
+		})
+
+		When("emitting the permission request to page subscribers", func() {
+			var eventChan <-chan chatbuffer.Event
+
+			BeforeEach(func() {
+				var unsub func()
+				eventChan, unsub = manager.SubscribeToPage("test-page")
+				DeferCleanup(unsub)
+
+				go func() {
+					manager.RequestPermission(
+						"test-page",
+						"req-2",
+						"Allow Edit",
+						"Do you want to allow editing?",
+						[]chatbuffer.PermissionOption{
+							{OptionID: "yes", Label: "Yes", Description: "Allow"},
+						},
+					)
+				}()
+			})
+
+			It("should deliver the permission request event", func() {
+				Eventually(eventChan).Should(Receive(And(
+					HaveField("Type", chatbuffer.EventTypePermissionRequest),
+					HaveField("PermissionRequest.RequestID", "req-2"),
+					HaveField("PermissionRequest.Title", "Allow Edit"),
+					HaveField("PermissionRequest.Description", "Do you want to allow editing?"),
+				)))
+			})
+		})
+	})
+
+	Describe("EmitPermissionRequest", func() {
+		When("page subscribers are listening", func() {
+			var eventChan <-chan chatbuffer.Event
+
+			BeforeEach(func() {
+				var unsub func()
+				eventChan, unsub = manager.SubscribeToPage("test-page")
+				DeferCleanup(unsub)
+
+				manager.EmitPermissionRequest("test-page", &chatbuffer.PermissionRequestEvent{
+					Page:        "test-page",
+					RequestID:   "req-3",
+					Title:       "Confirm Action",
+					Description: "Are you sure?",
+					Options: []chatbuffer.PermissionOption{
+						{OptionID: "confirm", Label: "Confirm", Description: "Proceed"},
+					},
+				})
+			})
+
+			It("should deliver the event to page subscribers", func() {
+				Eventually(eventChan).Should(Receive(And(
+					HaveField("Type", chatbuffer.EventTypePermissionRequest),
+					HaveField("PermissionRequest.RequestID", "req-3"),
+					HaveField("PermissionRequest.Title", "Confirm Action"),
+				)))
+			})
+		})
+
+		When("subscribers exist on a different page", func() {
+			var otherChan <-chan chatbuffer.Event
+
+			BeforeEach(func() {
+				var unsub func()
+				otherChan, unsub = manager.SubscribeToPage("other-page")
+				DeferCleanup(unsub)
+
+				manager.EmitPermissionRequest("test-page", &chatbuffer.PermissionRequestEvent{
+					Page:      "test-page",
+					RequestID: "req-4",
+					Title:     "Confirm",
+				})
+			})
+
+			It("should not deliver to other page subscribers", func() {
+				Consistently(otherChan).ShouldNot(Receive())
+			})
+		})
+	})
+
+	Describe("RespondToPermission", func() {
+		When("responding to a pending request", func() {
+			var selectedOption string
+
+			BeforeEach(func() {
+				done := make(chan struct{})
+
+				go func() {
+					defer close(done)
+					selectedOption = manager.RequestPermission(
+						"test-page",
+						"req-respond-1",
+						"Title",
+						"Description",
+						[]chatbuffer.PermissionOption{
+							{OptionID: "opt-a", Label: "A"},
+							{OptionID: "opt-b", Label: "B"},
+						},
+					)
+				}()
+
+				time.Sleep(50 * time.Millisecond)
+
+				manager.RespondToPermission("req-respond-1", "opt-b")
+
+				Eventually(done, 2*time.Second).Should(BeClosed())
+			})
+
+			It("should unblock the request with the correct option", func() {
+				Expect(selectedOption).To(Equal("opt-b"))
+			})
+		})
+
+		When("responding to a non-existent request", func() {
+			It("should not panic", func() {
+				Expect(func() {
+					manager.RespondToPermission("nonexistent-req", "some-option")
+				}).NotTo(Panic())
+			})
+		})
+	})
+
+	Describe("SubscribeToPageChannelWithReplay", func() {
+		When("existing messages are present", func() {
+			var (
+				replayMessages []*chatbuffer.Message
+				msgChan        <-chan *chatbuffer.Message
+			)
+
+			BeforeEach(func() {
+				// Add messages before subscribing
+				_, _ = manager.AddAssistantMessage("test-page", "First message", "")
+				_, _ = manager.AddAssistantMessage("test-page", "Second message", "")
+
+				var unsub func()
+				replayMessages, msgChan, unsub = manager.SubscribeToPageChannelWithReplay("test-page")
+				DeferCleanup(unsub)
+			})
+
+			It("should return existing messages as replay", func() {
+				Expect(replayMessages).To(HaveLen(2))
+				Expect(replayMessages[0].Content).To(Equal("First message"))
+				Expect(replayMessages[1].Content).To(Equal("Second message"))
+			})
+
+			It("should return a non-nil message channel", func() {
+				Expect(msgChan).NotTo(BeNil())
+			})
+
+			It("should mark the page as having a subscriber", func() {
+				Expect(manager.HasPageChannelSubscriber("test-page")).To(BeTrue())
+			})
+		})
+
+		When("no existing messages are present", func() {
+			var replayMessages []*chatbuffer.Message
+
+			BeforeEach(func() {
+				var unsub func()
+				replayMessages, _, unsub = manager.SubscribeToPageChannelWithReplay("test-page")
+				DeferCleanup(unsub)
+			})
+
+			It("should return an empty replay slice", func() {
+				Expect(replayMessages).To(BeEmpty())
+			})
+		})
+
+		When("new messages arrive after subscribing", func() {
+			var msgChan <-chan *chatbuffer.Message
+
+			BeforeEach(func() {
+				var unsub func()
+				_, msgChan, unsub = manager.SubscribeToPageChannelWithReplay("test-page")
+				DeferCleanup(unsub)
+
+				_, _ = manager.AddUserMessage("test-page", "New message", "user1")
+			})
+
+			It("should deliver new messages on the channel", func() {
+				Eventually(msgChan).Should(Receive(HaveField("Content", "New message")))
+			})
+		})
+
+		When("unsubscribing", func() {
+			var (
+				msgChan <-chan *chatbuffer.Message
+				unsub   func()
+			)
+
+			BeforeEach(func() {
+				_, msgChan, unsub = manager.SubscribeToPageChannelWithReplay("test-page")
+				unsub()
+			})
+
+			It("should close the channel", func() {
+				Eventually(msgChan).Should(BeClosed())
+			})
+
+			It("should mark as not having a page channel subscriber", func() {
+				Expect(manager.HasPageChannelSubscriber("test-page")).To(BeFalse())
+			})
+		})
+	})
+
+	Describe("CancelPage", func() {
+		When("a cancellation subscriber exists", func() {
+			var (
+				cancelChan <-chan struct{}
+				result     bool
+			)
+
+			BeforeEach(func() {
+				var unsub func()
+				cancelChan, unsub = manager.SubscribeToCancellation("test-page")
+				DeferCleanup(unsub)
+
+				result = manager.CancelPage("test-page")
+			})
+
+			It("should return true", func() {
+				Expect(result).To(BeTrue())
+			})
+
+			It("should signal the cancellation channel", func() {
+				Eventually(cancelChan).Should(Receive())
+			})
+		})
+
+		When("no cancellation subscribers exist", func() {
+			var result bool
+
+			BeforeEach(func() {
+				result = manager.CancelPage("test-page")
+			})
+
+			It("should return false", func() {
+				Expect(result).To(BeFalse())
+			})
+		})
+
+		When("cancellation subscribers exist on a different page", func() {
+			var (
+				otherChan <-chan struct{}
+				result    bool
+			)
+
+			BeforeEach(func() {
+				var unsub func()
+				otherChan, unsub = manager.SubscribeToCancellation("other-page")
+				DeferCleanup(unsub)
+
+				result = manager.CancelPage("test-page")
+			})
+
+			It("should return false", func() {
+				Expect(result).To(BeFalse())
+			})
+
+			It("should not signal the other page's channel", func() {
+				Consistently(otherChan).ShouldNot(Receive())
+			})
+		})
+
+		When("multiple cancellation subscribers exist on same page", func() {
+			var (
+				cancelChan1 <-chan struct{}
+				cancelChan2 <-chan struct{}
+				result      bool
+			)
+
+			BeforeEach(func() {
+				var unsub1, unsub2 func()
+				cancelChan1, unsub1 = manager.SubscribeToCancellation("test-page")
+				cancelChan2, unsub2 = manager.SubscribeToCancellation("test-page")
+				DeferCleanup(unsub1)
+				DeferCleanup(unsub2)
+
+				result = manager.CancelPage("test-page")
+			})
+
+			It("should return true", func() {
+				Expect(result).To(BeTrue())
+			})
+
+			It("should signal all subscribers", func() {
+				Eventually(cancelChan1).Should(Receive())
+				Eventually(cancelChan2).Should(Receive())
+			})
+		})
+
+		When("cancelling the same page twice", func() {
+			var (
+				firstResult  bool
+				secondResult bool
+			)
+
+			BeforeEach(func() {
+				_, unsub := manager.SubscribeToCancellation("test-page")
+				DeferCleanup(unsub)
+
+				firstResult = manager.CancelPage("test-page")
+				secondResult = manager.CancelPage("test-page")
+			})
+
+			It("should return true on first cancel", func() {
+				Expect(firstResult).To(BeTrue())
+			})
+
+			It("should return false on second cancel", func() {
+				Expect(secondResult).To(BeFalse())
+			})
+		})
+	})
+
+	Describe("SubscribeToCancellation", func() {
+		When("subscribing to a page", func() {
+			var (
+				cancelChan <-chan struct{}
+				unsub      func()
+			)
+
+			BeforeEach(func() {
+				cancelChan, unsub = manager.SubscribeToCancellation("test-page")
+				DeferCleanup(unsub)
+			})
+
+			It("should return a non-nil channel", func() {
+				Expect(cancelChan).NotTo(BeNil())
+			})
+
+			It("should return a non-nil unsubscribe function", func() {
+				Expect(unsub).NotTo(BeNil())
+			})
+		})
+
+		When("CancelPage is called after subscribing", func() {
+			var cancelChan <-chan struct{}
+
+			BeforeEach(func() {
+				var unsub func()
+				cancelChan, unsub = manager.SubscribeToCancellation("test-page")
+				DeferCleanup(unsub)
+
+				manager.CancelPage("test-page")
+			})
+
+			It("should receive a cancellation signal", func() {
+				Eventually(cancelChan).Should(Receive())
+			})
+		})
+
+		When("unsubscribing before CancelPage", func() {
+			var result bool
+
+			BeforeEach(func() {
+				_, unsub := manager.SubscribeToCancellation("test-page")
+				unsub()
+
+				result = manager.CancelPage("test-page")
+			})
+
+			It("should not find any subscribers to notify", func() {
+				Expect(result).To(BeFalse())
+			})
+		})
+	})
+
 	Describe("Concurrent access", func() {
 		When("multiple goroutines add messages concurrently", func() {
 			var messages []*chatbuffer.Message
