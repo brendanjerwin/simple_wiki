@@ -64,14 +64,11 @@ test.describe('Dialog Accessibility E2E Tests', () => {
         await expect(page.locator('wiki-editor textarea')).toBeVisible({ timeout: COMPONENT_LOAD_TIMEOUT_MS });
 
         await openConfirmationDialog(page);
-        await expect(page.locator('confirmation-dialog dialog')).toBeVisible({ timeout: DIALOG_TIMEOUT_MS });
+        // Playwright's chained locators automatically pierce shadow DOM
+        const dlg = page.locator('confirmation-dialog').locator('dialog');
+        await expect(dlg).toBeVisible({ timeout: DIALOG_TIMEOUT_MS });
 
-        const ariaLabelledBy = await page.evaluate(() => {
-          const host = document.querySelector('confirmation-dialog');
-          const dlg = host?.shadowRoot?.querySelector('dialog');
-          return dlg?.getAttribute('aria-labelledby') ?? null;
-        });
-
+        const ariaLabelledBy = await dlg.getAttribute('aria-labelledby');
         expect(ariaLabelledBy).toBeTruthy();
       });
 
@@ -80,19 +77,16 @@ test.describe('Dialog Accessibility E2E Tests', () => {
         await expect(page.locator('wiki-editor textarea')).toBeVisible({ timeout: COMPONENT_LOAD_TIMEOUT_MS });
 
         await openConfirmationDialog(page);
-        await expect(page.locator('confirmation-dialog dialog')).toBeVisible({ timeout: DIALOG_TIMEOUT_MS });
+        const dlg = page.locator('confirmation-dialog').locator('dialog');
+        await expect(dlg).toBeVisible({ timeout: DIALOG_TIMEOUT_MS });
 
-        const labelText = await page.evaluate(() => {
-          const host = document.querySelector('confirmation-dialog');
-          const dlg = host?.shadowRoot?.querySelector('dialog');
-          const labelId = dlg?.getAttribute('aria-labelledby');
-          if (!labelId) return null;
-          const labelEl = host?.shadowRoot?.getElementById(labelId);
-          return labelEl?.textContent?.trim() ?? null;
-        });
+        const ariaLabelledBy = await dlg.getAttribute('aria-labelledby');
+        expect(ariaLabelledBy).toBeTruthy();
 
+        // Use chained locator to pierce shadow DOM and find the labelled element by ID
+        const labelText = await page.locator('confirmation-dialog').locator(`[id="${ariaLabelledBy}"]`).textContent();
         // The real message from pageDeleteService.confirmAndDeletePage()
-        expect(labelText).toBe('Are you sure you want to delete this page?');
+        expect(labelText?.trim()).toBe('Are you sure you want to delete this page?');
       });
 
       test('uses a native dialog element providing implicit role="dialog"', async ({ page }) => {
@@ -100,14 +94,11 @@ test.describe('Dialog Accessibility E2E Tests', () => {
         await expect(page.locator('wiki-editor textarea')).toBeVisible({ timeout: COMPONENT_LOAD_TIMEOUT_MS });
 
         await openConfirmationDialog(page);
-        await expect(page.locator('confirmation-dialog dialog')).toBeVisible({ timeout: DIALOG_TIMEOUT_MS });
+        const dlg = page.locator('confirmation-dialog').locator('dialog');
+        await expect(dlg).toBeVisible({ timeout: DIALOG_TIMEOUT_MS });
 
-        const tagName = await page.evaluate(() => {
-          const host = document.querySelector('confirmation-dialog');
-          const dlg = host?.shadowRoot?.querySelector('dialog');
-          return dlg?.tagName.toLowerCase() ?? null;
-        });
-
+        // Evaluate on the locator-resolved element (Playwright already pierced shadow DOM)
+        const tagName = await dlg.evaluate(el => el.tagName.toLowerCase());
         // The native <dialog> element has implicit role="dialog" per the HTML spec
         expect(tagName).toBe('dialog');
       });
@@ -119,11 +110,12 @@ test.describe('Dialog Accessibility E2E Tests', () => {
         await expect(page.locator('wiki-editor textarea')).toBeVisible({ timeout: COMPONENT_LOAD_TIMEOUT_MS });
 
         await openConfirmationDialog(page);
-        await expect(page.locator('confirmation-dialog dialog')).toBeVisible({ timeout: DIALOG_TIMEOUT_MS });
+        const dlg = page.locator('confirmation-dialog').locator('dialog');
+        await expect(dlg).toBeVisible({ timeout: DIALOG_TIMEOUT_MS });
 
         await page.keyboard.press('Escape');
 
-        await expect(page.locator('confirmation-dialog dialog')).not.toBeVisible();
+        await expect(dlg).not.toBeVisible();
       });
     });
 
@@ -133,16 +125,16 @@ test.describe('Dialog Accessibility E2E Tests', () => {
         await expect(page.locator('wiki-editor textarea')).toBeVisible({ timeout: COMPONENT_LOAD_TIMEOUT_MS });
 
         await openConfirmationDialog(page);
-        const dialogEl = page.locator('confirmation-dialog dialog');
-        await expect(dialogEl).toBeVisible({ timeout: DIALOG_TIMEOUT_MS });
+        const dlg = page.locator('confirmation-dialog').locator('dialog');
+        await expect(dlg).toBeVisible({ timeout: DIALOG_TIMEOUT_MS });
 
         // Click the <dialog> element near its edge (outside the dialog-box content)
         // to simulate a backdrop click. Position { x: 5, y: 5 } targets the top-left
         // corner of the <dialog> element, which is guaranteed to be outside the
         // centered .dialog-box panel.
-        await dialogEl.click({ position: { x: 5, y: 5 } });
+        await dlg.click({ position: { x: 5, y: 5 } });
 
-        await expect(dialogEl).not.toBeVisible();
+        await expect(dlg).not.toBeVisible();
       });
     });
 
@@ -152,12 +144,13 @@ test.describe('Dialog Accessibility E2E Tests', () => {
         await expect(page.locator('wiki-editor textarea')).toBeVisible({ timeout: COMPONENT_LOAD_TIMEOUT_MS });
 
         await openConfirmationDialog(page);
-        await expect(page.locator('confirmation-dialog dialog')).toBeVisible({ timeout: DIALOG_TIMEOUT_MS });
+        await expect(page.locator('confirmation-dialog').locator('dialog')).toBeVisible({ timeout: DIALOG_TIMEOUT_MS });
 
-        // Focus should move inside the dialog's shadow root after showModal()
-        const focusedIsInsideDialog = await page.locator('confirmation-dialog dialog').evaluate(
-          (dlg) => dlg.contains((dlg.getRootNode() as Document | ShadowRoot).activeElement)
-        );
+        // When focus is inside a shadow DOM, document.activeElement returns the shadow host —
+        // not the element within the shadow tree. This is the correct cross-browser check.
+        const focusedIsInsideDialog = await page.evaluate(() => {
+          return document.activeElement?.tagName.toLowerCase() === 'confirmation-dialog';
+        });
 
         expect(focusedIsInsideDialog).toBe(true);
       });
@@ -169,10 +162,11 @@ test.describe('Dialog Accessibility E2E Tests', () => {
         // The hover+click on #erasePage moves focus there; dialog captures it and
         // restores focus to #erasePage after close.
         await openConfirmationDialog(page);
-        await expect(page.locator('confirmation-dialog dialog')).toBeVisible({ timeout: DIALOG_TIMEOUT_MS });
+        const dlg = page.locator('confirmation-dialog').locator('dialog');
+        await expect(dlg).toBeVisible({ timeout: DIALOG_TIMEOUT_MS });
 
-        await page.locator('confirmation-dialog dialog .button-cancel').click();
-        await expect(page.locator('confirmation-dialog dialog')).not.toBeVisible();
+        await page.locator('confirmation-dialog').locator('.button-cancel').click();
+        await expect(dlg).not.toBeVisible();
 
         await expect(page.locator('#erasePage')).toBeFocused();
       });
@@ -184,10 +178,11 @@ test.describe('Dialog Accessibility E2E Tests', () => {
         // The hover+click on #erasePage moves focus there; dialog captures it and
         // restores focus to #erasePage after close.
         await openConfirmationDialog(page);
-        await expect(page.locator('confirmation-dialog dialog')).toBeVisible({ timeout: DIALOG_TIMEOUT_MS });
+        const dlg = page.locator('confirmation-dialog').locator('dialog');
+        await expect(dlg).toBeVisible({ timeout: DIALOG_TIMEOUT_MS });
 
         await page.keyboard.press('Escape');
-        await expect(page.locator('confirmation-dialog dialog')).not.toBeVisible();
+        await expect(dlg).not.toBeVisible();
 
         await expect(page.locator('#erasePage')).toBeFocused();
       });
@@ -197,22 +192,23 @@ test.describe('Dialog Accessibility E2E Tests', () => {
         await expect(page.locator('wiki-editor textarea')).toBeVisible({ timeout: COMPONENT_LOAD_TIMEOUT_MS });
 
         await openConfirmationDialog(page);
-        await expect(page.locator('confirmation-dialog dialog')).toBeVisible({ timeout: DIALOG_TIMEOUT_MS });
+        await expect(page.locator('confirmation-dialog').locator('dialog')).toBeVisible({ timeout: DIALOG_TIMEOUT_MS });
 
         // Tab through dialog elements multiple times — native <dialog> with showModal()
         // provides built-in focus trapping so focus should never leave the dialog.
         for (let i = 0; i < 5; i++) {
           await page.keyboard.press('Tab');
 
-          const focusedIsInsideDialog = await page.locator('confirmation-dialog dialog').evaluate(
-            (dlg) => dlg.contains((dlg.getRootNode() as Document | ShadowRoot).activeElement)
-          );
+          // When focus is inside a shadow DOM, document.activeElement returns the shadow host
+          const focusedIsInsideDialog = await page.evaluate(() => {
+            return document.activeElement?.tagName.toLowerCase() === 'confirmation-dialog';
+          });
 
           expect(focusedIsInsideDialog).toBe(true);
         }
 
         // Dialog should still be visible — Tab does not close it
-        await expect(page.locator('confirmation-dialog dialog')).toBeVisible();
+        await expect(page.locator('confirmation-dialog').locator('dialog')).toBeVisible();
       });
     });
 
@@ -222,11 +218,12 @@ test.describe('Dialog Accessibility E2E Tests', () => {
         await expect(page.locator('wiki-editor textarea')).toBeVisible({ timeout: COMPONENT_LOAD_TIMEOUT_MS });
 
         await openConfirmationDialog(page);
-        await expect(page.locator('confirmation-dialog dialog')).toBeVisible({ timeout: DIALOG_TIMEOUT_MS });
+        await expect(page.locator('confirmation-dialog').locator('dialog')).toBeVisible({ timeout: DIALOG_TIMEOUT_MS });
 
-        const cancelButton = page.locator('confirmation-dialog dialog .button-cancel');
+        // Playwright's chained locators pierce shadow DOM to find buttons inside the dialog
+        const cancelButton = page.locator('confirmation-dialog').locator('.button-cancel');
         // confirmVariant is 'danger' from pageDeleteService, so the confirm button has class button-danger
-        const confirmButton = page.locator('confirmation-dialog dialog .button-danger');
+        const confirmButton = page.locator('confirmation-dialog').locator('.button-danger');
 
         await cancelButton.focus();
         await expect(cancelButton).toBeFocused();
@@ -245,12 +242,13 @@ test.describe('Dialog Accessibility E2E Tests', () => {
         await expect(page.locator('wiki-editor textarea')).toBeVisible({ timeout: COMPONENT_LOAD_TIMEOUT_MS });
 
         await openConfirmationDialog(page);
-        await expect(page.locator('confirmation-dialog dialog')).toBeVisible({ timeout: DIALOG_TIMEOUT_MS });
+        const dlg = page.locator('confirmation-dialog').locator('dialog');
+        await expect(dlg).toBeVisible({ timeout: DIALOG_TIMEOUT_MS });
 
-        await page.locator('confirmation-dialog dialog .button-cancel').focus();
+        await page.locator('confirmation-dialog').locator('.button-cancel').focus();
         await page.keyboard.press('Enter');
 
-        await expect(page.locator('confirmation-dialog dialog')).not.toBeVisible();
+        await expect(dlg).not.toBeVisible();
       });
     });
   });
@@ -262,14 +260,11 @@ test.describe('Dialog Accessibility E2E Tests', () => {
         await expect(page.locator('wiki-editor textarea')).toBeVisible({ timeout: COMPONENT_LOAD_TIMEOUT_MS });
 
         await openFrontmatterEditorDialog(page);
-        await expect(page.locator('frontmatter-editor-dialog dialog')).toBeVisible({ timeout: DIALOG_TIMEOUT_MS });
+        // Playwright's chained locators automatically pierce shadow DOM
+        const dlg = page.locator('frontmatter-editor-dialog').locator('dialog');
+        await expect(dlg).toBeVisible({ timeout: DIALOG_TIMEOUT_MS });
 
-        const ariaLabelledBy = await page.evaluate(() => {
-          const host = document.querySelector('frontmatter-editor-dialog');
-          const dlg = host?.shadowRoot?.querySelector('dialog');
-          return dlg?.getAttribute('aria-labelledby') ?? null;
-        });
-
+        const ariaLabelledBy = await dlg.getAttribute('aria-labelledby');
         expect(ariaLabelledBy).toBeTruthy();
       });
 
@@ -278,18 +273,15 @@ test.describe('Dialog Accessibility E2E Tests', () => {
         await expect(page.locator('wiki-editor textarea')).toBeVisible({ timeout: COMPONENT_LOAD_TIMEOUT_MS });
 
         await openFrontmatterEditorDialog(page);
-        await expect(page.locator('frontmatter-editor-dialog dialog')).toBeVisible({ timeout: DIALOG_TIMEOUT_MS });
+        const dlg = page.locator('frontmatter-editor-dialog').locator('dialog');
+        await expect(dlg).toBeVisible({ timeout: DIALOG_TIMEOUT_MS });
 
-        const labelText = await page.evaluate(() => {
-          const host = document.querySelector('frontmatter-editor-dialog');
-          const dlg = host?.shadowRoot?.querySelector('dialog');
-          const labelId = dlg?.getAttribute('aria-labelledby');
-          if (!labelId) return null;
-          const labelEl = host?.shadowRoot?.getElementById(labelId);
-          return labelEl?.textContent?.trim() ?? null;
-        });
+        const ariaLabelledBy = await dlg.getAttribute('aria-labelledby');
+        expect(ariaLabelledBy).toBeTruthy();
 
-        expect(labelText).toContain('Edit Frontmatter');
+        // Use chained locator to pierce shadow DOM and find the labelled element by ID
+        const labelText = await page.locator('frontmatter-editor-dialog').locator(`[id="${ariaLabelledBy}"]`).textContent();
+        expect(labelText?.trim()).toContain('Edit Frontmatter');
       });
 
       test('uses a native dialog element providing implicit role="dialog"', async ({ page }) => {
@@ -297,14 +289,11 @@ test.describe('Dialog Accessibility E2E Tests', () => {
         await expect(page.locator('wiki-editor textarea')).toBeVisible({ timeout: COMPONENT_LOAD_TIMEOUT_MS });
 
         await openFrontmatterEditorDialog(page);
-        await expect(page.locator('frontmatter-editor-dialog dialog')).toBeVisible({ timeout: DIALOG_TIMEOUT_MS });
+        const dlg = page.locator('frontmatter-editor-dialog').locator('dialog');
+        await expect(dlg).toBeVisible({ timeout: DIALOG_TIMEOUT_MS });
 
-        const tagName = await page.evaluate(() => {
-          const host = document.querySelector('frontmatter-editor-dialog');
-          const dlg = host?.shadowRoot?.querySelector('dialog');
-          return dlg?.tagName.toLowerCase() ?? null;
-        });
-
+        // Evaluate on the locator-resolved element (Playwright already pierced shadow DOM)
+        const tagName = await dlg.evaluate(el => el.tagName.toLowerCase());
         // The native <dialog> element has implicit role="dialog" per the HTML spec
         expect(tagName).toBe('dialog');
       });
@@ -316,11 +305,12 @@ test.describe('Dialog Accessibility E2E Tests', () => {
         await expect(page.locator('wiki-editor textarea')).toBeVisible({ timeout: COMPONENT_LOAD_TIMEOUT_MS });
 
         await openFrontmatterEditorDialog(page);
-        await expect(page.locator('frontmatter-editor-dialog dialog')).toBeVisible({ timeout: DIALOG_TIMEOUT_MS });
+        const dlg = page.locator('frontmatter-editor-dialog').locator('dialog');
+        await expect(dlg).toBeVisible({ timeout: DIALOG_TIMEOUT_MS });
 
         await page.keyboard.press('Escape');
 
-        await expect(page.locator('frontmatter-editor-dialog dialog')).not.toBeVisible();
+        await expect(dlg).not.toBeVisible();
       });
     });
 
@@ -331,10 +321,11 @@ test.describe('Dialog Accessibility E2E Tests', () => {
 
         await addFocusedTriggerButton(page);
         await openFrontmatterEditorDialog(page);
-        await expect(page.locator('frontmatter-editor-dialog dialog')).toBeVisible({ timeout: DIALOG_TIMEOUT_MS });
+        const dlg = page.locator('frontmatter-editor-dialog').locator('dialog');
+        await expect(dlg).toBeVisible({ timeout: DIALOG_TIMEOUT_MS });
 
-        await page.locator('frontmatter-editor-dialog dialog .button-secondary').click();
-        await expect(page.locator('frontmatter-editor-dialog dialog')).not.toBeVisible();
+        await page.locator('frontmatter-editor-dialog').locator('.button-secondary').click();
+        await expect(dlg).not.toBeVisible();
 
         await expect(page.locator('#e2e-trigger-button')).toBeFocused();
       });
@@ -345,10 +336,11 @@ test.describe('Dialog Accessibility E2E Tests', () => {
 
         await addFocusedTriggerButton(page);
         await openFrontmatterEditorDialog(page);
-        await expect(page.locator('frontmatter-editor-dialog dialog')).toBeVisible({ timeout: DIALOG_TIMEOUT_MS });
+        const dlg = page.locator('frontmatter-editor-dialog').locator('dialog');
+        await expect(dlg).toBeVisible({ timeout: DIALOG_TIMEOUT_MS });
 
         await page.keyboard.press('Escape');
-        await expect(page.locator('frontmatter-editor-dialog dialog')).not.toBeVisible();
+        await expect(dlg).not.toBeVisible();
 
         await expect(page.locator('#e2e-trigger-button')).toBeFocused();
       });
@@ -358,22 +350,23 @@ test.describe('Dialog Accessibility E2E Tests', () => {
         await expect(page.locator('wiki-editor textarea')).toBeVisible({ timeout: COMPONENT_LOAD_TIMEOUT_MS });
 
         await openFrontmatterEditorDialog(page);
-        await expect(page.locator('frontmatter-editor-dialog dialog')).toBeVisible({ timeout: DIALOG_TIMEOUT_MS });
+        await expect(page.locator('frontmatter-editor-dialog').locator('dialog')).toBeVisible({ timeout: DIALOG_TIMEOUT_MS });
 
         // Tab through dialog elements multiple times — native <dialog> with showModal()
         // provides built-in focus trapping so focus should never leave the dialog.
         for (let i = 0; i < 5; i++) {
           await page.keyboard.press('Tab');
 
-          const focusedIsInsideDialog = await page.locator('frontmatter-editor-dialog dialog').evaluate(
-            (dlg) => dlg.contains((dlg.getRootNode() as Document | ShadowRoot).activeElement)
-          );
+          // When focus is inside a shadow DOM, document.activeElement returns the shadow host
+          const focusedIsInsideDialog = await page.evaluate(() => {
+            return document.activeElement?.tagName.toLowerCase() === 'frontmatter-editor-dialog';
+          });
 
           expect(focusedIsInsideDialog).toBe(true);
         }
 
         // Dialog should still be visible — Tab does not close it
-        await expect(page.locator('frontmatter-editor-dialog dialog')).toBeVisible();
+        await expect(page.locator('frontmatter-editor-dialog').locator('dialog')).toBeVisible();
       });
     });
 
@@ -383,12 +376,13 @@ test.describe('Dialog Accessibility E2E Tests', () => {
         await expect(page.locator('wiki-editor textarea')).toBeVisible({ timeout: COMPONENT_LOAD_TIMEOUT_MS });
 
         await openFrontmatterEditorDialog(page);
-        await expect(page.locator('frontmatter-editor-dialog dialog')).toBeVisible({ timeout: DIALOG_TIMEOUT_MS });
+        const dlg = page.locator('frontmatter-editor-dialog').locator('dialog');
+        await expect(dlg).toBeVisible({ timeout: DIALOG_TIMEOUT_MS });
 
-        await page.locator('frontmatter-editor-dialog dialog .button-secondary').focus();
+        await page.locator('frontmatter-editor-dialog').locator('.button-secondary').focus();
         await page.keyboard.press('Enter');
 
-        await expect(page.locator('frontmatter-editor-dialog dialog')).not.toBeVisible();
+        await expect(dlg).not.toBeVisible();
       });
     });
   });
