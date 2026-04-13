@@ -202,13 +202,13 @@ describe('WikiTable', () => {
 
   describe('view toggle pill', () => {
 
-    describe('when clicking view toggle in table mode', () => {
+    describe('when clicking the cards radio button in table mode', () => {
       let el: WikiTable;
 
       beforeEach(async () => {
         el = await createBasicFixture();
-        const viewToggle = el.shadowRoot?.querySelector('[aria-label="View mode"]') as HTMLElement;
-        viewToggle.click();
+        const cardsButton = el.shadowRoot?.querySelector('[data-view="cards"]') as HTMLButtonElement;
+        cardsButton.click();
         await el.updateComplete;
       });
 
@@ -246,6 +246,157 @@ describe('WikiTable', () => {
         await el.updateComplete;
         const sortFilterPill = el.shadowRoot?.querySelector('[aria-label="Sort and filter"]');
         expect(sortFilterPill).to.equal(null);
+      });
+    });
+
+    describe('ARIA attributes on view toggle', () => {
+      let el: WikiTable;
+
+      beforeEach(async () => {
+        el = await createBasicFixture();
+      });
+
+      it('should render table button with role="radio"', () => {
+        const tableBtn = el.shadowRoot?.querySelector('[data-view="table"]');
+        expect(tableBtn?.getAttribute('role')).to.equal('radio');
+      });
+
+      it('should render cards button with role="radio"', () => {
+        const cardsBtn = el.shadowRoot?.querySelector('[data-view="cards"]');
+        expect(cardsBtn?.getAttribute('role')).to.equal('radio');
+      });
+
+      it('should set aria-checked="true" on table button when in table view', () => {
+        const tableBtn = el.shadowRoot?.querySelector('[data-view="table"]');
+        expect(tableBtn?.getAttribute('aria-checked')).to.equal('true');
+      });
+
+      it('should set aria-checked="false" on cards button when in table view', () => {
+        const cardsBtn = el.shadowRoot?.querySelector('[data-view="cards"]');
+        expect(cardsBtn?.getAttribute('aria-checked')).to.equal('false');
+      });
+
+      it('should set tabindex="0" on table button when in table view', () => {
+        const tableBtn = el.shadowRoot?.querySelector('[data-view="table"]');
+        expect(tableBtn?.getAttribute('tabindex')).to.equal('0');
+      });
+
+      it('should set tabindex="-1" on cards button when in table view', () => {
+        const cardsBtn = el.shadowRoot?.querySelector('[data-view="cards"]');
+        expect(cardsBtn?.getAttribute('tabindex')).to.equal('-1');
+      });
+
+      describe('when in card view', () => {
+        beforeEach(async () => {
+          el.cardViewActive = true;
+          await el.updateComplete;
+        });
+
+        it('should set aria-checked="false" on table button', () => {
+          const tableBtn = el.shadowRoot?.querySelector('[data-view="table"]');
+          expect(tableBtn?.getAttribute('aria-checked')).to.equal('false');
+        });
+
+        it('should set aria-checked="true" on cards button', () => {
+          const cardsBtn = el.shadowRoot?.querySelector('[data-view="cards"]');
+          expect(cardsBtn?.getAttribute('aria-checked')).to.equal('true');
+        });
+
+        it('should set tabindex="-1" on table button', () => {
+          const tableBtn = el.shadowRoot?.querySelector('[data-view="table"]');
+          expect(tableBtn?.getAttribute('tabindex')).to.equal('-1');
+        });
+
+        it('should set tabindex="0" on cards button', () => {
+          const cardsBtn = el.shadowRoot?.querySelector('[data-view="cards"]');
+          expect(cardsBtn?.getAttribute('tabindex')).to.equal('0');
+        });
+      });
+    });
+
+    describe('keyboard navigation on view toggle', () => {
+      let el: WikiTable;
+
+      beforeEach(async () => {
+        el = await createBasicFixture();
+      });
+
+      describe('when pressing ArrowRight in table view', () => {
+        beforeEach(async () => {
+          const radiogroup = el.shadowRoot?.querySelector('[role="radiogroup"]') as HTMLElement;
+          radiogroup.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+          await el.updateComplete;
+        });
+
+        it('should switch to card view', () => {
+          expect(el.cardViewActive).to.equal(true);
+        });
+      });
+
+      describe('when pressing ArrowDown in table view', () => {
+        beforeEach(async () => {
+          const radiogroup = el.shadowRoot?.querySelector('[role="radiogroup"]') as HTMLElement;
+          radiogroup.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+          await el.updateComplete;
+        });
+
+        it('should switch to card view', () => {
+          expect(el.cardViewActive).to.equal(true);
+        });
+      });
+
+      describe('when pressing ArrowLeft in card view', () => {
+        beforeEach(async () => {
+          el.cardViewActive = true;
+          await el.updateComplete;
+          const radiogroup = el.shadowRoot?.querySelector('[role="radiogroup"]') as HTMLElement;
+          radiogroup.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true }));
+          await el.updateComplete;
+        });
+
+        it('should switch to table view', () => {
+          expect(el.cardViewActive).to.equal(false);
+        });
+      });
+
+      describe('when pressing ArrowUp in card view', () => {
+        beforeEach(async () => {
+          el.cardViewActive = true;
+          await el.updateComplete;
+          const radiogroup = el.shadowRoot?.querySelector('[role="radiogroup"]') as HTMLElement;
+          radiogroup.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true }));
+          await el.updateComplete;
+        });
+
+        it('should switch to table view', () => {
+          expect(el.cardViewActive).to.equal(false);
+        });
+      });
+
+      describe('when pressing ArrowRight already in card view', () => {
+        beforeEach(async () => {
+          el.cardViewActive = true;
+          await el.updateComplete;
+          const radiogroup = el.shadowRoot?.querySelector('[role="radiogroup"]') as HTMLElement;
+          radiogroup.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+          await el.updateComplete;
+        });
+
+        it('should remain in card view', () => {
+          expect(el.cardViewActive).to.equal(true);
+        });
+      });
+
+      describe('when pressing ArrowLeft already in table view', () => {
+        beforeEach(async () => {
+          const radiogroup = el.shadowRoot?.querySelector('[role="radiogroup"]') as HTMLElement;
+          radiogroup.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true }));
+          await el.updateComplete;
+        });
+
+        it('should remain in table view', () => {
+          expect(el.cardViewActive).to.equal(false);
+        });
       });
     });
   });
