@@ -101,6 +101,10 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
         box-shadow: 0 6px 16px rgba(0, 0, 0, 0.4);
       }
 
+      .fab[hidden] {
+        display: none;
+      }
+
       .fab.disabled {
         opacity: 0.4;
         cursor: not-allowed;
