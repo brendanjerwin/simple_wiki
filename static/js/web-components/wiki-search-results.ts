@@ -230,7 +230,7 @@ class WikiSearchResults extends LitElement {
     if (focusableElements.length === 0) return;
 
     const firstFocusable = focusableElements[0]!;
-    const lastFocusable = focusableElements[focusableElements.length - 1]!;
+    const lastFocusable = focusableElements.at(-1)!;
     const activeEl = this.shadowRoot?.activeElement;
 
     if (event.shiftKey) {
@@ -238,11 +238,9 @@ class WikiSearchResults extends LitElement {
         event.preventDefault();
         lastFocusable.focus();
       }
-    } else {
-      if (activeEl === lastFocusable) {
-        event.preventDefault();
-        firstFocusable.focus();
-      }
+    } else if (activeEl === lastFocusable) {
+      event.preventDefault();
+      firstFocusable.focus();
     }
   }
 
