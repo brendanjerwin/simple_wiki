@@ -191,6 +191,20 @@ export class ConfirmationDialog extends LitElement {
         border-color: var(--color-action-warning-btn-hover);
       }
 
+      dialog {
+        padding: 0;
+        border: none;
+        background: transparent;
+        max-width: none;
+        max-height: none;
+        overflow: visible;
+      }
+
+      dialog::backdrop {
+        background: var(--color-surface-overlay, rgba(0, 0, 0, 0.5));
+        backdrop-filter: blur(4px);
+      }
+
       .dialog-box {
         max-height: 90vh;
         overflow-y: auto;
@@ -245,6 +259,8 @@ export class ConfirmationDialog extends LitElement {
   @state()
   declare private open: boolean;
 
+  private _previouslyFocusedElement: Element | null = null;
+
   constructor() {
     super();
     this.config = null;
@@ -262,19 +278,32 @@ export class ConfirmationDialog extends LitElement {
     this.loading = false;
     this.open = true;
     this.setAttribute('open', '');
-    this.style.setProperty('display', 'block', 'important');
+    this._previouslyFocusedElement = document.activeElement;
+    void this.updateComplete.then(() => {
+      const dialog = this.shadowRoot?.querySelector('dialog');
+      if (dialog && !dialog.open && this.isConnected) {
+        dialog.showModal();
+      }
+    });
   }
 
   /**
    * Closes the dialog and cleans up
    */
   closeDialog() {
+    const dialog = this.shadowRoot?.querySelector('dialog');
+    if (dialog?.open) {
+      dialog.close();
+    }
     this.open = false;
     this.removeAttribute('open');
-    this.style.setProperty('display', 'none', 'important');
     this.loading = false;
     this.augmentedError = undefined;
     this.config = null;
+    if (this._previouslyFocusedElement instanceof HTMLElement) {
+      this._previouslyFocusedElement.focus();
+    }
+    this._previouslyFocusedElement = null;
   }
 
   /**
@@ -328,32 +357,40 @@ export class ConfirmationDialog extends LitElement {
   }
 
   /**
-   * Handles clicking outside the dialog
+   * Handles dialog cancel event (Escape key via native dialog)
    */
-  private handleOverlayClick(event: Event) {
+  private readonly _handleDialogCancel = (event: Event): void => {
+    event.preventDefault();
+    this.handleCancel();
+  };
+
+  /**
+   * Handles clicking on the dialog element itself (backdrop click)
+   */
+  private readonly _handleDialogClick = (event: MouseEvent): void => {
     if (event.target === event.currentTarget) {
       this.handleCancel();
     }
-  }
+  };
 
   override render() {
     if (!this.open || !this.config) {
-      return html``;
+      return html`<dialog></dialog>`;
     }
 
     const config = this.config;
     const iconClass = config.confirmVariant === 'danger' ? 'warning' : 'info';
     const confirmButtonClass = `button button-${config.confirmVariant || 'danger'}`;
     const descriptionIrreversibleClass = config.irreversible ? 'irreversible' : '';
-    
+
     return html`
-      <div class="overlay" @click=${this.handleOverlayClick}>
+      <dialog @cancel=${this._handleDialogCancel} @click=${this._handleDialogClick}>
         <div class="container container-modal dialog-box">
           <div class="dialog-content panel gap-sm">
             <div class="dialog-icon ${iconClass}">
               ${AugmentErrorService.getIconString(config.icon || 'warning')}
             </div>
-            
+
             <div class="dialog-message text-primary font-mono text-base">
               ${config.message}
             </div>
@@ -375,15 +412,15 @@ export class ConfirmationDialog extends LitElement {
             ` : ''}
 
             <div class="dialog-actions">
-              <button 
-                class="button button-cancel font-mono text-sm" 
+              <button
+                class="button button-cancel font-mono text-sm"
                 @click=${this.handleCancel}
                 ?disabled=${this.loading}
               >
                 ${config.cancelText || 'Cancel'}
               </button>
-              <button 
-                class="${confirmButtonClass} font-mono text-sm" 
+              <button
+                class="${confirmButtonClass} font-mono text-sm"
                 @click=${this.handleConfirm}
                 ?disabled=${this.loading}
               >
@@ -392,7 +429,7 @@ export class ConfirmationDialog extends LitElement {
             </div>
           </div>
         </div>
-      </div>
+      </dialog>
     `;
   }
 }

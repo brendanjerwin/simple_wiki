@@ -61,8 +61,8 @@ test.describe('Chat Panel', () => {
     test('should hide the FAB when panel is open', async ({ page }) => {
       const { fab } = await openChatPanel(page);
 
-      // FAB should no longer be in the DOM when panel is open
-      await expect(fab).not.toBeAttached({ timeout: PANEL_INTERACTION_TIMEOUT_MS });
+      // FAB should be hidden (but still in DOM) when panel is open, for focus management
+      await expect(fab).toBeHidden({ timeout: PANEL_INTERACTION_TIMEOUT_MS });
     });
 
     test('should close the chat panel when close button is clicked', async ({ page }) => {

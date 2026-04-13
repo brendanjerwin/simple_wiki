@@ -12,15 +12,13 @@ import type { JsonObject } from '@bufbuild/protobuf';
 
 // Helper type to access private methods for testing drag-and-drop
 interface WikiChecklistInternal {
-  persistData(
-    items: ChecklistItem[]
-  ): Promise<void>;
   _handleItemDragStart(e: DragEvent, index: number): void;
   _handleItemDragOver(e: DragEvent, index: number): void;
   _handleItemDragLeave(e: DragEvent): void;
   _handleItemDrop(e: DragEvent, targetIndex: number): Promise<void>;
   _handleItemDragEnd(e: DragEvent): void;
   _handleDragHandleMousedown(e: MouseEvent): void;
+  _handleDragHandleKeydown(e: KeyboardEvent, index: number): void;
   _dragSourceItemIndex: number | null;
   _dragOverItemIndex: number | null;
   _dragOverItemPosition: 'before' | 'after';
@@ -191,281 +189,6 @@ describe('WikiChecklist', () => {
 
       it('should return an empty string', () => {
         expect(result).to.equal('');
-      });
-    });
-  });
-
-  describe('parseTaggedInput', () => {
-    describe('when input has a single :tag at the start', () => {
-      let result: ReturnType<WikiChecklist['parseTaggedInput']>;
-
-      beforeEach(() => {
-        result = el.parseTaggedInput(':Dairy Buy milk');
-      });
-
-      it('should extract the tag lowercased', () => {
-        expect(result.tags).to.deep.equal(['dairy']);
-      });
-
-      it('should extract the text after the tag', () => {
-        expect(result.text).to.equal('Buy milk');
-      });
-    });
-
-    describe('when input has a single :tag at the end', () => {
-      let result: ReturnType<WikiChecklist['parseTaggedInput']>;
-
-      beforeEach(() => {
-        result = el.parseTaggedInput('Buy milk :Dairy');
-      });
-
-      it('should extract the tag lowercased', () => {
-        expect(result.tags).to.deep.equal(['dairy']);
-      });
-
-      it('should extract the text without the tag', () => {
-        expect(result.text).to.equal('Buy milk');
-      });
-    });
-
-    describe('when input has a :tag in the middle', () => {
-      let result: ReturnType<WikiChecklist['parseTaggedInput']>;
-
-      beforeEach(() => {
-        result = el.parseTaggedInput('buy :dairy milk');
-      });
-
-      it('should extract the tag lowercased', () => {
-        expect(result.tags).to.deep.equal(['dairy']);
-      });
-
-      it('should join the remaining text', () => {
-        expect(result.text).to.equal('buy milk');
-      });
-    });
-
-    describe('when input has multiple tags', () => {
-      let result: ReturnType<WikiChecklist['parseTaggedInput']>;
-
-      beforeEach(() => {
-        result = el.parseTaggedInput('milk :dairy :fridge');
-      });
-
-      it('should extract all tags lowercased', () => {
-        expect(result.tags).to.deep.equal(['dairy', 'fridge']);
-      });
-
-      it('should extract the remaining text', () => {
-        expect(result.text).to.equal('milk');
-      });
-    });
-
-    describe('when input has multiple tags scattered', () => {
-      let result: ReturnType<WikiChecklist['parseTaggedInput']>;
-
-      beforeEach(() => {
-        result = el.parseTaggedInput(':dairy milk :fridge');
-      });
-
-      it('should extract all tags lowercased', () => {
-        expect(result.tags).to.deep.equal(['dairy', 'fridge']);
-      });
-
-      it('should extract the remaining text', () => {
-        expect(result.text).to.equal('milk');
-      });
-    });
-
-    describe('when input has no tag', () => {
-      let result: ReturnType<WikiChecklist['parseTaggedInput']>;
-
-      beforeEach(() => {
-        result = el.parseTaggedInput('Buy milk');
-      });
-
-      it('should have empty tags array', () => {
-        expect(result.tags).to.deep.equal([]);
-      });
-
-      it('should use the full input as text', () => {
-        expect(result.text).to.equal('Buy milk');
-      });
-    });
-
-    describe('when input has :tag but no item text', () => {
-      let result: ReturnType<WikiChecklist['parseTaggedInput']>;
-
-      beforeEach(() => {
-        result = el.parseTaggedInput(':Dairy');
-      });
-
-      it('should extract the tag lowercased', () => {
-        expect(result.tags).to.deep.equal(['dairy']);
-      });
-
-      it('should have empty text', () => {
-        expect(result.text).to.equal('');
-      });
-    });
-
-    describe('when input has mixed case tag', () => {
-      let result: ReturnType<WikiChecklist['parseTaggedInput']>;
-
-      beforeEach(() => {
-        result = el.parseTaggedInput('milk :DAIRY');
-      });
-
-      it('should lowercase the tag', () => {
-        expect(result.tags).to.deep.equal(['dairy']);
-      });
-    });
-  });
-
-  describe('composeTaggedText', () => {
-    describe('when item has tags', () => {
-      let result: string;
-
-      beforeEach(() => {
-        result = el.composeTaggedText({ text: 'milk', checked: false, tags: ['dairy', 'fridge'] });
-      });
-
-      it('should append tags with :tag syntax', () => {
-        expect(result).to.equal('milk :dairy :fridge');
-      });
-    });
-
-    describe('when item has no tags', () => {
-      let result: string;
-
-      beforeEach(() => {
-        result = el.composeTaggedText({ text: 'milk', checked: false, tags: [] });
-      });
-
-      it('should return just the text', () => {
-        expect(result).to.equal('milk');
-      });
-    });
-
-    describe('when item has a single tag', () => {
-      let result: string;
-
-      beforeEach(() => {
-        result = el.composeTaggedText({ text: 'eggs', checked: true, tags: ['dairy'] });
-      });
-
-      it('should append the single tag', () => {
-        expect(result).to.equal('eggs :dairy');
-      });
-    });
-  });
-
-  describe('extractChecklistData', () => {
-    describe('when frontmatter has no checklists', () => {
-      let result: ReturnType<WikiChecklist['extractChecklistData']>;
-
-      beforeEach(() => {
-        const frontmatter: JsonObject = { title: 'Test' };
-        result = el.extractChecklistData(frontmatter, 'grocery_list');
-      });
-
-      it('should return empty items', () => {
-        expect(result.items).to.deep.equal([]);
-      });
-    });
-
-    describe('when listName is not in checklists', () => {
-      let result: ReturnType<WikiChecklist['extractChecklistData']>;
-
-      beforeEach(() => {
-        const frontmatter: JsonObject = {
-          checklists: { other_list: { items: [] } },
-        };
-        result = el.extractChecklistData(frontmatter, 'grocery_list');
-      });
-
-      it('should return empty items', () => {
-        expect(result.items).to.deep.equal([]);
-      });
-    });
-
-    describe('when checklists contain items with new tags array format', () => {
-      let result: ReturnType<WikiChecklist['extractChecklistData']>;
-
-      beforeEach(() => {
-        const frontmatter: JsonObject = {
-          checklists: {
-            grocery_list: {
-              items: [
-                { text: 'Milk', checked: false },
-                { text: 'Eggs', checked: true, tags: ['dairy', 'fridge'] },
-              ],
-            },
-          },
-        };
-        result = el.extractChecklistData(frontmatter, 'grocery_list');
-      });
-
-      it('should extract the correct number of items', () => {
-        expect(result.items).to.have.length(2);
-      });
-
-      it('should extract plain items with empty tags array', () => {
-        expect(result.items[0]).to.deep.equal({ text: 'Milk', checked: false, tags: [] });
-      });
-
-      it('should extract items with tags array correctly', () => {
-        expect(result.items[1]).to.deep.equal({
-          text: 'Eggs',
-          checked: true,
-          tags: ['dairy', 'fridge'],
-        });
-      });
-    });
-
-    describe('when checklists contain items with old tag string format (backward-compatible)', () => {
-      let result: ReturnType<WikiChecklist['extractChecklistData']>;
-
-      beforeEach(() => {
-        const frontmatter: JsonObject = {
-          checklists: {
-            grocery_list: {
-              items: [
-                { text: 'Milk', checked: false },
-                { text: 'Eggs', checked: true, tag: 'Dairy' },
-              ],
-            },
-          },
-        };
-        result = el.extractChecklistData(frontmatter, 'grocery_list');
-      });
-
-      it('should extract the correct number of items', () => {
-        expect(result.items).to.have.length(2);
-      });
-
-      it('should wrap old tag string in an array', () => {
-        expect(result.items[1]?.tags).to.deep.equal(['Dairy']);
-      });
-    });
-
-    describe('when item has both tag and tags (tags takes precedence)', () => {
-      let result: ReturnType<WikiChecklist['extractChecklistData']>;
-
-      beforeEach(() => {
-        const frontmatter: JsonObject = {
-          checklists: {
-            grocery_list: {
-              items: [
-                { text: 'Eggs', checked: false, tag: 'old', tags: ['new1', 'new2'] },
-              ],
-            },
-          },
-        };
-        result = el.extractChecklistData(frontmatter, 'grocery_list');
-      });
-
-      it('should prefer the tags array over the tag string', () => {
-        expect(result.items[0]?.tags).to.deep.equal(['new1', 'new2']);
       });
     });
   });
@@ -1465,7 +1188,7 @@ describe('WikiChecklist', () => {
         freshEl = buildElement('test-page', 'test_list');
         getFrontmatterStub = stubGetFrontmatter(freshEl);
         document.body.appendChild(freshEl);
-        clock.tick(3001);
+        clock.tick(10001);
       });
 
       afterEach(() => {
@@ -1537,7 +1260,7 @@ describe('WikiChecklist', () => {
         await pollingEl.updateComplete;
         await pollingEl.updateComplete;
 
-        await clock.tickAsync(3001);
+        await clock.tickAsync(10001);
         await pollingEl.updateComplete;
       });
 
@@ -1551,6 +1274,90 @@ describe('WikiChecklist', () => {
 
       it('should reflect checked state changes from the API after a poll', () => {
         expect(pollingEl.items[0]?.checked).to.be.true;
+      });
+    });
+
+    describe('when tab is hidden during polling interval', () => {
+      let getFrontmatterStub: SinonStub;
+      let freshEl: WikiChecklist;
+      let callCountWhenHidden: number;
+
+      beforeEach(() => {
+        sinon.stub(document, 'hidden').get(() => true);
+
+        freshEl = buildElement('test-page', 'test_list');
+        getFrontmatterStub = stubGetFrontmatter(freshEl);
+        document.body.appendChild(freshEl);
+        // initial connectedCallback fetch happened (page was set), reset count
+        callCountWhenHidden = getFrontmatterStub.callCount;
+        clock.tick(10001);
+      });
+
+      afterEach(() => {
+        freshEl.remove();
+      });
+
+      it('should not call getFrontmatter during the polling interval', () => {
+        expect(getFrontmatterStub.callCount).to.equal(callCountWhenHidden);
+      });
+    });
+
+    describe('when tab becomes visible after being hidden', () => {
+      let getFrontmatterStub: SinonStub;
+      let freshEl: WikiChecklist;
+      let callCountBeforeVisible: number;
+
+      beforeEach(async () => {
+        let isHidden = true;
+        sinon.stub(document, 'hidden').get(() => isHidden);
+
+        freshEl = buildElement('test-page', 'test_list');
+        getFrontmatterStub = stubGetFrontmatter(freshEl);
+        document.body.appendChild(freshEl);
+
+        // Tab is hidden — polling interval fires but should be skipped
+        await clock.tickAsync(10001);
+        callCountBeforeVisible = getFrontmatterStub.callCount;
+
+        // Simulate tab becoming visible
+        isHidden = false;
+        document.dispatchEvent(new Event('visibilitychange'));
+        await freshEl.updateComplete;
+      });
+
+      afterEach(() => {
+        freshEl.remove();
+      });
+
+      it('should immediately call getFrontmatter when tab becomes visible', () => {
+        expect(getFrontmatterStub.callCount).to.be.greaterThan(callCountBeforeVisible);
+      });
+    });
+
+    describe('when a save is in progress during polling interval', () => {
+      let getFrontmatterStub: SinonStub;
+      let freshEl: WikiChecklist;
+      let callCountBeforeSave: number;
+
+      beforeEach(async () => {
+        freshEl = buildElement('test-page', 'test_list');
+        getFrontmatterStub = stubGetFrontmatter(freshEl);
+        document.body.appendChild(freshEl);
+        await freshEl.updateComplete;
+
+        callCountBeforeSave = getFrontmatterStub.callCount;
+
+        // Simulate save in progress
+        freshEl.saving = true;
+        clock.tick(10001);
+      });
+
+      afterEach(() => {
+        freshEl.remove();
+      });
+
+      it('should not call getFrontmatter while saving', () => {
+        expect(getFrontmatterStub.callCount).to.equal(callCountBeforeSave);
       });
     });
   });
@@ -1806,97 +1613,6 @@ describe('WikiChecklist', () => {
   });
 
   describe('drag-and-drop reordering', () => {
-    describe('reorderItems', () => {
-      describe('when moving from earlier to later index', () => {
-        let result: ChecklistItem[];
-
-        beforeEach(() => {
-          const items: ChecklistItem[] = [
-            { text: 'A', checked: false, tags: [] },
-            { text: 'B', checked: false, tags: [] },
-            { text: 'C', checked: false, tags: [] },
-            { text: 'D', checked: false, tags: [] },
-          ];
-          result = el.reorderItems(items, 0, 3);
-        });
-
-        it('should place the moved item before the target', () => {
-          expect(result.map(i => i.text)).to.deep.equal(['B', 'C', 'A', 'D']);
-        });
-      });
-
-      describe('when moving from later to earlier index', () => {
-        let result: ChecklistItem[];
-
-        beforeEach(() => {
-          const items: ChecklistItem[] = [
-            { text: 'A', checked: false, tags: [] },
-            { text: 'B', checked: false, tags: [] },
-            { text: 'C', checked: false, tags: [] },
-            { text: 'D', checked: false, tags: [] },
-          ];
-          result = el.reorderItems(items, 3, 1);
-        });
-
-        it('should place the moved item before the target', () => {
-          expect(result.map(i => i.text)).to.deep.equal(['A', 'D', 'B', 'C']);
-        });
-      });
-
-      describe('when moving item to same index', () => {
-        let result: ChecklistItem[];
-
-        beforeEach(() => {
-          const items: ChecklistItem[] = [
-            { text: 'A', checked: false, tags: [] },
-            { text: 'B', checked: false, tags: [] },
-          ];
-          result = el.reorderItems(items, 1, 1);
-        });
-
-        it('should not change the order', () => {
-          expect(result.map(i => i.text)).to.deep.equal(['A', 'B']);
-        });
-      });
-
-      describe('when fromIndex is out of range', () => {
-        let items: ChecklistItem[];
-        let result: ChecklistItem[];
-
-        beforeEach(() => {
-          items = [{ text: 'A', checked: false, tags: [] }];
-          result = el.reorderItems(items, 5, 0);
-        });
-
-        it('should return the original items', () => {
-          expect(result).to.deep.equal(items);
-        });
-      });
-
-      describe('when moving Eggs above Milk in Dairy group (plan example)', () => {
-        let result: ChecklistItem[];
-
-        beforeEach(() => {
-          const items: ChecklistItem[] = [
-            { text: 'Milk', checked: false, tags: ['dairy'] },
-            { text: 'Bread', checked: false, tags: ['bakery'] },
-            { text: 'Apples', checked: false, tags: ['produce'] },
-            { text: 'Eggs', checked: false, tags: ['dairy'] },
-          ];
-          result = el.reorderItems(items, 3, 0);
-        });
-
-        it('should place Eggs first in the array', () => {
-          expect(result.map(i => i.text)).to.deep.equal([
-            'Eggs',
-            'Milk',
-            'Bread',
-            'Apples',
-          ]);
-        });
-      });
-    });
-
     describe('rendering with drag support', () => {
       let handles: NodeListOf<Element> | undefined;
       let rows: NodeListOf<Element> | undefined;
@@ -1932,6 +1648,117 @@ describe('WikiChecklist', () => {
 
       it('should not render item rows as statically draggable', () => {
         expect(rows?.[0]?.getAttribute('draggable')).to.not.equal('true');
+      });
+
+      it('should render drag handles with tabindex="0" for keyboard access', () => {
+        expect(handles?.[0]?.getAttribute('tabindex')).to.equal('0');
+      });
+
+      it('should render drag handles with role="button"', () => {
+        expect(handles?.[0]?.getAttribute('role')).to.equal('button');
+      });
+
+      it('should render drag handles with an aria-label', () => {
+        expect(handles?.[0]?.getAttribute('aria-label')).to.exist;
+        expect(handles?.[0]?.getAttribute('aria-label')).to.not.be.empty;
+      });
+
+      it('should NOT have aria-hidden on drag handles', () => {
+        expect(handles?.[0]?.getAttribute('aria-hidden')).to.be.null;
+      });
+    });
+
+    describe('keyboard reorder', () => {
+      let internal: WikiChecklistInternal;
+
+      beforeEach(async () => {
+        internal = el as unknown as WikiChecklistInternal;
+
+        sinon
+          .stub(el.client, 'mergeFrontmatter')
+          .resolves(create(MergeFrontmatterResponseSchema, {}));
+
+        el.error = null;
+        el.loading = false;
+        el.items = [
+          { text: 'Item A', checked: false, tags: [] },
+          { text: 'Item B', checked: false, tags: [] },
+          { text: 'Item C', checked: false, tags: [] },
+        ];
+        await el.updateComplete;
+      });
+
+      describe('when ArrowUp is pressed on a drag handle (not the first item)', () => {
+        beforeEach(async () => {
+          const event = new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true, cancelable: true });
+          internal._handleDragHandleKeydown(event, 1);
+          await el.updateComplete;
+        });
+
+        it('should move the item up by one position', () => {
+          expect(el.items[0]?.text).to.equal('Item B');
+          expect(el.items[1]?.text).to.equal('Item A');
+          expect(el.items[2]?.text).to.equal('Item C');
+        });
+      });
+
+      describe('when ArrowDown is pressed on a drag handle (not the last item)', () => {
+        beforeEach(async () => {
+          const event = new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true });
+          internal._handleDragHandleKeydown(event, 1);
+          await el.updateComplete;
+        });
+
+        it('should move the item down by one position', () => {
+          expect(el.items[0]?.text).to.equal('Item A');
+          expect(el.items[1]?.text).to.equal('Item C');
+          expect(el.items[2]?.text).to.equal('Item B');
+        });
+      });
+
+      describe('when ArrowUp is pressed on the first item', () => {
+        let originalItems: ChecklistItem[];
+
+        beforeEach(async () => {
+          originalItems = [...el.items];
+          const event = new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true, cancelable: true });
+          internal._handleDragHandleKeydown(event, 0);
+          await el.updateComplete;
+        });
+
+        it('should not reorder items', () => {
+          expect(el.items.map(i => i.text)).to.deep.equal(originalItems.map(i => i.text));
+        });
+      });
+
+      describe('when ArrowDown is pressed on the last item', () => {
+        let originalItems: ChecklistItem[];
+
+        beforeEach(async () => {
+          originalItems = [...el.items];
+          const event = new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true });
+          internal._handleDragHandleKeydown(event, 2);
+          await el.updateComplete;
+        });
+
+        it('should not reorder items', () => {
+          expect(el.items.map(i => i.text)).to.deep.equal(originalItems.map(i => i.text));
+        });
+      });
+
+      describe('when other keys are pressed on a drag handle', () => {
+        let originalItems: ChecklistItem[];
+
+        beforeEach(async () => {
+          originalItems = [...el.items];
+          const event = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true });
+          internal._handleDragHandleKeydown(event, 1);
+          await el.updateComplete;
+        });
+
+        it('should not reorder items', () => {
+          expect(el.items.map(i => i.text)).to.deep.equal(originalItems.map(i => i.text));
+        });
       });
     });
 

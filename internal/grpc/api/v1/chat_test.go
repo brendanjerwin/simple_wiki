@@ -234,7 +234,9 @@ func (m *mockChatBufferManager) HasPageChannelSubscriber(string) bool {
 	return m.hasPageChannelSubscriberVal
 }
 
-func (*mockChatBufferManager) RequestInstance(string) {}
+func (*mockChatBufferManager) RequestInstance(string) {
+	// no-op: satisfies interface; mock does not manage chat instances
+}
 
 func (*mockChatBufferManager) SubscribeToInstanceRequests() (<-chan string, func()) {
 	ch := make(chan string, 10)
@@ -396,7 +398,9 @@ func (m *mockInstanceRequestStreamServer) Context() context.Context {
 
 func (*mockInstanceRequestStreamServer) SetHeader(metadata.MD) error   { return nil }
 func (*mockInstanceRequestStreamServer) SendHeader(metadata.MD) error  { return nil }
-func (*mockInstanceRequestStreamServer) SetTrailer(metadata.MD)        {}
+func (*mockInstanceRequestStreamServer) SetTrailer(metadata.MD) {
+	// No-op test stub — not needed for this test scenario
+}
 func (*mockInstanceRequestStreamServer) SendMsg(any) error             { return nil }
 func (*mockInstanceRequestStreamServer) RecvMsg(any) error             { return nil }
 

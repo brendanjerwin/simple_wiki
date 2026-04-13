@@ -251,7 +251,7 @@ identifier = "${TEST_PAGE_NAME}"
         await expect(editFrontmatterBtn).toBeVisible({ timeout: DIALOG_TIMEOUT_MS });
         await editFrontmatterBtn.click();
 
-        const dialog = page.locator('frontmatter-editor-dialog').locator('.dialog');
+        const dialog = page.locator('frontmatter-editor-dialog').locator('dialog');
         await expect(dialog).toBeVisible({ timeout: DIALOG_TIMEOUT_MS });
 
         // Verify dialog uses dark elevated surface token (CSS variable inherited from :root)
@@ -267,7 +267,7 @@ identifier = "${TEST_PAGE_NAME}"
         await expect(editFrontmatterBtn).toBeVisible({ timeout: DIALOG_TIMEOUT_MS });
         await editFrontmatterBtn.click();
 
-        const dialog = page.locator('frontmatter-editor-dialog').locator('.dialog');
+        const dialog = page.locator('frontmatter-editor-dialog').locator('dialog');
         await expect(dialog).toBeVisible({ timeout: DIALOG_TIMEOUT_MS });
 
         // Light surface-elevated #ffffff = rgb(255, 255, 255)

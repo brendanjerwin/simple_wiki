@@ -155,11 +155,6 @@ if [[ "$SKIP_GENERATE" != "true" ]]; then
     # Extensions must be built before static/ so the XPI is present when go:embed runs
     go generate ./extensions/...
 
-    # TODO: Move AMO signing to the running wiki server so it can inject the
-    # correct update_url (based on its actual hostname) into the manifest before
-    # signing. Currently signing happens at build time with no knowledge of the
-    # deployment URL, so update_url is omitted from the signed XPI.
-
     # Use a pre-signed XPI if provided (e.g. from a prior CI job).
     # This avoids hitting AMO multiple times in a matrix build.
     if [[ -n "${SIGNED_XPI_PATH:-}" && -s "$SIGNED_XPI_PATH" ]]; then

@@ -114,19 +114,25 @@ func (noOpChatBufferManager) SubscribeToPageChannelWithReplay(string) ([]*chatbu
 func (noOpChatBufferManager) SubscribeToPageChannel(string) (<-chan *chatbuffer.Message, func()) {
 	ch := make(chan *chatbuffer.Message)
 	close(ch)
-	return ch, func() {}
+	return ch, func() {
+		// no-op: nothing to unsubscribe from a closed channel
+	}
 }
 
 func (noOpChatBufferManager) HasPageChannelSubscriber(string) bool {
 	return false
 }
 
-func (noOpChatBufferManager) RequestInstance(string) {}
+func (noOpChatBufferManager) RequestInstance(string) {
+	// no-op: satisfies interface; this implementation ignores instance requests
+}
 
 func (noOpChatBufferManager) SubscribeToInstanceRequests() (<-chan string, func()) {
 	ch := make(chan string)
 	close(ch)
-	return ch, func() {}
+	return ch, func() {
+		// no-op: nothing to unsubscribe from a closed channel
+	}
 }
 
 func (noOpChatBufferManager) HasInstanceRequestSubscribers() bool {
@@ -211,6 +217,138 @@ var _ = Describe("NewStreamableHTTPHandler", func() {
 				resultMap, ok := result["result"].(map[string]any)
 				Expect(ok).To(BeTrue())
 				Expect(resultMap).To(HaveKey("serverInfo"))
+			})
+		})
+
+		When("invoking the api_v1_Frontmatter_ReplaceFrontmatter tool with frontmatter as a JSON object", func() {
+			var callResp *httptest.ResponseRecorder
+			var callResult map[string]any
+
+			BeforeEach(func() {
+				// Initialize to get a session
+				initBody := `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"0.0.1"}}}`
+				initReq := httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(initBody))
+				initReq.Header.Set("Content-Type", "application/json")
+				initResp := httptest.NewRecorder()
+				handler.ServeHTTP(initResp, initReq)
+				sessionID := initResp.Header().Get("Mcp-Session-Id")
+
+				// Call the tool with frontmatter as a JSON object
+				callBody := `{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"api_v1_Frontmatter_ReplaceFrontmatter","arguments":{"page":"test-page","frontmatter":{"title":"Test Page","tags":["alpha","beta"]}}}}`
+				callReq := httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(callBody))
+				callReq.Header.Set("Content-Type", "application/json")
+				if sessionID != "" {
+					callReq.Header.Set("Mcp-Session-Id", sessionID)
+				}
+				callResp = httptest.NewRecorder()
+				handler.ServeHTTP(callResp, callReq)
+
+				Expect(json.Unmarshal(callResp.Body.Bytes(), &callResult)).To(Succeed())
+			})
+
+			It("returns HTTP 200", func() {
+				Expect(callResp.Code).To(Equal(http.StatusOK))
+			})
+
+			It("returns a JSON-RPC result without error", func() {
+				Expect(callResult).NotTo(HaveKey("error"), "unexpected JSON-RPC error: %v", callResult["error"])
+				Expect(callResult).To(HaveKey("result"))
+			})
+
+			It("returns a non-error tool result", func() {
+				resultMap, ok := callResult["result"].(map[string]any)
+				Expect(ok).To(BeTrue(), "result should be a map, got: %T", callResult["result"])
+				Expect(resultMap["isError"]).NotTo(Equal(true), "tool result isError should be false, content: %v", resultMap["content"])
+			})
+		})
+
+		// Regression test for: ReplaceFrontmatter MCP tool broken with proto syntax error
+		// When Claude Code (or any OpenAI-compatible client) sends frontmatter as a JSON-encoded
+		// string instead of a JSON object, the standard protojson handler would fail with:
+		//   "proto: syntax error (line 1:N): unexpected token ..."
+		// The OpenAI-compatible handler applies FixOpenAI to convert the string back to an object.
+		When("invoking the api_v1_Frontmatter_ReplaceFrontmatter tool with frontmatter as a JSON-encoded string", func() {
+			var callResp *httptest.ResponseRecorder
+			var callResult map[string]any
+
+			BeforeEach(func() {
+				// Initialize to get a session
+				initBody := `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"0.0.1"}}}`
+				initReq := httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(initBody))
+				initReq.Header.Set("Content-Type", "application/json")
+				initResp := httptest.NewRecorder()
+				handler.ServeHTTP(initResp, initReq)
+				sessionID := initResp.Header().Get("Mcp-Session-Id")
+
+				// Call the tool with frontmatter as a JSON-encoded string (OpenAI-style)
+				// This is the format that caused the "proto syntax error on any payload" bug.
+				callBody := `{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"api_v1_Frontmatter_ReplaceFrontmatter","arguments":{"page":"test-page","frontmatter":"{\"title\":\"Test Page\",\"tags\":[\"alpha\",\"beta\"]}"}}}`
+				callReq := httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(callBody))
+				callReq.Header.Set("Content-Type", "application/json")
+				if sessionID != "" {
+					callReq.Header.Set("Mcp-Session-Id", sessionID)
+				}
+				callResp = httptest.NewRecorder()
+				handler.ServeHTTP(callResp, callReq)
+
+				Expect(json.Unmarshal(callResp.Body.Bytes(), &callResult)).To(Succeed())
+			})
+
+			It("returns HTTP 200", func() {
+				Expect(callResp.Code).To(Equal(http.StatusOK))
+			})
+
+			It("returns a JSON-RPC result without proto syntax error", func() {
+				Expect(callResult).NotTo(HaveKey("error"), "unexpected JSON-RPC error (proto syntax error?): %v", callResult["error"])
+				Expect(callResult).To(HaveKey("result"))
+			})
+
+			It("returns a non-error tool result", func() {
+				resultMap, ok := callResult["result"].(map[string]any)
+				Expect(ok).To(BeTrue(), "result should be a map, got: %T", callResult["result"])
+				Expect(resultMap["isError"]).NotTo(Equal(true), "tool result isError should be false, content: %v", resultMap["content"])
+			})
+		})
+
+		When("invoking the api_v1_Frontmatter_MergeFrontmatter tool", func() {
+			var callResp *httptest.ResponseRecorder
+			var callResult map[string]any
+
+			BeforeEach(func() {
+				// Initialize to get a session
+				initBody := `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"0.0.1"}}}`
+				initReq := httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(initBody))
+				initReq.Header.Set("Content-Type", "application/json")
+				initResp := httptest.NewRecorder()
+				handler.ServeHTTP(initResp, initReq)
+				sessionID := initResp.Header().Get("Mcp-Session-Id")
+
+				// Call the tool
+				callBody := `{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"api_v1_Frontmatter_MergeFrontmatter","arguments":{"page":"test-page","frontmatter":{"title":"Test Page","tags":["alpha","beta"]}}}}`
+				callReq := httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(callBody))
+				callReq.Header.Set("Content-Type", "application/json")
+				if sessionID != "" {
+					callReq.Header.Set("Mcp-Session-Id", sessionID)
+				}
+				callResp = httptest.NewRecorder()
+				handler.ServeHTTP(callResp, callReq)
+
+				Expect(json.Unmarshal(callResp.Body.Bytes(), &callResult)).To(Succeed())
+			})
+
+			It("returns HTTP 200", func() {
+				Expect(callResp.Code).To(Equal(http.StatusOK))
+			})
+
+			It("returns a JSON-RPC result without error", func() {
+				Expect(callResult).NotTo(HaveKey("error"), "unexpected JSON-RPC error: %v", callResult["error"])
+				Expect(callResult).To(HaveKey("result"))
+			})
+
+			It("returns a non-error tool result", func() {
+				resultMap, ok := callResult["result"].(map[string]any)
+				Expect(ok).To(BeTrue(), "result should be a map, got: %T", callResult["result"])
+				Expect(resultMap["isError"]).NotTo(Equal(true), "tool result isError should be false, content: %v", resultMap["content"])
 			})
 		})
 

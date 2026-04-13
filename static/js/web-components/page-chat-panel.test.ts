@@ -128,8 +128,9 @@ describe('PageChatPanel', () => {
     });
 
     it('should hide the FAB', () => {
-      const fab = el.shadowRoot!.querySelector('.fab');
-      expect(fab).to.equal(null);
+      const fab = el.shadowRoot!.querySelector('.fab') as HTMLButtonElement | null;
+      expect(fab).to.exist;
+      expect(fab!.hidden).to.equal(true);
     });
 
     it('should save state to localStorage', () => {
@@ -202,6 +203,58 @@ describe('PageChatPanel', () => {
     it('should have aria-label on messages container', () => {
       const container = el.shadowRoot!.querySelector('.messages-container');
       expect(container!.getAttribute('aria-label')).to.equal('Chat messages');
+    });
+
+    it('should have id="chat-panel" on the panel element', () => {
+      const panel = el.shadowRoot!.querySelector('#chat-panel');
+      expect(panel).to.exist;
+    });
+
+    describe('FAB aria attributes', () => {
+      it('should have aria-controls="chat-panel" on the FAB', () => {
+        const fab = el.shadowRoot!.querySelector('.fab');
+        expect(fab!.getAttribute('aria-controls')).to.equal('chat-panel');
+      });
+
+      it('should have aria-expanded="false" when panel is closed', () => {
+        const fab = el.shadowRoot!.querySelector('.fab');
+        expect(fab!.getAttribute('aria-expanded')).to.equal('false');
+      });
+
+      describe('when the panel is open', () => {
+        beforeEach(async () => {
+          el.drawerOpen = true;
+          await el.updateComplete;
+        });
+
+        it('should have aria-expanded="true" on the FAB', () => {
+          const fab = el.shadowRoot!.querySelector('.fab');
+          expect(fab!.getAttribute('aria-expanded')).to.equal('true');
+        });
+      });
+    });
+  });
+
+  describe('when close button is clicked', () => {
+    let el: PageChatPanel;
+    let fabFocusSpy: ReturnType<typeof spy>;
+
+    beforeEach(async () => {
+      localStorageStub.getItem.returns(null);
+      el = await fixture(html`<page-chat-panel page="test-page" persona="TestPersona"></page-chat-panel>`);
+      el.drawerOpen = true;
+      await el.updateComplete;
+
+      const fab = el.shadowRoot!.querySelector('.fab') as HTMLButtonElement;
+      fabFocusSpy = spy(fab, 'focus');
+
+      const closeBtn = el.shadowRoot!.querySelector('.close-button') as HTMLElement;
+      closeBtn.click();
+      await el.updateComplete;
+    });
+
+    it('should return focus to the FAB', () => {
+      expect(fabFocusSpy.calledOnce).to.equal(true);
     });
   });
 

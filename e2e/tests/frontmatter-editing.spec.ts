@@ -76,7 +76,7 @@ identifier = "${TEST_PAGE_NAME.toLowerCase()}"
     await expect(dialog).toBeAttached();
 
     // The dialog should be closed initially
-    await expect(dialog.locator('.dialog')).not.toBeVisible();
+    await expect(dialog.locator('dialog')).not.toBeVisible();
   });
 
   test('should display loading state when opening dialog', async ({ page }) => {
@@ -94,7 +94,7 @@ identifier = "${TEST_PAGE_NAME.toLowerCase()}"
     }, TEST_PAGE_NAME.toLowerCase());
 
     // Dialog should become visible
-    const dialog = page.locator('frontmatter-editor-dialog .dialog');
+    const dialog = page.locator('frontmatter-editor-dialog dialog');
     await expect(dialog).toBeVisible({ timeout: DIALOG_TIMEOUT_MS });
 
     // Should either show loading state briefly or already have content
@@ -118,7 +118,7 @@ identifier = "${TEST_PAGE_NAME.toLowerCase()}"
       }
     }, TEST_PAGE_NAME.toLowerCase());
 
-    await expect(page.locator('frontmatter-editor-dialog .dialog')).toBeVisible({
+    await expect(page.locator('frontmatter-editor-dialog dialog')).toBeVisible({
       timeout: DIALOG_TIMEOUT_MS,
     });
 
@@ -148,7 +148,7 @@ identifier = "${TEST_PAGE_NAME.toLowerCase()}"
       }
     }, TEST_PAGE_NAME.toLowerCase());
 
-    await expect(page.locator('frontmatter-editor-dialog .dialog')).toBeVisible({
+    await expect(page.locator('frontmatter-editor-dialog dialog')).toBeVisible({
       timeout: DIALOG_TIMEOUT_MS,
     });
 
@@ -156,7 +156,7 @@ identifier = "${TEST_PAGE_NAME.toLowerCase()}"
     await page.locator('frontmatter-editor-dialog button.button-secondary').click();
 
     // Dialog should close
-    await expect(page.locator('frontmatter-editor-dialog .dialog')).not.toBeVisible();
+    await expect(page.locator('frontmatter-editor-dialog dialog')).not.toBeVisible();
   });
 
   test('should close dialog when pressing Escape key', async ({ page }) => {
@@ -173,7 +173,7 @@ identifier = "${TEST_PAGE_NAME.toLowerCase()}"
       }
     }, TEST_PAGE_NAME.toLowerCase());
 
-    await expect(page.locator('frontmatter-editor-dialog .dialog')).toBeVisible({
+    await expect(page.locator('frontmatter-editor-dialog dialog')).toBeVisible({
       timeout: DIALOG_TIMEOUT_MS,
     });
 
@@ -181,7 +181,7 @@ identifier = "${TEST_PAGE_NAME.toLowerCase()}"
     await page.keyboard.press('Escape');
 
     // Dialog should close
-    await expect(page.locator('frontmatter-editor-dialog .dialog')).not.toBeVisible();
+    await expect(page.locator('frontmatter-editor-dialog dialog')).not.toBeVisible();
   });
 
   test('should add and save a new frontmatter field', async ({ page }) => {
@@ -228,7 +228,7 @@ author = "E2E Test"
       }
     });
 
-    await expect(page.locator('frontmatter-editor-dialog .dialog')).toBeVisible({
+    await expect(page.locator('frontmatter-editor-dialog dialog')).toBeVisible({
       timeout: DIALOG_TIMEOUT_MS,
     });
 

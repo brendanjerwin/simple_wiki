@@ -81,10 +81,19 @@ export class CollapsibleHeading extends LitElement {
   @state()
   declare collapsed: boolean;
 
+  private readonly _contentId: string;
+
   constructor() {
     super();
     this.headingLevel = 1;
     this.collapsed = true;
+    this._contentId = `ch-content-${crypto.randomUUID()}`;
+  }
+
+  private _headingLabel(): string {
+    const headingEl = this.querySelector('[slot="heading"]');
+    const text = headingEl?.textContent?.trim();
+    return text ? `Toggle ${text}` : 'Toggle section';
   }
 
   override connectedCallback(): void {
@@ -132,11 +141,13 @@ export class CollapsibleHeading extends LitElement {
           type="button"
           class="ch-toggle"
           aria-expanded="${!this.collapsed}"
+          aria-label="${this._headingLabel()}"
+          aria-controls="${this._contentId}"
           @click="${this._handleToggle}"
         >${icon}</button>
         <slot name="heading"></slot>
       </div>
-      <div class="ch-content" ?hidden="${this.collapsed}">
+      <div class="ch-content" id="${this._contentId}" ?hidden="${this.collapsed}">
         <slot></slot>
       </div>
     `;

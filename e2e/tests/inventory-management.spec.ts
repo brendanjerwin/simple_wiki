@@ -1,4 +1,5 @@
 import { test, expect, APIRequestContext } from '@playwright/test';
+import { COMPONENT_LOAD_TIMEOUT_MS, IDENTIFIER_GENERATE_TIMEOUT_MS } from './constants.js';
 
 // Tests for inventory management features:
 // 1. Creating an inventory item via the add-item dialog (UI)
@@ -7,9 +8,8 @@ import { test, expect, APIRequestContext } from '@playwright/test';
 // 4. Searching for item locations (FindItemLocation API)
 // 5. Moving an inventory item between containers (UI + API verification)
 
-// Timeouts
-const COMPONENT_LOAD_TIMEOUT_MS = 15000;
-const SAVE_TIMEOUT_MS = 10000;
+// Timeouts (local — not shared across spec files)
+const SAVE_TIMEOUT_MS = 15000;
 const DIALOG_APPEAR_TIMEOUT_MS = 5000;
 const MENU_APPEAR_TIMEOUT_MS = 5000;
 
@@ -168,8 +168,9 @@ This is an E2E test inventory container.`);
 
       // The "Add Item" button is disabled until the identifier is auto-generated
       // (an async gRPC call to GenerateIdentifier). Wait for it to become enabled.
+      // This requires debounce (300ms) + gRPC round-trip, so use a longer timeout.
       const addButton = dialog.locator('button', { hasText: 'Add Item' });
-      await expect(addButton).toBeEnabled({ timeout: DIALOG_APPEAR_TIMEOUT_MS });
+      await expect(addButton).toBeEnabled({ timeout: IDENTIFIER_GENERATE_TIMEOUT_MS });
 
       // Submit the form and wait for the page to reload.
       // On success, the component calls window.location.reload(), which keeps the same URL.
@@ -180,7 +181,11 @@ This is an E2E test inventory container.`);
         page.waitForNavigation({ waitUntil: 'load', timeout: SAVE_TIMEOUT_MS }),
         addButton.click(),
       ]);
-      await expect(page).toHaveURL(`**/${CONTAINER_A}/view`);
+      // Use url().toContain() rather than toHaveURL(glob) — Playwright prepends baseURL to
+      // glob patterns, making '**/${CONTAINER_A}/view' resolve to
+      // 'http://localhost:8090/**/e2einvcontainera.../view' which requires an extra path
+      // segment between the host and the identifier and never matches the root-level path.
+      expect(page.url()).toContain(`/${CONTAINER_A}/view`);
     });
   });
 
@@ -339,7 +344,9 @@ This is an E2E test inventory container.`);
         page.waitForNavigation({ waitUntil: 'load', timeout: SAVE_TIMEOUT_MS }),
         moveToButton.first().click(),
       ]);
-      await expect(page).toHaveURL(`**/${API_ITEM}/view`);
+      // Use url().toContain() rather than toHaveURL(glob) for the same reason as the
+      // add-item test: baseURL prepending breaks glob matching at root-level paths.
+      expect(page.url()).toContain(`/${API_ITEM}/view`);
     });
 
     test('should reflect the move in FindItemLocation after the dialog move', async ({ request }) => {

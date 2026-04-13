@@ -20,6 +20,13 @@ export function coerceThirdPartyError(err: unknown, errorContext: string): Error
     return new Error(err);
   }
   if (err !== null && err !== undefined) {
+    if (typeof err === 'object') {
+      try {
+        return new Error(JSON.stringify(err));
+      } catch {
+        return new Error(Object.prototype.toString.call(err));
+      }
+    }
     return new Error(String(err));
   }
   return new Error(errorContext);
@@ -230,14 +237,13 @@ export class AugmentErrorService {
     if (typeof error === 'string') {
       message = error;
     } else if (error !== null && error !== undefined) {
-      // Try to stringify the object to preserve information.
-      // JSON.stringify returns undefined (without throwing) for values like functions
-      // or symbols, so we fall back to String() coercion in that case too.
-      try {
-        message = JSON.stringify(error) ?? String(error);
-      } catch {
-        // If JSON.stringify fails (e.g. circular reference), fall back to String(...)
-        // coercion to preserve a readable representation when possible
+      if (typeof error === 'object') {
+        try {
+          message = JSON.stringify(error);
+        } catch {
+          message = Object.prototype.toString.call(error);
+        }
+      } else {
         message = String(error);
       }
     } else {
