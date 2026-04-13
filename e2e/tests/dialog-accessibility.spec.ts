@@ -26,19 +26,21 @@ async function addFocusedTriggerButton(page: Page): Promise<void> {
  * The component is already registered via the JS bundle.
  */
 async function openConfirmationDialog(page: Page): Promise<void> {
-  await page.evaluate(() => {
-    let dialog = document.querySelector('confirmation-dialog');
+  await page.evaluate(async () => {
+    let dialog = document.querySelector('confirmation-dialog') as any;
     if (!dialog) {
       dialog = document.createElement('confirmation-dialog');
       document.body.appendChild(dialog);
     }
-    (dialog as any).openDialog({
+    dialog.openDialog({
       message: 'Test Confirmation',
       description: 'Accessibility test dialog.',
       confirmText: 'Confirm',
       cancelText: 'Cancel',
       confirmVariant: 'primary',
     });
+    // Wait for Lit's render cycle to complete so showModal() is called before returning
+    await dialog.updateComplete;
   });
 }
 
@@ -153,13 +155,9 @@ test.describe('Dialog Accessibility E2E Tests', () => {
         await expect(page.locator('confirmation-dialog dialog')).toBeVisible({ timeout: DIALOG_TIMEOUT_MS });
 
         // Focus should move inside the dialog's shadow root after showModal()
-        const focusedIsInsideDialog = await page.evaluate(() => {
-          const host = document.querySelector('confirmation-dialog');
-          if (!host?.shadowRoot) return false;
-          const dlg = host.shadowRoot.querySelector('dialog');
-          const focused = host.shadowRoot.activeElement;
-          return dlg !== null && focused !== null && dlg.contains(focused);
-        });
+        const focusedIsInsideDialog = await page.locator('confirmation-dialog dialog').evaluate(
+          (dlg) => dlg.matches(':focus-within')
+        );
 
         expect(focusedIsInsideDialog).toBe(true);
       });
@@ -204,13 +202,9 @@ test.describe('Dialog Accessibility E2E Tests', () => {
         for (let i = 0; i < 5; i++) {
           await page.keyboard.press('Tab');
 
-          const focusedIsInsideDialog = await page.evaluate(() => {
-            const host = document.querySelector('confirmation-dialog');
-            if (!host?.shadowRoot) return false;
-            const dlg = host.shadowRoot.querySelector('dialog');
-            const focused = host.shadowRoot.activeElement;
-            return dlg !== null && focused !== null && dlg.contains(focused);
-          });
+          const focusedIsInsideDialog = await page.locator('confirmation-dialog dialog').evaluate(
+            (dlg) => dlg.matches(':focus-within')
+          );
 
           expect(focusedIsInsideDialog).toBe(true);
         }
@@ -368,13 +362,9 @@ test.describe('Dialog Accessibility E2E Tests', () => {
         for (let i = 0; i < 5; i++) {
           await page.keyboard.press('Tab');
 
-          const focusedIsInsideDialog = await page.evaluate(() => {
-            const host = document.querySelector('frontmatter-editor-dialog');
-            if (!host?.shadowRoot) return false;
-            const dlg = host.shadowRoot.querySelector('dialog');
-            const focused = host.shadowRoot.activeElement;
-            return dlg !== null && focused !== null && dlg.contains(focused);
-          });
+          const focusedIsInsideDialog = await page.locator('frontmatter-editor-dialog dialog').evaluate(
+            (dlg) => dlg.matches(':focus-within')
+          );
 
           expect(focusedIsInsideDialog).toBe(true);
         }
