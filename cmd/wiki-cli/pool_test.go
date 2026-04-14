@@ -305,17 +305,23 @@ var _ = Describe("poolDaemon", func() {
 						"new-page": {
 							page:       "new-page",
 							lastActive: time.Now(),
-							cancel:     func() {},
+							cancel: func() {
+								// no-op: test stub; no real goroutine to cancel
+							},
 						},
 						"old-page": {
 							page:       "old-page",
 							lastActive: time.Now().Add(-30 * time.Minute),
-							cancel:     func() {},
+							cancel: func() {
+								// no-op: test stub; no real goroutine to cancel
+							},
 						},
 						"mid-page": {
 							page:       "mid-page",
 							lastActive: time.Now().Add(-10 * time.Minute),
-							cancel:     func() {},
+							cancel: func() {
+								// no-op: test stub; no real goroutine to cancel
+							},
 						},
 					},
 				}
@@ -464,12 +470,16 @@ var _ = Describe("poolDaemon", func() {
 						"idle-page": {
 							page:       "idle-page",
 							lastActive: time.Now().Add(-20 * time.Minute),
-							cancel:     func() {},
+							cancel: func() {
+								// no-op: test stub; no real goroutine to cancel
+							},
 						},
 						"active-page": {
 							page:       "active-page",
 							lastActive: time.Now(),
-							cancel:     func() {},
+							cancel: func() {
+								// no-op: test stub; no real goroutine to cancel
+							},
 						},
 					},
 				}
