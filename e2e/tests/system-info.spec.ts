@@ -1,7 +1,7 @@
 import { test, expect, type Page } from '@playwright/test';
+import { COMPONENT_LOAD_TIMEOUT_MS } from './constants.js';
 
 // Timeouts
-const COMPONENT_LOAD_TIMEOUT_MS = 15000;
 const PANEL_INTERACTION_TIMEOUT_MS = 5000;
 const API_LOAD_TIMEOUT_MS = 10000;
 
@@ -40,7 +40,7 @@ test.describe('System Info Panel', () => {
 
     test('opening the panel reveals panel content', async ({ page }) => {
       await openSystemInfoPanel(page);
-      await expect(page.locator('system-info .panel-content')).toBeAttached({ timeout: PANEL_INTERACTION_TIMEOUT_MS });
+      await expect(page.locator('system-info .system-panel')).toHaveAttribute('aria-expanded', 'true', { timeout: PANEL_INTERACTION_TIMEOUT_MS });
     });
   });
 
