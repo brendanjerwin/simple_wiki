@@ -147,7 +147,6 @@ type poolDaemon struct {
 	maxInstances int
 	idleTimeout  time.Duration
 
-	ctx       context.Context
 	instances map[string]*instanceEntry
 	mu        sync.Mutex
 }
@@ -240,7 +239,6 @@ The daemon should be run in a directory containing your agent configuration
 
 // run starts the pool daemon's main loop.
 func (d *poolDaemon) run(ctx context.Context) error {
-	d.ctx = ctx
 	log.Printf("Pool daemon starting (max=%d, idle-timeout=%s, wiki=%s)", d.maxInstances, d.idleTimeout, d.wikiURL)
 
 	// Start the idle reaper
@@ -297,7 +295,7 @@ func (d *poolDaemon) subscribeAndHandle(ctx context.Context) error {
 	for stream.Receive() {
 		req := stream.Msg()
 		log.Printf("Instance requested for page %q", req.Page)
-		d.ensureInstance(req.Page)
+		d.ensureInstance(ctx, req.Page)
 	}
 
 	if err := stream.Err(); err != nil {
@@ -314,7 +312,7 @@ func (d *poolDaemon) subscribeAndHandle(ctx context.Context) error {
 }
 
 // ensureInstance spawns an agent instance for a page if one doesn't already exist.
-func (d *poolDaemon) ensureInstance(page string) {
+func (d *poolDaemon) ensureInstance(ctx context.Context, page string) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
@@ -326,7 +324,7 @@ func (d *poolDaemon) ensureInstance(page string) {
 	}
 
 	// Spawn new instance first, then evict if needed.
-	entry, err := d.spawnInstance(page)
+	entry, err := d.spawnInstance(ctx, page)
 	if err != nil {
 		log.Printf("Failed to spawn instance for %q: %v", page, err)
 		return
@@ -791,11 +789,8 @@ func (*wikiChatClient) WaitForTerminalExit(_ context.Context, _ acp.WaitForTermi
 // spawnInstance starts an ACP agent process for a page, performs the handshake,
 // creates a session with wiki MCP tools, and starts the message bridge.
 // Must be called with d.mu held.
-func (d *poolDaemon) spawnInstance(page string) (*instanceEntry, error) {
-	if d.ctx == nil {
-		return nil, errors.New("pool daemon context not initialized")
-	}
-	ctx, cancel := context.WithCancel(d.ctx)
+func (d *poolDaemon) spawnInstance(ctx context.Context, page string) (*instanceEntry, error) {
+	ctx, cancel := context.WithCancel(ctx)
 
 	conn, chatClient, err := d.startAgentProcess(ctx, page)
 	if err != nil {

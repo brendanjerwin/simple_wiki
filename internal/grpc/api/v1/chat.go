@@ -12,7 +12,10 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-const errPageRequired = "page is required"
+const (
+	errPageRequired      = "page is required"
+	errMessageIDRequired = "message_id is required"
+)
 
 // SendMessage implements the SendMessage RPC.
 // Receives a user message, assigns a UUID, writes it to the buffer, and pushes it to channel subscribers.
@@ -130,7 +133,7 @@ func (s *Server) SendChatReply(_ context.Context, req *apiv1.SendChatReplyReques
 // Called by wiki-cli mcp when the assistant uses the edit_message tool.
 func (s *Server) EditChatMessage(_ context.Context, req *apiv1.EditChatMessageRequest) (*apiv1.EditChatMessageResponse, error) {
 	if req.MessageId == "" {
-		return nil, status.Error(codes.InvalidArgument, "message_id is required")
+		return nil, status.Error(codes.InvalidArgument, errMessageIDRequired)
 	}
 	if req.NewContent == "" {
 		return nil, status.Error(codes.InvalidArgument, "new_content is required")
@@ -151,7 +154,7 @@ func (s *Server) EditChatMessage(_ context.Context, req *apiv1.EditChatMessageRe
 // Called by wiki-cli mcp when the assistant uses the react tool.
 func (s *Server) ReactToMessage(_ context.Context, req *apiv1.ReactToMessageRequest) (*apiv1.ReactToMessageResponse, error) {
 	if req.MessageId == "" {
-		return nil, status.Error(codes.InvalidArgument, "message_id is required")
+		return nil, status.Error(codes.InvalidArgument, errMessageIDRequired)
 	}
 	if req.Emoji == "" {
 		return nil, status.Error(codes.InvalidArgument, "emoji is required")
@@ -402,7 +405,7 @@ func (s *Server) SendToolCallNotification(_ context.Context, req *apiv1.SendTool
 		return nil, status.Error(codes.InvalidArgument, errPageRequired)
 	}
 	if req.MessageId == "" {
-		return nil, status.Error(codes.InvalidArgument, "message_id is required")
+		return nil, status.Error(codes.InvalidArgument, errMessageIDRequired)
 	}
 
 	s.chatBufferManager.NotifyToolCall(req.Page, req.MessageId, req.ToolCallId, req.Title, req.Status)
