@@ -596,7 +596,7 @@ export const GetChatStatusRequestSchema: GenMessage<GetChatStatusRequest> = /*@_
  */
 export type GetChatStatusResponse = Message<"api.v1.GetChatStatusResponse"> & {
   /**
-   * Whether an agent is connected for the requested page.
+   * Whether a Claude channel subscriber is connected for the requested page.
    *
    * @generated from field: bool connected = 1;
    */
@@ -661,7 +661,7 @@ export const SubscribeInstanceRequestsRequestSchema: GenMessage<SubscribeInstanc
   messageDesc(file_api_v1_chat, 20);
 
 /**
- * InstanceRequest is streamed by SubscribeInstanceRequests when a page needs an agent instance.
+ * InstanceRequest is streamed by SubscribeInstanceRequests when a page needs a Claude instance.
  *
  * @generated from message api.v1.InstanceRequest
  */
@@ -949,9 +949,9 @@ export const SenderSchema: GenEnum<Sender> = /*@__PURE__*/
   enumDesc(file_api_v1_chat, 0);
 
 /**
- * ChatService brokers chat messages between browsers and an AI agent.
- * Browsers send user messages and subscribe to chat events. The pool daemon
- * manages agent instances that send back assistant replies, edits, and reactions.
+ * ChatService brokers chat messages between browsers and the Claude Code channel.
+ * Browsers send user messages and subscribe to chat events. The wiki-cli MCP server
+ * subscribes to receive user messages and sends back assistant replies, edits, and reactions.
  *
  * @generated from service api.v1.ChatService
  */
@@ -979,7 +979,7 @@ export const ChatService: GenService<{
     output: typeof ChatEventSchema;
   },
   /**
-   * SendChatReply is called by the pool daemon when the agent uses the reply tool.
+   * SendChatReply is called by wiki-cli mcp when Claude uses the reply tool.
    * Accepts optional reply_to message ID for threading.
    *
    * @generated from rpc api.v1.ChatService.SendChatReply
@@ -990,7 +990,7 @@ export const ChatService: GenService<{
     output: typeof SendChatReplyResponseSchema;
   },
   /**
-   * EditChatMessage is called by the pool daemon when the agent uses the edit_message tool.
+   * EditChatMessage is called by wiki-cli mcp when Claude uses the edit_message tool.
    * Updates an existing message's content.
    *
    * @generated from rpc api.v1.ChatService.EditChatMessage
@@ -1001,7 +1001,7 @@ export const ChatService: GenService<{
     output: typeof EditChatMessageResponseSchema;
   },
   /**
-   * ReactToMessage is called by the pool daemon when the agent uses the react tool.
+   * ReactToMessage is called by wiki-cli mcp when Claude uses the react tool.
    * Adds an emoji reaction to a message.
    *
    * @generated from rpc api.v1.ChatService.ReactToMessage
@@ -1012,8 +1012,8 @@ export const ChatService: GenService<{
     output: typeof ReactToMessageResponseSchema;
   },
   /**
-   * GetChatStatus returns whether an agent is currently connected for a page.
-   * Used by the chat panel to disable the UI when no agent is available.
+   * GetChatStatus returns whether Claude is currently connected (a channel subscriber exists).
+   * Used by the chat panel to disable the UI when Claude is unavailable.
    *
    * @generated from rpc api.v1.ChatService.GetChatStatus
    */
@@ -1035,7 +1035,7 @@ export const ChatService: GenService<{
   },
   /**
    * SubscribeInstanceRequests is called by the wiki-cli pool daemon.
-   * Streams page names that need an agent instance spawned.
+   * Streams page names that need a Claude instance spawned.
    *
    * @generated from rpc api.v1.ChatService.SubscribeInstanceRequests
    */

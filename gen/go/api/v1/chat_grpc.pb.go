@@ -38,9 +38,9 @@ const (
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 //
-// ChatService brokers chat messages between browsers and an AI agent.
-// Browsers send user messages and subscribe to chat events. The pool daemon
-// manages agent instances that send back assistant replies, edits, and reactions.
+// ChatService brokers chat messages between browsers and the Claude Code channel.
+// Browsers send user messages and subscribe to chat events. The wiki-cli MCP server
+// subscribes to receive user messages and sends back assistant replies, edits, and reactions.
 type ChatServiceClient interface {
 	// SendMessage sends a user chat message in the context of a page.
 	// Returns the assigned message ID.
@@ -48,23 +48,23 @@ type ChatServiceClient interface {
 	// SubscribeChat subscribes to all chat events for a page.
 	// Replays existing buffer contents on connect, then streams new events.
 	SubscribeChat(ctx context.Context, in *SubscribeChatRequest, opts ...grpc.CallOption) (ChatService_SubscribeChatClient, error)
-	// SendChatReply is called by the pool daemon when the agent uses the reply tool.
+	// SendChatReply is called by wiki-cli mcp when Claude uses the reply tool.
 	// Accepts optional reply_to message ID for threading.
 	SendChatReply(ctx context.Context, in *SendChatReplyRequest, opts ...grpc.CallOption) (*SendChatReplyResponse, error)
-	// EditChatMessage is called by the pool daemon when the agent uses the edit_message tool.
+	// EditChatMessage is called by wiki-cli mcp when Claude uses the edit_message tool.
 	// Updates an existing message's content.
 	EditChatMessage(ctx context.Context, in *EditChatMessageRequest, opts ...grpc.CallOption) (*EditChatMessageResponse, error)
-	// ReactToMessage is called by the pool daemon when the agent uses the react tool.
+	// ReactToMessage is called by wiki-cli mcp when Claude uses the react tool.
 	// Adds an emoji reaction to a message.
 	ReactToMessage(ctx context.Context, in *ReactToMessageRequest, opts ...grpc.CallOption) (*ReactToMessageResponse, error)
-	// GetChatStatus returns whether an agent is currently connected for a page.
-	// Used by the chat panel to disable the UI when no agent is available.
+	// GetChatStatus returns whether Claude is currently connected (a channel subscriber exists).
+	// Used by the chat panel to disable the UI when Claude is unavailable.
 	GetChatStatus(ctx context.Context, in *GetChatStatusRequest, opts ...grpc.CallOption) (*GetChatStatusResponse, error)
 	// SubscribePageChatMessages is called by wiki-cli mcp --page at startup.
 	// Streams new user messages for a specific page only.
 	SubscribePageChatMessages(ctx context.Context, in *SubscribePageChatMessagesRequest, opts ...grpc.CallOption) (ChatService_SubscribePageChatMessagesClient, error)
 	// SubscribeInstanceRequests is called by the wiki-cli pool daemon.
-	// Streams page names that need an agent instance spawned.
+	// Streams page names that need a Claude instance spawned.
 	SubscribeInstanceRequests(ctx context.Context, in *SubscribeInstanceRequestsRequest, opts ...grpc.CallOption) (ChatService_SubscribeInstanceRequestsClient, error)
 	// SendToolCallNotification is called by the pool daemon or ACP client
 	// when the agent invokes a tool. The notification is broadcast to page subscribers.
@@ -316,9 +316,9 @@ func (c *chatServiceClient) RequestPermissionFromUser(ctx context.Context, in *R
 // All implementations must embed UnimplementedChatServiceServer
 // for forward compatibility
 //
-// ChatService brokers chat messages between browsers and an AI agent.
-// Browsers send user messages and subscribe to chat events. The pool daemon
-// manages agent instances that send back assistant replies, edits, and reactions.
+// ChatService brokers chat messages between browsers and the Claude Code channel.
+// Browsers send user messages and subscribe to chat events. The wiki-cli MCP server
+// subscribes to receive user messages and sends back assistant replies, edits, and reactions.
 type ChatServiceServer interface {
 	// SendMessage sends a user chat message in the context of a page.
 	// Returns the assigned message ID.
@@ -326,23 +326,23 @@ type ChatServiceServer interface {
 	// SubscribeChat subscribes to all chat events for a page.
 	// Replays existing buffer contents on connect, then streams new events.
 	SubscribeChat(*SubscribeChatRequest, ChatService_SubscribeChatServer) error
-	// SendChatReply is called by the pool daemon when the agent uses the reply tool.
+	// SendChatReply is called by wiki-cli mcp when Claude uses the reply tool.
 	// Accepts optional reply_to message ID for threading.
 	SendChatReply(context.Context, *SendChatReplyRequest) (*SendChatReplyResponse, error)
-	// EditChatMessage is called by the pool daemon when the agent uses the edit_message tool.
+	// EditChatMessage is called by wiki-cli mcp when Claude uses the edit_message tool.
 	// Updates an existing message's content.
 	EditChatMessage(context.Context, *EditChatMessageRequest) (*EditChatMessageResponse, error)
-	// ReactToMessage is called by the pool daemon when the agent uses the react tool.
+	// ReactToMessage is called by wiki-cli mcp when Claude uses the react tool.
 	// Adds an emoji reaction to a message.
 	ReactToMessage(context.Context, *ReactToMessageRequest) (*ReactToMessageResponse, error)
-	// GetChatStatus returns whether an agent is currently connected for a page.
-	// Used by the chat panel to disable the UI when no agent is available.
+	// GetChatStatus returns whether Claude is currently connected (a channel subscriber exists).
+	// Used by the chat panel to disable the UI when Claude is unavailable.
 	GetChatStatus(context.Context, *GetChatStatusRequest) (*GetChatStatusResponse, error)
 	// SubscribePageChatMessages is called by wiki-cli mcp --page at startup.
 	// Streams new user messages for a specific page only.
 	SubscribePageChatMessages(*SubscribePageChatMessagesRequest, ChatService_SubscribePageChatMessagesServer) error
 	// SubscribeInstanceRequests is called by the wiki-cli pool daemon.
-	// Streams page names that need an agent instance spawned.
+	// Streams page names that need a Claude instance spawned.
 	SubscribeInstanceRequests(*SubscribeInstanceRequestsRequest, ChatService_SubscribeInstanceRequestsServer) error
 	// SendToolCallNotification is called by the pool daemon or ACP client
 	// when the agent invokes a tool. The notification is broadcast to page subscribers.

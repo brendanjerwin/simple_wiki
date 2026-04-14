@@ -9,6 +9,8 @@ import (
 
 import (
 	"context"
+	"github.com/mark3labs/mcp-go/mcp"
+	mcpserver "github.com/mark3labs/mcp-go/server"
 	"encoding/json"
 	"google.golang.org/protobuf/encoding/protojson"
 	"connectrpc.com/connect"
@@ -17,12 +19,12 @@ import (
 )
 
 var (
-	FileStorageService_DeleteFileTool        = runtime.Tool{Name: "api_v1_FileStorageService_DeleteFile", Description: "DeleteFile removes an uploaded file.\n", RawInputSchema: json.RawMessage{0x7b, 0x22, 0x70, 0x72, 0x6f, 0x70, 0x65, 0x72, 0x74, 0x69, 0x65, 0x73, 0x22, 0x3a, 0x7b, 0x22, 0x68, 0x61, 0x73, 0x68, 0x22, 0x3a, 0x7b, 0x22, 0x74, 0x79, 0x70, 0x65, 0x22, 0x3a, 0x22, 0x73, 0x74, 0x72, 0x69, 0x6e, 0x67, 0x22, 0x7d, 0x7d, 0x2c, 0x22, 0x72, 0x65, 0x71, 0x75, 0x69, 0x72, 0x65, 0x64, 0x22, 0x3a, 0x5b, 0x5d, 0x2c, 0x22, 0x74, 0x79, 0x70, 0x65, 0x22, 0x3a, 0x22, 0x6f, 0x62, 0x6a, 0x65, 0x63, 0x74, 0x22, 0x7d}}
-	FileStorageService_GetFileInfoTool       = runtime.Tool{Name: "api_v1_FileStorageService_GetFileInfo", Description: "GetFileInfo returns metadata about an uploaded file.\n", RawInputSchema: json.RawMessage{0x7b, 0x22, 0x70, 0x72, 0x6f, 0x70, 0x65, 0x72, 0x74, 0x69, 0x65, 0x73, 0x22, 0x3a, 0x7b, 0x22, 0x68, 0x61, 0x73, 0x68, 0x22, 0x3a, 0x7b, 0x22, 0x74, 0x79, 0x70, 0x65, 0x22, 0x3a, 0x22, 0x73, 0x74, 0x72, 0x69, 0x6e, 0x67, 0x22, 0x7d, 0x7d, 0x2c, 0x22, 0x72, 0x65, 0x71, 0x75, 0x69, 0x72, 0x65, 0x64, 0x22, 0x3a, 0x5b, 0x5d, 0x2c, 0x22, 0x74, 0x79, 0x70, 0x65, 0x22, 0x3a, 0x22, 0x6f, 0x62, 0x6a, 0x65, 0x63, 0x74, 0x22, 0x7d}}
-	FileStorageService_UploadFileTool        = runtime.Tool{Name: "api_v1_FileStorageService_UploadFile", Description: "UploadFile uploads a file and returns its hash and URL.\n", RawInputSchema: json.RawMessage{0x7b, 0x22, 0x70, 0x72, 0x6f, 0x70, 0x65, 0x72, 0x74, 0x69, 0x65, 0x73, 0x22, 0x3a, 0x7b, 0x22, 0x63, 0x6f, 0x6e, 0x74, 0x65, 0x6e, 0x74, 0x22, 0x3a, 0x7b, 0x22, 0x63, 0x6f, 0x6e, 0x74, 0x65, 0x6e, 0x74, 0x45, 0x6e, 0x63, 0x6f, 0x64, 0x69, 0x6e, 0x67, 0x22, 0x3a, 0x22, 0x62, 0x61, 0x73, 0x65, 0x36, 0x34, 0x22, 0x2c, 0x22, 0x66, 0x6f, 0x72, 0x6d, 0x61, 0x74, 0x22, 0x3a, 0x22, 0x62, 0x79, 0x74, 0x65, 0x22, 0x2c, 0x22, 0x74, 0x79, 0x70, 0x65, 0x22, 0x3a, 0x22, 0x73, 0x74, 0x72, 0x69, 0x6e, 0x67, 0x22, 0x7d, 0x2c, 0x22, 0x66, 0x69, 0x6c, 0x65, 0x6e, 0x61, 0x6d, 0x65, 0x22, 0x3a, 0x7b, 0x22, 0x74, 0x79, 0x70, 0x65, 0x22, 0x3a, 0x22, 0x73, 0x74, 0x72, 0x69, 0x6e, 0x67, 0x22, 0x7d, 0x7d, 0x2c, 0x22, 0x72, 0x65, 0x71, 0x75, 0x69, 0x72, 0x65, 0x64, 0x22, 0x3a, 0x5b, 0x5d, 0x2c, 0x22, 0x74, 0x79, 0x70, 0x65, 0x22, 0x3a, 0x22, 0x6f, 0x62, 0x6a, 0x65, 0x63, 0x74, 0x22, 0x7d}}
-	FileStorageService_DeleteFileToolOpenAI  = runtime.Tool{Name: "api_v1_FileStorageService_DeleteFile", Description: "DeleteFile removes an uploaded file.\n", RawInputSchema: json.RawMessage{0x7b, 0x22, 0x61, 0x64, 0x64, 0x69, 0x74, 0x69, 0x6f, 0x6e, 0x61, 0x6c, 0x50, 0x72, 0x6f, 0x70, 0x65, 0x72, 0x74, 0x69, 0x65, 0x73, 0x22, 0x3a, 0x66, 0x61, 0x6c, 0x73, 0x65, 0x2c, 0x22, 0x70, 0x72, 0x6f, 0x70, 0x65, 0x72, 0x74, 0x69, 0x65, 0x73, 0x22, 0x3a, 0x7b, 0x22, 0x68, 0x61, 0x73, 0x68, 0x22, 0x3a, 0x7b, 0x22, 0x74, 0x79, 0x70, 0x65, 0x22, 0x3a, 0x22, 0x73, 0x74, 0x72, 0x69, 0x6e, 0x67, 0x22, 0x7d, 0x7d, 0x2c, 0x22, 0x72, 0x65, 0x71, 0x75, 0x69, 0x72, 0x65, 0x64, 0x22, 0x3a, 0x5b, 0x22, 0x68, 0x61, 0x73, 0x68, 0x22, 0x5d, 0x2c, 0x22, 0x74, 0x79, 0x70, 0x65, 0x22, 0x3a, 0x22, 0x6f, 0x62, 0x6a, 0x65, 0x63, 0x74, 0x22, 0x7d}}
-	FileStorageService_GetFileInfoToolOpenAI = runtime.Tool{Name: "api_v1_FileStorageService_GetFileInfo", Description: "GetFileInfo returns metadata about an uploaded file.\n", RawInputSchema: json.RawMessage{0x7b, 0x22, 0x61, 0x64, 0x64, 0x69, 0x74, 0x69, 0x6f, 0x6e, 0x61, 0x6c, 0x50, 0x72, 0x6f, 0x70, 0x65, 0x72, 0x74, 0x69, 0x65, 0x73, 0x22, 0x3a, 0x66, 0x61, 0x6c, 0x73, 0x65, 0x2c, 0x22, 0x70, 0x72, 0x6f, 0x70, 0x65, 0x72, 0x74, 0x69, 0x65, 0x73, 0x22, 0x3a, 0x7b, 0x22, 0x68, 0x61, 0x73, 0x68, 0x22, 0x3a, 0x7b, 0x22, 0x74, 0x79, 0x70, 0x65, 0x22, 0x3a, 0x22, 0x73, 0x74, 0x72, 0x69, 0x6e, 0x67, 0x22, 0x7d, 0x7d, 0x2c, 0x22, 0x72, 0x65, 0x71, 0x75, 0x69, 0x72, 0x65, 0x64, 0x22, 0x3a, 0x5b, 0x22, 0x68, 0x61, 0x73, 0x68, 0x22, 0x5d, 0x2c, 0x22, 0x74, 0x79, 0x70, 0x65, 0x22, 0x3a, 0x22, 0x6f, 0x62, 0x6a, 0x65, 0x63, 0x74, 0x22, 0x7d}}
-	FileStorageService_UploadFileToolOpenAI  = runtime.Tool{Name: "api_v1_FileStorageService_UploadFile", Description: "UploadFile uploads a file and returns its hash and URL.\n", RawInputSchema: json.RawMessage{0x7b, 0x22, 0x61, 0x64, 0x64, 0x69, 0x74, 0x69, 0x6f, 0x6e, 0x61, 0x6c, 0x50, 0x72, 0x6f, 0x70, 0x65, 0x72, 0x74, 0x69, 0x65, 0x73, 0x22, 0x3a, 0x66, 0x61, 0x6c, 0x73, 0x65, 0x2c, 0x22, 0x70, 0x72, 0x6f, 0x70, 0x65, 0x72, 0x74, 0x69, 0x65, 0x73, 0x22, 0x3a, 0x7b, 0x22, 0x63, 0x6f, 0x6e, 0x74, 0x65, 0x6e, 0x74, 0x22, 0x3a, 0x7b, 0x22, 0x63, 0x6f, 0x6e, 0x74, 0x65, 0x6e, 0x74, 0x45, 0x6e, 0x63, 0x6f, 0x64, 0x69, 0x6e, 0x67, 0x22, 0x3a, 0x22, 0x62, 0x61, 0x73, 0x65, 0x36, 0x34, 0x22, 0x2c, 0x22, 0x74, 0x79, 0x70, 0x65, 0x22, 0x3a, 0x22, 0x73, 0x74, 0x72, 0x69, 0x6e, 0x67, 0x22, 0x7d, 0x2c, 0x22, 0x66, 0x69, 0x6c, 0x65, 0x6e, 0x61, 0x6d, 0x65, 0x22, 0x3a, 0x7b, 0x22, 0x74, 0x79, 0x70, 0x65, 0x22, 0x3a, 0x22, 0x73, 0x74, 0x72, 0x69, 0x6e, 0x67, 0x22, 0x7d, 0x7d, 0x2c, 0x22, 0x72, 0x65, 0x71, 0x75, 0x69, 0x72, 0x65, 0x64, 0x22, 0x3a, 0x5b, 0x22, 0x63, 0x6f, 0x6e, 0x74, 0x65, 0x6e, 0x74, 0x22, 0x2c, 0x22, 0x66, 0x69, 0x6c, 0x65, 0x6e, 0x61, 0x6d, 0x65, 0x22, 0x5d, 0x2c, 0x22, 0x74, 0x79, 0x70, 0x65, 0x22, 0x3a, 0x22, 0x6f, 0x62, 0x6a, 0x65, 0x63, 0x74, 0x22, 0x7d}}
+	FileStorageService_DeleteFileTool        = mcp.Tool{Meta: (*mcp.Meta)(nil), Name: "api_v1_FileStorageService_DeleteFile", Description: "DeleteFile removes an uploaded file.\n", InputSchema: mcp.ToolInputSchema{Defs: map[string]interface{}(nil), Type: "", Properties: map[string]interface{}(nil), Required: []string(nil)}, RawInputSchema: json.RawMessage{0x7b, 0x22, 0x70, 0x72, 0x6f, 0x70, 0x65, 0x72, 0x74, 0x69, 0x65, 0x73, 0x22, 0x3a, 0x7b, 0x22, 0x68, 0x61, 0x73, 0x68, 0x22, 0x3a, 0x7b, 0x22, 0x74, 0x79, 0x70, 0x65, 0x22, 0x3a, 0x22, 0x73, 0x74, 0x72, 0x69, 0x6e, 0x67, 0x22, 0x7d, 0x7d, 0x2c, 0x22, 0x72, 0x65, 0x71, 0x75, 0x69, 0x72, 0x65, 0x64, 0x22, 0x3a, 0x5b, 0x5d, 0x2c, 0x22, 0x74, 0x79, 0x70, 0x65, 0x22, 0x3a, 0x22, 0x6f, 0x62, 0x6a, 0x65, 0x63, 0x74, 0x22, 0x7d}, RawOutputSchema: json.RawMessage(nil), Annotations: mcp.ToolAnnotation{Title: "", ReadOnlyHint: (*bool)(nil), DestructiveHint: (*bool)(nil), IdempotentHint: (*bool)(nil), OpenWorldHint: (*bool)(nil)}}
+	FileStorageService_GetFileInfoTool       = mcp.Tool{Meta: (*mcp.Meta)(nil), Name: "api_v1_FileStorageService_GetFileInfo", Description: "GetFileInfo returns metadata about an uploaded file.\n", InputSchema: mcp.ToolInputSchema{Defs: map[string]interface{}(nil), Type: "", Properties: map[string]interface{}(nil), Required: []string(nil)}, RawInputSchema: json.RawMessage{0x7b, 0x22, 0x70, 0x72, 0x6f, 0x70, 0x65, 0x72, 0x74, 0x69, 0x65, 0x73, 0x22, 0x3a, 0x7b, 0x22, 0x68, 0x61, 0x73, 0x68, 0x22, 0x3a, 0x7b, 0x22, 0x74, 0x79, 0x70, 0x65, 0x22, 0x3a, 0x22, 0x73, 0x74, 0x72, 0x69, 0x6e, 0x67, 0x22, 0x7d, 0x7d, 0x2c, 0x22, 0x72, 0x65, 0x71, 0x75, 0x69, 0x72, 0x65, 0x64, 0x22, 0x3a, 0x5b, 0x5d, 0x2c, 0x22, 0x74, 0x79, 0x70, 0x65, 0x22, 0x3a, 0x22, 0x6f, 0x62, 0x6a, 0x65, 0x63, 0x74, 0x22, 0x7d}, RawOutputSchema: json.RawMessage(nil), Annotations: mcp.ToolAnnotation{Title: "", ReadOnlyHint: (*bool)(nil), DestructiveHint: (*bool)(nil), IdempotentHint: (*bool)(nil), OpenWorldHint: (*bool)(nil)}}
+	FileStorageService_UploadFileTool        = mcp.Tool{Meta: (*mcp.Meta)(nil), Name: "api_v1_FileStorageService_UploadFile", Description: "UploadFile uploads a file and returns its hash and URL.\n", InputSchema: mcp.ToolInputSchema{Defs: map[string]interface{}(nil), Type: "", Properties: map[string]interface{}(nil), Required: []string(nil)}, RawInputSchema: json.RawMessage{0x7b, 0x22, 0x70, 0x72, 0x6f, 0x70, 0x65, 0x72, 0x74, 0x69, 0x65, 0x73, 0x22, 0x3a, 0x7b, 0x22, 0x63, 0x6f, 0x6e, 0x74, 0x65, 0x6e, 0x74, 0x22, 0x3a, 0x7b, 0x22, 0x63, 0x6f, 0x6e, 0x74, 0x65, 0x6e, 0x74, 0x45, 0x6e, 0x63, 0x6f, 0x64, 0x69, 0x6e, 0x67, 0x22, 0x3a, 0x22, 0x62, 0x61, 0x73, 0x65, 0x36, 0x34, 0x22, 0x2c, 0x22, 0x66, 0x6f, 0x72, 0x6d, 0x61, 0x74, 0x22, 0x3a, 0x22, 0x62, 0x79, 0x74, 0x65, 0x22, 0x2c, 0x22, 0x74, 0x79, 0x70, 0x65, 0x22, 0x3a, 0x22, 0x73, 0x74, 0x72, 0x69, 0x6e, 0x67, 0x22, 0x7d, 0x2c, 0x22, 0x66, 0x69, 0x6c, 0x65, 0x6e, 0x61, 0x6d, 0x65, 0x22, 0x3a, 0x7b, 0x22, 0x74, 0x79, 0x70, 0x65, 0x22, 0x3a, 0x22, 0x73, 0x74, 0x72, 0x69, 0x6e, 0x67, 0x22, 0x7d, 0x7d, 0x2c, 0x22, 0x72, 0x65, 0x71, 0x75, 0x69, 0x72, 0x65, 0x64, 0x22, 0x3a, 0x5b, 0x5d, 0x2c, 0x22, 0x74, 0x79, 0x70, 0x65, 0x22, 0x3a, 0x22, 0x6f, 0x62, 0x6a, 0x65, 0x63, 0x74, 0x22, 0x7d}, RawOutputSchema: json.RawMessage(nil), Annotations: mcp.ToolAnnotation{Title: "", ReadOnlyHint: (*bool)(nil), DestructiveHint: (*bool)(nil), IdempotentHint: (*bool)(nil), OpenWorldHint: (*bool)(nil)}}
+	FileStorageService_DeleteFileToolOpenAI  = mcp.Tool{Meta: (*mcp.Meta)(nil), Name: "api_v1_FileStorageService_DeleteFile", Description: "DeleteFile removes an uploaded file.\n", InputSchema: mcp.ToolInputSchema{Defs: map[string]interface{}(nil), Type: "", Properties: map[string]interface{}(nil), Required: []string(nil)}, RawInputSchema: json.RawMessage{0x7b, 0x22, 0x61, 0x64, 0x64, 0x69, 0x74, 0x69, 0x6f, 0x6e, 0x61, 0x6c, 0x50, 0x72, 0x6f, 0x70, 0x65, 0x72, 0x74, 0x69, 0x65, 0x73, 0x22, 0x3a, 0x66, 0x61, 0x6c, 0x73, 0x65, 0x2c, 0x22, 0x70, 0x72, 0x6f, 0x70, 0x65, 0x72, 0x74, 0x69, 0x65, 0x73, 0x22, 0x3a, 0x7b, 0x22, 0x68, 0x61, 0x73, 0x68, 0x22, 0x3a, 0x7b, 0x22, 0x74, 0x79, 0x70, 0x65, 0x22, 0x3a, 0x22, 0x73, 0x74, 0x72, 0x69, 0x6e, 0x67, 0x22, 0x7d, 0x7d, 0x2c, 0x22, 0x72, 0x65, 0x71, 0x75, 0x69, 0x72, 0x65, 0x64, 0x22, 0x3a, 0x5b, 0x22, 0x68, 0x61, 0x73, 0x68, 0x22, 0x5d, 0x2c, 0x22, 0x74, 0x79, 0x70, 0x65, 0x22, 0x3a, 0x22, 0x6f, 0x62, 0x6a, 0x65, 0x63, 0x74, 0x22, 0x7d}, RawOutputSchema: json.RawMessage(nil), Annotations: mcp.ToolAnnotation{Title: "", ReadOnlyHint: (*bool)(nil), DestructiveHint: (*bool)(nil), IdempotentHint: (*bool)(nil), OpenWorldHint: (*bool)(nil)}}
+	FileStorageService_GetFileInfoToolOpenAI = mcp.Tool{Meta: (*mcp.Meta)(nil), Name: "api_v1_FileStorageService_GetFileInfo", Description: "GetFileInfo returns metadata about an uploaded file.\n", InputSchema: mcp.ToolInputSchema{Defs: map[string]interface{}(nil), Type: "", Properties: map[string]interface{}(nil), Required: []string(nil)}, RawInputSchema: json.RawMessage{0x7b, 0x22, 0x61, 0x64, 0x64, 0x69, 0x74, 0x69, 0x6f, 0x6e, 0x61, 0x6c, 0x50, 0x72, 0x6f, 0x70, 0x65, 0x72, 0x74, 0x69, 0x65, 0x73, 0x22, 0x3a, 0x66, 0x61, 0x6c, 0x73, 0x65, 0x2c, 0x22, 0x70, 0x72, 0x6f, 0x70, 0x65, 0x72, 0x74, 0x69, 0x65, 0x73, 0x22, 0x3a, 0x7b, 0x22, 0x68, 0x61, 0x73, 0x68, 0x22, 0x3a, 0x7b, 0x22, 0x74, 0x79, 0x70, 0x65, 0x22, 0x3a, 0x22, 0x73, 0x74, 0x72, 0x69, 0x6e, 0x67, 0x22, 0x7d, 0x7d, 0x2c, 0x22, 0x72, 0x65, 0x71, 0x75, 0x69, 0x72, 0x65, 0x64, 0x22, 0x3a, 0x5b, 0x22, 0x68, 0x61, 0x73, 0x68, 0x22, 0x5d, 0x2c, 0x22, 0x74, 0x79, 0x70, 0x65, 0x22, 0x3a, 0x22, 0x6f, 0x62, 0x6a, 0x65, 0x63, 0x74, 0x22, 0x7d}, RawOutputSchema: json.RawMessage(nil), Annotations: mcp.ToolAnnotation{Title: "", ReadOnlyHint: (*bool)(nil), DestructiveHint: (*bool)(nil), IdempotentHint: (*bool)(nil), OpenWorldHint: (*bool)(nil)}}
+	FileStorageService_UploadFileToolOpenAI  = mcp.Tool{Meta: (*mcp.Meta)(nil), Name: "api_v1_FileStorageService_UploadFile", Description: "UploadFile uploads a file and returns its hash and URL.\n", InputSchema: mcp.ToolInputSchema{Defs: map[string]interface{}(nil), Type: "", Properties: map[string]interface{}(nil), Required: []string(nil)}, RawInputSchema: json.RawMessage{0x7b, 0x22, 0x61, 0x64, 0x64, 0x69, 0x74, 0x69, 0x6f, 0x6e, 0x61, 0x6c, 0x50, 0x72, 0x6f, 0x70, 0x65, 0x72, 0x74, 0x69, 0x65, 0x73, 0x22, 0x3a, 0x66, 0x61, 0x6c, 0x73, 0x65, 0x2c, 0x22, 0x70, 0x72, 0x6f, 0x70, 0x65, 0x72, 0x74, 0x69, 0x65, 0x73, 0x22, 0x3a, 0x7b, 0x22, 0x63, 0x6f, 0x6e, 0x74, 0x65, 0x6e, 0x74, 0x22, 0x3a, 0x7b, 0x22, 0x63, 0x6f, 0x6e, 0x74, 0x65, 0x6e, 0x74, 0x45, 0x6e, 0x63, 0x6f, 0x64, 0x69, 0x6e, 0x67, 0x22, 0x3a, 0x22, 0x62, 0x61, 0x73, 0x65, 0x36, 0x34, 0x22, 0x2c, 0x22, 0x74, 0x79, 0x70, 0x65, 0x22, 0x3a, 0x22, 0x73, 0x74, 0x72, 0x69, 0x6e, 0x67, 0x22, 0x7d, 0x2c, 0x22, 0x66, 0x69, 0x6c, 0x65, 0x6e, 0x61, 0x6d, 0x65, 0x22, 0x3a, 0x7b, 0x22, 0x74, 0x79, 0x70, 0x65, 0x22, 0x3a, 0x22, 0x73, 0x74, 0x72, 0x69, 0x6e, 0x67, 0x22, 0x7d, 0x7d, 0x2c, 0x22, 0x72, 0x65, 0x71, 0x75, 0x69, 0x72, 0x65, 0x64, 0x22, 0x3a, 0x5b, 0x22, 0x63, 0x6f, 0x6e, 0x74, 0x65, 0x6e, 0x74, 0x22, 0x2c, 0x22, 0x66, 0x69, 0x6c, 0x65, 0x6e, 0x61, 0x6d, 0x65, 0x22, 0x5d, 0x2c, 0x22, 0x74, 0x79, 0x70, 0x65, 0x22, 0x3a, 0x22, 0x6f, 0x62, 0x6a, 0x65, 0x63, 0x74, 0x22, 0x7d}, RawOutputSchema: json.RawMessage(nil), Annotations: mcp.ToolAnnotation{Title: "", ReadOnlyHint: (*bool)(nil), DestructiveHint: (*bool)(nil), IdempotentHint: (*bool)(nil), OpenWorldHint: (*bool)(nil)}}
 )
 
 // FileStorageServiceServer is compatible with the grpc-go server interface.
@@ -33,18 +35,21 @@ type FileStorageServiceServer interface {
 }
 
 // RegisterFileStorageServiceHandler registers standard MCP handlers for FileStorageService
-func RegisterFileStorageServiceHandler(s runtime.MCPServer, srv FileStorageServiceServer, opts ...runtime.Option) {
+func RegisterFileStorageServiceHandler(s *mcpserver.MCPServer, srv FileStorageServiceServer, opts ...runtime.Option) {
 	config := runtime.NewConfig()
 	for _, opt := range opts {
 		opt(config)
 	}
 	DeleteFileTool := FileStorageService_DeleteFileTool
-	DeleteFileTool = runtime.ApplyConfig(DeleteFileTool, config)
+	// Add extra properties to schema if configured
+	if len(config.ExtraProperties) > 0 {
+		DeleteFileTool = runtime.AddExtraPropertiesToTool(DeleteFileTool, config.ExtraProperties)
+	}
 
-	s.AddTool(DeleteFileTool, func(ctx context.Context, request *runtime.CallToolRequest) (*runtime.CallToolResult, error) {
+	s.AddTool(DeleteFileTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		var req v1.DeleteFileRequest
 
-		message := request.Arguments
+		message := request.GetArguments()
 
 		// Extract extra properties if configured
 		for _, prop := range config.ExtraProperties {
@@ -72,15 +77,18 @@ func RegisterFileStorageServiceHandler(s runtime.MCPServer, srv FileStorageServi
 			return nil, err
 		}
 
-		return runtime.NewToolResultText(string(marshaled)), nil
+		return mcp.NewToolResultText(string(marshaled)), nil
 	})
 	GetFileInfoTool := FileStorageService_GetFileInfoTool
-	GetFileInfoTool = runtime.ApplyConfig(GetFileInfoTool, config)
+	// Add extra properties to schema if configured
+	if len(config.ExtraProperties) > 0 {
+		GetFileInfoTool = runtime.AddExtraPropertiesToTool(GetFileInfoTool, config.ExtraProperties)
+	}
 
-	s.AddTool(GetFileInfoTool, func(ctx context.Context, request *runtime.CallToolRequest) (*runtime.CallToolResult, error) {
+	s.AddTool(GetFileInfoTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		var req v1.GetFileInfoRequest
 
-		message := request.Arguments
+		message := request.GetArguments()
 
 		// Extract extra properties if configured
 		for _, prop := range config.ExtraProperties {
@@ -108,15 +116,18 @@ func RegisterFileStorageServiceHandler(s runtime.MCPServer, srv FileStorageServi
 			return nil, err
 		}
 
-		return runtime.NewToolResultText(string(marshaled)), nil
+		return mcp.NewToolResultText(string(marshaled)), nil
 	})
 	UploadFileTool := FileStorageService_UploadFileTool
-	UploadFileTool = runtime.ApplyConfig(UploadFileTool, config)
+	// Add extra properties to schema if configured
+	if len(config.ExtraProperties) > 0 {
+		UploadFileTool = runtime.AddExtraPropertiesToTool(UploadFileTool, config.ExtraProperties)
+	}
 
-	s.AddTool(UploadFileTool, func(ctx context.Context, request *runtime.CallToolRequest) (*runtime.CallToolResult, error) {
+	s.AddTool(UploadFileTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		var req v1.UploadFileRequest
 
-		message := request.Arguments
+		message := request.GetArguments()
 
 		// Extract extra properties if configured
 		for _, prop := range config.ExtraProperties {
@@ -144,23 +155,26 @@ func RegisterFileStorageServiceHandler(s runtime.MCPServer, srv FileStorageServi
 			return nil, err
 		}
 
-		return runtime.NewToolResultText(string(marshaled)), nil
+		return mcp.NewToolResultText(string(marshaled)), nil
 	})
 }
 
 // RegisterFileStorageServiceHandlerOpenAI registers OpenAI-compatible MCP handlers for FileStorageService
-func RegisterFileStorageServiceHandlerOpenAI(s runtime.MCPServer, srv FileStorageServiceServer, opts ...runtime.Option) {
+func RegisterFileStorageServiceHandlerOpenAI(s *mcpserver.MCPServer, srv FileStorageServiceServer, opts ...runtime.Option) {
 	config := runtime.NewConfig()
 	for _, opt := range opts {
 		opt(config)
 	}
 	DeleteFileToolOpenAI := FileStorageService_DeleteFileToolOpenAI
-	DeleteFileToolOpenAI = runtime.ApplyConfig(DeleteFileToolOpenAI, config)
+	// Add extra properties to schema if configured
+	if len(config.ExtraProperties) > 0 {
+		DeleteFileToolOpenAI = runtime.AddExtraPropertiesToTool(DeleteFileToolOpenAI, config.ExtraProperties)
+	}
 
-	s.AddTool(DeleteFileToolOpenAI, func(ctx context.Context, request *runtime.CallToolRequest) (*runtime.CallToolResult, error) {
+	s.AddTool(DeleteFileToolOpenAI, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		var req v1.DeleteFileRequest
 
-		message := request.Arguments
+		message := request.GetArguments()
 
 		// Extract extra properties if configured
 		for _, prop := range config.ExtraProperties {
@@ -190,15 +204,18 @@ func RegisterFileStorageServiceHandlerOpenAI(s runtime.MCPServer, srv FileStorag
 			return nil, err
 		}
 
-		return runtime.NewToolResultText(string(marshaled)), nil
+		return mcp.NewToolResultText(string(marshaled)), nil
 	})
 	GetFileInfoToolOpenAI := FileStorageService_GetFileInfoToolOpenAI
-	GetFileInfoToolOpenAI = runtime.ApplyConfig(GetFileInfoToolOpenAI, config)
+	// Add extra properties to schema if configured
+	if len(config.ExtraProperties) > 0 {
+		GetFileInfoToolOpenAI = runtime.AddExtraPropertiesToTool(GetFileInfoToolOpenAI, config.ExtraProperties)
+	}
 
-	s.AddTool(GetFileInfoToolOpenAI, func(ctx context.Context, request *runtime.CallToolRequest) (*runtime.CallToolResult, error) {
+	s.AddTool(GetFileInfoToolOpenAI, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		var req v1.GetFileInfoRequest
 
-		message := request.Arguments
+		message := request.GetArguments()
 
 		// Extract extra properties if configured
 		for _, prop := range config.ExtraProperties {
@@ -228,15 +245,18 @@ func RegisterFileStorageServiceHandlerOpenAI(s runtime.MCPServer, srv FileStorag
 			return nil, err
 		}
 
-		return runtime.NewToolResultText(string(marshaled)), nil
+		return mcp.NewToolResultText(string(marshaled)), nil
 	})
 	UploadFileToolOpenAI := FileStorageService_UploadFileToolOpenAI
-	UploadFileToolOpenAI = runtime.ApplyConfig(UploadFileToolOpenAI, config)
+	// Add extra properties to schema if configured
+	if len(config.ExtraProperties) > 0 {
+		UploadFileToolOpenAI = runtime.AddExtraPropertiesToTool(UploadFileToolOpenAI, config.ExtraProperties)
+	}
 
-	s.AddTool(UploadFileToolOpenAI, func(ctx context.Context, request *runtime.CallToolRequest) (*runtime.CallToolResult, error) {
+	s.AddTool(UploadFileToolOpenAI, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		var req v1.UploadFileRequest
 
-		message := request.Arguments
+		message := request.GetArguments()
 
 		// Extract extra properties if configured
 		for _, prop := range config.ExtraProperties {
@@ -266,12 +286,12 @@ func RegisterFileStorageServiceHandlerOpenAI(s runtime.MCPServer, srv FileStorag
 			return nil, err
 		}
 
-		return runtime.NewToolResultText(string(marshaled)), nil
+		return mcp.NewToolResultText(string(marshaled)), nil
 	})
 }
 
 // RegisterFileStorageServiceHandlerWithProvider registers handlers for the specified LLM provider
-func RegisterFileStorageServiceHandlerWithProvider(s runtime.MCPServer, srv FileStorageServiceServer, provider runtime.LLMProvider, opts ...runtime.Option) {
+func RegisterFileStorageServiceHandlerWithProvider(s *mcpserver.MCPServer, srv FileStorageServiceServer, provider runtime.LLMProvider, opts ...runtime.Option) {
 	switch provider {
 	case runtime.LLMProviderOpenAI:
 		RegisterFileStorageServiceHandlerOpenAI(s, srv, opts...)
@@ -297,18 +317,21 @@ type ConnectFileStorageServiceClient interface {
 }
 
 // ForwardToConnectFileStorageServiceClient registers a connectrpc client, to forward MCP calls to it.
-func ForwardToConnectFileStorageServiceClient(s runtime.MCPServer, client ConnectFileStorageServiceClient, opts ...runtime.Option) {
+func ForwardToConnectFileStorageServiceClient(s *mcpserver.MCPServer, client ConnectFileStorageServiceClient, opts ...runtime.Option) {
 	config := runtime.NewConfig()
 	for _, opt := range opts {
 		opt(config)
 	}
 	DeleteFileTool := FileStorageService_DeleteFileTool
-	DeleteFileTool = runtime.ApplyConfig(DeleteFileTool, config)
+	// Add extra properties to schema if configured
+	if len(config.ExtraProperties) > 0 {
+		DeleteFileTool = runtime.AddExtraPropertiesToTool(DeleteFileTool, config.ExtraProperties)
+	}
 
-	s.AddTool(DeleteFileTool, func(ctx context.Context, request *runtime.CallToolRequest) (*runtime.CallToolResult, error) {
+	s.AddTool(DeleteFileTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		var req v1.DeleteFileRequest
 
-		message := request.Arguments
+		message := request.GetArguments()
 
 		// Extract extra properties if configured
 		for _, prop := range config.ExtraProperties {
@@ -335,15 +358,18 @@ func ForwardToConnectFileStorageServiceClient(s runtime.MCPServer, client Connec
 		if err != nil {
 			return nil, err
 		}
-		return runtime.NewToolResultText(string(marshaled)), nil
+		return mcp.NewToolResultText(string(marshaled)), nil
 	})
 	GetFileInfoTool := FileStorageService_GetFileInfoTool
-	GetFileInfoTool = runtime.ApplyConfig(GetFileInfoTool, config)
+	// Add extra properties to schema if configured
+	if len(config.ExtraProperties) > 0 {
+		GetFileInfoTool = runtime.AddExtraPropertiesToTool(GetFileInfoTool, config.ExtraProperties)
+	}
 
-	s.AddTool(GetFileInfoTool, func(ctx context.Context, request *runtime.CallToolRequest) (*runtime.CallToolResult, error) {
+	s.AddTool(GetFileInfoTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		var req v1.GetFileInfoRequest
 
-		message := request.Arguments
+		message := request.GetArguments()
 
 		// Extract extra properties if configured
 		for _, prop := range config.ExtraProperties {
@@ -370,15 +396,18 @@ func ForwardToConnectFileStorageServiceClient(s runtime.MCPServer, client Connec
 		if err != nil {
 			return nil, err
 		}
-		return runtime.NewToolResultText(string(marshaled)), nil
+		return mcp.NewToolResultText(string(marshaled)), nil
 	})
 	UploadFileTool := FileStorageService_UploadFileTool
-	UploadFileTool = runtime.ApplyConfig(UploadFileTool, config)
+	// Add extra properties to schema if configured
+	if len(config.ExtraProperties) > 0 {
+		UploadFileTool = runtime.AddExtraPropertiesToTool(UploadFileTool, config.ExtraProperties)
+	}
 
-	s.AddTool(UploadFileTool, func(ctx context.Context, request *runtime.CallToolRequest) (*runtime.CallToolResult, error) {
+	s.AddTool(UploadFileTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		var req v1.UploadFileRequest
 
-		message := request.Arguments
+		message := request.GetArguments()
 
 		// Extract extra properties if configured
 		for _, prop := range config.ExtraProperties {
@@ -405,23 +434,26 @@ func ForwardToConnectFileStorageServiceClient(s runtime.MCPServer, client Connec
 		if err != nil {
 			return nil, err
 		}
-		return runtime.NewToolResultText(string(marshaled)), nil
+		return mcp.NewToolResultText(string(marshaled)), nil
 	})
 }
 
 // ForwardToFileStorageServiceClient registers a gRPC client, to forward MCP calls to it.
-func ForwardToFileStorageServiceClient(s runtime.MCPServer, client FileStorageServiceClient, opts ...runtime.Option) {
+func ForwardToFileStorageServiceClient(s *mcpserver.MCPServer, client FileStorageServiceClient, opts ...runtime.Option) {
 	config := runtime.NewConfig()
 	for _, opt := range opts {
 		opt(config)
 	}
 	DeleteFileTool := FileStorageService_DeleteFileTool
-	DeleteFileTool = runtime.ApplyConfig(DeleteFileTool, config)
+	// Add extra properties to schema if configured
+	if len(config.ExtraProperties) > 0 {
+		DeleteFileTool = runtime.AddExtraPropertiesToTool(DeleteFileTool, config.ExtraProperties)
+	}
 
-	s.AddTool(DeleteFileTool, func(ctx context.Context, request *runtime.CallToolRequest) (*runtime.CallToolResult, error) {
+	s.AddTool(DeleteFileTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		var req v1.DeleteFileRequest
 
-		message := request.Arguments
+		message := request.GetArguments()
 
 		// Extract extra properties if configured
 		for _, prop := range config.ExtraProperties {
@@ -448,15 +480,18 @@ func ForwardToFileStorageServiceClient(s runtime.MCPServer, client FileStorageSe
 		if err != nil {
 			return nil, err
 		}
-		return runtime.NewToolResultText(string(marshaled)), nil
+		return mcp.NewToolResultText(string(marshaled)), nil
 	})
 	GetFileInfoTool := FileStorageService_GetFileInfoTool
-	GetFileInfoTool = runtime.ApplyConfig(GetFileInfoTool, config)
+	// Add extra properties to schema if configured
+	if len(config.ExtraProperties) > 0 {
+		GetFileInfoTool = runtime.AddExtraPropertiesToTool(GetFileInfoTool, config.ExtraProperties)
+	}
 
-	s.AddTool(GetFileInfoTool, func(ctx context.Context, request *runtime.CallToolRequest) (*runtime.CallToolResult, error) {
+	s.AddTool(GetFileInfoTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		var req v1.GetFileInfoRequest
 
-		message := request.Arguments
+		message := request.GetArguments()
 
 		// Extract extra properties if configured
 		for _, prop := range config.ExtraProperties {
@@ -483,15 +518,18 @@ func ForwardToFileStorageServiceClient(s runtime.MCPServer, client FileStorageSe
 		if err != nil {
 			return nil, err
 		}
-		return runtime.NewToolResultText(string(marshaled)), nil
+		return mcp.NewToolResultText(string(marshaled)), nil
 	})
 	UploadFileTool := FileStorageService_UploadFileTool
-	UploadFileTool = runtime.ApplyConfig(UploadFileTool, config)
+	// Add extra properties to schema if configured
+	if len(config.ExtraProperties) > 0 {
+		UploadFileTool = runtime.AddExtraPropertiesToTool(UploadFileTool, config.ExtraProperties)
+	}
 
-	s.AddTool(UploadFileTool, func(ctx context.Context, request *runtime.CallToolRequest) (*runtime.CallToolResult, error) {
+	s.AddTool(UploadFileTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		var req v1.UploadFileRequest
 
-		message := request.Arguments
+		message := request.GetArguments()
 
 		// Extract extra properties if configured
 		for _, prop := range config.ExtraProperties {
@@ -518,6 +556,6 @@ func ForwardToFileStorageServiceClient(s runtime.MCPServer, client FileStorageSe
 		if err != nil {
 			return nil, err
 		}
-		return runtime.NewToolResultText(string(marshaled)), nil
+		return mcp.NewToolResultText(string(marshaled)), nil
 	})
 }
