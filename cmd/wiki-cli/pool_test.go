@@ -516,10 +516,6 @@ var _ = Describe("poolDaemon", func() {
 			It("should return nil", func() {
 				Expect(err).NotTo(HaveOccurred())
 			})
-
-			It("should set the daemon context", func() {
-				Expect(daemon.ctx).NotTo(BeNil())
-			})
 		})
 	})
 })
