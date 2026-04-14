@@ -80,12 +80,13 @@ test.describe('System Info Panel', () => {
       await expect(identityComp).toBeAttached({ timeout: COMPONENT_LOAD_TIMEOUT_MS });
     });
 
-    test('identity section renders without an error-display when no Tailscale identity is configured', async ({ page }) => {
+    test('identity section does not render identity UI when no Tailscale identity is configured', async ({ page }) => {
       await openSystemInfoPanel(page);
-      // The component returns `nothing` when no identity is configured — no error-display should appear.
+      // The component returns `nothing` when no identity is configured — .identity-info and User: label should not appear.
       const identityComp = page.locator('system-info system-info-identity');
       await expect(identityComp).toBeAttached({ timeout: COMPONENT_LOAD_TIMEOUT_MS });
-      await expect(identityComp.locator('error-display')).not.toBeAttached({ timeout: API_LOAD_TIMEOUT_MS });
+      await expect(identityComp.locator('.identity-info')).not.toBeAttached({ timeout: API_LOAD_TIMEOUT_MS });
+      await expect(identityComp.getByText('User:', { exact: true })).not.toBeAttached({ timeout: API_LOAD_TIMEOUT_MS });
     });
   });
 
@@ -158,8 +159,10 @@ test.describe('System Info Panel', () => {
       const panel = page.locator('system-info .system-panel');
       await expect(panel).toHaveAttribute('aria-expanded', 'true');
 
-      // Click somewhere outside the system-info element
-      await page.locator('body').click({ position: { x: 10, y: 10 } });
+      // Dispatch a bubbling click on body to deterministically trigger the document-level click-outside handler.
+      await page.evaluate(() => {
+        document.body.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      });
 
       await expect(panel).toHaveAttribute('aria-expanded', 'false', { timeout: PANEL_INTERACTION_TIMEOUT_MS });
     });
