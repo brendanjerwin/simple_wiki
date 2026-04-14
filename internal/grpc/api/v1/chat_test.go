@@ -222,7 +222,9 @@ func (m *mockChatBufferManager) SubscribeToPageWithReplay(page string) ([]*chatb
 
 func (m *mockChatBufferManager) SubscribeToPageChannelWithReplay(string) ([]*chatbuffer.Message, <-chan *chatbuffer.Message, func()) {
 	if m.pageChannelChan != nil {
-		return m.pageChannelReplayMessages, m.pageChannelChan, func() {}
+		return m.pageChannelReplayMessages, m.pageChannelChan, func() {
+			// no-op: no cleanup needed for this pre-configured mock channel
+		}
 	}
 	ch := make(chan *chatbuffer.Message, 10)
 	return m.pageChannelReplayMessages, ch, func() { close(ch) }
@@ -274,14 +276,20 @@ func (m *mockChatBufferManager) SubscribeToCancellation(string) (<-chan struct{}
 	if len(m.cancellationChans) > 0 {
 		ch := m.cancellationChans[0]
 		m.cancellationChans = m.cancellationChans[1:]
-		return ch, func() {}
+		return ch, func() {
+			// no-op: no cleanup needed for this pre-created mock cancellation channel
+		}
 	}
 
 	ch := make(chan struct{}, 1)
-	return ch, func() {}
+	return ch, func() {
+		// no-op: no cleanup needed for this ad-hoc mock cancellation channel
+	}
 }
 
-func (*mockChatBufferManager) EmitPermissionRequest(string, *chatbuffer.PermissionRequestEvent) {}
+func (*mockChatBufferManager) EmitPermissionRequest(string, *chatbuffer.PermissionRequestEvent) {
+	// no-op: satisfies interface; test mock does not emit permission request events
+}
 
 func (m *mockChatBufferManager) RespondToPermission(requestID, selectedOptionID string) {
 	m.mu.Lock()

@@ -109,7 +109,9 @@ func (noOpChatBufferManager) SubscribeToPageWithReplay(string) ([]*chatbuffer.Me
 func (noOpChatBufferManager) SubscribeToPageChannelWithReplay(string) ([]*chatbuffer.Message, <-chan *chatbuffer.Message, func()) {
 	ch := make(chan *chatbuffer.Message)
 	close(ch)
-	return nil, ch, func() {}
+	return nil, ch, func() {
+		// no-op: nothing to unsubscribe from a closed channel
+	}
 }
 
 func (noOpChatBufferManager) SubscribeToPageChannel(string) (<-chan *chatbuffer.Message, func()) {
@@ -144,7 +146,9 @@ func (noOpChatBufferManager) IsInstanceRequested(string) bool {
 	return false
 }
 
-func (noOpChatBufferManager) NotifyToolCall(string, string, string, string, string) {}
+func (noOpChatBufferManager) NotifyToolCall(string, string, string, string, string) {
+	// no-op: satisfies interface; this implementation ignores tool call notifications
+}
 
 func (noOpChatBufferManager) CancelPage(string) bool {
 	return false
@@ -152,12 +156,18 @@ func (noOpChatBufferManager) CancelPage(string) bool {
 
 func (noOpChatBufferManager) SubscribeToCancellation(string) (<-chan struct{}, func()) {
 	ch := make(chan struct{}, 1)
-	return ch, func() {}
+	return ch, func() {
+		// no-op: nothing to unsubscribe from this mock cancellation channel
+	}
 }
 
-func (noOpChatBufferManager) EmitPermissionRequest(string, *chatbuffer.PermissionRequestEvent) {}
+func (noOpChatBufferManager) EmitPermissionRequest(string, *chatbuffer.PermissionRequestEvent) {
+	// no-op: satisfies interface; this implementation ignores permission request emissions
+}
 
-func (noOpChatBufferManager) RespondToPermission(string, string) {}
+func (noOpChatBufferManager) RespondToPermission(string, string) {
+	// no-op: satisfies interface; this implementation ignores permission responses
+}
 
 func mustNewAPIServer() *grpcapi.Server {
 	srv, err := grpcapi.NewServer(
