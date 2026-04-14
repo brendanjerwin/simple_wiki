@@ -41,7 +41,7 @@ describe('PageChatPanel', () => {
     resetForTesting();
   });
 
-  describe('when Claude is not connected', () => {
+  describe('when agent is not connected', () => {
     let el: PageChatPanel;
 
     beforeEach(async () => {
@@ -89,7 +89,7 @@ describe('PageChatPanel', () => {
     beforeEach(async () => {
       localStorageStub.getItem.returns(null);
       el = await fixture(html`<page-chat-panel page="test-page" persona="TestPersona"></page-chat-panel>`);
-      el.claudeConnected = true;
+      el.agentConnected = true;
       await el.updateComplete;
     });
 
@@ -115,7 +115,7 @@ describe('PageChatPanel', () => {
     beforeEach(async () => {
       localStorageStub.getItem.returns(null);
       el = await fixture(html`<page-chat-panel page="test-page" persona="TestPersona"></page-chat-panel>`);
-      el.claudeConnected = true;
+      el.agentConnected = true;
       await el.updateComplete;
       const fab = el.shadowRoot!.querySelector('.fab') as HTMLElement;
       fab.click();
@@ -144,7 +144,7 @@ describe('PageChatPanel', () => {
     beforeEach(async () => {
       localStorageStub.getItem.returns(null);
       el = await fixture(html`<page-chat-panel page="test-page" persona="TestPersona"></page-chat-panel>`);
-      el.claudeConnected = true;
+      el.agentConnected = true;
       await el.updateComplete;
       const fab = el.shadowRoot!.querySelector('.fab') as HTMLElement;
       fab.click();
@@ -376,7 +376,7 @@ describe('PageChatPanel', () => {
     beforeEach(async () => {
       localStorageStub.getItem.returns('true');
       el = await fixture(html`<page-chat-panel page="test-page" persona="TestPersona"></page-chat-panel>`);
-      el.claudeConnected = true;
+      el.agentConnected = true;
       el.streamState = 'disconnected';
       el.error = new Error('Connection lost');
       await el.updateComplete;
@@ -432,13 +432,13 @@ describe('PageChatPanel', () => {
     });
   });
 
-  describe('when Claude is connected', () => {
+  describe('when agent is connected', () => {
     let el: PageChatPanel;
 
     beforeEach(async () => {
       localStorageStub.getItem.returns('true');
       el = await fixture(html`<page-chat-panel page="test-page" persona="TestPersona"></page-chat-panel>`);
-      el.claudeConnected = true;
+      el.agentConnected = true;
       await el.updateComplete;
     });
 
@@ -532,6 +532,7 @@ describe('PageChatPanel', () => {
         replyToId: '',
         reactions: [{ emoji: '👍', reactors: ['alice'], count: 1 }],
         edited: false,
+        toolCalls: [],
         sequence: 0n,
       };
       (el as unknown as { messagesById: Map<string, ChatMessageState> }).messagesById.set('msg-1', msgState);
@@ -716,6 +717,7 @@ describe('PageChatPanel', () => {
         replyToId: '',
         reactions: [],
         edited: false,
+        toolCalls: [],
         sequence: 0n,
       };
       (el as unknown as { messagesById: Map<string, ChatMessageState> }).messagesById.set('edit-msg', msgState);
@@ -757,7 +759,7 @@ describe('PageChatPanel', () => {
     beforeEach(async () => {
       localStorageStub.getItem.returns('true');
       el = await fixture(html`<page-chat-panel page="test-page" persona="TestPersona"></page-chat-panel>`);
-      el.claudeConnected = true;
+      el.agentConnected = true;
       el.streamState = 'disconnected';
       el.error = new Error('Connection lost');
       await el.updateComplete;
@@ -884,13 +886,622 @@ describe('PageChatPanel', () => {
     });
   });
 
+  describe('permission prompt rendering', () => {
+    let el: PageChatPanel;
+
+    beforeEach(async () => {
+      localStorageStub.getItem.returns('true');
+      el = await fixture(html`<page-chat-panel page="test-page" persona="TestPersona"></page-chat-panel>`);
+      el.agentConnected = true;
+      await el.updateComplete;
+    });
+
+    describe('when pendingPermission is null', () => {
+
+      it('should not render the permission prompt', () => {
+        const prompt = el.shadowRoot!.querySelector('.permission-prompt');
+        expect(prompt).to.equal(null);
+      });
+    });
+
+    describe('when pendingPermission is set', () => {
+
+      beforeEach(async () => {
+        el.pendingPermission = {
+          requestId: 'req-1',
+          title: 'File Access',
+          description: 'Read /etc/passwd',
+          options: [
+            { optionId: 'allow', label: 'Allow', description: 'Allow this access' },
+            { optionId: 'allow-all', label: 'Allow All', description: 'Allow all file access' },
+          ],
+        };
+        await el.updateComplete;
+      });
+
+      it('should render the permission prompt', () => {
+        const prompt = el.shadowRoot!.querySelector('.permission-prompt');
+        expect(prompt).to.exist;
+      });
+
+      it('should render the permission title', () => {
+        const title = el.shadowRoot!.querySelector('.permission-title');
+        expect(title).to.exist;
+        expect(title!.textContent).to.contain('Permission requested');
+      });
+
+      it('should render the description with title', () => {
+        const desc = el.shadowRoot!.querySelector('.permission-description');
+        expect(desc).to.exist;
+        expect(desc!.textContent).to.contain('File Access');
+        expect(desc!.textContent).to.contain('Read /etc/passwd');
+      });
+
+      it('should render option buttons', () => {
+        const buttons = el.shadowRoot!.querySelectorAll('.permission-btn:not(.cancel)');
+        expect(buttons.length).to.equal(2);
+        expect(buttons[0]!.textContent).to.contain('Allow');
+        expect(buttons[1]!.textContent).to.contain('Allow All');
+      });
+
+      it('should render the deny button', () => {
+        const cancelBtn = el.shadowRoot!.querySelector('.permission-btn.cancel');
+        expect(cancelBtn).to.exist;
+        expect(cancelBtn!.textContent).to.contain('Deny');
+      });
+    });
+
+    describe('when an option button is clicked', () => {
+      let respondToPermissionStub: SinonStub;
+
+      beforeEach(async () => {
+        respondToPermissionStub = stub().resolves();
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- replacing private chatClient for testing
+        (el as any).chatClient = { respondToPermission: respondToPermissionStub };
+        el.pendingPermission = {
+          requestId: 'req-1',
+          title: 'File Access',
+          description: 'Read file',
+          options: [
+            { optionId: 'allow', label: 'Allow', description: 'Allow this access' },
+          ],
+        };
+        await el.updateComplete;
+
+        const optionBtn = el.shadowRoot!.querySelector('.permission-btn:not(.cancel)') as HTMLButtonElement;
+        optionBtn.click();
+        await el.updateComplete;
+      });
+
+      it('should call respondToPermission on the client', () => {
+        expect(respondToPermissionStub.callCount).to.equal(1);
+      });
+
+      it('should pass the correct optionId to respondToPermission', () => {
+        const callArg = respondToPermissionStub.firstCall.args[0];
+        expect(callArg.selectedOptionId).to.equal('allow');
+      });
+
+      it('should pass the correct requestId to respondToPermission', () => {
+        const callArg = respondToPermissionStub.firstCall.args[0];
+        expect(callArg.requestId).to.equal('req-1');
+      });
+
+      it('should clear pendingPermission', () => {
+        expect(el.pendingPermission).to.equal(null);
+      });
+
+      it('should remove the permission prompt from the DOM', () => {
+        const prompt = el.shadowRoot!.querySelector('.permission-prompt');
+        expect(prompt).to.equal(null);
+      });
+    });
+
+    describe('when multiple option buttons exist and second is clicked', () => {
+      let respondToPermissionStub: SinonStub;
+
+      beforeEach(async () => {
+        respondToPermissionStub = stub().resolves();
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- replacing private chatClient for testing
+        (el as any).chatClient = { respondToPermission: respondToPermissionStub };
+        el.pendingPermission = {
+          requestId: 'req-multi',
+          title: 'Shell Access',
+          description: 'Run command',
+          options: [
+            { optionId: 'allow-once', label: 'Allow Once', description: 'Allow this once' },
+            { optionId: 'allow-always', label: 'Allow Always', description: 'Allow forever' },
+          ],
+        };
+        await el.updateComplete;
+
+        const optionBtns = el.shadowRoot!.querySelectorAll('.permission-btn:not(.cancel)');
+        (optionBtns[1] as HTMLButtonElement).click();
+        await el.updateComplete;
+      });
+
+      it('should pass the second option optionId', () => {
+        const callArg = respondToPermissionStub.firstCall.args[0];
+        expect(callArg.selectedOptionId).to.equal('allow-always');
+      });
+    });
+
+    describe('when multiple permission requests arrive in sequence', () => {
+      let respondToPermissionStub: SinonStub;
+
+      beforeEach(async () => {
+        respondToPermissionStub = stub().resolves();
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- replacing private chatClient for testing
+        (el as any).chatClient = { respondToPermission: respondToPermissionStub };
+
+        // First permission
+        el.pendingPermission = {
+          requestId: 'seq-1',
+          title: 'First Request',
+          description: 'First description',
+          options: [{ optionId: 'opt-1', label: 'Accept', description: 'Accept first' }],
+        };
+        await el.updateComplete;
+
+        const firstBtn = el.shadowRoot!.querySelector('.permission-btn:not(.cancel)') as HTMLButtonElement;
+        firstBtn.click();
+        await el.updateComplete;
+
+        // Second permission
+        el.pendingPermission = {
+          requestId: 'seq-2',
+          title: 'Second Request',
+          description: 'Second description',
+          options: [{ optionId: 'opt-2', label: 'Accept', description: 'Accept second' }],
+        };
+        await el.updateComplete;
+
+        const secondBtn = el.shadowRoot!.querySelector('.permission-btn:not(.cancel)') as HTMLButtonElement;
+        secondBtn.click();
+        await el.updateComplete;
+      });
+
+      it('should have called respondToPermission twice', () => {
+        expect(respondToPermissionStub.callCount).to.equal(2);
+      });
+
+      it('should have sent the first requestId on the first call', () => {
+        expect(respondToPermissionStub.firstCall.args[0].requestId).to.equal('seq-1');
+      });
+
+      it('should have sent the second requestId on the second call', () => {
+        expect(respondToPermissionStub.secondCall.args[0].requestId).to.equal('seq-2');
+      });
+
+      it('should have cleared pendingPermission after the second response', () => {
+        expect(el.pendingPermission).to.equal(null);
+      });
+    });
+
+    describe('when the deny button is clicked', () => {
+      let respondToPermissionStub: SinonStub;
+
+      beforeEach(async () => {
+        respondToPermissionStub = stub().resolves();
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- replacing private chatClient for testing
+        (el as any).chatClient = { respondToPermission: respondToPermissionStub };
+        el.pendingPermission = {
+          requestId: 'req-deny',
+          title: 'File Access',
+          description: 'Read file',
+          options: [
+            { optionId: 'allow', label: 'Allow', description: 'Allow this access' },
+          ],
+        };
+        await el.updateComplete;
+
+        const cancelBtn = el.shadowRoot!.querySelector('.permission-btn.cancel') as HTMLButtonElement;
+        cancelBtn.click();
+        await el.updateComplete;
+      });
+
+      it('should call respondToPermission with empty optionId', () => {
+        expect(respondToPermissionStub.callCount).to.equal(1);
+        const callArg = respondToPermissionStub.firstCall.args[0];
+        expect(callArg.selectedOptionId).to.equal('');
+      });
+
+      it('should clear pendingPermission', () => {
+        expect(el.pendingPermission).to.equal(null);
+      });
+    });
+  });
+
+  describe('updateToolCall()', () => {
+    let el: PageChatPanel;
+
+    beforeEach(async () => {
+      localStorageStub.getItem.returns(null);
+      el = await fixture(html`<page-chat-panel page="test-page" persona="TestPersona"></page-chat-panel>`);
+
+      const msgState: ChatMessageState = {
+        id: 'tc-msg',
+        sender: Sender.ASSISTANT,
+        content: 'Using tools',
+        renderedHtml: '',
+        timestamp: new Date(),
+        senderName: 'TestPersona',
+        replyToId: '',
+        reactions: [],
+        edited: false,
+        toolCalls: [],
+        sequence: 0n,
+      };
+      (el as unknown as { messagesById: Map<string, ChatMessageState> }).messagesById.set('tc-msg', msgState);
+      el.messages = [msgState];
+      await el.updateComplete;
+    });
+
+    describe('when adding a new tool call to a message', () => {
+
+      beforeEach(async () => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- calling private method for testing
+        (el as any).updateToolCall('tc-msg', 'tc-1', 'Read File', 'running');
+        await el.updateComplete;
+      });
+
+      it('should create a new tool call entry', () => {
+        expect(el.messages[0]!.toolCalls).to.have.length(1);
+      });
+
+      it('should set the correct toolCallId', () => {
+        expect(el.messages[0]!.toolCalls[0]!.toolCallId).to.equal('tc-1');
+      });
+
+      it('should set the correct title', () => {
+        expect(el.messages[0]!.toolCalls[0]!.title).to.equal('Read File');
+      });
+
+      it('should set the correct status', () => {
+        expect(el.messages[0]!.toolCalls[0]!.status).to.equal('running');
+      });
+    });
+
+    describe('when updating an existing tool call', () => {
+
+      beforeEach(async () => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- calling private method for testing
+        (el as any).updateToolCall('tc-msg', 'tc-1', 'Read File', 'running');
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- calling private method for testing
+        (el as any).updateToolCall('tc-msg', 'tc-1', 'Read File', 'complete');
+        await el.updateComplete;
+      });
+
+      it('should not duplicate the tool call entry', () => {
+        expect(el.messages[0]!.toolCalls).to.have.length(1);
+      });
+
+      it('should update the status', () => {
+        expect(el.messages[0]!.toolCalls[0]!.status).to.equal('complete');
+      });
+    });
+
+    describe('when adding multiple different tool calls', () => {
+
+      beforeEach(async () => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- calling private method for testing
+        (el as any).updateToolCall('tc-msg', 'tc-1', 'Read File', 'complete');
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- calling private method for testing
+        (el as any).updateToolCall('tc-msg', 'tc-2', 'Write File', 'running');
+        await el.updateComplete;
+      });
+
+      it('should have two tool call entries', () => {
+        expect(el.messages[0]!.toolCalls).to.have.length(2);
+      });
+
+      it('should preserve the first tool call', () => {
+        expect(el.messages[0]!.toolCalls[0]!.toolCallId).to.equal('tc-1');
+      });
+
+      it('should add the second tool call', () => {
+        expect(el.messages[0]!.toolCalls[1]!.toolCallId).to.equal('tc-2');
+      });
+    });
+
+    describe('when the message id does not exist', () => {
+
+      it('should not throw', () => {
+        expect(() => {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any -- calling private method for testing
+          (el as any).updateToolCall('no-such-msg', 'tc-1', 'Read File', 'running');
+        }).to.not.throw();
+      });
+    });
+  });
+
+  describe('toolCalls passed to chat-message-bubble', () => {
+    let el: PageChatPanel;
+
+    beforeEach(async () => {
+      localStorageStub.getItem.returns('true');
+      el = await fixture(html`<page-chat-panel page="test-page" persona="TestPersona"></page-chat-panel>`);
+
+      const msgState: ChatMessageState = {
+        id: 'tc-render-msg',
+        sender: Sender.ASSISTANT,
+        content: 'Tool result',
+        renderedHtml: '',
+        timestamp: new Date(),
+        senderName: 'TestPersona',
+        replyToId: '',
+        reactions: [],
+        edited: false,
+        toolCalls: [
+          { toolCallId: 'tc-a', title: 'Search', status: 'complete' },
+          { toolCallId: 'tc-b', title: 'Execute', status: 'running' },
+        ],
+        sequence: 0n,
+      };
+      (el as unknown as { messagesById: Map<string, ChatMessageState> }).messagesById.set('tc-render-msg', msgState);
+      el.messages = [msgState];
+      await el.updateComplete;
+    });
+
+    it('should pass toolCalls to the chat-message-bubble component', () => {
+      const bubble = el.shadowRoot!.querySelector('chat-message-bubble');
+      expect(bubble).to.exist;
+      expect((bubble as unknown as { toolCalls: unknown[] }).toolCalls).to.have.length(2);
+    });
+  });
+
+  describe('editMessage() streaming behavior', () => {
+    let el: PageChatPanel;
+
+    beforeEach(async () => {
+      localStorageStub.getItem.returns(null);
+      el = await fixture(html`<page-chat-panel page="test-page" persona="TestPersona"></page-chat-panel>`);
+
+      const msgState: ChatMessageState = {
+        id: 'stream-msg',
+        sender: Sender.ASSISTANT,
+        content: 'Original',
+        renderedHtml: '',
+        timestamp: new Date(),
+        senderName: 'TestPersona',
+        replyToId: '',
+        reactions: [],
+        edited: false,
+        toolCalls: [],
+        sequence: 0n,
+      };
+      (el as unknown as { messagesById: Map<string, ChatMessageState> }).messagesById.set('stream-msg', msgState);
+      el.messages = [msgState];
+      await el.updateComplete;
+    });
+
+    describe('when editing with streaming=true', () => {
+
+      beforeEach(async () => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- calling private method for testing
+        await (el as any).editMessage('stream-msg', 'Streaming content', true);
+        await el.updateComplete;
+      });
+
+      it('should update the content', () => {
+        expect(el.messages[0]!.content).to.equal('Streaming content');
+      });
+
+      it('should NOT mark the message as edited', () => {
+        expect(el.messages[0]!.edited).to.equal(false);
+      });
+    });
+
+    describe('when editing with streaming=false', () => {
+
+      beforeEach(async () => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- calling private method for testing
+        await (el as any).editMessage('stream-msg', 'Final content', false);
+        await el.updateComplete;
+      });
+
+      it('should update the content', () => {
+        expect(el.messages[0]!.content).to.equal('Final content');
+      });
+
+      it('should mark the message as edited', () => {
+        expect(el.messages[0]!.edited).to.equal(true);
+      });
+    });
+
+    describe('when editing with streaming=true and user has not scrolled', () => {
+      let scrollToBottomSpy: SinonSpy;
+
+      beforeEach(async () => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- accessing private field for testing
+        (el as any).userHasScrolled = false;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- spying on private method for testing
+        scrollToBottomSpy = spy(el as any, 'scrollToBottom');
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- calling private method for testing
+        await (el as any).editMessage('stream-msg', 'Streaming update', true);
+        await el.updateComplete;
+      });
+
+      it('should auto-scroll to bottom', () => {
+        expect(scrollToBottomSpy.callCount).to.be.greaterThan(0);
+      });
+    });
+
+    describe('when editing with streaming=true and user has scrolled up', () => {
+      let scrollToBottomSpy: SinonSpy;
+
+      beforeEach(async () => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- accessing private field for testing
+        (el as any).userHasScrolled = true;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- spying on private method for testing
+        scrollToBottomSpy = spy(el as any, 'scrollToBottom');
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- calling private method for testing
+        await (el as any).editMessage('stream-msg', 'Streaming update', true);
+        await el.updateComplete;
+      });
+
+      it('should not auto-scroll to bottom', () => {
+        expect(scrollToBottomSpy.callCount).to.equal(0);
+      });
+    });
+  });
+
+  describe('_chatAvailable and agent state', () => {
+    let el: PageChatPanel;
+
+    beforeEach(async () => {
+      localStorageStub.getItem.returns('true');
+      el = await fixture(html`<page-chat-panel page="test-page" persona="TestPersona"></page-chat-panel>`);
+    });
+
+    describe('when only poolConnected is true', () => {
+
+      beforeEach(async () => {
+        el.poolConnected = true;
+        el.agentConnected = false;
+        await el.updateComplete;
+      });
+
+      it('should consider chat available', () => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- accessing private getter for testing
+        expect((el as any)._chatAvailable).to.equal(true);
+      });
+
+      it('should enable the textarea', () => {
+        const textarea = el.shadowRoot!.querySelector('textarea');
+        expect(textarea!.disabled).to.equal(false);
+      });
+
+      it('should enable the send button', () => {
+        const btn = el.shadowRoot!.querySelector('.send-button') as HTMLButtonElement;
+        expect(btn.disabled).to.equal(false);
+      });
+    });
+
+    describe('when only agentConnected is true', () => {
+
+      beforeEach(async () => {
+        el.poolConnected = false;
+        el.agentConnected = true;
+        await el.updateComplete;
+      });
+
+      it('should consider chat available', () => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- accessing private getter for testing
+        expect((el as any)._chatAvailable).to.equal(true);
+      });
+
+      it('should enable the send button', () => {
+        const btn = el.shadowRoot!.querySelector('.send-button') as HTMLButtonElement;
+        expect(btn.disabled).to.equal(false);
+      });
+    });
+
+    describe('when neither poolConnected nor agentConnected', () => {
+
+      beforeEach(async () => {
+        el.poolConnected = false;
+        el.agentConnected = false;
+        await el.updateComplete;
+      });
+
+      it('should not consider chat available', () => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- accessing private getter for testing
+        expect((el as any)._chatAvailable).to.equal(false);
+      });
+
+      it('should disable the textarea', () => {
+        const textarea = el.shadowRoot!.querySelector('textarea');
+        expect(textarea!.disabled).to.equal(true);
+      });
+
+      it('should disable the send button', () => {
+        const btn = el.shadowRoot!.querySelector('.send-button') as HTMLButtonElement;
+        expect(btn.disabled).to.equal(true);
+      });
+
+      it('should show disconnected banner', () => {
+        const banner = el.shadowRoot!.querySelector('.status-banner.disconnected');
+        expect(banner).to.exist;
+      });
+    });
+
+    describe('FAB disabled state when neither connected (panel closed)', () => {
+      let closedEl: PageChatPanel;
+
+      beforeEach(async () => {
+        localStorageStub.getItem.returns(null);
+        closedEl = await fixture(html`<page-chat-panel page="test-page" persona="TestPersona"></page-chat-panel>`);
+        closedEl.poolConnected = false;
+        closedEl.agentConnected = false;
+        await closedEl.updateComplete;
+      });
+
+      it('should render the FAB with disabled class', () => {
+        const fab = closedEl.shadowRoot!.querySelector('.fab');
+        expect(fab).to.exist;
+        expect(fab!.classList.contains('disabled')).to.equal(true);
+      });
+    });
+
+    describe('FAB enabled state when poolConnected (panel closed)', () => {
+      let closedEl: PageChatPanel;
+
+      beforeEach(async () => {
+        localStorageStub.getItem.returns(null);
+        closedEl = await fixture(html`<page-chat-panel page="test-page" persona="TestPersona"></page-chat-panel>`);
+        closedEl.poolConnected = true;
+        closedEl.agentConnected = false;
+        await closedEl.updateComplete;
+      });
+
+      it('should render the FAB without disabled class', () => {
+        const fab = closedEl.shadowRoot!.querySelector('.fab');
+        expect(fab).to.exist;
+        expect(fab!.classList.contains('disabled')).to.equal(false);
+      });
+    });
+
+    describe('when agentStarting is true', () => {
+
+      beforeEach(async () => {
+        el.agentStarting = true;
+        el.agentConnected = false;
+        el.poolConnected = false;
+        await el.updateComplete;
+      });
+
+      it('should show the starting assistant banner', () => {
+        const banner = el.shadowRoot!.querySelector('.status-banner.reconnecting');
+        expect(banner).to.exist;
+        expect(banner!.textContent).to.contain('Starting assistant...');
+      });
+    });
+
+    describe('when poolConnected but not agentConnected and not starting', () => {
+
+      beforeEach(async () => {
+        el.poolConnected = true;
+        el.agentConnected = false;
+        el.agentStarting = false;
+        await el.updateComplete;
+      });
+
+      it('should show the send a message to start banner', () => {
+        const banners = el.shadowRoot!.querySelectorAll('.status-banner');
+        const startBanner = Array.from(banners).find((b) => b.textContent!.includes('Send a message to start'));
+        expect(startBanner).to.exist;
+      });
+    });
+  });
+
   describe('Ctrl+Space global keyboard shortcut', () => {
     let el: PageChatPanel;
 
     beforeEach(async () => {
       localStorageStub.getItem.returns(null);
       el = await fixture(html`<page-chat-panel page="test-page" persona="TestPersona"></page-chat-panel>`);
-      el.claudeConnected = true;
+      el.agentConnected = true;
       await el.updateComplete;
     });
 
@@ -1302,6 +1913,7 @@ describe('PageChatPanel stream methods', () => {
           replyToId: '',
           reactions: [],
           edited: false,
+          toolCalls: [],
           sequence: 0n,
         };
         // eslint-disable-next-line @typescript-eslint/no-explicit-any -- accessing private field for testing
@@ -1340,6 +1952,7 @@ describe('PageChatPanel stream methods', () => {
           replyToId: '',
           reactions: [],
           edited: false,
+          toolCalls: [],
           sequence: 0n,
         };
         // eslint-disable-next-line @typescript-eslint/no-explicit-any -- accessing private field for testing
@@ -1360,6 +1973,41 @@ describe('PageChatPanel stream methods', () => {
         const reactions = el.messages[0]!.reactions;
         expect(reactions).to.have.length(1);
         expect(reactions[0]!.emoji).to.equal('👍');
+      });
+    });
+
+    describe('when event is permissionRequest', () => {
+
+      beforeEach(async () => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- calling private method for testing
+        await (el as any).handleChatEvent({
+          event: {
+            case: 'permissionRequest',
+            value: {
+              requestId: 'perm-1',
+              title: 'Tool Use',
+              description: 'Run shell command',
+              options: [
+                { optionId: 'allow', label: 'Allow', description: 'Allow once' },
+              ],
+            },
+          },
+        });
+        await el.updateComplete;
+      });
+
+      it('should set pendingPermission', () => {
+        expect(el.pendingPermission).to.not.equal(null);
+        expect(el.pendingPermission!.requestId).to.equal('perm-1');
+      });
+
+      it('should map the title from the event', () => {
+        expect(el.pendingPermission!.title).to.equal('Tool Use');
+      });
+
+      it('should map options from the event', () => {
+        expect(el.pendingPermission!.options).to.have.length(1);
+        expect(el.pendingPermission!.options[0]!.optionId).to.equal('allow');
       });
     });
 
@@ -1529,15 +2177,15 @@ describe('PageChatPanel pollChatStatus and sendMessage', () => {
         await el.updateComplete;
       });
 
-      it('should set claudeConnected to true', () => {
-        expect(el.claudeConnected).to.equal(true);
+      it('should set agentConnected to true', () => {
+        expect(el.agentConnected).to.equal(true);
       });
     });
 
     describe('when getChatStatus returns connected=false', () => {
 
       beforeEach(async () => {
-        el.claudeConnected = true;
+        el.agentConnected = true;
         // eslint-disable-next-line @typescript-eslint/no-explicit-any -- replacing private chatClient for testing
         (el as any).chatClient = {
           getChatStatus: stub().resolves({ connected: false }),
@@ -1547,15 +2195,15 @@ describe('PageChatPanel pollChatStatus and sendMessage', () => {
         await el.updateComplete;
       });
 
-      it('should set claudeConnected to false', () => {
-        expect(el.claudeConnected).to.equal(false);
+      it('should set agentConnected to false', () => {
+        expect(el.agentConnected).to.equal(false);
       });
     });
 
     describe('when getChatStatus throws', () => {
 
       beforeEach(async () => {
-        el.claudeConnected = true;
+        el.agentConnected = true;
         // eslint-disable-next-line @typescript-eslint/no-explicit-any -- replacing private chatClient for testing
         (el as any).chatClient = {
           getChatStatus: stub().rejects(new Error('network error')),
@@ -1565,16 +2213,16 @@ describe('PageChatPanel pollChatStatus and sendMessage', () => {
         await el.updateComplete;
       });
 
-      it('should set claudeConnected to false', () => {
-        expect(el.claudeConnected).to.equal(false);
+      it('should set agentConnected to false', () => {
+        expect(el.agentConnected).to.equal(false);
       });
     });
 
-    describe('when Claude just connected while panel is open', () => {
+    describe('when agent just connected while panel is open', () => {
       let focusInputSpy: SinonSpy;
 
       beforeEach(async () => {
-        el.claudeConnected = false;
+        el.agentConnected = false;
         el.drawerOpen = true;
         await el.updateComplete;
         focusInputSpy = spy(el as unknown as { focusInput: () => void }, 'focusInput');
@@ -1600,7 +2248,7 @@ describe('PageChatPanel pollChatStatus and sendMessage', () => {
 
       beforeEach(async () => {
         el.page = 'test-page';
-        el.claudeConnected = true;
+        el.agentConnected = true;
         el.drawerOpen = true;
         await el.updateComplete;
         sendMessageStub = stub().resolves();
@@ -1622,7 +2270,7 @@ describe('PageChatPanel pollChatStatus and sendMessage', () => {
 
       beforeEach(async () => {
         el.page = 'test-page';
-        el.claudeConnected = true;
+        el.agentConnected = true;
         el.drawerOpen = true;
         await el.updateComplete;
         sendMessageStub = stub().resolves();
@@ -1649,7 +2297,7 @@ describe('PageChatPanel pollChatStatus and sendMessage', () => {
 
       beforeEach(async () => {
         el.page = 'test-page';
-        el.claudeConnected = true;
+        el.agentConnected = true;
         el.drawerOpen = true;
         await el.updateComplete;
         const connectError = new ConnectError('service unavailable', Code.Unavailable);
@@ -1680,7 +2328,7 @@ describe('PageChatPanel pollChatStatus and sendMessage', () => {
 
       beforeEach(async () => {
         el.page = 'test-page';
-        el.claudeConnected = true;
+        el.agentConnected = true;
         el.drawerOpen = true;
         await el.updateComplete;
         // eslint-disable-next-line @typescript-eslint/no-explicit-any -- replacing private chatClient for testing

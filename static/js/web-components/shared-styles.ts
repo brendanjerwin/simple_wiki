@@ -36,6 +36,77 @@ export const colorCSS = css`
 `;
 
 /* ==========================================================================
+   Force Dark Mode — Override all root-level tokens to dark-mode values.
+   Apply .force-dark to any container that is always on a dark background
+   (e.g., the chat panel). Cascades through shadow DOM via CSS custom
+   property inheritance, so child components automatically get dark tokens.
+   ========================================================================== */
+
+export const forceDarkTokensCSS = css`
+  .force-dark {
+    /* Surfaces — elevated must be lighter than editor-surface (#2d2d2d) for contrast */
+    --color-surface-primary: var(--color-editor-surface);
+    --color-surface-elevated: var(--color-editor-surface-elevated);
+    --color-surface-sunken: #141414;
+    --color-surface-overlay: rgba(0, 0, 0, 0.7);
+
+    /* Text */
+    --color-text-primary: #e9ecef;
+    --color-text-secondary: #adb5bd;
+    --color-text-muted: #8b949e;
+    --color-text-inverse: #1e1e1e;
+    --color-text-link: #6ea8fe;
+
+    /* Borders */
+    --color-border-default: #444444;
+    --color-border-subtle: #333333;
+    --color-border-strong: #555555;
+    --color-border-focus: #58a6ff;
+
+    /* Actions */
+    --color-action-primary: #8b949e;
+    --color-action-primary-hover: #a0adb5;
+    --color-action-secondary-bg: #2d2d2d;
+    --color-action-secondary-hover-bg: #3d3d3d;
+    --color-action-danger: #f85149;
+    --color-action-danger-hover: #da3633;
+    --color-action-confirm: #388bfd;
+    --color-action-confirm-hover: #1f6feb;
+    --color-action-link: #6ea8fe;
+    --color-action-link-hover: #9ec5fe;
+
+    /* Interactive */
+    --color-hover-overlay: rgba(255, 255, 255, 0.1);
+
+    /* Semantic */
+    --color-success: #3fb950;
+    --color-success-bg: #0d2b12;
+    --color-success-text: #75b798;
+    --color-error: #f85149;
+    --color-error-bg: #2c0b0e;
+    --color-error-text: #ea868f;
+    --color-warning: #d29922;
+    --color-warning-bg: #2d2000;
+    --color-warning-text: #ffda6a;
+    --color-info: #8b949e;
+
+    /* Chat */
+    --color-chat-user-bg: #4a6a9c;
+    --color-chat-user-bg-hover: #5a7aac;
+
+    /* Highlight */
+    --color-highlight-bg: rgba(255, 255, 0, 0.3);
+
+    /* Shadows */
+    --shadow-subtle: 0 1px 3px rgba(0, 0, 0, 0.4);
+    --shadow-medium: 0 4px 12px rgba(0, 0, 0, 0.5);
+
+    /* Set base text color */
+    color: var(--color-text-primary);
+  }
+`;
+
+/* ==========================================================================
    Layer System (z-index)
    ========================================================================== */
 

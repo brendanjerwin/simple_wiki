@@ -2,6 +2,7 @@ import { expect, fixture, html } from '@open-wc/testing';
 import { Sender } from '../gen/api/v1/chat_pb.js';
 import './chat-message-bubble.js';
 import type { ChatMessageBubble, ReactionGroup, ScrollToMessageEventDetail } from './chat-message-bubble.js';
+import type { ToolCallState } from './page-chat-panel.js';
 
 describe('ChatMessageBubble', () => {
   describe('when rendering a user message', () => {
@@ -219,6 +220,104 @@ describe('ChatMessageBubble', () => {
       const name = el.shadowRoot!.querySelector('.sender-name');
       expect(name).to.not.be.null;
       expect(name!.textContent).to.equal('Alice');
+    });
+  });
+
+  describe('tool call rendering', () => {
+
+    describe('when toolCalls is empty', () => {
+      let el: ChatMessageBubble;
+
+      beforeEach(async () => {
+        el = await fixture(html`
+          <chat-message-bubble
+            message-id="msg-tc-empty"
+            .sender=${Sender.ASSISTANT}
+            content="No tools"
+            .toolCalls=${[]}
+          ></chat-message-bubble>
+        `);
+      });
+
+      it('should not render the tool-calls container', () => {
+        const toolCalls = el.shadowRoot!.querySelector('.tool-calls');
+        expect(toolCalls).to.be.null;
+      });
+    });
+
+    describe('when toolCalls has entries', () => {
+      let el: ChatMessageBubble;
+      const toolCalls: ToolCallState[] = [
+        { toolCallId: 'tc-1', title: 'Read File', status: 'complete' },
+        { toolCallId: 'tc-2', title: 'Execute Shell', status: 'running' },
+        { toolCallId: 'tc-3', title: 'Failed Op', status: 'error' },
+      ];
+
+      beforeEach(async () => {
+        el = await fixture(html`
+          <chat-message-bubble
+            message-id="msg-tc-multi"
+            .sender=${Sender.ASSISTANT}
+            content="Used tools"
+            .toolCalls=${toolCalls}
+          ></chat-message-bubble>
+        `);
+      });
+
+      it('should render the tool-calls container', () => {
+        const container = el.shadowRoot!.querySelector('.tool-calls');
+        expect(container).to.not.be.null;
+      });
+
+      it('should render one pill per tool call', () => {
+        const pills = el.shadowRoot!.querySelectorAll('.tool-call-pill');
+        expect(pills.length).to.equal(3);
+      });
+
+      it('should display the tool call title', () => {
+        const pills = el.shadowRoot!.querySelectorAll('.tool-call-pill');
+        expect(pills[0]!.textContent).to.contain('Read File');
+        expect(pills[1]!.textContent).to.contain('Execute Shell');
+        expect(pills[2]!.textContent).to.contain('Failed Op');
+      });
+
+      it('should show check mark icon for complete status', () => {
+        const pills = el.shadowRoot!.querySelectorAll('.tool-call-pill');
+        const icon = pills[0]!.querySelector('.status-icon');
+        expect(icon!.textContent).to.equal('\u2705');
+      });
+
+      it('should show hourglass icon for running status', () => {
+        const pills = el.shadowRoot!.querySelectorAll('.tool-call-pill');
+        const icon = pills[1]!.querySelector('.status-icon');
+        expect(icon!.textContent).to.equal('\u23F3');
+      });
+
+      it('should show cross mark icon for error status', () => {
+        const pills = el.shadowRoot!.querySelectorAll('.tool-call-pill');
+        const icon = pills[2]!.querySelector('.status-icon');
+        expect(icon!.textContent).to.equal('\u274C');
+      });
+    });
+
+    describe('when toolCalls has an entry with unknown status', () => {
+      let el: ChatMessageBubble;
+
+      beforeEach(async () => {
+        el = await fixture(html`
+          <chat-message-bubble
+            message-id="msg-tc-unknown"
+            .sender=${Sender.ASSISTANT}
+            content="Unknown status"
+            .toolCalls=${[{ toolCallId: 'tc-x', title: 'Mystery', status: 'pending' }]}
+          ></chat-message-bubble>
+        `);
+      });
+
+      it('should show bullet icon for unknown status', () => {
+        const icon = el.shadowRoot!.querySelector('.tool-call-pill .status-icon');
+        expect(icon!.textContent).to.equal('\u2022');
+      });
     });
   });
 });

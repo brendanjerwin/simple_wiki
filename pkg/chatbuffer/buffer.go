@@ -1,6 +1,7 @@
 package chatbuffer
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"sync"
@@ -44,12 +45,30 @@ type Reaction struct {
 	Reactor string
 }
 
+// PermissionOption represents a single option in a permission request.
+type PermissionOption struct {
+	OptionID    string
+	Label       string
+	Description string
+}
+
+// PermissionRequestEvent represents a permission request sent to the browser.
+type PermissionRequestEvent struct {
+	Page        string
+	RequestID   string
+	Title       string
+	Description string
+	Options     []PermissionOption
+}
+
 // Event represents a chat event that can be streamed to subscribers.
 type Event struct {
-	Type      EventType
-	Message   *Message
-	Edit      *EditEvent
-	Reaction  *ReactionEvent
+	Type              EventType
+	Message           *Message
+	Edit              *EditEvent
+	Reaction          *ReactionEvent
+	ToolCall          *ToolCallEvent
+	PermissionRequest *PermissionRequestEvent
 }
 
 // EventType identifies the type of chat event.
@@ -59,6 +78,8 @@ const (
 	EventTypeNewMessage EventType = iota
 	EventTypeEdit
 	EventTypeReaction
+	EventTypeToolCall
+	EventTypePermissionRequest
 )
 
 // EditEvent represents a message edit.
@@ -66,6 +87,15 @@ type EditEvent struct {
 	MessageID  string
 	NewContent string
 	Timestamp  time.Time
+	Streaming  bool // true for ACP streaming updates, false for user edits
+}
+
+// ToolCallEvent represents an agent tool invocation notification.
+type ToolCallEvent struct {
+	MessageID  string
+	ToolCallID string
+	Title      string
+	Status     string // "pending", "running", "complete", "error"
 }
 
 // ReactionEvent represents a reaction added to a message.
@@ -86,10 +116,8 @@ type pageBuffer struct {
 
 // Manager manages chat message buffers for all pages.
 type Manager struct {
-	buffers              map[string]*pageBuffer
-	mu                   sync.RWMutex
-	channelSubscribers   []chan *Message
-	channelSubscribersMu sync.RWMutex
+	buffers map[string]*pageBuffer
+	mu      sync.RWMutex
 
 	pageChannelSubscribers   map[string][]chan *Message // page → per-page MCP subscribers
 	pageChannelSubscribersMu sync.RWMutex
@@ -98,6 +126,12 @@ type Manager struct {
 	instanceRequestChans []chan string         // pool daemon subscribers
 	instanceMu           sync.RWMutex
 
+	cancelFuncs   map[string][]chan struct{} // page → cancellation signal subscribers
+	cancelFuncsMu sync.Mutex
+
+	pendingPermissions   map[string]chan string // request_id → response channel
+	pendingPermissionsMu sync.Mutex
+
 	done chan struct{}
 }
 
@@ -105,10 +139,11 @@ type Manager struct {
 func NewManager() *Manager {
 	m := &Manager{
 		buffers:                make(map[string]*pageBuffer),
-		channelSubscribers:     make([]chan *Message, 0),
 		pageChannelSubscribers: make(map[string][]chan *Message),
 		instanceRequests:       make(map[string]time.Time),
 		instanceRequestChans:   make([]chan string, 0),
+		cancelFuncs:            make(map[string][]chan struct{}),
+		pendingPermissions:     make(map[string]chan string),
 		done:                   make(chan struct{}),
 	}
 
@@ -185,18 +220,13 @@ func (m *Manager) getOrCreateBuffer(page string) *pageBuffer {
 }
 
 // AddUserMessage adds a user message to the buffer and notifies subscribers.
-// Returns ErrNoSubscribers if no channel subscribers (global or page-level) are connected;
+// Returns ErrNoSubscribers if no page-level channel subscribers or pool daemon are connected;
 // in that case the message is NOT stored and page subscribers are NOT notified.
 func (m *Manager) AddUserMessage(page, content, senderName string) (string, error) {
 	// Check for channel subscribers BEFORE writing to the buffer so that if
 	// ErrNoSubscribers is returned, the message was never stored and page
 	// subscribers were never notified.
-	// Allow sending if there are global subscribers OR page-specific subscribers.
-	m.channelSubscribersMu.RLock()
-	hasGlobal := len(m.channelSubscribers) > 0
-	m.channelSubscribersMu.RUnlock()
-
-	if !hasGlobal && !m.HasPageChannelSubscriber(page) {
+	if !m.HasPageChannelSubscriber(page) && !m.HasInstanceRequestSubscribers() {
 		return "", ErrNoSubscribers
 	}
 
@@ -229,27 +259,13 @@ func (m *Manager) AddUserMessage(page, content, senderName string) (string, erro
 		Message: &msgCopy,
 	})
 
-	// Publish to global channel subscribers (wiki-cli mcp without --page).
-	// Acquire channelSubscribersMu after releasing buf.mu to maintain
-	// a consistent lock ordering and avoid deadlock.
-	m.channelSubscribersMu.RLock()
-	msgCopy2 := *msg
-	for _, subscriber := range m.channelSubscribers {
-		select {
-		case subscriber <- &msgCopy2:
-		default:
-			// Don't block if subscriber is slow
-		}
-	}
-	m.channelSubscribersMu.RUnlock()
-
-	// Publish to page-specific channel subscribers (wiki-cli mcp --page).
+	// Publish to page-specific channel subscribers (wiki-cli mcp --page / ACP pool).
 	m.pageChannelSubscribersMu.RLock()
 	if subs, ok := m.pageChannelSubscribers[page]; ok {
-		msgCopy3 := *msg
+		msgCopy2 := *msg
 		for _, subscriber := range subs {
 			select {
-			case subscriber <- &msgCopy3:
+			case subscriber <- &msgCopy2:
 			default:
 				// Don't block if subscriber is slow
 			}
@@ -359,7 +375,9 @@ func hasReaction(msg *Message, emoji, reactor string) bool {
 }
 
 // EditMessage updates the content of an existing message.
-func (m *Manager) EditMessage(messageID, newContent string) error {
+// If streaming is true, the edit event carries a streaming flag so the frontend
+// can suppress the "(edited)" indicator for ACP streaming updates.
+func (m *Manager) EditMessage(messageID, newContent string, streaming bool) error {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
@@ -380,6 +398,7 @@ func (m *Manager) EditMessage(messageID, newContent string) error {
 					MessageID:  messageID,
 					NewContent: newContent,
 					Timestamp:  time.Now(),
+					Streaming:  streaming,
 				},
 			})
 			return nil
@@ -426,6 +445,24 @@ func (m *Manager) AddReaction(messageID, emoji, reactor string) error {
 	}
 
 	return ErrMessageNotFound
+}
+
+// NotifyToolCall sends a tool call notification to page subscribers.
+// This is ephemeral — not stored in the buffer, only streamed to active subscribers.
+func (m *Manager) NotifyToolCall(page, messageID, toolCallID, title, toolStatus string) {
+	buf := m.getOrCreateBuffer(page)
+	buf.mu.Lock()
+	buf.lastAccess = time.Now()
+
+	buf.unlockAndNotify(Event{
+		Type: EventTypeToolCall,
+		ToolCall: &ToolCallEvent{
+			MessageID:  messageID,
+			ToolCallID: toolCallID,
+			Title:      title,
+			Status:     toolStatus,
+		},
+	})
 }
 
 // GetMessages returns all messages for a page.
@@ -475,39 +512,6 @@ func (m *Manager) SubscribeToPageWithReplay(page string) ([]*Message, <-chan Eve
 	}
 
 	return messages, eventChan, buf.makeUnsubscribeFn(eventChan)
-}
-
-// SubscribeToChannel subscribes to all user messages across all pages.
-// This is used by wiki-cli mcp to receive messages for Claude.
-// Returns a channel that receives messages and an unsubscribe function.
-func (m *Manager) SubscribeToChannel() (<-chan *Message, func()) {
-	m.channelSubscribersMu.Lock()
-	defer m.channelSubscribersMu.Unlock()
-
-	msgChan := make(chan *Message, 100) // Buffer messages
-	m.channelSubscribers = append(m.channelSubscribers, msgChan)
-
-	unsubscribe := func() {
-		m.channelSubscribersMu.Lock()
-		defer m.channelSubscribersMu.Unlock()
-
-		for i, subscriber := range m.channelSubscribers {
-			if subscriber == msgChan {
-				m.channelSubscribers = append(m.channelSubscribers[:i], m.channelSubscribers[i+1:]...)
-				close(msgChan)
-				break
-			}
-		}
-	}
-
-	return msgChan, unsubscribe
-}
-
-// HasChannelSubscribers returns true if there are any channel subscribers.
-func (m *Manager) HasChannelSubscribers() bool {
-	m.channelSubscribersMu.RLock()
-	defer m.channelSubscribersMu.RUnlock()
-	return len(m.channelSubscribers) > 0
 }
 
 // GetMessageByID retrieves a message by its ID across all pages.
@@ -560,6 +564,44 @@ func (m *Manager) SubscribeToPageChannel(page string) (<-chan *Message, func()) 
 	return msgChan, unsubscribe
 }
 
+// SubscribeToPageChannelWithReplay atomically subscribes to a page channel and returns
+// existing messages, preventing the first message from being lost between spawn and subscribe.
+func (m *Manager) SubscribeToPageChannelWithReplay(page string) ([]*Message, <-chan *Message, func()) {
+	buf := m.getOrCreateBuffer(page)
+	buf.mu.Lock()
+
+	// Create page channel subscription
+	m.pageChannelSubscribersMu.Lock()
+	msgChan := make(chan *Message, 100)
+	m.pageChannelSubscribers[page] = append(m.pageChannelSubscribers[page], msgChan)
+	m.pageChannelSubscribersMu.Unlock()
+
+	// Copy existing messages under the buffer lock
+	messages := make([]*Message, len(buf.messages))
+	for i, msg := range buf.messages {
+		messages[i] = msg.clone()
+	}
+	buf.mu.Unlock()
+
+	unsubscribe := func() {
+		m.pageChannelSubscribersMu.Lock()
+		defer m.pageChannelSubscribersMu.Unlock()
+		subs := m.pageChannelSubscribers[page]
+		for i, subscriber := range subs {
+			if subscriber == msgChan {
+				m.pageChannelSubscribers[page] = append(subs[:i], subs[i+1:]...)
+				close(msgChan)
+				break
+			}
+		}
+		if len(m.pageChannelSubscribers[page]) == 0 {
+			delete(m.pageChannelSubscribers, page)
+		}
+	}
+
+	return messages, msgChan, unsubscribe
+}
+
 // HasPageChannelSubscriber returns true if a per-page channel subscriber exists for the given page.
 func (m *Manager) HasPageChannelSubscriber(page string) bool {
 	m.pageChannelSubscribersMu.RLock()
@@ -570,15 +612,8 @@ func (m *Manager) HasPageChannelSubscriber(page string) bool {
 // RequestInstance records that a page needs a Claude instance and notifies pool daemon subscribers.
 // Deduplicates: if the page already has a subscriber or was recently requested, this is a no-op.
 func (m *Manager) RequestInstance(page string) {
-	// Don't request if page already has a subscriber
+	// Don't request if page already has a per-page subscriber
 	if m.HasPageChannelSubscriber(page) {
-		return
-	}
-
-	m.channelSubscribersMu.RLock()
-	hasGlobal := len(m.channelSubscribers) > 0
-	m.channelSubscribersMu.RUnlock()
-	if hasGlobal {
 		return
 	}
 
@@ -592,12 +627,14 @@ func (m *Manager) RequestInstance(page string) {
 
 	m.instanceRequests[page] = time.Now()
 
-	// Notify all pool daemon subscribers
+	// Notify exactly one pool daemon subscriber to prevent duplicate spawns.
+	// Try each subscriber in order; use the first one that accepts.
 	for _, ch := range m.instanceRequestChans {
 		select {
 		case ch <- page:
+			return
 		default:
-			// Don't block if subscriber is slow
+			// Subscriber is full, try next
 		}
 	}
 }
@@ -635,6 +672,56 @@ func (m *Manager) HasInstanceRequestSubscribers() bool {
 	return len(m.instanceRequestChans) > 0
 }
 
+// CancelPage signals cancellation for an in-progress agent prompt on the given page.
+// Returns true if any cancellation subscribers were notified.
+func (m *Manager) CancelPage(page string) bool {
+	m.cancelFuncsMu.Lock()
+	defer m.cancelFuncsMu.Unlock()
+
+	chans, ok := m.cancelFuncs[page]
+	if !ok || len(chans) == 0 {
+		return false
+	}
+
+	// Signal all subscribers, then remove them (one-shot)
+	for _, ch := range chans {
+		select {
+		case ch <- struct{}{}:
+		default:
+		}
+	}
+	delete(m.cancelFuncs, page)
+	return true
+}
+
+// SubscribeToCancellation returns a channel that receives a signal when CancelPage is called
+// for the given page. The returned unsubscribe function removes the subscription.
+func (m *Manager) SubscribeToCancellation(page string) (<-chan struct{}, func()) {
+	m.cancelFuncsMu.Lock()
+	defer m.cancelFuncsMu.Unlock()
+
+	ch := make(chan struct{}, 1)
+	m.cancelFuncs[page] = append(m.cancelFuncs[page], ch)
+
+	unsubscribe := func() {
+		m.cancelFuncsMu.Lock()
+		defer m.cancelFuncsMu.Unlock()
+
+		chans := m.cancelFuncs[page]
+		for i, c := range chans {
+			if c == ch {
+				m.cancelFuncs[page] = append(chans[:i], chans[i+1:]...)
+				break
+			}
+		}
+		if len(m.cancelFuncs[page]) == 0 {
+			delete(m.cancelFuncs, page)
+		}
+	}
+
+	return ch, unsubscribe
+}
+
 // IsInstanceRequested returns true if a Claude instance has been requested for the given page
 // within the last 2 minutes and has not yet connected (no page channel subscriber exists).
 func (m *Manager) IsInstanceRequested(page string) bool {
@@ -646,4 +733,69 @@ func (m *Manager) IsInstanceRequested(page string) bool {
 	defer m.instanceMu.RUnlock()
 	ts, ok := m.instanceRequests[page]
 	return ok && time.Since(ts) < 2*time.Minute
+}
+
+// RequestPermission emits a permission request event to page subscribers and blocks
+// until a response arrives via RespondToPermission or the context is cancelled.
+// Returns the selected option ID, or empty string if cancelled.
+func (m *Manager) RequestPermission(ctx context.Context, page, requestID, title, description string, options []PermissionOption) string {
+	// Create a response channel and register it
+	responseChan := make(chan string, 1)
+
+	m.pendingPermissionsMu.Lock()
+	m.pendingPermissions[requestID] = responseChan
+	m.pendingPermissionsMu.Unlock()
+
+	// Ensure cleanup on all exit paths
+	defer func() {
+		m.pendingPermissionsMu.Lock()
+		delete(m.pendingPermissions, requestID)
+		m.pendingPermissionsMu.Unlock()
+	}()
+
+	// Emit the permission request event to page subscribers
+	m.EmitPermissionRequest(page, &PermissionRequestEvent{
+		Page:        page,
+		RequestID:   requestID,
+		Title:       title,
+		Description: description,
+		Options:     options,
+	})
+
+	// Block until a response arrives or context is cancelled
+	select {
+	case selectedOptionID := <-responseChan:
+		return selectedOptionID
+	case <-ctx.Done():
+		return ""
+	}
+}
+
+// EmitPermissionRequest sends a permission request event to all subscribers of the given page.
+func (m *Manager) EmitPermissionRequest(page string, event *PermissionRequestEvent) {
+	buf := m.getOrCreateBuffer(page)
+	buf.mu.Lock()
+	buf.lastAccess = time.Now()
+
+	buf.unlockAndNotify(Event{
+		Type:              EventTypePermissionRequest,
+		PermissionRequest: event,
+	})
+}
+
+// RespondToPermission delivers a permission response to the waiting RequestPermission call.
+func (m *Manager) RespondToPermission(requestID, selectedOptionID string) {
+	m.pendingPermissionsMu.Lock()
+	responseChan, ok := m.pendingPermissions[requestID]
+	m.pendingPermissionsMu.Unlock()
+
+	if !ok {
+		return
+	}
+
+	select {
+	case responseChan <- selectedOptionID:
+	default:
+		// Channel already has a response or was closed
+	}
 }
