@@ -1236,7 +1236,7 @@ type GetChatStatusResponse struct {
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
-	// Whether a Claude channel subscriber is connected for the requested page.
+	// Whether an agent is connected for the requested page.
 	Connected bool `protobuf:"varint,1,opt,name=connected,proto3" json:"connected,omitempty"`
 	// Whether an instance has been requested but is not yet connected.
 	Starting bool `protobuf:"varint,2,opt,name=starting,proto3" json:"starting,omitempty"`
@@ -1384,7 +1384,7 @@ func (*SubscribeInstanceRequestsRequest) Descriptor() ([]byte, []int) {
 	return file_api_v1_chat_proto_rawDescGZIP(), []int{20}
 }
 
-// InstanceRequest is streamed by SubscribeInstanceRequests when a page needs a Claude instance.
+// InstanceRequest is streamed by SubscribeInstanceRequests when a page needs an agent instance.
 type InstanceRequest struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache

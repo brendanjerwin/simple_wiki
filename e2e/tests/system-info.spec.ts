@@ -14,9 +14,9 @@ async function navigateAndWait(page: Page): Promise<void> {
 
 /** Click the INFO drawer tab to open the system-info panel and wait for it to open. */
 async function openSystemInfoPanel(page: Page): Promise<void> {
-  const panel = page.locator('system-info .system-panel');
-  await expect(panel).toBeAttached({ timeout: PANEL_INTERACTION_TIMEOUT_MS });
-  await panel.click();
+  const drawerTab = page.locator('system-info .drawer-tab');
+  await expect(drawerTab).toBeAttached({ timeout: PANEL_INTERACTION_TIMEOUT_MS });
+  await drawerTab.click();
   await expect(page.locator('system-info .system-panel.drawerOpen')).toBeAttached({ timeout: PANEL_INTERACTION_TIMEOUT_MS });
 }
 
@@ -96,13 +96,12 @@ test.describe('System Info Panel', () => {
       await expect(jobsComp).toBeAttached({ timeout: COMPONENT_LOAD_TIMEOUT_MS });
     });
 
-    test('jobs section renders without error in idle state (no active jobs)', async ({ page }) => {
+    test('jobs section renders without an error-display', async ({ page }) => {
       await openSystemInfoPanel(page);
-      // In idle state (no active jobs) system-info-jobs renders empty HTML — no error state.
-      const jobsComp = page.locator('system-info system-info-jobs');
-      await expect(jobsComp).toBeAttached({ timeout: COMPONENT_LOAD_TIMEOUT_MS });
       // Verify the jobs component is not showing an error — if error-display is attached,
       // the jobs component is in an error state which should not happen.
+      const jobsComp = page.locator('system-info system-info-jobs');
+      await expect(jobsComp).toBeAttached({ timeout: COMPONENT_LOAD_TIMEOUT_MS });
       await expect(jobsComp.locator('error-display')).not.toBeAttached({ timeout: API_LOAD_TIMEOUT_MS });
     });
   });

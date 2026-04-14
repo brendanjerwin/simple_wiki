@@ -9,8 +9,6 @@ import (
 
 import (
 	"context"
-	"github.com/mark3labs/mcp-go/mcp"
-	mcpserver "github.com/mark3labs/mcp-go/server"
 	"encoding/json"
 	"google.golang.org/protobuf/encoding/protojson"
 	"connectrpc.com/connect"
@@ -19,10 +17,10 @@ import (
 )
 
 var (
-	SystemInfoService_GetJobStatusTool       = mcp.Tool{Meta: (*mcp.Meta)(nil), Name: "api_v1_SystemInfoService_GetJobStatus", Description: "GetJobStatus returns the current status of background job queues.\n", InputSchema: mcp.ToolInputSchema{Defs: map[string]interface{}(nil), Type: "", Properties: map[string]interface{}(nil), Required: []string(nil)}, RawInputSchema: json.RawMessage{0x7b, 0x22, 0x70, 0x72, 0x6f, 0x70, 0x65, 0x72, 0x74, 0x69, 0x65, 0x73, 0x22, 0x3a, 0x7b, 0x7d, 0x2c, 0x22, 0x72, 0x65, 0x71, 0x75, 0x69, 0x72, 0x65, 0x64, 0x22, 0x3a, 0x5b, 0x5d, 0x2c, 0x22, 0x74, 0x79, 0x70, 0x65, 0x22, 0x3a, 0x22, 0x6f, 0x62, 0x6a, 0x65, 0x63, 0x74, 0x22, 0x7d}, RawOutputSchema: json.RawMessage(nil), Annotations: mcp.ToolAnnotation{Title: "", ReadOnlyHint: (*bool)(nil), DestructiveHint: (*bool)(nil), IdempotentHint: (*bool)(nil), OpenWorldHint: (*bool)(nil)}}
-	SystemInfoService_GetVersionTool         = mcp.Tool{Meta: (*mcp.Meta)(nil), Name: "api_v1_SystemInfoService_GetVersion", Description: "GetVersion returns the server version and build time.\n", InputSchema: mcp.ToolInputSchema{Defs: map[string]interface{}(nil), Type: "", Properties: map[string]interface{}(nil), Required: []string(nil)}, RawInputSchema: json.RawMessage{0x7b, 0x22, 0x70, 0x72, 0x6f, 0x70, 0x65, 0x72, 0x74, 0x69, 0x65, 0x73, 0x22, 0x3a, 0x7b, 0x7d, 0x2c, 0x22, 0x72, 0x65, 0x71, 0x75, 0x69, 0x72, 0x65, 0x64, 0x22, 0x3a, 0x5b, 0x5d, 0x2c, 0x22, 0x74, 0x79, 0x70, 0x65, 0x22, 0x3a, 0x22, 0x6f, 0x62, 0x6a, 0x65, 0x63, 0x74, 0x22, 0x7d}, RawOutputSchema: json.RawMessage(nil), Annotations: mcp.ToolAnnotation{Title: "", ReadOnlyHint: (*bool)(nil), DestructiveHint: (*bool)(nil), IdempotentHint: (*bool)(nil), OpenWorldHint: (*bool)(nil)}}
-	SystemInfoService_GetJobStatusToolOpenAI = mcp.Tool{Meta: (*mcp.Meta)(nil), Name: "api_v1_SystemInfoService_GetJobStatus", Description: "GetJobStatus returns the current status of background job queues.\n", InputSchema: mcp.ToolInputSchema{Defs: map[string]interface{}(nil), Type: "", Properties: map[string]interface{}(nil), Required: []string(nil)}, RawInputSchema: json.RawMessage{0x7b, 0x22, 0x61, 0x64, 0x64, 0x69, 0x74, 0x69, 0x6f, 0x6e, 0x61, 0x6c, 0x50, 0x72, 0x6f, 0x70, 0x65, 0x72, 0x74, 0x69, 0x65, 0x73, 0x22, 0x3a, 0x66, 0x61, 0x6c, 0x73, 0x65, 0x2c, 0x22, 0x70, 0x72, 0x6f, 0x70, 0x65, 0x72, 0x74, 0x69, 0x65, 0x73, 0x22, 0x3a, 0x7b, 0x7d, 0x2c, 0x22, 0x72, 0x65, 0x71, 0x75, 0x69, 0x72, 0x65, 0x64, 0x22, 0x3a, 0x5b, 0x5d, 0x2c, 0x22, 0x74, 0x79, 0x70, 0x65, 0x22, 0x3a, 0x22, 0x6f, 0x62, 0x6a, 0x65, 0x63, 0x74, 0x22, 0x7d}, RawOutputSchema: json.RawMessage(nil), Annotations: mcp.ToolAnnotation{Title: "", ReadOnlyHint: (*bool)(nil), DestructiveHint: (*bool)(nil), IdempotentHint: (*bool)(nil), OpenWorldHint: (*bool)(nil)}}
-	SystemInfoService_GetVersionToolOpenAI   = mcp.Tool{Meta: (*mcp.Meta)(nil), Name: "api_v1_SystemInfoService_GetVersion", Description: "GetVersion returns the server version and build time.\n", InputSchema: mcp.ToolInputSchema{Defs: map[string]interface{}(nil), Type: "", Properties: map[string]interface{}(nil), Required: []string(nil)}, RawInputSchema: json.RawMessage{0x7b, 0x22, 0x61, 0x64, 0x64, 0x69, 0x74, 0x69, 0x6f, 0x6e, 0x61, 0x6c, 0x50, 0x72, 0x6f, 0x70, 0x65, 0x72, 0x74, 0x69, 0x65, 0x73, 0x22, 0x3a, 0x66, 0x61, 0x6c, 0x73, 0x65, 0x2c, 0x22, 0x70, 0x72, 0x6f, 0x70, 0x65, 0x72, 0x74, 0x69, 0x65, 0x73, 0x22, 0x3a, 0x7b, 0x7d, 0x2c, 0x22, 0x72, 0x65, 0x71, 0x75, 0x69, 0x72, 0x65, 0x64, 0x22, 0x3a, 0x5b, 0x5d, 0x2c, 0x22, 0x74, 0x79, 0x70, 0x65, 0x22, 0x3a, 0x22, 0x6f, 0x62, 0x6a, 0x65, 0x63, 0x74, 0x22, 0x7d}, RawOutputSchema: json.RawMessage(nil), Annotations: mcp.ToolAnnotation{Title: "", ReadOnlyHint: (*bool)(nil), DestructiveHint: (*bool)(nil), IdempotentHint: (*bool)(nil), OpenWorldHint: (*bool)(nil)}}
+	SystemInfoService_GetJobStatusTool       = runtime.Tool{Name: "api_v1_SystemInfoService_GetJobStatus", Description: "GetJobStatus returns the current status of background job queues.\n", RawInputSchema: json.RawMessage{0x7b, 0x22, 0x70, 0x72, 0x6f, 0x70, 0x65, 0x72, 0x74, 0x69, 0x65, 0x73, 0x22, 0x3a, 0x7b, 0x7d, 0x2c, 0x22, 0x72, 0x65, 0x71, 0x75, 0x69, 0x72, 0x65, 0x64, 0x22, 0x3a, 0x5b, 0x5d, 0x2c, 0x22, 0x74, 0x79, 0x70, 0x65, 0x22, 0x3a, 0x22, 0x6f, 0x62, 0x6a, 0x65, 0x63, 0x74, 0x22, 0x7d}}
+	SystemInfoService_GetVersionTool         = runtime.Tool{Name: "api_v1_SystemInfoService_GetVersion", Description: "GetVersion returns the server version and build time.\n", RawInputSchema: json.RawMessage{0x7b, 0x22, 0x70, 0x72, 0x6f, 0x70, 0x65, 0x72, 0x74, 0x69, 0x65, 0x73, 0x22, 0x3a, 0x7b, 0x7d, 0x2c, 0x22, 0x72, 0x65, 0x71, 0x75, 0x69, 0x72, 0x65, 0x64, 0x22, 0x3a, 0x5b, 0x5d, 0x2c, 0x22, 0x74, 0x79, 0x70, 0x65, 0x22, 0x3a, 0x22, 0x6f, 0x62, 0x6a, 0x65, 0x63, 0x74, 0x22, 0x7d}}
+	SystemInfoService_GetJobStatusToolOpenAI = runtime.Tool{Name: "api_v1_SystemInfoService_GetJobStatus", Description: "GetJobStatus returns the current status of background job queues.\n", RawInputSchema: json.RawMessage{0x7b, 0x22, 0x61, 0x64, 0x64, 0x69, 0x74, 0x69, 0x6f, 0x6e, 0x61, 0x6c, 0x50, 0x72, 0x6f, 0x70, 0x65, 0x72, 0x74, 0x69, 0x65, 0x73, 0x22, 0x3a, 0x66, 0x61, 0x6c, 0x73, 0x65, 0x2c, 0x22, 0x70, 0x72, 0x6f, 0x70, 0x65, 0x72, 0x74, 0x69, 0x65, 0x73, 0x22, 0x3a, 0x7b, 0x7d, 0x2c, 0x22, 0x72, 0x65, 0x71, 0x75, 0x69, 0x72, 0x65, 0x64, 0x22, 0x3a, 0x5b, 0x5d, 0x2c, 0x22, 0x74, 0x79, 0x70, 0x65, 0x22, 0x3a, 0x22, 0x6f, 0x62, 0x6a, 0x65, 0x63, 0x74, 0x22, 0x7d}}
+	SystemInfoService_GetVersionToolOpenAI   = runtime.Tool{Name: "api_v1_SystemInfoService_GetVersion", Description: "GetVersion returns the server version and build time.\n", RawInputSchema: json.RawMessage{0x7b, 0x22, 0x61, 0x64, 0x64, 0x69, 0x74, 0x69, 0x6f, 0x6e, 0x61, 0x6c, 0x50, 0x72, 0x6f, 0x70, 0x65, 0x72, 0x74, 0x69, 0x65, 0x73, 0x22, 0x3a, 0x66, 0x61, 0x6c, 0x73, 0x65, 0x2c, 0x22, 0x70, 0x72, 0x6f, 0x70, 0x65, 0x72, 0x74, 0x69, 0x65, 0x73, 0x22, 0x3a, 0x7b, 0x7d, 0x2c, 0x22, 0x72, 0x65, 0x71, 0x75, 0x69, 0x72, 0x65, 0x64, 0x22, 0x3a, 0x5b, 0x5d, 0x2c, 0x22, 0x74, 0x79, 0x70, 0x65, 0x22, 0x3a, 0x22, 0x6f, 0x62, 0x6a, 0x65, 0x63, 0x74, 0x22, 0x7d}}
 )
 
 // SystemInfoServiceServer is compatible with the grpc-go server interface.
@@ -32,21 +30,18 @@ type SystemInfoServiceServer interface {
 }
 
 // RegisterSystemInfoServiceHandler registers standard MCP handlers for SystemInfoService
-func RegisterSystemInfoServiceHandler(s *mcpserver.MCPServer, srv SystemInfoServiceServer, opts ...runtime.Option) {
+func RegisterSystemInfoServiceHandler(s runtime.MCPServer, srv SystemInfoServiceServer, opts ...runtime.Option) {
 	config := runtime.NewConfig()
 	for _, opt := range opts {
 		opt(config)
 	}
 	GetJobStatusTool := SystemInfoService_GetJobStatusTool
-	// Add extra properties to schema if configured
-	if len(config.ExtraProperties) > 0 {
-		GetJobStatusTool = runtime.AddExtraPropertiesToTool(GetJobStatusTool, config.ExtraProperties)
-	}
+	GetJobStatusTool = runtime.ApplyConfig(GetJobStatusTool, config)
 
-	s.AddTool(GetJobStatusTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	s.AddTool(GetJobStatusTool, func(ctx context.Context, request *runtime.CallToolRequest) (*runtime.CallToolResult, error) {
 		var req v1.GetJobStatusRequest
 
-		message := request.GetArguments()
+		message := request.Arguments
 
 		// Extract extra properties if configured
 		for _, prop := range config.ExtraProperties {
@@ -74,18 +69,15 @@ func RegisterSystemInfoServiceHandler(s *mcpserver.MCPServer, srv SystemInfoServ
 			return nil, err
 		}
 
-		return mcp.NewToolResultText(string(marshaled)), nil
+		return runtime.NewToolResultText(string(marshaled)), nil
 	})
 	GetVersionTool := SystemInfoService_GetVersionTool
-	// Add extra properties to schema if configured
-	if len(config.ExtraProperties) > 0 {
-		GetVersionTool = runtime.AddExtraPropertiesToTool(GetVersionTool, config.ExtraProperties)
-	}
+	GetVersionTool = runtime.ApplyConfig(GetVersionTool, config)
 
-	s.AddTool(GetVersionTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	s.AddTool(GetVersionTool, func(ctx context.Context, request *runtime.CallToolRequest) (*runtime.CallToolResult, error) {
 		var req v1.GetVersionRequest
 
-		message := request.GetArguments()
+		message := request.Arguments
 
 		// Extract extra properties if configured
 		for _, prop := range config.ExtraProperties {
@@ -113,26 +105,23 @@ func RegisterSystemInfoServiceHandler(s *mcpserver.MCPServer, srv SystemInfoServ
 			return nil, err
 		}
 
-		return mcp.NewToolResultText(string(marshaled)), nil
+		return runtime.NewToolResultText(string(marshaled)), nil
 	})
 }
 
 // RegisterSystemInfoServiceHandlerOpenAI registers OpenAI-compatible MCP handlers for SystemInfoService
-func RegisterSystemInfoServiceHandlerOpenAI(s *mcpserver.MCPServer, srv SystemInfoServiceServer, opts ...runtime.Option) {
+func RegisterSystemInfoServiceHandlerOpenAI(s runtime.MCPServer, srv SystemInfoServiceServer, opts ...runtime.Option) {
 	config := runtime.NewConfig()
 	for _, opt := range opts {
 		opt(config)
 	}
 	GetJobStatusToolOpenAI := SystemInfoService_GetJobStatusToolOpenAI
-	// Add extra properties to schema if configured
-	if len(config.ExtraProperties) > 0 {
-		GetJobStatusToolOpenAI = runtime.AddExtraPropertiesToTool(GetJobStatusToolOpenAI, config.ExtraProperties)
-	}
+	GetJobStatusToolOpenAI = runtime.ApplyConfig(GetJobStatusToolOpenAI, config)
 
-	s.AddTool(GetJobStatusToolOpenAI, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	s.AddTool(GetJobStatusToolOpenAI, func(ctx context.Context, request *runtime.CallToolRequest) (*runtime.CallToolResult, error) {
 		var req v1.GetJobStatusRequest
 
-		message := request.GetArguments()
+		message := request.Arguments
 
 		// Extract extra properties if configured
 		for _, prop := range config.ExtraProperties {
@@ -162,18 +151,15 @@ func RegisterSystemInfoServiceHandlerOpenAI(s *mcpserver.MCPServer, srv SystemIn
 			return nil, err
 		}
 
-		return mcp.NewToolResultText(string(marshaled)), nil
+		return runtime.NewToolResultText(string(marshaled)), nil
 	})
 	GetVersionToolOpenAI := SystemInfoService_GetVersionToolOpenAI
-	// Add extra properties to schema if configured
-	if len(config.ExtraProperties) > 0 {
-		GetVersionToolOpenAI = runtime.AddExtraPropertiesToTool(GetVersionToolOpenAI, config.ExtraProperties)
-	}
+	GetVersionToolOpenAI = runtime.ApplyConfig(GetVersionToolOpenAI, config)
 
-	s.AddTool(GetVersionToolOpenAI, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	s.AddTool(GetVersionToolOpenAI, func(ctx context.Context, request *runtime.CallToolRequest) (*runtime.CallToolResult, error) {
 		var req v1.GetVersionRequest
 
-		message := request.GetArguments()
+		message := request.Arguments
 
 		// Extract extra properties if configured
 		for _, prop := range config.ExtraProperties {
@@ -203,12 +189,12 @@ func RegisterSystemInfoServiceHandlerOpenAI(s *mcpserver.MCPServer, srv SystemIn
 			return nil, err
 		}
 
-		return mcp.NewToolResultText(string(marshaled)), nil
+		return runtime.NewToolResultText(string(marshaled)), nil
 	})
 }
 
 // RegisterSystemInfoServiceHandlerWithProvider registers handlers for the specified LLM provider
-func RegisterSystemInfoServiceHandlerWithProvider(s *mcpserver.MCPServer, srv SystemInfoServiceServer, provider runtime.LLMProvider, opts ...runtime.Option) {
+func RegisterSystemInfoServiceHandlerWithProvider(s runtime.MCPServer, srv SystemInfoServiceServer, provider runtime.LLMProvider, opts ...runtime.Option) {
 	switch provider {
 	case runtime.LLMProviderOpenAI:
 		RegisterSystemInfoServiceHandlerOpenAI(s, srv, opts...)
@@ -232,21 +218,18 @@ type ConnectSystemInfoServiceClient interface {
 }
 
 // ForwardToConnectSystemInfoServiceClient registers a connectrpc client, to forward MCP calls to it.
-func ForwardToConnectSystemInfoServiceClient(s *mcpserver.MCPServer, client ConnectSystemInfoServiceClient, opts ...runtime.Option) {
+func ForwardToConnectSystemInfoServiceClient(s runtime.MCPServer, client ConnectSystemInfoServiceClient, opts ...runtime.Option) {
 	config := runtime.NewConfig()
 	for _, opt := range opts {
 		opt(config)
 	}
 	GetJobStatusTool := SystemInfoService_GetJobStatusTool
-	// Add extra properties to schema if configured
-	if len(config.ExtraProperties) > 0 {
-		GetJobStatusTool = runtime.AddExtraPropertiesToTool(GetJobStatusTool, config.ExtraProperties)
-	}
+	GetJobStatusTool = runtime.ApplyConfig(GetJobStatusTool, config)
 
-	s.AddTool(GetJobStatusTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	s.AddTool(GetJobStatusTool, func(ctx context.Context, request *runtime.CallToolRequest) (*runtime.CallToolResult, error) {
 		var req v1.GetJobStatusRequest
 
-		message := request.GetArguments()
+		message := request.Arguments
 
 		// Extract extra properties if configured
 		for _, prop := range config.ExtraProperties {
@@ -273,18 +256,15 @@ func ForwardToConnectSystemInfoServiceClient(s *mcpserver.MCPServer, client Conn
 		if err != nil {
 			return nil, err
 		}
-		return mcp.NewToolResultText(string(marshaled)), nil
+		return runtime.NewToolResultText(string(marshaled)), nil
 	})
 	GetVersionTool := SystemInfoService_GetVersionTool
-	// Add extra properties to schema if configured
-	if len(config.ExtraProperties) > 0 {
-		GetVersionTool = runtime.AddExtraPropertiesToTool(GetVersionTool, config.ExtraProperties)
-	}
+	GetVersionTool = runtime.ApplyConfig(GetVersionTool, config)
 
-	s.AddTool(GetVersionTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	s.AddTool(GetVersionTool, func(ctx context.Context, request *runtime.CallToolRequest) (*runtime.CallToolResult, error) {
 		var req v1.GetVersionRequest
 
-		message := request.GetArguments()
+		message := request.Arguments
 
 		// Extract extra properties if configured
 		for _, prop := range config.ExtraProperties {
@@ -311,26 +291,23 @@ func ForwardToConnectSystemInfoServiceClient(s *mcpserver.MCPServer, client Conn
 		if err != nil {
 			return nil, err
 		}
-		return mcp.NewToolResultText(string(marshaled)), nil
+		return runtime.NewToolResultText(string(marshaled)), nil
 	})
 }
 
 // ForwardToSystemInfoServiceClient registers a gRPC client, to forward MCP calls to it.
-func ForwardToSystemInfoServiceClient(s *mcpserver.MCPServer, client SystemInfoServiceClient, opts ...runtime.Option) {
+func ForwardToSystemInfoServiceClient(s runtime.MCPServer, client SystemInfoServiceClient, opts ...runtime.Option) {
 	config := runtime.NewConfig()
 	for _, opt := range opts {
 		opt(config)
 	}
 	GetJobStatusTool := SystemInfoService_GetJobStatusTool
-	// Add extra properties to schema if configured
-	if len(config.ExtraProperties) > 0 {
-		GetJobStatusTool = runtime.AddExtraPropertiesToTool(GetJobStatusTool, config.ExtraProperties)
-	}
+	GetJobStatusTool = runtime.ApplyConfig(GetJobStatusTool, config)
 
-	s.AddTool(GetJobStatusTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	s.AddTool(GetJobStatusTool, func(ctx context.Context, request *runtime.CallToolRequest) (*runtime.CallToolResult, error) {
 		var req v1.GetJobStatusRequest
 
-		message := request.GetArguments()
+		message := request.Arguments
 
 		// Extract extra properties if configured
 		for _, prop := range config.ExtraProperties {
@@ -357,18 +334,15 @@ func ForwardToSystemInfoServiceClient(s *mcpserver.MCPServer, client SystemInfoS
 		if err != nil {
 			return nil, err
 		}
-		return mcp.NewToolResultText(string(marshaled)), nil
+		return runtime.NewToolResultText(string(marshaled)), nil
 	})
 	GetVersionTool := SystemInfoService_GetVersionTool
-	// Add extra properties to schema if configured
-	if len(config.ExtraProperties) > 0 {
-		GetVersionTool = runtime.AddExtraPropertiesToTool(GetVersionTool, config.ExtraProperties)
-	}
+	GetVersionTool = runtime.ApplyConfig(GetVersionTool, config)
 
-	s.AddTool(GetVersionTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	s.AddTool(GetVersionTool, func(ctx context.Context, request *runtime.CallToolRequest) (*runtime.CallToolResult, error) {
 		var req v1.GetVersionRequest
 
-		message := request.GetArguments()
+		message := request.Arguments
 
 		// Extract extra properties if configured
 		for _, prop := range config.ExtraProperties {
@@ -395,6 +369,6 @@ func ForwardToSystemInfoServiceClient(s *mcpserver.MCPServer, client SystemInfoS
 		if err != nil {
 			return nil, err
 		}
-		return mcp.NewToolResultText(string(marshaled)), nil
+		return runtime.NewToolResultText(string(marshaled)), nil
 	})
 }

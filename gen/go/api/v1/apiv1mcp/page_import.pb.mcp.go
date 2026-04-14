@@ -9,8 +9,6 @@ import (
 
 import (
 	"context"
-	"github.com/mark3labs/mcp-go/mcp"
-	mcpserver "github.com/mark3labs/mcp-go/server"
 	"encoding/json"
 	"google.golang.org/protobuf/encoding/protojson"
 	"connectrpc.com/connect"
@@ -19,10 +17,10 @@ import (
 )
 
 var (
-	PageImportService_ParseCSVPreviewTool          = mcp.Tool{Meta: (*mcp.Meta)(nil), Name: "api_v1_PageImportService_ParseCSVPreview", Description: "", InputSchema: mcp.ToolInputSchema{Defs: map[string]interface{}(nil), Type: "", Properties: map[string]interface{}(nil), Required: []string(nil)}, RawInputSchema: json.RawMessage{0x7b, 0x22, 0x70, 0x72, 0x6f, 0x70, 0x65, 0x72, 0x74, 0x69, 0x65, 0x73, 0x22, 0x3a, 0x7b, 0x22, 0x63, 0x73, 0x76, 0x5f, 0x63, 0x6f, 0x6e, 0x74, 0x65, 0x6e, 0x74, 0x22, 0x3a, 0x7b, 0x22, 0x74, 0x79, 0x70, 0x65, 0x22, 0x3a, 0x22, 0x73, 0x74, 0x72, 0x69, 0x6e, 0x67, 0x22, 0x7d, 0x7d, 0x2c, 0x22, 0x72, 0x65, 0x71, 0x75, 0x69, 0x72, 0x65, 0x64, 0x22, 0x3a, 0x5b, 0x5d, 0x2c, 0x22, 0x74, 0x79, 0x70, 0x65, 0x22, 0x3a, 0x22, 0x6f, 0x62, 0x6a, 0x65, 0x63, 0x74, 0x22, 0x7d}, RawOutputSchema: json.RawMessage(nil), Annotations: mcp.ToolAnnotation{Title: "", ReadOnlyHint: (*bool)(nil), DestructiveHint: (*bool)(nil), IdempotentHint: (*bool)(nil), OpenWorldHint: (*bool)(nil)}}
-	PageImportService_StartPageImportJobTool       = mcp.Tool{Meta: (*mcp.Meta)(nil), Name: "api_v1_PageImportService_StartPageImportJob", Description: "", InputSchema: mcp.ToolInputSchema{Defs: map[string]interface{}(nil), Type: "", Properties: map[string]interface{}(nil), Required: []string(nil)}, RawInputSchema: json.RawMessage{0x7b, 0x22, 0x70, 0x72, 0x6f, 0x70, 0x65, 0x72, 0x74, 0x69, 0x65, 0x73, 0x22, 0x3a, 0x7b, 0x22, 0x63, 0x73, 0x76, 0x5f, 0x63, 0x6f, 0x6e, 0x74, 0x65, 0x6e, 0x74, 0x22, 0x3a, 0x7b, 0x22, 0x74, 0x79, 0x70, 0x65, 0x22, 0x3a, 0x22, 0x73, 0x74, 0x72, 0x69, 0x6e, 0x67, 0x22, 0x7d, 0x7d, 0x2c, 0x22, 0x72, 0x65, 0x71, 0x75, 0x69, 0x72, 0x65, 0x64, 0x22, 0x3a, 0x5b, 0x5d, 0x2c, 0x22, 0x74, 0x79, 0x70, 0x65, 0x22, 0x3a, 0x22, 0x6f, 0x62, 0x6a, 0x65, 0x63, 0x74, 0x22, 0x7d}, RawOutputSchema: json.RawMessage(nil), Annotations: mcp.ToolAnnotation{Title: "", ReadOnlyHint: (*bool)(nil), DestructiveHint: (*bool)(nil), IdempotentHint: (*bool)(nil), OpenWorldHint: (*bool)(nil)}}
-	PageImportService_ParseCSVPreviewToolOpenAI    = mcp.Tool{Meta: (*mcp.Meta)(nil), Name: "api_v1_PageImportService_ParseCSVPreview", Description: "", InputSchema: mcp.ToolInputSchema{Defs: map[string]interface{}(nil), Type: "", Properties: map[string]interface{}(nil), Required: []string(nil)}, RawInputSchema: json.RawMessage{0x7b, 0x22, 0x61, 0x64, 0x64, 0x69, 0x74, 0x69, 0x6f, 0x6e, 0x61, 0x6c, 0x50, 0x72, 0x6f, 0x70, 0x65, 0x72, 0x74, 0x69, 0x65, 0x73, 0x22, 0x3a, 0x66, 0x61, 0x6c, 0x73, 0x65, 0x2c, 0x22, 0x70, 0x72, 0x6f, 0x70, 0x65, 0x72, 0x74, 0x69, 0x65, 0x73, 0x22, 0x3a, 0x7b, 0x22, 0x63, 0x73, 0x76, 0x5f, 0x63, 0x6f, 0x6e, 0x74, 0x65, 0x6e, 0x74, 0x22, 0x3a, 0x7b, 0x22, 0x74, 0x79, 0x70, 0x65, 0x22, 0x3a, 0x22, 0x73, 0x74, 0x72, 0x69, 0x6e, 0x67, 0x22, 0x7d, 0x7d, 0x2c, 0x22, 0x72, 0x65, 0x71, 0x75, 0x69, 0x72, 0x65, 0x64, 0x22, 0x3a, 0x5b, 0x22, 0x63, 0x73, 0x76, 0x5f, 0x63, 0x6f, 0x6e, 0x74, 0x65, 0x6e, 0x74, 0x22, 0x5d, 0x2c, 0x22, 0x74, 0x79, 0x70, 0x65, 0x22, 0x3a, 0x22, 0x6f, 0x62, 0x6a, 0x65, 0x63, 0x74, 0x22, 0x7d}, RawOutputSchema: json.RawMessage(nil), Annotations: mcp.ToolAnnotation{Title: "", ReadOnlyHint: (*bool)(nil), DestructiveHint: (*bool)(nil), IdempotentHint: (*bool)(nil), OpenWorldHint: (*bool)(nil)}}
-	PageImportService_StartPageImportJobToolOpenAI = mcp.Tool{Meta: (*mcp.Meta)(nil), Name: "api_v1_PageImportService_StartPageImportJob", Description: "", InputSchema: mcp.ToolInputSchema{Defs: map[string]interface{}(nil), Type: "", Properties: map[string]interface{}(nil), Required: []string(nil)}, RawInputSchema: json.RawMessage{0x7b, 0x22, 0x61, 0x64, 0x64, 0x69, 0x74, 0x69, 0x6f, 0x6e, 0x61, 0x6c, 0x50, 0x72, 0x6f, 0x70, 0x65, 0x72, 0x74, 0x69, 0x65, 0x73, 0x22, 0x3a, 0x66, 0x61, 0x6c, 0x73, 0x65, 0x2c, 0x22, 0x70, 0x72, 0x6f, 0x70, 0x65, 0x72, 0x74, 0x69, 0x65, 0x73, 0x22, 0x3a, 0x7b, 0x22, 0x63, 0x73, 0x76, 0x5f, 0x63, 0x6f, 0x6e, 0x74, 0x65, 0x6e, 0x74, 0x22, 0x3a, 0x7b, 0x22, 0x74, 0x79, 0x70, 0x65, 0x22, 0x3a, 0x22, 0x73, 0x74, 0x72, 0x69, 0x6e, 0x67, 0x22, 0x7d, 0x7d, 0x2c, 0x22, 0x72, 0x65, 0x71, 0x75, 0x69, 0x72, 0x65, 0x64, 0x22, 0x3a, 0x5b, 0x22, 0x63, 0x73, 0x76, 0x5f, 0x63, 0x6f, 0x6e, 0x74, 0x65, 0x6e, 0x74, 0x22, 0x5d, 0x2c, 0x22, 0x74, 0x79, 0x70, 0x65, 0x22, 0x3a, 0x22, 0x6f, 0x62, 0x6a, 0x65, 0x63, 0x74, 0x22, 0x7d}, RawOutputSchema: json.RawMessage(nil), Annotations: mcp.ToolAnnotation{Title: "", ReadOnlyHint: (*bool)(nil), DestructiveHint: (*bool)(nil), IdempotentHint: (*bool)(nil), OpenWorldHint: (*bool)(nil)}}
+	PageImportService_ParseCSVPreviewTool          = runtime.Tool{Name: "api_v1_PageImportService_ParseCSVPreview", Description: "", RawInputSchema: json.RawMessage{0x7b, 0x22, 0x70, 0x72, 0x6f, 0x70, 0x65, 0x72, 0x74, 0x69, 0x65, 0x73, 0x22, 0x3a, 0x7b, 0x22, 0x63, 0x73, 0x76, 0x5f, 0x63, 0x6f, 0x6e, 0x74, 0x65, 0x6e, 0x74, 0x22, 0x3a, 0x7b, 0x22, 0x74, 0x79, 0x70, 0x65, 0x22, 0x3a, 0x22, 0x73, 0x74, 0x72, 0x69, 0x6e, 0x67, 0x22, 0x7d, 0x7d, 0x2c, 0x22, 0x72, 0x65, 0x71, 0x75, 0x69, 0x72, 0x65, 0x64, 0x22, 0x3a, 0x5b, 0x5d, 0x2c, 0x22, 0x74, 0x79, 0x70, 0x65, 0x22, 0x3a, 0x22, 0x6f, 0x62, 0x6a, 0x65, 0x63, 0x74, 0x22, 0x7d}}
+	PageImportService_StartPageImportJobTool       = runtime.Tool{Name: "api_v1_PageImportService_StartPageImportJob", Description: "", RawInputSchema: json.RawMessage{0x7b, 0x22, 0x70, 0x72, 0x6f, 0x70, 0x65, 0x72, 0x74, 0x69, 0x65, 0x73, 0x22, 0x3a, 0x7b, 0x22, 0x63, 0x73, 0x76, 0x5f, 0x63, 0x6f, 0x6e, 0x74, 0x65, 0x6e, 0x74, 0x22, 0x3a, 0x7b, 0x22, 0x74, 0x79, 0x70, 0x65, 0x22, 0x3a, 0x22, 0x73, 0x74, 0x72, 0x69, 0x6e, 0x67, 0x22, 0x7d, 0x7d, 0x2c, 0x22, 0x72, 0x65, 0x71, 0x75, 0x69, 0x72, 0x65, 0x64, 0x22, 0x3a, 0x5b, 0x5d, 0x2c, 0x22, 0x74, 0x79, 0x70, 0x65, 0x22, 0x3a, 0x22, 0x6f, 0x62, 0x6a, 0x65, 0x63, 0x74, 0x22, 0x7d}}
+	PageImportService_ParseCSVPreviewToolOpenAI    = runtime.Tool{Name: "api_v1_PageImportService_ParseCSVPreview", Description: "", RawInputSchema: json.RawMessage{0x7b, 0x22, 0x61, 0x64, 0x64, 0x69, 0x74, 0x69, 0x6f, 0x6e, 0x61, 0x6c, 0x50, 0x72, 0x6f, 0x70, 0x65, 0x72, 0x74, 0x69, 0x65, 0x73, 0x22, 0x3a, 0x66, 0x61, 0x6c, 0x73, 0x65, 0x2c, 0x22, 0x70, 0x72, 0x6f, 0x70, 0x65, 0x72, 0x74, 0x69, 0x65, 0x73, 0x22, 0x3a, 0x7b, 0x22, 0x63, 0x73, 0x76, 0x5f, 0x63, 0x6f, 0x6e, 0x74, 0x65, 0x6e, 0x74, 0x22, 0x3a, 0x7b, 0x22, 0x74, 0x79, 0x70, 0x65, 0x22, 0x3a, 0x22, 0x73, 0x74, 0x72, 0x69, 0x6e, 0x67, 0x22, 0x7d, 0x7d, 0x2c, 0x22, 0x72, 0x65, 0x71, 0x75, 0x69, 0x72, 0x65, 0x64, 0x22, 0x3a, 0x5b, 0x22, 0x63, 0x73, 0x76, 0x5f, 0x63, 0x6f, 0x6e, 0x74, 0x65, 0x6e, 0x74, 0x22, 0x5d, 0x2c, 0x22, 0x74, 0x79, 0x70, 0x65, 0x22, 0x3a, 0x22, 0x6f, 0x62, 0x6a, 0x65, 0x63, 0x74, 0x22, 0x7d}}
+	PageImportService_StartPageImportJobToolOpenAI = runtime.Tool{Name: "api_v1_PageImportService_StartPageImportJob", Description: "", RawInputSchema: json.RawMessage{0x7b, 0x22, 0x61, 0x64, 0x64, 0x69, 0x74, 0x69, 0x6f, 0x6e, 0x61, 0x6c, 0x50, 0x72, 0x6f, 0x70, 0x65, 0x72, 0x74, 0x69, 0x65, 0x73, 0x22, 0x3a, 0x66, 0x61, 0x6c, 0x73, 0x65, 0x2c, 0x22, 0x70, 0x72, 0x6f, 0x70, 0x65, 0x72, 0x74, 0x69, 0x65, 0x73, 0x22, 0x3a, 0x7b, 0x22, 0x63, 0x73, 0x76, 0x5f, 0x63, 0x6f, 0x6e, 0x74, 0x65, 0x6e, 0x74, 0x22, 0x3a, 0x7b, 0x22, 0x74, 0x79, 0x70, 0x65, 0x22, 0x3a, 0x22, 0x73, 0x74, 0x72, 0x69, 0x6e, 0x67, 0x22, 0x7d, 0x7d, 0x2c, 0x22, 0x72, 0x65, 0x71, 0x75, 0x69, 0x72, 0x65, 0x64, 0x22, 0x3a, 0x5b, 0x22, 0x63, 0x73, 0x76, 0x5f, 0x63, 0x6f, 0x6e, 0x74, 0x65, 0x6e, 0x74, 0x22, 0x5d, 0x2c, 0x22, 0x74, 0x79, 0x70, 0x65, 0x22, 0x3a, 0x22, 0x6f, 0x62, 0x6a, 0x65, 0x63, 0x74, 0x22, 0x7d}}
 )
 
 // PageImportServiceServer is compatible with the grpc-go server interface.
@@ -32,21 +30,18 @@ type PageImportServiceServer interface {
 }
 
 // RegisterPageImportServiceHandler registers standard MCP handlers for PageImportService
-func RegisterPageImportServiceHandler(s *mcpserver.MCPServer, srv PageImportServiceServer, opts ...runtime.Option) {
+func RegisterPageImportServiceHandler(s runtime.MCPServer, srv PageImportServiceServer, opts ...runtime.Option) {
 	config := runtime.NewConfig()
 	for _, opt := range opts {
 		opt(config)
 	}
 	ParseCSVPreviewTool := PageImportService_ParseCSVPreviewTool
-	// Add extra properties to schema if configured
-	if len(config.ExtraProperties) > 0 {
-		ParseCSVPreviewTool = runtime.AddExtraPropertiesToTool(ParseCSVPreviewTool, config.ExtraProperties)
-	}
+	ParseCSVPreviewTool = runtime.ApplyConfig(ParseCSVPreviewTool, config)
 
-	s.AddTool(ParseCSVPreviewTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	s.AddTool(ParseCSVPreviewTool, func(ctx context.Context, request *runtime.CallToolRequest) (*runtime.CallToolResult, error) {
 		var req v1.ParseCSVPreviewRequest
 
-		message := request.GetArguments()
+		message := request.Arguments
 
 		// Extract extra properties if configured
 		for _, prop := range config.ExtraProperties {
@@ -74,18 +69,15 @@ func RegisterPageImportServiceHandler(s *mcpserver.MCPServer, srv PageImportServ
 			return nil, err
 		}
 
-		return mcp.NewToolResultText(string(marshaled)), nil
+		return runtime.NewToolResultText(string(marshaled)), nil
 	})
 	StartPageImportJobTool := PageImportService_StartPageImportJobTool
-	// Add extra properties to schema if configured
-	if len(config.ExtraProperties) > 0 {
-		StartPageImportJobTool = runtime.AddExtraPropertiesToTool(StartPageImportJobTool, config.ExtraProperties)
-	}
+	StartPageImportJobTool = runtime.ApplyConfig(StartPageImportJobTool, config)
 
-	s.AddTool(StartPageImportJobTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	s.AddTool(StartPageImportJobTool, func(ctx context.Context, request *runtime.CallToolRequest) (*runtime.CallToolResult, error) {
 		var req v1.StartPageImportJobRequest
 
-		message := request.GetArguments()
+		message := request.Arguments
 
 		// Extract extra properties if configured
 		for _, prop := range config.ExtraProperties {
@@ -113,26 +105,23 @@ func RegisterPageImportServiceHandler(s *mcpserver.MCPServer, srv PageImportServ
 			return nil, err
 		}
 
-		return mcp.NewToolResultText(string(marshaled)), nil
+		return runtime.NewToolResultText(string(marshaled)), nil
 	})
 }
 
 // RegisterPageImportServiceHandlerOpenAI registers OpenAI-compatible MCP handlers for PageImportService
-func RegisterPageImportServiceHandlerOpenAI(s *mcpserver.MCPServer, srv PageImportServiceServer, opts ...runtime.Option) {
+func RegisterPageImportServiceHandlerOpenAI(s runtime.MCPServer, srv PageImportServiceServer, opts ...runtime.Option) {
 	config := runtime.NewConfig()
 	for _, opt := range opts {
 		opt(config)
 	}
 	ParseCSVPreviewToolOpenAI := PageImportService_ParseCSVPreviewToolOpenAI
-	// Add extra properties to schema if configured
-	if len(config.ExtraProperties) > 0 {
-		ParseCSVPreviewToolOpenAI = runtime.AddExtraPropertiesToTool(ParseCSVPreviewToolOpenAI, config.ExtraProperties)
-	}
+	ParseCSVPreviewToolOpenAI = runtime.ApplyConfig(ParseCSVPreviewToolOpenAI, config)
 
-	s.AddTool(ParseCSVPreviewToolOpenAI, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	s.AddTool(ParseCSVPreviewToolOpenAI, func(ctx context.Context, request *runtime.CallToolRequest) (*runtime.CallToolResult, error) {
 		var req v1.ParseCSVPreviewRequest
 
-		message := request.GetArguments()
+		message := request.Arguments
 
 		// Extract extra properties if configured
 		for _, prop := range config.ExtraProperties {
@@ -162,18 +151,15 @@ func RegisterPageImportServiceHandlerOpenAI(s *mcpserver.MCPServer, srv PageImpo
 			return nil, err
 		}
 
-		return mcp.NewToolResultText(string(marshaled)), nil
+		return runtime.NewToolResultText(string(marshaled)), nil
 	})
 	StartPageImportJobToolOpenAI := PageImportService_StartPageImportJobToolOpenAI
-	// Add extra properties to schema if configured
-	if len(config.ExtraProperties) > 0 {
-		StartPageImportJobToolOpenAI = runtime.AddExtraPropertiesToTool(StartPageImportJobToolOpenAI, config.ExtraProperties)
-	}
+	StartPageImportJobToolOpenAI = runtime.ApplyConfig(StartPageImportJobToolOpenAI, config)
 
-	s.AddTool(StartPageImportJobToolOpenAI, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	s.AddTool(StartPageImportJobToolOpenAI, func(ctx context.Context, request *runtime.CallToolRequest) (*runtime.CallToolResult, error) {
 		var req v1.StartPageImportJobRequest
 
-		message := request.GetArguments()
+		message := request.Arguments
 
 		// Extract extra properties if configured
 		for _, prop := range config.ExtraProperties {
@@ -203,12 +189,12 @@ func RegisterPageImportServiceHandlerOpenAI(s *mcpserver.MCPServer, srv PageImpo
 			return nil, err
 		}
 
-		return mcp.NewToolResultText(string(marshaled)), nil
+		return runtime.NewToolResultText(string(marshaled)), nil
 	})
 }
 
 // RegisterPageImportServiceHandlerWithProvider registers handlers for the specified LLM provider
-func RegisterPageImportServiceHandlerWithProvider(s *mcpserver.MCPServer, srv PageImportServiceServer, provider runtime.LLMProvider, opts ...runtime.Option) {
+func RegisterPageImportServiceHandlerWithProvider(s runtime.MCPServer, srv PageImportServiceServer, provider runtime.LLMProvider, opts ...runtime.Option) {
 	switch provider {
 	case runtime.LLMProviderOpenAI:
 		RegisterPageImportServiceHandlerOpenAI(s, srv, opts...)
@@ -232,21 +218,18 @@ type ConnectPageImportServiceClient interface {
 }
 
 // ForwardToConnectPageImportServiceClient registers a connectrpc client, to forward MCP calls to it.
-func ForwardToConnectPageImportServiceClient(s *mcpserver.MCPServer, client ConnectPageImportServiceClient, opts ...runtime.Option) {
+func ForwardToConnectPageImportServiceClient(s runtime.MCPServer, client ConnectPageImportServiceClient, opts ...runtime.Option) {
 	config := runtime.NewConfig()
 	for _, opt := range opts {
 		opt(config)
 	}
 	ParseCSVPreviewTool := PageImportService_ParseCSVPreviewTool
-	// Add extra properties to schema if configured
-	if len(config.ExtraProperties) > 0 {
-		ParseCSVPreviewTool = runtime.AddExtraPropertiesToTool(ParseCSVPreviewTool, config.ExtraProperties)
-	}
+	ParseCSVPreviewTool = runtime.ApplyConfig(ParseCSVPreviewTool, config)
 
-	s.AddTool(ParseCSVPreviewTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	s.AddTool(ParseCSVPreviewTool, func(ctx context.Context, request *runtime.CallToolRequest) (*runtime.CallToolResult, error) {
 		var req v1.ParseCSVPreviewRequest
 
-		message := request.GetArguments()
+		message := request.Arguments
 
 		// Extract extra properties if configured
 		for _, prop := range config.ExtraProperties {
@@ -273,18 +256,15 @@ func ForwardToConnectPageImportServiceClient(s *mcpserver.MCPServer, client Conn
 		if err != nil {
 			return nil, err
 		}
-		return mcp.NewToolResultText(string(marshaled)), nil
+		return runtime.NewToolResultText(string(marshaled)), nil
 	})
 	StartPageImportJobTool := PageImportService_StartPageImportJobTool
-	// Add extra properties to schema if configured
-	if len(config.ExtraProperties) > 0 {
-		StartPageImportJobTool = runtime.AddExtraPropertiesToTool(StartPageImportJobTool, config.ExtraProperties)
-	}
+	StartPageImportJobTool = runtime.ApplyConfig(StartPageImportJobTool, config)
 
-	s.AddTool(StartPageImportJobTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	s.AddTool(StartPageImportJobTool, func(ctx context.Context, request *runtime.CallToolRequest) (*runtime.CallToolResult, error) {
 		var req v1.StartPageImportJobRequest
 
-		message := request.GetArguments()
+		message := request.Arguments
 
 		// Extract extra properties if configured
 		for _, prop := range config.ExtraProperties {
@@ -311,26 +291,23 @@ func ForwardToConnectPageImportServiceClient(s *mcpserver.MCPServer, client Conn
 		if err != nil {
 			return nil, err
 		}
-		return mcp.NewToolResultText(string(marshaled)), nil
+		return runtime.NewToolResultText(string(marshaled)), nil
 	})
 }
 
 // ForwardToPageImportServiceClient registers a gRPC client, to forward MCP calls to it.
-func ForwardToPageImportServiceClient(s *mcpserver.MCPServer, client PageImportServiceClient, opts ...runtime.Option) {
+func ForwardToPageImportServiceClient(s runtime.MCPServer, client PageImportServiceClient, opts ...runtime.Option) {
 	config := runtime.NewConfig()
 	for _, opt := range opts {
 		opt(config)
 	}
 	ParseCSVPreviewTool := PageImportService_ParseCSVPreviewTool
-	// Add extra properties to schema if configured
-	if len(config.ExtraProperties) > 0 {
-		ParseCSVPreviewTool = runtime.AddExtraPropertiesToTool(ParseCSVPreviewTool, config.ExtraProperties)
-	}
+	ParseCSVPreviewTool = runtime.ApplyConfig(ParseCSVPreviewTool, config)
 
-	s.AddTool(ParseCSVPreviewTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	s.AddTool(ParseCSVPreviewTool, func(ctx context.Context, request *runtime.CallToolRequest) (*runtime.CallToolResult, error) {
 		var req v1.ParseCSVPreviewRequest
 
-		message := request.GetArguments()
+		message := request.Arguments
 
 		// Extract extra properties if configured
 		for _, prop := range config.ExtraProperties {
@@ -357,18 +334,15 @@ func ForwardToPageImportServiceClient(s *mcpserver.MCPServer, client PageImportS
 		if err != nil {
 			return nil, err
 		}
-		return mcp.NewToolResultText(string(marshaled)), nil
+		return runtime.NewToolResultText(string(marshaled)), nil
 	})
 	StartPageImportJobTool := PageImportService_StartPageImportJobTool
-	// Add extra properties to schema if configured
-	if len(config.ExtraProperties) > 0 {
-		StartPageImportJobTool = runtime.AddExtraPropertiesToTool(StartPageImportJobTool, config.ExtraProperties)
-	}
+	StartPageImportJobTool = runtime.ApplyConfig(StartPageImportJobTool, config)
 
-	s.AddTool(StartPageImportJobTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	s.AddTool(StartPageImportJobTool, func(ctx context.Context, request *runtime.CallToolRequest) (*runtime.CallToolResult, error) {
 		var req v1.StartPageImportJobRequest
 
-		message := request.GetArguments()
+		message := request.Arguments
 
 		// Extract extra properties if configured
 		for _, prop := range config.ExtraProperties {
@@ -395,6 +369,6 @@ func ForwardToPageImportServiceClient(s *mcpserver.MCPServer, client PageImportS
 		if err != nil {
 			return nil, err
 		}
-		return mcp.NewToolResultText(string(marshaled)), nil
+		return runtime.NewToolResultText(string(marshaled)), nil
 	})
 }
