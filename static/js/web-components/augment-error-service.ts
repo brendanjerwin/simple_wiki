@@ -20,7 +20,8 @@ export function coerceThirdPartyError(err: unknown, errorContext: string): Error
     return new Error(err);
   }
   if (err !== null && err !== undefined) {
-    if (typeof err === 'symbol' || typeof err === 'function') {
+    if (typeof err === 'symbol' || typeof err === 'function' ||
+        typeof err === 'number' || typeof err === 'boolean' || typeof err === 'bigint') {
       return new Error(err.toString());
     }
     try {
@@ -237,7 +238,8 @@ export class AugmentErrorService {
     if (typeof error === 'string') {
       message = error;
     } else if (error !== null && error !== undefined) {
-      if (typeof error === 'symbol' || typeof error === 'function') {
+      if (typeof error === 'symbol' || typeof error === 'function' ||
+          typeof error === 'number' || typeof error === 'boolean' || typeof error === 'bigint') {
         message = error.toString();
       } else {
         try {

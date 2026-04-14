@@ -293,7 +293,7 @@ describe('AugmentErrorService', () => {
         });
       });
 
-      describe('when error is a function (JSON.stringify returns undefined)', () => {
+      describe('when error is a function', () => {
         it('should use toString() to include function name in message', () => {
           const fn = function namedFn() { return 42; };
           const augmented = AugmentErrorService.augmentError(fn);
@@ -302,6 +302,22 @@ describe('AugmentErrorService', () => {
 
         it('should set errorKind to ERROR', () => {
           const augmented = AugmentErrorService.augmentError(() => 0);
+          expect(augmented.errorKind).to.equal(ErrorKind.ERROR);
+        });
+      });
+
+      describe('when error is a bigint', () => {
+        let augmented: AugmentedError;
+
+        beforeEach(() => {
+          augmented = AugmentErrorService.augmentError(BigInt(42));
+        });
+
+        it('should use the numeric string representation', () => {
+          expect(augmented.message).to.equal('42');
+        });
+
+        it('should set errorKind to ERROR', () => {
           expect(augmented.errorKind).to.equal(ErrorKind.ERROR);
         });
       });
