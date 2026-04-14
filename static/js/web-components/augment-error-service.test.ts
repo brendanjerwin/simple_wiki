@@ -294,7 +294,7 @@ describe('AugmentErrorService', () => {
       });
 
       describe('when error is a function (JSON.stringify returns undefined)', () => {
-        it('should fall back to String() coercion', () => {
+        it('should use toString() to include function name in message', () => {
           const fn = function namedFn() { return 42; };
           const augmented = AugmentErrorService.augmentError(fn);
           expect(augmented.message).to.include('namedFn');

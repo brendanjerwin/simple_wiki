@@ -20,14 +20,14 @@ export function coerceThirdPartyError(err: unknown, errorContext: string): Error
     return new Error(err);
   }
   if (err !== null && err !== undefined) {
-    if (typeof err === 'object') {
-      try {
-        return new Error(JSON.stringify(err));
-      } catch {
-        return new Error(Object.prototype.toString.call(err));
-      }
+    if (typeof err === 'symbol' || typeof err === 'function') {
+      return new Error(err.toString());
     }
-    return new Error(String(err));
+    try {
+      return new Error(JSON.stringify(err));
+    } catch {
+      return new Error(Object.prototype.toString.call(err));
+    }
   }
   return new Error(errorContext);
 }
@@ -237,14 +237,14 @@ export class AugmentErrorService {
     if (typeof error === 'string') {
       message = error;
     } else if (error !== null && error !== undefined) {
-      if (typeof error === 'object') {
+      if (typeof error === 'symbol' || typeof error === 'function') {
+        message = error.toString();
+      } else {
         try {
           message = JSON.stringify(error);
         } catch {
           message = Object.prototype.toString.call(error);
         }
-      } else {
-        message = String(error);
       }
     } else {
       message = 'An unknown error occurred';
