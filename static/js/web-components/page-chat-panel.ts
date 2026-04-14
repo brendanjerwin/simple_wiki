@@ -160,6 +160,7 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
       .messages-container {
         flex: 1;
         overflow-y: auto;
+        overscroll-behavior: contain;
         padding: 12px;
         display: flex;
         flex-direction: column;
