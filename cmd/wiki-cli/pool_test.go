@@ -407,6 +407,58 @@ var _ = Describe("poolDaemon", func() {
 		})
 	})
 
+	Describe("cleanupExitedInstance", func() {
+		When("instance exists and is idle", func() {
+			var (
+				daemon   *poolDaemon
+				entry    *instanceEntry
+				canceled bool
+			)
+
+			BeforeEach(func() {
+				canceled = false
+				entry = &instanceEntry{
+					page:   "page-a",
+					state:  StateIdle,
+					cancel: func() { canceled = true },
+				}
+				daemon = &poolDaemon{
+					instances: map[string]*instanceEntry{
+						"page-a": entry,
+					},
+				}
+				daemon.cleanupExitedInstance("page-a")
+			})
+
+			It("should cancel the instance", func() {
+				Expect(canceled).To(BeTrue())
+			})
+
+			It("should remove the instance from the map", func() {
+				Expect(daemon.instances).NotTo(HaveKey("page-a"))
+			})
+
+			It("should transition the instance to Dead", func() {
+				Expect(entry.State()).To(Equal(StateDead))
+			})
+		})
+
+		When("instance has already been removed (normal shutdown)", func() {
+			var daemon *poolDaemon
+
+			BeforeEach(func() {
+				daemon = &poolDaemon{
+					instances: make(map[string]*instanceEntry),
+				}
+				daemon.cleanupExitedInstance("nonexistent")
+			})
+
+			It("should not panic", func() {
+				Expect(daemon.instances).To(BeEmpty())
+			})
+		})
+	})
+
 	Describe("stopAll", func() {
 		When("instances are running", func() {
 			var (

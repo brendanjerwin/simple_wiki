@@ -792,7 +792,9 @@ func (*wikiChatClient) WaitForTerminalExit(_ context.Context, _ acp.WaitForTermi
 func (d *poolDaemon) spawnInstance(ctx context.Context, page string) (*instanceEntry, error) {
 	ctx, cancel := context.WithCancel(ctx)
 
-	conn, chatClient, err := d.startAgentProcess(ctx, page)
+	conn, chatClient, err := d.startAgentProcess(ctx, page, func() {
+		d.cleanupExitedInstance(page)
+	})
 	if err != nil {
 		cancel()
 		return nil, err
@@ -822,7 +824,9 @@ func (d *poolDaemon) spawnInstance(ctx context.Context, page string) (*instanceE
 
 // startAgentProcess spawns the ACP agent binary (optionally via systemd), performs
 // the ACP handshake, and returns the ready connection and chat client.
-func (d *poolDaemon) startAgentProcess(ctx context.Context, page string) (*acp.ClientSideConnection, *wikiChatClient, error) {
+// onExit is called when the process exits for any reason, allowing the caller to
+// clean up the instance entry.
+func (d *poolDaemon) startAgentProcess(ctx context.Context, page string, onExit func()) (*acp.ClientSideConnection, *wikiChatClient, error) {
 	cmd := d.buildAgentCmd(ctx, page)
 
 	stdinPipe, err := cmd.StdinPipe()
@@ -845,6 +849,7 @@ func (d *poolDaemon) startAgentProcess(ctx context.Context, page string) (*acp.C
 		} else {
 			log.Printf("Agent for %q exited cleanly", page)
 		}
+		onExit()
 	}()
 
 	chatClient := newWikiChatClient(page, d.wikiURL)
@@ -1229,6 +1234,15 @@ func (d *poolDaemon) stopInstanceLocked(page string) {
 	entry.mu.Unlock()
 
 	delete(d.instances, page)
+}
+
+// cleanupExitedInstance is called when an agent process exits (for any reason —
+// signal, error, or clean exit). It transitions the instance to Dead and removes
+// it from the instances map so that subsequent requests spawn a fresh agent.
+func (d *poolDaemon) cleanupExitedInstance(page string) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.stopInstanceLocked(page)
 }
 
 // stopAll stops all running instances.
