@@ -66,10 +66,6 @@ export class WikiImage extends LitElement {
       .image-container:hover .tools-panel {
         opacity: 1;
       }
-
-      .image-container:hover .tool-btn {
-        pointer-events: auto;
-      }
     }
 
     /* Mobile & desktop: show when tools-open attribute is set */
