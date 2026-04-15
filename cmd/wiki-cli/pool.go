@@ -1050,7 +1050,7 @@ func forwardUserMessage(ctx context.Context, entry *instanceEntry, chatClient *w
 
 	go listenForCancelSignal(promptCtx, promptCancel, cancelChan, entry.page)
 
-	promptText := buildPromptText(chatClient, msg.Content)
+	promptText := buildPromptText(chatClient, msg.SenderName, msg.Content)
 
 	if err := entry.setState(StatePrompting); err != nil {
 		log.Printf(logFmtStateTransitionErr, err)
@@ -1104,29 +1104,37 @@ func listenForCancelSignal(ctx context.Context, cancel context.CancelFunc, cance
 }
 
 // buildPromptText prepends page context to the user message content if available,
-// consuming the context so it is only prepended once.
-func buildPromptText(chatClient *wikiChatClient, messageContent string) string {
+// consuming the context so it is only prepended once. If senderName is non-empty,
+// the message is prefixed with "[senderName]: " to identify the speaker in group chats.
+func buildPromptText(chatClient *wikiChatClient, senderName string, messageContent string) string {
 	chatClient.mu.Lock()
 	defer chatClient.mu.Unlock()
 
-	if chatClient.pageContext == "" {
-		return messageContent
+	formattedMessage := messageContent
+	if senderName != "" {
+		formattedMessage = fmt.Sprintf("[%s]: %s", senderName, messageContent)
 	}
 
-	promptText := chatClient.pageContext + "\n\n---\n\nUser message: " + messageContent
+	if chatClient.pageContext == "" {
+		return formattedMessage
+	}
+
+	promptText := chatClient.pageContext + "\n\n---\n\nUser message: " + formattedMessage
 	chatClient.pageContext = "" // only prepend once
 	return promptText
 }
 
 // chatPreamble is prepended to the first prompt to establish the interactive chat context.
-const chatPreamble = `You are in an INTERACTIVE CHAT session with a user on a wiki page. This is a conversation, not a coding task.
+const chatPreamble = `You are in an INTERACTIVE CHAT session with one or more users on a wiki page. This is a conversation, not a coding task.
 
 CRITICAL: Respond quickly and conversationally. Do NOT explore the codebase, run startup hooks, or do extensive initialization. The user is waiting for your reply in a chat window.
 
 Rules:
 - Keep responses concise and conversational
 - Use the wiki MCP tools only when the user asks you to read or edit pages
-- Each message you receive is from a user chatting on this wiki page
+- Multiple users may be chatting on the same page simultaneously
+- Each message is prefixed with the sender's name in the format "[Name]: message"
+- Address users by name in your responses when their identity is known
 
 ## MANDATORY: Update Your Memory After EVERY Response
 

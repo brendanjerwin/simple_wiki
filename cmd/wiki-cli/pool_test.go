@@ -1267,7 +1267,7 @@ var _ = Describe("buildPromptText", func() {
 		BeforeEach(func() {
 			client = newWikiChatClient("test-page", "http://localhost:1")
 			client.pageContext = "You are an assistant for page X."
-			result = buildPromptText(client, "Hello there")
+			result = buildPromptText(client, "", "Hello there")
 		})
 
 		It("should prepend the page context to the message", func() {
@@ -1293,7 +1293,7 @@ var _ = Describe("buildPromptText", func() {
 		BeforeEach(func() {
 			client := newWikiChatClient("test-page", "http://localhost:1")
 			client.pageContext = ""
-			result = buildPromptText(client, "Just a message")
+			result = buildPromptText(client, "", "Just a message")
 		})
 
 		It("should return only the message content", func() {
@@ -1308,8 +1308,8 @@ var _ = Describe("buildPromptText", func() {
 		BeforeEach(func() {
 			client := newWikiChatClient("test-page", "http://localhost:1")
 			client.pageContext = "Some context"
-			firstResult = buildPromptText(client, "First message")
-			secondResult = buildPromptText(client, "Second message")
+			firstResult = buildPromptText(client, "", "First message")
+			secondResult = buildPromptText(client, "", "Second message")
 		})
 
 		It("should include context in the first call", func() {
@@ -1318,6 +1318,52 @@ var _ = Describe("buildPromptText", func() {
 
 		It("should not include context in the second call", func() {
 			Expect(secondResult).To(Equal("Second message"))
+		})
+	})
+
+	When("the sender name is provided", func() {
+		var result string
+
+		BeforeEach(func() {
+			client := newWikiChatClient("test-page", "http://localhost:1")
+			client.pageContext = ""
+			result = buildPromptText(client, "Alice", "Hello there")
+		})
+
+		It("should prefix the message with the sender name", func() {
+			Expect(result).To(Equal("[Alice]: Hello there"))
+		})
+	})
+
+	When("the sender name is provided and page context is set", func() {
+		var result string
+
+		BeforeEach(func() {
+			client := newWikiChatClient("test-page", "http://localhost:1")
+			client.pageContext = "You are an assistant for page X."
+			result = buildPromptText(client, "Bob", "What is the status?")
+		})
+
+		It("should include the sender name prefix in the message portion", func() {
+			Expect(result).To(ContainSubstring("User message: [Bob]: What is the status?"))
+		})
+
+		It("should prepend the page context", func() {
+			Expect(result).To(HavePrefix("You are an assistant for page X."))
+		})
+	})
+
+	When("the sender name is empty", func() {
+		var result string
+
+		BeforeEach(func() {
+			client := newWikiChatClient("test-page", "http://localhost:1")
+			client.pageContext = ""
+			result = buildPromptText(client, "", "Just a message")
+		})
+
+		It("should return the message without a sender prefix", func() {
+			Expect(result).To(Equal("Just a message"))
 		})
 	})
 })
@@ -1496,6 +1542,18 @@ var _ = Describe("chatPreamble", func() {
 		Expect(chatPreamble).To(ContainSubstring("pending_items"))
 		Expect(chatPreamble).To(ContainSubstring("key_context"))
 		Expect(chatPreamble).To(ContainSubstring("last_updated"))
+	})
+
+	It("should explain that multiple users may be chatting on the same page", func() {
+		Expect(chatPreamble).To(ContainSubstring("Multiple users may be chatting"))
+	})
+
+	It("should explain the sender name prefix format", func() {
+		Expect(chatPreamble).To(ContainSubstring("[Name]: message"))
+	})
+
+	It("should instruct the agent to address users by name", func() {
+		Expect(chatPreamble).To(ContainSubstring("Address users by name"))
 	})
 })
 
