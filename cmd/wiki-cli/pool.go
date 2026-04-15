@@ -1162,6 +1162,14 @@ IMPORTANT: Merge new information with existing context — do not discard previo
 from user_goals or key_context unless they are no longer relevant. Accumulate knowledge
 across sessions.
 
+## Wiki Syntax Help
+
+When users ask about wiki features, formatting, or syntax (e.g., macros, special markdown,
+collapsible headers, checklists, blog macros), search the wiki itself for help pages using
+the SearchPages tool with terms like "help" + the feature name. Read the help page content
+to answer accurately. Do NOT search the codebase for this — the wiki's own help pages are
+the authoritative source.
+
 `
 
 // fetchPageContext retrieves the page's ai_agent_chat_context frontmatter and returns
