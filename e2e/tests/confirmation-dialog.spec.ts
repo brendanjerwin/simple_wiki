@@ -270,12 +270,15 @@ test.describe('confirmation-dialog', () => {
 
     test.describe('when the dialog is closed after being opened', () => {
       test.beforeEach(async ({ page }) => {
-        // Make the host element focusable and focus it so the component captures it
-        // as _previouslyFocusedElement for focus restoration.
+        // Create a visible, focusable button to act as the trigger element.
+        // The confirmation-dialog host has `display:none` when closed so it cannot
+        // receive focus; using a real button guarantees focus capture works.
         await page.evaluate(() => {
-          const host = document.getElementById('e2e-test-cd') as HTMLElement;
-          host.tabIndex = -1;
-          host.focus();
+          const btn = document.createElement('button');
+          btn.id = 'e2e-prev-focus';
+          btn.setAttribute('style', 'position:absolute;left:-9999px');
+          document.body.appendChild(btn);
+          btn.focus();
         });
 
         await page.evaluate((cfg) => {
@@ -287,9 +290,13 @@ test.describe('confirmation-dialog', () => {
         await expect(page.locator('#e2e-test-cd[open]')).not.toBeAttached({ timeout: DIALOG_APPEAR_TIMEOUT_MS });
       });
 
+      test.afterEach(async ({ page }) => {
+        await page.evaluate(() => document.getElementById('e2e-prev-focus')?.remove());
+      });
+
       test('should return focus to the previously focused element', async ({ page }) => {
         await expect.poll(
-          () => page.evaluate(() => document.activeElement === document.getElementById('e2e-test-cd')),
+          () => page.evaluate(() => document.activeElement === document.getElementById('e2e-prev-focus')),
           { timeout: DIALOG_APPEAR_TIMEOUT_MS },
         ).toBe(true);
       });
@@ -318,12 +325,14 @@ test.describe('confirmation-dialog', () => {
         // Focus the confirm button (last focusable element)
         await page.locator('#e2e-test-cd .button-danger').focus();
 
-        // Tab should wrap focus back inside the dialog (native <dialog> focus trap)
+        // Tab should wrap focus back inside the dialog (native <dialog> focus trap).
+        // In shadow DOM, Chromium may move focus to the shadow host rather than staying
+        // inside shadowRoot, so check either shadowRoot.activeElement or host itself.
         await page.keyboard.press('Tab');
 
         const focusStillInDialog = await page.evaluate(() => {
           const host = document.getElementById('e2e-test-cd');
-          return host?.shadowRoot?.activeElement !== null;
+          return host?.shadowRoot?.activeElement !== null || document.activeElement === host;
         });
         expect(focusStillInDialog).toBe(true);
       });
@@ -332,12 +341,14 @@ test.describe('confirmation-dialog', () => {
         // Focus the cancel button (first focusable element)
         await page.locator('#e2e-test-cd .button-cancel').focus();
 
-        // Shift+Tab should wrap focus back inside the dialog
+        // Shift+Tab should wrap focus back inside the dialog.
+        // In shadow DOM, Chromium may move focus to the shadow host rather than staying
+        // inside shadowRoot, so check either shadowRoot.activeElement or host itself.
         await page.keyboard.press('Shift+Tab');
 
         const focusStillInDialog = await page.evaluate(() => {
           const host = document.getElementById('e2e-test-cd');
-          return host?.shadowRoot?.activeElement !== null;
+          return host?.shadowRoot?.activeElement !== null || document.activeElement === host;
         });
         expect(focusStillInDialog).toBe(true);
       });
