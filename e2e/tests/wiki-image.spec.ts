@@ -104,7 +104,7 @@ test.describe('wiki-image component', () => {
 
     test('clicking on image sets the tools-open attribute', async ({ page }) => {
       const wikiImage = page.locator('wiki-image');
-      await wikiImage.click();
+      await page.locator('wiki-image img').click();
       await expect(wikiImage).toHaveAttribute('tools-open', '', {
         timeout: TOOLS_INTERACTION_TIMEOUT_MS,
       });
@@ -112,7 +112,7 @@ test.describe('wiki-image component', () => {
 
     test('clicking outside removes the tools-open attribute', async ({ page }) => {
       const wikiImage = page.locator('wiki-image');
-      await wikiImage.click();
+      await page.locator('wiki-image img').click();
       await expect(wikiImage).toHaveAttribute('tools-open', '', {
         timeout: TOOLS_INTERACTION_TIMEOUT_MS,
       });
@@ -131,7 +131,7 @@ test.describe('wiki-image component', () => {
       context,
     }) => {
       const wikiImage = page.locator('wiki-image');
-      await wikiImage.click();
+      await page.locator('wiki-image img').click();
       await expect(wikiImage).toHaveAttribute('tools-open', '', {
         timeout: TOOLS_INTERACTION_TIMEOUT_MS,
       });
@@ -141,7 +141,7 @@ test.describe('wiki-image component', () => {
         page.locator('wiki-image button[aria-label="Open in new tab"]').click(),
       ]);
 
-      await expect(newPage).toHaveURL(new RegExp(TEST_IMAGE_SRC.replace(/\//g, '\\/')));
+      await expect(newPage).toHaveURL(new RegExp(TEST_IMAGE_SRC.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
       await newPage.close();
     });
   });
@@ -218,7 +218,7 @@ test.describe('wiki-image component', () => {
     test('clicking image sets tools-open attribute', async ({ page }) => {
       const wikiImage = page.locator('wiki-image');
       await expect(wikiImage).toBeAttached({ timeout: COMPONENT_LOAD_TIMEOUT_MS });
-      await wikiImage.click();
+      await page.locator('wiki-image img').click();
       await expect(wikiImage).toHaveAttribute('tools-open', '', {
         timeout: TOOLS_INTERACTION_TIMEOUT_MS,
       });
@@ -226,7 +226,7 @@ test.describe('wiki-image component', () => {
 
     test('tools-open attribute is removed when clicking outside', async ({ page }) => {
       const wikiImage = page.locator('wiki-image');
-      await wikiImage.click();
+      await page.locator('wiki-image img').click();
       await expect(wikiImage).toHaveAttribute('tools-open', '', {
         timeout: TOOLS_INTERACTION_TIMEOUT_MS,
       });
@@ -244,7 +244,7 @@ test.describe('wiki-image component', () => {
       // Component uses click-inside to open; close-bar X closes on mobile.
       // A second click on the image should keep tools open (not toggle off).
       const wikiImage = page.locator('wiki-image');
-      await wikiImage.click();
+      await page.locator('wiki-image img').click();
       await expect(wikiImage).toHaveAttribute('tools-open', '', {
         timeout: TOOLS_INTERACTION_TIMEOUT_MS,
       });
