@@ -61,6 +61,12 @@ type PermissionRequestEvent struct {
 	Options     []PermissionOption
 }
 
+// pendingPermissionEntry holds the response channel and original event for a pending permission request.
+type pendingPermissionEntry struct {
+	responseChan chan string
+	event        *PermissionRequestEvent
+}
+
 // Event represents a chat event that can be streamed to subscribers.
 type Event struct {
 	Type              EventType
@@ -129,7 +135,7 @@ type Manager struct {
 	cancelFuncs   map[string][]chan struct{} // page → cancellation signal subscribers
 	cancelFuncsMu sync.Mutex
 
-	pendingPermissions   map[string]chan string // request_id → response channel
+	pendingPermissions   map[string]*pendingPermissionEntry // request_id → pending entry
 	pendingPermissionsMu sync.Mutex
 
 	done chan struct{}
@@ -143,7 +149,7 @@ func NewManager() *Manager {
 		instanceRequests:       make(map[string]time.Time),
 		instanceRequestChans:   make([]chan string, 0),
 		cancelFuncs:            make(map[string][]chan struct{}),
-		pendingPermissions:     make(map[string]chan string),
+		pendingPermissions:     make(map[string]*pendingPermissionEntry),
 		done:                   make(chan struct{}),
 	}
 
@@ -739,11 +745,21 @@ func (m *Manager) IsInstanceRequested(page string) bool {
 // until a response arrives via RespondToPermission or the context is cancelled.
 // Returns the selected option ID, or empty string if cancelled.
 func (m *Manager) RequestPermission(ctx context.Context, page, requestID, title, description string, options []PermissionOption) string {
-	// Create a response channel and register it
-	responseChan := make(chan string, 1)
+	// Create a response channel and register the pending entry with the full event for replay
+	event := &PermissionRequestEvent{
+		Page:        page,
+		RequestID:   requestID,
+		Title:       title,
+		Description: description,
+		Options:     options,
+	}
+	entry := &pendingPermissionEntry{
+		responseChan: make(chan string, 1),
+		event:        event,
+	}
 
 	m.pendingPermissionsMu.Lock()
-	m.pendingPermissions[requestID] = responseChan
+	m.pendingPermissions[requestID] = entry
 	m.pendingPermissionsMu.Unlock()
 
 	// Ensure cleanup on all exit paths
@@ -754,17 +770,11 @@ func (m *Manager) RequestPermission(ctx context.Context, page, requestID, title,
 	}()
 
 	// Emit the permission request event to page subscribers
-	m.EmitPermissionRequest(page, &PermissionRequestEvent{
-		Page:        page,
-		RequestID:   requestID,
-		Title:       title,
-		Description: description,
-		Options:     options,
-	})
+	m.EmitPermissionRequest(page, event)
 
 	// Block until a response arrives or context is cancelled
 	select {
-	case selectedOptionID := <-responseChan:
+	case selectedOptionID := <-entry.responseChan:
 		return selectedOptionID
 	case <-ctx.Done():
 		return ""
@@ -786,7 +796,7 @@ func (m *Manager) EmitPermissionRequest(page string, event *PermissionRequestEve
 // RespondToPermission delivers a permission response to the waiting RequestPermission call.
 func (m *Manager) RespondToPermission(requestID, selectedOptionID string) {
 	m.pendingPermissionsMu.Lock()
-	responseChan, ok := m.pendingPermissions[requestID]
+	entry, ok := m.pendingPermissions[requestID]
 	m.pendingPermissionsMu.Unlock()
 
 	if !ok {
@@ -794,8 +804,23 @@ func (m *Manager) RespondToPermission(requestID, selectedOptionID string) {
 	}
 
 	select {
-	case responseChan <- selectedOptionID:
+	case entry.responseChan <- selectedOptionID:
 	default:
 		// Channel already has a response or was closed
 	}
+}
+
+// GetPendingPermissionsForPage returns all pending permission request events for a given page.
+// This allows late-joining subscribers to replay permission prompts they missed.
+func (m *Manager) GetPendingPermissionsForPage(page string) []*PermissionRequestEvent {
+	m.pendingPermissionsMu.Lock()
+	defer m.pendingPermissionsMu.Unlock()
+
+	var events []*PermissionRequestEvent
+	for _, entry := range m.pendingPermissions {
+		if entry.event.Page == page {
+			events = append(events, entry.event)
+		}
+	}
+	return events
 }
