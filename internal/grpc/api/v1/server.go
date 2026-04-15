@@ -52,6 +52,7 @@ type ChatBufferManager interface {
 	RequestPermission(ctx context.Context, page, requestID, title, description string, options []chatbuffer.PermissionOption) string
 	EmitPermissionRequest(page string, event *chatbuffer.PermissionRequestEvent)
 	RespondToPermission(requestID, selectedOptionID string)
+	GetPendingPermissionsForPage(page string) []*chatbuffer.PermissionRequestEvent
 }
 
 // BuildInfo contains version and build metadata for the server.

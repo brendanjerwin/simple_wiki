@@ -87,6 +87,17 @@ func (s *Server) SubscribeChat(req *apiv1.SubscribeChatRequest, stream apiv1.Cha
 		}
 	}
 
+	// Replay any pending permission requests so late-joining subscribers can respond
+	for _, permEvent := range s.chatBufferManager.GetPendingPermissionsForPage(req.Page) {
+		protoEvent := bufferEventToProto(chatbuffer.Event{
+			Type:              chatbuffer.EventTypePermissionRequest,
+			PermissionRequest: permEvent,
+		})
+		if err := stream.Send(protoEvent); err != nil {
+			return err
+		}
+	}
+
 	// Stream new events as they arrive
 	for {
 		select {

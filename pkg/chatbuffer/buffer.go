@@ -129,8 +129,9 @@ type Manager struct {
 	cancelFuncs   map[string][]chan struct{} // page → cancellation signal subscribers
 	cancelFuncsMu sync.Mutex
 
-	pendingPermissions   map[string]chan string // request_id → response channel
-	pendingPermissionsMu sync.Mutex
+	pendingPermissions      map[string]chan string              // request_id → response channel
+	pendingPermissionEvents map[string]*PermissionRequestEvent // request_id → full event for replay
+	pendingPermissionsMu    sync.Mutex
 
 	done chan struct{}
 }
@@ -143,7 +144,8 @@ func NewManager() *Manager {
 		instanceRequests:       make(map[string]time.Time),
 		instanceRequestChans:   make([]chan string, 0),
 		cancelFuncs:            make(map[string][]chan struct{}),
-		pendingPermissions:     make(map[string]chan string),
+		pendingPermissions:      make(map[string]chan string),
+		pendingPermissionEvents: make(map[string]*PermissionRequestEvent),
 		done:                   make(chan struct{}),
 	}
 
@@ -742,25 +744,29 @@ func (m *Manager) RequestPermission(ctx context.Context, page, requestID, title,
 	// Create a response channel and register it
 	responseChan := make(chan string, 1)
 
+	event := &PermissionRequestEvent{
+		Page:        page,
+		RequestID:   requestID,
+		Title:       title,
+		Description: description,
+		Options:     options,
+	}
+
 	m.pendingPermissionsMu.Lock()
 	m.pendingPermissions[requestID] = responseChan
+	m.pendingPermissionEvents[requestID] = event
 	m.pendingPermissionsMu.Unlock()
 
 	// Ensure cleanup on all exit paths
 	defer func() {
 		m.pendingPermissionsMu.Lock()
 		delete(m.pendingPermissions, requestID)
+		delete(m.pendingPermissionEvents, requestID)
 		m.pendingPermissionsMu.Unlock()
 	}()
 
 	// Emit the permission request event to page subscribers
-	m.EmitPermissionRequest(page, &PermissionRequestEvent{
-		Page:        page,
-		RequestID:   requestID,
-		Title:       title,
-		Description: description,
-		Options:     options,
-	})
+	m.EmitPermissionRequest(page, event)
 
 	// Block until a response arrives or context is cancelled
 	select {
@@ -781,6 +787,22 @@ func (m *Manager) EmitPermissionRequest(page string, event *PermissionRequestEve
 		Type:              EventTypePermissionRequest,
 		PermissionRequest: event,
 	})
+}
+
+// GetPendingPermissionsForPage returns all pending permission request events for a given page.
+// This is used to replay pending permissions to late-joining SubscribeChat subscribers.
+func (m *Manager) GetPendingPermissionsForPage(page string) []*PermissionRequestEvent {
+	m.pendingPermissionsMu.Lock()
+	defer m.pendingPermissionsMu.Unlock()
+
+	var events []*PermissionRequestEvent
+	for _, event := range m.pendingPermissionEvents {
+		if event.Page == page {
+			events = append(events, event)
+		}
+	}
+
+	return events
 }
 
 // RespondToPermission delivers a permission response to the waiting RequestPermission call.

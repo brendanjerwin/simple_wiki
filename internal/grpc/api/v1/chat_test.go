@@ -45,6 +45,9 @@ type mockChatBufferManager struct {
 
 	// Configurable cancellation channels for SubscribeToCancellation
 	cancellationChans []chan struct{}
+
+	// Configurable pending permissions per page for replay testing
+	pendingPermissionsByPage map[string][]*chatbuffer.PermissionRequestEvent
 }
 
 type notifyToolCallArgs struct {
@@ -1757,6 +1760,105 @@ var _ = Describe("ChatService", func() {
 			})
 		})
 
+		When("there are pending permissions for the page on subscribe", func() {
+			var (
+				streamServer *mockChatStreamServer
+			)
+
+			BeforeEach(func() {
+				chatManager.pendingPermissionsByPage = map[string][]*chatbuffer.PermissionRequestEvent{
+					"test-page": {
+						{
+							RequestID:   "perm-replay-1",
+							Page:        "test-page",
+							Title:       "Pending Action",
+							Description: "Waiting for approval",
+							Options: []chatbuffer.PermissionOption{
+								{OptionID: "allow", Label: "Allow", Description: "Allow this"},
+								{OptionID: "deny", Label: "Deny", Description: "Deny this"},
+							},
+						},
+					},
+				}
+
+				req := &apiv1.SubscribeChatRequest{Page: "test-page"}
+				streamServer = &mockChatStreamServer{contextDone: true}
+
+				_ = server.SubscribeChat(req, streamServer)
+			})
+
+			It("should replay the pending permission request event", func() {
+				events := streamServer.GetEvents()
+				var permReq *apiv1.ChatPermissionRequest
+				for _, e := range events {
+					if pr := e.GetPermissionRequest(); pr != nil {
+						permReq = pr
+						break
+					}
+				}
+				Expect(permReq).NotTo(BeNil())
+			})
+
+			It("should include the correct request ID", func() {
+				events := streamServer.GetEvents()
+				var permReq *apiv1.ChatPermissionRequest
+				for _, e := range events {
+					if pr := e.GetPermissionRequest(); pr != nil {
+						permReq = pr
+						break
+					}
+				}
+				Expect(permReq.RequestId).To(Equal("perm-replay-1"))
+			})
+
+			It("should include the correct title and description", func() {
+				events := streamServer.GetEvents()
+				var permReq *apiv1.ChatPermissionRequest
+				for _, e := range events {
+					if pr := e.GetPermissionRequest(); pr != nil {
+						permReq = pr
+						break
+					}
+				}
+				Expect(permReq.Title).To(Equal("Pending Action"))
+				Expect(permReq.Description).To(Equal("Waiting for approval"))
+			})
+
+			It("should include the options", func() {
+				events := streamServer.GetEvents()
+				var permReq *apiv1.ChatPermissionRequest
+				for _, e := range events {
+					if pr := e.GetPermissionRequest(); pr != nil {
+						permReq = pr
+						break
+					}
+				}
+				Expect(permReq.Options).To(HaveLen(2))
+				Expect(permReq.Options[0].OptionId).To(Equal("allow"))
+				Expect(permReq.Options[1].OptionId).To(Equal("deny"))
+			})
+		})
+
+		When("there are no pending permissions for the page on subscribe", func() {
+			var (
+				streamServer *mockChatStreamServer
+			)
+
+			BeforeEach(func() {
+				req := &apiv1.SubscribeChatRequest{Page: "test-page"}
+				streamServer = &mockChatStreamServer{contextDone: true}
+
+				_ = server.SubscribeChat(req, streamServer)
+			})
+
+			It("should not send any permission request events", func() {
+				events := streamServer.GetEvents()
+				for _, e := range events {
+					Expect(e.GetPermissionRequest()).To(BeNil())
+				}
+			})
+		})
+
 		When("receiving an unknown event type", func() {
 			var (
 				streamServer *mockChatStreamServer
@@ -2017,4 +2119,13 @@ func (m *mockChatBufferManager) RequestPermission(_ context.Context, page, reque
 	defer m.mu.Unlock()
 	m.requestPermissionCalls = append(m.requestPermissionCalls, requestPermissionArgs{page, requestID, title, description, options})
 	return m.requestPermissionResponse
+}
+
+func (m *mockChatBufferManager) GetPendingPermissionsForPage(page string) []*chatbuffer.PermissionRequestEvent {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.pendingPermissionsByPage == nil {
+		return nil
+	}
+	return m.pendingPermissionsByPage[page]
 }

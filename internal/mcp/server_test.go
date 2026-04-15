@@ -169,6 +169,10 @@ func (noOpChatBufferManager) RespondToPermission(string, string) {
 	// no-op: satisfies interface; this implementation ignores permission responses
 }
 
+func (noOpChatBufferManager) GetPendingPermissionsForPage(string) []*chatbuffer.PermissionRequestEvent {
+	return nil
+}
+
 func mustNewAPIServer() *grpcapi.Server {
 	srv, err := grpcapi.NewServer(
 		grpcapi.BuildInfo{Commit: "test-commit", BuildTime: time.Now()},

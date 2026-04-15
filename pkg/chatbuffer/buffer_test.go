@@ -1127,6 +1127,122 @@ var _ = Describe("Manager", func() {
 		})
 	})
 
+	Describe("GetPendingPermissionsForPage", func() {
+		When("there is a pending permission request for the page", func() {
+			var pendingEvents []*chatbuffer.PermissionRequestEvent
+
+			BeforeEach(func() {
+				go func() {
+					manager.RequestPermission(
+						context.Background(),
+						"test-page",
+						"req-pending-1",
+						"Pending Title",
+						"Pending description",
+						[]chatbuffer.PermissionOption{
+							{OptionID: "yes", Label: "Yes", Description: "Allow"},
+							{OptionID: "no", Label: "No", Description: "Deny"},
+						},
+					)
+				}()
+
+				// Give the goroutine time to register the pending permission
+				time.Sleep(50 * time.Millisecond)
+
+				pendingEvents = manager.GetPendingPermissionsForPage("test-page")
+			})
+
+			It("should return the pending permission event", func() {
+				Expect(pendingEvents).To(HaveLen(1))
+			})
+
+			It("should include the correct request ID", func() {
+				Expect(pendingEvents[0].RequestID).To(Equal("req-pending-1"))
+			})
+
+			It("should include the correct title and description", func() {
+				Expect(pendingEvents[0].Title).To(Equal("Pending Title"))
+				Expect(pendingEvents[0].Description).To(Equal("Pending description"))
+			})
+
+			It("should include the correct page", func() {
+				Expect(pendingEvents[0].Page).To(Equal("test-page"))
+			})
+
+			It("should include the options", func() {
+				Expect(pendingEvents[0].Options).To(HaveLen(2))
+				Expect(pendingEvents[0].Options[0].OptionID).To(Equal("yes"))
+				Expect(pendingEvents[0].Options[1].OptionID).To(Equal("no"))
+			})
+		})
+
+		When("the permission request has been resolved", func() {
+			var pendingEvents []*chatbuffer.PermissionRequestEvent
+
+			BeforeEach(func() {
+				done := make(chan struct{})
+				go func() {
+					defer close(done)
+					manager.RequestPermission(
+						context.Background(),
+						"test-page",
+						"req-resolved-1",
+						"Title",
+						"Description",
+						[]chatbuffer.PermissionOption{{OptionID: "yes", Label: "Yes"}},
+					)
+				}()
+
+				time.Sleep(50 * time.Millisecond)
+				manager.RespondToPermission("req-resolved-1", "yes")
+				Eventually(done, 2*time.Second).Should(BeClosed())
+
+				pendingEvents = manager.GetPendingPermissionsForPage("test-page")
+			})
+
+			It("should not return the resolved permission", func() {
+				Expect(pendingEvents).To(BeEmpty())
+			})
+		})
+
+		When("there are permissions pending for a different page", func() {
+			var pendingEvents []*chatbuffer.PermissionRequestEvent
+
+			BeforeEach(func() {
+				go func() {
+					manager.RequestPermission(
+						context.Background(),
+						"other-page",
+						"req-other-page-1",
+						"Other Title",
+						"Other description",
+						[]chatbuffer.PermissionOption{{OptionID: "yes", Label: "Yes"}},
+					)
+				}()
+
+				time.Sleep(50 * time.Millisecond)
+
+				pendingEvents = manager.GetPendingPermissionsForPage("test-page")
+			})
+
+			It("should not return permissions from other pages", func() {
+				Expect(pendingEvents).To(BeEmpty())
+			})
+		})
+
+		When("there are no pending permissions", func() {
+			var pendingEvents []*chatbuffer.PermissionRequestEvent
+
+			BeforeEach(func() {
+				pendingEvents = manager.GetPendingPermissionsForPage("test-page")
+			})
+
+			It("should return an empty slice", func() {
+				Expect(pendingEvents).To(BeEmpty())
+			})
+		})
+	})
+
 	Describe("SubscribeToPageChannelWithReplay", func() {
 		When("existing messages are present", func() {
 			var (

@@ -551,6 +551,10 @@ func (noOpChatBufferManager) RespondToPermission(string, string) {
 	// no-op: satisfies interface; this implementation ignores permission responses
 }
 
+func (noOpChatBufferManager) GetPendingPermissionsForPage(string) []*chatbuffer.PermissionRequestEvent {
+	return nil
+}
+
 // noOpPageReaderMutator is a minimal mock for tests that don't need page operations.
 type noOpPageReaderMutator struct{}
 
