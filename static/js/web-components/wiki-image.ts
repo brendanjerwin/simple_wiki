@@ -258,7 +258,14 @@ export class WikiImage extends LitElement {
     const link = document.createElement('a');
     link.href = this.src;
     link.download = this._getFilename();
+    link.style.display = 'none';
+    // Append to shadow root so the synthetic click's composed path includes this component.
+    // Without this, link.click() on a detached element reaches the document-level
+    // _handleDocumentClick with a path that doesn't include wiki-image, causing
+    // toolsOpen to be incorrectly set to false.
+    this.shadowRoot!.appendChild(link);
     link.click();
+    this.shadowRoot!.removeChild(link);
   }
 
   private async _handleCopyImage(e: Event): Promise<void> {
