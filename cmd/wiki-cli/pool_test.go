@@ -459,7 +459,7 @@ var _ = Describe("poolDaemon", func() {
 		})
 	})
 
-	Describe("reapIdleInstances", func() {
+	Describe("reapOnce", func() {
 		When("an instance exceeds idle timeout", func() {
 			var daemon *poolDaemon
 
@@ -469,14 +469,18 @@ var _ = Describe("poolDaemon", func() {
 					instances: map[string]*instanceEntry{
 						"idle-page": {
 							page:       "idle-page",
+							createdAt:  time.Now(),
 							lastActive: time.Now().Add(-20 * time.Minute),
+							state:      StateIdle,
 							cancel: func() {
 								// no-op: test stub; no real goroutine to cancel
 							},
 						},
 						"active-page": {
 							page:       "active-page",
+							createdAt:  time.Now(),
 							lastActive: time.Now(),
+							state:      StateIdle,
 							cancel: func() {
 								// no-op: test stub; no real goroutine to cancel
 							},
@@ -484,14 +488,7 @@ var _ = Describe("poolDaemon", func() {
 					},
 				}
 
-				// Simulate one reaper tick
-				daemon.mu.Lock()
-				for page, entry := range daemon.instances {
-					if entry.idleSince() > daemon.idleTimeout {
-						daemon.stopInstanceLocked(page)
-					}
-				}
-				daemon.mu.Unlock()
+				daemon.reapOnce()
 			})
 
 			It("should reap the idle instance", func() {
@@ -500,6 +497,144 @@ var _ = Describe("poolDaemon", func() {
 
 			It("should keep the active instance", func() {
 				Expect(daemon.instances).To(HaveKey("active-page"))
+			})
+		})
+
+		When("an instance exceeds max instance age", func() {
+			var daemon *poolDaemon
+
+			BeforeEach(func() {
+				daemon = &poolDaemon{
+					idleTimeout:    10 * time.Minute,
+					maxInstanceAge: 1 * time.Hour,
+					instances: map[string]*instanceEntry{
+						"old-page": {
+							page:       "old-page",
+							createdAt:  time.Now().Add(-2 * time.Hour),
+							lastActive: time.Now(), // active recently, but too old
+							state:      StatePrompting,
+							cancel: func() {
+								// no-op: test stub
+							},
+						},
+						"young-page": {
+							page:       "young-page",
+							createdAt:  time.Now(),
+							lastActive: time.Now(),
+							state:      StateIdle,
+							cancel: func() {
+								// no-op: test stub
+							},
+						},
+					},
+				}
+
+				daemon.reapOnce()
+			})
+
+			It("should reap the overaged instance regardless of activity", func() {
+				Expect(daemon.instances).NotTo(HaveKey("old-page"))
+			})
+
+			It("should keep the young instance", func() {
+				Expect(daemon.instances).To(HaveKey("young-page"))
+			})
+		})
+
+		When("max instance age is zero (disabled)", func() {
+			var daemon *poolDaemon
+
+			BeforeEach(func() {
+				daemon = &poolDaemon{
+					idleTimeout:    10 * time.Minute,
+					maxInstanceAge: 0, // disabled
+					instances: map[string]*instanceEntry{
+						"old-active-page": {
+							page:       "old-active-page",
+							createdAt:  time.Now().Add(-48 * time.Hour),
+							lastActive: time.Now(), // recently active
+							state:      StateIdle,
+							cancel: func() {
+								// no-op: test stub
+							},
+						},
+					},
+				}
+
+				daemon.reapOnce()
+			})
+
+			It("should not reap the old but active instance", func() {
+				Expect(daemon.instances).To(HaveKey("old-active-page"))
+			})
+		})
+
+		When("an instance is stuck in PermissionPending past the timeout", func() {
+			var daemon *poolDaemon
+
+			BeforeEach(func() {
+				daemon = &poolDaemon{
+					idleTimeout:               10 * time.Minute,
+					permissionPendingTimeout:  5 * time.Minute,
+					instances: map[string]*instanceEntry{
+						"stuck-perm-page": {
+							page:       "stuck-perm-page",
+							createdAt:  time.Now().Add(-30 * time.Minute),
+							lastActive: time.Now().Add(-20 * time.Minute),
+							state:      StatePermissionPending,
+							cancel: func() {
+								// no-op: test stub
+							},
+						},
+						"recent-perm-page": {
+							page:       "recent-perm-page",
+							createdAt:  time.Now(),
+							lastActive: time.Now().Add(-1 * time.Minute),
+							state:      StatePermissionPending,
+							cancel: func() {
+								// no-op: test stub
+							},
+						},
+					},
+				}
+
+				daemon.reapOnce()
+			})
+
+			It("should reap the stuck permission-pending instance", func() {
+				Expect(daemon.instances).NotTo(HaveKey("stuck-perm-page"))
+			})
+
+			It("should keep the recently-entered permission-pending instance", func() {
+				Expect(daemon.instances).To(HaveKey("recent-perm-page"))
+			})
+		})
+
+		When("permission pending timeout is zero (disabled)", func() {
+			var daemon *poolDaemon
+
+			BeforeEach(func() {
+				daemon = &poolDaemon{
+					idleTimeout:              10 * time.Minute,
+					permissionPendingTimeout: 0, // disabled
+					instances: map[string]*instanceEntry{
+						"stuck-perm-page": {
+							page:       "stuck-perm-page",
+							createdAt:  time.Now().Add(-2 * time.Hour),
+							lastActive: time.Now().Add(-1 * time.Hour),
+							state:      StatePermissionPending,
+							cancel: func() {
+								// no-op: test stub
+							},
+						},
+					},
+				}
+
+				daemon.reapOnce()
+			})
+
+			It("should not reap permission-pending instances when timeout is disabled", func() {
+				Expect(daemon.instances).To(HaveKey("stuck-perm-page"))
 			})
 		})
 	})

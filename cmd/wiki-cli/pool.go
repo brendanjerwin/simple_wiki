@@ -24,8 +24,9 @@ import (
 )
 
 const (
-	defaultMaxInstances       = 5
-	defaultIdleTimeoutMinutes = 30
+	defaultMaxInstances                    = 5
+	defaultIdleTimeoutMinutes              = 30
+	defaultPermissionPendingTimeoutMinutes = 15
 
 	logFmtStateTransitionErr    = "%v"
 	errTerminalAccessUnavailable = "terminal access not available"
@@ -88,6 +89,7 @@ type instanceEntry struct {
 	conn       acpAgent
 	sessionID  acp.SessionId
 	cancel     context.CancelFunc
+	createdAt  time.Time
 	lastActive time.Time
 	state      InstanceState
 	mu         sync.Mutex
@@ -103,6 +105,12 @@ func (e *instanceEntry) idleSince() time.Duration {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	return time.Since(e.lastActive)
+}
+
+func (e *instanceEntry) age() time.Duration {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return time.Since(e.createdAt)
 }
 
 // setState transitions the instance to a new state. It validates that the
@@ -146,6 +154,12 @@ type poolDaemon struct {
 	useSystemd   bool
 	maxInstances int
 	idleTimeout  time.Duration
+	// maxInstanceAge is the maximum lifetime of any instance regardless of state.
+	// Zero means no limit.
+	maxInstanceAge time.Duration
+	// permissionPendingTimeout is the maximum time an instance may remain in
+	// StatePermissionPending before being reaped. Zero means no limit.
+	permissionPendingTimeout time.Duration
 
 	instances map[string]*instanceEntry
 	mu        sync.Mutex
@@ -195,6 +209,16 @@ The daemon should be run in a directory containing your agent configuration
 				Value: defaultIdleTimeoutMinutes * time.Minute,
 				Usage: "Reclaim idle instances after this duration",
 			},
+			cli.DurationFlag{
+				Name:  "max-instance-age",
+				Value: 0,
+				Usage: "Maximum lifetime of any instance regardless of state; 0 disables (e.g. 1h)",
+			},
+			cli.DurationFlag{
+				Name:  "permission-pending-timeout",
+				Value: defaultPermissionPendingTimeoutMinutes * time.Minute,
+				Usage: "Reap instances stuck in PermissionPending after this duration; 0 disables",
+			},
 			cli.StringFlag{
 				Name:  "agent-path",
 				Usage: "Path to ACP-compatible agent binary (required)",
@@ -204,42 +228,47 @@ The daemon should be run in a directory containing your agent configuration
 				Usage: "Disable systemd integration even when available",
 			},
 		},
-		Action: func(c *cli.Context) error {
-			baseURL := c.String("url")
-			normalizedURL, err := normalizeBaseURL(baseURL)
-			if err != nil {
-				return fmt.Errorf("invalid base URL: %w", err)
-			}
-
-			useSystemd := isSystemdAvailable() && !c.Bool("no-systemd")
-			if useSystemd {
-				log.Println("Systemd detected — agent processes will be spawned as transient units")
-			} else {
-				log.Println("Systemd not available or disabled — using direct process management")
-			}
-
-			agentPath := c.String("agent-path")
-			if agentPath == "" {
-				return errors.New("--agent-path is required: provide the path to an ACP-compatible agent binary")
-			}
-
-			d := &poolDaemon{
-				wikiURL:      normalizedURL,
-				agentPath:    agentPath,
-				useSystemd:   useSystemd,
-				maxInstances: c.Int("max-instances"),
-				idleTimeout:  c.Duration("idle-timeout"),
-				instances:    make(map[string]*instanceEntry),
-			}
-
-			return d.run(context.Background())
-		},
+		Action: runPoolFromCLI,
 	}
+}
+
+func runPoolFromCLI(c *cli.Context) error {
+	baseURL := c.String("url")
+	normalizedURL, err := normalizeBaseURL(baseURL)
+	if err != nil {
+		return fmt.Errorf("invalid base URL: %w", err)
+	}
+
+	useSystemd := isSystemdAvailable() && !c.Bool("no-systemd")
+	if useSystemd {
+		log.Println("Systemd detected — agent processes will be spawned as transient units")
+	} else {
+		log.Println("Systemd not available or disabled — using direct process management")
+	}
+
+	agentPath := c.String("agent-path")
+	if agentPath == "" {
+		return errors.New("--agent-path is required: provide the path to an ACP-compatible agent binary")
+	}
+
+	d := &poolDaemon{
+		wikiURL:                  normalizedURL,
+		agentPath:                agentPath,
+		useSystemd:               useSystemd,
+		maxInstances:             c.Int("max-instances"),
+		idleTimeout:              c.Duration("idle-timeout"),
+		maxInstanceAge:           c.Duration("max-instance-age"),
+		permissionPendingTimeout: c.Duration("permission-pending-timeout"),
+		instances:                make(map[string]*instanceEntry),
+	}
+
+	return d.run(context.Background())
 }
 
 // run starts the pool daemon's main loop.
 func (d *poolDaemon) run(ctx context.Context) error {
-	log.Printf("Pool daemon starting (max=%d, idle-timeout=%s, wiki=%s)", d.maxInstances, d.idleTimeout, d.wikiURL)
+	log.Printf("Pool daemon starting (max=%d, idle-timeout=%s, max-instance-age=%s, permission-pending-timeout=%s, wiki=%s)",
+		d.maxInstances, d.idleTimeout, d.maxInstanceAge, d.permissionPendingTimeout, d.wikiURL)
 
 	// Start the idle reaper
 	go d.reapIdleInstances(ctx)
@@ -804,12 +833,14 @@ func (d *poolDaemon) spawnInstance(ctx context.Context, page string) (*instanceE
 		return nil, err
 	}
 
+	now := time.Now()
 	entry := &instanceEntry{
 		page:       page,
 		conn:       conn,
 		sessionID:  sess.SessionId,
 		cancel:     cancel,
-		lastActive: time.Now(),
+		createdAt:  now,
+		lastActive: now,
 		state:      StateInitializing,
 	}
 	log.Printf("[%s] State: Spawning -> Initializing", page)
@@ -1242,7 +1273,39 @@ func (d *poolDaemon) stopAll() {
 	log.Println("All instances stopped")
 }
 
-// reapIdleInstances periodically stops instances that have been idle too long.
+// reapOnce performs a single reap pass, stopping instances that have exceeded
+// any configured timeout. Must not be called with d.mu held.
+func (d *poolDaemon) reapOnce() {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	for page, entry := range d.instances {
+		// Max-age check: forcibly reap any instance that has exceeded its maximum
+		// lifetime, regardless of state.
+		if d.maxInstanceAge > 0 && entry.age() > d.maxInstanceAge {
+			log.Printf("Reaping overaged instance for %q (age %s)", page, entry.age().Round(time.Second))
+			d.stopInstanceLocked(page)
+			continue
+		}
+
+		// Permission-pending timeout: reap instances stuck waiting for user
+		// permission approval.
+		if d.permissionPendingTimeout > 0 && entry.State() == StatePermissionPending && entry.idleSince() > d.permissionPendingTimeout {
+			log.Printf("Reaping stuck PermissionPending instance for %q (stuck %s)", page, entry.idleSince().Round(time.Second))
+			d.stopInstanceLocked(page)
+			continue
+		}
+
+		// Idle timeout: reap instances in the Idle state that have been
+		// inactive too long.
+		if entry.State() == StateIdle && entry.idleSince() > d.idleTimeout {
+			log.Printf("Reaping idle instance for %q (idle %s)", page, entry.idleSince().Round(time.Second))
+			d.stopInstanceLocked(page)
+		}
+	}
+}
+
+// reapIdleInstances periodically calls reapOnce to stop stale instances.
 func (d *poolDaemon) reapIdleInstances(ctx context.Context) {
 	ticker := time.NewTicker(1 * time.Minute)
 	defer ticker.Stop()
@@ -1252,14 +1315,7 @@ func (d *poolDaemon) reapIdleInstances(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			d.mu.Lock()
-			for page, entry := range d.instances {
-				if entry.idleSince() > d.idleTimeout {
-					log.Printf("Reaping idle instance for %q (idle %s)", page, entry.idleSince().Round(time.Second))
-					d.stopInstanceLocked(page)
-				}
-			}
-			d.mu.Unlock()
+			d.reapOnce()
 		}
 	}
 }
