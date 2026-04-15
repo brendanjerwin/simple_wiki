@@ -122,6 +122,18 @@ func (m *mockChatReplier) RequestPermissionFromUser(_ context.Context, req *conn
 	return connect.NewResponse(resp), nil
 }
 
+// blockingPermissionReplier implements chatReplier and blocks on
+// RequestPermissionFromUser until the context is cancelled, simulating a user
+// who never responds to a permission prompt.
+type blockingPermissionReplier struct {
+	mockChatReplier
+}
+
+func (*blockingPermissionReplier) RequestPermissionFromUser(ctx context.Context, _ *connect.Request[apiv1.RequestPermissionFromUserRequest]) (*connect.Response[apiv1.RequestPermissionFromUserResponse], error) {
+	<-ctx.Done()
+	return nil, ctx.Err()
+}
+
 // mockACPAgent is a mock implementation of the acpAgent interface.
 type mockACPAgent struct {
 	initResp    acp.InitializeResponse
@@ -2724,6 +2736,48 @@ var _ = Describe("RequestPermission (mock-based)", func() {
 		It("should auto-approve with the first option", func() {
 			Expect(resp.Outcome.Selected).NotTo(BeNil())
 			Expect(resp.Outcome.Selected.OptionId).To(Equal(acp.PermissionOptionId("opt-allow")))
+		})
+	})
+
+	When("the permission request times out waiting for the user", func() {
+		var (
+			resp acp.RequestPermissionResponse
+			err  error
+		)
+
+		BeforeEach(func() {
+			mock := &blockingPermissionReplier{}
+			client := &wikiChatClient{
+				page:       "test-page",
+				chatClient: mock,
+			}
+
+			// Use a very short context timeout so the test does not wait 5 minutes.
+			// Since the production code derives permCtx from ctx, this short deadline
+			// propagates and causes the blocking mock to unblock quickly.
+			shortCtx, cancel := context.WithTimeout(context.Background(), time.Millisecond)
+			defer cancel()
+
+			title := "Write file"
+			req := acp.RequestPermissionRequest{
+				ToolCall: acp.RequestPermissionToolCall{
+					ToolCallId: "tc-timeout",
+					Title:      &title,
+				},
+				Options: []acp.PermissionOption{
+					{OptionId: "opt-allow", Name: "Allow"},
+					{OptionId: "opt-deny", Name: "Deny"},
+				},
+			}
+			resp, err = client.RequestPermission(shortCtx, req)
+		})
+
+		It("should not return an error", func() {
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should auto-deny by returning a cancelled response", func() {
+			Expect(resp.Outcome.Cancelled).NotTo(BeNil())
 		})
 	})
 })

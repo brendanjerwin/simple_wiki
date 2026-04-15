@@ -684,8 +684,10 @@ func (c *wikiChatClient) RequestPermission(ctx context.Context, p acp.RequestPer
 	return c.relayPermissionToUser(ctx, p, title)
 }
 
+const permissionRequestTimeout = 5 * time.Minute
+
 // relayPermissionToUser forwards the permission request to the wiki chat UI and
-// blocks until the user responds.
+// blocks until the user responds or the timeout elapses.
 func (c *wikiChatClient) relayPermissionToUser(ctx context.Context, p acp.RequestPermissionRequest, title string) (acp.RequestPermissionResponse, error) {
 	requestID := fmt.Sprintf("perm-%d", time.Now().UnixNano())
 
@@ -697,7 +699,10 @@ func (c *wikiChatClient) relayPermissionToUser(ctx context.Context, p acp.Reques
 		})
 	}
 
-	resp, err := c.chatClient.RequestPermissionFromUser(ctx, connect.NewRequest(&apiv1.RequestPermissionFromUserRequest{
+	permCtx, cancel := context.WithTimeout(ctx, permissionRequestTimeout)
+	defer cancel()
+
+	resp, err := c.chatClient.RequestPermissionFromUser(permCtx, connect.NewRequest(&apiv1.RequestPermissionFromUserRequest{
 		Page:        c.page,
 		RequestId:   requestID,
 		Title:       title,
@@ -705,6 +710,10 @@ func (c *wikiChatClient) relayPermissionToUser(ctx context.Context, p acp.Reques
 		Options:     protoOptions,
 	}))
 	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			log.Printf("[%s] Permission request timed out after 5m, auto-denying: %s", c.page, title)
+			return permissionCancelledResponse(), nil
+		}
 		log.Printf("[%s] Permission request failed: %v — auto-approving", c.page, err)
 		selected := p.Options[0]
 		return permissionSelectedResponse(selected.OptionId), nil
