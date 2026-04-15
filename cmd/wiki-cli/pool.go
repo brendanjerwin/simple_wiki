@@ -27,11 +27,16 @@ const (
 	defaultMaxInstances       = 5
 	defaultIdleTimeoutMinutes = 30
 
-	logFmtStateTransitionErr    = "%v"
+	logFmtStateTransitionErr     = "%v"
 	errTerminalAccessUnavailable = "terminal access not available"
 	truncateLimitForLog          = 100
 	truncateLimitForBridge       = 80
 )
+
+// permissionRequestTimeout is the maximum time to wait for a user to respond
+// to a permission request. After this duration the request is auto-denied so
+// the agent is not stuck in PermissionPending state forever.
+var permissionRequestTimeout = 5 * time.Minute
 
 // InstanceState represents the lifecycle state of an agent instance.
 type InstanceState int
@@ -685,7 +690,9 @@ func (c *wikiChatClient) RequestPermission(ctx context.Context, p acp.RequestPer
 }
 
 // relayPermissionToUser forwards the permission request to the wiki chat UI and
-// blocks until the user responds.
+// blocks until the user responds or the permission request timeout elapses.
+// If the timeout expires the request is auto-denied so the agent does not
+// remain stuck in PermissionPending state when the user navigates away.
 func (c *wikiChatClient) relayPermissionToUser(ctx context.Context, p acp.RequestPermissionRequest, title string) (acp.RequestPermissionResponse, error) {
 	requestID := fmt.Sprintf("perm-%d", time.Now().UnixNano())
 
@@ -697,7 +704,10 @@ func (c *wikiChatClient) relayPermissionToUser(ctx context.Context, p acp.Reques
 		})
 	}
 
-	resp, err := c.chatClient.RequestPermissionFromUser(ctx, connect.NewRequest(&apiv1.RequestPermissionFromUserRequest{
+	permCtx, cancel := context.WithTimeout(ctx, permissionRequestTimeout)
+	defer cancel()
+
+	resp, err := c.chatClient.RequestPermissionFromUser(permCtx, connect.NewRequest(&apiv1.RequestPermissionFromUserRequest{
 		Page:        c.page,
 		RequestId:   requestID,
 		Title:       title,
@@ -705,6 +715,10 @@ func (c *wikiChatClient) relayPermissionToUser(ctx context.Context, p acp.Reques
 		Options:     protoOptions,
 	}))
 	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			log.Printf("[%s] Permission request timed out after %s, auto-denying: %s", c.page, permissionRequestTimeout, title)
+			return permissionCancelledResponse(), nil
+		}
 		log.Printf("[%s] Permission request failed: %v — auto-approving", c.page, err)
 		selected := p.Options[0]
 		return permissionSelectedResponse(selected.OptionId), nil
