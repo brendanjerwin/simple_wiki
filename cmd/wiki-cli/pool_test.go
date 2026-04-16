@@ -122,6 +122,18 @@ func (m *mockChatReplier) RequestPermissionFromUser(_ context.Context, req *conn
 	return connect.NewResponse(resp), nil
 }
 
+// blockingPermissionReplier is a mock chatReplier that blocks on
+// RequestPermissionFromUser until the passed context is cancelled, then
+// returns the context error. This is used to test permission request timeouts.
+type blockingPermissionReplier struct {
+	mockChatReplier
+}
+
+func (blockingPermissionReplier) RequestPermissionFromUser(ctx context.Context, _ *connect.Request[apiv1.RequestPermissionFromUserRequest]) (*connect.Response[apiv1.RequestPermissionFromUserResponse], error) {
+	<-ctx.Done()
+	return nil, ctx.Err()
+}
+
 // mockACPAgent is a mock implementation of the acpAgent interface.
 type mockACPAgent struct {
 	initResp    acp.InitializeResponse
@@ -2782,6 +2794,49 @@ var _ = Describe("RequestPermission (mock-based)", func() {
 		It("should auto-approve with the first option", func() {
 			Expect(resp.Outcome.Selected).NotTo(BeNil())
 			Expect(resp.Outcome.Selected.OptionId).To(Equal(acp.PermissionOptionId("opt-allow")))
+		})
+	})
+
+	When("the permission request times out waiting for the user", func() {
+		var (
+			resp acp.RequestPermissionResponse
+			err  error
+		)
+
+		BeforeEach(func() {
+			originalTimeout := permissionRequestTimeout
+			permissionRequestTimeout = 10 * time.Millisecond
+			DeferCleanup(func() { permissionRequestTimeout = originalTimeout })
+
+			client := &wikiChatClient{
+				page:       "test-page",
+				chatClient: &blockingPermissionReplier{},
+			}
+
+			title := "Run shell command"
+			req := acp.RequestPermissionRequest{
+				ToolCall: acp.RequestPermissionToolCall{
+					ToolCallId: "tc-timeout",
+					Title:      &title,
+				},
+				Options: []acp.PermissionOption{
+					{OptionId: "opt-allow", Name: "Allow"},
+					{OptionId: "opt-deny", Name: "Deny"},
+				},
+			}
+			resp, err = client.RequestPermission(context.Background(), req)
+		})
+
+		It("should not return an error", func() {
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should auto-deny with a cancelled outcome", func() {
+			Expect(resp.Outcome.Cancelled).NotTo(BeNil())
+		})
+
+		It("should not auto-approve", func() {
+			Expect(resp.Outcome.Selected).To(BeNil())
 		})
 	})
 })
