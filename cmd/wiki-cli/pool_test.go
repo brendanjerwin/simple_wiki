@@ -248,6 +248,14 @@ var _ = Describe("buildPoolCommand", func() {
 			Expect(flagNames).To(ContainElement("idle-timeout"))
 		})
 
+		It("should include the max-instance-age flag", func() {
+			Expect(flagNames).To(ContainElement("max-instance-age"))
+		})
+
+		It("should include the permission-pending-timeout flag", func() {
+			Expect(flagNames).To(ContainElement("permission-pending-timeout"))
+		})
+
 		It("should include the agent-path flag", func() {
 			Expect(flagNames).To(ContainElement("agent-path"))
 		})
@@ -301,6 +309,62 @@ var _ = Describe("instanceEntry", func() {
 
 			It("should return approximately the idle duration", func() {
 				Expect(idle).To(BeNumerically("~", 5*time.Minute, time.Second))
+			})
+		})
+	})
+
+	Describe("age", func() {
+		When("entry was just created", func() {
+			var result time.Duration
+
+			BeforeEach(func() {
+				entry := &instanceEntry{page: "test-page", createdAt: time.Now()}
+				result = entry.age()
+			})
+
+			It("should return a very short duration", func() {
+				Expect(result).To(BeNumerically("<", time.Second))
+			})
+		})
+
+		When("entry was created a while ago", func() {
+			var result time.Duration
+
+			BeforeEach(func() {
+				entry := &instanceEntry{page: "test-page", createdAt: time.Now().Add(-3 * time.Hour)}
+				result = entry.age()
+			})
+
+			It("should return approximately the elapsed duration", func() {
+				Expect(result).To(BeNumerically("~", 3*time.Hour, time.Second))
+			})
+		})
+	})
+
+	Describe("inStateSince", func() {
+		When("state was changed recently", func() {
+			var result time.Duration
+
+			BeforeEach(func() {
+				entry := &instanceEntry{page: "test-page", stateChangedAt: time.Now()}
+				result = entry.inStateSince()
+			})
+
+			It("should return a very short duration", func() {
+				Expect(result).To(BeNumerically("<", time.Second))
+			})
+		})
+
+		When("state was changed a while ago", func() {
+			var result time.Duration
+
+			BeforeEach(func() {
+				entry := &instanceEntry{page: "test-page", stateChangedAt: time.Now().Add(-10 * time.Minute)}
+				result = entry.inStateSince()
+			})
+
+			It("should return approximately the elapsed duration", func() {
+				Expect(result).To(BeNumerically("~", 10*time.Minute, time.Second))
 			})
 		})
 	})
@@ -471,6 +535,196 @@ var _ = Describe("poolDaemon", func() {
 		})
 	})
 
+	Describe("shouldReap", func() {
+		var daemon *poolDaemon
+		var noopCancel context.CancelFunc
+
+		BeforeEach(func() {
+			noopCancel = func() {}
+			daemon = &poolDaemon{
+				idleTimeout:              10 * time.Minute,
+				maxInstanceAge:           2 * time.Hour,
+				permissionPendingTimeout: 5 * time.Minute,
+			}
+		})
+
+		When("instance is in Dead state", func() {
+			var reason string
+
+			BeforeEach(func() {
+				entry := &instanceEntry{
+					page:       "dead-page",
+					cancel:     noopCancel,
+					lastActive: time.Now(),
+					createdAt:  time.Now(),
+					state:      StateDead,
+				}
+				reason = daemon.shouldReap(entry)
+			})
+
+			It("should return a non-empty reason", func() {
+				Expect(reason).NotTo(BeEmpty())
+			})
+		})
+
+		When("instance age exceeds maxInstanceAge", func() {
+			var reason string
+
+			BeforeEach(func() {
+				entry := &instanceEntry{
+					page:       "old-page",
+					cancel:     noopCancel,
+					lastActive: time.Now(),
+					createdAt:  time.Now().Add(-3 * time.Hour),
+					state:      StatePrompting,
+				}
+				reason = daemon.shouldReap(entry)
+			})
+
+			It("should return a non-empty reason", func() {
+				Expect(reason).NotTo(BeEmpty())
+			})
+		})
+
+		When("instance age does not exceed maxInstanceAge", func() {
+			var reason string
+
+			BeforeEach(func() {
+				entry := &instanceEntry{
+					page:       "young-page",
+					cancel:     noopCancel,
+					lastActive: time.Now(),
+					createdAt:  time.Now().Add(-1 * time.Hour),
+					state:      StatePrompting,
+				}
+				reason = daemon.shouldReap(entry)
+			})
+
+			It("should return an empty reason", func() {
+				Expect(reason).To(BeEmpty())
+			})
+		})
+
+		When("maxInstanceAge is zero (disabled)", func() {
+			var reason string
+
+			BeforeEach(func() {
+				daemon.maxInstanceAge = 0
+				entry := &instanceEntry{
+					page:       "ancient-page",
+					cancel:     noopCancel,
+					lastActive: time.Now(),
+					createdAt:  time.Now().Add(-100 * time.Hour),
+					state:      StatePrompting,
+				}
+				reason = daemon.shouldReap(entry)
+			})
+
+			It("should not reap based on age", func() {
+				Expect(reason).To(BeEmpty())
+			})
+		})
+
+		When("instance is PermissionPending and exceeds permissionPendingTimeout", func() {
+			var reason string
+
+			BeforeEach(func() {
+				entry := &instanceEntry{
+					page:           "perm-page",
+					cancel:         noopCancel,
+					lastActive:     time.Now(),
+					createdAt:      time.Now().Add(-10 * time.Minute),
+					stateChangedAt: time.Now().Add(-10 * time.Minute),
+					state:          StatePermissionPending,
+				}
+				reason = daemon.shouldReap(entry)
+			})
+
+			It("should return a non-empty reason", func() {
+				Expect(reason).NotTo(BeEmpty())
+			})
+		})
+
+		When("instance is PermissionPending but within timeout", func() {
+			var reason string
+
+			BeforeEach(func() {
+				entry := &instanceEntry{
+					page:           "perm-page",
+					cancel:         noopCancel,
+					lastActive:     time.Now(),
+					createdAt:      time.Now().Add(-1 * time.Minute),
+					stateChangedAt: time.Now().Add(-1 * time.Minute),
+					state:          StatePermissionPending,
+				}
+				reason = daemon.shouldReap(entry)
+			})
+
+			It("should return an empty reason", func() {
+				Expect(reason).To(BeEmpty())
+			})
+		})
+
+		When("permissionPendingTimeout is zero (disabled)", func() {
+			var reason string
+
+			BeforeEach(func() {
+				daemon.permissionPendingTimeout = 0
+				entry := &instanceEntry{
+					page:           "perm-page",
+					cancel:         noopCancel,
+					lastActive:     time.Now(),
+					createdAt:      time.Now().Add(-30 * time.Minute),
+					stateChangedAt: time.Now().Add(-30 * time.Minute),
+					state:          StatePermissionPending,
+				}
+				reason = daemon.shouldReap(entry)
+			})
+
+			It("should not reap based on permission pending timeout", func() {
+				Expect(reason).To(BeEmpty())
+			})
+		})
+
+		When("instance is idle beyond idleTimeout", func() {
+			var reason string
+
+			BeforeEach(func() {
+				entry := &instanceEntry{
+					page:       "idle-page",
+					cancel:     noopCancel,
+					lastActive: time.Now().Add(-20 * time.Minute),
+					createdAt:  time.Now().Add(-20 * time.Minute),
+					state:      StateIdle,
+				}
+				reason = daemon.shouldReap(entry)
+			})
+
+			It("should return a non-empty reason", func() {
+				Expect(reason).NotTo(BeEmpty())
+			})
+		})
+
+		When("instance is active within idleTimeout", func() {
+			var reason string
+
+			BeforeEach(func() {
+				entry := &instanceEntry{
+					page:       "active-page",
+					cancel:     noopCancel,
+					lastActive: time.Now(),
+					createdAt:  time.Now(),
+					state:      StateIdle,
+				}
+				reason = daemon.shouldReap(entry)
+			})
+
+			It("should return an empty reason", func() {
+				Expect(reason).To(BeEmpty())
+			})
+		})
+	})
+
 	Describe("reapIdleInstances", func() {
 		When("an instance exceeds idle timeout", func() {
 			var daemon *poolDaemon
@@ -496,10 +750,10 @@ var _ = Describe("poolDaemon", func() {
 					},
 				}
 
-				// Simulate one reaper tick
+				// Simulate one reaper tick using shouldReap
 				daemon.mu.Lock()
 				for page, entry := range daemon.instances {
-					if entry.idleSince() > daemon.idleTimeout {
+					if reason := daemon.shouldReap(entry); reason != "" {
 						daemon.stopInstanceLocked(page)
 					}
 				}
@@ -512,6 +766,105 @@ var _ = Describe("poolDaemon", func() {
 
 			It("should keep the active instance", func() {
 				Expect(daemon.instances).To(HaveKey("active-page"))
+			})
+		})
+
+		When("an instance exceeds maxInstanceAge regardless of state", func() {
+			var daemon *poolDaemon
+
+			BeforeEach(func() {
+				daemon = &poolDaemon{
+					idleTimeout:    10 * time.Minute,
+					maxInstanceAge: 1 * time.Hour,
+					instances: map[string]*instanceEntry{
+						"old-prompting-page": {
+							page:       "old-prompting-page",
+							lastActive: time.Now(),
+							createdAt:  time.Now().Add(-2 * time.Hour),
+							state:      StatePrompting,
+							cancel: func() {
+								// no-op: test stub; no real goroutine to cancel
+							},
+						},
+						"young-page": {
+							page:       "young-page",
+							lastActive: time.Now(),
+							createdAt:  time.Now().Add(-30 * time.Minute),
+							state:      StateIdle,
+							cancel: func() {
+								// no-op: test stub; no real goroutine to cancel
+							},
+						},
+					},
+				}
+
+				// Simulate one reaper tick using shouldReap
+				daemon.mu.Lock()
+				for page, entry := range daemon.instances {
+					if reason := daemon.shouldReap(entry); reason != "" {
+						daemon.stopInstanceLocked(page)
+					}
+				}
+				daemon.mu.Unlock()
+			})
+
+			It("should reap the old instance even though it is actively prompting", func() {
+				Expect(daemon.instances).NotTo(HaveKey("old-prompting-page"))
+			})
+
+			It("should keep the young instance", func() {
+				Expect(daemon.instances).To(HaveKey("young-page"))
+			})
+		})
+
+		When("a PermissionPending instance exceeds its timeout", func() {
+			var daemon *poolDaemon
+
+			BeforeEach(func() {
+				daemon = &poolDaemon{
+					idleTimeout:              10 * time.Minute,
+					maxInstanceAge:           2 * time.Hour,
+					permissionPendingTimeout: 5 * time.Minute,
+					instances: map[string]*instanceEntry{
+						"stuck-perm-page": {
+							page:           "stuck-perm-page",
+							lastActive:     time.Now(),
+							createdAt:      time.Now().Add(-10 * time.Minute),
+							stateChangedAt: time.Now().Add(-10 * time.Minute),
+							state:          StatePermissionPending,
+							cancel: func() {
+								// no-op: test stub; no real goroutine to cancel
+							},
+						},
+						"fresh-perm-page": {
+							page:           "fresh-perm-page",
+							lastActive:     time.Now(),
+							createdAt:      time.Now().Add(-1 * time.Minute),
+							stateChangedAt: time.Now().Add(-1 * time.Minute),
+							state:          StatePermissionPending,
+							cancel: func() {
+								// no-op: test stub; no real goroutine to cancel
+							},
+						},
+					},
+				}
+
+				// Simulate one reaper tick using shouldReap
+				daemon.mu.Lock()
+				for page, entry := range daemon.instances {
+					if reason := daemon.shouldReap(entry); reason != "" {
+						daemon.stopInstanceLocked(page)
+					}
+				}
+				daemon.mu.Unlock()
+			})
+
+			It("should reap the stuck PermissionPending instance", func() {
+				Expect(daemon.instances).NotTo(HaveKey("stuck-perm-page"))
+			})
+
+			It("should keep the fresh PermissionPending instance", func() {
+				Expect(daemon.instances).To(HaveKey("fresh-perm-page"))
 			})
 		})
 	})
