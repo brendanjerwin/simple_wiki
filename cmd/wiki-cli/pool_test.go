@@ -753,7 +753,7 @@ var _ = Describe("poolDaemon", func() {
 				// Simulate one reaper tick using shouldReap
 				daemon.mu.Lock()
 				for page, entry := range daemon.instances {
-					if reason := daemon.shouldReap(entry); reason != "" {
+					if daemon.shouldReap(entry) != "" {
 						daemon.stopInstanceLocked(page)
 					}
 				}
@@ -801,7 +801,7 @@ var _ = Describe("poolDaemon", func() {
 				// Simulate one reaper tick using shouldReap
 				daemon.mu.Lock()
 				for page, entry := range daemon.instances {
-					if reason := daemon.shouldReap(entry); reason != "" {
+					if daemon.shouldReap(entry) != "" {
 						daemon.stopInstanceLocked(page)
 					}
 				}
@@ -852,7 +852,7 @@ var _ = Describe("poolDaemon", func() {
 				// Simulate one reaper tick using shouldReap
 				daemon.mu.Lock()
 				for page, entry := range daemon.instances {
-					if reason := daemon.shouldReap(entry); reason != "" {
+					if daemon.shouldReap(entry) != "" {
 						daemon.stopInstanceLocked(page)
 					}
 				}
