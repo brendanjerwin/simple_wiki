@@ -122,6 +122,18 @@ func (m *mockChatReplier) RequestPermissionFromUser(_ context.Context, req *conn
 	return connect.NewResponse(resp), nil
 }
 
+// blockingPermissionReplier is a mock chatReplier that blocks on
+// RequestPermissionFromUser until the passed context is cancelled, then
+// returns the context error. This is used to test permission request timeouts.
+type blockingPermissionReplier struct {
+	mockChatReplier
+}
+
+func (blockingPermissionReplier) RequestPermissionFromUser(ctx context.Context, _ *connect.Request[apiv1.RequestPermissionFromUserRequest]) (*connect.Response[apiv1.RequestPermissionFromUserResponse], error) {
+	<-ctx.Done()
+	return nil, ctx.Err()
+}
+
 // mockACPAgent is a mock implementation of the acpAgent interface.
 type mockACPAgent struct {
 	initResp    acp.InitializeResponse
@@ -236,6 +248,14 @@ var _ = Describe("buildPoolCommand", func() {
 			Expect(flagNames).To(ContainElement("idle-timeout"))
 		})
 
+		It("should include the max-instance-age flag", func() {
+			Expect(flagNames).To(ContainElement("max-instance-age"))
+		})
+
+		It("should include the permission-pending-timeout flag", func() {
+			Expect(flagNames).To(ContainElement("permission-pending-timeout"))
+		})
+
 		It("should include the agent-path flag", func() {
 			Expect(flagNames).To(ContainElement("agent-path"))
 		})
@@ -289,6 +309,62 @@ var _ = Describe("instanceEntry", func() {
 
 			It("should return approximately the idle duration", func() {
 				Expect(idle).To(BeNumerically("~", 5*time.Minute, time.Second))
+			})
+		})
+	})
+
+	Describe("age", func() {
+		When("entry was just created", func() {
+			var result time.Duration
+
+			BeforeEach(func() {
+				entry := &instanceEntry{page: "test-page", createdAt: time.Now()}
+				result = entry.age()
+			})
+
+			It("should return a very short duration", func() {
+				Expect(result).To(BeNumerically("<", time.Second))
+			})
+		})
+
+		When("entry was created a while ago", func() {
+			var result time.Duration
+
+			BeforeEach(func() {
+				entry := &instanceEntry{page: "test-page", createdAt: time.Now().Add(-3 * time.Hour)}
+				result = entry.age()
+			})
+
+			It("should return approximately the elapsed duration", func() {
+				Expect(result).To(BeNumerically("~", 3*time.Hour, time.Second))
+			})
+		})
+	})
+
+	Describe("inStateSince", func() {
+		When("state was changed recently", func() {
+			var result time.Duration
+
+			BeforeEach(func() {
+				entry := &instanceEntry{page: "test-page", stateChangedAt: time.Now()}
+				result = entry.inStateSince()
+			})
+
+			It("should return a very short duration", func() {
+				Expect(result).To(BeNumerically("<", time.Second))
+			})
+		})
+
+		When("state was changed a while ago", func() {
+			var result time.Duration
+
+			BeforeEach(func() {
+				entry := &instanceEntry{page: "test-page", stateChangedAt: time.Now().Add(-10 * time.Minute)}
+				result = entry.inStateSince()
+			})
+
+			It("should return approximately the elapsed duration", func() {
+				Expect(result).To(BeNumerically("~", 10*time.Minute, time.Second))
 			})
 		})
 	})
@@ -459,6 +535,196 @@ var _ = Describe("poolDaemon", func() {
 		})
 	})
 
+	Describe("shouldReap", func() {
+		var daemon *poolDaemon
+		var noopCancel context.CancelFunc
+
+		BeforeEach(func() {
+			noopCancel = func() {}
+			daemon = &poolDaemon{
+				idleTimeout:              10 * time.Minute,
+				maxInstanceAge:           2 * time.Hour,
+				permissionPendingTimeout: 5 * time.Minute,
+			}
+		})
+
+		When("instance is in Dead state", func() {
+			var reason string
+
+			BeforeEach(func() {
+				entry := &instanceEntry{
+					page:       "dead-page",
+					cancel:     noopCancel,
+					lastActive: time.Now(),
+					createdAt:  time.Now(),
+					state:      StateDead,
+				}
+				reason = daemon.shouldReap(entry)
+			})
+
+			It("should return a non-empty reason", func() {
+				Expect(reason).NotTo(BeEmpty())
+			})
+		})
+
+		When("instance age exceeds maxInstanceAge", func() {
+			var reason string
+
+			BeforeEach(func() {
+				entry := &instanceEntry{
+					page:       "old-page",
+					cancel:     noopCancel,
+					lastActive: time.Now(),
+					createdAt:  time.Now().Add(-3 * time.Hour),
+					state:      StatePrompting,
+				}
+				reason = daemon.shouldReap(entry)
+			})
+
+			It("should return a non-empty reason", func() {
+				Expect(reason).NotTo(BeEmpty())
+			})
+		})
+
+		When("instance age does not exceed maxInstanceAge", func() {
+			var reason string
+
+			BeforeEach(func() {
+				entry := &instanceEntry{
+					page:       "young-page",
+					cancel:     noopCancel,
+					lastActive: time.Now(),
+					createdAt:  time.Now().Add(-1 * time.Hour),
+					state:      StatePrompting,
+				}
+				reason = daemon.shouldReap(entry)
+			})
+
+			It("should return an empty reason", func() {
+				Expect(reason).To(BeEmpty())
+			})
+		})
+
+		When("maxInstanceAge is zero (disabled)", func() {
+			var reason string
+
+			BeforeEach(func() {
+				daemon.maxInstanceAge = 0
+				entry := &instanceEntry{
+					page:       "ancient-page",
+					cancel:     noopCancel,
+					lastActive: time.Now(),
+					createdAt:  time.Now().Add(-100 * time.Hour),
+					state:      StatePrompting,
+				}
+				reason = daemon.shouldReap(entry)
+			})
+
+			It("should not reap based on age", func() {
+				Expect(reason).To(BeEmpty())
+			})
+		})
+
+		When("instance is PermissionPending and exceeds permissionPendingTimeout", func() {
+			var reason string
+
+			BeforeEach(func() {
+				entry := &instanceEntry{
+					page:           "perm-page",
+					cancel:         noopCancel,
+					lastActive:     time.Now(),
+					createdAt:      time.Now().Add(-10 * time.Minute),
+					stateChangedAt: time.Now().Add(-10 * time.Minute),
+					state:          StatePermissionPending,
+				}
+				reason = daemon.shouldReap(entry)
+			})
+
+			It("should return a non-empty reason", func() {
+				Expect(reason).NotTo(BeEmpty())
+			})
+		})
+
+		When("instance is PermissionPending but within timeout", func() {
+			var reason string
+
+			BeforeEach(func() {
+				entry := &instanceEntry{
+					page:           "perm-page",
+					cancel:         noopCancel,
+					lastActive:     time.Now(),
+					createdAt:      time.Now().Add(-1 * time.Minute),
+					stateChangedAt: time.Now().Add(-1 * time.Minute),
+					state:          StatePermissionPending,
+				}
+				reason = daemon.shouldReap(entry)
+			})
+
+			It("should return an empty reason", func() {
+				Expect(reason).To(BeEmpty())
+			})
+		})
+
+		When("permissionPendingTimeout is zero (disabled)", func() {
+			var reason string
+
+			BeforeEach(func() {
+				daemon.permissionPendingTimeout = 0
+				entry := &instanceEntry{
+					page:           "perm-page",
+					cancel:         noopCancel,
+					lastActive:     time.Now(),
+					createdAt:      time.Now().Add(-30 * time.Minute),
+					stateChangedAt: time.Now().Add(-30 * time.Minute),
+					state:          StatePermissionPending,
+				}
+				reason = daemon.shouldReap(entry)
+			})
+
+			It("should not reap based on permission pending timeout", func() {
+				Expect(reason).To(BeEmpty())
+			})
+		})
+
+		When("instance is idle beyond idleTimeout", func() {
+			var reason string
+
+			BeforeEach(func() {
+				entry := &instanceEntry{
+					page:       "idle-page",
+					cancel:     noopCancel,
+					lastActive: time.Now().Add(-20 * time.Minute),
+					createdAt:  time.Now().Add(-20 * time.Minute),
+					state:      StateIdle,
+				}
+				reason = daemon.shouldReap(entry)
+			})
+
+			It("should return a non-empty reason", func() {
+				Expect(reason).NotTo(BeEmpty())
+			})
+		})
+
+		When("instance is active within idleTimeout", func() {
+			var reason string
+
+			BeforeEach(func() {
+				entry := &instanceEntry{
+					page:       "active-page",
+					cancel:     noopCancel,
+					lastActive: time.Now(),
+					createdAt:  time.Now(),
+					state:      StateIdle,
+				}
+				reason = daemon.shouldReap(entry)
+			})
+
+			It("should return an empty reason", func() {
+				Expect(reason).To(BeEmpty())
+			})
+		})
+	})
+
 	Describe("reapIdleInstances", func() {
 		When("an instance exceeds idle timeout", func() {
 			var daemon *poolDaemon
@@ -484,10 +750,10 @@ var _ = Describe("poolDaemon", func() {
 					},
 				}
 
-				// Simulate one reaper tick
+				// Simulate one reaper tick using shouldReap
 				daemon.mu.Lock()
 				for page, entry := range daemon.instances {
-					if entry.idleSince() > daemon.idleTimeout {
+					if reason := daemon.shouldReap(entry); reason != "" {
 						daemon.stopInstanceLocked(page)
 					}
 				}
@@ -500,6 +766,188 @@ var _ = Describe("poolDaemon", func() {
 
 			It("should keep the active instance", func() {
 				Expect(daemon.instances).To(HaveKey("active-page"))
+			})
+		})
+
+		When("an instance exceeds maxInstanceAge regardless of state", func() {
+			var daemon *poolDaemon
+
+			BeforeEach(func() {
+				daemon = &poolDaemon{
+					idleTimeout:    10 * time.Minute,
+					maxInstanceAge: 1 * time.Hour,
+					instances: map[string]*instanceEntry{
+						"old-prompting-page": {
+							page:       "old-prompting-page",
+							lastActive: time.Now(),
+							createdAt:  time.Now().Add(-2 * time.Hour),
+							state:      StatePrompting,
+							cancel: func() {
+								// no-op: test stub; no real goroutine to cancel
+							},
+						},
+						"young-page": {
+							page:       "young-page",
+							lastActive: time.Now(),
+							createdAt:  time.Now().Add(-30 * time.Minute),
+							state:      StateIdle,
+							cancel: func() {
+								// no-op: test stub; no real goroutine to cancel
+							},
+						},
+					},
+				}
+
+				// Simulate one reaper tick using shouldReap
+				daemon.mu.Lock()
+				for page, entry := range daemon.instances {
+					if reason := daemon.shouldReap(entry); reason != "" {
+						daemon.stopInstanceLocked(page)
+					}
+				}
+				daemon.mu.Unlock()
+			})
+
+			It("should reap the old instance even though it is actively prompting", func() {
+				Expect(daemon.instances).NotTo(HaveKey("old-prompting-page"))
+			})
+
+			It("should keep the young instance", func() {
+				Expect(daemon.instances).To(HaveKey("young-page"))
+			})
+		})
+
+		When("a PermissionPending instance exceeds its timeout", func() {
+			var daemon *poolDaemon
+
+			BeforeEach(func() {
+				daemon = &poolDaemon{
+					idleTimeout:              10 * time.Minute,
+					maxInstanceAge:           2 * time.Hour,
+					permissionPendingTimeout: 5 * time.Minute,
+					instances: map[string]*instanceEntry{
+						"stuck-perm-page": {
+							page:           "stuck-perm-page",
+							lastActive:     time.Now(),
+							createdAt:      time.Now().Add(-10 * time.Minute),
+							stateChangedAt: time.Now().Add(-10 * time.Minute),
+							state:          StatePermissionPending,
+							cancel: func() {
+								// no-op: test stub; no real goroutine to cancel
+							},
+						},
+						"fresh-perm-page": {
+							page:           "fresh-perm-page",
+							lastActive:     time.Now(),
+							createdAt:      time.Now().Add(-1 * time.Minute),
+							stateChangedAt: time.Now().Add(-1 * time.Minute),
+							state:          StatePermissionPending,
+							cancel: func() {
+								// no-op: test stub; no real goroutine to cancel
+							},
+						},
+					},
+				}
+
+				// Simulate one reaper tick using shouldReap
+				daemon.mu.Lock()
+				for page, entry := range daemon.instances {
+					if reason := daemon.shouldReap(entry); reason != "" {
+						daemon.stopInstanceLocked(page)
+					}
+				}
+				daemon.mu.Unlock()
+			})
+
+			It("should reap the stuck PermissionPending instance", func() {
+				Expect(daemon.instances).NotTo(HaveKey("stuck-perm-page"))
+			})
+
+			It("should keep the fresh PermissionPending instance", func() {
+				Expect(daemon.instances).To(HaveKey("fresh-perm-page"))
+			})
+		})
+	})
+
+	Describe("markInstanceDead", func() {
+		When("the instance exists and is in Idle state", func() {
+			var (
+				daemon   *poolDaemon
+				entry    *instanceEntry
+				canceled bool
+			)
+
+			BeforeEach(func() {
+				canceled = false
+				entry = &instanceEntry{
+					page:       "test-page",
+					state:      StateIdle,
+					lastActive: time.Now(),
+					cancel:     func() { canceled = true },
+				}
+				daemon = &poolDaemon{
+					instances: map[string]*instanceEntry{
+						"test-page": entry,
+					},
+				}
+				daemon.markInstanceDead("test-page")
+			})
+
+			It("should remove the instance from the map", func() {
+				Expect(daemon.instances).NotTo(HaveKey("test-page"))
+			})
+
+			It("should transition the instance state to Dead", func() {
+				Expect(entry.State()).To(Equal(StateDead))
+			})
+
+			It("should cancel the instance context", func() {
+				Expect(canceled).To(BeTrue())
+			})
+		})
+
+		When("the instance exists and is in Prompting state", func() {
+			var (
+				daemon *poolDaemon
+				entry  *instanceEntry
+			)
+
+			BeforeEach(func() {
+				entry = &instanceEntry{
+					page:       "test-page",
+					state:      StatePrompting,
+					lastActive: time.Now(),
+					cancel:     func() {},
+				}
+				daemon = &poolDaemon{
+					instances: map[string]*instanceEntry{
+						"test-page": entry,
+					},
+				}
+				daemon.markInstanceDead("test-page")
+			})
+
+			It("should remove the instance from the map", func() {
+				Expect(daemon.instances).NotTo(HaveKey("test-page"))
+			})
+
+			It("should transition the instance state to Dead", func() {
+				Expect(entry.State()).To(Equal(StateDead))
+			})
+		})
+
+		When("the instance does not exist in the map", func() {
+			var daemon *poolDaemon
+
+			BeforeEach(func() {
+				daemon = &poolDaemon{
+					instances: make(map[string]*instanceEntry),
+				}
+				daemon.markInstanceDead("nonexistent")
+			})
+
+			It("should not panic", func() {
+				Expect(daemon.instances).To(BeEmpty())
 			})
 		})
 	})
@@ -1267,7 +1715,7 @@ var _ = Describe("buildPromptText", func() {
 		BeforeEach(func() {
 			client = newWikiChatClient("test-page", "http://localhost:1")
 			client.pageContext = "You are an assistant for page X."
-			result = buildPromptText(client, "Hello there")
+			result = buildPromptText(client, "", "Hello there")
 		})
 
 		It("should prepend the page context to the message", func() {
@@ -1293,7 +1741,7 @@ var _ = Describe("buildPromptText", func() {
 		BeforeEach(func() {
 			client := newWikiChatClient("test-page", "http://localhost:1")
 			client.pageContext = ""
-			result = buildPromptText(client, "Just a message")
+			result = buildPromptText(client, "", "Just a message")
 		})
 
 		It("should return only the message content", func() {
@@ -1308,8 +1756,8 @@ var _ = Describe("buildPromptText", func() {
 		BeforeEach(func() {
 			client := newWikiChatClient("test-page", "http://localhost:1")
 			client.pageContext = "Some context"
-			firstResult = buildPromptText(client, "First message")
-			secondResult = buildPromptText(client, "Second message")
+			firstResult = buildPromptText(client, "", "First message")
+			secondResult = buildPromptText(client, "", "Second message")
 		})
 
 		It("should include context in the first call", func() {
@@ -1318,6 +1766,52 @@ var _ = Describe("buildPromptText", func() {
 
 		It("should not include context in the second call", func() {
 			Expect(secondResult).To(Equal("Second message"))
+		})
+	})
+
+	When("the sender name is provided", func() {
+		var result string
+
+		BeforeEach(func() {
+			client := newWikiChatClient("test-page", "http://localhost:1")
+			client.pageContext = ""
+			result = buildPromptText(client, "Alice", "Hello there")
+		})
+
+		It("should prefix the message with the sender name", func() {
+			Expect(result).To(Equal("[Alice]: Hello there"))
+		})
+	})
+
+	When("the sender name is provided and page context is set", func() {
+		var result string
+
+		BeforeEach(func() {
+			client := newWikiChatClient("test-page", "http://localhost:1")
+			client.pageContext = "You are an assistant for page X."
+			result = buildPromptText(client, "Bob", "What is the status?")
+		})
+
+		It("should include the sender name prefix in the message portion", func() {
+			Expect(result).To(ContainSubstring("User message: [Bob]: What is the status?"))
+		})
+
+		It("should prepend the page context", func() {
+			Expect(result).To(HavePrefix("You are an assistant for page X."))
+		})
+	})
+
+	When("the sender name is empty", func() {
+		var result string
+
+		BeforeEach(func() {
+			client := newWikiChatClient("test-page", "http://localhost:1")
+			client.pageContext = ""
+			result = buildPromptText(client, "", "Just a message")
+		})
+
+		It("should return the message without a sender prefix", func() {
+			Expect(result).To(Equal("Just a message"))
 		})
 	})
 })
@@ -1497,6 +1991,18 @@ var _ = Describe("chatPreamble", func() {
 		Expect(chatPreamble).To(ContainSubstring("key_context"))
 		Expect(chatPreamble).To(ContainSubstring("last_updated"))
 	})
+
+	It("should explain that multiple users may be chatting on the same page", func() {
+		Expect(chatPreamble).To(ContainSubstring("Multiple users may be chatting"))
+	})
+
+	It("should explain the sender name prefix format", func() {
+		Expect(chatPreamble).To(ContainSubstring("[Name]: message"))
+	})
+
+	It("should instruct the agent to address users by name", func() {
+		Expect(chatPreamble).To(ContainSubstring("Address users by name"))
+	})
 })
 
 var _ = Describe("validTransitions map", func() {
@@ -1512,8 +2018,8 @@ var _ = Describe("validTransitions map", func() {
 		Expect(validTransitions[StateBridgeConnecting]).To(ConsistOf(StateIdle, StateDead))
 	})
 
-	It("should allow Idle to transition to Prompting and Stopping only", func() {
-		Expect(validTransitions[StateIdle]).To(ConsistOf(StatePrompting, StateStopping))
+	It("should allow Idle to transition to Prompting, Stopping, and Dead", func() {
+		Expect(validTransitions[StateIdle]).To(ConsistOf(StatePrompting, StateStopping, StateDead))
 	})
 
 	It("should allow Prompting to transition to Idle, PermissionPending, Stopping, and Dead", func() {
@@ -2724,6 +3230,49 @@ var _ = Describe("RequestPermission (mock-based)", func() {
 		It("should auto-approve with the first option", func() {
 			Expect(resp.Outcome.Selected).NotTo(BeNil())
 			Expect(resp.Outcome.Selected.OptionId).To(Equal(acp.PermissionOptionId("opt-allow")))
+		})
+	})
+
+	When("the permission request times out waiting for the user", func() {
+		var (
+			resp acp.RequestPermissionResponse
+			err  error
+		)
+
+		BeforeEach(func() {
+			originalTimeout := permissionRequestTimeout
+			permissionRequestTimeout = 10 * time.Millisecond
+			DeferCleanup(func() { permissionRequestTimeout = originalTimeout })
+
+			client := &wikiChatClient{
+				page:       "test-page",
+				chatClient: &blockingPermissionReplier{},
+			}
+
+			title := "Run shell command"
+			req := acp.RequestPermissionRequest{
+				ToolCall: acp.RequestPermissionToolCall{
+					ToolCallId: "tc-timeout",
+					Title:      &title,
+				},
+				Options: []acp.PermissionOption{
+					{OptionId: "opt-allow", Name: "Allow"},
+					{OptionId: "opt-deny", Name: "Deny"},
+				},
+			}
+			resp, err = client.RequestPermission(context.Background(), req)
+		})
+
+		It("should not return an error", func() {
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should auto-deny with a cancelled outcome", func() {
+			Expect(resp.Outcome.Cancelled).NotTo(BeNil())
+		})
+
+		It("should not auto-approve", func() {
+			Expect(resp.Outcome.Selected).To(BeNil())
 		})
 	})
 })
