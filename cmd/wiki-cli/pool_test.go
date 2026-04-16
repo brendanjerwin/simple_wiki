@@ -516,6 +516,89 @@ var _ = Describe("poolDaemon", func() {
 		})
 	})
 
+	Describe("markInstanceDead", func() {
+		When("the instance exists and is in Idle state", func() {
+			var (
+				daemon   *poolDaemon
+				entry    *instanceEntry
+				canceled bool
+			)
+
+			BeforeEach(func() {
+				canceled = false
+				entry = &instanceEntry{
+					page:       "test-page",
+					state:      StateIdle,
+					lastActive: time.Now(),
+					cancel:     func() { canceled = true },
+				}
+				daemon = &poolDaemon{
+					instances: map[string]*instanceEntry{
+						"test-page": entry,
+					},
+				}
+				daemon.markInstanceDead("test-page")
+			})
+
+			It("should remove the instance from the map", func() {
+				Expect(daemon.instances).NotTo(HaveKey("test-page"))
+			})
+
+			It("should transition the instance state to Dead", func() {
+				Expect(entry.State()).To(Equal(StateDead))
+			})
+
+			It("should cancel the instance context", func() {
+				Expect(canceled).To(BeTrue())
+			})
+		})
+
+		When("the instance exists and is in Prompting state", func() {
+			var (
+				daemon *poolDaemon
+				entry  *instanceEntry
+			)
+
+			BeforeEach(func() {
+				entry = &instanceEntry{
+					page:       "test-page",
+					state:      StatePrompting,
+					lastActive: time.Now(),
+					cancel:     func() {},
+				}
+				daemon = &poolDaemon{
+					instances: map[string]*instanceEntry{
+						"test-page": entry,
+					},
+				}
+				daemon.markInstanceDead("test-page")
+			})
+
+			It("should remove the instance from the map", func() {
+				Expect(daemon.instances).NotTo(HaveKey("test-page"))
+			})
+
+			It("should transition the instance state to Dead", func() {
+				Expect(entry.State()).To(Equal(StateDead))
+			})
+		})
+
+		When("the instance does not exist in the map", func() {
+			var daemon *poolDaemon
+
+			BeforeEach(func() {
+				daemon = &poolDaemon{
+					instances: make(map[string]*instanceEntry),
+				}
+				daemon.markInstanceDead("nonexistent")
+			})
+
+			It("should not panic", func() {
+				Expect(daemon.instances).To(BeEmpty())
+			})
+		})
+	})
+
 	Describe("run", func() {
 		When("context is cancelled immediately", func() {
 			var (
@@ -1582,8 +1665,8 @@ var _ = Describe("validTransitions map", func() {
 		Expect(validTransitions[StateBridgeConnecting]).To(ConsistOf(StateIdle, StateDead))
 	})
 
-	It("should allow Idle to transition to Prompting and Stopping only", func() {
-		Expect(validTransitions[StateIdle]).To(ConsistOf(StatePrompting, StateStopping))
+	It("should allow Idle to transition to Prompting, Stopping, and Dead", func() {
+		Expect(validTransitions[StateIdle]).To(ConsistOf(StatePrompting, StateStopping, StateDead))
 	})
 
 	It("should allow Prompting to transition to Idle, PermissionPending, Stopping, and Dead", func() {

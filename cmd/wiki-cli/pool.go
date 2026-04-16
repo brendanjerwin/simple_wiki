@@ -80,7 +80,7 @@ var validTransitions = map[InstanceState][]InstanceState{
 	StateSpawning:          {StateInitializing, StateDead},
 	StateInitializing:      {StateBridgeConnecting, StateDead},
 	StateBridgeConnecting:  {StateIdle, StateDead},
-	StateIdle:              {StatePrompting, StateStopping},
+	StateIdle:              {StatePrompting, StateStopping, StateDead},
 	StatePrompting:         {StateIdle, StatePermissionPending, StateStopping, StateDead},
 	StatePermissionPending: {StatePrompting, StateStopping, StateDead},
 	StateStopping:          {StateDead},
@@ -859,6 +859,7 @@ func (d *poolDaemon) startAgentProcess(ctx context.Context, page string) (*acp.C
 		} else {
 			log.Printf("Agent for %q exited cleanly", page)
 		}
+		d.markInstanceDead(page)
 	}()
 
 	chatClient := newWikiChatClient(page, d.wikiURL)
@@ -1251,6 +1252,28 @@ func (d *poolDaemon) stopInstanceLocked(page string) {
 	entry.mu.Unlock()
 
 	delete(d.instances, page)
+}
+
+// markInstanceDead transitions an instance to Dead and removes it from the pool.
+// This is called when the agent process exits unexpectedly (signal, crash, or clean exit).
+// Safe to call without d.mu held.
+func (d *poolDaemon) markInstanceDead(page string) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	entry, ok := d.instances[page]
+	if !ok {
+		return
+	}
+
+	entry.cancel()
+
+	if err := entry.setState(StateDead); err != nil {
+		log.Printf(logFmtStateTransitionErr, err)
+	}
+
+	delete(d.instances, page)
+	log.Printf("[%s] Instance removed from pool after process exit", page)
 }
 
 // stopAll stops all running instances.
