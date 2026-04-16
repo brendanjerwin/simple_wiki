@@ -1225,6 +1225,21 @@ IMPORTANT: Merge new information with existing context — do not discard previo
 from user_goals or key_context unless they are no longer relevant. Accumulate knowledge
 across sessions.
 
+## Wiki Syntax Help
+
+When users ask about wiki features, formatting, or syntax (e.g., macros, special markdown,
+collapsible headers, checklists, blog macros, or any other wiki-specific feature):
+
+1. Search the wiki itself for help pages using the SearchPages tool with terms like "help"
+   combined with the feature name (e.g., "help collapsible", "help checklist").
+2. Read the relevant help page using the ReadPage tool (e.g., "help/collapsible-headers",
+   "help/checklists").
+3. Answer based on the wiki's own help pages — they are the authoritative source for
+   user-facing features and syntax.
+
+Do NOT search the codebase for this. The wiki's own help pages contain accurate,
+user-facing documentation for all wiki-specific syntax and features.
+
 `
 
 // fetchPageContext retrieves the page's ai_agent_chat_context frontmatter and returns
