@@ -73,18 +73,12 @@ func (s *Server) SubscribeChat(req *apiv1.SubscribeChatRequest, stream apiv1.Cha
 	existingMessages, eventChan, unsubscribe := s.chatBufferManager.SubscribeToPageWithReplay(req.Page)
 	defer unsubscribe()
 
-	// Replay existing messages
-	for _, msg := range existingMessages {
-		protoMsg := bufferMessageToProto(msg)
-		event := &apiv1.ChatEvent{
-			Event: &apiv1.ChatEvent_NewMessage{
-				NewMessage: protoMsg,
-			},
-		}
+	if err := replayExistingMessages(existingMessages, stream); err != nil {
+		return err
+	}
 
-		if err := stream.Send(event); err != nil {
-			return err
-		}
+	if err := replayPendingPermissions(s.chatBufferManager.GetPendingPermissionsForPage(req.Page), stream); err != nil {
+		return err
 	}
 
 	// Stream new events as they arrive
@@ -107,6 +101,38 @@ func (s *Server) SubscribeChat(req *apiv1.SubscribeChatRequest, stream apiv1.Cha
 			return stream.Context().Err()
 		}
 	}
+}
+
+// replayExistingMessages sends all buffered messages to the stream as NewMessage events.
+func replayExistingMessages(messages []*chatbuffer.Message, stream apiv1.ChatService_SubscribeChatServer) error {
+	for _, msg := range messages {
+		event := &apiv1.ChatEvent{
+			Event: &apiv1.ChatEvent_NewMessage{
+				NewMessage: bufferMessageToProto(msg),
+			},
+		}
+		if err := stream.Send(event); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// replayPendingPermissions sends pending permission requests to the stream so
+// late-joining subscribers see them.
+func replayPendingPermissions(perms []*chatbuffer.PermissionRequestEvent, stream apiv1.ChatService_SubscribeChatServer) error {
+	for _, perm := range perms {
+		protoEvent := bufferEventToProto(chatbuffer.Event{
+			Type:              chatbuffer.EventTypePermissionRequest,
+			PermissionRequest: perm,
+		})
+		if protoEvent != nil {
+			if err := stream.Send(protoEvent); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 // SendChatReply implements the SendChatReply RPC.

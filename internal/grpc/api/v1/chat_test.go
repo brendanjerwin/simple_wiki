@@ -45,6 +45,9 @@ type mockChatBufferManager struct {
 
 	// Configurable cancellation channels for SubscribeToCancellation
 	cancellationChans []chan struct{}
+
+	// Configurable pending permissions for GetPendingPermissionsForPage
+	pendingPermissions map[string][]*chatbuffer.PermissionRequestEvent
 }
 
 type notifyToolCallArgs struct {
@@ -62,8 +65,9 @@ type requestPermissionArgs struct {
 
 func newMockChatBufferManager() *mockChatBufferManager {
 	return &mockChatBufferManager{
-		messages:        make(map[string][]*chatbuffer.Message),
-		pageSubscribers: make(map[string][]chan chatbuffer.Event),
+		messages:           make(map[string][]*chatbuffer.Message),
+		pageSubscribers:    make(map[string][]chan chatbuffer.Event),
+		pendingPermissions: make(map[string][]*chatbuffer.PermissionRequestEvent),
 	}
 }
 
@@ -295,6 +299,12 @@ func (m *mockChatBufferManager) RespondToPermission(requestID, selectedOptionID 
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.respondToPermissionCalls = append(m.respondToPermissionCalls, respondToPermissionArgs{requestID, selectedOptionID})
+}
+
+func (m *mockChatBufferManager) GetPendingPermissionsForPage(page string) []*chatbuffer.PermissionRequestEvent {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.pendingPermissions[page]
 }
 
 func (m *mockChatBufferManager) pageSubscriberCount(page string) int {
@@ -1078,6 +1088,86 @@ var _ = Describe("ChatService", func() {
 				st, ok := status.FromError(err)
 				Expect(ok).To(BeTrue())
 				Expect(st.Code()).To(Equal(codes.InvalidArgument))
+			})
+		})
+
+		When("subscribing with pending permission requests", func() {
+			var (
+				req          *apiv1.SubscribeChatRequest
+				streamServer *mockChatStreamServer
+			)
+
+			BeforeEach(func() {
+				chatManager.pendingPermissions["test-page"] = []*chatbuffer.PermissionRequestEvent{
+					{
+						Page:        "test-page",
+						RequestID:   "req-pending-1",
+						Title:       "Allow file write?",
+						Description: "The agent wants to write to disk.",
+						Options: []chatbuffer.PermissionOption{
+							{OptionID: "allow", Label: "Allow", Description: "Permit the action"},
+							{OptionID: "deny", Label: "Deny", Description: "Block the action"},
+						},
+					},
+				}
+
+				req = &apiv1.SubscribeChatRequest{
+					Page: "test-page",
+				}
+				streamServer = &mockChatStreamServer{contextDone: true}
+
+				_ = server.SubscribeChat(req, streamServer)
+			})
+
+			It("should replay the pending permission request", func() {
+				Expect(streamServer.events).To(HaveLen(1))
+			})
+
+			It("should send it as a permission_request event", func() {
+				Expect(streamServer.events[0].GetPermissionRequest()).NotTo(BeNil())
+			})
+
+			It("should include the correct request ID", func() {
+				Expect(streamServer.events[0].GetPermissionRequest().GetRequestId()).To(Equal("req-pending-1"))
+			})
+
+			It("should include the correct title", func() {
+				Expect(streamServer.events[0].GetPermissionRequest().GetTitle()).To(Equal("Allow file write?"))
+			})
+
+			It("should include the correct options", func() {
+				opts := streamServer.events[0].GetPermissionRequest().GetOptions()
+				Expect(opts).To(HaveLen(2))
+				Expect(opts[0].GetOptionId()).To(Equal("allow"))
+				Expect(opts[1].GetOptionId()).To(Equal("deny"))
+			})
+		})
+
+		When("subscribing with pending permissions for a different page", func() {
+			var (
+				req          *apiv1.SubscribeChatRequest
+				streamServer *mockChatStreamServer
+			)
+
+			BeforeEach(func() {
+				chatManager.pendingPermissions["other-page"] = []*chatbuffer.PermissionRequestEvent{
+					{
+						Page:      "other-page",
+						RequestID: "req-other-1",
+						Title:     "Other page permission",
+					},
+				}
+
+				req = &apiv1.SubscribeChatRequest{
+					Page: "test-page",
+				}
+				streamServer = &mockChatStreamServer{contextDone: true}
+
+				_ = server.SubscribeChat(req, streamServer)
+			})
+
+			It("should not replay permissions for other pages", func() {
+				Expect(streamServer.events).To(HaveLen(0))
 			})
 		})
 	})

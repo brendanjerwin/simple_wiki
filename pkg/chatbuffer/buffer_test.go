@@ -1127,6 +1127,139 @@ var _ = Describe("Manager", func() {
 		})
 	})
 
+	Describe("GetPendingPermissionsForPage", func() {
+		When("no permissions are pending", func() {
+			var result []*chatbuffer.PermissionRequestEvent
+
+			BeforeEach(func() {
+				result = manager.GetPendingPermissionsForPage("test-page")
+			})
+
+			It("should return nil", func() {
+				Expect(result).To(BeNil())
+			})
+		})
+
+		When("a permission is pending for the page", func() {
+			var result []*chatbuffer.PermissionRequestEvent
+
+			BeforeEach(func() {
+				done := make(chan struct{})
+
+				go func() {
+					defer close(done)
+					manager.RequestPermission(
+						context.Background(),
+						"test-page",
+						"req-pending-1",
+						"Allow write?",
+						"Agent wants to write files.",
+						[]chatbuffer.PermissionOption{
+							{OptionID: "allow", Label: "Allow"},
+							{OptionID: "deny", Label: "Deny"},
+						},
+					)
+				}()
+
+				// Wait for the goroutine to register the pending permission
+				Eventually(func() []*chatbuffer.PermissionRequestEvent {
+					return manager.GetPendingPermissionsForPage("test-page")
+				}, "1s", "10ms").Should(HaveLen(1))
+
+				result = manager.GetPendingPermissionsForPage("test-page")
+
+				manager.RespondToPermission("req-pending-1", "allow")
+				Eventually(done, "2s").Should(BeClosed())
+			})
+
+			It("should return the pending permission event", func() {
+				Expect(result).To(HaveLen(1))
+			})
+
+			It("should include the correct request ID", func() {
+				Expect(result[0].RequestID).To(Equal("req-pending-1"))
+			})
+
+			It("should include the correct title", func() {
+				Expect(result[0].Title).To(Equal("Allow write?"))
+			})
+
+			It("should include the correct options", func() {
+				Expect(result[0].Options).To(HaveLen(2))
+				Expect(result[0].Options[0].OptionID).To(Equal("allow"))
+				Expect(result[0].Options[1].OptionID).To(Equal("deny"))
+			})
+		})
+
+		When("a permission is pending for a different page", func() {
+			var result []*chatbuffer.PermissionRequestEvent
+
+			BeforeEach(func() {
+				done := make(chan struct{})
+
+				go func() {
+					defer close(done)
+					manager.RequestPermission(
+						context.Background(),
+						"other-page",
+						"req-other-1",
+						"Other permission",
+						"Some description",
+						nil,
+					)
+				}()
+
+				// Wait for the goroutine to register
+				Eventually(func() []*chatbuffer.PermissionRequestEvent {
+					return manager.GetPendingPermissionsForPage("other-page")
+				}, "1s", "10ms").Should(HaveLen(1))
+
+				result = manager.GetPendingPermissionsForPage("test-page")
+
+				manager.RespondToPermission("req-other-1", "")
+				Eventually(done, "2s").Should(BeClosed())
+			})
+
+			It("should not return permissions for other pages", func() {
+				Expect(result).To(BeNil())
+			})
+		})
+
+		When("permission is no longer pending after response", func() {
+			var result []*chatbuffer.PermissionRequestEvent
+
+			BeforeEach(func() {
+				done := make(chan struct{})
+
+				go func() {
+					defer close(done)
+					manager.RequestPermission(
+						context.Background(),
+						"test-page",
+						"req-completed-1",
+						"Completed permission",
+						"Some description",
+						nil,
+					)
+				}()
+
+				// Wait for registration then respond
+				Eventually(func() []*chatbuffer.PermissionRequestEvent {
+					return manager.GetPendingPermissionsForPage("test-page")
+				}, "1s", "10ms").Should(HaveLen(1))
+
+				manager.RespondToPermission("req-completed-1", "allow")
+				Eventually(done, "2s").Should(BeClosed())
+
+				result = manager.GetPendingPermissionsForPage("test-page")
+			})
+
+			It("should not return the completed permission", func() {
+				Expect(result).To(BeNil())
+			})
+		})
+	})
+
 	Describe("SubscribeToPageChannelWithReplay", func() {
 		When("existing messages are present", func() {
 			var (
