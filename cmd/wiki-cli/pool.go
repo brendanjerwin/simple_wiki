@@ -6,7 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/exec"
@@ -29,10 +29,18 @@ const (
 	defaultMaxInstanceAgeHours            = 2
 	defaultPermissionPendingTimeoutMinutes = 5
 
-	logFmtStateTransitionErr     = "%v"
 	errTerminalAccessUnavailable = "terminal access not available"
 	truncateLimitForLog          = 100
 	truncateLimitForBridge       = 80
+
+	// Structured log field keys.
+	logKeyPage   = "page"
+	logKeyAction = "action"
+	logKeyError  = "error"
+	logKeyTool   = "tool"
+
+	// Structured log messages.
+	logMsgStateTransitionError = "state transition error"
 )
 
 // permissionRequestTimeout is the maximum time to wait for a user to respond
@@ -148,7 +156,7 @@ func (e *instanceEntry) setStateLocked(newState InstanceState) error {
 		if s == newState {
 			e.state = newState
 			e.stateChangedAt = time.Now()
-			log.Printf("[%s] State: %s -> %s", e.page, oldState, newState)
+			slog.Info("state transition", logKeyPage, e.page, "from_state", oldState.String(), "to_state", newState.String(), logKeyAction, "state_change")
 			return nil
 		}
 	}
@@ -254,9 +262,9 @@ func runPoolAction(c *cli.Context) error {
 
 	useSystemd := isSystemdAvailable() && !c.Bool("no-systemd")
 	if useSystemd {
-		log.Println("Systemd detected — agent processes will be spawned as transient units")
+		slog.Info("systemd detected, agent processes will be spawned as transient units", logKeyAction, "startup")
 	} else {
-		log.Println("Systemd not available or disabled — using direct process management")
+		slog.Info("systemd not available or disabled, using direct process management", logKeyAction, "startup")
 	}
 
 	agentPath := c.String("agent-path")
@@ -280,8 +288,13 @@ func runPoolAction(c *cli.Context) error {
 
 // run starts the pool daemon's main loop.
 func (d *poolDaemon) run(ctx context.Context) error {
-	log.Printf("Pool daemon starting (max=%d, idle-timeout=%s, max-age=%s, perm-pending-timeout=%s, wiki=%s)",
-		d.maxInstances, d.idleTimeout, d.maxInstanceAge, d.permissionPendingTimeout, d.wikiURL)
+	slog.Info("pool daemon starting",
+		"max_instances", d.maxInstances,
+		"idle_timeout", d.idleTimeout,
+		"max_age", d.maxInstanceAge,
+		"perm_pending_timeout", d.permissionPendingTimeout,
+		"wiki", d.wikiURL,
+		logKeyAction, "startup")
 
 	// Start the idle reaper
 	go d.reapIdleInstances(ctx)
@@ -305,7 +318,7 @@ func (d *poolDaemon) run(ctx context.Context) error {
 		}
 
 		delayMs, nextMs := computeBackoffAfterFailure(backoffMs, time.Since(start))
-		log.Printf("Instance request subscription error: %v. Reconnecting in %dms...", err, delayMs)
+		slog.Warn("instance request subscription error, reconnecting", logKeyError, err, "delay_ms", delayMs, logKeyAction, "reconnect")
 
 		select {
 		case <-ctx.Done():
@@ -332,11 +345,11 @@ func (d *poolDaemon) subscribeAndHandle(ctx context.Context) error {
 	}
 	defer func() { _ = stream.Close() }()
 
-	log.Println("Connected to wiki — listening for instance requests")
+	slog.Info("connected to wiki, listening for instance requests", logKeyAction, "connected")
 
 	for stream.Receive() {
 		req := stream.Msg()
-		log.Printf("Instance requested for page %q", req.Page)
+		slog.Info("instance requested", logKeyPage, req.Page, logKeyAction, "instance_requested")
 		d.ensureInstance(ctx, req.Page)
 	}
 
@@ -361,14 +374,14 @@ func (d *poolDaemon) ensureInstance(ctx context.Context, page string) {
 	// Already running?
 	if entry, ok := d.instances[page]; ok {
 		entry.touch()
-		log.Printf("Instance for %q already running — updated lastActive", page)
+		slog.Info("instance already running, updated lastActive", logKeyPage, page, logKeyAction, "touch")
 		return
 	}
 
 	// Spawn new instance first, then evict if needed.
 	entry, err := d.spawnInstance(ctx, page)
 	if err != nil {
-		log.Printf("Failed to spawn instance for %q: %v", page, err)
+		slog.Error("failed to spawn instance", logKeyPage, page, logKeyError, err, logKeyAction, "spawn")
 		return
 	}
 
@@ -377,7 +390,7 @@ func (d *poolDaemon) ensureInstance(ctx context.Context, page string) {
 	}
 
 	d.instances[page] = entry
-	log.Printf("Spawned instance for %q (total: %d/%d)", page, len(d.instances), d.maxInstances)
+	slog.Info("instance spawned", logKeyPage, page, "instance_count", len(d.instances), "max_instances", d.maxInstances, logKeyAction, "created")
 }
 
 // evictLeastActive finds and stops the least recently active instance.
@@ -395,7 +408,7 @@ func (d *poolDaemon) evictLeastActive() {
 	}
 
 	if oldestPage != "" {
-		log.Printf("Evicting instance for %q (idle %s) to make room", oldestPage, oldestIdle.Round(time.Second))
+		slog.Info("evicting least active instance to make room", logKeyPage, oldestPage, "idle_duration", oldestIdle.Round(time.Second), logKeyAction, "evict")
 		d.stopInstanceLocked(oldestPage)
 	}
 }
@@ -499,7 +512,7 @@ func (c *wikiChatClient) handleAgentMessage(chunk *acp.SessionUpdateAgentMessage
 			ReplyToId: replyTo,
 		}))
 		if err != nil {
-			log.Printf("Failed to create streaming reply for %q: %v", c.page, err)
+			slog.Error("failed to create streaming reply", logKeyPage, c.page, logKeyError, err)
 			return nil
 		}
 		c.mu.Lock()
@@ -512,7 +525,7 @@ func (c *wikiChatClient) handleAgentMessage(chunk *acp.SessionUpdateAgentMessage
 			Streaming:  true,
 		}))
 		if err != nil {
-			log.Printf("Failed to update streaming reply for %q: %v", c.page, err)
+			slog.Error("failed to update streaming reply", logKeyPage, c.page, logKeyError, err)
 		}
 	}
 
@@ -534,7 +547,7 @@ func (c *wikiChatClient) handleToolCall(tc *acp.SessionUpdateToolCall) {
 			Status:     string(tc.Status),
 		}))
 	}
-	log.Printf("[%s] Tool call: %s (%s)", c.page, tc.Title, tc.Status)
+	slog.Info("tool call", logKeyPage, c.page, logKeyTool, tc.Title, "status", string(tc.Status))
 }
 
 // handleToolCallUpdate sends an updated tool call notification to the wiki chat.
@@ -570,7 +583,7 @@ func (c *wikiChatClient) handleThought(chunk *acp.SessionUpdateAgentThoughtChunk
 		return
 	}
 
-	log.Printf("[%s] Thinking: %s", c.page, truncate(chunk.Content.Text.Text, truncateLimitForLog))
+	slog.Info("agent thinking", logKeyPage, c.page, "thought", truncate(chunk.Content.Text.Text, truncateLimitForLog))
 
 	c.mu.Lock()
 	_, _ = c.thoughtBuf.WriteString(chunk.Content.Text.Text)
@@ -595,7 +608,7 @@ func (c *wikiChatClient) handlePlan(plan *acp.SessionUpdatePlan) {
 	replyTo := c.replyToID
 	c.mu.Unlock()
 
-	log.Printf("[%s] Plan update: %d entries", c.page, len(plan.Entries))
+	slog.Info("plan update", logKeyPage, c.page, "entry_count", len(plan.Entries))
 
 	c.streamOrCreateReply(msgID, replyTo, fullText)
 }
@@ -609,7 +622,7 @@ func (c *wikiChatClient) streamOrCreateReply(msgID, replyTo, text string) {
 			ReplyToId: replyTo,
 		}))
 		if err != nil {
-			log.Printf("Failed to create streaming reply for %q: %v", c.page, err)
+			slog.Error("failed to create streaming reply", logKeyPage, c.page, logKeyError, err)
 		} else {
 			c.mu.Lock()
 			c.currentMsg = resp.Msg.MessageId
@@ -622,7 +635,7 @@ func (c *wikiChatClient) streamOrCreateReply(msgID, replyTo, text string) {
 			Streaming:  true,
 		}))
 		if err != nil {
-			log.Printf("Failed to update streaming reply for %q: %v", c.page, err)
+			slog.Error("failed to update streaming reply", logKeyPage, c.page, logKeyError, err)
 		}
 	}
 }
@@ -702,11 +715,11 @@ func truncate(s string, limit int) string {
 func (c *wikiChatClient) RequestPermission(ctx context.Context, p acp.RequestPermissionRequest) (acp.RequestPermissionResponse, error) {
 	if c.entry != nil {
 		if err := c.entry.setState(StatePermissionPending); err != nil {
-			log.Printf(logFmtStateTransitionErr, err)
+			slog.Warn(logMsgStateTransitionError, logKeyPage, c.page, logKeyError, err)
 		}
 		defer func() {
 			if err := c.entry.setState(StatePrompting); err != nil {
-				log.Printf(logFmtStateTransitionErr, err)
+				slog.Warn(logMsgStateTransitionError, logKeyPage, c.page, logKeyError, err)
 			}
 		}()
 	}
@@ -717,11 +730,11 @@ func (c *wikiChatClient) RequestPermission(ctx context.Context, p acp.RequestPer
 	}
 
 	if len(p.Options) == 0 {
-		log.Printf("[%s] Permission request cancelled (no options): %s", c.page, title)
+		slog.Warn("permission request cancelled, no options", logKeyPage, c.page, logKeyTool, title, logKeyAction, "permission_denied")
 		return permissionCancelledResponse(), nil
 	}
 
-	log.Printf("[%s] Permission requested from user: %s (%d options)", c.page, title, len(p.Options))
+	slog.Info("permission requested from user", logKeyPage, c.page, logKeyTool, title, "option_count", len(p.Options), logKeyAction, "permission_requested")
 
 	return c.relayPermissionToUser(ctx, p, title)
 }
@@ -753,10 +766,10 @@ func (c *wikiChatClient) relayPermissionToUser(ctx context.Context, p acp.Reques
 	}))
 	if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
-			log.Printf("[%s] Permission request timed out after %s, auto-denying: %s", c.page, permissionRequestTimeout, title)
+			slog.Warn("permission request timed out, auto-denying", logKeyPage, c.page, "timeout", permissionRequestTimeout, logKeyTool, title, logKeyAction, "permission_denied")
 			return permissionCancelledResponse(), nil
 		}
-		log.Printf("[%s] Permission request failed: %v — auto-approving", c.page, err)
+		slog.Warn("permission request failed, auto-approving", logKeyPage, c.page, logKeyError, err, logKeyAction, "permission_auto_approved")
 		selected := p.Options[0]
 		return permissionSelectedResponse(selected.OptionId), nil
 	}
@@ -768,7 +781,7 @@ func (c *wikiChatClient) relayPermissionToUser(ctx context.Context, p acp.Reques
 // records it in the permission notes buffer.
 func (c *wikiChatClient) processPermissionResponse(selectedID string, options []acp.PermissionOption, title string) (acp.RequestPermissionResponse, error) {
 	if selectedID == "" {
-		log.Printf("[%s] Permission denied by user: %s", c.page, title)
+		slog.Info("permission denied by user", logKeyPage, c.page, logKeyTool, title, logKeyAction, "permission_denied")
 		c.mu.Lock()
 		_, _ = fmt.Fprintf(&c.permissionNotes, "> \U0001F510 **Permission denied:** %s\n", title)
 		c.mu.Unlock()
@@ -782,7 +795,7 @@ func (c *wikiChatClient) processPermissionResponse(selectedID string, options []
 			break
 		}
 	}
-	log.Printf("[%s] Permission granted by user: %s — %s", c.page, title, selectedName)
+	slog.Info("permission granted by user", logKeyPage, c.page, logKeyTool, title, "option", selectedName, logKeyAction, "permission_granted")
 
 	c.mu.Lock()
 	_, _ = fmt.Fprintf(&c.permissionNotes, "> \U0001F510 **Permission granted:** %s — %s\n", title, selectedName)
@@ -866,7 +879,7 @@ func (d *poolDaemon) spawnInstance(ctx context.Context, page string) (*instanceE
 		stateChangedAt: now,
 		state:          StateInitializing,
 	}
-	log.Printf("[%s] State: Spawning -> Initializing", page)
+	slog.Info("state transition", logKeyPage, page, "from_state", "Spawning", "to_state", "Initializing", logKeyAction, "state_change")
 
 	chatClient.entry = entry
 	go d.runMessageBridge(ctx, entry, chatClient)
@@ -895,9 +908,9 @@ func (d *poolDaemon) startAgentProcess(ctx context.Context, page string) (*acp.C
 	go func() {
 		waitErr := cmd.Wait()
 		if waitErr != nil && ctx.Err() == nil {
-			log.Printf("Agent for %q exited: %v", page, waitErr)
+			slog.Warn("agent process exited unexpectedly", logKeyPage, page, logKeyError, waitErr, logKeyAction, "agent_exit")
 		} else {
-			log.Printf("Agent for %q exited cleanly", page)
+			slog.Info("agent process exited cleanly", logKeyPage, page, logKeyAction, "agent_exit")
 		}
 		d.markInstanceDead(page)
 	}()
@@ -975,15 +988,15 @@ func (d *poolDaemon) runMessageBridge(ctx context.Context, entry *instanceEntry,
 	page := entry.page
 
 	if err := entry.setState(StateBridgeConnecting); err != nil {
-		log.Printf(logFmtStateTransitionErr, err)
+		slog.Warn(logMsgStateTransitionError, logKeyPage, page, logKeyError, err)
 	}
 
-	log.Printf("[%s] Bridge: fetching page context...", page)
+	slog.Info("bridge: fetching page context", logKeyPage, page)
 	// Fetch page context (but don't send it as a prompt yet — prepend to first message)
 	chatClient.mu.Lock()
 	chatClient.pageContext = d.fetchPageContext(ctx, page)
 	chatClient.mu.Unlock()
-	log.Printf("[%s] Bridge: page context fetched, subscribing to messages...", page)
+	slog.Info("bridge: page context fetched, subscribing to messages", logKeyPage, page)
 
 	// Subscribe to page messages FIRST — this ensures we don't miss the triggering message
 	httpClient := &http.Client{}
@@ -1004,7 +1017,7 @@ func (d *poolDaemon) runMessageBridge(ctx context.Context, entry *instanceEntry,
 		}
 
 		delayMs, nextMs := computeBackoffAfterFailure(backoffMs, time.Since(start))
-		log.Printf("Message bridge for %q error: %v. Reconnecting in %dms...", page, err, delayMs)
+		slog.Warn("message bridge error, reconnecting", logKeyPage, page, logKeyError, err, "delay_ms", delayMs, logKeyAction, "reconnect")
 
 		select {
 		case <-ctx.Done():
@@ -1031,14 +1044,14 @@ func (*poolDaemon) bridgeMessages(ctx context.Context, entry *instanceEntry, wik
 	}
 	defer func() { _ = stream.Close() }()
 
-	log.Printf("[%s] Bridge: message stream connected, setting up cancellation...", entry.page)
+	slog.Info("bridge: message stream connected, setting up cancellation", logKeyPage, entry.page)
 
 	cancelChan := subscribeCancellations(ctx, wikiClient, entry.page)
 
-	log.Printf("Message bridge connected for page %q", entry.page)
+	slog.Info("message bridge connected", logKeyPage, entry.page, logKeyAction, "connected")
 
 	if err := entry.setState(StateIdle); err != nil {
-		log.Printf(logFmtStateTransitionErr, err)
+		slog.Warn(logMsgStateTransitionError, logKeyPage, entry.page, logKeyError, err)
 	}
 
 	for stream.Receive() {
@@ -1046,7 +1059,7 @@ func (*poolDaemon) bridgeMessages(ctx context.Context, entry *instanceEntry, wik
 
 		// Only forward user messages
 		if msg.Sender != apiv1.Sender_USER {
-			log.Printf("[%s] Bridge: skipping non-user message (sender=%s)", entry.page, msg.Sender)
+			slog.Info("bridge: skipping non-user message", logKeyPage, entry.page, "sender", msg.Sender.String())
 			continue
 		}
 
@@ -1075,7 +1088,7 @@ func subscribeCancellations(ctx context.Context, wikiClient pageMessageSource, p
 			Page: page,
 		}))
 		if cancelErr != nil {
-			log.Printf("Warning: failed to subscribe to cancellations for %q: %v", page, cancelErr)
+			slog.Warn("failed to subscribe to cancellations", logKeyPage, page, logKeyError, cancelErr)
 			return
 		}
 		defer func() { _ = cancelStream.Close() }()
@@ -1092,7 +1105,7 @@ func subscribeCancellations(ctx context.Context, wikiClient pageMessageSource, p
 // forwardUserMessage processes a single user message from the chat stream: prepares
 // context, sends it as an ACP prompt, and manages heartbeats and cancellation.
 func forwardUserMessage(ctx context.Context, entry *instanceEntry, chatClient *wikiChatClient, cancelChan <-chan struct{}, msg *apiv1.ChatMessage) {
-	log.Printf("[%s] Bridge: received user message %q: %s", entry.page, msg.Id, truncate(msg.Content, truncateLimitForBridge))
+	slog.Info("bridge: received user message", logKeyPage, entry.page, "message_id", msg.Id, "content_preview", truncate(msg.Content, truncateLimitForBridge))
 	entry.touch()
 
 	chatClient.beginTurn(msg.Id)
@@ -1108,10 +1121,10 @@ func forwardUserMessage(ctx context.Context, entry *instanceEntry, chatClient *w
 	promptText := buildPromptText(chatClient, msg.SenderName, msg.Content)
 
 	if err := entry.setState(StatePrompting); err != nil {
-		log.Printf(logFmtStateTransitionErr, err)
+		slog.Warn(logMsgStateTransitionError, logKeyPage, entry.page, logKeyError, err)
 	}
 
-	log.Printf("[%s] Bridge: sending prompt (%d chars)...", entry.page, len(promptText))
+	slog.Info("bridge: sending prompt", logKeyPage, entry.page, "prompt_length", len(promptText))
 	_, promptErr := entry.conn.Prompt(promptCtx, acp.PromptRequest{
 		SessionId: entry.sessionID,
 		Prompt:    []acp.ContentBlock{acp.TextBlock(promptText)},
@@ -1119,14 +1132,14 @@ func forwardUserMessage(ctx context.Context, entry *instanceEntry, chatClient *w
 
 	if promptErr != nil {
 		if promptCtx.Err() != nil && ctx.Err() == nil {
-			log.Printf("Prompt cancelled for page %q", entry.page)
+			slog.Info("prompt cancelled", logKeyPage, entry.page, logKeyAction, "cancelled")
 		} else {
-			log.Printf("Failed to send prompt to agent for %q: %v", entry.page, promptErr)
+			slog.Error("failed to send prompt to agent", logKeyPage, entry.page, logKeyError, promptErr)
 		}
 	}
 
 	if err := entry.setState(StateIdle); err != nil {
-		log.Printf(logFmtStateTransitionErr, err)
+		slog.Warn(logMsgStateTransitionError, logKeyPage, entry.page, logKeyError, err)
 	}
 }
 
@@ -1139,9 +1152,9 @@ func heartbeatWhilePrompting(ctx context.Context, entry *instanceEntry) {
 		select {
 		case <-ticker.C:
 			entry.touch()
-			log.Printf("[%s] Heartbeat: touched lastActive", entry.page)
+			slog.Info("heartbeat: touched lastActive", logKeyPage, entry.page)
 		case <-ctx.Done():
-			log.Printf("[%s] Heartbeat: stopped (prompt done)", entry.page)
+			slog.Info("heartbeat: stopped, prompt done", logKeyPage, entry.page)
 			return
 		}
 	}
@@ -1152,7 +1165,7 @@ func heartbeatWhilePrompting(ctx context.Context, entry *instanceEntry) {
 func listenForCancelSignal(ctx context.Context, cancel context.CancelFunc, cancelChan <-chan struct{}, page string) {
 	select {
 	case <-cancelChan:
-		log.Printf("Cancelling prompt for page %q", page)
+		slog.Info("cancelling prompt on user request", logKeyPage, page, logKeyAction, "cancel")
 		cancel()
 	case <-ctx.Done():
 	}
@@ -1250,7 +1263,7 @@ func (d *poolDaemon) fetchPageContext(ctx context.Context, page string) string {
 
 	fmResp, err := fmClient.GetFrontmatter(ctx, connect.NewRequest(&apiv1.GetFrontmatterRequest{Page: page}))
 	if err != nil {
-		log.Printf("Failed to fetch frontmatter for page %q: %v", page, err)
+		slog.Error("failed to fetch frontmatter", logKeyPage, page, logKeyError, err)
 		return chatPreamble + fmt.Sprintf(
 			"You are the assistant for wiki page '%s'. Failed to fetch page context: %v. Do NOT attempt to create or modify the [ai_agent_chat_context] section.",
 			page, err,
@@ -1270,7 +1283,7 @@ func (d *poolDaemon) fetchPageContext(ctx context.Context, page string) string {
 
 	contextJSON, err := json.MarshalIndent(agentContext, "", "  ")
 	if err != nil {
-		log.Printf("Failed to marshal ai_agent_chat_context for page %q: %v", page, err)
+		slog.Error("failed to marshal ai_agent_chat_context", logKeyPage, page, logKeyError, err)
 		return chatPreamble + fmt.Sprintf("You are the assistant for wiki page '%s'.", page)
 	}
 
@@ -1294,7 +1307,7 @@ func (d *poolDaemon) stopInstanceLocked(page string) {
 
 	entry.mu.Lock()
 	if err := entry.setStateLocked(StateStopping); err != nil {
-		log.Printf(logFmtStateTransitionErr, err)
+		slog.Warn(logMsgStateTransitionError, logKeyPage, page, logKeyError, err)
 	}
 	entry.mu.Unlock()
 
@@ -1302,7 +1315,7 @@ func (d *poolDaemon) stopInstanceLocked(page string) {
 
 	entry.mu.Lock()
 	if err := entry.setStateLocked(StateDead); err != nil {
-		log.Printf(logFmtStateTransitionErr, err)
+		slog.Warn(logMsgStateTransitionError, logKeyPage, page, logKeyError, err)
 	}
 	entry.mu.Unlock()
 
@@ -1324,11 +1337,11 @@ func (d *poolDaemon) markInstanceDead(page string) {
 	entry.cancel()
 
 	if err := entry.setState(StateDead); err != nil {
-		log.Printf(logFmtStateTransitionErr, err)
+		slog.Warn(logMsgStateTransitionError, logKeyPage, page, logKeyError, err)
 	}
 
 	delete(d.instances, page)
-	log.Printf("[%s] Instance removed from pool after process exit", page)
+	slog.Info("instance removed from pool after process exit", logKeyPage, page, logKeyAction, "reaped")
 }
 
 // stopAll stops all running instances.
@@ -1339,7 +1352,7 @@ func (d *poolDaemon) stopAll() {
 	for page := range d.instances {
 		d.stopInstanceLocked(page)
 	}
-	log.Println("All instances stopped")
+	slog.Info("all instances stopped", logKeyAction, "shutdown")
 }
 
 // shouldReap returns a non-empty string describing why the instance should be reaped,
@@ -1395,7 +1408,7 @@ func (d *poolDaemon) reapIdleInstances(ctx context.Context) {
 			d.mu.Lock()
 			for page, entry := range d.instances {
 				if reason := d.shouldReap(entry); reason != "" {
-					log.Printf("Reaping instance for %q: %s", page, reason)
+					slog.Info("reaping instance", logKeyPage, page, "reason", reason, logKeyAction, "reaped")
 					d.stopInstanceLocked(page)
 				}
 			}
