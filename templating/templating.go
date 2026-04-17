@@ -127,6 +127,7 @@ const (
 	funcNameFindByKeyExists  = "FindByKeyExistence"
 	funcNameChecklist        = "Checklist"
 	funcNameBlog             = "Blog"
+	funcNameSurvey           = "Survey"
 
 	templateTimeoutErrFmt = "template execution timed out after %v"
 )
@@ -359,7 +360,80 @@ func renderChecklistFallback(frontmatter map[string]any, listName string) string
 	return buf.String()
 }
 
-const blogSnippetMaxChars = 200
+// BuildSurvey returns a template function that renders a wiki-survey custom element
+// with a server-rendered fallback inside it.
+func BuildSurvey(templateContext TemplateContext) func(string) string {
+	return func(surveyName string) string {
+		fallback := renderSurveyFallback(templateContext.Map, surveyName)
+		return fmt.Sprintf(`<wiki-survey name="%s" page="%s">%s</wiki-survey>`,
+			html.EscapeString(surveyName),
+			html.EscapeString(templateContext.Identifier),
+			fallback,
+		)
+	}
+}
+
+func renderSurveyFallback(frontmatter map[string]any, surveyName string) string {
+	surveysMap, ok := frontmatter["surveys"].(map[string]any)
+	if !ok {
+		return ""
+	}
+	survey, ok := surveysMap[surveyName].(map[string]any)
+	if !ok {
+		return ""
+	}
+
+	var buf strings.Builder
+
+	if question, isString := survey["question"].(string); isString && question != "" {
+		_, _ = fmt.Fprintf(&buf, `<span class="survey-question">%s</span>`, html.EscapeString(question))
+	}
+
+	responses, ok := survey["responses"].([]any)
+	if !ok || len(responses) == 0 {
+		return buf.String()
+	}
+
+	for _, raw := range responses {
+		resp, ok := raw.(map[string]any)
+		if !ok {
+			continue
+		}
+		user, userOk := resp["user"].(string)
+		if !userOk {
+			user = ""
+		}
+		submittedAt, atOk := resp["submitted_at"].(string)
+		if !atOk {
+			submittedAt = ""
+		}
+		// Trim to date-only portion for compact display
+		dateStr := submittedAt
+		if len(dateStr) >= surveyDatePrefixLength {
+			dateStr = dateStr[:surveyDatePrefixLength]
+		}
+		values, valuesOk := resp["values"].(map[string]any)
+		if !valuesOk {
+			values = map[string]any{}
+		}
+		var valBuf strings.Builder
+		for k, v := range values {
+			if valBuf.Len() > 0 {
+				_, _ = valBuf.WriteString(", ")
+			}
+			_, _ = fmt.Fprintf(&valBuf, "%s=%v", k, v)
+		}
+		entry := fmt.Sprintf("%s (%s): %s", user, dateStr, valBuf.String())
+		_, _ = fmt.Fprintf(&buf, `<span class="survey-response">%s</span>`, html.EscapeString(entry))
+	}
+
+	return buf.String()
+}
+
+const (
+	blogSnippetMaxChars    = 200
+	surveyDatePrefixLength = 10 // length of "YYYY-MM-DD" prefix in an ISO 8601 timestamp
+)
 
 // BuildBlog returns a template function that renders a wiki-blog custom element
 // with a server-rendered fallback list of blog posts inside it.
@@ -539,9 +613,10 @@ func buildChatTemplateWithFunctions(ctx context.Context, templateString string, 
 		funcNameFindByPrefix:    query.QueryPrefixMatch,
 		funcNameFindByKeyExists: query.QueryKeyExistence,
 		// Stubs for interactive widget macros that are not supported in chat context.
-		// These prevent parse errors when messages contain Checklist or Blog macros.
+		// These prevent parse errors when messages contain Checklist, Blog, or Survey macros.
 		funcNameChecklist: func(string) string { return "" },
 		funcNameBlog:      func(string, int) string { return "" },
+		funcNameSurvey:    func(string) string { return "" },
 	}
 
 	return template.New("page").Funcs(funcs).Parse(templateString)
@@ -611,6 +686,7 @@ func buildTemplateWithFunctions(ctx context.Context, templateString string, site
 		funcNameFindByKeyExists: query.QueryKeyExistence,
 		funcNameChecklist:       BuildChecklist(templateContext),
 		funcNameBlog:            BuildBlog(templateContext, query, site),
+		funcNameSurvey:          BuildSurvey(templateContext),
 	}
 
 	return template.New("page").Funcs(funcs).Parse(templateString)
@@ -648,6 +724,7 @@ func validationFuncMap() template.FuncMap {
 		funcNameFindByKeyExists: func(string) []string { return nil },
 		funcNameChecklist:       func(string) string { return "" },
 		funcNameBlog:            func(string, int) string { return "" },
+		funcNameSurvey:          func(string) string { return "" },
 	}
 }
 
