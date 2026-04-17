@@ -3598,3 +3598,278 @@ var _ = Describe("poolDaemon runMessageBridge", func() {
 		})
 	})
 })
+
+// instanceRequestStreamer is a Connect handler that sends a fixed list of
+// InstanceRequest messages and then closes the stream cleanly.
+type instanceRequestStreamer struct {
+	apiv1connect.UnimplementedChatServiceHandler
+	pages []string
+}
+
+func (h *instanceRequestStreamer) SubscribeInstanceRequests(_ context.Context, _ *connect.Request[apiv1.SubscribeInstanceRequestsRequest], stream *connect.ServerStream[apiv1.InstanceRequest]) error {
+	for _, page := range h.pages {
+		if err := stream.Send(&apiv1.InstanceRequest{Page: page}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+var _ = Describe("poolDaemon subscribeAndHandle", func() {
+	Describe("connected and instance-requested log paths", func() {
+		When("the server sends one instance request then closes the stream", func() {
+			var result error
+
+			BeforeEach(func() {
+				handler := &instanceRequestStreamer{
+					pages: []string{"test-page"},
+				}
+				mux := http.NewServeMux()
+				path, h := apiv1connect.NewChatServiceHandler(handler)
+				mux.Handle(path, h)
+				server := httptest.NewServer(mux)
+				DeferCleanup(server.Close)
+
+				daemon := &poolDaemon{
+					wikiURL:      server.URL,
+					agentPath:    "/nonexistent-agent-binary",
+					useSystemd:   false,
+					maxInstances: 5,
+					instances:    make(map[string]*instanceEntry),
+				}
+
+				result = daemon.subscribeAndHandle(context.Background())
+			})
+
+			It("should return a stream-closed error (not a subscribe error)", func() {
+				Expect(result).To(MatchError(ContainSubstring("stream closed by server")))
+			})
+		})
+
+		When("the server stream closes immediately with no messages", func() {
+			var result error
+
+			BeforeEach(func() {
+				handler := &instanceRequestStreamer{
+					pages: []string{},
+				}
+				mux := http.NewServeMux()
+				path, h := apiv1connect.NewChatServiceHandler(handler)
+				mux.Handle(path, h)
+				server := httptest.NewServer(mux)
+				DeferCleanup(server.Close)
+
+				daemon := &poolDaemon{
+					wikiURL:      server.URL,
+					maxInstances: 5,
+					instances:    make(map[string]*instanceEntry),
+				}
+
+				result = daemon.subscribeAndHandle(context.Background())
+			})
+
+			It("should return a stream-closed error after connecting", func() {
+				Expect(result).To(MatchError(ContainSubstring("stream closed by server")))
+			})
+		})
+
+		When("the context is cancelled before any messages arrive", func() {
+			var result error
+
+			BeforeEach(func() {
+				handler := &instanceRequestStreamer{
+					pages: []string{},
+				}
+				mux := http.NewServeMux()
+				path, h := apiv1connect.NewChatServiceHandler(handler)
+				mux.Handle(path, h)
+				server := httptest.NewServer(mux)
+				DeferCleanup(server.Close)
+
+				daemon := &poolDaemon{
+					wikiURL:      server.URL,
+					maxInstances: 5,
+					instances:    make(map[string]*instanceEntry),
+				}
+
+				ctx, cancel := context.WithCancel(context.Background())
+				cancel()
+				result = daemon.subscribeAndHandle(ctx)
+			})
+
+			It("should return nil when context is already cancelled", func() {
+				Expect(result).NotTo(HaveOccurred())
+			})
+		})
+	})
+})
+
+var _ = Describe("poolDaemon run reconnect path", func() {
+	When("subscribeAndHandle fails immediately and context expires during backoff wait", func() {
+		var err error
+
+		BeforeEach(func() {
+			daemon := &poolDaemon{
+				wikiURL:      "http://localhost:1", // unreachable → immediate failure
+				maxInstances: 5,
+				idleTimeout:  30 * time.Minute,
+				instances:    make(map[string]*instanceEntry),
+			}
+			// Context expires after 250 ms, which is shorter than the 1 s reconnect backoff.
+			// This exercises the reconnect warning log and the ctx.Done() exit branch.
+			ctx, cancel := context.WithTimeout(context.Background(), 250*time.Millisecond)
+			DeferCleanup(cancel)
+			err = daemon.run(ctx)
+		})
+
+		It("should return nil after the context expires", func() {
+			Expect(err).NotTo(HaveOccurred())
+		})
+	})
+})
+
+var _ = Describe("handleAgentMessage error paths (mock-based)", func() {
+	Describe("SendChatReply failure on the first chunk", func() {
+		When("the wiki rejects the new streaming reply", func() {
+			var (
+				client *wikiChatClient
+				err    error
+			)
+
+			BeforeEach(func() {
+				mock := &mockChatReplier{
+					sendReplyErr: errors.New("wiki unavailable"),
+				}
+				client = &wikiChatClient{
+					page:       "test-page",
+					chatClient: mock,
+					replyToID:  "parent-1",
+				}
+				chunk := &acp.SessionUpdateAgentMessageChunk{
+					Content: acp.TextBlock("Hello from agent"),
+				}
+				err = client.handleAgentMessage(chunk)
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should not store a message ID when creation fails", func() {
+				Expect(client.currentMsg).To(BeEmpty())
+			})
+		})
+	})
+
+	Describe("EditChatMessage failure on a subsequent chunk", func() {
+		When("the wiki rejects the edit of an existing streaming reply", func() {
+			var err error
+
+			BeforeEach(func() {
+				mock := &mockChatReplier{
+					editErr: errors.New("wiki unavailable"),
+				}
+				client := &wikiChatClient{
+					page:       "test-page",
+					chatClient: mock,
+					currentMsg: "existing-msg-77",
+				}
+				client.textBuf.WriteString("Previous text. ")
+
+				chunk := &acp.SessionUpdateAgentMessageChunk{
+					Content: acp.TextBlock("More text"),
+				}
+				err = client.handleAgentMessage(chunk)
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+		})
+	})
+})
+
+var _ = Describe("poolDaemon markInstanceDead state transition error", func() {
+	When("the instance is already in Dead state when markInstanceDead is called", func() {
+		var daemon *poolDaemon
+
+		BeforeEach(func() {
+			entry := &instanceEntry{
+				page:       "already-dead-page",
+				state:      StateDead,
+				lastActive: time.Now(),
+				cancel:     func() {},
+			}
+			daemon = &poolDaemon{
+				instances: map[string]*instanceEntry{
+					"already-dead-page": entry,
+				},
+			}
+			daemon.markInstanceDead("already-dead-page")
+		})
+
+		It("should still remove the instance from the pool", func() {
+			Expect(daemon.instances).NotTo(HaveKey("already-dead-page"))
+		})
+	})
+})
+
+var _ = Describe("poolDaemon stopInstanceLocked state transition errors", func() {
+	When("the instance is already in Dead state", func() {
+		var (
+			daemon   *poolDaemon
+			canceled bool
+		)
+
+		BeforeEach(func() {
+			canceled = false
+			daemon = &poolDaemon{
+				instances: map[string]*instanceEntry{
+					"dead-page": {
+						page:   "dead-page",
+						state:  StateDead,
+						cancel: func() { canceled = true },
+					},
+				},
+			}
+			daemon.mu.Lock()
+			daemon.stopInstanceLocked("dead-page")
+			daemon.mu.Unlock()
+		})
+
+		It("should still cancel the instance context", func() {
+			Expect(canceled).To(BeTrue())
+		})
+
+		It("should still remove the instance from the pool", func() {
+			Expect(daemon.instances).NotTo(HaveKey("dead-page"))
+		})
+	})
+})
+
+var _ = Describe("poolDaemon reapIdleInstances goroutine", func() {
+	When("the context is already cancelled on entry", func() {
+		var done chan struct{}
+
+		BeforeEach(func() {
+			daemon := &poolDaemon{
+				idleTimeout: 10 * time.Minute,
+				instances:   make(map[string]*instanceEntry),
+			}
+			ctx, cancel := context.WithCancel(context.Background())
+			cancel()
+
+			done = make(chan struct{})
+			go func() {
+				daemon.reapIdleInstances(ctx)
+				close(done)
+			}()
+
+			Eventually(done, "2s").Should(BeClosed())
+		})
+
+		It("should exit the goroutine cleanly without blocking", func() {
+			Expect(done).To(BeClosed())
+		})
+	})
+})
