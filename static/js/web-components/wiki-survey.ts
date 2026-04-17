@@ -163,7 +163,7 @@ export class WikiSurvey extends LitElement {
           user: r.user,
           anonymous: r.anonymous,
           submitted_at: r.submitted_at,
-          values: r.values as JsonObject,
+          values: r.values as unknown as JsonObject,
         })),
       };
 
