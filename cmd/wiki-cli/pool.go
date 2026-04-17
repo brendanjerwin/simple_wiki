@@ -1163,20 +1163,20 @@ func listenForCancelSignal(ctx context.Context, cancel context.CancelFunc, cance
 // the message is prefixed with "[senderName]: " to identify the speaker in group chats.
 func buildPromptText(chatClient *wikiChatClient, senderName string, messageContent string) string {
 	chatClient.mu.Lock()
-	defer chatClient.mu.Unlock()
+	pageContext := chatClient.pageContext
+	chatClient.pageContext = "" // only prepend once
+	chatClient.mu.Unlock()
 
 	formattedMessage := messageContent
 	if senderName != "" {
 		formattedMessage = fmt.Sprintf("[%s]: %s", senderName, messageContent)
 	}
 
-	if chatClient.pageContext == "" {
+	if pageContext == "" {
 		return formattedMessage
 	}
 
-	promptText := chatClient.pageContext + "\n\n---\n\nUser message: " + formattedMessage
-	chatClient.pageContext = "" // only prepend once
-	return promptText
+	return pageContext + "\n\n---\n\nUser message: " + formattedMessage
 }
 
 // chatPreamble is prepended to the first prompt to establish the interactive chat context.
