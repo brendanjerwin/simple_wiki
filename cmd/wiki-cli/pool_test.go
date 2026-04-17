@@ -3440,3 +3440,161 @@ var _ = Describe("interface compliance", func() {
 		var _ acpAgent = (*acp.ClientSideConnection)(nil)
 	})
 })
+
+// mockPageMessageSource is a mock implementation of the pageMessageSource interface
+// for testing bridgeMessages without a real HTTP server.
+type mockPageMessageSource struct {
+	subscribePageErr   error
+	subscribeCancelErr error
+}
+
+func (m *mockPageMessageSource) SubscribePageChatMessages(_ context.Context, _ *connect.Request[apiv1.SubscribePageChatMessagesRequest]) (*connect.ServerStreamForClient[apiv1.ChatMessage], error) {
+	return nil, m.subscribePageErr
+}
+
+func (m *mockPageMessageSource) SubscribePageCancellations(_ context.Context, _ *connect.Request[apiv1.SubscribePageCancellationsRequest]) (*connect.ServerStreamForClient[apiv1.PageCancellation], error) {
+	return nil, m.subscribeCancelErr
+}
+
+var _ = Describe("poolDaemon ensureInstance", func() {
+	Describe("when an instance already exists for the page", func() {
+		var (
+			daemon        *poolDaemon
+			entry         *instanceEntry
+			oldLastActive time.Time
+		)
+
+		BeforeEach(func() {
+			oldLastActive = time.Now().Add(-5 * time.Minute)
+			entry = &instanceEntry{
+				page:       "existing-page",
+				lastActive: oldLastActive,
+				cancel:     func() {},
+			}
+			daemon = &poolDaemon{
+				maxInstances: 5,
+				instances: map[string]*instanceEntry{
+					"existing-page": entry,
+				},
+			}
+			daemon.ensureInstance(context.Background(), "existing-page")
+		})
+
+		It("should not add a second entry for the same page", func() {
+			Expect(daemon.instances).To(HaveLen(1))
+		})
+
+		It("should update the existing entry's lastActive", func() {
+			Expect(entry.lastActive).To(BeTemporally(">", oldLastActive))
+		})
+	})
+
+	Describe("when spawnInstance fails because the agent binary does not exist", func() {
+		var daemon *poolDaemon
+
+		BeforeEach(func() {
+			daemon = &poolDaemon{
+				wikiURL:      "http://localhost:1",
+				agentPath:    "/nonexistent-agent-binary-does-not-exist",
+				useSystemd:   false,
+				maxInstances: 5,
+				instances:    make(map[string]*instanceEntry),
+			}
+			daemon.ensureInstance(context.Background(), "test-page")
+		})
+
+		It("should not add the failed instance to the pool", func() {
+			Expect(daemon.instances).NotTo(HaveKey("test-page"))
+		})
+	})
+})
+
+var _ = Describe("poolDaemon bridgeMessages", func() {
+	Describe("subscription failure path", func() {
+		When("SubscribePageChatMessages returns an error", func() {
+			var result error
+
+			BeforeEach(func() {
+				entry := &instanceEntry{
+					page:           "test-page",
+					state:          StateBridgeConnecting,
+					lastActive:     time.Now(),
+					stateChangedAt: time.Now(),
+					cancel:         func() {},
+				}
+				chatClient := &wikiChatClient{
+					page:       "test-page",
+					chatClient: &mockChatReplier{},
+				}
+				mockSource := &mockPageMessageSource{
+					subscribePageErr: errors.New("service unavailable"),
+				}
+
+				daemon := &poolDaemon{}
+				result = daemon.bridgeMessages(context.Background(), entry, mockSource, chatClient)
+			})
+
+			It("should return an error wrapping the subscription failure", func() {
+				Expect(result).To(MatchError(ContainSubstring("failed to subscribe to page messages")))
+			})
+		})
+	})
+})
+
+var _ = Describe("poolDaemon runMessageBridge", func() {
+	Describe("reconnect/backoff path", func() {
+		When("bridgeMessages fails and context expires before the retry delay elapses", func() {
+			var done chan struct{}
+
+			BeforeEach(func() {
+				// Set up a Connect server whose SubscribePageChatMessages immediately
+				// returns an Unimplemented error, causing bridgeMessages to return an error
+				// and triggering the reconnect/backoff log path in runMessageBridge.
+				mux := http.NewServeMux()
+				chatPath, chatHandler := apiv1connect.NewChatServiceHandler(&stubChatServiceHandler{})
+				mux.Handle(chatPath, chatHandler)
+				fmPath, fmHandler := apiv1connect.NewFrontmatterHandler(&stubFrontmatterHandler{
+					frontmatter: map[string]any{},
+				})
+				mux.Handle(fmPath, fmHandler)
+				server := httptest.NewServer(mux)
+				DeferCleanup(server.Close)
+
+				daemon := &poolDaemon{
+					wikiURL:  server.URL,
+					instances: make(map[string]*instanceEntry),
+				}
+
+				entry := &instanceEntry{
+					page:           "reconnect-test-page",
+					state:          StateInitializing,
+					lastActive:     time.Now(),
+					stateChangedAt: time.Now(),
+					createdAt:      time.Now(),
+					cancel:         func() {},
+				}
+				chatClient := &wikiChatClient{
+					page:       "reconnect-test-page",
+					chatClient: &mockChatReplier{},
+				}
+
+				// Use a context that expires well before the 1-second reconnect backoff,
+				// so the goroutine exits on ctx.Done() without sleeping.
+				ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+				DeferCleanup(cancel)
+
+				done = make(chan struct{})
+				go func() {
+					daemon.runMessageBridge(ctx, entry, chatClient)
+					close(done)
+				}()
+
+				Eventually(done, "5s").Should(BeClosed())
+			})
+
+			It("should exit cleanly once the context expires", func() {
+				Expect(done).To(BeClosed())
+			})
+		})
+	})
+})
