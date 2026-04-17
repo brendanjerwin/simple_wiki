@@ -45,7 +45,7 @@ describe('WikiSurvey', () => {
     el = buildElement();
     stubGetFrontmatter(el);
     document.body.appendChild(el);
-    await el.updateComplete;
+    await waitUntil(() => !el.loading, 'fetch should complete', { timeout: 3000 });
     expect(el).to.exist;
   });
 
@@ -56,9 +56,7 @@ describe('WikiSurvey', () => {
       el = buildElement();
       getFrontmatterStub = stubGetFrontmatter(el);
       document.body.appendChild(el);
-      // Double updateComplete to ensure fetch + re-render both complete
-      await el.updateComplete;
-      await el.updateComplete;
+      await waitUntil(() => !el.loading, 'fetch should complete', { timeout: 3000 });
     });
 
     it('should call getFrontmatter', () => {
@@ -76,8 +74,7 @@ describe('WikiSurvey', () => {
       el = buildElement();
       stubGetFrontmatter(el, {});
       document.body.appendChild(el);
-      await el.updateComplete;
-      await el.updateComplete;
+      await waitUntil(() => !el.loading, 'fetch should complete', { timeout: 3000 });
     });
 
     it('should render the not-configured message', () => {
@@ -104,8 +101,7 @@ describe('WikiSurvey', () => {
       el = buildElement();
       stubGetFrontmatter(el, surveyFrontmatter);
       document.body.appendChild(el);
-      await el.updateComplete;
-      await el.updateComplete;
+      await waitUntil(() => !el.loading, 'fetch should complete', { timeout: 3000 });
     });
 
     it('should render the survey question', () => {
@@ -144,8 +140,7 @@ describe('WikiSurvey', () => {
       el = buildElement();
       stubGetFrontmatter(el, surveyFrontmatter);
       document.body.appendChild(el);
-      await el.updateComplete;
-      await el.updateComplete;
+      await waitUntil(() => !el.loading, 'fetch should complete', { timeout: 3000 });
     });
 
     it('should render the login-required message', () => {
@@ -175,8 +170,7 @@ describe('WikiSurvey', () => {
       el = buildElement();
       stubGetFrontmatter(el, surveyFrontmatter);
       document.body.appendChild(el);
-      await el.updateComplete;
-      await el.updateComplete;
+      await waitUntil(() => !el.loading, 'fetch should complete', { timeout: 3000 });
     });
 
     it('should render the closed notice', () => {
@@ -213,8 +207,7 @@ describe('WikiSurvey', () => {
       el = buildElement();
       stubGetFrontmatter(el, surveyFrontmatter);
       document.body.appendChild(el);
-      await el.updateComplete;
-      await el.updateComplete;
+      await waitUntil(() => !el.loading, 'fetch should complete', { timeout: 3000 });
     });
 
     it('should render the responses section', () => {
@@ -265,8 +258,7 @@ describe('WikiSurvey', () => {
       getFrontmatterStub = stubGetFrontmatter(el, surveyFrontmatter);
       mergeFrontmatterStub = stubMergeFrontmatter(el, surveyFrontmatter);
       document.body.appendChild(el);
-      await el.updateComplete;
-      await el.updateComplete;
+      await waitUntil(() => !el.loading, 'fetch should complete', { timeout: 3000 });
 
       const btn = el.shadowRoot?.querySelector('.submit-btn') as HTMLButtonElement | null;
       btn?.click();
