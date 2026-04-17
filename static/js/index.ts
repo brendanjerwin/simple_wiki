@@ -10,6 +10,7 @@ import './web-components/wiki-image.js';
 import './web-components/page-import-dialog.js';
 import './web-components/insert-new-page-dialog.js';
 import './web-components/wiki-checklist.js';
+import './web-components/wiki-survey.js';
 import './web-components/wiki-blog.js';
 import './web-components/blog-new-post-dialog.js';
 import './web-components/file-drop-zone.js';

@@ -4,6 +4,7 @@ interface Window {
     pageName?: string;
     debounceMS?: number;
     lastFetch?: number;
+    username?: string;
   };
 }
 
@@ -14,5 +15,6 @@ declare var simple_wiki:
       pageName?: string;
       debounceMS?: number;
       lastFetch?: number;
+      username?: string;
     }
   | undefined;
