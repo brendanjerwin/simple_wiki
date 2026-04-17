@@ -163,6 +163,7 @@ export class WikiSurvey extends LitElement {
           user: r.user,
           anonymous: r.anonymous,
           submitted_at: r.submitted_at,
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- r.values is Record<string, unknown>; values are form inputs (strings/primitives) so JsonObject is safe here
           values: r.values as unknown as JsonObject,
         })),
       };
