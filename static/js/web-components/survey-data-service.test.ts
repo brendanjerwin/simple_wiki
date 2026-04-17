@@ -40,7 +40,7 @@ describe('extractSurveyData', () => {
     let result: SurveyData;
 
     beforeEach(() => {
-      result = extractSurveyData({} as JsonObject, 'my_survey');
+      result = extractSurveyData({} as unknown as JsonObject, 'my_survey');
     });
 
     it('should return empty question', () => {
@@ -64,7 +64,7 @@ describe('extractSurveyData', () => {
     let result: SurveyData;
 
     beforeEach(() => {
-      result = extractSurveyData({ surveys: { other_survey: {} } } as JsonObject, 'my_survey');
+      result = extractSurveyData({ surveys: { other_survey: {} } } as unknown as JsonObject, 'my_survey');
     });
 
     it('should return empty question', () => {
