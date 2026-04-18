@@ -385,8 +385,14 @@ func formatSurveyResponseValues(values map[string]any) string {
 }
 
 func renderSurveyResponse(resp map[string]any) string {
-	user, _ := resp["user"].(string)
-	submittedAt, _ := resp["submitted_at"].(string)
+	user, ok := resp["user"].(string)
+	if !ok {
+		user = ""
+	}
+	submittedAt, ok := resp["submitted_at"].(string)
+	if !ok {
+		submittedAt = ""
+	}
 
 	// Trim to date-only portion for compact display
 	dateStr := submittedAt
