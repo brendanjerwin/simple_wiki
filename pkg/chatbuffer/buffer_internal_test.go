@@ -12,7 +12,6 @@ import (
 // All var _ = Describe(...) blocks in this package are registered in the same Ginkgo registry.
 
 var _ = Describe("Manager internal", func() {
-
 	Describe("reclaimOnce", func() {
 		var manager *Manager
 
@@ -143,5 +142,4 @@ var _ = Describe("Manager internal", func() {
 			})
 		})
 	})
-
 })
