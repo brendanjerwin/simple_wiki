@@ -62,7 +62,7 @@ function parseSurveyResponse(raw: unknown): SurveyResponse | null {
     user,
     anonymous: Boolean(r['anonymous']),
     submitted_at: typeof r['submitted_at'] === 'string' ? r['submitted_at'] : '',
-    values: valuesRaw as Record<string, unknown>,
+    values: valuesRaw,
   };
 }
 

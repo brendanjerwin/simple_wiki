@@ -373,6 +373,36 @@ func BuildSurvey(templateContext TemplateContext) func(string) string {
 	}
 }
 
+func formatSurveyResponseValues(values map[string]any) string {
+	var valBuf strings.Builder
+	for k, v := range values {
+		if valBuf.Len() > 0 {
+			_, _ = valBuf.WriteString(", ")
+		}
+		_, _ = fmt.Fprintf(&valBuf, "%s=%v", k, v)
+	}
+	return valBuf.String()
+}
+
+func renderSurveyResponse(resp map[string]any) string {
+	user, _ := resp["user"].(string)
+	submittedAt, _ := resp["submitted_at"].(string)
+
+	// Trim to date-only portion for compact display
+	dateStr := submittedAt
+	if len(dateStr) >= surveyDatePrefixLength {
+		dateStr = dateStr[:surveyDatePrefixLength]
+	}
+
+	values, valuesOk := resp["values"].(map[string]any)
+	if !valuesOk {
+		values = map[string]any{}
+	}
+
+	entry := fmt.Sprintf("%s (%s): %s", user, dateStr, formatSurveyResponseValues(values))
+	return fmt.Sprintf(`<span class="survey-response">%s</span>`, html.EscapeString(entry))
+}
+
 func renderSurveyFallback(frontmatter map[string]any, surveyName string) string {
 	surveysMap, ok := frontmatter["surveys"].(map[string]any)
 	if !ok {
@@ -399,32 +429,7 @@ func renderSurveyFallback(frontmatter map[string]any, surveyName string) string 
 		if !ok {
 			continue
 		}
-		user, userOk := resp["user"].(string)
-		if !userOk {
-			user = ""
-		}
-		submittedAt, atOk := resp["submitted_at"].(string)
-		if !atOk {
-			submittedAt = ""
-		}
-		// Trim to date-only portion for compact display
-		dateStr := submittedAt
-		if len(dateStr) >= surveyDatePrefixLength {
-			dateStr = dateStr[:surveyDatePrefixLength]
-		}
-		values, valuesOk := resp["values"].(map[string]any)
-		if !valuesOk {
-			values = map[string]any{}
-		}
-		var valBuf strings.Builder
-		for k, v := range values {
-			if valBuf.Len() > 0 {
-				_, _ = valBuf.WriteString(", ")
-			}
-			_, _ = fmt.Fprintf(&valBuf, "%s=%v", k, v)
-		}
-		entry := fmt.Sprintf("%s (%s): %s", user, dateStr, valBuf.String())
-		_, _ = fmt.Fprintf(&buf, `<span class="survey-response">%s</span>`, html.EscapeString(entry))
+		_, _ = buf.WriteString(renderSurveyResponse(resp))
 	}
 
 	return buf.String()

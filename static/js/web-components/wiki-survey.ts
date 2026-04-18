@@ -21,13 +21,9 @@ import {
   findUserResponse,
   upsertResponse,
   asRecord,
-  type SurveyData,
-  type SurveyField,
-  type SurveyResponse,
 } from './survey-data-service.js';
+export type { SurveyData, SurveyField, SurveyResponse } from './survey-data-service.js';
 import { wikiSurveyStyles } from './wiki-survey-styles.js';
-
-export type { SurveyData, SurveyField, SurveyResponse };
 
 /**
  * WikiSurvey - An interactive survey component that persists responses to frontmatter.
@@ -153,7 +149,7 @@ export class WikiSurvey extends LitElement {
       const currentSurveyObj = (asRecord(existingSurveys[this.name]) ?? {}) as JsonObject;
 
       // Get existing responses and upsert the current user's response
-      const existingData = extractSurveyData(currentFrontmatter as JsonObject, this.name);
+      const existingData = extractSurveyData(currentFrontmatter, this.name);
       const updatedResponses = upsertResponse(existingData.responses, username, this.fieldValues);
 
       // Build updated survey object (preserve all existing keys, update responses)
@@ -221,8 +217,8 @@ export class WikiSurvey extends LitElement {
               ?disabled="${this.saving}"
               @input="${(e: InputEvent) => {
                 if (!(e.target instanceof HTMLInputElement)) return;
-                const n = parseFloat(e.target.value);
-                this._handleFieldChange(field.name, isNaN(n) ? '' : n);
+                const n = Number.parseFloat(e.target.value);
+                this._handleFieldChange(field.name, Number.isNaN(n) ? '' : n);
               }}"
             />
           </div>
@@ -302,6 +298,39 @@ export class WikiSurvey extends LitElement {
     }
   }
 
+  private _renderSavingIndicator() {
+    if (this.saving) return html`<span class="saving-indicator">Saving\u2026</span>`;
+    if (this.saved) return html`<span class="success-message">Response saved!</span>`;
+    return nothing;
+  }
+
+  private _renderFormSection(data: SurveyData, username: string) {
+    if (data.closed) {
+      return html`<p class="closed-notice">This survey is closed.</p>`;
+    }
+    if (!username) {
+      return html`<p class="login-required">Log in to submit a response.</p>`;
+    }
+    return html`
+      <div class="survey-fields" role="group" aria-labelledby="survey-question-${this.name}">
+        ${data.fields.map(f => this._renderField(f))}
+      </div>
+      <div class="submit-row">
+        <button
+          type="button"
+          class="submit-btn button-base button-primary"
+          ?disabled="${this.saving || data.fields.length === 0}"
+          @click="${this._handleSubmit}"
+        >
+          Submit
+        </button>
+        <div role="status" aria-live="polite" class="submit-status">
+          ${this._renderSavingIndicator()}
+        </div>
+      </div>
+    `;
+  }
+
   private _renderResponses(responses: SurveyResponse[]) {
     if (responses.length === 0) return nothing;
 
@@ -357,7 +386,7 @@ export class WikiSurvey extends LitElement {
     }
 
     const data = this.surveyData;
-    if (!data || !data.question) {
+    if (!data?.question) {
       return html`
         ${sharedStyles}
         <div class="survey-container system-font">
@@ -373,32 +402,7 @@ export class WikiSurvey extends LitElement {
       <div class="survey-container system-font">
         <p class="survey-question" id="survey-question-${this.name}">${data.question}</p>
 
-        ${data.closed
-          ? html`<p class="closed-notice">This survey is closed.</p>`
-          : username
-            ? html`
-                <div class="survey-fields" role="group" aria-labelledby="survey-question-${this.name}">
-                  ${data.fields.map(f => this._renderField(f))}
-                </div>
-                <div class="submit-row">
-                  <button
-                    type="button"
-                    class="submit-btn button-base button-primary"
-                    ?disabled="${this.saving || data.fields.length === 0}"
-                    @click="${this._handleSubmit}"
-                  >
-                    Submit
-                  </button>
-                  <div role="status" aria-live="polite" class="submit-status">
-                    ${this.saving
-                      ? html`<span class="saving-indicator">Saving\u2026</span>`
-                      : this.saved
-                        ? html`<span class="success-message">Response saved!</span>`
-                        : nothing}
-                  </div>
-                </div>
-              `
-            : html`<p class="login-required">Log in to submit a response.</p>`}
+        ${this._renderFormSection(data, username)}
 
         ${this._renderResponses(data.responses)}
       </div>
