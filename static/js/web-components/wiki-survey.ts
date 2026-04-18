@@ -21,6 +21,9 @@ import {
   findUserResponse,
   upsertResponse,
   asRecord,
+  type SurveyData,
+  type SurveyField,
+  type SurveyResponse,
 } from './survey-data-service.js';
 export type { SurveyData, SurveyField, SurveyResponse } from './survey-data-service.js';
 import { wikiSurveyStyles } from './wiki-survey-styles.js';
