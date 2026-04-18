@@ -43,6 +43,57 @@ describe('InventoryMoveItemDialog', () => {
     (dialog as unknown as { _clearScannedResult: () => void })._clearScannedResult();
   }
 
+  /**
+   * Helper to call the private _enterScannerMode method.
+   */
+  function callEnterScannerMode(dialog: InventoryMoveItemDialog): void {
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private method for testing
+    (dialog as unknown as { _enterScannerMode: () => void })._enterScannerMode();
+  }
+
+  /**
+   * Helper to call the private _exitScannerMode method.
+   */
+  function callExitScannerMode(dialog: InventoryMoveItemDialog): void {
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private method for testing
+    (dialog as unknown as { _exitScannerMode: () => void })._exitScannerMode();
+  }
+
+  /**
+   * Helper to call the private _handleScannerCancelled method.
+   */
+  function callHandleScannerCancelled(dialog: InventoryMoveItemDialog): void {
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private method for testing
+    (dialog as unknown as { _handleScannerCancelled: () => void })._handleScannerCancelled();
+  }
+
+  /**
+   * Helper to call the private _handleScanAgain method.
+   */
+  function callHandleScanAgain(dialog: InventoryMoveItemDialog): void {
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private method for testing
+    (dialog as unknown as { _handleScanAgain: () => void })._handleScanAgain();
+  }
+
+  /**
+   * Helper to call the private _performSearch method.
+   */
+  async function callPerformSearch(dialog: InventoryMoveItemDialog): Promise<void> {
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private method for testing
+    await (dialog as unknown as { _performSearch: () => Promise<void> })._performSearch();
+  }
+
+  /**
+   * Helper to call the private _handleMoveToClick method.
+   */
+  async function callHandleMoveToClick(dialog: InventoryMoveItemDialog, containerIdentifier: string): Promise<void> {
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private method for testing
+    await (dialog as unknown as { _handleMoveToClick: (id: string) => Promise<void> })._handleMoveToClick(containerIdentifier);
+  }
+
+  type SearchClientLike = { searchContent: (req: unknown) => Promise<{ results: SearchResult[] }> };
+  type CreatorMoverLike = { moveItem: (item: string, loc: string) => Promise<unknown>; showSuccess: (msg: string, cb?: () => void) => void };
+
   beforeEach(async () => {
     el = await Promise.race([
       fixture<InventoryMoveItemDialog>(html`<inventory-move-item-dialog></inventory-move-item-dialog>`),
@@ -193,6 +244,25 @@ describe('InventoryMoveItemDialog', () => {
 
       it('should not close the dialog', () => {
         expect(closeSpy).to.not.have.been.called;
+      });
+    });
+
+    describe('when escape key is pressed while scanner is open', () => {
+      let closeSpy: sinon.SinonSpy;
+
+      beforeEach(() => {
+        closeSpy = sinon.spy(el, 'close');
+        el.openDialog('screwdriver', 'drawer_kitchen');
+        el.scannerMode = true;
+        callHandleKeydown(el, new KeyboardEvent('keydown', { key: 'Escape' }));
+      });
+
+      it('should not close the dialog', () => {
+        expect(closeSpy).to.not.have.been.called;
+      });
+
+      it('should exit scanner mode', () => {
+        expect(el.scannerMode).to.be.false;
       });
     });
   });
@@ -674,6 +744,313 @@ describe('InventoryMoveItemDialog', () => {
     });
   });
 
+  describe('_performSearch', () => {
+    let searchStub: sinon.SinonStub;
+
+    beforeEach(async () => {
+      el.openDialog('screwdriver', 'drawer_kitchen');
+      await el.updateComplete;
+
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private property for testing
+      const searchClient = (el as unknown as { searchClient: SearchClientLike }).searchClient;
+      searchStub = sinon.stub(searchClient, 'searchContent');
+    });
+
+    describe('when query is empty', () => {
+      beforeEach(async () => {
+        el.searchQuery = '';
+        await callPerformSearch(el);
+      });
+
+      it('should clear searchResults', () => {
+        expect(el.searchResults).to.deep.equal([]);
+      });
+
+      it('should not call search API', () => {
+        expect(searchStub).to.not.have.been.called;
+      });
+    });
+
+    describe('when search succeeds with results', () => {
+      beforeEach(async () => {
+        searchStub.resolves({
+          results: [
+            // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- creating mock test data
+            {
+              identifier: 'toolbox_garage',
+              title: 'Garage Toolbox',
+              fragment: '',
+              highlights: [],
+              frontmatter: { 'inventory.container': 'garage' },
+            } as unknown as SearchResult,
+            // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- creating mock test data
+            {
+              identifier: 'drawer_kitchen',
+              title: 'Kitchen Drawer',
+              fragment: '',
+              highlights: [],
+              frontmatter: {},
+            } as unknown as SearchResult,
+          ],
+        });
+
+        el.searchQuery = 'toolbox';
+        await callPerformSearch(el);
+      });
+
+      it('should populate searchResults', () => {
+        expect(el.searchResults).to.have.length(1);
+      });
+
+      it('should filter out current container', () => {
+        expect(el.searchResults[0].identifier).to.equal('toolbox_garage');
+      });
+
+      it('should set searchLoading to false', () => {
+        expect(el.searchLoading).to.be.false;
+      });
+
+      it('should not set error', () => {
+        expect(el.error).to.be.null;
+      });
+    });
+
+    describe('when search fails', () => {
+      beforeEach(async () => {
+        searchStub.rejects(new Error('Network error'));
+        el.searchQuery = 'toolbox';
+        await callPerformSearch(el);
+      });
+
+      it('should set error', () => {
+        expect(el.error).to.not.be.null;
+      });
+
+      it('should clear searchResults', () => {
+        expect(el.searchResults).to.deep.equal([]);
+      });
+
+      it('should set searchLoading to false', () => {
+        expect(el.searchLoading).to.be.false;
+      });
+    });
+  });
+
+  describe('_handleSearchInput debounce behavior', () => {
+    let clock: sinon.SinonFakeTimers;
+    let searchStub: sinon.SinonStub;
+
+    beforeEach(async () => {
+      el.openDialog('screwdriver', 'drawer_kitchen');
+      await el.updateComplete;
+
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private property for testing
+      const searchClient = (el as unknown as { searchClient: SearchClientLike }).searchClient;
+      searchStub = sinon.stub(searchClient, 'searchContent').resolves({ results: [] });
+      clock = sinon.useFakeTimers();
+    });
+
+    afterEach(() => {
+      clock.restore();
+    });
+
+    describe('when input is typed', () => {
+      let performSearchSpy: sinon.SinonSpy;
+
+      beforeEach(async () => {
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private method for testing
+        performSearchSpy = sinon.spy(el as unknown as { _performSearch: () => Promise<void> }, '_performSearch');
+
+        const searchInput = el.shadowRoot?.querySelector<HTMLInputElement>('input[name="searchQuery"]');
+        if (searchInput) {
+          searchInput.value = 'toolbox';
+          searchInput.dispatchEvent(new Event('input'));
+        }
+      });
+
+      it('should not call performSearch immediately', () => {
+        expect(performSearchSpy).to.not.have.been.called;
+      });
+
+      describe('when debounce delay passes', () => {
+        beforeEach(async () => {
+          await clock.tickAsync(300);
+        });
+
+        it('should call performSearch', () => {
+          expect(performSearchSpy).to.have.been.calledOnce;
+        });
+      });
+    });
+
+    describe('when input is typed twice quickly', () => {
+      let performSearchSpy: sinon.SinonSpy;
+
+      beforeEach(async () => {
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private method for testing
+        performSearchSpy = sinon.spy(el as unknown as { _performSearch: () => Promise<void> }, '_performSearch');
+
+        const searchInput = el.shadowRoot?.querySelector<HTMLInputElement>('input[name="searchQuery"]');
+        if (searchInput) {
+          searchInput.value = 'tool';
+          searchInput.dispatchEvent(new Event('input'));
+
+          await clock.tickAsync(100);
+
+          searchInput.value = 'toolbox';
+          searchInput.dispatchEvent(new Event('input'));
+
+          await clock.tickAsync(300);
+        }
+      });
+
+      it('should only call performSearch once', () => {
+        expect(performSearchSpy).to.have.been.calledOnce;
+      });
+    });
+
+    describe('when input is typed and previous scan state exists', () => {
+      beforeEach(async () => {
+        el.scannedDestination = 'old_container';
+        el.scannedResult = { identifier: 'old', title: 'Old Container' };
+        el.scanError = AugmentErrorService.augmentError(new Error('Old scan error'), 'test');
+        await el.updateComplete;
+
+        const searchInput = el.shadowRoot?.querySelector<HTMLInputElement>('input[name="searchQuery"]');
+        if (searchInput) {
+          searchInput.value = 'toolbox';
+          searchInput.dispatchEvent(new Event('input'));
+        }
+      });
+
+      it('should clear scannedDestination', () => {
+        expect(el.scannedDestination).to.be.null;
+      });
+
+      it('should clear scannedResult', () => {
+        expect(el.scannedResult).to.be.null;
+      });
+
+      it('should clear scanError', () => {
+        expect(el.scanError).to.be.null;
+      });
+    });
+
+    it('should not call search API when unused stub check', () => {
+      expect(searchStub).to.not.have.been.called;
+    });
+  });
+
+  describe('_enterScannerMode', () => {
+    beforeEach(async () => {
+      el.openDialog('screwdriver', 'drawer_kitchen');
+      el.searchQuery = 'old query';
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- creating mock test data
+      el.searchResults = [{ identifier: 'some_result', title: 'Some Result' } as unknown as SearchResult];
+      el.scannedDestination = 'old_destination';
+      el.scannedResult = { identifier: 'old', title: 'Old' };
+      el.scanError = AugmentErrorService.augmentError(new Error('Old error'), 'test');
+      await el.updateComplete;
+
+      callEnterScannerMode(el);
+      await el.updateComplete;
+    });
+
+    it('should set scannerMode to true', () => {
+      expect(el.scannerMode).to.be.true;
+    });
+
+    it('should clear searchQuery', () => {
+      expect(el.searchQuery).to.equal('');
+    });
+
+    it('should clear searchResults', () => {
+      expect(el.searchResults).to.deep.equal([]);
+    });
+
+    it('should clear scannedDestination', () => {
+      expect(el.scannedDestination).to.be.null;
+    });
+
+    it('should clear scannedResult', () => {
+      expect(el.scannedResult).to.be.null;
+    });
+
+    it('should clear scanError', () => {
+      expect(el.scanError).to.be.null;
+    });
+  });
+
+  describe('_exitScannerMode', () => {
+    beforeEach(async () => {
+      el.openDialog('screwdriver', 'drawer_kitchen');
+      el.scannerMode = true;
+      await el.updateComplete;
+
+      callExitScannerMode(el);
+      await el.updateComplete;
+    });
+
+    it('should set scannerMode to false', () => {
+      expect(el.scannerMode).to.be.false;
+    });
+  });
+
+  describe('_handleScannerCancelled', () => {
+    beforeEach(async () => {
+      el.openDialog('screwdriver', 'drawer_kitchen');
+      el.scannerMode = true;
+      await el.updateComplete;
+
+      callHandleScannerCancelled(el);
+      await el.updateComplete;
+    });
+
+    it('should exit scanner mode', () => {
+      expect(el.scannerMode).to.be.false;
+    });
+  });
+
+  describe('_handleScanAgain', () => {
+    beforeEach(async () => {
+      el.openDialog('screwdriver', 'drawer_kitchen');
+      el.scanError = AugmentErrorService.augmentError(new Error('Scan failed'), 'test');
+      el.scannerMode = false;
+      await el.updateComplete;
+
+      callHandleScanAgain(el);
+      await el.updateComplete;
+    });
+
+    it('should clear scanError', () => {
+      expect(el.scanError).to.be.null;
+    });
+
+    it('should enter scanner mode', () => {
+      expect(el.scannerMode).to.be.true;
+    });
+  });
+
+  describe('disconnectedCallback', () => {
+    describe('when debounce timer is active', () => {
+      let clearDebounceTimerSpy: sinon.SinonSpy;
+
+      beforeEach(async () => {
+        el.openDialog('screwdriver', 'drawer_kitchen');
+        await el.updateComplete;
+
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private method for testing
+        clearDebounceTimerSpy = sinon.spy(el as unknown as { _clearDebounceTimer: () => void }, '_clearDebounceTimer');
+
+        el.remove();
+      });
+
+      it('should call _clearDebounceTimer', () => {
+        expect(clearDebounceTimerSpy).to.have.been.calledOnce;
+      });
+    });
+  });
+
   describe('_handleMoveToClick success path', () => {
     let moveItemStub: sinon.SinonStub;
     let showSuccessStub: sinon.SinonStub;
@@ -714,6 +1091,104 @@ describe('InventoryMoveItemDialog', () => {
       await (el as unknown as { _handleMoveToClick: (id: string) => Promise<void> })._handleMoveToClick('toolbox_garage');
 
       expect(el.open).to.be.false;
+    });
+  });
+
+  describe('_handleMoveToClick failure path', () => {
+    let moveItemStub: sinon.SinonStub;
+
+    beforeEach(async () => {
+      el.openDialog('screwdriver', 'drawer_kitchen');
+      await el.updateComplete;
+
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private property for testing
+      const creatorMover = (el as unknown as { inventoryItemCreatorMover: CreatorMoverLike }).inventoryItemCreatorMover;
+      moveItemStub = sinon.stub(creatorMover, 'moveItem').resolves({
+        success: false,
+        error: new Error('Move failed: network error'),
+      });
+    });
+
+    describe('when move fails', () => {
+      beforeEach(async () => {
+        await callHandleMoveToClick(el, 'toolbox_garage');
+      });
+
+      it('should set error', () => {
+        expect(el.error).to.not.be.null;
+      });
+
+      it('should clear movingTo', () => {
+        expect(el.movingTo).to.be.null;
+      });
+
+      it('should not close dialog', () => {
+        expect(el.open).to.be.true;
+      });
+
+      it('should have called moveItem', () => {
+        expect(moveItemStub).to.have.been.calledWith('screwdriver', 'toolbox_garage');
+      });
+    });
+  });
+
+  describe('_handleMoveToClick when already moving', () => {
+    let moveItemStub: sinon.SinonStub;
+
+    beforeEach(async () => {
+      el.openDialog('screwdriver', 'drawer_kitchen');
+      el.movingTo = 'other_container';
+      await el.updateComplete;
+
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private property for testing
+      const creatorMover = (el as unknown as { inventoryItemCreatorMover: CreatorMoverLike }).inventoryItemCreatorMover;
+      moveItemStub = sinon.stub(creatorMover, 'moveItem').resolves({ success: true });
+
+      await callHandleMoveToClick(el, 'toolbox_garage');
+    });
+
+    it('should not call moveItem', () => {
+      expect(moveItemStub).to.not.have.been.called;
+    });
+
+    it('should keep movingTo unchanged', () => {
+      expect(el.movingTo).to.equal('other_container');
+    });
+  });
+
+  describe('_handleMoveToClick item-moved event', () => {
+    let itemMovedEvent: CustomEvent | null;
+
+    beforeEach(async () => {
+      el.openDialog('screwdriver', 'drawer_kitchen');
+      await el.updateComplete;
+
+      itemMovedEvent = null;
+      el.addEventListener('item-moved', (e) => {
+        itemMovedEvent = e as CustomEvent;
+      });
+
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private property for testing
+      const creatorMover = (el as unknown as { inventoryItemCreatorMover: CreatorMoverLike }).inventoryItemCreatorMover;
+      sinon.stub(creatorMover, 'moveItem').resolves({
+        success: true,
+        summary: 'Moved screwdriver to toolbox_garage',
+      });
+      sinon.stub(creatorMover, 'showSuccess');
+
+      await callHandleMoveToClick(el, 'toolbox_garage');
+    });
+
+    it('should dispatch item-moved event', () => {
+      expect(itemMovedEvent).to.not.be.null;
+    });
+
+    it('should include itemIdentifier in event detail', () => {
+      expect(itemMovedEvent?.detail.itemIdentifier).to.equal('screwdriver');
+    });
+
+    it('should include containerIdentifier in event detail', () => {
+      expect(itemMovedEvent?.detail.containerIdentifier).to.equal('toolbox_garage');
     });
   });
 });
