@@ -370,17 +370,20 @@ export class WikiSurvey extends LitElement {
                 </div>
                 <div class="submit-row">
                   <button
+                    type="button"
                     class="submit-btn button-base button-primary"
                     ?disabled="${this.saving || data.fields.length === 0}"
                     @click="${this._handleSubmit}"
                   >
                     Submit
                   </button>
-                  ${this.saving
-                    ? html`<span class="saving-indicator">Saving\u2026</span>`
-                    : this.saved
-                      ? html`<span class="success-message">Response saved!</span>`
-                      : nothing}
+                  <div role="status" aria-live="polite" class="submit-status">
+                    ${this.saving
+                      ? html`<span class="saving-indicator">Saving\u2026</span>`
+                      : this.saved
+                        ? html`<span class="success-message">Response saved!</span>`
+                        : nothing}
+                  </div>
                 </div>
               `
             : html`<p class="login-required">Log in to submit a response.</p>`}
