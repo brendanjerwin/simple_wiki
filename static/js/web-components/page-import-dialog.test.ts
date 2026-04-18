@@ -969,6 +969,505 @@ describe('PageImportDialog', () => {
     });
   });
 
+  describe('drag and drop event propagation', () => {
+    describe('when dragover event fires', () => {
+      let event: DragEvent;
+      let preventDefaultSpy: sinon.SinonSpy;
+
+      beforeEach(async () => {
+        el.openDialog();
+        await el.updateComplete;
+
+        const dropZone = el.shadowRoot?.querySelector('.drop-zone');
+        event = new DragEvent('dragover', { bubbles: true, cancelable: true });
+        preventDefaultSpy = sinon.spy(event, 'preventDefault');
+        dropZone?.dispatchEvent(event);
+        await el.updateComplete;
+      });
+
+      it('should call event.preventDefault()', () => {
+        expect(preventDefaultSpy).to.have.been.called;
+      });
+    });
+
+    describe('when dragleave event fires', () => {
+      let event: DragEvent;
+      let preventDefaultSpy: sinon.SinonSpy;
+
+      beforeEach(async () => {
+        el.openDialog();
+        await el.updateComplete;
+
+        const dropZone = el.shadowRoot?.querySelector('.drop-zone');
+        event = new DragEvent('dragleave', { bubbles: true, cancelable: true });
+        preventDefaultSpy = sinon.spy(event, 'preventDefault');
+        dropZone?.dispatchEvent(event);
+        await el.updateComplete;
+      });
+
+      it('should call event.preventDefault()', () => {
+        expect(preventDefaultSpy).to.have.been.called;
+      });
+    });
+
+    describe('when a drop event has no dataTransfer', () => {
+      beforeEach(async () => {
+        el.openDialog();
+        await el.updateComplete;
+
+        const dropZone = el.shadowRoot?.querySelector('.drop-zone');
+        const dropEvent = new DragEvent('drop', { bubbles: true, cancelable: true });
+        dropZone?.dispatchEvent(dropEvent);
+        await el.updateComplete;
+      });
+
+      it('should not store a file', () => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        expect((el as any).file).to.be.null;
+      });
+
+      it('should remain in upload state', () => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        expect((el as any).dialogState).to.equal('upload');
+      });
+
+      it('should clear dragOver', () => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        expect((el as any).dragOver).to.be.false;
+      });
+    });
+
+    describe('when a drop event has an empty DataTransfer', () => {
+      beforeEach(async () => {
+        el.openDialog();
+        await el.updateComplete;
+
+        const dropZone = el.shadowRoot?.querySelector('.drop-zone');
+        const dt = new DataTransfer();
+        const dropEvent = new DragEvent('drop', {
+          bubbles: true,
+          cancelable: true,
+          dataTransfer: dt,
+        });
+        dropZone?.dispatchEvent(dropEvent);
+        await el.updateComplete;
+      });
+
+      it('should not store a file', () => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        expect((el as any).file).to.be.null;
+      });
+
+      it('should remain in upload state', () => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        expect((el as any).dialogState).to.equal('upload');
+      });
+    });
+  });
+
+  describe('file input with empty files', () => {
+    describe('when file input change event fires with no files', () => {
+      beforeEach(async () => {
+        el.openDialog();
+        await el.updateComplete;
+
+        const fileInput = el.shadowRoot?.querySelector<HTMLInputElement>('.file-input');
+        fileInput?.dispatchEvent(new Event('change'));
+        await el.updateComplete;
+      });
+
+      it('should not store a file', () => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        expect((el as any).file).to.be.null;
+      });
+
+      it('should remain in upload state', () => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        expect((el as any).dialogState).to.equal('upload');
+      });
+    });
+  });
+
+  describe('CSV parsing via gRPC', () => {
+    let parseCSVPreviewStub: sinon.SinonStub;
+
+    beforeEach(async () => {
+      el.openDialog();
+      await el.updateComplete;
+
+      parseCSVPreviewStub = sinon.stub();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (el as any)._pageImportClient = {
+        parseCSVPreview: parseCSVPreviewStub,
+        startPageImportJob: sinon.stub(),
+      };
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (el as any).file = new File(['identifier\npage1'], 'import.csv', { type: 'text/csv' });
+    });
+
+    describe('when parseCSVPreview succeeds', () => {
+      beforeEach(async () => {
+        parseCSVPreviewStub.resolves({
+          records: [
+            {
+              identifier: 'page1',
+              pageExists: false,
+              validationErrors: [],
+              warnings: [],
+              arrayOps: [],
+              fieldsToDelete: [],
+            },
+          ],
+          parsingErrors: [],
+          totalRecords: 1,
+          errorCount: 0,
+          updateCount: 0,
+          createCount: 1,
+        });
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (el as any)._handleParse();
+        await el.updateComplete;
+      });
+
+      it('should call parseCSVPreview', () => {
+        expect(parseCSVPreviewStub).to.have.been.calledOnce;
+      });
+
+      it('should transition to preview state', () => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        expect((el as any).dialogState).to.equal('preview');
+      });
+
+      it('should set records from response', () => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        expect((el as any).records.length).to.equal(1);
+      });
+
+      it('should set stats from response', () => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const stats = (el as any).stats;
+        expect(stats.total).to.equal(1);
+        expect(stats.creates).to.equal(1);
+        expect(stats.errors).to.equal(0);
+      });
+
+      it('should reset currentRecordIndex to 0', () => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        expect((el as any).currentRecordIndex).to.equal(0);
+      });
+    });
+
+    describe('when parseCSVPreview returns parsing errors', () => {
+      beforeEach(async () => {
+        parseCSVPreviewStub.resolves({
+          records: [],
+          parsingErrors: ['Line 5: Invalid CSV format'],
+          totalRecords: 0,
+          errorCount: 0,
+          updateCount: 0,
+          createCount: 0,
+        });
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (el as any)._handleParse();
+        await el.updateComplete;
+      });
+
+      it('should transition to preview state', () => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        expect((el as any).dialogState).to.equal('preview');
+      });
+
+      it('should set parsing errors from response', () => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        expect((el as any).parsingErrors).to.deep.equal(['Line 5: Invalid CSV format']);
+      });
+    });
+
+    describe('when parseCSVPreview returns records with validation errors', () => {
+      beforeEach(async () => {
+        parseCSVPreviewStub.resolves({
+          records: [
+            {
+              identifier: 'bad_page',
+              pageExists: false,
+              validationErrors: ['Invalid identifier'],
+              warnings: [],
+              arrayOps: [],
+              fieldsToDelete: [],
+            },
+          ],
+          parsingErrors: [],
+          totalRecords: 1,
+          errorCount: 1,
+          updateCount: 0,
+          createCount: 0,
+        });
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (el as any)._handleParse();
+        await el.updateComplete;
+      });
+
+      it('should set showErrorsOnly to true', () => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        expect((el as any).showErrorsOnly).to.be.true;
+      });
+    });
+
+    describe('when parseCSVPreview fails', () => {
+      beforeEach(async () => {
+        parseCSVPreviewStub.rejects(new Error('Network error'));
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (el as any)._handleParse();
+        await el.updateComplete;
+      });
+
+      it('should set error state', () => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        expect((el as any).error).to.exist;
+      });
+
+      it('should transition back to upload state', () => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        expect((el as any).dialogState).to.equal('upload');
+      });
+    });
+  });
+
+  describe('import execution via gRPC', () => {
+    let startPageImportJobStub: sinon.SinonStub;
+    let streamJobStatusStub: sinon.SinonStub;
+
+    beforeEach(async () => {
+      el.openDialog();
+      await el.updateComplete;
+
+      startPageImportJobStub = sinon.stub();
+      streamJobStatusStub = sinon.stub();
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (el as any)._pageImportClient = {
+        parseCSVPreview: sinon.stub(),
+        startPageImportJob: startPageImportJobStub,
+      };
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (el as any)._systemInfoClient = {
+        streamJobStatus: streamJobStatusStub,
+      };
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (el as any).dialogState = 'preview';
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (el as any).file = new File(['identifier\npage1'], 'import.csv', { type: 'text/csv' });
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (el as any).stats = { total: 1, errors: 0, updates: 0, creates: 1 };
+      await el.updateComplete;
+    });
+
+    describe('when startPageImportJob succeeds', () => {
+      beforeEach(async () => {
+        startPageImportJobStub.resolves({
+          success: true,
+          recordCount: 5,
+          error: '',
+        });
+
+        streamJobStatusStub.returns(
+          (async function* () {
+            // empty stream - completes immediately
+          })()
+        );
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (el as any)._handleImport();
+        await el.updateComplete;
+      });
+
+      it('should call startPageImportJob', () => {
+        expect(startPageImportJobStub).to.have.been.calledOnce;
+      });
+
+      it('should transition to importing state', () => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        expect((el as any).dialogState).to.equal('importing');
+      });
+
+      it('should set importedCount from response', () => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        expect((el as any).importedCount).to.equal(5);
+      });
+    });
+
+    describe('when startPageImportJob returns success=false', () => {
+      beforeEach(async () => {
+        startPageImportJobStub.resolves({
+          success: false,
+          recordCount: 0,
+          error: 'Server error occurred',
+        });
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (el as any)._handleImport();
+        await el.updateComplete;
+      });
+
+      it('should set error state', () => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        expect((el as any).error).to.exist;
+      });
+
+      it('should transition back to preview state', () => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        expect((el as any).dialogState).to.equal('preview');
+      });
+    });
+
+    describe('when startPageImportJob throws an exception', () => {
+      beforeEach(async () => {
+        startPageImportJobStub.rejects(new Error('Network error'));
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (el as any)._handleImport();
+        await el.updateComplete;
+      });
+
+      it('should set error state', () => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        expect((el as any).error).to.exist;
+      });
+
+      it('should transition back to preview state', () => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        expect((el as any).dialogState).to.equal('preview');
+      });
+    });
+  });
+
+  describe('job status streaming', () => {
+    let streamJobStatusStub: sinon.SinonStub;
+
+    beforeEach(async () => {
+      el.openDialog();
+      await el.updateComplete;
+
+      streamJobStatusStub = sinon.stub();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (el as any)._systemInfoClient = {
+        streamJobStatus: streamJobStatusStub,
+      };
+    });
+
+    describe('when streaming receives a PageImportJob queue update', () => {
+      beforeEach(async () => {
+        streamJobStatusStub.returns(
+          (async function* () {
+            yield {
+              jobQueues: [
+                {
+                  name: 'PageImportJob',
+                  jobsRemaining: 3,
+                  highWaterMark: 5,
+                  isActive: true,
+                },
+              ],
+            };
+          })()
+        );
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (el as any)._streamJobStatus();
+        await el.updateComplete;
+      });
+
+      it('should update jobQueueStatus with stream data', () => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const status = (el as any).jobQueueStatus;
+        expect(status).to.exist;
+        expect(status.jobsRemaining).to.equal(3);
+        expect(status.highWaterMark).to.equal(5);
+        expect(status.isActive).to.be.true;
+      });
+    });
+
+    describe('when streaming receives a queue not matching PageImportJob', () => {
+      beforeEach(async () => {
+        streamJobStatusStub.returns(
+          (async function* () {
+            yield {
+              jobQueues: [
+                {
+                  name: 'SomeOtherJob',
+                  jobsRemaining: 1,
+                  highWaterMark: 1,
+                  isActive: true,
+                },
+              ],
+            };
+          })()
+        );
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (el as any).jobQueueStatus = { jobsRemaining: 1, highWaterMark: 1, isActive: true };
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (el as any)._streamJobStatus();
+        await el.updateComplete;
+      });
+
+      it('should set jobQueueStatus to null', () => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        expect((el as any).jobQueueStatus).to.be.null;
+      });
+    });
+
+    describe('when streaming encounters a non-abort error', () => {
+      beforeEach(async () => {
+        streamJobStatusStub.returns(
+          (async function* () {
+            throw new Error('Connection reset');
+            // Unreachable yield required to satisfy generator type
+            yield {};
+          })()
+        );
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (el as any)._streamJobStatus();
+        await el.updateComplete;
+      });
+
+      it('should set streamingDisconnected to true', () => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        expect((el as any).streamingDisconnected).to.be.true;
+      });
+    });
+
+    describe('when streaming is aborted', () => {
+      beforeEach(async () => {
+        const abortError = new Error('Aborted');
+        abortError.name = 'AbortError';
+        streamJobStatusStub.returns(
+          (async function* () {
+            throw abortError;
+            // Unreachable yield required to satisfy generator type
+            yield {};
+          })()
+        );
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (el as any)._streamJobStatus();
+        await el.updateComplete;
+      });
+
+      it('should not set streamingDisconnected', () => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        expect((el as any).streamingDisconnected).to.be.false;
+      });
+    });
+  });
+
   describe('event listener lifecycle', () => {
     let lifecycleEl: PageImportDialog;
 
