@@ -6,9 +6,9 @@ import "google/protobuf/timestamp.proto";
 
 option go_package = "github.com/brendanjerwin/simple_wiki/gen/go/api/v1;apiv1";
 
-// ChatService brokers chat messages between browsers and the Claude Code channel.
-// Browsers send user messages and subscribe to chat events. The wiki-cli MCP server
-// subscribes to receive user messages and sends back assistant replies, edits, and reactions.
+// ChatService brokers chat messages between browsers and an AI agent.
+// Browsers send user messages and subscribe to chat events. The pool daemon
+// manages agent instances that send back assistant replies, edits, and reactions.
 service ChatService {
   // SendMessage sends a user chat message in the context of a page.
   // Returns the assigned message ID.
@@ -18,24 +18,20 @@ service ChatService {
   // Replays existing buffer contents on connect, then streams new events.
   rpc SubscribeChat(SubscribeChatRequest) returns (stream ChatEvent) {}
 
-  // SubscribeChatMessages is called by wiki-cli mcp at startup.
-  // Streams all new user messages (from all pages) as they arrive from browsers.
-  rpc SubscribeChatMessages(SubscribeChatMessagesRequest) returns (stream ChatMessage) {}
-
-  // SendChatReply is called by wiki-cli mcp when Claude uses the reply tool.
+  // SendChatReply is called by the pool daemon when the agent uses the reply tool.
   // Accepts optional reply_to message ID for threading.
   rpc SendChatReply(SendChatReplyRequest) returns (SendChatReplyResponse) {}
 
-  // EditChatMessage is called by wiki-cli mcp when Claude uses the edit_message tool.
+  // EditChatMessage is called by the pool daemon when the agent uses the edit_message tool.
   // Updates an existing message's content.
   rpc EditChatMessage(EditChatMessageRequest) returns (EditChatMessageResponse) {}
 
-  // ReactToMessage is called by wiki-cli mcp when Claude uses the react tool.
+  // ReactToMessage is called by the pool daemon when the agent uses the react tool.
   // Adds an emoji reaction to a message.
   rpc ReactToMessage(ReactToMessageRequest) returns (ReactToMessageResponse) {}
 
-  // GetChatStatus returns whether Claude is currently connected (a channel subscriber exists).
-  // Used by the chat panel to disable the UI when Claude is unavailable.
+  // GetChatStatus returns whether an agent is currently connected for a page.
+  // Used by the chat panel to disable the UI when no agent is available.
   rpc GetChatStatus(GetChatStatusRequest) returns (GetChatStatusResponse) {}
 
   // SubscribePageChatMessages is called by wiki-cli mcp --page at startup.
@@ -43,8 +39,27 @@ service ChatService {
   rpc SubscribePageChatMessages(SubscribePageChatMessagesRequest) returns (stream ChatMessage) {}
 
   // SubscribeInstanceRequests is called by the wiki-cli pool daemon.
-  // Streams page names that need a Claude instance spawned.
+  // Streams page names that need an agent instance spawned.
   rpc SubscribeInstanceRequests(SubscribeInstanceRequestsRequest) returns (stream InstanceRequest) {}
+
+  // SendToolCallNotification is called by the pool daemon or ACP client
+  // when the agent invokes a tool. The notification is broadcast to page subscribers.
+  rpc SendToolCallNotification(SendToolCallNotificationRequest) returns (SendToolCallNotificationResponse) {}
+
+  // CancelAgentPrompt cancels an in-progress agent prompt for a page.
+  // Called by the frontend "Stop" button.
+  rpc CancelAgentPrompt(CancelAgentPromptRequest) returns (CancelAgentPromptResponse) {}
+
+  // SubscribePageCancellations is called by the pool daemon per page.
+  // Streams a signal when CancelAgentPrompt is called for that page.
+  rpc SubscribePageCancellations(SubscribePageCancellationsRequest) returns (stream PageCancellation) {}
+
+  // RespondToPermission is called by the frontend when the user responds to a permission request.
+  rpc RespondToPermission(RespondToPermissionRequest) returns (RespondToPermissionResponse) {}
+
+  // RequestPermissionFromUser is called by the pool daemon to forward a permission request
+  // to the user via chat and block until the user responds.
+  rpc RequestPermissionFromUser(RequestPermissionFromUserRequest) returns (RequestPermissionFromUserResponse) {}
 }
 
 // Sender identifies who sent a chat message.
@@ -79,7 +94,33 @@ message ChatEvent {
     ChatMessage new_message = 1;
     ChatMessageEdit edit = 2;
     ChatReaction reaction = 3;
+    ChatToolCall tool_call = 4;
+    ChatPermissionRequest permission_request = 5;
   }
+}
+
+// ChatPermissionRequest is sent to the browser when the agent needs user authorization.
+message ChatPermissionRequest {
+  string request_id = 1;   // unique ID to correlate the response
+  string page = 2;         // page this permission is for
+  string title = 3;        // human-readable description of what's being requested
+  string description = 4;  // detailed explanation
+  repeated ChatPermissionOption options = 5;
+}
+
+// ChatPermissionOption is a choice the user can select.
+message ChatPermissionOption {
+  string option_id = 1;
+  string label = 2;
+  string description = 3;
+}
+
+// ChatToolCall represents a tool invocation by the assistant.
+message ChatToolCall {
+  string message_id = 1;    // the assistant message this tool is part of
+  string tool_call_id = 2;  // unique ID for this tool call
+  string title = 3;         // human-readable description (e.g., "Reading page...")
+  string status = 4;        // "pending", "running", "complete", "error"
 }
 
 // ChatMessageEdit represents an edit to an existing message.
@@ -87,6 +128,9 @@ message ChatMessageEdit {
   string message_id = 1;
   string new_content = 2;
   google.protobuf.Timestamp timestamp = 3;
+  // When true, this is a streaming content update (e.g., from an ACP agent),
+  // not a user-initiated edit. The frontend should not show "(edited)".
+  bool streaming = 4;
 }
 
 // ChatReaction represents a reaction added to a message.
@@ -112,9 +156,6 @@ message SubscribeChatRequest {
   string page = 1;  // page identifier
 }
 
-// SubscribeChatMessagesRequest is the request for SubscribeChatMessages.
-message SubscribeChatMessagesRequest {}
-
 // SendChatReplyRequest is the request for SendChatReply.
 message SendChatReplyRequest {
   string page = 1;          // page identifier
@@ -131,6 +172,9 @@ message SendChatReplyResponse {
 message EditChatMessageRequest {
   string message_id = 1;   // message to edit
   string new_content = 2;  // new markdown content
+  // When true, this is a streaming update from an ACP agent.
+  // The edit event will carry this flag so the frontend can suppress "(edited)".
+  bool streaming = 3;
 }
 
 // EditChatMessageResponse is the response for EditChatMessage.
@@ -148,13 +192,12 @@ message ReactToMessageResponse {}
 // GetChatStatusRequest is the request for GetChatStatus.
 message GetChatStatusRequest {
   // Optional page identifier. If set, checks for a page-specific instance.
-  // If empty, falls back to global subscriber check.
   string page = 1;
 }
 
 // GetChatStatusResponse is the response for GetChatStatus.
 message GetChatStatusResponse {
-  // Whether a Claude channel subscriber is connected for the requested page (or globally).
+  // Whether an agent is connected for the requested page.
   bool connected = 1;
   // Whether an instance has been requested but is not yet connected.
   bool starting = 2;
@@ -170,7 +213,58 @@ message SubscribePageChatMessagesRequest {
 // SubscribeInstanceRequestsRequest is the request for SubscribeInstanceRequests.
 message SubscribeInstanceRequestsRequest {}
 
-// InstanceRequest is streamed by SubscribeInstanceRequests when a page needs a Claude instance.
+// InstanceRequest is streamed by SubscribeInstanceRequests when a page needs an agent instance.
 message InstanceRequest {
   string page = 1;  // page identifier that needs an instance
+}
+
+// SendToolCallNotificationRequest is the request for SendToolCallNotification.
+message SendToolCallNotificationRequest {
+  string page = 1;           // page identifier
+  string message_id = 2;     // the assistant message this tool is part of
+  string tool_call_id = 3;   // unique ID for this tool call
+  string title = 4;          // human-readable description
+  string status = 5;         // "pending", "running", "complete", "error"
+}
+
+// SendToolCallNotificationResponse is the response for SendToolCallNotification.
+message SendToolCallNotificationResponse {}
+
+// CancelAgentPromptRequest is the request for CancelAgentPrompt.
+message CancelAgentPromptRequest {
+  string page = 1;  // page identifier whose agent prompt should be cancelled
+}
+
+// CancelAgentPromptResponse is the response for CancelAgentPrompt.
+message CancelAgentPromptResponse {}
+
+// SubscribePageCancellationsRequest is the request for SubscribePageCancellations.
+message SubscribePageCancellationsRequest {
+  string page = 1;  // page identifier to subscribe to cancellations for
+}
+
+// PageCancellation is streamed when CancelAgentPrompt is called for a page.
+message PageCancellation {}
+
+// RespondToPermissionRequest is the request for RespondToPermission.
+message RespondToPermissionRequest {
+  string request_id = 1;           // correlates to ChatPermissionRequest.request_id
+  string selected_option_id = 2;   // the option_id the user chose (empty = cancelled)
+}
+
+// RespondToPermissionResponse is the response for RespondToPermission.
+message RespondToPermissionResponse {}
+
+// RequestPermissionFromUserRequest is sent by the pool daemon to ask the user.
+message RequestPermissionFromUserRequest {
+  string page = 1;
+  string request_id = 2;
+  string title = 3;
+  string description = 4;
+  repeated ChatPermissionOption options = 5;
+}
+
+// RequestPermissionFromUserResponse returns the user's choice.
+message RequestPermissionFromUserResponse {
+  string selected_option_id = 1;  // empty = cancelled/denied
 }

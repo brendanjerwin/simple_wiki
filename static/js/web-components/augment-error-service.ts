@@ -20,8 +20,9 @@ export function coerceThirdPartyError(err: unknown, errorContext: string): Error
     return new Error(err);
   }
   if (err !== null && err !== undefined) {
-    if (typeof err !== 'object') {
-      return new Error(String(err));
+    if (typeof err === 'symbol' || typeof err === 'function' ||
+        typeof err === 'number' || typeof err === 'boolean' || typeof err === 'bigint') {
+      return new Error(err.toString());
     }
     try {
       return new Error(JSON.stringify(err));
@@ -237,8 +238,9 @@ export class AugmentErrorService {
     if (typeof error === 'string') {
       message = error;
     } else if (error !== null && error !== undefined) {
-      if (typeof error !== 'object') {
-        message = String(error);
+      if (typeof error === 'symbol' || typeof error === 'function' ||
+          typeof error === 'number' || typeof error === 'boolean' || typeof error === 'bigint') {
+        message = error.toString();
       } else {
         try {
           message = JSON.stringify(error);

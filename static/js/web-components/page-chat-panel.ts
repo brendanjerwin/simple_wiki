@@ -8,13 +8,16 @@ import {
   GetChatStatusRequestSchema,
   SendChatMessageRequestSchema,
   SubscribeChatRequestSchema,
+  CancelAgentPromptRequestSchema,
+  RespondToPermissionRequestSchema,
   Sender,
   type ChatMessage,
   type ChatEvent,
+  type ChatPermissionRequest,
   type Reaction,
 } from '../gen/api/v1/chat_pb.js';
 import { ChatMarkdownRenderer } from './chat-markdown-renderer.js';
-import { sharedStyles, colorCSS, typographyCSS, zIndexCSS } from './shared-styles.js';
+import { sharedStyles, colorCSS, typographyCSS, zIndexCSS, forceDarkTokensCSS } from './shared-styles.js';
 import { DrawerMixin } from './drawer-mixin.js';
 import { registerAmbientCTA, type AmbientCTA } from './drawer-coordinator.js';
 import type { ReactionGroup, ScrollToMessageEventDetail } from './chat-message-bubble.js';
@@ -27,6 +30,19 @@ const MAX_RECONNECT_DELAY_MS = 30000;
 const STATUS_POLL_INTERVAL_MS = 15000;
 const STATUS_POLL_STARTING_MS = 3000;
 
+export interface ToolCallState {
+  toolCallId: string;
+  title: string;
+  status: string;
+}
+
+export interface PermissionRequestState {
+  requestId: string;
+  title: string;
+  description: string;
+  options: { optionId: string; label: string; description: string }[];
+}
+
 export interface ChatMessageState {
   id: string;
   sender: Sender;
@@ -38,6 +54,7 @@ export interface ChatMessageState {
   reactions: ReactionGroup[];
   edited: boolean;
   sequence: bigint;
+  toolCalls: ToolCallState[];
 }
 
 declare global {
@@ -53,6 +70,7 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
     colorCSS,
     typographyCSS,
     zIndexCSS,
+    forceDarkTokensCSS,
     css`
       :host {
         display: block;
@@ -83,13 +101,13 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
         box-shadow: 0 6px 16px rgba(0, 0, 0, 0.4);
       }
 
+      .fab[hidden] {
+        display: none;
+      }
+
       .fab.disabled {
         opacity: 0.4;
         cursor: not-allowed;
-      }
-
-      button[hidden] {
-        display: none !important;
       }
 
       .panel {
@@ -142,6 +160,7 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
       .messages-container {
         flex: 1;
         overflow-y: auto;
+        overscroll-behavior: contain;
         padding: 12px;
         display: flex;
         flex-direction: column;
@@ -152,6 +171,7 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
         font-size: 0.8rem;
         text-align: center;
         flex-shrink: 0;
+        color: var(--color-text-muted);
       }
 
       .status-banner.reconnecting {
@@ -171,6 +191,22 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
         display: flex;
         align-items: center;
         gap: 6px;
+      }
+
+      .stop-button {
+        margin-left: auto;
+        background: rgba(220, 53, 69, 0.15);
+        border: 1px solid rgba(220, 53, 69, 0.4);
+        border-radius: 4px;
+        color: var(--color-error);
+        padding: 2px 8px;
+        cursor: pointer;
+        font-size: 0.75rem;
+        flex-shrink: 0;
+      }
+
+      .stop-button:hover {
+        background: rgba(220, 53, 69, 0.3);
       }
 
       .thinking-dots {
@@ -270,6 +306,58 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
         padding: 24px;
       }
 
+      .permission-prompt {
+        padding: 10px 12px;
+        margin: 0;
+        background: rgba(255, 193, 7, 0.1);
+        border-top: 1px solid rgba(255, 193, 7, 0.3);
+        flex-shrink: 0;
+      }
+
+      .permission-title {
+        font-size: 0.8rem;
+        font-weight: 600;
+        color: var(--color-warning);
+        margin-bottom: 4px;
+      }
+
+      .permission-description {
+        font-size: 0.8rem;
+        color: var(--color-text-primary);
+        margin-bottom: 8px;
+        line-height: 1.4;
+      }
+
+      .permission-options {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+      }
+
+      .permission-btn {
+        background: var(--color-chat-user-bg);
+        border: 1px solid var(--color-editor-border);
+        border-radius: 4px;
+        color: var(--color-chat-user-text);
+        padding: 4px 10px;
+        cursor: pointer;
+        font-size: 0.8rem;
+      }
+
+      .permission-btn:hover {
+        background: var(--color-chat-user-bg-hover);
+      }
+
+      .permission-btn.cancel {
+        background: rgba(220, 53, 69, 0.15);
+        border-color: rgba(220, 53, 69, 0.4);
+        color: var(--color-error);
+      }
+
+      .permission-btn.cancel:hover {
+        background: rgba(220, 53, 69, 0.3);
+      }
+
       @media (max-width: 768px) {
         .panel {
           top: 0;
@@ -313,13 +401,16 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
   declare error: Error | null;
 
   @state()
-  declare claudeConnected: boolean;
+  declare agentConnected: boolean;
 
   @state()
   declare poolConnected: boolean;
 
   @state()
-  declare claudeStarting: boolean;
+  declare agentStarting: boolean;
+
+  @state()
+  declare pendingPermission: PermissionRequestState | null;
 
   private pendingMessage: string | null = null;
   private readonly messagesById = new Map<string, ChatMessageState>();
@@ -344,9 +435,10 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
     this.streamState = 'disconnected';
     this.waitingForAssistant = false;
     this.error = null;
-    this.claudeConnected = false;
+    this.agentConnected = false;
     this.poolConnected = false;
-    this.claudeStarting = false;
+    this.agentStarting = false;
+    this.pendingPermission = null;
     this.chatClient = createClient(ChatService, getGrpcWebTransport());
     this.markdownRenderer = new ChatMarkdownRenderer();
     this._handleVisibilityChange = this.handleVisibilityChange.bind(this);
@@ -423,22 +515,20 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
   }
 
   private get _chatAvailable(): boolean {
-    return this.poolConnected || this.claudeConnected;
+    return this.poolConnected || this.agentConnected;
   }
 
   private _renderFab() {
-    // Keep FAB in DOM when our drawer is open so focus can be returned to it on close.
-    // When _fabVisible is false and our drawer is closed (another drawer is open), omit entirely.
-    if (!this._fabVisible && !this.drawerOpen) return nothing;
     const fabClass = this._chatAvailable ? 'fab' : 'fab disabled';
+    const fabHidden = !this._fabVisible || this.drawerOpen;
     return html`
       <button
         class="${fabClass}"
-        ?hidden=${!this._fabVisible || this.drawerOpen}
+        ?hidden=${fabHidden}
         @click=${this.toggleDrawer}
         aria-label=${this.persona ? 'Chat with ' + this.persona : 'Open chat'}
-        aria-expanded=${this.drawerOpen}
         aria-controls="chat-panel"
+        aria-expanded=${this.drawerOpen ? 'true' : 'false'}
       >
         <i class="fa-solid fa-robot"></i>
       </button>
@@ -446,14 +536,14 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
   }
 
   private _renderDisconnectedBanner() {
-    if (this.claudeStarting) {
+    if (this.agentStarting) {
       return html`<div class="status-banner reconnecting">Starting assistant...</div>`;
     }
-    if (!this.poolConnected && !this.claudeConnected) {
+    if (!this._chatAvailable) {
       const disconnectedText = this.persona ? this.persona + ' is not connected' : 'Not connected';
       return html`<div class="status-banner disconnected">${disconnectedText}</div>`;
     }
-    if (this.poolConnected && !this.claudeConnected && !this.claudeStarting) {
+    if (this.poolConnected && !this.agentConnected && !this.agentStarting) {
       return html`<div class="status-banner">Send a message to start</div>`;
     }
     if (this.streamState === 'disconnected' && this.error) {
@@ -470,7 +560,7 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
       ${sharedStyles}
       ${this._renderFab()}
 
-      <div id="chat-panel" class="panel ${this.drawerOpen ? 'open' : ''}" ?inert=${!this.drawerOpen}>
+      <div id="chat-panel" class="panel force-dark ${this.drawerOpen ? 'open' : ''}" ?inert=${!this.drawerOpen}>
         <div class="panel-header">
           <span class="panel-title">${this.persona}</span>
           <button class="close-button" @click=${this.closeDrawer} aria-label="Close chat">
@@ -505,6 +595,7 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
                     ?edited=${msg.edited}
                     reply-to-id=${msg.replyToId}
                     .reactions=${msg.reactions}
+                    .toolCalls=${msg.toolCalls}
                     @scroll-to-message=${this._handleScrollToMessage}
                   ></chat-message-bubble>
                 `,
@@ -517,8 +608,13 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
                 <span></span><span></span><span></span>
               </span>
               ${this._thinkingText}
+              <button class="stop-button" @click=${this._handleStopClick} aria-label="Stop">
+                Stop
+              </button>
             </div>`
           : nothing}
+
+        ${this._renderPermissionPrompt()}
 
         <div class="input-area" @click=${this._focusTextarea}>
           <textarea
@@ -544,6 +640,7 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
 
   override openDrawer(): void {
     super.openDrawer();
+    this.resizePanel();
     try { localStorage.setItem(STORAGE_KEY, 'true'); } catch { /* */ }
     if (!this._panelEverOpened) {
       this._panelEverOpened = true;
@@ -561,8 +658,10 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
     super.closeDrawer();
     try { localStorage.setItem(STORAGE_KEY, 'false'); } catch { /* */ }
     this.updateComplete.then(() => {
-      const fab = this.shadowRoot?.querySelector<HTMLButtonElement>('.fab');
-      fab?.focus();
+      const fab = this.shadowRoot?.querySelector<HTMLElement>('.fab');
+      if (fab && !fab.hidden) {
+        fab.focus();
+      }
     });
   }
 
@@ -586,6 +685,18 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
     this.sendMessage();
   }
 
+  private async _handleStopClick() {
+    try {
+      const request = create(CancelAgentPromptRequestSchema, {
+        page: this.page,
+      });
+      await this.chatClient.cancelAgentPrompt(request);
+      this.waitingForAssistant = false;
+    } catch (err) {
+      this.error = err instanceof Error ? err : new Error(String(err));
+    }
+  }
+
   private _handleScroll(e: Event) {
     if (!(e.target instanceof HTMLElement)) return;
     const container = e.target;
@@ -600,6 +711,62 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
     );
     if (target) {
       target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }
+
+  private _renderPermissionPrompt() {
+    if (!this.pendingPermission) return nothing;
+    const { title, description, options } = this.pendingPermission;
+    return html`
+      <div class="permission-prompt">
+        <div class="permission-title">🔐 Permission requested</div>
+        <div class="permission-description">${title}: ${description}</div>
+        <div class="permission-options">
+          ${options.map(
+            (opt) => html`
+              <button
+                class="permission-btn"
+                @click=${() => this._respondToPermission(opt.optionId)}
+                title=${opt.description}
+              >
+                ${opt.label}
+              </button>
+            `,
+          )}
+          <button class="permission-btn cancel" @click=${() => this._respondToPermission('')}>
+            Deny
+          </button>
+        </div>
+      </div>
+    `;
+  }
+
+  private setPermissionRequest(request: ChatPermissionRequest): void {
+    this.pendingPermission = {
+      requestId: request.requestId,
+      title: request.title,
+      description: request.description,
+      options: request.options.map((opt) => ({
+        optionId: opt.optionId,
+        label: opt.label,
+        description: opt.description,
+      })),
+    };
+  }
+
+  private async _respondToPermission(optionId: string): Promise<void> {
+    if (!this.pendingPermission) return;
+    const requestId = this.pendingPermission.requestId;
+    this.pendingPermission = null;
+
+    try {
+      const request = create(RespondToPermissionRequestSchema, {
+        requestId,
+        selectedOptionId: optionId,
+      });
+      await this.chatClient.respondToPermission(request);
+    } catch (err) {
+      this.error = err instanceof Error ? err : new Error(String(err));
     }
   }
 
@@ -647,16 +814,16 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
         page: this.page,
       });
       const response = await this.chatClient.getChatStatus(request);
-      const wasConnected = this.claudeConnected;
-      const wasStarting = this.claudeStarting;
-      this.claudeConnected = response.connected;
+      const wasConnected = this.agentConnected;
+      const wasStarting = this.agentStarting;
+      this.agentConnected = response.connected;
       this.poolConnected = response.poolConnected;
-      this.claudeStarting = response.starting;
+      this.agentStarting = response.starting;
 
       // Adjust poll rate based on state
       this.adjustPollRate();
 
-      // If Claude just connected and we have a pending message, auto-send it
+      // If agent just connected and we have a pending message, auto-send it
       if (!wasConnected && response.connected && this.pendingMessage) {
         const content = this.pendingMessage;
         this.pendingMessage = null;
@@ -674,7 +841,7 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
         }
       }
 
-      // If Claude just connected and panel was open, re-focus input
+      // If agent just connected and panel was open, re-focus input
       if (!wasConnected && response.connected && this.drawerOpen) {
         this.focusInput();
       }
@@ -684,14 +851,14 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
         this.error = null;
       }
     } catch {
-      this.claudeConnected = false;
+      this.agentConnected = false;
       this.poolConnected = false;
-      this.claudeStarting = false;
+      this.agentStarting = false;
     }
   }
 
   private adjustPollRate(): void {
-    const desiredIntervalMs = this.claudeStarting ? STATUS_POLL_STARTING_MS : STATUS_POLL_INTERVAL_MS;
+    const desiredIntervalMs = this.agentStarting ? STATUS_POLL_STARTING_MS : STATUS_POLL_INTERVAL_MS;
 
     // Only restart the timer if the interval needs to change
     if (this.statusPollTimer) {
@@ -700,17 +867,30 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
     this.statusPollTimer = setInterval(() => this.pollChatStatus(), desiredIntervalMs);
   }
 
-  private handleViewportResize(): void {
+  private resizePanel(): void {
+    const panel = this.shadowRoot?.querySelector<HTMLElement>('.panel');
+    if (!panel) return;
+
     const viewport = window.visualViewport;
     if (!viewport) return;
 
-    // On mobile, when the keyboard opens, visualViewport.height shrinks but
-    // CSS 100dvh may not update immediately. Force the panel height to match
-    // the actual visual viewport so it doesn't extend behind the keyboard.
-    const panel = this.shadowRoot?.querySelector<HTMLElement>('.panel');
-    if (panel) {
+    // Only apply inline sizing when the visual viewport differs from the window
+    // (e.g., mobile keyboard is open). On desktop, let CSS handle layout.
+    const keyboardOpen = viewport.height < window.innerHeight * 0.85;
+    if (keyboardOpen) {
       panel.style.height = `${viewport.height}px`;
+      if (viewport.offsetTop > 0) {
+        panel.style.top = `${viewport.offsetTop}px`;
+      }
+    } else {
+      panel.style.removeProperty('height');
+      panel.style.removeProperty('top');
     }
+  }
+
+  private handleViewportResize(): void {
+    if (!window.visualViewport) return;
+    this.resizePanel();
   }
 
   private handleVisibilityChange(): void {
@@ -799,7 +979,15 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
         await this.addMessage(event.event.value);
         break;
       case 'edit':
-        await this.editMessage(event.event.value.messageId, event.event.value.newContent);
+        await this.editMessage(event.event.value.messageId, event.event.value.newContent, event.event.value.streaming);
+        break;
+      case 'toolCall':
+        this.updateToolCall(
+          event.event.value.messageId,
+          event.event.value.toolCallId,
+          event.event.value.title,
+          event.event.value.status,
+        );
         break;
       case 'reaction':
         this.addReaction(
@@ -807,6 +995,9 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
           event.event.value.emoji,
           event.event.value.reactor,
         );
+        break;
+      case 'permissionRequest':
+        this.setPermissionRequest(event.event.value);
         break;
     }
   }
@@ -837,6 +1028,7 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
       reactions: groupReactions(msg.reactions),
       edited: false,
       sequence: msg.sequence,
+      toolCalls: [],
     };
 
     const existing = this.messagesById.get(msg.id);
@@ -855,7 +1047,7 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
     }
   }
 
-  private async editMessage(messageId: string, newContent: string): Promise<void> {
+  private async editMessage(messageId: string, newContent: string, streaming = false): Promise<void> {
     const msg = this.messagesById.get(messageId);
     if (!msg) return;
 
@@ -870,8 +1062,31 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
 
     msg.content = newContent;
     msg.renderedHtml = renderedHtml;
-    msg.edited = true;
+    if (!streaming) {
+      msg.edited = true;
+    }
     this.messages = [...this.messages]; // trigger re-render
+
+    // Auto-scroll during streaming if user hasn't scrolled up
+    if (streaming && !this.userHasScrolled) {
+      await this.updateComplete;
+      this.scrollToBottom();
+    }
+  }
+
+  private updateToolCall(messageId: string, toolCallId: string, title: string, status: string): void {
+    const msg = this.messagesById.get(messageId);
+    if (!msg) return;
+
+    const existing = msg.toolCalls.find((tc) => tc.toolCallId === toolCallId);
+    if (existing) {
+      existing.title = title;
+      existing.status = status;
+      msg.toolCalls = [...msg.toolCalls];
+    } else {
+      msg.toolCalls = [...msg.toolCalls, { toolCallId, title, status }];
+    }
+    this.messages = [...this.messages];
   }
 
   private addReaction(messageId: string, emoji: string, reactor: string): void {

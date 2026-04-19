@@ -3,6 +3,7 @@ import { property } from 'lit/decorators.js';
 import { unsafeHTML } from 'lit/directives/unsafe-html.js';
 import { colorCSS, typographyCSS } from './shared-styles.js';
 import { Sender } from '../gen/api/v1/chat_pb.js';
+import type { ToolCallState } from './page-chat-panel.js';
 
 export interface ReactionGroup {
   emoji: string;
@@ -117,6 +118,29 @@ export class ChatMessageBubble extends LitElement {
         font-size: 0.7rem;
         color: var(--color-text-muted);
       }
+
+      .tool-calls {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px;
+        margin-top: 6px;
+      }
+
+      .tool-call-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        padding: 2px 8px;
+        border-radius: 10px;
+        background: rgba(255, 255, 255, 0.08);
+        border: 1px solid var(--color-border-subtle);
+        font-size: 0.75rem;
+        color: var(--color-text-muted);
+      }
+
+      .tool-call-pill .status-icon {
+        font-size: 0.7rem;
+      }
     `,
   ];
 
@@ -144,6 +168,9 @@ export class ChatMessageBubble extends LitElement {
   @property({ attribute: false })
   declare reactions: ReactionGroup[];
 
+  @property({ attribute: false })
+  declare toolCalls: ToolCallState[];
+
   constructor() {
     super();
     this.messageId = '';
@@ -154,6 +181,7 @@ export class ChatMessageBubble extends LitElement {
     this.edited = false;
     this.replyToId = '';
     this.reactions = [];
+    this.toolCalls = [];
   }
 
   override render() {
@@ -181,6 +209,7 @@ export class ChatMessageBubble extends LitElement {
             ? unsafeHTML(this.renderedHtml)
             : html`${this.content}`}
         </div>
+        ${this._renderToolCalls()}
         ${this.edited
           ? html`<div class="edited-indicator">(edited)</div>`
           : nothing}
@@ -199,6 +228,32 @@ export class ChatMessageBubble extends LitElement {
             )}
           </div>`
         : nothing}
+    `;
+  }
+
+  private _toolCallStatusIcon(status: string): string {
+    switch (status) {
+      case 'running': return '\u23F3';  // hourglass
+      case 'complete': return '\u2705'; // check mark
+      case 'error': return '\u274C';    // cross mark
+      default: return '\u2022';         // bullet
+    }
+  }
+
+  private _renderToolCalls() {
+    if (this.toolCalls.length === 0) return nothing;
+
+    return html`
+      <div class="tool-calls">
+        ${this.toolCalls.map(
+          (tc) => html`
+            <span class="tool-call-pill">
+              <span class="status-icon">${this._toolCallStatusIcon(tc.status)}</span>
+              ${tc.title}
+            </span>
+          `,
+        )}
+      </div>
     `;
   }
 

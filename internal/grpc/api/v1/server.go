@@ -34,19 +34,25 @@ const (
 type ChatBufferManager interface {
 	AddUserMessage(page, content, senderName string) (string, error)
 	AddAssistantMessage(page, content, replyToID string) (string, error)
-	EditMessage(messageID, newContent string) error
+	EditMessage(messageID, newContent string, streaming bool) error
 	AddReaction(messageID, emoji, reactor string) error
 	GetMessages(page string) []*chatbuffer.Message
 	SubscribeToPage(page string) (<-chan chatbuffer.Event, func())
 	SubscribeToPageWithReplay(page string) ([]*chatbuffer.Message, <-chan chatbuffer.Event, func())
-	SubscribeToChannel() (<-chan *chatbuffer.Message, func())
-	HasChannelSubscribers() bool
 	SubscribeToPageChannel(page string) (<-chan *chatbuffer.Message, func())
+	SubscribeToPageChannelWithReplay(page string) ([]*chatbuffer.Message, <-chan *chatbuffer.Message, func())
 	HasPageChannelSubscriber(page string) bool
 	RequestInstance(page string)
 	SubscribeToInstanceRequests() (<-chan string, func())
 	HasInstanceRequestSubscribers() bool
 	IsInstanceRequested(page string) bool
+	NotifyToolCall(page, messageID, toolCallID, title, toolStatus string)
+	CancelPage(page string) bool
+	SubscribeToCancellation(page string) (<-chan struct{}, func())
+	RequestPermission(ctx context.Context, page, requestID, title, description string, options []chatbuffer.PermissionOption) string
+	EmitPermissionRequest(page string, event *chatbuffer.PermissionRequestEvent)
+	RespondToPermission(requestID, selectedOptionID string)
+	GetPendingPermissionsForPage(page string) []*chatbuffer.PermissionRequestEvent
 }
 
 // BuildInfo contains version and build metadata for the server.

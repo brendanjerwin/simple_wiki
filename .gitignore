@@ -50,6 +50,7 @@ storybook-static
 # E2E test data directories
 e2e-test-data/
 test-manual-data/
+test-results/
 
 # Backup directories that may be created during development
 data__bak/

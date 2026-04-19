@@ -9,7 +9,9 @@ mkdir -p "$OUT"
 # Embed the current git commit so the CLI can check version compatibility
 # with the running wiki server at startup.
 COMMIT=$(git rev-parse HEAD 2>/dev/null || echo "dev")
-LDFLAGS="-X main.commit=${COMMIT}"
+SHORT_COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+VERSION="dev-${SHORT_COMMIT}"
+LDFLAGS="-X main.commit=${COMMIT} -X main.version=${VERSION}"
 
 platforms=(
   "linux/amd64"
