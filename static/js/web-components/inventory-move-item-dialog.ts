@@ -307,7 +307,11 @@ export class InventoryMoveItemDialog extends LitElement {
 
   private readonly _handleKeydown = (event: KeyboardEvent): void => {
     if (event.key === 'Escape' && this.open) {
-      this.close();
+      if (this.scannerMode) {
+        this._exitScannerMode();
+      } else {
+        this.close();
+      }
     }
   };
 
@@ -515,6 +519,11 @@ export class InventoryMoveItemDialog extends LitElement {
     );
 
     if (result.success) {
+      this.dispatchEvent(new CustomEvent('item-moved', {
+        detail: { itemIdentifier: this.itemIdentifier, containerIdentifier },
+        bubbles: true,
+        composed: true,
+      }));
       this.inventoryItemCreatorMover.showSuccess(
         result.summary || `Moved ${this.itemIdentifier} to ${containerIdentifier}`,
         () => globalThis.location.reload()

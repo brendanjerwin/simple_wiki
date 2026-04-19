@@ -3440,3 +3440,748 @@ var _ = Describe("interface compliance", func() {
 		var _ acpAgent = (*acp.ClientSideConnection)(nil)
 	})
 })
+
+// mockPageMessageSource is a mock implementation of the pageMessageSource interface
+// for testing bridgeMessages without a real HTTP server.
+type mockPageMessageSource struct {
+	subscribePageErr   error
+	subscribeCancelErr error
+}
+
+func (m *mockPageMessageSource) SubscribePageChatMessages(_ context.Context, _ *connect.Request[apiv1.SubscribePageChatMessagesRequest]) (*connect.ServerStreamForClient[apiv1.ChatMessage], error) {
+	return nil, m.subscribePageErr
+}
+
+func (m *mockPageMessageSource) SubscribePageCancellations(_ context.Context, _ *connect.Request[apiv1.SubscribePageCancellationsRequest]) (*connect.ServerStreamForClient[apiv1.PageCancellation], error) {
+	return nil, m.subscribeCancelErr
+}
+
+var _ = Describe("poolDaemon ensureInstance", func() {
+	Describe("when an instance already exists for the page", func() {
+		var (
+			daemon        *poolDaemon
+			entry         *instanceEntry
+			oldLastActive time.Time
+		)
+
+		BeforeEach(func() {
+			oldLastActive = time.Now().Add(-5 * time.Minute)
+			entry = &instanceEntry{
+				page:       "existing-page",
+				lastActive: oldLastActive,
+				cancel:     func() {},
+			}
+			daemon = &poolDaemon{
+				maxInstances: 5,
+				instances: map[string]*instanceEntry{
+					"existing-page": entry,
+				},
+			}
+			daemon.ensureInstance(context.Background(), "existing-page")
+		})
+
+		It("should not add a second entry for the same page", func() {
+			Expect(daemon.instances).To(HaveLen(1))
+		})
+
+		It("should update the existing entry's lastActive", func() {
+			Expect(entry.lastActive).To(BeTemporally(">", oldLastActive))
+		})
+	})
+
+	Describe("when spawnInstance fails because the agent binary does not exist", func() {
+		var daemon *poolDaemon
+
+		BeforeEach(func() {
+			daemon = &poolDaemon{
+				wikiURL:      "http://localhost:1",
+				agentPath:    "/nonexistent-agent-binary-does-not-exist",
+				useSystemd:   false,
+				maxInstances: 5,
+				instances:    make(map[string]*instanceEntry),
+			}
+			daemon.ensureInstance(context.Background(), "test-page")
+		})
+
+		It("should not add the failed instance to the pool", func() {
+			Expect(daemon.instances).NotTo(HaveKey("test-page"))
+		})
+	})
+})
+
+var _ = Describe("poolDaemon bridgeMessages", func() {
+	Describe("subscription failure path", func() {
+		When("SubscribePageChatMessages returns an error", func() {
+			var result error
+
+			BeforeEach(func() {
+				entry := &instanceEntry{
+					page:           "test-page",
+					state:          StateBridgeConnecting,
+					lastActive:     time.Now(),
+					stateChangedAt: time.Now(),
+					cancel:         func() {},
+				}
+				chatClient := &wikiChatClient{
+					page:       "test-page",
+					chatClient: &mockChatReplier{},
+				}
+				mockSource := &mockPageMessageSource{
+					subscribePageErr: errors.New("service unavailable"),
+				}
+
+				daemon := &poolDaemon{}
+				result = daemon.bridgeMessages(context.Background(), entry, mockSource, chatClient)
+			})
+
+			It("should return an error wrapping the subscription failure", func() {
+				Expect(result).To(MatchError(ContainSubstring("failed to subscribe to page messages")))
+			})
+		})
+	})
+})
+
+var _ = Describe("poolDaemon runMessageBridge", func() {
+	Describe("reconnect/backoff path", func() {
+		When("bridgeMessages fails and context expires before the retry delay elapses", func() {
+			var done chan struct{}
+
+			BeforeEach(func() {
+				// Set up a Connect server whose SubscribePageChatMessages immediately
+				// returns an Unimplemented error, causing bridgeMessages to return an error
+				// and triggering the reconnect/backoff log path in runMessageBridge.
+				mux := http.NewServeMux()
+				chatPath, chatHandler := apiv1connect.NewChatServiceHandler(&stubChatServiceHandler{})
+				mux.Handle(chatPath, chatHandler)
+				fmPath, fmHandler := apiv1connect.NewFrontmatterHandler(&stubFrontmatterHandler{
+					frontmatter: map[string]any{},
+				})
+				mux.Handle(fmPath, fmHandler)
+				server := httptest.NewServer(mux)
+				DeferCleanup(server.Close)
+
+				daemon := &poolDaemon{
+					wikiURL:  server.URL,
+					instances: make(map[string]*instanceEntry),
+				}
+
+				entry := &instanceEntry{
+					page:           "reconnect-test-page",
+					state:          StateInitializing,
+					lastActive:     time.Now(),
+					stateChangedAt: time.Now(),
+					createdAt:      time.Now(),
+					cancel:         func() {},
+				}
+				chatClient := &wikiChatClient{
+					page:       "reconnect-test-page",
+					chatClient: &mockChatReplier{},
+				}
+
+				// Use a context that expires well before the 1-second reconnect backoff,
+				// so the goroutine exits on ctx.Done() without sleeping.
+				ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+				DeferCleanup(cancel)
+
+				done = make(chan struct{})
+				go func() {
+					daemon.runMessageBridge(ctx, entry, chatClient)
+					close(done)
+				}()
+
+				Eventually(done, "5s").Should(BeClosed())
+			})
+
+			It("should exit cleanly once the context expires", func() {
+				Expect(done).To(BeClosed())
+			})
+		})
+	})
+})
+
+// instanceRequestStreamer is a Connect handler that sends a fixed list of
+// InstanceRequest messages and then closes the stream cleanly.
+type instanceRequestStreamer struct {
+	apiv1connect.UnimplementedChatServiceHandler
+	pages []string
+}
+
+func (h *instanceRequestStreamer) SubscribeInstanceRequests(_ context.Context, _ *connect.Request[apiv1.SubscribeInstanceRequestsRequest], stream *connect.ServerStream[apiv1.InstanceRequest]) error {
+	for _, page := range h.pages {
+		if err := stream.Send(&apiv1.InstanceRequest{Page: page}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+var _ = Describe("poolDaemon subscribeAndHandle", func() {
+	Describe("connected and instance-requested log paths", func() {
+		When("the server sends one instance request then closes the stream", func() {
+			var result error
+
+			BeforeEach(func() {
+				handler := &instanceRequestStreamer{
+					pages: []string{"test-page"},
+				}
+				mux := http.NewServeMux()
+				path, h := apiv1connect.NewChatServiceHandler(handler)
+				mux.Handle(path, h)
+				server := httptest.NewServer(mux)
+				DeferCleanup(server.Close)
+
+				daemon := &poolDaemon{
+					wikiURL:      server.URL,
+					agentPath:    "/nonexistent-agent-binary",
+					useSystemd:   false,
+					maxInstances: 5,
+					instances:    make(map[string]*instanceEntry),
+				}
+
+				result = daemon.subscribeAndHandle(context.Background())
+			})
+
+			It("should return a stream-closed error (not a subscribe error)", func() {
+				Expect(result).To(MatchError(ContainSubstring("stream closed by server")))
+			})
+		})
+
+		When("the server stream closes immediately with no messages", func() {
+			var result error
+
+			BeforeEach(func() {
+				handler := &instanceRequestStreamer{
+					pages: []string{},
+				}
+				mux := http.NewServeMux()
+				path, h := apiv1connect.NewChatServiceHandler(handler)
+				mux.Handle(path, h)
+				server := httptest.NewServer(mux)
+				DeferCleanup(server.Close)
+
+				daemon := &poolDaemon{
+					wikiURL:      server.URL,
+					maxInstances: 5,
+					instances:    make(map[string]*instanceEntry),
+				}
+
+				result = daemon.subscribeAndHandle(context.Background())
+			})
+
+			It("should return a stream-closed error after connecting", func() {
+				Expect(result).To(MatchError(ContainSubstring("stream closed by server")))
+			})
+		})
+
+		When("the context is cancelled before any messages arrive", func() {
+			var result error
+
+			BeforeEach(func() {
+				handler := &instanceRequestStreamer{
+					pages: []string{},
+				}
+				mux := http.NewServeMux()
+				path, h := apiv1connect.NewChatServiceHandler(handler)
+				mux.Handle(path, h)
+				server := httptest.NewServer(mux)
+				DeferCleanup(server.Close)
+
+				daemon := &poolDaemon{
+					wikiURL:      server.URL,
+					maxInstances: 5,
+					instances:    make(map[string]*instanceEntry),
+				}
+
+				ctx, cancel := context.WithCancel(context.Background())
+				cancel()
+				result = daemon.subscribeAndHandle(ctx)
+			})
+
+			It("should return nil when context is already cancelled", func() {
+				Expect(result).NotTo(HaveOccurred())
+			})
+		})
+	})
+})
+
+var _ = Describe("poolDaemon run reconnect path", func() {
+	When("subscribeAndHandle fails immediately and context expires during backoff wait", func() {
+		var err error
+
+		BeforeEach(func() {
+			daemon := &poolDaemon{
+				wikiURL:      "http://localhost:1", // unreachable → immediate failure
+				maxInstances: 5,
+				idleTimeout:  30 * time.Minute,
+				instances:    make(map[string]*instanceEntry),
+			}
+			// Context expires after 250 ms, which is shorter than the 1 s reconnect backoff.
+			// This exercises the reconnect warning log and the ctx.Done() exit branch.
+			ctx, cancel := context.WithTimeout(context.Background(), 250*time.Millisecond)
+			DeferCleanup(cancel)
+			err = daemon.run(ctx)
+		})
+
+		It("should return nil after the context expires", func() {
+			Expect(err).NotTo(HaveOccurred())
+		})
+	})
+})
+
+var _ = Describe("handleAgentMessage error paths (mock-based)", func() {
+	Describe("SendChatReply failure on the first chunk", func() {
+		When("the wiki rejects the new streaming reply", func() {
+			var (
+				client *wikiChatClient
+				err    error
+			)
+
+			BeforeEach(func() {
+				mock := &mockChatReplier{
+					sendReplyErr: errors.New("wiki unavailable"),
+				}
+				client = &wikiChatClient{
+					page:       "test-page",
+					chatClient: mock,
+					replyToID:  "parent-1",
+				}
+				chunk := &acp.SessionUpdateAgentMessageChunk{
+					Content: acp.TextBlock("Hello from agent"),
+				}
+				err = client.handleAgentMessage(chunk)
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should not store a message ID when creation fails", func() {
+				Expect(client.currentMsg).To(BeEmpty())
+			})
+		})
+	})
+
+	Describe("EditChatMessage failure on a subsequent chunk", func() {
+		When("the wiki rejects the edit of an existing streaming reply", func() {
+			var err error
+
+			BeforeEach(func() {
+				mock := &mockChatReplier{
+					editErr: errors.New("wiki unavailable"),
+				}
+				client := &wikiChatClient{
+					page:       "test-page",
+					chatClient: mock,
+					currentMsg: "existing-msg-77",
+				}
+				client.textBuf.WriteString("Previous text. ")
+
+				chunk := &acp.SessionUpdateAgentMessageChunk{
+					Content: acp.TextBlock("More text"),
+				}
+				err = client.handleAgentMessage(chunk)
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+		})
+	})
+})
+
+var _ = Describe("poolDaemon markInstanceDead state transition error", func() {
+	When("the instance is already in Dead state when markInstanceDead is called", func() {
+		var daemon *poolDaemon
+
+		BeforeEach(func() {
+			entry := &instanceEntry{
+				page:       "already-dead-page",
+				state:      StateDead,
+				lastActive: time.Now(),
+				cancel:     func() {},
+			}
+			daemon = &poolDaemon{
+				instances: map[string]*instanceEntry{
+					"already-dead-page": entry,
+				},
+			}
+			daemon.markInstanceDead("already-dead-page")
+		})
+
+		It("should still remove the instance from the pool", func() {
+			Expect(daemon.instances).NotTo(HaveKey("already-dead-page"))
+		})
+	})
+})
+
+var _ = Describe("poolDaemon stopInstanceLocked state transition errors", func() {
+	When("the instance is already in Dead state", func() {
+		var (
+			daemon   *poolDaemon
+			canceled bool
+		)
+
+		BeforeEach(func() {
+			canceled = false
+			daemon = &poolDaemon{
+				instances: map[string]*instanceEntry{
+					"dead-page": {
+						page:   "dead-page",
+						state:  StateDead,
+						cancel: func() { canceled = true },
+					},
+				},
+			}
+			daemon.mu.Lock()
+			daemon.stopInstanceLocked("dead-page")
+			daemon.mu.Unlock()
+		})
+
+		It("should still cancel the instance context", func() {
+			Expect(canceled).To(BeTrue())
+		})
+
+		It("should still remove the instance from the pool", func() {
+			Expect(daemon.instances).NotTo(HaveKey("dead-page"))
+		})
+	})
+})
+
+var _ = Describe("poolDaemon reapIdleInstances goroutine", func() {
+	When("the context is already cancelled on entry", func() {
+		var done chan struct{}
+
+		BeforeEach(func() {
+			daemon := &poolDaemon{
+				idleTimeout: 10 * time.Minute,
+				instances:   make(map[string]*instanceEntry),
+			}
+			ctx, cancel := context.WithCancel(context.Background())
+			cancel()
+
+			done = make(chan struct{})
+			go func() {
+				daemon.reapIdleInstances(ctx)
+				close(done)
+			}()
+
+			Eventually(done, "2s").Should(BeClosed())
+		})
+
+		It("should exit the goroutine cleanly without blocking", func() {
+			Expect(done).To(BeClosed())
+		})
+	})
+})
+
+// blockingACPAgent is a mock acpAgent whose Prompt method blocks until
+// its context is cancelled. Used to test the "prompt cancelled" log path.
+type blockingACPAgent struct {
+	mockACPAgent
+}
+
+func (*blockingACPAgent) Prompt(ctx context.Context, _ acp.PromptRequest) (acp.PromptResponse, error) {
+	<-ctx.Done()
+	return acp.PromptResponse{}, ctx.Err()
+}
+
+// chatMessageStreamer is a Connect handler that streams predefined ChatMessages
+// to the client and then closes the stream cleanly.
+type chatMessageStreamer struct {
+	apiv1connect.UnimplementedChatServiceHandler
+	messages []*apiv1.ChatMessage
+}
+
+func (h *chatMessageStreamer) SubscribePageChatMessages(_ context.Context, _ *connect.Request[apiv1.SubscribePageChatMessagesRequest], stream *connect.ServerStream[apiv1.ChatMessage]) error {
+	for _, msg := range h.messages {
+		if err := stream.Send(msg); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+var _ = Describe("listenForCancelSignal", func() {
+	Describe("when the cancel channel receives a signal", func() {
+		var cancelCalled bool
+
+		BeforeEach(func() {
+			cancelCalled = false
+			cancelChan := make(chan struct{}, 1)
+			cancelChan <- struct{}{}
+
+			ctx, ctxCancel := context.WithCancel(context.Background())
+			defer ctxCancel()
+
+			listenForCancelSignal(ctx, func() {
+				cancelCalled = true
+				ctxCancel()
+			}, cancelChan, "test-page")
+		})
+
+		It("should call the cancel function", func() {
+			Expect(cancelCalled).To(BeTrue())
+		})
+	})
+})
+
+var _ = Describe("streamOrCreateReply EditChatMessage failure", func() {
+	When("EditChatMessage fails on an existing message", func() {
+		var client *wikiChatClient
+
+		BeforeEach(func() {
+			mock := &mockChatReplier{editErr: errors.New("wiki unavailable")}
+			client = &wikiChatClient{
+				page:       "test-page",
+				chatClient: mock,
+				currentMsg: "existing-msg-id",
+			}
+			client.streamOrCreateReply("existing-msg-id", "", "some updated text")
+		})
+
+		It("should preserve the current message ID after the edit failure", func() {
+			Expect(client.currentMsg).To(Equal("existing-msg-id"))
+		})
+	})
+})
+
+var _ = Describe("RequestPermission setState error paths", func() {
+	When("the entry is in Dead state (invalid for StatePermissionPending transition)", func() {
+		var (
+			resp acp.RequestPermissionResponse
+			err  error
+		)
+
+		BeforeEach(func() {
+			entry := &instanceEntry{
+				page:  "test-page",
+				state: StateDead,
+			}
+			mock := &mockChatReplier{
+				permResp: &apiv1.RequestPermissionFromUserResponse{
+					SelectedOptionId: "opt-allow",
+				},
+			}
+			client := &wikiChatClient{
+				page:       "test-page",
+				chatClient: mock,
+				entry:      entry,
+			}
+
+			title := "Test Tool"
+			resp, err = client.RequestPermission(context.Background(), acp.RequestPermissionRequest{
+				ToolCall: acp.RequestPermissionToolCall{
+					ToolCallId: "tc-1",
+					Title:      &title,
+				},
+				Options: []acp.PermissionOption{
+					{OptionId: "opt-allow", Name: "Allow"},
+				},
+			})
+		})
+
+		It("should not return an error", func() {
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should still relay the permission request to the user", func() {
+			Expect(resp.Outcome).NotTo(BeNil())
+		})
+	})
+})
+
+var _ = Describe("forwardUserMessage setState error paths", func() {
+	When("the entry is in Dead state (both StatePrompting and StateIdle transitions fail)", func() {
+		var entry *instanceEntry
+
+		BeforeEach(func() {
+			entry = &instanceEntry{
+				page:       "test-page",
+				conn:       &mockACPAgent{},
+				sessionID:  "session-1",
+				lastActive: time.Now(),
+				state:      StateDead,
+			}
+
+			client := &wikiChatClient{
+				page: "test-page",
+				chatClient: &mockChatReplier{
+					sendReplyResp: &apiv1.SendChatReplyResponse{MessageId: "reply-1"},
+				},
+			}
+
+			cancelChan := make(chan struct{})
+			msg := &apiv1.ChatMessage{
+				Id:      "msg-1",
+				Content: "Hello",
+				Sender:  apiv1.Sender_USER,
+			}
+
+			forwardUserMessage(context.Background(), entry, client, cancelChan, msg)
+		})
+
+		It("should leave the entry in Dead state after both transition errors", func() {
+			Expect(entry.State()).To(Equal(StateDead))
+		})
+	})
+})
+
+var _ = Describe("forwardUserMessage prompt cancelled path", func() {
+	When("the cancel channel signals during the prompt", func() {
+		var entry *instanceEntry
+
+		BeforeEach(func() {
+			entry = &instanceEntry{
+				page:       "test-page",
+				conn:       &blockingACPAgent{},
+				sessionID:  "session-1",
+				lastActive: time.Now(),
+				state:      StateIdle,
+			}
+
+			client := &wikiChatClient{
+				page: "test-page",
+				chatClient: &mockChatReplier{
+					sendReplyResp: &apiv1.SendChatReplyResponse{MessageId: "reply-1"},
+				},
+			}
+
+			// Pre-fill the cancel channel so listenForCancelSignal immediately cancels
+			// promptCtx, which unblocks the blockingACPAgent's Prompt call.
+			cancelChan := make(chan struct{}, 1)
+			cancelChan <- struct{}{}
+
+			msg := &apiv1.ChatMessage{
+				Id:      "msg-1",
+				Content: "test message",
+				Sender:  apiv1.Sender_USER,
+			}
+
+			forwardUserMessage(context.Background(), entry, client, cancelChan, msg)
+		})
+
+		It("should transition back to Idle after the cancelled prompt", func() {
+			Expect(entry.State()).To(Equal(StateIdle))
+		})
+	})
+})
+
+var _ = Describe("runMessageBridge Dead-state setState error paths", func() {
+	When("entry is in Dead state (invalid for StateBridgeConnecting transition)", func() {
+		var done chan struct{}
+
+		BeforeEach(func() {
+			mux := http.NewServeMux()
+			chatPath, chatHandler := apiv1connect.NewChatServiceHandler(&stubChatServiceHandler{})
+			mux.Handle(chatPath, chatHandler)
+			fmPath, fmHandler := apiv1connect.NewFrontmatterHandler(&stubFrontmatterHandler{
+				frontmatter: map[string]any{},
+			})
+			mux.Handle(fmPath, fmHandler)
+			server := httptest.NewServer(mux)
+			DeferCleanup(server.Close)
+
+			daemon := &poolDaemon{
+				wikiURL:   server.URL,
+				instances: make(map[string]*instanceEntry),
+			}
+
+			entry := &instanceEntry{
+				page:           "dead-bridge-page",
+				state:          StateDead,
+				lastActive:     time.Now(),
+				stateChangedAt: time.Now(),
+				createdAt:      time.Now(),
+				cancel:         func() {},
+			}
+			chatClient := &wikiChatClient{
+				page:       "dead-bridge-page",
+				chatClient: &mockChatReplier{},
+			}
+
+			ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
+			DeferCleanup(cancel)
+
+			done = make(chan struct{})
+			go func() {
+				daemon.runMessageBridge(ctx, entry, chatClient)
+				close(done)
+			}()
+
+			Eventually(done, "5s").Should(BeClosed())
+		})
+
+		It("should exit cleanly once the context expires", func() {
+			Expect(done).To(BeClosed())
+		})
+	})
+})
+
+var _ = Describe("bridgeMessages non-user message path", func() {
+	When("the stream delivers a non-user (assistant) message", func() {
+		var result error
+
+		BeforeEach(func() {
+			handler := &chatMessageStreamer{
+				messages: []*apiv1.ChatMessage{
+					{
+						Id:      "msg-1",
+						Sender:  apiv1.Sender_ASSISTANT,
+						Content: "Assistant response",
+					},
+				},
+			}
+			mux := http.NewServeMux()
+			path, h := apiv1connect.NewChatServiceHandler(handler)
+			mux.Handle(path, h)
+			server := httptest.NewServer(mux)
+			DeferCleanup(server.Close)
+
+			httpClient := &http.Client{}
+			wikiClient := apiv1connect.NewChatServiceClient(httpClient, server.URL)
+
+			entry := &instanceEntry{
+				page:           "test-page",
+				state:          StateBridgeConnecting,
+				lastActive:     time.Now(),
+				stateChangedAt: time.Now(),
+				cancel:         func() {},
+			}
+			chatClient := &wikiChatClient{
+				page:       "test-page",
+				chatClient: &mockChatReplier{},
+			}
+
+			daemon := &poolDaemon{}
+			result = daemon.bridgeMessages(context.Background(), entry, wikiClient, chatClient)
+		})
+
+		It("should return a stream-closed error after skipping the non-user message", func() {
+			Expect(result).To(MatchError(ContainSubstring("stream closed by server")))
+		})
+	})
+})
+
+var _ = Describe("subscribeCancellations error path", func() {
+	When("SubscribePageCancellations returns an error", func() {
+		var cancelChan <-chan struct{}
+
+		BeforeEach(func() {
+			mock := &mockPageMessageSource{
+				subscribeCancelErr: errors.New("cancellations unavailable"),
+			}
+
+			ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+			DeferCleanup(cancel)
+
+			cancelChan = subscribeCancellations(ctx, mock, "test-page")
+
+			// Wait for the goroutine to run by letting the context expire.
+			<-ctx.Done()
+		})
+
+		It("should return a channel that never receives a cancellation signal", func() {
+			Expect(cancelChan).NotTo(Receive())
+		})
+	})
+})

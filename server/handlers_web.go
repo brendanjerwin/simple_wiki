@@ -313,6 +313,7 @@ func (s *Site) getDirectoryEntries(page, command string) (DirectoryListing, stri
 }
 
 func (s *Site) buildTemplateData(page, command string, listing DirectoryListing, contentHTML []byte, rawText string, c *gin.Context) gin.H {
+	identity := tailscale.IdentityFromContext(c.Request.Context())
 	return gin.H{
 		"EditPage": command[0:2] == "/e", // /edit
 		"ViewPage": command[0:2] == "/v", // /view
@@ -338,7 +339,8 @@ func (s *Site) buildTemplateData(page, command string, listing DirectoryListing,
 		"UnixTime":         time.Now().Unix(),
 		"AllowFileUploads": s.Fileuploads,
 		"MaxUploadMB":      s.MaxUploadSize,
-		"WikiBaseURL":       requestBaseURL(c),
+		"WikiBaseURL": requestBaseURL(c),
+		"Username":    identity.LoginName(),
 	}
 }
 

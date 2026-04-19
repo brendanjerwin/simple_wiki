@@ -3,12 +3,14 @@ package v1_test
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"time"
 
 	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
 	"github.com/brendanjerwin/simple_wiki/internal/grpc/api/v1"
 	"github.com/brendanjerwin/simple_wiki/pkg/chatbuffer"
+	"github.com/brendanjerwin/simple_wiki/tailscale"
 	"github.com/jcelliott/lumber"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -48,6 +50,12 @@ type mockChatBufferManager struct {
 
 	// Configurable pending permissions for GetPendingPermissionsForPage
 	pendingPermissions map[string][]*chatbuffer.PermissionRequestEvent
+
+	// Configurable pre-built instance requests channel (e.g. pre-closed for !ok path)
+	instanceRequestsChan chan string
+
+	// Configurable event channel to return from SubscribeToPageWithReplay
+	subscribeWithReplayEventChan chan chatbuffer.Event
 }
 
 type notifyToolCallArgs struct {
@@ -202,6 +210,13 @@ func (m *mockChatBufferManager) SubscribeToPageWithReplay(page string) ([]*chatb
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
+	// If a pre-configured channel is set (e.g. pre-closed), use it directly
+	if m.subscribeWithReplayEventChan != nil {
+		ch := m.subscribeWithReplayEventChan
+		messages := m.messages[page]
+		return messages, ch, func() {}
+	}
+
 	// Subscribe first
 	ch := make(chan chatbuffer.Event, 10)
 	m.pageSubscribers[page] = append(m.pageSubscribers[page], ch)
@@ -247,7 +262,11 @@ func (*mockChatBufferManager) RequestInstance(string) {
 	// no-op: satisfies interface; mock does not manage chat instances
 }
 
-func (*mockChatBufferManager) SubscribeToInstanceRequests() (<-chan string, func()) {
+func (m *mockChatBufferManager) SubscribeToInstanceRequests() (<-chan string, func()) {
+	if m.instanceRequestsChan != nil {
+		ch := m.instanceRequestsChan
+		return ch, func() {}
+	}
 	ch := make(chan string, 10)
 	return ch, func() { close(ch) }
 }
@@ -407,10 +426,14 @@ func (*mockChatMessagesStreamServer) RecvMsg(any) error             { return nil
 type mockInstanceRequestStreamServer struct {
 	mu          sync.Mutex
 	requests    []*apiv1.InstanceRequest
+	sendErr     error
 	contextDone bool
 }
 
 func (m *mockInstanceRequestStreamServer) Send(req *apiv1.InstanceRequest) error {
+	if m.sendErr != nil {
+		return m.sendErr
+	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.requests = append(m.requests, req)
@@ -600,6 +623,101 @@ var _ = Describe("ChatService", func() {
 				Expect(st.Message()).To(ContainSubstring("no agent subscriber connected"))
 			})
 		})
+
+		When("buffer manager returns an unexpected internal error", func() {
+			var err error
+
+			BeforeEach(func() {
+				chatManager.addUserMessageError = errors.New("unexpected storage failure")
+
+				_, err = server.SendMessage(ctx, &apiv1.SendChatMessageRequest{
+					Page:    "test-page",
+					Content: "Hello",
+				})
+			})
+
+			It("should return Internal error", func() {
+				st, ok := status.FromError(err)
+				Expect(ok).To(BeTrue())
+				Expect(st.Code()).To(Equal(codes.Internal))
+				Expect(st.Message()).To(ContainSubstring("failed to add message"))
+			})
+		})
+
+		When("Tailscale identity with LoginName is in context", func() {
+			var (
+				resp *apiv1.SendChatMessageResponse
+				err  error
+			)
+
+			BeforeEach(func() {
+				identity := tailscale.NewIdentity("alice@example.com", "Alice", "node-1")
+				ctxWithIdentity := tailscale.ContextWithIdentity(ctx, identity)
+
+				resp, err = server.SendMessage(ctxWithIdentity, &apiv1.SendChatMessageRequest{
+					Page:    "test-page",
+					Content: "Hello from alice",
+				})
+			})
+
+			It("should not error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should return a message ID", func() {
+				Expect(resp.MessageId).NotTo(BeEmpty())
+			})
+		})
+
+		When("Tailscale identity has only DisplayName (no LoginName)", func() {
+			var (
+				resp *apiv1.SendChatMessageResponse
+				err  error
+			)
+
+			BeforeEach(func() {
+				identity := tailscale.NewIdentity("", "Bob", "node-2")
+				ctxWithIdentity := tailscale.ContextWithIdentity(ctx, identity)
+
+				resp, err = server.SendMessage(ctxWithIdentity, &apiv1.SendChatMessageRequest{
+					Page:    "test-page",
+					Content: "Hello from bob",
+				})
+			})
+
+			It("should not error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should return a message ID", func() {
+				Expect(resp.MessageId).NotTo(BeEmpty())
+			})
+		})
+
+		When("pool daemon is connected but no per-page subscriber exists after successful send", func() {
+			var (
+				resp *apiv1.SendChatMessageResponse
+				err  error
+			)
+
+			BeforeEach(func() {
+				chatManager.hasInstanceRequestSubscriberVal = true
+				chatManager.hasPageChannelSubscriberVal = false
+
+				resp, err = server.SendMessage(ctx, &apiv1.SendChatMessageRequest{
+					Page:    "test-page",
+					Content: "Hello",
+				})
+			})
+
+			It("should not error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should return a message ID", func() {
+				Expect(resp.MessageId).NotTo(BeEmpty())
+			})
+		})
 	})
 
 	Describe("SendChatReply", func() {
@@ -672,6 +790,26 @@ var _ = Describe("ChatService", func() {
 				st, ok := status.FromError(err)
 				Expect(ok).To(BeTrue())
 				Expect(st.Code()).To(Equal(codes.InvalidArgument))
+			})
+		})
+
+		When("buffer manager returns an internal error", func() {
+			var err error
+
+			BeforeEach(func() {
+				chatManager.addAssistantError = errors.New("storage failure")
+
+				_, err = server.SendChatReply(ctx, &apiv1.SendChatReplyRequest{
+					Page:    "test-page",
+					Content: "Hello",
+				})
+			})
+
+			It("should return Internal error", func() {
+				st, ok := status.FromError(err)
+				Expect(ok).To(BeTrue())
+				Expect(st.Code()).To(Equal(codes.Internal))
+				Expect(st.Message()).To(ContainSubstring("failed to add reply"))
 			})
 		})
 	})
@@ -772,6 +910,26 @@ var _ = Describe("ChatService", func() {
 				Expect(st.Code()).To(Equal(codes.NotFound))
 			})
 		})
+
+		When("buffer manager returns an unexpected internal error", func() {
+			var err error
+
+			BeforeEach(func() {
+				chatManager.editMessageError = errors.New("storage corruption")
+
+				_, err = server.EditChatMessage(ctx, &apiv1.EditChatMessageRequest{
+					MessageId:  "msg-1",
+					NewContent: "Updated",
+				})
+			})
+
+			It("should return Internal error", func() {
+				st, ok := status.FromError(err)
+				Expect(ok).To(BeTrue())
+				Expect(st.Code()).To(Equal(codes.Internal))
+				Expect(st.Message()).To(ContainSubstring("failed to edit message"))
+			})
+		})
 	})
 
 	Describe("ReactToMessage", func() {
@@ -868,6 +1026,26 @@ var _ = Describe("ChatService", func() {
 				st, ok := status.FromError(err)
 				Expect(ok).To(BeTrue())
 				Expect(st.Code()).To(Equal(codes.NotFound))
+			})
+		})
+
+		When("buffer manager returns an unexpected internal error", func() {
+			var err error
+
+			BeforeEach(func() {
+				chatManager.addReactionError = errors.New("storage corruption")
+
+				_, err = server.ReactToMessage(ctx, &apiv1.ReactToMessageRequest{
+					MessageId: "msg-1",
+					Emoji:     "👍",
+				})
+			})
+
+			It("should return Internal error", func() {
+				st, ok := status.FromError(err)
+				Expect(ok).To(BeTrue())
+				Expect(st.Code()).To(Equal(codes.Internal))
+				Expect(st.Message()).To(ContainSubstring("failed to add reaction"))
 			})
 		})
 	})
@@ -1143,6 +1321,161 @@ var _ = Describe("ChatService", func() {
 			})
 		})
 
+		When("send fails during pending permission replay", func() {
+			var err error
+
+			BeforeEach(func() {
+				chatManager.pendingPermissions["test-page"] = []*chatbuffer.PermissionRequestEvent{
+					{
+						Page:      "test-page",
+						RequestID: "req-send-fail",
+						Title:     "Allow?",
+						Options: []chatbuffer.PermissionOption{
+							{OptionID: "yes", Label: "Yes"},
+						},
+					},
+				}
+
+				streamServer := &mockChatStreamServer{
+					sendErr: status.Error(codes.Internal, "send failed during permission replay"),
+				}
+
+				err = server.SubscribeChat(&apiv1.SubscribeChatRequest{Page: "test-page"}, streamServer)
+			})
+
+			It("should return the send error", func() {
+				Expect(err).To(HaveOccurred())
+				st, ok := status.FromError(err)
+				Expect(ok).To(BeTrue())
+				Expect(st.Code()).To(Equal(codes.Internal))
+			})
+		})
+
+		When("replaying a message with reactions", func() {
+			var streamServer *mockChatStreamServer
+
+			BeforeEach(func() {
+				chatManager.messages["test-page"] = []*chatbuffer.Message{
+					{
+						ID:      "msg-with-reactions",
+						Sender:  "user",
+						Content: "Hello",
+						Page:    "test-page",
+						Reactions: []chatbuffer.Reaction{
+							{Emoji: "👍", Reactor: "alice"},
+							{Emoji: "❤️", Reactor: "bob"},
+						},
+					},
+				}
+
+				streamServer = &mockChatStreamServer{contextDone: true}
+				_ = server.SubscribeChat(&apiv1.SubscribeChatRequest{Page: "test-page"}, streamServer)
+			})
+
+			It("should include reactions in the replayed message", func() {
+				Expect(streamServer.events).To(HaveLen(1))
+				msg := streamServer.events[0].GetNewMessage()
+				Expect(msg).NotTo(BeNil())
+				Expect(msg.Reactions).To(HaveLen(2))
+				Expect(msg.Reactions[0].Emoji).To(Equal("👍"))
+				Expect(msg.Reactions[1].Emoji).To(Equal("❤️"))
+			})
+		})
+
+		When("event channel is closed while streaming", func() {
+			var (
+				err    error
+				doneCh chan struct{}
+			)
+
+			BeforeEach(func() {
+				// Pre-close the channel to trigger the !ok path in the streaming loop
+				closedChan := make(chan chatbuffer.Event)
+				close(closedChan)
+				chatManager.subscribeWithReplayEventChan = closedChan
+
+				doneCh = make(chan struct{})
+
+				go func() {
+					defer close(doneCh)
+					err = server.SubscribeChat(
+						&apiv1.SubscribeChatRequest{Page: "test-page"},
+						&mockChatStreamServer{},
+					)
+				}()
+
+				Eventually(doneCh, "1s", "10ms").Should(BeClosed())
+			})
+
+			It("should return nil when channel is closed", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+		})
+
+		When("send fails while streaming a live event", func() {
+			var (
+				err    error
+				doneCh chan struct{}
+			)
+
+			BeforeEach(func() {
+				streamServer := &mockChatStreamServer{
+					sendErr: status.Error(codes.Internal, "send failed for live event"),
+				}
+
+				doneCh = make(chan struct{})
+
+				go func() {
+					defer close(doneCh)
+					err = server.SubscribeChat(
+						&apiv1.SubscribeChatRequest{Page: "test-page"},
+						streamServer,
+					)
+				}()
+
+				// Wait for subscription to be registered
+				Eventually(func() int { return chatManager.pageSubscriberCount("test-page") }, "1s", "10ms").Should(BeNumerically(">=", 1))
+
+				// Send an event that will trigger the failing Send
+				chatManager.sendEventToPage("test-page", chatbuffer.Event{
+					Type:    chatbuffer.EventTypeNewMessage,
+					Message: &chatbuffer.Message{ID: "fail-msg", Sender: "user", Content: "Hello", Page: "test-page"},
+				})
+
+				Eventually(doneCh, "1s", "10ms").Should(BeClosed())
+			})
+
+			It("should return the send error", func() {
+				Expect(err).To(HaveOccurred())
+				st, ok := status.FromError(err)
+				Expect(ok).To(BeTrue())
+				Expect(st.Code()).To(Equal(codes.Internal))
+			})
+		})
+
+		When("replaying a message with an unknown sender value", func() {
+			var (
+				streamServer *mockChatStreamServer
+			)
+
+			BeforeEach(func() {
+				chatManager.messages["test-page"] = []*chatbuffer.Message{
+					{ID: "msg-unknown", Sender: "bot", Content: "Hello", Page: "test-page"},
+				}
+
+				streamServer = &mockChatStreamServer{contextDone: true}
+
+				_ = server.SubscribeChat(&apiv1.SubscribeChatRequest{Page: "test-page"}, streamServer)
+			})
+
+			It("should replay the message with SENDER_UNSPECIFIED", func() {
+				Expect(streamServer.events).To(HaveLen(1))
+				msg := streamServer.events[0].GetNewMessage()
+				Expect(msg).NotTo(BeNil())
+				Expect(msg.Sender).To(Equal(apiv1.Sender_SENDER_UNSPECIFIED))
+			})
+		})
+
 		When("subscribing with pending permissions for a different page", func() {
 			var (
 				req          *apiv1.SubscribeChatRequest
@@ -1286,6 +1619,72 @@ var _ = Describe("ChatService", func() {
 
 			It("should exit cleanly", func() {
 				Expect(true).To(BeTrue())
+			})
+		})
+
+		When("the instance requests channel is closed", func() {
+			var (
+				err    error
+				doneCh chan struct{}
+			)
+
+			BeforeEach(func() {
+				// Pre-close the channel so the handler sees !ok immediately
+				closedChan := make(chan string)
+				close(closedChan)
+				chatManager.instanceRequestsChan = closedChan
+
+				doneCh = make(chan struct{})
+
+				go func() {
+					defer close(doneCh)
+					err = server.SubscribeInstanceRequests(
+						&apiv1.SubscribeInstanceRequestsRequest{},
+						&mockInstanceRequestStreamServer{},
+					)
+				}()
+
+				Eventually(doneCh, "1s", "10ms").Should(BeClosed())
+			})
+
+			It("should return nil", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+		})
+
+		When("send fails while streaming a page request", func() {
+			var (
+				err    error
+				doneCh chan struct{}
+			)
+
+			BeforeEach(func() {
+				pageChan := make(chan string, 1)
+				chatManager.instanceRequestsChan = pageChan
+				pageChan <- "test-page"
+
+				streamServer := &mockInstanceRequestStreamServer{
+					sendErr: status.Error(codes.Internal, "send failed"),
+				}
+
+				doneCh = make(chan struct{})
+
+				go func() {
+					defer close(doneCh)
+					err = server.SubscribeInstanceRequests(
+						&apiv1.SubscribeInstanceRequestsRequest{},
+						streamServer,
+					)
+				}()
+
+				Eventually(doneCh, "1s", "10ms").Should(BeClosed())
+			})
+
+			It("should return the send error", func() {
+				Expect(err).To(HaveOccurred())
+				st, ok := status.FromError(err)
+				Expect(ok).To(BeTrue())
+				Expect(st.Code()).To(Equal(codes.Internal))
 			})
 		})
 	})
@@ -1560,6 +1959,76 @@ var _ = Describe("ChatService", func() {
 				Expect(call.options).To(HaveLen(2))
 				Expect(call.options[0].OptionID).To(Equal("allow-once"))
 				Expect(call.options[1].OptionID).To(Equal("deny"))
+			})
+		})
+	})
+
+	Describe("SubscribePageChatMessages send errors", func() {
+		When("send fails while replaying the last user message", func() {
+			var err error
+
+			BeforeEach(func() {
+				chatManager.pageChannelReplayMessages = []*chatbuffer.Message{
+					{ID: "msg-1", Sender: "user", Content: "Hello", Page: "test-page"},
+				}
+
+				streamServer := &mockChatMessagesStreamServer{
+					sendErr: status.Error(codes.Internal, "send failed during replay"),
+				}
+
+				err = server.SubscribePageChatMessages(
+					&apiv1.SubscribePageChatMessagesRequest{Page: "test-page"},
+					streamServer,
+				)
+			})
+
+			It("should return the send error", func() {
+				Expect(err).To(HaveOccurred())
+				st, ok := status.FromError(err)
+				Expect(ok).To(BeTrue())
+				Expect(st.Code()).To(Equal(codes.Internal))
+			})
+		})
+
+		When("send fails while streaming a new message", func() {
+			var (
+				err    error
+				doneCh chan struct{}
+			)
+
+			BeforeEach(func() {
+				msgChan := make(chan *chatbuffer.Message, 10)
+				chatManager.pageChannelChan = msgChan
+
+				msgChan <- &chatbuffer.Message{
+					ID:      "new-msg-fail",
+					Sender:  "user",
+					Content: "Hello",
+					Page:    "test-page",
+				}
+
+				streamServer := &mockChatMessagesStreamServer{
+					sendErr: status.Error(codes.Internal, "send failed during stream"),
+				}
+
+				doneCh = make(chan struct{})
+
+				go func() {
+					defer close(doneCh)
+					err = server.SubscribePageChatMessages(
+						&apiv1.SubscribePageChatMessagesRequest{Page: "test-page"},
+						streamServer,
+					)
+				}()
+
+				Eventually(doneCh, "1s", "10ms").Should(BeClosed())
+			})
+
+			It("should return the send error", func() {
+				Expect(err).To(HaveOccurred())
+				st, ok := status.FromError(err)
+				Expect(ok).To(BeTrue())
+				Expect(st.Code()).To(Equal(codes.Internal))
 			})
 		})
 	})
@@ -2041,6 +2510,75 @@ var _ = Describe("ChatService", func() {
 
 			It("should exit cleanly", func() {
 				Expect(true).To(BeTrue())
+			})
+		})
+
+		When("the cancellation channel is closed", func() {
+			var (
+				err    error
+				doneCh chan struct{}
+			)
+
+			BeforeEach(func() {
+				// Pre-close the channel to trigger the !ok path
+				closedChan := make(chan struct{})
+				close(closedChan)
+				chatManager.cancellationChans = []chan struct{}{closedChan}
+
+				streamServer := newMockCancellationStreamServer()
+				doneCh = make(chan struct{})
+
+				go func() {
+					defer close(doneCh)
+					err = server.SubscribePageCancellations(
+						&apiv1.SubscribePageCancellationsRequest{Page: "test-page"},
+						streamServer,
+					)
+				}()
+
+				Eventually(doneCh, "1s", "10ms").Should(BeClosed())
+			})
+
+			It("should return nil", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+		})
+
+		When("send fails after receiving a cancellation signal", func() {
+			var (
+				err    error
+				doneCh chan struct{}
+			)
+
+			BeforeEach(func() {
+				ch1 := make(chan struct{}, 1)
+				// ch2 is used after re-subscribe; provide one so the mock doesn't create a new ad-hoc channel
+				ch2 := make(chan struct{}, 1)
+				chatManager.cancellationChans = []chan struct{}{ch1, ch2}
+
+				streamServer := newMockCancellationStreamServer()
+				streamServer.sendErr = status.Error(codes.Internal, "send failed after cancel")
+				doneCh = make(chan struct{})
+
+				go func() {
+					defer close(doneCh)
+					err = server.SubscribePageCancellations(
+						&apiv1.SubscribePageCancellationsRequest{Page: "test-page"},
+						streamServer,
+					)
+				}()
+
+				// Trigger the cancellation signal
+				ch1 <- struct{}{}
+
+				Eventually(doneCh, "1s", "10ms").Should(BeClosed())
+			})
+
+			It("should return the send error", func() {
+				Expect(err).To(HaveOccurred())
+				st, ok := status.FromError(err)
+				Expect(ok).To(BeTrue())
+				Expect(st.Code()).To(Equal(codes.Internal))
 			})
 		})
 	})
