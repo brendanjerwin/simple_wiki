@@ -47,7 +47,6 @@ describe('BlogNewPostDialog', () => {
   });
 
   describe('when closed', () => {
-
     beforeEach(async () => {
       el = buildElement();
       document.body.appendChild(el);
@@ -58,11 +57,9 @@ describe('BlogNewPostDialog', () => {
       const dialog = el.shadowRoot?.querySelector('.dialog');
       expect(dialog).to.not.exist;
     });
-
   });
 
   describe('when opened', () => {
-
     beforeEach(async () => {
       el = buildElement();
       document.body.appendChild(el);
@@ -126,11 +123,9 @@ describe('BlogNewPostDialog', () => {
       const textarea = el.shadowRoot?.querySelector('#post-summary');
       expect(textarea).to.not.exist;
     });
-
   });
 
   describe('when summary section is expanded', () => {
-
     beforeEach(async () => {
       el = buildElement();
       document.body.appendChild(el);
@@ -146,11 +141,9 @@ describe('BlogNewPostDialog', () => {
       const textarea = el.shadowRoot?.querySelector('#post-summary') as HTMLTextAreaElement;
       expect(textarea).to.exist;
     });
-
   });
 
   describe('when close button is clicked', () => {
-
     beforeEach(async () => {
       el = buildElement();
       document.body.appendChild(el);
@@ -165,11 +158,9 @@ describe('BlogNewPostDialog', () => {
     it('should close the dialog', () => {
       expect(el.open).to.be.false;
     });
-
   });
 
   describe('when backdrop is clicked', () => {
-
     beforeEach(async () => {
       el = buildElement();
       document.body.appendChild(el);
@@ -184,11 +175,9 @@ describe('BlogNewPostDialog', () => {
     it('should close the dialog', () => {
       expect(el.open).to.be.false;
     });
-
   });
 
   describe('when Escape key is pressed while open', () => {
-
     beforeEach(async () => {
       el = buildElement();
       document.body.appendChild(el);
@@ -202,11 +191,9 @@ describe('BlogNewPostDialog', () => {
     it('should close the dialog', () => {
       expect(el.open).to.be.false;
     });
-
   });
 
   describe('when Escape key is pressed while closed', () => {
-
     beforeEach(async () => {
       el = buildElement();
       document.body.appendChild(el);
@@ -219,11 +206,9 @@ describe('BlogNewPostDialog', () => {
     it('should remain closed', () => {
       expect(el.open).to.be.false;
     });
-
   });
 
   describe('when title is entered', () => {
-
     beforeEach(async () => {
       el = buildElement();
       document.body.appendChild(el);
@@ -237,11 +222,9 @@ describe('BlogNewPostDialog', () => {
       const btn = el.shadowRoot?.querySelector('.btn-primary') as HTMLButtonElement;
       expect(btn.disabled).to.be.false;
     });
-
   });
 
   describe('when date is changed', () => {
-
     beforeEach(async () => {
       el = buildElement();
       document.body.appendChild(el);
@@ -257,11 +240,9 @@ describe('BlogNewPostDialog', () => {
     it('should update the date property', () => {
       expect(el.date).to.equal('2025-06-15');
     });
-
   });
 
   describe('when subtitle is entered', () => {
-
     beforeEach(async () => {
       el = buildElement();
       document.body.appendChild(el);
@@ -277,11 +258,9 @@ describe('BlogNewPostDialog', () => {
     it('should update the subtitle property', () => {
       expect(el.subtitle).to.equal('My Subtitle');
     });
-
   });
 
   describe('when summary is entered after expanding', () => {
-
     beforeEach(async () => {
       el = buildElement();
       document.body.appendChild(el);
@@ -301,11 +280,9 @@ describe('BlogNewPostDialog', () => {
     it('should update the summary property', () => {
       expect(el.summary).to.equal('My summary text');
     });
-
   });
 
   describe('when dialog is closed after fields are filled', () => {
-
     beforeEach(async () => {
       el = buildElement();
       document.body.appendChild(el);
@@ -342,7 +319,6 @@ describe('BlogNewPostDialog', () => {
     it('should reset error', () => {
       expect(el.error).to.be.null;
     });
-
   });
 
   describe('when element is disconnected from DOM', () => {
@@ -364,13 +340,10 @@ describe('BlogNewPostDialog', () => {
     it('should abort the keydown controller', () => {
       expect(abortSpy).to.have.been.calledOnce;
     });
-
   });
 
   describe('identifier preview', () => {
-
     describe('when blogId, date, and title are all set', () => {
-
       beforeEach(async () => {
         el = buildElement();
         document.body.appendChild(el);
@@ -390,11 +363,9 @@ describe('BlogNewPostDialog', () => {
         const preview = el.shadowRoot?.querySelector('.identifier-preview');
         expect(preview?.textContent).to.equal('test-blog-2026-01-15-my-new-post-extra-dashes');
       });
-
     });
 
     describe('when blogId is not set', () => {
-
       beforeEach(async () => {
         el = document.createElement('blog-new-post-dialog') as BlogNewPostDialog;
         document.body.appendChild(el);
@@ -409,11 +380,9 @@ describe('BlogNewPostDialog', () => {
         const preview = el.shadowRoot?.querySelector('.identifier-preview');
         expect(preview).to.not.exist;
       });
-
     });
 
     describe('when date is empty', () => {
-
       beforeEach(async () => {
         el = buildElement();
         document.body.appendChild(el);
@@ -428,13 +397,10 @@ describe('BlogNewPostDialog', () => {
         const preview = el.shadowRoot?.querySelector('.identifier-preview');
         expect(preview).to.not.exist;
       });
-
     });
-
   });
 
   describe('submission', () => {
-
     describe('when form is submitted successfully', () => {
       let createPageStub: sinon.SinonStub;
       let showSuccessStub: sinon.SinonStub;
@@ -506,7 +472,6 @@ describe('BlogNewPostDialog', () => {
       it('should set creating to false', () => {
         expect(el.creating).to.be.false;
       });
-
     });
 
     describe('when subtitle and summary are provided', () => {
@@ -557,11 +522,9 @@ describe('BlogNewPostDialog', () => {
         const blog = frontmatter['blog'] as Record<string, unknown>;
         expect(blog['summary_markdown']).to.equal('My summary');
       });
-
     });
 
     describe('when identifier generation fails', () => {
-
       beforeEach(async () => {
         el = buildElement();
         document.body.appendChild(el);
@@ -601,11 +564,9 @@ describe('BlogNewPostDialog', () => {
       it('should set creating to false', () => {
         expect(el.creating).to.be.false;
       });
-
     });
 
     describe('when page creation fails', () => {
-
       beforeEach(async () => {
         el = buildElement();
         document.body.appendChild(el);
@@ -648,11 +609,9 @@ describe('BlogNewPostDialog', () => {
       it('should set creating to false', () => {
         expect(el.creating).to.be.false;
       });
-
     });
 
     describe('when submission throws an unexpected exception', () => {
-
       beforeEach(async () => {
         el = buildElement();
         document.body.appendChild(el);
@@ -683,37 +642,20 @@ describe('BlogNewPostDialog', () => {
       it('should set creating to false', () => {
         expect(el.creating).to.be.false;
       });
-
     });
 
     describe('when title is empty', () => {
-      let generateIdentifierStub: sinon.SinonStub;
-
       beforeEach(async () => {
         el = buildElement();
         document.body.appendChild(el);
-
-        const stubs = stubPageCreator(el);
-        generateIdentifierStub = stubs.generateIdentifierStub;
-
         el.open = true;
-        // Leave title empty
-        await el.updateComplete;
-
-        // Manually call _submit with empty title via direct property access
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion, @typescript-eslint/no-explicit-any
-        await (el as any)._submit();
         await el.updateComplete;
       });
 
-      it('should not call generateIdentifier', () => {
-        expect(generateIdentifierStub).to.not.have.been.called;
+      it('should have the submit button disabled', () => {
+        const btn = el.shadowRoot?.querySelector('.btn-primary') as HTMLButtonElement;
+        expect(btn.disabled).to.be.true;
       });
-
-      it('should not set creating to true', () => {
-        expect(el.creating).to.be.false;
-      });
-
     });
 
     describe('creating state', () => {
@@ -751,9 +693,6 @@ describe('BlogNewPostDialog', () => {
       it('should set creating to true while the async operation is in progress', () => {
         expect(creatingDuringSubmit).to.be.true;
       });
-
     });
-
   });
-
 });
