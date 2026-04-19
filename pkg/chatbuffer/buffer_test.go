@@ -110,6 +110,27 @@ var _ = Describe("Manager", func() {
 			})
 		})
 
+		When("page channel subscriber buffer is full and cannot receive", func() {
+			var addedCount int
+
+			BeforeEach(func() {
+				// Subscribe but never read, so the channel buffer fills up
+				_, unsub := manager.SubscribeToPageChannel("test-page")
+				DeferCleanup(unsub)
+
+				// Add 101 messages — the channel buffer holds 100, so the 101st hits the default drop branch
+				for i := 0; i < 101; i++ {
+					_, _ = manager.AddUserMessage("test-page", "Message", "user")
+				}
+
+				addedCount = len(manager.GetMessages("test-page"))
+			})
+
+			It("should not deadlock or panic", func() {
+				Expect(addedCount).To(Equal(101))
+			})
+		})
+
 		When("adding more than MaxMessagesPerPage messages", func() {
 			var messages []*chatbuffer.Message
 
@@ -251,6 +272,34 @@ var _ = Describe("Manager", func() {
 					HaveField("Type", chatbuffer.EventTypeEdit),
 					HaveField("Edit.MessageID", messageID),
 					HaveField("Edit.NewContent", "Edited content"),
+				)))
+			})
+		})
+
+		When("editing with streaming=true", func() {
+			var (
+				messageID string
+				eventChan <-chan chatbuffer.Event
+			)
+
+			BeforeEach(func() {
+				_, unsubChan := manager.SubscribeToPageChannel("test-page")
+				DeferCleanup(unsubChan)
+
+				messageID, _ = manager.AddUserMessage("test-page", "Original", "user")
+
+				var unsubPage func()
+				eventChan, unsubPage = manager.SubscribeToPage("test-page")
+				DeferCleanup(unsubPage)
+
+				_ = manager.EditMessage(messageID, "Streaming update", true)
+			})
+
+			It("should include streaming=true in the edit event", func() {
+				Eventually(eventChan).Should(Receive(And(
+					HaveField("Type", chatbuffer.EventTypeEdit),
+					HaveField("Edit.Streaming", true),
+					HaveField("Edit.NewContent", "Streaming update"),
 				)))
 			})
 		})
@@ -634,6 +683,83 @@ var _ = Describe("Manager", func() {
 
 			It("should set timestamp to current time", func() {
 				Expect(messages[0].Timestamp).To(BeTemporally("~", time.Now(), time.Second))
+			})
+		})
+	})
+
+	Describe("SubscribeToPageWithReplay", func() {
+		When("existing messages are present", func() {
+			var (
+				replayMessages []*chatbuffer.Message
+				eventChan      <-chan chatbuffer.Event
+			)
+
+			BeforeEach(func() {
+				_, _ = manager.AddAssistantMessage("test-page", "First message", "")
+				_, _ = manager.AddAssistantMessage("test-page", "Second message", "")
+
+				var unsub func()
+				replayMessages, eventChan, unsub = manager.SubscribeToPageWithReplay("test-page")
+				DeferCleanup(unsub)
+			})
+
+			It("should return existing messages as replay", func() {
+				Expect(replayMessages).To(HaveLen(2))
+				Expect(replayMessages[0].Content).To(Equal("First message"))
+				Expect(replayMessages[1].Content).To(Equal("Second message"))
+			})
+
+			It("should return a non-nil event channel", func() {
+				Expect(eventChan).NotTo(BeNil())
+			})
+		})
+
+		When("no existing messages are present", func() {
+			var replayMessages []*chatbuffer.Message
+
+			BeforeEach(func() {
+				var unsub func()
+				replayMessages, _, unsub = manager.SubscribeToPageWithReplay("test-page")
+				DeferCleanup(unsub)
+			})
+
+			It("should return an empty replay slice", func() {
+				Expect(replayMessages).To(BeEmpty())
+			})
+		})
+
+		When("new events arrive after subscribing", func() {
+			var eventChan <-chan chatbuffer.Event
+
+			BeforeEach(func() {
+				var unsub func()
+				_, eventChan, unsub = manager.SubscribeToPageWithReplay("test-page")
+				DeferCleanup(unsub)
+
+				_, _ = manager.AddAssistantMessage("test-page", "New message", "")
+			})
+
+			It("should deliver new message events on the channel", func() {
+				Eventually(eventChan).Should(Receive(And(
+					HaveField("Type", chatbuffer.EventTypeNewMessage),
+					HaveField("Message.Content", "New message"),
+				)))
+			})
+		})
+
+		When("unsubscribing", func() {
+			var (
+				eventChan <-chan chatbuffer.Event
+				unsub     func()
+			)
+
+			BeforeEach(func() {
+				_, eventChan, unsub = manager.SubscribeToPageWithReplay("test-page")
+				unsub()
+			})
+
+			It("should close the event channel", func() {
+				Eventually(eventChan).Should(BeClosed())
 			})
 		})
 	})
@@ -1030,6 +1156,39 @@ var _ = Describe("Manager", func() {
 					HaveField("PermissionRequest.Title", "Allow Edit"),
 					HaveField("PermissionRequest.Description", "Do you want to allow editing?"),
 				)))
+			})
+		})
+
+		When("context is cancelled before a response arrives", func() {
+			var selectedOption string
+
+			BeforeEach(func() {
+				ctx, cancel := context.WithCancel(context.Background())
+				done := make(chan struct{})
+
+				go func() {
+					defer close(done)
+					selectedOption = manager.RequestPermission(
+						ctx,
+						"test-page",
+						"req-cancel-1",
+						"Allow Edit",
+						"Do you want to allow editing?",
+						[]chatbuffer.PermissionOption{
+							{OptionID: "yes", Label: "Yes", Description: "Allow"},
+						},
+					)
+				}()
+
+				// Give the goroutine time to register the pending permission
+				time.Sleep(50 * time.Millisecond)
+				cancel()
+
+				Eventually(done, 2*time.Second).Should(BeClosed())
+			})
+
+			It("should return an empty string when context is cancelled", func() {
+				Expect(selectedOption).To(BeEmpty())
 			})
 		})
 	})

@@ -174,32 +174,37 @@ func (m *Manager) reclaimStaleBuffers() {
 		select {
 		case <-m.done:
 			return
-		case <-ticker.C:
-			m.mu.Lock()
-			now := time.Now()
-			for page, buf := range m.buffers {
-				buf.mu.RLock()
-				inactive := now.Sub(buf.lastAccess) > BufferInactivityTimeout
-				hasActiveListeners := len(buf.eventListeners) > 0
-				buf.mu.RUnlock()
-
-				// Only reclaim inactive buffers that have no active subscribers
-				if inactive && !hasActiveListeners {
-					delete(m.buffers, page)
-				}
-			}
-			m.mu.Unlock()
-
-			// Clear stale instance requests (older than 2 minutes)
-			m.instanceMu.Lock()
-			for page, ts := range m.instanceRequests {
-				if now.Sub(ts) > 2*time.Minute {
-					delete(m.instanceRequests, page)
-				}
-			}
-			m.instanceMu.Unlock()
+		case now := <-ticker.C:
+			m.reclaimOnce(now)
 		}
 	}
+}
+
+// reclaimOnce removes inactive page buffers and expired instance requests as of the given time.
+// Called by the reclaimStaleBuffers goroutine on each tick.
+func (m *Manager) reclaimOnce(now time.Time) {
+	m.mu.Lock()
+	for page, buf := range m.buffers {
+		buf.mu.RLock()
+		inactive := now.Sub(buf.lastAccess) > BufferInactivityTimeout
+		hasActiveListeners := len(buf.eventListeners) > 0
+		buf.mu.RUnlock()
+
+		// Only reclaim inactive buffers that have no active subscribers
+		if inactive && !hasActiveListeners {
+			delete(m.buffers, page)
+		}
+	}
+	m.mu.Unlock()
+
+	// Clear stale instance requests (older than 2 minutes)
+	m.instanceMu.Lock()
+	for page, ts := range m.instanceRequests {
+		if now.Sub(ts) > 2*time.Minute {
+			delete(m.instanceRequests, page)
+		}
+	}
+	m.instanceMu.Unlock()
 }
 
 // getOrCreateBuffer returns the buffer for a page, creating it if necessary.
