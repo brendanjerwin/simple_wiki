@@ -29,6 +29,11 @@ export class WikiImage extends LitElement {
       display: inline-block;
       position: relative;
       max-width: 80%;
+      /* Ensure the image center is never covered by the tools panel buttons.
+         Buttons are ~48px from the bottom; any image smaller than this min-height
+         would have its center completely obscured, preventing clicks on the image
+         when tools are open. */
+      min-height: 100px;
     }
 
     img {
