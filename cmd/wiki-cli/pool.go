@@ -834,8 +834,8 @@ func (*wikiChatClient) CreateTerminal(_ context.Context, _ acp.CreateTerminalReq
 	return acp.CreateTerminalResponse{}, errors.New(errTerminalAccessUnavailable)
 }
 
-func (*wikiChatClient) KillTerminalCommand(_ context.Context, _ acp.KillTerminalCommandRequest) (acp.KillTerminalCommandResponse, error) {
-	return acp.KillTerminalCommandResponse{}, errors.New(errTerminalAccessUnavailable)
+func (*wikiChatClient) KillTerminal(_ context.Context, _ acp.KillTerminalRequest) (acp.KillTerminalResponse, error) {
+	return acp.KillTerminalResponse{}, errors.New(errTerminalAccessUnavailable)
 }
 
 func (*wikiChatClient) TerminalOutput(_ context.Context, _ acp.TerminalOutputRequest) (acp.TerminalOutputResponse, error) {
@@ -921,7 +921,7 @@ func (d *poolDaemon) startAgentProcess(ctx context.Context, page string) (*acp.C
 	_, err = conn.Initialize(ctx, acp.InitializeRequest{
 		ProtocolVersion: acp.ProtocolVersionNumber,
 		ClientCapabilities: acp.ClientCapabilities{
-			Fs: acp.FileSystemCapability{
+			Fs: acp.FileSystemCapabilities{
 				ReadTextFile:  false,
 				WriteTextFile: false,
 			},

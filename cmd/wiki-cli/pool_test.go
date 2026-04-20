@@ -2231,12 +2231,12 @@ var _ = Describe("wikiChatClient file system and terminal denials", func() {
 		})
 	})
 
-	Describe("KillTerminalCommand", func() {
+	Describe("KillTerminal", func() {
 		When("called", func() {
 			var err error
 
 			BeforeEach(func() {
-				_, err = client.KillTerminalCommand(context.Background(), acp.KillTerminalCommandRequest{})
+				_, err = client.KillTerminal(context.Background(), acp.KillTerminalRequest{})
 			})
 
 			It("should return an error about terminal access", func() {
@@ -3053,7 +3053,7 @@ var _ = Describe("RequestPermission (mock-based)", func() {
 			}
 
 			req := acp.RequestPermissionRequest{
-				ToolCall: acp.RequestPermissionToolCall{
+				ToolCall: acp.ToolCallUpdate{
 					ToolCallId: "tc-1",
 				},
 				Options: []acp.PermissionOption{},
@@ -3095,7 +3095,7 @@ var _ = Describe("RequestPermission (mock-based)", func() {
 
 			title := "Edit file.txt"
 			req := acp.RequestPermissionRequest{
-				ToolCall: acp.RequestPermissionToolCall{
+				ToolCall: acp.ToolCallUpdate{
 					ToolCallId: "tc-1",
 					Title:      &title,
 				},
@@ -3169,7 +3169,7 @@ var _ = Describe("RequestPermission (mock-based)", func() {
 
 			title := "Delete data"
 			req := acp.RequestPermissionRequest{
-				ToolCall: acp.RequestPermissionToolCall{
+				ToolCall: acp.ToolCallUpdate{
 					ToolCallId: "tc-2",
 					Title:      &title,
 				},
@@ -3211,7 +3211,7 @@ var _ = Describe("RequestPermission (mock-based)", func() {
 
 			title := "Write file"
 			req := acp.RequestPermissionRequest{
-				ToolCall: acp.RequestPermissionToolCall{
+				ToolCall: acp.ToolCallUpdate{
 					ToolCallId: "tc-3",
 					Title:      &title,
 				},
@@ -3251,7 +3251,7 @@ var _ = Describe("RequestPermission (mock-based)", func() {
 
 			title := "Run shell command"
 			req := acp.RequestPermissionRequest{
-				ToolCall: acp.RequestPermissionToolCall{
+				ToolCall: acp.ToolCallUpdate{
 					ToolCallId: "tc-timeout",
 					Title:      &title,
 				},
@@ -3970,7 +3970,7 @@ var _ = Describe("RequestPermission setState error paths", func() {
 
 			title := "Test Tool"
 			resp, err = client.RequestPermission(context.Background(), acp.RequestPermissionRequest{
-				ToolCall: acp.RequestPermissionToolCall{
+				ToolCall: acp.ToolCallUpdate{
 					ToolCallId: "tc-1",
 					Title:      &title,
 				},
