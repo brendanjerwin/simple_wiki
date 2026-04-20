@@ -14,7 +14,6 @@ describe('PageDeleter', () => {
     removeEventListener: sinon.SinonSpy;
     remove: sinon.SinonSpy;
     dataset: { pageName?: string };
-    hidden: boolean;
     id: string;
   };
   let createElementStub: sinon.SinonStub;
@@ -31,7 +30,6 @@ describe('PageDeleter', () => {
       removeEventListener: sinon.spy(),
       remove: sinon.spy(),
       dataset: {},
-      hidden: true,
       id: ''
     };
 
@@ -60,10 +58,6 @@ describe('PageDeleter', () => {
 
     it('should set dialog id', () => {
       expect(mockDialog.id).to.equal('page-deletion-dialog');
-    });
-
-    it('should set dialog as hidden', () => {
-      expect(mockDialog.hidden).to.be.true;
     });
 
     it('should append dialog to document body', () => {
