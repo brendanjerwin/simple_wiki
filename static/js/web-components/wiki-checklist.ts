@@ -389,7 +389,14 @@ export class WikiChecklist extends LitElement implements DragReorderHandler {
       if (event.target instanceof HTMLElement) {
         event.target.blur();
       }
+      void this._returnFocusToDisplayText(index);
     }
+  }
+
+  private async _returnFocusToDisplayText(index: number): Promise<void> {
+    await this.updateComplete;
+    const row = this.shadowRoot?.querySelector<HTMLElement>(`.item-row[data-index="${index}"]`);
+    row?.querySelector<HTMLElement>('.item-display-text')?.focus();
   }
 
   private async _handleAddItem(): Promise<void> {
@@ -675,7 +682,7 @@ export class WikiChecklist extends LitElement implements DragReorderHandler {
       `;
     } else if (this.error) {
       checklistItemsContent = html`
-        <div class="error-wrapper">
+        <div class="error-wrapper" role="alert">
           <error-display
             .augmentedError="${this.error}"
             .action="${{
@@ -708,8 +715,14 @@ export class WikiChecklist extends LitElement implements DragReorderHandler {
         <div class="checklist-header">
           <h2 class="checklist-title">${this.formatTitle(this.listName)}</h2>
           <div class="header-actions">
+            <span
+              class="sr-only"
+              role="status"
+              aria-live="polite"
+              aria-atomic="true"
+            >${this.saving ? 'Saving\u2026' : ''}</span>
             ${this.saving
-              ? html`<span class="saving-indicator">Saving\u2026</span>`
+              ? html`<span class="saving-indicator" aria-hidden="true">Saving\u2026</span>`
               : nothing}
             ${this.items.some(item => item.checked)
               ? html`
