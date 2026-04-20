@@ -206,6 +206,35 @@ export class FrontmatterEditorDialog extends LitElement {
     this._handleCancel();
   };
 
+  /**
+   * Handles Tab key to explicitly cycle focus between dialog buttons.
+   * Native Tab in headless Chromium doesn't reliably update shadowRoot.activeElement
+   * for top-layer dialogs inside shadow roots. Using composedPath()[0] gives
+   * the actual focused element without relying on the buggy shadowRoot.activeElement API.
+   */
+  private readonly _handleKeydown = (event: KeyboardEvent): void => {
+    if (event.key !== 'Tab') return;
+    const shadowRoot = this.shadowRoot;
+    if (!shadowRoot) return;
+
+    const activeEl = event.composedPath()[0] as HTMLElement | null;
+    if (!activeEl) return;
+
+    const focusable = Array.from(
+      shadowRoot.querySelectorAll<HTMLElement>('button:not([disabled])')
+    );
+    if (focusable.length === 0) return;
+
+    const idx = focusable.indexOf(activeEl as HTMLElement);
+    if (idx === -1) return;
+
+    event.preventDefault();
+    const next = event.shiftKey
+      ? (idx - 1 + focusable.length) % focusable.length
+      : (idx + 1) % focusable.length;
+    focusable[next].focus();
+  };
+
   public openDialog(page: string): void {
     this.page = page;
     this.open = true;
@@ -321,7 +350,7 @@ export class FrontmatterEditorDialog extends LitElement {
   override render() {
     return html`
       ${sharedStyles}
-      <dialog aria-labelledby="frontmatter-dialog-title" @cancel="${this._handleDialogCancel}">
+      <dialog aria-labelledby="frontmatter-dialog-title" @cancel="${this._handleDialogCancel}" @keydown="${this._handleKeydown}">
         <div class="dialog-header system-font">
           <h2 id="frontmatter-dialog-title" class="dialog-title">Edit Frontmatter</h2>
         </div>

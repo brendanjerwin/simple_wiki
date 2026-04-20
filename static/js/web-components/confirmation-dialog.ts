@@ -197,7 +197,12 @@ export class ConfirmationDialog extends LitElement {
         background: transparent;
         max-width: none;
         max-height: none;
-        overflow: visible;
+        width: 100vw;
+        height: 100dvh;
+        overflow: hidden;
+        display: flex;
+        align-items: center;
+        justify-content: center;
       }
 
       dialog::backdrop {
@@ -278,10 +283,10 @@ export class ConfirmationDialog extends LitElement {
     this.loading = false;
     this.open = true;
     this.setAttribute('open', '');
-    this._previouslyFocusedElement = document.activeElement;
     void this.updateComplete.then(() => {
       const dialog = this.shadowRoot?.querySelector('dialog');
       if (dialog && !dialog.open && this.isConnected) {
+        this._previouslyFocusedElement = document.activeElement;
         dialog.showModal();
       }
     });
@@ -373,6 +378,35 @@ export class ConfirmationDialog extends LitElement {
     }
   };
 
+  /**
+   * Handles Tab key to explicitly cycle focus between dialog buttons.
+   * Native Tab in headless Chromium doesn't reliably update shadowRoot.activeElement
+   * for top-layer dialogs inside shadow roots. Using composedPath()[0] gives
+   * the actual focused element without relying on the buggy shadowRoot.activeElement API.
+   */
+  private readonly _handleKeydown = (event: KeyboardEvent): void => {
+    if (event.key !== 'Tab') return;
+    const shadowRoot = this.shadowRoot;
+    if (!shadowRoot) return;
+
+    const activeEl = event.composedPath()[0] as HTMLElement | null;
+    if (!activeEl) return;
+
+    const focusable = Array.from(
+      shadowRoot.querySelectorAll<HTMLElement>('button:not([disabled])')
+    );
+    if (focusable.length === 0) return;
+
+    const idx = focusable.indexOf(activeEl as HTMLElement);
+    if (idx === -1) return;
+
+    event.preventDefault();
+    const next = event.shiftKey
+      ? (idx - 1 + focusable.length) % focusable.length
+      : (idx + 1) % focusable.length;
+    focusable[next].focus();
+  };
+
   override render() {
     if (!this.open || !this.config) {
       return html`<dialog></dialog>`;
@@ -384,7 +418,7 @@ export class ConfirmationDialog extends LitElement {
     const descriptionIrreversibleClass = config.irreversible ? 'irreversible' : '';
 
     return html`
-      <dialog aria-labelledby="confirmation-dialog-title" @cancel=${this._handleDialogCancel} @click=${this._handleDialogClick}>
+      <dialog aria-labelledby="confirmation-dialog-title" @cancel=${this._handleDialogCancel} @click=${this._handleDialogClick} @keydown=${this._handleKeydown}>
         <div class="container container-modal dialog-box">
           <div class="dialog-content panel gap-sm">
             <div class="dialog-icon ${iconClass}">
@@ -413,6 +447,7 @@ export class ConfirmationDialog extends LitElement {
 
             <div class="dialog-actions">
               <button
+                autofocus
                 class="button button-cancel font-mono text-sm"
                 @click=${this.handleCancel}
                 ?disabled=${this.loading}
