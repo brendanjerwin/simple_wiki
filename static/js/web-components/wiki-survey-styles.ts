@@ -43,6 +43,11 @@ export const wikiSurveyStyles = css`
     text-transform: capitalize;
   }
 
+  .required-indicator {
+    color: var(--color-error, #dc3545);
+    margin-left: 2px;
+  }
+
   .field-input {
     padding: 8px 10px;
     border: 1px solid var(--color-border-default);

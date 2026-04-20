@@ -207,7 +207,9 @@ export class WikiSurvey extends LitElement {
         const numVal = typeof currentValue === 'number' ? currentValue : '';
         return html`
           <div class="field-group">
-            <label class="field-label" for="field-${field.name}">${field.name}</label>
+            <label class="field-label" for="field-${field.name}">
+              ${field.name}${field.required ? html`<span class="required-indicator" aria-hidden="true"> *</span>` : nothing}
+            </label>
             <input
               id="field-${field.name}"
               type="number"
@@ -215,6 +217,7 @@ export class WikiSurvey extends LitElement {
               .value="${String(numVal)}"
               min="${field.min ?? nothing}"
               max="${field.max ?? nothing}"
+              aria-required="${field.required ? 'true' : nothing}"
               ?disabled="${this.saving}"
               @input="${(e: InputEvent) => {
                 if (!(e.target instanceof HTMLInputElement)) return;
@@ -234,13 +237,16 @@ export class WikiSurvey extends LitElement {
                 id="field-${field.name}"
                 type="checkbox"
                 .checked="${boolVal}"
+                aria-required="${field.required ? 'true' : nothing}"
                 ?disabled="${this.saving}"
                 @change="${(e: Event) => {
                   if (!(e.target instanceof HTMLInputElement)) return;
                   this._handleFieldChange(field.name, e.target.checked);
                 }}"
               />
-              <label class="field-label" for="field-${field.name}">${field.name}</label>
+              <label class="field-label" for="field-${field.name}">
+                ${field.name}${field.required ? html`<span class="required-indicator" aria-hidden="true"> *</span>` : nothing}
+              </label>
             </div>
           </div>
         `;
@@ -250,11 +256,14 @@ export class WikiSurvey extends LitElement {
         const options = field.options ?? [];
         return html`
           <div class="field-group">
-            <label class="field-label" for="field-${field.name}">${field.name}</label>
+            <label class="field-label" for="field-${field.name}">
+              ${field.name}${field.required ? html`<span class="required-indicator" aria-hidden="true"> *</span>` : nothing}
+            </label>
             <select
               id="field-${field.name}"
               class="field-input"
               .value="${choiceVal}"
+              aria-required="${field.required ? 'true' : nothing}"
               ?disabled="${this.saving}"
               @change="${(e: Event) => {
                 if (!(e.target instanceof HTMLSelectElement)) return;
@@ -272,12 +281,15 @@ export class WikiSurvey extends LitElement {
         const textVal = typeof currentValue === 'string' ? currentValue : '';
         return html`
           <div class="field-group">
-            <label class="field-label" for="field-${field.name}">${field.name}</label>
+            <label class="field-label" for="field-${field.name}">
+              ${field.name}${field.required ? html`<span class="required-indicator" aria-hidden="true"> *</span>` : nothing}
+            </label>
             <input
               id="field-${field.name}"
               type="text"
               class="field-input"
               .value="${textVal}"
+              aria-required="${field.required ? 'true' : nothing}"
               ?disabled="${this.saving}"
               @input="${(e: InputEvent) => {
                 if (!(e.target instanceof HTMLInputElement)) return;
@@ -327,7 +339,7 @@ export class WikiSurvey extends LitElement {
       return html`
         ${sharedStyles}
         <div class="survey-container system-font">
-          <div class="error-wrapper">
+          <div class="error-wrapper" role="alert">
             <error-display
               .augmentedError="${this.error}"
               .action="${{
@@ -359,13 +371,13 @@ export class WikiSurvey extends LitElement {
     return html`
       ${sharedStyles}
       <div class="survey-container system-font">
-        <p class="survey-question">${data.question}</p>
+        <p class="survey-question" id="survey-question-${this.name}">${data.question}</p>
 
         ${data.closed
           ? html`<p class="closed-notice">This survey is closed.</p>`
           : username
             ? html`
-                <div class="survey-fields">
+                <div class="survey-fields" role="group" aria-labelledby="survey-question-${this.name}">
                   ${data.fields.map(f => this._renderField(f))}
                 </div>
                 <div class="submit-row">
