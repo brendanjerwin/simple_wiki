@@ -144,10 +144,10 @@ test.describe('Survey Response Persistence E2E Tests', () => {
     const content = await getEditorContent(page);
 
     // Verify the response is stored under the user key
-    expect(content).toContain(`user = "${TEST_USERNAME}"`);
+    expect(content).toContain(`user = '${TEST_USERNAME}'`);
 
     // Verify text field persisted correctly
-    expect(content).toContain('text_field = "hello world"');
+    expect(content).toContain("text_field = 'hello world'");
 
     // Verify number field persisted as a numeric value
     expect(content).toMatch(/number_field\s*=\s*7(?:\.0)?/);
@@ -192,12 +192,12 @@ test.describe('Survey Response Persistence E2E Tests', () => {
     await navigateToEdit(page);
     const content = await getEditorContent(page);
 
-    expect(content).toContain('text_field = "updated value"');
+    expect(content).toContain("text_field = 'updated value'");
     expect(content).toMatch(/number_field\s*=\s*3(?:\.0)?/);
     expect(content).toMatch(/bool_field\s*=\s*false/);
 
     // Verify the response was updated in-place, not duplicated
-    const userEntries = content.match(new RegExp(`user = "${TEST_USERNAME}"`, 'g'));
+    const userEntries = content.match(new RegExp(`user = '${TEST_USERNAME}'`, 'g'));
     expect(userEntries).toHaveLength(1);
   });
 });
