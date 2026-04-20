@@ -217,22 +217,22 @@ export class FrontmatterEditorDialog extends LitElement {
     const shadowRoot = this.shadowRoot;
     if (!shadowRoot) return;
 
-    const activeEl = event.composedPath()[0] as HTMLElement | null;
-    if (!activeEl) return;
+    const target = event.composedPath()[0];
+    if (!(target instanceof HTMLElement)) return;
 
     const focusable = Array.from(
       shadowRoot.querySelectorAll<HTMLElement>('button:not([disabled])')
     );
     if (focusable.length === 0) return;
 
-    const idx = focusable.indexOf(activeEl as HTMLElement);
+    const idx = focusable.indexOf(target);
     if (idx === -1) return;
 
     event.preventDefault();
     const next = event.shiftKey
       ? (idx - 1 + focusable.length) % focusable.length
       : (idx + 1) % focusable.length;
-    focusable[next].focus();
+    focusable[next]?.focus();
   };
 
   public openDialog(page: string): void {
