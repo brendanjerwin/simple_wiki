@@ -803,7 +803,7 @@ describe('InventoryMoveItemDialog', () => {
       });
 
       it('should filter out current container', () => {
-        expect(el.searchResults[0].identifier).to.equal('toolbox_garage');
+        expect(el.searchResults[0]!.identifier).to.equal('toolbox_garage');
       });
 
       it('should set searchLoading to false', () => {
