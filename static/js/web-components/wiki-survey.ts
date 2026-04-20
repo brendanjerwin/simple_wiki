@@ -199,106 +199,115 @@ export class WikiSurvey extends LitElement {
   }
 
   private _renderField(field: SurveyField) {
-    const currentValue = this.fieldValues[field.name];
-
     switch (field.type) {
-      case 'number': {
-        const numVal = typeof currentValue === 'number' ? currentValue : '';
-        return html`
-          <div class="field-group">
-            <label class="field-label" for="field-${field.name}">
-              ${field.name}${field.required ? html`<span class="required-indicator" aria-hidden="true"> *</span>` : nothing}
-            </label>
-            <input
-              id="field-${field.name}"
-              type="number"
-              class="field-input"
-              .value="${String(numVal)}"
-              min="${field.min ?? nothing}"
-              max="${field.max ?? nothing}"
-              aria-required="${field.required ? 'true' : nothing}"
-              ?disabled="${this.saving}"
-              @input="${(e: InputEvent) => {
-                if (!(e.target instanceof HTMLInputElement)) return;
-                const n = Number.parseFloat(e.target.value);
-                this._handleFieldChange(field.name, Number.isNaN(n) ? '' : n);
-              }}"
-            />
-          </div>
-        `;
-      }
-      case 'boolean': {
-        const boolVal = Boolean(currentValue);
-        return html`
-          <div class="field-group">
-            <div class="checkbox-group">
-              <input
-                id="field-${field.name}"
-                type="checkbox"
-                .checked="${boolVal}"
-                aria-required="${field.required ? 'true' : nothing}"
-                ?disabled="${this.saving}"
-                @change="${(e: Event) => {
-                  if (!(e.target instanceof HTMLInputElement)) return;
-                  this._handleFieldChange(field.name, e.target.checked);
-                }}"
-              />
-              <label class="field-label" for="field-${field.name}">
-                ${field.name}${field.required ? html`<span class="required-indicator" aria-hidden="true"> *</span>` : nothing}
-              </label>
-            </div>
-          </div>
-        `;
-      }
-      case 'choice': {
-        const choiceVal = typeof currentValue === 'string' ? currentValue : '';
-        const options = field.options ?? [];
-        return html`
-          <div class="field-group">
-            <label class="field-label" for="field-${field.name}">
-              ${field.name}${field.required ? html`<span class="required-indicator" aria-hidden="true"> *</span>` : nothing}
-            </label>
-            <select
-              id="field-${field.name}"
-              class="field-input"
-              .value="${choiceVal}"
-              aria-required="${field.required ? 'true' : nothing}"
-              ?disabled="${this.saving}"
-              @change="${(e: Event) => {
-                if (!(e.target instanceof HTMLSelectElement)) return;
-                this._handleFieldChange(field.name, e.target.value);
-              }}"
-            >
-              <option value="">-- select --</option>
-              ${options.map(opt => html`<option value="${opt}" ?selected="${choiceVal === opt}">${opt}</option>`)}
-            </select>
-          </div>
-        `;
-      }
-      default: {
-        // text
-        const textVal = typeof currentValue === 'string' ? currentValue : '';
-        return html`
-          <div class="field-group">
-            <label class="field-label" for="field-${field.name}">
-              ${field.name}${field.required ? html`<span class="required-indicator" aria-hidden="true"> *</span>` : nothing}
-            </label>
-            <input
-              id="field-${field.name}"
-              type="text"
-              class="field-input"
-              .value="${textVal}"
-              aria-required="${field.required ? 'true' : nothing}"
-              ?disabled="${this.saving}"
-              @input="${(e: InputEvent) => {
-                if (!(e.target instanceof HTMLInputElement)) return;
-                this._handleFieldChange(field.name, e.target.value);
-              }}"
-            />
-          </div>
-        `;
-      }
+      case 'number':  return this._renderNumberField(field);
+      case 'boolean': return this._renderBooleanField(field);
+      case 'choice':  return this._renderChoiceField(field);
+      default:        return this._renderTextField(field);
     }
+  }
+
+  private _renderNumberField(field: SurveyField) {
+    const currentValue = this.fieldValues[field.name];
+    const numVal = typeof currentValue === 'number' ? currentValue : '';
+    return html`
+      <div class="field-group">
+        <label class="field-label" for="field-${field.name}">
+          ${field.name}${field.required ? html`<span class="required-indicator" aria-hidden="true"> *</span>` : nothing}
+        </label>
+        <input
+          id="field-${field.name}"
+          type="number"
+          class="field-input"
+          .value="${String(numVal)}"
+          min="${field.min ?? nothing}"
+          max="${field.max ?? nothing}"
+          aria-required="${field.required ? 'true' : nothing}"
+          ?disabled="${this.saving}"
+          @input="${(e: InputEvent) => {
+            if (!(e.target instanceof HTMLInputElement)) return;
+            const n = Number.parseFloat(e.target.value);
+            this._handleFieldChange(field.name, Number.isNaN(n) ? '' : n);
+          }}"
+        />
+      </div>
+    `;
+  }
+
+  private _renderBooleanField(field: SurveyField) {
+    const currentValue = this.fieldValues[field.name];
+    const boolVal = Boolean(currentValue);
+    return html`
+      <div class="field-group">
+        <div class="checkbox-group">
+          <input
+            id="field-${field.name}"
+            type="checkbox"
+            .checked="${boolVal}"
+            aria-required="${field.required ? 'true' : nothing}"
+            ?disabled="${this.saving}"
+            @change="${(e: Event) => {
+              if (!(e.target instanceof HTMLInputElement)) return;
+              this._handleFieldChange(field.name, e.target.checked);
+            }}"
+          />
+          <label class="field-label" for="field-${field.name}">
+            ${field.name}${field.required ? html`<span class="required-indicator" aria-hidden="true"> *</span>` : nothing}
+          </label>
+        </div>
+      </div>
+    `;
+  }
+
+  private _renderChoiceField(field: SurveyField) {
+    const currentValue = this.fieldValues[field.name];
+    const choiceVal = typeof currentValue === 'string' ? currentValue : '';
+    const options = field.options ?? [];
+    return html`
+      <div class="field-group">
+        <label class="field-label" for="field-${field.name}">
+          ${field.name}${field.required ? html`<span class="required-indicator" aria-hidden="true"> *</span>` : nothing}
+        </label>
+        <select
+          id="field-${field.name}"
+          class="field-input"
+          .value="${choiceVal}"
+          aria-required="${field.required ? 'true' : nothing}"
+          ?disabled="${this.saving}"
+          @change="${(e: Event) => {
+            if (!(e.target instanceof HTMLSelectElement)) return;
+            this._handleFieldChange(field.name, e.target.value);
+          }}"
+        >
+          <option value="">-- select --</option>
+          ${options.map(opt => html`<option value="${opt}" ?selected="${choiceVal === opt}">${opt}</option>`)}
+        </select>
+      </div>
+    `;
+  }
+
+  private _renderTextField(field: SurveyField) {
+    const currentValue = this.fieldValues[field.name];
+    const textVal = typeof currentValue === 'string' ? currentValue : '';
+    return html`
+      <div class="field-group">
+        <label class="field-label" for="field-${field.name}">
+          ${field.name}${field.required ? html`<span class="required-indicator" aria-hidden="true"> *</span>` : nothing}
+        </label>
+        <input
+          id="field-${field.name}"
+          type="text"
+          class="field-input"
+          .value="${textVal}"
+          aria-required="${field.required ? 'true' : nothing}"
+          ?disabled="${this.saving}"
+          @input="${(e: InputEvent) => {
+            if (!(e.target instanceof HTMLInputElement)) return;
+            this._handleFieldChange(field.name, e.target.value);
+          }}"
+        />
+      </div>
+    `;
   }
 
   private _renderSavingIndicator() {
