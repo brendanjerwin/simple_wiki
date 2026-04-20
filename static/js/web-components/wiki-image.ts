@@ -29,6 +29,11 @@ export class WikiImage extends LitElement {
       display: inline-block;
       position: relative;
       max-width: 80%;
+      /* Ensure the image center is never covered by the tools panel buttons.
+         Buttons are ~48px from the bottom; any image smaller than this min-height
+         would have its center completely obscured, preventing clicks on the image
+         when tools are open. */
+      min-height: 100px;
     }
 
     img {
@@ -65,10 +70,6 @@ export class WikiImage extends LitElement {
     @media (hover: hover) {
       .image-container:hover .tools-panel {
         opacity: 1;
-      }
-
-      .image-container:hover .tool-btn {
-        pointer-events: auto;
       }
     }
 
@@ -262,7 +263,14 @@ export class WikiImage extends LitElement {
     const link = document.createElement('a');
     link.href = this.src;
     link.download = this._getFilename();
+    link.style.display = 'none';
+    // Append to shadow root so the synthetic click's composed path includes this component.
+    // Without this, link.click() on a detached element reaches the document-level
+    // _handleDocumentClick with a path that doesn't include wiki-image, causing
+    // toolsOpen to be incorrectly set to false.
+    this.shadowRoot!.appendChild(link);
     link.click();
+    this.shadowRoot!.removeChild(link);
   }
 
   private async _handleCopyImage(e: Event): Promise<void> {
