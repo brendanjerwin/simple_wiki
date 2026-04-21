@@ -430,5 +430,205 @@ var _ = Describe("GoldmarkRenderer", func() {
 				Expect(string(output)).To(ContainSubstring("<h6 slot=\"heading\""))
 			})
 		})
+
+		When("rendering a NOTE alert block", func() {
+			BeforeEach(func() {
+				source = []byte("> [!NOTE]\n> Useful information.")
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should render a markdown-alert div", func() {
+				Expect(string(output)).To(ContainSubstring(`class="markdown-alert markdown-alert-note"`))
+			})
+
+			It("should include role=note for accessibility", func() {
+				Expect(string(output)).To(ContainSubstring(`role="note"`))
+			})
+
+			It("should render the alert title paragraph", func() {
+				Expect(string(output)).To(ContainSubstring(`class="markdown-alert-title"`))
+			})
+
+			It("should render the Note label", func() {
+				Expect(string(output)).To(ContainSubstring("Note"))
+			})
+
+			It("should render the alert content", func() {
+				Expect(string(output)).To(ContainSubstring("Useful information."))
+			})
+
+			It("should not render a plain blockquote", func() {
+				Expect(string(output)).NotTo(ContainSubstring("<blockquote>"))
+			})
+		})
+
+		When("rendering a TIP alert block", func() {
+			BeforeEach(func() {
+				source = []byte("> [!TIP]\n> Do it this way.")
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should render a markdown-alert-tip div", func() {
+				Expect(string(output)).To(ContainSubstring(`class="markdown-alert markdown-alert-tip"`))
+			})
+
+			It("should render the Tip label", func() {
+				Expect(string(output)).To(ContainSubstring("Tip"))
+			})
+		})
+
+		When("rendering an IMPORTANT alert block", func() {
+			BeforeEach(func() {
+				source = []byte("> [!IMPORTANT]\n> Key information.")
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should render a markdown-alert-important div", func() {
+				Expect(string(output)).To(ContainSubstring(`class="markdown-alert markdown-alert-important"`))
+			})
+
+			It("should render the Important label", func() {
+				Expect(string(output)).To(ContainSubstring("Important"))
+			})
+		})
+
+		When("rendering a WARNING alert block", func() {
+			BeforeEach(func() {
+				source = []byte("> [!WARNING]\n> Watch out!")
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should render a markdown-alert-warning div", func() {
+				Expect(string(output)).To(ContainSubstring(`class="markdown-alert markdown-alert-warning"`))
+			})
+
+			It("should render the Warning label", func() {
+				Expect(string(output)).To(ContainSubstring("Warning"))
+			})
+		})
+
+		When("rendering a CAUTION alert block", func() {
+			BeforeEach(func() {
+				source = []byte("> [!CAUTION]\n> Risky action.")
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should render a markdown-alert-caution div", func() {
+				Expect(string(output)).To(ContainSubstring(`class="markdown-alert markdown-alert-caution"`))
+			})
+
+			It("should render the Caution label", func() {
+				Expect(string(output)).To(ContainSubstring("Caution"))
+			})
+		})
+
+		When("rendering an alert block with lowercase type marker", func() {
+			BeforeEach(func() {
+				source = []byte("> [!note]\n> Content.")
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should still render as a note alert", func() {
+				Expect(string(output)).To(ContainSubstring(`class="markdown-alert markdown-alert-note"`))
+			})
+		})
+
+		When("rendering an alert block with multi-paragraph content", func() {
+			BeforeEach(func() {
+				source = []byte("> [!NOTE]\n> First paragraph.\n>\n> Second paragraph.")
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should render both paragraphs inside the alert", func() {
+				Expect(string(output)).To(ContainSubstring("First paragraph."))
+				Expect(string(output)).To(ContainSubstring("Second paragraph."))
+			})
+
+			It("should not include the type marker as content", func() {
+				Expect(string(output)).NotTo(ContainSubstring("[!NOTE]"))
+			})
+		})
+
+		When("rendering a blockquote without an alert marker", func() {
+			BeforeEach(func() {
+				source = []byte("> Regular blockquote content.")
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should render as a plain blockquote", func() {
+				Expect(string(output)).To(ContainSubstring("<blockquote>"))
+			})
+
+			It("should not render as an alert", func() {
+				Expect(string(output)).NotTo(ContainSubstring("markdown-alert"))
+			})
+		})
+
+		When("rendering a blockquote with an unknown alert type", func() {
+			BeforeEach(func() {
+				source = []byte("> [!UNKNOWN]\n> Content.")
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should render as a plain blockquote", func() {
+				Expect(string(output)).To(ContainSubstring("<blockquote>"))
+			})
+
+			It("should not render as an alert", func() {
+				Expect(string(output)).NotTo(ContainSubstring("markdown-alert"))
+			})
+		})
+
+		When("rendering an alert where [!TYPE] has trailing text on the same line", func() {
+			BeforeEach(func() {
+				// "[!NOTE] extra" has content after the closing bracket — not a valid marker
+				source = []byte("> [!NOTE] extra text\n> Content.")
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should render as a plain blockquote", func() {
+				Expect(string(output)).To(ContainSubstring("<blockquote>"))
+			})
+		})
+
+		When("rendering an alert with the icon aria-hidden attribute", func() {
+			BeforeEach(func() {
+				source = []byte("> [!WARNING]\n> Be careful.")
+			})
+
+			It("should render the icon span with aria-hidden", func() {
+				Expect(string(output)).To(ContainSubstring(`aria-hidden="true"`))
+			})
+		})
 	})
 })
