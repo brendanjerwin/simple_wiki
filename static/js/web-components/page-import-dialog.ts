@@ -52,52 +52,35 @@ export class PageImportDialog extends LitElement {
 
   static override readonly styles = dialogStyles(css`
       :host {
-        position: fixed;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        z-index: var(--z-modal);
-        display: none;
+        display: block;
       }
 
-      :host([open]) {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        animation: fadeIn 0.2s ease-out;
-      }
-
-      .backdrop {
-        position: fixed;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        background: rgba(0, 0, 0, 0.5);
-      }
-
-      .dialog {
+      dialog {
+        padding: 0;
+        border: none;
+        border-radius: 8px;
         background: var(--color-surface-elevated);
         max-width: 700px;
         width: 90%;
         max-height: 80vh;
-        display: flex;
         flex-direction: column;
-        position: relative;
-        z-index: 1;
+        box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
         animation: slideIn 0.2s ease-out;
-        border-radius: 8px;
+        overflow: hidden;
+      }
+
+      dialog[open] {
+        display: flex;
+      }
+
+      dialog::backdrop {
+        background: rgba(0, 0, 0, 0.5);
+        animation: fadeIn 0.2s ease-out;
       }
 
       /* Mobile-first responsive behavior */
       @media (max-width: 768px) {
-        :host([open]) {
-          align-items: stretch;
-          justify-content: stretch;
-        }
-
-        .dialog {
+        dialog {
           width: 100%;
           height: 100%;
           max-width: none;
@@ -512,43 +495,45 @@ export class PageImportDialog extends LitElement {
   );
 
   @property({ type: Boolean, reflect: true })
-  open = false;
+  declare open: boolean;
 
   @state()
-  private dialogState: DialogState = 'upload';
+  private declare dialogState: DialogState;
 
   @state()
-  private file: File | null = null;
+  private declare file: File | null;
 
   @state()
-  private records: PageImportRecord[] = [];
+  private declare records: PageImportRecord[];
 
   @state()
-  private currentRecordIndex = 0;
+  private declare currentRecordIndex: number;
 
   @state()
-  private showErrorsOnly = false;
+  private declare showErrorsOnly: boolean;
 
   @state()
-  private error: AugmentedError | null = null;
+  private declare error: AugmentedError | null;
 
   @state()
-  private stats: ImportStats = { total: 0, errors: 0, updates: 0, creates: 0 };
+  private declare stats: ImportStats;
 
   @state()
-  private importedCount = 0;
+  private declare importedCount: number;
 
   @state()
-  private dragOver = false;
+  private declare dragOver: boolean;
 
   @state()
-  private parsingErrors: string[] = [];
+  private declare parsingErrors: string[];
 
   @state()
-  private jobQueueStatus: JobQueueStatus | null = null;
+  private declare jobQueueStatus: JobQueueStatus | null;
 
   @state()
-  private streamingDisconnected = false;
+  private declare streamingDisconnected: boolean;
+
+  private _previouslyFocusedElement: Element | null = null;
 
   private _pageImportClient: ReturnType<typeof createClient<typeof PageImportService>> | null =
     null;
@@ -557,6 +542,23 @@ export class PageImportDialog extends LitElement {
     null;
 
   private _streamAbortController: AbortController | null = null;
+
+  constructor() {
+    super();
+    this.open = false;
+    this.dialogState = 'upload';
+    this.file = null;
+    this.records = [];
+    this.currentRecordIndex = 0;
+    this.showErrorsOnly = false;
+    this.error = null;
+    this.stats = { total: 0, errors: 0, updates: 0, creates: 0 };
+    this.importedCount = 0;
+    this.dragOver = false;
+    this.parsingErrors = [];
+    this.jobQueueStatus = null;
+    this.streamingDisconnected = false;
+  }
 
   private get pageImportClient(): ReturnType<typeof createClient<typeof PageImportService>> {
     this._pageImportClient ??= createClient(PageImportService, getGrpcWebTransport());
@@ -568,20 +570,27 @@ export class PageImportDialog extends LitElement {
     return this._systemInfoClient;
   }
 
-  override connectedCallback(): void {
-    super.connectedCallback();
-    document.addEventListener('keydown', this._handleKeydown);
-  }
-
-  override disconnectedCallback(): void {
-    super.disconnectedCallback();
-    document.removeEventListener('keydown', this._handleKeydown);
-  }
-
-  public _handleKeydown = (event: KeyboardEvent): void => {
-    if (event.key === 'Escape' && this.open) {
-      this.closeDialog();
+  override updated(changedProperties: Map<PropertyKey, unknown>): void {
+    super.updated(changedProperties);
+    if (changedProperties.has('open')) {
+      const dialog = this.shadowRoot?.querySelector('dialog');
+      if (!dialog) return;
+      if (this.open && !dialog.open) {
+        this._previouslyFocusedElement = document.activeElement;
+        dialog.showModal();
+      } else if (!this.open && dialog.open) {
+        dialog.close();
+        if (this._previouslyFocusedElement instanceof HTMLElement) {
+          this._previouslyFocusedElement.focus();
+        }
+        this._previouslyFocusedElement = null;
+      }
     }
+  }
+
+  private readonly _handleDialogCancel = (event: Event): void => {
+    event.preventDefault();
+    this.closeDialog();
   };
 
   public openDialog(): void {
@@ -609,14 +618,6 @@ export class PageImportDialog extends LitElement {
     this.streamingDisconnected = false;
     this._streamAbortController = null;
   }
-
-  private readonly _handleBackdropClick = (): void => {
-    this.closeDialog();
-  };
-
-  private readonly _handleDialogClick = (event: Event): void => {
-    event.stopPropagation();
-  };
 
   private readonly _handleDragOver = (event: DragEvent): void => {
     event.preventDefault();
@@ -1219,14 +1220,14 @@ export class PageImportDialog extends LitElement {
   override render() {
     return html`
       ${sharedStyles}
-      <div class="backdrop" @click=${this._handleBackdropClick}></div>
-      <div class="dialog system-font border-radius box-shadow" @click=${this._handleDialogClick}>
-        <div class="dialog-header">
-          <h2 class="dialog-title">${this._getDialogTitle()}</h2>
+      <dialog aria-labelledby="page-import-dialog-title" @cancel="${this._handleDialogCancel}">
+        <div class="dialog-header system-font">
+          <h2 id="page-import-dialog-title" class="dialog-title">${this._getDialogTitle()}</h2>
+          <button class="button-base icon-button" aria-label="Close dialog" @click="${this.closeDialog}">×</button>
         </div>
         <div class="content">${this._renderContent()}</div>
         <div class="footer">${this._renderFooter()}</div>
-      </div>
+      </dialog>
     `;
   }
 }
