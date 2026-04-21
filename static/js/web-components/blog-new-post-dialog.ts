@@ -21,42 +21,40 @@ import './title-input.js';
 export class BlogNewPostDialog extends LitElement {
   static override readonly styles = dialogStyles(css`
     :host {
-      position: fixed;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      z-index: var(--z-modal);
-      display: none;
+      display: block;
     }
 
-    :host([open]) {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      animation: fadeIn 0.2s ease-out;
-    }
-
-    .backdrop {
-      position: fixed;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      background: rgba(0, 0, 0, 0.5);
-    }
-
-    .dialog {
-      background: white;
+    dialog {
+      padding: 0;
+      border: none;
+      border-radius: 8px;
+      background: var(--color-surface-elevated, white);
       max-width: 700px;
       width: 90%;
       max-height: 90vh;
-      display: flex;
       flex-direction: column;
-      position: relative;
-      z-index: 1;
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
       animation: slideIn 0.2s ease-out;
-      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    dialog[open] {
+      display: flex;
+    }
+
+    dialog::backdrop {
+      background: rgba(0, 0, 0, 0.5);
+      animation: fadeIn 0.2s ease-out;
+    }
+
+    @media (max-width: 768px) {
+      dialog {
+        width: 100%;
+        max-width: none;
+        max-height: none;
+        border-radius: 0;
+        margin: 0;
+      }
     }
 
     .header {
@@ -87,10 +85,6 @@ export class BlogNewPostDialog extends LitElement {
       flex: 1;
     }
 
-    .form-group {
-      margin-bottom: 12px;
-    }
-
     .form-row {
       display: flex;
       gap: 12px;
@@ -107,13 +101,6 @@ export class BlogNewPostDialog extends LitElement {
 
     .form-row .form-group:last-child {
       flex: 1;
-    }
-
-    .form-group label {
-      display: block;
-      font-weight: 600;
-      margin-bottom: 4px;
-      font-size: 0.9em;
     }
 
     .form-group input,
@@ -208,16 +195,6 @@ export class BlogNewPostDialog extends LitElement {
       font-family: "Lucida Console", Monaco, monospace;
       margin-top: 4px;
     }
-
-    @keyframes fadeIn {
-      from { opacity: 0; }
-      to { opacity: 1; }
-    }
-
-    @keyframes slideIn {
-      from { transform: translateY(-20px); opacity: 0; }
-      to { transform: translateY(0); opacity: 1; }
-    }
   `);
 
   @property({ type: String, attribute: 'blog-id' })
@@ -249,9 +226,9 @@ export class BlogNewPostDialog extends LitElement {
 
   private readonly pageCreator = new PageCreator();
 
-  private _keydownController: AbortController | undefined = undefined;
-
   private _pendingFocusRaf: number | undefined = undefined;
+
+  private _previouslyFocusedElement: Element | null = null;
 
   private get identifierPreview(): string {
     if (!this.blogId || !this.date || !this.title.trim()) return '';
@@ -306,30 +283,34 @@ export class BlogNewPostDialog extends LitElement {
   }
 
   override updated(changed: Map<string, unknown>): void {
-    if (changed.has('open') && this.open) {
-      // Cancel any pending focus RAF before starting a new one to prevent
-      // race conditions or focusing elements in a closed dialog.
-      if (this._pendingFocusRaf !== undefined) {
-        cancelAnimationFrame(this._pendingFocusRaf);
-      }
-      // Focus the title input when dialog opens
-      this._pendingFocusRaf = requestAnimationFrame(() => {
-        this._pendingFocusRaf = undefined;
-        if (this.open) {
-          this.shadowRoot?.querySelector<HTMLElement>('title-input')?.focus();
+    super.updated(changed);
+    if (changed.has('open')) {
+      const dialog = this.shadowRoot?.querySelector('dialog');
+      if (!dialog) return;
+      if (this.open && !dialog.open) {
+        this._previouslyFocusedElement = document.activeElement;
+        dialog.showModal();
+        if (this._pendingFocusRaf !== undefined) {
+          cancelAnimationFrame(this._pendingFocusRaf);
         }
-      });
-    }
-  }
-
-  override connectedCallback(): void {
-    super.connectedCallback();
-    this._keydownController = new AbortController();
-    document.addEventListener('keydown', (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && this.open) {
-        this._close();
+        this._pendingFocusRaf = requestAnimationFrame(() => {
+          this._pendingFocusRaf = undefined;
+          if (this.open) {
+            this.shadowRoot?.querySelector<HTMLElement>('title-input')?.focus();
+          }
+        });
+      } else if (!this.open && dialog.open) {
+        if (this._pendingFocusRaf !== undefined) {
+          cancelAnimationFrame(this._pendingFocusRaf);
+          this._pendingFocusRaf = undefined;
+        }
+        dialog.close();
+        if (this._previouslyFocusedElement instanceof HTMLElement) {
+          this._previouslyFocusedElement.focus();
+        }
+        this._previouslyFocusedElement = null;
       }
-    }, { signal: this._keydownController.signal });
+    }
   }
 
   override disconnectedCallback(): void {
@@ -338,9 +319,19 @@ export class BlogNewPostDialog extends LitElement {
       cancelAnimationFrame(this._pendingFocusRaf);
       this._pendingFocusRaf = undefined;
     }
-    this._keydownController?.abort();
-    this._keydownController = undefined;
+    this._previouslyFocusedElement = null;
   }
+
+  private readonly _handleDialogCancel = (event: Event): void => {
+    event.preventDefault();
+    this._close();
+  };
+
+  private readonly _handleDialogClick = (e: MouseEvent): void => {
+    if (e.target === e.currentTarget) {
+      this._close();
+    }
+  };
 
   private _close(): void {
     this.open = false;
@@ -416,14 +407,15 @@ export class BlogNewPostDialog extends LitElement {
   }
 
   override render() {
-    if (!this.open) return nothing;
-
     return html`
       ${sharedStyles}
-      <div class="backdrop" @click=${this._close}></div>
-      <div class="dialog">
+      <dialog
+        aria-labelledby="blog-new-post-dialog-title"
+        @cancel=${this._handleDialogCancel}
+        @click=${this._handleDialogClick}
+      >
         <div class="header">
-          <h2>New Blog Post</h2>
+          <h2 id="blog-new-post-dialog-title">New Blog Post</h2>
           <button class="close-btn" aria-label="Close" @click=${this._close}>
             <i class="fa-solid fa-xmark"></i>
           </button>
@@ -507,7 +499,7 @@ export class BlogNewPostDialog extends LitElement {
             ${this.creating ? html`<i class="fa-solid fa-spinner fa-spin"></i> Creating...` : 'Create Post'}
           </button>
         </div>
-      </div>
+      </dialog>
     `;
   }
 }

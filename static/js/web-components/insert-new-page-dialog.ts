@@ -34,42 +34,40 @@ const NONE_TEMPLATE_VALUE = '';
 export class InsertNewPageDialog extends LitElement {
   static override readonly styles = dialogStyles(css`
     :host {
-      position: fixed;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      z-index: var(--z-modal);
-      display: none;
+      display: block;
     }
 
-    :host([open]) {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      animation: fadeIn 0.2s ease-out;
-    }
-
-    .backdrop {
-      position: fixed;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      background: rgba(0, 0, 0, 0.5);
-    }
-
-    .dialog {
-      background: white;
+    dialog {
+      padding: 0;
+      border: none;
+      border-radius: 8px;
+      background: var(--color-surface-elevated, white);
       max-width: 600px;
       width: 90%;
       max-height: 90vh;
-      display: flex;
       flex-direction: column;
-      position: relative;
-      z-index: 1;
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
       animation: slideIn 0.2s ease-out;
-      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    dialog[open] {
+      display: flex;
+    }
+
+    dialog::backdrop {
+      background: rgba(0, 0, 0, 0.5);
+      animation: fadeIn 0.2s ease-out;
+    }
+
+    @media (max-width: 768px) {
+      dialog {
+        width: 100%;
+        max-width: none;
+        max-height: none;
+        border-radius: 0;
+        margin: 0;
+      }
     }
 
     .content {
@@ -186,6 +184,8 @@ export class InsertNewPageDialog extends LitElement {
 
   private readonly pageCreator = new PageCreator();
 
+  private _previouslyFocusedElement: Element | null = null;
+
   constructor() {
     super();
     this.open = false;
@@ -202,18 +202,31 @@ export class InsertNewPageDialog extends LitElement {
     this.frontmatterDirty = false;
   }
 
-  override connectedCallback(): void {
-    super.connectedCallback();
-    document.addEventListener('keydown', this._handleKeydown);
+  override updated(changedProperties: Map<PropertyKey, unknown>): void {
+    super.updated(changedProperties);
+    if (changedProperties.has('open')) {
+      const dialog = this.shadowRoot?.querySelector('dialog');
+      if (!dialog) return;
+      if (this.open && !dialog.open) {
+        this._previouslyFocusedElement = document.activeElement;
+        dialog.showModal();
+      } else if (!this.open && dialog.open) {
+        dialog.close();
+        if (this._previouslyFocusedElement instanceof HTMLElement) {
+          this._previouslyFocusedElement.focus();
+        }
+        this._previouslyFocusedElement = null;
+      }
+    }
   }
 
-  override disconnectedCallback(): void {
-    super.disconnectedCallback();
-    document.removeEventListener('keydown', this._handleKeydown);
-  }
+  private readonly _handleDialogCancel = (event: Event): void => {
+    event.preventDefault();
+    this.close();
+  };
 
-  private readonly _handleKeydown = (event: KeyboardEvent): void => {
-    if (event.key === 'Escape' && this.open) {
+  private readonly _handleDialogClick = (e: MouseEvent): void => {
+    if (e.target === e.currentTarget) {
       this.close();
     }
   };
@@ -259,14 +272,6 @@ export class InsertNewPageDialog extends LitElement {
       this.templates = result.templates;
     }
   }
-
-  private readonly _handleBackdropClick = (): void => {
-    this.close();
-  };
-
-  private readonly _handleDialogClick = (event: Event): void => {
-    event.stopPropagation();
-  };
 
   /**
    * Adapter function to call PageCreator.generateIdentifier
@@ -480,10 +485,14 @@ export class InsertNewPageDialog extends LitElement {
   override render() {
     return html`
       ${sharedStyles}
-      <div class="backdrop" @click=${this._handleBackdropClick}></div>
-      <div class="dialog system-font border-radius box-shadow" @click=${this._handleDialogClick}>
+      <dialog
+        aria-labelledby="insert-new-page-dialog-title"
+        @cancel=${this._handleDialogCancel}
+        @click=${this._handleDialogClick}
+        class="system-font"
+      >
         <div class="dialog-header">
-          <h2 class="dialog-title">Insert New Page</h2>
+          <h2 id="insert-new-page-dialog-title" class="dialog-title">Insert New Page</h2>
         </div>
 
         <div class="content">
@@ -522,7 +531,7 @@ export class InsertNewPageDialog extends LitElement {
             ${this.loading ? 'Creating...' : 'Create Page'}
           </button>
         </div>
-      </div>
+      </dialog>
     `;
   }
 }
