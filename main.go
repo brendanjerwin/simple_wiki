@@ -136,6 +136,11 @@ func createSite(c *cli.Context) (*server.Site, error) {
 	site.MaxUploadSize = c.GlobalUint("max-upload-mb")
 	site.MaxDocumentSize = c.GlobalUint("max-document-length")
 	site.ChatPersona = c.GlobalString("chat-persona")
+
+	if err := site.SeedInitialPages(); err != nil {
+		logger.Warn("Failed to seed initial wiki pages: %v", err)
+	}
+
 	return site, nil
 }
 

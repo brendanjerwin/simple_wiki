@@ -500,3 +500,130 @@ tr.directory-error-row {
     color: #98c379;
   }
 }
+
+/* ==========================================================================
+   GitHub-style Alert / Admonition Blocks
+   ========================================================================== */
+
+.markdown-alert {
+  padding: 0.5rem 1rem;
+  margin-bottom: 1rem;
+  border-left: 4px solid;
+  border-radius: 0 6px 6px 0;
+}
+
+.markdown-alert > :first-child {
+  margin-top: 0;
+}
+
+.markdown-alert > :last-child {
+  margin-bottom: 0;
+}
+
+.markdown-alert-title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 600;
+  margin-top: 0;
+  margin-bottom: 0.5rem;
+  font-size: 0.875rem;
+}
+
+/* NOTE — blue */
+.markdown-alert-note {
+  border-left-color: #0969da;
+  background-color: rgba(9, 105, 218, 0.05);
+}
+
+.markdown-alert-note .markdown-alert-title {
+  color: #0969da;
+}
+
+/* TIP — green */
+.markdown-alert-tip {
+  border-left-color: #1a7f37;
+  background-color: rgba(26, 127, 55, 0.05);
+}
+
+.markdown-alert-tip .markdown-alert-title {
+  color: #1a7f37;
+}
+
+/* IMPORTANT — purple */
+.markdown-alert-important {
+  border-left-color: #8250df;
+  background-color: rgba(130, 80, 223, 0.05);
+}
+
+.markdown-alert-important .markdown-alert-title {
+  color: #8250df;
+}
+
+/* WARNING — amber */
+.markdown-alert-warning {
+  border-left-color: #9a6700;
+  background-color: rgba(154, 103, 0, 0.05);
+}
+
+.markdown-alert-warning .markdown-alert-title {
+  color: #9a6700;
+}
+
+/* CAUTION — red */
+.markdown-alert-caution {
+  border-left-color: #cf222e;
+  background-color: rgba(207, 34, 46, 0.05);
+}
+
+.markdown-alert-caution .markdown-alert-title {
+  color: #cf222e;
+}
+
+/* Dark mode overrides for alert blocks */
+@media (prefers-color-scheme: dark) {
+  .markdown-alert-note {
+    border-left-color: #1f6feb;
+    background-color: rgba(31, 111, 235, 0.1);
+  }
+
+  .markdown-alert-note .markdown-alert-title {
+    color: #58a6ff;
+  }
+
+  .markdown-alert-tip {
+    border-left-color: #238636;
+    background-color: rgba(35, 134, 54, 0.1);
+  }
+
+  .markdown-alert-tip .markdown-alert-title {
+    color: #3fb950;
+  }
+
+  .markdown-alert-important {
+    border-left-color: #8957e5;
+    background-color: rgba(137, 87, 229, 0.1);
+  }
+
+  .markdown-alert-important .markdown-alert-title {
+    color: #d2a8ff;
+  }
+
+  .markdown-alert-warning {
+    border-left-color: #9e6a03;
+    background-color: rgba(158, 106, 3, 0.1);
+  }
+
+  .markdown-alert-warning .markdown-alert-title {
+    color: #e3b341;
+  }
+
+  .markdown-alert-caution {
+    border-left-color: #da3633;
+    background-color: rgba(218, 54, 51, 0.1);
+  }
+
+  .markdown-alert-caution .markdown-alert-title {
+    color: #f85149;
+  }
+}
