@@ -71,6 +71,26 @@ describe('FrontmatterEditorDialog', () => {
       const dialog = el.shadowRoot?.querySelector('dialog');
       expect(dialog?.open).to.be.false;
     });
+
+    it('should have aria-labelledby pointing to the dialog title id', () => {
+      const dialog = el.shadowRoot?.querySelector('dialog');
+      expect(dialog?.getAttribute('aria-labelledby')).to.equal('frontmatter-dialog-title');
+    });
+
+    it('should have an h2 with id frontmatter-dialog-title', () => {
+      const h2 = el.shadowRoot?.querySelector('h2#frontmatter-dialog-title');
+      expect(h2).to.exist;
+    });
+
+    it('should have a close button in the dialog header', () => {
+      const closeButton = el.shadowRoot?.querySelector('.dialog-header .icon-button');
+      expect(closeButton).to.exist;
+    });
+
+    it('should have a close button with aria-label "Close dialog"', () => {
+      const closeButton = el.shadowRoot?.querySelector('.dialog-header .icon-button');
+      expect(closeButton?.getAttribute('aria-label')).to.equal('Close dialog');
+    });
   });
 
   describe('when openDialog is called', () => {
