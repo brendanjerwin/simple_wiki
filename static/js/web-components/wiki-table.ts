@@ -187,6 +187,11 @@ export class WikiTable extends LitElement {
         display: flex;
         align-items: center;
         gap: 4px;
+        background: none;
+        border: none;
+        font: inherit;
+        color: inherit;
+        text-align: left;
       }
 
       .filter-dot {
@@ -203,6 +208,10 @@ export class WikiTable extends LitElement {
         cursor: pointer;
         opacity: 0.4;
         flex-shrink: 0;
+        background: none;
+        border: none;
+        font: inherit;
+        color: inherit;
       }
 
       .sort-arrows:hover {
@@ -717,22 +726,26 @@ export class WikiTable extends LitElement {
             <tr>
               ${this.extractedData.columns.map((col, i) => html`
                 <th
+                  scope="col"
                   class="${this.sortColumnIndex === i ? 'sorted' : ''}"
                   title="Detected type: ${col.typeInfo.detectedType}"
                   aria-sort="${this.sortColumnIndex === i ? this.sortDirection : 'none'}"
                 >
                   <div class="header-cell">
-                    <span
+                    <button
+                      type="button"
                       class="header-main"
                       @click=${() => this._handleHeaderMainClick(i)}
                     >
                       ${col.headerText}
                       ${this._isColumnFiltered(i) ? html`<span class="filter-dot" @click=${(e: Event) => this._handleFilterDotClick(i, e)}></span>` : nothing}
-                    </span>
-                    <span
+                    </button>
+                    <button
+                      type="button"
                       class="sort-arrows"
+                      aria-label="Sort by ${col.headerText}"
                       @click=${(e: Event) => this._handleSortArrowClick(i, e)}
-                    >${this._getSortIndicator(i)}</span>
+                    ><span aria-hidden="true">${this._getSortIndicator(i)}</span></button>
                   </div>
                 </th>
               `)}
