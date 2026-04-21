@@ -35,6 +35,14 @@ const collapsibleHeadingParserPriority = 550
 // collapsibleSectionRendererPriority for the custom collapsible section renderer.
 const collapsibleSectionRendererPriority = 100
 
+// alertTransformerPriority for the alert AST transformer.
+// Uses the same priority as collapsibleSectionRendererPriority; both handle
+// different node types so ordering between them does not matter.
+const alertTransformerPriority = 100
+
+// alertRendererPriority for the custom alert node renderer.
+const alertRendererPriority = 500
+
 type GoldmarkRenderer struct{}
 
 // Render renders the input markdown to HTML.
@@ -55,6 +63,7 @@ func (GoldmarkRenderer) Render(input []byte) ([]byte, error) {
 			),
 			parser.WithASTTransformers(
 				util.Prioritized(NewCollapsibleSectionTransformer(), collapsibleSectionRendererPriority),
+				util.Prioritized(NewAlertTransformer(), alertTransformerPriority),
 			),
 		),
 		goldmark.WithRendererOptions(
@@ -65,6 +74,7 @@ func (GoldmarkRenderer) Render(input []byte) ([]byte, error) {
 				util.Prioritized(NewWikiImageRenderer(html.WithUnsafe()), wikiImageRendererPriority),
 				util.Prioritized(NewWikiTableRenderer(html.WithUnsafe()), wikiTableRendererPriority),
 				util.Prioritized(NewCollapsibleSectionRenderer(html.WithUnsafe()), collapsibleSectionRendererPriority),
+				util.Prioritized(NewAlertRenderer(html.WithUnsafe()), alertRendererPriority),
 			),
 		),
 	)
@@ -98,6 +108,12 @@ func (GoldmarkRenderer) Render(input []byte) ([]byte, error) {
 	// Allow slot attribute on heading elements for the collapsible-heading named slot
 	p.AllowAttrs("slot").OnElements("h1", "h2", "h3", "h4", "h5", "h6")
 	p.AllowAttrs("class").OnElements("span", "a")
+	// Allow GitHub-style alert/admonition blocks rendered by the alert transformer.
+	p.AllowElements("div")
+	p.AllowAttrs("class").Matching(regexp.MustCompile(`^markdown-alert(?: markdown-alert-(?:note|tip|important|warning|caution))?$`)).OnElements("div")
+	p.AllowAttrs("role").Matching(regexp.MustCompile(`^note$`)).OnElements("div")
+	p.AllowAttrs("class").Matching(regexp.MustCompile(`^markdown-alert-title$`)).OnElements("p")
+	p.AllowAttrs("aria-hidden").Matching(regexp.MustCompile(`^true$`)).OnElements("span")
 	return p.SanitizeBytes(buf.Bytes()), nil
 }
 
