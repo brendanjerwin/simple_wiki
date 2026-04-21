@@ -270,7 +270,7 @@ export class WikiImage extends LitElement {
     // toolsOpen to be incorrectly set to false.
     this.shadowRoot!.appendChild(link);
     link.click();
-    this.shadowRoot!.removeChild(link);
+    link.remove();
   }
 
   private async _handleCopyImage(e: Event): Promise<void> {
