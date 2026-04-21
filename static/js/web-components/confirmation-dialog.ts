@@ -283,6 +283,9 @@ export class ConfirmationDialog extends LitElement {
       const dialog = this.shadowRoot?.querySelector('dialog');
       if (dialog && !dialog.open && this.isConnected) {
         dialog.showModal();
+        // Focus the cancel button by default so users must deliberately choose a destructive action
+        const cancelButton = this.shadowRoot?.querySelector<HTMLButtonElement>('.button-cancel');
+        cancelButton?.focus();
       }
     });
   }
@@ -384,14 +387,14 @@ export class ConfirmationDialog extends LitElement {
     const descriptionIrreversibleClass = config.irreversible ? 'irreversible' : '';
 
     return html`
-      <dialog @cancel=${this._handleDialogCancel} @click=${this._handleDialogClick}>
+      <dialog aria-labelledby="dialog-title" @cancel=${this._handleDialogCancel} @click=${this._handleDialogClick}>
         <div class="container container-modal dialog-box">
           <div class="dialog-content panel gap-sm">
             <div class="dialog-icon ${iconClass}">
               ${AugmentErrorService.getIconString(config.icon || 'warning')}
             </div>
 
-            <div class="dialog-message text-primary font-mono text-base">
+            <div id="dialog-title" class="dialog-message text-primary font-mono text-base">
               ${config.message}
             </div>
 
