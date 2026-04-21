@@ -24,12 +24,18 @@ func NewStreamableHTTPHandler(apiServer *grpcapi.Server, version string) (http.H
 		mcpserver.WithToolCapabilities(false),
 	)
 
-	// Use the OpenAI-compatible handler for Frontmatter tools. This applies FixOpenAI to
-	// convert google.protobuf.Struct fields from JSON-encoded strings back to objects before
-	// proto parsing. Without this, clients sending frontmatter as a JSON string (a common
-	// behaviour in OpenAI-compatible tool call mode) would receive a proto syntax error.
-	// The handler also handles the regular object format, so both input styles work.
-	apiv1mcp.RegisterFrontmatterHandlerOpenAI(s, apiServer)
+	// Use the standard handler for Frontmatter tools. The standard schema advertises
+	// google.protobuf.Struct fields (e.g. frontmatter) as "type": "object", so LLMs send
+	// them as JSON objects directly. protojson.Unmarshal handles Struct fields natively
+	// without any intermediate string-encoding step.
+	//
+	// Previously the OpenAI-compatible handler was used, which told clients to send
+	// frontmatter as a JSON-encoded string and relied on FixOpenAI to decode it back.
+	// However, for complex frontmatter (e.g. ai_agent_chat_context with deeply nested
+	// content and special characters), the LLM sometimes produced improperly escaped JSON.
+	// FixOpenAI silently ignored json.Unmarshal failures, leaving the string as-is and
+	// causing protojson to fail with: "proto: syntax error (line 1:16): unexpected token".
+	apiv1mcp.RegisterFrontmatterHandler(s, apiServer)
 	apiv1mcp.RegisterInventoryManagementServiceHandler(s, apiServer)
 	apiv1mcp.RegisterPageImportServiceHandler(s, apiServer)
 	apiv1mcp.RegisterPageManagementServiceHandler(s, apiServer)
