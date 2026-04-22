@@ -273,11 +273,12 @@ var _ = Describe("NewStreamableHTTPHandler", func() {
 			})
 		})
 
-		// Regression test for: ReplaceFrontmatter MCP tool broken with proto syntax error
-		// When Claude Code (or any OpenAI-compatible client) sends frontmatter as a JSON-encoded
-		// string instead of a JSON object, the standard protojson handler would fail with:
-		//   "proto: syntax error (line 1:N): unexpected token ..."
-		// The OpenAI-compatible handler applies FixOpenAI to convert the string back to an object.
+		// The server now uses the standard handler, which advertises frontmatter as
+		// "type": "object". String-encoded frontmatter is no longer accepted — clients
+		// that send a JSON-encoded string instead of an object will receive a JSON-RPC error.
+		// This intentional change eliminates the fragile FixOpenAI conversion step that
+		// silently failed with complex/large frontmatter (e.g. ai_agent_chat_context),
+		// causing intermittent "proto: syntax error" failures (issue #956).
 		When("invoking the api_v1_Frontmatter_ReplaceFrontmatter tool with frontmatter as a JSON-encoded string", func() {
 			var callResp *httptest.ResponseRecorder
 			var callResult map[string]any
@@ -291,9 +292,51 @@ var _ = Describe("NewStreamableHTTPHandler", func() {
 				handler.ServeHTTP(initResp, initReq)
 				sessionID := initResp.Header().Get("Mcp-Session-Id")
 
-				// Call the tool with frontmatter as a JSON-encoded string (OpenAI-style)
-				// This is the format that caused the "proto syntax error on any payload" bug.
+				// Send frontmatter as a JSON-encoded string. The standard handler does not
+				// apply FixOpenAI, so this results in a JSON-RPC error (not a tool success).
 				callBody := `{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"api_v1_Frontmatter_ReplaceFrontmatter","arguments":{"page":"test-page","frontmatter":"{\"title\":\"Test Page\",\"tags\":[\"alpha\",\"beta\"]}"}}}`
+				callReq := httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(callBody))
+				callReq.Header.Set("Content-Type", "application/json")
+				if sessionID != "" {
+					callReq.Header.Set("Mcp-Session-Id", sessionID)
+				}
+				callResp = httptest.NewRecorder()
+				handler.ServeHTTP(callResp, callReq)
+
+				Expect(json.Unmarshal(callResp.Body.Bytes(), &callResult)).To(Succeed())
+			})
+
+			It("returns HTTP 200", func() {
+				Expect(callResp.Code).To(Equal(http.StatusOK))
+			})
+
+			It("returns a JSON-RPC error because the standard handler requires objects not strings", func() {
+				Expect(callResult).To(HaveKey("error"), "expected a JSON-RPC error for string-encoded frontmatter")
+			})
+		})
+
+		// Regression test for issue #956: ReplaceFrontmatter intermittently failed with
+		// "proto: syntax error" when the frontmatter contained deeply nested structures
+		// (e.g. ai_agent_chat_context written by the wiki-chat daemon). The fix switches
+		// from the OpenAI-compatible handler (which required frontmatter as a JSON-encoded
+		// string) to the standard handler (which accepts frontmatter as a JSON object),
+		// eliminating the fragile FixOpenAI string-decoding step.
+		When("invoking the api_v1_Frontmatter_ReplaceFrontmatter tool with deeply nested frontmatter as a JSON object", func() {
+			var callResp *httptest.ResponseRecorder
+			var callResult map[string]any
+
+			BeforeEach(func() {
+				// Initialize to get a session
+				initBody := `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"0.0.1"}}}`
+				initReq := httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(initBody))
+				initReq.Header.Set("Content-Type", "application/json")
+				initResp := httptest.NewRecorder()
+				handler.ServeHTTP(initResp, initReq)
+				sessionID := initResp.Header().Get("Mcp-Session-Id")
+
+				// Send deeply nested frontmatter as a JSON object, mirroring the
+				// ai_agent_chat_context structure that triggered issue #956.
+				callBody := `{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"api_v1_Frontmatter_ReplaceFrontmatter","arguments":{"page":"ai_assistant","frontmatter":{"title":"AI Assistant","ai_agent_chat_context":{"session_id":"abc123","messages":[{"role":"user","content":"Hello, can you help me?"},{"role":"assistant","content":"Sure! What do you need?"}],"metadata":{"model":"claude-sonnet","temperature":0.7,"nested":{"deep":{"deeper":{"deepest":"value with \"quotes\" and special chars"}}}}}}}}}`
 				callReq := httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(callBody))
 				callReq.Header.Set("Content-Type", "application/json")
 				if sessionID != "" {
