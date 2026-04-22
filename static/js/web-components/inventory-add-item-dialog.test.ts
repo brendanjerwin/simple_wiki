@@ -23,6 +23,14 @@ describe('InventoryAddItemDialog', () => {
     return dialog.shadowRoot?.querySelector<AutomagicIdentifierInput>('automagic-identifier-input') ?? null;
   }
 
+  /**
+   * Helper to call the private _handleDialogCancel method.
+   */
+  function callHandleDialogCancel(dialog: InventoryAddItemDialog, event: Event = new Event('cancel', { cancelable: true })): void {
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private method for testing
+    (dialog as unknown as { _handleDialogCancel: (e: Event) => void })._handleDialogCancel(event);
+  }
+
   beforeEach(async () => {
     el = await Promise.race([
       fixture<InventoryAddItemDialog>(html`<inventory-add-item-dialog></inventory-add-item-dialog>`),
@@ -166,14 +174,14 @@ describe('InventoryAddItemDialog', () => {
     });
   });
 
-  describe('keyboard handling', () => {
-    describe('when escape key is pressed while open', () => {
+  describe('cancel event handling', () => {
+    describe('when cancel event fires while open', () => {
       let closeSpy: sinon.SinonSpy;
 
       beforeEach(() => {
         closeSpy = sinon.spy(el, 'close');
         el.openDialog('drawer_kitchen');
-        (el as unknown as { _handleKeydown: (event: KeyboardEvent) => void })._handleKeydown(new KeyboardEvent('keydown', { key: 'Escape' }));
+        callHandleDialogCancel(el);
       });
 
       it('should close the dialog', () => {
@@ -181,16 +189,17 @@ describe('InventoryAddItemDialog', () => {
       });
     });
 
-    describe('when escape key is pressed while closed', () => {
+    describe('when cancel event fires while closed', () => {
       let closeSpy: sinon.SinonSpy;
 
       beforeEach(() => {
         closeSpy = sinon.spy(el, 'close');
-        (el as unknown as { _handleKeydown: (event: KeyboardEvent) => void })._handleKeydown(new KeyboardEvent('keydown', { key: 'Escape' }));
+        callHandleDialogCancel(el);
       });
 
-      it('should not close the dialog', () => {
-        expect(closeSpy).to.not.have.been.called;
+      it('should close the dialog via cancel handler', () => {
+        // _handleDialogCancel always calls close; the dialog is already closed
+        expect(closeSpy).to.have.been.calledOnce;
       });
     });
   });
@@ -317,15 +326,19 @@ describe('InventoryAddItemDialog', () => {
   });
 
   describe('backdrop click handling', () => {
-    describe('when backdrop is clicked', () => {
+    describe('when backdrop is clicked (dialog element itself is clicked)', () => {
       let closeSpy: sinon.SinonSpy;
 
       beforeEach(async () => {
         closeSpy = sinon.spy(el, 'close');
         el.openDialog('drawer_kitchen');
         await el.updateComplete;
-        const backdrop = el.shadowRoot?.querySelector<HTMLElement>('.backdrop');
-        backdrop?.click();
+        const dialog = el.shadowRoot?.querySelector<HTMLElement>('dialog');
+        // Simulate a click directly on the dialog element (backdrop area)
+        const clickEvent = new MouseEvent('click', { bubbles: true, cancelable: true });
+        Object.defineProperty(clickEvent, 'target', { value: dialog });
+        Object.defineProperty(clickEvent, 'currentTarget', { value: dialog });
+        dialog?.dispatchEvent(clickEvent);
       });
 
       it('should close the dialog', () => {
@@ -334,16 +347,21 @@ describe('InventoryAddItemDialog', () => {
     });
   });
 
-  describe('dialog click handling', () => {
-    describe('when dialog content is clicked', () => {
+  describe('dialog content click handling', () => {
+    describe('when dialog header content is clicked', () => {
       let closeSpy: sinon.SinonSpy;
 
       beforeEach(async () => {
         closeSpy = sinon.spy(el, 'close');
         el.openDialog('drawer_kitchen');
         await el.updateComplete;
-        const dialog = el.shadowRoot?.querySelector<HTMLElement>('.dialog');
-        dialog?.click();
+        const dialog = el.shadowRoot?.querySelector<HTMLElement>('dialog');
+        const header = el.shadowRoot?.querySelector<HTMLElement>('.dialog-header');
+        // Simulate a click on inner content: target is header, currentTarget is dialog
+        const clickEvent = new MouseEvent('click', { bubbles: true, cancelable: true });
+        Object.defineProperty(clickEvent, 'target', { value: header });
+        Object.defineProperty(clickEvent, 'currentTarget', { value: dialog });
+        dialog?.dispatchEvent(clickEvent);
       });
 
       it('should not close the dialog', () => {
@@ -464,33 +482,34 @@ describe('InventoryAddItemDialog', () => {
     });
   });
 
-  describe('event listener lifecycle', () => {
+  describe('native dialog element', () => {
     describe('when component is connected', () => {
-      let addEventListenerSpy: sinon.SinonSpy;
-
       beforeEach(async () => {
-        addEventListenerSpy = sinon.spy(document, 'addEventListener');
         el = await fixture(html`<inventory-add-item-dialog></inventory-add-item-dialog>`);
         await el.updateComplete;
       });
 
-      it('should add keydown event listener', () => {
-        expect(addEventListenerSpy).to.have.been.calledWith('keydown', (el as unknown as { _handleKeydown: (event: KeyboardEvent) => void })._handleKeydown);
+      it('should render a native dialog element', () => {
+        const dialog = el.shadowRoot?.querySelector('dialog');
+        expect(dialog).to.exist;
+      });
+
+      it('should have aria-labelledby attribute on dialog', () => {
+        const dialog = el.shadowRoot?.querySelector('dialog');
+        expect(dialog?.getAttribute('aria-labelledby')).to.equal('add-item-dialog-title');
       });
     });
 
     describe('when component is disconnected', () => {
-      let removeEventListenerSpy: sinon.SinonSpy;
-
       beforeEach(async () => {
-        removeEventListenerSpy = sinon.spy(document, 'removeEventListener');
         el = await fixture(html`<inventory-add-item-dialog></inventory-add-item-dialog>`);
         await el.updateComplete;
         el.remove();
       });
 
-      it('should remove keydown event listener', () => {
-        expect(removeEventListenerSpy).to.have.been.calledWith('keydown', (el as unknown as { _handleKeydown: (event: KeyboardEvent) => void })._handleKeydown);
+      it('should clean up without errors', () => {
+        // Native dialog cleanup is handled by the browser; verify no exceptions thrown
+        expect(el).to.exist;
       });
     });
   });

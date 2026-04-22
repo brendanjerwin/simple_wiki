@@ -1213,6 +1213,42 @@ describe('PageChatPanel', () => {
         }).to.not.throw();
       });
     });
+
+    describe('when adding a new tool call and user has not scrolled', () => {
+      let scrollToBottomSpy: SinonSpy;
+
+      beforeEach(async () => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- accessing private field for testing
+        (el as any).userHasScrolled = false;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- spying on private method for testing
+        scrollToBottomSpy = spy(el as any, 'scrollToBottom');
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- calling private method for testing
+        await (el as any).updateToolCall('tc-msg', 'tc-1', 'Read File', 'running');
+        await el.updateComplete;
+      });
+
+      it('should auto-scroll to bottom', () => {
+        expect(scrollToBottomSpy.callCount).to.be.greaterThan(0);
+      });
+    });
+
+    describe('when adding a new tool call and user has scrolled up', () => {
+      let scrollToBottomSpy: SinonSpy;
+
+      beforeEach(async () => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- accessing private field for testing
+        (el as any).userHasScrolled = true;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- spying on private method for testing
+        scrollToBottomSpy = spy(el as any, 'scrollToBottom');
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- calling private method for testing
+        await (el as any).updateToolCall('tc-msg', 'tc-1', 'Read File', 'running');
+        await el.updateComplete;
+      });
+
+      it('should not auto-scroll to bottom', () => {
+        expect(scrollToBottomSpy.callCount).to.equal(0);
+      });
+    });
   });
 
   describe('toolCalls passed to chat-message-bubble', () => {
@@ -2121,6 +2157,78 @@ describe('PageChatPanel stream methods', () => {
 
       it('should not call startStream', () => {
         expect(startStreamSpy.callCount).to.equal(0);
+      });
+    });
+
+    describe('when document becomes visible, drawer is open, and user has not scrolled', () => {
+      let scrollToBottomSpy: SinonSpy;
+
+      beforeEach(async () => {
+        el.drawerOpen = true;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- accessing private field for testing
+        (el as any).userHasScrolled = false;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- spying on private method for testing
+        scrollToBottomSpy = spy(el as any, 'scrollToBottom');
+        Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true });
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- calling private method for testing
+        (el as any).handleVisibilityChange();
+        await el.updateComplete;
+      });
+
+      afterEach(() => {
+        Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true });
+      });
+
+      it('should scroll to bottom', () => {
+        expect(scrollToBottomSpy.callCount).to.be.greaterThan(0);
+      });
+    });
+
+    describe('when document becomes visible, drawer is open, and user has scrolled up', () => {
+      let scrollToBottomSpy: SinonSpy;
+
+      beforeEach(async () => {
+        el.drawerOpen = true;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- accessing private field for testing
+        (el as any).userHasScrolled = true;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- spying on private method for testing
+        scrollToBottomSpy = spy(el as any, 'scrollToBottom');
+        Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true });
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- calling private method for testing
+        (el as any).handleVisibilityChange();
+        await el.updateComplete;
+      });
+
+      afterEach(() => {
+        Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true });
+      });
+
+      it('should not scroll to bottom', () => {
+        expect(scrollToBottomSpy.callCount).to.equal(0);
+      });
+    });
+
+    describe('when document becomes visible but drawer is closed', () => {
+      let scrollToBottomSpy: SinonSpy;
+
+      beforeEach(async () => {
+        el.drawerOpen = false;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- accessing private field for testing
+        (el as any).userHasScrolled = false;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- spying on private method for testing
+        scrollToBottomSpy = spy(el as any, 'scrollToBottom');
+        Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true });
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- calling private method for testing
+        (el as any).handleVisibilityChange();
+        await el.updateComplete;
+      });
+
+      afterEach(() => {
+        Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true });
+      });
+
+      it('should not scroll to bottom', () => {
+        expect(scrollToBottomSpy.callCount).to.equal(0);
       });
     });
   });
