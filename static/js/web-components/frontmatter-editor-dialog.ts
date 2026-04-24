@@ -1,5 +1,6 @@
 import { html, css, LitElement } from 'lit';
 import { property, state } from 'lit/decorators.js';
+import { NativeDialogMixin } from './native-dialog-mixin.js';
 import { createClient } from '@connectrpc/connect';
 import { create, type JsonObject } from '@bufbuild/protobuf';
 import { getGrpcWebTransport } from './grpc-transport.js';
@@ -42,10 +43,11 @@ import type { SectionChangeEventDetail } from './event-types.js';
  * 
  * This separation allows for clean state management, proper event bubbling, and maintainable code.
  */
-export class FrontmatterEditorDialog extends LitElement {
+export class FrontmatterEditorDialog extends NativeDialogMixin(LitElement) {
   static override readonly styles = dialogStyles(css`
       :host {
         display: block;
+        z-index: var(--z-modal);
       }
 
       dialog {
@@ -138,9 +140,6 @@ export class FrontmatterEditorDialog extends LitElement {
   @property({ type: String })
   declare page: string;
 
-  @property({ type: Boolean, reflect: true })
-  declare open: boolean;
-
   @state()
   declare loading: boolean;
 
@@ -157,12 +156,10 @@ export class FrontmatterEditorDialog extends LitElement {
   declare workingFrontmatter?: JsonObject;
 
   private readonly client = createClient(Frontmatter, getGrpcWebTransport());
-  private _previouslyFocusedElement: Element | null = null;
 
   constructor() {
     super();
     this.page = '';
-    this.open = false;
     this.loading = false;
     this.saving = false;
     this.workingFrontmatter = {};
@@ -183,41 +180,22 @@ export class FrontmatterEditorDialog extends LitElement {
     this.requestUpdate();
   };
 
-  override updated(changedProperties: Map<PropertyKey, unknown>): void {
-    super.updated(changedProperties);
-    if (changedProperties.has('open')) {
-      const dialog = this.shadowRoot?.querySelector('dialog');
-      if (!dialog) return;
-      if (this.open && !dialog.open) {
-        this._previouslyFocusedElement = document.activeElement;
-        dialog.showModal();
-      } else if (!this.open && dialog.open) {
-        dialog.close();
-        if (this._previouslyFocusedElement instanceof HTMLElement) {
-          this._previouslyFocusedElement.focus();
-        }
-        this._previouslyFocusedElement = null;
-      }
-    }
-  }
-
-  private readonly _handleDialogCancel = (event: Event): void => {
-    event.preventDefault();
-    this._handleCancel();
-  };
-
   public openDialog(page: string): void {
     this.page = page;
     this.open = true;
     this.loadFrontmatter();
   }
 
-  public close(): void {
-    this.open = false;
+  override closeDialog(): void {
     this.frontmatter = undefined;
     this.augmentedError = undefined;
     this.loading = false;
     this.saving = false;
+    super.closeDialog();
+  }
+
+  public close(): void {
+    this.closeDialog();
   }
 
   public async loadFrontmatter(): Promise<void> {
@@ -241,10 +219,6 @@ export class FrontmatterEditorDialog extends LitElement {
       this.requestUpdate();
     }
   }
-
-  private readonly _handleCancel = (): void => {
-    this.close();
-  };
 
   private refreshPage(): void {
     globalThis.location.reload();
@@ -324,13 +298,13 @@ export class FrontmatterEditorDialog extends LitElement {
       <dialog aria-labelledby="frontmatter-dialog-title" @cancel="${this._handleDialogCancel}">
         <div class="dialog-header system-font">
           <h2 id="frontmatter-dialog-title" class="dialog-title">Edit Frontmatter</h2>
-          <button class="button-base icon-button" aria-label="Close dialog" @click="${this._handleCancel}" ?disabled="${this.saving}">×</button>
+          <button class="button-base icon-button" aria-label="Close dialog" @click="${this.closeDialog}" ?disabled="${this.saving}">×</button>
         </div>
         <div class="content">
           ${this._renderContent()}
         </div>
         <div class="footer">
-          <button class="button-base button-secondary button-large border-radius-small" @click="${this._handleCancel}" ?disabled="${this.saving}">
+          <button class="button-base button-secondary button-large border-radius-small" @click="${this.closeDialog}" ?disabled="${this.saving}">
             Cancel
           </button>
           <button class="button-base button-primary button-large border-radius-small" @click="${this._handleSaveClick}" ?disabled="${this.saving || this.loading}">

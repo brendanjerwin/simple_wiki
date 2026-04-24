@@ -54,6 +54,7 @@ export class PageImportDialog extends NativeDialogMixin(LitElement) {
   static override readonly styles = dialogStyles(css`
       :host {
         display: block;
+        z-index: var(--z-modal);
       }
 
       dialog {
