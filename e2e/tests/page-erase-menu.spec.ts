@@ -111,7 +111,8 @@ This page is used by E2E tests for the page erase menu confirmation flow.`);
     // Click the danger (Delete) button to confirm deletion
     await page.locator('#page-deletion-dialog .button-danger').click();
 
-    // Should navigate to home page after successful deletion
-    await expect(page).toHaveURL('/', { timeout: NAVIGATION_TIMEOUT_MS });
+    // Should navigate to home page after successful deletion.
+    // The server redirects '/' → '/{defaultPage}/view', so the final URL is '/home/view'.
+    await expect(page).toHaveURL('/home/view', { timeout: NAVIGATION_TIMEOUT_MS });
   });
 });
