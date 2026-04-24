@@ -24,210 +24,203 @@ export type ScannedResultInfo = ScannedItemInfo;
  */
 export class InventoryMoveItemDialog extends LitElement {
   static override readonly styles = dialogStyles(css`
-      :host {
-        position: fixed;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        z-index: var(--z-modal);
-        display: none;
-      }
+    dialog {
+      padding: 0;
+      border: none;
+      border-radius: 8px;
+      background: var(--color-surface-elevated);
+      max-width: 500px;
+      width: 90%;
+      max-height: 90vh;
+      flex-direction: column;
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
+      animation: slideIn 0.2s ease-out;
+      overflow: hidden;
+    }
 
-      :host([open]) {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        animation: fadeIn 0.2s ease-out;
-      }
+    dialog[open] {
+      display: flex;
+    }
 
-      .backdrop {
-        position: fixed;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        background: rgba(0, 0, 0, 0.5);
-      }
+    dialog::backdrop {
+      background: rgba(0, 0, 0, 0.5);
+      animation: fadeIn 0.2s ease-out;
+    }
 
-      .dialog {
-        background: var(--color-surface-elevated);
-        max-width: 500px;
-        width: 90%;
-        max-height: 90vh;
-        display: flex;
-        flex-direction: column;
-        position: relative;
-        z-index: 1;
-        animation: slideIn 0.2s ease-out;
-        border-radius: 8px;
+    @media (max-width: 768px) {
+      dialog {
+        width: 100%;
+        max-width: none;
+        max-height: 100%;
+        border-radius: 0;
+        margin: 0;
       }
+    }
 
-      .content {
-        padding: 20px;
-        overflow-y: auto;
-        flex: 1;
-      }
+    .content {
+      padding: 20px;
+      overflow-y: auto;
+      flex: 1;
+    }
 
-      .search-results {
-        margin-top: 8px;
-        border: 1px solid var(--color-border-subtle);
-        border-radius: 4px;
-        max-height: 250px;
-        overflow-y: auto;
-      }
+    .search-results {
+      margin-top: 8px;
+      border: 1px solid var(--color-border-subtle);
+      border-radius: 4px;
+      max-height: 250px;
+      overflow-y: auto;
+    }
 
-      .search-results-header {
-        padding: 8px 12px;
-        background: var(--color-surface-sunken);
-        border-bottom: 1px solid var(--color-border-subtle);
-        font-size: 12px;
-        font-weight: 500;
-        color: var(--color-text-secondary);
-      }
+    .search-results-header {
+      padding: 8px 12px;
+      background: var(--color-surface-sunken);
+      border-bottom: 1px solid var(--color-border-subtle);
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--color-text-secondary);
+    }
 
-      .search-result-item {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        padding: 10px 12px;
-        border-bottom: 1px solid var(--color-border-subtle);
-        gap: 12px;
-      }
+    .search-result-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--color-border-subtle);
+      gap: 12px;
+    }
 
-      .search-result-item:last-child {
-        border-bottom: none;
-      }
+    .search-result-item:last-child {
+      border-bottom: none;
+    }
 
-      .result-info {
-        flex: 1;
-        min-width: 0;
-      }
+    .result-info {
+      flex: 1;
+      min-width: 0;
+    }
 
-      .result-title {
-        font-weight: 500;
-        color: var(--color-text-primary);
-        margin-bottom: 2px;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-      }
+    .result-title {
+      font-weight: 500;
+      color: var(--color-text-primary);
+      margin-bottom: 2px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
 
-      .result-container {
-        font-size: 12px;
-        color: var(--color-text-secondary);
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-      }
+    .result-container {
+      font-size: 12px;
+      color: var(--color-text-secondary);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
 
-      .move-to-button {
-        padding: 6px 12px;
-        border: none;
-        border-radius: 4px;
-        background: var(--color-action-confirm);
-        color: var(--color-text-inverse);
-        font-size: 13px;
-        font-weight: 500;
-        cursor: pointer;
-        white-space: nowrap;
-        transition: background-color 0.15s;
-      }
+    .move-to-button {
+      padding: 6px 12px;
+      border: none;
+      border-radius: 4px;
+      background: var(--color-action-confirm);
+      color: var(--color-text-inverse);
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: background-color 0.15s;
+    }
 
-      .move-to-button:hover:not(:disabled) {
-        background: var(--color-action-confirm-hover);
-      }
+    .move-to-button:hover:not(:disabled) {
+      background: var(--color-action-confirm-hover);
+    }
 
-      .move-to-button:disabled {
-        background: var(--color-action-primary);
-        cursor: not-allowed;
-      }
+    .move-to-button:disabled {
+      background: var(--color-action-primary);
+      cursor: not-allowed;
+    }
 
-      .no-results {
-        padding: 16px 12px;
-        text-align: center;
-        color: var(--color-text-secondary);
-        font-size: 14px;
-      }
+    .no-results {
+      padding: 16px 12px;
+      text-align: center;
+      color: var(--color-text-secondary);
+      font-size: 14px;
+    }
 
-      .footer {
-        display: flex;
-        gap: 12px;
-        padding: 16px 20px;
-        border-top: 1px solid var(--color-border-subtle);
-        justify-content: flex-end;
-      }
+    .footer {
+      display: flex;
+      gap: 12px;
+      padding: 16px 20px;
+      border-top: 1px solid var(--color-border-subtle);
+      justify-content: flex-end;
+    }
 
-      .footer-hint {
-        flex: 1;
-        font-size: 13px;
-        color: var(--color-text-secondary);
-        display: flex;
-        align-items: center;
-      }
+    .footer-hint {
+      flex: 1;
+      font-size: 13px;
+      color: var(--color-text-secondary);
+      display: flex;
+      align-items: center;
+    }
 
-      .search-row {
-        display: flex;
-        gap: 8px;
-        align-items: stretch;
-      }
+    .search-row {
+      display: flex;
+      gap: 8px;
+      align-items: stretch;
+    }
 
-      .search-row input {
-        flex: 1;
-      }
+    .search-row input {
+      flex: 1;
+    }
 
-      .qr-scan-button {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        padding: 0 12px;
-        background: var(--color-surface-sunken);
-        border: 1px solid var(--color-border-default);
-        border-radius: 4px;
-        cursor: pointer;
-        color: var(--color-text-primary);
-        font-size: 16px;
-        transition: background-color 0.15s;
-      }
+    .qr-scan-button {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0 12px;
+      background: var(--color-surface-sunken);
+      border: 1px solid var(--color-border-default);
+      border-radius: 4px;
+      cursor: pointer;
+      color: var(--color-text-primary);
+      font-size: 16px;
+      transition: background-color 0.15s;
+    }
 
-      .qr-scan-button:hover:not(:disabled) {
-        background: var(--color-hover-overlay);
-      }
+    .qr-scan-button:hover:not(:disabled) {
+      background: var(--color-hover-overlay);
+    }
 
-      .qr-scan-button:disabled {
-        cursor: not-allowed;
-        opacity: 0.6;
-      }
+    .qr-scan-button:disabled {
+      cursor: not-allowed;
+      opacity: 0.6;
+    }
 
-      .scanned-result {
-        margin-top: 12px;
-        border: 2px solid var(--color-success);
-        border-radius: 4px;
-        background: var(--color-success-bg);
-      }
+    .scanned-result {
+      margin-top: 12px;
+      border: 2px solid var(--color-success);
+      border-radius: 4px;
+      background: var(--color-success-bg);
+    }
 
-      .scanned-result-header {
-        padding: 8px 12px;
-        background: var(--color-success-bg);
-        border-bottom: 1px solid var(--color-success);
-        font-size: 12px;
-        font-weight: 500;
-        color: var(--color-success-text);
-        display: flex;
-        align-items: center;
-        gap: 6px;
-      }
+    .scanned-result-header {
+      padding: 8px 12px;
+      background: var(--color-success-bg);
+      border-bottom: 1px solid var(--color-success);
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--color-success-text);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
 
-      .scanned-result-item {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        padding: 10px 12px;
-        gap: 12px;
-      }
+    .scanned-result-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 12px;
+      gap: 12px;
+    }
 
-    `
-  );
+  `);
 
   @property({ type: Boolean, reflect: true })
   declare open: boolean;
@@ -269,6 +262,7 @@ export class InventoryMoveItemDialog extends LitElement {
   private _searchDebounceTimer?: ReturnType<typeof setTimeout>;
   private readonly searchClient = createClient(SearchService, getGrpcWebTransport());
   private readonly inventoryItemCreatorMover = new InventoryItemCreatorMover();
+  private _previouslyFocusedElement: Element | null = null;
 
   constructor() {
     super();
@@ -285,16 +279,29 @@ export class InventoryMoveItemDialog extends LitElement {
     this.scannedDestination = null;
     this.scannedResult = null;
     this.scanError = null;
+    this._previouslyFocusedElement = null;
   }
 
-  override connectedCallback(): void {
-    super.connectedCallback();
-    document.addEventListener('keydown', this._handleKeydown);
+  override updated(changedProperties: Map<PropertyKey, unknown>): void {
+    super.updated(changedProperties);
+    if (changedProperties.has('open')) {
+      const dialog = this.shadowRoot?.querySelector('dialog');
+      if (!dialog) return;
+      if (this.open && !dialog.open && this.isConnected) {
+        this._previouslyFocusedElement = document.activeElement;
+        dialog.showModal();
+      } else if (!this.open && dialog.open) {
+        dialog.close();
+        if (this._previouslyFocusedElement instanceof HTMLElement) {
+          this._previouslyFocusedElement.focus();
+        }
+        this._previouslyFocusedElement = null;
+      }
+    }
   }
 
   override disconnectedCallback(): void {
     super.disconnectedCallback();
-    document.removeEventListener('keydown', this._handleKeydown);
     this._clearDebounceTimer();
   }
 
@@ -305,13 +312,18 @@ export class InventoryMoveItemDialog extends LitElement {
     }
   }
 
-  private readonly _handleKeydown = (event: KeyboardEvent): void => {
-    if (event.key === 'Escape' && this.open) {
-      if (this.scannerMode) {
-        this._exitScannerMode();
-      } else {
-        this.close();
-      }
+  private readonly _handleDialogCancel = (event: Event): void => {
+    event.preventDefault();
+    if (this.scannerMode) {
+      this._exitScannerMode();
+    } else {
+      this._handleCancel();
+    }
+  };
+
+  private readonly _handleDialogClick = (event: MouseEvent): void => {
+    if (event.target === event.currentTarget && !this.movingTo) {
+      this._handleCancel();
     }
   };
 
@@ -351,16 +363,6 @@ export class InventoryMoveItemDialog extends LitElement {
     this.scannedResult = null;
     this.scanError = null;
   }
-
-  private readonly _handleBackdropClick = (): void => {
-    if (!this.movingTo) {
-      this.close();
-    }
-  };
-
-  private readonly _handleDialogClick = (event: Event): void => {
-    event.stopPropagation();
-  };
 
   private readonly _handleSearchInput = (event: Event): void => {
     if (!(event.target instanceof HTMLInputElement)) {
@@ -634,10 +636,13 @@ export class InventoryMoveItemDialog extends LitElement {
   override render() {
     return html`
       ${sharedStyles}
-      <div class="backdrop" @click=${this._handleBackdropClick}></div>
-      <div class="dialog system-font border-radius box-shadow" @click=${this._handleDialogClick}>
-        <div class="dialog-header">
-          <h2 class="dialog-title">Move Item: ${this.itemIdentifier}</h2>
+      <dialog
+        aria-labelledby="move-item-dialog-title"
+        @cancel="${this._handleDialogCancel}"
+        @click="${this._handleDialogClick}"
+      >
+        <div class="dialog-header system-font">
+          <h2 id="move-item-dialog-title" class="dialog-title">Move Item: ${this.itemIdentifier}</h2>
         </div>
 
         <div class="content">
@@ -698,7 +703,7 @@ export class InventoryMoveItemDialog extends LitElement {
             Cancel
           </button>
         </div>
-      </div>
+      </dialog>
     `;
   }
 }

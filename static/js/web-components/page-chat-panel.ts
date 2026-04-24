@@ -894,12 +894,13 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
   }
 
   private handleVisibilityChange(): void {
-    if (
-      document.visibilityState === 'visible' &&
-      this.page &&
-      this._panelEverOpened &&
-      this.streamState !== 'connected'
-    ) {
+    if (document.visibilityState !== 'visible') return;
+
+    if (this.drawerOpen && !this.userHasScrolled) {
+      this.updateComplete.then(() => this.scrollToBottom());
+    }
+
+    if (this.page && this._panelEverOpened && this.streamState !== 'connected') {
       this.startStream();
     }
   }
@@ -1074,7 +1075,7 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
     }
   }
 
-  private updateToolCall(messageId: string, toolCallId: string, title: string, status: string): void {
+  private async updateToolCall(messageId: string, toolCallId: string, title: string, status: string): Promise<void> {
     const msg = this.messagesById.get(messageId);
     if (!msg) return;
 
@@ -1087,6 +1088,11 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
       msg.toolCalls = [...msg.toolCalls, { toolCallId, title, status }];
     }
     this.messages = [...this.messages];
+
+    if (!this.userHasScrolled) {
+      await this.updateComplete;
+      this.scrollToBottom();
+    }
   }
 
   private addReaction(messageId: string, emoji: string, reactor: string): void {

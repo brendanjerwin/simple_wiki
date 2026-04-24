@@ -353,6 +353,7 @@ export class FrontmatterEditorDialog extends LitElement {
       <dialog aria-labelledby="frontmatter-dialog-title" @cancel="${this._handleDialogCancel}" @keydown="${this._handleKeydown}">
         <div class="dialog-header system-font">
           <h2 id="frontmatter-dialog-title" class="dialog-title">Edit Frontmatter</h2>
+          <button class="button-base icon-button" aria-label="Close dialog" @click="${this._handleCancel}" ?disabled="${this.saving}">×</button>
         </div>
         <div class="content">
           ${this._renderContent()}

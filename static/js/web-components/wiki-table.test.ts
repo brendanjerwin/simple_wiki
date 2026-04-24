@@ -1578,4 +1578,48 @@ describe('WikiTable', () => {
 
   });
 
+  describe('column header accessibility', () => {
+    let el: WikiTable;
+
+    beforeEach(async () => {
+      el = await createBasicFixture();
+    });
+
+    it('should have scope="col" on all th elements', () => {
+      const headers = el.shadowRoot?.querySelectorAll('thead th');
+      Array.from(headers ?? []).forEach(th => {
+        expect(th.getAttribute('scope')).to.equal('col');
+      });
+    });
+
+    it('should render sort-arrows as button elements', () => {
+      const arrows = el.shadowRoot?.querySelectorAll('.sort-arrows');
+      Array.from(arrows ?? []).forEach(arrow => {
+        expect(arrow.tagName.toLowerCase()).to.equal('button');
+      });
+    });
+
+    it('should render header-main as button elements', () => {
+      const mains = el.shadowRoot?.querySelectorAll('.header-main');
+      Array.from(mains ?? []).forEach(main => {
+        expect(main.tagName.toLowerCase()).to.equal('button');
+      });
+    });
+
+    it('should have aria-label on sort-arrows buttons', () => {
+      const arrows = el.shadowRoot?.querySelectorAll('.sort-arrows');
+      expect(arrows?.[0]?.getAttribute('aria-label')).to.contain('Name');
+      expect(arrows?.[1]?.getAttribute('aria-label')).to.contain('Price');
+    });
+
+    it('should have aria-hidden="true" on sort indicator spans inside sort-arrows buttons', () => {
+      const arrows = el.shadowRoot?.querySelectorAll('.sort-arrows');
+      Array.from(arrows ?? []).forEach(arrow => {
+        const indicator = arrow.querySelector('span[aria-hidden="true"]');
+        expect(indicator).to.exist;
+      });
+    });
+
+  });
+
 });

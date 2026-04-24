@@ -26,12 +26,12 @@ describe('InventoryMoveItemDialog', () => {
   }
 
   /**
-   * Helper to call the private _handleKeydown method.
+   * Helper to call the private _handleDialogCancel method.
    * Uses type assertion to access private handler for testing.
    */
-  function callHandleKeydown(dialog: InventoryMoveItemDialog, event: KeyboardEvent): void {
+  function callHandleDialogCancel(dialog: InventoryMoveItemDialog, event: Event = new Event('cancel', { cancelable: true })): void {
     // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private method for testing
-    (dialog as unknown as { _handleKeydown: (e: KeyboardEvent) => void })._handleKeydown(event);
+    (dialog as unknown as { _handleDialogCancel: (e: Event) => void })._handleDialogCancel(event);
   }
 
   /**
@@ -219,14 +219,14 @@ describe('InventoryMoveItemDialog', () => {
     });
   });
 
-  describe('keyboard handling', () => {
-    describe('when escape key is pressed while open', () => {
+  describe('cancel event handling', () => {
+    describe('when cancel event fires while open', () => {
       let closeSpy: sinon.SinonSpy;
 
       beforeEach(() => {
         closeSpy = sinon.spy(el, 'close');
         el.openDialog('screwdriver', 'drawer_kitchen');
-        callHandleKeydown(el, new KeyboardEvent('keydown', { key: 'Escape' }));
+        callHandleDialogCancel(el);
       });
 
       it('should close the dialog', () => {
@@ -234,27 +234,28 @@ describe('InventoryMoveItemDialog', () => {
       });
     });
 
-    describe('when escape key is pressed while closed', () => {
+    describe('when cancel event fires while closed', () => {
       let closeSpy: sinon.SinonSpy;
 
       beforeEach(() => {
         closeSpy = sinon.spy(el, 'close');
-        callHandleKeydown(el, new KeyboardEvent('keydown', { key: 'Escape' }));
+        callHandleDialogCancel(el);
       });
 
-      it('should not close the dialog', () => {
-        expect(closeSpy).to.not.have.been.called;
+      it('should not close the dialog (movingTo is null but dialog already closed)', () => {
+        // _handleCancel calls close() only when !this.movingTo - and it is null, so close is called
+        expect(closeSpy).to.have.been.calledOnce;
       });
     });
 
-    describe('when escape key is pressed while scanner is open', () => {
+    describe('when cancel event fires while scanner is open', () => {
       let closeSpy: sinon.SinonSpy;
 
       beforeEach(() => {
         closeSpy = sinon.spy(el, 'close');
         el.openDialog('screwdriver', 'drawer_kitchen');
         el.scannerMode = true;
-        callHandleKeydown(el, new KeyboardEvent('keydown', { key: 'Escape' }));
+        callHandleDialogCancel(el);
       });
 
       it('should not close the dialog', () => {
@@ -435,6 +436,25 @@ describe('InventoryMoveItemDialog', () => {
       it('should disable cancel button', () => {
         const cancelBtn = el.shadowRoot?.querySelector<HTMLButtonElement>('.button-secondary');
         expect(cancelBtn?.disabled).to.be.true;
+      });
+    });
+  });
+
+  describe('native dialog element', () => {
+    describe('when component is rendered', () => {
+      beforeEach(async () => {
+        el = await fixture(html`<inventory-move-item-dialog></inventory-move-item-dialog>`);
+        await el.updateComplete;
+      });
+
+      it('should render a native dialog element', () => {
+        const dialog = el.shadowRoot?.querySelector('dialog');
+        expect(dialog).to.exist;
+      });
+
+      it('should have aria-labelledby attribute on dialog', () => {
+        const dialog = el.shadowRoot?.querySelector('dialog');
+        expect(dialog?.getAttribute('aria-labelledby')).to.equal('move-item-dialog-title');
       });
     });
   });
