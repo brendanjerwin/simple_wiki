@@ -110,6 +110,7 @@ func normalizeBaseURL(baseURL string) (string, error) {
 
 // apiClients holds Connect protocol clients for all wiki services.
 type apiClients struct {
+	agentMetadata  apiv1connect.AgentMetadataServiceClient
 	chat           apiv1connect.ChatServiceClient
 	frontmatter    apiv1connect.FrontmatterClient
 	inventory      apiv1connect.InventoryManagementServiceClient
@@ -122,6 +123,7 @@ type apiClients struct {
 // createAPIClients creates Connect protocol clients for all wiki services.
 func createAPIClients(httpClient connect.HTTPClient, baseURL string) *apiClients {
 	return &apiClients{
+		agentMetadata:  apiv1connect.NewAgentMetadataServiceClient(httpClient, baseURL),
 		chat:           apiv1connect.NewChatServiceClient(httpClient, baseURL),
 		frontmatter:    apiv1connect.NewFrontmatterClient(httpClient, baseURL),
 		inventory:      apiv1connect.NewInventoryManagementServiceClient(httpClient, baseURL),
@@ -136,6 +138,7 @@ func createAPIClients(httpClient connect.HTTPClient, baseURL string) *apiClients
 func registerToolHandlers(s *mcpserver.MCPServer, clients *apiClients) {
 	// Register handlers for each service
 	// These forward MCP tool calls to the Connect protocol services
+	apiv1mcp.ForwardToConnectAgentMetadataServiceClient(s, clients.agentMetadata)
 	apiv1mcp.ForwardToConnectChatServiceClient(s, clients.chat)
 	apiv1mcp.ForwardToConnectFrontmatterClient(s, clients.frontmatter)
 	apiv1mcp.ForwardToConnectInventoryManagementServiceClient(s, clients.inventory)
