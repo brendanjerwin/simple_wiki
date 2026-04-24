@@ -78,7 +78,7 @@ test.describe('InsertNewPageDialog E2E Tests', () => {
     await expect(dialog).toBeAttached({ timeout: DIALOG_TIMEOUT_MS });
 
     // Dialog panel should become visible
-    await expect(dialog.locator('.dialog')).toBeVisible({ timeout: DIALOG_TIMEOUT_MS });
+    await expect(dialog.locator('dialog')).toBeVisible({ timeout: DIALOG_TIMEOUT_MS });
 
     // Verify dialog header text
     await expect(dialog.locator('.dialog-title')).toContainText('Insert New Page');
@@ -91,7 +91,7 @@ test.describe('InsertNewPageDialog E2E Tests', () => {
     await openInsertNewPageDialog(page);
 
     const dialog = page.locator('insert-new-page-dialog');
-    await expect(dialog.locator('.dialog')).toBeVisible({ timeout: DIALOG_TIMEOUT_MS });
+    await expect(dialog.locator('dialog')).toBeVisible({ timeout: DIALOG_TIMEOUT_MS });
 
     // Should render the automagic identifier input component
     await expect(dialog.locator('automagic-identifier-input')).toBeAttached();
@@ -111,13 +111,13 @@ test.describe('InsertNewPageDialog E2E Tests', () => {
     await openInsertNewPageDialog(page);
 
     const dialog = page.locator('insert-new-page-dialog');
-    await expect(dialog.locator('.dialog')).toBeVisible({ timeout: DIALOG_TIMEOUT_MS });
+    await expect(dialog.locator('dialog')).toBeVisible({ timeout: DIALOG_TIMEOUT_MS });
 
     // Click the Cancel button
     await dialog.locator('button.button-secondary').click();
 
     // Dialog should close
-    await expect(dialog.locator('.dialog')).not.toBeVisible();
+    await expect(dialog.locator('dialog')).not.toBeVisible();
   });
 
   test('should close dialog when clicking backdrop', async ({ page }) => {
@@ -127,15 +127,20 @@ test.describe('InsertNewPageDialog E2E Tests', () => {
     await openInsertNewPageDialog(page);
 
     const dialog = page.locator('insert-new-page-dialog');
-    await expect(dialog.locator('.dialog')).toBeVisible({ timeout: DIALOG_TIMEOUT_MS });
+    await expect(dialog.locator('dialog')).toBeVisible({ timeout: DIALOG_TIMEOUT_MS });
 
-    // Click the backdrop element (behind the dialog panel)
-    // Use position: { x: 10, y: 10 } to click near the top-left corner, which is
-    // guaranteed to be outside the centered dialog panel.
-    await dialog.locator('.backdrop').click({ position: { x: 10, y: 10 } });
+    // Simulate a backdrop click by dispatching a click event directly on the native
+    // <dialog> element inside the shadow root. When the browser fires a click on
+    // dialog::backdrop, the event target is the <dialog> element itself, which is
+    // exactly what _handleDialogClick checks for (e.target === e.currentTarget).
+    await page.evaluate(() => {
+      const host = document.querySelector('insert-new-page-dialog');
+      const d = host?.shadowRoot?.querySelector('dialog');
+      d?.dispatchEvent(new MouseEvent('click', { bubbles: false }));
+    });
 
     // Dialog should close
-    await expect(dialog.locator('.dialog')).not.toBeVisible();
+    await expect(dialog.locator('dialog')).not.toBeVisible();
   });
 
   test('should close dialog when pressing Escape key', async ({ page }) => {
@@ -145,13 +150,13 @@ test.describe('InsertNewPageDialog E2E Tests', () => {
     await openInsertNewPageDialog(page);
 
     const dialog = page.locator('insert-new-page-dialog');
-    await expect(dialog.locator('.dialog')).toBeVisible({ timeout: DIALOG_TIMEOUT_MS });
+    await expect(dialog.locator('dialog')).toBeVisible({ timeout: DIALOG_TIMEOUT_MS });
 
     // Press Escape key — the component listens for keydown on document
     await page.keyboard.press('Escape');
 
     // Dialog should close
-    await expect(dialog.locator('.dialog')).not.toBeVisible();
+    await expect(dialog.locator('dialog')).not.toBeVisible();
   });
 
   test('should disable Create Page button when identifier is empty', async ({ page }) => {
@@ -161,7 +166,7 @@ test.describe('InsertNewPageDialog E2E Tests', () => {
     await openInsertNewPageDialog(page);
 
     const dialog = page.locator('insert-new-page-dialog');
-    await expect(dialog.locator('.dialog')).toBeVisible({ timeout: DIALOG_TIMEOUT_MS });
+    await expect(dialog.locator('dialog')).toBeVisible({ timeout: DIALOG_TIMEOUT_MS });
 
     // Create Page button should be disabled when no identifier is set
     await expect(dialog.locator(FOOTER_PRIMARY_BUTTON)).toBeDisabled();
@@ -176,7 +181,7 @@ test.describe('InsertNewPageDialog E2E Tests', () => {
     await openInsertNewPageDialog(page);
 
     const dialog = page.locator('insert-new-page-dialog');
-    await expect(dialog.locator('.dialog')).toBeVisible({ timeout: DIALOG_TIMEOUT_MS });
+    await expect(dialog.locator('dialog')).toBeVisible({ timeout: DIALOG_TIMEOUT_MS });
 
     // Type a unique title to trigger automagic identifier generation (debounce + gRPC call)
     const titleInput = dialog.locator('automagic-identifier-input title-input input');
@@ -202,7 +207,7 @@ test.describe('InsertNewPageDialog E2E Tests', () => {
     await newPageButton.click();
 
     const dialog = page.locator('insert-new-page-dialog');
-    await expect(dialog.locator('.dialog')).toBeVisible({ timeout: DIALOG_TIMEOUT_MS });
+    await expect(dialog.locator('dialog')).toBeVisible({ timeout: DIALOG_TIMEOUT_MS });
 
     // Set identifier directly via evaluate to bypass gRPC debounce timing
     await page.evaluate((id) => {
@@ -222,7 +227,7 @@ test.describe('InsertNewPageDialog E2E Tests', () => {
     await createButton.click();
 
     // Dialog should close after successful page creation
-    await expect(dialog.locator('.dialog')).not.toBeVisible({ timeout: DIALOG_TIMEOUT_MS });
+    await expect(dialog.locator('dialog')).not.toBeVisible({ timeout: DIALOG_TIMEOUT_MS });
 
     // The markdown link should be inserted into the editor textarea
     const editorContent = await editorTextarea.inputValue();
@@ -244,7 +249,7 @@ test.describe('InsertNewPageDialog E2E Tests', () => {
     await openInsertNewPageDialog(page);
 
     const dialog = page.locator('insert-new-page-dialog');
-    await expect(dialog.locator('.dialog')).toBeVisible({ timeout: DIALOG_TIMEOUT_MS });
+    await expect(dialog.locator('dialog')).toBeVisible({ timeout: DIALOG_TIMEOUT_MS });
 
     // Wait for the template-loading async operation to complete
     await page.waitForTimeout(2000);
@@ -260,7 +265,7 @@ test.describe('InsertNewPageDialog E2E Tests', () => {
     await openInsertNewPageDialog(page);
 
     const dialog = page.locator('insert-new-page-dialog');
-    await expect(dialog.locator('.dialog')).toBeVisible({ timeout: DIALOG_TIMEOUT_MS });
+    await expect(dialog.locator('dialog')).toBeVisible({ timeout: DIALOG_TIMEOUT_MS });
 
     // Focus the title input to start Tab navigation from a known position
     const titleInput = dialog.locator('automagic-identifier-input title-input input');
@@ -269,7 +274,7 @@ test.describe('InsertNewPageDialog E2E Tests', () => {
 
     // Tab should move focus within the dialog without closing it
     await page.keyboard.press('Tab');
-    await expect(dialog.locator('.dialog')).toBeVisible();
+    await expect(dialog.locator('dialog')).toBeVisible();
 
     // Dialog should remain open after tabbing
     await expect(dialog).toHaveAttribute('open');
@@ -282,18 +287,18 @@ test.describe('InsertNewPageDialog E2E Tests', () => {
     // Open the dialog and enter a title
     await openInsertNewPageDialog(page);
     const dialog = page.locator('insert-new-page-dialog');
-    await expect(dialog.locator('.dialog')).toBeVisible({ timeout: DIALOG_TIMEOUT_MS });
+    await expect(dialog.locator('dialog')).toBeVisible({ timeout: DIALOG_TIMEOUT_MS });
 
     const titleInput = dialog.locator('automagic-identifier-input title-input input');
     await titleInput.fill('Some Title To Clear');
 
     // Close the dialog via Cancel
     await dialog.locator('button.button-secondary').click();
-    await expect(dialog.locator('.dialog')).not.toBeVisible();
+    await expect(dialog.locator('dialog')).not.toBeVisible();
 
     // Reopen the dialog
     await openInsertNewPageDialog(page);
-    await expect(dialog.locator('.dialog')).toBeVisible({ timeout: DIALOG_TIMEOUT_MS });
+    await expect(dialog.locator('dialog')).toBeVisible({ timeout: DIALOG_TIMEOUT_MS });
 
     // Title input should be cleared after reset
     await expect(titleInput).toHaveValue('');

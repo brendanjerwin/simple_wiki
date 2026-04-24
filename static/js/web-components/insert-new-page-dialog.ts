@@ -3,6 +3,7 @@ import { property, state } from 'lit/decorators.js';
 import type { JsonObject } from '@bufbuild/protobuf';
 import { sharedStyles, dialogStyles } from './shared-styles.js';
 import { PageCreator } from './page-creator.js';
+import { NativeDialogMixin } from './native-dialog-mixin.js';
 import type { TemplateInfo } from '../gen/api/v1/page_management_pb.js';
 import type { AutomagicIdentifierInput, GenerateIdentifierResult } from './automagic-identifier-input.js';
 import { AugmentErrorService, type AugmentedError } from './augment-error-service.js';
@@ -31,7 +32,7 @@ const NONE_TEMPLATE_VALUE = '';
  *
  * @fires page-created - Dispatched when page is created. Detail: { identifier, title, markdownLink }
  */
-export class InsertNewPageDialog extends LitElement {
+export class InsertNewPageDialog extends NativeDialogMixin(LitElement) {
   static override readonly styles = dialogStyles(css`
     :host {
       display: block;
@@ -146,9 +147,6 @@ export class InsertNewPageDialog extends LitElement {
     }
   `);
 
-  @property({ type: Boolean, reflect: true })
-  declare open: boolean;
-
   @property({ type: String })
   declare pageTitle: string;
 
@@ -184,11 +182,8 @@ export class InsertNewPageDialog extends LitElement {
 
   private readonly pageCreator = new PageCreator();
 
-  private _previouslyFocusedElement: Element | null = null;
-
   constructor() {
     super();
-    this.open = false;
     this.pageTitle = '';
     this.pageIdentifier = '';
     this.isUnique = true;
@@ -202,34 +197,9 @@ export class InsertNewPageDialog extends LitElement {
     this.frontmatterDirty = false;
   }
 
-  override updated(changedProperties: Map<PropertyKey, unknown>): void {
-    super.updated(changedProperties);
-    if (changedProperties.has('open')) {
-      const dialog = this.shadowRoot?.querySelector('dialog');
-      if (!dialog) return;
-      if (this.open && !dialog.open) {
-        this._previouslyFocusedElement = document.activeElement;
-        dialog.showModal();
-      } else if (!this.open && dialog.open) {
-        dialog.close();
-        if (this._previouslyFocusedElement instanceof HTMLElement) {
-          this._previouslyFocusedElement.focus();
-        }
-        this._previouslyFocusedElement = null;
-      }
-    }
-  }
-
-  private readonly _handleDialogCancel = (event: Event): void => {
-    event.preventDefault();
+  protected _closeDialog(): void {
     this.close();
-  };
-
-  private readonly _handleDialogClick = (e: MouseEvent): void => {
-    if (e.target === e.currentTarget) {
-      this.close();
-    }
-  };
+  }
 
   public async openDialog(): Promise<void> {
     this._resetState();

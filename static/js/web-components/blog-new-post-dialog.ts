@@ -4,6 +4,7 @@ import type { JsonObject } from '@bufbuild/protobuf';
 import { sharedStyles, dialogStyles } from './shared-styles.js';
 import { PageCreator } from './page-creator.js';
 import { AugmentErrorService, type AugmentedError } from './augment-error-service.js';
+import { NativeDialogMixin } from './native-dialog-mixin.js';
 import type { WikiEditor } from './wiki-editor.js';
 import './wiki-editor.js';
 import './error-display.js';
@@ -18,7 +19,7 @@ import './title-input.js';
  *
  * @fires post-created - Dispatched when a blog post is successfully created.
  */
-export class BlogNewPostDialog extends LitElement {
+export class BlogNewPostDialog extends NativeDialogMixin(LitElement) {
   static override readonly styles = dialogStyles(css`
     :host {
       display: block;
@@ -200,9 +201,6 @@ export class BlogNewPostDialog extends LitElement {
   @property({ type: String, attribute: 'blog-id' })
   declare blogId: string;
 
-  @property({ type: Boolean, reflect: true })
-  declare open: boolean;
-
   @state()
   declare title: string;
 
@@ -228,8 +226,6 @@ export class BlogNewPostDialog extends LitElement {
 
   private _pendingFocusRaf: number | undefined = undefined;
 
-  private _previouslyFocusedElement: Element | null = null;
-
   private get identifierPreview(): string {
     if (!this.blogId || !this.date || !this.title.trim()) return '';
     const slug = this.title.trim()
@@ -243,7 +239,6 @@ export class BlogNewPostDialog extends LitElement {
   constructor() {
     super();
     this.blogId = '';
-    this.open = false;
     this.title = '';
     this.date = new Date().toISOString().slice(0, 10);
     this.creating = false;
@@ -282,14 +277,10 @@ export class BlogNewPostDialog extends LitElement {
     }
   }
 
-  override updated(changed: Map<string, unknown>): void {
+  override updated(changed: Map<PropertyKey, unknown>): void {
     super.updated(changed);
     if (changed.has('open')) {
-      const dialog = this.shadowRoot?.querySelector('dialog');
-      if (!dialog) return;
-      if (this.open && !dialog.open) {
-        this._previouslyFocusedElement = document.activeElement;
-        dialog.showModal();
+      if (this.open) {
         if (this._pendingFocusRaf !== undefined) {
           cancelAnimationFrame(this._pendingFocusRaf);
         }
@@ -299,16 +290,11 @@ export class BlogNewPostDialog extends LitElement {
             this.shadowRoot?.querySelector<HTMLElement>('title-input')?.focus();
           }
         });
-      } else if (!this.open && dialog.open) {
+      } else {
         if (this._pendingFocusRaf !== undefined) {
           cancelAnimationFrame(this._pendingFocusRaf);
           this._pendingFocusRaf = undefined;
         }
-        dialog.close();
-        if (this._previouslyFocusedElement instanceof HTMLElement) {
-          this._previouslyFocusedElement.focus();
-        }
-        this._previouslyFocusedElement = null;
       }
     }
   }
@@ -319,21 +305,9 @@ export class BlogNewPostDialog extends LitElement {
       cancelAnimationFrame(this._pendingFocusRaf);
       this._pendingFocusRaf = undefined;
     }
-    this._previouslyFocusedElement = null;
   }
 
-  private readonly _handleDialogCancel = (event: Event): void => {
-    event.preventDefault();
-    this._close();
-  };
-
-  private readonly _handleDialogClick = (e: MouseEvent): void => {
-    if (e.target === e.currentTarget) {
-      this._close();
-    }
-  };
-
-  private _close(): void {
+  protected _closeDialog(): void {
     this.open = false;
     this.title = '';
     this.date = new Date().toISOString().slice(0, 10);
@@ -398,7 +372,7 @@ export class BlogNewPostDialog extends LitElement {
         composed: true,
         detail: { identifier: idResult.identifier, title: this.title },
       }));
-      this._close();
+      this._closeDialog();
     } catch (err) {
       this.error = AugmentErrorService.augmentError(err, 'create blog post');
     } finally {
@@ -416,7 +390,7 @@ export class BlogNewPostDialog extends LitElement {
       >
         <div class="header">
           <h2 id="blog-new-post-dialog-title">New Blog Post</h2>
-          <button class="close-btn" aria-label="Close" @click=${this._close}>
+          <button class="close-btn" aria-label="Close" @click=${this._closeDialog}>
             <i class="fa-solid fa-xmark"></i>
           </button>
         </div>
@@ -488,7 +462,7 @@ export class BlogNewPostDialog extends LitElement {
           </div>
         </div>
         <div class="footer">
-          <button class="btn btn-cancel" @click=${this._close} ?disabled=${this.creating}>
+          <button class="btn btn-cancel" @click=${this._closeDialog} ?disabled=${this.creating}>
             Cancel
           </button>
           <button
