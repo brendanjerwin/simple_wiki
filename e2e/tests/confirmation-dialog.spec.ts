@@ -507,7 +507,7 @@ test.describe('confirmation-dialog', () => {
       });
 
       test('should display the irreversible warning message', async ({ page }) => {
-        await expect(page.locator('#e2e-test-cd .irreversible')).toContainText('This action cannot be undone.');
+        await expect(page.locator('#e2e-test-cd .dialog-irreversible-notice')).toContainText('This action cannot be undone.');
       });
 
     });
@@ -526,7 +526,7 @@ test.describe('confirmation-dialog', () => {
       });
 
       test('should not display the irreversible warning message', async ({ page }) => {
-        await expect(page.locator('#e2e-test-cd .irreversible')).not.toBeAttached();
+        await expect(page.locator('#e2e-test-cd .dialog-irreversible-notice')).not.toBeAttached();
       });
 
     });
