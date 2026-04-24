@@ -15,6 +15,15 @@ import (
 // is controlled by JobQueueCoordinator.RegisterQueue at startup.
 const AgentTurnJobName = "AgentTurn"
 
+// Structured log keys repeated across this file. Hoisted into constants so
+// rename / typo / consistency concerns surface at compile time rather than as
+// silently-divergent log fields.
+const (
+	logKeyError      = "error"
+	logKeyPage       = "page"
+	logKeyScheduleID = "schedule_id"
+)
+
 // agentTurnDispatcher captures the subset of the ScheduledTurnDispatcher API
 // that AgentTurnJob needs. Defined as an interface so tests can supply a fake.
 type agentTurnDispatcher interface {
@@ -55,7 +64,7 @@ func NewAgentTurnJob(store *AgentScheduleStore, dispatcher agentTurnDispatcher, 
 }
 
 // GetName implements jobs.Job.
-func (j *AgentTurnJob) GetName() string {
+func (*AgentTurnJob) GetName() string {
 	return AgentTurnJobName
 }
 
@@ -67,7 +76,7 @@ func (j *AgentTurnJob) Execute() error {
 	// Snapshot the schedule so we have the prompt + max_turns.
 	schedules, err := j.store.List(j.page)
 	if err != nil {
-		slog.Error("agent turn: list schedules failed", "page", j.page, "schedule_id", j.scheduleID, "error", err)
+		slog.Error("agent turn: list schedules failed", logKeyPage, j.page, logKeyScheduleID, j.scheduleID, logKeyError, err)
 		return nil
 	}
 	var snapshot *apiv1.AgentSchedule
@@ -78,7 +87,7 @@ func (j *AgentTurnJob) Execute() error {
 		}
 	}
 	if snapshot == nil {
-		slog.Warn("agent turn: schedule no longer exists", "page", j.page, "schedule_id", j.scheduleID)
+		slog.Warn("agent turn: schedule no longer exists", logKeyPage, j.page, logKeyScheduleID, j.scheduleID)
 		return nil
 	}
 
@@ -108,7 +117,7 @@ func (j *AgentTurnJob) Execute() error {
 
 	// Transition to RUNNING now that dispatch succeeded.
 	if err := j.store.TransitionStatus(j.page, j.scheduleID, apiv1.ScheduleStatus_SCHEDULE_STATUS_RUNNING, "", 0); err != nil {
-		slog.Error("agent turn: transition to RUNNING failed", "page", j.page, "schedule_id", j.scheduleID, "error", err)
+		slog.Error("agent turn: transition to RUNNING failed", logKeyPage, j.page, logKeyScheduleID, j.scheduleID, logKeyError, err)
 		return nil
 	}
 
@@ -119,7 +128,7 @@ func (j *AgentTurnJob) Execute() error {
 	}
 
 	if err := j.store.TransitionStatus(j.page, j.scheduleID, outcome.TerminalStatus, outcome.ErrorMessage, outcome.DurationSeconds); err != nil {
-		slog.Error("agent turn: terminal transition failed", "page", j.page, "schedule_id", j.scheduleID, "error", err)
+		slog.Error("agent turn: terminal transition failed", logKeyPage, j.page, logKeyScheduleID, j.scheduleID, logKeyError, err)
 	}
 	return nil
 }
@@ -137,14 +146,14 @@ func (j *AgentTurnJob) recordDispatchFailure(dispatchErr error) {
 		var illegal *IllegalScheduleTransitionError
 		if errors.As(err, &illegal) {
 			slog.Warn("agent turn: dispatch failed but prior state forbids RUNNING transition; leaving status unchanged",
-				"page", j.page, "schedule_id", j.scheduleID, "from", illegal.From, "error", dispatchErr)
+				logKeyPage, j.page, logKeyScheduleID, j.scheduleID, "from", illegal.From, logKeyError, dispatchErr)
 			return
 		}
-		slog.Error("agent turn: synthetic RUNNING transition failed", "page", j.page, "schedule_id", j.scheduleID, "error", err)
+		slog.Error("agent turn: synthetic RUNNING transition failed", logKeyPage, j.page, logKeyScheduleID, j.scheduleID, logKeyError, err)
 		return
 	}
 	if err := j.store.TransitionStatus(j.page, j.scheduleID, apiv1.ScheduleStatus_SCHEDULE_STATUS_ERROR, msg, 0); err != nil {
-		slog.Error("agent turn: ERROR transition after dispatch failure failed", "page", j.page, "schedule_id", j.scheduleID, "error", err)
+		slog.Error("agent turn: ERROR transition after dispatch failure failed", logKeyPage, j.page, logKeyScheduleID, j.scheduleID, logKeyError, err)
 	}
 }
 

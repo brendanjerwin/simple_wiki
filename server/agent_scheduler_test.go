@@ -20,7 +20,7 @@ type fakeFrontmatterIndex struct {
 	pages []wikipage.PageIdentifier
 }
 
-func (f *fakeFrontmatterIndex) QueryExactMatch(_, _ string) []wikipage.PageIdentifier {
+func (*fakeFrontmatterIndex) QueryExactMatch(_, _ string) []wikipage.PageIdentifier {
 	return nil
 }
 
@@ -28,7 +28,7 @@ func (f *fakeFrontmatterIndex) QueryKeyExistence(_ string) []wikipage.PageIdenti
 	return f.pages
 }
 
-func (f *fakeFrontmatterIndex) GetValue(_ wikipage.PageIdentifier, _ string) string {
+func (*fakeFrontmatterIndex) GetValue(_ wikipage.PageIdentifier, _ string) string {
 	return ""
 }
 

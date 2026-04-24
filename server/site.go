@@ -74,7 +74,13 @@ type Site struct {
 	FrontmatterIndexQueryer frontmatter.IQueryFrontmatterIndex
 	BleveIndexQueryer       bleve.BleveIndexQueryer
 	MigrationApplicator     lazy.FrontmatterMigrationApplicator
-	saveMut                 sync.RWMutex
+	AgentScheduleStore      *AgentScheduleStore
+	AgentScheduler          *AgentScheduler
+	ScheduledTurnDispatcher *ScheduledTurnDispatcher
+	AgentScheduleConcurrency int
+	AgentScheduleQueueCap    int
+	AgentTurnHardTimeout     time.Duration
+	saveMut                  sync.RWMutex
 }
 
 // LoadCustomCSS reads custom CSS from the given file path and assigns it to s.CSS.
@@ -181,6 +187,76 @@ func (s *Site) startMigrationJobs() {
 	}
 }
 
+// Defaults for the agent-schedule machinery when CLI flags do not override
+// them. The queue is intentionally generously-sized so that enqueue is
+// effectively backpressure rather than a skip trigger.
+const (
+	defaultAgentScheduleConcurrencyValue = 2
+	defaultAgentScheduleQueueCapValue    = 256
+	defaultAgentTurnHardTimeoutMinutes   = 10
+)
+
+// InitializeAgentScheduling pre-registers the AgentTurn queue and constructs
+// the AgentScheduler. Must be called after CLI flags have populated
+// AgentScheduleConcurrency and AgentScheduleQueueCap on the site (the values
+// are baked into the queue at registration time).
+//
+// Safe to call multiple times — the second call returns immediately if the
+// scheduler is already constructed.
+func (s *Site) InitializeAgentScheduling() {
+	if s.AgentScheduler != nil {
+		return
+	}
+	if s.AgentScheduleConcurrency <= 0 {
+		s.AgentScheduleConcurrency = defaultAgentScheduleConcurrencyValue
+	}
+	if s.AgentScheduleQueueCap <= 0 {
+		s.AgentScheduleQueueCap = defaultAgentScheduleQueueCapValue
+	}
+	if s.AgentTurnHardTimeout <= 0 {
+		s.AgentTurnHardTimeout = defaultAgentTurnHardTimeoutMinutes * time.Minute
+	}
+	if err := s.JobQueueCoordinator.RegisterQueue(AgentTurnJobName, s.AgentScheduleConcurrency, s.AgentScheduleQueueCap); err != nil {
+		s.Logger.Warn("AgentTurn queue pre-registration failed: %v", err)
+	}
+	s.AgentScheduler = NewAgentScheduler(
+		s.AgentScheduleStore,
+		s.ScheduledTurnDispatcher,
+		s.FrontmatterIndexQueryer,
+		s.CronScheduler,
+		s.AgentTurnHardTimeout,
+	)
+}
+
+// onInitialIndexingComplete is the callback fired by IndexCoordinator after
+// the initial bulk-enqueue jobs all finish. It chains the inventory
+// normalization job and loads agent schedules now that the frontmatter index
+// is fully populated.
+func (s *Site) onInitialIndexingComplete() {
+	normJob, err := NewInventoryNormalizationJob(s, s.FrontmatterIndexQueryer, s.Logger)
+	if err != nil {
+		s.Logger.Error("Failed to create inventory normalization job: %v", err)
+		return
+	}
+	if err := s.JobQueueCoordinator.EnqueueJob(normJob); err != nil {
+		s.Logger.Error("Failed to enqueue inventory normalization job: %v", err)
+	} else {
+		s.Logger.Info("Inventory normalization job queued after indexing completed")
+	}
+
+	// Load and register every page's agent.schedules with the cron scheduler
+	// once the frontmatter index is fully populated. Skips silently if
+	// InitializeAgentScheduling has not been called yet (e.g. tests).
+	if s.AgentScheduler == nil {
+		return
+	}
+	if loadErr := s.AgentScheduler.LoadAll(); loadErr != nil {
+		s.Logger.Error("Failed to load agent schedules: %v", loadErr)
+	} else {
+		s.Logger.Info("Agent schedules loaded into cron scheduler")
+	}
+}
+
 // InitializeIndexing initializes the site's indexes.
 func (s *Site) InitializeIndexing() error {
 	frontmatterIndex := frontmatter.NewIndex(s)
@@ -199,6 +275,14 @@ func (s *Site) InitializeIndexing() error {
 	// Create and start cron scheduler for periodic jobs
 	s.CronScheduler = jobs.NewCronScheduler(s.Logger)
 	s.CronScheduler.Start()
+
+	// Wire up the scheduled-agent infrastructure: dispatcher (server side
+	// bridge to the pool) and schedule store (typed agent.schedules access).
+	// Queue pre-registration and AgentScheduler construction are deferred to
+	// InitializeAgentScheduling so they pick up CLI-supplied concurrency and
+	// hard-timeout values.
+	s.ScheduledTurnDispatcher = NewScheduledTurnDispatcher()
+	s.AgentScheduleStore = NewAgentScheduleStore(s)
 
 	// Schedule inventory normalization job to run hourly at minute 0
 	// This creates pages for items listed in inventory.items that don't have their own pages,
@@ -234,19 +318,7 @@ func (s *Site) InitializeIndexing() error {
 	// Start background indexing with completion callback to chain the normalization job.
 	// Note: The callback executes asynchronously when all indexing jobs complete, not when this
 	// function returns. Error handling inside the callback is separate from the outer error check.
-	if err := s.IndexCoordinator.BulkEnqueuePagesWithCompletion(pageIdentifiers, index.Add, func() {
-		// This callback runs after all indexing completes - errors here are handled separately
-		normJob, err := NewInventoryNormalizationJob(s, s.FrontmatterIndexQueryer, s.Logger)
-		if err != nil {
-			s.Logger.Error("Failed to create inventory normalization job: %v", err)
-			return
-		}
-		if err := s.JobQueueCoordinator.EnqueueJob(normJob); err != nil {
-			s.Logger.Error("Failed to enqueue inventory normalization job: %v", err)
-		} else {
-			s.Logger.Info("Inventory normalization job queued after indexing completed")
-		}
-	}); err != nil {
+	if err := s.IndexCoordinator.BulkEnqueuePagesWithCompletion(pageIdentifiers, index.Add, s.onInitialIndexingComplete); err != nil {
 		// This error means the bulk enqueue failed immediately - the callback won't run
 		s.Logger.Error("Failed to enqueue bulk indexing jobs: %v", err)
 	}
@@ -673,6 +745,16 @@ func (s *Site) modifyOrCreatePage(identifierStr string, modifier func(currentTex
 		normJob := NewPageInventoryNormalizationJob(identifier, s, s.Logger)
 		if err := s.JobQueueCoordinator.EnqueueJob(normJob); err != nil {
 			s.Logger.Error("Failed to enqueue per-page inventory normalization job for %s: %v", identifierStr, err)
+		}
+	}
+
+	// Reconcile any agent.schedules that the user may have edited so cron
+	// pickups happen within seconds rather than at next restart. Run inline
+	// rather than as a job to avoid race windows where cron fires the old
+	// schedule between save and reconciliation.
+	if s.AgentScheduler != nil {
+		if err := s.AgentScheduler.Refresh(identifierStr); err != nil {
+			s.Logger.Error("Failed to refresh agent schedules for %s: %v", identifierStr, err)
 		}
 	}
 

@@ -19,7 +19,11 @@ import (
 // stores.
 const AgentNamespaceKey = "agent"
 
-const agentSchedulesKey = "schedules"
+const (
+	agentSchedulesKey      = "schedules"
+	errReadFrontmatterFmt  = "read frontmatter for %q: %w"
+	errWriteFrontmatterFmt = "write frontmatter for %q: %w"
+)
 
 // ScheduleNotFoundError is returned by the store when a referenced
 // schedule_id does not exist on the page.
@@ -59,7 +63,7 @@ func NewAgentScheduleStore(pages agentSchedulePagesStore) *AgentScheduleStore {
 func (s *AgentScheduleStore) List(page string) ([]*apiv1.AgentSchedule, error) {
 	_, fm, err := s.pages.ReadFrontMatter(wikipage.PageIdentifier(page))
 	if err != nil {
-		return nil, fmt.Errorf("read frontmatter for %q: %w", page, err)
+		return nil, fmt.Errorf(errReadFrontmatterFmt, page, err)
 	}
 	return decodeSchedules(fm)
 }
@@ -82,7 +86,7 @@ func (s *AgentScheduleStore) Upsert(page string, schedule *apiv1.AgentSchedule) 
 
 	id, fm, err := s.pages.ReadFrontMatter(wikipage.PageIdentifier(page))
 	if err != nil {
-		return fmt.Errorf("read frontmatter for %q: %w", page, err)
+		return fmt.Errorf(errReadFrontmatterFmt, page, err)
 	}
 	existing, err := decodeSchedules(fm)
 	if err != nil {
@@ -107,7 +111,7 @@ func (s *AgentScheduleStore) Upsert(page string, schedule *apiv1.AgentSchedule) 
 		return err
 	}
 	if err := s.pages.WriteFrontMatter(id, fm); err != nil {
-		return fmt.Errorf("write frontmatter for %q: %w", page, err)
+		return fmt.Errorf(errWriteFrontmatterFmt, page, err)
 	}
 	return nil
 }
@@ -120,7 +124,7 @@ func (s *AgentScheduleStore) Delete(page, scheduleID string) error {
 
 	id, fm, err := s.pages.ReadFrontMatter(wikipage.PageIdentifier(page))
 	if err != nil {
-		return fmt.Errorf("read frontmatter for %q: %w", page, err)
+		return fmt.Errorf(errReadFrontmatterFmt, page, err)
 	}
 	existing, err := decodeSchedules(fm)
 	if err != nil {
@@ -142,7 +146,7 @@ func (s *AgentScheduleStore) Delete(page, scheduleID string) error {
 		return err
 	}
 	if err := s.pages.WriteFrontMatter(id, fm); err != nil {
-		return fmt.Errorf("write frontmatter for %q: %w", page, err)
+		return fmt.Errorf(errWriteFrontmatterFmt, page, err)
 	}
 	return nil
 }
@@ -157,7 +161,7 @@ func (s *AgentScheduleStore) TransitionStatus(page, scheduleID string, to apiv1.
 
 	id, fm, err := s.pages.ReadFrontMatter(wikipage.PageIdentifier(page))
 	if err != nil {
-		return fmt.Errorf("read frontmatter for %q: %w", page, err)
+		return fmt.Errorf(errReadFrontmatterFmt, page, err)
 	}
 	existing, err := decodeSchedules(fm)
 	if err != nil {
@@ -188,7 +192,7 @@ func (s *AgentScheduleStore) TransitionStatus(page, scheduleID string, to apiv1.
 		return err
 	}
 	if err := s.pages.WriteFrontMatter(id, fm); err != nil {
-		return fmt.Errorf("write frontmatter for %q: %w", page, err)
+		return fmt.Errorf(errWriteFrontmatterFmt, page, err)
 	}
 	return nil
 }

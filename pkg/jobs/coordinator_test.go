@@ -426,5 +426,4 @@ var _ = Describe("JobQueueCoordinator.RegisterQueue", func() {
 			Expect(enqueueErr).NotTo(HaveOccurred())
 		})
 	})
-
 })

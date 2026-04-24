@@ -32,6 +32,10 @@ type AgentScheduleQueryer interface {
 	QueryKeyExistence(dottedKeyPath string) []wikipage.PageIdentifier
 }
 
+// logFieldPage is the structured-log key for the page identifier. Hoisted into
+// a constant so a typo in any one log call surfaces at compile time.
+const logFieldPage = "page"
+
 // AgentScheduler keeps the in-memory mapping {page, schedule_id} -> cron entry
 // id current. LoadAll is called once at startup; Refresh(page) is called from
 // the save-hook to react to user edits.
@@ -72,7 +76,7 @@ func (s *AgentScheduler) LoadAll() error {
 	pages := s.index.QueryKeyExistence("agent.schedules")
 	for _, page := range pages {
 		if err := s.loadPage(string(page)); err != nil {
-			slog.Error("agent scheduler: load page failed", "page", page, "error", err)
+			slog.Error("agent scheduler: load page failed", logFieldPage, page, "error", err)
 		}
 	}
 	return nil
@@ -101,7 +105,7 @@ func (s *AgentScheduler) loadPage(page string) error {
 		}
 		if !isValidCron(sc.GetCron()) {
 			slog.Warn("agent scheduler: skipping schedule with invalid cron",
-				"page", page, "schedule_id", sc.GetId(), "cron", sc.GetCron())
+				logFieldPage, page, "schedule_id", sc.GetId(), "cron", sc.GetCron())
 			continue
 		}
 		desired[sc.GetId()] = sc
@@ -128,7 +132,7 @@ func (s *AgentScheduler) loadPage(page string) error {
 		delete(s.entries, key)
 		newID, scheduleErr := s.cron.Schedule(want.GetCron(), s.newJob(page, want.GetId()))
 		if scheduleErr != nil {
-			slog.Warn("agent scheduler: re-register failed", "page", page, "schedule_id", want.GetId(), "error", scheduleErr)
+			slog.Warn("agent scheduler: re-register failed", logFieldPage, page, "schedule_id", want.GetId(), "error", scheduleErr)
 			continue
 		}
 		s.entries[key] = newID
@@ -142,7 +146,7 @@ func (s *AgentScheduler) loadPage(page string) error {
 		}
 		entryID, scheduleErr := s.cron.Schedule(sc.GetCron(), s.newJob(page, id))
 		if scheduleErr != nil {
-			slog.Warn("agent scheduler: register failed", "page", page, "schedule_id", id, "error", scheduleErr)
+			slog.Warn("agent scheduler: register failed", logFieldPage, page, "schedule_id", id, "error", scheduleErr)
 			continue
 		}
 		s.entries[key] = entryID
