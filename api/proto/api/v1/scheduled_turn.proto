@@ -1,0 +1,54 @@
+syntax = "proto3";
+
+package api.v1;
+
+import "api/v1/agent_metadata.proto";
+
+option go_package = "github.com/brendanjerwin/simple_wiki/gen/go/api/v1;apiv1";
+
+// ScheduledTurnService is the pool<->server bridge for executing scheduled
+// agent turns in headless ACP instances. It is NOT exposed as MCP.
+//
+// The wiki server owns the cron, the schedule store, and the per-request
+// completion correlation. The pool subscribes to ScheduledTurnRequest events
+// and reports outcomes back via CompleteScheduledTurn.
+service ScheduledTurnService {
+  // SubscribeScheduledTurns is opened by the pool on startup. The server pushes
+  // one ScheduledTurnRequest per fire and expects a matching
+  // CompleteScheduledTurn from the pool when the headless agent finishes.
+  rpc SubscribeScheduledTurns(SubscribeScheduledTurnsRequest)
+      returns (stream ScheduledTurnRequest) {}
+
+  // CompleteScheduledTurn is called by the pool when a headless turn ends
+  // (success, error, or timeout). The server uses request_id to wake the
+  // blocked AgentTurnJob so it can record the terminal transition.
+  rpc CompleteScheduledTurn(CompleteScheduledTurnRequest)
+      returns (CompleteScheduledTurnResponse) {}
+}
+
+message SubscribeScheduledTurnsRequest {}
+
+// ScheduledTurnRequest is the unit of work pushed to the pool for one fire.
+message ScheduledTurnRequest {
+  // Server-assigned correlation id; the pool echoes it back via Complete.
+  string request_id = 1;
+  // The wiki page identifier this turn is acting on.
+  string page = 2;
+  // The user prompt to send to the headless agent.
+  string prompt = 3;
+  // Maximum number of agent message chunks before the turn is cancelled.
+  int32 max_turns = 4;
+}
+
+// CompleteScheduledTurnRequest reports the terminal outcome of one turn.
+message CompleteScheduledTurnRequest {
+  string request_id = 1;
+  // Terminal status: OK, ERROR, or TIMEOUT.
+  ScheduleStatus terminal_status = 2;
+  // Populated when terminal_status is ERROR or TIMEOUT.
+  string error_message = 3;
+  // Wall-clock duration of the headless turn.
+  int32 duration_seconds = 4;
+}
+
+message CompleteScheduledTurnResponse {}

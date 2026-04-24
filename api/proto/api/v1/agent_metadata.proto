@@ -1,0 +1,170 @@
+syntax = "proto3";
+
+package api.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/brendanjerwin/simple_wiki/gen/go/api/v1;apiv1";
+
+// AgentMetadataService owns all reads and writes of agent-managed page state:
+// cron schedules, conversation memory, and the rolling background-activity log.
+//
+// The generic Frontmatter_* APIs reject any writes that touch the reserved
+// "agent" top-level namespace. Use this service to mutate that subtree.
+service AgentMetadataService {
+  // List all agent_schedules on a page, including wiki-managed status fields.
+  rpc ListSchedules(ListSchedulesRequest) returns (ListSchedulesResponse) {}
+
+  // Create or replace a schedule on a page. The cron expression must be a
+  // valid 6-field expression (sec min hr dom mon dow). Wiki-managed fields
+  // (last_run, last_status, last_error_message, last_duration_seconds) on the
+  // request are silently stripped.
+  rpc UpsertSchedule(UpsertScheduleRequest) returns (UpsertScheduleResponse) {}
+
+  // Remove a schedule by id from a page. Idempotent.
+  rpc DeleteSchedule(DeleteScheduleRequest) returns (DeleteScheduleResponse) {}
+
+  // Read the agent.chat_context for a page, including the rolling
+  // background-activity log (newest entries first, capped at 50).
+  rpc GetChatContext(GetChatContextRequest) returns (GetChatContextResponse) {}
+
+  // Deep-merge updates into agent.chat_context. Scalars replace, arrays union,
+  // last_updated is server-stamped. Interactive chat agents MUST call this
+  // every turn to persist memory.
+  rpc UpdateChatContext(UpdateChatContextRequest) returns (UpdateChatContextResponse) {}
+
+  // Attach a concise one-sentence summary to the most recent
+  // background-activity entry for the given schedule_id. Called by scheduled
+  // agents before they complete; this summary is what interactive chat users
+  // will see when asking what the background workers have been doing.
+  rpc AppendBackgroundActivitySummary(AppendBackgroundActivitySummaryRequest)
+      returns (AppendBackgroundActivitySummaryResponse) {}
+}
+
+// ScheduleStatus represents the lifecycle of an agent schedule's most recent
+// turn. Transitions are validated by the server-side schedule state machine.
+enum ScheduleStatus {
+  SCHEDULE_STATUS_UNSPECIFIED = 0;
+  SCHEDULE_STATUS_RUNNING = 1;
+  SCHEDULE_STATUS_OK = 2;
+  SCHEDULE_STATUS_ERROR = 3;
+  SCHEDULE_STATUS_TIMEOUT = 4;
+}
+
+// AgentSchedule describes one cron-driven scheduled agent turn on a page.
+message AgentSchedule {
+  // Stable identifier for this schedule, unique within the page.
+  string id = 1;
+  // 6-field cron expression: sec min hr dom mon dow.
+  string cron = 2;
+  // The user prompt to deliver to the scheduled agent each fire.
+  string prompt = 3;
+  // Maximum number of agent message chunks before the turn is cancelled.
+  // Zero means use the server default of 20.
+  int32 max_turns = 4;
+  // Whether this schedule should be registered with the cron scheduler.
+  // Defaults to true; disabled schedules are persisted but not fired.
+  bool enabled = 5;
+  // Wiki-managed: timestamp of the most recent fire.
+  google.protobuf.Timestamp last_run = 6;
+  // Wiki-managed: status of the most recent fire.
+  ScheduleStatus last_status = 7;
+  // Wiki-managed: error detail when last_status is ERROR or TIMEOUT.
+  string last_error_message = 8;
+  // Wiki-managed: wall-clock duration of the most recent fire.
+  int32 last_duration_seconds = 9;
+}
+
+// BackgroundActivityEntry records one terminal scheduled-turn outcome on a page.
+// Entries are appended automatically by the schedule store on every terminal
+// transition, and are exposed to interactive chat preambles via GetChatContext.
+message BackgroundActivityEntry {
+  // When the terminal status was recorded.
+  google.protobuf.Timestamp timestamp = 1;
+  // Which schedule this entry came from.
+  string schedule_id = 2;
+  // Terminal status (OK, ERROR, TIMEOUT).
+  ScheduleStatus status = 3;
+  // Optional one-sentence summary attached by the scheduled agent itself via
+  // AppendBackgroundActivitySummary before completion.
+  string summary = 4;
+}
+
+// ChatContext is the persisted memory the interactive chat agent maintains
+// across turns on a single page.
+message ChatContext {
+  // Free-form summary of the prior conversation.
+  string last_conversation_summary = 1;
+  // Things the user has asked the agent to keep in mind.
+  repeated string user_goals = 2;
+  // Open work items still in progress.
+  repeated string pending_items = 3;
+  // Other notable context that does not fit elsewhere.
+  string key_context = 4;
+  // When this context was last persisted by the agent.
+  google.protobuf.Timestamp last_updated = 5;
+  // Rolling log of background-agent activity on this page. Capped at 50
+  // entries; older entries drop when the cap is exceeded.
+  repeated BackgroundActivityEntry background_activity = 6;
+}
+
+// ListSchedules
+
+message ListSchedulesRequest {
+  string page = 1;
+}
+
+message ListSchedulesResponse {
+  repeated AgentSchedule schedules = 1;
+}
+
+// UpsertSchedule
+
+message UpsertScheduleRequest {
+  string page = 1;
+  AgentSchedule schedule = 2;
+}
+
+message UpsertScheduleResponse {
+  AgentSchedule schedule = 1;
+}
+
+// DeleteSchedule
+
+message DeleteScheduleRequest {
+  string page = 1;
+  string schedule_id = 2;
+}
+
+message DeleteScheduleResponse {}
+
+// GetChatContext
+
+message GetChatContextRequest {
+  string page = 1;
+}
+
+message GetChatContextResponse {
+  ChatContext chat_context = 1;
+}
+
+// UpdateChatContext
+
+message UpdateChatContextRequest {
+  string page = 1;
+  ChatContext chat_context = 2;
+}
+
+message UpdateChatContextResponse {
+  ChatContext chat_context = 1;
+}
+
+// AppendBackgroundActivitySummary
+
+message AppendBackgroundActivitySummaryRequest {
+  string page = 1;
+  string schedule_id = 2;
+  string summary = 3;
+}
+
+message AppendBackgroundActivitySummaryResponse {}
