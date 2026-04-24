@@ -299,6 +299,10 @@ func (d *poolDaemon) run(ctx context.Context) error {
 	// Start the idle reaper
 	go d.reapIdleInstances(ctx)
 
+	// Start the scheduled-turn subscriber. It runs alongside the chat
+	// instance-request subscriber and handles its own reconnects.
+	go d.runScheduledTurnLoop(ctx)
+
 	// Maintain subscription to instance requests with reconnect loop
 	backoffMs := initialBackoffMs
 
