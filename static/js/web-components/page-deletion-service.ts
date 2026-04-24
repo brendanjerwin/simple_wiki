@@ -76,7 +76,6 @@ export class PageDeleter {
     // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- custom element has known interface
     const newDialog = document.createElement('confirmation-dialog') as ConfirmationDialog;
     newDialog.id = 'page-deletion-dialog';
-    newDialog.hidden = true;
     document.body.appendChild(newDialog);
     return newDialog;
   }
