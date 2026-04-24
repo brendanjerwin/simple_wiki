@@ -54,9 +54,9 @@ var (
 
 // SystemInfoServiceClient is a client for the api.v1.SystemInfoService service.
 type SystemInfoServiceClient interface {
-	// GetVersion returns the server version and build time.
+	// GetVersion — see (api.v1.description).
 	GetVersion(context.Context, *connect.Request[v1.GetVersionRequest]) (*connect.Response[v1.GetVersionResponse], error)
-	// GetJobStatus returns the current status of background job queues.
+	// GetJobStatus — see (api.v1.description).
 	GetJobStatus(context.Context, *connect.Request[v1.GetJobStatusRequest]) (*connect.Response[v1.GetJobStatusResponse], error)
 	// StreamJobStatus provides real-time streaming updates of job queue status.
 	// The stream will automatically terminate when all queues are idle.
@@ -118,9 +118,9 @@ func (c *systemInfoServiceClient) StreamJobStatus(ctx context.Context, req *conn
 
 // SystemInfoServiceHandler is an implementation of the api.v1.SystemInfoService service.
 type SystemInfoServiceHandler interface {
-	// GetVersion returns the server version and build time.
+	// GetVersion — see (api.v1.description).
 	GetVersion(context.Context, *connect.Request[v1.GetVersionRequest]) (*connect.Response[v1.GetVersionResponse], error)
-	// GetJobStatus returns the current status of background job queues.
+	// GetJobStatus — see (api.v1.description).
 	GetJobStatus(context.Context, *connect.Request[v1.GetJobStatusRequest]) (*connect.Response[v1.GetJobStatusResponse], error)
 	// StreamJobStatus provides real-time streaming updates of job queue status.
 	// The stream will automatically terminate when all queues are idle.

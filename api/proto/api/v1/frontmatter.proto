@@ -2,23 +2,49 @@ syntax = "proto3";
 
 package api.v1;
 
+import "api/v1/mcp_options.proto";
 import "google/protobuf/struct.proto";
 
 option go_package = "github.com/brendanjerwin/simple_wiki/gen/go/api/v1;apiv1";
 
-// The Frontmatter service definition.
+// Frontmatter — see (api.v1.service_description).
 service Frontmatter {
-  // Gets the frontmatter for a given page.
-  rpc GetFrontmatter(GetFrontmatterRequest) returns (GetFrontmatterResponse) {}
+  option (api.v1.service_description) =
+      "Reads and writes the structured frontmatter (YAML/TOML-style metadata at "
+      "the top of each markdown page) as a JSON-like object. Writes that touch "
+      "the top-level 'agent' namespace key are rejected — use AgentMetadataService "
+      "for schedule, chat-context, and background-activity mutations under that "
+      "namespace.";
 
-  // Merges the given frontmatter with the existing frontmatter for a page.
-  rpc MergeFrontmatter(MergeFrontmatterRequest) returns (MergeFrontmatterResponse) {}
+  // GetFrontmatter — see (api.v1.description).
+  rpc GetFrontmatter(GetFrontmatterRequest) returns (GetFrontmatterResponse) {
+    option (api.v1.description) = "Get the frontmatter for a given page.";
+    option (api.v1.read_only) = true;
+  }
 
-  // Replaces the entire frontmatter for a given page.
-  rpc ReplaceFrontmatter(ReplaceFrontmatterRequest) returns (ReplaceFrontmatterResponse) {}
+  // MergeFrontmatter — see (api.v1.description).
+  rpc MergeFrontmatter(MergeFrontmatterRequest) returns (MergeFrontmatterResponse) {
+    option (api.v1.description) =
+        "Merge the given frontmatter with the existing frontmatter for a page. "
+        "Writes under the top-level 'agent' namespace are rejected; use "
+        "AgentMetadataService for those mutations.";
+  }
 
-  // Removes a key from the frontmatter at a given path.
-  rpc RemoveKeyAtPath(RemoveKeyAtPathRequest) returns (RemoveKeyAtPathResponse) {}
+  // ReplaceFrontmatter — see (api.v1.description).
+  rpc ReplaceFrontmatter(ReplaceFrontmatterRequest) returns (ReplaceFrontmatterResponse) {
+    option (api.v1.description) =
+        "Replace the entire frontmatter for a given page. Writes under the "
+        "top-level 'agent' namespace are rejected; use AgentMetadataService for "
+        "those mutations.";
+  }
+
+  // RemoveKeyAtPath — see (api.v1.description).
+  rpc RemoveKeyAtPath(RemoveKeyAtPathRequest) returns (RemoveKeyAtPathResponse) {
+    option (api.v1.description) =
+        "Remove a key from the frontmatter at a given path. Removals under the "
+        "top-level 'agent' namespace are rejected; use AgentMetadataService for "
+        "those mutations.";
+  }
 }
 
 // The request message containing the page name.

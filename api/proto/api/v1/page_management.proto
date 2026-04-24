@@ -2,41 +2,116 @@ syntax = "proto3";
 
 package api.v1;
 
+import "api/v1/mcp_options.proto";
 import "google/protobuf/struct.proto";
 import "google/protobuf/timestamp.proto";
 
 option go_package = "github.com/brendanjerwin/simple_wiki/gen/go/api/v1;apiv1";
 
+// PageManagementService — see (api.v1.service_description).
 service PageManagementService {
-  rpc CreatePage(CreatePageRequest) returns (CreatePageResponse);
-  rpc ReadPage(ReadPageRequest) returns (ReadPageResponse);
-  rpc RenderPage(RenderPageRequest) returns (RenderPageResponse);
-  rpc UpdatePage(UpdatePageRequest) returns (UpdatePageResponse);
-  rpc UpdatePageContent(UpdatePageContentRequest) returns (UpdatePageContentResponse);
-  rpc UpdateWholePage(UpdateWholePageRequest) returns (UpdateWholePageResponse);
-  rpc DeletePage(DeletePageRequest) returns (DeletePageResponse);
+  option (api.v1.service_description) =
+      "CRUD for wiki pages: markdown content paired with structured "
+      "frontmatter. Includes server-side rendering of pages and ad-hoc "
+      "markdown, identifier generation and uniqueness checks, template "
+      "discovery, and a streaming subscription that fires when a page's "
+      "on-disk content changes.";
 
-  // ClearPageContent explicitly clears the markdown content of a page, preserving its frontmatter.
-  // This is a destructive operation that requires confirm_clear = true to prevent accidental data loss.
-  rpc ClearPageContent(ClearPageContentRequest) returns (ClearPageContentResponse);
+  // CreatePage — see (api.v1.description).
+  rpc CreatePage(CreatePageRequest) returns (CreatePageResponse) {
+    option (api.v1.description) =
+        "Create a new wiki page from markdown content and structured "
+        "frontmatter. An optional template identifier seeds the frontmatter, "
+        "with the request's frontmatter merged on top.";
+  }
 
-  // GenerateIdentifier converts text to a wiki page identifier format.
-  // Used by UI to auto-generate identifiers from titles and check availability.
-  rpc GenerateIdentifier(GenerateIdentifierRequest) returns (GenerateIdentifierResponse);
+  // ReadPage — see (api.v1.description).
+  rpc ReadPage(ReadPageRequest) returns (ReadPageResponse) {
+    option (api.v1.description) =
+        "Read a page's raw markdown, TOML frontmatter, fully rendered HTML, "
+        "and template-expanded markdown. Returns a version_hash usable as "
+        "expected_version_hash on subsequent UpdatePageContent calls.";
+    option (api.v1.read_only) = true;
+  }
 
-  // ListTemplates returns all pages marked as templates (with template: true frontmatter).
-  rpc ListTemplates(ListTemplatesRequest) returns (ListTemplatesResponse);
+  // RenderPage — see (api.v1.description).
+  rpc RenderPage(RenderPageRequest) returns (RenderPageResponse) {
+    option (api.v1.description) =
+        "Render a stored page to HTML, executing all template macros against "
+        "the page's frontmatter context.";
+    option (api.v1.read_only) = true;
+  }
 
-  // WatchPage provides real-time streaming updates when a page's content changes.
-  // Emits the current version_hash when the content changes on the server.
-  // Clients can use this to re-fetch and re-render the page content.
-  rpc WatchPage(WatchPageRequest) returns (stream WatchPageResponse);
+  // UpdatePage — see (api.v1.description).
+  rpc UpdatePage(UpdatePageRequest) returns (UpdatePageResponse) {
+    option (api.v1.description) =
+        "Replace both the markdown content and TOML frontmatter of an "
+        "existing page in a single write.";
+  }
 
-  // RenderMarkdown renders arbitrary markdown content to HTML.
-  // Supports selective template macros (LinkTo, FindBy, etc.) but excludes
-  // interactive widget macros (Checklist, Blog) which render as literal text.
-  // Used by the chat panel to render assistant messages.
-  rpc RenderMarkdown(RenderMarkdownRequest) returns (RenderMarkdownResponse);
+  // UpdatePageContent — see (api.v1.description).
+  rpc UpdatePageContent(UpdatePageContentRequest) returns (UpdatePageContentResponse) {
+    option (api.v1.description) =
+        "Update only the markdown body of a page, leaving frontmatter "
+        "intact. Supports optimistic concurrency via expected_version_hash "
+        "and find-and-replace semantics via old_content_markdown (only the "
+        "first occurrence is replaced; missing matches return NOT_FOUND).";
+  }
+
+  // UpdateWholePage — see (api.v1.description).
+  rpc UpdateWholePage(UpdateWholePageRequest) returns (UpdateWholePageResponse) {
+    option (api.v1.description) =
+        "Replace a page using a single markdown document that includes its "
+        "frontmatter delimiters. Frontmatter and body are split on the "
+        "server.";
+  }
+
+  // DeletePage — see (api.v1.description).
+  rpc DeletePage(DeletePageRequest) returns (DeletePageResponse) {
+    option (api.v1.description) =
+        "Permanently delete a wiki page by identifier.";
+  }
+
+  // ClearPageContent — see (api.v1.description).
+  rpc ClearPageContent(ClearPageContentRequest) returns (ClearPageContentResponse) {
+    option (api.v1.description) =
+        "ClearPageContent explicitly clears the markdown content of a page, preserving its frontmatter. "
+        "This is a destructive operation that requires confirm_clear = true to prevent accidental data loss.";
+  }
+
+  // GenerateIdentifier — see (api.v1.description).
+  rpc GenerateIdentifier(GenerateIdentifierRequest) returns (GenerateIdentifierResponse) {
+    option (api.v1.description) =
+        "GenerateIdentifier converts text to a wiki page identifier format. "
+        "Used by UI to auto-generate identifiers from titles and check availability.";
+    option (api.v1.read_only) = true;
+  }
+
+  // ListTemplates — see (api.v1.description).
+  rpc ListTemplates(ListTemplatesRequest) returns (ListTemplatesResponse) {
+    option (api.v1.description) =
+        "ListTemplates returns all pages marked as templates (with template: true frontmatter).";
+    option (api.v1.read_only) = true;
+  }
+
+  // WatchPage — see (api.v1.description).
+  rpc WatchPage(WatchPageRequest) returns (stream WatchPageResponse) {
+    option (api.v1.description) =
+        "WatchPage provides real-time streaming updates when a page's content changes. "
+        "Emits the current version_hash when the content changes on the server. "
+        "Clients can use this to re-fetch and re-render the page content.";
+    option (api.v1.read_only) = true;
+  }
+
+  // RenderMarkdown — see (api.v1.description).
+  rpc RenderMarkdown(RenderMarkdownRequest) returns (RenderMarkdownResponse) {
+    option (api.v1.description) =
+        "RenderMarkdown renders arbitrary markdown content to HTML. "
+        "Supports selective template macros (LinkTo, FindBy, etc.) but excludes "
+        "interactive widget macros (Checklist, Blog) which render as literal text. "
+        "Used by the chat panel to render assistant messages.";
+    option (api.v1.read_only) = true;
+  }
 }
 
 // Create Page
