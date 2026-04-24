@@ -455,7 +455,9 @@ func setupGRPCServer(
 		WithMarkdownRenderer(site.MarkdownRenderer).
 		WithTemplateExecutor(server.TemplateExecutor{}).
 		WithFileStorer(site.FileStorer).
-		WithScheduledTurnDispatcher(site.ScheduledTurnDispatcher)
+		WithScheduledTurnDispatcher(site.ScheduledTurnDispatcher).
+		WithAgentScheduleStore(site.AgentScheduleStore).
+		WithAgentChatContextStore(site.AgentChatContextStore)
 
 	unaryInterceptors, streamInterceptors, err := buildGRPCInterceptors(
 		identityResolver, grpcAPIServer.LoggingInterceptor(), counters, logger,
