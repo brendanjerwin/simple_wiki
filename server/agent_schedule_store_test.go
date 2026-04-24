@@ -341,5 +341,62 @@ var _ = Describe("AgentScheduleStore", func() {
 				Expect(err).To(HaveOccurred())
 			})
 		})
+
+		Describe("when a BackgroundActivitySink is wired and the transition is terminal", func() {
+			var sink *recordingActivitySink
+
+			BeforeEach(func() {
+				sink = &recordingActivitySink{}
+				store.SetBackgroundActivitySink(sink)
+				Expect(store.TransitionStatus("p", "s1", apiv1.ScheduleStatus_SCHEDULE_STATUS_RUNNING, "", 0)).To(Succeed())
+				Expect(store.TransitionStatus("p", "s1", apiv1.ScheduleStatus_SCHEDULE_STATUS_OK, "", 5)).To(Succeed())
+			})
+
+			It("should call the sink exactly once (the terminal transition)", func() {
+				Expect(sink.calls).To(HaveLen(1))
+			})
+
+			It("should pass the schedule id to the sink", func() {
+				Expect(sink.calls[0].entry.GetScheduleId()).To(Equal("s1"))
+			})
+
+			It("should pass the terminal status", func() {
+				Expect(sink.calls[0].entry.GetStatus()).To(Equal(apiv1.ScheduleStatus_SCHEDULE_STATUS_OK))
+			})
+
+			It("should pass the page identifier", func() {
+				Expect(sink.calls[0].page).To(Equal("p"))
+			})
+		})
+
+		Describe("when a sink is wired and the transition is RUNNING (non-terminal)", func() {
+			var sink *recordingActivitySink
+
+			BeforeEach(func() {
+				sink = &recordingActivitySink{}
+				store.SetBackgroundActivitySink(sink)
+				Expect(store.TransitionStatus("p", "s1", apiv1.ScheduleStatus_SCHEDULE_STATUS_RUNNING, "", 0)).To(Succeed())
+			})
+
+			It("should not call the sink", func() {
+				Expect(sink.calls).To(BeEmpty())
+			})
+		})
 	})
 })
+
+// recordingActivitySink captures every AppendBackgroundActivityAutomatic call
+// for assertions.
+type recordingActivitySink struct {
+	calls []recordedActivityCall
+}
+
+type recordedActivityCall struct {
+	page  string
+	entry *apiv1.BackgroundActivityEntry
+}
+
+func (r *recordingActivitySink) AppendBackgroundActivityAutomatic(page string, entry *apiv1.BackgroundActivityEntry) error {
+	r.calls = append(r.calls, recordedActivityCall{page: page, entry: entry})
+	return nil
+}

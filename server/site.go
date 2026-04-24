@@ -73,10 +73,11 @@ type Site struct {
 	CronScheduler           *jobs.CronScheduler
 	FrontmatterIndexQueryer frontmatter.IQueryFrontmatterIndex
 	BleveIndexQueryer       bleve.BleveIndexQueryer
-	MigrationApplicator     lazy.FrontmatterMigrationApplicator
-	AgentScheduleStore      *AgentScheduleStore
-	AgentScheduler          *AgentScheduler
-	ScheduledTurnDispatcher *ScheduledTurnDispatcher
+	MigrationApplicator      lazy.FrontmatterMigrationApplicator
+	AgentScheduleStore       *AgentScheduleStore
+	AgentChatContextStore    *AgentChatContextStore
+	AgentScheduler           *AgentScheduler
+	ScheduledTurnDispatcher  *ScheduledTurnDispatcher
 	AgentScheduleConcurrency int
 	AgentScheduleQueueCap    int
 	AgentTurnHardTimeout     time.Duration
@@ -277,12 +278,18 @@ func (s *Site) InitializeIndexing() error {
 	s.CronScheduler.Start()
 
 	// Wire up the scheduled-agent infrastructure: dispatcher (server side
-	// bridge to the pool) and schedule store (typed agent.schedules access).
+	// bridge to the pool), schedule store (typed agent.schedules access), and
+	// chat-context store (typed agent.chat_context access). The schedule
+	// store's terminal-status hook writes through the chat-context store so
+	// every terminal transition records a background-activity entry visible to
+	// interactive chat preambles.
 	// Queue pre-registration and AgentScheduler construction are deferred to
 	// InitializeAgentScheduling so they pick up CLI-supplied concurrency and
 	// hard-timeout values.
 	s.ScheduledTurnDispatcher = NewScheduledTurnDispatcher()
 	s.AgentScheduleStore = NewAgentScheduleStore(s)
+	s.AgentChatContextStore = NewAgentChatContextStore(s)
+	s.AgentScheduleStore.SetBackgroundActivitySink(s.AgentChatContextStore)
 
 	// Schedule inventory normalization job to run hourly at minute 0
 	// This creates pages for items listed in inventory.items that don't have their own pages,

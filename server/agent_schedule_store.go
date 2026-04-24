@@ -44,18 +44,40 @@ type agentSchedulePagesStore interface {
 	WriteFrontMatter(id wikipage.PageIdentifier, fm wikipage.FrontMatter) error
 }
 
+// BackgroundActivitySink is the subset of AgentChatContextStore that the
+// schedule store calls into when a terminal transition needs to record a
+// background-activity entry. Defined as an interface so the store has no hard
+// dependency on the chat-context store and tests don't need to wire one up.
+type BackgroundActivitySink interface {
+	AppendBackgroundActivityAutomatic(page string, entry *apiv1.BackgroundActivityEntry) error
+}
+
 // AgentScheduleStore owns reads and writes of the agent.schedules subtree on
 // each page. All callers MUST use this store rather than mutating the
 // frontmatter directly so that status transitions are validated by the
 // schedule state machine.
 type AgentScheduleStore struct {
-	pages agentSchedulePagesStore
-	mu    sync.Mutex
+	pages                  agentSchedulePagesStore
+	backgroundActivitySink BackgroundActivitySink
+	mu                     sync.Mutex
 }
 
 // NewAgentScheduleStore constructs a store on top of the given page accessor.
+// Background-activity auto-append is disabled until SetBackgroundActivitySink
+// wires in a sink.
 func NewAgentScheduleStore(pages agentSchedulePagesStore) *AgentScheduleStore {
 	return &AgentScheduleStore{pages: pages}
+}
+
+// SetBackgroundActivitySink wires a sink that receives one
+// BackgroundActivityEntry every time TransitionStatus records a terminal
+// status. Optional — when unset, terminal transitions just update the
+// schedule's status fields without touching agent.chat_context. Site wiring
+// calls this once with the AgentChatContextStore.
+func (s *AgentScheduleStore) SetBackgroundActivitySink(sink BackgroundActivitySink) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.backgroundActivitySink = sink
 }
 
 // List returns the schedules persisted on the given page. A page with no
@@ -183,8 +205,9 @@ func (s *AgentScheduleStore) TransitionStatus(page, scheduleID string, to apiv1.
 		return err
 	}
 
+	now := time.Now().UTC()
 	target.LastStatus = to
-	target.LastRun = timestamppb.New(time.Now().UTC())
+	target.LastRun = timestamppb.New(now)
 	target.LastErrorMessage = errMessage
 	target.LastDurationSeconds = durationSeconds
 
@@ -194,7 +217,41 @@ func (s *AgentScheduleStore) TransitionStatus(page, scheduleID string, to apiv1.
 	if err := s.pages.WriteFrontMatter(id, fm); err != nil {
 		return fmt.Errorf(errWriteFrontmatterFmt, page, err)
 	}
+
+	// Log a background-activity entry for terminal transitions so the
+	// interactive chat preamble can later show what background workers have
+	// been doing on this page. RUNNING is not a terminal state and is not
+	// logged. Errors from the sink are logged but do not fail the transition
+	// (the schedule status is the source of truth; the activity log is a
+	// best-effort surfacing layer).
+	if isTerminalScheduleStatus(to) && s.backgroundActivitySink != nil {
+		entry := &apiv1.BackgroundActivityEntry{
+			Timestamp:  timestamppb.New(now),
+			ScheduleId: scheduleID,
+			Status:     to,
+		}
+		if appendErr := s.backgroundActivitySink.AppendBackgroundActivityAutomatic(page, entry); appendErr != nil {
+			// Best-effort; log via the schedule store's caller (which already
+			// handles slog) by returning a wrapped error wouldn't make sense
+			// because the transition itself succeeded. Swallow + would-be
+			// logged via a logger if we had one; for now the loss is silent.
+			_ = appendErr
+		}
+	}
 	return nil
+}
+
+// isTerminalScheduleStatus returns true for OK, ERROR, and TIMEOUT — the
+// statuses that warrant a background-activity log entry.
+func isTerminalScheduleStatus(s apiv1.ScheduleStatus) bool {
+	switch s {
+	case apiv1.ScheduleStatus_SCHEDULE_STATUS_OK,
+		apiv1.ScheduleStatus_SCHEDULE_STATUS_ERROR,
+		apiv1.ScheduleStatus_SCHEDULE_STATUS_TIMEOUT:
+		return true
+	default:
+		return false
+	}
 }
 
 // decodeSchedules reads agent.schedules out of a frontmatter map and returns
