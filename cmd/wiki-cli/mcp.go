@@ -13,6 +13,7 @@ import (
 	"connectrpc.com/connect"
 	"github.com/brendanjerwin/simple_wiki/gen/go/api/v1/apiv1connect"
 	"github.com/brendanjerwin/simple_wiki/gen/go/api/v1/apiv1mcp"
+	"github.com/brendanjerwin/simple_wiki/pkg/mcpdocs"
 	mcpserver "github.com/mark3labs/mcp-go/server"
 	cli "gopkg.in/urfave/cli.v1"
 )
@@ -148,13 +149,9 @@ func registerToolHandlers(s *mcpserver.MCPServer, clients *apiClients) {
 	apiv1mcp.ForwardToConnectSystemInfoServiceClient(s, clients.systemInfo)
 
 	// Override descriptions and annotations for any service whose proto
-	// methods declare the api.v1.* MCP doc extensions. New services like
-	// AgentMetadataService keep their description text in the proto extension
-	// (proto comments are reduced to a one-line "see (api.v1.description)"
-	// stub) so the runtime decorator is what surfaces useful descriptions for
-	// them. Services that haven't been ported still surface their proto
-	// comments unchanged.
-	decorateMCPToolsFromExtensions(s)
+	// methods declare the api.v1.* MCP doc extensions. Services that haven't
+	// been ported still surface their proto comments unchanged.
+	_ = mcpdocs.Decorate(s)
 }
 
 // computeBackoffAfterFailure returns the delay to wait before the next reconnect attempt

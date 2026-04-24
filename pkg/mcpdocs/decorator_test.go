@@ -1,24 +1,29 @@
 //revive:disable:dot-imports
-package main
+package mcpdocs_test
 
 import (
 	"context"
 	"errors"
-	"strings"
+	"testing"
 
 	"connectrpc.com/connect"
-	mcpgo "github.com/mark3labs/mcp-go/mcp"
 	mcpserver "github.com/mark3labs/mcp-go/server"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
 	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
 	"github.com/brendanjerwin/simple_wiki/gen/go/api/v1/apiv1mcp"
+	"github.com/brendanjerwin/simple_wiki/pkg/mcpdocs"
 )
 
-// noopAgentMetadataServer is an apiv1mcp.ConnectAgentMetadataServiceClient
-// whose RPCs are never actually called by these tests — the decorator only
-// inspects the registered MCP tool metadata, not the handler.
+func TestMCPDocsDecorator(t *testing.T) {
+	RegisterFailHandler(Fail)
+	RunSpecs(t, "MCP Docs Decorator Suite")
+}
+
+// noopAgentMetadataServer satisfies apiv1mcp.ConnectAgentMetadataServiceClient
+// just enough to register tools — handlers are never actually called by these
+// tests; the decorator only inspects MCP tool metadata.
 type noopAgentMetadataServer struct{}
 
 var errAgentMetadataNoop = errors.New("noopAgentMetadataServer: not used in this test")
@@ -47,16 +52,16 @@ func (*noopAgentMetadataServer) UpsertSchedule(_ context.Context, _ *connect.Req
 	return nil, errAgentMetadataNoop
 }
 
-var _ = Describe("decorateMCPToolsFromExtensions", func() {
-	var server *mcpserver.MCPServer
+var _ = Describe("Decorate", func() {
+	var (
+		server               *mcpserver.MCPServer
+		serviceDescriptions  []mcpdocs.ServiceDescription
+	)
 
 	BeforeEach(func() {
 		server = mcpserver.NewMCPServer("test", "0", mcpserver.WithToolCapabilities(false))
-		// Register the AgentMetadataService — the only currently-ported
-		// service. Other services would surface unchanged proto comments and
-		// are not exercised here.
 		apiv1mcp.ForwardToConnectAgentMetadataServiceClient(server, &noopAgentMetadataServer{})
-		decorateMCPToolsFromExtensions(server)
+		serviceDescriptions = mcpdocs.Decorate(server)
 	})
 
 	Describe("for a method with (api.v1.description) set", func() {
@@ -108,27 +113,22 @@ var _ = Describe("decorateMCPToolsFromExtensions", func() {
 		})
 	})
 
-	// computeMCPToolName has its own self-contained behavior that's worth a
-	// minimal sanity check independent of the decorator wiring.
-	Describe("computeMCPToolName via decorator output", func() {
-		It("should produce names matching the api_v1_<Service>_<Method> convention", func() {
+	Describe("service-level descriptions", func() {
+		It("should include the AgentMetadataService description", func() {
+			found := false
+			for _, sd := range serviceDescriptions {
+				if sd.Service == "api.v1.AgentMetadataService" {
+					found = true
+					Expect(sd.Description).To(ContainSubstring("agent-managed page state"))
+				}
+			}
+			Expect(found).To(BeTrue(), "expected api.v1.AgentMetadataService in service descriptions")
+		})
+	})
+
+	Describe("tool name convention", func() {
+		It("should produce names matching api_v1_<Service>_<Method>", func() {
 			Expect(server.GetTool("api_v1_AgentMetadataService_DeleteSchedule")).NotTo(BeNil())
 		})
 	})
 })
-
-// Suppress the unused-import warning for "strings" on builds where Ginkgo
-// rearranges the test compilation.
-var _ = strings.TrimSpace
-
-// noopHandler is a no-op tool handler used only when registering throwaway
-// tools in tests. The decorator preserves the existing handler when it
-// re-registers a tool with new metadata; we never invoke it.
-func noopHandler(_ context.Context, _ mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
-	return &mcpgo.CallToolResult{}, nil
-}
-
-// Suppress the unused-warning for noopHandler when no test happens to
-// reference it directly. It documents the contract that tools must have a
-// handler at registration.
-var _ = noopHandler
