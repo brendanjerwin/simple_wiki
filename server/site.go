@@ -245,6 +245,15 @@ func (s *Site) onInitialIndexingComplete() {
 		s.Logger.Info("Inventory normalization job queued after indexing completed")
 	}
 
+	// One-time migration: move ai_agent_chat_context -> agent.chat_context
+	// for any page that still has the legacy key. The job is idempotent so
+	// running it on every startup is safe; it short-circuits when there is
+	// nothing to do.
+	migrationJob := NewChatContextMigrationJob(s, s.FrontmatterIndexQueryer)
+	if err := s.JobQueueCoordinator.EnqueueJob(migrationJob); err != nil {
+		s.Logger.Error("Failed to enqueue chat-context migration job: %v", err)
+	}
+
 	// Load and register every page's agent.schedules with the cron scheduler
 	// once the frontmatter index is fully populated. Skips silently if
 	// InitializeAgentScheduling has not been called yet (e.g. tests).
