@@ -53,9 +53,14 @@ describe('BlogNewPostDialog', () => {
       await el.updateComplete;
     });
 
-    it('should not render dialog content', () => {
-      const dialog = el.shadowRoot?.querySelector('.dialog');
-      expect(dialog).to.not.exist;
+    it('should render the native dialog element', () => {
+      const dialog = el.shadowRoot?.querySelector('dialog');
+      expect(dialog).to.exist;
+    });
+
+    it('should not have the dialog open', () => {
+      const dialog = el.shadowRoot?.querySelector('dialog');
+      expect(dialog?.open).to.be.false;
     });
   });
 
@@ -67,9 +72,19 @@ describe('BlogNewPostDialog', () => {
       await el.updateComplete;
     });
 
-    it('should render the dialog', () => {
-      const dialog = el.shadowRoot?.querySelector('.dialog');
-      expect(dialog).to.exist;
+    it('should have the native dialog open', () => {
+      const dialog = el.shadowRoot?.querySelector('dialog');
+      expect(dialog?.open).to.be.true;
+    });
+
+    it('should have aria-labelledby pointing to dialog title', () => {
+      const dialog = el.shadowRoot?.querySelector('dialog');
+      expect(dialog?.getAttribute('aria-labelledby')).to.equal('blog-new-post-dialog-title');
+    });
+
+    it('should have an h2 with id blog-new-post-dialog-title', () => {
+      const h2 = el.shadowRoot?.querySelector('h2#blog-new-post-dialog-title');
+      expect(h2).to.exist;
     });
 
     it('should have a title input', () => {
@@ -167,8 +182,11 @@ describe('BlogNewPostDialog', () => {
       el.open = true;
       await el.updateComplete;
 
-      const backdrop = el.shadowRoot?.querySelector('.backdrop') as HTMLElement;
-      backdrop.click();
+      // Simulate a backdrop click by dispatching a click event directly on the dialog element.
+      // When the native dialog backdrop is clicked, the browser fires a click event on the
+      // dialog element itself with target === dialog (not a child element).
+      const dialog = el.shadowRoot?.querySelector('dialog') as HTMLDialogElement;
+      dialog.dispatchEvent(new MouseEvent('click', { bubbles: false }));
       await el.updateComplete;
     });
 
@@ -184,7 +202,9 @@ describe('BlogNewPostDialog', () => {
       el.open = true;
       await el.updateComplete;
 
-      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+      // The native <dialog> handles Escape by firing a cancelable 'cancel' event.
+      const dialog = el.shadowRoot?.querySelector('dialog');
+      dialog?.dispatchEvent(new Event('cancel', { cancelable: true }));
       await el.updateComplete;
     });
 
@@ -197,9 +217,6 @@ describe('BlogNewPostDialog', () => {
     beforeEach(async () => {
       el = buildElement();
       document.body.appendChild(el);
-      await el.updateComplete;
-
-      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
       await el.updateComplete;
     });
 
@@ -322,23 +339,19 @@ describe('BlogNewPostDialog', () => {
   });
 
   describe('when element is disconnected from DOM', () => {
-    let abortSpy: sinon.SinonSpy;
-
     beforeEach(async () => {
       el = buildElement();
       document.body.appendChild(el);
+      el.open = true;
       await el.updateComplete;
-
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion, @typescript-eslint/no-explicit-any
-      const elAny = el as any;
-      const controller: AbortController = elAny._keydownController;
-      abortSpy = sinon.spy(controller, 'abort');
 
       el.remove();
     });
 
-    it('should abort the keydown controller', () => {
-      expect(abortSpy).to.have.been.calledOnce;
+    it('should clear previouslyFocusedElement on disconnection', () => {
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion, @typescript-eslint/no-explicit-any
+      const elAny = el as any;
+      expect(elAny._previouslyFocusedElement).to.be.null;
     });
   });
 

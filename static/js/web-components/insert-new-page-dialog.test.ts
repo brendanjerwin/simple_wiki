@@ -24,9 +24,12 @@ describe('InsertNewPageDialog', () => {
       expect(el.open).to.be.false;
     });
 
-    it('should not display dialog when not open', () => {
-      expect(el.shadowRoot?.querySelector('.dialog')).to.exist;
-      // :host display: none is handled by CSS
+    it('should render the native dialog element', () => {
+      expect(el.shadowRoot?.querySelector('dialog')).to.exist;
+    });
+
+    it('should not have the dialog open', () => {
+      expect(el.shadowRoot?.querySelector('dialog')?.open).to.be.false;
     });
   });
 
@@ -53,6 +56,21 @@ describe('InsertNewPageDialog', () => {
 
     it('should set open to true', () => {
       expect(el.open).to.be.true;
+    });
+
+    it('should open the native dialog', () => {
+      const dialog = el.shadowRoot?.querySelector('dialog');
+      expect(dialog?.open).to.be.true;
+    });
+
+    it('should have aria-labelledby pointing to dialog title', () => {
+      const dialog = el.shadowRoot?.querySelector('dialog');
+      expect(dialog?.getAttribute('aria-labelledby')).to.equal('insert-new-page-dialog-title');
+    });
+
+    it('should have an h2 with id insert-new-page-dialog-title', () => {
+      const h2 = el.shadowRoot?.querySelector('h2#insert-new-page-dialog-title');
+      expect(h2).to.exist;
     });
 
     it('should load templates', () => {
@@ -146,8 +164,11 @@ describe('InsertNewPageDialog', () => {
       await el.openDialog();
       await el.updateComplete;
 
-      const backdrop = el.shadowRoot?.querySelector('.backdrop') as HTMLElement;
-      backdrop.click();
+      // Simulate a backdrop click by dispatching a click event directly on the dialog element.
+      // When the native dialog backdrop is clicked, the browser fires a click event on the
+      // dialog element itself with target === dialog (not a child element).
+      const dialog = el.shadowRoot?.querySelector('dialog') as HTMLDialogElement;
+      dialog.dispatchEvent(new MouseEvent('click', { bubbles: false }));
       await el.updateComplete;
     });
 
@@ -167,7 +188,9 @@ describe('InsertNewPageDialog', () => {
       await el.openDialog();
       await el.updateComplete;
 
-      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+      // The native <dialog> handles Escape by firing a cancelable 'cancel' event.
+      const dialog = el.shadowRoot?.querySelector('dialog');
+      dialog?.dispatchEvent(new Event('cancel', { cancelable: true }));
       await el.updateComplete;
     });
 
