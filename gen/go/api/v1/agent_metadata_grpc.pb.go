@@ -31,32 +31,19 @@ const (
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 //
-// AgentMetadataService owns all reads and writes of agent-managed page state:
-// cron schedules, conversation memory, and the rolling background-activity log.
-//
-// The generic Frontmatter_* APIs reject any writes that touch the reserved
-// "agent" top-level namespace. Use this service to mutate that subtree.
+// AgentMetadataService — see (api.v1.service_description).
 type AgentMetadataServiceClient interface {
-	// List all agent_schedules on a page, including wiki-managed status fields.
+	// ListSchedules — see (api.v1.description).
 	ListSchedules(ctx context.Context, in *ListSchedulesRequest, opts ...grpc.CallOption) (*ListSchedulesResponse, error)
-	// Create or replace a schedule on a page. The cron expression must be a
-	// valid 6-field expression (sec min hr dom mon dow). Wiki-managed fields
-	// (last_run, last_status, last_error_message, last_duration_seconds) on the
-	// request are silently stripped.
+	// UpsertSchedule — see (api.v1.description).
 	UpsertSchedule(ctx context.Context, in *UpsertScheduleRequest, opts ...grpc.CallOption) (*UpsertScheduleResponse, error)
-	// Remove a schedule by id from a page. Idempotent.
+	// DeleteSchedule — see (api.v1.description).
 	DeleteSchedule(ctx context.Context, in *DeleteScheduleRequest, opts ...grpc.CallOption) (*DeleteScheduleResponse, error)
-	// Read the agent.chat_context for a page, including the rolling
-	// background-activity log (newest entries first, capped at 50).
+	// GetChatContext — see (api.v1.description).
 	GetChatContext(ctx context.Context, in *GetChatContextRequest, opts ...grpc.CallOption) (*GetChatContextResponse, error)
-	// Deep-merge updates into agent.chat_context. Scalars replace, arrays union,
-	// last_updated is server-stamped. Interactive chat agents MUST call this
-	// every turn to persist memory.
+	// UpdateChatContext — see (api.v1.description).
 	UpdateChatContext(ctx context.Context, in *UpdateChatContextRequest, opts ...grpc.CallOption) (*UpdateChatContextResponse, error)
-	// Attach a concise one-sentence summary to the most recent
-	// background-activity entry for the given schedule_id. Called by scheduled
-	// agents before they complete; this summary is what interactive chat users
-	// will see when asking what the background workers have been doing.
+	// AppendBackgroundActivitySummary — see (api.v1.description).
 	AppendBackgroundActivitySummary(ctx context.Context, in *AppendBackgroundActivitySummaryRequest, opts ...grpc.CallOption) (*AppendBackgroundActivitySummaryResponse, error)
 }
 
@@ -132,32 +119,19 @@ func (c *agentMetadataServiceClient) AppendBackgroundActivitySummary(ctx context
 // All implementations must embed UnimplementedAgentMetadataServiceServer
 // for forward compatibility
 //
-// AgentMetadataService owns all reads and writes of agent-managed page state:
-// cron schedules, conversation memory, and the rolling background-activity log.
-//
-// The generic Frontmatter_* APIs reject any writes that touch the reserved
-// "agent" top-level namespace. Use this service to mutate that subtree.
+// AgentMetadataService — see (api.v1.service_description).
 type AgentMetadataServiceServer interface {
-	// List all agent_schedules on a page, including wiki-managed status fields.
+	// ListSchedules — see (api.v1.description).
 	ListSchedules(context.Context, *ListSchedulesRequest) (*ListSchedulesResponse, error)
-	// Create or replace a schedule on a page. The cron expression must be a
-	// valid 6-field expression (sec min hr dom mon dow). Wiki-managed fields
-	// (last_run, last_status, last_error_message, last_duration_seconds) on the
-	// request are silently stripped.
+	// UpsertSchedule — see (api.v1.description).
 	UpsertSchedule(context.Context, *UpsertScheduleRequest) (*UpsertScheduleResponse, error)
-	// Remove a schedule by id from a page. Idempotent.
+	// DeleteSchedule — see (api.v1.description).
 	DeleteSchedule(context.Context, *DeleteScheduleRequest) (*DeleteScheduleResponse, error)
-	// Read the agent.chat_context for a page, including the rolling
-	// background-activity log (newest entries first, capped at 50).
+	// GetChatContext — see (api.v1.description).
 	GetChatContext(context.Context, *GetChatContextRequest) (*GetChatContextResponse, error)
-	// Deep-merge updates into agent.chat_context. Scalars replace, arrays union,
-	// last_updated is server-stamped. Interactive chat agents MUST call this
-	// every turn to persist memory.
+	// UpdateChatContext — see (api.v1.description).
 	UpdateChatContext(context.Context, *UpdateChatContextRequest) (*UpdateChatContextResponse, error)
-	// Attach a concise one-sentence summary to the most recent
-	// background-activity entry for the given schedule_id. Called by scheduled
-	// agents before they complete; this summary is what interactive chat users
-	// will see when asking what the background workers have been doing.
+	// AppendBackgroundActivitySummary — see (api.v1.description).
 	AppendBackgroundActivitySummary(context.Context, *AppendBackgroundActivitySummaryRequest) (*AppendBackgroundActivitySummaryResponse, error)
 	mustEmbedUnimplementedAgentMetadataServiceServer()
 }

@@ -2,43 +2,70 @@ syntax = "proto3";
 
 package api.v1;
 
+import "api/v1/mcp_options.proto";
 import "google/protobuf/timestamp.proto";
 
 option go_package = "github.com/brendanjerwin/simple_wiki/gen/go/api/v1;apiv1";
 
-// AgentMetadataService owns all reads and writes of agent-managed page state:
-// cron schedules, conversation memory, and the rolling background-activity log.
-//
-// The generic Frontmatter_* APIs reject any writes that touch the reserved
-// "agent" top-level namespace. Use this service to mutate that subtree.
+// AgentMetadataService — see (api.v1.service_description).
 service AgentMetadataService {
-  // List all agent_schedules on a page, including wiki-managed status fields.
-  rpc ListSchedules(ListSchedulesRequest) returns (ListSchedulesResponse) {}
+  option (api.v1.service_description) =
+      "All reads and writes of agent-managed page state: cron schedules, "
+      "conversation memory, and the rolling background-activity log. Generic "
+      "Frontmatter_* APIs reject writes under the 'agent' namespace — use this "
+      "service instead.";
 
-  // Create or replace a schedule on a page. The cron expression must be a
-  // valid 6-field expression (sec min hr dom mon dow). Wiki-managed fields
-  // (last_run, last_status, last_error_message, last_duration_seconds) on the
-  // request are silently stripped.
-  rpc UpsertSchedule(UpsertScheduleRequest) returns (UpsertScheduleResponse) {}
+  // ListSchedules — see (api.v1.description).
+  rpc ListSchedules(ListSchedulesRequest) returns (ListSchedulesResponse) {
+    option (api.v1.description) =
+        "List all agent_schedules on a page, including wiki-managed status fields.";
+    option (api.v1.read_only) = true;
+  }
 
-  // Remove a schedule by id from a page. Idempotent.
-  rpc DeleteSchedule(DeleteScheduleRequest) returns (DeleteScheduleResponse) {}
+  // UpsertSchedule — see (api.v1.description).
+  rpc UpsertSchedule(UpsertScheduleRequest) returns (UpsertScheduleResponse) {
+    option (api.v1.description) =
+        "Create or replace a schedule on a page. The cron expression must be a "
+        "valid 6-field expression (sec min hr dom mon dow). Wiki-managed fields "
+        "(last_run, last_status, last_error_message, last_duration_seconds) on the "
+        "request are silently stripped.";
+    option (api.v1.example_request) =
+        "{\"page\": \"pastry_project\", \"schedule\": {\"id\": \"friday_draft\", "
+        "\"cron\": \"0 0 18 * * 5\", \"prompt\": \"Draft the weekend order.\", "
+        "\"max_turns\": 30, \"enabled\": true}}";
+  }
 
-  // Read the agent.chat_context for a page, including the rolling
-  // background-activity log (newest entries first, capped at 50).
-  rpc GetChatContext(GetChatContextRequest) returns (GetChatContextResponse) {}
+  // DeleteSchedule — see (api.v1.description).
+  rpc DeleteSchedule(DeleteScheduleRequest) returns (DeleteScheduleResponse) {
+    option (api.v1.description) = "Remove a schedule by id from a page. Idempotent.";
+  }
 
-  // Deep-merge updates into agent.chat_context. Scalars replace, arrays union,
-  // last_updated is server-stamped. Interactive chat agents MUST call this
-  // every turn to persist memory.
-  rpc UpdateChatContext(UpdateChatContextRequest) returns (UpdateChatContextResponse) {}
+  // GetChatContext — see (api.v1.description).
+  rpc GetChatContext(GetChatContextRequest) returns (GetChatContextResponse) {
+    option (api.v1.description) =
+        "Read the agent.chat_context for a page, including the rolling "
+        "background-activity log (newest entries first, capped at 50).";
+    option (api.v1.read_only) = true;
+  }
 
-  // Attach a concise one-sentence summary to the most recent
-  // background-activity entry for the given schedule_id. Called by scheduled
-  // agents before they complete; this summary is what interactive chat users
-  // will see when asking what the background workers have been doing.
+  // UpdateChatContext — see (api.v1.description).
+  rpc UpdateChatContext(UpdateChatContextRequest) returns (UpdateChatContextResponse) {
+    option (api.v1.description) =
+        "Deep-merge updates into agent.chat_context. Scalars replace, arrays "
+        "union, last_updated is server-stamped. Interactive chat agents MUST "
+        "call this every turn to persist memory.";
+  }
+
+  // AppendBackgroundActivitySummary — see (api.v1.description).
   rpc AppendBackgroundActivitySummary(AppendBackgroundActivitySummaryRequest)
-      returns (AppendBackgroundActivitySummaryResponse) {}
+      returns (AppendBackgroundActivitySummaryResponse) {
+    option (api.v1.description) =
+        "Attach a concise one-sentence summary to the most recent "
+        "background-activity entry for the given schedule_id. Called by "
+        "scheduled agents before they complete; this summary is what "
+        "interactive chat users will see when asking what the background "
+        "workers have been doing on this page.";
+  }
 }
 
 // ScheduleStatus represents the lifecycle of an agent schedule's most recent

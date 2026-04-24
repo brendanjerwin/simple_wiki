@@ -146,6 +146,15 @@ func registerToolHandlers(s *mcpserver.MCPServer, clients *apiClients) {
 	apiv1mcp.ForwardToConnectPageManagementServiceClient(s, clients.pageManagement)
 	apiv1mcp.ForwardToConnectSearchServiceClient(s, clients.search)
 	apiv1mcp.ForwardToConnectSystemInfoServiceClient(s, clients.systemInfo)
+
+	// Override descriptions and annotations for any service whose proto
+	// methods declare the api.v1.* MCP doc extensions. New services like
+	// AgentMetadataService keep their description text in the proto extension
+	// (proto comments are reduced to a one-line "see (api.v1.description)"
+	// stub) so the runtime decorator is what surfaces useful descriptions for
+	// them. Services that haven't been ported still surface their proto
+	// comments unchanged.
+	decorateMCPToolsFromExtensions(s)
 }
 
 // computeBackoffAfterFailure returns the delay to wait before the next reconnect attempt
