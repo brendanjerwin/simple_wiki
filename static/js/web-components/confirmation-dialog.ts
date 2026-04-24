@@ -116,6 +116,12 @@ export class ConfirmationDialog extends LitElement {
         color: var(--color-error);
       }
 
+      .dialog-irreversible-notice {
+        text-align: center;
+        margin-bottom: 16px;
+        font-weight: 600;
+      }
+
       .dialog-actions {
         display: flex;
         gap: 8px;
@@ -405,7 +411,7 @@ export class ConfirmationDialog extends LitElement {
             ` : ''}
 
             ${config.irreversible ? html`
-              <div class="dialog-description text-error font-mono text-sm irreversible">
+              <div class="dialog-irreversible-notice text-error font-mono text-sm">
                 This action cannot be undone.
               </div>
             ` : ''}
