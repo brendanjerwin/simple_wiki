@@ -61,6 +61,14 @@ type BuildInfo struct {
 	BuildTime time.Time
 }
 
+// ScheduledTurnDispatcher abstracts the server-side scheduled-turn bridge so
+// the gRPC layer does not depend on the concrete server package
+// implementation.
+type ScheduledTurnDispatcher interface {
+	Subscribe() (<-chan *apiv1.ScheduledTurnRequest, func())
+	Complete(req *apiv1.CompleteScheduledTurnRequest) error
+}
+
 // Server is the implementation of the gRPC services.
 type Server struct {
 	apiv1.UnimplementedSystemInfoServiceServer
@@ -71,6 +79,7 @@ type Server struct {
 	apiv1.UnimplementedPageImportServiceServer
 	apiv1.UnimplementedFileStorageServiceServer
 	apiv1.UnimplementedChatServiceServer
+	apiv1.UnimplementedScheduledTurnServiceServer
 	commit                  string
 	buildTime               time.Time
 	pageReaderMutator       wikipage.PageReaderMutator
@@ -83,6 +92,7 @@ type Server struct {
 	fileStorer              filestore.FileStorer
 	chatBufferManager       ChatBufferManager
 	pageOpener              wikipage.PageOpener
+	scheduledTurnDispatcher ScheduledTurnDispatcher
 }
 
 // NewServer creates a new gRPC server with the given dependencies.
@@ -151,6 +161,12 @@ func (s *Server) WithFileStorer(fs filestore.FileStorer) *Server {
 	return s
 }
 
+// WithScheduledTurnDispatcher sets the optional scheduled-turn dispatcher.
+func (s *Server) WithScheduledTurnDispatcher(d ScheduledTurnDispatcher) *Server {
+	s.scheduledTurnDispatcher = d
+	return s
+}
+
 // RegisterWithServer registers the gRPC services with the given gRPC server.
 func (s *Server) RegisterWithServer(grpcServer *grpc.Server) {
 	apiv1.RegisterSystemInfoServiceServer(grpcServer, s)
@@ -161,6 +177,7 @@ func (s *Server) RegisterWithServer(grpcServer *grpc.Server) {
 	apiv1.RegisterPageImportServiceServer(grpcServer, s)
 	apiv1.RegisterFileStorageServiceServer(grpcServer, s)
 	apiv1.RegisterChatServiceServer(grpcServer, s)
+	apiv1.RegisterScheduledTurnServiceServer(grpcServer, s)
 }
 
 // LoggingInterceptor returns a gRPC unary interceptor for logging method calls.
