@@ -137,10 +137,10 @@ describe('FrontmatterEditorDialog', () => {
   });
 
   describe('when Escape key is pressed while dialog is open', () => {
-    let cancelSpy: sinon.SinonSpy;
+    let closeDialogSpy: sinon.SinonSpy;
 
     beforeEach(async () => {
-      cancelSpy = sinon.spy(el, '_handleCancel' as keyof typeof el);
+      closeDialogSpy = sinon.spy(el, '_closeDialog' as keyof typeof el);
       el.openDialog('test-page');
       await Promise.race([
         el.updateComplete,
@@ -156,8 +156,8 @@ describe('FrontmatterEditorDialog', () => {
       ]);
     });
 
-    it('should call _handleCancel', () => {
-      expect(cancelSpy).to.have.been.calledOnce;
+    it('should call _closeDialog', () => {
+      expect(closeDialogSpy).to.have.been.calledOnce;
     });
   });
 

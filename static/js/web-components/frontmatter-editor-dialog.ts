@@ -10,19 +10,20 @@ import { showToastAfter } from './toast-message.js';
 import './error-display.js';
 import { AugmentErrorService, type AugmentedError } from './augment-error-service.js';
 import type { SectionChangeEventDetail } from './event-types.js';
+import { NativeDialogMixin } from './native-dialog-mixin.js';
 
 /**
  * FrontmatterEditorDialog - A modal dialog for editing page frontmatter metadata
- * 
+ *
  * WORKING THEORY:
  * This component manages the complete lifecycle of frontmatter editing through several key state variables:
- * 
+ *
  * - `frontmatter`: The original server response containing the current frontmatter data (read-only)
  * - `workingFrontmatter`: A mutable working copy of the frontmatter data that users can edit
  * - `loading`: Indicates whether the component is fetching data from the server
  * - `augmentedError`: Contains any error message from server operations
- * - `open`: Controls the visibility state of the modal dialog
- * 
+ * - `open`: Controls the visibility state of the modal dialog (provided by NativeDialogMixin)
+ *
  * DATA FLOW:
  * 1. When opened, the dialog fetches current frontmatter via gRPC and stores it in `frontmatter`
  * 2. The frontmatter field (already a JsonObject in protobuf-es v2) is directly cast to a plain object
@@ -30,7 +31,7 @@ import type { SectionChangeEventDetail } from './event-types.js';
  * 4. The frontmatter-value-section component renders and manages all field editing operations
  * 5. All user modifications update `workingFrontmatter` while preserving the original `frontmatter`
  * 6. On save, `workingFrontmatter` is cast back to JsonObject and sent to the server; on cancel, changes are discarded
- * 
+ *
  * COMPONENT ARCHITECTURE:
  * The dialog uses a hierarchical component structure:
  * - frontmatter-value-section: Root container that handles the main frontmatter object
@@ -39,15 +40,11 @@ import type { SectionChangeEventDetail } from './event-types.js';
  * - frontmatter-value-string: Handles individual string fields
  * - frontmatter-value-array: Manages arrays of string values
  * - frontmatter-add-field-button: Provides dropdown for adding new fields/arrays/sections
- * 
+ *
  * This separation allows for clean state management, proper event bubbling, and maintainable code.
  */
-export class FrontmatterEditorDialog extends LitElement {
+export class FrontmatterEditorDialog extends NativeDialogMixin(LitElement) {
   static override readonly styles = dialogStyles(css`
-      :host {
-        display: block;
-      }
-
       dialog {
         padding: 0;
         border: none;
@@ -60,27 +57,6 @@ export class FrontmatterEditorDialog extends LitElement {
         box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
         animation: slideIn 0.2s ease-out;
         overflow: hidden;
-      }
-
-      dialog[open] {
-        display: flex;
-      }
-
-      dialog::backdrop {
-        background: rgba(0, 0, 0, 0.5);
-        animation: fadeIn 0.2s ease-out;
-      }
-
-      /* Mobile-first responsive behavior */
-      @media (max-width: 768px) {
-        dialog {
-          width: 100%;
-          height: 100%;
-          max-width: none;
-          max-height: none;
-          border-radius: 0;
-          margin: 0;
-        }
       }
 
       .content {
@@ -124,22 +100,11 @@ export class FrontmatterEditorDialog extends LitElement {
         flex-direction: column;
         gap: 8px;
       }
-
-      .footer {
-        display: flex;
-        gap: 12px;
-        padding: 16px 20px;
-        border-top: 1px solid var(--color-border-subtle);
-        justify-content: flex-end;
-      }
     `
   );
 
   @property({ type: String })
   declare page: string;
-
-  @property({ type: Boolean, reflect: true })
-  declare open: boolean;
 
   @state()
   declare loading: boolean;
@@ -157,12 +122,10 @@ export class FrontmatterEditorDialog extends LitElement {
   declare workingFrontmatter?: JsonObject;
 
   private readonly client = createClient(Frontmatter, getGrpcWebTransport());
-  private _previouslyFocusedElement: Element | null = null;
 
   constructor() {
     super();
     this.page = '';
-    this.open = false;
     this.loading = false;
     this.saving = false;
     this.workingFrontmatter = {};
@@ -183,27 +146,8 @@ export class FrontmatterEditorDialog extends LitElement {
     this.requestUpdate();
   };
 
-  override updated(changedProperties: Map<PropertyKey, unknown>): void {
-    super.updated(changedProperties);
-    if (changedProperties.has('open')) {
-      const dialog = this.shadowRoot?.querySelector('dialog');
-      if (!dialog) return;
-      if (this.open && !dialog.open) {
-        this._previouslyFocusedElement = document.activeElement;
-        dialog.showModal();
-      } else if (!this.open && dialog.open) {
-        dialog.close();
-        if (this._previouslyFocusedElement instanceof HTMLElement) {
-          this._previouslyFocusedElement.focus();
-        }
-        this._previouslyFocusedElement = null;
-      }
-    }
-  }
-
-  private readonly _handleDialogCancel = (event: Event): void => {
-    event.preventDefault();
-    this._handleCancel();
+  private readonly _handleCancel = (): void => {
+    this._closeDialog();
   };
 
   public openDialog(page: string): void {
@@ -213,6 +157,10 @@ export class FrontmatterEditorDialog extends LitElement {
   }
 
   public close(): void {
+    this._closeDialog();
+  }
+
+  protected _closeDialog(): void {
     this.open = false;
     this.frontmatter = undefined;
     this.augmentedError = undefined;
@@ -241,10 +189,6 @@ export class FrontmatterEditorDialog extends LitElement {
       this.requestUpdate();
     }
   }
-
-  private readonly _handleCancel = (): void => {
-    this.close();
-  };
 
   private refreshPage(): void {
     globalThis.location.reload();

@@ -237,23 +237,29 @@ export class BlogNewPostDialog extends NativeDialogMixin(LitElement) {
   override updated(changed: Map<PropertyKey, unknown>): void {
     super.updated(changed);
     if (changed.has('open')) {
-      if (this.open) {
-        if (this._pendingFocusRaf !== undefined) {
-          cancelAnimationFrame(this._pendingFocusRaf);
-        }
-        this._pendingFocusRaf = requestAnimationFrame(() => {
-          this._pendingFocusRaf = undefined;
-          if (this.open) {
-            this.shadowRoot?.querySelector<HTMLElement>('title-input')?.focus();
-          }
-        });
-      } else {
-        if (this._pendingFocusRaf !== undefined) {
-          cancelAnimationFrame(this._pendingFocusRaf);
-          this._pendingFocusRaf = undefined;
-        }
-      }
+      this._onOpenChanged();
     }
+  }
+
+  private _onOpenChanged(): void {
+    if (this.open) {
+      this._scheduleFocusOnOpen();
+    } else if (this._pendingFocusRaf !== undefined) {
+      cancelAnimationFrame(this._pendingFocusRaf);
+      this._pendingFocusRaf = undefined;
+    }
+  }
+
+  private _scheduleFocusOnOpen(): void {
+    if (this._pendingFocusRaf !== undefined) {
+      cancelAnimationFrame(this._pendingFocusRaf);
+    }
+    this._pendingFocusRaf = requestAnimationFrame(() => {
+      this._pendingFocusRaf = undefined;
+      if (this.open) {
+        this.shadowRoot?.querySelector<HTMLElement>('title-input')?.focus();
+      }
+    });
   }
 
   override disconnectedCallback(): void {
@@ -275,6 +281,23 @@ export class BlogNewPostDialog extends NativeDialogMixin(LitElement) {
     this.subtitle = '';
   }
 
+  private _buildBlogFrontmatter(): JsonObject {
+    const blogMeta: JsonObject = {
+      identifier: this.blogId,
+      'published-date': this.date,
+    };
+    if (this.subtitle.trim()) {
+      blogMeta['subtitle'] = this.subtitle.trim();
+    }
+    if (this.summary.trim()) {
+      blogMeta['summary_markdown'] = this.summary.trim();
+    }
+    return {
+      title: this.title,
+      blog: blogMeta,
+    };
+  }
+
   private async _submit(): Promise<void> {
     if (!this.title.trim() || !this.date) return;
 
@@ -294,28 +317,12 @@ export class BlogNewPostDialog extends NativeDialogMixin(LitElement) {
       const editor = this.shadowRoot?.querySelector<WikiEditor>('wiki-editor');
       const bodyContent = editor?.getContent() || '';
 
-      // Build frontmatter
-      const blogMeta: JsonObject = {
-        identifier: this.blogId,
-        'published-date': this.date,
-      };
-      if (this.subtitle.trim()) {
-        blogMeta['subtitle'] = this.subtitle.trim();
-      }
-      if (this.summary.trim()) {
-        blogMeta['summary_markdown'] = this.summary.trim();
-      }
-      const frontmatter: JsonObject = {
-        title: this.title,
-        blog: blogMeta,
-      };
-
       // Create the page
       const result = await this.pageCreator.createPage(
         idResult.identifier,
         bodyContent,
         undefined,
-        frontmatter
+        this._buildBlogFrontmatter()
       );
 
       if (result.error) {
