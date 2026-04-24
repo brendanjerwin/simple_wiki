@@ -114,6 +114,12 @@ describe('ToastMessage', () => {
     });
   });
 
+  describe('when connected to DOM', () => {
+    it('should have popover attribute set to manual', () => {
+      expect(el.getAttribute('popover')).to.equal('manual');
+    });
+  });
+
   describe('when show() is called', () => {
     let clock: sinon.SinonFakeTimers;
 
@@ -128,9 +134,18 @@ describe('ToastMessage', () => {
       clock.restore();
     });
 
-    it('should set visible to true', () => {
-      el.show();
-      expect(el.visible).to.be.true;
+    describe('when show() is invoked', () => {
+      beforeEach(() => {
+        el.show();
+      });
+
+      it('should set visible to true', () => {
+        expect(el.visible).to.be.true;
+      });
+
+      it('should enter the top layer as a popover', () => {
+        expect(el.matches(':popover-open')).to.be.true;
+      });
     });
 
     describe('when autoClose is true', () => {

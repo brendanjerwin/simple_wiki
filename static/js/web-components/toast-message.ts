@@ -225,8 +225,11 @@ export class ToastMessage extends LitElement {
   }
 
   public show(): void {
+    if (this.isConnected && !this.matches(':popover-open')) {
+      this.showPopover();
+    }
     this.visible = true;
-    
+
     const shouldAutoClose = this.autoClose;
 
     if (shouldAutoClose && this.timeoutSeconds > 0) {
@@ -240,9 +243,12 @@ export class ToastMessage extends LitElement {
   public hide(): void {
     this.visible = false;
     this.clearTimeout();
-    
+
     // Remove from DOM after animation completes
     setTimeout(() => {
+      if (this.matches(':popover-open')) {
+        this.hidePopover();
+      }
       this.remove();
     }, ANIMATION_DURATION_MS);
   }
@@ -278,6 +284,11 @@ export class ToastMessage extends LitElement {
     // This maintains existing behavior for simple message toasts
     this.hide();
   };
+
+  override connectedCallback(): void {
+    super.connectedCallback();
+    this.setAttribute('popover', 'manual');
+  }
 
   override disconnectedCallback(): void {
     super.disconnectedCallback();
