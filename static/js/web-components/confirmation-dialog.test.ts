@@ -138,7 +138,7 @@ describe('ConfirmationDialog', () => {
     });
 
     it('should show irreversible warning', () => {
-      const irreversibleEl = el.shadowRoot?.querySelector('.dialog-description.irreversible');
+      const irreversibleEl = el.shadowRoot?.querySelector('.dialog-irreversible-notice');
       expect(irreversibleEl?.textContent?.trim()).to.equal('This action cannot be undone.');
     });
   });

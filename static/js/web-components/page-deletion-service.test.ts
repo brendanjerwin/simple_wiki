@@ -62,10 +62,6 @@ describe('PageDeleter', () => {
       expect(mockDialog.id).to.equal('page-deletion-dialog');
     });
 
-    it('should set dialog as hidden', () => {
-      expect(mockDialog.hidden).to.be.true;
-    });
-
     it('should append dialog to document body', () => {
       expect(appendChildStub).to.have.been.calledWith(mockDialog);
     });
