@@ -45,6 +45,10 @@ export class ToastMessage extends LitElement {
     zIndexCSS,
     css`
       :host {
+        /* Override UA [popover] defaults: inset:0 and margin:auto would
+           stretch/reposition the element against our fixed top-right placement */
+        inset: auto;
+        margin: 0;
         position: fixed;
         top: 12px;
         right: 12px;
@@ -225,7 +229,7 @@ export class ToastMessage extends LitElement {
   }
 
   public show(): void {
-    if (this.isConnected && !this.matches(':popover-open')) {
+    if (this.isConnected && this.hasAttribute('popover') && !this.matches(':popover-open')) {
       this.showPopover();
     }
     this.visible = true;
