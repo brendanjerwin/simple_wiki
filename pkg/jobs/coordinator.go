@@ -73,6 +73,38 @@ func NewJobQueueCoordinatorWithFactory(logger logging.Logger, factory Dispatcher
 }
 
 
+// RegisterQueue pre-registers a named queue with explicit worker and capacity
+// settings. This is used when the default 1-worker / 10-slot auto-registration
+// is not appropriate (e.g., a queue that needs concurrent workers, or a backlog
+// large enough that enqueue is the backpressure mechanism rather than a skip
+// trigger). Returns an error if a queue with this name is already registered.
+func (c *JobQueueCoordinator) RegisterQueue(name string, workers, capacity int) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if _, exists := c.queues[name]; exists {
+		return fmt.Errorf("queue %q is already registered", name)
+	}
+
+	c.queues[name] = c.createDispatcher(workers, capacity)
+	c.stats[name] = &QueueStats{
+		QueueName:     name,
+		JobsRemaining: 0,
+		HighWaterMark: 0,
+		IsActive:      false,
+	}
+	return nil
+}
+
+// createDispatcher constructs and starts a dispatcher with the given sizing.
+// Shared between auto-register (EnqueueJobWithCompletion) and explicit register
+// (RegisterQueue) so both paths behave identically.
+func (c *JobQueueCoordinator) createDispatcher(workers, capacity int) Dispatcher {
+	dispatcher := c.dispatcherFactory(workers, capacity)
+	dispatcher.Start()
+	return dispatcher
+}
+
 // EnqueueJob adds a job to its appropriate queue based on the job's name.
 // Returns an error if the job could not be dispatched.
 func (c *JobQueueCoordinator) EnqueueJob(job Job) error {
@@ -91,10 +123,8 @@ func (c *JobQueueCoordinator) EnqueueJobWithCompletion(job Job, onComplete Compl
 	// Auto-register queue if it doesn't exist
 	dispatcher, exists := c.queues[queueName]
 	if !exists {
-		// Create new queue for this job type
 		const defaultQueueCapacity = 10
-		dispatcher = c.dispatcherFactory(1, defaultQueueCapacity)
-		dispatcher.Start()
+		dispatcher = c.createDispatcher(1, defaultQueueCapacity)
 
 		c.queues[queueName] = dispatcher
 		c.stats[queueName] = &QueueStats{
