@@ -790,6 +790,64 @@ export const pillCSS = css`
 `;
 
 /* ==========================================================================
+   Native Dialog Base Styles
+   Shared base CSS for components using the native <dialog> element.
+   Each component should still provide its own max-width override.
+   ========================================================================== */
+
+export const nativeDialogCSS = css`
+  :host {
+    display: block;
+  }
+
+  dialog {
+    padding: 0;
+    border: none;
+    border-radius: 8px;
+    background: var(--color-surface-elevated);
+    width: 90%;
+    max-height: 90vh;
+    flex-direction: column;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
+    animation: slideIn 0.2s ease-out;
+    overflow: hidden;
+  }
+
+  dialog[open] {
+    display: flex;
+  }
+
+  dialog::backdrop {
+    background: rgba(0, 0, 0, 0.5);
+    animation: fadeIn 0.2s ease-out;
+  }
+
+  @media (max-width: 768px) {
+    dialog {
+      width: 100%;
+      max-width: none;
+      max-height: none;
+      border-radius: 0;
+      margin: 0;
+    }
+  }
+
+  .content {
+    padding: 20px;
+    overflow-y: auto;
+    flex: 1;
+  }
+
+  .footer {
+    display: flex;
+    gap: 12px;
+    padding: 16px 20px;
+    border-top: 1px solid var(--color-border-subtle);
+    justify-content: flex-end;
+  }
+`;
+
+/* ==========================================================================
    Dialog Styles Builder
    ========================================================================== */
 
@@ -797,7 +855,7 @@ export const pillCSS = css`
  * Builds a styles array for dialog components with all common styles included.
  * Ensures responsiveCSS is always last to properly override desktop styles on mobile.
  *
- * Includes: foundationCSS, zIndexCSS, dialogCSS, buttonCSS, animationCSS, ...componentStyles, responsiveCSS
+ * Includes: foundationCSS, zIndexCSS, dialogCSS, buttonCSS, animationCSS, nativeDialogCSS, ...componentStyles, responsiveCSS
  *
  * Usage:
  * ```
@@ -805,6 +863,6 @@ export const pillCSS = css`
  * ```
  */
 export function dialogStyles(...componentStyles: CSSResult[]): CSSResult[] {
-  return [foundationCSS, colorCSS, zIndexCSS, dialogCSS, buttonCSS, animationCSS, ...componentStyles, responsiveCSS];
+  return [foundationCSS, colorCSS, zIndexCSS, dialogCSS, buttonCSS, animationCSS, nativeDialogCSS, ...componentStyles, responsiveCSS];
 }
 

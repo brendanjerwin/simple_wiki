@@ -34,47 +34,8 @@ const NONE_TEMPLATE_VALUE = '';
  */
 export class InsertNewPageDialog extends NativeDialogMixin(LitElement) {
   static override readonly styles = dialogStyles(css`
-    :host {
-      display: block;
-    }
-
     dialog {
-      padding: 0;
-      border: none;
-      border-radius: 8px;
-      background: var(--color-surface-elevated, white);
       max-width: 600px;
-      width: 90%;
-      max-height: 90vh;
-      flex-direction: column;
-      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
-      animation: slideIn 0.2s ease-out;
-      overflow: hidden;
-    }
-
-    dialog[open] {
-      display: flex;
-    }
-
-    dialog::backdrop {
-      background: rgba(0, 0, 0, 0.5);
-      animation: fadeIn 0.2s ease-out;
-    }
-
-    @media (max-width: 768px) {
-      dialog {
-        width: 100%;
-        max-width: none;
-        max-height: none;
-        border-radius: 0;
-        margin: 0;
-      }
-    }
-
-    .content {
-      padding: 20px;
-      overflow-y: auto;
-      flex: 1;
     }
 
     .error-message {
@@ -138,13 +99,6 @@ export class InsertNewPageDialog extends NativeDialogMixin(LitElement) {
       text-align: center;
     }
 
-    .footer {
-      display: flex;
-      gap: 12px;
-      padding: 16px 20px;
-      border-top: 1px solid var(--color-border-subtle);
-      justify-content: flex-end;
-    }
   `);
 
   @property({ type: String })

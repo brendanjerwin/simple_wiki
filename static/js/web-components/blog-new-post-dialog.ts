@@ -21,41 +21,8 @@ import './title-input.js';
  */
 export class BlogNewPostDialog extends NativeDialogMixin(LitElement) {
   static override readonly styles = dialogStyles(css`
-    :host {
-      display: block;
-    }
-
     dialog {
-      padding: 0;
-      border: none;
-      border-radius: 8px;
-      background: var(--color-surface-elevated, white);
       max-width: 700px;
-      width: 90%;
-      max-height: 90vh;
-      flex-direction: column;
-      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
-      animation: slideIn 0.2s ease-out;
-      overflow: hidden;
-    }
-
-    dialog[open] {
-      display: flex;
-    }
-
-    dialog::backdrop {
-      background: rgba(0, 0, 0, 0.5);
-      animation: fadeIn 0.2s ease-out;
-    }
-
-    @media (max-width: 768px) {
-      dialog {
-        width: 100%;
-        max-width: none;
-        max-height: none;
-        border-radius: 0;
-        margin: 0;
-      }
     }
 
     .header {
@@ -78,12 +45,6 @@ export class BlogNewPostDialog extends NativeDialogMixin(LitElement) {
       cursor: pointer;
       color: var(--color-text-secondary);
       padding: 4px 8px;
-    }
-
-    .content {
-      padding: 20px;
-      overflow-y: auto;
-      flex: 1;
     }
 
     .form-row {
@@ -129,11 +90,7 @@ export class BlogNewPostDialog extends NativeDialogMixin(LitElement) {
     }
 
     .footer {
-      display: flex;
-      justify-content: flex-end;
       gap: 8px;
-      padding: 16px 20px;
-      border-top: 1px solid var(--color-border-subtle);
     }
 
     .btn {
