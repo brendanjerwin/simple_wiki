@@ -213,7 +213,10 @@ test.describe('Z-Index Token System (ADR-0008)', () => {
 
       test.beforeEach(async ({ page }) => {
         await openPageImportDialog(page);
-        await expect(page.locator('page-import-dialog')).toBeVisible({ timeout: MENU_APPEAR_TIMEOUT_MS });
+        // The native <dialog> is placed in the CSS top layer via showModal(), which removes it
+        // from normal document flow and gives the host element zero height. Pierce the shadow
+        // root to check that the inner dialog[open] element exists instead.
+        await expect(page.locator('page-import-dialog').locator('dialog[open]')).toBeAttached({ timeout: MENU_APPEAR_TIMEOUT_MS });
 
         dialogZIndex = await page.evaluate(() => {
           const el = document.querySelector('page-import-dialog');

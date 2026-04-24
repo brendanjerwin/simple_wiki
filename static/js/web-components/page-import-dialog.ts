@@ -1,5 +1,6 @@
 import { html, css, LitElement, nothing } from 'lit';
-import { property, state } from 'lit/decorators.js';
+import { state } from 'lit/decorators.js';
+import { NativeDialogMixin } from './native-dialog-mixin.js';
 import { createClient } from '@connectrpc/connect';
 import { create } from '@bufbuild/protobuf';
 import { getGrpcWebTransport } from './grpc-transport.js';
@@ -46,7 +47,7 @@ interface ImportStats {
  * 3. Preview: Review records with navigation and error filtering
  * 4. Importing: Shows job queue status while import runs in background
  */
-export class PageImportDialog extends LitElement {
+export class PageImportDialog extends NativeDialogMixin(LitElement) {
   // Must match server.PageImportJobName in server/page_import_job.go
   private static readonly PAGE_IMPORT_QUEUE_NAME = 'PageImportJob';
 
@@ -494,9 +495,6 @@ export class PageImportDialog extends LitElement {
     `
   );
 
-  @property({ type: Boolean, reflect: true })
-  declare open: boolean;
-
   @state()
   private declare dialogState: DialogState;
 
@@ -533,8 +531,6 @@ export class PageImportDialog extends LitElement {
   @state()
   private declare streamingDisconnected: boolean;
 
-  private _previouslyFocusedElement: Element | null = null;
-
   private _pageImportClient: ReturnType<typeof createClient<typeof PageImportService>> | null =
     null;
 
@@ -545,7 +541,6 @@ export class PageImportDialog extends LitElement {
 
   constructor() {
     super();
-    this.open = false;
     this.dialogState = 'upload';
     this.file = null;
     this.records = [];
@@ -570,37 +565,14 @@ export class PageImportDialog extends LitElement {
     return this._systemInfoClient;
   }
 
-  override updated(changedProperties: Map<PropertyKey, unknown>): void {
-    super.updated(changedProperties);
-    if (changedProperties.has('open')) {
-      const dialog = this.shadowRoot?.querySelector('dialog');
-      if (!dialog) return;
-      if (this.open && !dialog.open) {
-        this._previouslyFocusedElement = document.activeElement;
-        dialog.showModal();
-      } else if (!this.open && dialog.open) {
-        dialog.close();
-        if (this._previouslyFocusedElement instanceof HTMLElement) {
-          this._previouslyFocusedElement.focus();
-        }
-        this._previouslyFocusedElement = null;
-      }
-    }
-  }
-
-  private readonly _handleDialogCancel = (event: Event): void => {
-    event.preventDefault();
-    this.closeDialog();
-  };
-
   public openDialog(): void {
     this.open = true;
     this.resetState();
   }
 
-  public closeDialog(): void {
+  override closeDialog(): void {
     this._streamAbortController?.abort();
-    this.open = false;
+    super.closeDialog();
   }
 
   private resetState(): void {
