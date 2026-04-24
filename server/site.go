@@ -195,6 +195,14 @@ const (
 	defaultAgentScheduleConcurrencyValue = 2
 	defaultAgentScheduleQueueCapValue    = 256
 	defaultAgentTurnHardTimeoutMinutes   = 10
+
+	// agentScheduleRefreshConcurrency forces single-worker execution so
+	// per-page refreshes run in submission order and never race the cron
+	// registrar.
+	agentScheduleRefreshConcurrency = 1
+	// agentScheduleRefreshQueueCap is generously sized so enqueue acts as
+	// backpressure rather than dropping refresh requests on a save burst.
+	agentScheduleRefreshQueueCap = 256
 )
 
 // InitializeAgentScheduling pre-registers the AgentTurn queue and constructs
@@ -219,6 +227,12 @@ func (s *Site) InitializeAgentScheduling() {
 	}
 	if err := s.JobQueueCoordinator.RegisterQueue(AgentTurnJobName, s.AgentScheduleConcurrency, s.AgentScheduleQueueCap); err != nil {
 		s.Logger.Warn("AgentTurn queue pre-registration failed: %v", err)
+	}
+	// AgentScheduleRefresh runs single-worker so per-page refreshes execute in
+	// submission order, avoiding races against the cron registrar when the
+	// same page is saved twice in quick succession.
+	if err := s.JobQueueCoordinator.RegisterQueue(AgentScheduleRefreshJobName, agentScheduleRefreshConcurrency, agentScheduleRefreshQueueCap); err != nil {
+		s.Logger.Warn("AgentScheduleRefresh queue pre-registration failed: %v", err)
 	}
 	s.AgentScheduler = NewAgentScheduler(
 		s.AgentScheduleStore,
@@ -765,12 +779,13 @@ func (s *Site) modifyOrCreatePage(identifierStr string, modifier func(currentTex
 	}
 
 	// Reconcile any agent.schedules that the user may have edited so cron
-	// pickups happen within seconds rather than at next restart. Run inline
-	// rather than as a job to avoid race windows where cron fires the old
-	// schedule between save and reconciliation.
-	if s.AgentScheduler != nil {
-		if err := s.AgentScheduler.Refresh(identifierStr); err != nil {
-			s.Logger.Error("Failed to refresh agent schedules for %s: %v", identifierStr, err)
+	// pickups happen within seconds rather than at next restart. Enqueued as a
+	// single-worker job so refreshes run in submission order through the same
+	// machinery as every other background unit of work.
+	if s.AgentScheduler != nil && s.JobQueueCoordinator != nil {
+		refreshJob := NewAgentScheduleRefreshJob(s.AgentScheduler, identifierStr)
+		if err := s.JobQueueCoordinator.EnqueueJob(refreshJob); err != nil {
+			s.Logger.Error("Failed to enqueue agent schedule refresh for %s: %v", identifierStr, err)
 		}
 	}
 
