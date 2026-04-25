@@ -1,11 +1,20 @@
 // Package eager: checklist data-model migration.
 //
-// Promotes legacy checklist items (no uid, no per-item metadata) to the
-// new shape introduced in #984: ULID per item, server-stamped
-// created_at/updated_at, and per-list sync bookkeeping under the
-// reserved wiki.checklists.* namespace. Each list gets stamped with
-// wiki.checklists.<name>.migrated_data_model = true so subsequent scans
-// skip it.
+// MOVES legacy checklist items into the reserved wiki.checklists.*
+// subtree, in line with ADR-0010. After migration, a page has:
+//
+//   - All items at wiki.checklists.<name>.items[] (slice of full ChecklistItem
+//     maps with uid/text/checked/tags/sort_order/created_at/updated_at/
+//     completed_at/completed_by/automated).
+//   - wiki.checklists.<name>.{sync_token, updated_at, tombstones,
+//     migrated_data_model = true}.
+//   - NO checklists.<name> subtree at all.
+//
+// Re-runnable: pages where every list has wiki.checklists.<name>.items
+// as a slice are skipped. Pages migrated by an earlier draft of this
+// code (where items were split between checklists.* and wiki.checklists.*)
+// are detected (wiki.checklists.<list>.items is a map[string]any rather
+// than []any) and re-migrated cleanly.
 //
 // The tag-syntax migration in checklist_tag_syntax_migration.go is the
 // template — see that file for the cross-cutting concerns (system-page
@@ -42,11 +51,23 @@ const (
 	updatedAtFMKey  = "updated_at"
 	wikiFMKey       = "wiki"
 	itemsFMKey      = "items"
+	uidFMKey        = "uid"
+	textFMKey       = "text"
+	checkedFMKey    = "checked"
+	tagsFMKey       = "tags"
+	sortOrderFMKey  = "sort_order"
+	descriptionFMKey = "description"
+	dueFMKey        = "due"
+	createdAtFMKey  = "created_at"
+	completedAtFMKey = "completed_at"
+	completedByFMKey = "completed_by"
+	automatedFMKey  = "automated"
+	syncTokenFMKey  = "sync_token"
 )
 
 // ChecklistDataModelMigrationScanJob walks the data dir and enqueues a
 // per-page job for every page that has a checklists subtree where at
-// least one list lacks the migrated_data_model flag.
+// least one list still needs migration to the wiki.checklists.* shape.
 type ChecklistDataModelMigrationScanJob struct {
 	scanner       DataDirScanner
 	coordinator   *jobs.JobQueueCoordinator
@@ -54,9 +75,7 @@ type ChecklistDataModelMigrationScanJob struct {
 	ulids         ulid.Generator
 }
 
-// NewChecklistDataModelMigrationScanJob constructs the scan job. The ulid
-// generator is injected so tests can assert specific assignments; in
-// production it should be ulid.NewSystemGenerator().
+// NewChecklistDataModelMigrationScanJob constructs the scan job.
 func NewChecklistDataModelMigrationScanJob(
 	scanner DataDirScanner,
 	coordinator *jobs.JobQueueCoordinator,
@@ -76,8 +95,7 @@ func (*ChecklistDataModelMigrationScanJob) GetName() string {
 	return "ChecklistDataModelMigrationScanJob"
 }
 
-// Execute scans .md files and enqueues per-page migration jobs for pages
-// that need promoting.
+// Execute scans .md files and enqueues per-page migration jobs.
 func (j *ChecklistDataModelMigrationScanJob) Execute() error {
 	if !j.scanner.DataDirExists() {
 		return nil
@@ -141,44 +159,58 @@ func extractDataModelMigrationFrontmatter(scanner DataDirScanner, filename strin
 	return id, fm, true
 }
 
-// pageNeedsDataModelMigration reports whether the page has at least one
-// checklist that lacks the wiki.checklists.<name>.migrated_data_model
-// flag. System pages are skipped (they ship with the wiki binary and
-// cannot be edited via the gRPC API anyway).
+// pageNeedsDataModelMigration reports whether the page has any checklist
+// list that still needs migrating. A list needs migration if either:
+//
+//   - It exists at the legacy `checklists.<name>` location (regardless
+//     of whether `wiki.checklists.<name>.migrated_data_model` is set —
+//     a stale flag from the old two-tier draft must not block re-migration).
+//   - It exists under `wiki.checklists.<name>` but `items` is not a slice
+//     (e.g. the old draft persisted `items` as a map keyed by uid).
+//
+// System pages are skipped (they ship with the wiki binary and cannot
+// be edited via the gRPC API anyway).
 func pageNeedsDataModelMigration(fm map[string]any) bool {
 	if syspage.IsSystemPage(fm) {
 		return false
 	}
-	checklists, ok := fm[checklistsFMKey].(map[string]any)
-	if !ok {
-		return false
+
+	if legacyHasAny(fm) {
+		return true
 	}
 	wikiChecklists := readNestedMap(fm, wikiFMKey, checklistsFMKey)
-	for name := range checklists {
-		flag := dataModelMigratedFlag(wikiChecklists, name)
-		if !flag {
+	for _, raw := range wikiChecklists {
+		listMap, ok := raw.(map[string]any)
+		if !ok {
+			continue
+		}
+		// Items must be a slice in the new shape. A map indicates the
+		// old draft and needs re-migration.
+		if _, isMap := listMap[itemsFMKey].(map[string]any); isMap {
 			return true
 		}
 	}
 	return false
 }
 
-// dataModelMigratedFlag returns the migrated_data_model flag for a
-// specific list, false when missing.
-func dataModelMigratedFlag(wikiChecklists map[string]any, name string) bool {
-	if wikiChecklists == nil {
-		return false
-	}
-	listMeta, ok := wikiChecklists[name].(map[string]any)
+// legacyHasAny reports whether the page still has any checklists.<name>
+// subtree (un-migrated, or partially migrated by the old draft).
+func legacyHasAny(fm map[string]any) bool {
+	legacy, ok := fm[checklistsFMKey].(map[string]any)
 	if !ok {
 		return false
 	}
-	flag, ok := listMeta[migratedDataModelKey].(bool)
-	return ok && flag
+	for _, raw := range legacy {
+		if _, ok := raw.(map[string]any); ok {
+			return true
+		}
+	}
+	return false
 }
 
 // ChecklistDataModelMigrationJob promotes a single page's checklists to
-// the new shape and stamps the flag on every list it touched.
+// the new shape, moves them under wiki.checklists.*, and removes the
+// legacy checklists.* subtree on the same write.
 type ChecklistDataModelMigrationJob struct {
 	readerMutator wikipage.PageReaderMutator
 	ulids         ulid.Generator
@@ -195,8 +227,8 @@ func (j *ChecklistDataModelMigrationJob) GetName() string {
 	return fmt.Sprintf("ChecklistDataModelMigrationJob-%s", j.identifier)
 }
 
-// Execute reads the page's frontmatter, promotes legacy checklist items
-// to the new shape, and writes back via the standard write path.
+// Execute reads the page's frontmatter, moves all checklist data into
+// wiki.checklists.*, and writes back via the standard write path.
 func (j *ChecklistDataModelMigrationJob) Execute() error {
 	id := wikipage.PageIdentifier(j.identifier)
 	_, fm, err := j.readerMutator.ReadFrontMatter(id)
@@ -207,7 +239,7 @@ func (j *ChecklistDataModelMigrationJob) Execute() error {
 		return nil
 	}
 
-	if !promoteChecklistDataModel(fm, j.ulids) {
+	if !migrateChecklistsIntoWikiNamespace(fm, j.ulids) {
 		return nil
 	}
 
@@ -217,123 +249,222 @@ func (j *ChecklistDataModelMigrationJob) Execute() error {
 	return nil
 }
 
-// promoteChecklistDataModel walks every checklists.<name> on the page,
-// promoting items to the new shape. Returns true when any change was
-// made (callers persist only when changes happened).
-func promoteChecklistDataModel(fm map[string]any, ulids ulid.Generator) bool {
-	checklists, ok := fm[checklistsFMKey].(map[string]any)
-	if !ok {
-		return false
-	}
-	wikiChecklists := ensureNestedMap(fm, wikiFMKey, checklistsFMKey)
+// migrateChecklistsIntoWikiNamespace performs the move + promote. Returns
+// true when any change was made.
+//
+// One logical pass per list. For each list, the input may be in one of
+// three shapes:
+//
+//   - Legacy only: checklists.<list>.items[] exists, no wiki.checklists.<list>.
+//   - Old-draft split: checklists.<list>.items[] exists, wiki.checklists.<list>.items
+//     is a uid-keyed map of metadata.
+//   - Old-draft metadata-only: no checklists.<list>, wiki.checklists.<list>.items
+//     is a uid-keyed map (items got fully deleted before any new-shape migration).
+//   - New shape: no checklists.<list>, wiki.checklists.<list>.items is a slice.
+//
+// Build the full item slice once per list, walking legacy items if any,
+// joining per-uid metadata from the old-draft map when present, then
+// write the slice back. Then drop the legacy subtree on any change.
+func migrateChecklistsIntoWikiNamespace(fm map[string]any, ulids ulid.Generator) bool {
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-
 	changed := false
-	for name, raw := range checklists {
-		listMap, ok := raw.(map[string]any)
-		if !ok {
-			continue
-		}
-		if promoteList(name, listMap, wikiChecklists, ulids, now) {
-			checklists[name] = listMap
+
+	wikiChecklists := ensureNestedMap(fm, wikiFMKey, checklistsFMKey)
+	legacyChecklists, _ := fm[checklistsFMKey].(map[string]any)
+
+	// Union of list names across both namespaces.
+	names := make(map[string]struct{})
+	for name := range legacyChecklists {
+		names[name] = struct{}{}
+	}
+	for name := range wikiChecklists {
+		names[name] = struct{}{}
+	}
+
+	for name := range names {
+		legacyList, _ := legacyChecklists[name].(map[string]any)
+		wikiList := ensureMapInParent(wikiChecklists, name)
+		if migrateOneList(legacyList, wikiList, ulids, now) {
 			changed = true
 		}
 	}
 
-	if changed {
-		fm[checklistsFMKey] = checklists
+	// Drop the legacy subtree wholesale once any migration touched the
+	// page — the reserved namespace is now the only home for checklists.
+	if changed && legacyChecklists != nil {
+		delete(fm, checklistsFMKey)
+	}
+
+	return changed
+}
+
+// migrateOneList consolidates one list's data under wikiList. Returns
+// true if the wikiList's shape changed.
+func migrateOneList(legacyList, wikiList map[string]any, ulids ulid.Generator, now string) bool {
+	existingItemsSlice, hasSlice := wikiList[itemsFMKey].([]any)
+	existingItemsMap, hasMap := wikiList[itemsFMKey].(map[string]any)
+	hasLegacyItems := legacyList != nil && hasItems(legacyList)
+	flagAlreadySet := boolFromMap(wikiList, migratedDataModelKey)
+
+	// Already in the right shape and no legacy data to absorb: just
+	// idempotency-stamp and move on.
+	if hasSlice && !hasLegacyItems && !hasMap && flagAlreadySet {
+		return ensureFlagAndDefaults(wikiList, now)
+	}
+
+	// Build the new item slice from whatever sources are available.
+	merged := []any{}
+	switch {
+	case hasLegacyItems:
+		legacyItems, _ := legacyList[itemsFMKey].([]any)
+		merged = mergeLegacyAndDraftMetadata(legacyItems, existingItemsMap, ulids, now)
+	case hasMap:
+		merged = convertDraftMapToSlice(existingItemsMap, now)
+	case hasSlice:
+		// New-shape items already a slice. Keep them, but still let the
+		// flag-stamping path run.
+		merged = existingItemsSlice
+	}
+
+	wikiList[itemsFMKey] = merged
+	_ = ensureFlagAndDefaults(wikiList, now)
+	return true
+}
+
+// hasItems reports whether legacyList[items] is a non-empty []any.
+func hasItems(legacyList map[string]any) bool {
+	items, ok := legacyList[itemsFMKey].([]any)
+	return ok && len(items) > 0
+}
+
+// ensureFlagAndDefaults stamps migrated_data_model + sync_token defaults
+// when missing. Returns true if anything changed.
+func ensureFlagAndDefaults(wikiList map[string]any, now string) bool {
+	changed := false
+	if !boolFromMap(wikiList, migratedDataModelKey) {
+		wikiList[migratedDataModelKey] = true
+		changed = true
+	}
+	if _, has := wikiList[syncTokenFMKey]; !has {
+		wikiList[syncTokenFMKey] = int64(0)
+		changed = true
+	}
+	if _, has := wikiList[updatedAtFMKey]; !has {
+		wikiList[updatedAtFMKey] = now
+		changed = true
 	}
 	return changed
 }
 
-// promoteList promotes one named checklist on the page. Returns true if
-// the list was newly migrated; false if it was already stamped.
-func promoteList(name string, listMap, wikiChecklists map[string]any, ulids ulid.Generator, now string) bool {
-	wikiList := ensureMapInParent(wikiChecklists, name)
-	if alreadyMigrated(wikiList) {
-		return false
-	}
-
-	wikiItems := ensureMapInParent(wikiList, itemsFMKey)
-	items, ok := listMap[itemsFMKey].([]any)
-	if !ok {
-		items = nil
-	}
-	for idx, raw := range items {
+// mergeLegacyAndDraftMetadata builds a new full-item slice from legacy
+// items[] and any per-uid old-draft metadata map. Items get ULIDs and
+// sort_orders if missing; metadata fields are pulled from oldDraftMeta
+// when the uid matches.
+func mergeLegacyAndDraftMetadata(legacyItems []any, oldDraftMeta map[string]any, ulids ulid.Generator, now string) []any {
+	out := make([]any, 0, len(legacyItems))
+	for idx, raw := range legacyItems {
 		itemMap, ok := raw.(map[string]any)
 		if !ok {
 			continue
 		}
-		uid := promoteItemUserData(itemMap, idx, ulids)
-		stampItemMetadata(wikiItems, uid, now)
-		items[idx] = itemMap
+		out = append(out, promoteAndJoinItem(itemMap, oldDraftMeta, idx, ulids, now))
 	}
-	listMap[itemsFMKey] = items
-
-	stampListMetadata(wikiList, now)
-	return true
+	return out
 }
 
-func alreadyMigrated(wikiList map[string]any) bool {
-	flag, ok := wikiList[migratedDataModelKey].(bool)
-	return ok && flag
+// convertDraftMapToSlice turns an old-draft items map (keyed by uid)
+// into the new slice shape.
+func convertDraftMapToSlice(itemsMap map[string]any, now string) []any {
+	out := make([]any, 0, len(itemsMap))
+	for uid, raw := range itemsMap {
+		meta, ok := raw.(map[string]any)
+		if !ok {
+			continue
+		}
+		full := map[string]any{
+			uidFMKey:       uid,
+			textFMKey:      stringFromMap(meta, textFMKey),
+			checkedFMKey:   boolFromMap(meta, checkedFMKey),
+			sortOrderFMKey: int64Fallback(meta, sortOrderFMKey),
+			automatedFMKey: boolFromMap(meta, automatedFMKey),
+		}
+		if v := stringFromMap(meta, createdAtFMKey); v != "" {
+			full[createdAtFMKey] = v
+		} else {
+			full[createdAtFMKey] = now
+		}
+		if v := stringFromMap(meta, updatedAtFMKey); v != "" {
+			full[updatedAtFMKey] = v
+		} else {
+			full[updatedAtFMKey] = now
+		}
+		if v := stringFromMap(meta, completedAtFMKey); v != "" {
+			full[completedAtFMKey] = v
+		}
+		if v := stringFromMap(meta, completedByFMKey); v != "" {
+			full[completedByFMKey] = v
+		}
+		out = append(out, full)
+	}
+	return out
 }
 
-// promoteItemUserData fills in uid + sort_order on the item, returning
-// the (possibly newly assigned) uid.
-func promoteItemUserData(itemMap map[string]any, idx int, ulids ulid.Generator) string {
-	uid, ok := itemMap["uid"].(string)
-	if !ok {
-		uid = ""
-	}
+// promoteAndJoinItem turns a legacy item map into the new full-item map.
+// Assigns uid + sort_order if missing, fills in timestamps from old-draft
+// metadata when available, otherwise stamps `now`. Pre-existing items are
+// recorded as automated=false (no retroactive attribution).
+func promoteAndJoinItem(itemMap map[string]any, oldDraftMeta map[string]any, idx int, ulids ulid.Generator, now string) map[string]any {
+	uid := stringFromMap(itemMap, uidFMKey)
 	if uid == "" {
 		uid = ulids.NewULID()
-		itemMap["uid"] = uid
 	}
-	if _, hasOrder := itemMap["sort_order"]; !hasOrder {
-		itemMap["sort_order"] = int64(idx+1) * dataModelSortOrderStep
+	sortOrder, hasSortOrder := int64FromMap(itemMap, sortOrderFMKey)
+	if !hasSortOrder {
+		sortOrder = int64(idx+1) * dataModelSortOrderStep
 	}
-	return uid
-}
 
-// stampItemMetadata writes per-item wiki-managed metadata keyed by uid.
-// Pre-existing items can't be retroactively attributed; the migration
-// records automated=false so eventual sync is conservative.
-func stampItemMetadata(wikiItems map[string]any, uid, now string) {
-	meta := ensureMapInParent(wikiItems, uid)
-	if _, has := meta["created_at"]; !has {
-		meta["created_at"] = now
+	out := map[string]any{
+		uidFMKey:       uid,
+		textFMKey:      stringFromMap(itemMap, textFMKey),
+		checkedFMKey:   boolFromMap(itemMap, checkedFMKey),
+		sortOrderFMKey: sortOrder,
+		automatedFMKey: false,
 	}
-	if _, has := meta[updatedAtFMKey]; !has {
-		meta[updatedAtFMKey] = now
-	}
-	if _, has := meta["automated"]; !has {
-		meta["automated"] = false
-	}
-}
 
-// stampListMetadata sets the migrated flag and initializes per-list
-// sync state if absent.
-func stampListMetadata(wikiList map[string]any, now string) {
-	wikiList[migratedDataModelKey] = true
-	if _, has := wikiList["sync_token"]; !has {
-		wikiList["sync_token"] = int64(0)
+	// Carry user-mutable optional fields if present in the legacy item.
+	if v := stringFromMap(itemMap, descriptionFMKey); v != "" {
+		out[descriptionFMKey] = v
 	}
-	if _, has := wikiList[updatedAtFMKey]; !has {
-		wikiList[updatedAtFMKey] = now
+	if v := stringFromMap(itemMap, dueFMKey); v != "" {
+		out[dueFMKey] = v
 	}
-}
+	if tags, ok := itemMap[tagsFMKey].([]any); ok && len(tags) > 0 {
+		out[tagsFMKey] = tags
+	}
 
-// ensureMapInParent returns parent[key] as a map[string]any, creating
-// an empty map if missing or wrong type.
-func ensureMapInParent(parent map[string]any, key string) map[string]any {
-	existing, ok := parent[key].(map[string]any)
-	if ok {
-		return existing
+	// Pull per-item metadata from the old-draft split (if any).
+	createdAt := now
+	updatedAt := now
+	if meta, ok := oldDraftMeta[uid].(map[string]any); ok {
+		if v := stringFromMap(meta, createdAtFMKey); v != "" {
+			createdAt = v
+		}
+		if v := stringFromMap(meta, updatedAtFMKey); v != "" {
+			updatedAt = v
+		}
+		if v := stringFromMap(meta, completedAtFMKey); v != "" {
+			out[completedAtFMKey] = v
+		}
+		if v := stringFromMap(meta, completedByFMKey); v != "" {
+			out[completedByFMKey] = v
+		}
+		if v, ok := meta[automatedFMKey].(bool); ok {
+			out[automatedFMKey] = v
+		}
 	}
-	created := make(map[string]any)
-	parent[key] = created
-	return created
+	out[createdAtFMKey] = createdAt
+	out[updatedAtFMKey] = updatedAt
+	return out
 }
 
 // readNestedMap walks fm[k1][k2][...] returning the deepest map or nil.
@@ -365,4 +496,47 @@ func ensureNestedMap(fm map[string]any, keys ...string) map[string]any {
 		cur = next
 	}
 	return cur
+}
+
+// ensureMapInParent returns parent[key] as a map[string]any, creating
+// an empty map if missing or wrong type.
+func ensureMapInParent(parent map[string]any, key string) map[string]any {
+	existing, ok := parent[key].(map[string]any)
+	if ok {
+		return existing
+	}
+	created := make(map[string]any)
+	parent[key] = created
+	return created
+}
+
+// stringFromMap returns m[key] as string or empty.
+func stringFromMap(m map[string]any, key string) string {
+	v, _ := m[key].(string)
+	return v
+}
+
+// boolFromMap returns m[key] as bool or false.
+func boolFromMap(m map[string]any, key string) bool {
+	v, _ := m[key].(bool)
+	return v
+}
+
+// int64FromMap returns (value, true) when the key holds an int64/int/float64.
+func int64FromMap(m map[string]any, key string) (int64, bool) {
+	switch v := m[key].(type) {
+	case int64:
+		return v, true
+	case int:
+		return int64(v), true
+	case float64:
+		return int64(v), true
+	}
+	return 0, false
+}
+
+// int64Fallback is the no-ok form of int64FromMap.
+func int64Fallback(m map[string]any, key string) int64 {
+	v, _ := int64FromMap(m, key)
+	return v
 }

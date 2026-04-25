@@ -10,58 +10,56 @@ import (
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 )
 
-// User-facing checklist data lives at fm["checklists"][listName].
-//   - items: []map (each with text, checked, tags, sort_order, etc.)
-// Wiki-managed metadata lives at fm["wiki"]["checklists"][listName].
+// Single-namespace persistence layout (per ADR-0010).
+//
+// All checklist data lives at fm["wiki"]["checklists"][listName]:
+//
+//   - items[]: array of full ChecklistItem maps (uid/text/checked/tags/
+//     sort_order/description/due/alarm_payload PLUS created_at/updated_at/
+//     completed_at/completed_by/automated)
 //   - sync_token: int
-//   - items: map[uid]map (each with created_at, updated_at, completed_at,
-//     completed_by, automated)
-//   - tombstones: []map (uid, deleted_at, gc_after)
-//   - migrated_data_model: bool (set by the eager migration in slice 9)
+//   - updated_at: RFC3339 string (collection ETag)
+//   - tombstones[]: array of {uid, deleted_at, gc_after}
+//   - migrated_data_model: bool (set by the eager migration)
 //
-// decodeChecklist reads both subtrees and returns a unified proto Checklist.
-// Items missing a uid are assigned synthetic ULIDs in-memory (the caller
-// must persist to make them durable).
-//
-// encodeChecklist is the inverse — it splits the proto Checklist back into
-// the two-tier frontmatter shape and writes the result into fm.
+// The legacy fm["checklists"][listName] subtree is only consulted as a
+// fall-through when reading; the eager migration moves it into the
+// reserved namespace and deletes it. Bare reads on un-migrated pages
+// surface the legacy items in-memory but never persist them under
+// `checklists.*`.
 
 const (
-	userChecklistsKey = "checklists"
-	wikiKey           = "wiki"
-	itemsKey          = "items"
-	tombstonesKey     = "tombstones"
-	syncTokenKey      = "sync_token"
-	updatedAtKey      = "updated_at"
-	uidKey            = "uid"
+	wikiKey            = "wiki"
+	checklistsKey      = "checklists"
+	itemsKey           = "items"
+	tombstonesKey      = "tombstones"
+	syncTokenKey       = "sync_token"
+	updatedAtKey       = "updated_at"
+	uidKey             = "uid"
+	textKey            = "text"
+	checkedKey         = "checked"
+	tagsKey            = "tags"
+	sortOrderKey       = "sort_order"
+	descriptionKey     = "description"
+	dueKey             = "due"
+	alarmPayloadKey    = "alarm_payload"
+	createdAtKey       = "created_at"
+	completedAtKey     = "completed_at"
+	completedByKey     = "completed_by"
+	automatedKey       = "automated"
 )
 
-// decodeChecklist reads the named checklist from fm. Missing user data
-// returns an empty Checklist (the caller will populate it). Missing
-// metadata is allowed — items synthesize defaults.
+// decodeChecklist reads the named checklist out of fm. Reads from
+// wiki.checklists.<list> first; falls back to legacy checklists.<list>
+// items[] when the wiki-managed subtree is empty (un-migrated page).
+// Items missing a uid get an empty Uid string in the response — the
+// mutator's readChecklistForMutation promotes them on next mutation.
 func decodeChecklist(fm wikipage.FrontMatter, listName string, clock Clock) *apiv1.Checklist {
 	out := &apiv1.Checklist{Name: listName}
+	now := clock.Now()
 
-	userList := readMap(readMap(fm, userChecklistsKey), listName)
-	wikiList := readMap(readMap(readMap(fm, wikiKey), userChecklistsKey), listName)
-	wikiItems := readMap(wikiList, itemsKey)
-
-	if userList == nil {
-		// No user data; still surface metadata if present (e.g. tombstones
-		// from a list whose items were all deleted).
-		out.Items = nil
-	} else {
-		rawItems := readSlice(userList, itemsKey)
-		now := clock.Now()
-		for _, raw := range rawItems {
-			itemMap, ok := raw.(map[string]any)
-			if !ok {
-				continue
-			}
-			out.Items = append(out.Items, decodeItem(itemMap, wikiItems, now))
-		}
-	}
-	sortItems(out.Items)
+	wikiList := readMap(readMap(fm, wikiKey), checklistsKey)
+	wikiList = readMap(wikiList, listName)
 
 	if wikiList != nil {
 		if syncToken, ok := readInt64(wikiList, syncTokenKey); ok {
@@ -71,60 +69,89 @@ func decodeChecklist(fm wikipage.FrontMatter, listName string, clock Clock) *api
 			out.UpdatedAt = t
 		}
 		out.Tombstones = decodeTombstones(readSlice(wikiList, tombstonesKey))
-	}
-
-	return out
-}
-
-// decodeItem reads a single item from its user-data map plus any matching
-// wiki-managed metadata at wikiItems[uid]. now is used as a fallback for
-// created_at/updated_at when the item lacks a uid (synthetic) — those
-// values won't persist until the next mutation that calls encodeChecklist.
-func decodeItem(itemMap map[string]any, wikiItems map[string]any, now time.Time) *apiv1.ChecklistItem {
-	uid := stringValue(itemMap, uidKey)
-	item := &apiv1.ChecklistItem{
-		Uid:       uid,
-		Text:      stringValue(itemMap, "text"),
-		Checked:   boolValue(itemMap, "checked"),
-		Tags:      stringSlice(itemMap, "tags"),
-		SortOrder: int64Value(itemMap, "sort_order"),
-	}
-	if v := stringValue(itemMap, "description"); v != "" {
-		item.Description = &v
-	}
-	if t, ok := readTimestampValue(itemMap["due"]); ok {
-		item.Due = t
-	}
-	if v := stringValue(itemMap, "alarm_payload"); v != "" {
-		item.AlarmPayload = &v
-	}
-
-	// Wiki-managed metadata, when present, lives at wiki.checklists.<list>.items.<uid>.
-	if uid != "" {
-		if meta, ok := readMap(wikiItems, uid), true; ok && meta != nil {
-			if t, ok := readTimestamp(meta, "created_at"); ok {
-				item.CreatedAt = t
+		for _, raw := range readSlice(wikiList, itemsKey) {
+			itemMap, ok := raw.(map[string]any)
+			if !ok {
+				continue
 			}
-			if t, ok := readTimestamp(meta, "updated_at"); ok {
-				item.UpdatedAt = t
-			}
-			if t, ok := readTimestamp(meta, "completed_at"); ok {
-				item.CompletedAt = t
-			}
-			if v := stringValue(meta, "completed_by"); v != "" {
-				item.CompletedBy = &v
-			}
-			item.Automated = boolValue(meta, "automated")
+			out.Items = append(out.Items, decodeItem(itemMap, now))
 		}
 	}
 
-	// Synthesize created_at/updated_at when missing — legacy items pre-
-	// migration. The caller will persist these on the next write.
+	if len(out.Items) == 0 {
+		// Fall-through: page hasn't been migrated yet. Legacy items live
+		// at checklists.<list>.items[] without uids. Surface them so
+		// reads work; the next mutation will move + persist.
+		legacyList := readMap(readMap(fm, checklistsKey), listName)
+		for _, raw := range readSlice(legacyList, itemsKey) {
+			itemMap, ok := raw.(map[string]any)
+			if !ok {
+				continue
+			}
+			out.Items = append(out.Items, decodeLegacyItem(itemMap, now))
+		}
+	}
+
+	sortItems(out.Items)
+	return out
+}
+
+// decodeItem reads a single fully-shaped item from wiki.checklists.*.
+func decodeItem(itemMap map[string]any, now time.Time) *apiv1.ChecklistItem {
+	item := &apiv1.ChecklistItem{
+		Uid:       stringValue(itemMap, uidKey),
+		Text:      stringValue(itemMap, textKey),
+		Checked:   boolValue(itemMap, checkedKey),
+		Tags:      stringSlice(itemMap, tagsKey),
+		SortOrder: int64Value(itemMap, sortOrderKey),
+		Automated: boolValue(itemMap, automatedKey),
+	}
+	if v := stringValue(itemMap, descriptionKey); v != "" {
+		item.Description = &v
+	}
+	if t, ok := readTimestampValue(itemMap[dueKey]); ok {
+		item.Due = t
+	}
+	if v := stringValue(itemMap, alarmPayloadKey); v != "" {
+		item.AlarmPayload = &v
+	}
+	if t, ok := readTimestamp(itemMap, createdAtKey); ok {
+		item.CreatedAt = t
+	}
+	if t, ok := readTimestamp(itemMap, updatedAtKey); ok {
+		item.UpdatedAt = t
+	}
+	if t, ok := readTimestamp(itemMap, completedAtKey); ok {
+		item.CompletedAt = t
+	}
+	if v := stringValue(itemMap, completedByKey); v != "" {
+		item.CompletedBy = &v
+	}
 	if item.CreatedAt == nil {
 		item.CreatedAt = timestamppb.New(now)
 	}
 	if item.UpdatedAt == nil {
 		item.UpdatedAt = timestamppb.New(now)
+	}
+	return item
+}
+
+// decodeLegacyItem reads a pre-migration item from checklists.<list>.items[].
+// Such items lack uid and per-item metadata; we synthesize timestamps in
+// memory so reads work, but leave Uid empty so the mutator's promotion
+// step can detect and assign one on next persist.
+func decodeLegacyItem(itemMap map[string]any, now time.Time) *apiv1.ChecklistItem {
+	item := &apiv1.ChecklistItem{
+		Uid:       "", // intentionally empty; promoted on next mutation
+		Text:      stringValue(itemMap, textKey),
+		Checked:   boolValue(itemMap, checkedKey),
+		Tags:      stringSlice(itemMap, tagsKey),
+		SortOrder: int64Value(itemMap, sortOrderKey),
+		CreatedAt: timestamppb.New(now),
+		UpdatedAt: timestamppb.New(now),
+	}
+	if v := stringValue(itemMap, descriptionKey); v != "" {
+		item.Description = &v
 	}
 	return item
 }
@@ -152,24 +179,18 @@ func decodeTombstones(raw []any) []*apiv1.Tombstone {
 	return out
 }
 
-// encodeChecklist writes checklist back into fm, splitting into the
-// user-data and wiki-managed subtrees. The user data ends up at
-// fm.checklists.<list>.items[]; metadata lands under fm.wiki.checklists.<list>.
+// encodeChecklist writes the proto Checklist back into fm under
+// wiki.checklists.<list>.* and removes any legacy checklists.<list>
+// subtree on the same write — once a list is owned by the funnel, the
+// reserved namespace is its only home.
 func encodeChecklist(fm wikipage.FrontMatter, listName string, checklist *apiv1.Checklist) {
-	userList := ensureMap(ensureMap(fm, userChecklistsKey), listName)
-	wikiList := ensureMap(ensureMap(ensureMap(fm, wikiKey), userChecklistsKey), listName)
+	wikiList := ensureMap(ensureMap(ensureMap(fm, wikiKey), checklistsKey), listName)
 
-	// Encode user-mutable items.
 	rawItems := make([]any, 0, len(checklist.Items))
-	wikiItems := make(map[string]any, len(checklist.Items))
 	for _, item := range checklist.Items {
-		rawItems = append(rawItems, encodeItemUserData(item))
-		wikiItems[item.Uid] = encodeItemMetadata(item)
+		rawItems = append(rawItems, encodeItem(item))
 	}
-	userList[itemsKey] = rawItems
-	wikiList[itemsKey] = wikiItems
-
-	// Encode list-level wiki-managed fields.
+	wikiList[itemsKey] = rawItems
 	wikiList[syncTokenKey] = checklist.SyncToken
 	if checklist.UpdatedAt != nil {
 		wikiList[updatedAtKey] = checklist.UpdatedAt.AsTime().Format(time.RFC3339Nano)
@@ -179,51 +200,56 @@ func encodeChecklist(fm wikipage.FrontMatter, listName string, checklist *apiv1.
 	} else {
 		delete(wikiList, tombstonesKey)
 	}
+
+	// Remove the legacy checklists.<list> subtree if present — the
+	// reserved namespace is now this list's only home. The migration's
+	// post-promote write does the same; this catches any cases where
+	// ChecklistService mutates a legacy-shape page directly without the
+	// migration job having swept it yet.
+	if legacy := readMap(fm, checklistsKey); legacy != nil {
+		delete(legacy, listName)
+		if len(legacy) == 0 {
+			delete(fm, checklistsKey)
+		}
+	}
 }
 
-func encodeItemUserData(item *apiv1.ChecklistItem) map[string]any {
+func encodeItem(item *apiv1.ChecklistItem) map[string]any {
 	out := map[string]any{
-		uidKey:      item.Uid,
-		"text":       item.Text,
-		"checked":    item.Checked,
-		"sort_order": item.SortOrder,
+		uidKey:       item.Uid,
+		textKey:      item.Text,
+		checkedKey:   item.Checked,
+		sortOrderKey: item.SortOrder,
+		automatedKey: item.Automated,
 	}
 	if len(item.Tags) > 0 {
-		out["tags"] = stringSliceToAny(item.Tags)
+		out[tagsKey] = stringSliceToAny(item.Tags)
 	}
 	if item.Description != nil && *item.Description != "" {
-		out["description"] = *item.Description
+		out[descriptionKey] = *item.Description
 	}
 	if item.Due != nil {
-		out["due"] = item.Due.AsTime().Format(time.RFC3339Nano)
+		out[dueKey] = item.Due.AsTime().Format(time.RFC3339Nano)
 	}
 	if item.AlarmPayload != nil && *item.AlarmPayload != "" {
-		out["alarm_payload"] = *item.AlarmPayload
-	}
-	return out
-}
-
-func encodeItemMetadata(item *apiv1.ChecklistItem) map[string]any {
-	out := map[string]any{
-		"automated": item.Automated,
+		out[alarmPayloadKey] = *item.AlarmPayload
 	}
 	if item.CreatedAt != nil {
-		out["created_at"] = item.CreatedAt.AsTime().Format(time.RFC3339Nano)
+		out[createdAtKey] = item.CreatedAt.AsTime().Format(time.RFC3339Nano)
 	}
 	if item.UpdatedAt != nil {
-		out["updated_at"] = item.UpdatedAt.AsTime().Format(time.RFC3339Nano)
+		out[updatedAtKey] = item.UpdatedAt.AsTime().Format(time.RFC3339Nano)
 	}
 	if item.CompletedAt != nil {
-		out["completed_at"] = item.CompletedAt.AsTime().Format(time.RFC3339Nano)
+		out[completedAtKey] = item.CompletedAt.AsTime().Format(time.RFC3339Nano)
 	}
 	if item.CompletedBy != nil {
-		out["completed_by"] = *item.CompletedBy
+		out[completedByKey] = *item.CompletedBy
 	}
 	return out
 }
 
 func encodeTombstones(tombstones []*apiv1.Tombstone) []any {
-	// Sort tombstones by deleted_at for determinism.
 	sorted := append([]*apiv1.Tombstone(nil), tombstones...)
 	sort.SliceStable(sorted, func(i, j int) bool {
 		return sorted[i].DeletedAt.AsTime().Before(sorted[j].DeletedAt.AsTime())
@@ -242,17 +268,17 @@ func encodeTombstones(tombstones []*apiv1.Tombstone) []any {
 	return out
 }
 
-// listChecklistNames returns every list name on the page (the union of
-// names that appear under user-data checklists.* and wiki-managed
-// wiki.checklists.*). Used by GetChecklists.
+// listChecklistNames returns every list name on the page — union of
+// names that appear under wiki.checklists.* and the legacy checklists.*
+// (the latter only matters until the migration sweeps the page).
 func listChecklistNames(fm wikipage.FrontMatter) []string {
-	userLists := readMap(fm, userChecklistsKey)
-	wikiLists := readMap(readMap(fm, wikiKey), userChecklistsKey)
+	wikiLists := readMap(readMap(fm, wikiKey), checklistsKey)
+	legacyLists := readMap(fm, checklistsKey)
 	seen := make(map[string]struct{})
-	for name := range userLists {
+	for name := range wikiLists {
 		seen[name] = struct{}{}
 	}
-	for name := range wikiLists {
+	for name := range legacyLists {
 		seen[name] = struct{}{}
 	}
 	out := make([]string, 0, len(seen))

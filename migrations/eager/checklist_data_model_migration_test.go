@@ -71,9 +71,9 @@ func asAnySlice(v any) []any {
 
 var _ = Describe("ChecklistDataModelMigrationJob", func() {
 	var (
-		store   *fakeReaderMutator
-		ulids   *ulid.SequenceGenerator
-		job     *eager.ChecklistDataModelMigrationJob
+		store *fakeReaderMutator
+		ulids *ulid.SequenceGenerator
+		job   *eager.ChecklistDataModelMigrationJob
 	)
 
 	BeforeEach(func() {
@@ -83,7 +83,7 @@ var _ = Describe("ChecklistDataModelMigrationJob", func() {
 		)
 	})
 
-	When("the page has a legacy-shape checklist", func() {
+	When("the page has a legacy-shape checklist outside the wiki namespace", func() {
 		var migrationErr error
 
 		BeforeEach(func() {
@@ -108,8 +108,17 @@ var _ = Describe("ChecklistDataModelMigrationJob", func() {
 			Expect(migrationErr).NotTo(HaveOccurred())
 		})
 
+		It("should remove the legacy checklists.* subtree entirely", func() {
+			Expect(store.pages["shopping"]).NotTo(HaveKey("checklists"))
+		})
+
+		It("should move items into wiki.checklists.<list>.items[]", func() {
+			items := asAnySlice(asMap(asMap(asMap(store.pages["shopping"]["wiki"])["checklists"])["groceries"])["items"])
+			Expect(items).To(HaveLen(2))
+		})
+
 		It("should assign ULIDs to items lacking uid", func() {
-			items := asAnySlice(asMap(asMap(store.pages["shopping"]["checklists"])["groceries"])["items"])
+			items := asAnySlice(asMap(asMap(asMap(store.pages["shopping"]["wiki"])["checklists"])["groceries"])["items"])
 			first := asMap(items[0])
 			Expect(first["uid"]).To(Equal("01HXAAAAAAAAAAAAAAAAAAAAAA"))
 			second := asMap(items[1])
@@ -117,42 +126,111 @@ var _ = Describe("ChecklistDataModelMigrationJob", func() {
 		})
 
 		It("should backfill sort_order in 1000 increments", func() {
-			items := asAnySlice(asMap(asMap(store.pages["shopping"]["checklists"])["groceries"])["items"])
+			items := asAnySlice(asMap(asMap(asMap(store.pages["shopping"]["wiki"])["checklists"])["groceries"])["items"])
 			Expect(asMap(items[0])["sort_order"]).To(Equal(int64(1000)))
 			Expect(asMap(items[1])["sort_order"]).To(Equal(int64(2000)))
 		})
 
-		It("should populate wiki.checklists.<list>.items.<uid>.created_at", func() {
-			meta := asMap(asMap(asMap(asMap(store.pages["shopping"]["wiki"])["checklists"])["groceries"])["items"])
-			itemMeta := asMap(meta["01HXAAAAAAAAAAAAAAAAAAAAAA"])
-			Expect(itemMeta["created_at"]).NotTo(BeNil())
-			Expect(itemMeta["updated_at"]).NotTo(BeNil())
+		It("should stamp created_at/updated_at on each item", func() {
+			items := asAnySlice(asMap(asMap(asMap(store.pages["shopping"]["wiki"])["checklists"])["groceries"])["items"])
+			Expect(asMap(items[0])["created_at"]).NotTo(BeNil())
+			Expect(asMap(items[0])["updated_at"]).NotTo(BeNil())
 		})
 
-		It("should stamp migrated_data_model = true", func() {
+		It("should record automated=false for pre-existing items (no retroactive attribution)", func() {
+			items := asAnySlice(asMap(asMap(asMap(store.pages["shopping"]["wiki"])["checklists"])["groceries"])["items"])
+			Expect(asMap(items[0])["automated"]).To(BeFalse())
+		})
+
+		It("should stamp wiki.checklists.<list>.migrated_data_model = true", func() {
 			wikiList := asMap(asMap(asMap(store.pages["shopping"]["wiki"])["checklists"])["groceries"])
 			Expect(wikiList["migrated_data_model"]).To(BeTrue())
 		})
+
+		It("should initialize wiki.checklists.<list>.sync_token = 0", func() {
+			wikiList := asMap(asMap(asMap(store.pages["shopping"]["wiki"])["checklists"])["groceries"])
+			Expect(wikiList["sync_token"]).To(Equal(int64(0)))
+		})
 	})
 
-	When("the page has already been migrated", func() {
+	When("the page was migrated by the old draft (items split between checklists.* and wiki.checklists.*.items map)", func() {
 		BeforeEach(func() {
 			store = newFakeReaderMutator(map[string]wikipage.FrontMatter{
 				"shopping": {
 					"identifier": "shopping",
+					// User-data items lived in checklists.* under the old draft.
 					"checklists": map[string]any{
 						"groceries": map[string]any{
 							"items": []any{
-								map[string]any{"text": "milk", "checked": false, "uid": "existing", "sort_order": int64(1000)},
+								map[string]any{"text": "milk", "checked": false, "uid": "existing-uid", "sort_order": int64(1000)},
 							},
 						},
 					},
+					// Per-item metadata lived in wiki.checklists.<list>.items as a uid-keyed map.
 					"wiki": map[string]any{
 						"checklists": map[string]any{
 							"groceries": map[string]any{
 								"migrated_data_model": true,
+								"sync_token":          int64(3),
 								"items": map[string]any{
-									"existing": map[string]any{"created_at": "2026-04-25T13:00:00Z"},
+									"existing-uid": map[string]any{
+										"created_at": "2026-04-25T13:00:00Z",
+										"updated_at": "2026-04-25T14:00:00Z",
+										"automated":  true,
+									},
+								},
+							},
+						},
+					},
+				},
+			})
+			job = eager.NewChecklistDataModelMigrationJob(store, ulids, "shopping")
+			_ = job.Execute()
+		})
+
+		It("should move items into a slice and discard the metadata map", func() {
+			items := asAnySlice(asMap(asMap(asMap(store.pages["shopping"]["wiki"])["checklists"])["groceries"])["items"])
+			Expect(items).To(HaveLen(1))
+			Expect(asMap(items[0])["uid"]).To(Equal("existing-uid"))
+		})
+
+		It("should preserve created_at and automated from the old metadata map", func() {
+			items := asAnySlice(asMap(asMap(asMap(store.pages["shopping"]["wiki"])["checklists"])["groceries"])["items"])
+			Expect(asMap(items[0])["created_at"]).To(Equal("2026-04-25T13:00:00Z"))
+			Expect(asMap(items[0])["automated"]).To(BeTrue())
+		})
+
+		It("should remove the legacy checklists.* subtree", func() {
+			Expect(store.pages["shopping"]).NotTo(HaveKey("checklists"))
+		})
+
+		It("should preserve sync_token (no spurious reset)", func() {
+			wikiList := asMap(asMap(asMap(store.pages["shopping"]["wiki"])["checklists"])["groceries"])
+			Expect(wikiList["sync_token"]).To(Equal(int64(3)))
+		})
+	})
+
+	When("the page is already in the new shape (single-namespace, items as slice)", func() {
+		BeforeEach(func() {
+			store = newFakeReaderMutator(map[string]wikipage.FrontMatter{
+				"shopping": {
+					"identifier": "shopping",
+					"wiki": map[string]any{
+						"checklists": map[string]any{
+							"groceries": map[string]any{
+								"migrated_data_model": true,
+								"sync_token":          int64(7),
+								"updated_at":          "2026-04-25T13:00:00Z",
+								"items": []any{
+									map[string]any{
+										"uid":        "existing-uid",
+										"text":       "milk",
+										"checked":    false,
+										"sort_order": int64(1000),
+										"created_at": "2026-04-25T13:00:00Z",
+										"updated_at": "2026-04-25T13:00:00Z",
+										"automated":  false,
+									},
 								},
 							},
 						},
@@ -164,7 +242,7 @@ var _ = Describe("ChecklistDataModelMigrationJob", func() {
 			_ = job.Execute() // run twice
 		})
 
-		It("should be idempotent (no spurious writes for already-migrated lists)", func() {
+		It("should be idempotent (no spurious writes)", func() {
 			Expect(store.writeCount).To(Equal(0))
 		})
 	})

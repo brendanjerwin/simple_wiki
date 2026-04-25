@@ -51,11 +51,13 @@ Wiki-managed fields that record "who did this" (`completed_by`) and "was this au
 
 Mutating RPCs accept an optional `expected_updated_at` timestamp. The funnel compares it to the persisted value before applying the mutation; mismatch returns `codes.FailedPrecondition`. Callers that observe the precondition failure should refetch the current state and retry.
 
-### 7. User-data namespaces remain user-mutable by default
+### 7. Reserve the entire feature subtree, not just the metadata
 
-The reservation applies to the **metadata** namespace (the wiki-managed bookkeeping), not necessarily to the user-data namespace it shadows. For checklists, `wiki.checklists.*` is reserved but `checklists.*` (the user-facing items) remains writable through the generic frontmatter tools. Raw frontmatter writes to `checklists.*` continue to work but bypass the funnel — they will not advance `sync_token` or stamp attribution. The dedicated service is the *correct* path; the generic tools are tolerated for tooling and human edits.
+The reservation applies to **every byte** of the feature's persisted state, not only the wiki-managed metadata. The funnel's invariants (`sync_token` advancement, server-stamped timestamps, identity-derived attribution) only hold if no other write path can touch the same subtree. Reserving only metadata while leaving user-mutable items writable through generic frontmatter tools defeats the whole pattern — a `MergeFrontmatter` write to the user-data side mutates user-visible state without advancing metadata, and downstream consumers (CalDAV ETags, reflection data) silently lie.
 
-This is a deliberate trade-off documented here so future reservations can be evaluated consistently. Reserve metadata aggressively; reserve user data only when bypass would corrupt invariants the wiki cannot rebuild from the data alone.
+Therefore, the dedicated service owns the entire feature subtree. For checklists, all of `wiki.checklists.*` is reserved — items, metadata, sync token, tombstones, migration flags. There is no companion user-data namespace. The funnel internally distinguishes user-mutable fields (accepted from input) and server-derived fields (stamped from the principal/clock/diff state), but the on-disk shape is one subtree per feature.
+
+When migrating an existing feature into a reserved namespace (as in #984's checklist refactor), the eager migration is destructive: it moves data into `wiki.<feature>.*` and removes the legacy subtree on the same write. Once migrated, generic frontmatter tools cannot reach the data at all.
 
 ## Currently Reserved Namespaces
 

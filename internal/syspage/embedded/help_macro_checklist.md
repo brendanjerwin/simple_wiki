@@ -40,40 +40,9 @@ A single page can have multiple checklists with different names.
 - **Filter by tag**: Click tag pills to filter the list to items with that tag
 - **Literal `#`**: Escape with a backslash (`\#5`) when you want the `#` to appear as plain text instead of being treated as a tag
 
-## Two-Tier Data Model
+## Reserved-Namespace Data Model
 
-Checklist data lives in **two** frontmatter subtrees. The split exists so generic frontmatter editors can edit user data while the wiki itself maintains attribution and sync metadata invariantly. See [[ADR-0009]] and [[ADR-0010]] for the architecture.
-
-### `checklists.<list-name>` — user-mutable
-
-```toml
-+++
-title = "My Page"
-
-[[checklists.grocery-list.items]]
-uid = "01HXXXXXXXXXXXXXXXXXXXXXXX"
-text = "Buy milk"
-checked = false
-tags = ["urgent", "groceries"]
-sort_order = 1000
-description = "the brand Kirsten likes"      # optional
-+++
-```
-
-User-data fields:
-
-| Field | Type | Notes |
-|---|---|---|
-| `uid` | string | Stable ULID assigned by the wiki on first save. Immutable. |
-| `text` | string | Free-form item text. |
-| `checked` | bool | Done flag. |
-| `tags` | string[] | Normalized tags extracted from text plus explicit additions. |
-| `sort_order` | int | Sparse ordering value (multiples of 1000 are conventional). |
-| `description` | string | Optional sub-line content under the item. |
-| `due` | RFC3339 timestamp | Optional due time. |
-| `alarm_payload` | string | Optional VALARM payload for CalDAV sync clients. |
-
-### `wiki.checklists.<list-name>` — wiki-managed (reserved namespace)
+ALL checklist data lives under the reserved `wiki.checklists.<list-name>` subtree (per ADR-0009 and ADR-0010). The `wiki.*` namespace is rejected by generic frontmatter tools (`MergeFrontmatter`, `ReplaceFrontmatter`, `RemoveKeyAtPath`), so the only legitimate way to mutate checklist data is `ChecklistService`. There is no `checklists.*` companion namespace; the eager migration moves any legacy data into `wiki.checklists.*` and removes the source on the same write.
 
 ```toml
 [wiki.checklists.grocery-list]
@@ -81,15 +50,45 @@ sync_token = 47
 updated_at = "2026-04-25T17:14:00Z"
 migrated_data_model = true
 
-[wiki.checklists.grocery-list.items.01HXXXXXXXXXXXXXXXXXXXXXXX]
-created_at  = "2026-04-25T13:00:00Z"
-updated_at  = "2026-04-25T17:14:00Z"
+[[wiki.checklists.grocery-list.items]]
+uid          = "01HXXXXXXXXXXXXXXXXXXXXXXX"
+text         = "Buy milk"
+checked      = false
+tags         = ["urgent", "groceries"]
+sort_order   = 1000
+description  = "the brand Kirsten likes"
+due          = "2026-04-30T17:00:00Z"
+created_at   = "2026-04-25T13:00:00Z"
+updated_at   = "2026-04-25T17:14:00Z"
 completed_at = "2026-04-25T17:14:00Z"
 completed_by = "alice@example.com"
-automated   = false
+automated    = false
+
+[[wiki.checklists.grocery-list.tombstones]]
+uid        = "01HXOLDXXXXXXXXXXXXXXXXXXX"
+deleted_at = "2026-04-24T08:00:00Z"
+gc_after   = "2026-05-01T08:00:00Z"
 ```
 
-The `wiki.*` namespace is **reserved**. Generic frontmatter tools (`MergeFrontmatter`, `ReplaceFrontmatter`, `RemoveKeyAtPath`) reject writes targeting any `wiki.*` path. The only legitimate way to mutate this subtree is `ChecklistService` (or another dedicated service for future namespaces under `wiki.*`).
+Item fields:
+
+| Field | Type | Source | Notes |
+|---|---|---|---|
+| `uid` | string | wiki | Stable ULID assigned by the wiki on first save. Immutable. |
+| `text` | string | user | Free-form item text. |
+| `checked` | bool | user | Done flag. |
+| `tags` | string[] | user | Normalized tags extracted from text plus explicit additions. |
+| `sort_order` | int | user | Sparse ordering value (multiples of 1000 are conventional). |
+| `description` | string | user | Optional sub-line content under the item. |
+| `due` | RFC3339 | user | Optional due time. |
+| `alarm_payload` | string | user | Optional VALARM payload for CalDAV sync clients. |
+| `created_at` | RFC3339 | wiki | Server-stamped when the item is first added. Read-only. |
+| `updated_at` | RFC3339 | wiki | Server-stamped on every mutation. Used as the per-item ETag. Read-only. |
+| `completed_at` | RFC3339 | wiki | Set when `checked` flips false→true; cleared on true→false. Read-only. |
+| `completed_by` | string | wiki | The principal name that flipped `checked` to true. Read-only. |
+| `automated` | bool | wiki | Derived from `principal.IsAgent()` at mutation time. Read-only. |
+
+`ChecklistService` accepts user-source fields on input; wiki-source fields on the request payload are silently stripped. The funnel re-derives them from the auth context, the server clock, and the diff state.
 
 ## For Agents
 
