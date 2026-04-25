@@ -9,6 +9,16 @@ import type {
   ChecklistItem,
 } from '../gen/api/v1/checklist_pb.js';
 
+// Test-fixture uid generator. A monotonic counter keeps tests
+// deterministic and quiet: no Math.random() (which CodeQL flags as
+// insecure-randomness in a security context — irrelevant for fixtures
+// but cheaper to avoid than to suppress).
+let nextFixtureUidSeq = 0;
+function nextFixtureUid(): string {
+  nextFixtureUidSeq += 1;
+  return `uid-test-${nextFixtureUidSeq.toString().padStart(8, '0')}`;
+}
+
 export interface ChecklistItemOverrides {
   uid?: string;
   text?: string;
@@ -33,7 +43,7 @@ export interface ChecklistItemOverrides {
  */
 export function makeChecklistItem(overrides: ChecklistItemOverrides = {}): ChecklistItem {
   const init: MessageInitShape<typeof ChecklistItemSchema> = {
-    uid: overrides.uid ?? `uid-${Math.random().toString(36).slice(2, 10)}`,
+    uid: overrides.uid ?? nextFixtureUid(),
     text: overrides.text ?? '',
     checked: overrides.checked ?? false,
     tags: overrides.tags ?? [],
