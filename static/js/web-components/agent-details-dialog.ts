@@ -181,6 +181,18 @@ export class AgentDetailsDialog extends NativeDialogMixin(LitElement) {
         cursor: not-allowed;
       }
 
+      .delete-schedule-button.confirming {
+        background: var(--color-action-danger);
+        color: var(--color-text-inverse);
+        border-color: var(--color-action-danger);
+        font-weight: 600;
+      }
+
+      .pending-checkbox-glyph {
+        margin-right: 6px;
+        color: var(--color-text-muted);
+      }
+
       .activity-row-header {
         display: flex;
         align-items: center;
@@ -237,6 +249,9 @@ export class AgentDetailsDialog extends NativeDialogMixin(LitElement) {
   declare deletingScheduleId: string | null;
 
   @state()
+  declare confirmingDeleteId: string | null;
+
+  @state()
   declare augmentedError: AugmentedError | null;
 
   @state()
@@ -244,6 +259,13 @@ export class AgentDetailsDialog extends NativeDialogMixin(LitElement) {
 
   @state()
   declare chatContext: ChatContext | null;
+
+  /**
+   * Time in milliseconds before an armed delete confirmation auto-disarms.
+   */
+  private static readonly CONFIRM_DELETE_AUTO_DISARM_MS = 5000;
+
+  private _confirmDeleteTimeoutId: ReturnType<typeof setTimeout> | null = null;
 
   /**
    * Test seam: the gRPC client used to call AgentMetadataService. Tests can
@@ -256,6 +278,7 @@ export class AgentDetailsDialog extends NativeDialogMixin(LitElement) {
     this.page = '';
     this.loading = false;
     this.deletingScheduleId = null;
+    this.confirmingDeleteId = null;
     this.augmentedError = null;
     this.schedules = [];
     this.chatContext = null;
@@ -279,6 +302,34 @@ export class AgentDetailsDialog extends NativeDialogMixin(LitElement) {
     this.augmentedError = null;
     this.loading = false;
     this.deletingScheduleId = null;
+    this._disarmDeleteConfirmation();
+  }
+
+  private _armDeleteConfirmation(scheduleId: string): void {
+    this.confirmingDeleteId = scheduleId;
+    if (this._confirmDeleteTimeoutId !== null) {
+      clearTimeout(this._confirmDeleteTimeoutId);
+    }
+    this._confirmDeleteTimeoutId = setTimeout(() => {
+      this._disarmDeleteConfirmation();
+      this.requestUpdate();
+    }, AgentDetailsDialog.CONFIRM_DELETE_AUTO_DISARM_MS);
+  }
+
+  private _disarmDeleteConfirmation(): void {
+    this.confirmingDeleteId = null;
+    if (this._confirmDeleteTimeoutId !== null) {
+      clearTimeout(this._confirmDeleteTimeoutId);
+      this._confirmDeleteTimeoutId = null;
+    }
+  }
+
+  override disconnectedCallback(): void {
+    super.disconnectedCallback();
+    if (this._confirmDeleteTimeoutId !== null) {
+      clearTimeout(this._confirmDeleteTimeoutId);
+      this._confirmDeleteTimeoutId = null;
+    }
   }
 
   public async loadAgentDetails(): Promise<void> {
@@ -313,8 +364,25 @@ export class AgentDetailsDialog extends NativeDialogMixin(LitElement) {
     this._closeDialog();
   };
 
-  private readonly _handleDeleteSchedule = async (scheduleId: string): Promise<void> => {
+  /**
+   * Two-click delete interlock entry point. The first click on a row's delete
+   * button arms confirmation; the second click on the SAME row's button while
+   * armed triggers the actual delete RPC.
+   */
+  private readonly _handleDeleteScheduleClick = (scheduleId: string): void => {
+    if (!scheduleId) return;
+    if (this.confirmingDeleteId === scheduleId) {
+      void this._performDeleteSchedule(scheduleId);
+      return;
+    }
+    this._armDeleteConfirmation(scheduleId);
+    this.requestUpdate();
+  };
+
+  private async _performDeleteSchedule(scheduleId: string): Promise<void> {
     if (!this.page || !scheduleId) return;
+
+    this._disarmDeleteConfirmation();
 
     try {
       this.deletingScheduleId = scheduleId;
@@ -334,6 +402,40 @@ export class AgentDetailsDialog extends NativeDialogMixin(LitElement) {
       this.deletingScheduleId = null;
       this.requestUpdate();
     }
+  }
+
+  /**
+   * Composite click handler for the dialog. Performs both:
+   *   1. Disarms any pending delete confirmation when the click is NOT on a
+   *      per-row delete button.
+   *   2. Delegates to the native-dialog backdrop close behavior so that
+   *      clicking the dialog backdrop still closes the dialog.
+   */
+  private readonly _handleDialogContentClick = (event: MouseEvent): void => {
+    if (this.confirmingDeleteId !== null) {
+      const path = event.composedPath();
+      const clickedDeleteButton = path.some(
+        (n) => n instanceof HTMLElement && n.classList.contains('delete-schedule-button')
+      );
+      if (!clickedDeleteButton) {
+        this._disarmDeleteConfirmation();
+        this.requestUpdate();
+      }
+    }
+    this._handleDialogClick(event);
+  };
+
+  /**
+   * Disarm any pending delete confirmation when the user presses Escape while
+   * a confirmation is armed. The native dialog `cancel` event still fires and
+   * closes the dialog as usual; this also fires when Escape is pressed while
+   * the dialog has focus and ensures the armed state is cleared.
+   */
+  private readonly _handleDialogKeydown = (event: KeyboardEvent): void => {
+    if (event.key !== 'Escape') return;
+    if (this.confirmingDeleteId === null) return;
+    this._disarmDeleteConfirmation();
+    this.requestUpdate();
   };
 
   private formatTimestamp(timestamp: Timestamp | undefined): string {
@@ -378,25 +480,40 @@ export class AgentDetailsDialog extends NativeDialogMixin(LitElement) {
     }
     return html`
       <ul class="schedule-list">
-        ${this.schedules.map((schedule) => html`
-          <li class="schedule-row" data-schedule-id="${schedule.id}">
-            <div class="schedule-row-header">
-              <span class="schedule-id">${schedule.id}</span>
-              <span class="status-badge ${this.statusClass(schedule.lastStatus)}">
-                ${this.statusLabel(schedule.lastStatus)}
-              </span>
-              <button
-                class="delete-schedule-button"
-                aria-label="Delete schedule ${schedule.id}"
-                ?disabled="${this.deletingScheduleId === schedule.id || this.loading}"
-                @click="${(): void => { void this._handleDeleteSchedule(schedule.id); }}"
-              >
-                ${this.deletingScheduleId === schedule.id ? 'Deleting...' : 'Delete'}
-              </button>
-            </div>
-            <div class="schedule-cron">${schedule.cron}</div>
-          </li>
-        `)}
+        ${this.schedules.map((schedule) => {
+          const isConfirming = this.confirmingDeleteId === schedule.id;
+          const isDeleting = this.deletingScheduleId === schedule.id;
+          let label: string;
+          if (isDeleting) {
+            label = 'Deleting...';
+          } else if (isConfirming) {
+            label = 'Confirm delete';
+          } else {
+            label = 'Delete';
+          }
+          const ariaLabel = isConfirming
+            ? `Confirm delete schedule ${schedule.id}`
+            : `Delete schedule ${schedule.id}`;
+          return html`
+            <li class="schedule-row" data-schedule-id="${schedule.id}">
+              <div class="schedule-row-header">
+                <span class="schedule-id">${schedule.id}</span>
+                <span class="status-badge ${this.statusClass(schedule.lastStatus)}">
+                  ${this.statusLabel(schedule.lastStatus)}
+                </span>
+                <button
+                  class="delete-schedule-button${isConfirming ? ' confirming' : ''}"
+                  aria-label="${ariaLabel}"
+                  ?disabled="${isDeleting || this.loading}"
+                  @click="${(): void => { this._handleDeleteScheduleClick(schedule.id); }}"
+                >
+                  ${label}
+                </button>
+              </div>
+              <div class="schedule-cron">${schedule.cron}</div>
+            </li>
+          `;
+        })}
       </ul>
     `;
   }
@@ -436,7 +553,12 @@ export class AgentDetailsDialog extends NativeDialogMixin(LitElement) {
         <div class="chat-field">
           <div class="chat-field-label">Pending items</div>
           <ul class="pending-list">
-            ${ctx.pendingItems.map((item) => html`<li class="chat-list-item">${item}</li>`)}
+            ${ctx.pendingItems.map((item) => html`
+              <li class="chat-list-item">
+                <i class="fas fa-square pending-checkbox-glyph" aria-hidden="true"></i>
+                ${item}
+              </li>
+            `)}
           </ul>
         </div>
       ` : nothing}
@@ -515,7 +637,12 @@ export class AgentDetailsDialog extends NativeDialogMixin(LitElement) {
   override render() {
     return html`
       ${sharedStyles}
-      <dialog aria-labelledby="agent-details-dialog-title" @cancel="${this._handleDialogCancel}">
+      <dialog
+        aria-labelledby="agent-details-dialog-title"
+        @cancel="${this._handleDialogCancel}"
+        @click="${this._handleDialogContentClick}"
+        @keydown="${this._handleDialogKeydown}"
+      >
         <div class="dialog-header system-font">
           <h2 id="agent-details-dialog-title" class="dialog-title">Agent Details</h2>
           <button

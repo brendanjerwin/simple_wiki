@@ -319,6 +319,16 @@ describe('AgentDetailsDialog', () => {
       expect(text).to.include('Update price list');
     });
 
+    it('should render a leading checkbox glyph for each pending item', () => {
+      const glyphs = el.shadowRoot?.querySelectorAll('.pending-list .chat-list-item .fa-square');
+      expect(glyphs?.length).to.equal(2);
+    });
+
+    it('should not render a checkbox glyph on user goals', () => {
+      const glyphs = el.shadowRoot?.querySelectorAll('.goal-list .chat-list-item .fa-square');
+      expect(glyphs?.length).to.equal(0);
+    });
+
     it('should render the key context', () => {
       const text = el.shadowRoot?.textContent ?? '';
       expect(text).to.include('Bakery is closed Mondays');
@@ -569,7 +579,7 @@ describe('AgentDetailsDialog', () => {
     });
   });
 
-  describe('when delete schedule succeeds', () => {
+  describe('when delete schedule button is clicked once', () => {
     let fakeClient: FakeAgentClient;
 
     beforeEach(async () => {
@@ -598,6 +608,77 @@ describe('AgentDetailsDialog', () => {
         '[data-schedule-id="delete-me"] .delete-schedule-button'
       );
       deleteButton?.click();
+      await el.updateComplete;
+    });
+
+    it('should not call deleteSchedule', () => {
+      expect(fakeClient.deleteSchedule).to.not.have.been.called;
+    });
+
+    it('should arm the delete confirmation for that schedule', () => {
+      expect(el.confirmingDeleteId).to.equal('delete-me');
+    });
+
+    it('should change the button label to a confirming label', () => {
+      const button = el.shadowRoot?.querySelector<HTMLButtonElement>(
+        '[data-schedule-id="delete-me"] .delete-schedule-button'
+      );
+      expect(button?.textContent?.trim()).to.equal('Confirm delete');
+    });
+
+    it('should mark the armed button with a confirming class', () => {
+      const button = el.shadowRoot?.querySelector<HTMLButtonElement>(
+        '[data-schedule-id="delete-me"] .delete-schedule-button'
+      );
+      expect(button?.classList.contains('confirming')).to.be.true;
+    });
+
+    it('should keep the row in local state', () => {
+      const ids = el.schedules.map((s) => s.id);
+      expect(ids).to.deep.equal(['keep-me', 'delete-me']);
+    });
+
+    it('should still render the row in the DOM', () => {
+      const row = el.shadowRoot?.querySelector('[data-schedule-id="delete-me"]');
+      expect(row).to.exist;
+    });
+  });
+
+  describe('when delete schedule is confirmed by a second click', () => {
+    let fakeClient: FakeAgentClient;
+
+    beforeEach(async () => {
+      el = await Promise.race([
+        fixture<AgentDetailsDialog>(html`<agent-details-dialog></agent-details-dialog>`),
+        timeout(5000, 'Component fixture timed out'),
+      ]);
+
+      fakeClient = buildFakeClient();
+      fakeClient.listSchedules.resolves(create(ListSchedulesResponseSchema, {
+        schedules: [
+          makeSchedule({ id: 'keep-me' }),
+          makeSchedule({ id: 'delete-me' }),
+        ],
+      }));
+      fakeClient.getChatContext.resolves(create(GetChatContextResponseSchema, {}));
+      fakeClient.deleteSchedule.resolves(create(DeleteScheduleResponseSchema, {}));
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- injecting fake client for tests
+      el.client = fakeClient as unknown as AgentDetailsDialog['client'];
+
+      el.openDialog('my-page');
+      await waitUntil(() => !el.loading, 'still loading', { timeout: 1000 });
+      await el.updateComplete;
+
+      const firstClickButton = el.shadowRoot?.querySelector<HTMLButtonElement>(
+        '[data-schedule-id="delete-me"] .delete-schedule-button'
+      );
+      firstClickButton?.click();
+      await el.updateComplete;
+
+      const confirmButton = el.shadowRoot?.querySelector<HTMLButtonElement>(
+        '[data-schedule-id="delete-me"] .delete-schedule-button'
+      );
+      confirmButton?.click();
       await waitUntil(() => fakeClient.deleteSchedule.called, 'delete not called', { timeout: 1000 });
       await el.updateComplete;
     });
@@ -630,9 +711,218 @@ describe('AgentDetailsDialog', () => {
       const remainingRow = el.shadowRoot?.querySelector('[data-schedule-id="keep-me"]');
       expect(remainingRow).to.exist;
     });
+
+    it('should clear the armed confirmation state', () => {
+      expect(el.confirmingDeleteId).to.equal(null);
+    });
   });
 
-  describe('when delete schedule fails', () => {
+  describe('when delete is armed on schedule A and then schedule B is clicked', () => {
+    let fakeClient: FakeAgentClient;
+
+    beforeEach(async () => {
+      el = await Promise.race([
+        fixture<AgentDetailsDialog>(html`<agent-details-dialog></agent-details-dialog>`),
+        timeout(5000, 'Component fixture timed out'),
+      ]);
+
+      fakeClient = buildFakeClient();
+      fakeClient.listSchedules.resolves(create(ListSchedulesResponseSchema, {
+        schedules: [
+          makeSchedule({ id: 'sched-a' }),
+          makeSchedule({ id: 'sched-b' }),
+        ],
+      }));
+      fakeClient.getChatContext.resolves(create(GetChatContextResponseSchema, {}));
+      fakeClient.deleteSchedule.resolves(create(DeleteScheduleResponseSchema, {}));
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- injecting fake client for tests
+      el.client = fakeClient as unknown as AgentDetailsDialog['client'];
+
+      el.openDialog('my-page');
+      await waitUntil(() => !el.loading, 'still loading', { timeout: 1000 });
+      await el.updateComplete;
+
+      const buttonA = el.shadowRoot?.querySelector<HTMLButtonElement>(
+        '[data-schedule-id="sched-a"] .delete-schedule-button'
+      );
+      buttonA?.click();
+      await el.updateComplete;
+
+      const buttonB = el.shadowRoot?.querySelector<HTMLButtonElement>(
+        '[data-schedule-id="sched-b"] .delete-schedule-button'
+      );
+      buttonB?.click();
+      await el.updateComplete;
+    });
+
+    it('should not call deleteSchedule', () => {
+      expect(fakeClient.deleteSchedule).to.not.have.been.called;
+    });
+
+    it('should move the armed confirmation to schedule B', () => {
+      expect(el.confirmingDeleteId).to.equal('sched-b');
+    });
+
+    it('should not mark schedule A as confirming', () => {
+      const buttonA = el.shadowRoot?.querySelector<HTMLButtonElement>(
+        '[data-schedule-id="sched-a"] .delete-schedule-button'
+      );
+      expect(buttonA?.classList.contains('confirming')).to.be.false;
+    });
+
+    it('should mark schedule B as confirming', () => {
+      const buttonB = el.shadowRoot?.querySelector<HTMLButtonElement>(
+        '[data-schedule-id="sched-b"] .delete-schedule-button'
+      );
+      expect(buttonB?.classList.contains('confirming')).to.be.true;
+    });
+  });
+
+  describe('when delete is armed and then Escape is pressed', () => {
+    let fakeClient: FakeAgentClient;
+
+    beforeEach(async () => {
+      el = await Promise.race([
+        fixture<AgentDetailsDialog>(html`<agent-details-dialog></agent-details-dialog>`),
+        timeout(5000, 'Component fixture timed out'),
+      ]);
+
+      fakeClient = buildFakeClient();
+      fakeClient.listSchedules.resolves(create(ListSchedulesResponseSchema, {
+        schedules: [makeSchedule({ id: 'armed-row' })],
+      }));
+      fakeClient.getChatContext.resolves(create(GetChatContextResponseSchema, {}));
+      fakeClient.deleteSchedule.resolves(create(DeleteScheduleResponseSchema, {}));
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- injecting fake client for tests
+      el.client = fakeClient as unknown as AgentDetailsDialog['client'];
+
+      el.openDialog('my-page');
+      await waitUntil(() => !el.loading, 'still loading', { timeout: 1000 });
+      await el.updateComplete;
+
+      const button = el.shadowRoot?.querySelector<HTMLButtonElement>(
+        '[data-schedule-id="armed-row"] .delete-schedule-button'
+      );
+      button?.click();
+      await el.updateComplete;
+
+      const escapeEvent = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true });
+      el.shadowRoot?.querySelector('dialog')?.dispatchEvent(escapeEvent);
+      await el.updateComplete;
+    });
+
+    it('should clear the armed confirmation state', () => {
+      expect(el.confirmingDeleteId).to.equal(null);
+    });
+
+    it('should not call deleteSchedule', () => {
+      expect(fakeClient.deleteSchedule).to.not.have.been.called;
+    });
+
+    it('should still render the row', () => {
+      const row = el.shadowRoot?.querySelector('[data-schedule-id="armed-row"]');
+      expect(row).to.exist;
+    });
+  });
+
+  describe('when delete is armed and a click happens outside any delete button', () => {
+    let fakeClient: FakeAgentClient;
+
+    beforeEach(async () => {
+      el = await Promise.race([
+        fixture<AgentDetailsDialog>(html`<agent-details-dialog></agent-details-dialog>`),
+        timeout(5000, 'Component fixture timed out'),
+      ]);
+
+      fakeClient = buildFakeClient();
+      fakeClient.listSchedules.resolves(create(ListSchedulesResponseSchema, {
+        schedules: [makeSchedule({ id: 'armed-row' })],
+      }));
+      fakeClient.getChatContext.resolves(create(GetChatContextResponseSchema, {}));
+      fakeClient.deleteSchedule.resolves(create(DeleteScheduleResponseSchema, {}));
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- injecting fake client for tests
+      el.client = fakeClient as unknown as AgentDetailsDialog['client'];
+
+      el.openDialog('my-page');
+      await waitUntil(() => !el.loading, 'still loading', { timeout: 1000 });
+      await el.updateComplete;
+
+      const button = el.shadowRoot?.querySelector<HTMLButtonElement>(
+        '[data-schedule-id="armed-row"] .delete-schedule-button'
+      );
+      button?.click();
+      await el.updateComplete;
+
+      const heading = el.shadowRoot?.querySelector<HTMLElement>('.section-heading');
+      heading?.click();
+      await el.updateComplete;
+    });
+
+    it('should clear the armed confirmation state', () => {
+      expect(el.confirmingDeleteId).to.equal(null);
+    });
+
+    it('should not call deleteSchedule', () => {
+      expect(fakeClient.deleteSchedule).to.not.have.been.called;
+    });
+
+    it('should still render the row', () => {
+      const row = el.shadowRoot?.querySelector('[data-schedule-id="armed-row"]');
+      expect(row).to.exist;
+    });
+  });
+
+  describe('when delete is armed and the auto-disarm timeout elapses', () => {
+    let fakeClient: FakeAgentClient;
+    let clock: sinon.SinonFakeTimers;
+
+    beforeEach(async () => {
+      el = await Promise.race([
+        fixture<AgentDetailsDialog>(html`<agent-details-dialog></agent-details-dialog>`),
+        timeout(5000, 'Component fixture timed out'),
+      ]);
+
+      fakeClient = buildFakeClient();
+      fakeClient.listSchedules.resolves(create(ListSchedulesResponseSchema, {
+        schedules: [makeSchedule({ id: 'armed-row' })],
+      }));
+      fakeClient.getChatContext.resolves(create(GetChatContextResponseSchema, {}));
+      fakeClient.deleteSchedule.resolves(create(DeleteScheduleResponseSchema, {}));
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- injecting fake client for tests
+      el.client = fakeClient as unknown as AgentDetailsDialog['client'];
+
+      el.openDialog('my-page');
+      await waitUntil(() => !el.loading, 'still loading', { timeout: 1000 });
+      await el.updateComplete;
+
+      // Install fake timers AFTER all the async setup is settled, so we only
+      // control the auto-disarm setTimeout.
+      clock = sinon.useFakeTimers();
+
+      const button = el.shadowRoot?.querySelector<HTMLButtonElement>(
+        '[data-schedule-id="armed-row"] .delete-schedule-button'
+      );
+      button?.click();
+      await el.updateComplete;
+
+      await clock.tickAsync(5001);
+      await el.updateComplete;
+    });
+
+    afterEach(() => {
+      clock.restore();
+    });
+
+    it('should clear the armed confirmation state', () => {
+      expect(el.confirmingDeleteId).to.equal(null);
+    });
+
+    it('should not call deleteSchedule', () => {
+      expect(fakeClient.deleteSchedule).to.not.have.been.called;
+    });
+  });
+
+  describe('when delete schedule fails after confirmation', () => {
     let fakeClient: FakeAgentClient;
     const failure = new Error('cannot delete');
 
@@ -655,10 +945,16 @@ describe('AgentDetailsDialog', () => {
       await waitUntil(() => !el.loading, 'still loading', { timeout: 1000 });
       await el.updateComplete;
 
-      const deleteButton = el.shadowRoot?.querySelector<HTMLButtonElement>(
+      const armButton = el.shadowRoot?.querySelector<HTMLButtonElement>(
         '[data-schedule-id="sticky"] .delete-schedule-button'
       );
-      deleteButton?.click();
+      armButton?.click();
+      await el.updateComplete;
+
+      const confirmButton = el.shadowRoot?.querySelector<HTMLButtonElement>(
+        '[data-schedule-id="sticky"] .delete-schedule-button'
+      );
+      confirmButton?.click();
       await waitUntil(() => el.augmentedError !== null, 'error not set', { timeout: 1000 });
       await el.updateComplete;
     });
