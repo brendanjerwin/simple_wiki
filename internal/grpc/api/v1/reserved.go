@@ -22,6 +22,7 @@ import (
 // See ADR-0009 (the pattern) and ADR-0010 (the wiki.* namespace).
 var reservedNamespaces = map[string]string{
 	"agent": "the 'agent' top-level frontmatter namespace is reserved; use AgentMetadataService instead",
+	"wiki":  "the 'wiki' top-level frontmatter namespace is reserved; use ChecklistService for wiki.checklists.* (see ADR-0009 and ADR-0010)",
 }
 
 // isReservedTopLevel reports whether key is a reserved top-level frontmatter
