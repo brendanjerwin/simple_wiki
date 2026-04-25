@@ -4,6 +4,7 @@
 
 import type { GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
 import { fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
+import { file_api_v1_mcp_options } from "./mcp_options_pb";
 import { file_google_protobuf_struct } from "@bufbuild/protobuf/wkt";
 import type { JsonObject, Message } from "@bufbuild/protobuf";
 
@@ -11,7 +12,7 @@ import type { JsonObject, Message } from "@bufbuild/protobuf";
  * Describes the file api/v1/frontmatter.proto.
  */
 export const file_api_v1_frontmatter: GenFile = /*@__PURE__*/
-  fileDesc("ChhhcGkvdjEvZnJvbnRtYXR0ZXIucHJvdG8SBmFwaS52MSIlChVHZXRGcm9udG1hdHRlclJlcXVlc3QSDAoEcGFnZRgBIAEoCSJGChZHZXRGcm9udG1hdHRlclJlc3BvbnNlEiwKC2Zyb250bWF0dGVyGAEgASgLMhcuZ29vZ2xlLnByb3RvYnVmLlN0cnVjdCJVChdNZXJnZUZyb250bWF0dGVyUmVxdWVzdBIMCgRwYWdlGAEgASgJEiwKC2Zyb250bWF0dGVyGAIgASgLMhcuZ29vZ2xlLnByb3RvYnVmLlN0cnVjdCJIChhNZXJnZUZyb250bWF0dGVyUmVzcG9uc2USLAoLZnJvbnRtYXR0ZXIYASABKAsyFy5nb29nbGUucHJvdG9idWYuU3RydWN0IjwKDVBhdGhDb21wb25lbnQSDQoDa2V5GAEgASgJSAASDwoFaW5kZXgYAiABKAVIAEILCgljb21wb25lbnQiTwoWUmVtb3ZlS2V5QXRQYXRoUmVxdWVzdBIMCgRwYWdlGAEgASgJEicKCGtleV9wYXRoGAIgAygLMhUuYXBpLnYxLlBhdGhDb21wb25lbnQiRwoXUmVtb3ZlS2V5QXRQYXRoUmVzcG9uc2USLAoLZnJvbnRtYXR0ZXIYASABKAsyFy5nb29nbGUucHJvdG9idWYuU3RydWN0IlcKGVJlcGxhY2VGcm9udG1hdHRlclJlcXVlc3QSDAoEcGFnZRgBIAEoCRIsCgtmcm9udG1hdHRlchgCIAEoCzIXLmdvb2dsZS5wcm90b2J1Zi5TdHJ1Y3QiSgoaUmVwbGFjZUZyb250bWF0dGVyUmVzcG9uc2USLAoLZnJvbnRtYXR0ZXIYASABKAsyFy5nb29nbGUucHJvdG9idWYuU3RydWN0Mu4CCgtGcm9udG1hdHRlchJRCg5HZXRGcm9udG1hdHRlchIdLmFwaS52MS5HZXRGcm9udG1hdHRlclJlcXVlc3QaHi5hcGkudjEuR2V0RnJvbnRtYXR0ZXJSZXNwb25zZSIAElcKEE1lcmdlRnJvbnRtYXR0ZXISHy5hcGkudjEuTWVyZ2VGcm9udG1hdHRlclJlcXVlc3QaIC5hcGkudjEuTWVyZ2VGcm9udG1hdHRlclJlc3BvbnNlIgASXQoSUmVwbGFjZUZyb250bWF0dGVyEiEuYXBpLnYxLlJlcGxhY2VGcm9udG1hdHRlclJlcXVlc3QaIi5hcGkudjEuUmVwbGFjZUZyb250bWF0dGVyUmVzcG9uc2UiABJUCg9SZW1vdmVLZXlBdFBhdGgSHi5hcGkudjEuUmVtb3ZlS2V5QXRQYXRoUmVxdWVzdBofLmFwaS52MS5SZW1vdmVLZXlBdFBhdGhSZXNwb25zZSIAQjpaOGdpdGh1Yi5jb20vYnJlbmRhbmplcndpbi9zaW1wbGVfd2lraS9nZW4vZ28vYXBpL3YxO2FwaXYxYgZwcm90bzM", [file_google_protobuf_struct]);
+  fileDesc("ChhhcGkvdjEvZnJvbnRtYXR0ZXIucHJvdG8SBmFwaS52MSIlChVHZXRGcm9udG1hdHRlclJlcXVlc3QSDAoEcGFnZRgBIAEoCSJGChZHZXRGcm9udG1hdHRlclJlc3BvbnNlEiwKC2Zyb250bWF0dGVyGAEgASgLMhcuZ29vZ2xlLnByb3RvYnVmLlN0cnVjdCJVChdNZXJnZUZyb250bWF0dGVyUmVxdWVzdBIMCgRwYWdlGAEgASgJEiwKC2Zyb250bWF0dGVyGAIgASgLMhcuZ29vZ2xlLnByb3RvYnVmLlN0cnVjdCJIChhNZXJnZUZyb250bWF0dGVyUmVzcG9uc2USLAoLZnJvbnRtYXR0ZXIYASABKAsyFy5nb29nbGUucHJvdG9idWYuU3RydWN0IjwKDVBhdGhDb21wb25lbnQSDQoDa2V5GAEgASgJSAASDwoFaW5kZXgYAiABKAVIAEILCgljb21wb25lbnQiTwoWUmVtb3ZlS2V5QXRQYXRoUmVxdWVzdBIMCgRwYWdlGAEgASgJEicKCGtleV9wYXRoGAIgAygLMhUuYXBpLnYxLlBhdGhDb21wb25lbnQiRwoXUmVtb3ZlS2V5QXRQYXRoUmVzcG9uc2USLAoLZnJvbnRtYXR0ZXIYASABKAsyFy5nb29nbGUucHJvdG9idWYuU3RydWN0IlcKGVJlcGxhY2VGcm9udG1hdHRlclJlcXVlc3QSDAoEcGFnZRgBIAEoCRIsCgtmcm9udG1hdHRlchgCIAEoCzIXLmdvb2dsZS5wcm90b2J1Zi5TdHJ1Y3QiSgoaUmVwbGFjZUZyb250bWF0dGVyUmVzcG9uc2USLAoLZnJvbnRtYXR0ZXIYASABKAsyFy5nb29nbGUucHJvdG9idWYuU3RydWN0Ms4JCgtGcm9udG1hdHRlchJ+Cg5HZXRGcm9udG1hdHRlchIdLmFwaS52MS5HZXRGcm9udG1hdHRlclJlcXVlc3QaHi5hcGkudjEuR2V0RnJvbnRtYXR0ZXJSZXNwb25zZSItirUYJUdldCB0aGUgZnJvbnRtYXR0ZXIgZm9yIGEgZ2l2ZW4gcGFnZS6YtRgBEosCChBNZXJnZUZyb250bWF0dGVyEh8uYXBpLnYxLk1lcmdlRnJvbnRtYXR0ZXJSZXF1ZXN0GiAuYXBpLnYxLk1lcmdlRnJvbnRtYXR0ZXJSZXNwb25zZSKzAYq1GK4BTWVyZ2UgdGhlIGdpdmVuIGZyb250bWF0dGVyIHdpdGggdGhlIGV4aXN0aW5nIGZyb250bWF0dGVyIGZvciBhIHBhZ2UuIFdyaXRlcyB1bmRlciB0aGUgdG9wLWxldmVsICdhZ2VudCcgbmFtZXNwYWNlIGFyZSByZWplY3RlZDsgdXNlIEFnZW50TWV0YWRhdGFTZXJ2aWNlIGZvciB0aG9zZSBtdXRhdGlvbnMuEvwBChJSZXBsYWNlRnJvbnRtYXR0ZXISIS5hcGkudjEuUmVwbGFjZUZyb250bWF0dGVyUmVxdWVzdBoiLmFwaS52MS5SZXBsYWNlRnJvbnRtYXR0ZXJSZXNwb25zZSKeAYq1GJkBUmVwbGFjZSB0aGUgZW50aXJlIGZyb250bWF0dGVyIGZvciBhIGdpdmVuIHBhZ2UuIFdyaXRlcyB1bmRlciB0aGUgdG9wLWxldmVsICdhZ2VudCcgbmFtZXNwYWNlIGFyZSByZWplY3RlZDsgdXNlIEFnZW50TWV0YWRhdGFTZXJ2aWNlIGZvciB0aG9zZSBtdXRhdGlvbnMuEvcBCg9SZW1vdmVLZXlBdFBhdGgSHi5hcGkudjEuUmVtb3ZlS2V5QXRQYXRoUmVxdWVzdBofLmFwaS52MS5SZW1vdmVLZXlBdFBhdGhSZXNwb25zZSKiAYq1GJ0BUmVtb3ZlIGEga2V5IGZyb20gdGhlIGZyb250bWF0dGVyIGF0IGEgZ2l2ZW4gcGF0aC4gUmVtb3ZhbHMgdW5kZXIgdGhlIHRvcC1sZXZlbCAnYWdlbnQnIG5hbWVzcGFjZSBhcmUgcmVqZWN0ZWQ7IHVzZSBBZ2VudE1ldGFkYXRhU2VydmljZSBmb3IgdGhvc2UgbXV0YXRpb25zLhq3Aqq1GLICUmVhZHMgYW5kIHdyaXRlcyB0aGUgc3RydWN0dXJlZCBmcm9udG1hdHRlciAoWUFNTC9UT01MLXN0eWxlIG1ldGFkYXRhIGF0IHRoZSB0b3Agb2YgZWFjaCBtYXJrZG93biBwYWdlKSBhcyBhIEpTT04tbGlrZSBvYmplY3QuIFdyaXRlcyB0aGF0IHRvdWNoIHRoZSB0b3AtbGV2ZWwgJ2FnZW50JyBuYW1lc3BhY2Uga2V5IGFyZSByZWplY3RlZCDigJQgdXNlIEFnZW50TWV0YWRhdGFTZXJ2aWNlIGZvciBzY2hlZHVsZSwgY2hhdC1jb250ZXh0LCBhbmQgYmFja2dyb3VuZC1hY3Rpdml0eSBtdXRhdGlvbnMgdW5kZXIgdGhhdCBuYW1lc3BhY2UuQjpaOGdpdGh1Yi5jb20vYnJlbmRhbmplcndpbi9zaW1wbGVfd2lraS9nZW4vZ28vYXBpL3YxO2FwaXYxYgZwcm90bzM", [file_api_v1_mcp_options, file_google_protobuf_struct]);
 
 /**
  * The request message containing the page name.
@@ -232,13 +233,13 @@ export const ReplaceFrontmatterResponseSchema: GenMessage<ReplaceFrontmatterResp
   messageDesc(file_api_v1_frontmatter, 8);
 
 /**
- * The Frontmatter service definition.
+ * Frontmatter — see (api.v1.service_description).
  *
  * @generated from service api.v1.Frontmatter
  */
 export const Frontmatter: GenService<{
   /**
-   * Gets the frontmatter for a given page.
+   * GetFrontmatter — see (api.v1.description).
    *
    * @generated from rpc api.v1.Frontmatter.GetFrontmatter
    */
@@ -248,7 +249,7 @@ export const Frontmatter: GenService<{
     output: typeof GetFrontmatterResponseSchema;
   },
   /**
-   * Merges the given frontmatter with the existing frontmatter for a page.
+   * MergeFrontmatter — see (api.v1.description).
    *
    * @generated from rpc api.v1.Frontmatter.MergeFrontmatter
    */
@@ -258,7 +259,7 @@ export const Frontmatter: GenService<{
     output: typeof MergeFrontmatterResponseSchema;
   },
   /**
-   * Replaces the entire frontmatter for a given page.
+   * ReplaceFrontmatter — see (api.v1.description).
    *
    * @generated from rpc api.v1.Frontmatter.ReplaceFrontmatter
    */
@@ -268,7 +269,7 @@ export const Frontmatter: GenService<{
     output: typeof ReplaceFrontmatterResponseSchema;
   },
   /**
-   * Removes a key from the frontmatter at a given path.
+   * RemoveKeyAtPath — see (api.v1.description).
    *
    * @generated from rpc api.v1.Frontmatter.RemoveKeyAtPath
    */

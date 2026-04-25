@@ -61,6 +61,32 @@ type BuildInfo struct {
 	BuildTime time.Time
 }
 
+// ScheduledTurnDispatcher abstracts the server-side scheduled-turn bridge so
+// the gRPC layer does not depend on the concrete server package
+// implementation.
+type ScheduledTurnDispatcher interface {
+	Subscribe() (<-chan *apiv1.ScheduledTurnRequest, func())
+	Complete(req *apiv1.CompleteScheduledTurnRequest) error
+}
+
+// AgentScheduleStore is the contract the AgentMetadataService handlers use to
+// read and mutate the agent.schedules subtree. The concrete type lives in the
+// server package.
+type AgentScheduleStore interface {
+	List(page string) ([]*apiv1.AgentSchedule, error)
+	Upsert(page string, schedule *apiv1.AgentSchedule) error
+	Delete(page, scheduleID string) error
+}
+
+// AgentChatContextStore is the contract the AgentMetadataService handlers use
+// to read and mutate the agent.chat_context subtree. The concrete type lives
+// in the server package.
+type AgentChatContextStore interface {
+	Read(page string) (*apiv1.ChatContext, error)
+	UpdateMerge(page string, update *apiv1.ChatContext) (*apiv1.ChatContext, error)
+	AppendBackgroundActivitySummary(page, scheduleID, summary string) error
+}
+
 // Server is the implementation of the gRPC services.
 type Server struct {
 	apiv1.UnimplementedSystemInfoServiceServer
@@ -71,6 +97,8 @@ type Server struct {
 	apiv1.UnimplementedPageImportServiceServer
 	apiv1.UnimplementedFileStorageServiceServer
 	apiv1.UnimplementedChatServiceServer
+	apiv1.UnimplementedScheduledTurnServiceServer
+	apiv1.UnimplementedAgentMetadataServiceServer
 	commit                  string
 	buildTime               time.Time
 	pageReaderMutator       wikipage.PageReaderMutator
@@ -83,6 +111,9 @@ type Server struct {
 	fileStorer              filestore.FileStorer
 	chatBufferManager       ChatBufferManager
 	pageOpener              wikipage.PageOpener
+	scheduledTurnDispatcher ScheduledTurnDispatcher
+	agentScheduleStore      AgentScheduleStore
+	agentChatContextStore   AgentChatContextStore
 }
 
 // NewServer creates a new gRPC server with the given dependencies.
@@ -151,6 +182,27 @@ func (s *Server) WithFileStorer(fs filestore.FileStorer) *Server {
 	return s
 }
 
+// WithScheduledTurnDispatcher sets the optional scheduled-turn dispatcher.
+func (s *Server) WithScheduledTurnDispatcher(d ScheduledTurnDispatcher) *Server {
+	s.scheduledTurnDispatcher = d
+	return s
+}
+
+// WithAgentScheduleStore sets the optional agent schedule store. Required for
+// AgentMetadataService.{ListSchedules, UpsertSchedule, DeleteSchedule} to work.
+func (s *Server) WithAgentScheduleStore(store AgentScheduleStore) *Server {
+	s.agentScheduleStore = store
+	return s
+}
+
+// WithAgentChatContextStore sets the optional agent chat-context store.
+// Required for AgentMetadataService.{GetChatContext, UpdateChatContext,
+// AppendBackgroundActivitySummary} to work.
+func (s *Server) WithAgentChatContextStore(store AgentChatContextStore) *Server {
+	s.agentChatContextStore = store
+	return s
+}
+
 // RegisterWithServer registers the gRPC services with the given gRPC server.
 func (s *Server) RegisterWithServer(grpcServer *grpc.Server) {
 	apiv1.RegisterSystemInfoServiceServer(grpcServer, s)
@@ -161,6 +213,8 @@ func (s *Server) RegisterWithServer(grpcServer *grpc.Server) {
 	apiv1.RegisterPageImportServiceServer(grpcServer, s)
 	apiv1.RegisterFileStorageServiceServer(grpcServer, s)
 	apiv1.RegisterChatServiceServer(grpcServer, s)
+	apiv1.RegisterScheduledTurnServiceServer(grpcServer, s)
+	apiv1.RegisterAgentMetadataServiceServer(grpcServer, s)
 }
 
 // LoggingInterceptor returns a gRPC unary interceptor for logging method calls.

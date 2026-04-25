@@ -21,6 +21,56 @@ func TestWikiCLI(t *testing.T) {
 	RunSpecs(t, "wiki-cli Suite")
 }
 
+var _ = Describe("shouldSkipVersionCheck", func() {
+	When("the first arg is 'mcp'", func() {
+		var result bool
+
+		BeforeEach(func() {
+			result = shouldSkipVersionCheck("mcp")
+		})
+
+		It("should return true", func() {
+			Expect(result).To(BeTrue())
+		})
+	})
+
+	When("the first arg is 'pool'", func() {
+		var result bool
+
+		BeforeEach(func() {
+			result = shouldSkipVersionCheck("pool")
+		})
+
+		It("should return false", func() {
+			Expect(result).To(BeFalse())
+		})
+	})
+
+	When("the first arg is 'call'", func() {
+		var result bool
+
+		BeforeEach(func() {
+			result = shouldSkipVersionCheck("call")
+		})
+
+		It("should return false", func() {
+			Expect(result).To(BeFalse())
+		})
+	})
+
+	When("the first arg is empty (no args)", func() {
+		var result bool
+
+		BeforeEach(func() {
+			result = shouldSkipVersionCheck("")
+		})
+
+		It("should return false", func() {
+			Expect(result).To(BeFalse())
+		})
+	})
+})
+
 var _ = Describe("commitsMatch", func() {
 	When("the server reports a raw hash matching the CLI commit", func() {
 		var result bool

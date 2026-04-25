@@ -50,9 +50,9 @@ var (
 
 // SearchServiceClient is a client for the api.v1.SearchService service.
 type SearchServiceClient interface {
-	// Searches the wiki content and returns matching results.
+	// SearchContent — see (api.v1.description).
 	SearchContent(context.Context, *connect.Request[v1.SearchContentRequest]) (*connect.Response[v1.SearchContentResponse], error)
-	// Lists pages matching a frontmatter key-value pair, sorted by another frontmatter key.
+	// ListPagesByFrontmatter — see (api.v1.description).
 	ListPagesByFrontmatter(context.Context, *connect.Request[v1.ListPagesByFrontmatterRequest]) (*connect.Response[v1.ListPagesByFrontmatterResponse], error)
 }
 
@@ -99,9 +99,9 @@ func (c *searchServiceClient) ListPagesByFrontmatter(ctx context.Context, req *c
 
 // SearchServiceHandler is an implementation of the api.v1.SearchService service.
 type SearchServiceHandler interface {
-	// Searches the wiki content and returns matching results.
+	// SearchContent — see (api.v1.description).
 	SearchContent(context.Context, *connect.Request[v1.SearchContentRequest]) (*connect.Response[v1.SearchContentResponse], error)
-	// Lists pages matching a frontmatter key-value pair, sorted by another frontmatter key.
+	// ListPagesByFrontmatter — see (api.v1.description).
 	ListPagesByFrontmatter(context.Context, *connect.Request[v1.ListPagesByFrontmatterRequest]) (*connect.Response[v1.ListPagesByFrontmatterResponse], error)
 }
 

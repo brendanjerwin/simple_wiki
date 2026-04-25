@@ -11,6 +11,51 @@ import (
 	"google.golang.org/protobuf/types/known/structpb"
 )
 
+// reservedAgentKey is the top-level frontmatter key that AgentMetadataService
+// owns exclusively. Generic Frontmatter writes touching this key are rejected
+// to prevent accidental clobbering of cron schedules and chat memory.
+const reservedAgentKey = "agent"
+
+// reservedAgentRedirect is the error message users see when they try to mutate
+// agent.* via the generic API. It points them at the right service.
+const reservedAgentRedirect = "the 'agent' top-level frontmatter namespace is reserved; use AgentMetadataService instead"
+
+// containsReservedAgentKey returns true when fm contains the reserved 'agent'
+// top-level key. Used by Merge/Replace to reject writes that would touch it.
+func containsReservedAgentKey(fm map[string]any) bool {
+	if fm == nil {
+		return false
+	}
+	_, ok := fm[reservedAgentKey]
+	return ok
+}
+
+// pathStartsWithReservedAgent returns true when the first PathComponent is the
+// reserved 'agent' key. Used by RemoveKeyAtPath to reject removal targeting
+// agent or any agent.* descendant.
+func pathStartsWithReservedAgent(path []*apiv1.PathComponent) bool {
+	if len(path) == 0 {
+		return false
+	}
+	keyComp, ok := path[0].Component.(*apiv1.PathComponent_Key)
+	if !ok {
+		return false
+	}
+	return keyComp.Key == reservedAgentKey
+}
+
+// preserveAgentSubtree carries the reserved agent.* subtree from existing into
+// incoming so a ReplaceFrontmatter call that omits agent does not silently
+// destroy it. Callers must already have rejected payloads that include agent.
+func preserveAgentSubtree(existing, incoming map[string]any) {
+	if existing == nil || incoming == nil {
+		return
+	}
+	if agent, ok := existing[reservedAgentKey]; ok {
+		incoming[reservedAgentKey] = agent
+	}
+}
+
 // filterIdentifierKey removes the identifier key from a frontmatter map.
 func filterIdentifierKey(fm map[string]any) map[string]any {
 	if fm == nil {
@@ -183,6 +228,9 @@ func (s *Server) MergeFrontmatter(_ context.Context, req *apiv1.MergeFrontmatter
 		if err := validateNoIdentifierKey(newFm); err != nil {
 			return nil, err
 		}
+		if containsReservedAgentKey(newFm) {
+			return nil, status.Error(codes.InvalidArgument, reservedAgentRedirect)
+		}
 	}
 
 	_, existingFm, err := s.pageReaderMutator.ReadFrontMatter(wikipage.PageIdentifier(req.Page))
@@ -221,9 +269,22 @@ func (s *Server) ReplaceFrontmatter(_ context.Context, req *apiv1.ReplaceFrontma
 	var fm map[string]any
 	if req.Frontmatter != nil {
 		fm = req.Frontmatter.AsMap()
+		if containsReservedAgentKey(fm) {
+			return nil, status.Error(codes.InvalidArgument, reservedAgentRedirect)
+		}
 		// Filter out any user-provided identifier key and set the correct one
 		fm = filterIdentifierKey(fm)
 		fm[identifierKey] = req.Page
+	}
+
+	// Carry the reserved agent.* subtree forward — even a caller unaware of the
+	// namespace must not be able to destroy it via Replace.
+	if fm != nil {
+		_, existingFm, readErr := s.pageReaderMutator.ReadFrontMatter(wikipage.PageIdentifier(req.Page))
+		if readErr != nil && !os.IsNotExist(readErr) {
+			return nil, status.Errorf(codes.Internal, failedToReadFrontmatterErrFmt, readErr)
+		}
+		preserveAgentSubtree(existingFm, fm)
 	}
 
 	err = s.pageReaderMutator.WriteFrontMatter(wikipage.PageIdentifier(req.Page), fm)
@@ -259,6 +320,11 @@ func (s *Server) RemoveKeyAtPath(_ context.Context, req *apiv1.RemoveKeyAtPathRe
 	// Validate that the path is not targeting the identifier key
 	if isIdentifierKeyPath(req.GetKeyPath()) {
 		return nil, status.Error(codes.InvalidArgument, "identifier key cannot be removed")
+	}
+
+	// Reject any path under the reserved agent.* namespace.
+	if pathStartsWithReservedAgent(req.GetKeyPath()) {
+		return nil, status.Error(codes.InvalidArgument, reservedAgentRedirect)
 	}
 
 	_, fm, err := s.pageReaderMutator.ReadFrontMatter(wikipage.PageIdentifier(req.Page))

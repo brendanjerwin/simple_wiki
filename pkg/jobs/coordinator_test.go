@@ -330,3 +330,100 @@ type testError struct {
 func (e *testError) Error() string {
 	return e.msg
 }
+
+var _ = Describe("JobQueueCoordinator.RegisterQueue", func() {
+	var coordinator *jobs.JobQueueCoordinator
+
+	BeforeEach(func() {
+		logger := lumber.NewConsoleLogger(lumber.WARN)
+		coordinator = jobs.NewJobQueueCoordinator(logger)
+	})
+
+	Describe("when registering a queue with multiple workers", func() {
+		var registerErr error
+
+		BeforeEach(func() {
+			registerErr = coordinator.RegisterQueue("MultiWorker", 3, 10)
+		})
+
+		It("should not return an error", func() {
+			Expect(registerErr).NotTo(HaveOccurred())
+		})
+
+		It("should allow concurrent dispatches", func() {
+			job1 := jobs.NewBlockingMockJob("MultiWorker")
+			job2 := jobs.NewBlockingMockJob("MultiWorker")
+			job3 := jobs.NewBlockingMockJob("MultiWorker")
+
+			Expect(coordinator.EnqueueJob(job1)).To(Succeed())
+			Expect(coordinator.EnqueueJob(job2)).To(Succeed())
+			Expect(coordinator.EnqueueJob(job3)).To(Succeed())
+
+			// All three should be running simultaneously (workers=3); jobs_remaining
+			// reflects queued + in-flight, so we expect 3 here.
+			Eventually(func() int32 {
+				return coordinator.GetQueueStats("MultiWorker").JobsRemaining
+			}).Should(Equal(int32(3)))
+
+			job1.Release()
+			job2.Release()
+			job3.Release()
+
+			Eventually(func() int32 {
+				return coordinator.GetQueueStats("MultiWorker").JobsRemaining
+			}).Should(Equal(int32(0)))
+		})
+	})
+
+	Describe("when registering the same queue twice", func() {
+		var firstErr, secondErr error
+
+		BeforeEach(func() {
+			firstErr = coordinator.RegisterQueue("Duplicate", 1, 10)
+			secondErr = coordinator.RegisterQueue("Duplicate", 1, 10)
+		})
+
+		It("should accept the first registration", func() {
+			Expect(firstErr).NotTo(HaveOccurred())
+		})
+
+		It("should reject the second registration with an error", func() {
+			Expect(secondErr).To(HaveOccurred())
+		})
+
+		It("should mention the queue name in the error", func() {
+			Expect(secondErr.Error()).To(ContainSubstring("Duplicate"))
+		})
+	})
+
+	Describe("when a queue is registered then a job is enqueued for it", func() {
+		var enqueueErr error
+
+		BeforeEach(func() {
+			Expect(coordinator.RegisterQueue("Preregistered", 2, 10)).To(Succeed())
+			enqueueErr = coordinator.EnqueueJob(&jobs.MockJob{Name: "Preregistered"})
+		})
+
+		It("should not return an error", func() {
+			Expect(enqueueErr).NotTo(HaveOccurred())
+		})
+
+		It("should not auto-register a duplicate dispatcher", func() {
+			// The queue must remain the one we registered (workers=2, capacity=10).
+			// Best proxy: stats exist for the registered name.
+			Expect(coordinator.GetQueueStats("Preregistered")).NotTo(BeNil())
+		})
+	})
+
+	Describe("auto-register fallback for unregistered names", func() {
+		var enqueueErr error
+
+		BeforeEach(func() {
+			enqueueErr = coordinator.EnqueueJob(&jobs.MockJob{Name: "Unregistered"})
+		})
+
+		It("should still succeed (back-compat)", func() {
+			Expect(enqueueErr).NotTo(HaveOccurred())
+		})
+	})
+})

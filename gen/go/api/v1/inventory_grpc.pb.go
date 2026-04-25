@@ -29,18 +29,15 @@ const (
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 //
-// InventoryManagementService provides operations for managing inventory items.
-// This service enables AI agents and other clients to manage household inventory
-// through natural language commands like "put the batteries in the drawer".
+// InventoryManagementService — see (api.v1.service_description).
 type InventoryManagementServiceClient interface {
-	// Creates a new inventory item page with the inv_item template structure.
+	// CreateInventoryItem — see (api.v1.description).
 	CreateInventoryItem(ctx context.Context, in *CreateInventoryItemRequest, opts ...grpc.CallOption) (*CreateInventoryItemResponse, error)
-	// Moves an item from one container to another by updating both
-	// the item's inventory.container and the containers' inventory.items lists.
+	// MoveInventoryItem — see (api.v1.description).
 	MoveInventoryItem(ctx context.Context, in *MoveInventoryItemRequest, opts ...grpc.CallOption) (*MoveInventoryItemResponse, error)
-	// Lists all items in a container, including items in nested containers.
+	// ListContainerContents — see (api.v1.description).
 	ListContainerContents(ctx context.Context, in *ListContainerContentsRequest, opts ...grpc.CallOption) (*ListContainerContentsResponse, error)
-	// Finds which container(s) an item is in.
+	// FindItemLocation — see (api.v1.description).
 	FindItemLocation(ctx context.Context, in *FindItemLocationRequest, opts ...grpc.CallOption) (*FindItemLocationResponse, error)
 }
 
@@ -96,18 +93,15 @@ func (c *inventoryManagementServiceClient) FindItemLocation(ctx context.Context,
 // All implementations must embed UnimplementedInventoryManagementServiceServer
 // for forward compatibility
 //
-// InventoryManagementService provides operations for managing inventory items.
-// This service enables AI agents and other clients to manage household inventory
-// through natural language commands like "put the batteries in the drawer".
+// InventoryManagementService — see (api.v1.service_description).
 type InventoryManagementServiceServer interface {
-	// Creates a new inventory item page with the inv_item template structure.
+	// CreateInventoryItem — see (api.v1.description).
 	CreateInventoryItem(context.Context, *CreateInventoryItemRequest) (*CreateInventoryItemResponse, error)
-	// Moves an item from one container to another by updating both
-	// the item's inventory.container and the containers' inventory.items lists.
+	// MoveInventoryItem — see (api.v1.description).
 	MoveInventoryItem(context.Context, *MoveInventoryItemRequest) (*MoveInventoryItemResponse, error)
-	// Lists all items in a container, including items in nested containers.
+	// ListContainerContents — see (api.v1.description).
 	ListContainerContents(context.Context, *ListContainerContentsRequest) (*ListContainerContentsResponse, error)
-	// Finds which container(s) an item is in.
+	// FindItemLocation — see (api.v1.description).
 	FindItemLocation(context.Context, *FindItemLocationRequest) (*FindItemLocationResponse, error)
 	mustEmbedUnimplementedInventoryManagementServiceServer()
 }
