@@ -299,6 +299,10 @@ func (d *poolDaemon) run(ctx context.Context) error {
 	// Start the idle reaper
 	go d.reapIdleInstances(ctx)
 
+	// Start the scheduled-turn subscriber. It runs alongside the chat
+	// instance-request subscriber and handles its own reconnects.
+	go d.runScheduledTurnLoop(ctx)
+
 	// Maintain subscription to instance requests with reconnect loop
 	backoffMs := initialBackoffMs
 
@@ -1207,36 +1211,55 @@ Rules:
 ## MANDATORY: Update Your Memory After EVERY Response
 
 You have NO chat history between sessions. The ONLY way to maintain continuity is the
-[ai_agent_chat_context] section in this page's frontmatter. Without it, you start every
+agent.chat_context section in this page's frontmatter. Without it, you start every
 session completely blank.
 
 REQUIREMENT: Before you finish responding to EVERY message, you MUST call the
-MergeFrontmatter MCP tool to update [ai_agent_chat_context]. This is not optional.
+api_v1_AgentMetadataService_UpdateChatContext MCP tool. This is not optional.
 Do it every single turn, even for short exchanges.
 
-Update it with a structured object containing these fields:
-- "last_conversation_summary": 1-2 sentence summary of this exchange
-- "user_goals": array of goals or preferences the user has mentioned (accumulate across sessions)
-- "pending_items": array of action items that need follow-up
-- "key_context": important facts, decisions, or preferences to remember
-- "last_updated": current date/time
+NOTE: Generic frontmatter tools (MergeFrontmatter, ReplaceFrontmatter,
+RemoveKeyAtPath) are BLOCKED for the reserved 'agent' top-level key. Use
+api_v1_AgentMetadataService_UpdateChatContext instead — it merges your update
+into agent.chat_context and server-stamps last_updated for you.
 
-Example MergeFrontmatter call:
+Update it with a chat_context object containing these fields:
+- "last_conversation_summary": 1-2 sentence summary of this exchange
+- "user_goals": array of goals or preferences the user has mentioned (will be unioned with prior goals)
+- "pending_items": array of action items that need follow-up (will be unioned with prior items)
+- "key_context": important facts, decisions, or preferences to remember
+
+Example call:
 ` + "```" + `json
 {
-  "ai_agent_chat_context": {
+  "page": "your_page_id",
+  "chat_context": {
     "last_conversation_summary": "User asked me to help reorganize the project roadmap section. I restructured it into Q1/Q2 milestones.",
     "user_goals": ["reorganize roadmap", "keep page concise"],
     "pending_items": ["add Q3 milestones when user provides them"],
-    "key_context": "User prefers bullet points over tables for roadmap items. This page tracks the Alpha project.",
-    "last_updated": "2025-01-15T10:30:00Z"
+    "key_context": "User prefers bullet points over tables for roadmap items. This page tracks the Alpha project."
   }
 }
 ` + "```" + `
 
-IMPORTANT: Merge new information with existing context — do not discard previous entries
-from user_goals or key_context unless they are no longer relevant. Accumulate knowledge
-across sessions.
+IMPORTANT: Scalar fields (last_conversation_summary, key_context) replace on
+update; arrays (user_goals, pending_items) union — so include ONLY new entries
+in your update, the server will keep prior ones automatically.
+
+## Discovering what you can do
+
+Your wiki MCP toolset is broader than just read/edit. Each tool's description
+is the source of truth for what it does and how to call it.
+
+When the user asks for something you're not sure how to do, do NOT decline.
+Instead:
+
+1. **List your MCP tools** and skim the descriptions for something that fits.
+2. **Search the wiki for a help-* page** matching a keyword from the request.
+   Read it for usage patterns this wiki documents.
+3. Compose the call.
+
+Default to "let me look that up" rather than "I can't" when uncertain.
 
 ## Wiki Syntax Help
 
@@ -1255,47 +1278,93 @@ user-facing documentation for all wiki-specific syntax and features.
 
 `
 
-// fetchPageContext retrieves the page's ai_agent_chat_context frontmatter and returns
-// it as a text string to prepend to the first user message.
+// fetchPageContext retrieves the page's agent.chat_context (including the
+// rolling background-activity log) and returns a string to prepend to the
+// first user message of the session.
 func (d *poolDaemon) fetchPageContext(ctx context.Context, page string) string {
 	httpClient := &http.Client{}
-	fmClient := apiv1connect.NewFrontmatterClient(httpClient, d.wikiURL)
+	client := apiv1connect.NewAgentMetadataServiceClient(httpClient, d.wikiURL)
 
-	fmResp, err := fmClient.GetFrontmatter(ctx, connect.NewRequest(&apiv1.GetFrontmatterRequest{Page: page}))
+	resp, err := client.GetChatContext(ctx, connect.NewRequest(&apiv1.GetChatContextRequest{Page: page}))
 	if err != nil {
-		slog.Error("failed to fetch frontmatter", logKeyPage, page, logKeyError, err)
+		slog.Error("failed to fetch chat context", logKeyPage, page, logKeyError, err)
 		return chatPreamble + fmt.Sprintf(
-			"You are the assistant for wiki page '%s'. Failed to fetch page context: %v. Do NOT attempt to create or modify the [ai_agent_chat_context] section.",
+			"You are the assistant for wiki page '%s'. Failed to fetch page context: %v. Continue the conversation but do NOT attempt to update agent.chat_context until the connection recovers.",
 			page, err,
 		)
 	}
 
-	fm := fmResp.Msg.Frontmatter.AsMap()
-	agentContext, ok := fm["ai_agent_chat_context"]
-	if !ok {
-		return chatPreamble + fmt.Sprintf(
-			"You are the assistant for wiki page '%s'. No [ai_agent_chat_context] exists yet — this is your first session on this page.\n\n"+
-			"You MUST create it now by calling MergeFrontmatter after your first response. Use the structured format described above "+
-			"(last_conversation_summary, user_goals, pending_items, key_context, last_updated).",
-			page,
-		)
-	}
-
-	contextJSON, err := json.MarshalIndent(agentContext, "", "  ")
-	if err != nil {
-		slog.Error("failed to marshal ai_agent_chat_context", logKeyPage, page, logKeyError, err)
-		return chatPreamble + fmt.Sprintf("You are the assistant for wiki page '%s'.", page)
-	}
+	chatContext := resp.Msg.GetChatContext()
+	memorySection := buildMemorySection(chatContext)
+	activitySection := buildBackgroundActivitySection(chatContext)
 
 	return chatPreamble + fmt.Sprintf(
-		"You are the assistant for wiki page '%s'.\n\n"+
-			"## Your Restored Memory (from [ai_agent_chat_context])\n\n"+
-			"This is everything you remember from previous sessions. Review it before responding:\n\n"+
-			"```json\n%s\n```\n\n"+
-			"REMINDER: You MUST update this memory via MergeFrontmatter before finishing your response. "+
-			"Merge new information with the existing data above — do not overwrite fields, accumulate them.",
-		page, string(contextJSON),
+		"You are the assistant for wiki page '%s'.\n\n%s%sREMINDER: You MUST call api_v1_AgentMetadataService_UpdateChatContext "+
+			"before finishing your response. Provide ONLY new entries for user_goals and pending_items — they will be unioned with the prior values above.",
+		page, memorySection, activitySection,
 	)
+}
+
+// buildMemorySection renders the persisted chat-memory portion of the
+// agent.chat_context for the preamble. Returns the empty string when no
+// chat memory has been saved yet (so the agent knows it's the first session).
+func buildMemorySection(chatContext *apiv1.ChatContext) string {
+	if chatContext == nil || isChatContextEmpty(chatContext) {
+		return "## Your Restored Memory\n\nNo prior memory exists for this page — this is your first session.\n\n"
+	}
+	jsonBytes, err := json.MarshalIndent(struct {
+		LastConversationSummary string   `json:"last_conversation_summary,omitempty"`
+		UserGoals               []string `json:"user_goals,omitempty"`
+		PendingItems            []string `json:"pending_items,omitempty"`
+		KeyContext              string   `json:"key_context,omitempty"`
+	}{
+		LastConversationSummary: chatContext.GetLastConversationSummary(),
+		UserGoals:               chatContext.GetUserGoals(),
+		PendingItems:            chatContext.GetPendingItems(),
+		KeyContext:              chatContext.GetKeyContext(),
+	}, "", "  ")
+	if err != nil {
+		slog.Error("failed to marshal chat memory", logKeyError, err)
+		return "## Your Restored Memory\n\n(failed to render — proceeding without)\n\n"
+	}
+	return fmt.Sprintf("## Your Restored Memory\n\nThis is everything you remember from previous sessions:\n\n```json\n%s\n```\n\n", string(jsonBytes))
+}
+
+// buildBackgroundActivitySection renders the background-activity log so the
+// interactive agent knows what scheduled background workers have been doing
+// on this page. Returns the empty string when there is no activity to show.
+func buildBackgroundActivitySection(chatContext *apiv1.ChatContext) string {
+	entries := chatContext.GetBackgroundActivity()
+	if len(entries) == 0 {
+		return ""
+	}
+	var sb strings.Builder
+	_, _ = sb.WriteString("## Recent Background Activity\n\nScheduled background agents recently ran on this page:\n\n")
+	// Render newest-first so the most recent activity is at the top.
+	for i := len(entries) - 1; i >= 0; i-- {
+		entry := entries[i]
+		ts := ""
+		if entry.GetTimestamp() != nil {
+			ts = entry.GetTimestamp().AsTime().Format("2006-01-02 15:04 MST")
+		}
+		summary := entry.GetSummary()
+		if summary == "" {
+			summary = "(no summary)"
+		}
+		_, _ = fmt.Fprintf(&sb, "- **%s** [%s] %s — %s\n", entry.GetScheduleId(), entry.GetStatus().String(), ts, summary)
+	}
+	_, _ = sb.WriteString("\n")
+	return sb.String()
+}
+
+// isChatContextEmpty returns true when the persisted chat memory has no user-
+// or agent-supplied content. background_activity is checked separately by the
+// caller because it warrants its own preamble section.
+func isChatContextEmpty(c *apiv1.ChatContext) bool {
+	return c.GetLastConversationSummary() == "" &&
+		len(c.GetUserGoals()) == 0 &&
+		len(c.GetPendingItems()) == 0 &&
+		c.GetKeyContext() == ""
 }
 
 // stopInstanceLocked stops an instance. Must be called with d.mu held.

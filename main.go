@@ -136,6 +136,17 @@ func createSite(c *cli.Context) (*server.Site, error) {
 	site.MaxUploadSize = c.GlobalUint("max-upload-mb")
 	site.MaxDocumentSize = c.GlobalUint("max-document-length")
 	site.ChatPersona = c.GlobalString("chat-persona")
+	site.AgentScheduleConcurrency = c.GlobalInt("agent-schedule-concurrency")
+	site.AgentScheduleQueueCap = c.GlobalInt("agent-schedule-queue-capacity")
+
+	// Now that the CLI-supplied agent-schedule sizing is on the site, register
+	// the AgentTurn queue and construct the AgentScheduler. LoadAll() runs
+	// once initial indexing completes; the index-completion callback in
+	// InitializeIndexing checks AgentScheduler != nil before invoking it.
+	site.InitializeAgentScheduling()
+	if err := site.AgentScheduler.LoadAll(); err != nil {
+		logger.Warn("Failed to load agent schedules at startup: %v", err)
+	}
 
 	if err := site.SeedInitialPages(); err != nil {
 		logger.Warn("Failed to seed initial wiki pages: %v", err)
@@ -298,14 +309,16 @@ func main() {
 }
 
 const (
-	defaultHTTPPort          = 8050
-	defaultDebounce          = 500
-	defaultMaxUploadMB       = 100
-	defaultMaxDocumentLength = 100000000
+	defaultHTTPPort                  = 8050
+	defaultDebounce                  = 500
+	defaultMaxUploadMB               = 100
+	defaultMaxDocumentLength         = 100000000
+	defaultAgentScheduleConcurrency  = 2
+	defaultAgentScheduleQueueCapacity = 256
 )
 
 func getFlags() []cli.Flag {
-	return []cli.Flag{
+	flags := []cli.Flag{
 		cli.StringFlag{
 			Name:  "data",
 			Value: "data",
@@ -364,6 +377,15 @@ func getFlags() []cli.Flag {
 			Value: "",
 			Usage: "random data to use for cookies; changing it will invalidate all sessions (if empty, a random secret is generated per startup)",
 		},
+	}
+	flags = append(flags, uploadLimitFlags()...)
+	flags = append(flags, agentScheduleFlags()...)
+	return flags
+}
+
+// uploadLimitFlags returns the flags that govern upload size limits.
+func uploadLimitFlags() []cli.Flag {
+	return []cli.Flag{
 		cli.BoolFlag{
 			Name:  "block-file-uploads",
 			Usage: "Block file uploads",
@@ -377,6 +399,24 @@ func getFlags() []cli.Flag {
 			Name:  "max-document-length",
 			Value: defaultMaxDocumentLength,
 			Usage: "Largest wiki page (in characters) allowed",
+		},
+	}
+}
+
+// agentScheduleFlags returns the flags that tune the scheduled-agent-turn
+// machinery. Hoisted out of getFlags so that function stays under the linter's
+// 75-line limit.
+func agentScheduleFlags() []cli.Flag {
+	return []cli.Flag{
+		cli.IntFlag{
+			Name:  "agent-schedule-concurrency",
+			Value: defaultAgentScheduleConcurrency,
+			Usage: "max concurrent scheduled-agent turns",
+		},
+		cli.IntFlag{
+			Name:  "agent-schedule-queue-capacity",
+			Value: defaultAgentScheduleQueueCapacity,
+			Usage: "backlog capacity for scheduled-agent turns (queue is backpressure, not skip trigger)",
 		},
 	}
 }

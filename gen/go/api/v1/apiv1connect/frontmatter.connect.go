@@ -58,13 +58,13 @@ var (
 
 // FrontmatterClient is a client for the api.v1.Frontmatter service.
 type FrontmatterClient interface {
-	// Gets the frontmatter for a given page.
+	// GetFrontmatter — see (api.v1.description).
 	GetFrontmatter(context.Context, *connect.Request[v1.GetFrontmatterRequest]) (*connect.Response[v1.GetFrontmatterResponse], error)
-	// Merges the given frontmatter with the existing frontmatter for a page.
+	// MergeFrontmatter — see (api.v1.description).
 	MergeFrontmatter(context.Context, *connect.Request[v1.MergeFrontmatterRequest]) (*connect.Response[v1.MergeFrontmatterResponse], error)
-	// Replaces the entire frontmatter for a given page.
+	// ReplaceFrontmatter — see (api.v1.description).
 	ReplaceFrontmatter(context.Context, *connect.Request[v1.ReplaceFrontmatterRequest]) (*connect.Response[v1.ReplaceFrontmatterResponse], error)
-	// Removes a key from the frontmatter at a given path.
+	// RemoveKeyAtPath — see (api.v1.description).
 	RemoveKeyAtPath(context.Context, *connect.Request[v1.RemoveKeyAtPathRequest]) (*connect.Response[v1.RemoveKeyAtPathResponse], error)
 }
 
@@ -135,13 +135,13 @@ func (c *frontmatterClient) RemoveKeyAtPath(ctx context.Context, req *connect.Re
 
 // FrontmatterHandler is an implementation of the api.v1.Frontmatter service.
 type FrontmatterHandler interface {
-	// Gets the frontmatter for a given page.
+	// GetFrontmatter — see (api.v1.description).
 	GetFrontmatter(context.Context, *connect.Request[v1.GetFrontmatterRequest]) (*connect.Response[v1.GetFrontmatterResponse], error)
-	// Merges the given frontmatter with the existing frontmatter for a page.
+	// MergeFrontmatter — see (api.v1.description).
 	MergeFrontmatter(context.Context, *connect.Request[v1.MergeFrontmatterRequest]) (*connect.Response[v1.MergeFrontmatterResponse], error)
-	// Replaces the entire frontmatter for a given page.
+	// ReplaceFrontmatter — see (api.v1.description).
 	ReplaceFrontmatter(context.Context, *connect.Request[v1.ReplaceFrontmatterRequest]) (*connect.Response[v1.ReplaceFrontmatterResponse], error)
-	// Removes a key from the frontmatter at a given path.
+	// RemoveKeyAtPath — see (api.v1.description).
 	RemoveKeyAtPath(context.Context, *connect.Request[v1.RemoveKeyAtPathRequest]) (*connect.Response[v1.RemoveKeyAtPathResponse], error)
 }
 

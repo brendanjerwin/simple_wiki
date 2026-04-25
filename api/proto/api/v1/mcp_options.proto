@@ -1,0 +1,40 @@
+syntax = "proto3";
+
+package api.v1;
+
+import "google/protobuf/descriptor.proto";
+
+option go_package = "github.com/brendanjerwin/simple_wiki/gen/go/api/v1;apiv1";
+
+// MCP documentation extensions. Tag numbers live in the 50000-99999 private range.
+//
+// These extensions allow proto authors to declare MCP-specific tool documentation
+// alongside the RPC definition. The wiki-cli runtime can read these via proto
+// reflection to override the descriptions baked into the generated MCP tool stubs.
+//
+// When the runtime decorator is not active (or for services that have not been
+// ported), the existing proto comments still drive the MCP tool description.
+extend google.protobuf.MethodOptions {
+  // Human-readable description of the MCP tool. Replaces the proto comment when
+  // present. Use this when the proto comment is intended for godoc consumption
+  // and a different (longer/clearer) description is appropriate for MCP tool
+  // surfacing.
+  string description = 50001;
+
+  // Example JSON request body shown alongside the tool description.
+  string example_request = 50002;
+
+  // Hints to MCP that the tool does not mutate state. The runtime sets the
+  // matching annotation on the generated tool.
+  bool read_only = 50003;
+
+  // Hints to MCP that the tool may take an extended time to complete (e.g., it
+  // enqueues a job whose progress is observable elsewhere).
+  bool long_running = 50004;
+}
+
+extend google.protobuf.ServiceOptions {
+  // Human-readable description of the MCP service. Surfaced as part of any
+  // service-level catalog or summary the runtime emits.
+  string service_description = 50005;
+}

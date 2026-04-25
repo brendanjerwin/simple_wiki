@@ -26,8 +26,12 @@ const (
 // PageImportServiceClient is the client API for PageImportService service.
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
+//
+// PageImportService — see (api.v1.service_description).
 type PageImportServiceClient interface {
+	// ParseCSVPreview — see (api.v1.description).
 	ParseCSVPreview(ctx context.Context, in *ParseCSVPreviewRequest, opts ...grpc.CallOption) (*ParseCSVPreviewResponse, error)
+	// StartPageImportJob — see (api.v1.description).
 	StartPageImportJob(ctx context.Context, in *StartPageImportJobRequest, opts ...grpc.CallOption) (*StartPageImportJobResponse, error)
 }
 
@@ -62,8 +66,12 @@ func (c *pageImportServiceClient) StartPageImportJob(ctx context.Context, in *St
 // PageImportServiceServer is the server API for PageImportService service.
 // All implementations must embed UnimplementedPageImportServiceServer
 // for forward compatibility
+//
+// PageImportService — see (api.v1.service_description).
 type PageImportServiceServer interface {
+	// ParseCSVPreview — see (api.v1.description).
 	ParseCSVPreview(context.Context, *ParseCSVPreviewRequest) (*ParseCSVPreviewResponse, error)
+	// StartPageImportJob — see (api.v1.description).
 	StartPageImportJob(context.Context, *StartPageImportJobRequest) (*StartPageImportJobResponse, error)
 	mustEmbedUnimplementedPageImportServiceServer()
 }

@@ -235,3 +235,90 @@ var _ = Describe("enqueueImportJobs internal", func() {
 		})
 	})
 })
+
+var _ = Describe("preserveAgentSubtree", func() {
+	When("existing is nil and incoming is non-nil", func() {
+		var incoming map[string]any
+
+		BeforeEach(func() {
+			incoming = map[string]any{"title": "T"}
+			preserveAgentSubtree(nil, incoming)
+		})
+
+		It("should not add an agent key to incoming", func() {
+			Expect(incoming).NotTo(HaveKey("agent"))
+		})
+
+		It("should leave the other keys untouched", func() {
+			Expect(incoming["title"]).To(Equal("T"))
+		})
+	})
+
+	When("existing is non-nil and incoming is nil", func() {
+		var existing map[string]any
+		var preserveCall func()
+
+		BeforeEach(func() {
+			existing = map[string]any{"agent": map[string]any{"x": 1}}
+			preserveCall = func() {
+				preserveAgentSubtree(existing, nil)
+			}
+		})
+
+		It("should not panic", func() {
+			Expect(preserveCall).NotTo(Panic())
+		})
+	})
+
+	When("both existing and incoming are nil", func() {
+		var preserveCall func()
+
+		BeforeEach(func() {
+			preserveCall = func() {
+				preserveAgentSubtree(nil, nil)
+			}
+		})
+
+		It("should not panic", func() {
+			Expect(preserveCall).NotTo(Panic())
+		})
+	})
+
+	When("existing has no agent key and incoming has none", func() {
+		var existing, incoming map[string]any
+
+		BeforeEach(func() {
+			existing = map[string]any{"title": "Old"}
+			incoming = map[string]any{"title": "New"}
+			preserveAgentSubtree(existing, incoming)
+		})
+
+		It("should not add an agent key to incoming", func() {
+			Expect(incoming).NotTo(HaveKey("agent"))
+		})
+	})
+
+	When("existing has agent and incoming has no agent", func() {
+		var existing, incoming map[string]any
+
+		BeforeEach(func() {
+			existing = map[string]any{
+				"title": "Old",
+				"agent": map[string]any{"schedules": []any{"s1"}},
+			}
+			incoming = map[string]any{"title": "New"}
+			preserveAgentSubtree(existing, incoming)
+		})
+
+		It("should copy the agent subtree into incoming", func() {
+			Expect(incoming).To(HaveKey("agent"))
+			agent, ok := incoming["agent"].(map[string]any)
+			Expect(ok).To(BeTrue())
+			Expect(agent["schedules"]).To(Equal([]any{"s1"}))
+		})
+
+		It("should not modify other incoming keys", func() {
+			Expect(incoming["title"]).To(Equal("New"))
+		})
+	})
+})

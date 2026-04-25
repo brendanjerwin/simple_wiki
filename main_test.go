@@ -87,6 +87,33 @@ var _ = Describe("getFlags", func() {
 		Expect(foundOk).To(BeTrue(), "cookie-secret flag not found")
 		Expect(foundFlag.Value).To(Equal(""), "cookie-secret default should be empty, not 'secret'")
 	})
+
+	When("the app is parsed with no arguments", func() {
+		var (
+			concurrency   int
+			queueCapacity int
+		)
+
+		BeforeEach(func() {
+			app := cli.NewApp()
+			app.Flags = getFlags()
+			app.Action = func(c *cli.Context) error {
+				concurrency = c.GlobalInt("agent-schedule-concurrency")
+				queueCapacity = c.GlobalInt("agent-schedule-queue-capacity")
+				return nil
+			}
+
+			Expect(app.Run([]string{"simple_wiki"})).To(Succeed())
+		})
+
+		It("should default agent-schedule-concurrency to defaultAgentScheduleConcurrency", func() {
+			Expect(concurrency).To(Equal(defaultAgentScheduleConcurrency))
+		})
+
+		It("should default agent-schedule-queue-capacity to defaultAgentScheduleQueueCapacity", func() {
+			Expect(queueCapacity).To(Equal(defaultAgentScheduleQueueCapacity))
+		})
+	})
 })
 
 var _ = Describe("createSite", func() {
