@@ -182,6 +182,14 @@ func (s *AgentChatContextStore) AppendBackgroundActivitySummary(page, scheduleID
 
 // decodeChatContext extracts agent.chat_context out of a frontmatter map and
 // returns a typed ChatContext. Returns an empty ChatContext when missing.
+//
+// Defensive against malformed timestamp strings (e.g. a date-only
+// "2026-04-23" instead of RFC3339): scrubs unparseable values from known
+// google.protobuf.Timestamp slots before protojson.Unmarshal so a single bad
+// field on disk cannot brick chat for the page. The server re-stamps
+// last_updated on every UpdateMerge and last_run/timestamp on every
+// terminal status transition, so a scrubbed value will be replaced on the
+// next legitimate write. See issue #973.
 func decodeChatContext(fm wikipage.FrontMatter) (*apiv1.ChatContext, error) {
 	agent, ok := fm[AgentNamespaceKey].(map[string]any)
 	if !ok {
@@ -195,6 +203,7 @@ func decodeChatContext(fm wikipage.FrontMatter) (*apiv1.ChatContext, error) {
 	if !ok {
 		return nil, fmt.Errorf("agent.chat_context has unexpected type %T", raw)
 	}
+	scrubChatContextTimestamps(rawMap)
 	bytes, err := mapToJSONBytes(rawMap)
 	if err != nil {
 		return nil, err
@@ -204,6 +213,53 @@ func decodeChatContext(fm wikipage.FrontMatter) (*apiv1.ChatContext, error) {
 		return nil, err
 	}
 	return out, nil
+}
+
+// scrubChatContextTimestamps walks the supplied chat_context map and removes
+// any value at a known google.protobuf.Timestamp slot that is not a valid
+// RFC3339 string (or that we can't even tentatively coerce). The known slots
+// are last_updated at the top level, and timestamp inside each
+// background_activity entry. Removed fields will be re-stamped by the server
+// on the next UpdateMerge or terminal status transition.
+func scrubChatContextTimestamps(ctx map[string]any) {
+	if ctx == nil {
+		return
+	}
+	if !isValidRFC3339(ctx["last_updated"]) {
+		delete(ctx, "last_updated")
+	}
+	entries, ok := ctx["background_activity"].([]any)
+	if !ok {
+		return
+	}
+	for _, raw := range entries {
+		entry, ok := raw.(map[string]any)
+		if !ok {
+			continue
+		}
+		if !isValidRFC3339(entry["timestamp"]) {
+			delete(entry, "timestamp")
+		}
+	}
+}
+
+// isValidRFC3339 returns true when v is absent, nil, or a string that parses
+// as RFC3339. Returning true for absent/nil keeps "no value" untouched —
+// only positively-malformed strings get scrubbed.
+func isValidRFC3339(v any) bool {
+	if v == nil {
+		return true
+	}
+	s, ok := v.(string)
+	if !ok {
+		// Anything non-string at a Timestamp slot is unparseable; scrub it.
+		return false
+	}
+	if s == "" {
+		return true
+	}
+	_, err := time.Parse(time.RFC3339, s)
+	return err == nil
 }
 
 // writeChatContext replaces agent.chat_context in fm with the supplied
