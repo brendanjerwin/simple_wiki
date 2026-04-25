@@ -17,17 +17,27 @@ import (
 
 // MockPageReader is a test implementation of wikipage.PageReader.
 type MockPageReader struct {
-	pages map[string]wikipage.FrontMatter
+	pages    map[string]wikipage.FrontMatter
+	markdown map[string]wikipage.Markdown
 }
 
 func NewMockPageReader() *MockPageReader {
 	return &MockPageReader{
-		pages: make(map[string]wikipage.FrontMatter),
+		pages:    make(map[string]wikipage.FrontMatter),
+		markdown: make(map[string]wikipage.Markdown),
 	}
 }
 
 func (m *MockPageReader) AddPage(identifier string, fm wikipage.FrontMatter) {
 	m.pages[identifier] = fm
+}
+
+// AddPageWithMarkdown adds a page with both frontmatter and explicit markdown
+// body. Used by tests that exercise extraction from page content (e.g. the
+// hashtag indexer).
+func (m *MockPageReader) AddPageWithMarkdown(identifier string, fm wikipage.FrontMatter, md wikipage.Markdown) {
+	m.pages[identifier] = fm
+	m.markdown[identifier] = md
 }
 
 func (m *MockPageReader) ReadFrontMatter(identifier wikipage.PageIdentifier) (wikipage.PageIdentifier, wikipage.FrontMatter, error) {
@@ -39,9 +49,11 @@ func (m *MockPageReader) ReadFrontMatter(identifier wikipage.PageIdentifier) (wi
 }
 
 func (m *MockPageReader) ReadMarkdown(identifier wikipage.PageIdentifier) (wikipage.PageIdentifier, wikipage.Markdown, error) {
-	_, exists := m.pages[string(identifier)]
-	if !exists {
+	if _, exists := m.pages[string(identifier)]; !exists {
 		return identifier, "", errors.New("page not found")
+	}
+	if md, ok := m.markdown[string(identifier)]; ok {
+		return identifier, md, nil
 	}
 	return identifier, "Mock markdown content", nil
 }
@@ -597,6 +609,86 @@ var _ = Describe("Index", func() {
 
 			It("should include invalid identifier context", func() {
 				Expect(err.Error()).To(ContainSubstring("invalid identifier"))
+			})
+		})
+	})
+
+	Describe("page-level hashtag indexing", func() {
+		When("a page body contains a #tag", func() {
+			var (
+				ids []wikipage.PageIdentifier
+				err error
+			)
+
+			BeforeEach(func() {
+				mockReader.AddPageWithMarkdown("groceries-page", wikipage.FrontMatter{
+					"identifier": "groceries-page",
+					"title":      "Groceries",
+				}, "buy #milk and #eggs")
+				Expect(frontmatterIndex.AddPageToIndex("groceries-page")).To(Succeed())
+				Expect(index.AddPageToIndex("groceries-page")).To(Succeed())
+
+				ids, err = index.QueryRawForTest("tags:milk")
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should find the page via the tags field", func() {
+				Expect(ids).To(ContainElement(wikipage.PageIdentifier("groceries-page")))
+			})
+		})
+
+		When("a page body contains a hyphenated tag", func() {
+			var (
+				ids []wikipage.PageIdentifier
+				err error
+			)
+
+			BeforeEach(func() {
+				mockReader.AddPageWithMarkdown("homelab-page", wikipage.FrontMatter{
+					"identifier": "homelab-page",
+					"title":      "Homelab",
+				}, "running my #home-lab on a Pi cluster")
+				Expect(frontmatterIndex.AddPageToIndex("homelab-page")).To(Succeed())
+				Expect(index.AddPageToIndex("homelab-page")).To(Succeed())
+
+				ids, err = index.QueryRawForTest("tags:home-lab")
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should match the whole-tag keyword `home-lab`", func() {
+				Expect(ids).To(ContainElement(wikipage.PageIdentifier("homelab-page")))
+			})
+		})
+
+		When("a page body has no tags", func() {
+			var (
+				ids []wikipage.PageIdentifier
+				err error
+			)
+
+			BeforeEach(func() {
+				mockReader.AddPageWithMarkdown("plain-page", wikipage.FrontMatter{
+					"identifier": "plain-page",
+					"title":      "Plain",
+				}, "no hashtags here at all")
+				Expect(frontmatterIndex.AddPageToIndex("plain-page")).To(Succeed())
+				Expect(index.AddPageToIndex("plain-page")).To(Succeed())
+
+				ids, err = index.QueryRawForTest("tags:milk")
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should not match the page", func() {
+				Expect(ids).NotTo(ContainElement(wikipage.PageIdentifier("plain-page")))
 			})
 		})
 	})

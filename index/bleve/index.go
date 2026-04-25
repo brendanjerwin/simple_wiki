@@ -11,8 +11,11 @@ import (
 	"unicode/utf8"
 
 	"github.com/blevesearch/bleve"
+	// Register the keyword analyzer (used for the tags field below).
+	_ "github.com/blevesearch/bleve/analysis/analyzer/keyword"
 	"github.com/blevesearch/bleve/search"
 	"github.com/brendanjerwin/simple_wiki/index/frontmatter"
+	"github.com/brendanjerwin/simple_wiki/internal/hashtags"
 	"github.com/brendanjerwin/simple_wiki/templating"
 	"github.com/brendanjerwin/simple_wiki/utils/goldmarkrenderer"
 	"github.com/brendanjerwin/simple_wiki/wikiidentifiers"
@@ -33,10 +36,22 @@ type BleveIndexQueryer interface {
 	Query(query string) ([]SearchResult, error)
 }
 
+// tagsField is the document field used to store extracted page-level
+// hashtags. The keyword analyzer matches whole tags (so `#home-lab` is a
+// single token, not split into `home`+`lab`).
+const tagsField = "tags"
+
 // NewIndex creates a new BleveIndex.
 func NewIndex(pageReader wikipage.PageReader, frontmatterQueryer frontmatter.IQueryFrontmatterIndex) (*Index, error) {
 	mapping := bleve.NewIndexMapping()
 	mapping.DefaultAnalyzer = "en"
+
+	// Treat the `tags` field as keyword (whole-string match) rather than
+	// analyzing it through the default English analyzer.
+	tagsFieldMapping := bleve.NewTextFieldMapping()
+	tagsFieldMapping.Analyzer = "keyword"
+	mapping.DefaultMapping.AddFieldMappingsAt(tagsField, tagsFieldMapping)
+
 	index, err := bleve.NewMemOnly(mapping)
 	if err != nil {
 		return nil, err
@@ -88,6 +103,7 @@ func (b *Index) AddPageToIndex(requestedIdentifier wikipage.PageIdentifier) erro
 	}
 
 	pageFrontmatter["content"] = content
+	pageFrontmatter[tagsField] = hashtags.Extract(string(markdown))
 
 	b.mu.Lock()
 	defer b.mu.Unlock()

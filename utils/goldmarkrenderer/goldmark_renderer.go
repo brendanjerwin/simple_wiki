@@ -43,6 +43,15 @@ const alertTransformerPriority = 100
 // alertRendererPriority for the custom alert node renderer.
 const alertRendererPriority = 500
 
+// hashtagInlineParserPriority must run after the link parser so `(#anchor)`
+// inside markdown link syntax `[text](#anchor)` is consumed as part of the
+// link before the hashtag parser sees it. The default link parser is at
+// priority 200, so we use a larger number (lower priority).
+const hashtagInlineParserPriority = 999
+
+// hashtagRendererPriority for the custom hashtag node renderer.
+const hashtagRendererPriority = 500
+
 type GoldmarkRenderer struct{}
 
 // Render renders the input markdown to HTML.
@@ -61,6 +70,9 @@ func (GoldmarkRenderer) Render(input []byte) ([]byte, error) {
 			parser.WithBlockParsers(
 				util.Prioritized(NewCollapsibleHeadingBlockParser(), collapsibleHeadingParserPriority),
 			),
+			parser.WithInlineParsers(
+				util.Prioritized(NewHashtagInlineParser(), hashtagInlineParserPriority),
+			),
 			parser.WithASTTransformers(
 				util.Prioritized(NewCollapsibleSectionTransformer(), collapsibleSectionRendererPriority),
 				util.Prioritized(NewAlertTransformer(), alertTransformerPriority),
@@ -75,6 +87,7 @@ func (GoldmarkRenderer) Render(input []byte) ([]byte, error) {
 				util.Prioritized(NewWikiTableRenderer(html.WithUnsafe()), wikiTableRendererPriority),
 				util.Prioritized(NewCollapsibleSectionRenderer(html.WithUnsafe()), collapsibleSectionRendererPriority),
 				util.Prioritized(NewAlertRenderer(html.WithUnsafe()), alertRendererPriority),
+				util.Prioritized(NewHashtagRenderer(html.WithUnsafe()), hashtagRendererPriority),
 			),
 		),
 	)
@@ -108,6 +121,8 @@ func (GoldmarkRenderer) Render(input []byte) ([]byte, error) {
 	// Allow slot attribute on heading elements for the collapsible-heading named slot
 	p.AllowAttrs("slot").OnElements("h1", "h2", "h3", "h4", "h5", "h6")
 	p.AllowAttrs("class").OnElements("span", "a")
+	// Allow hashtag pills emitted by the hashtag inline parser/renderer.
+	p.AllowAttrs("class").Matching(regexp.MustCompile(`^hashtag-pill$`)).OnElements("a")
 	// Allow GitHub-style alert/admonition blocks rendered by the alert transformer.
 	p.AllowElements("div")
 	p.AllowAttrs("class").Matching(regexp.MustCompile(`^markdown-alert(?: markdown-alert-(?:note|tip|important|warning|caution))?$`)).OnElements("div")
