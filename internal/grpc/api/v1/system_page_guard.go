@@ -21,6 +21,12 @@ const systemPageRedirect = "page %q is a system page and cannot be edited via th
 // from the embedded help corpus). Pages that don't yet exist are treated as
 // user-mutable so first-time creates aren't blocked.
 //
+// On any other read error the guard fails closed: it returns a gRPC error
+// rather than allowing the mutation to proceed. The alternative — letting
+// the underlying handler observe the same transient failure and decide —
+// risks overwriting a system page if a future handler implementation skips
+// re-reading the frontmatter.
+//
 // Internal startup writes (via syspage.Sync) go through Site directly and
 // bypass this guard — the guard lives only on the public gRPC surface.
 func requireUserMutable(reader wikipage.PageReader, id wikipage.PageIdentifier) error {
@@ -29,10 +35,7 @@ func requireUserMutable(reader wikipage.PageReader, id wikipage.PageIdentifier) 
 		if errors.Is(err, os.ErrNotExist) {
 			return nil
 		}
-		// We don't fail-closed on read errors — letting the underlying handler
-		// surface whatever specific error it produces is more informative
-		// than turning every transient read failure into FailedPrecondition.
-		return nil
+		return status.Errorf(codes.Internal, "failed to read frontmatter for system-page check on %q: %v", string(id), err)
 	}
 
 	if syspage.IsSystemPage(fm) {

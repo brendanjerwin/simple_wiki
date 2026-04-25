@@ -12,15 +12,15 @@ The Blog macro renders a list of the most recent blog articles, sorted by publis
 ## Syntax
 
 ```
-{{ Blog "identifier" max_articles }}
+{{ Blog "<blog-id>" 10 }}
 ```
 
 ### Parameters
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `identifier` | string | Blog identifier — matches posts via `blog.identifier` frontmatter |
-| `max_articles` | int | Maximum number of articles to display |
+| First | string | Blog identifier — matches posts via `blog.identifier` frontmatter |
+| Second | int | Maximum number of articles to display |
 
 ### Example
 

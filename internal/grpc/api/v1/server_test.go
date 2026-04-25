@@ -2169,8 +2169,11 @@ var _ = Describe("Server", func() {
 				mockPageReaderMutator.Err = errors.New("read error")
 			})
 
+			// The system-page guard runs first and surfaces a frontmatter
+			// read failure as Internal — this is intentional fail-closed
+			// behavior so a transient read can't sneak past the guard.
 			It("should return an internal error", func() {
-				Expect(err).To(HaveGrpcStatusWithSubstr(codes.Internal, "failed to read current content"))
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.Internal, "read error"))
 			})
 
 			It("should not return a response", func() {

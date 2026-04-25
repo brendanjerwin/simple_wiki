@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"math"
 	"os"
 	"path"
 	"reflect"
@@ -181,7 +182,8 @@ func pageDiffers(rw wikipage.PageReaderMutator, id wikipage.PageIdentifier, embe
 
 // coerceFrontmatter normalizes frontmatter for comparison purposes. Both sides
 // of the comparison go through this so we treat round-tripped values that
-// only differ in their concrete Go type (e.g. int vs int64) as equal.
+// only differ in their concrete Go type (e.g. int vs int64, []string vs []any
+// of strings) as equal.
 func coerceFrontmatter(fm map[string]any) map[string]any {
 	if fm == nil {
 		return nil
@@ -193,22 +195,43 @@ func coerceFrontmatter(fm map[string]any) map[string]any {
 	return out
 }
 
+// coerceValue coerces a single frontmatter value into a canonical form.
+//
+// It handles maps and slices recursively (using reflect for slices so that
+// `[]string`, `[]int`, `[]bool`, etc. — produced by various TOML/JSON
+// decoders — all collapse to a `[]any`), and widens numeric types so that
+// `int`, `int32`, `int8`, `uint*`, and `float32` compare equal to their
+// canonical 64-bit counterparts. Other types pass through unchanged.
 func coerceValue(v any) any {
-	switch typed := v.(type) {
-	case map[string]any:
-		return coerceFrontmatter(typed)
-	case []any:
-		out := make([]any, len(typed))
-		for i, item := range typed {
-			out[i] = coerceValue(item)
+	if v == nil {
+		return nil
+	}
+
+	if m, ok := v.(map[string]any); ok {
+		return coerceFrontmatter(m)
+	}
+
+	rv := reflect.ValueOf(v)
+	switch rv.Kind() {
+	case reflect.Slice, reflect.Array:
+		out := make([]any, rv.Len())
+		for i := 0; i < rv.Len(); i++ {
+			out[i] = coerceValue(rv.Index(i).Interface())
 		}
 		return out
-	case int:
-		return int64(typed)
-	case int32:
-		return int64(typed)
-	case float32:
-		return float64(typed)
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		return rv.Int()
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		// uint64 can overflow int64; return as int64 for values that fit and
+		// fall back to the original value otherwise (still comparable to
+		// itself via DeepEqual).
+		u := rv.Uint()
+		if u <= math.MaxInt64 {
+			return int64(u)
+		}
+		return v
+	case reflect.Float32, reflect.Float64:
+		return rv.Float()
 	default:
 		return v
 	}

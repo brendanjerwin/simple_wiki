@@ -95,41 +95,7 @@ var _ = Describe("parseUserSearchQuery", func() {
 	})
 })
 
-var _ = Describe("buildBleveQueryString", func() {
-	Describe("when there are required tags only", func() {
-		It("should AND the tag clauses", func() {
-			parsed := parsedSearchQuery{requiredTags: []string{"groceries", "urgent"}}
-			Expect(buildBleveQueryString(parsed)).To(Equal("+tags:groceries +tags:urgent"))
-		})
-	})
-
-	Describe("when there is free text only", func() {
-		It("should include the free-text tokens with tag-boost should-clauses", func() {
-			parsed := parsedSearchQuery{freeTextTokens: []string{"home", "lab"}}
-			result := buildBleveQueryString(parsed)
-			Expect(result).To(ContainSubstring("home"))
-			Expect(result).To(ContainSubstring("lab"))
-			Expect(result).To(ContainSubstring("tags:home^2"))
-			Expect(result).To(ContainSubstring("tags:lab^2"))
-		})
-	})
-
-	Describe("when there is a mix of tags and free text", func() {
-		It("should AND the tags and OR the free-text tokens with boosts", func() {
-			parsed := parsedSearchQuery{
-				requiredTags:   []string{"groceries"},
-				freeTextTokens: []string{"milk"},
-			}
-			result := buildBleveQueryString(parsed)
-			Expect(result).To(ContainSubstring("+tags:groceries"))
-			Expect(result).To(ContainSubstring("milk"))
-			Expect(result).To(ContainSubstring("tags:milk^2"))
-		})
-	})
-
-	Describe("when both required tags and free text are empty", func() {
-		It("should return an empty string", func() {
-			Expect(buildBleveQueryString(parsedSearchQuery{})).To(Equal(""))
-		})
-	})
-})
+// buildBleveQueryString was removed; the active path now builds a
+// structured bleve.Query directly inside index/bleve/index.go's
+// QueryWithTags. Tests for the structured query path live in
+// index/bleve/index_test.go.

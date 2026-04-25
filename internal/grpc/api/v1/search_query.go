@@ -6,13 +6,6 @@ import (
 	"github.com/brendanjerwin/simple_wiki/internal/hashtags"
 )
 
-// tagBoostFactor is the multiplier applied to free-text tokens when they're
-// also queried against the tags field. A query like `home lab` boosts pages
-// tagged `#home` or `#lab` above pages that only mention those words in
-// prose, but not so much that genuinely relevant text matches lose to a
-// passing-mention tag.
-const tagBoostFactor = "2"
-
 // parsedSearchQuery is the result of splitting a user search query into its
 // `#tag` filter portion and free-text portion. Empty fields are returned as
 // nil/empty so callers can short-circuit on simple queries.
@@ -65,33 +58,4 @@ func appendUnique(slice []string, s string) []string {
 		}
 	}
 	return append(slice, s)
-}
-
-// buildBleveQueryString translates a parsedSearchQuery back into a Bleve
-// query-string-syntax expression. Result format:
-//
-//	+tags:foo +tags:bar free text terms tags:free^2 tags:text^2
-//
-// Required tags are pre-pended with `+` (must-match). Free-text tokens are
-// included verbatim (default OR via the analyzer) plus a should-clause
-// `tags:<token>^N` so pages tagged with a search term get a ranking boost.
-func buildBleveQueryString(parsed parsedSearchQuery) string {
-	if len(parsed.requiredTags) == 0 && len(parsed.freeTextTokens) == 0 {
-		return ""
-	}
-
-	var parts []string
-	for _, tag := range parsed.requiredTags {
-		parts = append(parts, "+tags:"+tag)
-	}
-	parts = append(parts, parsed.freeTextTokens...)
-	for _, token := range parsed.freeTextTokens {
-		normalized := hashtags.Normalize(token)
-		if normalized == "" {
-			continue
-		}
-		parts = append(parts, "tags:"+normalized+"^"+tagBoostFactor)
-	}
-
-	return strings.Join(parts, " ")
 }

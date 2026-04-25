@@ -34,71 +34,98 @@ const fenceMarker = "```"
 // Extract returns the unique set of normalized hashtags found in body. Tags
 // are returned in first-occurrence order to keep output deterministic.
 func Extract(body string) []string {
-	var result []string
-	seen := make(map[string]struct{})
+	state := newExtractState([]rune(body))
+	for state.i < len(state.runes) {
+		state.advance()
+	}
+	return state.result
+}
 
-	runes := []rune(body)
-	prev := rune(' ') // start-of-string counts as a boundary
-	inInlineCode := false
-	inFence := false
+// extractState carries the iterator state for Extract. Splitting it out
+// keeps the main loop short enough to satisfy revive's cognitive-complexity
+// budget while leaving the grammar self-contained in one place.
+type extractState struct {
+	runes        []rune
+	i            int
+	prev         rune
+	inInlineCode bool
+	inFence      bool
+	seen         map[string]struct{}
+	result       []string
+}
 
-	for i := 0; i < len(runes); i++ {
-		r := runes[i]
+func newExtractState(runes []rune) *extractState {
+	return &extractState{
+		runes: runes,
+		prev:  ' ', // start-of-string counts as a boundary
+		seen:  make(map[string]struct{}),
+	}
+}
 
-		// Fenced code block toggle: ``` at start of line.
-		if !inInlineCode && atFenceMarker(runes, i, prev) {
-			inFence = !inFence
-			i += len(fenceMarker) - 1
-			prev = '`'
-			continue
-		}
-
-		if inFence {
-			prev = r
-			continue
-		}
-
-		// Inline code-span toggle on backtick.
-		if r == '`' {
-			inInlineCode = !inInlineCode
-			prev = r
-			continue
-		}
-
-		if inInlineCode {
-			prev = r
-			continue
-		}
-
-		// Escape sequence: a `\` immediately before `#` cancels tag extraction.
-		if r == '\\' && i+1 < len(runes) && runes[i+1] == '#' {
-			prev = runes[i+1]
-			i++
-			continue
-		}
-
-		if r == '#' && IsTagBoundary(prev) {
-			tag, consumed := readTag(runes[i+1:])
-			if tag != "" {
-				normalized := Normalize(tag)
-				if normalized != "" {
-					if _, dup := seen[normalized]; !dup {
-						seen[normalized] = struct{}{}
-						result = append(result, normalized)
-					}
-				}
-				i += consumed
-				if i < len(runes) {
-					prev = runes[i]
-				}
-				continue
-			}
-		}
-
-		prev = r
+// advance consumes the next rune (or token) and updates state accordingly.
+func (s *extractState) advance() {
+	if !s.inInlineCode && atFenceMarker(s.runes, s.i, s.prev) {
+		s.inFence = !s.inFence
+		s.i += len(fenceMarker)
+		s.prev = '`'
+		return
 	}
 
-	return result
+	r := s.runes[s.i]
+
+	if s.inFence {
+		s.consume(r)
+		return
+	}
+
+	if r == '`' {
+		s.inInlineCode = !s.inInlineCode
+		s.consume(r)
+		return
+	}
+
+	if s.inInlineCode {
+		s.consume(r)
+		return
+	}
+
+	if r == '\\' && s.i+1 < len(s.runes) && s.runes[s.i+1] == '#' {
+		s.prev = s.runes[s.i+1]
+		s.i += 2
+		return
+	}
+
+	if r == '#' && IsTagBoundary(s.prev) && s.tryConsumeTag() {
+		return
+	}
+
+	s.consume(r)
+}
+
+// tryConsumeTag reads a tag at runes[i+1:]. Returns true if a tag was
+// consumed (state advanced past it); false otherwise.
+func (s *extractState) tryConsumeTag() bool {
+	tag, consumed := readTag(s.runes[s.i+1:])
+	if tag == "" {
+		return false
+	}
+	if normalized := Normalize(tag); normalized != "" {
+		if _, dup := s.seen[normalized]; !dup {
+			s.seen[normalized] = struct{}{}
+			s.result = append(s.result, normalized)
+		}
+	}
+	s.i += 1 + consumed
+	if s.i < len(s.runes) {
+		s.prev = s.runes[s.i-1]
+	}
+	return true
+}
+
+// consume advances past r without recognizing it as a tag.
+func (s *extractState) consume(r rune) {
+	s.prev = r
+	s.i++
 }
 
 // atFenceMarker reports whether runes[i:] starts with ``` and the marker is

@@ -106,10 +106,14 @@ func isHashtagBoundary(prev rune) bool {
 	return hashtags.IsTagBoundary(prev)
 }
 
+// utf8MultiByteStart is the lowest byte value that begins a multi-byte UTF-8
+// sequence. We let any byte at or above this value through so non-ASCII tag
+// characters (e.g. accented letters) pass into Normalize, which then rejects
+// anything that isn't a Unicode letter or digit.
+const utf8MultiByteStart byte = 0x80
+
 // isHashtagByte reports whether b is a permissible byte inside a tag body.
-// Tag chars are letters/digits, `-`, and `_`. We accept all bytes >= 0x80 so
-// multi-byte UTF-8 sequences (e.g. accented letters) pass through; the final
-// Normalize() call rejects anything that isn't a Unicode letter/digit.
+// Tag chars are letters/digits, `-`, and `_`.
 func isHashtagByte(b byte) bool {
 	switch {
 	case b == '-' || b == '_':
@@ -120,7 +124,7 @@ func isHashtagByte(b byte) bool {
 		return true
 	case b >= 'a' && b <= 'z':
 		return true
-	case b >= 0x80:
+	case b >= utf8MultiByteStart:
 		return true
 	default:
 		return false
@@ -152,21 +156,26 @@ func (*hashtagNodeRenderer) RegisterFuncs(reg renderer.NodeRendererFuncRegistere
 // user wrote it.
 //
 // The actual click handling lives in the `<wiki-hashtag>` Lit web component
-// (see static/js/web-components/wiki-hashtag.ts). When the component is
-// upgraded, a click dispatches a `wiki-search-open` event that the
-// page-level `<wiki-search>` listens for and runs as a search — same UX
-// as typing into the menu search bar. If the script fails to load, the
-// custom element renders its inline text content unchanged: visible but
-// not clickable.
+// (see static/js/web-components/wiki-hashtag.ts). The renderer here only
+// emits markup; behavior on click is owned entirely by the client.
+//
+// `entering` is part of Goldmark's NodeRendererFunc contract — renderers
+// are invoked on both entry and exit of every node. Emission happens on
+// entry; the exit pass is a no-op (the leaf element has no AST children).
 func renderHashtagNode(w util.BufWriter, _ []byte, node ast.Node, entering bool) (ast.WalkStatus, error) {
 	if !entering {
 		return ast.WalkContinue, nil
 	}
+	return emitHashtag(w, node)
+}
+
+// emitHashtag writes the wiki-hashtag custom element to w. Returns
+// WalkSkipChildren since the element has no AST descendants to walk.
+func emitHashtag(w util.BufWriter, node ast.Node) (ast.WalkStatus, error) {
 	n, ok := node.(*HashtagNode)
 	if !ok {
 		return ast.WalkContinue, nil
 	}
-
 	_, err := fmt.Fprintf(
 		w,
 		`<wiki-hashtag tag="%s">#%s</wiki-hashtag>`,

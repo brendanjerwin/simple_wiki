@@ -56,7 +56,19 @@ type GoldmarkRenderer struct{}
 
 // Render renders the input markdown to HTML.
 func (GoldmarkRenderer) Render(input []byte) ([]byte, error) {
-	md := goldmark.New(
+	md := newGoldmark()
+
+	var buf bytes.Buffer
+	if err := md.Convert(input, &buf); err != nil {
+		return []byte{}, err
+	}
+	return sanitizeWikiHTML(buf.Bytes()), nil
+}
+
+// newGoldmark constructs the configured Goldmark instance with all parser
+// and renderer extensions used by the wiki.
+func newGoldmark() goldmark.Markdown {
+	return goldmark.New(
 		goldmark.WithExtensions(
 			extension.GFM,
 			emoji.Emoji,
@@ -91,11 +103,12 @@ func (GoldmarkRenderer) Render(input []byte) ([]byte, error) {
 			),
 		),
 	)
+}
 
-	var buf bytes.Buffer
-	if err := md.Convert(input, &buf); err != nil {
-		return []byte{}, err
-	}
+// sanitizeWikiHTML applies the wiki's bluemonday allowlist to raw HTML
+// produced by Goldmark. The allowlist is the union of the default UGC
+// policy plus every custom element/attribute the wiki's renderers emit.
+func sanitizeWikiHTML(rawHTML []byte) []byte {
 	p := bluemonday.UGCPolicy()
 	// Allow GFM task list checkboxes
 	p.AllowElements("input")
@@ -135,7 +148,7 @@ func (GoldmarkRenderer) Render(input []byte) ([]byte, error) {
 	p.AllowAttrs("role").Matching(regexp.MustCompile(`^note$`)).OnElements("div")
 	p.AllowAttrs("class").Matching(regexp.MustCompile(`^markdown-alert-title$`)).OnElements("p")
 	p.AllowAttrs("aria-hidden").Matching(regexp.MustCompile(`^true$`)).OnElements("span")
-	return p.SanitizeBytes(buf.Bytes()), nil
+	return p.SanitizeBytes(rawHTML)
 }
 
 type wikilinkResolver struct{}

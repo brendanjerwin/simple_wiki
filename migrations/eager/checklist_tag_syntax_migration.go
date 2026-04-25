@@ -147,7 +147,7 @@ func pageNeedsChecklistMigration(fm map[string]any) bool {
 		if !ok {
 			continue
 		}
-		if flag, _ := listMap[migratedFlagKey].(bool); flag {
+		if flag, isBool := listMap[migratedFlagKey].(bool); isBool && flag {
 			continue
 		}
 		items, ok := listMap["items"].([]any)
@@ -159,7 +159,10 @@ func pageNeedsChecklistMigration(fm map[string]any) bool {
 			if !ok {
 				continue
 			}
-			text, _ := itemMap["text"].(string)
+			text, isString := itemMap["text"].(string)
+			if !isString {
+				continue
+			}
 			if legacyTagPattern.MatchString(text) {
 				return true
 			}
@@ -224,7 +227,7 @@ func rewriteChecklistTags(fm map[string]any) bool {
 		if !ok {
 			continue
 		}
-		if flag, _ := listMap[migratedFlagKey].(bool); flag {
+		if flag, isBool := listMap[migratedFlagKey].(bool); isBool && flag {
 			continue
 		}
 
@@ -236,7 +239,10 @@ func rewriteChecklistTags(fm map[string]any) bool {
 				if !ok {
 					continue
 				}
-				text, _ := itemMap["text"].(string)
+				text, isString := itemMap["text"].(string)
+				if !isString {
+					continue
+				}
 				if rewritten := legacyTagPattern.ReplaceAllString(text, "$1#$2"); rewritten != text {
 					itemMap["text"] = rewritten
 					listChanged = true

@@ -35,7 +35,7 @@ type Index struct {
 // BleveIndexQueryer defines the interface for querying the Bleve index.
 type BleveIndexQueryer interface {
 	// Query runs a free-text search against title and content fields.
-	Query(query string) ([]SearchResult, error)
+	Query(queryText string) ([]SearchResult, error)
 	// QueryWithTags runs a free-text search like Query but additionally requires
 	// each result page to carry every tag in requiredTags, and applies a tag
 	// boost for each token in boostTokens (so plain-text queries that happen
@@ -273,8 +273,8 @@ const titlePrefixBoost = 1.5
 const tagsBoostFloat = 2.0
 
 // Query searches the Bleve index for free-text only (no tag filtering).
-func (b *Index) Query(query string) ([]SearchResult, error) {
-	return b.QueryWithTags(query, nil, nil)
+func (b *Index) Query(queryText string) ([]SearchResult, error) {
+	return b.QueryWithTags(queryText, nil, nil)
 }
 
 // QueryWithTags is the full search entry point: free-text matched against
@@ -360,10 +360,15 @@ func buildTextScoringQuery(text string, boostTokens []string) query.Query {
 	}
 
 	for _, token := range boostTokens {
-		if token == "" {
+		// Normalize through the same pipeline that produced the indexed `tags`
+		// values (NFKC + lowercase + char filtering). Without this, a query
+		// like "Milk" would build a NewTermQuery against "Milk" — which never
+		// matches because the stored tag is "milk".
+		normalized := hashtags.Normalize(token)
+		if normalized == "" {
 			continue
 		}
-		tagBoostQuery := bleve.NewTermQuery(token)
+		tagBoostQuery := bleve.NewTermQuery(normalized)
 		tagBoostQuery.SetField(tagsField)
 		tagBoostQuery.SetBoost(tagsBoostFloat)
 		clauses = append(clauses, tagBoostQuery)

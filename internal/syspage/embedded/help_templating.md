@@ -7,7 +7,7 @@ system = true
 
 # {{.Title}}
 
-This wiki uses [Go `text/template`](https://pkg.go.dev/text/template) syntax for dynamic content in pages. Macros are invoked with `{{ MacroName "args" }}`.
+This wiki uses [Go `text/template`](https://pkg.go.dev/text/template) syntax for dynamic content in pages. Macros are invoked with double-curly-brace syntax — see the per-macro sections below for working examples.
 
 ## Template Context Variables
 

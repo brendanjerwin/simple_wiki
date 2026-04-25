@@ -69,6 +69,43 @@ func (f *fakeMutator) ModifyMarkdown(id wikipage.PageIdentifier, modifier func(w
 	return nil
 }
 
+// itemTextOf walks `fm.checklists.<listName>.items[idx].text`, asserting the
+// shape via Gomega. Centralized so the type-assertion noise lives in one
+// place; tests that just want to read an item's text don't have to do the
+// nested casting themselves.
+func itemTextOf(fm map[string]any, listName string, idx int) string {
+	GinkgoHelper()
+	checklists, ok := fm["checklists"].(map[string]any)
+	Expect(ok).To(BeTrue(), "frontmatter has no `checklists` map")
+	list, ok := checklists[listName].(map[string]any)
+	Expect(ok).To(BeTrue(), "checklists has no entry %q", listName)
+	items, ok := list["items"].([]any)
+	Expect(ok).To(BeTrue(), "checklists[%q] has no `items` slice", listName)
+	Expect(len(items)).To(BeNumerically(">", idx))
+	item, ok := items[idx].(map[string]any)
+	Expect(ok).To(BeTrue(), "items[%d] is not a map", idx)
+	text, ok := item["text"].(string)
+	Expect(ok).To(BeTrue(), "items[%d].text is not a string", idx)
+	return text
+}
+
+// migratedFlagOf returns the migrated_tags_syntax flag of a checklist
+// subtree.
+func migratedFlagOf(fm map[string]any, listName string) bool {
+	GinkgoHelper()
+	checklists, ok := fm["checklists"].(map[string]any)
+	Expect(ok).To(BeTrue())
+	list, ok := checklists[listName].(map[string]any)
+	Expect(ok).To(BeTrue())
+	v, present := list["migrated_tags_syntax"]
+	if !present {
+		return false
+	}
+	flag, ok := v.(bool)
+	Expect(ok).To(BeTrue(), "migrated_tags_syntax is not a bool")
+	return flag
+}
+
 var _ = Describe("pageNeedsChecklistMigration", func() {
 	Describe("when the page has no checklists", func() {
 		It("should return false", func() {
@@ -170,14 +207,11 @@ var _ = Describe("rewriteChecklistTags", func() {
 		})
 
 		It("should rewrite the item text", func() {
-			groceries := fm["checklists"].(map[string]any)["groceries"].(map[string]any)
-			items := groceries["items"].([]any)
-			Expect(items[0].(map[string]any)["text"]).To(Equal("milk #urgent"))
+			Expect(itemTextOf(fm, "groceries", 0)).To(Equal("milk #urgent"))
 		})
 
 		It("should set the migrated flag on the checklist subtree", func() {
-			groceries := fm["checklists"].(map[string]any)["groceries"].(map[string]any)
-			Expect(groceries["migrated_tags_syntax"]).To(Equal(true))
+			Expect(migratedFlagOf(fm, "groceries")).To(BeTrue())
 		})
 	})
 
@@ -198,9 +232,7 @@ var _ = Describe("rewriteChecklistTags", func() {
 		})
 
 		It("should rewrite all `:tag` to `#tag`", func() {
-			todo := fm["checklists"].(map[string]any)["todo"].(map[string]any)
-			items := todo["items"].([]any)
-			Expect(items[0].(map[string]any)["text"]).To(Equal("#urgent buy milk #groceries"))
+			Expect(itemTextOf(fm, "todo", 0)).To(Equal("#urgent buy milk #groceries"))
 		})
 	})
 
@@ -229,9 +261,7 @@ var _ = Describe("rewriteChecklistTags", func() {
 		})
 
 		It("should leave items untouched", func() {
-			old := fm["checklists"].(map[string]any)["old"].(map[string]any)
-			items := old["items"].([]any)
-			Expect(items[0].(map[string]any)["text"]).To(Equal("milk :legacy"))
+			Expect(itemTextOf(fm, "old", 0)).To(Equal("milk :legacy"))
 		})
 	})
 
@@ -252,9 +282,7 @@ var _ = Describe("rewriteChecklistTags", func() {
 		})
 
 		It("should rewrite only the boundary-anchored `:urgent`", func() {
-			meet := fm["checklists"].(map[string]any)["meet"].(map[string]any)
-			items := meet["items"].([]any)
-			Expect(items[0].(map[string]any)["text"]).To(Equal("Meet 2:30pm with Alice #urgent"))
+			Expect(itemTextOf(fm, "meet", 0)).To(Equal("Meet 2:30pm with Alice #urgent"))
 		})
 	})
 })
@@ -294,10 +322,8 @@ var _ = Describe("ChecklistTagSyntaxMigrationJob", func() {
 
 		It("should rewrite the item text and set the migrated flag", func() {
 			fm := mut.frontmatter[pageID]
-			groceries := fm["checklists"].(map[string]any)["groceries"].(map[string]any)
-			items := groceries["items"].([]any)
-			Expect(items[0].(map[string]any)["text"]).To(Equal("milk #urgent"))
-			Expect(groceries["migrated_tags_syntax"]).To(Equal(true))
+			Expect(itemTextOf(fm, "groceries", 0)).To(Equal("milk #urgent"))
+			Expect(migratedFlagOf(fm, "groceries")).To(BeTrue())
 		})
 	})
 
