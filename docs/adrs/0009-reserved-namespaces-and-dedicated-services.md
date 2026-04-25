@@ -59,10 +59,10 @@ This is a deliberate trade-off documented here so future reservations can be eva
 
 ## Currently Reserved Namespaces
 
-| Top-level key | Service                                 | Funnel              | Why reserved                                       |
-| ------------- | --------------------------------------- | ------------------- | -------------------------------------------------- |
-| `agent.*`     | `AgentMetadataService`                  | `AgentScheduleStore`, `AgentChatContextStore` | Cron status, chat memory, background activity log |
-| `wiki.*`      | `ChecklistService` (and future siblings) | `checklistMutator`  | Per-item timestamps, attribution, sync tokens     |
+| Top-level key | Service | Funnel | Why reserved |
+| --- | --- | --- | --- |
+| `agent.*` | `AgentMetadataService` | `AgentScheduleStore`, `AgentChatContextStore` | Cron status, chat memory, background activity log |
+| `wiki.*` | `ChecklistService` (and future siblings) | `checklistMutator` | Per-item timestamps, attribution, sync tokens |
 
 ## Consequences
 
