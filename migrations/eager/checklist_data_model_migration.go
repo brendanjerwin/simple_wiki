@@ -270,7 +270,10 @@ func migrateChecklistsIntoWikiNamespace(fm map[string]any, ulids ulid.Generator)
 	changed := false
 
 	wikiChecklists := ensureNestedMap(fm, wikiFMKey, checklistsFMKey)
-	legacyChecklists, _ := fm[checklistsFMKey].(map[string]any)
+	legacyChecklists, hasLegacy := fm[checklistsFMKey].(map[string]any)
+	if !hasLegacy {
+		legacyChecklists = nil
+	}
 
 	// Union of list names across both namespaces.
 	names := make(map[string]struct{})
@@ -282,7 +285,10 @@ func migrateChecklistsIntoWikiNamespace(fm map[string]any, ulids ulid.Generator)
 	}
 
 	for name := range names {
-		legacyList, _ := legacyChecklists[name].(map[string]any)
+		legacyList, ok := legacyChecklists[name].(map[string]any)
+		if !ok {
+			legacyList = nil
+		}
 		wikiList := ensureMapInParent(wikiChecklists, name)
 		if migrateOneList(legacyList, wikiList, ulids, now) {
 			changed = true
@@ -316,7 +322,10 @@ func migrateOneList(legacyList, wikiList map[string]any, ulids ulid.Generator, n
 	merged := []any{}
 	switch {
 	case hasLegacyItems:
-		legacyItems, _ := legacyList[itemsFMKey].([]any)
+		legacyItems, ok := legacyList[itemsFMKey].([]any)
+		if !ok {
+			legacyItems = nil
+		}
 		merged = mergeLegacyAndDraftMetadata(legacyItems, existingItemsMap, ulids, now)
 	case hasMap:
 		merged = convertDraftMapToSlice(existingItemsMap, now)
@@ -324,6 +333,9 @@ func migrateOneList(legacyList, wikiList map[string]any, ulids ulid.Generator, n
 		// New-shape items already a slice. Keep them, but still let the
 		// flag-stamping path run.
 		merged = existingItemsSlice
+	default:
+		// No items anywhere — start with an empty slice so the encoded
+		// list at least has a valid shape.
 	}
 
 	wikiList[itemsFMKey] = merged
@@ -512,13 +524,19 @@ func ensureMapInParent(parent map[string]any, key string) map[string]any {
 
 // stringFromMap returns m[key] as string or empty.
 func stringFromMap(m map[string]any, key string) string {
-	v, _ := m[key].(string)
+	v, ok := m[key].(string)
+	if !ok {
+		return ""
+	}
 	return v
 }
 
 // boolFromMap returns m[key] as bool or false.
 func boolFromMap(m map[string]any, key string) bool {
-	v, _ := m[key].(bool)
+	v, ok := m[key].(bool)
+	if !ok {
+		return false
+	}
 	return v
 }
 

@@ -347,7 +347,10 @@ func lookupChecklistItems(frontmatter map[string]any, listName string) []any {
 	if !ok {
 		return nil
 	}
-	items, _ := list["items"].([]any)
+	items, ok := list["items"].([]any)
+	if !ok {
+		return nil
+	}
 	return items
 }
 
