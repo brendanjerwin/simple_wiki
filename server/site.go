@@ -21,6 +21,7 @@ import (
 	"github.com/brendanjerwin/simple_wiki/index/frontmatter"
 	"github.com/brendanjerwin/simple_wiki/migrations/eager"
 	"github.com/brendanjerwin/simple_wiki/migrations/lazy"
+	"github.com/brendanjerwin/simple_wiki/pkg/ulid"
 	"github.com/brendanjerwin/simple_wiki/pkg/jobs"
 	"github.com/brendanjerwin/simple_wiki/templating"
 	"github.com/brendanjerwin/simple_wiki/utils/base32tools"
@@ -195,6 +196,20 @@ func (s *Site) startMigrationJobs() {
 		s.Logger.Error("Failed to enqueue checklist tag-syntax migration job: %v", err)
 	} else {
 		s.Logger.Info("Checklist tag-syntax migration started.")
+	}
+
+	// One-shot migration: promote legacy checklist items to the #984 shape
+	// (ULIDs, per-item created_at/updated_at, per-list sync_token under
+	// wiki.checklists.*). Once every page has been migrated and the
+	// migrated_data_model flag is set everywhere, this scan becomes a
+	// no-op and the migration code can be deleted.
+	checklistDataModelMigration := eager.NewChecklistDataModelMigrationScanJob(
+		dataDirScanner, s.JobQueueCoordinator, s, ulid.NewSystemGenerator(),
+	)
+	if err := s.JobQueueCoordinator.EnqueueJob(checklistDataModelMigration); err != nil {
+		s.Logger.Error("Failed to enqueue checklist data-model migration job: %v", err)
+	} else {
+		s.Logger.Info("Checklist data-model migration started.")
 	}
 }
 
