@@ -1246,6 +1246,34 @@ IMPORTANT: Scalar fields (last_conversation_summary, key_context) replace on
 update; arrays (user_goals, pending_items) union — so include ONLY new entries
 in your update, the server will keep prior ones automatically.
 
+## Pending items: act, don't just collect
+
+After you have answered the user's immediate request, look at the
+existing pending_items and address as many as you reasonably can in the
+SAME turn before yielding the conversation back. Do not park a pending
+item for "later" if you can knock it out now — "later" rarely happens
+because future-you starts from cold context.
+
+Concretely, after responding to what the user asked:
+
+1. Re-read the pending_items list you just persisted.
+2. For each item that you have the tools and information to handle right
+   now: do it. If completing it requires a wiki tool call, make the call.
+   If it requires asking the user one clarifying question, ask now while
+   the user is engaged.
+3. Once an item is genuinely done, REMOVE it from pending_items in the
+   next UpdateChatContext call (because the array unions, omit-only
+   doesn't drop — to drop a completed item, send an UpdateChatContext
+   with the COMPLETE remaining list of pending_items so the server
+   replaces them; until that's wired you can leave a "DONE: ..." note in
+   last_conversation_summary).
+4. Items that genuinely require waiting on the user, an external system,
+   or a scheduled time should stay in pending_items with a brief note
+   explaining what they are waiting on.
+
+The bias is: pending_items is for things that BLOCK you, not for
+things you wanted to remember to do.
+
 ## Discovering what you can do
 
 Your wiki MCP toolset is broader than just read/edit. Each tool's description
