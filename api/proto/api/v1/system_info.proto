@@ -2,17 +2,34 @@ syntax = "proto3";
 
 package api.v1;
 
+import "api/v1/mcp_options.proto";
 import "google/protobuf/timestamp.proto";
 
 option go_package = "github.com/brendanjerwin/simple_wiki/gen/go/api/v1;apiv1";
 
+// SystemInfoService — see (api.v1.service_description).
 service SystemInfoService {
-  // GetVersion returns the server version and build time.
-  rpc GetVersion(GetVersionRequest) returns (GetVersionResponse) {}
-  
-  // GetJobStatus returns the current status of background job queues.
-  rpc GetJobStatus(GetJobStatusRequest) returns (GetJobStatusResponse) {}
-  
+  option (api.v1.service_description) =
+      "Runtime information about the wiki server itself: commit hash, build "
+      "time, the current Tailscale identity of the requesting user, and the "
+      "live status of background-job queues.";
+
+  // GetVersion — see (api.v1.description).
+  rpc GetVersion(GetVersionRequest) returns (GetVersionResponse) {
+    option (api.v1.description) =
+        "Returns the server commit hash, build time, and (when available) the "
+        "Tailscale identity of the requesting user.";
+    option (api.v1.read_only) = true;
+  }
+
+  // GetJobStatus — see (api.v1.description).
+  rpc GetJobStatus(GetJobStatusRequest) returns (GetJobStatusResponse) {
+    option (api.v1.description) =
+        "Returns the current depth, high-water mark, and active flag for every "
+        "background-job queue.";
+    option (api.v1.read_only) = true;
+  }
+
   // StreamJobStatus provides real-time streaming updates of job queue status.
   // The stream will automatically terminate when all queues are idle.
   rpc StreamJobStatus(StreamJobStatusRequest) returns (stream GetJobStatusResponse) {}

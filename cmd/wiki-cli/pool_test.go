@@ -1529,45 +1529,64 @@ var _ = Describe("wikiChatClient beginTurn", func() {
 	})
 })
 
-// stubFrontmatterHandler is a mock Connect handler for the Frontmatter service
-// that returns predefined frontmatter data.
+// stubFrontmatterHandler is a mock Connect handler for the Frontmatter
+// service. Used by other tests that exercise the legacy chat-bridge path; the
+// fetchPageContext tests (below) have moved to AgentMetadataService.
 type stubFrontmatterHandler struct {
 	apiv1connect.UnimplementedFrontmatterHandler
 	frontmatter map[string]any
 	err         error
 }
 
-func (h *stubFrontmatterHandler) GetFrontmatter(_ context.Context, req *connect.Request[apiv1.GetFrontmatterRequest]) (*connect.Response[apiv1.GetFrontmatterResponse], error) {
+func (h *stubFrontmatterHandler) GetFrontmatter(_ context.Context, _ *connect.Request[apiv1.GetFrontmatterRequest]) (*connect.Response[apiv1.GetFrontmatterResponse], error) {
 	if h.err != nil {
 		return nil, h.err
 	}
-
 	s, err := structpb.NewStruct(h.frontmatter)
 	if err != nil {
 		return nil, err
 	}
+	return connect.NewResponse(&apiv1.GetFrontmatterResponse{Frontmatter: s}), nil
+}
 
-	return connect.NewResponse(&apiv1.GetFrontmatterResponse{
-		Frontmatter: s,
+// stubAgentMetadataHandler is a mock Connect handler for the
+// AgentMetadataService that returns a fixed ChatContext (or an error) on
+// GetChatContext. Other RPCs are inherited as Unimplemented.
+type stubAgentMetadataHandler struct {
+	apiv1connect.UnimplementedAgentMetadataServiceHandler
+	chatContext *apiv1.ChatContext
+	err         error
+}
+
+func (h *stubAgentMetadataHandler) GetChatContext(_ context.Context, _ *connect.Request[apiv1.GetChatContextRequest]) (*connect.Response[apiv1.GetChatContextResponse], error) {
+	if h.err != nil {
+		return nil, h.err
+	}
+	return connect.NewResponse(&apiv1.GetChatContextResponse{
+		ChatContext: h.chatContext,
 	}), nil
 }
 
 var _ = Describe("poolDaemon fetchPageContext", func() {
-	When("the page has ai_agent_chat_context in frontmatter", func() {
+	When("the page has stored chat memory and background activity", func() {
 		var result string
 
 		BeforeEach(func() {
-			handler := &stubFrontmatterHandler{
-				frontmatter: map[string]any{
-					"title": "Test Page",
-					"ai_agent_chat_context": map[string]any{
-						"summary": "We discussed testing",
-						"goals":   "Add more test coverage",
+			handler := &stubAgentMetadataHandler{
+				chatContext: &apiv1.ChatContext{
+					LastConversationSummary: "We discussed testing",
+					UserGoals:               []string{"Add more test coverage"},
+					BackgroundActivity: []*apiv1.BackgroundActivityEntry{
+						{
+							ScheduleId: "weekly_check",
+							Status:     apiv1.ScheduleStatus_SCHEDULE_STATUS_OK,
+							Summary:    "Drafted Friday order",
+						},
 					},
 				},
 			}
 			mux := http.NewServeMux()
-			path, h := apiv1connect.NewFrontmatterHandler(handler)
+			path, h := apiv1connect.NewAgentMetadataServiceHandler(handler)
 			mux.Handle(path, h)
 			server := httptest.NewServer(mux)
 			DeferCleanup(server.Close)
@@ -1584,27 +1603,37 @@ var _ = Describe("poolDaemon fetchPageContext", func() {
 			Expect(result).To(ContainSubstring("test-page"))
 		})
 
-		It("should include the context JSON", func() {
+		It("should include the conversation summary", func() {
 			Expect(result).To(ContainSubstring("We discussed testing"))
+		})
+
+		It("should include user goals", func() {
 			Expect(result).To(ContainSubstring("Add more test coverage"))
 		})
 
-		It("should mention MergeFrontmatter for updates", func() {
-			Expect(result).To(ContainSubstring("MergeFrontmatter"))
+		It("should include the background-activity section", func() {
+			Expect(result).To(ContainSubstring("Recent Background Activity"))
+		})
+
+		It("should include the schedule id and summary in the activity section", func() {
+			Expect(result).To(ContainSubstring("weekly_check"))
+			Expect(result).To(ContainSubstring("Drafted Friday order"))
+		})
+
+		It("should mention UpdateChatContext (the new tool)", func() {
+			Expect(result).To(ContainSubstring("UpdateChatContext"))
 		})
 	})
 
-	When("the page has no ai_agent_chat_context", func() {
+	When("the page has no chat context yet", func() {
 		var result string
 
 		BeforeEach(func() {
-			handler := &stubFrontmatterHandler{
-				frontmatter: map[string]any{
-					"title": "Test Page",
-				},
+			handler := &stubAgentMetadataHandler{
+				chatContext: &apiv1.ChatContext{},
 			}
 			mux := http.NewServeMux()
-			path, h := apiv1connect.NewFrontmatterHandler(handler)
+			path, h := apiv1connect.NewAgentMetadataServiceHandler(handler)
 			mux.Handle(path, h)
 			server := httptest.NewServer(mux)
 			DeferCleanup(server.Close)
@@ -1617,24 +1646,28 @@ var _ = Describe("poolDaemon fetchPageContext", func() {
 			Expect(result).To(HavePrefix(chatPreamble))
 		})
 
-		It("should indicate no context exists yet", func() {
-			Expect(result).To(ContainSubstring("No [ai_agent_chat_context] exists yet"))
+		It("should indicate this is the first session", func() {
+			Expect(result).To(ContainSubstring("first session"))
 		})
 
-		It("should suggest creating one with MergeFrontmatter", func() {
-			Expect(result).To(ContainSubstring("MergeFrontmatter"))
+		It("should mention UpdateChatContext as the tool to use", func() {
+			Expect(result).To(ContainSubstring("UpdateChatContext"))
+		})
+
+		It("should NOT include the background-activity section (empty)", func() {
+			Expect(result).NotTo(ContainSubstring("Recent Background Activity"))
 		})
 	})
 
-	When("the frontmatter service returns an error", func() {
+	When("the AgentMetadataService returns an error", func() {
 		var result string
 
 		BeforeEach(func() {
-			handler := &stubFrontmatterHandler{
-				err: connect.NewError(connect.CodeNotFound, nil),
+			handler := &stubAgentMetadataHandler{
+				err: connect.NewError(connect.CodeUnavailable, nil),
 			}
 			mux := http.NewServeMux()
-			path, h := apiv1connect.NewFrontmatterHandler(handler)
+			path, h := apiv1connect.NewAgentMetadataServiceHandler(handler)
 			mux.Handle(path, h)
 			server := httptest.NewServer(mux)
 			DeferCleanup(server.Close)
@@ -1651,8 +1684,8 @@ var _ = Describe("poolDaemon fetchPageContext", func() {
 			Expect(result).To(ContainSubstring("Failed to fetch page context"))
 		})
 
-		It("should warn against modifying the context section", func() {
-			Expect(result).To(ContainSubstring("Do NOT attempt to create or modify"))
+		It("should warn against retrying the agent.chat_context update", func() {
+			Expect(result).To(ContainSubstring("do NOT attempt to update agent.chat_context"))
 		})
 	})
 })
@@ -1976,12 +2009,17 @@ var _ = Describe("chatPreamble", func() {
 		Expect(chatPreamble).To(ContainSubstring("wiki MCP tools"))
 	})
 
-	It("should mention MergeFrontmatter for memory updates", func() {
-		Expect(chatPreamble).To(ContainSubstring("MergeFrontmatter"))
+	It("should mention UpdateChatContext for memory updates", func() {
+		Expect(chatPreamble).To(ContainSubstring("UpdateChatContext"))
 	})
 
-	It("should describe the ai_agent_chat_context memory mechanism", func() {
-		Expect(chatPreamble).To(ContainSubstring("ai_agent_chat_context"))
+	It("should describe the agent.chat_context memory mechanism", func() {
+		Expect(chatPreamble).To(ContainSubstring("agent.chat_context"))
+	})
+
+	It("should warn that generic frontmatter tools are blocked for the agent namespace", func() {
+		Expect(chatPreamble).To(ContainSubstring("BLOCKED"))
+		Expect(chatPreamble).To(ContainSubstring("MergeFrontmatter"))
 	})
 
 	It("should mention the required memory fields", func() {
@@ -1989,7 +2027,6 @@ var _ = Describe("chatPreamble", func() {
 		Expect(chatPreamble).To(ContainSubstring("user_goals"))
 		Expect(chatPreamble).To(ContainSubstring("pending_items"))
 		Expect(chatPreamble).To(ContainSubstring("key_context"))
-		Expect(chatPreamble).To(ContainSubstring("last_updated"))
 	})
 
 	It("should explain that multiple users may be chatting on the same page", func() {

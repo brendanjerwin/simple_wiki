@@ -56,6 +56,31 @@ func DetermineServerMode(tsStatus *tailscale.Status, useTailscaleServe bool) Ser
 	return ModeFullTLS
 }
 
+// composeCleanup combines two cleanup functions into one. Either may be nil.
+func composeCleanup(first, second func()) func() {
+	return func() {
+		if first != nil {
+			first()
+		}
+		if second != nil {
+			second()
+		}
+	}
+}
+
+// stopSiteCron returns a cleanup function that stops the site's cron scheduler
+// (waiting for in-flight jobs) so scheduled-agent turns terminate cleanly on
+// shutdown. Returns a no-op when the scheduler is nil (defensive — can happen
+// in unusual test setups).
+func stopSiteCron(site *server.Site) func() {
+	return func() {
+		if site == nil || site.CronScheduler == nil {
+			return
+		}
+		site.CronScheduler.Stop()
+	}
+}
+
 // SetupPlainHTTP creates a plain HTTP server without Tailscale integration.
 func SetupPlainHTTP(
 	httpAddr string,
@@ -82,7 +107,7 @@ func SetupPlainHTTP(
 			Handler: h2c.NewHandler(handler, &http2.Server{}),
 		},
 		MainListener: httpListener,
-		Cleanup:      metricsCleanup,
+		Cleanup:      composeCleanup(metricsCleanup, stopSiteCron(site)),
 	}, nil
 }
 
@@ -128,7 +153,7 @@ func SetupTailscaleServe(
 			Handler: finalHandler,
 		},
 		MainListener: httpListener,
-		Cleanup:      metricsCleanup,
+		Cleanup:      composeCleanup(metricsCleanup, stopSiteCron(site)),
 	}, nil
 }
 
@@ -191,7 +216,7 @@ func SetupFullTLS(
 			Handler: handler,
 		},
 		MainListener:  tlsListener,
-		Cleanup:       metricsCleanup,
+		Cleanup:       composeCleanup(metricsCleanup, stopSiteCron(site)),
 		RedirectServer: &http.Server{
 			Addr:    httpAddr,
 			Handler: redirector,
@@ -367,12 +392,14 @@ func BuildVanguardTranscoder(grpcServer *grpc.Server, ginRouter http.Handler) (h
 
 	// Single source of truth for service names to avoid drift between Vanguard and reflection.
 	serviceNames := []string{
+		"api.v1.AgentMetadataService",
 		"api.v1.ChatService",
 		"api.v1.FileStorageService",
 		"api.v1.Frontmatter",
 		"api.v1.InventoryManagementService",
 		"api.v1.PageImportService",
 		"api.v1.PageManagementService",
+		"api.v1.ScheduledTurnService",
 		"api.v1.SearchService",
 		"api.v1.SystemInfoService",
 	}
@@ -429,7 +456,10 @@ func setupGRPCServer(
 		WithJobQueueCoordinator(site.GetJobQueueCoordinator()).
 		WithMarkdownRenderer(site.MarkdownRenderer).
 		WithTemplateExecutor(server.TemplateExecutor{}).
-		WithFileStorer(site.FileStorer)
+		WithFileStorer(site.FileStorer).
+		WithScheduledTurnDispatcher(site.ScheduledTurnDispatcher).
+		WithAgentScheduleStore(site.AgentScheduleStore).
+		WithAgentChatContextStore(site.AgentChatContextStore)
 
 	unaryInterceptors, streamInterceptors, err := buildGRPCInterceptors(
 		identityResolver, grpcAPIServer.LoggingInterceptor(), counters, logger,

@@ -73,8 +73,15 @@ type Site struct {
 	CronScheduler           *jobs.CronScheduler
 	FrontmatterIndexQueryer frontmatter.IQueryFrontmatterIndex
 	BleveIndexQueryer       bleve.BleveIndexQueryer
-	MigrationApplicator     lazy.FrontmatterMigrationApplicator
-	saveMut                 sync.RWMutex
+	MigrationApplicator      lazy.FrontmatterMigrationApplicator
+	AgentScheduleStore       *AgentScheduleStore
+	AgentChatContextStore    *AgentChatContextStore
+	AgentScheduler           *AgentScheduler
+	ScheduledTurnDispatcher  *ScheduledTurnDispatcher
+	AgentScheduleConcurrency int
+	AgentScheduleQueueCap    int
+	AgentTurnHardTimeout     time.Duration
+	saveMut                  sync.RWMutex
 }
 
 // LoadCustomCSS reads custom CSS from the given file path and assigns it to s.CSS.
@@ -181,6 +188,99 @@ func (s *Site) startMigrationJobs() {
 	}
 }
 
+// Defaults for the agent-schedule machinery when CLI flags do not override
+// them. The queue is intentionally generously-sized so that enqueue is
+// effectively backpressure rather than a skip trigger.
+const (
+	defaultAgentScheduleConcurrencyValue = 2
+	defaultAgentScheduleQueueCapValue    = 256
+	defaultAgentTurnHardTimeoutMinutes   = 10
+
+	// agentScheduleRefreshConcurrency forces single-worker execution so
+	// per-page refreshes run in submission order and never race the cron
+	// registrar.
+	agentScheduleRefreshConcurrency = 1
+	// agentScheduleRefreshQueueCap is generously sized so enqueue acts as
+	// backpressure rather than dropping refresh requests on a save burst.
+	agentScheduleRefreshQueueCap = 256
+)
+
+// InitializeAgentScheduling pre-registers the AgentTurn queue and constructs
+// the AgentScheduler. Must be called after CLI flags have populated
+// AgentScheduleConcurrency and AgentScheduleQueueCap on the site (the values
+// are baked into the queue at registration time).
+//
+// Safe to call multiple times — the second call returns immediately if the
+// scheduler is already constructed.
+func (s *Site) InitializeAgentScheduling() {
+	if s.AgentScheduler != nil {
+		return
+	}
+	if s.AgentScheduleConcurrency <= 0 {
+		s.AgentScheduleConcurrency = defaultAgentScheduleConcurrencyValue
+	}
+	if s.AgentScheduleQueueCap <= 0 {
+		s.AgentScheduleQueueCap = defaultAgentScheduleQueueCapValue
+	}
+	if s.AgentTurnHardTimeout <= 0 {
+		s.AgentTurnHardTimeout = defaultAgentTurnHardTimeoutMinutes * time.Minute
+	}
+	if err := s.JobQueueCoordinator.RegisterQueue(AgentTurnJobName, s.AgentScheduleConcurrency, s.AgentScheduleQueueCap); err != nil {
+		s.Logger.Warn("AgentTurn queue pre-registration failed: %v", err)
+	}
+	// AgentScheduleRefresh runs single-worker so per-page refreshes execute in
+	// submission order, avoiding races against the cron registrar when the
+	// same page is saved twice in quick succession.
+	if err := s.JobQueueCoordinator.RegisterQueue(AgentScheduleRefreshJobName, agentScheduleRefreshConcurrency, agentScheduleRefreshQueueCap); err != nil {
+		s.Logger.Warn("AgentScheduleRefresh queue pre-registration failed: %v", err)
+	}
+	s.AgentScheduler = NewAgentScheduler(
+		s.AgentScheduleStore,
+		s.ScheduledTurnDispatcher,
+		s.FrontmatterIndexQueryer,
+		s.CronScheduler,
+		s.AgentTurnHardTimeout,
+	)
+}
+
+// onInitialIndexingComplete is the callback fired by IndexCoordinator after
+// the initial bulk-enqueue jobs all finish. It chains the inventory
+// normalization job and loads agent schedules now that the frontmatter index
+// is fully populated.
+func (s *Site) onInitialIndexingComplete() {
+	normJob, err := NewInventoryNormalizationJob(s, s.FrontmatterIndexQueryer, s.Logger)
+	if err != nil {
+		s.Logger.Error("Failed to create inventory normalization job: %v", err)
+		return
+	}
+	if err := s.JobQueueCoordinator.EnqueueJob(normJob); err != nil {
+		s.Logger.Error("Failed to enqueue inventory normalization job: %v", err)
+	} else {
+		s.Logger.Info("Inventory normalization job queued after indexing completed")
+	}
+
+	// One-time migration: move ai_agent_chat_context -> agent.chat_context
+	// for any page that still has the legacy key. The job is idempotent so
+	// running it on every startup is safe; it short-circuits when there is
+	// nothing to do.
+	migrationJob := NewChatContextMigrationJob(s, s.FrontmatterIndexQueryer)
+	if err := s.JobQueueCoordinator.EnqueueJob(migrationJob); err != nil {
+		s.Logger.Error("Failed to enqueue chat-context migration job: %v", err)
+	}
+
+	// Load and register every page's agent.schedules with the cron scheduler
+	// once the frontmatter index is fully populated. Skips silently if
+	// InitializeAgentScheduling has not been called yet (e.g. tests).
+	if s.AgentScheduler == nil {
+		return
+	}
+	if loadErr := s.AgentScheduler.LoadAll(); loadErr != nil {
+		s.Logger.Error("Failed to load agent schedules: %v", loadErr)
+	} else {
+		s.Logger.Info("Agent schedules loaded into cron scheduler")
+	}
+}
+
 // InitializeIndexing initializes the site's indexes.
 func (s *Site) InitializeIndexing() error {
 	frontmatterIndex := frontmatter.NewIndex(s)
@@ -199,6 +299,20 @@ func (s *Site) InitializeIndexing() error {
 	// Create and start cron scheduler for periodic jobs
 	s.CronScheduler = jobs.NewCronScheduler(s.Logger)
 	s.CronScheduler.Start()
+
+	// Wire up the scheduled-agent infrastructure: dispatcher (server side
+	// bridge to the pool), schedule store (typed agent.schedules access), and
+	// chat-context store (typed agent.chat_context access). The schedule
+	// store's terminal-status hook writes through the chat-context store so
+	// every terminal transition records a background-activity entry visible to
+	// interactive chat preambles.
+	// Queue pre-registration and AgentScheduler construction are deferred to
+	// InitializeAgentScheduling so they pick up CLI-supplied concurrency and
+	// hard-timeout values.
+	s.ScheduledTurnDispatcher = NewScheduledTurnDispatcher()
+	s.AgentScheduleStore = NewAgentScheduleStore(s)
+	s.AgentChatContextStore = NewAgentChatContextStore(s)
+	s.AgentScheduleStore.SetBackgroundActivitySink(s.AgentChatContextStore)
 
 	// Schedule inventory normalization job to run hourly at minute 0
 	// This creates pages for items listed in inventory.items that don't have their own pages,
@@ -234,19 +348,7 @@ func (s *Site) InitializeIndexing() error {
 	// Start background indexing with completion callback to chain the normalization job.
 	// Note: The callback executes asynchronously when all indexing jobs complete, not when this
 	// function returns. Error handling inside the callback is separate from the outer error check.
-	if err := s.IndexCoordinator.BulkEnqueuePagesWithCompletion(pageIdentifiers, index.Add, func() {
-		// This callback runs after all indexing completes - errors here are handled separately
-		normJob, err := NewInventoryNormalizationJob(s, s.FrontmatterIndexQueryer, s.Logger)
-		if err != nil {
-			s.Logger.Error("Failed to create inventory normalization job: %v", err)
-			return
-		}
-		if err := s.JobQueueCoordinator.EnqueueJob(normJob); err != nil {
-			s.Logger.Error("Failed to enqueue inventory normalization job: %v", err)
-		} else {
-			s.Logger.Info("Inventory normalization job queued after indexing completed")
-		}
-	}); err != nil {
+	if err := s.IndexCoordinator.BulkEnqueuePagesWithCompletion(pageIdentifiers, index.Add, s.onInitialIndexingComplete); err != nil {
 		// This error means the bulk enqueue failed immediately - the callback won't run
 		s.Logger.Error("Failed to enqueue bulk indexing jobs: %v", err)
 	}
@@ -676,6 +778,17 @@ func (s *Site) modifyOrCreatePage(identifierStr string, modifier func(currentTex
 		}
 	}
 
+	// Reconcile any agent.schedules that the user may have edited so cron
+	// pickups happen within seconds rather than at next restart. Enqueued as a
+	// single-worker job so refreshes run in submission order through the same
+	// machinery as every other background unit of work.
+	if s.AgentScheduler != nil && s.JobQueueCoordinator != nil {
+		refreshJob := NewAgentScheduleRefreshJob(s.AgentScheduler, identifierStr)
+		if err := s.JobQueueCoordinator.EnqueueJob(refreshJob); err != nil {
+			s.Logger.Error("Failed to enqueue agent schedule refresh for %s: %v", identifierStr, err)
+		}
+	}
+
 	return nil
 }
 
@@ -765,6 +878,16 @@ func (s *Site) DeletePage(identifier wikipage.PageIdentifier) error {
 	defer s.saveMut.Unlock()
 
 	s.Logger.Trace("Deleting page %s", identifier)
+
+	// Drop any agent.schedules cron registrations for this page BEFORE the
+	// file is moved out of place. Otherwise the cron keeps firing for a
+	// non-existent page until restart. Done synchronously (not via the
+	// AgentScheduleRefreshJob queue) because the file move below may be
+	// observed by an in-flight cron fire microseconds later — we want the
+	// registration gone before that window opens.
+	if s.AgentScheduler != nil {
+		s.AgentScheduler.UnregisterPage(string(identifier))
+	}
 
 	// Enqueue removal jobs for both frontmatter and bleve indexes
 	if s.IndexCoordinator != nil {

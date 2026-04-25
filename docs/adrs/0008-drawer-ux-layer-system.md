@@ -16,12 +16,12 @@ We introduce a layer system with four named UI concepts and a coordinator that e
 
 ### UI Concepts
 
-| Concept | Definition | Examples |
-|---------|-----------|----------|
-| **Drawer** | Panel that slides from the right (desktop) or bottom (mobile) over content | system-info, chat panel |
-| **Ambient-CTA** | Always-visible trigger for opening a drawer; hidden when any drawer is open | FAB button, INFO tab |
-| **Notification** | Transient, non-interactive overlay | toast-message |
-| **Blocker** | Full-screen element demanding immediate attention | kernel-panic, dialog modals |
+| Concept          | Definition                                                                  | Examples                    |
+| ---------------- | --------------------------------------------------------------------------- | --------------------------- |
+| **Drawer**       | Panel that slides from the right (desktop) or bottom (mobile) over content  | system-info, chat panel     |
+| **Ambient-CTA**  | Always-visible trigger for opening a drawer; hidden when any drawer is open | FAB button, INFO tab        |
+| **Notification** | Transient, non-interactive overlay                                          | toast-message               |
+| **Blocker**      | Full-screen element demanding immediate attention                           | kernel-panic, dialog modals |
 
 ### Rules
 
@@ -36,7 +36,7 @@ We introduce a layer system with four named UI concepts and a coordinator that e
 
 Semantic z-index tokens defined in `shared-styles.ts` as CSS custom properties:
 
-```
+```css
 --z-ambient: 100       (Ambient-CTAs)
 --z-drawer: 200        (Slide-over panels)
 --z-popover: 300       (Menus, tooltips)

@@ -50,7 +50,9 @@ var (
 
 // PageImportServiceClient is a client for the api.v1.PageImportService service.
 type PageImportServiceClient interface {
+	// ParseCSVPreview — see (api.v1.description).
 	ParseCSVPreview(context.Context, *connect.Request[v1.ParseCSVPreviewRequest]) (*connect.Response[v1.ParseCSVPreviewResponse], error)
+	// StartPageImportJob — see (api.v1.description).
 	StartPageImportJob(context.Context, *connect.Request[v1.StartPageImportJobRequest]) (*connect.Response[v1.StartPageImportJobResponse], error)
 }
 
@@ -97,7 +99,9 @@ func (c *pageImportServiceClient) StartPageImportJob(ctx context.Context, req *c
 
 // PageImportServiceHandler is an implementation of the api.v1.PageImportService service.
 type PageImportServiceHandler interface {
+	// ParseCSVPreview — see (api.v1.description).
 	ParseCSVPreview(context.Context, *connect.Request[v1.ParseCSVPreviewRequest]) (*connect.Response[v1.ParseCSVPreviewResponse], error)
+	// StartPageImportJob — see (api.v1.description).
 	StartPageImportJob(context.Context, *connect.Request[v1.StartPageImportJobRequest]) (*connect.Response[v1.StartPageImportJobResponse], error)
 }
 

@@ -90,29 +90,29 @@ var (
 
 // PageManagementServiceClient is a client for the api.v1.PageManagementService service.
 type PageManagementServiceClient interface {
+	// CreatePage — see (api.v1.description).
 	CreatePage(context.Context, *connect.Request[v1.CreatePageRequest]) (*connect.Response[v1.CreatePageResponse], error)
+	// ReadPage — see (api.v1.description).
 	ReadPage(context.Context, *connect.Request[v1.ReadPageRequest]) (*connect.Response[v1.ReadPageResponse], error)
+	// RenderPage — see (api.v1.description).
 	RenderPage(context.Context, *connect.Request[v1.RenderPageRequest]) (*connect.Response[v1.RenderPageResponse], error)
+	// UpdatePage — see (api.v1.description).
 	UpdatePage(context.Context, *connect.Request[v1.UpdatePageRequest]) (*connect.Response[v1.UpdatePageResponse], error)
+	// UpdatePageContent — see (api.v1.description).
 	UpdatePageContent(context.Context, *connect.Request[v1.UpdatePageContentRequest]) (*connect.Response[v1.UpdatePageContentResponse], error)
+	// UpdateWholePage — see (api.v1.description).
 	UpdateWholePage(context.Context, *connect.Request[v1.UpdateWholePageRequest]) (*connect.Response[v1.UpdateWholePageResponse], error)
+	// DeletePage — see (api.v1.description).
 	DeletePage(context.Context, *connect.Request[v1.DeletePageRequest]) (*connect.Response[v1.DeletePageResponse], error)
-	// ClearPageContent explicitly clears the markdown content of a page, preserving its frontmatter.
-	// This is a destructive operation that requires confirm_clear = true to prevent accidental data loss.
+	// ClearPageContent — see (api.v1.description).
 	ClearPageContent(context.Context, *connect.Request[v1.ClearPageContentRequest]) (*connect.Response[v1.ClearPageContentResponse], error)
-	// GenerateIdentifier converts text to a wiki page identifier format.
-	// Used by UI to auto-generate identifiers from titles and check availability.
+	// GenerateIdentifier — see (api.v1.description).
 	GenerateIdentifier(context.Context, *connect.Request[v1.GenerateIdentifierRequest]) (*connect.Response[v1.GenerateIdentifierResponse], error)
-	// ListTemplates returns all pages marked as templates (with template: true frontmatter).
+	// ListTemplates — see (api.v1.description).
 	ListTemplates(context.Context, *connect.Request[v1.ListTemplatesRequest]) (*connect.Response[v1.ListTemplatesResponse], error)
-	// WatchPage provides real-time streaming updates when a page's content changes.
-	// Emits the current version_hash when the content changes on the server.
-	// Clients can use this to re-fetch and re-render the page content.
+	// WatchPage — see (api.v1.description).
 	WatchPage(context.Context, *connect.Request[v1.WatchPageRequest]) (*connect.ServerStreamForClient[v1.WatchPageResponse], error)
-	// RenderMarkdown renders arbitrary markdown content to HTML.
-	// Supports selective template macros (LinkTo, FindBy, etc.) but excludes
-	// interactive widget macros (Checklist, Blog) which render as literal text.
-	// Used by the chat panel to render assistant messages.
+	// RenderMarkdown — see (api.v1.description).
 	RenderMarkdown(context.Context, *connect.Request[v1.RenderMarkdownRequest]) (*connect.Response[v1.RenderMarkdownResponse], error)
 }
 
@@ -279,29 +279,29 @@ func (c *pageManagementServiceClient) RenderMarkdown(ctx context.Context, req *c
 
 // PageManagementServiceHandler is an implementation of the api.v1.PageManagementService service.
 type PageManagementServiceHandler interface {
+	// CreatePage — see (api.v1.description).
 	CreatePage(context.Context, *connect.Request[v1.CreatePageRequest]) (*connect.Response[v1.CreatePageResponse], error)
+	// ReadPage — see (api.v1.description).
 	ReadPage(context.Context, *connect.Request[v1.ReadPageRequest]) (*connect.Response[v1.ReadPageResponse], error)
+	// RenderPage — see (api.v1.description).
 	RenderPage(context.Context, *connect.Request[v1.RenderPageRequest]) (*connect.Response[v1.RenderPageResponse], error)
+	// UpdatePage — see (api.v1.description).
 	UpdatePage(context.Context, *connect.Request[v1.UpdatePageRequest]) (*connect.Response[v1.UpdatePageResponse], error)
+	// UpdatePageContent — see (api.v1.description).
 	UpdatePageContent(context.Context, *connect.Request[v1.UpdatePageContentRequest]) (*connect.Response[v1.UpdatePageContentResponse], error)
+	// UpdateWholePage — see (api.v1.description).
 	UpdateWholePage(context.Context, *connect.Request[v1.UpdateWholePageRequest]) (*connect.Response[v1.UpdateWholePageResponse], error)
+	// DeletePage — see (api.v1.description).
 	DeletePage(context.Context, *connect.Request[v1.DeletePageRequest]) (*connect.Response[v1.DeletePageResponse], error)
-	// ClearPageContent explicitly clears the markdown content of a page, preserving its frontmatter.
-	// This is a destructive operation that requires confirm_clear = true to prevent accidental data loss.
+	// ClearPageContent — see (api.v1.description).
 	ClearPageContent(context.Context, *connect.Request[v1.ClearPageContentRequest]) (*connect.Response[v1.ClearPageContentResponse], error)
-	// GenerateIdentifier converts text to a wiki page identifier format.
-	// Used by UI to auto-generate identifiers from titles and check availability.
+	// GenerateIdentifier — see (api.v1.description).
 	GenerateIdentifier(context.Context, *connect.Request[v1.GenerateIdentifierRequest]) (*connect.Response[v1.GenerateIdentifierResponse], error)
-	// ListTemplates returns all pages marked as templates (with template: true frontmatter).
+	// ListTemplates — see (api.v1.description).
 	ListTemplates(context.Context, *connect.Request[v1.ListTemplatesRequest]) (*connect.Response[v1.ListTemplatesResponse], error)
-	// WatchPage provides real-time streaming updates when a page's content changes.
-	// Emits the current version_hash when the content changes on the server.
-	// Clients can use this to re-fetch and re-render the page content.
+	// WatchPage — see (api.v1.description).
 	WatchPage(context.Context, *connect.Request[v1.WatchPageRequest], *connect.ServerStream[v1.WatchPageResponse]) error
-	// RenderMarkdown renders arbitrary markdown content to HTML.
-	// Supports selective template macros (LinkTo, FindBy, etc.) but excludes
-	// interactive widget macros (Checklist, Blog) which render as literal text.
-	// Used by the chat panel to render assistant messages.
+	// RenderMarkdown — see (api.v1.description).
 	RenderMarkdown(context.Context, *connect.Request[v1.RenderMarkdownRequest]) (*connect.Response[v1.RenderMarkdownResponse], error)
 }
 

@@ -59,14 +59,13 @@ var (
 
 // InventoryManagementServiceClient is a client for the api.v1.InventoryManagementService service.
 type InventoryManagementServiceClient interface {
-	// Creates a new inventory item page with the inv_item template structure.
+	// CreateInventoryItem — see (api.v1.description).
 	CreateInventoryItem(context.Context, *connect.Request[v1.CreateInventoryItemRequest]) (*connect.Response[v1.CreateInventoryItemResponse], error)
-	// Moves an item from one container to another by updating both
-	// the item's inventory.container and the containers' inventory.items lists.
+	// MoveInventoryItem — see (api.v1.description).
 	MoveInventoryItem(context.Context, *connect.Request[v1.MoveInventoryItemRequest]) (*connect.Response[v1.MoveInventoryItemResponse], error)
-	// Lists all items in a container, including items in nested containers.
+	// ListContainerContents — see (api.v1.description).
 	ListContainerContents(context.Context, *connect.Request[v1.ListContainerContentsRequest]) (*connect.Response[v1.ListContainerContentsResponse], error)
-	// Finds which container(s) an item is in.
+	// FindItemLocation — see (api.v1.description).
 	FindItemLocation(context.Context, *connect.Request[v1.FindItemLocationRequest]) (*connect.Response[v1.FindItemLocationResponse], error)
 }
 
@@ -138,14 +137,13 @@ func (c *inventoryManagementServiceClient) FindItemLocation(ctx context.Context,
 // InventoryManagementServiceHandler is an implementation of the api.v1.InventoryManagementService
 // service.
 type InventoryManagementServiceHandler interface {
-	// Creates a new inventory item page with the inv_item template structure.
+	// CreateInventoryItem — see (api.v1.description).
 	CreateInventoryItem(context.Context, *connect.Request[v1.CreateInventoryItemRequest]) (*connect.Response[v1.CreateInventoryItemResponse], error)
-	// Moves an item from one container to another by updating both
-	// the item's inventory.container and the containers' inventory.items lists.
+	// MoveInventoryItem — see (api.v1.description).
 	MoveInventoryItem(context.Context, *connect.Request[v1.MoveInventoryItemRequest]) (*connect.Response[v1.MoveInventoryItemResponse], error)
-	// Lists all items in a container, including items in nested containers.
+	// ListContainerContents — see (api.v1.description).
 	ListContainerContents(context.Context, *connect.Request[v1.ListContainerContentsRequest]) (*connect.Response[v1.ListContainerContentsResponse], error)
-	// Finds which container(s) an item is in.
+	// FindItemLocation — see (api.v1.description).
 	FindItemLocation(context.Context, *connect.Request[v1.FindItemLocationRequest]) (*connect.Response[v1.FindItemLocationResponse], error)
 }
 

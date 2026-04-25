@@ -2,24 +2,45 @@ syntax = "proto3";
 
 package api.v1;
 
+import "api/v1/mcp_options.proto";
+
 option go_package = "github.com/brendanjerwin/simple_wiki/gen/go/api/v1;apiv1";
 
-// InventoryManagementService provides operations for managing inventory items.
-// This service enables AI agents and other clients to manage household inventory
-// through natural language commands like "put the batteries in the drawer".
+// InventoryManagementService — see (api.v1.service_description).
 service InventoryManagementService {
-  // Creates a new inventory item page with the inv_item template structure.
-  rpc CreateInventoryItem(CreateInventoryItemRequest) returns (CreateInventoryItemResponse);
+  option (api.v1.service_description) =
+      "Tracks wiki pages that represent physical inventory items and the "
+      "containers they live in for a workshop / lab inventory wiki. Lets "
+      "agents create item pages, move items between containers, look up "
+      "where an item currently lives, and enumerate the contents of a "
+      "container (optionally recursing into nested containers).";
 
-  // Moves an item from one container to another by updating both
-  // the item's inventory.container and the containers' inventory.items lists.
-  rpc MoveInventoryItem(MoveInventoryItemRequest) returns (MoveInventoryItemResponse);
+  // CreateInventoryItem — see (api.v1.description).
+  rpc CreateInventoryItem(CreateInventoryItemRequest) returns (CreateInventoryItemResponse) {
+    option (api.v1.description) =
+        "Creates a new inventory item page with the inv_item template structure.";
+  }
 
-  // Lists all items in a container, including items in nested containers.
-  rpc ListContainerContents(ListContainerContentsRequest) returns (ListContainerContentsResponse);
+  // MoveInventoryItem — see (api.v1.description).
+  rpc MoveInventoryItem(MoveInventoryItemRequest) returns (MoveInventoryItemResponse) {
+    option (api.v1.description) =
+        "Moves an item from one container to another by updating both "
+        "the item's inventory.container and the containers' inventory.items lists.";
+  }
 
-  // Finds which container(s) an item is in.
-  rpc FindItemLocation(FindItemLocationRequest) returns (FindItemLocationResponse);
+  // ListContainerContents — see (api.v1.description).
+  rpc ListContainerContents(ListContainerContentsRequest) returns (ListContainerContentsResponse) {
+    option (api.v1.description) =
+        "Lists all items in a container, including items in nested containers.";
+    option (api.v1.read_only) = true;
+  }
+
+  // FindItemLocation — see (api.v1.description).
+  rpc FindItemLocation(FindItemLocationRequest) returns (FindItemLocationResponse) {
+    option (api.v1.description) =
+        "Finds which container(s) an item is in.";
+    option (api.v1.read_only) = true;
+  }
 }
 
 // CreateInventoryItem messages
