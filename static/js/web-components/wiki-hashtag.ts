@@ -189,6 +189,16 @@ export class WikiHashtag extends LitElement {
     }
   };
 
+  // Mutual exclusion: when any wiki-hashtag opens its popover, every other
+  // instance hears a `wiki-hashtag-open` event and closes itself. Without
+  // this, clicking pill B with pill A's popover open keeps both open
+  // because pill B's click handler stopPropagation()s the click before
+  // pill A's outside-click listener runs.
+  private readonly _onAnotherHashtagOpen = (event: Event): void => {
+    if (event.target === this) return;
+    this._close();
+  };
+
   constructor() {
     super();
     this.tag = '';
@@ -199,12 +209,18 @@ export class WikiHashtag extends LitElement {
     this._hasSearched = false;
   }
 
+  override connectedCallback(): void {
+    super.connectedCallback();
+    document.addEventListener('wiki-hashtag-open', this._onAnotherHashtagOpen);
+  }
+
   override disconnectedCallback(): void {
     super.disconnectedCallback();
     // Defensive: tear down any stray document listeners if we were closed
     // while still open.
     document.removeEventListener('click', this._onDocumentClick);
     document.removeEventListener('keydown', this._onDocumentKeydown);
+    document.removeEventListener('wiki-hashtag-open', this._onAnotherHashtagOpen);
   }
 
   private getClient(): Client<typeof SearchService> {
@@ -229,6 +245,12 @@ export class WikiHashtag extends LitElement {
   }
 
   private async _open_(): Promise<void> {
+    // Tell every other wiki-hashtag on the page to close before we open
+    // ours, so only one popover is visible at a time.
+    this.dispatchEvent(
+      new CustomEvent('wiki-hashtag-open', { bubbles: true, composed: true }),
+    );
+
     this._open = true;
     document.addEventListener('click', this._onDocumentClick);
     document.addEventListener('keydown', this._onDocumentKeydown);

@@ -412,4 +412,53 @@ describe('WikiHashtag', () => {
       });
     });
   });
+
+  describe('when a second wiki-hashtag opens its popover while the first is open', () => {
+    let firstEl: WikiHashtagElement;
+    let secondEl: WikiHashtagElement;
+
+    beforeEach(async () => {
+      const container = await fixture<HTMLElement>(html`
+        <div>
+          <wiki-hashtag tag="alpha">#alpha</wiki-hashtag>
+          <wiki-hashtag tag="beta">#beta</wiki-hashtag>
+        </div>
+      `);
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- custom element matches interface
+      firstEl = container.children[0] as WikiHashtagElement;
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- custom element matches interface
+      secondEl = container.children[1] as WikiHashtagElement;
+
+      sinon.stub(firstEl, 'performSearch').resolves([]);
+      sinon.stub(secondEl, 'performSearch').resolves([]);
+
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- rendered above
+      const firstAnchor = firstEl.shadowRoot.querySelector<HTMLAnchorElement>('a.hashtag-pill')!;
+      firstAnchor.dispatchEvent(
+        new MouseEvent('click', { bubbles: true, cancelable: true, composed: true }),
+      );
+      await waitUntil(
+        () => firstEl.shadowRoot.querySelector('.bubble') !== null,
+        'First popover should open',
+      );
+
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- rendered above
+      const secondAnchor = secondEl.shadowRoot.querySelector<HTMLAnchorElement>('a.hashtag-pill')!;
+      secondAnchor.dispatchEvent(
+        new MouseEvent('click', { bubbles: true, cancelable: true, composed: true }),
+      );
+      await waitUntil(
+        () => secondEl.shadowRoot.querySelector('.bubble') !== null,
+        'Second popover should open',
+      );
+    });
+
+    it('should close the first popover', () => {
+      expect(firstEl.shadowRoot.querySelector('.bubble')).to.be.null;
+    });
+
+    it('should keep the second popover open', () => {
+      expect(secondEl.shadowRoot.querySelector('.bubble')).to.exist;
+    });
+  });
 });
