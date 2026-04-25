@@ -1,5 +1,3 @@
-import type { ChecklistItem } from './checklist-tag-parser.js';
-
 // Long-press delay in milliseconds before initiating touch drag
 const LONG_PRESS_DELAY_MS = 400;
 
@@ -32,20 +30,74 @@ export interface DragReorderHandler {
  * Pure function: move item from fromIndex to toInsertIndex in resulting array.
  * reorderItems([A,B,C,D], 3, 0) -> [D,A,B,C]
  */
-export function reorderItems(
-  items: ChecklistItem[],
+export function reorderItems<T>(
+  items: readonly T[],
   fromIndex: number,
   toInsertIndex: number
-): ChecklistItem[] {
-  if (fromIndex < 0 || fromIndex >= items.length) return items;
-  if (toInsertIndex < 0 || toInsertIndex > items.length) return items;
+): T[] {
+  if (fromIndex < 0 || fromIndex >= items.length) return [...items];
+  if (toInsertIndex < 0 || toInsertIndex > items.length) return [...items];
   const result = [...items];
   const [item] = result.splice(fromIndex, 1);
-  if (!item) return items;
+  if (item === undefined) return [...items];
   const adjustedIndex =
     fromIndex < toInsertIndex ? toInsertIndex - 1 : toInsertIndex;
   result.splice(adjustedIndex, 0, item);
   return result;
+}
+
+/**
+ * Compute the new sort_order value for an item being inserted between
+ * neighbors. The conventions used by the wiki are:
+ *   - The first slot uses sortOrder = 1000.
+ *   - When inserting between items A (sortOrder a) and B (sortOrder b),
+ *     return floor((a + b) / 2) — but if that collides with a or b,
+ *     return a + 1000 instead. The server will re-densify on collision
+ *     anyway; we just want a value that is monotonic when possible.
+ *   - When inserting at the end, return last + 1000.
+ *   - When inserting at the start, return first - 1000 (or 0 if first <= 1000).
+ *
+ * @param items All items in their current order.
+ * @param toInsertIndex The slot index where the moved item will land
+ *                     (0..items.length, where length means "append").
+ * @param movedUid The UID of the moved item — excluded from neighbor lookup
+ *                 since the splice is conceptually already done.
+ */
+export function computeSortOrder(
+  items: readonly { uid: string; sortOrder: bigint }[],
+  toInsertIndex: number,
+  movedUid: string
+): bigint {
+  // Build the list as it will appear AFTER the move (without movedUid).
+  const without = items.filter(i => i.uid !== movedUid);
+  // Clamp toInsertIndex against the post-removal list.
+  let target = toInsertIndex;
+  // If the original move passed an index that referenced a position past the
+  // moved item, the splice-style index is one too high in the without-list.
+  const originalIndex = items.findIndex(i => i.uid === movedUid);
+  if (originalIndex !== -1 && originalIndex < toInsertIndex) {
+    target -= 1;
+  }
+  if (target < 0) target = 0;
+  if (target > without.length) target = without.length;
+
+  const before = target > 0 ? without[target - 1] : undefined;
+  const after = target < without.length ? without[target] : undefined;
+
+  if (!before && !after) return 1000n;
+  if (!before && after) {
+    return after.sortOrder > 1000n ? after.sortOrder - 1000n : 0n;
+  }
+  if (before && !after) return before.sortOrder + 1000n;
+  if (before && after) {
+    const mid = (before.sortOrder + after.sortOrder) / 2n;
+    if (mid === before.sortOrder || mid === after.sortOrder) {
+      return before.sortOrder + 1000n;
+    }
+    return mid;
+  }
+  // Unreachable, but TS demands it.
+  return 1000n;
 }
 
 export class ChecklistDragManager {

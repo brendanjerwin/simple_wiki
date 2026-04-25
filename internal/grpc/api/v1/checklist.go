@@ -209,6 +209,8 @@ func mapChecklistMutatorErr(err error) error {
 		return status.Error(codes.NotFound, err.Error())
 	case errors.Is(err, checklistmutator.ErrPageNotFound):
 		return status.Errorf(codes.NotFound, "page not found")
+	default:
+		// Fall through; status.FromError handling and Internal default below.
 	}
 	if _, ok := status.FromError(err); ok {
 		return err

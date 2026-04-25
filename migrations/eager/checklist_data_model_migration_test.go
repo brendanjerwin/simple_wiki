@@ -37,15 +37,36 @@ func (f *fakeReaderMutator) WriteFrontMatter(id wikipage.PageIdentifier, fm wiki
 	return nil
 }
 
-func (f *fakeReaderMutator) ReadMarkdown(_ wikipage.PageIdentifier) (wikipage.PageIdentifier, wikipage.Markdown, error) {
+func (*fakeReaderMutator) ReadMarkdown(_ wikipage.PageIdentifier) (wikipage.PageIdentifier, wikipage.Markdown, error) {
 	return "", "", nil
 }
-func (f *fakeReaderMutator) WriteMarkdown(_ wikipage.PageIdentifier, _ wikipage.Markdown) error {
+func (*fakeReaderMutator) WriteMarkdown(_ wikipage.PageIdentifier, _ wikipage.Markdown) error {
 	return nil
 }
-func (f *fakeReaderMutator) DeletePage(_ wikipage.PageIdentifier) error { return nil }
-func (f *fakeReaderMutator) ModifyMarkdown(_ wikipage.PageIdentifier, _ func(wikipage.Markdown) (wikipage.Markdown, error)) error {
+func (*fakeReaderMutator) DeletePage(_ wikipage.PageIdentifier) error { return nil }
+func (*fakeReaderMutator) ModifyMarkdown(_ wikipage.PageIdentifier, _ func(wikipage.Markdown) (wikipage.Markdown, error)) error {
 	return nil
+}
+
+// asMap is a tiny test helper that asserts v is a non-nil map[string]any
+// and returns it. Keeps the deep-walk assertions in the test bodies tidy
+// and gives the linter a single point to flag if the input shape ever
+// changes.
+func asMap(v any) map[string]any {
+	m, ok := v.(map[string]any)
+	if !ok {
+		Fail("expected map[string]any")
+	}
+	return m
+}
+
+// asAnySlice mirrors asMap for []any.
+func asAnySlice(v any) []any {
+	s, ok := v.([]any)
+	if !ok {
+		Fail("expected []any")
+	}
+	return s
 }
 
 var _ = Describe("ChecklistDataModelMigrationJob", func() {
@@ -88,28 +109,28 @@ var _ = Describe("ChecklistDataModelMigrationJob", func() {
 		})
 
 		It("should assign ULIDs to items lacking uid", func() {
-			items := store.pages["shopping"]["checklists"].(map[string]any)["groceries"].(map[string]any)["items"].([]any)
-			first := items[0].(map[string]any)
+			items := asAnySlice(asMap(asMap(store.pages["shopping"]["checklists"])["groceries"])["items"])
+			first := asMap(items[0])
 			Expect(first["uid"]).To(Equal("01HXAAAAAAAAAAAAAAAAAAAAAA"))
-			second := items[1].(map[string]any)
+			second := asMap(items[1])
 			Expect(second["uid"]).To(Equal("01HXBBBBBBBBBBBBBBBBBBBBBB"))
 		})
 
 		It("should backfill sort_order in 1000 increments", func() {
-			items := store.pages["shopping"]["checklists"].(map[string]any)["groceries"].(map[string]any)["items"].([]any)
-			Expect(items[0].(map[string]any)["sort_order"]).To(Equal(int64(1000)))
-			Expect(items[1].(map[string]any)["sort_order"]).To(Equal(int64(2000)))
+			items := asAnySlice(asMap(asMap(store.pages["shopping"]["checklists"])["groceries"])["items"])
+			Expect(asMap(items[0])["sort_order"]).To(Equal(int64(1000)))
+			Expect(asMap(items[1])["sort_order"]).To(Equal(int64(2000)))
 		})
 
 		It("should populate wiki.checklists.<list>.items.<uid>.created_at", func() {
-			meta := store.pages["shopping"]["wiki"].(map[string]any)["checklists"].(map[string]any)["groceries"].(map[string]any)["items"].(map[string]any)
-			itemMeta := meta["01HXAAAAAAAAAAAAAAAAAAAAAA"].(map[string]any)
+			meta := asMap(asMap(asMap(asMap(store.pages["shopping"]["wiki"])["checklists"])["groceries"])["items"])
+			itemMeta := asMap(meta["01HXAAAAAAAAAAAAAAAAAAAAAA"])
 			Expect(itemMeta["created_at"]).NotTo(BeNil())
 			Expect(itemMeta["updated_at"]).NotTo(BeNil())
 		})
 
 		It("should stamp migrated_data_model = true", func() {
-			wikiList := store.pages["shopping"]["wiki"].(map[string]any)["checklists"].(map[string]any)["groceries"].(map[string]any)
+			wikiList := asMap(asMap(asMap(store.pages["shopping"]["wiki"])["checklists"])["groceries"])
 			Expect(wikiList["migrated_data_model"]).To(BeTrue())
 		})
 	})

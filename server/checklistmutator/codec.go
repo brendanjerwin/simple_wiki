@@ -33,6 +33,7 @@ const (
 	tombstonesKey     = "tombstones"
 	syncTokenKey      = "sync_token"
 	updatedAtKey      = "updated_at"
+	uidKey            = "uid"
 )
 
 // decodeChecklist reads the named checklist from fm. Missing user data
@@ -80,7 +81,7 @@ func decodeChecklist(fm wikipage.FrontMatter, listName string, clock Clock) *api
 // created_at/updated_at when the item lacks a uid (synthetic) — those
 // values won't persist until the next mutation that calls encodeChecklist.
 func decodeItem(itemMap map[string]any, wikiItems map[string]any, now time.Time) *apiv1.ChecklistItem {
-	uid, _ := itemMap["uid"].(string)
+	uid := stringValue(itemMap, uidKey)
 	item := &apiv1.ChecklistItem{
 		Uid:       uid,
 		Text:      stringValue(itemMap, "text"),
@@ -139,7 +140,7 @@ func decodeTombstones(raw []any) []*apiv1.Tombstone {
 		if !ok {
 			continue
 		}
-		t := &apiv1.Tombstone{Uid: stringValue(m, "uid")}
+		t := &apiv1.Tombstone{Uid: stringValue(m, uidKey)}
 		if ts, ok := readTimestamp(m, "deleted_at"); ok {
 			t.DeletedAt = ts
 		}
@@ -182,7 +183,7 @@ func encodeChecklist(fm wikipage.FrontMatter, listName string, checklist *apiv1.
 
 func encodeItemUserData(item *apiv1.ChecklistItem) map[string]any {
 	out := map[string]any{
-		"uid":        item.Uid,
+		uidKey:      item.Uid,
 		"text":       item.Text,
 		"checked":    item.Checked,
 		"sort_order": item.SortOrder,
@@ -229,7 +230,7 @@ func encodeTombstones(tombstones []*apiv1.Tombstone) []any {
 	})
 	out := make([]any, 0, len(sorted))
 	for _, t := range sorted {
-		m := map[string]any{"uid": t.Uid}
+		m := map[string]any{uidKey: t.Uid}
 		if t.DeletedAt != nil {
 			m["deleted_at"] = t.DeletedAt.AsTime().Format(time.RFC3339Nano)
 		}
@@ -325,15 +326,27 @@ func readTimestampValue(v any) (*timestamppb.Timestamp, bool) {
 	return nil, false
 }
 
-// stringValue returns m[key] as a string, or empty.
+// stringValue returns m[key] as a string, or empty when missing/wrong-type.
 func stringValue(m map[string]any, key string) string {
-	v, _ := m[key].(string)
+	if m == nil {
+		return ""
+	}
+	v, ok := m[key].(string)
+	if !ok {
+		return ""
+	}
 	return v
 }
 
-// boolValue returns m[key] as a bool, or false.
+// boolValue returns m[key] as a bool, or false when missing/wrong-type.
 func boolValue(m map[string]any, key string) bool {
-	v, _ := m[key].(bool)
+	if m == nil {
+		return false
+	}
+	v, ok := m[key].(bool)
+	if !ok {
+		return false
+	}
 	return v
 }
 

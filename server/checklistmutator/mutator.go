@@ -56,6 +56,12 @@ const TombstoneTTL = 7 * 24 * time.Hour
 // re-densifying the entire list.
 const SortOrderStep int64 = 1000
 
+// errUIDRequiredMsg is the InvalidArgument message returned when a
+// mutator method is called with an empty uid. Pulled out so the
+// repeated literal doesn't trip the "string literal appears N times"
+// linter and so the wording stays consistent.
+const errUIDRequiredMsg = "uid is required"
+
 // Mutator is the single funnel for checklist mutations. Construct one per
 // process via New; share across handlers.
 type Mutator struct {
@@ -179,7 +185,7 @@ func (m *Mutator) AddItem(_ context.Context, page, listName string, args AddItem
 // fields on the request are ignored; updated_at is server-stamped.
 func (m *Mutator) UpdateItem(_ context.Context, page, listName, uid string, args UpdateItemArgs, expectedUpdatedAt *time.Time, _ tailscale.IdentityValue) (*apiv1.ChecklistItem, *apiv1.Checklist, error) {
 	if uid == "" {
-		return nil, nil, status.Error(codes.InvalidArgument, "uid is required")
+		return nil, nil, status.Error(codes.InvalidArgument, errUIDRequiredMsg)
 	}
 
 	unlock := m.lockPage(page)
@@ -250,7 +256,7 @@ func (m *Mutator) UpdateItem(_ context.Context, page, listName, uid string, args
 // completed_by; true→false clears both.
 func (m *Mutator) ToggleItem(_ context.Context, page, listName, uid string, expectedUpdatedAt *time.Time, identity tailscale.IdentityValue) (*apiv1.ChecklistItem, *apiv1.Checklist, error) {
 	if uid == "" {
-		return nil, nil, status.Error(codes.InvalidArgument, "uid is required")
+		return nil, nil, status.Error(codes.InvalidArgument, errUIDRequiredMsg)
 	}
 
 	unlock := m.lockPage(page)
@@ -296,7 +302,7 @@ func (m *Mutator) ToggleItem(_ context.Context, page, listName, uid string, expe
 // DeleteItem removes uid from the named checklist and writes a tombstone.
 func (m *Mutator) DeleteItem(_ context.Context, page, listName, uid string, expectedUpdatedAt *time.Time, _ tailscale.IdentityValue) (*apiv1.Checklist, error) {
 	if uid == "" {
-		return nil, status.Error(codes.InvalidArgument, "uid is required")
+		return nil, status.Error(codes.InvalidArgument, errUIDRequiredMsg)
 	}
 
 	unlock := m.lockPage(page)
@@ -338,7 +344,7 @@ func (m *Mutator) DeleteItem(_ context.Context, page, listName, uid string, expe
 // values just enough to make room.
 func (m *Mutator) ReorderItem(_ context.Context, page, listName, uid string, newSortOrder int64, expectedUpdatedAt *time.Time, _ tailscale.IdentityValue) (*apiv1.Checklist, error) {
 	if uid == "" {
-		return nil, status.Error(codes.InvalidArgument, "uid is required")
+		return nil, status.Error(codes.InvalidArgument, errUIDRequiredMsg)
 	}
 
 	unlock := m.lockPage(page)
@@ -487,16 +493,16 @@ func sortItems(items []*apiv1.ChecklistItem) {
 	})
 }
 
-// nextSortOrder returns max(items.SortOrder) + SortOrderStep, or
-// SortOrderStep when items is empty.
+// nextSortOrder returns max-existing(items.SortOrder) + SortOrderStep,
+// or SortOrderStep when items is empty.
 func nextSortOrder(items []*apiv1.ChecklistItem) int64 {
-	var max int64
+	var maxOrder int64
 	for _, it := range items {
-		if it.SortOrder > max {
-			max = it.SortOrder
+		if it.SortOrder > maxOrder {
+			maxOrder = it.SortOrder
 		}
 	}
-	return max + SortOrderStep
+	return maxOrder + SortOrderStep
 }
 
 // densifyAroundSortOrder resolves a sort_order collision at items[movedIdx]

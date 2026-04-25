@@ -34,6 +34,16 @@ const migratedDataModelKey = "migrated_data_model"
 // to avoid the migrations package depending on the mutator.
 const dataModelSortOrderStep int64 = 1000
 
+// Frontmatter keys repeated across the migration — declared once so the
+// linter doesn't trip on "string appears N times" and so any rename is
+// a single-edit change.
+const (
+	checklistsFMKey = "checklists"
+	updatedAtFMKey  = "updated_at"
+	wikiFMKey       = "wiki"
+	itemsFMKey      = "items"
+)
+
 // ChecklistDataModelMigrationScanJob walks the data dir and enqueues a
 // per-page job for every page that has a checklists subtree where at
 // least one list lacks the migrated_data_model flag.
@@ -139,11 +149,11 @@ func pageNeedsDataModelMigration(fm map[string]any) bool {
 	if syspage.IsSystemPage(fm) {
 		return false
 	}
-	checklists, ok := fm["checklists"].(map[string]any)
+	checklists, ok := fm[checklistsFMKey].(map[string]any)
 	if !ok {
 		return false
 	}
-	wikiChecklists := readNestedMap(fm, "wiki", "checklists")
+	wikiChecklists := readNestedMap(fm, wikiFMKey, checklistsFMKey)
 	for name := range checklists {
 		flag := dataModelMigratedFlag(wikiChecklists, name)
 		if !flag {
@@ -208,15 +218,14 @@ func (j *ChecklistDataModelMigrationJob) Execute() error {
 }
 
 // promoteChecklistDataModel walks every checklists.<name> on the page,
-// fills in missing uid/sort_order, populates wiki.checklists.<name>.items.<uid>.{created_at, updated_at},
-// and stamps wiki.checklists.<name>.migrated_data_model = true. Returns
-// true when any change was made (callers persist only when changes happened).
+// promoting items to the new shape. Returns true when any change was
+// made (callers persist only when changes happened).
 func promoteChecklistDataModel(fm map[string]any, ulids ulid.Generator) bool {
-	checklists, ok := fm["checklists"].(map[string]any)
+	checklists, ok := fm[checklistsFMKey].(map[string]any)
 	if !ok {
 		return false
 	}
-	wikiChecklists := ensureNestedMap(fm, "wiki", "checklists")
+	wikiChecklists := ensureNestedMap(fm, wikiFMKey, checklistsFMKey)
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 
 	changed := false
@@ -225,75 +234,106 @@ func promoteChecklistDataModel(fm map[string]any, ulids ulid.Generator) bool {
 		if !ok {
 			continue
 		}
-		wikiList, _ := wikiChecklists[name].(map[string]any)
-		if wikiList == nil {
-			wikiList = make(map[string]any)
-			wikiChecklists[name] = wikiList
+		if promoteList(name, listMap, wikiChecklists, ulids, now) {
+			checklists[name] = listMap
+			changed = true
 		}
-
-		// Skip lists that have already been migrated.
-		if flag, ok := wikiList[migratedDataModelKey].(bool); ok && flag {
-			continue
-		}
-
-		wikiItems, _ := wikiList["items"].(map[string]any)
-		if wikiItems == nil {
-			wikiItems = make(map[string]any)
-			wikiList["items"] = wikiItems
-		}
-
-		items, _ := listMap["items"].([]any)
-		for idx, raw := range items {
-			itemMap, ok := raw.(map[string]any)
-			if !ok {
-				continue
-			}
-			uid, _ := itemMap["uid"].(string)
-			if uid == "" {
-				uid = ulids.NewULID()
-				itemMap["uid"] = uid
-			}
-			if _, hasOrder := itemMap["sort_order"]; !hasOrder {
-				itemMap["sort_order"] = int64(idx+1) * dataModelSortOrderStep
-			}
-			meta, _ := wikiItems[uid].(map[string]any)
-			if meta == nil {
-				meta = make(map[string]any)
-				wikiItems[uid] = meta
-			}
-			if _, has := meta["created_at"]; !has {
-				meta["created_at"] = now
-			}
-			if _, has := meta["updated_at"]; !has {
-				meta["updated_at"] = now
-			}
-			if _, has := meta["automated"]; !has {
-				// Pre-existing items can't be retroactively attributed; mark as
-				// automated=false so the eventual sync is conservative.
-				meta["automated"] = false
-			}
-			items[idx] = itemMap
-		}
-		listMap["items"] = items
-		checklists[name] = listMap
-
-		// Stamp the migrated flag — whether or not any item needed work, the
-		// list is now under the new model.
-		wikiList[migratedDataModelKey] = true
-		// Initialize sync_token if absent.
-		if _, has := wikiList["sync_token"]; !has {
-			wikiList["sync_token"] = int64(0)
-		}
-		if _, has := wikiList["updated_at"]; !has {
-			wikiList["updated_at"] = now
-		}
-		changed = true
 	}
 
 	if changed {
-		fm["checklists"] = checklists
+		fm[checklistsFMKey] = checklists
 	}
 	return changed
+}
+
+// promoteList promotes one named checklist on the page. Returns true if
+// the list was newly migrated; false if it was already stamped.
+func promoteList(name string, listMap, wikiChecklists map[string]any, ulids ulid.Generator, now string) bool {
+	wikiList := ensureMapInParent(wikiChecklists, name)
+	if alreadyMigrated(wikiList) {
+		return false
+	}
+
+	wikiItems := ensureMapInParent(wikiList, itemsFMKey)
+	items, ok := listMap[itemsFMKey].([]any)
+	if !ok {
+		items = nil
+	}
+	for idx, raw := range items {
+		itemMap, ok := raw.(map[string]any)
+		if !ok {
+			continue
+		}
+		uid := promoteItemUserData(itemMap, idx, ulids)
+		stampItemMetadata(wikiItems, uid, now)
+		items[idx] = itemMap
+	}
+	listMap[itemsFMKey] = items
+
+	stampListMetadata(wikiList, now)
+	return true
+}
+
+func alreadyMigrated(wikiList map[string]any) bool {
+	flag, ok := wikiList[migratedDataModelKey].(bool)
+	return ok && flag
+}
+
+// promoteItemUserData fills in uid + sort_order on the item, returning
+// the (possibly newly assigned) uid.
+func promoteItemUserData(itemMap map[string]any, idx int, ulids ulid.Generator) string {
+	uid, ok := itemMap["uid"].(string)
+	if !ok {
+		uid = ""
+	}
+	if uid == "" {
+		uid = ulids.NewULID()
+		itemMap["uid"] = uid
+	}
+	if _, hasOrder := itemMap["sort_order"]; !hasOrder {
+		itemMap["sort_order"] = int64(idx+1) * dataModelSortOrderStep
+	}
+	return uid
+}
+
+// stampItemMetadata writes per-item wiki-managed metadata keyed by uid.
+// Pre-existing items can't be retroactively attributed; the migration
+// records automated=false so eventual sync is conservative.
+func stampItemMetadata(wikiItems map[string]any, uid, now string) {
+	meta := ensureMapInParent(wikiItems, uid)
+	if _, has := meta["created_at"]; !has {
+		meta["created_at"] = now
+	}
+	if _, has := meta[updatedAtFMKey]; !has {
+		meta[updatedAtFMKey] = now
+	}
+	if _, has := meta["automated"]; !has {
+		meta["automated"] = false
+	}
+}
+
+// stampListMetadata sets the migrated flag and initializes per-list
+// sync state if absent.
+func stampListMetadata(wikiList map[string]any, now string) {
+	wikiList[migratedDataModelKey] = true
+	if _, has := wikiList["sync_token"]; !has {
+		wikiList["sync_token"] = int64(0)
+	}
+	if _, has := wikiList[updatedAtFMKey]; !has {
+		wikiList[updatedAtFMKey] = now
+	}
+}
+
+// ensureMapInParent returns parent[key] as a map[string]any, creating
+// an empty map if missing or wrong type.
+func ensureMapInParent(parent map[string]any, key string) map[string]any {
+	existing, ok := parent[key].(map[string]any)
+	if ok {
+		return existing
+	}
+	created := make(map[string]any)
+	parent[key] = created
+	return created
 }
 
 // readNestedMap walks fm[k1][k2][...] returning the deepest map or nil.
@@ -303,8 +343,8 @@ func readNestedMap(fm map[string]any, keys ...string) map[string]any {
 		if cur == nil {
 			return nil
 		}
-		next, _ := cur[k].(map[string]any)
-		if next == nil {
+		next, ok := cur[k].(map[string]any)
+		if !ok || next == nil {
 			return nil
 		}
 		cur = next
@@ -317,8 +357,8 @@ func readNestedMap(fm map[string]any, keys ...string) map[string]any {
 func ensureNestedMap(fm map[string]any, keys ...string) map[string]any {
 	cur := fm
 	for _, k := range keys {
-		next, _ := cur[k].(map[string]any)
-		if next == nil {
+		next, ok := cur[k].(map[string]any)
+		if !ok || next == nil {
 			next = make(map[string]any)
 			cur[k] = next
 		}

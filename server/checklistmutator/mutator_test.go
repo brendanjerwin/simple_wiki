@@ -78,13 +78,13 @@ func (s *fakeStore) WriteFrontMatter(id wikipage.PageIdentifier, fm wikipage.Fro
 	return nil
 }
 
-func (s *fakeStore) ReadMarkdown(_ wikipage.PageIdentifier) (wikipage.PageIdentifier, wikipage.Markdown, error) {
+func (*fakeStore) ReadMarkdown(_ wikipage.PageIdentifier) (wikipage.PageIdentifier, wikipage.Markdown, error) {
 	return "", "", nil
 }
 
-func (s *fakeStore) WriteMarkdown(_ wikipage.PageIdentifier, _ wikipage.Markdown) error { return nil }
-func (s *fakeStore) DeletePage(_ wikipage.PageIdentifier) error                          { return nil }
-func (s *fakeStore) ModifyMarkdown(_ wikipage.PageIdentifier, _ func(wikipage.Markdown) (wikipage.Markdown, error)) error {
+func (*fakeStore) WriteMarkdown(_ wikipage.PageIdentifier, _ wikipage.Markdown) error { return nil }
+func (*fakeStore) DeletePage(_ wikipage.PageIdentifier) error                          { return nil }
+func (*fakeStore) ModifyMarkdown(_ wikipage.PageIdentifier, _ func(wikipage.Markdown) (wikipage.Markdown, error)) error {
 	return nil
 }
 
@@ -212,11 +212,11 @@ var _ = Describe("Mutator", func() {
 	})
 
 	Describe("ToggleItem", func() {
-		var initialUid string
+		var initialUID string
 
 		BeforeEach(func() {
 			added, _, _ := mutator.AddItem(ctx, "p", "list", checklistmutator.AddItemArgs{Text: "T"}, human)
-			initialUid = added.Uid
+			initialUID = added.Uid
 		})
 
 		When("checked transitions false to true", func() {
@@ -224,7 +224,7 @@ var _ = Describe("Mutator", func() {
 
 			BeforeEach(func() {
 				clock.advance(time.Minute)
-				item, _, _ = mutator.ToggleItem(ctx, "p", "list", initialUid, nil, human)
+				item, _, _ = mutator.ToggleItem(ctx, "p", "list", initialUID, nil, human)
 			})
 
 			It("should populate completed_at", func() {
@@ -241,9 +241,9 @@ var _ = Describe("Mutator", func() {
 			var item *apiv1.ChecklistItem
 
 			BeforeEach(func() {
-				_, _, _ = mutator.ToggleItem(ctx, "p", "list", initialUid, nil, human)
+				_, _, _ = mutator.ToggleItem(ctx, "p", "list", initialUID, nil, human)
 				clock.advance(time.Minute)
-				item, _, _ = mutator.ToggleItem(ctx, "p", "list", initialUid, nil, human)
+				item, _, _ = mutator.ToggleItem(ctx, "p", "list", initialUID, nil, human)
 			})
 
 			It("should clear completed_at", func() {
@@ -257,12 +257,12 @@ var _ = Describe("Mutator", func() {
 	})
 
 	Describe("UpdateItem", func() {
-		var initialUid string
+		var initialUID string
 		var initialUpdatedAt time.Time
 
 		BeforeEach(func() {
 			added, list, _ := mutator.AddItem(ctx, "p", "list", checklistmutator.AddItemArgs{Text: "Original"}, human)
-			initialUid = added.Uid
+			initialUID = added.Uid
 			initialUpdatedAt = list.UpdatedAt.AsTime()
 		})
 
@@ -275,7 +275,7 @@ var _ = Describe("Mutator", func() {
 			BeforeEach(func() {
 				clock.advance(time.Minute)
 				newText := "Updated"
-				updated, _, updateErr := mutator.UpdateItem(ctx, "p", "list", initialUid, checklistmutator.UpdateItemArgs{Text: &newText}, nil, human)
+				updated, _, updateErr := mutator.UpdateItem(ctx, "p", "list", initialUID, checklistmutator.UpdateItemArgs{Text: &newText}, nil, human)
 				err = updateErr
 				if updated != nil {
 					updatedAtAfter = updated.UpdatedAt.AsTime()
@@ -296,11 +296,11 @@ var _ = Describe("Mutator", func() {
 
 			BeforeEach(func() {
 				clock.advance(time.Minute)
-				_, _, _ = mutator.ToggleItem(ctx, "p", "list", initialUid, nil, human)
+				_, _, _ = mutator.ToggleItem(ctx, "p", "list", initialUID, nil, human)
 				clock.advance(time.Minute)
 				stale := initialUpdatedAt
 				newText := "Updated"
-				_, _, err = mutator.UpdateItem(ctx, "p", "list", initialUid, checklistmutator.UpdateItemArgs{Text: &newText}, &stale, human)
+				_, _, err = mutator.UpdateItem(ctx, "p", "list", initialUID, checklistmutator.UpdateItemArgs{Text: &newText}, &stale, human)
 			})
 
 			It("should return FailedPrecondition", func() {
@@ -323,11 +323,11 @@ var _ = Describe("Mutator", func() {
 	})
 
 	Describe("DeleteItem", func() {
-		var initialUid string
+		var initialUID string
 
 		BeforeEach(func() {
 			added, _, _ := mutator.AddItem(ctx, "p", "list", checklistmutator.AddItemArgs{Text: "Doomed"}, human)
-			initialUid = added.Uid
+			initialUID = added.Uid
 			clock.advance(time.Minute)
 		})
 
@@ -338,7 +338,7 @@ var _ = Describe("Mutator", func() {
 			)
 
 			BeforeEach(func() {
-				list, deleteErr = mutator.DeleteItem(ctx, "p", "list", initialUid, nil, human)
+				list, deleteErr = mutator.DeleteItem(ctx, "p", "list", initialUID, nil, human)
 			})
 
 			It("should not error", func() {
@@ -352,18 +352,18 @@ var _ = Describe("Mutator", func() {
 	})
 
 	Describe("sync_token", func() {
-		var initialUid string
+		var initialUID string
 
 		BeforeEach(func() {
 			added, _, _ := mutator.AddItem(ctx, "p", "list", checklistmutator.AddItemArgs{Text: "T"}, human)
-			initialUid = added.Uid
+			initialUID = added.Uid
 		})
 
 		When("a single mutation occurs", func() {
 			It("should advance sync_token by exactly 1", func() {
 				_, listBefore, _ := mutator.AddItem(ctx, "p", "list", checklistmutator.AddItemArgs{Text: "intermediate"}, human)
 				before := listBefore.SyncToken
-				_, _, _ = mutator.ToggleItem(ctx, "p", "list", initialUid, nil, human)
+				_, _, _ = mutator.ToggleItem(ctx, "p", "list", initialUID, nil, human)
 				_, listAfter, _ := mutator.AddItem(ctx, "p", "list", checklistmutator.AddItemArgs{Text: "after"}, human)
 				// before → +1 (Toggle) → +1 (AddItem) = before + 2
 				Expect(listAfter.SyncToken).To(Equal(before + 2))
@@ -372,12 +372,12 @@ var _ = Describe("Mutator", func() {
 	})
 
 	Describe("tombstone GC", func() {
-		var deletedUid string
+		var deletedUID string
 
 		BeforeEach(func() {
 			added, _, _ := mutator.AddItem(ctx, "p", "list", checklistmutator.AddItemArgs{Text: "X"}, human)
-			deletedUid = added.Uid
-			_, _ = mutator.DeleteItem(ctx, "p", "list", deletedUid, nil, human)
+			deletedUID = added.Uid
+			_, _ = mutator.DeleteItem(ctx, "p", "list", deletedUID, nil, human)
 		})
 
 		When("the next mutation runs after the tombstone TTL", func() {
@@ -401,10 +401,10 @@ var _ = Describe("Mutator", func() {
 		It("should serialize without losing updates", func() {
 			_, _, _ = mutator.AddItem(ctx, "p", "list", checklistmutator.AddItemArgs{Text: "seed"}, human)
 
-			const N = 20
+			const concurrency = 20
 			var wg sync.WaitGroup
-			wg.Add(N)
-			for i := 0; i < N; i++ {
+			wg.Add(concurrency)
+			for i := 0; i < concurrency; i++ {
 				go func() {
 					defer wg.Done()
 					_, _, _ = mutator.AddItem(ctx, "p", "list", checklistmutator.AddItemArgs{Text: "concurrent"}, human)
@@ -414,7 +414,7 @@ var _ = Describe("Mutator", func() {
 
 			list, err := mutator.ListItems(ctx, "p", "list")
 			Expect(err).NotTo(HaveOccurred())
-			Expect(list.Items).To(HaveLen(N + 1))
+			Expect(list.Items).To(HaveLen(concurrency + 1))
 		})
 	})
 })

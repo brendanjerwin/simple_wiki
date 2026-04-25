@@ -16,6 +16,19 @@ import (
 	"github.com/brendanjerwin/simple_wiki/gen/go/api/v1/apiv1connect"
 )
 
+// Argument-count constants for the checklist subcommands. Named so the
+// expected shape of each subcommand is greppable from one spot.
+const (
+	checklistAddMinArgs     = 3
+	checklistUpdateMinArgs  = 4
+	checklistReorderMinArgs = 4
+)
+
+// pageListUIDUsage is the canonical "<page> <list> <uid>" string used in
+// usage messages. Defining once avoids "string literal appears N times"
+// lint complaints and keeps wording consistent.
+const pageListUIDUsage = "<page> <list> <uid>"
+
 // buildChecklistCommand creates the `checklist` subcommand tree wrapping
 // the gRPC ChecklistService. The dedicated subcommand is for human use
 // at the terminal — programmatic callers should use the MCP tool or the
@@ -43,28 +56,28 @@ func buildChecklistCommand(urlFlag cli.StringFlag) cli.Command {
 			{
 				Name:      "toggle",
 				Usage:     "Flip an item's checked state",
-				ArgsUsage: "<page> <list> <uid>",
+				ArgsUsage: pageListUIDUsage,
 				Flags:     []cli.Flag{urlFlag},
 				Action:    runChecklistToggle,
 			},
 			{
 				Name:      "update",
 				Usage:     "Update item text",
-				ArgsUsage: "<page> <list> <uid> <text...>",
+				ArgsUsage: pageListUIDUsage + " <text...>",
 				Flags:     []cli.Flag{urlFlag},
 				Action:    runChecklistUpdate,
 			},
 			{
 				Name:      "delete",
 				Usage:     "Remove an item",
-				ArgsUsage: "<page> <list> <uid>",
+				ArgsUsage: pageListUIDUsage,
 				Flags:     []cli.Flag{urlFlag},
 				Action:    runChecklistDelete,
 			},
 			{
 				Name:      "reorder",
 				Usage:     "Update an item's sort_order",
-				ArgsUsage: "<page> <list> <uid> <new_sort_order>",
+				ArgsUsage: pageListUIDUsage + " <new_sort_order>",
 				Flags:     []cli.Flag{urlFlag},
 				Action:    runChecklistReorder,
 			},
@@ -103,7 +116,7 @@ func runChecklistList(c *cli.Context) error {
 
 func runChecklistAdd(c *cli.Context) error {
 	args := c.Args()
-	if len(args) < 3 {
+	if len(args) < checklistAddMinArgs {
 		return errors.New("usage: checklist add <page> <list> <text...>")
 	}
 	page, listName := args[0], args[1]
@@ -122,7 +135,7 @@ func runChecklistAdd(c *cli.Context) error {
 }
 
 func runChecklistToggle(c *cli.Context) error {
-	page, listName, uid, err := requireThreeArgs(c, "toggle", "<page> <list> <uid>")
+	parsed, err := requireThreeArgs(c, "toggle", pageListUIDUsage)
 	if err != nil {
 		return err
 	}
@@ -131,7 +144,7 @@ func runChecklistToggle(c *cli.Context) error {
 		return err
 	}
 	resp, err := client.ToggleItem(context.Background(), connect.NewRequest(&apiv1.ToggleItemRequest{
-		Page: page, ListName: listName, Uid: uid,
+		Page: parsed.page, ListName: parsed.listName, Uid: parsed.uid,
 	}))
 	if err != nil {
 		return fmt.Errorf("ToggleItem: %w", err)
@@ -141,7 +154,7 @@ func runChecklistToggle(c *cli.Context) error {
 
 func runChecklistUpdate(c *cli.Context) error {
 	args := c.Args()
-	if len(args) < 4 {
+	if len(args) < checklistUpdateMinArgs {
 		return errors.New("usage: checklist update <page> <list> <uid> <text...>")
 	}
 	page, listName, uid := args[0], args[1], args[2]
@@ -160,7 +173,7 @@ func runChecklistUpdate(c *cli.Context) error {
 }
 
 func runChecklistDelete(c *cli.Context) error {
-	page, listName, uid, err := requireThreeArgs(c, "delete", "<page> <list> <uid>")
+	parsed, err := requireThreeArgs(c, "delete", pageListUIDUsage)
 	if err != nil {
 		return err
 	}
@@ -169,7 +182,7 @@ func runChecklistDelete(c *cli.Context) error {
 		return err
 	}
 	resp, err := client.DeleteItem(context.Background(), connect.NewRequest(&apiv1.DeleteItemRequest{
-		Page: page, ListName: listName, Uid: uid,
+		Page: parsed.page, ListName: parsed.listName, Uid: parsed.uid,
 	}))
 	if err != nil {
 		return fmt.Errorf("DeleteItem: %w", err)
@@ -179,7 +192,7 @@ func runChecklistDelete(c *cli.Context) error {
 
 func runChecklistReorder(c *cli.Context) error {
 	args := c.Args()
-	if len(args) < 4 {
+	if len(args) < checklistReorderMinArgs {
 		return errors.New("usage: checklist reorder <page> <list> <uid> <new_sort_order>")
 	}
 	page, listName, uid := args[0], args[1], args[2]
@@ -203,7 +216,7 @@ func runChecklistReorder(c *cli.Context) error {
 // requireArgs returns the first two args and a wrapped usage error when fewer
 // than `n` are supplied. (Used for the two-arg subcommands; the three-arg
 // helpers below do similar work.)
-func requireArgs(c *cli.Context, n int, name, usage string) (string, string, error) {
+func requireArgs(c *cli.Context, n int, name, usage string) (page, listName string, err error) {
 	args := c.Args()
 	if len(args) < n {
 		return "", "", fmt.Errorf("usage: checklist %s %s", name, usage)
@@ -211,12 +224,20 @@ func requireArgs(c *cli.Context, n int, name, usage string) (string, string, err
 	return args[0], args[1], nil
 }
 
-func requireThreeArgs(c *cli.Context, name, usage string) (string, string, string, error) {
+// pageListUIDArgs captures the (page, list, uid) triple parsed from a
+// CLI argv. Returning a struct lets requireThreeArgs stay under the
+// linter's max-results-per-function limit.
+type pageListUIDArgs struct {
+	page, listName, uid string
+}
+
+func requireThreeArgs(c *cli.Context, name, usage string) (pageListUIDArgs, error) {
 	args := c.Args()
-	if len(args) < 3 {
-		return "", "", "", fmt.Errorf("usage: checklist %s %s", name, usage)
+	const minArgs = 3
+	if len(args) < minArgs {
+		return pageListUIDArgs{}, fmt.Errorf("usage: checklist %s %s", name, usage)
 	}
-	return args[0], args[1], args[2], nil
+	return pageListUIDArgs{page: args[0], listName: args[1], uid: args[2]}, nil
 }
 
 // printJSON marshals a proto message to indented JSON on stdout.

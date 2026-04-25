@@ -1,13 +1,24 @@
 import { html, LitElement, nothing } from 'lit';
 import { property, state } from 'lit/decorators.js';
 import { createClient } from '@connectrpc/connect';
-import { create, type JsonObject } from '@bufbuild/protobuf';
+import { ConnectError, Code } from '@connectrpc/connect';
+import { create } from '@bufbuild/protobuf';
+import { timestampDate } from '@bufbuild/protobuf/wkt';
 import { getGrpcWebTransport } from './grpc-transport.js';
 import {
-  Frontmatter,
-  GetFrontmatterRequestSchema,
-  MergeFrontmatterRequestSchema,
-} from '../gen/api/v1/frontmatter_pb.js';
+  ChecklistService,
+  ListItemsRequestSchema,
+  AddItemRequestSchema,
+  UpdateItemRequestSchema,
+  ToggleItemRequestSchema,
+  DeleteItemRequestSchema,
+  ReorderItemRequestSchema,
+} from '../gen/api/v1/checklist_pb.js';
+import type {
+  Checklist,
+  ChecklistItem,
+} from '../gen/api/v1/checklist_pb.js';
+import type { Timestamp } from '@bufbuild/protobuf/wkt';
 import {
   foundationCSS,
   buttonCSS,
@@ -19,23 +30,35 @@ import {
 import { AugmentErrorService, type AugmentedError } from './augment-error-service.js';
 import './error-display.js';
 import { parseTaggedInput, composeTaggedText } from './checklist-tag-parser.js';
-import { extractChecklistData, asRecord } from './checklist-data-service.js';
-import { reorderItems, ChecklistDragManager } from './checklist-drag-manager.js';
+import {
+  reorderItems,
+  computeSortOrder,
+  ChecklistDragManager,
+} from './checklist-drag-manager.js';
 import type { DragReorderHandler } from './checklist-drag-manager.js';
 import { wikiChecklistStyles } from './wiki-checklist-styles.js';
 
-import type { ChecklistItem } from './checklist-tag-parser.js';
-export type { ChecklistItem, ChecklistData } from './checklist-tag-parser.js';
+export type { ChecklistItem, Checklist } from '../gen/api/v1/checklist_pb.js';
 
 // Polling interval in milliseconds
 const POLL_INTERVAL_MS = 10000;
+// OCC retry happens once on FailedPrecondition; the retry uses the
+// updated_at returned from the refetch.
+const OCC_TOAST_DURATION_MS = 2000;
 
 /**
  * WikiChecklist - A fully API-driven interactive checklist component.
  *
- * Polls GetFrontmatter for data and persists changes via MergeFrontmatter.
+ * Mutations go through ChecklistService, which gives us:
+ *   - server-stamped attribution (completed_by, automated)
+ *   - per-item created_at/updated_at
+ *   - optimistic concurrency via expected_updated_at
+ *   - per-list sync_token bookkeeping for CalDAV
  *
- * @property {string} listName - Checklist name in frontmatter (attribute: list-name)
+ * Polls ListItems for fresh data; short-circuits the render when the
+ * checklist's updated_at hasn't moved.
+ *
+ * @property {string} listName - Checklist name (attribute: list-name)
  * @property {string} page - Page identifier for gRPC calls
  *
  * @example
@@ -72,6 +95,17 @@ export class WikiChecklist extends LitElement implements DragReorderHandler {
   @state()
   declare filterTags: string[];
 
+  // Per-list metadata: updated_at + sync_token, used as OCC token.
+  @state()
+  declare _listUpdatedAt: Timestamp | undefined;
+
+  @state()
+  declare _syncToken: bigint;
+
+  // OCC retry toast — surfaced briefly when a mutation lost a race.
+  @state()
+  declare _occRetryToastVisible: boolean;
+
   // Index of the item currently being edited (text input focused)
   @state()
   private declare editingIndex: number | null;
@@ -85,11 +119,11 @@ export class WikiChecklist extends LitElement implements DragReorderHandler {
   declare _touchDragActive: boolean;
 
   private _boundHandleVisibilityChange: (() => void) | null = null;
-
+  private _occToastTimer: ReturnType<typeof setTimeout> | null = null;
 
   private pollingTimer: ReturnType<typeof setInterval> | null = null;
 
-  readonly client = createClient(Frontmatter, getGrpcWebTransport());
+  readonly client = createClient(ChecklistService, getGrpcWebTransport());
 
   private readonly _dragManager: ChecklistDragManager;
 
@@ -102,6 +136,9 @@ export class WikiChecklist extends LitElement implements DragReorderHandler {
     this.saving = false;
     this.error = null;
     this.filterTags = [];
+    this._listUpdatedAt = undefined;
+    this._syncToken = 0n;
+    this._occRetryToastVisible = false;
     this.editingIndex = null;
     this.newItemText = '';
     this._touchDragActive = false;
@@ -116,9 +153,29 @@ export class WikiChecklist extends LitElement implements DragReorderHandler {
   }
 
   async onReorder(fromIndex: number, toInsertIndex: number): Promise<void> {
-    const newItems = reorderItems(this.items, fromIndex, toInsertIndex);
-    this.items = newItems;
-    await this._persistData(newItems);
+    const moved = this.items[fromIndex];
+    if (!moved) return;
+    const newSortOrder = computeSortOrder(
+      this.items.map(i => ({ uid: i.uid, sortOrder: i.sortOrder })),
+      toInsertIndex,
+      moved.uid
+    );
+
+    // Optimistic local update
+    const previousItems = this.items;
+    this.items = reorderItems(this.items, fromIndex, toInsertIndex);
+
+    await this._callMutation(
+      async expectedUpdatedAt => this.client.reorderItem(create(ReorderItemRequestSchema, {
+        page: this.page,
+        listName: this.listName,
+        uid: moved.uid,
+        newSortOrder,
+        expectedUpdatedAt,
+      })),
+      previousItems,
+      'reordering item'
+    );
   }
 
   onError(err: unknown): void {
@@ -206,6 +263,10 @@ export class WikiChecklist extends LitElement implements DragReorderHandler {
       document.removeEventListener('visibilitychange', this._boundHandleVisibilityChange);
       this._boundHandleVisibilityChange = null;
     }
+    if (this._occToastTimer !== null) {
+      clearTimeout(this._occToastTimer);
+      this._occToastTimer = null;
+    }
     this._dragManager.cleanup();
   }
 
@@ -257,7 +318,10 @@ export class WikiChecklist extends LitElement implements DragReorderHandler {
   }
 
   /**
-   * Fetch checklist data from GetFrontmatter and update state.
+   * Fetch checklist data via ListItems.
+   *
+   * Short-circuits the render when the checklist's updated_at value is
+   * unchanged, avoiding unnecessary work and preserving cursor/edit state.
    */
   private async fetchData(): Promise<void> {
     if (!this.page) {
@@ -265,10 +329,28 @@ export class WikiChecklist extends LitElement implements DragReorderHandler {
     }
 
     try {
-      const request = create(GetFrontmatterRequestSchema, { page: this.page });
-      const response = await this.client.getFrontmatter(request);
-      const { items } = extractChecklistData(response.frontmatter ?? {}, this.listName);
-      this.items = items;
+      const request = create(ListItemsRequestSchema, {
+        page: this.page,
+        listName: this.listName,
+      });
+      const response = await this.client.listItems(request);
+      const checklist = response.checklist;
+      if (!checklist) {
+        this.items = [];
+        this._listUpdatedAt = undefined;
+        this._syncToken = 0n;
+      } else if (timestampsEqual(checklist.updatedAt, this._listUpdatedAt)) {
+        // Server data unchanged — skip the re-render entirely. This is
+        // the polling short-circuit; it preserves edit-mode state and
+        // cursor position.
+        this.error = null;
+        this.loading = false;
+        return;
+      } else {
+        this.items = [...checklist.items];
+        this._listUpdatedAt = checklist.updatedAt;
+        this._syncToken = checklist.syncToken;
+      }
       this.error = null;
     } catch (err) {
       this.error = AugmentErrorService.augmentError(err, 'loading checklist');
@@ -278,80 +360,114 @@ export class WikiChecklist extends LitElement implements DragReorderHandler {
   }
 
   /**
-   * Read-modify-write: get current frontmatter, update checklists key, merge back.
+   * Run a mutation with optimistic local update + OCC retry.
+   *
+   * The mutation closure receives the current expected_updated_at (which
+   * may be undefined if the list has never been read). On
+   * FailedPrecondition the component refetches, surfaces a brief toast,
+   * and retries the mutation once. Any other error reverts the local
+   * optimistic state and surfaces the error.
    */
-  private async _persistData(
-    newItems: ChecklistItem[]
+  private async _callMutation(
+    runMutation: (expectedUpdatedAt: Timestamp | undefined) => Promise<MutationResponse>,
+    previousItems: ChecklistItem[],
+    failedGoalDescription: string
   ): Promise<void> {
-    if (!this.page) {
-      throw new Error('wiki-checklist: page attribute is required but not set');
-    }
-
     try {
       this.saving = true;
-
-      // Read current frontmatter
-      const getRequest = create(GetFrontmatterRequestSchema, {
-        page: this.page,
-      });
-      const currentResponse = await this.client.getFrontmatter(getRequest);
-      const currentFrontmatter: JsonObject = {
-        ...currentResponse.frontmatter,
-      };
-
-      // Build updated checklist data
-      const checklistData: JsonObject = {
-        items: newItems.map(item => {
-          const obj: JsonObject = { text: item.text, checked: item.checked };
-          if (item.tags.length > 0) {
-            obj['tags'] = item.tags;
-          }
-          return obj;
-        }),
-      };
-
-      // Update the checklists key
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- asRecord narrows to non-null object; values originate from parsed JSON and are valid JsonValues
-      const existingChecklists = (asRecord(currentFrontmatter['checklists']) ?? {}) as JsonObject;
-      const updatedChecklists: JsonObject = {
-        ...existingChecklists,
-        [this.listName]: checklistData,
-      };
-
-      const mergeRequest = create(MergeFrontmatterRequestSchema, {
-        page: this.page,
-        frontmatter: { checklists: updatedChecklists },
-      });
-      const mergeResponse = await this.client.mergeFrontmatter(mergeRequest);
-
-      // Update local state from the response
-      if (mergeResponse.frontmatter) {
-        const { items } = extractChecklistData(
-          mergeResponse.frontmatter,
-          this.listName
-        );
-        this.items = items;
-      }
       this.error = null;
+
+      let response: MutationResponse;
+      try {
+        response = await runMutation(this._listUpdatedAt);
+      } catch (err) {
+        if (err instanceof ConnectError && err.code === Code.FailedPrecondition) {
+          // OCC mismatch — refetch and retry once.
+          await this._refetchForOccRetry();
+          this._showOccRetryToast();
+          response = await runMutation(this._listUpdatedAt);
+        } else {
+          throw err;
+        }
+      }
+
+      if (response.checklist) {
+        this.items = [...response.checklist.items];
+        this._listUpdatedAt = response.checklist.updatedAt;
+        this._syncToken = response.checklist.syncToken;
+      }
     } catch (err) {
-      this.error = AugmentErrorService.augmentError(err, 'saving checklist');
+      // Revert the optimistic state on non-OCC failure.
+      this.items = previousItems;
+      this.error = AugmentErrorService.augmentError(err, failedGoalDescription);
     } finally {
       this.saving = false;
     }
   }
 
+  private async _refetchForOccRetry(): Promise<void> {
+    const request = create(ListItemsRequestSchema, {
+      page: this.page,
+      listName: this.listName,
+    });
+    const response = await this.client.listItems(request);
+    if (response.checklist) {
+      this._listUpdatedAt = response.checklist.updatedAt;
+      this._syncToken = response.checklist.syncToken;
+    }
+  }
+
+  private _showOccRetryToast(): void {
+    this._occRetryToastVisible = true;
+    if (this._occToastTimer !== null) {
+      clearTimeout(this._occToastTimer);
+    }
+    this._occToastTimer = setTimeout(() => {
+      this._occRetryToastVisible = false;
+      this._occToastTimer = null;
+    }, OCC_TOAST_DURATION_MS);
+  }
+
   private async _handleToggleItem(index: number): Promise<void> {
-    const newItems = this.items.map((item, i) =>
-      i === index ? { ...item, checked: !item.checked } : item
+    const item = this.items[index];
+    if (!item) return;
+    const previousItems = this.items;
+
+    // Optimistic local update
+    this.items = this.items.map((it, i) =>
+      i === index ? { ...it, checked: !it.checked } : it
     );
-    this.items = newItems;
-    await this._persistData(newItems);
+
+    await this._callMutation(
+      async expectedUpdatedAt => this.client.toggleItem(create(ToggleItemRequestSchema, {
+        page: this.page,
+        listName: this.listName,
+        uid: item.uid,
+        expectedUpdatedAt,
+      })),
+      previousItems,
+      'toggling item'
+    );
   }
 
   private async _handleRemoveItem(index: number): Promise<void> {
-    const newItems = this.items.filter((_, i) => i !== index);
-    this.items = newItems;
-    await this._persistData(newItems);
+    const item = this.items[index];
+    if (!item) return;
+    const previousItems = this.items;
+
+    // Optimistic local update
+    this.items = this.items.filter((_, i) => i !== index);
+
+    await this._callMutation(
+      async expectedUpdatedAt => this.client.deleteItem(create(DeleteItemRequestSchema, {
+        page: this.page,
+        listName: this.listName,
+        uid: item.uid,
+        expectedUpdatedAt,
+      })),
+      previousItems,
+      'deleting item'
+    );
   }
 
   private async _enterEditMode(index: number): Promise<void> {
@@ -372,11 +488,27 @@ export class WikiChecklist extends LitElement implements DragReorderHandler {
     this.editingIndex = null;
     const { tags, text } = parseTaggedInput(value);
     if (!text) return;
-    const newItems = this.items.map((item, i) =>
-      i === index ? { ...item, text, tags } : item
+    const item = this.items[index];
+    if (!item) return;
+    const previousItems = this.items;
+
+    // Optimistic local update
+    this.items = this.items.map((it, i) =>
+      i === index ? { ...it, text, tags } : it
     );
-    this.items = newItems;
-    await this._persistData(newItems);
+
+    await this._callMutation(
+      async expectedUpdatedAt => this.client.updateItem(create(UpdateItemRequestSchema, {
+        page: this.page,
+        listName: this.listName,
+        uid: item.uid,
+        text,
+        tags,
+        expectedUpdatedAt,
+      })),
+      previousItems,
+      'updating item'
+    );
   }
 
   private _handleItemTextKeydown(
@@ -402,11 +534,20 @@ export class WikiChecklist extends LitElement implements DragReorderHandler {
   private async _handleAddItem(): Promise<void> {
     const { tags, text } = parseTaggedInput(this.newItemText);
     if (!text) return;
-    const newItem: ChecklistItem = { text, checked: false, tags };
-    const newItems = [...this.items, newItem];
-    this.items = newItems;
+    const previousItems = this.items;
     this.newItemText = '';
-    await this._persistData(newItems);
+
+    await this._callMutation(
+      async expectedUpdatedAt => this.client.addItem(create(AddItemRequestSchema, {
+        page: this.page,
+        listName: this.listName,
+        text,
+        tags,
+        expectedUpdatedAt,
+      })),
+      previousItems,
+      'adding item'
+    );
   }
 
   private _handleNewItemKeydown(event: KeyboardEvent): void {
@@ -493,15 +634,40 @@ export class WikiChecklist extends LitElement implements DragReorderHandler {
   private async _keyboardMoveItem(fromIndex: number, direction: 'up' | 'down'): Promise<void> {
     const toInsertIndex = direction === 'up' ? fromIndex - 1 : fromIndex + 2;
     const newIndex = direction === 'up' ? fromIndex - 1 : fromIndex + 1;
-    const newItems = reorderItems(this.items, fromIndex, toInsertIndex);
-    this.items = newItems;
-    void this._persistData(newItems);
+
+    await this.onReorder(fromIndex, toInsertIndex);
 
     await this.updateComplete;
     const handles = this.shadowRoot?.querySelectorAll<HTMLElement>('.drag-handle');
     const handle = handles?.[newIndex];
     handle?.focus();
   }
+
+  private async _handleDeleteChecked(): Promise<void> {
+    const checkedItems = this.items.filter(item => item.checked);
+    for (const item of checkedItems) {
+      const previousItems = this.items;
+      this.items = this.items.filter(it => it.uid !== item.uid);
+      // Sequential deletes — each one bumps updated_at, so we can't fan out.
+      await this._callMutation(
+        async expectedUpdatedAt => this.client.deleteItem(create(DeleteItemRequestSchema, {
+          page: this.page,
+          listName: this.listName,
+          uid: item.uid,
+          expectedUpdatedAt,
+        })),
+        previousItems,
+        'deleting checked items'
+      );
+      // Bail if a delete failed — don't keep firing requests against
+      // a list that's already in a bad state.
+      if (this.error) return;
+    }
+  }
+
+  // ---------------------------------------------------------------------
+  // Render
+  // ---------------------------------------------------------------------
 
   private _renderItemEditInput(index: number) {
     return html`
@@ -520,23 +686,74 @@ export class WikiChecklist extends LitElement implements DragReorderHandler {
       />`;
   }
 
-  private _renderItemDisplayText(item: ChecklistItem, index: number) {
+  private _renderItemDisplayText(item: ChecklistItem, _index: number) {
     return html`
       <span
         class="item-display-text"
         role="button"
         tabindex="0"
-        @click="${() => void this._enterEditMode(index)}"
+        @click="${() => void this._enterEditMode(_index)}"
         @keydown="${(e: KeyboardEvent) => {
           if (e.key === 'Enter' || e.key === ' ') {
             e.preventDefault();
-            void this._enterEditMode(index);
+            void this._enterEditMode(_index);
           }
         }}"
       >${item.text}</span>
       ${item.tags.map(
         tag => html`<span class="item-tag-badge">${tag}</span>`
       )}`;
+  }
+
+  private _renderCompletedCaption(item: ChecklistItem) {
+    if (!item.checked) return nothing;
+    if (!item.completedBy && !item.completedAt) return nothing;
+
+    const who = item.automated
+      ? 'an agent'
+      : (item.completedBy ?? 'someone');
+    const whenText = item.completedAt
+      ? ` · ${formatRelativeTime(item.completedAt)}`
+      : '';
+
+    return html`
+      <div class="item-meta-caption" data-meta="completed">
+        Done by ${who}${whenText}
+      </div>
+    `;
+  }
+
+  private _renderDescription(item: ChecklistItem) {
+    if (!item.description || !item.description.trim()) return nothing;
+    return html`
+      <div class="item-description">${item.description}</div>
+    `;
+  }
+
+  private _renderDueIndicator(item: ChecklistItem) {
+    if (!item.due) return nothing;
+    const dueDate = timestampDate(item.due);
+    const overdue = dueDate.getTime() < Date.now() && !item.checked;
+    return html`
+      <div class="item-due ${overdue ? 'item-due-overdue' : ''}" data-meta="due">
+        <span aria-hidden="true">\u{1F4C5}</span>
+        <span>${formatRelativeTime(item.due)}</span>
+      </div>
+    `;
+  }
+
+  private _renderDebugBadge(item: ChecklistItem) {
+    if (!isDebugBadgeEnabled()) return nothing;
+    const updated = item.updatedAt
+      ? timestampDate(item.updatedAt).toISOString()
+      : 'n/a';
+    return html`
+      <div class="item-debug-badge">
+        <span>uid:${item.uid.slice(0, 8)}</span>
+        <span>upd:${updated}</span>
+        <span>so:${item.sortOrder.toString()}</span>
+      </div>
+    `;
   }
 
   private _renderItem(
@@ -553,6 +770,7 @@ export class WikiChecklist extends LitElement implements DragReorderHandler {
       <li
         class="item-row ${item.checked ? 'item-checked' : ''} ${isDragging ? 'dragging' : ''} ${dragOverClass}"
         data-index="${index}"
+        data-uid="${item.uid}"
         @dragstart="${(e: DragEvent) => this._handleItemDragStart(e, index)}"
         @dragover="${(e: DragEvent) =>
           this._handleItemDragOver(e, index)}"
@@ -568,7 +786,7 @@ export class WikiChecklist extends LitElement implements DragReorderHandler {
           @mousedown="${(e: MouseEvent) => this._handleDragHandleMousedown(e)}"
           @touchstart="${(e: TouchEvent) => this._handleTouchStart(e, index)}"
           @keydown="${(e: KeyboardEvent) => this._handleDragHandleKeydown(e, index)}"
-        >\u2807</span>
+        >⠇</span>
         <input
           type="checkbox"
           class="item-checkbox"
@@ -581,6 +799,10 @@ export class WikiChecklist extends LitElement implements DragReorderHandler {
           ${this.editingIndex === index
             ? this._renderItemEditInput(index)
             : this._renderItemDisplayText(item, index)}
+          ${this._renderDescription(item)}
+          ${this._renderDueIndicator(item)}
+          ${this._renderCompletedCaption(item)}
+          ${this._renderDebugBadge(item)}
         </span>
         <button
           class="remove-btn"
@@ -589,16 +811,10 @@ export class WikiChecklist extends LitElement implements DragReorderHandler {
           ?disabled="${this.saving}"
           @click="${() => this._handleRemoveItem(index)}"
         >
-          \u2715
+          ✕
         </button>
       </li>
     `;
-  }
-
-  private async _handleDeleteChecked(): Promise<void> {
-    const newItems = this.items.filter(item => !item.checked);
-    this.items = newItems;
-    await this._persistData(newItems);
   }
 
   private _renderTagFilterBar() {
@@ -650,7 +866,7 @@ export class WikiChecklist extends LitElement implements DragReorderHandler {
           type="text"
           class="add-text-input"
           .value="${this.newItemText}"
-          placeholder="Add item\u2026 (use #tag for grouping)"
+          placeholder="Add item… (use #tag for grouping)"
           aria-label="New item text, with optional #tag anywhere for grouping"
           ?disabled="${this.saving}"
           @input="${(e: InputEvent) => {
@@ -671,13 +887,34 @@ export class WikiChecklist extends LitElement implements DragReorderHandler {
     `;
   }
 
+  private _renderListDebugBadge() {
+    if (!isDebugBadgeEnabled()) return nothing;
+    const updated = this._listUpdatedAt
+      ? timestampDate(this._listUpdatedAt).toISOString()
+      : 'n/a';
+    return html`
+      <div class="list-debug-badge" data-debug="list">
+        sync:${this._syncToken.toString()} · upd:${updated}
+      </div>
+    `;
+  }
+
+  private _renderOccToast() {
+    if (!this._occRetryToastVisible) return nothing;
+    return html`
+      <div class="occ-retry-toast" role="status" aria-live="polite">
+        Edited concurrently — refreshed
+      </div>
+    `;
+  }
+
   override render() {
     let checklistItemsContent;
     if (this.loading) {
       checklistItemsContent = html`
         <div class="loading" role="status" aria-live="polite">
           <i class="fas fa-spinner fa-spin" aria-hidden="true"></i>
-          Loading checklist\u2026
+          Loading checklist…
         </div>
       `;
     } else if (this.error) {
@@ -720,9 +957,9 @@ export class WikiChecklist extends LitElement implements DragReorderHandler {
               role="status"
               aria-live="polite"
               aria-atomic="true"
-            >${this.saving ? 'Saving\u2026' : ''}</span>
+            >${this.saving ? 'Saving…' : ''}</span>
             ${this.saving
-              ? html`<span class="saving-indicator" aria-hidden="true">Saving\u2026</span>`
+              ? html`<span class="saving-indicator" aria-hidden="true">Saving…</span>`
               : nothing}
             ${this.items.some(item => item.checked)
               ? html`
@@ -739,9 +976,63 @@ export class WikiChecklist extends LitElement implements DragReorderHandler {
           </div>
         </div>
 
+        ${this._renderListDebugBadge()}
         ${checklistItemsContent}
+        ${this._renderOccToast()}
       </div>
     `;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+interface MutationResponse {
+  checklist?: Checklist;
+}
+
+function timestampsEqual(a: Timestamp | undefined, b: Timestamp | undefined): boolean {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  return a.seconds === b.seconds && a.nanos === b.nanos;
+}
+
+/**
+ * Render a Timestamp as a short relative-time phrase, e.g. "2h ago" or
+ * "in 30m". Falls back to ISO date for very old/distant times.
+ */
+function formatRelativeTime(ts: Timestamp): string {
+  const date = timestampDate(ts);
+  const diffMs = date.getTime() - Date.now();
+  const absMs = Math.abs(diffMs);
+  const past = diffMs < 0;
+
+  const minute = 60_000;
+  const hour = 60 * minute;
+  const day = 24 * hour;
+
+  if (absMs < minute) return past ? 'just now' : 'in <1m';
+  if (absMs < hour) {
+    const m = Math.round(absMs / minute);
+    return past ? `${m}m ago` : `in ${m}m`;
+  }
+  if (absMs < day) {
+    const h = Math.round(absMs / hour);
+    return past ? `${h}h ago` : `in ${h}h`;
+  }
+  if (absMs < 7 * day) {
+    const d = Math.round(absMs / day);
+    return past ? `${d}d ago` : `in ${d}d`;
+  }
+  return date.toISOString().slice(0, 10);
+}
+
+function isDebugBadgeEnabled(): boolean {
+  try {
+    return globalThis.localStorage?.getItem('wiki-checklist-debug') === '1';
+  } catch {
+    return false;
   }
 }
 
