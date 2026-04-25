@@ -186,6 +186,16 @@ func (s *Site) startMigrationJobs() {
 	} else {
 		s.Logger.Info("JSON archive migration started.")
 	}
+
+	// One-shot migration: rewrite legacy `:tag` checklist items to `#tag` and
+	// stamp `migrated_tags_syntax = true`. Once we're confident no pages have
+	// the old syntax in the wild, the scan/job pair can be deleted entirely.
+	checklistTagMigration := eager.NewChecklistTagSyntaxMigrationScanJob(dataDirScanner, s.JobQueueCoordinator, s)
+	if err := s.JobQueueCoordinator.EnqueueJob(checklistTagMigration); err != nil {
+		s.Logger.Error("Failed to enqueue checklist tag-syntax migration job: %v", err)
+	} else {
+		s.Logger.Info("Checklist tag-syntax migration started.")
+	}
 }
 
 // Defaults for the agent-schedule machinery when CLI flags do not override

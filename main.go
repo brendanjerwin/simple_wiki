@@ -15,6 +15,7 @@ import (
 
 	"github.com/brendanjerwin/simple_wiki/internal/bootstrap"
 	"github.com/brendanjerwin/simple_wiki/internal/observability"
+	"github.com/brendanjerwin/simple_wiki/internal/syspage"
 	"github.com/brendanjerwin/simple_wiki/server"
 	"github.com/brendanjerwin/simple_wiki/tailscale"
 	"github.com/jcelliott/lumber"
@@ -148,8 +149,8 @@ func createSite(c *cli.Context) (*server.Site, error) {
 		logger.Warn("Failed to load agent schedules at startup: %v", err)
 	}
 
-	if err := site.SeedInitialPages(); err != nil {
-		logger.Warn("Failed to seed initial wiki pages: %v", err)
+	if err := syspage.Sync(site, logger); err != nil {
+		logger.Warn("Failed to sync embedded system pages: %v", err)
 	}
 
 	return site, nil

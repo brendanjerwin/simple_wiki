@@ -43,11 +43,32 @@ const alertTransformerPriority = 100
 // alertRendererPriority for the custom alert node renderer.
 const alertRendererPriority = 500
 
+// hashtagInlineParserPriority must run after the link parser so `(#anchor)`
+// inside markdown link syntax `[text](#anchor)` is consumed as part of the
+// link before the hashtag parser sees it. The default link parser is at
+// priority 200, so we use a larger number (lower priority).
+const hashtagInlineParserPriority = 999
+
+// hashtagRendererPriority for the custom hashtag node renderer.
+const hashtagRendererPriority = 500
+
 type GoldmarkRenderer struct{}
 
 // Render renders the input markdown to HTML.
 func (GoldmarkRenderer) Render(input []byte) ([]byte, error) {
-	md := goldmark.New(
+	md := newGoldmark()
+
+	var buf bytes.Buffer
+	if err := md.Convert(input, &buf); err != nil {
+		return []byte{}, err
+	}
+	return sanitizeWikiHTML(buf.Bytes()), nil
+}
+
+// newGoldmark constructs the configured Goldmark instance with all parser
+// and renderer extensions used by the wiki.
+func newGoldmark() goldmark.Markdown {
+	return goldmark.New(
 		goldmark.WithExtensions(
 			extension.GFM,
 			emoji.Emoji,
@@ -60,6 +81,9 @@ func (GoldmarkRenderer) Render(input []byte) ([]byte, error) {
 			parser.WithAutoHeadingID(),
 			parser.WithBlockParsers(
 				util.Prioritized(NewCollapsibleHeadingBlockParser(), collapsibleHeadingParserPriority),
+			),
+			parser.WithInlineParsers(
+				util.Prioritized(NewHashtagInlineParser(), hashtagInlineParserPriority),
 			),
 			parser.WithASTTransformers(
 				util.Prioritized(NewCollapsibleSectionTransformer(), collapsibleSectionRendererPriority),
@@ -75,14 +99,16 @@ func (GoldmarkRenderer) Render(input []byte) ([]byte, error) {
 				util.Prioritized(NewWikiTableRenderer(html.WithUnsafe()), wikiTableRendererPriority),
 				util.Prioritized(NewCollapsibleSectionRenderer(html.WithUnsafe()), collapsibleSectionRendererPriority),
 				util.Prioritized(NewAlertRenderer(html.WithUnsafe()), alertRendererPriority),
+				util.Prioritized(NewHashtagRenderer(html.WithUnsafe()), hashtagRendererPriority),
 			),
 		),
 	)
+}
 
-	var buf bytes.Buffer
-	if err := md.Convert(input, &buf); err != nil {
-		return []byte{}, err
-	}
+// sanitizeWikiHTML applies the wiki's bluemonday allowlist to raw HTML
+// produced by Goldmark. The allowlist is the union of the default UGC
+// policy plus every custom element/attribute the wiki's renderers emit.
+func sanitizeWikiHTML(rawHTML []byte) []byte {
 	p := bluemonday.UGCPolicy()
 	// Allow GFM task list checkboxes
 	p.AllowElements("input")
@@ -108,13 +134,20 @@ func (GoldmarkRenderer) Render(input []byte) ([]byte, error) {
 	// Allow slot attribute on heading elements for the collapsible-heading named slot
 	p.AllowAttrs("slot").OnElements("h1", "h2", "h3", "h4", "h5", "h6")
 	p.AllowAttrs("class").OnElements("span", "a")
+	// Allow wiki-hashtag custom element emitted by the hashtag inline
+	// parser/renderer. The `tag` attribute carries the normalized tag value
+	// (letters, digits, hyphen, underscore — Unicode allowed via the
+	// non-ASCII range below); the Lit component handles its own click
+	// behavior, opening a small popover anchored to the pill.
+	p.AllowElements("wiki-hashtag")
+	p.AllowAttrs("tag").Matching(regexp.MustCompile(`^[\p{L}\p{N}\-_]+$`)).OnElements("wiki-hashtag")
 	// Allow GitHub-style alert/admonition blocks rendered by the alert transformer.
 	p.AllowElements("div")
 	p.AllowAttrs("class").Matching(regexp.MustCompile(`^markdown-alert(?: markdown-alert-(?:note|tip|important|warning|caution))?$`)).OnElements("div")
 	p.AllowAttrs("role").Matching(regexp.MustCompile(`^note$`)).OnElements("div")
 	p.AllowAttrs("class").Matching(regexp.MustCompile(`^markdown-alert-title$`)).OnElements("p")
 	p.AllowAttrs("aria-hidden").Matching(regexp.MustCompile(`^true$`)).OnElements("span")
-	return p.SanitizeBytes(buf.Bytes()), nil
+	return p.SanitizeBytes(rawHTML)
 }
 
 type wikilinkResolver struct{}

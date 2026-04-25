@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/brendanjerwin/simple_wiki/internal/syspage"
 	"github.com/brendanjerwin/simple_wiki/static"
 	"github.com/brendanjerwin/simple_wiki/tailscale"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
@@ -339,11 +340,38 @@ func (s *Site) buildTemplateData(page, command string, listing DirectoryListing,
 		"UnixTime":         time.Now().Unix(),
 		"AllowFileUploads": s.Fileuploads,
 		"MaxUploadMB":      s.MaxUploadSize,
-		"WikiBaseURL": requestBaseURL(c),
-		"Username":    identity.LoginName(),
+		"WikiBaseURL":      requestBaseURL(c),
+		"Username":         identity.LoginName(),
+		"IsSystemPage":     s.isSystemPage(page),
 	}
 }
 
+// isSystemPage reports whether the given page identifier refers to a page
+// flagged `system = true` in its frontmatter (sourced from the embedded help
+// corpus). The check is best-effort — if the page can't be read we assume
+// not-system rather than blocking the render.
+func (s *Site) isSystemPage(page string) bool {
+	_, fm, err := s.ReadFrontMatter(wikipage.PageIdentifier(page))
+	if err != nil {
+		return false
+	}
+	return syspage.IsSystemPage(fm)
+}
+
+// getRecentlyEdited returns the per-user list of recently visited pages,
+// recorded in the user's cookie session. Despite the misleading name, this is
+// driven by GET visits (in handlePageRequest), not by writes — and the list
+// is private to each browser session, never aggregated globally.
+//
+// Issue #980 asked us to "filter system-page writes out of the recent-changes
+// feed (or mark them specially) — startup overwrites would otherwise dominate
+// the feed on every deploy." The concern there assumed a global, write-driven
+// feed. Because this implementation is session-only and visit-driven, startup
+// syspage.Sync writes cannot pollute it: the only way a system page lands in
+// any user's list is if that user navigates to it themselves. No filter is
+// applied here for that reason. If a global recent-changes feed is added in
+// the future, that surface should call syspage.IsSystemPage to skip system
+// pages.
 func getRecentlyEdited(title string, c *gin.Context, logger *lumber.ConsoleLogger) []string {
 	session := sessions.Default(c)
 	var recentlyEdited string

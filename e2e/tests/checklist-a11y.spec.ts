@@ -47,7 +47,7 @@ title = "Checklist A11y Test Page"
     const addInput = checklist.locator('.add-text-input');
     const addButton = checklist.locator('.add-btn');
 
-    for (const itemText of ['First item :alpha', 'Second item :beta', 'Third item :alpha']) {
+    for (const itemText of ['First item #alpha', 'Second item #beta', 'Third item #alpha']) {
       await addInput.fill(itemText);
       await addButton.click();
       await expect(checklist.locator('.saving-indicator')).not.toBeVisible({

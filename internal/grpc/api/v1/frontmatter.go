@@ -239,6 +239,10 @@ func (s *Server) MergeFrontmatter(_ context.Context, req *apiv1.MergeFrontmatter
 		}
 	}
 
+	if guardErr := requireUserMutable(s.pageReaderMutator, wikipage.PageIdentifier(req.Page)); guardErr != nil {
+		return nil, guardErr
+	}
+
 	_, existingFm, err := s.pageReaderMutator.ReadFrontMatter(wikipage.PageIdentifier(req.Page))
 	if err != nil && !os.IsNotExist(err) {
 		return nil, status.Errorf(codes.Internal, failedToReadFrontmatterErrFmt, err)
@@ -281,6 +285,10 @@ func (s *Server) ReplaceFrontmatter(_ context.Context, req *apiv1.ReplaceFrontma
 		// Filter out any user-provided identifier key and set the correct one
 		fm = filterIdentifierKey(fm)
 		fm[identifierKey] = req.Page
+	}
+
+	if guardErr := requireUserMutable(s.pageReaderMutator, wikipage.PageIdentifier(req.Page)); guardErr != nil {
+		return nil, guardErr
 	}
 
 	// Carry the reserved agent.* subtree forward — even a caller unaware of the
@@ -331,6 +339,10 @@ func (s *Server) RemoveKeyAtPath(_ context.Context, req *apiv1.RemoveKeyAtPathRe
 	// Reject any path under the reserved agent.* namespace.
 	if pathStartsWithReservedAgent(req.GetKeyPath()) {
 		return nil, status.Error(codes.InvalidArgument, reservedAgentRedirect)
+	}
+
+	if guardErr := requireUserMutable(s.pageReaderMutator, wikipage.PageIdentifier(req.Page)); guardErr != nil {
+		return nil, guardErr
 	}
 
 	_, fm, err := s.pageReaderMutator.ReadFrontMatter(wikipage.PageIdentifier(req.Page))

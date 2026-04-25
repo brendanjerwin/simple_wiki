@@ -53,6 +53,9 @@ func (noOpPageOpener) ReadPage(wikipage.PageIdentifier) (*wikipage.Page, error) 
 type noOpBleveIndexQueryer struct{}
 
 func (noOpBleveIndexQueryer) Query(string) ([]bleve.SearchResult, error) { return nil, nil }
+func (noOpBleveIndexQueryer) QueryWithTags(string, []string, []string) ([]bleve.SearchResult, error) {
+	return nil, nil
+}
 
 // noOpFrontmatterIndexQueryer satisfies wikipage.IQueryFrontmatterIndex for tests.
 type noOpFrontmatterIndexQueryer struct{}

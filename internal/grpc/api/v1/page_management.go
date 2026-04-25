@@ -284,6 +284,9 @@ func (s *Server) readPageHashAndModTime(pageID wikipage.PageIdentifier) (string,
 
 // DeletePage implements the DeletePage RPC.
 func (s *Server) DeletePage(ctx context.Context, req *apiv1.DeletePageRequest) (*apiv1.DeletePageResponse, error) {
+	if guardErr := requireUserMutable(s.pageReaderMutator, wikipage.PageIdentifier(req.PageName)); guardErr != nil {
+		return nil, guardErr
+	}
 	err := s.pageReaderMutator.DeletePage(wikipage.PageIdentifier(req.PageName))
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -507,6 +510,10 @@ func (s *Server) UpdatePageContent(_ context.Context, req *apiv1.UpdatePageConte
 		return nil, status.Error(codes.InvalidArgument, "old_content_markdown cannot be empty when provided")
 	}
 
+	if guardErr := requireUserMutable(s.pageReaderMutator, wikipage.PageIdentifier(req.PageName)); guardErr != nil {
+		return nil, guardErr
+	}
+
 	// Read current content for: (1) page existence check, and (2) rollback data if the
 	// post-write invariant check fails.
 	_, originalMarkdown, err := s.pageReaderMutator.ReadMarkdown(wikipage.PageIdentifier(req.PageName))
@@ -569,6 +576,10 @@ func (s *Server) ClearPageContent(_ context.Context, req *apiv1.ClearPageContent
 		return nil, status.Error(codes.InvalidArgument, "confirm_clear must be true to clear page content")
 	}
 
+	if guardErr := requireUserMutable(s.pageReaderMutator, wikipage.PageIdentifier(req.PageName)); guardErr != nil {
+		return nil, guardErr
+	}
+
 	// Verify the page exists
 	_, _, err := s.pageReaderMutator.ReadFrontMatter(wikipage.PageIdentifier(req.PageName))
 	if err != nil {
@@ -591,6 +602,10 @@ func (s *Server) ClearPageContent(_ context.Context, req *apiv1.ClearPageContent
 func (s *Server) UpdateWholePage(_ context.Context, req *apiv1.UpdateWholePageRequest) (*apiv1.UpdateWholePageResponse, error) {
 	if req.PageName == "" {
 		return nil, status.Error(codes.InvalidArgument, pageNameRequiredErr)
+	}
+
+	if guardErr := requireUserMutable(s.pageReaderMutator, wikipage.PageIdentifier(req.PageName)); guardErr != nil {
+		return nil, guardErr
 	}
 
 	// Verify the page exists

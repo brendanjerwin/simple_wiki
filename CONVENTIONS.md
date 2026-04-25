@@ -1175,6 +1175,33 @@ defer span.End()
 
 See `internal/observability/doc.go` for detailed documentation.
 
+## Help Documentation
+
+The wiki ships its help corpus from `internal/syspage/embedded/` — every help page is bundled into the binary and synced to the page store on startup (see `internal/syspage/loader.go`). When you add, change, or remove a feature that users interact with, you MUST update the corresponding embedded help page in the same change. This includes:
+
+- New macros, template functions, or page conventions → update or add a page under `internal/syspage/embedded/help_*.md`.
+- New or changed gRPC/MCP tools that agents use → update the relevant help page's "For Agents" section.
+- New search or tagging behavior → update `help_search` and `help_hashtags`.
+- New top-level features → add a new entry to `help` and a dedicated page if warranted.
+
+Do not punt this to a follow-up. Help is part of the deliverable. If you can't update the help in the same PR, the feature isn't done. Reviewers should reject feature PRs that don't include the corresponding help update.
+
+## Planning
+
+For any non-trivial change (anything bigger than a typo or single-line fix), produce a written plan before implementation and break the work into discrete, TDD-shaped todos.
+
+- **Plan file first.** Write the plan to a plan file (the harness's plan-mode flow is the right tool — `/plan ...` then `ExitPlanMode`). The plan file is the authoritative task list, not chat memory.
+- **Per-capability TDD todos.** For each new function/method/component: emit four distinct todos following the project TDD workflow — **Skeleton → Red → Green → Refactor**:
+  1. Skeleton — add the no-op signature so dependents can compile.
+  2. Red — write a failing test that pins down the desired behavior.
+  3. Green — minimal implementation to pass the test.
+  4. Refactor — clean up while keeping tests green.
+- **Use `TaskCreate`/`TaskUpdate`.** Mirror the plan file into the harness's task list. Mark each todo `in_progress` when started and `completed` immediately when its tests pass — no batching at the end.
+- **Surface parallelism.** Group todos by dependency. Items with no shared files and no upstream blockers should be flagged as parallelizable so the executor can dispatch them concurrently. Items that must wait should declare what they're waiting on.
+- **Help docs ride along.** Each feature todo group should include an entry that updates the relevant `internal/syspage/embedded/help_*.md` page (see "Help Documentation" above) — the help update is part of "Done" for that feature, not a follow-up.
+
+This applies to both human contributors and agents. If you find yourself implementing without a plan, stop and write one.
+
 ## README
 
 - When updating the readme, match the tone of voice in the rest of the README. Its the face of the project. Marketing matters.

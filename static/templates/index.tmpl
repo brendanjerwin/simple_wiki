@@ -64,19 +64,21 @@
                             <ul class="pure-menu-children">
                                 <li class="pure-menu-item"><a href="/" class="pure-menu-link"><i class="fa-solid fa-home"></i> Home</a></li>
                                 <hr>
-                                {{ if .ViewPage }}
+                                {{ if and .ViewPage (not .IsSystemPage) }}
                                 <li class="pure-menu-item"><a href="/{{ .Page }}/edit" class="pure-menu-link"><i class="fas fa-pen-to-square"></i> Edit</a></li>
                                 {{ end }}
                                 {{ if .EditPage }}
                                 <li class="pure-menu-item"><a href="/{{ .Page }}/view" class="pure-menu-link"><i class="fas fa-eye"></i> View</a></li>
                                 {{ end }}
                                 <hr id="utilityMenuSection">
-                                {{ if not .EditPage }}
+                                {{ if and (not .EditPage) (not .IsSystemPage) }}
                                 <li class="pure-menu-item"><a href="#" class="pure-menu-link" id="editFrontmatter"><i class="fas fa-file-lines"></i> Edit Frontmatter</a></li>
                                 <li class="pure-menu-item"><a href="#" class="pure-menu-link" id="agentDetails"><i class="fas fa-robot"></i> Agent Details</a></li>
                                 <hr>
                                 {{ end }}
+                                {{ if not .IsSystemPage }}
                                 <li class="pure-menu-item"><a href="#" class="pure-menu-link" id="erasePage"><i class="fas fa-recycle"></i> Erase</a></li>
+                                {{ end }}
                             </ul>
                         </li>
                     </ul>
@@ -97,6 +99,14 @@
                 {{ end }}
 
                 <div id="rendered" aria-live="polite" aria-label="Page content">
+                    {{ if .IsSystemPage }}
+                    <div class="system-page-banner" role="note">
+                        <span class="system-page-banner-icon" aria-hidden="true">📘</span>
+                        <span>This is a system help page. It ships with the wiki binary and isn't editable here.
+                        <a href="https://github.com/brendanjerwin/simple_wiki/issues" target="_blank" rel="noopener">Open an issue</a>
+                        upstream to propose changes.</span>
+                    </div>
+                    {{ end }}
                     {{ if .DontKnowPage }}
                         <strong>
                             <center>

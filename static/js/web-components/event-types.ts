@@ -61,3 +61,4 @@ export interface InventoryFilterChangedEventDetail {
 export interface AddFieldEventDetail {
   type: 'field' | 'array' | 'section';
 }
+

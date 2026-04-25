@@ -8,7 +8,9 @@ import { SearchService, SearchContentRequestSchema } from '../gen/api/v1/search_
 import type { SearchResult } from '../gen/api/v1/search_pb.js';
 import { AugmentErrorService, type AugmentedError } from './augment-error-service.js';
 import './error-display.js';
-import type { InventoryFilterChangedEventDetail } from './event-types.js';
+import type {
+  InventoryFilterChangedEventDetail,
+} from './event-types.js';
 import { getGrpcWebTransport } from './grpc-transport.js';
 
 const INVENTORY_ONLY_STORAGE_KEY = 'wiki-search-inventory-only';

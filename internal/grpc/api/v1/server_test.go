@@ -424,7 +424,16 @@ type MockBleveIndexQueryer struct {
 	Err     error
 }
 
-func (m *MockBleveIndexQueryer) Query(query string) ([]bleve.SearchResult, error) {
+func (m *MockBleveIndexQueryer) Query(_ string) ([]bleve.SearchResult, error) {
+	if m.Err != nil {
+		return nil, m.Err
+	}
+	return m.Results, nil
+}
+
+// QueryWithTags returns the same Results regardless of tag filtering — tests
+// that need to assert tag-aware behavior should override on a per-test basis.
+func (m *MockBleveIndexQueryer) QueryWithTags(_ string, _ []string, _ []string) ([]bleve.SearchResult, error) {
 	if m.Err != nil {
 		return nil, m.Err
 	}
@@ -454,6 +463,9 @@ func (noOpFrontmatterIndexQueryer) QueryExactMatchSortedBy(wikipage.DottedKeyPat
 type noOpBleveIndexQueryer struct{}
 
 func (noOpBleveIndexQueryer) Query(string) ([]bleve.SearchResult, error) { return nil, nil }
+func (noOpBleveIndexQueryer) QueryWithTags(string, []string, []string) ([]bleve.SearchResult, error) {
+	return nil, nil
+}
 
 // noopUnsubscribe is a no-op unsubscribe function returned by mock subscription methods.
 func noopUnsubscribe() {
@@ -2157,8 +2169,11 @@ var _ = Describe("Server", func() {
 				mockPageReaderMutator.Err = errors.New("read error")
 			})
 
+			// The system-page guard runs first and surfaces a frontmatter
+			// read failure as Internal — this is intentional fail-closed
+			// behavior so a transient read can't sneak past the guard.
 			It("should return an internal error", func() {
-				Expect(err).To(HaveGrpcStatusWithSubstr(codes.Internal, "failed to read current content"))
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.Internal, "read error"))
 			})
 
 			It("should not return a response", func() {
