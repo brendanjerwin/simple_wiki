@@ -171,7 +171,7 @@ export class WikiChecklist extends LitElement implements DragReorderHandler {
         listName: this.listName,
         uid: moved.uid,
         newSortOrder,
-        expectedUpdatedAt,
+        ...(expectedUpdatedAt && { expectedUpdatedAt }),
       })),
       previousItems,
       'reordering item'
@@ -339,10 +339,14 @@ export class WikiChecklist extends LitElement implements DragReorderHandler {
         this.items = [];
         this._listUpdatedAt = undefined;
         this._syncToken = 0n;
-      } else if (timestampsEqual(checklist.updatedAt, this._listUpdatedAt)) {
-        // Server data unchanged — skip the re-render entirely. This is
-        // the polling short-circuit; it preserves edit-mode state and
-        // cursor position.
+      } else if (
+        // Polling short-circuit: only skip the re-render when we have
+        // a previously-seen updated_at AND the new response carries the
+        // same value. On the initial load both sides may be undefined,
+        // and we still need to populate items in that case.
+        this._listUpdatedAt !== undefined &&
+        timestampsEqual(checklist.updatedAt, this._listUpdatedAt)
+      ) {
         this.error = null;
         this.loading = false;
         return;
@@ -443,7 +447,7 @@ export class WikiChecklist extends LitElement implements DragReorderHandler {
         page: this.page,
         listName: this.listName,
         uid: item.uid,
-        expectedUpdatedAt,
+        ...(expectedUpdatedAt && { expectedUpdatedAt }),
       })),
       previousItems,
       'toggling item'
@@ -463,7 +467,7 @@ export class WikiChecklist extends LitElement implements DragReorderHandler {
         page: this.page,
         listName: this.listName,
         uid: item.uid,
-        expectedUpdatedAt,
+        ...(expectedUpdatedAt && { expectedUpdatedAt }),
       })),
       previousItems,
       'deleting item'
@@ -504,7 +508,7 @@ export class WikiChecklist extends LitElement implements DragReorderHandler {
         uid: item.uid,
         text,
         tags,
-        expectedUpdatedAt,
+        ...(expectedUpdatedAt && { expectedUpdatedAt }),
       })),
       previousItems,
       'updating item'
@@ -543,7 +547,7 @@ export class WikiChecklist extends LitElement implements DragReorderHandler {
         listName: this.listName,
         text,
         tags,
-        expectedUpdatedAt,
+        ...(expectedUpdatedAt && { expectedUpdatedAt }),
       })),
       previousItems,
       'adding item'
@@ -654,7 +658,7 @@ export class WikiChecklist extends LitElement implements DragReorderHandler {
           page: this.page,
           listName: this.listName,
           uid: item.uid,
-          expectedUpdatedAt,
+          ...(expectedUpdatedAt && { expectedUpdatedAt }),
         })),
         previousItems,
         'deleting checked items'

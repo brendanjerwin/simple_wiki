@@ -95,10 +95,10 @@ title = "Checklist Polling Test Page"
         timeout: COMPONENT_LOAD_TIMEOUT_MS,
       });
 
-      // Track GetFrontmatter calls made after the component has finished its initial load.
+      // Track ListItems calls made after the component has finished its initial load.
       // These represent poll-cycle requests, not the initial data fetch.
       let pollCallCount = 0;
-      await page.route('**/api.v1.Frontmatter/GetFrontmatter', route => {
+      await page.route('**/api.v1.ChecklistService/ListItems', route => {
         pollCallCount++;
         return route.continue();
       });
@@ -150,7 +150,7 @@ title = "Checklist Polling Test Page"
       // Install the route interceptor after initial load so we only count
       // the fetch triggered by the visibility restore, not the initial load.
       let visibilityRestoreFetchCount = 0;
-      await page.route('**/api.v1.Frontmatter/GetFrontmatter', route => {
+      await page.route('**/api.v1.ChecklistService/ListItems', route => {
         visibilityRestoreFetchCount++;
         return route.continue();
       });
@@ -181,8 +181,8 @@ title = "Checklist Polling Test Page"
 
   test.describe('save state - prevents concurrent saves', () => {
     test('should disable checkboxes while a save is in progress', async ({ page }) => {
-      // Delay MergeFrontmatter to hold the component in saving=true long enough to assert on
-      await page.route('**/api.v1.Frontmatter/MergeFrontmatter', async route => {
+      // Delay ToggleItem to hold the component in saving=true long enough to assert on
+      await page.route('**/api.v1.ChecklistService/ToggleItem', async route => {
         await new Promise<void>(resolve => setTimeout(resolve, 2000));
         await route.continue();
       });
@@ -238,10 +238,10 @@ title = "Checklist Polling Test Page"
       }
     });
 
-    test('should produce exactly one MergeFrontmatter request per checkbox toggle', async ({ page }) => {
-      let mergeCallCount = 0;
-      await page.route('**/api.v1.Frontmatter/MergeFrontmatter', async route => {
-        mergeCallCount++;
+    test('should produce exactly one ToggleItem request per checkbox toggle', async ({ page }) => {
+      let toggleCallCount = 0;
+      await page.route('**/api.v1.ChecklistService/ToggleItem', async route => {
+        toggleCallCount++;
         await route.continue();
       });
 
@@ -254,7 +254,7 @@ title = "Checklist Polling Test Page"
         timeout: COMPONENT_LOAD_TIMEOUT_MS,
       });
 
-      const countBeforeToggle = mergeCallCount;
+      const countBeforeToggle = toggleCallCount;
 
       // Toggle the first checkbox
       const firstCheckbox = checklist.locator('.item-checkbox').first();
@@ -265,9 +265,9 @@ title = "Checklist Polling Test Page"
         timeout: SAVE_TIMEOUT_MS,
       });
 
-      // Exactly one MergeFrontmatter request must have been made for this single toggle —
+      // Exactly one ToggleItem request must have been made for this single toggle —
       // debouncing via the saving=true disabled state prevents any extra concurrent requests
-      expect(mergeCallCount - countBeforeToggle).toBe(1);
+      expect(toggleCallCount - countBeforeToggle).toBe(1);
     });
   });
 });
