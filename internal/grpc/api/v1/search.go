@@ -3,6 +3,7 @@ package v1
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
 	"github.com/brendanjerwin/simple_wiki/index/bleve"
@@ -18,7 +19,9 @@ func (s *Server) SearchContent(_ context.Context, req *apiv1.SearchContentReques
 		return nil, err
 	}
 
-	searchResults, err := s.bleveIndexQueryer.Query(req.Query)
+	parsed := parseUserSearchQuery(req.Query)
+	freeText := strings.Join(parsed.freeTextTokens, " ")
+	searchResults, err := s.bleveIndexQueryer.QueryWithTags(freeText, parsed.requiredTags, parsed.freeTextTokens)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to search: %v", err)
 	}

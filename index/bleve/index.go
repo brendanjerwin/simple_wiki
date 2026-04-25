@@ -14,6 +14,7 @@ import (
 	// Register the keyword analyzer (used for the tags field below).
 	_ "github.com/blevesearch/bleve/analysis/analyzer/keyword"
 	"github.com/blevesearch/bleve/search"
+	"github.com/blevesearch/bleve/search/query"
 	"github.com/brendanjerwin/simple_wiki/index/frontmatter"
 	"github.com/brendanjerwin/simple_wiki/internal/hashtags"
 	"github.com/brendanjerwin/simple_wiki/templating"
@@ -33,7 +34,13 @@ type Index struct {
 
 // BleveIndexQueryer defines the interface for querying the Bleve index.
 type BleveIndexQueryer interface {
+	// Query runs a free-text search against title and content fields.
 	Query(query string) ([]SearchResult, error)
+	// QueryWithTags runs a free-text search like Query but additionally requires
+	// each result page to carry every tag in requiredTags, and applies a tag
+	// boost for each token in boostTokens (so plain-text queries that happen
+	// to match an indexed tag rank higher than untagged matches).
+	QueryWithTags(text string, requiredTags []string, boostTokens []string) ([]SearchResult, error)
 }
 
 // tagsField is the document field used to store extracted page-level
@@ -252,34 +259,41 @@ func (*Index) calculateFragmentWindow(contentText string, locations []*search.Lo
 }
 
 
-// Query searches the Bleve index.
+// titleBoost is the multiplier applied to title matches in the existing
+// search scoring. Title matches outrank content matches by this factor.
+const titleBoost = 2.0
+
+// titlePrefixBoost is the multiplier applied to title-prefix matches (lower
+// than exact title to keep the prefix from outranking a real title hit).
+const titlePrefixBoost = 1.5
+
+// tagsBoostFloat is the multiplier applied to free-text-token-as-tag should
+// clauses on the tags field. The intent: a query like "home lab" boosts
+// pages tagged `#home` or `#lab` above pages that just mention those words.
+const tagsBoostFloat = 2.0
+
+// Query searches the Bleve index for free-text only (no tag filtering).
 func (b *Index) Query(query string) ([]SearchResult, error) {
+	return b.QueryWithTags(query, nil, nil)
+}
+
+// QueryWithTags is the full search entry point: free-text matched against
+// title and content (with the same scoring as Query), additionally requiring
+// every entry in requiredTags to be present on the result page, and applying
+// a should-clause tag boost for each token in boostTokens.
+func (b *Index) QueryWithTags(text string, requiredTags []string, boostTokens []string) ([]SearchResult, error) {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
 
-	// Exact match on title (boosted highest)
-	titleQuery := bleve.NewMatchQuery(query)
-	titleQuery.SetField("title")
-	titleQuery.SetBoost(2.0)
-
-	// Prefix match on title (for partial matches like "Container" → "ContainerFoo")
-	titlePrefixQuery := bleve.NewPrefixQuery(strings.ToLower(query))
-	titlePrefixQuery.SetField("title")
-	titlePrefixQuery.SetBoost(1.5)
-
-	// Match query on content (safer than QueryStringQuery which interprets special chars like /)
-	contentQuery := bleve.NewMatchQuery(query)
-	contentQuery.SetField(contentField)
-
-	q := bleve.NewDisjunctionQuery(titleQuery, titlePrefixQuery, contentQuery)
+	q := buildSearchQuery(text, requiredTags, boostTokens)
 
 	searchReq := bleve.NewSearchRequest(q)
 	searchReq.Highlight = bleve.NewHighlight()
 	searchReq.IncludeLocations = true
-	searchReq.Fields = []string{contentField}  // Include content field to get original text
+	searchReq.Fields = []string{contentField}
 	bleveResults, err := b.index.Search(searchReq)
 	if err != nil {
-		return nil, fmt.Errorf("bleve search for query %q: %w", query, err)
+		return nil, fmt.Errorf("bleve search for query %q: %w", text, err)
 	}
 
 	var results []SearchResult
@@ -293,7 +307,6 @@ func (b *Index) Query(query string) ([]SearchResult, error) {
 			result.Title = string(result.Identifier)
 		}
 
-		// Get fragment and highlights from the structured location data
 		if hit.Fields != nil && hit.Fields[contentField] != nil {
 			if contentText, ok := hit.Fields[contentField].(string); ok {
 				result.Fragment, result.Highlights = b.extractFragmentFromLocations(contentText, hit.Locations)
@@ -304,6 +317,62 @@ func (b *Index) Query(query string) ([]SearchResult, error) {
 	}
 
 	return results, nil
+}
+
+// buildSearchQuery composes the free-text scoring disjunction (title-exact +
+// title-prefix + content) with the optional required-tag conjunction and
+// tag-boost should clauses.
+func buildSearchQuery(text string, requiredTags []string, boostTokens []string) query.Query {
+	textPortion := buildTextScoringQuery(text, boostTokens)
+
+	if len(requiredTags) == 0 {
+		return textPortion
+	}
+
+	parts := []query.Query{textPortion}
+	for _, tag := range requiredTags {
+		tq := bleve.NewTermQuery(tag)
+		tq.SetField(tagsField)
+		parts = append(parts, tq)
+	}
+	return bleve.NewConjunctionQuery(parts...)
+}
+
+// buildTextScoringQuery returns the free-text portion of the search query.
+// When text is empty and no boost tokens are supplied, it returns a match-all
+// query so a pure tag query like `#groceries` still returns results.
+func buildTextScoringQuery(text string, boostTokens []string) query.Query {
+	var clauses []query.Query
+
+	if text != "" {
+		titleQuery := bleve.NewMatchQuery(text)
+		titleQuery.SetField("title")
+		titleQuery.SetBoost(titleBoost)
+
+		titlePrefixQuery := bleve.NewPrefixQuery(strings.ToLower(text))
+		titlePrefixQuery.SetField("title")
+		titlePrefixQuery.SetBoost(titlePrefixBoost)
+
+		contentQuery := bleve.NewMatchQuery(text)
+		contentQuery.SetField(contentField)
+
+		clauses = append(clauses, titleQuery, titlePrefixQuery, contentQuery)
+	}
+
+	for _, token := range boostTokens {
+		if token == "" {
+			continue
+		}
+		tagBoostQuery := bleve.NewTermQuery(token)
+		tagBoostQuery.SetField(tagsField)
+		tagBoostQuery.SetBoost(tagsBoostFloat)
+		clauses = append(clauses, tagBoostQuery)
+	}
+
+	if len(clauses) == 0 {
+		return bleve.NewMatchAllQuery()
+	}
+	return bleve.NewDisjunctionQuery(clauses...)
 }
 
 // HighlightSpan represents a text span that should be highlighted in search results.

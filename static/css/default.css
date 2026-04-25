@@ -381,6 +381,49 @@ tr.directory-error-row {
   background: var(--color-warning-bg);
 }
 
+/*---- System page banner (rendered on pages flagged system = true in frontmatter) ----*/
+.system-page-banner {
+  background: var(--color-info-bg, #eef4fb);
+  border: 1px solid var(--color-info, #2c6cb0);
+  border-radius: 4px;
+  padding: 10px 14px;
+  margin: 0 0 16px 0;
+  color: var(--color-info-text, #1e3a5f);
+  font-size: 0.95em;
+  display: flex;
+  gap: 0.5em;
+  align-items: center;
+}
+
+.system-page-banner-icon {
+  font-size: 1.1em;
+}
+
+.system-page-banner a {
+  color: inherit;
+  text-decoration: underline;
+}
+
+/*---- Hashtag pills (rendered inline by Goldmark hashtag extension) ----*/
+a.hashtag-pill {
+  display: inline-block;
+  padding: 1px 8px;
+  margin: 0 1px;
+  font-size: 0.85em;
+  background: var(--color-surface-sunken, #f0f0f0);
+  border: 1px solid var(--color-border-subtle, #e0e0e0);
+  border-radius: 12px;
+  color: var(--color-text-link, #4078c0);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+a.hashtag-pill:hover {
+  background: var(--color-text-link, #4078c0);
+  color: var(--color-text-inverse, #fff);
+  border-color: var(--color-text-link, #4078c0);
+}
+
 
 /* ==========================================================================
    Dark mode overrides for GitHub Markdown (vendor/css/github-markdown.css)

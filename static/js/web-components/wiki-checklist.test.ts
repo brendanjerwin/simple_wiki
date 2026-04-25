@@ -491,7 +491,7 @@ describe('WikiChecklist', () => {
         });
 
         it('should show composed tagged text in the input', () => {
-          expect(textInput?.value).to.equal('Milk :dairy :fridge');
+          expect(textInput?.value).to.equal('Milk #dairy #fridge');
         });
 
         it('should hide tag badges while editing', () => {
@@ -598,7 +598,7 @@ describe('WikiChecklist', () => {
 
         const textInput = el.shadowRoot?.querySelector<HTMLInputElement>('.item-text');
         if (textInput) {
-          textInput.value = 'Milk :dairy :fridge';
+          textInput.value = 'Milk #dairy #fridge';
           textInput.dispatchEvent(new FocusEvent('blur'));
         }
         await waitUntil(
@@ -1467,7 +1467,7 @@ describe('WikiChecklist', () => {
       const addInput =
         el.shadowRoot?.querySelector<HTMLInputElement>('.add-text-input');
       if (addInput) {
-        addInput.value = 'Milk :dairy';
+        addInput.value = 'Milk #dairy';
         addInput.dispatchEvent(new InputEvent('input', { bubbles: true }));
       }
       await el.updateComplete;

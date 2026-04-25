@@ -3,11 +3,11 @@ import { parseTaggedInput, composeTaggedText } from './checklist-tag-parser.js';
 import type { ChecklistItem } from './checklist-tag-parser.js';
 
 describe('parseTaggedInput', () => {
-  describe('when input has a single :tag at the start', () => {
+  describe('when input has a single #tag at the start', () => {
     let result: ReturnType<typeof parseTaggedInput>;
 
     beforeEach(() => {
-      result = parseTaggedInput(':Dairy Buy milk');
+      result = parseTaggedInput('#Dairy Buy milk');
     });
 
     it('should extract the tag lowercased', () => {
@@ -19,11 +19,11 @@ describe('parseTaggedInput', () => {
     });
   });
 
-  describe('when input has a single :tag at the end', () => {
+  describe('when input has a single #tag at the end', () => {
     let result: ReturnType<typeof parseTaggedInput>;
 
     beforeEach(() => {
-      result = parseTaggedInput('Buy milk :Dairy');
+      result = parseTaggedInput('Buy milk #Dairy');
     });
 
     it('should extract the tag lowercased', () => {
@@ -35,11 +35,11 @@ describe('parseTaggedInput', () => {
     });
   });
 
-  describe('when input has a :tag in the middle', () => {
+  describe('when input has a #tag in the middle', () => {
     let result: ReturnType<typeof parseTaggedInput>;
 
     beforeEach(() => {
-      result = parseTaggedInput('buy :dairy milk');
+      result = parseTaggedInput('buy #dairy milk');
     });
 
     it('should extract the tag lowercased', () => {
@@ -55,7 +55,7 @@ describe('parseTaggedInput', () => {
     let result: ReturnType<typeof parseTaggedInput>;
 
     beforeEach(() => {
-      result = parseTaggedInput('milk :dairy :fridge');
+      result = parseTaggedInput('milk #dairy #fridge');
     });
 
     it('should extract all tags lowercased', () => {
@@ -71,7 +71,7 @@ describe('parseTaggedInput', () => {
     let result: ReturnType<typeof parseTaggedInput>;
 
     beforeEach(() => {
-      result = parseTaggedInput(':dairy milk :fridge');
+      result = parseTaggedInput('#dairy milk #fridge');
     });
 
     it('should extract all tags lowercased', () => {
@@ -99,11 +99,11 @@ describe('parseTaggedInput', () => {
     });
   });
 
-  describe('when input has :tag but no item text', () => {
+  describe('when input has #tag but no item text', () => {
     let result: ReturnType<typeof parseTaggedInput>;
 
     beforeEach(() => {
-      result = parseTaggedInput(':Dairy');
+      result = parseTaggedInput('#Dairy');
     });
 
     it('should extract the tag lowercased', () => {
@@ -119,7 +119,7 @@ describe('parseTaggedInput', () => {
     let result: ReturnType<typeof parseTaggedInput>;
 
     beforeEach(() => {
-      result = parseTaggedInput('milk :DAIRY');
+      result = parseTaggedInput('milk #DAIRY');
     });
 
     it('should lowercase the tag', () => {
@@ -167,7 +167,7 @@ describe('parseTaggedInput', () => {
     let result: ReturnType<typeof parseTaggedInput>;
 
     beforeEach(() => {
-      result = parseTaggedInput('eggs :dairy :fridge :breakfast');
+      result = parseTaggedInput('eggs #dairy #fridge #breakfast');
     });
 
     it('should extract all three tags', () => {
@@ -176,6 +176,39 @@ describe('parseTaggedInput', () => {
 
     it('should extract the remaining text', () => {
       expect(result.text).to.equal('eggs');
+    });
+  });
+
+  describe('when input has a hyphenated tag', () => {
+    let result: ReturnType<typeof parseTaggedInput>;
+
+    beforeEach(() => {
+      result = parseTaggedInput('reset router #home-lab');
+    });
+
+    it('should preserve the hyphen in the tag', () => {
+      expect(result.tags).to.deep.equal(['home-lab']);
+    });
+
+    it('should extract the text without the tag', () => {
+      expect(result.text).to.equal('reset router');
+    });
+  });
+
+  describe('when input has a # with a digit followed by space (not a tag)', () => {
+    // Mid-word `item#5` shouldn't extract — no preceding space.
+    let result: ReturnType<typeof parseTaggedInput>;
+
+    beforeEach(() => {
+      result = parseTaggedInput('Buy item#5 of these');
+    });
+
+    it('should not extract anything as a tag', () => {
+      expect(result.tags).to.deep.equal([]);
+    });
+
+    it('should keep the text intact', () => {
+      expect(result.text).to.equal('Buy item#5 of these');
     });
   });
 });
@@ -189,8 +222,8 @@ describe('composeTaggedText', () => {
       result = composeTaggedText(item);
     });
 
-    it('should append tags with :tag syntax', () => {
-      expect(result).to.equal('milk :dairy :fridge');
+    it('should append tags with #tag syntax', () => {
+      expect(result).to.equal('milk #dairy #fridge');
     });
   });
 
@@ -216,7 +249,7 @@ describe('composeTaggedText', () => {
     });
 
     it('should append the single tag', () => {
-      expect(result).to.equal('eggs :dairy');
+      expect(result).to.equal('eggs #dairy');
     });
   });
 
@@ -229,7 +262,7 @@ describe('composeTaggedText', () => {
     });
 
     it('should return just the tag with leading space', () => {
-      expect(result).to.equal(' :dairy');
+      expect(result).to.equal(' #dairy');
     });
   });
 
@@ -242,7 +275,7 @@ describe('composeTaggedText', () => {
     });
 
     it('should include all tags in order', () => {
-      expect(result).to.equal('yogurt :dairy :fridge :breakfast');
+      expect(result).to.equal('yogurt #dairy #fridge #breakfast');
     });
   });
 });

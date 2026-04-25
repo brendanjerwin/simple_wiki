@@ -650,8 +650,8 @@ export class WikiChecklist extends LitElement implements DragReorderHandler {
           type="text"
           class="add-text-input"
           .value="${this.newItemText}"
-          placeholder="Add item\u2026 (use :tag for grouping)"
-          aria-label="New item text, with optional :tag anywhere for grouping"
+          placeholder="Add item\u2026 (use #tag for grouping)"
+          aria-label="New item text, with optional #tag anywhere for grouping"
           ?disabled="${this.saving}"
           @input="${(e: InputEvent) => {
             if (!(e.target instanceof HTMLInputElement)) return;

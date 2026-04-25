@@ -11,6 +11,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
+	"github.com/brendanjerwin/simple_wiki/wikipage"
 )
 
 // errAgentScheduleStoreNotConfigured is returned when an AgentMetadataService
@@ -52,6 +53,9 @@ func (s *Server) UpsertSchedule(_ context.Context, req *apiv1.UpsertScheduleRequ
 	}
 	if req.GetPage() == "" {
 		return nil, status.Error(codes.InvalidArgument, errPageRequired)
+	}
+	if guardErr := requireUserMutable(s.pageReaderMutator, wikipage.PageIdentifier(req.GetPage())); guardErr != nil {
+		return nil, guardErr
 	}
 	schedule := req.GetSchedule()
 	if schedule == nil {
@@ -109,6 +113,9 @@ func (s *Server) DeleteSchedule(_ context.Context, req *apiv1.DeleteScheduleRequ
 	if req.GetPage() == "" {
 		return nil, status.Error(codes.InvalidArgument, errPageRequired)
 	}
+	if guardErr := requireUserMutable(s.pageReaderMutator, wikipage.PageIdentifier(req.GetPage())); guardErr != nil {
+		return nil, guardErr
+	}
 	if req.GetScheduleId() == "" {
 		return nil, status.Error(codes.InvalidArgument, "schedule_id is required")
 	}
@@ -142,6 +149,9 @@ func (s *Server) UpdateChatContext(_ context.Context, req *apiv1.UpdateChatConte
 	if req.GetPage() == "" {
 		return nil, status.Error(codes.InvalidArgument, errPageRequired)
 	}
+	if guardErr := requireUserMutable(s.pageReaderMutator, wikipage.PageIdentifier(req.GetPage())); guardErr != nil {
+		return nil, guardErr
+	}
 	if req.GetChatContext() == nil {
 		return nil, status.Error(codes.InvalidArgument, "chat_context is required")
 	}
@@ -162,6 +172,9 @@ func (s *Server) AppendBackgroundActivitySummary(_ context.Context, req *apiv1.A
 	}
 	if req.GetPage() == "" {
 		return nil, status.Error(codes.InvalidArgument, errPageRequired)
+	}
+	if guardErr := requireUserMutable(s.pageReaderMutator, wikipage.PageIdentifier(req.GetPage())); guardErr != nil {
+		return nil, guardErr
 	}
 	if req.GetScheduleId() == "" {
 		return nil, status.Error(codes.InvalidArgument, "schedule_id is required")

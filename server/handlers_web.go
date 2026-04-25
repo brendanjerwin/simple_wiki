@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/brendanjerwin/simple_wiki/internal/syspage"
 	"github.com/brendanjerwin/simple_wiki/static"
 	"github.com/brendanjerwin/simple_wiki/tailscale"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
@@ -339,9 +340,22 @@ func (s *Site) buildTemplateData(page, command string, listing DirectoryListing,
 		"UnixTime":         time.Now().Unix(),
 		"AllowFileUploads": s.Fileuploads,
 		"MaxUploadMB":      s.MaxUploadSize,
-		"WikiBaseURL": requestBaseURL(c),
-		"Username":    identity.LoginName(),
+		"WikiBaseURL":      requestBaseURL(c),
+		"Username":         identity.LoginName(),
+		"IsSystemPage":     s.isSystemPage(page),
 	}
+}
+
+// isSystemPage reports whether the given page identifier refers to a page
+// flagged `system = true` in its frontmatter (sourced from the embedded help
+// corpus). The check is best-effort — if the page can't be read we assume
+// not-system rather than blocking the render.
+func (s *Site) isSystemPage(page string) bool {
+	_, fm, err := s.ReadFrontMatter(wikipage.PageIdentifier(page))
+	if err != nil {
+		return false
+	}
+	return syspage.IsSystemPage(fm)
 }
 
 func getRecentlyEdited(title string, c *gin.Context, logger *lumber.ConsoleLogger) []string {
