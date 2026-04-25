@@ -65,8 +65,8 @@ var _ = Describe("AgentScheduleRefreshJob", func() {
 			Expect(cronReg.scheduled).To(HaveLen(1))
 		})
 
-		It("should register the cron expression from the schedule", func() {
-			Expect(cronReg.scheduled[0].cron).To(Equal("0 0 9 * * 1"))
+		It("should register the cron expression from the schedule with the default UTC prefix", func() {
+			Expect(cronReg.scheduled[0].cron).To(Equal("CRON_TZ=UTC 0 0 9 * * 1"))
 		})
 	})
 

@@ -2040,6 +2040,23 @@ var _ = Describe("chatPreamble", func() {
 	It("should instruct the agent to address users by name", func() {
 		Expect(chatPreamble).To(ContainSubstring("Address users by name"))
 	})
+
+	Describe("pending_items follow-through guidance", func() {
+		It("should tell the agent to work on pending_items after the user's request is satisfied", func() {
+			Expect(chatPreamble).To(ContainSubstring("pending_items"))
+			// Some signal that the agent should take action on those items,
+			// not just persist them as bookkeeping. Match either order
+			// (verb-near-pending or pending-near-verb).
+			Expect(chatPreamble).To(SatisfyAny(
+				MatchRegexp(`(?is)(work on|address|tackle|act on|follow.{0,3}through).*pending`),
+				MatchRegexp(`(?is)pending.*?(work on|address|tackle|act on|follow.{0,3}through)`),
+			))
+		})
+
+		It("should explicitly link the follow-through to after the immediate request is done", func() {
+			Expect(chatPreamble).To(MatchRegexp(`(?i)(after|once|when).*(answer|respond|done|reply|finish|address)`))
+		})
+	})
 })
 
 var _ = Describe("validTransitions map", func() {

@@ -73,6 +73,7 @@
                                 <hr id="utilityMenuSection">
                                 {{ if not .EditPage }}
                                 <li class="pure-menu-item"><a href="#" class="pure-menu-link" id="editFrontmatter"><i class="fas fa-file-lines"></i> Edit Frontmatter</a></li>
+                                <li class="pure-menu-item"><a href="#" class="pure-menu-link" id="agentDetails"><i class="fas fa-robot"></i> Agent Details</a></li>
                                 <hr>
                                 {{ end }}
                                 <li class="pure-menu-item"><a href="#" class="pure-menu-link" id="erasePage"><i class="fas fa-recycle"></i> Erase</a></li>
@@ -162,6 +163,7 @@
         <page-chat-panel page="{{ .Page }}" persona="{{ .ChatPersona }}"></page-chat-panel>
         {{ end }}
         <frontmatter-editor-dialog id="frontmatter-dialog"></frontmatter-editor-dialog>
+        <agent-details-dialog id="agent-details-dialog"></agent-details-dialog>
         <inventory-add-item-dialog id="inventory-add-dialog"></inventory-add-item-dialog>
         <inventory-move-item-dialog id="inventory-move-dialog"></inventory-move-item-dialog>
         <inventory-find-item-dialog id="inventory-find-dialog"></inventory-find-item-dialog>

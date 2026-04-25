@@ -57,6 +57,11 @@ func preserveAgentSubtree(existing, incoming map[string]any) {
 }
 
 // filterIdentifierKey removes the identifier key from a frontmatter map.
+// It also removes the reserved agent.* namespace because that subtree is
+// owned exclusively by AgentMetadataService — letting it through would let a
+// generic frontmatter editor read it, send it back unchanged on save, and
+// trip the agent.* write rejection. Hiding it from the read makes the edit
+// dialog work without special-casing.
 func filterIdentifierKey(fm map[string]any) map[string]any {
 	if fm == nil {
 		return nil
@@ -64,9 +69,10 @@ func filterIdentifierKey(fm map[string]any) map[string]any {
 
 	filtered := make(map[string]any)
 	for k, v := range fm {
-		if k != identifierKey {
-			filtered[k] = v
+		if k == identifierKey || k == reservedAgentKey {
+			continue
 		}
+		filtered[k] = v
 	}
 	return filtered
 }
