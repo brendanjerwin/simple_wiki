@@ -211,6 +211,42 @@ describe('parseTaggedInput', () => {
       expect(result.text).to.equal('Buy item#5 of these');
     });
   });
+
+  describe('when input has a backslash-escaped #', () => {
+    // `\#5` is an escape — the `#5` should appear in the text but NOT
+    // be extracted as a tag. The backslash itself is consumed.
+    let result: ReturnType<typeof parseTaggedInput>;
+
+    beforeEach(() => {
+      result = parseTaggedInput('Buy \\#5 of these #urgent');
+    });
+
+    it('should extract only the unescaped #urgent tag', () => {
+      expect(result.tags).to.deep.equal(['urgent']);
+    });
+
+    it('should preserve the escaped # in the text without the backslash', () => {
+      expect(result.text).to.equal('Buy #5 of these');
+    });
+  });
+
+  describe('when a # is inside an inline code span', () => {
+    // The `#notreal` inside backticks should NOT be extracted and should
+    // remain visible in the text exactly as written.
+    let result: ReturnType<typeof parseTaggedInput>;
+
+    beforeEach(() => {
+      result = parseTaggedInput('see `example #notreal` and #real');
+    });
+
+    it('should extract only the #real tag from outside the code span', () => {
+      expect(result.tags).to.deep.equal(['real']);
+    });
+
+    it('should preserve the in-code-span # in the text', () => {
+      expect(result.text).to.equal('see `example #notreal` and');
+    });
+  });
 });
 
 describe('composeTaggedText', () => {

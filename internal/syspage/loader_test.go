@@ -178,11 +178,12 @@ var _ = Describe("Sync", func() {
 
 	Describe("when on-disk content has drifted", func() {
 		var (
-			store     *fakeStore
-			pages     []Page
-			id        wikipage.PageIdentifier
-			writesPre int
-			writes    int
+			store           *fakeStore
+			pages           []Page
+			driftedID       wikipage.PageIdentifier
+			driftedWrites   int
+			otherIDs        []wikipage.PageIdentifier
+			otherIDWrites   map[wikipage.PageIdentifier]int
 		)
 
 		BeforeEach(func() {
@@ -195,24 +196,52 @@ var _ = Describe("Sync", func() {
 			// Simulate user/admin drift: replace the markdown of the first
 			// embedded page with something that does not match the embedded
 			// source.
-			id = wikipage.PageIdentifier(pages[0].Identifier)
-			store.markdown[id] = wikipage.Markdown("DRIFTED CONTENT")
+			driftedID = wikipage.PageIdentifier(pages[0].Identifier)
+			store.markdown[driftedID] = wikipage.Markdown("DRIFTED CONTENT")
 
-			writesPre = totalWrites(store)
+			// Snapshot per-page write counts so we can subtract first-Sync
+			// writes from second-Sync writes per page.
+			writesPre := map[wikipage.PageIdentifier]int{}
+			for k, v := range store.writes {
+				writesPre[k] = v
+			}
+
 			Expect(Sync(store, nullLogger{})).To(Succeed())
-			writes = totalWrites(store) - writesPre
+
+			driftedWrites = store.writes[driftedID] - writesPre[driftedID]
+
+			otherIDs = nil
+			otherIDWrites = map[wikipage.PageIdentifier]int{}
+			for _, p := range pages {
+				other := wikipage.PageIdentifier(p.Identifier)
+				if other == driftedID {
+					continue
+				}
+				otherIDs = append(otherIDs, other)
+				otherIDWrites[other] = store.writes[other] - writesPre[other]
+			}
 		})
 
 		It("should rewrite the drifted page", func() {
-			Expect(string(store.markdown[id])).NotTo(Equal("DRIFTED CONTENT"))
+			Expect(string(store.markdown[driftedID])).NotTo(Equal("DRIFTED CONTENT"))
 		})
 
-		It("should perform writes only for the drifted page", func() {
-			// At least one write for the drifted page; allow the implementation
-			// to call WriteFrontMatter and WriteMarkdown separately, but not to
-			// rewrite untouched pages.
-			Expect(writes).To(BeNumerically(">=", 1))
-			Expect(writes).To(BeNumerically("<=", 2))
+		It("should sync the drifted page exactly once", func() {
+			// A single logical Sync may emit one WriteFrontMatter and one
+			// WriteMarkdown — two physical writes per logical sync. We accept
+			// 1 (markdown-only update) or 2 (frontmatter + markdown) but not
+			// more, which would indicate the page was synced more than once.
+			Expect(driftedWrites).To(BeNumerically(">=", 1),
+				"drifted page should receive at least one write")
+			Expect(driftedWrites).To(BeNumerically("<=", 2),
+				"drifted page should receive at most one logical sync (two physical writes: frontmatter + markdown)")
+		})
+
+		It("should not rewrite any non-drifted page", func() {
+			for _, other := range otherIDs {
+				Expect(otherIDWrites[other]).To(Equal(0),
+					fmt.Sprintf("page %q should not have been rewritten on the second sync", other))
+			}
 		})
 	})
 

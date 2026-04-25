@@ -692,4 +692,54 @@ var _ = Describe("Index", func() {
 			})
 		})
 	})
+
+	Describe("free-text search ranks tagged pages above prose-only pages", func() {
+		// This integration test mirrors the gRPC handler: a plain-text query
+		// "home lab" decomposes into requiredTags = nil and boostTokens =
+		// ["home", "lab"] (see internal/grpc/api/v1/search_query.go
+		// parseUserSearchQuery). The tagged page should rank first because
+		// the boost-clause matches its tags field.
+		var (
+			results []bleve.SearchResult
+			err     error
+		)
+
+		BeforeEach(func() {
+			mockReader.AddPageWithMarkdown("home-page", wikipage.FrontMatter{
+				"identifier": "home-page",
+				"title":      "Home",
+			}, "running my #home-lab on a Pi cluster")
+			Expect(frontmatterIndex.AddPageToIndex("home-page")).To(Succeed())
+			Expect(index.AddPageToIndex("home-page")).To(Succeed())
+
+			mockReader.AddPageWithMarkdown("prose-page", wikipage.FrontMatter{
+				"identifier": "prose-page",
+				"title":      "Network Notes",
+			}, "Set up the home lab last weekend")
+			Expect(frontmatterIndex.AddPageToIndex("prose-page")).To(Succeed())
+			Expect(index.AddPageToIndex("prose-page")).To(Succeed())
+
+			results, err = index.QueryWithTags("home lab", nil, []string{"home", "lab"})
+		})
+
+		It("should not return an error", func() {
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should return both pages", func() {
+			ids := make([]wikipage.PageIdentifier, 0, len(results))
+			for _, r := range results {
+				ids = append(ids, r.Identifier)
+			}
+			Expect(ids).To(ContainElements(
+				wikipage.PageIdentifier("home-page"),
+				wikipage.PageIdentifier("prose-page"),
+			))
+		})
+
+		It("should rank the tagged page first", func() {
+			Expect(results).NotTo(BeEmpty())
+			Expect(results[0].Identifier).To(Equal(wikipage.PageIdentifier("home-page")))
+		})
+	})
 })
