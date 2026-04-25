@@ -182,6 +182,72 @@ var _ = Describe("AgentMetadataService handlers", func() {
 				Expect(err).To(HaveGrpcStatusWithSubstr(codes.InvalidArgument, "page"))
 			})
 		})
+
+		Describe("when the timezone is a valid IANA name", func() {
+			var err error
+
+			BeforeEach(func() {
+				_, err = srv.UpsertSchedule(ctx, &apiv1.UpsertScheduleRequest{
+					Page: "p",
+					Schedule: &apiv1.AgentSchedule{
+						Id:       "tz_valid",
+						Cron:     "0 0 9 * * 1",
+						Timezone: "America/New_York",
+						Enabled:  true,
+					},
+				})
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should persist the timezone", func() {
+				list, _ := schedules.List("p")
+				Expect(list).To(HaveLen(1))
+				Expect(list[0].GetTimezone()).To(Equal("America/New_York"))
+			})
+		})
+
+		Describe("when the timezone is not a valid IANA name", func() {
+			var err error
+
+			BeforeEach(func() {
+				_, err = srv.UpsertSchedule(ctx, &apiv1.UpsertScheduleRequest{
+					Page: "p",
+					Schedule: &apiv1.AgentSchedule{
+						Id:       "tz_bad",
+						Cron:     "0 0 9 * * 1",
+						Timezone: "Mars/Olympus",
+						Enabled:  true,
+					},
+				})
+			})
+
+			It("should return InvalidArgument", func() {
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.InvalidArgument, "timezone"))
+			})
+		})
+
+		Describe("when the timezone is omitted", func() {
+			BeforeEach(func() {
+				_, err := srv.UpsertSchedule(ctx, &apiv1.UpsertScheduleRequest{
+					Page: "p",
+					Schedule: &apiv1.AgentSchedule{
+						Id:      "tz_default",
+						Cron:    "0 0 9 * * 1",
+						Enabled: true,
+					},
+				})
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should persist with empty timezone (default-UTC semantics applied at register time)", func() {
+				list, _ := schedules.List("p")
+				Expect(list).To(HaveLen(1))
+				Expect(list[0].GetTimezone()).To(Equal(""))
+			})
+		})
 	})
 
 	Describe("ListSchedules", func() {

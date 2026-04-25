@@ -40,6 +40,7 @@ function makeSchedule(overrides: Partial<{
   cron: string;
   prompt: string;
   lastStatus: ScheduleStatus;
+  timezone: string;
 }> = {}): ReturnType<typeof create<typeof AgentScheduleSchema>> {
   return create(AgentScheduleSchema, {
     id: overrides.id ?? 'sched-1',
@@ -50,6 +51,7 @@ function makeSchedule(overrides: Partial<{
     lastStatus: overrides.lastStatus ?? ScheduleStatus.OK,
     lastErrorMessage: '',
     lastDurationSeconds: 0,
+    timezone: overrides.timezone ?? '',
   });
 }
 
@@ -255,6 +257,66 @@ describe('AgentDetailsDialog', () => {
     it('should mark the error schedule with the status-error class', () => {
       const errorRow = el.shadowRoot?.querySelector('[data-schedule-id="evening"] .status-badge');
       expect(errorRow?.classList.contains('status-error')).to.be.true;
+    });
+  });
+
+  describe('when a schedule has an explicit timezone', () => {
+    let fakeClient: FakeAgentClient;
+
+    beforeEach(async () => {
+      el = await Promise.race([
+        fixture<AgentDetailsDialog>(html`<agent-details-dialog></agent-details-dialog>`),
+        timeout(5000, 'Component fixture timed out'),
+      ]);
+
+      fakeClient = buildFakeClient();
+      fakeClient.listSchedules.resolves(create(ListSchedulesResponseSchema, {
+        schedules: [
+          makeSchedule({ id: 'tz-row', cron: '0 0 9 * * *', timezone: 'America/New_York' }),
+        ],
+      }));
+      fakeClient.getChatContext.resolves(create(GetChatContextResponseSchema, {}));
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- injecting fake client for tests
+      el.client = fakeClient as unknown as AgentDetailsDialog['client'];
+
+      el.openDialog('p');
+      await waitUntil(() => !el.loading, 'still loading', { timeout: 1000 });
+      await el.updateComplete;
+    });
+
+    it('should render the timezone next to the cron expression', () => {
+      const tz = el.shadowRoot?.querySelector('[data-schedule-id="tz-row"] .schedule-timezone');
+      expect(tz?.textContent).to.include('America/New_York');
+    });
+  });
+
+  describe('when a schedule has no timezone set (defaulting to UTC)', () => {
+    let fakeClient: FakeAgentClient;
+
+    beforeEach(async () => {
+      el = await Promise.race([
+        fixture<AgentDetailsDialog>(html`<agent-details-dialog></agent-details-dialog>`),
+        timeout(5000, 'Component fixture timed out'),
+      ]);
+
+      fakeClient = buildFakeClient();
+      fakeClient.listSchedules.resolves(create(ListSchedulesResponseSchema, {
+        schedules: [
+          makeSchedule({ id: 'utc-row', cron: '0 0 9 * * *', timezone: '' }),
+        ],
+      }));
+      fakeClient.getChatContext.resolves(create(GetChatContextResponseSchema, {}));
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- injecting fake client for tests
+      el.client = fakeClient as unknown as AgentDetailsDialog['client'];
+
+      el.openDialog('p');
+      await waitUntil(() => !el.loading, 'still loading', { timeout: 1000 });
+      await el.updateComplete;
+    });
+
+    it('should render UTC as the implicit default timezone', () => {
+      const tz = el.shadowRoot?.querySelector('[data-schedule-id="utc-row"] .schedule-timezone');
+      expect(tz?.textContent).to.include('UTC');
     });
   });
 

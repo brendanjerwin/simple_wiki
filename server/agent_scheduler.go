@@ -147,7 +147,7 @@ func (s *AgentScheduler) loadPage(page string) error {
 		// little benefit.
 		s.cron.Remove(entryID)
 		delete(s.entries, key)
-		newID, scheduleErr := s.cron.Schedule(want.GetCron(), s.newJob(page, want.GetId()))
+		newID, scheduleErr := s.cron.Schedule(scheduleExpression(want), s.newJob(page, want.GetId()))
 		if scheduleErr != nil {
 			slog.Warn("agent scheduler: re-register failed", logFieldPage, page, "schedule_id", want.GetId(), "error", scheduleErr)
 			continue
@@ -161,7 +161,7 @@ func (s *AgentScheduler) loadPage(page string) error {
 		if _, alreadyRegistered := s.entries[key]; alreadyRegistered {
 			continue
 		}
-		entryID, scheduleErr := s.cron.Schedule(sc.GetCron(), s.newJob(page, id))
+		entryID, scheduleErr := s.cron.Schedule(scheduleExpression(sc), s.newJob(page, id))
 		if scheduleErr != nil {
 			slog.Warn("agent scheduler: register failed", logFieldPage, page, "schedule_id", id, "error", scheduleErr)
 			continue
@@ -169,6 +169,21 @@ func (s *AgentScheduler) loadPage(page string) error {
 		s.entries[key] = entryID
 	}
 	return nil
+}
+
+// scheduleExpression prefixes the schedule's cron expression with
+// "CRON_TZ=<timezone> " so robfig/cron interprets the schedule in the named
+// IANA timezone. Empty/unset timezone defaults to UTC — chosen to remove
+// timezone ambiguity from the contract; users who want local time set
+// schedule.timezone explicitly. The handler validates the IANA name on
+// UpsertSchedule, so by the time the scheduler sees it the value is either
+// empty (→ UTC) or known-good.
+func scheduleExpression(sc *apiv1.AgentSchedule) string {
+	tz := sc.GetTimezone()
+	if tz == "" {
+		tz = "UTC"
+	}
+	return "CRON_TZ=" + tz + " " + sc.GetCron()
 }
 
 func (s *AgentScheduler) newJob(page, scheduleID string) CronJob {
