@@ -208,9 +208,20 @@ var _ = Describe("Frontmatter agent.* namespace guard", func() {
 				Expect(err).NotTo(HaveOccurred())
 			})
 
-			It("should include agent.* in the response (read is not gated)", func() {
+			// agent.* is hidden from the generic GetFrontmatter response so a
+			// plain edit dialog (which reads + writes back) doesn't pull
+			// agent.* in and then trip the agent.* write-rejection on save.
+			// AgentMetadataService.GetChatContext / ListSchedules remain the
+			// authoritative read path for agent.* content.
+			It("should NOT include agent.* in the response", func() {
 				m := got.GetFrontmatter().AsMap()
-				Expect(m).To(HaveKey("agent"))
+				Expect(m).NotTo(HaveKey("agent"))
+			})
+
+			It("should still include the non-agent keys", func() {
+				m := got.GetFrontmatter().AsMap()
+				Expect(m).To(HaveKey("title"))
+				Expect(m["title"]).To(Equal("T"))
 			})
 		})
 	})
