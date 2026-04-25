@@ -397,6 +397,42 @@ var _ = Describe("Mutator", func() {
 		})
 	})
 
+	Describe("legacy item promotion on first mutation", func() {
+		When("an item without a uid was injected via raw MergeFrontmatter", func() {
+			var allItems []*apiv1.ChecklistItem
+
+			BeforeEach(func() {
+				// Simulate a raw frontmatter write: an item with no uid.
+				store.pages["legacy_page"] = wikipage.FrontMatter{
+					"checklists": map[string]any{
+						"shopping": map[string]any{
+							"items": []any{
+								map[string]any{"text": "no uid here", "checked": false},
+							},
+						},
+					},
+				}
+				// Trigger a mutation: AddItem appends, but should also
+				// promote the existing item to a real ULID.
+				_, list, _ := mutator.AddItem(ctx, "legacy_page", "shopping",
+					checklistmutator.AddItemArgs{Text: "added via service"}, human)
+				allItems = list.Items
+			})
+
+			It("should persist a real ULID for the legacy item, not the empty string", func() {
+				Expect(allItems).To(HaveLen(2))
+				for _, it := range allItems {
+					Expect(it.Uid).NotTo(BeEmpty(), "every item must have a uid after a mutation")
+				}
+			})
+
+			It("should keep the original text", func() {
+				texts := []string{allItems[0].Text, allItems[1].Text}
+				Expect(texts).To(ContainElement("no uid here"))
+			})
+		})
+	})
+
 	Describe("concurrent mutations on the same page", func() {
 		It("should serialize without losing updates", func() {
 			_, _, _ = mutator.AddItem(ctx, "p", "list", checklistmutator.AddItemArgs{Text: "seed"}, human)

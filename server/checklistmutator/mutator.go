@@ -146,7 +146,7 @@ func (m *Mutator) AddItem(_ context.Context, page, listName string, args AddItem
 		return nil, nil, err
 	}
 
-	checklist := decodeChecklist(fm, listName, m.clock)
+	checklist := m.readChecklistForMutation(fm, listName)
 
 	now := m.clock.Now()
 	uid := m.ulids.NewULID()
@@ -196,7 +196,7 @@ func (m *Mutator) UpdateItem(_ context.Context, page, listName, uid string, args
 		return nil, nil, err
 	}
 
-	checklist := decodeChecklist(fm, listName, m.clock)
+	checklist := m.readChecklistForMutation(fm, listName)
 	if err := checkExpectedUpdatedAt(checklist, expectedUpdatedAt); err != nil {
 		return nil, nil, err
 	}
@@ -267,7 +267,7 @@ func (m *Mutator) ToggleItem(_ context.Context, page, listName, uid string, expe
 		return nil, nil, err
 	}
 
-	checklist := decodeChecklist(fm, listName, m.clock)
+	checklist := m.readChecklistForMutation(fm, listName)
 	if err := checkExpectedUpdatedAt(checklist, expectedUpdatedAt); err != nil {
 		return nil, nil, err
 	}
@@ -313,7 +313,7 @@ func (m *Mutator) DeleteItem(_ context.Context, page, listName, uid string, expe
 		return nil, err
 	}
 
-	checklist := decodeChecklist(fm, listName, m.clock)
+	checklist := m.readChecklistForMutation(fm, listName)
 	if err := checkExpectedUpdatedAt(checklist, expectedUpdatedAt); err != nil {
 		return nil, err
 	}
@@ -355,7 +355,7 @@ func (m *Mutator) ReorderItem(_ context.Context, page, listName, uid string, new
 		return nil, err
 	}
 
-	checklist := decodeChecklist(fm, listName, m.clock)
+	checklist := m.readChecklistForMutation(fm, listName)
 	if err := checkExpectedUpdatedAt(checklist, expectedUpdatedAt); err != nil {
 		return nil, err
 	}
@@ -413,6 +413,40 @@ func (m *Mutator) GetChecklists(_ context.Context, page string) ([]*apiv1.Checkl
 		out = append(out, decodeChecklist(fm, name, m.clock))
 	}
 	return out, nil
+}
+
+// readChecklistForMutation decodes the named checklist and promotes any
+// legacy items lacking a uid by assigning a fresh ULID and stamping
+// created_at = updated_at = now. This handles two cases:
+//
+//   - Pages whose checklists were last touched by a raw MergeFrontmatter
+//     (where checklists.* user data is still mutable, but the caller has
+//     no way to mint ULIDs).
+//   - Pages created post-startup that the eager migration job did not
+//     see; the next mutation through the funnel cleans them up.
+//
+// Mutating callers use this; ListItems / GetChecklists do not (they are
+// read-only and would otherwise leak fresh uids to the wire on every
+// poll).
+func (m *Mutator) readChecklistForMutation(fm wikipage.FrontMatter, listName string) *apiv1.Checklist {
+	checklist := decodeChecklist(fm, listName, m.clock)
+	now := timestamppb.New(m.clock.Now())
+	for _, item := range checklist.Items {
+		if item.Uid == "" {
+			item.Uid = m.ulids.NewULID()
+			// The codec synthesized created_at/updated_at if the item had
+			// no wiki-managed metadata, but the timestamps were keyed by
+			// the empty uid in storage. Reset them with the real uid so
+			// the next persist writes them under the correct key.
+			if item.CreatedAt == nil {
+				item.CreatedAt = now
+			}
+			if item.UpdatedAt == nil {
+				item.UpdatedAt = now
+			}
+		}
+	}
+	return checklist
 }
 
 // readFrontMatter reads the page's frontmatter, mapping not-found into
