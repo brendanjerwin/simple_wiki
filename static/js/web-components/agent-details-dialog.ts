@@ -518,7 +518,7 @@ export class AgentDetailsDialog extends NativeDialogMixin(LitElement) {
                 <button
                   class="delete-schedule-button${isConfirming ? ' confirming' : ''}"
                   aria-label="${ariaLabel}"
-                  ?disabled="${isDeleting || this.loading}"
+                  ?disabled="${this.deletingScheduleId !== null || this.loading}"
                   @click="${(): void => { this._handleDeleteScheduleClick(schedule.id); }}"
                 >
                   ${label}

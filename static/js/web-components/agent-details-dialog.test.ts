@@ -840,6 +840,60 @@ describe('AgentDetailsDialog', () => {
     });
   });
 
+  describe('when a delete RPC is in flight on one schedule', () => {
+    let fakeClient: FakeAgentClient;
+    let deletePending: { resolve: () => void };
+
+    beforeEach(async () => {
+      el = await Promise.race([
+        fixture<AgentDetailsDialog>(html`<agent-details-dialog></agent-details-dialog>`),
+        timeout(5000, 'Component fixture timed out'),
+      ]);
+
+      fakeClient = buildFakeClient();
+      fakeClient.listSchedules.resolves(create(ListSchedulesResponseSchema, {
+        schedules: [
+          makeSchedule({ id: 'in-flight' }),
+          makeSchedule({ id: 'other' }),
+        ],
+      }));
+      fakeClient.getChatContext.resolves(create(GetChatContextResponseSchema, {}));
+
+      // Hold the delete RPC open so the in-flight state is observable.
+      const blocked = new Promise<{ $typeName: 'api.v1.DeleteScheduleResponse' }>((resolve) => {
+        deletePending = { resolve: () => resolve(create(DeleteScheduleResponseSchema, {})) };
+      });
+      fakeClient.deleteSchedule.returns(blocked);
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- injecting fake client for tests
+      el.client = fakeClient as unknown as AgentDetailsDialog['client'];
+
+      el.openDialog('my-page');
+      await waitUntil(() => !el.loading, 'still loading', { timeout: 1000 });
+      await el.updateComplete;
+
+      // Arm + confirm delete on the first row to trigger the RPC.
+      const inFlightButton = el.shadowRoot?.querySelector<HTMLButtonElement>(
+        '[data-schedule-id="in-flight"] .delete-schedule-button'
+      );
+      inFlightButton?.click();
+      await el.updateComplete;
+      inFlightButton?.click();
+      await el.updateComplete;
+    });
+
+    afterEach(() => {
+      // Resolve the held promise so no test leaks state.
+      deletePending.resolve();
+    });
+
+    it("should disable the other schedule's delete button while the RPC is in flight", () => {
+      const otherButton = el.shadowRoot?.querySelector<HTMLButtonElement>(
+        '[data-schedule-id="other"] .delete-schedule-button'
+      );
+      expect(otherButton?.disabled).to.be.true;
+    });
+  });
+
   describe('when delete is armed and then Escape is pressed', () => {
     let fakeClient: FakeAgentClient;
 
