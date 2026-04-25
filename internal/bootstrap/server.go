@@ -14,7 +14,9 @@ import (
 	wikimcp "github.com/brendanjerwin/simple_wiki/internal/mcp"
 	"github.com/brendanjerwin/simple_wiki/internal/observability"
 	"github.com/brendanjerwin/simple_wiki/pkg/chatbuffer"
+	"github.com/brendanjerwin/simple_wiki/pkg/ulid"
 	"github.com/brendanjerwin/simple_wiki/server"
+	"github.com/brendanjerwin/simple_wiki/server/checklistmutator"
 	"github.com/brendanjerwin/simple_wiki/tailscale"
 	"github.com/gin-gonic/gin"
 	"github.com/jcelliott/lumber"
@@ -455,6 +457,8 @@ func setupGRPCServer(
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create gRPC server: %w", err)
 	}
+	checklistMutator := checklistmutator.New(site, checklistmutator.SystemClock{}, ulid.NewSystemGenerator())
+
 	grpcAPIServer = grpcAPIServer.
 		WithJobQueueCoordinator(site.GetJobQueueCoordinator()).
 		WithMarkdownRenderer(site.MarkdownRenderer).
@@ -462,7 +466,8 @@ func setupGRPCServer(
 		WithFileStorer(site.FileStorer).
 		WithScheduledTurnDispatcher(site.ScheduledTurnDispatcher).
 		WithAgentScheduleStore(site.AgentScheduleStore).
-		WithAgentChatContextStore(site.AgentChatContextStore)
+		WithAgentChatContextStore(site.AgentChatContextStore).
+		WithChecklistMutator(checklistMutator)
 
 	unaryInterceptors, streamInterceptors, err := buildGRPCInterceptors(
 		identityResolver, grpcAPIServer.LoggingInterceptor(), counters, logger,
