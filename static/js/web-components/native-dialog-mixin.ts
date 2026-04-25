@@ -5,6 +5,31 @@ import { property } from 'lit/decorators.js';
 type Constructor<T = LitElement> = abstract new (...args: any[]) => T;
 
 /**
+ * Handles Tab / Shift+Tab focus cycling within a shadow root.
+ *
+ * Exported as a standalone function so components that do not extend
+ * NativeDialogMixin can still use the same focus-trap implementation
+ * without copying it.
+ */
+export function handleKeydownFocusTrap(shadowRoot: ShadowRoot | null, event: KeyboardEvent): void {
+  if (event.key !== 'Tab') return;
+  if (!shadowRoot) return;
+  const target = event.composedPath()[0];
+  if (!(target instanceof HTMLElement)) return;
+  const focusable = Array.from(
+    shadowRoot.querySelectorAll<HTMLElement>('button:not([disabled])')
+  );
+  if (focusable.length === 0) return;
+  const idx = focusable.indexOf(target);
+  if (idx === -1) return;
+  event.preventDefault();
+  const next = event.shiftKey
+    ? (idx - 1 + focusable.length) % focusable.length
+    : (idx + 1) % focusable.length;
+  focusable[next]?.focus();
+}
+
+/**
  * Declares the public interface added by NativeDialogMixin.
  *
  * Components that use this mixin must also implement the protected method
@@ -14,6 +39,7 @@ export declare class NativeDialogMixinInterface {
   open: boolean;
   readonly _handleDialogCancel: (event: Event) => void;
   readonly _handleDialogClick: (e: MouseEvent) => void;
+  readonly _handleKeydown: (event: KeyboardEvent) => void;
 }
 
 /**
@@ -100,6 +126,10 @@ export function NativeDialogMixin<T extends Constructor>(Base: T) {
       if (e.target === e.currentTarget) {
         this._closeDialog();
       }
+    };
+
+    readonly _handleKeydown = (event: KeyboardEvent): void => {
+      handleKeydownFocusTrap(this.shadowRoot, event);
     };
   }
 

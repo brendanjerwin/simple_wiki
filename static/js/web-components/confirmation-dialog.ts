@@ -3,6 +3,7 @@ import { state } from 'lit/decorators.js';
 import { colorCSS, typographyCSS, themeCSS, foundationCSS, dialogCSS, responsiveCSS, buttonCSS, zIndexCSS } from './shared-styles.js';
 import './error-display.js';
 import { type AugmentedError, AugmentErrorService } from './augment-error-service.js';
+import { handleKeydownFocusTrap } from './native-dialog-mixin.js';
 
 /**
  * Configuration for the confirmation dialog
@@ -203,7 +204,12 @@ export class ConfirmationDialog extends LitElement {
         background: transparent;
         max-width: none;
         max-height: none;
-        overflow: visible;
+        width: 100vw;
+        height: 100dvh;
+        overflow: hidden;
+        display: flex;
+        align-items: center;
+        justify-content: center;
       }
 
       dialog::backdrop {
@@ -284,14 +290,11 @@ export class ConfirmationDialog extends LitElement {
     this.loading = false;
     this.open = true;
     this.setAttribute('open', '');
-    this._previouslyFocusedElement = document.activeElement;
     void this.updateComplete.then(() => {
       const dialog = this.shadowRoot?.querySelector('dialog');
       if (dialog && !dialog.open && this.isConnected) {
+        this._previouslyFocusedElement = document.activeElement;
         dialog.showModal();
-        // Focus the cancel button by default so users must deliberately choose a destructive action
-        const cancelButton = this.shadowRoot?.querySelector<HTMLButtonElement>('.button-cancel');
-        cancelButton?.focus();
       }
     });
   }
@@ -382,6 +385,14 @@ export class ConfirmationDialog extends LitElement {
     }
   };
 
+  /**
+   * Handles Tab / Shift+Tab key to keep focus within the dialog (focus trap).
+   * Delegates to the shared implementation in NativeDialogMixin.
+   */
+  private readonly _handleKeydown = (event: KeyboardEvent): void => {
+    handleKeydownFocusTrap(this.shadowRoot, event);
+  };
+
   override render() {
     if (!this.open || !this.config) {
       return html`<dialog></dialog>`;
@@ -393,14 +404,19 @@ export class ConfirmationDialog extends LitElement {
     const descriptionIrreversibleClass = config.irreversible ? 'irreversible' : '';
 
     return html`
-      <dialog aria-labelledby="dialog-title" @cancel=${this._handleDialogCancel} @click=${this._handleDialogClick}>
+      <dialog
+        aria-labelledby="confirmation-dialog-title"
+        @cancel=${this._handleDialogCancel}
+        @click=${this._handleDialogClick}
+        @keydown=${this._handleKeydown}
+      >
         <div class="container container-modal dialog-box">
           <div class="dialog-content panel gap-sm">
             <div class="dialog-icon ${iconClass}">
               ${AugmentErrorService.getIconString(config.icon || 'warning')}
             </div>
 
-            <div id="dialog-title" class="dialog-message text-primary font-mono text-base">
+            <div id="confirmation-dialog-title" class="dialog-message text-primary font-mono text-base">
               ${config.message}
             </div>
 
@@ -422,6 +438,7 @@ export class ConfirmationDialog extends LitElement {
 
             <div class="dialog-actions">
               <button
+                autofocus
                 class="button button-cancel font-mono text-sm"
                 @click=${this.handleCancel}
                 ?disabled=${this.loading}
