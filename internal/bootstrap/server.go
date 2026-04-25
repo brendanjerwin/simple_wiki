@@ -123,11 +123,12 @@ func SetupTailscaleServe(
 	logger *lumber.ConsoleLogger,
 	commit string,
 	buildTime time.Time,
+	agentTags []string,
 ) (*ServerResult, error) {
 	logger.Info("Tailscale detected: %s", tsDNSName)
 	logger.Info("Tailscale Serve mode. Running HTTP on %s with identity support", httpAddr)
 
-	identityResolver := tailscale.NewIdentityResolver()
+	identityResolver := tailscale.NewIdentityResolver(agentTags)
 	handler, metricsCleanup, err := createMultiplexedHandler(site, logger, commit, buildTime, identityResolver)
 	if err != nil {
 		return nil, fmt.Errorf(errCreateHandlerFmt, err)
@@ -167,10 +168,11 @@ func SetupFullTLS(
 	logger *lumber.ConsoleLogger,
 	commit string,
 	buildTime time.Time,
+	agentTags []string,
 ) (*ServerResult, error) {
 	logger.Info("Tailscale detected: %s", tsDNSName)
 
-	identityResolver := tailscale.NewIdentityResolver()
+	identityResolver := tailscale.NewIdentityResolver(agentTags)
 	handler, metricsCleanup, err := createMultiplexedHandler(site, logger, commit, buildTime, identityResolver)
 	if err != nil {
 		return nil, fmt.Errorf(errCreateHandlerFmt, err)

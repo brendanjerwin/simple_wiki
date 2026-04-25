@@ -15,9 +15,20 @@ type IdentityValue interface {
 	NodeName() string
 	ForLog() string
 	String() string
+	// IsAgent reports whether this identity belongs to an automated caller
+	// (a tagged Tailscale device, an anonymous caller asserting agent-ness
+	// via metadata, or wiki-cli running with its default agent assumption).
+	// Used by services that record attribution (e.g. ChecklistService).
+	IsAgent() bool
+	// Name returns a short, stable identifier for the principal — typically
+	// the LoginName, falling back to DisplayName then NodeName. Empty for
+	// anonymous identities. Used by services that record attribution
+	// (e.g. ChecklistService.completed_by).
+	Name() string
 }
 
 const anonymousLabel = "anonymous"
+const agentSuffix = " [agent]"
 
 // Anonymous is the singleton representing no identity.
 var Anonymous IdentityValue = anonymousIdentity{}
@@ -30,6 +41,8 @@ func (anonymousIdentity) DisplayName() string { return "" }
 func (anonymousIdentity) NodeName() string    { return "" }
 func (anonymousIdentity) ForLog() string      { return anonymousLabel }
 func (anonymousIdentity) String() string      { return anonymousLabel }
+func (anonymousIdentity) IsAgent() bool       { return false }
+func (anonymousIdentity) Name() string        { return "" }
 
 var _ IdentityValue = anonymousIdentity{}
 
@@ -38,14 +51,30 @@ type Identity struct {
 	loginName   string // private - use LoginName() method
 	displayName string
 	nodeName    string
+	isAgent     bool
 }
 
-// NewIdentity creates a new identity with the given values.
+// NewIdentity creates a new identity with the given values. The resulting
+// identity reports IsAgent() == false. Use NewAgentIdentity for callers
+// the resolver has classified as automated.
 func NewIdentity(loginName, displayName, nodeName string) *Identity {
 	return &Identity{
 		loginName:   loginName,
 		displayName: displayName,
 		nodeName:    nodeName,
+	}
+}
+
+// NewAgentIdentity creates an identity that reports IsAgent() == true.
+// Callers: the Tailscale resolver when a node tag matches the agent set,
+// gRPC interceptors for anonymous self-claim via metadata header, and
+// wiki-cli when WIKI_CLI_HUMAN is unset.
+func NewAgentIdentity(loginName, displayName, nodeName string) *Identity {
+	return &Identity{
+		loginName:   loginName,
+		displayName: displayName,
+		nodeName:    nodeName,
+		isAgent:     true,
 	}
 }
 
@@ -59,6 +88,17 @@ func (i *Identity) IsAnonymous() bool {
 func (i *Identity) LoginName() string   { return i.loginName }
 func (i *Identity) DisplayName() string { return i.displayName }
 func (i *Identity) NodeName() string    { return i.nodeName }
+func (i *Identity) IsAgent() bool       { return i.isAgent }
+
+func (i *Identity) Name() string {
+	if i.loginName != "" {
+		return i.loginName
+	}
+	if i.displayName != "" {
+		return i.displayName
+	}
+	return i.nodeName
+}
 
 func (i *Identity) String() string {
 	if i.IsAnonymous() {
@@ -74,6 +114,14 @@ func (i *Identity) String() string {
 }
 
 func (i *Identity) ForLog() string {
+	base := i.forLogBase()
+	if i.isAgent {
+		return base + agentSuffix
+	}
+	return base
+}
+
+func (i *Identity) forLogBase() string {
 	if i.IsAnonymous() {
 		return anonymousLabel
 	}

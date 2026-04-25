@@ -28,7 +28,7 @@ var _ = Describe("LocalIdentityResolver", func() {
 			var resolver *tailscale.LocalIdentityResolver
 
 			BeforeEach(func() {
-				resolver = tailscale.NewIdentityResolver()
+				resolver = tailscale.NewIdentityResolver(nil)
 			})
 
 			It("should not be nil", func() {
@@ -43,7 +43,7 @@ var _ = Describe("LocalIdentityResolver", func() {
 
 			BeforeEach(func() {
 				client := &mockWhoIsQuerier{}
-				resolver = tailscale.NewIdentityResolverWithClient(client)
+				resolver = tailscale.NewIdentityResolverWithClient(client, nil)
 			})
 
 			It("should not be nil", func() {
@@ -65,7 +65,7 @@ var _ = Describe("LocalIdentityResolver", func() {
 					response: nil,
 					err:      errors.New("connection refused"),
 				}
-				resolver = tailscale.NewIdentityResolverWithClient(client)
+				resolver = tailscale.NewIdentityResolverWithClient(client, nil)
 				identity, err = resolver.WhoIs(context.Background(), "100.64.0.1:12345")
 			})
 
@@ -98,7 +98,7 @@ var _ = Describe("LocalIdentityResolver", func() {
 					},
 					err: nil,
 				}
-				resolver = tailscale.NewIdentityResolverWithClient(client)
+				resolver = tailscale.NewIdentityResolverWithClient(client, nil)
 				identity, err = resolver.WhoIs(context.Background(), "100.64.0.1:12345")
 			})
 
@@ -140,7 +140,7 @@ var _ = Describe("LocalIdentityResolver", func() {
 					},
 					err: nil,
 				}
-				resolver = tailscale.NewIdentityResolverWithClient(client)
+				resolver = tailscale.NewIdentityResolverWithClient(client, nil)
 				identity, err = resolver.WhoIs(context.Background(), "100.64.0.1:12345")
 			})
 
@@ -171,7 +171,7 @@ var _ = Describe("LocalIdentityResolver", func() {
 					},
 					err: nil,
 				}
-				resolver = tailscale.NewIdentityResolverWithClient(client)
+				resolver = tailscale.NewIdentityResolverWithClient(client, nil)
 				identity, err = resolver.WhoIs(context.Background(), "100.64.0.1:12345")
 			})
 
@@ -204,7 +204,7 @@ var _ = Describe("LocalIdentityResolver", func() {
 					response: &apitype.WhoIsResponse{},
 					err:      nil,
 				}
-				resolver = tailscale.NewIdentityResolverWithClient(client)
+				resolver = tailscale.NewIdentityResolverWithClient(client, nil)
 				identity, err = resolver.WhoIs(context.Background(), "100.64.0.1:12345")
 			})
 
@@ -214,6 +214,123 @@ var _ = Describe("LocalIdentityResolver", func() {
 
 			It("should return Anonymous identity", func() {
 				Expect(identity.IsAnonymous()).To(BeTrue())
+			})
+		})
+	})
+
+	Describe("agent-tag classification", func() {
+		When("the responding node carries a configured agent tag", func() {
+			var (
+				resolver *tailscale.LocalIdentityResolver
+				identity tailscale.IdentityValue
+			)
+
+			BeforeEach(func() {
+				client := &mockWhoIsQuerier{
+					response: &apitype.WhoIsResponse{
+						UserProfile: &tailcfg.UserProfile{
+							LoginName:   "user@example.com",
+							DisplayName: "Test User",
+						},
+						Node: &tailcfg.Node{
+							ComputedName: "agent-bot",
+							Tags:         []string{"tag:agent"},
+						},
+					},
+				}
+				resolver = tailscale.NewIdentityResolverWithClient(client, []string{"tag:agent"})
+				identity, _ = resolver.WhoIs(context.Background(), "100.64.0.1:12345")
+			})
+
+			It("should classify the identity as an agent", func() {
+				Expect(identity.IsAgent()).To(BeTrue())
+			})
+
+			It("should preserve the login name", func() {
+				Expect(identity.LoginName()).To(Equal("user@example.com"))
+			})
+		})
+
+		When("the responding node has tags but none are configured as agent tags", func() {
+			var (
+				resolver *tailscale.LocalIdentityResolver
+				identity tailscale.IdentityValue
+			)
+
+			BeforeEach(func() {
+				client := &mockWhoIsQuerier{
+					response: &apitype.WhoIsResponse{
+						UserProfile: &tailcfg.UserProfile{
+							LoginName:   "user@example.com",
+							DisplayName: "Test User",
+						},
+						Node: &tailcfg.Node{
+							ComputedName: "user-laptop",
+							Tags:         []string{"tag:human"},
+						},
+					},
+				}
+				resolver = tailscale.NewIdentityResolverWithClient(client, []string{"tag:agent"})
+				identity, _ = resolver.WhoIs(context.Background(), "100.64.0.1:12345")
+			})
+
+			It("should not classify the identity as an agent", func() {
+				Expect(identity.IsAgent()).To(BeFalse())
+			})
+		})
+
+		When("the resolver was constructed with an empty agent-tag set", func() {
+			var (
+				resolver *tailscale.LocalIdentityResolver
+				identity tailscale.IdentityValue
+			)
+
+			BeforeEach(func() {
+				client := &mockWhoIsQuerier{
+					response: &apitype.WhoIsResponse{
+						UserProfile: &tailcfg.UserProfile{
+							LoginName:   "user@example.com",
+							DisplayName: "Test User",
+						},
+						Node: &tailcfg.Node{
+							ComputedName: "agent-bot",
+							Tags:         []string{"tag:agent"},
+						},
+					},
+				}
+				resolver = tailscale.NewIdentityResolverWithClient(client, nil)
+				identity, _ = resolver.WhoIs(context.Background(), "100.64.0.1:12345")
+			})
+
+			It("should not classify any identity as an agent", func() {
+				Expect(identity.IsAgent()).To(BeFalse())
+			})
+		})
+
+		When("multiple node tags overlap the configured agent-tag set", func() {
+			var (
+				resolver *tailscale.LocalIdentityResolver
+				identity tailscale.IdentityValue
+			)
+
+			BeforeEach(func() {
+				client := &mockWhoIsQuerier{
+					response: &apitype.WhoIsResponse{
+						UserProfile: &tailcfg.UserProfile{
+							LoginName: "agent@example.com",
+						},
+						Node: &tailcfg.Node{
+							ComputedName: "scheduler",
+							Tags:         []string{"tag:scheduled", "tag:agent"},
+						},
+					},
+				}
+				resolver = tailscale.NewIdentityResolverWithClient(client, []string{"tag:agent", "tag:bot"})
+				identity, _ = resolver.WhoIs(context.Background(), "100.64.0.1:12345")
+			})
+
+			It("should classify as agent on the first matching tag", func() {
+				Expect(identity.IsAgent()).To(BeTrue())
 			})
 		})
 	})

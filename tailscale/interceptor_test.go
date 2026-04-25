@@ -359,4 +359,113 @@ var _ = Describe("IdentityStreamInterceptor", func() {
 			})
 		})
 	})
+
+	Describe("x-wiki-is-agent self-claim header", func() {
+		When("an anonymous caller sets the header to true", func() {
+			var capturedIdentity tailscale.IdentityValue
+
+			BeforeEach(func() {
+				inter, err := tailscale.IdentityInterceptor(nil, testLogger())
+				Expect(err).NotTo(HaveOccurred())
+
+				md := metadata.New(map[string]string{
+					tailscale.WikiIsAgentHeader: "true",
+				})
+				ctx := metadata.NewIncomingContext(context.Background(), md)
+
+				handler := func(ctx context.Context, _ any) (any, error) {
+					capturedIdentity = tailscale.IdentityFromContext(ctx)
+					return "response", nil
+				}
+
+				_, _ = inter(ctx, nil, &grpc.UnaryServerInfo{}, handler)
+			})
+
+			It("should report IsAgent true", func() {
+				Expect(capturedIdentity.IsAgent()).To(BeTrue())
+			})
+
+			It("should still report IsAnonymous true (no name was claimed)", func() {
+				Expect(capturedIdentity.IsAnonymous()).To(BeTrue())
+			})
+		})
+
+		When("a Tailscale-authenticated user sets the header to true", func() {
+			var capturedIdentity tailscale.IdentityValue
+
+			BeforeEach(func() {
+				inter, err := tailscale.IdentityInterceptor(nil, testLogger())
+				Expect(err).NotTo(HaveOccurred())
+
+				md := metadata.New(map[string]string{
+					"tailscale-user-login":      "user@example.com",
+					"tailscale-user-name":       "Test User",
+					tailscale.WikiIsAgentHeader: "true",
+				})
+				ctx := metadata.NewIncomingContext(context.Background(), md)
+
+				handler := func(ctx context.Context, _ any) (any, error) {
+					capturedIdentity = tailscale.IdentityFromContext(ctx)
+					return "response", nil
+				}
+
+				_, _ = inter(ctx, nil, &grpc.UnaryServerInfo{}, handler)
+			})
+
+			It("should report IsAgent true", func() {
+				Expect(capturedIdentity.IsAgent()).To(BeTrue())
+			})
+
+			It("should preserve the resolved login name", func() {
+				Expect(capturedIdentity.LoginName()).To(Equal("user@example.com"))
+			})
+		})
+
+		When("the header is absent", func() {
+			var capturedIdentity tailscale.IdentityValue
+
+			BeforeEach(func() {
+				inter, err := tailscale.IdentityInterceptor(nil, testLogger())
+				Expect(err).NotTo(HaveOccurred())
+
+				ctx := metadata.NewIncomingContext(context.Background(), metadata.MD{})
+
+				handler := func(ctx context.Context, _ any) (any, error) {
+					capturedIdentity = tailscale.IdentityFromContext(ctx)
+					return "response", nil
+				}
+
+				_, _ = inter(ctx, nil, &grpc.UnaryServerInfo{}, handler)
+			})
+
+			It("should not classify the request as agent", func() {
+				Expect(capturedIdentity.IsAgent()).To(BeFalse())
+			})
+		})
+
+		When("the header value is 'false'", func() {
+			var capturedIdentity tailscale.IdentityValue
+
+			BeforeEach(func() {
+				inter, err := tailscale.IdentityInterceptor(nil, testLogger())
+				Expect(err).NotTo(HaveOccurred())
+
+				md := metadata.New(map[string]string{
+					tailscale.WikiIsAgentHeader: "false",
+				})
+				ctx := metadata.NewIncomingContext(context.Background(), md)
+
+				handler := func(ctx context.Context, _ any) (any, error) {
+					capturedIdentity = tailscale.IdentityFromContext(ctx)
+					return "response", nil
+				}
+
+				_, _ = inter(ctx, nil, &grpc.UnaryServerInfo{}, handler)
+			})
+
+			It("should not classify the request as agent", func() {
+				Expect(capturedIdentity.IsAgent()).To(BeFalse())
+			})
+		})
+	})
 })
