@@ -56,8 +56,18 @@ func main() {
 		},
 	}
 	app.Before = func(c *cli.Context) error {
-		// Skip version check for mcp and pool commands (they need to start quickly)
-		if c.Args().First() == "mcp" || c.Args().First() == "pool" {
+		// Skip version check for mcp — it speaks stdio and clients expect a
+		// near-instant initialize response; a network round-trip on every
+		// startup is too slow. The wiki-cli bootstrapper script is expected
+		// to handle mcp updates by other means (e.g. periodic deletion of
+		// the cached binary).
+		//
+		// Pool and other commands DO check: pool is a long-lived daemon and
+		// without a version check at startup the bootstrapper's
+		// "VERSION MISMATCH" self-update path never fires for it. The cost
+		// is one HTTP round-trip at startup which is acceptable for a
+		// daemon that runs for hours or days.
+		if c.Args().First() == "mcp" {
 			return nil
 		}
 		if err := checkVersionCompatibility(c.GlobalString("url")); err != nil {
