@@ -90,6 +90,23 @@ func (s *AgentScheduler) Refresh(page string) error {
 	return s.loadPage(page)
 }
 
+// UnregisterPage removes every cron entry registered for the given page,
+// without consulting the store. Called from DeletePage so the registrations
+// stop firing immediately — Refresh would also work here, but only if List
+// returns "no schedules" cleanly for a missing page; UnregisterPage is the
+// explicit, store-independent path that always does the right thing.
+func (s *AgentScheduler) UnregisterPage(page string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for key, entryID := range s.entries {
+		if key.page != page {
+			continue
+		}
+		s.cron.Remove(entryID)
+		delete(s.entries, key)
+	}
+}
+
 func (s *AgentScheduler) loadPage(page string) error {
 	schedules, err := s.store.List(page)
 	if err != nil {

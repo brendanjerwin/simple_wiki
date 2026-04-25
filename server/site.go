@@ -879,6 +879,16 @@ func (s *Site) DeletePage(identifier wikipage.PageIdentifier) error {
 
 	s.Logger.Trace("Deleting page %s", identifier)
 
+	// Drop any agent.schedules cron registrations for this page BEFORE the
+	// file is moved out of place. Otherwise the cron keeps firing for a
+	// non-existent page until restart. Done synchronously (not via the
+	// AgentScheduleRefreshJob queue) because the file move below may be
+	// observed by an in-flight cron fire microseconds later — we want the
+	// registration gone before that window opens.
+	if s.AgentScheduler != nil {
+		s.AgentScheduler.UnregisterPage(string(identifier))
+	}
+
 	// Enqueue removal jobs for both frontmatter and bleve indexes
 	if s.IndexCoordinator != nil {
 		if err := s.IndexCoordinator.EnqueueIndexJob(identifier, index.Remove); err != nil {

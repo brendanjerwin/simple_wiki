@@ -108,3 +108,74 @@ var _ = Describe("AgentScheduler.LoadAll", func() {
 		})
 	})
 })
+
+var _ = Describe("AgentScheduler.UnregisterPage", func() {
+	var (
+		pages    *fakePageStore
+		store    *server.AgentScheduleStore
+		idx      *fakeFrontmatterIndex
+		cronReg  *fakeCronRegistrar
+		dispatch *fakeDispatcher
+	)
+
+	BeforeEach(func() {
+		pages = newFakePageStore()
+		store = server.NewAgentScheduleStore(pages)
+		idx = &fakeFrontmatterIndex{}
+		cronReg = &fakeCronRegistrar{}
+		dispatch = &fakeDispatcher{}
+	})
+
+	Describe("when one page has registered schedules and another also has one", func() {
+		var keepers, removed []int
+
+		BeforeEach(func() {
+			Expect(store.Upsert("doomed", &apiv1.AgentSchedule{
+				Id: "a", Cron: "0 0 9 * * 1", Prompt: "p", Enabled: true,
+			})).To(Succeed())
+			Expect(store.Upsert("doomed", &apiv1.AgentSchedule{
+				Id: "b", Cron: "0 0 9 * * 2", Prompt: "p", Enabled: true,
+			})).To(Succeed())
+			Expect(store.Upsert("keeper", &apiv1.AgentSchedule{
+				Id: "z", Cron: "0 0 9 * * 3", Prompt: "p", Enabled: true,
+			})).To(Succeed())
+
+			idx.pages = []wikipage.PageIdentifier{"doomed", "keeper"}
+
+			scheduler := server.NewAgentScheduler(store, dispatch, idx, cronReg, time.Minute)
+			Expect(scheduler.LoadAll()).To(Succeed())
+
+			// Capture entry IDs for the keeper before unregister.
+			keepers = nil
+			for _, e := range cronReg.scheduled {
+				if e.cron == "0 0 9 * * 3" {
+					keepers = append(keepers, e.id)
+				}
+			}
+
+			scheduler.UnregisterPage("doomed")
+			removed = append([]int{}, cronReg.removed...)
+		})
+
+		It("should remove both 'doomed' page entries", func() {
+			Expect(removed).To(HaveLen(2))
+		})
+
+		It("should not remove the 'keeper' page entry", func() {
+			for _, kept := range keepers {
+				Expect(removed).NotTo(ContainElement(kept))
+			}
+		})
+	})
+
+	Describe("when called for a page that has no registered schedules", func() {
+		BeforeEach(func() {
+			scheduler := server.NewAgentScheduler(store, dispatch, idx, cronReg, time.Minute)
+			scheduler.UnregisterPage("never_registered")
+		})
+
+		It("should not call the cron registrar", func() {
+			Expect(cronReg.removed).To(BeEmpty())
+		})
+	})
+})
