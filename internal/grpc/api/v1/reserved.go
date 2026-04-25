@@ -20,9 +20,14 @@ import (
 // inherit the reservation without code changes.
 //
 // See ADR-0009 (the pattern) and ADR-0010 (the wiki.* namespace).
+// Each entry's value is the InvalidArgument error message returned to a
+// caller that tries to mutate the namespace via the generic API. Keep
+// the messages generic — the frontmatter package should not reach into
+// any feature's vocabulary. Callers find the right dedicated service via
+// `wiki-cli list` / `wiki-cli describe` or the embedded help corpus.
 var reservedNamespaces = map[string]string{
-	"agent": "the 'agent' top-level frontmatter namespace is reserved; use AgentMetadataService instead",
-	"wiki":  "the 'wiki' top-level frontmatter namespace is reserved; use ChecklistService for wiki.checklists.* (see ADR-0009 and ADR-0010)",
+	"agent": "the 'agent' top-level frontmatter namespace is reserved; use the appropriate dedicated service (see ADR-0009)",
+	"wiki":  "the 'wiki' top-level frontmatter namespace is reserved; use the appropriate dedicated service (see ADR-0009 and ADR-0010)",
 }
 
 // isReservedTopLevel reports whether key is a reserved top-level frontmatter

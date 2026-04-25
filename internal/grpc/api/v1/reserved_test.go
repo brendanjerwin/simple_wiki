@@ -108,8 +108,9 @@ var _ = Describe("reserved namespace registry", func() {
 				Expect(status.Code(err)).To(Equal(codes.InvalidArgument))
 			})
 
-			It("should name AgentMetadataService in the message", func() {
-				Expect(err.Error()).To(ContainSubstring("AgentMetadataService"))
+			It("should describe the rejection as a reserved-namespace violation", func() {
+				Expect(err.Error()).To(ContainSubstring("reserved"))
+				Expect(err.Error()).To(ContainSubstring("agent"))
 			})
 		})
 
