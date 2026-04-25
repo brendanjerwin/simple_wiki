@@ -55,8 +55,10 @@ func setupMCPServer(_ string) (*mcpserver.MCPServer, *http.Client, error) {
 		mcpserver.WithToolCapabilities(false),
 	)
 
-	// Create HTTP client for Connect protocol.
-	httpClient := &http.Client{}
+	// Create HTTP client for Connect protocol. Wrap with the agent-header
+	// transport so all wiki-cli MCP calls carry x-wiki-is-agent: true by
+	// default (suppressed only when WIKI_CLI_HUMAN=1).
+	httpClient := newAgentAwareHTTPClient(nil)
 
 	return s, httpClient, nil
 }
