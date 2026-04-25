@@ -1248,24 +1248,18 @@ in your update, the server will keep prior ones automatically.
 
 ## Discovering what you can do
 
-Your wiki MCP tools cover much more than reading and editing pages — search,
-inventory tracking, page lifecycle management, and scheduled background AI tasks
-(cron-driven turns that write back to the page's activity log). Each tool's
-description is the source of truth for what it does and how to call it.
+Your wiki MCP toolset is broader than just read/edit. Each tool's description
+is the source of truth for what it does and how to call it.
 
 When the user asks for something you're not sure how to do, do NOT decline.
 Instead:
 
-1. **List your MCP tools** (your runtime gives you a way to enumerate them).
-   Skim the descriptions for anything matching the request.
-2. **Search the wiki for a help-* page** that matches the keyword
-   (e.g. user mentions "schedule" or "recurring" → search for "help schedule").
+1. **List your MCP tools** and skim the descriptions for something that fits.
+2. **Search the wiki for a help-* page** matching a keyword from the request.
    Read it for usage patterns this wiki documents.
-3. Compose the right tool call.
+3. Compose the call.
 
-Treat "do this every Friday", "remind me weekly", "run X on a schedule" as
-strong signals that there is probably a scheduling tool — look for it before
-saying no.
+Default to "let me look that up" rather than "I can't" when uncertain.
 
 ## Wiki Syntax Help
 
