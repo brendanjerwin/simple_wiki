@@ -113,6 +113,7 @@ func normalizeBaseURL(baseURL string) (string, error) {
 type apiClients struct {
 	agentMetadata  apiv1connect.AgentMetadataServiceClient
 	chat           apiv1connect.ChatServiceClient
+	checklist      apiv1connect.ChecklistServiceClient
 	frontmatter    apiv1connect.FrontmatterClient
 	inventory      apiv1connect.InventoryManagementServiceClient
 	pageImport     apiv1connect.PageImportServiceClient
@@ -126,6 +127,7 @@ func createAPIClients(httpClient connect.HTTPClient, baseURL string) *apiClients
 	return &apiClients{
 		agentMetadata:  apiv1connect.NewAgentMetadataServiceClient(httpClient, baseURL),
 		chat:           apiv1connect.NewChatServiceClient(httpClient, baseURL),
+		checklist:      apiv1connect.NewChecklistServiceClient(httpClient, baseURL),
 		frontmatter:    apiv1connect.NewFrontmatterClient(httpClient, baseURL),
 		inventory:      apiv1connect.NewInventoryManagementServiceClient(httpClient, baseURL),
 		pageImport:     apiv1connect.NewPageImportServiceClient(httpClient, baseURL),
@@ -141,6 +143,7 @@ func registerToolHandlers(s *mcpserver.MCPServer, clients *apiClients) {
 	// These forward MCP tool calls to the Connect protocol services
 	apiv1mcp.ForwardToConnectAgentMetadataServiceClient(s, clients.agentMetadata)
 	apiv1mcp.ForwardToConnectChatServiceClient(s, clients.chat)
+	apiv1mcp.ForwardToConnectChecklistServiceClient(s, clients.checklist)
 	apiv1mcp.ForwardToConnectFrontmatterClient(s, clients.frontmatter)
 	apiv1mcp.ForwardToConnectInventoryManagementServiceClient(s, clients.inventory)
 	apiv1mcp.ForwardToConnectPageImportServiceClient(s, clients.pageImport)

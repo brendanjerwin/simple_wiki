@@ -99,6 +99,7 @@ type Server struct {
 	apiv1.UnimplementedChatServiceServer
 	apiv1.UnimplementedScheduledTurnServiceServer
 	apiv1.UnimplementedAgentMetadataServiceServer
+	apiv1.UnimplementedChecklistServiceServer
 	commit                  string
 	buildTime               time.Time
 	pageReaderMutator       wikipage.PageReaderMutator
@@ -215,6 +216,7 @@ func (s *Server) RegisterWithServer(grpcServer *grpc.Server) {
 	apiv1.RegisterChatServiceServer(grpcServer, s)
 	apiv1.RegisterScheduledTurnServiceServer(grpcServer, s)
 	apiv1.RegisterAgentMetadataServiceServer(grpcServer, s)
+	apiv1.RegisterChecklistServiceServer(grpcServer, s)
 }
 
 // LoggingInterceptor returns a gRPC unary interceptor for logging method calls.

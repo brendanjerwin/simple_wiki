@@ -396,6 +396,7 @@ func BuildVanguardTranscoder(grpcServer *grpc.Server, ginRouter http.Handler) (h
 	serviceNames := []string{
 		"api.v1.AgentMetadataService",
 		"api.v1.ChatService",
+		"api.v1.ChecklistService",
 		"api.v1.FileStorageService",
 		"api.v1.Frontmatter",
 		"api.v1.InventoryManagementService",
