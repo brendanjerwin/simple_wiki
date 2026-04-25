@@ -128,6 +128,15 @@ export class AgentDetailsDialog extends NativeDialogMixin(LitElement) {
         font-size: 12px;
       }
 
+      .schedule-timezone {
+        color: var(--color-text-muted);
+        font-size: 12px;
+      }
+
+      .schedule-timezone-default {
+        font-style: italic;
+      }
+
       .status-badge {
         display: inline-block;
         font-size: 11px;
@@ -494,6 +503,11 @@ export class AgentDetailsDialog extends NativeDialogMixin(LitElement) {
           const ariaLabel = isConfirming
             ? `Confirm delete schedule ${schedule.id}`
             : `Delete schedule ${schedule.id}`;
+          const hasExplicitTimezone = Boolean(schedule.timezone);
+          const tzDisplay = hasExplicitTimezone ? schedule.timezone : 'UTC (default)';
+          const tzClass = hasExplicitTimezone
+            ? 'schedule-timezone'
+            : 'schedule-timezone schedule-timezone-default';
           return html`
             <li class="schedule-row" data-schedule-id="${schedule.id}">
               <div class="schedule-row-header">
@@ -511,6 +525,7 @@ export class AgentDetailsDialog extends NativeDialogMixin(LitElement) {
                 </button>
               </div>
               <div class="schedule-cron">${schedule.cron}</div>
+              <div class="${tzClass}">${tzDisplay}</div>
             </li>
           `;
         })}

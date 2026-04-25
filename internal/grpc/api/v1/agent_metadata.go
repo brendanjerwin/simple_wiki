@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"time"
 
 	"github.com/robfig/cron/v3"
 	"google.golang.org/grpc/codes"
@@ -62,6 +63,14 @@ func (s *Server) UpsertSchedule(_ context.Context, req *apiv1.UpsertScheduleRequ
 	if _, err := scheduleCronParser.Parse(schedule.GetCron()); err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, "invalid cron expression %q: %v", schedule.GetCron(), err)
 	}
+	// Empty timezone is treated as UTC at register time. A non-empty value
+	// must be a valid IANA name so we don't surface the failure deep in the
+	// scheduler later when the user can't see it.
+	if tz := schedule.GetTimezone(); tz != "" {
+		if _, tzErr := time.LoadLocation(tz); tzErr != nil {
+			return nil, status.Errorf(codes.InvalidArgument, "invalid timezone %q: %v", tz, tzErr)
+		}
+	}
 
 	// Strip wiki-managed fields so callers cannot forge status. The store
 	// layer also strips them; we belt-and-suspenders here so the response
@@ -72,6 +81,7 @@ func (s *Server) UpsertSchedule(_ context.Context, req *apiv1.UpsertScheduleRequ
 		Prompt:   schedule.GetPrompt(),
 		MaxTurns: schedule.GetMaxTurns(),
 		Enabled:  schedule.GetEnabled(),
+		Timezone: schedule.GetTimezone(),
 	}
 	if err := s.agentScheduleStore.Upsert(req.GetPage(), clean); err != nil {
 		return nil, status.Errorf(codes.Internal, "upsert schedule: %v", err)
