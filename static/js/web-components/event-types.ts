@@ -61,3 +61,24 @@ export interface InventoryFilterChangedEventDetail {
 export interface AddFieldEventDetail {
   type: 'field' | 'array' | 'section';
 }
+
+/**
+ * Event detail for wiki-search-open event from WikiHashtag (and any other
+ * surface that wants to invoke the popup search). Dispatched on window —
+ * `<wiki-search>` listens at window level and runs the supplied query
+ * immediately. Lives here because it's consumed by both wiki-search and
+ * wiki-hashtag, which would otherwise import each other.
+ * @fires wiki-search-open - Dispatched to request the global search popup
+ * open with a pre-filled query.
+ */
+export interface WikiSearchOpenEventDetail {
+  query: string;
+}
+
+declare global {
+  // Augment WindowEventMap so addEventListener('wiki-search-open', …)
+  // is type-checked with the correct CustomEvent payload.
+  interface WindowEventMap {
+    'wiki-search-open': CustomEvent<WikiSearchOpenEventDetail>;
+  }
+}

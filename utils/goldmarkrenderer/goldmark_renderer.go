@@ -121,8 +121,14 @@ func (GoldmarkRenderer) Render(input []byte) ([]byte, error) {
 	// Allow slot attribute on heading elements for the collapsible-heading named slot
 	p.AllowAttrs("slot").OnElements("h1", "h2", "h3", "h4", "h5", "h6")
 	p.AllowAttrs("class").OnElements("span", "a")
-	// Allow hashtag pills emitted by the hashtag inline parser/renderer.
-	p.AllowAttrs("class").Matching(regexp.MustCompile(`^hashtag-pill$`)).OnElements("a")
+	// Allow wiki-hashtag custom element emitted by the hashtag inline
+	// parser/renderer. The `tag` attribute carries the normalized tag value
+	// (letters, digits, hyphen, underscore — Unicode allowed via the
+	// non-ASCII range below); the click handler in the Lit component
+	// dispatches a `wiki-search-open` event the page-level <wiki-search>
+	// listens for.
+	p.AllowElements("wiki-hashtag")
+	p.AllowAttrs("tag").Matching(regexp.MustCompile(`^[\p{L}\p{N}\-_]+$`)).OnElements("wiki-hashtag")
 	// Allow GitHub-style alert/admonition blocks rendered by the alert transformer.
 	p.AllowElements("div")
 	p.AllowAttrs("class").Matching(regexp.MustCompile(`^markdown-alert(?: markdown-alert-(?:note|tip|important|warning|caution))?$`)).OnElements("div")

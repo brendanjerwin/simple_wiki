@@ -404,8 +404,16 @@ tr.directory-error-row {
   text-decoration: underline;
 }
 
-/*---- Hashtag pills (rendered inline by Goldmark hashtag extension) ----*/
-a.hashtag-pill {
+/*
+ * Hashtag pills (rendered inline by the Goldmark hashtag extension as
+ * <wiki-hashtag> custom elements). The upgraded component renders its own
+ * shadow-DOM anchor with the same visual rules — the styles below cover
+ * the brief unupgraded window before the JS loads, so bare
+ * <wiki-hashtag>#tag</wiki-hashtag> looks like a pill rather than naked
+ * text. We intentionally style the host element here, since :defined
+ * styling is handled inside the component's shadow root.
+ */
+wiki-hashtag {
   display: inline-block;
   padding: 1px 8px;
   margin: 0 1px;
@@ -418,10 +426,18 @@ a.hashtag-pill {
   white-space: nowrap;
 }
 
-a.hashtag-pill:hover {
-  background: var(--color-text-link, #4078c0);
-  color: var(--color-text-inverse, #fff);
-  border-color: var(--color-text-link, #4078c0);
+/*
+ * Once the custom element upgrades, its shadow DOM anchor takes over
+ * presentation (see wiki-hashtag.ts). Reset the host so the inner anchor
+ * is the only visible pill.
+ */
+wiki-hashtag:defined {
+  display: inline;
+  padding: 0;
+  margin: 0;
+  background: none;
+  border: none;
+  border-radius: 0;
 }
 
 

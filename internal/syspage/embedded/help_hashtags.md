@@ -66,7 +66,7 @@ The displayed pill preserves the original casing/spelling from each occurrence; 
 
 ## Click Behavior
 
-Clicking a tag pill runs `#tag` as a search query (see [[help-search]]). There's no dedicated tag index page — the search results page is the canonical "all pages tagged X" view.
+Clicking a tag pill opens the wiki's search popup with the `#tag` query pre-filled and runs it immediately (see [[help-search]]). There's no dedicated tag index page — the search results popup is the canonical "all pages tagged X" view.
 
 ## See Also
 

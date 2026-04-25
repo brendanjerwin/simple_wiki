@@ -1,5 +1,6 @@
 // Main entry point for web components
 import './web-components/wiki-search.js';
+import './web-components/wiki-hashtag.js';
 import './web-components/system-info.js';
 import './web-components/frontmatter-editor-dialog.js';
 import './web-components/agent-details-dialog.js';

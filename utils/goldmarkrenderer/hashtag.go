@@ -2,7 +2,6 @@ package goldmarkrenderer
 
 import (
 	"fmt"
-	"net/url"
 
 	"github.com/brendanjerwin/simple_wiki/internal/hashtags"
 	"github.com/yuin/goldmark/ast"
@@ -147,9 +146,18 @@ func (*hashtagNodeRenderer) RegisterFuncs(reg renderer.NodeRendererFuncRegistere
 	reg.Register(KindHashtag, renderHashtagNode)
 }
 
-// renderHashtagNode emits `<a class="hashtag-pill" href="/search?q=%23TAG">#TAG</a>`
-// where the display TAG is the original spelling and the href TAG is the
-// normalized form.
+// renderHashtagNode emits `<wiki-hashtag tag="TAG">#TAG</wiki-hashtag>`
+// where the `tag` attribute is the canonical normalized form and the
+// slotted text preserves the original spelling so the pill displays as the
+// user wrote it.
+//
+// The actual click handling lives in the `<wiki-hashtag>` Lit web component
+// (see static/js/web-components/wiki-hashtag.ts). When the component is
+// upgraded, a click dispatches a `wiki-search-open` event that the
+// page-level `<wiki-search>` listens for and runs as a search — same UX
+// as typing into the menu search bar. If the script fails to load, the
+// custom element renders its inline text content unchanged: visible but
+// not clickable.
 func renderHashtagNode(w util.BufWriter, _ []byte, node ast.Node, entering bool) (ast.WalkStatus, error) {
 	if !entering {
 		return ast.WalkContinue, nil
@@ -159,7 +167,11 @@ func renderHashtagNode(w util.BufWriter, _ []byte, node ast.Node, entering bool)
 		return ast.WalkContinue, nil
 	}
 
-	href := "/search?q=" + url.QueryEscape("#"+n.NormalizedTag)
-	_, err := fmt.Fprintf(w, `<a class="hashtag-pill" href="%s">#%s</a>`, href, util.EscapeHTML([]byte(n.RawTag)))
+	_, err := fmt.Fprintf(
+		w,
+		`<wiki-hashtag tag="%s">#%s</wiki-hashtag>`,
+		util.EscapeHTML([]byte(n.NormalizedTag)),
+		util.EscapeHTML([]byte(n.RawTag)),
+	)
 	return ast.WalkSkipChildren, err
 }
