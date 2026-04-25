@@ -316,3 +316,317 @@ var _ = Describe("AgentMetadataService handlers", func() {
 		})
 	})
 })
+
+// stubAgentChatContextStore is a minimal AgentChatContextStore implementation
+// used to drive the AppendBackgroundActivitySummary handler down its
+// generic-error mapping branch. The Read and UpdateMerge methods are
+// unimplemented because the only handler exercised by these tests is
+// AppendBackgroundActivitySummary.
+type stubAgentChatContextStore struct {
+	appendErr error
+}
+
+func (*stubAgentChatContextStore) Read(string) (*apiv1.ChatContext, error) {
+	return &apiv1.ChatContext{}, nil
+}
+
+func (*stubAgentChatContextStore) UpdateMerge(string, *apiv1.ChatContext) (*apiv1.ChatContext, error) {
+	return &apiv1.ChatContext{}, nil
+}
+
+func (s *stubAgentChatContextStore) AppendBackgroundActivitySummary(string, string, string) error {
+	return s.appendErr
+}
+
+var _ = Describe("AgentMetadataService handler guards", func() {
+	var ctx context.Context
+
+	BeforeEach(func() {
+		ctx = context.Background()
+	})
+
+	Describe("ListSchedules", func() {
+		Describe("when the agent schedule store is not configured", func() {
+			var err error
+
+			BeforeEach(func() {
+				srv := mustNewServer(&MockPageReaderMutator{}, nil, nil)
+				_, err = srv.ListSchedules(ctx, &apiv1.ListSchedulesRequest{Page: "p"})
+			})
+
+			It("should return FailedPrecondition", func() {
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.FailedPrecondition, "not configured"))
+			})
+		})
+
+		Describe("when the page is missing", func() {
+			var err error
+
+			BeforeEach(func() {
+				srv, _, _ := newAgentMetadataServer()
+				_, err = srv.ListSchedules(ctx, &apiv1.ListSchedulesRequest{})
+			})
+
+			It("should return InvalidArgument", func() {
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.InvalidArgument, "page is required"))
+			})
+		})
+	})
+
+	Describe("UpsertSchedule", func() {
+		Describe("when the agent schedule store is not configured", func() {
+			var err error
+
+			BeforeEach(func() {
+				srv := mustNewServer(&MockPageReaderMutator{}, nil, nil)
+				_, err = srv.UpsertSchedule(ctx, &apiv1.UpsertScheduleRequest{
+					Page:     "p",
+					Schedule: &apiv1.AgentSchedule{Id: "x", Cron: "0 0 9 * * 1"},
+				})
+			})
+
+			It("should return FailedPrecondition", func() {
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.FailedPrecondition, "not configured"))
+			})
+		})
+
+		Describe("when the page is missing", func() {
+			var err error
+
+			BeforeEach(func() {
+				srv, _, _ := newAgentMetadataServer()
+				_, err = srv.UpsertSchedule(ctx, &apiv1.UpsertScheduleRequest{
+					Schedule: &apiv1.AgentSchedule{Id: "x", Cron: "0 0 9 * * 1"},
+				})
+			})
+
+			It("should return InvalidArgument", func() {
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.InvalidArgument, "page is required"))
+			})
+		})
+
+		Describe("when the schedule is nil", func() {
+			var err error
+
+			BeforeEach(func() {
+				srv, _, _ := newAgentMetadataServer()
+				_, err = srv.UpsertSchedule(ctx, &apiv1.UpsertScheduleRequest{Page: "p"})
+			})
+
+			It("should return InvalidArgument", func() {
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.InvalidArgument, "schedule is required"))
+			})
+		})
+
+		Describe("when the schedule id is empty", func() {
+			var err error
+
+			BeforeEach(func() {
+				srv, _, _ := newAgentMetadataServer()
+				_, err = srv.UpsertSchedule(ctx, &apiv1.UpsertScheduleRequest{
+					Page:     "p",
+					Schedule: &apiv1.AgentSchedule{Cron: "0 0 9 * * 1"},
+				})
+			})
+
+			It("should return InvalidArgument with id message", func() {
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.InvalidArgument, "id is required"))
+			})
+		})
+	})
+
+	Describe("DeleteSchedule", func() {
+		Describe("when the agent schedule store is not configured", func() {
+			var err error
+
+			BeforeEach(func() {
+				srv := mustNewServer(&MockPageReaderMutator{}, nil, nil)
+				_, err = srv.DeleteSchedule(ctx, &apiv1.DeleteScheduleRequest{
+					Page: "p", ScheduleId: "x",
+				})
+			})
+
+			It("should return FailedPrecondition", func() {
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.FailedPrecondition, "not configured"))
+			})
+		})
+
+		Describe("when the page is missing", func() {
+			var err error
+
+			BeforeEach(func() {
+				srv, _, _ := newAgentMetadataServer()
+				_, err = srv.DeleteSchedule(ctx, &apiv1.DeleteScheduleRequest{ScheduleId: "x"})
+			})
+
+			It("should return InvalidArgument", func() {
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.InvalidArgument, "page is required"))
+			})
+		})
+
+		Describe("when the schedule_id is missing", func() {
+			var err error
+
+			BeforeEach(func() {
+				srv, _, _ := newAgentMetadataServer()
+				_, err = srv.DeleteSchedule(ctx, &apiv1.DeleteScheduleRequest{Page: "p"})
+			})
+
+			It("should return InvalidArgument", func() {
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.InvalidArgument, "schedule_id is required"))
+			})
+		})
+	})
+
+	Describe("GetChatContext", func() {
+		Describe("when the agent chat-context store is not configured", func() {
+			var err error
+
+			BeforeEach(func() {
+				srv := mustNewServer(&MockPageReaderMutator{}, nil, nil)
+				_, err = srv.GetChatContext(ctx, &apiv1.GetChatContextRequest{Page: "p"})
+			})
+
+			It("should return FailedPrecondition", func() {
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.FailedPrecondition, "not configured"))
+			})
+		})
+
+		Describe("when the page is missing", func() {
+			var err error
+
+			BeforeEach(func() {
+				srv, _, _ := newAgentMetadataServer()
+				_, err = srv.GetChatContext(ctx, &apiv1.GetChatContextRequest{})
+			})
+
+			It("should return InvalidArgument", func() {
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.InvalidArgument, "page is required"))
+			})
+		})
+	})
+
+	Describe("UpdateChatContext", func() {
+		Describe("when the agent chat-context store is not configured", func() {
+			var err error
+
+			BeforeEach(func() {
+				srv := mustNewServer(&MockPageReaderMutator{}, nil, nil)
+				_, err = srv.UpdateChatContext(ctx, &apiv1.UpdateChatContextRequest{
+					Page:        "p",
+					ChatContext: &apiv1.ChatContext{},
+				})
+			})
+
+			It("should return FailedPrecondition", func() {
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.FailedPrecondition, "not configured"))
+			})
+		})
+
+		Describe("when the page is missing", func() {
+			var err error
+
+			BeforeEach(func() {
+				srv, _, _ := newAgentMetadataServer()
+				_, err = srv.UpdateChatContext(ctx, &apiv1.UpdateChatContextRequest{
+					ChatContext: &apiv1.ChatContext{},
+				})
+			})
+
+			It("should return InvalidArgument", func() {
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.InvalidArgument, "page is required"))
+			})
+		})
+
+		Describe("when the chat_context is nil", func() {
+			var err error
+
+			BeforeEach(func() {
+				srv, _, _ := newAgentMetadataServer()
+				_, err = srv.UpdateChatContext(ctx, &apiv1.UpdateChatContextRequest{Page: "p"})
+			})
+
+			It("should return InvalidArgument", func() {
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.InvalidArgument, "chat_context is required"))
+			})
+		})
+	})
+
+	Describe("AppendBackgroundActivitySummary", func() {
+		Describe("when the agent chat-context store is not configured", func() {
+			var err error
+
+			BeforeEach(func() {
+				srv := mustNewServer(&MockPageReaderMutator{}, nil, nil)
+				_, err = srv.AppendBackgroundActivitySummary(ctx, &apiv1.AppendBackgroundActivitySummaryRequest{
+					Page: "p", ScheduleId: "x", Summary: "s",
+				})
+			})
+
+			It("should return FailedPrecondition", func() {
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.FailedPrecondition, "not configured"))
+			})
+		})
+
+		Describe("when the page is missing", func() {
+			var err error
+
+			BeforeEach(func() {
+				srv, _, _ := newAgentMetadataServer()
+				_, err = srv.AppendBackgroundActivitySummary(ctx, &apiv1.AppendBackgroundActivitySummaryRequest{
+					ScheduleId: "x", Summary: "s",
+				})
+			})
+
+			It("should return InvalidArgument", func() {
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.InvalidArgument, "page is required"))
+			})
+		})
+
+		Describe("when the schedule_id is missing", func() {
+			var err error
+
+			BeforeEach(func() {
+				srv, _, _ := newAgentMetadataServer()
+				_, err = srv.AppendBackgroundActivitySummary(ctx, &apiv1.AppendBackgroundActivitySummaryRequest{
+					Page: "p", Summary: "s",
+				})
+			})
+
+			It("should return InvalidArgument", func() {
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.InvalidArgument, "schedule_id is required"))
+			})
+		})
+
+		Describe("when the summary is empty", func() {
+			var err error
+
+			BeforeEach(func() {
+				srv, _, _ := newAgentMetadataServer()
+				_, err = srv.AppendBackgroundActivitySummary(ctx, &apiv1.AppendBackgroundActivitySummaryRequest{
+					Page: "p", ScheduleId: "x",
+				})
+			})
+
+			It("should return InvalidArgument", func() {
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.InvalidArgument, "summary is required"))
+			})
+		})
+
+		Describe("when the chat-context store returns a non-typed error", func() {
+			var err error
+
+			BeforeEach(func() {
+				stub := &stubAgentChatContextStore{appendErr: errors.New("disk on fire")}
+				srv := mustNewServer(&MockPageReaderMutator{}, nil, nil).WithAgentChatContextStore(stub)
+				_, err = srv.AppendBackgroundActivitySummary(ctx, &apiv1.AppendBackgroundActivitySummaryRequest{
+					Page: "p", ScheduleId: "x", Summary: "s",
+				})
+			})
+
+			It("should return Internal", func() {
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.Internal, "append summary"))
+			})
+		})
+	})
+})

@@ -124,6 +124,38 @@ var _ = Describe("AgentScheduleStore", func() {
 	})
 
 	Describe("Upsert", func() {
+		Describe("when the schedule argument is nil", func() {
+			var err error
+
+			BeforeEach(func() {
+				err = store.Upsert("p", nil)
+			})
+
+			It("should return an error", func() {
+				Expect(err).To(HaveOccurred())
+			})
+
+			It("should mention that schedule is required", func() {
+				Expect(err).To(MatchError("schedule is required"))
+			})
+		})
+
+		Describe("when the schedule id is empty", func() {
+			var err error
+
+			BeforeEach(func() {
+				err = store.Upsert("p", &apiv1.AgentSchedule{Cron: "0 * * * * *"})
+			})
+
+			It("should return an error", func() {
+				Expect(err).To(HaveOccurred())
+			})
+
+			It("should mention that schedule.id is required", func() {
+				Expect(err).To(MatchError("schedule.id is required"))
+			})
+		})
+
 		Describe("when the schedule is new", func() {
 			var err error
 
@@ -382,6 +414,121 @@ var _ = Describe("AgentScheduleStore", func() {
 				Expect(sink.calls).To(BeEmpty())
 			})
 		})
+
+		Describe("when a sink is wired and returns an error on a terminal transition", func() {
+			var sink *erroringActivitySink
+			var transitionErr error
+
+			BeforeEach(func() {
+				sink = &erroringActivitySink{err: errors.New("sink boom")}
+				store.SetBackgroundActivitySink(sink)
+				Expect(store.TransitionStatus("p", "s1", apiv1.ScheduleStatus_SCHEDULE_STATUS_RUNNING, "", 0)).To(Succeed())
+				transitionErr = store.TransitionStatus("p", "s1", apiv1.ScheduleStatus_SCHEDULE_STATUS_OK, "", 5)
+			})
+
+			It("should still succeed (sink errors are best-effort)", func() {
+				Expect(transitionErr).NotTo(HaveOccurred())
+			})
+
+			It("should still have called the sink", func() {
+				Expect(sink.calls).To(Equal(1))
+			})
+
+			It("should still record the terminal status on the schedule", func() {
+				schedules, _ := store.List("p")
+				Expect(schedules[0].GetLastStatus()).To(Equal(apiv1.ScheduleStatus_SCHEDULE_STATUS_OK))
+			})
+		})
+
+		Describe("when ReadFrontMatter returns an error", func() {
+			var err error
+
+			BeforeEach(func() {
+				errStore := &errorPageStore{readErr: errors.New("disk on fire")}
+				bad := server.NewAgentScheduleStore(errStore)
+				err = bad.TransitionStatus("p", "s1", apiv1.ScheduleStatus_SCHEDULE_STATUS_RUNNING, "", 0)
+			})
+
+			It("should return an error", func() {
+				Expect(err).To(HaveOccurred())
+			})
+
+			It("should wrap the error with read frontmatter context", func() {
+				Expect(err.Error()).To(ContainSubstring("read frontmatter"))
+			})
+		})
+
+		Describe("when WriteFrontMatter returns an error", func() {
+			var err error
+
+			BeforeEach(func() {
+				errStore := &errorPageStore{
+					writeErr: errors.New("disk full"),
+					fm: wikipage.FrontMatter{
+						"agent": map[string]any{
+							"schedules": []any{
+								map[string]any{
+									"id":      "s1",
+									"cron":    "0 * * * * *",
+									"enabled": true,
+								},
+							},
+						},
+					},
+				}
+				bad := server.NewAgentScheduleStore(errStore)
+				err = bad.TransitionStatus("p", "s1", apiv1.ScheduleStatus_SCHEDULE_STATUS_RUNNING, "", 0)
+			})
+
+			It("should return an error", func() {
+				Expect(err).To(HaveOccurred())
+			})
+
+			It("should wrap the error with write frontmatter context", func() {
+				Expect(err.Error()).To(ContainSubstring("write frontmatter"))
+			})
+		})
+	})
+
+	Describe("List error handling", func() {
+		Describe("when ReadFrontMatter returns an error", func() {
+			var err error
+
+			BeforeEach(func() {
+				errStore := &errorPageStore{readErr: errors.New("disk gone")}
+				bad := server.NewAgentScheduleStore(errStore)
+				_, err = bad.List("p")
+			})
+
+			It("should return an error", func() {
+				Expect(err).To(HaveOccurred())
+			})
+
+			It("should wrap the error with read frontmatter context", func() {
+				Expect(err.Error()).To(ContainSubstring("read frontmatter"))
+			})
+		})
+
+		Describe("when agent.schedules has the wrong type", func() {
+			var err error
+
+			BeforeEach(func() {
+				_ = pages.WriteFrontMatter("malformed", wikipage.FrontMatter{
+					"agent": map[string]any{
+						"schedules": "not-a-list",
+					},
+				})
+				_, err = store.List("malformed")
+			})
+
+			It("should return an error", func() {
+				Expect(err).To(HaveOccurred())
+			})
+
+			It("should mention the unexpected type", func() {
+				Expect(err.Error()).To(ContainSubstring("unexpected type"))
+			})
+		})
 	})
 })
 
@@ -398,5 +545,49 @@ type recordedActivityCall struct {
 
 func (r *recordingActivitySink) AppendBackgroundActivityAutomatic(page string, entry *apiv1.BackgroundActivityEntry) error {
 	r.calls = append(r.calls, recordedActivityCall{page: page, entry: entry})
+	return nil
+}
+
+// erroringActivitySink always returns an error from
+// AppendBackgroundActivityAutomatic. Used to verify that schedule transitions
+// succeed even when the best-effort sink fails.
+type erroringActivitySink struct {
+	err   error
+	calls int
+}
+
+func (e *erroringActivitySink) AppendBackgroundActivityAutomatic(_ string, _ *apiv1.BackgroundActivityEntry) error {
+	e.calls++
+	return e.err
+}
+
+// errorPageStore is a fake page store with configurable read/write errors. It
+// satisfies the same interface as fakePageStore but lets tests inject
+// failures.
+type errorPageStore struct {
+	readErr  error
+	writeErr error
+	fm       wikipage.FrontMatter
+}
+
+func (e *errorPageStore) ReadFrontMatter(id wikipage.PageIdentifier) (wikipage.PageIdentifier, wikipage.FrontMatter, error) {
+	if e.readErr != nil {
+		return id, nil, e.readErr
+	}
+	if e.fm == nil {
+		return id, wikipage.FrontMatter{}, nil
+	}
+	out := wikipage.FrontMatter{}
+	for k, v := range e.fm {
+		out[k] = v
+	}
+	return id, out, nil
+}
+
+func (e *errorPageStore) WriteFrontMatter(_ wikipage.PageIdentifier, fm wikipage.FrontMatter) error {
+	if e.writeErr != nil {
+		return e.writeErr
+	}
+	e.fm = fm
 	return nil
 }

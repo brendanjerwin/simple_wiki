@@ -82,7 +82,43 @@ var _ = Describe("AgentChatContextStore", func() {
 		})
 	})
 
+	Describe("Read error handling", func() {
+		Describe("when ReadFrontMatter returns an error", func() {
+			var err error
+
+			BeforeEach(func() {
+				errStore := &errorPageStore{readErr: errors.New("disk on fire")}
+				bad := server.NewAgentChatContextStore(errStore)
+				_, err = bad.Read("p")
+			})
+
+			It("should return an error", func() {
+				Expect(err).To(HaveOccurred())
+			})
+
+			It("should wrap the error with read frontmatter context", func() {
+				Expect(err.Error()).To(ContainSubstring("read frontmatter"))
+			})
+		})
+	})
+
 	Describe("UpdateMerge", func() {
+		Describe("when the update argument is nil", func() {
+			var err error
+
+			BeforeEach(func() {
+				_, err = store.UpdateMerge("p", nil)
+			})
+
+			It("should return an error", func() {
+				Expect(err).To(HaveOccurred())
+			})
+
+			It("should mention that update is required", func() {
+				Expect(err).To(MatchError("update is required"))
+			})
+		})
+
 		Describe("when no prior context exists", func() {
 			var written *apiv1.ChatContext
 
@@ -161,6 +197,22 @@ var _ = Describe("AgentChatContextStore", func() {
 	})
 
 	Describe("AppendBackgroundActivityAutomatic", func() {
+		Describe("when the entry argument is nil", func() {
+			var err error
+
+			BeforeEach(func() {
+				err = store.AppendBackgroundActivityAutomatic("p", nil)
+			})
+
+			It("should return an error", func() {
+				Expect(err).To(HaveOccurred())
+			})
+
+			It("should mention that entry is required", func() {
+				Expect(err).To(MatchError("entry is required"))
+			})
+		})
+
 		Describe("when no chat context exists yet", func() {
 			BeforeEach(func() {
 				err := store.AppendBackgroundActivityAutomatic("p", &apiv1.BackgroundActivityEntry{
@@ -229,6 +281,24 @@ var _ = Describe("AgentChatContextStore", func() {
 			})
 
 			It("should be a SummaryTargetNotFoundError", func() {
+				var typed *server.SummaryTargetNotFoundError
+				Expect(errors.As(err, &typed)).To(BeTrue())
+			})
+		})
+
+		Describe("when entries exist but none match the schedule_id", func() {
+			var err error
+
+			BeforeEach(func() {
+				Expect(store.AppendBackgroundActivityAutomatic("p", &apiv1.BackgroundActivityEntry{
+					Timestamp:  timestamppb.New(time.Now()),
+					ScheduleId: "alpha",
+					Status:     apiv1.ScheduleStatus_SCHEDULE_STATUS_OK,
+				})).To(Succeed())
+				err = store.AppendBackgroundActivitySummary("p", "beta", "...")
+			})
+
+			It("should return a SummaryTargetNotFoundError", func() {
 				var typed *server.SummaryTargetNotFoundError
 				Expect(errors.As(err, &typed)).To(BeTrue())
 			})
