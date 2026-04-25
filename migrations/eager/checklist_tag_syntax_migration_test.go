@@ -121,6 +121,28 @@ var _ = Describe("pageNeedsChecklistMigration", func() {
 			Expect(pageNeedsChecklistMigration(fm)).To(BeFalse())
 		})
 	})
+
+	// System pages ship with the wiki binary and are owned by syspage.Sync.
+	// Even if a future embedded help page accidentally contains `:tag` text
+	// inside a checklist, the migration must never touch it — those pages
+	// are read-only at the wiki layer (the system-page guard rejects user
+	// writes) and any rewrite would be undone on the next startup sync.
+	// Skipping here is purely defensive.
+	Describe("when frontmatter has system = true", func() {
+		It("should return false even if items contain `:tag`", func() {
+			fm := map[string]any{
+				"system": true,
+				"checklists": map[string]any{
+					"groceries": map[string]any{
+						"items": []any{
+							map[string]any{"text": "milk :urgent", "checked": false},
+						},
+					},
+				},
+			}
+			Expect(pageNeedsChecklistMigration(fm)).To(BeFalse())
+		})
+	})
 })
 
 var _ = Describe("rewriteChecklistTags", func() {

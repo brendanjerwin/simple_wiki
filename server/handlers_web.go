@@ -358,6 +358,20 @@ func (s *Site) isSystemPage(page string) bool {
 	return syspage.IsSystemPage(fm)
 }
 
+// getRecentlyEdited returns the per-user list of recently visited pages,
+// recorded in the user's cookie session. Despite the misleading name, this is
+// driven by GET visits (in handlePageRequest), not by writes — and the list
+// is private to each browser session, never aggregated globally.
+//
+// Issue #980 asked us to "filter system-page writes out of the recent-changes
+// feed (or mark them specially) — startup overwrites would otherwise dominate
+// the feed on every deploy." The concern there assumed a global, write-driven
+// feed. Because this implementation is session-only and visit-driven, startup
+// syspage.Sync writes cannot pollute it: the only way a system page lands in
+// any user's list is if that user navigates to it themselves. No filter is
+// applied here for that reason. If a global recent-changes feed is added in
+// the future, that surface should call syspage.IsSystemPage to skip system
+// pages.
 func getRecentlyEdited(title string, c *gin.Context, logger *lumber.ConsoleLogger) []string {
 	session := sessions.Default(c)
 	var recentlyEdited string

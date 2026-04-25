@@ -11,6 +11,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/brendanjerwin/simple_wiki/internal/syspage"
 	"github.com/brendanjerwin/simple_wiki/pkg/jobs"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 	"github.com/pelletier/go-toml/v2"
@@ -128,8 +129,15 @@ func (j *ChecklistTagSyntaxMigrationScanJob) extractIdentifierAndFrontmatter(fil
 //   - has not been flagged migrated, AND
 //   - contains an item whose `text` matches the legacy `:tag` grammar.
 //
-// Pages without `checklists` always return false.
+// Pages without `checklists` always return false. System pages (system =
+// true) always return false because they ship with the wiki binary and are
+// owned by syspage.Sync; the system-page guard rejects user writes to them
+// at the gRPC layer, and any rewrite here would be undone on the next
+// startup sync. Skipping is purely defensive.
 func pageNeedsChecklistMigration(fm map[string]any) bool {
+	if syspage.IsSystemPage(fm) {
+		return false
+	}
 	checklists, ok := fm["checklists"].(map[string]any)
 	if !ok {
 		return false
