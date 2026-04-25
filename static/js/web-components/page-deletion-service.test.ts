@@ -14,7 +14,6 @@ describe('PageDeleter', () => {
     removeEventListener: sinon.SinonSpy;
     remove: sinon.SinonSpy;
     dataset: { pageName?: string };
-    hidden: boolean;
     id: string;
   };
   let createElementStub: sinon.SinonStub;
@@ -31,7 +30,6 @@ describe('PageDeleter', () => {
       removeEventListener: sinon.spy(),
       remove: sinon.spy(),
       dataset: {},
-      hidden: true,
       id: ''
     };
 

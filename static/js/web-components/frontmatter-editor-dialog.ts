@@ -1,5 +1,6 @@
 import { html, css, LitElement } from 'lit';
 import { property, state } from 'lit/decorators.js';
+import { NativeDialogMixin } from './native-dialog-mixin.js';
 import { createClient } from '@connectrpc/connect';
 import { create, type JsonObject } from '@bufbuild/protobuf';
 import { getGrpcWebTransport } from './grpc-transport.js';
@@ -10,7 +11,6 @@ import { showToastAfter } from './toast-message.js';
 import './error-display.js';
 import { AugmentErrorService, type AugmentedError } from './augment-error-service.js';
 import type { SectionChangeEventDetail } from './event-types.js';
-import { NativeDialogMixin } from './native-dialog-mixin.js';
 
 /**
  * FrontmatterEditorDialog - A modal dialog for editing page frontmatter metadata
@@ -45,6 +45,11 @@ import { NativeDialogMixin } from './native-dialog-mixin.js';
  */
 export class FrontmatterEditorDialog extends NativeDialogMixin(LitElement) {
   static override readonly styles = dialogStyles(css`
+      :host {
+        display: block;
+        z-index: var(--z-modal);
+      }
+
       dialog {
         padding: 0;
         border: none;
@@ -57,6 +62,27 @@ export class FrontmatterEditorDialog extends NativeDialogMixin(LitElement) {
         box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
         animation: slideIn 0.2s ease-out;
         overflow: hidden;
+      }
+
+      dialog[open] {
+        display: flex;
+      }
+
+      dialog::backdrop {
+        background: rgba(0, 0, 0, 0.5);
+        animation: fadeIn 0.2s ease-out;
+      }
+
+      /* Mobile-first responsive behavior */
+      @media (max-width: 768px) {
+        dialog {
+          width: 100%;
+          height: 100%;
+          max-width: none;
+          max-height: none;
+          border-radius: 0;
+          margin: 0;
+        }
       }
 
       .content {
@@ -99,6 +125,14 @@ export class FrontmatterEditorDialog extends NativeDialogMixin(LitElement) {
         color: var(--color-error);
         flex-direction: column;
         gap: 8px;
+      }
+
+      .footer {
+        display: flex;
+        gap: 12px;
+        padding: 16px 20px;
+        border-top: 1px solid var(--color-border-subtle);
+        justify-content: flex-end;
       }
     `
   );
@@ -265,7 +299,7 @@ export class FrontmatterEditorDialog extends NativeDialogMixin(LitElement) {
   override render() {
     return html`
       ${sharedStyles}
-      <dialog aria-labelledby="frontmatter-dialog-title" @cancel="${this._handleDialogCancel}">
+      <dialog aria-labelledby="frontmatter-dialog-title" @cancel="${this._handleDialogCancel}" @click="${this._handleDialogClick}">
         <div class="dialog-header system-font">
           <h2 id="frontmatter-dialog-title" class="dialog-title">Edit Frontmatter</h2>
           <button class="button-base icon-button" aria-label="Close dialog" @click="${this._handleCancel}" ?disabled="${this.saving}">×</button>
