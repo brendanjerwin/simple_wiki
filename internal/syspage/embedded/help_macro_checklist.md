@@ -38,6 +38,7 @@ A single page can have multiple checklists with different names.
 - **Reorder**: Drag and drop items using the drag handle (desktop) or long-press and drag (mobile)
 - **Tagging**: Add tags to items using `#tag` syntax in the item text (e.g., `Buy milk #urgent #groceries`)
 - **Filter by tag**: Click tag pills to filter the list to items with that tag
+- **Literal `#`**: Escape with a backslash (`\#5`) when you want the `#` to appear as plain text instead of being treated as a tag
 
 ## Frontmatter Data Structure
 

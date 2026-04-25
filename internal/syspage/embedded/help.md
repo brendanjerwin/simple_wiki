@@ -34,7 +34,12 @@ You can drag and drop files and images right into the page. You'll see a special
 
 ## Tags
 
-Add `#tag` anywhere in a page body to organize content across pages. Tags are clickable and link to a search filtered by that tag. See [[help-hashtags]] and [[help-search]] for the full grammar.
+Add `#tag` anywhere in a page body to organize content across pages. Clicking a tag opens the search popup with that tag pre-filled.
+
+> [!TIP]
+> If you want a literal `#` (e.g. mentioning `#5` or `#1234`), put a backslash in front of it: `\#5`. The wiki shows the `#` as plain text and skips the tag extraction. Same trick works inside checklist items.
+
+See [[help-hashtags]] and [[help-search]] for the full grammar.
 
 ## Advanced Features
 
