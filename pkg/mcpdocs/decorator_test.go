@@ -278,6 +278,86 @@ var _ = Describe("Decorate for a method declaring (api.v1.long_running)", func()
 	})
 })
 
+// noopChatServer satisfies apiv1mcp.ConnectChatServiceClient. ChatService
+// declares neither (api.v1.service_description) nor any method-level MCP
+// extensions, so it exercises the "no overrides" branches in
+// readServiceDescription, readBoolExtension, and readStringExtension via the
+// real registered service.
+type noopChatServer struct{}
+
+var errChatNoop = errors.New("noopChatServer: not used in this test")
+
+func (*noopChatServer) CancelAgentPrompt(_ context.Context, _ *connect.Request[apiv1.CancelAgentPromptRequest]) (*connect.Response[apiv1.CancelAgentPromptResponse], error) {
+	return nil, errChatNoop
+}
+
+func (*noopChatServer) EditChatMessage(_ context.Context, _ *connect.Request[apiv1.EditChatMessageRequest]) (*connect.Response[apiv1.EditChatMessageResponse], error) {
+	return nil, errChatNoop
+}
+
+func (*noopChatServer) GetChatStatus(_ context.Context, _ *connect.Request[apiv1.GetChatStatusRequest]) (*connect.Response[apiv1.GetChatStatusResponse], error) {
+	return nil, errChatNoop
+}
+
+func (*noopChatServer) ReactToMessage(_ context.Context, _ *connect.Request[apiv1.ReactToMessageRequest]) (*connect.Response[apiv1.ReactToMessageResponse], error) {
+	return nil, errChatNoop
+}
+
+func (*noopChatServer) RequestPermissionFromUser(_ context.Context, _ *connect.Request[apiv1.RequestPermissionFromUserRequest]) (*connect.Response[apiv1.RequestPermissionFromUserResponse], error) {
+	return nil, errChatNoop
+}
+
+func (*noopChatServer) RespondToPermission(_ context.Context, _ *connect.Request[apiv1.RespondToPermissionRequest]) (*connect.Response[apiv1.RespondToPermissionResponse], error) {
+	return nil, errChatNoop
+}
+
+func (*noopChatServer) SendChatReply(_ context.Context, _ *connect.Request[apiv1.SendChatReplyRequest]) (*connect.Response[apiv1.SendChatReplyResponse], error) {
+	return nil, errChatNoop
+}
+
+func (*noopChatServer) SendMessage(_ context.Context, _ *connect.Request[apiv1.SendChatMessageRequest]) (*connect.Response[apiv1.SendChatMessageResponse], error) {
+	return nil, errChatNoop
+}
+
+func (*noopChatServer) SendToolCallNotification(_ context.Context, _ *connect.Request[apiv1.SendToolCallNotificationRequest]) (*connect.Response[apiv1.SendToolCallNotificationResponse], error) {
+	return nil, errChatNoop
+}
+
+var _ = Describe("Decorate for a service that declares no service_description", func() {
+	var (
+		server              *mcpserver.MCPServer
+		serviceDescriptions []mcpdocs.ServiceDescription
+	)
+
+	BeforeEach(func() {
+		server = mcpserver.NewMCPServer("test", "0", mcpserver.WithToolCapabilities(false))
+		apiv1mcp.ForwardToConnectChatServiceClient(server, &noopChatServer{})
+		serviceDescriptions = mcpdocs.Decorate(server)
+	})
+
+	It("should not include the chat service in service descriptions", func() {
+		services := []string{}
+		for _, sd := range serviceDescriptions {
+			services = append(services, sd.Service)
+		}
+		Expect(services).NotTo(ContainElement("api.v1.ChatService"))
+	})
+
+	It("should still register the chat tool from the codegen plugin", func() {
+		Expect(server.GetTool("api_v1_ChatService_GetChatStatus")).NotTo(BeNil())
+	})
+
+	It("should preserve the codegen description verbatim for chat tools (no override)", func() {
+		tool := server.GetTool("api_v1_ChatService_GetChatStatus")
+		Expect(tool.Tool.Description).To(ContainSubstring("GetChatStatus"))
+	})
+
+	It("should not set the read-only annotation on chat tools", func() {
+		tool := server.GetTool("api_v1_ChatService_GetChatStatus")
+		Expect(tool.Tool.Annotations.ReadOnlyHint).To(BeNil())
+	})
+})
+
 var _ = Describe("Decorate when a service declares extensions but tools are not registered", func() {
 	var (
 		server *mcpserver.MCPServer

@@ -121,5 +121,106 @@ var _ = Describe("ScheduledTurnDispatcher", func() {
 				Expect(err).To(HaveOccurred())
 			})
 		})
+
+		Describe("when Dispatch is called with a nil request", func() {
+			var dispatchErr error
+
+			BeforeEach(func() {
+				_, dispatchErr = dispatcher.Dispatch(nil)
+			})
+
+			It("should return an error", func() {
+				Expect(dispatchErr).To(MatchError(ContainSubstring("request is required")))
+			})
+		})
+
+		Describe("when Dispatch is called with an empty request_id", func() {
+			var unsubscribe func()
+			var dispatchErr error
+
+			BeforeEach(func() {
+				_, unsubscribe = dispatcher.Subscribe()
+				_, dispatchErr = dispatcher.Dispatch(&apiv1.ScheduledTurnRequest{
+					RequestId: "",
+					Page:      "p",
+					Prompt:    "do",
+				})
+			})
+
+			AfterEach(func() {
+				unsubscribe()
+			})
+
+			It("should return an error mentioning request_id", func() {
+				Expect(dispatchErr).To(MatchError(ContainSubstring("request_id is required")))
+			})
+		})
+
+		Describe("when Dispatch is called twice with the same request_id", func() {
+			var unsubscribe func()
+			var firstErr, secondErr error
+
+			BeforeEach(func() {
+				_, unsubscribe = dispatcher.Subscribe()
+				_, firstErr = dispatcher.Dispatch(&apiv1.ScheduledTurnRequest{
+					RequestId: "dup-req", Page: "p", Prompt: "do",
+				})
+				_, secondErr = dispatcher.Dispatch(&apiv1.ScheduledTurnRequest{
+					RequestId: "dup-req", Page: "p", Prompt: "do again",
+				})
+			})
+
+			AfterEach(func() {
+				unsubscribe()
+			})
+
+			It("should accept the first dispatch", func() {
+				Expect(firstErr).NotTo(HaveOccurred())
+			})
+
+			It("should reject the second dispatch as already in flight", func() {
+				Expect(secondErr).To(MatchError(ContainSubstring("already in flight")))
+			})
+		})
+
+		Describe("when Complete is called with a nil request", func() {
+			var completeErr error
+
+			BeforeEach(func() {
+				completeErr = dispatcher.Complete(nil)
+			})
+
+			It("should return an error", func() {
+				Expect(completeErr).To(MatchError(ContainSubstring("request is required")))
+			})
+		})
+
+		Describe("when Complete is called with an empty request_id", func() {
+			var completeErr error
+
+			BeforeEach(func() {
+				completeErr = dispatcher.Complete(&apiv1.CompleteScheduledTurnRequest{
+					RequestId: "",
+				})
+			})
+
+			It("should return an error mentioning request_id", func() {
+				Expect(completeErr).To(MatchError(ContainSubstring("request_id is required")))
+			})
+		})
+
+		Describe("when unsubscribe is called", func() {
+			var requests <-chan *apiv1.ScheduledTurnRequest
+			var unsubscribe func()
+
+			BeforeEach(func() {
+				requests, unsubscribe = dispatcher.Subscribe()
+				unsubscribe()
+			})
+
+			It("should close the subscriber channel", func() {
+				Eventually(requests).Should(BeClosed())
+			})
+		})
 	})
 })

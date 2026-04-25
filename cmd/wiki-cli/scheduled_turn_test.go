@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"strings"
 	"sync/atomic"
 
 	acp "github.com/coder/acp-go-sdk"
@@ -134,6 +135,158 @@ var _ = Describe("scheduledTurnClient RequestPermission", func() {
 
 		It("should return a Cancelled outcome", func() {
 			Expect(resp.Outcome.Cancelled).NotTo(BeNil())
+		})
+	})
+})
+
+var _ = Describe("buildScheduledTurnAgentCmd", func() {
+	When("useSystemd is true and request_id is longer than scheduledTurnRequestIDInUnit", func() {
+		var (
+			daemon    *poolDaemon
+			cmd       interface{ String() string }
+			args      []string
+			page      string
+			requestID string
+		)
+
+		BeforeEach(func() {
+			page = "my-page"
+			requestID = "abcdef0123456789-uuid"
+			daemon = &poolDaemon{
+				useSystemd: true,
+				agentPath:  "/fake/path",
+			}
+			c := daemon.buildScheduledTurnAgentCmd(context.Background(), page, requestID)
+			cmd = c
+			args = c.Args
+		})
+
+		It("should not be nil", func() {
+			Expect(cmd).NotTo(BeNil())
+		})
+
+		It("should invoke systemd-run as the program", func() {
+			Expect(args[0]).To(Equal("systemd-run"))
+		})
+
+		It("should include --user flag", func() {
+			Expect(args).To(ContainElement("--user"))
+		})
+
+		It("should include --scope flag", func() {
+			Expect(args).To(ContainElement("--scope"))
+		})
+
+		It("should include a --unit= flag whose value starts with wiki-scheduled-", func() {
+			found := false
+			for _, a := range args {
+				if strings.HasPrefix(a, "--unit=") {
+					found = true
+					Expect(strings.TrimPrefix(a, "--unit=")).To(HavePrefix(scheduledTurnUnitPrefix))
+				}
+			}
+			Expect(found).To(BeTrue(), "expected a --unit= argument")
+		})
+
+		It("should embed the sanitized page in the unit name", func() {
+			for _, a := range args {
+				if strings.HasPrefix(a, "--unit=") {
+					Expect(a).To(ContainSubstring(sanitizeUnitName(page)))
+					return
+				}
+			}
+			Fail("no --unit= argument present")
+		})
+
+		It("should embed only the first scheduledTurnRequestIDInUnit characters of the request_id", func() {
+			truncated := requestID[:scheduledTurnRequestIDInUnit]
+			for _, a := range args {
+				if strings.HasPrefix(a, "--unit=") {
+					unit := strings.TrimPrefix(a, "--unit=")
+					Expect(unit).To(HaveSuffix("-" + truncated))
+					// Make sure the full request_id is NOT in the unit name.
+					Expect(unit).NotTo(ContainSubstring(requestID))
+					return
+				}
+			}
+			Fail("no --unit= argument present")
+		})
+
+		It("should include a --working-directory= argument (cwd pinning)", func() {
+			found := false
+			for _, a := range args {
+				if strings.HasPrefix(a, "--working-directory=") {
+					found = true
+				}
+			}
+			Expect(found).To(BeTrue(), "expected a --working-directory= argument")
+		})
+
+		It("should end with the agent path", func() {
+			Expect(args[len(args)-1]).To(Equal("/fake/path"))
+		})
+	})
+
+	When("useSystemd is false", func() {
+		var (
+			daemon *poolDaemon
+			args   []string
+		)
+
+		BeforeEach(func() {
+			daemon = &poolDaemon{
+				useSystemd: false,
+				agentPath:  "/fake/path",
+			}
+			c := daemon.buildScheduledTurnAgentCmd(context.Background(), "page", "requestid")
+			args = c.Args
+		})
+
+		It("should not include systemd-run", func() {
+			for _, a := range args {
+				Expect(a).NotTo(Equal("systemd-run"))
+			}
+		})
+
+		It("should invoke the agent path directly", func() {
+			Expect(args[0]).To(Equal("/fake/path"))
+		})
+
+		It("should have exactly one argument (the agent path)", func() {
+			Expect(args).To(HaveLen(1))
+		})
+	})
+
+	When("useSystemd is true and request_id is shorter than scheduledTurnRequestIDInUnit", func() {
+		var (
+			daemon   *poolDaemon
+			args     []string
+			shortReq string
+		)
+
+		BeforeEach(func() {
+			shortReq = "abc"
+			daemon = &poolDaemon{
+				useSystemd: true,
+				agentPath:  "/fake/path",
+			}
+			c := daemon.buildScheduledTurnAgentCmd(context.Background(), "page", shortReq)
+			args = c.Args
+		})
+
+		It("should not panic when slicing the short request_id", func() {
+			// If we got here, the constructor did not panic.
+			Expect(args).NotTo(BeEmpty())
+		})
+
+		It("should embed the full short request_id in the unit name", func() {
+			for _, a := range args {
+				if strings.HasPrefix(a, "--unit=") {
+					Expect(a).To(HaveSuffix("-" + shortReq))
+					return
+				}
+			}
+			Fail("no --unit= argument present")
 		})
 	})
 })
