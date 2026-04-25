@@ -14,6 +14,7 @@ export declare class NativeDialogMixinInterface {
   open: boolean;
   readonly _handleDialogCancel: (event: Event) => void;
   readonly _handleDialogClick: (e: MouseEvent) => void;
+  readonly _handleKeydown: (event: KeyboardEvent) => void;
 }
 
 /**
@@ -99,6 +100,41 @@ export function NativeDialogMixin<T extends Constructor>(Base: T) {
     readonly _handleDialogClick = (e: MouseEvent): void => {
       if (e.target === e.currentTarget) {
         this._closeDialog();
+      }
+    };
+
+    readonly _handleKeydown = (event: KeyboardEvent): void => {
+      if (event.key !== 'Tab') return;
+
+      const dialog = this.shadowRoot?.querySelector('dialog');
+      if (!dialog) return;
+
+      const focusableSelector = [
+        'button:not([disabled])',
+        '[href]',
+        'input:not([disabled])',
+        'select:not([disabled])',
+        'textarea:not([disabled])',
+        '[tabindex]:not([tabindex="-1"])',
+      ].join(', ');
+
+      const focusableElements = Array.from(dialog.querySelectorAll<HTMLElement>(focusableSelector));
+      if (focusableElements.length === 0) return;
+
+      const firstElement = focusableElements[0];
+      const lastElement = focusableElements[focusableElements.length - 1];
+      const activeElement = this.shadowRoot?.activeElement;
+
+      if (event.shiftKey) {
+        if (activeElement === firstElement) {
+          event.preventDefault();
+          lastElement.focus();
+        }
+      } else {
+        if (activeElement === lastElement) {
+          event.preventDefault();
+          firstElement.focus();
+        }
       }
     };
   }
