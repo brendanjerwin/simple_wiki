@@ -11,6 +11,8 @@ Pages can declare cron-driven background AI agent tasks in their frontmatter. Th
 
 > [!NOTE]
 > The `agent.*` top-level frontmatter namespace is **reserved**. Generic frontmatter tools (`MergeFrontmatter`, `ReplaceFrontmatter`, `RemoveKeyAtPath`) reject writes touching it. All schedule and chat-context mutations go through `api_v1_AgentMetadataService_*`.
+>
+> Other reserved namespaces follow the same pattern documented in [[ADR-0009]]: `wiki.*` (wiki-managed metadata for checklists and future siblings — see [[ADR-0010]] and [[help-macro-checklist]]).
 
 ## Creating a schedule
 

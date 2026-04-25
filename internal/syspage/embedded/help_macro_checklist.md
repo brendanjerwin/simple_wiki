@@ -7,7 +7,7 @@ system = true
 
 # {{.Title}}
 
-The Checklist macro renders an interactive checklist with add, remove, reorder, and tagging capabilities.
+The Checklist macro renders an interactive checklist with add, remove, reorder, and tagging capabilities. Item-level mutations go through the typed `ChecklistService` API, which records server-stamped attribution and a per-list sync token used by CalDAV and other sync clients.
 
 ## Syntax
 
@@ -40,42 +40,84 @@ A single page can have multiple checklists with different names.
 - **Filter by tag**: Click tag pills to filter the list to items with that tag
 - **Literal `#`**: Escape with a backslash (`\#5`) when you want the `#` to appear as plain text instead of being treated as a tag
 
-## Frontmatter Data Structure
+## Two-Tier Data Model
 
-Checklist data is stored in the page's frontmatter under `checklists.<list-name>`:
+Checklist data lives in **two** frontmatter subtrees. The split exists so generic frontmatter editors can edit user data while the wiki itself maintains attribution and sync metadata invariantly. See [[ADR-0009]] and [[ADR-0010]] for the architecture.
+
+### `checklists.<list-name>` — user-mutable
 
 ```toml
 +++
 title = "My Page"
 
-[checklists.grocery-list]
-
 [[checklists.grocery-list.items]]
+uid = "01HXXXXXXXXXXXXXXXXXXXXXXX"
 text = "Buy milk"
 checked = false
 tags = ["urgent", "groceries"]
-
-[[checklists.grocery-list.items]]
-text = "Buy eggs"
-checked = true
-tags = []
+sort_order = 1000
+description = "the brand Kirsten likes"      # optional
 +++
 ```
 
-### JSON Representation
+User-data fields:
 
-```json
-{
-  "checklists": {
-    "grocery-list": {
-      "items": [
-        { "text": "Buy milk", "checked": false, "tags": ["urgent", "groceries"] },
-        { "text": "Buy eggs", "checked": true, "tags": [] }
-      ]
-    }
-  }
-}
+| Field | Type | Notes |
+|---|---|---|
+| `uid` | string | Stable ULID assigned by the wiki on first save. Immutable. |
+| `text` | string | Free-form item text. |
+| `checked` | bool | Done flag. |
+| `tags` | string[] | Normalized tags extracted from text plus explicit additions. |
+| `sort_order` | int | Sparse ordering value (multiples of 1000 are conventional). |
+| `description` | string | Optional sub-line content under the item. |
+| `due` | RFC3339 timestamp | Optional due time. |
+| `alarm_payload` | string | Optional VALARM payload for CalDAV sync clients. |
+
+### `wiki.checklists.<list-name>` — wiki-managed (reserved namespace)
+
+```toml
+[wiki.checklists.grocery-list]
+sync_token = 47
+updated_at = "2026-04-25T17:14:00Z"
+migrated_data_model = true
+
+[wiki.checklists.grocery-list.items.01HXXXXXXXXXXXXXXXXXXXXXXX]
+created_at  = "2026-04-25T13:00:00Z"
+updated_at  = "2026-04-25T17:14:00Z"
+completed_at = "2026-04-25T17:14:00Z"
+completed_by = "alice@example.com"
+automated   = false
 ```
+
+The `wiki.*` namespace is **reserved**. Generic frontmatter tools (`MergeFrontmatter`, `ReplaceFrontmatter`, `RemoveKeyAtPath`) reject writes targeting any `wiki.*` path. The only legitimate way to mutate this subtree is `ChecklistService` (or another dedicated service for future namespaces under `wiki.*`).
+
+## For Agents
+
+Use `ChecklistService` for item-level mutations. It is exposed both as gRPC and as MCP tools (auto-generated from the proto).
+
+### MCP Tools
+
+| Tool | Purpose |
+|---|---|
+| `api_v1_ChecklistService_AddItem` | Append a new item; the wiki generates `uid` and stamps `created_at`/`updated_at`. |
+| `api_v1_ChecklistService_UpdateItem` | Mutate user-mutable fields. Wiki-managed fields on the request are silently stripped. |
+| `api_v1_ChecklistService_ToggleItem` | Flip `checked`. Sets/clears `completed_at` + `completed_by`. |
+| `api_v1_ChecklistService_DeleteItem` | Remove an item; tombstone is written for sync clients. |
+| `api_v1_ChecklistService_ReorderItem` | Update `sort_order`. The wiki re-densifies adjacent values only on collision. |
+| `api_v1_ChecklistService_ListItems` | Read items + wiki-managed metadata. |
+| `api_v1_ChecklistService_GetChecklists` | Enumerate all checklists on a page. |
+
+### Optimistic Concurrency
+
+Mutating tools accept an optional `expected_updated_at`. Pass the value from a prior `ListItems` response to detect concurrent edits — mismatch returns `FailedPrecondition`, and you should refetch + retry.
+
+### Attribution
+
+The wiki derives `automated` from your authentication context — Tailscale tags, the `x-wiki-is-agent` request header, or `wiki-cli`'s default. **Do not pass `automated`, `completed_by`, or any `created_at`/`updated_at` field on input** — they're silently stripped, and only the wiki's authoritative values survive.
+
+### Raw Frontmatter Writes Still Work (But Lose Attribution)
+
+`checklists.*` itself is **not** reserved. Direct `MergeFrontmatter`/`ReplaceFrontmatter` calls to `checklists.*` continue to succeed — but they bypass the funnel, so the corresponding `wiki.checklists.<list>.updated_at` and `sync_token` will not advance, and CalDAV/sync clients won't see the change. Use `ChecklistService` whenever attribution or sync correctness matters.
 
 ## Tag Grammar
 
@@ -86,17 +128,6 @@ Checklist tags share their grammar and normalization with [[help-hashtags]]:
 - `\#tag` is an escape — renders as literal text.
 - Tags are case-folded and NFKC-normalized; the canonical form goes into the `tags` array.
 
-## For Agents
+## Migration Note
 
-Checklist updates require a **read-modify-write** pattern because `MergeFrontmatter` replaces the entire `checklists.<name>` subtree:
-
-1. Read current frontmatter via `api_v1_Frontmatter_GetFrontmatter`
-2. Extract the items array from `checklists.<name>.items`
-3. Append/modify/reorder
-4. Write back the full subtree via `api_v1_Frontmatter_MergeFrontmatter`
-
-### Important Notes
-
-- The `MergeFrontmatter` call replaces the entire `checklists.<name>` subtree, so you must include all existing items when updating.
-- Tags are extracted from `#tag` syntax in the item text but also stored in the `tags` array — the array is the source of truth for the rendered tag pill UI.
-- Empty `tags` arrays can be omitted — they default to `[]`.
+Pages created before #984 land may have items without `uid` and without per-item metadata. The eager `ChecklistDataModelMigrationScanJob` runs once at startup, assigns ULIDs, backfills `sort_order`, and stamps each list's `wiki.checklists.<name>.migrated_data_model = true` flag. The migration is idempotent — re-running on a stamped page is a no-op.
