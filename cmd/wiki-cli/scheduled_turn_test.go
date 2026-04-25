@@ -137,3 +137,172 @@ var _ = Describe("scheduledTurnClient RequestPermission", func() {
 		})
 	})
 })
+
+var _ = Describe("scheduledTurnClient unsupported acp.Client methods", func() {
+	var client *scheduledTurnClient
+
+	BeforeEach(func() {
+		client = newScheduledTurnClient("test-page", 3, func() {})
+	})
+
+	Describe("ReadTextFile", func() {
+		var (
+			resp acp.ReadTextFileResponse
+			err  error
+		)
+
+		BeforeEach(func() {
+			resp, err = client.ReadTextFile(context.Background(), acp.ReadTextFileRequest{})
+		})
+
+		It("should return a zero-value response", func() {
+			Expect(resp).To(Equal(acp.ReadTextFileResponse{}))
+		})
+
+		It("should return a non-nil error", func() {
+			Expect(err).To(HaveOccurred())
+		})
+
+		It("should return an error mentioning file system access is unavailable", func() {
+			Expect(err).To(MatchError(ContainSubstring("file system access not available")))
+		})
+	})
+
+	Describe("WriteTextFile", func() {
+		var (
+			resp acp.WriteTextFileResponse
+			err  error
+		)
+
+		BeforeEach(func() {
+			resp, err = client.WriteTextFile(context.Background(), acp.WriteTextFileRequest{})
+		})
+
+		It("should return a zero-value response", func() {
+			Expect(resp).To(Equal(acp.WriteTextFileResponse{}))
+		})
+
+		It("should return a non-nil error", func() {
+			Expect(err).To(HaveOccurred())
+		})
+
+		It("should return an error mentioning file system access is unavailable", func() {
+			Expect(err).To(MatchError(ContainSubstring("file system access not available")))
+		})
+	})
+
+	Describe("CreateTerminal", func() {
+		var (
+			resp acp.CreateTerminalResponse
+			err  error
+		)
+
+		BeforeEach(func() {
+			resp, err = client.CreateTerminal(context.Background(), acp.CreateTerminalRequest{})
+		})
+
+		It("should return a zero-value response", func() {
+			Expect(resp).To(Equal(acp.CreateTerminalResponse{}))
+		})
+
+		It("should return a non-nil error", func() {
+			Expect(err).To(HaveOccurred())
+		})
+
+		It("should return an error mentioning terminal access is unavailable", func() {
+			Expect(err).To(MatchError(ContainSubstring("terminal access not available")))
+		})
+	})
+
+	Describe("TerminalOutput", func() {
+		var (
+			resp acp.TerminalOutputResponse
+			err  error
+		)
+
+		BeforeEach(func() {
+			resp, err = client.TerminalOutput(context.Background(), acp.TerminalOutputRequest{})
+		})
+
+		It("should return a zero-value response", func() {
+			Expect(resp).To(Equal(acp.TerminalOutputResponse{}))
+		})
+
+		It("should return a non-nil error", func() {
+			Expect(err).To(HaveOccurred())
+		})
+
+		It("should return an error mentioning terminal access is unavailable", func() {
+			Expect(err).To(MatchError(ContainSubstring("terminal access not available")))
+		})
+	})
+
+	Describe("ReleaseTerminal", func() {
+		var (
+			resp acp.ReleaseTerminalResponse
+			err  error
+		)
+
+		BeforeEach(func() {
+			resp, err = client.ReleaseTerminal(context.Background(), acp.ReleaseTerminalRequest{})
+		})
+
+		It("should return a zero-value response", func() {
+			Expect(resp).To(Equal(acp.ReleaseTerminalResponse{}))
+		})
+
+		It("should return a non-nil error", func() {
+			Expect(err).To(HaveOccurred())
+		})
+
+		It("should return an error mentioning terminal access is unavailable", func() {
+			Expect(err).To(MatchError(ContainSubstring("terminal access not available")))
+		})
+	})
+
+	Describe("WaitForTerminalExit", func() {
+		var (
+			resp acp.WaitForTerminalExitResponse
+			err  error
+		)
+
+		BeforeEach(func() {
+			resp, err = client.WaitForTerminalExit(context.Background(), acp.WaitForTerminalExitRequest{})
+		})
+
+		It("should return a zero-value response", func() {
+			Expect(resp).To(Equal(acp.WaitForTerminalExitResponse{}))
+		})
+
+		It("should return a non-nil error", func() {
+			Expect(err).To(HaveOccurred())
+		})
+
+		It("should return an error mentioning terminal access is unavailable", func() {
+			Expect(err).To(MatchError(ContainSubstring("terminal access not available")))
+		})
+	})
+
+	Describe("KillTerminal", func() {
+		var (
+			resp acp.KillTerminalResponse
+			err  error
+		)
+
+		BeforeEach(func() {
+			resp, err = client.KillTerminal(context.Background(), acp.KillTerminalRequest{})
+		})
+
+		It("should return a zero-value response", func() {
+			Expect(resp).To(Equal(acp.KillTerminalResponse{}))
+		})
+
+		It("should return a non-nil error", func() {
+			Expect(err).To(HaveOccurred())
+		})
+
+		It("should return an error mentioning terminal access is unavailable", func() {
+			Expect(err).To(MatchError(ContainSubstring("terminal access not available")))
+		})
+	})
+})
