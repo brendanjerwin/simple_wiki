@@ -2,13 +2,39 @@ syntax = "proto3";
 
 package api.v1;
 
+import "api/v1/mcp_options.proto";
 import "google/protobuf/struct.proto";
 
 option go_package = "github.com/brendanjerwin/simple_wiki/gen/go/api/v1;apiv1";
 
+// PageImportService — see (api.v1.service_description).
 service PageImportService {
-  rpc ParseCSVPreview(ParseCSVPreviewRequest) returns (ParseCSVPreviewResponse);
-  rpc StartPageImportJob(StartPageImportJobRequest) returns (StartPageImportJobResponse);
+  option (api.v1.service_description) =
+      "Bulk-import wiki pages from CSV. Parses a CSV body row-by-row, with each "
+      "row becoming a new (or updated) page: scalar frontmatter fields are set "
+      "from columns, array fields support add/remove operations, and cells "
+      "marked [[DELETE]] remove fields. Offers a dry-run preview and a "
+      "background job for the actual import.";
+
+  // ParseCSVPreview — see (api.v1.description).
+  rpc ParseCSVPreview(ParseCSVPreviewRequest) returns (ParseCSVPreviewResponse) {
+    option (api.v1.description) =
+        "Dry-run a CSV import: parse the supplied csv_content and return the "
+        "PageImportRecords that would be written, along with per-row "
+        "validation errors, type-coercion warnings, create/update counts, and "
+        "any global parsing errors. No pages are modified.";
+    option (api.v1.read_only) = true;
+  }
+
+  // StartPageImportJob — see (api.v1.description).
+  rpc StartPageImportJob(StartPageImportJobRequest) returns (StartPageImportJobResponse) {
+    option (api.v1.description) =
+        "Kick off a background job that imports the supplied csv_content into "
+        "the wiki, creating or updating one page per row. Returns immediately "
+        "with a job_id that can be polled for progress; record_count reports "
+        "how many rows were accepted for processing.";
+    option (api.v1.long_running) = true;
+  }
 }
 
 message PageImportRecord {

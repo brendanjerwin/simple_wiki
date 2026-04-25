@@ -2,15 +2,38 @@ syntax = "proto3";
 
 package api.v1;
 
+import "api/v1/mcp_options.proto";
+
 option go_package = "github.com/brendanjerwin/simple_wiki/gen/go/api/v1;apiv1";
 
-// The Search service definition.
+// SearchService — see (api.v1.service_description).
 service SearchService {
-  // Searches the wiki content and returns matching results.
-  rpc SearchContent(SearchContentRequest) returns (SearchContentResponse) {}
+  option (api.v1.service_description) =
+      "Discovery over wiki pages. SearchContent runs a Bleve full-text query "
+      "across page bodies and titles with optional frontmatter-key include/"
+      "exclude filters and inline highlighting. ListPagesByFrontmatter queries "
+      "the structured frontmatter index to find pages whose frontmatter "
+      "dot-path matches an exact value, with sortable, bounded results.";
 
-  // Lists pages matching a frontmatter key-value pair, sorted by another frontmatter key.
-  rpc ListPagesByFrontmatter(ListPagesByFrontmatterRequest) returns (ListPagesByFrontmatterResponse) {}
+  // SearchContent — see (api.v1.description).
+  rpc SearchContent(SearchContentRequest) returns (SearchContentResponse) {
+    option (api.v1.description) =
+        "Searches the wiki content and returns matching results. Backed by the "
+        "Bleve full-text index over page titles and bodies. Supports include/"
+        "exclude filtering by presence of frontmatter keys and can return "
+        "selected frontmatter values alongside each hit.";
+    option (api.v1.read_only) = true;
+  }
+
+  // ListPagesByFrontmatter — see (api.v1.description).
+  rpc ListPagesByFrontmatter(ListPagesByFrontmatterRequest) returns (ListPagesByFrontmatterResponse) {
+    option (api.v1.description) =
+        "Lists pages matching a frontmatter key-value pair, sorted by another "
+        "frontmatter key. Backed by the structured-field frontmatter index "
+        "(not Bleve full-text). Use this for exact-match lookups such as "
+        "'all blog posts with status=published, sorted by published-date'.";
+    option (api.v1.read_only) = true;
+  }
 }
 
 // The request message for searching content.

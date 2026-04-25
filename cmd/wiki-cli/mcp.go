@@ -13,6 +13,7 @@ import (
 	"connectrpc.com/connect"
 	"github.com/brendanjerwin/simple_wiki/gen/go/api/v1/apiv1connect"
 	"github.com/brendanjerwin/simple_wiki/gen/go/api/v1/apiv1mcp"
+	"github.com/brendanjerwin/simple_wiki/pkg/mcpdocs"
 	mcpserver "github.com/mark3labs/mcp-go/server"
 	cli "gopkg.in/urfave/cli.v1"
 )
@@ -110,6 +111,7 @@ func normalizeBaseURL(baseURL string) (string, error) {
 
 // apiClients holds Connect protocol clients for all wiki services.
 type apiClients struct {
+	agentMetadata  apiv1connect.AgentMetadataServiceClient
 	chat           apiv1connect.ChatServiceClient
 	frontmatter    apiv1connect.FrontmatterClient
 	inventory      apiv1connect.InventoryManagementServiceClient
@@ -122,6 +124,7 @@ type apiClients struct {
 // createAPIClients creates Connect protocol clients for all wiki services.
 func createAPIClients(httpClient connect.HTTPClient, baseURL string) *apiClients {
 	return &apiClients{
+		agentMetadata:  apiv1connect.NewAgentMetadataServiceClient(httpClient, baseURL),
 		chat:           apiv1connect.NewChatServiceClient(httpClient, baseURL),
 		frontmatter:    apiv1connect.NewFrontmatterClient(httpClient, baseURL),
 		inventory:      apiv1connect.NewInventoryManagementServiceClient(httpClient, baseURL),
@@ -136,6 +139,7 @@ func createAPIClients(httpClient connect.HTTPClient, baseURL string) *apiClients
 func registerToolHandlers(s *mcpserver.MCPServer, clients *apiClients) {
 	// Register handlers for each service
 	// These forward MCP tool calls to the Connect protocol services
+	apiv1mcp.ForwardToConnectAgentMetadataServiceClient(s, clients.agentMetadata)
 	apiv1mcp.ForwardToConnectChatServiceClient(s, clients.chat)
 	apiv1mcp.ForwardToConnectFrontmatterClient(s, clients.frontmatter)
 	apiv1mcp.ForwardToConnectInventoryManagementServiceClient(s, clients.inventory)
@@ -143,6 +147,11 @@ func registerToolHandlers(s *mcpserver.MCPServer, clients *apiClients) {
 	apiv1mcp.ForwardToConnectPageManagementServiceClient(s, clients.pageManagement)
 	apiv1mcp.ForwardToConnectSearchServiceClient(s, clients.search)
 	apiv1mcp.ForwardToConnectSystemInfoServiceClient(s, clients.systemInfo)
+
+	// Override descriptions and annotations for any service whose proto
+	// methods declare the api.v1.* MCP doc extensions. Services that haven't
+	// been ported still surface their proto comments unchanged.
+	_ = mcpdocs.Decorate(s)
 }
 
 // computeBackoffAfterFailure returns the delay to wait before the next reconnect attempt

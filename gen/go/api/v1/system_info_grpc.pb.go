@@ -27,10 +27,12 @@ const (
 // SystemInfoServiceClient is the client API for SystemInfoService service.
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
+//
+// SystemInfoService — see (api.v1.service_description).
 type SystemInfoServiceClient interface {
-	// GetVersion returns the server version and build time.
+	// GetVersion — see (api.v1.description).
 	GetVersion(ctx context.Context, in *GetVersionRequest, opts ...grpc.CallOption) (*GetVersionResponse, error)
-	// GetJobStatus returns the current status of background job queues.
+	// GetJobStatus — see (api.v1.description).
 	GetJobStatus(ctx context.Context, in *GetJobStatusRequest, opts ...grpc.CallOption) (*GetJobStatusResponse, error)
 	// StreamJobStatus provides real-time streaming updates of job queue status.
 	// The stream will automatically terminate when all queues are idle.
@@ -101,10 +103,12 @@ func (x *systemInfoServiceStreamJobStatusClient) Recv() (*GetJobStatusResponse, 
 // SystemInfoServiceServer is the server API for SystemInfoService service.
 // All implementations must embed UnimplementedSystemInfoServiceServer
 // for forward compatibility
+//
+// SystemInfoService — see (api.v1.service_description).
 type SystemInfoServiceServer interface {
-	// GetVersion returns the server version and build time.
+	// GetVersion — see (api.v1.description).
 	GetVersion(context.Context, *GetVersionRequest) (*GetVersionResponse, error)
-	// GetJobStatus returns the current status of background job queues.
+	// GetJobStatus — see (api.v1.description).
 	GetJobStatus(context.Context, *GetJobStatusRequest) (*GetJobStatusResponse, error)
 	// StreamJobStatus provides real-time streaming updates of job queue status.
 	// The stream will automatically terminate when all queues are idle.

@@ -29,15 +29,15 @@ const (
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 //
-// The Frontmatter service definition.
+// Frontmatter — see (api.v1.service_description).
 type FrontmatterClient interface {
-	// Gets the frontmatter for a given page.
+	// GetFrontmatter — see (api.v1.description).
 	GetFrontmatter(ctx context.Context, in *GetFrontmatterRequest, opts ...grpc.CallOption) (*GetFrontmatterResponse, error)
-	// Merges the given frontmatter with the existing frontmatter for a page.
+	// MergeFrontmatter — see (api.v1.description).
 	MergeFrontmatter(ctx context.Context, in *MergeFrontmatterRequest, opts ...grpc.CallOption) (*MergeFrontmatterResponse, error)
-	// Replaces the entire frontmatter for a given page.
+	// ReplaceFrontmatter — see (api.v1.description).
 	ReplaceFrontmatter(ctx context.Context, in *ReplaceFrontmatterRequest, opts ...grpc.CallOption) (*ReplaceFrontmatterResponse, error)
-	// Removes a key from the frontmatter at a given path.
+	// RemoveKeyAtPath — see (api.v1.description).
 	RemoveKeyAtPath(ctx context.Context, in *RemoveKeyAtPathRequest, opts ...grpc.CallOption) (*RemoveKeyAtPathResponse, error)
 }
 
@@ -93,15 +93,15 @@ func (c *frontmatterClient) RemoveKeyAtPath(ctx context.Context, in *RemoveKeyAt
 // All implementations must embed UnimplementedFrontmatterServer
 // for forward compatibility
 //
-// The Frontmatter service definition.
+// Frontmatter — see (api.v1.service_description).
 type FrontmatterServer interface {
-	// Gets the frontmatter for a given page.
+	// GetFrontmatter — see (api.v1.description).
 	GetFrontmatter(context.Context, *GetFrontmatterRequest) (*GetFrontmatterResponse, error)
-	// Merges the given frontmatter with the existing frontmatter for a page.
+	// MergeFrontmatter — see (api.v1.description).
 	MergeFrontmatter(context.Context, *MergeFrontmatterRequest) (*MergeFrontmatterResponse, error)
-	// Replaces the entire frontmatter for a given page.
+	// ReplaceFrontmatter — see (api.v1.description).
 	ReplaceFrontmatter(context.Context, *ReplaceFrontmatterRequest) (*ReplaceFrontmatterResponse, error)
-	// Removes a key from the frontmatter at a given path.
+	// RemoveKeyAtPath — see (api.v1.description).
 	RemoveKeyAtPath(context.Context, *RemoveKeyAtPathRequest) (*RemoveKeyAtPathResponse, error)
 	mustEmbedUnimplementedFrontmatterServer()
 }

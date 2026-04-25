@@ -99,23 +99,23 @@ type ChatServiceClient interface {
 	// SubscribeChat subscribes to all chat events for a page.
 	// Replays existing buffer contents on connect, then streams new events.
 	SubscribeChat(context.Context, *connect.Request[v1.SubscribeChatRequest]) (*connect.ServerStreamForClient[v1.ChatEvent], error)
-	// SendChatReply is called by wiki-cli mcp when Claude uses the reply tool.
+	// SendChatReply is called by the pool daemon when the agent uses the reply tool.
 	// Accepts optional reply_to message ID for threading.
 	SendChatReply(context.Context, *connect.Request[v1.SendChatReplyRequest]) (*connect.Response[v1.SendChatReplyResponse], error)
-	// EditChatMessage is called by wiki-cli mcp when Claude uses the edit_message tool.
+	// EditChatMessage is called by the pool daemon when the agent uses the edit_message tool.
 	// Updates an existing message's content.
 	EditChatMessage(context.Context, *connect.Request[v1.EditChatMessageRequest]) (*connect.Response[v1.EditChatMessageResponse], error)
-	// ReactToMessage is called by wiki-cli mcp when Claude uses the react tool.
+	// ReactToMessage is called by the pool daemon when the agent uses the react tool.
 	// Adds an emoji reaction to a message.
 	ReactToMessage(context.Context, *connect.Request[v1.ReactToMessageRequest]) (*connect.Response[v1.ReactToMessageResponse], error)
-	// GetChatStatus returns whether Claude is currently connected (a channel subscriber exists).
-	// Used by the chat panel to disable the UI when Claude is unavailable.
+	// GetChatStatus returns whether an agent is currently connected for a page.
+	// Used by the chat panel to disable the UI when no agent is available.
 	GetChatStatus(context.Context, *connect.Request[v1.GetChatStatusRequest]) (*connect.Response[v1.GetChatStatusResponse], error)
 	// SubscribePageChatMessages is called by wiki-cli mcp --page at startup.
 	// Streams new user messages for a specific page only.
 	SubscribePageChatMessages(context.Context, *connect.Request[v1.SubscribePageChatMessagesRequest]) (*connect.ServerStreamForClient[v1.ChatMessage], error)
 	// SubscribeInstanceRequests is called by the wiki-cli pool daemon.
-	// Streams page names that need a Claude instance spawned.
+	// Streams page names that need an agent instance spawned.
 	SubscribeInstanceRequests(context.Context, *connect.Request[v1.SubscribeInstanceRequestsRequest]) (*connect.ServerStreamForClient[v1.InstanceRequest], error)
 	// SendToolCallNotification is called by the pool daemon or ACP client
 	// when the agent invokes a tool. The notification is broadcast to page subscribers.
@@ -314,23 +314,23 @@ type ChatServiceHandler interface {
 	// SubscribeChat subscribes to all chat events for a page.
 	// Replays existing buffer contents on connect, then streams new events.
 	SubscribeChat(context.Context, *connect.Request[v1.SubscribeChatRequest], *connect.ServerStream[v1.ChatEvent]) error
-	// SendChatReply is called by wiki-cli mcp when Claude uses the reply tool.
+	// SendChatReply is called by the pool daemon when the agent uses the reply tool.
 	// Accepts optional reply_to message ID for threading.
 	SendChatReply(context.Context, *connect.Request[v1.SendChatReplyRequest]) (*connect.Response[v1.SendChatReplyResponse], error)
-	// EditChatMessage is called by wiki-cli mcp when Claude uses the edit_message tool.
+	// EditChatMessage is called by the pool daemon when the agent uses the edit_message tool.
 	// Updates an existing message's content.
 	EditChatMessage(context.Context, *connect.Request[v1.EditChatMessageRequest]) (*connect.Response[v1.EditChatMessageResponse], error)
-	// ReactToMessage is called by wiki-cli mcp when Claude uses the react tool.
+	// ReactToMessage is called by the pool daemon when the agent uses the react tool.
 	// Adds an emoji reaction to a message.
 	ReactToMessage(context.Context, *connect.Request[v1.ReactToMessageRequest]) (*connect.Response[v1.ReactToMessageResponse], error)
-	// GetChatStatus returns whether Claude is currently connected (a channel subscriber exists).
-	// Used by the chat panel to disable the UI when Claude is unavailable.
+	// GetChatStatus returns whether an agent is currently connected for a page.
+	// Used by the chat panel to disable the UI when no agent is available.
 	GetChatStatus(context.Context, *connect.Request[v1.GetChatStatusRequest]) (*connect.Response[v1.GetChatStatusResponse], error)
 	// SubscribePageChatMessages is called by wiki-cli mcp --page at startup.
 	// Streams new user messages for a specific page only.
 	SubscribePageChatMessages(context.Context, *connect.Request[v1.SubscribePageChatMessagesRequest], *connect.ServerStream[v1.ChatMessage]) error
 	// SubscribeInstanceRequests is called by the wiki-cli pool daemon.
-	// Streams page names that need a Claude instance spawned.
+	// Streams page names that need an agent instance spawned.
 	SubscribeInstanceRequests(context.Context, *connect.Request[v1.SubscribeInstanceRequestsRequest], *connect.ServerStream[v1.InstanceRequest]) error
 	// SendToolCallNotification is called by the pool daemon or ACP client
 	// when the agent invokes a tool. The notification is broadcast to page subscribers.

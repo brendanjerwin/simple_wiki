@@ -27,11 +27,11 @@ const (
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 //
-// The Search service definition.
+// SearchService — see (api.v1.service_description).
 type SearchServiceClient interface {
-	// Searches the wiki content and returns matching results.
+	// SearchContent — see (api.v1.description).
 	SearchContent(ctx context.Context, in *SearchContentRequest, opts ...grpc.CallOption) (*SearchContentResponse, error)
-	// Lists pages matching a frontmatter key-value pair, sorted by another frontmatter key.
+	// ListPagesByFrontmatter — see (api.v1.description).
 	ListPagesByFrontmatter(ctx context.Context, in *ListPagesByFrontmatterRequest, opts ...grpc.CallOption) (*ListPagesByFrontmatterResponse, error)
 }
 
@@ -67,11 +67,11 @@ func (c *searchServiceClient) ListPagesByFrontmatter(ctx context.Context, in *Li
 // All implementations must embed UnimplementedSearchServiceServer
 // for forward compatibility
 //
-// The Search service definition.
+// SearchService — see (api.v1.service_description).
 type SearchServiceServer interface {
-	// Searches the wiki content and returns matching results.
+	// SearchContent — see (api.v1.description).
 	SearchContent(context.Context, *SearchContentRequest) (*SearchContentResponse, error)
-	// Lists pages matching a frontmatter key-value pair, sorted by another frontmatter key.
+	// ListPagesByFrontmatter — see (api.v1.description).
 	ListPagesByFrontmatter(context.Context, *ListPagesByFrontmatterRequest) (*ListPagesByFrontmatterResponse, error)
 	mustEmbedUnimplementedSearchServiceServer()
 }
