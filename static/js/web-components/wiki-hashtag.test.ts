@@ -69,9 +69,8 @@ describe('WikiHashtag', () => {
       expect(anchor).to.exist;
     });
 
-    it('should set href to the search fallback URL with the encoded tag', () => {
-      // Fallback href is what makes "open in new tab" / no-JS still useful.
-      expect(anchor?.getAttribute('href')).to.equal('/?q=%23groceries');
+    it('should set href to "#" so right-click/no-JS does not navigate to a non-existent route', () => {
+      expect(anchor?.getAttribute('href')).to.equal('#');
     });
 
     it('should slot the display text from light DOM', () => {
@@ -324,6 +323,10 @@ describe('WikiHashtag', () => {
     });
   });
 
+  // Modifier-key clicks (ctrl/meta/shift) used to fall through to native
+  // browser navigation, but the inert `#` href made that pointless and the
+  // synthetic-click test runner kept tripping page reloads. Now clicks
+  // always open the popover regardless of modifiers — verify that.
   describe('when the anchor is ctrl-clicked', () => {
     let clickEvent: MouseEvent;
     let anchor: HTMLAnchorElement;
@@ -338,74 +341,18 @@ describe('WikiHashtag', () => {
         ctrlKey: true,
       });
       anchor.dispatchEvent(clickEvent);
-      await el.updateComplete;
+      await waitUntil(
+        () => el.shadowRoot.querySelector('.bubble') !== null,
+        'Popover should still open on ctrl-click',
+      );
     });
 
-    it('should not preventDefault so the browser can open in a new tab via the href', () => {
-      expect(clickEvent.defaultPrevented).to.equal(false);
+    it('should preventDefault so the browser does not navigate', () => {
+      expect(clickEvent.defaultPrevented).to.equal(true);
     });
 
-    it('should not call performSearch', () => {
-      expect(performSearchStub).to.not.have.been.called;
-    });
-
-    it('should not open the popover', () => {
-      const bubble = el.shadowRoot.querySelector('.bubble');
-      expect(bubble).to.be.null;
-    });
-  });
-
-  describe('when the anchor is meta-clicked', () => {
-    // Cmd-click on macOS is meta-click — same "open in new tab" intent.
-    let clickEvent: MouseEvent;
-    let anchor: HTMLAnchorElement;
-
-    beforeEach(async () => {
-      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- rendered above
-      anchor = el.shadowRoot.querySelector<HTMLAnchorElement>('a.hashtag-pill')!;
-      clickEvent = new MouseEvent('click', {
-        bubbles: true,
-        cancelable: true,
-        composed: true,
-        metaKey: true,
-      });
-      anchor.dispatchEvent(clickEvent);
-      await el.updateComplete;
-    });
-
-    it('should not preventDefault', () => {
-      expect(clickEvent.defaultPrevented).to.equal(false);
-    });
-
-    it('should not call performSearch', () => {
-      expect(performSearchStub).to.not.have.been.called;
-    });
-  });
-
-  describe('when the anchor is shift-clicked', () => {
-    // Shift-click traditionally opens in a new window — preserve that.
-    let clickEvent: MouseEvent;
-    let anchor: HTMLAnchorElement;
-
-    beforeEach(async () => {
-      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- rendered above
-      anchor = el.shadowRoot.querySelector<HTMLAnchorElement>('a.hashtag-pill')!;
-      clickEvent = new MouseEvent('click', {
-        bubbles: true,
-        cancelable: true,
-        composed: true,
-        shiftKey: true,
-      });
-      anchor.dispatchEvent(clickEvent);
-      await el.updateComplete;
-    });
-
-    it('should not preventDefault', () => {
-      expect(clickEvent.defaultPrevented).to.equal(false);
-    });
-
-    it('should not call performSearch', () => {
-      expect(performSearchStub).to.not.have.been.called;
+    it('should call performSearch (popover wins over modifier-fallback)', () => {
+      expect(performSearchStub).to.have.been.calledWith('#groceries');
     });
   });
 
@@ -445,8 +392,8 @@ describe('WikiHashtag', () => {
       anchor = el.shadowRoot.querySelector<HTMLAnchorElement>('a.hashtag-pill')!;
     });
 
-    it('should update the fallback href to the new tag', () => {
-      expect(anchor.getAttribute('href')).to.equal('/?q=%23urgent');
+    it('should keep the inert `#` href regardless of tag', () => {
+      expect(anchor.getAttribute('href')).to.equal('#');
     });
 
     describe('and then clicked', () => {

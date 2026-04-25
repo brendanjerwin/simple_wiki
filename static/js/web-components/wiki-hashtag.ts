@@ -220,10 +220,12 @@ export class WikiHashtag extends LitElement {
   }
 
   private get fallbackHref(): string {
-    // `/?q=#TAG` lets a future bootstrap step pre-fill the search bar from
-    // the URL. Today it just navigates to the wiki home, which is acceptable
-    // progressive-enhancement behavior when JS is disabled.
-    return `/?q=${encodeURIComponent('#' + this.tag)}`;
+    // The pill is purely interactive — clicks always open the popover.
+    // The fallback href is a hash anchor (no destination) so right-click
+    // → "open in new tab" lands on the same page rather than a 404.
+    // Modifier-clicks were special-cased before but the popover is the
+    // primary interaction; making it consistent simplifies behavior.
+    return '#';
   }
 
   private async _open_(): Promise<void> {
@@ -267,13 +269,9 @@ export class WikiHashtag extends LitElement {
   }
 
   private async handleClick(e: MouseEvent): Promise<void> {
-    // Modifier keys signal the user wants browser-native behavior
-    // (open in new tab/window). Don't intercept — let the anchor follow
-    // its href.
-    if (e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) {
-      return;
-    }
-
+    // Always intercept — the popover is the click destination, regardless
+    // of modifier keys. Right-click still works (context menu fires before
+    // click) so users can copy the link if they want.
     e.preventDefault();
     e.stopPropagation();
     await this._toggle();
