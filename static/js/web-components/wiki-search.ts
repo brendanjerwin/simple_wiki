@@ -10,7 +10,6 @@ import { AugmentErrorService, type AugmentedError } from './augment-error-servic
 import './error-display.js';
 import type {
   InventoryFilterChangedEventDetail,
-  WikiSearchOpenEventDetail,
 } from './event-types.js';
 import { getGrpcWebTransport } from './grpc-transport.js';
 
@@ -123,60 +122,16 @@ export class WikiSearch extends LitElement {
     this.inventoryOnly = localStorage.getItem(INVENTORY_ONLY_STORAGE_KEY) === 'true';
     this.totalUnfilteredCount = 0;
     this._handleKeydown = this._handleKeydown.bind(this);
-    this._handleSearchOpen = this._handleSearchOpen.bind(this);
   }
 
   override connectedCallback() {
     super.connectedCallback();
     globalThis.addEventListener('keydown', this._handleKeydown);
-    // The hashtag pill component (`<wiki-hashtag>`) and any other surface
-    // that wants to invoke the popup search dispatches `wiki-search-open`
-    // with a query payload. Listening at window level lets pills anywhere
-    // in the document — including server-rendered ones — open this dialog
-    // without having to reach the component directly.
-    globalThis.addEventListener('wiki-search-open', this._handleSearchOpen);
   }
 
   override disconnectedCallback() {
     super.disconnectedCallback();
     globalThis.removeEventListener('keydown', this._handleKeydown);
-    globalThis.removeEventListener('wiki-search-open', this._handleSearchOpen);
-  }
-
-  // Exposed for event wiring verification in tests. The `<wiki-hashtag>`
-  // component (and any other producer) dispatches a typed CustomEvent; the
-  // shared detail type lives in event-types.ts.
-  async _handleSearchOpen(e: CustomEvent<WikiSearchOpenEventDetail>): Promise<void> {
-    const query = e.detail?.query?.trim() ?? '';
-    if (!query) {
-      return;
-    }
-
-    // Reflect the query into the visible search input so the user sees
-    // exactly what was searched and can edit/re-submit.
-    await this.updateComplete;
-    const searchInput = this.shadowRoot?.querySelector<HTMLInputElement>('input[type="search"]');
-    if (searchInput) {
-      searchInput.value = query;
-    }
-
-    this.lastSearchQuery = query;
-    this.error = null;
-    this.noResults = false;
-    this.loading = true;
-
-    try {
-      const response = await this.performSearch(query);
-      this.results = [...response.results];
-      this.totalUnfilteredCount = response.totalUnfilteredCount;
-      this.noResults = response.results.length === 0;
-    } catch (error) {
-      this.results = [];
-      this.totalUnfilteredCount = 0;
-      this.error = AugmentErrorService.augmentError(error, 'search');
-    } finally {
-      this.loading = false;
-    }
   }
 
   // Exposed for event wiring verification in tests

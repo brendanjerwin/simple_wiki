@@ -34,9 +34,9 @@ The boost is a `should`-clause against the tag field — not a hard filter. If n
 
 ## Tag Click-Through
 
-Anywhere a `#tag` is rendered as a pill (in page bodies, search results, checklist items), clicking the pill opens the wiki's search popup with the `#tag` query pre-filled and runs it immediately — same behavior as typing the query into the search bar in the top menu yourself. There's no separate "tag index" page — the `#tag` search **is** the canonical view of "everything tagged X."
+Anywhere a `#tag` is rendered as a pill (in page bodies, search results, checklist items), clicking the pill pops a small bubble anchored to the pill listing pages tagged that way — a quick peek, not a full search. Click the pill again, click outside, or press Escape to dismiss.
 
-To open the search bar without clicking a pill, press `Ctrl+K` (or `Cmd+K` on macOS).
+To run an explicit `#tag` search and see the full results view, type `#tag` into the search bar in the top menu. Press `Ctrl+K` (or `Cmd+K` on macOS) to focus it without leaving the keyboard. The `#tag` query is the canonical view of "everything tagged X" — there's no separate "tag index" page.
 
 ## See Also
 

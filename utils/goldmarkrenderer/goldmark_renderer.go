@@ -137,9 +137,8 @@ func sanitizeWikiHTML(rawHTML []byte) []byte {
 	// Allow wiki-hashtag custom element emitted by the hashtag inline
 	// parser/renderer. The `tag` attribute carries the normalized tag value
 	// (letters, digits, hyphen, underscore — Unicode allowed via the
-	// non-ASCII range below); the click handler in the Lit component
-	// dispatches a `wiki-search-open` event the page-level <wiki-search>
-	// listens for.
+	// non-ASCII range below); the Lit component handles its own click
+	// behavior, opening a small popover anchored to the pill.
 	p.AllowElements("wiki-hashtag")
 	p.AllowAttrs("tag").Matching(regexp.MustCompile(`^[\p{L}\p{N}\-_]+$`)).OnElements("wiki-hashtag")
 	// Allow GitHub-style alert/admonition blocks rendered by the alert transformer.

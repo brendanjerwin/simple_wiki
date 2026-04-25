@@ -1,24 +1,30 @@
-import { html, fixture, expect } from '@open-wc/testing';
+import { html, fixture, expect, waitUntil } from '@open-wc/testing';
 import sinon from 'sinon';
 import './wiki-hashtag.js';
+import type { SearchResult } from '../gen/api/v1/search_pb.js';
 
 interface WikiHashtagElement extends HTMLElement {
   tag: string;
+  performSearch: (query: string) => Promise<SearchResult[]>;
   updateComplete: Promise<boolean>;
-}
-
-interface SearchOpenDetail {
-  query: string;
+  shadowRoot: ShadowRoot;
 }
 
 describe('WikiHashtag', () => {
   let el: WikiHashtagElement;
+  let performSearchStub: sinon.SinonStub;
 
   beforeEach(async () => {
     // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- custom element matches interface
     el = (await fixture(
       html`<wiki-hashtag tag="groceries">#Groceries</wiki-hashtag>`,
     )) as WikiHashtagElement;
+    performSearchStub = sinon.stub(el, 'performSearch');
+    // Default: a single result so most click-to-open paths render a list.
+    performSearchStub.resolves([
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- minimal mock for tests
+      { identifier: 'tagged-page', title: 'Tagged Page' } as SearchResult,
+    ]);
   });
 
   afterEach(() => {
@@ -33,7 +39,7 @@ describe('WikiHashtag', () => {
     let anchor: HTMLAnchorElement | null;
 
     beforeEach(() => {
-      anchor = el.shadowRoot?.querySelector<HTMLAnchorElement>('a.hashtag-pill') ?? null;
+      anchor = el.shadowRoot.querySelector<HTMLAnchorElement>('a.hashtag-pill');
     });
 
     it('should render an anchor with the hashtag-pill class', () => {
@@ -49,72 +55,236 @@ describe('WikiHashtag', () => {
       // Display text is provided as the slotted child so case is preserved.
       expect(el.textContent?.trim()).to.equal('#Groceries');
     });
+
+    it('should not render the bubble while closed', () => {
+      const bubble = el.shadowRoot.querySelector('.bubble');
+      expect(bubble).to.be.null;
+    });
   });
 
   describe('when the anchor is clicked without modifier keys', () => {
-    let dispatched: CustomEvent<SearchOpenDetail> | null;
     let clickEvent: MouseEvent;
     let anchor: HTMLAnchorElement;
 
-    beforeEach(() => {
-      dispatched = null;
-      globalThis.addEventListener(
-        'wiki-search-open',
-        (e: Event) => {
-          // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- known custom event
-          dispatched = e as CustomEvent<SearchOpenDetail>;
-        },
-        { once: true },
-      );
-
+    beforeEach(async () => {
       // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- rendered above
-      anchor = el.shadowRoot!.querySelector<HTMLAnchorElement>('a.hashtag-pill')!;
+      anchor = el.shadowRoot.querySelector<HTMLAnchorElement>('a.hashtag-pill')!;
       clickEvent = new MouseEvent('click', {
         bubbles: true,
         cancelable: true,
         composed: true,
       });
       anchor.dispatchEvent(clickEvent);
-    });
-
-    it('should dispatch a wiki-search-open event', () => {
-      expect(dispatched).to.exist;
-    });
-
-    it('should include the #-prefixed tag as the query', () => {
-      expect(dispatched?.detail.query).to.equal('#groceries');
-    });
-
-    it('should bubble through the document', () => {
-      expect(dispatched?.bubbles).to.equal(true);
-    });
-
-    it('should be composed so it crosses shadow boundaries', () => {
-      expect(dispatched?.composed).to.equal(true);
+      await waitUntil(
+        () => el.shadowRoot.querySelector('.bubble-list') !== null,
+        'Bubble list should appear after fetch resolves',
+      );
     });
 
     it('should preventDefault on the click so the browser does not navigate', () => {
       expect(clickEvent.defaultPrevented).to.equal(true);
     });
+
+    it('should call performSearch with the #-prefixed tag', () => {
+      expect(performSearchStub).to.have.been.calledWith('#groceries');
+    });
+
+    it('should open the popover bubble', () => {
+      const bubble = el.shadowRoot.querySelector('.bubble');
+      expect(bubble).to.exist;
+    });
+
+    it('should render a list of result links', () => {
+      const links = el.shadowRoot.querySelectorAll('.bubble-list a');
+      expect(links.length).to.equal(1);
+      expect(links[0]?.getAttribute('href')).to.equal('/tagged-page');
+      expect(links[0]?.textContent?.trim()).to.equal('Tagged Page');
+    });
+  });
+
+  describe('when the anchor is clicked a second time', () => {
+    let anchor: HTMLAnchorElement;
+
+    beforeEach(async () => {
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- rendered above
+      anchor = el.shadowRoot.querySelector<HTMLAnchorElement>('a.hashtag-pill')!;
+      anchor.dispatchEvent(
+        new MouseEvent('click', { bubbles: true, cancelable: true, composed: true }),
+      );
+      await waitUntil(
+        () => el.shadowRoot.querySelector('.bubble') !== null,
+        'Bubble should be open after first click',
+      );
+
+      anchor.dispatchEvent(
+        new MouseEvent('click', { bubbles: true, cancelable: true, composed: true }),
+      );
+      await el.updateComplete;
+    });
+
+    it('should close the popover', () => {
+      const bubble = el.shadowRoot.querySelector('.bubble');
+      expect(bubble).to.be.null;
+    });
+  });
+
+  describe('when the search is in flight', () => {
+    let anchor: HTMLAnchorElement;
+    let resolveSearch: (results: SearchResult[]) => void;
+
+    beforeEach(async () => {
+      performSearchStub.callsFake(
+        () =>
+          new Promise<SearchResult[]>((resolve) => {
+            resolveSearch = resolve;
+          }),
+      );
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- rendered above
+      anchor = el.shadowRoot.querySelector<HTMLAnchorElement>('a.hashtag-pill')!;
+      anchor.dispatchEvent(
+        new MouseEvent('click', { bubbles: true, cancelable: true, composed: true }),
+      );
+      await waitUntil(
+        () => el.shadowRoot.querySelector('.bubble-loading') !== null,
+        'Loading state should appear before fetch resolves',
+      );
+    });
+
+    afterEach(() => {
+      // Make sure we don't leave a dangling promise.
+      resolveSearch?.([]);
+    });
+
+    it('should render the loading indicator', () => {
+      const loading = el.shadowRoot.querySelector('.bubble-loading');
+      expect(loading).to.exist;
+    });
+
+    it('should render a spinner inside the loading state', () => {
+      const spinner = el.shadowRoot.querySelector('.bubble-loading .spinner');
+      expect(spinner).to.exist;
+    });
+  });
+
+  describe('when the search returns no results', () => {
+    let anchor: HTMLAnchorElement;
+
+    beforeEach(async () => {
+      performSearchStub.resolves([]);
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- rendered above
+      anchor = el.shadowRoot.querySelector<HTMLAnchorElement>('a.hashtag-pill')!;
+      anchor.dispatchEvent(
+        new MouseEvent('click', { bubbles: true, cancelable: true, composed: true }),
+      );
+      await waitUntil(
+        () => el.shadowRoot.querySelector('.bubble-empty') !== null,
+        'Empty state should appear',
+      );
+    });
+
+    it('should render the empty state', () => {
+      const empty = el.shadowRoot.querySelector('.bubble-empty');
+      expect(empty?.textContent?.trim()).to.equal('No pages tagged #groceries.');
+    });
+
+    it('should not render a result list', () => {
+      const list = el.shadowRoot.querySelector('.bubble-list');
+      expect(list).to.be.null;
+    });
+  });
+
+  describe('when the search throws', () => {
+    let anchor: HTMLAnchorElement;
+
+    beforeEach(async () => {
+      performSearchStub.rejects(new Error('boom'));
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- rendered above
+      anchor = el.shadowRoot.querySelector<HTMLAnchorElement>('a.hashtag-pill')!;
+      anchor.dispatchEvent(
+        new MouseEvent('click', { bubbles: true, cancelable: true, composed: true }),
+      );
+      await waitUntil(
+        () => el.shadowRoot.querySelector('error-display') !== null,
+        'error-display should be rendered',
+      );
+    });
+
+    it('should render an error-display in the bubble', () => {
+      const errorDisplay = el.shadowRoot.querySelector('error-display');
+      expect(errorDisplay).to.exist;
+    });
+  });
+
+  describe('when an outside click happens while open', () => {
+    let anchor: HTMLAnchorElement;
+    let outside: HTMLDivElement;
+
+    beforeEach(async () => {
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- rendered above
+      anchor = el.shadowRoot.querySelector<HTMLAnchorElement>('a.hashtag-pill')!;
+      anchor.dispatchEvent(
+        new MouseEvent('click', { bubbles: true, cancelable: true, composed: true }),
+      );
+      await waitUntil(
+        () => el.shadowRoot.querySelector('.bubble') !== null,
+        'Bubble should be open',
+      );
+
+      outside = document.createElement('div');
+      document.body.appendChild(outside);
+      outside.dispatchEvent(
+        new MouseEvent('click', { bubbles: true, cancelable: true, composed: true }),
+      );
+      await el.updateComplete;
+    });
+
+    afterEach(() => {
+      outside.remove();
+    });
+
+    it('should close the popover', () => {
+      const bubble = el.shadowRoot.querySelector('.bubble');
+      expect(bubble).to.be.null;
+    });
+  });
+
+  describe('when Escape is pressed while open', () => {
+    let anchor: HTMLAnchorElement;
+
+    beforeEach(async () => {
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- rendered above
+      anchor = el.shadowRoot.querySelector<HTMLAnchorElement>('a.hashtag-pill')!;
+      anchor.dispatchEvent(
+        new MouseEvent('click', { bubbles: true, cancelable: true, composed: true }),
+      );
+      await waitUntil(
+        () => el.shadowRoot.querySelector('.bubble') !== null,
+        'Bubble should be open',
+      );
+
+      document.dispatchEvent(
+        new KeyboardEvent('keydown', {
+          key: 'Escape',
+          bubbles: true,
+          cancelable: true,
+        }),
+      );
+      await el.updateComplete;
+    });
+
+    it('should close the popover', () => {
+      const bubble = el.shadowRoot.querySelector('.bubble');
+      expect(bubble).to.be.null;
+    });
   });
 
   describe('when the anchor is ctrl-clicked', () => {
-    let dispatched: Event | null;
     let clickEvent: MouseEvent;
     let anchor: HTMLAnchorElement;
 
-    beforeEach(() => {
-      dispatched = null;
-      globalThis.addEventListener(
-        'wiki-search-open',
-        (e: Event) => {
-          dispatched = e;
-        },
-        { once: true },
-      );
-
+    beforeEach(async () => {
       // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- rendered above
-      anchor = el.shadowRoot!.querySelector<HTMLAnchorElement>('a.hashtag-pill')!;
+      anchor = el.shadowRoot.querySelector<HTMLAnchorElement>('a.hashtag-pill')!;
       clickEvent = new MouseEvent('click', {
         bubbles: true,
         cancelable: true,
@@ -122,35 +292,31 @@ describe('WikiHashtag', () => {
         ctrlKey: true,
       });
       anchor.dispatchEvent(clickEvent);
-    });
-
-    it('should not dispatch a wiki-search-open event', () => {
-      expect(dispatched).to.be.null;
+      await el.updateComplete;
     });
 
     it('should not preventDefault so the browser can open in a new tab via the href', () => {
       expect(clickEvent.defaultPrevented).to.equal(false);
     });
+
+    it('should not call performSearch', () => {
+      expect(performSearchStub).to.not.have.been.called;
+    });
+
+    it('should not open the popover', () => {
+      const bubble = el.shadowRoot.querySelector('.bubble');
+      expect(bubble).to.be.null;
+    });
   });
 
   describe('when the anchor is meta-clicked', () => {
     // Cmd-click on macOS is meta-click — same "open in new tab" intent.
-    let dispatched: Event | null;
     let clickEvent: MouseEvent;
     let anchor: HTMLAnchorElement;
 
-    beforeEach(() => {
-      dispatched = null;
-      globalThis.addEventListener(
-        'wiki-search-open',
-        (e: Event) => {
-          dispatched = e;
-        },
-        { once: true },
-      );
-
+    beforeEach(async () => {
       // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- rendered above
-      anchor = el.shadowRoot!.querySelector<HTMLAnchorElement>('a.hashtag-pill')!;
+      anchor = el.shadowRoot.querySelector<HTMLAnchorElement>('a.hashtag-pill')!;
       clickEvent = new MouseEvent('click', {
         bubbles: true,
         cancelable: true,
@@ -158,35 +324,26 @@ describe('WikiHashtag', () => {
         metaKey: true,
       });
       anchor.dispatchEvent(clickEvent);
-    });
-
-    it('should not dispatch a wiki-search-open event', () => {
-      expect(dispatched).to.be.null;
+      await el.updateComplete;
     });
 
     it('should not preventDefault', () => {
       expect(clickEvent.defaultPrevented).to.equal(false);
     });
+
+    it('should not call performSearch', () => {
+      expect(performSearchStub).to.not.have.been.called;
+    });
   });
 
   describe('when the anchor is shift-clicked', () => {
     // Shift-click traditionally opens in a new window — preserve that.
-    let dispatched: Event | null;
     let clickEvent: MouseEvent;
     let anchor: HTMLAnchorElement;
 
-    beforeEach(() => {
-      dispatched = null;
-      globalThis.addEventListener(
-        'wiki-search-open',
-        (e: Event) => {
-          dispatched = e;
-        },
-        { once: true },
-      );
-
+    beforeEach(async () => {
       // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- rendered above
-      anchor = el.shadowRoot!.querySelector<HTMLAnchorElement>('a.hashtag-pill')!;
+      anchor = el.shadowRoot.querySelector<HTMLAnchorElement>('a.hashtag-pill')!;
       clickEvent = new MouseEvent('click', {
         bubbles: true,
         cancelable: true,
@@ -194,49 +351,41 @@ describe('WikiHashtag', () => {
         shiftKey: true,
       });
       anchor.dispatchEvent(clickEvent);
-    });
-
-    it('should not dispatch a wiki-search-open event', () => {
-      expect(dispatched).to.be.null;
+      await el.updateComplete;
     });
 
     it('should not preventDefault', () => {
       expect(clickEvent.defaultPrevented).to.equal(false);
     });
+
+    it('should not call performSearch', () => {
+      expect(performSearchStub).to.not.have.been.called;
+    });
   });
 
   describe('when a contextmenu event fires on the anchor', () => {
     // Right-click should open the browser's context menu, not trigger search.
-    let dispatched: Event | null;
     let contextEvent: MouseEvent;
     let anchor: HTMLAnchorElement;
 
-    beforeEach(() => {
-      dispatched = null;
-      globalThis.addEventListener(
-        'wiki-search-open',
-        (e: Event) => {
-          dispatched = e;
-        },
-        { once: true },
-      );
-
+    beforeEach(async () => {
       // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- rendered above
-      anchor = el.shadowRoot!.querySelector<HTMLAnchorElement>('a.hashtag-pill')!;
+      anchor = el.shadowRoot.querySelector<HTMLAnchorElement>('a.hashtag-pill')!;
       contextEvent = new MouseEvent('contextmenu', {
         bubbles: true,
         cancelable: true,
         composed: true,
       });
       anchor.dispatchEvent(contextEvent);
-    });
-
-    it('should not dispatch a wiki-search-open event', () => {
-      expect(dispatched).to.be.null;
+      await el.updateComplete;
     });
 
     it('should not preventDefault on the context menu event', () => {
       expect(contextEvent.defaultPrevented).to.equal(false);
+    });
+
+    it('should not call performSearch', () => {
+      expect(performSearchStub).to.not.have.been.called;
     });
   });
 
@@ -247,7 +396,7 @@ describe('WikiHashtag', () => {
       el.tag = 'urgent';
       await el.updateComplete;
       // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- rendered above
-      anchor = el.shadowRoot!.querySelector<HTMLAnchorElement>('a.hashtag-pill')!;
+      anchor = el.shadowRoot.querySelector<HTMLAnchorElement>('a.hashtag-pill')!;
     });
 
     it('should update the fallback href to the new tag', () => {
@@ -255,25 +404,18 @@ describe('WikiHashtag', () => {
     });
 
     describe('and then clicked', () => {
-      let dispatched: CustomEvent<SearchOpenDetail> | null;
-
-      beforeEach(() => {
-        dispatched = null;
-        globalThis.addEventListener(
-          'wiki-search-open',
-          (e: Event) => {
-            // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- known custom event
-            dispatched = e as CustomEvent<SearchOpenDetail>;
-          },
-          { once: true },
-        );
+      beforeEach(async () => {
         anchor.dispatchEvent(
           new MouseEvent('click', { bubbles: true, cancelable: true, composed: true }),
         );
+        await waitUntil(
+          () => el.shadowRoot.querySelector('.bubble') !== null,
+          'Bubble should open',
+        );
       });
 
-      it('should dispatch the new tag in the query', () => {
-        expect(dispatched?.detail.query).to.equal('#urgent');
+      it('should call performSearch with the new tag', () => {
+        expect(performSearchStub).to.have.been.calledWith('#urgent');
       });
     });
   });

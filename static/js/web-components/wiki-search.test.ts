@@ -4,7 +4,6 @@ import './wiki-search.js';
 import type { SearchResult } from '../gen/api/v1/search_pb.js';
 import type {
   InventoryFilterChangedEventDetail,
-  WikiSearchOpenEventDetail,
 } from './event-types.js';
 import type { AugmentedError } from './augment-error-service.js';
 
@@ -18,7 +17,6 @@ interface WikiSearchElement extends HTMLElement {
   inventoryOnly: boolean;
   totalUnfilteredCount: number;
   _handleKeydown: (event: KeyboardEvent) => void;
-  _handleSearchOpen: (event: CustomEvent<WikiSearchOpenEventDetail>) => Promise<void>;
   handleFormSubmit: (event: Event) => Promise<void>;
   handleInventoryFilterChanged: (event: CustomEvent<InventoryFilterChangedEventDetail>) => Promise<void>;
   handleSearchInputFocused: (event: Event) => void;
@@ -179,10 +177,6 @@ describe('WikiSearch', () => {
     it('should add keydown event listener', () => {
       expect(addEventListenerSpy).to.have.been.calledWith('keydown', el._handleKeydown);
     });
-
-    it('should add wiki-search-open event listener', () => {
-      expect(addEventListenerSpy).to.have.been.calledWith('wiki-search-open', el._handleSearchOpen);
-    });
   });
 
   describe('when component is disconnected from DOM', () => {
@@ -202,109 +196,6 @@ describe('WikiSearch', () => {
 
     it('should remove keydown event listener', () => {
       expect(removeEventListenerSpy).to.have.been.calledWith('keydown', el._handleKeydown);
-    });
-
-    it('should remove wiki-search-open event listener', () => {
-      expect(removeEventListenerSpy).to.have.been.calledWith('wiki-search-open', el._handleSearchOpen);
-    });
-  });
-
-  describe('when a wiki-search-open event is dispatched on window', () => {
-    let stubPerformSearch: sinon.SinonStub;
-    const mockResults: SearchResult[] = [
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- minimal mock
-      { identifier: 'tagged-page', title: 'Tagged' } as SearchResult,
-    ];
-
-    beforeEach(async () => {
-      stubPerformSearch = sinon.stub(el, 'performSearch');
-      stubPerformSearch.resolves({ results: mockResults, totalUnfilteredCount: 1 });
-
-      const event = new CustomEvent('wiki-search-open', {
-        detail: { query: '#groceries' },
-        bubbles: true,
-        composed: true,
-      });
-      window.dispatchEvent(event);
-      await waitUntil(() => !el.loading, 'Search should complete');
-      await el.updateComplete;
-    });
-
-    afterEach(() => {
-      stubPerformSearch.restore();
-    });
-
-    it('should run the search with the supplied query', () => {
-      expect(stubPerformSearch).to.have.been.calledWith('#groceries');
-    });
-
-    it('should populate results from the search response', () => {
-      expect(el.results.length).to.equal(1);
-      expect(el.results[0]?.identifier).to.equal('tagged-page');
-    });
-
-    it('should reflect the query into the visible search input', () => {
-      const searchInput = el.shadowRoot?.querySelector<HTMLInputElement>('input[type="search"]');
-      expect(searchInput?.value).to.equal('#groceries');
-    });
-
-    it('should clear loading state when finished', () => {
-      expect(el.loading).to.equal(false);
-    });
-  });
-
-  describe('when a wiki-search-open event has an empty query', () => {
-    let stubPerformSearch: sinon.SinonStub;
-
-    beforeEach(async () => {
-      stubPerformSearch = sinon.stub(el, 'performSearch');
-      stubPerformSearch.resolves({ results: [], totalUnfilteredCount: 0 });
-
-      const event = new CustomEvent('wiki-search-open', {
-        detail: { query: '   ' },
-        bubbles: true,
-        composed: true,
-      });
-      window.dispatchEvent(event);
-      await el.updateComplete;
-    });
-
-    afterEach(() => {
-      stubPerformSearch.restore();
-    });
-
-    it('should not run a search', () => {
-      expect(stubPerformSearch).to.not.have.been.called;
-    });
-  });
-
-  describe('when a wiki-search-open search throws', () => {
-    let stubPerformSearch: sinon.SinonStub;
-
-    beforeEach(async () => {
-      stubPerformSearch = sinon.stub(el, 'performSearch');
-      stubPerformSearch.rejects(new Error('boom'));
-
-      const event = new CustomEvent('wiki-search-open', {
-        detail: { query: '#urgent' },
-        bubbles: true,
-        composed: true,
-      });
-      window.dispatchEvent(event);
-      await waitUntil(() => el.error?.message === 'boom', 'Error should be set');
-      await el.updateComplete;
-    });
-
-    afterEach(() => {
-      stubPerformSearch.restore();
-    });
-
-    it('should set the error property on the component', () => {
-      expect(el.error?.message).to.equal('boom');
-    });
-
-    it('should clear the results', () => {
-      expect(el.results).to.deep.equal([]);
     });
   });
 
