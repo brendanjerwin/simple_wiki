@@ -140,7 +140,7 @@ describe('FrontmatterEditorDialog', () => {
     let closeDialogSpy: sinon.SinonSpy;
 
     beforeEach(async () => {
-      closeDialogSpy = sinon.spy(el, 'closeDialog');
+      closeDialogSpy = sinon.spy(el, '_closeDialog' as keyof typeof el);
       el.openDialog('test-page');
       await Promise.race([
         el.updateComplete,
@@ -156,7 +156,7 @@ describe('FrontmatterEditorDialog', () => {
       ]);
     });
 
-    it('should call closeDialog', () => {
+    it('should call _closeDialog', () => {
       expect(closeDialogSpy).to.have.been.calledOnce;
     });
   });

@@ -67,7 +67,7 @@ describe('PageImportDialog', () => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (el as any).file = new File(['test'], 'test.csv', { type: 'text/csv' });
         await el.updateComplete;
-        el.closeDialog();
+        el.close();
         el.openDialog();
         await el.updateComplete;
       });
@@ -89,12 +89,12 @@ describe('PageImportDialog', () => {
     });
   });
 
-  describe('closeDialog', () => {
+  describe('close', () => {
     describe('when called', () => {
       beforeEach(async () => {
         el.openDialog();
         await el.updateComplete;
-        el.closeDialog();
+        el.close();
       });
 
       it('should set open to false', () => {
@@ -139,7 +139,7 @@ describe('PageImportDialog', () => {
       let closeDialogSpy: sinon.SinonSpy;
 
       beforeEach(async () => {
-        closeDialogSpy = sinon.spy(el, 'closeDialog');
+        closeDialogSpy = sinon.spy(el, '_closeDialog' as keyof typeof el);
         el.openDialog();
         await el.updateComplete;
         const closeBtn = el.shadowRoot?.querySelector<HTMLButtonElement>('[aria-label="Close dialog"]');
@@ -158,16 +158,34 @@ describe('PageImportDialog', () => {
       let closeDialogSpy: sinon.SinonSpy;
 
       beforeEach(async () => {
-        closeDialogSpy = sinon.spy(el, 'closeDialog');
+        closeDialogSpy = sinon.spy(el, '_closeDialog' as keyof typeof el);
         el.openDialog();
         await el.updateComplete;
-        const dialog = el.shadowRoot?.querySelector<HTMLElement>('dialog');
-        expect(dialog).to.exist;
-        dialog!.click();
+        // Click a child element inside the dialog (not the backdrop area)
+        const header = el.shadowRoot?.querySelector<HTMLElement>('.dialog-header');
+        expect(header).to.exist;
+        header!.click();
       });
 
       it('should not close the dialog', () => {
         expect(closeDialogSpy).to.not.have.been.called;
+      });
+    });
+
+    describe('when backdrop is clicked', () => {
+      beforeEach(async () => {
+        el.openDialog();
+        await el.updateComplete;
+        // Simulate a backdrop click by dispatching a click event directly on the dialog element.
+        // When the native dialog backdrop is clicked, the browser fires a click event on the
+        // dialog element itself with target === dialog (not a child element).
+        const dialog = el.shadowRoot?.querySelector('dialog') as HTMLDialogElement;
+        dialog.dispatchEvent(new MouseEvent('click', { bubbles: false }));
+        await el.updateComplete;
+      });
+
+      it('should close the dialog', () => {
+        expect(el.open).to.be.false;
       });
     });
   });
@@ -469,7 +487,7 @@ describe('PageImportDialog', () => {
       let closeDialogSpy: sinon.SinonSpy;
 
       beforeEach(async () => {
-        closeDialogSpy = sinon.spy(el, 'closeDialog');
+        closeDialogSpy = sinon.spy(el, '_closeDialog' as keyof typeof el);
         el.openDialog();
         await el.updateComplete;
         // Use .footer selector to avoid matching the "Select CSV File" button

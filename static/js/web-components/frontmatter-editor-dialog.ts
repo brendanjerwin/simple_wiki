@@ -14,16 +14,16 @@ import type { SectionChangeEventDetail } from './event-types.js';
 
 /**
  * FrontmatterEditorDialog - A modal dialog for editing page frontmatter metadata
- * 
+ *
  * WORKING THEORY:
  * This component manages the complete lifecycle of frontmatter editing through several key state variables:
- * 
+ *
  * - `frontmatter`: The original server response containing the current frontmatter data (read-only)
  * - `workingFrontmatter`: A mutable working copy of the frontmatter data that users can edit
  * - `loading`: Indicates whether the component is fetching data from the server
  * - `augmentedError`: Contains any error message from server operations
- * - `open`: Controls the visibility state of the modal dialog
- * 
+ * - `open`: Controls the visibility state of the modal dialog (provided by NativeDialogMixin)
+ *
  * DATA FLOW:
  * 1. When opened, the dialog fetches current frontmatter via gRPC and stores it in `frontmatter`
  * 2. The frontmatter field (already a JsonObject in protobuf-es v2) is directly cast to a plain object
@@ -31,7 +31,7 @@ import type { SectionChangeEventDetail } from './event-types.js';
  * 4. The frontmatter-value-section component renders and manages all field editing operations
  * 5. All user modifications update `workingFrontmatter` while preserving the original `frontmatter`
  * 6. On save, `workingFrontmatter` is cast back to JsonObject and sent to the server; on cancel, changes are discarded
- * 
+ *
  * COMPONENT ARCHITECTURE:
  * The dialog uses a hierarchical component structure:
  * - frontmatter-value-section: Root container that handles the main frontmatter object
@@ -40,7 +40,7 @@ import type { SectionChangeEventDetail } from './event-types.js';
  * - frontmatter-value-string: Handles individual string fields
  * - frontmatter-value-array: Manages arrays of string values
  * - frontmatter-add-field-button: Provides dropdown for adding new fields/arrays/sections
- * 
+ *
  * This separation allows for clean state management, proper event bubbling, and maintainable code.
  */
 export class FrontmatterEditorDialog extends NativeDialogMixin(LitElement) {
@@ -180,22 +180,26 @@ export class FrontmatterEditorDialog extends NativeDialogMixin(LitElement) {
     this.requestUpdate();
   };
 
+  private readonly _handleCancel = (): void => {
+    this._closeDialog();
+  };
+
   public openDialog(page: string): void {
     this.page = page;
     this.open = true;
     this.loadFrontmatter();
   }
 
-  override closeDialog(): void {
+  public close(): void {
+    this._closeDialog();
+  }
+
+  protected _closeDialog(): void {
+    this.open = false;
     this.frontmatter = undefined;
     this.augmentedError = undefined;
     this.loading = false;
     this.saving = false;
-    super.closeDialog();
-  }
-
-  public close(): void {
-    this.closeDialog();
   }
 
   public async loadFrontmatter(): Promise<void> {
@@ -295,16 +299,16 @@ export class FrontmatterEditorDialog extends NativeDialogMixin(LitElement) {
   override render() {
     return html`
       ${sharedStyles}
-      <dialog aria-labelledby="frontmatter-dialog-title" @cancel="${this._handleDialogCancel}">
+      <dialog aria-labelledby="frontmatter-dialog-title" @cancel="${this._handleDialogCancel}" @click="${this._handleDialogClick}">
         <div class="dialog-header system-font">
           <h2 id="frontmatter-dialog-title" class="dialog-title">Edit Frontmatter</h2>
-          <button class="button-base icon-button" aria-label="Close dialog" @click="${this.closeDialog}" ?disabled="${this.saving}">×</button>
+          <button class="button-base icon-button" aria-label="Close dialog" @click="${this._handleCancel}" ?disabled="${this.saving}">×</button>
         </div>
         <div class="content">
           ${this._renderContent()}
         </div>
         <div class="footer">
-          <button class="button-base button-secondary button-large border-radius-small" @click="${this.closeDialog}" ?disabled="${this.saving}">
+          <button class="button-base button-secondary button-large border-radius-small" @click="${this._handleCancel}" ?disabled="${this.saving}">
             Cancel
           </button>
           <button class="button-base button-primary button-large border-radius-small" @click="${this._handleSaveClick}" ?disabled="${this.saving || this.loading}">

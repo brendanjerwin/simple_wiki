@@ -3,6 +3,7 @@ import { property, state } from 'lit/decorators.js';
 import type { JsonObject } from '@bufbuild/protobuf';
 import { sharedStyles, dialogStyles } from './shared-styles.js';
 import { PageCreator } from './page-creator.js';
+import { NativeDialogMixin } from './native-dialog-mixin.js';
 import type { TemplateInfo } from '../gen/api/v1/page_management_pb.js';
 import type { AutomagicIdentifierInput, GenerateIdentifierResult } from './automagic-identifier-input.js';
 import { AugmentErrorService, type AugmentedError } from './augment-error-service.js';
@@ -31,51 +32,10 @@ const NONE_TEMPLATE_VALUE = '';
  *
  * @fires page-created - Dispatched when page is created. Detail: { identifier, title, markdownLink }
  */
-export class InsertNewPageDialog extends LitElement {
+export class InsertNewPageDialog extends NativeDialogMixin(LitElement) {
   static override readonly styles = dialogStyles(css`
-    :host {
-      position: fixed;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      z-index: var(--z-modal);
-      display: none;
-    }
-
-    :host([open]) {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      animation: fadeIn 0.2s ease-out;
-    }
-
-    .backdrop {
-      position: fixed;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      background: rgba(0, 0, 0, 0.5);
-    }
-
-    .dialog {
-      background: white;
+    dialog {
       max-width: 600px;
-      width: 90%;
-      max-height: 90vh;
-      display: flex;
-      flex-direction: column;
-      position: relative;
-      z-index: 1;
-      animation: slideIn 0.2s ease-out;
-      border-radius: 8px;
-    }
-
-    .content {
-      padding: 20px;
-      overflow-y: auto;
-      flex: 1;
     }
 
     .error-message {
@@ -139,17 +99,7 @@ export class InsertNewPageDialog extends LitElement {
       text-align: center;
     }
 
-    .footer {
-      display: flex;
-      gap: 12px;
-      padding: 16px 20px;
-      border-top: 1px solid var(--color-border-subtle);
-      justify-content: flex-end;
-    }
   `);
-
-  @property({ type: Boolean, reflect: true })
-  declare open: boolean;
 
   @property({ type: String })
   declare pageTitle: string;
@@ -188,7 +138,6 @@ export class InsertNewPageDialog extends LitElement {
 
   constructor() {
     super();
-    this.open = false;
     this.pageTitle = '';
     this.pageIdentifier = '';
     this.isUnique = true;
@@ -202,21 +151,9 @@ export class InsertNewPageDialog extends LitElement {
     this.frontmatterDirty = false;
   }
 
-  override connectedCallback(): void {
-    super.connectedCallback();
-    document.addEventListener('keydown', this._handleKeydown);
+  protected _closeDialog(): void {
+    this.close();
   }
-
-  override disconnectedCallback(): void {
-    super.disconnectedCallback();
-    document.removeEventListener('keydown', this._handleKeydown);
-  }
-
-  private readonly _handleKeydown = (event: KeyboardEvent): void => {
-    if (event.key === 'Escape' && this.open) {
-      this.close();
-    }
-  };
 
   public async openDialog(): Promise<void> {
     this._resetState();
@@ -259,14 +196,6 @@ export class InsertNewPageDialog extends LitElement {
       this.templates = result.templates;
     }
   }
-
-  private readonly _handleBackdropClick = (): void => {
-    this.close();
-  };
-
-  private readonly _handleDialogClick = (event: Event): void => {
-    event.stopPropagation();
-  };
 
   /**
    * Adapter function to call PageCreator.generateIdentifier
@@ -480,10 +409,14 @@ export class InsertNewPageDialog extends LitElement {
   override render() {
     return html`
       ${sharedStyles}
-      <div class="backdrop" @click=${this._handleBackdropClick}></div>
-      <div class="dialog system-font border-radius box-shadow" @click=${this._handleDialogClick}>
+      <dialog
+        aria-labelledby="insert-new-page-dialog-title"
+        @cancel=${this._handleDialogCancel}
+        @click=${this._handleDialogClick}
+        class="system-font"
+      >
         <div class="dialog-header">
-          <h2 class="dialog-title">Insert New Page</h2>
+          <h2 id="insert-new-page-dialog-title" class="dialog-title">Insert New Page</h2>
         </div>
 
         <div class="content">
@@ -522,7 +455,7 @@ export class InsertNewPageDialog extends LitElement {
             ${this.loading ? 'Creating...' : 'Create Page'}
           </button>
         </div>
-      </div>
+      </dialog>
     `;
   }
 }

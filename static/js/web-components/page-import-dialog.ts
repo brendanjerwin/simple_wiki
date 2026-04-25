@@ -571,9 +571,13 @@ export class PageImportDialog extends NativeDialogMixin(LitElement) {
     this.resetState();
   }
 
-  override closeDialog(): void {
+  public close(): void {
+    this._closeDialog();
+  }
+
+  protected _closeDialog(): void {
     this._streamAbortController?.abort();
-    super.closeDialog();
+    this.open = false;
   }
 
   private resetState(): void {
@@ -1135,7 +1139,7 @@ export class PageImportDialog extends NativeDialogMixin(LitElement) {
         return html`
           <button
             class="button-base button-secondary button-large border-radius-small"
-            @click=${this.closeDialog}
+            @click=${this._closeDialog}
           >
             Cancel
           </button>
@@ -1153,7 +1157,7 @@ export class PageImportDialog extends NativeDialogMixin(LitElement) {
         return html`
           <button
             class="button-base button-secondary button-large border-radius-small"
-            @click=${this.closeDialog}
+            @click=${this._closeDialog}
           >
             Close
           </button>
@@ -1162,7 +1166,7 @@ export class PageImportDialog extends NativeDialogMixin(LitElement) {
         return html`
           <button
             class="button-base button-secondary button-large border-radius-small"
-            @click=${this.closeDialog}
+            @click=${this._closeDialog}
           >
             Cancel
           </button>
@@ -1193,10 +1197,10 @@ export class PageImportDialog extends NativeDialogMixin(LitElement) {
   override render() {
     return html`
       ${sharedStyles}
-      <dialog aria-labelledby="page-import-dialog-title" @cancel="${this._handleDialogCancel}">
+      <dialog aria-labelledby="page-import-dialog-title" @cancel="${this._handleDialogCancel}" @click="${this._handleDialogClick}">
         <div class="dialog-header system-font">
           <h2 id="page-import-dialog-title" class="dialog-title">${this._getDialogTitle()}</h2>
-          <button class="button-base icon-button" aria-label="Close dialog" @click="${this.closeDialog}">×</button>
+          <button class="button-base icon-button" aria-label="Close dialog" @click="${this._closeDialog}">×</button>
         </div>
         <div class="content">${this._renderContent()}</div>
         <div class="footer">${this._renderFooter()}</div>
