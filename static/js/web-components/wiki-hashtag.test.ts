@@ -1,6 +1,6 @@
 import { html, fixture, expect, waitUntil } from '@open-wc/testing';
 import sinon from 'sinon';
-import './wiki-hashtag.js';
+import { displayTitle } from './wiki-hashtag.js';
 import type { SearchResult } from '../gen/api/v1/search_pb.js';
 
 interface WikiHashtagElement extends HTMLElement {
@@ -9,6 +9,29 @@ interface WikiHashtagElement extends HTMLElement {
   updateComplete: Promise<boolean>;
   shadowRoot: ShadowRoot;
 }
+
+describe('displayTitle', () => {
+  it('returns the frontmatter title when one is set', () => {
+    expect(displayTitle({ identifier: 'p', title: 'Real Title' })).to.equal('Real Title');
+  });
+
+  it('humanizes the identifier when title is empty', () => {
+    expect(displayTitle({ identifier: 'home_lab', title: '' })).to.equal('Home Lab');
+  });
+
+  it('humanizes the identifier when title equals identifier', () => {
+    expect(displayTitle({ identifier: 'home_lab', title: 'home_lab' })).to.equal('Home Lab');
+  });
+
+  it('handles hyphens, mixed separators, and capitalization', () => {
+    expect(displayTitle({ identifier: 'engineering-blog', title: '' })).to.equal('Engineering Blog');
+    expect(displayTitle({ identifier: 'foo_bar-baz', title: '' })).to.equal('Foo Bar Baz');
+  });
+
+  it('trims whitespace from titles before comparing to identifier', () => {
+    expect(displayTitle({ identifier: 'p', title: '  ' })).to.equal('P');
+  });
+});
 
 describe('WikiHashtag', () => {
   let el: WikiHashtagElement;
@@ -99,6 +122,29 @@ describe('WikiHashtag', () => {
       expect(links.length).to.equal(1);
       expect(links[0]?.getAttribute('href')).to.equal('/tagged-page');
       expect(links[0]?.textContent?.trim()).to.equal('Tagged Page');
+    });
+  });
+
+  describe('when results have no real title (server fell back to identifier)', () => {
+    beforeEach(async () => {
+      performSearchStub.reset();
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- minimal mock for tests
+      performSearchStub.resolves([
+        { identifier: 'home_lab', title: 'home_lab' } as SearchResult,
+        { identifier: 'engineering-blog', title: '' } as SearchResult,
+      ]);
+
+      const anchor = el.shadowRoot.querySelector('a.hashtag-pill') as HTMLAnchorElement;
+      anchor.click();
+      await waitUntil(() => performSearchStub.called);
+      await el.updateComplete;
+    });
+
+    it('should humanize the identifier instead of showing the raw form', () => {
+      const links = el.shadowRoot.querySelectorAll('.bubble-list a');
+      expect(links.length).to.equal(2);
+      expect(links[0]?.textContent?.trim()).to.equal('Home Lab');
+      expect(links[1]?.textContent?.trim()).to.equal('Engineering Blog');
     });
   });
 

@@ -297,7 +297,7 @@ export class WikiHashtag extends LitElement {
         ${this._results.map(
           (result) => html`
             <li>
-              <a href="/${result.identifier}">${result.title || result.identifier}</a>
+              <a href="/${result.identifier}">${displayTitle(result)}</a>
             </li>
           `,
         )}
@@ -329,6 +329,43 @@ export class WikiHashtag extends LitElement {
         @click="${this.handleClick}"
       ><slot></slot></a>${this.renderBubble()}`;
   }
+}
+
+/**
+ * Pick the user-facing display string for a search result.
+ *
+ * The server falls back `result.title` to `result.identifier` when no
+ * frontmatter title is set, so a naive `result.title || result.identifier`
+ * always shows the raw identifier (e.g. `home_lab`) for pages without an
+ * explicit title. Detect that case and humanize the identifier into a
+ * readable form (`Home Lab`) so the popover surfaces real titles when they
+ * exist and a friendly fallback when they don't.
+ *
+ * Mirrors the title-or-humanized-identifier convention used by the
+ * `LinkTo` template function in `templating/templating.go`.
+ */
+export function displayTitle(result: { title?: string; identifier: string }): string {
+  const rawTitle = (result.title ?? '').trim();
+  const id = result.identifier;
+  if (rawTitle !== '' && rawTitle !== id) {
+    return rawTitle;
+  }
+  return humanizeIdentifier(id);
+}
+
+/**
+ * Convert an identifier like `home_lab` or `engineering-blog` into a
+ * Title-Cased phrase (`Home Lab`, `Engineering Blog`).
+ */
+function humanizeIdentifier(id: string): string {
+  if (!id) return id;
+  return id
+    .replace(/[-_]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .split(' ')
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(' ');
 }
 
 customElements.define('wiki-hashtag', WikiHashtag);
