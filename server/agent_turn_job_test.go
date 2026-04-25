@@ -154,4 +154,25 @@ var _ = Describe("AgentTurnJob", func() {
 			Expect(job.Execute()).To(Succeed())
 		})
 	})
+
+	Describe("Execute when the schedule is already RUNNING (single-in-flight guard)", func() {
+		BeforeEach(func() {
+			// Manually drive the schedule into RUNNING the same way a prior
+			// fire would have.
+			Expect(store.TransitionStatus("p", "s1",
+				apiv1.ScheduleStatus_SCHEDULE_STATUS_RUNNING, "", 0)).To(Succeed())
+
+			job = server.NewAgentTurnJob(store, dispatcher, "p", "s1", 5*time.Second)
+			Expect(job.Execute()).To(Succeed())
+		})
+
+		It("should not dispatch a second turn", func() {
+			Expect(dispatcher.dispatched).To(BeEmpty())
+		})
+
+		It("should leave the schedule in RUNNING (no spurious transition)", func() {
+			schedules, _ := store.List("p")
+			Expect(schedules[0].GetLastStatus()).To(Equal(apiv1.ScheduleStatus_SCHEDULE_STATUS_RUNNING))
+		})
+	})
 })

@@ -91,6 +91,19 @@ func (j *AgentTurnJob) Execute() error {
 		return nil
 	}
 
+	// Single-in-flight: skip this fire when the schedule is already RUNNING. A
+	// stuck RUNNING (e.g. the pool died mid-turn) eventually clears via
+	// awaitOutcome's hard timeout, after which the next cron fire proceeds.
+	// Without this guard, overlapping fires dispatch a new turn but then fail
+	// the RUNNING -> RUNNING state-machine transition, leaving the new
+	// dispatch's completion channel orphaned and the schedule status frozen
+	// at the original RUNNING.
+	if snapshot.GetLastStatus() == apiv1.ScheduleStatus_SCHEDULE_STATUS_RUNNING {
+		slog.Info("agent turn: skipping fire — previous run still in flight",
+			logKeyPage, j.page, logKeyScheduleID, j.scheduleID)
+		return nil
+	}
+
 	// Pre-flight Dispatch so we can fail fast (and skip the RUNNING transition)
 	// if no pool is connected.
 	requestID := uuid.NewString()

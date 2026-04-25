@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"os"
+	"os/exec"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -230,7 +232,7 @@ func (d *poolDaemon) executeScheduledTurn(ctx context.Context, req *apiv1.Schedu
 	turnCtx, cancelTurn := context.WithCancel(ctx)
 	defer cancelTurn()
 
-	conn, cleanup, spawnErr := d.spawnEphemeralForScheduledTurn(turnCtx, req.GetPage(), req.GetMaxTurns(), cancelTurn)
+	conn, cleanup, spawnErr := d.spawnEphemeralForScheduledTurn(turnCtx, req.GetPage(), req.GetRequestId(), req.GetMaxTurns(), cancelTurn)
 	if spawnErr != nil {
 		return apiv1.ScheduleStatus_SCHEDULE_STATUS_ERROR, fmt.Sprintf("spawn failed: %v", spawnErr)
 	}
@@ -268,8 +270,15 @@ type scheduledEphemeralConnection struct {
 // spawnEphemeralForScheduledTurn spawns a one-shot ACP agent for a scheduled
 // turn. Unlike the chat path, the resulting instance is NOT added to
 // d.instances — it lives only for the duration of one Prompt call.
-func (d *poolDaemon) spawnEphemeralForScheduledTurn(ctx context.Context, page string, maxTurns int32, cancelTurn context.CancelFunc) (*scheduledEphemeralConnection, func(), error) {
-	cmd := d.buildAgentCmd(ctx, page)
+//
+// Each ephemeral spawn uses a UNIQUE systemd unit name
+// ("wiki-scheduled-<page>-<short-request-id>") so concurrent fires and
+// collisions with the per-page interactive chat unit ("wiki-chat-<page>")
+// are avoided. The earlier code reused buildAgentCmd which always
+// stop+restart's wiki-chat-<page>.scope — that killed both interactive
+// chat instances and competing scheduled turns mid-turn.
+func (d *poolDaemon) spawnEphemeralForScheduledTurn(ctx context.Context, page, requestID string, maxTurns int32, cancelTurn context.CancelFunc) (*scheduledEphemeralConnection, func(), error) {
+	cmd := d.buildScheduledTurnAgentCmd(ctx, page, requestID)
 	stdinPipe, err := cmd.StdinPipe()
 	if err != nil {
 		return nil, func() {}, fmt.Errorf("stdin pipe: %w", err)
@@ -322,4 +331,51 @@ func (d *poolDaemon) spawnEphemeralForScheduledTurn(ctx context.Context, page st
 		sessionID:  sess.SessionId,
 		client:     client,
 	}, cleanup, nil
+}
+
+// scheduledTurnUnitPrefix is the unit-name prefix for ephemeral
+// scheduled-turn systemd scope units. Distinct from the chat path's
+// "wiki-chat-<page>" prefix so concurrent scheduled turns and interactive
+// chats on the same page don't kill each other.
+const scheduledTurnUnitPrefix = "wiki-scheduled-"
+
+// scheduledTurnRequestIDInUnit is how many characters of the request_id we
+// embed in the systemd unit name. Full UUIDs would push the unit name past
+// the 256-char systemd limit on some pages.
+const scheduledTurnRequestIDInUnit = 8
+
+// buildScheduledTurnAgentCmd constructs the exec.Cmd for one ephemeral
+// scheduled-turn agent. Mirrors buildAgentCmd's systemd vs. plain exec
+// behavior, with two important differences:
+//
+//   - Unit name is "wiki-scheduled-<sanitized-page>-<short-request-id>"
+//     (unique per fire) so concurrent scheduled turns and the per-page
+//     interactive chat unit ("wiki-chat-<page>") cannot collide.
+//   - The working directory is pinned to the daemon's cwd so the
+//     ephemeral agent inherits the same shell env (1Password tokens,
+//     ~/.claude config, etc.) the long-lived interactive instances see.
+func (d *poolDaemon) buildScheduledTurnAgentCmd(ctx context.Context, page, requestID string) *exec.Cmd {
+	shortID := requestID
+	if len(shortID) > scheduledTurnRequestIDInUnit {
+		shortID = shortID[:scheduledTurnRequestIDInUnit]
+	}
+	if d.useSystemd {
+		unitName := scheduledTurnUnitPrefix + sanitizeUnitName(page) + "-" + shortID
+		// Pin cwd so 1Password / claude config / agent CLAUDE.md are found
+		// the same way the interactive chat instances find them.
+		cwd, _ := os.Getwd()
+		args := []string{
+			"--user",
+			"--unit=" + unitName,
+			"--scope",
+		}
+		if cwd != "" {
+			args = append(args, "--working-directory="+cwd)
+		}
+		args = append(args, d.agentPath)
+		return exec.CommandContext(ctx, "systemd-run", args...)
+	}
+	cmd := exec.CommandContext(ctx, d.agentPath)
+	cmd.Stderr = newPrefixWriter(os.Stderr, page)
+	return cmd
 }
