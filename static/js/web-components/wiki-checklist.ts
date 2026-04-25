@@ -649,10 +649,15 @@ export class WikiChecklist extends LitElement implements DragReorderHandler {
 
   private async _handleDeleteChecked(): Promise<void> {
     const checkedItems = this.items.filter(item => item.checked);
+    // Sequential because OCC: each DeleteItem advances Checklist.updated_at,
+    // and the next call must send the post-delete value as expected_updated_at.
+    // Promise.all would race — all N requests would send the same pre-bulk
+    // ETag and only the first would succeed. A bulk DeleteItems RPC could
+    // serve this in one round-trip; not worth adding for the case where
+    // checked-item counts are typically small (<10).
     for (const item of checkedItems) {
       const previousItems = this.items;
       this.items = this.items.filter(it => it.uid !== item.uid);
-      // Sequential deletes — each one bumps updated_at, so we can't fan out.
       await this._callMutation(
         async expectedUpdatedAt => this.client.deleteItem(create(DeleteItemRequestSchema, {
           page: this.page,

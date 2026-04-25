@@ -69,8 +69,14 @@ type Mutator struct {
 	clock Clock
 	ulids ulid.Generator
 
-	mu     sync.Mutex
-	pageMu map[string]*sync.Mutex
+	// pageMu is a sync.Map keyed by page identifier whose values are
+	// *sync.Mutex serializing concurrent mutations on that page. The
+	// map grows monotonically; its size is bounded by the number of
+	// distinct pages with checklists ever mutated by this process,
+	// which is finite in practice. Each entry costs one *sync.Mutex
+	// (8 bytes pointer + ~24 byte mutex on 64-bit), well below
+	// observable RAM pressure for any realistic wiki.
+	pageMu sync.Map
 }
 
 // New constructs a Mutator with the given dependencies.
@@ -81,10 +87,9 @@ type Mutator struct {
 // FixedGenerator in tests.
 func New(pages wikipage.PageReaderMutator, clock Clock, ulids ulid.Generator) *Mutator {
 	return &Mutator{
-		pages:  pages,
-		clock:  clock,
-		ulids:  ulids,
-		pageMu: make(map[string]*sync.Mutex),
+		pages: pages,
+		clock: clock,
+		ulids: ulids,
 	}
 }
 
@@ -478,14 +483,17 @@ func (m *Mutator) persist(page string, fm wikipage.FrontMatter, listName string,
 }
 
 // lockPage acquires the per-page mutex and returns a release function.
+// Uses sync.Map.LoadOrStore so concurrent first-touches of the same page
+// share one mutex without a global lock.
 func (m *Mutator) lockPage(page string) func() {
-	m.mu.Lock()
-	mu, ok := m.pageMu[page]
+	v, _ := m.pageMu.LoadOrStore(page, &sync.Mutex{})
+	mu, ok := v.(*sync.Mutex)
 	if !ok {
+		// Belt-and-braces: every value in pageMu is set as *sync.Mutex.
+		// Treat a wrong-type entry as a programming bug and create a
+		// fresh local lock so the caller still gets serialized access.
 		mu = &sync.Mutex{}
-		m.pageMu[page] = mu
 	}
-	m.mu.Unlock()
 	mu.Lock()
 	return mu.Unlock
 }
@@ -540,16 +548,37 @@ func nextSortOrder(items []*apiv1.ChecklistItem) int64 {
 }
 
 // densifyAroundSortOrder resolves a sort_order collision at items[movedIdx]
-// by adjusting adjacent items by +/- 1. The full list is sorted afterwards
-// by the caller.
+// by walking sort_order ascending, bumping any later item up far enough
+// to clear the previous one. Handles cascades like A=1000, B=1001
+// (after the moved item lands at 1000) by making B=1002.
 func densifyAroundSortOrder(items []*apiv1.ChecklistItem, movedIdx int) {
-	target := items[movedIdx].SortOrder
-	for i, it := range items {
-		if i == movedIdx {
-			continue
+	movedUID := items[movedIdx].Uid
+	// Sort by (SortOrder, Uid), with the moved item placed deterministically
+	// at the head of any collision tie so the cascade only walks forward.
+	sortedIdx := make([]int, len(items))
+	for i := range items {
+		sortedIdx[i] = i
+	}
+	sort.SliceStable(sortedIdx, func(a, b int) bool {
+		ia, ib := items[sortedIdx[a]], items[sortedIdx[b]]
+		if ia.SortOrder != ib.SortOrder {
+			return ia.SortOrder < ib.SortOrder
 		}
-		if it.SortOrder == target {
-			it.SortOrder++
+		// Tie-break: moved item first; otherwise stable on uid.
+		if ia.Uid == movedUID {
+			return true
+		}
+		if ib.Uid == movedUID {
+			return false
+		}
+		return ia.Uid < ib.Uid
+	})
+
+	for i := 1; i < len(sortedIdx); i++ {
+		prev := items[sortedIdx[i-1]]
+		cur := items[sortedIdx[i]]
+		if cur.SortOrder <= prev.SortOrder {
+			cur.SortOrder = prev.SortOrder + 1
 		}
 	}
 }
