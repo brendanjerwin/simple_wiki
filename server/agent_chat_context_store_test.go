@@ -102,6 +102,111 @@ var _ = Describe("AgentChatContextStore", func() {
 		})
 	})
 
+	Describe("UpdateMerge error handling", func() {
+		Describe("when WriteFrontMatter returns an error", func() {
+			var err error
+
+			BeforeEach(func() {
+				errStore := &errorPageStore{writeErr: errors.New("disk full")}
+				bad := server.NewAgentChatContextStore(errStore)
+				_, err = bad.UpdateMerge("p", &apiv1.ChatContext{
+					LastConversationSummary: "hello",
+				})
+			})
+
+			It("should return an error", func() {
+				Expect(err).To(HaveOccurred())
+			})
+
+			It("should wrap the error with write frontmatter context", func() {
+				Expect(err.Error()).To(ContainSubstring("write frontmatter"))
+			})
+		})
+	})
+
+	Describe("AppendBackgroundActivityAutomatic error handling", func() {
+		Describe("when ReadFrontMatter returns an error", func() {
+			var err error
+
+			BeforeEach(func() {
+				errStore := &errorPageStore{readErr: errors.New("disk on fire")}
+				bad := server.NewAgentChatContextStore(errStore)
+				err = bad.AppendBackgroundActivityAutomatic("p", &apiv1.BackgroundActivityEntry{
+					Timestamp:  timestamppb.New(time.Now()),
+					ScheduleId: "s1",
+					Status:     apiv1.ScheduleStatus_SCHEDULE_STATUS_OK,
+				})
+			})
+
+			It("should return an error", func() {
+				Expect(err).To(HaveOccurred())
+			})
+
+			It("should wrap the error with read frontmatter context", func() {
+				Expect(err.Error()).To(ContainSubstring("read frontmatter"))
+			})
+		})
+
+		Describe("when WriteFrontMatter returns an error", func() {
+			var err error
+
+			BeforeEach(func() {
+				errStore := &errorPageStore{writeErr: errors.New("disk full")}
+				bad := server.NewAgentChatContextStore(errStore)
+				err = bad.AppendBackgroundActivityAutomatic("p", &apiv1.BackgroundActivityEntry{
+					Timestamp:  timestamppb.New(time.Now()),
+					ScheduleId: "s1",
+					Status:     apiv1.ScheduleStatus_SCHEDULE_STATUS_OK,
+				})
+			})
+
+			It("should return an error", func() {
+				Expect(err).To(HaveOccurred())
+			})
+
+			It("should wrap the error with write frontmatter context", func() {
+				Expect(err.Error()).To(ContainSubstring("write frontmatter"))
+			})
+		})
+	})
+
+	Describe("AppendBackgroundActivitySummary error handling", func() {
+		Describe("when WriteFrontMatter returns an error after a matching entry is found", func() {
+			var err error
+
+			BeforeEach(func() {
+				// Pre-seed the error store with a chat_context whose
+				// background_activity contains a matching schedule_id, so the
+				// summary lookup succeeds and the write path is reached.
+				errStore := &errorPageStore{
+					writeErr: errors.New("disk full"),
+					fm: wikipage.FrontMatter{
+						"agent": map[string]any{
+							"chat_context": map[string]any{
+								"background_activity": []any{
+									map[string]any{
+										"schedule_id": "weekly",
+										"status":      "SCHEDULE_STATUS_OK",
+									},
+								},
+							},
+						},
+					},
+				}
+				bad := server.NewAgentChatContextStore(errStore)
+				err = bad.AppendBackgroundActivitySummary("p", "weekly", "drafted weekend order")
+			})
+
+			It("should return an error", func() {
+				Expect(err).To(HaveOccurred())
+			})
+
+			It("should wrap the error with write frontmatter context", func() {
+				Expect(err.Error()).To(ContainSubstring("write frontmatter"))
+			})
+		})
+	})
+
 	Describe("UpdateMerge", func() {
 		Describe("when the update argument is nil", func() {
 			var err error

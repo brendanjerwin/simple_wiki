@@ -529,6 +529,111 @@ var _ = Describe("AgentScheduleStore", func() {
 				Expect(err.Error()).To(ContainSubstring("unexpected type"))
 			})
 		})
+
+		Describe("when an item inside agent.schedules has the wrong type", func() {
+			var err error
+
+			BeforeEach(func() {
+				_ = pages.WriteFrontMatter("indexed_malformed", wikipage.FrontMatter{
+					"agent": map[string]any{
+						"schedules": []any{
+							map[string]any{
+								"id":      "ok",
+								"cron":    "0 * * * * *",
+								"enabled": true,
+							},
+							"not-a-map",
+						},
+					},
+				})
+				_, err = store.List("indexed_malformed")
+			})
+
+			It("should return an error", func() {
+				Expect(err).To(HaveOccurred())
+			})
+
+			It("should include the offending index in the error message", func() {
+				Expect(err.Error()).To(ContainSubstring("agent.schedules[1"))
+			})
+		})
+	})
+
+	Describe("Upsert preserving wiki-managed status fields", func() {
+		var schedules []*apiv1.AgentSchedule
+
+		BeforeEach(func() {
+			Expect(store.Upsert("p", &apiv1.AgentSchedule{
+				Id: "s1", Cron: "0 * * * * *", Prompt: "v1", Enabled: true,
+			})).To(Succeed())
+			Expect(store.TransitionStatus("p", "s1", apiv1.ScheduleStatus_SCHEDULE_STATUS_RUNNING, "", 0)).To(Succeed())
+			Expect(store.TransitionStatus("p", "s1", apiv1.ScheduleStatus_SCHEDULE_STATUS_ERROR, "boom", 99)).To(Succeed())
+
+			// Caller attempts to change wiki-managed fields via Upsert; those
+			// must be silently dropped in favor of the prior values.
+			Expect(store.Upsert("p", &apiv1.AgentSchedule{
+				Id:                  "s1",
+				Cron:                "0 * * * * *",
+				Prompt:              "v2",
+				Enabled:             true,
+				LastStatus:          apiv1.ScheduleStatus_SCHEDULE_STATUS_OK,
+				LastErrorMessage:    "caller lied",
+				LastDurationSeconds: 1,
+			})).To(Succeed())
+
+			var listErr error
+			schedules, listErr = store.List("p")
+			Expect(listErr).NotTo(HaveOccurred())
+		})
+
+		It("should preserve last_status from the prior record", func() {
+			Expect(schedules[0].GetLastStatus()).To(Equal(apiv1.ScheduleStatus_SCHEDULE_STATUS_ERROR))
+		})
+
+		It("should preserve last_error_message from the prior record", func() {
+			Expect(schedules[0].GetLastErrorMessage()).To(Equal("boom"))
+		})
+
+		It("should preserve last_duration_seconds from the prior record", func() {
+			Expect(schedules[0].GetLastDurationSeconds()).To(Equal(int32(99)))
+		})
+
+		It("should still apply caller-managed prompt updates", func() {
+			Expect(schedules[0].GetPrompt()).To(Equal("v2"))
+		})
+	})
+
+	Describe("Delete error handling", func() {
+		Describe("when WriteFrontMatter returns an error", func() {
+			var err error
+
+			BeforeEach(func() {
+				errStore := &errorPageStore{
+					writeErr: errors.New("disk full"),
+					fm: wikipage.FrontMatter{
+						"agent": map[string]any{
+							"schedules": []any{
+								map[string]any{
+									"id":      "victim",
+									"cron":    "0 * * * * *",
+									"enabled": true,
+								},
+							},
+						},
+					},
+				}
+				bad := server.NewAgentScheduleStore(errStore)
+				err = bad.Delete("p", "victim")
+			})
+
+			It("should return an error", func() {
+				Expect(err).To(HaveOccurred())
+			})
+
+			It("should wrap the error with write frontmatter context", func() {
+				Expect(err.Error()).To(ContainSubstring("write frontmatter"))
+			})
+		})
 	})
 })
 

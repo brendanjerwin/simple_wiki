@@ -20,6 +20,9 @@ type fakeDispatcher struct {
 	dispatched       []*apiv1.ScheduledTurnRequest
 	dispatchErr      error
 	completionToSend *server.ScheduledTurnOutcome
+	// neverComplete, when true, returns a channel that never receives and is
+	// never closed — used to exercise the hard-timeout path in awaitOutcome.
+	neverComplete bool
 }
 
 func (f *fakeDispatcher) Dispatch(req *apiv1.ScheduledTurnRequest) (<-chan *server.ScheduledTurnOutcome, error) {
@@ -30,6 +33,9 @@ func (f *fakeDispatcher) Dispatch(req *apiv1.ScheduledTurnRequest) (<-chan *serv
 	}
 	f.dispatched = append(f.dispatched, req)
 	ch := make(chan *server.ScheduledTurnOutcome, 1)
+	if f.neverComplete {
+		return ch, nil
+	}
 	if f.completionToSend != nil {
 		ch <- f.completionToSend
 		close(ch)
@@ -173,6 +179,91 @@ var _ = Describe("AgentTurnJob", func() {
 		It("should leave the schedule in RUNNING (no spurious transition)", func() {
 			schedules, _ := store.List("p")
 			Expect(schedules[0].GetLastStatus()).To(Equal(apiv1.ScheduleStatus_SCHEDULE_STATUS_RUNNING))
+		})
+	})
+
+	Describe("Execute when hardTimeout is zero", func() {
+		// hardTimeout <= 0 takes the indefinite-wait branch in awaitOutcome.
+		// The fakeDispatcher writes the outcome and closes the channel, so the
+		// blocking <-completion still receives without deadlocking.
+		BeforeEach(func() {
+			dispatcher.completionToSend = &server.ScheduledTurnOutcome{
+				TerminalStatus:  apiv1.ScheduleStatus_SCHEDULE_STATUS_OK,
+				DurationSeconds: 3,
+			}
+			job = server.NewAgentTurnJob(store, dispatcher, "p", "s1", 0)
+			Expect(job.Execute()).To(Succeed())
+		})
+
+		It("should still dispatch the request", func() {
+			Expect(dispatcher.dispatched).To(HaveLen(1))
+		})
+
+		It("should record the terminal OK status", func() {
+			schedules, _ := store.List("p")
+			Expect(schedules[0].GetLastStatus()).To(Equal(apiv1.ScheduleStatus_SCHEDULE_STATUS_OK))
+		})
+
+		It("should record the duration from the outcome", func() {
+			schedules, _ := store.List("p")
+			Expect(schedules[0].GetLastDurationSeconds()).To(Equal(int32(3)))
+		})
+	})
+
+	Describe("Execute when the hard timeout elapses", func() {
+		// The dispatcher returns a channel that never completes. Wrapping the
+		// Execute call in a select with a 1s safety net guarantees the test
+		// itself doesn't hang if the timeout branch regresses.
+		var executeErr error
+
+		BeforeEach(func() {
+			dispatcher.neverComplete = true
+			job = server.NewAgentTurnJob(store, dispatcher, "p", "s1", 50*time.Millisecond)
+
+			done := make(chan error, 1)
+			go func() {
+				done <- job.Execute()
+			}()
+			select {
+			case executeErr = <-done:
+			case <-time.After(time.Second):
+				Fail("Execute did not return within 1s; awaitOutcome timeout branch is likely broken")
+			}
+		})
+
+		It("should still return nil from Execute (errors are recorded on the schedule)", func() {
+			Expect(executeErr).NotTo(HaveOccurred())
+		})
+
+		It("should record terminal ERROR status", func() {
+			schedules, _ := store.List("p")
+			Expect(schedules[0].GetLastStatus()).To(Equal(apiv1.ScheduleStatus_SCHEDULE_STATUS_ERROR))
+		})
+
+		It("should mention 'scheduled turn timed out' in last_error_message", func() {
+			schedules, _ := store.List("p")
+			Expect(schedules[0].GetLastErrorMessage()).To(ContainSubstring("scheduled turn timed out"))
+		})
+	})
+
+	Describe("Execute when the page store fails to read", func() {
+		// Replace the underlying page store with one that errors on
+		// ReadFrontMatter so the List call inside Execute fails.
+		var brokenJob *server.AgentTurnJob
+
+		BeforeEach(func() {
+			errStore := &errorPageStore{readErr: errors.New("disk gone")}
+			brokenStore := server.NewAgentScheduleStore(errStore)
+			brokenJob = server.NewAgentTurnJob(brokenStore, dispatcher, "p", "s1", 5*time.Second)
+		})
+
+		It("should not return an error from Execute (logged, not propagated)", func() {
+			Expect(brokenJob.Execute()).To(Succeed())
+		})
+
+		It("should not dispatch", func() {
+			_ = brokenJob.Execute()
+			Expect(dispatcher.dispatched).To(BeEmpty())
 		})
 	})
 })

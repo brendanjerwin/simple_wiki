@@ -52,6 +52,40 @@ func (*noopAgentMetadataServer) UpsertSchedule(_ context.Context, _ *connect.Req
 	return nil, errAgentMetadataNoop
 }
 
+// noopFileStorageServer satisfies apiv1mcp.ConnectFileStorageServiceClient.
+// FileStorageService methods declare none of the MCP extensions, so it
+// exercises the methodHasMCPOverrides short-circuit branch in the decorator.
+type noopFileStorageServer struct{}
+
+var errFileStorageNoop = errors.New("noopFileStorageServer: not used in this test")
+
+func (*noopFileStorageServer) DeleteFile(_ context.Context, _ *connect.Request[apiv1.DeleteFileRequest]) (*connect.Response[apiv1.DeleteFileResponse], error) {
+	return nil, errFileStorageNoop
+}
+
+func (*noopFileStorageServer) GetFileInfo(_ context.Context, _ *connect.Request[apiv1.GetFileInfoRequest]) (*connect.Response[apiv1.GetFileInfoResponse], error) {
+	return nil, errFileStorageNoop
+}
+
+func (*noopFileStorageServer) UploadFile(_ context.Context, _ *connect.Request[apiv1.UploadFileRequest]) (*connect.Response[apiv1.UploadFileResponse], error) {
+	return nil, errFileStorageNoop
+}
+
+// noopPageImportServer satisfies apiv1mcp.ConnectPageImportServiceClient.
+// PageImportService.StartPageImportJob declares (api.v1.long_running) = true
+// and exercises the long-running annotation branch in applyAnnotations.
+type noopPageImportServer struct{}
+
+var errPageImportNoop = errors.New("noopPageImportServer: not used in this test")
+
+func (*noopPageImportServer) ParseCSVPreview(_ context.Context, _ *connect.Request[apiv1.ParseCSVPreviewRequest]) (*connect.Response[apiv1.ParseCSVPreviewResponse], error) {
+	return nil, errPageImportNoop
+}
+
+func (*noopPageImportServer) StartPageImportJob(_ context.Context, _ *connect.Request[apiv1.StartPageImportJobRequest]) (*connect.Response[apiv1.StartPageImportJobResponse], error) {
+	return nil, errPageImportNoop
+}
+
 var _ = Describe("Decorate", func() {
 	var (
 		server               *mcpserver.MCPServer
@@ -130,5 +164,138 @@ var _ = Describe("Decorate", func() {
 		It("should produce names matching api_v1_<Service>_<Method>", func() {
 			Expect(server.GetTool("api_v1_AgentMetadataService_DeleteSchedule")).NotTo(BeNil())
 		})
+	})
+
+	Describe("when Decorate returns ServiceDescriptions", func() {
+		It("should be non-empty", func() {
+			Expect(serviceDescriptions).NotTo(BeEmpty())
+		})
+
+		It("should include the api.v1.AgentMetadataService entry", func() {
+			services := []string{}
+			for _, sd := range serviceDescriptions {
+				services = append(services, sd.Service)
+			}
+			Expect(services).To(ContainElement("api.v1.AgentMetadataService"))
+		})
+	})
+})
+
+var _ = Describe("Decorate with no MCP tools registered", func() {
+	var (
+		emptyServer         *mcpserver.MCPServer
+		serviceDescriptions []mcpdocs.ServiceDescription
+		decorateInvocation  func()
+	)
+
+	BeforeEach(func() {
+		emptyServer = mcpserver.NewMCPServer("empty", "0", mcpserver.WithToolCapabilities(false))
+		decorateInvocation = func() {
+			serviceDescriptions = mcpdocs.Decorate(emptyServer)
+		}
+	})
+
+	It("should not panic", func() {
+		Expect(decorateInvocation).NotTo(Panic())
+	})
+
+	Describe("when Decorate completes", func() {
+		BeforeEach(func() {
+			decorateInvocation()
+		})
+
+		It("should still return service-level descriptions for services with (api.v1.service_description)", func() {
+			// AgentMetadataService declares service_description even though no
+			// MCP tools were registered on this server.
+			services := []string{}
+			for _, sd := range serviceDescriptions {
+				services = append(services, sd.Service)
+			}
+			Expect(services).To(ContainElement("api.v1.AgentMetadataService"))
+		})
+	})
+})
+
+var _ = Describe("Decorate for a service whose methods declare no MCP extensions", func() {
+	var (
+		server *mcpserver.MCPServer
+		tool   *mcpserver.ServerTool
+	)
+
+	BeforeEach(func() {
+		server = mcpserver.NewMCPServer("test", "0", mcpserver.WithToolCapabilities(false))
+		apiv1mcp.ForwardToConnectFileStorageServiceClient(server, &noopFileStorageServer{})
+		mcpdocs.Decorate(server)
+		tool = server.GetTool("api_v1_FileStorageService_DeleteFile")
+	})
+
+	It("should still register the tool from the codegen plugin", func() {
+		Expect(tool).NotTo(BeNil())
+	})
+
+	It("should preserve the codegen description verbatim (no override)", func() {
+		Expect(tool.Tool.Description).To(Equal("DeleteFile removes an uploaded file.\n"))
+	})
+
+	It("should not set the read-only annotation", func() {
+		Expect(tool.Tool.Annotations.ReadOnlyHint).To(BeNil())
+	})
+
+	It("should not set the idempotent annotation", func() {
+		Expect(tool.Tool.Annotations.IdempotentHint).To(BeNil())
+	})
+
+	It("should not set the open-world annotation", func() {
+		Expect(tool.Tool.Annotations.OpenWorldHint).To(BeNil())
+	})
+})
+
+var _ = Describe("Decorate for a method declaring (api.v1.long_running)", func() {
+	var (
+		server *mcpserver.MCPServer
+		tool   *mcpserver.ServerTool
+	)
+
+	BeforeEach(func() {
+		server = mcpserver.NewMCPServer("test", "0", mcpserver.WithToolCapabilities(false))
+		apiv1mcp.ForwardToConnectPageImportServiceClient(server, &noopPageImportServer{})
+		mcpdocs.Decorate(server)
+		tool = server.GetTool("api_v1_PageImportService_StartPageImportJob")
+	})
+
+	It("should register the tool", func() {
+		Expect(tool).NotTo(BeNil())
+	})
+
+	It("should set IdempotentHint to false", func() {
+		Expect(tool.Tool.Annotations.IdempotentHint).NotTo(BeNil())
+		Expect(*tool.Tool.Annotations.IdempotentHint).To(BeFalse())
+	})
+
+	It("should set OpenWorldHint to true", func() {
+		Expect(tool.Tool.Annotations.OpenWorldHint).NotTo(BeNil())
+		Expect(*tool.Tool.Annotations.OpenWorldHint).To(BeTrue())
+	})
+})
+
+var _ = Describe("Decorate when a service declares extensions but tools are not registered", func() {
+	var (
+		server *mcpserver.MCPServer
+		tool   *mcpserver.ServerTool
+	)
+
+	BeforeEach(func() {
+		// Construct a fresh server WITHOUT calling any ForwardToConnect*
+		// functions. The decorator walks the global proto registry and finds
+		// services declaring extensions (e.g. AgentMetadataService), but
+		// s.GetTool returns nil for each one — exercising the tool == nil
+		// short-circuit branch in decorateFileServices.
+		server = mcpserver.NewMCPServer("test", "0", mcpserver.WithToolCapabilities(false))
+		mcpdocs.Decorate(server)
+		tool = server.GetTool("api_v1_AgentMetadataService_GetChatContext")
+	})
+
+	It("should silently skip the unregistered tool", func() {
+		Expect(tool).To(BeNil())
 	})
 })
