@@ -40,17 +40,9 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case http.MethodGet, http.MethodHead:
 		s.serveGET(w, r)
 	case http.MethodPut:
-		if _, ok := s.requireIdentity(w, r); !ok {
-			return
-		}
-		// Phase 2 will implement servePUT.
-		http.Error(w, "PUT not implemented yet", http.StatusNotImplemented)
+		s.servePUT(w, r)
 	case http.MethodDelete:
-		if _, ok := s.requireIdentity(w, r); !ok {
-			return
-		}
-		// Phase 2 will implement serveDELETE.
-		http.Error(w, "DELETE not implemented yet", http.StatusNotImplemented)
+		s.serveDELETE(w, r)
 	default:
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 	}
@@ -410,4 +402,22 @@ func (*Server) requireIdentity(w http.ResponseWriter, r *http.Request) (tailscal
 		return tailscale.Anonymous, false
 	}
 	return identity, true
+}
+
+// servePUT handles PUT against /<page>/<list>/<uid>.ics. Skeleton —
+// implementation lands in P2-C4/green.
+func (s *Server) servePUT(w http.ResponseWriter, r *http.Request) {
+	if _, ok := s.requireIdentity(w, r); !ok {
+		return
+	}
+	http.Error(w, "PUT not implemented yet", http.StatusNotImplemented)
+}
+
+// serveDELETE handles DELETE against /<page>/<list>/<uid>.ics. Skeleton —
+// implementation lands in P2-C5/green.
+func (s *Server) serveDELETE(w http.ResponseWriter, r *http.Request) {
+	if _, ok := s.requireIdentity(w, r); !ok {
+		return
+	}
+	http.Error(w, "DELETE not implemented yet", http.StatusNotImplemented)
 }

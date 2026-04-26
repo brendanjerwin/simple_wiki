@@ -51,3 +51,13 @@ func (s *Server) RequireIdentityForTest(w http.ResponseWriter, r *http.Request) 
 	_, ok := s.requireIdentity(w, r)
 	return ok
 }
+
+// ServePUTForTest is the test-only re-export of (*Server).servePUT.
+func (s *Server) ServePUTForTest(w http.ResponseWriter, r *http.Request) {
+	s.servePUT(w, r)
+}
+
+// ServeDELETEForTest is the test-only re-export of (*Server).serveDELETE.
+func (s *Server) ServeDELETEForTest(w http.ResponseWriter, r *http.Request) {
+	s.serveDELETE(w, r)
+}
