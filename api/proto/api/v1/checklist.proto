@@ -149,6 +149,13 @@ message Tombstone {
   string uid = 1;
   google.protobuf.Timestamp deleted_at = 2;
   google.protobuf.Timestamp gc_after = 3;
+  // Wiki-managed: the value of Checklist.sync_token at the moment of
+  // deletion (post-bump, so a sync-collection REPORT can emit this
+  // tombstone to clients whose token is < this value). Tombstones
+  // written before this field existed decode as 0 — treat 0 as
+  // "before recorded history" and emit to any client with an empty
+  // or zero token.
+  int64 sync_token = 4;
 }
 
 // Checklist — one named checklist on a page.

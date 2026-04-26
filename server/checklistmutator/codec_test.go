@@ -384,6 +384,37 @@ var _ = Describe("decodeTombstones", func() {
 			Expect(result[0].GcAfter).To(BeNil())
 		})
 	})
+
+	When("tombstone carries sync_token", func() {
+		It("should decode the int64 value", func() {
+			raw := []any{map[string]any{
+				"uid":        "u",
+				"sync_token": int64(42),
+			}}
+			result := decodeTombstones(raw)
+			Expect(result).To(HaveLen(1))
+			Expect(result[0].SyncToken).To(Equal(int64(42)))
+		})
+
+		It("should accept float64 values from JSON-via-structpb decoding", func() {
+			raw := []any{map[string]any{
+				"uid":        "u",
+				"sync_token": float64(7),
+			}}
+			result := decodeTombstones(raw)
+			Expect(result).To(HaveLen(1))
+			Expect(result[0].SyncToken).To(Equal(int64(7)))
+		})
+	})
+
+	When("legacy tombstone lacks sync_token", func() {
+		It("should decode with sync_token=0 as the legacy sentinel", func() {
+			raw := []any{map[string]any{"uid": "legacy"}}
+			result := decodeTombstones(raw)
+			Expect(result).To(HaveLen(1))
+			Expect(result[0].SyncToken).To(BeZero())
+		})
+	})
 })
 
 var _ = Describe("decodeItem", func() {
@@ -675,6 +706,39 @@ var _ = Describe("encodeTombstones", func() {
 			m := asMap(encoded[0])
 			Expect(m).NotTo(HaveKey("deleted_at"))
 			Expect(m).To(HaveKey("gc_after"))
+		})
+	})
+
+	When("a tombstone carries a non-zero sync_token", func() {
+		var encoded []any
+
+		BeforeEach(func() {
+			tombstones := []*apiv1.Tombstone{
+				{Uid: "u", DeletedAt: timestamppb.New(codecNow), GcAfter: timestamppb.New(codecNow.Add(TombstoneTTL)), SyncToken: 42},
+			}
+			encoded = encodeTombstones(tombstones)
+		})
+
+		It("should emit the sync_token key", func() {
+			m := asMap(encoded[0])
+			Expect(m).To(HaveKey("sync_token"))
+		})
+
+		It("should emit the int64 value", func() {
+			m := asMap(encoded[0])
+			Expect(m["sync_token"]).To(Equal(int64(42)))
+		})
+	})
+
+	When("a tombstone has zero sync_token", func() {
+		It("should still emit the sync_token key so legacy decoding stays consistent", func() {
+			tombstones := []*apiv1.Tombstone{
+				{Uid: "u", DeletedAt: timestamppb.New(codecNow), GcAfter: timestamppb.New(codecNow.Add(TombstoneTTL)), SyncToken: 0},
+			}
+			encoded := encodeTombstones(tombstones)
+			m := asMap(encoded[0])
+			Expect(m).To(HaveKey("sync_token"))
+			Expect(m["sync_token"]).To(Equal(int64(0)))
 		})
 	})
 })

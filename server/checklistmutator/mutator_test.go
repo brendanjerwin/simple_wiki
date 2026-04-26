@@ -348,6 +348,11 @@ var _ = Describe("Mutator", func() {
 			It("should produce one tombstone for the deleted uid", func() {
 				Expect(list.Tombstones).To(HaveLen(1))
 			})
+
+			It("should stamp the post-bump sync_token on the tombstone", func() {
+				Expect(list.Tombstones).To(HaveLen(1))
+				Expect(list.Tombstones[0].SyncToken).To(Equal(list.SyncToken))
+			})
 		})
 	})
 
