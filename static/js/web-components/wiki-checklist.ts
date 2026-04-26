@@ -40,8 +40,18 @@ import { wikiChecklistStyles } from './wiki-checklist-styles.js';
 
 export type { ChecklistItem, Checklist } from '../gen/api/v1/checklist_pb.js';
 
-// Polling interval in milliseconds
-const POLL_INTERVAL_MS = 10000;
+// Polling interval in milliseconds.
+//
+// Tightened from 10s to 2s so external writes (CalDAV PUTs from
+// phone clients, edits in another tab, agent-driven changes) surface
+// within ~2s instead of ~10s. The user's own clicks already feel
+// instant via the optimistic-update path in runMutation; this affects
+// only mutations originating outside the current tab.
+//
+// Server-side cost: each poll is one ListItems RPC reading a single
+// page's frontmatter. At 30 polls/min/tab, well under the noise floor
+// of an interactive wiki session.
+const POLL_INTERVAL_MS = 2000;
 // OCC retry happens once on FailedPrecondition; the retry uses the
 // updated_at returned from the refetch.
 const OCC_TOAST_DURATION_MS = 2000;
