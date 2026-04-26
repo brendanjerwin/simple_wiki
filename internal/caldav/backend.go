@@ -8,6 +8,7 @@ import (
 
 	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
 	"github.com/brendanjerwin/simple_wiki/internal/caldav/etag"
+	"github.com/brendanjerwin/simple_wiki/internal/caldav/icalcodec"
 	"github.com/brendanjerwin/simple_wiki/server/checklistmutator"
 	"github.com/brendanjerwin/simple_wiki/tailscale"
 )
@@ -206,8 +207,44 @@ func checklistExists(c *apiv1.Checklist) bool {
 	return false
 }
 
-func (*defaultBackend) ListItems(_ context.Context, _, _ string) (CalendarCollection, []CalendarItem, error) {
-	return CalendarCollection{}, nil, ErrCollectionNotFound
+// ListItems returns the collection metadata plus every live (non-
+// tombstoned) item in the named collection. Each item is rendered to
+// iCalendar bytes via icalcodec.RenderItem so the HTTP layer can serve
+// GET / embed calendar-data without re-running the codec. Returns
+// ErrCollectionNotFound when the page or list does not exist.
+func (b *defaultBackend) ListItems(ctx context.Context, page, listName string) (CalendarCollection, []CalendarItem, error) {
+	checklist, err := b.mutator.ListItems(ctx, page, listName)
+	if err != nil {
+		return CalendarCollection{}, nil, fmt.Errorf("caldav: list items %q/%q: %w", page, listName, err)
+	}
+	if !checklistExists(checklist) {
+		return CalendarCollection{}, nil, ErrCollectionNotFound
+	}
+
+	col := collectionFromChecklist(page, checklist)
+	items := make([]CalendarItem, 0, len(checklist.Items))
+	for _, it := range checklist.Items {
+		items = append(items, b.renderItem(it, page, listName))
+	}
+	return col, items, nil
+}
+
+// renderItem maps an *apiv1.ChecklistItem onto a CalendarItem,
+// including the per-item ETag and the pre-rendered iCalendar bytes.
+// Centralized so ListItems and GetItem agree on the representation.
+func (b *defaultBackend) renderItem(item *apiv1.ChecklistItem, page, listName string) CalendarItem {
+	ci := CalendarItem{
+		UID:       item.Uid,
+		ETag:      etag.ItemETag(item),
+		ICalBytes: icalcodec.RenderItem(item, page, listName, b.baseURL, b.nowFn),
+	}
+	if item.UpdatedAt != nil {
+		ci.UpdatedAt = item.UpdatedAt.AsTime()
+	}
+	if item.CreatedAt != nil {
+		ci.CreatedAt = item.CreatedAt.AsTime()
+	}
+	return ci
 }
 
 func (*defaultBackend) GetItem(_ context.Context, _, _, _ string) (CalendarItem, error) {
