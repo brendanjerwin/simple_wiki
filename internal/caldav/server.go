@@ -2,6 +2,7 @@ package caldav
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -712,26 +713,15 @@ func (s *Server) auditWrite(action, principal, page, list, uid, outcome, etag st
 	if logger == nil {
 		logger = log.Default()
 	}
-	var b strings.Builder
-	b.WriteString("caldav: action=")
-	b.WriteString(action)
-	b.WriteString(` principal="`)
-	b.WriteString(principal)
-	b.WriteString(`" page="`)
-	b.WriteString(page)
-	b.WriteString(`" list="`)
-	b.WriteString(list)
-	b.WriteString(`" uid="`)
-	b.WriteString(uid)
-	b.WriteString(`" outcome=`)
-	b.WriteString(outcome)
+	line := fmt.Sprintf(
+		`caldav: action=%s principal=%q page=%q list=%q uid=%q outcome=%s`,
+		action, principal, page, list, uid, outcome,
+	)
 	if etag != "" {
-		// Quote the etag so the line stays parseable even though
-		// the etag itself contains the W/"…" wire form. Embedded
-		// double quotes are escaped with a backslash.
-		b.WriteString(` etag="`)
-		b.WriteString(strings.ReplaceAll(etag, `"`, `\"`))
-		b.WriteString(`"`)
+		// Quote the etag so the line stays parseable even though the
+		// etag itself contains the W/"…" wire form. Embedded double
+		// quotes are escaped with a backslash via %q.
+		line += fmt.Sprintf(` etag=%q`, etag)
 	}
-	logger.Println(b.String())
+	logger.Println(line)
 }
