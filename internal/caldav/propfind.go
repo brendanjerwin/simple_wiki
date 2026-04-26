@@ -1,8 +1,38 @@
 package caldav
 
 import (
+	"encoding/xml"
+	"errors"
 	"net/http"
+	"strings"
 )
+
+// XML namespace constants. The CalDAV multistatus response is
+// hand-rolled rather than delegated to a library so we get exact
+// control over namespace prefixes — Apple Reminders is finicky about
+// receiving `D:`, `C:`, and `CS:` aliases.
+const (
+	nsDAV          = "DAV:"
+	nsCalDAV       = "urn:ietf:params:xml:ns:caldav"
+	nsCalServer    = "http://calendarserver.org/ns/"
+	xmlContentType = "application/xml; charset=utf-8"
+)
+
+// xmlDecl is the XML 1.0 declaration prepended to every PROPFIND
+// response body. encoding/xml.Marshal does not emit one, so we write
+// it manually before the multistatus element.
+const xmlDecl = `<?xml version="1.0" encoding="utf-8"?>` + "\n"
+
+// principalPath is the value used for the current-user-principal
+// property on home-set responses. The wiki has no separate principal
+// URL space — every authenticated request is its own principal — so
+// we point it back at the home-set itself, which is what most
+// CalDAV servers do when there's no separate principal collection.
+const principalPath = "/"
+
+// statusOK is the multistatus per-property status string for
+// successful property fetches.
+const statusOK = "HTTP/1.1 200 OK"
 
 // servePROPFIND handles WebDAV PROPFIND requests against any CalDAV
 // URL. PROPFIND is the discovery primitive iOS / DAVx5 fire after the
@@ -12,11 +42,303 @@ import (
 //
 // URL shapes handled:
 //
-//   - /<page>            -> calendar-home-set; Depth:1 lists collections
-//   - /<page>/<list>     -> calendar collection; Depth:1 lists items
-//   - /<page>/<list>/<uid>.ics -> single item (Depth always 0-equivalent)
+//   - /<page>                  — calendar-home-set; Depth:1 lists collections
+//   - /<page>/<list>           — calendar collection; Depth:1 lists items
+//   - /<page>/<list>/<uid>.ics — single item resource
 //
-// This is a skeleton — the real implementation lands in P1-C11/green.
-func (s *Server) servePROPFIND(w http.ResponseWriter, _ *http.Request) {
-	w.WriteHeader(http.StatusNotImplemented)
+// Depth:0 returns one <response> for the URL itself; Depth:1 adds one
+// <response> per child resource. iOS sometimes omits the Depth header
+// entirely (treated as Depth:0 per RFC 4918 §10.2 default).
+func (s *Server) servePROPFIND(w http.ResponseWriter, r *http.Request) {
+	if _, ok := s.requireIdentity(w, r); !ok {
+		return
+	}
+	page, list, uid, err := parsePath(r.URL.Path)
+	if err != nil {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+	depth := r.Header.Get("Depth")
+	switch {
+	case uid != "":
+		s.propfindItem(w, r, page, list, uid)
+	case list != "":
+		s.propfindCollection(w, r, page, list, depth)
+	default:
+		s.propfindHomeSet(w, r, page, depth)
+	}
 }
+
+// propfindHomeSet writes the multistatus response for a request at
+// `/<page>`. Depth:0 returns just the home-set; Depth:1 enumerates
+// every collection on the page.
+func (s *Server) propfindHomeSet(w http.ResponseWriter, r *http.Request, page, depth string) {
+	responses := []multistatusResponse{homeSetResponse(page)}
+	if depth == "1" {
+		cols, err := s.Backend.ListCollections(r.Context(), page)
+		if err != nil {
+			http.Error(w, "internal error", http.StatusInternalServerError)
+			return
+		}
+		for _, col := range cols {
+			responses = append(responses, collectionResponse(col))
+		}
+	}
+	writeMultistatus(w, responses)
+}
+
+// propfindCollection writes the multistatus response for a request at
+// `/<page>/<list>`. Depth:0 returns just the collection; Depth:1
+// enumerates every live item in the collection. Returns 404 when the
+// collection does not exist.
+func (s *Server) propfindCollection(w http.ResponseWriter, r *http.Request, page, list, depth string) {
+	if depth == "1" {
+		col, items, err := s.Backend.ListItems(r.Context(), page, list)
+		if err != nil {
+			if errors.Is(err, ErrCollectionNotFound) {
+				http.NotFound(w, r)
+				return
+			}
+			http.Error(w, "internal error", http.StatusInternalServerError)
+			return
+		}
+		responses := []multistatusResponse{collectionResponse(col)}
+		for _, item := range items {
+			responses = append(responses, itemResponse(page, list, item))
+		}
+		writeMultistatus(w, responses)
+		return
+	}
+	col, err := s.Backend.GetCollection(r.Context(), page, list)
+	if err != nil {
+		if errors.Is(err, ErrCollectionNotFound) {
+			http.NotFound(w, r)
+			return
+		}
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	writeMultistatus(w, []multistatusResponse{collectionResponse(col)})
+}
+
+// propfindItem writes the multistatus response for a request at
+// `/<page>/<list>/<uid>.ics`. There are no children below an item, so
+// Depth is effectively ignored — both 0 and 1 return a single
+// <response>. Returns 404 for unknown or tombstoned uids.
+func (s *Server) propfindItem(w http.ResponseWriter, r *http.Request, page, list, uid string) {
+	item, err := s.Backend.GetItem(r.Context(), page, list, uid)
+	if err != nil {
+		if errors.Is(err, ErrItemNotFound) || errors.Is(err, ErrItemDeleted) {
+			http.NotFound(w, r)
+			return
+		}
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	writeMultistatus(w, []multistatusResponse{itemResponse(page, list, item)})
+}
+
+// homeSetResponse builds the <response> element advertising a CalDAV
+// calendar-home-set. iOS reads calendar-home-set from this response
+// to find the URL it should issue a Depth:1 PROPFIND against to
+// enumerate collections.
+func homeSetResponse(page string) multistatusResponse {
+	href := "/" + page + "/"
+	return multistatusResponse{
+		Href: href,
+		Propstat: []propstat{{
+			Prop: prop{
+				ResourceType: &resourceType{
+					Collection: &empty{},
+				},
+				DisplayName: page,
+				CurrentUserPrincipal: &userPrincipal{
+					Href: principalPath,
+				},
+				CalendarHomeSet: &calendarHomeSet{
+					Href: href,
+				},
+			},
+			Status: statusOK,
+		}},
+	}
+}
+
+// collectionResponse builds the <response> element for a single
+// CalDAV calendar collection. It advertises the collection-level
+// metadata (CTag, sync-token, displayname, supported components) so
+// iOS / DAVx5 can decide whether to skip a sync (CTag unchanged) or
+// run an incremental sync-collection REPORT (sync-token).
+func collectionResponse(col CalendarCollection) multistatusResponse {
+	href := "/" + col.Page + "/" + col.ListName + "/"
+	return multistatusResponse{
+		Href: href,
+		Propstat: []propstat{{
+			Prop: prop{
+				ResourceType: &resourceType{
+					Collection: &empty{},
+					Calendar:   &empty{},
+				},
+				DisplayName: col.DisplayName,
+				CTag:        col.CTag,
+				SyncToken:   col.SyncToken,
+				SupportedCalendarComponentSet: &supportedComponents{
+					Comps: []comp{{Name: "VTODO"}},
+				},
+			},
+			Status: statusOK,
+		}},
+	}
+}
+
+// itemResponse builds the <response> element for a single VTODO
+// resource. iOS / DAVx5 use the embedded calendar-data on Depth:1
+// PROPFINDs to populate task lists without firing a follow-up GET per
+// item; the ETag lets them skip re-fetching unchanged items.
+func itemResponse(page, list string, item CalendarItem) multistatusResponse {
+	href := "/" + page + "/" + list + "/" + item.UID + ".ics"
+	return multistatusResponse{
+		Href: href,
+		Propstat: []propstat{{
+			Prop: prop{
+				ResourceType:    &resourceType{},
+				GetETag:         item.ETag,
+				GetContentType:  iCalendarContentType,
+				CalendarDataRaw: string(item.ICalBytes),
+			},
+			Status: statusOK,
+		}},
+	}
+}
+
+// writeMultistatus serializes a multistatus body to the response
+// writer with the canonical CalDAV headers: 207 Multi-Status status
+// and `application/xml; charset=utf-8` content type.
+func writeMultistatus(w http.ResponseWriter, responses []multistatusResponse) {
+	body := multistatus{Responses: responses}
+	out, err := xml.Marshal(body)
+	if err != nil {
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", xmlContentType)
+	w.WriteHeader(http.StatusMultiStatus)
+	_, _ = w.Write([]byte(xmlDecl))
+	_, _ = w.Write(out)
+}
+
+// multistatus is the WebDAV `<multistatus>` root element. encoding/xml
+// emits the namespace declarations from the field tags so iOS sees
+// `xmlns:D`, `xmlns:C`, and `xmlns:CS` on the root.
+type multistatus struct {
+	XMLName   xml.Name              `xml:"DAV: multistatus"`
+	XmlnsCal  string                `xml:"xmlns:C,attr"`
+	XmlnsCS   string                `xml:"xmlns:CS,attr"`
+	Responses []multistatusResponse `xml:"DAV: response"`
+}
+
+// MarshalXML overrides the default encoding/xml output so the root
+// `<multistatus>` element carries the CalDAV and Calendar Server
+// namespace declarations alongside the default DAV namespace. Without
+// this hook the property elements that live in those namespaces would
+// be emitted with auto-generated prefixes that some clients (notably
+// older Apple Reminders builds) don't normalize correctly.
+func (m multistatus) MarshalXML(e *xml.Encoder, _ xml.StartElement) error {
+	start := xml.StartElement{
+		Name: xml.Name{Local: "multistatus"},
+		Attr: []xml.Attr{
+			{Name: xml.Name{Local: "xmlns"}, Value: nsDAV},
+			{Name: xml.Name{Local: "xmlns:C"}, Value: nsCalDAV},
+			{Name: xml.Name{Local: "xmlns:CS"}, Value: nsCalServer},
+		},
+	}
+	if err := e.EncodeToken(start); err != nil {
+		return err
+	}
+	for _, resp := range m.Responses {
+		if err := e.EncodeElement(resp, xml.StartElement{Name: xml.Name{Local: "response"}}); err != nil {
+			return err
+		}
+	}
+	return e.EncodeToken(start.End())
+}
+
+// multistatusResponse is one `<response>` entry inside a `<multistatus>`.
+// Each describes a single resource (the URL itself or a child).
+type multistatusResponse struct {
+	Href     string     `xml:"href"`
+	Propstat []propstat `xml:"propstat"`
+}
+
+// propstat groups one <prop> with the HTTP status that applies to
+// every property inside it. The wiki only emits the 200 OK group; we
+// don't bother synthesizing 404 entries for properties the client
+// requested but we don't have, because RFC 4918 §9.1.1 lets servers
+// either omit them or report 404 — most CalDAV clients tolerate the
+// omission and are stricter about the 404 case.
+type propstat struct {
+	Prop   prop   `xml:"prop"`
+	Status string `xml:"status"`
+}
+
+// prop is the union of every property the wiki advertises. Pointer
+// fields let us omit ones that don't apply to a given resource type
+// (e.g. calendar-home-set on a per-item response).
+type prop struct {
+	ResourceType                  *resourceType        `xml:"resourcetype,omitempty"`
+	DisplayName                   string               `xml:"displayname,omitempty"`
+	GetETag                       string               `xml:"getetag,omitempty"`
+	GetContentType                string               `xml:"getcontenttype,omitempty"`
+	CTag                          string               `xml:"http://calendarserver.org/ns/ getctag,omitempty"`
+	SyncToken                     string               `xml:"sync-token,omitempty"`
+	CurrentUserPrincipal          *userPrincipal       `xml:"current-user-principal,omitempty"`
+	CalendarHomeSet               *calendarHomeSet     `xml:"urn:ietf:params:xml:ns:caldav calendar-home-set,omitempty"`
+	SupportedCalendarComponentSet *supportedComponents `xml:"urn:ietf:params:xml:ns:caldav supported-calendar-component-set,omitempty"`
+	CalendarDataRaw               string               `xml:"urn:ietf:params:xml:ns:caldav calendar-data,omitempty"`
+}
+
+// resourceType is the WebDAV `<resourcetype>` value. Empty children
+// are valid — `<collection/>` and `<calendar/>` are flag elements,
+// not containers.
+type resourceType struct {
+	Collection *empty `xml:"collection,omitempty"`
+	Calendar   *empty `xml:"urn:ietf:params:xml:ns:caldav calendar,omitempty"`
+}
+
+// empty is a placeholder for self-closing XML elements. encoding/xml
+// emits `<foo></foo>` for a zero-value struct; we use this when the
+// element should be empty regardless.
+type empty struct{}
+
+// userPrincipal is the value of `<current-user-principal>`. The
+// referenced URL identifies the principal collection for the
+// requester; CalDAV clients use it to discover principal-level
+// resources like calendar-home-set if they aren't advertised inline.
+type userPrincipal struct {
+	Href string `xml:"href"`
+}
+
+// calendarHomeSet is the value of `<C:calendar-home-set>`, the CalDAV
+// extension that points clients at the URL where they can issue a
+// Depth:1 PROPFIND to enumerate every calendar collection accessible
+// to the current principal.
+type calendarHomeSet struct {
+	Href string `xml:"DAV: href"`
+}
+
+// supportedComponents is the value of `<C:supported-calendar-component-set>`.
+// Clients use this to filter which iCalendar component types they
+// expect to receive from a calendar — the wiki only stores VTODOs.
+type supportedComponents struct {
+	Comps []comp `xml:"urn:ietf:params:xml:ns:caldav comp"`
+}
+
+// comp is one entry inside `<C:supported-calendar-component-set>`,
+// identifying a single iCalendar component type (e.g. VTODO).
+type comp struct {
+	Name string `xml:"name,attr"`
+}
+
+// Quiet the lint about unused namespace fields on multistatus — they
+// exist so encoding/xml emits the prefix declarations on the root.
+var _ = []string{nsDAV, strings.TrimSpace("")}

@@ -203,7 +203,7 @@ var _ = Describe("Server.servePROPFIND", func() {
 
 		It("should advertise getctag on each child collection", func() {
 			Expect(rec.Body.String()).To(ContainSubstring("getctag"))
-			Expect(rec.Body.String()).To(ContainSubstring(`"2026-04-25T13:00:00Z"`))
+			Expect(rec.Body.String()).To(ContainSubstring(`&#34;2026-04-25T13:00:00Z&#34;`))
 		})
 
 		It("should advertise sync-token on each child collection", func() {
@@ -253,7 +253,7 @@ var _ = Describe("Server.servePROPFIND", func() {
 
 		It("should advertise getctag on the collection", func() {
 			Expect(rec.Body.String()).To(ContainSubstring("getctag"))
-			Expect(rec.Body.String()).To(ContainSubstring(`"2026-04-25T13:00:00Z"`))
+			Expect(rec.Body.String()).To(ContainSubstring(`&#34;2026-04-25T13:00:00Z&#34;`))
 		})
 
 		It("should advertise sync-token on the collection", func() {
