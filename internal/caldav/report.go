@@ -152,10 +152,8 @@ func (s *Server) reportCalendarQuery(w http.ResponseWriter, r *http.Request, bod
 		http.Error(w, "malformed calendar-query body", http.StatusBadRequest)
 		return
 	}
-	page, list, uid, err := parsePath(r.URL.Path)
-	if err != nil || page == "" || list == "" || uid != "" {
-		// calendar-query only makes sense on a collection URL.
-		http.NotFound(w, r)
+	page, list, ok := parseCollectionPath(w, r)
+	if !ok {
 		return
 	}
 	_, items, listErr := s.Backend.ListItems(r.Context(), page, list)
@@ -172,6 +170,23 @@ func (s *Server) reportCalendarQuery(w http.ResponseWriter, r *http.Request, bod
 		resps = append(resps, itemResponse(page, list, item))
 	}
 	writeMultistatus(w, resps)
+}
+
+// parseCollectionPath enforces that the request URL names a calendar
+// collection (page and list both populated, no uid). On any failure
+// it writes a 404 to w and returns ok=false so the caller can bail.
+// On success it returns the parsed (page, list) pair and ok=true.
+//
+// Used by both reportCalendarQuery and reportSyncCollection — neither
+// REPORT type makes sense at the home-set level or against a single
+// item.
+func parseCollectionPath(w http.ResponseWriter, r *http.Request) (page, list string, ok bool) {
+	page, list, uid, err := parsePath(r.URL.Path)
+	if err != nil || page == "" || list == "" || uid != "" {
+		http.NotFound(w, r)
+		return "", "", false
+	}
+	return page, list, true
 }
 
 // isResourceMissing reports whether err means "the resource the client
@@ -235,9 +250,8 @@ func (s *Server) reportSyncCollection(w http.ResponseWriter, r *http.Request, bo
 		http.Error(w, "malformed sync-collection body", http.StatusBadRequest)
 		return
 	}
-	page, list, uid, err := parsePath(r.URL.Path)
-	if err != nil || page == "" || list == "" || uid != "" {
-		http.NotFound(w, r)
+	page, list, ok := parseCollectionPath(w, r)
+	if !ok {
 		return
 	}
 
