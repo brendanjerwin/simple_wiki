@@ -528,10 +528,11 @@ func (s *Server) servePUT(w http.ResponseWriter, r *http.Request) {
 	ifNoneMatch := strings.TrimSpace(r.Header.Get("If-None-Match"))
 
 	newETag, created, err := s.Backend.PutItem(r.Context(), page, list, uid, body, ifMatch, ifNoneMatch, identity)
+	audit := s.bindAuditWrite(auditActionPut, identity.Name(), page, list, uid)
 	if err != nil {
 		writePUTErrorStatus(w, err)
 		if errors.Is(err, ErrPreconditionFailed) {
-			s.auditWrite(auditActionPut, identity.Name(), page, list, uid, auditOutcomePreconditionFailed, "")
+			audit(auditOutcomePreconditionFailed, "")
 		}
 		return
 	}
@@ -539,11 +540,11 @@ func (s *Server) servePUT(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("ETag", newETag)
 	}
 	if created {
-		s.auditWrite(auditActionPut, identity.Name(), page, list, uid, auditOutcomeCreated, newETag)
+		audit(auditOutcomeCreated, newETag)
 		w.WriteHeader(http.StatusCreated)
 		return
 	}
-	s.auditWrite(auditActionPut, identity.Name(), page, list, uid, auditOutcomeUpdated, newETag)
+	audit(auditOutcomeUpdated, newETag)
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -571,14 +572,15 @@ func (s *Server) serveDELETE(w http.ResponseWriter, r *http.Request) {
 	}
 	ifMatch := stripETagQuotes(r.Header.Get("If-Match"))
 
+	audit := s.bindAuditWrite(auditActionDelete, identity.Name(), page, list, uid)
 	if err := s.Backend.DeleteItem(r.Context(), page, list, uid, ifMatch, identity); err != nil {
 		writeDELETEErrorStatus(w, err)
 		if errors.Is(err, ErrPreconditionFailed) {
-			s.auditWrite(auditActionDelete, identity.Name(), page, list, uid, auditOutcomePreconditionFailed, "")
+			audit(auditOutcomePreconditionFailed, "")
 		}
 		return
 	}
-	s.auditWrite(auditActionDelete, identity.Name(), page, list, uid, auditOutcomeDeleted, "")
+	audit(auditOutcomeDeleted, "")
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -677,6 +679,17 @@ const (
 	auditActionPut    = "put"
 	auditActionDelete = "delete"
 )
+
+// bindAuditWrite returns a closure that fills in the per-write fields
+// (action / principal / page / list / uid) and lets the caller supply
+// only the per-outcome ones (outcome / etag). The five "common" fields
+// are captured at handler-entry time so the per-outcome call sites
+// stay short and don't re-name `identity.Name()` on every line.
+func (s *Server) bindAuditWrite(action, principal, page, list, uid string) func(outcome, etag string) {
+	return func(outcome, etag string) {
+		s.auditWrite(action, principal, page, list, uid, outcome, etag)
+	}
+}
 
 // auditWrite emits a single structured log line summarising a
 // CalDAV write attempt. Called from servePUT and serveDELETE on the
