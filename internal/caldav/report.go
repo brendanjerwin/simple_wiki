@@ -17,8 +17,11 @@
 //     render anyway, so ignoring the filter is a safe approximation
 //     until a future phase needs precise filtering.
 //
-// sync-collection (RFC 6578) is a third REPORT type the spec lists.
-// Phase 1 returns 501 Not Implemented for it; Phase 3 will land it.
+// sync-collection (RFC 6578) is the third REPORT type the spec lists.
+// Phase 3 implements it: clients pass back the sync-token they last
+// saw, and the server returns the items changed and uids deleted since
+// then. Apple Reminders / DAVx5 use this to do incremental sync without
+// re-fetching the entire collection.
 
 package caldav
 
@@ -97,9 +100,7 @@ func (s *Server) serveREPORT(w http.ResponseWriter, r *http.Request) {
 	case root.XMLName.Space == nsCalDAV && root.XMLName.Local == reportLocalCalendarQuery:
 		s.reportCalendarQuery(w, r, body)
 	case root.XMLName.Space == nsDAV && root.XMLName.Local == reportLocalSyncCollection:
-		// Phase 3 will land this; for now reject with 501 so clients
-		// that probe it (DAVx5 does, then falls back) don't see a 400.
-		http.Error(w, "sync-collection not implemented yet", http.StatusNotImplemented)
+		s.reportSyncCollection(w, r, body)
 	default:
 		http.Error(w, "unrecognized REPORT root element", http.StatusBadRequest)
 	}
@@ -196,4 +197,13 @@ func notFoundResponse(href string) multistatusResponse {
 			Status: statusNotFound,
 		}},
 	}
+}
+
+// reportSyncCollection handles the sync-collection REPORT body. The
+// skeleton returns 501 Not Implemented; the green pass replaces this
+// with the real handler that decodes the sync-token element, calls
+// CalendarBackend.SyncCollection, and emits a multistatus with a
+// trailing sync-token element per RFC 6578 §3.5.
+func (*Server) reportSyncCollection(w http.ResponseWriter, _ *http.Request, _ []byte) {
+	http.Error(w, "sync-collection not implemented yet", http.StatusNotImplemented)
 }
