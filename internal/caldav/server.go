@@ -2,6 +2,7 @@ package caldav
 
 import (
 	"errors"
+	"io"
 	"net/http"
 	"strings"
 
@@ -404,20 +405,187 @@ func (*Server) requireIdentity(w http.ResponseWriter, r *http.Request) (tailscal
 	return identity, true
 }
 
-// servePUT handles PUT against /<page>/<list>/<uid>.ics. Skeleton —
-// implementation lands in P2-C4/green.
+// maxPUTBodyBytes caps how many bytes servePUT will read from a
+// request body before short-circuiting with 413 Payload Too Large. A
+// well-formed VTODO with the wiki's 64 KB DESCRIPTION cap fits well
+// under this. Pathological clients that stream gigabytes never get
+// further than this read.
+const maxPUTBodyBytes int64 = 256 * 1024
+
+// iCalContentTypePrefix is the case-insensitive Content-Type prefix
+// every PUT body must carry. Accepts both "text/calendar" alone and
+// the canonical "text/calendar; charset=utf-8" form CalDAV clients
+// send.
+const iCalContentTypePrefix = "text/calendar"
+
+// servePUT handles PUT against /<page>/<list>/<uid>.ics. The flow is:
+//
+//  1. requireIdentity — anonymous callers get 403.
+//  2. parsePath — the URL must name an item resource (page, list,
+//     uid all populated); anything else is 400 Bad Request.
+//  3. Validate Content-Type starts with text/calendar; mismatched
+//     types get 415 Unsupported Media Type.
+//  4. Read the body through an io.LimitReader capped at
+//     maxPUTBodyBytes. If the read produces more bytes than the cap
+//     allows, return 413 Payload Too Large.
+//  5. Extract If-Match / If-None-Match preconditions for the backend.
+//  6. Call CalendarBackend.PutItem and map its result:
+//
+//     created=true  -> 201 Created  + ETag header
+//     created=false -> 204 No Content + ETag header
+//     ErrPreconditionFailed   -> 412
+//     ErrInvalidBody, ErrUIDMismatch -> 400
+//     ErrDescriptionTooLarge  -> 413
+//     other                   -> 500
 func (s *Server) servePUT(w http.ResponseWriter, r *http.Request) {
-	if _, ok := s.requireIdentity(w, r); !ok {
+	identity, ok := s.requireIdentity(w, r)
+	if !ok {
 		return
 	}
-	http.Error(w, "PUT not implemented yet", http.StatusNotImplemented)
+	page, list, uid, err := parsePath(r.URL.Path)
+	if err != nil || uid == "" {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+	if !isCalendarContentType(r.Header.Get("Content-Type")) {
+		http.Error(w, "unsupported media type", http.StatusUnsupportedMediaType)
+		return
+	}
+	body, tooLarge, err := readCappedBody(r.Body, maxPUTBodyBytes)
+	if err != nil {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+	if tooLarge {
+		http.Error(w, "payload too large", http.StatusRequestEntityTooLarge)
+		return
+	}
+	ifMatch := stripETagQuotes(r.Header.Get("If-Match"))
+	ifNoneMatch := strings.TrimSpace(r.Header.Get("If-None-Match"))
+
+	newETag, created, err := s.Backend.PutItem(r.Context(), page, list, uid, body, ifMatch, ifNoneMatch, identity)
+	if err != nil {
+		writePUTErrorStatus(w, err)
+		return
+	}
+	if newETag != "" {
+		w.Header().Set("ETag", newETag)
+	}
+	if created {
+		w.WriteHeader(http.StatusCreated)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
-// serveDELETE handles DELETE against /<page>/<list>/<uid>.ics. Skeleton —
-// implementation lands in P2-C5/green.
+// serveDELETE handles DELETE against /<page>/<list>/<uid>.ics. The
+// flow mirrors servePUT but is much simpler:
+//
+//  1. requireIdentity — 403 on anonymous.
+//  2. parsePath — non-item URLs return 400.
+//  3. Read If-Match for precondition enforcement.
+//  4. CalendarBackend.DeleteItem. Map its error:
+//
+//     nil                     -> 204 No Content
+//     ErrItemNotFound,
+//     ErrItemDeleted          -> 404
+//     ErrPreconditionFailed   -> 412
+//     other                   -> 500
 func (s *Server) serveDELETE(w http.ResponseWriter, r *http.Request) {
-	if _, ok := s.requireIdentity(w, r); !ok {
+	identity, ok := s.requireIdentity(w, r)
+	if !ok {
 		return
 	}
-	http.Error(w, "DELETE not implemented yet", http.StatusNotImplemented)
+	page, list, uid, err := parsePath(r.URL.Path)
+	if err != nil || uid == "" {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+	ifMatch := stripETagQuotes(r.Header.Get("If-Match"))
+
+	if err := s.Backend.DeleteItem(r.Context(), page, list, uid, ifMatch, identity); err != nil {
+		writeDELETEErrorStatus(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// isCalendarContentType reports whether ct is a Content-Type the PUT
+// handler accepts. Comparison is case-insensitive on the media type
+// portion (RFC 9110 §8.3.1) and tolerates an optional `; charset=...`
+// parameter.
+func isCalendarContentType(ct string) bool {
+	if ct == "" {
+		return false
+	}
+	// Cut off any parameters (e.g. "; charset=utf-8") before
+	// comparison so we don't reject the "text/calendar" form.
+	mediaType := ct
+	if i := strings.IndexByte(mediaType, ';'); i >= 0 {
+		mediaType = mediaType[:i]
+	}
+	mediaType = strings.TrimSpace(mediaType)
+	return strings.EqualFold(mediaType, iCalContentTypePrefix)
+}
+
+// readCappedBody reads up to limit+1 bytes from body. If the read
+// returns more than limit bytes, tooLarge is true and the returned
+// slice is empty. Otherwise body holds the request bytes (which may
+// be empty). Read errors other than io.EOF are returned unchanged.
+func readCappedBody(body io.Reader, limit int64) (data []byte, tooLarge bool, err error) {
+	// Read one byte past the limit so we can detect overruns.
+	limited := io.LimitReader(body, limit+1)
+	buf, err := io.ReadAll(limited)
+	if err != nil {
+		return nil, false, err
+	}
+	if int64(len(buf)) > limit {
+		return nil, true, nil
+	}
+	return buf, false, nil
+}
+
+// stripETagQuotes trims surrounding whitespace and the optional
+// surrounding double-quotes from an HTTP If-Match header value. RFC
+// 7232 §2.3 specifies the wire format `"…"` (or `W/"…"` for weak), so
+// the backend wants the inner token. Returns the input unchanged
+// (after trim) when no quotes are present so an explicit "*" or empty
+// value passes through.
+func stripETagQuotes(v string) string {
+	v = strings.TrimSpace(v)
+	v = strings.TrimPrefix(v, `W/`)
+	v = strings.TrimSpace(v)
+	if len(v) >= 2 && v[0] == '"' && v[len(v)-1] == '"' {
+		return v[1 : len(v)-1]
+	}
+	return v
+}
+
+// writePUTErrorStatus maps a backend error to the appropriate HTTP
+// status for the PUT path. Centralized so servePUT stays focused on
+// the happy path.
+func writePUTErrorStatus(w http.ResponseWriter, err error) {
+	switch {
+	case errors.Is(err, ErrPreconditionFailed):
+		http.Error(w, "precondition failed", http.StatusPreconditionFailed)
+	case errors.Is(err, ErrInvalidBody), errors.Is(err, ErrUIDMismatch):
+		http.Error(w, "bad request", http.StatusBadRequest)
+	case errors.Is(err, ErrDescriptionTooLarge):
+		http.Error(w, "payload too large", http.StatusRequestEntityTooLarge)
+	default:
+		http.Error(w, "internal error", http.StatusInternalServerError)
+	}
+}
+
+// writeDELETEErrorStatus maps a backend error to the appropriate HTTP
+// status for the DELETE path.
+func writeDELETEErrorStatus(w http.ResponseWriter, err error) {
+	switch {
+	case errors.Is(err, ErrItemNotFound), errors.Is(err, ErrItemDeleted):
+		http.Error(w, "not found", http.StatusNotFound)
+	case errors.Is(err, ErrPreconditionFailed):
+		http.Error(w, "precondition failed", http.StatusPreconditionFailed)
+	default:
+		http.Error(w, "internal error", http.StatusInternalServerError)
+	}
 }
