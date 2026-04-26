@@ -24,11 +24,11 @@ type Server struct {
 // route matching and forwards every CalDAV verb (and the .ics-shaped
 // GETs) here; non-CalDAV traffic never reaches this method.
 //
-// PUT and DELETE return 501 for now — Phase 2 will land servePUT /
-// serveDELETE. Other recognized CalDAV verbs (MKCALENDAR, COPY, MOVE,
-// PROPPATCH) likewise return 405; the gateway forwards them so we
-// don't have to teach the gateway every CalDAV verb the protocol
-// allows, but the wiki has no use for them.
+// The implemented handlers (serveOPTIONS / servePROPFIND / serveREPORT
+// / serveGET) each enforce identity via requireIdentity, so anonymous
+// callers see a 403 from those branches. The unimplemented PUT / DELETE
+// branches gate on identity here so the 501 isn't an information leak
+// for off-tailnet probes.
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodOptions:
@@ -40,9 +40,15 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case http.MethodGet, http.MethodHead:
 		s.serveGET(w, r)
 	case http.MethodPut:
+		if _, ok := s.requireIdentity(w, r); !ok {
+			return
+		}
 		// Phase 2 will implement servePUT.
 		http.Error(w, "PUT not implemented yet", http.StatusNotImplemented)
 	case http.MethodDelete:
+		if _, ok := s.requireIdentity(w, r); !ok {
+			return
+		}
 		// Phase 2 will implement serveDELETE.
 		http.Error(w, "DELETE not implemented yet", http.StatusNotImplemented)
 	default:
