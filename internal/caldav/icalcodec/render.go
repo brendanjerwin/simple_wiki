@@ -42,13 +42,46 @@ func RenderItem(item *apiv1.ChecklistItem, page string, listName string, baseURL
 // value is a stable opaque string identifying the producing application.
 const productID = "-//simple_wiki//CalDAV//EN"
 
-// neutralPriority is the RFC 5545 "no priority" / undefined sentinel.
-// We emit it on every VTODO because PRIORITY is required to be in
-// 0..9; clients that ignore X-APPLE-SORT-ORDER fall back to PRIORITY,
-// and emitting 5 (medium) avoids accidentally communicating "high" or
-// "low" to those clients. Real ordering is conveyed by
-// X-APPLE-SORT-ORDER.
-const neutralPriority = 5
+// priorityMin / priorityMax bound the RFC 5545 PRIORITY values we
+// emit. The spec allows 0 ("undefined") through 9; we never emit 0
+// because then clients that order by PRIORITY would see all items
+// as a tie and ignore our intended order.
+const (
+	priorityMin = 1
+	priorityMax = 9
+)
+
+// priorityForSortOrder maps a wiki sort_order (sparse int64,
+// conventionally multiples of checklistmutator.SortOrderStep = 1000)
+// onto an RFC 5545 PRIORITY value (1..9, 1 = highest).
+//
+// The wiki appends new items at sort_order = (n+1)*1000, so for the
+// first 9 items the mapping is 1:1: sort_order=1000 → PRIORITY:1,
+// 2000 → 2, …, 9000 → 9. Past the ninth item the bucket saturates
+// at 9.
+//
+// Apple Reminders honors X-APPLE-SORT-ORDER (see xAppleSortOrder)
+// and ignores PRIORITY for ordering, so the saturation only affects
+// clients like tasks.org / DAVx5 that order by PRIORITY. For typical
+// household lists with under a dozen items the mapping is exact;
+// longer lists collapse the tail into a single visual group.
+func priorityForSortOrder(sortOrder int64) int {
+	bucket := sortOrder / sortOrderStep
+	if bucket < priorityMin {
+		return priorityMin
+	}
+	if bucket > priorityMax {
+		return priorityMax
+	}
+	return int(bucket)
+}
+
+// sortOrderStep matches checklistmutator.SortOrderStep — the
+// conventional spacing between adjacent items' sort_order values.
+// Duplicated here to avoid an icalcodec → checklistmutator import
+// cycle. The value is part of the wiki's data-layout contract; both
+// sides are kept in sync at code-review time.
+const sortOrderStep = 1000
 
 // xAppleSortOrder is the Apple-namespaced extension property Apple
 // Reminders uses to order tasks within a list.
@@ -105,7 +138,7 @@ func renderToCalendar(item *apiv1.ChecklistItem, page string, listName string, b
 	}
 
 	setRawValue(todo, xAppleSortOrder, strconv.FormatInt(item.SortOrder, sortOrderBase10))
-	setRawValue(todo, ical.PropPriority, strconv.Itoa(neutralPriority))
+	setRawValue(todo, ical.PropPriority, strconv.Itoa(priorityForSortOrder(item.SortOrder)))
 
 	if u, err := url.Parse(buildBacklink(baseURL, page, listName)); err == nil {
 		todo.Props.SetURI(ical.PropURL, u)
