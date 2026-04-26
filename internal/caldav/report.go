@@ -4,14 +4,18 @@
 // carries an XML body describing the report the client wants. Phase 1
 // of the bridge handles two report types:
 //
-//   - calendar-multiget (RFC 4791 §7.9): explicit list of hrefs the
-//     client already knows about, used after PROPFIND to fetch the
-//     calendar-data + getetag for each item in one round-trip.
+//   - calendar-multiget (RFC 4791 §7.9): an explicit list of hrefs the
+//     client already knows about. After PROPFIND tells iOS / DAVx5
+//     which items live in a collection, the client batches the per-
+//     item GETs into one calendar-multiget so it gets every getetag +
+//     calendar-data in a single request.
 //   - calendar-query    (RFC 4791 §7.8): server-side filtering on a
-//     collection. Phase 1 honors the trivial `VCALENDAR > VTODO`
-//     component-filter (which matches every item we serve) and ignores
-//     more advanced filters (text-match, time-range, prop-filter); they
-//     surface as "no filter" — clients receive every live item back.
+//     collection. Phase 1 does not honor the <C:filter> element — every
+//     calendar-query returns every live item from the addressed
+//     collection. Real-world clients (iOS, DAVx5) only send the trivial
+//     `VCALENDAR > VTODO` component-filter, which matches every item we
+//     render anyway, so ignoring the filter is a safe approximation
+//     until a future phase needs precise filtering.
 //
 // sync-collection (RFC 6578) is a third REPORT type the spec lists.
 // Phase 1 returns 501 Not Implemented for it; Phase 3 will land it.
@@ -26,10 +30,17 @@ import (
 	"strings"
 )
 
-// statusNotFound is the per-href status line for a multistatus
-// response describing a resource the server could not resolve. RFC
-// 2616 §6.1 quotes the canonical `HTTP/1.1 <code> <reason>` shape.
+// Per-href status line used inside multistatus responses. RFC 2616 §6.1
+// quotes the canonical `HTTP/1.1 <code> <reason>` shape.
 const statusNotFound = "HTTP/1.1 404 Not Found"
+
+// REPORT root element local names. Centralized so the dispatcher and
+// any future per-type handler agree on the spelling.
+const (
+	reportLocalMultiget       = "calendar-multiget"
+	reportLocalCalendarQuery  = "calendar-query"
+	reportLocalSyncCollection = "sync-collection"
+)
 
 // reportRoot is the minimal XML decoded from the REPORT body just to
 // learn which report type the client is asking for. Each per-type
@@ -56,7 +67,8 @@ type multigetRequest struct {
 
 // calendarQueryRequest is the calendar-query request body shape. The
 // filter element is intentionally not modeled — Phase 1 ignores it (we
-// always return every live item from the addressed collection).
+// always return every live item from the addressed collection). The
+// type exists only so xml.Unmarshal can validate the body parses.
 type calendarQueryRequest struct {
 	XMLName xml.Name `xml:"urn:ietf:params:xml:ns:caldav calendar-query"`
 }
@@ -80,11 +92,11 @@ func (s *Server) serveREPORT(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	switch {
-	case root.XMLName.Space == nsCalDAV && root.XMLName.Local == "calendar-multiget":
+	case root.XMLName.Space == nsCalDAV && root.XMLName.Local == reportLocalMultiget:
 		s.reportMultiget(w, r, body)
-	case root.XMLName.Space == nsCalDAV && root.XMLName.Local == "calendar-query":
+	case root.XMLName.Space == nsCalDAV && root.XMLName.Local == reportLocalCalendarQuery:
 		s.reportCalendarQuery(w, r, body)
-	case root.XMLName.Space == nsDAV && root.XMLName.Local == "sync-collection":
+	case root.XMLName.Space == nsDAV && root.XMLName.Local == reportLocalSyncCollection:
 		// Phase 3 will land this; for now reject with 501 so clients
 		// that probe it (DAVx5 does, then falls back) don't see a 400.
 		http.Error(w, "sync-collection not implemented yet", http.StatusNotImplemented)
@@ -94,9 +106,11 @@ func (s *Server) serveREPORT(w http.ResponseWriter, r *http.Request) {
 }
 
 // reportMultiget handles the calendar-multiget REPORT body. Each href
-// resolves through parsePath + Backend.GetItem; per-href errors surface
-// as a 404 inside the multistatus response so a single bad href doesn't
-// poison the entire batch.
+// resolves through parsePath + Backend.GetItem; per-href resolution
+// errors surface as a 404 inside the multistatus response so a single
+// bad href doesn't poison the entire batch. The page in each href —
+// not the request URL — is what's passed to GetItem, so a multiget
+// that spans pages (rare but legal) works.
 func (s *Server) reportMultiget(w http.ResponseWriter, r *http.Request, body []byte) {
 	var req multigetRequest
 	if err := xml.Unmarshal(body, &req); err != nil {
@@ -113,7 +127,7 @@ func (s *Server) reportMultiget(w http.ResponseWriter, r *http.Request, body []b
 		}
 		item, err := s.Backend.GetItem(r.Context(), page, list, uid)
 		if err != nil {
-			if errors.Is(err, ErrItemNotFound) || errors.Is(err, ErrItemDeleted) || errors.Is(err, ErrCollectionNotFound) {
+			if isResourceMissing(err) {
 				resps = append(resps, notFoundResponse(hrefPath))
 				continue
 			}
@@ -129,15 +143,8 @@ func (s *Server) reportMultiget(w http.ResponseWriter, r *http.Request, body []b
 
 // reportCalendarQuery handles the calendar-query REPORT body. Phase 1
 // does no real filtering — the request URL must point at a collection,
-// and we return every live item from that collection.
-//
-// Filter handling: we don't decode the <C:filter> element. Clients we
-// care about (iOS, DAVx5) send the trivial `VCALENDAR > VTODO`
-// component-filter, which matches every item we render anyway. More
-// elaborate filters (text-match, time-range, prop-filter) are accepted
-// silently and ignored; the multistatus payload still contains every
-// live item. If a future Phase needs precise filtering, this is where
-// it lands.
+// and we return every live item from that collection. See the package
+// doc comment for the rationale.
 func (s *Server) reportCalendarQuery(w http.ResponseWriter, r *http.Request, body []byte) {
 	var req calendarQueryRequest
 	if err := xml.Unmarshal(body, &req); err != nil {
@@ -166,30 +173,27 @@ func (s *Server) reportCalendarQuery(w http.ResponseWriter, r *http.Request, bod
 	writeMultistatus(w, resps)
 }
 
-// notFoundResponse builds a 404-style multistatus response for a single
-// href that did not resolve. Per RFC 4918 §13.5 a top-level <status>
-// (no propstat) is the canonical shape for "the resource itself is
-// gone" — a propstat with a 404 inside means a specific property is
-// missing, not the whole resource.
-func notFoundResponse(href string) multistatusResponse {
-	// We need a sibling to Propstat for the bare-status case; the
-	// shared multistatusResponse type doesn't model it. Encode by
-	// hand-marshaling a minimal element. This keeps propfind.go's
-	// response shape intact while giving REPORT what it needs.
-	return multistatusResponse{
-		Href:     href,
-		Propstat: []propstat{notFoundPropstat()},
-	}
+// isResourceMissing reports whether err means "the resource the client
+// asked about does not exist on the server" — the cluster of errors
+// that turn into a per-href 404 inside a multistatus response.
+func isResourceMissing(err error) bool {
+	return errors.Is(err, ErrItemNotFound) ||
+		errors.Is(err, ErrItemDeleted) ||
+		errors.Is(err, ErrCollectionNotFound)
 }
 
-// notFoundPropstat returns a propstat whose status is 404. For per-
-// resource not-found we'd prefer a top-level <status>, but the current
-// multistatusResponse type only carries propstat children; reporting
-// 404 inside an empty propstat is what RFC 4918 §13.5 permits as an
-// alternate shape and what real CalDAV clients (iOS, DAVx5) accept.
-func notFoundPropstat() propstat {
-	return propstat{
-		Prop:   prop{},
-		Status: statusNotFound,
+// notFoundResponse builds a 404-style multistatus response for a single
+// href that did not resolve. RFC 4918 §13.5 prefers a top-level <status>
+// (no propstat) for "the resource itself is gone", but the
+// multistatusResponse type shared with PROPFIND only carries propstat
+// children; emitting the 404 inside an empty propstat is the alternate
+// shape that real CalDAV clients (iOS, DAVx5) accept.
+func notFoundResponse(href string) multistatusResponse {
+	return multistatusResponse{
+		Href: href,
+		Propstat: []propstat{{
+			Prop:   prop{},
+			Status: statusNotFound,
+		}},
 	}
 }

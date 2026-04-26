@@ -61,8 +61,11 @@ func (*reportBackend) SyncCollection(_ context.Context, _, _, _ string) (string,
 }
 
 // reportRequest builds an authenticated REPORT request with the given
-// XML body. Depth is set to "0" by default (the value DAVx5 uses on
-// calendar-multiget); callers can override via reportRequestDepth.
+// XML body. Depth is set to "0" — the value DAVx5 sends on
+// calendar-multiget. The handler does not look at Depth (REPORT
+// semantics are owned by the report type, not the WebDAV depth header)
+// but the value is set so the request shape matches what real clients
+// emit.
 func reportRequest(target, body string) *http.Request {
 	req := httptest.NewRequest("REPORT", target, strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/xml; charset=utf-8")
