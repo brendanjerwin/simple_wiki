@@ -99,10 +99,10 @@ var _ = Describe("defaultBackend.ListCollections", func() {
 
 	When("the page has two checklists", func() {
 		var (
-			cols      []caldav.CalendarCollection
-			err       error
-			updated1  time.Time
-			updated2  time.Time
+			cols       []caldav.CalendarCollection
+			err        error
+			updated1   time.Time
+			updated2   time.Time
 			checklist1 *apiv1.Checklist
 			checklist2 *apiv1.Checklist
 		)
@@ -420,6 +420,153 @@ var _ = Describe("defaultBackend.ListItems", func() {
 
 		It("should return no items", func() {
 			Expect(items).To(BeEmpty())
+		})
+	})
+})
+
+var _ = Describe("defaultBackend.GetItem", func() {
+	var (
+		ctx     context.Context
+		now     time.Time
+		fake    *fakeMutator
+		backend caldav.CalendarBackend
+	)
+
+	BeforeEach(func() {
+		ctx = context.Background()
+		now = time.Date(2026, 4, 25, 13, 0, 0, 0, time.UTC)
+		fake = &fakeMutator{pages: map[string][]*apiv1.Checklist{}}
+		backend = caldav.NewBackend(fake, "https://wiki.example.com", fixedNow(now))
+	})
+
+	When("the requested uid names a live item", func() {
+		var (
+			item   caldav.CalendarItem
+			err    error
+			source *apiv1.ChecklistItem
+		)
+
+		BeforeEach(func() {
+			itemUpdated := now.Add(-30 * time.Minute)
+			source = &apiv1.ChecklistItem{
+				Uid:       "01HXAAAAAAAAAAAAAAAAAAAAAA",
+				Text:      "Buy milk",
+				SortOrder: 1000,
+				CreatedAt: timestamppb.New(itemUpdated.Add(-time.Hour)),
+				UpdatedAt: timestamppb.New(itemUpdated),
+			}
+			fake.pages["shopping"] = []*apiv1.Checklist{{
+				Name:      "this-week",
+				UpdatedAt: timestamppb.New(now.Add(-time.Hour)),
+				SyncToken: 5,
+				Items:     []*apiv1.ChecklistItem{source},
+			}}
+			item, err = backend.GetItem(ctx, "shopping", "this-week", "01HXAAAAAAAAAAAAAAAAAAAAAA")
+		})
+
+		It("should not return an error", func() {
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should set UID from the source item", func() {
+			Expect(item.UID).To(Equal("01HXAAAAAAAAAAAAAAAAAAAAAA"))
+		})
+
+		It("should derive ETag from the source item's UpdatedAt", func() {
+			Expect(item.ETag).To(Equal(`W/"` + source.UpdatedAt.AsTime().Format(time.RFC3339Nano) + `"`))
+		})
+
+		It("should set UpdatedAt from the source item", func() {
+			Expect(item.UpdatedAt).To(Equal(source.UpdatedAt.AsTime()))
+		})
+
+		It("should set CreatedAt from the source item", func() {
+			Expect(item.CreatedAt).To(Equal(source.CreatedAt.AsTime()))
+		})
+
+		It("should produce non-empty ICalBytes", func() {
+			Expect(item.ICalBytes).NotTo(BeEmpty())
+		})
+
+		It("should produce ICalBytes containing a VTODO component", func() {
+			Expect(string(item.ICalBytes)).To(ContainSubstring("BEGIN:VTODO"))
+		})
+	})
+
+	When("the requested uid is in the tombstone list", func() {
+		var (
+			item caldav.CalendarItem
+			err  error
+		)
+
+		BeforeEach(func() {
+			fake.pages["shopping"] = []*apiv1.Checklist{{
+				Name:      "this-week",
+				UpdatedAt: timestamppb.New(now.Add(-time.Hour)),
+				SyncToken: 5,
+				Tombstones: []*apiv1.Tombstone{{
+					Uid:       "01HXCCCCCCCCCCCCCCCCCCCCCC",
+					DeletedAt: timestamppb.New(now.Add(-2 * time.Hour)),
+					SyncToken: 3,
+				}},
+			}}
+			item, err = backend.GetItem(ctx, "shopping", "this-week", "01HXCCCCCCCCCCCCCCCCCCCCCC")
+		})
+
+		It("should return ErrItemDeleted", func() {
+			Expect(err).To(MatchError(caldav.ErrItemDeleted))
+		})
+
+		It("should return a zero-value CalendarItem", func() {
+			Expect(item).To(Equal(caldav.CalendarItem{}))
+		})
+	})
+
+	When("the requested uid is unknown", func() {
+		var (
+			item caldav.CalendarItem
+			err  error
+		)
+
+		BeforeEach(func() {
+			fake.pages["shopping"] = []*apiv1.Checklist{{
+				Name:      "this-week",
+				UpdatedAt: timestamppb.New(now.Add(-time.Hour)),
+				SyncToken: 5,
+				Items: []*apiv1.ChecklistItem{{
+					Uid:       "01HXAAAAAAAAAAAAAAAAAAAAAA",
+					Text:      "Buy milk",
+					UpdatedAt: timestamppb.New(now),
+				}},
+			}}
+			item, err = backend.GetItem(ctx, "shopping", "this-week", "01HXZZZZZZZZZZZZZZZZZZZZZZ")
+		})
+
+		It("should return ErrItemNotFound", func() {
+			Expect(err).To(MatchError(caldav.ErrItemNotFound))
+		})
+
+		It("should return a zero-value CalendarItem", func() {
+			Expect(item).To(Equal(caldav.CalendarItem{}))
+		})
+	})
+
+	When("the named list does not exist on the page", func() {
+		var (
+			item caldav.CalendarItem
+			err  error
+		)
+
+		BeforeEach(func() {
+			item, err = backend.GetItem(ctx, "missing", "this-week", "01HXAAAAAAAAAAAAAAAAAAAAAA")
+		})
+
+		It("should return ErrItemNotFound", func() {
+			Expect(err).To(MatchError(caldav.ErrItemNotFound))
+		})
+
+		It("should return a zero-value CalendarItem", func() {
+			Expect(item).To(Equal(caldav.CalendarItem{}))
 		})
 	})
 })

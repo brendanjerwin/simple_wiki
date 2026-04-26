@@ -247,7 +247,29 @@ func (b *defaultBackend) renderItem(item *apiv1.ChecklistItem, page, listName st
 	return ci
 }
 
-func (*defaultBackend) GetItem(_ context.Context, _, _, _ string) (CalendarItem, error) {
+// GetItem returns the iCalendar representation of a single item.
+// Searches the live items first; on miss, consults the tombstone list
+// so a recently-deleted uid surfaces as ErrItemDeleted (mapped to a
+// 404 by the HTTP layer, but distinguishable from "never existed" so
+// sync-collection can replay the deletion). Unknown uids return
+// ErrItemNotFound.
+func (b *defaultBackend) GetItem(ctx context.Context, page, listName, uid string) (CalendarItem, error) {
+	checklist, err := b.mutator.ListItems(ctx, page, listName)
+	if err != nil {
+		return CalendarItem{}, fmt.Errorf("caldav: get item %q/%q/%q: %w", page, listName, uid, err)
+	}
+	if checklist != nil {
+		for _, it := range checklist.Items {
+			if it.Uid == uid {
+				return b.renderItem(it, page, listName), nil
+			}
+		}
+		for _, t := range checklist.Tombstones {
+			if t.Uid == uid {
+				return CalendarItem{}, ErrItemDeleted
+			}
+		}
+	}
 	return CalendarItem{}, ErrItemNotFound
 }
 
