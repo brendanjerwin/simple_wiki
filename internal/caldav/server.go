@@ -3,10 +3,12 @@ package caldav
 import (
 	"errors"
 	"io"
+	"log"
 	"net/http"
 	"strings"
 
 	"github.com/brendanjerwin/simple_wiki/tailscale"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // Server is the CalDAV HTTP handler. It owns the CalendarBackend
@@ -18,6 +20,40 @@ type Server struct {
 	// before dispatching; backend implementations read it via
 	// tailscale.IdentityFromContext.
 	Backend CalendarBackend
+
+	// Metrics is the per-method OTel counter set fed by the
+	// instrumented wrapper around every handler. Wired up by NewServer.
+	// May be nil — when the OTel meter fails to register the counters
+	// we drop instrumentation rather than crashing the server, so this
+	// field MUST be checked for nil before use.
+	Metrics *serverMetrics
+
+	// Tracer is the OTel tracer the instrumented wrapper uses to start
+	// per-method spans. Wired up by NewServer to otel.Tracer("simple_wiki/caldav").
+	// When nil (zero-value Server, used by some legacy tests) the
+	// instrumented wrapper falls back to otel.Tracer at call time.
+	Tracer trace.Tracer
+
+	// auditLogger is the destination for write-path audit log lines.
+	// Defaults to log.Default() when unset; tests inject a buffer-backed
+	// logger to capture output. The field is unexported so production
+	// callers always use the standard logger and tests stage a fake via
+	// the test-only setter in export_test.go.
+	auditLogger *log.Logger
+}
+
+// NewServer constructs a CalDAV Server with metrics, tracing, and audit
+// logging wired up. Construction never fails — when the OTel meter
+// rejects a counter registration we fall back to no metrics rather
+// than aborting startup; CalDAV's value to the user has nothing to do
+// with whether the OTLP feed is configured.
+func NewServer(backend CalendarBackend) *Server {
+	metrics, _ := newServerMetrics()
+	return &Server{
+		Backend: backend,
+		Metrics: metrics,
+		Tracer:  newServerTracer(),
+	}
 }
 
 // ServeHTTP dispatches a CalDAV-shaped request to the matching method
@@ -33,21 +69,36 @@ type Server struct {
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodOptions:
-		s.serveOPTIONS(w, r)
+		s.instrumented(methodLabelOptions, s.serveOPTIONS)(w, r)
 	case methodPROPFIND:
-		s.servePROPFIND(w, r)
+		s.instrumented(methodLabelPropfind, s.servePROPFIND)(w, r)
 	case methodREPORT:
-		s.serveREPORT(w, r)
+		s.instrumented(methodLabelReport, s.serveREPORT)(w, r)
 	case http.MethodGet, http.MethodHead:
-		s.serveGET(w, r)
+		s.instrumented(methodLabelGet, s.serveGET)(w, r)
 	case http.MethodPut:
-		s.servePUT(w, r)
+		s.instrumented(methodLabelPut, s.servePUT)(w, r)
 	case http.MethodDelete:
-		s.serveDELETE(w, r)
+		s.instrumented(methodLabelDelete, s.serveDELETE)(w, r)
 	default:
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 	}
 }
+
+// methodLabel* are the lowercase verb tokens used as the {method}
+// attribute on every CalDAV metric and as the suffix on every
+// caldav.<method> span name. Constants because (a) revive's
+// add-constant rule fires on raw string literals here and (b) any
+// drift between metric and span attributes would silently break the
+// OTLP-side dashboards.
+const (
+	methodLabelOptions  = "options"
+	methodLabelPropfind = "propfind"
+	methodLabelReport   = "report"
+	methodLabelGet      = "get"
+	methodLabelPut      = "put"
+	methodLabelDelete   = "delete"
+)
 
 // methodPROPFIND is the WebDAV verb (RFC 4918 §9.1) used to retrieve
 // resource properties. Declared as a constant so ServeHTTP and the
