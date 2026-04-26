@@ -229,6 +229,7 @@ func collectionResponse(col CalendarCollection) multistatusResponse {
 				SupportedCalendarComponentSet: &supportedComponents{
 					Comps: []comp{{Name: "VTODO"}},
 				},
+				CurrentUserPrivilegeSet: fullPrivilegeSet(),
 			},
 			Status: statusOK,
 		}},
@@ -359,6 +360,7 @@ type prop struct {
 	CalendarHomeSet               *calendarHomeSet     `xml:"urn:ietf:params:xml:ns:caldav calendar-home-set,omitempty"`
 	SupportedCalendarComponentSet *supportedComponents `xml:"urn:ietf:params:xml:ns:caldav supported-calendar-component-set,omitempty"`
 	CalendarDataRaw               string               `xml:"urn:ietf:params:xml:ns:caldav calendar-data,omitempty"`
+	CurrentUserPrivilegeSet       *privilegeSet        `xml:"current-user-privilege-set,omitempty"`
 }
 
 // resourceType is the WebDAV `<resourcetype>` value. Empty children
@@ -401,5 +403,39 @@ type supportedComponents struct {
 // identifying a single iCalendar component type (e.g. VTODO).
 type comp struct {
 	Name string `xml:"name,attr"`
+}
+
+// privilegeSet is the value of `<DAV:current-user-privilege-set>`.
+// Each child element marks one privilege the requesting principal
+// holds on the resource. iOS Reminders specifically reads this on
+// the calendar collection: when it's missing, iOS treats the
+// collection as effectively read-only and silently stops issuing
+// PUTs even if the rest of the protocol succeeded. The wiki has no
+// real ACL — every Tailscale-authenticated principal has full
+// read+write — so we emit the standard read+write privilege set
+// unconditionally on collection responses.
+type privilegeSet struct {
+	Read                          *empty `xml:"privilege>read,omitempty"`
+	Write                         *empty `xml:"privilege>write,omitempty"`
+	WriteContent                  *empty `xml:"privilege>write-content,omitempty"`
+	WriteProperties               *empty `xml:"privilege>write-properties,omitempty"`
+	Bind                          *empty `xml:"privilege>bind,omitempty"`
+	Unbind                        *empty `xml:"privilege>unbind,omitempty"`
+	ReadCurrentUserPrivilegeSet   *empty `xml:"privilege>read-current-user-privilege-set,omitempty"`
+}
+
+// fullPrivilegeSet is the canonical "this principal can do everything
+// on this resource" value. Reused across collectionResponse so the
+// wire form stays identical between collections.
+func fullPrivilegeSet() *privilegeSet {
+	return &privilegeSet{
+		Read:                        &empty{},
+		Write:                       &empty{},
+		WriteContent:                &empty{},
+		WriteProperties:             &empty{},
+		Bind:                        &empty{},
+		Unbind:                      &empty{},
+		ReadCurrentUserPrivilegeSet: &empty{},
+	}
 }
 

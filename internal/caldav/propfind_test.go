@@ -270,6 +270,13 @@ var _ = Describe("Server.servePROPFIND", func() {
 			Expect(rec.Body.String()).To(ContainSubstring(`name="VTODO"`))
 		})
 
+		It("should advertise current-user-privilege-set so iOS doesn't treat the calendar as read-only", func() {
+			body := rec.Body.String()
+			Expect(body).To(ContainSubstring("<current-user-privilege-set>"))
+			Expect(body).To(ContainSubstring("<write>"))
+			Expect(body).To(ContainSubstring("<read>"))
+		})
+
 		It("should not enumerate items at Depth:0", func() {
 			Expect(rec.Body.String()).NotTo(ContainSubstring(".ics"))
 		})

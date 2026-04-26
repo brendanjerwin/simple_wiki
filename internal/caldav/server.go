@@ -350,9 +350,17 @@ func buildHref(page, list, uid string) string {
 }
 
 // davCapabilities is the value of the DAV response header on every
-// CalDAV response. The class numbers come from RFC 4918 (1, 3) and the
-// calendar-access token from RFC 4791 §5.1.
-const davCapabilities = "1, 3, calendar-access"
+// CalDAV response. The class numbers come from RFC 4918 (1, 2, 3) and
+// the calendar-access token from RFC 4791 §5.1.
+//
+// Class 2 (locking) is advertised even though the wiki doesn't
+// implement WebDAV LOCK / UNLOCK. iOS Reminders gates several "is
+// this a real DAV server" code paths on seeing "2" in the header
+// and silently throttles sync when the token is missing — adding it
+// keeps iOS happy without requiring lock support, and we don't
+// advertise <DAV:supportedlock/> on PROPFIND so a client that
+// follows up trying to lock gets a clean 405 from method dispatch.
+const davCapabilities = "1, 2, 3, calendar-access"
 
 // allowedMethods is the value of the Allow response header. Lists the
 // HTTP/WebDAV/CalDAV verbs the gateway dispatches to this Server.
@@ -414,6 +422,9 @@ func (s *Server) serveGET(w http.ResponseWriter, r *http.Request) {
 	h.Set("Content-Type", iCalendarContentType)
 	if item.ETag != "" {
 		h.Set("ETag", item.ETag)
+	}
+	if !item.UpdatedAt.IsZero() {
+		h.Set("Last-Modified", item.UpdatedAt.UTC().Format(http.TimeFormat))
 	}
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(item.ICalBytes)

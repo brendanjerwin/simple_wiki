@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -581,7 +582,7 @@ var _ = Describe("Server.serveOPTIONS", func() {
 	})
 
 	It("should set the DAV header to advertise CalDAV capabilities", func() {
-		Expect(rec.Header().Get("DAV")).To(Equal("1, 3, calendar-access"))
+		Expect(rec.Header().Get("DAV")).To(Equal("1, 2, 3, calendar-access"))
 	})
 
 	It("should set the Allow header listing every supported verb", func() {
@@ -666,6 +667,33 @@ var _ = Describe("Server.serveGET", func() {
 
 		It("should return 404 Not Found", func() {
 			Expect(rec.Code).To(Equal(http.StatusNotFound))
+		})
+	})
+
+	When("the backend returns an item with UpdatedAt set", func() {
+		var rec *httptest.ResponseRecorder
+		var when time.Time
+
+		BeforeEach(func() {
+			when = time.Date(2026, 4, 25, 13, 0, 0, 0, time.UTC)
+			backend := &fakeServerBackend{
+				getItemFn: func(_ context.Context, _, _, _ string) (caldav.CalendarItem, error) {
+					return caldav.CalendarItem{
+						UID:       okUID,
+						ETag:      `W/"2026-04-25T13:00:00Z"`,
+						UpdatedAt: when,
+						ICalBytes: []byte("BEGIN:VCALENDAR\r\nEND:VCALENDAR\r\n"),
+					}, nil
+				},
+			}
+			server := &caldav.Server{Backend: backend}
+			rec = httptest.NewRecorder()
+			req := authedRequest(http.MethodGet, okPath)
+			server.ServeGETForTest(rec, req)
+		})
+
+		It("should set Last-Modified to the item's updated_at in HTTP-date form", func() {
+			Expect(rec.Header().Get("Last-Modified")).To(Equal(when.UTC().Format(http.TimeFormat)))
 		})
 	})
 

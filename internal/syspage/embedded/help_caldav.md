@@ -74,7 +74,28 @@ The `Authorization` header that iOS and DAVx5 send is **never read** by the wiki
 
 When the phone PUTs a change, the wiki page rendering of the same checklist updates within a second. The `wiki-checklist` web component subscribes to `ChecklistService.WatchList`, a server-side push channel that fires whenever the per-list `sync_token` advances — gRPC writes, CalDAV writes, and agent writes all bump the token. A 2 s polling fallback covers transient stream drops.
 
-In practice: tap "done" on a phone, the same item ticks itself off in the open browser tab without a refresh.
+In practice: tap "done" on a phone, the same item ticks itself off in the open browser tab without a refresh — *as long as the phone has actually pushed the edit.* iOS Reminders is conservative about when it does that (see below).
+
+## iOS Reminders sync latency (and how to get it down)
+
+Apple's Reminders app does not use APNs push for non-iCloud CalDAV accounts — the wiki cannot tell the phone "wake up and pull." iOS schedules its own outbound writes based on its internal state machine. Typical latencies:
+
+- **App foregrounded, edit a reminder:** PUT lands at the wiki within 1–5 seconds.
+- **App backgrounded, screen on:** typically 30 s – 2 min (the foreground/background transition triggers a sync).
+- **App killed, screen locked, or Low Power Mode:** can be **15–30 minutes**, sometimes until next foreground.
+- **Inbound (server → iOS):** bounded by the per-account "Fetch New Data" interval, which is **15 minutes minimum** for non-iCloud accounts.
+
+Levers you can pull on the phone:
+
+1. **Settings → Calendar → Accounts → wiki account → Fetch New Data** — set this account to *Every 15 Minutes* (the floor for third-party CalDAV; "Push" only works for iCloud / Exchange).
+2. **Disable Low Power Mode** — it suspends background CalDAV.
+3. **Foreground Reminders before making time-critical edits** — the foreground PUT path is fast and reliable.
+
+Levers you can pull on the wiki:
+
+The wiki already advertises everything iOS Reminders looks for — `getctag` that bumps on every write, `sync-token` for incremental sync (RFC 6578), `<DAV:current-user-privilege-set>` so iOS knows the calendar is writable, `DAV: 1, 2, 3, calendar-access` in the OPTIONS header, `<C:supported-calendar-component-set>` listing `VTODO`, `Last-Modified` on `.ics` GETs, and `ETag` on every resource. There is no further server-side trick that makes iOS poll faster.
+
+If the latency is unacceptable for a particular use case (e.g. a shared shopping list while one person is at the store), open the wiki page directly in mobile Safari — that path is real-time via `WatchList` and ignores iOS Reminders entirely.
 
 ## Multiple lists, multiple accounts
 
