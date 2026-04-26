@@ -772,3 +772,82 @@ var _ = Describe("CalDAV e2e: DAVx5 subscribes and syncs", func() {
 		})
 	})
 })
+
+var _ = Describe("CalDAV e2e: two clients race a PUT with the same If-Match", func() {
+	var (
+		f         *e2eFixture
+		seededUID string
+		// initialETag is the per-item ETag both clients see before any
+		// of them mutate the item — the value both will pass to
+		// If-Match to assert "I'm updating the version I last read."
+		initialETag string
+	)
+
+	BeforeEach(func() {
+		f = newFixture()
+		seededUID = seedShoppingList(f, "Original")
+
+		// Capture the initial ETag both clients would have read via a
+		// PROPFIND. The wiki's per-item ETag is W/"<rfc3339nano of
+		// updated_at>", so we ask the mutator directly rather than
+		// parsing it out of XML.
+		cl, err := f.mutator.ListItems(f.ctx, "shopping", "this-week")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(cl.Items).To(HaveLen(1))
+		initialETag = `W/"` + cl.Items[0].UpdatedAt.AsTime().UTC().Format(time.RFC3339Nano) + `"`
+	})
+
+	When("client A wins the race and client B's stale If-Match arrives second", func() {
+		var (
+			recA *httptest.ResponseRecorder
+			recB *httptest.ResponseRecorder
+		)
+
+		BeforeEach(func() {
+			// Client A fires first and gets through.
+			f.clock.advance(time.Minute)
+			recA = f.doWithIdentity(
+				http.MethodPut,
+				itemPath(seededUID),
+				iCalContentType,
+				vtodoBody(seededUID, "A wins", "NEEDS-ACTION"),
+				f.alice,
+				map[string]string{"If-Match": quotedETag(initialETag)},
+			)
+
+			// Client B fires second with the same now-stale ETag.
+			// Bob's clock advances another second so any If-Match
+			// comparison against UpdatedAt is unambiguous.
+			f.clock.advance(time.Second)
+			recB = f.doWithIdentity(
+				http.MethodPut,
+				itemPath(seededUID),
+				iCalContentType,
+				vtodoBody(seededUID, "B loses", "NEEDS-ACTION"),
+				f.bob,
+				map[string]string{"If-Match": quotedETag(initialETag)},
+			)
+		})
+
+		It("should let client A win with 204 No Content", func() {
+			Expect(recA.Code).To(Equal(http.StatusNoContent))
+		})
+
+		It("should set a new ETag on client A's response", func() {
+			newETag := recA.Header().Get("ETag")
+			Expect(newETag).NotTo(BeEmpty())
+			Expect(newETag).NotTo(Equal(initialETag))
+		})
+
+		It("should reject client B with 412 Precondition Failed", func() {
+			Expect(recB.Code).To(Equal(http.StatusPreconditionFailed))
+		})
+
+		It("should leave the persisted item with client A's text", func() {
+			cl, err := f.mutator.ListItems(f.ctx, "shopping", "this-week")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(cl.Items).To(HaveLen(1))
+			Expect(cl.Items[0].Text).To(Equal("A wins"))
+		})
+	})
+})
