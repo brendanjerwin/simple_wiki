@@ -69,6 +69,12 @@ Writes from CalDAV use the **Tailscale principal** of the device making the requ
 
 The `Authorization` header that iOS and DAVx5 send is **never read** by the wiki. The username and password you typed during account setup are decorative — they exist to satisfy the OS form.
 
+## Live updates back to the wiki
+
+When the phone PUTs a change, the wiki page rendering of the same checklist updates within a second. The `wiki-checklist` web component subscribes to `ChecklistService.WatchList`, a server-side push channel that fires whenever the per-list `sync_token` advances — gRPC writes, CalDAV writes, and agent writes all bump the token. A 2 s polling fallback covers transient stream drops.
+
+In practice: tap "done" on a phone, the same item ticks itself off in the open browser tab without a refresh.
+
 ## Multiple lists, multiple accounts
 
 - **One page = one CalDAV account.** Each named checklist on the page is a separate calendar collection under that account.
