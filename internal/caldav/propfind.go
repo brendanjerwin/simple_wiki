@@ -153,7 +153,7 @@ func (s *Server) propfindItem(w http.ResponseWriter, r *http.Request, page, list
 // to find the URL it should issue a Depth:1 PROPFIND against to
 // enumerate collections.
 func homeSetResponse(page string) multistatusResponse {
-	href := pathSep + page + pathSep
+	href := buildHref(page, "", "")
 	return multistatusResponse{
 		Href: href,
 		Propstat: []propstat{{
@@ -180,7 +180,7 @@ func homeSetResponse(page string) multistatusResponse {
 // iOS / DAVx5 can decide whether to skip a sync (CTag unchanged) or
 // run an incremental sync-collection REPORT (sync-token).
 func collectionResponse(col CalendarCollection) multistatusResponse {
-	href := pathSep + col.Page + pathSep + col.ListName + pathSep
+	href := buildHref(col.Page, col.ListName, "")
 	return multistatusResponse{
 		Href: href,
 		Propstat: []propstat{{
@@ -206,7 +206,7 @@ func collectionResponse(col CalendarCollection) multistatusResponse {
 // PROPFINDs to populate task lists without firing a follow-up GET per
 // item; the ETag lets them skip re-fetching unchanged items.
 func itemResponse(page, list string, item CalendarItem) multistatusResponse {
-	href := pathSep + page + pathSep + list + pathSep + item.UID + icsSuffix
+	href := buildHref(page, list, item.UID)
 	return multistatusResponse{
 		Href: href,
 		Propstat: []propstat{{

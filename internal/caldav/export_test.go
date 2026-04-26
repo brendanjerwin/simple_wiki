@@ -83,6 +83,11 @@ func ParsePathForTest(reqURL string) (page, list, uid string, err error) {
 	return parsePath(reqURL)
 }
 
+// BuildHrefForTest is the test-only re-export of buildHref.
+func BuildHrefForTest(page, list, uid string) string {
+	return buildHref(page, list, uid)
+}
+
 // ServeOPTIONSForTest is the test-only re-export of (*Server).serveOPTIONS.
 func (s *Server) ServeOPTIONSForTest(w http.ResponseWriter, r *http.Request) {
 	s.serveOPTIONS(w, r)

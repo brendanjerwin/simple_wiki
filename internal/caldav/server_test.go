@@ -361,6 +361,96 @@ var _ = Describe("parsePath", func() {
 		})
 	})
 
+	When("path contains a percent-encoded slash inside the list segment", func() {
+		var page, list, uid string
+		var err error
+
+		BeforeEach(func() {
+			// Mirrors a real-world checklist named "Groceries/Household";
+			// buildHref percent-encodes the slash on emit so the wire URL
+			// stays a 2-segment collection path.
+			page, list, uid, err = caldav.ParsePathForTest("/shopping_lists/Groceries%2FHousehold/")
+		})
+
+		It("should not error", func() {
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should return the page component", func() {
+			Expect(page).To(Equal("shopping_lists"))
+		})
+
+		It("should decode the list component back to the raw name", func() {
+			Expect(list).To(Equal("Groceries/Household"))
+		})
+
+		It("should leave uid empty", func() {
+			Expect(uid).To(Equal(""))
+		})
+	})
+
+	When("path contains a percent-encoded space in the page segment", func() {
+		var page string
+		var err error
+
+		BeforeEach(func() {
+			page, _, _, err = caldav.ParsePathForTest("/my%20page/")
+		})
+
+		It("should not error", func() {
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should decode the page component", func() {
+			Expect(page).To(Equal("my page"))
+		})
+	})
+
+	When("path has malformed percent-encoding", func() {
+		var err error
+
+		BeforeEach(func() {
+			_, _, _, err = caldav.ParsePathForTest("/page/%ZZ/")
+		})
+
+		It("should return ErrMalformedPath", func() {
+			Expect(errors.Is(err, caldav.ErrMalformedPath)).To(BeTrue())
+		})
+	})
+})
+
+var _ = Describe("buildHref", func() {
+	When("the list name contains a slash", func() {
+		It("should percent-encode the slash so the wire path stays 2-segment", func() {
+			href := caldav.BuildHrefForTest("shopping_lists", "Groceries/Household", "")
+			Expect(href).To(Equal("/shopping_lists/Groceries%2FHousehold/"))
+		})
+	})
+
+	When("the page name contains a space", func() {
+		It("should percent-encode the space", func() {
+			href := caldav.BuildHrefForTest("my page", "list", "")
+			Expect(href).To(Equal("/my%20page/list/"))
+		})
+	})
+
+	When("a uid is provided", func() {
+		It("should append the .ics suffix and emit a 3-segment item path", func() {
+			href := caldav.BuildHrefForTest("shopping_lists", "Groceries/Household", "01HXAAAAAAAAAAAAAAAAAAAAAA")
+			Expect(href).To(Equal("/shopping_lists/Groceries%2FHousehold/01HXAAAAAAAAAAAAAAAAAAAAAA.ics"))
+		})
+	})
+
+	When("the buildHref output round-trips through parsePath", func() {
+		It("should restore the raw list name with embedded slash", func() {
+			href := caldav.BuildHrefForTest("shopping_lists", "Groceries/Household", "")
+			page, list, _, err := caldav.ParsePathForTest(href)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(page).To(Equal("shopping_lists"))
+			Expect(list).To(Equal("Groceries/Household"))
+		})
+	})
+
 	When("path has too many segments", func() {
 		var err error
 

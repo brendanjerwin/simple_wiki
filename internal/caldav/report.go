@@ -343,7 +343,7 @@ func (s *Server) reportSyncCollection(w http.ResponseWriter, r *http.Request, bo
 // sync-collection multistatus response embeds this so clients can
 // recognize the uid they should drop from local state.
 func deletedHref(page, list, uid string) string {
-	return pathSep + page + pathSep + list + pathSep + uid + icsSuffix
+	return buildHref(page, list, uid)
 }
 
 // writeSyncCollectionError maps a backend error from SyncCollection

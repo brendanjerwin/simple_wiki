@@ -6,6 +6,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/brendanjerwin/simple_wiki/tailscale"
@@ -327,14 +328,14 @@ func parsePath(reqURL string) (page, list, uid string, err error) {
 	if len(parts) > maxPathSegments {
 		return "", "", "", ErrMalformedPath
 	}
-	page, err = sanitizePathComponent(parts[0])
+	page, err = decodePathComponent(parts[0])
 	if err != nil {
 		return "", "", "", err
 	}
 	if len(parts) == 1 {
 		return page, "", "", nil
 	}
-	list, err = sanitizePathComponent(parts[1])
+	list, err = decodePathComponent(parts[1])
 	if err != nil {
 		return "", "", "", err
 	}
@@ -342,7 +343,7 @@ func parsePath(reqURL string) (page, list, uid string, err error) {
 		return page, list, "", nil
 	}
 	// 3-segment path: third component must be <uid>.ics.
-	leaf, err := sanitizePathComponent(parts[2])
+	leaf, err := decodePathComponent(parts[2])
 	if err != nil {
 		return "", "", "", err
 	}
@@ -354,6 +355,39 @@ func parsePath(reqURL string) (page, list, uid string, err error) {
 		return "", "", "", err
 	}
 	return page, list, uid, nil
+}
+
+// decodePathComponent percent-decodes one URL path segment and then
+// runs it through sanitizePathComponent. Page identifiers and
+// checklist names may contain characters that need escaping in URLs
+// (slash, space, etc.); the gateway handler emits hrefs with those
+// characters percent-encoded via buildHref, and the parser reverses
+// the encoding here so the wiki data layer always sees the raw name.
+func decodePathComponent(raw string) (string, error) {
+	decoded, err := url.PathUnescape(raw)
+	if err != nil {
+		return "", ErrMalformedPath
+	}
+	return sanitizePathComponent(decoded)
+}
+
+// buildHref returns the URL path for a CalDAV resource, percent-
+// encoding each component so characters that are reserved in URL paths
+// (RFC 3986) — most importantly "/" inside a checklist name — survive
+// the round trip through clients that follow the href verbatim.
+//
+// Pass uid="" for collection URLs (page="" is invalid; that's the
+// home-set, which the caller emits as raw "/<page>/" elsewhere).
+func buildHref(page, list, uid string) string {
+	href := pathSep + url.PathEscape(page) + pathSep
+	if list == "" {
+		return href
+	}
+	href += url.PathEscape(list) + pathSep
+	if uid == "" {
+		return href
+	}
+	return href + url.PathEscape(uid) + icsSuffix
 }
 
 // davCapabilities is the value of the DAV response header on every
