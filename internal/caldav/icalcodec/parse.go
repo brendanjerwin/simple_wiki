@@ -1,8 +1,15 @@
 package icalcodec
 
 import (
+	"bytes"
 	"errors"
+	"strconv"
+	"strings"
 	"time"
+
+	"github.com/emersion/go-ical"
+
+	"github.com/brendanjerwin/simple_wiki/internal/hashtags"
 )
 
 // DescriptionMaxBytes is the per-item DESCRIPTION cap from the plan
@@ -74,9 +81,25 @@ type ParsedVTODO struct {
 	Created *time.Time
 
 	// AlarmPayload is the JSON-encoded alarm payload from the first
-	// VALARM child, when present. nil when no VALARM is present.
+	// VALARM child, when present. Additional VALARM children are
+	// ignored — the wiki's data model carries one alarm per item.
+	// nil when no VALARM is present.
 	AlarmPayload *string
 }
+
+// xAppleSortOrderProp is the Apple-namespaced VTODO property name we
+// honor as the canonical sort-order signal. PRIORITY is the RFC 5545
+// fallback used only when X-APPLE-SORT-ORDER is absent.
+const xAppleSortOrderProp = "X-APPLE-SORT-ORDER"
+
+// statusCompleted is the case-insensitive string we recognize as the
+// "checked" state on STATUS.
+const statusCompleted = "COMPLETED"
+
+// sortOrderBitSize is the strconv.ParseInt bit-size for numeric
+// sort-order values. The on-the-wire form is a decimal integer
+// (sortOrderBase10 from render.go) bounded by int64.
+const sortOrderBitSize = 64
 
 // ParseVTODO decodes a VCALENDAR body containing a single VTODO and
 // returns a ParsedVTODO ready for the mutator. Out-of-scope properties
@@ -85,6 +108,204 @@ type ParsedVTODO struct {
 // stripped silently per the v1 scope guardrails. DESCRIPTION longer
 // than DescriptionMaxBytes returns ErrDescriptionTooLarge so the HTTP
 // layer can map it to 413 Payload Too Large.
-func ParseVTODO(_ []byte) (ParsedVTODO, error) {
-	return ParsedVTODO{}, ErrNoVTODO
+func ParseVTODO(body []byte) (ParsedVTODO, error) {
+	cal, err := ical.NewDecoder(bytes.NewReader(body)).Decode()
+	if err != nil {
+		return ParsedVTODO{}, err
+	}
+
+	todo, err := singleVTODO(cal)
+	if err != nil {
+		return ParsedVTODO{}, err
+	}
+
+	return parseVTODOComponent(todo)
+}
+
+// singleVTODO returns the one and only VTODO child from a VCALENDAR,
+// or a sentinel error for the zero-or-many cases. Non-VTODO children
+// (e.g. VTIMEZONE) are ignored — they're commonly present alongside a
+// task and not interesting to the parser.
+func singleVTODO(cal *ical.Calendar) (*ical.Component, error) {
+	var found *ical.Component
+	for _, child := range cal.Children {
+		if child.Name != ical.CompToDo {
+			continue
+		}
+		if found != nil {
+			return nil, ErrMultipleVTODOs
+		}
+		found = child
+	}
+	if found == nil {
+		return nil, ErrNoVTODO
+	}
+	return found, nil
+}
+
+// parseVTODOComponent maps a single VTODO into the wiki shape. Split
+// out so future callers (e.g., a calendar-data property in PROPFIND)
+// can reuse the mapping without going through bytes.
+func parseVTODOComponent(todo *ical.Component) (ParsedVTODO, error) {
+	uid, err := todo.Props.Text(ical.PropUID)
+	if err != nil {
+		return ParsedVTODO{}, err
+	}
+	if uid == "" {
+		return ParsedVTODO{}, ErrMissingUID
+	}
+
+	parsed := ParsedVTODO{UID: uid}
+
+	if parsed.Text, err = todo.Props.Text(ical.PropSummary); err != nil {
+		return ParsedVTODO{}, err
+	}
+
+	parsed.Checked = parseChecked(todo)
+
+	if parsed.CompletedAt, err = parseOptionalDateTime(todo, ical.PropCompleted); err != nil {
+		return ParsedVTODO{}, err
+	}
+	if parsed.Due, err = parseOptionalDateTime(todo, ical.PropDue); err != nil {
+		return ParsedVTODO{}, err
+	}
+	if parsed.Created, err = parseOptionalDateTime(todo, ical.PropCreated); err != nil {
+		return ParsedVTODO{}, err
+	}
+
+	description, err := parseDescription(todo)
+	if err != nil {
+		return ParsedVTODO{}, err
+	}
+	parsed.Description = description
+
+	parsed.Tags = collectTags(todo, description)
+	parsed.SortOrder = parseSortOrder(todo)
+	parsed.AlarmPayload = parseFirstAlarm(todo)
+
+	return parsed, nil
+}
+
+// parseChecked reads STATUS and reports whether it equals "COMPLETED"
+// (case-insensitively). Anything else — NEEDS-ACTION, IN-PROCESS,
+// CANCELLED, or absent — counts as unchecked.
+func parseChecked(todo *ical.Component) bool {
+	status, _ := todo.Props.Text(ical.PropStatus)
+	return strings.EqualFold(strings.TrimSpace(status), statusCompleted)
+}
+
+// parseOptionalDateTime returns a pointer to the parsed datetime when
+// the named property is present, or nil when it's absent. Decoding
+// errors propagate.
+func parseOptionalDateTime(todo *ical.Component, name string) (*time.Time, error) {
+	prop := todo.Props.Get(name)
+	if prop == nil {
+		return nil, nil
+	}
+	t, err := prop.DateTime(time.UTC)
+	if err != nil {
+		return nil, err
+	}
+	utc := t.UTC()
+	return &utc, nil
+}
+
+// parseDescription returns a pointer to the DESCRIPTION text when
+// present, or nil when absent. Returns ErrDescriptionTooLarge when the
+// raw value exceeds DescriptionMaxBytes — using the raw wire value
+// (not the unescaped text) keeps the limit predictable from the HTTP
+// layer's perspective: clients see the same bytes we measured.
+func parseDescription(todo *ical.Component) (*string, error) {
+	prop := todo.Props.Get(ical.PropDescription)
+	if prop == nil {
+		return nil, nil
+	}
+	if len(prop.Value) > DescriptionMaxBytes {
+		return nil, ErrDescriptionTooLarge
+	}
+	text, err := prop.Text()
+	if err != nil {
+		return nil, err
+	}
+	return &text, nil
+}
+
+// collectTags unions CATEGORIES tags with #tag references from
+// DESCRIPTION, normalizing each through hashtags.Normalize and
+// preserving first-seen order for determinism. CATEGORIES is processed
+// first because clients (e.g., DAVx5 with tasks.org) treat it as the
+// authoritative tag list.
+func collectTags(todo *ical.Component, description *string) []string {
+	seen := make(map[string]struct{})
+	var tags []string
+
+	addTag := func(raw string) {
+		normalized := hashtags.Normalize(raw)
+		if normalized == "" {
+			return
+		}
+		if _, dup := seen[normalized]; dup {
+			return
+		}
+		seen[normalized] = struct{}{}
+		tags = append(tags, normalized)
+	}
+
+	if catProp := todo.Props.Get(ical.PropCategories); catProp != nil {
+		// TextList parses RFC 5545 escaping and splits on unescaped
+		// commas — the correct shape for CATEGORIES. If it errors,
+		// fall back to a simple comma split rather than dropping
+		// tags entirely.
+		list, err := catProp.TextList()
+		if err != nil {
+			list = strings.Split(catProp.Value, ",")
+		}
+		for _, raw := range list {
+			addTag(strings.TrimSpace(raw))
+		}
+	}
+
+	if description != nil {
+		for _, raw := range hashtags.Extract(*description) {
+			addTag(raw)
+		}
+	}
+
+	return tags
+}
+
+// parseSortOrder prefers X-APPLE-SORT-ORDER and falls back to PRIORITY.
+// Returns nil when neither is parseable as int64 — the mutator treats
+// that as "leave the stored sort order alone".
+func parseSortOrder(todo *ical.Component) *int64 {
+	if prop := todo.Props.Get(xAppleSortOrderProp); prop != nil {
+		if v, err := strconv.ParseInt(strings.TrimSpace(prop.Value), sortOrderBase10, sortOrderBitSize); err == nil {
+			return &v
+		}
+	}
+	if prop := todo.Props.Get(ical.PropPriority); prop != nil {
+		if v, err := strconv.ParseInt(strings.TrimSpace(prop.Value), sortOrderBase10, sortOrderBitSize); err == nil {
+			return &v
+		}
+	}
+	return nil
+}
+
+// parseFirstAlarm returns the JSON-encoded alarm payload for the first
+// VALARM child of todo, or nil when no VALARM is present or the first
+// one fails to parse. Additional VALARM children are ignored: the
+// wiki's data model carries one alarm per item, and silently dropping
+// extras is preferable to rejecting an otherwise-valid PUT.
+func parseFirstAlarm(todo *ical.Component) *string {
+	for _, child := range todo.Children {
+		if child.Name != ical.CompAlarm {
+			continue
+		}
+		payload, err := ParseAlarm(child)
+		if err != nil {
+			return nil
+		}
+		return &payload
+	}
+	return nil
 }
