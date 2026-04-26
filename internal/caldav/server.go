@@ -175,123 +175,55 @@ func sanitizePathComponent(s string) (string, error) {
 	return trimmed, nil
 }
 
-// ulidLen is the fixed length of a Crockford-base32 ULID. RFC 4122
-// UUIDs (with dashes) are 36 characters, so the two formats are
-// distinguishable by length alone.
-const ulidLen = 26
+// uidMaxLen caps the UID at a generous size. RFC 5545 §3.8.4.7
+// requires implementations to handle "at least 255 octets" but
+// doesn't impose an upper bound; we cap at 256 to bound storage and
+// prevent path-DoS. The values real-world clients emit
+// (DAVx5/tasks.org sends 19-digit numbers, Apple emits UUIDs) sit
+// well under this limit.
+const uidMaxLen = 256
 
-// uuidLen is the canonical length of a hyphenated RFC 4122 UUID
-// (e.g. "c5b7e0a4-3d2e-4f1a-9b8c-1234567890ab").
-const uuidLen = 36
+// asciiControlMin is the lowest byte value that's *not* a forbidden
+// ASCII control character — UID bytes below this are rejected.
+const asciiControlMin = 0x20
 
-// validateUID accepts a 26-character Crockford-base32 ULID OR an RFC
-// 4122 UUID (lower- or upper-case, with dashes). Anything else is
-// rejected with ErrInvalidUID.
+// asciiDel is the DEL control character (0x7F) — also rejected in
+// UIDs because most terminals/loggers can't safely render it.
+const asciiDel = 0x7f
+
+// validateUID enforces what the wiki considers a usable VTODO UID.
+// RFC 5545 §3.8.4.7 says "any text" so we accept any non-empty string
+// of printable, non-path-separator characters up to uidMaxLen octets.
+// We reject control characters, "/", "\\" (would split path segments),
+// and "." patterns that look like traversal — the rest of CalDAV's
+// per-item path machinery assumes the UID stays inside the leaf
+// segment.
+//
+// Items the wiki creates internally still get Crockford-base32 ULIDs
+// via the mutator's ulid generator; this validator is the relaxed
+// gate for inbound PUTs from clients with their own UID schemes.
 func validateUID(uid string) error {
-	switch len(uid) {
-	case ulidLen:
-		if !isCrockfordULID(uid) {
-			return ErrInvalidUID
-		}
-		return nil
-	case uuidLen:
-		if !isRFC4122UUID(uid) {
-			return ErrInvalidUID
-		}
-		return nil
-	default:
+	if uid == "" {
 		return ErrInvalidUID
 	}
-}
-
-// isCrockfordULID reports whether uid is a 26-character ULID using
-// Crockford base32. Crockford base32 omits I, L, O, and U; comparison
-// is case-insensitive.
-func isCrockfordULID(uid string) bool {
+	if len(uid) > uidMaxLen {
+		return ErrInvalidUID
+	}
+	if uid == "." || uid == ".." {
+		return ErrInvalidUID
+	}
 	for i := 0; i < len(uid); i++ {
 		c := uid[i]
-		switch {
-		case c >= '0' && c <= '9':
-			// digit
-		case c >= 'A' && c <= 'Z':
-			if !crockfordUpper[c-'A'] {
-				return false
-			}
-		case c >= 'a' && c <= 'z':
-			if !crockfordUpper[c-'a'] {
-				return false
-			}
-		default:
-			return false
+		if c < asciiControlMin || c == asciiDel {
+			return ErrInvalidUID
+		}
+		if c == '/' || c == '\\' {
+			return ErrInvalidUID
 		}
 	}
-	return true
+	return nil
 }
 
-// crockfordUpper indexes the 26 uppercase letters; true entries are
-// valid Crockford base32 letters (everything except I, L, O, U).
-var crockfordUpper = func() [26]bool {
-	var t [26]bool
-	for i := range t {
-		t[i] = true
-	}
-	for _, excluded := range []rune{'I', 'L', 'O', 'U'} {
-		t[excluded-'A'] = false
-	}
-	return t
-}()
-
-// uuidDashPositions are the byte offsets where dashes must appear in
-// an RFC 4122 hyphenated UUID.
-var uuidDashPositions = [...]int{8, 13, 18, 23}
-
-// isRFC4122UUID reports whether uid is a 36-character UUID with
-// dashes at the canonical positions and lower- or upper-case hex
-// digits everywhere else.
-func isRFC4122UUID(uid string) bool {
-	if len(uid) != uuidLen {
-		return false
-	}
-	for _, p := range uuidDashPositions {
-		if uid[p] != '-' {
-			return false
-		}
-	}
-	for i := 0; i < len(uid); i++ {
-		if isUUIDDashPosition(i) {
-			continue
-		}
-		if !isHexDigit(uid[i]) {
-			return false
-		}
-	}
-	return true
-}
-
-// isUUIDDashPosition reports whether i is one of the four dash
-// positions in a canonical hyphenated UUID.
-func isUUIDDashPosition(i int) bool {
-	for _, p := range uuidDashPositions {
-		if p == i {
-			return true
-		}
-	}
-	return false
-}
-
-// isHexDigit reports whether c is an ASCII hexadecimal digit.
-func isHexDigit(c byte) bool {
-	switch {
-	case c >= '0' && c <= '9':
-		return true
-	case c >= 'a' && c <= 'f':
-		return true
-	case c >= 'A' && c <= 'F':
-		return true
-	default:
-		return false
-	}
-}
 
 // icsSuffix is the file extension on item resource URLs.
 const icsSuffix = ".ics"
@@ -307,9 +239,18 @@ const maxPathSegments = 3
 //   - /<page>/<list>              -> page="…", list="…", uid=""
 //   - /<page>/<list>/<uid>.ics    -> page="…", list="…", uid="…"
 //
-// Each component is run through sanitizePathComponent; the uid (if
-// present) is additionally checked by validateUID. A trailing slash
-// on the collection URL is tolerated (RFC 4918 allows it).
+// The input MUST be the encoded URL path (r.URL.EscapedPath() or a
+// raw href value from a REPORT body), NOT the percent-decoded
+// r.URL.Path — Go's net/http strips %2F to "/" in Path, which
+// destroys the segment boundary when a list or page name contains
+// a slash. parsePath splits on "/" first and percent-decodes each
+// segment afterward so an encoded slash inside a single segment
+// stays inside that segment.
+//
+// Each component is run through decodePathComponent (percent-decode
+// + sanitize); the uid (if present) is additionally checked by
+// validateUID. A trailing slash on the collection URL is tolerated
+// (RFC 4918 allows it).
 //
 //revive:disable-next-line:function-result-limit Returning four values keeps the call site shape natural for HTTP handlers; bundling into a struct buys nothing here.
 func parsePath(reqURL string) (page, list, uid string, err error) {

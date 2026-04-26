@@ -10,6 +10,7 @@ import (
 
 	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
 	"github.com/brendanjerwin/simple_wiki/tailscale"
+	"github.com/brendanjerwin/simple_wiki/wikipage"
 )
 
 // UpsertFromCalDAVArgs carries the user-mutable fields a CalDAV PUT may
@@ -61,6 +62,7 @@ func (m *Mutator) UpsertFromCalDAV(
 	ifNoneMatch string,
 	identity tailscale.IdentityValue,
 ) (*apiv1.ChecklistItem, *apiv1.Checklist, error) {
+	listName = wikipage.NormalizeListName(listName)
 	if uid == "" {
 		return nil, nil, status.Error(codes.InvalidArgument, errUIDRequiredMsg)
 	}

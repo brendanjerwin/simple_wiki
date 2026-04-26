@@ -136,6 +136,7 @@ var (
 // automated is derived from identity.IsAgent(); completed_by is left
 // unset (the new item is not checked yet).
 func (m *Mutator) AddItem(_ context.Context, page, listName string, args AddItemArgs, identity tailscale.IdentityValue) (*apiv1.ChecklistItem, *apiv1.Checklist, error) {
+	listName = wikipage.NormalizeListName(listName)
 	if listName == "" {
 		return nil, nil, status.Error(codes.InvalidArgument, "list_name is required")
 	}
@@ -224,6 +225,7 @@ func applyUserMutableFields(item *apiv1.ChecklistItem, args UpdateItemArgs) bool
 // UpdateItem mutates user-mutable fields of an existing item. Wiki-managed
 // fields on the request are ignored; updated_at is server-stamped.
 func (m *Mutator) UpdateItem(_ context.Context, page, listName, uid string, args UpdateItemArgs, expectedUpdatedAt *time.Time, _ tailscale.IdentityValue) (*apiv1.ChecklistItem, *apiv1.Checklist, error) {
+	listName = wikipage.NormalizeListName(listName)
 	if uid == "" {
 		return nil, nil, status.Error(codes.InvalidArgument, errUIDRequiredMsg)
 	}
@@ -265,6 +267,7 @@ func (m *Mutator) UpdateItem(_ context.Context, page, listName, uid string, args
 // ToggleItem flips the checked field. False→true sets completed_at and
 // completed_by; true→false clears both.
 func (m *Mutator) ToggleItem(_ context.Context, page, listName, uid string, expectedUpdatedAt *time.Time, identity tailscale.IdentityValue) (*apiv1.ChecklistItem, *apiv1.Checklist, error) {
+	listName = wikipage.NormalizeListName(listName)
 	if uid == "" {
 		return nil, nil, status.Error(codes.InvalidArgument, errUIDRequiredMsg)
 	}
@@ -311,6 +314,7 @@ func (m *Mutator) ToggleItem(_ context.Context, page, listName, uid string, expe
 
 // DeleteItem removes uid from the named checklist and writes a tombstone.
 func (m *Mutator) DeleteItem(_ context.Context, page, listName, uid string, expectedUpdatedAt *time.Time, _ tailscale.IdentityValue) (*apiv1.Checklist, error) {
+	listName = wikipage.NormalizeListName(listName)
 	if uid == "" {
 		return nil, status.Error(codes.InvalidArgument, errUIDRequiredMsg)
 	}
@@ -354,6 +358,7 @@ func (m *Mutator) DeleteItem(_ context.Context, page, listName, uid string, expe
 // would collide with another item, the mutator re-densifies adjacent
 // values just enough to make room.
 func (m *Mutator) ReorderItem(_ context.Context, page, listName, uid string, newSortOrder int64, expectedUpdatedAt *time.Time, _ tailscale.IdentityValue) (*apiv1.Checklist, error) {
+	listName = wikipage.NormalizeListName(listName)
 	if uid == "" {
 		return nil, status.Error(codes.InvalidArgument, errUIDRequiredMsg)
 	}
@@ -396,6 +401,7 @@ func (m *Mutator) ReorderItem(_ context.Context, page, listName, uid string, new
 // ListItems returns the named checklist with all items and any
 // surviving tombstones. Read-only — does not write back.
 func (m *Mutator) ListItems(_ context.Context, page, listName string) (*apiv1.Checklist, error) {
+	listName = wikipage.NormalizeListName(listName)
 	unlock := m.lockPage(page)
 	defer unlock()
 

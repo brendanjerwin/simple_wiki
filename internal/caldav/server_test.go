@@ -212,31 +212,56 @@ var _ = Describe("validateUID", func() {
 		})
 	})
 
-	When("uid is 25 characters", func() {
-		It("should return ErrInvalidUID", func() {
-			err := caldav.ValidateUIDForTest("01HZ8K7Q9X1V2N3R4T5Y6Z7B8")
+	When("uid is a 19-digit numeric DAVx5/tasks.org form", func() {
+		It("should not error (RFC 5545 UID is any text)", func() {
+			Expect(caldav.ValidateUIDForTest("1047750122940509807")).NotTo(HaveOccurred())
+		})
+	})
+
+	When("uid is an opaque string a foreign client emits", func() {
+		It("should not error", func() {
+			Expect(caldav.ValidateUIDForTest("client@example.com:abc123")).NotTo(HaveOccurred())
+		})
+	})
+
+	When("uid contains a slash", func() {
+		It("should return ErrInvalidUID (would split path segments)", func() {
+			err := caldav.ValidateUIDForTest("a/b")
 			Expect(errors.Is(err, caldav.ErrInvalidUID)).To(BeTrue())
 		})
 	})
 
-	When("uid is 27 characters", func() {
+	When("uid contains a backslash", func() {
 		It("should return ErrInvalidUID", func() {
-			err := caldav.ValidateUIDForTest("01HZ8K7Q9X1V2N3R4T5Y6Z7B8CC")
+			err := caldav.ValidateUIDForTest(`a\b`)
 			Expect(errors.Is(err, caldav.ErrInvalidUID)).To(BeTrue())
 		})
 	})
 
-	When("uid contains a non-base32 character", func() {
-		It("should return ErrInvalidUID", func() {
-			// 'I' is excluded from Crockford base32.
-			err := caldav.ValidateUIDForTest("01HZ8K7Q9X1V2N3R4T5Y6Z7B8I")
+	When("uid is a single dot", func() {
+		It("should return ErrInvalidUID (path traversal)", func() {
+			err := caldav.ValidateUIDForTest(".")
 			Expect(errors.Is(err, caldav.ErrInvalidUID)).To(BeTrue())
 		})
 	})
 
-	When("uid is a UUID with the wrong dash placement", func() {
+	When("uid is two dots", func() {
+		It("should return ErrInvalidUID (path traversal)", func() {
+			err := caldav.ValidateUIDForTest("..")
+			Expect(errors.Is(err, caldav.ErrInvalidUID)).To(BeTrue())
+		})
+	})
+
+	When("uid contains a control character", func() {
 		It("should return ErrInvalidUID", func() {
-			err := caldav.ValidateUIDForTest("c5b7e0a43d2e-4f1a-9b8c-1234567890ab")
+			err := caldav.ValidateUIDForTest("abc\x00def")
+			Expect(errors.Is(err, caldav.ErrInvalidUID)).To(BeTrue())
+		})
+	})
+
+	When("uid is longer than 256 octets", func() {
+		It("should return ErrInvalidUID", func() {
+			err := caldav.ValidateUIDForTest(strings.Repeat("a", 257))
 			Expect(errors.Is(err, caldav.ErrInvalidUID)).To(BeTrue())
 		})
 	})
@@ -475,11 +500,11 @@ var _ = Describe("buildHref", func() {
 		})
 	})
 
-	When("uid in third segment is invalid", func() {
+	When("uid in third segment is empty", func() {
 		var err error
 
 		BeforeEach(func() {
-			_, _, _, err = caldav.ParsePathForTest("/shopping/this-week/not-a-ulid.ics")
+			_, _, _, err = caldav.ParsePathForTest("/shopping/this-week/.ics")
 		})
 
 		It("should return ErrInvalidUID", func() {
@@ -890,13 +915,13 @@ var _ = Describe("Server.servePUT", func() {
 		})
 	})
 
-	When("the URL has a malformed uid", func() {
+	When("the URL has a uid with embedded backslash", func() {
 		var rec *httptest.ResponseRecorder
 
 		BeforeEach(func() {
 			server := &caldav.Server{Backend: &fakeServerBackend{}}
 			rec = httptest.NewRecorder()
-			req := authedRequestWithBody(http.MethodPut, "/shopping/this-week/not-a-ulid.ics", okBody)
+			req := authedRequestWithBody(http.MethodPut, `/shopping/this-week/a%5Cb.ics`, okBody)
 			server.ServePUTForTest(rec, req)
 		})
 
@@ -1275,13 +1300,13 @@ var _ = Describe("Server.serveDELETE", func() {
 		})
 	})
 
-	When("the URL has a malformed uid", func() {
+	When("the URL has a uid with embedded backslash", func() {
 		var rec *httptest.ResponseRecorder
 
 		BeforeEach(func() {
 			server := &caldav.Server{Backend: &fakeServerBackend{}}
 			rec = httptest.NewRecorder()
-			req := authedRequest(http.MethodDelete, "/shopping/this-week/not-a-ulid.ics")
+			req := authedRequest(http.MethodDelete, `/shopping/this-week/a%5Cb.ics`)
 			server.ServeDELETEForTest(rec, req)
 		})
 
