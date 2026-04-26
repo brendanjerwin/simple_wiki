@@ -1522,8 +1522,11 @@ var _ = Describe("Server.instrumented", func() {
 			}, rec, req)
 		})
 
-		It("should not panic and should still call the inner handler", func() {
+		It("should not panic", func() {
 			Expect(rec.Code).To(Equal(http.StatusOK))
+		})
+
+		It("should still call the inner handler", func() {
 			Expect(rec.Body.String()).To(Equal("body"))
 		})
 	})

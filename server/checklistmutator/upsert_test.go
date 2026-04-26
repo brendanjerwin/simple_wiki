@@ -65,13 +65,19 @@ var _ = Describe("UpsertFromCalDAV", func() {
 			Expect(item.Uid).To(Equal(newUID))
 		})
 
-		It("should populate text and tags from args", func() {
+		It("should populate text from args", func() {
 			Expect(item.Text).To(Equal("Buy milk"))
+		})
+
+		It("should populate tags from args", func() {
 			Expect(item.Tags).To(Equal([]string{"urgent"}))
 		})
 
-		It("should stamp created_at and updated_at to clock.Now()", func() {
+		It("should stamp created_at to clock.Now()", func() {
 			Expect(item.CreatedAt.AsTime()).To(Equal(clock.Now()))
+		})
+
+		It("should stamp updated_at to clock.Now()", func() {
 			Expect(item.UpdatedAt.AsTime()).To(Equal(clock.Now()))
 		})
 
@@ -235,12 +241,23 @@ var _ = Describe("UpsertFromCalDAV", func() {
 			clock.advance(time.Minute)
 		})
 
-		It("should clear completed_at and completed_by", func() {
+		var resultItem *apiv1.ChecklistItem
+
+		BeforeEach(func() {
 			args := checklistmutator.UpsertFromCalDAVArgs{Text: "Done", Checked: false}
-			item, _, _ := mutator.UpsertFromCalDAV(ctx, "p", "list", existingUID, args, "", "", alice)
-			Expect(item.CompletedAt).To(BeNil())
-			Expect(item.CompletedBy).To(BeNil())
-			Expect(item.Checked).To(BeFalse())
+			resultItem, _, _ = mutator.UpsertFromCalDAV(ctx, "p", "list", existingUID, args, "", "", alice)
+		})
+
+		It("should clear completed_at", func() {
+			Expect(resultItem.CompletedAt).To(BeNil())
+		})
+
+		It("should clear completed_by", func() {
+			Expect(resultItem.CompletedBy).To(BeNil())
+		})
+
+		It("should set checked to false", func() {
+			Expect(resultItem.Checked).To(BeFalse())
 		})
 	})
 
@@ -249,6 +266,26 @@ var _ = Describe("UpsertFromCalDAV", func() {
 			args := checklistmutator.UpsertFromCalDAVArgs{Text: "x"}
 			_, _, err := mutator.UpsertFromCalDAV(ctx, "p", "list", "", args, "", "", alice)
 			Expect(status.Code(err)).To(Equal(codes.InvalidArgument))
+		})
+	})
+
+	When("an expired tombstone exists at upsert time", func() {
+		var (
+			deletedUID string
+			checklist  *apiv1.Checklist
+		)
+
+		BeforeEach(func() {
+			added, _, _ := mutator.AddItem(ctx, "p", "list", checklistmutator.AddItemArgs{Text: "doomed"}, alice)
+			deletedUID = added.Uid
+			_, _ = mutator.DeleteItem(ctx, "p", "list", deletedUID, nil, alice)
+			clock.advance(checklistmutator.TombstoneTTL + time.Hour)
+			args := checklistmutator.UpsertFromCalDAVArgs{Text: "fresh"}
+			_, checklist, _ = mutator.UpsertFromCalDAV(ctx, "p", "list", "01HXFRESHFRESHFRESHFRESHFR", args, "", "", alice)
+		})
+
+		It("should prune the expired tombstone", func() {
+			Expect(checklist.Tombstones).To(BeEmpty())
 		})
 	})
 })

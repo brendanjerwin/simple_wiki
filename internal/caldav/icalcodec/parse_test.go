@@ -464,7 +464,7 @@ var _ = Describe("ParseVTODO", func() {
 			))
 		})
 
-		It("should silently strip GEO and not return an error", func() {
+		It("should silently strip GEO without returning an error", func() {
 			Expect(err).NotTo(HaveOccurred())
 		})
 	})
@@ -478,7 +478,7 @@ var _ = Describe("ParseVTODO", func() {
 			))
 		})
 
-		It("should silently strip RELATED-TO and not return an error", func() {
+		It("should silently strip RELATED-TO without returning an error", func() {
 			Expect(err).NotTo(HaveOccurred())
 		})
 	})
@@ -492,7 +492,7 @@ var _ = Describe("ParseVTODO", func() {
 			))
 		})
 
-		It("should silently strip LOCATION and not return an error", func() {
+		It("should silently strip LOCATION without returning an error", func() {
 			Expect(err).NotTo(HaveOccurred())
 		})
 	})
@@ -506,7 +506,7 @@ var _ = Describe("ParseVTODO", func() {
 			))
 		})
 
-		It("should silently strip CLASS and not return an error", func() {
+		It("should silently strip CLASS without returning an error", func() {
 			Expect(err).NotTo(HaveOccurred())
 		})
 	})
@@ -520,7 +520,7 @@ var _ = Describe("ParseVTODO", func() {
 			))
 		})
 
-		It("should silently strip ORGANIZER and not return an error", func() {
+		It("should silently strip ORGANIZER without returning an error", func() {
 			Expect(err).NotTo(HaveOccurred())
 		})
 	})
@@ -534,7 +534,7 @@ var _ = Describe("ParseVTODO", func() {
 			))
 		})
 
-		It("should silently strip ATTENDEE and not return an error", func() {
+		It("should silently strip ATTENDEE without returning an error", func() {
 			Expect(err).NotTo(HaveOccurred())
 		})
 	})
@@ -548,7 +548,7 @@ var _ = Describe("ParseVTODO", func() {
 			))
 		})
 
-		It("should silently strip the X- property and not return an error", func() {
+		It("should silently strip the X- property without returning an error", func() {
 			Expect(err).NotTo(HaveOccurred())
 		})
 	})
