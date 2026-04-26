@@ -24,12 +24,40 @@ type Server struct {
 // route matching and forwards every CalDAV verb (and the .ics-shaped
 // GETs) here; non-CalDAV traffic never reaches this method.
 //
-// Skeleton stage: returns 501 for every method so the failing tests
-// have something concrete to assert against. The Green phase wires the
-// real method switch.
-func (*Server) ServeHTTP(w http.ResponseWriter, _ *http.Request) {
-	http.Error(w, "ServeHTTP not implemented yet", http.StatusNotImplemented)
+// PUT and DELETE return 501 for now — Phase 2 will land servePUT /
+// serveDELETE. Other recognized CalDAV verbs (MKCALENDAR, COPY, MOVE,
+// PROPPATCH) likewise return 405; the gateway forwards them so we
+// don't have to teach the gateway every CalDAV verb the protocol
+// allows, but the wiki has no use for them.
+func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodOptions:
+		s.serveOPTIONS(w, r)
+	case methodPROPFIND:
+		s.servePROPFIND(w, r)
+	case methodREPORT:
+		s.serveREPORT(w, r)
+	case http.MethodGet, http.MethodHead:
+		s.serveGET(w, r)
+	case http.MethodPut:
+		// Phase 2 will implement servePUT.
+		http.Error(w, "PUT not implemented yet", http.StatusNotImplemented)
+	case http.MethodDelete:
+		// Phase 2 will implement serveDELETE.
+		http.Error(w, "DELETE not implemented yet", http.StatusNotImplemented)
+	default:
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+	}
 }
+
+// methodPROPFIND is the WebDAV verb (RFC 4918 §9.1) used to retrieve
+// resource properties. Declared as a constant so ServeHTTP and the
+// gateway agree on the spelling.
+const methodPROPFIND = "PROPFIND"
+
+// methodREPORT is the WebDAV verb (RFC 3253) used by CalDAV for
+// calendar-query, calendar-multiget, and sync-collection reports.
+const methodREPORT = "REPORT"
 
 // Path-component sanitization errors. The gateway middleware (P1-C16)
 // maps these to 400 Bad Request before they ever reach a CalDAV

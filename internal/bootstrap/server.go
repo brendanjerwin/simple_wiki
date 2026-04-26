@@ -10,6 +10,7 @@ import (
 
 	"connectrpc.com/grpcreflect"
 	"connectrpc.com/vanguard"
+	"github.com/brendanjerwin/simple_wiki/internal/caldav"
 	grpcapi "github.com/brendanjerwin/simple_wiki/internal/grpc/api/v1"
 	wikimcp "github.com/brendanjerwin/simple_wiki/internal/mcp"
 	"github.com/brendanjerwin/simple_wiki/internal/observability"
@@ -458,6 +459,16 @@ func setupGRPCServer(
 		return nil, nil, fmt.Errorf("failed to create gRPC server: %w", err)
 	}
 	checklistMutator := checklistmutator.New(site, checklistmutator.SystemClock{}, ulid.NewSystemGenerator())
+
+	// Wire the CalDAV server into the Site so its caldavGateway
+	// middleware can dispatch CalDAV-shaped traffic. baseURL is left
+	// empty here — defaultBackend uses it only to render the URL
+	// property in VTODOs, and we'd rather honor X-Forwarded-Host
+	// per-request than bake a fixed value at startup. Refining the
+	// codec to derive baseURL from the request is a Phase 4 follow-up.
+	caldavBackend := caldav.NewBackend(checklistMutator, "", time.Now)
+	caldavServer := &caldav.Server{Backend: caldavBackend}
+	site.SetCalDAVServer(caldavServer)
 
 	grpcAPIServer = grpcAPIServer.
 		WithJobQueueCoordinator(site.GetJobQueueCoordinator()).
