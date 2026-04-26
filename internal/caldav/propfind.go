@@ -225,7 +225,16 @@ func itemResponse(page, list string, item CalendarItem) multistatusResponse {
 // writer with the canonical CalDAV headers: 207 Multi-Status status
 // and `application/xml; charset=utf-8` content type.
 func writeMultistatus(w http.ResponseWriter, responses []multistatusResponse) {
-	body := multistatus{Responses: responses}
+	writeMultistatusWithSyncToken(w, responses, "")
+}
+
+// writeMultistatusWithSyncToken serializes a multistatus body that
+// carries an RFC 6578 `<sync-token>` element after the per-resource
+// responses. Used by the sync-collection REPORT handler; PROPFIND /
+// calendar-multiget / calendar-query callers should use writeMultistatus
+// (which omits the element entirely).
+func writeMultistatusWithSyncToken(w http.ResponseWriter, responses []multistatusResponse, syncToken string) {
+	body := multistatus{Responses: responses, SyncToken: syncToken}
 	out, err := xml.Marshal(body)
 	if err != nil {
 		http.Error(w, internalErrorMessage, http.StatusInternalServerError)
@@ -241,8 +250,15 @@ func writeMultistatus(w http.ResponseWriter, responses []multistatusResponse) {
 // MarshalXML below emits the start-element with the three namespace
 // declarations CalDAV clients expect (DAV, C:CalDAV, CS:Calendar
 // Server) and then defers to encoding/xml for each child response.
+//
+// SyncToken, when non-empty, is emitted as a trailing
+// `<sync-token>URI</sync-token>` element after every response — the
+// shape RFC 6578 §3.5 requires on sync-collection REPORT responses.
+// For PROPFIND / calendar-multiget / calendar-query responses the
+// field is left empty and the element is omitted entirely.
 type multistatus struct {
 	Responses []multistatusResponse
+	SyncToken string
 }
 
 // MarshalXML overrides the default encoding/xml output so the root
@@ -265,6 +281,12 @@ func (m multistatus) MarshalXML(e *xml.Encoder, _ xml.StartElement) error {
 	}
 	for _, resp := range m.Responses {
 		if err := e.EncodeElement(resp, xml.StartElement{Name: xml.Name{Local: "response"}}); err != nil {
+			return err
+		}
+	}
+	if m.SyncToken != "" {
+		tokenStart := xml.StartElement{Name: xml.Name{Local: "sync-token"}}
+		if err := e.EncodeElement(m.SyncToken, tokenStart); err != nil {
 			return err
 		}
 	}

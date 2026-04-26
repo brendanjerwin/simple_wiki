@@ -199,11 +199,86 @@ func notFoundResponse(href string) multistatusResponse {
 	}
 }
 
+// syncCollectionRequest is the RFC 6578 sync-collection request body.
+// We model only `<sync-token>`; sync-level is ignored (VTODO
+// collections are flat) and the `<prop>` element is informational —
+// we always emit getetag + calendar-data for the changed set.
+type syncCollectionRequest struct {
+	XMLName   xml.Name `xml:"DAV: sync-collection"`
+	SyncToken string   `xml:"DAV: sync-token"`
+}
+
+// validSyncTokenErrorBody is the response body emitted on
+// ErrInvalidSyncToken — the RFC 6578 §3.2 precondition element that
+// tells the client to drop its state and replay an initial full sync.
+const validSyncTokenErrorBody = xmlDecl +
+	`<error xmlns="DAV:"><valid-sync-token/></error>`
+
 // reportSyncCollection handles the sync-collection REPORT body. The
-// skeleton returns 501 Not Implemented; the green pass replaces this
-// with the real handler that decodes the sync-token element, calls
-// CalendarBackend.SyncCollection, and emits a multistatus with a
-// trailing sync-token element per RFC 6578 §3.5.
-func (*Server) reportSyncCollection(w http.ResponseWriter, _ *http.Request, _ []byte) {
-	http.Error(w, "sync-collection not implemented yet", http.StatusNotImplemented)
+// flow:
+//
+//  1. Decode the request body into syncCollectionRequest. A parse
+//     failure is 400 Bad Request.
+//  2. Re-validate the URL — sync-collection only makes sense on a
+//     collection URL (`/<page>/<list>/`). Anything else is 404.
+//  3. Call CalendarBackend.SyncCollection, mapping its sentinel
+//     errors:
+//       - ErrCollectionNotFound -> 404
+//       - ErrInvalidSyncToken   -> 403 + DAV:valid-sync-token body
+//       - other                 -> 500
+//  4. On success, emit one multistatus response per changed item plus
+//     one 404-response per deleted uid, and append the new sync-token
+//     element after the responses.
+func (s *Server) reportSyncCollection(w http.ResponseWriter, r *http.Request, body []byte) {
+	var req syncCollectionRequest
+	if err := xml.Unmarshal(body, &req); err != nil {
+		http.Error(w, "malformed sync-collection body", http.StatusBadRequest)
+		return
+	}
+	page, list, uid, err := parsePath(r.URL.Path)
+	if err != nil || page == "" || list == "" || uid != "" {
+		http.NotFound(w, r)
+		return
+	}
+
+	clientToken := strings.TrimSpace(req.SyncToken)
+	newToken, changed, deletedUIDs, syncErr := s.Backend.SyncCollection(r.Context(), page, list, clientToken)
+	if syncErr != nil {
+		writeSyncCollectionError(w, syncErr)
+		return
+	}
+
+	resps := make([]multistatusResponse, 0, len(changed)+len(deletedUIDs))
+	for _, item := range changed {
+		resps = append(resps, itemResponse(page, list, item))
+	}
+	for _, deletedUID := range deletedUIDs {
+		resps = append(resps, notFoundResponse(deletedHref(page, list, deletedUID)))
+	}
+	writeMultistatusWithSyncToken(w, resps, newToken)
+}
+
+// deletedHref builds the href for a deleted item's per-uid path. The
+// sync-collection multistatus response embeds this so clients can
+// recognize the uid they should drop from local state.
+func deletedHref(page, list, uid string) string {
+	return pathSep + page + pathSep + list + pathSep + uid + icsSuffix
+}
+
+// writeSyncCollectionError maps a backend error from SyncCollection
+// onto the appropriate HTTP status. ErrInvalidSyncToken gets the
+// RFC 6578 precondition element so iOS / DAVx5 know to wipe their
+// local state and replay an initial sync; ErrCollectionNotFound is a
+// plain 404; everything else is a generic 500.
+func writeSyncCollectionError(w http.ResponseWriter, err error) {
+	switch {
+	case errors.Is(err, ErrInvalidSyncToken):
+		w.Header().Set("Content-Type", xmlContentType)
+		w.WriteHeader(http.StatusForbidden)
+		_, _ = w.Write([]byte(validSyncTokenErrorBody))
+	case errors.Is(err, ErrCollectionNotFound):
+		http.Error(w, "not found", http.StatusNotFound)
+	default:
+		http.Error(w, internalErrorMessage, http.StatusInternalServerError)
+	}
 }
