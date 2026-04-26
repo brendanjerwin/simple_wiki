@@ -13,6 +13,7 @@ import {
   ToggleItemRequestSchema,
   DeleteItemRequestSchema,
   ReorderItemRequestSchema,
+  WatchListRequestSchema,
 } from '../gen/api/v1/checklist_pb.js';
 import type {
   Checklist,
@@ -42,16 +43,21 @@ export type { ChecklistItem, Checklist } from '../gen/api/v1/checklist_pb.js';
 
 // Polling interval in milliseconds.
 //
-// Tightened from 10s to 2s so external writes (CalDAV PUTs from
-// phone clients, edits in another tab, agent-driven changes) surface
-// within ~2s instead of ~10s. The user's own clicks already feel
-// instant via the optimistic-update path in runMutation; this affects
-// only mutations originating outside the current tab.
+// The poll is a fallback for the WatchList stream — the stream
+// pushes near-instantly on every mutation, but if it drops
+// (network blip, server restart) the poll fills the gap until
+// reconnect. Tightened from 10s to 2s so the gap is short even
+// in stream-down mode.
 //
 // Server-side cost: each poll is one ListItems RPC reading a single
 // page's frontmatter. At 30 polls/min/tab, well under the noise floor
 // of an interactive wiki session.
 const POLL_INTERVAL_MS = 2000;
+
+// Backoff between WatchList stream reconnect attempts after a
+// transient failure. Short because a fresh fetchData fires before
+// each reconnect, so the user-visible state stays current.
+const RECONNECT_DELAY_MS = 1000;
 // OCC retry happens once on FailedPrecondition; the retry uses the
 // updated_at returned from the refetch.
 const OCC_TOAST_DURATION_MS = 2000;
@@ -132,6 +138,14 @@ export class WikiChecklist extends LitElement implements DragReorderHandler {
   private _occToastTimer: ReturnType<typeof setTimeout> | null = null;
 
   private pollingTimer: ReturnType<typeof setInterval> | null = null;
+
+  // Server-push subscription via ChecklistService.WatchList. Streams
+  // a sync_token bump on every external mutation (CalDAV PUTs, edits
+  // in another tab, agent writes), letting fetchData fire near-
+  // instantly instead of waiting for the next poll cycle. The poll
+  // remains as a fallback for transient stream drops.
+  private watchAbort: AbortController | null = null;
+  private _lastSeenSyncToken: bigint | null = null;
 
   readonly client = createClient(ChecklistService, getGrpcWebTransport());
 
@@ -253,6 +267,7 @@ export class WikiChecklist extends LitElement implements DragReorderHandler {
     if (this.page) {
       this.loading = true;
       void this.fetchData();
+      void this._startWatching();
     }
     this._boundHandleVisibilityChange = () => { this._handleVisibilityChange(); };
     document.addEventListener('visibilitychange', this._boundHandleVisibilityChange);
@@ -269,6 +284,7 @@ export class WikiChecklist extends LitElement implements DragReorderHandler {
       clearInterval(this.pollingTimer);
       this.pollingTimer = null;
     }
+    this._stopWatching();
     if (this._boundHandleVisibilityChange !== null) {
       document.removeEventListener('visibilitychange', this._boundHandleVisibilityChange);
       this._boundHandleVisibilityChange = null;
@@ -278,6 +294,53 @@ export class WikiChecklist extends LitElement implements DragReorderHandler {
       this._occToastTimer = null;
     }
     this._dragManager.cleanup();
+  }
+
+  /**
+   * Subscribe to ChecklistService.WatchList for the current
+   * (page, listName). Each event carries the current sync_token; we
+   * fetchData when the token advances past the one we last saw. The
+   * stream auto-reconnects on transient errors (the server-side
+   * poll is itself a tickle so reconnects don't lose updates).
+   */
+  private async _startWatching(): Promise<void> {
+    this._stopWatching();
+    if (!this.page || !this.listName) return;
+    const abort = new AbortController();
+    this.watchAbort = abort;
+    const signal = abort.signal;
+    while (!signal.aborted) {
+      try {
+        const request = create(WatchListRequestSchema, {
+          page: this.page,
+          listName: this.listName,
+        });
+        for await (const evt of this.client.watchList(request, { signal })) {
+          if (this._lastSeenSyncToken !== null && evt.syncToken !== this._lastSeenSyncToken) {
+            void this.fetchData();
+          }
+          this._lastSeenSyncToken = evt.syncToken;
+        }
+        // Stream ended cleanly — server closed without error.
+        break;
+      } catch (err) {
+        if (signal.aborted) break;
+        if (err instanceof Error && err.name === 'AbortError') break;
+        // Transient drop — back off briefly and reconnect. Fall back
+        // to a fresh fetchData so we don't sit on stale data while
+        // the stream is down.
+        void this.fetchData();
+        await new Promise<void>(resolve => setTimeout(resolve, RECONNECT_DELAY_MS));
+      }
+    }
+  }
+
+  private _stopWatching(): void {
+    if (this.watchAbort !== null) {
+      this.watchAbort.abort();
+      this.watchAbort = null;
+    }
+    this._lastSeenSyncToken = null;
   }
 
   private _handleVisibilityChange(): void {

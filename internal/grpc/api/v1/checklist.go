@@ -170,6 +170,95 @@ func (s *Server) ListItems(ctx context.Context, req *apiv1.ListItemsRequest) (*a
 	return &apiv1.ListItemsResponse{Checklist: list}, nil
 }
 
+// watchListMinIntervalMs and watchListMaxIntervalMs bound the
+// per-stream server-side poll cadence. 100ms keeps a single chatty
+// client from monopolizing the file system; 60s is the soft ceiling
+// past which the user perceives "stale" rather than "near-live".
+const (
+	watchListMinIntervalMs     = 100
+	watchListMaxIntervalMs     = 60_000
+	watchListDefaultIntervalMs = 1_000
+)
+
+// resolveWatchListInterval clamps the requested interval into
+// [watchListMinIntervalMs, watchListMaxIntervalMs]. Zero / unset
+// uses the default. Pulled out so the WatchList RPC body stays
+// linear-flow.
+func resolveWatchListInterval(requestedMs int64) time.Duration {
+	switch {
+	case requestedMs <= 0:
+		return time.Duration(watchListDefaultIntervalMs) * time.Millisecond
+	case requestedMs < watchListMinIntervalMs:
+		return time.Duration(watchListMinIntervalMs) * time.Millisecond
+	case requestedMs > watchListMaxIntervalMs:
+		return time.Duration(watchListMaxIntervalMs) * time.Millisecond
+	default:
+		return time.Duration(requestedMs) * time.Millisecond
+	}
+}
+
+// WatchList implements the WatchList streaming RPC. Polls the
+// checklist's sync_token server-side at the requested cadence and
+// streams a WatchListResponse whenever the token advances. The
+// first response fires immediately with the current state so a
+// subscribing client doesn't need a separate ListItems call.
+//
+// Per-stream cost is one ListItems read per poll iteration. With the
+// 1s default and the typical ~10 active wiki tabs, that's ~10 reads
+// per second across the wiki — well below the noise floor of an
+// interactive workload.
+func (s *Server) WatchList(req *apiv1.WatchListRequest, stream apiv1.ChecklistService_WatchListServer) error {
+	if s.checklistMutator == nil {
+		return errChecklistMutatorNotConfigured
+	}
+	if req.GetPage() == "" {
+		return status.Error(codes.InvalidArgument, errPageRequired)
+	}
+	if req.GetListName() == "" {
+		return status.Error(codes.InvalidArgument, "list_name is required")
+	}
+
+	ctx := stream.Context()
+	interval := resolveWatchListInterval(req.GetCheckIntervalMs())
+
+	list, err := s.checklistMutator.ListItems(ctx, req.GetPage(), req.GetListName())
+	if err != nil {
+		return mapChecklistMutatorErr(err)
+	}
+	lastToken := list.GetSyncToken()
+	if err := stream.Send(&apiv1.WatchListResponse{
+		SyncToken: lastToken,
+		UpdatedAt: list.GetUpdatedAt(),
+	}); err != nil {
+		return err
+	}
+
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-ticker.C:
+			cur, err := s.checklistMutator.ListItems(ctx, req.GetPage(), req.GetListName())
+			if err != nil {
+				return mapChecklistMutatorErr(err)
+			}
+			if cur.GetSyncToken() == lastToken {
+				continue
+			}
+			lastToken = cur.GetSyncToken()
+			if err := stream.Send(&apiv1.WatchListResponse{
+				SyncToken: lastToken,
+				UpdatedAt: cur.GetUpdatedAt(),
+			}); err != nil {
+				return err
+			}
+		}
+	}
+}
+
 // GetChecklists implements the GetChecklists RPC.
 func (s *Server) GetChecklists(ctx context.Context, req *apiv1.GetChecklistsRequest) (*apiv1.GetChecklistsResponse, error) {
 	if s.checklistMutator == nil {

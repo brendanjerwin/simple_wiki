@@ -26,6 +26,7 @@ const (
 	ChecklistService_ReorderItem_FullMethodName   = "/api.v1.ChecklistService/ReorderItem"
 	ChecklistService_ListItems_FullMethodName     = "/api.v1.ChecklistService/ListItems"
 	ChecklistService_GetChecklists_FullMethodName = "/api.v1.ChecklistService/GetChecklists"
+	ChecklistService_WatchList_FullMethodName     = "/api.v1.ChecklistService/WatchList"
 )
 
 // ChecklistServiceClient is the client API for ChecklistService service.
@@ -48,6 +49,8 @@ type ChecklistServiceClient interface {
 	ListItems(ctx context.Context, in *ListItemsRequest, opts ...grpc.CallOption) (*ListItemsResponse, error)
 	// GetChecklists — see (api.v1.description).
 	GetChecklists(ctx context.Context, in *GetChecklistsRequest, opts ...grpc.CallOption) (*GetChecklistsResponse, error)
+	// WatchList — see (api.v1.description).
+	WatchList(ctx context.Context, in *WatchListRequest, opts ...grpc.CallOption) (ChecklistService_WatchListClient, error)
 }
 
 type checklistServiceClient struct {
@@ -128,6 +131,39 @@ func (c *checklistServiceClient) GetChecklists(ctx context.Context, in *GetCheck
 	return out, nil
 }
 
+func (c *checklistServiceClient) WatchList(ctx context.Context, in *WatchListRequest, opts ...grpc.CallOption) (ChecklistService_WatchListClient, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &ChecklistService_ServiceDesc.Streams[0], ChecklistService_WatchList_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &checklistServiceWatchListClient{ClientStream: stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+type ChecklistService_WatchListClient interface {
+	Recv() (*WatchListResponse, error)
+	grpc.ClientStream
+}
+
+type checklistServiceWatchListClient struct {
+	grpc.ClientStream
+}
+
+func (x *checklistServiceWatchListClient) Recv() (*WatchListResponse, error) {
+	m := new(WatchListResponse)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
 // ChecklistServiceServer is the server API for ChecklistService service.
 // All implementations must embed UnimplementedChecklistServiceServer
 // for forward compatibility
@@ -148,6 +184,8 @@ type ChecklistServiceServer interface {
 	ListItems(context.Context, *ListItemsRequest) (*ListItemsResponse, error)
 	// GetChecklists — see (api.v1.description).
 	GetChecklists(context.Context, *GetChecklistsRequest) (*GetChecklistsResponse, error)
+	// WatchList — see (api.v1.description).
+	WatchList(*WatchListRequest, ChecklistService_WatchListServer) error
 	mustEmbedUnimplementedChecklistServiceServer()
 }
 
@@ -175,6 +213,9 @@ func (UnimplementedChecklistServiceServer) ListItems(context.Context, *ListItems
 }
 func (UnimplementedChecklistServiceServer) GetChecklists(context.Context, *GetChecklistsRequest) (*GetChecklistsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetChecklists not implemented")
+}
+func (UnimplementedChecklistServiceServer) WatchList(*WatchListRequest, ChecklistService_WatchListServer) error {
+	return status.Errorf(codes.Unimplemented, "method WatchList not implemented")
 }
 func (UnimplementedChecklistServiceServer) mustEmbedUnimplementedChecklistServiceServer() {}
 
@@ -315,6 +356,27 @@ func _ChecklistService_GetChecklists_Handler(srv interface{}, ctx context.Contex
 	return interceptor(ctx, in, info, handler)
 }
 
+func _ChecklistService_WatchList_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(WatchListRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(ChecklistServiceServer).WatchList(m, &checklistServiceWatchListServer{ServerStream: stream})
+}
+
+type ChecklistService_WatchListServer interface {
+	Send(*WatchListResponse) error
+	grpc.ServerStream
+}
+
+type checklistServiceWatchListServer struct {
+	grpc.ServerStream
+}
+
+func (x *checklistServiceWatchListServer) Send(m *WatchListResponse) error {
+	return x.ServerStream.SendMsg(m)
+}
+
 // ChecklistService_ServiceDesc is the grpc.ServiceDesc for ChecklistService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -351,6 +413,12 @@ var ChecklistService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _ChecklistService_GetChecklists_Handler,
 		},
 	},
-	Streams:  []grpc.StreamDesc{},
+	Streams: []grpc.StreamDesc{
+		{
+			StreamName:    "WatchList",
+			Handler:       _ChecklistService_WatchList_Handler,
+			ServerStreams: true,
+		},
+	},
 	Metadata: "api/v1/checklist.proto",
 }
