@@ -45,6 +45,13 @@ var (
 	// DESCRIPTION exceeds icalcodec.DescriptionMaxBytes. The HTTP
 	// layer maps this to 413 Payload Too Large.
 	ErrDescriptionTooLarge = errors.New("caldav: description too large")
+	// ErrInvalidSyncToken is returned by SyncCollection when the
+	// caller-supplied sync-token cannot be parsed (wrong prefix, non-
+	// integer suffix, or otherwise malformed). The HTTP layer maps
+	// this to 403 Forbidden with a `<DAV:valid-sync-token/>`
+	// precondition element per RFC 6578 §3.2 so the client knows to
+	// drop its state and replay an initial full sync.
+	ErrInvalidSyncToken = errors.New("caldav: invalid sync token")
 )
 
 // CalendarCollection describes a single (page, list) pair. The HTTP
@@ -416,7 +423,12 @@ func findItemOrTombstone(checklist *apiv1.Checklist, uid string) (*apiv1.Checkli
 	return nil, false
 }
 
+// SyncCollection returns the items changed and uids deleted since the
+// caller's last sync. The skeleton returns ErrCollectionNotFound for
+// every call; the green pass replaces this with a real implementation
+// against the underlying mutator state.
+//
 // revive:disable-next-line:max-control-nesting,function-result-limit  // CalendarBackend.SyncCollection's 4-return shape (newToken, changed, deleted, err) is part of the interface contract.
 func (*defaultBackend) SyncCollection(_ context.Context, _, _, _ string) (string, []CalendarItem, []string, error) { //nolint:revive // 4 returns are interface-mandated
-	return "", nil, nil, errors.New("caldav: SyncCollection not implemented yet")
+	return "", nil, nil, ErrCollectionNotFound
 }
