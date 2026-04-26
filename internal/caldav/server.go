@@ -19,6 +19,18 @@ type Server struct {
 	Backend CalendarBackend
 }
 
+// ServeHTTP dispatches a CalDAV-shaped request to the matching method
+// handler on the Server. The gateway middleware (P1-C16) runs before
+// route matching and forwards every CalDAV verb (and the .ics-shaped
+// GETs) here; non-CalDAV traffic never reaches this method.
+//
+// Skeleton stage: returns 501 for every method so the failing tests
+// have something concrete to assert against. The Green phase wires the
+// real method switch.
+func (*Server) ServeHTTP(w http.ResponseWriter, _ *http.Request) {
+	http.Error(w, "ServeHTTP not implemented yet", http.StatusNotImplemented)
+}
+
 // Path-component sanitization errors. The gateway middleware (P1-C16)
 // maps these to 400 Bad Request before they ever reach a CalDAV
 // handler; sanitizePathComponent and validateUID return them so the

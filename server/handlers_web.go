@@ -80,8 +80,44 @@ func (s *Site) GinRouter(middleware ...gin.HandlerFunc) *gin.Engine {
 
 	router.Use(sessions.Sessions("_session", s.SessionStore))
 
+	// The CalDAV gateway runs before route matching so CalDAV-shaped
+	// requests bypass Gin's wildcard GET handler and reach the
+	// dedicated CalDAV server. Non-CalDAV traffic falls through to the
+	// regular routes registered below. nil caldavServer makes the
+	// gateway a no-op so test sites that don't wire CalDAV continue to
+	// work unchanged.
+	router.Use(s.caldavGateway())
+
 	s.registerRoutes(router)
 	return router
+}
+
+// caldavGateway returns a Gin middleware that intercepts CalDAV-shaped
+// HTTP traffic and forwards it to the configured caldavServer. Regular
+// page GETs, edits, and API calls fall through via c.Next().
+//
+// Skeleton stage: every request falls through. The Green phase wires
+// the real shouldRouteToCalDAV check.
+func (s *Site) caldavGateway() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		// Skeleton: shouldRouteToCalDAV always returns false, so every
+		// request falls through. The Green phase implements the real
+		// method/path checks and the dispatch to s.caldavServer.
+		if shouldRouteToCalDAV(c.Request) {
+			_ = s // dispatch added in Green
+		}
+		c.Next()
+	}
+}
+
+// shouldRouteToCalDAV reports whether the gateway should forward a
+// request to the CalDAV server instead of letting it hit the regular
+// Gin routes.
+//
+// Skeleton stage: returns false for everything. The Green phase
+// implements the real method/path checks.
+func shouldRouteToCalDAV(_ *http.Request) bool {
+	return false
 }
 
 func (s *Site) registerRoutes(router *gin.Engine) {
