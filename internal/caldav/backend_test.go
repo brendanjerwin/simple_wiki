@@ -163,3 +163,113 @@ var _ = Describe("defaultBackend.ListCollections", func() {
 		})
 	})
 })
+
+var _ = Describe("defaultBackend.GetCollection", func() {
+	var (
+		ctx     context.Context
+		now     time.Time
+		fake    *fakeMutator
+		backend caldav.CalendarBackend
+	)
+
+	BeforeEach(func() {
+		ctx = context.Background()
+		now = time.Date(2026, 4, 25, 13, 0, 0, 0, time.UTC)
+		fake = &fakeMutator{pages: map[string][]*apiv1.Checklist{}}
+		backend = caldav.NewBackend(fake, "https://wiki.example.com", fixedNow(now))
+	})
+
+	When("the named (page, list) exists", func() {
+		var (
+			col       caldav.CalendarCollection
+			err       error
+			updatedAt time.Time
+		)
+
+		BeforeEach(func() {
+			updatedAt = now.Add(-15 * time.Minute)
+			fake.pages["shopping"] = []*apiv1.Checklist{{
+				Name:      "this-week",
+				UpdatedAt: timestamppb.New(updatedAt),
+				SyncToken: 11,
+				Items: []*apiv1.ChecklistItem{{
+					Uid:       "01HXAAAAAAAAAAAAAAAAAAAAAA",
+					Text:      "Buy milk",
+					UpdatedAt: timestamppb.New(updatedAt),
+				}},
+			}}
+			col, err = backend.GetCollection(ctx, "shopping", "this-week")
+		})
+
+		It("should not return an error", func() {
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should set Page from the input page name", func() {
+			Expect(col.Page).To(Equal("shopping"))
+		})
+
+		It("should set ListName from the checklist name", func() {
+			Expect(col.ListName).To(Equal("this-week"))
+		})
+
+		It("should set DisplayName from the checklist name", func() {
+			Expect(col.DisplayName).To(Equal("this-week"))
+		})
+
+		It("should set UpdatedAt from the checklist UpdatedAt", func() {
+			Expect(col.UpdatedAt).To(Equal(updatedAt))
+		})
+
+		It("should set SyncToken to the URI form of the sync_token counter", func() {
+			Expect(col.SyncToken).To(Equal("http://simple-wiki.local/ns/sync/11"))
+		})
+
+		It("should set CTag to the quoted RFC3339Nano of the checklist UpdatedAt", func() {
+			Expect(col.CTag).To(Equal(`"` + updatedAt.Format(time.RFC3339Nano) + `"`))
+		})
+	})
+
+	When("the named list does not exist on the page", func() {
+		var (
+			col caldav.CalendarCollection
+			err error
+		)
+
+		BeforeEach(func() {
+			// Page exists but only has "other-list", not "this-week".
+			fake.pages["shopping"] = []*apiv1.Checklist{{
+				Name:      "other-list",
+				UpdatedAt: timestamppb.New(now),
+			}}
+			col, err = backend.GetCollection(ctx, "shopping", "this-week")
+		})
+
+		It("should return ErrCollectionNotFound", func() {
+			Expect(err).To(MatchError(caldav.ErrCollectionNotFound))
+		})
+
+		It("should return a zero-value CalendarCollection", func() {
+			Expect(col).To(Equal(caldav.CalendarCollection{}))
+		})
+	})
+
+	When("the page itself does not exist", func() {
+		var (
+			col caldav.CalendarCollection
+			err error
+		)
+
+		BeforeEach(func() {
+			col, err = backend.GetCollection(ctx, "missing-page", "this-week")
+		})
+
+		It("should return ErrCollectionNotFound", func() {
+			Expect(err).To(MatchError(caldav.ErrCollectionNotFound))
+		})
+
+		It("should return a zero-value CalendarCollection", func() {
+			Expect(col).To(Equal(caldav.CalendarCollection{}))
+		})
+	})
+})

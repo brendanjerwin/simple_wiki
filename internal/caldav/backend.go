@@ -172,10 +172,38 @@ func collectionFromChecklist(page string, c *apiv1.Checklist) CalendarCollection
 	return col
 }
 
-// GetCollection / ListItems / GetItem / PutItem / DeleteItem /
-// SyncCollection: skeletons in subsequent capabilities.
-func (*defaultBackend) GetCollection(_ context.Context, _, _ string) (CalendarCollection, error) {
-	return CalendarCollection{}, ErrCollectionNotFound
+// GetCollection returns the metadata for a single (page, list) pair.
+// Returns ErrCollectionNotFound when the page has no checklist with
+// the requested name. The mutator's read-only ListItems returns an
+// empty *apiv1.Checklist (Name set, UpdatedAt nil, no Items, no
+// Tombstones) for both "page missing" and "list missing on the page";
+// GetCollection treats that case uniformly as "not found".
+func (b *defaultBackend) GetCollection(ctx context.Context, page, listName string) (CalendarCollection, error) {
+	checklist, err := b.mutator.ListItems(ctx, page, listName)
+	if err != nil {
+		return CalendarCollection{}, fmt.Errorf("caldav: get collection %q/%q: %w", page, listName, err)
+	}
+	if !checklistExists(checklist) {
+		return CalendarCollection{}, ErrCollectionNotFound
+	}
+	return collectionFromChecklist(page, checklist), nil
+}
+
+// checklistExists reports whether the mutator's ListItems result
+// represents an actual checklist (vs the empty placeholder it returns
+// for missing pages or unknown list names). A real checklist has
+// either an UpdatedAt stamp, live items, or surviving tombstones.
+func checklistExists(c *apiv1.Checklist) bool {
+	if c == nil {
+		return false
+	}
+	if c.UpdatedAt != nil {
+		return true
+	}
+	if len(c.Items) > 0 || len(c.Tombstones) > 0 {
+		return true
+	}
+	return false
 }
 
 func (*defaultBackend) ListItems(_ context.Context, _, _ string) (CalendarCollection, []CalendarItem, error) {
