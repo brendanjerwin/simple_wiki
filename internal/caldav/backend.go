@@ -326,6 +326,7 @@ func (b *defaultBackend) PutItem(ctx context.Context, page, listName, uid string
 		Checked:      parsed.Checked,
 		CompletedAt:  parsed.CompletedAt,
 		Created:      parsed.Created,
+		SortOrder:    parsed.SortOrder,
 	}
 
 	item, _, err := b.mutator.UpsertFromCalDAV(ctx, page, listName, uid, args, ifMatch, ifNoneMatch, identity)

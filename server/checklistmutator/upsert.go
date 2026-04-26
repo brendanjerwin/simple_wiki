@@ -33,6 +33,13 @@ type UpsertFromCalDAVArgs struct {
 	// Created is consulted only when uid is unknown (creating a new item).
 	// nil means "stamp now". Has no effect on existing items.
 	Created *time.Time
+	// SortOrder is the wiki-side sparse ordering value the client
+	// communicated (typically derived from PRIORITY for tasks.org-style
+	// clients, or X-APPLE-SORT-ORDER for Apple Reminders). nil means
+	// "the client didn't express an order" — on create, mutator
+	// appends at nextSortOrder; on update, mutator leaves the stored
+	// value alone.
+	SortOrder *int64
 }
 
 // IfNoneMatchAny is the literal `*` value RFC 4918 §10.4 / RFC 7232 §3.2
@@ -127,14 +134,28 @@ func (*Mutator) upsertExistingItem(
 
 	userChanged := applyUserMutableFields(item, asUpdateItemArgs(args))
 	checkedChanged := applyCheckedTransition(item, args, identity, now)
+	sortOrderChanged := false
+	if args.SortOrder != nil && *args.SortOrder != item.SortOrder {
+		item.SortOrder = *args.SortOrder
+		sortOrderChanged = true
+	}
 
-	if userChanged || checkedChanged {
+	if userChanged || checkedChanged || sortOrderChanged {
 		item.UpdatedAt = timestamppb.New(now)
 		item.Automated = identity.IsAgent()
 		bumpSyncToken(checklist, now)
 	}
+	if sortOrderChanged {
+		// Re-densify around the moved item the same way ReorderItem
+		// does so a SortOrder collision doesn't leave the list with
+		// duplicate values that confuse later writes.
+		densifyAroundSortOrder(checklist.Items, idx)
+		sortItems(checklist.Items)
+	}
 	pruneTombstones(checklist, now)
-	checklist.Items[idx] = item
+	if !sortOrderChanged {
+		checklist.Items[idx] = item
+	}
 	return item, nil
 }
 
@@ -151,12 +172,16 @@ func (*Mutator) upsertNewItem(
 	if args.Created != nil {
 		createdAt = *args.Created
 	}
+	sortOrder := nextSortOrder(checklist.Items)
+	if args.SortOrder != nil {
+		sortOrder = *args.SortOrder
+	}
 	newItem := &apiv1.ChecklistItem{
 		Uid:          uid,
 		Text:         args.Text,
 		Checked:      args.Checked,
 		Tags:         append([]string(nil), args.Tags...),
-		SortOrder:    nextSortOrder(checklist.Items),
+		SortOrder:    sortOrder,
 		Description:  args.Description,
 		AlarmPayload: args.AlarmPayload,
 		CreatedAt:    timestamppb.New(createdAt),
