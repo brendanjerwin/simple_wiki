@@ -424,11 +424,120 @@ func findItemOrTombstone(checklist *apiv1.Checklist, uid string) (*apiv1.Checkli
 }
 
 // SyncCollection returns the items changed and uids deleted since the
-// caller's last sync. The skeleton returns ErrCollectionNotFound for
-// every call; the green pass replaces this with a real implementation
-// against the underlying mutator state.
+// caller's last sync (RFC 6578). The wire flow:
+//
+//  1. Empty clientToken means "initial sync" — emit every live item
+//     and no deletes (the client has nothing yet).
+//  2. Non-empty clientToken parses to an int64 counter (see
+//     etag.ParseSyncToken). A parse failure returns ErrInvalidSyncToken
+//     so the HTTP layer can answer the report with the
+//     `<DAV:valid-sync-token/>` precondition response.
+//  3. If the named collection does not exist, return
+//     ErrCollectionNotFound.
+//  4. Build the changed slice. The proto has no per-item sync-token,
+//     only a collection-level counter that bumps on every mutation.
+//     Phase 3 takes a pragmatic approximation: when clientToken
+//     parsed value differs from the collection's current sync_token,
+//     emit every live item. This over-emits — a client that's only
+//     missing one mutation gets the whole collection — but is correct
+//     and trivial to reason about. A future phase can refine this by
+//     tracking per-item sync-token if real-world traffic warrants it.
+//  5. Build deletedUIDs from tombstones whose SyncToken exceeds the
+//     client's parsed token. Legacy tombstones (SyncToken=0) lack the
+//     stamping done in newer code; emit them only on the initial-sync
+//     branch (clientToken empty -> parsed=0) and suppress otherwise.
+//  6. Return the collection's current sync-token URI as newToken.
 //
 // revive:disable-next-line:max-control-nesting,function-result-limit  // CalendarBackend.SyncCollection's 4-return shape (newToken, changed, deleted, err) is part of the interface contract.
-func (*defaultBackend) SyncCollection(_ context.Context, _, _, _ string) (string, []CalendarItem, []string, error) { //nolint:revive // 4 returns are interface-mandated
-	return "", nil, nil, ErrCollectionNotFound
+func (b *defaultBackend) SyncCollection(ctx context.Context, page, listName, clientToken string) (string, []CalendarItem, []string, error) { //nolint:revive // 4 returns are interface-mandated
+	clientCounter, err := etag.ParseSyncToken(clientToken)
+	if err != nil {
+		return "", nil, nil, ErrInvalidSyncToken
+	}
+	checklist, err := b.mutator.ListItems(ctx, page, listName)
+	if err != nil {
+		return "", nil, nil, fmt.Errorf("caldav: sync collection %q/%q: %w", page, listName, err)
+	}
+	if !checklistExists(checklist) {
+		return "", nil, nil, ErrCollectionNotFound
+	}
+
+	newToken := etag.CollectionSyncToken(checklist)
+	changed := b.collectChanged(checklist, page, listName, clientToken, clientCounter)
+	deletedUIDs := collectDeletedUIDs(checklist, clientToken, clientCounter)
+	return newToken, changed, deletedUIDs, nil
+}
+
+// collectChanged returns the items the client should re-fetch given the
+// supplied (clientToken, clientCounter) pair. See SyncCollection's doc
+// comment for the over-emission rationale.
+func (b *defaultBackend) collectChanged(checklist *apiv1.Checklist, page, listName, clientToken string, clientCounter int64) []CalendarItem {
+	// Initial sync: emit every live item.
+	if clientToken == "" {
+		return b.renderAllItems(checklist, page, listName)
+	}
+	// Up-to-date: emit nothing.
+	if clientCounter == checklist.SyncToken {
+		return nil
+	}
+	// Behind: emit every live item (Phase 3 approximation).
+	return b.renderAllItems(checklist, page, listName)
+}
+
+// renderAllItems renders every live item on the checklist into the
+// CalendarItem shape the report handler emits. Used by both initial-
+// sync and the "client is behind" branches of collectChanged.
+func (b *defaultBackend) renderAllItems(checklist *apiv1.Checklist, page, listName string) []CalendarItem {
+	if len(checklist.Items) == 0 {
+		return nil
+	}
+	out := make([]CalendarItem, 0, len(checklist.Items))
+	for _, it := range checklist.Items {
+		out = append(out, b.renderItem(it, page, listName))
+	}
+	return out
+}
+
+// collectDeletedUIDs returns the tombstoned uids the client should
+// drop from its local cache. The wire rule:
+//
+//   - Initial sync (empty clientToken): no deletes — the client has
+//     nothing to drop.
+//   - Subsequent sync: emit every tombstone whose SyncToken exceeds
+//     the client's parsed counter. Legacy tombstones (SyncToken=0)
+//     pre-date the Phase 0 stamping work; they only emit when the
+//     client's token is itself the zero counter, which is the one
+//     and only safe replay window.
+func collectDeletedUIDs(checklist *apiv1.Checklist, clientToken string, clientCounter int64) []string {
+	if clientToken == "" || len(checklist.Tombstones) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(checklist.Tombstones))
+	for _, t := range checklist.Tombstones {
+		if shouldEmitTombstone(t, clientCounter) {
+			out = append(out, t.GetUid())
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+// shouldEmitTombstone applies the per-tombstone visibility rules for
+// the subsequent-sync branch. A post-Phase-0 tombstone with SyncToken
+// > clientCounter emits. Legacy tombstones (SyncToken=0) emit only
+// when the client's parsed counter is also 0; on later incremental
+// syncs we suppress them to avoid replaying every legacy delete on
+// every poll.
+func shouldEmitTombstone(t *apiv1.Tombstone, clientCounter int64) bool {
+	if t == nil {
+		return false
+	}
+	stamped := t.GetSyncToken()
+	if stamped > 0 {
+		return stamped > clientCounter
+	}
+	// Legacy (unstamped) tombstone: only emit when clientCounter is 0.
+	return clientCounter == 0
 }

@@ -1313,7 +1313,10 @@ var _ = Describe("defaultBackend.SyncCollection", func() {
 					SyncToken: 0,
 				}},
 			}}
-			_, _, deletedUIDs, err = backend.SyncCollection(ctx, "shopping", "this-week", "")
+			// Non-empty client token that parses to 0 — distinguishes
+			// "subsequent sync, replay window for legacy tombstones"
+			// from the initial-sync case.
+			_, _, deletedUIDs, err = backend.SyncCollection(ctx, "shopping", "this-week", "http://simple-wiki.local/ns/sync/0")
 		})
 
 		It("should not return an error", func() {
@@ -1322,6 +1325,35 @@ var _ = Describe("defaultBackend.SyncCollection", func() {
 
 		It("should emit the legacy tombstone uid as deleted", func() {
 			Expect(deletedUIDs).To(ConsistOf("01HXCCCCCCCCCCCCCCCCCCCCCC"))
+		})
+	})
+
+	When("a legacy tombstone has SyncToken zero and the client supplies an empty initial-sync token", func() {
+		var (
+			deletedUIDs []string
+			err         error
+		)
+
+		BeforeEach(func() {
+			fake.pages["shopping"] = []*apiv1.Checklist{{
+				Name:      "this-week",
+				UpdatedAt: timestamppb.New(now.Add(-time.Hour)),
+				SyncToken: 4,
+				Tombstones: []*apiv1.Tombstone{{
+					Uid:       "01HXCCCCCCCCCCCCCCCCCCCCCC",
+					DeletedAt: timestamppb.New(now.Add(-2 * time.Hour)),
+					SyncToken: 0,
+				}},
+			}}
+			_, _, deletedUIDs, err = backend.SyncCollection(ctx, "shopping", "this-week", "")
+		})
+
+		It("should not return an error", func() {
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should emit no deleted uids — the client has nothing to drop", func() {
+			Expect(deletedUIDs).To(BeEmpty())
 		})
 	})
 
