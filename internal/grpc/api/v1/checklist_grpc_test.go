@@ -138,7 +138,34 @@ var _ = Describe("ChecklistService handlers — errChecklistMutatorNotConfigured
 			})
 		})
 	})
+
+	Describe("WatchList", func() {
+		When("checklistMutator is not configured", func() {
+			var err error
+
+			BeforeEach(func() {
+				err = server.WatchList(&apiv1.WatchListRequest{Page: "p", ListName: "l"}, &fakeWatchListStream{ctx: ctx})
+			})
+
+			It("should return FailedPrecondition", func() {
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.FailedPrecondition, "checklist mutator not configured"))
+			})
+		})
+	})
 })
+
+// fakeWatchListStream is a no-op ChecklistService_WatchListServer used
+// by the WatchList validation specs; the validation paths bail before
+// any Send so the only method that matters is Context.
+type fakeWatchListStream struct {
+	apiv1.ChecklistService_WatchListServer
+	ctx context.Context
+}
+
+func (s *fakeWatchListStream) Context() context.Context { return s.ctx }
+func (*fakeWatchListStream) Send(*apiv1.WatchListResponse) error {
+	return nil
+}
 
 var _ = Describe("ChecklistService handlers — page required validation", func() {
 	var (
@@ -215,6 +242,22 @@ var _ = Describe("ChecklistService handlers — page required validation", func(
 			It("should return InvalidArgument", func() {
 				_, err := server.GetChecklists(ctx, &apiv1.GetChecklistsRequest{Page: ""})
 				Expect(err).To(HaveGrpcStatusWithSubstr(codes.InvalidArgument, "page"))
+			})
+		})
+	})
+
+	Describe("WatchList", func() {
+		When("page is empty", func() {
+			It("should return InvalidArgument", func() {
+				err := server.WatchList(&apiv1.WatchListRequest{Page: "", ListName: "l"}, &fakeWatchListStream{ctx: ctx})
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.InvalidArgument, "page"))
+			})
+		})
+
+		When("list_name is empty", func() {
+			It("should return InvalidArgument", func() {
+				err := server.WatchList(&apiv1.WatchListRequest{Page: "p", ListName: ""}, &fakeWatchListStream{ctx: ctx})
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.InvalidArgument, "list_name"))
 			})
 		})
 	})
