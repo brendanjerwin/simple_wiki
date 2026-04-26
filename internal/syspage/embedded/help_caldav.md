@@ -7,7 +7,7 @@ system = true
 
 # CalDAV Sync (Apple Reminders, DAVx5)
 
-Every page with a `{{ Checklist }}` macro is also a CalDAV calendar collection. Each named checklist on the page becomes a calendar; each checklist item becomes a `VTODO`. Subscribe from a phone and the checklists show up in the OS task app — Apple Reminders on iOS, tasks.org or Jtx Board on Android via DAVx5. Edits round-trip both ways.
+Every page with a `{{"{{ Checklist }}"}}` macro is also a CalDAV calendar collection. Each named checklist on the page becomes a calendar; each checklist item becomes a `VTODO`. Subscribe from a phone and the checklists show up in the OS task app — Apple Reminders on iOS, tasks.org or Jtx Board on Android via DAVx5. Edits round-trip both ways.
 
 The macro is a view over the data; CalDAV is a view over the same data. Both read and write the `wiki.checklists.*` frontmatter through the same funnel, so attribution, sync tokens, and tombstones stay consistent across both surfaces. See [[help-macro-checklist]] for the underlying data model.
 
@@ -86,7 +86,7 @@ A `412 Precondition Failed` means another writer (the wiki UI, another phone, an
 **Items don't appear after subscribing.**
 Two common causes:
 
-1. The page has no `{{ Checklist }}` macro yet, or its checklists are empty. Add at least one item via the wiki UI.
+1. The page has no `{{"{{ Checklist }}"}}` macro yet, or its checklists are empty. Add at least one item via the wiki UI.
 2. The server URL is wrong — double-check the trailing slash and that the page identifier in the URL matches an existing wiki page.
 
 **Apple Reminders shows the account but no lists.**
