@@ -44,11 +44,12 @@ See [[help-hashtags]] and [[help-search]] for the full grammar.
 ## Advanced Features
 
 - [[help-alerts]] — Styled callout boxes (note, tip, warning, caution)
-- [[help-templating]] — Template language reference (macros, variables, conditionals)
+- [[help-caldav]] — Bidirectional checklist sync with native task apps (Apple Reminders, DAVx5)
+- [[help-hashtags]] — Page-level hashtag tagging
 - [[help-macro-blog]] — Blog macro for publishing articles
 - [[help-macro-checklist]] — Checklist macro for interactive task lists
 - [[help-macro-survey]] — Survey macro for collecting per-user responses
 - [[help-scheduled-agents]] — Cron-driven background AI agent tasks per page
 - [[help-search]] — Search syntax including `#tag` queries
-- [[help-hashtags]] — Page-level hashtag tagging
 - [[help-system-pages]] — Pages that ship with the wiki binary
+- [[help-templating]] — Template language reference (macros, variables, conditionals)
