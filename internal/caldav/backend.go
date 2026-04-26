@@ -442,10 +442,13 @@ func findItemOrTombstone(checklist *apiv1.Checklist, uid string) (*apiv1.Checkli
 //     missing one mutation gets the whole collection — but is correct
 //     and trivial to reason about. A future phase can refine this by
 //     tracking per-item sync-token if real-world traffic warrants it.
-//  5. Build deletedUIDs from tombstones whose SyncToken exceeds the
-//     client's parsed token. Legacy tombstones (SyncToken=0) lack the
-//     stamping done in newer code; emit them only on the initial-sync
-//     branch (clientToken empty -> parsed=0) and suppress otherwise.
+//  5. Build deletedUIDs:
+//     - Initial sync (clientToken empty): no deletes — the client
+//       has nothing to drop.
+//     - Subsequent sync: emit tombstones whose SyncToken exceeds the
+//       client's parsed counter. Legacy tombstones (SyncToken=0)
+//       lack the Phase 0 stamping; emit them only when the client's
+//       parsed counter is also 0.
 //  6. Return the collection's current sync-token URI as newToken.
 //
 // revive:disable-next-line:max-control-nesting,function-result-limit  // CalendarBackend.SyncCollection's 4-return shape (newToken, changed, deleted, err) is part of the interface contract.
