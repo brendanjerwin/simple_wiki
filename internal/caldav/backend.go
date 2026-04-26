@@ -277,19 +277,14 @@ func (b *defaultBackend) GetItem(ctx context.Context, page, listName, uid string
 	if err != nil {
 		return CalendarItem{}, fmt.Errorf("caldav: get item %q/%q/%q: %w", page, listName, uid, err)
 	}
-	if checklist != nil {
-		for _, it := range checklist.Items {
-			if it.Uid == uid {
-				return b.renderItem(it, page, listName), nil
-			}
-		}
-		for _, t := range checklist.Tombstones {
-			if t.Uid == uid {
-				return CalendarItem{}, ErrItemDeleted
-			}
-		}
+	item, deleted := findItemOrTombstone(checklist, uid)
+	if deleted {
+		return CalendarItem{}, ErrItemDeleted
 	}
-	return CalendarItem{}, ErrItemNotFound
+	if item == nil {
+		return CalendarItem{}, ErrItemNotFound
+	}
+	return b.renderItem(item, page, listName), nil
 }
 
 // PutItem creates or updates a checklist item from an inbound CalDAV
