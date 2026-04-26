@@ -136,6 +136,7 @@ var (
 // automated is derived from identity.IsAgent(); completed_by is left
 // unset (the new item is not checked yet).
 func (m *Mutator) AddItem(_ context.Context, page, listName string, args AddItemArgs, identity tailscale.IdentityValue) (*apiv1.ChecklistItem, *apiv1.Checklist, error) {
+	listName = wikipage.NormalizeListName(listName)
 	if listName == "" {
 		return nil, nil, status.Error(codes.InvalidArgument, "list_name is required")
 	}
@@ -186,9 +187,45 @@ func (m *Mutator) AddItem(_ context.Context, page, listName string, args AddItem
 	return item, checklist, nil
 }
 
+// applyUserMutableFields applies the user-mutable fields from args to item,
+// returning whether anything actually changed. Wiki-managed fields on item
+// (created_at, updated_at, completed_at, completed_by, automated) are not
+// touched here — callers are responsible for stamping those after a true
+// return. Used by both UpdateItem and UpsertFromCalDAV so the per-field
+// comparison logic stays in one place.
+func applyUserMutableFields(item *apiv1.ChecklistItem, args UpdateItemArgs) bool {
+	changed := false
+	if args.Text != nil && *args.Text != item.Text {
+		item.Text = *args.Text
+		changed = true
+	}
+	if args.TagsSet && !slicesEqual(args.Tags, item.Tags) {
+		item.Tags = append([]string(nil), args.Tags...)
+		changed = true
+	}
+	if args.DescriptionSet && !stringPtrEqual(args.Description, item.Description) {
+		item.Description = args.Description
+		changed = true
+	}
+	if args.DueSet && !timeAndTimestampEqual(args.Due, item.Due) {
+		if args.Due == nil {
+			item.Due = nil
+		} else {
+			item.Due = timestamppb.New(*args.Due)
+		}
+		changed = true
+	}
+	if args.AlarmPayloadSet && !stringPtrEqual(args.AlarmPayload, item.AlarmPayload) {
+		item.AlarmPayload = args.AlarmPayload
+		changed = true
+	}
+	return changed
+}
+
 // UpdateItem mutates user-mutable fields of an existing item. Wiki-managed
 // fields on the request are ignored; updated_at is server-stamped.
 func (m *Mutator) UpdateItem(_ context.Context, page, listName, uid string, args UpdateItemArgs, expectedUpdatedAt *time.Time, _ tailscale.IdentityValue) (*apiv1.ChecklistItem, *apiv1.Checklist, error) {
+	listName = wikipage.NormalizeListName(listName)
 	if uid == "" {
 		return nil, nil, status.Error(codes.InvalidArgument, errUIDRequiredMsg)
 	}
@@ -211,37 +248,7 @@ func (m *Mutator) UpdateItem(_ context.Context, page, listName, uid string, args
 		return nil, nil, ErrItemNotFound
 	}
 
-	changed := false
-	if args.Text != nil && *args.Text != item.Text {
-		item.Text = *args.Text
-		changed = true
-	}
-	if args.TagsSet && !slicesEqual(args.Tags, item.Tags) {
-		item.Tags = append([]string(nil), args.Tags...)
-		changed = true
-	}
-	if args.DescriptionSet {
-		if !stringPtrEqual(args.Description, item.Description) {
-			item.Description = args.Description
-			changed = true
-		}
-	}
-	if args.DueSet {
-		if !timeAndTimestampEqual(args.Due, item.Due) {
-			if args.Due == nil {
-				item.Due = nil
-			} else {
-				item.Due = timestamppb.New(*args.Due)
-			}
-			changed = true
-		}
-	}
-	if args.AlarmPayloadSet {
-		if !stringPtrEqual(args.AlarmPayload, item.AlarmPayload) {
-			item.AlarmPayload = args.AlarmPayload
-			changed = true
-		}
-	}
+	changed := applyUserMutableFields(item, args)
 
 	now := m.clock.Now()
 	if changed {
@@ -260,6 +267,7 @@ func (m *Mutator) UpdateItem(_ context.Context, page, listName, uid string, args
 // ToggleItem flips the checked field. False→true sets completed_at and
 // completed_by; true→false clears both.
 func (m *Mutator) ToggleItem(_ context.Context, page, listName, uid string, expectedUpdatedAt *time.Time, identity tailscale.IdentityValue) (*apiv1.ChecklistItem, *apiv1.Checklist, error) {
+	listName = wikipage.NormalizeListName(listName)
 	if uid == "" {
 		return nil, nil, status.Error(codes.InvalidArgument, errUIDRequiredMsg)
 	}
@@ -306,6 +314,7 @@ func (m *Mutator) ToggleItem(_ context.Context, page, listName, uid string, expe
 
 // DeleteItem removes uid from the named checklist and writes a tombstone.
 func (m *Mutator) DeleteItem(_ context.Context, page, listName, uid string, expectedUpdatedAt *time.Time, _ tailscale.IdentityValue) (*apiv1.Checklist, error) {
+	listName = wikipage.NormalizeListName(listName)
 	if uid == "" {
 		return nil, status.Error(codes.InvalidArgument, errUIDRequiredMsg)
 	}
@@ -330,12 +339,13 @@ func (m *Mutator) DeleteItem(_ context.Context, page, listName, uid string, expe
 
 	now := m.clock.Now()
 	checklist.Items = append(checklist.Items[:idx], checklist.Items[idx+1:]...)
+	bumpSyncToken(checklist, now)
 	checklist.Tombstones = append(checklist.Tombstones, &apiv1.Tombstone{
 		Uid:       uid,
 		DeletedAt: timestamppb.New(now),
 		GcAfter:   timestamppb.New(now.Add(TombstoneTTL)),
+		SyncToken: checklist.SyncToken,
 	})
-	bumpSyncToken(checklist, now)
 	pruneTombstones(checklist, now)
 
 	if err := m.persist(page, fm, listName, checklist); err != nil {
@@ -348,6 +358,7 @@ func (m *Mutator) DeleteItem(_ context.Context, page, listName, uid string, expe
 // would collide with another item, the mutator re-densifies adjacent
 // values just enough to make room.
 func (m *Mutator) ReorderItem(_ context.Context, page, listName, uid string, newSortOrder int64, expectedUpdatedAt *time.Time, _ tailscale.IdentityValue) (*apiv1.Checklist, error) {
+	listName = wikipage.NormalizeListName(listName)
 	if uid == "" {
 		return nil, status.Error(codes.InvalidArgument, errUIDRequiredMsg)
 	}
@@ -390,6 +401,7 @@ func (m *Mutator) ReorderItem(_ context.Context, page, listName, uid string, new
 // ListItems returns the named checklist with all items and any
 // surviving tombstones. Read-only — does not write back.
 func (m *Mutator) ListItems(_ context.Context, page, listName string) (*apiv1.Checklist, error) {
+	listName = wikipage.NormalizeListName(listName)
 	unlock := m.lockPage(page)
 	defer unlock()
 

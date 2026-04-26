@@ -68,9 +68,30 @@ describe('WikiChecklist', () => {
     const checklist = updatedAtMs === undefined
       ? makeChecklist({ name: 'grocery_list', items })
       : makeChecklist({ name: 'grocery_list', items, updatedAtMs });
+    // Always stub watchList to an empty async iterable so the
+    // component's _startWatching loop returns immediately. Without
+    // this the real transport hangs the test until timeout.
+    stubWatchList(target);
     return sinon
       .stub(target.client, 'listItems')
       .resolves(create(ListItemsResponseSchema, { checklist }));
+  }
+
+  // stubWatchList replaces client.watchList with a function that
+  // returns an empty async iterable, simulating an immediate
+  // server-close. Components see one tick (no-op) and exit the
+  // for-await loop without firing extra fetchData calls.
+  function stubWatchList(target: WikiChecklist): SinonStub {
+    const empty: AsyncIterable<never> = {
+      [Symbol.asyncIterator]() {
+        return {
+          next() { return Promise.resolve({ value: undefined as never, done: true }); },
+        };
+      },
+    };
+    return sinon
+      .stub(target.client, 'watchList')
+      .returns(empty as unknown as ReturnType<WikiChecklist['client']['watchList']>);
   }
 
   beforeEach(async () => {

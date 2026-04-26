@@ -9,6 +9,7 @@ require (
 	github.com/adrg/frontmatter v0.2.0
 	github.com/blevesearch/bleve v1.0.14
 	github.com/coder/acp-go-sdk v0.12.0
+	github.com/emersion/go-ical v0.0.0-20250609112844-439c63cef608
 	github.com/gabriel-vasile/mimetype v1.4.13
 	github.com/gin-contrib/multitemplate v1.1.1
 	github.com/gin-contrib/sessions v1.1.0
@@ -115,6 +116,7 @@ require (
 	github.com/spf13/cast v1.7.1 // indirect
 	github.com/steveyen/gtreap v0.1.0 // indirect
 	github.com/tailscale/go-winio v0.0.0-20231025203758-c4f33415bf55 // indirect
+	github.com/teambition/rrule-go v1.8.2 // indirect
 	github.com/tinylib/msgp v1.1.0 // indirect
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
 	github.com/ugorji/go/codec v1.3.1 // indirect

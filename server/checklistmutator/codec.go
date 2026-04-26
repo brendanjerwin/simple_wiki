@@ -174,6 +174,9 @@ func decodeTombstones(raw []any) []*apiv1.Tombstone {
 		if ts, ok := readTimestamp(m, "gc_after"); ok {
 			t.GcAfter = ts
 		}
+		if syncToken, ok := readInt64(m, syncTokenKey); ok {
+			t.SyncToken = syncToken
+		}
 		out = append(out, t)
 	}
 	return out
@@ -256,7 +259,10 @@ func encodeTombstones(tombstones []*apiv1.Tombstone) []any {
 	})
 	out := make([]any, 0, len(sorted))
 	for _, t := range sorted {
-		m := map[string]any{uidKey: t.Uid}
+		m := map[string]any{
+			uidKey:       t.Uid,
+			syncTokenKey: t.SyncToken,
+		}
 		if t.DeletedAt != nil {
 			m["deleted_at"] = t.DeletedAt.AsTime().Format(time.RFC3339Nano)
 		}

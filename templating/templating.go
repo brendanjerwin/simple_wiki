@@ -327,6 +327,7 @@ func BuildChecklist(templateContext TemplateContext) func(string) string {
 // falling through to the legacy checklists.<list>.items[] for pages the
 // eager migration hasn't swept yet (per ADR-0010).
 func lookupChecklistItems(frontmatter map[string]any, listName string) []any {
+	listName = wikipage.NormalizeListName(listName)
 	wiki, ok := frontmatter["wiki"].(map[string]any)
 	if ok {
 		wikiChecklists, ok := wiki["checklists"].(map[string]any)

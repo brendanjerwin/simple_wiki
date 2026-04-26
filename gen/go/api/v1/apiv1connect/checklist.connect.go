@@ -54,6 +54,9 @@ const (
 	// ChecklistServiceGetChecklistsProcedure is the fully-qualified name of the ChecklistService's
 	// GetChecklists RPC.
 	ChecklistServiceGetChecklistsProcedure = "/api.v1.ChecklistService/GetChecklists"
+	// ChecklistServiceWatchListProcedure is the fully-qualified name of the ChecklistService's
+	// WatchList RPC.
+	ChecklistServiceWatchListProcedure = "/api.v1.ChecklistService/WatchList"
 )
 
 // These variables are the protoreflect.Descriptor objects for the RPCs defined in this package.
@@ -66,6 +69,7 @@ var (
 	checklistServiceReorderItemMethodDescriptor   = checklistServiceServiceDescriptor.Methods().ByName("ReorderItem")
 	checklistServiceListItemsMethodDescriptor     = checklistServiceServiceDescriptor.Methods().ByName("ListItems")
 	checklistServiceGetChecklistsMethodDescriptor = checklistServiceServiceDescriptor.Methods().ByName("GetChecklists")
+	checklistServiceWatchListMethodDescriptor     = checklistServiceServiceDescriptor.Methods().ByName("WatchList")
 )
 
 // ChecklistServiceClient is a client for the api.v1.ChecklistService service.
@@ -84,6 +88,8 @@ type ChecklistServiceClient interface {
 	ListItems(context.Context, *connect.Request[v1.ListItemsRequest]) (*connect.Response[v1.ListItemsResponse], error)
 	// GetChecklists — see (api.v1.description).
 	GetChecklists(context.Context, *connect.Request[v1.GetChecklistsRequest]) (*connect.Response[v1.GetChecklistsResponse], error)
+	// WatchList — see (api.v1.description).
+	WatchList(context.Context, *connect.Request[v1.WatchListRequest]) (*connect.ServerStreamForClient[v1.WatchListResponse], error)
 }
 
 // NewChecklistServiceClient constructs a client for the api.v1.ChecklistService service. By
@@ -138,6 +144,12 @@ func NewChecklistServiceClient(httpClient connect.HTTPClient, baseURL string, op
 			connect.WithSchema(checklistServiceGetChecklistsMethodDescriptor),
 			connect.WithClientOptions(opts...),
 		),
+		watchList: connect.NewClient[v1.WatchListRequest, v1.WatchListResponse](
+			httpClient,
+			baseURL+ChecklistServiceWatchListProcedure,
+			connect.WithSchema(checklistServiceWatchListMethodDescriptor),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -150,6 +162,7 @@ type checklistServiceClient struct {
 	reorderItem   *connect.Client[v1.ReorderItemRequest, v1.ReorderItemResponse]
 	listItems     *connect.Client[v1.ListItemsRequest, v1.ListItemsResponse]
 	getChecklists *connect.Client[v1.GetChecklistsRequest, v1.GetChecklistsResponse]
+	watchList     *connect.Client[v1.WatchListRequest, v1.WatchListResponse]
 }
 
 // AddItem calls api.v1.ChecklistService.AddItem.
@@ -187,6 +200,11 @@ func (c *checklistServiceClient) GetChecklists(ctx context.Context, req *connect
 	return c.getChecklists.CallUnary(ctx, req)
 }
 
+// WatchList calls api.v1.ChecklistService.WatchList.
+func (c *checklistServiceClient) WatchList(ctx context.Context, req *connect.Request[v1.WatchListRequest]) (*connect.ServerStreamForClient[v1.WatchListResponse], error) {
+	return c.watchList.CallServerStream(ctx, req)
+}
+
 // ChecklistServiceHandler is an implementation of the api.v1.ChecklistService service.
 type ChecklistServiceHandler interface {
 	// AddItem — see (api.v1.description).
@@ -203,6 +221,8 @@ type ChecklistServiceHandler interface {
 	ListItems(context.Context, *connect.Request[v1.ListItemsRequest]) (*connect.Response[v1.ListItemsResponse], error)
 	// GetChecklists — see (api.v1.description).
 	GetChecklists(context.Context, *connect.Request[v1.GetChecklistsRequest]) (*connect.Response[v1.GetChecklistsResponse], error)
+	// WatchList — see (api.v1.description).
+	WatchList(context.Context, *connect.Request[v1.WatchListRequest], *connect.ServerStream[v1.WatchListResponse]) error
 }
 
 // NewChecklistServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -253,6 +273,12 @@ func NewChecklistServiceHandler(svc ChecklistServiceHandler, opts ...connect.Han
 		connect.WithSchema(checklistServiceGetChecklistsMethodDescriptor),
 		connect.WithHandlerOptions(opts...),
 	)
+	checklistServiceWatchListHandler := connect.NewServerStreamHandler(
+		ChecklistServiceWatchListProcedure,
+		svc.WatchList,
+		connect.WithSchema(checklistServiceWatchListMethodDescriptor),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/api.v1.ChecklistService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case ChecklistServiceAddItemProcedure:
@@ -269,6 +295,8 @@ func NewChecklistServiceHandler(svc ChecklistServiceHandler, opts ...connect.Han
 			checklistServiceListItemsHandler.ServeHTTP(w, r)
 		case ChecklistServiceGetChecklistsProcedure:
 			checklistServiceGetChecklistsHandler.ServeHTTP(w, r)
+		case ChecklistServiceWatchListProcedure:
+			checklistServiceWatchListHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -304,4 +332,8 @@ func (UnimplementedChecklistServiceHandler) ListItems(context.Context, *connect.
 
 func (UnimplementedChecklistServiceHandler) GetChecklists(context.Context, *connect.Request[v1.GetChecklistsRequest]) (*connect.Response[v1.GetChecklistsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("api.v1.ChecklistService.GetChecklists is not implemented"))
+}
+
+func (UnimplementedChecklistServiceHandler) WatchList(context.Context, *connect.Request[v1.WatchListRequest], *connect.ServerStream[v1.WatchListResponse]) error {
+	return connect.NewError(connect.CodeUnimplemented, errors.New("api.v1.ChecklistService.WatchList is not implemented"))
 }

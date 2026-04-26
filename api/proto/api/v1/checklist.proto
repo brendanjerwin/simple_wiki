@@ -105,6 +105,20 @@ service ChecklistService {
         "and by UI surfaces that need to render multiple lists.";
     option (api.v1.read_only) = true;
   }
+
+  // WatchList — see (api.v1.description).
+  rpc WatchList(WatchListRequest) returns (stream WatchListResponse) {
+    option (api.v1.description) =
+        "Server-streaming watch on a single checklist. Sends an event "
+        "every time the per-list sync_token changes — i.e., on every "
+        "successful AddItem / UpdateItem / ToggleItem / DeleteItem / "
+        "ReorderItem / UpsertFromCalDAV. UI components subscribe to "
+        "skip the polling-poll-interval gap on external writes "
+        "(CalDAV PUTs, edits in another tab, agent mutations). The "
+        "first event fires immediately with the current state so the "
+        "client doesn't need a separate ListItems before subscribing.";
+    option (api.v1.read_only) = true;
+  }
 }
 
 // ChecklistItem — one row in a checklist.
@@ -149,6 +163,13 @@ message Tombstone {
   string uid = 1;
   google.protobuf.Timestamp deleted_at = 2;
   google.protobuf.Timestamp gc_after = 3;
+  // Wiki-managed: the value of Checklist.sync_token at the moment of
+  // deletion (post-bump, so a sync-collection REPORT can emit this
+  // tombstone to clients whose token is < this value). Tombstones
+  // written before this field existed decode as 0 — treat 0 as
+  // "before recorded history" and emit to any client with an empty
+  // or zero token.
+  int64 sync_token = 4;
 }
 
 // Checklist — one named checklist on a page.
@@ -266,4 +287,25 @@ message GetChecklistsRequest {
 
 message GetChecklistsResponse {
   repeated Checklist checklists = 1;
+}
+
+// WatchList
+
+message WatchListRequest {
+  string page = 1;
+  string list_name = 2;
+  // Server-side poll cadence. Bounded to a sane range; values
+  // outside [100ms, 60s] are clamped. Omit / 0 to use the server
+  // default (~1s).
+  optional int64 check_interval_ms = 3;
+}
+
+message WatchListResponse {
+  // Current sync_token. Monotonically advances on every mutation.
+  // Clients use the sync_token they last saw to decide whether the
+  // event represents a real change vs. an initial-snapshot push.
+  int64 sync_token = 1;
+  // Current collection-level updated_at. Useful for ETag display
+  // and as expected_updated_at on subsequent mutations.
+  google.protobuf.Timestamp updated_at = 2;
 }

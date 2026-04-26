@@ -80,8 +80,111 @@ func (s *Site) GinRouter(middleware ...gin.HandlerFunc) *gin.Engine {
 
 	router.Use(sessions.Sessions("_session", s.SessionStore))
 
+	// The CalDAV gateway runs before route matching so CalDAV-shaped
+	// requests bypass Gin's wildcard GET handler and reach the
+	// dedicated CalDAV server. Non-CalDAV traffic falls through to the
+	// regular routes registered below. nil caldavServer makes the
+	// gateway a no-op so test sites that don't wire CalDAV continue to
+	// work unchanged.
+	router.Use(s.caldavGateway())
+
 	s.registerRoutes(router)
 	return router
+}
+
+// caldavGateway returns a Gin middleware that intercepts CalDAV-shaped
+// HTTP traffic and forwards it to the configured caldavServer. Regular
+// page GETs, edits, and API calls fall through via c.Next().
+//
+// The gateway is registered before route matching so CalDAV verbs that
+// Gin's wildcard /:page/*command handler would otherwise swallow (e.g.
+// PROPFIND, REPORT) reach the dedicated CalDAV server instead. A nil
+// caldavServer makes the gateway a pass-through — used in tests that
+// don't need the CalDAV surface and in environments where CalDAV has
+// not yet been wired by bootstrap.
+func (s *Site) caldavGateway() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if s.caldavServer == nil || !shouldRouteToCalDAV(c.Request) {
+			c.Next()
+			return
+		}
+		s.caldavServer.ServeHTTP(c.Writer, c.Request)
+		c.Abort()
+	}
+}
+
+// CalDAV / WebDAV verbs the gateway forwards unconditionally. Gin's
+// router matches GET/POST/PUT/DELETE/HEAD/OPTIONS/PATCH but has no
+// concept of these WebDAV-specific methods, so the only sane place to
+// dispatch them is from middleware that runs before route matching.
+const (
+	methodPROPFIND   = "PROPFIND"
+	methodREPORT     = "REPORT"
+	methodMKCALENDAR = "MKCALENDAR"
+	methodCOPY       = "COPY"
+	methodMOVE       = "MOVE"
+	methodPROPPATCH  = "PROPPATCH"
+)
+
+// icsExtension is the file extension on per-item CalDAV resource URLs
+// (e.g. /<page>/<list>/<uid>.ics). Used to recognize GETs that should
+// route to the CalDAV server instead of the wiki's page handler.
+const icsExtension = ".ics"
+
+// minICSPathSegments is the smallest number of "/"-separated path
+// segments a /<page>/<list>/<uid>.ics URL must have. Anything shorter
+// (e.g. /foo/bar.ics) is not an item resource and should fall through
+// to the regular page handler.
+const minICSPathSegments = 3
+
+// shouldRouteToCalDAV reports whether the gateway should forward a
+// request to the CalDAV server instead of letting it hit the regular
+// Gin routes. The conditions are:
+//
+//   - Method is a CalDAV / WebDAV verb (OPTIONS, PROPFIND, REPORT,
+//     PUT, DELETE, MKCALENDAR, COPY, MOVE, PROPPATCH).
+//   - Method is GET / HEAD AND the path looks like
+//     /<page>/<list>/<uid>.ics (3+ segments, last segment ends in
+//     ".ics").
+//
+// OPTIONS is included even though Gin handles it natively because
+// CalDAV clients fire OPTIONS as the capability-discovery probe and
+// need the DAV / Allow headers the CalDAV server emits.
+func shouldRouteToCalDAV(r *http.Request) bool {
+	switch r.Method {
+	case http.MethodOptions,
+		methodPROPFIND,
+		methodREPORT,
+		http.MethodPut,
+		http.MethodDelete,
+		methodMKCALENDAR,
+		methodCOPY,
+		methodMOVE,
+		methodPROPPATCH:
+		return true
+	case http.MethodGet, http.MethodHead:
+		return isICSResourcePath(r.URL.Path)
+	default:
+		return false
+	}
+}
+
+// isICSResourcePath reports whether p has the shape of a per-item
+// CalDAV resource URL (3+ segments, last segment ends in ".ics").
+// Reuses the same prefix/trim conventions as
+// internal/caldav.parsePath so the gateway and the CalDAV server agree
+// on what a per-item URL looks like.
+func isICSResourcePath(p string) bool {
+	if !strings.HasSuffix(p, icsExtension) {
+		return false
+	}
+	trimmed := strings.TrimPrefix(p, rootPath)
+	trimmed = strings.TrimSuffix(trimmed, rootPath)
+	if trimmed == "" {
+		return false
+	}
+	segments := strings.Split(trimmed, rootPath)
+	return len(segments) >= minICSPathSegments
 }
 
 func (s *Site) registerRoutes(router *gin.Engine) {

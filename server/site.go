@@ -82,7 +82,20 @@ type Site struct {
 	AgentScheduleConcurrency int
 	AgentScheduleQueueCap    int
 	AgentTurnHardTimeout     time.Duration
-	saveMut                  sync.RWMutex
+	// caldavServer dispatches CalDAV-shaped HTTP traffic. The
+	// caldavGateway middleware (registered before route matching)
+	// forwards qualifying requests here; everything else falls through
+	// to the regular Gin routes. nil disables CalDAV routing — used in
+	// tests that don't need the CalDAV surface.
+	caldavServer http.Handler
+	saveMut      sync.RWMutex
+}
+
+// SetCalDAVServer installs the CalDAV HTTP handler the caldavGateway
+// middleware will dispatch CalDAV-shaped requests to. Pass nil to
+// disable CalDAV routing (the gateway becomes a no-op pass-through).
+func (s *Site) SetCalDAVServer(h http.Handler) {
+	s.caldavServer = h
 }
 
 // LoadCustomCSS reads custom CSS from the given file path and assigns it to s.CSS.
