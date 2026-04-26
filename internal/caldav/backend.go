@@ -6,6 +6,9 @@ import (
 	"fmt"
 	"time"
 
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+
 	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
 	"github.com/brendanjerwin/simple_wiki/internal/caldav/etag"
 	"github.com/brendanjerwin/simple_wiki/internal/caldav/icalcodec"
@@ -293,8 +296,69 @@ func (*defaultBackend) PutItem(_ context.Context, _, _, _ string, _ []byte, _, _
 	return "", false, errors.New("caldav: PutItem not implemented yet")
 }
 
-func (*defaultBackend) DeleteItem(_ context.Context, _, _, _, _ string, _ tailscale.IdentityValue) error {
-	return errors.New("caldav: DeleteItem not implemented yet")
+// DeleteItem removes an item from the named collection, writing a
+// tombstone for sync-collection replay. When ifMatch is empty, the
+// delete proceeds unconditionally. When ifMatch is non-empty, the
+// backend resolves the current item, compares its ETag against ifMatch,
+// and stamps expectedUpdatedAt onto the funnel call as a defense-in-
+// depth OCC check (the funnel re-validates against its own snapshot).
+//
+// Tombstoned uids surface as ErrItemDeleted so the HTTP layer can
+// distinguish "never existed" (ErrItemNotFound → 404) from "deleted
+// recently" (also 404 to clients, but still in the sync-collection
+// stream). FailedPrecondition from the funnel maps to
+// ErrPreconditionFailed (412). Other funnel errors are wrapped.
+func (b *defaultBackend) DeleteItem(ctx context.Context, page, listName, uid, ifMatch string, identity tailscale.IdentityValue) error {
+	var expectedUpdatedAt *time.Time
+	if ifMatch != "" {
+		checklist, err := b.mutator.ListItems(ctx, page, listName)
+		if err != nil {
+			return fmt.Errorf("caldav: delete item %q/%q/%q: %w", page, listName, uid, err)
+		}
+		item, deleted := findItemOrTombstone(checklist, uid)
+		if deleted {
+			return ErrItemDeleted
+		}
+		if item == nil {
+			return ErrItemNotFound
+		}
+		if etag.ItemETag(item) != ifMatch {
+			return ErrPreconditionFailed
+		}
+		updated := item.UpdatedAt.AsTime()
+		expectedUpdatedAt = &updated
+	}
+
+	if _, err := b.mutator.DeleteItem(ctx, page, listName, uid, expectedUpdatedAt, identity); err != nil {
+		if errors.Is(err, checklistmutator.ErrItemNotFound) {
+			return ErrItemNotFound
+		}
+		if status.Code(err) == codes.FailedPrecondition {
+			return ErrPreconditionFailed
+		}
+		return fmt.Errorf("caldav: delete item %q/%q/%q: %w", page, listName, uid, err)
+	}
+	return nil
+}
+
+// findItemOrTombstone scans a checklist for uid, returning the live
+// item when found, or signaling deleted=true when the uid is in the
+// tombstone list. Both nil and false mean "uid is unknown".
+func findItemOrTombstone(checklist *apiv1.Checklist, uid string) (*apiv1.ChecklistItem, bool) {
+	if checklist == nil {
+		return nil, false
+	}
+	for _, it := range checklist.Items {
+		if it.Uid == uid {
+			return it, false
+		}
+	}
+	for _, t := range checklist.Tombstones {
+		if t.Uid == uid {
+			return nil, true
+		}
+	}
+	return nil, false
 }
 
 // revive:disable-next-line:max-control-nesting,function-result-limit  // CalendarBackend.SyncCollection's 4-return shape (newToken, changed, deleted, err) is part of the interface contract.
