@@ -25,10 +25,12 @@ import (
 	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
 )
 
-// SyncTokenPrefix is the URI prefix on every emitted sync-token. RFC
+// syncURIPrefix is the URI prefix on every emitted sync-token. RFC
 // 6578 mandates the token be a URI; we use a wiki-specific URN-shaped
-// prefix so the suffix is unambiguously ours.
-const SyncTokenPrefix = "http://simple-wiki.local/ns/sync/"
+// prefix so the suffix is unambiguously ours. Kept unexported because
+// callers should round-trip through CollectionSyncToken / ParseSyncToken
+// rather than building or parsing tokens by hand.
+const syncURIPrefix = "http://simple-wiki.local/ns/sync/"
 
 // syncTokenBase / syncTokenBitSize are the numeric base and bit width
 // of the integer suffix on a sync-token URI (decimal int64).
@@ -66,7 +68,7 @@ func CollectionSyncToken(checklist *apiv1.Checklist) string {
 	if checklist == nil {
 		return ""
 	}
-	return SyncTokenPrefix + strconv.FormatInt(checklist.SyncToken, syncTokenBase)
+	return syncURIPrefix + strconv.FormatInt(checklist.SyncToken, syncTokenBase)
 }
 
 // ParseSyncToken extracts the integer counter from a sync-token URI
@@ -78,10 +80,10 @@ func ParseSyncToken(token string) (int64, error) {
 	if token == "" {
 		return 0, nil
 	}
-	if !strings.HasPrefix(token, SyncTokenPrefix) {
-		return 0, fmt.Errorf("etag: sync-token %q does not have prefix %q", token, SyncTokenPrefix)
+	if !strings.HasPrefix(token, syncURIPrefix) {
+		return 0, fmt.Errorf("etag: sync-token %q does not have prefix %q", token, syncURIPrefix)
 	}
-	suffix := strings.TrimPrefix(token, SyncTokenPrefix)
+	suffix := strings.TrimPrefix(token, syncURIPrefix)
 	n, err := strconv.ParseInt(suffix, syncTokenBase, syncTokenBitSize)
 	if err != nil {
 		return 0, fmt.Errorf("etag: sync-token %q has non-integer suffix: %w", token, err)
