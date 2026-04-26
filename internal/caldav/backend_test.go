@@ -1098,3 +1098,288 @@ var _ = Describe("defaultBackend.PutItem", func() {
 		})
 	})
 })
+
+var _ = Describe("defaultBackend.SyncCollection", func() {
+	var (
+		ctx     context.Context
+		now     time.Time
+		fake    *fakeMutator
+		backend caldav.CalendarBackend
+	)
+
+	BeforeEach(func() {
+		ctx = context.Background()
+		now = time.Date(2026, 4, 25, 13, 0, 0, 0, time.UTC)
+		fake = &fakeMutator{pages: map[string][]*apiv1.Checklist{}}
+		backend = caldav.NewBackend(fake, "https://wiki.example.com", fixedNow(now))
+	})
+
+	When("the client supplies an empty token (initial sync)", func() {
+		var (
+			newToken    string
+			changed     []caldav.CalendarItem
+			deletedUIDs []string
+			err         error
+			item1       *apiv1.ChecklistItem
+			item2       *apiv1.ChecklistItem
+		)
+
+		BeforeEach(func() {
+			itemUpdated := now.Add(-30 * time.Minute)
+			item1 = &apiv1.ChecklistItem{
+				Uid:       "01HXAAAAAAAAAAAAAAAAAAAAAA",
+				Text:      "Buy milk",
+				UpdatedAt: timestamppb.New(itemUpdated),
+			}
+			item2 = &apiv1.ChecklistItem{
+				Uid:       "01HXBBBBBBBBBBBBBBBBBBBBBB",
+				Text:      "Buy bread",
+				UpdatedAt: timestamppb.New(itemUpdated),
+			}
+			fake.pages["shopping"] = []*apiv1.Checklist{{
+				Name:      "this-week",
+				UpdatedAt: timestamppb.New(now.Add(-time.Hour)),
+				SyncToken: 7,
+				Items:     []*apiv1.ChecklistItem{item1, item2},
+				Tombstones: []*apiv1.Tombstone{{
+					Uid:       "01HXCCCCCCCCCCCCCCCCCCCCCC",
+					DeletedAt: timestamppb.New(now.Add(-2 * time.Hour)),
+					SyncToken: 3,
+				}},
+			}}
+			newToken, changed, deletedUIDs, err = backend.SyncCollection(ctx, "shopping", "this-week", "")
+		})
+
+		It("should not return an error", func() {
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should return the current collection sync-token", func() {
+			Expect(newToken).To(Equal("http://simple-wiki.local/ns/sync/7"))
+		})
+
+		It("should emit every live item as changed", func() {
+			Expect(changed).To(HaveLen(2))
+		})
+
+		It("should set each changed item's UID from the source", func() {
+			uids := []string{changed[0].UID, changed[1].UID}
+			Expect(uids).To(ConsistOf("01HXAAAAAAAAAAAAAAAAAAAAAA", "01HXBBBBBBBBBBBBBBBBBBBBBB"))
+		})
+
+		It("should produce VTODO bytes for each changed item", func() {
+			Expect(string(changed[0].ICalBytes)).To(ContainSubstring("BEGIN:VTODO"))
+			Expect(string(changed[1].ICalBytes)).To(ContainSubstring("BEGIN:VTODO"))
+		})
+
+		It("should not emit any deleted uids", func() {
+			Expect(deletedUIDs).To(BeEmpty())
+		})
+	})
+
+	When("the client's token equals the current collection sync-token", func() {
+		var (
+			newToken    string
+			changed     []caldav.CalendarItem
+			deletedUIDs []string
+			err         error
+		)
+
+		BeforeEach(func() {
+			itemUpdated := now.Add(-30 * time.Minute)
+			fake.pages["shopping"] = []*apiv1.Checklist{{
+				Name:      "this-week",
+				UpdatedAt: timestamppb.New(now.Add(-time.Hour)),
+				SyncToken: 12,
+				Items: []*apiv1.ChecklistItem{{
+					Uid:       "01HXAAAAAAAAAAAAAAAAAAAAAA",
+					Text:      "Buy milk",
+					UpdatedAt: timestamppb.New(itemUpdated),
+				}},
+			}}
+			newToken, changed, deletedUIDs, err = backend.SyncCollection(ctx, "shopping", "this-week", "http://simple-wiki.local/ns/sync/12")
+		})
+
+		It("should not return an error", func() {
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should return the same collection sync-token", func() {
+			Expect(newToken).To(Equal("http://simple-wiki.local/ns/sync/12"))
+		})
+
+		It("should emit no changed items", func() {
+			Expect(changed).To(BeEmpty())
+		})
+
+		It("should emit no deleted uids", func() {
+			Expect(deletedUIDs).To(BeEmpty())
+		})
+	})
+
+	When("a tombstone has SyncToken greater than the client's token", func() {
+		var (
+			newToken    string
+			changed     []caldav.CalendarItem
+			deletedUIDs []string
+			err         error
+		)
+
+		BeforeEach(func() {
+			fake.pages["shopping"] = []*apiv1.Checklist{{
+				Name:      "this-week",
+				UpdatedAt: timestamppb.New(now.Add(-time.Hour)),
+				SyncToken: 9,
+				Items:     []*apiv1.ChecklistItem{},
+				Tombstones: []*apiv1.Tombstone{{
+					Uid:       "01HXCCCCCCCCCCCCCCCCCCCCCC",
+					DeletedAt: timestamppb.New(now.Add(-time.Minute)),
+					SyncToken: 9,
+				}},
+			}}
+			newToken, changed, deletedUIDs, err = backend.SyncCollection(ctx, "shopping", "this-week", "http://simple-wiki.local/ns/sync/5")
+		})
+
+		It("should not return an error", func() {
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should advance the sync-token to the collection's current value", func() {
+			Expect(newToken).To(Equal("http://simple-wiki.local/ns/sync/9"))
+		})
+
+		It("should emit the tombstoned uid as deleted", func() {
+			Expect(deletedUIDs).To(ConsistOf("01HXCCCCCCCCCCCCCCCCCCCCCC"))
+		})
+
+		It("should emit no changed items", func() {
+			Expect(changed).To(BeEmpty())
+		})
+	})
+
+	When("the client is far behind the current sync-token", func() {
+		var (
+			changed     []caldav.CalendarItem
+			deletedUIDs []string
+			err         error
+		)
+
+		BeforeEach(func() {
+			itemUpdated := now.Add(-30 * time.Minute)
+			fake.pages["shopping"] = []*apiv1.Checklist{{
+				Name:      "this-week",
+				UpdatedAt: timestamppb.New(now.Add(-time.Hour)),
+				SyncToken: 50,
+				Items: []*apiv1.ChecklistItem{{
+					Uid:       "01HXAAAAAAAAAAAAAAAAAAAAAA",
+					Text:      "Buy milk",
+					UpdatedAt: timestamppb.New(itemUpdated),
+				}, {
+					Uid:       "01HXBBBBBBBBBBBBBBBBBBBBBB",
+					Text:      "Buy bread",
+					UpdatedAt: timestamppb.New(itemUpdated),
+				}},
+			}}
+			_, changed, deletedUIDs, err = backend.SyncCollection(ctx, "shopping", "this-week", "http://simple-wiki.local/ns/sync/2")
+		})
+
+		It("should not return an error", func() {
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should over-emit by returning every live item", func() {
+			Expect(changed).To(HaveLen(2))
+		})
+
+		It("should emit no deleted uids when no tombstones are newer than the client's token", func() {
+			Expect(deletedUIDs).To(BeEmpty())
+		})
+	})
+
+	When("a legacy tombstone has SyncToken zero and the client's token parses to zero", func() {
+		var (
+			deletedUIDs []string
+			err         error
+		)
+
+		BeforeEach(func() {
+			fake.pages["shopping"] = []*apiv1.Checklist{{
+				Name:      "this-week",
+				UpdatedAt: timestamppb.New(now.Add(-time.Hour)),
+				SyncToken: 4,
+				Tombstones: []*apiv1.Tombstone{{
+					Uid:       "01HXCCCCCCCCCCCCCCCCCCCCCC",
+					DeletedAt: timestamppb.New(now.Add(-2 * time.Hour)),
+					SyncToken: 0,
+				}},
+			}}
+			_, _, deletedUIDs, err = backend.SyncCollection(ctx, "shopping", "this-week", "")
+		})
+
+		It("should not return an error", func() {
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should emit the legacy tombstone uid as deleted", func() {
+			Expect(deletedUIDs).To(ConsistOf("01HXCCCCCCCCCCCCCCCCCCCCCC"))
+		})
+	})
+
+	When("a legacy tombstone has SyncToken zero and the client's token is non-zero", func() {
+		var (
+			deletedUIDs []string
+			err         error
+		)
+
+		BeforeEach(func() {
+			fake.pages["shopping"] = []*apiv1.Checklist{{
+				Name:      "this-week",
+				UpdatedAt: timestamppb.New(now.Add(-time.Hour)),
+				SyncToken: 4,
+				Tombstones: []*apiv1.Tombstone{{
+					Uid:       "01HXCCCCCCCCCCCCCCCCCCCCCC",
+					DeletedAt: timestamppb.New(now.Add(-2 * time.Hour)),
+					SyncToken: 0,
+				}},
+			}}
+			_, _, deletedUIDs, err = backend.SyncCollection(ctx, "shopping", "this-week", "http://simple-wiki.local/ns/sync/2")
+		})
+
+		It("should not return an error", func() {
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should suppress the legacy tombstone", func() {
+			Expect(deletedUIDs).To(BeEmpty())
+		})
+	})
+
+	When("the named (page, list) does not exist", func() {
+		var err error
+
+		BeforeEach(func() {
+			_, _, _, err = backend.SyncCollection(ctx, "missing-page", "this-week", "")
+		})
+
+		It("should return ErrCollectionNotFound", func() {
+			Expect(err).To(MatchError(caldav.ErrCollectionNotFound))
+		})
+	})
+
+	When("the client supplies a malformed sync-token", func() {
+		var err error
+
+		BeforeEach(func() {
+			fake.pages["shopping"] = []*apiv1.Checklist{{
+				Name:      "this-week",
+				UpdatedAt: timestamppb.New(now.Add(-time.Hour)),
+				SyncToken: 7,
+			}}
+			_, _, _, err = backend.SyncCollection(ctx, "shopping", "this-week", "not-a-uri-at-all")
+		})
+
+		It("should return ErrInvalidSyncToken", func() {
+			Expect(err).To(MatchError(caldav.ErrInvalidSyncToken))
+		})
+	})
+})
