@@ -287,3 +287,43 @@ func (*Server) serveOPTIONS(w http.ResponseWriter, _ *http.Request) {
 	h.Set("Allow", allowedMethods)
 	w.WriteHeader(http.StatusOK)
 }
+
+// iCalendarContentType is the media type CalDAV clients expect on
+// every per-item .ics resource (RFC 5545 §3.1, RFC 4791 §4.1).
+const iCalendarContentType = "text/calendar; charset=utf-8"
+
+// serveGET handles GET requests against /<page>/<list>/<uid>.ics. The
+// CalDAV gateway only routes GETs that already match the .ics URL
+// shape (the wiki's page handler owns every other GET), but we still
+// re-validate via parsePath so request smuggling can't bypass the
+// gateway's filter.
+//
+// Returns:
+//   - 200 with the rendered iCalendar body and an ETag header.
+//   - 404 when uid is unknown, tombstoned, or the URL doesn't name
+//     an item resource.
+//   - 500 on any other backend error.
+func (s *Server) serveGET(w http.ResponseWriter, r *http.Request) {
+	page, list, uid, err := parsePath(r.URL.Path)
+	if err != nil || uid == "" {
+		http.NotFound(w, r)
+		return
+	}
+	item, err := s.Backend.GetItem(r.Context(), page, list, uid)
+	if err != nil {
+		switch {
+		case errors.Is(err, ErrItemNotFound), errors.Is(err, ErrItemDeleted):
+			http.NotFound(w, r)
+		default:
+			http.Error(w, "internal error", http.StatusInternalServerError)
+		}
+		return
+	}
+	h := w.Header()
+	h.Set("Content-Type", iCalendarContentType)
+	if item.ETag != "" {
+		h.Set("ETag", item.ETag)
+	}
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(item.ICalBytes)
+}

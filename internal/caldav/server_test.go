@@ -2,6 +2,7 @@
 package caldav_test
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -10,7 +11,51 @@ import (
 	. "github.com/onsi/gomega"
 
 	"github.com/brendanjerwin/simple_wiki/internal/caldav"
+	"github.com/brendanjerwin/simple_wiki/tailscale"
 )
+
+// fakeServerBackend is a minimal CalendarBackend used by Server-level
+// tests. Every method has a recorded "lastCall…" set of arguments and
+// a configurable return value or error so each test can stage exactly
+// the response it needs without dragging in the real wikipage / mutator
+// stack.
+//
+//revive:disable:exported Internal test helper.
+type fakeServerBackend struct {
+	getItemFn func(ctx context.Context, page, list, uid string) (caldav.CalendarItem, error)
+}
+
+func (*fakeServerBackend) ListCollections(_ context.Context, _ string) ([]caldav.CalendarCollection, error) {
+	return nil, nil
+}
+
+func (*fakeServerBackend) GetCollection(_ context.Context, _, _ string) (caldav.CalendarCollection, error) {
+	return caldav.CalendarCollection{}, caldav.ErrCollectionNotFound
+}
+
+func (*fakeServerBackend) ListItems(_ context.Context, _, _ string) (caldav.CalendarCollection, []caldav.CalendarItem, error) {
+	return caldav.CalendarCollection{}, nil, caldav.ErrCollectionNotFound
+}
+
+func (f *fakeServerBackend) GetItem(ctx context.Context, page, list, uid string) (caldav.CalendarItem, error) {
+	if f.getItemFn != nil {
+		return f.getItemFn(ctx, page, list, uid)
+	}
+	return caldav.CalendarItem{}, caldav.ErrItemNotFound
+}
+
+func (*fakeServerBackend) PutItem(_ context.Context, _, _, _ string, _ []byte, _, _ string, _ tailscale.IdentityValue) (string, bool, error) {
+	return "", false, errors.New("PutItem not used in these tests")
+}
+
+func (*fakeServerBackend) DeleteItem(_ context.Context, _, _, _, _ string, _ tailscale.IdentityValue) error {
+	return errors.New("DeleteItem not used in these tests")
+}
+
+//revive:disable-next-line:function-result-limit Mirrors CalendarBackend.SyncCollection's interface signature.
+func (*fakeServerBackend) SyncCollection(_ context.Context, _, _, _ string) (string, []caldav.CalendarItem, []string, error) {
+	return "", nil, nil, errors.New("SyncCollection not used in these tests")
+}
 
 // The package-level RunSpecs lives in backend_test.go (TestBackend);
 // adding a second TestServer would trip Ginkgo's "RunSpecs more than
@@ -391,5 +436,152 @@ var _ = Describe("Server.serveOPTIONS", func() {
 
 	It("should write an empty body", func() {
 		Expect(rec.Body.Len()).To(Equal(0))
+	})
+})
+
+var _ = Describe("Server.serveGET", func() {
+	const okPath = "/shopping/this-week/01HZ8K7Q9X1V2N3R4T5Y6Z7B8C.ics"
+	const okUID = "01HZ8K7Q9X1V2N3R4T5Y6Z7B8C"
+
+	When("the backend returns a live item", func() {
+		var rec *httptest.ResponseRecorder
+		var capturedPage, capturedList, capturedUID string
+
+		BeforeEach(func() {
+			backend := &fakeServerBackend{
+				getItemFn: func(_ context.Context, page, list, uid string) (caldav.CalendarItem, error) {
+					capturedPage = page
+					capturedList = list
+					capturedUID = uid
+					return caldav.CalendarItem{
+						UID:       okUID,
+						ETag:      `W/"2026-04-25T13:00:00Z"`,
+						ICalBytes: []byte("BEGIN:VCALENDAR\r\nEND:VCALENDAR\r\n"),
+					}, nil
+				},
+			}
+			server := &caldav.Server{Backend: backend}
+			rec = httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodGet, okPath, nil)
+			server.ServeGETForTest(rec, req)
+		})
+
+		It("should return 200 OK", func() {
+			Expect(rec.Code).To(Equal(http.StatusOK))
+		})
+
+		It("should set Content-Type to text/calendar; charset=utf-8", func() {
+			Expect(rec.Header().Get("Content-Type")).To(Equal("text/calendar; charset=utf-8"))
+		})
+
+		It("should set the ETag header from the backend item", func() {
+			Expect(rec.Header().Get("ETag")).To(Equal(`W/"2026-04-25T13:00:00Z"`))
+		})
+
+		It("should write the iCalendar body", func() {
+			Expect(rec.Body.String()).To(Equal("BEGIN:VCALENDAR\r\nEND:VCALENDAR\r\n"))
+		})
+
+		It("should pass the page from the URL to the backend", func() {
+			Expect(capturedPage).To(Equal("shopping"))
+		})
+
+		It("should pass the list from the URL to the backend", func() {
+			Expect(capturedList).To(Equal("this-week"))
+		})
+
+		It("should pass the uid from the URL to the backend", func() {
+			Expect(capturedUID).To(Equal(okUID))
+		})
+	})
+
+	When("the backend returns ErrItemNotFound", func() {
+		var rec *httptest.ResponseRecorder
+
+		BeforeEach(func() {
+			backend := &fakeServerBackend{
+				getItemFn: func(_ context.Context, _, _, _ string) (caldav.CalendarItem, error) {
+					return caldav.CalendarItem{}, caldav.ErrItemNotFound
+				},
+			}
+			server := &caldav.Server{Backend: backend}
+			rec = httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodGet, okPath, nil)
+			server.ServeGETForTest(rec, req)
+		})
+
+		It("should return 404 Not Found", func() {
+			Expect(rec.Code).To(Equal(http.StatusNotFound))
+		})
+	})
+
+	When("the backend returns ErrItemDeleted", func() {
+		var rec *httptest.ResponseRecorder
+
+		BeforeEach(func() {
+			backend := &fakeServerBackend{
+				getItemFn: func(_ context.Context, _, _, _ string) (caldav.CalendarItem, error) {
+					return caldav.CalendarItem{}, caldav.ErrItemDeleted
+				},
+			}
+			server := &caldav.Server{Backend: backend}
+			rec = httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodGet, okPath, nil)
+			server.ServeGETForTest(rec, req)
+		})
+
+		It("should return 404 Not Found", func() {
+			Expect(rec.Code).To(Equal(http.StatusNotFound))
+		})
+	})
+
+	When("the backend returns an unexpected error", func() {
+		var rec *httptest.ResponseRecorder
+
+		BeforeEach(func() {
+			backend := &fakeServerBackend{
+				getItemFn: func(_ context.Context, _, _, _ string) (caldav.CalendarItem, error) {
+					return caldav.CalendarItem{}, errors.New("disk on fire")
+				},
+			}
+			server := &caldav.Server{Backend: backend}
+			rec = httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodGet, okPath, nil)
+			server.ServeGETForTest(rec, req)
+		})
+
+		It("should return 500 Internal Server Error", func() {
+			Expect(rec.Code).To(Equal(http.StatusInternalServerError))
+		})
+	})
+
+	When("the URL is not a .ics resource", func() {
+		var rec *httptest.ResponseRecorder
+
+		BeforeEach(func() {
+			server := &caldav.Server{Backend: &fakeServerBackend{}}
+			rec = httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodGet, "/shopping/this-week", nil)
+			server.ServeGETForTest(rec, req)
+		})
+
+		It("should return 404 Not Found", func() {
+			Expect(rec.Code).To(Equal(http.StatusNotFound))
+		})
+	})
+
+	When("the URL has a malformed uid", func() {
+		var rec *httptest.ResponseRecorder
+
+		BeforeEach(func() {
+			server := &caldav.Server{Backend: &fakeServerBackend{}}
+			rec = httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodGet, "/shopping/this-week/not-a-ulid.ics", nil)
+			server.ServeGETForTest(rec, req)
+		})
+
+		It("should return 404 Not Found", func() {
+			Expect(rec.Code).To(Equal(http.StatusNotFound))
+		})
 	})
 })

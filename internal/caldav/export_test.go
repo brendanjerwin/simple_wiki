@@ -28,3 +28,8 @@ func ParsePathForTest(reqURL string) (page, list, uid string, err error) {
 func (s *Server) ServeOPTIONSForTest(w http.ResponseWriter, r *http.Request) {
 	s.serveOPTIONS(w, r)
 }
+
+// ServeGETForTest is the test-only re-export of (*Server).serveGET.
+func (s *Server) ServeGETForTest(w http.ResponseWriter, r *http.Request) {
+	s.serveGET(w, r)
+}
