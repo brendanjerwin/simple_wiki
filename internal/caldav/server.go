@@ -3,7 +3,6 @@ package caldav
 import (
 	"errors"
 	"io"
-	"log"
 	"net/http"
 	"strings"
 
@@ -33,13 +32,6 @@ type Server struct {
 	// When nil (zero-value Server, used by some legacy tests) the
 	// instrumented wrapper falls back to otel.Tracer at call time.
 	Tracer trace.Tracer
-
-	// auditLogger is the destination for write-path audit log lines.
-	// Defaults to log.Default() when unset; tests inject a buffer-backed
-	// logger to capture output. The field is unexported so production
-	// callers always use the standard logger and tests stage a fake via
-	// the test-only setter in export_test.go.
-	auditLogger *log.Logger
 }
 
 // NewServer constructs a CalDAV Server with metrics, tracing, and audit

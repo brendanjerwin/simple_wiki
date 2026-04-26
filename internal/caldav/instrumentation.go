@@ -179,6 +179,16 @@ func (s *statusRecorder) Write(b []byte) (int, error) {
 	return n, err
 }
 
+// contentLengthBase / contentLengthBitSize parameterize the
+// strconv.ParseInt call that decodes the Content-Length header.
+// Constants because revive's add-constant rule fires on the raw
+// numbers, and naming them spells out that the parse is decimal and
+// targets int64 (matching r.ContentLength).
+const (
+	contentLengthBase    = 10
+	contentLengthBitSize = 64
+)
+
 // requestBytesIn extracts a byte count for the bytesIn counter. We
 // honor Content-Length when present (the CalDAV clients we care about
 // — iOS, DAVx5 — always set it on PUT) and report zero otherwise so a
@@ -196,7 +206,7 @@ func requestBytesIn(r *http.Request) int64 {
 	if cl == "" {
 		return 0
 	}
-	n, err := strconv.ParseInt(cl, 10, 64)
+	n, err := strconv.ParseInt(cl, contentLengthBase, contentLengthBitSize)
 	if err != nil || n < 0 {
 		return 0
 	}
