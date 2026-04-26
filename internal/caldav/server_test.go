@@ -2,8 +2,10 @@
 package caldav_test
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"log"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -1523,6 +1525,270 @@ var _ = Describe("Server.instrumented", func() {
 		It("should not panic and should still call the inner handler", func() {
 			Expect(rec.Code).To(Equal(http.StatusOK))
 			Expect(rec.Body.String()).To(Equal("body"))
+		})
+	})
+})
+
+// newAuditLogger returns a *log.Logger that writes into the supplied
+// buffer with no prefix and no flags. Tests use it to capture
+// auditWrite output verbatim, then assert on substrings.
+func newAuditLogger(buf *bytes.Buffer) *log.Logger {
+	return log.New(buf, "", 0)
+}
+
+var _ = Describe("Server.auditWrite", func() {
+	When("a put creates a new item", func() {
+		var buf *bytes.Buffer
+
+		BeforeEach(func() {
+			buf = &bytes.Buffer{}
+			server := &caldav.Server{AuditLogger: newAuditLogger(buf)}
+			server.CallAuditWriteForTest(
+				"put", "alice@example.com",
+				"shopping", "this-week", "01HZ8K7Q9X1V2N3R4T5Y6Z7B8C",
+				"created", `W/"2026-04-25T13:00:00Z"`,
+			)
+		})
+
+		It("should include the caldav prefix", func() {
+			Expect(buf.String()).To(HavePrefix("caldav:"))
+		})
+
+		It("should include action=put", func() {
+			Expect(buf.String()).To(ContainSubstring(`action=put`))
+		})
+
+		It("should include the principal", func() {
+			Expect(buf.String()).To(ContainSubstring(`principal="alice@example.com"`))
+		})
+
+		It("should include the page", func() {
+			Expect(buf.String()).To(ContainSubstring(`page="shopping"`))
+		})
+
+		It("should include the list", func() {
+			Expect(buf.String()).To(ContainSubstring(`list="this-week"`))
+		})
+
+		It("should include the uid", func() {
+			Expect(buf.String()).To(ContainSubstring(`uid="01HZ8K7Q9X1V2N3R4T5Y6Z7B8C"`))
+		})
+
+		It("should include outcome=created", func() {
+			Expect(buf.String()).To(ContainSubstring(`outcome=created`))
+		})
+
+		It("should include the etag", func() {
+			Expect(buf.String()).To(ContainSubstring(`etag="W/\"2026-04-25T13:00:00Z\""`))
+		})
+	})
+
+	When("a delete succeeds", func() {
+		var buf *bytes.Buffer
+
+		BeforeEach(func() {
+			buf = &bytes.Buffer{}
+			server := &caldav.Server{AuditLogger: newAuditLogger(buf)}
+			server.CallAuditWriteForTest(
+				"delete", "alice@example.com",
+				"shopping", "this-week", "01HZ8K7Q9X1V2N3R4T5Y6Z7B8C",
+				"deleted", "",
+			)
+		})
+
+		It("should include action=delete", func() {
+			Expect(buf.String()).To(ContainSubstring(`action=delete`))
+		})
+
+		It("should include outcome=deleted", func() {
+			Expect(buf.String()).To(ContainSubstring(`outcome=deleted`))
+		})
+
+		It("should omit the etag field when no etag is supplied", func() {
+			Expect(buf.String()).NotTo(ContainSubstring(`etag=`))
+		})
+	})
+
+	When("AuditLogger is nil", func() {
+		var server *caldav.Server
+
+		BeforeEach(func() {
+			server = &caldav.Server{}
+		})
+
+		It("should not panic", func() {
+			Expect(func() {
+				server.CallAuditWriteForTest("put", "alice", "p", "l", "u", "created", "")
+			}).NotTo(Panic())
+		})
+	})
+})
+
+var _ = Describe("audit logging on PUT", func() {
+	const okPath = "/shopping/this-week/01HZ8K7Q9X1V2N3R4T5Y6Z7B8C.ics"
+	const okBody = "BEGIN:VCALENDAR\r\nBEGIN:VTODO\r\nUID:01HZ8K7Q9X1V2N3R4T5Y6Z7B8C\r\nSUMMARY:milk\r\nEND:VTODO\r\nEND:VCALENDAR\r\n"
+	const okETag = `W/"2026-04-25T13:00:00Z"`
+
+	When("the put creates a new item", func() {
+		var buf *bytes.Buffer
+
+		BeforeEach(func() {
+			buf = &bytes.Buffer{}
+			backend := &fakeServerBackend{
+				putItemFn: func(_ context.Context, _, _, _ string, _ []byte, _, _ string, _ tailscale.IdentityValue) (string, bool, error) {
+					return okETag, true, nil
+				},
+			}
+			server := &caldav.Server{Backend: backend, AuditLogger: newAuditLogger(buf)}
+			rec := httptest.NewRecorder()
+			req := authedRequestWithBody(http.MethodPut, okPath, okBody)
+			server.ServePUTForTest(rec, req)
+		})
+
+		It("should emit an audit log line with outcome=created", func() {
+			Expect(buf.String()).To(ContainSubstring(`outcome=created`))
+		})
+
+		It("should attribute the action to the requester's principal", func() {
+			Expect(buf.String()).To(ContainSubstring(`principal="tester@example.com"`))
+		})
+	})
+
+	When("the put updates an existing item", func() {
+		var buf *bytes.Buffer
+
+		BeforeEach(func() {
+			buf = &bytes.Buffer{}
+			backend := &fakeServerBackend{
+				putItemFn: func(_ context.Context, _, _, _ string, _ []byte, _, _ string, _ tailscale.IdentityValue) (string, bool, error) {
+					return okETag, false, nil
+				},
+			}
+			server := &caldav.Server{Backend: backend, AuditLogger: newAuditLogger(buf)}
+			rec := httptest.NewRecorder()
+			req := authedRequestWithBody(http.MethodPut, okPath, okBody)
+			server.ServePUTForTest(rec, req)
+		})
+
+		It("should emit an audit log line with outcome=updated", func() {
+			Expect(buf.String()).To(ContainSubstring(`outcome=updated`))
+		})
+	})
+
+	When("the put hits a precondition failure", func() {
+		var buf *bytes.Buffer
+
+		BeforeEach(func() {
+			buf = &bytes.Buffer{}
+			backend := &fakeServerBackend{
+				putItemFn: func(_ context.Context, _, _, _ string, _ []byte, _, _ string, _ tailscale.IdentityValue) (string, bool, error) {
+					return "", false, caldav.ErrPreconditionFailed
+				},
+			}
+			server := &caldav.Server{Backend: backend, AuditLogger: newAuditLogger(buf)}
+			rec := httptest.NewRecorder()
+			req := authedRequestWithBody(http.MethodPut, okPath, okBody)
+			server.ServePUTForTest(rec, req)
+		})
+
+		It("should emit an audit log line with outcome=precondition_failed", func() {
+			Expect(buf.String()).To(ContainSubstring(`outcome=precondition_failed`))
+		})
+	})
+
+	When("the put hits a non-precondition error", func() {
+		var buf *bytes.Buffer
+
+		BeforeEach(func() {
+			buf = &bytes.Buffer{}
+			backend := &fakeServerBackend{
+				putItemFn: func(_ context.Context, _, _, _ string, _ []byte, _, _ string, _ tailscale.IdentityValue) (string, bool, error) {
+					return "", false, errors.New("disk on fire")
+				},
+			}
+			server := &caldav.Server{Backend: backend, AuditLogger: newAuditLogger(buf)}
+			rec := httptest.NewRecorder()
+			req := authedRequestWithBody(http.MethodPut, okPath, okBody)
+			server.ServePUTForTest(rec, req)
+		})
+
+		It("should not emit an audit log line", func() {
+			Expect(buf.String()).To(Equal(""))
+		})
+	})
+})
+
+var _ = Describe("audit logging on DELETE", func() {
+	const okPath = "/shopping/this-week/01HZ8K7Q9X1V2N3R4T5Y6Z7B8C.ics"
+
+	When("the delete succeeds", func() {
+		var buf *bytes.Buffer
+
+		BeforeEach(func() {
+			buf = &bytes.Buffer{}
+			backend := &fakeServerBackend{
+				deleteItemFn: func(_ context.Context, _, _, _, _ string, _ tailscale.IdentityValue) error {
+					return nil
+				},
+			}
+			server := &caldav.Server{Backend: backend, AuditLogger: newAuditLogger(buf)}
+			rec := httptest.NewRecorder()
+			req := authedRequest(http.MethodDelete, okPath)
+			server.ServeDELETEForTest(rec, req)
+		})
+
+		It("should emit an audit log line with action=delete", func() {
+			Expect(buf.String()).To(ContainSubstring(`action=delete`))
+		})
+
+		It("should emit an audit log line with outcome=deleted", func() {
+			Expect(buf.String()).To(ContainSubstring(`outcome=deleted`))
+		})
+
+		It("should attribute the action to the requester's principal", func() {
+			Expect(buf.String()).To(ContainSubstring(`principal="tester@example.com"`))
+		})
+	})
+
+	When("the delete returns ErrItemNotFound", func() {
+		var buf *bytes.Buffer
+
+		BeforeEach(func() {
+			buf = &bytes.Buffer{}
+			backend := &fakeServerBackend{
+				deleteItemFn: func(_ context.Context, _, _, _, _ string, _ tailscale.IdentityValue) error {
+					return caldav.ErrItemNotFound
+				},
+			}
+			server := &caldav.Server{Backend: backend, AuditLogger: newAuditLogger(buf)}
+			rec := httptest.NewRecorder()
+			req := authedRequest(http.MethodDelete, okPath)
+			server.ServeDELETEForTest(rec, req)
+		})
+
+		It("should not emit an audit log line", func() {
+			Expect(buf.String()).To(Equal(""))
+		})
+	})
+
+	When("the delete hits a precondition failure", func() {
+		var buf *bytes.Buffer
+
+		BeforeEach(func() {
+			buf = &bytes.Buffer{}
+			backend := &fakeServerBackend{
+				deleteItemFn: func(_ context.Context, _, _, _, _ string, _ tailscale.IdentityValue) error {
+					return caldav.ErrPreconditionFailed
+				},
+			}
+			server := &caldav.Server{Backend: backend, AuditLogger: newAuditLogger(buf)}
+			rec := httptest.NewRecorder()
+			req := authedRequest(http.MethodDelete, okPath)
+			server.ServeDELETEForTest(rec, req)
+		})
+
+		It("should emit an audit log line with outcome=precondition_failed", func() {
+			Expect(buf.String()).To(ContainSubstring(`outcome=precondition_failed`))
 		})
 	})
 })

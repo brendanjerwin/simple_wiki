@@ -54,6 +54,13 @@ func (s *Server) CallInstrumentedForTest(method string, h http.HandlerFunc, w ht
 	s.instrumented(method, h)(w, r)
 }
 
+// CallAuditWriteForTest invokes the unexported (*Server).auditWrite
+// directly so tests can drive log formatting without going through a
+// full PUT / DELETE flow.
+func (s *Server) CallAuditWriteForTest(action, principal, page, list, uid, outcome, etag string) {
+	s.auditWrite(action, principal, page, list, uid, outcome, etag)
+}
+
 // Test-only re-exports for unexported helpers. Keeping them in
 // export_test.go (compiled only with `go test`) means the public API
 // surface stays minimal.
