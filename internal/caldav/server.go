@@ -81,6 +81,8 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		s.instrumented(methodLabelPut, s.servePUT)(w, r)
 	case http.MethodDelete:
 		s.instrumented(methodLabelDelete, s.serveDELETE)(w, r)
+	case methodPROPPATCH:
+		s.instrumented(methodLabelProppatch, s.servePROPPATCH)(w, r)
 	default:
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 	}
@@ -99,6 +101,7 @@ const (
 	methodLabelGet      = "get"
 	methodLabelPut      = "put"
 	methodLabelDelete   = "delete"
+	methodLabelProppatch = "proppatch"
 )
 
 // methodPROPFIND is the WebDAV verb (RFC 4918 §9.1) used to retrieve
@@ -109,6 +112,17 @@ const methodPROPFIND = "PROPFIND"
 // methodREPORT is the WebDAV verb (RFC 3253) used by CalDAV for
 // calendar-query, calendar-multiget, and sync-collection reports.
 const methodREPORT = "REPORT"
+
+// methodPROPPATCH is the WebDAV verb (RFC 4918 §9.2) iOS Reminders
+// fires during account setup to write displayname / calendar-color on
+// the calendar collection. We don't store these properties (the wiki
+// page name owns displayname) but iOS treats a hard 405 Method Not
+// Allowed as a fatal "calendar is broken / read-only" signal and
+// silently stops issuing PUTs. So we answer the verb with a
+// 207 Multi-Status that acknowledges each requested prop, mapping
+// well-known cosmetic ones to 200 (silently dropped) and everything
+// else to 403 Forbidden — both shapes iOS tolerates without giving up.
+const methodPROPPATCH = "PROPPATCH"
 
 // Path-component sanitization errors. The gateway middleware (P1-C16)
 // maps these to 400 Bad Request before they ever reach a CalDAV

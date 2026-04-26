@@ -108,6 +108,11 @@ func (s *Server) ServeREPORTForTest(w http.ResponseWriter, r *http.Request) {
 	s.serveREPORT(w, r)
 }
 
+// ServePROPPATCHForTest is the test-only re-export of (*Server).servePROPPATCH.
+func (s *Server) ServePROPPATCHForTest(w http.ResponseWriter, r *http.Request) {
+	s.servePROPPATCH(w, r)
+}
+
 // RequireIdentityForTest is the test-only re-export of
 // (*Server).requireIdentity. The second return is the "ok" flag —
 // true means the caller may proceed.

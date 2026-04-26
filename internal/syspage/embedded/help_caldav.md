@@ -60,6 +60,7 @@ The wiki accepts these properties on inbound `PUT` and discards them rather than
 - `LOCATION` — no location fields.
 - `ORGANIZER`, `ATTENDEE` — no multi-user task assignment.
 - `CLASS` — no per-item visibility model; all items inherit page visibility.
+- `displayname`, `calendar-color`, `calendar-order`, `calendar-timezone` — calendar-collection cosmetics. The wiki page name owns the displayname; per-device colors and ordering are not persisted. iOS sets these during account setup via `PROPPATCH`; the wiki acknowledges them with `200 OK` per-prop so iOS doesn't flag the calendar as read-only, then drops the value. Customize the color in the OS task app — it'll stick on that device, just not round-trip to other clients.
 
 These are out of scope for v1 of the bridge. Round-trip them if you need them: edit the page in the wiki UI instead.
 
