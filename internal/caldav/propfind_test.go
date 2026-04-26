@@ -404,7 +404,7 @@ var _ = Describe("Server.servePROPFIND", func() {
 		})
 	})
 
-	When("the URL is malformed", func() {
+	When("the URL is the root /", func() {
 		var rec *httptest.ResponseRecorder
 
 		BeforeEach(func() {
@@ -414,8 +414,53 @@ var _ = Describe("Server.servePROPFIND", func() {
 			server.ServePROPFINDForTest(rec, req)
 		})
 
+		It("should return 207 Multi-Status (clients probe / during discovery)", func() {
+			Expect(rec.Code).To(Equal(http.StatusMultiStatus))
+		})
+
+		It("should advertise current-user-principal pointing back at /", func() {
+			Expect(rec.Body.String()).To(ContainSubstring("current-user-principal"))
+			Expect(rec.Body.String()).To(ContainSubstring("<href>/</href>"))
+		})
+	})
+
+	When("the URL is malformed", func() {
+		var rec *httptest.ResponseRecorder
+
+		BeforeEach(func() {
+			server := &caldav.Server{Backend: &propfindBackend{}}
+			rec = httptest.NewRecorder()
+			// Path-traversal segment — sanitization rejects it.
+			req := propfindRequest("/foo/..", "0", allpropBody)
+			server.ServePROPFINDForTest(rec, req)
+		})
+
 		It("should return 400 Bad Request", func() {
 			Expect(rec.Code).To(Equal(http.StatusBadRequest))
+		})
+	})
+
+	When("the URL points at a known page (home-set)", func() {
+		var rec *httptest.ResponseRecorder
+
+		BeforeEach(func() {
+			backend := &propfindBackend{}
+			server := &caldav.Server{Backend: backend}
+			rec = httptest.NewRecorder()
+			req := propfindRequest("/shopping_lists/", "0", allpropBody)
+			server.ServePROPFINDForTest(rec, req)
+		})
+
+		It("should return 207 Multi-Status", func() {
+			Expect(rec.Code).To(Equal(http.StatusMultiStatus))
+		})
+
+		It("should include displayname matching the page so clients label the account with it", func() {
+			Expect(rec.Body.String()).To(ContainSubstring("<displayname>shopping_lists</displayname>"))
+		})
+
+		It("should point current-user-principal at the page itself, not at /", func() {
+			Expect(rec.Body.String()).To(ContainSubstring("<current-user-principal><href>/shopping_lists/</href></current-user-principal>"))
 		})
 	})
 })

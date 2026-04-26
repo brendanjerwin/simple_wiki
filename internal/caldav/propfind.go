@@ -74,9 +74,37 @@ func (s *Server) servePROPFIND(w http.ResponseWriter, r *http.Request) {
 		s.propfindItem(w, r, page, list, uid)
 	case list != "":
 		s.propfindCollection(w, r, page, list, depth)
-	default:
+	case page != "":
 		s.propfindHomeSet(w, r, page, depth)
+	default:
+		s.propfindRoot(w)
 	}
+}
+
+// propfindRoot answers a PROPFIND on "/" — the discovery probe iOS,
+// DAVx5, and tasks.org issue when the user enters the wiki host
+// without a page path, or when the client requires creds (Basic Auth)
+// before saving and pre-flights the connection. We don't have a real
+// principal hierarchy; return a minimal multistatus that points
+// current-user-principal at the same root so the client knows the
+// connection is alive without us having to enumerate every wiki page
+// as a candidate calendar-home-set.
+func (*Server) propfindRoot(w http.ResponseWriter) {
+	resp := multistatusResponse{
+		Href: pathSep,
+		Propstat: []propstat{{
+			Prop: prop{
+				ResourceType: &resourceType{
+					Collection: &empty{},
+				},
+				CurrentUserPrincipal: &userPrincipal{
+					Href: principalPath,
+				},
+			},
+			Status: statusOK,
+		}},
+	}
+	writeMultistatus(w, []multistatusResponse{resp})
 }
 
 // propfindHomeSet writes the multistatus response for a request at
@@ -162,8 +190,14 @@ func homeSetResponse(page string) multistatusResponse {
 					Collection: &empty{},
 				},
 				DisplayName: page,
+				// Point current-user-principal at the page itself.
+				// In our model the page is the account boundary, so
+				// when a client follows current-user-principal back
+				// here it sees displayname=<page> and labels the
+				// account with the page name instead of falling
+				// back to the URL's hostname.
 				CurrentUserPrincipal: &userPrincipal{
-					Href: principalPath,
+					Href: href,
 				},
 				CalendarHomeSet: &calendarHomeSet{
 					Href: href,

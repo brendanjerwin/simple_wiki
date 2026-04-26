@@ -375,14 +375,21 @@ var _ = Describe("parsePath", func() {
 	})
 
 	When("path is just /", func() {
+		var page, list, uid string
 		var err error
 
 		BeforeEach(func() {
-			_, _, _, err = caldav.ParsePathForTest("/")
+			page, list, uid, err = caldav.ParsePathForTest("/")
 		})
 
-		It("should return ErrMalformedPath", func() {
-			Expect(errors.Is(err, caldav.ErrMalformedPath)).To(BeTrue())
+		It("should not error — bare / is the root resource for client discovery", func() {
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should return all components empty", func() {
+			Expect(page).To(Equal(""))
+			Expect(list).To(Equal(""))
+			Expect(uid).To(Equal(""))
 		})
 	})
 

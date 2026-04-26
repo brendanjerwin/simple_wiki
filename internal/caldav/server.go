@@ -263,7 +263,11 @@ func parsePath(reqURL string) (page, list, uid string, err error) {
 	// Tolerate a single trailing slash on /<page>/<list>/.
 	trimmed = strings.TrimSuffix(trimmed, pathSep)
 	if trimmed == "" {
-		return "", "", "", ErrMalformedPath
+		// Bare "/" is the root resource — used by client discovery
+		// flows (RFC 6764 / RFC 5397). Return all-empty so the
+		// PROPFIND handler can emit a current-user-principal stub
+		// instead of treating the probe as malformed.
+		return "", "", "", nil
 	}
 	parts := strings.Split(trimmed, pathSep)
 	if len(parts) > maxPathSegments {
