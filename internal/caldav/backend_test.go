@@ -9,6 +9,8 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
@@ -24,9 +26,13 @@ func TestBackend(t *testing.T) {
 
 // fakeMutator is a hand-rolled MutatorBackend used by the backend tests.
 // It stores a fixed map of pages -> checklists and returns clones so
-// callers cannot mutate test fixtures by accident.
+// callers cannot mutate test fixtures by accident. Tests that exercise
+// UpsertFromCalDAV / DeleteItem inject upsertFn / deleteFn to capture
+// arguments and return canned responses.
 type fakeMutator struct {
-	pages map[string][]*apiv1.Checklist
+	pages    map[string][]*apiv1.Checklist
+	upsertFn func(ctx context.Context, page, listName, uid string, args checklistmutator.UpsertFromCalDAVArgs, ifMatch, ifNoneMatch string, identity tailscale.IdentityValue) (*apiv1.ChecklistItem, *apiv1.Checklist, error)
+	deleteFn func(ctx context.Context, page, listName, uid string, expectedUpdatedAt *time.Time, identity tailscale.IdentityValue) (*apiv1.Checklist, error)
 }
 
 func (f *fakeMutator) GetChecklists(_ context.Context, page string) ([]*apiv1.Checklist, error) {
@@ -52,11 +58,17 @@ func (f *fakeMutator) ListItems(_ context.Context, page, listName string) (*apiv
 	return &apiv1.Checklist{Name: listName}, nil
 }
 
-func (*fakeMutator) UpsertFromCalDAV(_ context.Context, _, _, _ string, _ checklistmutator.UpsertFromCalDAVArgs, _, _ string, _ tailscale.IdentityValue) (*apiv1.ChecklistItem, *apiv1.Checklist, error) {
+func (f *fakeMutator) UpsertFromCalDAV(ctx context.Context, page, listName, uid string, args checklistmutator.UpsertFromCalDAVArgs, ifMatch, ifNoneMatch string, identity tailscale.IdentityValue) (*apiv1.ChecklistItem, *apiv1.Checklist, error) {
+	if f.upsertFn != nil {
+		return f.upsertFn(ctx, page, listName, uid, args, ifMatch, ifNoneMatch, identity)
+	}
 	return nil, nil, errors.New("fakeMutator.UpsertFromCalDAV not used in these tests")
 }
 
-func (*fakeMutator) DeleteItem(_ context.Context, _, _, _ string, _ *time.Time, _ tailscale.IdentityValue) (*apiv1.Checklist, error) {
+func (f *fakeMutator) DeleteItem(ctx context.Context, page, listName, uid string, expectedUpdatedAt *time.Time, identity tailscale.IdentityValue) (*apiv1.Checklist, error) {
+	if f.deleteFn != nil {
+		return f.deleteFn(ctx, page, listName, uid, expectedUpdatedAt, identity)
+	}
 	return nil, errors.New("fakeMutator.DeleteItem not used in these tests")
 }
 
@@ -567,6 +579,252 @@ var _ = Describe("defaultBackend.GetItem", func() {
 
 		It("should return a zero-value CalendarItem", func() {
 			Expect(item).To(Equal(caldav.CalendarItem{}))
+		})
+	})
+})
+
+var _ = Describe("defaultBackend.DeleteItem", func() {
+	var (
+		ctx      context.Context
+		now      time.Time
+		fake     *fakeMutator
+		backend  caldav.CalendarBackend
+		identity tailscale.IdentityValue
+	)
+
+	BeforeEach(func() {
+		ctx = context.Background()
+		now = time.Date(2026, 4, 25, 13, 0, 0, 0, time.UTC)
+		fake = &fakeMutator{pages: map[string][]*apiv1.Checklist{}}
+		backend = caldav.NewBackend(fake, "https://wiki.example.com", fixedNow(now))
+		identity = tailscale.NewIdentity("alice@example.com", "Alice", "alice-laptop")
+	})
+
+	When("ifMatch is empty and the item exists", func() {
+		var (
+			err                       error
+			capturedExpectedUpdatedAt *time.Time
+			capturedPage              string
+			capturedListName          string
+			capturedUID               string
+			capturedIdentity          tailscale.IdentityValue
+			itemUpdated               time.Time
+		)
+
+		BeforeEach(func() {
+			itemUpdated = now.Add(-30 * time.Minute)
+			fake.pages["shopping"] = []*apiv1.Checklist{{
+				Name:      "this-week",
+				UpdatedAt: timestamppb.New(now.Add(-time.Hour)),
+				SyncToken: 5,
+				Items: []*apiv1.ChecklistItem{{
+					Uid:       "01HXAAAAAAAAAAAAAAAAAAAAAA",
+					Text:      "Buy milk",
+					UpdatedAt: timestamppb.New(itemUpdated),
+				}},
+			}}
+			fake.deleteFn = func(_ context.Context, page, listName, uid string, expectedUpdatedAt *time.Time, id tailscale.IdentityValue) (*apiv1.Checklist, error) {
+				capturedPage = page
+				capturedListName = listName
+				capturedUID = uid
+				capturedExpectedUpdatedAt = expectedUpdatedAt
+				capturedIdentity = id
+				return &apiv1.Checklist{Name: listName}, nil
+			}
+			err = backend.DeleteItem(ctx, "shopping", "this-week", "01HXAAAAAAAAAAAAAAAAAAAAAA", "", identity)
+		})
+
+		It("should not return an error", func() {
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should call mutator.DeleteItem with nil expectedUpdatedAt", func() {
+			Expect(capturedExpectedUpdatedAt).To(BeNil())
+		})
+
+		It("should pass the page through to the mutator", func() {
+			Expect(capturedPage).To(Equal("shopping"))
+		})
+
+		It("should pass the list name through to the mutator", func() {
+			Expect(capturedListName).To(Equal("this-week"))
+		})
+
+		It("should pass the uid through to the mutator", func() {
+			Expect(capturedUID).To(Equal("01HXAAAAAAAAAAAAAAAAAAAAAA"))
+		})
+
+		It("should pass the identity through to the mutator", func() {
+			Expect(capturedIdentity).To(Equal(identity))
+		})
+	})
+
+	When("ifMatch matches the current item ETag", func() {
+		var (
+			err                       error
+			capturedExpectedUpdatedAt *time.Time
+			itemUpdated               time.Time
+			ifMatch                   string
+		)
+
+		BeforeEach(func() {
+			itemUpdated = now.Add(-30 * time.Minute)
+			fake.pages["shopping"] = []*apiv1.Checklist{{
+				Name:      "this-week",
+				UpdatedAt: timestamppb.New(now.Add(-time.Hour)),
+				SyncToken: 5,
+				Items: []*apiv1.ChecklistItem{{
+					Uid:       "01HXAAAAAAAAAAAAAAAAAAAAAA",
+					Text:      "Buy milk",
+					UpdatedAt: timestamppb.New(itemUpdated),
+				}},
+			}}
+			ifMatch = `W/"` + itemUpdated.Format(time.RFC3339Nano) + `"`
+			fake.deleteFn = func(_ context.Context, _, _, _ string, expectedUpdatedAt *time.Time, _ tailscale.IdentityValue) (*apiv1.Checklist, error) {
+				capturedExpectedUpdatedAt = expectedUpdatedAt
+				return &apiv1.Checklist{Name: "this-week"}, nil
+			}
+			err = backend.DeleteItem(ctx, "shopping", "this-week", "01HXAAAAAAAAAAAAAAAAAAAAAA", ifMatch, identity)
+		})
+
+		It("should not return an error", func() {
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should call mutator.DeleteItem with non-nil expectedUpdatedAt", func() {
+			Expect(capturedExpectedUpdatedAt).NotTo(BeNil())
+		})
+
+		It("should pass the item's UpdatedAt as expectedUpdatedAt", func() {
+			Expect(*capturedExpectedUpdatedAt).To(Equal(itemUpdated))
+		})
+	})
+
+	When("ifMatch does not match the current item ETag", func() {
+		var (
+			err              error
+			deleteFnCalled   bool
+		)
+
+		BeforeEach(func() {
+			itemUpdated := now.Add(-30 * time.Minute)
+			fake.pages["shopping"] = []*apiv1.Checklist{{
+				Name:      "this-week",
+				UpdatedAt: timestamppb.New(now.Add(-time.Hour)),
+				SyncToken: 5,
+				Items: []*apiv1.ChecklistItem{{
+					Uid:       "01HXAAAAAAAAAAAAAAAAAAAAAA",
+					Text:      "Buy milk",
+					UpdatedAt: timestamppb.New(itemUpdated),
+				}},
+			}}
+			fake.deleteFn = func(_ context.Context, _, _, _ string, _ *time.Time, _ tailscale.IdentityValue) (*apiv1.Checklist, error) {
+				deleteFnCalled = true
+				return &apiv1.Checklist{Name: "this-week"}, nil
+			}
+			err = backend.DeleteItem(ctx, "shopping", "this-week", "01HXAAAAAAAAAAAAAAAAAAAAAA", `W/"stale-etag"`, identity)
+		})
+
+		It("should return ErrPreconditionFailed", func() {
+			Expect(err).To(MatchError(caldav.ErrPreconditionFailed))
+		})
+
+		It("should not call mutator.DeleteItem", func() {
+			Expect(deleteFnCalled).To(BeFalse())
+		})
+	})
+
+	When("the requested uid is unknown", func() {
+		var err error
+
+		BeforeEach(func() {
+			fake.pages["shopping"] = []*apiv1.Checklist{{
+				Name:      "this-week",
+				UpdatedAt: timestamppb.New(now.Add(-time.Hour)),
+				SyncToken: 5,
+				Items: []*apiv1.ChecklistItem{{
+					Uid:       "01HXAAAAAAAAAAAAAAAAAAAAAA",
+					Text:      "Buy milk",
+					UpdatedAt: timestamppb.New(now),
+				}},
+			}}
+			err = backend.DeleteItem(ctx, "shopping", "this-week", "01HXZZZZZZZZZZZZZZZZZZZZZZ", `W/"some-etag"`, identity)
+		})
+
+		It("should return ErrItemNotFound", func() {
+			Expect(err).To(MatchError(caldav.ErrItemNotFound))
+		})
+	})
+
+	When("the requested uid is in the tombstone list", func() {
+		var err error
+
+		BeforeEach(func() {
+			fake.pages["shopping"] = []*apiv1.Checklist{{
+				Name:      "this-week",
+				UpdatedAt: timestamppb.New(now.Add(-time.Hour)),
+				SyncToken: 5,
+				Tombstones: []*apiv1.Tombstone{{
+					Uid:       "01HXCCCCCCCCCCCCCCCCCCCCCC",
+					DeletedAt: timestamppb.New(now.Add(-2 * time.Hour)),
+					SyncToken: 3,
+				}},
+			}}
+			err = backend.DeleteItem(ctx, "shopping", "this-week", "01HXCCCCCCCCCCCCCCCCCCCCCC", `W/"any-etag"`, identity)
+		})
+
+		It("should return ErrItemDeleted", func() {
+			Expect(err).To(MatchError(caldav.ErrItemDeleted))
+		})
+	})
+
+	When("the mutator returns FailedPrecondition", func() {
+		var err error
+
+		BeforeEach(func() {
+			fake.pages["shopping"] = []*apiv1.Checklist{{
+				Name:      "this-week",
+				UpdatedAt: timestamppb.New(now.Add(-time.Hour)),
+				SyncToken: 5,
+				Items: []*apiv1.ChecklistItem{{
+					Uid:       "01HXAAAAAAAAAAAAAAAAAAAAAA",
+					Text:      "Buy milk",
+					UpdatedAt: timestamppb.New(now),
+				}},
+			}}
+			fake.deleteFn = func(_ context.Context, _, _, _ string, _ *time.Time, _ tailscale.IdentityValue) (*apiv1.Checklist, error) {
+				return nil, status.Error(codes.FailedPrecondition, "stale")
+			}
+			err = backend.DeleteItem(ctx, "shopping", "this-week", "01HXAAAAAAAAAAAAAAAAAAAAAA", "", identity)
+		})
+
+		It("should return ErrPreconditionFailed", func() {
+			Expect(err).To(MatchError(caldav.ErrPreconditionFailed))
+		})
+	})
+
+	When("the mutator returns ErrItemNotFound", func() {
+		var err error
+
+		BeforeEach(func() {
+			fake.pages["shopping"] = []*apiv1.Checklist{{
+				Name:      "this-week",
+				UpdatedAt: timestamppb.New(now.Add(-time.Hour)),
+				SyncToken: 5,
+				Items: []*apiv1.ChecklistItem{{
+					Uid:       "01HXAAAAAAAAAAAAAAAAAAAAAA",
+					Text:      "Buy milk",
+					UpdatedAt: timestamppb.New(now),
+				}},
+			}}
+			fake.deleteFn = func(_ context.Context, _, _, _ string, _ *time.Time, _ tailscale.IdentityValue) (*apiv1.Checklist, error) {
+				return nil, checklistmutator.ErrItemNotFound
+			}
+			err = backend.DeleteItem(ctx, "shopping", "this-week", "01HXAAAAAAAAAAAAAAAAAAAAAA", "", identity)
+		})
+
+		It("should return ErrItemNotFound", func() {
+			Expect(err).To(MatchError(caldav.ErrItemNotFound))
 		})
 	})
 })
