@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -22,7 +23,9 @@ import (
 //
 //revive:disable:exported Internal test helper.
 type fakeServerBackend struct {
-	getItemFn func(ctx context.Context, page, list, uid string) (caldav.CalendarItem, error)
+	getItemFn    func(ctx context.Context, page, list, uid string) (caldav.CalendarItem, error)
+	putItemFn    func(ctx context.Context, page, list, uid string, body []byte, ifMatch, ifNoneMatch string, identity tailscale.IdentityValue) (string, bool, error)
+	deleteItemFn func(ctx context.Context, page, list, uid, ifMatch string, identity tailscale.IdentityValue) error
 }
 
 func (*fakeServerBackend) ListCollections(_ context.Context, _ string) ([]caldav.CalendarCollection, error) {
@@ -44,12 +47,18 @@ func (f *fakeServerBackend) GetItem(ctx context.Context, page, list, uid string)
 	return caldav.CalendarItem{}, caldav.ErrItemNotFound
 }
 
-func (*fakeServerBackend) PutItem(_ context.Context, _, _, _ string, _ []byte, _, _ string, _ tailscale.IdentityValue) (string, bool, error) {
-	return "", false, errors.New("PutItem not used in these tests")
+func (f *fakeServerBackend) PutItem(ctx context.Context, page, list, uid string, body []byte, ifMatch, ifNoneMatch string, identity tailscale.IdentityValue) (string, bool, error) {
+	if f.putItemFn != nil {
+		return f.putItemFn(ctx, page, list, uid, body, ifMatch, ifNoneMatch, identity)
+	}
+	return "", false, errors.New("PutItem not staged in this test")
 }
 
-func (*fakeServerBackend) DeleteItem(_ context.Context, _, _, _, _ string, _ tailscale.IdentityValue) error {
-	return errors.New("DeleteItem not used in these tests")
+func (f *fakeServerBackend) DeleteItem(ctx context.Context, page, list, uid, ifMatch string, identity tailscale.IdentityValue) error {
+	if f.deleteItemFn != nil {
+		return f.deleteItemFn(ctx, page, list, uid, ifMatch, identity)
+	}
+	return errors.New("DeleteItem not staged in this test")
 }
 
 //revive:disable-next-line:function-result-limit Mirrors CalendarBackend.SyncCollection's interface signature.
@@ -421,6 +430,16 @@ func authedRequest(method, target string) *http.Request {
 	return req.WithContext(tailscale.ContextWithIdentity(req.Context(), id))
 }
 
+// authedRequestWithBody is the body-bearing twin of authedRequest. It
+// also sets a default Content-Type of text/calendar; tests that need
+// a different value can override the header on the returned request.
+func authedRequestWithBody(method, target, body string) *http.Request {
+	req := httptest.NewRequest(method, target, strings.NewReader(body))
+	req.Header.Set("Content-Type", "text/calendar; charset=utf-8")
+	id := tailscale.NewIdentity("tester@example.com", "Tester", "phone")
+	return req.WithContext(tailscale.ContextWithIdentity(req.Context(), id))
+}
+
 var _ = Describe("Server.serveOPTIONS", func() {
 	var server *caldav.Server
 	var rec *httptest.ResponseRecorder
@@ -728,3 +747,632 @@ var _ = Describe("anonymous-gated handlers", func() {
 		})
 	})
 })
+
+var _ = Describe("Server.servePUT", func() {
+	const okPath = "/shopping/this-week/01HZ8K7Q9X1V2N3R4T5Y6Z7B8C.ics"
+	const okUID = "01HZ8K7Q9X1V2N3R4T5Y6Z7B8C"
+	const okBody = "BEGIN:VCALENDAR\r\nBEGIN:VTODO\r\nUID:01HZ8K7Q9X1V2N3R4T5Y6Z7B8C\r\nSUMMARY:milk\r\nEND:VTODO\r\nEND:VCALENDAR\r\n"
+	const okETag = `W/"2026-04-25T13:00:00Z"`
+
+	When("the request is anonymous", func() {
+		var rec *httptest.ResponseRecorder
+		var backendCalled bool
+
+		BeforeEach(func() {
+			backend := &fakeServerBackend{
+				putItemFn: func(_ context.Context, _, _, _ string, _ []byte, _, _ string, _ tailscale.IdentityValue) (string, bool, error) {
+					backendCalled = true
+					return "", false, nil
+				},
+			}
+			server := &caldav.Server{Backend: backend}
+			rec = httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodPut, okPath, strings.NewReader(okBody))
+			req.Header.Set("Content-Type", "text/calendar; charset=utf-8")
+			req = req.WithContext(tailscale.ContextWithIdentity(req.Context(), tailscale.Anonymous))
+			server.ServePUTForTest(rec, req)
+		})
+
+		It("should respond 403 Forbidden", func() {
+			Expect(rec.Code).To(Equal(http.StatusForbidden))
+		})
+
+		It("should not call the backend", func() {
+			Expect(backendCalled).To(BeFalse())
+		})
+	})
+
+	When("the URL is not an .ics resource", func() {
+		var rec *httptest.ResponseRecorder
+
+		BeforeEach(func() {
+			server := &caldav.Server{Backend: &fakeServerBackend{}}
+			rec = httptest.NewRecorder()
+			req := authedRequestWithBody(http.MethodPut, "/shopping/this-week", okBody)
+			server.ServePUTForTest(rec, req)
+		})
+
+		It("should respond 400 Bad Request", func() {
+			Expect(rec.Code).To(Equal(http.StatusBadRequest))
+		})
+	})
+
+	When("the URL has a malformed uid", func() {
+		var rec *httptest.ResponseRecorder
+
+		BeforeEach(func() {
+			server := &caldav.Server{Backend: &fakeServerBackend{}}
+			rec = httptest.NewRecorder()
+			req := authedRequestWithBody(http.MethodPut, "/shopping/this-week/not-a-ulid.ics", okBody)
+			server.ServePUTForTest(rec, req)
+		})
+
+		It("should respond 400 Bad Request", func() {
+			Expect(rec.Code).To(Equal(http.StatusBadRequest))
+		})
+	})
+
+	When("the Content-Type is not text/calendar", func() {
+		var rec *httptest.ResponseRecorder
+
+		BeforeEach(func() {
+			server := &caldav.Server{Backend: &fakeServerBackend{}}
+			rec = httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodPut, okPath, strings.NewReader(okBody))
+			req.Header.Set("Content-Type", "application/json")
+			id := tailscale.NewIdentity("tester@example.com", "Tester", "phone")
+			req = req.WithContext(tailscale.ContextWithIdentity(req.Context(), id))
+			server.ServePUTForTest(rec, req)
+		})
+
+		It("should respond 415 Unsupported Media Type", func() {
+			Expect(rec.Code).To(Equal(http.StatusUnsupportedMediaType))
+		})
+	})
+
+	When("the body exceeds the size cap", func() {
+		var rec *httptest.ResponseRecorder
+		var backendCalled bool
+
+		BeforeEach(func() {
+			backend := &fakeServerBackend{
+				putItemFn: func(_ context.Context, _, _, _ string, _ []byte, _, _ string, _ tailscale.IdentityValue) (string, bool, error) {
+					backendCalled = true
+					return okETag, true, nil
+				},
+			}
+			server := &caldav.Server{Backend: backend}
+			rec = httptest.NewRecorder()
+			// 256 KB cap; exceed it by a comfortable margin.
+			big := strings.Repeat("X", 300*1024)
+			req := authedRequestWithBody(http.MethodPut, okPath, big)
+			server.ServePUTForTest(rec, req)
+		})
+
+		It("should respond 413 Payload Too Large", func() {
+			Expect(rec.Code).To(Equal(http.StatusRequestEntityTooLarge))
+		})
+
+		It("should not call the backend", func() {
+			Expect(backendCalled).To(BeFalse())
+		})
+	})
+
+	When("the backend creates a new item", func() {
+		var rec *httptest.ResponseRecorder
+
+		BeforeEach(func() {
+			backend := &fakeServerBackend{
+				putItemFn: func(_ context.Context, _, _, _ string, _ []byte, _, _ string, _ tailscale.IdentityValue) (string, bool, error) {
+					return okETag, true, nil
+				},
+			}
+			server := &caldav.Server{Backend: backend}
+			rec = httptest.NewRecorder()
+			req := authedRequestWithBody(http.MethodPut, okPath, okBody)
+			server.ServePUTForTest(rec, req)
+		})
+
+		It("should respond 201 Created", func() {
+			Expect(rec.Code).To(Equal(http.StatusCreated))
+		})
+
+		It("should set the ETag header to the new ETag", func() {
+			Expect(rec.Header().Get("ETag")).To(Equal(okETag))
+		})
+	})
+
+	When("the backend updates an existing item", func() {
+		var rec *httptest.ResponseRecorder
+
+		BeforeEach(func() {
+			backend := &fakeServerBackend{
+				putItemFn: func(_ context.Context, _, _, _ string, _ []byte, _, _ string, _ tailscale.IdentityValue) (string, bool, error) {
+					return okETag, false, nil
+				},
+			}
+			server := &caldav.Server{Backend: backend}
+			rec = httptest.NewRecorder()
+			req := authedRequestWithBody(http.MethodPut, okPath, okBody)
+			server.ServePUTForTest(rec, req)
+		})
+
+		It("should respond 204 No Content", func() {
+			Expect(rec.Code).To(Equal(http.StatusNoContent))
+		})
+
+		It("should set the ETag header to the new ETag", func() {
+			Expect(rec.Header().Get("ETag")).To(Equal(okETag))
+		})
+	})
+
+	When("the backend returns ErrPreconditionFailed", func() {
+		var rec *httptest.ResponseRecorder
+
+		BeforeEach(func() {
+			backend := &fakeServerBackend{
+				putItemFn: func(_ context.Context, _, _, _ string, _ []byte, _, _ string, _ tailscale.IdentityValue) (string, bool, error) {
+					return "", false, caldav.ErrPreconditionFailed
+				},
+			}
+			server := &caldav.Server{Backend: backend}
+			rec = httptest.NewRecorder()
+			req := authedRequestWithBody(http.MethodPut, okPath, okBody)
+			server.ServePUTForTest(rec, req)
+		})
+
+		It("should respond 412 Precondition Failed", func() {
+			Expect(rec.Code).To(Equal(http.StatusPreconditionFailed))
+		})
+	})
+
+	When("the backend returns ErrInvalidBody", func() {
+		var rec *httptest.ResponseRecorder
+
+		BeforeEach(func() {
+			backend := &fakeServerBackend{
+				putItemFn: func(_ context.Context, _, _, _ string, _ []byte, _, _ string, _ tailscale.IdentityValue) (string, bool, error) {
+					return "", false, caldav.ErrInvalidBody
+				},
+			}
+			server := &caldav.Server{Backend: backend}
+			rec = httptest.NewRecorder()
+			req := authedRequestWithBody(http.MethodPut, okPath, okBody)
+			server.ServePUTForTest(rec, req)
+		})
+
+		It("should respond 400 Bad Request", func() {
+			Expect(rec.Code).To(Equal(http.StatusBadRequest))
+		})
+	})
+
+	When("the backend returns ErrUIDMismatch", func() {
+		var rec *httptest.ResponseRecorder
+
+		BeforeEach(func() {
+			backend := &fakeServerBackend{
+				putItemFn: func(_ context.Context, _, _, _ string, _ []byte, _, _ string, _ tailscale.IdentityValue) (string, bool, error) {
+					return "", false, caldav.ErrUIDMismatch
+				},
+			}
+			server := &caldav.Server{Backend: backend}
+			rec = httptest.NewRecorder()
+			req := authedRequestWithBody(http.MethodPut, okPath, okBody)
+			server.ServePUTForTest(rec, req)
+		})
+
+		It("should respond 400 Bad Request", func() {
+			Expect(rec.Code).To(Equal(http.StatusBadRequest))
+		})
+	})
+
+	When("the backend returns ErrDescriptionTooLarge", func() {
+		var rec *httptest.ResponseRecorder
+
+		BeforeEach(func() {
+			backend := &fakeServerBackend{
+				putItemFn: func(_ context.Context, _, _, _ string, _ []byte, _, _ string, _ tailscale.IdentityValue) (string, bool, error) {
+					return "", false, caldav.ErrDescriptionTooLarge
+				},
+			}
+			server := &caldav.Server{Backend: backend}
+			rec = httptest.NewRecorder()
+			req := authedRequestWithBody(http.MethodPut, okPath, okBody)
+			server.ServePUTForTest(rec, req)
+		})
+
+		It("should respond 413 Payload Too Large", func() {
+			Expect(rec.Code).To(Equal(http.StatusRequestEntityTooLarge))
+		})
+	})
+
+	When("the backend returns an unexpected error", func() {
+		var rec *httptest.ResponseRecorder
+
+		BeforeEach(func() {
+			backend := &fakeServerBackend{
+				putItemFn: func(_ context.Context, _, _, _ string, _ []byte, _, _ string, _ tailscale.IdentityValue) (string, bool, error) {
+					return "", false, errors.New("disk on fire")
+				},
+			}
+			server := &caldav.Server{Backend: backend}
+			rec = httptest.NewRecorder()
+			req := authedRequestWithBody(http.MethodPut, okPath, okBody)
+			server.ServePUTForTest(rec, req)
+		})
+
+		It("should respond 500 Internal Server Error", func() {
+			Expect(rec.Code).To(Equal(http.StatusInternalServerError))
+		})
+	})
+
+	When("the request carries an If-Match header", func() {
+		var capturedIfMatch string
+		var capturedIfNoneMatch string
+
+		BeforeEach(func() {
+			backend := &fakeServerBackend{
+				putItemFn: func(_ context.Context, _, _, _ string, _ []byte, ifMatch, ifNoneMatch string, _ tailscale.IdentityValue) (string, bool, error) {
+					capturedIfMatch = ifMatch
+					capturedIfNoneMatch = ifNoneMatch
+					return okETag, false, nil
+				},
+			}
+			server := &caldav.Server{Backend: backend}
+			rec := httptest.NewRecorder()
+			req := authedRequestWithBody(http.MethodPut, okPath, okBody)
+			req.Header.Set("If-Match", `"abc123"`)
+			server.ServePUTForTest(rec, req)
+		})
+
+		It("should pass If-Match (with quotes stripped) to the backend", func() {
+			Expect(capturedIfMatch).To(Equal("abc123"))
+		})
+
+		It("should pass an empty If-None-Match to the backend", func() {
+			Expect(capturedIfNoneMatch).To(Equal(""))
+		})
+	})
+
+	When("the request carries If-None-Match: *", func() {
+		var capturedIfNoneMatch string
+		var capturedIfMatch string
+
+		BeforeEach(func() {
+			backend := &fakeServerBackend{
+				putItemFn: func(_ context.Context, _, _, _ string, _ []byte, ifMatch, ifNoneMatch string, _ tailscale.IdentityValue) (string, bool, error) {
+					capturedIfMatch = ifMatch
+					capturedIfNoneMatch = ifNoneMatch
+					return okETag, true, nil
+				},
+			}
+			server := &caldav.Server{Backend: backend}
+			rec := httptest.NewRecorder()
+			req := authedRequestWithBody(http.MethodPut, okPath, okBody)
+			req.Header.Set("If-None-Match", "*")
+			server.ServePUTForTest(rec, req)
+		})
+
+		It("should pass If-None-Match=* to the backend", func() {
+			Expect(capturedIfNoneMatch).To(Equal("*"))
+		})
+
+		It("should pass an empty If-Match to the backend", func() {
+			Expect(capturedIfMatch).To(Equal(""))
+		})
+	})
+
+	When("the request body is read by the backend", func() {
+		var capturedBody []byte
+
+		BeforeEach(func() {
+			backend := &fakeServerBackend{
+				putItemFn: func(_ context.Context, _, _, _ string, body []byte, _, _ string, _ tailscale.IdentityValue) (string, bool, error) {
+					capturedBody = body
+					return okETag, true, nil
+				},
+			}
+			server := &caldav.Server{Backend: backend}
+			rec := httptest.NewRecorder()
+			req := authedRequestWithBody(http.MethodPut, okPath, okBody)
+			server.ServePUTForTest(rec, req)
+		})
+
+		It("should pass the request body bytes to the backend", func() {
+			Expect(string(capturedBody)).To(Equal(okBody))
+		})
+	})
+
+	When("the request carries the caller's Tailscale identity", func() {
+		var capturedIdentity tailscale.IdentityValue
+
+		BeforeEach(func() {
+			backend := &fakeServerBackend{
+				putItemFn: func(_ context.Context, _, _, _ string, _ []byte, _, _ string, identity tailscale.IdentityValue) (string, bool, error) {
+					capturedIdentity = identity
+					return okETag, true, nil
+				},
+			}
+			server := &caldav.Server{Backend: backend}
+			rec := httptest.NewRecorder()
+			req := authedRequestWithBody(http.MethodPut, okPath, okBody)
+			server.ServePUTForTest(rec, req)
+		})
+
+		It("should pass the identity through to the backend", func() {
+			Expect(capturedIdentity.LoginName()).To(Equal("tester@example.com"))
+		})
+	})
+
+	When("the request URL passes the page/list/uid to the backend", func() {
+		var capturedPage, capturedList, capturedUID string
+
+		BeforeEach(func() {
+			backend := &fakeServerBackend{
+				putItemFn: func(_ context.Context, page, list, uid string, _ []byte, _, _ string, _ tailscale.IdentityValue) (string, bool, error) {
+					capturedPage = page
+					capturedList = list
+					capturedUID = uid
+					return okETag, true, nil
+				},
+			}
+			server := &caldav.Server{Backend: backend}
+			rec := httptest.NewRecorder()
+			req := authedRequestWithBody(http.MethodPut, okPath, okBody)
+			server.ServePUTForTest(rec, req)
+		})
+
+		It("should pass the page from the URL to the backend", func() {
+			Expect(capturedPage).To(Equal("shopping"))
+		})
+
+		It("should pass the list from the URL to the backend", func() {
+			Expect(capturedList).To(Equal("this-week"))
+		})
+
+		It("should pass the uid from the URL to the backend", func() {
+			Expect(capturedUID).To(Equal(okUID))
+		})
+	})
+})
+
+var _ = Describe("Server.serveDELETE", func() {
+	const okPath = "/shopping/this-week/01HZ8K7Q9X1V2N3R4T5Y6Z7B8C.ics"
+	const okUID = "01HZ8K7Q9X1V2N3R4T5Y6Z7B8C"
+
+	When("the request is anonymous", func() {
+		var rec *httptest.ResponseRecorder
+		var backendCalled bool
+
+		BeforeEach(func() {
+			backend := &fakeServerBackend{
+				deleteItemFn: func(_ context.Context, _, _, _, _ string, _ tailscale.IdentityValue) error {
+					backendCalled = true
+					return nil
+				},
+			}
+			server := &caldav.Server{Backend: backend}
+			rec = httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodDelete, okPath, nil)
+			req = req.WithContext(tailscale.ContextWithIdentity(req.Context(), tailscale.Anonymous))
+			server.ServeDELETEForTest(rec, req)
+		})
+
+		It("should respond 403 Forbidden", func() {
+			Expect(rec.Code).To(Equal(http.StatusForbidden))
+		})
+
+		It("should not call the backend", func() {
+			Expect(backendCalled).To(BeFalse())
+		})
+	})
+
+	When("the URL is not an .ics resource", func() {
+		var rec *httptest.ResponseRecorder
+
+		BeforeEach(func() {
+			server := &caldav.Server{Backend: &fakeServerBackend{}}
+			rec = httptest.NewRecorder()
+			req := authedRequest(http.MethodDelete, "/shopping/this-week")
+			server.ServeDELETEForTest(rec, req)
+		})
+
+		It("should respond 400 Bad Request", func() {
+			Expect(rec.Code).To(Equal(http.StatusBadRequest))
+		})
+	})
+
+	When("the URL has a malformed uid", func() {
+		var rec *httptest.ResponseRecorder
+
+		BeforeEach(func() {
+			server := &caldav.Server{Backend: &fakeServerBackend{}}
+			rec = httptest.NewRecorder()
+			req := authedRequest(http.MethodDelete, "/shopping/this-week/not-a-ulid.ics")
+			server.ServeDELETEForTest(rec, req)
+		})
+
+		It("should respond 400 Bad Request", func() {
+			Expect(rec.Code).To(Equal(http.StatusBadRequest))
+		})
+	})
+
+	When("the backend deletes successfully", func() {
+		var rec *httptest.ResponseRecorder
+
+		BeforeEach(func() {
+			backend := &fakeServerBackend{
+				deleteItemFn: func(_ context.Context, _, _, _, _ string, _ tailscale.IdentityValue) error {
+					return nil
+				},
+			}
+			server := &caldav.Server{Backend: backend}
+			rec = httptest.NewRecorder()
+			req := authedRequest(http.MethodDelete, okPath)
+			server.ServeDELETEForTest(rec, req)
+		})
+
+		It("should respond 204 No Content", func() {
+			Expect(rec.Code).To(Equal(http.StatusNoContent))
+		})
+
+		It("should not write a body", func() {
+			Expect(rec.Body.Len()).To(Equal(0))
+		})
+	})
+
+	When("the backend returns ErrItemNotFound", func() {
+		var rec *httptest.ResponseRecorder
+
+		BeforeEach(func() {
+			backend := &fakeServerBackend{
+				deleteItemFn: func(_ context.Context, _, _, _, _ string, _ tailscale.IdentityValue) error {
+					return caldav.ErrItemNotFound
+				},
+			}
+			server := &caldav.Server{Backend: backend}
+			rec = httptest.NewRecorder()
+			req := authedRequest(http.MethodDelete, okPath)
+			server.ServeDELETEForTest(rec, req)
+		})
+
+		It("should respond 404 Not Found", func() {
+			Expect(rec.Code).To(Equal(http.StatusNotFound))
+		})
+	})
+
+	When("the backend returns ErrItemDeleted", func() {
+		var rec *httptest.ResponseRecorder
+
+		BeforeEach(func() {
+			backend := &fakeServerBackend{
+				deleteItemFn: func(_ context.Context, _, _, _, _ string, _ tailscale.IdentityValue) error {
+					return caldav.ErrItemDeleted
+				},
+			}
+			server := &caldav.Server{Backend: backend}
+			rec = httptest.NewRecorder()
+			req := authedRequest(http.MethodDelete, okPath)
+			server.ServeDELETEForTest(rec, req)
+		})
+
+		It("should respond 404 Not Found", func() {
+			Expect(rec.Code).To(Equal(http.StatusNotFound))
+		})
+	})
+
+	When("the backend returns ErrPreconditionFailed", func() {
+		var rec *httptest.ResponseRecorder
+
+		BeforeEach(func() {
+			backend := &fakeServerBackend{
+				deleteItemFn: func(_ context.Context, _, _, _, _ string, _ tailscale.IdentityValue) error {
+					return caldav.ErrPreconditionFailed
+				},
+			}
+			server := &caldav.Server{Backend: backend}
+			rec = httptest.NewRecorder()
+			req := authedRequest(http.MethodDelete, okPath)
+			server.ServeDELETEForTest(rec, req)
+		})
+
+		It("should respond 412 Precondition Failed", func() {
+			Expect(rec.Code).To(Equal(http.StatusPreconditionFailed))
+		})
+	})
+
+	When("the backend returns an unexpected error", func() {
+		var rec *httptest.ResponseRecorder
+
+		BeforeEach(func() {
+			backend := &fakeServerBackend{
+				deleteItemFn: func(_ context.Context, _, _, _, _ string, _ tailscale.IdentityValue) error {
+					return errors.New("disk on fire")
+				},
+			}
+			server := &caldav.Server{Backend: backend}
+			rec = httptest.NewRecorder()
+			req := authedRequest(http.MethodDelete, okPath)
+			server.ServeDELETEForTest(rec, req)
+		})
+
+		It("should respond 500 Internal Server Error", func() {
+			Expect(rec.Code).To(Equal(http.StatusInternalServerError))
+		})
+	})
+
+	When("the request carries an If-Match header", func() {
+		var capturedIfMatch string
+
+		BeforeEach(func() {
+			backend := &fakeServerBackend{
+				deleteItemFn: func(_ context.Context, _, _, _, ifMatch string, _ tailscale.IdentityValue) error {
+					capturedIfMatch = ifMatch
+					return nil
+				},
+			}
+			server := &caldav.Server{Backend: backend}
+			rec := httptest.NewRecorder()
+			req := authedRequest(http.MethodDelete, okPath)
+			req.Header.Set("If-Match", `"abc123"`)
+			server.ServeDELETEForTest(rec, req)
+		})
+
+		It("should pass If-Match (with quotes stripped) to the backend", func() {
+			Expect(capturedIfMatch).To(Equal("abc123"))
+		})
+	})
+
+	When("the request URL passes page/list/uid to the backend", func() {
+		var capturedPage, capturedList, capturedUID string
+
+		BeforeEach(func() {
+			backend := &fakeServerBackend{
+				deleteItemFn: func(_ context.Context, page, list, uid, _ string, _ tailscale.IdentityValue) error {
+					capturedPage = page
+					capturedList = list
+					capturedUID = uid
+					return nil
+				},
+			}
+			server := &caldav.Server{Backend: backend}
+			rec := httptest.NewRecorder()
+			req := authedRequest(http.MethodDelete, okPath)
+			server.ServeDELETEForTest(rec, req)
+		})
+
+		It("should pass the page from the URL to the backend", func() {
+			Expect(capturedPage).To(Equal("shopping"))
+		})
+
+		It("should pass the list from the URL to the backend", func() {
+			Expect(capturedList).To(Equal("this-week"))
+		})
+
+		It("should pass the uid from the URL to the backend", func() {
+			Expect(capturedUID).To(Equal(okUID))
+		})
+	})
+
+	When("the request carries the caller's Tailscale identity", func() {
+		var capturedIdentity tailscale.IdentityValue
+
+		BeforeEach(func() {
+			backend := &fakeServerBackend{
+				deleteItemFn: func(_ context.Context, _, _, _, _ string, identity tailscale.IdentityValue) error {
+					capturedIdentity = identity
+					return nil
+				},
+			}
+			server := &caldav.Server{Backend: backend}
+			rec := httptest.NewRecorder()
+			req := authedRequest(http.MethodDelete, okPath)
+			server.ServeDELETEForTest(rec, req)
+		})
+
+		It("should pass the identity through to the backend", func() {
+			Expect(capturedIdentity.LoginName()).To(Equal("tester@example.com"))
+		})
+	})
+})
+
