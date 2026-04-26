@@ -273,8 +273,21 @@ func collectTags(todo *ical.Component, description *string) []string {
 }
 
 // parseSortOrder prefers X-APPLE-SORT-ORDER and falls back to PRIORITY.
-// Returns nil when neither is parseable as int64 — the mutator treats
-// that as "leave the stored sort order alone".
+// Returns nil when neither is parseable — the mutator treats nil as
+// "leave the stored sort order alone".
+//
+// X-APPLE-SORT-ORDER is the wiki's native form (sparse int64,
+// conventionally multiples of sortOrderStep). When falling back to
+// PRIORITY we multiply by sortOrderStep so an inbound RFC 5545
+// PRIORITY value (1..9) round-trips cleanly through the mapping the
+// renderer applies on the way out (sort_order/sortOrderStep). A
+// client like tasks.org that sends PRIORITY:3 lands at sort_order
+// 3000, which we then re-emit as PRIORITY:3 on the next read — no
+// drift on idle PUTs.
+//
+// PRIORITY:0 is the RFC 5545 "undefined" sentinel; treat it as
+// "no change" and return nil so the mutator preserves the existing
+// sort_order rather than slamming the item to position zero.
 func parseSortOrder(todo *ical.Component) *int64 {
 	if prop := todo.Props.Get(xAppleSortOrder); prop != nil {
 		if v, err := strconv.ParseInt(strings.TrimSpace(prop.Value), sortOrderBase10, sortOrderBitSize); err == nil {
@@ -283,7 +296,11 @@ func parseSortOrder(todo *ical.Component) *int64 {
 	}
 	if prop := todo.Props.Get(ical.PropPriority); prop != nil {
 		if v, err := strconv.ParseInt(strings.TrimSpace(prop.Value), sortOrderBase10, sortOrderBitSize); err == nil {
-			return &v
+			if v == 0 {
+				return nil
+			}
+			scaled := v * sortOrderStep
+			return &scaled
 		}
 	}
 	return nil

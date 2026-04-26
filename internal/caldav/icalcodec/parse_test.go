@@ -307,9 +307,25 @@ var _ = Describe("ParseVTODO", func() {
 			Expect(err).NotTo(HaveOccurred())
 		})
 
-		It("should fall back to PRIORITY for SortOrder", func() {
+		It("should map PRIORITY:3 to sort_order 3000 so it round-trips with the renderer", func() {
 			Expect(parsed.SortOrder).NotTo(BeNil())
-			Expect(*parsed.SortOrder).To(Equal(int64(3)))
+			Expect(*parsed.SortOrder).To(Equal(int64(3000)))
+		})
+	})
+
+	When("PRIORITY:0 (RFC 5545 'undefined') is present without X-APPLE-SORT-ORDER", func() {
+		var parsed icalcodec.ParsedVTODO
+
+		BeforeEach(func() {
+			var err error
+			parsed, err = icalcodec.ParseVTODO(withDefaults(
+				"PRIORITY:0",
+			))
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should leave SortOrder nil so the mutator preserves the existing order", func() {
+			Expect(parsed.SortOrder).To(BeNil())
 		})
 	})
 
