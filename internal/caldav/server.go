@@ -68,6 +68,7 @@ func NewServer(backend CalendarBackend) *Server {
 // branches gate on identity here so the 501 isn't an information leak
 // for off-tailnet probes.
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	r = r.WithContext(withClientKind(r.Context(), detectClientFromUserAgent(r.Header.Get("User-Agent"))))
 	switch r.Method {
 	case http.MethodOptions:
 		s.instrumented(methodLabelOptions, s.serveOPTIONS)(w, r)

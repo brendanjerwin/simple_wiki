@@ -176,7 +176,7 @@ func parseVTODOComponent(todo *ical.Component) (ParsedVTODO, error) {
 	}
 	parsed.Description = description
 
-	parsed.Tags = collectTags(todo, description)
+	parsed.Tags = collectTags(todo, description, parsed.Text)
 	parsed.SortOrder = parseSortOrder(todo)
 	parsed.AlarmPayload = parseFirstAlarm(todo)
 
@@ -228,12 +228,19 @@ func parseDescription(todo *ical.Component) (*string, error) {
 	return &text, nil
 }
 
-// collectTags unions CATEGORIES tags with #tag references from
-// DESCRIPTION, normalizing each through hashtags.Normalize and
+// collectTags unions CATEGORIES tags with #tag references from SUMMARY
+// and DESCRIPTION, normalizing each through hashtags.Normalize and
 // preserving first-seen order for determinism. CATEGORIES is processed
-// first because clients (e.g., DAVx5 with tasks.org) treat it as the
-// authoritative tag list.
-func collectTags(todo *ical.Component, description *string) []string {
+// first because clients that speak it (DAVx5 + tasks.org, Jtx Board)
+// treat it as the authoritative tag list.
+//
+// SUMMARY is harvested because Apple Reminders on a non-iCloud CalDAV
+// account does not expose its native tag chips on the wire — users
+// who want a tag have to type the literal `#tag` into the reminder
+// title. Without harvesting from SUMMARY those tags would round-trip
+// as plain text inside the item title and never show up as wiki
+// tags.
+func collectTags(todo *ical.Component, description *string, summary string) []string {
 	seen := make(map[string]struct{})
 	var tags []string
 
@@ -260,6 +267,12 @@ func collectTags(todo *ical.Component, description *string) []string {
 		}
 		for _, raw := range list {
 			addTag(strings.TrimSpace(raw))
+		}
+	}
+
+	if summary != "" {
+		for _, raw := range hashtags.Extract(summary) {
+			addTag(raw)
 		}
 	}
 

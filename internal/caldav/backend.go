@@ -250,7 +250,7 @@ func (b *defaultBackend) ListItems(ctx context.Context, page, listName string) (
 	col := collectionFromChecklist(page, checklist)
 	items := make([]CalendarItem, 0, len(checklist.Items))
 	for _, it := range checklist.Items {
-		items = append(items, b.renderItem(it, page, listName))
+		items = append(items, b.renderItem(ctx, it, page, listName))
 	}
 	return col, items, nil
 }
@@ -258,11 +258,18 @@ func (b *defaultBackend) ListItems(ctx context.Context, page, listName string) (
 // renderItem maps an *apiv1.ChecklistItem onto a CalendarItem,
 // including the per-item ETag and the pre-rendered iCalendar bytes.
 // Centralized so ListItems and GetItem agree on the representation.
-func (b *defaultBackend) renderItem(item *apiv1.ChecklistItem, page, listName string) CalendarItem {
+//
+// Reads the request's ClientKind off ctx (set in Server.ServeHTTP) so
+// Apple-family clients get RenderOptions{EmbedTagsInSummary: true}.
+// Other clients (DAVx5 / tasks.org) get standards-only rendering.
+func (b *defaultBackend) renderItem(ctx context.Context, item *apiv1.ChecklistItem, page, listName string) CalendarItem {
+	opts := icalcodec.RenderOptions{
+		EmbedTagsInSummary: ClientKindFromContext(ctx) == ClientIOS,
+	}
 	ci := CalendarItem{
 		UID:       item.Uid,
 		ETag:      etag.ItemETag(item),
-		ICalBytes: icalcodec.RenderItem(item, page, listName, b.baseURL, b.nowFn),
+		ICalBytes: icalcodec.RenderItemWithOptions(item, page, listName, b.baseURL, b.nowFn, opts),
 	}
 	if item.UpdatedAt != nil {
 		ci.UpdatedAt = item.UpdatedAt.AsTime()
@@ -291,7 +298,7 @@ func (b *defaultBackend) GetItem(ctx context.Context, page, listName, uid string
 	if item == nil {
 		return CalendarItem{}, ErrItemNotFound
 	}
-	return b.renderItem(item, page, listName), nil
+	return b.renderItem(ctx, item, page, listName), nil
 }
 
 // PutItem creates or updates a checklist item from an inbound CalDAV
@@ -467,7 +474,7 @@ func (b *defaultBackend) SyncCollection(ctx context.Context, page, listName, cli
 	}
 
 	newToken := etag.CollectionSyncToken(checklist)
-	changed := b.collectChanged(checklist, page, listName, clientToken, clientCounter)
+	changed := b.collectChanged(ctx, checklist, page, listName, clientToken, clientCounter)
 	deletedUIDs := collectDeletedUIDs(checklist, clientToken, clientCounter)
 	return newToken, changed, deletedUIDs, nil
 }
@@ -475,29 +482,29 @@ func (b *defaultBackend) SyncCollection(ctx context.Context, page, listName, cli
 // collectChanged returns the items the client should re-fetch given the
 // supplied (clientToken, clientCounter) pair. See SyncCollection's doc
 // comment for the over-emission rationale.
-func (b *defaultBackend) collectChanged(checklist *apiv1.Checklist, page, listName, clientToken string, clientCounter int64) []CalendarItem {
+func (b *defaultBackend) collectChanged(ctx context.Context, checklist *apiv1.Checklist, page, listName, clientToken string, clientCounter int64) []CalendarItem {
 	// Initial sync: emit every live item.
 	if clientToken == "" {
-		return b.renderAllItems(checklist, page, listName)
+		return b.renderAllItems(ctx, checklist, page, listName)
 	}
 	// Up-to-date: emit nothing.
 	if clientCounter == checklist.SyncToken {
 		return nil
 	}
 	// Behind: emit every live item (Phase 3 approximation).
-	return b.renderAllItems(checklist, page, listName)
+	return b.renderAllItems(ctx, checklist, page, listName)
 }
 
 // renderAllItems renders every live item on the checklist into the
 // CalendarItem shape the report handler emits. Used by both initial-
 // sync and the "client is behind" branches of collectChanged.
-func (b *defaultBackend) renderAllItems(checklist *apiv1.Checklist, page, listName string) []CalendarItem {
+func (b *defaultBackend) renderAllItems(ctx context.Context, checklist *apiv1.Checklist, page, listName string) []CalendarItem {
 	if len(checklist.Items) == 0 {
 		return nil
 	}
 	out := make([]CalendarItem, 0, len(checklist.Items))
 	for _, it := range checklist.Items {
-		out = append(out, b.renderItem(it, page, listName))
+		out = append(out, b.renderItem(ctx, it, page, listName))
 	}
 	return out
 }

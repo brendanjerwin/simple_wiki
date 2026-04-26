@@ -279,6 +279,41 @@ var _ = Describe("ParseVTODO", func() {
 		})
 	})
 
+	When("SUMMARY contains a #tag (iOS Reminders user typed it into the title)", func() {
+		var parsed icalcodec.ParsedVTODO
+
+		BeforeEach(func() {
+			var err error
+			parsed, err = icalcodec.ParseVTODO(buildVTODO(
+				"UID:01HXAAAAAAAAAAAAAAAAAAAAAA",
+				"SUMMARY:Buy milk #urgent",
+			))
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should harvest 'urgent' as a tag", func() {
+			Expect(parsed.Tags).To(ConsistOf("urgent"))
+		})
+	})
+
+	When("SUMMARY and CATEGORIES both contain the same tag", func() {
+		var parsed icalcodec.ParsedVTODO
+
+		BeforeEach(func() {
+			var err error
+			parsed, err = icalcodec.ParseVTODO(buildVTODO(
+				"UID:01HXAAAAAAAAAAAAAAAAAAAAAA",
+				"SUMMARY:Buy milk #urgent",
+				"CATEGORIES:urgent",
+			))
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should deduplicate the tag", func() {
+			Expect(parsed.Tags).To(ConsistOf("urgent"))
+		})
+	})
+
 	When("X-APPLE-SORT-ORDER is present", func() {
 		var parsed icalcodec.ParsedVTODO
 

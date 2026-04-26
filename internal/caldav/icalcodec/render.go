@@ -26,8 +26,42 @@ import (
 // nowFn returns the wall-clock time used for the DTSTAMP property,
 // which RFC 5545 mandates on every VTODO. Callers in production should
 // pass time.Now; tests pass a deterministic clock.
+//
+// Defaults to standards-only rendering — for client-specific shapes
+// (e.g. embedding tags into SUMMARY for Apple Reminders) call
+// RenderItemWithOptions.
 func RenderItem(item *apiv1.ChecklistItem, page string, listName string, baseURL string, nowFn func() time.Time) []byte {
-	cal := renderToCalendar(item, page, listName, baseURL, nowFn)
+	return RenderItemWithOptions(item, page, listName, baseURL, nowFn, RenderOptions{})
+}
+
+// RenderOptions controls per-call shape variations on the rendered
+// VTODO. Each field is opt-in — the zero value matches the
+// standards-only behavior of RenderItem.
+type RenderOptions struct {
+	// EmbedTagsInSummary appends `#tag` markers for every entry in
+	// item.Tags to the SUMMARY text (skipping any that are already
+	// present, case-insensitively, so an inbound `Buy milk #urgent`
+	// doesn't round-trip as `Buy milk #urgent #urgent`).
+	//
+	// Apple Reminders on a non-iCloud CalDAV account does not surface
+	// CATEGORIES as tag chips — its native tag chip system is iCloud-
+	// only. So a user who created a tag on the wiki would see
+	// nothing tag-shaped in iOS Reminders if we relied on CATEGORIES
+	// alone. Embedding `#tag` in the title gives them visible text
+	// they can recognize and (in iOS 17+) tap as a hashtag chip.
+	//
+	// We don't do this for non-Apple clients because DAVx5 / tasks.org
+	// honor CATEGORIES and a redundant `#tag` in the title clutters
+	// the rendered text without adding signal.
+	EmbedTagsInSummary bool
+}
+
+// RenderItemWithOptions is the explicit-options variant of RenderItem.
+// Used by the backend when the request context indicates a client
+// family (e.g. Apple Reminders) that benefits from non-default
+// rendering.
+func RenderItemWithOptions(item *apiv1.ChecklistItem, page string, listName string, baseURL string, nowFn func() time.Time, opts RenderOptions) []byte {
+	cal := renderToCalendar(item, page, listName, baseURL, nowFn, opts)
 	if cal == nil {
 		return nil
 	}
@@ -41,6 +75,38 @@ func RenderItem(item *apiv1.ChecklistItem, page string, listName string, baseURL
 // productID is emitted as VCALENDAR/PRODID. RFC 5545 requires it; the
 // value is a stable opaque string identifying the producing application.
 const productID = "-//simple_wiki//CalDAV//EN"
+
+// embedTagsInText appends `#tag` for every entry in tags that's not
+// already present in text (case-insensitive). Used for Apple-family
+// rendering — see RenderOptions.EmbedTagsInSummary.
+//
+// Idempotent on round-trip: if iOS sent `Buy milk #urgent` and we
+// later re-emit with tags=["urgent"], the existing `#urgent` is
+// detected and skipped, so the SUMMARY stays `Buy milk #urgent`.
+// Without the dedup the text would grow `Buy milk #urgent #urgent` on
+// every read.
+func embedTagsInText(text string, tags []string) string {
+	if len(tags) == 0 {
+		return text
+	}
+	lower := strings.ToLower(text)
+	out := text
+	for _, tag := range tags {
+		if tag == "" {
+			continue
+		}
+		marker := "#" + strings.ToLower(tag)
+		if strings.Contains(lower, marker) {
+			continue
+		}
+		if out != "" {
+			out += " "
+		}
+		out += "#" + tag
+		lower = strings.ToLower(out)
+	}
+	return out
+}
 
 // priorityUndefined is the RFC 5545 PRIORITY value for "no
 // user-set priority." iOS Reminders renders any non-zero PRIORITY
@@ -88,7 +154,7 @@ const (
 // it. Split out of RenderItem so future callers (e.g., the multiget
 // REPORT handler that wants a *ical.Calendar to merge) can reuse the
 // mapping logic without going through bytes.
-func renderToCalendar(item *apiv1.ChecklistItem, page string, listName string, baseURL string, nowFn func() time.Time) *ical.Calendar {
+func renderToCalendar(item *apiv1.ChecklistItem, page string, listName string, baseURL string, nowFn func() time.Time, opts RenderOptions) *ical.Calendar {
 	if item == nil {
 		return nil
 	}
@@ -96,7 +162,11 @@ func renderToCalendar(item *apiv1.ChecklistItem, page string, listName string, b
 
 	todo := ical.NewComponent(ical.CompToDo)
 	todo.Props.SetText(ical.PropUID, item.Uid)
-	todo.Props.SetText(ical.PropSummary, item.Text)
+	summary := item.Text
+	if opts.EmbedTagsInSummary {
+		summary = embedTagsInText(summary, item.Tags)
+	}
+	todo.Props.SetText(ical.PropSummary, summary)
 
 	if item.Checked {
 		todo.Props.SetText(ical.PropStatus, statusValueCompleted)

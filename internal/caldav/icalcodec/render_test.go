@@ -245,4 +245,48 @@ var _ = Describe("RenderItem", func() {
 			Expect(body).To(ContainSubstring("BEGIN:VTODO"))
 		})
 	})
+
+	When("EmbedTagsInSummary is enabled and item has tags", func() {
+		BeforeEach(func() {
+			item.Tags = []string{"urgent", "grocery"}
+			body = string(icalcodec.RenderItemWithOptions(item, page, listName, baseURL, fixedNow(now), icalcodec.RenderOptions{EmbedTagsInSummary: true}))
+		})
+
+		It("should append #urgent to SUMMARY", func() {
+			Expect(body).To(ContainSubstring("#urgent"))
+		})
+
+		It("should append #grocery to SUMMARY", func() {
+			Expect(body).To(ContainSubstring("#grocery"))
+		})
+
+		It("should still emit CATEGORIES so DAVx5 also sees the tags", func() {
+			Expect(body).To(MatchRegexp(`CATEGORIES:[^\r\n]*urgent`))
+		})
+	})
+
+	When("EmbedTagsInSummary is enabled and SUMMARY already contains the tag", func() {
+		BeforeEach(func() {
+			item.Text = "Buy milk #urgent"
+			item.Tags = []string{"urgent"}
+			body = string(icalcodec.RenderItemWithOptions(item, page, listName, baseURL, fixedNow(now), icalcodec.RenderOptions{EmbedTagsInSummary: true}))
+		})
+
+		It("should not duplicate the tag (round-trip stability)", func() {
+			Expect(strings.Count(body, "#urgent")).To(Equal(1))
+		})
+	})
+
+	When("EmbedTagsInSummary is disabled (default RenderItem)", func() {
+		BeforeEach(func() {
+			item.Tags = []string{"urgent"}
+			item.Text = "Buy milk"
+			body = string(icalcodec.RenderItem(item, page, listName, baseURL, fixedNow(now)))
+		})
+
+		It("should NOT append #urgent to SUMMARY (DAVx5 path uses CATEGORIES alone)", func() {
+			Expect(body).To(MatchRegexp(`(?m)^SUMMARY:Buy milk\b`))
+			Expect(body).NotTo(ContainSubstring("#urgent"))
+		})
+	})
 })
