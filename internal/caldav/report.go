@@ -30,6 +30,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 )
 
@@ -106,38 +107,113 @@ func (s *Server) serveREPORT(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// hrefToPath extracts the URL path from an href value. CalDAV clients
+// send hrefs as either absolute URLs ("https://wiki/page/list/uid.ics")
+// or absolute paths ("/page/list/uid.ics"); RFC 4791 allows both. We
+// strip scheme+host when present so parsePath sees a consistent shape.
+// Returns the trimmed input unchanged if it doesn't parse as an
+// absolute URL — an absolute path matches that fall-through case.
+func hrefToPath(href string) string {
+	href = strings.TrimSpace(href)
+	if href == "" {
+		return ""
+	}
+	if !strings.Contains(href, "://") {
+		return href
+	}
+	u, err := url.Parse(href)
+	if err != nil {
+		return href
+	}
+	return u.Path
+}
+
 // reportMultiget handles the calendar-multiget REPORT body. Each href
-// resolves through parsePath + Backend.GetItem; per-href resolution
-// errors surface as a 404 inside the multistatus response so a single
-// bad href doesn't poison the entire batch. The page in each href —
-// not the request URL — is what's passed to GetItem, so a multiget
-// that spans pages (rare but legal) works.
+// resolves through parsePath; per-href resolution errors surface as a
+// 404 inside the multistatus response so a single bad href doesn't
+// poison the entire batch. The page in each href — not the request
+// URL — is what's used, so a multiget that spans pages (rare but
+// legal) works.
+//
+// Hrefs are grouped by (page, list) and each group's items fetched in
+// a single Backend.ListItems call. This keeps a 100-item multiget from
+// fanning out into 100 store reads when all the items live in the
+// same collection — the common iOS/DAVx5 batch shape after a PROPFIND.
+// Cross-collection multigets degrade gracefully to one ListItems per
+// distinct collection.
 func (s *Server) reportMultiget(w http.ResponseWriter, r *http.Request, body []byte) {
 	var req multigetRequest
 	if err := xml.Unmarshal(body, &req); err != nil {
 		http.Error(w, "malformed calendar-multiget body", http.StatusBadRequest)
 		return
 	}
-	resps := make([]multistatusResponse, 0, len(req.Hrefs))
+
+	type multigetSlot struct {
+		hrefPath string
+		page     string
+		list     string
+		uid      string
+		item     CalendarItem
+		notFound bool
+	}
+	type collectionKey struct{ page, list string }
+
+	// Pass 1: parse every href into (page, list, uid) — or mark the
+	// slot as a per-href 404. Preserve request order so the response's
+	// <response> children line up with the request's <href> children.
+	slots := make([]multigetSlot, 0, len(req.Hrefs))
+	groups := make(map[collectionKey][]int)
 	for _, h := range req.Hrefs {
-		hrefPath := strings.TrimSpace(h.Path)
+		hrefPath := hrefToPath(h.Path)
 		page, list, uid, parseErr := parsePath(hrefPath)
 		if parseErr != nil || uid == "" {
-			resps = append(resps, notFoundResponse(hrefPath))
+			slots = append(slots, multigetSlot{hrefPath: hrefPath, notFound: true})
 			continue
 		}
-		item, err := s.Backend.GetItem(r.Context(), page, list, uid)
+		idx := len(slots)
+		slots = append(slots, multigetSlot{hrefPath: hrefPath, page: page, list: list, uid: uid})
+		key := collectionKey{page: page, list: list}
+		groups[key] = append(groups[key], idx)
+	}
+
+	// Pass 2: per (page, list) group, ListItems once and resolve each
+	// uid against an in-memory map. ErrCollectionNotFound on the group
+	// fans out to per-href 404s rather than failing the whole report.
+	for key, indices := range groups {
+		_, items, err := s.Backend.ListItems(r.Context(), key.page, key.list)
 		if err != nil {
-			if isResourceMissing(err) {
-				resps = append(resps, notFoundResponse(hrefPath))
+			if errors.Is(err, ErrCollectionNotFound) {
+				for _, idx := range indices {
+					slots[idx].notFound = true
+				}
 				continue
 			}
-			// Any other backend error fails the whole report — we have
-			// no useful per-href status to offer the client.
 			http.Error(w, "internal error", http.StatusInternalServerError)
 			return
 		}
-		resps = append(resps, itemResponse(page, list, item))
+		byUID := make(map[string]CalendarItem, len(items))
+		for _, item := range items {
+			byUID[item.UID] = item
+		}
+		for _, idx := range indices {
+			item, ok := byUID[slots[idx].uid]
+			if !ok {
+				slots[idx].notFound = true
+				continue
+			}
+			slots[idx].item = item
+		}
+	}
+
+	// Pass 3: emit responses in original request order using the
+	// items already loaded in pass 2.
+	resps := make([]multistatusResponse, 0, len(slots))
+	for _, sl := range slots {
+		if sl.notFound {
+			resps = append(resps, notFoundResponse(sl.hrefPath))
+			continue
+		}
+		resps = append(resps, itemResponse(sl.page, sl.list, sl.item))
 	}
 	writeMultistatus(w, resps)
 }
@@ -187,15 +263,6 @@ func parseCollectionPath(w http.ResponseWriter, r *http.Request) (page, list str
 		return "", "", false
 	}
 	return page, list, true
-}
-
-// isResourceMissing reports whether err means "the resource the client
-// asked about does not exist on the server" — the cluster of errors
-// that turn into a per-href 404 inside a multistatus response.
-func isResourceMissing(err error) bool {
-	return errors.Is(err, ErrItemNotFound) ||
-		errors.Is(err, ErrItemDeleted) ||
-		errors.Is(err, ErrCollectionNotFound)
 }
 
 // notFoundResponse builds a 404-style multistatus response for a single

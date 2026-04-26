@@ -135,19 +135,18 @@ var _ = Describe("Server.serveREPORT calendar-multiget", func() {
 		})
 	})
 
-	When("two known hrefs are requested", func() {
+	When("two known hrefs in the same collection are requested", func() {
 		var rec *httptest.ResponseRecorder
-		var capturedUIDs []string
+		var listItemsCalls int
 
 		BeforeEach(func() {
-			capturedUIDs = nil
+			listItemsCalls = 0
 			backend := &reportBackend{
-				getItemFn: func(_ context.Context, _, _, uid string) (caldav.CalendarItem, error) {
-					capturedUIDs = append(capturedUIDs, uid)
-					return caldav.CalendarItem{
-						UID:       uid,
-						ETag:      `W/"2026-04-25T12:00:00Z"`,
-						ICalBytes: []byte("BEGIN:VCALENDAR\r\nEND:VCALENDAR\r\n"),
+				listItemsFn: func(_ context.Context, _, _ string) (caldav.CalendarCollection, []caldav.CalendarItem, error) {
+					listItemsCalls++
+					return caldav.CalendarCollection{}, []caldav.CalendarItem{
+						{UID: "01HZ8K7Q9X1V2N3R4T5Y6Z7B8C", ETag: `W/"2026-04-25T12:00:00Z"`, ICalBytes: []byte("BEGIN:VCALENDAR\r\nEND:VCALENDAR\r\n")},
+						{UID: "01HZ8K7Q9X1V2N3R4T5Y6Z7B8D", ETag: `W/"2026-04-25T12:00:00Z"`, ICalBytes: []byte("BEGIN:VCALENDAR\r\nEND:VCALENDAR\r\n")},
 					}, nil
 				},
 			}
@@ -185,16 +184,8 @@ var _ = Describe("Server.serveREPORT calendar-multiget", func() {
 			Expect(rec.Body.String()).To(ContainSubstring("BEGIN:VCALENDAR"))
 		})
 
-		It("should call the backend once per href", func() {
-			Expect(capturedUIDs).To(HaveLen(2))
-		})
-
-		It("should pass the first uid to the backend", func() {
-			Expect(capturedUIDs).To(ContainElement("01HZ8K7Q9X1V2N3R4T5Y6Z7B8C"))
-		})
-
-		It("should pass the second uid to the backend", func() {
-			Expect(capturedUIDs).To(ContainElement("01HZ8K7Q9X1V2N3R4T5Y6Z7B8D"))
+		It("should batch the same-collection hrefs into one ListItems call", func() {
+			Expect(listItemsCalls).To(Equal(1))
 		})
 	})
 
@@ -203,8 +194,10 @@ var _ = Describe("Server.serveREPORT calendar-multiget", func() {
 
 		BeforeEach(func() {
 			backend := &reportBackend{
-				getItemFn: func(_ context.Context, _, _, _ string) (caldav.CalendarItem, error) {
-					return caldav.CalendarItem{}, caldav.ErrItemNotFound
+				listItemsFn: func(_ context.Context, _, _ string) (caldav.CalendarCollection, []caldav.CalendarItem, error) {
+					// Empty items list — the requested uid won't be
+					// found, so the per-href slot becomes a 404.
+					return caldav.CalendarCollection{}, nil, nil
 				},
 			}
 			server := &caldav.Server{Backend: backend}
@@ -226,13 +219,13 @@ var _ = Describe("Server.serveREPORT calendar-multiget", func() {
 		})
 	})
 
-	When("an href in the multiget references a tombstoned item", func() {
+	When("the multiget references a collection that does not exist", func() {
 		var rec *httptest.ResponseRecorder
 
 		BeforeEach(func() {
 			backend := &reportBackend{
-				getItemFn: func(_ context.Context, _, _, _ string) (caldav.CalendarItem, error) {
-					return caldav.CalendarItem{}, caldav.ErrItemDeleted
+				listItemsFn: func(_ context.Context, _, _ string) (caldav.CalendarCollection, []caldav.CalendarItem, error) {
+					return caldav.CalendarCollection{}, nil, caldav.ErrCollectionNotFound
 				},
 			}
 			server := &caldav.Server{Backend: backend}
@@ -245,8 +238,70 @@ var _ = Describe("Server.serveREPORT calendar-multiget", func() {
 			Expect(rec.Code).To(Equal(http.StatusMultiStatus))
 		})
 
-		It("should mark that response with status 404", func() {
+		It("should mark each requested href as 404", func() {
 			Expect(rec.Body.String()).To(ContainSubstring("HTTP/1.1 404 Not Found"))
+		})
+	})
+
+	When("an href is an absolute URL with scheme and host", func() {
+		var rec *httptest.ResponseRecorder
+
+		BeforeEach(func() {
+			backend := &reportBackend{
+				listItemsFn: func(_ context.Context, _, _ string) (caldav.CalendarCollection, []caldav.CalendarItem, error) {
+					return caldav.CalendarCollection{}, []caldav.CalendarItem{
+						{UID: "01HZ8K7Q9X1V2N3R4T5Y6Z7B8C", ETag: `W/"2026-04-25T12:00:00Z"`, ICalBytes: []byte("BEGIN:VCALENDAR\r\nEND:VCALENDAR\r\n")},
+					}, nil
+				},
+			}
+			server := &caldav.Server{Backend: backend}
+			rec = httptest.NewRecorder()
+			body := `<?xml version="1.0" encoding="utf-8"?>
+<C:calendar-multiget xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav">
+  <D:prop><D:getetag/><C:calendar-data/></D:prop>
+  <D:href>https://wiki.example.com/shopping/this-week/01HZ8K7Q9X1V2N3R4T5Y6Z7B8C.ics</D:href>
+</C:calendar-multiget>`
+			req := reportRequest("/shopping/this-week/", body)
+			server.ServeREPORTForTest(rec, req)
+		})
+
+		It("should return 207 Multi-Status", func() {
+			Expect(rec.Code).To(Equal(http.StatusMultiStatus))
+		})
+
+		It("should resolve the item by stripping scheme and host before parsePath", func() {
+			Expect(rec.Body.String()).To(ContainSubstring(`W/&#34;2026-04-25T12:00:00Z&#34;`))
+		})
+	})
+
+	When("hrefs span two collections", func() {
+		var rec *httptest.ResponseRecorder
+		var listItemsCalls []string
+
+		BeforeEach(func() {
+			listItemsCalls = nil
+			backend := &reportBackend{
+				listItemsFn: func(_ context.Context, page, list string) (caldav.CalendarCollection, []caldav.CalendarItem, error) {
+					listItemsCalls = append(listItemsCalls, page+"/"+list)
+					return caldav.CalendarCollection{}, []caldav.CalendarItem{
+						{UID: "01HZ8K7Q9X1V2N3R4T5Y6Z7B8C", ETag: `W/"a"`, ICalBytes: []byte("BEGIN:VCALENDAR\r\nEND:VCALENDAR\r\n")},
+					}, nil
+				},
+			}
+			server := &caldav.Server{Backend: backend}
+			rec = httptest.NewRecorder()
+			body := `<?xml version="1.0" encoding="utf-8"?>
+<C:calendar-multiget xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav">
+  <D:prop><D:getetag/><C:calendar-data/></D:prop>
+  <D:href>/shopping/this-week/01HZ8K7Q9X1V2N3R4T5Y6Z7B8C.ics</D:href>
+  <D:href>/work/today/01HZ8K7Q9X1V2N3R4T5Y6Z7B8C.ics</D:href>
+</C:calendar-multiget>`
+			req := reportRequest("/shopping/this-week/", body)
+			server.ServeREPORTForTest(rec, req)
+		})
+
+		It("should call ListItems once per distinct collection", func() {
+			Expect(listItemsCalls).To(HaveLen(2))
 		})
 	})
 
@@ -312,12 +367,11 @@ var _ = Describe("Server.serveREPORT calendar-multiget", func() {
   <D:href>/garage/projects/01HZ8K7Q9X1V2N3R4T5Y6Z7B8D.ics</D:href>
 </C:calendar-multiget>`
 			backend := &reportBackend{
-				getItemFn: func(_ context.Context, page, _, uid string) (caldav.CalendarItem, error) {
+				listItemsFn: func(_ context.Context, page, _ string) (caldav.CalendarCollection, []caldav.CalendarItem, error) {
 					capturedPages = append(capturedPages, page)
-					return caldav.CalendarItem{
-						UID:       uid,
-						ETag:      `W/"x"`,
-						ICalBytes: []byte("BEGIN:VCALENDAR\r\nEND:VCALENDAR\r\n"),
+					return caldav.CalendarCollection{}, []caldav.CalendarItem{
+						{UID: "01HZ8K7Q9X1V2N3R4T5Y6Z7B8C", ETag: `W/"x"`, ICalBytes: []byte("BEGIN:VCALENDAR\r\nEND:VCALENDAR\r\n")},
+						{UID: "01HZ8K7Q9X1V2N3R4T5Y6Z7B8D", ETag: `W/"x"`, ICalBytes: []byte("BEGIN:VCALENDAR\r\nEND:VCALENDAR\r\n")},
 					}, nil
 				},
 			}

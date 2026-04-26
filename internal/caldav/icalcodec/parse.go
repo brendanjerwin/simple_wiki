@@ -209,20 +209,21 @@ func parseOptionalDateTime(todo *ical.Component, name string) (*time.Time, error
 
 // parseDescription returns a pointer to the DESCRIPTION text when
 // present, or nil when absent. Returns ErrDescriptionTooLarge when the
-// raw value exceeds DescriptionMaxBytes — using the raw wire value
-// (not the unescaped text) keeps the limit predictable from the HTTP
-// layer's perspective: clients see the same bytes we measured.
+// unescaped text exceeds DescriptionMaxBytes — measuring the decoded
+// length (not the raw wire value) means a client typing N characters
+// of plain text gets a consistent limit regardless of how many of
+// those characters are RFC 5545 escapes (`\n`, `\,`, `\;`, `\\`).
 func parseDescription(todo *ical.Component) (*string, error) {
 	prop := todo.Props.Get(ical.PropDescription)
 	if prop == nil {
 		return nil, nil
 	}
-	if len(prop.Value) > DescriptionMaxBytes {
-		return nil, ErrDescriptionTooLarge
-	}
 	text, err := prop.Text()
 	if err != nil {
 		return nil, err
+	}
+	if len(text) > DescriptionMaxBytes {
+		return nil, ErrDescriptionTooLarge
 	}
 	return &text, nil
 }

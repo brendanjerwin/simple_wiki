@@ -378,6 +378,31 @@ var _ = Describe("ParseVTODO", func() {
 		})
 	})
 
+	When("DESCRIPTION raw wire value exceeds the cap because of escape sequences but the unescaped text fits", func() {
+		var (
+			parsed icalcodec.ParsedVTODO
+			err    error
+		)
+
+		BeforeEach(func() {
+			// Each "\n" escape is 2 wire bytes for 1 unescaped byte. A
+			// payload of ~half the cap of "\n" pairs has unescaped text
+			// well under the cap but raw wire length over it.
+			pair := `\n`
+			repeats := (icalcodec.DescriptionMaxBytes / 2) + 1
+			body := withDefaults("DESCRIPTION:" + strings.Repeat(pair, repeats))
+			parsed, err = icalcodec.ParseVTODO(body)
+		})
+
+		It("should not return an error", func() {
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should populate the description", func() {
+			Expect(parsed.Description).NotTo(BeNil())
+		})
+	})
+
 	When("DUE is set", func() {
 		var parsed icalcodec.ParsedVTODO
 
