@@ -3,6 +3,8 @@ package caldav_test
 
 import (
 	"errors"
+	"net/http"
+	"net/http/httptest"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -360,5 +362,34 @@ var _ = Describe("parsePath", func() {
 		It("should return ErrPathContainsNUL", func() {
 			Expect(errors.Is(err, caldav.ErrPathContainsNUL)).To(BeTrue())
 		})
+	})
+})
+
+var _ = Describe("Server.serveOPTIONS", func() {
+	var server *caldav.Server
+	var rec *httptest.ResponseRecorder
+	var req *http.Request
+
+	BeforeEach(func() {
+		server = &caldav.Server{}
+		rec = httptest.NewRecorder()
+		req = httptest.NewRequest(http.MethodOptions, "/shopping", nil)
+		server.ServeOPTIONSForTest(rec, req)
+	})
+
+	It("should return 200 OK", func() {
+		Expect(rec.Code).To(Equal(http.StatusOK))
+	})
+
+	It("should set the DAV header to advertise CalDAV capabilities", func() {
+		Expect(rec.Header().Get("DAV")).To(Equal("1, 3, calendar-access"))
+	})
+
+	It("should set the Allow header listing every supported verb", func() {
+		Expect(rec.Header().Get("Allow")).To(Equal("OPTIONS, GET, HEAD, PROPFIND, REPORT, PUT, DELETE"))
+	})
+
+	It("should write an empty body", func() {
+		Expect(rec.Body.Len()).To(Equal(0))
 	})
 })

@@ -1,5 +1,7 @@
 package caldav
 
+import "net/http"
+
 // Test-only re-exports for unexported helpers. Keeping them in
 // export_test.go (compiled only with `go test`) means the public API
 // surface stays minimal.
@@ -20,4 +22,9 @@ func ValidateUIDForTest(uid string) error {
 //revive:disable-next-line:function-result-limit Mirrors parsePath's shape; bundling into a struct adds noise in tests.
 func ParsePathForTest(reqURL string) (page, list, uid string, err error) {
 	return parsePath(reqURL)
+}
+
+// ServeOPTIONSForTest is the test-only re-export of (*Server).serveOPTIONS.
+func (s *Server) ServeOPTIONSForTest(w http.ResponseWriter, r *http.Request) {
+	s.serveOPTIONS(w, r)
 }

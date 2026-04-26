@@ -2,6 +2,7 @@ package caldav
 
 import (
 	"errors"
+	"net/http"
 	"strings"
 )
 
@@ -261,4 +262,28 @@ func parsePath(reqURL string) (page, list, uid string, err error) {
 		return "", "", "", err
 	}
 	return page, list, uid, nil
+}
+
+// davCapabilities is the value of the DAV response header on every
+// CalDAV response. The class numbers come from RFC 4918 (1, 3) and the
+// calendar-access token from RFC 4791 §5.1.
+const davCapabilities = "1, 3, calendar-access"
+
+// allowedMethods is the value of the Allow response header. Lists the
+// HTTP/WebDAV/CalDAV verbs the gateway dispatches to this Server.
+const allowedMethods = "OPTIONS, GET, HEAD, PROPFIND, REPORT, PUT, DELETE"
+
+// serveOPTIONS handles OPTIONS requests against any CalDAV URL. It
+// answers the WebDAV / CalDAV capability discovery probe iOS and DAVx5
+// fire as the first request on a newly-configured account:
+//
+//   - DAV header lists the WebDAV / CalDAV class memberships we
+//     support (1, 3, calendar-access).
+//   - Allow header lists every method our handler will accept.
+//   - 200 OK with no body.
+func (*Server) serveOPTIONS(w http.ResponseWriter, _ *http.Request) {
+	h := w.Header()
+	h.Set("DAV", davCapabilities)
+	h.Set("Allow", allowedMethods)
+	w.WriteHeader(http.StatusOK)
 }
