@@ -4,6 +4,7 @@ package caldav_test
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -15,6 +16,7 @@ import (
 
 	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
 	"github.com/brendanjerwin/simple_wiki/internal/caldav"
+	"github.com/brendanjerwin/simple_wiki/internal/caldav/icalcodec"
 	"github.com/brendanjerwin/simple_wiki/server/checklistmutator"
 	"github.com/brendanjerwin/simple_wiki/tailscale"
 )
@@ -825,6 +827,274 @@ var _ = Describe("defaultBackend.DeleteItem", func() {
 
 		It("should return ErrItemNotFound", func() {
 			Expect(err).To(MatchError(caldav.ErrItemNotFound))
+		})
+	})
+})
+
+// buildVTODOBody assembles a minimal-but-valid VCALENDAR/VTODO body
+// from the given UID and SUMMARY for use by the PutItem tests.
+func buildVTODOBody(uid, summary string) []byte {
+	return []byte(
+		"BEGIN:VCALENDAR\r\n" +
+			"VERSION:2.0\r\n" +
+			"PRODID:-//test//EN\r\n" +
+			"BEGIN:VTODO\r\n" +
+			"UID:" + uid + "\r\n" +
+			"SUMMARY:" + summary + "\r\n" +
+			"END:VTODO\r\n" +
+			"END:VCALENDAR\r\n",
+	)
+}
+
+var _ = Describe("defaultBackend.PutItem", func() {
+	var (
+		ctx      context.Context
+		now      time.Time
+		fake     *fakeMutator
+		backend  caldav.CalendarBackend
+		identity tailscale.IdentityValue
+	)
+
+	BeforeEach(func() {
+		ctx = context.Background()
+		now = time.Date(2026, 4, 25, 13, 0, 0, 0, time.UTC)
+		fake = &fakeMutator{pages: map[string][]*apiv1.Checklist{}}
+		backend = caldav.NewBackend(fake, "https://wiki.example.com", fixedNow(now))
+		identity = tailscale.NewIdentity("alice@example.com", "Alice", "alice-laptop")
+	})
+
+	When("the uid does not exist and the body is valid", func() {
+		var (
+			newETag         string
+			created         bool
+			err             error
+			capturedArgs    checklistmutator.UpsertFromCalDAVArgs
+			capturedPage    string
+			capturedList    string
+			capturedUID     string
+			capturedIfMatch string
+			capturedINM     string
+			itemUpdated     time.Time
+		)
+
+		BeforeEach(func() {
+			itemUpdated = now
+			fake.pages["shopping"] = []*apiv1.Checklist{{
+				Name:      "this-week",
+				UpdatedAt: timestamppb.New(now.Add(-time.Hour)),
+				SyncToken: 5,
+			}}
+			fake.upsertFn = func(_ context.Context, page, listName, uid string, args checklistmutator.UpsertFromCalDAVArgs, ifMatch, ifNoneMatch string, _ tailscale.IdentityValue) (*apiv1.ChecklistItem, *apiv1.Checklist, error) {
+				capturedPage = page
+				capturedList = listName
+				capturedUID = uid
+				capturedArgs = args
+				capturedIfMatch = ifMatch
+				capturedINM = ifNoneMatch
+				return &apiv1.ChecklistItem{
+					Uid:       uid,
+					Text:      args.Text,
+					UpdatedAt: timestamppb.New(itemUpdated),
+				}, nil, nil
+			}
+			body := buildVTODOBody("01HXAAAAAAAAAAAAAAAAAAAAAA", "Buy milk")
+			newETag, created, err = backend.PutItem(ctx, "shopping", "this-week", "01HXAAAAAAAAAAAAAAAAAAAAAA", body, "", "", identity)
+		})
+
+		It("should not return an error", func() {
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should report created=true", func() {
+			Expect(created).To(BeTrue())
+		})
+
+		It("should return the per-item ETag", func() {
+			Expect(newETag).To(Equal(`W/"` + itemUpdated.Format(time.RFC3339Nano) + `"`))
+		})
+
+		It("should pass page through to the mutator", func() {
+			Expect(capturedPage).To(Equal("shopping"))
+		})
+
+		It("should pass list name through to the mutator", func() {
+			Expect(capturedList).To(Equal("this-week"))
+		})
+
+		It("should pass uid through to the mutator", func() {
+			Expect(capturedUID).To(Equal("01HXAAAAAAAAAAAAAAAAAAAAAA"))
+		})
+
+		It("should populate args.Text from SUMMARY", func() {
+			Expect(capturedArgs.Text).To(Equal("Buy milk"))
+		})
+
+		It("should pass ifMatch through to the mutator", func() {
+			Expect(capturedIfMatch).To(Equal(""))
+		})
+
+		It("should pass ifNoneMatch through to the mutator", func() {
+			Expect(capturedINM).To(Equal(""))
+		})
+	})
+
+	When("the uid already exists and the body is valid", func() {
+		var (
+			newETag     string
+			created     bool
+			err         error
+			itemUpdated time.Time
+		)
+
+		BeforeEach(func() {
+			itemUpdated = now
+			existing := &apiv1.ChecklistItem{
+				Uid:       "01HXAAAAAAAAAAAAAAAAAAAAAA",
+				Text:      "Buy milk (old)",
+				UpdatedAt: timestamppb.New(now.Add(-time.Hour)),
+			}
+			fake.pages["shopping"] = []*apiv1.Checklist{{
+				Name:      "this-week",
+				UpdatedAt: timestamppb.New(now.Add(-time.Hour)),
+				SyncToken: 5,
+				Items:     []*apiv1.ChecklistItem{existing},
+			}}
+			fake.upsertFn = func(_ context.Context, _, _, uid string, args checklistmutator.UpsertFromCalDAVArgs, _, _ string, _ tailscale.IdentityValue) (*apiv1.ChecklistItem, *apiv1.Checklist, error) {
+				return &apiv1.ChecklistItem{
+					Uid:       uid,
+					Text:      args.Text,
+					UpdatedAt: timestamppb.New(itemUpdated),
+				}, nil, nil
+			}
+			body := buildVTODOBody("01HXAAAAAAAAAAAAAAAAAAAAAA", "Buy milk (new)")
+			newETag, created, err = backend.PutItem(ctx, "shopping", "this-week", "01HXAAAAAAAAAAAAAAAAAAAAAA", body, "", "", identity)
+		})
+
+		It("should not return an error", func() {
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should report created=false", func() {
+			Expect(created).To(BeFalse())
+		})
+
+		It("should return the per-item ETag from the upsert result", func() {
+			Expect(newETag).To(Equal(`W/"` + itemUpdated.Format(time.RFC3339Nano) + `"`))
+		})
+	})
+
+	When("the body fails to parse as iCalendar", func() {
+		var err error
+
+		BeforeEach(func() {
+			_, _, err = backend.PutItem(ctx, "shopping", "this-week", "01HXAAAAAAAAAAAAAAAAAAAAAA", []byte("NOT ICAL"), "", "", identity)
+		})
+
+		It("should return ErrInvalidBody", func() {
+			Expect(err).To(MatchError(caldav.ErrInvalidBody))
+		})
+	})
+
+	When("the body has no VTODO component", func() {
+		var err error
+
+		BeforeEach(func() {
+			body := []byte("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//x//EN\r\nEND:VCALENDAR\r\n")
+			_, _, err = backend.PutItem(ctx, "shopping", "this-week", "01HXAAAAAAAAAAAAAAAAAAAAAA", body, "", "", identity)
+		})
+
+		It("should return ErrInvalidBody", func() {
+			Expect(err).To(MatchError(caldav.ErrInvalidBody))
+		})
+	})
+
+	When("the body's VTODO is missing UID", func() {
+		var err error
+
+		BeforeEach(func() {
+			body := []byte(
+				"BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//x//EN\r\n" +
+					"BEGIN:VTODO\r\nSUMMARY:no uid\r\nEND:VTODO\r\nEND:VCALENDAR\r\n",
+			)
+			_, _, err = backend.PutItem(ctx, "shopping", "this-week", "01HXAAAAAAAAAAAAAAAAAAAAAA", body, "", "", identity)
+		})
+
+		It("should return ErrInvalidBody", func() {
+			Expect(err).To(MatchError(caldav.ErrInvalidBody))
+		})
+	})
+
+	When("the body's DESCRIPTION exceeds the size cap", func() {
+		var err error
+
+		BeforeEach(func() {
+			huge := strings.Repeat("a", icalcodec.DescriptionMaxBytes+1)
+			body := []byte(
+				"BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//x//EN\r\n" +
+					"BEGIN:VTODO\r\nUID:01HXAAAAAAAAAAAAAAAAAAAAAA\r\nSUMMARY:big\r\n" +
+					"DESCRIPTION:" + huge + "\r\n" +
+					"END:VTODO\r\nEND:VCALENDAR\r\n",
+			)
+			_, _, err = backend.PutItem(ctx, "shopping", "this-week", "01HXAAAAAAAAAAAAAAAAAAAAAA", body, "", "", identity)
+		})
+
+		It("should return ErrDescriptionTooLarge", func() {
+			Expect(err).To(MatchError(caldav.ErrDescriptionTooLarge))
+		})
+	})
+
+	When("the body's UID does not match the path uid", func() {
+		var err error
+
+		BeforeEach(func() {
+			body := buildVTODOBody("01HXBBBBBBBBBBBBBBBBBBBBBB", "Buy milk")
+			_, _, err = backend.PutItem(ctx, "shopping", "this-week", "01HXAAAAAAAAAAAAAAAAAAAAAA", body, "", "", identity)
+		})
+
+		It("should return ErrUIDMismatch", func() {
+			Expect(err).To(MatchError(caldav.ErrUIDMismatch))
+		})
+	})
+
+	When("the mutator returns FailedPrecondition", func() {
+		var err error
+
+		BeforeEach(func() {
+			fake.upsertFn = func(_ context.Context, _, _, _ string, _ checklistmutator.UpsertFromCalDAVArgs, _, _ string, _ tailscale.IdentityValue) (*apiv1.ChecklistItem, *apiv1.Checklist, error) {
+				return nil, nil, status.Error(codes.FailedPrecondition, "stale")
+			}
+			body := buildVTODOBody("01HXAAAAAAAAAAAAAAAAAAAAAA", "Buy milk")
+			_, _, err = backend.PutItem(ctx, "shopping", "this-week", "01HXAAAAAAAAAAAAAAAAAAAAAA", body, `W/"stale"`, "", identity)
+		})
+
+		It("should return ErrPreconditionFailed", func() {
+			Expect(err).To(MatchError(caldav.ErrPreconditionFailed))
+		})
+	})
+
+	When("ifNoneMatch is * and the item exists and the mutator returns FailedPrecondition", func() {
+		var err error
+
+		BeforeEach(func() {
+			fake.pages["shopping"] = []*apiv1.Checklist{{
+				Name:      "this-week",
+				UpdatedAt: timestamppb.New(now.Add(-time.Hour)),
+				SyncToken: 5,
+				Items: []*apiv1.ChecklistItem{{
+					Uid:       "01HXAAAAAAAAAAAAAAAAAAAAAA",
+					Text:      "Buy milk",
+					UpdatedAt: timestamppb.New(now.Add(-time.Hour)),
+				}},
+			}}
+			fake.upsertFn = func(_ context.Context, _, _, _ string, _ checklistmutator.UpsertFromCalDAVArgs, _, _ string, _ tailscale.IdentityValue) (*apiv1.ChecklistItem, *apiv1.Checklist, error) {
+				return nil, nil, status.Error(codes.FailedPrecondition, "exists")
+			}
+			body := buildVTODOBody("01HXAAAAAAAAAAAAAAAAAAAAAA", "Buy milk")
+			_, _, err = backend.PutItem(ctx, "shopping", "this-week", "01HXAAAAAAAAAAAAAAAAAAAAAA", body, "", "*", identity)
+		})
+
+		It("should return ErrPreconditionFailed", func() {
+			Expect(err).To(MatchError(caldav.ErrPreconditionFailed))
 		})
 	})
 })
