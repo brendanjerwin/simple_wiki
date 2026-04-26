@@ -34,6 +34,11 @@ func (s *Server) ServeGETForTest(w http.ResponseWriter, r *http.Request) {
 	s.serveGET(w, r)
 }
 
+// ServePROPFINDForTest is the test-only re-export of (*Server).servePROPFIND.
+func (s *Server) ServePROPFINDForTest(w http.ResponseWriter, r *http.Request) {
+	s.servePROPFIND(w, r)
+}
+
 // RequireIdentityForTest is the test-only re-export of
 // (*Server).requireIdentity. The second return is the "ok" flag —
 // true means the caller may proceed.
