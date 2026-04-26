@@ -1,5 +1,7 @@
 +++
 identifier = "help"
+
+[wiki]
 system = true
 +++
 
@@ -49,6 +51,7 @@ See [[help-hashtags]] and [[help-search]] for the full grammar.
 - [[help-macro-blog]] — Blog macro for publishing articles
 - [[help-macro-checklist]] — Checklist macro for interactive task lists
 - [[help-macro-survey]] — Survey macro for collecting per-user responses
+- [[help-profile]] — Per-user profile pages auto-resolved at `/profile`
 - [[help-scheduled-agents]] — Cron-driven background AI agent tasks per page
 - [[help-search]] — Search syntax including `#tag` queries
 - [[help-system-pages]] — Pages that ship with the wiki binary

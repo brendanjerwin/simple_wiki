@@ -11,7 +11,6 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/brendanjerwin/simple_wiki/internal/syspage"
 	"github.com/brendanjerwin/simple_wiki/pkg/jobs"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 	"github.com/pelletier/go-toml/v2"
@@ -135,7 +134,7 @@ func (j *ChecklistTagSyntaxMigrationScanJob) extractIdentifierAndFrontmatter(fil
 // at the gRPC layer, and any rewrite here would be undone on the next
 // startup sync. Skipping is purely defensive.
 func pageNeedsChecklistMigration(fm map[string]any) bool {
-	if syspage.IsSystemPage(fm) {
+	if wikipage.IsSystemPage(fm) {
 		return false
 	}
 	checklists, ok := fm["checklists"].(map[string]any)

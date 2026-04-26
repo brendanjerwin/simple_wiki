@@ -83,38 +83,6 @@ type nullLogger struct{}
 func (nullLogger) Info(_ string, _ ...any)  {}
 func (nullLogger) Debug(_ string, _ ...any) {}
 
-var _ = Describe("IsSystemPage", func() {
-	Describe("when frontmatter has system = true", func() {
-		It("should return true", func() {
-			Expect(IsSystemPage(map[string]any{"system": true})).To(BeTrue())
-		})
-	})
-
-	Describe("when frontmatter has system = false", func() {
-		It("should return false", func() {
-			Expect(IsSystemPage(map[string]any{"system": false})).To(BeFalse())
-		})
-	})
-
-	Describe("when frontmatter omits system", func() {
-		It("should return false", func() {
-			Expect(IsSystemPage(map[string]any{"title": "x"})).To(BeFalse())
-		})
-	})
-
-	Describe("when frontmatter is nil", func() {
-		It("should return false", func() {
-			Expect(IsSystemPage(nil)).To(BeFalse())
-		})
-	})
-
-	Describe("when system value is the string \"true\"", func() {
-		It("should return true (TOML coercion friendliness)", func() {
-			Expect(IsSystemPage(map[string]any{"system": "true"})).To(BeTrue())
-		})
-	})
-})
-
 var _ = Describe("LoadEmbedded", func() {
 	var (
 		pages []Page
@@ -141,9 +109,36 @@ var _ = Describe("LoadEmbedded", func() {
 
 	It("should mark every embedded page as a system page", func() {
 		for _, p := range pages {
-			Expect(IsSystemPage(p.Frontmatter)).To(BeTrue(),
-				fmt.Sprintf("page %q should have system = true", p.Identifier))
+			Expect(wikipage.IsSystemPage(p.Frontmatter)).To(BeTrue(),
+				fmt.Sprintf("page %q should have wiki.system = true", p.Identifier))
 		}
+	})
+
+	Describe("the shipped profile_template page", func() {
+		var profileTemplate *Page
+
+		BeforeEach(func() {
+			for i := range pages {
+				if pages[i].Identifier == "profile_template" {
+					profileTemplate = &pages[i]
+					break
+				}
+			}
+		})
+
+		It("should be present in the embedded corpus", func() {
+			Expect(profileTemplate).NotTo(BeNil(), "profile_template.md should ship in internal/syspage/embedded/")
+		})
+
+		It("should be marked as a template", func() {
+			Expect(wikipage.IsTemplatePage(profileTemplate.Frontmatter)).To(BeTrue(),
+				"profile_template should have wiki.template = true")
+		})
+
+		It("should be marked as a system page", func() {
+			Expect(wikipage.IsSystemPage(profileTemplate.Frontmatter)).To(BeTrue(),
+				"profile_template should have wiki.system = true")
+		})
 	})
 })
 

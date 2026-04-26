@@ -1,6 +1,8 @@
 +++
 identifier = "help_system_pages"
 title = "help-system-pages"
+
+[wiki]
 system = true
 +++
 
@@ -15,13 +17,19 @@ Some pages on this wiki are **system pages** — their canonical source lives in
 
 ## Identifying a System Page
 
-A page is a system page when its frontmatter includes:
+A page is a system page when its frontmatter includes the `system` flag under the reserved `wiki.*` namespace:
 
 ```toml
 +++
+identifier = "..."
+
+[wiki]
 system = true
 +++
 ```
+
+> [!NOTE]
+> An eager startup migration moves any pages that still carry a top-level `system` flag (the pre-#997 location) into the `[wiki]` block. The helper that checks this flag only looks under `wiki.system` — so the migration is what makes legacy pages start being recognised again, not a fallback in the helper itself.
 
 When you visit a system page you'll see a banner at the top of the content area noting that the page ships with the binary, and the **Edit** button is hidden.
 
@@ -51,7 +59,7 @@ Writes go through the same page-write API that user edits use, so indexes (bleve
 For contributors:
 
 1. Create a new `internal/syspage/embedded/<identifier>.md`.
-2. Include TOML frontmatter with `identifier = "<identifier>"` and `system = true`.
+2. Include TOML frontmatter with `identifier = "<identifier>"` and a `[wiki]` block containing `system = true`.
 3. Link it from the [[help]] index page if it should be user-discoverable.
 4. Open a PR.
 

@@ -106,44 +106,11 @@ func (s *Server) loadTemplateFrontmatter(templateIdentifier string) (map[string]
 	}
 
 	// Validate that the page is marked as a template
-	if !isTemplatePage(fm) {
-		return nil, fmt.Errorf("page '%s' is not a template (missing template: true)", templateIdentifier)
+	if !wikipage.IsTemplatePage(fm) {
+		return nil, fmt.Errorf("page '%s' is not a template (missing wiki.template = true)", templateIdentifier)
 	}
 
 	return fm, nil
-}
-
-// isTemplatePage checks if a frontmatter map indicates a template page.
-func isTemplatePage(fm map[string]any) bool {
-	templateVal, ok := fm["template"]
-	if !ok {
-		return false
-	}
-
-	switch v := templateVal.(type) {
-	case bool:
-		return v
-	case string:
-		return strings.EqualFold(v, "true")
-	case int64:
-		// TOML parses integers as int64
-		return v != 0
-	case float64:
-		// Handle floats for robustness
-		return v != 0
-	default:
-		return false
-	}
-}
-
-// applyTemplateFrontmatter copies template frontmatter keys to dest,
-// excluding the identifier and template keys.
-func applyTemplateFrontmatter(dest, src map[string]any) {
-	for k, v := range src {
-		if k != identifierKey && k != "template" {
-			dest[k] = v
-		}
-	}
 }
 
 // applyProvidedFrontmatter copies user-provided frontmatter keys to dest,
@@ -169,7 +136,7 @@ func (s *Server) buildNewPageFrontmatter(identifier string, template *string, fr
 		if err != nil {
 			return nil, err
 		}
-		applyTemplateFrontmatter(fm, templateFm)
+		wikipage.ApplyTemplate(fm, templateFm)
 	}
 
 	applyProvidedFrontmatter(fm, frontmatter)
@@ -663,8 +630,12 @@ func (s *Server) ListTemplates(_ context.Context, req *apiv1.ListTemplatesReques
 		excludeSet[id] = true
 	}
 
-	// Query pages with template: true
-	templatePages := s.frontmatterIndexQueryer.QueryExactMatch("template", "true")
+	// Query pages with wiki.template = true. Per the #997 namespace
+	// migration, the canonical flag location is wiki.template; pages still
+	// carrying the legacy top-level template key get rewritten by the
+	// eager system_template_namespace_migration on startup, so the index
+	// converges on the new location shortly after process start.
+	templatePages := s.frontmatterIndexQueryer.QueryExactMatch("wiki.template", "true")
 
 	templates := make([]*apiv1.TemplateInfo, 0, len(templatePages))
 	for _, pageID := range templatePages {

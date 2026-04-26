@@ -1,6 +1,8 @@
 +++
 identifier = "help_alerts"
 title = "help-alerts"
+
+[wiki]
 system = true
 +++
 

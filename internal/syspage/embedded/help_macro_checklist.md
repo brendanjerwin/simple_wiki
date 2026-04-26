@@ -1,5 +1,7 @@
 +++
 identifier = "help_macro_checklist"
+
+[wiki]
 system = true
 +++
 

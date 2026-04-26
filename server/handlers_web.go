@@ -16,7 +16,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/brendanjerwin/simple_wiki/internal/syspage"
 	"github.com/brendanjerwin/simple_wiki/static"
 	"github.com/brendanjerwin/simple_wiki/tailscale"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
@@ -191,6 +190,11 @@ func (s *Site) registerRoutes(router *gin.Engine) {
 	router.GET("/", func(c *gin.Context) {
 		c.Redirect(httpStatusFound, "/"+s.DefaultPage+"/view")
 	})
+
+	// `/profile` resolves the current user's identity and redirects to their
+	// personal profile page. Registered before the catch-all `/:page` so the
+	// router never treats `profile` as an arbitrary page identifier.
+	router.GET("/profile", s.handleProfile)
 
 	router.POST("/uploads", s.handleUpload)
 	router.GET("/cli/:binary", serveCLIBinary)
@@ -458,7 +462,7 @@ func (s *Site) isSystemPage(page string) bool {
 	if err != nil {
 		return false
 	}
-	return syspage.IsSystemPage(fm)
+	return wikipage.IsSystemPage(fm)
 }
 
 // getRecentlyEdited returns the per-user list of recently visited pages,

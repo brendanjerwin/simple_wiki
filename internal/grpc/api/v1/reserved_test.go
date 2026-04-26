@@ -10,20 +10,6 @@ import (
 )
 
 var _ = Describe("reserved namespace registry", func() {
-	Describe("isReservedTopLevel", func() {
-		When("the key is registered", func() {
-			It("should return true for 'agent'", func() {
-				Expect(isReservedTopLevel("agent")).To(BeTrue())
-			})
-		})
-
-		When("the key is not registered", func() {
-			It("should return false", func() {
-				Expect(isReservedTopLevel("title")).To(BeFalse())
-			})
-		})
-	})
-
 	Describe("reservedKeyInMap", func() {
 		When("fm contains a reserved key", func() {
 			var found string

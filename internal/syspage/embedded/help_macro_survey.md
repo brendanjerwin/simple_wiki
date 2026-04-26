@@ -1,6 +1,8 @@
 +++
 identifier = "help_macro_survey"
 title = "help-macro-survey"
+
+[wiki]
 system = true
 +++
 

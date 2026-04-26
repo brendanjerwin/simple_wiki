@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/brendanjerwin/simple_wiki/internal/syspage"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -38,7 +37,7 @@ func requireUserMutable(reader wikipage.PageReader, id wikipage.PageIdentifier) 
 		return status.Errorf(codes.Internal, "failed to read frontmatter for system-page check on %q: %v", string(id), err)
 	}
 
-	if syspage.IsSystemPage(fm) {
+	if wikipage.IsSystemPage(fm) {
 		return status.Error(codes.FailedPrecondition, fmt.Sprintf(systemPageRedirect, string(id)))
 	}
 	return nil

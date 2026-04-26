@@ -35,7 +35,7 @@ var _ = Describe("System page rendering", func() {
 		_ = os.RemoveAll(tmpDir)
 	})
 
-	When("the page has frontmatter system = true", func() {
+	When("the page has frontmatter wiki.system = true", func() {
 		var (
 			recorder *httptest.ResponseRecorder
 			body     string
@@ -46,7 +46,9 @@ var _ = Describe("System page rendering", func() {
 			Expect(site.WriteFrontMatter(pageID, wikipage.FrontMatter{
 				"identifier": "help-test-page",
 				"title":      "Help Test Page",
-				"system":     true,
+				"wiki": map[string]any{
+					"system": true,
+				},
 			})).To(Succeed())
 			Expect(site.WriteMarkdown(pageID, wikipage.Markdown("# Help body"))).To(Succeed())
 

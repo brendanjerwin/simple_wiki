@@ -24,11 +24,6 @@ var embeddedFS embed.FS
 // corpus. Each `.md` file under this directory is one system page.
 const embeddedRoot = "embedded"
 
-// systemKey is the top-level frontmatter key that flags a page as
-// system-owned. Mutation handlers consult this on the existing on-disk page
-// before allowing a write.
-const systemKey = "system"
-
 // Page is one embedded help page parsed into its component parts.
 type Page struct {
 	Identifier  string
@@ -92,28 +87,6 @@ func LoadEmbedded() ([]Page, error) {
 		return nil, walkErr
 	}
 	return pages, nil
-}
-
-// IsSystemPage reports whether the given frontmatter map flags the page as
-// system-owned (i.e. sourced from the binary, not user-editable). Recognises
-// both bool true and the string "true" so TOML/JSON coercion variations are
-// handled uniformly.
-func IsSystemPage(fm map[string]any) bool {
-	if fm == nil {
-		return false
-	}
-	v, ok := fm[systemKey]
-	if !ok {
-		return false
-	}
-	switch typed := v.(type) {
-	case bool:
-		return typed
-	case string:
-		return strings.EqualFold(typed, "true")
-	default:
-		return false
-	}
 }
 
 // Sync writes every embedded page to the store via the standard write path,

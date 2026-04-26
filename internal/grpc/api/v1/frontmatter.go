@@ -24,7 +24,7 @@ func filterIdentifierKey(fm map[string]any) map[string]any {
 
 	filtered := make(map[string]any, len(fm))
 	for k, v := range fm {
-		if k == identifierKey || isReservedTopLevel(k) {
+		if k == identifierKey || wikipage.IsReservedTopLevelKey(k) {
 			continue
 		}
 		filtered[k] = v

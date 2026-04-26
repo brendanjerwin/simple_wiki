@@ -1,5 +1,7 @@
 +++
 identifier = "help_hashtags"
+
+[wiki]
 system = true
 +++
 

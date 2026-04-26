@@ -1,5 +1,7 @@
 +++
 identifier = "help_caldav"
+
+[wiki]
 system = true
 +++
 

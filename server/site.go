@@ -224,6 +224,20 @@ func (s *Site) startMigrationJobs() {
 	} else {
 		s.Logger.Info("Checklist data-model migration started.")
 	}
+
+	// One-shot migration: move legacy top-level `system` and `template`
+	// frontmatter keys under the reserved `wiki.*` namespace (per #997 and
+	// ADR-0010). Once every page carries `wiki.migrated_namespaces = true`
+	// and the dual-read fallback is removed (#1001), this scan can be
+	// deleted entirely.
+	namespaceMigration := eager.NewSystemTemplateNamespaceMigrationScanJob(
+		dataDirScanner, s.JobQueueCoordinator, s,
+	)
+	if err := s.JobQueueCoordinator.EnqueueJob(namespaceMigration); err != nil {
+		s.Logger.Error("Failed to enqueue system/template namespace migration job: %v", err)
+	} else {
+		s.Logger.Info("System/template namespace migration started.")
+	}
 }
 
 // Defaults for the agent-schedule machinery when CLI flags do not override
