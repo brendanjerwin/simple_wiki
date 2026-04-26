@@ -292,8 +292,68 @@ func (b *defaultBackend) GetItem(ctx context.Context, page, listName, uid string
 	return CalendarItem{}, ErrItemNotFound
 }
 
-func (*defaultBackend) PutItem(_ context.Context, _, _, _ string, _ []byte, _, _ string, _ tailscale.IdentityValue) (string, bool, error) {
-	return "", false, errors.New("caldav: PutItem not implemented yet")
+// PutItem creates or updates a checklist item from an inbound CalDAV
+// PUT body. The body is decoded via icalcodec.ParseVTODO, validated
+// against the path uid, and routed through Mutator.UpsertFromCalDAV so
+// the funnel does the OCC and attribution work atomically. Returns
+// the new per-item ETag and whether the resource was created (HTTP 201
+// vs 204) for the HTTP layer to translate into the response.
+func (b *defaultBackend) PutItem(ctx context.Context, page, listName, uid string, body []byte, ifMatch, ifNoneMatch string, identity tailscale.IdentityValue) (string, bool, error) {
+	parsed, err := icalcodec.ParseVTODO(body)
+	if err != nil {
+		if errors.Is(err, icalcodec.ErrDescriptionTooLarge) {
+			return "", false, ErrDescriptionTooLarge
+		}
+		return "", false, ErrInvalidBody
+	}
+	if parsed.UID != uid {
+		return "", false, ErrUIDMismatch
+	}
+
+	created, err := b.uidIsNew(ctx, page, listName, uid)
+	if err != nil {
+		return "", false, fmt.Errorf("caldav: put item %q/%q/%q: %w", page, listName, uid, err)
+	}
+
+	args := checklistmutator.UpsertFromCalDAVArgs{
+		Text:         parsed.Text,
+		Tags:         parsed.Tags,
+		Description:  parsed.Description,
+		Due:          parsed.Due,
+		AlarmPayload: parsed.AlarmPayload,
+		Checked:      parsed.Checked,
+		CompletedAt:  parsed.CompletedAt,
+		Created:      parsed.Created,
+	}
+
+	item, _, err := b.mutator.UpsertFromCalDAV(ctx, page, listName, uid, args, ifMatch, ifNoneMatch, identity)
+	if err != nil {
+		if status.Code(err) == codes.FailedPrecondition {
+			return "", false, ErrPreconditionFailed
+		}
+		return "", false, fmt.Errorf("caldav: put item %q/%q/%q: %w", page, listName, uid, err)
+	}
+	return etag.ItemETag(item), created, nil
+}
+
+// uidIsNew reports whether a uid is unknown in the named (page, list).
+// The PUT handler needs this to decide between HTTP 201 Created and
+// HTTP 204 No Content on success. A "page/list does not exist yet"
+// counts as new — the funnel will create the collection on demand.
+func (b *defaultBackend) uidIsNew(ctx context.Context, page, listName, uid string) (bool, error) {
+	checklist, err := b.mutator.ListItems(ctx, page, listName)
+	if err != nil {
+		return false, err
+	}
+	if checklist == nil {
+		return true, nil
+	}
+	for _, it := range checklist.Items {
+		if it.Uid == uid {
+			return false, nil
+		}
+	}
+	return true, nil
 }
 
 // DeleteItem removes an item from the named collection, writing a
