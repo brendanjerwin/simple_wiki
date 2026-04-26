@@ -602,3 +602,173 @@ var _ = Describe("CalDAV e2e: iPhone subscribes and syncs", func() {
 		})
 	})
 })
+
+// calendarQueryVTODOBody is the calendar-query REPORT body DAVx5
+// fires when enumerating a collection. It carries the trivial
+// `VCALENDAR > VTODO` comp-filter that matches every item we serve;
+// our server ignores filters in Phase 1 and returns every live item,
+// so the shape is preserved purely to mirror what real DAVx5 traffic
+// looks like.
+const calendarQueryVTODOBody = `<?xml version="1.0" encoding="utf-8"?>
+<C:calendar-query xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav">
+  <D:prop>
+    <D:getetag/>
+    <C:calendar-data/>
+  </D:prop>
+  <C:filter>
+    <C:comp-filter name="VCALENDAR">
+      <C:comp-filter name="VTODO"/>
+    </C:comp-filter>
+  </C:filter>
+</C:calendar-query>`
+
+// calendarMultigetBody returns a calendar-multiget REPORT body listing
+// the supplied hrefs verbatim. DAVx5 fires this after a calendar-query
+// has told it which uids exist on the collection — it batches the
+// per-item GETs into one round-trip.
+//
+// strings.Builder.WriteString always returns a nil error (it can never
+// fail), but the linter is conservative: explicit `_ = b.WriteString(...)`
+// silences the unhandled-error warning without obscuring the fact that
+// we're discarding the return value.
+func calendarMultigetBody(hrefs ...string) string {
+	var b strings.Builder
+	_, _ = b.WriteString(`<?xml version="1.0" encoding="utf-8"?>` + "\n")
+	_, _ = b.WriteString(`<C:calendar-multiget xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav">` + "\n")
+	_, _ = b.WriteString(`  <D:prop><D:getetag/><C:calendar-data/></D:prop>` + "\n")
+	for _, h := range hrefs {
+		_, _ = b.WriteString("  <D:href>" + h + "</D:href>\n")
+	}
+	_, _ = b.WriteString(`</C:calendar-multiget>`)
+	return b.String()
+}
+
+var _ = Describe("CalDAV e2e: DAVx5 subscribes and syncs", func() {
+	var (
+		f         *e2eFixture
+		seededUID string
+	)
+
+	BeforeEach(func() {
+		f = newFixture()
+		seededUID = seedShoppingList(f, "Bread")
+	})
+
+	When("DAVx5 enumerates collections via PROPFIND home-set Depth:1", func() {
+		var rec *httptest.ResponseRecorder
+
+		BeforeEach(func() {
+			rec = f.doWithIdentity("PROPFIND", "/shopping/", xmlContentType, propfindHomeSetBody, f.alice, map[string]string{"Depth": "1"})
+		})
+
+		It("should return 207 Multi-Status", func() {
+			Expect(rec.Code).To(Equal(http.StatusMultiStatus))
+		})
+
+		It("should include a response for the seeded collection", func() {
+			Expect(rec.Body.String()).To(ContainSubstring("/shopping/this-week/"))
+		})
+	})
+
+	When("DAVx5 issues calendar-query REPORT with the VTODO comp-filter", func() {
+		var rec *httptest.ResponseRecorder
+
+		BeforeEach(func() {
+			rec = f.doWithIdentity("REPORT", "/shopping/this-week/", xmlContentType, calendarQueryVTODOBody, f.alice, map[string]string{"Depth": "1"})
+		})
+
+		It("should return 207 Multi-Status", func() {
+			Expect(rec.Code).To(Equal(http.StatusMultiStatus))
+		})
+
+		It("should include the seeded item in the response", func() {
+			Expect(rec.Body.String()).To(ContainSubstring(seededUID + ".ics"))
+		})
+
+		It("should embed calendar-data for the item", func() {
+			body := rec.Body.String()
+			Expect(body).To(ContainSubstring("calendar-data"))
+			Expect(body).To(ContainSubstring("Bread"))
+		})
+	})
+
+	When("DAVx5 PUTs a new VTODO", func() {
+		const newUID = "01HXDAV1DAV1DAV1DAV1DAV1DA"
+		var rec *httptest.ResponseRecorder
+
+		BeforeEach(func() {
+			f.clock.advance(time.Minute)
+			rec = f.do(http.MethodPut, itemPath(newUID), iCalContentType, vtodoBody(newUID, "Cheese", "NEEDS-ACTION"))
+		})
+
+		It("should return 201 Created", func() {
+			Expect(rec.Code).To(Equal(http.StatusCreated))
+		})
+
+		It("should set an ETag header", func() {
+			Expect(rec.Header().Get("ETag")).NotTo(BeEmpty())
+		})
+	})
+
+	When("DAVx5 issues calendar-multiget REPORT with two known hrefs", func() {
+		const newUID = "01HXDAV2DAV2DAV2DAV2DAV2DA"
+		var rec *httptest.ResponseRecorder
+
+		BeforeEach(func() {
+			f.clock.advance(time.Minute)
+			putRec := f.do(http.MethodPut, itemPath(newUID), iCalContentType, vtodoBody(newUID, "Wine", "NEEDS-ACTION"))
+			Expect(putRec.Code).To(Equal(http.StatusCreated))
+
+			rec = f.doWithIdentity(
+				"REPORT",
+				"/shopping/this-week/",
+				xmlContentType,
+				calendarMultigetBody(itemPath(seededUID), itemPath(newUID)),
+				f.alice,
+				map[string]string{"Depth": "1"},
+			)
+		})
+
+		It("should return 207 Multi-Status", func() {
+			Expect(rec.Code).To(Equal(http.StatusMultiStatus))
+		})
+
+		It("should include the first known item", func() {
+			Expect(rec.Body.String()).To(ContainSubstring(seededUID + ".ics"))
+		})
+
+		It("should include the second known item", func() {
+			Expect(rec.Body.String()).To(ContainSubstring(newUID + ".ics"))
+		})
+	})
+
+	When("DAVx5 issues calendar-multiget REPORT with one unknown href alongside known ones", func() {
+		const unknownUID = "01HXDAVUNKNOWNUNKNOWNUNKNOW"
+		var rec *httptest.ResponseRecorder
+
+		BeforeEach(func() {
+			rec = f.doWithIdentity(
+				"REPORT",
+				"/shopping/this-week/",
+				xmlContentType,
+				calendarMultigetBody(itemPath(seededUID), itemPath(unknownUID)),
+				f.alice,
+				map[string]string{"Depth": "1"},
+			)
+		})
+
+		It("should return 207 Multi-Status", func() {
+			Expect(rec.Code).To(Equal(http.StatusMultiStatus))
+		})
+
+		It("should still include the known item", func() {
+			Expect(rec.Body.String()).To(ContainSubstring(seededUID + ".ics"))
+		})
+
+		It("should emit a 404 entry for the unknown href without failing the others", func() {
+			body := rec.Body.String()
+			Expect(body).To(ContainSubstring(unknownUID + ".ics"))
+			Expect(body).To(ContainSubstring("404"))
+		})
+	})
+})
