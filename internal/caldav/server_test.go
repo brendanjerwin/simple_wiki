@@ -10,6 +10,7 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"go.opentelemetry.io/otel/attribute"
 
 	"github.com/brendanjerwin/simple_wiki/internal/caldav"
 	"github.com/brendanjerwin/simple_wiki/tailscale"
@@ -1372,6 +1373,156 @@ var _ = Describe("Server.serveDELETE", func() {
 
 		It("should pass the identity through to the backend", func() {
 			Expect(capturedIdentity.LoginName()).To(Equal("tester@example.com"))
+		})
+	})
+})
+
+// findAttr returns the value of the first attribute with the given key,
+// or "" / -1 if absent. Two helpers because Go doesn't let a single
+// function pick the right return type from the attribute.Value union.
+func findStringAttr(attrs []attribute.KeyValue, key string) string {
+	for _, a := range attrs {
+		if string(a.Key) == key {
+			return a.Value.AsString()
+		}
+	}
+	return ""
+}
+
+var _ = Describe("Server.instrumented", func() {
+	const okPath = "/shopping/this-week/01HZ8K7Q9X1V2N3R4T5Y6Z7B8C.ics"
+
+	When("the wrapped handler succeeds with a 200", func() {
+		var server *caldav.Server
+		var requests, bytesIn, bytesOut *caldav.FakeCounter
+		var rec *httptest.ResponseRecorder
+
+		BeforeEach(func() {
+			server = &caldav.Server{}
+			requests, bytesIn, bytesOut = server.InstallFakeMetricsForTest()
+			rec = httptest.NewRecorder()
+			req := authedRequest(http.MethodGet, okPath)
+			server.CallInstrumentedForTest("propfind", func(w http.ResponseWriter, _ *http.Request) {
+				w.WriteHeader(http.StatusOK)
+				_, _ = w.Write([]byte("ok"))
+			}, rec, req)
+		})
+
+		It("should record exactly one requests increment", func() {
+			Expect(requests.Records).To(HaveLen(1))
+			Expect(requests.Records[0].Incr).To(Equal(int64(1)))
+		})
+
+		It("should attribute the request to the propfind method", func() {
+			Expect(findStringAttr(requests.Records[0].Attrs, "caldav.method")).To(Equal("propfind"))
+		})
+
+		It("should attribute the outcome as ok", func() {
+			Expect(findStringAttr(requests.Records[0].Attrs, "caldav.outcome")).To(Equal("ok"))
+		})
+
+		It("should record the bytes-out increment matching the response body", func() {
+			Expect(bytesOut.Records).To(HaveLen(1))
+			Expect(bytesOut.Records[0].Incr).To(Equal(int64(2)))
+		})
+
+		It("should record a bytes-in increment", func() {
+			Expect(bytesIn.Records).To(HaveLen(1))
+		})
+	})
+
+	When("the wrapped handler returns 400", func() {
+		var requests *caldav.FakeCounter
+
+		BeforeEach(func() {
+			server := &caldav.Server{}
+			requests, _, _ = server.InstallFakeMetricsForTest()
+			rec := httptest.NewRecorder()
+			req := authedRequest(http.MethodPut, okPath)
+			server.CallInstrumentedForTest("put", func(w http.ResponseWriter, _ *http.Request) {
+				http.Error(w, "bad request", http.StatusBadRequest)
+			}, rec, req)
+		})
+
+		It("should attribute the outcome as client_error", func() {
+			Expect(requests.Records).To(HaveLen(1))
+			Expect(findStringAttr(requests.Records[0].Attrs, "caldav.outcome")).To(Equal("client_error"))
+		})
+	})
+
+	When("the wrapped handler returns 500", func() {
+		var requests *caldav.FakeCounter
+
+		BeforeEach(func() {
+			server := &caldav.Server{}
+			requests, _, _ = server.InstallFakeMetricsForTest()
+			rec := httptest.NewRecorder()
+			req := authedRequest(http.MethodPut, okPath)
+			server.CallInstrumentedForTest("put", func(w http.ResponseWriter, _ *http.Request) {
+				http.Error(w, "boom", http.StatusInternalServerError)
+			}, rec, req)
+		})
+
+		It("should attribute the outcome as server_error", func() {
+			Expect(requests.Records).To(HaveLen(1))
+			Expect(findStringAttr(requests.Records[0].Attrs, "caldav.outcome")).To(Equal("server_error"))
+		})
+	})
+
+	When("the request carries a Content-Length header", func() {
+		var bytesIn *caldav.FakeCounter
+
+		BeforeEach(func() {
+			server := &caldav.Server{}
+			_, bytesIn, _ = server.InstallFakeMetricsForTest()
+			rec := httptest.NewRecorder()
+			req := authedRequestWithBody(http.MethodPut, okPath, "hello")
+			server.CallInstrumentedForTest("put", func(w http.ResponseWriter, _ *http.Request) {
+				w.WriteHeader(http.StatusCreated)
+			}, rec, req)
+		})
+
+		It("should record bytes-in matching the Content-Length", func() {
+			Expect(bytesIn.Records).To(HaveLen(1))
+			Expect(bytesIn.Records[0].Incr).To(Equal(int64(5)))
+		})
+	})
+
+	When("the wrapped handler never writes a status", func() {
+		var requests *caldav.FakeCounter
+
+		BeforeEach(func() {
+			server := &caldav.Server{}
+			requests, _, _ = server.InstallFakeMetricsForTest()
+			rec := httptest.NewRecorder()
+			req := authedRequest(http.MethodOptions, "/shopping")
+			server.CallInstrumentedForTest("options", func(_ http.ResponseWriter, _ *http.Request) {
+				// Handler intentionally writes nothing.
+			}, rec, req)
+		})
+
+		It("should default the outcome to ok", func() {
+			Expect(requests.Records).To(HaveLen(1))
+			Expect(findStringAttr(requests.Records[0].Attrs, "caldav.outcome")).To(Equal("ok"))
+		})
+	})
+
+	When("the Server has nil Metrics", func() {
+		var rec *httptest.ResponseRecorder
+
+		BeforeEach(func() {
+			server := &caldav.Server{} // Metrics is nil
+			rec = httptest.NewRecorder()
+			req := authedRequest(http.MethodGet, okPath)
+			server.CallInstrumentedForTest("get", func(w http.ResponseWriter, _ *http.Request) {
+				w.WriteHeader(http.StatusOK)
+				_, _ = w.Write([]byte("body"))
+			}, rec, req)
+		})
+
+		It("should not panic and should still call the inner handler", func() {
+			Expect(rec.Code).To(Equal(http.StatusOK))
+			Expect(rec.Body.String()).To(Equal("body"))
 		})
 	})
 })
