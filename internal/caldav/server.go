@@ -4,6 +4,8 @@ import (
 	"errors"
 	"net/http"
 	"strings"
+
+	"github.com/brendanjerwin/simple_wiki/tailscale"
 )
 
 // Server is the CalDAV HTTP handler. It owns the CalendarBackend
@@ -281,7 +283,10 @@ const allowedMethods = "OPTIONS, GET, HEAD, PROPFIND, REPORT, PUT, DELETE"
 //     support (1, 3, calendar-access).
 //   - Allow header lists every method our handler will accept.
 //   - 200 OK with no body.
-func (*Server) serveOPTIONS(w http.ResponseWriter, _ *http.Request) {
+func (s *Server) serveOPTIONS(w http.ResponseWriter, r *http.Request) {
+	if _, ok := s.requireIdentity(w, r); !ok {
+		return
+	}
 	h := w.Header()
 	h.Set("DAV", davCapabilities)
 	h.Set("Allow", allowedMethods)
@@ -304,6 +309,9 @@ const iCalendarContentType = "text/calendar; charset=utf-8"
 //     an item resource.
 //   - 500 on any other backend error.
 func (s *Server) serveGET(w http.ResponseWriter, r *http.Request) {
+	if _, ok := s.requireIdentity(w, r); !ok {
+		return
+	}
 	page, list, uid, err := parsePath(r.URL.Path)
 	if err != nil || uid == "" {
 		http.NotFound(w, r)
@@ -326,4 +334,34 @@ func (s *Server) serveGET(w http.ResponseWriter, r *http.Request) {
 	}
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(item.ICalBytes)
+}
+
+// anonymousRejectionBody is the response body sent on every CalDAV
+// request that arrives without a Tailscale identity. The plain text
+// makes the failure mode explicit to anyone curling from off-tailnet;
+// production clients (iOS, DAVx5) hit this only when the operator has
+// misconfigured Tailscale routing.
+const anonymousRejectionBody = "tailscale identity required\n"
+
+// requireIdentity is the auth gate at the top of every CalDAV
+// handler. It reads tailscale.IdentityFromContext and:
+//
+//   - returns (identity, true) when the identity is non-anonymous so
+//     the caller can proceed.
+//   - writes a 403 response with the anonymousRejectionBody and
+//     returns (Anonymous, false) when the identity is anonymous.
+//
+// Critically, this never reads or sets the Authorization header. The
+// wiki's auth model is Tailscale-only — anonymous requests fail
+// closed with 403, never with a 401 challenge that would invite the
+// client to retry with credentials we don't validate.
+func (*Server) requireIdentity(w http.ResponseWriter, r *http.Request) (tailscale.IdentityValue, bool) {
+	identity := tailscale.IdentityFromContext(r.Context())
+	if identity.IsAnonymous() {
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		w.WriteHeader(http.StatusForbidden)
+		_, _ = w.Write([]byte(anonymousRejectionBody))
+		return tailscale.Anonymous, false
+	}
+	return identity, true
 }

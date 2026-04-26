@@ -410,15 +410,25 @@ var _ = Describe("parsePath", func() {
 	})
 })
 
+// authedRequest returns a request with a non-anonymous Tailscale
+// identity attached, so handlers under test reach their main path
+// instead of the requireIdentity 403 short-circuit. Tests that want
+// to exercise the anonymous path attach tailscale.Anonymous (or omit
+// the identity entirely) themselves.
+func authedRequest(method, target string) *http.Request {
+	req := httptest.NewRequest(method, target, nil)
+	id := tailscale.NewIdentity("tester@example.com", "Tester", "phone")
+	return req.WithContext(tailscale.ContextWithIdentity(req.Context(), id))
+}
+
 var _ = Describe("Server.serveOPTIONS", func() {
 	var server *caldav.Server
 	var rec *httptest.ResponseRecorder
-	var req *http.Request
 
 	BeforeEach(func() {
 		server = &caldav.Server{}
 		rec = httptest.NewRecorder()
-		req = httptest.NewRequest(http.MethodOptions, "/shopping", nil)
+		req := authedRequest(http.MethodOptions, "/shopping")
 		server.ServeOPTIONSForTest(rec, req)
 	})
 
@@ -462,7 +472,7 @@ var _ = Describe("Server.serveGET", func() {
 			}
 			server := &caldav.Server{Backend: backend}
 			rec = httptest.NewRecorder()
-			req := httptest.NewRequest(http.MethodGet, okPath, nil)
+			req := authedRequest(http.MethodGet, okPath)
 			server.ServeGETForTest(rec, req)
 		})
 
@@ -506,7 +516,7 @@ var _ = Describe("Server.serveGET", func() {
 			}
 			server := &caldav.Server{Backend: backend}
 			rec = httptest.NewRecorder()
-			req := httptest.NewRequest(http.MethodGet, okPath, nil)
+			req := authedRequest(http.MethodGet, okPath)
 			server.ServeGETForTest(rec, req)
 		})
 
@@ -526,7 +536,7 @@ var _ = Describe("Server.serveGET", func() {
 			}
 			server := &caldav.Server{Backend: backend}
 			rec = httptest.NewRecorder()
-			req := httptest.NewRequest(http.MethodGet, okPath, nil)
+			req := authedRequest(http.MethodGet, okPath)
 			server.ServeGETForTest(rec, req)
 		})
 
@@ -546,7 +556,7 @@ var _ = Describe("Server.serveGET", func() {
 			}
 			server := &caldav.Server{Backend: backend}
 			rec = httptest.NewRecorder()
-			req := httptest.NewRequest(http.MethodGet, okPath, nil)
+			req := authedRequest(http.MethodGet, okPath)
 			server.ServeGETForTest(rec, req)
 		})
 
@@ -561,7 +571,7 @@ var _ = Describe("Server.serveGET", func() {
 		BeforeEach(func() {
 			server := &caldav.Server{Backend: &fakeServerBackend{}}
 			rec = httptest.NewRecorder()
-			req := httptest.NewRequest(http.MethodGet, "/shopping/this-week", nil)
+			req := authedRequest(http.MethodGet, "/shopping/this-week")
 			server.ServeGETForTest(rec, req)
 		})
 
@@ -576,12 +586,145 @@ var _ = Describe("Server.serveGET", func() {
 		BeforeEach(func() {
 			server := &caldav.Server{Backend: &fakeServerBackend{}}
 			rec = httptest.NewRecorder()
-			req := httptest.NewRequest(http.MethodGet, "/shopping/this-week/not-a-ulid.ics", nil)
+			req := authedRequest(http.MethodGet, "/shopping/this-week/not-a-ulid.ics")
 			server.ServeGETForTest(rec, req)
 		})
 
 		It("should return 404 Not Found", func() {
 			Expect(rec.Code).To(Equal(http.StatusNotFound))
+		})
+	})
+})
+
+var _ = Describe("Server.requireIdentity", func() {
+	var server *caldav.Server
+
+	BeforeEach(func() {
+		server = &caldav.Server{}
+	})
+
+	When("the request has no identity in context", func() {
+		var rec *httptest.ResponseRecorder
+		var ok bool
+
+		BeforeEach(func() {
+			rec = httptest.NewRecorder()
+			req := httptest.NewRequest("PROPFIND", "/shopping", nil)
+			ok = server.RequireIdentityForTest(rec, req)
+		})
+
+		It("should return false", func() {
+			Expect(ok).To(BeFalse())
+		})
+
+		It("should write status 403", func() {
+			Expect(rec.Code).To(Equal(http.StatusForbidden))
+		})
+
+		It("should write the anonymous-rejection body", func() {
+			Expect(rec.Body.String()).To(Equal("tailscale identity required\n"))
+		})
+
+		It("should not set a WWW-Authenticate header", func() {
+			Expect(rec.Header().Get("WWW-Authenticate")).To(Equal(""))
+		})
+	})
+
+	When("the request has the Anonymous singleton in context", func() {
+		var rec *httptest.ResponseRecorder
+		var ok bool
+
+		BeforeEach(func() {
+			rec = httptest.NewRecorder()
+			req := httptest.NewRequest("PROPFIND", "/shopping", nil)
+			req = req.WithContext(tailscale.ContextWithIdentity(req.Context(), tailscale.Anonymous))
+			ok = server.RequireIdentityForTest(rec, req)
+		})
+
+		It("should return false", func() {
+			Expect(ok).To(BeFalse())
+		})
+
+		It("should write status 403", func() {
+			Expect(rec.Code).To(Equal(http.StatusForbidden))
+		})
+
+		It("should not set a WWW-Authenticate header", func() {
+			Expect(rec.Header().Get("WWW-Authenticate")).To(Equal(""))
+		})
+	})
+
+	When("the request has a non-anonymous identity in context", func() {
+		var rec *httptest.ResponseRecorder
+		var ok bool
+
+		BeforeEach(func() {
+			rec = httptest.NewRecorder()
+			req := httptest.NewRequest("PROPFIND", "/shopping", nil)
+			id := tailscale.NewIdentity("alice@example.com", "Alice", "phone")
+			req = req.WithContext(tailscale.ContextWithIdentity(req.Context(), id))
+			ok = server.RequireIdentityForTest(rec, req)
+		})
+
+		It("should return true", func() {
+			Expect(ok).To(BeTrue())
+		})
+
+		It("should leave the response status unwritten", func() {
+			// httptest.ResponseRecorder defaults Code to 200; we
+			// assert nothing was actually written by checking the
+			// flushed flag, since requireIdentity must not call
+			// WriteHeader on the success path.
+			Expect(rec.Body.Len()).To(Equal(0))
+		})
+	})
+})
+
+var _ = Describe("anonymous-gated handlers", func() {
+	When("serveOPTIONS receives an anonymous request", func() {
+		var rec *httptest.ResponseRecorder
+
+		BeforeEach(func() {
+			server := &caldav.Server{}
+			rec = httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodOptions, "/shopping", nil)
+			req = req.WithContext(tailscale.ContextWithIdentity(req.Context(), tailscale.Anonymous))
+			server.ServeOPTIONSForTest(rec, req)
+		})
+
+		It("should respond 403 Forbidden", func() {
+			Expect(rec.Code).To(Equal(http.StatusForbidden))
+		})
+
+		It("should not advertise DAV capabilities to anonymous callers", func() {
+			Expect(rec.Header().Get("DAV")).To(Equal(""))
+		})
+	})
+
+	When("serveGET receives an anonymous request for a real .ics", func() {
+		var rec *httptest.ResponseRecorder
+		var backendCalled bool
+
+		BeforeEach(func() {
+			backend := &fakeServerBackend{
+				getItemFn: func(_ context.Context, _, _, _ string) (caldav.CalendarItem, error) {
+					backendCalled = true
+					return caldav.CalendarItem{}, nil
+				},
+			}
+			server := &caldav.Server{Backend: backend}
+			rec = httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodGet, "/shopping/this-week/01HZ8K7Q9X1V2N3R4T5Y6Z7B8C.ics", nil)
+			req = req.WithContext(tailscale.ContextWithIdentity(req.Context(), tailscale.Anonymous))
+			server.ServeGETForTest(rec, req)
+		})
+
+		It("should respond 403 Forbidden", func() {
+			Expect(rec.Code).To(Equal(http.StatusForbidden))
+		})
+
+		It("should not call the backend", func() {
+			Expect(backendCalled).To(BeFalse())
 		})
 	})
 })
