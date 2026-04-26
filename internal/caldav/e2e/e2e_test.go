@@ -208,6 +208,20 @@ func (f *e2eFixture) doWithIdentity(method, target, contentType, body string, id
 	return rec
 }
 
+// propfind issues a PROPFIND with the given Depth and body as alice.
+// Centralizes the application/xml Content-Type and the Depth header
+// shape every CalDAV PROPFIND in these specs uses.
+func (f *e2eFixture) propfind(target, depth, body string) *httptest.ResponseRecorder {
+	return f.doWithIdentity("PROPFIND", target, xmlContentType, body, f.alice, map[string]string{"Depth": depth})
+}
+
+// report issues a REPORT (Depth:1, application/xml) with the given body
+// as alice. Used by every calendar-query / calendar-multiget /
+// sync-collection driver in these specs.
+func (f *e2eFixture) report(target, body string) *httptest.ResponseRecorder {
+	return f.doWithIdentity("REPORT", target, xmlContentType, body, f.alice, map[string]string{"Depth": "1"})
+}
+
 // vtodoBody renders a minimal VCALENDAR/VTODO body for an iOS-style
 // PUT. summary is the SUMMARY text; status is one of NEEDS-ACTION /
 // COMPLETED. uid is the VTODO/UID property which must match the URL.
@@ -340,7 +354,7 @@ var _ = Describe("CalDAV e2e: iPhone subscribes and syncs", func() {
 		var rec *httptest.ResponseRecorder
 
 		BeforeEach(func() {
-			rec = f.doWithIdentity("PROPFIND", "/shopping/", xmlContentType, propfindHomeSetBody, f.alice, map[string]string{"Depth": "0"})
+			rec = f.propfind("/shopping/", "0", propfindHomeSetBody)
 		})
 
 		It("should return 207 Multi-Status", func() {
@@ -362,7 +376,7 @@ var _ = Describe("CalDAV e2e: iPhone subscribes and syncs", func() {
 		var rec *httptest.ResponseRecorder
 
 		BeforeEach(func() {
-			rec = f.doWithIdentity("PROPFIND", "/shopping/", xmlContentType, propfindHomeSetBody, f.alice, map[string]string{"Depth": "1"})
+			rec = f.propfind("/shopping/", "1", propfindHomeSetBody)
 		})
 
 		It("should return 207 Multi-Status", func() {
@@ -393,7 +407,7 @@ var _ = Describe("CalDAV e2e: iPhone subscribes and syncs", func() {
 		var initialSyncToken string
 
 		BeforeEach(func() {
-			rec = f.doWithIdentity("REPORT", "/shopping/this-week/", xmlContentType, syncCollectionBody(""), f.alice, map[string]string{"Depth": "1"})
+			rec = f.report("/shopping/this-week/", syncCollectionBody(""))
 			initialSyncToken = extractSyncToken(rec.Body.String())
 		})
 
@@ -449,7 +463,7 @@ var _ = Describe("CalDAV e2e: iPhone subscribes and syncs", func() {
 			Expect(putRec.Code).To(Equal(http.StatusCreated))
 			putETag = putRec.Header().Get("ETag")
 			f.clock.advance(time.Second)
-			propfindRec = f.doWithIdentity("PROPFIND", itemPath(newUID), xmlContentType, propfindItemBody, f.alice, map[string]string{"Depth": "0"})
+			propfindRec = f.propfind(itemPath(newUID), "0", propfindItemBody)
 		})
 
 		It("should return 207 Multi-Status", func() {
@@ -514,7 +528,7 @@ var _ = Describe("CalDAV e2e: iPhone subscribes and syncs", func() {
 
 		BeforeEach(func() {
 			// Capture the sync token after seeding (one item exists).
-			initRec := f.doWithIdentity("REPORT", "/shopping/this-week/", xmlContentType, syncCollectionBody(""), f.alice, map[string]string{"Depth": "1"})
+			initRec := f.report("/shopping/this-week/", syncCollectionBody(""))
 			prevToken = extractSyncToken(initRec.Body.String())
 			Expect(prevToken).NotTo(BeEmpty())
 
@@ -524,7 +538,7 @@ var _ = Describe("CalDAV e2e: iPhone subscribes and syncs", func() {
 			Expect(putRec.Code).To(Equal(http.StatusCreated))
 
 			// Now sync-collection REPORT with the pre-mutation token.
-			rec = f.doWithIdentity("REPORT", "/shopping/this-week/", xmlContentType, syncCollectionBody(prevToken), f.alice, map[string]string{"Depth": "1"})
+			rec = f.report("/shopping/this-week/", syncCollectionBody(prevToken))
 		})
 
 		It("should return 207 Multi-Status", func() {
@@ -579,7 +593,7 @@ var _ = Describe("CalDAV e2e: iPhone subscribes and syncs", func() {
 
 		BeforeEach(func() {
 			// Initial sync to capture the pre-delete token.
-			initRec := f.doWithIdentity("REPORT", "/shopping/this-week/", xmlContentType, syncCollectionBody(""), f.alice, map[string]string{"Depth": "1"})
+			initRec := f.report("/shopping/this-week/", syncCollectionBody(""))
 			prevToken = extractSyncToken(initRec.Body.String())
 
 			// DELETE the seeded item.
@@ -588,7 +602,7 @@ var _ = Describe("CalDAV e2e: iPhone subscribes and syncs", func() {
 			Expect(delRec.Code).To(Equal(http.StatusNoContent))
 
 			// Sync with the pre-delete token.
-			rec = f.doWithIdentity("REPORT", "/shopping/this-week/", xmlContentType, syncCollectionBody(prevToken), f.alice, map[string]string{"Depth": "1"})
+			rec = f.report("/shopping/this-week/", syncCollectionBody(prevToken))
 		})
 
 		It("should return 207 Multi-Status", func() {
@@ -658,7 +672,7 @@ var _ = Describe("CalDAV e2e: DAVx5 subscribes and syncs", func() {
 		var rec *httptest.ResponseRecorder
 
 		BeforeEach(func() {
-			rec = f.doWithIdentity("PROPFIND", "/shopping/", xmlContentType, propfindHomeSetBody, f.alice, map[string]string{"Depth": "1"})
+			rec = f.propfind("/shopping/", "1", propfindHomeSetBody)
 		})
 
 		It("should return 207 Multi-Status", func() {
@@ -674,7 +688,7 @@ var _ = Describe("CalDAV e2e: DAVx5 subscribes and syncs", func() {
 		var rec *httptest.ResponseRecorder
 
 		BeforeEach(func() {
-			rec = f.doWithIdentity("REPORT", "/shopping/this-week/", xmlContentType, calendarQueryVTODOBody, f.alice, map[string]string{"Depth": "1"})
+			rec = f.report("/shopping/this-week/", calendarQueryVTODOBody)
 		})
 
 		It("should return 207 Multi-Status", func() {
@@ -719,14 +733,7 @@ var _ = Describe("CalDAV e2e: DAVx5 subscribes and syncs", func() {
 			putRec := f.do(http.MethodPut, itemPath(newUID), iCalContentType, vtodoBody(newUID, "Wine", "NEEDS-ACTION"))
 			Expect(putRec.Code).To(Equal(http.StatusCreated))
 
-			rec = f.doWithIdentity(
-				"REPORT",
-				"/shopping/this-week/",
-				xmlContentType,
-				calendarMultigetBody(itemPath(seededUID), itemPath(newUID)),
-				f.alice,
-				map[string]string{"Depth": "1"},
-			)
+			rec = f.report("/shopping/this-week/", calendarMultigetBody(itemPath(seededUID), itemPath(newUID)))
 		})
 
 		It("should return 207 Multi-Status", func() {
@@ -747,14 +754,7 @@ var _ = Describe("CalDAV e2e: DAVx5 subscribes and syncs", func() {
 		var rec *httptest.ResponseRecorder
 
 		BeforeEach(func() {
-			rec = f.doWithIdentity(
-				"REPORT",
-				"/shopping/this-week/",
-				xmlContentType,
-				calendarMultigetBody(itemPath(seededUID), itemPath(unknownUID)),
-				f.alice,
-				map[string]string{"Depth": "1"},
-			)
+			rec = f.report("/shopping/this-week/", calendarMultigetBody(itemPath(seededUID), itemPath(unknownUID)))
 		})
 
 		It("should return 207 Multi-Status", func() {
