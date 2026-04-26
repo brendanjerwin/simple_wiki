@@ -21,6 +21,7 @@ require (
 	github.com/mark3labs/mcp-go v0.48.0
 	github.com/mborders/artifex v0.5.1
 	github.com/microcosm-cc/bluemonday v1.0.27
+	github.com/oklog/ulid/v2 v2.1.1
 	github.com/onsi/ginkgo/v2 v2.28.1
 	github.com/onsi/gomega v1.39.1
 	github.com/pelletier/go-toml/v2 v2.3.0

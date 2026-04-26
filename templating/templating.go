@@ -322,17 +322,41 @@ func BuildChecklist(templateContext TemplateContext) func(string) string {
 	}
 }
 
-func renderChecklistFallback(frontmatter map[string]any, listName string) string {
-	checklists, ok := frontmatter["checklists"].(map[string]any)
-	if !ok {
-		return ""
+// lookupChecklistItems returns the items[] for the named checklist,
+// preferring the reserved wiki.checklists.<list>.items[] location and
+// falling through to the legacy checklists.<list>.items[] for pages the
+// eager migration hasn't swept yet (per ADR-0010).
+func lookupChecklistItems(frontmatter map[string]any, listName string) []any {
+	wiki, ok := frontmatter["wiki"].(map[string]any)
+	if ok {
+		wikiChecklists, ok := wiki["checklists"].(map[string]any)
+		if ok {
+			list, ok := wikiChecklists[listName].(map[string]any)
+			if ok {
+				if items, ok := list["items"].([]any); ok && len(items) > 0 {
+					return items
+				}
+			}
+		}
 	}
-	list, ok := checklists[listName].(map[string]any)
+	legacy, ok := frontmatter["checklists"].(map[string]any)
 	if !ok {
-		return ""
+		return nil
+	}
+	list, ok := legacy[listName].(map[string]any)
+	if !ok {
+		return nil
 	}
 	items, ok := list["items"].([]any)
-	if !ok || len(items) == 0 {
+	if !ok {
+		return nil
+	}
+	return items
+}
+
+func renderChecklistFallback(frontmatter map[string]any, listName string) string {
+	items := lookupChecklistItems(frontmatter, listName)
+	if len(items) == 0 {
 		return ""
 	}
 

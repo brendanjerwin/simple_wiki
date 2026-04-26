@@ -50,6 +50,12 @@ var _ = Describe("MCP extension regression (Phase 1E.0)", func() {
 			Expect(tools).To(HaveKey("api_v1_AgentMetadataService_GetChatContext"))
 		})
 
+		It("should register the ChecklistService tools", func() {
+			Expect(tools).To(HaveKey("api_v1_ChecklistService_AddItem"))
+			Expect(tools).To(HaveKey("api_v1_ChecklistService_ToggleItem"))
+			Expect(tools).To(HaveKey("api_v1_ChecklistService_ListItems"))
+		})
+
 		It("should leave no tool with an empty description", func() {
 			for name, tool := range tools {
 				Expect(strings.TrimSpace(tool.Tool.Description)).

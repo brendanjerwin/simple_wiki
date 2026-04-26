@@ -191,8 +191,10 @@ title = "Checklist A11y Test Page"
     });
 
     test('error wrapper should have role=alert when error is displayed', async ({ page }) => {
-      // Intercept GetFrontmatter to force an error
-      await page.route('**/api.v1.Frontmatter/GetFrontmatter', route => {
+      // Intercept ChecklistService.ListItems to force an error. Per
+      // ADR-0010 the web component now talks to the dedicated service,
+      // not the generic Frontmatter API.
+      await page.route('**/api.v1.ChecklistService/ListItems', route => {
         return route.fulfill({ status: 500, body: 'Internal Server Error' });
       });
 

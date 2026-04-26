@@ -7,6 +7,7 @@ import (
 	"time"
 
 	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
+	"github.com/brendanjerwin/simple_wiki/server/checklistmutator"
 	"github.com/brendanjerwin/simple_wiki/filestore"
 	"github.com/brendanjerwin/simple_wiki/index/bleve"
 	"github.com/brendanjerwin/simple_wiki/pkg/chatbuffer"
@@ -99,6 +100,7 @@ type Server struct {
 	apiv1.UnimplementedChatServiceServer
 	apiv1.UnimplementedScheduledTurnServiceServer
 	apiv1.UnimplementedAgentMetadataServiceServer
+	apiv1.UnimplementedChecklistServiceServer
 	commit                  string
 	buildTime               time.Time
 	pageReaderMutator       wikipage.PageReaderMutator
@@ -114,6 +116,7 @@ type Server struct {
 	scheduledTurnDispatcher ScheduledTurnDispatcher
 	agentScheduleStore      AgentScheduleStore
 	agentChatContextStore   AgentChatContextStore
+	checklistMutator        *checklistmutator.Mutator
 }
 
 // NewServer creates a new gRPC server with the given dependencies.
@@ -203,6 +206,13 @@ func (s *Server) WithAgentChatContextStore(store AgentChatContextStore) *Server 
 	return s
 }
 
+// WithChecklistMutator wires the checklistmutator funnel into the server.
+// Required for ChecklistService handlers to function.
+func (s *Server) WithChecklistMutator(m *checklistmutator.Mutator) *Server {
+	s.checklistMutator = m
+	return s
+}
+
 // RegisterWithServer registers the gRPC services with the given gRPC server.
 func (s *Server) RegisterWithServer(grpcServer *grpc.Server) {
 	apiv1.RegisterSystemInfoServiceServer(grpcServer, s)
@@ -215,6 +225,7 @@ func (s *Server) RegisterWithServer(grpcServer *grpc.Server) {
 	apiv1.RegisterChatServiceServer(grpcServer, s)
 	apiv1.RegisterScheduledTurnServiceServer(grpcServer, s)
 	apiv1.RegisterAgentMetadataServiceServer(grpcServer, s)
+	apiv1.RegisterChecklistServiceServer(grpcServer, s)
 }
 
 // LoggingInterceptor returns a gRPC unary interceptor for logging method calls.

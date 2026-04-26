@@ -327,5 +327,126 @@ var _ = Describe("Identity", func() {
 				Expect(result).To(Equal("user@example.com"))
 			})
 		})
+
+		When("identity is an agent", func() {
+			var result string
+
+			BeforeEach(func() {
+				identity := tailscale.NewAgentIdentity(
+					"user@example.com",
+					"",
+					"my-laptop",
+				)
+				result = identity.ForLog()
+			})
+
+			It("should append the [agent] suffix", func() {
+				Expect(result).To(Equal("user@example.com (my-laptop) [agent]"))
+			})
+		})
+	})
+
+	Describe("IsAgent", func() {
+		When("identity was constructed via NewIdentity", func() {
+			var identity *tailscale.Identity
+
+			BeforeEach(func() {
+				identity = tailscale.NewIdentity("user@example.com", "", "")
+			})
+
+			It("should report false", func() {
+				Expect(identity.IsAgent()).To(BeFalse())
+			})
+		})
+
+		When("identity was constructed via NewAgentIdentity", func() {
+			var identity *tailscale.Identity
+
+			BeforeEach(func() {
+				identity = tailscale.NewAgentIdentity("user@example.com", "", "")
+			})
+
+			It("should report true", func() {
+				Expect(identity.IsAgent()).To(BeTrue())
+			})
+		})
+
+		When("the Anonymous singleton is queried", func() {
+			It("should report false", func() {
+				Expect(tailscale.Anonymous.IsAgent()).To(BeFalse())
+			})
+		})
+
+		When("an anonymous-but-claiming-agent identity is constructed", func() {
+			var identity *tailscale.Identity
+
+			BeforeEach(func() {
+				identity = tailscale.NewAgentIdentity("", "", "")
+			})
+
+			It("should report IsAnonymous true", func() {
+				Expect(identity.IsAnonymous()).To(BeTrue())
+			})
+
+			It("should report IsAgent true", func() {
+				Expect(identity.IsAgent()).To(BeTrue())
+			})
+		})
+	})
+
+	Describe("Name", func() {
+		When("identity has a login name", func() {
+			var identity *tailscale.Identity
+
+			BeforeEach(func() {
+				identity = tailscale.NewIdentity("alice@example.com", "Alice", "alice-laptop")
+			})
+
+			It("should return the login name", func() {
+				Expect(identity.Name()).To(Equal("alice@example.com"))
+			})
+		})
+
+		When("identity has only a display name", func() {
+			var identity *tailscale.Identity
+
+			BeforeEach(func() {
+				identity = tailscale.NewIdentity("", "Alice", "")
+			})
+
+			It("should return the display name", func() {
+				Expect(identity.Name()).To(Equal("Alice"))
+			})
+		})
+
+		When("identity has only a node name", func() {
+			var identity *tailscale.Identity
+
+			BeforeEach(func() {
+				identity = tailscale.NewIdentity("", "", "alice-laptop")
+			})
+
+			It("should return the node name", func() {
+				Expect(identity.Name()).To(Equal("alice-laptop"))
+			})
+		})
+
+		When("identity is fully anonymous", func() {
+			var identity *tailscale.Identity
+
+			BeforeEach(func() {
+				identity = tailscale.NewIdentity("", "", "")
+			})
+
+			It("should return an empty string (not 'anonymous')", func() {
+				Expect(identity.Name()).To(BeEmpty())
+			})
+		})
+
+		When("the Anonymous singleton is queried", func() {
+			It("should return an empty string", func() {
+				Expect(tailscale.Anonymous.Name()).To(BeEmpty())
+			})
+		})
 	})
 })

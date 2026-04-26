@@ -14,7 +14,9 @@ import (
 	wikimcp "github.com/brendanjerwin/simple_wiki/internal/mcp"
 	"github.com/brendanjerwin/simple_wiki/internal/observability"
 	"github.com/brendanjerwin/simple_wiki/pkg/chatbuffer"
+	"github.com/brendanjerwin/simple_wiki/pkg/ulid"
 	"github.com/brendanjerwin/simple_wiki/server"
+	"github.com/brendanjerwin/simple_wiki/server/checklistmutator"
 	"github.com/brendanjerwin/simple_wiki/tailscale"
 	"github.com/gin-gonic/gin"
 	"github.com/jcelliott/lumber"
@@ -123,11 +125,12 @@ func SetupTailscaleServe(
 	logger *lumber.ConsoleLogger,
 	commit string,
 	buildTime time.Time,
+	agentTags []string,
 ) (*ServerResult, error) {
 	logger.Info("Tailscale detected: %s", tsDNSName)
 	logger.Info("Tailscale Serve mode. Running HTTP on %s with identity support", httpAddr)
 
-	identityResolver := tailscale.NewIdentityResolver()
+	identityResolver := tailscale.NewIdentityResolver(agentTags)
 	handler, metricsCleanup, err := createMultiplexedHandler(site, logger, commit, buildTime, identityResolver)
 	if err != nil {
 		return nil, fmt.Errorf(errCreateHandlerFmt, err)
@@ -167,10 +170,11 @@ func SetupFullTLS(
 	logger *lumber.ConsoleLogger,
 	commit string,
 	buildTime time.Time,
+	agentTags []string,
 ) (*ServerResult, error) {
 	logger.Info("Tailscale detected: %s", tsDNSName)
 
-	identityResolver := tailscale.NewIdentityResolver()
+	identityResolver := tailscale.NewIdentityResolver(agentTags)
 	handler, metricsCleanup, err := createMultiplexedHandler(site, logger, commit, buildTime, identityResolver)
 	if err != nil {
 		return nil, fmt.Errorf(errCreateHandlerFmt, err)
@@ -394,6 +398,7 @@ func BuildVanguardTranscoder(grpcServer *grpc.Server, ginRouter http.Handler) (h
 	serviceNames := []string{
 		"api.v1.AgentMetadataService",
 		"api.v1.ChatService",
+		"api.v1.ChecklistService",
 		"api.v1.FileStorageService",
 		"api.v1.Frontmatter",
 		"api.v1.InventoryManagementService",
@@ -452,6 +457,8 @@ func setupGRPCServer(
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create gRPC server: %w", err)
 	}
+	checklistMutator := checklistmutator.New(site, checklistmutator.SystemClock{}, ulid.NewSystemGenerator())
+
 	grpcAPIServer = grpcAPIServer.
 		WithJobQueueCoordinator(site.GetJobQueueCoordinator()).
 		WithMarkdownRenderer(site.MarkdownRenderer).
@@ -459,7 +466,8 @@ func setupGRPCServer(
 		WithFileStorer(site.FileStorer).
 		WithScheduledTurnDispatcher(site.ScheduledTurnDispatcher).
 		WithAgentScheduleStore(site.AgentScheduleStore).
-		WithAgentChatContextStore(site.AgentChatContextStore)
+		WithAgentChatContextStore(site.AgentChatContextStore).
+		WithChecklistMutator(checklistMutator)
 
 	unaryInterceptors, streamInterceptors, err := buildGRPCInterceptors(
 		identityResolver, grpcAPIServer.LoggingInterceptor(), counters, logger,

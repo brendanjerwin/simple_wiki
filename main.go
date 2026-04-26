@@ -215,6 +215,10 @@ func setupServer(c *cli.Context) (*bootstrap.ServerResult, func(), error) {
 
 	httpAddr := fmt.Sprintf("%s:%d", host, port)
 	buildTime := getBuildTime()
+	agentTags := c.GlobalStringSlice("agent-tag")
+	if len(agentTags) > 0 {
+		logger.Info("Agent classification: callers from nodes with any of these Tailscale tags will be marked IsAgent=true: %v", agentTags)
+	}
 
 	var result *bootstrap.ServerResult
 	switch mode {
@@ -223,12 +227,12 @@ func setupServer(c *cli.Context) (*bootstrap.ServerResult, func(), error) {
 	case bootstrap.ModeTailscaleServe:
 		result, err = bootstrap.SetupTailscaleServe(
 			httpAddr, tsStatus.DNSName, c.GlobalBool("force-redirect-tailnet-https"),
-			site, logger, actualCommit, buildTime,
+			site, logger, actualCommit, buildTime, agentTags,
 		)
 	case bootstrap.ModeFullTLS:
 		result, err = bootstrap.SetupFullTLS(
 			httpAddr, tlsPort, tsStatus.DNSName,
-			site, logger, actualCommit, buildTime,
+			site, logger, actualCommit, buildTime, agentTags,
 		)
 	default:
 		err = fmt.Errorf("unknown server mode: %v", mode)
@@ -381,7 +385,20 @@ func getFlags() []cli.Flag {
 	}
 	flags = append(flags, uploadLimitFlags()...)
 	flags = append(flags, agentScheduleFlags()...)
+	flags = append(flags, identityFlags()...)
 	return flags
+}
+
+// identityFlags returns flags that configure how callers are classified
+// as agents vs humans for attribution purposes. See ChecklistService and
+// ADR-0009 for context.
+func identityFlags() []cli.Flag {
+	return []cli.Flag{
+		cli.StringSliceFlag{
+			Name:  "agent-tag",
+			Usage: "Tailscale node tag (e.g. 'tag:agent') whose nodes are classified as automated callers; repeatable",
+		},
+	}
 }
 
 // uploadLimitFlags returns the flags that govern upload size limits.

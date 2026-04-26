@@ -1,16 +1,22 @@
 import { expect, waitUntil } from '@open-wc/testing';
 import sinon, { type SinonStub } from 'sinon';
 import './wiki-checklist.js';
-import type { WikiChecklist, ChecklistItem } from './wiki-checklist.js';
+import type { WikiChecklist } from './wiki-checklist.js';
 import { AugmentedError, AugmentErrorService } from './augment-error-service.js';
 import { create } from '@bufbuild/protobuf';
+import { timestampFromMs } from '@bufbuild/protobuf/wkt';
+import { ConnectError, Code } from '@connectrpc/connect';
 import {
-  GetFrontmatterResponseSchema,
-  MergeFrontmatterResponseSchema,
-} from '../gen/api/v1/frontmatter_pb.js';
-import type { JsonObject } from '@bufbuild/protobuf';
+  ListItemsResponseSchema,
+  AddItemResponseSchema,
+  UpdateItemResponseSchema,
+  ToggleItemResponseSchema,
+  DeleteItemResponseSchema,
+  ReorderItemResponseSchema,
+} from '../gen/api/v1/checklist_pb.js';
+import type { ChecklistItem } from '../gen/api/v1/checklist_pb.js';
+import { makeChecklist, makeChecklistItem } from './checklist-test-fixtures.js';
 
-// Helper type to access private methods for testing drag-and-drop
 interface WikiChecklistInternal {
   _handleItemDragStart(e: DragEvent, index: number): void;
   _handleItemDragOver(e: DragEvent, index: number): void;
@@ -54,35 +60,22 @@ describe('WikiChecklist', () => {
     return freshEl;
   }
 
-  function stubGetFrontmatter(
+  function stubListItems(
     target: WikiChecklist,
-    frontmatter: JsonObject = {}
+    items: ChecklistItem[] = [],
+    updatedAtMs?: number,
   ): SinonStub {
+    const checklist = updatedAtMs === undefined
+      ? makeChecklist({ name: 'grocery_list', items })
+      : makeChecklist({ name: 'grocery_list', items, updatedAtMs });
     return sinon
-      .stub(target.client, 'getFrontmatter')
-      .resolves(create(GetFrontmatterResponseSchema, { frontmatter }));
-  }
-
-  /**
-   * Extracts the checklist items from the first mergeFrontmatter stub call.
-   * The component always merges under the 'grocery_list' key (the default list
-   * name set by buildElement).
-   */
-  function getMergePayloadItems(stub: SinonStub): JsonObject[] {
-    const mergeArgs = stub.getCall(0).args[0] as { frontmatter: JsonObject };
-    const checklists = mergeArgs.frontmatter['checklists'] as JsonObject;
-    const list = checklists['grocery_list'] as JsonObject;
-    return list['items'] as JsonObject[];
-  }
-
-  function getMergePayloadChecklists(stub: SinonStub): JsonObject {
-    const mergeArgs = stub.getCall(0).args[0] as { frontmatter: JsonObject };
-    return mergeArgs.frontmatter['checklists'] as JsonObject;
+      .stub(target.client, 'listItems')
+      .resolves(create(ListItemsResponseSchema, { checklist }));
   }
 
   beforeEach(async () => {
     el = buildElement();
-    stubGetFrontmatter(el);
+    stubListItems(el);
     document.body.appendChild(el);
     await el.updateComplete;
   });
@@ -107,7 +100,7 @@ describe('WikiChecklist', () => {
       el.remove();
       el = buildElement();
       el.innerHTML = '<span class="checklist-item">[ ] Buy milk</span><span class="checklist-item">[x] Walk dog</span>';
-      stubGetFrontmatter(el);
+      stubListItems(el);
       document.body.appendChild(el);
       await el.updateComplete;
     });
@@ -197,10 +190,10 @@ describe('WikiChecklist', () => {
     describe('when items have multiple tags', () => {
       beforeEach(() => {
         el.items = [
-          { text: 'Milk', checked: false, tags: ['dairy'] },
-          { text: 'Apples', checked: false, tags: ['produce'] },
-          { text: 'Eggs', checked: true, tags: ['dairy', 'fridge'] },
-          { text: 'Bread', checked: false, tags: [] },
+          makeChecklistItem({ text: 'Milk', tags: ['dairy'] }),
+          makeChecklistItem({ text: 'Apples', tags: ['produce'] }),
+          makeChecklistItem({ text: 'Eggs', checked: true, tags: ['dairy', 'fridge'] }),
+          makeChecklistItem({ text: 'Bread' }),
         ];
       });
 
@@ -212,8 +205,8 @@ describe('WikiChecklist', () => {
     describe('when items have no tags', () => {
       beforeEach(() => {
         el.items = [
-          { text: 'Item 1', checked: false, tags: [] },
-          { text: 'Item 2', checked: false, tags: [] },
+          makeChecklistItem({ text: 'Item 1' }),
+          makeChecklistItem({ text: 'Item 2' }),
         ];
       });
 
@@ -229,9 +222,9 @@ describe('WikiChecklist', () => {
 
       beforeEach(() => {
         el.items = [
-          { text: 'Milk', checked: false, tags: ['dairy'] },
-          { text: 'Apples', checked: false, tags: ['produce'] },
-          { text: 'Bread', checked: false, tags: [] },
+          makeChecklistItem({ text: 'Milk', tags: ['dairy'] }),
+          makeChecklistItem({ text: 'Apples', tags: ['produce'] }),
+          makeChecklistItem({ text: 'Bread' }),
         ];
         el.filterTags = [];
         result = el.getFilteredItems();
@@ -247,10 +240,10 @@ describe('WikiChecklist', () => {
 
       beforeEach(() => {
         el.items = [
-          { text: 'Milk', checked: false, tags: ['dairy'] },
-          { text: 'Apples', checked: false, tags: ['produce'] },
-          { text: 'Eggs', checked: false, tags: ['dairy', 'fridge'] },
-          { text: 'Bread', checked: false, tags: [] },
+          makeChecklistItem({ text: 'Milk', tags: ['dairy'] }),
+          makeChecklistItem({ text: 'Apples', tags: ['produce'] }),
+          makeChecklistItem({ text: 'Eggs', tags: ['dairy', 'fridge'] }),
+          makeChecklistItem({ text: 'Bread' }),
         ];
         el.filterTags = ['dairy'];
         result = el.getFilteredItems();
@@ -276,11 +269,11 @@ describe('WikiChecklist', () => {
 
       beforeEach(() => {
         el.items = [
-          { text: 'Milk', checked: false, tags: ['dairy'] },
-          { text: 'Eggs', checked: false, tags: ['dairy', 'fridge'] },
-          { text: 'Cheese', checked: false, tags: ['dairy', 'fridge'] },
-          { text: 'Apples', checked: false, tags: ['produce'] },
-          { text: 'Butter', checked: false, tags: ['dairy'] },
+          makeChecklistItem({ text: 'Milk', tags: ['dairy'] }),
+          makeChecklistItem({ text: 'Eggs', tags: ['dairy', 'fridge'] }),
+          makeChecklistItem({ text: 'Cheese', tags: ['dairy', 'fridge'] }),
+          makeChecklistItem({ text: 'Apples', tags: ['produce'] }),
+          makeChecklistItem({ text: 'Butter', tags: ['dairy'] }),
         ];
         el.filterTags = ['dairy', 'fridge'];
         result = el.getFilteredItems();
@@ -305,9 +298,7 @@ describe('WikiChecklist', () => {
       let result: ReturnType<WikiChecklist['getFilteredItems']>;
 
       beforeEach(() => {
-        el.items = [
-          { text: 'Milk', checked: false, tags: ['dairy'] },
-        ];
+        el.items = [makeChecklistItem({ text: 'Milk', tags: ['dairy'] })];
         el.filterTags = ['nonexistent'];
         result = el.getFilteredItems();
       });
@@ -367,8 +358,8 @@ describe('WikiChecklist', () => {
         el.error = null;
         el.loading = false;
         el.items = [
-          { text: 'Milk', checked: false, tags: [] },
-          { text: 'Eggs', checked: true, tags: [] },
+          makeChecklistItem({ text: 'Milk' }),
+          makeChecklistItem({ text: 'Eggs', checked: true }),
         ];
         await el.updateComplete;
         checkboxes = el.shadowRoot?.querySelectorAll('input[type="checkbox"]');
@@ -385,7 +376,7 @@ describe('WikiChecklist', () => {
       beforeEach(async () => {
         el.error = null;
         el.loading = false;
-        el.items = [{ text: 'Done', checked: true, tags: [] }];
+        el.items = [makeChecklistItem({ text: 'Done', checked: true })];
         await el.updateComplete;
         checkedItem = el.shadowRoot?.querySelector('.item-checked');
       });
@@ -433,8 +424,8 @@ describe('WikiChecklist', () => {
         el.error = null;
         el.loading = false;
         el.items = [
-          { text: 'Milk', checked: false, tags: ['dairy', 'fridge'] },
-          { text: 'Bread', checked: false, tags: [] },
+          makeChecklistItem({ text: 'Milk', tags: ['dairy', 'fridge'] }),
+          makeChecklistItem({ text: 'Bread' }),
         ];
         await el.updateComplete;
         tagBadges = el.shadowRoot?.querySelectorAll('.item-tag-badge');
@@ -450,9 +441,7 @@ describe('WikiChecklist', () => {
         beforeEach(async () => {
           el.error = null;
           el.loading = false;
-          el.items = [
-            { text: 'Milk', checked: false, tags: ['dairy'] },
-          ];
+          el.items = [makeChecklistItem({ text: 'Milk', tags: ['dairy'] })];
           await el.updateComplete;
         });
 
@@ -475,9 +464,7 @@ describe('WikiChecklist', () => {
         beforeEach(async () => {
           el.error = null;
           el.loading = false;
-          el.items = [
-            { text: 'Milk', checked: false, tags: ['dairy', 'fridge'] },
-          ];
+          el.items = [makeChecklistItem({ text: 'Milk', tags: ['dairy', 'fridge'] })];
           await el.updateComplete;
 
           const displaySpan = el.shadowRoot?.querySelector('.item-display-text');
@@ -509,9 +496,7 @@ describe('WikiChecklist', () => {
         beforeEach(async () => {
           el.error = null;
           el.loading = false;
-          el.items = [
-            { text: 'Milk', checked: false, tags: [] },
-          ];
+          el.items = [makeChecklistItem({ text: 'Milk' })];
           await el.updateComplete;
 
           // Enter edit mode
@@ -519,7 +504,11 @@ describe('WikiChecklist', () => {
           (displaySpan as HTMLElement)?.click();
           await el.updateComplete;
 
-          // Blur to exit edit mode
+          // Stub updateItem so the persist completes
+          sinon.stub(el.client, 'updateItem').resolves(
+            create(UpdateItemResponseSchema, { checklist: makeChecklist() })
+          );
+
           const textInput = el.shadowRoot?.querySelector<HTMLInputElement>('.item-text');
           if (textInput) {
             textInput.value = 'Milk';
@@ -540,9 +529,9 @@ describe('WikiChecklist', () => {
         beforeEach(async () => {
           el.error = null;
           el.loading = false;
-          el.items = [
-            { text: 'This is a very long checklist item text that should wrap on mobile screens', checked: false, tags: [] },
-          ];
+          el.items = [makeChecklistItem({
+            text: 'This is a very long checklist item text that should wrap on mobile screens',
+          })];
           await el.updateComplete;
         });
 
@@ -557,41 +546,26 @@ describe('WikiChecklist', () => {
     });
 
     describe('when blurring an item after editing tags', () => {
-      let mergeFrontmatterStub: SinonStub;
+      let updateItemStub: SinonStub;
 
       beforeEach(async () => {
         sinon.restore();
         el.remove();
         el = buildElement();
 
-        const initialFrontmatter: JsonObject = {
-          checklists: {
-            grocery_list: {
-              items: [
-                { text: 'Milk', checked: false, tags: ['dairy'] },
-              ],
-            },
-          },
-        };
-
-        sinon
-          .stub(el.client, 'getFrontmatter')
-          .resolves(
-            create(GetFrontmatterResponseSchema, { frontmatter: initialFrontmatter })
-          );
-        mergeFrontmatterStub = sinon
-          .stub(el.client, 'mergeFrontmatter')
-          .callsFake(async (req: { frontmatter?: JsonObject }) =>
-            create(MergeFrontmatterResponseSchema, {
-              frontmatter: req.frontmatter ?? {},
-            })
+        stubListItems(el, [
+          makeChecklistItem({ uid: 'uid-milk', text: 'Milk', tags: ['dairy'] }),
+        ]);
+        updateItemStub = sinon
+          .stub(el.client, 'updateItem')
+          .callsFake(async () =>
+            create(UpdateItemResponseSchema, { checklist: makeChecklist() })
           );
 
         document.body.appendChild(el);
         await el.updateComplete;
         await el.updateComplete;
 
-        // Click the display span to enter edit mode
         const displaySpan = el.shadowRoot?.querySelector('.item-display-text');
         (displaySpan as HTMLElement)?.click();
         await el.updateComplete;
@@ -602,23 +576,21 @@ describe('WikiChecklist', () => {
           textInput.dispatchEvent(new FocusEvent('blur'));
         }
         await waitUntil(
-          () => mergeFrontmatterStub.callCount > 0,
-          'mergeFrontmatter should be called',
+          () => updateItemStub.callCount > 0,
+          'updateItem should be called',
           { timeout: 2000 }
         );
         await el.updateComplete;
       });
 
-      it('should update the item tags', () => {
-        expect(el.items[0]?.tags).to.deep.equal(['dairy', 'fridge']);
+      it('should send the updated tags in the request', () => {
+        const args = updateItemStub.getCall(0).args[0] as { tags: string[] };
+        expect(args.tags).to.deep.equal(['dairy', 'fridge']);
       });
 
-      it('should persist the updated tags', () => {
-        const mergeArgs = mergeFrontmatterStub.getCall(0).args[0] as { frontmatter: JsonObject };
-        const checklists = mergeArgs.frontmatter['checklists'] as JsonObject;
-        const list = checklists['grocery_list'] as JsonObject;
-        const items = list['items'] as JsonObject[];
-        expect(items[0]?.['tags']).to.deep.equal(['dairy', 'fridge']);
+      it('should send the targeted item uid', () => {
+        const args = updateItemStub.getCall(0).args[0] as { uid: string };
+        expect(args.uid).to.equal('uid-milk');
       });
     });
 
@@ -631,8 +603,8 @@ describe('WikiChecklist', () => {
           el.error = null;
           el.loading = false;
           el.items = [
-            { text: 'Milk', checked: false, tags: ['dairy'] },
-            { text: 'Apples', checked: false, tags: ['produce'] },
+            makeChecklistItem({ text: 'Milk', tags: ['dairy'] }),
+            makeChecklistItem({ text: 'Apples', tags: ['produce'] }),
           ];
           await el.updateComplete;
           filterBar = el.shadowRoot?.querySelector('.tag-filter-bar');
@@ -654,9 +626,7 @@ describe('WikiChecklist', () => {
         beforeEach(async () => {
           el.error = null;
           el.loading = false;
-          el.items = [
-            { text: 'Milk', checked: false, tags: [] },
-          ];
+          el.items = [makeChecklistItem({ text: 'Milk' })];
           await el.updateComplete;
           filterBar = el.shadowRoot?.querySelector('.tag-filter-bar');
         });
@@ -674,9 +644,9 @@ describe('WikiChecklist', () => {
           el.error = null;
           el.loading = false;
           el.items = [
-            { text: 'Milk', checked: false, tags: ['dairy'] },
-            { text: 'Apples', checked: false, tags: ['produce'] },
-            { text: 'Eggs', checked: false, tags: ['dairy'] },
+            makeChecklistItem({ text: 'Milk', tags: ['dairy'] }),
+            makeChecklistItem({ text: 'Apples', tags: ['produce'] }),
+            makeChecklistItem({ text: 'Eggs', tags: ['dairy'] }),
           ];
           el.filterTags = ['dairy'];
           await el.updateComplete;
@@ -700,9 +670,9 @@ describe('WikiChecklist', () => {
           el.error = null;
           el.loading = false;
           el.items = [
-            { text: 'Milk', checked: false, tags: ['dairy'] },
-            { text: 'Apples', checked: false, tags: ['produce'] },
-            { text: 'Eggs', checked: false, tags: ['dairy'] },
+            makeChecklistItem({ text: 'Milk', tags: ['dairy'] }),
+            makeChecklistItem({ text: 'Apples', tags: ['produce'] }),
+            makeChecklistItem({ text: 'Eggs', tags: ['dairy'] }),
           ];
           await el.updateComplete;
 
@@ -729,8 +699,8 @@ describe('WikiChecklist', () => {
           el.error = null;
           el.loading = false;
           el.items = [
-            { text: 'Milk', checked: false, tags: ['dairy'] },
-            { text: 'Apples', checked: false, tags: ['produce'] },
+            makeChecklistItem({ text: 'Milk', tags: ['dairy'] }),
+            makeChecklistItem({ text: 'Apples', tags: ['produce'] }),
           ];
           el.filterTags = ['dairy'];
           await el.updateComplete;
@@ -757,8 +727,8 @@ describe('WikiChecklist', () => {
           el.error = null;
           el.loading = false;
           el.items = [
-            { text: 'Milk', checked: false, tags: ['dairy'] },
-            { text: 'Apples', checked: false, tags: ['produce'] },
+            makeChecklistItem({ text: 'Milk', tags: ['dairy'] }),
+            makeChecklistItem({ text: 'Apples', tags: ['produce'] }),
           ];
           el.filterTags = ['dairy'];
           await el.updateComplete;
@@ -777,8 +747,8 @@ describe('WikiChecklist', () => {
           el.error = null;
           el.loading = false;
           el.items = [
-            { text: 'Milk', checked: false, tags: ['dairy'] },
-            { text: 'Apples', checked: false, tags: ['produce'] },
+            makeChecklistItem({ text: 'Milk', tags: ['dairy'] }),
+            makeChecklistItem({ text: 'Apples', tags: ['produce'] }),
           ];
           el.filterTags = ['dairy'];
           await el.updateComplete;
@@ -804,9 +774,7 @@ describe('WikiChecklist', () => {
         beforeEach(async () => {
           el.error = null;
           el.loading = false;
-          el.items = [
-            { text: 'Milk', checked: false, tags: ['dairy'] },
-          ];
+          el.items = [makeChecklistItem({ text: 'Milk', tags: ['dairy'] })];
           el.filterTags = [];
           await el.updateComplete;
           clearBtn = el.shadowRoot?.querySelector('.tag-filter-bar .tag-filter-clear') as HTMLButtonElement | null;
@@ -826,8 +794,8 @@ describe('WikiChecklist', () => {
           el.error = null;
           el.loading = false;
           el.items = [
-            { text: 'Milk', checked: true, tags: [] },
-            { text: 'Eggs', checked: false, tags: [] },
+            makeChecklistItem({ text: 'Milk', checked: true }),
+            makeChecklistItem({ text: 'Eggs' }),
           ];
           await el.updateComplete;
           clearCheckedBtn = Array.from(
@@ -846,9 +814,7 @@ describe('WikiChecklist', () => {
         beforeEach(async () => {
           el.error = null;
           el.loading = false;
-          el.items = [
-            { text: 'Milk', checked: false, tags: [] },
-          ];
+          el.items = [makeChecklistItem({ text: 'Milk' })];
           await el.updateComplete;
           clearCheckedBtn = Array.from(
             el.shadowRoot?.querySelectorAll<HTMLButtonElement>('.delete-checked-btn') ?? []
@@ -861,36 +827,22 @@ describe('WikiChecklist', () => {
       });
 
       describe('when clicking clear checked', () => {
-        let mergeFrontmatterStub: SinonStub;
+        let deleteItemStub: SinonStub;
 
         beforeEach(async () => {
           sinon.restore();
           el.remove();
           el = buildElement();
 
-          const initialFrontmatter: JsonObject = {
-            checklists: {
-              grocery_list: {
-                items: [
-                  { text: 'Milk', checked: true, tags: [] },
-                  { text: 'Eggs', checked: false, tags: [] },
-                  { text: 'Bread', checked: true, tags: [] },
-                ],
-              },
-            },
-          };
-
-          sinon
-            .stub(el.client, 'getFrontmatter')
-            .resolves(
-              create(GetFrontmatterResponseSchema, { frontmatter: initialFrontmatter })
-            );
-          mergeFrontmatterStub = sinon
-            .stub(el.client, 'mergeFrontmatter')
-            .callsFake(async (req: { frontmatter?: JsonObject }) =>
-              create(MergeFrontmatterResponseSchema, {
-                frontmatter: req.frontmatter ?? {},
-              })
+          stubListItems(el, [
+            makeChecklistItem({ uid: 'uid-milk', text: 'Milk', checked: true }),
+            makeChecklistItem({ uid: 'uid-eggs', text: 'Eggs' }),
+            makeChecklistItem({ uid: 'uid-bread', text: 'Bread', checked: true }),
+          ]);
+          deleteItemStub = sinon
+            .stub(el.client, 'deleteItem')
+            .callsFake(async () =>
+              create(DeleteItemResponseSchema, { checklist: makeChecklist() })
             );
 
           document.body.appendChild(el);
@@ -902,61 +854,57 @@ describe('WikiChecklist', () => {
           ).find(btn => btn.textContent?.trim() === 'delete checked');
           clearCheckedBtn?.click();
           await waitUntil(
-            () => mergeFrontmatterStub.callCount > 0,
-            'mergeFrontmatter should be called',
+            () => deleteItemStub.callCount === 2,
+            'deleteItem should be called for each checked item',
             { timeout: 2000 }
           );
           await el.updateComplete;
         });
 
-        it('should remove checked items', () => {
-          expect(el.items).to.have.length(1);
+        it('should call deleteItem once per checked item', () => {
+          expect(deleteItemStub.callCount).to.equal(2);
         });
 
-        it('should keep only unchecked items', () => {
-          expect(el.items[0]?.text).to.equal('Eggs');
+        it('should target the checked uids', () => {
+          const uids = deleteItemStub.getCalls().map(c => (c.args[0] as { uid: string }).uid);
+          expect(uids).to.have.members(['uid-milk', 'uid-bread']);
         });
       });
     });
   });
 
-  describe('when GetFrontmatter returns checklist items', () => {
+  describe('when ListItems returns checklist items', () => {
     let items: ChecklistItem[];
-    let getFrontmatterStub: SinonStub;
+    let listItemsStub: SinonStub;
     let requestedPage: string;
+    let requestedListName: string;
 
     beforeEach(async () => {
       sinon.restore();
       el.remove();
 
       el = buildElement();
-      const mockFrontmatter: JsonObject = {
-        checklists: {
-          grocery_list: {
-            items: [
-              { text: 'Milk', checked: false },
-              { text: 'Eggs', checked: true, tags: ['dairy'] },
-            ],
-          },
-        },
-      };
-      getFrontmatterStub = sinon
-        .stub(el.client, 'getFrontmatter')
-        .resolves(
-          create(GetFrontmatterResponseSchema, { frontmatter: mockFrontmatter })
-        );
+      listItemsStub = stubListItems(el, [
+        makeChecklistItem({ text: 'Milk' }),
+        makeChecklistItem({ text: 'Eggs', checked: true, tags: ['dairy'] }),
+      ]);
       document.body.appendChild(el);
       await el.updateComplete;
       items = el.items;
-      requestedPage = getFrontmatterStub.getCall(0).args[0].page;
+      requestedPage = (listItemsStub.getCall(0).args[0] as { page: string }).page;
+      requestedListName = (listItemsStub.getCall(0).args[0] as { listName: string }).listName;
     });
 
-    it('should call getFrontmatter', () => {
-      expect(getFrontmatterStub.callCount).to.be.greaterThan(0);
+    it('should call listItems', () => {
+      expect(listItemsStub.callCount).to.be.greaterThan(0);
     });
 
     it('should request the configured page', () => {
       expect(requestedPage).to.equal('test-page');
+    });
+
+    it('should request the configured listName', () => {
+      expect(requestedListName).to.equal('grocery_list');
     });
 
     it('should populate items from response', () => {
@@ -976,14 +924,14 @@ describe('WikiChecklist', () => {
     });
   });
 
-  describe('when GetFrontmatter fails', () => {
+  describe('when ListItems fails', () => {
     beforeEach(async () => {
       sinon.restore();
       el.remove();
 
       el = buildElement();
       sinon
-        .stub(el.client, 'getFrontmatter')
+        .stub(el.client, 'listItems')
         .rejects(new Error('Network error'));
       document.body.appendChild(el);
       await el.updateComplete;
@@ -1003,80 +951,50 @@ describe('WikiChecklist', () => {
   });
 
   describe('when toggling a checkbox', () => {
-    let getFrontmatterStub: SinonStub;
-    let mergeFrontmatterStub: SinonStub;
-    let mergePayloadItems: JsonObject[];
-    let mergeChecklists: JsonObject;
+    let toggleItemStub: SinonStub;
 
     beforeEach(async () => {
       sinon.restore();
       el.remove();
       el = buildElement();
 
-      const currentFrontmatter: JsonObject = {
-        checklists: {
-          grocery_list: {
-            items: [
-              { text: 'Milk', checked: false },
-              { text: 'Eggs', checked: false },
-            ],
-          },
-          other_list: {
-            items: [{ text: 'Paper towels', checked: false }],
-          },
-        },
-      };
-
-      getFrontmatterStub = sinon
-        .stub(el.client, 'getFrontmatter')
-        .resolves(
-          create(GetFrontmatterResponseSchema, {
-            frontmatter: currentFrontmatter,
-          })
-        );
-      mergeFrontmatterStub = sinon
-        .stub(el.client, 'mergeFrontmatter')
-        .resolves(
-          create(MergeFrontmatterResponseSchema, {
-            frontmatter: currentFrontmatter,
-          })
-        );
+      stubListItems(el, [
+        makeChecklistItem({ uid: 'uid-milk', text: 'Milk' }),
+        makeChecklistItem({ uid: 'uid-eggs', text: 'Eggs' }),
+      ]);
+      toggleItemStub = sinon
+        .stub(el.client, 'toggleItem')
+        .resolves(create(ToggleItemResponseSchema, { checklist: makeChecklist() }));
 
       document.body.appendChild(el);
       await el.updateComplete;
       await el.updateComplete;
-
-      getFrontmatterStub.resetHistory();
 
       const checkbox = el.shadowRoot?.querySelector<HTMLInputElement>(
         'input[type="checkbox"]'
       );
       checkbox?.click();
       await waitUntil(
-        () => mergeFrontmatterStub.callCount > 0,
-        'mergeFrontmatter should be called',
+        () => toggleItemStub.callCount > 0,
+        'toggleItem should be called',
         { timeout: 2000 }
       );
       await el.updateComplete;
-
-      mergePayloadItems = getMergePayloadItems(mergeFrontmatterStub);
-      mergeChecklists = getMergePayloadChecklists(mergeFrontmatterStub);
     });
 
-    it('should call mergeFrontmatter', () => {
-      expect(mergeFrontmatterStub).to.have.been.calledOnce;
+    it('should call toggleItem exactly once', () => {
+      expect(toggleItemStub).to.have.been.calledOnce;
     });
 
-    it('should call getFrontmatter before mergeFrontmatter (read-modify-write)', () => {
-      expect(getFrontmatterStub).to.have.been.calledBefore(mergeFrontmatterStub);
+    it('should pass the toggled item uid', () => {
+      const args = toggleItemStub.getCall(0).args[0] as { uid: string };
+      expect(args.uid).to.equal('uid-milk');
     });
 
-    it('should send the toggled checked state in the merge payload', () => {
-      expect(mergePayloadItems[0]?.['checked']).to.be.true;
-    });
-
-    it('should preserve sibling checklists in the merge payload', () => {
-      expect(mergeChecklists).to.have.property('other_list');
+    it('should pass the listName and page', () => {
+      const args = toggleItemStub.getCall(0).args[0] as { page: string; listName: string };
+      expect(args.page).to.equal('test-page');
+      expect(args.listName).to.equal('grocery_list');
     });
 
     it('should clear saving state after completion', () => {
@@ -1085,31 +1003,22 @@ describe('WikiChecklist', () => {
   });
 
   describe('when saving state is active', () => {
-    let savingDuringMerge: boolean;
+    let savingDuringMutation: boolean;
 
     beforeEach(async () => {
       sinon.restore();
       el.remove();
 
       el = buildElement();
-      const mockFrontmatter: JsonObject = {
-        checklists: {
-          grocery_list: {
-            items: [{ text: 'Milk', checked: false }],
-          },
-        },
-      };
+      stubListItems(el, [
+        makeChecklistItem({ uid: 'uid-milk', text: 'Milk' }),
+      ]);
+      savingDuringMutation = false;
       sinon
-        .stub(el.client, 'getFrontmatter')
-        .resolves(
-          create(GetFrontmatterResponseSchema, { frontmatter: mockFrontmatter })
-        );
-      savingDuringMerge = false;
-      sinon
-        .stub(el.client, 'mergeFrontmatter')
+        .stub(el.client, 'toggleItem')
         .callsFake(async () => {
-          savingDuringMerge = el.saving;
-          return create(MergeFrontmatterResponseSchema, { frontmatter: {} });
+          savingDuringMutation = el.saving;
+          return create(ToggleItemResponseSchema, { checklist: makeChecklist() });
         });
       document.body.appendChild(el);
       await el.updateComplete;
@@ -1120,38 +1029,33 @@ describe('WikiChecklist', () => {
       await el.updateComplete;
     });
 
-    it('should be in saving state during the merge call', () => {
-      expect(savingDuringMerge).to.be.true;
+    it('should be in saving state during the mutation', () => {
+      expect(savingDuringMutation).to.be.true;
     });
   });
 
   describe('when persist fails via checkbox toggle', () => {
+    let originalItems: ChecklistItem[];
+
     beforeEach(async () => {
       sinon.restore();
       el.remove();
 
       el = buildElement();
-      const mockFrontmatter: JsonObject = {
-        checklists: {
-          grocery_list: {
-            items: [{ text: 'Milk', checked: false }],
-          },
-        },
-      };
+      stubListItems(el, [
+        makeChecklistItem({ uid: 'uid-milk', text: 'Milk' }),
+      ]);
       sinon
-        .stub(el.client, 'getFrontmatter')
-        .resolves(
-          create(GetFrontmatterResponseSchema, { frontmatter: mockFrontmatter })
-        );
-      sinon
-        .stub(el.client, 'mergeFrontmatter')
+        .stub(el.client, 'toggleItem')
         .rejects(new Error('Save failed'));
       document.body.appendChild(el);
       await el.updateComplete;
       await el.updateComplete;
+      originalItems = el.items;
 
       const checkbox = el.shadowRoot!.querySelector('input[type="checkbox"]') as HTMLInputElement;
       checkbox.click();
+      await waitUntil(() => el.error !== null, 'error should be set', { timeout: 2000 });
       await el.updateComplete;
     });
 
@@ -1159,12 +1063,99 @@ describe('WikiChecklist', () => {
       expect(el.error).to.be.instanceOf(AugmentedError);
     });
 
-    it('should describe the failed goal as saving checklist', () => {
-      expect(el.error?.failedGoalDescription).to.equal('saving checklist');
+    it('should describe the failed goal as toggling item', () => {
+      expect(el.error?.failedGoalDescription).to.equal('toggling item');
+    });
+
+    it('should revert items to the previous state', () => {
+      expect(el.items).to.deep.equal(originalItems);
     });
 
     it('should clear saving state', () => {
       expect(el.saving).to.be.false;
+    });
+  });
+
+  describe('when a mutation fails with FailedPrecondition', () => {
+    let toggleItemStub: SinonStub;
+    let listItemsStub: SinonStub;
+
+    beforeEach(async () => {
+      sinon.restore();
+      el.remove();
+      el = buildElement();
+
+      // First listItems response — initial fetch.
+      const initialChecklist = makeChecklist({
+        name: 'grocery_list',
+        updatedAtMs: 1000,
+        items: [
+          makeChecklistItem({
+            uid: 'uid-milk',
+            text: 'Milk',
+            updatedAtMs: 1000,
+          }),
+        ],
+      });
+      // Second listItems response — refetch after OCC mismatch (newer updated_at).
+      const refreshedChecklist = makeChecklist({
+        name: 'grocery_list',
+        updatedAtMs: 2000,
+        items: [
+          makeChecklistItem({
+            uid: 'uid-milk',
+            text: 'Milk',
+            updatedAtMs: 2000,
+          }),
+        ],
+      });
+      listItemsStub = sinon.stub(el.client, 'listItems');
+      listItemsStub.onFirstCall().resolves(
+        create(ListItemsResponseSchema, { checklist: initialChecklist })
+      );
+      listItemsStub.resolves(
+        create(ListItemsResponseSchema, { checklist: refreshedChecklist })
+      );
+
+      // First call rejects with FailedPrecondition; retry succeeds.
+      toggleItemStub = sinon.stub(el.client, 'toggleItem');
+      toggleItemStub.onFirstCall().rejects(
+        new ConnectError('expected_updated_at mismatch', Code.FailedPrecondition)
+      );
+      toggleItemStub.resolves(
+        create(ToggleItemResponseSchema, { checklist: refreshedChecklist })
+      );
+
+      document.body.appendChild(el);
+      await el.updateComplete;
+      await el.updateComplete;
+
+      const checkbox = el.shadowRoot!.querySelector('input[type="checkbox"]') as HTMLInputElement;
+      checkbox.click();
+      await waitUntil(
+        () => toggleItemStub.callCount === 2,
+        'toggleItem should be retried',
+        { timeout: 2000 }
+      );
+      await el.updateComplete;
+    });
+
+    it('should refetch the checklist before retrying', () => {
+      // listItemsStub is called once for initial load + once for OCC refetch
+      expect(listItemsStub.callCount).to.be.at.least(2);
+    });
+
+    it('should retry the toggleItem call exactly once', () => {
+      expect(toggleItemStub.callCount).to.equal(2);
+    });
+
+    it('should not surface an error on successful retry', () => {
+      expect(el.error).to.be.null;
+    });
+
+    it('should show the OCC retry toast briefly', () => {
+      const toast = el.shadowRoot?.querySelector('.occ-retry-toast');
+      expect(toast).to.exist;
     });
   });
 
@@ -1181,12 +1172,12 @@ describe('WikiChecklist', () => {
     });
 
     describe('when element is connected', () => {
-      let getFrontmatterStub: SinonStub;
+      let listItemsStub: SinonStub;
       let freshEl: WikiChecklist;
 
       beforeEach(() => {
         freshEl = buildElement('test-page', 'test_list');
-        getFrontmatterStub = stubGetFrontmatter(freshEl);
+        listItemsStub = stubListItems(freshEl);
         document.body.appendChild(freshEl);
         clock.tick(10001);
       });
@@ -1195,64 +1186,54 @@ describe('WikiChecklist', () => {
         freshEl.remove();
       });
 
-      it('should call getFrontmatter at regular intervals', () => {
-        expect(getFrontmatterStub.callCount).to.be.greaterThan(0);
+      it('should call listItems at regular intervals', () => {
+        expect(listItemsStub.callCount).to.be.greaterThan(0);
       });
     });
 
     describe('when element is disconnected', () => {
-      let getFrontmatterStub: SinonStub;
+      let listItemsStub: SinonStub;
       let countAfterDisconnect: number;
 
       beforeEach(() => {
         const freshEl = buildElement('test-page', 'test_list');
-        getFrontmatterStub = stubGetFrontmatter(freshEl);
+        listItemsStub = stubListItems(freshEl);
         document.body.appendChild(freshEl);
         freshEl.remove();
-        countAfterDisconnect = getFrontmatterStub.callCount;
+        countAfterDisconnect = listItemsStub.callCount;
         clock.tick(10000);
       });
 
       it('should stop polling after disconnect', () => {
-        expect(getFrontmatterStub.callCount).to.equal(countAfterDisconnect);
+        expect(listItemsStub.callCount).to.equal(countAfterDisconnect);
       });
     });
 
-    describe('when external change arrives via poll', () => {
+    describe('when external change arrives via poll (different updated_at)', () => {
       let pollingEl: WikiChecklist;
 
       beforeEach(async () => {
-        const initialFrontmatter: JsonObject = {
-          checklists: {
-            grocery_list: {
-              items: [{ text: 'Milk', checked: false }],
-            },
-          },
-        };
-        const updatedFrontmatter: JsonObject = {
-          checklists: {
-            grocery_list: {
-              items: [
-                { text: 'Milk', checked: true },
-                { text: 'Eggs', checked: false },
-              ],
-            },
-          },
-        };
-
         pollingEl = buildElement('test-page', 'grocery_list');
-        const getFrontmatterStub = sinon.stub(
-          pollingEl.client,
-          'getFrontmatter'
-        );
-        getFrontmatterStub.onFirstCall().resolves(
-          create(GetFrontmatterResponseSchema, {
-            frontmatter: initialFrontmatter,
+        const stub = sinon.stub(pollingEl.client, 'listItems');
+        stub.onFirstCall().resolves(
+          create(ListItemsResponseSchema, {
+            checklist: makeChecklist({
+              name: 'grocery_list',
+              updatedAtMs: 1000,
+              items: [makeChecklistItem({ uid: 'uid-milk', text: 'Milk', updatedAtMs: 1000 })],
+            }),
           })
         );
-        getFrontmatterStub.resolves(
-          create(GetFrontmatterResponseSchema, {
-            frontmatter: updatedFrontmatter,
+        stub.resolves(
+          create(ListItemsResponseSchema, {
+            checklist: makeChecklist({
+              name: 'grocery_list',
+              updatedAtMs: 2000,
+              items: [
+                makeChecklistItem({ uid: 'uid-milk', text: 'Milk', checked: true, updatedAtMs: 2000 }),
+                makeChecklistItem({ uid: 'uid-eggs', text: 'Eggs', updatedAtMs: 2000 }),
+              ],
+            }),
           })
         );
 
@@ -1277,8 +1258,46 @@ describe('WikiChecklist', () => {
       });
     });
 
+    describe('when poll returns the same updated_at (short-circuit)', () => {
+      let pollingEl: WikiChecklist;
+      let listItemsStub: SinonStub;
+      let preItems: ChecklistItem[];
+
+      beforeEach(async () => {
+        pollingEl = buildElement('test-page', 'grocery_list');
+        const sameChecklist = makeChecklist({
+          name: 'grocery_list',
+          updatedAtMs: 1000,
+          items: [makeChecklistItem({ uid: 'uid-milk', text: 'Milk', updatedAtMs: 1000 })],
+        });
+        listItemsStub = sinon.stub(pollingEl.client, 'listItems').resolves(
+          create(ListItemsResponseSchema, { checklist: sameChecklist })
+        );
+
+        document.body.appendChild(pollingEl);
+        await pollingEl.updateComplete;
+        await pollingEl.updateComplete;
+        preItems = pollingEl.items;
+
+        await clock.tickAsync(10001);
+        await pollingEl.updateComplete;
+      });
+
+      afterEach(() => {
+        pollingEl.remove();
+      });
+
+      it('should still call listItems', () => {
+        expect(listItemsStub.callCount).to.be.greaterThan(1);
+      });
+
+      it('should not replace the items array reference (short-circuit)', () => {
+        expect(pollingEl.items).to.equal(preItems);
+      });
+    });
+
     describe('when tab is hidden during polling interval', () => {
-      let getFrontmatterStub: SinonStub;
+      let listItemsStub: SinonStub;
       let freshEl: WikiChecklist;
       let callCountWhenHidden: number;
 
@@ -1286,10 +1305,9 @@ describe('WikiChecklist', () => {
         sinon.stub(document, 'hidden').get(() => true);
 
         freshEl = buildElement('test-page', 'test_list');
-        getFrontmatterStub = stubGetFrontmatter(freshEl);
+        listItemsStub = stubListItems(freshEl);
         document.body.appendChild(freshEl);
-        // initial connectedCallback fetch happened (page was set), reset count
-        callCountWhenHidden = getFrontmatterStub.callCount;
+        callCountWhenHidden = listItemsStub.callCount;
         clock.tick(10001);
       });
 
@@ -1297,13 +1315,13 @@ describe('WikiChecklist', () => {
         freshEl.remove();
       });
 
-      it('should not call getFrontmatter during the polling interval', () => {
-        expect(getFrontmatterStub.callCount).to.equal(callCountWhenHidden);
+      it('should not call listItems during the polling interval', () => {
+        expect(listItemsStub.callCount).to.equal(callCountWhenHidden);
       });
     });
 
     describe('when tab becomes visible after being hidden', () => {
-      let getFrontmatterStub: SinonStub;
+      let listItemsStub: SinonStub;
       let freshEl: WikiChecklist;
       let callCountBeforeVisible: number;
 
@@ -1312,14 +1330,12 @@ describe('WikiChecklist', () => {
         sinon.stub(document, 'hidden').get(() => isHidden);
 
         freshEl = buildElement('test-page', 'test_list');
-        getFrontmatterStub = stubGetFrontmatter(freshEl);
+        listItemsStub = stubListItems(freshEl);
         document.body.appendChild(freshEl);
 
-        // Tab is hidden — polling interval fires but should be skipped
         await clock.tickAsync(10001);
-        callCountBeforeVisible = getFrontmatterStub.callCount;
+        callCountBeforeVisible = listItemsStub.callCount;
 
-        // Simulate tab becoming visible
         isHidden = false;
         document.dispatchEvent(new Event('visibilitychange'));
         await freshEl.updateComplete;
@@ -1329,25 +1345,24 @@ describe('WikiChecklist', () => {
         freshEl.remove();
       });
 
-      it('should immediately call getFrontmatter when tab becomes visible', () => {
-        expect(getFrontmatterStub.callCount).to.be.greaterThan(callCountBeforeVisible);
+      it('should immediately call listItems when tab becomes visible', () => {
+        expect(listItemsStub.callCount).to.be.greaterThan(callCountBeforeVisible);
       });
     });
 
     describe('when a save is in progress during polling interval', () => {
-      let getFrontmatterStub: SinonStub;
+      let listItemsStub: SinonStub;
       let freshEl: WikiChecklist;
       let callCountBeforeSave: number;
 
       beforeEach(async () => {
         freshEl = buildElement('test-page', 'test_list');
-        getFrontmatterStub = stubGetFrontmatter(freshEl);
+        listItemsStub = stubListItems(freshEl);
         document.body.appendChild(freshEl);
         await freshEl.updateComplete;
 
-        callCountBeforeSave = getFrontmatterStub.callCount;
+        callCountBeforeSave = listItemsStub.callCount;
 
-        // Simulate save in progress
         freshEl.saving = true;
         clock.tick(10001);
       });
@@ -1356,44 +1371,32 @@ describe('WikiChecklist', () => {
         freshEl.remove();
       });
 
-      it('should not call getFrontmatter while saving', () => {
-        expect(getFrontmatterStub.callCount).to.equal(callCountBeforeSave);
+      it('should not call listItems while saving', () => {
+        expect(listItemsStub.callCount).to.equal(callCountBeforeSave);
       });
     });
   });
 
   describe('when adding an item', () => {
-    let mergeFrontmatterStub: SinonStub;
-    let mergePayloadItems: JsonObject[];
-    let addInputValue: string;
+    let addItemStub: SinonStub;
 
     beforeEach(async () => {
       sinon.restore();
       el.remove();
       el = buildElement();
 
-      const initialFrontmatter: JsonObject = {
-        checklists: {
-          grocery_list: {
-            items: [{ text: 'Milk', checked: false }],
-          },
-        },
-      };
-
-      sinon
-        .stub(el.client, 'getFrontmatter')
-        .resolves(
-          create(GetFrontmatterResponseSchema, {
-            frontmatter: initialFrontmatter,
-          })
-        );
-      mergeFrontmatterStub = sinon
-        .stub(el.client, 'mergeFrontmatter')
-        .resolves(
-          create(MergeFrontmatterResponseSchema, {
-            frontmatter: initialFrontmatter,
-          })
-        );
+      stubListItems(el, [makeChecklistItem({ uid: 'uid-milk', text: 'Milk' })]);
+      addItemStub = sinon
+        .stub(el.client, 'addItem')
+        .resolves(create(AddItemResponseSchema, {
+          item: makeChecklistItem({ uid: 'uid-bread', text: 'Bread' }),
+          checklist: makeChecklist({
+            items: [
+              makeChecklistItem({ uid: 'uid-milk', text: 'Milk' }),
+              makeChecklistItem({ uid: 'uid-bread', text: 'Bread' }),
+            ],
+          }),
+        }));
 
       document.body.appendChild(el);
       await el.updateComplete;
@@ -1411,54 +1414,42 @@ describe('WikiChecklist', () => {
         el.shadowRoot?.querySelector<HTMLButtonElement>('.add-btn');
       addBtn?.click();
       await waitUntil(
-        () => mergeFrontmatterStub.callCount > 0,
-        'mergeFrontmatter should be called',
+        () => addItemStub.callCount > 0,
+        'addItem should be called',
         { timeout: 2000 }
       );
       await el.updateComplete;
-
-      mergePayloadItems = getMergePayloadItems(mergeFrontmatterStub);
-      const addInputAfter =
-        el.shadowRoot?.querySelector<HTMLInputElement>('.add-text-input');
-      addInputValue = addInputAfter?.value ?? '';
     });
 
-    it('should call mergeFrontmatter with the new item appended', () => {
-      const lastItem = mergePayloadItems[mergePayloadItems.length - 1];
-      expect(lastItem?.['text']).to.equal('Bread');
+    it('should send the new item text', () => {
+      const args = addItemStub.getCall(0).args[0] as { text: string };
+      expect(args.text).to.equal('Bread');
     });
 
     it('should clear the add input after adding', () => {
-      expect(addInputValue).to.equal('');
+      const addInputAfter =
+        el.shadowRoot?.querySelector<HTMLInputElement>('.add-text-input');
+      expect(addInputAfter?.value).to.equal('');
     });
   });
 
   describe('when adding an item with a tag', () => {
-    let mergePayloadItems: JsonObject[];
+    let addItemStub: SinonStub;
 
     beforeEach(async () => {
       sinon.restore();
       el.remove();
       el = buildElement();
 
-      const initialFrontmatter: JsonObject = {
-        checklists: { grocery_list: { items: [] } },
-      };
-
-      sinon
-        .stub(el.client, 'getFrontmatter')
-        .resolves(
-          create(GetFrontmatterResponseSchema, {
-            frontmatter: initialFrontmatter,
-          })
-        );
-      const mergeFrontmatterStub = sinon
-        .stub(el.client, 'mergeFrontmatter')
-        .resolves(
-          create(MergeFrontmatterResponseSchema, {
-            frontmatter: initialFrontmatter,
-          })
-        );
+      stubListItems(el, []);
+      addItemStub = sinon
+        .stub(el.client, 'addItem')
+        .resolves(create(AddItemResponseSchema, {
+          item: makeChecklistItem({ uid: 'uid-milk', text: 'Milk', tags: ['dairy'] }),
+          checklist: makeChecklist({
+            items: [makeChecklistItem({ uid: 'uid-milk', text: 'Milk', tags: ['dairy'] })],
+          }),
+        }));
 
       document.body.appendChild(el);
       await el.updateComplete;
@@ -1476,53 +1467,38 @@ describe('WikiChecklist', () => {
         el.shadowRoot?.querySelector<HTMLButtonElement>('.add-btn');
       addBtn?.click();
       await waitUntil(
-        () => mergeFrontmatterStub.callCount > 0,
-        'mergeFrontmatter should be called',
+        () => addItemStub.callCount > 0,
+        'addItem should be called',
         { timeout: 2000 }
       );
       await el.updateComplete;
-
-      mergePayloadItems = getMergePayloadItems(mergeFrontmatterStub);
     });
 
-    it('should include the tags array in the persisted item', () => {
-      expect(mergePayloadItems[0]?.['tags']).to.deep.equal(['dairy']);
+    it('should include the tags array in the AddItem request', () => {
+      const args = addItemStub.getCall(0).args[0] as { tags: string[] };
+      expect(args.tags).to.deep.equal(['dairy']);
     });
   });
 
   describe('when removing an item', () => {
-    let mergePayloadItems: JsonObject[];
+    let deleteItemStub: SinonStub;
 
     beforeEach(async () => {
       sinon.restore();
       el.remove();
       el = buildElement();
 
-      const initialFrontmatter: JsonObject = {
-        checklists: {
-          grocery_list: {
-            items: [
-              { text: 'Milk', checked: false },
-              { text: 'Eggs', checked: false },
-            ],
-          },
-        },
-      };
-
-      sinon
-        .stub(el.client, 'getFrontmatter')
-        .resolves(
-          create(GetFrontmatterResponseSchema, {
-            frontmatter: initialFrontmatter,
-          })
-        );
-      const mergeFrontmatterStub = sinon
-        .stub(el.client, 'mergeFrontmatter')
-        .resolves(
-          create(MergeFrontmatterResponseSchema, {
-            frontmatter: initialFrontmatter,
-          })
-        );
+      stubListItems(el, [
+        makeChecklistItem({ uid: 'uid-milk', text: 'Milk' }),
+        makeChecklistItem({ uid: 'uid-eggs', text: 'Eggs' }),
+      ]);
+      deleteItemStub = sinon
+        .stub(el.client, 'deleteItem')
+        .resolves(create(DeleteItemResponseSchema, {
+          checklist: makeChecklist({
+            items: [makeChecklistItem({ uid: 'uid-eggs', text: 'Eggs' })],
+          }),
+        }));
 
       document.body.appendChild(el);
       await el.updateComplete;
@@ -1532,60 +1508,40 @@ describe('WikiChecklist', () => {
         el.shadowRoot?.querySelector<HTMLButtonElement>('.remove-btn');
       removeBtn?.click();
       await waitUntil(
-        () => mergeFrontmatterStub.callCount > 0,
-        'mergeFrontmatter should be called',
+        () => deleteItemStub.callCount > 0,
+        'deleteItem should be called',
         { timeout: 2000 }
       );
       await el.updateComplete;
-
-      mergePayloadItems = getMergePayloadItems(mergeFrontmatterStub);
     });
 
-    it('should reduce the item count by one', () => {
-      expect(mergePayloadItems).to.have.length(1);
-    });
-
-    it('should keep the remaining item', () => {
-      expect(mergePayloadItems[0]?.['text']).to.equal('Eggs');
+    it('should call deleteItem with the targeted uid', () => {
+      const args = deleteItemStub.getCall(0).args[0] as { uid: string };
+      expect(args.uid).to.equal('uid-milk');
     });
   });
 
   describe('when editing item text', () => {
-    let mergePayloadItems: JsonObject[];
+    let updateItemStub: SinonStub;
 
     beforeEach(async () => {
       sinon.restore();
       el.remove();
       el = buildElement();
 
-      const initialFrontmatter: JsonObject = {
-        checklists: {
-          grocery_list: {
-            items: [{ text: 'Milk', checked: false }],
-          },
-        },
-      };
-
-      sinon
-        .stub(el.client, 'getFrontmatter')
-        .resolves(
-          create(GetFrontmatterResponseSchema, {
-            frontmatter: initialFrontmatter,
-          })
-        );
-      const mergeFrontmatterStub = sinon
-        .stub(el.client, 'mergeFrontmatter')
-        .resolves(
-          create(MergeFrontmatterResponseSchema, {
-            frontmatter: initialFrontmatter,
-          })
-        );
+      stubListItems(el, [makeChecklistItem({ uid: 'uid-milk', text: 'Milk' })]);
+      updateItemStub = sinon
+        .stub(el.client, 'updateItem')
+        .resolves(create(UpdateItemResponseSchema, {
+          checklist: makeChecklist({
+            items: [makeChecklistItem({ uid: 'uid-milk', text: 'Whole Milk' })],
+          }),
+        }));
 
       document.body.appendChild(el);
       await el.updateComplete;
       await el.updateComplete;
 
-      // Click the display span to enter edit mode
       const displaySpan = el.shadowRoot?.querySelector('.item-display-text');
       (displaySpan as HTMLElement)?.click();
       await el.updateComplete;
@@ -1598,17 +1554,21 @@ describe('WikiChecklist', () => {
         textInput.dispatchEvent(new FocusEvent('blur', { bubbles: true }));
       }
       await waitUntil(
-        () => mergeFrontmatterStub.callCount > 0,
-        'mergeFrontmatter should be called',
+        () => updateItemStub.callCount > 0,
+        'updateItem should be called',
         { timeout: 2000 }
       );
       await el.updateComplete;
-
-      mergePayloadItems = getMergePayloadItems(mergeFrontmatterStub);
     });
 
-    it('should call mergeFrontmatter with the updated text on blur', () => {
-      expect(mergePayloadItems[0]?.['text']).to.equal('Whole Milk');
+    it('should call updateItem with the updated text on blur', () => {
+      const args = updateItemStub.getCall(0).args[0] as { text: string };
+      expect(args.text).to.equal('Whole Milk');
+    });
+
+    it('should pass the targeted uid', () => {
+      const args = updateItemStub.getCall(0).args[0] as { uid: string };
+      expect(args.uid).to.equal('uid-milk');
     });
   });
 
@@ -1621,9 +1581,9 @@ describe('WikiChecklist', () => {
         el.error = null;
         el.loading = false;
         el.items = [
-          { text: 'Milk', checked: false, tags: ['dairy'] },
-          { text: 'Bread', checked: false, tags: ['bakery'] },
-          { text: 'Eggs', checked: false, tags: ['dairy'] },
+          makeChecklistItem({ text: 'Milk', tags: ['dairy'] }),
+          makeChecklistItem({ text: 'Bread', tags: ['bakery'] }),
+          makeChecklistItem({ text: 'Eggs', tags: ['dairy'] }),
         ];
         await el.updateComplete;
         handles = el.shadowRoot?.querySelectorAll('.drag-handle');
@@ -1670,21 +1630,29 @@ describe('WikiChecklist', () => {
 
     describe('keyboard reorder', () => {
       let internal: WikiChecklistInternal;
+      let reorderItemStub: SinonStub;
 
       beforeEach(async () => {
         internal = el as unknown as WikiChecklistInternal;
 
-        sinon
-          .stub(el.client, 'mergeFrontmatter')
-          .resolves(create(MergeFrontmatterResponseSchema, {}));
-
         el.error = null;
         el.loading = false;
         el.items = [
-          { text: 'Item A', checked: false, tags: [] },
-          { text: 'Item B', checked: false, tags: [] },
-          { text: 'Item C', checked: false, tags: [] },
+          makeChecklistItem({ uid: 'a', text: 'Item A', sortOrder: 1000n }),
+          makeChecklistItem({ uid: 'b', text: 'Item B', sortOrder: 2000n }),
+          makeChecklistItem({ uid: 'c', text: 'Item C', sortOrder: 3000n }),
         ];
+
+        // The stub echoes the current optimistic state back, mirroring
+        // what the real server would do (return the now-mutated list).
+        reorderItemStub = sinon
+          .stub(el.client, 'reorderItem')
+          .callsFake(async () =>
+            create(ReorderItemResponseSchema, {
+              checklist: makeChecklist({ items: el.items }),
+            })
+          );
+
         await el.updateComplete;
       });
 
@@ -1692,6 +1660,11 @@ describe('WikiChecklist', () => {
         beforeEach(async () => {
           const event = new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true, cancelable: true });
           internal._handleDragHandleKeydown(event, 1);
+          await waitUntil(
+            () => reorderItemStub.callCount > 0,
+            'reorderItem should be called',
+            { timeout: 2000 }
+          );
           await el.updateComplete;
         });
 
@@ -1700,12 +1673,22 @@ describe('WikiChecklist', () => {
           expect(el.items[1]?.text).to.equal('Item A');
           expect(el.items[2]?.text).to.equal('Item C');
         });
+
+        it('should call reorderItem with the moved uid', () => {
+          const args = reorderItemStub.getCall(0).args[0] as { uid: string };
+          expect(args.uid).to.equal('b');
+        });
       });
 
       describe('when ArrowDown is pressed on a drag handle (not the last item)', () => {
         beforeEach(async () => {
           const event = new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true });
           internal._handleDragHandleKeydown(event, 1);
+          await waitUntil(
+            () => reorderItemStub.callCount > 0,
+            'reorderItem should be called',
+            { timeout: 2000 }
+          );
           await el.updateComplete;
         });
 
@@ -1728,6 +1711,10 @@ describe('WikiChecklist', () => {
 
         it('should not reorder items', () => {
           expect(el.items.map(i => i.text)).to.deep.equal(originalItems.map(i => i.text));
+        });
+
+        it('should not call reorderItem', () => {
+          expect(reorderItemStub.callCount).to.equal(0);
         });
       });
 
@@ -1769,8 +1756,8 @@ describe('WikiChecklist', () => {
         el.error = null;
         el.loading = false;
         el.items = [
-          { text: 'Milk', checked: false, tags: ['dairy'] },
-          { text: 'Bread', checked: false, tags: ['bakery'] },
+          makeChecklistItem({ text: 'Milk', tags: ['dairy'] }),
+          makeChecklistItem({ text: 'Bread', tags: ['bakery'] }),
         ];
         await el.updateComplete;
         row = el.shadowRoot?.querySelector('.item-row');
@@ -1790,14 +1777,12 @@ describe('WikiChecklist', () => {
         el.error = null;
         el.loading = false;
         el.items = [
-          { text: 'Milk', checked: false, tags: ['dairy'] },
-          { text: 'Bread', checked: false, tags: ['bakery'] },
+          makeChecklistItem({ text: 'Milk', tags: ['dairy'] }),
+          makeChecklistItem({ text: 'Bread', tags: ['bakery'] }),
         ];
         await el.updateComplete;
         row = el.shadowRoot?.querySelector<HTMLElement>('.item-row');
-        // Simulate: mousedown on handle sets draggable
         row!.draggable = true;
-        // Then dragend fires
         const dragEndEvent = new DragEvent('dragend', { bubbles: true });
         Object.defineProperty(dragEndEvent, 'currentTarget', { value: row });
         (el as unknown as WikiChecklistInternal)._handleItemDragEnd(dragEndEvent);
@@ -1809,26 +1794,25 @@ describe('WikiChecklist', () => {
     });
 
     describe('drop handler: flat view reordering', () => {
-      let mergeFrontmatterStub: SinonStub;
+      let reorderItemStub: SinonStub;
 
       beforeEach(async () => {
         sinon.restore();
-        sinon
-          .stub(el.client, 'getFrontmatter')
-          .resolves(create(GetFrontmatterResponseSchema, { frontmatter: {} }));
-        mergeFrontmatterStub = sinon
-          .stub(el.client, 'mergeFrontmatter')
-          .callsFake(async (req: { frontmatter?: JsonObject }) =>
-            create(MergeFrontmatterResponseSchema, {
-              frontmatter: req.frontmatter ?? {},
+        sinon.stub(el.client, 'listItems').resolves(
+          create(ListItemsResponseSchema, { checklist: makeChecklist() })
+        );
+        el.items = [
+          makeChecklistItem({ uid: 'a', text: 'Milk', sortOrder: 1000n }),
+          makeChecklistItem({ uid: 'b', text: 'Bread', sortOrder: 2000n }),
+          makeChecklistItem({ uid: 'c', text: 'Eggs', sortOrder: 3000n }),
+        ];
+        reorderItemStub = sinon
+          .stub(el.client, 'reorderItem')
+          .callsFake(async () =>
+            create(ReorderItemResponseSchema, {
+              checklist: makeChecklist({ items: el.items }),
             })
           );
-
-        el.items = [
-          { text: 'Milk', checked: false, tags: [] },
-          { text: 'Bread', checked: false, tags: [] },
-          { text: 'Eggs', checked: false, tags: [] },
-        ];
         await el.updateComplete;
       });
 
@@ -1853,8 +1837,13 @@ describe('WikiChecklist', () => {
           expect(el.items[2]?.text).to.equal('Bread');
         });
 
-        it('should call mergeFrontmatter to persist', () => {
-          expect(mergeFrontmatterStub).to.have.been.called;
+        it('should call reorderItem to persist', () => {
+          expect(reorderItemStub).to.have.been.calledOnce;
+        });
+
+        it('should pass the moved uid', () => {
+          const args = reorderItemStub.getCall(0).args[0] as { uid: string };
+          expect(args.uid).to.equal('c');
         });
       });
 
@@ -1893,8 +1882,8 @@ describe('WikiChecklist', () => {
           expect(el.items).to.deep.equal(originalItems);
         });
 
-        it('should not call mergeFrontmatter', () => {
-          expect(mergeFrontmatterStub).not.to.have.been.called;
+        it('should not call reorderItem', () => {
+          expect(reorderItemStub).not.to.have.been.called;
         });
       });
     });
@@ -2007,7 +1996,7 @@ describe('WikiChecklist', () => {
 
   describe('touch drag reordering', () => {
     let internal: WikiChecklistInternal;
-    let mergeFrontmatterStub: SinonStub;
+    let reorderItemStub: SinonStub;
 
     function makeTouchEvent(
       type: string,
@@ -2040,22 +2029,21 @@ describe('WikiChecklist', () => {
 
     beforeEach(async () => {
       sinon.restore();
-      sinon
-        .stub(el.client, 'getFrontmatter')
-        .resolves(create(GetFrontmatterResponseSchema, { frontmatter: {} }));
-      mergeFrontmatterStub = sinon
-        .stub(el.client, 'mergeFrontmatter')
-        .callsFake(async (req: { frontmatter?: JsonObject }) =>
-          create(MergeFrontmatterResponseSchema, {
-            frontmatter: req.frontmatter ?? {},
+      sinon.stub(el.client, 'listItems').resolves(
+        create(ListItemsResponseSchema, { checklist: makeChecklist() })
+      );
+      el.items = [
+        makeChecklistItem({ uid: 'a', text: 'Milk', sortOrder: 1000n }),
+        makeChecklistItem({ uid: 'b', text: 'Bread', sortOrder: 2000n }),
+        makeChecklistItem({ uid: 'c', text: 'Eggs', sortOrder: 3000n }),
+      ];
+      reorderItemStub = sinon
+        .stub(el.client, 'reorderItem')
+        .callsFake(async () =>
+          create(ReorderItemResponseSchema, {
+            checklist: makeChecklist({ items: el.items }),
           })
         );
-
-      el.items = [
-        { text: 'Milk', checked: false, tags: [] },
-        { text: 'Bread', checked: false, tags: [] },
-        { text: 'Eggs', checked: false, tags: [] },
-      ];
       await el.updateComplete;
       internal = el as unknown as WikiChecklistInternal;
     });
@@ -2110,7 +2098,6 @@ describe('WikiChecklist', () => {
         const touchEvent = makeTouchEvent('touchstart', 100, 200);
         internal._handleTouchStart(touchEvent, 1);
 
-        // Move 15px to the right (exceeds 10px threshold)
         const moveEvent = makeTouchEvent('touchmove', 115, 200);
         internal._handleTouchMove(moveEvent);
       });
@@ -2133,7 +2120,6 @@ describe('WikiChecklist', () => {
         const touchEvent = makeTouchEvent('touchstart', 100, 200);
         internal._handleTouchStart(touchEvent, 1);
 
-        // Move 5px (under the 10px threshold)
         const moveEvent = makeTouchEvent('touchmove', 103, 204);
         internal._handleTouchMove(moveEvent);
       });
@@ -2149,11 +2135,9 @@ describe('WikiChecklist', () => {
 
     describe('when touch moves during active drag', () => {
       beforeEach(() => {
-        // Activate touch drag directly
         const touch = makeTouch(100, 200);
         internal._startTouchDrag(0, touch);
 
-        // Stub elementFromPoint on the shadow root to return item at index 2
         const row = el.shadowRoot?.querySelectorAll('.item-row')[2];
         if (row instanceof HTMLElement) {
           row.getBoundingClientRect = () =>
@@ -2161,7 +2145,6 @@ describe('WikiChecklist', () => {
         }
         sinon.stub(el.shadowRoot!, 'elementFromPoint').returns(row ?? null);
 
-        // Move to y=310 (in the lower half of item at index 2)
         const moveEvent = makeTouchEvent('touchmove', 100, 310);
         internal._handleTouchMove(moveEvent);
       });
@@ -2177,17 +2160,14 @@ describe('WikiChecklist', () => {
 
     describe('when touch ends during active drag', () => {
       beforeEach(async () => {
-        // Activate touch drag directly
         const touch = makeTouch(100, 200);
         internal._startTouchDrag(2, touch);
 
-        // Set up the drop target — simulate dragging to before item 0
         internal._dragOverItemIndex = 0;
         internal._dragOverItemPosition = 'before';
 
         await internal._handleTouchEnd();
 
-        // Wait for Lit to re-render after state changes
         await el.updateComplete;
       });
 
@@ -2203,8 +2183,8 @@ describe('WikiChecklist', () => {
         expect(el.items[0]?.text).to.equal('Eggs');
       });
 
-      it('should call persistData (mergeFrontmatter)', () => {
-        expect(mergeFrontmatterStub.called).to.be.true;
+      it('should call reorderItem', () => {
+        expect(reorderItemStub.called).to.be.true;
       });
     });
 
@@ -2212,7 +2192,6 @@ describe('WikiChecklist', () => {
       let originalItems: ChecklistItem[];
 
       beforeEach(() => {
-        // Activate touch drag directly
         const touch = makeTouch(100, 200);
         internal._startTouchDrag(1, touch);
 
@@ -2243,7 +2222,6 @@ describe('WikiChecklist', () => {
         const touchEvent = makeTouchEvent('touchstart', 100, 200);
         internal._handleTouchStart(touchEvent, 1);
 
-        // End before the 400ms fires — no active drag
         await internal._handleTouchEnd();
       });
 
@@ -2254,6 +2232,213 @@ describe('WikiChecklist', () => {
       it('should not set any drag state', () => {
         expect(internal._touchDragActive).to.be.false;
         expect(internal._dragSourceItemIndex).to.be.null;
+      });
+    });
+  });
+
+  describe('metadata display', () => {
+    describe('when an item has completed_by and completed_at', () => {
+      let caption: Element | null | undefined;
+
+      beforeEach(async () => {
+        el.error = null;
+        el.loading = false;
+        el.items = [
+          makeChecklistItem({
+            text: 'Done task',
+            checked: true,
+            completedBy: 'alice@example.com',
+            completedAtMs: Date.now() - 60_000,
+          }),
+        ];
+        await el.updateComplete;
+        caption = el.shadowRoot?.querySelector('[data-meta="completed"]');
+      });
+
+      it('should render the completion caption', () => {
+        expect(caption).to.exist;
+      });
+
+      it('should include the completed_by name', () => {
+        expect(caption?.textContent).to.contain('alice@example.com');
+      });
+    });
+
+    describe('when an automated item is completed', () => {
+      let caption: Element | null | undefined;
+
+      beforeEach(async () => {
+        el.error = null;
+        el.loading = false;
+        el.items = [
+          makeChecklistItem({
+            text: 'Sync task',
+            checked: true,
+            automated: true,
+            completedBy: 'wiki-cli',
+            completedAtMs: Date.now() - 60_000,
+          }),
+        ];
+        await el.updateComplete;
+        caption = el.shadowRoot?.querySelector('[data-meta="completed"]');
+      });
+
+      it('should attribute completion to "an agent"', () => {
+        expect(caption?.textContent).to.contain('an agent');
+      });
+
+      it('should NOT show the agent’s raw completed_by', () => {
+        expect(caption?.textContent).to.not.contain('wiki-cli');
+      });
+    });
+
+    describe('when an unchecked item has a description', () => {
+      let description: Element | null | undefined;
+
+      beforeEach(async () => {
+        el.error = null;
+        el.loading = false;
+        el.items = [
+          makeChecklistItem({
+            text: 'Buy oat milk',
+            description: 'The brand Kirsten likes',
+          }),
+        ];
+        await el.updateComplete;
+        description = el.shadowRoot?.querySelector('.item-description');
+      });
+
+      it('should render the description', () => {
+        expect(description?.textContent?.trim()).to.equal('The brand Kirsten likes');
+      });
+    });
+
+    describe('when an item has no description', () => {
+      let description: Element | null | undefined;
+
+      beforeEach(async () => {
+        el.error = null;
+        el.loading = false;
+        el.items = [makeChecklistItem({ text: 'Plain task' })];
+        await el.updateComplete;
+        description = el.shadowRoot?.querySelector('.item-description');
+      });
+
+      it('should not render an empty description element', () => {
+        expect(description).to.not.exist;
+      });
+    });
+
+    describe('when an item is past-due (overdue)', () => {
+      let due: Element | null | undefined;
+
+      beforeEach(async () => {
+        el.error = null;
+        el.loading = false;
+        el.items = [
+          makeChecklistItem({
+            text: 'Renew passport',
+            dueMs: Date.now() - 24 * 60 * 60 * 1000,
+          }),
+        ];
+        await el.updateComplete;
+        due = el.shadowRoot?.querySelector('[data-meta="due"]');
+      });
+
+      it('should render the due indicator', () => {
+        expect(due).to.exist;
+      });
+
+      it('should mark it as overdue', () => {
+        expect(due?.classList.contains('item-due-overdue')).to.be.true;
+      });
+    });
+
+    describe('when an item is due in the future', () => {
+      let due: Element | null | undefined;
+
+      beforeEach(async () => {
+        el.error = null;
+        el.loading = false;
+        el.items = [
+          makeChecklistItem({
+            text: 'Future task',
+            dueMs: Date.now() + 60 * 60 * 1000,
+          }),
+        ];
+        await el.updateComplete;
+        due = el.shadowRoot?.querySelector('[data-meta="due"]');
+      });
+
+      it('should render the due indicator', () => {
+        expect(due).to.exist;
+      });
+
+      it('should not mark it as overdue', () => {
+        expect(due?.classList.contains('item-due-overdue')).to.be.false;
+      });
+    });
+
+    describe('when localStorage debug flag is enabled', () => {
+      let listBadge: Element | null | undefined;
+      let itemBadge: Element | null | undefined;
+
+      beforeEach(async () => {
+        try { globalThis.localStorage.setItem('wiki-checklist-debug', '1'); } catch { /* noop */ }
+        el.error = null;
+        el.loading = false;
+        el._syncToken = 42n;
+        el._listUpdatedAt = timestampFromMs(1700_000_000_000);
+        el.items = [
+          makeChecklistItem({
+            uid: 'uid-debug',
+            text: 'Item with debug',
+            sortOrder: 1500n,
+            updatedAtMs: 1700_000_001_000,
+          }),
+        ];
+        el.requestUpdate();
+        await el.updateComplete;
+        listBadge = el.shadowRoot?.querySelector('[data-debug="list"]');
+        itemBadge = el.shadowRoot?.querySelector('.item-debug-badge');
+      });
+
+      afterEach(() => {
+        try { globalThis.localStorage.removeItem('wiki-checklist-debug'); } catch { /* noop */ }
+      });
+
+      it('should render the list-level debug badge', () => {
+        expect(listBadge).to.exist;
+      });
+
+      it('should include the sync_token in the list badge', () => {
+        expect(listBadge?.textContent).to.contain('sync:42');
+      });
+
+      it('should render the item-level debug badge', () => {
+        expect(itemBadge).to.exist;
+      });
+
+      it('should include the item uid in the item badge', () => {
+        expect(itemBadge?.textContent).to.contain('uid:uid-debu');
+      });
+    });
+
+    describe('when localStorage debug flag is NOT enabled', () => {
+      let listBadge: Element | null | undefined;
+
+      beforeEach(async () => {
+        try { globalThis.localStorage.removeItem('wiki-checklist-debug'); } catch { /* noop */ }
+        el.error = null;
+        el.loading = false;
+        el.items = [makeChecklistItem({ text: 'Plain' })];
+        el.requestUpdate();
+        await el.updateComplete;
+        listBadge = el.shadowRoot?.querySelector('[data-debug="list"]');
+      });
+
+      it('should NOT render the debug badge', () => {
+        expect(listBadge).to.not.exist;
       });
     });
   });

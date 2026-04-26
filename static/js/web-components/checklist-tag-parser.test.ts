@@ -1,6 +1,6 @@
 import { expect } from '@open-wc/testing';
 import { parseTaggedInput, composeTaggedText } from './checklist-tag-parser.js';
-import type { ChecklistItem } from './checklist-tag-parser.js';
+import type { TaggedTextItem } from './checklist-tag-parser.js';
 
 describe('parseTaggedInput', () => {
   describe('when input has a single #tag at the start', () => {
@@ -254,7 +254,7 @@ describe('composeTaggedText', () => {
     let result: string;
 
     beforeEach(() => {
-      const item: ChecklistItem = { text: 'milk', checked: false, tags: ['dairy', 'fridge'] };
+      const item: TaggedTextItem = { text: 'milk', tags: ['dairy', 'fridge'] };
       result = composeTaggedText(item);
     });
 
@@ -267,7 +267,7 @@ describe('composeTaggedText', () => {
     let result: string;
 
     beforeEach(() => {
-      const item: ChecklistItem = { text: 'milk', checked: false, tags: [] };
+      const item: TaggedTextItem = { text: 'milk', tags: [] };
       result = composeTaggedText(item);
     });
 
@@ -280,7 +280,7 @@ describe('composeTaggedText', () => {
     let result: string;
 
     beforeEach(() => {
-      const item: ChecklistItem = { text: 'eggs', checked: true, tags: ['dairy'] };
+      const item: TaggedTextItem = { text: 'eggs', tags: ['dairy'] };
       result = composeTaggedText(item);
     });
 
@@ -293,7 +293,7 @@ describe('composeTaggedText', () => {
     let result: string;
 
     beforeEach(() => {
-      const item: ChecklistItem = { text: '', checked: false, tags: ['dairy'] };
+      const item: TaggedTextItem = { text: '', tags: ['dairy'] };
       result = composeTaggedText(item);
     });
 
@@ -306,7 +306,7 @@ describe('composeTaggedText', () => {
     let result: string;
 
     beforeEach(() => {
-      const item: ChecklistItem = { text: 'yogurt', checked: true, tags: ['dairy', 'fridge', 'breakfast'] };
+      const item: TaggedTextItem = { text: 'yogurt', tags: ['dairy', 'fridge', 'breakfast'] };
       result = composeTaggedText(item);
     });
 

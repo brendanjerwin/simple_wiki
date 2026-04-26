@@ -3,12 +3,22 @@ package tailscale
 import (
 	"context"
 	"errors"
+	"strings"
 
 	"github.com/jcelliott/lumber"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/peer"
 )
+
+// WikiIsAgentHeader is the gRPC metadata header a caller sets to assert
+// it should be classified as an automated agent for attribution purposes.
+// The value "true" (case-insensitive) marks the request as agent-driven.
+// This is informational, not a security boundary — anonymous callers can
+// set it freely. Used by wiki-cli (default-on, opt out via
+// WIKI_CLI_HUMAN=1) and by any non-Tailscale automation that wants
+// correct attribution.
+const WikiIsAgentHeader = "x-wiki-is-agent"
 
 // IdentityInterceptor creates a gRPC unary interceptor that extracts Tailscale identity.
 // Identity is extracted from gRPC metadata (headers from Tailscale Serve) or via WhoIs.
@@ -90,6 +100,39 @@ func resolveIdentityToContext(ctx context.Context, resolver IdentityResolver, lo
 		}
 	}
 
+	// Honor the x-wiki-is-agent self-claim header. This layers on top of
+	// any identity already resolved — a tagged Tailscale node already has
+	// IsAgent=true, but a regular Tailscale user (or an anonymous caller)
+	// can also assert agent-ness for attribution purposes.
+	if assertsAgent(ctx) {
+		identity = upgradeToAgent(identity)
+	}
+
 	// Always store identity in context (Anonymous is valid)
 	return ContextWithIdentity(ctx, identity)
+}
+
+// assertsAgent reports whether the request's incoming gRPC metadata
+// includes a true-valued WikiIsAgentHeader.
+func assertsAgent(ctx context.Context) bool {
+	md, ok := metadata.FromIncomingContext(ctx)
+	if !ok {
+		return false
+	}
+	for _, v := range md.Get(WikiIsAgentHeader) {
+		if strings.EqualFold(v, "true") {
+			return true
+		}
+	}
+	return false
+}
+
+// upgradeToAgent returns an identity that reports IsAgent() == true,
+// preserving any name fields. If the input already reports IsAgent()
+// it is returned unchanged.
+func upgradeToAgent(id IdentityValue) IdentityValue {
+	if id.IsAgent() {
+		return id
+	}
+	return NewAgentIdentity(id.LoginName(), id.DisplayName(), id.NodeName())
 }

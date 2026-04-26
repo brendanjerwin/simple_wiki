@@ -1,0 +1,269 @@
+syntax = "proto3";
+
+package api.v1;
+
+import "api/v1/mcp_options.proto";
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/brendanjerwin/simple_wiki/gen/go/api/v1;apiv1";
+
+// ChecklistService — see (api.v1.service_description).
+service ChecklistService {
+  option (api.v1.service_description) =
+      "Item-level checklist mutation with server-derived attribution, "
+      "optimistic concurrency, and sync-token bookkeeping. The wiki.* "
+      "namespace (where this service stores per-item timestamps, "
+      "completed_by, and the per-list sync_token) is reserved — generic "
+      "Frontmatter_* writes targeting wiki.* are rejected. User-facing "
+      "checklist data under checklists.<name>.items[] is NOT reserved; "
+      "raw Frontmatter_* writes to it continue to work but bypass the "
+      "attribution and sync_token bookkeeping. Use ChecklistService when "
+      "you want any of: per-item created_at/updated_at, completed_by/"
+      "completed_at when checking, automated=true|false attribution, "
+      "optimistic concurrency via expected_updated_at, sync_token "
+      "advancement that CalDAV and other sync clients depend on.";
+
+  // AddItem — see (api.v1.description).
+  rpc AddItem(AddItemRequest) returns (AddItemResponse) {
+    option (api.v1.description) =
+        "Append a new item to a checklist. The wiki generates the uid "
+        "(ULID) and stamps created_at = updated_at = server-now. The "
+        "automated field is derived from the caller's identity (Tailscale "
+        "tag or x-wiki-is-agent metadata header) — input is ignored. If "
+        "sort_order is omitted, the item is appended at the end of the "
+        "list (next multiple of 1000).";
+    option (api.v1.example_request) =
+        "{\"page\": \"grocery_planning\", \"list_name\": \"this_week\", "
+        "\"text\": \"Buy milk #urgent\", \"description\": \"the brand "
+        "Kirsten likes\"}";
+  }
+
+  // UpdateItem — see (api.v1.description).
+  rpc UpdateItem(UpdateItemRequest) returns (UpdateItemResponse) {
+    option (api.v1.description) =
+        "Mutate user-mutable fields of an existing item. The uid is "
+        "immutable — passing a new uid is an error. Wiki-managed fields "
+        "(created_at, updated_at, completed_at, completed_by, automated) "
+        "on the request are silently stripped; the funnel re-derives "
+        "them. Pass expected_updated_at (from a prior ListItems response) "
+        "for optimistic concurrency — mismatch returns FailedPrecondition.";
+    option (api.v1.example_request) =
+        "{\"page\": \"grocery_planning\", \"list_name\": \"this_week\", "
+        "\"uid\": \"01HXXXXXXXXXXXXXXXXXXXXXXX\", \"text\": \"Buy oat "
+        "milk #urgent\", \"expected_updated_at\": "
+        "\"2026-04-25T17:14:00Z\"}";
+  }
+
+  // ToggleItem — see (api.v1.description).
+  rpc ToggleItem(ToggleItemRequest) returns (ToggleItemResponse) {
+    option (api.v1.description) =
+        "Flip an item's checked field. Transitioning false->true sets "
+        "completed_at = server-now and completed_by = caller's "
+        "principal.Name(). Transitioning true->false clears both. "
+        "Optimistic concurrency via expected_updated_at.";
+    option (api.v1.example_request) =
+        "{\"page\": \"grocery_planning\", \"list_name\": \"this_week\", "
+        "\"uid\": \"01HXXXXXXXXXXXXXXXXXXXXXXX\"}";
+  }
+
+  // DeleteItem — see (api.v1.description).
+  rpc DeleteItem(DeleteItemRequest) returns (DeleteItemResponse) {
+    option (api.v1.description) =
+        "Remove an item from a checklist. Writes a tombstone to "
+        "wiki.checklists.<list>.tombstones[] with gc_after = now() + "
+        "7 days; tombstones are pruned lazily on next mutation/read of "
+        "the list. CalDAV sync-collection REPORTs read tombstones so "
+        "slow-syncing clients see the deletion. Optimistic concurrency "
+        "via expected_updated_at.";
+  }
+
+  // ReorderItem — see (api.v1.description).
+  rpc ReorderItem(ReorderItemRequest) returns (ReorderItemResponse) {
+    option (api.v1.description) =
+        "Update an item's sort_order. The wiki only re-densifies "
+        "sort_order values for adjacent items when the requested value "
+        "would collide; otherwise other items are untouched. Pass "
+        "new_sort_order as the desired sparse value (multiples of 1000 "
+        "are conventional but not required).";
+  }
+
+  // ListItems — see (api.v1.description).
+  rpc ListItems(ListItemsRequest) returns (ListItemsResponse) {
+    option (api.v1.description) =
+        "Return all items in a checklist with both user-mutable and "
+        "wiki-managed metadata. The Checklist.updated_at field is the "
+        "value to pass back as expected_updated_at on subsequent "
+        "mutations. Tombstones are returned in a separate field for "
+        "CalDAV sync-collection consumption.";
+    option (api.v1.read_only) = true;
+  }
+
+  // GetChecklists — see (api.v1.description).
+  rpc GetChecklists(GetChecklistsRequest) returns (GetChecklistsResponse) {
+    option (api.v1.description) =
+        "Enumerate all checklists on a page. Used by CalDAV PROPFIND "
+        "and by UI surfaces that need to render multiple lists.";
+    option (api.v1.read_only) = true;
+  }
+}
+
+// ChecklistItem — one row in a checklist.
+message ChecklistItem {
+  // Stable identifier; wiki-generated ULID. Immutable once assigned.
+  string uid = 1;
+  // Free-form item text. May contain #tags (preferred) or :tags (legacy
+  // — migrated by the tag-syntax migration in #982).
+  string text = 2;
+  // Whether the item is marked done.
+  bool checked = 3;
+  // Tags extracted from text plus any explicit additions. The wiki
+  // normalizes these per the hashtag rules.
+  repeated string tags = 4;
+  // Sparse ordering value; convention is multiples of 1000.
+  int64 sort_order = 5;
+  // Optional long-form description (sub-line content under the item).
+  optional string description = 6;
+  // Optional due time (RFC3339).
+  optional google.protobuf.Timestamp due = 7;
+  // Optional VALARM payload for CalDAV. Opaque to the wiki — used by
+  // sync clients only.
+  optional string alarm_payload = 8;
+  // Wiki-managed: server-stamped on creation. Read-only on input.
+  google.protobuf.Timestamp created_at = 9;
+  // Wiki-managed: server-stamped on creation and every mutation. Used
+  // as the per-item ETag. Read-only on input.
+  google.protobuf.Timestamp updated_at = 10;
+  // Wiki-managed: set when checked transitions false->true; cleared
+  // on true->false. Read-only on input.
+  optional google.protobuf.Timestamp completed_at = 11;
+  // Wiki-managed: principal.Name() of the caller that flipped checked
+  // false->true. Cleared on true->false. Read-only on input.
+  optional string completed_by = 12;
+  // Wiki-managed: principal.IsAgent() at creation/last-mutation time.
+  // Read-only on input.
+  bool automated = 13;
+}
+
+// Tombstone — record of a deleted item. Pruned lazily after gc_after.
+message Tombstone {
+  string uid = 1;
+  google.protobuf.Timestamp deleted_at = 2;
+  google.protobuf.Timestamp gc_after = 3;
+}
+
+// Checklist — one named checklist on a page.
+message Checklist {
+  // Stable name (the <name> in checklists.<name>). Used as the path
+  // component in CalDAV URLs.
+  string name = 1;
+  // Wiki-managed: most recent mutation time across all items in this
+  // list. Used as the collection-level ETag and as expected_updated_at
+  // for OCC. Bumped on every successful mutation.
+  google.protobuf.Timestamp updated_at = 2;
+  // Wiki-managed: monotonic counter, advances by 1 on every mutation.
+  // Consumed by CalDAV sync-collection REPORT.
+  int64 sync_token = 3;
+  // The visible items, sorted by sort_order ascending.
+  repeated ChecklistItem items = 4;
+  // Tombstones for items deleted in the last 7+ days (lazy GC).
+  repeated Tombstone tombstones = 5;
+}
+
+// AddItem
+
+message AddItemRequest {
+  string page = 1;
+  string list_name = 2;
+  string text = 3;
+  repeated string tags = 4;
+  optional string description = 5;
+  optional google.protobuf.Timestamp due = 6;
+  optional int64 sort_order = 7;
+  optional google.protobuf.Timestamp expected_updated_at = 8;
+}
+
+message AddItemResponse {
+  ChecklistItem item = 1;
+  Checklist checklist = 2;
+}
+
+// UpdateItem
+
+message UpdateItemRequest {
+  string page = 1;
+  string list_name = 2;
+  string uid = 3;
+  optional string text = 4;
+  repeated string tags = 5;
+  optional string description = 6;
+  optional google.protobuf.Timestamp due = 7;
+  optional string alarm_payload = 8;
+  optional google.protobuf.Timestamp expected_updated_at = 9;
+}
+
+message UpdateItemResponse {
+  ChecklistItem item = 1;
+  Checklist checklist = 2;
+}
+
+// ToggleItem
+
+message ToggleItemRequest {
+  string page = 1;
+  string list_name = 2;
+  string uid = 3;
+  optional google.protobuf.Timestamp expected_updated_at = 4;
+}
+
+message ToggleItemResponse {
+  ChecklistItem item = 1;
+  Checklist checklist = 2;
+}
+
+// DeleteItem
+
+message DeleteItemRequest {
+  string page = 1;
+  string list_name = 2;
+  string uid = 3;
+  optional google.protobuf.Timestamp expected_updated_at = 4;
+}
+
+message DeleteItemResponse {
+  Checklist checklist = 1;
+}
+
+// ReorderItem
+
+message ReorderItemRequest {
+  string page = 1;
+  string list_name = 2;
+  string uid = 3;
+  int64 new_sort_order = 4;
+  optional google.protobuf.Timestamp expected_updated_at = 5;
+}
+
+message ReorderItemResponse {
+  Checklist checklist = 1;
+}
+
+// ListItems
+
+message ListItemsRequest {
+  string page = 1;
+  string list_name = 2;
+}
+
+message ListItemsResponse {
+  Checklist checklist = 1;
+}
+
+// GetChecklists
+
+message GetChecklistsRequest {
+  string page = 1;
+}
+
+message GetChecklistsResponse {
+  repeated Checklist checklists = 1;
+}

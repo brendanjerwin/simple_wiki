@@ -3,6 +3,7 @@ import { action } from 'storybook/actions';
 import { html } from 'lit';
 import './wiki-checklist.js';
 import type { ChecklistItem } from './wiki-checklist.js';
+import { makeChecklistItem } from './checklist-test-fixtures.js';
 import { AugmentErrorService } from './augment-error-service.js';
 
 const meta: Meta = {
@@ -14,17 +15,18 @@ const meta: Meta = {
     docs: {
       description: {
         component: `
-A fully API-driven interactive checklist component backed by the frontmatter gRPC API.
+A fully API-driven interactive checklist component backed by ChecklistService.
 
 **Features:**
-- Check/uncheck items (persisted immediately)
-- Inline text editing per item
-- Multiple tags per item via \`:tag\` syntax
+- Check/uncheck items (server stamps completed_at + completed_by)
+- Inline text editing per item with #tag syntax
+- Multiple tags per item via \`#tag\` anywhere in text
 - Tag filter bar: click a tag pill to filter visible items
-- Add new items with optional tags (e.g. "milk :dairy :fridge")
+- Add new items with optional tags (e.g. "milk #dairy #fridge")
 - Remove items
-- Drag-and-drop reordering
-- Automatic polling every 3 s to stay in sync
+- Drag-and-drop reordering (single ReorderItem RPC per drop)
+- Automatic polling every 10 s with updated_at short-circuit
+- Optimistic concurrency with FailedPrecondition retry + toast
 
 **Usage:**
 \`\`\`html
@@ -33,7 +35,8 @@ A fully API-driven interactive checklist component backed by the frontmatter gRP
 
 **Storybook note:** In Storybook, the component has no backend, so stories bypass
 the API by setting \`items\` (and optionally \`loading\`, \`error\`, \`filterTags\`)
-directly on the element after fixture creation.
+directly on the element after fixture creation. Use the \`makeChecklistItem\`
+helper to build proto-typed items.
         `,
       },
     },
@@ -68,12 +71,12 @@ export const Default: Story = {
 export const WithItems: Story = {
   render: () => {
     const items: ChecklistItem[] = [
-      { text: 'Milk', checked: false, tags: ['dairy'] },
-      { text: 'Eggs', checked: true, tags: ['dairy'] },
-      { text: 'Apples', checked: false, tags: ['produce'] },
-      { text: 'Bananas', checked: true, tags: ['produce'] },
-      { text: 'Sourdough bread', checked: false, tags: ['bakery'] },
-      { text: 'Butter', checked: false, tags: [] },
+      makeChecklistItem({ text: 'Milk', tags: ['dairy'] }),
+      makeChecklistItem({ text: 'Eggs', checked: true, tags: ['dairy'] }),
+      makeChecklistItem({ text: 'Apples', tags: ['produce'] }),
+      makeChecklistItem({ text: 'Bananas', checked: true, tags: ['produce'] }),
+      makeChecklistItem({ text: 'Sourdough bread', tags: ['bakery'] }),
+      makeChecklistItem({ text: 'Butter' }),
     ];
 
     return html`
@@ -101,11 +104,11 @@ export const WithItems: Story = {
 export const AllChecked: Story = {
   render: () => {
     const items: ChecklistItem[] = [
-      { text: 'Buy coffee', checked: true, tags: [] },
-      { text: 'Read emails', checked: true, tags: [] },
-      { text: 'Team stand-up', checked: true, tags: [] },
-      { text: 'Code review', checked: true, tags: [] },
-      { text: 'Deploy to staging', checked: true, tags: [] },
+      makeChecklistItem({ text: 'Buy coffee', checked: true }),
+      makeChecklistItem({ text: 'Read emails', checked: true }),
+      makeChecklistItem({ text: 'Team stand-up', checked: true }),
+      makeChecklistItem({ text: 'Code review', checked: true }),
+      makeChecklistItem({ text: 'Deploy to staging', checked: true }),
     ];
 
     return html`
@@ -132,7 +135,7 @@ export const AllChecked: Story = {
 export const SingleItem: Story = {
   render: () => {
     const items: ChecklistItem[] = [
-      { text: 'Pick up dry cleaning', checked: false, tags: [] },
+      makeChecklistItem({ text: 'Pick up dry cleaning' }),
     ];
 
     return html`
@@ -159,14 +162,14 @@ export const SingleItem: Story = {
 export const MultipleTagsPerItem: Story = {
   render: () => {
     const items: ChecklistItem[] = [
-      { text: 'Whole milk (2L)', checked: false, tags: ['dairy', 'fridge'] },
-      { text: 'Cheddar cheese', checked: true, tags: ['dairy', 'fridge'] },
-      { text: 'Greek yogurt', checked: false, tags: ['dairy', 'fridge'] },
-      { text: 'Fuji apples', checked: false, tags: ['produce', 'fridge'] },
-      { text: 'Baby spinach', checked: false, tags: ['produce', 'fridge'] },
-      { text: 'Roma tomatoes', checked: true, tags: ['produce'] },
-      { text: 'Sourdough loaf', checked: false, tags: ['bakery'] },
-      { text: 'Croissants (x4)', checked: false, tags: ['bakery'] },
+      makeChecklistItem({ text: 'Whole milk (2L)', tags: ['dairy', 'fridge'] }),
+      makeChecklistItem({ text: 'Cheddar cheese', checked: true, tags: ['dairy', 'fridge'] }),
+      makeChecklistItem({ text: 'Greek yogurt', tags: ['dairy', 'fridge'] }),
+      makeChecklistItem({ text: 'Fuji apples', tags: ['produce', 'fridge'] }),
+      makeChecklistItem({ text: 'Baby spinach', tags: ['produce', 'fridge'] }),
+      makeChecklistItem({ text: 'Roma tomatoes', checked: true, tags: ['produce'] }),
+      makeChecklistItem({ text: 'Sourdough loaf', tags: ['bakery'] }),
+      makeChecklistItem({ text: 'Croissants (x4)', tags: ['bakery'] }),
     ];
 
     return html`
@@ -194,11 +197,11 @@ export const MultipleTagsPerItem: Story = {
 export const FilteredByTag: Story = {
   render: () => {
     const items: ChecklistItem[] = [
-      { text: 'Whole milk (2L)', checked: false, tags: ['dairy', 'fridge'] },
-      { text: 'Cheddar cheese', checked: true, tags: ['dairy'] },
-      { text: 'Fuji apples', checked: false, tags: ['produce'] },
-      { text: 'Baby spinach', checked: false, tags: ['produce', 'fridge'] },
-      { text: 'Sourdough loaf', checked: false, tags: ['bakery'] },
+      makeChecklistItem({ text: 'Whole milk (2L)', tags: ['dairy', 'fridge'] }),
+      makeChecklistItem({ text: 'Cheddar cheese', checked: true, tags: ['dairy'] }),
+      makeChecklistItem({ text: 'Fuji apples', tags: ['produce'] }),
+      makeChecklistItem({ text: 'Baby spinach', tags: ['produce', 'fridge'] }),
+      makeChecklistItem({ text: 'Sourdough loaf', tags: ['bakery'] }),
     ];
 
     return html`
@@ -227,12 +230,12 @@ export const FilteredByTag: Story = {
 export const MixedTaggedUntagged: Story = {
   render: () => {
     const items: ChecklistItem[] = [
-      { text: 'Write unit tests', checked: false, tags: ['dev'] },
-      { text: 'Update README', checked: true, tags: [] },
-      { text: 'Fix TypeScript error', checked: false, tags: ['dev'] },
-      { text: 'Buy coffee beans', checked: false, tags: [] },
-      { text: 'Review PR #42', checked: false, tags: ['dev'] },
-      { text: 'Call dentist', checked: true, tags: [] },
+      makeChecklistItem({ text: 'Write unit tests', tags: ['dev'] }),
+      makeChecklistItem({ text: 'Update README', checked: true }),
+      makeChecklistItem({ text: 'Fix TypeScript error', tags: ['dev'] }),
+      makeChecklistItem({ text: 'Buy coffee beans' }),
+      makeChecklistItem({ text: 'Review PR #42', tags: ['dev'] }),
+      makeChecklistItem({ text: 'Call dentist', checked: true }),
     ];
 
     return html`
@@ -260,29 +263,29 @@ export const LongList: Story = {
   render: () => {
     const items: ChecklistItem[] = [
       // Dairy
-      { text: 'Whole milk (2L)', checked: false, tags: ['dairy'] },
-      { text: 'Skimmed milk (1L)', checked: true, tags: ['dairy'] },
-      { text: 'Cheddar cheese', checked: false, tags: ['dairy'] },
-      { text: 'Greek yogurt', checked: false, tags: ['dairy'] },
-      { text: 'Butter (250g)', checked: true, tags: ['dairy'] },
+      makeChecklistItem({ text: 'Whole milk (2L)', tags: ['dairy'] }),
+      makeChecklistItem({ text: 'Skimmed milk (1L)', checked: true, tags: ['dairy'] }),
+      makeChecklistItem({ text: 'Cheddar cheese', tags: ['dairy'] }),
+      makeChecklistItem({ text: 'Greek yogurt', tags: ['dairy'] }),
+      makeChecklistItem({ text: 'Butter (250g)', checked: true, tags: ['dairy'] }),
       // Produce
-      { text: 'Fuji apples (x6)', checked: false, tags: ['produce'] },
-      { text: 'Baby spinach', checked: false, tags: ['produce'] },
-      { text: 'Roma tomatoes', checked: true, tags: ['produce'] },
-      { text: 'Yellow onions', checked: false, tags: ['produce'] },
-      { text: 'Garlic (bulb)', checked: false, tags: ['produce'] },
+      makeChecklistItem({ text: 'Fuji apples (x6)', tags: ['produce'] }),
+      makeChecklistItem({ text: 'Baby spinach', tags: ['produce'] }),
+      makeChecklistItem({ text: 'Roma tomatoes', checked: true, tags: ['produce'] }),
+      makeChecklistItem({ text: 'Yellow onions', tags: ['produce'] }),
+      makeChecklistItem({ text: 'Garlic (bulb)', tags: ['produce'] }),
       // Bakery
-      { text: 'Sourdough loaf', checked: false, tags: ['bakery'] },
-      { text: 'Croissants (x4)', checked: false, tags: ['bakery'] },
-      { text: 'Bagels (x6)', checked: true, tags: ['bakery'] },
+      makeChecklistItem({ text: 'Sourdough loaf', tags: ['bakery'] }),
+      makeChecklistItem({ text: 'Croissants (x4)', tags: ['bakery'] }),
+      makeChecklistItem({ text: 'Bagels (x6)', checked: true, tags: ['bakery'] }),
       // Frozen
-      { text: 'Frozen peas (400g)', checked: false, tags: ['frozen'] },
-      { text: 'Ice cream (vanilla)', checked: false, tags: ['frozen'] },
-      { text: 'Frozen fish fillets', checked: true, tags: ['frozen'] },
+      makeChecklistItem({ text: 'Frozen peas (400g)', tags: ['frozen'] }),
+      makeChecklistItem({ text: 'Ice cream (vanilla)', tags: ['frozen'] }),
+      makeChecklistItem({ text: 'Frozen fish fillets', checked: true, tags: ['frozen'] }),
       // Pantry
-      { text: 'Pasta (500g)', checked: false, tags: ['pantry'] },
-      { text: 'Olive oil (500ml)', checked: false, tags: ['pantry'] },
-      { text: 'Tinned tomatoes (x4)', checked: true, tags: ['pantry'] },
+      makeChecklistItem({ text: 'Pasta (500g)', tags: ['pantry'] }),
+      makeChecklistItem({ text: 'Olive oil (500ml)', tags: ['pantry'] }),
+      makeChecklistItem({ text: 'Tinned tomatoes (x4)', checked: true, tags: ['pantry'] }),
     ];
 
     return html`
@@ -360,14 +363,224 @@ export const ErrorState: Story = {
   },
 };
 
+export const CompletedByAttribution: Story = {
+  render: () => {
+    const now = Date.now();
+    const items: ChecklistItem[] = [
+      makeChecklistItem({
+        text: 'Mow the lawn',
+        checked: true,
+        completedBy: 'alice@example.com',
+        completedAtMs: now - 2 * 60 * 60 * 1000, // 2h ago
+      }),
+      makeChecklistItem({
+        text: 'Take out the trash',
+        checked: true,
+        completedBy: 'bob@example.com',
+        completedAtMs: now - 30 * 60 * 1000, // 30m ago
+      }),
+      makeChecklistItem({ text: 'Water the plants' }),
+    ];
+
+    return html`
+      <div style="max-width: 640px; padding: 20px;">
+        <wiki-checklist
+          list-name="chores"
+          .items=${items}
+          .loading=${false}
+          .error=${null}
+        ></wiki-checklist>
+      </div>
+    `;
+  },
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'Checked items show a "Done by X · Nh ago" caption sourced from the server-stamped completed_by + completed_at fields.',
+      },
+    },
+  },
+};
+
+export const CompletedByAgent: Story = {
+  render: () => {
+    const now = Date.now();
+    const items: ChecklistItem[] = [
+      makeChecklistItem({
+        text: 'Auto-tag inventory items',
+        checked: true,
+        automated: true,
+        completedBy: 'wiki-cli',
+        completedAtMs: now - 15 * 60 * 1000, // 15m ago
+      }),
+      makeChecklistItem({
+        text: 'Daily backup',
+        checked: true,
+        automated: true,
+        completedBy: 'agent:backup-bot',
+        completedAtMs: now - 4 * 60 * 60 * 1000, // 4h ago
+      }),
+    ];
+
+    return html`
+      <div style="max-width: 640px; padding: 20px;">
+        <wiki-checklist
+          list-name="automated_tasks"
+          .items=${items}
+          .loading=${false}
+          .error=${null}
+        ></wiki-checklist>
+      </div>
+    `;
+  },
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'Items completed by an automated caller (Tailscale-tagged or x-wiki-is-agent). The caption reads "Done by an agent · Nh ago".',
+      },
+    },
+  },
+};
+
+export const MixedAttribution: Story = {
+  render: () => {
+    const now = Date.now();
+    const items: ChecklistItem[] = [
+      makeChecklistItem({
+        text: 'Buy milk',
+        checked: true,
+        completedBy: 'alice@example.com',
+        completedAtMs: now - 60 * 60 * 1000,
+      }),
+      makeChecklistItem({
+        text: 'Sync inventory',
+        checked: true,
+        automated: true,
+        completedBy: 'wiki-cli',
+        completedAtMs: now - 5 * 60 * 1000,
+      }),
+      makeChecklistItem({ text: 'Walk the dog' }),
+      makeChecklistItem({
+        text: 'Send weekly report',
+        checked: true,
+        completedBy: 'bob@example.com',
+        completedAtMs: now - 10 * 60 * 1000,
+      }),
+    ];
+
+    return html`
+      <div style="max-width: 640px; padding: 20px;">
+        <wiki-checklist
+          list-name="weekly_tasks"
+          .items=${items}
+          .loading=${false}
+          .error=${null}
+        ></wiki-checklist>
+      </div>
+    `;
+  },
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'Mix of human and agent completions in the same list — useful for verifying both captions render side-by-side.',
+      },
+    },
+  },
+};
+
+export const OverdueItems: Story = {
+  render: () => {
+    const now = Date.now();
+    const items: ChecklistItem[] = [
+      makeChecklistItem({
+        text: 'Renew passport',
+        dueMs: now - 7 * 24 * 60 * 60 * 1000, // 1w overdue
+      }),
+      makeChecklistItem({
+        text: 'File taxes',
+        dueMs: now - 60 * 60 * 1000, // 1h overdue
+      }),
+      makeChecklistItem({
+        text: 'Doctor appointment',
+        dueMs: now + 2 * 60 * 60 * 1000, // in 2h
+      }),
+      makeChecklistItem({
+        text: 'Past task (completed)',
+        checked: true,
+        dueMs: now - 24 * 60 * 60 * 1000,
+        completedBy: 'alice@example.com',
+        completedAtMs: now - 12 * 60 * 60 * 1000,
+      }),
+    ];
+
+    return html`
+      <div style="max-width: 640px; padding: 20px;">
+        <wiki-checklist
+          list-name="deadlines"
+          .items=${items}
+          .loading=${false}
+          .error=${null}
+        ></wiki-checklist>
+      </div>
+    `;
+  },
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'Items with due dates. Past-due items render with the overdue style; checked items do not.',
+      },
+    },
+  },
+};
+
+export const WithDescriptions: Story = {
+  render: () => {
+    const items: ChecklistItem[] = [
+      makeChecklistItem({
+        text: 'Buy oat milk',
+        tags: ['dairy'],
+        description: 'The brand Kirsten likes — Califia Farms, unsweetened.',
+      }),
+      makeChecklistItem({
+        text: 'Pick up new tires',
+        description: 'Discount Tire on Main Street. Appointment is at 2pm.',
+      }),
+      makeChecklistItem({ text: 'Call electrician' }),
+    ];
+
+    return html`
+      <div style="max-width: 640px; padding: 20px;">
+        <wiki-checklist
+          list-name="errands"
+          .items=${items}
+          .loading=${false}
+          .error=${null}
+        ></wiki-checklist>
+      </div>
+    `;
+  },
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'Items can carry an optional description (sub-line content) that renders below the main text.',
+      },
+    },
+  },
+};
+
 export const InteractiveTesting: Story = {
   render: () => {
     const groceryItems: ChecklistItem[] = [
-      { text: 'Whole milk', checked: false, tags: ['dairy', 'fridge'] },
-      { text: 'Eggs (x12)', checked: false, tags: ['dairy'] },
-      { text: 'Apples', checked: false, tags: ['produce'] },
-      { text: 'Sourdough bread', checked: false, tags: ['bakery'] },
-      { text: 'Butter', checked: false, tags: [] },
+      makeChecklistItem({ text: 'Whole milk', tags: ['dairy', 'fridge'] }),
+      makeChecklistItem({ text: 'Eggs (x12)', tags: ['dairy'] }),
+      makeChecklistItem({ text: 'Apples', tags: ['produce'] }),
+      makeChecklistItem({ text: 'Sourdough bread', tags: ['bakery'] }),
+      makeChecklistItem({ text: 'Butter' }),
     ];
 
     return html`
@@ -382,7 +595,7 @@ export const InteractiveTesting: Story = {
           <li>Check/uncheck items -- triggers an API save (no backend in Storybook, so a network error is expected)</li>
           <li>Click tag pills in the filter bar to filter items by tag</li>
           <li>Click the active pill again to clear the filter</li>
-          <li>Type in the "Add item..." field with :tag syntax and press Enter or click Add</li>
+          <li>Type in the "Add item..." field with #tag syntax and press Enter or click Add</li>
           <li>Click the remove button to remove an item</li>
           <li>Drag items to reorder them</li>
         </ul>
@@ -418,13 +631,13 @@ export const InteractiveTesting: Story = {
 export const TouchDragTesting: Story = {
   render: () => {
     const items: ChecklistItem[] = [
-      { text: 'Whole milk', checked: false, tags: ['dairy', 'fridge'] },
-      { text: 'Eggs (x12)', checked: false, tags: ['dairy'] },
-      { text: 'Apples', checked: false, tags: ['produce'] },
-      { text: 'Sourdough bread', checked: false, tags: ['bakery'] },
-      { text: 'Butter', checked: false, tags: [] },
-      { text: 'Greek yogurt', checked: false, tags: ['dairy', 'fridge'] },
-      { text: 'Bananas', checked: false, tags: ['produce'] },
+      makeChecklistItem({ text: 'Whole milk', tags: ['dairy', 'fridge'] }),
+      makeChecklistItem({ text: 'Eggs (x12)', tags: ['dairy'] }),
+      makeChecklistItem({ text: 'Apples', tags: ['produce'] }),
+      makeChecklistItem({ text: 'Sourdough bread', tags: ['bakery'] }),
+      makeChecklistItem({ text: 'Butter' }),
+      makeChecklistItem({ text: 'Greek yogurt', tags: ['dairy', 'fridge'] }),
+      makeChecklistItem({ text: 'Bananas', tags: ['produce'] }),
     ];
 
     return html`
@@ -471,9 +684,109 @@ export const TouchDragTesting: Story = {
   },
 };
 
-// ---------------------------------------------------------------------------
-// Decorator-based approach: use a play function to set state post-render
-// for stories where Lit property bindings alone are insufficient (e.g. when
-// we need to reach into shadow-DOM state).  The stories above use direct
-// property bindings which is the preferred pattern.
-// ---------------------------------------------------------------------------
+export const OCCRetryToast: Story = {
+  render: () => {
+    const items: ChecklistItem[] = [
+      makeChecklistItem({ text: 'Item A', tags: ['x'] }),
+      makeChecklistItem({ text: 'Item B', tags: ['x'] }),
+      makeChecklistItem({ text: 'Item C', tags: ['y'] }),
+    ];
+
+    // Force the toast visible by setting the internal state after the
+    // component upgrades. Stories can reach into the @state property
+    // because Lit's decorator-defined state is just a class field.
+    const toggleToast = (e: Event) => {
+      const target = e.currentTarget as HTMLButtonElement | null;
+      const root = target?.parentElement;
+      const checklist = root?.querySelector('wiki-checklist') as
+        | (HTMLElement & { _occRetryToastVisible?: boolean; requestUpdate?: () => void })
+        | null;
+      if (checklist) {
+        checklist._occRetryToastVisible = !checklist._occRetryToastVisible;
+        checklist.requestUpdate?.();
+      }
+    };
+
+    return html`
+      <div style="max-width: 640px; padding: 20px;">
+        <button @click=${toggleToast} style="margin-bottom: 12px;">
+          Toggle "Edited concurrently" toast
+        </button>
+        <wiki-checklist
+          list-name="shared_list"
+          .items=${items}
+          .loading=${false}
+          .error=${null}
+        ></wiki-checklist>
+      </div>
+    `;
+  },
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'The OCC retry toast — surfaced briefly after a FailedPrecondition triggers a refetch+retry. Click the button to toggle visibility.',
+      },
+    },
+  },
+};
+
+export const DebugSyncBadge: Story = {
+  render: () => {
+    const now = Date.now();
+    const items: ChecklistItem[] = [
+      makeChecklistItem({
+        text: 'Item with debug metadata',
+        tags: ['dev'],
+        sortOrder: 1000n,
+        updatedAtMs: now - 60_000,
+      }),
+      makeChecklistItem({
+        text: 'Another item',
+        tags: ['dev'],
+        sortOrder: 2000n,
+        updatedAtMs: now,
+      }),
+    ];
+
+    // Stories cannot reliably set localStorage before the page renders, so we
+    // do it imperatively then nudge the components to re-render.
+    const enableDebug = () => {
+      try { globalThis.localStorage.setItem('wiki-checklist-debug', '1'); } catch { /* noop */ }
+      document.querySelectorAll('wiki-checklist').forEach(c => {
+        const lit = c as HTMLElement & { requestUpdate?: () => void };
+        lit.requestUpdate?.();
+      });
+    };
+    const disableDebug = () => {
+      try { globalThis.localStorage.removeItem('wiki-checklist-debug'); } catch { /* noop */ }
+      document.querySelectorAll('wiki-checklist').forEach(c => {
+        const lit = c as HTMLElement & { requestUpdate?: () => void };
+        lit.requestUpdate?.();
+      });
+    };
+
+    return html`
+      <div style="max-width: 640px; padding: 20px;">
+        <div style="margin-bottom: 12px;">
+          <button @click=${enableDebug}>Enable debug</button>
+          <button @click=${disableDebug}>Disable debug</button>
+        </div>
+        <wiki-checklist
+          list-name="debug_list"
+          .items=${items}
+          .loading=${false}
+          .error=${null}
+        ></wiki-checklist>
+      </div>
+    `;
+  },
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'When the localStorage flag wiki-checklist-debug = "1" is set, the component renders a per-list sync_token + updated_at line and per-item uid + updated_at + sort_order. Use the buttons to toggle the flag.',
+      },
+    },
+  },
+};

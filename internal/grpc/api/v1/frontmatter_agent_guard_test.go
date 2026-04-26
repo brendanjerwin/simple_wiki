@@ -47,8 +47,9 @@ var _ = Describe("Frontmatter agent.* namespace guard", func() {
 				Expect(err).To(HaveGrpcStatusWithSubstr(codes.InvalidArgument, "agent"))
 			})
 
-			It("should mention AgentMetadataService in the error", func() {
-				Expect(err.Error()).To(ContainSubstring("AgentMetadataService"))
+			It("should describe the rejection as a reserved-namespace violation", func() {
+				Expect(err.Error()).To(ContainSubstring("reserved"))
+				Expect(err.Error()).To(ContainSubstring("agent"))
 			})
 
 			It("should not have written to the page", func() {

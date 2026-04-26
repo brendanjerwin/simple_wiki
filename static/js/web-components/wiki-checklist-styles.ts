@@ -314,6 +314,77 @@ export const wikiChecklistStyles = css`
     margin-top: 8px;
   }
 
+  /* Per-item metadata captions: completion, description, due, debug. */
+  .item-meta-caption,
+  .item-description,
+  .item-due,
+  .item-debug-badge {
+    flex: 0 0 100%;
+    font-size: 11px;
+    color: var(--color-text-muted);
+    margin-top: 2px;
+    line-height: 1.3;
+  }
+
+  .item-description {
+    color: var(--color-text-secondary);
+    font-size: 12px;
+    font-style: italic;
+  }
+
+  .item-due {
+    display: inline-flex;
+    gap: 4px;
+    align-items: center;
+  }
+
+  .item-due-overdue {
+    color: var(--color-error);
+    font-weight: 500;
+  }
+
+  .item-debug-badge {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    font-family: var(--font-family-mono, monospace);
+    font-size: 10px;
+    color: var(--color-text-muted);
+    opacity: 0.7;
+  }
+
+  .list-debug-badge {
+    font-family: var(--font-family-mono, monospace);
+    font-size: 10px;
+    color: var(--color-text-muted);
+    margin-bottom: 8px;
+    opacity: 0.7;
+  }
+
+  /* Brief toast that appears on OCC retry. */
+  .occ-retry-toast {
+    position: absolute;
+    bottom: 8px;
+    right: 8px;
+    background: var(--color-info, #2563eb);
+    color: var(--color-text-inverse, white);
+    padding: 6px 12px;
+    border-radius: 4px;
+    font-size: 12px;
+    box-shadow: var(--shadow-medium, 0 2px 8px rgba(0, 0, 0, 0.15));
+    pointer-events: none;
+    animation: occ-toast-fade-in 0.2s ease;
+  }
+
+  @keyframes occ-toast-fade-in {
+    from { opacity: 0; transform: translateY(4px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .checklist-container {
+    position: relative;
+  }
+
   @media (max-width: 480px) {
     .checklist-container {
       padding: 12px;

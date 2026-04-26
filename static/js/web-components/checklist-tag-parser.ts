@@ -1,13 +1,13 @@
 import { extractHashtags } from '../utils/tag-parser.js';
 
-export interface ChecklistItem {
+/**
+ * Minimal shape required to compose tagged text from an item.
+ * The full {@link import('../gen/api/v1/checklist_pb.js').ChecklistItem} satisfies
+ * this — but tests and other callers can use plain object literals too.
+ */
+export interface TaggedTextItem {
   text: string;
-  checked: boolean;
   tags: string[];
-}
-
-export interface ChecklistData {
-  items: ChecklistItem[];
 }
 
 /**
@@ -107,7 +107,7 @@ function consumeTagChars(chars: string[], start: number): number {
  * Compose structured item data into the editable `#tag` text format.
  * e.g. { text: "milk", tags: ["dairy", "fridge"] } -> "milk #dairy #fridge"
  */
-export function composeTaggedText(item: ChecklistItem): string {
+export function composeTaggedText(item: TaggedTextItem): string {
   if (item.tags.length === 0) return item.text;
   return item.text + item.tags.map(t => ` #${t}`).join('');
 }
