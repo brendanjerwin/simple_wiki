@@ -87,13 +87,10 @@ type ParsedVTODO struct {
 	AlarmPayload *string
 }
 
-// xAppleSortOrderProp is the Apple-namespaced VTODO property name we
-// honor as the canonical sort-order signal. PRIORITY is the RFC 5545
-// fallback used only when X-APPLE-SORT-ORDER is absent.
-const xAppleSortOrderProp = "X-APPLE-SORT-ORDER"
-
 // statusCompleted is the case-insensitive string we recognize as the
-// "checked" state on STATUS.
+// "checked" state on STATUS. It mirrors statusValueCompleted in
+// render.go but is kept distinct here to make Parse's matching
+// behavior (case-insensitive) self-evident at the call site.
 const statusCompleted = "COMPLETED"
 
 // sortOrderBitSize is the strconv.ParseInt bit-size for numeric
@@ -278,7 +275,7 @@ func collectTags(todo *ical.Component, description *string) []string {
 // Returns nil when neither is parseable as int64 — the mutator treats
 // that as "leave the stored sort order alone".
 func parseSortOrder(todo *ical.Component) *int64 {
-	if prop := todo.Props.Get(xAppleSortOrderProp); prop != nil {
+	if prop := todo.Props.Get(xAppleSortOrder); prop != nil {
 		if v, err := strconv.ParseInt(strings.TrimSpace(prop.Value), sortOrderBase10, sortOrderBitSize); err == nil {
 			return &v
 		}
