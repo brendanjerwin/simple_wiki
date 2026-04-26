@@ -4,7 +4,6 @@ import (
 	"encoding/xml"
 	"errors"
 	"net/http"
-	"strings"
 )
 
 // XML namespace constants. The CalDAV multistatus response is
@@ -33,6 +32,17 @@ const principalPath = "/"
 // statusOK is the multistatus per-property status string for
 // successful property fetches.
 const statusOK = "HTTP/1.1 200 OK"
+
+// depthOne is the only Depth header value that triggers child
+// enumeration. RFC 4918 also defines Depth:0 (default) and
+// "infinity"; CalDAV clients only send 0 or 1, and we treat any
+// unrecognized value as 0 so the response stays bounded.
+const depthOne = "1"
+
+// internalErrorMessage is the body sent on backend errors that don't
+// map to a more specific status. Centralized so every error path emits
+// the same opaque message — clients log the HTTP status anyway.
+const internalErrorMessage = "internal error"
 
 // servePROPFIND handles WebDAV PROPFIND requests against any CalDAV
 // URL. PROPFIND is the discovery primitive iOS / DAVx5 fire after the
@@ -74,10 +84,10 @@ func (s *Server) servePROPFIND(w http.ResponseWriter, r *http.Request) {
 // every collection on the page.
 func (s *Server) propfindHomeSet(w http.ResponseWriter, r *http.Request, page, depth string) {
 	responses := []multistatusResponse{homeSetResponse(page)}
-	if depth == "1" {
+	if depth == depthOne {
 		cols, err := s.Backend.ListCollections(r.Context(), page)
 		if err != nil {
-			http.Error(w, "internal error", http.StatusInternalServerError)
+			http.Error(w, internalErrorMessage, http.StatusInternalServerError)
 			return
 		}
 		for _, col := range cols {
@@ -92,14 +102,14 @@ func (s *Server) propfindHomeSet(w http.ResponseWriter, r *http.Request, page, d
 // enumerates every live item in the collection. Returns 404 when the
 // collection does not exist.
 func (s *Server) propfindCollection(w http.ResponseWriter, r *http.Request, page, list, depth string) {
-	if depth == "1" {
+	if depth == depthOne {
 		col, items, err := s.Backend.ListItems(r.Context(), page, list)
 		if err != nil {
 			if errors.Is(err, ErrCollectionNotFound) {
 				http.NotFound(w, r)
 				return
 			}
-			http.Error(w, "internal error", http.StatusInternalServerError)
+			http.Error(w, internalErrorMessage, http.StatusInternalServerError)
 			return
 		}
 		responses := []multistatusResponse{collectionResponse(col)}
@@ -115,7 +125,7 @@ func (s *Server) propfindCollection(w http.ResponseWriter, r *http.Request, page
 			http.NotFound(w, r)
 			return
 		}
-		http.Error(w, "internal error", http.StatusInternalServerError)
+		http.Error(w, internalErrorMessage, http.StatusInternalServerError)
 		return
 	}
 	writeMultistatus(w, []multistatusResponse{collectionResponse(col)})
@@ -132,7 +142,7 @@ func (s *Server) propfindItem(w http.ResponseWriter, r *http.Request, page, list
 			http.NotFound(w, r)
 			return
 		}
-		http.Error(w, "internal error", http.StatusInternalServerError)
+		http.Error(w, internalErrorMessage, http.StatusInternalServerError)
 		return
 	}
 	writeMultistatus(w, []multistatusResponse{itemResponse(page, list, item)})
@@ -143,7 +153,7 @@ func (s *Server) propfindItem(w http.ResponseWriter, r *http.Request, page, list
 // to find the URL it should issue a Depth:1 PROPFIND against to
 // enumerate collections.
 func homeSetResponse(page string) multistatusResponse {
-	href := "/" + page + "/"
+	href := pathSep + page + pathSep
 	return multistatusResponse{
 		Href: href,
 		Propstat: []propstat{{
@@ -170,7 +180,7 @@ func homeSetResponse(page string) multistatusResponse {
 // iOS / DAVx5 can decide whether to skip a sync (CTag unchanged) or
 // run an incremental sync-collection REPORT (sync-token).
 func collectionResponse(col CalendarCollection) multistatusResponse {
-	href := "/" + col.Page + "/" + col.ListName + "/"
+	href := pathSep + col.Page + pathSep + col.ListName + pathSep
 	return multistatusResponse{
 		Href: href,
 		Propstat: []propstat{{
@@ -196,7 +206,7 @@ func collectionResponse(col CalendarCollection) multistatusResponse {
 // PROPFINDs to populate task lists without firing a follow-up GET per
 // item; the ETag lets them skip re-fetching unchanged items.
 func itemResponse(page, list string, item CalendarItem) multistatusResponse {
-	href := "/" + page + "/" + list + "/" + item.UID + ".ics"
+	href := pathSep + page + pathSep + list + pathSep + item.UID + icsSuffix
 	return multistatusResponse{
 		Href: href,
 		Propstat: []propstat{{
@@ -218,7 +228,7 @@ func writeMultistatus(w http.ResponseWriter, responses []multistatusResponse) {
 	body := multistatus{Responses: responses}
 	out, err := xml.Marshal(body)
 	if err != nil {
-		http.Error(w, "internal error", http.StatusInternalServerError)
+		http.Error(w, internalErrorMessage, http.StatusInternalServerError)
 		return
 	}
 	w.Header().Set("Content-Type", xmlContentType)
@@ -227,14 +237,12 @@ func writeMultistatus(w http.ResponseWriter, responses []multistatusResponse) {
 	_, _ = w.Write(out)
 }
 
-// multistatus is the WebDAV `<multistatus>` root element. encoding/xml
-// emits the namespace declarations from the field tags so iOS sees
-// `xmlns:D`, `xmlns:C`, and `xmlns:CS` on the root.
+// multistatus is the WebDAV `<multistatus>` root element. The custom
+// MarshalXML below emits the start-element with the three namespace
+// declarations CalDAV clients expect (DAV, C:CalDAV, CS:Calendar
+// Server) and then defers to encoding/xml for each child response.
 type multistatus struct {
-	XMLName   xml.Name              `xml:"DAV: multistatus"`
-	XmlnsCal  string                `xml:"xmlns:C,attr"`
-	XmlnsCS   string                `xml:"xmlns:CS,attr"`
-	Responses []multistatusResponse `xml:"DAV: response"`
+	Responses []multistatusResponse
 }
 
 // MarshalXML overrides the default encoding/xml output so the root
@@ -339,6 +347,3 @@ type comp struct {
 	Name string `xml:"name,attr"`
 }
 
-// Quiet the lint about unused namespace fields on multistatus — they
-// exist so encoding/xml emits the prefix declarations on the root.
-var _ = []string{nsDAV, strings.TrimSpace("")}
