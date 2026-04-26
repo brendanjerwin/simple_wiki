@@ -16,25 +16,25 @@ import (
 // scanFakeReaderMutator is a minimal PageReaderMutator for scan job tests.
 type scanFakeReaderMutator struct{}
 
-func (f *scanFakeReaderMutator) ReadFrontMatter(id wikipage.PageIdentifier) (wikipage.PageIdentifier, wikipage.FrontMatter, error) {
+func (*scanFakeReaderMutator) ReadFrontMatter(id wikipage.PageIdentifier) (wikipage.PageIdentifier, wikipage.FrontMatter, error) {
 	return id, nil, nil
 }
 
-func (f *scanFakeReaderMutator) WriteFrontMatter(_ wikipage.PageIdentifier, _ wikipage.FrontMatter) error {
+func (*scanFakeReaderMutator) WriteFrontMatter(_ wikipage.PageIdentifier, _ wikipage.FrontMatter) error {
 	return nil
 }
 
-func (f *scanFakeReaderMutator) ReadMarkdown(id wikipage.PageIdentifier) (wikipage.PageIdentifier, wikipage.Markdown, error) {
+func (*scanFakeReaderMutator) ReadMarkdown(id wikipage.PageIdentifier) (wikipage.PageIdentifier, wikipage.Markdown, error) {
 	return id, "", nil
 }
 
-func (f *scanFakeReaderMutator) WriteMarkdown(_ wikipage.PageIdentifier, _ wikipage.Markdown) error {
+func (*scanFakeReaderMutator) WriteMarkdown(_ wikipage.PageIdentifier, _ wikipage.Markdown) error {
 	return nil
 }
 
-func (f *scanFakeReaderMutator) DeletePage(_ wikipage.PageIdentifier) error { return nil }
+func (*scanFakeReaderMutator) DeletePage(_ wikipage.PageIdentifier) error { return nil }
 
-func (f *scanFakeReaderMutator) ModifyMarkdown(_ wikipage.PageIdentifier, _ func(wikipage.Markdown) (wikipage.Markdown, error)) error {
+func (*scanFakeReaderMutator) ModifyMarkdown(_ wikipage.PageIdentifier, _ func(wikipage.Markdown) (wikipage.Markdown, error)) error {
 	return nil
 }
 

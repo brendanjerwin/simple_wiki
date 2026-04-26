@@ -169,6 +169,9 @@ var _ = Describe("buildChecklistCommand", func() {
 			case "reorder":
 				Expect(s.ArgsUsage).To(ContainSubstring(pageListUIDUsage))
 				Expect(s.ArgsUsage).To(ContainSubstring("<new_sort_order>"))
+			default:
+				// Two-arg subcommands (list, add) — usage doesn't include
+				// pageListUIDUsage, so nothing to assert here.
 			}
 		}
 	})

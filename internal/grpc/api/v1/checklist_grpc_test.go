@@ -10,7 +10,7 @@ import (
 	"google.golang.org/grpc/codes"
 
 	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
-	v1 "github.com/brendanjerwin/simple_wiki/internal/grpc/api/v1"
+	"github.com/brendanjerwin/simple_wiki/internal/grpc/api/v1"
 	"github.com/brendanjerwin/simple_wiki/pkg/ulid"
 	"github.com/brendanjerwin/simple_wiki/server/checklistmutator"
 )
@@ -18,8 +18,15 @@ import (
 // checklistSteadyClock implements checklistmutator.Clock for tests.
 type checklistSteadyClock struct{}
 
+const (
+	checklistTestYear  = 2026
+	checklistTestMonth = 4
+	checklistTestDay   = 25
+	checklistTestHour  = 12
+)
+
 func (*checklistSteadyClock) Now() time.Time {
-	return time.Date(2026, 4, 25, 12, 0, 0, 0, time.UTC)
+	return time.Date(checklistTestYear, time.Month(checklistTestMonth), checklistTestDay, checklistTestHour, 0, 0, 0, time.UTC)
 }
 
 var _ = Describe("ChecklistService handlers — errChecklistMutatorNotConfigured", func() {

@@ -29,6 +29,25 @@ var (
 	codecClock = internalClock{t: codecNow}
 )
 
+// asMap / asAnySlice unwrap deeply-nested fixture lookups in a single
+// gateway so revive's unchecked-type-assertion rule sees an explicit
+// check rather than a panic-on-mismatch cast at every grep-step.
+func asMap(v any) map[string]any {
+	m, ok := v.(map[string]any)
+	if !ok {
+		Fail("expected map[string]any")
+	}
+	return m
+}
+
+func asAnySlice(v any) []any {
+	s, ok := v.([]any)
+	if !ok {
+		Fail("expected []any")
+	}
+	return s
+}
+
 var _ = Describe("readMap", func() {
 	When("m is nil", func() {
 		It("should return nil", func() {
@@ -629,7 +648,7 @@ var _ = Describe("encodeTombstones", func() {
 			}
 			encoded := encodeTombstones(tombstones)
 			Expect(encoded).To(HaveLen(2))
-			first := encoded[0].(map[string]any)
+			first := asMap(encoded[0])
 			Expect(first["uid"]).To(Equal("earlier"))
 		})
 	})
@@ -641,7 +660,7 @@ var _ = Describe("encodeTombstones", func() {
 				{Uid: "no-gc", DeletedAt: timestamppb.New(t1), GcAfter: nil},
 			}
 			encoded := encodeTombstones(tombstones)
-			m := encoded[0].(map[string]any)
+			m := asMap(encoded[0])
 			Expect(m).To(HaveKey("deleted_at"))
 			Expect(m).NotTo(HaveKey("gc_after"))
 		})
@@ -653,7 +672,7 @@ var _ = Describe("encodeTombstones", func() {
 				{Uid: "no-del", DeletedAt: nil, GcAfter: timestamppb.New(codecNow)},
 			}
 			encoded := encodeTombstones(tombstones)
-			m := encoded[0].(map[string]any)
+			m := asMap(encoded[0])
 			Expect(m).NotTo(HaveKey("deleted_at"))
 			Expect(m).To(HaveKey("gc_after"))
 		})
@@ -855,31 +874,31 @@ var _ = Describe("encodeChecklist", func() {
 		})
 
 		It("should write items under wiki.checklists.groceries.items", func() {
-			wiki := fm["wiki"].(map[string]any)
-			checklists := wiki["checklists"].(map[string]any)
-			groceries := checklists["groceries"].(map[string]any)
-			items := groceries["items"].([]any)
+			wiki := asMap(fm["wiki"])
+			checklists := asMap(wiki["checklists"])
+			groceries := asMap(checklists["groceries"])
+			items := asAnySlice(groceries["items"])
 			Expect(items).To(HaveLen(1))
 		})
 
 		It("should write sync_token", func() {
-			wiki := fm["wiki"].(map[string]any)
-			checklists := wiki["checklists"].(map[string]any)
-			groceries := checklists["groceries"].(map[string]any)
+			wiki := asMap(fm["wiki"])
+			checklists := asMap(wiki["checklists"])
+			groceries := asMap(checklists["groceries"])
 			Expect(groceries["sync_token"]).To(Equal(int64(5)))
 		})
 
 		It("should write updated_at", func() {
-			wiki := fm["wiki"].(map[string]any)
-			checklists := wiki["checklists"].(map[string]any)
-			groceries := checklists["groceries"].(map[string]any)
+			wiki := asMap(fm["wiki"])
+			checklists := asMap(wiki["checklists"])
+			groceries := asMap(checklists["groceries"])
 			Expect(groceries["updated_at"]).NotTo(BeEmpty())
 		})
 
 		It("should write tombstones", func() {
-			wiki := fm["wiki"].(map[string]any)
-			checklists := wiki["checklists"].(map[string]any)
-			groceries := checklists["groceries"].(map[string]any)
+			wiki := asMap(fm["wiki"])
+			checklists := asMap(wiki["checklists"])
+			groceries := asMap(checklists["groceries"])
 			Expect(groceries["tombstones"]).NotTo(BeNil())
 		})
 	})
@@ -917,12 +936,12 @@ var _ = Describe("encodeChecklist", func() {
 		})
 
 		It("should remove only the encoded list from legacy", func() {
-			legacy := fm["checklists"].(map[string]any)
+			legacy := asMap(fm["checklists"])
 			Expect(legacy).NotTo(HaveKey("groceries"))
 		})
 
 		It("should preserve other legacy lists", func() {
-			legacy := fm["checklists"].(map[string]any)
+			legacy := asMap(fm["checklists"])
 			Expect(legacy).To(HaveKey("other"))
 		})
 	})
@@ -932,9 +951,9 @@ var _ = Describe("encodeChecklist", func() {
 			fm := wikipage.FrontMatter{}
 			cl := &apiv1.Checklist{Name: "list", SyncToken: 1, UpdatedAt: timestamppb.New(codecNow)}
 			encodeChecklist(fm, "list", cl)
-			wiki := fm["wiki"].(map[string]any)
-			checklists := wiki["checklists"].(map[string]any)
-			list := checklists["list"].(map[string]any)
+			wiki := asMap(fm["wiki"])
+			checklists := asMap(wiki["checklists"])
+			list := asMap(checklists["list"])
 			Expect(list).NotTo(HaveKey("tombstones"))
 		})
 	})

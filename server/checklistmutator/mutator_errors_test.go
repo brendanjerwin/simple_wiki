@@ -3,6 +3,7 @@ package checklistmutator_test
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"time"
@@ -27,7 +28,7 @@ func (s *errorStore) ReadFrontMatter(_ wikipage.PageIdentifier) (wikipage.PageId
 	return "", nil, s.err
 }
 
-func (s *errorStore) WriteFrontMatter(_ wikipage.PageIdentifier, _ wikipage.FrontMatter) error {
+func (*errorStore) WriteFrontMatter(_ wikipage.PageIdentifier, _ wikipage.FrontMatter) error {
 	return nil
 }
 
@@ -107,7 +108,7 @@ var _ = Describe("Mutator error paths", func() {
 			)
 
 			BeforeEach(func() {
-				store := &errorStore{err: fmt.Errorf("disk I/O failure")}
+				store := &errorStore{err: errors.New("disk I/O failure")}
 				mutator = checklistmutator.New(store, clock, ulids)
 				_, _, err = mutator.AddItem(ctx, "broken-page", "list",
 					checklistmutator.AddItemArgs{Text: "item"}, human)
@@ -253,15 +254,19 @@ var _ = Describe("Mutator error paths", func() {
 				// Manually inject a tombstone with nil GcAfter into the store
 				store.mu.Lock()
 				fm := store.pages["p"]
-				wiki := fm["wiki"].(map[string]any)
-				checklists := wiki["checklists"].(map[string]any)
-				listMap := checklists["list"].(map[string]any)
+				wiki, ok := fm["wiki"].(map[string]any)
+				Expect(ok).To(BeTrue())
+				checklists, ok := wiki["checklists"].(map[string]any)
+				Expect(ok).To(BeTrue())
+				listMap, ok := checklists["list"].(map[string]any)
+				Expect(ok).To(BeTrue())
 				nilGCTombstone := map[string]any{
 					"uid":        "nil-gc-uid",
 					"deleted_at": clock.Now().Format("2006-01-02T15:04:05.999999999Z07:00"),
 					// GcAfter intentionally omitted
 				}
-				existingTombstones := listMap["tombstones"].([]any)
+				existingTombstones, ok := listMap["tombstones"].([]any)
+				Expect(ok).To(BeTrue())
 				listMap["tombstones"] = append(existingTombstones, nilGCTombstone)
 				store.mu.Unlock()
 
