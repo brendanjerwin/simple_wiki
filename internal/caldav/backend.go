@@ -281,6 +281,7 @@ func (*defaultBackend) DeleteItem(_ context.Context, _, _, _, _ string, _ tailsc
 	return errors.New("caldav: DeleteItem not implemented yet")
 }
 
-func (*defaultBackend) SyncCollection(_ context.Context, _, _, _ string) (string, []CalendarItem, []string, error) {
+// revive:disable-next-line:max-control-nesting,function-result-limit  // CalendarBackend.SyncCollection's 4-return shape (newToken, changed, deleted, err) is part of the interface contract.
+func (*defaultBackend) SyncCollection(_ context.Context, _, _, _ string) (string, []CalendarItem, []string, error) { //nolint:revive // 4 returns are interface-mandated
 	return "", nil, nil, errors.New("caldav: SyncCollection not implemented yet")
 }

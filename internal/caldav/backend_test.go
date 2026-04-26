@@ -52,11 +52,11 @@ func (f *fakeMutator) ListItems(_ context.Context, page, listName string) (*apiv
 	return &apiv1.Checklist{Name: listName}, nil
 }
 
-func (f *fakeMutator) UpsertFromCalDAV(_ context.Context, _, _, _ string, _ checklistmutator.UpsertFromCalDAVArgs, _, _ string, _ tailscale.IdentityValue) (*apiv1.ChecklistItem, *apiv1.Checklist, error) {
+func (*fakeMutator) UpsertFromCalDAV(_ context.Context, _, _, _ string, _ checklistmutator.UpsertFromCalDAVArgs, _, _ string, _ tailscale.IdentityValue) (*apiv1.ChecklistItem, *apiv1.Checklist, error) {
 	return nil, nil, errors.New("fakeMutator.UpsertFromCalDAV not used in these tests")
 }
 
-func (f *fakeMutator) DeleteItem(_ context.Context, _, _, _ string, _ *time.Time, _ tailscale.IdentityValue) (*apiv1.Checklist, error) {
+func (*fakeMutator) DeleteItem(_ context.Context, _, _, _ string, _ *time.Time, _ tailscale.IdentityValue) (*apiv1.Checklist, error) {
 	return nil, errors.New("fakeMutator.DeleteItem not used in these tests")
 }
 
