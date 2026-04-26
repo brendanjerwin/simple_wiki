@@ -26,6 +26,22 @@ var (
 	// tombstone list (HTTP 404 to clients; sync-collection emits the
 	// uid in the deleted set instead).
 	ErrItemDeleted = errors.New("caldav: item deleted")
+	// ErrPreconditionFailed is returned when an If-Match or
+	// If-None-Match precondition on PutItem/DeleteItem does not hold.
+	// The HTTP layer maps this to 412 Precondition Failed.
+	ErrPreconditionFailed = errors.New("caldav: precondition failed")
+	// ErrInvalidBody is returned when a PUT body cannot be parsed as
+	// a single VTODO (no VTODO, multiple VTODOs, missing UID, or any
+	// other decoder error). The HTTP layer maps this to 400.
+	ErrInvalidBody = errors.New("caldav: invalid request body")
+	// ErrUIDMismatch is returned when the UID in the PUT body does
+	// not match the uid in the request path. The HTTP layer maps
+	// this to 400.
+	ErrUIDMismatch = errors.New("caldav: path uid does not match body UID")
+	// ErrDescriptionTooLarge is returned when a PUT body's
+	// DESCRIPTION exceeds icalcodec.DescriptionMaxBytes. The HTTP
+	// layer maps this to 413 Payload Too Large.
+	ErrDescriptionTooLarge = errors.New("caldav: description too large")
 )
 
 // CalendarCollection describes a single (page, list) pair. The HTTP
