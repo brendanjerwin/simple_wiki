@@ -681,18 +681,44 @@ const (
 // auditWrite emits a single structured log line summarising a
 // CalDAV write attempt. Called from servePUT and serveDELETE on the
 // outcomes the audit log cares about: PUT created / updated / 412,
-// DELETE 204. Reads, 4xx-other-than-412, and 5xx are NOT audited —
-// those either have no business signal (reads, 5xx leaks) or no
-// consistent identity (the 403 anonymous-rejection happens before
-// the handler logic, so there's no Tailscale principal to attribute
-// the call to).
+// DELETE 204 / 412. Reads, 4xx-other-than-412, and 5xx are NOT
+// audited — those either have no business signal (reads, 5xx leaks)
+// or no consistent identity (the 403 anonymous-rejection happens
+// before the handler logic, so there's no Tailscale principal to
+// attribute the call to).
 //
 // Format is a single line keyed by `caldav: action=… principal=… …`
 // so log-aggregation rules can split it deterministically. etag is
 // optional (DELETE doesn't carry one); pass "" to omit the field.
 //
-// SKELETON: the green phase wires this up to actually write to
-// s.AuditLogger / log.Default().
-func (s *Server) auditWrite(_, _, _, _, _, _, _ string) {
-	// no-op — green phase fills this in.
+// The destination logger is s.AuditLogger when set, falling back to
+// log.Default() so production callers that haven't constructed via
+// NewServer still get audit lines on stderr.
+func (s *Server) auditWrite(action, principal, page, list, uid, outcome, etag string) {
+	logger := s.AuditLogger
+	if logger == nil {
+		logger = log.Default()
+	}
+	var b strings.Builder
+	b.WriteString("caldav: action=")
+	b.WriteString(action)
+	b.WriteString(` principal="`)
+	b.WriteString(principal)
+	b.WriteString(`" page="`)
+	b.WriteString(page)
+	b.WriteString(`" list="`)
+	b.WriteString(list)
+	b.WriteString(`" uid="`)
+	b.WriteString(uid)
+	b.WriteString(`" outcome=`)
+	b.WriteString(outcome)
+	if etag != "" {
+		// Quote the etag so the line stays parseable even though
+		// the etag itself contains the W/"…" wire form. Embedded
+		// double quotes are escaped with a backslash.
+		b.WriteString(` etag="`)
+		b.WriteString(strings.ReplaceAll(etag, `"`, `\"`))
+		b.WriteString(`"`)
+	}
+	logger.Println(b.String())
 }
