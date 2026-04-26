@@ -17,18 +17,17 @@ import (
 // about; helpers below add UID/SUMMARY where the test isn't testing
 // their absence.
 func buildVTODO(props ...string) []byte {
-	var b strings.Builder
-	b.WriteString("BEGIN:VCALENDAR\r\n")
-	b.WriteString("VERSION:2.0\r\n")
-	b.WriteString("PRODID:-//test//EN\r\n")
-	b.WriteString("BEGIN:VTODO\r\n")
-	for _, p := range props {
-		b.WriteString(p)
-		b.WriteString("\r\n")
+	parts := []string{
+		"BEGIN:VCALENDAR\r\n",
+		"VERSION:2.0\r\n",
+		"PRODID:-//test//EN\r\n",
+		"BEGIN:VTODO\r\n",
 	}
-	b.WriteString("END:VTODO\r\n")
-	b.WriteString("END:VCALENDAR\r\n")
-	return []byte(b.String())
+	for _, p := range props {
+		parts = append(parts, p, "\r\n")
+	}
+	parts = append(parts, "END:VTODO\r\n", "END:VCALENDAR\r\n")
+	return []byte(strings.Join(parts, ""))
 }
 
 // withDefaults prepends a UID and SUMMARY line so tests that don't care
