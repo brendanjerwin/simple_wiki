@@ -418,6 +418,21 @@ const maxPUTBodyBytes int64 = 256 * 1024
 // send.
 const iCalContentTypePrefix = "text/calendar"
 
+// parseItemPath enforces that the request URL names an item resource
+// (page, list, and uid all populated). On any failure it writes a 400
+// Bad Request to w and returns ok=false; the caller should bail. On
+// success it returns the parsed components and ok=true.
+//
+//revive:disable-next-line:function-result-limit Four returns mirror parsePath; the caller wants each component named.
+func parseItemPath(w http.ResponseWriter, r *http.Request) (page, list, uid string, ok bool) {
+	page, list, uid, err := parsePath(r.URL.Path)
+	if err != nil || uid == "" {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return "", "", "", false
+	}
+	return page, list, uid, true
+}
+
 // servePUT handles PUT against /<page>/<list>/<uid>.ics. The flow is:
 //
 //  1. requireIdentity — anonymous callers get 403.
@@ -442,9 +457,8 @@ func (s *Server) servePUT(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	page, list, uid, err := parsePath(r.URL.Path)
-	if err != nil || uid == "" {
-		http.Error(w, "bad request", http.StatusBadRequest)
+	page, list, uid, ok := parseItemPath(w, r)
+	if !ok {
 		return
 	}
 	if !isCalendarContentType(r.Header.Get("Content-Type")) {
@@ -496,9 +510,8 @@ func (s *Server) serveDELETE(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	page, list, uid, err := parsePath(r.URL.Path)
-	if err != nil || uid == "" {
-		http.Error(w, "bad request", http.StatusBadRequest)
+	page, list, uid, ok := parseItemPath(w, r)
+	if !ok {
 		return
 	}
 	ifMatch := stripETagQuotes(r.Header.Get("If-Match"))
