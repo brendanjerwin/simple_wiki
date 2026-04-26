@@ -3,6 +3,7 @@ package caldav
 import (
 	"errors"
 	"io"
+	"log"
 	"net/http"
 	"strings"
 
@@ -32,6 +33,12 @@ type Server struct {
 	// When nil (zero-value Server, used by some legacy tests) the
 	// instrumented wrapper falls back to otel.Tracer at call time.
 	Tracer trace.Tracer
+
+	// AuditLogger is the destination for write-path audit log lines
+	// (PUT / DELETE successes and PUT precondition-failed). When nil
+	// the audit path falls back to log.Default(); tests inject a
+	// buffer-backed logger to capture output. Reads are never audited.
+	AuditLogger *log.Logger
 }
 
 // NewServer constructs a CalDAV Server with metrics, tracing, and audit
@@ -523,15 +530,20 @@ func (s *Server) servePUT(w http.ResponseWriter, r *http.Request) {
 	newETag, created, err := s.Backend.PutItem(r.Context(), page, list, uid, body, ifMatch, ifNoneMatch, identity)
 	if err != nil {
 		writePUTErrorStatus(w, err)
+		if errors.Is(err, ErrPreconditionFailed) {
+			s.auditWrite(auditActionPut, identity.Name(), page, list, uid, auditOutcomePreconditionFailed, "")
+		}
 		return
 	}
 	if newETag != "" {
 		w.Header().Set("ETag", newETag)
 	}
 	if created {
+		s.auditWrite(auditActionPut, identity.Name(), page, list, uid, auditOutcomeCreated, newETag)
 		w.WriteHeader(http.StatusCreated)
 		return
 	}
+	s.auditWrite(auditActionPut, identity.Name(), page, list, uid, auditOutcomeUpdated, newETag)
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -561,8 +573,12 @@ func (s *Server) serveDELETE(w http.ResponseWriter, r *http.Request) {
 
 	if err := s.Backend.DeleteItem(r.Context(), page, list, uid, ifMatch, identity); err != nil {
 		writeDELETEErrorStatus(w, err)
+		if errors.Is(err, ErrPreconditionFailed) {
+			s.auditWrite(auditActionDelete, identity.Name(), page, list, uid, auditOutcomePreconditionFailed, "")
+		}
 		return
 	}
+	s.auditWrite(auditActionDelete, identity.Name(), page, list, uid, auditOutcomeDeleted, "")
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -644,4 +660,39 @@ func writeDELETEErrorStatus(w http.ResponseWriter, err error) {
 	default:
 		http.Error(w, "internal error", http.StatusInternalServerError)
 	}
+}
+
+// Audit outcome strings emitted by auditWrite. Constants because
+// (a) revive's add-constant rule fires on raw string literals, and
+// (b) downstream log-aggregation rules (Loki / Grafana) hinge on the
+// exact spelling — drift would silently break dashboards.
+const (
+	auditOutcomeCreated            = "created"
+	auditOutcomeUpdated            = "updated"
+	auditOutcomeDeleted            = "deleted"
+	auditOutcomePreconditionFailed = "precondition_failed"
+	// auditActionPut and auditActionDelete are the action= field
+	// values; only PUT and DELETE are audited (reads have no useful
+	// audit signal).
+	auditActionPut    = "put"
+	auditActionDelete = "delete"
+)
+
+// auditWrite emits a single structured log line summarising a
+// CalDAV write attempt. Called from servePUT and serveDELETE on the
+// outcomes the audit log cares about: PUT created / updated / 412,
+// DELETE 204. Reads, 4xx-other-than-412, and 5xx are NOT audited —
+// those either have no business signal (reads, 5xx leaks) or no
+// consistent identity (the 403 anonymous-rejection happens before
+// the handler logic, so there's no Tailscale principal to attribute
+// the call to).
+//
+// Format is a single line keyed by `caldav: action=… principal=… …`
+// so log-aggregation rules can split it deterministically. etag is
+// optional (DELETE doesn't carry one); pass "" to omit the field.
+//
+// SKELETON: the green phase wires this up to actually write to
+// s.AuditLogger / log.Default().
+func (s *Server) auditWrite(_, _, _, _, _, _, _ string) {
+	// no-op — green phase fills this in.
 }
