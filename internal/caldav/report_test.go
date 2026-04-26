@@ -21,8 +21,9 @@ import (
 //
 //revive:disable:exported Internal test helper.
 type reportBackend struct {
-	getItemFn   func(ctx context.Context, page, list, uid string) (caldav.CalendarItem, error)
-	listItemsFn func(ctx context.Context, page, list string) (caldav.CalendarCollection, []caldav.CalendarItem, error)
+	getItemFn        func(ctx context.Context, page, list, uid string) (caldav.CalendarItem, error)
+	listItemsFn      func(ctx context.Context, page, list string) (caldav.CalendarCollection, []caldav.CalendarItem, error)
+	syncCollectionFn func(ctx context.Context, page, list, clientToken string) (string, []caldav.CalendarItem, []string, error)
 }
 
 func (*reportBackend) ListCollections(_ context.Context, _ string) ([]caldav.CalendarCollection, error) {
@@ -56,8 +57,11 @@ func (*reportBackend) DeleteItem(_ context.Context, _, _, _, _ string, _ tailsca
 }
 
 //revive:disable-next-line:function-result-limit Mirrors CalendarBackend.SyncCollection's interface signature.
-func (*reportBackend) SyncCollection(_ context.Context, _, _, _ string) (string, []caldav.CalendarItem, []string, error) {
-	return "", nil, nil, errors.New("SyncCollection not used in report tests")
+func (r *reportBackend) SyncCollection(ctx context.Context, page, list, clientToken string) (string, []caldav.CalendarItem, []string, error) {
+	if r.syncCollectionFn != nil {
+		return r.syncCollectionFn(ctx, page, list, clientToken)
+	}
+	return "", nil, nil, errors.New("SyncCollection not used in this report test")
 }
 
 // reportRequest builds an authenticated REPORT request with the given
@@ -276,19 +280,19 @@ var _ = Describe("Server.serveREPORT calendar-multiget", func() {
 		})
 	})
 
-	When("the root element is sync-collection", func() {
+	When("the root element is sync-collection on a non-collection URL", func() {
 		var rec *httptest.ResponseRecorder
 
 		BeforeEach(func() {
 			body := `<?xml version="1.0"?><sync-collection xmlns="DAV:"><sync-token/></sync-collection>`
 			server := &caldav.Server{Backend: &reportBackend{}}
 			rec = httptest.NewRecorder()
-			req := reportRequest("/shopping/this-week/", body)
+			req := reportRequest("/shopping", body)
 			server.ServeREPORTForTest(rec, req)
 		})
 
-		It("should return 501 Not Implemented", func() {
-			Expect(rec.Code).To(Equal(http.StatusNotImplemented))
+		It("should return 404 Not Found", func() {
+			Expect(rec.Code).To(Equal(http.StatusNotFound))
 		})
 	})
 
@@ -569,6 +573,251 @@ var _ = Describe("Server.serveREPORT calendar-query", func() {
 
 		It("should include the item href", func() {
 			Expect(rec.Body.String()).To(ContainSubstring("/shopping/this-week/01HZ8K7Q9X1V2N3R4T5Y6Z7B8C.ics"))
+		})
+	})
+})
+
+// syncCollectionInitialBody is a sync-collection body with an empty
+// `<sync-token/>` element — what RFC 6578 §3.5 calls the "initial sync"
+// shape.
+const syncCollectionInitialBody = `<?xml version="1.0" encoding="utf-8"?>
+<sync-collection xmlns="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav">
+  <sync-token/>
+  <sync-level>1</sync-level>
+  <prop>
+    <getetag/>
+    <C:calendar-data/>
+  </prop>
+</sync-collection>`
+
+// syncCollectionTokenBody is the same sync-collection body but with a
+// non-empty `<sync-token>` element pointing at a previously-emitted
+// URI.
+func syncCollectionTokenBody(token string) string {
+	return `<?xml version="1.0" encoding="utf-8"?>
+<sync-collection xmlns="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav">
+  <sync-token>` + token + `</sync-token>
+  <sync-level>1</sync-level>
+  <prop>
+    <getetag/>
+    <C:calendar-data/>
+  </prop>
+</sync-collection>`
+}
+
+var _ = Describe("Server.serveREPORT sync-collection", func() {
+	When("the request is anonymous", func() {
+		var rec *httptest.ResponseRecorder
+
+		BeforeEach(func() {
+			server := &caldav.Server{Backend: &reportBackend{}}
+			rec = httptest.NewRecorder()
+			req := httptest.NewRequest("REPORT", "/shopping/this-week/", strings.NewReader(syncCollectionInitialBody))
+			req.Header.Set("Content-Type", "application/xml; charset=utf-8")
+			req = req.WithContext(tailscale.ContextWithIdentity(req.Context(), tailscale.Anonymous))
+			server.ServeREPORTForTest(rec, req)
+		})
+
+		It("should return 403 Forbidden", func() {
+			Expect(rec.Code).To(Equal(http.StatusForbidden))
+		})
+	})
+
+	When("the URL is a page rather than a collection", func() {
+		var rec *httptest.ResponseRecorder
+
+		BeforeEach(func() {
+			server := &caldav.Server{Backend: &reportBackend{}}
+			rec = httptest.NewRecorder()
+			req := reportRequest("/shopping", syncCollectionInitialBody)
+			server.ServeREPORTForTest(rec, req)
+		})
+
+		It("should return 404 Not Found", func() {
+			Expect(rec.Code).To(Equal(http.StatusNotFound))
+		})
+	})
+
+	When("the sync-collection body is malformed", func() {
+		var rec *httptest.ResponseRecorder
+
+		BeforeEach(func() {
+			server := &caldav.Server{Backend: &reportBackend{}}
+			rec = httptest.NewRecorder()
+			req := reportRequest("/shopping/this-week/", `<?xml version="1.0"?><sync-collection xmlns="DAV:"><not-closed`)
+			server.ServeREPORTForTest(rec, req)
+		})
+
+		It("should return 400 Bad Request", func() {
+			Expect(rec.Code).To(Equal(http.StatusBadRequest))
+		})
+	})
+
+	When("the named collection does not exist", func() {
+		var rec *httptest.ResponseRecorder
+
+		BeforeEach(func() {
+			backend := &reportBackend{
+				syncCollectionFn: func(_ context.Context, _, _, _ string) (string, []caldav.CalendarItem, []string, error) {
+					return "", nil, nil, caldav.ErrCollectionNotFound
+				},
+			}
+			server := &caldav.Server{Backend: backend}
+			rec = httptest.NewRecorder()
+			req := reportRequest("/shopping/this-week/", syncCollectionInitialBody)
+			server.ServeREPORTForTest(rec, req)
+		})
+
+		It("should return 404 Not Found", func() {
+			Expect(rec.Code).To(Equal(http.StatusNotFound))
+		})
+	})
+
+	When("the client supplies an invalid sync-token", func() {
+		var rec *httptest.ResponseRecorder
+
+		BeforeEach(func() {
+			backend := &reportBackend{
+				syncCollectionFn: func(_ context.Context, _, _, _ string) (string, []caldav.CalendarItem, []string, error) {
+					return "", nil, nil, caldav.ErrInvalidSyncToken
+				},
+			}
+			server := &caldav.Server{Backend: backend}
+			rec = httptest.NewRecorder()
+			req := reportRequest("/shopping/this-week/", syncCollectionTokenBody("not-a-real-token"))
+			server.ServeREPORTForTest(rec, req)
+		})
+
+		It("should return 403 Forbidden per RFC 6578 §3.2", func() {
+			Expect(rec.Code).To(Equal(http.StatusForbidden))
+		})
+
+		It("should include the valid-sync-token precondition element", func() {
+			Expect(rec.Body.String()).To(ContainSubstring("valid-sync-token"))
+		})
+	})
+
+	When("the initial sync returns two changed items", func() {
+		var rec *httptest.ResponseRecorder
+		var capturedClientToken string
+
+		BeforeEach(func() {
+			backend := &reportBackend{
+				syncCollectionFn: func(_ context.Context, _, _, clientToken string) (string, []caldav.CalendarItem, []string, error) {
+					capturedClientToken = clientToken
+					return "http://simple-wiki.local/ns/sync/7", []caldav.CalendarItem{
+						{
+							UID:       "01HZ8K7Q9X1V2N3R4T5Y6Z7B8C",
+							ETag:      `W/"2026-04-25T12:00:00Z"`,
+							ICalBytes: []byte("BEGIN:VCALENDAR\r\nUID:item-1\r\nEND:VCALENDAR\r\n"),
+						},
+						{
+							UID:       "01HZ8K7Q9X1V2N3R4T5Y6Z7B8D",
+							ETag:      `W/"2026-04-25T13:00:00Z"`,
+							ICalBytes: []byte("BEGIN:VCALENDAR\r\nUID:item-2\r\nEND:VCALENDAR\r\n"),
+						},
+					}, nil, nil
+				},
+			}
+			server := &caldav.Server{Backend: backend}
+			rec = httptest.NewRecorder()
+			req := reportRequest("/shopping/this-week/", syncCollectionInitialBody)
+			server.ServeREPORTForTest(rec, req)
+		})
+
+		It("should return 207 Multi-Status", func() {
+			Expect(rec.Code).To(Equal(http.StatusMultiStatus))
+		})
+
+		It("should set Content-Type to application/xml; charset=utf-8", func() {
+			Expect(rec.Header().Get("Content-Type")).To(Equal("application/xml; charset=utf-8"))
+		})
+
+		It("should pass an empty clientToken through to the backend", func() {
+			Expect(capturedClientToken).To(Equal(""))
+		})
+
+		It("should include an href for the first item", func() {
+			Expect(rec.Body.String()).To(ContainSubstring("/shopping/this-week/01HZ8K7Q9X1V2N3R4T5Y6Z7B8C.ics"))
+		})
+
+		It("should include an href for the second item", func() {
+			Expect(rec.Body.String()).To(ContainSubstring("/shopping/this-week/01HZ8K7Q9X1V2N3R4T5Y6Z7B8D.ics"))
+		})
+
+		It("should include the calendar-data body for each item", func() {
+			Expect(rec.Body.String()).To(ContainSubstring("UID:item-1"))
+			Expect(rec.Body.String()).To(ContainSubstring("UID:item-2"))
+		})
+
+		It("should emit the trailing sync-token element with the new token URI", func() {
+			Expect(rec.Body.String()).To(ContainSubstring("http://simple-wiki.local/ns/sync/7"))
+		})
+	})
+
+	When("an incremental sync finds no changes", func() {
+		var rec *httptest.ResponseRecorder
+		var capturedClientToken string
+
+		BeforeEach(func() {
+			backend := &reportBackend{
+				syncCollectionFn: func(_ context.Context, _, _, clientToken string) (string, []caldav.CalendarItem, []string, error) {
+					capturedClientToken = clientToken
+					return "http://simple-wiki.local/ns/sync/12", nil, nil, nil
+				},
+			}
+			server := &caldav.Server{Backend: backend}
+			rec = httptest.NewRecorder()
+			req := reportRequest("/shopping/this-week/", syncCollectionTokenBody("http://simple-wiki.local/ns/sync/12"))
+			server.ServeREPORTForTest(rec, req)
+		})
+
+		It("should return 207 Multi-Status", func() {
+			Expect(rec.Code).To(Equal(http.StatusMultiStatus))
+		})
+
+		It("should pass the client's token through to the backend", func() {
+			Expect(capturedClientToken).To(Equal("http://simple-wiki.local/ns/sync/12"))
+		})
+
+		It("should include no item hrefs", func() {
+			Expect(rec.Body.String()).NotTo(ContainSubstring(".ics"))
+		})
+
+		It("should still include the trailing sync-token element", func() {
+			Expect(rec.Body.String()).To(ContainSubstring("http://simple-wiki.local/ns/sync/12"))
+		})
+	})
+
+	When("an incremental sync returns a deleted uid", func() {
+		var rec *httptest.ResponseRecorder
+
+		BeforeEach(func() {
+			backend := &reportBackend{
+				syncCollectionFn: func(_ context.Context, _, _, _ string) (string, []caldav.CalendarItem, []string, error) {
+					return "http://simple-wiki.local/ns/sync/9", nil, []string{"01HXCCCCCCCCCCCCCCCCCCCCCC"}, nil
+				},
+			}
+			server := &caldav.Server{Backend: backend}
+			rec = httptest.NewRecorder()
+			req := reportRequest("/shopping/this-week/", syncCollectionTokenBody("http://simple-wiki.local/ns/sync/5"))
+			server.ServeREPORTForTest(rec, req)
+		})
+
+		It("should return 207 Multi-Status", func() {
+			Expect(rec.Code).To(Equal(http.StatusMultiStatus))
+		})
+
+		It("should include the deleted uid's href", func() {
+			Expect(rec.Body.String()).To(ContainSubstring("/shopping/this-week/01HXCCCCCCCCCCCCCCCCCCCCCC.ics"))
+		})
+
+		It("should mark the deleted href with a 404 status line", func() {
+			Expect(rec.Body.String()).To(ContainSubstring("HTTP/1.1 404 Not Found"))
+		})
+
+		It("should advance the sync-token", func() {
+			Expect(rec.Body.String()).To(ContainSubstring("http://simple-wiki.local/ns/sync/9"))
 		})
 	})
 })
