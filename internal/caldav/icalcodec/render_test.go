@@ -101,9 +101,8 @@ var _ = Describe("RenderItem", func() {
 			Expect(body).To(ContainSubstring("X-APPLE-SORT-ORDER:1500"))
 		})
 
-		It("should emit a PRIORITY value derived from sort_order (sort_order=1500 → bucket 1)", func() {
-			// 1500 / sortOrderStep(1000) = 1; clamped to [1, 9].
-			Expect(body).To(MatchRegexp(`(?m)^PRIORITY:1\b`))
+		It("should emit PRIORITY:0 (undefined) so iOS doesn't render a '!' badge on every item", func() {
+			Expect(body).To(MatchRegexp(`(?m)^PRIORITY:0\b`))
 		})
 
 		It("should emit a URL property pointing back to the wiki page", func() {
@@ -196,35 +195,26 @@ var _ = Describe("RenderItem", func() {
 		})
 	})
 
-	When("sort_order falls in different priority buckets", func() {
-		It("should map sort_order=1000 to PRIORITY:1", func() {
+	When("sort_order varies", func() {
+		// Outbound PRIORITY is intentionally constant 0 (undefined).
+		// Ordering rides on X-APPLE-SORT-ORDER so iOS doesn't render
+		// a "!" priority badge on items the user never marked.
+		It("should still emit PRIORITY:0 for sort_order=1000", func() {
 			item.SortOrder = 1000
 			out := string(icalcodec.RenderItem(item, page, listName, baseURL, fixedNow(now)))
-			Expect(out).To(MatchRegexp(`(?m)^PRIORITY:1\b`))
+			Expect(out).To(MatchRegexp(`(?m)^PRIORITY:0\b`))
 		})
 
-		It("should map sort_order=5000 to PRIORITY:5", func() {
-			item.SortOrder = 5000
-			out := string(icalcodec.RenderItem(item, page, listName, baseURL, fixedNow(now)))
-			Expect(out).To(MatchRegexp(`(?m)^PRIORITY:5\b`))
-		})
-
-		It("should map sort_order=9000 to PRIORITY:9", func() {
+		It("should still emit PRIORITY:0 for sort_order=9000", func() {
 			item.SortOrder = 9000
 			out := string(icalcodec.RenderItem(item, page, listName, baseURL, fixedNow(now)))
-			Expect(out).To(MatchRegexp(`(?m)^PRIORITY:9\b`))
+			Expect(out).To(MatchRegexp(`(?m)^PRIORITY:0\b`))
 		})
 
-		It("should saturate sort_order=15000 at PRIORITY:9", func() {
-			item.SortOrder = 15000
+		It("should emit X-APPLE-SORT-ORDER carrying the actual order", func() {
+			item.SortOrder = 5000
 			out := string(icalcodec.RenderItem(item, page, listName, baseURL, fixedNow(now)))
-			Expect(out).To(MatchRegexp(`(?m)^PRIORITY:9\b`))
-		})
-
-		It("should clamp sort_order=0 to PRIORITY:1", func() {
-			item.SortOrder = 0
-			out := string(icalcodec.RenderItem(item, page, listName, baseURL, fixedNow(now)))
-			Expect(out).To(MatchRegexp(`(?m)^PRIORITY:1\b`))
+			Expect(out).To(ContainSubstring("X-APPLE-SORT-ORDER:5000"))
 		})
 	})
 
