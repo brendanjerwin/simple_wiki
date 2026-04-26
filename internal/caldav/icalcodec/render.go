@@ -127,6 +127,13 @@ func renderToCalendar(item *apiv1.ChecklistItem, page string, listName string, b
 	}
 	todo.Props.SetDateTime(ical.PropDateTimeStamp, now)
 
+	if item.AlarmPayload != nil && *item.AlarmPayload != "" {
+		alarm, err := RenderAlarm(*item.AlarmPayload, item.Text)
+		if err == nil && alarm != nil {
+			todo.Children = append(todo.Children, alarm)
+		}
+	}
+
 	cal := ical.NewCalendar()
 	cal.Props.SetText(ical.PropVersion, "2.0")
 	cal.Props.SetText(ical.PropProductID, productID)

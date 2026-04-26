@@ -194,4 +194,32 @@ var _ = Describe("RenderItem", func() {
 			Expect(body).To(ContainSubstring("URL:https://wiki.example.com/shopping/view"))
 		})
 	})
+
+	When("the item has an alarm_payload", func() {
+		BeforeEach(func() {
+			alarm := `{"trigger":"-PT15M"}`
+			item.AlarmPayload = &alarm
+			body = string(icalcodec.RenderItem(item, page, listName, baseURL, fixedNow(now)))
+		})
+
+		It("should embed a VALARM in the VTODO", func() {
+			Expect(body).To(ContainSubstring("BEGIN:VALARM"))
+			Expect(body).To(ContainSubstring("END:VALARM"))
+			Expect(body).To(ContainSubstring("ACTION:DISPLAY"))
+			Expect(body).To(ContainSubstring("TRIGGER:-PT15M"))
+		})
+	})
+
+	When("the item has a malformed alarm_payload", func() {
+		BeforeEach(func() {
+			alarm := "not json"
+			item.AlarmPayload = &alarm
+			body = string(icalcodec.RenderItem(item, page, listName, baseURL, fixedNow(now)))
+		})
+
+		It("should silently drop the alarm rather than fail the whole item", func() {
+			Expect(body).NotTo(ContainSubstring("BEGIN:VALARM"))
+			Expect(body).To(ContainSubstring("BEGIN:VTODO"))
+		})
+	})
 })
