@@ -52,6 +52,53 @@ func NewAuthenticator(httpClient *http.Client, authURL, deviceID string) *Authen
 	return &Authenticator{httpClient: httpClient, authURL: authURL, deviceID: deviceID}
 }
 
+// KeepServiceScope is the OAuth scope string we hand to Stage 2 to receive
+// a bearer usable against the Keep API.
+const KeepServiceScope = "oauth2:https://www.googleapis.com/auth/memento"
+
+// keepAndroidApp is the Android package name we claim to be — required by
+// Stage 2.
+const keepAndroidApp = "com.google.android.keep"
+
+// ExchangeMasterTokenForBearer performs Stage 2 of the auth flow: trade a
+// long-lived master token for a short-lived bearer scoped to the Keep API.
+// Bearer is returned verbatim — caller adds it as
+// "Authorization: GoogleLogin auth=<bearer>" on Keep API requests.
+//
+// Note that, unlike Stage 1, the master token is sent verbatim in the
+// EncryptedPasswd slot (Google reuses the field name). It is *not* RSA
+// re-encrypted.
+func (a *Authenticator) ExchangeMasterTokenForBearer(ctx context.Context, email, masterToken string) (string, error) {
+	form := a.commonAuthFields(email)
+	form.Set("EncryptedPasswd", masterToken)
+	form.Set("service", KeepServiceScope)
+	form.Set("app", keepAndroidApp)
+
+	resp, err := a.postAuth(ctx, form)
+	if err != nil {
+		return "", err
+	}
+
+	if bearer := resp["Auth"]; bearer != "" {
+		return bearer, nil
+	}
+	return "", classifyBearerError(resp)
+}
+
+// classifyBearerError maps Stage 2 errors to the appropriate sentinels.
+// Differs from classifyAuthError in that BadAuthentication here means the
+// master token is revoked (not a wrong-ASP situation).
+func classifyBearerError(resp map[string]string) error {
+	switch resp["Error"] {
+	case "":
+		return ErrProtocolDrift
+	case "BadAuthentication", "NeedsBrowser":
+		return ErrAuthRevoked
+	default:
+		return fmt.Errorf("%w: %s", ErrAuthRevoked, resp["Error"])
+	}
+}
+
 // ExchangeASPForMasterToken performs Stage 1 of the auth flow: trade an
 // App-Specific Password for a long-lived master token.
 //
