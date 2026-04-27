@@ -15,6 +15,23 @@ import (
 	"github.com/brendanjerwin/simple_wiki/internal/keep/protocol"
 )
 
+// asArr is a small helper for tests that already gate on map/slice
+// membership via Gomega matchers. A failed assertion here yields a nil
+// slice; subsequent matchers fail loudly with a clear message.
+//
+//revive:disable-next-line:unchecked-type-assertion
+func asArr(v any) []any { s, _ := v.([]any); return s }
+
+// asMap mirrors asArr for objects.
+//
+//revive:disable-next-line:unchecked-type-assertion
+func asMap(v any) map[string]any { m, _ := v.(map[string]any); return m }
+
+// asStr returns the string value or empty if not a string.
+//
+//revive:disable-next-line:unchecked-type-assertion
+func asStr(v any) string { s, _ := v.(string); return s }
+
 // canonicalChangesResponse is the success-shape body Keep returns. Mirrors
 // the shape gkeepapi documents (see REFERENCE.md "Sync endpoint").
 const canonicalChangesResponse = `{
@@ -206,8 +223,7 @@ var _ = Describe("KeepClient.Changes", func() {
 		It("should include the requestHeader subobject", func() {
 			Expect(parseErr).ToNot(HaveOccurred())
 			Expect(reqBody).To(HaveKey("requestHeader"))
-			rh, ok := reqBody["requestHeader"].(map[string]any)
-			Expect(ok).To(BeTrue())
+			rh := asMap(reqBody["requestHeader"])
 			Expect(rh["clientPlatform"]).To(Equal("ANDROID"))
 			Expect(rh["clientSessionId"]).To(Equal("s--1234--5678901234"))
 		})
@@ -292,6 +308,64 @@ var _ = Describe("KeepClient.Changes", func() {
 		})
 	})
 
+	When("the request includes nodes to push", func() {
+		var (
+			callErr  error
+			reqBody  map[string]any
+			parseErr error
+		)
+
+		BeforeEach(func() {
+			pushNode := protocol.Node{
+				ID:       "client-id-1",
+				ServerID: "srv-1",
+				ParentID: "srv-list-1",
+				Type:     protocol.NodeTypeListItem,
+				Text:     "Buy bread",
+				Checked:  false,
+				Timestamps: protocol.Timestamps{
+					Created: time.Date(2026, 4, 25, 17, 14, 0, 0, time.UTC),
+					Updated: time.Date(2026, 4, 25, 17, 14, 0, 0, time.UTC),
+				},
+			}
+			_, callErr = client.Changes(ctx, protocol.ChangesRequest{
+				Nodes:           []protocol.Node{pushNode},
+				SessionID:       "s--1234--5678901234",
+				ClientTimestamp: "1745601000000000",
+			})
+			parseErr = json.Unmarshal([]byte(lastBody), &reqBody)
+		})
+
+		It("should not error", func() {
+			Expect(callErr).ToNot(HaveOccurred())
+		})
+
+		It("should serialize the node into the request body", func() {
+			Expect(parseErr).ToNot(HaveOccurred())
+			nodes := asArr(reqBody["nodes"])
+			Expect(nodes).To(HaveLen(1))
+			n := asMap(nodes[0])
+			Expect(n).ToNot(BeEmpty())
+			Expect(n["id"]).To(Equal("client-id-1"))
+			Expect(n["type"]).To(Equal("LIST_ITEM"))
+			Expect(n["text"]).To(Equal("Buy bread"))
+		})
+
+		It("should encode timestamps in RFC3339 microsecond format", func() {
+			Expect(parseErr).ToNot(HaveOccurred())
+			nodes := asArr(reqBody["nodes"])
+			n := asMap(nodes[0])
+			ts := asMap(n["timestamps"])
+			Expect(ts["updated"]).To(Equal("2026-04-25T17:14:00.000000Z"))
+		})
+
+		It("should default the kind field to notes#node", func() {
+			nodes := asArr(reqBody["nodes"])
+			n := asMap(nodes[0])
+			Expect(n["kind"]).To(Equal("notes#node"))
+		})
+	})
+
 	When("forceFullResync is true", func() {
 		var resp protocol.ChangesResponse
 
@@ -303,6 +377,97 @@ var _ = Describe("KeepClient.Changes", func() {
 
 		It("should propagate to the response", func() {
 			Expect(resp.ForceFullResync).To(BeTrue())
+		})
+	})
+})
+
+var _ = Describe("KeepClient.CreateList", func() {
+	var (
+		ctx        context.Context
+		fakeServer *httptest.Server
+		client     *protocol.KeepClient
+		lastBody   string
+	)
+
+	BeforeEach(func() {
+		ctx = context.Background()
+		// Fake Keep echoes the request's LIST node with a serverId attached.
+		// Real Keep does the same — the response carries the canonicalized
+		// node so the client can bind its server identity.
+		fakeServer = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			b, _ := io.ReadAll(r.Body)
+			lastBody = string(b)
+			var req map[string]any
+			_ = json.Unmarshal(b, &req)
+			clientID := ""
+			nodes := asArr(req["nodes"])
+			if len(nodes) > 0 {
+				clientID = asStr(asMap(nodes[0])["id"])
+			}
+			respNode := map[string]any{
+				"kind":     "notes#node",
+				"id":       clientID,
+				"serverId": "srv-newlist",
+				"type":     "LIST",
+				"timestamps": map[string]any{
+					"kind":    "notes#timestamps",
+					"created": "2026-04-25T17:14:00.000000Z",
+					"updated": "2026-04-25T17:14:00.000000Z",
+				},
+			}
+			respBody, _ := json.Marshal(map[string]any{
+				"kind":      "notes#changes",
+				"toVersion": "v-1",
+				"nodes":     []any{respNode},
+			})
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write(respBody)
+		}))
+		client = protocol.NewKeepClient(fakeServer.Client(), fakeServer.URL+"/", "fake-bearer")
+	})
+
+	AfterEach(func() {
+		fakeServer.Close()
+	})
+
+	When("creating a new list with a title", func() {
+		var (
+			serverID string
+			err      error
+			reqBody  map[string]any
+		)
+
+		BeforeEach(func() {
+			serverID, err = client.CreateList(ctx, "groceries")
+			_ = json.Unmarshal([]byte(lastBody), &reqBody)
+		})
+
+		It("should not error", func() {
+			Expect(err).ToNot(HaveOccurred())
+		})
+
+		It("should return the server-assigned id from the response", func() {
+			Expect(serverID).To(Equal("srv-newlist"))
+		})
+
+		It("should send a single LIST node in the request", func() {
+			nodes := asArr(reqBody["nodes"])
+			Expect(nodes).To(HaveLen(1))
+			n := asMap(nodes[0])
+			Expect(n).ToNot(BeEmpty())
+			Expect(n["type"]).To(Equal("LIST"))
+		})
+
+		It("should generate a non-empty client id for the new list", func() {
+			nodes := asArr(reqBody["nodes"])
+			n := asMap(nodes[0])
+			Expect(asStr(n["id"])).ToNot(BeEmpty())
+		})
+
+		It("should put the title in the node text", func() {
+			nodes := asArr(reqBody["nodes"])
+			n := asMap(nodes[0])
+			Expect(n["text"]).To(Equal("groceries"))
 		})
 	})
 })

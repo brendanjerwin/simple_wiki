@@ -3,9 +3,13 @@ package protocol
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
+	"encoding/binary"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
+	"strconv"
 	"time"
 )
 
@@ -32,6 +36,82 @@ type KeepClient struct {
 func NewKeepClient(httpClient *http.Client, baseURL, bearer string) *KeepClient {
 	return &KeepClient{httpClient: httpClient, baseURL: baseURL, bearer: bearer}
 }
+
+// CreateList creates a brand-new LIST node in the user's Keep account
+// with the given title. Returns the server-assigned ID so callers can
+// store it as the binding's keep_note_id.
+//
+// Used by the bind flow when the user picks "Create new Keep note named
+// '<list_name>'" from the picker.
+func (c *KeepClient) CreateList(ctx context.Context, title string) (string, error) {
+	now := time.Now().UTC()
+	clientID := generateKeepID(now)
+	sessionID := generateSessionID(now)
+
+	listNode := Node{
+		Kind: "notes#node",
+		ID:   clientID,
+		Type: NodeTypeList,
+		Text: title,
+		Timestamps: Timestamps{
+			Created: now,
+			Updated: now,
+		},
+	}
+
+	resp, err := c.Changes(ctx, ChangesRequest{
+		Nodes:           []Node{listNode},
+		SessionID:       sessionID,
+		ClientTimestamp: clientTimestamp(now),
+	})
+	if err != nil {
+		return "", err
+	}
+
+	for _, n := range resp.Nodes {
+		if n.ID == clientID && n.Type == NodeTypeList {
+			return n.ServerID, nil
+		}
+	}
+	return "", fmt.Errorf("%w: server did not echo the created list", ErrProtocolDrift)
+}
+
+// generateKeepID returns a Keep-style identifier of the form
+// "<ms-hex>.<16-hex-char random>". Matches the gkeepapi reference
+// implementation's _generateId.
+func generateKeepID(now time.Time) string {
+	var entropy [randomBytes]byte
+	_, _ = io.ReadFull(rand.Reader, entropy[:])
+	return fmt.Sprintf("%x.%016x", now.UnixMilli(), binary.BigEndian.Uint64(entropy[:]))
+}
+
+// generateSessionID returns a Keep-style session id ("s--<ms>--<10 digits>").
+func generateSessionID(now time.Time) string {
+	var entropy [randomBytes]byte
+	_, _ = io.ReadFull(rand.Reader, entropy[:])
+	n := binary.BigEndian.Uint64(entropy[:]) % sessionIDRange
+	return fmt.Sprintf("s--%d--%010d", now.UnixMilli(), n+sessionIDOffset)
+}
+
+// decimalBase is the FormatInt base for human-readable decimal strings.
+const decimalBase = 10
+
+// clientTimestamp returns the wire format Keep expects for clientTimestamp:
+// microseconds since epoch as a decimal string.
+func clientTimestamp(now time.Time) string {
+	return strconv.FormatInt(now.UnixMicro(), decimalBase)
+}
+
+const (
+	// randomBytes is how many bytes of entropy we read for a single Keep
+	// ID or session id (8 bytes → uint64 → 16-hex-char).
+	randomBytes = 8
+
+	// sessionIDOffset and sessionIDRange together produce a 10-digit
+	// session-id suffix in [1000000000, 9999999999], matching gkeepapi.
+	sessionIDOffset = 1000000000
+	sessionIDRange  = 9000000000
+)
 
 // Changes calls POST /notes/v1/changes — the unified pull/push endpoint.
 // req.TargetVersion is the cursor to pull *from* (empty = full pull);
