@@ -165,10 +165,12 @@ var _ = Describe("pageNeedsChecklistMigration", func() {
 	// are read-only at the wiki layer (the system-page guard rejects user
 	// writes) and any rewrite would be undone on the next startup sync.
 	// Skipping here is purely defensive.
-	Describe("when frontmatter has system = true", func() {
+	Describe("when frontmatter has wiki.system = true", func() {
 		It("should return false even if items contain `:tag`", func() {
 			fm := map[string]any{
-				"system": true,
+				"wiki": map[string]any{
+					"system": true,
+				},
 				"checklists": map[string]any{
 					"groceries": map[string]any{
 						"items": []any{

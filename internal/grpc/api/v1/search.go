@@ -3,18 +3,39 @@ package v1
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 
 	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
 	"github.com/brendanjerwin/simple_wiki/index/bleve"
+	"github.com/brendanjerwin/simple_wiki/tailscale"
 	"github.com/brendanjerwin/simple_wiki/wikiidentifiers"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
 
+// callerCanRead reports whether the caller represented by ctx is permitted
+// to read the page identified by id, per the page's wiki.authorization
+// rules. Used by search-result filtering — pages the caller cannot read are
+// silently dropped from results so the search surface does not leak the
+// existence of restricted pages.
+//
+// Orphaned index entries (pages whose frontmatter is gone) are kept in the
+// results: there's no authorization to enforce against a missing page, and
+// hiding them would diverge from the search surface's pre-authorization
+// behavior. Other read errors fail closed.
+func (s *Server) callerCanRead(ctx context.Context, id wikipage.PageIdentifier) bool {
+	_, fm, err := s.pageReaderMutator.ReadFrontMatter(id)
+	if err != nil {
+		return os.IsNotExist(err)
+	}
+	identity := tailscale.IdentityFromContext(ctx)
+	return wikipage.Authorize(identity, fm) == nil
+}
+
 // SearchContent implements the SearchContent RPC.
-func (s *Server) SearchContent(_ context.Context, req *apiv1.SearchContentRequest) (*apiv1.SearchContentResponse, error) {
+func (s *Server) SearchContent(ctx context.Context, req *apiv1.SearchContentRequest) (*apiv1.SearchContentResponse, error) {
 	if err := s.validateSearchRequest(req); err != nil {
 		return nil, err
 	}
@@ -33,6 +54,16 @@ func (s *Server) SearchContent(_ context.Context, req *apiv1.SearchContentReques
 		return nil, status.Errorf(codes.Internal, "failed to filter search results: %v", err)
 	}
 
+	// Drop results the caller is not authorized to read. Done after the
+	// other filter stages so an authorization-denied page does not consume
+	// one of the include-filter slots in the unfiltered count.
+	authorizedResults := make([]*apiv1.SearchResult, 0, len(results))
+	for _, r := range results {
+		if s.callerCanRead(ctx, wikipage.PageIdentifier(r.Identifier)) {
+			authorizedResults = append(authorizedResults, r)
+		}
+	}
+
 	// Return total unfiltered count when filters are applied (for inventory filter warning)
 	// When no filters are applied, return 0 to indicate no filtering occurred
 	totalUnfilteredCount := int32(0)
@@ -42,13 +73,13 @@ func (s *Server) SearchContent(_ context.Context, req *apiv1.SearchContentReques
 	}
 
 	return &apiv1.SearchContentResponse{
-		Results:              results,
+		Results:              authorizedResults,
 		TotalUnfilteredCount: totalUnfilteredCount,
 	}, nil
 }
 
 // ListPagesByFrontmatter lists pages matching a frontmatter key-value pair, sorted by another frontmatter key.
-func (s *Server) ListPagesByFrontmatter(_ context.Context, req *apiv1.ListPagesByFrontmatterRequest) (*apiv1.ListPagesByFrontmatterResponse, error) {
+func (s *Server) ListPagesByFrontmatter(ctx context.Context, req *apiv1.ListPagesByFrontmatterRequest) (*apiv1.ListPagesByFrontmatterResponse, error) {
 	if req.MatchKey == "" {
 		return nil, status.Error(codes.InvalidArgument, "match_key is required")
 	}
@@ -72,6 +103,12 @@ func (s *Server) ListPagesByFrontmatter(_ context.Context, req *apiv1.ListPagesB
 
 	results := make([]*apiv1.FrontmatterQueryResult, 0, len(pageIDs))
 	for _, id := range pageIDs {
+		// Drop pages the caller is not authorized to read so the search
+		// surface does not leak the existence of restricted pages.
+		if !s.callerCanRead(ctx, id) {
+			continue
+		}
+
 		fmValues := make(map[string]string, len(req.FrontmatterKeysToReturn))
 		for _, key := range req.FrontmatterKeysToReturn {
 			fmValues[key] = s.frontmatterIndexQueryer.GetValue(id, key)

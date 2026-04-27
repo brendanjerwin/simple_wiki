@@ -11,14 +11,6 @@ import (
 )
 
 var _ = Describe("reserved namespace registry — wiki namespace", func() {
-	Describe("isReservedTopLevel", func() {
-		When("the key is 'wiki'", func() {
-			It("should return true", func() {
-				Expect(isReservedTopLevel("wiki")).To(BeTrue())
-			})
-		})
-	})
-
 	Describe("reservedKeyInMap", func() {
 		When("fm contains the 'wiki' key", func() {
 			var found string

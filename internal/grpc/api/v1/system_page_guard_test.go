@@ -27,7 +27,9 @@ var _ = Describe("system page guard", func() {
 		mock = &MockPageReaderMutator{
 			Frontmatter: wikipage.FrontMatter{
 				"identifier": "help",
-				"system":     true,
+				"wiki": map[string]any{
+					"system": true,
+				},
 			},
 			Markdown: "# Help",
 		}

@@ -28,7 +28,6 @@ import (
 
 	"github.com/pelletier/go-toml/v2"
 
-	"github.com/brendanjerwin/simple_wiki/internal/syspage"
 	"github.com/brendanjerwin/simple_wiki/pkg/jobs"
 	"github.com/brendanjerwin/simple_wiki/pkg/ulid"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
@@ -171,7 +170,7 @@ func extractDataModelMigrationFrontmatter(scanner DataDirScanner, filename strin
 // System pages are skipped (they ship with the wiki binary and cannot
 // be edited via the gRPC API anyway).
 func pageNeedsDataModelMigration(fm map[string]any) bool {
-	if syspage.IsSystemPage(fm) {
+	if wikipage.IsSystemPage(fm) {
 		return false
 	}
 

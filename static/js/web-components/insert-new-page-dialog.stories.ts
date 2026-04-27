@@ -20,7 +20,7 @@ A modal dialog for creating new wiki pages with template support.
 **Key Features:**
 - Title input with auto-generated identifier (automagic mode)
 - Toggle between automagic and manual identifier entry
-- Template dropdown populated from pages with \`template: true\` frontmatter
+- Template dropdown populated from pages with \`wiki.template: true\` frontmatter
 - Embedded frontmatter editor
 - Dropdown locks when template selected or frontmatter edited
 - Inline confirmation to clear frontmatter when changing template

@@ -8,6 +8,8 @@ import (
 	"sync/atomic"
 
 	"github.com/brendanjerwin/simple_wiki/server"
+	"github.com/brendanjerwin/simple_wiki/tailscale"
+	"github.com/brendanjerwin/simple_wiki/wikipage"
 	"github.com/gin-gonic/gin"
 	"github.com/jcelliott/lumber"
 	. "github.com/onsi/ginkgo/v2"
@@ -228,6 +230,69 @@ var _ = Describe("caldavGateway middleware", func() {
 				// 404 for PROPFIND since no Gin route matches).
 				Expect(bareW.Code).NotTo(Equal(caldavSentinelStatus))
 			})
+		})
+	})
+
+	When("the request targets a page restricted by wiki.authorization", func() {
+		BeforeEach(func() {
+			// Stamp an owner-only page on disk so the gateway has
+			// frontmatter to authorize against.
+			Expect(site.WriteFrontMatter(
+				"shopping",
+				wikipage.FrontMatter{
+					"identifier": "shopping",
+					"wiki": map[string]any{
+						"authorization": map[string]any{
+							"acl": map[string]any{
+								"owner": "alice@example.com",
+							},
+						},
+					},
+				},
+			)).To(Succeed())
+			Expect(site.WriteMarkdown("shopping", "# body")).To(Succeed())
+		})
+
+		When("the caller is not the owner", func() {
+			BeforeEach(func() {
+				req := httptest.NewRequest("PROPFIND", "/shopping/", nil)
+				req = req.WithContext(tailscale.ContextWithIdentity(
+					req.Context(),
+					tailscale.NewIdentity("bob@example.com", "Bob", "bob-laptop"),
+				))
+				router.ServeHTTP(w, req)
+			})
+
+			It("should respond 403 without forwarding to CalDAV", func() {
+				Expect(w.Code).To(Equal(http.StatusForbidden))
+				Expect(caldavSrv.calls.Load()).To(Equal(int32(0)))
+			})
+		})
+
+		When("the caller is the owner", func() {
+			BeforeEach(func() {
+				req := httptest.NewRequest("PROPFIND", "/shopping/", nil)
+				req = req.WithContext(tailscale.ContextWithIdentity(
+					req.Context(),
+					tailscale.NewIdentity("alice@example.com", "Alice", "alice-laptop"),
+				))
+				router.ServeHTTP(w, req)
+			})
+
+			It("should forward the request normally", func() {
+				Expect(caldavSrv.calls.Load()).To(Equal(int32(1)))
+			})
+		})
+	})
+
+	When("the request targets a non-existent page", func() {
+		BeforeEach(func() {
+			req := httptest.NewRequest("PROPFIND", "/never_existed/", nil)
+			router.ServeHTTP(w, req)
+		})
+
+		It("should still forward (the CalDAV layer produces the 404)", func() {
+			Expect(caldavSrv.calls.Load()).To(Equal(int32(1)))
 		})
 	})
 })

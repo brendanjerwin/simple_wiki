@@ -1,5 +1,7 @@
 +++
 identifier = "help_scheduled_agents"
+
+[wiki]
 system = true
 +++
 

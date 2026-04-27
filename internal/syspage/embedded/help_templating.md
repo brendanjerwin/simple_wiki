@@ -1,5 +1,7 @@
 +++
 identifier = "help_templating"
+
+[wiki]
 system = true
 +++
 
@@ -20,6 +22,7 @@ Every page template receives a context object with these fields:
 | `.Description` | string | Page description from frontmatter |
 | `.Map` | map | Full frontmatter as key-value pairs (e.g., `.Map.blog.identifier`) |
 | `.Inventory` | object | Inventory frontmatter with `.Container` and `.Items` fields |
+| `.WikiAuthorization` | object | Typed view of `wiki.authorization`. Has `.ACL.Owner` (string) and `.AllowAgentAccess` (bool). Empty when the page has no `wiki.authorization` block. See [[help-system-pages]] for the rules. |
 
 ## Go Template Syntax Basics
 
@@ -95,9 +98,23 @@ Each returns a list of page identifiers.
 
 ## Template Pages
 
-Any page with `template: true` in its frontmatter becomes a template. Templates also need `title` and `description` fields. They appear in the "New Page" dialog.
+Any page with `wiki.template = true` in its frontmatter becomes a template. Templates also need `title` and `description` fields. They appear in the "New Page" dialog.
 
-When creating a page from a template, the template's frontmatter is merged as a base, and any explicitly provided frontmatter values override the template defaults.
+```toml
++++
+identifier = "article_template"
+title = "Article"
+description = "Standard article layout"
+
+[wiki]
+template = true
++++
+```
+
+> [!NOTE]
+> An eager startup migration moves any templates that still carry a top-level `template` flag (the pre-#997 location) into the `[wiki]` block. The helper that recognises templates only looks under `wiki.template` — so the migration is what makes legacy templates start being recognised again.
+
+When creating a page from a template, the template's frontmatter is merged as a base, and any explicitly provided frontmatter values override the template defaults. The template's own reserved-namespace state (`wiki.template`, `wiki.system`, etc.) is **not** carried over to the new page — those flags belong to the template, not its instances.
 
 ## For Agents
 

@@ -1,40 +1,40 @@
 package v1
 
 import (
+	"fmt"
+
 	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
+	"github.com/brendanjerwin/simple_wiki/wikipage"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
 
-// reservedNamespaces lists the top-level frontmatter keys that generic
-// Frontmatter writes (Merge/Replace/RemoveKeyAtPath) must reject. New
-// reservations land here; `frontmatter.go` consults this registry rather
-// than hardcoding individual key names.
+// reservedNamespaceMessages is the gRPC-layer's user-facing rejection message
+// for each reserved namespace. The keys here MUST match
+// wikipage.ReservedTopLevelKeys exactly — the init() block below enforces
+// that invariant at process start so a missing entry is impossible to ship.
 //
-// Each entry's value is the InvalidArgument error message returned to a
-// caller that tries to mutate the namespace via the generic API. The
-// message names the dedicated service the caller should use instead.
-//
-// The reservation is wholesale: registering top-level key "wiki" reserves
-// `wiki.*` in its entirety. Future occupants under a registered key
-// inherit the reservation without code changes.
-//
-// See ADR-0009 (the pattern) and ADR-0010 (the wiki.* namespace).
-// Each entry's value is the InvalidArgument error message returned to a
-// caller that tries to mutate the namespace via the generic API. Keep
-// the messages generic — the frontmatter package should not reach into
+// Keep the messages generic — the frontmatter package should not reach into
 // any feature's vocabulary. Callers find the right dedicated service via
 // `wiki-cli list` / `wiki-cli describe` or the embedded help corpus.
-var reservedNamespaces = map[string]string{
+//
+// See ADR-0009 (the pattern) and ADR-0010 (the wiki.* namespace).
+var reservedNamespaceMessages = map[string]string{
 	"agent": "the 'agent' top-level frontmatter namespace is reserved; use the appropriate dedicated service (see ADR-0009)",
 	"wiki":  "the 'wiki' top-level frontmatter namespace is reserved; use the appropriate dedicated service (see ADR-0009 and ADR-0010)",
 }
 
-// isReservedTopLevel reports whether key is a reserved top-level frontmatter
-// key.
-func isReservedTopLevel(key string) bool {
-	_, ok := reservedNamespaces[key]
-	return ok
+func init() {
+	for _, key := range wikipage.ReservedTopLevelKeys() {
+		if _, ok := reservedNamespaceMessages[key]; !ok {
+			panic(fmt.Sprintf("reserved namespace %q has no rejection message in reservedNamespaceMessages; add one", key))
+		}
+	}
+	for key := range reservedNamespaceMessages {
+		if !wikipage.IsReservedTopLevelKey(key) {
+			panic(fmt.Sprintf("reservedNamespaceMessages has stale entry %q not present in wikipage.ReservedTopLevelKeys", key))
+		}
+	}
 }
 
 // reservedKeyInMap returns the first reserved top-level key found in fm,
@@ -45,7 +45,7 @@ func reservedKeyInMap(fm map[string]any) string {
 		return ""
 	}
 	for key := range fm {
-		if isReservedTopLevel(key) {
+		if wikipage.IsReservedTopLevelKey(key) {
 			return key
 		}
 	}
@@ -63,7 +63,7 @@ func reservedKeyOnPath(path []*apiv1.PathComponent) string {
 	if !ok {
 		return ""
 	}
-	if isReservedTopLevel(keyComp.Key) {
+	if wikipage.IsReservedTopLevelKey(keyComp.Key) {
 		return keyComp.Key
 	}
 	return ""
@@ -72,10 +72,12 @@ func reservedKeyOnPath(path []*apiv1.PathComponent) string {
 // reservedNamespaceError builds the InvalidArgument response for a given
 // reserved key, naming the dedicated service the caller should redirect to.
 func reservedNamespaceError(key string) error {
-	msg, ok := reservedNamespaces[key]
+	msg, ok := reservedNamespaceMessages[key]
 	if !ok {
 		// Belt-and-braces: callers should only invoke this with keys returned
-		// by isReservedTopLevel/reservedKeyInMap/reservedKeyOnPath.
+		// by reservedKeyInMap/reservedKeyOnPath. The init() invariant guarantees
+		// every reserved key has a message, so reaching this branch means a
+		// caller passed a non-reserved key.
 		return status.Errorf(codes.InvalidArgument, "the '%s' top-level frontmatter namespace is reserved", key)
 	}
 	return status.Error(codes.InvalidArgument, msg)
@@ -91,7 +93,7 @@ func preserveReservedSubtrees(existing, incoming map[string]any) {
 	if existing == nil || incoming == nil {
 		return
 	}
-	for key := range reservedNamespaces {
+	for _, key := range wikipage.ReservedTopLevelKeys() {
 		if existingValue, ok := existing[key]; ok {
 			incoming[key] = existingValue
 		}
@@ -108,7 +110,7 @@ func stripReservedKeys(fm map[string]any) map[string]any {
 	}
 	out := make(map[string]any, len(fm))
 	for k, v := range fm {
-		if isReservedTopLevel(k) {
+		if wikipage.IsReservedTopLevelKey(k) {
 			continue
 		}
 		out[k] = v

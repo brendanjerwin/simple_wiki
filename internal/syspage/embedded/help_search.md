@@ -1,5 +1,7 @@
 +++
 identifier = "help_search"
+
+[wiki]
 system = true
 +++
 

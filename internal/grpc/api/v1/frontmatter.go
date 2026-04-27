@@ -24,7 +24,7 @@ func filterIdentifierKey(fm map[string]any) map[string]any {
 
 	filtered := make(map[string]any, len(fm))
 	for k, v := range fm {
-		if k == identifierKey || isReservedTopLevel(k) {
+		if k == identifierKey || wikipage.IsReservedTopLevelKey(k) {
 			continue
 		}
 		filtered[k] = v
@@ -157,7 +157,10 @@ func removeAtPathFromSlice(v []any, component *apiv1.PathComponent, remainingPat
 }
 
 // GetFrontmatter implements the GetFrontmatter RPC.
-func (s *Server) GetFrontmatter(_ context.Context, req *apiv1.GetFrontmatterRequest) (resp *apiv1.GetFrontmatterResponse, err error) {
+func (s *Server) GetFrontmatter(ctx context.Context, req *apiv1.GetFrontmatterRequest) (resp *apiv1.GetFrontmatterResponse, err error) {
+	if authErr := requireAuthorized(ctx, s.pageReaderMutator, wikipage.PageIdentifier(req.Page)); authErr != nil {
+		return nil, authErr
+	}
 	var fm map[string]any
 	_, fm, err = s.pageReaderMutator.ReadFrontMatter(wikipage.PageIdentifier(req.Page))
 	if err != nil {
@@ -182,7 +185,7 @@ func (s *Server) GetFrontmatter(_ context.Context, req *apiv1.GetFrontmatterRequ
 }
 
 // MergeFrontmatter implements the MergeFrontmatter RPC.
-func (s *Server) MergeFrontmatter(_ context.Context, req *apiv1.MergeFrontmatterRequest) (resp *apiv1.MergeFrontmatterResponse, err error) {
+func (s *Server) MergeFrontmatter(ctx context.Context, req *apiv1.MergeFrontmatterRequest) (resp *apiv1.MergeFrontmatterResponse, err error) {
 	// Validate that the request doesn't contain an identifier key or any
 	// reserved top-level namespace.
 	if req.Frontmatter != nil {
@@ -197,6 +200,9 @@ func (s *Server) MergeFrontmatter(_ context.Context, req *apiv1.MergeFrontmatter
 
 	if guardErr := requireUserMutable(s.pageReaderMutator, wikipage.PageIdentifier(req.Page)); guardErr != nil {
 		return nil, guardErr
+	}
+	if authErr := requireAuthorized(ctx, s.pageReaderMutator, wikipage.PageIdentifier(req.Page)); authErr != nil {
+		return nil, authErr
 	}
 
 	_, existingFm, err := s.pageReaderMutator.ReadFrontMatter(wikipage.PageIdentifier(req.Page))
@@ -231,7 +237,7 @@ func (s *Server) MergeFrontmatter(_ context.Context, req *apiv1.MergeFrontmatter
 }
 
 // ReplaceFrontmatter implements the ReplaceFrontmatter RPC.
-func (s *Server) ReplaceFrontmatter(_ context.Context, req *apiv1.ReplaceFrontmatterRequest) (resp *apiv1.ReplaceFrontmatterResponse, err error) {
+func (s *Server) ReplaceFrontmatter(ctx context.Context, req *apiv1.ReplaceFrontmatterRequest) (resp *apiv1.ReplaceFrontmatterResponse, err error) {
 	var fm map[string]any
 	if req.Frontmatter != nil {
 		fm = req.Frontmatter.AsMap()
@@ -245,6 +251,9 @@ func (s *Server) ReplaceFrontmatter(_ context.Context, req *apiv1.ReplaceFrontma
 
 	if guardErr := requireUserMutable(s.pageReaderMutator, wikipage.PageIdentifier(req.Page)); guardErr != nil {
 		return nil, guardErr
+	}
+	if authErr := requireAuthorized(ctx, s.pageReaderMutator, wikipage.PageIdentifier(req.Page)); authErr != nil {
+		return nil, authErr
 	}
 
 	// Carry every reserved subtree forward — a caller unaware of those
@@ -282,7 +291,7 @@ func (s *Server) ReplaceFrontmatter(_ context.Context, req *apiv1.ReplaceFrontma
 }
 
 // RemoveKeyAtPath implements the RemoveKeyAtPath RPC.
-func (s *Server) RemoveKeyAtPath(_ context.Context, req *apiv1.RemoveKeyAtPathRequest) (*apiv1.RemoveKeyAtPathResponse, error) {
+func (s *Server) RemoveKeyAtPath(ctx context.Context, req *apiv1.RemoveKeyAtPathRequest) (*apiv1.RemoveKeyAtPathResponse, error) {
 	if len(req.GetKeyPath()) == 0 {
 		return nil, status.Error(codes.InvalidArgument, "key_path cannot be empty")
 	}
@@ -299,6 +308,9 @@ func (s *Server) RemoveKeyAtPath(_ context.Context, req *apiv1.RemoveKeyAtPathRe
 
 	if guardErr := requireUserMutable(s.pageReaderMutator, wikipage.PageIdentifier(req.Page)); guardErr != nil {
 		return nil, guardErr
+	}
+	if authErr := requireAuthorized(ctx, s.pageReaderMutator, wikipage.PageIdentifier(req.Page)); authErr != nil {
+		return nil, authErr
 	}
 
 	_, fm, err := s.pageReaderMutator.ReadFrontMatter(wikipage.PageIdentifier(req.Page))

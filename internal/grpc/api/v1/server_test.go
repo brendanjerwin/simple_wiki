@@ -717,7 +717,7 @@ var _ = Describe("Server", func() {
 			})
 
 			It("should return an internal error and no response", func() {
-				Expect(err).To(HaveGrpcStatus(codes.Internal, "failed to read frontmatter: kaboom"))
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.Internal, "kaboom"))
 				Expect(res).To(BeNil())
 			})
 		})
@@ -4062,7 +4062,7 @@ var _ = Describe("Server", func() {
 			})
 
 			It("should return an internal error", func() {
-				Expect(err).To(HaveGrpcStatusWithSubstr(codes.Internal, "failed to read page"))
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.Internal, "disk read error"))
 			})
 
 			It("should return no response", func() {
@@ -4556,8 +4556,10 @@ var _ = Describe("Server", func() {
 				mockPageReaderMutator = &MockPageReaderMutator{
 					FrontmatterByID: map[string]map[string]any{
 						"article_template": {
-							"title":    "Article Template",
-							"template": true,
+							"title": "Article Template",
+							"wiki": map[string]any{
+								"template": true,
+							},
 						},
 					},
 					ErrByID: map[string]error{
@@ -4752,14 +4754,16 @@ var _ = Describe("Server", func() {
 			})
 		})
 
-		When("csv_content references a template with template field as string 'true'", func() {
+		When("csv_content references a template with wiki.template field as string 'true'", func() {
 			BeforeEach(func() {
 				req.CsvContent = "identifier,template,title\ntest_page,string_template,Test Item"
 				mockPageReaderMutator = &MockPageReaderMutator{
 					FrontmatterByID: map[string]map[string]any{
 						"string_template": {
-							"title":    "String Template",
-							"template": "true", // string case
+							"title": "String Template",
+							"wiki": map[string]any{
+								"template": "true", // string case
+							},
 						},
 					},
 					ErrByID: map[string]error{
@@ -4777,14 +4781,16 @@ var _ = Describe("Server", func() {
 			})
 		})
 
-		When("csv_content references a template with template field as int64 nonzero", func() {
+		When("csv_content references a template with wiki.template field as int64 nonzero", func() {
 			BeforeEach(func() {
 				req.CsvContent = "identifier,template,title\ntest_page,int_template,Test Item"
 				mockPageReaderMutator = &MockPageReaderMutator{
 					FrontmatterByID: map[string]map[string]any{
 						"int_template": {
-							"title":    "Int Template",
-							"template": int64(1), // int64 nonzero = true
+							"title": "Int Template",
+							"wiki": map[string]any{
+								"template": int64(1), // int64 nonzero = true
+							},
 						},
 					},
 					ErrByID: map[string]error{
@@ -4802,14 +4808,16 @@ var _ = Describe("Server", func() {
 			})
 		})
 
-		When("csv_content references a page with template field as int64 zero", func() {
+		When("csv_content references a page with wiki.template field as int64 zero", func() {
 			BeforeEach(func() {
 				req.CsvContent = "identifier,template,title\ntest_page,zero_template,Test Item"
 				mockPageReaderMutator = &MockPageReaderMutator{
 					FrontmatterByID: map[string]map[string]any{
 						"zero_template": {
-							"title":    "Zero Template",
-							"template": int64(0), // int64 zero = false
+							"title": "Zero Template",
+							"wiki": map[string]any{
+								"template": int64(0), // int64 zero = false
+							},
 						},
 					},
 					ErrByID: map[string]error{
@@ -4827,14 +4835,16 @@ var _ = Describe("Server", func() {
 			})
 		})
 
-		When("csv_content references a template with template field as float64 nonzero", func() {
+		When("csv_content references a template with wiki.template field as float64 nonzero", func() {
 			BeforeEach(func() {
 				req.CsvContent = "identifier,template,title\ntest_page,float_template,Test Item"
 				mockPageReaderMutator = &MockPageReaderMutator{
 					FrontmatterByID: map[string]map[string]any{
 						"float_template": {
-							"title":    "Float Template",
-							"template": float64(1.0), // float64 nonzero = true
+							"title": "Float Template",
+							"wiki": map[string]any{
+								"template": float64(1.0), // float64 nonzero = true
+							},
 						},
 					},
 					ErrByID: map[string]error{
@@ -4852,14 +4862,16 @@ var _ = Describe("Server", func() {
 			})
 		})
 
-		When("csv_content references a page with template field of an unrecognized type", func() {
+		When("csv_content references a page with wiki.template field of an unrecognized type", func() {
 			BeforeEach(func() {
 				req.CsvContent = "identifier,template,title\ntest_page,unknown_template,Test Item"
 				mockPageReaderMutator = &MockPageReaderMutator{
 					FrontmatterByID: map[string]map[string]any{
 						"unknown_template": {
-							"title":    "Unknown Template",
-							"template": []string{"true"}, // default case: not bool/string/int64/float64
+							"title": "Unknown Template",
+							"wiki": map[string]any{
+								"template": []string{"true"}, // default case: not bool/string/int64/float64
+							},
 						},
 					},
 					ErrByID: map[string]error{
@@ -5367,10 +5379,12 @@ var _ = Describe("Server", func() {
 				}
 				mockPageReaderMutator.FrontmatterByID = map[string]map[string]any{
 					"article_template": {
-						"template":    true,
 						"author":      "Default Author",
 						"category":    "articles",
 						"description": "Template description",
+						"wiki": map[string]any{
+							"template": true,
+						},
 					},
 				}
 				templateID = "article_template"
@@ -5390,9 +5404,8 @@ var _ = Describe("Server", func() {
 				Expect(mockPageReaderMutator.WrittenFrontmatter["category"]).To(Equal("articles"))
 			})
 
-			It("should not copy the template flag", func() {
-				_, hasTemplate := mockPageReaderMutator.WrittenFrontmatter["template"]
-				Expect(hasTemplate).To(BeFalse())
+			It("should not copy the wiki.* reserved subtree (template flag, etc.)", func() {
+				Expect(mockPageReaderMutator.WrittenFrontmatter).NotTo(HaveKey("wiki"))
 			})
 
 			It("should set the correct identifier", func() {
@@ -5410,9 +5423,11 @@ var _ = Describe("Server", func() {
 				}
 				mockPageReaderMutator.FrontmatterByID = map[string]map[string]any{
 					"article_template": {
-						"template": true,
 						"author":   "Default Author",
 						"category": "articles",
+						"wiki": map[string]any{
+							"template": true,
+						},
 					},
 				}
 				templateID = "article_template"
@@ -5570,13 +5585,17 @@ var _ = Describe("Server", func() {
 				}
 				mockPageReaderMutator.FrontmatterByID = map[string]map[string]any{
 					"article_template": {
-						"template":    true,
 						"title":       "Article Template",
 						"description": "For writing articles",
+						"wiki": map[string]any{
+							"template": true,
+						},
 					},
 					"project_template": {
-						"template": true,
-						"title":    "Project Template",
+						"title": "Project Template",
+						"wiki": map[string]any{
+							"template": true,
+						},
 					},
 				}
 			})
@@ -5622,9 +5641,9 @@ var _ = Describe("Server", func() {
 					"project_template",
 				}
 				mockPageReaderMutator.FrontmatterByID = map[string]map[string]any{
-					"article_template": {"template": true, "title": "Article"},
-					"inv_item":         {"template": true, "title": "Inventory Item"},
-					"project_template": {"template": true, "title": "Project"},
+					"article_template": {"title": "Article", "wiki": map[string]any{"template": true}},
+					"inv_item":         {"title": "Inventory Item", "wiki": map[string]any{"template": true}},
+					"project_template": {"title": "Project", "wiki": map[string]any{"template": true}},
 				}
 				req.ExcludeIdentifiers = []string{"inv_item"}
 			})
@@ -5653,7 +5672,7 @@ var _ = Describe("Server", func() {
 					"broken_template",
 				}
 				mockPageReaderMutator.FrontmatterByID = map[string]map[string]any{
-					"good_template": {"template": true, "title": "Good Template"},
+					"good_template": {"title": "Good Template", "wiki": map[string]any{"template": true}},
 				}
 				mockPageReaderMutator.ErrByID = map[string]error{
 					"broken_template": errors.New("disk error"),

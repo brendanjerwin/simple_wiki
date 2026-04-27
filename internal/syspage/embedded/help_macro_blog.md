@@ -1,5 +1,7 @@
 +++
 identifier = "help_macro_blog"
+
+[wiki]
 system = true
 +++
 
