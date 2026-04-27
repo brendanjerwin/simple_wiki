@@ -257,6 +257,45 @@ func (c *Connector) FindBinding(ctx context.Context, profileID wikipage.PageIden
 	return c.store.FindBinding(profileID, page, listName)
 }
 
+// VerifyBinding pings Keep with the user's bearer to confirm the bound
+// note still exists. Updates LastVerifiedAt on success. This is the v1
+// sync stub — actual data round-trip lands as a follow-up; see the help
+// page section "What sync does today".
+//
+// Pulled out as its own method so the scheduler can call it on a tick
+// without knowing about Keep's wire shape.
+func (c *Connector) VerifyBinding(ctx context.Context, profileID wikipage.PageIdentifier, binding Binding) error {
+	client, _, err := c.keepClientFor(ctx, profileID)
+	if err != nil {
+		return err
+	}
+	now := c.clock.Now()
+	resp, err := client.Changes(ctx, protocol.ChangesRequest{
+		SessionID:       fmt.Sprintf("s--%d--verify-%s", now.UnixMilli(), binding.KeepNoteID),
+		ClientTimestamp: fmt.Sprintf("%d", now.UnixMicro()),
+	})
+	if err != nil {
+		return err
+	}
+	for _, n := range resp.Nodes {
+		if n.Type == protocol.NodeTypeList && n.ServerID == binding.KeepNoteID {
+			// Found — record verified-at.
+			state, lerr := c.store.LoadState(profileID)
+			if lerr != nil {
+				return lerr
+			}
+			state.LastVerifiedAt = now.UTC()
+			return c.store.SaveState(profileID, state)
+		}
+	}
+	return ErrBoundNoteDeletedLocal
+}
+
+// ErrBoundNoteDeletedLocal mirrors protocol.ErrBoundNoteDeleted but is
+// surfaced from VerifyBinding when the bound note simply isn't in the
+// user's account anymore (e.g., they deleted it from the Keep app).
+var ErrBoundNoteDeletedLocal = protocol.ErrBoundNoteDeleted
+
 // deriveDeviceID returns a stable 16-hex-char device id derived from the
 // profile id. Matches the gpsoauth requirement of a stable per-account
 // android id without reusing any real device's id.
