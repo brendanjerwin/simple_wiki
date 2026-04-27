@@ -22,6 +22,7 @@ Every page template receives a context object with these fields:
 | `.Description` | string | Page description from frontmatter |
 | `.Map` | map | Full frontmatter as key-value pairs (e.g., `.Map.blog.identifier`) |
 | `.Inventory` | object | Inventory frontmatter with `.Container` and `.Items` fields |
+| `.WikiAuthorization` | object | Typed view of `wiki.authorization`. Has `.ACL.Owner` (string) and `.AllowAgentAccess` (bool). Empty when the page has no `wiki.authorization` block. See [[help-system-pages]] for the rules. |
 
 ## Go Template Syntax Basics
 

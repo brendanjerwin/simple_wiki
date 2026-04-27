@@ -98,6 +98,14 @@ func createProfileFromTemplate(
 	wikipage.ApplyTemplate(newFm, templateFm)
 	newFm[wikipage.IdentifierKey] = string(id)
 	newFm["title"] = "Profile: " + login
+	newFm["wiki"] = map[string]any{
+		"authorization": map[string]any{
+			"acl": map[string]any{
+				"owner": login,
+			},
+			"allow_agent_access": false,
+		},
+	}
 
 	rendered, err := templating.ExecuteTemplate(string(templateMd), newFm, mutator, query)
 	if err != nil {

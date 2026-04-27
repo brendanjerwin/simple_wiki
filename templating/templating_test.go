@@ -762,6 +762,109 @@ var _ = Describe("ConstructTemplateContextFromFrontmatterWithVisited", func() {
 			Expect(len(templateContext.Inventory.Items)).To(BeNumerically(">", 0))
 		})
 	})
+
+	Describe("when frontmatter contains wiki.authorization", func() {
+		var (
+			templateContext templating.TemplateContext
+			err             error
+			mockIndex       *mockFrontmatterIndex
+		)
+
+		BeforeEach(func() {
+			frontmatter := wikipage.FrontMatter{
+				identifierKey: "profile_alice",
+				titleKey:      "Profile: alice@example.com",
+				"wiki": map[string]any{
+					"authorization": map[string]any{
+						"acl": map[string]any{
+							"owner": "alice@example.com",
+						},
+						"allow_agent_access": false,
+					},
+				},
+			}
+			mockIndex = &mockFrontmatterIndex{
+				index:  map[string]map[string][]wikipage.PageIdentifier{},
+				values: map[string]map[string]string{},
+			}
+			templateContext, err = templating.ConstructTemplateContextFromFrontmatterWithVisited(
+				frontmatter, mockIndex, make(map[string]bool))
+		})
+
+		It("should not return an error", func() {
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should populate WikiAuthorization.ACL.Owner from wiki.authorization.acl.owner", func() {
+			Expect(templateContext.WikiAuthorization.ACL.Owner).To(Equal("alice@example.com"))
+		})
+
+		It("should populate WikiAuthorization.AllowAgentAccess from wiki.authorization.allow_agent_access", func() {
+			Expect(templateContext.WikiAuthorization.AllowAgentAccess).To(BeFalse())
+		})
+	})
+
+	Describe("when frontmatter has no wiki.authorization subtree", func() {
+		var (
+			templateContext templating.TemplateContext
+			err             error
+			mockIndex       *mockFrontmatterIndex
+		)
+
+		BeforeEach(func() {
+			frontmatter := wikipage.FrontMatter{
+				identifierKey: "ordinary_page",
+				titleKey:      "Ordinary",
+			}
+			mockIndex = &mockFrontmatterIndex{
+				index:  map[string]map[string][]wikipage.PageIdentifier{},
+				values: map[string]map[string]string{},
+			}
+			templateContext, err = templating.ConstructTemplateContextFromFrontmatterWithVisited(
+				frontmatter, mockIndex, make(map[string]bool))
+		})
+
+		It("should not return an error", func() {
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should leave WikiAuthorization at its zero value", func() {
+			Expect(templateContext.WikiAuthorization).To(Equal(templating.WikiAuthorization{}))
+		})
+	})
+
+	Describe("when wiki.authorization.allow_agent_access is true", func() {
+		var (
+			templateContext templating.TemplateContext
+			err             error
+			mockIndex       *mockFrontmatterIndex
+		)
+
+		BeforeEach(func() {
+			frontmatter := wikipage.FrontMatter{
+				identifierKey: "shared_page",
+				"wiki": map[string]any{
+					"authorization": map[string]any{
+						"allow_agent_access": true,
+					},
+				},
+			}
+			mockIndex = &mockFrontmatterIndex{
+				index:  map[string]map[string][]wikipage.PageIdentifier{},
+				values: map[string]map[string]string{},
+			}
+			templateContext, err = templating.ConstructTemplateContextFromFrontmatterWithVisited(
+				frontmatter, mockIndex, make(map[string]bool))
+		})
+
+		It("should not return an error", func() {
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should reflect AllowAgentAccess as true", func() {
+			Expect(templateContext.WikiAuthorization.AllowAgentAccess).To(BeTrue())
+		})
+	})
 })
 
 var _ = Describe("ConstructTemplateContextFromFrontmatterWithVisited with circular reference", func() {

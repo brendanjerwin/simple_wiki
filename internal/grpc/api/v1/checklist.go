@@ -31,6 +31,9 @@ func (s *Server) AddItem(ctx context.Context, req *apiv1.AddItemRequest) (*apiv1
 	if guardErr := requireUserMutable(s.pageReaderMutator, wikipage.PageIdentifier(req.GetPage())); guardErr != nil {
 		return nil, guardErr
 	}
+	if authErr := requireAuthorized(ctx, s.pageReaderMutator, wikipage.PageIdentifier(req.GetPage())); authErr != nil {
+		return nil, authErr
+	}
 
 	args := checklistmutator.AddItemArgs{
 		Text:         req.GetText(),
@@ -65,6 +68,9 @@ func (s *Server) UpdateItem(ctx context.Context, req *apiv1.UpdateItemRequest) (
 	}
 	if guardErr := requireUserMutable(s.pageReaderMutator, wikipage.PageIdentifier(req.GetPage())); guardErr != nil {
 		return nil, guardErr
+	}
+	if authErr := requireAuthorized(ctx, s.pageReaderMutator, wikipage.PageIdentifier(req.GetPage())); authErr != nil {
+		return nil, authErr
 	}
 
 	args := checklistmutator.UpdateItemArgs{
@@ -102,6 +108,9 @@ func (s *Server) ToggleItem(ctx context.Context, req *apiv1.ToggleItemRequest) (
 	if guardErr := requireUserMutable(s.pageReaderMutator, wikipage.PageIdentifier(req.GetPage())); guardErr != nil {
 		return nil, guardErr
 	}
+	if authErr := requireAuthorized(ctx, s.pageReaderMutator, wikipage.PageIdentifier(req.GetPage())); authErr != nil {
+		return nil, authErr
+	}
 
 	identity := tailscale.IdentityFromContext(ctx)
 	expected := timestampPtr(req.ExpectedUpdatedAt)
@@ -122,6 +131,9 @@ func (s *Server) DeleteItem(ctx context.Context, req *apiv1.DeleteItemRequest) (
 	}
 	if guardErr := requireUserMutable(s.pageReaderMutator, wikipage.PageIdentifier(req.GetPage())); guardErr != nil {
 		return nil, guardErr
+	}
+	if authErr := requireAuthorized(ctx, s.pageReaderMutator, wikipage.PageIdentifier(req.GetPage())); authErr != nil {
+		return nil, authErr
 	}
 
 	identity := tailscale.IdentityFromContext(ctx)
@@ -144,6 +156,9 @@ func (s *Server) ReorderItem(ctx context.Context, req *apiv1.ReorderItemRequest)
 	if guardErr := requireUserMutable(s.pageReaderMutator, wikipage.PageIdentifier(req.GetPage())); guardErr != nil {
 		return nil, guardErr
 	}
+	if authErr := requireAuthorized(ctx, s.pageReaderMutator, wikipage.PageIdentifier(req.GetPage())); authErr != nil {
+		return nil, authErr
+	}
 
 	identity := tailscale.IdentityFromContext(ctx)
 	expected := timestampPtr(req.ExpectedUpdatedAt)
@@ -161,6 +176,9 @@ func (s *Server) ListItems(ctx context.Context, req *apiv1.ListItemsRequest) (*a
 	}
 	if req.GetPage() == "" {
 		return nil, status.Error(codes.InvalidArgument, errPageRequired)
+	}
+	if authErr := requireAuthorized(ctx, s.pageReaderMutator, wikipage.PageIdentifier(req.GetPage())); authErr != nil {
+		return nil, authErr
 	}
 
 	list, err := s.checklistMutator.ListItems(ctx, req.GetPage(), req.GetListName())
@@ -219,6 +237,9 @@ func (s *Server) WatchList(req *apiv1.WatchListRequest, stream apiv1.ChecklistSe
 	}
 
 	ctx := stream.Context()
+	if authErr := requireAuthorized(ctx, s.pageReaderMutator, wikipage.PageIdentifier(req.GetPage())); authErr != nil {
+		return authErr
+	}
 	interval := resolveWatchListInterval(req.GetCheckIntervalMs())
 
 	list, err := s.checklistMutator.ListItems(ctx, req.GetPage(), req.GetListName())
@@ -266,6 +287,9 @@ func (s *Server) GetChecklists(ctx context.Context, req *apiv1.GetChecklistsRequ
 	}
 	if req.GetPage() == "" {
 		return nil, status.Error(codes.InvalidArgument, errPageRequired)
+	}
+	if authErr := requireAuthorized(ctx, s.pageReaderMutator, wikipage.PageIdentifier(req.GetPage())); authErr != nil {
+		return nil, authErr
 	}
 
 	lists, err := s.checklistMutator.GetChecklists(ctx, req.GetPage())

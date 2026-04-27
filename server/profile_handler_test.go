@@ -241,16 +241,41 @@ var _ = Describe("resolveAndRedirectToProfile", func() {
 			Expect(fm["title"]).To(Equal("Profile: bob.smith@example.com"))
 		})
 
-		It("should not carry the template's wiki.* flags into the new page", func() {
+		It("should not carry the template's wiki.template / wiki.system flags into the new page", func() {
 			fm, ok := mutator.writtenFM[expectedID]
 			Expect(ok).To(BeTrue())
-			Expect(fm).NotTo(HaveKey("wiki"))
+			wikiSubtree, ok := fm["wiki"].(map[string]any)
+			Expect(ok).To(BeTrue())
+			Expect(wikiSubtree).NotTo(HaveKey("template"))
+			Expect(wikiSubtree).NotTo(HaveKey("system"))
 		})
 
 		It("should write the rendered markdown body", func() {
 			md, ok := mutator.writtenMD[expectedID]
 			Expect(ok).To(BeTrue())
 			Expect(string(md)).To(ContainSubstring("Profile: bob.smith@example.com"))
+		})
+
+		It("should stamp wiki.authorization.acl.owner = login on the new page", func() {
+			fm, ok := mutator.writtenFM[expectedID]
+			Expect(ok).To(BeTrue())
+			wikiSubtree, ok := fm["wiki"].(map[string]any)
+			Expect(ok).To(BeTrue(), "wiki subtree should be present")
+			authSubtree, ok := wikiSubtree["authorization"].(map[string]any)
+			Expect(ok).To(BeTrue(), "wiki.authorization subtree should be present")
+			aclSubtree, ok := authSubtree["acl"].(map[string]any)
+			Expect(ok).To(BeTrue(), "wiki.authorization.acl subtree should be present")
+			Expect(aclSubtree["owner"]).To(Equal("bob.smith@example.com"))
+		})
+
+		It("should default wiki.authorization.allow_agent_access to false on the new page", func() {
+			fm, ok := mutator.writtenFM[expectedID]
+			Expect(ok).To(BeTrue())
+			wikiSubtree, ok := fm["wiki"].(map[string]any)
+			Expect(ok).To(BeTrue())
+			authSubtree, ok := wikiSubtree["authorization"].(map[string]any)
+			Expect(ok).To(BeTrue())
+			Expect(authSubtree["allow_agent_access"]).To(Equal(false))
 		})
 	})
 

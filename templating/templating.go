@@ -29,14 +29,54 @@ type InventoryFrontmatter struct {
 }
 
 
+// WikiACL is the access-control surface owned by the wiki.authorization
+// reserved subtree. Single-owner today; readers/writers will join when
+// the enforcement layer arrives.
+type WikiACL struct {
+	Owner string `json:"owner"`
+}
+
+// readWikiAuthorization extracts the typed view of fm["wiki"]["authorization"].
+// Missing or malformed entries yield zero values rather than errors — templates
+// must never fail to render because authorization metadata is absent.
+func readWikiAuthorization(fm wikipage.FrontMatter) WikiAuthorization {
+	wikiSubtree, ok := fm["wiki"].(map[string]any)
+	if !ok {
+		return WikiAuthorization{}
+	}
+	authSubtree, ok := wikiSubtree["authorization"].(map[string]any)
+	if !ok {
+		return WikiAuthorization{}
+	}
+	out := WikiAuthorization{}
+	if aclSubtree, ok := authSubtree["acl"].(map[string]any); ok {
+		if owner, ok := aclSubtree["owner"].(string); ok {
+			out.ACL.Owner = owner
+		}
+	}
+	if allow, ok := authSubtree["allow_agent_access"].(bool); ok {
+		out.AllowAgentAccess = allow
+	}
+	return out
+}
+
+// WikiAuthorization is the typed view of the page's wiki.authorization
+// reserved subtree. Templates access it via TemplateContext.WikiAuthorization
+// so they don't have to dig through the raw Map.
+type WikiAuthorization struct {
+	ACL              WikiACL `json:"acl"`
+	AllowAgentAccess bool    `json:"allow_agent_access"`
+}
+
 type TemplateContext struct {
 	// CAUTION: avoid changing the structure of TemplateContext without considering backward compatibility.
 	// If you change the structure, consider adding a migration to handle existing pages that may rely on the old structure.
-	Identifier  string `json:"identifier"`
-	Title       string `json:"title"`
-	Description string `json:"description"`
-	Map         map[string]any
-	Inventory   InventoryFrontmatter `json:"inventory"`
+	Identifier        string `json:"identifier"`
+	Title             string `json:"title"`
+	Description       string `json:"description"`
+	Map               map[string]any
+	Inventory         InventoryFrontmatter `json:"inventory"`
+	WikiAuthorization WikiAuthorization    `json:"-"`
 }
 
 func ConstructTemplateContextFromFrontmatter(fm wikipage.FrontMatter, query wikipage.IQueryFrontmatterIndex) (TemplateContext, error) {
@@ -56,6 +96,7 @@ func ConstructTemplateContextFromFrontmatterWithVisited(fm wikipage.FrontMatter,
 	}
 
 	templateContext.Map = fm
+	templateContext.WikiAuthorization = readWikiAuthorization(fm)
 
 	// Check for circular reference in inventory processing
 	if visited[templateContext.Identifier] {

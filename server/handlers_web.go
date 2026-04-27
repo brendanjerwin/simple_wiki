@@ -10,6 +10,7 @@ import (
 	"mime"
 	"net/http"
 	"net/url"
+	"os"
 	"path"
 	"path/filepath"
 	"slices"
@@ -107,9 +108,55 @@ func (s *Site) caldavGateway() gin.HandlerFunc {
 			c.Next()
 			return
 		}
+		// Authorize against the page named in the URL before forwarding to
+		// the CalDAV server. CalDAV resource paths always begin with the
+		// page identifier (e.g. /<page>/<list>/<uid>.ics for items, or
+		// /<page>/ for collection lists), so taking the first segment is
+		// sufficient. OPTIONS at the root has no page to gate — let it
+		// through; the CalDAV server's own requireIdentity stops anonymous
+		// callers from learning anything past the capability advertisement.
+		if pageID := caldavRequestPageID(c.Request); pageID != "" {
+			if !s.caldavCallerAuthorized(c.Request, pageID) {
+				c.AbortWithStatus(http.StatusForbidden)
+				return
+			}
+		}
 		s.caldavServer.ServeHTTP(c.Writer, c.Request)
 		c.Abort()
 	}
+}
+
+// caldavRequestPageID extracts the wiki page identifier from a CalDAV
+// request URL. Returns "" when the path has no page segment (e.g. the
+// root OPTIONS probe), which the gateway treats as "no authorization
+// needed at this layer."
+func caldavRequestPageID(r *http.Request) wikipage.PageIdentifier {
+	trimmed := strings.Trim(r.URL.Path, "/")
+	if trimmed == "" {
+		return ""
+	}
+	first := strings.SplitN(trimmed, "/", 2)[0]
+	return wikipage.PageIdentifier(first)
+}
+
+// caldavCallerAuthorized returns whether the request's caller is allowed
+// to access the named page under the wiki.authorization rules.
+//
+// Pages that don't exist are treated as authorized — the underlying
+// CalDAV layer will produce its own 404. We don't synthesize a 404 here
+// because that would leak existence information that the regular wiki
+// layer also doesn't try to hide.
+func (s *Site) caldavCallerAuthorized(r *http.Request, pageID wikipage.PageIdentifier) bool {
+	_, fm, err := s.ReadFrontMatter(pageID)
+	if err != nil {
+		// Page absent → nothing to authorize against; let the CalDAV
+		// layer handle it (it'll respond with the appropriate 404 / 405).
+		// Other read errors fail closed so a transient disk issue cannot
+		// silently expose a restricted page.
+		return errors.Is(err, os.ErrNotExist)
+	}
+	identity := tailscale.IdentityFromContext(r.Context())
+	return wikipage.Authorize(identity, fm) == nil
 }
 
 // CalDAV / WebDAV verbs the gateway forwards unconditionally. Gin's
@@ -348,6 +395,23 @@ func (s *Site) handlePageRequest(c *gin.Context) {
 		return
 	}
 
+	// Authorize against the page's wiki.authorization rules. Brand-new pages
+	// (no frontmatter on disk yet) are wide open — the creator becomes the
+	// owner via subsequent saves.
+	if !p.IsNew() {
+		fm, fmErr := p.GetFrontMatter()
+		if fmErr != nil {
+			s.Logger.Error("Failed to read frontmatter for authorization check on '%s': %v", page, fmErr)
+			c.String(http.StatusInternalServerError, "Failed to read page frontmatter")
+			return
+		}
+		identity := tailscale.IdentityFromContext(c.Request.Context())
+		if authErr := wikipage.Authorize(identity, fm); authErr != nil {
+			c.String(http.StatusForbidden, "access denied by wiki.authorization rules")
+			return
+		}
+	}
+
 	// Render the page content
 	s.renderPageContent(c, page, command, p)
 }
@@ -545,6 +609,24 @@ func (s *Site) handlePageUpdate(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "Failed to open page"})
 		return
 	}
+
+	// Authorize against the existing page's wiki.authorization. Brand-new
+	// pages have no existing rules to enforce — the first save establishes
+	// ownership.
+	if !p.IsNew() {
+		fm, fmErr := p.GetFrontMatter()
+		if fmErr != nil {
+			s.Logger.Error("Failed to read frontmatter for authorization check on '%s': %v", json.Page, fmErr)
+			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "Failed to read page frontmatter"})
+			return
+		}
+		identity := tailscale.IdentityFromContext(c.Request.Context())
+		if authErr := wikipage.Authorize(identity, fm); authErr != nil {
+			c.JSON(http.StatusForbidden, gin.H{"success": false, "message": "access denied by wiki.authorization rules"})
+			return
+		}
+	}
+
 	unixTime := time.Now().Unix()
 	if json.FetchedAt > 0 && p.IsModifiedSince(json.FetchedAt) {
 		c.JSON(http.StatusConflict, gin.H{"success": false, "message": "Refusing to overwrite others' work", "unix_time": unixTime})

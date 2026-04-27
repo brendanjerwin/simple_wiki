@@ -44,13 +44,30 @@ page — edit it freely from the normal editor. Subsequent visits to
 - **The Tailscale agent identity** (tagged nodes, wiki-cli's default
   agent claim) — `403`.
 
-## Visibility today
+## Authorization
 
-Profile pages are ordinary wiki pages with predictable identifiers. There
-is no per-page access control yet, so any authenticated reader can view
-any profile page if they know the identifier. **Do not put secrets in
-your profile page.** A future change will add an owner-scoped ACL — see
-issue #997 for the roadmap.
+Each profile page ships with a `wiki.authorization` block that limits
+access to its owner:
+
+```toml
+[wiki.authorization]
+allow_agent_access = false
+
+[wiki.authorization.acl]
+owner = "you@example.com"
+```
+
+The wiki enforces this on every API surface (HTTP page reads/writes,
+gRPC PageManagement / Frontmatter / Checklist / Search, CalDAV). Other
+users on the tailnet — and agents — get a 403 / `PermissionDenied`. Only
+internal startup machinery (the syspage sync, the eager migrations, the
+indexer) bypasses these rules; no external caller does.
+
+If you'd like to share your profile page with another tailnet user,
+edit the `acl.owner` to the new owner (you'll lose access at the next
+write) — or remove the `wiki.authorization.acl` block entirely to make
+the page readable by every authenticated human while still keeping
+agents out.
 
 ## For agents
 

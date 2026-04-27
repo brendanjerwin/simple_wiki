@@ -717,7 +717,7 @@ var _ = Describe("Server", func() {
 			})
 
 			It("should return an internal error and no response", func() {
-				Expect(err).To(HaveGrpcStatus(codes.Internal, "failed to read frontmatter: kaboom"))
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.Internal, "kaboom"))
 				Expect(res).To(BeNil())
 			})
 		})
@@ -4062,7 +4062,7 @@ var _ = Describe("Server", func() {
 			})
 
 			It("should return an internal error", func() {
-				Expect(err).To(HaveGrpcStatusWithSubstr(codes.Internal, "failed to read page"))
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.Internal, "disk read error"))
 			})
 
 			It("should return no response", func() {

@@ -43,6 +43,27 @@ To propose a change:
 2. Edit the corresponding `.md` file under `internal/syspage/embedded/`.
 3. After the next deploy, the upgraded binary will sync the new content into your installation automatically.
 
+## Authorization (`wiki.authorization`)
+
+System pages are not the only pages with restricted access — any wiki page can carry a `wiki.authorization` block to gate reads and writes. The block is a sibling of `wiki.system` under the reserved `wiki.*` namespace:
+
+```toml
+[wiki.authorization]
+allow_agent_access = false   # opt-in for agent (non-human) callers, default false
+
+[wiki.authorization.acl]
+owner = "alice@example.com"  # restricts to this human; omit to allow any human
+```
+
+**Rules** (enforced on every API surface — HTTP, gRPC, CalDAV, MCP):
+
+1. Pages with no `wiki.authorization` subtree are public — everyone allowed.
+2. With the subtree present, the `acl.owner` field gates humans. If set, only that owner may read/write. If the subtree exists but `acl.owner` is missing, any authenticated human may read/write.
+3. `allow_agent_access` is orthogonal. Agents are denied unless this flag is `true`. The flag does not unlock human access; an agent reading a page never falls through to the owner check.
+4. Anonymous callers (no Tailscale identity) cannot pass any non-empty authorization block — they have no login to match against.
+
+Internal callers (the system-page sync, the eager migrations, the indexer) bypass these rules by going through `*Site` directly rather than through any of the API surfaces. There is no other escape hatch.
+
 ## How Sync Works
 
 On startup (after the indexes are open and before HTTP serving begins) the wiki:
