@@ -88,20 +88,20 @@ func (*fakeProfileMutator) ModifyMarkdown(_ wikipage.PageIdentifier, _ func(wiki
 	return nil
 }
 
-// fakeFrontmatterIndex is a stub IQueryFrontmatterIndex that returns no
+// fakeProfileFrontmatterIndex is a stub IQueryFrontmatterIndex that returns no
 // matches and no values. The profile handler does not exercise the index
 // directly; templating.ExecuteTemplate may call into it for macro
 // expansion, and an empty index is fine for the simple template body the
 // profile_template ships with.
-type fakeFrontmatterIndex struct{}
+type fakeProfileFrontmatterIndex struct{}
 
-func (fakeFrontmatterIndex) QueryExactMatch(_, _ string) []wikipage.PageIdentifier { return nil }
-func (fakeFrontmatterIndex) QueryExactMatchSortedBy(_, _, _ string, _ bool, _ int) []wikipage.PageIdentifier {
+func (fakeProfileFrontmatterIndex) QueryExactMatch(_, _ string) []wikipage.PageIdentifier { return nil }
+func (fakeProfileFrontmatterIndex) QueryExactMatchSortedBy(_, _, _ string, _ bool, _ int) []wikipage.PageIdentifier {
 	return nil
 }
-func (fakeFrontmatterIndex) QueryPrefixMatch(_, _ string) []wikipage.PageIdentifier  { return nil }
-func (fakeFrontmatterIndex) QueryKeyExistence(_ string) []wikipage.PageIdentifier    { return nil }
-func (fakeFrontmatterIndex) GetValue(_ wikipage.PageIdentifier, _ wikipage.DottedKeyPath) wikipage.Value {
+func (fakeProfileFrontmatterIndex) QueryPrefixMatch(_, _ string) []wikipage.PageIdentifier  { return nil }
+func (fakeProfileFrontmatterIndex) QueryKeyExistence(_ string) []wikipage.PageIdentifier    { return nil }
+func (fakeProfileFrontmatterIndex) GetValue(_ wikipage.PageIdentifier, _ wikipage.DottedKeyPath) wikipage.Value {
 	return ""
 }
 
@@ -119,12 +119,12 @@ func makeContext(identity tailscale.IdentityValue) (*gin.Context, *httptest.Resp
 var _ = Describe("resolveAndRedirectToProfile", func() {
 	var (
 		mutator *fakeProfileMutator
-		index   fakeFrontmatterIndex
+		index   fakeProfileFrontmatterIndex
 	)
 
 	BeforeEach(func() {
 		mutator = newFakeProfileMutator()
-		index = fakeFrontmatterIndex{}
+		index = fakeProfileFrontmatterIndex{}
 	})
 
 	When("the caller is anonymous", func() {

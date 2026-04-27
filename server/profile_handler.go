@@ -87,7 +87,7 @@ func createProfileFromTemplate(
 		return fmt.Errorf("read profile_template frontmatter: %w", err)
 	}
 	if !wikipage.IsTemplatePage(templateFm) {
-		return fmt.Errorf("profile_template is missing wiki.template = true; the system page sync may not have run yet")
+		return errors.New("profile_template is missing wiki.template = true; the system page sync may not have run yet")
 	}
 	_, templateMd, err := mutator.ReadMarkdown(profileTemplateIdentifier)
 	if err != nil {
@@ -116,6 +116,10 @@ func createProfileFromTemplate(
 		return fmt.Errorf("write new profile frontmatter: %w", err)
 	}
 	if err := mutator.WriteMarkdown(id, wikipage.Markdown(rendered)); err != nil {
+		// Roll back the partial write so the next /profile visit sees a
+		// clean missing-page state and re-tries from scratch instead of
+		// redirecting the user to a frontmatter-only stub with no body.
+		_ = mutator.DeletePage(id)
 		return fmt.Errorf("write new profile markdown: %w", err)
 	}
 	return nil

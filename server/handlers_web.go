@@ -131,11 +131,11 @@ func (s *Site) caldavGateway() gin.HandlerFunc {
 // root OPTIONS probe), which the gateway treats as "no authorization
 // needed at this layer."
 func caldavRequestPageID(r *http.Request) wikipage.PageIdentifier {
-	trimmed := strings.Trim(r.URL.Path, "/")
+	trimmed := strings.Trim(r.URL.Path, rootPath)
 	if trimmed == "" {
 		return ""
 	}
-	first := strings.SplitN(trimmed, "/", 2)[0]
+	first := strings.SplitN(trimmed, rootPath, 2)[0]
 	return wikipage.PageIdentifier(first)
 }
 

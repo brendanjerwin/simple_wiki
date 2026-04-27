@@ -124,8 +124,8 @@ func (j *SystemTemplateNamespaceMigrationJob) Execute() error {
 		fm = wikipage.FrontMatter{}
 	}
 
-	wikiSubtree, _ := fm[wikiNamespaceKey].(map[string]any)
-	if wikiSubtree == nil {
+	wikiSubtree, ok := fm[wikiNamespaceKey].(map[string]any)
+	if !ok || wikiSubtree == nil {
 		wikiSubtree = map[string]any{}
 	}
 

@@ -362,5 +362,4 @@ var _ = Describe("ApplyTemplate", func() {
 			Expect(dest["title"]).To(Equal("New"))
 		})
 	})
-
 })
