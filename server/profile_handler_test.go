@@ -14,6 +14,7 @@ import (
 	"github.com/brendanjerwin/simple_wiki/tailscale"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 	"github.com/gin-gonic/gin"
+	"github.com/jcelliott/lumber"
 )
 
 // fakeProfileMutator is the minimum PageReaderMutator for the profile-handler
@@ -336,6 +337,42 @@ var _ = Describe("resolveAndRedirectToProfile", func() {
 
 		It("should respond 500 (no silent assumption that any error is not-found)", func() {
 			Expect(rec.Code).To(Equal(http.StatusInternalServerError))
+		})
+	})
+})
+
+var _ = Describe("(*Site).handleProfile via the registered route", func() {
+	var (
+		site    *Site
+		router  *gin.Engine
+		tmpDir  string
+	)
+
+	BeforeEach(func() {
+		var err error
+		tmpDir, err = os.MkdirTemp("", "simple_wiki_profile_handler_route_test")
+		Expect(err).NotTo(HaveOccurred())
+		logger := lumber.NewConsoleLogger(lumber.WARN)
+		site, err = NewSite(tmpDir, "testpage", 0, "secret", logger)
+		Expect(err).NotTo(HaveOccurred())
+		router = site.GinRouter()
+	})
+
+	AfterEach(func() {
+		_ = os.RemoveAll(tmpDir)
+	})
+
+	When("an anonymous request hits /profile", func() {
+		var rec *httptest.ResponseRecorder
+
+		BeforeEach(func() {
+			rec = httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodGet, "/profile", nil)
+			router.ServeHTTP(rec, req)
+		})
+
+		It("should respond 403", func() {
+			Expect(rec.Code).To(Equal(http.StatusForbidden))
 		})
 	})
 })
