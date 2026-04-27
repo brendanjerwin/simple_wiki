@@ -1,0 +1,213 @@
+syntax = "proto3";
+
+package api.v1;
+
+import "api/v1/mcp_options.proto";
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/brendanjerwin/simple_wiki/gen/go/api/v1;apiv1";
+
+// KeepConnectorService binds wiki checklists to Google Keep notes via an
+// unofficial reverse-engineered API. Per-user only — every method scopes to
+// the *calling* user's profile via Tailscale identity. No method ever
+// reveals another user's master token, bindings, or note ids.
+service KeepConnectorService {
+  option (api.v1.service_description) =
+      "Per-user Google Keep bridge. Connects a user's Google account "
+      "(via App-Specific Password + gpsoauth exchange) and binds wiki "
+      "checklists to Keep notes in their account. Bindings live on the "
+      "calling user's profile page so two household members can each "
+      "bind the same wiki checklist to their own Keep note. The Keep "
+      "wire protocol is unofficial — see help_google_keep for the "
+      "trust model and churn risk.";
+
+  rpc ExchangeAndStore(ExchangeAndStoreRequest) returns (ExchangeAndStoreResponse) {
+    option (api.v1.description) =
+        "Exchange the user's email + App-Specific Password for a "
+        "long-lived master token via gpsoauth, verify it works against "
+        "Keep, and store wiki.connectors.google_keep.* on the calling "
+        "user's profile. The ASP is consumed only for this call — never "
+        "persisted. Idempotent: replaces any prior state.";
+  }
+
+  rpc Disconnect(DisconnectRequest) returns (DisconnectResponse) {
+    option (api.v1.description) =
+        "Wipe the master token from the calling user's profile and pause "
+        "all of their bindings. Bindings remain on the profile (paused) "
+        "so reconnect can resume them with cursors preserved. Other "
+        "users' bindings are untouched.";
+  }
+
+  rpc GetState(GetStateRequest) returns (GetStateResponse) {
+    option (api.v1.description) =
+        "Return the calling user's connector state — connected/not, "
+        "email, last verified at, and the bindings list. Used by the "
+        "<keep-connect> macro on the profile page.";
+    option (api.v1.read_only) = true;
+  }
+
+  rpc ListNotes(ListNotesRequest) returns (ListNotesResponse) {
+    option (api.v1.description) =
+        "Proxy to the calling user's Keep account: enumerate list-typed "
+        "notes (used to populate the bind picker in the Checklist "
+        "component). Returns ErrAuthRevoked if the master token no "
+        "longer works.";
+    option (api.v1.read_only) = true;
+  }
+
+  rpc ListMyBindings(ListMyBindingsRequest) returns (ListMyBindingsResponse) {
+    option (api.v1.description) =
+        "Return all of the calling user's bindings with sync status. "
+        "Used by the <keep-connect> macro to render the per-row remove "
+        "controls.";
+    option (api.v1.read_only) = true;
+  }
+
+  rpc BindChecklist(BindChecklistRequest) returns (BindChecklistResponse) {
+    option (api.v1.description) =
+        "Bind a wiki checklist to a Keep note for the calling user. "
+        "If keep_note_id is empty, creates a new Keep note named "
+        "list_name. Per-user collision rules: a user cannot bind the "
+        "same (page, list_name) twice or bind two different checklists "
+        "to the same Keep note (returns FAILED_PRECONDITION). Two "
+        "different users binding the same (page, list_name) is fine — "
+        "they each have their own Keep note.";
+  }
+
+  rpc UnbindChecklist(UnbindChecklistRequest) returns (UnbindChecklistResponse) {
+    option (api.v1.description) =
+        "Remove the calling user's binding for (page, list_name). Wiki "
+        "data and Keep note are both left as-is. Idempotent: returns "
+        "OK whether the binding existed or not.";
+  }
+
+  rpc GetChecklistBindingState(GetChecklistBindingStateRequest) returns (GetChecklistBindingStateResponse) {
+    option (api.v1.description) =
+        "Per-(page, list_name) binding state for the calling user, used "
+        "by the Checklist component on render to decide whether to show "
+        "the bind button, an Unbind affordance, or nothing.";
+    option (api.v1.read_only) = true;
+  }
+}
+
+// --- Common types ---------------------------------------------------------
+
+// ConnectorState is the full per-user connector configuration as visible
+// to the calling user. Master token is never returned over the wire.
+message ConnectorState {
+  bool configured = 1;
+  string email = 2;
+  google.protobuf.Timestamp connected_at = 3;
+  google.protobuf.Timestamp last_verified_at = 4;
+  int64 poll_interval_seconds = 5;
+  repeated BindingState bindings = 6;
+  // last_error is populated when the most recent verification call failed.
+  ConnectorError last_error = 7;
+}
+
+// BindingState is a single binding plus its sync health.
+message BindingState {
+  string page = 1;
+  string list_name = 2;
+  string keep_note_id = 3;
+  string keep_note_title = 4;
+  google.protobuf.Timestamp bound_at = 5;
+  google.protobuf.Timestamp last_pull_at = 6;
+  google.protobuf.Timestamp last_push_at = 7;
+  google.protobuf.Timestamp last_verified_at = 8;
+  ConnectorError last_error = 9;
+  // paused is true when the user disconnected the connector — bindings
+  // remain on the profile but no cron entries are registered.
+  bool paused = 10;
+}
+
+// KeepNoteSummary describes one of the user's Keep notes for the bind
+// picker. Only list-typed notes are returned.
+message KeepNoteSummary {
+  string keep_note_id = 1;
+  string title = 2;
+  int32 item_count = 3;
+}
+
+// ConnectorError is the typed error surfaced to UI when sync or auth
+// fails. Branches on `code`, never on `message`.
+message ConnectorError {
+  enum Code {
+    CODE_UNSPECIFIED = 0;
+    CODE_INVALID_CREDENTIALS = 1;
+    CODE_AUTH_REVOKED = 2;
+    CODE_PROTOCOL_DRIFT = 3;
+    CODE_RATE_LIMITED = 4;
+    CODE_BOUND_NOTE_DELETED = 5;
+    CODE_INTERNAL = 99;
+  }
+  Code code = 1;
+  string message = 2;
+  google.protobuf.Timestamp occurred_at = 3;
+}
+
+// ChecklistBindingState is the response shape the Checklist component
+// queries on render — small surface intentionally so we don't leak more
+// than the component needs.
+message ChecklistBindingState {
+  bool connector_configured = 1;
+  // current_binding is null when the user has no binding for this
+  // checklist (button shows "Bind to Keep List").
+  BindingState current_binding = 2;
+  ConnectorError last_error = 3;
+}
+
+// --- Request/response messages ---
+
+message ExchangeAndStoreRequest {
+  string email = 1;
+  string app_specific_password = 2;
+}
+message ExchangeAndStoreResponse {
+  ConnectorState state = 1;
+}
+
+message DisconnectRequest {}
+message DisconnectResponse {
+  ConnectorState state = 1;
+}
+
+message GetStateRequest {}
+message GetStateResponse {
+  ConnectorState state = 1;
+}
+
+message ListNotesRequest {}
+message ListNotesResponse {
+  repeated KeepNoteSummary notes = 1;
+}
+
+message ListMyBindingsRequest {}
+message ListMyBindingsResponse {
+  repeated BindingState bindings = 1;
+}
+
+message BindChecklistRequest {
+  string page = 1;
+  string list_name = 2;
+  // keep_note_id binds to an existing note. If empty, a new Keep note is
+  // created with title = list_name.
+  string keep_note_id = 3;
+}
+message BindChecklistResponse {
+  BindingState binding = 1;
+}
+
+message UnbindChecklistRequest {
+  string page = 1;
+  string list_name = 2;
+}
+message UnbindChecklistResponse {}
+
+message GetChecklistBindingStateRequest {
+  string page = 1;
+  string list_name = 2;
+}
+message GetChecklistBindingStateResponse {
+  ChecklistBindingState state = 1;
+}

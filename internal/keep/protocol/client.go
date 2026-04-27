@@ -212,6 +212,7 @@ type wireNode struct {
 	ServerID    string         `json:"serverId,omitempty"`
 	ParentID    string         `json:"parentId,omitempty"`
 	Type        string         `json:"type"`
+	Title       string         `json:"title,omitempty"`
 	Text        string         `json:"text,omitempty"`
 	Checked     bool           `json:"checked,omitempty"`
 	SortValue   string         `json:"sortValue,omitempty"`
@@ -273,6 +274,7 @@ func encodeNode(n Node) wireNode {
 		ServerID:    n.ServerID,
 		ParentID:    n.ParentID,
 		Type:        string(n.Type),
+		Title:       n.Title,
 		Text:        n.Text,
 		Checked:     n.Checked,
 		SortValue:   n.SortValue,
@@ -343,6 +345,7 @@ func decodeNode(w wireNode) Node {
 		ServerID:    w.ServerID,
 		ParentID:    w.ParentID,
 		Type:        NodeType(w.Type),
+		Title:       w.Title,
 		Text:        w.Text,
 		Checked:     w.Checked,
 		SortValue:   w.SortValue,

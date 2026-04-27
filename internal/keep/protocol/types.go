@@ -39,6 +39,7 @@ type Node struct {
 	ServerID    string
 	ParentID    string
 	Type        NodeType
+	Title       string // top-level Note/List title (empty on ListItem)
 	Text        string
 	SortValue   string
 	BaseVersion string
