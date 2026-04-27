@@ -3,7 +3,7 @@ module github.com/brendanjerwin/simple_wiki
 go 1.26.1
 
 require (
-	connectrpc.com/connect v1.19.1
+	connectrpc.com/connect v1.19.2
 	connectrpc.com/grpcreflect v1.3.0
 	connectrpc.com/vanguard v0.4.0
 	github.com/adrg/frontmatter v0.2.0
