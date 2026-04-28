@@ -362,17 +362,18 @@ type wireChangesResponse struct {
 }
 
 type wireNode struct {
-	Kind        string         `json:"kind,omitempty"`
-	ID          string         `json:"id"`
-	ServerID    string         `json:"serverId,omitempty"`
-	ParentID    string         `json:"parentId,omitempty"`
-	Type        string         `json:"type"`
-	Title       string         `json:"title,omitempty"`
-	Text        string         `json:"text,omitempty"`
-	Checked     bool           `json:"checked,omitempty"`
-	SortValue   string         `json:"sortValue,omitempty"`
-	BaseVersion string         `json:"baseVersion,omitempty"`
-	Timestamps  wireTimestamps `json:"timestamps"`
+	Kind           string         `json:"kind,omitempty"`
+	ID             string         `json:"id"`
+	ServerID       string         `json:"serverId,omitempty"`
+	ParentID       string         `json:"parentId,omitempty"`
+	ParentServerID string         `json:"parentServerId,omitempty"`
+	Type           string         `json:"type"`
+	Title          string         `json:"title,omitempty"`
+	Text           string         `json:"text,omitempty"`
+	Checked        bool           `json:"checked,omitempty"`
+	SortValue      string         `json:"sortValue,omitempty"`
+	BaseVersion    string         `json:"baseVersion,omitempty"`
+	Timestamps     wireTimestamps `json:"timestamps"`
 }
 
 type wireTimestamps struct {
@@ -424,17 +425,18 @@ func buildChangesRequest(req ChangesRequest) wireChangesRequest {
 
 func encodeNode(n Node) wireNode {
 	out := wireNode{
-		Kind:        firstNonEmpty(n.Kind, "notes#node"),
-		ID:          n.ID,
-		ServerID:    n.ServerID,
-		ParentID:    n.ParentID,
-		Type:        string(n.Type),
-		Title:       n.Title,
-		Text:        n.Text,
-		Checked:     n.Checked,
-		SortValue:   n.SortValue,
-		BaseVersion: n.BaseVersion,
-		Timestamps:  encodeTimestamps(n.Timestamps),
+		Kind:           firstNonEmpty(n.Kind, "notes#node"),
+		ID:             n.ID,
+		ServerID:       n.ServerID,
+		ParentID:       n.ParentID,
+		ParentServerID: n.ParentServerID,
+		Type:           string(n.Type),
+		Title:          n.Title,
+		Text:           n.Text,
+		Checked:        n.Checked,
+		SortValue:      n.SortValue,
+		BaseVersion:    n.BaseVersion,
+		Timestamps:     encodeTimestamps(n.Timestamps),
 	}
 	return out
 }

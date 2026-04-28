@@ -2,7 +2,9 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
 	"crypto/tls"
+	"encoding/binary"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -15,9 +17,11 @@ import (
 )
 
 func main() {
-	cmd := flag.String("cmd", "list", "list | create-and-push | create-with-items")
+	cmd := flag.String("cmd", "list", "list | create-and-push | create-with-items | push-item-to-existing")
 	title := flag.String("title", "Keep CLI Test", "title for create-and-push / create-with-items")
 	itemsCSV := flag.String("items", "Eggs,Milk,Bread", "comma-separated items for create-with-items")
+	parentID := flag.String("parent-id", "", "for push-item-to-existing: the LIST node's serverID")
+	itemText := flag.String("item-text", "Late Add", "for push-item-to-existing: the new item's text")
 	flag.Parse()
 
 	email := os.Getenv("KEEP_EMAIL")
@@ -53,9 +57,87 @@ func main() {
 		runCreateAndPush(ctx, keep, *title)
 	case "create-with-items":
 		runCreateWithItems(ctx, keep, *title, strings.Split(*itemsCSV, ","))
+	case "push-item-to-existing":
+		if *parentID == "" {
+			fmt.Fprintln(os.Stderr, "push-item-to-existing requires -parent-id=<list-serverID>")
+			os.Exit(2)
+		}
+		runPushItemToExisting(ctx, keep, *parentID, *itemText)
 	default:
 		fmt.Fprintln(os.Stderr, "unknown cmd:", *cmd)
 		os.Exit(2)
+	}
+}
+
+func runPushItemToExisting(ctx context.Context, keep *protocol.KeepClient, parentServerID, text string) {
+	now := time.Now().UTC()
+
+	// Step 1: pull to get the latest toVersion. gkeepapi follows a strict
+	// sync-then-push pattern; pushing with empty TargetVersion gets a 500
+	// "Unknown Error" because the server can't reconcile the partial
+	// node update against an unknown client baseline.
+	pull, err := keep.Changes(ctx, protocol.ChangesRequest{
+		SessionID:       fmt.Sprintf("s--%d--pull", now.UnixMilli()),
+		ClientTimestamp: now.Format("2006-01-02T15:04:05.000000Z"),
+	})
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "pull failed:", err)
+		os.Exit(1)
+	}
+	fmt.Printf("✓ pull got toVersion=%s (%d nodes)\n", pull.ToVersion, len(pull.Nodes))
+
+	var entropy [8]byte
+	_, _ = rand.Read(entropy[:])
+	itemClientID := fmt.Sprintf("%x.%016x", now.UnixMilli(), binary.BigEndian.Uint64(entropy[:]))
+
+	var sessionEntropy [8]byte
+	_, _ = rand.Read(sessionEntropy[:])
+	sessionID := fmt.Sprintf("s--%d--%010d", now.UnixMilli(),
+		(binary.BigEndian.Uint64(sessionEntropy[:])%9000000000)+1000000000)
+
+	// Step 2: push with TargetVersion = the toVersion we just pulled.
+	// LIST_ITEM going to an existing list needs BOTH a parent_id
+	// (a client-side reference, can be the serverId for an existing
+	// list) and parent_server_id (the actual serverId). Without
+	// parent_server_id, Keep returns 500 "Unknown Error" because it
+	// can't reconcile the partial node update against an unknown
+	// parent (gkeepapi node.py line 1585).
+	resp, err := keep.Changes(ctx, protocol.ChangesRequest{
+		Nodes: []protocol.Node{
+			{
+				Kind:           "notes#node",
+				ID:             itemClientID,
+				Type:           protocol.NodeTypeListItem,
+				ParentID:       parentServerID,
+				ParentServerID: parentServerID,
+				Text:           text,
+				SortValue:      "1000",
+				Timestamps: protocol.Timestamps{
+					Created: now,
+					Updated: now,
+				},
+			},
+		},
+		TargetVersion:   pull.ToVersion,
+		SessionID:       sessionID,
+		ClientTimestamp: now.Format("2006-01-02T15:04:05.000000Z"),
+	})
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "push-item-to-existing failed:", err)
+		os.Exit(1)
+	}
+
+	for _, n := range resp.Nodes {
+		if n.ID == itemClientID && n.Type == protocol.NodeTypeListItem {
+			fmt.Printf("✓ item created on existing list: %s -> %s\n", itemClientID, n.ServerID)
+			return
+		}
+	}
+	fmt.Println("✗ item NOT echoed back; full response nodes:")
+	for _, n := range resp.Nodes {
+		if n.Type == protocol.NodeTypeListItem {
+			fmt.Printf("  id=%s server=%s parent=%s text=%q\n", n.ID, n.ServerID, n.ParentID, n.Text)
+		}
 	}
 }
 
@@ -99,13 +181,12 @@ func runList(ctx context.Context, keep *protocol.KeepClient) {
 		}
 	}
 	fmt.Println("by type:", byType)
-	fmt.Println("LIST nodes (top 10):")
-	for i, n := range lists {
-		if i >= 10 {
-			break
+	fmt.Println("ALIVE LIST nodes:")
+	for _, n := range lists {
+		if !n.Timestamps.Trashed.IsZero() || !n.Timestamps.Deleted.IsZero() {
+			continue
 		}
-		fmt.Printf("  serverID=%s title=%q text=%q trashed=%v deleted=%v\n",
-			n.ServerID, n.Title, n.Text, !n.Timestamps.Trashed.IsZero(), !n.Timestamps.Deleted.IsZero())
+		fmt.Printf("  serverID=%s title=%q\n", n.ServerID, n.Title)
 	}
 }
 

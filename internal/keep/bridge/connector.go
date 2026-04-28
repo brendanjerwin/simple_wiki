@@ -2,14 +2,18 @@ package bridge
 
 import (
 	"context"
+	"crypto/rand"
 	"crypto/sha256"
 	"crypto/tls"
+	"encoding/binary"
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"time"
 
+	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
 	"github.com/brendanjerwin/simple_wiki/internal/keep/protocol"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 )
@@ -42,6 +46,14 @@ type KeepClient interface {
 	CreateListWithItems(ctx context.Context, title string, items []protocol.ListItemSpec) (protocol.CreateListResult, error)
 }
 
+// ChecklistReader is the read-side of checklistmutator the connector
+// needs for outbound sync. The real type lives in server/checklistmutator
+// but pulling it here as an interface keeps bridge from depending on the
+// server package — bootstrap injects the concrete reader at startup.
+type ChecklistReader interface {
+	ListItems(ctx context.Context, page, listName string) (*apiv1.Checklist, error)
+}
+
 // Connector orchestrates the Keep bridge: per-user auth exchange,
 // verification, binding management, and Keep client construction. Owns no
 // long-running goroutines (those live in the scheduler) — every method
@@ -51,9 +63,15 @@ type Connector struct {
 	httpClient    *http.Client
 	clock         Clock
 	debug         protocol.DebugLogger
+	checklistR    ChecklistReader
 	authBuilder   func(deviceID string) AuthExchanger
 	clientBuilder KeepClientFactory
 }
+
+// SetChecklistReader injects the wiki-side reader the outbound sync
+// path uses to diff wiki state against the binding's id_map. Pass at
+// startup; nil disables outbound sync (SyncToKeep returns an error).
+func (c *Connector) SetChecklistReader(r ChecklistReader) { c.checklistR = r }
 
 // SetDebugLogger attaches a debug logger that the underlying KeepClient
 // will use to dump response bodies on each Changes call. Production
@@ -252,7 +270,13 @@ func firstNonEmpty(values ...string) string {
 // InitialItem is the input shape for items to push into a brand-new
 // Keep note as part of Bind. Caller (the gRPC handler) reads them from
 // the wiki checklist and converts; the connector doesn't import apiv1.
+//
+// UID is the wiki ChecklistItem UID and is what the binding's
+// ItemIDMap keys on after the bundled push completes — that's how
+// future incremental syncs find "the Keep node corresponding to
+// wiki item X."
 type InitialItem struct {
+	UID     string
 	Text    string
 	Checked bool
 }
@@ -273,6 +297,7 @@ func (c *Connector) Bind(ctx context.Context, profileID wikipage.PageIdentifier,
 		return Binding{}, err
 	}
 
+	idMap := map[string]string{}
 	if keepNoteID == "" {
 		specs := make([]protocol.ListItemSpec, len(initialItems))
 		for i, it := range initialItems {
@@ -290,6 +315,18 @@ func (c *Connector) Bind(ctx context.Context, profileID wikipage.PageIdentifier,
 			return Binding{}, err
 		}
 		keepNoteID = result.ListServerID
+		// Populate the binding's wiki-uid → keep-serverID mapping from
+		// what the bundled create returned. This is the seed every
+		// future incremental sync uses to identify which Keep node
+		// corresponds to which wiki item.
+		for i, serverID := range result.ItemServerIDs {
+			if i >= len(initialItems) || serverID == "" {
+				continue
+			}
+			if uid := initialItems[i].UID; uid != "" {
+				idMap[uid] = serverID
+			}
+		}
 	}
 
 	binding := Binding{
@@ -298,6 +335,7 @@ func (c *Connector) Bind(ctx context.Context, profileID wikipage.PageIdentifier,
 		KeepNoteID:    keepNoteID,
 		KeepNoteTitle: listName,
 		BoundAt:       c.clock.Now().UTC(),
+		ItemIDMap:     idMap,
 	}
 	if err := c.store.AddBinding(profileID, binding); err != nil {
 		return Binding{}, err
@@ -310,6 +348,223 @@ func (c *Connector) Bind(ctx context.Context, profileID wikipage.PageIdentifier,
 // Keep sort values so future inserts can land between them without a
 // global re-numbering. 1000 is gkeepapi's gap of choice.
 const sortValueGap = 1000
+
+// keepSessionIDOffset and keepSessionIDSpan together produce a 10-digit
+// session-id suffix in [1000000000, 9999999999], matching gkeepapi.
+// Pulled out so the magic numbers don't repeat in generatePushSessionID.
+const (
+	keepSessionIDOffset = 1000000000
+	keepSessionIDSpan   = 9000000000
+)
+
+// ErrChecklistReaderUnavailable is returned by SyncToKeep when the
+// connector wasn't given a ChecklistReader at startup. Indicates a
+// wiring bug in bootstrap; callers should fail loudly so it gets
+// noticed rather than silently dropping sync events.
+var ErrChecklistReaderUnavailable = errors.New("keep bridge: checklist reader not configured (bootstrap bug)")
+
+// SyncToKeep diffs the wiki checklist (page, listName) against the
+// bound Keep note and pushes the delta in a single Changes request.
+//
+// Algorithm:
+//
+//  1. Load binding + wiki items.
+//  2. Pull Keep to acquire a fresh targetVersion (Keep rejects pushes
+//     with empty targetVersion as 500 "Unknown Error" — proven via
+//     keep-debug round trip).
+//  3. Build the push:
+//     - wiki uid found in ItemIDMap → update existing Keep node by
+//       serverID (sets both ParentID and ParentServerID; required by
+//       Keep on incremental edits).
+//     - wiki uid absent from ItemIDMap → fresh push with new client_id.
+//     - ItemIDMap entry whose uid no longer exists wiki-side → push
+//       Trashed timestamp = now (Keep's soft-delete protocol).
+//  4. POST one Changes request.
+//  5. Walk the response; collect new uid → serverID mappings for items
+//     pushed brand-new; remove map entries for trashed items (the
+//     Keep response will echo them back with a non-zero Trashed).
+//  6. Persist updated binding. Last-write-wins per binding via the
+//     store's per-profile mutex.
+//
+// Conflict handling for v1 is "we win": if Keep has changes the wiki
+// hasn't seen yet, our push still goes through (Keep's CRDT-ish backend
+// merges by node). The bidirectional reconcile that preserves Keep-side
+// edits is the inbound-sync follow-up (#1007).
+func (c *Connector) SyncToKeep(ctx context.Context, profileID wikipage.PageIdentifier, page, listName string) error {
+	if c.checklistR == nil {
+		return ErrChecklistReaderUnavailable
+	}
+
+	binding, found, err := c.store.FindBinding(profileID, page, listName)
+	if err != nil {
+		return fmt.Errorf("load binding: %w", err)
+	}
+	if !found {
+		// No binding for this checklist — nothing to sync. Not an error;
+		// the mutator hook fires on every checklist edit and shouldn't
+		// require pre-checking whether a binding exists.
+		return nil
+	}
+
+	checklist, err := c.checklistR.ListItems(ctx, page, listName)
+	if err != nil {
+		return fmt.Errorf("read wiki checklist: %w", err)
+	}
+
+	client, _, err := c.keepClientFor(ctx, profileID)
+	if err != nil {
+		return err
+	}
+
+	now := c.clock.Now().UTC()
+	pull, err := client.Changes(ctx, protocol.ChangesRequest{
+		SessionID:       fmt.Sprintf("s--%d--syncpull-%s", now.UnixMilli(), binding.KeepNoteID),
+		ClientTimestamp: now.Format("2006-01-02T15:04:05.000000Z"),
+	})
+	if err != nil {
+		return fmt.Errorf("sync pull: %w", err)
+	}
+
+	// Walk wiki items: classify each as fresh or update; track which
+	// existing map entries we covered so we can soft-delete the rest.
+	covered := make(map[string]bool, len(binding.ItemIDMap))
+	pushNodes := make([]protocol.Node, 0, len(checklist.GetItems()))
+	freshUIDs := make([]string, 0)        // index-aligned with the appended fresh items below
+	freshClientIDs := make([]string, 0)
+	for i, item := range checklist.GetItems() {
+		serverID := binding.ItemIDMap[item.GetUid()]
+		node := WikiToKeep(item, binding.KeepNoteID, serverID)
+		// Lower SortValues sort to the bottom; preserve wiki ordering
+		// by mapping (n-i)*1000 in absence of an explicit SortOrder.
+		if item.GetSortOrder() == 0 {
+			node.SortValue = fmt.Sprintf("%d", (len(checklist.GetItems())-i)*sortValueGap)
+		}
+		if serverID == "" {
+			// Fresh item: assign a client_id, remember the uid so we
+			// can update the map after the response.
+			cid, idErr := generatePushClientID(now, i)
+			if idErr != nil {
+				return fmt.Errorf("generate client_id: %w", idErr)
+			}
+			node.ID = cid
+			freshClientIDs = append(freshClientIDs, cid)
+			freshUIDs = append(freshUIDs, item.GetUid())
+		} else {
+			covered[item.GetUid()] = true
+		}
+		pushNodes = append(pushNodes, node)
+	}
+
+	// Soft-delete: any binding map entry whose uid isn't in the current
+	// wiki items list got deleted wiki-side. Push Trashed=now so Keep
+	// moves it to the trash on the user's phone.
+	for uid, serverID := range binding.ItemIDMap {
+		if covered[uid] || serverID == "" {
+			continue
+		}
+		pushNodes = append(pushNodes, protocol.Node{
+			Kind:           "notes#node",
+			ID:             serverID, // Keep accepts serverID as ID for in-place updates
+			ServerID:       serverID,
+			ParentID:       binding.KeepNoteID,
+			ParentServerID: binding.KeepNoteID,
+			Type:           protocol.NodeTypeListItem,
+			Timestamps: protocol.Timestamps{
+				Trashed: now,
+				Updated: now,
+			},
+		})
+	}
+
+	if len(pushNodes) == 0 {
+		// No diff — wiki and binding map are in sync. Update verified
+		// timestamp and exit.
+		return c.markBindingSynced(profileID, binding, now)
+	}
+
+	pushSession, err := generatePushSessionID(now)
+	if err != nil {
+		return fmt.Errorf("generate session_id: %w", err)
+	}
+	resp, err := client.Changes(ctx, protocol.ChangesRequest{
+		Nodes:           pushNodes,
+		TargetVersion:   pull.ToVersion,
+		SessionID:       pushSession,
+		ClientTimestamp: now.Format("2006-01-02T15:04:05.000000Z"),
+	})
+	if err != nil {
+		return fmt.Errorf("sync push: %w", err)
+	}
+
+	// Update id_map: pick up server-assigned IDs for fresh items;
+	// drop entries whose corresponding node came back trashed.
+	if binding.ItemIDMap == nil {
+		binding.ItemIDMap = map[string]string{}
+	}
+	for _, n := range resp.Nodes {
+		if n.Type != protocol.NodeTypeListItem {
+			continue
+		}
+		// Match echoed-back fresh items by their client_id (n.ID).
+		for i, cid := range freshClientIDs {
+			if n.ID == cid && n.ServerID != "" {
+				binding.ItemIDMap[freshUIDs[i]] = n.ServerID
+			}
+		}
+	}
+	// Drop trashed-confirmed entries.
+	for uid := range binding.ItemIDMap {
+		if covered[uid] {
+			continue
+		}
+		// Wiki side dropped this; remove from id_map regardless of
+		// whether the response echoed it (Keep's soft-delete is
+		// eventually consistent).
+		delete(binding.ItemIDMap, uid)
+	}
+
+	return c.markBindingSynced(profileID, binding, now)
+}
+
+// markBindingSynced persists the updated binding (id_map changes) and
+// stamps the binding's BoundAt — used as a "last successful sync" marker
+// pending a more explicit field. Holds the per-profile mutex via
+// BindingStore so concurrent syncs serialize.
+func (c *Connector) markBindingSynced(profileID wikipage.PageIdentifier, binding Binding, _ time.Time) error {
+	state, err := c.store.LoadState(profileID)
+	if err != nil {
+		return fmt.Errorf("reload state for sync persist: %w", err)
+	}
+	for i, b := range state.Bindings {
+		if b.Page == binding.Page && b.ListName == binding.ListName {
+			state.Bindings[i] = binding
+			break
+		}
+	}
+	return c.store.SaveState(profileID, state)
+}
+
+// generatePushClientID makes a Keep-style client id for a brand-new
+// item being pushed during sync. Bumps the ms component by index so
+// repeated calls within the same sync don't collide.
+func generatePushClientID(now time.Time, idx int) (string, error) {
+	var entropy [8]byte
+	if _, err := io.ReadFull(rand.Reader, entropy[:]); err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("%x.%016x", now.UnixMilli()+int64(idx), binary.BigEndian.Uint64(entropy[:])), nil
+}
+
+// generatePushSessionID makes a Keep-style session id (s--<ms>--<10digit>)
+// for a single sync push, identifying the outbound batch in Keep logs.
+func generatePushSessionID(now time.Time) (string, error) {
+	var entropy [8]byte
+	if _, err := io.ReadFull(rand.Reader, entropy[:]); err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("s--%d--%010d", now.UnixMilli(),
+		(binary.BigEndian.Uint64(entropy[:])%keepSessionIDSpan)+keepSessionIDOffset), nil
+}
 
 // Unbind removes the calling user's binding for (page, listName).
 func (c *Connector) Unbind(_ context.Context, profileID wikipage.PageIdentifier, page, listName string) error {

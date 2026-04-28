@@ -476,6 +476,29 @@ func setupGRPCServer(
 	// "ListNotes returns empty / CreateList silently fails" report.
 	// Strip this once the response-shape question is resolved.
 	keepConnector.SetDebugLogger(logger)
+	// Outbound sync needs read access to wiki checklists; the mutator
+	// satisfies bridge.ChecklistReader's ListItems signature directly.
+	keepConnector.SetChecklistReader(checklistMutator)
+	// Register the single-worker outbound-sync queue. One worker per
+	// account is the right answer because Keep's targetVersion is
+	// global; concurrent pushes on the same account would race the
+	// version cursor and force resyncs.
+	if err := site.GetJobQueueCoordinator().RegisterQueue(
+		bridge.KeepOutboundSyncJobName, 1, 256,
+	); err != nil {
+		return nil, nil, fmt.Errorf("register Keep outbound sync queue: %w", err)
+	}
+	// Mutator hook: every checklist edit fires a debounced enqueue
+	// of a sync job for that (page, listName). Debounce coalesces
+	// burst edits (toggling 50 items rapidly) into a single push.
+	keepSyncDebouncer := bridge.NewSyncDebouncer(
+		site.GetJobQueueCoordinator(),
+		keepConnector,
+		site,
+		logger,
+		1500*time.Millisecond,
+	)
+	checklistMutator.SetSubscriber(keepSyncDebouncer)
 
 	// Wire the CalDAV server into the Site so its caldavGateway
 	// middleware can dispatch CalDAV-shaped traffic. baseURL is left

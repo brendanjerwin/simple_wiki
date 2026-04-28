@@ -154,6 +154,7 @@ func (s *Server) BindChecklist(ctx context.Context, req *apiv1.BindChecklistRequ
 		if checklist, listErr := s.checklistMutator.ListItems(ctx, req.GetPage(), req.GetListName()); listErr == nil {
 			for _, it := range checklist.GetItems() {
 				initialItems = append(initialItems, bridge.InitialItem{
+					UID:     it.GetUid(),
 					Text:    it.GetText(),
 					Checked: it.GetChecked(),
 				})

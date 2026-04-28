@@ -38,13 +38,21 @@ type Node struct {
 	ID          string
 	ServerID    string
 	ParentID    string
-	Type        NodeType
-	Title       string // top-level Note/List title (empty on ListItem)
-	Text        string
-	SortValue   string
-	BaseVersion string
-	Checked     bool
-	Timestamps  Timestamps
+	// ParentServerID is required on a LIST_ITEM push when the parent
+	// LIST already exists server-side. Without it Keep returns a 500
+	// "Unknown Error" — the server uses parent_server_id to confirm
+	// the client is referring to the same parent it has on file.
+	// gkeepapi node.py line 1585; set by ListItem(parent_server_id=...)
+	// at every incremental edit. Empty when the list is brand-new in
+	// the same request (Keep resolves via parent_id alone in that case).
+	ParentServerID string
+	Type           NodeType
+	Title          string // top-level Note/List title (empty on ListItem)
+	Text           string
+	SortValue      string
+	BaseVersion    string
+	Checked        bool
+	Timestamps     Timestamps
 }
 
 // ChangesRequest is the body of POST /notes/v1/changes — both pulls (with

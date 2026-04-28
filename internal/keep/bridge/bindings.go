@@ -15,12 +15,21 @@ import (
 
 // Binding is a single user's link from a wiki checklist (page + list_name)
 // to a Keep note in their account.
+//
+// ItemIDMap is the per-binding mapping from wiki item UID to the Keep
+// node's serverID. Populated at bind time by the bundled CreateListWithItems
+// path and updated on every outbound sync — the sync engine uses it to
+// decide "is this wiki item a fresh push (uid not in map) or an update
+// (uid already in map, push with parent_server_id)?" Without this map
+// we'd have no identity correlation between sides and would have to
+// recreate the whole list on every change.
 type Binding struct {
 	Page          string
 	ListName      string
 	KeepNoteID    string
 	KeepNoteTitle string
 	BoundAt       time.Time
+	ItemIDMap     map[string]string
 }
 
 // ConnectorState is the per-user connector configuration stored on the
@@ -84,6 +93,7 @@ const (
 	bindingKeepNoteIDField    = "keep_note_id"
 	bindingKeepNoteTitleField = "keep_note_title"
 	bindingBoundAtField       = "bound_at"
+	bindingItemIDMapField     = "item_id_map"
 )
 
 // BindingStore is the typed funnel for connector-state writes on profile
@@ -289,12 +299,17 @@ func decodeBindings(raw any) ([]Binding, error) {
 		if err != nil {
 			return nil, fmt.Errorf("wiki.connectors.google_keep.bindings[%d].bound_at: %w", i, err)
 		}
+		idMap, err := decodeItemIDMap(m[bindingItemIDMapField])
+		if err != nil {
+			return nil, fmt.Errorf("wiki.connectors.google_keep.bindings[%d].item_id_map: %w", i, err)
+		}
 		out = append(out, Binding{
 			Page:          getString(m, bindingPageField),
 			ListName:      getString(m, bindingListNameField),
 			KeepNoteID:    getString(m, bindingKeepNoteIDField),
 			KeepNoteTitle: getString(m, bindingKeepNoteTitleField),
 			BoundAt:       boundAt,
+			ItemIDMap:     idMap,
 		})
 	}
 	return out, nil
@@ -348,9 +363,39 @@ func encodeBindings(bindings []Binding) []any {
 		if !b.BoundAt.IsZero() {
 			entry[bindingBoundAtField] = b.BoundAt.UTC().Format(time.RFC3339)
 		}
+		if len(b.ItemIDMap) > 0 {
+			m := make(map[string]any, len(b.ItemIDMap))
+			for uid, serverID := range b.ItemIDMap {
+				m[uid] = serverID
+			}
+			entry[bindingItemIDMapField] = m
+		}
 		out[i] = entry
 	}
 	return out
+}
+
+// decodeItemIDMap reads the per-binding wiki-uid → keep-serverID map.
+// Frontmatter loaders typically hand back map[string]any with string
+// values; this checks each value is a string and rejects any other
+// shape rather than silently coercing.
+func decodeItemIDMap(raw any) (map[string]string, error) {
+	if raw == nil {
+		return nil, nil
+	}
+	m, ok := raw.(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("expected map, got %T", raw)
+	}
+	out := make(map[string]string, len(m))
+	for k, v := range m {
+		s, ok := v.(string)
+		if !ok {
+			return nil, fmt.Errorf("key %q value is %T, expected string", k, v)
+		}
+		out[k] = s
+	}
+	return out, nil
 }
 
 // connectorMap returns the wiki.connectors.google_keep submap, or nil if
