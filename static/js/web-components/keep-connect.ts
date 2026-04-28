@@ -30,8 +30,10 @@ import {
   pillCSS,
   sharedStyles,
 } from './shared-styles.js';
+import { AugmentErrorService, type AugmentedError } from './augment-error-service.js';
+import './error-display.js';
 
-type Phase = 'loading' | 'disconnected' | 'connecting' | 'connected' | 'error';
+type Phase = 'loading' | 'disconnected' | 'connecting' | 'connected';
 
 export class KeepConnect extends LitElement {
   static override styles = [
@@ -45,7 +47,7 @@ export class KeepConnect extends LitElement {
   @state() declare private state: ConnectorState | null;
   @state() declare private formEmail: string;
   @state() declare private formAsp: string;
-  @state() declare private errorMessage: string;
+  @state() declare private error: AugmentedError | null;
 
   private client = createClient(KeepConnectorService, getGrpcWebTransport());
 
@@ -55,7 +57,7 @@ export class KeepConnect extends LitElement {
     this.state = null;
     this.formEmail = '';
     this.formAsp = '';
-    this.errorMessage = '';
+    this.error = null;
   }
 
   override connectedCallback(): void {
@@ -64,21 +66,27 @@ export class KeepConnect extends LitElement {
   }
 
   private async refresh(): Promise<void> {
+    this.error = null;
     try {
       const resp = await this.client.getState(create(GetStateRequestSchema, {}));
       this.state = resp.state ?? null;
       this.phase = this.state?.configured ? 'connected' : 'disconnected';
     } catch (err: unknown) {
-      this.phase = 'error';
-      this.errorMessage = err instanceof Error ? err.message : String(err);
+      this.error = AugmentErrorService.augmentError(err, 'load Google Keep connector state');
+      // Stay on the disconnect form so the user can act; the
+      // <error-display> renders the augmented error inline.
+      this.phase = 'disconnected';
     }
   }
 
   private async handleConnect(e: SubmitEvent): Promise<void> {
     e.preventDefault();
-    this.errorMessage = '';
+    this.error = null;
     if (!this.formEmail || !this.formAsp) {
-      this.errorMessage = 'Email and App-Specific Password are required.';
+      this.error = AugmentErrorService.augmentError(
+        new Error('Email and App-Specific Password are required.'),
+        'connect Google Keep',
+      );
       return;
     }
     this.phase = 'connecting';
@@ -95,7 +103,7 @@ export class KeepConnect extends LitElement {
     } catch (err: unknown) {
       this.phase = 'disconnected';
       this.formAsp = '';
-      this.errorMessage = err instanceof Error ? err.message : String(err);
+      this.error = AugmentErrorService.augmentError(err, 'connect Google Keep');
     }
   }
 
@@ -108,7 +116,7 @@ export class KeepConnect extends LitElement {
       this.state = resp.state ?? null;
       this.phase = 'disconnected';
     } catch (err: unknown) {
-      this.errorMessage = err instanceof Error ? err.message : String(err);
+      this.error = AugmentErrorService.augmentError(err, 'disconnect Google Keep');
     }
   }
 
@@ -125,7 +133,7 @@ export class KeepConnect extends LitElement {
       );
       await this.refresh();
     } catch (err: unknown) {
-      this.errorMessage = err instanceof Error ? err.message : String(err);
+      this.error = AugmentErrorService.augmentError(err, 'unbind checklist');
     }
   }
 
@@ -135,8 +143,8 @@ export class KeepConnect extends LitElement {
       <section class="keep-connect">
         <h3>Google Keep</h3>
         ${this.renderPhase()}
-        ${this.errorMessage
-          ? html`<div class="error-banner">${this.errorMessage}</div>`
+        ${this.error
+          ? html`<error-display .augmentedError=${this.error}></error-display>`
           : nothing}
       </section>
     `;
@@ -152,8 +160,6 @@ export class KeepConnect extends LitElement {
         return html`<p class="muted">Verifying credentials…</p>`;
       case 'connected':
         return this.renderConnected();
-      case 'error':
-        return html`<p class="error">Failed to load connector state.</p>`;
       default:
         return nothing;
     }

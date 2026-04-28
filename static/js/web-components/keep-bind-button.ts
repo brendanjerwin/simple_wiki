@@ -28,15 +28,10 @@ import {
   pillCSS,
   sharedStyles,
 } from './shared-styles.js';
+import { AugmentErrorService, type AugmentedError } from './augment-error-service.js';
+import './error-display.js';
 
-type Phase =
-  | 'loading'
-  | 'hidden'
-  | 'unbound'
-  | 'picker'
-  | 'binding'
-  | 'bound'
-  | 'error';
+type Phase = 'loading' | 'hidden' | 'unbound' | 'picker' | 'binding' | 'bound';
 
 export class KeepBindButton extends LitElement {
   static override styles = [foundationCSS, buttonCSS, inputCSS, pillCSS];
@@ -51,7 +46,7 @@ export class KeepBindButton extends LitElement {
   @state() declare private bindingState: ChecklistBindingState | null;
   @state() declare private notes: KeepNoteSummary[];
   @state() declare private selectedNoteID: string;
-  @state() declare private errorMessage: string;
+  @state() declare private error: AugmentedError | null;
 
   private client = createClient(KeepConnectorService, getGrpcWebTransport());
 
@@ -63,7 +58,7 @@ export class KeepBindButton extends LitElement {
     this.bindingState = null;
     this.notes = [];
     this.selectedNoteID = '';
-    this.errorMessage = '';
+    this.error = null;
   }
 
   override connectedCallback(): void {
@@ -101,19 +96,19 @@ export class KeepBindButton extends LitElement {
   }
 
   private async openPicker(): Promise<void> {
-    this.errorMessage = '';
+    this.error = null;
     this.phase = 'picker';
     try {
       const resp = await this.client.listNotes(create(ListNotesRequestSchema, {}));
       this.notes = resp.notes;
     } catch (err: unknown) {
       this.notes = [];
-      this.errorMessage = err instanceof Error ? err.message : String(err);
+      this.error = AugmentErrorService.augmentError(err, 'list Keep notes');
     }
   }
 
   private async handleBind(): Promise<void> {
-    this.errorMessage = '';
+    this.error = null;
     this.phase = 'binding';
     try {
       await this.client.bindChecklist(
@@ -126,7 +121,7 @@ export class KeepBindButton extends LitElement {
       this.selectedNoteID = '';
       await this.refresh();
     } catch (err: unknown) {
-      this.errorMessage = err instanceof Error ? err.message : String(err);
+      this.error = AugmentErrorService.augmentError(err, 'bind checklist to Keep');
       this.phase = 'picker';
     }
   }
@@ -144,7 +139,7 @@ export class KeepBindButton extends LitElement {
       );
       await this.refresh();
     } catch (err: unknown) {
-      this.errorMessage = err instanceof Error ? err.message : String(err);
+      this.error = AugmentErrorService.augmentError(err, 'unbind checklist');
     }
   }
 
@@ -156,8 +151,8 @@ export class KeepBindButton extends LitElement {
       ${sharedStyles}
       <div class="keep-bind">
         ${this.renderPhase()}
-        ${this.errorMessage
-          ? html`<div class="error-banner">${this.errorMessage}</div>`
+        ${this.error
+          ? html`<error-display .augmentedError=${this.error}></error-display>`
           : nothing}
       </div>
     `;
