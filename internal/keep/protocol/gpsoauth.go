@@ -91,15 +91,19 @@ func (a *Authenticator) ExchangeMasterTokenForBearer(ctx context.Context, email,
 
 // classifyBearerError maps Stage 2 errors to the appropriate sentinels.
 // Differs from classifyAuthError in that BadAuthentication here means the
-// master token is revoked (not a wrong-ASP situation).
+// master token is revoked (not a wrong-credential situation). Wraps the
+// full response summary into the error message for diagnostic visibility
+// — matches classifyAuthError so server logs show what Google actually
+// said.
 func classifyBearerError(resp map[string]string) error {
+	summary := summarizeAuthResponse(resp)
 	switch resp["Error"] {
 	case "":
-		return ErrProtocolDrift
+		return fmt.Errorf("%w: %s", ErrProtocolDrift, summary)
 	case "BadAuthentication", "NeedsBrowser":
-		return ErrAuthRevoked
+		return fmt.Errorf("%w: stage2 %s", ErrAuthRevoked, summary)
 	default:
-		return fmt.Errorf("%w: %s", ErrAuthRevoked, resp["Error"])
+		return fmt.Errorf("%w: stage2 %s", ErrAuthRevoked, summary)
 	}
 }
 
