@@ -43,9 +43,11 @@ https://accounts.google.com/EmbeddedSetup
 
 This is Google's Android-style sign-in page. Sign in with the Google account you want to bridge.
 
+> **Important:** When the page prompts you with "I agree" (or similar consent), click it. After that, the page may show a loading spinner forever — that's expected; ignore it and move on to the next step. The cookie is set even though the page hangs.
+
 ### 2. Copy the `oauth_token` cookie
 
-After sign-in:
+After clicking "I agree":
 
 1. Open DevTools (F12 or right-click → Inspect).
 2. Go to the **Application** tab (Chrome) or **Storage** tab (Firefox).

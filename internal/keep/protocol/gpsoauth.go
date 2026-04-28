@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"sort"
 	"strings"
 )
 
@@ -204,31 +205,41 @@ func parseAuthResponse(body string) map[string]string {
 // classifyAuthError maps Google's "Error=…" responses into our typed
 // sentinels. Branches are on field values, never on free-form messages
 // (per CLAUDE.md "Never Branch Logic on Error Messages"). The full
-// response body — Error + ErrorDetail + Url — is wrapped into the
-// returned error message so operators can diagnose the specific reason
-// Google rejected the request without needing server-side SSH access.
+// response body summary is wrapped into the returned error message so
+// operators can diagnose the specific reason Google rejected the
+// request without needing server-side SSH access.
 func classifyAuthError(resp map[string]string) error {
+	summary := summarizeAuthResponse(resp)
 	switch resp["Error"] {
 	case "BadAuthentication":
-		// ErrorDetail often distinguishes "wrong password" from
-		// "this method isn't accepted for accounts with 2SV" — surface
-		// it when present.
-		if detail := resp["ErrorDetail"]; detail != "" {
-			return fmt.Errorf("%w: %s", ErrInvalidCredentials, detail)
-		}
-		return ErrInvalidCredentials
+		return fmt.Errorf("%w: %s", ErrInvalidCredentials, summary)
 	case "NeedsBrowser":
-		if browserURL := resp["Url"]; browserURL != "" {
-			return fmt.Errorf("%w: browser sign-in required (%s)", ErrAuthRevoked, browserURL)
-		}
-		return ErrAuthRevoked
+		return fmt.Errorf("%w: browser sign-in required (%s)", ErrAuthRevoked, summary)
 	case "":
 		// No Token AND no Error — treat as drift.
-		return ErrProtocolDrift
+		return fmt.Errorf("%w: %s", ErrProtocolDrift, summary)
 	default:
-		if detail := resp["ErrorDetail"]; detail != "" {
-			return fmt.Errorf("%w: %s (%s)", ErrAuthRevoked, resp["Error"], detail)
-		}
-		return fmt.Errorf("%w: %s", ErrAuthRevoked, resp["Error"])
+		return fmt.Errorf("%w: %s", ErrAuthRevoked, summary)
 	}
+}
+
+// summarizeAuthResponse renders Google's key=value response into a
+// single line for error wrapping. Skips obviously-secret fields (Auth,
+// Token, SID, LSID) so the summary can safely appear in user-visible
+// banners and journalctl logs.
+func summarizeAuthResponse(resp map[string]string) string {
+	skip := map[string]bool{"Auth": true, "Token": true, "SID": true, "LSID": true}
+	keys := make([]string, 0, len(resp))
+	for k := range resp {
+		if skip[k] {
+			continue
+		}
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	var parts []string
+	for _, k := range keys {
+		parts = append(parts, k+"="+resp[k])
+	}
+	return strings.Join(parts, " ")
 }

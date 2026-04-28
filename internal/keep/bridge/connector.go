@@ -3,6 +3,7 @@ package bridge
 import (
 	"context"
 	"crypto/sha256"
+	"crypto/tls"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -54,18 +55,40 @@ type Connector struct {
 
 // NewConnector wires the production dependencies. Tests construct a
 // Connector directly with stubbed builders.
+//
+// The auth-side http.Client forces HTTP/1.1 (no h2 ALPN advertisement)
+// because gpsoauth's auth endpoint at android.clients.google.com/auth
+// returns 403 Bad Authentication when an h2 ALPN protocol is offered.
+// The Python gpsoauth library applies the same quirk via a custom
+// HTTPAdapter; mirroring it here.
 func NewConnector(store *BindingStore, httpClient *http.Client, clock Clock) *Connector {
+	authClient := newAuthHTTPClient()
 	return &Connector{
 		store:      store,
 		httpClient: httpClient,
 		clock:      clock,
 		authBuilder: func(deviceID string) AuthExchanger {
-			return protocol.NewAuthenticator(httpClient, protocol.AuthURL, deviceID)
+			return protocol.NewAuthenticator(authClient, protocol.AuthURL, deviceID)
 		},
 		clientBuilder: func(bearer string) KeepClient {
 			return protocol.NewKeepClient(httpClient, protocol.DefaultKeepBaseURL, bearer)
 		},
 	}
+}
+
+// newAuthHTTPClient returns an http.Client that mirrors the TLS quirks
+// the Python gpsoauth library applies — specifically, do not advertise
+// h2 in TLS ALPN. Google's /auth endpoint returns 403 (sometimes
+// surfaced as the body-level "BadAuthentication") when it sees h2.
+func newAuthHTTPClient() *http.Client {
+	transport := &http.Transport{
+		TLSClientConfig: &tls.Config{
+			MinVersion: tls.VersionTLS12,
+			NextProtos: []string{"http/1.1"},
+		},
+		ForceAttemptHTTP2: false,
+	}
+	return &http.Client{Transport: transport, Timeout: 30 * time.Second}
 }
 
 // Connect performs the full connect flow: oauth_token → master token →
