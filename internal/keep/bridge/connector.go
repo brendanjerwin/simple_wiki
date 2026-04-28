@@ -529,6 +529,10 @@ func (c *Connector) SyncToKeep(ctx context.Context, profileID wikipage.PageIdent
 			originalClientIDs[n.ServerID] = n.ID
 		}
 	}
+	if c.debug != nil {
+		c.debug.Info("SyncToKeep diff prep: pull.Nodes=%d clientIDs=%d baseVersions=%d",
+			len(pull.Nodes), len(originalClientIDs), len(baseVersions))
+	}
 
 	covered := make(map[string]bool, len(binding.ItemIDMap))
 	pushNodes := make([]protocol.Node, 0, len(checklist.GetItems()))
