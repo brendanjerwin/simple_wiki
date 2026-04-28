@@ -518,6 +518,13 @@ func (c *Connector) SyncToKeep(ctx context.Context, profileID wikipage.PageIdent
 	// updates can carry the right `id` field (Keep distinguishes
 	// `id` = client-generated stable ID, `serverId` = server-assigned).
 	originalClientIDs := make(map[string]string, len(pull.Nodes))
+	// And the Keep-side Updated timestamp per serverID — used by
+	// shouldPushWikiUpdate to skip items where Keep's view is fresher
+	// than wiki's. Symmetric to shouldPullKeepUpdate on the inbound
+	// side. Without this gate every cron tick pushes EVERY wiki item,
+	// which (combined with stale wiki state vs a just-edited Keep
+	// item) reverts the user's phone-side edit on the next push.
+	keepUpdated := make(map[string]time.Time, len(pull.Nodes))
 	for _, n := range pull.Nodes {
 		if n.ServerID == "" {
 			continue
@@ -527,6 +534,9 @@ func (c *Connector) SyncToKeep(ctx context.Context, profileID wikipage.PageIdent
 		}
 		if n.ID != "" {
 			originalClientIDs[n.ServerID] = n.ID
+		}
+		if !n.Timestamps.Updated.IsZero() {
+			keepUpdated[n.ServerID] = n.Timestamps.Updated
 		}
 	}
 	if c.debug != nil {
@@ -574,6 +584,19 @@ func (c *Connector) SyncToKeep(ctx context.Context, profileID wikipage.PageIdent
 			}
 			node.BaseVersion = baseVersions[serverID]
 			covered[item.GetUid()] = true
+
+			// Only push items where wiki's view is more recent than
+			// Keep's. Symmetric to inbound's shouldPullKeepUpdate.
+			// Skipping no-op items (or items where Keep is fresher)
+			// avoids two corruption modes:
+			//   1. Reverting a just-applied phone-side edit because
+			//      wiki's stale state was pushed back.
+			//   2. Bumping Keep timestamps on every cron tick, which
+			//      makes future inbound updates think Keep is always
+			//      newer than wiki and skip them.
+			if !shouldPushWikiUpdate(item.GetUpdatedAt(), keepUpdated[serverID]) {
+				continue
+			}
 		}
 		pushNodes = append(pushNodes, node)
 	}
@@ -950,6 +973,25 @@ func shouldPullKeepUpdate(keepUpdated time.Time, wikiUpdatedAt *timestamppb.Time
 		return true
 	}
 	return keepUpdated.After(wikiUpdatedAt.AsTime())
+}
+
+// shouldPushWikiUpdate is the symmetric outbound version of
+// shouldPullKeepUpdate. Returns true when wiki's view is strictly
+// newer than Keep's — we have wiki-side edits that haven't reached
+// Keep yet. Returns false when Keep's view is at or ahead of wiki's
+// (the state has already round-tripped, or Keep was just edited and
+// the inbound apply will catch up next tick).
+//
+// keepUpdated may be zero (Keep node missing or no Updated value) —
+// treat that as "Keep is empty, push our state."
+func shouldPushWikiUpdate(wikiUpdatedAt *timestamppb.Timestamp, keepUpdated time.Time) bool {
+	if wikiUpdatedAt == nil {
+		return false
+	}
+	if keepUpdated.IsZero() {
+		return true
+	}
+	return wikiUpdatedAt.AsTime().After(keepUpdated)
 }
 
 // seedIDMapFromExistingList reconciles wiki items against an existing
