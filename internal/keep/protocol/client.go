@@ -57,10 +57,12 @@ func (c *KeepClient) CreateList(ctx context.Context, title string) (string, erro
 	}
 
 	listNode := Node{
-		Kind: "notes#node",
-		ID:   clientID,
-		Type: NodeTypeList,
-		Text: title,
+		Kind:  "notes#node",
+		ID:    clientID,
+		Type:  NodeTypeList,
+		Title: title, // gkeepapi TopLevelNode stores list/note title in the
+		// `title` field (node.py _title). Putting it in Text leaves
+		// the note titleless on the user's phone.
 		Timestamps: Timestamps{
 			Created: now,
 			Updated: now,

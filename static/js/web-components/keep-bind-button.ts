@@ -30,6 +30,7 @@ import {
 } from './shared-styles.js';
 import { AugmentErrorService, type AugmentedError } from './augment-error-service.js';
 import './error-display.js';
+import './confirmation-interlock-button.js';
 
 type Phase = 'loading' | 'hidden' | 'unbound' | 'picker' | 'binding' | 'bound';
 
@@ -126,10 +127,10 @@ export class KeepBindButton extends LitElement {
     }
   }
 
+  // handleUnbind is invoked by the <confirmation-interlock-button>'s
+  // `confirmed` event — the interlock provides the safety prompt; this
+  // handler runs only after the user clicks the "Yes" leg.
   private async handleUnbind(): Promise<void> {
-    if (!confirm('Stop syncing this checklist with Google Keep? Both sides keep their data as-is.')) {
-      return;
-    }
     try {
       await this.client.unbindChecklist(
         create(UnbindChecklistRequestSchema, {
@@ -204,9 +205,13 @@ export class KeepBindButton extends LitElement {
               ? html` ("${this.bindingState.currentBinding.keepNoteTitle}")`
               : nothing}
           </span>
-          <button type="button" class="secondary" @click=${this.handleUnbind}>
-            Unbind
-          </button>
+          <confirmation-interlock-button
+            label="Unbind"
+            confirmLabel="Stop syncing this checklist with Keep?"
+            yesLabel="Unbind"
+            noLabel="Cancel"
+            @confirmed=${this.handleUnbind}
+          ></confirmation-interlock-button>
         `;
       default:
         return nothing;

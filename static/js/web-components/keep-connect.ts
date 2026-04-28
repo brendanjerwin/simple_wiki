@@ -38,6 +38,7 @@ import {
 } from './shared-styles.js';
 import { AugmentErrorService, type AugmentedError } from './augment-error-service.js';
 import './error-display.js';
+import './confirmation-interlock-button.js';
 
 type Phase = 'loading' | 'disconnected' | 'connecting' | 'connected';
 
@@ -106,10 +107,11 @@ export class KeepConnect extends LitElement {
     }
   }
 
+  // Disconnect and per-binding Unbind both go through
+  // <confirmation-interlock-button> for safety; these handlers run only
+  // after the interlock fires its `confirmed` event. The interlock
+  // auto-disarms after a short timeout if the user walks away.
   private async handleDisconnect(): Promise<void> {
-    if (!confirm('Disconnect Google Keep? Your bindings will be paused but kept; reconnect resumes them.')) {
-      return;
-    }
     try {
       const resp = await this.client.disconnect(create(DisconnectRequestSchema, {}));
       this.state = resp.state ?? null;
@@ -120,9 +122,6 @@ export class KeepConnect extends LitElement {
   }
 
   private async handleUnbind(binding: BindingState): Promise<void> {
-    if (!confirm(`Stop syncing ${binding.page} / ${binding.listName}? Wiki and Keep data are both left as-is.`)) {
-      return;
-    }
     try {
       await this.client.unbindChecklist(
         create(UnbindChecklistRequestSchema, {
@@ -237,9 +236,13 @@ export class KeepConnect extends LitElement {
       <h4>Bindings</h4>
       ${this.renderBindings()}
       <p>
-        <button type="button" class="secondary" @click=${this.handleDisconnect}>
-          Disconnect Google Keep
-        </button>
+        <confirmation-interlock-button
+          label="Disconnect Google Keep"
+          confirmLabel="Disconnect — bindings will be paused"
+          yesLabel="Disconnect"
+          noLabel="Cancel"
+          @confirmed=${this.handleDisconnect}
+        ></confirmation-interlock-button>
       </p>
     `;
   }
@@ -260,7 +263,13 @@ export class KeepConnect extends LitElement {
               <strong>${b.page} / ${b.listName}</strong>
               → Keep note "${b.keepNoteTitle || b.keepNoteId}"
               ${b.paused ? html`<span class="pill pill-warn">paused</span>` : nothing}
-              <button type="button" @click=${() => this.handleUnbind(b)}>✕</button>
+              <confirmation-interlock-button
+                label="✕"
+                confirmLabel="Stop syncing this binding?"
+                yesLabel="Unbind"
+                noLabel="Cancel"
+                @confirmed=${() => this.handleUnbind(b)}
+              ></confirmation-interlock-button>
             </li>
           `,
         )}
