@@ -27,12 +27,17 @@ type CustomElement struct {
 // macro may emit. The goldmark sanitizer iterates this list to build its
 // allowlist; the corresponding sanitizer pass-through tests iterate it
 // to verify each element survives sanitization.
+// pageAttr is the conventional attribute name macros use to thread the
+// host page identifier into a Lit component. Pulled out as a constant
+// because revive's "string literal repeated 4 times" rule fires.
+const pageAttr = "page"
+
 func MacroCustomElements() []CustomElement {
 	return []CustomElement{
-		{Name: "wiki-checklist", Attrs: []string{"list-name", "page"}},
-		{Name: "wiki-survey", Attrs: []string{"name", "page"}},
-		{Name: "wiki-blog", Attrs: []string{"blog-id", "max-articles", "page", "hide-new-post"}},
+		{Name: "wiki-checklist", Attrs: []string{"list-name", pageAttr}},
+		{Name: "wiki-survey", Attrs: []string{"name", pageAttr}},
+		{Name: "wiki-blog", Attrs: []string{"blog-id", "max-articles", pageAttr, "hide-new-post"}},
 		{Name: "keep-connect"},
-		{Name: "keep-bind-button", Attrs: []string{"page", "list-name"}},
+		{Name: "keep-bind-button", Attrs: []string{pageAttr, "list-name"}},
 	}
 }

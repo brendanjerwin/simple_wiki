@@ -42,7 +42,7 @@ func (s *Server) ExchangeAndStore(ctx context.Context, req *apiv1.ExchangeAndSto
 	if err != nil {
 		return nil, err
 	}
-	state, err := s.keepConnector.Connect(ctx, profileID, req.GetEmail(), req.GetAppSpecificPassword())
+	state, err := s.keepConnector.Connect(ctx, profileID, req.GetEmail(), req.GetOauthToken())
 	if err != nil {
 		return nil, mapKeepConnectorErr(err)
 	}

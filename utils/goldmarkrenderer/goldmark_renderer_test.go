@@ -680,13 +680,13 @@ var _ = Describe("GoldmarkRenderer", func() {
 // attribute populated. Used by the registry coverage test.
 func buildElementSample(ce templating.CustomElement) string {
 	var b strings.Builder
-	b.WriteString("<")
-	b.WriteString(ce.Name)
+	_, _ = b.WriteString("<")
+	_, _ = b.WriteString(ce.Name)
 	for i, attr := range ce.Attrs {
-		fmt.Fprintf(&b, ` %s="sample-%d"`, attr, i)
+		_, _ = fmt.Fprintf(&b, ` %s="sample-%d"`, attr, i)
 	}
-	b.WriteString("></")
-	b.WriteString(ce.Name)
-	b.WriteString(">")
+	_, _ = b.WriteString("></")
+	_, _ = b.WriteString(ce.Name)
+	_, _ = b.WriteString(">")
 	return b.String()
 }

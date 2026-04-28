@@ -122,7 +122,10 @@ func emittedCustomElementsByMacros() []string {
 		if len(out) == 0 {
 			continue
 		}
-		rendered, _ := out[0].Interface().(string)
+		rendered, ok := out[0].Interface().(string)
+		if !ok {
+			continue
+		}
 		for _, m := range customElementOpenTag.FindAllStringSubmatch(rendered, -1) {
 			emitted[m[1]] = struct{}{}
 		}

@@ -18,32 +18,58 @@ The macro is a view over the data; Keep is another view over the same data. The 
 This bridge uses an unofficial Keep API that Google can change without notice. Read this section carefully before connecting.
 
 - **You will store a Google master token on your wiki profile page in plaintext.** A master token is credential-equivalent to your Google password — anyone who can read your profile page can act as you against Google Keep (and potentially other Google services). The wiki sits behind Tailscale and profile pages are read-restricted to your principal, so the realistic exposure is "someone with admin access to the wiki host." That's the same trust posture as the existing CalDAV bridge.
-- **App-Specific Passwords are required.** This means you have 2-Step Verification enabled on the Google account.
 - **Google can break the bridge any time.** When that happens, sync stops cleanly and surfaces a `protocol_drift` error to the UI. You won't lose data — both sides keep their own state.
 - **Don't share screenshots of your profile page.** The master token is visible in frontmatter.
 
-If any of these is a deal-breaker, use the [CalDAV bridge](/help_caldav/view) instead. The household member just needs an Android task app like tasks.org via DAVx5.
+If any of this is a deal-breaker, use the [CalDAV bridge](/help_caldav/view) instead. The household member just needs an Android task app like tasks.org via DAVx5.
+
+## Why oauth_token, not a password / App-Specific Password
+
+Google has steadily deprecated the password-based gpsoauth `master_login` flow. App-Specific Passwords used to work — they don't anymore. Almost every account now gets `BadAuthentication` regardless of whether the ASP is correct.
+
+The flow that *does* still work is **oauth_token capture**: sign in to Google in your browser, copy a specific HttpOnly cookie, hand it to the wiki. The wiki exchanges it for a long-lived master token via gpsoauth's `exchange_token` (a different endpoint variant that Google hasn't gated yet).
+
+This isn't elegant. It's the only path that works.
 
 ## Setup (one-time, per user)
 
-### 1. Enable 2-Step Verification on your Google account
+### 1. Sign in to the EmbeddedSetup page
 
-If you don't already have it on, go to **Google Account → Security → 2-Step Verification** and turn it on. App-Specific Passwords require it.
+In a fresh browser tab, open:
 
-### 2. Create an App-Specific Password
+```text
+https://accounts.google.com/EmbeddedSetup
+```
 
-1. Open **Google Account → Security → 2-Step Verification → App passwords**.
-2. Click **Create new**, name it `simple_wiki keep` (anything works — this is just a label).
-3. Google generates a 16-character password like `abcd efgh ijkl mnop`. You'll need it once and you can paste it with or without spaces.
+This is Google's Android-style sign-in page. Sign in with the Google account you want to bridge.
 
-### 3. Connect on your wiki profile
+### 2. Copy the `oauth_token` cookie
+
+After sign-in:
+
+1. Open DevTools (F12 or right-click → Inspect).
+2. Go to the **Application** tab (Chrome) or **Storage** tab (Firefox).
+3. Expand **Cookies** → `https://accounts.google.com`.
+4. Find the row named **`oauth_token`** — the value will look like `oauth2_4/0Ad…` (long string).
+5. Copy that value.
+
+> The `oauth_token` cookie is HttpOnly, which means it does **not** appear in the JavaScript console. You must use the Application/Storage panel — `document.cookie` won't show it.
+
+### 3. Paste it into your wiki profile
 
 1. Visit **/profile** on the wiki. You'll be redirected to your own profile page.
 2. Find the **Google Keep** section.
-3. Enter your Google email and the App-Specific Password from step 2.
-4. Click **Test & Save**. The wiki performs the gpsoauth exchange to obtain a master token, verifies it works against Keep, and stores it on your profile page. The App-Specific Password is consumed once and discarded — only the master token persists.
+3. Enter your Google email and paste the `oauth_token` value into the password field.
+4. Click **Test & Save**.
 
-You should see **Connected as alice@example.com** within a couple of seconds. If you see an error, double-check the email + ASP and the 2-Step Verification status on your account.
+The wiki performs the gpsoauth `exchange_token` exchange to obtain a master token, verifies it works against Keep, and stores it on your profile page. The captured `oauth_token` is consumed once and never persisted — only the resulting master token is.
+
+You should see **Connected as alice@example.com** within a couple of seconds.
+
+### Troubleshooting the capture
+
+- **"oauth_token isn't in the cookie list."** You missed step 1, or you completed sign-in on a different domain. The cookie only appears on `accounts.google.com` after a successful EmbeddedSetup sign-in. Try again in a private/incognito window.
+- **"BadAuthentication"** after pasting. The token may be expired (they're short-lived — capture and paste within a minute or two), or the token was for a different account than the email you entered. Capture again.
 
 ## Bind a wiki checklist to a Keep note
 
@@ -88,9 +114,9 @@ To remove a single binding (without disconnecting the whole connector), click th
 ## Errors you might see
 
 | Banner | What it means | What to do |
-|---|---|---|
-| `invalid_credentials` | Google rejected the email + ASP | Verify the App-Specific Password and your email |
-| `auth_revoked` | Master token no longer valid (you changed your Google password, or revoked the ASP) | Generate a fresh ASP and re-connect |
+| --- | --- | --- |
+| `invalid_credentials` | Google rejected the oauth_token | Recapture (it's short-lived); make sure it's the cookie from `accounts.google.com`, not some other Google domain |
+| `auth_revoked` | Master token no longer valid (you signed out, or Google revoked it) | Recapture an oauth_token and re-connect |
 | `protocol_drift` | Google changed the Keep wire format | Update simple_wiki and try again |
 | `rate_limited` | We're hitting Keep too hard | Wait a few minutes; sync resumes automatically |
 | `bound_note_deleted` | The bound note was deleted from your Keep app | Rebind or remove the binding |
@@ -101,7 +127,7 @@ Errors branch on typed codes only — never on the human-readable banner text.
 
 The bridge exposes a per-user gRPC service `api.v1.KeepConnectorService` with these methods. All scope to the calling user via Tailscale identity → ProfileIdentifierFor; no method ever leaks another user's master token or bindings.
 
-- `ExchangeAndStore(email, app_specific_password) → ConnectorState` — connect.
+- `ExchangeAndStore(email, oauth_token) → ConnectorState` — connect.
 - `Disconnect() → ConnectorState` — pause.
 - `GetState() → ConnectorState` — read connector + bindings.
 - `ListNotes() → KeepNoteSummary[]` — proxy to the user's Keep account.

@@ -99,20 +99,24 @@ func classifyBearerError(resp map[string]string) error {
 	}
 }
 
-// ExchangeASPForMasterToken performs Stage 1 of the auth flow: trade an
-// App-Specific Password for a long-lived master token.
+// ExchangeOAuthTokenForMasterToken trades a browser-captured oauth_token
+// cookie value for a long-lived master token. This is the modern Stage 1b
+// flow — Google has been deprecating ASP-based master_login, so most
+// accounts now require this path.
 //
-// The ASP is consumed only for the duration of this call. It is never
-// returned, never logged, and never persisted by this function.
-func (a *Authenticator) ExchangeASPForMasterToken(ctx context.Context, email, asp string) (string, error) {
-	encryptedPasswd, err := encryptCredential(androidKey, email, asp)
-	if err != nil {
-		return "", fmt.Errorf("encrypt credential: %w", err)
-	}
-
+// The user obtains the oauth_token by:
+//  1. Opening accounts.google.com/EmbeddedSetup in a browser.
+//  2. Signing in to the Google account.
+//  3. DevTools → Application → Cookies → accounts.google.com.
+//  4. Copying the oauth_token cookie value (HttpOnly; only visible in
+//     the Application panel, not the Console).
+//
+// Mirrors gpsoauth's exchange_token call.
+func (a *Authenticator) ExchangeOAuthTokenForMasterToken(ctx context.Context, email, oauthToken string) (string, error) {
 	form := a.commonAuthFields(email)
 	form.Set("add_account", "1")
-	form.Set("EncryptedPasswd", encryptedPasswd)
+	form.Set("ACCESS_TOKEN", "1")
+	form.Set("Token", oauthToken)
 	form.Set("service", "ac2dm")
 	form.Set("callerSig", playServicesClientSig)
 	form.Set("droidguard_results", "dummy123")
@@ -121,12 +125,12 @@ func (a *Authenticator) ExchangeASPForMasterToken(ctx context.Context, email, as
 	if err != nil {
 		return "", err
 	}
-
 	if token := resp["Token"]; token != "" {
 		return token, nil
 	}
 	return "", classifyAuthError(resp)
 }
+
 
 // commonAuthFields populates the request fields shared between Stage 1 and
 // Stage 2. Callers add stage-specific fields on top.
@@ -199,17 +203,32 @@ func parseAuthResponse(body string) map[string]string {
 
 // classifyAuthError maps Google's "Error=…" responses into our typed
 // sentinels. Branches are on field values, never on free-form messages
-// (per CLAUDE.md "Never Branch Logic on Error Messages").
+// (per CLAUDE.md "Never Branch Logic on Error Messages"). The full
+// response body — Error + ErrorDetail + Url — is wrapped into the
+// returned error message so operators can diagnose the specific reason
+// Google rejected the request without needing server-side SSH access.
 func classifyAuthError(resp map[string]string) error {
 	switch resp["Error"] {
 	case "BadAuthentication":
+		// ErrorDetail often distinguishes "wrong password" from
+		// "this method isn't accepted for accounts with 2SV" — surface
+		// it when present.
+		if detail := resp["ErrorDetail"]; detail != "" {
+			return fmt.Errorf("%w: %s", ErrInvalidCredentials, detail)
+		}
 		return ErrInvalidCredentials
 	case "NeedsBrowser":
+		if browserURL := resp["Url"]; browserURL != "" {
+			return fmt.Errorf("%w: browser sign-in required (%s)", ErrAuthRevoked, browserURL)
+		}
 		return ErrAuthRevoked
 	case "":
 		// No Token AND no Error — treat as drift.
 		return ErrProtocolDrift
 	default:
+		if detail := resp["ErrorDetail"]; detail != "" {
+			return fmt.Errorf("%w: %s (%s)", ErrAuthRevoked, resp["Error"], detail)
+		}
 		return fmt.Errorf("%w: %s", ErrAuthRevoked, resp["Error"])
 	}
 }

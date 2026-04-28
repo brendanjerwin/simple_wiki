@@ -161,7 +161,15 @@ message ChecklistBindingState {
 
 message ExchangeAndStoreRequest {
   string email = 1;
-  string app_specific_password = 2;
+  // oauth_token is captured by the user from the `oauth_token` HttpOnly
+  // cookie at accounts.google.com after signing in via
+  // accounts.google.com/EmbeddedSetup. The wiki exchanges it for a
+  // long-lived master token via gpsoauth's exchange_token call. See
+  // help_google_keep for the step-by-step capture instructions.
+  //
+  // (Tag 2 — formerly app_specific_password — is intentionally skipped;
+  // Google deprecated password-based gpsoauth master-login.)
+  string oauth_token = 3;
 }
 message ExchangeAndStoreResponse {
   ConnectorState state = 1;

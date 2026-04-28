@@ -1,11 +1,17 @@
 // keep-connect — profile-page Lit component for Google Keep connector.
 //
-// On render: queries KeepConnectorService.GetState; displays disconnected
-// or connected UI accordingly. The form takes email + ASP and never
-// retains the ASP after submission. Bindings list is rendered with a
-// per-row Unbind affordance.
+// Renders the "Connect Google Keep" form, the connected state, and the
+// per-binding remove controls. The connect form takes the user's Google
+// email + an oauth_token cookie value captured from a Google sign-in
+// (see help_google_keep for capture instructions). The wiki exchanges
+// the oauth_token for a long-lived master token via gpsoauth and stores
+// only the master token. The captured oauth_token is consumed once and
+// discarded.
 //
-// See plan Phase A and help_google_keep for the trust model.
+// Why oauth_token (not an App-Specific Password): Google deprecated
+// password-based gpsoauth master-login. ASPs reliably get rejected
+// regardless of correctness. The browser-captured oauth_token is the
+// only credential type that still works for the unofficial Keep API.
 
 import { html, LitElement, nothing } from 'lit';
 import { state } from 'lit/decorators.js';
@@ -36,17 +42,12 @@ import './error-display.js';
 type Phase = 'loading' | 'disconnected' | 'connecting' | 'connected';
 
 export class KeepConnect extends LitElement {
-  static override styles = [
-    foundationCSS,
-    buttonCSS,
-    inputCSS,
-    pillCSS,
-  ];
+  static override styles = [foundationCSS, buttonCSS, inputCSS, pillCSS];
 
   @state() declare private phase: Phase;
   @state() declare private state: ConnectorState | null;
   @state() declare private formEmail: string;
-  @state() declare private formAsp: string;
+  @state() declare private formOAuthToken: string;
   @state() declare private error: AugmentedError | null;
 
   private client = createClient(KeepConnectorService, getGrpcWebTransport());
@@ -56,7 +57,7 @@ export class KeepConnect extends LitElement {
     this.phase = 'loading';
     this.state = null;
     this.formEmail = '';
-    this.formAsp = '';
+    this.formOAuthToken = '';
     this.error = null;
   }
 
@@ -73,8 +74,6 @@ export class KeepConnect extends LitElement {
       this.phase = this.state?.configured ? 'connected' : 'disconnected';
     } catch (err: unknown) {
       this.error = AugmentErrorService.augmentError(err, 'load Google Keep connector state');
-      // Stay on the disconnect form so the user can act; the
-      // <error-display> renders the augmented error inline.
       this.phase = 'disconnected';
     }
   }
@@ -82,9 +81,9 @@ export class KeepConnect extends LitElement {
   private async handleConnect(e: SubmitEvent): Promise<void> {
     e.preventDefault();
     this.error = null;
-    if (!this.formEmail || !this.formAsp) {
+    if (!this.formEmail || !this.formOAuthToken) {
       this.error = AugmentErrorService.augmentError(
-        new Error('Email and App-Specific Password are required.'),
+        new Error('Google email and oauth_token are both required.'),
         'connect Google Keep',
       );
       return;
@@ -94,15 +93,15 @@ export class KeepConnect extends LitElement {
       const resp = await this.client.exchangeAndStore(
         create(ExchangeAndStoreRequestSchema, {
           email: this.formEmail,
-          appSpecificPassword: this.formAsp,
+          oauthToken: this.formOAuthToken,
         }),
       );
       this.state = resp.state ?? null;
       this.phase = this.state?.configured ? 'connected' : 'disconnected';
-      this.formAsp = ''; // never retain the ASP
+      this.formOAuthToken = ''; // never retain the captured credential
     } catch (err: unknown) {
       this.phase = 'disconnected';
-      this.formAsp = '';
+      this.formOAuthToken = '';
       this.error = AugmentErrorService.augmentError(err, 'connect Google Keep');
     }
   }
@@ -169,9 +168,29 @@ export class KeepConnect extends LitElement {
     return html`
       <p>
         Connect your Google account to sync wiki checklists with Google Keep
-        notes on your phone. See <a href="/help_google_keep/view">help</a> for
-        setup steps. You will need an App-Specific Password (Google Account →
-        Security → 2-Step Verification → App passwords).
+        notes on your phone.
+      </p>
+      <ol>
+        <li>
+          Open
+          <a
+            href="https://accounts.google.com/EmbeddedSetup"
+            target="_blank"
+            rel="noopener noreferrer"
+            >accounts.google.com/EmbeddedSetup</a
+          >
+          and sign in.
+        </li>
+        <li>Open DevTools → Application → Cookies → <code>accounts.google.com</code>.</li>
+        <li>
+          Copy the value of the <code>oauth_token</code> cookie. It's HttpOnly,
+          so it only appears in the Application panel — not the Console.
+        </li>
+        <li>Paste it below with your Google email.</li>
+      </ol>
+      <p>
+        See <a href="/help_google_keep/view">help</a> for the full walkthrough
+        and the trust-model warning.
       </p>
       <form @submit=${this.handleConnect}>
         <label>
@@ -187,16 +206,16 @@ export class KeepConnect extends LitElement {
           />
         </label>
         <label>
-          App-Specific Password
+          oauth_token cookie value
           <input
             type="password"
             required
             autocomplete="off"
-            placeholder="xxxx xxxx xxxx xxxx"
-            .value=${this.formAsp}
+            placeholder="oauth2_4/0Ad…"
+            .value=${this.formOAuthToken}
             @input=${(e: Event) => {
               if (!(e.target instanceof HTMLInputElement)) return;
-              this.formAsp = e.target.value;
+              this.formOAuthToken = e.target.value;
             }}
           />
         </label>
@@ -240,7 +259,7 @@ export class KeepConnect extends LitElement {
             <li>
               <strong>${b.page} / ${b.listName}</strong>
               → Keep note "${b.keepNoteTitle || b.keepNoteId}"
-              ${b.paused ? html` <span class="pill pill-warn">paused</span>` : nothing}
+              ${b.paused ? html`<span class="pill pill-warn">paused</span>` : nothing}
               <button type="button" @click=${() => this.handleUnbind(b)}>✕</button>
             </li>
           `,

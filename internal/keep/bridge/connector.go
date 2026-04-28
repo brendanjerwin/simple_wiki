@@ -26,7 +26,7 @@ func (SystemClock) Now() time.Time { return time.Now() }
 // Stated as an interface so tests can substitute a fake without spinning up
 // a real httptest server for every Connector test.
 type AuthExchanger interface {
-	ExchangeASPForMasterToken(ctx context.Context, email, asp string) (string, error)
+	ExchangeOAuthTokenForMasterToken(ctx context.Context, email, oauthToken string) (string, error)
 	ExchangeMasterTokenForBearer(ctx context.Context, email, masterToken string) (string, error)
 }
 
@@ -68,19 +68,21 @@ func NewConnector(store *BindingStore, httpClient *http.Client, clock Clock) *Co
 	}
 }
 
-// Connect performs the full connect flow: ASP → master token → bearer →
-// verify with a Keep changes call → store. On any failure, no state is
-// written.
-func (c *Connector) Connect(ctx context.Context, profileID wikipage.PageIdentifier, email, asp string) (ConnectorState, error) {
+// Connect performs the full connect flow: oauth_token → master token →
+// bearer → verify with a Keep changes call → store. The oauth_token is
+// captured by the user from accounts.google.com after signing in via
+// /EmbeddedSetup; see help_google_keep for instructions. On any failure,
+// no state is written.
+func (c *Connector) Connect(ctx context.Context, profileID wikipage.PageIdentifier, email, oauthToken string) (ConnectorState, error) {
 	if email == "" {
 		return ConnectorState{}, errors.New("keep bridge: email is required")
 	}
-	if asp == "" {
-		return ConnectorState{}, errors.New("keep bridge: app-specific password is required")
+	if oauthToken == "" {
+		return ConnectorState{}, errors.New("keep bridge: oauth_token is required")
 	}
 
 	auth := c.authBuilder(deriveDeviceID(profileID))
-	masterToken, err := auth.ExchangeASPForMasterToken(ctx, email, asp)
+	masterToken, err := auth.ExchangeOAuthTokenForMasterToken(ctx, email, oauthToken)
 	if err != nil {
 		return ConnectorState{}, err
 	}
