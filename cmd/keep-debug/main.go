@@ -181,12 +181,16 @@ func runList(ctx context.Context, keep *protocol.KeepClient) {
 		}
 	}
 	fmt.Println("by type:", byType)
-	fmt.Println("ALIVE LIST nodes:")
+	fmt.Println("ALL LIST nodes (with state):")
 	for _, n := range lists {
-		if !n.Timestamps.Trashed.IsZero() || !n.Timestamps.Deleted.IsZero() {
-			continue
+		state := "alive"
+		if !n.Timestamps.Trashed.IsZero() {
+			state = "trashed " + n.Timestamps.Trashed.Format("2006-01-02")
 		}
-		fmt.Printf("  serverID=%s title=%q\n", n.ServerID, n.Title)
+		if !n.Timestamps.Deleted.IsZero() {
+			state = "deleted " + n.Timestamps.Deleted.Format("2006-01-02")
+		}
+		fmt.Printf("  [%s] serverID=%s title=%q\n", state, n.ServerID, n.Title)
 	}
 }
 

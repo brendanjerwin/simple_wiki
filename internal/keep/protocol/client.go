@@ -655,6 +655,14 @@ func decodeTimestamps(w wireTimestamps) (Timestamps, error) {
 // errors loudly on a non-empty unparseable input. Silently returning
 // zero on parse failure would collapse "trashed" / "deleted" timestamps
 // into "live" — surfacing tombstones as if they were active notes.
+//
+// Keep also uses the literal Unix epoch ("1970-01-01T00:00:00.000Z")
+// as a sentinel meaning "this timestamp doesn't apply" — observed on
+// alive notes' Trashed/Deleted fields. Treat that as zero so the
+// IsZero() filters elsewhere correctly classify the note as alive.
+// Verified by reading the user's real-account Changes response: the
+// kept-but-not-trashed Grocery list returned trashed=epoch and our
+// IsZero check was wrongly treating epoch as "trashed in 1970."
 func parseRFC3339Micros(s string) (time.Time, error) {
 	if s == "" {
 		return time.Time{}, nil
@@ -667,6 +675,9 @@ func parseRFC3339Micros(s string) (time.Time, error) {
 		if err != nil {
 			return time.Time{}, fmt.Errorf("not a valid RFC3339 timestamp: %w", err)
 		}
+	}
+	if t.Unix() == 0 {
+		return time.Time{}, nil
 	}
 	return t.UTC(), nil
 }
