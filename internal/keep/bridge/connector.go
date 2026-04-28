@@ -535,8 +535,16 @@ func (c *Connector) SyncToKeep(ctx context.Context, profileID wikipage.PageIdent
 		if n.ID != "" {
 			originalClientIDs[n.ServerID] = n.ID
 		}
-		if !n.Timestamps.Updated.IsZero() {
-			keepUpdated[n.ServerID] = n.Timestamps.Updated
+		// Use the LATER of `updated` and `userEdited`. Keep stamps
+		// `updated` with millisecond-offset epoch sentinels for items
+		// it created server-side, even after the user has toggled
+		// them; the actual "user touched this" recency lives in
+		// `userEdited`. Verified via cmd/keep-debug dump on the
+		// user's bound list — items toggled via the phone app had
+		// userEdited=2026-04-28T23:44Z but updated=epoch+2ms.
+		t := latestKeepTimestamp(n.Timestamps.Updated, n.Timestamps.UserEdited)
+		if !t.IsZero() {
+			keepUpdated[n.ServerID] = t
 		}
 	}
 	if c.debug != nil {
@@ -907,13 +915,15 @@ func (c *Connector) applyInboundFromKeep(ctx context.Context, profileID wikipage
 			delete(binding.ItemIDMap, uid)
 
 		case isAlive && knownToWiki:
-			// Class 2: maybe updated on Keep. Compare Keep's Updated
-			// to wiki's UpdatedAt; only push if Keep is newer.
+			// Class 2: maybe updated on Keep. Compare Keep's freshness
+			// (later of updated/userEdited — see latestKeepTimestamp)
+			// to wiki's UpdatedAt; only pull if Keep is newer.
 			wikiItem, ok := wikiByUID[uid]
 			if !ok {
 				continue
 			}
-			if !shouldPullKeepUpdate(n.Timestamps.Updated, wikiItem.GetUpdatedAt()) {
+			keepFreshness := latestKeepTimestamp(n.Timestamps.Updated, n.Timestamps.UserEdited)
+			if !shouldPullKeepUpdate(keepFreshness, wikiItem.GetUpdatedAt()) {
 				continue
 			}
 			converted, err := KeepToWiki(n)
@@ -967,6 +977,18 @@ func (c *Connector) persistBindingMap(profileID wikipage.PageIdentifier, binding
 		}
 	}
 	return c.store.SaveState(profileID, state)
+}
+
+// latestKeepTimestamp picks whichever of `updated` and `userEdited`
+// is more recent. Keep stamps `updated` with millisecond-offset
+// epoch sentinels (1970-01-01T00:00:00.001/.002Z) for items it
+// created server-side; the actual "user touched this" recency lives
+// in `userEdited`. Using the max keeps the gate comparisons honest.
+func latestKeepTimestamp(updated, userEdited time.Time) time.Time {
+	if userEdited.After(updated) {
+		return userEdited
+	}
+	return updated
 }
 
 // shouldPullKeepUpdate decides whether a Keep node's Updated
