@@ -597,6 +597,14 @@ func (c *Connector) SyncToKeep(ctx context.Context, profileID wikipage.PageIdent
 			if !shouldPushWikiUpdate(item.GetUpdatedAt(), keepUpdated[serverID]) {
 				continue
 			}
+			if c.debug != nil {
+				wt := time.Time{}
+				if item.GetUpdatedAt() != nil {
+					wt = item.GetUpdatedAt().AsTime()
+				}
+				c.debug.Info("push gate let through: uid=%s wiki.updated=%s keep.updated=%s",
+					item.GetUid(), wt.Format(time.RFC3339Nano), keepUpdated[serverID].Format(time.RFC3339Nano))
+			}
 		}
 		pushNodes = append(pushNodes, node)
 	}
