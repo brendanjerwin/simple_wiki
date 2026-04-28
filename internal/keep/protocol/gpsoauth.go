@@ -231,22 +231,33 @@ func classifyAuthError(resp map[string]string) error {
 }
 
 // summarizeAuthResponse renders Google's key=value response into a
-// single line for error wrapping. Skips obviously-secret fields (Auth,
-// Token, SID, LSID) so the summary can safely appear in user-visible
-// banners and journalctl logs.
+// single line for error wrapping. Redacts:
+//
+//   - secrets that grant account access (Auth, Token, SID, LSID, capabilities tokens)
+//   - PII Google sometimes echoes (Email, firstName, lastName, PicasaUser)
+//   - URLs that may carry account-identifying tokens (Url, e.g. NeedsBrowser flows)
+//
+// The remaining surface (Error, ErrorDetail, services, RopRevision, etc.)
+// is what we actually need for diagnostics and is safe for both
+// user-visible banners and journalctl.
 func summarizeAuthResponse(resp map[string]string) string {
-	skip := map[string]bool{"Auth": true, "Token": true, "SID": true, "LSID": true}
+	redact := map[string]bool{
+		"Auth": true, "Token": true, "SID": true, "LSID": true,
+		"Email": true, "firstName": true, "lastName": true, "PicasaUser": true,
+		"Url": true, "GooglePlusUpgrade": true,
+	}
 	keys := make([]string, 0, len(resp))
 	for k := range resp {
-		if skip[k] {
-			continue
-		}
 		keys = append(keys, k)
 	}
 	sort.Strings(keys)
 	var parts []string
 	for _, k := range keys {
-		parts = append(parts, k+"="+resp[k])
+		v := resp[k]
+		if redact[k] && v != "" {
+			v = "[REDACTED]"
+		}
+		parts = append(parts, k+"="+v)
 	}
 	return strings.Join(parts, " ")
 }

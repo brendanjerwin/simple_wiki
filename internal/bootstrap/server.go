@@ -471,6 +471,11 @@ func setupGRPCServer(
 		http.DefaultClient,
 		bridge.SystemClock{},
 	)
+	// TEMP: route Keep API responses through the wiki logger so we can
+	// see Changes() response shapes in journalctl while diagnosing the
+	// "ListNotes returns empty / CreateList silently fails" report.
+	// Strip this once the response-shape question is resolved.
+	keepConnector.SetDebugLogger(logger)
 
 	// Wire the CalDAV server into the Site so its caldavGateway
 	// middleware can dispatch CalDAV-shaped traffic. baseURL is left

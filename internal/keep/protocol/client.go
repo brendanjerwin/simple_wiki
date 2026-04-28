@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"regexp"
 	"strings"
 	"time"
 )
@@ -28,6 +29,7 @@ type KeepClient struct {
 	httpClient *http.Client
 	baseURL    string
 	bearer     string
+	debug      DebugLogger
 }
 
 // NewKeepClient constructs a KeepClient. baseURL is the Keep API base
@@ -113,6 +115,18 @@ const (
 	sessionIDRange  = 9000000000
 )
 
+// DebugLogger is the optional sink Changes() writes a one-line summary
+// to on every call. Set via SetDebugLogger; default is nil (silent).
+// Method shape matches jcelliott/lumber's ConsoleLogger so the wiki's
+// existing logger can be passed directly. Used to chase response-shape
+// regressions; remove once diagnosed.
+type DebugLogger interface {
+	Info(format string, args ...any)
+}
+
+// SetDebugLogger attaches a debug logger; pass nil to silence.
+func (c *KeepClient) SetDebugLogger(l DebugLogger) { c.debug = l }
+
 // Changes calls POST /notes/v1/changes — the unified pull/push endpoint.
 // req.TargetVersion is the cursor to pull *from* (empty = full pull);
 // req.Nodes are mutations to push. Response carries the new cursor and
@@ -144,27 +158,40 @@ func (c *KeepClient) Changes(ctx context.Context, req ChangesRequest) (ChangesRe
 		// "message":"..."}}; surfacing them is critical for diagnosing
 		// "Stage 2 succeeded but the bearer doesn't pass the Keep API
 		// auth check" — distinct from any of the auth-stage rejections.
-		body, _ := io.ReadAll(resp.Body)
-		return ChangesResponse{}, fmt.Errorf("%w: stage3 HTTP %d: %s", classified, resp.StatusCode, truncateBody(body))
+		errBody, _ := io.ReadAll(resp.Body)
+		return ChangesResponse{}, fmt.Errorf("%w: stage3 HTTP %d: %s", classified, resp.StatusCode, truncateBody(errBody))
+	}
+
+	rawBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return ChangesResponse{}, fmt.Errorf("%w: read response: %w", ErrProtocolDrift, err)
+	}
+	if c.debug != nil {
+		c.debug.Info("keep changes response (req nodes=%d targetVersion=%q): %s",
+			len(req.Nodes), req.TargetVersion, truncateBody(rawBody))
 	}
 
 	var wireResp wireChangesResponse
-	if err := json.NewDecoder(resp.Body).Decode(&wireResp); err != nil {
+	if err := json.Unmarshal(rawBody, &wireResp); err != nil {
 		return ChangesResponse{}, fmt.Errorf("%w: decode response: %w", ErrProtocolDrift, err)
 	}
 
 	return decodeChangesResponse(wireResp)
 }
 
-// truncateBody bounds an HTTP error body to 512 bytes so a chatty error
-// page doesn't blow out journalctl lines. Replaces non-printable bytes
-// with '?'.
+// truncateBody bounds an HTTP body to 4 KB so a chatty payload doesn't
+// blow out journalctl lines, and scrubs anything shaped like a bearer
+// token / master token / oauth_token cookie value before the body lands
+// in logs. Defensive — Google's documented Keep API errors don't echo
+// credentials, but a future drift could. The 4 KB ceiling is enough to
+// see the first ~10 nodes of a Changes response for diagnostics; full
+// state can run to MBs and we don't need it.
 func truncateBody(b []byte) string {
-	const maxLen = 512
+	const maxLen = 4096
 	if len(b) > maxLen {
 		b = b[:maxLen]
 	}
-	return strings.Map(func(r rune) rune {
+	cleaned := strings.Map(func(r rune) rune {
 		if r >= 0x20 && r < 0x7f {
 			return r
 		}
@@ -173,7 +200,19 @@ func truncateBody(b []byte) string {
 		}
 		return '?'
 	}, string(b))
+	cleaned = bearerLikeRE.ReplaceAllString(cleaned, "[REDACTED]")
+	cleaned = masterTokenLikeRE.ReplaceAllString(cleaned, "[REDACTED]")
+	return cleaned
 }
+
+// bearerLikeRE matches Google-style OAuth bearer tokens
+// (ya29.<long-string>) wherever they appear in a body.
+var bearerLikeRE = regexp.MustCompile(`ya29\.[A-Za-z0-9_-]{20,}`)
+
+// masterTokenLikeRE matches gpsoauth-style master/refresh tokens
+// (oauth2rt_<digits>/...) and oauth_token cookie values
+// (oauth2_<digits>/...).
+var masterTokenLikeRE = regexp.MustCompile(`oauth2(?:rt)?_[0-9]+/[A-Za-z0-9_/+=-]{20,}`)
 
 // classifyHTTPStatus maps Keep API status codes to typed errors. nil means
 // "proceed with body decode."

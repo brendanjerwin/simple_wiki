@@ -49,9 +49,16 @@ type Connector struct {
 	store         *BindingStore
 	httpClient    *http.Client
 	clock         Clock
+	debug         protocol.DebugLogger
 	authBuilder   func(deviceID string) AuthExchanger
 	clientBuilder KeepClientFactory
 }
+
+// SetDebugLogger attaches a debug logger that the underlying KeepClient
+// will use to dump response bodies on each Changes call. Production
+// wires the wiki's lumber logger through here to chase response-shape
+// regressions; pass nil to silence.
+func (c *Connector) SetDebugLogger(l protocol.DebugLogger) { c.debug = l }
 
 // NewConnector wires the production dependencies. Tests construct a
 // Connector directly with stubbed builders.
@@ -63,17 +70,22 @@ type Connector struct {
 // HTTPAdapter; mirroring it here.
 func NewConnector(store *BindingStore, httpClient *http.Client, clock Clock) *Connector {
 	authClient := newAuthHTTPClient()
-	return &Connector{
+	c := &Connector{
 		store:      store,
 		httpClient: httpClient,
 		clock:      clock,
 		authBuilder: func(deviceID string) AuthExchanger {
 			return protocol.NewAuthenticator(authClient, protocol.AuthURL, deviceID)
 		},
-		clientBuilder: func(bearer string) KeepClient {
-			return protocol.NewKeepClient(httpClient, protocol.DefaultKeepBaseURL, bearer)
-		},
 	}
+	c.clientBuilder = func(bearer string) KeepClient {
+		kc := protocol.NewKeepClient(httpClient, protocol.DefaultKeepBaseURL, bearer)
+		if c.debug != nil {
+			kc.SetDebugLogger(c.debug)
+		}
+		return kc
+	}
+	return c
 }
 
 // newAuthHTTPClient returns an http.Client that mirrors the TLS quirks
