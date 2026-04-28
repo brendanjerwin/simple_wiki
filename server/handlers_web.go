@@ -233,6 +233,15 @@ func isICSResourcePath(p string) bool {
 	return len(segments) >= minICSPathSegments
 }
 
+// redirectToCanonicalProfile sends a 302 to the canonical lowercase
+// `/profile` route. Used for case variants (Profile, PROFILE) that the
+// case-sensitive Gin router would otherwise drop into the catch-all
+// `/:page` route — that path resolves a literal page named "profile",
+// not the user's personal profile.
+func redirectToCanonicalProfile(c *gin.Context) {
+	c.Redirect(httpStatusFound, "/profile")
+}
+
 func (s *Site) registerRoutes(router *gin.Engine) {
 	router.GET("/", func(c *gin.Context) {
 		c.Redirect(httpStatusFound, "/"+s.DefaultPage+"/view")
@@ -241,7 +250,14 @@ func (s *Site) registerRoutes(router *gin.Engine) {
 	// `/profile` resolves the current user's identity and redirects to their
 	// personal profile page. Registered before the catch-all `/:page` so the
 	// router never treats `profile` as an arbitrary page identifier.
+	//
+	// Gin routing is case-sensitive — `/Profile`, `/PROFILE`, etc. would
+	// otherwise fall through to `/:page` and resolve to the literal page
+	// named "profile" (after lowercasing) rather than the user's personal
+	// profile. Register the exact-case variants too with a 302 to canonical.
 	router.GET("/profile", s.handleProfile)
+	router.GET("/Profile", redirectToCanonicalProfile)
+	router.GET("/PROFILE", redirectToCanonicalProfile)
 
 	router.POST("/uploads", s.handleUpload)
 	router.GET("/cli/:binary", serveCLIBinary)
