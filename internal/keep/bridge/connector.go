@@ -507,6 +507,29 @@ func (c *Connector) SyncToKeep(ctx context.Context, profileID wikipage.PageIdent
 
 	// Walk wiki items: classify each as fresh or update; track which
 	// existing map entries we covered so we can soft-delete the rest.
+	// baseVersions: serverID → BaseVersion captured from the just-
+	// completed pull. Keep's optimistic-concurrency-control 500s
+	// "Unknown Error" if a LIST_ITEM update is sent without the
+	// baseVersion the server currently holds. gkeepapi sets it via
+	// the loaded-from-server flow (node.py: self._base_version =
+	// raw["baseVersion"]; emitted by Node.save()).
+	baseVersions := make(map[string]string, len(pull.Nodes))
+	// Also capture the original client_id for each server_id so
+	// updates can carry the right `id` field (Keep distinguishes
+	// `id` = client-generated stable ID, `serverId` = server-assigned).
+	originalClientIDs := make(map[string]string, len(pull.Nodes))
+	for _, n := range pull.Nodes {
+		if n.ServerID == "" {
+			continue
+		}
+		if n.BaseVersion != "" {
+			baseVersions[n.ServerID] = n.BaseVersion
+		}
+		if n.ID != "" {
+			originalClientIDs[n.ServerID] = n.ID
+		}
+	}
+
 	covered := make(map[string]bool, len(binding.ItemIDMap))
 	pushNodes := make([]protocol.Node, 0, len(checklist.GetItems()))
 	freshUIDs := make([]string, 0)        // index-aligned with the appended fresh items below
@@ -537,6 +560,15 @@ func (c *Connector) SyncToKeep(ctx context.Context, profileID wikipage.PageIdent
 			freshClientIDs = append(freshClientIDs, cid)
 			freshUIDs = append(freshUIDs, item.GetUid())
 		} else {
+			// Existing item: prefer the original client_id (the one
+			// captured at the item's first arrival on this client) so
+			// the wire shape mirrors gkeepapi exactly. Fall back to
+			// serverID-as-id if the pull didn't carry a client_id
+			// (some Keep responses elide it).
+			if originalID, ok := originalClientIDs[serverID]; ok {
+				node.ID = originalID
+			}
+			node.BaseVersion = baseVersions[serverID]
 			covered[item.GetUid()] = true
 		}
 		pushNodes = append(pushNodes, node)
@@ -549,13 +581,20 @@ func (c *Connector) SyncToKeep(ctx context.Context, profileID wikipage.PageIdent
 		if covered[uid] || serverID == "" {
 			continue
 		}
+		// Same id-vs-serverId distinction as the update path above:
+		// prefer the captured client_id when we have one.
+		clientID := serverID
+		if originalID, ok := originalClientIDs[serverID]; ok {
+			clientID = originalID
+		}
 		pushNodes = append(pushNodes, protocol.Node{
 			Kind:           "notes#node",
-			ID:             serverID, // Keep accepts serverID as ID for in-place updates
+			ID:             clientID,
 			ServerID:       serverID,
 			ParentID:       binding.KeepNoteID,
 			ParentServerID: binding.KeepNoteID,
 			Type:           protocol.NodeTypeListItem,
+			BaseVersion:    baseVersions[serverID],
 			Timestamps: protocol.Timestamps{
 				Trashed: now,
 				Updated: now,
