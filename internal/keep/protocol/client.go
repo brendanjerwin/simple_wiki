@@ -288,7 +288,10 @@ func (c *KeepClient) Changes(ctx context.Context, req ChangesRequest) (ChangesRe
 // see the first ~10 nodes of a Changes response for diagnostics; full
 // state can run to MBs and we don't need it.
 func truncateBody(b []byte) string {
-	const maxLen = 4096
+	// TEMP: bumped from 4KB to 32KB to read past the userInfo/labels
+	// preamble and see LIST_ITEM bodies in journalctl. Strip back to
+	// 4KB once the version-field key is identified.
+	const maxLen = 32768
 	if len(b) > maxLen {
 		b = b[:maxLen]
 	}
