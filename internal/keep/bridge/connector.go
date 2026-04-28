@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
@@ -289,8 +290,9 @@ type InitialItem struct {
 // 500 Unknown Error, so bundling is the only path that works.
 //
 // initialItems is ignored when binding to an existing keepNoteID; in
-// that case, the user is opting in to "merge into the existing list,"
-// which the v1 sync engine handles via its incremental reconcile.
+// that case, we pull the existing Keep items and pre-seed the
+// item_id_map by exact-text match so the next sync diff doesn't
+// duplicate every wiki item as a fresh push.
 func (c *Connector) Bind(ctx context.Context, profileID wikipage.PageIdentifier, page, listName, keepNoteID string, initialItems []InitialItem) (Binding, error) {
 	client, state, err := c.keepClientFor(ctx, profileID)
 	if err != nil {
@@ -327,6 +329,12 @@ func (c *Connector) Bind(ctx context.Context, profileID wikipage.PageIdentifier,
 				idMap[uid] = serverID
 			}
 		}
+	} else {
+		// Bind to existing Keep list: pull items, match by exact text
+		// against the caller's wiki items, populate id_map. Without
+		// this, every wiki item looks "fresh" to the sync engine and
+		// gets pushed to Keep as a duplicate of an item already there.
+		idMap = c.seedIDMapFromExistingList(ctx, client, keepNoteID, initialItems)
 	}
 
 	binding := Binding{
@@ -573,6 +581,68 @@ func (c *Connector) markBindingSynced(profileID wikipage.PageIdentifier, binding
 		}
 	}
 	return c.store.SaveState(profileID, state)
+}
+
+// seedIDMapFromExistingList reconciles wiki items against an existing
+// Keep list at bind time so future syncs don't duplicate items.
+//
+// Strategy: pull the bound list's existing LIST_ITEMs from Keep, then
+// for each wiki item find a Keep item by exact head-line match (text +
+// inline tags, before any "\n— description" suffix). Match-by-text is
+// imperfect (collisions on identical-text items) but it's the only
+// signal we have at bind time — Keep doesn't know wiki UIDs and wiki
+// has no record of Keep serverIDs yet. Subsequent edits round-trip
+// cleanly through the id_map.
+//
+// Errors are swallowed — a failed pull at bind time should not block
+// the bind itself; the next mutation will trigger a sync that
+// re-discovers items via CreateListWithItems-style new-item pushes
+// (which will dedupe-by-text on Keep's side... no, actually they
+// won't — Keep accepts duplicate-text items. So this DOES matter, but
+// we'd rather have a working bind than a hard failure if the pull
+// flakes.).
+func (c *Connector) seedIDMapFromExistingList(ctx context.Context, client KeepClient, listServerID string, wikiItems []InitialItem) map[string]string {
+	out := map[string]string{}
+	now := c.clock.Now().UTC()
+	pull, err := client.Changes(ctx, protocol.ChangesRequest{
+		SessionID:       fmt.Sprintf("s--%d--bindseed-%s", now.UnixMilli(), listServerID),
+		ClientTimestamp: now.Format("2006-01-02T15:04:05.000000Z"),
+	})
+	if err != nil {
+		return out
+	}
+	// Build text → serverID index for live LIST_ITEMs whose ParentID
+	// or ParentServerID matches our bound list. Only the head line is
+	// indexed (everything before "\n— ").
+	keepByText := make(map[string]string, len(pull.Nodes))
+	for _, n := range pull.Nodes {
+		if n.Type != protocol.NodeTypeListItem {
+			continue
+		}
+		if n.ParentID != listServerID && n.ParentServerID != listServerID {
+			continue
+		}
+		if !n.Timestamps.Trashed.IsZero() || !n.Timestamps.Deleted.IsZero() {
+			continue
+		}
+		head, _, _ := strings.Cut(n.Text, "\n— ")
+		if _, exists := keepByText[head]; exists {
+			// Duplicate-text Keep items: leave the first match in
+			// place; the second will look fresh to the sync engine
+			// and get a new client_id. User can clean up.
+			continue
+		}
+		keepByText[head] = n.ServerID
+	}
+	for _, w := range wikiItems {
+		if w.UID == "" {
+			continue
+		}
+		if serverID, ok := keepByText[w.Text]; ok {
+			out[w.UID] = serverID
+		}
+	}
+	return out
 }
 
 // readPageTags reads the host page's frontmatter tags. Returns an
