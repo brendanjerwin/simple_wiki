@@ -97,10 +97,18 @@ func (c *Connector) noteBindingRemoved(k BindingKey) {
 	c.active.remove(k)
 }
 
-// KeepCronTickJob enumerates active bindings and enqueues a sync job
-// per binding. Cron schedule of "every 30 seconds" gives Keep-side
-// edits a worst-case 30s latency to flow into the wiki, even when no
-// wiki-side trigger fires the SyncDebouncer.
+// BindingsLister returns the currently-known set of bindings. Called
+// by the cron tick on every fire so the result reflects on-disk state
+// (handles pre-existing bindings that weren't bound during this
+// process's lifetime). Bootstrap satisfies this via the frontmatter
+// index's QueryKeyExistence + per-profile decode.
+type BindingsLister func() []BindingKey
+
+// KeepCronTickJob enumerates active bindings via the BindingsLister
+// callback and enqueues a sync job per binding. Cron schedule of
+// "every 30 seconds" gives Keep-side edits a worst-case 30s latency
+// to flow into the wiki, even when no wiki-side trigger fires the
+// SyncDebouncer.
 //
 // The job's Execute returns nil even on partial enqueue failures;
 // individual sync errors land in the sync queue's per-job log line.
@@ -108,14 +116,19 @@ type KeepCronTickJob struct {
 	connector *Connector
 	enqueuer  JobEnqueuer
 	logger    SubscriberLogger
+	lister    BindingsLister
 }
 
-// NewKeepCronTickJob constructs the periodic tick job.
-func NewKeepCronTickJob(connector *Connector, enqueuer JobEnqueuer, logger SubscriberLogger) *KeepCronTickJob {
+// NewKeepCronTickJob constructs the periodic tick job. The lister is
+// called fresh on every Execute so changes to on-disk binding state
+// (including pre-existing bindings discovered after startup) are
+// picked up without needing a process restart.
+func NewKeepCronTickJob(connector *Connector, enqueuer JobEnqueuer, logger SubscriberLogger, lister BindingsLister) *KeepCronTickJob {
 	return &KeepCronTickJob{
 		connector: connector,
 		enqueuer:  enqueuer,
 		logger:    logger,
+		lister:    lister,
 	}
 }
 
@@ -126,14 +139,25 @@ func (*KeepCronTickJob) GetName() string { return "KeepCronTick" }
 // Execute fires off one sync job per active binding. Errors from
 // EnqueueJob (queue full, worker stopped) are logged and counted as
 // the job's overall failure but don't interrupt enqueuing the rest.
+//
+// If a BindingsLister is wired, its result is the source of truth
+// (re-read each tick). Otherwise we fall back to the in-memory active
+// set populated by Bind/Unbind. The lister-driven path ensures cold
+// pre-existing bindings get picked up without a wiki-side trigger.
 func (j *KeepCronTickJob) Execute() error {
 	if j.connector == nil || j.enqueuer == nil {
 		return nil
 	}
-	keys := j.connector.ActiveBindingsSnapshot()
+	var keys []BindingKey
+	if j.lister != nil {
+		keys = j.lister()
+	} else {
+		keys = j.connector.ActiveBindingsSnapshot()
+	}
 	if len(keys) == 0 {
 		return nil
 	}
+	j.logger.Info("KeepCronTick: enqueuing %d sync jobs", len(keys))
 	for _, k := range keys {
 		job := NewKeepOutboundSyncJob(j.connector, k.ProfileID, k.Page, k.ListName)
 		if err := j.enqueuer.EnqueueJob(job); err != nil {

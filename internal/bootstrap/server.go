@@ -505,29 +505,32 @@ func setupGRPCServer(
 	// satisfies bridge.ChecklistMutator's For-Sync helpers directly.
 	keepConnector.SetChecklistMutator(checklistMutator)
 	keepConnector.SetSyncSuppressor(keepSyncDebouncer)
-	// One-time scan of the page index for existing bindings so the
-	// cron tick has work to do at startup before any wiki edit fires.
-	for _, p := range site.FrontmatterIndexQueryer.QueryKeyExistence("wiki.connectors.google_keep.bindings") {
-		state, err := bridge.NewBindingStore(site).LoadState(p)
-		if err != nil || !state.IsConfigured() {
-			continue
+	// Cron tick fires every 30s: enumerate active bindings via a
+	// fresh index scan + profile decode each tick (handles pre-existing
+	// bindings that weren't bound during this process's lifetime),
+	// then enqueue one sync job per binding. Closes the inbound-latency
+	// gap so phone-side edits flow back to wiki without a wiki trigger.
+	keepBindingStore := bridge.NewBindingStore(site)
+	keepBindingsLister := func() []bridge.BindingKey {
+		var out []bridge.BindingKey
+		for _, p := range site.FrontmatterIndexQueryer.QueryKeyExistence("wiki.connectors.google_keep.bindings") {
+			state, err := keepBindingStore.LoadState(p)
+			if err != nil || !state.IsConfigured() {
+				continue
+			}
+			for _, b := range state.Bindings {
+				out = append(out, bridge.BindingKey{
+					ProfileID: p,
+					Page:      b.Page,
+					ListName:  b.ListName,
+				})
+			}
 		}
-		keys := make([]bridge.BindingKey, 0, len(state.Bindings))
-		for _, b := range state.Bindings {
-			keys = append(keys, bridge.BindingKey{
-				ProfileID: p,
-				Page:      b.Page,
-				ListName:  b.ListName,
-			})
-		}
-		keepConnector.RegisterActiveBindings(keys)
+		return out
 	}
-	// Cron tick fires every 30s: enumerate active bindings, enqueue
-	// a sync job per binding. Picks up Keep-side edits without
-	// requiring a wiki-side trigger (closes the inbound-latency gap).
 	if _, err := site.CronScheduler.Schedule(
 		"@every 30s",
-		bridge.NewKeepCronTickJob(keepConnector, site.GetJobQueueCoordinator(), logger),
+		bridge.NewKeepCronTickJob(keepConnector, site.GetJobQueueCoordinator(), logger, keepBindingsLister),
 	); err != nil {
 		return nil, nil, fmt.Errorf("schedule Keep cron tick: %w", err)
 	}
