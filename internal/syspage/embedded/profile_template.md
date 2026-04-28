@@ -12,3 +12,7 @@ template = true
 Owner: {{.WikiAuthorization.ACL.Owner}}
 
 This is your personal profile page. Edit it however you like.
+
+## Connectors
+
+{{"{{ KeepConnect }}"}}

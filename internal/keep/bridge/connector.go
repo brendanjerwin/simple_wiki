@@ -117,7 +117,7 @@ func (c *Connector) Connect(ctx context.Context, profileID wikipage.PageIdentifi
 
 // Disconnect wipes the master token from the calling user's profile but
 // preserves the bindings list (paused). Reconnect resumes them.
-func (c *Connector) Disconnect(ctx context.Context, profileID wikipage.PageIdentifier) (ConnectorState, error) {
+func (c *Connector) Disconnect(_ context.Context, profileID wikipage.PageIdentifier) (ConnectorState, error) {
 	state, err := c.store.LoadState(profileID)
 	if err != nil {
 		return ConnectorState{}, err
@@ -131,7 +131,7 @@ func (c *Connector) Disconnect(ctx context.Context, profileID wikipage.PageIdent
 }
 
 // GetState returns the calling user's connector state.
-func (c *Connector) GetState(ctx context.Context, profileID wikipage.PageIdentifier) (ConnectorState, error) {
+func (c *Connector) GetState(_ context.Context, profileID wikipage.PageIdentifier) (ConnectorState, error) {
 	return c.store.LoadState(profileID)
 }
 
@@ -242,7 +242,7 @@ func (c *Connector) Bind(ctx context.Context, profileID wikipage.PageIdentifier,
 }
 
 // Unbind removes the calling user's binding for (page, listName).
-func (c *Connector) Unbind(ctx context.Context, profileID wikipage.PageIdentifier, page, listName string) error {
+func (c *Connector) Unbind(_ context.Context, profileID wikipage.PageIdentifier, page, listName string) error {
 	err := c.store.RemoveBinding(profileID, page, listName)
 	if errors.Is(err, ErrBindingNotFound) {
 		// Idempotent at the orchestrator boundary — UI calls this on
@@ -253,7 +253,7 @@ func (c *Connector) Unbind(ctx context.Context, profileID wikipage.PageIdentifie
 }
 
 // FindBinding mirrors BindingStore.FindBinding for handler convenience.
-func (c *Connector) FindBinding(ctx context.Context, profileID wikipage.PageIdentifier, page, listName string) (Binding, bool, error) {
+func (c *Connector) FindBinding(_ context.Context, profileID wikipage.PageIdentifier, page, listName string) (Binding, bool, error) {
 	return c.store.FindBinding(profileID, page, listName)
 }
 

@@ -169,6 +169,7 @@ const (
 	funcNameChecklist        = "Checklist"
 	funcNameBlog             = "Blog"
 	funcNameSurvey           = "Survey"
+	funcNameKeepConnect      = "KeepConnect"
 
 	templateTimeoutErrFmt = "template execution timed out after %v"
 )
@@ -424,6 +425,16 @@ func renderChecklistFallback(frontmatter map[string]any, listName string) string
 		_, _ = fmt.Fprintf(&buf, `<span class="checklist-item">%s %s</span>`, marker, html.EscapeString(text))
 	}
 	return buf.String()
+}
+
+// BuildKeepConnect returns a template function that renders the
+// <keep-connect> custom element. Intended for use on profile pages —
+// the element queries gRPC KeepConnectorService for state and renders
+// connect/connected/error UX accordingly. Takes no arguments.
+func BuildKeepConnect(_ TemplateContext) func() string {
+	return func() string {
+		return `<keep-connect></keep-connect>`
+	}
 }
 
 // BuildSurvey returns a template function that renders a wiki-survey custom element
@@ -691,9 +702,10 @@ func buildChatTemplateWithFunctions(ctx context.Context, templateString string, 
 		funcNameFindByKeyExists: query.QueryKeyExistence,
 		// Stubs for interactive widget macros that are not supported in chat context.
 		// These prevent parse errors when messages contain Checklist, Blog, or Survey macros.
-		funcNameChecklist: func(string) string { return "" },
-		funcNameBlog:      func(string, int) string { return "" },
-		funcNameSurvey:    func(string) string { return "" },
+		funcNameChecklist:   func(string) string { return "" },
+		funcNameBlog:        func(string, int) string { return "" },
+		funcNameSurvey:      func(string) string { return "" },
+		funcNameKeepConnect: func() string { return "" },
 	}
 
 	return template.New("page").Funcs(funcs).Parse(templateString)
@@ -764,6 +776,7 @@ func buildTemplateWithFunctions(ctx context.Context, templateString string, site
 		funcNameChecklist:       BuildChecklist(templateContext),
 		funcNameBlog:            BuildBlog(templateContext, query, site),
 		funcNameSurvey:          BuildSurvey(templateContext),
+		funcNameKeepConnect:     BuildKeepConnect(templateContext),
 	}
 
 	return template.New("page").Funcs(funcs).Parse(templateString)
@@ -802,6 +815,7 @@ func validationFuncMap() template.FuncMap {
 		funcNameChecklist:       func(string) string { return "" },
 		funcNameBlog:            func(string, int) string { return "" },
 		funcNameSurvey:          func(string) string { return "" },
+		funcNameKeepConnect:     func() string { return "" },
 	}
 }
 

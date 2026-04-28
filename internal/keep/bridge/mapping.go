@@ -10,7 +10,10 @@ import (
 	"github.com/brendanjerwin/simple_wiki/internal/keep/protocol"
 )
 
-const sortOrderBase = 10
+const (
+	sortOrderBase    = 10
+	sortOrderBitSize = 64
+)
 
 // WikiToKeep converts a wiki ChecklistItem to a Keep ListItem Node ready
 // to be sent on the changes endpoint. parentNoteID is the bound Keep
@@ -47,7 +50,7 @@ func WikiToKeep(item *apiv1.ChecklistItem, parentNoteID, keepItemID string) prot
 // id_map.
 func KeepToWiki(node protocol.Node) *apiv1.ChecklistItem {
 	tags := hashtags.Extract(node.Text)
-	sortOrder, _ := strconv.ParseInt(node.SortValue, sortOrderBase, 64)
+	sortOrder, _ := strconv.ParseInt(node.SortValue, sortOrderBase, sortOrderBitSize)
 
 	item := &apiv1.ChecklistItem{
 		Text:      node.Text,

@@ -120,6 +120,15 @@ The wiki derives `automated` from your authentication context — Tailscale tags
 
 `checklists.*` itself is **not** reserved. Direct `MergeFrontmatter`/`ReplaceFrontmatter` calls to `checklists.*` continue to succeed — but they bypass the funnel, so the corresponding `wiki.checklists.<list>.updated_at` and `sync_token` will not advance, and CalDAV/sync clients won't see the change. Use `ChecklistService` whenever attribution or sync correctness matters.
 
+## Bind to External Apps
+
+Checklists can be bound to ecosystem-native task apps so items round-trip with your phone:
+
+- **CalDAV (Apple Reminders, DAVx5)** — works automatically; subscribe from the device. See [[help-caldav]].
+- **Google Keep** — per-user, opt-in. Configure your Google account on **/profile**, then click **Bind to Keep List** inside any checklist. See [[help-google-keep]].
+
+Bindings to Keep are stored on the calling user's profile page so two household members can each bind the same wiki checklist to their own Keep note.
+
 ## Tag Grammar
 
 Checklist tags share their grammar and normalization with [[help-hashtags]]:

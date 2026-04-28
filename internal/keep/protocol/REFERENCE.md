@@ -13,9 +13,9 @@ diff against the upstream when something breaks.
 ## Pinned upstreams
 
 | Upstream | Repo | Pinned commit |
-|---|---|---|
-| `gkeepapi` (Keep client + node model) | https://github.com/kiwiz/gkeepapi | `1a94b25c18a7abfdc23d1412091129cd63652877` |
-| `gpsoauth` (Android-style auth) | https://github.com/simon-weber/gpsoauth | `429b7f99fa268315cef7a981408a612fb424a79b` |
+| --- | --- | --- |
+| `gkeepapi` (Keep client + node model) | <https://github.com/kiwiz/gkeepapi> | `1a94b25c18a7abfdc23d1412091129cd63652877` |
+| `gpsoauth` (Android-style auth) | <https://github.com/simon-weber/gpsoauth> | `429b7f99fa268315cef7a981408a612fb424a79b` |
 
 The mapping below is what we mirror in Go. Anything not listed is intentionally
 not implemented (see "Out of scope").
@@ -24,7 +24,7 @@ not implemented (see "Out of scope").
 
 Two-stage exchange that mimics what the Android Keep app does on first launch:
 
-```
+```text
                 +----------------------+
    ASP -------->|  master_login        |--> master token (oauth2rt_1/...)
                 |  (or exchange_token) |
@@ -52,7 +52,7 @@ Two-stage exchange that mimics what the Android Keep app does on first launch:
   browser-flow `oauth_token` cookies):
 
   | field | value |
-  |---|---|
+  | --- | --- |
   | `accountType` | `HOSTED_OR_GOOGLE` |
   | `Email` | the user's Google email |
   | `has_permission` | `1` |
@@ -81,7 +81,7 @@ Two-stage exchange that mimics what the Android Keep app does on first launch:
 - **Form body** (gpsoauth `perform_oauth`):
 
   | field | value |
-  |---|---|
+  | --- | --- |
   | `accountType` | `HOSTED_OR_GOOGLE` |
   | `Email` | the user's Google email |
   | `has_permission` | `1` |
@@ -183,7 +183,8 @@ We do **not** advertise `EC`/`RB`/`EX` (gkeepapi marks them as unknown).
    keeps `=` padding; preserve it).
 
 The fixed RSA key blob (from gpsoauth):
-```
+
+```text
 AAAAgMom/1a/v0lblO2Ubrt60J2gcuXSljGFQXgcyZWveWLEwo6prwgi3iJIZdodyhKZQrNWp5nKJ3srRXcUW+F1BD3baEVGcmEgqaLZUNBjm057pKRI16kB0YppeGx5qIQ5QjKzsR8ETQbKLNWgRY0QRNVz34kMJR3P/LgHax/6rmf5AAAAAwEAAQ==
 ```
 
@@ -200,7 +201,7 @@ AAAAgMom/1a/v0lblO2Ubrt60J2gcuXSljGFQXgcyZWveWLEwo6prwgi3iJIZdodyhKZQrNWp5nKJ3sr
 ## Failure surface (mapped to typed errors in `errors.go`)
 
 | Upstream signal | Our error | Typical cause |
-|---|---|---|
+| --- | --- | --- |
 | `Error=BadAuthentication` (Stage 1) | `ErrInvalidCredentials` | Wrong ASP. |
 | `Error=NeedsBrowser` (Stage 1) | `ErrAuthRevoked` | Account requires browser interaction; user must regenerate ASP. |
 | `Error=…` other (Stage 1) | `ErrAuthRevoked` | 2SV not enabled, account suspended, etc. |
