@@ -404,6 +404,7 @@ func BuildVanguardTranscoder(grpcServer *grpc.Server, ginRouter http.Handler) (h
 		"api.v1.FileStorageService",
 		"api.v1.Frontmatter",
 		"api.v1.InventoryManagementService",
+		"api.v1.KeepConnectorService",
 		"api.v1.PageImportService",
 		"api.v1.PageManagementService",
 		"api.v1.ScheduledTurnService",

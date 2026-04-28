@@ -2,9 +2,13 @@
 package goldmarkrenderer_test
 
 import (
+	"fmt"
+	"strings"
+
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	"github.com/brendanjerwin/simple_wiki/templating"
 	"github.com/brendanjerwin/simple_wiki/utils/goldmarkrenderer"
 )
 
@@ -280,35 +284,6 @@ var _ = Describe("GoldmarkRenderer", func() {
 			})
 		})
 
-		When("rendering HTML with a keep-connect element", func() {
-			BeforeEach(func() {
-				source = []byte(`<keep-connect></keep-connect>`)
-			})
-
-			It("should not return an error", func() {
-				Expect(err).NotTo(HaveOccurred())
-			})
-
-			It("should preserve the keep-connect element through the sanitizer", func() {
-				Expect(string(output)).To(ContainSubstring("<keep-connect"))
-			})
-		})
-
-		When("rendering HTML with a keep-bind-button element", func() {
-			BeforeEach(func() {
-				source = []byte(`<keep-bind-button page="shopping" list-name="groceries"></keep-bind-button>`)
-			})
-
-			It("should not return an error", func() {
-				Expect(err).NotTo(HaveOccurred())
-			})
-
-			It("should preserve the keep-bind-button element and its attributes", func() {
-				Expect(string(output)).To(ContainSubstring("<keep-bind-button"))
-				Expect(string(output)).To(ContainSubstring(`page="shopping"`))
-				Expect(string(output)).To(ContainSubstring(`list-name="groceries"`))
-			})
-		})
 
 		When("rendering markdown with wikilinks", func() {
 			BeforeEach(func() {
@@ -661,4 +636,57 @@ var _ = Describe("GoldmarkRenderer", func() {
 			})
 		})
 	})
+
+	// macro-emitted custom-element coverage
+	//
+	// Iterates the templating.MacroCustomElements registry and asserts
+	// every registered element survives sanitization with all of its
+	// declared attributes intact. This is the drift guard: a new macro
+	// added to the registry automatically grows this test.
+	Describe("templating-macro custom-element registry coverage", func() {
+		for _, ce := range templating.MacroCustomElements() {
+			ce := ce // capture loop var for closures
+			Context(fmt.Sprintf("the %q custom element", ce.Name), func() {
+				var rendered string
+				var renderErr error
+
+				BeforeEach(func() {
+					input := buildElementSample(ce)
+					out, e := renderer.Render([]byte(input))
+					rendered = string(out)
+					renderErr = e
+				})
+
+				It("should not error", func() {
+					Expect(renderErr).NotTo(HaveOccurred())
+				})
+
+				It("should survive sanitization", func() {
+					Expect(rendered).To(ContainSubstring("<" + ce.Name))
+				})
+
+				for _, attr := range ce.Attrs {
+					attr := attr // capture
+					It(fmt.Sprintf("should preserve the %q attribute", attr), func() {
+						Expect(rendered).To(ContainSubstring(fmt.Sprintf(`%s="`, attr)))
+					})
+				}
+			})
+		}
+	})
 })
+
+// buildElementSample produces a sample HTML fragment with every declared
+// attribute populated. Used by the registry coverage test.
+func buildElementSample(ce templating.CustomElement) string {
+	var b strings.Builder
+	b.WriteString("<")
+	b.WriteString(ce.Name)
+	for i, attr := range ce.Attrs {
+		fmt.Fprintf(&b, ` %s="sample-%d"`, attr, i)
+	}
+	b.WriteString("></")
+	b.WriteString(ce.Name)
+	b.WriteString(">")
+	return b.String()
+}

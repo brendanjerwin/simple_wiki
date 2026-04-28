@@ -5,6 +5,7 @@ import (
 	"net/url"
 	"regexp"
 
+	"github.com/brendanjerwin/simple_wiki/templating"
 	"github.com/brendanjerwin/simple_wiki/wikiidentifiers"
 	"github.com/microcosm-cc/bluemonday"
 	"github.com/yuin/goldmark"
@@ -114,29 +115,25 @@ func sanitizeWikiHTML(rawHTML []byte) []byte {
 	p.AllowElements("input")
 	p.AllowAttrs("type").Matching(regexp.MustCompile(`^checkbox$`)).OnElements("input")
 	p.AllowAttrs("disabled", "checked").OnElements("input")
-	// Allow wiki-image custom element
+	// Allow wiki-image custom element (emitted by a goldmark plugin, not a
+	// templating macro — kept inline here).
 	p.AllowElements("wiki-image")
 	p.AllowAttrs("src", "alt", "title").OnElements("wiki-image")
-	// Allow wiki-table custom element (AllowNoAttrs is required for bluemonday to preserve the element)
+	// Allow wiki-table custom element (also a goldmark plugin output;
+	// AllowNoAttrs is required for bluemonday to preserve the element).
 	p.AllowNoAttrs().OnElements("wiki-table")
-	// Allow wiki-checklist custom element
-	p.AllowElements("wiki-checklist")
-	p.AllowAttrs("list-name", "page").OnElements("wiki-checklist")
-	// Allow wiki-survey custom element
-	p.AllowElements("wiki-survey")
-	p.AllowAttrs("name", "page").OnElements("wiki-survey")
-	// Allow wiki-blog custom element and its server-rendered fallback children
-	p.AllowElements("wiki-blog")
-	p.AllowAttrs("blog-id", "max-articles", "page", "hide-new-post").OnElements("wiki-blog")
-	// Allow keep-connect custom element on profile pages — emitted by the
-	// {{ KeepConnect }} macro. Takes no attributes today.
-	p.AllowNoAttrs().OnElements("keep-connect")
-	// Allow keep-bind-button custom element embedded inside the wiki-checklist
-	// component (and renderable directly if a macro ever wants to emit it
-	// outside that context). page + list-name attributes are how it scopes
-	// its profile query.
-	p.AllowElements("keep-bind-button")
-	p.AllowAttrs("page", "list-name").OnElements("keep-bind-button")
+
+	// Custom elements emitted by templating macros are sourced from a
+	// single registry so a new macro author touches one list, not two.
+	// See templating.MacroCustomElements for the rationale.
+	for _, ce := range templating.MacroCustomElements() {
+		if len(ce.Attrs) == 0 {
+			p.AllowNoAttrs().OnElements(ce.Name)
+			continue
+		}
+		p.AllowElements(ce.Name)
+		p.AllowAttrs(ce.Attrs...).OnElements(ce.Name)
+	}
 	// Allow collapsible-heading custom element for #^ syntax
 	p.AllowElements("collapsible-heading")
 	p.AllowAttrs("heading-level").OnElements("collapsible-heading")
