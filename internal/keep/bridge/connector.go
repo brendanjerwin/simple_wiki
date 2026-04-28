@@ -425,6 +425,19 @@ func (c *Connector) SyncToKeep(ctx context.Context, profileID wikipage.PageIdent
 		return fmt.Errorf("sync pull: %w", err)
 	}
 
+	// Resolve which Keep labels the bound LIST should carry. Reads the
+	// host page's frontmatter tags and reconciles with the user's
+	// existing Keep labels: existing names map by id; missing names
+	// generate fresh Label CRUD entries that ride in the same push.
+	pageTags, err := c.readPageTags(binding.Page)
+	if err != nil {
+		return fmt.Errorf("read page tags: %w", err)
+	}
+	labelPushEntries, listLabelIDs, err := resolveLabelsForTags(pageTags, pull.Labels, now)
+	if err != nil {
+		return fmt.Errorf("resolve labels: %w", err)
+	}
+
 	// Walk wiki items: classify each as fresh or update; track which
 	// existing map entries we covered so we can soft-delete the rest.
 	covered := make(map[string]bool, len(binding.ItemIDMap))
@@ -476,7 +489,24 @@ func (c *Connector) SyncToKeep(ctx context.Context, profileID wikipage.PageIdent
 		})
 	}
 
-	if len(pushNodes) == 0 {
+	// Always include the LIST node in the push when we have label
+	// assignments to record — Keep ignores label CRUD without a node
+	// referencing the new IDs. Cheap: a labelIds-only push on an
+	// existing LIST is one extra wireNode.
+	if len(listLabelIDs) > 0 || len(labelPushEntries) > 0 {
+		listNode := protocol.Node{
+			Kind:       "notes#node",
+			ID:         binding.KeepNoteID,
+			ServerID:   binding.KeepNoteID,
+			Type:       protocol.NodeTypeList,
+			Title:      binding.KeepNoteTitle,
+			LabelIDs:   listLabelIDs,
+			Timestamps: protocol.Timestamps{Updated: now},
+		}
+		pushNodes = append(pushNodes, listNode)
+	}
+
+	if len(pushNodes) == 0 && len(labelPushEntries) == 0 {
 		// No diff — wiki and binding map are in sync. Update verified
 		// timestamp and exit.
 		return c.markBindingSynced(profileID, binding, now)
@@ -488,6 +518,7 @@ func (c *Connector) SyncToKeep(ctx context.Context, profileID wikipage.PageIdent
 	}
 	resp, err := client.Changes(ctx, protocol.ChangesRequest{
 		Nodes:           pushNodes,
+		Labels:          labelPushEntries,
 		TargetVersion:   pull.ToVersion,
 		SessionID:       pushSession,
 		ClientTimestamp: now.Format("2006-01-02T15:04:05.000000Z"),
@@ -542,6 +573,94 @@ func (c *Connector) markBindingSynced(profileID wikipage.PageIdentifier, binding
 		}
 	}
 	return c.store.SaveState(profileID, state)
+}
+
+// readPageTags reads the host page's frontmatter tags. Returns an
+// empty slice for "no tags" (not an error). Errors only on actual
+// store failures; missing pages return ([], nil) — the binding might
+// outlive the host page in edge cases and we'd rather sync no labels
+// than blow up the sync job.
+func (c *Connector) readPageTags(page string) ([]string, error) {
+	_, fm, err := c.store.pages.ReadFrontMatter(wikipage.PageIdentifier(page))
+	if err != nil {
+		// Treat missing page as "no tags" — sync engine continues
+		// rather than wedging on an irrelevant lookup.
+		return nil, nil
+	}
+	raw, ok := fm["tags"]
+	if !ok {
+		return nil, nil
+	}
+	arr, ok := raw.([]any)
+	if !ok {
+		// Frontmatter has a "tags" field but it isn't a list — the
+		// page likely has a different convention. Skip rather than
+		// failing the entire sync.
+		return nil, nil
+	}
+	out := make([]string, 0, len(arr))
+	for _, v := range arr {
+		if s, ok := v.(string); ok && s != "" {
+			out = append(out, s)
+		}
+	}
+	return out, nil
+}
+
+// resolveLabelsForTags reconciles the host page's tags against the
+// user's existing Keep labels. Returns:
+//   - labelPush: Label CRUD entries for tags that don't have a Keep
+//     label yet (one fresh MainID per missing tag).
+//   - listLabelIDs: the set of Keep label MainIDs that should be
+//     assigned to the bound LIST after the push.
+//
+// Existing Keep labels matched by exact name (case-sensitive); Keep's
+// label uniqueness is per-name. Tombstoned labels (Deleted != zero)
+// are skipped — we re-create rather than reviving.
+func resolveLabelsForTags(tags []string, existingLabels []protocol.LabelEntry, now time.Time) (labelPush []protocol.LabelEntry, listLabelIDs []string, err error) {
+	if len(tags) == 0 {
+		return nil, nil, nil
+	}
+	byName := make(map[string]string, len(existingLabels))
+	for _, l := range existingLabels {
+		if !l.Deleted.IsZero() {
+			continue
+		}
+		byName[l.Name] = l.MainID
+	}
+	listLabelIDs = make([]string, 0, len(tags))
+	for _, tag := range tags {
+		if existingID, ok := byName[tag]; ok {
+			listLabelIDs = append(listLabelIDs, existingID)
+			continue
+		}
+		newID, err := generateLabelMainID(now, len(labelPush))
+		if err != nil {
+			return nil, nil, err
+		}
+		labelPush = append(labelPush, protocol.LabelEntry{
+			MainID:  newID,
+			Name:    tag,
+			Created: now,
+			Updated: now,
+		})
+		listLabelIDs = append(listLabelIDs, newID)
+		// Cache the just-created mapping so a duplicate tag in the
+		// input list reuses the same MainID rather than creating
+		// another (Keep tolerates duplicates but we'd rather not).
+		byName[tag] = newID
+	}
+	return labelPush, listLabelIDs, nil
+}
+
+// generateLabelMainID makes a Keep-style label MainID. Same shape as a
+// Node ID ("ms-hex.16-hex"); gkeepapi node.py:1077-1085 (Label._gen_id).
+func generateLabelMainID(now time.Time, idx int) (string, error) {
+	var entropy [8]byte
+	if _, err := io.ReadFull(rand.Reader, entropy[:]); err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("%x.%016x", now.UnixMilli()+int64(idx), binary.BigEndian.Uint64(entropy[:])), nil
 }
 
 // generatePushClientID makes a Keep-style client id for a brand-new

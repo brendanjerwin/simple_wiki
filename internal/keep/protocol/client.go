@@ -329,10 +329,25 @@ func classifyHTTPStatus(code int) error {
 // at the boundary.
 
 type wireChangesRequest struct {
-	Nodes           []wireNode    `json:"nodes"`
-	ClientTimestamp string        `json:"clientTimestamp"`
-	RequestHeader   wireReqHeader `json:"requestHeader"`
-	TargetVersion   string        `json:"targetVersion,omitempty"`
+	Nodes           []wireNode     `json:"nodes"`
+	ClientTimestamp string         `json:"clientTimestamp"`
+	RequestHeader   wireReqHeader  `json:"requestHeader"`
+	TargetVersion   string         `json:"targetVersion,omitempty"`
+	UserInfo        *wireUserInfo  `json:"userInfo,omitempty"`
+}
+
+// wireUserInfo carries label CRUD on the request side; on the response
+// side it carries the user's full label state. We only populate the
+// labels-pushed channel here; settings/coachmarks/etc. round-trip from
+// the server but we don't model them.
+type wireUserInfo struct {
+	Labels []wireLabel `json:"labels,omitempty"`
+}
+
+type wireLabel struct {
+	MainID     string         `json:"mainId"`
+	Name       string         `json:"name"`
+	Timestamps wireTimestamps `json:"timestamps,omitempty"`
 }
 
 type wireReqHeader struct {
@@ -354,11 +369,12 @@ type wireCapEntry struct {
 }
 
 type wireChangesResponse struct {
-	Kind            string     `json:"kind"`
-	ToVersion       *string    `json:"toVersion"`
-	Nodes           []wireNode `json:"nodes"`
-	ForceFullResync bool       `json:"forceFullResync"`
-	Truncated       bool       `json:"truncated"`
+	Kind            string        `json:"kind"`
+	ToVersion       *string       `json:"toVersion"`
+	Nodes           []wireNode    `json:"nodes"`
+	UserInfo        *wireUserInfo `json:"userInfo,omitempty"`
+	ForceFullResync bool          `json:"forceFullResync"`
+	Truncated       bool          `json:"truncated"`
 }
 
 type wireNode struct {
@@ -373,7 +389,16 @@ type wireNode struct {
 	Checked        bool           `json:"checked,omitempty"`
 	SortValue      string         `json:"sortValue,omitempty"`
 	BaseVersion    string         `json:"baseVersion,omitempty"`
+	LabelIDs       []wireLabelID  `json:"labelIds,omitempty"`
 	Timestamps     wireTimestamps `json:"timestamps"`
+}
+
+// wireLabelID is the per-node label assignment shape: a labelId
+// reference plus a deleted-timestamp marker (zero = assigned;
+// non-zero RFC3339 = unassigned). gkeepapi node.py:1162-1174.
+type wireLabelID struct {
+	LabelID string `json:"labelId"`
+	Deleted string `json:"deleted,omitempty"`
 }
 
 type wireTimestamps struct {
@@ -405,7 +430,7 @@ func buildChangesRequest(req ChangesRequest) wireChangesRequest {
 	for i, n := range req.Nodes {
 		wireNodes[i] = encodeNode(n)
 	}
-	return wireChangesRequest{
+	out := wireChangesRequest{
 		Nodes:           wireNodes,
 		ClientTimestamp: req.ClientTimestamp,
 		TargetVersion:   req.TargetVersion,
@@ -421,6 +446,33 @@ func buildChangesRequest(req ChangesRequest) wireChangesRequest {
 			Capabilities: supportedCapabilities,
 		},
 	}
+	if len(req.Labels) > 0 {
+		labels := make([]wireLabel, len(req.Labels))
+		for i, l := range req.Labels {
+			labels[i] = wireLabel{
+				MainID: l.MainID,
+				Name:   l.Name,
+				Timestamps: wireTimestamps{
+					Kind:    "notes#timestamps",
+					Created: rfcOrEmpty(l.Created),
+					Updated: rfcOrEmpty(l.Updated),
+					Deleted: rfcOrEmpty(l.Deleted),
+				},
+			}
+		}
+		out.UserInfo = &wireUserInfo{Labels: labels}
+	}
+	return out
+}
+
+// rfcOrEmpty formats t using rfc3339Micros, returning "" for zero
+// times. Centralized so encodeTimestamps and the label encoder use
+// the same convention.
+func rfcOrEmpty(t time.Time) string {
+	if t.IsZero() {
+		return ""
+	}
+	return t.UTC().Format(rfc3339Micros)
 }
 
 func encodeNode(n Node) wireNode {
@@ -437,6 +489,12 @@ func encodeNode(n Node) wireNode {
 		SortValue:      n.SortValue,
 		BaseVersion:    n.BaseVersion,
 		Timestamps:     encodeTimestamps(n.Timestamps),
+	}
+	if len(n.LabelIDs) > 0 {
+		out.LabelIDs = make([]wireLabelID, len(n.LabelIDs))
+		for i, id := range n.LabelIDs {
+			out.LabelIDs[i] = wireLabelID{LabelID: id}
+		}
 	}
 	return out
 }
@@ -496,7 +554,38 @@ func decodeChangesResponse(w wireChangesResponse) (ChangesResponse, error) {
 		}
 		out.Nodes = append(out.Nodes, n)
 	}
+	if w.UserInfo != nil {
+		for _, wl := range w.UserInfo.Labels {
+			le, err := decodeLabel(wl)
+			if err != nil {
+				return ChangesResponse{}, fmt.Errorf("%w: label %q: %w", ErrProtocolDrift, wl.MainID, err)
+			}
+			out.Labels = append(out.Labels, le)
+		}
+	}
 	return out, nil
+}
+
+func decodeLabel(w wireLabel) (LabelEntry, error) {
+	created, err := parseRFC3339Micros(w.Timestamps.Created)
+	if err != nil {
+		return LabelEntry{}, fmt.Errorf("created: %w", err)
+	}
+	updated, err := parseRFC3339Micros(w.Timestamps.Updated)
+	if err != nil {
+		return LabelEntry{}, fmt.Errorf("updated: %w", err)
+	}
+	deleted, err := parseRFC3339Micros(w.Timestamps.Deleted)
+	if err != nil {
+		return LabelEntry{}, fmt.Errorf("deleted: %w", err)
+	}
+	return LabelEntry{
+		MainID:  w.MainID,
+		Name:    w.Name,
+		Created: created,
+		Updated: updated,
+		Deleted: deleted,
+	}, nil
 }
 
 func decodeNode(w wireNode) (Node, error) {
@@ -504,18 +593,31 @@ func decodeNode(w wireNode) (Node, error) {
 	if err != nil {
 		return Node{}, fmt.Errorf("timestamps: %w", err)
 	}
+	var labelIDs []string
+	for _, l := range w.LabelIDs {
+		// Skip entries marked deleted (Keep's tombstone for "label
+		// removed from this note").
+		if l.Deleted != "" && l.Deleted != "1970-01-01T00:00:00.000Z" {
+			continue
+		}
+		if l.LabelID != "" {
+			labelIDs = append(labelIDs, l.LabelID)
+		}
+	}
 	return Node{
-		Kind:        w.Kind,
-		ID:          w.ID,
-		ServerID:    w.ServerID,
-		ParentID:    w.ParentID,
-		Type:        NodeType(w.Type),
-		Title:       w.Title,
-		Text:        w.Text,
-		Checked:     w.Checked,
-		SortValue:   w.SortValue,
-		BaseVersion: w.BaseVersion,
-		Timestamps:  ts,
+		Kind:           w.Kind,
+		ID:             w.ID,
+		ServerID:       w.ServerID,
+		ParentID:       w.ParentID,
+		ParentServerID: w.ParentServerID,
+		Type:           NodeType(w.Type),
+		Title:          w.Title,
+		Text:           w.Text,
+		Checked:        w.Checked,
+		SortValue:      w.SortValue,
+		BaseVersion:    w.BaseVersion,
+		LabelIDs:       labelIDs,
+		Timestamps:     ts,
 	}, nil
 }
 

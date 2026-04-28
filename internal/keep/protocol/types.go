@@ -52,23 +52,54 @@ type Node struct {
 	SortValue      string
 	BaseVersion    string
 	Checked        bool
-	Timestamps     Timestamps
+	// LabelIDs is the set of Keep Label MainIDs assigned to this top-
+	// level Note/List. Empty on LIST_ITEM. The wiki-side sync engine
+	// reads page hashtags and pushes them through here.
+	LabelIDs   []string
+	Timestamps Timestamps
 }
 
 // ChangesRequest is the body of POST /notes/v1/changes — both pulls (with
 // TargetVersion) and pushes (with Nodes populated). See REFERENCE.md
 // "Sync endpoint".
+//
+// Labels are sent under userInfo.labels (separate from Nodes); see
+// gkeepapi __init__.py:365. Each label CRUD entry has its own mainId
+// + name + timestamps; deletion is signaled by setting timestamps.deleted
+// (gkeepapi node.py:1162-1174).
 type ChangesRequest struct {
 	Nodes           []Node
+	Labels          []LabelEntry // CRUD batch — added/renamed/deleted labels
 	TargetVersion   string
 	ClientTimestamp string
 	SessionID       string
 }
 
 // ChangesResponse is the parsed body returned by the Keep server.
+//
+// Labels echoes the user's full label set after the sync. Used by the
+// outbound-sync engine to find or create the right Keep Label for each
+// wiki page hashtag without pushing duplicates.
 type ChangesResponse struct {
 	ToVersion       string
 	Nodes           []Node
+	Labels          []LabelEntry
 	ForceFullResync bool
 	Truncated       bool
+}
+
+// LabelEntry is one Keep Label as it appears in userInfo.labels (both
+// directions). Identity is MainID — a Keep-internal id with the same
+// "ms-hex.16-hex" shape as Node IDs. Name is the human label text;
+// adding the same name twice is idempotent if the same MainID is reused.
+//
+// Deleted is set on outbound to signal "delete this label" (Keep's
+// soft-delete on labels). On inbound, non-zero Deleted means the label
+// is tombstoned.
+type LabelEntry struct {
+	MainID  string
+	Name    string
+	Created time.Time
+	Updated time.Time
+	Deleted time.Time
 }

@@ -5,7 +5,7 @@
 // List" button when configured but unbound. Renders a status pill +
 // Unbind affordance when bound.
 
-import { html, LitElement, nothing } from 'lit';
+import { css, html, LitElement, nothing } from 'lit';
 import { property, state } from 'lit/decorators.js';
 import { createClient } from '@connectrpc/connect';
 import { create } from '@bufbuild/protobuf';
@@ -32,10 +32,74 @@ import { AugmentErrorService, type AugmentedError } from './augment-error-servic
 import './error-display.js';
 import './confirmation-interlock-button.js';
 
+// Local layout overrides — keep the bind affordance & sync badge
+// visually subordinate to the checklist itself. Tokens used:
+//   --color-text-muted, --color-text-secondary, --color-action-secondary-*
+// (defined in shared-styles foundationCSS).
+const localCSS = css`
+  :host {
+    display: block;
+    margin-top: 8px;
+  }
+  .keep-bind {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  /* Bind-mode trigger: ghost-style, matches the muted text scale of
+     a checklist's caption row, doesn't compete with primary actions. */
+  .bind-trigger {
+    background: transparent;
+    border: 1px solid var(--color-border-default, rgba(0, 0, 0, 0.12));
+    color: var(--color-text-secondary, #6c757d);
+    font-size: 11px;
+    font-weight: 500;
+    padding: 4px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+    line-height: 1.2;
+  }
+  .bind-trigger:hover {
+    color: var(--color-text-primary, inherit);
+    border-color: var(--color-border-strong, rgba(0, 0, 0, 0.24));
+  }
+  /* Bound-mode badge: muted info text + small unbind affordance,
+     visually similar weight to a "last edited" caption. */
+  .sync-badge {
+    color: var(--color-text-muted, #868e96);
+    font-size: 11px;
+    font-weight: 400;
+    line-height: 1.2;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .sync-badge::before {
+    content: '✓';
+    color: var(--color-success, #2f9e44);
+    font-weight: 600;
+  }
+  .picker {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+    font-size: 12px;
+  }
+  .picker p {
+    margin: 0;
+  }
+  .picker select {
+    font-size: 12px;
+    padding: 2px 6px;
+  }
+`;
+
 type Phase = 'loading' | 'hidden' | 'unbound' | 'picker' | 'binding' | 'bound';
 
 export class KeepBindButton extends LitElement {
-  static override styles = [foundationCSS, buttonCSS, inputCSS, pillCSS];
+  static override styles = [foundationCSS, buttonCSS, inputCSS, pillCSS, localCSS];
 
   @property({ type: String, attribute: 'page' })
   declare page: string;
@@ -163,14 +227,14 @@ export class KeepBindButton extends LitElement {
     switch (this.phase) {
       case 'unbound':
         return html`
-          <button type="button" @click=${this.openPicker}>
-            🔗 Bind to Keep List
+          <button class="bind-trigger" type="button" @click=${this.openPicker}>
+            Bind to Keep
           </button>
         `;
       case 'picker':
         return html`
           <div class="picker">
-            <p>Pick a Google Keep note to bind <strong>${this.listName}</strong> to:</p>
+            <p>Bind <strong>${this.listName}</strong> →</p>
             <select
               .value=${this.selectedNoteID}
               @change=${(e: Event) => {
@@ -178,17 +242,17 @@ export class KeepBindButton extends LitElement {
                 this.selectedNoteID = e.target.value;
               }}
             >
-              <option value="">Create new Keep note named "${this.listName}"</option>
+              <option value="">Create new "${this.listName}"</option>
               ${this.notes.map(
                 (n) => html`
                   <option value=${n.keepNoteId}>${n.title || '(untitled)'}</option>
                 `,
               )}
             </select>
-            <button type="button" @click=${this.handleBind}>Bind</button>
+            <button class="bind-trigger" type="button" @click=${this.handleBind}>Bind</button>
             <button
+              class="bind-trigger"
               type="button"
-              class="secondary"
               @click=${() => (this.phase = 'unbound')}
             >
               Cancel
@@ -196,20 +260,20 @@ export class KeepBindButton extends LitElement {
           </div>
         `;
       case 'binding':
-        return html`<p class="muted">Binding…</p>`;
+        return html`<span class="sync-badge">Binding…</span>`;
       case 'bound':
         return html`
-          <span class="pill pill-ok">
-            Synced with Keep
-            ${this.bindingState?.currentBinding?.keepNoteTitle
-              ? html` ("${this.bindingState.currentBinding.keepNoteTitle}")`
-              : nothing}
-          </span>
+          <span class="sync-badge"
+            >Synced${this.bindingState?.currentBinding?.keepNoteTitle
+              ? html` · ${this.bindingState.currentBinding.keepNoteTitle}`
+              : nothing}</span
+          >
           <confirmation-interlock-button
             label="Unbind"
-            confirmLabel="Stop syncing this checklist with Keep?"
+            confirmLabel="Stop syncing?"
             yesLabel="Unbind"
             noLabel="Cancel"
+            class="bind-trigger"
             @confirmed=${this.handleUnbind}
           ></confirmation-interlock-button>
         `;
