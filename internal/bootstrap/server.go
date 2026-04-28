@@ -499,6 +499,38 @@ func setupGRPCServer(
 		1500*time.Millisecond,
 	)
 	checklistMutator.SetSubscriber(keepSyncDebouncer)
+	// Inbound apply: SyncToKeep also pulls Keep state into the wiki.
+	// Mutator writes during apply must NOT loop back as fresh sync
+	// triggers, so the suppressor wraps the apply window. Mutator
+	// satisfies bridge.ChecklistMutator's For-Sync helpers directly.
+	keepConnector.SetChecklistMutator(checklistMutator)
+	keepConnector.SetSyncSuppressor(keepSyncDebouncer)
+	// One-time scan of the page index for existing bindings so the
+	// cron tick has work to do at startup before any wiki edit fires.
+	for _, p := range site.FrontmatterIndexQueryer.QueryKeyExistence("wiki.connectors.google_keep.bindings") {
+		state, err := bridge.NewBindingStore(site).LoadState(p)
+		if err != nil || !state.IsConfigured() {
+			continue
+		}
+		keys := make([]bridge.BindingKey, 0, len(state.Bindings))
+		for _, b := range state.Bindings {
+			keys = append(keys, bridge.BindingKey{
+				ProfileID: p,
+				Page:      b.Page,
+				ListName:  b.ListName,
+			})
+		}
+		keepConnector.RegisterActiveBindings(keys)
+	}
+	// Cron tick fires every 30s: enumerate active bindings, enqueue
+	// a sync job per binding. Picks up Keep-side edits without
+	// requiring a wiki-side trigger (closes the inbound-latency gap).
+	if _, err := site.CronScheduler.Schedule(
+		"@every 30s",
+		bridge.NewKeepCronTickJob(keepConnector, site.GetJobQueueCoordinator(), logger),
+	); err != nil {
+		return nil, nil, fmt.Errorf("schedule Keep cron tick: %w", err)
+	}
 
 	// Wire the CalDAV server into the Site so its caldavGateway
 	// middleware can dispatch CalDAV-shaped traffic. baseURL is left

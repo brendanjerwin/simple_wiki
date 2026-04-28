@@ -43,8 +43,9 @@ type SyncDebouncer struct {
 	logger          SubscriberLogger
 	debounceWindow  time.Duration
 
-	mu     sync.Mutex
-	timers map[string]*time.Timer // key: "<profileID>|<page>|<listName>"
+	mu         sync.Mutex
+	timers     map[string]*time.Timer // key: "<profileID>|<page>|<listName>"
+	suppressed map[string]int        // refcount: nonzero = inbound-apply in progress
 }
 
 // NewSyncDebouncer constructs a debouncer.
@@ -62,6 +63,34 @@ func NewSyncDebouncer(
 		logger:         logger,
 		debounceWindow: debounceWindow,
 		timers:         map[string]*time.Timer{},
+		suppressed:     map[string]int{},
+	}
+}
+
+// Suppress marks a (profile, page, list) as "inbound-apply in
+// progress" — OnChecklistMutated calls for this key during the
+// suppress window are ignored. Refcounted so nested apply windows
+// (multiple bindings on the same page, etc.) compose cleanly.
+//
+// Always pair with Unsuppress in a defer; missing the unsuppress
+// permanently blocks future sync events for that binding.
+func (d *SyncDebouncer) Suppress(profileID wikipage.PageIdentifier, page, listName string) {
+	key := fmt.Sprintf("%s|%s|%s", string(profileID), page, listName)
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.suppressed[key]++
+}
+
+// Unsuppress decrements the suppress refcount for the given key. The
+// underlying entry is removed when the count returns to zero so the
+// map doesn't accumulate stale keys for short-lived bindings.
+func (d *SyncDebouncer) Unsuppress(profileID wikipage.PageIdentifier, page, listName string) {
+	key := fmt.Sprintf("%s|%s|%s", string(profileID), page, listName)
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.suppressed[key]--
+	if d.suppressed[key] <= 0 {
+		delete(d.suppressed, key)
 	}
 }
 
@@ -87,13 +116,18 @@ func (d *SyncDebouncer) OnChecklistMutated(page, listName string, identity tails
 	d.scheduleSync(profileID, page, listName)
 }
 
-// scheduleSync resets the per-key debounce timer.
+// scheduleSync resets the per-key debounce timer. Suppressed keys are
+// dropped silently — the inbound-apply pass is mid-flight and another
+// sync run would loop.
 func (d *SyncDebouncer) scheduleSync(profileID wikipage.PageIdentifier, page, listName string) {
 	key := fmt.Sprintf("%s|%s|%s", string(profileID), page, listName)
 
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
+	if d.suppressed[key] > 0 {
+		return
+	}
 	if existing, ok := d.timers[key]; ok {
 		existing.Stop()
 	}

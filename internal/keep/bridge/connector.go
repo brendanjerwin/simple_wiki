@@ -12,7 +12,10 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
+
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
 	"github.com/brendanjerwin/simple_wiki/internal/keep/protocol"
@@ -55,6 +58,21 @@ type ChecklistReader interface {
 	ListItems(ctx context.Context, page, listName string) (*apiv1.Checklist, error)
 }
 
+// ChecklistMutator is the write-side counterpart used by inbound sync
+// to apply Keep-side changes to the wiki. The mutator's notify hook
+// MUST be suppressed for the sync window (via SyncDebouncer.Suppress)
+// or these calls trigger another sync job and loop forever.
+//
+// Args and signatures mirror the real mutator's. The bridge package
+// intentionally ignores per-call expectedUpdatedAt (last-writer-wins
+// from Keep at sync time) and identity (sync runs as a system actor,
+// not a user; the wiki captures completed_by from a separate path).
+type ChecklistMutator interface {
+	AddItemForSync(ctx context.Context, page, listName, text string, checked bool, tags []string, description, sortValueHint string) (string, error)
+	UpdateItemForSync(ctx context.Context, page, listName, uid, text string, checked bool, tags []string, description string) error
+	DeleteItemForSync(ctx context.Context, page, listName, uid string) error
+}
+
 // Connector orchestrates the Keep bridge: per-user auth exchange,
 // verification, binding management, and Keep client construction. Owns no
 // long-running goroutines (those live in the scheduler) — every method
@@ -65,9 +83,34 @@ type Connector struct {
 	clock         Clock
 	debug         protocol.DebugLogger
 	checklistR    ChecklistReader
+	checklistW    ChecklistMutator
+	suppressor    SyncSuppressor
 	authBuilder   func(deviceID string) AuthExchanger
 	clientBuilder KeepClientFactory
+
+	activeMu sync.Mutex
+	active   *activeBindings
 }
+
+// SyncSuppressor is the notify-suppression interface SyncDebouncer
+// satisfies. SyncToKeep wraps its inbound-apply pass in
+// Suppress/Unsuppress so mutator notifies during apply don't enqueue
+// another sync.
+type SyncSuppressor interface {
+	Suppress(profileID wikipage.PageIdentifier, page, listName string)
+	Unsuppress(profileID wikipage.PageIdentifier, page, listName string)
+}
+
+// SetChecklistMutator injects the wiki-side mutator the inbound sync
+// path uses to apply Keep-originated changes. Optional; nil disables
+// inbound apply (SyncToKeep still does outbound).
+func (c *Connector) SetChecklistMutator(w ChecklistMutator) { c.checklistW = w }
+
+// SetSyncSuppressor injects the suppressor used during inbound apply
+// to keep mutator notifies from looping back as new sync triggers.
+// Optional; nil falls back to "outbound only" behavior to avoid an
+// infinite loop in mis-wired test setups.
+func (c *Connector) SetSyncSuppressor(s SyncSuppressor) { c.suppressor = s }
 
 // SetChecklistReader injects the wiki-side reader the outbound sync
 // path uses to diff wiki state against the binding's id_map. Pass at
@@ -348,6 +391,7 @@ func (c *Connector) Bind(ctx context.Context, profileID wikipage.PageIdentifier,
 	if err := c.store.AddBinding(profileID, binding); err != nil {
 		return Binding{}, err
 	}
+	c.noteBindingAdded(BindingKey{ProfileID: profileID, Page: page, ListName: listName})
 	_ = state // reserved for future per-binding bookkeeping during bind
 	return binding, nil
 }
@@ -432,6 +476,19 @@ func (c *Connector) SyncToKeep(ctx context.Context, profileID wikipage.PageIdent
 	if err != nil {
 		return fmt.Errorf("sync pull: %w", err)
 	}
+
+	// Inbound apply: bring Keep-side changes into the wiki BEFORE
+	// computing the outbound diff. Suppressed via the SyncSuppressor
+	// so the mutator notifies emitted by AddItemForSync /
+	// UpdateItemForSync / DeleteItemForSync don't loop back as fresh
+	// sync triggers. updatedBinding carries any id_map changes (new
+	// uid → serverID for items that arrived from Keep).
+	updatedBinding, freshChecklist, err := c.applyInboundFromKeep(ctx, profileID, binding, pull, checklist)
+	if err != nil {
+		return fmt.Errorf("inbound apply: %w", err)
+	}
+	binding = updatedBinding
+	checklist = freshChecklist
 
 	// Resolve which Keep labels the bound LIST should carry. Reads the
 	// host page's frontmatter tags and reconciles with the user's
@@ -581,6 +638,166 @@ func (c *Connector) markBindingSynced(profileID wikipage.PageIdentifier, binding
 		}
 	}
 	return c.store.SaveState(profileID, state)
+}
+
+// applyInboundFromKeep reconciles Keep-side changes into the wiki
+// before the outbound diff runs. Returns the (possibly updated)
+// binding (id_map gains entries for fresh-from-Keep items) and a
+// freshly-loaded checklist reflecting the post-apply state.
+//
+// Three classes of inbound change:
+//
+//  1. New on Keep, not in wiki — a Keep node whose serverID isn't in
+//     binding.ItemIDMap (reverse). Apply via AddItemForSync; record
+//     the new uid in the id_map.
+//
+//  2. Updated on Keep — a Keep node whose serverID IS in id_map and
+//     whose Updated timestamp is newer than the wiki item's
+//     UpdatedAt. Apply via UpdateItemForSync (replaces text/tags/
+//     description, reconciles checked).
+//
+//  3. Trashed/Deleted on Keep — a Keep node whose serverID is in
+//     id_map and whose Trashed/Deleted timestamp is non-zero. Apply
+//     via DeleteItemForSync; remove from id_map.
+//
+// Suppression: each inbound mutation fires the mutator's notify hook,
+// which would normally enqueue another sync. The suppressor blocks
+// scheduleSync for this binding's key for the duration of the apply
+// pass (refcounted). Outbound push then runs unsuppressed; if it
+// itself produces new wiki state via the response (e.g. new Keep
+// serverIDs), those land via the response-walk in the caller.
+func (c *Connector) applyInboundFromKeep(ctx context.Context, profileID wikipage.PageIdentifier, binding Binding, pull protocol.ChangesResponse, currentChecklist *apiv1.Checklist) (Binding, *apiv1.Checklist, error) {
+	if c.checklistW == nil {
+		// No mutator wired — outbound-only mode. Return inputs as-is.
+		return binding, currentChecklist, nil
+	}
+	if c.suppressor != nil {
+		c.suppressor.Suppress(profileID, binding.Page, binding.ListName)
+		defer c.suppressor.Unsuppress(profileID, binding.Page, binding.ListName)
+	}
+
+	// Reverse map: serverID → wiki uid, from the binding's id_map.
+	rev := make(map[string]string, len(binding.ItemIDMap))
+	for uid, sid := range binding.ItemIDMap {
+		rev[sid] = uid
+	}
+
+	// Wiki items by uid (for find-by-uid update path).
+	wikiByUID := make(map[string]*apiv1.ChecklistItem, len(currentChecklist.GetItems()))
+	for _, it := range currentChecklist.GetItems() {
+		wikiByUID[it.GetUid()] = it
+	}
+
+	if binding.ItemIDMap == nil {
+		binding.ItemIDMap = map[string]string{}
+	}
+
+	for _, n := range pull.Nodes {
+		if n.Type != protocol.NodeTypeListItem {
+			continue
+		}
+		if n.ParentID != binding.KeepNoteID && n.ParentServerID != binding.KeepNoteID {
+			continue
+		}
+		serverID := n.ServerID
+		if serverID == "" {
+			continue
+		}
+		isAlive := n.Timestamps.Trashed.IsZero() && n.Timestamps.Deleted.IsZero()
+		uid, knownToWiki := rev[serverID]
+
+		switch {
+		case isAlive && !knownToWiki:
+			// Class 1: new from Keep. Convert to wiki shape and add.
+			wikiItem, err := KeepToWiki(n)
+			if err != nil {
+				// Skip malformed nodes rather than fail the whole sync.
+				continue
+			}
+			desc := ""
+			if wikiItem.Description != nil {
+				desc = *wikiItem.Description
+			}
+			newUID, err := c.checklistW.AddItemForSync(ctx, binding.Page, binding.ListName,
+				wikiItem.GetText(), wikiItem.GetChecked(), wikiItem.GetTags(), desc, n.SortValue)
+			if err != nil {
+				continue
+			}
+			binding.ItemIDMap[newUID] = serverID
+
+		case !isAlive && knownToWiki:
+			// Class 3: trashed on Keep. Delete from wiki.
+			_ = c.checklistW.DeleteItemForSync(ctx, binding.Page, binding.ListName, uid)
+			delete(binding.ItemIDMap, uid)
+
+		case isAlive && knownToWiki:
+			// Class 2: maybe updated on Keep. Compare Keep's Updated
+			// to wiki's UpdatedAt; only push if Keep is newer.
+			wikiItem, ok := wikiByUID[uid]
+			if !ok {
+				continue
+			}
+			if !shouldPullKeepUpdate(n.Timestamps.Updated, wikiItem.GetUpdatedAt()) {
+				continue
+			}
+			converted, err := KeepToWiki(n)
+			if err != nil {
+				continue
+			}
+			desc := ""
+			if converted.Description != nil {
+				desc = *converted.Description
+			}
+			_ = c.checklistW.UpdateItemForSync(ctx, binding.Page, binding.ListName, uid,
+				converted.GetText(), converted.GetChecked(), converted.GetTags(), desc)
+		}
+	}
+
+	// Reload wiki state — the apply mutated it.
+	freshChecklist, err := c.checklistR.ListItems(ctx, binding.Page, binding.ListName)
+	if err != nil {
+		return binding, currentChecklist, fmt.Errorf("reload after inbound apply: %w", err)
+	}
+
+	// Persist binding's updated id_map (delete + new uid entries).
+	if persistErr := c.persistBindingMap(profileID, binding); persistErr != nil {
+		// Persist failure is recoverable — outbound still works against
+		// the in-memory map for this run; next run reloads from store.
+		_ = persistErr
+	}
+
+	return binding, freshChecklist, nil
+}
+
+// persistBindingMap writes the updated binding back to the store.
+// Used after inbound apply to lock in id_map changes (new uids,
+// dropped trashed entries) before the outbound push runs.
+func (c *Connector) persistBindingMap(profileID wikipage.PageIdentifier, binding Binding) error {
+	state, err := c.store.LoadState(profileID)
+	if err != nil {
+		return err
+	}
+	for i, b := range state.Bindings {
+		if b.Page == binding.Page && b.ListName == binding.ListName {
+			state.Bindings[i] = binding
+			break
+		}
+	}
+	return c.store.SaveState(profileID, state)
+}
+
+// shouldPullKeepUpdate decides whether a Keep node's Updated
+// timestamp is newer enough than the wiki item's UpdatedAt to warrant
+// pulling the Keep state. Returns false if the wiki UpdatedAt is
+// missing or already at-or-after Keep's Updated.
+func shouldPullKeepUpdate(keepUpdated time.Time, wikiUpdatedAt *timestamppb.Timestamp) bool {
+	if keepUpdated.IsZero() {
+		return false
+	}
+	if wikiUpdatedAt == nil {
+		return true
+	}
+	return keepUpdated.After(wikiUpdatedAt.AsTime())
 }
 
 // seedIDMapFromExistingList reconciles wiki items against an existing
@@ -788,6 +1005,7 @@ func generatePushSessionID(now time.Time) (string, error) {
 // Unbind removes the calling user's binding for (page, listName).
 func (c *Connector) Unbind(_ context.Context, profileID wikipage.PageIdentifier, page, listName string) error {
 	err := c.store.RemoveBinding(profileID, page, listName)
+	c.noteBindingRemoved(BindingKey{ProfileID: profileID, Page: page, ListName: listName})
 	if errors.Is(err, ErrBindingNotFound) {
 		// Idempotent at the orchestrator boundary — UI calls this on
 		// rebind/remove flows and shouldn't have to disambiguate.
