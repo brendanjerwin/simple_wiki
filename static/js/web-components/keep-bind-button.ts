@@ -80,6 +80,25 @@ const localCSS = css`
     color: var(--color-success, #2f9e44);
     font-weight: 600;
   }
+  /* Strip the default secondary-button weight off the interlock's
+     trigger when used here. The Unbind affordance lives next to a
+     muted caption; matching that visual weight keeps it from
+     dominating the surroundings. */
+  confirmation-interlock-button::part(trigger) {
+    background: transparent;
+    border: none;
+    color: var(--color-text-muted, #868e96);
+    font-size: 11px;
+    font-weight: 400;
+    padding: 0 4px;
+    text-decoration: underline;
+    text-decoration-style: dotted;
+    text-underline-offset: 2px;
+  }
+  confirmation-interlock-button::part(trigger):hover {
+    color: var(--color-text-primary, inherit);
+    text-decoration-style: solid;
+  }
   .picker {
     display: flex;
     align-items: center;

@@ -85,12 +85,19 @@ type Connector struct {
 	checklistR    ChecklistReader
 	checklistW    ChecklistMutator
 	suppressor    SyncSuppressor
+	enqueuer      JobEnqueuer
 	authBuilder   func(deviceID string) AuthExchanger
 	clientBuilder KeepClientFactory
 
 	activeMu sync.Mutex
 	active   *activeBindings
 }
+
+// SetJobEnqueuer wires the queue Bind enqueues a sync job into. Same
+// JobQueueCoordinator used by the cron tick and the SyncDebouncer, so
+// every sync — bind, save, cron — flows through the same single-worker
+// queue and can never race the targetVersion cursor against itself.
+func (c *Connector) SetJobEnqueuer(e JobEnqueuer) { c.enqueuer = e }
 
 // SyncSuppressor is the notify-suppression interface SyncDebouncer
 // satisfies. SyncToKeep wraps its inbound-apply pass in
@@ -331,66 +338,27 @@ type InitialItem struct {
 	Checked     bool
 }
 
-// Bind binds (page, listName) to a Keep note for the calling user. If
-// keepNoteID is empty, a new note titled `listName` is created. When
-// initialItems is non-empty AND a new note is being created, the items
-// are pushed in the same Changes request as the list creation —
-// Google's backend rejects two-step (create list → push items) with
-// 500 Unknown Error, so bundling is the only path that works.
+// Bind records a (page, listName) ↔ Keep-note binding for the calling
+// user, then enqueues a SyncToKeep job. The actual data push (creating
+// the Keep LIST when binding fresh, or reconciling against an existing
+// LIST) happens inside SyncToKeep — not inline here. This is the
+// "one method to sync" invariant: every trigger (bind, save, cron)
+// converges on Connector.SyncToKeep.
 //
-// initialItems is ignored when binding to an existing keepNoteID; in
-// that case, we pull the existing Keep items and pre-seed the
-// item_id_map by exact-text match so the next sync diff doesn't
-// duplicate every wiki item as a fresh push.
+// keepNoteID == "" means "create a new Keep note titled listName."
+// SyncToKeep notices the empty keep_note_id and runs the bundled
+// CreateListWithItems wire-protocol oddity (Keep rejects two-step
+// create-list-then-push-items with 500). For an existing keepNoteID
+// the binding is recorded with a base-text-match seed of the
+// item_id_map so the first sync diff doesn't duplicate items
+// already present on Keep.
 func (c *Connector) Bind(ctx context.Context, profileID wikipage.PageIdentifier, page, listName, keepNoteID string, initialItems []InitialItem) (Binding, error) {
-	client, state, err := c.keepClientFor(ctx, profileID)
-	if err != nil {
-		return Binding{}, err
-	}
-
 	idMap := map[string]string{}
-	if keepNoteID == "" {
-		specs := make([]protocol.ListItemSpec, len(initialItems))
-		for i, it := range initialItems {
-			// Encode the same way WikiToKeep does so the initial-bind
-			// push lands with tags + description visible on the
-			// phone, and so the next sync's text-match adoption
-			// recognizes it as the corresponding wiki item.
-			text := encodeTextWithTags(it.Text, it.Tags)
-			if it.Description != "" {
-				text = text + descriptionSeparator + it.Description
-			}
-			// Lower SortValues sort to the bottom in Keep, so map the
-			// caller's intended top-to-bottom order into descending
-			// values. (n-i)*1000 leaves room for future inserts.
-			specs[i] = protocol.ListItemSpec{
-				Text:      text,
-				Checked:   it.Checked,
-				SortValue: fmt.Sprintf("%d", (len(initialItems)-i)*sortValueGap),
-			}
-		}
-		result, err := client.CreateListWithItems(ctx, listName, specs)
+	if keepNoteID != "" {
+		client, _, err := c.keepClientFor(ctx, profileID)
 		if err != nil {
 			return Binding{}, err
 		}
-		keepNoteID = result.ListServerID
-		// Populate the binding's wiki-uid → keep-serverID mapping from
-		// what the bundled create returned. This is the seed every
-		// future incremental sync uses to identify which Keep node
-		// corresponds to which wiki item.
-		for i, serverID := range result.ItemServerIDs {
-			if i >= len(initialItems) || serverID == "" {
-				continue
-			}
-			if uid := initialItems[i].UID; uid != "" {
-				idMap[uid] = serverID
-			}
-		}
-	} else {
-		// Bind to existing Keep list: pull items, match by exact text
-		// against the caller's wiki items, populate id_map. Without
-		// this, every wiki item looks "fresh" to the sync engine and
-		// gets pushed to Keep as a duplicate of an item already there.
 		idMap = c.seedIDMapFromExistingList(ctx, client, keepNoteID, initialItems)
 	}
 
@@ -406,7 +374,17 @@ func (c *Connector) Bind(ctx context.Context, profileID wikipage.PageIdentifier,
 		return Binding{}, err
 	}
 	c.noteBindingAdded(BindingKey{ProfileID: profileID, Page: page, ListName: listName})
-	_ = state // reserved for future per-binding bookkeeping during bind
+
+	// Enqueue the unified sync — same job the cron tick and the
+	// SyncDebouncer enqueue. SyncToKeep reads wiki state, creates the
+	// Keep LIST if needed (fresh-bind case), pushes any item diff,
+	// pulls Keep state and applies it back, and persists the binding's
+	// updated id_map. We don't run it inline because the bind RPC
+	// should return promptly; the queue worker will pick this up
+	// within milliseconds.
+	if c.enqueuer != nil {
+		_ = c.enqueuer.EnqueueJob(NewKeepOutboundSyncJob(c, profileID, page, listName))
+	}
 	return binding, nil
 }
 
@@ -483,6 +461,16 @@ func (c *Connector) SyncToKeep(ctx context.Context, profileID wikipage.PageIdent
 	}
 
 	now := c.clock.Now().UTC()
+
+	// Fresh-bind branch: binding has no Keep serverID yet. Use the
+	// bundled CreateListWithItems path (Keep rejects two-step
+	// create-list + push-items with 500 Unknown Error). After this,
+	// the binding is fully initialized and subsequent syncs go down
+	// the steady-state pull/apply/push path below.
+	if binding.KeepNoteID == "" {
+		return c.bootstrapKeepListForBinding(ctx, profileID, binding, checklist, client, now)
+	}
+
 	pull, err := client.Changes(ctx, protocol.ChangesRequest{
 		SessionID:       fmt.Sprintf("s--%d--syncpull-%s", now.UnixMilli(), binding.KeepNoteID),
 		ClientTimestamp: now.Format("2006-01-02T15:04:05.000000Z"),
@@ -641,6 +629,61 @@ func (c *Connector) SyncToKeep(ctx context.Context, profileID wikipage.PageIdent
 	}
 
 	return c.markBindingSynced(profileID, binding, now)
+}
+
+// bootstrapKeepListForBinding creates the Keep LIST for a binding that
+// was recorded with KeepNoteID="". Uses the bundled CreateListWithItems
+// path because Keep rejects two-step (create-list, push-items) with
+// stage3 HTTP 500. Pulls wiki items, encodes them with the same tags
+// + description encoder the steady-state push uses, sends one Changes
+// request, then persists the binding with the server-assigned LIST
+// serverID + the per-item id_map echoed back.
+//
+// On success the binding is fully initialized; the next sync (cron or
+// edit-triggered) falls through to the normal pull/apply/push path.
+func (c *Connector) bootstrapKeepListForBinding(ctx context.Context, profileID wikipage.PageIdentifier, binding Binding, checklist *apiv1.Checklist, client KeepClient, now time.Time) error {
+	wikiItems := checklist.GetItems()
+	specs := make([]protocol.ListItemSpec, len(wikiItems))
+	for i, it := range wikiItems {
+		// Same encoder the steady-state SyncToKeep uses, so the
+		// initial push and subsequent diff-pushes produce
+		// byte-identical wire shapes for the same wiki state.
+		head := encodeTextWithTags(it.GetText(), it.GetTags())
+		text := head
+		if d := it.GetDescription(); d != "" {
+			text = head + descriptionSeparator + d
+		}
+		specs[i] = protocol.ListItemSpec{
+			Text:      text,
+			Checked:   it.GetChecked(),
+			SortValue: fmt.Sprintf("%d", (len(wikiItems)-i)*sortValueGap),
+		}
+	}
+
+	result, err := client.CreateListWithItems(ctx, binding.ListName, specs)
+	if err != nil {
+		return fmt.Errorf("bootstrap create-list: %w", err)
+	}
+
+	binding.KeepNoteID = result.ListServerID
+	binding.KeepNoteTitle = binding.ListName
+	if binding.ItemIDMap == nil {
+		binding.ItemIDMap = map[string]string{}
+	}
+	for i, serverID := range result.ItemServerIDs {
+		if i >= len(wikiItems) || serverID == "" {
+			continue
+		}
+		if uid := wikiItems[i].GetUid(); uid != "" {
+			binding.ItemIDMap[uid] = serverID
+		}
+	}
+
+	// Suppress is unnecessary here — CreateListWithItems doesn't
+	// touch wiki state, just reads — but persistBindingMap uses the
+	// store's per-profile mutex so concurrent bind/cron interleavings
+	// can't shred the id_map.
+	return c.persistBindingMap(profileID, binding)
 }
 
 // markBindingSynced persists the updated binding (id_map changes) and

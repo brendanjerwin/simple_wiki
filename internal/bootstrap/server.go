@@ -505,6 +505,9 @@ func setupGRPCServer(
 	// satisfies bridge.ChecklistMutator's For-Sync helpers directly.
 	keepConnector.SetChecklistMutator(checklistMutator)
 	keepConnector.SetSyncSuppressor(keepSyncDebouncer)
+	// Bind enqueues a sync job through the same queue cron + debouncer
+	// use, unifying every sync trigger behind Connector.SyncToKeep.
+	keepConnector.SetJobEnqueuer(site.GetJobQueueCoordinator())
 	// Cron tick fires every 30s: enumerate active bindings via a
 	// fresh index scan + profile decode each tick (handles pre-existing
 	// bindings that weren't bound during this process's lifetime),
