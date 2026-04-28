@@ -54,8 +54,11 @@ func NewAuthenticator(httpClient *http.Client, authURL, deviceID string) *Authen
 }
 
 // KeepServiceScope is the OAuth scope string we hand to Stage 2 to receive
-// a bearer usable against the Keep API.
-const KeepServiceScope = "oauth2:https://www.googleapis.com/auth/memento"
+// a bearer usable against the Keep API. Mirrors gkeepapi's Keep.OAUTH_SCOPES
+// constant — TWO space-separated scopes (memento + reminders) under a
+// single "oauth2:" prefix. Using only one scope causes Google to return
+// BadAuthentication on the Stage 2 exchange.
+const KeepServiceScope = "oauth2:https://www.googleapis.com/auth/memento https://www.googleapis.com/auth/reminders"
 
 // keepAndroidApp is the Android package name we claim to be — required by
 // Stage 2.
