@@ -39,7 +39,7 @@ Two-stage exchange that mimics what the Android Keep app does on first launch:
                 +----------------------+
                 |  Keep API            |
                 |  Authorization:      |
-                |  GoogleLogin auth=…  |
+                |  OAuth <bearer>      |
                 +----------------------+
 ```
 
@@ -99,7 +99,7 @@ Two-stage exchange that mimics what the Android Keep app does on first launch:
 ### Stage 3 — Keep API
 
 - **Base URL**: `https://www.googleapis.com/notes/v1/`
-- **Auth header**: `Authorization: GoogleLogin auth=<bearer>`
+- **Auth header**: `Authorization: OAuth <bearer>` (mirrors gkeepapi `_send` line 271; `GoogleLogin auth=…` is the legacy Android format and now returns 401 from googleapis.com)
 - **Sync endpoint**: `POST /notes/v1/changes`
 - **Request body** (JSON):
 

@@ -67,7 +67,7 @@ const keepAndroidApp = "com.google.android.keep"
 // ExchangeMasterTokenForBearer performs Stage 2 of the auth flow: trade a
 // long-lived master token for a short-lived bearer scoped to the Keep API.
 // Bearer is returned verbatim — caller adds it as
-// "Authorization: GoogleLogin auth=<bearer>" on Keep API requests.
+// "Authorization: OAuth <bearer>" on Keep API requests.
 //
 // Note that, unlike Stage 1, the master token is sent verbatim in the
 // EncryptedPasswd slot (Google reuses the field name). It is *not* RSA

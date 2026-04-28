@@ -33,7 +33,7 @@ type KeepClient struct {
 
 // NewKeepClient constructs a KeepClient. baseURL is the Keep API base
 // (production callers pass DefaultKeepBaseURL). bearer is the value to put
-// after "GoogleLogin auth=" in the Authorization header.
+// after "OAuth " in the Authorization header (matches gkeepapi).
 func NewKeepClient(httpClient *http.Client, baseURL, bearer string) *KeepClient {
 	return &KeepClient{httpClient: httpClient, baseURL: baseURL, bearer: bearer}
 }
@@ -129,7 +129,7 @@ func (c *KeepClient) Changes(ctx context.Context, req ChangesRequest) (ChangesRe
 	if err != nil {
 		return ChangesResponse{}, fmt.Errorf("build changes request: %w", err)
 	}
-	httpReq.Header.Set("Authorization", "GoogleLogin auth="+c.bearer)
+	httpReq.Header.Set("Authorization", "OAuth "+c.bearer)
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("User-Agent", userAgent)
 

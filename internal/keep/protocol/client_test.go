@@ -207,8 +207,8 @@ var _ = Describe("KeepClient.Changes", func() {
 			Expect(lastRequest.URL.Path).To(HaveSuffix("changes"))
 		})
 
-		It("should send the GoogleLogin auth header", func() {
-			Expect(lastRequest.Header.Get("Authorization")).To(Equal("GoogleLogin auth=fake-bearer"))
+		It("should send the OAuth auth header", func() {
+			Expect(lastRequest.Header.Get("Authorization")).To(Equal("OAuth fake-bearer"))
 		})
 
 		It("should send a JSON content-type", func() {
