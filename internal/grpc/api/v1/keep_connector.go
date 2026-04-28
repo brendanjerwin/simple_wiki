@@ -44,6 +44,13 @@ func (s *Server) ExchangeAndStore(ctx context.Context, req *apiv1.ExchangeAndSto
 	}
 	state, err := s.keepConnector.Connect(ctx, profileID, req.GetEmail(), req.GetOauthToken())
 	if err != nil {
+		// Log the full error chain server-side so journalctl shows
+		// Google's exact rejection (memento/reminders scope, ErrorDetail,
+		// etc.) without exposing the captured oauth_token. The mapped
+		// gRPC error sent back to the client still redacts.
+		if s.logger != nil {
+			s.logger.Error("KeepConnectorService.ExchangeAndStore failed for profile=%s: %v", string(profileID), err)
+		}
 		return nil, mapKeepConnectorErr(err)
 	}
 	return &apiv1.ExchangeAndStoreResponse{State: connectorStateToProto(state)}, nil
