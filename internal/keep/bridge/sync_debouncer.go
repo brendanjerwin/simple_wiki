@@ -94,18 +94,36 @@ func (d *SyncDebouncer) Unsuppress(profileID wikipage.PageIdentifier, page, list
 	}
 }
 
+// syncIdentityLoginName is the LoginName the inbound-sync code path
+// uses for its synthetic identity. Hard-coded here (rather than
+// imported from checklistmutator.SyncIdentity) to avoid a bridge →
+// checklistmutator import cycle. Kept in sync with the const in
+// server/checklistmutator/sync_helpers.go.
+const syncIdentityLoginName = "system:keep-sync"
+
 // OnChecklistMutated implements checklistmutator.Subscriber. Resolves
 // the calling identity to a profileID, then debounces an outbound
 // sync enqueue for (profileID, page, listName).
 //
 // Anonymous identities (no LoginName) are silently dropped — they
 // can't have a binding because Bind requires a real user.
+//
+// The synthetic SyncIdentity is dropped explicitly: it's used only
+// when applyInboundFromKeep is writing inbound state via the mutator,
+// and we MUST NOT re-enqueue a sync for that. The suppressor is also
+// in play during apply, but matches by (real-user-profileID, page,
+// listName); the synthetic identity would resolve to a different
+// profileID and slip past the suppressor. Filtering at the source
+// is the simpler invariant.
 func (d *SyncDebouncer) OnChecklistMutated(page, listName string, identity tailscale.IdentityValue) {
 	if identity == nil {
 		return
 	}
 	login := identity.LoginName()
 	if login == "" {
+		return
+	}
+	if login == syncIdentityLoginName {
 		return
 	}
 	profileID, err := wikipage.ProfileIdentifierFor(login)
