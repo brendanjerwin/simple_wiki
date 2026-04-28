@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -139,7 +140,13 @@ func (c *KeepClient) Changes(ctx context.Context, req ChangesRequest) (ChangesRe
 	defer func() { _ = resp.Body.Close() }()
 
 	if classified := classifyHTTPStatus(resp.StatusCode); classified != nil {
-		return ChangesResponse{}, classified
+		// Read the body so the error chain can show what Keep actually
+		// said. Bodies are typically JSON like {"error":{"code":401,
+		// "message":"..."}}; surfacing them is critical for diagnosing
+		// "Stage 2 succeeded but the bearer doesn't pass the Keep API
+		// auth check" — distinct from any of the auth-stage rejections.
+		body, _ := io.ReadAll(resp.Body)
+		return ChangesResponse{}, fmt.Errorf("%w: stage3 HTTP %d: %s", classified, resp.StatusCode, truncateBody(body))
 	}
 
 	var wireResp wireChangesResponse
@@ -148,6 +155,25 @@ func (c *KeepClient) Changes(ctx context.Context, req ChangesRequest) (ChangesRe
 	}
 
 	return decodeChangesResponse(wireResp)
+}
+
+// truncateBody bounds an HTTP error body to 512 bytes so a chatty error
+// page doesn't blow out journalctl lines. Replaces non-printable bytes
+// with '?'.
+func truncateBody(b []byte) string {
+	const maxLen = 512
+	if len(b) > maxLen {
+		b = b[:maxLen]
+	}
+	return strings.Map(func(r rune) rune {
+		if r >= 0x20 && r < 0x7f {
+			return r
+		}
+		if r == '\n' || r == '\t' {
+			return ' '
+		}
+		return '?'
+	}, string(b))
 }
 
 // classifyHTTPStatus maps Keep API status codes to typed errors. nil means
