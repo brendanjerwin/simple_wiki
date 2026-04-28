@@ -280,6 +280,36 @@ var _ = Describe("GoldmarkRenderer", func() {
 			})
 		})
 
+		When("rendering HTML with a keep-connect element", func() {
+			BeforeEach(func() {
+				source = []byte(`<keep-connect></keep-connect>`)
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should preserve the keep-connect element through the sanitizer", func() {
+				Expect(string(output)).To(ContainSubstring("<keep-connect"))
+			})
+		})
+
+		When("rendering HTML with a keep-bind-button element", func() {
+			BeforeEach(func() {
+				source = []byte(`<keep-bind-button page="shopping" list-name="groceries"></keep-bind-button>`)
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should preserve the keep-bind-button element and its attributes", func() {
+				Expect(string(output)).To(ContainSubstring("<keep-bind-button"))
+				Expect(string(output)).To(ContainSubstring(`page="shopping"`))
+				Expect(string(output)).To(ContainSubstring(`list-name="groceries"`))
+			})
+		})
+
 		When("rendering markdown with wikilinks", func() {
 			BeforeEach(func() {
 				source = []byte("This is a [[wikilink]] in text")

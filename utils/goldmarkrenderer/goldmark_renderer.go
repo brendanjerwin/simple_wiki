@@ -128,6 +128,15 @@ func sanitizeWikiHTML(rawHTML []byte) []byte {
 	// Allow wiki-blog custom element and its server-rendered fallback children
 	p.AllowElements("wiki-blog")
 	p.AllowAttrs("blog-id", "max-articles", "page", "hide-new-post").OnElements("wiki-blog")
+	// Allow keep-connect custom element on profile pages — emitted by the
+	// {{ KeepConnect }} macro. Takes no attributes today.
+	p.AllowNoAttrs().OnElements("keep-connect")
+	// Allow keep-bind-button custom element embedded inside the wiki-checklist
+	// component (and renderable directly if a macro ever wants to emit it
+	// outside that context). page + list-name attributes are how it scopes
+	// its profile query.
+	p.AllowElements("keep-bind-button")
+	p.AllowAttrs("page", "list-name").OnElements("keep-bind-button")
 	// Allow collapsible-heading custom element for #^ syntax
 	p.AllowElements("collapsible-heading")
 	p.AllowAttrs("heading-level").OnElements("collapsible-heading")
