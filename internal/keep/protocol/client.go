@@ -47,8 +47,14 @@ func NewKeepClient(httpClient *http.Client, baseURL, bearer string) *KeepClient 
 // '<list_name>'" from the picker.
 func (c *KeepClient) CreateList(ctx context.Context, title string) (string, error) {
 	now := time.Now().UTC()
-	clientID := generateKeepID(now)
-	sessionID := generateSessionID(now)
+	clientID, err := generateKeepID(now)
+	if err != nil {
+		return "", err
+	}
+	sessionID, err := generateSessionID(now)
+	if err != nil {
+		return "", err
+	}
 
 	listNode := Node{
 		Kind: "notes#node",
@@ -80,19 +86,27 @@ func (c *KeepClient) CreateList(ctx context.Context, title string) (string, erro
 
 // generateKeepID returns a Keep-style identifier of the form
 // "<ms-hex>.<16-hex-char random>". Matches the gkeepapi reference
-// implementation's _generateId.
-func generateKeepID(now time.Time) string {
+// implementation's _generateId. crypto/rand failure is exceptional
+// (entropy starvation on container startup) but real — surface as an
+// error rather than silently producing all-zero ids that would collide
+// across simultaneous CreateList calls.
+func generateKeepID(now time.Time) (string, error) {
 	var entropy [randomBytes]byte
-	_, _ = io.ReadFull(rand.Reader, entropy[:])
-	return fmt.Sprintf("%x.%016x", now.UnixMilli(), binary.BigEndian.Uint64(entropy[:]))
+	if _, err := io.ReadFull(rand.Reader, entropy[:]); err != nil {
+		return "", fmt.Errorf("read entropy: %w", err)
+	}
+	return fmt.Sprintf("%x.%016x", now.UnixMilli(), binary.BigEndian.Uint64(entropy[:])), nil
 }
 
 // generateSessionID returns a Keep-style session id ("s--<ms>--<10 digits>").
-func generateSessionID(now time.Time) string {
+// See generateKeepID for the entropy-error rationale.
+func generateSessionID(now time.Time) (string, error) {
 	var entropy [randomBytes]byte
-	_, _ = io.ReadFull(rand.Reader, entropy[:])
+	if _, err := io.ReadFull(rand.Reader, entropy[:]); err != nil {
+		return "", fmt.Errorf("read entropy: %w", err)
+	}
 	n := binary.BigEndian.Uint64(entropy[:]) % sessionIDRange
-	return fmt.Sprintf("s--%d--%010d", now.UnixMilli(), n+sessionIDOffset)
+	return fmt.Sprintf("s--%d--%010d", now.UnixMilli(), n+sessionIDOffset), nil
 }
 
 // clientTimestamp returns the wire format Keep expects: RFC3339 with
@@ -158,8 +172,12 @@ func (c *KeepClient) Changes(ctx context.Context, req ChangesRequest) (ChangesRe
 		// "message":"..."}}; surfacing them is critical for diagnosing
 		// "Stage 2 succeeded but the bearer doesn't pass the Keep API
 		// auth check" — distinct from any of the auth-stage rejections.
-		errBody, _ := io.ReadAll(resp.Body)
-		return ChangesResponse{}, fmt.Errorf("%w: stage3 HTTP %d: %s", classified, resp.StatusCode, truncateBody(errBody))
+		errBody, readErr := io.ReadAll(resp.Body)
+		bodyTxt := truncateBody(errBody)
+		if readErr != nil {
+			bodyTxt = fmt.Sprintf("(body read failed: %v) %s", readErr, bodyTxt)
+		}
+		return ChangesResponse{}, fmt.Errorf("%w: stage3 HTTP %d: %s", classified, resp.StatusCode, bodyTxt)
 	}
 
 	rawBody, err := io.ReadAll(resp.Body)
@@ -397,12 +415,20 @@ func decodeChangesResponse(w wireChangesResponse) (ChangesResponse, error) {
 			// Unknown node type: skip silently (forward compatibility).
 			continue
 		}
-		out.Nodes = append(out.Nodes, decodeNode(wn))
+		n, err := decodeNode(wn)
+		if err != nil {
+			return ChangesResponse{}, fmt.Errorf("%w: node %q: %w", ErrProtocolDrift, wn.ID, err)
+		}
+		out.Nodes = append(out.Nodes, n)
 	}
 	return out, nil
 }
 
-func decodeNode(w wireNode) Node {
+func decodeNode(w wireNode) (Node, error) {
+	ts, err := decodeTimestamps(w.Timestamps)
+	if err != nil {
+		return Node{}, fmt.Errorf("timestamps: %w", err)
+	}
 	return Node{
 		Kind:        w.Kind,
 		ID:          w.ID,
@@ -414,34 +440,58 @@ func decodeNode(w wireNode) Node {
 		Checked:     w.Checked,
 		SortValue:   w.SortValue,
 		BaseVersion: w.BaseVersion,
-		Timestamps:  decodeTimestamps(w.Timestamps),
-	}
+		Timestamps:  ts,
+	}, nil
 }
 
-func decodeTimestamps(w wireTimestamps) Timestamps {
+func decodeTimestamps(w wireTimestamps) (Timestamps, error) {
+	created, err := parseRFC3339Micros(w.Created)
+	if err != nil {
+		return Timestamps{}, fmt.Errorf("created: %w", err)
+	}
+	updated, err := parseRFC3339Micros(w.Updated)
+	if err != nil {
+		return Timestamps{}, fmt.Errorf("updated: %w", err)
+	}
+	userEdited, err := parseRFC3339Micros(w.UserEdited)
+	if err != nil {
+		return Timestamps{}, fmt.Errorf("userEdited: %w", err)
+	}
+	trashed, err := parseRFC3339Micros(w.Trashed)
+	if err != nil {
+		return Timestamps{}, fmt.Errorf("trashed: %w", err)
+	}
+	deleted, err := parseRFC3339Micros(w.Deleted)
+	if err != nil {
+		return Timestamps{}, fmt.Errorf("deleted: %w", err)
+	}
 	return Timestamps{
-		Created:    parseRFC3339Micros(w.Created),
-		Updated:    parseRFC3339Micros(w.Updated),
-		UserEdited: parseRFC3339Micros(w.UserEdited),
-		Trashed:    parseRFC3339Micros(w.Trashed),
-		Deleted:    parseRFC3339Micros(w.Deleted),
-	}
+		Created:    created,
+		Updated:    updated,
+		UserEdited: userEdited,
+		Trashed:    trashed,
+		Deleted:    deleted,
+	}, nil
 }
 
-func parseRFC3339Micros(s string) time.Time {
+// parseRFC3339Micros returns zero/no-error for absent input ("") and
+// errors loudly on a non-empty unparseable input. Silently returning
+// zero on parse failure would collapse "trashed" / "deleted" timestamps
+// into "live" — surfacing tombstones as if they were active notes.
+func parseRFC3339Micros(s string) (time.Time, error) {
 	if s == "" {
-		return time.Time{}
+		return time.Time{}, nil
 	}
 	t, err := time.Parse(rfc3339Micros, s)
 	if err != nil {
 		// Try the more lenient RFC3339Nano in case Google trims trailing
-		// zeros. If still invalid, return zero — caller treats as "absent".
+		// zeros. If still invalid, the caller gets an error.
 		t, err = time.Parse(time.RFC3339Nano, s)
 		if err != nil {
-			return time.Time{}
+			return time.Time{}, fmt.Errorf("not a valid RFC3339 timestamp: %w", err)
 		}
 	}
-	return t.UTC()
+	return t.UTC(), nil
 }
 
 func firstNonEmpty(values ...string) string {

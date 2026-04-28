@@ -114,7 +114,7 @@ func (s *BindingStore) LoadState(profileID wikipage.PageIdentifier) (ConnectorSt
 		}
 		return ConnectorState{}, err
 	}
-	return decodeState(fm), nil
+	return decodeState(fm)
 }
 
 // SaveState overwrites the entire connector state on the profile page.
@@ -145,7 +145,10 @@ func (s *BindingStore) AddBinding(profileID wikipage.PageIdentifier, b Binding) 
 	if err != nil {
 		return err
 	}
-	state := decodeState(fm)
+	state, err := decodeState(fm)
+	if err != nil {
+		return err
+	}
 	if !state.IsConfigured() {
 		return ErrConnectorNotConfigured
 	}
@@ -174,7 +177,10 @@ func (s *BindingStore) RemoveBinding(profileID wikipage.PageIdentifier, page, li
 	if err != nil {
 		return err
 	}
-	state := decodeState(fm)
+	state, err := decodeState(fm)
+	if err != nil {
+		return err
+	}
 
 	for i, existing := range state.Bindings {
 		if existing.Page == page && existing.ListName == listName {
@@ -224,9 +230,13 @@ func (s *BindingStore) writeFrontMatter(profileID wikipage.PageIdentifier, fm wi
 // lockProfile acquires the per-profile mutex.
 func (s *BindingStore) lockProfile(profileID wikipage.PageIdentifier) func() {
 	v, _ := s.profilMu.LoadOrStore(profileID, &sync.Mutex{})
+	// INVARIANT ASSERTION: every value stored in profilMu is *sync.Mutex.
+	// Anything else here is a programming bug — falling back to a fresh
+	// mutex would silently break the per-profile serialization invariant
+	// (two writers could race). Panic loudly so the bug gets fixed.
 	mu, ok := v.(*sync.Mutex)
 	if !ok {
-		mu = &sync.Mutex{}
+		panic(fmt.Sprintf("keep bridge: profilMu held a %T, expected *sync.Mutex — programming bug", v))
 	}
 	mu.Lock()
 	return mu.Unlock
@@ -234,41 +244,60 @@ func (s *BindingStore) lockProfile(profileID wikipage.PageIdentifier) func() {
 
 // --- codec ----------------------------------------------------------------
 
-func decodeState(fm wikipage.FrontMatter) ConnectorState {
+func decodeState(fm wikipage.FrontMatter) (ConnectorState, error) {
 	connector := connectorMap(fm)
 	if connector == nil {
-		return ConnectorState{}
+		return ConnectorState{}, nil
+	}
+	connectedAt, err := parseTime(getString(connector, connectedAtField))
+	if err != nil {
+		return ConnectorState{}, fmt.Errorf("wiki.connectors.google_keep.connected_at: %w", err)
+	}
+	lastVerifiedAt, err := parseTime(getString(connector, lastVerifiedAtField))
+	if err != nil {
+		return ConnectorState{}, fmt.Errorf("wiki.connectors.google_keep.last_verified_at: %w", err)
+	}
+	bindings, err := decodeBindings(connector[bindingsField])
+	if err != nil {
+		return ConnectorState{}, err
 	}
 	return ConnectorState{
 		Email:               getString(connector, emailField),
 		MasterToken:         getString(connector, masterTokenField),
-		ConnectedAt:         parseTime(getString(connector, connectedAtField)),
-		LastVerifiedAt:      parseTime(getString(connector, lastVerifiedAtField)),
+		ConnectedAt:         connectedAt,
+		LastVerifiedAt:      lastVerifiedAt,
 		PollIntervalSeconds: getInt64(connector, pollIntervalSecondsField),
-		Bindings:            decodeBindings(connector[bindingsField]),
-	}
+		Bindings:            bindings,
+	}, nil
 }
 
-func decodeBindings(raw any) []Binding {
+func decodeBindings(raw any) ([]Binding, error) {
+	if raw == nil {
+		return nil, nil
+	}
 	arr, ok := raw.([]any)
 	if !ok {
-		return nil
+		return nil, fmt.Errorf("wiki.connectors.google_keep.bindings is %T, expected list", raw)
 	}
 	out := make([]Binding, 0, len(arr))
-	for _, entry := range arr {
+	for i, entry := range arr {
 		m, ok := entry.(map[string]any)
 		if !ok {
-			continue
+			return nil, fmt.Errorf("wiki.connectors.google_keep.bindings[%d] is %T, expected map", i, entry)
+		}
+		boundAt, err := parseTime(getString(m, bindingBoundAtField))
+		if err != nil {
+			return nil, fmt.Errorf("wiki.connectors.google_keep.bindings[%d].bound_at: %w", i, err)
 		}
 		out = append(out, Binding{
 			Page:          getString(m, bindingPageField),
 			ListName:      getString(m, bindingListNameField),
 			KeepNoteID:    getString(m, bindingKeepNoteIDField),
 			KeepNoteTitle: getString(m, bindingKeepNoteTitleField),
-			BoundAt:       parseTime(getString(m, bindingBoundAtField)),
+			BoundAt:       boundAt,
 		})
 	}
-	return out
+	return out, nil
 }
 
 func encodeState(fm wikipage.FrontMatter, state ConnectorState) {
@@ -382,13 +411,18 @@ func getInt64(m map[string]any, key string) int64 {
 	}
 }
 
-func parseTime(s string) time.Time {
+// parseTime accepts an empty string (returns zero, no error — "absent")
+// or an RFC3339 string. A non-empty unparseable input is an error: not
+// the same thing as "absent", and silently collapsing the two would
+// hide profile-page corruption (a recently-connected user would render
+// as "never verified", etc.).
+func parseTime(s string) (time.Time, error) {
 	if s == "" {
-		return time.Time{}
+		return time.Time{}, nil
 	}
 	t, err := time.Parse(time.RFC3339, s)
 	if err != nil {
-		return time.Time{}
+		return time.Time{}, fmt.Errorf("not a valid RFC3339 timestamp: %w", err)
 	}
-	return t.UTC()
+	return t.UTC(), nil
 }

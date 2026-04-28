@@ -1,6 +1,7 @@
 package bridge
 
 import (
+	"fmt"
 	"strconv"
 
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -47,10 +48,15 @@ func WikiToKeep(item *apiv1.ChecklistItem, parentNoteID, keepItemID string) prot
 // Tags are extracted from the text via the same hashtag parser the rest
 // of the wiki uses. The wiki UID is *not* set here — caller assigns one
 // when adding a brand-new item or looks one up via the per-binding
-// id_map.
-func KeepToWiki(node protocol.Node) *apiv1.ChecklistItem {
+// id_map. Returns an error rather than silently coercing a malformed
+// SortValue to 0 — silent coercion would corrupt the wiki ordering on
+// inbound sync without leaving any trace.
+func KeepToWiki(node protocol.Node) (*apiv1.ChecklistItem, error) {
 	tags := hashtags.Extract(node.Text)
-	sortOrder, _ := strconv.ParseInt(node.SortValue, sortOrderBase, sortOrderBitSize)
+	sortOrder, err := parseSortValue(node.SortValue)
+	if err != nil {
+		return nil, fmt.Errorf("keep node %q: %w", node.ServerID, err)
+	}
 
 	item := &apiv1.ChecklistItem{
 		Text:      node.Text,
@@ -64,7 +70,24 @@ func KeepToWiki(node protocol.Node) *apiv1.ChecklistItem {
 	if !node.Timestamps.Updated.IsZero() {
 		item.UpdatedAt = timestamppb.New(node.Timestamps.Updated)
 	}
-	return item
+	return item, nil
+}
+
+// parseSortValue parses Keep's SortValue field into the wiki's int64
+// SortOrder. Empty input is OK (zero, no error — matches "absent").
+// Otherwise integer first, then float fallback (Keep occasionally
+// writes float-style values; truncate to int64).
+func parseSortValue(s string) (int64, error) {
+	if s == "" {
+		return 0, nil
+	}
+	if n, err := strconv.ParseInt(s, sortOrderBase, sortOrderBitSize); err == nil {
+		return n, nil
+	}
+	if f, err := strconv.ParseFloat(s, 64); err == nil {
+		return int64(f), nil
+	}
+	return 0, fmt.Errorf("sortValue %q is neither an integer nor a float", s)
 }
 
 // encodeTextWithTags appends any tags not already present in text as

@@ -100,8 +100,9 @@ var _ = Describe("KeepToWiki", func() {
 	When("converting a LIST_ITEM with #tags inline", func() {
 		var item *apiv1.ChecklistItem
 
+		var convertErr error
 		BeforeEach(func() {
-			item = bridge.KeepToWiki(protocol.Node{
+			item, convertErr = bridge.KeepToWiki(protocol.Node{
 				ID:        "keep-1",
 				ServerID:  "srv-keep-1",
 				Type:      protocol.NodeTypeListItem,
@@ -112,6 +113,10 @@ var _ = Describe("KeepToWiki", func() {
 					Updated: time.Date(2026, 4, 25, 18, 0, 0, 0, time.UTC),
 				},
 			})
+		})
+
+		It("should not error", func() {
+			Expect(convertErr).ToNot(HaveOccurred())
 		})
 
 		It("should populate text", func() {
