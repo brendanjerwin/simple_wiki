@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 )
@@ -94,13 +93,13 @@ func generateSessionID(now time.Time) string {
 	return fmt.Sprintf("s--%d--%010d", now.UnixMilli(), n+sessionIDOffset)
 }
 
-// decimalBase is the FormatInt base for human-readable decimal strings.
-const decimalBase = 10
-
-// clientTimestamp returns the wire format Keep expects for clientTimestamp:
-// microseconds since epoch as a decimal string.
+// clientTimestamp returns the wire format Keep expects: RFC3339 with
+// microsecond precision and the literal Z suffix. Mirrors gkeepapi's
+// NodeTimestamps.int_to_str / dt_to_str output (not a microseconds
+// integer — an early implementation guess that returned a 16-digit
+// number was rejected by the Keep API as "malformed").
 func clientTimestamp(now time.Time) string {
-	return strconv.FormatInt(now.UnixMicro(), decimalBase)
+	return now.UTC().Format(rfc3339Micros)
 }
 
 const (

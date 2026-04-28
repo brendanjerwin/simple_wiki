@@ -118,7 +118,7 @@ func (c *Connector) Connect(ctx context.Context, profileID wikipage.PageIdentifi
 	// we only need shape — discard the response body.
 	if _, err := client.Changes(ctx, protocol.ChangesRequest{
 		SessionID:       fmt.Sprintf("s--%d--verify", c.clock.Now().UnixMilli()),
-		ClientTimestamp: fmt.Sprintf("%d", c.clock.Now().UnixMicro()),
+		ClientTimestamp: c.clock.Now().UTC().Format("2006-01-02T15:04:05.000000Z"),
 	}); err != nil {
 		return ConnectorState{}, err
 	}
@@ -197,7 +197,7 @@ func (c *Connector) ListNotes(ctx context.Context, profileID wikipage.PageIdenti
 	now := c.clock.Now()
 	resp, err := client.Changes(ctx, protocol.ChangesRequest{
 		SessionID:       fmt.Sprintf("s--%d--listnotes", now.UnixMilli()),
-		ClientTimestamp: fmt.Sprintf("%d", now.UnixMicro()),
+		ClientTimestamp: now.UTC().Format("2006-01-02T15:04:05.000000Z"),
 	})
 	if err != nil {
 		return nil, err
@@ -297,7 +297,7 @@ func (c *Connector) VerifyBinding(ctx context.Context, profileID wikipage.PageId
 	now := c.clock.Now()
 	resp, err := client.Changes(ctx, protocol.ChangesRequest{
 		SessionID:       fmt.Sprintf("s--%d--verify-%s", now.UnixMilli(), binding.KeepNoteID),
-		ClientTimestamp: fmt.Sprintf("%d", now.UnixMicro()),
+		ClientTimestamp: now.UTC().Format("2006-01-02T15:04:05.000000Z"),
 	})
 	if err != nil {
 		return err
