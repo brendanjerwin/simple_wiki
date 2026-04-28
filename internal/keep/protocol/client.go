@@ -39,51 +39,122 @@ func NewKeepClient(httpClient *http.Client, baseURL, bearer string) *KeepClient 
 	return &KeepClient{httpClient: httpClient, baseURL: baseURL, bearer: bearer}
 }
 
-// CreateList creates a brand-new LIST node in the user's Keep account
-// with the given title. Returns the server-assigned ID so callers can
-// store it as the binding's keep_note_id.
-//
-// Used by the bind flow when the user picks "Create new Keep note named
-// '<list_name>'" from the picker.
+// ListItemSpec is the input shape for creating a LIST_ITEM node when
+// bundling items into the same Changes request that creates the LIST.
+// SortValue is a numeric string; lower values sort to the bottom in the
+// Keep app, so callers should compute it as (n-i)*1000 to keep the
+// natural top-to-bottom order.
+type ListItemSpec struct {
+	Text      string
+	Checked   bool
+	SortValue string
+}
+
+// CreateListResult is what CreateListWithItems hands back. Item server
+// IDs are index-aligned with the input items slice. The mapping is the
+// thread an eventual sync engine pulls on to push subsequent edits to
+// the right Keep nodes.
+type CreateListResult struct {
+	ListServerID  string
+	ItemServerIDs []string
+}
+
+// CreateList creates a brand-new empty LIST node. Thin wrapper around
+// CreateListWithItems for callers that don't have items to push yet.
 func (c *KeepClient) CreateList(ctx context.Context, title string) (string, error) {
-	now := time.Now().UTC()
-	clientID, err := generateKeepID(now)
+	r, err := c.CreateListWithItems(ctx, title, nil)
 	if err != nil {
 		return "", err
+	}
+	return r.ListServerID, nil
+}
+
+// CreateListWithItems creates a new LIST node and (optionally) its
+// initial children in a SINGLE Changes request. This is the only shape
+// Google's Keep backend accepts — splitting the create and the item
+// push into two requests returns 500 "Unknown Error" because the second
+// request's parent_id (the list's serverID) doesn't yet refer to a
+// node the client has acknowledged. Bundled, the items reference the
+// list's CLIENT id and the server resolves the linkage server-side.
+func (c *KeepClient) CreateListWithItems(ctx context.Context, title string, items []ListItemSpec) (CreateListResult, error) {
+	now := time.Now().UTC()
+	listClientID, err := generateKeepID(now)
+	if err != nil {
+		return CreateListResult{}, err
 	}
 	sessionID, err := generateSessionID(now)
 	if err != nil {
-		return "", err
+		return CreateListResult{}, err
 	}
 
-	listNode := Node{
+	nodes := make([]Node, 0, 1+len(items))
+	nodes = append(nodes, Node{
 		Kind:  "notes#node",
-		ID:    clientID,
+		ID:    listClientID,
 		Type:  NodeTypeList,
-		Title: title, // gkeepapi TopLevelNode stores list/note title in the
-		// `title` field (node.py _title). Putting it in Text leaves
-		// the note titleless on the user's phone.
+		Title: title,
 		Timestamps: Timestamps{
 			Created: now,
 			Updated: now,
 		},
+	})
+
+	itemClientIDs := make([]string, len(items))
+	for i, it := range items {
+		// Items each get their own client id; bumping the ms component
+		// by (i+1) preserves the user-facing top-to-bottom order in the
+		// Keep app even if the random suffix ordering would otherwise
+		// not.
+		itemClientID, err := generateKeepID(now.Add(time.Duration(i+1) * time.Millisecond))
+		if err != nil {
+			return CreateListResult{}, err
+		}
+		itemClientIDs[i] = itemClientID
+		nodes = append(nodes, Node{
+			Kind:      "notes#node",
+			ID:        itemClientID,
+			Type:      NodeTypeListItem,
+			ParentID:  listClientID,
+			Text:      it.Text,
+			Checked:   it.Checked,
+			SortValue: it.SortValue,
+			Timestamps: Timestamps{
+				Created: now,
+				Updated: now,
+			},
+		})
 	}
 
 	resp, err := c.Changes(ctx, ChangesRequest{
-		Nodes:           []Node{listNode},
+		Nodes:           nodes,
 		SessionID:       sessionID,
 		ClientTimestamp: clientTimestamp(now),
 	})
 	if err != nil {
-		return "", err
+		return CreateListResult{}, err
 	}
 
+	result := CreateListResult{
+		ItemServerIDs: make([]string, len(items)),
+	}
 	for _, n := range resp.Nodes {
-		if n.ID == clientID && n.Type == NodeTypeList {
-			return n.ServerID, nil
+		if n.ID == listClientID && n.Type == NodeTypeList {
+			result.ListServerID = n.ServerID
+			continue
+		}
+		if n.Type == NodeTypeListItem {
+			for i, want := range itemClientIDs {
+				if n.ID == want {
+					result.ItemServerIDs[i] = n.ServerID
+					break
+				}
+			}
 		}
 	}
-	return "", fmt.Errorf("%w: server did not echo the created list", ErrProtocolDrift)
+	if result.ListServerID == "" {
+		return CreateListResult{}, fmt.Errorf("%w: server did not echo the created list", ErrProtocolDrift)
+	}
+	return result, nil
 }
 
 // generateKeepID returns a Keep-style identifier of the form

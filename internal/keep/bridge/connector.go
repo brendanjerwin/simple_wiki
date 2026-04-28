@@ -39,6 +39,7 @@ type KeepClientFactory func(bearer string) KeepClient
 type KeepClient interface {
 	Changes(ctx context.Context, req protocol.ChangesRequest) (protocol.ChangesResponse, error)
 	CreateList(ctx context.Context, title string) (string, error)
+	CreateListWithItems(ctx context.Context, title string, items []protocol.ListItemSpec) (protocol.CreateListResult, error)
 }
 
 // Connector orchestrates the Keep bridge: per-user auth exchange,
@@ -248,20 +249,47 @@ func firstNonEmpty(values ...string) string {
 	return ""
 }
 
+// InitialItem is the input shape for items to push into a brand-new
+// Keep note as part of Bind. Caller (the gRPC handler) reads them from
+// the wiki checklist and converts; the connector doesn't import apiv1.
+type InitialItem struct {
+	Text    string
+	Checked bool
+}
+
 // Bind binds (page, listName) to a Keep note for the calling user. If
-// keepNoteID is empty, a new note titled `listName` is created.
-func (c *Connector) Bind(ctx context.Context, profileID wikipage.PageIdentifier, page, listName, keepNoteID string) (Binding, error) {
+// keepNoteID is empty, a new note titled `listName` is created. When
+// initialItems is non-empty AND a new note is being created, the items
+// are pushed in the same Changes request as the list creation —
+// Google's backend rejects two-step (create list → push items) with
+// 500 Unknown Error, so bundling is the only path that works.
+//
+// initialItems is ignored when binding to an existing keepNoteID; in
+// that case, the user is opting in to "merge into the existing list,"
+// which the v1 sync engine handles via its incremental reconcile.
+func (c *Connector) Bind(ctx context.Context, profileID wikipage.PageIdentifier, page, listName, keepNoteID string, initialItems []InitialItem) (Binding, error) {
 	client, state, err := c.keepClientFor(ctx, profileID)
 	if err != nil {
 		return Binding{}, err
 	}
 
 	if keepNoteID == "" {
-		newID, err := client.CreateList(ctx, listName)
+		specs := make([]protocol.ListItemSpec, len(initialItems))
+		for i, it := range initialItems {
+			// Lower SortValues sort to the bottom in Keep, so map the
+			// caller's intended top-to-bottom order into descending
+			// values. (n-i)*1000 leaves room for future inserts.
+			specs[i] = protocol.ListItemSpec{
+				Text:      it.Text,
+				Checked:   it.Checked,
+				SortValue: fmt.Sprintf("%d", (len(initialItems)-i)*sortValueGap),
+			}
+		}
+		result, err := client.CreateListWithItems(ctx, listName, specs)
 		if err != nil {
 			return Binding{}, err
 		}
-		keepNoteID = newID
+		keepNoteID = result.ListServerID
 	}
 
 	binding := Binding{
@@ -277,6 +305,11 @@ func (c *Connector) Bind(ctx context.Context, profileID wikipage.PageIdentifier,
 	_ = state // reserved for future per-binding bookkeeping during bind
 	return binding, nil
 }
+
+// sortValueGap is the spacing we leave between adjacent initial items'
+// Keep sort values so future inserts can land between them without a
+// global re-numbering. 1000 is gkeepapi's gap of choice.
+const sortValueGap = 1000
 
 // Unbind removes the calling user's binding for (page, listName).
 func (c *Connector) Unbind(_ context.Context, profileID wikipage.PageIdentifier, page, listName string) error {

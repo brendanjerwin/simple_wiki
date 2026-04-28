@@ -8,14 +8,16 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/brendanjerwin/simple_wiki/internal/keep/protocol"
 )
 
 func main() {
-	cmd := flag.String("cmd", "list", "list | create-and-push")
-	title := flag.String("title", "Keep CLI Test", "title for create-and-push")
+	cmd := flag.String("cmd", "list", "list | create-and-push | create-with-items")
+	title := flag.String("title", "Keep CLI Test", "title for create-and-push / create-with-items")
+	itemsCSV := flag.String("items", "Eggs,Milk,Bread", "comma-separated items for create-with-items")
 	flag.Parse()
 
 	email := os.Getenv("KEEP_EMAIL")
@@ -49,9 +51,31 @@ func main() {
 		runList(ctx, keep)
 	case "create-and-push":
 		runCreateAndPush(ctx, keep, *title)
+	case "create-with-items":
+		runCreateWithItems(ctx, keep, *title, strings.Split(*itemsCSV, ","))
 	default:
 		fmt.Fprintln(os.Stderr, "unknown cmd:", *cmd)
 		os.Exit(2)
+	}
+}
+
+func runCreateWithItems(ctx context.Context, keep *protocol.KeepClient, title string, items []string) {
+	specs := make([]protocol.ListItemSpec, len(items))
+	for i, txt := range items {
+		specs[i] = protocol.ListItemSpec{
+			Text:      txt,
+			SortValue: fmt.Sprintf("%d", (len(items)-i)*1000),
+		}
+	}
+	r, err := keep.CreateListWithItems(ctx, title, specs)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "CreateListWithItems failed:", err)
+		os.Exit(1)
+	}
+	fmt.Printf("✓ list created: serverID=%s\n", r.ListServerID)
+	fmt.Printf("✓ %d items pushed; server-assigned IDs:\n", len(r.ItemServerIDs))
+	for i, id := range r.ItemServerIDs {
+		fmt.Printf("  [%d] %q -> %s\n", i, items[i], id)
 	}
 }
 

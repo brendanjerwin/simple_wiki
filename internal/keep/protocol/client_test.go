@@ -464,10 +464,13 @@ var _ = Describe("KeepClient.CreateList", func() {
 			Expect(asStr(n["id"])).ToNot(BeEmpty())
 		})
 
-		It("should put the title in the node text", func() {
+		It("should put the title in the node title field", func() {
+			// gkeepapi TopLevelNode stores list/note titles in the
+			// `title` field (not `text`); putting it in text leaves
+			// the note titleless on the user's phone.
 			nodes := asArr(reqBody["nodes"])
 			n := asMap(nodes[0])
-			Expect(n["text"]).To(Equal("groceries"))
+			Expect(n["title"]).To(Equal("groceries"))
 		})
 	})
 })

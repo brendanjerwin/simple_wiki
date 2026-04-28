@@ -144,7 +144,23 @@ func (s *Server) BindChecklist(ctx context.Context, req *apiv1.BindChecklistRequ
 	if err != nil {
 		return nil, err
 	}
-	binding, err := s.keepConnector.Bind(ctx, profileID, req.GetPage(), req.GetListName(), req.GetKeepNoteId())
+	// Read existing wiki checklist items so they can ride along with
+	// the Keep list creation in the same Changes request. We ignore
+	// errors here: a missing-checklist or empty-checklist case should
+	// still allow Bind to create an empty Keep note, then the user
+	// can add items on either side and the sync engine reconciles.
+	var initialItems []bridge.InitialItem
+	if req.GetKeepNoteId() == "" && s.checklistMutator != nil {
+		if checklist, listErr := s.checklistMutator.ListItems(ctx, req.GetPage(), req.GetListName()); listErr == nil {
+			for _, it := range checklist.GetItems() {
+				initialItems = append(initialItems, bridge.InitialItem{
+					Text:    it.GetText(),
+					Checked: it.GetChecked(),
+				})
+			}
+		}
+	}
+	binding, err := s.keepConnector.Bind(ctx, profileID, req.GetPage(), req.GetListName(), req.GetKeepNoteId(), initialItems)
 	if err != nil {
 		return nil, mapKeepConnectorErr(err)
 	}
