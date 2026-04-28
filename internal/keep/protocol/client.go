@@ -233,6 +233,16 @@ func (c *KeepClient) Changes(ctx context.Context, req ChangesRequest) (ChangesRe
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("User-Agent", userAgent)
 
+	// TEMP: dump push request bodies (anything with nodes>0) so the
+	// "stage3 HTTP 500: Unknown Error" we're chasing on cron-tick
+	// pushes is diagnosable. The bearer is on the header, not the
+	// body, so this won't leak credentials. Strip once the 500 is
+	// resolved.
+	if c.debug != nil && len(req.Nodes) > 0 {
+		c.debug.Info("keep changes REQUEST (nodes=%d targetVersion=%q): %s",
+			len(req.Nodes), req.TargetVersion, truncateBody(body))
+	}
+
 	resp, err := c.httpClient.Do(httpReq)
 	if err != nil {
 		return ChangesResponse{}, fmt.Errorf("changes request: %w", err)
