@@ -313,16 +313,22 @@ func firstNonEmpty(values ...string) string {
 
 // InitialItem is the input shape for items to push into a brand-new
 // Keep note as part of Bind. Caller (the gRPC handler) reads them from
-// the wiki checklist and converts; the connector doesn't import apiv1.
+// the wiki checklist and forwards every field that survives a sync
+// round trip; the bridge encodes tags + description into the Keep
+// LIST_ITEM Text via the same encoder the cron-driven sync uses, so
+// the initial-bind push and subsequent incremental syncs produce
+// byte-identical wire shapes for the same wiki state.
 //
 // UID is the wiki ChecklistItem UID and is what the binding's
 // ItemIDMap keys on after the bundled push completes — that's how
 // future incremental syncs find "the Keep node corresponding to
 // wiki item X."
 type InitialItem struct {
-	UID     string
-	Text    string
-	Checked bool
+	UID         string
+	Text        string
+	Tags        []string
+	Description string
+	Checked     bool
 }
 
 // Bind binds (page, listName) to a Keep note for the calling user. If
@@ -346,11 +352,19 @@ func (c *Connector) Bind(ctx context.Context, profileID wikipage.PageIdentifier,
 	if keepNoteID == "" {
 		specs := make([]protocol.ListItemSpec, len(initialItems))
 		for i, it := range initialItems {
+			// Encode the same way WikiToKeep does so the initial-bind
+			// push lands with tags + description visible on the
+			// phone, and so the next sync's text-match adoption
+			// recognizes it as the corresponding wiki item.
+			text := encodeTextWithTags(it.Text, it.Tags)
+			if it.Description != "" {
+				text = text + descriptionSeparator + it.Description
+			}
 			// Lower SortValues sort to the bottom in Keep, so map the
 			// caller's intended top-to-bottom order into descending
 			// values. (n-i)*1000 leaves room for future inserts.
 			specs[i] = protocol.ListItemSpec{
-				Text:      it.Text,
+				Text:      text,
 				Checked:   it.Checked,
 				SortValue: fmt.Sprintf("%d", (len(initialItems)-i)*sortValueGap),
 			}
@@ -682,10 +696,27 @@ func (c *Connector) applyInboundFromKeep(ctx context.Context, profileID wikipage
 		rev[sid] = uid
 	}
 
-	// Wiki items by uid (for find-by-uid update path).
+	// Wiki items by uid (for find-by-uid update path) AND by exact
+	// rendered text (for the adopt-don't-add path on inbound items
+	// that match wiki state — typically wiki-pushed copies that
+	// boomeranged back through a fresh pull). Adoption avoids
+	// duplicating items wiki already has under a different uid.
 	wikiByUID := make(map[string]*apiv1.ChecklistItem, len(currentChecklist.GetItems()))
+	wikiByText := make(map[string]string, len(currentChecklist.GetItems()))
 	for _, it := range currentChecklist.GetItems() {
 		wikiByUID[it.GetUid()] = it
+		// Render the wiki item the same way WikiToKeep would so the
+		// match key aligns with what's actually flowing on the wire.
+		head := encodeTextWithTags(it.GetText(), it.GetTags())
+		full := head
+		if d := it.GetDescription(); d != "" {
+			full = head + descriptionSeparator + d
+		}
+		// First wiki item wins on duplicate-text ties — same convention
+		// as seedIDMapFromExistingList.
+		if _, exists := wikiByText[full]; !exists {
+			wikiByText[full] = it.GetUid()
+		}
 	}
 
 	if binding.ItemIDMap == nil {
@@ -708,7 +739,28 @@ func (c *Connector) applyInboundFromKeep(ctx context.Context, profileID wikipage
 
 		switch {
 		case isAlive && !knownToWiki:
-			// Class 1: new from Keep. Convert to wiki shape and add.
+			// Class 1: arrived from Keep, not yet known to id_map.
+			// Two sub-cases:
+			//
+			//   1a. Wiki has an item with byte-identical text — that's
+			//       almost certainly a wiki-pushed copy that came back
+			//       around. Adopt it: record uid → serverID in id_map
+			//       and DON'T create a duplicate. This is the most
+			//       common case after re-bind: the wiki-pushed enriched
+			//       items live on Keep alongside the user's plain
+			//       originals; the seed already mapped the plain ones,
+			//       and on the next sync the enriched copies look
+			//       "new" but actually correspond to wiki items we
+			//       already have.
+			//
+			//   1b. No text match in wiki. Genuinely new from Keep
+			//       (typically: phone-side add). Apply via AddItemForSync.
+			if existingUID, found := wikiByText[n.Text]; found {
+				if _, alreadyMapped := binding.ItemIDMap[existingUID]; !alreadyMapped {
+					binding.ItemIDMap[existingUID] = serverID
+				}
+				continue
+			}
 			wikiItem, err := KeepToWiki(n)
 			if err != nil {
 				// Skip malformed nodes rather than fail the whole sync.

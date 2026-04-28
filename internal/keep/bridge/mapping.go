@@ -54,6 +54,16 @@ func WikiToKeep(item *apiv1.ChecklistItem, parentNoteServerID, keepItemID string
 		Checked:        item.GetChecked(),
 		SortValue:      strconv.FormatInt(item.GetSortOrder(), sortOrderBase),
 	}
+	// For an existing item (keepItemID is a server-side id), also
+	// populate ServerID so the wire shape is {id, serverId} like
+	// gkeepapi emits. Keep's backend reportedly 500s on update-style
+	// nodes that have id-set-to-server-id but no serverId field.
+	// Brand-new pushes leave keepItemID empty; the caller assigns a
+	// fresh client_id and ServerID stays empty (server fills it in
+	// the response).
+	if keepItemID != "" {
+		n.ServerID = keepItemID
+	}
 	if item.GetUpdatedAt() != nil {
 		n.Timestamps.Updated = item.GetUpdatedAt().AsTime()
 	}
@@ -67,21 +77,27 @@ func WikiToKeep(item *apiv1.ChecklistItem, parentNoteServerID, keepItemID string
 // Splits the Text on the first description separator: left side is the
 // head line (text + #tag suffixes); right side is the description.
 // Tags are extracted from the head line via the same hashtag parser
-// the rest of the wiki uses. The wiki UID is *not* set here — caller
-// assigns one for brand-new items or looks it up via the per-binding
-// ItemIDMap. Returns an error rather than silently coercing a malformed
-// SortValue to 0 — silent coercion would corrupt the wiki ordering
-// on inbound sync without leaving any trace.
+// the rest of the wiki uses, then the #tag tokens are STRIPPED from
+// Text so the wiki side stores clean text + tags array (round-trip
+// stable: clean text → encode → text+#tags → push → pull → strip →
+// clean text again, byte-identical to the wiki's original input).
+//
+// The wiki UID is *not* set here — caller assigns one for brand-new
+// items or looks it up via the per-binding ItemIDMap. Returns an
+// error rather than silently coercing a malformed SortValue to 0 —
+// silent coercion would corrupt the wiki ordering on inbound sync
+// without leaving any trace.
 func KeepToWiki(node protocol.Node) (*apiv1.ChecklistItem, error) {
 	head, description := splitDescription(node.Text)
 	tags := hashtags.Extract(head)
+	cleanText := stripHashtagTokens(head)
 	sortOrder, err := parseSortValue(node.SortValue)
 	if err != nil {
 		return nil, fmt.Errorf("keep node %q: %w", node.ServerID, err)
 	}
 
 	item := &apiv1.ChecklistItem{
-		Text:      head,
+		Text:      cleanText,
 		Checked:   node.Checked,
 		Tags:      tags,
 		SortOrder: sortOrder,
@@ -97,6 +113,25 @@ func KeepToWiki(node protocol.Node) (*apiv1.ChecklistItem, error) {
 		item.UpdatedAt = timestamppb.New(node.Timestamps.Updated)
 	}
 	return item, nil
+}
+
+// stripHashtagTokens removes whitespace-delimited "#tag" tokens from
+// text and collapses the surrounding whitespace. Mirrors the wiki's
+// hashtag convention: #-prefixed tokens are always tags, never literal
+// content. Round-trip pair with encodeTextWithTags:
+//
+//	encode("Buy apples", []string{"fresh"})       → "Buy apples #fresh"
+//	stripHashtagTokens("Buy apples #fresh")        → "Buy apples"
+func stripHashtagTokens(s string) string {
+	fields := strings.Fields(s)
+	cleaned := make([]string, 0, len(fields))
+	for _, f := range fields {
+		if strings.HasPrefix(f, "#") {
+			continue
+		}
+		cleaned = append(cleaned, f)
+	}
+	return strings.Join(cleaned, " ")
 }
 
 // splitDescription returns the head line and description portion of a

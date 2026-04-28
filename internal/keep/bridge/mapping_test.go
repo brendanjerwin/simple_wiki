@@ -119,8 +119,12 @@ var _ = Describe("KeepToWiki", func() {
 			Expect(convertErr).ToNot(HaveOccurred())
 		})
 
-		It("should populate text", func() {
-			Expect(item.GetText()).To(Equal("Buy oat milk #urgent"))
+		It("should populate text without #tag suffix", func() {
+			// Round-trip stability: tags ride inline as #tag suffixes
+			// on the wire but are stripped from the wiki-side text
+			// so the wiki stores clean "text + tags array" — same
+			// shape as before the sync round trip.
+			Expect(item.GetText()).To(Equal("Buy oat milk"))
 		})
 
 		It("should propagate checked", func() {
