@@ -695,7 +695,14 @@ func parseRFC3339Micros(s string) (time.Time, error) {
 			return time.Time{}, fmt.Errorf("not a valid RFC3339 timestamp: %w", err)
 		}
 	}
-	if t.Unix() == 0 {
+	// Only the literal "1970-01-01T00:00:00.000Z" — Unix seconds 0
+	// AND zero nanoseconds — is the "no timestamp" sentinel. Keep
+	// also uses epoch-plus-tiny-offsets like ".001Z" / ".002Z" for
+	// LIST_ITEM created/updated when the item came from a process
+	// that didn't stamp them precisely. Treating those as zero
+	// breaks the push gate: every wiki item then looks "newer than
+	// Keep" because Keep's effective Updated parses to Time{}.
+	if t.Unix() == 0 && t.Nanosecond() == 0 {
 		return time.Time{}, nil
 	}
 	return t.UTC(), nil

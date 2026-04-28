@@ -17,7 +17,7 @@ import (
 )
 
 func main() {
-	cmd := flag.String("cmd", "list", "list | create-and-push | create-with-items | push-item-to-existing")
+	cmd := flag.String("cmd", "list", "list | create-and-push | create-with-items | push-item-to-existing | dump-items")
 	title := flag.String("title", "Keep CLI Test", "title for create-and-push / create-with-items")
 	itemsCSV := flag.String("items", "Eggs,Milk,Bread", "comma-separated items for create-with-items")
 	parentID := flag.String("parent-id", "", "for push-item-to-existing: the LIST node's serverID")
@@ -63,9 +63,109 @@ func main() {
 			os.Exit(2)
 		}
 		runPushItemToExisting(ctx, keep, *parentID, *itemText)
+	case "dump-items":
+		if *parentID == "" {
+			fmt.Fprintln(os.Stderr, "dump-items requires -parent-id=<list-serverID>")
+			os.Exit(2)
+		}
+		runDumpItems(ctx, keep, *parentID)
+	case "update-item":
+		if *parentID == "" {
+			fmt.Fprintln(os.Stderr, "update-item requires -parent-id=<list-serverID>")
+			os.Exit(2)
+		}
+		runUpdateItemMatching(ctx, keep, *parentID, *itemText)
 	default:
 		fmt.Fprintln(os.Stderr, "unknown cmd:", *cmd)
 		os.Exit(2)
+	}
+}
+
+// runUpdateItemMatching: pull, find ALL LIST_ITEMs under the given
+// list whose text contains the substring `match` (or all alive items
+// if match is empty), then push them back as UPDATES in a single
+// request — reproduces the cron-tick shape.
+func runUpdateItemMatching(ctx context.Context, keep *protocol.KeepClient, listServerID, match string) {
+	pull, err := keep.Changes(ctx, protocol.ChangesRequest{
+		SessionID:       fmt.Sprintf("s--%d--upd-pull", time.Now().UnixMilli()),
+		ClientTimestamp: time.Now().UTC().Format("2006-01-02T15:04:05.000000Z"),
+	})
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "pull failed:", err)
+		os.Exit(1)
+	}
+	var targets []protocol.Node
+	for _, n := range pull.Nodes {
+		if n.Type != protocol.NodeTypeListItem {
+			continue
+		}
+		if n.ParentID != listServerID && n.ParentServerID != listServerID {
+			continue
+		}
+		if !n.Timestamps.Trashed.IsZero() || !n.Timestamps.Deleted.IsZero() {
+			continue
+		}
+		if match != "" && !strings.Contains(n.Text, match) {
+			continue
+		}
+		targets = append(targets, n)
+	}
+	if len(targets) == 0 {
+		fmt.Fprintln(os.Stderr, "no items matching", match)
+		os.Exit(1)
+	}
+	fmt.Printf("found %d targets\n", len(targets))
+
+	now := time.Now().UTC()
+	pushNodes := make([]protocol.Node, 0, len(targets))
+	for i, t := range targets {
+		_ = i
+		pushNodes = append(pushNodes, protocol.Node{
+			Kind:           "notes#node",
+			ID:             t.ID,
+			ServerID:       t.ServerID,
+			ParentID:       listServerID,
+			ParentServerID: listServerID,
+			Type:           protocol.NodeTypeListItem,
+			Text:           t.Text + " #tag\n— Deal: SAVE UP TO $7.59",
+			Checked:        t.Checked,
+			SortValue:      t.SortValue,
+			BaseVersion:    t.BaseVersion,
+			Timestamps:     protocol.Timestamps{Updated: now},
+		})
+	}
+	resp, err := keep.Changes(ctx, protocol.ChangesRequest{
+		Nodes:           pushNodes,
+		TargetVersion:   pull.ToVersion,
+		SessionID:       fmt.Sprintf("s--%d--upd-push", now.UnixMilli()),
+		ClientTimestamp: now.Format("2006-01-02T15:04:05.000000Z"),
+	})
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "update push failed:", err)
+		os.Exit(1)
+	}
+	fmt.Printf("✓ update succeeded; toVersion=%s response nodes=%d\n", resp.ToVersion, len(resp.Nodes))
+}
+
+func runDumpItems(ctx context.Context, keep *protocol.KeepClient, listServerID string) {
+	resp, err := keep.Changes(ctx, protocol.ChangesRequest{
+		SessionID:       fmt.Sprintf("s--%d--dump", time.Now().UnixMilli()),
+		ClientTimestamp: time.Now().UTC().Format("2006-01-02T15:04:05.000000Z"),
+	})
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "dump pull failed:", err)
+		os.Exit(1)
+	}
+	for _, n := range resp.Nodes {
+		if n.Type != protocol.NodeTypeListItem {
+			continue
+		}
+		if n.ParentID != listServerID && n.ParentServerID != listServerID {
+			continue
+		}
+		fmt.Printf("id=%s\n  serverId=%s\n  text=%q checked=%v\n  baseVersion=%q\n  Created=%s\n  Updated=%s\n  Trashed=%s\n  Deleted=%s\n\n",
+			n.ID, n.ServerID, n.Text, n.Checked, n.BaseVersion,
+			n.Timestamps.Created, n.Timestamps.Updated, n.Timestamps.Trashed, n.Timestamps.Deleted)
 	}
 }
 
