@@ -611,10 +611,14 @@ func (c *Connector) seedIDMapFromExistingList(ctx context.Context, client KeepCl
 	if err != nil {
 		return out
 	}
-	// Build text → serverID index for live LIST_ITEMs whose ParentID
-	// or ParentServerID matches our bound list. Only the head line is
-	// indexed (everything before "\n— ").
-	keepByText := make(map[string]string, len(pull.Nodes))
+	// Build base-text → serverID index for live LIST_ITEMs whose
+	// parent matches our bound list. Base text strips inline #tags
+	// and any "\n— description" suffix so a plain Keep "Apples"
+	// matches an enriched wiki "Apples #produce\n— Deal: ...". This
+	// is the bind-time reconcile: the user is opting in to "wiki is
+	// the source of truth, but reuse Keep IDs where possible to
+	// avoid duplicating items already there."
+	keepByBase := make(map[string]string, len(pull.Nodes))
 	for _, n := range pull.Nodes {
 		if n.Type != protocol.NodeTypeListItem {
 			continue
@@ -625,24 +629,50 @@ func (c *Connector) seedIDMapFromExistingList(ctx context.Context, client KeepCl
 		if !n.Timestamps.Trashed.IsZero() || !n.Timestamps.Deleted.IsZero() {
 			continue
 		}
-		head, _, _ := strings.Cut(n.Text, "\n— ")
-		if _, exists := keepByText[head]; exists {
-			// Duplicate-text Keep items: leave the first match in
-			// place; the second will look fresh to the sync engine
-			// and get a new client_id. User can clean up.
+		base := normalizeForSeedMatch(n.Text)
+		if base == "" {
 			continue
 		}
-		keepByText[head] = n.ServerID
+		if _, exists := keepByBase[base]; exists {
+			// Duplicate-base Keep items: first match wins; second
+			// will look fresh to the sync engine and get a new
+			// client_id. User can manually clean up.
+			continue
+		}
+		keepByBase[base] = n.ServerID
 	}
 	for _, w := range wikiItems {
 		if w.UID == "" {
 			continue
 		}
-		if serverID, ok := keepByText[w.Text]; ok {
+		base := normalizeForSeedMatch(w.Text)
+		if base == "" {
+			continue
+		}
+		if serverID, ok := keepByBase[base]; ok {
 			out[w.UID] = serverID
 		}
 	}
 	return out
+}
+
+// normalizeForSeedMatch reduces a LIST_ITEM text to its bare item-name
+// portion: strips any "\n— description" suffix and any inline " #tag"
+// markers, lowercases, and trims surrounding whitespace. Used only at
+// bind time to find loose matches between wiki items (typically tagged
+// + described) and existing Keep items (typically plain text).
+func normalizeForSeedMatch(text string) string {
+	head, _, _ := strings.Cut(text, "\n— ")
+	// Walk word-by-word; drop tokens that start with '#'.
+	fields := strings.Fields(head)
+	cleaned := make([]string, 0, len(fields))
+	for _, f := range fields {
+		if strings.HasPrefix(f, "#") {
+			continue
+		}
+		cleaned = append(cleaned, f)
+	}
+	return strings.ToLower(strings.Join(cleaned, " "))
 }
 
 // readPageTags reads the host page's frontmatter tags. Returns an
