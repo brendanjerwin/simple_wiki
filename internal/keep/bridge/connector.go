@@ -893,8 +893,15 @@ func (c *Connector) applyInboundFromKeep(ctx context.Context, profileID wikipage
 			if converted.Description != nil {
 				desc = *converted.Description
 			}
-			_ = c.checklistW.UpdateItemForSync(ctx, binding.Page, binding.ListName, uid,
-				converted.GetText(), converted.GetChecked(), converted.GetTags(), desc)
+			if updateErr := c.checklistW.UpdateItemForSync(ctx, binding.Page, binding.ListName, uid,
+				converted.GetText(), converted.GetChecked(), converted.GetTags(), desc); updateErr != nil && c.debug != nil {
+				// Stop swallowing — when this fails the wiki silently
+				// drifts out of sync with Keep, and the next outbound
+				// push reverts Keep to wiki's stale state. Visibility
+				// in journalctl is critical for diagnosing.
+				c.debug.Info("applyInboundFromKeep: UpdateItemForSync(uid=%s, checked=%v) failed: %v",
+					uid, converted.GetChecked(), updateErr)
+			}
 		}
 	}
 

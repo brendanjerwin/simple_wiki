@@ -399,7 +399,13 @@ type wireNode struct {
 	Type           string         `json:"type"`
 	Title          string         `json:"title,omitempty"`
 	Text           string         `json:"text,omitempty"`
-	Checked        bool           `json:"checked,omitempty"`
+	// Checked is always emitted: omitempty would drop "checked":false
+	// for unchecked items, and Keep interprets a missing checked
+	// field as "set to false" rather than "leave alone." That caused
+	// items the user just checked on the phone to revert to
+	// unchecked on the next outbound push (when wiki state still
+	// said checked=false because the inbound pull hadn't applied).
+	Checked        bool           `json:"checked"`
 	SortValue      string         `json:"sortValue,omitempty"`
 	BaseVersion    string         `json:"baseVersion,omitempty"`
 	LabelIDs       []wireLabelID  `json:"labelIds,omitempty"`
