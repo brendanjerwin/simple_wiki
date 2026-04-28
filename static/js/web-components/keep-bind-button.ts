@@ -92,7 +92,11 @@ export class KeepBindButton extends LitElement {
         this.phase = 'unbound';
       }
     } catch {
-      this.phase = 'hidden'; // fail closed: don't show broken UI
+      // Fail-closed: this component renders inside every Checklist on every
+      // page, so a banner per render would be far worse UX than just
+      // hiding the bind affordance. Real auth/RPC errors surface on the
+      // /profile page where they're actionable.
+      this.phase = 'hidden';
     }
   }
 
