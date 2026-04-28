@@ -233,7 +233,7 @@ func mapKeepConnectorErr(err error) error {
 	case errors.Is(err, bridge.ErrBindingNotFound):
 		return status.Error(codes.NotFound, "binding_not_found")
 	case errors.Is(err, protocol.ErrInvalidCredentials):
-		return status.Error(codes.Unauthenticated, "invalid_credentials: Google rejected the App-Specific Password")
+		return status.Errorf(codes.Unauthenticated, "invalid_credentials: Google rejected the oauth_token (it may have expired — capture a fresh one): %v", err)
 	case errors.Is(err, protocol.ErrAuthRevoked):
 		return status.Error(codes.Unauthenticated, "auth_revoked: re-connect Google Keep on your profile")
 	case errors.Is(err, protocol.ErrProtocolDrift):
