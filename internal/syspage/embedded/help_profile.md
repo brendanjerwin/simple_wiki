@@ -69,8 +69,20 @@ write) — or remove the `wiki.authorization.acl` block entirely to make
 the page readable by every authenticated human while still keeping
 agents out.
 
+## Connectors
+
+Per-user external-app connector state lives on your profile page under
+`wiki.connectors.*`. The Google Keep bridge stores its credentials and
+bindings here — see [[help-google-keep]] for the full setup. Other
+connector types (Google Tasks, etc.) will follow the same pattern.
+
+The `KeepConnect` macro on the default profile template renders the
+connect/disconnect UI; if your profile was created before Keep landed,
+add `{{"{{ KeepConnect }}"}}` to your profile page's body to enable it.
+
 ## For agents
 
-There is no gRPC or MCP service for managing profiles in this release.
-Agents that want to record per-user state should wait for the per-user
-service that lands with the cloud-bridge work (#998/#999/#1000).
+There is no gRPC or MCP service for managing profiles directly. Agents
+that need per-user external-service state should call the
+per-connector services (e.g. `api.v1.KeepConnectorService`) — those
+scope to the calling identity automatically.

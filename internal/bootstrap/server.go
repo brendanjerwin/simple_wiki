@@ -12,6 +12,7 @@ import (
 	"connectrpc.com/vanguard"
 	"github.com/brendanjerwin/simple_wiki/internal/caldav"
 	grpcapi "github.com/brendanjerwin/simple_wiki/internal/grpc/api/v1"
+	"github.com/brendanjerwin/simple_wiki/internal/keep/bridge"
 	wikimcp "github.com/brendanjerwin/simple_wiki/internal/mcp"
 	"github.com/brendanjerwin/simple_wiki/internal/observability"
 	"github.com/brendanjerwin/simple_wiki/pkg/chatbuffer"
@@ -403,6 +404,7 @@ func BuildVanguardTranscoder(grpcServer *grpc.Server, ginRouter http.Handler) (h
 		"api.v1.FileStorageService",
 		"api.v1.Frontmatter",
 		"api.v1.InventoryManagementService",
+		"api.v1.KeepConnectorService",
 		"api.v1.PageImportService",
 		"api.v1.PageManagementService",
 		"api.v1.ScheduledTurnService",
@@ -460,6 +462,16 @@ func setupGRPCServer(
 	}
 	checklistMutator := checklistmutator.New(site, checklistmutator.SystemClock{}, ulid.NewSystemGenerator())
 
+	// Keep connector — Google Keep bridge orchestrator. Per-user state on
+	// profile pages (wiki.connectors.google_keep.*) plus a sync scheduler
+	// (added separately). Optional — without it KeepConnectorService
+	// returns a clear "not configured" error.
+	keepConnector := bridge.NewConnector(
+		bridge.NewBindingStore(site),
+		http.DefaultClient,
+		bridge.SystemClock{},
+	)
+
 	// Wire the CalDAV server into the Site so its caldavGateway
 	// middleware can dispatch CalDAV-shaped traffic. baseURL is left
 	// empty here — defaultBackend uses it only to render the URL
@@ -478,7 +490,8 @@ func setupGRPCServer(
 		WithScheduledTurnDispatcher(site.ScheduledTurnDispatcher).
 		WithAgentScheduleStore(site.AgentScheduleStore).
 		WithAgentChatContextStore(site.AgentChatContextStore).
-		WithChecklistMutator(checklistMutator)
+		WithChecklistMutator(checklistMutator).
+		WithKeepConnector(keepConnector)
 
 	unaryInterceptors, streamInterceptors, err := buildGRPCInterceptors(
 		identityResolver, grpcAPIServer.LoggingInterceptor(), counters, logger,

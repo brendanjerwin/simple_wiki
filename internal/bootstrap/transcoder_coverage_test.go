@@ -4,6 +4,7 @@ package bootstrap_test
 import (
 	"net/http"
 	"net/http/httptest"
+	"sort"
 	"strings"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -12,6 +13,7 @@ import (
 
 	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
 	"github.com/brendanjerwin/simple_wiki/internal/bootstrap"
+	v1 "github.com/brendanjerwin/simple_wiki/internal/grpc/api/v1"
 )
 
 // transcoder coverage guard
@@ -24,11 +26,24 @@ import (
 // transcoder tests didn't catch it because they verified routing for ONE
 // service at a time, not coverage across the whole server.
 //
-// The guard takes the registry of "what's been Register'd on the grpc.Server"
-// as the source of truth and asserts every one of those services is
-// reachable via the transcoder. If a future RPC service is registered with
-// the grpc.Server but forgotten in BuildVanguardTranscoder's serviceNames
-// list, this test fails loudly.
+// The guard has two parts:
+//
+//   1. A routing test that takes "what's Register'd on grpcServer" as ground
+//      truth and asserts every one of those services is reachable through
+//      the transcoder.
+//
+//   2. A parity test that asserts the fixture's manual Unimplemented-stub
+//      registrations match what production's v1.Server.RegisterWithServer
+//      registers — so a new service in production cannot drift away from
+//      the fixture. (The routing test alone wouldn't catch this: if both
+//      lists are missing the same service, both stay quietly green.)
+//
+// Why two registrations instead of using production wiring directly: the
+// real Server overrides Unimplemented* methods on every embedded service,
+// so a zero-value Server.GetState would dereference its nil keepConnector
+// and panic when the routing test actually dispatches a request. The
+// fixture uses pure Unimplemented* stubs which return UNIMPLEMENTED
+// cleanly (not 404). The parity test bridges the two.
 var _ = Describe("BuildVanguardTranscoder service coverage", func() {
 	var (
 		grpcServer *grpc.Server
@@ -37,14 +52,16 @@ var _ = Describe("BuildVanguardTranscoder service coverage", func() {
 
 	BeforeEach(func() {
 		grpcServer = grpc.NewServer()
-		// Register every api.v1.* service the production server exposes,
-		// using the codegen-provided Unimplemented* types so handler
-		// invocations return UNIMPLEMENTED rather than panicking on nil.
+		// Manually register Unimplemented* stubs. A new gRPC service must
+		// be added here AND to v1.Server.RegisterWithServer; the parity
+		// test below catches that drift.
 		apiv1.RegisterAgentMetadataServiceServer(grpcServer, apiv1.UnimplementedAgentMetadataServiceServer{})
 		apiv1.RegisterChatServiceServer(grpcServer, apiv1.UnimplementedChatServiceServer{})
+		apiv1.RegisterChecklistServiceServer(grpcServer, apiv1.UnimplementedChecklistServiceServer{})
 		apiv1.RegisterFileStorageServiceServer(grpcServer, apiv1.UnimplementedFileStorageServiceServer{})
 		apiv1.RegisterFrontmatterServer(grpcServer, apiv1.UnimplementedFrontmatterServer{})
 		apiv1.RegisterInventoryManagementServiceServer(grpcServer, apiv1.UnimplementedInventoryManagementServiceServer{})
+		apiv1.RegisterKeepConnectorServiceServer(grpcServer, apiv1.UnimplementedKeepConnectorServiceServer{})
 		apiv1.RegisterPageImportServiceServer(grpcServer, apiv1.UnimplementedPageImportServiceServer{})
 		apiv1.RegisterPageManagementServiceServer(grpcServer, apiv1.UnimplementedPageManagementServiceServer{})
 		apiv1.RegisterScheduledTurnServiceServer(grpcServer, apiv1.UnimplementedScheduledTurnServiceServer{})
@@ -61,6 +78,22 @@ var _ = Describe("BuildVanguardTranscoder service coverage", func() {
 		var err error
 		handler, err = bootstrap.BuildVanguardTranscoder(grpcServer, ginRouter)
 		Expect(err).NotTo(HaveOccurred())
+	})
+
+	Describe("fixture parity with production wiring", func() {
+		It("should register the same service set that v1.Server.RegisterWithServer registers", func() {
+			fixtureNames := serviceNames(grpcServer)
+
+			productionServer := grpc.NewServer()
+			// A zero-value v1.Server satisfies every apiv1.*ServiceServer
+			// interface via its embedded Unimplemented* types. We never
+			// invoke a handler here — Register* just stashes the impl.
+			(&v1.Server{}).RegisterWithServer(productionServer)
+			productionNames := serviceNames(productionServer)
+
+			Expect(fixtureNames).To(Equal(productionNames),
+				"Fixture coverage drifted from production. v1.Server.RegisterWithServer registers a service the fixture does not (or vice versa). Sync the fixture above with the RegisterWithServer call.")
+		})
 	})
 
 	Describe("for every service registered with the grpc.Server", func() {
@@ -97,3 +130,20 @@ var _ = Describe("BuildVanguardTranscoder service coverage", func() {
 		})
 	})
 })
+
+// serviceNames returns the set of fully-qualified gRPC service names a
+// grpc.Server has had Register-d to it, sorted for stable comparison.
+// Skips reflection/health meta-services which aren't wired through the
+// vanguard transcoder.
+func serviceNames(srv *grpc.Server) []string {
+	info := srv.GetServiceInfo()
+	out := make([]string, 0, len(info))
+	for name := range info {
+		if strings.HasPrefix(name, "grpc.reflection.") || strings.HasPrefix(name, "grpc.health.") {
+			continue
+		}
+		out = append(out, name)
+	}
+	sort.Strings(out)
+	return out
+}
