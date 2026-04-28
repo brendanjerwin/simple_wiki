@@ -154,10 +154,14 @@ func (j *KeepCronTickJob) Execute() error {
 	} else {
 		keys = j.connector.ActiveBindingsSnapshot()
 	}
+	// TEMP: log every tick (even zero-binding ticks) while we're
+	// debugging the post-restart "lister returns 0 keys" symptom.
+	// Strip back to the >0 guard once the index-readiness issue is
+	// understood.
+	j.logger.Info("KeepCronTick: tick fired, %d active binding(s)", len(keys))
 	if len(keys) == 0 {
 		return nil
 	}
-	j.logger.Info("KeepCronTick: enqueuing %d sync jobs", len(keys))
 	for _, k := range keys {
 		job := NewKeepOutboundSyncJob(j.connector, k.ProfileID, k.Page, k.ListName)
 		if err := j.enqueuer.EnqueueJob(job); err != nil {
