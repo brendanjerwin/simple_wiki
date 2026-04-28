@@ -526,6 +526,13 @@ func (c *Connector) SyncToKeep(ctx context.Context, profileID wikipage.PageIdent
 	for i, item := range checklist.GetItems() {
 		serverID := binding.ItemIDMap[item.GetUid()]
 		node := WikiToKeep(item, binding.KeepNoteID, serverID)
+		// Stamp Updated to sync-now: gkeepapi touch() sets
+		// timestamps.updated = now() on every dirty mutation, and
+		// Keep's backend 500s ("Unknown Error") if we send an older
+		// `updated` than what's on the server. Wiki UpdatedAt is the
+		// wiki-side last-touch, which can be days stale relative to
+		// Keep's record.
+		node.Timestamps.Updated = now
 		// Lower SortValues sort to the bottom; preserve wiki ordering
 		// by mapping (n-i)*1000 in absence of an explicit SortOrder.
 		if item.GetSortOrder() == 0 {

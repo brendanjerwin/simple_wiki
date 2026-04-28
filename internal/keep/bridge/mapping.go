@@ -64,10 +64,19 @@ func WikiToKeep(item *apiv1.ChecklistItem, parentNoteServerID, keepItemID string
 	if keepItemID != "" {
 		n.ServerID = keepItemID
 	}
+	// Timestamps: Created is only set for brand-new items (gkeepapi
+	// touch() never re-stamps created on updates; sending an older
+	// `created` than the server's known value triggers stage3 HTTP
+	// 500 "Unknown Error"). Updated is always stamped — the caller
+	// passes the sync-time clock — to mirror gkeepapi touch() which
+	// sets timestamps.updated = now() on every dirty mutation.
+	// Caller is responsible for passing clock-now via a pre-step;
+	// here we read the wiki item's UpdatedAt as the input but the
+	// connector's SyncToKeep overrides it to clock.Now() for pushes.
 	if item.GetUpdatedAt() != nil {
 		n.Timestamps.Updated = item.GetUpdatedAt().AsTime()
 	}
-	if item.GetCreatedAt() != nil {
+	if keepItemID == "" && item.GetCreatedAt() != nil {
 		n.Timestamps.Created = item.GetCreatedAt().AsTime()
 	}
 	return n
