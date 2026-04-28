@@ -513,7 +513,14 @@ func setupGRPCServer(
 	keepBindingStore := bridge.NewBindingStore(site)
 	keepBindingsLister := func() []bridge.BindingKey {
 		var out []bridge.BindingKey
-		for _, p := range site.FrontmatterIndexQueryer.QueryKeyExistence("wiki.connectors.google_keep.bindings") {
+		// Query "...email" (a leaf string) instead of "...bindings"
+		// (an array of maps). The frontmatter index doesn't save key
+		// entries for non-empty arrays of maps — see index.indexArray
+		// "Skip complex types" — so a profile with bindings would be
+		// invisible to a query keyed on bindings. email is set on
+		// every connected profile alongside bindings, so it's the
+		// reliable signal here.
+		for _, p := range site.FrontmatterIndexQueryer.QueryKeyExistence("wiki.connectors.google_keep.email") {
 			state, err := keepBindingStore.LoadState(p)
 			if err != nil || !state.IsConfigured() {
 				continue
