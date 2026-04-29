@@ -29,6 +29,20 @@ type Binding struct {
 	KeepNoteID    string
 	KeepNoteTitle string
 	BoundAt       time.Time
+	// LastPushedAt is the timestamp of the most recent successful push
+	// for this binding. It anchors the inbound-apply gate: a wiki item
+	// whose UpdatedAt is greater than this value has been edited since
+	// the last successful push (uncommitted), so we skip applying any
+	// inbound Keep change for that item — the next push will send the
+	// uncommitted edit. Items at or below this anchor are "synced state"
+	// from wiki's perspective; Keep-side edits can override them.
+	//
+	// Why not compare wiki UpdatedAt vs Keep's per-item Updated? Because
+	// Keep stores epoch-sentinel timestamps (1970-01-01T00:00:00.001/.002Z)
+	// for LIST_ITEM nodes pushed via the API — even right after a fresh
+	// push that explicitly sent Updated=now. The per-item Keep timestamps
+	// are unreliable signal; LastPushedAt is wiki-side ground truth.
+	LastPushedAt  time.Time
 	ItemIDMap     map[string]string
 }
 
@@ -93,6 +107,7 @@ const (
 	bindingKeepNoteIDField    = "keep_note_id"
 	bindingKeepNoteTitleField = "keep_note_title"
 	bindingBoundAtField       = "bound_at"
+	bindingLastPushedAtField  = "last_pushed_at"
 	bindingItemIDMapField     = "item_id_map"
 )
 
@@ -299,6 +314,10 @@ func decodeBindings(raw any) ([]Binding, error) {
 		if err != nil {
 			return nil, fmt.Errorf("wiki.connectors.google_keep.bindings[%d].bound_at: %w", i, err)
 		}
+		lastPushedAt, err := parseTime(getString(m, bindingLastPushedAtField))
+		if err != nil {
+			return nil, fmt.Errorf("wiki.connectors.google_keep.bindings[%d].last_pushed_at: %w", i, err)
+		}
 		idMap, err := decodeItemIDMap(m[bindingItemIDMapField])
 		if err != nil {
 			return nil, fmt.Errorf("wiki.connectors.google_keep.bindings[%d].item_id_map: %w", i, err)
@@ -309,6 +328,7 @@ func decodeBindings(raw any) ([]Binding, error) {
 			KeepNoteID:    getString(m, bindingKeepNoteIDField),
 			KeepNoteTitle: getString(m, bindingKeepNoteTitleField),
 			BoundAt:       boundAt,
+			LastPushedAt:  lastPushedAt,
 			ItemIDMap:     idMap,
 		})
 	}
@@ -362,6 +382,9 @@ func encodeBindings(bindings []Binding) []any {
 		}
 		if !b.BoundAt.IsZero() {
 			entry[bindingBoundAtField] = b.BoundAt.UTC().Format(time.RFC3339)
+		}
+		if !b.LastPushedAt.IsZero() {
+			entry[bindingLastPushedAtField] = b.LastPushedAt.UTC().Format(time.RFC3339)
 		}
 		if len(b.ItemIDMap) > 0 {
 			m := make(map[string]any, len(b.ItemIDMap))

@@ -130,6 +130,19 @@ func (c *Connector) SetChecklistReader(r ChecklistReader) { c.checklistR = r }
 // regressions; pass nil to silence.
 func (c *Connector) SetDebugLogger(l protocol.DebugLogger) { c.debug = l }
 
+// SetClientBuilder overrides the KeepClient factory. Test-only —
+// production wires the real factory in NewConnector. Used by sync
+// matrix tests to swap in a fake KeepClient that records pushes and
+// returns canned pull responses.
+func (c *Connector) SetClientBuilder(f KeepClientFactory) { c.clientBuilder = f }
+
+// SetAuthBuilder overrides the AuthExchanger factory. Test-only —
+// production wires the real factory in NewConnector. Used by sync
+// matrix tests to bypass the gpsoauth round trip.
+func (c *Connector) SetAuthBuilder(f func(deviceID string) AuthExchanger) {
+	c.authBuilder = f
+}
+
 // NewConnector wires the production dependencies. Tests construct a
 // Connector directly with stubbed builders.
 //
@@ -518,13 +531,13 @@ func (c *Connector) SyncToKeep(ctx context.Context, profileID wikipage.PageIdent
 	// updates can carry the right `id` field (Keep distinguishes
 	// `id` = client-generated stable ID, `serverId` = server-assigned).
 	originalClientIDs := make(map[string]string, len(pull.Nodes))
-	// And the Keep-side Updated timestamp per serverID — used by
-	// shouldPushWikiUpdate to skip items where Keep's view is fresher
-	// than wiki's. Symmetric to shouldPullKeepUpdate on the inbound
-	// side. Without this gate every cron tick pushes EVERY wiki item,
-	// which (combined with stale wiki state vs a just-edited Keep
-	// item) reverts the user's phone-side edit on the next push.
-	keepUpdated := make(map[string]time.Time, len(pull.Nodes))
+	// keepNodes lets the push diff loop check byte-identical equality
+	// against the latest Keep state. Pre-merge guard: with the inbound
+	// apply running first, wiki state already reflects any Keep-side
+	// changes; the only items left to push are real wiki-side diffs.
+	// Content-equality (text + checked + sortValue) is the sole push
+	// gate — Keep's backend 500s on no-op multi-item updates, so this
+	// skip is a hard correctness requirement, not just an optimization.
 	keepNodes := make(map[string]protocol.Node, len(pull.Nodes))
 	for _, n := range pull.Nodes {
 		if n.ServerID == "" {
@@ -535,10 +548,6 @@ func (c *Connector) SyncToKeep(ctx context.Context, profileID wikipage.PageIdent
 		}
 		if n.ID != "" {
 			originalClientIDs[n.ServerID] = n.ID
-		}
-		t := latestKeepTimestamp(n.Timestamps.Updated, n.Timestamps.UserEdited)
-		if !t.IsZero() {
-			keepUpdated[n.ServerID] = t
 		}
 		keepNodes[n.ServerID] = n
 	}
@@ -759,6 +768,13 @@ func (c *Connector) bootstrapKeepListForBinding(ctx context.Context, profileID w
 		}
 	}
 
+	// Stamp LastPushedAt: bootstrap is a successful push, so wiki
+	// state at this moment is reflected on Keep. Without this stamp,
+	// the next cron tick would treat all wiki items as "uncommitted"
+	// (lastPushedAt=zero gates apply) and refuse to apply any
+	// Keep-side changes until the user makes a wiki-side edit.
+	binding.LastPushedAt = now
+
 	// Suppress is unnecessary here — CreateListWithItems doesn't
 	// touch wiki state, just reads — but persistBindingMap uses the
 	// store's per-profile mutex so concurrent bind/cron interleavings
@@ -770,7 +786,8 @@ func (c *Connector) bootstrapKeepListForBinding(ctx context.Context, profileID w
 // stamps the binding's BoundAt — used as a "last successful sync" marker
 // pending a more explicit field. Holds the per-profile mutex via
 // BindingStore so concurrent syncs serialize.
-func (c *Connector) markBindingSynced(profileID wikipage.PageIdentifier, binding Binding, _ time.Time) error {
+func (c *Connector) markBindingSynced(profileID wikipage.PageIdentifier, binding Binding, now time.Time) error {
+	binding.LastPushedAt = now
 	state, err := c.store.LoadState(profileID)
 	if err != nil {
 		return fmt.Errorf("reload state for sync persist: %w", err)
@@ -913,15 +930,31 @@ func (c *Connector) applyInboundFromKeep(ctx context.Context, profileID wikipage
 			delete(binding.ItemIDMap, uid)
 
 		case isAlive && knownToWiki:
-			// Class 2: maybe updated on Keep. Compare Keep's freshness
-			// (later of updated/userEdited — see latestKeepTimestamp)
-			// to wiki's UpdatedAt; only pull if Keep is newer.
+			// Class 2: maybe updated on Keep.
+			//
+			// Why we don't compare per-item Keep timestamps: Keep stores
+			// epoch-sentinel ".001"/".002" timestamps on every LIST_ITEM
+			// pushed via the API, regardless of what we sent. Verified
+			// empirically via cmd/keep-debug — even immediately after a
+			// fresh push with Updated=now, the item's stored Updated is
+			// 1970-01-01T00:00:00.002Z. UserEdited is omitted entirely
+			// for API-pushed items. The per-item timestamps are useless
+			// signal for "did Keep change since last push?"
+			//
+			// Anchor instead on binding.LastPushedAt. If wiki's
+			// UpdatedAt is greater, the item has been edited locally
+			// since our last push (uncommitted) — skip apply, let the
+			// outbound push send the wiki edit. Else, the wiki state
+			// has been pushed; Keep can override on content diff.
+			//
+			// Content diff is checked downstream (the outbound push
+			// uses content equality), so even when we apply Keep's
+			// state, an identical-content apply is a no-op.
 			wikiItem, ok := wikiByUID[uid]
 			if !ok {
 				continue
 			}
-			keepFreshness := latestKeepTimestamp(n.Timestamps.Updated, n.Timestamps.UserEdited)
-			if !shouldPullKeepUpdate(keepFreshness, wikiItem.GetUpdatedAt()) {
+			if hasUncommittedWikiEdit(wikiItem.GetUpdatedAt(), binding.LastPushedAt) {
 				continue
 			}
 			converted, err := KeepToWiki(n)
@@ -993,6 +1026,13 @@ func latestKeepTimestamp(updated, userEdited time.Time) time.Time {
 // timestamp is newer enough than the wiki item's UpdatedAt to warrant
 // pulling the Keep state. Returns false if the wiki UpdatedAt is
 // missing or already at-or-after Keep's Updated.
+//
+// Deprecated for the inbound-apply gate: see hasUncommittedWikiEdit
+// for the correct anchor (Keep returns epoch sentinels for per-item
+// timestamps regardless of what we push, so per-item time comparisons
+// always look "wiki newer" forever). Kept for any callers that still
+// have a meaningful Keep timestamp to compare against (e.g. LIST node
+// freshness checks where Keep does maintain a real Updated value).
 func shouldPullKeepUpdate(keepUpdated time.Time, wikiUpdatedAt *timestamppb.Timestamp) bool {
 	if keepUpdated.IsZero() {
 		return false
@@ -1003,24 +1043,29 @@ func shouldPullKeepUpdate(keepUpdated time.Time, wikiUpdatedAt *timestamppb.Time
 	return keepUpdated.After(wikiUpdatedAt.AsTime())
 }
 
-// shouldPushWikiUpdate is the symmetric outbound version of
-// shouldPullKeepUpdate. Returns true when wiki's view is strictly
-// newer than Keep's — we have wiki-side edits that haven't reached
-// Keep yet. Returns false when Keep's view is at or ahead of wiki's
-// (the state has already round-tripped, or Keep was just edited and
-// the inbound apply will catch up next tick).
+// hasUncommittedWikiEdit decides whether the wiki item has been
+// edited since the binding's last successful push. If yes, inbound
+// apply must skip — the next outbound push will carry the wiki edit
+// to Keep. If no, the wiki state is "synced" and Keep-side changes
+// can override.
 //
-// keepUpdated may be zero (Keep node missing or no Updated value) —
-// treat that as "Keep is empty, push our state."
-func shouldPushWikiUpdate(wikiUpdatedAt *timestamppb.Timestamp, keepUpdated time.Time) bool {
+//   - lastPushedAt zero → no successful push yet for this binding.
+//     Treat all wiki state as uncommitted (don't apply Keep changes
+//     until the first push completes; otherwise we could overwrite
+//     a wiki edit that hasn't reached Keep yet).
+//   - wikiUpdatedAt nil → no wiki signal; treat as synced (apply Keep).
+//   - wikiUpdatedAt > lastPushedAt → uncommitted; skip apply.
+//   - wikiUpdatedAt ≤ lastPushedAt → synced; allow Keep apply.
+func hasUncommittedWikiEdit(wikiUpdatedAt *timestamppb.Timestamp, lastPushedAt time.Time) bool {
+	if lastPushedAt.IsZero() {
+		return true
+	}
 	if wikiUpdatedAt == nil {
 		return false
 	}
-	if keepUpdated.IsZero() {
-		return true
-	}
-	return wikiUpdatedAt.AsTime().After(keepUpdated)
+	return wikiUpdatedAt.AsTime().After(lastPushedAt)
 }
+
 
 // seedIDMapFromExistingList reconciles wiki items against an existing
 // Keep list at bind time so future syncs don't duplicate items.

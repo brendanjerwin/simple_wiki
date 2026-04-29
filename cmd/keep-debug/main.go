@@ -373,9 +373,9 @@ func runDumpItems(ctx context.Context, keep *protocol.KeepClient, listServerID s
 		if n.ParentID != listServerID && n.ParentServerID != listServerID {
 			continue
 		}
-		fmt.Printf("id=%s\n  serverId=%s\n  text=%q checked=%v\n  baseVersion=%q\n  Created=%s\n  Updated=%s\n  Trashed=%s\n  Deleted=%s\n\n",
+		fmt.Printf("id=%s\n  serverId=%s\n  text=%q checked=%v\n  baseVersion=%q\n  Created=%s\n  Updated=%s\n  UserEdited=%s\n  Trashed=%s\n  Deleted=%s\n\n",
 			n.ID, n.ServerID, n.Text, n.Checked, n.BaseVersion,
-			n.Timestamps.Created, n.Timestamps.Updated, n.Timestamps.Trashed, n.Timestamps.Deleted)
+			n.Timestamps.Created, n.Timestamps.Updated, n.Timestamps.UserEdited, n.Timestamps.Trashed, n.Timestamps.Deleted)
 	}
 }
 
