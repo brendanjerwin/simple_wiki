@@ -9,6 +9,7 @@ import (
 	context "context"
 	errors "errors"
 	v1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
+	emptypb "google.golang.org/protobuf/types/known/emptypb"
 	http "net/http"
 	strings "strings"
 )
@@ -57,6 +58,12 @@ const (
 	// KeepConnectorServiceGetChecklistBindingStateProcedure is the fully-qualified name of the
 	// KeepConnectorService's GetChecklistBindingState RPC.
 	KeepConnectorServiceGetChecklistBindingStateProcedure = "/api.v1.KeepConnectorService/GetChecklistBindingState"
+	// KeepConnectorServiceListDeadLettersProcedure is the fully-qualified name of the
+	// KeepConnectorService's ListDeadLetters RPC.
+	KeepConnectorServiceListDeadLettersProcedure = "/api.v1.KeepConnectorService/ListDeadLetters"
+	// KeepConnectorServiceClearDeadLetterProcedure is the fully-qualified name of the
+	// KeepConnectorService's ClearDeadLetter RPC.
+	KeepConnectorServiceClearDeadLetterProcedure = "/api.v1.KeepConnectorService/ClearDeadLetter"
 )
 
 // These variables are the protoreflect.Descriptor objects for the RPCs defined in this package.
@@ -70,6 +77,8 @@ var (
 	keepConnectorServiceBindChecklistMethodDescriptor            = keepConnectorServiceServiceDescriptor.Methods().ByName("BindChecklist")
 	keepConnectorServiceUnbindChecklistMethodDescriptor          = keepConnectorServiceServiceDescriptor.Methods().ByName("UnbindChecklist")
 	keepConnectorServiceGetChecklistBindingStateMethodDescriptor = keepConnectorServiceServiceDescriptor.Methods().ByName("GetChecklistBindingState")
+	keepConnectorServiceListDeadLettersMethodDescriptor          = keepConnectorServiceServiceDescriptor.Methods().ByName("ListDeadLetters")
+	keepConnectorServiceClearDeadLetterMethodDescriptor          = keepConnectorServiceServiceDescriptor.Methods().ByName("ClearDeadLetter")
 )
 
 // KeepConnectorServiceClient is a client for the api.v1.KeepConnectorService service.
@@ -82,6 +91,8 @@ type KeepConnectorServiceClient interface {
 	BindChecklist(context.Context, *connect.Request[v1.BindChecklistRequest]) (*connect.Response[v1.BindChecklistResponse], error)
 	UnbindChecklist(context.Context, *connect.Request[v1.UnbindChecklistRequest]) (*connect.Response[v1.UnbindChecklistResponse], error)
 	GetChecklistBindingState(context.Context, *connect.Request[v1.GetChecklistBindingStateRequest]) (*connect.Response[v1.GetChecklistBindingStateResponse], error)
+	ListDeadLetters(context.Context, *connect.Request[v1.ListDeadLettersRequest]) (*connect.Response[v1.ListDeadLettersResponse], error)
+	ClearDeadLetter(context.Context, *connect.Request[v1.ClearDeadLetterRequest]) (*connect.Response[emptypb.Empty], error)
 }
 
 // NewKeepConnectorServiceClient constructs a client for the api.v1.KeepConnectorService service. By
@@ -142,6 +153,18 @@ func NewKeepConnectorServiceClient(httpClient connect.HTTPClient, baseURL string
 			connect.WithSchema(keepConnectorServiceGetChecklistBindingStateMethodDescriptor),
 			connect.WithClientOptions(opts...),
 		),
+		listDeadLetters: connect.NewClient[v1.ListDeadLettersRequest, v1.ListDeadLettersResponse](
+			httpClient,
+			baseURL+KeepConnectorServiceListDeadLettersProcedure,
+			connect.WithSchema(keepConnectorServiceListDeadLettersMethodDescriptor),
+			connect.WithClientOptions(opts...),
+		),
+		clearDeadLetter: connect.NewClient[v1.ClearDeadLetterRequest, emptypb.Empty](
+			httpClient,
+			baseURL+KeepConnectorServiceClearDeadLetterProcedure,
+			connect.WithSchema(keepConnectorServiceClearDeadLetterMethodDescriptor),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -155,6 +178,8 @@ type keepConnectorServiceClient struct {
 	bindChecklist            *connect.Client[v1.BindChecklistRequest, v1.BindChecklistResponse]
 	unbindChecklist          *connect.Client[v1.UnbindChecklistRequest, v1.UnbindChecklistResponse]
 	getChecklistBindingState *connect.Client[v1.GetChecklistBindingStateRequest, v1.GetChecklistBindingStateResponse]
+	listDeadLetters          *connect.Client[v1.ListDeadLettersRequest, v1.ListDeadLettersResponse]
+	clearDeadLetter          *connect.Client[v1.ClearDeadLetterRequest, emptypb.Empty]
 }
 
 // ExchangeAndStore calls api.v1.KeepConnectorService.ExchangeAndStore.
@@ -197,6 +222,16 @@ func (c *keepConnectorServiceClient) GetChecklistBindingState(ctx context.Contex
 	return c.getChecklistBindingState.CallUnary(ctx, req)
 }
 
+// ListDeadLetters calls api.v1.KeepConnectorService.ListDeadLetters.
+func (c *keepConnectorServiceClient) ListDeadLetters(ctx context.Context, req *connect.Request[v1.ListDeadLettersRequest]) (*connect.Response[v1.ListDeadLettersResponse], error) {
+	return c.listDeadLetters.CallUnary(ctx, req)
+}
+
+// ClearDeadLetter calls api.v1.KeepConnectorService.ClearDeadLetter.
+func (c *keepConnectorServiceClient) ClearDeadLetter(ctx context.Context, req *connect.Request[v1.ClearDeadLetterRequest]) (*connect.Response[emptypb.Empty], error) {
+	return c.clearDeadLetter.CallUnary(ctx, req)
+}
+
 // KeepConnectorServiceHandler is an implementation of the api.v1.KeepConnectorService service.
 type KeepConnectorServiceHandler interface {
 	ExchangeAndStore(context.Context, *connect.Request[v1.ExchangeAndStoreRequest]) (*connect.Response[v1.ExchangeAndStoreResponse], error)
@@ -207,6 +242,8 @@ type KeepConnectorServiceHandler interface {
 	BindChecklist(context.Context, *connect.Request[v1.BindChecklistRequest]) (*connect.Response[v1.BindChecklistResponse], error)
 	UnbindChecklist(context.Context, *connect.Request[v1.UnbindChecklistRequest]) (*connect.Response[v1.UnbindChecklistResponse], error)
 	GetChecklistBindingState(context.Context, *connect.Request[v1.GetChecklistBindingStateRequest]) (*connect.Response[v1.GetChecklistBindingStateResponse], error)
+	ListDeadLetters(context.Context, *connect.Request[v1.ListDeadLettersRequest]) (*connect.Response[v1.ListDeadLettersResponse], error)
+	ClearDeadLetter(context.Context, *connect.Request[v1.ClearDeadLetterRequest]) (*connect.Response[emptypb.Empty], error)
 }
 
 // NewKeepConnectorServiceHandler builds an HTTP handler from the service implementation. It returns
@@ -263,6 +300,18 @@ func NewKeepConnectorServiceHandler(svc KeepConnectorServiceHandler, opts ...con
 		connect.WithSchema(keepConnectorServiceGetChecklistBindingStateMethodDescriptor),
 		connect.WithHandlerOptions(opts...),
 	)
+	keepConnectorServiceListDeadLettersHandler := connect.NewUnaryHandler(
+		KeepConnectorServiceListDeadLettersProcedure,
+		svc.ListDeadLetters,
+		connect.WithSchema(keepConnectorServiceListDeadLettersMethodDescriptor),
+		connect.WithHandlerOptions(opts...),
+	)
+	keepConnectorServiceClearDeadLetterHandler := connect.NewUnaryHandler(
+		KeepConnectorServiceClearDeadLetterProcedure,
+		svc.ClearDeadLetter,
+		connect.WithSchema(keepConnectorServiceClearDeadLetterMethodDescriptor),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/api.v1.KeepConnectorService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case KeepConnectorServiceExchangeAndStoreProcedure:
@@ -281,6 +330,10 @@ func NewKeepConnectorServiceHandler(svc KeepConnectorServiceHandler, opts ...con
 			keepConnectorServiceUnbindChecklistHandler.ServeHTTP(w, r)
 		case KeepConnectorServiceGetChecklistBindingStateProcedure:
 			keepConnectorServiceGetChecklistBindingStateHandler.ServeHTTP(w, r)
+		case KeepConnectorServiceListDeadLettersProcedure:
+			keepConnectorServiceListDeadLettersHandler.ServeHTTP(w, r)
+		case KeepConnectorServiceClearDeadLetterProcedure:
+			keepConnectorServiceClearDeadLetterHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -320,4 +373,12 @@ func (UnimplementedKeepConnectorServiceHandler) UnbindChecklist(context.Context,
 
 func (UnimplementedKeepConnectorServiceHandler) GetChecklistBindingState(context.Context, *connect.Request[v1.GetChecklistBindingStateRequest]) (*connect.Response[v1.GetChecklistBindingStateResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("api.v1.KeepConnectorService.GetChecklistBindingState is not implemented"))
+}
+
+func (UnimplementedKeepConnectorServiceHandler) ListDeadLetters(context.Context, *connect.Request[v1.ListDeadLettersRequest]) (*connect.Response[v1.ListDeadLettersResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("api.v1.KeepConnectorService.ListDeadLetters is not implemented"))
+}
+
+func (UnimplementedKeepConnectorServiceHandler) ClearDeadLetter(context.Context, *connect.Request[v1.ClearDeadLetterRequest]) (*connect.Response[emptypb.Empty], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("api.v1.KeepConnectorService.ClearDeadLetter is not implemented"))
 }

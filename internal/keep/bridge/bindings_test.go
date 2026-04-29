@@ -276,6 +276,7 @@ var _ = Describe("BindingStore.LoadState", func() {
 			Expect(ib.LastObservedWikiSortValue).To(Equal(""))
 			Expect(ib.PushFailureCount).To(Equal(0))
 			Expect(ib.LastFailureCode).To(Equal(""))
+			Expect(ib.NextAttemptAt.IsZero()).To(BeTrue())
 		})
 
 		When("the loaded state is re-saved and re-loaded", func() {
@@ -332,6 +333,7 @@ var _ = Describe("BindingStore.LoadState", func() {
 											"synced_sort_value":  "1000",
 											"push_failure_count": 2,
 											"last_failure_code":  "rate_limited",
+											"next_attempt_at":    "2026-05-01T12:01:00Z",
 										},
 									},
 								},
@@ -362,6 +364,39 @@ var _ = Describe("BindingStore.LoadState", func() {
 			Expect(ib.SyncedSortValue).To(Equal("1000"))
 			Expect(ib.PushFailureCount).To(Equal(2))
 			Expect(ib.LastFailureCode).To(Equal("rate_limited"))
+		})
+
+		It("should parse next_attempt_at as a UTC time", func() {
+			ib := state.Bindings[0].ItemIDMap["wiki-uid-1"]
+			expected := time.Date(2026, 5, 1, 12, 1, 0, 0, time.UTC)
+			Expect(ib.NextAttemptAt).To(BeTemporally("~", expected, time.Second))
+		})
+
+		When("the loaded structured state is re-saved and re-loaded", func() {
+			var roundTripped bridge.ConnectorState
+
+			BeforeEach(func() {
+				Expect(store.SaveState(aliceProfile, state)).To(Succeed())
+				var err error
+				roundTripped, err = store.LoadState(aliceProfile)
+				Expect(err).ToNot(HaveOccurred())
+			})
+
+			It("should round-trip NextAttemptAt", func() {
+				ib := roundTripped.Bindings[0].ItemIDMap["wiki-uid-1"]
+				expected := time.Date(2026, 5, 1, 12, 1, 0, 0, time.UTC)
+				Expect(ib.NextAttemptAt).To(BeTemporally("~", expected, time.Second))
+			})
+
+			It("should round-trip PushFailureCount", func() {
+				ib := roundTripped.Bindings[0].ItemIDMap["wiki-uid-1"]
+				Expect(ib.PushFailureCount).To(Equal(2))
+			})
+
+			It("should round-trip LastFailureCode", func() {
+				ib := roundTripped.Bindings[0].ItemIDMap["wiki-uid-1"]
+				Expect(ib.LastFailureCode).To(Equal("rate_limited"))
+			})
 		})
 	})
 })

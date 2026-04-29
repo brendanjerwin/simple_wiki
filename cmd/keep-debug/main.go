@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"strings"
@@ -17,7 +18,7 @@ import (
 )
 
 func main() {
-	cmd := flag.String("cmd", "list", "list | create-and-push | create-with-items | push-item-to-existing | dump-items")
+	cmd := flag.String("cmd", "list", "list | create-and-push | create-with-items | push-item-to-existing | dump-items | dump-write-results | verify-cursor-monotonic")
 	title := flag.String("title", "Keep CLI Test", "title for create-and-push / create-with-items")
 	itemsCSV := flag.String("items", "Eggs,Milk,Bread", "comma-separated items for create-with-items")
 	parentID := flag.String("parent-id", "", "for push-item-to-existing: the LIST node's serverID")
@@ -95,6 +96,10 @@ func main() {
 			os.Exit(2)
 		}
 		runUpdateItemMatching(ctx, keep, *parentID, *itemText)
+	case "dump-write-results":
+		runDumpWriteResults(ctx, email, masterToken, deviceID, keep)
+	case "verify-cursor-monotonic":
+		runVerifyCursorMonotonic(ctx, keep)
 	default:
 		fmt.Fprintln(os.Stderr, "unknown cmd:", *cmd)
 		os.Exit(2)
@@ -355,6 +360,212 @@ func runRawPull(ctx context.Context, email, masterToken, deviceID, filterParent 
 		fmt.Println(string(out))
 		fmt.Println("---")
 	}
+}
+
+// runDumpWriteResults posts a deliberate-conflict Changes push (a
+// soft-delete keyed to a bogus serverID that does not exist on the
+// account) and prints the raw response body. The point is to confirm
+// the wire shape of the per-pushed-node status array Keep echoes back
+// — assumed at protocol-decode time to be `writeResults: [{id,
+// status}]` based on prior keep-debug logs, but never empirically
+// pinned. Run against a real account; inspect stdout for the actual
+// field name.
+//
+// We use a raw HTTP request rather than KeepClient.Changes so the
+// literal response body lands on stdout — the typed decoder discards
+// fields it doesn't model.
+func runDumpWriteResults(ctx context.Context, email, masterToken, deviceID string, keep *protocol.KeepClient) {
+	// Step 1: pull to capture toVersion. We use the typed client here
+	// because we just need the cursor; the response body itself is
+	// uninteresting for this diagnostic.
+	now := time.Now().UTC()
+	pull, err := keep.Changes(ctx, protocol.ChangesRequest{
+		SessionID:       fmt.Sprintf("s--%d--dwr-pull", now.UnixMilli()),
+		ClientTimestamp: now.Format("2006-01-02T15:04:05.000000Z"),
+	})
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "pull failed:", err)
+		os.Exit(1)
+	}
+	fmt.Fprintf(os.Stderr, "✓ pull got toVersion=%s (%d nodes)\n", pull.ToVersion, len(pull.Nodes))
+
+	// Step 2: re-auth a raw HTTP client so we can dump the literal
+	// response body. The bearer above is on the typed client and isn't
+	// reachable from here.
+	authClient := &http.Client{
+		Transport: &http.Transport{
+			TLSClientConfig:   &tls.Config{MinVersion: tls.VersionTLS12, NextProtos: []string{"http/1.1"}},
+			ForceAttemptHTTP2: false,
+		},
+		Timeout: 30 * time.Second,
+	}
+	auth := protocol.NewAuthenticator(authClient, protocol.AuthURL, deviceID)
+	bearer, err := auth.ExchangeMasterTokenForBearer(ctx, email, masterToken)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "raw auth failed:", err)
+		os.Exit(1)
+	}
+
+	// Step 3: build a deliberately-conflicting push body. We send a
+	// soft-delete (Deleted=now) for a node whose serverId/parentServerId
+	// don't exist on this account. Either Keep responds with a per-node
+	// status entry indicating ERROR, or the whole call fails — both
+	// outcomes are informative.
+	now2 := time.Now().UTC()
+	bogusItemClientID := fmt.Sprintf("%x.%016x", now2.UnixMilli(), uint64(0xDEADBEEFCAFEBABE))
+	bogusItemServerID := "BOGUS_NONEXISTENT_ITEM_SERVERID_FOR_DIAGNOSTIC"
+	bogusParentServerID := "BOGUS_NONEXISTENT_LIST_SERVERID_FOR_DIAGNOSTIC"
+
+	var sessionEntropy [8]byte
+	_, _ = rand.Read(sessionEntropy[:])
+	sessionID := fmt.Sprintf("s--%d--%010d", now2.UnixMilli(),
+		(binary.BigEndian.Uint64(sessionEntropy[:])%9000000000)+1000000000)
+
+	pushBody := map[string]any{
+		"nodes": []any{
+			map[string]any{
+				"kind":           "notes#node",
+				"id":             bogusItemClientID,
+				"serverId":       bogusItemServerID,
+				"parentId":       bogusParentServerID,
+				"parentServerId": bogusParentServerID,
+				"type":           "LIST_ITEM",
+				"timestamps": map[string]any{
+					"kind":    "notes#timestamps",
+					"updated": now2.Format("2006-01-02T15:04:05.000000Z"),
+					"deleted": now2.Format("2006-01-02T15:04:05.000000Z"),
+				},
+			},
+		},
+		"clientTimestamp": now2.Format("2006-01-02T15:04:05.000000Z"),
+		"targetVersion":   pull.ToVersion,
+		"requestHeader": map[string]any{
+			"clientSessionId": sessionID,
+			"clientPlatform":  "ANDROID",
+			"clientVersion": map[string]any{
+				"major": "9", "minor": "9", "build": "9", "revision": "9",
+			},
+			"capabilities": []any{
+				map[string]any{"type": "NC"}, map[string]any{"type": "PI"},
+				map[string]any{"type": "LB"}, map[string]any{"type": "AN"},
+				map[string]any{"type": "SH"}, map[string]any{"type": "DR"},
+				map[string]any{"type": "TR"}, map[string]any{"type": "IN"},
+				map[string]any{"type": "SNB"}, map[string]any{"type": "MI"},
+				map[string]any{"type": "CO"},
+			},
+		},
+	}
+	body, err := json.Marshal(pushBody)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "marshal failed:", err)
+		os.Exit(1)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "POST",
+		protocol.DefaultKeepBaseURL+"changes", strings.NewReader(string(body)))
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "new request failed:", err)
+		os.Exit(1)
+	}
+	req.Header.Set("Authorization", "OAuth "+bearer)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("User-Agent", "simple_wiki-keep-debug/1")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "push failed:", err)
+		os.Exit(1)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	rawBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "read response body failed:", err)
+		os.Exit(1)
+	}
+
+	fmt.Fprintf(os.Stderr, "✓ push HTTP status: %d\n", resp.StatusCode)
+	fmt.Fprintln(os.Stderr, "--- RAW RESPONSE BODY (stdout) ---")
+	// Print to stdout so the body can be redirected/piped without
+	// the diagnostic chatter on stderr.
+	fmt.Println(string(rawBody))
+
+	// Also pretty-print if JSON parses, to make the field shape
+	// visually obvious.
+	var pretty any
+	if err := json.Unmarshal(rawBody, &pretty); err == nil {
+		out, _ := json.MarshalIndent(pretty, "", "  ")
+		fmt.Fprintln(os.Stderr, "--- pretty (stderr) ---")
+		fmt.Fprintln(os.Stderr, string(out))
+	} else {
+		fmt.Fprintln(os.Stderr, "(response is not JSON; only raw bytes printed)")
+	}
+}
+
+// runVerifyCursorMonotonic performs 6 sequential pulls (the first
+// with empty TargetVersion, each subsequent one with the prior pull's
+// ToVersion as TargetVersion) and asserts that the captured
+// to_version values are strictly lex-ordered in temporal order. This
+// empirically confirms whether Keep's cursor encoding is safe to
+// compare with Go's `<` string operator. If the assertion fails, the
+// runtime invariant in the connector must be relaxed (equality with
+// prior cursor) or replaced with a decode-then-compare comparator.
+//
+// This is the Phase-2 prerequisite from the plan's "Pre-flight
+// verification of lex monotonicity" section. Exits 0 on success, 1
+// on the first non-monotonic adjacent pair.
+func runVerifyCursorMonotonic(ctx context.Context, keep *protocol.KeepClient) {
+	const numPulls = 6
+	const interPullDelay = 1500 * time.Millisecond
+
+	versions := make([]string, 0, numPulls)
+	prevTarget := ""
+	for i := 0; i < numPulls; i++ {
+		now := time.Now().UTC()
+		req := protocol.ChangesRequest{
+			TargetVersion:   prevTarget,
+			SessionID:       fmt.Sprintf("s--%d--vcm-%d", now.UnixMilli(), i),
+			ClientTimestamp: now.Format("2006-01-02T15:04:05.000000Z"),
+		}
+		resp, err := keep.Changes(ctx, req)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "pull %d failed (targetVersion=%q): %v\n", i, prevTarget, err)
+			os.Exit(1)
+		}
+		fmt.Printf("pull[%d] targetVersion=%q -> toVersion=%q (nodes=%d, truncated=%v)\n",
+			i, prevTarget, resp.ToVersion, len(resp.Nodes), resp.Truncated)
+		if resp.ToVersion == "" {
+			fmt.Fprintf(os.Stderr, "pull %d returned empty toVersion; cannot verify monotonicity\n", i)
+			os.Exit(1)
+		}
+		versions = append(versions, resp.ToVersion)
+		prevTarget = resp.ToVersion
+
+		if i < numPulls-1 {
+			time.Sleep(interPullDelay)
+		}
+	}
+
+	// Assert lex monotonicity for every adjacent pair. We use strict
+	// `<` first; if any pair violates strict ordering we report it.
+	// Equal-adjacent pairs (no changes between pulls) are allowed —
+	// strictly-equal cursors are still safe (the invariant is
+	// "non-decreasing", not "strictly increasing").
+	for i := 1; i < len(versions); i++ {
+		prev, next := versions[i-1], versions[i]
+		if next < prev {
+			fmt.Fprintf(os.Stderr,
+				"FAIL: lex order violated at pair [%d -> %d]: prior=%q next=%q (next < prior)\n",
+				i-1, i, prev, next)
+			fmt.Fprintln(os.Stderr, "captured to_version values in temporal order:")
+			for j, v := range versions {
+				fmt.Fprintf(os.Stderr, "  [%d] %q\n", j, v)
+			}
+			os.Exit(1)
+		}
+	}
+
+	fmt.Printf("verified: %d consecutive to_version values are lexicographically monotonic\n", len(versions))
 }
 
 func runDumpItems(ctx context.Context, keep *protocol.KeepClient, listServerID string) {

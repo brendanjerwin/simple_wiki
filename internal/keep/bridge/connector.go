@@ -15,8 +15,6 @@ import (
 	"sync"
 	"time"
 
-	"google.golang.org/protobuf/types/known/timestamppb"
-
 	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
 	"github.com/brendanjerwin/simple_wiki/internal/hashtags"
 	"github.com/brendanjerwin/simple_wiki/internal/keep/protocol"
@@ -95,6 +93,15 @@ type Connector struct {
 
 	activeMu sync.Mutex
 	active   *activeBindings
+
+	// loggedSkip records bindings whose un-migrated SyncToKeep skip has
+	// already produced an INFO log this process. Keys are BindingKey
+	// values; presence means "skip already logged, stay silent". Reset
+	// on process restart (next process logs fresh on first skip). The
+	// rationale lives in plan §"Log throttling on the skip path": a
+	// stuck-un-migrated binding would otherwise spam the journal once
+	// per cron tick (~30s) until the migration job catches up.
+	loggedSkip sync.Map
 }
 
 // SetJobEnqueuer wires the queue Bind enqueues a sync job into. Same
@@ -422,11 +429,71 @@ const (
 	keepSessionIDSpan   = 9000000000
 )
 
+// truncationResyncThreshold is the streak length of consecutive
+// truncated pulls (per binding) at which — combined with no observed
+// progress (cursor not advancing AND no synced_fp updates) — the
+// connector drops the cursor and forces a full resync on the next
+// tick. The two-condition trigger distinguishes chronic-but-progressing
+// truncation (legitimate large-account pagination) from chronic-and-
+// stuck truncation (real masking risk). Source: plan §"Truncation
+// escape hatch".
+const truncationResyncThreshold = 5
+
+// deadLetterThreshold is the per-item consecutive-push-failure count at
+// which the connector stops attempting to push the item. After 10
+// failures the item is dead-lettered: surfaced in the KeepConnect macro
+// (task #83) and skipped on subsequent ticks until the user clears it
+// (gRPC ClearDeadLetter, task #83) or re-edits the wiki side (which
+// resets the failure count automatically — see SyncToKeep). Inbound
+// apply still operates on dead-lettered items; only the outbound push
+// is gated. Source: plan §"Bounded retry + dead-letter".
+const deadLetterThreshold = 10
+
+// pushFailureBackoffBaseSeconds and pushFailureBackoffMaxSeconds bound
+// the exponential per-item retry schedule. After the n-th consecutive
+// failure, the connector waits min(60 * 2^(n-1), 3600) seconds before
+// the next push attempt for that item. NextAttemptAt on the
+// ItemBinding records the absolute wall-clock deadline; the diff loop
+// skips items whose NextAttemptAt is in the future. Source: plan
+// §"Bounded retry + dead-letter".
+const (
+	pushFailureBackoffBaseSeconds = 60
+	pushFailureBackoffMaxSeconds  = 3600
+)
+
+// noResponseStatusCode is the LastFailureCode used when Keep's response
+// has no WriteResults entry for a pushed item. Distinguishes "Keep
+// rejected" (we have a status code) from "Keep didn't tell us anything"
+// (which can mean the response shape changed, the item was silently
+// dropped, or our matcher failed). Inspect the journal for this code
+// and check the raw push response next to the request body.
+const noResponseStatusCode = "no_response_status"
+
+// writeResultStatusSuccess is the per-node WriteResults Status string
+// Keep returns for a successfully accepted push. Anything else (or
+// missing) counts as failure for the purposes of synced_fp gating.
+const writeResultStatusSuccess = "SUCCESS"
+
 // ErrChecklistReaderUnavailable is returned by SyncToKeep when the
 // connector wasn't given a ChecklistReader at startup. Indicates a
 // wiring bug in bootstrap; callers should fail loudly so it gets
 // noticed rather than silently dropping sync events.
 var ErrChecklistReaderUnavailable = errors.New("keep bridge: checklist reader not configured (bootstrap bug)")
+
+// logSkipOnce records a per-process "we already logged the skip for
+// this binding" signal. Returns true exactly once per (profileID,
+// page, listName) per Connector instance — the caller logs an INFO
+// line on `true` and stays silent on `false`. The state persists
+// only for the life of this process; a restart re-logs each
+// still-un-migrated binding once. See the field comment on
+// Connector.loggedSkip and plan §"Log throttling on the skip path"
+// for the rationale (avoid 30s-cadence journal spam while still
+// surfacing the transition into "stuck un-migrated").
+func (c *Connector) logSkipOnce(profileID wikipage.PageIdentifier, page, listName string) bool {
+	key := BindingKey{ProfileID: profileID, Page: page, ListName: listName}
+	_, alreadyLogged := c.loggedSkip.LoadOrStore(key, struct{}{})
+	return !alreadyLogged
+}
 
 // SyncToKeep diffs the wiki checklist (page, listName) against the
 // bound Keep note and pushes the delta in a single Changes request.
@@ -471,6 +538,24 @@ func (c *Connector) SyncToKeep(ctx context.Context, profileID wikipage.PageIdent
 		return nil
 	}
 
+	// Migration gate: legacy bindings created before the fingerprint
+	// rewrite have a flat id_map (just serverIDs, no synced_fp) and
+	// MigratedFingerprints=false. The sync engine's divergence rule
+	// requires a real synced_fp baseline; running it on a zero-valued
+	// baseline would silently rebaseline on the first tick (the "lazy
+	// first-tick" approach the plan rejected). Skip — eagerly — until
+	// the KeepBridgeFingerprintMigrationJob populates synced_fp and
+	// stamps the flag. Throttled INFO log on the first skip per binding
+	// per process so we see the transition into "stuck un-migrated"
+	// without spamming the journal at the cron cadence.
+	if !binding.MigratedFingerprints {
+		if c.logSkipOnce(profileID, page, listName) && c.debug != nil {
+			c.debug.Info("SyncToKeep skipping un-migrated binding profile=%s page=%s list=%s",
+				profileID, page, listName)
+		}
+		return nil
+	}
+
 	checklist, err := c.checklistR.ListItems(ctx, page, listName)
 	if err != nil {
 		return fmt.Errorf("read wiki checklist: %w", err)
@@ -496,23 +581,63 @@ func (c *Connector) SyncToKeep(ctx context.Context, profileID wikipage.PageIdent
 	pull, err := client.Changes(ctx, protocol.ChangesRequest{
 		SessionID:       fmt.Sprintf("s--%d--syncpull-%s", now.UnixMilli(), binding.KeepNoteID),
 		ClientTimestamp: now.Format("2006-01-02T15:04:05.000000Z"),
+		TargetVersion:   binding.KeepCursor,
 	})
 	if err != nil {
 		return fmt.Errorf("sync pull: %w", err)
 	}
+
+	// Capture the prior cursor so the truncation escape hatch can
+	// distinguish "cursor advanced this tick" (progress) from "cursor
+	// stuck at the same value" (no progress). A truncated pull never
+	// advances the cursor below, so without this snapshot we can't
+	// tell whether a later push advanced it.
+	priorCursor := binding.KeepCursor
+
+	// Track whether ANY synced_fp moved this tick (inbound apply,
+	// outbound push success, applyInboundNewFromKeep adoption / fresh-
+	// from-Keep imports). Combined with a cursor advance below, this
+	// is the "progress" signal used by the truncation escape hatch:
+	// chronic truncation that's still advancing items isn't masking
+	// deletes, just paginating.
+	progressed := false
+
+	// Cursor advance: a successful non-truncated pull (even one with an
+	// empty Nodes slice) advances the binding's KeepCursor to pull.ToVersion.
+	// Skip advance only when pull.Truncated == true — leave the cursor
+	// stale so the next tick re-pulls from the same point. Without this,
+	// an empty incremental pull would re-fetch the same delta forever.
+	if !pull.Truncated && pull.ToVersion != "" {
+		binding.KeepCursor = pull.ToVersion
+	}
+
+	// Truncation streak: bump on truncated pull, reset on clean pull.
+	// The two-condition escape hatch fires AFTER the rest of the tick
+	// (so we can observe whether any synced_fp / cursor advance happened
+	// despite the truncation). Source: plan §"Truncation escape hatch".
+	if pull.Truncated {
+		binding.TruncatedTickStreak++
+	} else {
+		binding.TruncatedTickStreak = 0
+	}
+	getMetrics().recordTruncationStreak(ctx, profileID, page, listName, int64(binding.TruncatedTickStreak))
 
 	// Inbound apply: bring Keep-side changes into the wiki BEFORE
 	// computing the outbound diff. Suppressed via the SyncSuppressor
 	// so the mutator notifies emitted by AddItemForSync /
 	// UpdateItemForSync / DeleteItemForSync don't loop back as fresh
 	// sync triggers. updatedBinding carries any id_map changes (new
-	// uid → serverID for items that arrived from Keep).
-	updatedBinding, freshChecklist, err := c.applyInboundFromKeep(ctx, profileID, ownerEmail, binding, pull, checklist)
+	// uid → serverID for items that arrived from Keep). inboundProgressed
+	// is true if any synced_fp advance happened during the apply.
+	updatedBinding, freshChecklist, inboundProgressed, err := c.applyInboundFromKeep(ctx, profileID, ownerEmail, binding, pull, checklist)
 	if err != nil {
 		return fmt.Errorf("inbound apply: %w", err)
 	}
 	binding = updatedBinding
 	checklist = freshChecklist
+	if inboundProgressed {
+		progressed = true
+	}
 
 	// Resolve which Keep labels the bound LIST should carry. Reads the
 	// host page's frontmatter tags and reconciles with the user's
@@ -540,13 +665,11 @@ func (c *Connector) SyncToKeep(ctx context.Context, profileID wikipage.PageIdent
 	// updates can carry the right `id` field (Keep distinguishes
 	// `id` = client-generated stable ID, `serverId` = server-assigned).
 	originalClientIDs := make(map[string]string, len(pull.Nodes))
-	// keepNodes lets the push diff loop check byte-identical equality
-	// against the latest Keep state. Pre-merge guard: with the inbound
-	// apply running first, wiki state already reflects any Keep-side
-	// changes; the only items left to push are real wiki-side diffs.
-	// Content-equality (text + checked + sortValue) is the sole push
-	// gate — Keep's backend 500s on no-op multi-item updates, so this
-	// skip is a hard correctness requirement, not just an optimization.
+	// keepNodes is retained for inbound bookkeeping (see soft-delete
+	// loop below: skip pushing a soft-delete for items Keep has
+	// already removed). The outbound push gate, however, is the
+	// fingerprint divergence rule — see the per-item decision in
+	// the loop below.
 	keepNodes := make(map[string]protocol.Node, len(pull.Nodes))
 	for _, n := range pull.Nodes {
 		if n.ServerID == "" {
@@ -565,8 +688,63 @@ func (c *Connector) SyncToKeep(ctx context.Context, profileID wikipage.PageIdent
 	pushNodes := make([]protocol.Node, 0, len(checklist.GetItems()))
 	freshUIDs := make([]string, 0)        // index-aligned with the appended fresh items below
 	freshClientIDs := make([]string, 0)
+	// pushedFP[uid] = the Fingerprint we sent for that item. After a
+	// successful push, each ItemBinding's synced_fp is advanced to its
+	// entry here ONLY for nodes Keep reports as Status=SUCCESS in
+	// WriteResults. Items missing from WriteResults or marked non-
+	// SUCCESS leave synced_fp at its prior value so the next tick re-
+	// pushes. Indexed by wiki uid so the response walk can match.
+	pushedFP := make(map[string]Fingerprint, len(checklist.GetItems()))
+	// pushedClientID[uid] = the client_id we sent in the push for that
+	// uid. Used to match Keep's per-node WriteResults entries (Keep
+	// echoes the request's client-side `id` field, NOT array index).
+	pushedClientID := make(map[string]string, len(checklist.GetItems()))
 	for i, item := range checklist.GetItems() {
-		ib := binding.ItemIDMap[item.GetUid()]
+		uid := item.GetUid()
+		ib := binding.ItemIDMap[uid]
+
+		// Wiki-side re-edit auto-resets the failure count. If the user
+		// edited this item in the wiki since the previous tick, the
+		// current wiki fingerprint differs from LastObservedWiki* and
+		// PushFailureCount/LastFailureCode/NextAttemptAt are cleared.
+		// Done BEFORE the dead-letter check so a re-edit unblocks an
+		// item that would otherwise be skipped.
+		wikiFPNow := FingerprintWiki(item)
+		if ib.LastObservedWikiText != "" {
+			observedFP := Fingerprint{
+				Text:      ib.LastObservedWikiText,
+				Checked:   ib.LastObservedWikiChecked,
+				SortValue: ib.LastObservedWikiSortValue,
+			}
+			if wikiFPNow != observedFP {
+				ib.PushFailureCount = 0
+				ib.LastFailureCode = ""
+				ib.NextAttemptAt = time.Time{}
+				binding.ItemIDMap[uid] = ib
+			}
+		}
+
+		// Dead-letter skip: after deadLetterThreshold consecutive push
+		// failures, stop attempting the item until the user clears the
+		// dead-letter (gRPC ClearDeadLetter, task #83) or re-edits the
+		// wiki side (handled above). Inbound apply still operates on
+		// dead-lettered items; only the outbound push is gated.
+		if ib.PushFailureCount >= deadLetterThreshold {
+			covered[uid] = true
+			getMetrics().recordPushAttempt(ctx, profileID, page, listName, PushAttemptStatusDeadLetteredSkip, 1)
+			continue
+		}
+
+		// Backoff gate: skip until NextAttemptAt. Successful pushes and
+		// wiki re-edits clear NextAttemptAt; only failures populate it
+		// (now + min(60 * 2^(n-1), 3600) seconds). Items in their
+		// backoff window are still considered "covered" so the soft-
+		// delete loop below doesn't misinterpret them as wiki-deleted.
+		if !ib.NextAttemptAt.IsZero() && now.Before(ib.NextAttemptAt) {
+			covered[uid] = true
+			continue
+		}
+
 		serverID := ib.ServerID
 		node := WikiToKeep(item, binding.KeepNoteID, serverID)
 		// Stamp Updated to sync-now: gkeepapi touch() sets
@@ -582,39 +760,64 @@ func (c *Connector) SyncToKeep(ctx context.Context, profileID wikipage.PageIdent
 			node.SortValue = fmt.Sprintf("%d", (len(checklist.GetItems())-i)*sortValueGap)
 		}
 		if serverID == "" {
-			// Fresh item: assign a client_id, remember the uid so we
-			// can update the map after the response.
+			// Fresh item (W1): no synced baseline — wiki is offering
+			// it for the first time, so push unconditionally. Assign
+			// a client_id and remember the uid so we can update the
+			// map after the response.
 			cid, idErr := generatePushClientID(now, i)
 			if idErr != nil {
 				return fmt.Errorf("generate client_id: %w", idErr)
 			}
 			node.ID = cid
 			freshClientIDs = append(freshClientIDs, cid)
-			freshUIDs = append(freshUIDs, item.GetUid())
+			freshUIDs = append(freshUIDs, uid)
+			// Mark fresh uids as covered too — without this, the
+			// post-push "drop uncovered id_map entries" loop deletes
+			// the just-created entry for fresh items, losing both
+			// the server-assigned ServerID and the synced_fp advance.
+			covered[uid] = true
 		} else {
 			if originalID, ok := originalClientIDs[serverID]; ok {
 				node.ID = originalID
 			}
 			node.BaseVersion = baseVersions[serverID]
-			covered[item.GetUid()] = true
+			covered[uid] = true
 
-			// Content-equality skip: Keep's backend 500s on a multi-
-			// item update where every item is byte-identical to the
-			// server's current state. Verified via cmd/keep-debug —
-			// 3 items with text=X/Y/Z (matching Keep) returned
-			// stage3 HTTP 500; the same 3 items with text=X edit/
-			// Y edit/Z edit returned writeResults=SUCCESS. So we
-			// only push items whose text/checked/sortValue actually
-			// differ from what we just pulled. Timestamp differences
-			// alone don't count as a real change — Keep rebuilds
-			// its own updated timestamp on apply.
-			if keepNode, ok := keepNodes[serverID]; ok {
-				if keepNode.Text == node.Text && keepNode.Checked == node.Checked && keepNode.SortValue == node.SortValue {
-					continue
-				}
+			// Per-item decision rule (fingerprint divergence):
+			//   wiki_fp   = FingerprintWiki(item)
+			//   synced_fp = last successful sync's content for this uid
+			//   wiki_fp == synced_fp → skip (W0 / no-op tick: wiki
+			//     hasn't been edited since the last sync).
+			//   wiki_fp != synced_fp → push (W2/W3/W4/W5/W6 cases).
+			//
+			// Concurrent-edit case (wiki_fp != synced_fp AND
+			// keep_fp != synced_fp): handled by applyInboundFromKeep
+			// before this loop. If Keep diverged, the inbound apply
+			// either rewrote wiki to match Keep (B1: keep wins) or
+			// silently rebaselined synced_fp (when wiki_fp ==
+			// keep_fp). Either way, by the time we reach this loop
+			// wiki_fp == synced_fp again and we skip the push — no
+			// special-case branch needed here.
+			//
+			// Why this replaces the old content-equality-against-
+			// Keep skip: byte-equality only catches "wiki and Keep
+			// happen to match", not "wiki was never edited since
+			// last sync". The latter is the actual no-op condition
+			// we want — and Keep's backend still 500s on no-op
+			// multi-item updates, so the fingerprint check is also
+			// the production-correctness gate.
+			syncedFP := FingerprintFromItemBinding(ib)
+			if wikiFPNow == syncedFP {
+				continue
 			}
 		}
 		pushNodes = append(pushNodes, node)
+		pushedFP[uid] = Fingerprint{
+			Text:      node.Text,
+			Checked:   node.Checked,
+			SortValue: node.SortValue,
+		}
+		pushedClientID[uid] = node.ID
 	}
 
 	// Soft-delete: any binding map entry whose uid isn't in the current
@@ -681,8 +884,12 @@ func (c *Connector) SyncToKeep(ctx context.Context, profileID wikipage.PageIdent
 	}
 
 	if len(pushNodes) == 0 && len(labelPushEntries) == 0 {
-		// No diff — wiki and binding map are in sync. Update verified
-		// timestamp and exit.
+		// No diff — wiki and binding map are in sync. Stamp end-of-
+		// tick LastObservedWiki* (so a wiki re-edit after this tick is
+		// detectable on the next one) and exit.
+		c.maybeForceFullResyncOnTruncation(ctx, &binding, priorCursor, progressed, profileID)
+		stampLastObservedWiki(&binding, checklist)
+		getMetrics().recordDeadLetterCount(ctx, profileID, page, listName, countDeadLetters(binding.ItemIDMap))
 		return c.markBindingSynced(profileID, binding, now)
 	}
 
@@ -701,8 +908,19 @@ func (c *Connector) SyncToKeep(ctx context.Context, profileID wikipage.PageIdent
 		return fmt.Errorf("sync push: %w", err)
 	}
 
+	// Successful push: prefer the push response's ToVersion over the
+	// pull's — the push is the more recent server state.
+	if resp.ToVersion != "" {
+		binding.KeepCursor = resp.ToVersion
+	}
+
 	// Update id_map: pick up server-assigned IDs for fresh items;
-	// drop entries whose corresponding node came back trashed.
+	// advance synced_fp ONLY for nodes Keep reports as SUCCESS in
+	// WriteResults; bump PushFailureCount + record LastFailureCode for
+	// the rest. Match WriteResults entries to pushed nodes by client-
+	// side ID (Keep echoes the request's `id` field, NOT array index).
+	// An item with no WriteResults entry counts as a failure with
+	// LastFailureCode=noResponseStatusCode.
 	if binding.ItemIDMap == nil {
 		binding.ItemIDMap = map[string]ItemBinding{}
 	}
@@ -719,6 +937,50 @@ func (c *Connector) SyncToKeep(ctx context.Context, profileID wikipage.PageIdent
 			}
 		}
 	}
+	// Build a clientID → status map so the per-uid walk below can
+	// look up Keep's verdict in O(1). Anything not SUCCESS (including
+	// missing) counts as failure.
+	statusByClientID := make(map[string]string, len(resp.WriteResults))
+	for _, wr := range resp.WriteResults {
+		statusByClientID[wr.ID] = wr.Status
+	}
+	// Advance synced_fp + reset failure state for SUCCESS uids; bump
+	// PushFailureCount + set LastFailureCode + populate NextAttemptAt
+	// for the rest. SyncedText / SyncedChecked / SyncedSortValue use
+	// the fingerprint we SENT (not what Keep echoed back) — Keep
+	// doesn't necessarily echo content fields on a successful update,
+	// but the wire-state it now holds for that item is what we sent.
+	for uid, fp := range pushedFP {
+		clientID := pushedClientID[uid]
+		status, hasStatus := statusByClientID[clientID]
+		ib, ok := binding.ItemIDMap[uid]
+		if !ok {
+			// Fresh item whose response wasn't echoed back — no
+			// id_map entry was created above. Skip; the next sync
+			// will treat it as fresh again (idempotent).
+			continue
+		}
+		if hasStatus && status == writeResultStatusSuccess {
+			ib.SyncedText = fp.Text
+			ib.SyncedChecked = fp.Checked
+			ib.SyncedSortValue = fp.SortValue
+			ib.PushFailureCount = 0
+			ib.LastFailureCode = ""
+			ib.NextAttemptAt = time.Time{}
+			progressed = true
+			getMetrics().recordPushAttempt(ctx, profileID, page, listName, PushAttemptStatusSuccess, 1)
+		} else {
+			ib.PushFailureCount++
+			if hasStatus {
+				ib.LastFailureCode = status
+			} else {
+				ib.LastFailureCode = noResponseStatusCode
+			}
+			ib.NextAttemptAt = now.Add(pushFailureBackoff(ib.PushFailureCount))
+			getMetrics().recordPushAttempt(ctx, profileID, page, listName, PushAttemptStatusFailure, 1)
+		}
+		binding.ItemIDMap[uid] = ib
+	}
 	// Drop trashed-confirmed entries.
 	for uid := range binding.ItemIDMap {
 		if covered[uid] {
@@ -730,7 +992,108 @@ func (c *Connector) SyncToKeep(ctx context.Context, profileID wikipage.PageIdent
 		delete(binding.ItemIDMap, uid)
 	}
 
+	// End-of-tick: stamp LastObservedWiki* for every uid in id_map
+	// that's also present in the current wiki snapshot. Drives the
+	// next tick's "did the user re-edit the wiki side?" check.
+	c.maybeForceFullResyncOnTruncation(ctx, &binding, priorCursor, progressed, profileID)
+	stampLastObservedWiki(&binding, checklist)
+	getMetrics().recordDeadLetterCount(ctx, profileID, page, listName, countDeadLetters(binding.ItemIDMap))
+
 	return c.markBindingSynced(profileID, binding, now)
+}
+
+// countDeadLetters reports how many entries in idMap are currently
+// at-or-above the dead-letter threshold. Used as the snapshot value
+// for the keep_bridge_dead_letter_count gauge at end of each
+// SyncToKeep tick.
+func countDeadLetters(idMap map[string]ItemBinding) int64 {
+	var n int64
+	for _, ib := range idMap {
+		if ib.PushFailureCount >= deadLetterThreshold {
+			n++
+		}
+	}
+	return n
+}
+
+// maybeForceFullResyncOnTruncation implements the two-condition escape
+// hatch from the plan §"Truncation escape hatch": if the binding has
+// hit `truncationResyncThreshold` consecutive truncated pulls (condition
+// A) AND no progress was made on this tick — neither the cursor
+// advanced nor any synced_fp updates landed (condition B) — drop the
+// cursor to force a full resync on the next tick and reset the streak
+// counter.
+//
+// Why both conditions: chronic-but-progressing truncation is just
+// pagination of a large account (legitimate); chronic-and-stuck is
+// the actual masking-deletes risk this guard protects against. The
+// reset gives the next tick a clean baseline regardless of which
+// branch fires.
+func (c *Connector) maybeForceFullResyncOnTruncation(ctx context.Context, binding *Binding, priorCursor string, progressed bool, profileID wikipage.PageIdentifier) {
+	if binding.TruncatedTickStreak < truncationResyncThreshold {
+		return
+	}
+	cursorAdvanced := binding.KeepCursor != "" && binding.KeepCursor != priorCursor
+	if cursorAdvanced || progressed {
+		// Condition A fired but B did not: pagination, not masking.
+		// Leave streak elevated; another non-truncated tick will reset
+		// it via the streak-reset branch in SyncToKeep.
+		return
+	}
+	binding.KeepCursor = ""
+	binding.TruncatedTickStreak = 0
+	getMetrics().recordCursorReset(ctx, profileID, binding.Page, binding.ListName, CursorResetReasonChronicTruncation)
+	if c.debug != nil {
+		c.debug.Info("keep bridge: chronic truncation without progress (streak=%d) — dropping cursor to force full resync next tick (page=%s list=%s)",
+			truncationResyncThreshold, binding.Page, binding.ListName)
+	}
+}
+
+// stampLastObservedWiki records the current wiki fingerprint for every
+// uid still in the id_map at the end of a SyncToKeep tick. The next
+// tick compares the fresh wiki_fp against this snapshot to detect
+// "user re-edited locally since the last tick" — which resets
+// PushFailureCount and clears any backoff (the obvious user-fix path
+// after a dead-letter). Captured at end-of-tick, not start, so
+// intra-tick wiki edits aren't missed.
+func stampLastObservedWiki(binding *Binding, checklist *apiv1.Checklist) {
+	wikiByUID := make(map[string]*apiv1.ChecklistItem, len(checklist.GetItems()))
+	for _, it := range checklist.GetItems() {
+		if it.GetUid() == "" {
+			continue
+		}
+		wikiByUID[it.GetUid()] = it
+	}
+	for uid, ib := range binding.ItemIDMap {
+		item, ok := wikiByUID[uid]
+		if !ok {
+			continue
+		}
+		fp := FingerprintWiki(item)
+		ib.LastObservedWikiText = fp.Text
+		ib.LastObservedWikiChecked = fp.Checked
+		ib.LastObservedWikiSortValue = fp.SortValue
+		binding.ItemIDMap[uid] = ib
+	}
+}
+
+// pushFailureBackoff returns the wait duration after the n-th
+// consecutive per-item push failure: min(60 * 2^(n-1), 3600) seconds.
+// n is the post-increment PushFailureCount (so n=1 returns 60s, n=2
+// returns 120s, ..., capped at 3600s = 1h).
+func pushFailureBackoff(n int) time.Duration {
+	if n < 1 {
+		return 0
+	}
+	seconds := pushFailureBackoffBaseSeconds
+	for i := 1; i < n; i++ {
+		seconds *= 2
+		if seconds >= pushFailureBackoffMaxSeconds {
+			seconds = pushFailureBackoffMaxSeconds
+			break
+		}
+	}
+	return time.Duration(seconds) * time.Second
 }
 
 // bootstrapKeepListForBinding creates the Keep LIST for a binding that
@@ -819,23 +1182,38 @@ func (c *Connector) markBindingSynced(profileID wikipage.PageIdentifier, binding
 
 // applyInboundFromKeep reconciles Keep-side changes into the wiki
 // before the outbound diff runs. Returns the (possibly updated)
-// binding (id_map gains entries for fresh-from-Keep items) and a
-// freshly-loaded checklist reflecting the post-apply state.
+// binding (id_map gains entries for fresh-from-Keep items, synced_fp
+// advances on every successful apply) and a freshly-loaded checklist
+// reflecting the post-apply state.
 //
-// Three classes of inbound change:
+// The classification is the per-item divergence rule from the plan:
 //
-//  1. New on Keep, not in wiki — a Keep node whose serverID isn't in
-//     binding.ItemIDMap (reverse). Apply via AddItemForSync; record
-//     the new uid in the id_map.
+//	wiki_fp   = FingerprintWiki(wiki item) | NIL if absent
+//	keep_fp   = FingerprintKeep(node)      | NIL if trashed/deleted/absent
+//	synced_fp = FingerprintFromItemBinding | NIL if not in id_map
 //
-//  2. Updated on Keep — a Keep node whose serverID IS in id_map and
-//     whose Updated timestamp is newer than the wiki item's
-//     UpdatedAt. Apply via UpdateItemForSync (replaces text/tags/
-//     description, reconciles checked).
+//	wiki_diverged := wiki_fp != synced_fp
+//	keep_diverged := keep_fp != synced_fp
 //
-//  3. Trashed/Deleted on Keep — a Keep node whose serverID is in
-//     id_map and whose Trashed/Deleted timestamp is non-zero. Apply
-//     via DeleteItemForSync; remove from id_map.
+// Cells handled here (inbound):
+//
+//	¬W ∧  K ∧ M=none                           → adopt-by-text else AddItemForSync
+//	 W ∧  K ∧ M=correct ∧ ¬wd ∧ ¬kd            → no-op
+//	 W ∧  K ∧ M=correct ∧  wd ∧ ¬kd            → defer to outbound (push wiki)
+//	 W ∧  K ∧ M=correct ∧ ¬wd ∧  kd            → apply Keep
+//	 W ∧  K ∧ M=correct ∧  wd ∧  kd            → conflict; "Keep wins" (B1)
+//	 K trashed/deleted ∧ M=correct             → apply delete + drop id_map (K4/K5)
+//	 W ∧ ¬K ∧ M=correct ∧ ¬wd                  → apply Keep hard-delete (bug 1 fix)
+//	 W ∧ ¬K ∧ M=correct ∧  wd                  → defer to outbound (push wiki as fresh)
+//	¬W ∧ ¬K                                    → drop stale id_map (no-op)
+//
+// Special case "wd ∧ kd ∧ wiki_fp == keep_fp": both sides drifted to
+// the same content (typical of a bridge-restart-recovery race or a
+// first-tick rebaseline where wiki and Keep happen to agree). The
+// unified Keep-wins branch would call UpdateItemForSync with the same
+// content the wiki already has — operationally a no-op but a wasted
+// mutator call. Detect this and silent-rebaseline: advance synced_fp
+// without invoking the mutator.
 //
 // Suppression: each inbound mutation fires the mutator's notify hook,
 // which would normally enqueue another sync. The suppressor blocks
@@ -843,10 +1221,11 @@ func (c *Connector) markBindingSynced(profileID wikipage.PageIdentifier, binding
 // pass (refcounted). Outbound push then runs unsuppressed; if it
 // itself produces new wiki state via the response (e.g. new Keep
 // serverIDs), those land via the response-walk in the caller.
-func (c *Connector) applyInboundFromKeep(ctx context.Context, profileID wikipage.PageIdentifier, ownerEmail string, binding Binding, pull protocol.ChangesResponse, currentChecklist *apiv1.Checklist) (Binding, *apiv1.Checklist, error) {
+//revive:disable-next-line:function-result-limit
+func (c *Connector) applyInboundFromKeep(ctx context.Context, profileID wikipage.PageIdentifier, ownerEmail string, binding Binding, pull protocol.ChangesResponse, currentChecklist *apiv1.Checklist) (Binding, *apiv1.Checklist, bool, error) {
 	if c.checklistW == nil {
 		// No mutator wired — outbound-only mode. Return inputs as-is.
-		return binding, currentChecklist, nil
+		return binding, currentChecklist, false, nil
 	}
 	if c.suppressor != nil {
 		c.suppressor.Suppress(profileID, binding.Page, binding.ListName)
@@ -886,6 +1265,15 @@ func (c *Connector) applyInboundFromKeep(ctx context.Context, profileID wikipage
 		binding.ItemIDMap = map[string]ItemBinding{}
 	}
 
+	// progressed tracks whether ANY synced_fp moved during this apply
+	// — counts apply-Keep updates, silent rebaselines (B1 same-content),
+	// and adopt/AddItemForSync via applyInboundNewFromKeep. Surfaces
+	// to SyncToKeep via the return value so the truncation escape
+	// hatch can distinguish stuck from progressing.
+	progressed := false
+
+	// Walk the pull. Each list item produces one decision under the
+	// per-item divergence rule.
 	for _, n := range pull.Nodes {
 		if n.Type != protocol.NodeTypeListItem {
 			continue
@@ -900,132 +1288,120 @@ func (c *Connector) applyInboundFromKeep(ctx context.Context, profileID wikipage
 		isAlive := n.Timestamps.Trashed.IsZero() && n.Timestamps.Deleted.IsZero()
 		uid, knownToWiki := rev[serverID]
 
-		switch {
-		case isAlive && !knownToWiki:
-			// Class 1: arrived from Keep, not yet known to id_map.
-			// Two sub-cases:
-			//
-			//   1a. Wiki has an item with byte-identical text — that's
-			//       almost certainly a wiki-pushed copy that came back
-			//       around. Adopt it: record uid → serverID in id_map
-			//       and DON'T create a duplicate. This is the most
-			//       common case after re-bind: the wiki-pushed enriched
-			//       items live on Keep alongside the user's plain
-			//       originals; the seed already mapped the plain ones,
-			//       and on the next sync the enriched copies look
-			//       "new" but actually correspond to wiki items we
-			//       already have.
-			//
-			//   1b. No text match in wiki. Genuinely new from Keep
-			//       (typically: phone-side add). Apply via AddItemForSync.
-			if existingUID, found := wikiByText[n.Text]; found {
-				if _, alreadyMapped := binding.ItemIDMap[existingUID]; !alreadyMapped {
-					binding.ItemIDMap[existingUID] = ItemBinding{ServerID: serverID}
+		// K trashed/deleted ∧ M=correct → apply delete + drop id_map.
+		if !isAlive {
+			if knownToWiki {
+				if delErr := c.checklistW.DeleteItemForSync(ctx, binding.Page, binding.ListName, ownerEmail, uid); delErr != nil && c.debug != nil {
+					c.debug.Info("applyInboundFromKeep: DeleteItemForSync(uid=%s, serverID=%s) for Keep tombstone failed: %v",
+						uid, serverID, delErr)
 				}
-				continue
+				delete(binding.ItemIDMap, uid)
+				progressed = true
 			}
-			wikiItem, err := KeepToWiki(n)
-			if err != nil {
-				// Skip malformed nodes rather than fail the whole sync.
-				continue
-			}
-			desc := ""
-			if wikiItem.Description != nil {
-				desc = *wikiItem.Description
-			}
-			newUID, err := c.checklistW.AddItemForSync(ctx, binding.Page, binding.ListName, ownerEmail,
-				wikiItem.GetText(), wikiItem.GetChecked(), wikiItem.GetTags(), desc, n.SortValue)
-			if err != nil {
-				continue
-			}
-			binding.ItemIDMap[newUID] = ItemBinding{ServerID: serverID}
+			// ¬W ∧ ¬K (id_map doesn't have it either) → nothing to do.
+			continue
+		}
 
-		case !isAlive && knownToWiki:
-			// Class 3: trashed on Keep. Delete from wiki.
-			_ = c.checklistW.DeleteItemForSync(ctx, binding.Page, binding.ListName, ownerEmail, uid)
-			delete(binding.ItemIDMap, uid)
+		// K alive from here on.
+		if !knownToWiki {
+			// ¬W relative to id_map; not yet paired. Either adopt by
+			// text (boomeranged push) or apply as a fresh Keep add.
+			if c.applyInboundNewFromKeep(ctx, ownerEmail, &binding, n, wikiByText) {
+				progressed = true
+			}
+			continue
+		}
 
-		case isAlive && knownToWiki:
-			// Class 2: maybe updated on Keep.
-			//
-			// Why we don't compare per-item Keep timestamps: Keep stores
-			// epoch-sentinel ".001"/".002" timestamps on every LIST_ITEM
-			// pushed via the API, regardless of what we sent. Verified
-			// empirically via cmd/keep-debug — even immediately after a
-			// fresh push with Updated=now, the item's stored Updated is
-			// 1970-01-01T00:00:00.002Z. UserEdited is omitted entirely
-			// for API-pushed items. The per-item timestamps are useless
-			// signal for "did Keep change since last push?"
-			//
-			// Anchor instead on binding.LastPushedAt. If wiki's
-			// UpdatedAt is greater, the item has been edited locally
-			// since our last push (uncommitted) — skip apply, let the
-			// outbound push send the wiki edit. Else, the wiki state
-			// has been pushed; Keep can override on content diff.
-			//
-			// Content diff is checked downstream (the outbound push
-			// uses content equality), so even when we apply Keep's
-			// state, an identical-content apply is a no-op.
-			wikiItem, ok := wikiByUID[uid]
-			if !ok {
+		// W ∧ K ∧ M=correct: compute divergence.
+		wikiItem, hasWiki := wikiByUID[uid]
+		if !hasWiki {
+			// id_map says we have a uid that the wiki actually doesn't
+			// have. Treat as ¬W ∧ K ∧ M=correct → outbound will push
+			// soft-delete (W7). Inbound: nothing to do here.
+			continue
+		}
+		ib := binding.ItemIDMap[uid]
+		wikiFP := FingerprintWiki(wikiItem)
+		keepFP := FingerprintKeep(n)
+		syncedFP := FingerprintFromItemBinding(ib)
+		wikiDiverged := wikiFP != syncedFP
+		keepDiverged := keepFP != syncedFP
+
+		switch {
+		case !wikiDiverged && !keepDiverged:
+			// W0 — no-op.
+			continue
+
+		case wikiDiverged && !keepDiverged:
+			// W2/W3/W4/W5/W6 — wiki edited from baseline; outbound push
+			// will carry it. Inbound does nothing.
+			continue
+
+		case !wikiDiverged && keepDiverged:
+			// K2/K3 — only Keep changed. Apply Keep; advance synced_fp.
+			if err := c.applyKeepUpdate(ctx, ownerEmail, binding.Page, binding.ListName, uid, n); err == nil {
+				ib.SyncedText = keepFP.Text
+				ib.SyncedChecked = keepFP.Checked
+				ib.SyncedSortValue = keepFP.SortValue
+				binding.ItemIDMap[uid] = ib
+				progressed = true
+			}
+
+		default:
+			// wikiDiverged && keepDiverged — conflict. "Keep wins" (B1).
+			// Special case: wiki_fp == keep_fp means both happened to
+			// drift to the same content (or the synced_fp was empty
+			// and both sides have the same value). Don't burn a mutator
+			// call — silent-rebaseline.
+			if wikiFP == keepFP {
+				ib.SyncedText = keepFP.Text
+				ib.SyncedChecked = keepFP.Checked
+				ib.SyncedSortValue = keepFP.SortValue
+				binding.ItemIDMap[uid] = ib
+				progressed = true
 				continue
 			}
-			if hasUncommittedWikiEdit(wikiItem.GetUpdatedAt(), time.Time{}) {
-				continue
-			}
-			converted, err := KeepToWiki(n)
-			if err != nil {
-				continue
-			}
-			desc := ""
-			if converted.Description != nil {
-				desc = *converted.Description
-			}
-			if updateErr := c.checklistW.UpdateItemForSync(ctx, binding.Page, binding.ListName, ownerEmail, uid,
-				converted.GetText(), converted.GetChecked(), converted.GetTags(), desc); updateErr != nil && c.debug != nil {
-				// Stop swallowing — when this fails the wiki silently
-				// drifts out of sync with Keep, and the next outbound
-				// push reverts Keep to wiki's stale state. Visibility
-				// in journalctl is critical for diagnosing.
-				c.debug.Info("applyInboundFromKeep: UpdateItemForSync(uid=%s, checked=%v) failed: %v",
-					uid, converted.GetChecked(), updateErr)
+			if err := c.applyKeepUpdate(ctx, ownerEmail, binding.Page, binding.ListName, uid, n); err == nil {
+				ib.SyncedText = keepFP.Text
+				ib.SyncedChecked = keepFP.Checked
+				ib.SyncedSortValue = keepFP.SortValue
+				binding.ItemIDMap[uid] = ib
+				progressed = true
 			}
 		}
 	}
 
-	// Class 4: hard-delete on Keep. Some Keep clients (notably the
-	// mobile app's swipe-to-delete) remove items entirely instead of
-	// flipping a Trashed/Deleted timestamp — the item is just absent
-	// from the next pull. The class-3 branch above only fires when
-	// the trashed item is still in the pull with a tombstone field
-	// set, so without this pass, hard-deleted items orphan in the
-	// id_map and stay alive on the wiki side forever.
+	// Class 4 — Keep hard-delete pass: Keep clients (notably the mobile
+	// app's swipe-to-delete) remove items entirely instead of flipping
+	// a Trashed/Deleted timestamp — the item is just absent from the
+	// next pull. The walk above only fires for items that are still
+	// in the pull (alive or tombstoned), so without this pass, hard-
+	// deleted items orphan in the id_map and stay alive wiki-side.
 	//
 	// **Critical invariant**: this pass deletes ONLY wiki items that
 	// were previously paired with a Keep node (id_map entry exists
-	// with non-empty serverID). Wiki-only items that were never
-	// pushed to Keep have no id_map entry and are never touched here.
-	// Keep is NOT authoritative over wiki state — it's only authoritative
-	// over the lifecycle of items that were established as paired.
+	// with non-empty serverID). Wiki-only items that were never pushed
+	// to Keep have no id_map entry and are never touched here. Keep
+	// is NOT authoritative over wiki state — only over the lifecycle
+	// of items established as paired.
 	//
-	// Walk id_map: any entry whose serverID is alive in wiki but
-	// missing from the pull's set of LIST_ITEMs under this binding's
-	// note → Keep removed it; mirror by deleting wiki-side.
+	// Per-item rule (W ∧ ¬K ∧ M=correct):
+	//   - wiki_fp == synced_fp (¬wiki_diverged) → apply Keep hard-delete
+	//     (DeleteItemForSync + drop id_map). This is bug-1 fix:
+	//     wiki state matches the synced baseline, so the wiki has no
+	//     uncommitted edit — it's safe to mirror Keep's deletion.
+	//   - wiki_fp != synced_fp (wiki_diverged) → defer to outbound;
+	//     the outbound diff will push the wiki edit as fresh, re-creating
+	//     the item on Keep under a new serverID. Don't drop id_map
+	//     here — outbound owns that.
 	//
 	// Guards (any one false → skip the entire pass for safety):
-	//   - pull.Truncated: a truncated pull is missing items because
-	//     of pagination, not deletion.
-	//   - LastPushedAt zero: pre-bootstrap, the id_map may carry
-	//     stale entries from a previous bind/unbind cycle.
-	//   - sanity check: if the pull contained ZERO of id_map's
-	//     serverIDs, the response is suspect (auth blip, server-
-	//     side filter, etc.) — refuse to mass-delete. Only act when
-	//     at least one expected item appeared in the pull, which
-	//     proves Keep returned this binding's data.
-	//   - per-item: hasUncommittedWikiEdit — same anchor as class 2.
-	//     If the wiki item has been edited since last push, defer
-	//     to push (Keep delete loses to wiki re-edit; user re-adds
-	//     in Keep if they really meant to delete).
+	//   - pull.Truncated: pagination, not deletion.
+	//   - !binding.MigratedFingerprints: legacy binding without seeded
+	//     synced_fp; the migration job will rebaseline first.
+	//   - sanity check: if the pull contained ZERO of id_map's serverIDs,
+	//     the response is suspect (auth blip, server-side filter, etc.)
+	//     — refuse to mass-delete.
 	if !pull.Truncated && binding.MigratedFingerprints {
 		keepHas := make(map[string]bool, len(pull.Nodes))
 		for _, n := range pull.Nodes {
@@ -1057,16 +1433,23 @@ func (c *Connector) applyInboundFromKeep(ctx context.Context, profileID wikipage
 				}
 				wikiItem, hasWiki := wikiByUID[uid]
 				if !hasWiki {
-					// Already gone wiki-side; nothing to do.
+					// Wiki doesn't have it either; nothing to delete.
+					// Drop the stale id_map entry.
+					delete(binding.ItemIDMap, uid)
+					progressed = true
 					continue
 				}
-				// TODO(task #76): replace this clock-based gate with the
-				// content-fingerprint divergence test (wiki_fp == synced_fp
-				// → safe to apply Keep delete; wiki_fp != synced_fp →
-				// uncommitted; defer to push). For now, no gate — the
-				// migration is born-migrated, and pre-migration bindings
-				// short-circuit at the gate above.
-				_ = wikiItem
+				// W ∧ ¬K ∧ M=correct: branch on wiki_diverged.
+				wikiFP := FingerprintWiki(wikiItem)
+				syncedFP := FingerprintFromItemBinding(ib)
+				if wikiFP != syncedFP {
+					// Wiki edited concurrently with Keep delete; defer
+					// to outbound which pushes wiki as fresh (re-create
+					// on Keep under a new serverID). Don't drop id_map
+					// here — outbound owns that decision.
+					continue
+				}
+				// ¬wiki_diverged: safe to apply Keep's hard-delete.
 				if delErr := c.checklistW.DeleteItemForSync(ctx, binding.Page, binding.ListName, ownerEmail, uid); delErr != nil {
 					if c.debug != nil {
 						c.debug.Info("applyInboundFromKeep: DeleteItemForSync(uid=%s, serverID=%s) for Keep-side hard-delete failed: %v",
@@ -1075,6 +1458,7 @@ func (c *Connector) applyInboundFromKeep(ctx context.Context, profileID wikipage
 					continue
 				}
 				delete(binding.ItemIDMap, uid)
+				progressed = true
 			}
 		}
 	}
@@ -1082,17 +1466,98 @@ func (c *Connector) applyInboundFromKeep(ctx context.Context, profileID wikipage
 	// Reload wiki state — the apply mutated it.
 	freshChecklist, err := c.checklistR.ListItems(ctx, binding.Page, binding.ListName)
 	if err != nil {
-		return binding, currentChecklist, fmt.Errorf("reload after inbound apply: %w", err)
+		return binding, currentChecklist, progressed, fmt.Errorf("reload after inbound apply: %w", err)
 	}
 
-	// Persist binding's updated id_map (delete + new uid entries).
+	// Persist binding's updated id_map (delete + new uid entries +
+	// synced_fp advances).
 	if persistErr := c.persistBindingMap(profileID, binding); persistErr != nil {
 		// Persist failure is recoverable — outbound still works against
 		// the in-memory map for this run; next run reloads from store.
 		_ = persistErr
 	}
 
-	return binding, freshChecklist, nil
+	return binding, freshChecklist, progressed, nil
+}
+
+// applyInboundNewFromKeep handles ¬W ∧ K ∧ M=none: a Keep node that
+// isn't yet paired with a wiki item. Adopt-by-text if a wiki item has
+// byte-identical rendered text (typically a wiki-pushed copy that
+// boomeranged back); else AddItemForSync to create a new wiki item.
+//
+// Adopt records the wiki uid → keep serverID mapping in id_map and
+// seeds synced_fp from the Keep node's fingerprint (the adopted wiki
+// item is, by definition, content-equal to Keep). AddItemForSync also
+// seeds synced_fp from the Keep node, since we just imported its
+// content verbatim into the wiki.
+//
+// Returns true if a new id_map entry was created (synced_fp seeded);
+// the caller uses this signal as part of the "progress made this tick"
+// computation for the truncation escape hatch.
+func (c *Connector) applyInboundNewFromKeep(ctx context.Context, ownerEmail string, binding *Binding, n protocol.Node, wikiByText map[string]string) bool {
+	if existingUID, found := wikiByText[n.Text]; found {
+		if _, alreadyMapped := binding.ItemIDMap[existingUID]; !alreadyMapped {
+			keepFP := FingerprintKeep(n)
+			binding.ItemIDMap[existingUID] = ItemBinding{
+				ServerID:        n.ServerID,
+				SyncedText:      keepFP.Text,
+				SyncedChecked:   keepFP.Checked,
+				SyncedSortValue: keepFP.SortValue,
+			}
+			return true
+		}
+		return false
+	}
+	wikiItem, err := KeepToWiki(n)
+	if err != nil {
+		// Skip malformed nodes rather than fail the whole sync.
+		return false
+	}
+	desc := ""
+	if wikiItem.Description != nil {
+		desc = *wikiItem.Description
+	}
+	newUID, err := c.checklistW.AddItemForSync(ctx, binding.Page, binding.ListName, ownerEmail,
+		wikiItem.GetText(), wikiItem.GetChecked(), wikiItem.GetTags(), desc, n.SortValue)
+	if err != nil {
+		return false
+	}
+	keepFP := FingerprintKeep(n)
+	binding.ItemIDMap[newUID] = ItemBinding{
+		ServerID:        n.ServerID,
+		SyncedText:      keepFP.Text,
+		SyncedChecked:   keepFP.Checked,
+		SyncedSortValue: keepFP.SortValue,
+	}
+	return true
+}
+
+// applyKeepUpdate dispatches an UpdateItemForSync for a Keep node whose
+// content has diverged from the wiki/synced baseline. Returns any
+// mutator error so the caller can decide whether to advance synced_fp
+// (only on success).
+func (c *Connector) applyKeepUpdate(ctx context.Context, ownerEmail, page, listName, uid string, n protocol.Node) error {
+	converted, err := KeepToWiki(n)
+	if err != nil {
+		return err
+	}
+	desc := ""
+	if converted.Description != nil {
+		desc = *converted.Description
+	}
+	if updateErr := c.checklistW.UpdateItemForSync(ctx, page, listName, ownerEmail, uid,
+		converted.GetText(), converted.GetChecked(), converted.GetTags(), desc); updateErr != nil {
+		if c.debug != nil {
+			// Stop swallowing — when this fails the wiki silently
+			// drifts out of sync with Keep, and the next outbound
+			// push reverts Keep to wiki's stale state. Visibility
+			// in journalctl is critical for diagnosing.
+			c.debug.Info("applyInboundFromKeep: UpdateItemForSync(uid=%s, checked=%v) failed: %v",
+				uid, converted.GetChecked(), updateErr)
+		}
+		return updateErr
+	}
+	return nil
 }
 
 // persistBindingMap writes the updated binding back to the store.
@@ -1111,63 +1576,6 @@ func (c *Connector) persistBindingMap(profileID wikipage.PageIdentifier, binding
 	}
 	return c.store.SaveState(profileID, state)
 }
-
-// latestKeepTimestamp picks whichever of `updated` and `userEdited`
-// is more recent. Keep stamps `updated` with millisecond-offset
-// epoch sentinels (1970-01-01T00:00:00.001/.002Z) for items it
-// created server-side; the actual "user touched this" recency lives
-// in `userEdited`. Using the max keeps the gate comparisons honest.
-func latestKeepTimestamp(updated, userEdited time.Time) time.Time {
-	if userEdited.After(updated) {
-		return userEdited
-	}
-	return updated
-}
-
-// shouldPullKeepUpdate decides whether a Keep node's Updated
-// timestamp is newer enough than the wiki item's UpdatedAt to warrant
-// pulling the Keep state. Returns false if the wiki UpdatedAt is
-// missing or already at-or-after Keep's Updated.
-//
-// Deprecated for the inbound-apply gate: see hasUncommittedWikiEdit
-// for the correct anchor (Keep returns epoch sentinels for per-item
-// timestamps regardless of what we push, so per-item time comparisons
-// always look "wiki newer" forever). Kept for any callers that still
-// have a meaningful Keep timestamp to compare against (e.g. LIST node
-// freshness checks where Keep does maintain a real Updated value).
-func shouldPullKeepUpdate(keepUpdated time.Time, wikiUpdatedAt *timestamppb.Timestamp) bool {
-	if keepUpdated.IsZero() {
-		return false
-	}
-	if wikiUpdatedAt == nil {
-		return true
-	}
-	return keepUpdated.After(wikiUpdatedAt.AsTime())
-}
-
-// hasUncommittedWikiEdit decides whether the wiki item has been
-// edited since the binding's last successful push. If yes, inbound
-// apply must skip — the next outbound push will carry the wiki edit
-// to Keep. If no, the wiki state is "synced" and Keep-side changes
-// can override.
-//
-//   - lastPushedAt zero → no successful push yet for this binding.
-//     Treat all wiki state as uncommitted (don't apply Keep changes
-//     until the first push completes; otherwise we could overwrite
-//     a wiki edit that hasn't reached Keep yet).
-//   - wikiUpdatedAt nil → no wiki signal; treat as synced (apply Keep).
-//   - wikiUpdatedAt > lastPushedAt → uncommitted; skip apply.
-//   - wikiUpdatedAt ≤ lastPushedAt → synced; allow Keep apply.
-func hasUncommittedWikiEdit(wikiUpdatedAt *timestamppb.Timestamp, lastPushedAt time.Time) bool {
-	if lastPushedAt.IsZero() {
-		return true
-	}
-	if wikiUpdatedAt == nil {
-		return false
-	}
-	return wikiUpdatedAt.AsTime().After(lastPushedAt)
-}
-
 
 // seedIDMapFromExistingList reconciles wiki items against an existing
 // Keep list at bind time so future syncs don't duplicate items.
@@ -1448,10 +1856,362 @@ func (c *Connector) VerifyBinding(ctx context.Context, profileID wikipage.PageId
 // user's account anymore (e.g., they deleted it from the Keep app).
 var ErrBoundNoteDeletedLocal = protocol.ErrBoundNoteDeleted
 
+// MigrateBindingFingerprints rebases a legacy binding's per-item
+// synced_fp baseline so the new sync engine has a real merge-base to
+// test divergence against. Called by the eager migration job (one
+// per legacy binding) at startup; idempotent on already-migrated
+// bindings.
+//
+// Algorithm (under the per-profile mutex for the entire cycle):
+//
+//  1. Load state. Find the binding. If MigratedFingerprints is
+//     already true, return nil — concurrent migration jobs and
+//     restart-resumed scans both land here harmlessly.
+//  2. Authenticated full pull from Keep (empty target_version).
+//  3. For each id_map entry whose serverID is in the pull AND wiki
+//     has the uid:
+//     - wiki_fp == keep_fp: silent rebaseline. Set synced_fp ←
+//       wiki_fp. No mutator call (wiki content already matches Keep).
+//     - wiki_fp != keep_fp: "Keep wins". UpdateItemForSync with
+//       Keep's content; set synced_fp ← keep_fp.
+//     - Either branch logs a forensic INFO line via c.debug with the
+//       full payload (profileID, binding key, uid, serverID,
+//       fingerprints, prior cursor) so an operator can audit what
+//     migration did.
+//  4. id_map entries whose serverID is NOT in the pull: drop the
+//     entry. Keep already deleted that item; the pairing is gone.
+//  5. Stamp KeepCursor ← pull.ToVersion (so the next regular sync
+//     pulls only the delta since the migration moment).
+//  6. Stamp MigratedFingerprints = true.
+//  7. Persist state.
+//
+// On error (network failure, auth_revoked, persist failure), the
+// binding stays MigratedFingerprints=false; the eager migration's
+// queue retries with backoff. SyncToKeep keeps skipping that
+// binding via the gate until migration finally succeeds.
+func (c *Connector) MigrateBindingFingerprints(ctx context.Context, profileID wikipage.PageIdentifier, page, listName string) error {
+	if c.checklistR == nil {
+		return ErrChecklistReaderUnavailable
+	}
+
+	// Pull happens BEFORE acquiring the lock — Keep API calls can
+	// take seconds; holding the per-profile mutex across the network
+	// round-trip would block concurrent Bind/Unbind/macro calls for
+	// the entire pull. The lock-window is just the read-rebaseline-
+	// write cycle below.
+	client, state, err := c.keepClientFor(ctx, profileID)
+	if err != nil {
+		return fmt.Errorf("keep client for migration: %w", err)
+	}
+	ownerEmail := state.Email
+
+	// Pre-check under the lock: the binding might already be migrated
+	// by a concurrent run, or might not exist anymore. Check before
+	// the (potentially expensive) pull.
+	var preBinding Binding
+	var preFound bool
+	preCheckErr := c.store.WithProfileLock(profileID, func() error {
+		st, lerr := c.store.LoadStateLocked(profileID)
+		if lerr != nil {
+			return lerr
+		}
+		for _, b := range st.Bindings {
+			if b.Page == page && b.ListName == listName {
+				preBinding = b
+				preFound = true
+				return nil
+			}
+		}
+		return nil
+	})
+	if preCheckErr != nil {
+		return fmt.Errorf("pre-check binding for migration: %w", preCheckErr)
+	}
+	if !preFound {
+		// Binding was removed (e.g., user unbound between scan-time
+		// and now). Nothing to migrate; succeed silently.
+		return nil
+	}
+	if preBinding.MigratedFingerprints {
+		// Already migrated — idempotent no-op. The flag is the
+		// sole gate that enrolls a binding into the steady-state
+		// sync path, so re-running this method on a migrated
+		// binding does no work and emits no journal noise.
+		return nil
+	}
+
+	// Read the wiki checklist OUTSIDE the lock — checklist reads do
+	// not touch the binding store and can be slow. We re-read inside
+	// the lock immediately before the rebaseline write so the
+	// fingerprints we compute reflect the wiki state at write time.
+	now := c.clock.Now().UTC()
+
+	pull, pullErr := client.Changes(ctx, protocol.ChangesRequest{
+		SessionID:       fmt.Sprintf("s--%d--migrate-%s", now.UnixMilli(), preBinding.KeepNoteID),
+		ClientTimestamp: now.Format("2006-01-02T15:04:05.000000Z"),
+		// Empty TargetVersion → full pull. Migration must see the
+		// authoritative current state of every paired item; an
+		// incremental pull would miss items that haven't changed
+		// since the legacy binding was first written.
+		TargetVersion: "",
+	})
+	if pullErr != nil {
+		return fmt.Errorf("migration pull: %w", pullErr)
+	}
+
+	// Build serverID → keep node for the rebaseline below. Filter
+	// to LIST_ITEMs parented under the binding's note, alive only
+	// (trashed/deleted items represent items Keep removed; the
+	// "drop missing" branch handles them).
+	keepByServerID := make(map[string]protocol.Node, len(pull.Nodes))
+	for _, n := range pull.Nodes {
+		if n.Type != protocol.NodeTypeListItem {
+			continue
+		}
+		if n.ParentID != preBinding.KeepNoteID && n.ParentServerID != preBinding.KeepNoteID {
+			continue
+		}
+		if !n.Timestamps.Trashed.IsZero() || !n.Timestamps.Deleted.IsZero() {
+			continue
+		}
+		if n.ServerID == "" {
+			continue
+		}
+		keepByServerID[n.ServerID] = n
+	}
+
+	// Rebaseline write window: read fresh state under the lock,
+	// re-read wiki, walk id_map, persist. The lock spans every
+	// store touch so concurrent macro actions / cron ticks
+	// observe a consistent view.
+	return c.store.WithProfileLock(profileID, func() error {
+		st, lerr := c.store.LoadStateLocked(profileID)
+		if lerr != nil {
+			return fmt.Errorf("load state for migration: %w", lerr)
+		}
+
+		// Locate the binding by (page, listName); check the flag
+		// once more under the lock — concurrent migration runs and
+		// Bind/Unbind churn could have changed it.
+		idx := -1
+		for i, b := range st.Bindings {
+			if b.Page == page && b.ListName == listName {
+				idx = i
+				break
+			}
+		}
+		if idx < 0 {
+			// Binding was removed between pull and write. Not an
+			// error — the user unbound and that's authoritative.
+			return nil
+		}
+		binding := st.Bindings[idx]
+		if binding.MigratedFingerprints {
+			return nil
+		}
+
+		// Re-read wiki under the lock so wiki_fp reflects the
+		// state we're about to baseline against. Wiki reads don't
+		// hit the binding store, so this is safe under the lock.
+		checklist, rerr := c.checklistR.ListItems(ctx, page, listName)
+		if rerr != nil {
+			return fmt.Errorf("read wiki checklist for migration: %w", rerr)
+		}
+		wikiByUID := make(map[string]*apiv1.ChecklistItem, len(checklist.GetItems()))
+		for _, it := range checklist.GetItems() {
+			wikiByUID[it.GetUid()] = it
+		}
+
+		priorCursor := binding.KeepCursor
+		newIDMap := make(map[string]ItemBinding, len(binding.ItemIDMap))
+		for uid, ib := range binding.ItemIDMap {
+			serverID := ib.ServerID
+			if serverID == "" {
+				// Malformed legacy entry (no serverID) — drop it.
+				continue
+			}
+			keepNode, hasKeep := keepByServerID[serverID]
+			if !hasKeep {
+				// Keep already removed this item. Pairing is gone;
+				// drop the entry so subsequent syncs don't try to
+				// touch a non-existent serverID.
+				if c.debug != nil {
+					c.debug.Info("MigrateBindingFingerprints: dropping unpaired entry profile=%s page=%s list=%s uid=%s serverID=%s prior_cursor=%s",
+						profileID, page, listName, uid, serverID, priorCursor)
+				}
+				continue
+			}
+			wikiItem, hasWiki := wikiByUID[uid]
+			if !hasWiki {
+				// id_map says we have a uid the wiki doesn't have —
+				// mirrors the W7-style "id_map ahead of wiki"
+				// state. Keep the entry as-is; the regular sync
+				// engine will see ¬W ∧ K ∧ M=correct and push a
+				// soft-delete on the next tick. Seed synced_fp
+				// from Keep so the divergence rule has something
+				// non-zero to test against.
+				ib.SyncedText = keepNode.Text
+				ib.SyncedChecked = keepNode.Checked
+				ib.SyncedSortValue = keepNode.SortValue
+				newIDMap[uid] = ib
+				if c.debug != nil {
+					c.debug.Info("MigrateBindingFingerprints: orphan-uid baseline-from-keep profile=%s page=%s list=%s uid=%s serverID=%s keep_fp_text=%q prior_cursor=%s",
+						profileID, page, listName, uid, serverID, keepNode.Text, priorCursor)
+				}
+				continue
+			}
+			wikiFP := FingerprintWiki(wikiItem)
+			keepFP := FingerprintKeep(keepNode)
+			if wikiFP == keepFP {
+				// Silent rebaseline: wiki content already matches
+				// Keep, just need a synced_fp to anchor the merge-
+				// base. No mutator call.
+				ib.SyncedText = wikiFP.Text
+				ib.SyncedChecked = wikiFP.Checked
+				ib.SyncedSortValue = wikiFP.SortValue
+				newIDMap[uid] = ib
+				getMetrics().recordSilentRebaseline(ctx, profileID, page, listName)
+				if c.debug != nil {
+					c.debug.Info("MigrateBindingFingerprints: silent-rebaseline profile=%s page=%s list=%s uid=%s serverID=%s fp_text=%q fp_checked=%t fp_sort=%q prior_cursor=%s",
+						profileID, page, listName, uid, serverID, wikiFP.Text, wikiFP.Checked, wikiFP.SortValue, priorCursor)
+				}
+				continue
+			}
+			// "Keep wins": apply Keep to wiki, then baseline to keep_fp.
+			if c.checklistW != nil {
+				keepItemForApply, kerr := KeepToWiki(keepNode)
+				if kerr != nil {
+					return fmt.Errorf("keep→wiki conversion for migration uid=%s: %w", uid, kerr)
+				}
+				if uerr := c.checklistW.UpdateItemForSync(
+					ctx, page, listName, ownerEmail, uid,
+					keepItemForApply.GetText(),
+					keepItemForApply.GetChecked(),
+					keepItemForApply.GetTags(),
+					keepItemForApply.GetDescription(),
+				); uerr != nil {
+					return fmt.Errorf("update item for migration uid=%s: %w", uid, uerr)
+				}
+			}
+			ib.SyncedText = keepFP.Text
+			ib.SyncedChecked = keepFP.Checked
+			ib.SyncedSortValue = keepFP.SortValue
+			newIDMap[uid] = ib
+			if c.debug != nil {
+				c.debug.Info("MigrateBindingFingerprints: keep-wins profile=%s page=%s list=%s uid=%s serverID=%s wiki_fp_text=%q keep_fp_text=%q prior_cursor=%s",
+					profileID, page, listName, uid, serverID, wikiFP.Text, keepFP.Text, priorCursor)
+			}
+		}
+
+		binding.ItemIDMap = newIDMap
+		if pull.ToVersion != "" {
+			binding.KeepCursor = pull.ToVersion
+		}
+		binding.MigratedFingerprints = true
+		st.Bindings[idx] = binding
+		if perr := c.store.SaveStateLocked(profileID, st); perr != nil {
+			return fmt.Errorf("persist migrated binding: %w", perr)
+		}
+		// Clear the migration-pending gauge: the binding is now in
+		// the new shape and SyncToKeep will start operating on it.
+		getMetrics().setMigrationPending(ctx, profileID, page, listName, false)
+		return nil
+	})
+}
+
 // deriveDeviceID returns a stable 16-hex-char device id derived from the
 // profile id. Matches the gpsoauth requirement of a stable per-account
 // android id without reusing any real device's id.
 func deriveDeviceID(profileID wikipage.PageIdentifier) string {
 	sum := sha256.Sum256([]byte(profileID))
 	return hex.EncodeToString(sum[:8]) // 16 hex chars
+}
+
+// DeadLetterEntry is one dead-lettered item surfaced to gRPC clients.
+// Mirrors the api/v1.DeadLetterItem proto shape so the handler is a
+// thin translation layer; the bridge package never imports proto types.
+type DeadLetterEntry struct {
+	// ItemUID is the wiki-side stable item identifier.
+	ItemUID string
+	// Text is the most recent observed wiki text, used by the macro
+	// UI to render a recognizable row label.
+	Text string
+	// PushFailureCount is the consecutive failure count.
+	PushFailureCount int
+	// LastFailureCode is Keep's per-node WriteResults Status string
+	// (or our internal classifier) for the most recent failure.
+	LastFailureCode string
+}
+
+// ListDeadLetters returns every ItemBinding in the (profileID, page,
+// listName) binding whose PushFailureCount is at-or-above the dead-
+// letter threshold. Used by the <keep-connect> macro UI to render
+// per-item failure rows. Returns an empty slice (not an error) when
+// the binding has no dead-lettered items, and ErrBindingNotFound when
+// the binding itself doesn't exist.
+func (c *Connector) ListDeadLetters(_ context.Context, profileID wikipage.PageIdentifier, page, listName string) ([]DeadLetterEntry, error) {
+	binding, found, err := c.store.FindBinding(profileID, page, listName)
+	if err != nil {
+		return nil, fmt.Errorf("load binding for dead-letter list: %w", err)
+	}
+	if !found {
+		return nil, ErrBindingNotFound
+	}
+	out := make([]DeadLetterEntry, 0)
+	for uid, ib := range binding.ItemIDMap {
+		if ib.PushFailureCount < deadLetterThreshold {
+			continue
+		}
+		out = append(out, DeadLetterEntry{
+			ItemUID:          uid,
+			Text:             ib.LastObservedWikiText,
+			PushFailureCount: ib.PushFailureCount,
+			LastFailureCode:  ib.LastFailureCode,
+		})
+	}
+	return out, nil
+}
+
+// ClearDeadLetter resets the failure-tracking fields on one
+// ItemBinding so the next sync tick re-attempts the push.
+// Specifically: PushFailureCount → 0, LastFailureCode → "",
+// NextAttemptAt → zero. Synced{Text,Checked,SortValue} (the merge-
+// base baseline) and ServerID are preserved — clearing only undoes
+// the failure state, not the divergence rule's anchor. Returns
+// ErrBindingNotFound if the binding doesn't exist and
+// ErrDeadLetterItemNotFound if the binding has no ItemBinding for
+// the given uid.
+//
+// Per the plan §"Concurrent macro action vs sync tick", a Clear
+// that races against an in-flight SyncToKeep takes effect on the
+// next tick (≤30s) — last-writer-wins on the binding store mutex.
+func (c *Connector) ClearDeadLetter(_ context.Context, profileID wikipage.PageIdentifier, page, listName, itemUID string) error {
+	return c.store.WithProfileLock(profileID, func() error {
+		st, err := c.store.LoadStateLocked(profileID)
+		if err != nil {
+			return fmt.Errorf("load state for clear dead-letter: %w", err)
+		}
+		idx := -1
+		for i, b := range st.Bindings {
+			if b.Page == page && b.ListName == listName {
+				idx = i
+				break
+			}
+		}
+		if idx == -1 {
+			return ErrBindingNotFound
+		}
+		ib, ok := st.Bindings[idx].ItemIDMap[itemUID]
+		if !ok {
+			return ErrDeadLetterItemNotFound
+		}
+		ib.PushFailureCount = 0
+		ib.LastFailureCode = ""
+		ib.NextAttemptAt = time.Time{}
+		st.Bindings[idx].ItemIDMap[itemUID] = ib
+		if perr := c.store.SaveStateLocked(profileID, st); perr != nil {
+			return fmt.Errorf("persist cleared dead-letter: %w", perr)
+		}
+		return nil
+	})
 }

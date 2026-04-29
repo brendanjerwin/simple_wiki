@@ -74,6 +74,14 @@ type Binding struct {
 // subsequent pushes until the user clears it (ClearDeadLetter) or
 // re-edits the wiki side. LastFailureCode is Keep's per-node status
 // code (or our internal classifier) for the most recent failure.
+//
+// NextAttemptAt is the earliest wall-clock time at which the connector
+// should retry pushing this item after a failure. Set on every push
+// failure to `now + min(60 * 2^(n-1), 3600) seconds` where n is the
+// post-increment PushFailureCount. The diff loop skips items whose
+// NextAttemptAt is in the future. Zero value (always-eligible) is the
+// normal steady state — only failed items carry a non-zero value, and
+// successful pushes reset it back to zero alongside the failure count.
 type ItemBinding struct {
 	ServerID                  string
 	SyncedText                string
@@ -84,6 +92,7 @@ type ItemBinding struct {
 	LastObservedWikiSortValue string
 	PushFailureCount          int
 	LastFailureCode           string
+	NextAttemptAt             time.Time
 }
 
 // ConnectorState is the per-user connector configuration stored on the
@@ -123,6 +132,12 @@ var (
 	// ErrConnectorNotConfigured is returned by methods that require an
 	// active connector when the profile has no master_token.
 	ErrConnectorNotConfigured = errors.New("keep bridge: connector not configured for this user")
+
+	// ErrDeadLetterItemNotFound is returned by ClearDeadLetter when no
+	// ItemBinding exists for the given (page, listName, itemUID). The
+	// gRPC layer maps this to NotFound so the macro can surface a
+	// "this item no longer exists" message.
+	ErrDeadLetterItemNotFound = errors.New("keep bridge: dead-letter item not found")
 )
 
 // Frontmatter path constants. The connector state lives at
@@ -161,6 +176,7 @@ const (
 	itemBindingLastObservedWikiSortValueField = "last_observed_wiki_sort_value"
 	itemBindingPushFailureCountField          = "push_failure_count"
 	itemBindingLastFailureCodeField           = "last_failure_code"
+	itemBindingNextAttemptAtField             = "next_attempt_at"
 )
 
 // BindingStore is the typed funnel for connector-state writes on profile
@@ -317,6 +333,49 @@ func (s *BindingStore) lockProfile(profileID wikipage.PageIdentifier) func() {
 	}
 	mu.Lock()
 	return mu.Unlock
+}
+
+// LoadStateLocked reads state without acquiring the per-profile mutex.
+// Caller MUST hold the lock (typically via WithProfileLock). Used by
+// the eager migration job to read-then-write under one lock window.
+// INVARIANT ASSERTION: this is documentation, not enforced; misuse
+// races against AddBinding/RemoveBinding/SaveState.
+func (s *BindingStore) LoadStateLocked(profileID wikipage.PageIdentifier) (ConnectorState, error) {
+	fm, err := s.readFrontMatter(profileID)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return ConnectorState{}, nil
+		}
+		return ConnectorState{}, err
+	}
+	return decodeState(fm)
+}
+
+// SaveStateLocked overwrites state without acquiring the per-profile
+// mutex. Caller MUST hold the lock. Pairs with LoadStateLocked for
+// the eager migration job's read-rebaseline-write cycle.
+func (s *BindingStore) SaveStateLocked(profileID wikipage.PageIdentifier, state ConnectorState) error {
+	fm, err := s.readFrontMatter(profileID)
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	if fm == nil {
+		fm = make(wikipage.FrontMatter)
+	}
+	encodeState(fm, state)
+	return s.writeFrontMatter(profileID, fm)
+}
+
+// WithProfileLock runs fn while holding the per-profile mutex. fn
+// must use LoadStateLocked / SaveStateLocked for any state access
+// (the regular LoadState / SaveState would deadlock). Used by the
+// eager migration job to span its read-pull-rebaseline-write cycle
+// inside one lock window so concurrent macro actions, cron ticks,
+// and Bind/Unbind calls serialize against migration cleanly.
+func (s *BindingStore) WithProfileLock(profileID wikipage.PageIdentifier, fn func() error) error {
+	unlock := s.lockProfile(profileID)
+	defer unlock()
+	return fn()
 }
 
 // --- codec ----------------------------------------------------------------
@@ -486,6 +545,9 @@ func encodeItemBinding(ib ItemBinding) map[string]any {
 	if ib.LastFailureCode != "" {
 		out[itemBindingLastFailureCodeField] = ib.LastFailureCode
 	}
+	if !ib.NextAttemptAt.IsZero() {
+		out[itemBindingNextAttemptAtField] = ib.NextAttemptAt.UTC().Format(time.RFC3339)
+	}
 	return out
 }
 
@@ -513,6 +575,10 @@ func decodeItemIDMap(raw any) (map[string]ItemBinding, error) {
 			out[k] = ItemBinding{ServerID: typed}
 		case map[string]any:
 			// New structured shape.
+			nextAttemptAt, err := parseTime(getString(typed, itemBindingNextAttemptAtField))
+			if err != nil {
+				return nil, fmt.Errorf("key %q next_attempt_at: %w", k, err)
+			}
 			out[k] = ItemBinding{
 				ServerID:                  getString(typed, itemBindingServerIDField),
 				SyncedText:                getString(typed, itemBindingSyncedTextField),
@@ -523,6 +589,7 @@ func decodeItemIDMap(raw any) (map[string]ItemBinding, error) {
 				LastObservedWikiSortValue: getString(typed, itemBindingLastObservedWikiSortValueField),
 				PushFailureCount:          getInt(typed, itemBindingPushFailureCountField),
 				LastFailureCode:           getString(typed, itemBindingLastFailureCodeField),
+				NextAttemptAt:             nextAttemptAt,
 			}
 		default:
 			return nil, fmt.Errorf("key %q value is %T, expected string or map", k, v)

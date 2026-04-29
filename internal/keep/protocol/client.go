@@ -379,12 +379,24 @@ type wireCapEntry struct {
 }
 
 type wireChangesResponse struct {
-	Kind            string        `json:"kind"`
-	ToVersion       *string       `json:"toVersion"`
-	Nodes           []wireNode    `json:"nodes"`
-	UserInfo        *wireUserInfo `json:"userInfo,omitempty"`
-	ForceFullResync bool          `json:"forceFullResync"`
-	Truncated       bool          `json:"truncated"`
+	Kind            string             `json:"kind"`
+	ToVersion       *string            `json:"toVersion"`
+	Nodes           []wireNode         `json:"nodes"`
+	UserInfo        *wireUserInfo      `json:"userInfo,omitempty"`
+	WriteResults    []wireWriteResult  `json:"writeResults,omitempty"`
+	ForceFullResync bool               `json:"forceFullResync"`
+	Truncated       bool               `json:"truncated"`
+}
+
+// wireWriteResult is the per-pushed-node status entry. Best-guess
+// shape based on prior keep-debug diagnostics — Keep echoes one entry
+// per pushed node with a client-side id and a status string. Tag the
+// JSON keys camelCase to match Google's Keep wire convention; the
+// `dump-write-results` keep-debug subcommand prints the raw response
+// so the actual field names can be confirmed against a live account.
+type wireWriteResult struct {
+	ID     string `json:"id,omitempty"`
+	Status string `json:"status,omitempty"`
 }
 
 type wireNode struct {
@@ -619,6 +631,12 @@ func decodeChangesResponse(w wireChangesResponse) (ChangesResponse, error) {
 			}
 			out.Labels = append(out.Labels, le)
 		}
+	}
+	for _, wr := range w.WriteResults {
+		out.WriteResults = append(out.WriteResults, NodeWriteResult{
+			ID:     wr.ID,
+			Status: wr.Status,
+		})
 	}
 	return out, nil
 }

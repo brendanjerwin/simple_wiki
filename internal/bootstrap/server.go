@@ -15,6 +15,7 @@ import (
 	"github.com/brendanjerwin/simple_wiki/internal/keep/bridge"
 	wikimcp "github.com/brendanjerwin/simple_wiki/internal/mcp"
 	"github.com/brendanjerwin/simple_wiki/internal/observability"
+	"github.com/brendanjerwin/simple_wiki/migrations/eager"
 	"github.com/brendanjerwin/simple_wiki/pkg/chatbuffer"
 	"github.com/brendanjerwin/simple_wiki/pkg/ulid"
 	"github.com/brendanjerwin/simple_wiki/server"
@@ -538,6 +539,30 @@ func setupGRPCServer(
 		}
 		return out
 	}
+	// Eager fingerprint migration: enqueue ONE scan job that walks
+	// the data dir, finds every legacy Keep-bridge binding (those
+	// whose MigratedFingerprints flag is unset), and enqueues a
+	// per-binding migration job that pulls Keep once and rebases
+	// synced_fp using the agreement-or-Keep-wins rule. Must be
+	// enqueued BEFORE the cron registration below so the job
+	// queue drains migration jobs before the first cron tick can
+	// run SyncToKeep against an un-migrated binding (the gate at
+	// the top of SyncToKeep would skip those anyway, but the
+	// eager job is what flips the flag so they stop being skipped).
+	// Source: plan §"Migration".
+	keepBridgeMigrationScanner := eager.NewFileSystemDataDirScanner(site.PathToData)
+	keepBridgeFingerprintMigration := eager.NewKeepBridgeFingerprintMigrationScanJob(
+		keepBridgeMigrationScanner,
+		site.GetJobQueueCoordinator(),
+		keepConnector,
+		keepBindingStore,
+	)
+	if eerr := site.GetJobQueueCoordinator().EnqueueJob(keepBridgeFingerprintMigration); eerr != nil {
+		logger.Error("Failed to enqueue Keep-bridge fingerprint migration scan job: %v", eerr)
+	} else {
+		logger.Info("Keep-bridge fingerprint migration scan started.")
+	}
+
 	if _, err := site.CronScheduler.Schedule(
 		"@every 30s",
 		bridge.NewKeepCronTickJob(keepConnector, site.GetJobQueueCoordinator(), logger, keepBindingsLister),

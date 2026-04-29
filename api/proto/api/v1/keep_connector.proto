@@ -3,6 +3,7 @@ syntax = "proto3";
 package api.v1;
 
 import "api/v1/mcp_options.proto";
+import "google/protobuf/empty.proto";
 import "google/protobuf/timestamp.proto";
 
 option go_package = "github.com/brendanjerwin/simple_wiki/gen/go/api/v1;apiv1";
@@ -87,6 +88,27 @@ service KeepConnectorService {
         "by the Checklist component on render to decide whether to show "
         "the bind button, an Unbind affordance, or nothing.";
     option (api.v1.read_only) = true;
+  }
+
+  rpc ListDeadLetters(ListDeadLettersRequest) returns (ListDeadLettersResponse) {
+    option (api.v1.description) =
+        "Return the per-binding dead-letter set: items whose "
+        "PushFailureCount has reached the dead-letter threshold "
+        "and are no longer being attempted on cron ticks. The "
+        "<keep-connect> macro renders one row per returned item "
+        "so the user can clear the failure (ClearDeadLetter) and "
+        "trigger a re-attempt. Scoped to the calling user's "
+        "profile.";
+    option (api.v1.read_only) = true;
+  }
+
+  rpc ClearDeadLetter(ClearDeadLetterRequest) returns (google.protobuf.Empty) {
+    option (api.v1.description) =
+        "Reset a dead-lettered item's PushFailureCount to zero so "
+        "the next cron tick re-attempts the push. Preserves "
+        "synced_fp (the merge-base baseline) so the divergence "
+        "rule still recomputes correctly. The clear takes effect "
+        "on the next tick after this call returns.";
   }
 }
 
@@ -218,4 +240,37 @@ message GetChecklistBindingStateRequest {
 }
 message GetChecklistBindingStateResponse {
   ChecklistBindingState state = 1;
+}
+
+// DeadLetterItem describes one wiki item whose push has reached the
+// dead-letter threshold. Surfaced to the <keep-connect> macro so the
+// user can read the failure code and clear the counter to re-attempt.
+message DeadLetterItem {
+  // item_uid is the wiki-side stable identifier for the checklist
+  // item. Same value used to match against ItemIDMap entries.
+  string item_uid = 1;
+  // text is the most recent observed wiki text for the item, used
+  // by the macro UI to render a recognizable row label.
+  string text = 2;
+  // push_failure_count is the consecutive failure count. At-or-above
+  // the threshold means the item is currently dead-lettered.
+  int32 push_failure_count = 3;
+  // last_failure_code is Keep's per-node WriteResults Status string
+  // (or our internal classifier when Keep didn't echo a status) for
+  // the most recent failed push attempt.
+  string last_failure_code = 4;
+}
+
+message ListDeadLettersRequest {
+  string page = 1;
+  string list_name = 2;
+}
+message ListDeadLettersResponse {
+  repeated DeadLetterItem items = 1;
+}
+
+message ClearDeadLetterRequest {
+  string page = 1;
+  string list_name = 2;
+  string item_uid = 3;
 }

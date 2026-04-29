@@ -475,3 +475,106 @@ var _ = Describe("KeepClient.CreateList", func() {
 	})
 })
 
+// WriteResults decode tests pin the per-pushed-node status array
+// surfaces through ChangesResponse. The wire field name and shape
+// were unverified at write time — the keep-debug `dump-write-results`
+// subcommand confirms the live shape; if Keep diverges from the
+// camelCase `writeResults` / `{id, status}` guess, these tests are
+// where we adjust.
+var _ = Describe("decodeChangesResponse WriteResults", func() {
+	var (
+		ctx          context.Context
+		fakeServer   *httptest.Server
+		client       *protocol.KeepClient
+		responseBody string
+		resp         protocol.ChangesResponse
+		callErr      error
+	)
+
+	BeforeEach(func() {
+		ctx = context.Background()
+		fakeServer = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = io.WriteString(w, responseBody)
+		}))
+		client = protocol.NewKeepClient(fakeServer.Client(), fakeServer.URL+"/", "fake-bearer")
+	})
+
+	AfterEach(func() {
+		fakeServer.Close()
+	})
+
+	When("the response carries a two-entry writeResults array", func() {
+		BeforeEach(func() {
+			responseBody = `{
+			  "kind": "notes#downSync",
+			  "toVersion": "v-after",
+			  "writeResults": [
+			    {"id": "node-1", "status": "SUCCESS"},
+			    {"id": "node-2", "status": "ERROR"}
+			  ]
+			}`
+			resp, callErr = client.Changes(ctx, protocol.ChangesRequest{})
+		})
+
+		It("should not error", func() {
+			Expect(callErr).ToNot(HaveOccurred())
+		})
+
+		It("should populate WriteResults with both entries", func() {
+			Expect(resp.WriteResults).To(HaveLen(2))
+		})
+
+		It("should preserve the first entry's id and status", func() {
+			Expect(resp.WriteResults[0].ID).To(Equal("node-1"))
+			Expect(resp.WriteResults[0].Status).To(Equal("SUCCESS"))
+		})
+
+		It("should preserve the second entry's id and status", func() {
+			Expect(resp.WriteResults[1].ID).To(Equal("node-2"))
+			Expect(resp.WriteResults[1].Status).To(Equal("ERROR"))
+		})
+	})
+
+	When("the response carries an empty writeResults array", func() {
+		BeforeEach(func() {
+			responseBody = `{
+			  "kind": "notes#downSync",
+			  "toVersion": "v-after",
+			  "writeResults": []
+			}`
+			resp, callErr = client.Changes(ctx, protocol.ChangesRequest{})
+		})
+
+		It("should not error", func() {
+			Expect(callErr).ToNot(HaveOccurred())
+		})
+
+		It("should leave WriteResults nil", func() {
+			Expect(resp.WriteResults).To(BeNil())
+		})
+	})
+
+	When("the response omits writeResults entirely", func() {
+		BeforeEach(func() {
+			responseBody = `{
+			  "kind": "notes#downSync",
+			  "toVersion": "v-after"
+			}`
+			resp, callErr = client.Changes(ctx, protocol.ChangesRequest{})
+		})
+
+		It("should not error", func() {
+			Expect(callErr).ToNot(HaveOccurred())
+		})
+
+		It("should leave WriteResults nil", func() {
+			Expect(resp.WriteResults).To(BeNil())
+		})
+
+		It("should still populate ToVersion", func() {
+			Expect(resp.ToVersion).To(Equal("v-after"))
+		})
+	})
+})
+

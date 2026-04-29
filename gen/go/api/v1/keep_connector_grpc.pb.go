@@ -11,6 +11,7 @@ import (
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"
+	emptypb "google.golang.org/protobuf/types/known/emptypb"
 )
 
 // This is a compile-time assertion to ensure that this generated file
@@ -27,6 +28,8 @@ const (
 	KeepConnectorService_BindChecklist_FullMethodName            = "/api.v1.KeepConnectorService/BindChecklist"
 	KeepConnectorService_UnbindChecklist_FullMethodName          = "/api.v1.KeepConnectorService/UnbindChecklist"
 	KeepConnectorService_GetChecklistBindingState_FullMethodName = "/api.v1.KeepConnectorService/GetChecklistBindingState"
+	KeepConnectorService_ListDeadLetters_FullMethodName          = "/api.v1.KeepConnectorService/ListDeadLetters"
+	KeepConnectorService_ClearDeadLetter_FullMethodName          = "/api.v1.KeepConnectorService/ClearDeadLetter"
 )
 
 // KeepConnectorServiceClient is the client API for KeepConnectorService service.
@@ -46,6 +49,8 @@ type KeepConnectorServiceClient interface {
 	BindChecklist(ctx context.Context, in *BindChecklistRequest, opts ...grpc.CallOption) (*BindChecklistResponse, error)
 	UnbindChecklist(ctx context.Context, in *UnbindChecklistRequest, opts ...grpc.CallOption) (*UnbindChecklistResponse, error)
 	GetChecklistBindingState(ctx context.Context, in *GetChecklistBindingStateRequest, opts ...grpc.CallOption) (*GetChecklistBindingStateResponse, error)
+	ListDeadLetters(ctx context.Context, in *ListDeadLettersRequest, opts ...grpc.CallOption) (*ListDeadLettersResponse, error)
+	ClearDeadLetter(ctx context.Context, in *ClearDeadLetterRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 }
 
 type keepConnectorServiceClient struct {
@@ -136,6 +141,26 @@ func (c *keepConnectorServiceClient) GetChecklistBindingState(ctx context.Contex
 	return out, nil
 }
 
+func (c *keepConnectorServiceClient) ListDeadLetters(ctx context.Context, in *ListDeadLettersRequest, opts ...grpc.CallOption) (*ListDeadLettersResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListDeadLettersResponse)
+	err := c.cc.Invoke(ctx, KeepConnectorService_ListDeadLetters_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *keepConnectorServiceClient) ClearDeadLetter(ctx context.Context, in *ClearDeadLetterRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(emptypb.Empty)
+	err := c.cc.Invoke(ctx, KeepConnectorService_ClearDeadLetter_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // KeepConnectorServiceServer is the server API for KeepConnectorService service.
 // All implementations must embed UnimplementedKeepConnectorServiceServer
 // for forward compatibility
@@ -153,6 +178,8 @@ type KeepConnectorServiceServer interface {
 	BindChecklist(context.Context, *BindChecklistRequest) (*BindChecklistResponse, error)
 	UnbindChecklist(context.Context, *UnbindChecklistRequest) (*UnbindChecklistResponse, error)
 	GetChecklistBindingState(context.Context, *GetChecklistBindingStateRequest) (*GetChecklistBindingStateResponse, error)
+	ListDeadLetters(context.Context, *ListDeadLettersRequest) (*ListDeadLettersResponse, error)
+	ClearDeadLetter(context.Context, *ClearDeadLetterRequest) (*emptypb.Empty, error)
 	mustEmbedUnimplementedKeepConnectorServiceServer()
 }
 
@@ -183,6 +210,12 @@ func (UnimplementedKeepConnectorServiceServer) UnbindChecklist(context.Context, 
 }
 func (UnimplementedKeepConnectorServiceServer) GetChecklistBindingState(context.Context, *GetChecklistBindingStateRequest) (*GetChecklistBindingStateResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetChecklistBindingState not implemented")
+}
+func (UnimplementedKeepConnectorServiceServer) ListDeadLetters(context.Context, *ListDeadLettersRequest) (*ListDeadLettersResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListDeadLetters not implemented")
+}
+func (UnimplementedKeepConnectorServiceServer) ClearDeadLetter(context.Context, *ClearDeadLetterRequest) (*emptypb.Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ClearDeadLetter not implemented")
 }
 func (UnimplementedKeepConnectorServiceServer) mustEmbedUnimplementedKeepConnectorServiceServer() {}
 
@@ -341,6 +374,42 @@ func _KeepConnectorService_GetChecklistBindingState_Handler(srv interface{}, ctx
 	return interceptor(ctx, in, info, handler)
 }
 
+func _KeepConnectorService_ListDeadLetters_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListDeadLettersRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(KeepConnectorServiceServer).ListDeadLetters(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: KeepConnectorService_ListDeadLetters_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(KeepConnectorServiceServer).ListDeadLetters(ctx, req.(*ListDeadLettersRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _KeepConnectorService_ClearDeadLetter_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ClearDeadLetterRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(KeepConnectorServiceServer).ClearDeadLetter(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: KeepConnectorService_ClearDeadLetter_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(KeepConnectorServiceServer).ClearDeadLetter(ctx, req.(*ClearDeadLetterRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // KeepConnectorService_ServiceDesc is the grpc.ServiceDesc for KeepConnectorService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -379,6 +448,14 @@ var KeepConnectorService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetChecklistBindingState",
 			Handler:    _KeepConnectorService_GetChecklistBindingState_Handler,
+		},
+		{
+			MethodName: "ListDeadLetters",
+			Handler:    _KeepConnectorService_ListDeadLetters_Handler,
+		},
+		{
+			MethodName: "ClearDeadLetter",
+			Handler:    _KeepConnectorService_ClearDeadLetter_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

@@ -80,12 +80,34 @@ type ChangesRequest struct {
 // Labels echoes the user's full label set after the sync. Used by the
 // outbound-sync engine to find or create the right Keep Label for each
 // wiki page hashtag without pushing duplicates.
+//
+// WriteResults is the per-pushed-node status echoed by Keep on a push.
+// Empty on pure pulls. Populated when the request carried Nodes; one
+// entry per pushed node, keyed by client-side ID. Used by the bridge
+// to decide whether to advance synced_fp for a soft-delete: a SUCCESS
+// status means Keep accepted the mutation; anything else means the
+// push silently failed and the bridge must NOT mark the binding synced.
+// Wire shape was unverified empirically when this field was added —
+// the cmd/keep-debug `dump-write-results` subcommand exists to
+// inspect the raw response for confirmation. See task #74 in the
+// Keep bridge plan.
 type ChangesResponse struct {
 	ToVersion       string
 	Nodes           []Node
 	Labels          []LabelEntry
+	WriteResults    []NodeWriteResult
 	ForceFullResync bool
 	Truncated       bool
+}
+
+// NodeWriteResult is the per-pushed-node status entry from Keep's
+// Changes response. Best-guess shape based on prior keep-debug logs:
+// id (client-side node ID echoed back) and status (e.g. "SUCCESS").
+// If the wire shape turns out richer, additional fields land here as
+// they're confirmed.
+type NodeWriteResult struct {
+	ID     string
+	Status string
 }
 
 // LabelEntry is one Keep Label as it appears in userInfo.labels (both

@@ -6,6 +6,7 @@ import (
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
@@ -210,6 +211,52 @@ func (s *Server) GetChecklistBindingState(ctx context.Context, req *apiv1.GetChe
 	return &apiv1.GetChecklistBindingStateResponse{State: out}, nil
 }
 
+// ListDeadLetters implements the ListDeadLetters RPC.
+func (s *Server) ListDeadLetters(ctx context.Context, req *apiv1.ListDeadLettersRequest) (*apiv1.ListDeadLettersResponse, error) {
+	if s.keepConnector == nil {
+		return nil, errKeepConnectorNotConfigured
+	}
+	if req.GetPage() == "" || req.GetListName() == "" {
+		return nil, status.Error(codes.InvalidArgument, "page and list_name are required")
+	}
+	_, profileID, err := requireRealUser(ctx)
+	if err != nil {
+		return nil, err
+	}
+	entries, err := s.keepConnector.ListDeadLetters(ctx, profileID, req.GetPage(), req.GetListName())
+	if err != nil {
+		return nil, mapKeepConnectorErr(err)
+	}
+	out := make([]*apiv1.DeadLetterItem, 0, len(entries))
+	for _, e := range entries {
+		out = append(out, &apiv1.DeadLetterItem{
+			ItemUid:          e.ItemUID,
+			Text:             e.Text,
+			PushFailureCount: int32(e.PushFailureCount),
+			LastFailureCode:  e.LastFailureCode,
+		})
+	}
+	return &apiv1.ListDeadLettersResponse{Items: out}, nil
+}
+
+// ClearDeadLetter implements the ClearDeadLetter RPC.
+func (s *Server) ClearDeadLetter(ctx context.Context, req *apiv1.ClearDeadLetterRequest) (*emptypb.Empty, error) {
+	if s.keepConnector == nil {
+		return nil, errKeepConnectorNotConfigured
+	}
+	if req.GetPage() == "" || req.GetListName() == "" || req.GetItemUid() == "" {
+		return nil, status.Error(codes.InvalidArgument, "page, list_name, and item_uid are required")
+	}
+	_, profileID, err := requireRealUser(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.keepConnector.ClearDeadLetter(ctx, profileID, req.GetPage(), req.GetListName(), req.GetItemUid()); err != nil {
+		return nil, mapKeepConnectorErr(err)
+	}
+	return &emptypb.Empty{}, nil
+}
+
 // --- helpers --------------------------------------------------------------
 
 func connectorStateToProto(state bridge.ConnectorState) *apiv1.ConnectorState {
@@ -258,6 +305,8 @@ func mapKeepConnectorErr(err error) error {
 		return status.Error(codes.FailedPrecondition, "keep_note_already_bound_by_you: pick a different note or unbind first")
 	case errors.Is(err, bridge.ErrBindingNotFound):
 		return status.Error(codes.NotFound, "binding_not_found")
+	case errors.Is(err, bridge.ErrDeadLetterItemNotFound):
+		return status.Error(codes.NotFound, "dead_letter_item_not_found")
 	case errors.Is(err, protocol.ErrInvalidCredentials):
 		return status.Errorf(codes.Unauthenticated, "invalid_credentials: Google rejected the oauth_token (it may have expired — capture a fresh one): %v", err)
 	case errors.Is(err, protocol.ErrAuthRevoked):

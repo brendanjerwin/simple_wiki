@@ -5,6 +5,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -20,13 +22,19 @@ import (
 )
 
 // fakeKeepClient records every Changes() call. Pull responses come from
-// pullState (set per-test); push responses are an empty downSync with
-// the next toVersion. Implements bridge.KeepClient.
+// pullState (set per-test); push responses default to an empty downSync
+// with synthesized SUCCESS WriteResults for every pushed LIST_ITEM
+// (matches the steady-state happy path so tests don't have to wire
+// WriteResults explicitly when they don't care). Tests that need to
+// exercise per-node failure handling override pushResponse, including
+// pushResponse.WriteResults; the default-synth is only applied when
+// pushResponse.ToVersion is empty.
 type fakeKeepClient struct {
 	mu             sync.Mutex
 	pullState      protocol.ChangesResponse
 	pushResponse   protocol.ChangesResponse
 	pushedRequests []protocol.ChangesRequest
+	pulledRequests []protocol.ChangesRequest
 }
 
 func (c *fakeKeepClient) Changes(_ context.Context, req protocol.ChangesRequest) (protocol.ChangesResponse, error) {
@@ -34,11 +42,29 @@ func (c *fakeKeepClient) Changes(_ context.Context, req protocol.ChangesRequest)
 	defer c.mu.Unlock()
 	if len(req.Nodes) == 0 && len(req.Labels) == 0 {
 		// pull
+		c.pulledRequests = append(c.pulledRequests, req)
 		return c.pullState, nil
 	}
 	c.pushedRequests = append(c.pushedRequests, req)
 	if c.pushResponse.ToVersion == "" {
-		return protocol.ChangesResponse{ToVersion: "v-after-push"}, nil
+		// Default: every pushed node succeeds. The connector gates
+		// synced_fp on per-node SUCCESS, so without this the existing
+		// happy-path tests would all interpret default fakes as
+		// failure.
+		writeResults := make([]protocol.NodeWriteResult, 0, len(req.Nodes))
+		for _, n := range req.Nodes {
+			if n.Type != protocol.NodeTypeListItem {
+				continue
+			}
+			writeResults = append(writeResults, protocol.NodeWriteResult{
+				ID:     n.ID,
+				Status: "SUCCESS",
+			})
+		}
+		return protocol.ChangesResponse{
+			ToVersion:    "v-after-push",
+			WriteResults: writeResults,
+		}, nil
 	}
 	return c.pushResponse, nil
 }
@@ -64,6 +90,14 @@ func (c *fakeKeepClient) pushCount() int {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return len(c.pushedRequests)
+}
+
+// lastPull returns the most recent pull request body, or fails if none.
+func (c *fakeKeepClient) lastPull() protocol.ChangesRequest {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	Expect(c.pulledRequests).ToNot(BeEmpty(), "expected at least one pull")
+	return c.pulledRequests[len(c.pulledRequests)-1]
 }
 
 // findPushedItem returns the LIST_ITEM in the latest push with the given
@@ -119,18 +153,26 @@ func (c *fakeChecklist) ListItems(_ context.Context, _, _ string) (*apiv1.Checkl
 	return out, nil
 }
 
-func (c *fakeChecklist) AddItemForSync(_ context.Context, _, _, ownerEmail, text string, checked bool, tags []string, description, _ string) (string, error) {
+func (c *fakeChecklist) AddItemForSync(_ context.Context, _, _, ownerEmail, text string, checked bool, tags []string, description, sortValueHint string) (string, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.addCalls = append(c.addCalls, addRecord{OwnerEmail: ownerEmail, Text: text, Description: description, Tags: tags, Checked: checked})
 	c.uidCount++
 	uid := fmt.Sprintf("test-uid-%d", c.uidCount)
 	now := timestamppb.New(time.Now())
+	var sortOrder int64
+	if sortValueHint != "" {
+		// Mirror the real mutator: parse the hint as the new SortOrder.
+		if n, err := strconv.ParseInt(sortValueHint, 10, 64); err == nil {
+			sortOrder = n
+		}
+	}
 	item := &apiv1.ChecklistItem{
 		Uid:       uid,
 		Text:      text,
 		Tags:      tags,
 		Checked:   checked,
+		SortOrder: sortOrder,
 		UpdatedAt: now,
 	}
 	if description != "" {
@@ -222,6 +264,74 @@ func freshConnector(profileID wikipage.PageIdentifier, page, listName, keepNoteI
 	}
 	Expect(bridge.NewBindingStore(store).SaveState(profileID, state)).To(Succeed())
 	return c, store, keep, chk
+}
+
+// seedSyncedFromKeep copies each pull node's content fingerprint into
+// the corresponding ItemBinding's Synced{Text,Checked,SortValue}
+// fields, keyed by serverID. Use to express the test's pre-tick
+// synced baseline for scenarios where wiki edited and Keep stayed
+// at the previously-synced state — so wiki_fp != synced_fp (wd) and
+// keep_fp == synced_fp (¬kd) → "push wiki" route.
+func seedSyncedFromKeep(profileID wikipage.PageIdentifier, page, listName string, store *fakeStore, nodes []protocol.Node) {
+	GinkgoHelper()
+	bs := bridge.NewBindingStore(store)
+	state, err := bs.LoadState(profileID)
+	Expect(err).NotTo(HaveOccurred())
+	nodeByServerID := make(map[string]protocol.Node, len(nodes))
+	for _, n := range nodes {
+		if n.ServerID == "" {
+			continue
+		}
+		nodeByServerID[n.ServerID] = n
+	}
+	for i, b := range state.Bindings {
+		if b.Page != page || b.ListName != listName {
+			continue
+		}
+		for uid, ib := range b.ItemIDMap {
+			node, ok := nodeByServerID[ib.ServerID]
+			if !ok {
+				continue
+			}
+			ib.SyncedText = node.Text
+			ib.SyncedChecked = node.Checked
+			ib.SyncedSortValue = node.SortValue
+			state.Bindings[i].ItemIDMap[uid] = ib
+		}
+	}
+	Expect(bs.SaveState(profileID, state)).To(Succeed())
+}
+
+// seedSyncedFromWiki seeds each ItemBinding's synced_fp from the
+// matching wiki item (by uid). Use for scenarios where Keep edited
+// and wiki stayed at the previously-synced state — so keep_fp !=
+// synced_fp (kd) and wiki_fp == synced_fp (¬wd) → "apply Keep" route.
+func seedSyncedFromWiki(profileID wikipage.PageIdentifier, page, listName string, store *fakeStore, items []*apiv1.ChecklistItem) {
+	GinkgoHelper()
+	bs := bridge.NewBindingStore(store)
+	state, err := bs.LoadState(profileID)
+	Expect(err).NotTo(HaveOccurred())
+	itemByUID := make(map[string]*apiv1.ChecklistItem, len(items))
+	for _, it := range items {
+		itemByUID[it.GetUid()] = it
+	}
+	for i, b := range state.Bindings {
+		if b.Page != page || b.ListName != listName {
+			continue
+		}
+		for uid, ib := range b.ItemIDMap {
+			it, ok := itemByUID[uid]
+			if !ok {
+				continue
+			}
+			fp := bridge.FingerprintWiki(it)
+			ib.SyncedText = fp.Text
+			ib.SyncedChecked = fp.Checked
+			ib.SyncedSortValue = fp.SortValue
+			state.Bindings[i].ItemIDMap[uid] = ib
+		}
+	}
+	Expect(bs.SaveState(profileID, state)).To(Succeed())
 }
 
 // Time anchors used across the matrix. Keeping these as named values
@@ -372,8 +482,10 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 
 	// W2 — wiki check toggled on an existing item.
 	Describe("W2 — wiki toggles an item's checked state", func() {
+		var store *fakeStore
+
 		BeforeEach(func() {
-			c, _, kc, chk = freshConnector(profile, page, listName, listSrv, map[string]string{
+			c, store, kc, chk = freshConnector(profile, page, listName, listSrv, map[string]string{
 				"uid-A": "srv-A",
 			})
 			chk.items = []*apiv1.ChecklistItem{
@@ -385,6 +497,9 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 					keepItem("srv-A", "client-A", listSrv, "Apples", false, "1000"),
 				},
 			}
+			// Seed synced_fp from Keep: previous baseline was Keep's
+			// current state; wiki has since edited (checked=true).
+			seedSyncedFromKeep(profile, page, listName, store, kc.pullState.Nodes)
 			Expect(c.SyncToKeep(ctx, profile, page, listName)).To(Succeed())
 		})
 
@@ -401,8 +516,10 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 
 	// W3 — wiki text edited.
 	Describe("W3 — wiki text edit", func() {
+		var store *fakeStore
+
 		BeforeEach(func() {
-			c, _, kc, chk = freshConnector(profile, page, listName, listSrv, map[string]string{
+			c, store, kc, chk = freshConnector(profile, page, listName, listSrv, map[string]string{
 				"uid-A": "srv-A",
 			})
 			chk.items = []*apiv1.ChecklistItem{
@@ -414,6 +531,9 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 					keepItem("srv-A", "client-A", listSrv, "Apples", false, "1000"),
 				},
 			}
+			// Seed synced_fp from Keep: wiki has the edit (Green Apples);
+			// the synced baseline is Keep's current Apples.
+			seedSyncedFromKeep(profile, page, listName, store, kc.pullState.Nodes)
 			Expect(c.SyncToKeep(ctx, profile, page, listName)).To(Succeed())
 		})
 
@@ -435,8 +555,10 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 
 	// W4 — wiki tags edit (encoded into text).
 	Describe("W4 — wiki adds tags to an item", func() {
+		var store *fakeStore
+
 		BeforeEach(func() {
-			c, _, kc, chk = freshConnector(profile, page, listName, listSrv, map[string]string{
+			c, store, kc, chk = freshConnector(profile, page, listName, listSrv, map[string]string{
 				"uid-A": "srv-A",
 			})
 			chk.items = []*apiv1.ChecklistItem{
@@ -448,6 +570,9 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 					keepItem("srv-A", "client-A", listSrv, "Apples", false, "1000"),
 				},
 			}
+			// Seed synced_fp from Keep: wiki has the edit (added tags);
+			// Keep is at the previously-synced state.
+			seedSyncedFromKeep(profile, page, listName, store, kc.pullState.Nodes)
 			Expect(c.SyncToKeep(ctx, profile, page, listName)).To(Succeed())
 		})
 
@@ -458,8 +583,10 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 
 	// W5 — wiki description edit.
 	Describe("W5 — wiki adds a description", func() {
+		var store *fakeStore
+
 		BeforeEach(func() {
-			c, _, kc, chk = freshConnector(profile, page, listName, listSrv, map[string]string{
+			c, store, kc, chk = freshConnector(profile, page, listName, listSrv, map[string]string{
 				"uid-A": "srv-A",
 			})
 			desc := "the red kind"
@@ -472,6 +599,9 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 					keepItem("srv-A", "client-A", listSrv, "Apples", false, "1000"),
 				},
 			}
+			// Seed synced_fp from Keep: wiki has the edit (added description);
+			// Keep is at the previously-synced state.
+			seedSyncedFromKeep(profile, page, listName, store, kc.pullState.Nodes)
 			Expect(c.SyncToKeep(ctx, profile, page, listName)).To(Succeed())
 		})
 
@@ -482,8 +612,10 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 
 	// W6 — wiki sort order changed.
 	Describe("W6 — wiki sort order changed", func() {
+		var store *fakeStore
+
 		BeforeEach(func() {
-			c, _, kc, chk = freshConnector(profile, page, listName, listSrv, map[string]string{
+			c, store, kc, chk = freshConnector(profile, page, listName, listSrv, map[string]string{
 				"uid-A": "srv-A",
 			})
 			chk.items = []*apiv1.ChecklistItem{
@@ -495,6 +627,9 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 					keepItem("srv-A", "client-A", listSrv, "Apples", false, "1000"),
 				},
 			}
+			// Seed synced_fp from Keep: wiki has the edit (sort changed);
+			// Keep is at the previously-synced state (SortValue=1000).
+			seedSyncedFromKeep(profile, page, listName, store, kc.pullState.Nodes)
 			Expect(c.SyncToKeep(ctx, profile, page, listName)).To(Succeed())
 		})
 
@@ -677,8 +812,10 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 	// a Trashed/Deleted timestamp. Without the class-4 pass, the
 	// id_map orphans and the wiki item stays alive.
 	Describe("K4-hard — Keep hard-deletes (item missing from pull)", func() {
+		var store *fakeStore
+
 		BeforeEach(func() {
-			c, _, kc, chk = freshConnector(profile, page, listName, listSrv, map[string]string{
+			c, store, kc, chk = freshConnector(profile, page, listName, listSrv, map[string]string{
 				"uid-A": "srv-A",
 				"uid-B": "srv-B",
 			})
@@ -694,6 +831,12 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 				},
 				Truncated: false,
 			}
+			// Seed synced_fp from wiki: wiki has not edited since the
+			// last successful sync. uid-A's synced matches both wiki
+			// and Keep (no divergence). uid-B's synced matches wiki
+			// (no wiki edit) — class-4 pass sees ¬wiki_diverged →
+			// safe to apply Keep's hard-delete.
+			seedSyncedFromWiki(profile, page, listName, store, chk.items)
 			Expect(c.SyncToKeep(ctx, profile, page, listName)).To(Succeed())
 		})
 
@@ -793,6 +936,212 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 
 		It("should NOT delete uid-B (truncation could explain its absence)", func() {
 			Expect(chk.delCalls).To(BeEmpty())
+		})
+	})
+
+	// keep_hard_delete_propagates_after_no_op_pull — bug 1 fix pinned.
+	// User added "bananas" on Keep, deleted it before any sync ran;
+	// in the meantime an earlier tick saw bananas alive and added
+	// it to wiki + id_map (with synced_fp seeded from that tick).
+	// Now this tick: bananas absent from pull, wiki idle (wiki_fp ==
+	// synced_fp). Class-4 hard-delete pass must fire, dropping
+	// bananas from wiki and from id_map. **No clock anywhere.**
+	Describe("keep_hard_delete_propagates_after_no_op_pull", func() {
+		var store *fakeStore
+
+		BeforeEach(func() {
+			c, store, kc, chk = freshConnector(profile, page, listName, listSrv, map[string]string{
+				"uid-bananas": "srv-bananas",
+				"uid-A":       "srv-A",
+			})
+			chk.items = []*apiv1.ChecklistItem{
+				{Uid: "uid-A", Text: "Apples", SortOrder: 1000},
+				{Uid: "uid-bananas", Text: "Bananas", SortOrder: 2000},
+			}
+			kc.pullState = protocol.ChangesResponse{
+				ToVersion: "v-after",
+				Nodes: []protocol.Node{
+					// Only Apples; bananas hard-deleted on Keep.
+					keepItem("srv-A", "client-A", listSrv, "Apples", false, "1000"),
+				},
+			}
+			// Both wiki items match their last-synced state (wiki idle).
+			seedSyncedFromWiki(profile, page, listName, store, chk.items)
+			Expect(c.SyncToKeep(ctx, profile, page, listName)).To(Succeed())
+		})
+
+		It("should call DeleteItemForSync for the hard-deleted item", func() {
+			Expect(chk.delCalls).To(HaveLen(1))
+			Expect(chk.delCalls[0].UID).To(Equal("uid-bananas"))
+		})
+
+		It("should not push anything", func() {
+			Expect(kc.pushCount()).To(Equal(0))
+		})
+
+		It("should drop the hard-deleted item from id_map", func() {
+			b, found, ferr := c.FindBinding(ctx, profile, page, listName)
+			Expect(ferr).ToNot(HaveOccurred())
+			Expect(found).To(BeTrue())
+			Expect(b.ItemIDMap).NotTo(HaveKey("uid-bananas"))
+		})
+	})
+
+	// keep_add_then_delete_within_one_tick — pull never sees the
+	// ephemeral item (Keep added then deleted before our pull).
+	// Nothing arrives in pull.Nodes for it; nothing in id_map either.
+	// No AddItemForSync, no churn.
+	Describe("keep_add_then_delete_within_one_tick", func() {
+		BeforeEach(func() {
+			c, _, kc, chk = freshConnector(profile, page, listName, listSrv, map[string]string{
+				"uid-A": "srv-A",
+			})
+			chk.items = []*apiv1.ChecklistItem{
+				{Uid: "uid-A", Text: "Apples", SortOrder: 1000},
+			}
+			kc.pullState = protocol.ChangesResponse{
+				ToVersion: "v-after",
+				Nodes: []protocol.Node{
+					keepItem("srv-A", "client-A", listSrv, "Apples", false, "1000"),
+				},
+			}
+			Expect(c.SyncToKeep(ctx, profile, page, listName)).To(Succeed())
+		})
+
+		It("should not call AddItemForSync (ephemeral item never seen)", func() {
+			Expect(chk.addCalls).To(BeEmpty())
+		})
+
+		It("should not call DeleteItemForSync", func() {
+			Expect(chk.delCalls).To(BeEmpty())
+		})
+
+		It("should not push", func() {
+			Expect(kc.pushCount()).To(Equal(0))
+		})
+	})
+
+	// keep_add_then_delete_across_two_ticks — tick 1 sees the alive
+	// add; tick 2 sees the delete (item absent from pull). Adds then
+	// removes from wiki without any clock comparisons.
+	Describe("keep_add_then_delete_across_two_ticks", func() {
+		var store *fakeStore
+
+		BeforeEach(func() {
+			c, store, kc, chk = freshConnector(profile, page, listName, listSrv, map[string]string{
+				"uid-A": "srv-A",
+			})
+			// Tick 1: wiki has Apples; Keep has Apples + new Bananas.
+			chk.items = []*apiv1.ChecklistItem{
+				{Uid: "uid-A", Text: "Apples", SortOrder: 1000},
+			}
+			kc.pullState = protocol.ChangesResponse{
+				ToVersion: "v-1",
+				Nodes: []protocol.Node{
+					keepItem("srv-A", "client-A", listSrv, "Apples", false, "1000"),
+					keepItem("srv-bananas", "client-bananas", listSrv, "Bananas", false, "2000"),
+				},
+			}
+			// Wiki Apples matches synced baseline (no wiki edit).
+			seedSyncedFromWiki(profile, page, listName, store, chk.items)
+			Expect(c.SyncToKeep(ctx, profile, page, listName)).To(Succeed())
+		})
+
+		It("should add Bananas on tick 1 and drop it on tick 2", func() {
+			// Tick 1 added bananas via AddItemForSync.
+			Expect(chk.addCalls).To(HaveLen(1))
+			Expect(chk.addCalls[0].Text).To(Equal("Bananas"))
+
+			// Verify id_map gained the entry with seeded synced_fp.
+			b, found, ferr := c.FindBinding(ctx, profile, page, listName)
+			Expect(ferr).ToNot(HaveOccurred())
+			Expect(found).To(BeTrue())
+			var bananasUID string
+			for uid, ib := range b.ItemIDMap {
+				if ib.ServerID == "srv-bananas" {
+					bananasUID = uid
+					break
+				}
+			}
+			Expect(bananasUID).NotTo(BeEmpty(), "bananas should be in id_map after tick 1")
+
+			// Tick 2: Keep no longer has bananas. Wiki idle.
+			kc.pullState = protocol.ChangesResponse{
+				ToVersion: "v-2",
+				Nodes: []protocol.Node{
+					keepItem("srv-A", "client-A", listSrv, "Apples", false, "1000"),
+				},
+			}
+			Expect(c.SyncToKeep(ctx, profile, page, listName)).To(Succeed())
+
+			// DeleteItemForSync should have fired for bananas.
+			Expect(chk.delCalls).To(HaveLen(1))
+			Expect(chk.delCalls[0].UID).To(Equal(bananasUID))
+
+			// Bananas dropped from id_map.
+			b2, found2, ferr2 := c.FindBinding(ctx, profile, page, listName)
+			Expect(ferr2).ToNot(HaveOccurred())
+			Expect(found2).To(BeTrue())
+			Expect(b2.ItemIDMap).NotTo(HaveKey(bananasUID))
+
+			// Tick 2 issued no push.
+			Expect(kc.pushCount()).To(Equal(0))
+		})
+	})
+
+	// wiki_edit_concurrent_with_keep_idle_does_not_block_keep_hard_delete_of_other_item
+	// Item A: wiki-edited (uncommitted). Item B: Keep hard-deleted.
+	// The two operations are independent — A pushed, B applied, neither
+	// blocks the other.
+	Describe("wiki_edit_concurrent_with_keep_idle_does_not_block_keep_hard_delete_of_other_item", func() {
+		var store *fakeStore
+
+		BeforeEach(func() {
+			c, store, kc, chk = freshConnector(profile, page, listName, listSrv, map[string]string{
+				"uid-A": "srv-A",
+				"uid-B": "srv-B",
+			})
+			chk.items = []*apiv1.ChecklistItem{
+				// uid-A: wiki edited (text changed).
+				{Uid: "uid-A", Text: "Apples GREEN", SortOrder: 1000},
+				// uid-B: wiki idle.
+				{Uid: "uid-B", Text: "Bread", SortOrder: 2000},
+			}
+			// Pull contains only uid-A; uid-B hard-deleted on Keep.
+			kc.pullState = protocol.ChangesResponse{
+				ToVersion: "v-after",
+				Nodes: []protocol.Node{
+					keepItem("srv-A", "client-A", listSrv, "Apples", false, "1000"),
+				},
+			}
+			// Synced baseline: pre-edit Apples for uid-A; current
+			// Bread for uid-B (wiki idle).
+			seedSyncedFromKeep(profile, page, listName, store, []protocol.Node{
+				keepItem("srv-A", "client-A", listSrv, "Apples", false, "1000"),
+				keepItem("srv-B", "client-B", listSrv, "Bread", false, "2000"),
+			})
+			Expect(c.SyncToKeep(ctx, profile, page, listName)).To(Succeed())
+		})
+
+		It("should DeleteItemForSync uid-B (Keep hard-delete)", func() {
+			var foundB bool
+			for _, d := range chk.delCalls {
+				if d.UID == "uid-B" {
+					foundB = true
+				}
+			}
+			Expect(foundB).To(BeTrue(), "uid-B should be deleted")
+		})
+
+		It("should push uid-A's wiki edit", func() {
+			Expect(kc.pushCount()).To(Equal(1))
+			Expect(kc.findPushedItem("srv-A").Text).To(Equal("Apples GREEN"))
+		})
+
+		It("should not apply Keep to uid-A (wiki diverged, Keep at synced)", func() {
+			for _, u := range chk.upsCalls {
+				Expect(u.UID).NotTo(Equal("uid-A"), "uid-A should not be apply-from-Keep")
+			}
 		})
 	})
 
@@ -900,10 +1249,16 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 		})
 	})
 
-	// B2 — both edited; wiki newer.
-	Describe("B2 — both edited, wiki newer", func() {
+	// B2 — wiki edited, Keep stayed at synced baseline. Under the
+	// fingerprint divergence rule this is no longer a "both edited"
+	// scenario — synced_fp = keep_fp expresses "Keep is unchanged
+	// since last sync." The plan deferred B2 (wiki-wins config) to
+	// future work; the canonical form here is just "wiki edit pushes."
+	Describe("B2 — wiki edit while Keep at synced baseline", func() {
+		var store *fakeStore
+
 		BeforeEach(func() {
-			c, _, kc, chk = freshConnector(profile, page, listName, listSrv, map[string]string{
+			c, store, kc, chk = freshConnector(profile, page, listName, listSrv, map[string]string{
 				"uid-A": "srv-A",
 			})
 			chk.items = []*apiv1.ChecklistItem{
@@ -915,10 +1270,13 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 				ToVersion: "v0",
 				Nodes:     []protocol.Node{n},
 			}
+			// Seed synced_fp = keep_fp: synced baseline matches Keep's
+			// current state, so kd=false. Only wiki diverged.
+			seedSyncedFromKeep(profile, page, listName, store, kc.pullState.Nodes)
 			Expect(c.SyncToKeep(ctx, profile, page, listName)).To(Succeed())
 		})
 
-		It("should not call UpdateItemForSync (gate skipped)", func() {
+		It("should not call UpdateItemForSync (¬keep_diverged → no apply)", func() {
 			Expect(chk.upsCalls).To(BeEmpty())
 		})
 
@@ -1250,12 +1608,14 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 		})
 	})
 
-	// 15e — content differs, wiki UpdatedAt EQUAL to Keep timestamp.
-	// Gate is strict After; equal timestamps mean "wiki side wins" via
-	// the inbound apply being skipped, then push happens (wiki -> Keep).
-	Describe("15e — content differs, timestamps equal", func() {
+	// 15e — wiki edited, Keep stayed at synced baseline. Under the
+	// fingerprint divergence rule, the synced baseline determines
+	// the direction; timestamps are no longer consulted.
+	Describe("15e — wiki edit only, Keep at synced baseline", func() {
+		var store *fakeStore
+
 		BeforeEach(func() {
-			c, _, kc, chk = freshConnector(profile, page, listName, listSrv, map[string]string{
+			c, store, kc, chk = freshConnector(profile, page, listName, listSrv, map[string]string{
 				"uid-A": "srv-A",
 			})
 			equalTime := tKeepRecent2
@@ -1269,23 +1629,15 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 				ToVersion: "v0",
 				Nodes:     []protocol.Node{n},
 			}
+			seedSyncedFromKeep(profile, page, listName, store, kc.pullState.Nodes)
 			Expect(c.SyncToKeep(ctx, profile, page, listName)).To(Succeed())
 		})
 
-		It("should NOT apply Keep's value (gate is strict After)", func() {
+		It("should NOT apply Keep's value (¬keep_diverged)", func() {
 			Expect(chk.upsCalls).To(BeEmpty())
 		})
 
-		It("should push wiki's value to Keep (wiki UpdatedAt is not strictly newer either, but content diff still pushes)", func() {
-			// shouldPushWikiUpdate is also strict After. With equal
-			// timestamps, neither side pushes via the gate, but the
-			// content-equality skip is the OUTER gate — equal timestamps
-			// don't block the diff. With diff content the push still
-			// happens because the gate isn't actually applied to the
-			// content-diff loop in the current code; the gate runs in
-			// shouldPushWikiUpdate which IS NOT called in the
-			// content-diff path (only the keepNodes content-equality
-			// check runs). So push happens.
+		It("should push wiki's value to Keep", func() {
 			Expect(kc.pushCount()).To(Equal(1))
 		})
 	})
@@ -1317,8 +1669,10 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 
 	// W2+W3 combined — text AND checked toggled in wiki.
 	Describe("combined — wiki edits both text and checked at once", func() {
+		var store *fakeStore
+
 		BeforeEach(func() {
-			c, _, kc, chk = freshConnector(profile, page, listName, listSrv, map[string]string{
+			c, store, kc, chk = freshConnector(profile, page, listName, listSrv, map[string]string{
 				"uid-A": "srv-A",
 			})
 			chk.items = []*apiv1.ChecklistItem{
@@ -1330,6 +1684,7 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 					keepItem("srv-A", "client-A", listSrv, "Apples", false, "1000"),
 				},
 			}
+			seedSyncedFromKeep(profile, page, listName, store, kc.pullState.Nodes)
 			Expect(c.SyncToKeep(ctx, profile, page, listName)).To(Succeed())
 		})
 
@@ -1343,8 +1698,10 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 
 	// Multi-item mixed — some items match, some differ. Push only the diffs.
 	Describe("multi-item mixed — push only items that actually differ", func() {
+		var store *fakeStore
+
 		BeforeEach(func() {
-			c, _, kc, chk = freshConnector(profile, page, listName, listSrv, map[string]string{
+			c, store, kc, chk = freshConnector(profile, page, listName, listSrv, map[string]string{
 				"uid-A": "srv-A",
 				"uid-B": "srv-B",
 				"uid-C": "srv-C",
@@ -1362,6 +1719,9 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 					keepItem("srv-C", "client-C", listSrv, "Cheese", false, "3000"),
 				},
 			}
+			// Seed synced_fp from Keep so per-item kd=false and only
+			// wiki-edited items diverge.
+			seedSyncedFromKeep(profile, page, listName, store, kc.pullState.Nodes)
 			Expect(c.SyncToKeep(ctx, profile, page, listName)).To(Succeed())
 		})
 
@@ -1536,6 +1896,1253 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 		It("should attempt the bundled CreateListWithItems path (delegating to bootstrap)", func() {
 			Expect(err).To(MatchError(ContainSubstring("bootstrap create-list")))
 			Expect(create.pushCount()).To(Equal(0))
+		})
+	})
+
+	// cursor_passed_as_target_version_on_pull — task #75. The pull request
+	// must carry the binding's KeepCursor as TargetVersion so Keep returns
+	// only the delta since the last successful sync.
+	Describe("cursor_passed_as_target_version_on_pull", func() {
+		var store *fakeStore
+
+		BeforeEach(func() {
+			c, store, kc, chk = freshConnector(profile, page, listName, listSrv, map[string]string{
+				"uid-A": "srv-A",
+			})
+			// Pre-populate the binding's KeepCursor.
+			bs := bridge.NewBindingStore(store)
+			st, loadErr := bs.LoadState(profile)
+			Expect(loadErr).ToNot(HaveOccurred())
+			st.Bindings[0].KeepCursor = "v-cursor-from-last-sync"
+			Expect(bs.SaveState(profile, st)).To(Succeed())
+
+			chk.items = []*apiv1.ChecklistItem{
+				{Uid: "uid-A", Text: "Apples", SortOrder: 1000, UpdatedAt: recentTime()},
+			}
+			kc.pullState = protocol.ChangesResponse{
+				ToVersion: "v-after-pull",
+				Nodes: []protocol.Node{
+					keepItem("srv-A", "client-A", listSrv, "Apples", false, "1000"),
+				},
+			}
+			Expect(c.SyncToKeep(ctx, profile, page, listName)).To(Succeed())
+		})
+
+		It("should send the binding's KeepCursor as TargetVersion on the pull", func() {
+			Expect(kc.lastPull().TargetVersion).To(Equal("v-cursor-from-last-sync"))
+		})
+	})
+
+	// cursor_advances_after_successful_pull — task #75. After a successful
+	// non-truncated pull (and no push), the binding's KeepCursor must
+	// advance to pull.ToVersion.
+	Describe("cursor_advances_after_successful_pull", func() {
+		var store *fakeStore
+
+		BeforeEach(func() {
+			c, store, kc, chk = freshConnector(profile, page, listName, listSrv, map[string]string{
+				"uid-A": "srv-A",
+			})
+			bs := bridge.NewBindingStore(store)
+			st, loadErr := bs.LoadState(profile)
+			Expect(loadErr).ToNot(HaveOccurred())
+			st.Bindings[0].KeepCursor = "v-1"
+			Expect(bs.SaveState(profile, st)).To(Succeed())
+
+			// Wiki and Keep agree → no push happens, so only the pull
+			// should advance the cursor.
+			chk.items = []*apiv1.ChecklistItem{
+				{Uid: "uid-A", Text: "Apples", SortOrder: 1000, UpdatedAt: recentTime()},
+			}
+			kc.pullState = protocol.ChangesResponse{
+				ToVersion: "v-2",
+				Nodes: []protocol.Node{
+					keepItem("srv-A", "client-A", listSrv, "Apples", false, "1000"),
+				},
+			}
+			Expect(c.SyncToKeep(ctx, profile, page, listName)).To(Succeed())
+		})
+
+		It("should advance KeepCursor to pull.ToVersion", func() {
+			b, found, ferr := c.FindBinding(ctx, profile, page, listName)
+			Expect(ferr).ToNot(HaveOccurred())
+			Expect(found).To(BeTrue())
+			Expect(b.KeepCursor).To(Equal("v-2"))
+		})
+
+		It("should not push (wiki and Keep agree)", func() {
+			Expect(kc.pushCount()).To(Equal(0))
+		})
+	})
+
+	// cursor_advances_after_successful_push — task #75. The push response's
+	// ToVersion is preferred over the pull's because the push is the more
+	// recent server state.
+	Describe("cursor_advances_after_successful_push", func() {
+		var store *fakeStore
+
+		BeforeEach(func() {
+			c, store, kc, chk = freshConnector(profile, page, listName, listSrv, map[string]string{
+				"uid-A": "srv-A",
+			})
+			bs := bridge.NewBindingStore(store)
+			st, loadErr := bs.LoadState(profile)
+			Expect(loadErr).ToNot(HaveOccurred())
+			st.Bindings[0].KeepCursor = "v-1"
+			Expect(bs.SaveState(profile, st)).To(Succeed())
+
+			// Wiki text differs → push happens.
+			chk.items = []*apiv1.ChecklistItem{
+				{Uid: "uid-A", Text: "Green Apples", SortOrder: 1000, UpdatedAt: recentTime()},
+			}
+			kc.pullState = protocol.ChangesResponse{
+				ToVersion: "v-2",
+				Nodes: []protocol.Node{
+					keepItem("srv-A", "client-A", listSrv, "Apples", false, "1000"),
+				},
+			}
+			kc.pushResponse = protocol.ChangesResponse{
+				ToVersion: "v-3",
+			}
+			seedSyncedFromKeep(profile, page, listName, store, kc.pullState.Nodes)
+			Expect(c.SyncToKeep(ctx, profile, page, listName)).To(Succeed())
+		})
+
+		It("should advance KeepCursor to push.ToVersion (newer than pull's)", func() {
+			b, found, ferr := c.FindBinding(ctx, profile, page, listName)
+			Expect(ferr).ToNot(HaveOccurred())
+			Expect(found).To(BeTrue())
+			Expect(b.KeepCursor).To(Equal("v-3"))
+		})
+
+		It("should have pushed once", func() {
+			Expect(kc.pushCount()).To(Equal(1))
+		})
+	})
+
+	// cursor_does_not_advance_when_pull_is_truncated — task #75. A truncated
+	// pull leaves the cursor stale so the next tick re-pulls from the same
+	// point. Without this, items missed by the truncation would never be
+	// fetched.
+	Describe("cursor_does_not_advance_when_pull_is_truncated", func() {
+		var store *fakeStore
+
+		BeforeEach(func() {
+			c, store, kc, chk = freshConnector(profile, page, listName, listSrv, map[string]string{
+				"uid-A": "srv-A",
+			})
+			bs := bridge.NewBindingStore(store)
+			st, loadErr := bs.LoadState(profile)
+			Expect(loadErr).ToNot(HaveOccurred())
+			st.Bindings[0].KeepCursor = "v-1"
+			Expect(bs.SaveState(profile, st)).To(Succeed())
+
+			chk.items = []*apiv1.ChecklistItem{
+				{Uid: "uid-A", Text: "Apples", SortOrder: 1000, UpdatedAt: recentTime()},
+			}
+			kc.pullState = protocol.ChangesResponse{
+				ToVersion: "v-9",
+				Truncated: true,
+				Nodes: []protocol.Node{
+					keepItem("srv-A", "client-A", listSrv, "Apples", false, "1000"),
+				},
+			}
+			Expect(c.SyncToKeep(ctx, profile, page, listName)).To(Succeed())
+		})
+
+		It("should NOT advance KeepCursor (truncation means missing data)", func() {
+			b, found, ferr := c.FindBinding(ctx, profile, page, listName)
+			Expect(ferr).ToNot(HaveOccurred())
+			Expect(found).To(BeTrue())
+			Expect(b.KeepCursor).To(Equal("v-1"))
+		})
+	})
+
+	// cursor_advances_on_empty_incremental_pull — task #75. An empty
+	// incremental pull (Keep returned no nodes) still advances the cursor;
+	// otherwise we'd re-pull the same delta forever.
+	Describe("cursor_advances_on_empty_incremental_pull", func() {
+		var store *fakeStore
+
+		BeforeEach(func() {
+			c, store, kc, chk = freshConnector(profile, page, listName, listSrv, map[string]string{})
+			bs := bridge.NewBindingStore(store)
+			st, loadErr := bs.LoadState(profile)
+			Expect(loadErr).ToNot(HaveOccurred())
+			st.Bindings[0].KeepCursor = "v-1"
+			Expect(bs.SaveState(profile, st)).To(Succeed())
+
+			// No wiki items, no Keep items, empty Nodes slice in pull.
+			chk.items = []*apiv1.ChecklistItem{}
+			kc.pullState = protocol.ChangesResponse{
+				ToVersion: "v-2",
+				Nodes:     []protocol.Node{},
+			}
+			Expect(c.SyncToKeep(ctx, profile, page, listName)).To(Succeed())
+		})
+
+		It("should advance KeepCursor even when no nodes changed", func() {
+			b, found, ferr := c.FindBinding(ctx, profile, page, listName)
+			Expect(ferr).ToNot(HaveOccurred())
+			Expect(found).To(BeTrue())
+			Expect(b.KeepCursor).To(Equal("v-2"))
+		})
+	})
+
+	// truncation_streak_increments_on_truncated_pull — task #79. Each
+	// truncated pull bumps Binding.TruncatedTickStreak by one.
+	Describe("truncation_streak_increments_on_truncated_pull", func() {
+		BeforeEach(func() {
+			c, _, kc, chk = freshConnector(profile, page, listName, listSrv, map[string]string{
+				"uid-A": "srv-A",
+			})
+			chk.items = []*apiv1.ChecklistItem{
+				{Uid: "uid-A", Text: "Apples", SortOrder: 1000, UpdatedAt: recentTime()},
+			}
+			kc.pullState = protocol.ChangesResponse{
+				ToVersion: "v-trunc",
+				Truncated: true,
+				Nodes: []protocol.Node{
+					keepItem("srv-A", "client-A", listSrv, "Apples", false, "1000"),
+				},
+			}
+			// First truncated pull: 0 → 1.
+			Expect(c.SyncToKeep(ctx, profile, page, listName)).To(Succeed())
+		})
+
+		It("should bump TruncatedTickStreak from 0 to 1 after first truncated pull", func() {
+			b, found, ferr := c.FindBinding(ctx, profile, page, listName)
+			Expect(ferr).ToNot(HaveOccurred())
+			Expect(found).To(BeTrue())
+			Expect(b.TruncatedTickStreak).To(Equal(1))
+		})
+
+		Describe("after a second truncated pull", func() {
+			BeforeEach(func() {
+				// Pull stays truncated; tick again. 1 → 2.
+				Expect(c.SyncToKeep(ctx, profile, page, listName)).To(Succeed())
+			})
+
+			It("should bump TruncatedTickStreak from 1 to 2", func() {
+				b, found, ferr := c.FindBinding(ctx, profile, page, listName)
+				Expect(ferr).ToNot(HaveOccurred())
+				Expect(found).To(BeTrue())
+				Expect(b.TruncatedTickStreak).To(Equal(2))
+			})
+		})
+	})
+
+	// truncation_streak_resets_on_non_truncated_pull — task #79. Any
+	// non-truncated pull clears Binding.TruncatedTickStreak back to 0,
+	// even if it was previously elevated.
+	Describe("truncation_streak_resets_on_non_truncated_pull", func() {
+		var store *fakeStore
+
+		BeforeEach(func() {
+			c, store, kc, chk = freshConnector(profile, page, listName, listSrv, map[string]string{
+				"uid-A": "srv-A",
+			})
+			// Pre-set the streak to 3 so we can observe the reset.
+			bs := bridge.NewBindingStore(store)
+			st, loadErr := bs.LoadState(profile)
+			Expect(loadErr).ToNot(HaveOccurred())
+			st.Bindings[0].TruncatedTickStreak = 3
+			Expect(bs.SaveState(profile, st)).To(Succeed())
+
+			chk.items = []*apiv1.ChecklistItem{
+				{Uid: "uid-A", Text: "Apples", SortOrder: 1000, UpdatedAt: recentTime()},
+			}
+			kc.pullState = protocol.ChangesResponse{
+				ToVersion: "v-clean",
+				Truncated: false,
+				Nodes: []protocol.Node{
+					keepItem("srv-A", "client-A", listSrv, "Apples", false, "1000"),
+				},
+			}
+			Expect(c.SyncToKeep(ctx, profile, page, listName)).To(Succeed())
+		})
+
+		It("should reset TruncatedTickStreak to 0 on a non-truncated pull", func() {
+			b, found, ferr := c.FindBinding(ctx, profile, page, listName)
+			Expect(ferr).ToNot(HaveOccurred())
+			Expect(found).To(BeTrue())
+			Expect(b.TruncatedTickStreak).To(Equal(0))
+		})
+	})
+
+	// chronic_truncation_with_progress_does_not_force_resync — task #79.
+	// Streak ≥ threshold but progress is being made (cursor advances OR
+	// synced_fp updates) → escape hatch must NOT fire. This is the
+	// large-account legitimate-pagination case.
+	Describe("chronic_truncation_with_progress_does_not_force_resync", func() {
+		var store *fakeStore
+
+		BeforeEach(func() {
+			c, store, kc, chk = freshConnector(profile, page, listName, listSrv, map[string]string{
+				"uid-A": "srv-A",
+			})
+			// Pre-existing streak just under threshold; a wiki edit will
+			// push and advance synced_fp this tick (progress observed).
+			bs := bridge.NewBindingStore(store)
+			st, loadErr := bs.LoadState(profile)
+			Expect(loadErr).ToNot(HaveOccurred())
+			st.Bindings[0].KeepCursor = "v-prior"
+			st.Bindings[0].TruncatedTickStreak = truncationResyncThresholdInTests()
+			Expect(bs.SaveState(profile, st)).To(Succeed())
+
+			// Wiki text differs from Keep → push happens (synced_fp advances).
+			chk.items = []*apiv1.ChecklistItem{
+				{Uid: "uid-A", Text: "Green Apples", SortOrder: 1000, UpdatedAt: recentTime()},
+			}
+			seedSyncedFromKeep(profile, page, listName, store, []protocol.Node{
+				keepItem("srv-A", "client-A", listSrv, "Apples", false, "1000"),
+			})
+			kc.pullState = protocol.ChangesResponse{
+				ToVersion: "v-prior", // cursor doesn't advance (truncated)
+				Truncated: true,
+				Nodes: []protocol.Node{
+					keepItem("srv-A", "client-A", listSrv, "Apples", false, "1000"),
+				},
+			}
+			Expect(c.SyncToKeep(ctx, profile, page, listName)).To(Succeed())
+		})
+
+		It("should NOT drop KeepCursor (progress was made via synced_fp advance)", func() {
+			b, found, ferr := c.FindBinding(ctx, profile, page, listName)
+			Expect(ferr).ToNot(HaveOccurred())
+			Expect(found).To(BeTrue())
+			Expect(b.KeepCursor).ToNot(BeEmpty())
+		})
+
+		It("should still increment the streak (truncated tick) but not reset it via the escape hatch", func() {
+			b, _, _ := c.FindBinding(ctx, profile, page, listName)
+			Expect(b.TruncatedTickStreak).To(BeNumerically(">=", truncationResyncThresholdInTests()+1))
+		})
+	})
+
+	// chronic_truncation_without_progress_forces_full_resync — task #79.
+	// Streak ≥ threshold AND no progress (cursor not advancing AND no
+	// synced_fp updates) → drop cursor, reset streak, force full resync
+	// next tick.
+	Describe("chronic_truncation_without_progress_forces_full_resync", func() {
+		var (
+			store *fakeStore
+			dbg   *fakeInfoLogger
+		)
+
+		BeforeEach(func() {
+			c, store, kc, chk = freshConnector(profile, page, listName, listSrv, map[string]string{
+				"uid-A": "srv-A",
+			})
+			dbg = &fakeInfoLogger{}
+			c.SetDebugLogger(dbg)
+
+			// Pre-set streak to one below threshold; this tick will be
+			// the threshold-crossing one.
+			bs := bridge.NewBindingStore(store)
+			st, loadErr := bs.LoadState(profile)
+			Expect(loadErr).ToNot(HaveOccurred())
+			st.Bindings[0].KeepCursor = "v-stuck"
+			st.Bindings[0].TruncatedTickStreak = truncationResyncThresholdInTests() - 1
+			Expect(bs.SaveState(profile, st)).To(Succeed())
+
+			// Wiki and Keep agree, no synced_fp advance, no inbound mutation.
+			chk.items = []*apiv1.ChecklistItem{
+				{Uid: "uid-A", Text: "Apples", SortOrder: 1000, UpdatedAt: recentTime()},
+			}
+			seedSyncedFromWiki(profile, page, listName, store, chk.items)
+			// Truncated pull whose ToVersion equals the prior cursor:
+			// cursor cannot advance, no items to apply.
+			kc.pullState = protocol.ChangesResponse{
+				ToVersion: "v-stuck",
+				Truncated: true,
+				Nodes: []protocol.Node{
+					keepItem("srv-A", "client-A", listSrv, "Apples", false, "1000"),
+				},
+			}
+			Expect(c.SyncToKeep(ctx, profile, page, listName)).To(Succeed())
+		})
+
+		It("should drop KeepCursor to empty (forces full resync next tick)", func() {
+			b, found, ferr := c.FindBinding(ctx, profile, page, listName)
+			Expect(ferr).ToNot(HaveOccurred())
+			Expect(found).To(BeTrue())
+			Expect(b.KeepCursor).To(BeEmpty())
+		})
+
+		It("should reset TruncatedTickStreak to 0 after triggering the escape hatch", func() {
+			b, _, _ := c.FindBinding(ctx, profile, page, listName)
+			Expect(b.TruncatedTickStreak).To(Equal(0))
+		})
+
+		It("should log an INFO-level message via debug.Info about the forced resync", func() {
+			Expect(dbg.containsSubstring("truncation")).To(BeTrue(),
+				"expected at least one Info log mentioning truncation; got: %v", dbg.formats)
+		})
+	})
+
+	// outbound_skips_items_at_synced_baseline — task #77. The outbound
+	// diff loop's push gate is now fingerprint divergence, not byte-
+	// equality against Keep. When wiki_fp == synced_fp (wiki has not
+	// been edited since the last successful sync), the item is
+	// skipped — even if Keep's content happens to differ would only
+	// matter via the inbound apply pass.
+	Describe("outbound_skips_items_at_synced_baseline", func() {
+		var store *fakeStore
+
+		BeforeEach(func() {
+			c, store, kc, chk = freshConnector(profile, page, listName, listSrv, map[string]string{
+				"uid-A": "srv-A",
+			})
+			chk.items = []*apiv1.ChecklistItem{
+				{Uid: "uid-A", Text: "Apples", SortOrder: 1000, UpdatedAt: recentTime()},
+			}
+			kc.pullState = protocol.ChangesResponse{
+				ToVersion: "v0",
+				Nodes: []protocol.Node{
+					keepItem("srv-A", "client-A", listSrv, "Apples", false, "1000"),
+				},
+			}
+			// Seed synced_fp from the wiki item — wiki_fp == synced_fp,
+			// so the outbound diff sees no edit and pushes nothing.
+			seedSyncedFromWiki(profile, page, listName, store, chk.items)
+			Expect(c.SyncToKeep(ctx, profile, page, listName)).To(Succeed())
+		})
+
+		It("should not push anything (wiki at synced baseline)", func() {
+			Expect(kc.pushCount()).To(Equal(0))
+		})
+	})
+
+	// outbound_pushes_when_wiki_diverges_from_synced — task #77. The
+	// converse of the previous spec: with wiki_fp != synced_fp, the
+	// outbound loop must include the item in the push body.
+	Describe("outbound_pushes_when_wiki_diverges_from_synced", func() {
+		var store *fakeStore
+
+		BeforeEach(func() {
+			c, store, kc, chk = freshConnector(profile, page, listName, listSrv, map[string]string{
+				"uid-A": "srv-A",
+			})
+			chk.items = []*apiv1.ChecklistItem{
+				{Uid: "uid-A", Text: "Green Apples", SortOrder: 1000, UpdatedAt: recentTime()},
+			}
+			kc.pullState = protocol.ChangesResponse{
+				ToVersion: "v0",
+				Nodes: []protocol.Node{
+					keepItem("srv-A", "client-A", listSrv, "Apples", false, "1000"),
+				},
+			}
+			// Seed synced_fp from Keep — wiki has the edit, baseline is
+			// at the previously-synced "Apples", so wiki_fp != synced_fp.
+			seedSyncedFromKeep(profile, page, listName, store, kc.pullState.Nodes)
+			Expect(c.SyncToKeep(ctx, profile, page, listName)).To(Succeed())
+		})
+
+		It("should push exactly one node (wiki edit)", func() {
+			Expect(kc.pushCount()).To(Equal(1))
+			Expect(kc.lastPush().Nodes).To(HaveLen(1))
+		})
+
+		It("should push the wiki-edited text", func() {
+			Expect(kc.findPushedItem("srv-A").Text).To(Equal("Green Apples"))
+		})
+	})
+
+	// outbound_advances_synced_fp_after_successful_push — task #77.
+	// After a successful push, the ItemBinding's synced_fp must be
+	// advanced to the just-pushed content. Without this, the next tick
+	// would re-read wiki_fp, compare against the unchanged synced_fp,
+	// and re-push the same edit forever.
+	Describe("outbound_advances_synced_fp_after_successful_push", func() {
+		var store *fakeStore
+
+		BeforeEach(func() {
+			c, store, kc, chk = freshConnector(profile, page, listName, listSrv, map[string]string{
+				"uid-A": "srv-A",
+			})
+			chk.items = []*apiv1.ChecklistItem{
+				{Uid: "uid-A", Text: "Green Apples", SortOrder: 1000, UpdatedAt: recentTime()},
+			}
+			kc.pullState = protocol.ChangesResponse{
+				ToVersion: "v0",
+				Nodes: []protocol.Node{
+					keepItem("srv-A", "client-A", listSrv, "Apples", false, "1000"),
+				},
+			}
+			// Pre-push synced baseline = Keep's "Apples".
+			seedSyncedFromKeep(profile, page, listName, store, kc.pullState.Nodes)
+			Expect(c.SyncToKeep(ctx, profile, page, listName)).To(Succeed())
+		})
+
+		It("should advance ItemBinding.SyncedText to the pushed value", func() {
+			b, found, ferr := c.FindBinding(ctx, profile, page, listName)
+			Expect(ferr).ToNot(HaveOccurred())
+			Expect(found).To(BeTrue())
+			ib, ok := b.ItemIDMap["uid-A"]
+			Expect(ok).To(BeTrue())
+			Expect(ib.SyncedText).To(Equal("Green Apples"))
+		})
+
+		It("should advance ItemBinding.SyncedSortValue to the pushed value", func() {
+			b, _, _ := c.FindBinding(ctx, profile, page, listName)
+			Expect(b.ItemIDMap["uid-A"].SyncedSortValue).To(Equal("1000"))
+		})
+	})
+
+	// outbound_advances_synced_fp_for_fresh_items_after_push — task #77.
+	// Fresh items (no id_map entry pre-push) get an ItemBinding created
+	// during the response walk when Keep echoes back a server-assigned
+	// ID. That new entry must also carry synced_fp at the pushed values
+	// so the next tick sees wiki_fp == synced_fp.
+	Describe("outbound_advances_synced_fp_for_fresh_items_after_push", func() {
+		BeforeEach(func() {
+			c, _, kc, chk = freshConnector(profile, page, listName, listSrv, map[string]string{})
+			chk.items = []*apiv1.ChecklistItem{
+				{Uid: "uid-NEW", Text: "Bread", Checked: false, SortOrder: 2000, UpdatedAt: recentTime()},
+			}
+			kc.pullState = protocol.ChangesResponse{
+				ToVersion: "v0",
+				Nodes:     []protocol.Node{},
+			}
+			// The default fakeKeepClient does not echo pushed nodes
+			// back in its response; without an echo, the connector's
+			// response walk has nothing to match against and never
+			// populates id_map for fresh items. Wrap with an echoing
+			// client so the response carries an echoed node per pushed
+			// LIST_ITEM, with a fresh server-assigned ServerID — that
+			// triggers the id_map creation + synced_fp advance path.
+			echoing := &echoingPushClient{inner: kc}
+			c.SetClientBuilder(func(_ string) bridge.KeepClient { return echoing })
+			Expect(c.SyncToKeep(ctx, profile, page, listName)).To(Succeed())
+		})
+
+		It("should populate id_map[uid-NEW] with a serverID", func() {
+			b, found, ferr := c.FindBinding(ctx, profile, page, listName)
+			Expect(ferr).ToNot(HaveOccurred())
+			Expect(found).To(BeTrue())
+			ib, ok := b.ItemIDMap["uid-NEW"]
+			Expect(ok).To(BeTrue())
+			Expect(ib.ServerID).ToNot(BeEmpty())
+		})
+
+		It("should advance the new id_map entry's SyncedText", func() {
+			b, _, _ := c.FindBinding(ctx, profile, page, listName)
+			Expect(b.ItemIDMap["uid-NEW"].SyncedText).To(Equal("Bread"))
+		})
+
+		It("should advance the new id_map entry's SyncedChecked", func() {
+			b, _, _ := c.FindBinding(ctx, profile, page, listName)
+			Expect(b.ItemIDMap["uid-NEW"].SyncedChecked).To(BeFalse())
+		})
+
+		It("should advance the new id_map entry's SyncedSortValue", func() {
+			b, _, _ := c.FindBinding(ctx, profile, page, listName)
+			Expect(b.ItemIDMap["uid-NEW"].SyncedSortValue).To(Equal("2000"))
+		})
+	})
+
+	// push_partial_failure_does_not_advance_synced_fp_for_failed_item — task #78.
+	// Two items pushed; Keep reports SUCCESS for the first and ERROR for
+	// the second. The successful item's synced_fp advances and its
+	// PushFailureCount is zero; the failed item's synced_fp is unchanged
+	// and its PushFailureCount is 1 + LastFailureCode is "ERROR".
+	Describe("push_partial_failure_does_not_advance_synced_fp_for_failed_item", func() {
+		var store *fakeStore
+
+		BeforeEach(func() {
+			c, store, kc, chk = freshConnector(profile, page, listName, listSrv, map[string]string{
+				"uid-A": "srv-A",
+				"uid-B": "srv-B",
+			})
+			chk.items = []*apiv1.ChecklistItem{
+				{Uid: "uid-A", Text: "Green Apples", SortOrder: 1000, UpdatedAt: recentTime()},
+				{Uid: "uid-B", Text: "Bananas New", SortOrder: 2000, UpdatedAt: recentTime()},
+			}
+			kc.pullState = protocol.ChangesResponse{
+				ToVersion: "v0",
+				Nodes: []protocol.Node{
+					keepItem("srv-A", "client-A", listSrv, "Apples", false, "1000"),
+					keepItem("srv-B", "client-B", listSrv, "Bananas", false, "2000"),
+				},
+			}
+			seedSyncedFromKeep(profile, page, listName, store, kc.pullState.Nodes)
+			kc.pushResponse = protocol.ChangesResponse{
+				ToVersion: "v-after-push",
+				WriteResults: []protocol.NodeWriteResult{
+					{ID: "client-A", Status: "SUCCESS"},
+					{ID: "client-B", Status: "ERROR"},
+				},
+			}
+			Expect(c.SyncToKeep(ctx, profile, page, listName)).To(Succeed())
+		})
+
+		It("should advance synced_fp for the SUCCESS uid", func() {
+			b, _, _ := c.FindBinding(ctx, profile, page, listName)
+			Expect(b.ItemIDMap["uid-A"].SyncedText).To(Equal("Green Apples"))
+		})
+
+		It("should reset PushFailureCount to 0 for the SUCCESS uid", func() {
+			b, _, _ := c.FindBinding(ctx, profile, page, listName)
+			Expect(b.ItemIDMap["uid-A"].PushFailureCount).To(Equal(0))
+		})
+
+		It("should leave synced_fp at its prior baseline for the ERROR uid", func() {
+			b, _, _ := c.FindBinding(ctx, profile, page, listName)
+			Expect(b.ItemIDMap["uid-B"].SyncedText).To(Equal("Bananas"))
+		})
+
+		It("should set PushFailureCount=1 for the ERROR uid", func() {
+			b, _, _ := c.FindBinding(ctx, profile, page, listName)
+			Expect(b.ItemIDMap["uid-B"].PushFailureCount).To(Equal(1))
+		})
+
+		It("should set LastFailureCode to the Keep status for the ERROR uid", func() {
+			b, _, _ := c.FindBinding(ctx, profile, page, listName)
+			Expect(b.ItemIDMap["uid-B"].LastFailureCode).To(Equal("ERROR"))
+		})
+	})
+
+	// push_failure_increments_count_and_does_not_advance_synced_fp — task #78.
+	// Single failed push: SyncedText stays at the prior baseline,
+	// PushFailureCount=1, LastFailureCode is set.
+	Describe("push_failure_increments_count_and_does_not_advance_synced_fp", func() {
+		var store *fakeStore
+
+		BeforeEach(func() {
+			c, store, kc, chk = freshConnector(profile, page, listName, listSrv, map[string]string{
+				"uid-A": "srv-A",
+			})
+			chk.items = []*apiv1.ChecklistItem{
+				{Uid: "uid-A", Text: "Green Apples", SortOrder: 1000, UpdatedAt: recentTime()},
+			}
+			kc.pullState = protocol.ChangesResponse{
+				ToVersion: "v0",
+				Nodes: []protocol.Node{
+					keepItem("srv-A", "client-A", listSrv, "Apples", false, "1000"),
+				},
+			}
+			seedSyncedFromKeep(profile, page, listName, store, kc.pullState.Nodes)
+			kc.pushResponse = protocol.ChangesResponse{
+				ToVersion: "v-after-push",
+				WriteResults: []protocol.NodeWriteResult{
+					{ID: "client-A", Status: "ERROR"},
+				},
+			}
+			Expect(c.SyncToKeep(ctx, profile, page, listName)).To(Succeed())
+		})
+
+		It("should leave SyncedText unchanged at the prior baseline", func() {
+			b, _, _ := c.FindBinding(ctx, profile, page, listName)
+			Expect(b.ItemIDMap["uid-A"].SyncedText).To(Equal("Apples"))
+		})
+
+		It("should set PushFailureCount to 1", func() {
+			b, _, _ := c.FindBinding(ctx, profile, page, listName)
+			Expect(b.ItemIDMap["uid-A"].PushFailureCount).To(Equal(1))
+		})
+
+		It("should set LastFailureCode to the returned status", func() {
+			b, _, _ := c.FindBinding(ctx, profile, page, listName)
+			Expect(b.ItemIDMap["uid-A"].LastFailureCode).To(Equal("ERROR"))
+		})
+
+		It("should set NextAttemptAt to now+60s", func() {
+			b, _, _ := c.FindBinding(ctx, profile, page, listName)
+			expected := tNow.Add(60 * time.Second)
+			Expect(b.ItemIDMap["uid-A"].NextAttemptAt).To(BeTemporally("~", expected, time.Second))
+		})
+	})
+
+	// push_failure_with_no_response_status_uses_no_response_status_code — task #78.
+	// Keep returned no per-node WriteResults entry (e.g. the response shape
+	// lacked the array, or the entry didn't match by clientID). Counts as
+	// failure: bump PushFailureCount, set LastFailureCode to the
+	// "no_response_status" sentinel, do NOT advance synced_fp.
+	Describe("push_failure_with_no_response_status_uses_no_response_status_code", func() {
+		var store *fakeStore
+
+		BeforeEach(func() {
+			c, store, kc, chk = freshConnector(profile, page, listName, listSrv, map[string]string{
+				"uid-A": "srv-A",
+			})
+			chk.items = []*apiv1.ChecklistItem{
+				{Uid: "uid-A", Text: "Green Apples", SortOrder: 1000, UpdatedAt: recentTime()},
+			}
+			kc.pullState = protocol.ChangesResponse{
+				ToVersion: "v0",
+				Nodes: []protocol.Node{
+					keepItem("srv-A", "client-A", listSrv, "Apples", false, "1000"),
+				},
+			}
+			seedSyncedFromKeep(profile, page, listName, store, kc.pullState.Nodes)
+			// Push response carries no WriteResults at all.
+			kc.pushResponse = protocol.ChangesResponse{
+				ToVersion: "v-after-push",
+			}
+			Expect(c.SyncToKeep(ctx, profile, page, listName)).To(Succeed())
+		})
+
+		It("should leave SyncedText at the prior baseline", func() {
+			b, _, _ := c.FindBinding(ctx, profile, page, listName)
+			Expect(b.ItemIDMap["uid-A"].SyncedText).To(Equal("Apples"))
+		})
+
+		It("should bump PushFailureCount to 1", func() {
+			b, _, _ := c.FindBinding(ctx, profile, page, listName)
+			Expect(b.ItemIDMap["uid-A"].PushFailureCount).To(Equal(1))
+		})
+
+		It("should set LastFailureCode to the no_response_status sentinel", func() {
+			b, _, _ := c.FindBinding(ctx, profile, page, listName)
+			Expect(b.ItemIDMap["uid-A"].LastFailureCode).To(Equal("no_response_status"))
+		})
+	})
+
+	// push_success_resets_failure_count_and_clears_failure_code — task #78.
+	// Pre-existing PushFailureCount=5 + LastFailureCode + NextAttemptAt;
+	// a successful push clears all three.
+	Describe("push_success_resets_failure_count_and_clears_failure_code", func() {
+		var store *fakeStore
+
+		BeforeEach(func() {
+			c, store, kc, chk = freshConnector(profile, page, listName, listSrv, map[string]string{
+				"uid-A": "srv-A",
+			})
+			chk.items = []*apiv1.ChecklistItem{
+				{Uid: "uid-A", Text: "Green Apples", SortOrder: 1000, UpdatedAt: recentTime()},
+			}
+			kc.pullState = protocol.ChangesResponse{
+				ToVersion: "v0",
+				Nodes: []protocol.Node{
+					keepItem("srv-A", "client-A", listSrv, "Apples", false, "1000"),
+				},
+			}
+			seedSyncedFromKeep(profile, page, listName, store, kc.pullState.Nodes)
+			// Pre-set the failure state directly.
+			bs := bridge.NewBindingStore(store)
+			st, loadErr := bs.LoadState(profile)
+			Expect(loadErr).ToNot(HaveOccurred())
+			ib := st.Bindings[0].ItemIDMap["uid-A"]
+			ib.PushFailureCount = 5
+			ib.LastFailureCode = "rate_limited"
+			ib.NextAttemptAt = tStaleA // already-past, won't gate
+			st.Bindings[0].ItemIDMap["uid-A"] = ib
+			Expect(bs.SaveState(profile, st)).To(Succeed())
+
+			kc.pushResponse = protocol.ChangesResponse{
+				ToVersion: "v-after-push",
+				WriteResults: []protocol.NodeWriteResult{
+					{ID: "client-A", Status: "SUCCESS"},
+				},
+			}
+			Expect(c.SyncToKeep(ctx, profile, page, listName)).To(Succeed())
+		})
+
+		It("should reset PushFailureCount to 0", func() {
+			b, _, _ := c.FindBinding(ctx, profile, page, listName)
+			Expect(b.ItemIDMap["uid-A"].PushFailureCount).To(Equal(0))
+		})
+
+		It("should clear LastFailureCode", func() {
+			b, _, _ := c.FindBinding(ctx, profile, page, listName)
+			Expect(b.ItemIDMap["uid-A"].LastFailureCode).To(Equal(""))
+		})
+
+		It("should clear NextAttemptAt", func() {
+			b, _, _ := c.FindBinding(ctx, profile, page, listName)
+			Expect(b.ItemIDMap["uid-A"].NextAttemptAt.IsZero()).To(BeTrue())
+		})
+	})
+
+	// dead_lettered_item_is_skipped_in_outbound_diff — task #78. With
+	// PushFailureCount >= deadLetterThreshold (10), the diff loop
+	// omits the uid from the push entirely.
+	Describe("dead_lettered_item_is_skipped_in_outbound_diff", func() {
+		var store *fakeStore
+
+		BeforeEach(func() {
+			c, store, kc, chk = freshConnector(profile, page, listName, listSrv, map[string]string{
+				"uid-A": "srv-A",
+				"uid-B": "srv-B",
+			})
+			chk.items = []*apiv1.ChecklistItem{
+				{Uid: "uid-A", Text: "Green Apples", SortOrder: 1000, UpdatedAt: recentTime()},
+				{Uid: "uid-B", Text: "Green Bananas", SortOrder: 2000, UpdatedAt: recentTime()},
+			}
+			kc.pullState = protocol.ChangesResponse{
+				ToVersion: "v0",
+				Nodes: []protocol.Node{
+					keepItem("srv-A", "client-A", listSrv, "Apples", false, "1000"),
+					keepItem("srv-B", "client-B", listSrv, "Bananas", false, "2000"),
+				},
+			}
+			seedSyncedFromKeep(profile, page, listName, store, kc.pullState.Nodes)
+			// Dead-letter uid-A.
+			bs := bridge.NewBindingStore(store)
+			st, loadErr := bs.LoadState(profile)
+			Expect(loadErr).ToNot(HaveOccurred())
+			ib := st.Bindings[0].ItemIDMap["uid-A"]
+			ib.PushFailureCount = 10
+			ib.LastFailureCode = "permanent_failure"
+			st.Bindings[0].ItemIDMap["uid-A"] = ib
+			Expect(bs.SaveState(profile, st)).To(Succeed())
+			Expect(c.SyncToKeep(ctx, profile, page, listName)).To(Succeed())
+		})
+
+		It("should still push (uid-B is not dead-lettered)", func() {
+			Expect(kc.pushCount()).To(Equal(1))
+		})
+
+		It("should omit the dead-lettered uid from the push body", func() {
+			for _, n := range kc.lastPush().Nodes {
+				Expect(n.ServerID).ToNot(Equal("srv-A"))
+			}
+		})
+
+		It("should include the non-dead-lettered uid in the push body", func() {
+			found := false
+			for _, n := range kc.lastPush().Nodes {
+				if n.ServerID == "srv-B" {
+					found = true
+				}
+			}
+			Expect(found).To(BeTrue())
+		})
+
+		It("should preserve the dead-lettered item's PushFailureCount", func() {
+			b, _, _ := c.FindBinding(ctx, profile, page, listName)
+			Expect(b.ItemIDMap["uid-A"].PushFailureCount).To(Equal(10))
+		})
+	})
+
+	// wiki_side_re_edit_resets_push_failure_count — task #78. The user
+	// edits the wiki side after a dead-letter; the diff loop sees that
+	// wiki_fp differs from LastObservedWiki* and resets the failure
+	// count BEFORE the dead-letter check, so the item gets pushed again.
+	Describe("wiki_side_re_edit_resets_push_failure_count", func() {
+		var store *fakeStore
+
+		BeforeEach(func() {
+			c, store, kc, chk = freshConnector(profile, page, listName, listSrv, map[string]string{
+				"uid-A": "srv-A",
+			})
+			// New text — user just edited on the wiki side.
+			chk.items = []*apiv1.ChecklistItem{
+				{Uid: "uid-A", Text: "new text", SortOrder: 1000, UpdatedAt: recentTime()},
+			}
+			kc.pullState = protocol.ChangesResponse{
+				ToVersion: "v0",
+				Nodes: []protocol.Node{
+					keepItem("srv-A", "client-A", listSrv, "old text", false, "1000"),
+				},
+			}
+			seedSyncedFromKeep(profile, page, listName, store, kc.pullState.Nodes)
+			// Pre-set: dead-lettered + LastObservedWiki* records the
+			// PRE-edit wiki state. Wiki_fp now differs from
+			// LastObservedWiki* → reset.
+			bs := bridge.NewBindingStore(store)
+			st, loadErr := bs.LoadState(profile)
+			Expect(loadErr).ToNot(HaveOccurred())
+			ib := st.Bindings[0].ItemIDMap["uid-A"]
+			ib.PushFailureCount = 10
+			ib.LastFailureCode = "rate_limited"
+			ib.LastObservedWikiText = "old text"
+			ib.LastObservedWikiSortValue = "1000"
+			st.Bindings[0].ItemIDMap["uid-A"] = ib
+			Expect(bs.SaveState(profile, st)).To(Succeed())
+			Expect(c.SyncToKeep(ctx, profile, page, listName)).To(Succeed())
+		})
+
+		It("should re-push the item (failure count is reset)", func() {
+			Expect(kc.pushCount()).To(Equal(1))
+			Expect(kc.findPushedItem("srv-A").Text).To(Equal("new text"))
+		})
+
+		It("should reset PushFailureCount to 0", func() {
+			b, _, _ := c.FindBinding(ctx, profile, page, listName)
+			Expect(b.ItemIDMap["uid-A"].PushFailureCount).To(Equal(0))
+		})
+
+		It("should clear LastFailureCode", func() {
+			b, _, _ := c.FindBinding(ctx, profile, page, listName)
+			Expect(b.ItemIDMap["uid-A"].LastFailureCode).To(Equal(""))
+		})
+	})
+
+	// last_observed_wiki_fields_written_at_end_of_tick — task #78. After
+	// SyncToKeep, every uid in id_map has LastObservedWiki* populated to
+	// reflect the post-tick wiki state.
+	Describe("last_observed_wiki_fields_written_at_end_of_tick", func() {
+		BeforeEach(func() {
+			c, _, kc, chk = freshConnector(profile, page, listName, listSrv, map[string]string{
+				"uid-A": "srv-A",
+			})
+			chk.items = []*apiv1.ChecklistItem{
+				{Uid: "uid-A", Text: "Apples", SortOrder: 1000, UpdatedAt: recentTime()},
+			}
+			kc.pullState = protocol.ChangesResponse{
+				ToVersion: "v0",
+				Nodes: []protocol.Node{
+					keepItem("srv-A", "client-A", listSrv, "Apples", false, "1000"),
+				},
+			}
+			Expect(c.SyncToKeep(ctx, profile, page, listName)).To(Succeed())
+		})
+
+		It("should populate LastObservedWikiText for items in id_map", func() {
+			b, _, _ := c.FindBinding(ctx, profile, page, listName)
+			Expect(b.ItemIDMap["uid-A"].LastObservedWikiText).To(Equal("Apples"))
+		})
+
+		It("should populate LastObservedWikiSortValue for items in id_map", func() {
+			b, _, _ := c.FindBinding(ctx, profile, page, listName)
+			Expect(b.ItemIDMap["uid-A"].LastObservedWikiSortValue).To(Equal("1000"))
+		})
+	})
+
+	// next_attempt_at_skips_recently_failed_item — task #78. NextAttemptAt
+	// 60s in the future and clock.Now() before that → diff loop skips
+	// the item even though wiki_fp != synced_fp.
+	Describe("next_attempt_at_skips_recently_failed_item", func() {
+		var store *fakeStore
+
+		BeforeEach(func() {
+			c, store, kc, chk = freshConnector(profile, page, listName, listSrv, map[string]string{
+				"uid-A": "srv-A",
+			})
+			chk.items = []*apiv1.ChecklistItem{
+				{Uid: "uid-A", Text: "Green Apples", SortOrder: 1000, UpdatedAt: recentTime()},
+			}
+			kc.pullState = protocol.ChangesResponse{
+				ToVersion: "v0",
+				Nodes: []protocol.Node{
+					keepItem("srv-A", "client-A", listSrv, "Apples", false, "1000"),
+				},
+			}
+			seedSyncedFromKeep(profile, page, listName, store, kc.pullState.Nodes)
+			bs := bridge.NewBindingStore(store)
+			st, loadErr := bs.LoadState(profile)
+			Expect(loadErr).ToNot(HaveOccurred())
+			ib := st.Bindings[0].ItemIDMap["uid-A"]
+			ib.PushFailureCount = 1
+			ib.LastFailureCode = "rate_limited"
+			ib.NextAttemptAt = tNow.Add(60 * time.Second)
+			st.Bindings[0].ItemIDMap["uid-A"] = ib
+			Expect(bs.SaveState(profile, st)).To(Succeed())
+			Expect(c.SyncToKeep(ctx, profile, page, listName)).To(Succeed())
+		})
+
+		It("should not push the item still inside its backoff window", func() {
+			Expect(kc.pushCount()).To(Equal(0))
+		})
+
+		It("should preserve PushFailureCount during the backoff skip", func() {
+			b, _, _ := c.FindBinding(ctx, profile, page, listName)
+			Expect(b.ItemIDMap["uid-A"].PushFailureCount).To(Equal(1))
+		})
+	})
+
+	// next_attempt_at_advances_after_failure — task #78. After a failed
+	// push, NextAttemptAt is set to now + min(60 * 2^(n-1), 3600) seconds.
+	Describe("next_attempt_at_advances_after_failure", func() {
+		var store *fakeStore
+
+		BeforeEach(func() {
+			c, store, kc, chk = freshConnector(profile, page, listName, listSrv, map[string]string{
+				"uid-A": "srv-A",
+			})
+			chk.items = []*apiv1.ChecklistItem{
+				{Uid: "uid-A", Text: "Green Apples", SortOrder: 1000, UpdatedAt: recentTime()},
+			}
+			kc.pullState = protocol.ChangesResponse{
+				ToVersion: "v0",
+				Nodes: []protocol.Node{
+					keepItem("srv-A", "client-A", listSrv, "Apples", false, "1000"),
+				},
+			}
+			seedSyncedFromKeep(profile, page, listName, store, kc.pullState.Nodes)
+			// Pre-existing 2 failures → this one becomes the 3rd, so
+			// NextAttemptAt = now + 60 * 2^2 = 240s.
+			bs := bridge.NewBindingStore(store)
+			st, loadErr := bs.LoadState(profile)
+			Expect(loadErr).ToNot(HaveOccurred())
+			ib := st.Bindings[0].ItemIDMap["uid-A"]
+			ib.PushFailureCount = 2
+			ib.LastFailureCode = "rate_limited"
+			st.Bindings[0].ItemIDMap["uid-A"] = ib
+			Expect(bs.SaveState(profile, st)).To(Succeed())
+
+			kc.pushResponse = protocol.ChangesResponse{
+				ToVersion: "v-after-push",
+				WriteResults: []protocol.NodeWriteResult{
+					{ID: "client-A", Status: "ERROR"},
+				},
+			}
+			Expect(c.SyncToKeep(ctx, profile, page, listName)).To(Succeed())
+		})
+
+		It("should advance PushFailureCount to 3", func() {
+			b, _, _ := c.FindBinding(ctx, profile, page, listName)
+			Expect(b.ItemIDMap["uid-A"].PushFailureCount).To(Equal(3))
+		})
+
+		It("should set NextAttemptAt to now + 240s (60 * 2^2)", func() {
+			b, _, _ := c.FindBinding(ctx, profile, page, listName)
+			expected := tNow.Add(240 * time.Second)
+			Expect(b.ItemIDMap["uid-A"].NextAttemptAt).To(BeTemporally("~", expected, time.Second))
+		})
+	})
+})
+
+// echoingPushClient wraps fakeKeepClient so that on push, the response
+// echoes back each pushed LIST_ITEM with a server-assigned ServerID
+// derived from the request's client_id. Used by the
+// outbound_advances_synced_fp_for_fresh_items_with_echo test to drive
+// the response-walk path that creates id_map entries for fresh items.
+type echoingPushClient struct {
+	inner *fakeKeepClient
+}
+
+func (e *echoingPushClient) Changes(ctx context.Context, req protocol.ChangesRequest) (protocol.ChangesResponse, error) {
+	if len(req.Nodes) == 0 && len(req.Labels) == 0 {
+		return e.inner.Changes(ctx, req)
+	}
+	// Invoke the inner so the request is recorded; then synthesize
+	// an echo by mapping each request node to an echoed response node
+	// with a fresh ServerID.
+	_, err := e.inner.Changes(ctx, req)
+	if err != nil {
+		return protocol.ChangesResponse{}, err
+	}
+	echoed := make([]protocol.Node, 0, len(req.Nodes))
+	writeResults := make([]protocol.NodeWriteResult, 0, len(req.Nodes))
+	for _, n := range req.Nodes {
+		if n.Type != protocol.NodeTypeListItem {
+			continue
+		}
+		echo := n
+		if echo.ServerID == "" {
+			echo.ServerID = "echoed-" + n.ID
+		}
+		echoed = append(echoed, echo)
+		writeResults = append(writeResults, protocol.NodeWriteResult{
+			ID:     n.ID,
+			Status: "SUCCESS",
+		})
+	}
+	return protocol.ChangesResponse{
+		ToVersion:    "v-after-push",
+		Nodes:        echoed,
+		WriteResults: writeResults,
+	}, nil
+}
+
+func (e *echoingPushClient) CreateList(ctx context.Context, title string) (string, error) {
+	return e.inner.CreateList(ctx, title)
+}
+
+func (e *echoingPushClient) CreateListWithItems(ctx context.Context, title string, items []protocol.ListItemSpec) (protocol.CreateListResult, error) {
+	return e.inner.CreateListWithItems(ctx, title, items)
+}
+
+// fakeInfoLogger captures Info(...) calls for assertion. Satisfies
+// protocol.DebugLogger so SetDebugLogger accepts it.
+type fakeInfoLogger struct {
+	mu       sync.Mutex
+	formats  []string
+	rendered []string
+}
+
+func (l *fakeInfoLogger) Info(format string, args ...any) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.formats = append(l.formats, format)
+	l.rendered = append(l.rendered, fmt.Sprintf(format, args...))
+}
+
+// containsSubstring reports whether any captured Info call (format or
+// rendered output) contains the given substring (case-insensitive).
+func (l *fakeInfoLogger) containsSubstring(s string) bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	needle := strings.ToLower(s)
+	for _, f := range l.formats {
+		if strings.Contains(strings.ToLower(f), needle) {
+			return true
+		}
+	}
+	for _, r := range l.rendered {
+		if strings.Contains(strings.ToLower(r), needle) {
+			return true
+		}
+	}
+	return false
+}
+
+// truncationResyncThresholdInTests mirrors the connector-package
+// constant for the truncation escape hatch threshold. Kept as a helper
+// so the test reads as "the threshold" rather than a magic number, and
+// the source of truth stays in connector.go.
+func truncationResyncThresholdInTests() int {
+	return 5
+}
+
+// SyncToKeep skip-gate: legacy bindings (MigratedFingerprints=false)
+// must short-circuit BEFORE any pull. The eager migration job
+// rebaselines synced_fp first; until it stamps MigratedFingerprints=
+// true, the sync engine has no synced_fp to test divergence against
+// and would silently rebaseline (the "lazy first-tick" approach the
+// plan rejected). The gate also throttles its INFO log to the first
+// skip per binding per process so a stuck-un-migrated binding doesn't
+// spam the journal at the cron cadence.
+var _ = Describe("SyncToKeep — un-migrated binding gate", func() {
+	const (
+		profile  = wikipage.PageIdentifier("profile_test")
+		page     = "shopping"
+		listName = "Grocery"
+		listSrv  = "list-server-id"
+	)
+
+	Describe("when binding has MigratedFingerprints=false", func() {
+		var (
+			c     *bridge.Connector
+			kc    *fakeKeepClient
+			store *fakeStore
+			err   error
+		)
+
+		BeforeEach(func() {
+			c, store, kc, _ = freshConnector(profile, page, listName, listSrv, map[string]string{
+				"uid-A": "srv-A",
+			})
+			// Flip the default born-migrated to false to express
+			// the legacy-on-disk shape.
+			bs := bridge.NewBindingStore(store)
+			st, loadErr := bs.LoadState(profile)
+			Expect(loadErr).ToNot(HaveOccurred())
+			st.Bindings[0].MigratedFingerprints = false
+			Expect(bs.SaveState(profile, st)).To(Succeed())
+
+			err = c.SyncToKeep(context.Background(), profile, page, listName)
+		})
+
+		It("should not return an error", func() {
+			Expect(err).ToNot(HaveOccurred())
+		})
+
+		It("should NOT call Changes() on the Keep client", func() {
+			Expect(kc.pulledRequests).To(BeEmpty())
+			Expect(kc.pushedRequests).To(BeEmpty())
+		})
+	})
+
+	Describe("when SyncToKeep skips the same binding twice", func() {
+		var (
+			c   *bridge.Connector
+			lg  *fakeInfoLogger
+		)
+
+		BeforeEach(func() {
+			var store *fakeStore
+			c, store, _, _ = freshConnector(profile, page, listName, listSrv, map[string]string{
+				"uid-A": "srv-A",
+			})
+			lg = &fakeInfoLogger{}
+			c.SetDebugLogger(lg)
+
+			bs := bridge.NewBindingStore(store)
+			st, loadErr := bs.LoadState(profile)
+			Expect(loadErr).ToNot(HaveOccurred())
+			st.Bindings[0].MigratedFingerprints = false
+			Expect(bs.SaveState(profile, st)).To(Succeed())
+
+			Expect(c.SyncToKeep(context.Background(), profile, page, listName)).To(Succeed())
+			Expect(c.SyncToKeep(context.Background(), profile, page, listName)).To(Succeed())
+		})
+
+		It("should log the skip exactly once per process", func() {
+			count := 0
+			lg.mu.Lock()
+			defer lg.mu.Unlock()
+			for _, f := range lg.formats {
+				if strings.Contains(strings.ToLower(f), "skip") {
+					count++
+				}
+			}
+			Expect(count).To(Equal(1))
+		})
+	})
+
+	Describe("when a freshly-bound binding is created via Bind", func() {
+		var b bridge.Binding
+
+		BeforeEach(func() {
+			c, store, _, _ := freshConnector(profile, page, listName, listSrv, map[string]string{
+				"uid-A": "srv-A",
+			})
+			// Drop the seeded binding so Bind() runs against a clean
+			// connected-but-no-bindings state.
+			bs := bridge.NewBindingStore(store)
+			st, loadErr := bs.LoadState(profile)
+			Expect(loadErr).ToNot(HaveOccurred())
+			st.Bindings = nil
+			Expect(bs.SaveState(profile, st)).To(Succeed())
+
+			var bindErr error
+			b, bindErr = c.Bind(context.Background(), profile, "newpage", "newlist", "", nil)
+			Expect(bindErr).ToNot(HaveOccurred())
+		})
+
+		It("should stamp MigratedFingerprints=true on the new binding", func() {
+			Expect(b.MigratedFingerprints).To(BeTrue())
+		})
+	})
+
+	Describe("when a fresh Connector instance encounters the same un-migrated binding", func() {
+		var (
+			lg2 *fakeInfoLogger
+		)
+
+		BeforeEach(func() {
+			c1, store, _, _ := freshConnector(profile, page, listName, listSrv, map[string]string{
+				"uid-A": "srv-A",
+			})
+			lg1 := &fakeInfoLogger{}
+			c1.SetDebugLogger(lg1)
+
+			bs := bridge.NewBindingStore(store)
+			st, loadErr := bs.LoadState(profile)
+			Expect(loadErr).ToNot(HaveOccurred())
+			st.Bindings[0].MigratedFingerprints = false
+			Expect(bs.SaveState(profile, st)).To(Succeed())
+
+			Expect(c1.SyncToKeep(context.Background(), profile, page, listName)).To(Succeed())
+
+			// Simulate a process restart: build a NEW Connector against
+			// the same store. The throttle map must reset.
+			c2 := bridge.NewConnector(bridge.NewBindingStore(store), nil, fakeClock{})
+			c2.SetClientBuilder(func(_ string) bridge.KeepClient { return &fakeKeepClient{} })
+			c2.SetAuthBuilder(func(_ string) bridge.AuthExchanger { return fakeAuth{} })
+			c2.SetChecklistReader(&fakeChecklist{})
+			c2.SetChecklistMutator(&fakeChecklist{})
+			c2.SetSyncSuppressor(fakeSuppressor{})
+			lg2 = &fakeInfoLogger{}
+			c2.SetDebugLogger(lg2)
+
+			Expect(c2.SyncToKeep(context.Background(), profile, page, listName)).To(Succeed())
+		})
+
+		It("should log the skip again for the new Connector", func() {
+			count := 0
+			lg2.mu.Lock()
+			defer lg2.mu.Unlock()
+			for _, f := range lg2.formats {
+				if strings.Contains(strings.ToLower(f), "skip") {
+					count++
+				}
+			}
+			Expect(count).To(Equal(1))
 		})
 	})
 })

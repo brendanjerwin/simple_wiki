@@ -12,6 +12,18 @@
 // password-based gpsoauth master-login. ASPs reliably get rejected
 // regardless of correctness. The browser-captured oauth_token is the
 // only credential type that still works for the unofficial Keep API.
+//
+// TODO(deadletter-ui): Render per-item dead-letter rows under each
+// binding. The KeepConnectorService exposes ListDeadLetters(page,
+// list_name) → repeated DeadLetterItem and ClearDeadLetter(page,
+// list_name, item_uid) → Empty (added by task #83). On render, fan
+// out one ListDeadLetters call per binding and render one row per
+// returned item showing the wiki text, the failure code, and a
+// "Clear" button that calls ClearDeadLetter and re-fetches. Until
+// shipped, dead-lettered items are visible only via the
+// keep_bridge_dead_letter_count metric and the journal INFO log
+// emitted by the connector. Source: plan §"Dead-letter macro UI
+// scope".
 
 import { html, LitElement, nothing } from 'lit';
 import { state } from 'lit/decorators.js';
