@@ -338,17 +338,15 @@ func seedSyncedFromWiki(profileID wikipage.PageIdentifier, page, listName string
 // avoids the lint nag about repeated time.Date(year, month, ...) calls
 // and makes the relative ordering at a glance.
 //
-// Ordering: tStaleA < tStaleB < tKeepRecent < tKeepRecent2 < tNow < tFuture.
+// Ordering: tStaleA < tKeepRecent < tKeepRecent2 < tWikiAnchor < tNow < tFuture.
 var (
 	tStaleA      = time.Date(2026, time.April, 26, 0, 0, 0, 0, time.UTC)         //nolint:gochecknoglobals
-	tStaleB      = time.Date(2026, time.April, 28, 0, 0, 0, 0, time.UTC)         //nolint:gochecknoglobals
 	tKeepRecent  = time.Date(2026, time.April, 28, 12, 0, 0, 0, time.UTC)        //nolint:gochecknoglobals
 	tKeepRecent2 = time.Date(2026, time.April, 30, 12, 0, 0, 0, time.UTC)        //nolint:gochecknoglobals
 	tWikiAnchor  = time.Date(2026, time.May, 1, 9, 0, 0, 0, time.UTC)            //nolint:gochecknoglobals
 	tNow         = time.Date(2026, time.May, 1, 12, 0, 0, 0, time.UTC)           //nolint:gochecknoglobals
 	tFuture      = time.Date(2026, time.May, 2, 12, 0, 0, 0, time.UTC)           //nolint:gochecknoglobals
 	tEpochPlusMs = time.Date(1970, time.January, 1, 0, 0, 0, 1000000, time.UTC)  //nolint:gochecknoglobals
-	tFiveMinAgo  = time.Date(2026, time.May, 1, 11, 55, 0, 0, time.UTC)          //nolint:gochecknoglobals
 )
 
 // fakeClock returns a fixed time.

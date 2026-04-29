@@ -633,10 +633,7 @@ func decodeChangesResponse(w wireChangesResponse) (ChangesResponse, error) {
 		}
 	}
 	for _, wr := range w.WriteResults {
-		out.WriteResults = append(out.WriteResults, NodeWriteResult{
-			ID:     wr.ID,
-			Status: wr.Status,
-		})
+		out.WriteResults = append(out.WriteResults, NodeWriteResult(wr))
 	}
 	return out, nil
 }
