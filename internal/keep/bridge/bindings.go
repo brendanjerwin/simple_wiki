@@ -16,34 +16,74 @@ import (
 // Binding is a single user's link from a wiki checklist (page + list_name)
 // to a Keep note in their account.
 //
-// ItemIDMap is the per-binding mapping from wiki item UID to the Keep
-// node's serverID. Populated at bind time by the bundled CreateListWithItems
-// path and updated on every outbound sync — the sync engine uses it to
-// decide "is this wiki item a fresh push (uid not in map) or an update
-// (uid already in map, push with parent_server_id)?" Without this map
-// we'd have no identity correlation between sides and would have to
-// recreate the whole list on every change.
+// ItemIDMap is the per-binding map from wiki item UID to ItemBinding —
+// the structured per-item sync record. Populated at bind time by the
+// bundled CreateListWithItems path and updated on every successful sync.
+// See ItemBinding for the full per-item shape.
+//
+// KeepCursor holds the last successful pull's `to_version` (Keep's
+// monotonic server-side commit cursor). Sent as `target_version` on
+// the next pull so Keep returns only the delta since our last sync.
+// Empty cursor → full pull (fresh client / forced full resync).
+//
+// TruncatedTickStreak counts consecutive truncated pulls; combined
+// with the "no items observed-changed" condition, drives the chronic-
+// truncation escape hatch (force full resync after 5 such ticks).
+//
+// MigratedFingerprints is the eager-migration flag: false on legacy
+// bindings until the migration job runs, then permanently true. The
+// SyncToKeep gate refuses to sync until this is true (prevents acting
+// on stale id_map state without per-item fingerprints).
+//
+// BoundAt is informational-only — used by the KeepConnect macro to
+// render "bound on YYYY-MM-DD"; not consulted by sync logic.
 type Binding struct {
-	Page          string
-	ListName      string
-	KeepNoteID    string
-	KeepNoteTitle string
-	BoundAt       time.Time
-	// LastPushedAt is the timestamp of the most recent successful push
-	// for this binding. It anchors the inbound-apply gate: a wiki item
-	// whose UpdatedAt is greater than this value has been edited since
-	// the last successful push (uncommitted), so we skip applying any
-	// inbound Keep change for that item — the next push will send the
-	// uncommitted edit. Items at or below this anchor are "synced state"
-	// from wiki's perspective; Keep-side edits can override them.
-	//
-	// Why not compare wiki UpdatedAt vs Keep's per-item Updated? Because
-	// Keep stores epoch-sentinel timestamps (1970-01-01T00:00:00.001/.002Z)
-	// for LIST_ITEM nodes pushed via the API — even right after a fresh
-	// push that explicitly sent Updated=now. The per-item Keep timestamps
-	// are unreliable signal; LastPushedAt is wiki-side ground truth.
-	LastPushedAt  time.Time
-	ItemIDMap     map[string]string
+	Page                 string
+	ListName             string
+	KeepNoteID           string
+	KeepNoteTitle        string
+	BoundAt              time.Time
+	KeepCursor           string
+	TruncatedTickStreak  int
+	MigratedFingerprints bool
+	ItemIDMap            map[string]ItemBinding
+}
+
+// ItemBinding is the per-item sync record for one wiki UID inside a
+// binding. It carries the Keep ServerID and the fingerprint baseline
+// used by the divergence rule.
+//
+// The "synced fingerprint" (Synced{Text,Checked,SortValue}) is the
+// post-successful-sync content baseline — the merge-base in the
+// three-way merge. Each tick computes:
+//
+//	wiki_diverged := wiki_fp != synced_fp
+//	keep_diverged := keep_fp != synced_fp
+//
+// to decide direction (push wiki / apply Keep / no-op / conflict).
+//
+// LastObservedWiki* records the wiki content as observed at the END
+// of the prior tick. Used to detect "user re-edited locally since
+// our last push attempt" — when current wiki_fp differs from this
+// triple, we reset PushFailureCount to 0 (the obvious user fix path
+// after a dead-letter).
+//
+// PushFailureCount counts consecutive per-item push failures; backoff
+// is min(60 * 2^(n-1), 3600) seconds. After 10 failures the item is
+// dead-lettered: surfaced via gRPC ListDeadLetters and skipped on
+// subsequent pushes until the user clears it (ClearDeadLetter) or
+// re-edits the wiki side. LastFailureCode is Keep's per-node status
+// code (or our internal classifier) for the most recent failure.
+type ItemBinding struct {
+	ServerID                  string
+	SyncedText                string
+	SyncedChecked             bool
+	SyncedSortValue           string
+	LastObservedWikiText      string
+	LastObservedWikiChecked   bool
+	LastObservedWikiSortValue string
+	PushFailureCount          int
+	LastFailureCode           string
 }
 
 // ConnectorState is the per-user connector configuration stored on the
@@ -106,9 +146,21 @@ const (
 	bindingListNameField      = "list_name"
 	bindingKeepNoteIDField    = "keep_note_id"
 	bindingKeepNoteTitleField = "keep_note_title"
-	bindingBoundAtField       = "bound_at"
-	bindingLastPushedAtField  = "last_pushed_at"
-	bindingItemIDMapField     = "item_id_map"
+	bindingBoundAtField              = "bound_at"
+	bindingKeepCursorField           = "keep_cursor"
+	bindingTruncatedTickStreakField  = "truncated_tick_streak"
+	bindingMigratedFingerprintsField = "migrated_fingerprints"
+	bindingItemIDMapField            = "item_id_map"
+
+	itemBindingServerIDField                  = "server_id"
+	itemBindingSyncedTextField                = "synced_text"
+	itemBindingSyncedCheckedField             = "synced_checked"
+	itemBindingSyncedSortValueField           = "synced_sort_value"
+	itemBindingLastObservedWikiTextField      = "last_observed_wiki_text"
+	itemBindingLastObservedWikiCheckedField   = "last_observed_wiki_checked"
+	itemBindingLastObservedWikiSortValueField = "last_observed_wiki_sort_value"
+	itemBindingPushFailureCountField          = "push_failure_count"
+	itemBindingLastFailureCodeField           = "last_failure_code"
 )
 
 // BindingStore is the typed funnel for connector-state writes on profile
@@ -314,22 +366,20 @@ func decodeBindings(raw any) ([]Binding, error) {
 		if err != nil {
 			return nil, fmt.Errorf("wiki.connectors.google_keep.bindings[%d].bound_at: %w", i, err)
 		}
-		lastPushedAt, err := parseTime(getString(m, bindingLastPushedAtField))
-		if err != nil {
-			return nil, fmt.Errorf("wiki.connectors.google_keep.bindings[%d].last_pushed_at: %w", i, err)
-		}
 		idMap, err := decodeItemIDMap(m[bindingItemIDMapField])
 		if err != nil {
 			return nil, fmt.Errorf("wiki.connectors.google_keep.bindings[%d].item_id_map: %w", i, err)
 		}
 		out = append(out, Binding{
-			Page:          getString(m, bindingPageField),
-			ListName:      getString(m, bindingListNameField),
-			KeepNoteID:    getString(m, bindingKeepNoteIDField),
-			KeepNoteTitle: getString(m, bindingKeepNoteTitleField),
-			BoundAt:       boundAt,
-			LastPushedAt:  lastPushedAt,
-			ItemIDMap:     idMap,
+			Page:                 getString(m, bindingPageField),
+			ListName:             getString(m, bindingListNameField),
+			KeepNoteID:           getString(m, bindingKeepNoteIDField),
+			KeepNoteTitle:        getString(m, bindingKeepNoteTitleField),
+			BoundAt:              boundAt,
+			KeepCursor:           getString(m, bindingKeepCursorField),
+			TruncatedTickStreak:  getInt(m, bindingTruncatedTickStreakField),
+			MigratedFingerprints: getBool(m, bindingMigratedFingerprintsField),
+			ItemIDMap:            idMap,
 		})
 	}
 	return out, nil
@@ -383,13 +433,19 @@ func encodeBindings(bindings []Binding) []any {
 		if !b.BoundAt.IsZero() {
 			entry[bindingBoundAtField] = b.BoundAt.UTC().Format(time.RFC3339)
 		}
-		if !b.LastPushedAt.IsZero() {
-			entry[bindingLastPushedAtField] = b.LastPushedAt.UTC().Format(time.RFC3339)
+		if b.KeepCursor != "" {
+			entry[bindingKeepCursorField] = b.KeepCursor
+		}
+		if b.TruncatedTickStreak > 0 {
+			entry[bindingTruncatedTickStreakField] = b.TruncatedTickStreak
+		}
+		if b.MigratedFingerprints {
+			entry[bindingMigratedFingerprintsField] = true
 		}
 		if len(b.ItemIDMap) > 0 {
 			m := make(map[string]any, len(b.ItemIDMap))
-			for uid, serverID := range b.ItemIDMap {
-				m[uid] = serverID
+			for uid, ib := range b.ItemIDMap {
+				m[uid] = encodeItemBinding(ib)
 			}
 			entry[bindingItemIDMapField] = m
 		}
@@ -398,11 +454,50 @@ func encodeBindings(bindings []Binding) []any {
 	return out
 }
 
-// decodeItemIDMap reads the per-binding wiki-uid → keep-serverID map.
-// Frontmatter loaders typically hand back map[string]any with string
-// values; this checks each value is a string and rejects any other
-// shape rather than silently coercing.
-func decodeItemIDMap(raw any) (map[string]string, error) {
+// encodeItemBinding writes one ItemBinding as a frontmatter map. Always
+// uses the new structured shape; legacy decoding still accepts the flat
+// string shape for backwards compatibility with files written before
+// this rewrite.
+func encodeItemBinding(ib ItemBinding) map[string]any {
+	out := map[string]any{
+		itemBindingServerIDField: ib.ServerID,
+	}
+	if ib.SyncedText != "" {
+		out[itemBindingSyncedTextField] = ib.SyncedText
+	}
+	if ib.SyncedChecked {
+		out[itemBindingSyncedCheckedField] = true
+	}
+	if ib.SyncedSortValue != "" {
+		out[itemBindingSyncedSortValueField] = ib.SyncedSortValue
+	}
+	if ib.LastObservedWikiText != "" {
+		out[itemBindingLastObservedWikiTextField] = ib.LastObservedWikiText
+	}
+	if ib.LastObservedWikiChecked {
+		out[itemBindingLastObservedWikiCheckedField] = true
+	}
+	if ib.LastObservedWikiSortValue != "" {
+		out[itemBindingLastObservedWikiSortValueField] = ib.LastObservedWikiSortValue
+	}
+	if ib.PushFailureCount > 0 {
+		out[itemBindingPushFailureCountField] = ib.PushFailureCount
+	}
+	if ib.LastFailureCode != "" {
+		out[itemBindingLastFailureCodeField] = ib.LastFailureCode
+	}
+	return out
+}
+
+// decodeItemIDMap reads the per-binding wiki-uid → ItemBinding map.
+// Accepts BOTH the old flat shape (map[uid]string of serverID) for
+// backwards compatibility with bindings persisted before this rewrite,
+// AND the new structured shape (map[uid]map[field]any with synced_*,
+// last_observed_wiki_*, push_failure_count, last_failure_code).
+//
+// Old-shape entries decode as ItemBinding{ServerID: v, …zero…} —
+// the eager migration job populates the rest.
+func decodeItemIDMap(raw any) (map[string]ItemBinding, error) {
 	if raw == nil {
 		return nil, nil
 	}
@@ -410,13 +505,28 @@ func decodeItemIDMap(raw any) (map[string]string, error) {
 	if !ok {
 		return nil, fmt.Errorf("expected map, got %T", raw)
 	}
-	out := make(map[string]string, len(m))
+	out := make(map[string]ItemBinding, len(m))
 	for k, v := range m {
-		s, ok := v.(string)
-		if !ok {
-			return nil, fmt.Errorf("key %q value is %T, expected string", k, v)
+		switch typed := v.(type) {
+		case string:
+			// Legacy flat shape: just the serverID.
+			out[k] = ItemBinding{ServerID: typed}
+		case map[string]any:
+			// New structured shape.
+			out[k] = ItemBinding{
+				ServerID:                  getString(typed, itemBindingServerIDField),
+				SyncedText:                getString(typed, itemBindingSyncedTextField),
+				SyncedChecked:             getBool(typed, itemBindingSyncedCheckedField),
+				SyncedSortValue:           getString(typed, itemBindingSyncedSortValueField),
+				LastObservedWikiText:      getString(typed, itemBindingLastObservedWikiTextField),
+				LastObservedWikiChecked:   getBool(typed, itemBindingLastObservedWikiCheckedField),
+				LastObservedWikiSortValue: getString(typed, itemBindingLastObservedWikiSortValueField),
+				PushFailureCount:          getInt(typed, itemBindingPushFailureCountField),
+				LastFailureCode:           getString(typed, itemBindingLastFailureCodeField),
+			}
+		default:
+			return nil, fmt.Errorf("key %q value is %T, expected string or map", k, v)
 		}
-		out[k] = s
 	}
 	return out, nil
 }
@@ -477,6 +587,15 @@ func getInt64(m map[string]any, key string) int64 {
 	default:
 		return 0
 	}
+}
+
+func getInt(m map[string]any, key string) int {
+	return int(getInt64(m, key))
+}
+
+func getBool(m map[string]any, key string) bool {
+	b, _ := m[key].(bool)
+	return b
 }
 
 // parseTime accepts an empty string (returns zero, no error — "absent")

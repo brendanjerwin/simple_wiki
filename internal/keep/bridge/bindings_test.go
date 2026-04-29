@@ -212,6 +212,158 @@ var _ = Describe("BindingStore.LoadState", func() {
 			Expect(state.Bindings[0].KeepNoteID).To(Equal("srv-list-1"))
 		})
 	})
+
+	When("decoding an old binding file without the new fields", func() {
+		var (
+			state   bridge.ConnectorState
+			loadErr error
+		)
+
+		BeforeEach(func() {
+			// Legacy on-disk shape: flat string id_map, no KeepCursor,
+			// no TruncatedTickStreak, no MigratedFingerprints, no
+			// per-item structured fields.
+			Expect(pages.WriteFrontMatter(aliceProfile, wikipage.FrontMatter{
+				"wiki": map[string]any{
+					"connectors": map[string]any{
+						"google_keep": map[string]any{
+							"email":        "alice@example.com",
+							"master_token": "oauth2rt_1/fake",
+							"bindings": []any{
+								map[string]any{
+									"page":            "shopping_lists",
+									"list_name":       "groceries",
+									"keep_note_id":    "srv-list-1",
+									"keep_note_title": "groceries",
+									"bound_at":        "2026-04-25T17:14:00Z",
+									"item_id_map": map[string]any{
+										"wiki-uid-1": "srv-A",
+										"wiki-uid-2": "srv-B",
+									},
+								},
+							},
+						},
+					},
+				},
+			})).To(Succeed())
+			state, loadErr = store.LoadState(aliceProfile)
+		})
+
+		It("should not error", func() {
+			Expect(loadErr).ToNot(HaveOccurred())
+		})
+
+		It("should load the legacy flat id_map as ItemBinding entries with only ServerID populated", func() {
+			Expect(state.Bindings).To(HaveLen(1))
+			Expect(state.Bindings[0].ItemIDMap).To(HaveKey("wiki-uid-1"))
+			Expect(state.Bindings[0].ItemIDMap["wiki-uid-1"].ServerID).To(Equal("srv-A"))
+		})
+
+		It("should default the new binding-level fields to zero values", func() {
+			b := state.Bindings[0]
+			Expect(b.KeepCursor).To(Equal(""))
+			Expect(b.TruncatedTickStreak).To(Equal(0))
+			Expect(b.MigratedFingerprints).To(BeFalse())
+		})
+
+		It("should default per-item synced/observed/failure fields to zero values", func() {
+			ib := state.Bindings[0].ItemIDMap["wiki-uid-1"]
+			Expect(ib.SyncedText).To(Equal(""))
+			Expect(ib.SyncedChecked).To(BeFalse())
+			Expect(ib.SyncedSortValue).To(Equal(""))
+			Expect(ib.LastObservedWikiText).To(Equal(""))
+			Expect(ib.LastObservedWikiChecked).To(BeFalse())
+			Expect(ib.LastObservedWikiSortValue).To(Equal(""))
+			Expect(ib.PushFailureCount).To(Equal(0))
+			Expect(ib.LastFailureCode).To(Equal(""))
+		})
+
+		When("the loaded state is re-saved and re-loaded", func() {
+			var roundTripped bridge.ConnectorState
+
+			BeforeEach(func() {
+				Expect(store.SaveState(aliceProfile, state)).To(Succeed())
+				var err error
+				roundTripped, err = store.LoadState(aliceProfile)
+				Expect(err).ToNot(HaveOccurred())
+			})
+
+			It("should preserve zero values for all new fields after a save→load round trip", func() {
+				Expect(roundTripped.Bindings).To(HaveLen(1))
+				b := roundTripped.Bindings[0]
+				Expect(b.KeepCursor).To(Equal(""))
+				Expect(b.TruncatedTickStreak).To(Equal(0))
+				Expect(b.MigratedFingerprints).To(BeFalse())
+				ib := b.ItemIDMap["wiki-uid-1"]
+				Expect(ib.ServerID).To(Equal("srv-A"))
+				Expect(ib.SyncedText).To(Equal(""))
+				Expect(ib.PushFailureCount).To(Equal(0))
+			})
+		})
+	})
+
+	When("decoding a binding with the new structured shape", func() {
+		var (
+			state   bridge.ConnectorState
+			loadErr error
+		)
+
+		BeforeEach(func() {
+			Expect(pages.WriteFrontMatter(aliceProfile, wikipage.FrontMatter{
+				"wiki": map[string]any{
+					"connectors": map[string]any{
+						"google_keep": map[string]any{
+							"email":        "alice@example.com",
+							"master_token": "oauth2rt_1/fake",
+							"bindings": []any{
+								map[string]any{
+									"page":                  "shopping_lists",
+									"list_name":             "groceries",
+									"keep_note_id":          "srv-list-1",
+									"bound_at":              "2026-04-25T17:14:00Z",
+									"keep_cursor":           "v-abc-123",
+									"truncated_tick_streak": 3,
+									"migrated_fingerprints": true,
+									"item_id_map": map[string]any{
+										"wiki-uid-1": map[string]any{
+											"server_id":          "srv-A",
+											"synced_text":        "Apples #produce",
+											"synced_checked":     true,
+											"synced_sort_value":  "1000",
+											"push_failure_count": 2,
+											"last_failure_code":  "rate_limited",
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			})).To(Succeed())
+			state, loadErr = store.LoadState(aliceProfile)
+		})
+
+		It("should not error", func() {
+			Expect(loadErr).ToNot(HaveOccurred())
+		})
+
+		It("should populate the new binding-level fields", func() {
+			b := state.Bindings[0]
+			Expect(b.KeepCursor).To(Equal("v-abc-123"))
+			Expect(b.TruncatedTickStreak).To(Equal(3))
+			Expect(b.MigratedFingerprints).To(BeTrue())
+		})
+
+		It("should populate the new per-item structured fields", func() {
+			ib := state.Bindings[0].ItemIDMap["wiki-uid-1"]
+			Expect(ib.ServerID).To(Equal("srv-A"))
+			Expect(ib.SyncedText).To(Equal("Apples #produce"))
+			Expect(ib.SyncedChecked).To(BeTrue())
+			Expect(ib.SyncedSortValue).To(Equal("1000"))
+			Expect(ib.PushFailureCount).To(Equal(2))
+			Expect(ib.LastFailureCode).To(Equal("rate_limited"))
+		})
+	})
 })
 
 var _ = Describe("BindingStore.AddBinding", func() {

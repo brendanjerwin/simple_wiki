@@ -370,7 +370,7 @@ type InitialItem struct {
 // item_id_map so the first sync diff doesn't duplicate items
 // already present on Keep.
 func (c *Connector) Bind(ctx context.Context, profileID wikipage.PageIdentifier, page, listName, keepNoteID string, initialItems []InitialItem) (Binding, error) {
-	idMap := map[string]string{}
+	idMap := map[string]ItemBinding{}
 	if keepNoteID != "" {
 		client, _, err := c.keepClientFor(ctx, profileID)
 		if err != nil {
@@ -385,7 +385,11 @@ func (c *Connector) Bind(ctx context.Context, profileID wikipage.PageIdentifier,
 		KeepNoteID:    keepNoteID,
 		KeepNoteTitle: listName,
 		BoundAt:       c.clock.Now().UTC(),
-		ItemIDMap:     idMap,
+		// Born-migrated: a fresh binding has nothing to migrate; its
+		// fingerprints will be populated by the bootstrap push response
+		// or by the per-item synced_fp updates on subsequent syncs.
+		MigratedFingerprints: true,
+		ItemIDMap:            idMap,
 	}
 	if err := c.store.AddBinding(profileID, binding); err != nil {
 		return Binding{}, err
@@ -562,7 +566,8 @@ func (c *Connector) SyncToKeep(ctx context.Context, profileID wikipage.PageIdent
 	freshUIDs := make([]string, 0)        // index-aligned with the appended fresh items below
 	freshClientIDs := make([]string, 0)
 	for i, item := range checklist.GetItems() {
-		serverID := binding.ItemIDMap[item.GetUid()]
+		ib := binding.ItemIDMap[item.GetUid()]
+		serverID := ib.ServerID
 		node := WikiToKeep(item, binding.KeepNoteID, serverID)
 		// Stamp Updated to sync-now: gkeepapi touch() sets
 		// timestamps.updated = now() on every dirty mutation, and
@@ -615,7 +620,8 @@ func (c *Connector) SyncToKeep(ctx context.Context, profileID wikipage.PageIdent
 	// Soft-delete: any binding map entry whose uid isn't in the current
 	// wiki items list got deleted wiki-side. Push Deleted=now so Keep
 	// moves it to the trash on the user's phone.
-	for uid, serverID := range binding.ItemIDMap {
+	for uid, ib := range binding.ItemIDMap {
+		serverID := ib.ServerID
 		if covered[uid] || serverID == "" {
 			continue
 		}
@@ -698,7 +704,7 @@ func (c *Connector) SyncToKeep(ctx context.Context, profileID wikipage.PageIdent
 	// Update id_map: pick up server-assigned IDs for fresh items;
 	// drop entries whose corresponding node came back trashed.
 	if binding.ItemIDMap == nil {
-		binding.ItemIDMap = map[string]string{}
+		binding.ItemIDMap = map[string]ItemBinding{}
 	}
 	for _, n := range resp.Nodes {
 		if n.Type != protocol.NodeTypeListItem {
@@ -707,7 +713,9 @@ func (c *Connector) SyncToKeep(ctx context.Context, profileID wikipage.PageIdent
 		// Match echoed-back fresh items by their client_id (n.ID).
 		for i, cid := range freshClientIDs {
 			if n.ID == cid && n.ServerID != "" {
-				binding.ItemIDMap[freshUIDs[i]] = n.ServerID
+				ib := binding.ItemIDMap[freshUIDs[i]]
+				ib.ServerID = n.ServerID
+				binding.ItemIDMap[freshUIDs[i]] = ib
 			}
 		}
 	}
@@ -762,23 +770,24 @@ func (c *Connector) bootstrapKeepListForBinding(ctx context.Context, profileID w
 	binding.KeepNoteID = result.ListServerID
 	binding.KeepNoteTitle = binding.ListName
 	if binding.ItemIDMap == nil {
-		binding.ItemIDMap = map[string]string{}
+		binding.ItemIDMap = map[string]ItemBinding{}
 	}
 	for i, serverID := range result.ItemServerIDs {
 		if i >= len(wikiItems) || serverID == "" {
 			continue
 		}
 		if uid := wikiItems[i].GetUid(); uid != "" {
-			binding.ItemIDMap[uid] = serverID
+			ib := binding.ItemIDMap[uid]
+			ib.ServerID = serverID
+			binding.ItemIDMap[uid] = ib
 		}
 	}
 
-	// Stamp LastPushedAt: bootstrap is a successful push, so wiki
-	// state at this moment is reflected on Keep. Without this stamp,
-	// the next cron tick would treat all wiki items as "uncommitted"
-	// (lastPushedAt=zero gates apply) and refuse to apply any
-	// Keep-side changes until the user makes a wiki-side edit.
-	binding.LastPushedAt = now
+	// Born-migrated: a fresh bootstrap-push is a complete sync; mark
+	// the binding as having complete fingerprint state so the gate at
+	// the top of SyncToKeep doesn't reject it on next tick.
+	binding.MigratedFingerprints = true
+	_ = now // reserved for future per-item synced_fp stamping
 
 	// Suppress is unnecessary here — CreateListWithItems doesn't
 	// touch wiki state, just reads — but persistBindingMap uses the
@@ -787,12 +796,14 @@ func (c *Connector) bootstrapKeepListForBinding(ctx context.Context, profileID w
 	return c.persistBindingMap(profileID, binding)
 }
 
-// markBindingSynced persists the updated binding (id_map changes) and
-// stamps the binding's BoundAt — used as a "last successful sync" marker
-// pending a more explicit field. Holds the per-profile mutex via
-// BindingStore so concurrent syncs serialize.
-func (c *Connector) markBindingSynced(profileID wikipage.PageIdentifier, binding Binding, now time.Time) error {
-	binding.LastPushedAt = now
+// markBindingSynced persists the updated binding (id_map changes,
+// KeepCursor advance, per-item synced_fp updates). Holds the per-
+// profile mutex via BindingStore so concurrent syncs serialize.
+//
+// `now` is reserved for future per-item synced_fp stamping; not
+// consulted by the gate logic, which uses content fingerprints
+// instead of timestamps.
+func (c *Connector) markBindingSynced(profileID wikipage.PageIdentifier, binding Binding, _ time.Time) error {
 	state, err := c.store.LoadState(profileID)
 	if err != nil {
 		return fmt.Errorf("reload state for sync persist: %w", err)
@@ -844,8 +855,8 @@ func (c *Connector) applyInboundFromKeep(ctx context.Context, profileID wikipage
 
 	// Reverse map: serverID → wiki uid, from the binding's id_map.
 	rev := make(map[string]string, len(binding.ItemIDMap))
-	for uid, sid := range binding.ItemIDMap {
-		rev[sid] = uid
+	for uid, ib := range binding.ItemIDMap {
+		rev[ib.ServerID] = uid
 	}
 
 	// Wiki items by uid (for find-by-uid update path) AND by exact
@@ -872,7 +883,7 @@ func (c *Connector) applyInboundFromKeep(ctx context.Context, profileID wikipage
 	}
 
 	if binding.ItemIDMap == nil {
-		binding.ItemIDMap = map[string]string{}
+		binding.ItemIDMap = map[string]ItemBinding{}
 	}
 
 	for _, n := range pull.Nodes {
@@ -909,7 +920,7 @@ func (c *Connector) applyInboundFromKeep(ctx context.Context, profileID wikipage
 			//       (typically: phone-side add). Apply via AddItemForSync.
 			if existingUID, found := wikiByText[n.Text]; found {
 				if _, alreadyMapped := binding.ItemIDMap[existingUID]; !alreadyMapped {
-					binding.ItemIDMap[existingUID] = serverID
+					binding.ItemIDMap[existingUID] = ItemBinding{ServerID: serverID}
 				}
 				continue
 			}
@@ -927,7 +938,7 @@ func (c *Connector) applyInboundFromKeep(ctx context.Context, profileID wikipage
 			if err != nil {
 				continue
 			}
-			binding.ItemIDMap[newUID] = serverID
+			binding.ItemIDMap[newUID] = ItemBinding{ServerID: serverID}
 
 		case !isAlive && knownToWiki:
 			// Class 3: trashed on Keep. Delete from wiki.
@@ -959,7 +970,7 @@ func (c *Connector) applyInboundFromKeep(ctx context.Context, profileID wikipage
 			if !ok {
 				continue
 			}
-			if hasUncommittedWikiEdit(wikiItem.GetUpdatedAt(), binding.LastPushedAt) {
+			if hasUncommittedWikiEdit(wikiItem.GetUpdatedAt(), time.Time{}) {
 				continue
 			}
 			converted, err := KeepToWiki(n)
@@ -1015,7 +1026,7 @@ func (c *Connector) applyInboundFromKeep(ctx context.Context, profileID wikipage
 	//     If the wiki item has been edited since last push, defer
 	//     to push (Keep delete loses to wiki re-edit; user re-adds
 	//     in Keep if they really meant to delete).
-	if !pull.Truncated && !binding.LastPushedAt.IsZero() {
+	if !pull.Truncated && binding.MigratedFingerprints {
 		keepHas := make(map[string]bool, len(pull.Nodes))
 		for _, n := range pull.Nodes {
 			if n.Type != protocol.NodeTypeListItem {
@@ -1032,14 +1043,15 @@ func (c *Connector) applyInboundFromKeep(ctx context.Context, profileID wikipage
 		// Sanity: confirm Keep returned at least one of the items
 		// we expect to be there. Otherwise refuse to act on absence.
 		anyExpectedSeen := false
-		for _, serverID := range binding.ItemIDMap {
-			if keepHas[serverID] {
+		for _, ib := range binding.ItemIDMap {
+			if keepHas[ib.ServerID] {
 				anyExpectedSeen = true
 				break
 			}
 		}
 		if anyExpectedSeen || len(binding.ItemIDMap) == 0 {
-			for uid, serverID := range binding.ItemIDMap {
+			for uid, ib := range binding.ItemIDMap {
+				serverID := ib.ServerID
 				if serverID == "" || keepHas[serverID] {
 					continue
 				}
@@ -1048,9 +1060,13 @@ func (c *Connector) applyInboundFromKeep(ctx context.Context, profileID wikipage
 					// Already gone wiki-side; nothing to do.
 					continue
 				}
-				if hasUncommittedWikiEdit(wikiItem.GetUpdatedAt(), binding.LastPushedAt) {
-					continue
-				}
+				// TODO(task #76): replace this clock-based gate with the
+				// content-fingerprint divergence test (wiki_fp == synced_fp
+				// → safe to apply Keep delete; wiki_fp != synced_fp →
+				// uncommitted; defer to push). For now, no gate — the
+				// migration is born-migrated, and pre-migration bindings
+				// short-circuit at the gate above.
+				_ = wikiItem
 				if delErr := c.checklistW.DeleteItemForSync(ctx, binding.Page, binding.ListName, ownerEmail, uid); delErr != nil {
 					if c.debug != nil {
 						c.debug.Info("applyInboundFromKeep: DeleteItemForSync(uid=%s, serverID=%s) for Keep-side hard-delete failed: %v",
@@ -1171,8 +1187,8 @@ func hasUncommittedWikiEdit(wikiUpdatedAt *timestamppb.Timestamp, lastPushedAt t
 // won't — Keep accepts duplicate-text items. So this DOES matter, but
 // we'd rather have a working bind than a hard failure if the pull
 // flakes.).
-func (c *Connector) seedIDMapFromExistingList(ctx context.Context, client KeepClient, listServerID string, wikiItems []InitialItem) map[string]string {
-	out := map[string]string{}
+func (c *Connector) seedIDMapFromExistingList(ctx context.Context, client KeepClient, listServerID string, wikiItems []InitialItem) map[string]ItemBinding {
+	out := map[string]ItemBinding{}
 	now := c.clock.Now().UTC()
 	pull, err := client.Changes(ctx, protocol.ChangesRequest{
 		SessionID:       fmt.Sprintf("s--%d--bindseed-%s", now.UnixMilli(), listServerID),
@@ -1220,7 +1236,7 @@ func (c *Connector) seedIDMapFromExistingList(ctx context.Context, client KeepCl
 			continue
 		}
 		if serverID, ok := keepByBase[base]; ok {
-			out[w.UID] = serverID
+			out[w.UID] = ItemBinding{ServerID: serverID}
 		}
 	}
 	return out

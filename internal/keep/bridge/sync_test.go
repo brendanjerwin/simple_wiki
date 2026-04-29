@@ -199,21 +199,25 @@ func freshConnector(profileID wikipage.PageIdentifier, page, listName, keepNoteI
 	c.SetChecklistMutator(chk)
 	c.SetSyncSuppressor(fakeSuppressor{})
 
-	// Seed LastPushedAt to a value between staleTime and recentTime
-	// so the default test scenario looks like "wiki is synced" — wiki
-	// items with stale UpdatedAt are below this anchor (apply Keep ok),
-	// items with recent UpdatedAt are above (uncommitted, push wins).
-	// Tests that need to override (e.g. fresh-bind tests) set their
-	// own binding state.
+	// Convert legacy flat idMap to the new structured shape. Tests that
+	// need richer fingerprint state set ItemBinding values directly.
+	itemBindings := make(map[string]bridge.ItemBinding, len(idMap))
+	for uid, serverID := range idMap {
+		itemBindings[uid] = bridge.ItemBinding{ServerID: serverID}
+	}
+
+	// Default test bindings are MigratedFingerprints=true so the sync
+	// engine's pre-pull migration gate doesn't reject them. Tests that
+	// pin legacy/un-migrated behavior override this on the saved state.
 	state := bridge.ConnectorState{
 		Email:       "test@example.com",
 		MasterToken: "token",
 		Bindings: []bridge.Binding{{
 			Page: page, ListName: listName,
 			KeepNoteID: keepNoteID, KeepNoteTitle: listName,
-			BoundAt:      time.Now().UTC(),
-			LastPushedAt: tStaleB,
-			ItemIDMap:    idMap,
+			BoundAt:              time.Now().UTC(),
+			MigratedFingerprints: true,
+			ItemIDMap:            itemBindings,
 		}},
 	}
 	Expect(bridge.NewBindingStore(store).SaveState(profileID, state)).To(Succeed())
@@ -988,15 +992,13 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 			c, store, kc, chk = freshConnector(profile, page, listName, listSrv, map[string]string{
 				"uid-A": "srv-A",
 			})
-			// Wiki was edited 30 min ago, pushed 25 min ago. Override
-			// LastPushedAt to capture the post-push synced state.
+			// TODO(task #76): rewrite this test around content fingerprints
+			// once the divergence rule is implemented. For now, the
+			// stub-test setup lets the sync run; the assertions below
+			// will need a fingerprint-baseline rebaseline when task #76
+			// lands.
 			thirtyMinAgo := timestamppb.New(tNow.Add(-30 * time.Minute))
-			twentyFiveMinAgo := tNow.Add(-25 * time.Minute)
-			bs := bridge.NewBindingStore(store)
-			stateNow, err := bs.LoadState(profile)
-			Expect(err).NotTo(HaveOccurred())
-			stateNow.Bindings[0].LastPushedAt = twentyFiveMinAgo
-			Expect(bs.SaveState(profile, stateNow)).To(Succeed())
+			_ = store
 
 			chk.items = []*apiv1.ChecklistItem{
 				{Uid: "uid-A", Text: "Apples", Checked: false, SortOrder: 1000, UpdatedAt: thirtyMinAgo},

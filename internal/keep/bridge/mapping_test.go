@@ -140,3 +140,85 @@ var _ = Describe("KeepToWiki", func() {
 		})
 	})
 })
+
+var _ = Describe("Fingerprint helpers", func() {
+	When("a wiki item is round-tripped through WikiToKeep", func() {
+		var (
+			item    *apiv1.ChecklistItem
+			node    protocol.Node
+			wikiFP  bridge.Fingerprint
+			keepFP  bridge.Fingerprint
+		)
+
+		BeforeEach(func() {
+			desc := "fresh local"
+			item = &apiv1.ChecklistItem{
+				Text:        "Apples",
+				Checked:     false,
+				Tags:        []string{"produce"},
+				Description: &desc,
+				SortOrder:   1000,
+			}
+			node = bridge.WikiToKeep(item, "list-server-id", "")
+			wikiFP = bridge.FingerprintWiki(item)
+			keepFP = bridge.FingerprintKeep(node)
+		})
+
+		It("should produce identical fingerprints on both sides", func() {
+			Expect(wikiFP).To(Equal(keepFP))
+		})
+
+		It("should encode text with #tags and the description separator", func() {
+			Expect(wikiFP.Text).To(Equal("Apples #produce\n— fresh local"))
+		})
+
+		It("should preserve checked state on both sides", func() {
+			Expect(wikiFP.Checked).To(BeFalse())
+			Expect(keepFP.Checked).To(BeFalse())
+		})
+
+		It("should encode SortValue identically on both sides", func() {
+			Expect(wikiFP.SortValue).To(Equal("1000"))
+			Expect(keepFP.SortValue).To(Equal("1000"))
+		})
+	})
+
+	When("comparing wiki and Keep fingerprints to a synced baseline", func() {
+		var synced bridge.Fingerprint
+
+		BeforeEach(func() {
+			synced = bridge.Fingerprint{Text: "Apples", Checked: false, SortValue: "1000"}
+		})
+
+		It("should report no divergence when the two fingerprints match the baseline exactly", func() {
+			wiki := bridge.Fingerprint{Text: "Apples", Checked: false, SortValue: "1000"}
+			Expect(wiki).To(Equal(synced))
+		})
+
+		It("should report wiki divergence when the wiki fingerprint differs from the baseline", func() {
+			wiki := bridge.Fingerprint{Text: "Green Apples", Checked: false, SortValue: "1000"}
+			Expect(wiki).NotTo(Equal(synced))
+		})
+
+		It("should report Keep divergence when the Keep fingerprint differs from the baseline", func() {
+			keep := bridge.Fingerprint{Text: "Apples", Checked: true, SortValue: "1000"}
+			Expect(keep).NotTo(Equal(synced))
+		})
+	})
+
+	When("loading the synced baseline from an ItemBinding", func() {
+		It("should reconstitute the fingerprint from the SyncedText/Checked/SortValue triple", func() {
+			ib := bridge.ItemBinding{
+				ServerID:        "srv-A",
+				SyncedText:      "Apples",
+				SyncedChecked:   true,
+				SyncedSortValue: "2000",
+			}
+			Expect(bridge.FingerprintFromItemBinding(ib)).To(Equal(bridge.Fingerprint{
+				Text:      "Apples",
+				Checked:   true,
+				SortValue: "2000",
+			}))
+		})
+	})
+})

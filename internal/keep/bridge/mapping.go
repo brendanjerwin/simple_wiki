@@ -124,6 +124,64 @@ func KeepToWiki(node protocol.Node) (*apiv1.ChecklistItem, error) {
 	return item, nil
 }
 
+// Fingerprint is the per-item content fingerprint used by the
+// divergence-rule sync engine. Two of these are equal iff the wiki
+// item and Keep node have the same canonical text, the same checked
+// flag, and the same SortValue. Used as the "merge-base" — see
+// internal/keep/bridge/MATRIX.md for the full divergence rule.
+//
+// The text component is canonicalized via the same encoder
+// `WikiToKeep` uses on the way out, so a wiki item and the Keep node
+// the wiki most recently pushed produce identical fingerprints. That
+// equality is what closes the "no clock anywhere" property in the
+// sync model: divergence is always content-equality, never wall-time.
+type Fingerprint struct {
+	Text      string
+	Checked   bool
+	SortValue string
+}
+
+// FingerprintWiki returns the canonical fingerprint for a wiki item.
+// Mirrors the encoding WikiToKeep performs (head + #tags + "\n— description")
+// so a wiki item and its post-push Keep node fingerprint identically.
+func FingerprintWiki(item *apiv1.ChecklistItem) Fingerprint {
+	if item == nil {
+		return Fingerprint{}
+	}
+	headLine := encodeTextWithTags(item.GetText(), item.GetTags())
+	text := headLine
+	if d := item.GetDescription(); d != "" {
+		text = headLine + descriptionSeparator + d
+	}
+	return Fingerprint{
+		Text:      text,
+		Checked:   item.GetChecked(),
+		SortValue: strconv.FormatInt(item.GetSortOrder(), sortOrderBase),
+	}
+}
+
+// FingerprintKeep returns the fingerprint for a Keep LIST_ITEM node.
+// Reads exactly the three fields the divergence rule cares about; no
+// timestamp comparison.
+func FingerprintKeep(node protocol.Node) Fingerprint {
+	return Fingerprint{
+		Text:      node.Text,
+		Checked:   node.Checked,
+		SortValue: node.SortValue,
+	}
+}
+
+// FingerprintFromItemBinding returns the synced-baseline fingerprint
+// from an ItemBinding. Used by the divergence rule to test whether
+// wiki_fp or keep_fp has diverged from the last successful sync.
+func FingerprintFromItemBinding(ib ItemBinding) Fingerprint {
+	return Fingerprint{
+		Text:      ib.SyncedText,
+		Checked:   ib.SyncedChecked,
+		SortValue: ib.SyncedSortValue,
+	}
+}
+
 // stripHashtagTokens removes whitespace-delimited "#tag" tokens from
 // text and collapses the surrounding whitespace. Mirrors the wiki's
 // hashtag convention: #-prefixed tokens are always tags, never literal
