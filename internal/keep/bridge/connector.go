@@ -525,6 +525,7 @@ func (c *Connector) SyncToKeep(ctx context.Context, profileID wikipage.PageIdent
 	// which (combined with stale wiki state vs a just-edited Keep
 	// item) reverts the user's phone-side edit on the next push.
 	keepUpdated := make(map[string]time.Time, len(pull.Nodes))
+	keepNodes := make(map[string]protocol.Node, len(pull.Nodes))
 	for _, n := range pull.Nodes {
 		if n.ServerID == "" {
 			continue
@@ -535,17 +536,11 @@ func (c *Connector) SyncToKeep(ctx context.Context, profileID wikipage.PageIdent
 		if n.ID != "" {
 			originalClientIDs[n.ServerID] = n.ID
 		}
-		// Use the LATER of `updated` and `userEdited`. Keep stamps
-		// `updated` with millisecond-offset epoch sentinels for items
-		// it created server-side, even after the user has toggled
-		// them; the actual "user touched this" recency lives in
-		// `userEdited`. Verified via cmd/keep-debug dump on the
-		// user's bound list — items toggled via the phone app had
-		// userEdited=2026-04-28T23:44Z but updated=epoch+2ms.
 		t := latestKeepTimestamp(n.Timestamps.Updated, n.Timestamps.UserEdited)
 		if !t.IsZero() {
 			keepUpdated[n.ServerID] = t
 		}
+		keepNodes[n.ServerID] = n
 	}
 	if c.debug != nil {
 		c.debug.Info("SyncToKeep diff prep: pull.Nodes=%d clientIDs=%d baseVersions=%d",
@@ -582,36 +577,26 @@ func (c *Connector) SyncToKeep(ctx context.Context, profileID wikipage.PageIdent
 			freshClientIDs = append(freshClientIDs, cid)
 			freshUIDs = append(freshUIDs, item.GetUid())
 		} else {
-			// Existing item: prefer the original client_id (the one
-			// captured at the item's first arrival on this client) so
-			// the wire shape mirrors gkeepapi exactly. Fall back to
-			// serverID-as-id if the pull didn't carry a client_id
-			// (some Keep responses elide it).
 			if originalID, ok := originalClientIDs[serverID]; ok {
 				node.ID = originalID
 			}
 			node.BaseVersion = baseVersions[serverID]
 			covered[item.GetUid()] = true
 
-			// Only push items where wiki's view is more recent than
-			// Keep's. Symmetric to inbound's shouldPullKeepUpdate.
-			// Skipping no-op items (or items where Keep is fresher)
-			// avoids two corruption modes:
-			//   1. Reverting a just-applied phone-side edit because
-			//      wiki's stale state was pushed back.
-			//   2. Bumping Keep timestamps on every cron tick, which
-			//      makes future inbound updates think Keep is always
-			//      newer than wiki and skip them.
-			if !shouldPushWikiUpdate(item.GetUpdatedAt(), keepUpdated[serverID]) {
-				continue
-			}
-			if c.debug != nil {
-				wt := time.Time{}
-				if item.GetUpdatedAt() != nil {
-					wt = item.GetUpdatedAt().AsTime()
+			// Content-equality skip: Keep's backend 500s on a multi-
+			// item update where every item is byte-identical to the
+			// server's current state. Verified via cmd/keep-debug —
+			// 3 items with text=X/Y/Z (matching Keep) returned
+			// stage3 HTTP 500; the same 3 items with text=X edit/
+			// Y edit/Z edit returned writeResults=SUCCESS. So we
+			// only push items whose text/checked/sortValue actually
+			// differ from what we just pulled. Timestamp differences
+			// alone don't count as a real change — Keep rebuilds
+			// its own updated timestamp on apply.
+			if keepNode, ok := keepNodes[serverID]; ok {
+				if keepNode.Text == node.Text && keepNode.Checked == node.Checked && keepNode.SortValue == node.SortValue {
+					continue
 				}
-				c.debug.Info("push gate let through: uid=%s wiki.updated=%s keep.updated=%s",
-					item.GetUid(), wt.Format(time.RFC3339Nano), keepUpdated[serverID].Format(time.RFC3339Nano))
 			}
 		}
 		pushNodes = append(pushNodes, node)

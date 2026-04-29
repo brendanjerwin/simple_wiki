@@ -69,6 +69,8 @@ func main() {
 			os.Exit(2)
 		}
 		runDumpItems(ctx, keep, *parentID)
+	case "raw-pull":
+		runRawPull(ctx, email, masterToken, deviceID, *parentID)
 	case "update-item":
 		if *parentID == "" {
 			fmt.Fprintln(os.Stderr, "update-item requires -parent-id=<list-serverID>")
@@ -127,13 +129,16 @@ func runUpdateItemMatching(ctx context.Context, keep *protocol.KeepClient, listS
 			ParentID:       listServerID,
 			ParentServerID: listServerID,
 			Type:           protocol.NodeTypeListItem,
-			Text:           t.Text + " #tag\n— Deal: SAVE UP TO $7.59",
+			Text:           t.Text + " edit",
 			Checked:        t.Checked,
 			SortValue:      t.SortValue,
 			BaseVersion:    t.BaseVersion,
 			Timestamps:     protocol.Timestamps{Updated: now},
 		})
 	}
+	// Wire-shape debug logger: prints the marshaled wire body so we
+	// see exactly what Keep gets.
+	keep.SetDebugLogger(stderrDebug{})
 	resp, err := keep.Changes(ctx, protocol.ChangesRequest{
 		Nodes:           pushNodes,
 		TargetVersion:   pull.ToVersion,
@@ -145,6 +150,65 @@ func runUpdateItemMatching(ctx context.Context, keep *protocol.KeepClient, listS
 		os.Exit(1)
 	}
 	fmt.Printf("✓ update succeeded; toVersion=%s response nodes=%d\n", resp.ToVersion, len(resp.Nodes))
+}
+
+type stderrDebug struct{}
+
+func (stderrDebug) Info(format string, args ...any) {
+	fmt.Fprintf(os.Stderr, "DEBUG: "+format+"\n", args...)
+}
+
+// runRawPull does its own raw HTTP request to /changes so we can see
+// the literal JSON response (the protocol package decodes into typed
+// structs, dropping unknown fields).
+func runRawPull(ctx context.Context, email, masterToken, deviceID, filterParent string) {
+	authClient := &http.Client{
+		Transport: &http.Transport{
+			TLSClientConfig:   &tls.Config{MinVersion: tls.VersionTLS12, NextProtos: []string{"http/1.1"}},
+			ForceAttemptHTTP2: false,
+		},
+		Timeout: 30 * time.Second,
+	}
+	auth := protocol.NewAuthenticator(authClient, protocol.AuthURL, deviceID)
+	bearer, err := auth.ExchangeMasterTokenForBearer(ctx, email, masterToken)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "auth failed:", err)
+		os.Exit(1)
+	}
+
+	body := fmt.Sprintf(`{"nodes":[],"clientTimestamp":%q,"requestHeader":{"clientSessionId":"raw-pull","clientPlatform":"ANDROID","clientVersion":{"major":"9","minor":"9","build":"9","revision":"9"},"capabilities":[{"type":"NC"},{"type":"PI"},{"type":"LB"},{"type":"AN"},{"type":"SH"},{"type":"DR"},{"type":"TR"},{"type":"IN"},{"type":"SNB"},{"type":"MI"},{"type":"CO"}]}}`,
+		time.Now().UTC().Format("2006-01-02T15:04:05.000000Z"))
+	req, _ := http.NewRequestWithContext(ctx, "POST", protocol.DefaultKeepBaseURL+"changes", strings.NewReader(body))
+	req.Header.Set("Authorization", "OAuth "+bearer)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("User-Agent", "simple_wiki-keep-debug/1")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "pull failed:", err)
+		os.Exit(1)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	var parsed map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&parsed); err != nil {
+		fmt.Fprintln(os.Stderr, "decode failed:", err)
+		os.Exit(1)
+	}
+	nodes, _ := parsed["nodes"].([]any)
+	for _, n := range nodes {
+		m, _ := n.(map[string]any)
+		if m == nil {
+			continue
+		}
+		if filterParent != "" {
+			if m["parentServerId"] != filterParent && m["parentId"] != filterParent {
+				continue
+			}
+		}
+		out, _ := json.MarshalIndent(m, "", "  ")
+		fmt.Println(string(out))
+		fmt.Println("---")
+	}
 }
 
 func runDumpItems(ctx context.Context, keep *protocol.KeepClient, listServerID string) {

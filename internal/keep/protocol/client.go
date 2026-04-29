@@ -405,11 +405,51 @@ type wireNode struct {
 	// items the user just checked on the phone to revert to
 	// unchecked on the next outbound push (when wiki state still
 	// said checked=false because the inbound pull hadn't applied).
-	Checked        bool           `json:"checked"`
-	SortValue      string         `json:"sortValue,omitempty"`
-	BaseVersion    string         `json:"baseVersion,omitempty"`
-	LabelIDs       []wireLabelID  `json:"labelIds,omitempty"`
-	Timestamps     wireTimestamps `json:"timestamps"`
+	Checked     bool          `json:"checked"`
+	SortValue   string        `json:"sortValue,omitempty"`
+	BaseVersion string        `json:"baseVersion,omitempty"`
+	LabelIDs    []wireLabelID `json:"labelIds,omitempty"`
+	// AnnotationsGroup is gkeepapi's Node.save() emits this verbatim
+	// from the loaded server state, even when empty. For items on a
+	// list Keep auto-categorized (e.g. taskAssist:GROCERY_ITEM,
+	// topicCategory:FOOD), the LIST node carries those annotations
+	// while LIST_ITEMs typically carry just `{"kind":"notes#annotationsGroup"}`.
+	// Keep's backend 500s "Unknown Error" on incremental LIST_ITEM
+	// updates when the field is missing — apparently it wants to
+	// re-merge against the previous value and treats absence as
+	// malformed. Always emitting the kind-only stub matches gkeepapi
+	// and unblocks updates on grocery-categorized lists.
+	AnnotationsGroup *wireAnnotationsGroup `json:"annotationsGroup,omitempty"`
+	// NodeSettings is gkeepapi's NodeSettingsMixin output; emitted on
+	// every Node.save(). LIST_ITEM responses always carry this block
+	// inherited from the parent LIST. Keep's backend appears to
+	// require it on incremental updates — adding annotationsGroup
+	// alone wasn't enough to unblock the auto-categorized grocery
+	// list pushes.
+	NodeSettings *wireNodeSettings `json:"nodeSettings,omitempty"`
+	// Color is gkeepapi's ColorMixin output; "DEFAULT" is the no-color
+	// value. Items inherit color from their parent LIST in practice;
+	// gkeepapi emits the field anyway.
+	Color      string         `json:"color,omitempty"`
+	Timestamps wireTimestamps `json:"timestamps"`
+}
+
+// wireAnnotationsGroup mirrors Keep's annotationsGroup subobject. We
+// don't model the inner annotations array — gkeepapi treats it as
+// opaque and we do too — but the kind sentinel + the wire pointer
+// being non-nil tells Keep "client knows about annotationsGroup."
+type wireAnnotationsGroup struct {
+	Kind string `json:"kind"`
+}
+
+// wireNodeSettings mirrors Keep's nodeSettings subobject. The values
+// observed on every LIST and LIST_ITEM in pull responses are
+// (BOTTOM, GRAVEYARD, EXPANDED). Emitting them verbatim matches what
+// gkeepapi sends on every save.
+type wireNodeSettings struct {
+	NewListItemPlacement   string `json:"newListItemPlacement,omitempty"`
+	CheckedListItemsPolicy string `json:"checkedListItemsPolicy,omitempty"`
+	GraveyardState         string `json:"graveyardState,omitempty"`
 }
 
 // wireLabelID is the per-node label assignment shape: a labelId
