@@ -667,6 +667,131 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 		})
 	})
 
+	// K4-hard — Keep removed the item entirely (not in pull at all).
+	// User did the swipe-to-delete or Keep app's "Remove" action,
+	// which omits the item from subsequent pulls instead of flipping
+	// a Trashed/Deleted timestamp. Without the class-4 pass, the
+	// id_map orphans and the wiki item stays alive.
+	Describe("K4-hard — Keep hard-deletes (item missing from pull)", func() {
+		BeforeEach(func() {
+			c, _, kc, chk = freshConnector(profile, page, listName, listSrv, map[string]string{
+				"uid-A": "srv-A",
+				"uid-B": "srv-B",
+			})
+			chk.items = []*apiv1.ChecklistItem{
+				{Uid: "uid-A", Text: "Apples", SortOrder: 1000, UpdatedAt: timestamppb.New(tStaleA)},
+				{Uid: "uid-B", Text: "Bread", SortOrder: 2000, UpdatedAt: timestamppb.New(tStaleA)},
+			}
+			// Pull only returns srv-A; srv-B was hard-deleted in Keep.
+			kc.pullState = protocol.ChangesResponse{
+				ToVersion: "v0",
+				Nodes: []protocol.Node{
+					keepItem("srv-A", "client-A", listSrv, "Apples", false, "1000"),
+				},
+				Truncated: false,
+			}
+			Expect(c.SyncToKeep(ctx, profile, page, listName)).To(Succeed())
+		})
+
+		It("should call DeleteItemForSync for the hard-deleted item", func() {
+			Expect(chk.delCalls).To(HaveLen(1))
+			Expect(chk.delCalls[0].UID).To(Equal("uid-B"))
+		})
+
+		It("should attribute the delete to the binding owner", func() {
+			Expect(chk.delCalls[0].OwnerEmail).To(Equal("test@example.com"))
+		})
+
+		It("should not push anything (Keep already has its way)", func() {
+			Expect(kc.pushCount()).To(Equal(0))
+		})
+	})
+
+	// K4-hard-wiki-only — wiki has an item that was NEVER pushed to
+	// Keep (not in id_map). The hard-delete pass must NOT touch it.
+	// Otherwise wiki-only items get silently dropped by every pull.
+	Describe("K4-hard-wiki-only — wiki-only item not in id_map should never be deleted by Keep absence", func() {
+		BeforeEach(func() {
+			c, _, kc, chk = freshConnector(profile, page, listName, listSrv, map[string]string{
+				"uid-A": "srv-A", // only this one is paired
+			})
+			chk.items = []*apiv1.ChecklistItem{
+				{Uid: "uid-A", Text: "Apples", SortOrder: 1000, UpdatedAt: timestamppb.New(tStaleA)},
+				{Uid: "uid-NEW", Text: "FreshLocal", SortOrder: 2000, UpdatedAt: timestamppb.New(tStaleA)}, // never pushed
+			}
+			kc.pullState = protocol.ChangesResponse{
+				ToVersion: "v0",
+				Nodes: []protocol.Node{
+					keepItem("srv-A", "client-A", listSrv, "Apples", false, "1000"),
+				},
+				Truncated: false,
+			}
+			Expect(c.SyncToKeep(ctx, profile, page, listName)).To(Succeed())
+		})
+
+		It("should NOT delete the wiki-only item", func() {
+			Expect(chk.delCalls).To(BeEmpty())
+		})
+
+		It("should push the wiki-only item to Keep (it's a fresh add)", func() {
+			Expect(kc.pushCount()).To(Equal(1))
+			Expect(kc.lastPush().Nodes[0].Text).To(Equal("FreshLocal"))
+		})
+	})
+
+	// K4-hard-bogus-pull — pull returned NONE of id_map's serverIDs.
+	// Suggests an auth/server hiccup; refuse to mass-delete.
+	Describe("K4-hard-bogus-pull — pull missing all expected items, refuse to delete", func() {
+		BeforeEach(func() {
+			c, _, kc, chk = freshConnector(profile, page, listName, listSrv, map[string]string{
+				"uid-A": "srv-A",
+				"uid-B": "srv-B",
+			})
+			chk.items = []*apiv1.ChecklistItem{
+				{Uid: "uid-A", Text: "Apples", SortOrder: 1000, UpdatedAt: timestamppb.New(tStaleA)},
+				{Uid: "uid-B", Text: "Bread", SortOrder: 2000, UpdatedAt: timestamppb.New(tStaleA)},
+			}
+			// Pull returns nothing for this binding.
+			kc.pullState = protocol.ChangesResponse{
+				ToVersion: "v0",
+				Nodes:     []protocol.Node{},
+				Truncated: false,
+			}
+			Expect(c.SyncToKeep(ctx, profile, page, listName)).To(Succeed())
+		})
+
+		It("should NOT delete anything (bogus pull is not deletion signal)", func() {
+			Expect(chk.delCalls).To(BeEmpty())
+		})
+	})
+
+	// K4-hard-truncated — same as K4-hard but pull was truncated.
+	// Should NOT delete (truncation means pagination, not deletion).
+	Describe("K4-hard-truncated — pull truncated, item missing is ambiguous", func() {
+		BeforeEach(func() {
+			c, _, kc, chk = freshConnector(profile, page, listName, listSrv, map[string]string{
+				"uid-A": "srv-A",
+				"uid-B": "srv-B",
+			})
+			chk.items = []*apiv1.ChecklistItem{
+				{Uid: "uid-A", Text: "Apples", SortOrder: 1000, UpdatedAt: timestamppb.New(tStaleA)},
+				{Uid: "uid-B", Text: "Bread", SortOrder: 2000, UpdatedAt: timestamppb.New(tStaleA)},
+			}
+			kc.pullState = protocol.ChangesResponse{
+				ToVersion: "v0",
+				Nodes: []protocol.Node{
+					keepItem("srv-A", "client-A", listSrv, "Apples", false, "1000"),
+				},
+				Truncated: true, // <- key difference
+			}
+			Expect(c.SyncToKeep(ctx, profile, page, listName)).To(Succeed())
+		})
+
+		It("should NOT delete uid-B (truncation could explain its absence)", func() {
+			Expect(chk.delCalls).To(BeEmpty())
+		})
+	})
+
 	// K5 — Keep deleted (Deleted timestamp non-zero).
 	Describe("K5 — Keep marks an item deleted", func() {
 		BeforeEach(func() {

@@ -981,6 +981,87 @@ func (c *Connector) applyInboundFromKeep(ctx context.Context, profileID wikipage
 		}
 	}
 
+	// Class 4: hard-delete on Keep. Some Keep clients (notably the
+	// mobile app's swipe-to-delete) remove items entirely instead of
+	// flipping a Trashed/Deleted timestamp — the item is just absent
+	// from the next pull. The class-3 branch above only fires when
+	// the trashed item is still in the pull with a tombstone field
+	// set, so without this pass, hard-deleted items orphan in the
+	// id_map and stay alive on the wiki side forever.
+	//
+	// **Critical invariant**: this pass deletes ONLY wiki items that
+	// were previously paired with a Keep node (id_map entry exists
+	// with non-empty serverID). Wiki-only items that were never
+	// pushed to Keep have no id_map entry and are never touched here.
+	// Keep is NOT authoritative over wiki state — it's only authoritative
+	// over the lifecycle of items that were established as paired.
+	//
+	// Walk id_map: any entry whose serverID is alive in wiki but
+	// missing from the pull's set of LIST_ITEMs under this binding's
+	// note → Keep removed it; mirror by deleting wiki-side.
+	//
+	// Guards (any one false → skip the entire pass for safety):
+	//   - pull.Truncated: a truncated pull is missing items because
+	//     of pagination, not deletion.
+	//   - LastPushedAt zero: pre-bootstrap, the id_map may carry
+	//     stale entries from a previous bind/unbind cycle.
+	//   - sanity check: if the pull contained ZERO of id_map's
+	//     serverIDs, the response is suspect (auth blip, server-
+	//     side filter, etc.) — refuse to mass-delete. Only act when
+	//     at least one expected item appeared in the pull, which
+	//     proves Keep returned this binding's data.
+	//   - per-item: hasUncommittedWikiEdit — same anchor as class 2.
+	//     If the wiki item has been edited since last push, defer
+	//     to push (Keep delete loses to wiki re-edit; user re-adds
+	//     in Keep if they really meant to delete).
+	if !pull.Truncated && !binding.LastPushedAt.IsZero() {
+		keepHas := make(map[string]bool, len(pull.Nodes))
+		for _, n := range pull.Nodes {
+			if n.Type != protocol.NodeTypeListItem {
+				continue
+			}
+			if n.ParentID != binding.KeepNoteID && n.ParentServerID != binding.KeepNoteID {
+				continue
+			}
+			if n.ServerID == "" {
+				continue
+			}
+			keepHas[n.ServerID] = true
+		}
+		// Sanity: confirm Keep returned at least one of the items
+		// we expect to be there. Otherwise refuse to act on absence.
+		anyExpectedSeen := false
+		for _, serverID := range binding.ItemIDMap {
+			if keepHas[serverID] {
+				anyExpectedSeen = true
+				break
+			}
+		}
+		if anyExpectedSeen || len(binding.ItemIDMap) == 0 {
+			for uid, serverID := range binding.ItemIDMap {
+				if serverID == "" || keepHas[serverID] {
+					continue
+				}
+				wikiItem, hasWiki := wikiByUID[uid]
+				if !hasWiki {
+					// Already gone wiki-side; nothing to do.
+					continue
+				}
+				if hasUncommittedWikiEdit(wikiItem.GetUpdatedAt(), binding.LastPushedAt) {
+					continue
+				}
+				if delErr := c.checklistW.DeleteItemForSync(ctx, binding.Page, binding.ListName, ownerEmail, uid); delErr != nil {
+					if c.debug != nil {
+						c.debug.Info("applyInboundFromKeep: DeleteItemForSync(uid=%s, serverID=%s) for Keep-side hard-delete failed: %v",
+							uid, serverID, delErr)
+					}
+					continue
+				}
+				delete(binding.ItemIDMap, uid)
+			}
+		}
+	}
+
 	// Reload wiki state — the apply mutated it.
 	freshChecklist, err := c.checklistR.ListItems(ctx, binding.Page, binding.ListName)
 	if err != nil {

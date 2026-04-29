@@ -7,25 +7,22 @@ import (
 )
 
 // syncIdentityFor builds the per-call sync identity used when applying
-// inbound Keep changes. Attribution (completed_by) goes to the binding
-// owner's email — the human who tied this wiki list to their Keep
-// account. We keep IsAgent()=true so `automated` is stamped (the change
-// flowed through automation, not a direct user click), but completed_by
-// reads the owner's email so consumers see "checked off by alice@ on
-// her phone" rather than the opaque "system:keep-sync" placeholder.
+// inbound Keep changes. The change originated from a human action — the
+// binding owner toggling/editing the item in Keep — even though the
+// cron tick is what actually replays it on the wiki side. So we treat
+// the apply as the user's own action: NewIdentity (not NewAgentIdentity),
+// so the wiki's checklist UI surfaces "Done by alice@gmail.com · Nm ago"
+// rather than collapsing to "Done by an agent". The cron is transport,
+// not actor.
 //
-// We DON'T notify on these calls — the SyncDebouncer is suppressed for
-// the duration of inbound apply — so this identity never reaches
-// Subscriber.OnChecklistMutated.
-//
-// Empty ownerEmail falls back to the historical "system:keep-sync"
-// loginName so the call still has a stable string for downstream
-// rendering. Production should never hit that path.
+// Empty ownerEmail falls back to a system loginName so the call still
+// has a stable string for downstream rendering. Production should never
+// hit that path because every binding requires a connected account.
 func syncIdentityFor(ownerEmail string) tailscale.IdentityValue {
 	if ownerEmail == "" {
-		return tailscale.NewAgentIdentity("system:keep-sync", "Keep Sync (system)", "keep-sync")
+		return tailscale.NewIdentity("system:keep-sync", "Keep Sync (system)", "keep-sync")
 	}
-	return tailscale.NewAgentIdentity(ownerEmail, ownerEmail, "keep-sync")
+	return tailscale.NewIdentity(ownerEmail, ownerEmail, "keep-sync")
 }
 
 // AddItemForSync is the Keep-sync entry point for "add this Keep
