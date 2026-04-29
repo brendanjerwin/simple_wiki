@@ -597,6 +597,16 @@ func (c *Connector) SyncToKeep(ctx context.Context, profileID wikipage.PageIdent
 				if keepNode.Text == node.Text && keepNode.Checked == node.Checked && keepNode.SortValue == node.SortValue {
 					continue
 				}
+				if c.debug != nil {
+					c.debug.Info("push gate (content): uid=%s diff text=%v checked=%v sort=%v wiki.text=%q keep.text=%q",
+						item.GetUid(),
+						keepNode.Text != node.Text,
+						keepNode.Checked != node.Checked,
+						keepNode.SortValue != node.SortValue,
+						node.Text, keepNode.Text)
+				}
+			} else if c.debug != nil {
+				c.debug.Info("push gate (content): uid=%s NO keepNode for serverID=%s", item.GetUid(), serverID)
 			}
 		}
 		pushNodes = append(pushNodes, node)
