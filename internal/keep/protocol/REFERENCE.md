@@ -266,6 +266,7 @@ bodies. Treat this as the canonical reference when something starts 500-ing agai
 | Creating a LIST and pushing its initial children must happen in ONE `Changes` request — items reference the LIST's CLIENT id (server hasn't issued a server id yet) | Two-step (create list, then push items) returns 500 | observed real-account, today |
 | Push must include `targetVersion` from a fresh pull on every incremental update | Stage 3 returns 500 on update-style pushes | gkeepapi sync flow |
 | **Multi-item update where every item is byte-identical to the server's current state → 500 "Unknown Error"**. Keep rejects empty-diff pushes | Cron-tick pushes 500 forever | observed real-account, today; matches gkeepapi's `_findDirtyNodes` pattern |
+| **Soft-delete via the Changes API requires `deleted` (not `trashed`) timestamp.** gkeepapi exposes both `node.trash()` and `node.delete()`, but only `deleted` makes it through Keep's incremental-update endpoint without 500. Items appearing in pulls with `trashed` set are still recognized as soft-deleted on inbound (server may auto-graduate trashed→deleted). | Wiki-side deletes never reach Keep; cron 500s every tick | observed real-account, sandbox-reproduced via cmd/keep-debug |
 
 ### Response handling
 

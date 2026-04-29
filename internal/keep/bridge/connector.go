@@ -542,10 +542,6 @@ func (c *Connector) SyncToKeep(ctx context.Context, profileID wikipage.PageIdent
 		}
 		keepNodes[n.ServerID] = n
 	}
-	if c.debug != nil {
-		c.debug.Info("SyncToKeep diff prep: pull.Nodes=%d clientIDs=%d baseVersions=%d",
-			len(pull.Nodes), len(originalClientIDs), len(baseVersions))
-	}
 
 	covered := make(map[string]bool, len(binding.ItemIDMap))
 	pushNodes := make([]protocol.Node, 0, len(checklist.GetItems()))
@@ -597,16 +593,6 @@ func (c *Connector) SyncToKeep(ctx context.Context, profileID wikipage.PageIdent
 				if keepNode.Text == node.Text && keepNode.Checked == node.Checked && keepNode.SortValue == node.SortValue {
 					continue
 				}
-				if c.debug != nil {
-					c.debug.Info("push gate (content): uid=%s diff text=%v checked=%v sort=%v wiki.text=%q keep.text=%q",
-						item.GetUid(),
-						keepNode.Text != node.Text,
-						keepNode.Checked != node.Checked,
-						keepNode.SortValue != node.SortValue,
-						node.Text, keepNode.Text)
-				}
-			} else if c.debug != nil {
-				c.debug.Info("push gate (content): uid=%s NO keepNode for serverID=%s", item.GetUid(), serverID)
 			}
 		}
 		pushNodes = append(pushNodes, node)
@@ -625,6 +611,14 @@ func (c *Connector) SyncToKeep(ctx context.Context, profileID wikipage.PageIdent
 		if originalID, ok := originalClientIDs[serverID]; ok {
 			clientID = originalID
 		}
+		// Use `Deleted` not `Trashed` — verified via cmd/keep-debug
+		// against a fresh sandbox: setting `trashed` on a LIST_ITEM
+		// update returns stage3 HTTP 500 "Unknown Error", but
+		// setting `deleted` accepts and removes the item. gkeepapi
+		// exposes both as separate methods (trash/delete), but only
+		// `deleted` makes it through Keep's Changes API on incremental
+		// updates. Trashed-marked items in pulls are still recognized
+		// as soft-deleted on the inbound side.
 		pushNodes = append(pushNodes, protocol.Node{
 			Kind:           "notes#node",
 			ID:             clientID,
@@ -634,7 +628,7 @@ func (c *Connector) SyncToKeep(ctx context.Context, profileID wikipage.PageIdent
 			Type:           protocol.NodeTypeListItem,
 			BaseVersion:    baseVersions[serverID],
 			Timestamps: protocol.Timestamps{
-				Trashed: now,
+				Deleted: now,
 				Updated: now,
 			},
 		})

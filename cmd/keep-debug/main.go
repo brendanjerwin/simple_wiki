@@ -71,6 +71,18 @@ func main() {
 		runDumpItems(ctx, keep, *parentID)
 	case "raw-pull":
 		runRawPull(ctx, email, masterToken, deviceID, *parentID)
+	case "trash-one":
+		if *parentID == "" {
+			fmt.Fprintln(os.Stderr, "trash-one requires -parent-id=<list-serverID>")
+			os.Exit(2)
+		}
+		runTrashOne(ctx, keep, *parentID, *itemText)
+	case "update-and-trash":
+		if *parentID == "" {
+			fmt.Fprintln(os.Stderr, "update-and-trash requires -parent-id=<list-serverID>")
+			os.Exit(2)
+		}
+		runUpdateAndTrash(ctx, keep, *parentID)
 	case "update-item":
 		if *parentID == "" {
 			fmt.Fprintln(os.Stderr, "update-item requires -parent-id=<list-serverID>")
@@ -150,6 +162,97 @@ func runUpdateItemMatching(ctx context.Context, keep *protocol.KeepClient, listS
 		os.Exit(1)
 	}
 	fmt.Printf("✓ update succeeded; toVersion=%s response nodes=%d\n", resp.ToVersion, len(resp.Nodes))
+}
+
+// runTrashOne: pull, find one alive item under listServerID matching
+// `match` (or any first alive if match==""), push a Trashed=now node
+// for it. Tests the soft-delete wire shape in isolation.
+func runTrashOne(ctx context.Context, keep *protocol.KeepClient, listServerID, match string) {
+	pull, err := keep.Changes(ctx, protocol.ChangesRequest{
+		SessionID:       fmt.Sprintf("s--%d--trash-pull", time.Now().UnixMilli()),
+		ClientTimestamp: time.Now().UTC().Format("2006-01-02T15:04:05.000000Z"),
+	})
+	if err != nil { fmt.Fprintln(os.Stderr, "pull:", err); os.Exit(1) }
+	var target protocol.Node
+	for _, n := range pull.Nodes {
+		if n.Type != protocol.NodeTypeListItem { continue }
+		if n.ParentID != listServerID && n.ParentServerID != listServerID { continue }
+		if !n.Timestamps.Trashed.IsZero() || !n.Timestamps.Deleted.IsZero() { continue }
+		if match != "" && !strings.Contains(n.Text, match) { continue }
+		target = n; break
+	}
+	if target.ServerID == "" { fmt.Fprintln(os.Stderr, "no alive item match"); os.Exit(1) }
+	now := time.Now().UTC()
+	keep.SetDebugLogger(stderrDebug{})
+	resp, err := keep.Changes(ctx, protocol.ChangesRequest{
+		Nodes: []protocol.Node{{
+			Kind: "notes#node",
+			ID: target.ID,
+			ServerID: target.ServerID,
+			ParentID: listServerID,
+			ParentServerID: listServerID,
+			Type: protocol.NodeTypeListItem,
+			Text: target.Text,         // include
+			Checked: target.Checked,   // include
+			SortValue: target.SortValue, // include
+			BaseVersion: target.BaseVersion,
+			Timestamps: protocol.Timestamps{
+				Updated: now,
+				Deleted: now,  // try Deleted instead of Trashed
+			},
+		}},
+		TargetVersion: pull.ToVersion,
+		SessionID: fmt.Sprintf("s--%d--trash-push", now.UnixMilli()),
+		ClientTimestamp: now.Format("2006-01-02T15:04:05.000000Z"),
+	})
+	if err != nil { fmt.Fprintln(os.Stderr, "trash push:", err); os.Exit(1) }
+	fmt.Printf("✓ trash succeeded; toVersion=%s nodes=%d\n", resp.ToVersion, len(resp.Nodes))
+}
+
+// runUpdateAndTrash: pull, find 2 alive items, push 1 update + 1
+// trash in same Changes call. Tests whether bundling updates with
+// soft-deletes is the trigger for the user's 500.
+func runUpdateAndTrash(ctx context.Context, keep *protocol.KeepClient, listServerID string) {
+	pull, err := keep.Changes(ctx, protocol.ChangesRequest{
+		SessionID:       fmt.Sprintf("s--%d--mix-pull", time.Now().UnixMilli()),
+		ClientTimestamp: time.Now().UTC().Format("2006-01-02T15:04:05.000000Z"),
+	})
+	if err != nil { fmt.Fprintln(os.Stderr, "pull:", err); os.Exit(1) }
+	var alive []protocol.Node
+	for _, n := range pull.Nodes {
+		if n.Type != protocol.NodeTypeListItem { continue }
+		if n.ParentID != listServerID && n.ParentServerID != listServerID { continue }
+		if !n.Timestamps.Trashed.IsZero() || !n.Timestamps.Deleted.IsZero() { continue }
+		alive = append(alive, n)
+		if len(alive) >= 2 { break }
+	}
+	if len(alive) < 2 { fmt.Fprintln(os.Stderr, "need >= 2 alive items"); os.Exit(1) }
+	now := time.Now().UTC()
+	keep.SetDebugLogger(stderrDebug{})
+	resp, err := keep.Changes(ctx, protocol.ChangesRequest{
+		Nodes: []protocol.Node{
+			{ // update
+				Kind: "notes#node", ID: alive[0].ID, ServerID: alive[0].ServerID,
+				ParentID: listServerID, ParentServerID: listServerID,
+				Type: protocol.NodeTypeListItem, Text: alive[0].Text + " edit",
+				Checked: alive[0].Checked, SortValue: alive[0].SortValue,
+				BaseVersion: alive[0].BaseVersion,
+				Timestamps: protocol.Timestamps{Updated: now},
+			},
+			{ // trash
+				Kind: "notes#node", ID: alive[1].ID, ServerID: alive[1].ServerID,
+				ParentID: listServerID, ParentServerID: listServerID,
+				Type: protocol.NodeTypeListItem,
+				BaseVersion: alive[1].BaseVersion,
+				Timestamps: protocol.Timestamps{Updated: now, Trashed: now},
+			},
+		},
+		TargetVersion: pull.ToVersion,
+		SessionID: fmt.Sprintf("s--%d--mix-push", now.UnixMilli()),
+		ClientTimestamp: now.Format("2006-01-02T15:04:05.000000Z"),
+	})
+	if err != nil { fmt.Fprintln(os.Stderr, "mixed push:", err); os.Exit(1) }
+	fmt.Printf("✓ mixed push succeeded; toVersion=%s nodes=%d\n", resp.ToVersion, len(resp.Nodes))
 }
 
 type stderrDebug struct{}

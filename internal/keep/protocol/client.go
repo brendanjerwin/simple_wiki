@@ -288,10 +288,7 @@ func (c *KeepClient) Changes(ctx context.Context, req ChangesRequest) (ChangesRe
 // see the first ~10 nodes of a Changes response for diagnostics; full
 // state can run to MBs and we don't need it.
 func truncateBody(b []byte) string {
-	// TEMP: bumped from 4KB to 32KB to read past the userInfo/labels
-	// preamble and see LIST_ITEM bodies in journalctl. Strip back to
-	// 4KB once the version-field key is identified.
-	const maxLen = 32768
+	const maxLen = 4096
 	if len(b) > maxLen {
 		b = b[:maxLen]
 	}
@@ -555,6 +552,7 @@ func encodeNode(n Node) wireNode {
 			out.LabelIDs[i] = wireLabelID{LabelID: id}
 		}
 	}
+	out.AnnotationsGroup = &wireAnnotationsGroup{Kind: "notes#annotationsGroup"}
 	return out
 }
 
