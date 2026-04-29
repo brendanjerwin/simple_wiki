@@ -25,8 +25,9 @@ func TestBridge(t *testing.T) {
 // implemented; the rest panic so a future change to the bindings code
 // can't silently start hitting an unimplemented surface.
 type fakeStore struct {
-	mu    sync.Mutex
-	pages map[wikipage.PageIdentifier]wikipage.FrontMatter
+	mu       sync.Mutex
+	pages    map[wikipage.PageIdentifier]wikipage.FrontMatter
+	markdown map[wikipage.PageIdentifier]wikipage.Markdown
 }
 
 func newFakeStore() *fakeStore {
@@ -52,11 +53,18 @@ func (s *fakeStore) WriteFrontMatter(id wikipage.PageIdentifier, fm wikipage.Fro
 
 // Methods on PageReaderMutator we don't exercise. Panic in case bindings
 // starts using them later — tests should fail loudly so we add coverage.
-func (*fakeStore) ReadMarkdown(wikipage.PageIdentifier) (wikipage.PageIdentifier, wikipage.Markdown, error) {
-	panic("ReadMarkdown not used by bindings")
+func (s *fakeStore) ReadMarkdown(id wikipage.PageIdentifier) (wikipage.PageIdentifier, wikipage.Markdown, error) {
+	if s.markdown == nil {
+		return id, "", nil
+	}
+	return id, s.markdown[id], nil
 }
-func (*fakeStore) WriteMarkdown(wikipage.PageIdentifier, wikipage.Markdown) error {
-	panic("WriteMarkdown not used by bindings")
+func (s *fakeStore) WriteMarkdown(id wikipage.PageIdentifier, md wikipage.Markdown) error {
+	if s.markdown == nil {
+		s.markdown = make(map[wikipage.PageIdentifier]wikipage.Markdown)
+	}
+	s.markdown[id] = md
+	return nil
 }
 func (*fakeStore) DeletePage(wikipage.PageIdentifier) error {
 	panic("DeletePage not used by bindings")

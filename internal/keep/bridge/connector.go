@@ -18,6 +18,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
+	"github.com/brendanjerwin/simple_wiki/internal/hashtags"
 	"github.com/brendanjerwin/simple_wiki/internal/keep/protocol"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 )
@@ -1244,35 +1245,56 @@ func normalizeForSeedMatch(text string) string {
 	return strings.ToLower(strings.Join(cleaned, " "))
 }
 
-// readPageTags reads the host page's frontmatter tags. Returns an
-// empty slice for "no tags" (not an error). Errors only on actual
-// store failures; missing pages return ([], nil) — the binding might
-// outlive the host page in edge cases and we'd rather sync no labels
-// than blow up the sync job.
+// readPageTags returns the union of (1) the host page's frontmatter
+// tags array and (2) inline `#hashtag` markers in the page's markdown
+// body. The inline source matters because most wiki pages use the
+// `#tag` content syntax (extracted via internal/hashtags) rather than
+// duplicating the same set in frontmatter. Returning only the
+// frontmatter list silently dropped Keep-Label sync for every page
+// that didn't maintain a parallel `tags = [...]` block.
+//
+// Returns an empty slice for "no tags" (not an error). Errors only on
+// actual store failures; missing pages return ([], nil) — the binding
+// might outlive the host page and we'd rather sync no labels than
+// blow up the sync job.
 func (c *Connector) readPageTags(page string) ([]string, error) {
-	_, fm, err := c.store.pages.ReadFrontMatter(wikipage.PageIdentifier(page))
-	if err != nil {
-		// Treat missing page as "no tags" — sync engine continues
-		// rather than wedging on an irrelevant lookup.
-		return nil, nil
+	pageID := wikipage.PageIdentifier(page)
+	out := make([]string, 0)
+	seen := make(map[string]struct{})
+	add := func(tag string) {
+		if tag == "" {
+			return
+		}
+		normalized := hashtags.Normalize(tag)
+		if _, exists := seen[normalized]; exists {
+			return
+		}
+		seen[normalized] = struct{}{}
+		out = append(out, tag)
 	}
-	raw, ok := fm["tags"]
-	if !ok {
-		return nil, nil
-	}
-	arr, ok := raw.([]any)
-	if !ok {
-		// Frontmatter has a "tags" field but it isn't a list — the
-		// page likely has a different convention. Skip rather than
-		// failing the entire sync.
-		return nil, nil
-	}
-	out := make([]string, 0, len(arr))
-	for _, v := range arr {
-		if s, ok := v.(string); ok && s != "" {
-			out = append(out, s)
+
+	// 1. Frontmatter tags (explicit list).
+	if _, fm, err := c.store.pages.ReadFrontMatter(pageID); err == nil {
+		if raw, ok := fm["tags"]; ok {
+			if arr, ok := raw.([]any); ok {
+				for _, v := range arr {
+					if s, ok := v.(string); ok {
+						add(s)
+					}
+				}
+			}
 		}
 	}
+
+	// 2. Inline #hashtag markers in the page body. The hashtags parser
+	// already strips fenced code blocks and inline code so #-mentions
+	// inside examples don't pollute the result.
+	if _, body, err := c.store.pages.ReadMarkdown(pageID); err == nil {
+		for _, tag := range hashtags.Extract(string(body)) {
+			add(tag)
+		}
+	}
+
 	return out, nil
 }
 

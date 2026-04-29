@@ -1375,6 +1375,142 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 		})
 	})
 
+	// L1 — page has tags, none exist as Keep labels yet. Push label
+	// CRUD entries plus a LIST node referencing the new label IDs.
+	Describe("L1 — page tags new to Keep, push label CRUD + LIST node", func() {
+		var store *fakeStore
+
+		BeforeEach(func() {
+			c, store, kc, chk = freshConnector(profile, page, listName, listSrv, map[string]string{
+				"uid-A": "srv-A",
+			})
+			// Seed page frontmatter with tags.
+			pageID := wikipage.PageIdentifier(page)
+			fm := wikipage.FrontMatter{
+				"tags": []any{"household", "groceries"},
+			}
+			Expect(store.WriteFrontMatter(pageID, fm)).To(Succeed())
+
+			chk.items = []*apiv1.ChecklistItem{
+				{Uid: "uid-A", Text: "Apples", SortOrder: 1000, UpdatedAt: timestamppb.New(tStaleA)},
+			}
+			kc.pullState = protocol.ChangesResponse{
+				ToVersion: "v0",
+				Nodes: []protocol.Node{
+					keepItem("srv-A", "client-A", listSrv, "Apples", false, "1000"),
+				},
+				Labels: []protocol.LabelEntry{}, // Keep has no labels yet
+			}
+			Expect(c.SyncToKeep(ctx, profile, page, listName)).To(Succeed())
+		})
+
+		It("should push two new label CRUD entries", func() {
+			Expect(kc.pushCount()).To(Equal(1))
+			Expect(kc.lastPush().Labels).To(HaveLen(2))
+		})
+
+		It("should push one for 'household' and one for 'groceries'", func() {
+			labelNames := []string{kc.lastPush().Labels[0].Name, kc.lastPush().Labels[1].Name}
+			Expect(labelNames).To(ConsistOf("household", "groceries"))
+		})
+
+		It("should also push a LIST node referencing the new label IDs", func() {
+			var listNode *protocol.Node
+			for i, n := range kc.lastPush().Nodes {
+				if n.Type == protocol.NodeTypeList {
+					listNode = &kc.lastPush().Nodes[i]
+					break
+				}
+			}
+			Expect(listNode).NotTo(BeNil(), "expected a LIST node in push")
+			Expect(listNode.LabelIDs).To(HaveLen(2))
+		})
+	})
+
+	// L1b — page uses inline #hashtag content syntax (no frontmatter
+	// tags array). Bridge should still extract them and push as labels.
+	// This was the "labels not actually working" bug: most wiki pages
+	// use #tag content syntax, and the old code only read frontmatter.
+	Describe("L1b — page uses inline #hashtag content, push as labels", func() {
+		var store *fakeStore
+
+		BeforeEach(func() {
+			c, store, kc, chk = freshConnector(profile, page, listName, listSrv, map[string]string{
+				"uid-A": "srv-A",
+			})
+			pageID := wikipage.PageIdentifier(page)
+			// No frontmatter tags. Just inline content with hashtags.
+			Expect(store.WriteMarkdown(pageID, wikipage.Markdown("#household #weekly\n\nshopping list lives here"))).To(Succeed())
+
+			chk.items = []*apiv1.ChecklistItem{
+				{Uid: "uid-A", Text: "Apples", SortOrder: 1000, UpdatedAt: timestamppb.New(tStaleA)},
+			}
+			kc.pullState = protocol.ChangesResponse{
+				ToVersion: "v0",
+				Nodes: []protocol.Node{
+					keepItem("srv-A", "client-A", listSrv, "Apples", false, "1000"),
+				},
+				Labels: []protocol.LabelEntry{},
+			}
+			Expect(c.SyncToKeep(ctx, profile, page, listName)).To(Succeed())
+		})
+
+		It("should push two label CRUD entries for the inline hashtags", func() {
+			Expect(kc.lastPush().Labels).To(HaveLen(2))
+		})
+
+		It("should push 'household' and 'weekly' (in first-occurrence order)", func() {
+			labelNames := []string{kc.lastPush().Labels[0].Name, kc.lastPush().Labels[1].Name}
+			Expect(labelNames).To(ConsistOf("household", "weekly"))
+		})
+	})
+
+	// L2 — page tag matches existing Keep label by name; reuse it.
+	Describe("L2 — page tag has existing Keep label, reuse mainID", func() {
+		var store *fakeStore
+
+		BeforeEach(func() {
+			c, store, kc, chk = freshConnector(profile, page, listName, listSrv, map[string]string{
+				"uid-A": "srv-A",
+			})
+			pageID := wikipage.PageIdentifier(page)
+			fm := wikipage.FrontMatter{
+				"tags": []any{"household"},
+			}
+			Expect(store.WriteFrontMatter(pageID, fm)).To(Succeed())
+
+			chk.items = []*apiv1.ChecklistItem{
+				{Uid: "uid-A", Text: "Apples", SortOrder: 1000, UpdatedAt: timestamppb.New(tStaleA)},
+			}
+			kc.pullState = protocol.ChangesResponse{
+				ToVersion: "v0",
+				Nodes: []protocol.Node{
+					keepItem("srv-A", "client-A", listSrv, "Apples", false, "1000"),
+				},
+				Labels: []protocol.LabelEntry{
+					{MainID: "existing-label-id", Name: "household"},
+				},
+			}
+			Expect(c.SyncToKeep(ctx, profile, page, listName)).To(Succeed())
+		})
+
+		It("should NOT push new label CRUD entries", func() {
+			Expect(kc.lastPush().Labels).To(BeEmpty())
+		})
+
+		It("should push a LIST node referencing the existing label ID", func() {
+			var listNode *protocol.Node
+			for i, n := range kc.lastPush().Nodes {
+				if n.Type == protocol.NodeTypeList {
+					listNode = &kc.lastPush().Nodes[i]
+					break
+				}
+			}
+			Expect(listNode).NotTo(BeNil())
+			Expect(listNode.LabelIDs).To(ConsistOf("existing-label-id"))
+		})
+	})
+
 	// E2 — fresh bind (KeepNoteID is empty).
 	Describe("E2 — fresh bind, no KeepNoteID yet", func() {
 		var (
