@@ -68,9 +68,12 @@ type ChecklistReader interface {
 // from Keep at sync time) and identity (sync runs as a system actor,
 // not a user; the wiki captures completed_by from a separate path).
 type ChecklistMutator interface {
-	AddItemForSync(ctx context.Context, page, listName, text string, checked bool, tags []string, description, sortValueHint string) (string, error)
-	UpdateItemForSync(ctx context.Context, page, listName, uid, text string, checked bool, tags []string, description string) error
-	DeleteItemForSync(ctx context.Context, page, listName, uid string) error
+	// ownerEmail is the binding owner's Google email — used for
+	// completed_by attribution so wiki readers see who synced from
+	// Keep, not an opaque "system" placeholder.
+	AddItemForSync(ctx context.Context, page, listName, ownerEmail, text string, checked bool, tags []string, description, sortValueHint string) (string, error)
+	UpdateItemForSync(ctx context.Context, page, listName, ownerEmail, uid, text string, checked bool, tags []string, description string) error
+	DeleteItemForSync(ctx context.Context, page, listName, ownerEmail, uid string) error
 }
 
 // Connector orchestrates the Keep bridge: per-user auth exchange,
@@ -468,10 +471,11 @@ func (c *Connector) SyncToKeep(ctx context.Context, profileID wikipage.PageIdent
 		return fmt.Errorf("read wiki checklist: %w", err)
 	}
 
-	client, _, err := c.keepClientFor(ctx, profileID)
+	client, state, err := c.keepClientFor(ctx, profileID)
 	if err != nil {
 		return err
 	}
+	ownerEmail := state.Email
 
 	now := c.clock.Now().UTC()
 
@@ -498,7 +502,7 @@ func (c *Connector) SyncToKeep(ctx context.Context, profileID wikipage.PageIdent
 	// UpdateItemForSync / DeleteItemForSync don't loop back as fresh
 	// sync triggers. updatedBinding carries any id_map changes (new
 	// uid → serverID for items that arrived from Keep).
-	updatedBinding, freshChecklist, err := c.applyInboundFromKeep(ctx, profileID, binding, pull, checklist)
+	updatedBinding, freshChecklist, err := c.applyInboundFromKeep(ctx, profileID, ownerEmail, binding, pull, checklist)
 	if err != nil {
 		return fmt.Errorf("inbound apply: %w", err)
 	}
@@ -827,7 +831,7 @@ func (c *Connector) markBindingSynced(profileID wikipage.PageIdentifier, binding
 // pass (refcounted). Outbound push then runs unsuppressed; if it
 // itself produces new wiki state via the response (e.g. new Keep
 // serverIDs), those land via the response-walk in the caller.
-func (c *Connector) applyInboundFromKeep(ctx context.Context, profileID wikipage.PageIdentifier, binding Binding, pull protocol.ChangesResponse, currentChecklist *apiv1.Checklist) (Binding, *apiv1.Checklist, error) {
+func (c *Connector) applyInboundFromKeep(ctx context.Context, profileID wikipage.PageIdentifier, ownerEmail string, binding Binding, pull protocol.ChangesResponse, currentChecklist *apiv1.Checklist) (Binding, *apiv1.Checklist, error) {
 	if c.checklistW == nil {
 		// No mutator wired — outbound-only mode. Return inputs as-is.
 		return binding, currentChecklist, nil
@@ -917,7 +921,7 @@ func (c *Connector) applyInboundFromKeep(ctx context.Context, profileID wikipage
 			if wikiItem.Description != nil {
 				desc = *wikiItem.Description
 			}
-			newUID, err := c.checklistW.AddItemForSync(ctx, binding.Page, binding.ListName,
+			newUID, err := c.checklistW.AddItemForSync(ctx, binding.Page, binding.ListName, ownerEmail,
 				wikiItem.GetText(), wikiItem.GetChecked(), wikiItem.GetTags(), desc, n.SortValue)
 			if err != nil {
 				continue
@@ -926,7 +930,7 @@ func (c *Connector) applyInboundFromKeep(ctx context.Context, profileID wikipage
 
 		case !isAlive && knownToWiki:
 			// Class 3: trashed on Keep. Delete from wiki.
-			_ = c.checklistW.DeleteItemForSync(ctx, binding.Page, binding.ListName, uid)
+			_ = c.checklistW.DeleteItemForSync(ctx, binding.Page, binding.ListName, ownerEmail, uid)
 			delete(binding.ItemIDMap, uid)
 
 		case isAlive && knownToWiki:
@@ -965,7 +969,7 @@ func (c *Connector) applyInboundFromKeep(ctx context.Context, profileID wikipage
 			if converted.Description != nil {
 				desc = *converted.Description
 			}
-			if updateErr := c.checklistW.UpdateItemForSync(ctx, binding.Page, binding.ListName, uid,
+			if updateErr := c.checklistW.UpdateItemForSync(ctx, binding.Page, binding.ListName, ownerEmail, uid,
 				converted.GetText(), converted.GetChecked(), converted.GetTags(), desc); updateErr != nil && c.debug != nil {
 				// Stop swallowing — when this fails the wiki silently
 				// drifts out of sync with Keep, and the next outbound

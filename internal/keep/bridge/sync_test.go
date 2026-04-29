@@ -87,19 +87,24 @@ type fakeChecklist struct {
 	items    []*apiv1.ChecklistItem
 	addCalls []addRecord
 	upsCalls []updateRecord
-	delCalls []string
+	delCalls []deleteRecord
 	uidCount int
 }
 
 type addRecord struct {
+	OwnerEmail        string
 	Text, Description string
 	Tags              []string
 	Checked           bool
 }
 type updateRecord struct {
+	OwnerEmail             string
 	UID, Text, Description string
 	Tags                   []string
 	Checked                bool
+}
+type deleteRecord struct {
+	OwnerEmail, UID string
 }
 
 func (c *fakeChecklist) ListItems(_ context.Context, _, _ string) (*apiv1.Checklist, error) {
@@ -114,10 +119,10 @@ func (c *fakeChecklist) ListItems(_ context.Context, _, _ string) (*apiv1.Checkl
 	return out, nil
 }
 
-func (c *fakeChecklist) AddItemForSync(_ context.Context, _, _, text string, checked bool, tags []string, description, _ string) (string, error) {
+func (c *fakeChecklist) AddItemForSync(_ context.Context, _, _, ownerEmail, text string, checked bool, tags []string, description, _ string) (string, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.addCalls = append(c.addCalls, addRecord{Text: text, Description: description, Tags: tags, Checked: checked})
+	c.addCalls = append(c.addCalls, addRecord{OwnerEmail: ownerEmail, Text: text, Description: description, Tags: tags, Checked: checked})
 	c.uidCount++
 	uid := fmt.Sprintf("test-uid-%d", c.uidCount)
 	now := timestamppb.New(time.Now())
@@ -136,10 +141,10 @@ func (c *fakeChecklist) AddItemForSync(_ context.Context, _, _, text string, che
 	return uid, nil
 }
 
-func (c *fakeChecklist) UpdateItemForSync(_ context.Context, _, _, uid, text string, checked bool, tags []string, description string) error {
+func (c *fakeChecklist) UpdateItemForSync(_ context.Context, _, _, ownerEmail, uid, text string, checked bool, tags []string, description string) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.upsCalls = append(c.upsCalls, updateRecord{UID: uid, Text: text, Description: description, Tags: tags, Checked: checked})
+	c.upsCalls = append(c.upsCalls, updateRecord{OwnerEmail: ownerEmail, UID: uid, Text: text, Description: description, Tags: tags, Checked: checked})
 	for _, it := range c.items {
 		if it.GetUid() == uid {
 			it.Text = text
@@ -158,10 +163,10 @@ func (c *fakeChecklist) UpdateItemForSync(_ context.Context, _, _, uid, text str
 	return fmt.Errorf("uid %s not found", uid)
 }
 
-func (c *fakeChecklist) DeleteItemForSync(_ context.Context, _, _, uid string) error {
+func (c *fakeChecklist) DeleteItemForSync(_ context.Context, _, _, ownerEmail, uid string) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.delCalls = append(c.delCalls, uid)
+	c.delCalls = append(c.delCalls, deleteRecord{OwnerEmail: ownerEmail, UID: uid})
 	out := make([]*apiv1.ChecklistItem, 0, len(c.items))
 	for _, it := range c.items {
 		if it.GetUid() != uid {
@@ -601,6 +606,10 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 			Expect(chk.upsCalls[0].Checked).To(BeTrue())
 		})
 
+		It("should attribute the apply to the binding owner's email, not a system actor", func() {
+			Expect(chk.upsCalls[0].OwnerEmail).To(Equal("test@example.com"))
+		})
+
 		It("should NOT push back to Keep — content equality after apply", func() {
 			Expect(kc.pushCount()).To(Equal(0))
 		})
@@ -650,7 +659,7 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 		})
 
 		It("should call DeleteItemForSync for the trashed item", func() {
-			Expect(chk.delCalls).To(ConsistOf("uid-A"))
+			Expect(chk.delCalls).To(HaveLen(1)); Expect(chk.delCalls[0].UID).To(Equal("uid-A"))
 		})
 
 		It("should NOT push the deletion back (already gone Keep-side)", func() {
@@ -677,7 +686,7 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 		})
 
 		It("should call DeleteItemForSync for the deleted item", func() {
-			Expect(chk.delCalls).To(ConsistOf("uid-A"))
+			Expect(chk.delCalls).To(HaveLen(1)); Expect(chk.delCalls[0].UID).To(Equal("uid-A"))
 		})
 	})
 
@@ -973,7 +982,7 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 		// (silent no-op), so this is harmless. The id_map gets cleaned
 		// up either way.
 		It("should call DeleteItemForSync via id_map (mutator silently no-ops on missing uid)", func() {
-			Expect(chk.delCalls).To(ConsistOf("uid-A"))
+			Expect(chk.delCalls).To(HaveLen(1)); Expect(chk.delCalls[0].UID).To(Equal("uid-A"))
 		})
 	})
 

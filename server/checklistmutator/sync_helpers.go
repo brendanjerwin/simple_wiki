@@ -6,27 +6,35 @@ import (
 	"github.com/brendanjerwin/simple_wiki/tailscale"
 )
 
-// SyncIdentity is the synthetic identity used by the Keep sync engine
-// when applying inbound changes. Built via NewAgentIdentity so it
-// satisfies tailscale.IdentityValue without us reimplementing every
-// method. Flagged IsAgent so wiki-managed completed_by/automated
-// fields render with the agent suffix. We DON'T notify on these calls
-// — the SyncDebouncer is suppressed for the duration of inbound apply
-// — so the sync agent identity never reaches
+// syncIdentityFor builds the per-call sync identity used when applying
+// inbound Keep changes. Attribution (completed_by) goes to the binding
+// owner's email — the human who tied this wiki list to their Keep
+// account. We keep IsAgent()=true so `automated` is stamped (the change
+// flowed through automation, not a direct user click), but completed_by
+// reads the owner's email so consumers see "checked off by alice@ on
+// her phone" rather than the opaque "system:keep-sync" placeholder.
+//
+// We DON'T notify on these calls — the SyncDebouncer is suppressed for
+// the duration of inbound apply — so this identity never reaches
 // Subscriber.OnChecklistMutated.
-var SyncIdentity tailscale.IdentityValue = tailscale.NewAgentIdentity(
-	"system:keep-sync",
-	"Keep Sync (system)",
-	"keep-sync",
-)
+//
+// Empty ownerEmail falls back to the historical "system:keep-sync"
+// loginName so the call still has a stable string for downstream
+// rendering. Production should never hit that path.
+func syncIdentityFor(ownerEmail string) tailscale.IdentityValue {
+	if ownerEmail == "" {
+		return tailscale.NewAgentIdentity("system:keep-sync", "Keep Sync (system)", "keep-sync")
+	}
+	return tailscale.NewAgentIdentity(ownerEmail, ownerEmail, "keep-sync")
+}
 
 // AddItemForSync is the Keep-sync entry point for "add this Keep
-// item to the wiki." Calls AddItem with the synthetic identity, then
-// returns the new wiki uid so the caller can update its id_map.
+// item to the wiki." Attributes the add to the binding owner's email
+// via ownerEmail (see syncIdentityFor).
 //
 // SortValueHint is forwarded as args.SortOrder when non-zero —
 // preserves Keep's relative ordering when seeding fresh items.
-func (m *Mutator) AddItemForSync(ctx context.Context, page, listName, text string, checked bool, tags []string, description, sortValueHint string) (string, error) {
+func (m *Mutator) AddItemForSync(ctx context.Context, page, listName, ownerEmail, text string, checked bool, tags []string, description, sortValueHint string) (string, error) {
 	args := AddItemArgs{
 		Text: text,
 		Tags: tags,
@@ -42,14 +50,15 @@ func (m *Mutator) AddItemForSync(ctx context.Context, page, listName, text strin
 			args.SortOrder = &n
 		}
 	}
-	item, _, err := m.AddItem(ctx, page, listName, args, SyncIdentity)
+	identity := syncIdentityFor(ownerEmail)
+	item, _, err := m.AddItem(ctx, page, listName, args, identity)
 	if err != nil {
 		return "", err
 	}
 	if checked {
 		// Toggle to set checked=true; the toggle path stamps
 		// completed_at correctly.
-		if _, _, err := m.ToggleItem(ctx, page, listName, item.GetUid(), nil, SyncIdentity); err != nil {
+		if _, _, err := m.ToggleItem(ctx, page, listName, item.GetUid(), nil, identity); err != nil {
 			return item.GetUid(), err
 		}
 	}
@@ -58,8 +67,8 @@ func (m *Mutator) AddItemForSync(ctx context.Context, page, listName, text strin
 
 // UpdateItemForSync is the Keep-sync entry point for "Keep changed
 // this item; mirror it on the wiki side." Replaces text/tags/
-// description and reconciles checked.
-func (m *Mutator) UpdateItemForSync(ctx context.Context, page, listName, uid, text string, checked bool, tags []string, description string) error {
+// description and reconciles checked. Attribution goes to ownerEmail.
+func (m *Mutator) UpdateItemForSync(ctx context.Context, page, listName, ownerEmail, uid, text string, checked bool, tags []string, description string) error {
 	args := UpdateItemArgs{
 		Text:           &text,
 		Tags:           tags,
@@ -70,12 +79,13 @@ func (m *Mutator) UpdateItemForSync(ctx context.Context, page, listName, uid, te
 		d := description
 		args.Description = &d
 	}
-	current, _, err := m.UpdateItem(ctx, page, listName, uid, args, nil, SyncIdentity)
+	identity := syncIdentityFor(ownerEmail)
+	current, _, err := m.UpdateItem(ctx, page, listName, uid, args, nil, identity)
 	if err != nil {
 		return err
 	}
 	if current.GetChecked() != checked {
-		if _, _, err := m.ToggleItem(ctx, page, listName, uid, nil, SyncIdentity); err != nil {
+		if _, _, err := m.ToggleItem(ctx, page, listName, uid, nil, identity); err != nil {
 			return err
 		}
 	}
@@ -83,9 +93,10 @@ func (m *Mutator) UpdateItemForSync(ctx context.Context, page, listName, uid, te
 }
 
 // DeleteItemForSync is the Keep-sync entry point for "Keep trashed
-// this item; remove it from the wiki side too."
-func (m *Mutator) DeleteItemForSync(ctx context.Context, page, listName, uid string) error {
-	_, err := m.DeleteItem(ctx, page, listName, uid, nil, SyncIdentity)
+// this item; remove it from the wiki side too." Attribution (for
+// audit logging) goes to ownerEmail.
+func (m *Mutator) DeleteItemForSync(ctx context.Context, page, listName, ownerEmail, uid string) error {
+	_, err := m.DeleteItem(ctx, page, listName, uid, nil, syncIdentityFor(ownerEmail))
 	return err
 }
 
