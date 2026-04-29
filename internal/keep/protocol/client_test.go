@@ -157,6 +157,10 @@ var _ = Describe("KeepClient.Changes", func() {
 			Expect(resp.ForceFullResync).To(BeFalse())
 		})
 
+		It("should not flag incremental when the field is absent", func() {
+			Expect(resp.Incremental).To(BeFalse())
+		})
+
 		It("should decode the LIST node", func() {
 			var found *protocol.Node
 			for i := range resp.Nodes {
@@ -377,6 +381,20 @@ var _ = Describe("KeepClient.Changes", func() {
 
 		It("should propagate to the response", func() {
 			Expect(resp.ForceFullResync).To(BeTrue())
+		})
+	})
+
+	When("incremental is true", func() {
+		var resp protocol.ChangesResponse
+
+		BeforeEach(func() {
+			responseBody = `{"kind": "notes#changes", "toVersion": "v-2", "incremental": true, "nodes": []}`
+			r, _ := client.Changes(ctx, protocol.ChangesRequest{TargetVersion: "v-1"})
+			resp = r
+		})
+
+		It("should propagate to the response", func() {
+			Expect(resp.Incremental).To(BeTrue())
 		})
 	})
 })

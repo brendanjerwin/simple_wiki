@@ -611,6 +611,15 @@ func (c *Connector) SyncToKeep(ctx context.Context, profileID wikipage.PageIdent
 		binding.KeepCursor = pull.ToVersion
 	}
 
+	// forceFullResync: Keep is telling us our cursor is unusable and the
+	// next pull must start from scratch. Drop our cursor; the next tick
+	// will issue a full pull (TargetVersion=""), which is the only state
+	// in which the class-4 hard-delete pass can correctly observe Keep's
+	// complete current state.
+	if pull.ForceFullResync {
+		binding.KeepCursor = ""
+	}
+
 	// Truncation streak: bump on truncated pull, reset on clean pull.
 	// The two-condition escape hatch fires AFTER the rest of the tick
 	// (so we can observe whether any synced_fp / cursor advance happened
@@ -1397,12 +1406,18 @@ func (c *Connector) applyInboundFromKeep(ctx context.Context, profileID wikipage
 	//
 	// Guards (any one false → skip the entire pass for safety):
 	//   - pull.Truncated: pagination, not deletion.
+	//   - pull.Incremental: response only contains items that CHANGED
+	//     since the request's TargetVersion. Unchanged items are simply
+	//     omitted — their absence from pull.Nodes is NOT a deletion
+	//     signal. This guard is the fix for the post-deploy mass-delete
+	//     bug: the cursor-induced incremental pull made class-4 fire
+	//     against id_map entries whose items were merely unchanged.
 	//   - !binding.MigratedFingerprints: legacy binding without seeded
 	//     synced_fp; the migration job will rebaseline first.
 	//   - sanity check: if the pull contained ZERO of id_map's serverIDs,
 	//     the response is suspect (auth blip, server-side filter, etc.)
 	//     — refuse to mass-delete.
-	if !pull.Truncated && binding.MigratedFingerprints {
+	if !pull.Truncated && !pull.Incremental && binding.MigratedFingerprints {
 		keepHas := make(map[string]bool, len(pull.Nodes))
 		for _, n := range pull.Nodes {
 			if n.Type != protocol.NodeTypeListItem {
@@ -1880,8 +1895,10 @@ var ErrBoundNoteDeletedLocal = protocol.ErrBoundNoteDeleted
 //     migration did.
 //  4. id_map entries whose serverID is NOT in the pull: drop the
 //     entry. Keep already deleted that item; the pairing is gone.
-//  5. Stamp KeepCursor ← pull.ToVersion (so the next regular sync
-//     pulls only the delta since the migration moment).
+//  5. Clear KeepCursor (set to "") so the FIRST post-migration sync
+//     does a full pull. The class-4 hard-delete pass fires only on
+//     full pulls, and the first post-migration tick must observe
+//     Keep's complete state to reconcile the rebaselined id_map.
 //  6. Stamp MigratedFingerprints = true.
 //  7. Persist state.
 //
@@ -2104,9 +2121,14 @@ func (c *Connector) MigrateBindingFingerprints(ctx context.Context, profileID wi
 		}
 
 		binding.ItemIDMap = newIDMap
-		if pull.ToVersion != "" {
-			binding.KeepCursor = pull.ToVersion
-		}
+		// Clear the cursor so the FIRST post-migration sync performs a
+		// full (non-incremental) pull. This is essential: the class-4
+		// hard-delete pass fires only on full pulls, and the first
+		// post-migration tick must see Keep's complete current state to
+		// reconcile against the rebaselined id_map. Once that tick lands
+		// a fresh ToVersion, subsequent ticks resume incremental pulls.
+		// Source: post-deploy mass-delete bug remediation.
+		binding.KeepCursor = ""
 		binding.MigratedFingerprints = true
 		st.Bindings[idx] = binding
 		if perr := c.store.SaveStateLocked(profileID, st); perr != nil {

@@ -937,6 +937,140 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 		})
 	})
 
+	// class4_does_not_fire_on_incremental_pull — the post-deploy
+	// mass-delete bug. Keep returned an INCREMENTAL pull (only items
+	// that changed since the cursor). The other id_map entries are
+	// alive on Keep but not in this delta. Class-4 must NOT classify
+	// their absence as "Keep deleted them."
+	Describe("class4_does_not_fire_on_incremental_pull", func() {
+		var store *fakeStore
+
+		BeforeEach(func() {
+			c, store, kc, chk = freshConnector(profile, page, listName, listSrv, map[string]string{
+				"uid-A":   "srv-A",
+				"uid-B":   "srv-B",
+				"uid-Dog": "srv-Dog",
+			})
+			chk.items = []*apiv1.ChecklistItem{
+				{Uid: "uid-A", Text: "Apples", SortOrder: 1000, UpdatedAt: timestamppb.New(tStaleA)},
+				{Uid: "uid-B", Text: "Bread", SortOrder: 2000, UpdatedAt: timestamppb.New(tStaleA)},
+				{Uid: "uid-Dog", Text: "Dog Treats", SortOrder: 3000, UpdatedAt: timestamppb.New(tStaleA)},
+			}
+			// Incremental pull: only uid-A is in the delta. uid-B and
+			// uid-Dog still exist on Keep but are unchanged since the
+			// cursor, so they're omitted.
+			kc.pullState = protocol.ChangesResponse{
+				ToVersion: "v-after",
+				Nodes: []protocol.Node{
+					keepItem("srv-A", "client-A", listSrv, "Apples", false, "1000"),
+				},
+				Truncated:   false,
+				Incremental: true,
+			}
+			seedSyncedFromWiki(profile, page, listName, store, chk.items)
+			Expect(c.SyncToKeep(ctx, profile, page, listName)).To(Succeed())
+		})
+
+		It("should NOT call DeleteItemForSync for items absent from the incremental delta", func() {
+			Expect(chk.delCalls).To(BeEmpty())
+		})
+
+		It("should leave the id_map intact for items absent from the incremental delta", func() {
+			b, found, ferr := c.FindBinding(ctx, profile, page, listName)
+			Expect(ferr).ToNot(HaveOccurred())
+			Expect(found).To(BeTrue())
+			Expect(b.ItemIDMap).To(HaveKey("uid-B"))
+			Expect(b.ItemIDMap).To(HaveKey("uid-Dog"))
+			Expect(b.ItemIDMap).To(HaveKey("uid-A"))
+		})
+	})
+
+	// class4_fires_on_full_pull_when_item_actually_missing — confirms
+	// the gate is correctly conditional on Incremental, not blanket-
+	// disabled. On a FULL pull (Incremental=false, Truncated=false),
+	// the absence of an id_map entry from pull.Nodes is real deletion.
+	Describe("class4_fires_on_full_pull_when_item_actually_missing", func() {
+		var store *fakeStore
+
+		BeforeEach(func() {
+			c, store, kc, chk = freshConnector(profile, page, listName, listSrv, map[string]string{
+				"uid-A":   "srv-A",
+				"uid-B":   "srv-B",
+				"uid-Dog": "srv-Dog",
+			})
+			chk.items = []*apiv1.ChecklistItem{
+				{Uid: "uid-A", Text: "Apples", SortOrder: 1000, UpdatedAt: timestamppb.New(tStaleA)},
+				{Uid: "uid-B", Text: "Bread", SortOrder: 2000, UpdatedAt: timestamppb.New(tStaleA)},
+				{Uid: "uid-Dog", Text: "Dog Treats", SortOrder: 3000, UpdatedAt: timestamppb.New(tStaleA)},
+			}
+			// Full pull: returns A and B; Dog Treats was hard-deleted.
+			kc.pullState = protocol.ChangesResponse{
+				ToVersion: "v-after",
+				Nodes: []protocol.Node{
+					keepItem("srv-A", "client-A", listSrv, "Apples", false, "1000"),
+					keepItem("srv-B", "client-B", listSrv, "Bread", false, "2000"),
+				},
+				Truncated:   false,
+				Incremental: false,
+			}
+			seedSyncedFromWiki(profile, page, listName, store, chk.items)
+			Expect(c.SyncToKeep(ctx, profile, page, listName)).To(Succeed())
+		})
+
+		It("should call DeleteItemForSync only for the genuinely-missing item", func() {
+			Expect(chk.delCalls).To(HaveLen(1))
+			Expect(chk.delCalls[0].UID).To(Equal("uid-Dog"))
+		})
+
+		It("should drop the hard-deleted item from id_map", func() {
+			b, found, ferr := c.FindBinding(ctx, profile, page, listName)
+			Expect(ferr).ToNot(HaveOccurred())
+			Expect(found).To(BeTrue())
+			Expect(b.ItemIDMap).NotTo(HaveKey("uid-Dog"))
+			Expect(b.ItemIDMap).To(HaveKey("uid-A"))
+			Expect(b.ItemIDMap).To(HaveKey("uid-B"))
+		})
+	})
+
+	// force_full_resync_clears_cursor — when Keep tells us our cursor
+	// is unusable, drop it so the next tick issues a full pull.
+	Describe("force_full_resync_clears_cursor", func() {
+		var store *fakeStore
+
+		BeforeEach(func() {
+			c, store, kc, chk = freshConnector(profile, page, listName, listSrv, map[string]string{
+				"uid-A": "srv-A",
+			})
+			chk.items = []*apiv1.ChecklistItem{
+				{Uid: "uid-A", Text: "Apples", SortOrder: 1000, UpdatedAt: timestamppb.New(tStaleA)},
+			}
+			// Pre-set a cursor so we can verify it gets cleared.
+			bs := bridge.NewBindingStore(store)
+			st, loadErr := bs.LoadState(profile)
+			Expect(loadErr).ToNot(HaveOccurred())
+			st.Bindings[0].KeepCursor = "v-stale-cursor"
+			Expect(bs.SaveState(profile, st)).To(Succeed())
+
+			kc.pullState = protocol.ChangesResponse{
+				ToVersion: "v-after",
+				Nodes: []protocol.Node{
+					keepItem("srv-A", "client-A", listSrv, "Apples", false, "1000"),
+				},
+				Truncated:       false,
+				Incremental:     false,
+				ForceFullResync: true,
+			}
+			Expect(c.SyncToKeep(ctx, profile, page, listName)).To(Succeed())
+		})
+
+		It("should clear the binding's KeepCursor", func() {
+			b, found, ferr := c.FindBinding(ctx, profile, page, listName)
+			Expect(ferr).ToNot(HaveOccurred())
+			Expect(found).To(BeTrue())
+			Expect(b.KeepCursor).To(BeEmpty())
+		})
+	})
+
 	// keep_hard_delete_propagates_after_no_op_pull — bug 1 fix pinned.
 	// User added "bananas" on Keep, deleted it before any sync ran;
 	// in the meantime an earlier tick saw bananas alive and added
@@ -2994,6 +3128,113 @@ func truncationResyncThresholdInTests() int {
 // plan rejected). The gate also throttles its INFO log to the first
 // skip per binding per process so a stuck-un-migrated binding doesn't
 // spam the journal at the cron cadence.
+var _ = Describe("MigrateBindingFingerprints — full-pull and cursor reset", func() {
+	var (
+		ctx = context.Background()
+		c   *bridge.Connector
+		kc  *fakeKeepClient
+		chk *fakeChecklist
+	)
+
+	const (
+		profile  = wikipage.PageIdentifier("test-profile")
+		page     = "shopping"
+		listName = "Grocery"
+		listSrv  = "list-server-id"
+	)
+
+	// migration_uses_full_pull_not_incremental — even when the
+	// binding has a stale KeepCursor, the migration MUST issue a
+	// full pull (TargetVersion="") so it sees Keep's complete
+	// current state. An incremental pull would miss paired items
+	// and falsely drop them from id_map.
+	Describe("migration_uses_full_pull_not_incremental", func() {
+		var store *fakeStore
+
+		BeforeEach(func() {
+			c, store, kc, chk = freshConnector(profile, page, listName, listSrv, map[string]string{
+				"uid-A": "srv-A",
+			})
+			chk.items = []*apiv1.ChecklistItem{
+				{Uid: "uid-A", Text: "Apples", SortOrder: 1000, UpdatedAt: timestamppb.New(time.Now())},
+			}
+			// Pre-set MigratedFingerprints=false (legacy) and a stale
+			// KeepCursor so we can verify the migration ignores it.
+			bs := bridge.NewBindingStore(store)
+			st, loadErr := bs.LoadState(profile)
+			Expect(loadErr).ToNot(HaveOccurred())
+			st.Bindings[0].MigratedFingerprints = false
+			st.Bindings[0].KeepCursor = "v-stale-cursor"
+			Expect(bs.SaveState(profile, st)).To(Succeed())
+
+			kc.pullState = protocol.ChangesResponse{
+				ToVersion: "v-after-migration",
+				Nodes: []protocol.Node{
+					keepItem("srv-A", "client-A", listSrv, "Apples", false, "1000"),
+				},
+				Truncated:   false,
+				Incremental: false,
+			}
+			Expect(c.MigrateBindingFingerprints(ctx, profile, page, listName)).To(Succeed())
+		})
+
+		It("should issue exactly one pull", func() {
+			Expect(kc.pulledRequests).To(HaveLen(1))
+		})
+
+		It("should ignore the binding's stale cursor and pull with empty TargetVersion (full pull)", func() {
+			Expect(kc.pulledRequests[0].TargetVersion).To(BeEmpty())
+		})
+	})
+
+	// migration_clears_cursor_so_next_sync_does_full_pull — after
+	// the migration completes, the binding's KeepCursor must be
+	// empty so the FIRST post-migration sync issues another full
+	// pull. Class-4 fires only on full pulls; the first post-
+	// migration tick must see Keep's full state to safely reconcile.
+	Describe("migration_clears_cursor_so_next_sync_does_full_pull", func() {
+		var store *fakeStore
+
+		BeforeEach(func() {
+			c, store, kc, chk = freshConnector(profile, page, listName, listSrv, map[string]string{
+				"uid-A": "srv-A",
+			})
+			chk.items = []*apiv1.ChecklistItem{
+				{Uid: "uid-A", Text: "Apples", SortOrder: 1000, UpdatedAt: timestamppb.New(time.Now())},
+			}
+			bs := bridge.NewBindingStore(store)
+			st, loadErr := bs.LoadState(profile)
+			Expect(loadErr).ToNot(HaveOccurred())
+			st.Bindings[0].MigratedFingerprints = false
+			Expect(bs.SaveState(profile, st)).To(Succeed())
+
+			kc.pullState = protocol.ChangesResponse{
+				ToVersion: "v-after-migration",
+				Nodes: []protocol.Node{
+					keepItem("srv-A", "client-A", listSrv, "Apples", false, "1000"),
+				},
+				Truncated:   false,
+				Incremental: false,
+			}
+			Expect(c.MigrateBindingFingerprints(ctx, profile, page, listName)).To(Succeed())
+		})
+
+		It("should clear KeepCursor", func() {
+			b, found, ferr := c.FindBinding(ctx, profile, page, listName)
+			Expect(ferr).ToNot(HaveOccurred())
+			Expect(found).To(BeTrue())
+			Expect(b.KeepCursor).To(BeEmpty())
+		})
+
+		It("should still stamp MigratedFingerprints=true", func() {
+			b, found, ferr := c.FindBinding(ctx, profile, page, listName)
+			Expect(ferr).ToNot(HaveOccurred())
+			Expect(found).To(BeTrue())
+			Expect(b.MigratedFingerprints).To(BeTrue())
+		})
+	})
+})
+
 var _ = Describe("SyncToKeep — un-migrated binding gate", func() {
 	const (
 		profile  = wikipage.PageIdentifier("profile_test")

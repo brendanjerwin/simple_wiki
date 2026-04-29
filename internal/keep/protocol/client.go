@@ -386,6 +386,7 @@ type wireChangesResponse struct {
 	WriteResults    []wireWriteResult  `json:"writeResults,omitempty"`
 	ForceFullResync bool               `json:"forceFullResync"`
 	Truncated       bool               `json:"truncated"`
+	Incremental     bool               `json:"incremental"`
 }
 
 // wireWriteResult is the per-pushed-node status entry. Best-guess
@@ -610,6 +611,7 @@ func decodeChangesResponse(w wireChangesResponse) (ChangesResponse, error) {
 		ToVersion:       *w.ToVersion,
 		ForceFullResync: w.ForceFullResync,
 		Truncated:       w.Truncated,
+		Incremental:     w.Incremental,
 	}
 	for _, wn := range w.Nodes {
 		nt := NodeType(wn.Type)

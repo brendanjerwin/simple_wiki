@@ -98,6 +98,13 @@ type ChangesResponse struct {
 	WriteResults    []NodeWriteResult
 	ForceFullResync bool
 	Truncated       bool
+	// Incremental signals that this response is the delta since the
+	// request's TargetVersion — items that did NOT change on Keep are
+	// NOT in Nodes. Without this flag, callers that walk id_map and
+	// treat "serverID missing from pull.Nodes" as "Keep deleted it"
+	// will mass-delete legitimately-paired items on every incremental
+	// pull. Wire field: "incremental".
+	Incremental bool
 }
 
 // NodeWriteResult is the per-pushed-node status entry from Keep's

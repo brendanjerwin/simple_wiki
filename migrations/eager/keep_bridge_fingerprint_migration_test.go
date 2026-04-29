@@ -475,10 +475,17 @@ var _ = Describe("KeepBridgeFingerprintMigrationJob — silent rebaseline", func
 			Expect(st.Bindings[0].MigratedFingerprints).To(BeTrue())
 		})
 
-		It("should stamp KeepCursor from the pull's ToVersion", func() {
+		It("should clear KeepCursor so the next sync does a full pull", func() {
+			// The first post-migration sync MUST be a full (non-
+			// incremental) pull so the class-4 hard-delete pass can
+			// observe Keep's complete current state. An incremental
+			// pull on a freshly-migrated binding would expose paired
+			// items whose serverIDs aren't in the delta to false
+			// "Keep deleted this" classification. Source: post-deploy
+			// mass-delete bug remediation.
 			st, err := store.LoadState(profileID)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(st.Bindings[0].KeepCursor).To(Equal("v-after-pull"))
+			Expect(st.Bindings[0].KeepCursor).To(BeEmpty())
 		})
 	})
 })
