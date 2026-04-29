@@ -599,10 +599,19 @@ func (c *Connector) SyncToKeep(ctx context.Context, profileID wikipage.PageIdent
 	}
 
 	// Soft-delete: any binding map entry whose uid isn't in the current
-	// wiki items list got deleted wiki-side. Push Trashed=now so Keep
+	// wiki items list got deleted wiki-side. Push Deleted=now so Keep
 	// moves it to the trash on the user's phone.
 	for uid, serverID := range binding.ItemIDMap {
 		if covered[uid] || serverID == "" {
+			continue
+		}
+		// Skip if Keep no longer has this item — they've already been
+		// removed on Keep's side (typically: user deleted via the
+		// phone app). Keep 500s on attempts to mark an already-
+		// deleted/missing item as deleted again. Drop the stale
+		// id_map entry instead.
+		if _, present := keepNodes[serverID]; !present {
+			delete(binding.ItemIDMap, uid)
 			continue
 		}
 		// Same id-vs-serverId distinction as the update path above:

@@ -83,6 +83,12 @@ func main() {
 			os.Exit(2)
 		}
 		runUpdateAndTrash(ctx, keep, *parentID)
+	case "delete-many":
+		if *parentID == "" {
+			fmt.Fprintln(os.Stderr, "delete-many requires -parent-id=<list-serverID>")
+			os.Exit(2)
+		}
+		runDeleteMany(ctx, keep, *parentID)
 	case "update-item":
 		if *parentID == "" {
 			fmt.Fprintln(os.Stderr, "update-item requires -parent-id=<list-serverID>")
@@ -239,12 +245,12 @@ func runUpdateAndTrash(ctx context.Context, keep *protocol.KeepClient, listServe
 				BaseVersion: alive[0].BaseVersion,
 				Timestamps: protocol.Timestamps{Updated: now},
 			},
-			{ // trash
+			{ // delete (using Deleted, not Trashed)
 				Kind: "notes#node", ID: alive[1].ID, ServerID: alive[1].ServerID,
 				ParentID: listServerID, ParentServerID: listServerID,
 				Type: protocol.NodeTypeListItem,
 				BaseVersion: alive[1].BaseVersion,
-				Timestamps: protocol.Timestamps{Updated: now, Trashed: now},
+				Timestamps: protocol.Timestamps{Updated: now, Deleted: now},
 			},
 		},
 		TargetVersion: pull.ToVersion,
@@ -253,6 +259,43 @@ func runUpdateAndTrash(ctx context.Context, keep *protocol.KeepClient, listServe
 	})
 	if err != nil { fmt.Fprintln(os.Stderr, "mixed push:", err); os.Exit(1) }
 	fmt.Printf("✓ mixed push succeeded; toVersion=%s nodes=%d\n", resp.ToVersion, len(resp.Nodes))
+}
+
+// runDeleteMany: delete ALL alive items in a list as one push
+func runDeleteMany(ctx context.Context, keep *protocol.KeepClient, listServerID string) {
+	pull, err := keep.Changes(ctx, protocol.ChangesRequest{
+		SessionID:       fmt.Sprintf("s--%d--del-pull", time.Now().UnixMilli()),
+		ClientTimestamp: time.Now().UTC().Format("2006-01-02T15:04:05.000000Z"),
+	})
+	if err != nil { fmt.Fprintln(os.Stderr, "pull:", err); os.Exit(1) }
+	var alive []protocol.Node
+	for _, n := range pull.Nodes {
+		if n.Type != protocol.NodeTypeListItem { continue }
+		if n.ParentID != listServerID && n.ParentServerID != listServerID { continue }
+		if !n.Timestamps.Trashed.IsZero() || !n.Timestamps.Deleted.IsZero() { continue }
+		alive = append(alive, n)
+	}
+	if len(alive) == 0 { fmt.Fprintln(os.Stderr, "no alive items"); os.Exit(1) }
+	fmt.Printf("deleting %d items\n", len(alive))
+	now := time.Now().UTC()
+	pushNodes := make([]protocol.Node, 0, len(alive))
+	for _, t := range alive {
+		pushNodes = append(pushNodes, protocol.Node{
+			Kind: "notes#node", ID: t.ID, ServerID: t.ServerID,
+			ParentID: listServerID, ParentServerID: listServerID,
+			Type: protocol.NodeTypeListItem,
+			BaseVersion: t.BaseVersion,
+			Timestamps: protocol.Timestamps{Updated: now, Deleted: now},
+		})
+	}
+	keep.SetDebugLogger(stderrDebug{})
+	resp, err := keep.Changes(ctx, protocol.ChangesRequest{
+		Nodes: pushNodes, TargetVersion: pull.ToVersion,
+		SessionID: fmt.Sprintf("s--%d--del-push", now.UnixMilli()),
+		ClientTimestamp: now.Format("2006-01-02T15:04:05.000000Z"),
+	})
+	if err != nil { fmt.Fprintln(os.Stderr, "delete-many:", err); os.Exit(1) }
+	fmt.Printf("✓ ok; toVersion=%s nodes=%d\n", resp.ToVersion, len(resp.Nodes))
 }
 
 type stderrDebug struct{}
