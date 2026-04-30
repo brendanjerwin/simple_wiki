@@ -18,11 +18,12 @@ import (
 )
 
 func main() {
-	cmd := flag.String("cmd", "list", "list | create-and-push | create-with-items | push-item-to-existing | dump-items | dump-write-results | verify-cursor-monotonic")
+	cmd := flag.String("cmd", "list", "list | create-and-push | create-with-items | push-item-to-existing | dump-items | dump-write-results | verify-cursor-monotonic | verify-list-push-shape | verify-list-push-shape-broken | verify-listitem-update-shape")
 	title := flag.String("title", "Keep CLI Test", "title for create-and-push / create-with-items")
 	itemsCSV := flag.String("items", "Eggs,Milk,Bread", "comma-separated items for create-with-items")
 	parentID := flag.String("parent-id", "", "for push-item-to-existing: the LIST node's serverID")
 	itemText := flag.String("item-text", "Late Add", "for push-item-to-existing: the new item's text")
+	labelName := flag.String("label-name", "", "for verify-list-push-shape: existing label to attach (case-insensitive). If empty, push without labels.")
 	flag.Parse()
 
 	email := os.Getenv("KEEP_EMAIL")
@@ -100,6 +101,24 @@ func main() {
 		runDumpWriteResults(ctx, email, masterToken, deviceID, keep)
 	case "verify-cursor-monotonic":
 		runVerifyCursorMonotonic(ctx, keep)
+	case "verify-list-push-shape":
+		if *parentID == "" {
+			fmt.Fprintln(os.Stderr, "verify-list-push-shape requires -parent-id=<list-serverID>")
+			os.Exit(2)
+		}
+		runVerifyListPushShape(ctx, email, masterToken, deviceID, keep, *parentID, *labelName, false /*sendBrokenShape*/)
+	case "verify-list-push-shape-broken":
+		if *parentID == "" {
+			fmt.Fprintln(os.Stderr, "verify-list-push-shape-broken requires -parent-id=<list-serverID>")
+			os.Exit(2)
+		}
+		runVerifyListPushShape(ctx, email, masterToken, deviceID, keep, *parentID, *labelName, true /*sendBrokenShape*/)
+	case "verify-listitem-update-shape":
+		if *parentID == "" {
+			fmt.Fprintln(os.Stderr, "verify-listitem-update-shape requires -parent-id=<list-serverID>")
+			os.Exit(2)
+		}
+		runVerifyListItemUpdateShape(ctx, email, masterToken, deviceID, keep, *parentID)
 	default:
 		fmt.Fprintln(os.Stderr, "unknown cmd:", *cmd)
 		os.Exit(2)
@@ -746,4 +765,333 @@ func runCreateAndPush(ctx context.Context, keep *protocol.KeepClient, title stri
 			fmt.Printf("  serverID=%s title=%q\n", n.ServerID, n.Title)
 		}
 	}
+}
+
+// runVerifyListPushShape pushes a labelIds-only LIST node update against
+// `parentID` (a Sandbox list serverID) using the new push-shape fix:
+// `id == LIST.client_id` (from the pull) and `serverId == LIST.server_id`,
+// distinct values. Optionally attaches an existing label by case-insensitive
+// name match.
+//
+// Goes raw HTTP for the push so we can capture the literal HTTP status
+// and response body — KeepClient.Changes wraps non-200s in classified
+// errors that lose the body.
+//
+// When sendBrokenShape=true, intentionally sets `id == serverId` (the
+// pre-fix shape) to confirm Keep returns 500 — the control case proving
+// the fix targets the right field.
+//
+// Exits 0 on PASS (HTTP 200, no error in response body), 1 on FAIL.
+func runVerifyListPushShape(ctx context.Context, email, masterToken, deviceID string, keep *protocol.KeepClient, listServerID, labelMatch string, sendBrokenShape bool) {
+	mode := "FIXED-SHAPE"
+	if sendBrokenShape {
+		mode = "BROKEN-SHAPE (id==serverId, expecting 500)"
+	}
+	fmt.Fprintf(os.Stderr, "=== verify-list-push-shape mode=%s parent-id=%s label=%q ===\n",
+		mode, listServerID, labelMatch)
+
+	// Step 1: full pull via the typed client to capture the LIST node's
+	// client_id, the toVersion cursor, the title, and any label that
+	// matches by case-insensitive name.
+	now := time.Now().UTC()
+	pull, err := keep.Changes(ctx, protocol.ChangesRequest{
+		SessionID:       fmt.Sprintf("s--%d--vlps-pull", now.UnixMilli()),
+		ClientTimestamp: now.Format("2006-01-02T15:04:05.000000Z"),
+	})
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "FAIL: pull failed:", err)
+		os.Exit(1)
+	}
+
+	var listClientID, listTitle string
+	for _, n := range pull.Nodes {
+		if n.Type == protocol.NodeTypeList && n.ServerID == listServerID {
+			listClientID = n.ID
+			listTitle = n.Title
+			break
+		}
+	}
+	if listClientID == "" {
+		fmt.Fprintf(os.Stderr, "FAIL: no LIST node found with serverId=%s in pull (got %d nodes)\n",
+			listServerID, len(pull.Nodes))
+		os.Exit(1)
+	}
+	fmt.Fprintf(os.Stderr, "✓ found LIST node: client_id=%s title=%q\n", listClientID, listTitle)
+
+	// Step 2: optionally locate a matching label.
+	var labelMainID, labelCanonicalName string
+	if labelMatch != "" {
+		want := strings.ToLower(labelMatch)
+		for _, l := range pull.Labels {
+			if strings.ToLower(l.Name) == want {
+				labelMainID = l.MainID
+				labelCanonicalName = l.Name
+				break
+			}
+		}
+		if labelMainID == "" {
+			fmt.Fprintf(os.Stderr, "FAIL: no label matching %q (case-insensitive) found among %d labels\n",
+				labelMatch, len(pull.Labels))
+			for _, l := range pull.Labels {
+				fmt.Fprintf(os.Stderr, "  available label: name=%q mainID=%s\n", l.Name, l.MainID)
+			}
+			os.Exit(1)
+		}
+		fmt.Fprintf(os.Stderr, "✓ found label: name=%q mainID=%s\n", labelCanonicalName, labelMainID)
+	}
+
+	// Step 3: build the push body with the chosen shape.
+	pushID := listClientID
+	if sendBrokenShape {
+		pushID = listServerID // intentionally wrong: id == serverId
+	}
+
+	now2 := time.Now().UTC()
+	nodeMap := map[string]any{
+		"kind":     "notes#node",
+		"id":       pushID,
+		"serverId": listServerID,
+		"type":     "LIST",
+		"title":    listTitle,
+		"annotationsGroup": map[string]any{
+			"kind": "notes#annotationsGroup",
+		},
+		"timestamps": map[string]any{
+			"kind":    "notes#timestamps",
+			"updated": now2.Format("2006-01-02T15:04:05.000000Z"),
+		},
+	}
+	if labelMainID != "" {
+		nodeMap["labelIds"] = []any{
+			map[string]any{"labelId": labelMainID},
+		}
+	}
+
+	pushBody := map[string]any{
+		"nodes":           []any{nodeMap},
+		"clientTimestamp": now2.Format("2006-01-02T15:04:05.000000Z"),
+		"targetVersion":   pull.ToVersion,
+		"requestHeader": map[string]any{
+			"clientSessionId": fmt.Sprintf("s--%d--vlps-push", now2.UnixMilli()),
+			"clientPlatform":  "ANDROID",
+			"clientVersion": map[string]any{
+				"major": "9", "minor": "9", "build": "9", "revision": "9",
+			},
+			"capabilities": []any{
+				map[string]any{"type": "NC"}, map[string]any{"type": "PI"},
+				map[string]any{"type": "LB"}, map[string]any{"type": "AN"},
+				map[string]any{"type": "SH"}, map[string]any{"type": "DR"},
+				map[string]any{"type": "TR"}, map[string]any{"type": "IN"},
+				map[string]any{"type": "SNB"}, map[string]any{"type": "MI"},
+				map[string]any{"type": "CO"},
+			},
+		},
+	}
+	// userInfo.labels is reserved for CRUD on the user's label set —
+	// adding, renaming, deleting. Echoing an *existing* label there
+	// caused Keep to 500 in this verifier. Attaching an existing label
+	// to a node is just a labelIds-only update on the node itself; no
+	// userInfo.labels CRUD entry needed.
+	//
+	// The production push path (resolveLabelsForTags) only emits a
+	// userInfo.labels CRUD entry when the label does NOT already exist
+	// — i.e. for a wiki tag that has no Keep label yet. Echoing a label
+	// here would make this verifier diverge from the prod shape.
+	_ = labelCanonicalName
+
+	bodyBytes, err := json.MarshalIndent(pushBody, "", "  ")
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "FAIL: marshal:", err)
+		os.Exit(1)
+	}
+	fmt.Fprintln(os.Stderr, "--- REQUEST BODY ---")
+	fmt.Fprintln(os.Stderr, string(bodyBytes))
+
+	// Step 4: send via raw HTTP so we capture the literal status + body.
+	status, respBody, err := rawKeepPost(ctx, email, masterToken, deviceID, bodyBytes)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "FAIL: HTTP send:", err)
+		os.Exit(1)
+	}
+	fmt.Fprintf(os.Stderr, "--- RESPONSE STATUS: %d ---\n", status)
+	excerpt := respBody
+	if len(excerpt) > 500 {
+		excerpt = excerpt[:500]
+	}
+	fmt.Fprintln(os.Stderr, "--- RESPONSE BODY (first 500) ---")
+	fmt.Fprintln(os.Stderr, string(excerpt))
+
+	// Step 5: verdict.
+	bodyStr := string(respBody)
+	hasError := strings.Contains(bodyStr, `"error"`) || strings.Contains(bodyStr, "Unknown Error")
+	if sendBrokenShape {
+		if status >= 500 || hasError {
+			fmt.Fprintln(os.Stderr, "PASS: broken shape (id==serverId) returned 500 / error as predicted by REFERENCE.md")
+			fmt.Println("PASS")
+			os.Exit(0)
+		}
+		fmt.Fprintln(os.Stderr, "UNEXPECTED: broken shape did NOT 500 — REFERENCE.md hypothesis may be wrong")
+		fmt.Println("UNEXPECTED-PASS")
+		os.Exit(1)
+	}
+	if status == 200 && !hasError {
+		fmt.Fprintln(os.Stderr, "PASS: fixed shape (id!=serverId) returned 200, no error")
+		fmt.Println("PASS")
+		os.Exit(0)
+	}
+	fmt.Fprintf(os.Stderr, "FAIL: fixed shape rejected (status=%d, hasError=%v)\n", status, hasError)
+	fmt.Println("FAIL")
+	os.Exit(1)
+}
+
+// runVerifyListItemUpdateShape pulls the sandbox list, picks any alive
+// LIST_ITEM, pushes a checked-toggle update with the proper shape (id =
+// the original client_id from the pull, serverId = server_id,
+// parentServerId = sandbox list serverID, baseVersion = "" since Keep
+// returns "" for it on every node, deleted = zero, updated = now).
+// Confirms the LIST_ITEM update path against the same hypothesis.
+func runVerifyListItemUpdateShape(ctx context.Context, email, masterToken, deviceID string, keep *protocol.KeepClient, listServerID string) {
+	fmt.Fprintf(os.Stderr, "=== verify-listitem-update-shape parent-id=%s ===\n", listServerID)
+
+	now := time.Now().UTC()
+	pull, err := keep.Changes(ctx, protocol.ChangesRequest{
+		SessionID:       fmt.Sprintf("s--%d--vliu-pull", now.UnixMilli()),
+		ClientTimestamp: now.Format("2006-01-02T15:04:05.000000Z"),
+	})
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "FAIL: pull failed:", err)
+		os.Exit(1)
+	}
+
+	var target protocol.Node
+	for _, n := range pull.Nodes {
+		if n.Type != protocol.NodeTypeListItem {
+			continue
+		}
+		if n.ParentID != listServerID && n.ParentServerID != listServerID {
+			continue
+		}
+		if !n.Timestamps.Trashed.IsZero() || !n.Timestamps.Deleted.IsZero() {
+			continue
+		}
+		target = n
+		break
+	}
+	if target.ServerID == "" {
+		fmt.Fprintln(os.Stderr, "FAIL: no alive LIST_ITEM under list", listServerID)
+		os.Exit(1)
+	}
+	fmt.Fprintf(os.Stderr, "✓ picked target item: client_id=%s serverId=%s text=%q checked=%v baseVersion=%q\n",
+		target.ID, target.ServerID, target.Text, target.Checked, target.BaseVersion)
+
+	// Build the push body. Keep returns baseVersion="" on every node we
+	// observed in the user's account, so we send "" — testing the
+	// hypothesis that BaseVersion isn't required.
+	now2 := time.Now().UTC()
+	nodeMap := map[string]any{
+		"kind":           "notes#node",
+		"id":             target.ID, // client_id from the pull, distinct from serverId
+		"serverId":       target.ServerID,
+		"parentId":       listServerID,
+		"parentServerId": listServerID,
+		"type":           "LIST_ITEM",
+		"text":           target.Text,
+		"checked":        !target.Checked, // toggle
+		"sortValue":      target.SortValue,
+		"annotationsGroup": map[string]any{
+			"kind": "notes#annotationsGroup",
+		},
+		"timestamps": map[string]any{
+			"kind":    "notes#timestamps",
+			"updated": now2.Format("2006-01-02T15:04:05.000000Z"),
+		},
+	}
+	pushBody := map[string]any{
+		"nodes":           []any{nodeMap},
+		"clientTimestamp": now2.Format("2006-01-02T15:04:05.000000Z"),
+		"targetVersion":   pull.ToVersion,
+		"requestHeader": map[string]any{
+			"clientSessionId": fmt.Sprintf("s--%d--vliu-push", now2.UnixMilli()),
+			"clientPlatform":  "ANDROID",
+			"clientVersion": map[string]any{
+				"major": "9", "minor": "9", "build": "9", "revision": "9",
+			},
+			"capabilities": []any{
+				map[string]any{"type": "NC"}, map[string]any{"type": "PI"},
+				map[string]any{"type": "LB"}, map[string]any{"type": "AN"},
+				map[string]any{"type": "SH"}, map[string]any{"type": "DR"},
+				map[string]any{"type": "TR"}, map[string]any{"type": "IN"},
+				map[string]any{"type": "SNB"}, map[string]any{"type": "MI"},
+				map[string]any{"type": "CO"},
+			},
+		},
+	}
+	bodyBytes, err := json.MarshalIndent(pushBody, "", "  ")
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "FAIL: marshal:", err)
+		os.Exit(1)
+	}
+	fmt.Fprintln(os.Stderr, "--- REQUEST BODY ---")
+	fmt.Fprintln(os.Stderr, string(bodyBytes))
+
+	status, respBody, err := rawKeepPost(ctx, email, masterToken, deviceID, bodyBytes)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "FAIL: HTTP send:", err)
+		os.Exit(1)
+	}
+	fmt.Fprintf(os.Stderr, "--- RESPONSE STATUS: %d ---\n", status)
+	excerpt := respBody
+	if len(excerpt) > 500 {
+		excerpt = excerpt[:500]
+	}
+	fmt.Fprintln(os.Stderr, "--- RESPONSE BODY (first 500) ---")
+	fmt.Fprintln(os.Stderr, string(excerpt))
+
+	bodyStr := string(respBody)
+	hasError := strings.Contains(bodyStr, `"error"`) || strings.Contains(bodyStr, "Unknown Error")
+	if status == 200 && !hasError {
+		fmt.Fprintln(os.Stderr, "PASS: LIST_ITEM update with proper shape returned 200")
+		fmt.Println("PASS")
+		os.Exit(0)
+	}
+	fmt.Fprintf(os.Stderr, "FAIL: LIST_ITEM update rejected (status=%d, hasError=%v)\n", status, hasError)
+	fmt.Println("FAIL")
+	os.Exit(1)
+}
+
+// rawKeepPost re-authenticates and posts a body to /changes via raw
+// HTTP, returning the status code and response body. Necessary for the
+// verifiers because KeepClient.Changes wraps non-200s in classified
+// errors that lose the body — we want the actual server response so
+// the verdict logic can see whether Keep complained about content.
+func rawKeepPost(ctx context.Context, email, masterToken, deviceID string, body []byte) (int, []byte, error) {
+	authClient := &http.Client{
+		Transport: &http.Transport{
+			TLSClientConfig:   &tls.Config{MinVersion: tls.VersionTLS12, NextProtos: []string{"http/1.1"}},
+			ForceAttemptHTTP2: false,
+		},
+		Timeout: 30 * time.Second,
+	}
+	auth := protocol.NewAuthenticator(authClient, protocol.AuthURL, deviceID)
+	bearer, err := auth.ExchangeMasterTokenForBearer(ctx, email, masterToken)
+	if err != nil {
+		return 0, nil, fmt.Errorf("auth: %w", err)
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, protocol.DefaultKeepBaseURL+"changes", strings.NewReader(string(body)))
+	if err != nil {
+		return 0, nil, fmt.Errorf("build request: %w", err)
+	}
+	req.Header.Set("Authorization", "OAuth "+bearer)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("User-Agent", "simple_wiki-keep-debug/1")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return 0, nil, fmt.Errorf("send: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return resp.StatusCode, nil, fmt.Errorf("read body: %w", err)
+	}
+	return resp.StatusCode, respBody, nil
 }

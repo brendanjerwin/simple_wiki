@@ -379,20 +379,22 @@ type InitialItem struct {
 func (c *Connector) Bind(ctx context.Context, profileID wikipage.PageIdentifier, page, listName, keepNoteID string, initialItems []InitialItem) (Binding, error) {
 	idMap := map[string]ItemBinding{}
 	labelIDs := map[string]string{}
+	var keepNoteClientID string
 	if keepNoteID != "" {
 		client, _, err := c.keepClientFor(ctx, profileID)
 		if err != nil {
 			return Binding{}, err
 		}
-		idMap, labelIDs = c.seedIDMapFromExistingList(ctx, client, keepNoteID, initialItems)
+		idMap, labelIDs, keepNoteClientID = c.seedIDMapFromExistingList(ctx, client, keepNoteID, initialItems)
 	}
 
 	binding := Binding{
-		Page:          page,
-		ListName:      listName,
-		KeepNoteID:    keepNoteID,
-		KeepNoteTitle: listName,
-		BoundAt:       c.clock.Now().UTC(),
+		Page:             page,
+		ListName:         listName,
+		KeepNoteID:       keepNoteID,
+		KeepNoteTitle:    listName,
+		KeepNoteClientID: keepNoteClientID,
+		BoundAt:          c.clock.Now().UTC(),
 		// Born-migrated: a fresh binding has nothing to migrate; its
 		// fingerprints will be populated by the bootstrap push response
 		// or by the per-item synced_fp updates on subsequent syncs.
@@ -589,6 +591,24 @@ func (c *Connector) SyncToKeep(ctx context.Context, profileID wikipage.PageIdent
 		return fmt.Errorf("sync pull: %w", err)
 	}
 
+	// Self-heal KeepNoteClientID for legacy bindings that were persisted
+	// before this field existed. If the LIST node is in this pull (full
+	// pulls always include it; incremental pulls only include it when
+	// the LIST itself changed), capture its client-side `id`. Outbound
+	// LIST pushes need `id != serverId` — Keep 500s on equal values.
+	keepNoteClientIDMissingAfterPull := false
+	if binding.KeepNoteClientID == "" {
+		for _, n := range pull.Nodes {
+			if n.Type == protocol.NodeTypeList && n.ServerID == binding.KeepNoteID && n.ID != "" {
+				binding.KeepNoteClientID = n.ID
+				break
+			}
+		}
+		if binding.KeepNoteClientID == "" {
+			keepNoteClientIDMissingAfterPull = true
+		}
+	}
+
 	// Capture the prior cursor so the truncation escape hatch can
 	// distinguish "cursor advanced this tick" (progress) from "cursor
 	// stuck at the same value" (no progress). A truncated pull never
@@ -619,6 +639,15 @@ func (c *Connector) SyncToKeep(ctx context.Context, profileID wikipage.PageIdent
 	// in which the class-4 hard-delete pass can correctly observe Keep's
 	// complete current state.
 	if pull.ForceFullResync {
+		binding.KeepCursor = ""
+	}
+
+	// Self-heal continued: if KeepNoteClientID is still empty after this
+	// pull, drop the cursor so the next tick's pull is full — full pulls
+	// always echo the LIST node, which lets us populate the field
+	// without operator intervention. Done AFTER cursor advance above so
+	// this reset isn't overwritten.
+	if keepNoteClientIDMissingAfterPull && binding.KeepNoteClientID == "" {
 		binding.KeepCursor = ""
 	}
 
@@ -962,9 +991,21 @@ func (c *Connector) SyncToKeep(ctx context.Context, profileID wikipage.PageIdent
 	// referencing the new IDs. Cheap: a labelIds-only push on an
 	// existing LIST is one extra wireNode.
 	if len(listLabelIDs) > 0 || len(labelPushEntries) > 0 {
+		// Outbound LIST node MUST send `id != serverId`. Keep returns
+		// stage3 HTTP 500 "Unknown Error" when they match. KeepNoteClientID
+		// is captured at bind/bootstrap/migration time and re-captured
+		// from full pulls via the self-heal block above. The fallback
+		// to KeepNoteID exists only so logs surface the bug rather than
+		// silently dropping the LIST node from the push — when this
+		// branch fires the push will 500 and the next tick's full-pull
+		// self-heal will repair the binding.
+		listClientID := binding.KeepNoteClientID
+		if listClientID == "" {
+			listClientID = binding.KeepNoteID
+		}
 		listNode := protocol.Node{
 			Kind:       "notes#node",
-			ID:         binding.KeepNoteID,
+			ID:         listClientID,
 			ServerID:   binding.KeepNoteID,
 			Type:       protocol.NodeTypeList,
 			Title:      binding.KeepNoteTitle,
@@ -1223,6 +1264,9 @@ func (c *Connector) bootstrapKeepListForBinding(ctx context.Context, profileID w
 
 	binding.KeepNoteID = result.ListServerID
 	binding.KeepNoteTitle = binding.ListName
+	// Capture the LIST node's client-side `id` so subsequent outbound
+	// LIST updates send `id != serverId` (Keep 500s when they match).
+	binding.KeepNoteClientID = result.ListClientID
 	if binding.ItemIDMap == nil {
 		binding.ItemIDMap = map[string]ItemBinding{}
 	}
@@ -1698,6 +1742,10 @@ func (c *Connector) persistBindingMap(profileID wikipage.PageIdentifier, binding
 //     pull's userInfo.labels. Without this, the first sync re-pulls
 //     incrementally (no labels) and re-creates every label with a
 //     fresh MainID, spamming the user's account.
+//   - keepNoteClientID: the LIST node's client-generated `id` (distinct
+//     from its server-assigned `serverId`). Captured so subsequent
+//     outbound LIST updates carry `id != serverId` — Keep 500s when
+//     the two are equal.
 //
 // Errors are swallowed — a failed pull at bind time should not block
 // the bind itself; the next mutation will trigger a sync that
@@ -1706,16 +1754,27 @@ func (c *Connector) persistBindingMap(profileID wikipage.PageIdentifier, binding
 // won't — Keep accepts duplicate-text items. So this DOES matter, but
 // we'd rather have a working bind than a hard failure if the pull
 // flakes.).
-func (c *Connector) seedIDMapFromExistingList(ctx context.Context, client KeepClient, listServerID string, wikiItems []InitialItem) (map[string]ItemBinding, map[string]string) {
+//
+//revive:disable-next-line:function-result-limit,cognitive-complexity
+func (c *Connector) seedIDMapFromExistingList(ctx context.Context, client KeepClient, listServerID string, wikiItems []InitialItem) (map[string]ItemBinding, map[string]string, string) {
 	idMap := map[string]ItemBinding{}
 	labelIDs := map[string]string{}
+	var keepNoteClientID string
 	now := c.clock.Now().UTC()
 	pull, err := client.Changes(ctx, protocol.ChangesRequest{
 		SessionID:       fmt.Sprintf("s--%d--bindseed-%s", now.UnixMilli(), listServerID),
 		ClientTimestamp: now.Format("2006-01-02T15:04:05.000000Z"),
 	})
 	if err != nil {
-		return idMap, labelIDs
+		return idMap, labelIDs, keepNoteClientID
+	}
+	// Capture the LIST node's client-side `id` so subsequent outbound
+	// LIST updates send `id != serverId`. Keep 500s when they match.
+	for _, n := range pull.Nodes {
+		if n.Type == protocol.NodeTypeList && n.ServerID == listServerID {
+			keepNoteClientID = n.ID
+			break
+		}
 	}
 	// Build base-text → Keep node index for live LIST_ITEMs whose
 	// parent matches our bound list. We retain the full node (not
@@ -1773,7 +1832,7 @@ func (c *Connector) seedIDMapFromExistingList(ctx context.Context, client KeepCl
 		}
 		labelIDs[l.Name] = l.MainID
 	}
-	return idMap, labelIDs
+	return idMap, labelIDs, keepNoteClientID
 }
 
 // normalizeForSeedMatch reduces a LIST_ITEM text to its bare item-name
@@ -1871,6 +1930,12 @@ func resolveLabelsForTags(tags []string, persistedLabelIDs map[string]string, ex
 	if len(tags) == 0 {
 		return nil, nil, nil
 	}
+	// Lookup is keyed by lowercased name so a wiki tag like `household`
+	// resolves to a Keep label whose canonical name is "Household". The
+	// PERSISTED map (binding.LabelIDs) preserves Keep's canonical case
+	// — see the post-pull persistence loop in SyncToKeep — but the
+	// LOOKUP normalizes both sides; otherwise every tick mints a fresh
+	// MainID and emits a duplicate-label CRUD entry.
 	byName := make(map[string]string, len(persistedLabelIDs)+len(existingLabels))
 	// Primary: persisted FKs from prior pulls. Survives incremental
 	// pulls that don't echo labels back.
@@ -1878,7 +1943,7 @@ func resolveLabelsForTags(tags []string, persistedLabelIDs map[string]string, ex
 		if mainID == "" {
 			continue
 		}
-		byName[name] = mainID
+		byName[strings.ToLower(name)] = mainID
 	}
 	// Secondary: this pull's labels. Overlay so a label whose MainID
 	// has changed (rare but possible — Keep can re-issue) gets
@@ -1891,11 +1956,12 @@ func resolveLabelsForTags(tags []string, persistedLabelIDs map[string]string, ex
 		if l.MainID == "" {
 			continue
 		}
-		byName[l.Name] = l.MainID
+		byName[strings.ToLower(l.Name)] = l.MainID
 	}
 	listLabelIDs = make([]string, 0, len(tags))
 	for _, tag := range tags {
-		if existingID, ok := byName[tag]; ok {
+		key := strings.ToLower(tag)
+		if existingID, ok := byName[key]; ok {
 			listLabelIDs = append(listLabelIDs, existingID)
 			continue
 		}
@@ -1913,7 +1979,7 @@ func resolveLabelsForTags(tags []string, persistedLabelIDs map[string]string, ex
 		// Cache the just-created mapping so a duplicate tag in the
 		// input list reuses the same MainID rather than creating
 		// another (Keep tolerates duplicates but we'd rather not).
-		byName[tag] = newID
+		byName[key] = newID
 	}
 	return labelPush, listLabelIDs, nil
 }
@@ -2116,7 +2182,16 @@ func (c *Connector) MigrateBindingFingerprints(ctx context.Context, profileID wi
 	// (trashed/deleted items represent items Keep removed; the
 	// "drop missing" branch handles them).
 	keepByServerID := make(map[string]protocol.Node, len(pull.Nodes))
+	// Capture the LIST node's client-side `id` so the migration can
+	// persist it alongside the rebaseline. Without this, the first
+	// post-migration push would reuse serverID for both `id` and
+	// `serverId` and Keep 500s.
+	var listClientIDFromPull string
 	for _, n := range pull.Nodes {
+		if n.Type == protocol.NodeTypeList && n.ServerID == preBinding.KeepNoteID {
+			listClientIDFromPull = n.ID
+			continue
+		}
 		if n.Type != protocol.NodeTypeListItem {
 			continue
 		}
@@ -2294,6 +2369,12 @@ func (c *Connector) MigrateBindingFingerprints(ctx context.Context, profileID wi
 			labelIDs[l.Name] = l.MainID
 		}
 		binding.LabelIDs = labelIDs
+		// Persist the LIST node's client-side `id` captured from the
+		// migration's full pull. Future outbound LIST updates send
+		// `id != serverId`; without this, Keep 500s on every push.
+		if listClientIDFromPull != "" {
+			binding.KeepNoteClientID = listClientIDFromPull
+		}
 		// Clear the cursor so the FIRST post-migration sync performs a
 		// full (non-incremental) pull. This is essential: the class-4
 		// hard-delete pass fires only on full pulls, and the first

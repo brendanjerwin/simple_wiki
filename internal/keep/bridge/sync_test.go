@@ -249,14 +249,17 @@ func freshConnector(profileID wikipage.PageIdentifier, page, listName, keepNoteI
 	}
 
 	// Default test bindings are MigratedFingerprints=true so the sync
-	// engine's pre-pull migration gate doesn't reject them. Tests that
-	// pin legacy/un-migrated behavior override this on the saved state.
+	// engine's pre-pull migration gate doesn't reject them, AND have a
+	// non-empty KeepNoteClientID so the self-heal block in SyncToKeep
+	// doesn't drop their cursor. Tests that pin legacy/un-migrated or
+	// missing-client-id behavior override these on the saved state.
 	state := bridge.ConnectorState{
 		Email:       "test@example.com",
 		MasterToken: "token",
 		Bindings: []bridge.Binding{{
 			Page: page, ListName: listName,
 			KeepNoteID: keepNoteID, KeepNoteTitle: listName,
+			KeepNoteClientID:     "list-client-" + keepNoteID,
 			BoundAt:              time.Now().UTC(),
 			MigratedFingerprints: true,
 			ItemIDMap:            itemBindings,
@@ -3904,6 +3907,430 @@ var _ = Describe("MigrateBindingFingerprints — seeds LabelIDs from full pull",
 			Expect(err).ToNot(HaveOccurred())
 			Expect(found).To(BeTrue())
 			Expect(b.LabelIDs).NotTo(HaveKey("tombstoned"))
+		})
+	})
+})
+
+// LIST node id-vs-serverId guard. Keep returns stage3 HTTP 500
+// "Unknown Error" when the outbound LIST node has id == serverId.
+// KeepNoteClientID is captured at bind / bootstrap / migration time
+// and on every full pull's LIST node, then used as the outbound
+// LIST node's `id` while KeepNoteID stays as the `serverId`.
+var _ = Describe("Outbound LIST node id-vs-serverId guard", func() {
+	const (
+		profile  = wikipage.PageIdentifier("profile_test_list_idvsserver")
+		page     = "shopping"
+		listName = "Grocery"
+		listSrv  = "list-server-1"
+	)
+
+	var (
+		ctx context.Context
+		c   *bridge.Connector
+		kc  *fakeKeepClient
+		chk *fakeChecklist
+	)
+
+	BeforeEach(func() {
+		ctx = context.Background()
+	})
+
+	// outbound_list_node_uses_client_id_not_server_id — pre-populate
+	// KeepNoteClientID on the binding; force a label push (page tag
+	// new to Keep) so the LIST node rides along; assert the LIST
+	// node's id and serverId are DIFFERENT.
+	Describe("outbound_list_node_uses_client_id_not_server_id", func() {
+		BeforeEach(func() {
+			var store *fakeStore
+			c, store, kc, chk = freshConnector(profile, page, listName, listSrv, map[string]string{
+				"uid-A": "srv-A",
+			})
+			bs := bridge.NewBindingStore(store)
+			st, loadErr := bs.LoadState(profile)
+			Expect(loadErr).ToNot(HaveOccurred())
+			st.Bindings[0].KeepNoteClientID = "list-client-abc"
+			Expect(bs.SaveState(profile, st)).To(Succeed())
+
+			pageID := wikipage.PageIdentifier(page)
+			Expect(store.WriteFrontMatter(pageID, wikipage.FrontMatter{
+				"tags": []any{"household"},
+			})).To(Succeed())
+
+			chk.items = []*apiv1.ChecklistItem{
+				{Uid: "uid-A", Text: "Apples", SortOrder: 1000, UpdatedAt: recentTime()},
+			}
+			kc.pullState = protocol.ChangesResponse{
+				ToVersion: "v0",
+				Nodes: []protocol.Node{
+					keepItem("srv-A", "client-A", listSrv, "Apples", false, "1000"),
+				},
+				Labels: []protocol.LabelEntry{},
+			}
+			Expect(c.SyncToKeep(ctx, profile, page, listName)).To(Succeed())
+		})
+
+		It("should use KeepNoteClientID as the LIST node's id", func() {
+			var listNode *protocol.Node
+			for i, n := range kc.lastPush().Nodes {
+				if n.Type == protocol.NodeTypeList {
+					listNode = &kc.lastPush().Nodes[i]
+					break
+				}
+			}
+			Expect(listNode).NotTo(BeNil())
+			Expect(listNode.ID).To(Equal("list-client-abc"))
+		})
+
+		It("should use KeepNoteID as the LIST node's serverId", func() {
+			var listNode *protocol.Node
+			for i, n := range kc.lastPush().Nodes {
+				if n.Type == protocol.NodeTypeList {
+					listNode = &kc.lastPush().Nodes[i]
+					break
+				}
+			}
+			Expect(listNode).NotTo(BeNil())
+			Expect(listNode.ServerID).To(Equal(listSrv))
+		})
+
+		It("should send id and serverId as DIFFERENT values", func() {
+			var listNode *protocol.Node
+			for i, n := range kc.lastPush().Nodes {
+				if n.Type == protocol.NodeTypeList {
+					listNode = &kc.lastPush().Nodes[i]
+					break
+				}
+			}
+			Expect(listNode).NotTo(BeNil())
+			Expect(listNode.ID).NotTo(Equal(listNode.ServerID))
+		})
+	})
+
+	// outbound_self_heals_when_KeepNoteClientID_is_empty — start with
+	// empty KeepNoteClientID and an incremental pull that doesn't
+	// echo the LIST node. The self-heal must clear KeepCursor so the
+	// next tick performs a full pull (which always includes the LIST
+	// node) without operator intervention.
+	Describe("outbound_self_heals_when_KeepNoteClientID_is_empty", func() {
+		BeforeEach(func() {
+			var store *fakeStore
+			c, store, kc, chk = freshConnector(profile, page, listName, listSrv, map[string]string{
+				"uid-A": "srv-A",
+			})
+			bs := bridge.NewBindingStore(store)
+			st, loadErr := bs.LoadState(profile)
+			Expect(loadErr).ToNot(HaveOccurred())
+			// Simulate a legacy binding: empty KeepNoteClientID, prior
+			// cursor that would otherwise advance on this pull.
+			st.Bindings[0].KeepNoteClientID = ""
+			st.Bindings[0].KeepCursor = "v-prior"
+			Expect(bs.SaveState(profile, st)).To(Succeed())
+
+			chk.items = []*apiv1.ChecklistItem{
+				{Uid: "uid-A", Text: "Apples", SortOrder: 1000, UpdatedAt: recentTime()},
+			}
+			// Incremental pull with NO LIST node — the realistic
+			// post-cursor steady state.
+			kc.pullState = protocol.ChangesResponse{
+				ToVersion:   "v-after",
+				Incremental: true,
+				Nodes: []protocol.Node{
+					keepItem("srv-A", "client-A", listSrv, "Apples", false, "1000"),
+				},
+			}
+			Expect(c.SyncToKeep(ctx, profile, page, listName)).To(Succeed())
+		})
+
+		It("should clear KeepCursor so the next tick pulls fully", func() {
+			b, found, err := c.FindBinding(ctx, profile, page, listName)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(found).To(BeTrue())
+			Expect(b.KeepCursor).To(Equal(""))
+		})
+	})
+
+	// outbound_list_node_id_captured_from_full_pull — when the pull
+	// DOES include the LIST node (typical of a full pull), the
+	// self-heal captures its `id` and persists KeepNoteClientID.
+	Describe("outbound_list_node_id_captured_from_full_pull", func() {
+		BeforeEach(func() {
+			var store *fakeStore
+			c, store, kc, chk = freshConnector(profile, page, listName, listSrv, map[string]string{
+				"uid-A": "srv-A",
+			})
+			bs := bridge.NewBindingStore(store)
+			st, loadErr := bs.LoadState(profile)
+			Expect(loadErr).ToNot(HaveOccurred())
+			st.Bindings[0].KeepNoteClientID = ""
+			Expect(bs.SaveState(profile, st)).To(Succeed())
+
+			chk.items = []*apiv1.ChecklistItem{
+				{Uid: "uid-A", Text: "Apples", SortOrder: 1000, UpdatedAt: recentTime()},
+			}
+			kc.pullState = protocol.ChangesResponse{
+				ToVersion: "v0",
+				Nodes: []protocol.Node{
+					{
+						Kind:     "notes#node",
+						ID:       "list-client-from-pull",
+						ServerID: listSrv,
+						Type:     protocol.NodeTypeList,
+						Title:    listName,
+					},
+					keepItem("srv-A", "client-A", listSrv, "Apples", false, "1000"),
+				},
+			}
+			Expect(c.SyncToKeep(ctx, profile, page, listName)).To(Succeed())
+		})
+
+		It("should capture the LIST node's client-side id into KeepNoteClientID", func() {
+			b, found, err := c.FindBinding(ctx, profile, page, listName)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(found).To(BeTrue())
+			Expect(b.KeepNoteClientID).To(Equal("list-client-from-pull"))
+		})
+	})
+})
+
+// Bind seeds KeepNoteClientID from the bind-time pull's LIST node so
+// the very first post-bind sync's outbound LIST node carries `id !=
+// serverId`. Without this, Bind followed by an immediate sync 500s.
+var _ = Describe("Bind — seeds KeepNoteClientID from initial pull", func() {
+	const (
+		profile  = wikipage.PageIdentifier("profile_test_bind_clientid")
+		page     = "shopping"
+		listName = "Grocery"
+		listSrv  = "list-server-id"
+	)
+
+	var (
+		ctx context.Context
+		c   *bridge.Connector
+		kc  *fakeKeepClient
+	)
+
+	BeforeEach(func() {
+		ctx = context.Background()
+	})
+
+	Describe("bind_seeds_KeepNoteClientID_from_pull", func() {
+		var b bridge.Binding
+
+		BeforeEach(func() {
+			var store *fakeStore
+			c, store, kc, _ = freshConnector(profile, page, listName, listSrv, map[string]string{})
+			bs := bridge.NewBindingStore(store)
+			st, loadErr := bs.LoadState(profile)
+			Expect(loadErr).ToNot(HaveOccurred())
+			st.Bindings = nil
+			Expect(bs.SaveState(profile, st)).To(Succeed())
+
+			kc.pullState = protocol.ChangesResponse{
+				ToVersion: "v-bind-seed",
+				Nodes: []protocol.Node{
+					{
+						Kind:     "notes#node",
+						ID:       "list-client-abc",
+						ServerID: listSrv,
+						Type:     protocol.NodeTypeList,
+						Title:    listName,
+					},
+				},
+			}
+
+			var bindErr error
+			b, bindErr = c.Bind(ctx, profile, page, listName, listSrv, nil)
+			Expect(bindErr).ToNot(HaveOccurred())
+		})
+
+		It("should populate KeepNoteClientID from the LIST node in the pull", func() {
+			Expect(b.KeepNoteClientID).To(Equal("list-client-abc"))
+		})
+
+		It("should NOT equal KeepNoteID (the server-assigned id)", func() {
+			Expect(b.KeepNoteClientID).NotTo(Equal(b.KeepNoteID))
+		})
+	})
+})
+
+// Migration seeds KeepNoteClientID from the full migration pull's LIST
+// node. Legacy bindings must end up with a populated KeepNoteClientID
+// after the migration job runs so the first post-migration push
+// doesn't 500.
+var _ = Describe("MigrateBindingFingerprints — seeds KeepNoteClientID from full pull", func() {
+	const (
+		profile  = wikipage.PageIdentifier("profile_test_migrate_clientid")
+		page     = "shopping"
+		listName = "Grocery"
+		listSrv  = "list-server-id"
+	)
+
+	var (
+		ctx context.Context
+		c   *bridge.Connector
+		kc  *fakeKeepClient
+		chk *fakeChecklist
+	)
+
+	BeforeEach(func() {
+		ctx = context.Background()
+	})
+
+	Describe("migration_seeds_KeepNoteClientID_from_full_pull", func() {
+		BeforeEach(func() {
+			var store *fakeStore
+			c, store, kc, chk = freshConnector(profile, page, listName, listSrv, map[string]string{
+				"uid-A": "srv-A",
+			})
+			chk.items = []*apiv1.ChecklistItem{
+				{Uid: "uid-A", Text: "Apples", SortOrder: 1000, UpdatedAt: recentTime()},
+			}
+
+			bs := bridge.NewBindingStore(store)
+			st, loadErr := bs.LoadState(profile)
+			Expect(loadErr).ToNot(HaveOccurred())
+			st.Bindings[0].MigratedFingerprints = false
+			st.Bindings[0].KeepNoteClientID = ""
+			Expect(bs.SaveState(profile, st)).To(Succeed())
+
+			node := keepItem("srv-A", "client-A", listSrv, "Apples", false, "1000")
+			node.BaseVersion = "v-base-A"
+			kc.pullState = protocol.ChangesResponse{
+				ToVersion:   "v-after-migration",
+				Incremental: false,
+				Nodes: []protocol.Node{
+					{
+						Kind:     "notes#node",
+						ID:       "list-client-from-migration",
+						ServerID: listSrv,
+						Type:     protocol.NodeTypeList,
+						Title:    listName,
+					},
+					node,
+				},
+			}
+			Expect(c.MigrateBindingFingerprints(ctx, profile, page, listName)).To(Succeed())
+		})
+
+		It("should capture the LIST node's client-side id into KeepNoteClientID", func() {
+			b, found, err := c.FindBinding(ctx, profile, page, listName)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(found).To(BeTrue())
+			Expect(b.KeepNoteClientID).To(Equal("list-client-from-migration"))
+		})
+	})
+})
+
+// Label name lookup must be case-insensitive. The wiki page's tag
+// (e.g. `household`) is typically lowercase; Keep stores the user's
+// canonical capitalization (e.g. "Household"). A case-sensitive
+// lookup misses the FK and re-mints a fresh MainID every tick — the
+// "duplicate label per push" bug observed in production.
+var _ = Describe("resolveLabelsForTags — case-insensitive name lookup", func() {
+	const (
+		profile  = wikipage.PageIdentifier("profile_test_label_case")
+		page     = "shopping"
+		listName = "Grocery"
+		listSrv  = "list-server-id"
+	)
+
+	var (
+		ctx context.Context
+		c   *bridge.Connector
+		kc  *fakeKeepClient
+		chk *fakeChecklist
+	)
+
+	BeforeEach(func() {
+		ctx = context.Background()
+	})
+
+	// label_lookup_is_case_insensitive — persisted MainID stored under
+	// "Household" must be resolved when the page tag is `household`.
+	Describe("label_lookup_is_case_insensitive", func() {
+		BeforeEach(func() {
+			var store *fakeStore
+			c, store, kc, chk = freshConnector(profile, page, listName, listSrv, map[string]string{
+				"uid-A": "srv-A",
+			})
+			pageID := wikipage.PageIdentifier(page)
+			Expect(store.WriteFrontMatter(pageID, wikipage.FrontMatter{
+				"tags": []any{"household"},
+			})).To(Succeed())
+
+			chk.items = []*apiv1.ChecklistItem{
+				{Uid: "uid-A", Text: "Apples", SortOrder: 1000, UpdatedAt: recentTime()},
+			}
+
+			bs := bridge.NewBindingStore(store)
+			st, loadErr := bs.LoadState(profile)
+			Expect(loadErr).ToNot(HaveOccurred())
+			// Persisted under Keep's canonical capitalization.
+			st.Bindings[0].LabelIDs = map[string]string{
+				"Household": "stable-mid-1",
+			}
+			Expect(bs.SaveState(profile, st)).To(Succeed())
+
+			// Incremental pull with no labels — the realistic steady
+			// state where the persisted FK is the only source.
+			kc.pullState = protocol.ChangesResponse{
+				ToVersion:   "v-after",
+				Incremental: true,
+				Labels:      nil,
+			}
+			Expect(c.SyncToKeep(ctx, profile, page, listName)).To(Succeed())
+		})
+
+		It("should NOT mint a fresh label CRUD entry for the lowercase tag", func() {
+			Expect(kc.lastPush().Labels).To(BeEmpty())
+		})
+
+		It("should reference the persisted MainID on the LIST node's labelIds", func() {
+			var listNode *protocol.Node
+			for i, n := range kc.lastPush().Nodes {
+				if n.Type == protocol.NodeTypeList {
+					listNode = &kc.lastPush().Nodes[i]
+					break
+				}
+			}
+			Expect(listNode).NotTo(BeNil())
+			Expect(listNode.LabelIDs).To(ConsistOf("stable-mid-1"))
+		})
+	})
+
+	// label_persisted_with_pull_canonical_case — the persistence loop
+	// preserves Keep's canonical capitalization. Lookup normalizes,
+	// storage doesn't.
+	Describe("label_persisted_with_pull_canonical_case", func() {
+		BeforeEach(func() {
+			var store *fakeStore
+			c, store, kc, chk = freshConnector(profile, page, listName, listSrv, map[string]string{
+				"uid-A": "srv-A",
+			})
+			pageID := wikipage.PageIdentifier(page)
+			Expect(store.WriteFrontMatter(pageID, wikipage.FrontMatter{
+				"tags": []any{"household"},
+			})).To(Succeed())
+
+			chk.items = []*apiv1.ChecklistItem{
+				{Uid: "uid-A", Text: "Apples", SortOrder: 1000, UpdatedAt: recentTime()},
+			}
+
+			kc.pullState = protocol.ChangesResponse{
+				ToVersion:   "v-after",
+				Incremental: true,
+				Labels: []protocol.LabelEntry{
+					{MainID: "abc", Name: "Household"},
+				},
+			}
+			Expect(c.SyncToKeep(ctx, profile, page, listName)).To(Succeed())
+		})
+
+		It("should persist the label under Keep's canonical capitalization", func() {
+			b, found, err := c.FindBinding(ctx, profile, page, listName)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(found).To(BeTrue())
+			Expect(b.LabelIDs).To(HaveKeyWithValue("Household", "abc"))
 		})
 	})
 })

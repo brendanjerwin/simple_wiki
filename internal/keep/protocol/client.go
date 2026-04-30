@@ -54,8 +54,15 @@ type ListItemSpec struct {
 // IDs are index-aligned with the input items slice. The mapping is the
 // thread an eventual sync engine pulls on to push subsequent edits to
 // the right Keep nodes.
+//
+// ListClientID is the client-generated `id` for the LIST node — the
+// counterpart to ListServerID's server-assigned `serverId`. Outbound
+// LIST node updates MUST send the two as DIFFERENT values; Keep returns
+// stage3 HTTP 500 "Unknown Error" if `id == serverId`. Callers persist
+// this alongside the binding so subsequent pushes carry the same `id`.
 type CreateListResult struct {
 	ListServerID  string
+	ListClientID  string
 	ItemServerIDs []string
 }
 
@@ -135,6 +142,7 @@ func (c *KeepClient) CreateListWithItems(ctx context.Context, title string, item
 	}
 
 	result := CreateListResult{
+		ListClientID:  listClientID,
 		ItemServerIDs: make([]string, len(items)),
 	}
 	for _, n := range resp.Nodes {

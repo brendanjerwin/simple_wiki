@@ -38,10 +38,23 @@ import (
 // BoundAt is informational-only — used by the KeepConnect macro to
 // render "bound on YYYY-MM-DD"; not consulted by sync logic.
 type Binding struct {
-	Page                 string
-	ListName             string
-	KeepNoteID           string
-	KeepNoteTitle        string
+	Page          string
+	ListName      string
+	KeepNoteID    string
+	KeepNoteTitle string
+	// KeepNoteClientID is the LIST node's client-generated stable
+	// identifier (the `id` field on Keep's wire format), distinct from
+	// KeepNoteID which is the server-assigned `serverId`. Outbound LIST
+	// node updates MUST send `id != serverId` — Keep returns stage3
+	// HTTP 500 "Unknown Error" on `id == serverId`. Captured at:
+	//   1. Bind time, from seedIDMapFromExistingList's pull walking the
+	//      LIST node itself.
+	//   2. Bootstrap time, from CreateListWithItems's generated client_id.
+	//   3. Migration time, from MigrateBindingFingerprints's full pull.
+	// Empty for legacy bindings until first observed; a self-heal in
+	// SyncToKeep clears KeepCursor on the empty case to force a full
+	// pull whose LIST node populates this field.
+	KeepNoteClientID     string
 	BoundAt              time.Time
 	KeepCursor           string
 	TruncatedTickStreak  int
@@ -192,10 +205,11 @@ const (
 	pollIntervalSecondsField = "poll_interval_seconds"
 	bindingsField            = "bindings"
 
-	bindingPageField          = "page"
-	bindingListNameField      = "list_name"
-	bindingKeepNoteIDField    = "keep_note_id"
-	bindingKeepNoteTitleField = "keep_note_title"
+	bindingPageField             = "page"
+	bindingListNameField         = "list_name"
+	bindingKeepNoteIDField       = "keep_note_id"
+	bindingKeepNoteTitleField    = "keep_note_title"
+	bindingKeepNoteClientIDField = "keep_note_client_id"
 	bindingBoundAtField              = "bound_at"
 	bindingKeepCursorField           = "keep_cursor"
 	bindingTruncatedTickStreakField  = "truncated_tick_streak"
@@ -476,6 +490,7 @@ func decodeBindings(raw any) ([]Binding, error) {
 			ListName:             getString(m, bindingListNameField),
 			KeepNoteID:           getString(m, bindingKeepNoteIDField),
 			KeepNoteTitle:        getString(m, bindingKeepNoteTitleField),
+			KeepNoteClientID:     getString(m, bindingKeepNoteClientIDField),
 			BoundAt:              boundAt,
 			KeepCursor:           getString(m, bindingKeepCursorField),
 			TruncatedTickStreak:  getInt(m, bindingTruncatedTickStreakField),
@@ -531,6 +546,9 @@ func encodeBindings(bindings []Binding) []any {
 		}
 		if b.KeepNoteTitle != "" {
 			entry[bindingKeepNoteTitleField] = b.KeepNoteTitle
+		}
+		if b.KeepNoteClientID != "" {
+			entry[bindingKeepNoteClientIDField] = b.KeepNoteClientID
 		}
 		if !b.BoundAt.IsZero() {
 			entry[bindingBoundAtField] = b.BoundAt.UTC().Format(time.RFC3339)
