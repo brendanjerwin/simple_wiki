@@ -478,6 +478,15 @@ const noResponseStatusCode = "no_response_status"
 // missing) counts as failure for the purposes of synced_fp gating.
 const writeResultStatusSuccess = "SUCCESS"
 
+// writeResultStatusKeepDeletedOnPush is the synthetic LastFailureCode
+// for the case where our push for a LIST_ITEM came back with the same
+// item tombstoned in response.Nodes — Keep silently rejected the
+// update by deleting it server-side (observed live when an UPDATE
+// without baseVersion races concurrent edits, or on a few other edge
+// cases). Distinct from `noResponseStatusCode` because the connector
+// has positive evidence Keep saw the push and chose to delete.
+const writeResultStatusKeepDeletedOnPush = "keep_deleted_on_push"
+
 // ErrChecklistReaderUnavailable is returned by SyncToKeep when the
 // connector wasn't given a ChecklistReader at startup. Indicates a
 // wiring bug in bootstrap; callers should fail loudly so it gets
@@ -1079,11 +1088,46 @@ func (c *Connector) SyncToKeep(ctx context.Context, profileID wikipage.PageIdent
 		}
 	}
 	// Build a clientID → status map so the per-uid walk below can
-	// look up Keep's verdict in O(1). Anything not SUCCESS (including
-	// missing) counts as failure.
+	// look up Keep's verdict in O(1). Note: Keep emits writeResults
+	// ONLY for top-level NOTE/LIST nodes — LIST_ITEM children are
+	// NEVER in writeResults regardless of whether the push succeeded.
+	// Verified live: every successful production push response has a
+	// writeResults array containing exactly one entry (the LIST node)
+	// no matter how many LIST_ITEMs were pushed. So for LIST_ITEMs
+	// we must infer success from response.Nodes echo instead.
 	statusByClientID := make(map[string]string, len(resp.WriteResults))
 	for _, wr := range resp.WriteResults {
 		statusByClientID[wr.ID] = wr.Status
+	}
+	// echoedAliveByClientID / echoedAliveByServerID: a LIST_ITEM is
+	// echoed alive (no Trashed/Deleted timestamp) if Keep accepted
+	// the push and the item still exists. echoedDeletedByClientID:
+	// Keep rejected our update by tombstoning the item — that's a
+	// failure, equivalent to a non-SUCCESS writeResults entry.
+	echoedAliveByClientID := make(map[string]bool, len(resp.Nodes))
+	echoedAliveByServerID := make(map[string]bool, len(resp.Nodes))
+	echoedDeletedByClientID := make(map[string]bool, len(resp.Nodes))
+	echoedDeletedByServerID := make(map[string]bool, len(resp.Nodes))
+	for _, n := range resp.Nodes {
+		if n.Type != protocol.NodeTypeListItem {
+			continue
+		}
+		alive := n.Timestamps.Trashed.IsZero() && n.Timestamps.Deleted.IsZero()
+		if alive {
+			if n.ID != "" {
+				echoedAliveByClientID[n.ID] = true
+			}
+			if n.ServerID != "" {
+				echoedAliveByServerID[n.ServerID] = true
+			}
+		} else {
+			if n.ID != "" {
+				echoedDeletedByClientID[n.ID] = true
+			}
+			if n.ServerID != "" {
+				echoedDeletedByServerID[n.ServerID] = true
+			}
+		}
 	}
 	// Advance synced_fp + reset failure state for SUCCESS uids; bump
 	// PushFailureCount + set LastFailureCode + populate NextAttemptAt
@@ -1101,7 +1145,33 @@ func (c *Connector) SyncToKeep(ctx context.Context, profileID wikipage.PageIdent
 			// will treat it as fresh again (idempotent).
 			continue
 		}
-		if hasStatus && status == writeResultStatusSuccess {
+		// Success/failure decision tree:
+		//  - writeResults SUCCESS → success
+		//  - writeResults non-SUCCESS → failure (Keep explicitly rejected)
+		//  - response echoes the node alive (by clientID or by the
+		//    serverID we sent / now hold) → success (Keep accepted but
+		//    didn't emit a writeResults entry, the production-normal
+		//    path for LIST_ITEMs)
+		//  - response echoes the node tombstoned → failure
+		//  - neither in writeResults nor echoed → failure (we have no
+		//    evidence Keep accepted the push)
+		echoedAlive := echoedAliveByClientID[clientID] || echoedAliveByServerID[ib.ServerID]
+		echoedDeleted := echoedDeletedByClientID[clientID] || echoedDeletedByServerID[ib.ServerID]
+		isSuccess := false
+		failureCode := ""
+		switch {
+		case hasStatus && status == writeResultStatusSuccess:
+			isSuccess = true
+		case hasStatus:
+			failureCode = status
+		case echoedAlive && !echoedDeleted:
+			isSuccess = true
+		case echoedDeleted:
+			failureCode = writeResultStatusKeepDeletedOnPush
+		default:
+			failureCode = noResponseStatusCode
+		}
+		if isSuccess {
 			ib.SyncedText = fp.Text
 			ib.SyncedChecked = fp.Checked
 			ib.SyncedSortValue = fp.SortValue
@@ -1112,11 +1182,7 @@ func (c *Connector) SyncToKeep(ctx context.Context, profileID wikipage.PageIdent
 			getMetrics().recordPushAttempt(ctx, profileID, page, listName, PushAttemptStatusSuccess, 1)
 		} else {
 			ib.PushFailureCount++
-			if hasStatus {
-				ib.LastFailureCode = status
-			} else {
-				ib.LastFailureCode = noResponseStatusCode
-			}
+			ib.LastFailureCode = failureCode
 			ib.NextAttemptAt = now.Add(pushFailureBackoff(ib.PushFailureCount))
 			getMetrics().recordPushAttempt(ctx, profileID, page, listName, PushAttemptStatusFailure, 1)
 		}

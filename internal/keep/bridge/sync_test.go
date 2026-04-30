@@ -2638,6 +2638,50 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 		})
 	})
 
+	// push_succeeds_when_response_echoes_alive_but_writeResults_omits_LIST_ITEM —
+	// the production-true Keep behavior: writeResults contains ONLY the LIST
+	// node entry; LIST_ITEM acceptance is signaled exclusively by an alive
+	// echo in response.Nodes. Verified live: every successful push response
+	// has a single writeResults entry (the LIST node), regardless of how
+	// many LIST_ITEMs were pushed. The connector must infer LIST_ITEM
+	// success from the echo, not from writeResults presence — otherwise
+	// every wiki-add cycles failure → backoff → eventual dead-letter even
+	// though Keep accepted the push.
+	Describe("push_succeeds_when_response_echoes_alive_but_writeResults_omits_LIST_ITEM", func() {
+		BeforeEach(func() {
+			c, _, kc, chk = freshConnector(profile, page, listName, listSrv, map[string]string{})
+			chk.items = []*apiv1.ChecklistItem{
+				{Uid: "uid-NEW", Text: "wiki added", SortOrder: 14000, UpdatedAt: recentTime()},
+			}
+			kc.pullState = protocol.ChangesResponse{
+				ToVersion: "v0",
+				Nodes:     []protocol.Node{},
+			}
+			realKeep := &realKeepBehaviorPushClient{inner: kc}
+			c.SetClientBuilder(func(_ string) bridge.KeepClient { return realKeep })
+			Expect(c.SyncToKeep(ctx, profile, page, listName)).To(Succeed())
+		})
+
+		It("should advance SyncedText for the wiki-added item", func() {
+			b, found, ferr := c.FindBinding(ctx, profile, page, listName)
+			Expect(ferr).ToNot(HaveOccurred())
+			Expect(found).To(BeTrue())
+			ib := b.ItemIDMap["uid-NEW"]
+			Expect(ib.SyncedText).To(Equal("wiki added"),
+				"missing writeResults but alive echo must count as success — otherwise wiki-adds enter a retry-loop and dead-letter even though Keep accepted them")
+		})
+
+		It("should NOT increment PushFailureCount", func() {
+			b, _, _ := c.FindBinding(ctx, profile, page, listName)
+			Expect(b.ItemIDMap["uid-NEW"].PushFailureCount).To(Equal(0))
+		})
+
+		It("should NOT set LastFailureCode", func() {
+			b, _, _ := c.FindBinding(ctx, profile, page, listName)
+			Expect(b.ItemIDMap["uid-NEW"].LastFailureCode).To(BeEmpty())
+		})
+	})
+
 	// push_partial_failure_does_not_advance_synced_fp_for_failed_item — task #78.
 	// Two items pushed; Keep reports SUCCESS for the first and ERROR for
 	// the second. The successful item's synced_fp advances and its
@@ -3090,6 +3134,59 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 		})
 	})
 })
+
+// realKeepBehaviorPushClient mirrors the production Keep server: on a
+// push, the response echoes pushed LIST_ITEMs alive (with assigned
+// ServerID) in `nodes`, but `writeResults` ONLY contains the LIST
+// node's status — LIST_ITEM status is never echoed in writeResults.
+// Verified live: every successful production push has a writeResults
+// array with exactly one entry, the LIST node, regardless of how many
+// LIST_ITEMs were in the request. The connector must therefore infer
+// LIST_ITEM success from response.Nodes echo, not from writeResults
+// presence.
+type realKeepBehaviorPushClient struct {
+	inner *fakeKeepClient
+}
+
+func (e *realKeepBehaviorPushClient) Changes(ctx context.Context, req protocol.ChangesRequest) (protocol.ChangesResponse, error) {
+	if len(req.Nodes) == 0 && len(req.Labels) == 0 {
+		return e.inner.Changes(ctx, req)
+	}
+	_, err := e.inner.Changes(ctx, req)
+	if err != nil {
+		return protocol.ChangesResponse{}, err
+	}
+	echoed := make([]protocol.Node, 0, len(req.Nodes))
+	writeResults := make([]protocol.NodeWriteResult, 0, 1)
+	for _, n := range req.Nodes {
+		echo := n
+		if echo.Type == protocol.NodeTypeListItem && echo.ServerID == "" {
+			echo.ServerID = "echoed-" + n.ID
+		}
+		echoed = append(echoed, echo)
+		// Production Keep emits writeResults ONLY for LIST/NOTE,
+		// not for LIST_ITEM children.
+		if n.Type == protocol.NodeTypeList || n.Type == protocol.NodeTypeNote {
+			writeResults = append(writeResults, protocol.NodeWriteResult{
+				ID:     n.ID,
+				Status: "SUCCESS",
+			})
+		}
+	}
+	return protocol.ChangesResponse{
+		ToVersion:    "v-after-push",
+		Nodes:        echoed,
+		WriteResults: writeResults,
+	}, nil
+}
+
+func (e *realKeepBehaviorPushClient) CreateList(ctx context.Context, title string) (string, error) {
+	return e.inner.CreateList(ctx, title)
+}
+
+func (e *realKeepBehaviorPushClient) CreateListWithItems(ctx context.Context, title string, items []protocol.ListItemSpec) (protocol.CreateListResult, error) {
+	return e.inner.CreateListWithItems(ctx, title, items)
+}
 
 // echoingPushClient wraps fakeKeepClient so that on push, the response
 // echoes back each pushed LIST_ITEM with a server-assigned ServerID
