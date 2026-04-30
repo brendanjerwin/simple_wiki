@@ -1485,29 +1485,34 @@ func (c *Connector) applyInboundFromKeep(ctx context.Context, profileID wikipage
 	// Walk the pull. Each list item produces one decision under the
 	// per-item divergence rule.
 	for _, n := range pull.Nodes {
-		if n.Type != protocol.NodeTypeListItem {
-			continue
-		}
 		serverID := n.ServerID
 		if serverID == "" {
 			continue
 		}
 		isAlive := n.Timestamps.Trashed.IsZero() && n.Timestamps.Deleted.IsZero()
 		uid, knownToWiki := rev[serverID]
-		// Parent filter: alive nodes must declare this binding's
-		// KeepNoteID via ParentID or ParentServerID. Tombstones strip
-		// parent fields entirely (verified live: Keep emits {id,
-		// serverId, timestamps.deleted=epoch+1ms} for soft-deleted
-		// LIST_ITEMs on incremental pulls). Identify tombstones by
-		// ServerID-in-id_map instead — that's our pairing handle.
+		// Type filter: alive nodes must declare LIST_ITEM. Tombstones
+		// strip the type field entirely (verified live: Keep emits
+		// {id, serverId, timestamps.deleted=epoch+1ms} with no type
+		// for soft-deleted LIST_ITEMs on incremental pulls). For
+		// tombstones, identify by ServerID-in-id_map — that's our
+		// pairing handle and tells us this is a LIST_ITEM we care
+		// about.
 		if isAlive {
-			if n.ParentID != binding.KeepNoteID && n.ParentServerID != binding.KeepNoteID {
+			if n.Type != protocol.NodeTypeListItem {
 				continue
 			}
 		} else if !knownToWiki {
 			// Tombstone for a serverID this binding never paired with;
 			// not our concern.
 			continue
+		}
+		// Parent filter for alive nodes (tombstones strip parent
+		// fields). Tombstones already gated above by id_map match.
+		if isAlive {
+			if n.ParentID != binding.KeepNoteID && n.ParentServerID != binding.KeepNoteID {
+				continue
+			}
 		}
 
 		// K trashed/deleted ∧ M=correct → apply delete + drop id_map.

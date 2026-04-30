@@ -599,6 +599,22 @@ func encodeTimestamps(t Timestamps) wireTimestamps {
 
 // --- response decode ------------------------------------------------------
 
+// isTombstoneTimestamp reports whether a wire-format timestamp string
+// represents a non-zero deletion marker. Keep uses `1970-01-01T00:00:00.000Z`
+// as the "no timestamp" sentinel; anything else (including `…00.001Z`,
+// the production deletion marker) means the timestamp is meaningfully set.
+// Used by the decoder to identify tombstones whose `type` field is
+// missing — they must still be passed through.
+func isTombstoneTimestamp(s string) bool {
+	if s == "" {
+		return false
+	}
+	if s == "1970-01-01T00:00:00.000Z" {
+		return false
+	}
+	return true
+}
+
 // recognizedNodeTypes is the set of NodeTypes the wiki actively models.
 // Decoder filters anything else out without erroring (forward-compat with
 // future Keep node types).
@@ -624,8 +640,17 @@ func decodeChangesResponse(w wireChangesResponse) (ChangesResponse, error) {
 	for _, wn := range w.Nodes {
 		nt := NodeType(wn.Type)
 		if _, ok := recognizedNodeTypes[nt]; !ok {
-			// Unknown node type: skip silently (forward compatibility).
-			continue
+			// Unknown / missing type: only accept if this is a
+			// tombstone (timestamps.deleted or timestamps.trashed
+			// non-epoch). Verified live: Keep emits LIST_ITEM
+			// tombstones with NO `type` field at all — only id,
+			// serverId, and timestamps.deleted set. Without this
+			// pass-through, the decoder silently drops them and
+			// the connector never learns Keep deleted the item.
+			isTombstone := isTombstoneTimestamp(wn.Timestamps.Deleted) || isTombstoneTimestamp(wn.Timestamps.Trashed)
+			if !isTombstone {
+				continue
+			}
 		}
 		n, err := decodeNode(wn)
 		if err != nil {

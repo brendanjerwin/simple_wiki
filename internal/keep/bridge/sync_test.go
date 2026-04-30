@@ -807,6 +807,49 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 		})
 	})
 
+	// K4-tombstone-no-type — Keep returns the item as a tombstone with
+	// no `type` field at all (production wire shape: only id, serverId,
+	// timestamps.deleted set). Verified live: tombstones for items
+	// Keep deleted server-side carry no type info either.
+	// The bridge must still apply the delete by serverID match.
+	Describe("K4-tombstone-no-type — tombstone with empty Type field", func() {
+		BeforeEach(func() {
+			c, _, kc, chk = freshConnector(profile, page, listName, listSrv, map[string]string{
+				"uid-A": "srv-A",
+			})
+			chk.items = []*apiv1.ChecklistItem{
+				{Uid: "uid-A", Text: "Apples", SortOrder: 1000, UpdatedAt: recentTime()},
+			}
+			tomb := protocol.Node{
+				Kind:     "notes#node",
+				ID:       "client-A",
+				ServerID: "srv-A",
+				// Type left as zero (UnknownNodeType) — production
+				// tombstone shape from Keep.
+				Timestamps: protocol.Timestamps{
+					Deleted: tEpochPlusMs,
+				},
+			}
+			kc.pullState = protocol.ChangesResponse{
+				ToVersion: "v0",
+				Nodes:     []protocol.Node{tomb},
+			}
+			Expect(c.SyncToKeep(ctx, profile, page, listName)).To(Succeed())
+		})
+
+		It("should call DeleteItemForSync for the type-less tombstone", func() {
+			Expect(chk.delCalls).To(HaveLen(1))
+			Expect(chk.delCalls[0].UID).To(Equal("uid-A"))
+		})
+
+		It("should drop the id_map entry", func() {
+			b, found, ferr := c.FindBinding(ctx, profile, page, listName)
+			Expect(ferr).ToNot(HaveOccurred())
+			Expect(found).To(BeTrue())
+			Expect(b.ItemIDMap).NotTo(HaveKey("uid-A"))
+		})
+	})
+
 	// K4-tombstone-empty-parents — Keep returns the item as a tombstone
 	// with Trashed.IsZero, Deleted=epoch+1ms, AND empty ParentID /
 	// ParentServerID (the wire shape Keep emits for a soft-deleted

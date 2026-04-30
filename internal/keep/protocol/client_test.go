@@ -594,5 +594,50 @@ var _ = Describe("decodeChangesResponse WriteResults", func() {
 			Expect(resp.ToVersion).To(Equal("v-after"))
 		})
 	})
+
+	// Verified live: when Keep tombstones a LIST_ITEM, the response
+	// node carries no `type` field at all — only id/serverId and
+	// `timestamps.deleted`. The decoder previously skipped these via
+	// the recognizedNodeTypes filter, hiding the delete from the
+	// connector and leaving the wiki item alive forever.
+	When("the response carries a tombstone with no type field", func() {
+		BeforeEach(func() {
+			responseBody = `{
+			  "kind": "notes#downSync",
+			  "toVersion": "v-after",
+			  "nodes": [
+			    {
+			      "kind": "notes#node",
+			      "id": "client-A",
+			      "serverId": "srv-A",
+			      "timestamps": {
+			        "deleted": "1970-01-01T00:00:00.001Z",
+			        "userEdited": "1970-01-01T00:00:00.000Z"
+			      }
+			    }
+			  ]
+			}`
+			resp, callErr = client.Changes(ctx, protocol.ChangesRequest{})
+		})
+
+		It("should not error", func() {
+			Expect(callErr).ToNot(HaveOccurred())
+		})
+
+		It("should include the tombstone node (not silently drop it)", func() {
+			Expect(resp.Nodes).To(HaveLen(1),
+				"type-less tombstones must pass through the decoder so the connector can apply the delete by serverID match")
+		})
+
+		It("should preserve the ServerID on the decoded tombstone", func() {
+			Expect(resp.Nodes).To(HaveLen(1))
+			Expect(resp.Nodes[0].ServerID).To(Equal("srv-A"))
+		})
+
+		It("should set a non-zero Deleted timestamp on the tombstone", func() {
+			Expect(resp.Nodes).To(HaveLen(1))
+			Expect(resp.Nodes[0].Timestamps.Deleted.IsZero()).To(BeFalse())
+		})
+	})
 })
 
