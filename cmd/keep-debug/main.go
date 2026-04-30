@@ -18,7 +18,7 @@ import (
 )
 
 func main() {
-	cmd := flag.String("cmd", "list", "list | create-and-push | create-with-items | push-item-to-existing | dump-items | dump-write-results | verify-cursor-monotonic | verify-list-push-shape | verify-list-push-shape-broken | verify-listitem-update-shape")
+	cmd := flag.String("cmd", "list", "list | create-and-push | create-with-items | push-item-to-existing | dump-items | dump-write-results | verify-cursor-monotonic | verify-list-push-shape | verify-list-push-shape-broken | verify-listitem-update-shape | verify-list-push-shape-prod-replay | verify-list-push-noop | diagnose-grocery-list-push")
 	title := flag.String("title", "Keep CLI Test", "title for create-and-push / create-with-items")
 	itemsCSV := flag.String("items", "Eggs,Milk,Bread", "comma-separated items for create-with-items")
 	parentID := flag.String("parent-id", "", "for push-item-to-existing: the LIST node's serverID")
@@ -119,6 +119,24 @@ func main() {
 			os.Exit(2)
 		}
 		runVerifyListItemUpdateShape(ctx, email, masterToken, deviceID, keep, *parentID)
+	case "verify-list-push-shape-prod-replay":
+		if *parentID == "" {
+			fmt.Fprintln(os.Stderr, "verify-list-push-shape-prod-replay requires -parent-id=<sandbox-list-serverID>")
+			os.Exit(2)
+		}
+		if *labelName == "" {
+			fmt.Fprintln(os.Stderr, "verify-list-push-shape-prod-replay requires -label-name=<existing-label-name>")
+			os.Exit(2)
+		}
+		runVerifyListPushShapeProdReplay(ctx, email, masterToken, deviceID, *parentID, *labelName)
+	case "verify-list-push-noop":
+		if *parentID == "" {
+			fmt.Fprintln(os.Stderr, "verify-list-push-noop requires -parent-id=<sandbox-list-serverID>")
+			os.Exit(2)
+		}
+		runVerifyListPushNoop(ctx, email, masterToken, deviceID, keep, *parentID)
+	case "diagnose-grocery-list-push":
+		runDiagnoseGroceryListPush(ctx, email, masterToken, deviceID)
 	default:
 		fmt.Fprintln(os.Stderr, "unknown cmd:", *cmd)
 		os.Exit(2)
@@ -1057,6 +1075,814 @@ func runVerifyListItemUpdateShape(ctx context.Context, email, masterToken, devic
 	fmt.Fprintf(os.Stderr, "FAIL: LIST_ITEM update rejected (status=%d, hasError=%v)\n", status, hasError)
 	fmt.Println("FAIL")
 	os.Exit(1)
+}
+
+// runVerifyListPushShapeProdReplay reproduces the EXACT body our
+// production push (after the LIST id≠serverId fix) is sending against
+// Sandbox to figure out what's still 500-ing. Runs three verifiers
+// against the same sandbox list:
+//
+//	A) Empty annotationsGroup, NO userInfo. (Production replay.)
+//	B) Empty annotationsGroup, WITH userInfo.labels echoing the existing
+//	   label.
+//	C) Annotations array preserved VERBATIM from the pull, NO userInfo.
+//
+// All three use the labelIds-only update shape (id=client_id,
+// serverId=server_id). All three target the SAME `targetVersion`
+// captured from a single up-front raw pull, then re-pull between
+// pushes to refresh the cursor. Reports per-verifier HTTP status +
+// hasError so caller can pinpoint the difference between production
+// and the original task #111 verifier.
+//
+// Goes raw HTTP throughout because the typed protocol layer drops the
+// annotations array (gkeepapi treats annotations opaquely; we model
+// only the `kind` sentinel) — and we need to re-emit them verbatim
+// for verifier C.
+func runVerifyListPushShapeProdReplay(ctx context.Context, email, masterToken, deviceID, listServerID, labelMatch string) {
+	fmt.Fprintf(os.Stderr, "=== verify-list-push-shape-prod-replay sandbox=%s label=%q ===\n",
+		listServerID, labelMatch)
+
+	// Step 1: raw pull so we can capture the LIST node's full
+	// annotationsGroup verbatim — the typed decoder discards inner
+	// annotations.
+	pullStatus, pullBody, err := rawKeepPostBody(ctx, email, masterToken, deviceID, buildPullBody("vlps-prod-replay-pull"))
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "FAIL: pull HTTP send:", err)
+		os.Exit(1)
+	}
+	if pullStatus != 200 {
+		fmt.Fprintf(os.Stderr, "FAIL: pull returned status=%d\n", pullStatus)
+		os.Exit(1)
+	}
+	var pullParsed map[string]any
+	if err := json.Unmarshal(pullBody, &pullParsed); err != nil {
+		fmt.Fprintln(os.Stderr, "FAIL: pull decode:", err)
+		os.Exit(1)
+	}
+	toVersion, _ := pullParsed["toVersion"].(string)
+	if toVersion == "" {
+		fmt.Fprintln(os.Stderr, "FAIL: pull missing toVersion")
+		os.Exit(1)
+	}
+
+	// Find the list node + capture its title + raw annotationsGroup.
+	var listClientID, listTitle string
+	var rawAnnotationsGroup any
+	rawNodes, _ := pullParsed["nodes"].([]any)
+	for _, n := range rawNodes {
+		m, _ := n.(map[string]any)
+		if m == nil {
+			continue
+		}
+		if t, _ := m["type"].(string); t != "LIST" {
+			continue
+		}
+		if sid, _ := m["serverId"].(string); sid != listServerID {
+			continue
+		}
+		listClientID, _ = m["id"].(string)
+		listTitle, _ = m["title"].(string)
+		rawAnnotationsGroup = m["annotationsGroup"]
+		break
+	}
+	if listClientID == "" {
+		fmt.Fprintf(os.Stderr, "FAIL: no LIST node with serverId=%s in pull\n", listServerID)
+		os.Exit(1)
+	}
+	fmt.Fprintf(os.Stderr, "✓ found LIST: client_id=%s title=%q\n", listClientID, listTitle)
+	if rawAnnotationsGroup != nil {
+		agJSON, _ := json.Marshal(rawAnnotationsGroup)
+		fmt.Fprintf(os.Stderr, "✓ verbatim annotationsGroup: %s\n", string(agJSON))
+	} else {
+		fmt.Fprintln(os.Stderr, "(no annotationsGroup on the LIST node in pull)")
+	}
+
+	// Find the matching label (case-insensitive) and capture its raw
+	// timestamps for verifier B.
+	var labelMainID, labelCanonicalName string
+	var labelTimestamps any
+	if userInfo, ok := pullParsed["userInfo"].(map[string]any); ok {
+		labels, _ := userInfo["labels"].([]any)
+		want := strings.ToLower(labelMatch)
+		for _, l := range labels {
+			lm, _ := l.(map[string]any)
+			if lm == nil {
+				continue
+			}
+			name, _ := lm["name"].(string)
+			if strings.ToLower(name) == want {
+				labelMainID, _ = lm["mainId"].(string)
+				labelCanonicalName = name
+				labelTimestamps = lm["timestamps"]
+				break
+			}
+		}
+	}
+	if labelMainID == "" {
+		fmt.Fprintf(os.Stderr, "FAIL: no label %q on account\n", labelMatch)
+		os.Exit(1)
+	}
+	fmt.Fprintf(os.Stderr, "✓ found label: name=%q mainID=%s\n", labelCanonicalName, labelMainID)
+
+	// Helper to build the LIST node body with a chosen annotationsGroup
+	// + optional userInfo.
+	buildPush := func(annotationsGroup any, includeUserInfo bool, sessionTag string) []byte {
+		now := time.Now().UTC()
+		nodeMap := map[string]any{
+			"kind":     "notes#node",
+			"id":       listClientID,
+			"serverId": listServerID,
+			"type":     "LIST",
+			"title":    listTitle,
+			"checked":  false,
+			"labelIds": []any{
+				map[string]any{"labelId": labelMainID},
+			},
+			"annotationsGroup": annotationsGroup,
+			"timestamps": map[string]any{
+				"kind":    "notes#timestamps",
+				"updated": now.Format("2006-01-02T15:04:05.000000Z"),
+			},
+		}
+		body := map[string]any{
+			"nodes":           []any{nodeMap},
+			"clientTimestamp": now.Format("2006-01-02T15:04:05.000000Z"),
+			"targetVersion":   toVersion,
+			"requestHeader": map[string]any{
+				"clientSessionId": fmt.Sprintf("s--%d--%s", now.UnixMilli(), sessionTag),
+				"clientPlatform":  "ANDROID",
+				"clientVersion": map[string]any{
+					"major": "9", "minor": "9", "build": "9", "revision": "9",
+				},
+				"capabilities": []any{
+					map[string]any{"type": "NC"}, map[string]any{"type": "PI"},
+					map[string]any{"type": "LB"}, map[string]any{"type": "AN"},
+					map[string]any{"type": "SH"}, map[string]any{"type": "DR"},
+					map[string]any{"type": "TR"}, map[string]any{"type": "IN"},
+					map[string]any{"type": "SNB"}, map[string]any{"type": "MI"},
+					map[string]any{"type": "CO"},
+				},
+			},
+		}
+		if includeUserInfo {
+			labelEntry := map[string]any{
+				"mainId": labelMainID,
+				"name":   labelCanonicalName,
+			}
+			if labelTimestamps != nil {
+				labelEntry["timestamps"] = labelTimestamps
+			}
+			body["userInfo"] = map[string]any{
+				"labels": []any{labelEntry},
+			}
+		}
+		out, _ := json.Marshal(body)
+		return out
+	}
+
+	// Refresh cursor between pushes — Keep rejects pushes whose
+	// targetVersion is stale after a successful prior write. We pull
+	// between attempts so each verifier sees a fresh cursor.
+	refreshCursor := func(tag string) string {
+		s, b, err := rawKeepPostBody(ctx, email, masterToken, deviceID, buildPullBody(tag))
+		if err != nil || s != 200 {
+			fmt.Fprintf(os.Stderr, "WARN: cursor refresh %s failed (status=%d err=%v)\n", tag, s, err)
+			return toVersion // fall back; the push will surface the real error
+		}
+		var p map[string]any
+		_ = json.Unmarshal(b, &p)
+		v, _ := p["toVersion"].(string)
+		return v
+	}
+
+	type result struct {
+		name      string
+		status    int
+		hasError  bool
+		body      string
+		bodySent  []byte
+	}
+	results := make([]result, 0, 3)
+
+	// Helper to send and classify a push.
+	send := func(name string, payload []byte) result {
+		status, respBody, err := rawKeepPost(ctx, email, masterToken, deviceID, payload)
+		if err != nil {
+			return result{name: name, status: -1, body: "send error: " + err.Error(), bodySent: payload}
+		}
+		bs := string(respBody)
+		hasErr := strings.Contains(bs, `"error"`) || strings.Contains(bs, "Unknown Error")
+		excerpt := bs
+		if len(excerpt) > 600 {
+			excerpt = excerpt[:600]
+		}
+		return result{name: name, status: status, hasError: hasErr, body: excerpt, bodySent: payload}
+	}
+
+	// === Verifier A: empty annotationsGroup, no userInfo (PROD REPLAY) ===
+	emptyAG := map[string]any{"kind": "notes#annotationsGroup"}
+	rA := send("A: empty AG, no userInfo (PROD REPLAY)", buildPush(emptyAG, false, "verA"))
+	results = append(results, rA)
+
+	// Refresh cursor for next attempt (in case A succeeded).
+	toVersion = refreshCursor("vlps-prod-replay-pullB")
+
+	// === Verifier B: empty annotationsGroup, WITH userInfo.labels ===
+	rB := send("B: empty AG, with userInfo.labels", buildPush(emptyAG, true, "verB"))
+	results = append(results, rB)
+
+	// Refresh cursor again for verifier C.
+	toVersion = refreshCursor("vlps-prod-replay-pullC")
+	// Re-pull to capture the (possibly new) annotationsGroup state in case A or B mutated it.
+	_, pullBody2, err2 := rawKeepPostBody(ctx, email, masterToken, deviceID, buildPullBody("vlps-prod-replay-pullC2"))
+	if err2 == nil {
+		var pp map[string]any
+		_ = json.Unmarshal(pullBody2, &pp)
+		if v, ok := pp["toVersion"].(string); ok && v != "" {
+			toVersion = v
+		}
+		nodes2, _ := pp["nodes"].([]any)
+		for _, n := range nodes2 {
+			m, _ := n.(map[string]any)
+			if m == nil {
+				continue
+			}
+			if sid, _ := m["serverId"].(string); sid != listServerID {
+				continue
+			}
+			if ag, ok := m["annotationsGroup"]; ok && ag != nil {
+				rawAnnotationsGroup = ag
+			}
+			break
+		}
+	}
+
+	// === Verifier C: annotations preserved verbatim, no userInfo ===
+	verbatimAG := rawAnnotationsGroup
+	if verbatimAG == nil {
+		verbatimAG = emptyAG
+		fmt.Fprintln(os.Stderr, "(verifier C: no verbatim annotations found, falling back to empty)")
+	}
+	rC := send("C: verbatim AG, no userInfo", buildPush(verbatimAG, false, "verC"))
+	results = append(results, rC)
+
+	// === Report ===
+	fmt.Fprintln(os.Stderr, "")
+	fmt.Fprintln(os.Stderr, "================ RESULTS ================")
+	for _, r := range results {
+		verdict := "FAIL"
+		if r.status == 200 && !r.hasError {
+			verdict = "PASS"
+		}
+		fmt.Fprintf(os.Stderr, "[%s] %s status=%d hasError=%v\n", verdict, r.name, r.status, r.hasError)
+		fmt.Fprintf(os.Stderr, "  body: %s\n", r.body)
+	}
+	fmt.Fprintln(os.Stderr, "")
+	for _, r := range results {
+		if r.status == 200 && !r.hasError {
+			fmt.Fprintf(os.Stderr, "WORKING REQUEST BODY for [%s]:\n", r.name)
+			var pretty any
+			if err := json.Unmarshal(r.bodySent, &pretty); err == nil {
+				out, _ := json.MarshalIndent(pretty, "", "  ")
+				fmt.Fprintln(os.Stderr, string(out))
+			} else {
+				fmt.Fprintln(os.Stderr, string(r.bodySent))
+			}
+			fmt.Fprintln(os.Stderr, "")
+		}
+	}
+	// Summarize on stdout for caller capture.
+	fmt.Println("PROD-REPLAY VERDICT:")
+	for _, r := range results {
+		v := "FAIL"
+		if r.status == 200 && !r.hasError {
+			v = "PASS"
+		}
+		fmt.Printf("  %s | status=%d hasError=%v | %s\n", v, r.status, r.hasError, r.name)
+	}
+}
+
+// buildPullBody builds a minimal pull-only ChangesRequest body keyed
+// by sessionTag. Used by the prod-replay verifier to keep cursor in
+// sync between push attempts.
+func buildPullBody(sessionTag string) []byte {
+	now := time.Now().UTC()
+	body := map[string]any{
+		"nodes":           []any{},
+		"clientTimestamp": now.Format("2006-01-02T15:04:05.000000Z"),
+		"requestHeader": map[string]any{
+			"clientSessionId": fmt.Sprintf("s--%d--%s", now.UnixMilli(), sessionTag),
+			"clientPlatform":  "ANDROID",
+			"clientVersion": map[string]any{
+				"major": "9", "minor": "9", "build": "9", "revision": "9",
+			},
+			"capabilities": []any{
+				map[string]any{"type": "NC"}, map[string]any{"type": "PI"},
+				map[string]any{"type": "LB"}, map[string]any{"type": "AN"},
+				map[string]any{"type": "SH"}, map[string]any{"type": "DR"},
+				map[string]any{"type": "TR"}, map[string]any{"type": "IN"},
+				map[string]any{"type": "SNB"}, map[string]any{"type": "MI"},
+				map[string]any{"type": "CO"},
+			},
+		},
+	}
+	out, _ := json.Marshal(body)
+	return out
+}
+
+// runVerifyListPushNoop empirically confirms the production hypothesis:
+// Keep returns HTTP 500 stage3 "Unknown Error" when a LIST node update
+// is pushed with `labelIds` matching exactly what Keep already has
+// (the no-op case), but accepts the same shape with a DIFFERENT label
+// set. Pulls the list, captures its current labelIds, then runs both
+// the no-op push (expect 500) and the change push (expect 200).
+//
+// Exits 0 if BOTH expectations hold, 1 otherwise. Stdout: PASS / FAIL.
+func runVerifyListPushNoop(ctx context.Context, email, masterToken, deviceID string, keep *protocol.KeepClient, listServerID string) {
+	fmt.Fprintf(os.Stderr, "=== verify-list-push-noop parent-id=%s ===\n", listServerID)
+
+	// Step 1: pull and locate the LIST node.
+	now := time.Now().UTC()
+	pull, err := keep.Changes(ctx, protocol.ChangesRequest{
+		SessionID:       fmt.Sprintf("s--%d--vlpn-pull", now.UnixMilli()),
+		ClientTimestamp: now.Format("2006-01-02T15:04:05.000000Z"),
+	})
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "FAIL: pull failed:", err)
+		os.Exit(1)
+	}
+	var listNode protocol.Node
+	for _, n := range pull.Nodes {
+		if n.Type == protocol.NodeTypeList && n.ServerID == listServerID {
+			listNode = n
+			break
+		}
+	}
+	if listNode.ServerID == "" {
+		fmt.Fprintf(os.Stderr, "FAIL: no LIST node with serverId=%s in pull (got %d nodes)\n",
+			listServerID, len(pull.Nodes))
+		os.Exit(1)
+	}
+	currentLabelIDs := append([]string{}, listNode.LabelIDs...)
+	fmt.Fprintf(os.Stderr, "✓ found LIST: client_id=%s title=%q current labelIds=%v\n",
+		listNode.ID, listNode.Title, currentLabelIDs)
+
+	// Step 2: pick a different label to use for the second push.
+	// Choose any label NOT currently on the LIST. If none exist, error.
+	var differentLabelID string
+	currentSet := map[string]bool{}
+	for _, id := range currentLabelIDs {
+		currentSet[id] = true
+	}
+	for _, l := range pull.Labels {
+		if l.MainID == "" || !l.Deleted.IsZero() {
+			continue
+		}
+		if !currentSet[l.MainID] {
+			differentLabelID = l.MainID
+			fmt.Fprintf(os.Stderr, "✓ chose different label: name=%q mainID=%s\n", l.Name, l.MainID)
+			break
+		}
+	}
+	if differentLabelID == "" {
+		fmt.Fprintln(os.Stderr, "FAIL: no usable alternative label found (need one not on the LIST)")
+		os.Exit(1)
+	}
+
+	// Step 3: NO-OP push — labelIds matches what Keep already has.
+	noopStatus, noopBody := pushListWithLabelIDs(ctx, email, masterToken, deviceID, listNode, listServerID, currentLabelIDs, pull.ToVersion, "noop")
+	noopHasError := strings.Contains(string(noopBody), `"error"`) || strings.Contains(string(noopBody), "Unknown Error")
+	noop500 := noopStatus >= 500 || noopHasError
+	fmt.Fprintf(os.Stderr, "--- NO-OP RESULT: status=%d hasError=%v ---\n", noopStatus, noopHasError)
+
+	// Step 4: re-pull to refresh the cursor for the second push (Keep may
+	// have advanced its toVersion as a side-effect of even a failed push).
+	now2 := time.Now().UTC()
+	pull2, err := keep.Changes(ctx, protocol.ChangesRequest{
+		SessionID:       fmt.Sprintf("s--%d--vlpn-pull2", now2.UnixMilli()),
+		ClientTimestamp: now2.Format("2006-01-02T15:04:05.000000Z"),
+	})
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "FAIL: second pull failed:", err)
+		os.Exit(1)
+	}
+
+	// Step 5: CHANGE push — labelIds DIFFERENT from current.
+	newLabelIDs := append([]string{}, currentLabelIDs...)
+	newLabelIDs = append(newLabelIDs, differentLabelID)
+	changeStatus, changeBody := pushListWithLabelIDs(ctx, email, masterToken, deviceID, listNode, listServerID, newLabelIDs, pull2.ToVersion, "change")
+	changeHasError := strings.Contains(string(changeBody), `"error"`) || strings.Contains(string(changeBody), "Unknown Error")
+	change200 := changeStatus == 200 && !changeHasError
+	fmt.Fprintf(os.Stderr, "--- CHANGE RESULT: status=%d hasError=%v ---\n", changeStatus, changeHasError)
+
+	// Step 6: verdict.
+	if noop500 && change200 {
+		fmt.Fprintln(os.Stderr, "PASS: no-op LIST push 500'd as predicted; change push accepted (200)")
+		fmt.Println("PASS")
+		os.Exit(0)
+	}
+	fmt.Fprintf(os.Stderr, "FAIL: expected noop=500 change=200, got noop=%d change=%d\n",
+		noopStatus, changeStatus)
+	fmt.Println("FAIL")
+	os.Exit(1)
+}
+
+// pushListWithLabelIDs sends a LIST node update with the given labelIds
+// using the proven push-shape (id == listNode.ID, serverId == listServerID).
+// Returns status code and response body. Used by runVerifyListPushNoop.
+func pushListWithLabelIDs(ctx context.Context, email, masterToken, deviceID string, listNode protocol.Node, listServerID string, labelIDs []string, targetVersion, tag string) (int, []byte) {
+	now := time.Now().UTC()
+	labelIDsBody := make([]any, 0, len(labelIDs))
+	for _, id := range labelIDs {
+		labelIDsBody = append(labelIDsBody, map[string]any{"labelId": id})
+	}
+	nodeMap := map[string]any{
+		"kind":     "notes#node",
+		"id":       listNode.ID,
+		"serverId": listServerID,
+		"type":     "LIST",
+		"title":    listNode.Title,
+		"labelIds": labelIDsBody,
+		"annotationsGroup": map[string]any{
+			"kind": "notes#annotationsGroup",
+		},
+		"timestamps": map[string]any{
+			"kind":    "notes#timestamps",
+			"updated": now.Format("2006-01-02T15:04:05.000000Z"),
+		},
+	}
+	pushBody := map[string]any{
+		"nodes":           []any{nodeMap},
+		"clientTimestamp": now.Format("2006-01-02T15:04:05.000000Z"),
+		"targetVersion":   targetVersion,
+		"requestHeader": map[string]any{
+			"clientSessionId": fmt.Sprintf("s--%d--vlpn-%s", now.UnixMilli(), tag),
+			"clientPlatform":  "ANDROID",
+			"clientVersion": map[string]any{
+				"major": "9", "minor": "9", "build": "9", "revision": "9",
+			},
+			"capabilities": []any{
+				map[string]any{"type": "NC"}, map[string]any{"type": "PI"},
+				map[string]any{"type": "LB"}, map[string]any{"type": "AN"},
+				map[string]any{"type": "SH"}, map[string]any{"type": "DR"},
+				map[string]any{"type": "TR"}, map[string]any{"type": "IN"},
+				map[string]any{"type": "SNB"}, map[string]any{"type": "MI"},
+				map[string]any{"type": "CO"},
+			},
+		},
+	}
+	bodyBytes, err := json.MarshalIndent(pushBody, "", "  ")
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "FAIL: marshal:", err)
+		os.Exit(1)
+	}
+	fmt.Fprintf(os.Stderr, "--- %s REQUEST BODY ---\n%s\n", strings.ToUpper(tag), string(bodyBytes))
+	status, respBody, err := rawKeepPost(ctx, email, masterToken, deviceID, bodyBytes)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "FAIL: HTTP send:", err)
+		os.Exit(1)
+	}
+	excerpt := respBody
+	if len(excerpt) > 500 {
+		excerpt = excerpt[:500]
+	}
+	fmt.Fprintf(os.Stderr, "--- %s RESPONSE STATUS=%d BODY (first 500) ---\n%s\n",
+		strings.ToUpper(tag), status, string(excerpt))
+	return status, respBody
+}
+
+// diagTestResult holds the outcome of a single A/B/C/D/E diagnostic
+// test in runDiagnoseGroceryListPush.
+type diagTestResult struct {
+	name     string
+	addition string
+	status   int
+	hasError bool
+	body     string
+	bodySent []byte
+}
+
+// runDiagnoseGroceryListPush runs an A/B/C/D/E test matrix against the
+// user's actual Grocery LIST in Keep to identify which preserved field
+// triggers the production HTTP 500. Each test pulls a FRESH cursor
+// before its push so targetVersion is current. All pushes are
+// labelIds-only no-ops (the Household labelId Keep already has).
+//
+// Test matrix:
+//
+//	A) Exact production replay — minimal body, no preservation.
+//	   Expected: 500 (matches production).
+//	B) A + baseNoteRevision (likely fix given the 141 revision).
+//	C) A + isPinned: true + color: "GREEN".
+//	D) A + nodeSettings (preserved verbatim from pull).
+//	E) Everything verbatim from pull, only override labelIds and
+//	   timestamps.updated. The known-safe fix path.
+//
+// The Grocery serverId, client_id, and Household labelId are
+// hard-coded — this is a one-shot diagnostic for the user's specific
+// account.
+func runDiagnoseGroceryListPush(ctx context.Context, email, masterToken, deviceID string) {
+	const (
+		groceryServerID    = "1jUAdi75xdeDenDIftIEY19O1FVmE78Pwigj7jSXNU2PIcrYZzYTDqYciB_rNle7OVrNU"
+		groceryClientID    = "19dd617db86.bec795fb133adf7b"
+		householdLabelID   = "19dcbc78892.97722f273a1555c5"
+	)
+
+	fmt.Fprintf(os.Stderr, "=== diagnose-grocery-list-push grocery=%s ===\n", groceryServerID)
+
+	// Helper: pull and return parsed body + toVersion + the LIST node map.
+	// Pulls fresh on every call so each test sees a current cursor.
+	pullGrocery := func(tag string) (toVersion string, listNode map[string]any) {
+		status, body, err := rawKeepPostBody(ctx, email, masterToken, deviceID, buildPullBody(tag))
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "FAIL: pull %s: %v\n", tag, err)
+			os.Exit(1)
+		}
+		if status != 200 {
+			fmt.Fprintf(os.Stderr, "FAIL: pull %s status=%d body=%s\n", tag, status, truncate(string(body), 500))
+			os.Exit(1)
+		}
+		var parsed map[string]any
+		if err := json.Unmarshal(body, &parsed); err != nil {
+			fmt.Fprintf(os.Stderr, "FAIL: pull %s decode: %v\n", tag, err)
+			os.Exit(1)
+		}
+		toVersion, _ = parsed["toVersion"].(string)
+		nodes, _ := parsed["nodes"].([]any)
+		for _, n := range nodes {
+			m, _ := n.(map[string]any)
+			if m == nil {
+				continue
+			}
+			if sid, _ := m["serverId"].(string); sid != groceryServerID {
+				continue
+			}
+			if t, _ := m["type"].(string); t != "LIST" {
+				continue
+			}
+			listNode = m
+			break
+		}
+		return toVersion, listNode
+	}
+
+	// Initial pull — capture the full LIST node so we can extract
+	// preservation fields for each test.
+	toVersion, listNode := pullGrocery("diag-grocery-pull-init")
+	if listNode == nil {
+		fmt.Fprintf(os.Stderr, "FAIL: no LIST node with serverId=%s in initial pull\n", groceryServerID)
+		os.Exit(1)
+	}
+	fmt.Fprintf(os.Stderr, "✓ found Grocery LIST: client_id=%v title=%q\n",
+		listNode["id"], listNode["title"])
+
+	// Capture the preservation candidates from the pull.
+	capturedTitle, _ := listNode["title"].(string)
+	capturedBaseNoteRevision := listNode["baseNoteRevision"]
+	capturedColor := listNode["color"]
+	capturedIsPinned := listNode["isPinned"]
+	capturedNodeSettings := listNode["nodeSettings"]
+
+	if capturedTitle == "" {
+		capturedTitle = "Grocery"
+	}
+
+	// Log captured fields so the diagnostic is auditable.
+	fmt.Fprintf(os.Stderr, "  baseNoteRevision: %v\n", capturedBaseNoteRevision)
+	fmt.Fprintf(os.Stderr, "  color: %v\n", capturedColor)
+	fmt.Fprintf(os.Stderr, "  isPinned: %v\n", capturedIsPinned)
+	if capturedNodeSettings != nil {
+		nsJSON, _ := json.Marshal(capturedNodeSettings)
+		fmt.Fprintf(os.Stderr, "  nodeSettings: %s\n", string(nsJSON))
+	} else {
+		fmt.Fprintln(os.Stderr, "  nodeSettings: (absent)")
+	}
+
+	// buildBaseBody: the exact production-replay shape (Test A).
+	// Fields are deliberately minimal to match what the bridge currently
+	// sends.
+	buildBaseBody := func() map[string]any {
+		now := time.Now().UTC()
+		return map[string]any{
+			"kind":     "notes#node",
+			"id":       groceryClientID,
+			"serverId": groceryServerID,
+			"type":     "LIST",
+			"title":    capturedTitle,
+			"checked":  false,
+			"labelIds": []any{
+				map[string]any{"labelId": householdLabelID},
+			},
+			"annotationsGroup": map[string]any{
+				"kind": "notes#annotationsGroup",
+			},
+			"timestamps": map[string]any{
+				"kind":    "notes#timestamps",
+				"updated": now.Format("2006-01-02T15:04:05.000000Z"),
+			},
+		}
+	}
+
+	// wrapPushBody wraps a node body in the full ChangesRequest envelope.
+	wrapPushBody := func(nodeMap map[string]any, targetVersion, sessionTag string) []byte {
+		now := time.Now().UTC()
+		body := map[string]any{
+			"nodes":           []any{nodeMap},
+			"clientTimestamp": now.Format("2006-01-02T15:04:05.000000Z"),
+			"targetVersion":   targetVersion,
+			"requestHeader": map[string]any{
+				"clientSessionId": fmt.Sprintf("s--%d--%s", now.UnixMilli(), sessionTag),
+				"clientPlatform":  "ANDROID",
+				"clientVersion": map[string]any{
+					"major": "9", "minor": "9", "build": "9", "revision": "9",
+				},
+				"capabilities": []any{
+					map[string]any{"type": "NC"}, map[string]any{"type": "PI"},
+					map[string]any{"type": "LB"}, map[string]any{"type": "AN"},
+					map[string]any{"type": "SH"}, map[string]any{"type": "DR"},
+					map[string]any{"type": "TR"}, map[string]any{"type": "IN"},
+					map[string]any{"type": "SNB"}, map[string]any{"type": "MI"},
+					map[string]any{"type": "CO"},
+				},
+			},
+		}
+		out, _ := json.Marshal(body)
+		return out
+	}
+
+	results := make([]diagTestResult, 0, 5)
+
+	// runTest: refresh cursor, build node body, send, classify.
+	runTest := func(name, addition, sessionTag string, mutate func(node map[string]any)) diagTestResult {
+		fmt.Fprintf(os.Stderr, "\n--- TEST %s: %s ---\n", name, addition)
+		// Fresh pull for this test.
+		freshTarget, freshNode := pullGrocery("diag-pull-" + sessionTag)
+		if freshTarget == "" {
+			fmt.Fprintf(os.Stderr, "WARN: empty toVersion from fresh pull, falling back to initial=%s\n", toVersion)
+			freshTarget = toVersion
+		}
+		_ = freshNode // captured here for tests that need fully-verbatim shape
+
+		nodeMap := buildBaseBody()
+		if mutate != nil {
+			// For Test E we need access to the FRESH node, not the captured one.
+			// Test E mutate function will use freshNode via closure.
+			mutate(nodeMap)
+		}
+		// Special handling: Test E rebuilds completely from freshNode.
+		// We detect that by a sentinel marker key set in mutate.
+		if _, isVerbatim := nodeMap["__verbatim__"]; isVerbatim {
+			delete(nodeMap, "__verbatim__")
+			// Rebuild from freshNode preserving every key, override labelIds
+			// and timestamps.updated.
+			if freshNode != nil {
+				verbatim := map[string]any{}
+				for k, v := range freshNode {
+					verbatim[k] = v
+				}
+				verbatim["labelIds"] = []any{
+					map[string]any{"labelId": householdLabelID},
+				}
+				now := time.Now().UTC()
+				// Preserve timestamps map but override updated.
+				ts, _ := verbatim["timestamps"].(map[string]any)
+				if ts == nil {
+					ts = map[string]any{"kind": "notes#timestamps"}
+				}
+				newTS := map[string]any{}
+				for k, v := range ts {
+					newTS[k] = v
+				}
+				newTS["updated"] = now.Format("2006-01-02T15:04:05.000000Z")
+				verbatim["timestamps"] = newTS
+				nodeMap = verbatim
+			}
+		}
+
+		payload := wrapPushBody(nodeMap, freshTarget, sessionTag)
+
+		// Pretty-print the body sent.
+		var pretty any
+		_ = json.Unmarshal(payload, &pretty)
+		prettyBytes, _ := json.MarshalIndent(pretty, "", "  ")
+		fmt.Fprintf(os.Stderr, "REQUEST BODY:\n%s\n", string(prettyBytes))
+
+		status, respBody, err := rawKeepPost(ctx, email, masterToken, deviceID, payload)
+		if err != nil {
+			return diagTestResult{name: name, addition: addition, status: -1, body: "send error: " + err.Error(), bodySent: payload}
+		}
+		bs := string(respBody)
+		hasErr := strings.Contains(bs, `"error"`) || strings.Contains(bs, "Unknown Error")
+		excerpt := truncate(bs, 500)
+		fmt.Fprintf(os.Stderr, "RESPONSE status=%d hasError=%v body=%s\n", status, hasErr, excerpt)
+		return diagTestResult{
+			name:     name,
+			addition: addition,
+			status:   status,
+			hasError: hasErr,
+			body:     excerpt,
+			bodySent: payload,
+		}
+	}
+
+	// === Test A: exact production replay ===
+	rA := runTest("A", "(none — prod replay)", "diagA", nil)
+	results = append(results, rA)
+
+	// Early-exit guard: if Test A returned 200, the production trigger
+	// has shifted since the user reported. Pause and report.
+	if rA.status == 200 && !rA.hasError {
+		fmt.Fprintln(os.Stderr, "")
+		fmt.Fprintln(os.Stderr, "!!! UNEXPECTED: Test A (prod replay) returned 200/no-error !!!")
+		fmt.Fprintln(os.Stderr, "Production was reportedly returning 500 with this exact body.")
+		fmt.Fprintln(os.Stderr, "Something has changed — pausing diagnostic and re-investigating needed.")
+		fmt.Println("UNEXPECTED-A-PASS")
+		printDiagResultsTable(results)
+		os.Exit(1)
+	}
+
+	// === Test B: + baseNoteRevision ===
+	rB := runTest("B", fmt.Sprintf("baseNoteRevision: %v", capturedBaseNoteRevision), "diagB", func(node map[string]any) {
+		if capturedBaseNoteRevision == nil {
+			fmt.Fprintln(os.Stderr, "WARN: pull had no baseNoteRevision — sending empty string")
+			node["baseNoteRevision"] = ""
+			return
+		}
+		// Pass through whatever shape Keep sent (string or number).
+		node["baseNoteRevision"] = capturedBaseNoteRevision
+	})
+	results = append(results, rB)
+
+	// === Test C: + isPinned + color ===
+	rC := runTest("C", fmt.Sprintf("isPinned: %v, color: %v", capturedIsPinned, capturedColor), "diagC", func(node map[string]any) {
+		if capturedIsPinned != nil {
+			node["isPinned"] = capturedIsPinned
+		} else {
+			node["isPinned"] = true
+		}
+		if capturedColor != nil {
+			node["color"] = capturedColor
+		} else {
+			node["color"] = "GREEN"
+		}
+	})
+	results = append(results, rC)
+
+	// === Test D: + nodeSettings verbatim ===
+	rD := runTest("D", "nodeSettings verbatim", "diagD", func(node map[string]any) {
+		if capturedNodeSettings == nil {
+			fmt.Fprintln(os.Stderr, "WARN: pull had no nodeSettings — Test D effectively duplicates Test A")
+			return
+		}
+		node["nodeSettings"] = capturedNodeSettings
+	})
+	results = append(results, rD)
+
+	// === Test E: everything verbatim, override labelIds + timestamps.updated ===
+	rE := runTest("E", "everything verbatim from pull", "diagE", func(node map[string]any) {
+		// Sentinel: runTest sees this key and rebuilds nodeMap from freshNode.
+		node["__verbatim__"] = true
+	})
+	results = append(results, rE)
+
+	// === Final report ===
+	fmt.Fprintln(os.Stderr, "")
+	fmt.Fprintln(os.Stderr, "================ DIAGNOSTIC RESULTS ================")
+	printDiagResultsTable(results)
+}
+
+// truncate cuts a string to at most n bytes, returning the prefix.
+func truncate(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	return s[:n]
+}
+
+// printDiagResultsTable prints the A/B/C/D/E test results as a table on
+// stdout (so callers piping to file capture the verdict) and stderr.
+func printDiagResultsTable(results []diagTestResult) {
+	header := fmt.Sprintf("%-4s | %-50s | %-6s | %-8s | %s", "Test", "Body addition", "Status", "hasError", "Verdict")
+	fmt.Fprintln(os.Stderr, header)
+	fmt.Println(header)
+	fmt.Fprintln(os.Stderr, strings.Repeat("-", len(header)))
+	fmt.Println(strings.Repeat("-", len(header)))
+	for _, r := range results {
+		verdict := "FAIL"
+		if r.status == 200 && !r.hasError {
+			verdict = "PASS"
+		}
+		line := fmt.Sprintf("%-4s | %-50s | %-6d | %-8t | %s", r.name, truncate(r.addition, 50), r.status, r.hasError, verdict)
+		fmt.Fprintln(os.Stderr, line)
+		fmt.Println(line)
+	}
+}
+
+// rawKeepPostBody is an alias for rawKeepPost — naming kept for
+// readability at the verifier-level call sites where we're sending a
+// pull, not a push.
+func rawKeepPostBody(ctx context.Context, email, masterToken, deviceID string, body []byte) (int, []byte, error) {
+	return rawKeepPost(ctx, email, masterToken, deviceID, body)
 }
 
 // rawKeepPost re-authenticates and posts a body to /changes via raw
