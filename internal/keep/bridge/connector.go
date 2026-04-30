@@ -1065,6 +1065,15 @@ func (c *Connector) SyncToKeep(ctx context.Context, profileID wikipage.PageIdent
 			if n.ID == cid && n.ServerID != "" {
 				ib := binding.ItemIDMap[freshUIDs[i]]
 				ib.ServerID = n.ServerID
+				// Persist the synthetic client_id we generated for the
+				// push so subsequent UPDATEs send {id: client_id,
+				// serverId: server_id} (different values) instead of
+				// {id: server_id, serverId: server_id} (same value).
+				// Keep silently no-ops the same-value shape on
+				// LIST_ITEM updates — verified live by missing
+				// writeResults entries and last_failure_code =
+				// no_response_status on items added wiki-side.
+				ib.ClientID = cid
 				binding.ItemIDMap[freshUIDs[i]] = ib
 			}
 		}
@@ -1413,15 +1422,27 @@ func (c *Connector) applyInboundFromKeep(ctx context.Context, profileID wikipage
 		if n.Type != protocol.NodeTypeListItem {
 			continue
 		}
-		if n.ParentID != binding.KeepNoteID && n.ParentServerID != binding.KeepNoteID {
-			continue
-		}
 		serverID := n.ServerID
 		if serverID == "" {
 			continue
 		}
 		isAlive := n.Timestamps.Trashed.IsZero() && n.Timestamps.Deleted.IsZero()
 		uid, knownToWiki := rev[serverID]
+		// Parent filter: alive nodes must declare this binding's
+		// KeepNoteID via ParentID or ParentServerID. Tombstones strip
+		// parent fields entirely (verified live: Keep emits {id,
+		// serverId, timestamps.deleted=epoch+1ms} for soft-deleted
+		// LIST_ITEMs on incremental pulls). Identify tombstones by
+		// ServerID-in-id_map instead — that's our pairing handle.
+		if isAlive {
+			if n.ParentID != binding.KeepNoteID && n.ParentServerID != binding.KeepNoteID {
+				continue
+			}
+		} else if !knownToWiki {
+			// Tombstone for a serverID this binding never paired with;
+			// not our concern.
+			continue
+		}
 
 		// K trashed/deleted ∧ M=correct → apply delete + drop id_map.
 		if !isAlive {

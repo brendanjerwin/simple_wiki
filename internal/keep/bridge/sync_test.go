@@ -807,6 +807,56 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 		})
 	})
 
+	// K4-tombstone-empty-parents — Keep returns the item as a tombstone
+	// with Trashed.IsZero, Deleted=epoch+1ms, AND empty ParentID /
+	// ParentServerID (the wire shape Keep emits for a soft-deleted
+	// LIST_ITEM on incremental pulls). Verified live against a Keep
+	// account: the tombstone strips parent fields entirely. The bridge
+	// must still apply the delete — identification is by ServerID
+	// matching an entry in id_map, not by parent.
+	Describe("K4-tombstone-empty-parents — tombstone with stripped parent fields", func() {
+		BeforeEach(func() {
+			c, _, kc, chk = freshConnector(profile, page, listName, listSrv, map[string]string{
+				"uid-A": "srv-A",
+			})
+			chk.items = []*apiv1.ChecklistItem{
+				{Uid: "uid-A", Text: "Apples", SortOrder: 1000, UpdatedAt: recentTime()},
+			}
+			tomb := protocol.Node{
+				Kind:     "notes#node",
+				ID:       "client-A",
+				ServerID: "srv-A",
+				// ParentID and ParentServerID intentionally blank —
+				// production Keep tombstone shape.
+				Type: protocol.NodeTypeListItem,
+				Timestamps: protocol.Timestamps{
+					Deleted: tEpochPlusMs,
+				},
+			}
+			kc.pullState = protocol.ChangesResponse{
+				ToVersion: "v0",
+				Nodes:     []protocol.Node{tomb},
+			}
+			Expect(c.SyncToKeep(ctx, profile, page, listName)).To(Succeed())
+		})
+
+		It("should call DeleteItemForSync for the tombstoned item", func() {
+			Expect(chk.delCalls).To(HaveLen(1))
+			Expect(chk.delCalls[0].UID).To(Equal("uid-A"))
+		})
+
+		It("should drop the id_map entry", func() {
+			b, found, ferr := c.FindBinding(ctx, profile, page, listName)
+			Expect(ferr).ToNot(HaveOccurred())
+			Expect(found).To(BeTrue())
+			Expect(b.ItemIDMap).NotTo(HaveKey("uid-A"))
+		})
+
+		It("should NOT push the deletion back (already gone Keep-side)", func() {
+			Expect(kc.pushCount()).To(Equal(0))
+		})
+	})
+
 	// K4-hard — Keep removed the item entirely (not in pull at all).
 	// User did the swipe-to-delete or Keep app's "Remove" action,
 	// which omits the item from subsequent pulls instead of flipping
@@ -2559,6 +2609,17 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 			ib, ok := b.ItemIDMap["uid-NEW"]
 			Expect(ok).To(BeTrue())
 			Expect(ib.ServerID).ToNot(BeEmpty())
+		})
+
+		It("should populate id_map[uid-NEW] with the generated ClientID matching the push", func() {
+			b, found, ferr := c.FindBinding(ctx, profile, page, listName)
+			Expect(ferr).ToNot(HaveOccurred())
+			Expect(found).To(BeTrue())
+			ib := b.ItemIDMap["uid-NEW"]
+			Expect(ib.ClientID).ToNot(BeEmpty(), "fresh-push response handler must persist the synthetic client_id so subsequent updates push id != serverId")
+			// The echoing fake builds ServerID as "echoed-" + clientID,
+			// so the persisted ClientID must equal the suffix of ServerID.
+			Expect(ib.ServerID).To(Equal("echoed-"+ib.ClientID))
 		})
 
 		It("should advance the new id_map entry's SyncedText", func() {
