@@ -47,6 +47,26 @@ type Binding struct {
 	TruncatedTickStreak  int
 	MigratedFingerprints bool
 	ItemIDMap            map[string]ItemBinding
+	// LabelIDs persists the per-binding mapping from label name to
+	// Keep label MainID. Captured from every pull that carries a
+	// non-empty Labels slice and consulted as the PRIMARY lookup in
+	// resolveLabelsForTags so incremental pulls (which usually return
+	// no labels at all) don't cause the connector to emit fresh label
+	// CRUD entries — and a corresponding new MainID — every tick for
+	// labels Keep already knows about. The per-pull Labels slice is
+	// the SECONDARY source: it only updates this map when a label
+	// appears or its MainID changes.
+	//
+	// Tombstoned labels (LabelEntry.Deleted != 0) are removed from
+	// the map so the next sync re-creates them rather than reusing a
+	// dead MainID.
+	//
+	// Empty/nil for legacy bindings until the first pull that carries
+	// a non-empty Labels slice — including the migration job's full
+	// pull and Bind's seed-time full pull. resolveLabelsForTags falls
+	// back to the per-pull byName index until the persisted map is
+	// populated.
+	LabelIDs map[string]string
 }
 
 // ItemBinding is the per-item sync record for one wiki UID inside a
@@ -93,6 +113,21 @@ type ItemBinding struct {
 	PushFailureCount          int
 	LastFailureCode           string
 	NextAttemptAt             time.Time
+	// BaseVersion is Keep's optimistic-concurrency-control token for
+	// this LIST_ITEM. Captured from every pull that includes the
+	// node, persisted across ticks so incremental pulls (which only
+	// return CHANGED nodes) don't strip it from the in-memory map.
+	// Included as `baseVersion` on every outbound LIST_ITEM update —
+	// Keep returns stage3 HTTP 500 "Unknown Error" if it's missing
+	// or stale. Source: gkeepapi node.py self._base_version handling.
+	BaseVersion string
+	// ClientID is Keep's client-generated stable identifier (the
+	// `id` field, distinct from `serverId`). Captured from pulls so
+	// outbound updates carry the same `id` across ticks. Like
+	// BaseVersion, must survive incremental pulls that don't echo
+	// the node back. Empty for legacy bindings until first observed
+	// in a pull.
+	ClientID string
 }
 
 // ConnectorState is the per-user connector configuration stored on the
@@ -166,6 +201,7 @@ const (
 	bindingTruncatedTickStreakField  = "truncated_tick_streak"
 	bindingMigratedFingerprintsField = "migrated_fingerprints"
 	bindingItemIDMapField            = "item_id_map"
+	bindingLabelIDsField             = "label_ids"
 
 	itemBindingServerIDField                  = "server_id"
 	itemBindingSyncedTextField                = "synced_text"
@@ -177,6 +213,8 @@ const (
 	itemBindingPushFailureCountField          = "push_failure_count"
 	itemBindingLastFailureCodeField           = "last_failure_code"
 	itemBindingNextAttemptAtField             = "next_attempt_at"
+	itemBindingBaseVersionField               = "base_version"
+	itemBindingClientIDField                  = "client_id"
 )
 
 // BindingStore is the typed funnel for connector-state writes on profile
@@ -429,6 +467,10 @@ func decodeBindings(raw any) ([]Binding, error) {
 		if err != nil {
 			return nil, fmt.Errorf("wiki.connectors.google_keep.bindings[%d].item_id_map: %w", i, err)
 		}
+		labelIDs, err := decodeLabelIDs(m[bindingLabelIDsField])
+		if err != nil {
+			return nil, fmt.Errorf("wiki.connectors.google_keep.bindings[%d].label_ids: %w", i, err)
+		}
 		out = append(out, Binding{
 			Page:                 getString(m, bindingPageField),
 			ListName:             getString(m, bindingListNameField),
@@ -439,6 +481,7 @@ func decodeBindings(raw any) ([]Binding, error) {
 			TruncatedTickStreak:  getInt(m, bindingTruncatedTickStreakField),
 			MigratedFingerprints: getBool(m, bindingMigratedFingerprintsField),
 			ItemIDMap:            idMap,
+			LabelIDs:             labelIDs,
 		})
 	}
 	return out, nil
@@ -508,6 +551,13 @@ func encodeBindings(bindings []Binding) []any {
 			}
 			entry[bindingItemIDMapField] = m
 		}
+		if len(b.LabelIDs) > 0 {
+			m := make(map[string]any, len(b.LabelIDs))
+			for name, mainID := range b.LabelIDs {
+				m[name] = mainID
+			}
+			entry[bindingLabelIDsField] = m
+		}
 		out[i] = entry
 	}
 	return out
@@ -547,6 +597,12 @@ func encodeItemBinding(ib ItemBinding) map[string]any {
 	}
 	if !ib.NextAttemptAt.IsZero() {
 		out[itemBindingNextAttemptAtField] = ib.NextAttemptAt.UTC().Format(time.RFC3339)
+	}
+	if ib.BaseVersion != "" {
+		out[itemBindingBaseVersionField] = ib.BaseVersion
+	}
+	if ib.ClientID != "" {
+		out[itemBindingClientIDField] = ib.ClientID
 	}
 	return out
 }
@@ -590,10 +646,34 @@ func decodeItemIDMap(raw any) (map[string]ItemBinding, error) {
 				PushFailureCount:          getInt(typed, itemBindingPushFailureCountField),
 				LastFailureCode:           getString(typed, itemBindingLastFailureCodeField),
 				NextAttemptAt:             nextAttemptAt,
+				BaseVersion:               getString(typed, itemBindingBaseVersionField),
+				ClientID:                  getString(typed, itemBindingClientIDField),
 			}
 		default:
 			return nil, fmt.Errorf("key %q value is %T, expected string or map", k, v)
 		}
+	}
+	return out, nil
+}
+
+// decodeLabelIDs reads the per-binding label-name → MainID map.
+// Legacy bindings without a label_ids key decode as a nil map; the
+// next sync's pull will populate it.
+func decodeLabelIDs(raw any) (map[string]string, error) {
+	if raw == nil {
+		return nil, nil
+	}
+	m, ok := raw.(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("expected map, got %T", raw)
+	}
+	out := make(map[string]string, len(m))
+	for k, v := range m {
+		s, ok := v.(string)
+		if !ok {
+			return nil, fmt.Errorf("key %q value is %T, expected string", k, v)
+		}
+		out[k] = s
 	}
 	return out, nil
 }

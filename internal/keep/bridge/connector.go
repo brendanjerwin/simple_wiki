@@ -378,12 +378,13 @@ type InitialItem struct {
 // already present on Keep.
 func (c *Connector) Bind(ctx context.Context, profileID wikipage.PageIdentifier, page, listName, keepNoteID string, initialItems []InitialItem) (Binding, error) {
 	idMap := map[string]ItemBinding{}
+	labelIDs := map[string]string{}
 	if keepNoteID != "" {
 		client, _, err := c.keepClientFor(ctx, profileID)
 		if err != nil {
 			return Binding{}, err
 		}
-		idMap = c.seedIDMapFromExistingList(ctx, client, keepNoteID, initialItems)
+		idMap, labelIDs = c.seedIDMapFromExistingList(ctx, client, keepNoteID, initialItems)
 	}
 
 	binding := Binding{
@@ -397,6 +398,7 @@ func (c *Connector) Bind(ctx context.Context, profileID wikipage.PageIdentifier,
 		// or by the per-item synced_fp updates on subsequent syncs.
 		MigratedFingerprints: true,
 		ItemIDMap:            idMap,
+		LabelIDs:             labelIDs,
 	}
 	if err := c.store.AddBinding(profileID, binding); err != nil {
 		return Binding{}, err
@@ -656,23 +658,66 @@ func (c *Connector) SyncToKeep(ctx context.Context, profileID wikipage.PageIdent
 	if err != nil {
 		return fmt.Errorf("read page tags: %w", err)
 	}
-	labelPushEntries, listLabelIDs, err := resolveLabelsForTags(pageTags, pull.Labels, now)
+	// Absorb this pull's labels into the persisted name → MainID map
+	// BEFORE resolving tags. Two effects:
+	//   1. New labels (Keep just learned about them) become available
+	//      to resolveLabelsForTags as the secondary lookup.
+	//   2. Tombstoned labels (Deleted != zero) get evicted so the
+	//      next push re-creates them with a fresh MainID instead of
+	//      reusing a dead one.
+	// On incremental pulls with no labels (the common case), this
+	// loop is a no-op and the persisted map carries forward unchanged
+	// — exactly what we want to stop the per-tick label-spam.
+	if binding.LabelIDs == nil {
+		binding.LabelIDs = map[string]string{}
+	}
+	for _, l := range pull.Labels {
+		if l.Name == "" {
+			continue
+		}
+		if !l.Deleted.IsZero() {
+			delete(binding.LabelIDs, l.Name)
+			continue
+		}
+		if l.MainID == "" {
+			continue
+		}
+		binding.LabelIDs[l.Name] = l.MainID
+	}
+	labelPushEntries, listLabelIDs, err := resolveLabelsForTags(pageTags, binding.LabelIDs, pull.Labels, now)
 	if err != nil {
 		return fmt.Errorf("resolve labels: %w", err)
+	}
+	// Record any freshly-minted labels in the persisted map too, so
+	// the next tick's resolveLabelsForTags sees them as primary even
+	// before Keep echoes them back in a pull.
+	for _, l := range labelPushEntries {
+		if l.Name == "" || l.MainID == "" {
+			continue
+		}
+		binding.LabelIDs[l.Name] = l.MainID
 	}
 
 	// Walk wiki items: classify each as fresh or update; track which
 	// existing map entries we covered so we can soft-delete the rest.
-	// baseVersions: serverID → BaseVersion captured from the just-
-	// completed pull. Keep's optimistic-concurrency-control 500s
-	// "Unknown Error" if a LIST_ITEM update is sent without the
-	// baseVersion the server currently holds. gkeepapi sets it via
-	// the loaded-from-server flow (node.py: self._base_version =
-	// raw["baseVersion"]; emitted by Node.save()).
+	//
+	// baseVersions / originalClientIDs are derived from the JUST-
+	// COMPLETED pull and are inherently sparse on incremental pulls
+	// (only items that CHANGED since our last cursor appear). The
+	// authoritative source for outbound updates is the persisted
+	// ItemBinding.BaseVersion / ClientID — we use the per-pull maps
+	// here only to UPDATE the persisted values when an item is in
+	// the pull. Items absent from this pull keep whatever they had
+	// from the last successful pull that included them.
+	//
+	// Why persisted values are required: Keep's optimistic-
+	// concurrency-control 500s "Unknown Error" if a LIST_ITEM update
+	// is sent without the baseVersion the server currently holds.
+	// gkeepapi sets it via the loaded-from-server flow (node.py:
+	// self._base_version = raw["baseVersion"]; emitted by Node.save()).
+	// Before this fix, incremental pulls dropped baseVersion for any
+	// item not changed since our last cursor → push 500s.
 	baseVersions := make(map[string]string, len(pull.Nodes))
-	// Also capture the original client_id for each server_id so
-	// updates can carry the right `id` field (Keep distinguishes
-	// `id` = client-generated stable ID, `serverId` = server-assigned).
 	originalClientIDs := make(map[string]string, len(pull.Nodes))
 	// keepNodes is retained for inbound bookkeeping (see soft-delete
 	// loop below: skip pushing a soft-delete for items Keep has
@@ -691,6 +736,32 @@ func (c *Connector) SyncToKeep(ctx context.Context, profileID wikipage.PageIdent
 			originalClientIDs[n.ServerID] = n.ID
 		}
 		keepNodes[n.ServerID] = n
+	}
+	// Update the persisted BaseVersion / ClientID on each ItemBinding
+	// for serverIDs that DID appear in this pull. Items absent from
+	// the pull retain whatever was previously persisted — this is the
+	// fix for the incremental-pull regression that made every push
+	// after the second tick 500 with empty baseVersion.
+	if binding.ItemIDMap == nil {
+		binding.ItemIDMap = map[string]ItemBinding{}
+	}
+	for uid, ib := range binding.ItemIDMap {
+		serverID := ib.ServerID
+		if serverID == "" {
+			continue
+		}
+		mutated := false
+		if bv, ok := baseVersions[serverID]; ok && bv != "" && ib.BaseVersion != bv {
+			ib.BaseVersion = bv
+			mutated = true
+		}
+		if cid, ok := originalClientIDs[serverID]; ok && cid != "" && ib.ClientID != cid {
+			ib.ClientID = cid
+			mutated = true
+		}
+		if mutated {
+			binding.ItemIDMap[uid] = ib
+		}
 	}
 
 	covered := make(map[string]bool, len(binding.ItemIDMap))
@@ -786,10 +857,18 @@ func (c *Connector) SyncToKeep(ctx context.Context, profileID wikipage.PageIdent
 			// the server-assigned ServerID and the synced_fp advance.
 			covered[uid] = true
 		} else {
-			if originalID, ok := originalClientIDs[serverID]; ok {
-				node.ID = originalID
+			// Source `id` and `baseVersion` from the persisted
+			// ItemBinding. The just-completed pull's per-pull maps
+			// are sparse on incremental pulls — they ONLY contain
+			// items that changed since our last cursor. Reading from
+			// the persisted value keeps both fields populated for
+			// items that were quiet on this tick. (The pre-loop
+			// update above already pulled in any new values from
+			// this pull's nodes.)
+			if ib.ClientID != "" {
+				node.ID = ib.ClientID
 			}
-			node.BaseVersion = baseVersions[serverID]
+			node.BaseVersion = ib.BaseVersion
 			covered[uid] = true
 
 			// Per-item decision rule (fingerprint divergence):
@@ -847,10 +926,13 @@ func (c *Connector) SyncToKeep(ctx context.Context, profileID wikipage.PageIdent
 			continue
 		}
 		// Same id-vs-serverId distinction as the update path above:
-		// prefer the captured client_id when we have one.
+		// prefer the persisted client_id (or fall back to serverID
+		// if we never observed one). Reading from the persisted
+		// ItemBinding rather than per-pull maps so soft-deletes
+		// also survive incremental pulls without 500ing.
 		clientID := serverID
-		if originalID, ok := originalClientIDs[serverID]; ok {
-			clientID = originalID
+		if ib.ClientID != "" {
+			clientID = ib.ClientID
 		}
 		// Use `Deleted` not `Trashed` — verified via cmd/keep-debug
 		// against a fresh sandbox: setting `trashed` on a LIST_ITEM
@@ -867,7 +949,7 @@ func (c *Connector) SyncToKeep(ctx context.Context, profileID wikipage.PageIdent
 			ParentID:       binding.KeepNoteID,
 			ParentServerID: binding.KeepNoteID,
 			Type:           protocol.NodeTypeListItem,
-			BaseVersion:    baseVersions[serverID],
+			BaseVersion:    ib.BaseVersion,
 			Timestamps: protocol.Timestamps{
 				Deleted: now,
 				Updated: now,
@@ -1518,6 +1600,8 @@ func (c *Connector) applyInboundNewFromKeep(ctx context.Context, ownerEmail stri
 				SyncedText:      keepFP.Text,
 				SyncedChecked:   keepFP.Checked,
 				SyncedSortValue: keepFP.SortValue,
+				BaseVersion:     n.BaseVersion,
+				ClientID:        n.ID,
 			}
 			return true
 		}
@@ -1543,6 +1627,8 @@ func (c *Connector) applyInboundNewFromKeep(ctx context.Context, ownerEmail stri
 		SyncedText:      keepFP.Text,
 		SyncedChecked:   keepFP.Checked,
 		SyncedSortValue: keepFP.SortValue,
+		BaseVersion:     n.BaseVersion,
+		ClientID:        n.ID,
 	}
 	return true
 }
@@ -1603,6 +1689,16 @@ func (c *Connector) persistBindingMap(profileID wikipage.PageIdentifier, binding
 // has no record of Keep serverIDs yet. Subsequent edits round-trip
 // cleanly through the id_map.
 //
+// Returns:
+//   - idMap: per-wiki-uid ItemBinding with ServerID, BaseVersion, and
+//     ClientID populated from the bind-time pull. Seeding all three
+//     here is what lets the very first outbound push from a fresh
+//     bind avoid the "missing baseVersion → 500 Unknown Error" path.
+//   - labelIDs: per-name → MainID map captured from the bind-time
+//     pull's userInfo.labels. Without this, the first sync re-pulls
+//     incrementally (no labels) and re-creates every label with a
+//     fresh MainID, spamming the user's account.
+//
 // Errors are swallowed — a failed pull at bind time should not block
 // the bind itself; the next mutation will trigger a sync that
 // re-discovers items via CreateListWithItems-style new-item pushes
@@ -1610,24 +1706,23 @@ func (c *Connector) persistBindingMap(profileID wikipage.PageIdentifier, binding
 // won't — Keep accepts duplicate-text items. So this DOES matter, but
 // we'd rather have a working bind than a hard failure if the pull
 // flakes.).
-func (c *Connector) seedIDMapFromExistingList(ctx context.Context, client KeepClient, listServerID string, wikiItems []InitialItem) map[string]ItemBinding {
-	out := map[string]ItemBinding{}
+func (c *Connector) seedIDMapFromExistingList(ctx context.Context, client KeepClient, listServerID string, wikiItems []InitialItem) (map[string]ItemBinding, map[string]string) {
+	idMap := map[string]ItemBinding{}
+	labelIDs := map[string]string{}
 	now := c.clock.Now().UTC()
 	pull, err := client.Changes(ctx, protocol.ChangesRequest{
 		SessionID:       fmt.Sprintf("s--%d--bindseed-%s", now.UnixMilli(), listServerID),
 		ClientTimestamp: now.Format("2006-01-02T15:04:05.000000Z"),
 	})
 	if err != nil {
-		return out
+		return idMap, labelIDs
 	}
-	// Build base-text → serverID index for live LIST_ITEMs whose
-	// parent matches our bound list. Base text strips inline #tags
-	// and any "\n— description" suffix so a plain Keep "Apples"
-	// matches an enriched wiki "Apples #produce\n— Deal: ...". This
-	// is the bind-time reconcile: the user is opting in to "wiki is
-	// the source of truth, but reuse Keep IDs where possible to
-	// avoid duplicating items already there."
-	keepByBase := make(map[string]string, len(pull.Nodes))
+	// Build base-text → Keep node index for live LIST_ITEMs whose
+	// parent matches our bound list. We retain the full node (not
+	// just serverID) so the per-item ItemBinding can capture
+	// BaseVersion and ClientID — both required by Keep's outbound
+	// push protocol on subsequent syncs.
+	keepByBase := make(map[string]protocol.Node, len(pull.Nodes))
 	for _, n := range pull.Nodes {
 		if n.Type != protocol.NodeTypeListItem {
 			continue
@@ -1648,7 +1743,7 @@ func (c *Connector) seedIDMapFromExistingList(ctx context.Context, client KeepCl
 			// client_id. User can manually clean up.
 			continue
 		}
-		keepByBase[base] = n.ServerID
+		keepByBase[base] = n
 	}
 	for _, w := range wikiItems {
 		if w.UID == "" {
@@ -1658,11 +1753,27 @@ func (c *Connector) seedIDMapFromExistingList(ctx context.Context, client KeepCl
 		if base == "" {
 			continue
 		}
-		if serverID, ok := keepByBase[base]; ok {
-			out[w.UID] = ItemBinding{ServerID: serverID}
+		if node, ok := keepByBase[base]; ok {
+			idMap[w.UID] = ItemBinding{
+				ServerID:    node.ServerID,
+				BaseVersion: node.BaseVersion,
+				ClientID:    node.ID,
+			}
 		}
 	}
-	return out
+	// Seed the per-name label MainID map from the bind-time pull so
+	// resolveLabelsForTags on the first post-bind sync uses persisted
+	// FKs instead of emitting fresh label CRUD entries every tick.
+	for _, l := range pull.Labels {
+		if l.Name == "" || l.MainID == "" {
+			continue
+		}
+		if !l.Deleted.IsZero() {
+			continue
+		}
+		labelIDs[l.Name] = l.MainID
+	}
+	return idMap, labelIDs
 }
 
 // normalizeForSeedMatch reduces a LIST_ITEM text to its bare item-name
@@ -1744,16 +1855,40 @@ func (c *Connector) readPageTags(page string) ([]string, error) {
 //   - listLabelIDs: the set of Keep label MainIDs that should be
 //     assigned to the bound LIST after the push.
 //
-// Existing Keep labels matched by exact name (case-sensitive); Keep's
-// label uniqueness is per-name. Tombstoned labels (Deleted != zero)
-// are skipped — we re-create rather than reviving.
-func resolveLabelsForTags(tags []string, existingLabels []protocol.LabelEntry, now time.Time) (labelPush []protocol.LabelEntry, listLabelIDs []string, err error) {
+// Lookup precedence:
+//  1. persistedLabelIDs (the binding's persistent name → MainID map):
+//     primary source. Survives incremental pulls that return no
+//     labels at all, so the connector stops emitting fresh label
+//     CRUD entries every tick for labels Keep already has.
+//  2. existingLabels (from this pull's Labels slice): secondary
+//     source. Picks up labels that Keep returned this tick but the
+//     binding hasn't observed yet — typically the very first sync
+//     after Bind, or after a forced full resync.
+//
+// Tombstoned labels in existingLabels (Deleted != zero) are skipped
+// — we re-create rather than reviving.
+func resolveLabelsForTags(tags []string, persistedLabelIDs map[string]string, existingLabels []protocol.LabelEntry, now time.Time) (labelPush []protocol.LabelEntry, listLabelIDs []string, err error) {
 	if len(tags) == 0 {
 		return nil, nil, nil
 	}
-	byName := make(map[string]string, len(existingLabels))
+	byName := make(map[string]string, len(persistedLabelIDs)+len(existingLabels))
+	// Primary: persisted FKs from prior pulls. Survives incremental
+	// pulls that don't echo labels back.
+	for name, mainID := range persistedLabelIDs {
+		if mainID == "" {
+			continue
+		}
+		byName[name] = mainID
+	}
+	// Secondary: this pull's labels. Overlay so a label whose MainID
+	// has changed (rare but possible — Keep can re-issue) gets
+	// absorbed; the post-pull update in SyncToKeep will then write
+	// the new value back into the persisted map.
 	for _, l := range existingLabels {
 		if !l.Deleted.IsZero() {
+			continue
+		}
+		if l.MainID == "" {
 			continue
 		}
 		byName[l.Name] = l.MainID
@@ -2070,6 +2205,12 @@ func (c *Connector) MigrateBindingFingerprints(ctx context.Context, profileID wi
 				ib.SyncedText = keepNode.Text
 				ib.SyncedChecked = keepNode.Checked
 				ib.SyncedSortValue = keepNode.SortValue
+				if keepNode.BaseVersion != "" {
+					ib.BaseVersion = keepNode.BaseVersion
+				}
+				if keepNode.ID != "" {
+					ib.ClientID = keepNode.ID
+				}
 				newIDMap[uid] = ib
 				if c.debug != nil {
 					c.debug.Info("MigrateBindingFingerprints: orphan-uid baseline-from-keep profile=%s page=%s list=%s uid=%s serverID=%s keep_fp_text=%q prior_cursor=%s",
@@ -2086,6 +2227,12 @@ func (c *Connector) MigrateBindingFingerprints(ctx context.Context, profileID wi
 				ib.SyncedText = wikiFP.Text
 				ib.SyncedChecked = wikiFP.Checked
 				ib.SyncedSortValue = wikiFP.SortValue
+				if keepNode.BaseVersion != "" {
+					ib.BaseVersion = keepNode.BaseVersion
+				}
+				if keepNode.ID != "" {
+					ib.ClientID = keepNode.ID
+				}
 				newIDMap[uid] = ib
 				getMetrics().recordSilentRebaseline(ctx, profileID, page, listName)
 				if c.debug != nil {
@@ -2113,6 +2260,12 @@ func (c *Connector) MigrateBindingFingerprints(ctx context.Context, profileID wi
 			ib.SyncedText = keepFP.Text
 			ib.SyncedChecked = keepFP.Checked
 			ib.SyncedSortValue = keepFP.SortValue
+			if keepNode.BaseVersion != "" {
+				ib.BaseVersion = keepNode.BaseVersion
+			}
+			if keepNode.ID != "" {
+				ib.ClientID = keepNode.ID
+			}
 			newIDMap[uid] = ib
 			if c.debug != nil {
 				c.debug.Info("MigrateBindingFingerprints: keep-wins profile=%s page=%s list=%s uid=%s serverID=%s wiki_fp_text=%q keep_fp_text=%q prior_cursor=%s",
@@ -2121,6 +2274,26 @@ func (c *Connector) MigrateBindingFingerprints(ctx context.Context, profileID wi
 		}
 
 		binding.ItemIDMap = newIDMap
+		// Seed the per-binding label name → MainID map from the full
+		// migration pull. Without this, the very first post-migration
+		// sync would see persisted_label_ids={} and fall back to the
+		// per-pull byName index — which is fine on this tick (the
+		// migration is a full pull) but for subsequent incremental
+		// pulls (which return no labels at all) the map would still
+		// be empty and the connector would re-mint a fresh MainID per
+		// label per tick, spamming Keep with duplicate labels.
+		// Tombstoned labels are skipped — re-create rather than revive.
+		labelIDs := make(map[string]string, len(pull.Labels))
+		for _, l := range pull.Labels {
+			if l.Name == "" || l.MainID == "" {
+				continue
+			}
+			if !l.Deleted.IsZero() {
+				continue
+			}
+			labelIDs[l.Name] = l.MainID
+		}
+		binding.LabelIDs = labelIDs
 		// Clear the cursor so the FIRST post-migration sync performs a
 		// full (non-incremental) pull. This is essential: the class-4
 		// hard-delete pass fires only on full pulls, and the first

@@ -3385,3 +3385,525 @@ var _ = Describe("SyncToKeep — un-migrated binding gate", func() {
 		})
 	})
 })
+
+// Persisted-pull-derived-state tests. These exist because the
+// incremental-pull-with-cursor change (task #75) made `pull.Nodes`
+// only carry items that CHANGED since the last cursor — items that
+// didn't change are silently absent. Per-pull-derived state used in
+// the push path (BaseVersion, ClientID) must therefore be persisted
+// on ItemBinding to survive incremental pulls; the per-pull maps
+// are only for ABSORBING fresh values. Without this, the second
+// post-cursor push 500s with empty baseVersion (Keep's OCC token).
+var _ = Describe("SyncToKeep — persisted pull-derived state on incremental pulls", func() {
+	const (
+		profile  = wikipage.PageIdentifier("profile_test_persistence")
+		page     = "shopping"
+		listName = "Grocery"
+		listSrv  = "list-server-id"
+	)
+
+	var (
+		ctx context.Context
+		c   *bridge.Connector
+		kc  *fakeKeepClient
+		chk *fakeChecklist
+	)
+
+	BeforeEach(func() {
+		ctx = context.Background()
+	})
+
+	Describe("outbound_uses_persisted_BaseVersion_when_pull_is_incremental", func() {
+		var store *fakeStore
+
+		BeforeEach(func() {
+			c, store, kc, chk = freshConnector(profile, page, listName, listSrv, map[string]string{
+				"uid-A": "srv-A",
+			})
+			chk.items = []*apiv1.ChecklistItem{
+				{Uid: "uid-A", Text: "Apples", Checked: true, SortOrder: 1000, UpdatedAt: recentTime()},
+			}
+			// Simulate the post-task-#75 steady state: this binding
+			// previously synced with Keep, captured BaseVersion +
+			// ClientID at that time, and stored them on the
+			// ItemBinding. Pre-populate that persisted state.
+			bs := bridge.NewBindingStore(store)
+			st, loadErr := bs.LoadState(profile)
+			Expect(loadErr).ToNot(HaveOccurred())
+			ib := st.Bindings[0].ItemIDMap["uid-A"]
+			ib.BaseVersion = "v-base-A-persisted"
+			ib.ClientID = "client-A-persisted"
+			// Seed synced_fp from the prior baseline (Keep at
+			// "Apples" unchecked) so the wiki edit (checked=true)
+			// triggers a push.
+			ib.SyncedText = "Apples"
+			ib.SyncedChecked = false
+			ib.SyncedSortValue = "1000"
+			st.Bindings[0].ItemIDMap["uid-A"] = ib
+			Expect(bs.SaveState(profile, st)).To(Succeed())
+
+			// Incremental pull that does NOT contain srv-A — Keep's
+			// cursor-based response only returns CHANGED items, and
+			// uid-A hasn't changed on Keep's side since the last
+			// successful sync. Per-pull baseVersions/originalClientIDs
+			// will therefore be empty for srv-A.
+			kc.pullState = protocol.ChangesResponse{
+				ToVersion:   "v-after-incremental",
+				Incremental: true,
+				Nodes:       nil,
+			}
+			Expect(c.SyncToKeep(ctx, profile, page, listName)).To(Succeed())
+		})
+
+		It("should still push the wiki edit with the persisted BaseVersion", func() {
+			n := kc.findPushedItem("srv-A")
+			Expect(n.BaseVersion).To(Equal("v-base-A-persisted"))
+		})
+
+		It("should use the persisted ClientID for the push `id` field", func() {
+			n := kc.findPushedItem("srv-A")
+			Expect(n.ID).To(Equal("client-A-persisted"))
+		})
+	})
+
+	Describe("pull_updates_persisted_BaseVersion_when_item_appears", func() {
+		var store *fakeStore
+
+		BeforeEach(func() {
+			c, store, kc, chk = freshConnector(profile, page, listName, listSrv, map[string]string{
+				"uid-A": "srv-A",
+			})
+			chk.items = []*apiv1.ChecklistItem{
+				{Uid: "uid-A", Text: "Apples", SortOrder: 1000, UpdatedAt: recentTime()},
+			}
+			// Seed an OLD BaseVersion on the persisted ItemBinding.
+			bs := bridge.NewBindingStore(store)
+			st, loadErr := bs.LoadState(profile)
+			Expect(loadErr).ToNot(HaveOccurred())
+			ib := st.Bindings[0].ItemIDMap["uid-A"]
+			ib.BaseVersion = "v-old"
+			ib.ClientID = "client-A-old"
+			// Match synced_fp to the pull's content so this is a
+			// no-op tick from the divergence rule's perspective —
+			// the test is about persistence absorption, not the
+			// push path.
+			ib.SyncedText = "Apples"
+			ib.SyncedChecked = false
+			ib.SyncedSortValue = "1000"
+			st.Bindings[0].ItemIDMap["uid-A"] = ib
+			Expect(bs.SaveState(profile, st)).To(Succeed())
+
+			// Pull DOES contain srv-A this time, with a NEW
+			// BaseVersion. The connector should absorb it into
+			// the persisted ItemBinding.
+			node := keepItem("srv-A", "client-A-new", listSrv, "Apples", false, "1000")
+			node.BaseVersion = "v-new"
+			kc.pullState = protocol.ChangesResponse{
+				ToVersion:   "v-after",
+				Incremental: true,
+				Nodes:       []protocol.Node{node},
+			}
+			Expect(c.SyncToKeep(ctx, profile, page, listName)).To(Succeed())
+		})
+
+		It("should update persisted BaseVersion to the value from the pull", func() {
+			b, found, err := c.FindBinding(ctx, profile, page, listName)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(found).To(BeTrue())
+			Expect(b.ItemIDMap["uid-A"].BaseVersion).To(Equal("v-new"))
+		})
+
+		It("should update persisted ClientID to the value from the pull", func() {
+			b, found, err := c.FindBinding(ctx, profile, page, listName)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(found).To(BeTrue())
+			Expect(b.ItemIDMap["uid-A"].ClientID).To(Equal("client-A-new"))
+		})
+	})
+
+	Describe("migration_seeds_BaseVersion_from_full_pull", func() {
+		var store *fakeStore
+
+		BeforeEach(func() {
+			c, store, kc, chk = freshConnector(profile, page, listName, listSrv, map[string]string{
+				"uid-A": "srv-A",
+			})
+			chk.items = []*apiv1.ChecklistItem{
+				{Uid: "uid-A", Text: "Apples", SortOrder: 1000, UpdatedAt: recentTime()},
+			}
+			// Legacy un-migrated binding: no BaseVersion / ClientID
+			// persisted yet, MigratedFingerprints=false.
+			bs := bridge.NewBindingStore(store)
+			st, loadErr := bs.LoadState(profile)
+			Expect(loadErr).ToNot(HaveOccurred())
+			st.Bindings[0].MigratedFingerprints = false
+			ib := st.Bindings[0].ItemIDMap["uid-A"]
+			ib.BaseVersion = ""
+			ib.ClientID = ""
+			st.Bindings[0].ItemIDMap["uid-A"] = ib
+			Expect(bs.SaveState(profile, st)).To(Succeed())
+
+			node := keepItem("srv-A", "client-A-migrate", listSrv, "Apples", false, "1000")
+			node.BaseVersion = "v-base-A-migrate"
+			kc.pullState = protocol.ChangesResponse{
+				ToVersion:   "v-after-migration",
+				Incremental: false,
+				Nodes:       []protocol.Node{node},
+			}
+			Expect(c.MigrateBindingFingerprints(ctx, profile, page, listName)).To(Succeed())
+		})
+
+		It("should stamp BaseVersion from the migration's full pull", func() {
+			b, found, err := c.FindBinding(ctx, profile, page, listName)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(found).To(BeTrue())
+			Expect(b.ItemIDMap["uid-A"].BaseVersion).To(Equal("v-base-A-migrate"))
+		})
+
+		It("should stamp ClientID from the migration's full pull", func() {
+			b, found, err := c.FindBinding(ctx, profile, page, listName)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(found).To(BeTrue())
+			Expect(b.ItemIDMap["uid-A"].ClientID).To(Equal("client-A-migrate"))
+		})
+	})
+
+	// labels_persisted_across_incremental_pulls — a binding with a
+	// pre-populated LabelIDs map MUST use the persisted MainID for the
+	// LIST node's labelIds even when the current pull is incremental
+	// and returns no labels at all. Without persisted FKs, every tick
+	// re-mints a fresh MainID per label and emits a duplicate label
+	// CRUD entry, spamming the user's account.
+	Describe("labels_persisted_across_incremental_pulls", func() {
+		var store *fakeStore
+
+		BeforeEach(func() {
+			c, store, kc, chk = freshConnector(profile, page, listName, listSrv, map[string]string{
+				"uid-A": "srv-A",
+			})
+			pageID := wikipage.PageIdentifier(page)
+			Expect(store.WriteFrontMatter(pageID, wikipage.FrontMatter{
+				"tags": []any{"household"},
+			})).To(Succeed())
+
+			chk.items = []*apiv1.ChecklistItem{
+				{Uid: "uid-A", Text: "Apples", SortOrder: 1000, UpdatedAt: recentTime()},
+			}
+
+			// Pre-populate the persisted label FK on the binding —
+			// simulating "a previous successful pull captured this
+			// label's MainID."
+			bs := bridge.NewBindingStore(store)
+			st, loadErr := bs.LoadState(profile)
+			Expect(loadErr).ToNot(HaveOccurred())
+			st.Bindings[0].LabelIDs = map[string]string{
+				"household": "stable-mid-1",
+			}
+			Expect(bs.SaveState(profile, st)).To(Succeed())
+
+			// Incremental pull with NO labels in the response — the
+			// realistic post-cursor steady state.
+			kc.pullState = protocol.ChangesResponse{
+				ToVersion:   "v-after-incremental",
+				Incremental: true,
+				Nodes:       nil,
+				Labels:      nil,
+			}
+			Expect(c.SyncToKeep(ctx, profile, page, listName)).To(Succeed())
+		})
+
+		It("should NOT push any new label CRUD entries", func() {
+			Expect(kc.lastPush().Labels).To(BeEmpty())
+		})
+
+		It("should reference the persisted MainID on the LIST node's labelIds", func() {
+			var listNode *protocol.Node
+			for i, n := range kc.lastPush().Nodes {
+				if n.Type == protocol.NodeTypeList {
+					listNode = &kc.lastPush().Nodes[i]
+					break
+				}
+			}
+			Expect(listNode).NotTo(BeNil())
+			Expect(listNode.LabelIDs).To(ConsistOf("stable-mid-1"))
+		})
+	})
+
+	// labels_seeded_from_pull_when_present — when an incremental pull
+	// DOES carry a Labels slice, the connector must absorb the entries
+	// into the persisted LabelIDs map so subsequent ticks can reference
+	// the same MainID without consulting that pull's slice.
+	Describe("labels_seeded_from_pull_when_present", func() {
+		var store *fakeStore
+
+		BeforeEach(func() {
+			c, store, kc, chk = freshConnector(profile, page, listName, listSrv, map[string]string{
+				"uid-A": "srv-A",
+			})
+			pageID := wikipage.PageIdentifier(page)
+			Expect(store.WriteFrontMatter(pageID, wikipage.FrontMatter{
+				"tags": []any{"newtag"},
+			})).To(Succeed())
+
+			chk.items = []*apiv1.ChecklistItem{
+				{Uid: "uid-A", Text: "Apples", SortOrder: 1000, UpdatedAt: recentTime()},
+			}
+
+			// Pull DOES contain a label entry — Keep just told us
+			// about a label whose MainID we should record on the
+			// binding for future ticks.
+			kc.pullState = protocol.ChangesResponse{
+				ToVersion:   "v-after",
+				Incremental: true,
+				Labels: []protocol.LabelEntry{
+					{MainID: "abc", Name: "newtag"},
+				},
+			}
+			Expect(c.SyncToKeep(ctx, profile, page, listName)).To(Succeed())
+		})
+
+		It("should persist the label name → MainID mapping on the binding", func() {
+			b, found, err := c.FindBinding(ctx, profile, page, listName)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(found).To(BeTrue())
+			Expect(b.LabelIDs).To(HaveKeyWithValue("newtag", "abc"))
+		})
+
+		It("should NOT push a fresh label CRUD entry for the absorbed label", func() {
+			Expect(kc.lastPush().Labels).To(BeEmpty())
+		})
+	})
+
+	// labels_absorb_tombstone_from_pull — a non-zero LabelEntry.Deleted
+	// in the pull means Keep tombstoned the label. Drop it from the
+	// persisted map so the next tick re-creates rather than referencing
+	// a dead MainID.
+	Describe("labels_absorb_tombstone_from_pull", func() {
+		var store *fakeStore
+
+		BeforeEach(func() {
+			c, store, kc, chk = freshConnector(profile, page, listName, listSrv, map[string]string{
+				"uid-A": "srv-A",
+			})
+			pageID := wikipage.PageIdentifier(page)
+			Expect(store.WriteFrontMatter(pageID, wikipage.FrontMatter{
+				"tags": []any{"tombstoned"},
+			})).To(Succeed())
+
+			chk.items = []*apiv1.ChecklistItem{
+				{Uid: "uid-A", Text: "Apples", SortOrder: 1000, UpdatedAt: recentTime()},
+			}
+
+			bs := bridge.NewBindingStore(store)
+			st, loadErr := bs.LoadState(profile)
+			Expect(loadErr).ToNot(HaveOccurred())
+			st.Bindings[0].LabelIDs = map[string]string{
+				"tombstoned": "old-mid",
+			}
+			Expect(bs.SaveState(profile, st)).To(Succeed())
+
+			kc.pullState = protocol.ChangesResponse{
+				ToVersion:   "v-after",
+				Incremental: true,
+				Labels: []protocol.LabelEntry{
+					{MainID: "old-mid", Name: "tombstoned", Deleted: tNow},
+				},
+			}
+			Expect(c.SyncToKeep(ctx, profile, page, listName)).To(Succeed())
+		})
+
+		It("should evict the dead MainID and replace it with the freshly-minted one", func() {
+			b, found, err := c.FindBinding(ctx, profile, page, listName)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(found).To(BeTrue())
+			// The tombstone-eviction step removes the dead MainID;
+			// then resolveLabelsForTags mints a fresh MainID for the
+			// tag (since the dead one is gone) and the post-resolve
+			// loop writes it back. End-state: the name is mapped to
+			// a NEW MainID, not the dead one.
+			Expect(b.LabelIDs["tombstoned"]).NotTo(BeEmpty())
+			Expect(b.LabelIDs["tombstoned"]).NotTo(Equal("old-mid"))
+		})
+
+		It("should mint a fresh label CRUD entry for the page tag", func() {
+			Expect(kc.lastPush().Labels).To(HaveLen(1))
+			Expect(kc.lastPush().Labels[0].Name).To(Equal("tombstoned"))
+			Expect(kc.lastPush().Labels[0].MainID).NotTo(Equal("old-mid"))
+		})
+	})
+})
+
+// Bind seeding tests. seedIDMapFromExistingList captures per-item
+// pull data into the ItemBinding (ServerID, BaseVersion, ClientID)
+// AND captures per-name → MainID for labels into Binding.LabelIDs,
+// so a fresh post-bind sync doesn't 500 on outbound updates and
+// doesn't spam Keep with duplicate labels.
+var _ = Describe("Bind — initial seed captures BaseVersion, ClientID, and LabelIDs", func() {
+	const (
+		profile  = wikipage.PageIdentifier("profile_test_bind_seed")
+		page     = "shopping"
+		listName = "Grocery"
+		listSrv  = "list-server-id"
+	)
+
+	var (
+		ctx context.Context
+		c   *bridge.Connector
+		kc  *fakeKeepClient
+	)
+
+	BeforeEach(func() {
+		ctx = context.Background()
+	})
+
+	Describe("bind_seeds_BaseVersion_and_ClientID_per_item", func() {
+		var b bridge.Binding
+
+		BeforeEach(func() {
+			var store *fakeStore
+			c, store, kc, _ = freshConnector(profile, page, listName, listSrv, map[string]string{})
+			// Drop the seeded binding so Bind() runs against a clean
+			// connected-but-no-bindings state.
+			bs := bridge.NewBindingStore(store)
+			st, loadErr := bs.LoadState(profile)
+			Expect(loadErr).ToNot(HaveOccurred())
+			st.Bindings = nil
+			Expect(bs.SaveState(profile, st)).To(Succeed())
+
+			// Fake Keep client returns a pull with two items, each
+			// carrying distinct ServerID / BaseVersion / ClientID.
+			itemA := keepItem("srv-A", "client-A", listSrv, "Apples", false, "1000")
+			itemA.BaseVersion = "v-base-A"
+			itemB := keepItem("srv-B", "client-B", listSrv, "Bread", false, "2000")
+			itemB.BaseVersion = "v-base-B"
+			kc.pullState = protocol.ChangesResponse{
+				ToVersion: "v-bind-seed",
+				Nodes:     []protocol.Node{itemA, itemB},
+			}
+
+			var bindErr error
+			b, bindErr = c.Bind(ctx, profile, page, listName, listSrv, []bridge.InitialItem{
+				{UID: "uid-A", Text: "Apples"},
+				{UID: "uid-B", Text: "Bread"},
+			})
+			Expect(bindErr).ToNot(HaveOccurred())
+		})
+
+		It("should populate ServerID for each matched item", func() {
+			Expect(b.ItemIDMap["uid-A"].ServerID).To(Equal("srv-A"))
+			Expect(b.ItemIDMap["uid-B"].ServerID).To(Equal("srv-B"))
+		})
+
+		It("should populate BaseVersion for each matched item", func() {
+			Expect(b.ItemIDMap["uid-A"].BaseVersion).To(Equal("v-base-A"))
+			Expect(b.ItemIDMap["uid-B"].BaseVersion).To(Equal("v-base-B"))
+		})
+
+		It("should populate ClientID for each matched item", func() {
+			Expect(b.ItemIDMap["uid-A"].ClientID).To(Equal("client-A"))
+			Expect(b.ItemIDMap["uid-B"].ClientID).To(Equal("client-B"))
+		})
+	})
+
+	Describe("bind_seeds_LabelIDs_from_initial_pull", func() {
+		var b bridge.Binding
+
+		BeforeEach(func() {
+			var store *fakeStore
+			c, store, kc, _ = freshConnector(profile, page, listName, listSrv, map[string]string{})
+			bs := bridge.NewBindingStore(store)
+			st, loadErr := bs.LoadState(profile)
+			Expect(loadErr).ToNot(HaveOccurred())
+			st.Bindings = nil
+			Expect(bs.SaveState(profile, st)).To(Succeed())
+
+			kc.pullState = protocol.ChangesResponse{
+				ToVersion: "v-bind-seed",
+				Nodes:     nil,
+				Labels: []protocol.LabelEntry{
+					{MainID: "abc", Name: "household"},
+					{MainID: "def", Name: "weekly"},
+				},
+			}
+
+			var bindErr error
+			b, bindErr = c.Bind(ctx, profile, page, listName, listSrv, nil)
+			Expect(bindErr).ToNot(HaveOccurred())
+		})
+
+		It("should capture each label's MainID by name into the binding's LabelIDs map", func() {
+			Expect(b.LabelIDs).To(HaveKeyWithValue("household", "abc"))
+			Expect(b.LabelIDs).To(HaveKeyWithValue("weekly", "def"))
+		})
+	})
+})
+
+// Migration LabelIDs seeding test. MigrateBindingFingerprints must
+// also capture the full pull's labels into Binding.LabelIDs so the
+// first post-migration tick (which is incremental on every
+// subsequent tick after the initial full pull) doesn't re-mint
+// fresh label MainIDs.
+var _ = Describe("MigrateBindingFingerprints — seeds LabelIDs from full pull", func() {
+	const (
+		profile  = wikipage.PageIdentifier("profile_test_migrate_labels")
+		page     = "shopping"
+		listName = "Grocery"
+		listSrv  = "list-server-id"
+	)
+
+	var (
+		ctx context.Context
+		c   *bridge.Connector
+		kc  *fakeKeepClient
+		chk *fakeChecklist
+	)
+
+	BeforeEach(func() {
+		ctx = context.Background()
+	})
+
+	Describe("migration_seeds_LabelIDs_from_full_pull", func() {
+		BeforeEach(func() {
+			var store *fakeStore
+			c, store, kc, chk = freshConnector(profile, page, listName, listSrv, map[string]string{
+				"uid-A": "srv-A",
+			})
+			chk.items = []*apiv1.ChecklistItem{
+				{Uid: "uid-A", Text: "Apples", SortOrder: 1000, UpdatedAt: recentTime()},
+			}
+
+			bs := bridge.NewBindingStore(store)
+			st, loadErr := bs.LoadState(profile)
+			Expect(loadErr).ToNot(HaveOccurred())
+			st.Bindings[0].MigratedFingerprints = false
+			Expect(bs.SaveState(profile, st)).To(Succeed())
+
+			node := keepItem("srv-A", "client-A", listSrv, "Apples", false, "1000")
+			node.BaseVersion = "v-base-A"
+			kc.pullState = protocol.ChangesResponse{
+				ToVersion:   "v-after-migration",
+				Incremental: false,
+				Nodes:       []protocol.Node{node},
+				Labels: []protocol.LabelEntry{
+					{MainID: "household-mid", Name: "household"},
+					{MainID: "tombstoned-mid", Name: "tombstoned", Deleted: tNow},
+				},
+			}
+			Expect(c.MigrateBindingFingerprints(ctx, profile, page, listName)).To(Succeed())
+		})
+
+		It("should capture live labels by name → MainID into Binding.LabelIDs", func() {
+			b, found, err := c.FindBinding(ctx, profile, page, listName)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(found).To(BeTrue())
+			Expect(b.LabelIDs).To(HaveKeyWithValue("household", "household-mid"))
+		})
+
+		It("should skip tombstoned labels when seeding LabelIDs", func() {
+			b, found, err := c.FindBinding(ctx, profile, page, listName)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(found).To(BeTrue())
+			Expect(b.LabelIDs).NotTo(HaveKey("tombstoned"))
+		})
+	})
+})

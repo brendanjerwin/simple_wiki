@@ -279,6 +279,17 @@ var _ = Describe("BindingStore.LoadState", func() {
 			Expect(ib.NextAttemptAt.IsZero()).To(BeTrue())
 		})
 
+		It("should default per-item Keep-cursor fields (BaseVersion, ClientID) to zero values", func() {
+			ib := state.Bindings[0].ItemIDMap["wiki-uid-1"]
+			Expect(ib.BaseVersion).To(Equal(""))
+			Expect(ib.ClientID).To(Equal(""))
+		})
+
+		It("should default LabelIDs to empty/nil for legacy bindings", func() {
+			b := state.Bindings[0]
+			Expect(b.LabelIDs).To(BeEmpty())
+		})
+
 		When("the loaded state is re-saved and re-loaded", func() {
 			var roundTripped bridge.ConnectorState
 
@@ -299,6 +310,11 @@ var _ = Describe("BindingStore.LoadState", func() {
 				Expect(ib.ServerID).To(Equal("srv-A"))
 				Expect(ib.SyncedText).To(Equal(""))
 				Expect(ib.PushFailureCount).To(Equal(0))
+			})
+
+			It("should preserve empty LabelIDs after a save→load round trip", func() {
+				b := roundTripped.Bindings[0]
+				Expect(b.LabelIDs).To(BeEmpty())
 			})
 		})
 	})
@@ -334,7 +350,13 @@ var _ = Describe("BindingStore.LoadState", func() {
 											"push_failure_count": 2,
 											"last_failure_code":  "rate_limited",
 											"next_attempt_at":    "2026-05-01T12:01:00Z",
+											"base_version":       "v-base-A",
+											"client_id":          "client-A",
 										},
+									},
+									"label_ids": map[string]any{
+										"household":  "label-mid-1",
+										"groceries":  "label-mid-2",
 									},
 								},
 							},
@@ -364,6 +386,18 @@ var _ = Describe("BindingStore.LoadState", func() {
 			Expect(ib.SyncedSortValue).To(Equal("1000"))
 			Expect(ib.PushFailureCount).To(Equal(2))
 			Expect(ib.LastFailureCode).To(Equal("rate_limited"))
+		})
+
+		It("should populate BaseVersion and ClientID", func() {
+			ib := state.Bindings[0].ItemIDMap["wiki-uid-1"]
+			Expect(ib.BaseVersion).To(Equal("v-base-A"))
+			Expect(ib.ClientID).To(Equal("client-A"))
+		})
+
+		It("should populate LabelIDs from the label_ids frontmatter map", func() {
+			b := state.Bindings[0]
+			Expect(b.LabelIDs).To(HaveKeyWithValue("household", "label-mid-1"))
+			Expect(b.LabelIDs).To(HaveKeyWithValue("groceries", "label-mid-2"))
 		})
 
 		It("should parse next_attempt_at as a UTC time", func() {
@@ -396,6 +430,22 @@ var _ = Describe("BindingStore.LoadState", func() {
 			It("should round-trip LastFailureCode", func() {
 				ib := roundTripped.Bindings[0].ItemIDMap["wiki-uid-1"]
 				Expect(ib.LastFailureCode).To(Equal("rate_limited"))
+			})
+
+			It("should round-trip BaseVersion", func() {
+				ib := roundTripped.Bindings[0].ItemIDMap["wiki-uid-1"]
+				Expect(ib.BaseVersion).To(Equal("v-base-A"))
+			})
+
+			It("should round-trip ClientID", func() {
+				ib := roundTripped.Bindings[0].ItemIDMap["wiki-uid-1"]
+				Expect(ib.ClientID).To(Equal("client-A"))
+			})
+
+			It("should round-trip LabelIDs", func() {
+				b := roundTripped.Bindings[0]
+				Expect(b.LabelIDs).To(HaveKeyWithValue("household", "label-mid-1"))
+				Expect(b.LabelIDs).To(HaveKeyWithValue("groceries", "label-mid-2"))
 			})
 		})
 	})

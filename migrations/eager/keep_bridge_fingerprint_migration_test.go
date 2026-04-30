@@ -4,7 +4,6 @@ package eager
 import (
 	"context"
 	"errors"
-	"fmt"
 	"os"
 	"sync"
 	"time"
@@ -179,7 +178,7 @@ func (c *fakeMigrationChecklist) ListItems(_ context.Context, _, _ string) (*api
 	for i, it := range c.items {
 		cloned, ok := proto.Clone(it).(*apiv1.ChecklistItem)
 		if !ok {
-			return nil, fmt.Errorf("proto.Clone returned wrong type")
+			return nil, errors.New("proto.Clone returned wrong type")
 		}
 		out.Items[i] = cloned
 	}
