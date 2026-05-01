@@ -954,12 +954,25 @@ func (c *Connector) SyncToKeep(ctx context.Context, profileID wikipage.PageIdent
 		if covered[uid] || serverID == "" {
 			continue
 		}
-		// Skip if Keep no longer has this item — they've already been
-		// removed on Keep's side (typically: user deleted via the
-		// phone app). Keep 500s on attempts to mark an already-
-		// deleted/missing item as deleted again. Drop the stale
-		// id_map entry instead.
-		if _, present := keepNodes[serverID]; !present {
+		// Drop-vs-push decision: if a FULL pull confirms Keep no
+		// longer has this item (absent from pull.Nodes), it was
+		// already removed Keep-side — drop the stale id_map entry
+		// instead of pushing a redundant soft-delete (Keep 500s on
+		// "delete an already-deleted item").
+		//
+		// On INCREMENTAL pulls the heuristic is wrong: incremental
+		// pulls only contain items that changed since the last
+		// cursor, so unchanged-but-still-alive items are also absent.
+		// Reading "absent from incremental pull" as "Keep deleted
+		// it" silently swallowed every steady-state wiki delete in
+		// production — the connector dropped the id_map entry and
+		// the soft-delete never reached Keep.
+		//
+		// On incremental pulls, push the soft-delete unconditionally;
+		// if Keep already deleted it, the post-push handler observes
+		// a tombstone echo (or no echo) and the entry exits id_map
+		// via the failure-handling branch.
+		if _, present := keepNodes[serverID]; !present && !pull.Incremental {
 			delete(binding.ItemIDMap, uid)
 			continue
 		}

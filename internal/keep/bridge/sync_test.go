@@ -676,6 +676,55 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 		})
 	})
 
+	// W7-incremental — wiki deletes a paired item that is QUIET on
+	// Keep side (i.e., not in the latest incremental pull because
+	// nothing changed for it since the last cursor). The connector
+	// must STILL push a soft-delete to Keep — it's only safe to drop
+	// the id_map entry without pushing when a FULL pull confirms Keep
+	// no longer has the item. Verified live: incremental pulls in
+	// production omit unchanged items, so the prior heuristic
+	// (`!present := keepNodes[serverID]` => drop without pushing)
+	// silently swallowed every steady-state wiki delete.
+	Describe("W7-incremental — wiki delete on incremental pull where item is absent from pull.Nodes", func() {
+		BeforeEach(func() {
+			c, _, kc, chk = freshConnector(profile, page, listName, listSrv, map[string]string{
+				"uid-A": "srv-A",
+				"uid-B": "srv-B",
+			})
+			chk.items = []*apiv1.ChecklistItem{
+				{Uid: "uid-A", Text: "Apples", SortOrder: 1000, UpdatedAt: recentTime()},
+				// uid-B removed wiki-side
+			}
+			kc.pullState = protocol.ChangesResponse{
+				ToVersion:   "v-after",
+				Incremental: true,
+				Nodes: []protocol.Node{
+					keepItem("srv-A", "client-A", listSrv, "Apples", false, "1000"),
+					// srv-B intentionally absent — it's been quiet
+					// on Keep since the last cursor.
+				},
+			}
+			Expect(c.SyncToKeep(ctx, profile, page, listName)).To(Succeed())
+		})
+
+		It("should push a soft-delete LIST_ITEM for the wiki-deleted item", func() {
+			Expect(kc.pushCount()).To(Equal(1))
+			var foundSoftDelete bool
+			for _, n := range kc.lastPush().Nodes {
+				if n.Type == protocol.NodeTypeListItem && n.ServerID == "srv-B" && !n.Timestamps.Deleted.IsZero() {
+					foundSoftDelete = true
+				}
+			}
+			Expect(foundSoftDelete).To(BeTrue(),
+				"connector silently dropped the id_map entry instead of pushing the soft-delete; user's wiki-delete never reaches Keep")
+		})
+
+		It("should NOT call any wiki mutator (the wiki side already removed the item)", func() {
+			Expect(chk.addCalls).To(BeEmpty())
+			Expect(chk.delCalls).To(BeEmpty())
+		})
+	})
+
 	// K1a — new item from Keep, no text-match in wiki.
 	Describe("K1a — new item from Keep (no text-match in wiki) → AddItemForSync", func() {
 		BeforeEach(func() {
