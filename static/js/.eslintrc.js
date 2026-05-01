@@ -15,6 +15,7 @@ module.exports = {
     'no-extra-semi': 'off',
     'no-warning-comments': ['error', { terms: ['todo', 'fixme', 'xxx', 'hack'], location: 'anywhere' }],
     'local/require-element-tag-name-map': 'error',
+    'local/no-string-error-on-litelement': 'error',
     'no-restricted-syntax': [
       'error',
       {

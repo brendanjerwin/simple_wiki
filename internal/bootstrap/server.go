@@ -12,8 +12,10 @@ import (
 	"connectrpc.com/vanguard"
 	"github.com/brendanjerwin/simple_wiki/internal/caldav"
 	grpcapi "github.com/brendanjerwin/simple_wiki/internal/grpc/api/v1"
+	"github.com/brendanjerwin/simple_wiki/internal/keep/bridge"
 	wikimcp "github.com/brendanjerwin/simple_wiki/internal/mcp"
 	"github.com/brendanjerwin/simple_wiki/internal/observability"
+	"github.com/brendanjerwin/simple_wiki/migrations/eager"
 	"github.com/brendanjerwin/simple_wiki/pkg/chatbuffer"
 	"github.com/brendanjerwin/simple_wiki/pkg/ulid"
 	"github.com/brendanjerwin/simple_wiki/server"
@@ -403,6 +405,7 @@ func BuildVanguardTranscoder(grpcServer *grpc.Server, ginRouter http.Handler) (h
 		"api.v1.FileStorageService",
 		"api.v1.Frontmatter",
 		"api.v1.InventoryManagementService",
+		"api.v1.KeepConnectorService",
 		"api.v1.PageImportService",
 		"api.v1.PageManagementService",
 		"api.v1.ScheduledTurnService",
@@ -437,8 +440,17 @@ func BuildVanguardTranscoder(grpcServer *grpc.Server, ginRouter http.Handler) (h
 	return mux, nil
 }
 
+// keepOutboundSyncQueueDepth bounds the per-worker queue for Keep
+// outbound sync jobs. 256 is generous for household-scale workloads
+// (a handful of bindings each ticking every 30s); we'd only hit it
+// during sustained Keep unreachability and the metric would surface
+// the backlog before it became a problem.
+const keepOutboundSyncQueueDepth = 256
+
 // setupGRPCServer creates and configures the gRPC server with interceptors.
 // It returns both the gRPC transport server and the underlying API server for direct in-process calls.
+//
+//revive:disable-next-line:function-length
 func setupGRPCServer(
 	site *server.Site,
 	commit string,
@@ -460,6 +472,113 @@ func setupGRPCServer(
 	}
 	checklistMutator := checklistmutator.New(site, checklistmutator.SystemClock{}, ulid.NewSystemGenerator())
 
+	// Keep connector — Google Keep bridge orchestrator. Per-user state on
+	// profile pages (wiki.connectors.google_keep.*) plus a sync scheduler
+	// (added separately). Optional — without it KeepConnectorService
+	// returns a clear "not configured" error.
+	keepConnector := bridge.NewConnector(
+		bridge.NewBindingStore(site),
+		http.DefaultClient,
+		bridge.SystemClock{},
+	)
+	// TEMP: route Keep API responses through the wiki logger so we can
+	// see Changes() response shapes in journalctl while diagnosing the
+	// "ListNotes returns empty / CreateList silently fails" report.
+	// Strip this once the response-shape question is resolved.
+	keepConnector.SetDebugLogger(logger)
+	// Outbound sync needs read access to wiki checklists; the mutator
+	// satisfies bridge.ChecklistReader's ListItems signature directly.
+	keepConnector.SetChecklistReader(checklistMutator)
+	// Register the single-worker outbound-sync queue. One worker per
+	// account is the right answer because Keep's targetVersion is
+	// global; concurrent pushes on the same account would race the
+	// version cursor and force resyncs.
+	if err := site.GetJobQueueCoordinator().RegisterQueue(
+		bridge.KeepOutboundSyncJobName, 1, keepOutboundSyncQueueDepth,
+	); err != nil {
+		return nil, nil, fmt.Errorf("register Keep outbound sync queue: %w", err)
+	}
+	// Mutator hook: every checklist edit fires a debounced enqueue
+	// of a sync job for that (page, listName). Debounce coalesces
+	// burst edits (toggling 50 items rapidly) into a single push.
+	keepSyncDebouncer := bridge.NewSyncDebouncer(
+		site.GetJobQueueCoordinator(),
+		keepConnector,
+		site,
+		logger,
+		1500*time.Millisecond,
+	)
+	checklistMutator.SetSubscriber(keepSyncDebouncer)
+	// Inbound apply: SyncToKeep also pulls Keep state into the wiki.
+	// Mutator writes during apply must NOT loop back as fresh sync
+	// triggers, so the suppressor wraps the apply window. Mutator
+	// satisfies bridge.ChecklistMutator's For-Sync helpers directly.
+	keepConnector.SetChecklistMutator(checklistMutator)
+	keepConnector.SetSyncSuppressor(keepSyncDebouncer)
+	// Bind enqueues a sync job through the same queue cron + debouncer
+	// use, unifying every sync trigger behind Connector.SyncToKeep.
+	keepConnector.SetJobEnqueuer(site.GetJobQueueCoordinator())
+	// Cron tick fires every 30s: enumerate active bindings via a
+	// fresh index scan + profile decode each tick (handles pre-existing
+	// bindings that weren't bound during this process's lifetime),
+	// then enqueue one sync job per binding. Closes the inbound-latency
+	// gap so phone-side edits flow back to wiki without a wiki trigger.
+	keepBindingStore := bridge.NewBindingStore(site)
+	keepBindingsLister := func() []bridge.BindingKey {
+		var out []bridge.BindingKey
+		// Query "...email" (a leaf string) instead of "...bindings"
+		// (an array of maps). The frontmatter index doesn't save key
+		// entries for non-empty arrays of maps — see index.indexArray
+		// "Skip complex types" — so a profile with bindings would be
+		// invisible to a query keyed on bindings. email is set on
+		// every connected profile alongside bindings, so it's the
+		// reliable signal here.
+		for _, p := range site.FrontmatterIndexQueryer.QueryKeyExistence("wiki.connectors.google_keep.email") {
+			state, err := keepBindingStore.LoadState(p)
+			if err != nil || !state.IsConfigured() {
+				continue
+			}
+			for _, b := range state.Bindings {
+				out = append(out, bridge.BindingKey{
+					ProfileID: p,
+					Page:      b.Page,
+					ListName:  b.ListName,
+				})
+			}
+		}
+		return out
+	}
+	// Eager fingerprint migration: enqueue ONE scan job that walks
+	// the data dir, finds every legacy Keep-bridge binding (those
+	// whose MigratedFingerprints flag is unset), and enqueues a
+	// per-binding migration job that pulls Keep once and rebases
+	// synced_fp using the agreement-or-Keep-wins rule. Must be
+	// enqueued BEFORE the cron registration below so the job
+	// queue drains migration jobs before the first cron tick can
+	// run SyncToKeep against an un-migrated binding (the gate at
+	// the top of SyncToKeep would skip those anyway, but the
+	// eager job is what flips the flag so they stop being skipped).
+	// Source: plan §"Migration".
+	keepBridgeMigrationScanner := eager.NewFileSystemDataDirScanner(site.PathToData)
+	keepBridgeFingerprintMigration := eager.NewKeepBridgeFingerprintMigrationScanJob(
+		keepBridgeMigrationScanner,
+		site.GetJobQueueCoordinator(),
+		keepConnector,
+		keepBindingStore,
+	)
+	if eerr := site.GetJobQueueCoordinator().EnqueueJob(keepBridgeFingerprintMigration); eerr != nil {
+		logger.Error("Failed to enqueue Keep-bridge fingerprint migration scan job: %v", eerr)
+	} else {
+		logger.Info("Keep-bridge fingerprint migration scan started.")
+	}
+
+	if _, err := site.CronScheduler.Schedule(
+		"@every 30s",
+		bridge.NewKeepCronTickJob(keepConnector, site.GetJobQueueCoordinator(), logger, keepBindingsLister),
+	); err != nil {
+		return nil, nil, fmt.Errorf("schedule Keep cron tick: %w", err)
+	}
+
 	// Wire the CalDAV server into the Site so its caldavGateway
 	// middleware can dispatch CalDAV-shaped traffic. baseURL is left
 	// empty here — defaultBackend uses it only to render the URL
@@ -478,7 +597,8 @@ func setupGRPCServer(
 		WithScheduledTurnDispatcher(site.ScheduledTurnDispatcher).
 		WithAgentScheduleStore(site.AgentScheduleStore).
 		WithAgentChatContextStore(site.AgentChatContextStore).
-		WithChecklistMutator(checklistMutator)
+		WithChecklistMutator(checklistMutator).
+		WithKeepConnector(keepConnector)
 
 	unaryInterceptors, streamInterceptors, err := buildGRPCInterceptors(
 		identityResolver, grpcAPIServer.LoggingInterceptor(), counters, logger,

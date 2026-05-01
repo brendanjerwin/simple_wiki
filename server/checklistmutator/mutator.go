@@ -62,6 +62,19 @@ const SortOrderStep int64 = 1000
 // linter and so the wording stays consistent.
 const errUIDRequiredMsg = "uid is required"
 
+// Subscriber receives a notification after every successful checklist
+// mutation. Optional — set via Mutator.SetSubscriber. The Keep bridge's
+// SyncDebouncer is the production subscriber; tests typically leave it
+// unset.
+//
+// The mutator calls OnChecklistMutated synchronously after the write
+// has committed but before returning to the caller, so subscribers
+// must be cheap (debounce + enqueue is fine; doing real I/O here
+// would slow every wiki edit).
+type Subscriber interface {
+	OnChecklistMutated(page, listName string, identity tailscale.IdentityValue)
+}
+
 // Mutator is the single funnel for checklist mutations. Construct one per
 // process via New; share across handlers.
 type Mutator struct {
@@ -77,6 +90,37 @@ type Mutator struct {
 	// (8 bytes pointer + ~24 byte mutex on 64-bit), well below
 	// observable RAM pressure for any realistic wiki.
 	pageMu sync.Map
+
+	// subMu protects subscriber. We use atomic.Value-style "set once,
+	// read many" — the mutex only serializes SetSubscriber callers
+	// against each other; readers (notify) take a brief read of the
+	// pointer.
+	subMu      sync.RWMutex
+	subscriber Subscriber
+}
+
+// SetSubscriber installs (or replaces) the post-mutation subscriber.
+// Pass nil to detach. Safe to call concurrently with mutations; the
+// next mutation observes the new subscriber.
+func (m *Mutator) SetSubscriber(sub Subscriber) {
+	m.subMu.Lock()
+	m.subscriber = sub
+	m.subMu.Unlock()
+}
+
+// notify fires the subscriber, if any. Called at the tail of every
+// successful mutating method. The subscriber's hook is expected to
+// be cheap (debounce/enqueue) — slow work in OnChecklistMutated would
+// drag every wiki edit. Any error from the subscriber is the
+// subscriber's problem to log; the mutation has already committed.
+func (m *Mutator) notify(page, listName string, identity tailscale.IdentityValue) {
+	m.subMu.RLock()
+	sub := m.subscriber
+	m.subMu.RUnlock()
+	if sub == nil {
+		return
+	}
+	sub.OnChecklistMutated(page, listName, identity)
 }
 
 // New constructs a Mutator with the given dependencies.
@@ -184,6 +228,7 @@ func (m *Mutator) AddItem(_ context.Context, page, listName string, args AddItem
 	if err := m.persist(page, fm, listName, checklist); err != nil {
 		return nil, nil, err
 	}
+	m.notify(page, listName, identity)
 	return item, checklist, nil
 }
 
@@ -224,7 +269,7 @@ func applyUserMutableFields(item *apiv1.ChecklistItem, args UpdateItemArgs) bool
 
 // UpdateItem mutates user-mutable fields of an existing item. Wiki-managed
 // fields on the request are ignored; updated_at is server-stamped.
-func (m *Mutator) UpdateItem(_ context.Context, page, listName, uid string, args UpdateItemArgs, expectedUpdatedAt *time.Time, _ tailscale.IdentityValue) (*apiv1.ChecklistItem, *apiv1.Checklist, error) {
+func (m *Mutator) UpdateItem(_ context.Context, page, listName, uid string, args UpdateItemArgs, expectedUpdatedAt *time.Time, identity tailscale.IdentityValue) (*apiv1.ChecklistItem, *apiv1.Checklist, error) {
 	listName = wikipage.NormalizeListName(listName)
 	if uid == "" {
 		return nil, nil, status.Error(codes.InvalidArgument, errUIDRequiredMsg)
@@ -261,6 +306,7 @@ func (m *Mutator) UpdateItem(_ context.Context, page, listName, uid string, args
 	if err := m.persist(page, fm, listName, checklist); err != nil {
 		return nil, nil, err
 	}
+	m.notify(page, listName, identity)
 	return item, checklist, nil
 }
 
@@ -309,11 +355,12 @@ func (m *Mutator) ToggleItem(_ context.Context, page, listName, uid string, expe
 	if err := m.persist(page, fm, listName, checklist); err != nil {
 		return nil, nil, err
 	}
+	m.notify(page, listName, identity)
 	return item, checklist, nil
 }
 
 // DeleteItem removes uid from the named checklist and writes a tombstone.
-func (m *Mutator) DeleteItem(_ context.Context, page, listName, uid string, expectedUpdatedAt *time.Time, _ tailscale.IdentityValue) (*apiv1.Checklist, error) {
+func (m *Mutator) DeleteItem(_ context.Context, page, listName, uid string, expectedUpdatedAt *time.Time, identity tailscale.IdentityValue) (*apiv1.Checklist, error) {
 	listName = wikipage.NormalizeListName(listName)
 	if uid == "" {
 		return nil, status.Error(codes.InvalidArgument, errUIDRequiredMsg)
@@ -351,13 +398,14 @@ func (m *Mutator) DeleteItem(_ context.Context, page, listName, uid string, expe
 	if err := m.persist(page, fm, listName, checklist); err != nil {
 		return nil, err
 	}
+	m.notify(page, listName, identity)
 	return checklist, nil
 }
 
 // ReorderItem updates an item's sort_order. When the requested value
 // would collide with another item, the mutator re-densifies adjacent
 // values just enough to make room.
-func (m *Mutator) ReorderItem(_ context.Context, page, listName, uid string, newSortOrder int64, expectedUpdatedAt *time.Time, _ tailscale.IdentityValue) (*apiv1.Checklist, error) {
+func (m *Mutator) ReorderItem(_ context.Context, page, listName, uid string, newSortOrder int64, expectedUpdatedAt *time.Time, identity tailscale.IdentityValue) (*apiv1.Checklist, error) {
 	listName = wikipage.NormalizeListName(listName)
 	if uid == "" {
 		return nil, status.Error(codes.InvalidArgument, errUIDRequiredMsg)
@@ -395,6 +443,7 @@ func (m *Mutator) ReorderItem(_ context.Context, page, listName, uid string, new
 	if err := m.persist(page, fm, listName, checklist); err != nil {
 		return nil, err
 	}
+	m.notify(page, listName, identity)
 	return checklist, nil
 }
 
