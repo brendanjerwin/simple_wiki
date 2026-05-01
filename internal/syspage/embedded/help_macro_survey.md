@@ -79,6 +79,25 @@ notes = "Heads-down sprint."
 | `select` | Dropdown; requires `options` array |
 | `text` | Free-form text input |
 
+### Field Labeling
+
+- Use `label` on a field to render a custom prompt verbatim.
+- If `label` is omitted, the UI auto-humanizes `name` from snake_case/kebab-case to Title Case.
+
+Example:
+
+```toml
+[[surveys.team-preferences.fields]]
+name = "protein_preference"
+type = "text"
+# Renders as "Protein Preference" if label is omitted
+
+[[surveys.team-preferences.fields]]
+name = "protein_notes"
+type = "text"
+label = "What's your preferred protein?"
+```
+
 ### Response Fields
 
 | Field | Type | Description |
