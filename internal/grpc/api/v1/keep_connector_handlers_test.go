@@ -132,7 +132,6 @@ var _ = Describe("KeepConnectorService handlers", func() {
 	// ------------------------------------------------------------------ ExchangeAndStore
 
 	Describe("ExchangeAndStore", func() {
-
 		Describe("when no connector is wired on the server", func() {
 			var err error
 
@@ -201,7 +200,6 @@ var _ = Describe("KeepConnectorService handlers", func() {
 	// ------------------------------------------------------------------ Disconnect
 
 	Describe("Disconnect", func() {
-
 		Describe("when no connector is wired on the server", func() {
 			var err error
 
@@ -256,7 +254,6 @@ var _ = Describe("KeepConnectorService handlers", func() {
 	// ------------------------------------------------------------------ GetState
 
 	Describe("GetState", func() {
-
 		Describe("when no connector is wired on the server", func() {
 			var err error
 
@@ -315,7 +312,6 @@ var _ = Describe("KeepConnectorService handlers", func() {
 	// ------------------------------------------------------------------ ListMyBindings
 
 	Describe("ListMyBindings", func() {
-
 		Describe("when no connector is wired on the server", func() {
 			var err error
 
@@ -376,7 +372,6 @@ var _ = Describe("KeepConnectorService handlers", func() {
 	// ------------------------------------------------------------------ ListNotes
 
 	Describe("ListNotes", func() {
-
 		Describe("when no connector is wired on the server", func() {
 			var err error
 
@@ -453,7 +448,6 @@ var _ = Describe("KeepConnectorService handlers", func() {
 	// ------------------------------------------------------------------ BindChecklist
 
 	Describe("BindChecklist", func() {
-
 		Describe("when no connector is wired on the server", func() {
 			var err error
 
@@ -558,7 +552,6 @@ var _ = Describe("KeepConnectorService handlers", func() {
 	// ------------------------------------------------------------------ UnbindChecklist
 
 	Describe("UnbindChecklist", func() {
-
 		Describe("when no connector is wired on the server", func() {
 			var err error
 
@@ -631,7 +624,6 @@ var _ = Describe("KeepConnectorService handlers", func() {
 	// ------------------------------------------------------------------ GetChecklistBindingState
 
 	Describe("GetChecklistBindingState", func() {
-
 		Describe("when no connector is wired on the server", func() {
 			var err error
 

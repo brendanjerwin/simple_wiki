@@ -33,11 +33,6 @@ function timeout(ms: number, message: string): Promise<never> {
   );
 }
 
-function makeUnboundState(): typeof GetChecklistBindingStateResponseSchema.$typeName {
-  const state = create(ChecklistBindingStateSchema, { connectorConfigured: true });
-  return create(GetChecklistBindingStateResponseSchema, { state }) as never;
-}
-
 describe('KeepBindButton', () => {
   let el: KeepBindButton;
 

@@ -81,13 +81,13 @@ var _ = Describe("SyncDebouncer", func() {
 		// shortWindow is small enough to fire quickly in tests but large
 		// enough that a fresh timer never fires during test setup (before
 		// we've had a chance to call OnChecklistMutated).
-		shortWindowMs = 10 * time.Millisecond
+		shortWindow = 10 * time.Millisecond
 		// waitBeyond is how long we wait to confirm a job did NOT fire.
-		waitBeyond = 3 * shortWindowMs
+		waitBeyond = 3 * shortWindow
 		// pollInterval is how often Eventually polls.
 		pollInterval = 2 * time.Millisecond
 		// pollTimeout is the max wait for an expected job to appear.
-		pollTimeout = 20 * shortWindowMs
+		pollTimeout = 20 * shortWindow
 	)
 
 	BeforeEach(func() {
@@ -99,13 +99,12 @@ var _ = Describe("SyncDebouncer", func() {
 		logger = &debouncerFakeLogger{}
 		// Connector is only used to construct the sync job, so nil is fine
 		// for tests that only verify enqueue behaviour.
-		debouncer = bridge.NewSyncDebouncer(enqueuer, nil, nil, logger, shortWindowMs)
+		debouncer = bridge.NewSyncDebouncer(enqueuer, nil, nil, logger, shortWindow)
 	})
 
 	// ------------------------------------------------------------------ Suppress / Unsuppress
 
 	Describe("Suppress and Unsuppress", func() {
-
 		Describe("when Suppress is called and OnChecklistMutated fires", func() {
 			BeforeEach(func() {
 				debouncer.Suppress(profileID, debouncePage, debounceListName)
@@ -151,7 +150,6 @@ var _ = Describe("SyncDebouncer", func() {
 	// ------------------------------------------------------------------ OnChecklistMutated
 
 	Describe("OnChecklistMutated", func() {
-
 		Describe("when called with a nil identity", func() {
 			BeforeEach(func() {
 				debouncer.OnChecklistMutated(debouncePage, debounceListName, nil)

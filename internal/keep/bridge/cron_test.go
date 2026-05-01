@@ -40,7 +40,6 @@ var _ = Describe("KeepCronTickJob", func() {
 	// ------------------------------------------------------------------ Execute
 
 	Describe("Execute", func() {
-
 		Describe("when no connector is set (nil connector)", func() {
 			var (
 				job *bridge.KeepCronTickJob
@@ -144,7 +143,6 @@ var _ = Describe("KeepCronTickJob", func() {
 	// ------------------------------------------------------------------ RegisterActiveBindings / ActiveBindingsSnapshot
 
 	Describe("RegisterActiveBindings and ActiveBindingsSnapshot", func() {
-
 		Describe("when two bindings are registered", func() {
 			var snapshot []bridge.BindingKey
 
