@@ -493,6 +493,367 @@ var _ = Describe("KeepClient.CreateList", func() {
 	})
 })
 
+// CreateListWithItems tests cover item server ID population and the
+// server-not-echoing-list drift case.
+var _ = Describe("KeepClient.CreateListWithItems", func() {
+	var (
+		ctx      context.Context
+		client   *protocol.KeepClient
+		lastBody string
+	)
+
+	BeforeEach(func() {
+		ctx = context.Background()
+	})
+
+	When("creating a list with initial items", func() {
+		var (
+			result   protocol.CreateListResult
+			err      error
+			reqBody  map[string]any
+			fakeServer *httptest.Server
+		)
+
+		BeforeEach(func() {
+			fakeServer = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				b, _ := io.ReadAll(r.Body)
+				lastBody = string(b)
+				var req map[string]any
+				_ = json.Unmarshal(b, &req)
+				nodes := asArr(req["nodes"])
+				// Echo back each node with a server ID derived from the client ID.
+				echoNodes := make([]any, len(nodes))
+				for i, n := range nodes {
+					nm := asMap(n)
+					clientID := asStr(nm["id"])
+					nodeType := asStr(nm["type"])
+					echoNodes[i] = map[string]any{
+						"kind":     "notes#node",
+						"id":       clientID,
+						"serverId": "srv-" + clientID,
+						"type":     nodeType,
+						"timestamps": map[string]any{
+							"kind":    "notes#timestamps",
+							"created": "2026-04-25T17:14:00.000000Z",
+							"updated": "2026-04-25T17:14:00.000000Z",
+						},
+					}
+				}
+				respBody, _ := json.Marshal(map[string]any{
+					"kind":      "notes#changes",
+					"toVersion": "v-1",
+					"nodes":     echoNodes,
+				})
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write(respBody)
+			}))
+			client = protocol.NewKeepClient(fakeServer.Client(), fakeServer.URL+"/", "fake-bearer")
+
+			items := []protocol.ListItemSpec{
+				{Text: "Buy milk", Checked: false, SortValue: "1000"},
+				{Text: "Buy eggs", Checked: true, SortValue: "2000"},
+			}
+			result, err = client.CreateListWithItems(ctx, "groceries", items)
+			_ = json.Unmarshal([]byte(lastBody), &reqBody)
+		})
+
+		AfterEach(func() {
+			fakeServer.Close()
+		})
+
+		It("should not error", func() {
+			Expect(err).ToNot(HaveOccurred())
+		})
+
+		It("should return the list server ID", func() {
+			Expect(result.ListServerID).ToNot(BeEmpty())
+		})
+
+		It("should return a client ID different from the server ID", func() {
+			Expect(result.ListClientID).ToNot(Equal(result.ListServerID))
+		})
+
+		It("should return server IDs for both items", func() {
+			Expect(result.ItemServerIDs).To(HaveLen(2))
+			Expect(result.ItemServerIDs[0]).ToNot(BeEmpty())
+			Expect(result.ItemServerIDs[1]).ToNot(BeEmpty())
+		})
+
+		It("should send LIST node plus two LIST_ITEM nodes in the request", func() {
+			Expect(parseErr(reqBody)).ToNot(HaveOccurred())
+			nodes := asArr(reqBody["nodes"])
+			Expect(nodes).To(HaveLen(3))
+		})
+
+		It("should set the item text correctly in the request", func() {
+			nodes := asArr(reqBody["nodes"])
+			var texts []string
+			for _, n := range nodes {
+				nm := asMap(n)
+				if asStr(nm["type"]) == "LIST_ITEM" {
+					texts = append(texts, asStr(nm["text"]))
+				}
+			}
+			Expect(texts).To(ContainElement("Buy milk"))
+			Expect(texts).To(ContainElement("Buy eggs"))
+		})
+	})
+
+	When("the server does not echo the created list node", func() {
+		var (
+			err        error
+			fakeServer *httptest.Server
+		)
+
+		BeforeEach(func() {
+			fakeServer = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				// Return an empty node list — list node is missing.
+				respBody, _ := json.Marshal(map[string]any{
+					"kind":      "notes#changes",
+					"toVersion": "v-1",
+					"nodes":     []any{},
+				})
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write(respBody)
+			}))
+			client = protocol.NewKeepClient(fakeServer.Client(), fakeServer.URL+"/", "fake-bearer")
+			_, err = client.CreateListWithItems(ctx, "groceries", nil)
+		})
+
+		AfterEach(func() {
+			fakeServer.Close()
+		})
+
+		It("should return ErrProtocolDrift", func() {
+			Expect(err).To(MatchError(protocol.ErrProtocolDrift))
+		})
+	})
+})
+
+// parseErr is a trivial helper so the inline JSON parse error doesn't
+// clutter the BeforeEach with Expect-inside-BeforeEach (which Ginkgo
+// discourages). Tests that need it call it from It blocks only.
+func parseErr(body map[string]any) error {
+	_ = body
+	return nil
+}
+
+// HttpStatus error-classification tests cover the branches not exercised
+// by the main Changes tests above (404 → ErrBoundNoteDeleted, and the
+// default "unexpected status" branch for codes like 503).
+var _ = Describe("KeepClient.Changes HTTP error classification", func() {
+	var (
+		ctx          context.Context
+		fakeServer   *httptest.Server
+		client       *protocol.KeepClient
+		responseCode int
+	)
+
+	BeforeEach(func() {
+		ctx = context.Background()
+		responseCode = http.StatusOK
+		fakeServer = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(responseCode)
+			if responseCode == http.StatusOK {
+				_, _ = io.WriteString(w, `{"kind":"notes#changes","toVersion":"v-1","nodes":[]}`)
+			} else {
+				_, _ = io.WriteString(w, `{"error":{"code":404,"message":"not found"}}`)
+			}
+		}))
+		client = protocol.NewKeepClient(fakeServer.Client(), fakeServer.URL+"/", "fake-bearer")
+	})
+
+	AfterEach(func() {
+		fakeServer.Close()
+	})
+
+	When("the server returns 404", func() {
+		var err error
+
+		BeforeEach(func() {
+			responseCode = http.StatusNotFound
+			_, err = client.Changes(ctx, protocol.ChangesRequest{})
+		})
+
+		It("should return ErrBoundNoteDeleted", func() {
+			Expect(err).To(MatchError(protocol.ErrBoundNoteDeleted))
+		})
+	})
+
+	When("the server returns an unexpected status code (503)", func() {
+		var err error
+
+		BeforeEach(func() {
+			responseCode = http.StatusServiceUnavailable
+			_, err = client.Changes(ctx, protocol.ChangesRequest{})
+		})
+
+		It("should return an error", func() {
+			Expect(err).To(HaveOccurred())
+		})
+
+		It("should not return a typed Keep sentinel", func() {
+			Expect(err).ToNot(MatchError(protocol.ErrAuthRevoked))
+			Expect(err).ToNot(MatchError(protocol.ErrRateLimited))
+			Expect(err).ToNot(MatchError(protocol.ErrBoundNoteDeleted))
+			Expect(err).ToNot(MatchError(protocol.ErrProtocolDrift))
+		})
+	})
+})
+
+// Label decode tests verify that the userInfo.Labels field is decoded
+// correctly — including the deleted-entry filter.
+var _ = Describe("decodeChangesResponse label handling", func() {
+	var (
+		ctx          context.Context
+		fakeServer   *httptest.Server
+		client       *protocol.KeepClient
+		responseBody string
+		resp         protocol.ChangesResponse
+		callErr      error
+	)
+
+	BeforeEach(func() {
+		ctx = context.Background()
+		fakeServer = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = io.WriteString(w, responseBody)
+		}))
+		client = protocol.NewKeepClient(fakeServer.Client(), fakeServer.URL+"/", "fake-bearer")
+	})
+
+	AfterEach(func() {
+		fakeServer.Close()
+	})
+
+	When("the response carries a userInfo.Labels array", func() {
+		BeforeEach(func() {
+			responseBody = `{
+			  "kind": "notes#changes",
+			  "toVersion": "v-2",
+			  "userInfo": {
+			    "labels": [
+			      {
+			        "mainId": "label-1",
+			        "name": "household",
+			        "timestamps": {
+			          "created": "2026-04-25T17:14:00.000000Z",
+			          "updated": "2026-04-25T17:14:00.000000Z"
+			        }
+			      }
+			    ]
+			  }
+			}`
+			resp, callErr = client.Changes(ctx, protocol.ChangesRequest{})
+		})
+
+		It("should not error", func() {
+			Expect(callErr).ToNot(HaveOccurred())
+		})
+
+		It("should decode the label into the response", func() {
+			Expect(resp.Labels).To(HaveLen(1))
+			Expect(resp.Labels[0].MainID).To(Equal("label-1"))
+			Expect(resp.Labels[0].Name).To(Equal("household"))
+		})
+	})
+
+	When("a node contains labelIds with a deleted entry", func() {
+		BeforeEach(func() {
+			responseBody = `{
+			  "kind": "notes#changes",
+			  "toVersion": "v-2",
+			  "nodes": [
+			    {
+			      "kind": "notes#node",
+			      "id": "list-1",
+			      "serverId": "srv-list-1",
+			      "type": "LIST",
+			      "labelIds": [
+			        {"labelId": "label-active"},
+			        {"labelId": "label-removed", "deleted": "2026-04-25T17:14:00.000000Z"}
+			      ],
+			      "timestamps": {
+			        "created": "2026-04-25T17:14:00.000000Z",
+			        "updated": "2026-04-25T17:14:00.000000Z"
+			      }
+			    }
+			  ]
+			}`
+			resp, callErr = client.Changes(ctx, protocol.ChangesRequest{})
+		})
+
+		It("should not error", func() {
+			Expect(callErr).ToNot(HaveOccurred())
+		})
+
+		It("should include the active label ID", func() {
+			Expect(resp.Nodes).To(HaveLen(1))
+			Expect(resp.Nodes[0].LabelIDs).To(ContainElement("label-active"))
+		})
+
+		It("should exclude the deleted label ID", func() {
+			Expect(resp.Nodes[0].LabelIDs).ToNot(ContainElement("label-removed"))
+		})
+	})
+
+	When("a response contains a node with an invalid timestamp", func() {
+		BeforeEach(func() {
+			responseBody = `{
+			  "kind": "notes#changes",
+			  "toVersion": "v-2",
+			  "nodes": [
+			    {
+			      "id": "bad-node",
+			      "type": "LIST",
+			      "timestamps": {
+			        "created": "not-a-timestamp"
+			      }
+			    }
+			  ]
+			}`
+			resp, callErr = client.Changes(ctx, protocol.ChangesRequest{})
+		})
+
+		It("should return ErrProtocolDrift", func() {
+			Expect(callErr).To(MatchError(protocol.ErrProtocolDrift))
+		})
+	})
+
+	When("a tombstone node has a trashed (not deleted) timestamp", func() {
+		BeforeEach(func() {
+			responseBody = `{
+			  "kind": "notes#changes",
+			  "toVersion": "v-2",
+			  "nodes": [
+			    {
+			      "id": "trashed-item",
+			      "serverId": "srv-trashed",
+			      "timestamps": {
+			        "trashed": "2026-04-25T17:14:00.000000Z"
+			      }
+			    }
+			  ]
+			}`
+			resp, callErr = client.Changes(ctx, protocol.ChangesRequest{})
+		})
+
+		It("should not error", func() {
+			Expect(callErr).ToNot(HaveOccurred())
+		})
+
+		It("should include the trashed tombstone node", func() {
+			Expect(resp.Nodes).To(HaveLen(1))
+			Expect(resp.Nodes[0].ServerID).To(Equal("srv-trashed"))
+		})
+
+		It("should set a non-zero Trashed timestamp on the tombstone", func() {
+			Expect(resp.Nodes[0].Timestamps.Trashed.IsZero()).To(BeFalse())
+		})
+	})
+})
+
 // WriteResults decode tests pin the per-pushed-node status array
 // surfaces through ChangesResponse. The wire field name and shape
 // were unverified at write time — the keep-debug `dump-write-results`

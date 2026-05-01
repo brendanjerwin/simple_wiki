@@ -49,9 +49,34 @@ else
   echo "Tests completed successfully" | tee -a "$LOG_FILE"
 fi
 
-# When running all tests (no specific paths), also run extension tests.
-# This ensures coverage data is generated for SonarCloud.
+# When running all tests (no specific paths), also run ESLint rule tests
+# and extension tests. This ensures coverage data is generated for SonarCloud.
 if [[ ${#processed_paths[@]} -eq 0 ]]; then
+  echo "" | tee -a "$LOG_FILE"
+  echo "Running ESLint rule tests..." | tee -a "$LOG_FILE"
+  echo "" | tee -a "$LOG_FILE"
+
+  # Run ESLint rule unit tests via bun with coverage. The RuleTester-based
+  # tests are Node-only and cannot run in the browser test runner.
+  mkdir -p coverage/eslint-rules
+  if [[ -n "${CI_COVERAGE}" ]]; then
+    bun test --coverage --coverage-reporter=lcov --coverage-dir=coverage/eslint-rules \
+      eslint-rules/no-string-error-on-litelement.test.js 2>&1 | tee -a "$LOG_FILE"
+  else
+    node eslint-rules/no-string-error-on-litelement.test.js 2>&1 | tee -a "$LOG_FILE"
+  fi
+  eslint_rule_exit=${PIPESTATUS[0]}
+
+  if [[ $eslint_rule_exit -ne 0 ]]; then
+    echo "ESLint rule tests failed with exit code: $eslint_rule_exit" | tee -a "$LOG_FILE"
+  else
+    echo "ESLint rule tests completed successfully" | tee -a "$LOG_FILE"
+  fi
+
+  if [[ $eslint_rule_exit -ne 0 && $test_exit -eq 0 ]]; then
+    test_exit=$eslint_rule_exit
+  fi
+
   echo "" | tee -a "$LOG_FILE"
   echo "Running extension tests..." | tee -a "$LOG_FILE"
   echo "" | tee -a "$LOG_FILE"

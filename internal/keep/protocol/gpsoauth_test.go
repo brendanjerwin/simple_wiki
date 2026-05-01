@@ -122,4 +122,163 @@ var _ = Describe("ExchangeMasterTokenForBearer", func() {
 			Expect(exchangeErr).To(MatchError(protocol.ErrAuthRevoked))
 		})
 	})
+
+	When("Google returns NeedsBrowser on Stage 2", func() {
+		var exchangeErr error
+
+		BeforeEach(func() {
+			responseBody = "Error=NeedsBrowser\n"
+			responseCode = http.StatusForbidden
+			_, exchangeErr = auth.ExchangeMasterTokenForBearer(ctx, "alice@example.com", "oauth2rt_1/fakeMasterToken")
+		})
+
+		It("should return ErrAuthRevoked", func() {
+			Expect(exchangeErr).To(MatchError(protocol.ErrAuthRevoked))
+		})
+	})
+
+	When("Google returns no Auth and no Error on Stage 2 (protocol drift)", func() {
+		var exchangeErr error
+
+		BeforeEach(func() {
+			responseBody = "SomeOtherField=value\n"
+			_, exchangeErr = auth.ExchangeMasterTokenForBearer(ctx, "alice@example.com", "oauth2rt_1/fakeMasterToken")
+		})
+
+		It("should return ErrProtocolDrift", func() {
+			Expect(exchangeErr).To(MatchError(protocol.ErrProtocolDrift))
+		})
+	})
+
+	When("the server returns HTTP 503 on Stage 2", func() {
+		var exchangeErr error
+
+		BeforeEach(func() {
+			responseBody = "Error=ServiceUnavailable\n"
+			responseCode = http.StatusServiceUnavailable
+			_, exchangeErr = auth.ExchangeMasterTokenForBearer(ctx, "alice@example.com", "oauth2rt_1/fakeMasterToken")
+		})
+
+		It("should return a transport-level error, not a typed auth sentinel", func() {
+			Expect(exchangeErr).To(HaveOccurred())
+			Expect(exchangeErr).ToNot(MatchError(protocol.ErrInvalidCredentials))
+			Expect(exchangeErr).ToNot(MatchError(protocol.ErrAuthRevoked))
+		})
+	})
+})
+
+var _ = Describe("ExchangeOAuthTokenForMasterToken", func() {
+	var (
+		ctx          context.Context
+		auth         *protocol.Authenticator
+		fakeServer   *httptest.Server
+		responseBody string
+		responseCode int
+	)
+
+	BeforeEach(func() {
+		ctx = context.Background()
+		responseBody = "Token=master_token_here\n"
+		responseCode = http.StatusOK
+		fakeServer = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+			w.WriteHeader(responseCode)
+			_, _ = io.WriteString(w, responseBody)
+		}))
+		auth = protocol.NewAuthenticator(fakeServer.Client(), fakeServer.URL, "0123456789abcdef")
+	})
+
+	AfterEach(func() {
+		fakeServer.Close()
+	})
+
+	When("Google returns a successful Token", func() {
+		var (
+			token string
+			err   error
+		)
+
+		BeforeEach(func() {
+			token, err = auth.ExchangeOAuthTokenForMasterToken(ctx, "alice@example.com", "oauth_token_here")
+		})
+
+		It("should not error", func() {
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should return the Token value as the master token", func() {
+			Expect(token).To(Equal("master_token_here"))
+		})
+	})
+
+	When("Google returns BadAuthentication (wrong credentials)", func() {
+		var err error
+
+		BeforeEach(func() {
+			responseBody = "Error=BadAuthentication\nErrorDetail=InvalidPasswordError\n"
+			responseCode = http.StatusForbidden
+			_, err = auth.ExchangeOAuthTokenForMasterToken(ctx, "alice@example.com", "bad_oauth_token")
+		})
+
+		It("should return ErrInvalidCredentials", func() {
+			Expect(err).To(MatchError(protocol.ErrInvalidCredentials))
+		})
+	})
+
+	When("Google returns NeedsBrowser (2FA or security check required)", func() {
+		var err error
+
+		BeforeEach(func() {
+			responseBody = "Error=NeedsBrowser\n"
+			responseCode = http.StatusForbidden
+			_, err = auth.ExchangeOAuthTokenForMasterToken(ctx, "alice@example.com", "needs_browser_token")
+		})
+
+		It("should return ErrAuthRevoked", func() {
+			Expect(err).To(MatchError(protocol.ErrAuthRevoked))
+		})
+	})
+
+	When("Google returns no Token and no Error (protocol drift)", func() {
+		var err error
+
+		BeforeEach(func() {
+			responseBody = "SomeOtherField=value\n"
+			_, err = auth.ExchangeOAuthTokenForMasterToken(ctx, "alice@example.com", "oauth_token")
+		})
+
+		It("should return ErrProtocolDrift", func() {
+			Expect(err).To(MatchError(protocol.ErrProtocolDrift))
+		})
+	})
+
+	When("Google returns an unrecognized Error value", func() {
+		var err error
+
+		BeforeEach(func() {
+			responseBody = "Error=AccountDeleted\n"
+			responseCode = http.StatusForbidden
+			_, err = auth.ExchangeOAuthTokenForMasterToken(ctx, "alice@example.com", "oauth_token")
+		})
+
+		It("should return ErrAuthRevoked (catch-all for unrecognized errors)", func() {
+			Expect(err).To(MatchError(protocol.ErrAuthRevoked))
+		})
+	})
+
+	When("the auth server returns HTTP 503", func() {
+		var err error
+
+		BeforeEach(func() {
+			responseBody = "Error=ServiceUnavailable\n"
+			responseCode = http.StatusServiceUnavailable
+			_, err = auth.ExchangeOAuthTokenForMasterToken(ctx, "alice@example.com", "oauth_token")
+		})
+
+		It("should return a transport-level error, not a typed auth sentinel", func() {
+			Expect(err).To(HaveOccurred())
+			Expect(err).ToNot(MatchError(protocol.ErrInvalidCredentials))
+			Expect(err).ToNot(MatchError(protocol.ErrAuthRevoked))
+		})
+	})
 })
