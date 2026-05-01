@@ -24,7 +24,7 @@ export CHROMIUM_BIN=$(which chromium)
 cd static/js || exit 1
 
 echo "Installing dependencies..." | tee -a "$LOG_FILE"
-bun install 2>&1 | tee -a "$LOG_FILE"
+bun install --ignore-scripts 2>&1 | tee -a "$LOG_FILE"
 install_exit=${PIPESTATUS[0]}
 if [[ $install_exit -ne 0 ]]; then
   echo "bun install failed with exit code $install_exit" | tee -a "$LOG_FILE"
@@ -83,7 +83,7 @@ if [[ ${#processed_paths[@]} -eq 0 ]]; then
 
   cd "$PROJECT_ROOT/extensions/online-order-recorder" || exit 1
 
-  bun install 2>&1 | tee -a "$LOG_FILE"
+  bun install --ignore-scripts 2>&1 | tee -a "$LOG_FILE"
   ext_install_exit=${PIPESTATUS[0]}
   if [[ $ext_install_exit -ne 0 ]]; then
     echo "Extension bun install failed with exit code $ext_install_exit" | tee -a "$LOG_FILE"
