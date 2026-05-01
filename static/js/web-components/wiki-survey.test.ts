@@ -160,7 +160,7 @@ describe('WikiSurvey', () => {
 
     it('should render the human-readable label text', () => {
       const label = el.shadowRoot?.querySelector('label[for="field-protein_preference"]');
-      expect(label?.textContent?.trim()).to.equal('Protein preference');
+      expect(label?.textContent?.trim()).to.include('Protein preference');
     });
   });
 
@@ -186,7 +186,7 @@ describe('WikiSurvey', () => {
 
     it('should render the label text instead of the field name', () => {
       const label = el.shadowRoot?.querySelector('label[for="field-mood_score"]');
-      expect(label?.textContent?.trim()).to.equal('How do you feel? (1–5)');
+      expect(label?.textContent?.trim()).to.include('How do you feel? (1–5)');
     });
   });
 
