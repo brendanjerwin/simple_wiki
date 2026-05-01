@@ -64,6 +64,13 @@ const KeepServiceScope = "oauth2:https://www.googleapis.com/auth/memento https:/
 // Stage 2.
 const keepAndroidApp = "com.google.android.keep"
 
+// authErrWrapFmt is the canonical fmt format string for wrapping a
+// typed sentinel error (Err*) with a one-line summary of Google's
+// auth response. Used across the BadAuthentication / NeedsBrowser /
+// drift / default branches in classifyAuthError so the wire-error
+// shape stays consistent.
+const authErrWrapFmt = "%w: %s"
+
 // ExchangeMasterTokenForBearer performs Stage 2 of the auth flow: trade a
 // long-lived master token for a short-lived bearer scoped to the Keep API.
 // Bearer is returned verbatim — caller adds it as
@@ -219,14 +226,14 @@ func classifyAuthError(resp map[string]string) error {
 	summary := summarizeAuthResponse(resp)
 	switch resp["Error"] {
 	case "BadAuthentication":
-		return fmt.Errorf("%w: %s", ErrInvalidCredentials, summary)
+		return fmt.Errorf(authErrWrapFmt, ErrInvalidCredentials, summary)
 	case "NeedsBrowser":
 		return fmt.Errorf("%w: browser sign-in required (%s)", ErrAuthRevoked, summary)
 	case "":
 		// No Token AND no Error — treat as drift.
-		return fmt.Errorf("%w: %s", ErrProtocolDrift, summary)
+		return fmt.Errorf(authErrWrapFmt, ErrProtocolDrift, summary)
 	default:
-		return fmt.Errorf("%w: %s", ErrAuthRevoked, summary)
+		return fmt.Errorf(authErrWrapFmt, ErrAuthRevoked, summary)
 	}
 }
 

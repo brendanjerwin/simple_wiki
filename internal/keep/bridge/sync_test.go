@@ -1,4 +1,5 @@
 //revive:disable:dot-imports
+//revive:disable:add-constant
 package bridge_test
 
 import (
@@ -1627,11 +1628,10 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 			c, store, kc, chk = freshConnector(profile, page, listName, listSrv, map[string]string{
 				"uid-A": "srv-A",
 			})
-			// TODO(task #76): rewrite this test around content fingerprints
-			// once the divergence rule is implemented. For now, the
-			// stub-test setup lets the sync run; the assertions below
-			// will need a fingerprint-baseline rebaseline when task #76
-			// lands.
+			// Note: this test predates the content-fingerprint
+			// divergence rule (task #76); the assertions below treat
+			// the post-rewrite shape as authoritative, so the stub-
+			// test setup just lets sync run end-to-end.
 			thirtyMinAgo := timestamppb.New(tNow.Add(-30 * time.Minute))
 			_ = store
 
@@ -2063,6 +2063,58 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 			}
 			Expect(listNode).NotTo(BeNil(), "expected a LIST node in push")
 			Expect(listNode.LabelIDs).To(HaveLen(2))
+		})
+
+		It("should NOT carry the Title field on the LIST push (Keep is authoritative)", func() {
+			var listNode *protocol.Node
+			for i, n := range kc.lastPush().Nodes {
+				if n.Type == protocol.NodeTypeList {
+					listNode = &kc.lastPush().Nodes[i]
+					break
+				}
+			}
+			Expect(listNode).NotTo(BeNil())
+			Expect(listNode.Title).To(BeEmpty(),
+				"outbound LIST updates must omit Title — once bound, Keep owns the note name; sending wiki's binding.KeepNoteTitle would clobber any rename the user did in the Keep app")
+		})
+	})
+
+	// title-keep-authoritative — the user's rename of the note in the
+	// Keep app must propagate into binding.KeepNoteTitle so the macro
+	// UI shows the current Keep-side name. The wiki list identity
+	// (Page, ListName) is unchanged; only the cosmetic title moves.
+	Describe("title_inbound_sync — Keep rename propagates to binding.KeepNoteTitle", func() {
+		BeforeEach(func() {
+			c, _, kc, chk = freshConnector(profile, page, listName, listSrv, map[string]string{
+				"uid-A": "srv-A",
+			})
+			chk.items = []*apiv1.ChecklistItem{
+				{Uid: "uid-A", Text: "Apples", SortOrder: 1000, UpdatedAt: recentTime()},
+			}
+			// Pull echoes the LIST node with a NEW title — user
+			// renamed it in the Keep app.
+			kc.pullState = protocol.ChangesResponse{
+				ToVersion: "v-after-rename",
+				Nodes: []protocol.Node{
+					{
+						Kind:     "notes#node",
+						ID:       "list-client-id",
+						ServerID: listSrv,
+						Type:     protocol.NodeTypeList,
+						Title:    "Renamed in Keep",
+					},
+					keepItem("srv-A", "client-A", listSrv, "Apples", false, "1000"),
+				},
+			}
+			Expect(c.SyncToKeep(ctx, profile, page, listName)).To(Succeed())
+		})
+
+		It("should update binding.KeepNoteTitle to the value Keep echoes", func() {
+			b, found, err := c.FindBinding(ctx, profile, page, listName)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(found).To(BeTrue())
+			Expect(b.KeepNoteTitle).To(Equal("Renamed in Keep"),
+				"connector must mirror Keep's authoritative title into the binding")
 		})
 	})
 

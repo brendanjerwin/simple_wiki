@@ -223,7 +223,7 @@ func parseSortValue(s string) (int64, error) {
 	if n, err := strconv.ParseInt(s, sortOrderBase, sortOrderBitSize); err == nil {
 		return n, nil
 	}
-	if f, err := strconv.ParseFloat(s, 64); err == nil {
+	if f, err := strconv.ParseFloat(s, sortOrderBitSize); err == nil {
 		return int64(f), nil
 	}
 	return 0, fmt.Errorf("sortValue %q is neither an integer nor a float", s)

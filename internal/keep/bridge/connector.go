@@ -194,7 +194,7 @@ func newAuthHTTPClient() *http.Client {
 		},
 		ForceAttemptHTTP2: false,
 	}
-	return &http.Client{Transport: transport, Timeout: 30 * time.Second}
+	return &http.Client{Transport: transport, Timeout: keepHTTPClientTimeoutSeconds * time.Second}
 }
 
 // Connect performs the full connect flow: oauth_token → master token →
@@ -425,6 +425,13 @@ func (c *Connector) Bind(ctx context.Context, profileID wikipage.PageIdentifier,
 // global re-numbering. 1000 is gkeepapi's gap of choice.
 const sortValueGap = 1000
 
+// keepHTTPClientTimeoutSeconds is the request timeout for the
+// dedicated Keep HTTP client. 30s is comfortably above Keep's worst
+// observed full-pull latency on the household-scale account but
+// short enough that a stuck request doesn't park a sync worker
+// indefinitely.
+const keepHTTPClientTimeoutSeconds = 30
+
 // keepSessionIDOffset and keepSessionIDSpan together produce a 10-digit
 // session-id suffix in [1000000000, 9999999999], matching gkeepapi.
 // Pulled out so the magic numbers don't repeat in generatePushSessionID.
@@ -535,6 +542,14 @@ func (c *Connector) logSkipOnce(profileID wikipage.PageIdentifier, page, listNam
 // hasn't seen yet, our push still goes through (Keep's CRDT-ish backend
 // merges by node). The bidirectional reconcile that preserves Keep-side
 // edits is the inbound-sync follow-up (#1007).
+//
+// The function is long because it orchestrates a single atomic tick
+// (read state → pull → apply inbound → diff outbound → push → persist
+// outcomes) and splitting that into helpers without losing readability
+// is a follow-up refactor; the inline structure makes the production-
+// debugging trace much easier to follow against the live wire log.
+//
+//revive:disable-next-line:function-length,cognitive-complexity,cyclomatic
 func (c *Connector) SyncToKeep(ctx context.Context, profileID wikipage.PageIdentifier, page, listName string) error {
 	if c.checklistR == nil {
 		return ErrChecklistReaderUnavailable
@@ -615,6 +630,20 @@ func (c *Connector) SyncToKeep(ctx context.Context, profileID wikipage.PageIdent
 		}
 		if binding.KeepNoteClientID == "" {
 			keepNoteClientIDMissingAfterPull = true
+		}
+	}
+
+	// Title sync: Keep is authoritative for the note name once bound.
+	// If the pull echoes the LIST node with a non-empty Title that
+	// differs from the binding's stored value, the user renamed the
+	// note in the Keep app — mirror that into binding.KeepNoteTitle
+	// so the macro UI surfaces the current name. The wiki list
+	// identity (Page, ListName) is unchanged; only the cosmetic
+	// title moves.
+	for _, n := range pull.Nodes {
+		if n.Type == protocol.NodeTypeList && n.ServerID == binding.KeepNoteID && n.Title != "" && n.Title != binding.KeepNoteTitle {
+			binding.KeepNoteTitle = n.Title
+			break
 		}
 	}
 
@@ -1025,12 +1054,19 @@ func (c *Connector) SyncToKeep(ctx context.Context, profileID wikipage.PageIdent
 		if listClientID == "" {
 			listClientID = binding.KeepNoteID
 		}
+		// Title intentionally omitted on outbound LIST updates: once
+		// bound, Keep is authoritative for the note name. Sending
+		// binding.KeepNoteTitle here would clobber any rename the
+		// user did in the Keep app (the binding only refreshes from
+		// pulls, so the wiki-side value is stale by definition).
+		// The initial create-note path in Bind/bootstrap is where
+		// the title is set; from then on, inbound apply mirrors
+		// Keep's value back into binding.KeepNoteTitle.
 		listNode := protocol.Node{
 			Kind:       "notes#node",
 			ID:         listClientID,
 			ServerID:   binding.KeepNoteID,
 			Type:       protocol.NodeTypeList,
-			Title:      binding.KeepNoteTitle,
 			LabelIDs:   listLabelIDs,
 			Timestamps: protocol.Timestamps{Updated: now},
 		}
@@ -1249,6 +1285,14 @@ func countDeadLetters(idMap map[string]ItemBinding) int64 {
 // the actual masking-deletes risk this guard protects against. The
 // reset gives the next tick a clean baseline regardless of which
 // branch fires.
+//
+// `progressed` is intentionally a boolean — it's the per-tick
+// summary of whether *any* synced_fp moved during inbound apply.
+// The caller computes it from the apply pass's iteration; turning
+// it into a struct or sentinel value would be ceremony with no
+// information added.
+//
+//revive:disable-next-line:flag-parameter
 func (c *Connector) maybeForceFullResyncOnTruncation(ctx context.Context, binding *Binding, priorCursor string, progressed bool, profileID wikipage.PageIdentifier) {
 	if binding.TruncatedTickStreak < truncationResyncThreshold {
 		return
@@ -1444,7 +1488,7 @@ func (c *Connector) markBindingSynced(profileID wikipage.PageIdentifier, binding
 // pass (refcounted). Outbound push then runs unsuppressed; if it
 // itself produces new wiki state via the response (e.g. new Keep
 // serverIDs), those land via the response-walk in the caller.
-//revive:disable-next-line:function-result-limit
+//revive:disable-next-line:function-result-limit,function-length,cognitive-complexity,cyclomatic
 func (c *Connector) applyInboundFromKeep(ctx context.Context, profileID wikipage.PageIdentifier, ownerEmail string, binding Binding, pull protocol.ChangesResponse, currentChecklist *apiv1.Checklist) (Binding, *apiv1.Checklist, bool, error) {
 	if c.checklistW == nil {
 		// No mutator wired — outbound-only mode. Return inputs as-is.
@@ -1641,8 +1685,9 @@ func (c *Connector) applyInboundFromKeep(ctx context.Context, profileID wikipage
 	//     since the request's TargetVersion. Unchanged items are simply
 	//     omitted — their absence from pull.Nodes is NOT a deletion
 	//     signal. This guard is the fix for the post-deploy mass-delete
-	//     bug: the cursor-induced incremental pull made class-4 fire
-	//     against id_map entries whose items were merely unchanged.
+	//     regression: the cursor-induced incremental pull previously
+	//     made class-4 fire against id_map entries whose items were
+	//     merely unchanged.
 	//   - !binding.MigratedFingerprints: legacy binding without seeded
 	//     synced_fp; the migration job will rebaseline first.
 	//   - sanity check: if the pull contained ZERO of id_map's serverIDs,
@@ -1860,7 +1905,7 @@ func (c *Connector) persistBindingMap(profileID wikipage.PageIdentifier, binding
 // we'd rather have a working bind than a hard failure if the pull
 // flakes.).
 //
-//revive:disable-next-line:function-result-limit,cognitive-complexity
+//revive:disable-next-line:function-result-limit,cognitive-complexity,function-length
 func (c *Connector) seedIDMapFromExistingList(ctx context.Context, client KeepClient, listServerID string, wikiItems []InitialItem) (map[string]ItemBinding, map[string]string, string) {
 	idMap := map[string]ItemBinding{}
 	labelIDs := map[string]string{}
@@ -2212,6 +2257,8 @@ var ErrBoundNoteDeletedLocal = protocol.ErrBoundNoteDeleted
 // binding stays MigratedFingerprints=false; the eager migration's
 // queue retries with backoff. SyncToKeep keeps skipping that
 // binding via the gate until migration finally succeeds.
+//
+//revive:disable-next-line:function-length,cognitive-complexity,cyclomatic
 func (c *Connector) MigrateBindingFingerprints(ctx context.Context, profileID wikipage.PageIdentifier, page, listName string) error {
 	if c.checklistR == nil {
 		return ErrChecklistReaderUnavailable

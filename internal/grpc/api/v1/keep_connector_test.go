@@ -1,4 +1,6 @@
 //revive:disable:dot-imports
+//revive:disable:add-constant
+//revive:disable:redundant-import-alias
 package v1_test
 
 import (

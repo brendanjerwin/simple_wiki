@@ -83,6 +83,8 @@ func (c *KeepClient) CreateList(ctx context.Context, title string) (string, erro
 // request's parent_id (the list's serverID) doesn't yet refer to a
 // node the client has acknowledged. Bundled, the items reference the
 // list's CLIENT id and the server resolves the linkage server-side.
+//
+//revive:disable-next-line:function-length
 func (c *KeepClient) CreateListWithItems(ctx context.Context, title string, items []ListItemSpec) (CreateListResult, error) {
 	now := time.Now().UTC()
 	listClientID, err := generateKeepID(now)

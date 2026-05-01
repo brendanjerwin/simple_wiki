@@ -1,3 +1,18 @@
+// keep-debug is a single-binary diagnostic CLI for the Keep bridge.
+// It is intentionally structured around branchy subcommand handlers
+// that exit on error and write rich progress text to stdout — the
+// shape that's most useful when poking live Keep responses by hand.
+// The revive rules below relax production-code conventions that
+// don't fit a one-off operator tool.
+//
+//revive:disable:deep-exit
+//revive:disable:unhandled-error
+//revive:disable:cognitive-complexity
+//revive:disable:cyclomatic
+//revive:disable:function-length
+//revive:disable:unchecked-type-assertion
+//revive:disable:add-constant
+//revive:disable:flag-parameter
 package main
 
 import (

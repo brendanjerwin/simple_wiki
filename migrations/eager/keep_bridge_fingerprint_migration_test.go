@@ -1,4 +1,6 @@
 //revive:disable:dot-imports
+//revive:disable:add-constant
+//revive:disable:unused-receiver
 package eager
 
 import (

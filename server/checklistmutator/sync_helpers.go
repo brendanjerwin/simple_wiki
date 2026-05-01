@@ -31,6 +31,11 @@ func syncIdentityFor(ownerEmail string) tailscale.IdentityValue {
 //
 // SortValueHint is forwarded as args.SortOrder when non-zero —
 // preserves Keep's relative ordering when seeding fresh items.
+//
+// `checked` is a value, not a control flag — it's Keep's reported
+// checkbox state for the new item.
+//
+//revive:disable-next-line:flag-parameter
 func (m *Mutator) AddItemForSync(ctx context.Context, page, listName, ownerEmail, text string, checked bool, tags []string, description, sortValueHint string) (string, error) {
 	args := AddItemArgs{
 		Text: text,
@@ -65,6 +70,12 @@ func (m *Mutator) AddItemForSync(ctx context.Context, page, listName, ownerEmail
 // UpdateItemForSync is the Keep-sync entry point for "Keep changed
 // this item; mirror it on the wiki side." Replaces text/tags/
 // description and reconciles checked. Attribution goes to ownerEmail.
+//
+// `checked` is a value, not a control flag — it's the new desired
+// checkbox state from Keep. The connector passes whatever Keep
+// reports (checked or unchecked) and this function applies it.
+//
+//revive:disable-next-line:flag-parameter
 func (m *Mutator) UpdateItemForSync(ctx context.Context, page, listName, ownerEmail, uid, text string, checked bool, tags []string, description string) error {
 	args := UpdateItemArgs{
 		Text:           &text,
@@ -97,6 +108,10 @@ func (m *Mutator) DeleteItemForSync(ctx context.Context, page, listName, ownerEm
 	return err
 }
 
+// decimalRadix is the multiplicative base used by parseSortHint to
+// shift accumulated digits left by one position.
+const decimalRadix = 10
+
 // parseSortHint parses Keep's SortValue (numeric string, sometimes
 // float-style). Returns 0 on any parse failure — caller treats 0 as
 // "no hint, append to end."
@@ -120,7 +135,7 @@ func parseSortHint(s string) int64 {
 			n = -n
 			continue
 		}
-		n = n*10 + int64(r-'0')
+		n = n*decimalRadix + int64(r-'0')
 	}
 	return n
 }

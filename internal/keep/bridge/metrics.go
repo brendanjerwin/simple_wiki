@@ -219,6 +219,12 @@ func (m *metrics) recordSilentRebaseline(ctx context.Context, profileID wikipage
 // 1 when it enqueues a job, the migration job clears to 0 on
 // successful rebaseline. A binding stuck at 1 for hours is the
 // "is the migration drained yet?" alert surface.
+//
+// `pending` is the gauge value, not a control flag — the caller
+// already decided whether this binding has a queued migration job
+// and we just emit the boolean as 0/1.
+//
+//revive:disable-next-line:flag-parameter
 func (m *metrics) setMigrationPending(ctx context.Context, profileID wikipage.PageIdentifier, page, list string, pending bool) {
 	if m == nil || m.migrationPending == nil {
 		return

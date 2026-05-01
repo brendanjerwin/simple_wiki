@@ -759,7 +759,14 @@ func getInt(m map[string]any, key string) int {
 }
 
 func getBool(m map[string]any, key string) bool {
-	b, _ := m[key].(bool)
+	v, ok := m[key]
+	if !ok {
+		return false
+	}
+	b, ok := v.(bool)
+	if !ok {
+		return false
+	}
 	return b
 }
 

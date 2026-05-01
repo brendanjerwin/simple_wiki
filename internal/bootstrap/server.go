@@ -440,8 +440,17 @@ func BuildVanguardTranscoder(grpcServer *grpc.Server, ginRouter http.Handler) (h
 	return mux, nil
 }
 
+// keepOutboundSyncQueueDepth bounds the per-worker queue for Keep
+// outbound sync jobs. 256 is generous for household-scale workloads
+// (a handful of bindings each ticking every 30s); we'd only hit it
+// during sustained Keep unreachability and the metric would surface
+// the backlog before it became a problem.
+const keepOutboundSyncQueueDepth = 256
+
 // setupGRPCServer creates and configures the gRPC server with interceptors.
 // It returns both the gRPC transport server and the underlying API server for direct in-process calls.
+//
+//revive:disable-next-line:function-length
 func setupGRPCServer(
 	site *server.Site,
 	commit string,
@@ -485,7 +494,7 @@ func setupGRPCServer(
 	// global; concurrent pushes on the same account would race the
 	// version cursor and force resyncs.
 	if err := site.GetJobQueueCoordinator().RegisterQueue(
-		bridge.KeepOutboundSyncJobName, 1, 256,
+		bridge.KeepOutboundSyncJobName, 1, keepOutboundSyncQueueDepth,
 	); err != nil {
 		return nil, nil, fmt.Errorf("register Keep outbound sync queue: %w", err)
 	}

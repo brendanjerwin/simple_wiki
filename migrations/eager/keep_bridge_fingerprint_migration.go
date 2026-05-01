@@ -167,8 +167,8 @@ func (j *KeepBridgeFingerprintMigrationScanJob) profileIDIfHasKeepConnector(file
 	if !ok {
 		return "", false
 	}
-	email, _ := gk["email"].(string)
-	if email == "" {
+	email, ok := gk["email"].(string)
+	if !ok || email == "" {
 		return "", false
 	}
 	id, ok := fm["identifier"].(string)
