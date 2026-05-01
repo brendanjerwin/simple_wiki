@@ -315,7 +315,7 @@ describe('WikiSurvey', () => {
             fields: [
               { name: 'rating', type: 'number', min: 1, max: 5 },
               { name: 'protein_preference', type: 'text' },
-              { name: 'favorite_food', type: 'text', label: "What's your preferred protein?" },
+              { name: 'favorite_food', type: 'text', label: "What's your favorite food?" },
               { name: 'agreed', type: 'boolean' },
               { name: 'mood', type: 'choice', options: ['happy', 'sad'] },
             ],
@@ -372,7 +372,7 @@ describe('WikiSurvey', () => {
           });
 
           it('should render the explicit label verbatim', () => {
-            expect(label?.textContent?.trim()).to.equal("What's your preferred protein?");
+            expect(label?.textContent?.trim()).to.equal("What's your favorite food?");
           });
         });
       });
