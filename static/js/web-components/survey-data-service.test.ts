@@ -213,6 +213,58 @@ describe('extractSurveyData', () => {
       expect(result.fields[0]?.options).to.deep.equal(['red', 'blue', 'green']);
     });
   });
+
+  describe('when fields contain a select type (alias for choice)', () => {
+    let result: SurveyData;
+
+    beforeEach(() => {
+      result = extractSurveyData(
+        {
+          surveys: {
+            my_survey: {
+              question: 'Test',
+              fields: [
+                { name: 'protein', type: 'select', options: ['Chicken', 'Beef', 'Fish'] },
+              ],
+            },
+          },
+        } as unknown as JsonObject,
+        'my_survey'
+      );
+    });
+
+    it('should map type to choice', () => {
+      expect(result.fields[0]?.type).to.equal('choice');
+    });
+
+    it('should extract options', () => {
+      expect(result.fields[0]?.options).to.deep.equal(['Chicken', 'Beef', 'Fish']);
+    });
+  });
+
+  describe('when a field has a label', () => {
+    let result: SurveyData;
+
+    beforeEach(() => {
+      result = extractSurveyData(
+        {
+          surveys: {
+            my_survey: {
+              question: 'Test',
+              fields: [
+                { name: 'protein_preference', type: 'select', label: 'Protein preference', options: ['Chicken', 'Beef'] },
+              ],
+            },
+          },
+        } as unknown as JsonObject,
+        'my_survey'
+      );
+    });
+
+    it('should extract the label', () => {
+      expect(result.fields[0]?.label).to.equal('Protein preference');
+    });
+  });
 });
 
 describe('findUserResponse', () => {

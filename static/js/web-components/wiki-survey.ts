@@ -213,7 +213,7 @@ export class WikiSurvey extends LitElement {
     return html`
       <div class="field-group">
         <label class="field-label" for="field-${field.name}">
-          ${field.name}${field.required ? html`<span class="required-indicator" aria-hidden="true"> *</span>` : nothing}
+          ${field.label ?? field.name}${field.required ? html`<span class="required-indicator" aria-hidden="true"> *</span>` : nothing}
         </label>
         <input
           id="field-${field.name}"
@@ -252,7 +252,7 @@ export class WikiSurvey extends LitElement {
             }}"
           />
           <label class="field-label" for="field-${field.name}">
-            ${field.name}${field.required ? html`<span class="required-indicator" aria-hidden="true"> *</span>` : nothing}
+            ${field.label ?? field.name}${field.required ? html`<span class="required-indicator" aria-hidden="true"> *</span>` : nothing}
           </label>
         </div>
       </div>
@@ -266,7 +266,7 @@ export class WikiSurvey extends LitElement {
     return html`
       <div class="field-group">
         <label class="field-label" for="field-${field.name}">
-          ${field.name}${field.required ? html`<span class="required-indicator" aria-hidden="true"> *</span>` : nothing}
+          ${field.label ?? field.name}${field.required ? html`<span class="required-indicator" aria-hidden="true"> *</span>` : nothing}
         </label>
         <select
           id="field-${field.name}"
@@ -292,7 +292,7 @@ export class WikiSurvey extends LitElement {
     return html`
       <div class="field-group">
         <label class="field-label" for="field-${field.name}">
-          ${field.name}${field.required ? html`<span class="required-indicator" aria-hidden="true"> *</span>` : nothing}
+          ${field.label ?? field.name}${field.required ? html`<span class="required-indicator" aria-hidden="true"> *</span>` : nothing}
         </label>
         <input
           id="field-${field.name}"

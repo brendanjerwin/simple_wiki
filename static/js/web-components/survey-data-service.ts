@@ -11,6 +11,7 @@ export function asRecord(value: unknown): Record<string, unknown> | null {
 
 export interface SurveyField {
   name: string;
+  label?: string;
   type: 'number' | 'text' | 'choice' | 'boolean';
   required?: boolean;
   min?: number;
@@ -41,8 +42,11 @@ function parseSurveyField(raw: unknown): SurveyField | null {
   const type: SurveyField['type'] =
     rawType === 'number' || rawType === 'text' || rawType === 'choice' || rawType === 'boolean'
       ? rawType
-      : 'text';
+      : rawType === 'select'
+        ? 'choice'
+        : 'text';
   const field: SurveyField = { name, type };
+  if (typeof r['label'] === 'string' && r['label']) field.label = r['label'];
   if (r['required'] === true) field.required = true;
   if (typeof r['min'] === 'number') field.min = r['min'];
   if (typeof r['max'] === 'number') field.max = r['max'];
