@@ -46,7 +46,10 @@ function parseSurveyField(raw: unknown): SurveyField | null {
         ? 'choice'
         : 'text';
   const field: SurveyField = { name, type };
-  if (typeof r['label'] === 'string' && r['label'].trim()) field.label = r['label'];
+  if (typeof r['label'] === 'string') {
+    const trimmedLabel = r['label'].trim();
+    if (trimmedLabel) field.label = trimmedLabel;
+  }
   if (r['required'] === true) field.required = true;
   if (typeof r['min'] === 'number') field.min = r['min'];
   if (typeof r['max'] === 'number') field.max = r['max'];
