@@ -9,6 +9,8 @@ system = true
 
 # Google Keep bridge
 
+> See [[help-connectors]] for the index of all checklist bridges.
+
 Connect your Google account so wiki checklists can be bound to Google Keep notes — items show up in the Keep app on your phone, and (eventually) edits round-trip.
 
 The macro is a view over the data; Keep is another view over the same data. The wiki uses an unofficial reverse-engineered Keep API — there is no public Google API to use instead.
