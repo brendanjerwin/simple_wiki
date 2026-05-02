@@ -1,4 +1,4 @@
-package bridge
+package sync
 
 import (
 	"context"
@@ -16,8 +16,9 @@ import (
 	"time"
 
 	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
+	"github.com/brendanjerwin/simple_wiki/internal/connectors/google_keep/gateway"
+	"github.com/brendanjerwin/simple_wiki/internal/connectors/google_keep/translator"
 	"github.com/brendanjerwin/simple_wiki/internal/hashtags"
-	"github.com/brendanjerwin/simple_wiki/internal/keep/protocol"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 )
 
@@ -30,7 +31,7 @@ type SystemClock struct{}
 // Now returns wall-clock time.
 func (SystemClock) Now() time.Time { return time.Now() }
 
-// AuthExchanger is the subset of protocol.Authenticator the connector uses.
+// AuthExchanger is the subset of gateway.Authenticator the connector uses.
 // Stated as an interface so tests can substitute a fake without spinning up
 // a real httptest server for every Connector test.
 type AuthExchanger interface {
@@ -39,14 +40,14 @@ type AuthExchanger interface {
 }
 
 // KeepClientFactory creates a KeepClient given a bearer. Real factory just
-// constructs *protocol.KeepClient; tests inject a stub.
+// constructs *gateway.KeepClient; tests inject a stub.
 type KeepClientFactory func(bearer string) KeepClient
 
-// KeepClient is the subset of *protocol.KeepClient the connector calls.
+// KeepClient is the subset of *gateway.KeepClient the connector calls.
 type KeepClient interface {
-	Changes(ctx context.Context, req protocol.ChangesRequest) (protocol.ChangesResponse, error)
+	Changes(ctx context.Context, req gateway.ChangesRequest) (gateway.ChangesResponse, error)
 	CreateList(ctx context.Context, title string) (string, error)
-	CreateListWithItems(ctx context.Context, title string, items []protocol.ListItemSpec) (protocol.CreateListResult, error)
+	CreateListWithItems(ctx context.Context, title string, items []gateway.ListItemSpec) (gateway.CreateListResult, error)
 }
 
 // ChecklistReader is the read-side of checklistmutator the connector
@@ -83,7 +84,7 @@ type Connector struct {
 	store         *BindingStore
 	httpClient    *http.Client
 	clock         Clock
-	debug         protocol.DebugLogger
+	debug         gateway.DebugLogger
 	checklistR    ChecklistReader
 	checklistW    ChecklistMutator
 	suppressor    SyncSuppressor
@@ -139,7 +140,7 @@ func (c *Connector) SetChecklistReader(r ChecklistReader) { c.checklistR = r }
 // will use to dump response bodies on each Changes call. Production
 // wires the wiki's lumber logger through here to chase response-shape
 // regressions; pass nil to silence.
-func (c *Connector) SetDebugLogger(l protocol.DebugLogger) { c.debug = l }
+func (c *Connector) SetDebugLogger(l gateway.DebugLogger) { c.debug = l }
 
 // SetClientBuilder overrides the KeepClient factory. Test-only —
 // production wires the real factory in NewConnector. Used by sync
@@ -169,11 +170,11 @@ func NewConnector(store *BindingStore, httpClient *http.Client, clock Clock) *Co
 		httpClient: httpClient,
 		clock:      clock,
 		authBuilder: func(deviceID string) AuthExchanger {
-			return protocol.NewAuthenticator(authClient, protocol.AuthURL, deviceID)
+			return gateway.NewAuthenticator(authClient, gateway.AuthURL, deviceID)
 		},
 	}
 	c.clientBuilder = func(bearer string) KeepClient {
-		kc := protocol.NewKeepClient(httpClient, protocol.DefaultKeepBaseURL, bearer)
+		kc := gateway.NewKeepClient(httpClient, gateway.DefaultKeepBaseURL, bearer)
 		if c.debug != nil {
 			kc.SetDebugLogger(c.debug)
 		}
@@ -222,7 +223,7 @@ func (c *Connector) Connect(ctx context.Context, profileID wikipage.PageIdentifi
 	client := c.clientBuilder(bearer)
 	// Verify with a no-mutation pull. Empty TargetVersion = full pull, but
 	// we only need shape — discard the response body.
-	if _, err := client.Changes(ctx, protocol.ChangesRequest{
+	if _, err := client.Changes(ctx, gateway.ChangesRequest{
 		SessionID:       fmt.Sprintf("s--%d--verify", c.clock.Now().UnixMilli()),
 		ClientTimestamp: c.clock.Now().UTC().Format("2006-01-02T15:04:05.000000Z"),
 	}); err != nil {
@@ -301,7 +302,7 @@ func (c *Connector) ListNotes(ctx context.Context, profileID wikipage.PageIdenti
 		return nil, err
 	}
 	now := c.clock.Now()
-	resp, err := client.Changes(ctx, protocol.ChangesRequest{
+	resp, err := client.Changes(ctx, gateway.ChangesRequest{
 		SessionID:       fmt.Sprintf("s--%d--listnotes", now.UnixMilli()),
 		ClientTimestamp: now.UTC().Format("2006-01-02T15:04:05.000000Z"),
 	})
@@ -311,14 +312,14 @@ func (c *Connector) ListNotes(ctx context.Context, profileID wikipage.PageIdenti
 
 	counts := make(map[string]int)
 	for _, n := range resp.Nodes {
-		if n.Type == protocol.NodeTypeListItem && n.ParentID != "" && n.Timestamps.Trashed.IsZero() && n.Timestamps.Deleted.IsZero() {
+		if n.Type == gateway.NodeTypeListItem && n.ParentID != "" && n.Timestamps.Trashed.IsZero() && n.Timestamps.Deleted.IsZero() {
 			counts[n.ParentID]++
 		}
 	}
 
 	out := make([]KeepNoteSummary, 0)
 	for _, n := range resp.Nodes {
-		if n.Type != protocol.NodeTypeList {
+		if n.Type != gateway.NodeTypeList {
 			continue
 		}
 		if !n.Timestamps.Trashed.IsZero() || !n.Timestamps.Deleted.IsZero() {
@@ -606,7 +607,7 @@ func (c *Connector) SyncToKeep(ctx context.Context, profileID wikipage.PageIdent
 		return c.bootstrapKeepListForBinding(ctx, profileID, binding, checklist, client, now)
 	}
 
-	pull, err := client.Changes(ctx, protocol.ChangesRequest{
+	pull, err := client.Changes(ctx, gateway.ChangesRequest{
 		SessionID:       fmt.Sprintf("s--%d--syncpull-%s", now.UnixMilli(), binding.KeepNoteID),
 		ClientTimestamp: now.Format("2006-01-02T15:04:05.000000Z"),
 		TargetVersion:   binding.KeepCursor,
@@ -623,7 +624,7 @@ func (c *Connector) SyncToKeep(ctx context.Context, profileID wikipage.PageIdent
 	keepNoteClientIDMissingAfterPull := false
 	if binding.KeepNoteClientID == "" {
 		for _, n := range pull.Nodes {
-			if n.Type == protocol.NodeTypeList && n.ServerID == binding.KeepNoteID && n.ID != "" {
+			if n.Type == gateway.NodeTypeList && n.ServerID == binding.KeepNoteID && n.ID != "" {
 				binding.KeepNoteClientID = n.ID
 				break
 			}
@@ -641,7 +642,7 @@ func (c *Connector) SyncToKeep(ctx context.Context, profileID wikipage.PageIdent
 	// identity (Page, ListName) is unchanged; only the cosmetic
 	// title moves.
 	for _, n := range pull.Nodes {
-		if n.Type == protocol.NodeTypeList && n.ServerID == binding.KeepNoteID && n.Title != "" && n.Title != binding.KeepNoteTitle {
+		if n.Type == gateway.NodeTypeList && n.ServerID == binding.KeepNoteID && n.Title != "" && n.Title != binding.KeepNoteTitle {
 			binding.KeepNoteTitle = n.Title
 			break
 		}
@@ -791,7 +792,7 @@ func (c *Connector) SyncToKeep(ctx context.Context, profileID wikipage.PageIdent
 	// already removed). The outbound push gate, however, is the
 	// fingerprint divergence rule — see the per-item decision in
 	// the loop below.
-	keepNodes := make(map[string]protocol.Node, len(pull.Nodes))
+	keepNodes := make(map[string]gateway.Node, len(pull.Nodes))
 	for _, n := range pull.Nodes {
 		if n.ServerID == "" {
 			continue
@@ -832,7 +833,7 @@ func (c *Connector) SyncToKeep(ctx context.Context, profileID wikipage.PageIdent
 	}
 
 	covered := make(map[string]bool, len(binding.ItemIDMap))
-	pushNodes := make([]protocol.Node, 0, len(checklist.GetItems()))
+	pushNodes := make([]gateway.Node, 0, len(checklist.GetItems()))
 	freshUIDs := make([]string, 0)        // index-aligned with the appended fresh items below
 	freshClientIDs := make([]string, 0)
 	// pushedFP[uid] = the Fingerprint we sent for that item. After a
@@ -841,7 +842,7 @@ func (c *Connector) SyncToKeep(ctx context.Context, profileID wikipage.PageIdent
 	// WriteResults. Items missing from WriteResults or marked non-
 	// SUCCESS leave synced_fp at its prior value so the next tick re-
 	// pushes. Indexed by wiki uid so the response walk can match.
-	pushedFP := make(map[string]Fingerprint, len(checklist.GetItems()))
+	pushedFP := make(map[string]translator.Fingerprint, len(checklist.GetItems()))
 	// pushedClientID[uid] = the client_id we sent in the push for that
 	// uid. Used to match Keep's per-node WriteResults entries (Keep
 	// echoes the request's client-side `id` field, NOT array index).
@@ -856,9 +857,9 @@ func (c *Connector) SyncToKeep(ctx context.Context, profileID wikipage.PageIdent
 		// PushFailureCount/LastFailureCode/NextAttemptAt are cleared.
 		// Done BEFORE the dead-letter check so a re-edit unblocks an
 		// item that would otherwise be skipped.
-		wikiFPNow := FingerprintWiki(item)
+		wikiFPNow := translator.FingerprintWiki(item)
 		if ib.LastObservedWikiText != "" {
-			observedFP := Fingerprint{
+			observedFP := translator.Fingerprint{
 				Text:      ib.LastObservedWikiText,
 				Checked:   ib.LastObservedWikiChecked,
 				SortValue: ib.LastObservedWikiSortValue,
@@ -893,7 +894,7 @@ func (c *Connector) SyncToKeep(ctx context.Context, profileID wikipage.PageIdent
 		}
 
 		serverID := ib.ServerID
-		node := WikiToKeep(item, binding.KeepNoteID, serverID)
+		node := translator.WikiToKeep(item, binding.KeepNoteID, serverID)
 		// Stamp Updated to sync-now: gkeepapi touch() sets
 		// timestamps.updated = now() on every dirty mutation, and
 		// Keep's backend 500s ("Unknown Error") if we send an older
@@ -939,7 +940,7 @@ func (c *Connector) SyncToKeep(ctx context.Context, profileID wikipage.PageIdent
 			covered[uid] = true
 
 			// Per-item decision rule (fingerprint divergence):
-			//   wiki_fp   = FingerprintWiki(item)
+			//   wiki_fp   = translator.FingerprintWiki(item)
 			//   synced_fp = last successful sync's content for this uid
 			//   wiki_fp == synced_fp → skip (W0 / no-op tick: wiki
 			//     hasn't been edited since the last sync).
@@ -961,13 +962,13 @@ func (c *Connector) SyncToKeep(ctx context.Context, profileID wikipage.PageIdent
 			// we want — and Keep's backend still 500s on no-op
 			// multi-item updates, so the fingerprint check is also
 			// the production-correctness gate.
-			syncedFP := FingerprintFromItemBinding(ib)
+			syncedFP := translator.FingerprintFromSyncedFields(ib.SyncedText, ib.SyncedChecked, ib.SyncedSortValue)
 			if wikiFPNow == syncedFP {
 				continue
 			}
 		}
 		pushNodes = append(pushNodes, node)
-		pushedFP[uid] = Fingerprint{
+		pushedFP[uid] = translator.Fingerprint{
 			Text:      node.Text,
 			Checked:   node.Checked,
 			SortValue: node.SortValue,
@@ -1022,15 +1023,15 @@ func (c *Connector) SyncToKeep(ctx context.Context, profileID wikipage.PageIdent
 		// `deleted` makes it through Keep's Changes API on incremental
 		// updates. Trashed-marked items in pulls are still recognized
 		// as soft-deleted on the inbound side.
-		pushNodes = append(pushNodes, protocol.Node{
+		pushNodes = append(pushNodes, gateway.Node{
 			Kind:           "notes#node",
 			ID:             clientID,
 			ServerID:       serverID,
 			ParentID:       binding.KeepNoteID,
 			ParentServerID: binding.KeepNoteID,
-			Type:           protocol.NodeTypeListItem,
+			Type:           gateway.NodeTypeListItem,
 			BaseVersion:    ib.BaseVersion,
-			Timestamps: protocol.Timestamps{
+			Timestamps: gateway.Timestamps{
 				Deleted: now,
 				Updated: now,
 			},
@@ -1062,13 +1063,13 @@ func (c *Connector) SyncToKeep(ctx context.Context, profileID wikipage.PageIdent
 		// The initial create-note path in Bind/bootstrap is where
 		// the title is set; from then on, inbound apply mirrors
 		// Keep's value back into binding.KeepNoteTitle.
-		listNode := protocol.Node{
+		listNode := gateway.Node{
 			Kind:       "notes#node",
 			ID:         listClientID,
 			ServerID:   binding.KeepNoteID,
-			Type:       protocol.NodeTypeList,
+			Type:       gateway.NodeTypeList,
 			LabelIDs:   listLabelIDs,
-			Timestamps: protocol.Timestamps{Updated: now},
+			Timestamps: gateway.Timestamps{Updated: now},
 		}
 		pushNodes = append(pushNodes, listNode)
 	}
@@ -1087,7 +1088,7 @@ func (c *Connector) SyncToKeep(ctx context.Context, profileID wikipage.PageIdent
 	if err != nil {
 		return fmt.Errorf("generate session_id: %w", err)
 	}
-	resp, err := client.Changes(ctx, protocol.ChangesRequest{
+	resp, err := client.Changes(ctx, gateway.ChangesRequest{
 		Nodes:           pushNodes,
 		Labels:          labelPushEntries,
 		TargetVersion:   pull.ToVersion,
@@ -1115,7 +1116,7 @@ func (c *Connector) SyncToKeep(ctx context.Context, profileID wikipage.PageIdent
 		binding.ItemIDMap = map[string]ItemBinding{}
 	}
 	for _, n := range resp.Nodes {
-		if n.Type != protocol.NodeTypeListItem {
+		if n.Type != gateway.NodeTypeListItem {
 			continue
 		}
 		// Match echoed-back fresh items by their client_id (n.ID).
@@ -1158,7 +1159,7 @@ func (c *Connector) SyncToKeep(ctx context.Context, profileID wikipage.PageIdent
 	echoedDeletedByClientID := make(map[string]bool, len(resp.Nodes))
 	echoedDeletedByServerID := make(map[string]bool, len(resp.Nodes))
 	for _, n := range resp.Nodes {
-		if n.Type != protocol.NodeTypeListItem {
+		if n.Type != gateway.NodeTypeListItem {
 			continue
 		}
 		alive := n.Timestamps.Trashed.IsZero() && n.Timestamps.Deleted.IsZero()
@@ -1333,7 +1334,7 @@ func stampLastObservedWiki(binding *Binding, checklist *apiv1.Checklist) {
 		if !ok {
 			continue
 		}
-		fp := FingerprintWiki(item)
+		fp := translator.FingerprintWiki(item)
 		ib.LastObservedWikiText = fp.Text
 		ib.LastObservedWikiChecked = fp.Checked
 		ib.LastObservedWikiSortValue = fp.SortValue
@@ -1372,17 +1373,17 @@ func pushFailureBackoff(n int) time.Duration {
 // edit-triggered) falls through to the normal pull/apply/push path.
 func (c *Connector) bootstrapKeepListForBinding(ctx context.Context, profileID wikipage.PageIdentifier, binding Binding, checklist *apiv1.Checklist, client KeepClient, now time.Time) error {
 	wikiItems := checklist.GetItems()
-	specs := make([]protocol.ListItemSpec, len(wikiItems))
+	specs := make([]gateway.ListItemSpec, len(wikiItems))
 	for i, it := range wikiItems {
 		// Same encoder the steady-state SyncToKeep uses, so the
 		// initial push and subsequent diff-pushes produce
 		// byte-identical wire shapes for the same wiki state.
-		head := encodeTextWithTags(it.GetText(), it.GetTags())
+		head := translator.EncodeTextWithTags(it.GetText(), it.GetTags())
 		text := head
 		if d := it.GetDescription(); d != "" {
-			text = head + descriptionSeparator + d
+			text = head + translator.DescriptionSeparator + d
 		}
-		specs[i] = protocol.ListItemSpec{
+		specs[i] = gateway.ListItemSpec{
 			Text:      text,
 			Checked:   it.GetChecked(),
 			SortValue: fmt.Sprintf("%d", (len(wikiItems)-i)*sortValueGap),
@@ -1455,8 +1456,8 @@ func (c *Connector) markBindingSynced(profileID wikipage.PageIdentifier, binding
 //
 // The classification is the per-item divergence rule from the plan:
 //
-//	wiki_fp   = FingerprintWiki(wiki item) | NIL if absent
-//	keep_fp   = FingerprintKeep(node)      | NIL if trashed/deleted/absent
+//	wiki_fp   = translator.FingerprintWiki(wiki item) | NIL if absent
+//	keep_fp   = translator.FingerprintKeep(node)      | NIL if trashed/deleted/absent
 //	synced_fp = FingerprintFromItemBinding | NIL if not in id_map
 //
 //	wiki_diverged := wiki_fp != synced_fp
@@ -1489,7 +1490,7 @@ func (c *Connector) markBindingSynced(profileID wikipage.PageIdentifier, binding
 // itself produces new wiki state via the response (e.g. new Keep
 // serverIDs), those land via the response-walk in the caller.
 //revive:disable-next-line:function-result-limit,function-length,cognitive-complexity,cyclomatic
-func (c *Connector) applyInboundFromKeep(ctx context.Context, profileID wikipage.PageIdentifier, ownerEmail string, binding Binding, pull protocol.ChangesResponse, currentChecklist *apiv1.Checklist) (Binding, *apiv1.Checklist, bool, error) {
+func (c *Connector) applyInboundFromKeep(ctx context.Context, profileID wikipage.PageIdentifier, ownerEmail string, binding Binding, pull gateway.ChangesResponse, currentChecklist *apiv1.Checklist) (Binding, *apiv1.Checklist, bool, error) {
 	if c.checklistW == nil {
 		// No mutator wired — outbound-only mode. Return inputs as-is.
 		return binding, currentChecklist, false, nil
@@ -1514,12 +1515,12 @@ func (c *Connector) applyInboundFromKeep(ctx context.Context, profileID wikipage
 	wikiByText := make(map[string]string, len(currentChecklist.GetItems()))
 	for _, it := range currentChecklist.GetItems() {
 		wikiByUID[it.GetUid()] = it
-		// Render the wiki item the same way WikiToKeep would so the
+		// Render the wiki item the same way translator.WikiToKeep would so the
 		// match key aligns with what's actually flowing on the wire.
-		head := encodeTextWithTags(it.GetText(), it.GetTags())
+		head := translator.EncodeTextWithTags(it.GetText(), it.GetTags())
 		full := head
 		if d := it.GetDescription(); d != "" {
-			full = head + descriptionSeparator + d
+			full = head + translator.DescriptionSeparator + d
 		}
 		// First wiki item wins on duplicate-text ties — same convention
 		// as seedIDMapFromExistingList.
@@ -1556,7 +1557,7 @@ func (c *Connector) applyInboundFromKeep(ctx context.Context, profileID wikipage
 		// pairing handle and tells us this is a LIST_ITEM we care
 		// about.
 		if isAlive {
-			if n.Type != protocol.NodeTypeListItem {
+			if n.Type != gateway.NodeTypeListItem {
 				continue
 			}
 		} else if !knownToWiki {
@@ -1605,9 +1606,9 @@ func (c *Connector) applyInboundFromKeep(ctx context.Context, profileID wikipage
 			continue
 		}
 		ib := binding.ItemIDMap[uid]
-		wikiFP := FingerprintWiki(wikiItem)
-		keepFP := FingerprintKeep(n)
-		syncedFP := FingerprintFromItemBinding(ib)
+		wikiFP := translator.FingerprintWiki(wikiItem)
+		keepFP := translator.FingerprintKeep(n)
+		syncedFP := translator.FingerprintFromSyncedFields(ib.SyncedText, ib.SyncedChecked, ib.SyncedSortValue)
 		wikiDiverged := wikiFP != syncedFP
 		keepDiverged := keepFP != syncedFP
 
@@ -1696,7 +1697,7 @@ func (c *Connector) applyInboundFromKeep(ctx context.Context, profileID wikipage
 	if !pull.Truncated && !pull.Incremental && binding.MigratedFingerprints {
 		keepHas := make(map[string]bool, len(pull.Nodes))
 		for _, n := range pull.Nodes {
-			if n.Type != protocol.NodeTypeListItem {
+			if n.Type != gateway.NodeTypeListItem {
 				continue
 			}
 			if n.ParentID != binding.KeepNoteID && n.ParentServerID != binding.KeepNoteID {
@@ -1731,8 +1732,8 @@ func (c *Connector) applyInboundFromKeep(ctx context.Context, profileID wikipage
 					continue
 				}
 				// W ∧ ¬K ∧ M=correct: branch on wiki_diverged.
-				wikiFP := FingerprintWiki(wikiItem)
-				syncedFP := FingerprintFromItemBinding(ib)
+				wikiFP := translator.FingerprintWiki(wikiItem)
+				syncedFP := translator.FingerprintFromSyncedFields(ib.SyncedText, ib.SyncedChecked, ib.SyncedSortValue)
 				if wikiFP != syncedFP {
 					// Wiki edited concurrently with Keep delete; defer
 					// to outbound which pushes wiki as fresh (re-create
@@ -1785,10 +1786,10 @@ func (c *Connector) applyInboundFromKeep(ctx context.Context, profileID wikipage
 // Returns true if a new id_map entry was created (synced_fp seeded);
 // the caller uses this signal as part of the "progress made this tick"
 // computation for the truncation escape hatch.
-func (c *Connector) applyInboundNewFromKeep(ctx context.Context, ownerEmail string, binding *Binding, n protocol.Node, wikiByText map[string]string) bool {
+func (c *Connector) applyInboundNewFromKeep(ctx context.Context, ownerEmail string, binding *Binding, n gateway.Node, wikiByText map[string]string) bool {
 	if existingUID, found := wikiByText[n.Text]; found {
 		if _, alreadyMapped := binding.ItemIDMap[existingUID]; !alreadyMapped {
-			keepFP := FingerprintKeep(n)
+			keepFP := translator.FingerprintKeep(n)
 			binding.ItemIDMap[existingUID] = ItemBinding{
 				ServerID:        n.ServerID,
 				SyncedText:      keepFP.Text,
@@ -1801,7 +1802,7 @@ func (c *Connector) applyInboundNewFromKeep(ctx context.Context, ownerEmail stri
 		}
 		return false
 	}
-	wikiItem, err := KeepToWiki(n)
+	wikiItem, err := translator.KeepToWiki(n)
 	if err != nil {
 		// Skip malformed nodes rather than fail the whole sync.
 		return false
@@ -1815,7 +1816,7 @@ func (c *Connector) applyInboundNewFromKeep(ctx context.Context, ownerEmail stri
 	if err != nil {
 		return false
 	}
-	keepFP := FingerprintKeep(n)
+	keepFP := translator.FingerprintKeep(n)
 	binding.ItemIDMap[newUID] = ItemBinding{
 		ServerID:        n.ServerID,
 		SyncedText:      keepFP.Text,
@@ -1831,8 +1832,8 @@ func (c *Connector) applyInboundNewFromKeep(ctx context.Context, ownerEmail stri
 // content has diverged from the wiki/synced baseline. Returns any
 // mutator error so the caller can decide whether to advance synced_fp
 // (only on success).
-func (c *Connector) applyKeepUpdate(ctx context.Context, ownerEmail, page, listName, uid string, n protocol.Node) error {
-	converted, err := KeepToWiki(n)
+func (c *Connector) applyKeepUpdate(ctx context.Context, ownerEmail, page, listName, uid string, n gateway.Node) error {
+	converted, err := translator.KeepToWiki(n)
 	if err != nil {
 		return err
 	}
@@ -1911,7 +1912,7 @@ func (c *Connector) seedIDMapFromExistingList(ctx context.Context, client KeepCl
 	labelIDs := map[string]string{}
 	var keepNoteClientID string
 	now := c.clock.Now().UTC()
-	pull, err := client.Changes(ctx, protocol.ChangesRequest{
+	pull, err := client.Changes(ctx, gateway.ChangesRequest{
 		SessionID:       fmt.Sprintf("s--%d--bindseed-%s", now.UnixMilli(), listServerID),
 		ClientTimestamp: now.Format("2006-01-02T15:04:05.000000Z"),
 	})
@@ -1921,7 +1922,7 @@ func (c *Connector) seedIDMapFromExistingList(ctx context.Context, client KeepCl
 	// Capture the LIST node's client-side `id` so subsequent outbound
 	// LIST updates send `id != serverId`. Keep 500s when they match.
 	for _, n := range pull.Nodes {
-		if n.Type == protocol.NodeTypeList && n.ServerID == listServerID {
+		if n.Type == gateway.NodeTypeList && n.ServerID == listServerID {
 			keepNoteClientID = n.ID
 			break
 		}
@@ -1931,9 +1932,9 @@ func (c *Connector) seedIDMapFromExistingList(ctx context.Context, client KeepCl
 	// just serverID) so the per-item ItemBinding can capture
 	// BaseVersion and ClientID — both required by Keep's outbound
 	// push protocol on subsequent syncs.
-	keepByBase := make(map[string]protocol.Node, len(pull.Nodes))
+	keepByBase := make(map[string]gateway.Node, len(pull.Nodes))
 	for _, n := range pull.Nodes {
-		if n.Type != protocol.NodeTypeListItem {
+		if n.Type != gateway.NodeTypeListItem {
 			continue
 		}
 		if n.ParentID != listServerID && n.ParentServerID != listServerID {
@@ -2076,7 +2077,7 @@ func (c *Connector) readPageTags(page string) ([]string, error) {
 //
 // Tombstoned labels in existingLabels (Deleted != zero) are skipped
 // — we re-create rather than reviving.
-func resolveLabelsForTags(tags []string, persistedLabelIDs map[string]string, existingLabels []protocol.LabelEntry, now time.Time) (labelPush []protocol.LabelEntry, listLabelIDs []string, err error) {
+func resolveLabelsForTags(tags []string, persistedLabelIDs map[string]string, existingLabels []gateway.LabelEntry, now time.Time) (labelPush []gateway.LabelEntry, listLabelIDs []string, err error) {
 	if len(tags) == 0 {
 		return nil, nil, nil
 	}
@@ -2119,7 +2120,7 @@ func resolveLabelsForTags(tags []string, persistedLabelIDs map[string]string, ex
 		if err != nil {
 			return nil, nil, err
 		}
-		labelPush = append(labelPush, protocol.LabelEntry{
+		labelPush = append(labelPush, gateway.LabelEntry{
 			MainID:  newID,
 			Name:    tag,
 			Created: now,
@@ -2196,7 +2197,7 @@ func (c *Connector) VerifyBinding(ctx context.Context, profileID wikipage.PageId
 		return err
 	}
 	now := c.clock.Now()
-	resp, err := client.Changes(ctx, protocol.ChangesRequest{
+	resp, err := client.Changes(ctx, gateway.ChangesRequest{
 		SessionID:       fmt.Sprintf("s--%d--verify-%s", now.UnixMilli(), binding.KeepNoteID),
 		ClientTimestamp: now.UTC().Format("2006-01-02T15:04:05.000000Z"),
 	})
@@ -2204,7 +2205,7 @@ func (c *Connector) VerifyBinding(ctx context.Context, profileID wikipage.PageId
 		return err
 	}
 	for _, n := range resp.Nodes {
-		if n.Type == protocol.NodeTypeList && n.ServerID == binding.KeepNoteID {
+		if n.Type == gateway.NodeTypeList && n.ServerID == binding.KeepNoteID {
 			// Found — record verified-at.
 			state, lerr := c.store.LoadState(profileID)
 			if lerr != nil {
@@ -2217,10 +2218,10 @@ func (c *Connector) VerifyBinding(ctx context.Context, profileID wikipage.PageId
 	return ErrBoundNoteDeletedLocal
 }
 
-// ErrBoundNoteDeletedLocal mirrors protocol.ErrBoundNoteDeleted but is
+// ErrBoundNoteDeletedLocal mirrors gateway.ErrBoundNoteDeleted but is
 // surfaced from VerifyBinding when the bound note simply isn't in the
 // user's account anymore (e.g., they deleted it from the Keep app).
-var ErrBoundNoteDeletedLocal = protocol.ErrBoundNoteDeleted
+var ErrBoundNoteDeletedLocal = gateway.ErrBoundNoteDeleted
 
 // MigrateBindingFingerprints rebases a legacy binding's per-item
 // synced_fp baseline so the new sync engine has a real merge-base to
@@ -2316,7 +2317,7 @@ func (c *Connector) MigrateBindingFingerprints(ctx context.Context, profileID wi
 	// fingerprints we compute reflect the wiki state at write time.
 	now := c.clock.Now().UTC()
 
-	pull, pullErr := client.Changes(ctx, protocol.ChangesRequest{
+	pull, pullErr := client.Changes(ctx, gateway.ChangesRequest{
 		SessionID:       fmt.Sprintf("s--%d--migrate-%s", now.UnixMilli(), preBinding.KeepNoteID),
 		ClientTimestamp: now.Format("2006-01-02T15:04:05.000000Z"),
 		// Empty TargetVersion → full pull. Migration must see the
@@ -2333,18 +2334,18 @@ func (c *Connector) MigrateBindingFingerprints(ctx context.Context, profileID wi
 	// to LIST_ITEMs parented under the binding's note, alive only
 	// (trashed/deleted items represent items Keep removed; the
 	// "drop missing" branch handles them).
-	keepByServerID := make(map[string]protocol.Node, len(pull.Nodes))
+	keepByServerID := make(map[string]gateway.Node, len(pull.Nodes))
 	// Capture the LIST node's client-side `id` so the migration can
 	// persist it alongside the rebaseline. Without this, the first
 	// post-migration push would reuse serverID for both `id` and
 	// `serverId` and Keep 500s.
 	var listClientIDFromPull string
 	for _, n := range pull.Nodes {
-		if n.Type == protocol.NodeTypeList && n.ServerID == preBinding.KeepNoteID {
+		if n.Type == gateway.NodeTypeList && n.ServerID == preBinding.KeepNoteID {
 			listClientIDFromPull = n.ID
 			continue
 		}
-		if n.Type != protocol.NodeTypeListItem {
+		if n.Type != gateway.NodeTypeListItem {
 			continue
 		}
 		if n.ParentID != preBinding.KeepNoteID && n.ParentServerID != preBinding.KeepNoteID {
@@ -2445,8 +2446,8 @@ func (c *Connector) MigrateBindingFingerprints(ctx context.Context, profileID wi
 				}
 				continue
 			}
-			wikiFP := FingerprintWiki(wikiItem)
-			keepFP := FingerprintKeep(keepNode)
+			wikiFP := translator.FingerprintWiki(wikiItem)
+			keepFP := translator.FingerprintKeep(keepNode)
 			if wikiFP == keepFP {
 				// Silent rebaseline: wiki content already matches
 				// Keep, just need a synced_fp to anchor the merge-
@@ -2470,7 +2471,7 @@ func (c *Connector) MigrateBindingFingerprints(ctx context.Context, profileID wi
 			}
 			// "Keep wins": apply Keep to wiki, then baseline to keep_fp.
 			if c.checklistW != nil {
-				keepItemForApply, kerr := KeepToWiki(keepNode)
+				keepItemForApply, kerr := translator.KeepToWiki(keepNode)
 				if kerr != nil {
 					return fmt.Errorf("keep→wiki conversion for migration uid=%s: %w", uid, kerr)
 				}

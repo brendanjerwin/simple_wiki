@@ -11,16 +11,19 @@ import (
 	"connectrpc.com/grpcreflect"
 	"connectrpc.com/vanguard"
 	"github.com/brendanjerwin/simple_wiki/internal/caldav"
+	"github.com/brendanjerwin/simple_wiki/internal/connectors"
+	keepsync "github.com/brendanjerwin/simple_wiki/internal/connectors/google_keep/sync"
 	grpcapi "github.com/brendanjerwin/simple_wiki/internal/grpc/api/v1"
-	"github.com/brendanjerwin/simple_wiki/internal/keep/bridge"
 	wikimcp "github.com/brendanjerwin/simple_wiki/internal/mcp"
 	"github.com/brendanjerwin/simple_wiki/internal/observability"
 	"github.com/brendanjerwin/simple_wiki/migrations/eager"
 	"github.com/brendanjerwin/simple_wiki/pkg/chatbuffer"
+	"github.com/brendanjerwin/simple_wiki/pkg/jobs"
 	"github.com/brendanjerwin/simple_wiki/pkg/ulid"
 	"github.com/brendanjerwin/simple_wiki/server"
 	"github.com/brendanjerwin/simple_wiki/server/checklistmutator"
 	"github.com/brendanjerwin/simple_wiki/tailscale"
+	"github.com/brendanjerwin/simple_wiki/wikipage"
 	"github.com/gin-gonic/gin"
 	"github.com/jcelliott/lumber"
 	"golang.org/x/net/http2"
@@ -476,10 +479,10 @@ func setupGRPCServer(
 	// profile pages (wiki.connectors.google_keep.*) plus a sync scheduler
 	// (added separately). Optional — without it KeepConnectorService
 	// returns a clear "not configured" error.
-	keepConnector := bridge.NewConnector(
-		bridge.NewBindingStore(site),
+	keepConnector := keepsync.NewConnector(
+		keepsync.NewBindingStore(site),
 		http.DefaultClient,
-		bridge.SystemClock{},
+		keepsync.SystemClock{},
 	)
 	// TEMP: route Keep API responses through the wiki logger so we can
 	// see Changes() response shapes in journalctl while diagnosing the
@@ -487,21 +490,21 @@ func setupGRPCServer(
 	// Strip this once the response-shape question is resolved.
 	keepConnector.SetDebugLogger(logger)
 	// Outbound sync needs read access to wiki checklists; the mutator
-	// satisfies bridge.ChecklistReader's ListItems signature directly.
+	// satisfies keepsync.ChecklistReader's ListItems signature directly.
 	keepConnector.SetChecklistReader(checklistMutator)
 	// Register the single-worker outbound-sync queue. One worker per
 	// account is the right answer because Keep's targetVersion is
 	// global; concurrent pushes on the same account would race the
 	// version cursor and force resyncs.
 	if err := site.GetJobQueueCoordinator().RegisterQueue(
-		bridge.KeepOutboundSyncJobName, 1, keepOutboundSyncQueueDepth,
+		keepsync.KeepOutboundSyncJobName, 1, keepOutboundSyncQueueDepth,
 	); err != nil {
 		return nil, nil, fmt.Errorf("register Keep outbound sync queue: %w", err)
 	}
 	// Mutator hook: every checklist edit fires a debounced enqueue
 	// of a sync job for that (page, listName). Debounce coalesces
 	// burst edits (toggling 50 items rapidly) into a single push.
-	keepSyncDebouncer := bridge.NewSyncDebouncer(
+	keepSyncDebouncer := keepsync.NewSyncDebouncer(
 		site.GetJobQueueCoordinator(),
 		keepConnector,
 		site,
@@ -512,7 +515,7 @@ func setupGRPCServer(
 	// Inbound apply: SyncToKeep also pulls Keep state into the wiki.
 	// Mutator writes during apply must NOT loop back as fresh sync
 	// triggers, so the suppressor wraps the apply window. Mutator
-	// satisfies bridge.ChecklistMutator's For-Sync helpers directly.
+	// satisfies keepsync.ChecklistMutator's For-Sync helpers directly.
 	keepConnector.SetChecklistMutator(checklistMutator)
 	keepConnector.SetSyncSuppressor(keepSyncDebouncer)
 	// Bind enqueues a sync job through the same queue cron + debouncer
@@ -523,9 +526,9 @@ func setupGRPCServer(
 	// bindings that weren't bound during this process's lifetime),
 	// then enqueue one sync job per binding. Closes the inbound-latency
 	// gap so phone-side edits flow back to wiki without a wiki trigger.
-	keepBindingStore := bridge.NewBindingStore(site)
-	keepBindingsLister := func() []bridge.BindingKey {
-		var out []bridge.BindingKey
+	keepBindingStore := keepsync.NewBindingStore(site)
+	keepBindingsLister := func() []keepsync.BindingKey {
+		var out []keepsync.BindingKey
 		// Query "...email" (a leaf string) instead of "...bindings"
 		// (an array of maps). The frontmatter index doesn't save key
 		// entries for non-empty arrays of maps — see index.indexArray
@@ -539,7 +542,7 @@ func setupGRPCServer(
 				continue
 			}
 			for _, b := range state.Bindings {
-				out = append(out, bridge.BindingKey{
+				out = append(out, keepsync.BindingKey{
 					ProfileID: p,
 					Page:      b.Page,
 					ListName:  b.ListName,
@@ -572,11 +575,48 @@ func setupGRPCServer(
 		logger.Info("Keep-bridge fingerprint migration scan started.")
 	}
 
-	if _, err := site.CronScheduler.Schedule(
-		"@every 30s",
-		bridge.NewKeepCronTickJob(keepConnector, site.GetJobQueueCoordinator(), logger, keepBindingsLister),
-	); err != nil {
-		return nil, nil, fmt.Errorf("schedule Keep cron tick: %w", err)
+	// Unified per-30s connector tick. The SyncScheduler walks every
+	// registered connector's SubscriptionLister on each fire and
+	// enqueues a per-subscription sync job through that connector's
+	// per-kind queue. Per-connector pause/rate-limit "skip-this-tick"
+	// logic stays inside each Connector's Sync impl — the scheduler
+	// doesn't second-guess.
+	syncScheduler, err := connectors.NewSyncScheduler(site.GetJobQueueCoordinator(), logger)
+	if err != nil {
+		return nil, nil, fmt.Errorf("create connector sync scheduler: %w", err)
+	}
+	keepSubscriptionLister := func() []connectors.SubscriptionKey {
+		out := make([]connectors.SubscriptionKey, 0, 16)
+		for _, k := range keepBindingsLister() {
+			out = append(out, connectors.SubscriptionKey{
+				ProfileID: string(k.ProfileID),
+				Page:      k.Page,
+				ListName:  k.ListName,
+			})
+		}
+		return out
+	}
+	if regErr := syncScheduler.Register(
+		keepConnector,
+		keepSubscriptionLister,
+		func(_ connectors.Connector, key connectors.SubscriptionKey) jobs.Job {
+			// The Keep outbound-sync queue still serializes per-account
+			// pushes against Keep's global targetVersion, so the sync
+			// job stays Keep-typed at the queue level. The dispatch
+			// shape across connectors lives in SyncScheduler; the work
+			// inside the queue stays connector-private.
+			return keepsync.NewKeepOutboundSyncJob(
+				keepConnector,
+				wikipage.PageIdentifier(key.ProfileID),
+				key.Page,
+				key.ListName,
+			)
+		},
+	); regErr != nil {
+		return nil, nil, fmt.Errorf("register Keep with sync scheduler: %w", regErr)
+	}
+	if _, err := site.CronScheduler.Schedule("@every 30s", syncScheduler); err != nil {
+		return nil, nil, fmt.Errorf("schedule connector sync tick: %w", err)
 	}
 
 	// Wire the CalDAV server into the Site so its caldavGateway

@@ -15,25 +15,25 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/brendanjerwin/simple_wiki/internal/keep/bridge"
+	keepsync "github.com/brendanjerwin/simple_wiki/internal/connectors/google_keep/sync"
 	"github.com/brendanjerwin/simple_wiki/pkg/jobs"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 	"github.com/pelletier/go-toml/v2"
 )
 
-// KeepBridgeFingerprintMigrator is the subset of bridge.Connector
+// KeepBridgeFingerprintMigrator is the subset of keepsync.Connector
 // the per-binding migration job calls. Stated as an interface so
 // tests can substitute a fake without spinning up a real Keep
-// client. Production wires *bridge.Connector here at startup.
+// client. Production wires *keepsync.Connector here at startup.
 type KeepBridgeFingerprintMigrator interface {
 	MigrateBindingFingerprints(ctx context.Context, profileID wikipage.PageIdentifier, page, listName string) error
 }
 
-// KeepBridgeBindingStateLoader is the subset of bridge.BindingStore
+// KeepBridgeBindingStateLoader is the subset of keepsync.BindingStore
 // the scan job calls to identify legacy bindings on a profile page.
-// Production wires *bridge.BindingStore; tests substitute a fake.
+// Production wires *keepsync.BindingStore; tests substitute a fake.
 type KeepBridgeBindingStateLoader interface {
-	LoadState(profileID wikipage.PageIdentifier) (bridge.ConnectorState, error)
+	LoadState(profileID wikipage.PageIdentifier) (keepsync.ConnectorState, error)
 }
 
 // KeepBridgeFingerprintMigrationScanJob walks the data dir, parses
@@ -41,7 +41,7 @@ type KeepBridgeBindingStateLoader interface {
 // migration job for every binding whose MigratedFingerprints flag
 // is unset. Mirrors ChecklistTagSyntaxMigrationScanJob's structure;
 // the per-page guard reads `wiki.connectors.google_keep.email` to
-// gate the bridge.BindingStore lookup.
+// gate the keepsync.BindingStore lookup.
 type KeepBridgeFingerprintMigrationScanJob struct {
 	scanner     DataDirScanner
 	coordinator *jobs.JobQueueCoordinator
@@ -50,8 +50,8 @@ type KeepBridgeFingerprintMigrationScanJob struct {
 }
 
 // NewKeepBridgeFingerprintMigrationScanJob constructs the scan job.
-// The migrator and loader are typically *bridge.Connector and
-// *bridge.BindingStore respectively; the interfaces let tests
+// The migrator and loader are typically *keepsync.Connector and
+// *keepsync.BindingStore respectively; the interfaces let tests
 // inject fakes.
 func NewKeepBridgeFingerprintMigrationScanJob(
 	scanner DataDirScanner,
@@ -122,7 +122,7 @@ func (j *KeepBridgeFingerprintMigrationScanJob) Execute() error {
 			// Mark the binding as migration-pending so operators can
 			// see the un-drained queue via the metric. The migration
 			// job itself clears this gauge on successful completion.
-			bridge.SetMigrationPendingMetric(context.Background(), profileID, b.Page, b.ListName, true)
+			keepsync.SetMigrationPendingMetric(context.Background(), profileID, b.Page, b.ListName, true)
 		}
 	}
 	return nil
@@ -182,7 +182,7 @@ func (j *KeepBridgeFingerprintMigrationScanJob) profileIDIfHasKeepConnector(file
 // pull Keep once, apply agreement-or-Keep-wins to populate synced_fp,
 // drop unpaired entries, stamp KeepCursor + MigratedFingerprints,
 // persist. The heavy lifting lives in
-// bridge.Connector.MigrateBindingFingerprints (which handles the
+// keepsync.Connector.MigrateBindingFingerprints (which handles the
 // per-profile mutex, the network round-trip, and the rule); this
 // job is the queue-shaped wrapper around that single call so a
 // failure surfaces as a queue retry rather than a swallowed error.
@@ -218,7 +218,7 @@ func (j *KeepBridgeFingerprintMigrationJob) GetName() string {
 		j.profileID, j.page, j.listName)
 }
 
-// Execute delegates to the bridge.Connector. A returned error
+// Execute delegates to the keepsync.Connector. A returned error
 // triggers the coordinator's retry-with-backoff (per
 // pkg/jobs.JobQueueCoordinator semantics); the binding's
 // MigratedFingerprints stays false until the migration succeeds,

@@ -1,4 +1,4 @@
-package bridge
+package sync
 
 import (
 	"fmt"

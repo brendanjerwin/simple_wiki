@@ -1,5 +1,5 @@
 //revive:disable:dot-imports
-package protocol_test
+package gateway_test
 
 import (
 	"context"
@@ -12,12 +12,12 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"github.com/brendanjerwin/simple_wiki/internal/keep/protocol"
+	"github.com/brendanjerwin/simple_wiki/internal/connectors/google_keep/gateway"
 )
 
-func TestProtocol(t *testing.T) {
+func TestGateway(t *testing.T) {
 	RegisterFailHandler(Fail)
-	RunSpecs(t, "internal/keep/protocol")
+	RunSpecs(t, "internal/connectors/google_keep/gateway")
 }
 
 // canonicalBearerSuccess is the Stage 2 success-case body — Auth= carries
@@ -31,7 +31,7 @@ const canonicalBearerSuccess = "SID=fakesid\n" +
 var _ = Describe("ExchangeMasterTokenForBearer", func() {
 	var (
 		ctx          context.Context
-		auth         *protocol.Authenticator
+		auth         *gateway.Authenticator
 		fakeServer   *httptest.Server
 		lastRequest  *http.Request
 		lastBody     string
@@ -51,7 +51,7 @@ var _ = Describe("ExchangeMasterTokenForBearer", func() {
 			w.WriteHeader(responseCode)
 			_, _ = io.WriteString(w, responseBody)
 		}))
-		auth = protocol.NewAuthenticator(fakeServer.Client(), fakeServer.URL, "0123456789abcdef")
+		auth = gateway.NewAuthenticator(fakeServer.Client(), fakeServer.URL, "0123456789abcdef")
 	})
 
 	AfterEach(func() {
@@ -79,7 +79,7 @@ var _ = Describe("ExchangeMasterTokenForBearer", func() {
 		It("should request the Keep service scope", func() {
 			form, err := url.ParseQuery(lastBody)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(form.Get("service")).To(Equal(protocol.KeepServiceScope))
+			Expect(form.Get("service")).To(Equal(gateway.KeepServiceScope))
 		})
 
 		It("should claim the Keep Android app id", func() {
@@ -119,7 +119,7 @@ var _ = Describe("ExchangeMasterTokenForBearer", func() {
 		It("should return ErrAuthRevoked (master token no longer valid)", func() {
 			// Stage 2 BadAuth means the master token itself is revoked,
 			// not a typo. Distinct from Stage 1.
-			Expect(exchangeErr).To(MatchError(protocol.ErrAuthRevoked))
+			Expect(exchangeErr).To(MatchError(gateway.ErrAuthRevoked))
 		})
 	})
 
@@ -133,7 +133,7 @@ var _ = Describe("ExchangeMasterTokenForBearer", func() {
 		})
 
 		It("should return ErrAuthRevoked", func() {
-			Expect(exchangeErr).To(MatchError(protocol.ErrAuthRevoked))
+			Expect(exchangeErr).To(MatchError(gateway.ErrAuthRevoked))
 		})
 	})
 
@@ -146,7 +146,7 @@ var _ = Describe("ExchangeMasterTokenForBearer", func() {
 		})
 
 		It("should return ErrProtocolDrift", func() {
-			Expect(exchangeErr).To(MatchError(protocol.ErrProtocolDrift))
+			Expect(exchangeErr).To(MatchError(gateway.ErrProtocolDrift))
 		})
 	})
 
@@ -161,8 +161,8 @@ var _ = Describe("ExchangeMasterTokenForBearer", func() {
 
 		It("should return a transport-level error, not a typed auth sentinel", func() {
 			Expect(exchangeErr).To(HaveOccurred())
-			Expect(exchangeErr).ToNot(MatchError(protocol.ErrInvalidCredentials))
-			Expect(exchangeErr).ToNot(MatchError(protocol.ErrAuthRevoked))
+			Expect(exchangeErr).ToNot(MatchError(gateway.ErrInvalidCredentials))
+			Expect(exchangeErr).ToNot(MatchError(gateway.ErrAuthRevoked))
 		})
 	})
 })
@@ -170,7 +170,7 @@ var _ = Describe("ExchangeMasterTokenForBearer", func() {
 var _ = Describe("ExchangeOAuthTokenForMasterToken", func() {
 	var (
 		ctx          context.Context
-		auth         *protocol.Authenticator
+		auth         *gateway.Authenticator
 		fakeServer   *httptest.Server
 		responseBody string
 		responseCode int
@@ -185,7 +185,7 @@ var _ = Describe("ExchangeOAuthTokenForMasterToken", func() {
 			w.WriteHeader(responseCode)
 			_, _ = io.WriteString(w, responseBody)
 		}))
-		auth = protocol.NewAuthenticator(fakeServer.Client(), fakeServer.URL, "0123456789abcdef")
+		auth = gateway.NewAuthenticator(fakeServer.Client(), fakeServer.URL, "0123456789abcdef")
 	})
 
 	AfterEach(func() {
@@ -221,7 +221,7 @@ var _ = Describe("ExchangeOAuthTokenForMasterToken", func() {
 		})
 
 		It("should return ErrInvalidCredentials", func() {
-			Expect(err).To(MatchError(protocol.ErrInvalidCredentials))
+			Expect(err).To(MatchError(gateway.ErrInvalidCredentials))
 		})
 	})
 
@@ -235,7 +235,7 @@ var _ = Describe("ExchangeOAuthTokenForMasterToken", func() {
 		})
 
 		It("should return ErrAuthRevoked", func() {
-			Expect(err).To(MatchError(protocol.ErrAuthRevoked))
+			Expect(err).To(MatchError(gateway.ErrAuthRevoked))
 		})
 	})
 
@@ -248,7 +248,7 @@ var _ = Describe("ExchangeOAuthTokenForMasterToken", func() {
 		})
 
 		It("should return ErrProtocolDrift", func() {
-			Expect(err).To(MatchError(protocol.ErrProtocolDrift))
+			Expect(err).To(MatchError(gateway.ErrProtocolDrift))
 		})
 	})
 
@@ -262,7 +262,7 @@ var _ = Describe("ExchangeOAuthTokenForMasterToken", func() {
 		})
 
 		It("should return ErrAuthRevoked (catch-all for unrecognized errors)", func() {
-			Expect(err).To(MatchError(protocol.ErrAuthRevoked))
+			Expect(err).To(MatchError(gateway.ErrAuthRevoked))
 		})
 	})
 
@@ -277,8 +277,8 @@ var _ = Describe("ExchangeOAuthTokenForMasterToken", func() {
 
 		It("should return a transport-level error, not a typed auth sentinel", func() {
 			Expect(err).To(HaveOccurred())
-			Expect(err).ToNot(MatchError(protocol.ErrInvalidCredentials))
-			Expect(err).ToNot(MatchError(protocol.ErrAuthRevoked))
+			Expect(err).ToNot(MatchError(gateway.ErrInvalidCredentials))
+			Expect(err).ToNot(MatchError(gateway.ErrAuthRevoked))
 		})
 	})
 })

@@ -1,5 +1,5 @@
 //revive:disable:dot-imports
-package bridge_test
+package translator_test
 
 import (
 	"time"
@@ -9,16 +9,16 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
-	"github.com/brendanjerwin/simple_wiki/internal/keep/bridge"
-	"github.com/brendanjerwin/simple_wiki/internal/keep/protocol"
+	"github.com/brendanjerwin/simple_wiki/internal/connectors/google_keep/translator"
+	"github.com/brendanjerwin/simple_wiki/internal/connectors/google_keep/gateway"
 )
 
 var _ = Describe("WikiToKeep", func() {
 	When("converting a basic checklist item", func() {
-		var node protocol.Node
+		var node gateway.Node
 
 		BeforeEach(func() {
-			node = bridge.WikiToKeep(&apiv1.ChecklistItem{
+			node = translator.WikiToKeep(&apiv1.ChecklistItem{
 				Uid:       "01HXXXXX",
 				Text:      "Buy milk",
 				Checked:   false,
@@ -29,7 +29,7 @@ var _ = Describe("WikiToKeep", func() {
 		})
 
 		It("should set type to LIST_ITEM", func() {
-			Expect(node.Type).To(Equal(protocol.NodeTypeListItem))
+			Expect(node.Type).To(Equal(gateway.NodeTypeListItem))
 		})
 
 		It("should set parentId to the Keep list serverId", func() {
@@ -54,10 +54,10 @@ var _ = Describe("WikiToKeep", func() {
 	})
 
 	When("the item has tags not already in text", func() {
-		var node protocol.Node
+		var node gateway.Node
 
 		BeforeEach(func() {
-			node = bridge.WikiToKeep(&apiv1.ChecklistItem{
+			node = translator.WikiToKeep(&apiv1.ChecklistItem{
 				Text: "Buy milk",
 				Tags: []string{"urgent", "kirsten"},
 			}, "srv-1", "")
@@ -74,10 +74,10 @@ var _ = Describe("WikiToKeep", func() {
 	})
 
 	When("a tag is already inline in the text", func() {
-		var node protocol.Node
+		var node gateway.Node
 
 		BeforeEach(func() {
-			node = bridge.WikiToKeep(&apiv1.ChecklistItem{
+			node = translator.WikiToKeep(&apiv1.ChecklistItem{
 				Text: "Buy milk #urgent",
 				Tags: []string{"urgent"},
 			}, "srv-1", "")
@@ -102,14 +102,14 @@ var _ = Describe("KeepToWiki", func() {
 
 		var convertErr error
 		BeforeEach(func() {
-			item, convertErr = bridge.KeepToWiki(protocol.Node{
+			item, convertErr = translator.KeepToWiki(gateway.Node{
 				ID:        "keep-1",
 				ServerID:  "srv-keep-1",
-				Type:      protocol.NodeTypeListItem,
+				Type:      gateway.NodeTypeListItem,
 				Text:      "Buy oat milk #urgent",
 				Checked:   true,
 				SortValue: "1500",
-				Timestamps: protocol.Timestamps{
+				Timestamps: gateway.Timestamps{
 					Updated: time.Date(2026, 4, 25, 18, 0, 0, 0, time.UTC),
 				},
 			})
@@ -145,9 +145,9 @@ var _ = Describe("Fingerprint helpers", func() {
 	When("a wiki item is round-tripped through WikiToKeep", func() {
 		var (
 			item    *apiv1.ChecklistItem
-			node    protocol.Node
-			wikiFP  bridge.Fingerprint
-			keepFP  bridge.Fingerprint
+			node    gateway.Node
+			wikiFP  translator.Fingerprint
+			keepFP  translator.Fingerprint
 		)
 
 		BeforeEach(func() {
@@ -159,9 +159,9 @@ var _ = Describe("Fingerprint helpers", func() {
 				Description: &desc,
 				SortOrder:   1000,
 			}
-			node = bridge.WikiToKeep(item, "list-server-id", "")
-			wikiFP = bridge.FingerprintWiki(item)
-			keepFP = bridge.FingerprintKeep(node)
+			node = translator.WikiToKeep(item, "list-server-id", "")
+			wikiFP = translator.FingerprintWiki(item)
+			keepFP = translator.FingerprintKeep(node)
 		})
 
 		It("should produce identical fingerprints on both sides", func() {
@@ -184,37 +184,31 @@ var _ = Describe("Fingerprint helpers", func() {
 	})
 
 	When("comparing wiki and Keep fingerprints to a synced baseline", func() {
-		var synced bridge.Fingerprint
+		var synced translator.Fingerprint
 
 		BeforeEach(func() {
-			synced = bridge.Fingerprint{Text: "Apples", Checked: false, SortValue: "1000"}
+			synced = translator.Fingerprint{Text: "Apples", Checked: false, SortValue: "1000"}
 		})
 
 		It("should report no divergence when the two fingerprints match the baseline exactly", func() {
-			wiki := bridge.Fingerprint{Text: "Apples", Checked: false, SortValue: "1000"}
+			wiki := translator.Fingerprint{Text: "Apples", Checked: false, SortValue: "1000"}
 			Expect(wiki).To(Equal(synced))
 		})
 
 		It("should report wiki divergence when the wiki fingerprint differs from the baseline", func() {
-			wiki := bridge.Fingerprint{Text: "Green Apples", Checked: false, SortValue: "1000"}
+			wiki := translator.Fingerprint{Text: "Green Apples", Checked: false, SortValue: "1000"}
 			Expect(wiki).NotTo(Equal(synced))
 		})
 
 		It("should report Keep divergence when the Keep fingerprint differs from the baseline", func() {
-			keep := bridge.Fingerprint{Text: "Apples", Checked: true, SortValue: "1000"}
+			keep := translator.Fingerprint{Text: "Apples", Checked: true, SortValue: "1000"}
 			Expect(keep).NotTo(Equal(synced))
 		})
 	})
 
-	When("loading the synced baseline from an ItemBinding", func() {
-		It("should reconstitute the fingerprint from the SyncedText/Checked/SortValue triple", func() {
-			ib := bridge.ItemBinding{
-				ServerID:        "srv-A",
-				SyncedText:      "Apples",
-				SyncedChecked:   true,
-				SyncedSortValue: "2000",
-			}
-			Expect(bridge.FingerprintFromItemBinding(ib)).To(Equal(bridge.Fingerprint{
+	When("loading the synced baseline from the persisted SyncedText/Checked/SortValue triple", func() {
+		It("should reconstitute the fingerprint", func() {
+			Expect(translator.FingerprintFromSyncedFields("Apples", true, "2000")).To(Equal(translator.Fingerprint{
 				Text:      "Apples",
 				Checked:   true,
 				SortValue: "2000",

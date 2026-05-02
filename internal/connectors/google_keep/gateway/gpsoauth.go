@@ -1,7 +1,13 @@
-// Package protocol is a Go port of the reverse-engineered Google Keep wire
+// Package gateway is a Go port of the reverse-engineered Google Keep wire
 // protocol. See REFERENCE.md for the pinned upstream sources, the auth flow
 // description, and the failure-surface mapping.
-package protocol
+//
+// Per the connector architecture (PoEAA Gateway pattern), this package
+// owns ONLY the wire protocol — gpsoauth, the Keep REST endpoints, and
+// the response/request types. Translation between Keep node shapes and
+// wiki ChecklistItems lives in the sibling translator package; sync
+// orchestration lives in sibling sync package.
+package gateway
 
 import (
 	"context"

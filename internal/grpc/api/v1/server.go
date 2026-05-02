@@ -7,7 +7,7 @@ import (
 	"time"
 
 	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
-	"github.com/brendanjerwin/simple_wiki/internal/keep/bridge"
+	keepsync "github.com/brendanjerwin/simple_wiki/internal/connectors/google_keep/sync"
 	"github.com/brendanjerwin/simple_wiki/server/checklistmutator"
 	"github.com/brendanjerwin/simple_wiki/filestore"
 	"github.com/brendanjerwin/simple_wiki/index/bleve"
@@ -119,7 +119,7 @@ type Server struct {
 	agentScheduleStore      AgentScheduleStore
 	agentChatContextStore   AgentChatContextStore
 	checklistMutator        *checklistmutator.Mutator
-	keepConnector           *bridge.Connector
+	keepConnector           *keepsync.Connector
 }
 
 // NewServer creates a new gRPC server with the given dependencies.
@@ -219,7 +219,7 @@ func (s *Server) WithChecklistMutator(m *checklistmutator.Mutator) *Server {
 // WithKeepConnector wires the Keep connector orchestrator into the server.
 // Required for KeepConnectorService handlers to function. Optional —
 // without it, KeepConnectorService methods return Unimplemented-equivalent.
-func (s *Server) WithKeepConnector(c *bridge.Connector) *Server {
+func (s *Server) WithKeepConnector(c *keepsync.Connector) *Server {
 	s.keepConnector = c
 	return s
 }

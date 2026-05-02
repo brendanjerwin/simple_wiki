@@ -1,7 +1,9 @@
-// Package bridge owns the wiki-side of the Google Keep bridge: per-user
-// connector state on profile pages, sync logic, and field mapping. The
-// wire-protocol port lives one directory up under internal/keep/protocol.
-package bridge
+// Package sync owns the wiki-side of the Google Keep bridge: per-user
+// connector state on profile pages, sync orchestration, and persistence
+// of bindings. Translation between Keep node shapes and wiki ChecklistItems
+// lives in the sibling translator package; the wire-protocol port lives
+// in the sibling gateway package.
+package sync
 
 import (
 	"errors"

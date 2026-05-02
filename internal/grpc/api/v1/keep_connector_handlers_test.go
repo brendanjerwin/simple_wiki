@@ -12,8 +12,8 @@ import (
 	"google.golang.org/grpc/codes"
 
 	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
-	"github.com/brendanjerwin/simple_wiki/internal/keep/bridge"
-	"github.com/brendanjerwin/simple_wiki/internal/keep/protocol"
+	keepsync "github.com/brendanjerwin/simple_wiki/internal/connectors/google_keep/sync"
+	"github.com/brendanjerwin/simple_wiki/internal/connectors/google_keep/gateway"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 )
 
@@ -35,10 +35,10 @@ func (f handlerFakeAuth) ExchangeMasterTokenForBearer(_ context.Context, _, _ st
 
 // handlerFakeKeepClient is a minimal keep client for handler tests.
 type handlerFakeKeepClient struct {
-	changesResp protocol.ChangesResponse
+	changesResp gateway.ChangesResponse
 }
 
-func (f *handlerFakeKeepClient) Changes(_ context.Context, _ protocol.ChangesRequest) (protocol.ChangesResponse, error) {
+func (f *handlerFakeKeepClient) Changes(_ context.Context, _ gateway.ChangesRequest) (gateway.ChangesResponse, error) {
 	return f.changesResp, nil
 }
 
@@ -46,20 +46,20 @@ func (*handlerFakeKeepClient) CreateList(_ context.Context, _ string) (string, e
 	return "new-keep-note-id", nil
 }
 
-func (*handlerFakeKeepClient) CreateListWithItems(_ context.Context, _ string, _ []protocol.ListItemSpec) (protocol.CreateListResult, error) {
-	return protocol.CreateListResult{}, nil
+func (*handlerFakeKeepClient) CreateListWithItems(_ context.Context, _ string, _ []gateway.ListItemSpec) (gateway.CreateListResult, error) {
+	return gateway.CreateListResult{}, nil
 }
 
 // buildHandlerConnector constructs a Connector with injectable fakes.
 // auth and kc may be nil (production defaults are used when nil).
-func buildHandlerConnector(mock *MockPageReaderMutator, auth bridge.AuthExchanger, kc *handlerFakeKeepClient) *bridge.Connector {
-	store := bridge.NewBindingStore(mock)
-	c := bridge.NewConnector(store, http.DefaultClient, keepConnectorClock{})
+func buildHandlerConnector(mock *MockPageReaderMutator, auth keepsync.AuthExchanger, kc *handlerFakeKeepClient) *keepsync.Connector {
+	store := keepsync.NewBindingStore(mock)
+	c := keepsync.NewConnector(store, http.DefaultClient, keepConnectorClock{})
 	if auth != nil {
-		c.SetAuthBuilder(func(_ string) bridge.AuthExchanger { return auth })
+		c.SetAuthBuilder(func(_ string) keepsync.AuthExchanger { return auth })
 	}
 	if kc != nil {
-		c.SetClientBuilder(func(_ string) bridge.KeepClient { return kc })
+		c.SetClientBuilder(func(_ string) keepsync.KeepClient { return kc })
 	}
 	return c
 }
@@ -411,11 +411,11 @@ var _ = Describe("KeepConnectorService handlers", func() {
 			BeforeEach(func() {
 				mock := connectedProfileMock(profileID)
 				kc := &handlerFakeKeepClient{
-					changesResp: protocol.ChangesResponse{
-						Nodes: []protocol.Node{
+					changesResp: gateway.ChangesResponse{
+						Nodes: []gateway.Node{
 							{
 								ServerID: "keep-list-1",
-								Type:     protocol.NodeTypeList,
+								Type:     gateway.NodeTypeList,
 								Title:    "Shopping List",
 							},
 						},

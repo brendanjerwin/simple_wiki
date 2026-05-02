@@ -1,6 +1,6 @@
 //revive:disable:dot-imports
 //revive:disable:add-constant
-package bridge_test
+package sync_test
 
 import (
 	"context"
@@ -17,8 +17,9 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
-	"github.com/brendanjerwin/simple_wiki/internal/keep/bridge"
-	"github.com/brendanjerwin/simple_wiki/internal/keep/protocol"
+	"github.com/brendanjerwin/simple_wiki/internal/connectors/google_keep/gateway"
+	keepsync "github.com/brendanjerwin/simple_wiki/internal/connectors/google_keep/sync"
+	"github.com/brendanjerwin/simple_wiki/internal/connectors/google_keep/translator"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 )
 
@@ -32,13 +33,13 @@ import (
 // pushResponse.ToVersion is empty.
 type fakeKeepClient struct {
 	mu             sync.Mutex
-	pullState      protocol.ChangesResponse
-	pushResponse   protocol.ChangesResponse
-	pushedRequests []protocol.ChangesRequest
-	pulledRequests []protocol.ChangesRequest
+	pullState      gateway.ChangesResponse
+	pushResponse   gateway.ChangesResponse
+	pushedRequests []gateway.ChangesRequest
+	pulledRequests []gateway.ChangesRequest
 }
 
-func (c *fakeKeepClient) Changes(_ context.Context, req protocol.ChangesRequest) (protocol.ChangesResponse, error) {
+func (c *fakeKeepClient) Changes(_ context.Context, req gateway.ChangesRequest) (gateway.ChangesResponse, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if len(req.Nodes) == 0 && len(req.Labels) == 0 {
@@ -52,17 +53,17 @@ func (c *fakeKeepClient) Changes(_ context.Context, req protocol.ChangesRequest)
 		// synced_fp on per-node SUCCESS, so without this the existing
 		// happy-path tests would all interpret default fakes as
 		// failure.
-		writeResults := make([]protocol.NodeWriteResult, 0, len(req.Nodes))
+		writeResults := make([]gateway.NodeWriteResult, 0, len(req.Nodes))
 		for _, n := range req.Nodes {
-			if n.Type != protocol.NodeTypeListItem {
+			if n.Type != gateway.NodeTypeListItem {
 				continue
 			}
-			writeResults = append(writeResults, protocol.NodeWriteResult{
+			writeResults = append(writeResults, gateway.NodeWriteResult{
 				ID:     n.ID,
 				Status: "SUCCESS",
 			})
 		}
-		return protocol.ChangesResponse{
+		return gateway.ChangesResponse{
 			ToVersion:    "v-after-push",
 			WriteResults: writeResults,
 		}, nil
@@ -74,12 +75,12 @@ func (*fakeKeepClient) CreateList(_ context.Context, _ string) (string, error) {
 	return "", errors.New("CreateList not used in these tests")
 }
 
-func (*fakeKeepClient) CreateListWithItems(_ context.Context, _ string, _ []protocol.ListItemSpec) (protocol.CreateListResult, error) {
-	return protocol.CreateListResult{}, errors.New("CreateListWithItems not used in these tests")
+func (*fakeKeepClient) CreateListWithItems(_ context.Context, _ string, _ []gateway.ListItemSpec) (gateway.CreateListResult, error) {
+	return gateway.CreateListResult{}, errors.New("CreateListWithItems not used in these tests")
 }
 
 // lastPush returns the most recent push request body, or fails if none.
-func (c *fakeKeepClient) lastPush() protocol.ChangesRequest {
+func (c *fakeKeepClient) lastPush() gateway.ChangesRequest {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	Expect(c.pushedRequests).ToNot(BeEmpty(), "expected at least one push")
@@ -94,7 +95,7 @@ func (c *fakeKeepClient) pushCount() int {
 }
 
 // lastPull returns the most recent pull request body, or fails if none.
-func (c *fakeKeepClient) lastPull() protocol.ChangesRequest {
+func (c *fakeKeepClient) lastPull() gateway.ChangesRequest {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	Expect(c.pulledRequests).ToNot(BeEmpty(), "expected at least one pull")
@@ -103,20 +104,20 @@ func (c *fakeKeepClient) lastPull() protocol.ChangesRequest {
 
 // findPushedItem returns the LIST_ITEM in the latest push with the given
 // serverID, or fails if not found.
-func (c *fakeKeepClient) findPushedItem(serverID string) protocol.Node {
+func (c *fakeKeepClient) findPushedItem(serverID string) gateway.Node {
 	push := c.lastPush()
 	for _, n := range push.Nodes {
-		if n.Type == protocol.NodeTypeListItem && n.ServerID == serverID {
+		if n.Type == gateway.NodeTypeListItem && n.ServerID == serverID {
 			return n
 		}
 	}
 	Fail(fmt.Sprintf("no LIST_ITEM with serverID=%s in last push", serverID))
-	return protocol.Node{}
+	return gateway.Node{}
 }
 
 // fakeChecklist holds wiki-side state — an items slice that AddItemFor
-// Sync / UpdateItemForSync / DeleteItemForSync mutate. Both bridge.
-// ChecklistReader and bridge.ChecklistMutator are satisfied.
+// Sync / UpdateItemForSync / DeleteItemForSync mutate. Both keepsync.
+// ChecklistReader and keepsync.ChecklistMutator are satisfied.
 type fakeChecklist struct {
 	mu       sync.Mutex
 	items    []*apiv1.ChecklistItem
@@ -220,7 +221,7 @@ func (c *fakeChecklist) DeleteItemForSync(_ context.Context, _, _, ownerEmail, u
 	return nil
 }
 
-// fakeSuppressor satisfies bridge.SyncSuppressor with no-op behavior.
+// fakeSuppressor satisfies keepsync.SyncSuppressor with no-op behavior.
 type fakeSuppressor struct{}
 
 func (fakeSuppressor) Suppress(_ wikipage.PageIdentifier, _, _ string)   {}
@@ -231,12 +232,12 @@ func (fakeSuppressor) Unsuppress(_ wikipage.PageIdentifier, _, _ string) {}
 // keepNoteID.
 //
 //revive:disable-next-line:max-public-structs,function-result-limit
-func freshConnector(profileID wikipage.PageIdentifier, page, listName, keepNoteID string, idMap map[string]string) (*bridge.Connector, *fakeStore, *fakeKeepClient, *fakeChecklist) {
+func freshConnector(profileID wikipage.PageIdentifier, page, listName, keepNoteID string, idMap map[string]string) (*keepsync.Connector, *fakeStore, *fakeKeepClient, *fakeChecklist) {
 	store := newFakeStore()
-	c := bridge.NewConnector(bridge.NewBindingStore(store), nil, fakeClock{})
+	c := keepsync.NewConnector(keepsync.NewBindingStore(store), nil, fakeClock{})
 	keep := &fakeKeepClient{}
-	c.SetClientBuilder(func(_ string) bridge.KeepClient { return keep })
-	c.SetAuthBuilder(func(_ string) bridge.AuthExchanger { return fakeAuth{} })
+	c.SetClientBuilder(func(_ string) keepsync.KeepClient { return keep })
+	c.SetAuthBuilder(func(_ string) keepsync.AuthExchanger { return fakeAuth{} })
 	chk := &fakeChecklist{}
 	c.SetChecklistReader(chk)
 	c.SetChecklistMutator(chk)
@@ -244,9 +245,9 @@ func freshConnector(profileID wikipage.PageIdentifier, page, listName, keepNoteI
 
 	// Convert legacy flat idMap to the new structured shape. Tests that
 	// need richer fingerprint state set ItemBinding values directly.
-	itemBindings := make(map[string]bridge.ItemBinding, len(idMap))
+	itemBindings := make(map[string]keepsync.ItemBinding, len(idMap))
 	for uid, serverID := range idMap {
-		itemBindings[uid] = bridge.ItemBinding{ServerID: serverID}
+		itemBindings[uid] = keepsync.ItemBinding{ServerID: serverID}
 	}
 
 	// Default test bindings are MigratedFingerprints=true so the sync
@@ -254,10 +255,10 @@ func freshConnector(profileID wikipage.PageIdentifier, page, listName, keepNoteI
 	// non-empty KeepNoteClientID so the self-heal block in SyncToKeep
 	// doesn't drop their cursor. Tests that pin legacy/un-migrated or
 	// missing-client-id behavior override these on the saved state.
-	state := bridge.ConnectorState{
+	state := keepsync.ConnectorState{
 		Email:       "test@example.com",
 		MasterToken: "token",
-		Bindings: []bridge.Binding{{
+		Bindings: []keepsync.Binding{{
 			Page: page, ListName: listName,
 			KeepNoteID: keepNoteID, KeepNoteTitle: listName,
 			KeepNoteClientID:     "list-client-" + keepNoteID,
@@ -266,7 +267,7 @@ func freshConnector(profileID wikipage.PageIdentifier, page, listName, keepNoteI
 			ItemIDMap:            itemBindings,
 		}},
 	}
-	Expect(bridge.NewBindingStore(store).SaveState(profileID, state)).To(Succeed())
+	Expect(keepsync.NewBindingStore(store).SaveState(profileID, state)).To(Succeed())
 	return c, store, keep, chk
 }
 
@@ -276,12 +277,12 @@ func freshConnector(profileID wikipage.PageIdentifier, page, listName, keepNoteI
 // synced baseline for scenarios where wiki edited and Keep stayed
 // at the previously-synced state — so wiki_fp != synced_fp (wd) and
 // keep_fp == synced_fp (¬kd) → "push wiki" route.
-func seedSyncedFromKeep(profileID wikipage.PageIdentifier, page, listName string, store *fakeStore, nodes []protocol.Node) {
+func seedSyncedFromKeep(profileID wikipage.PageIdentifier, page, listName string, store *fakeStore, nodes []gateway.Node) {
 	GinkgoHelper()
-	bs := bridge.NewBindingStore(store)
+	bs := keepsync.NewBindingStore(store)
 	state, err := bs.LoadState(profileID)
 	Expect(err).NotTo(HaveOccurred())
-	nodeByServerID := make(map[string]protocol.Node, len(nodes))
+	nodeByServerID := make(map[string]gateway.Node, len(nodes))
 	for _, n := range nodes {
 		if n.ServerID == "" {
 			continue
@@ -312,7 +313,7 @@ func seedSyncedFromKeep(profileID wikipage.PageIdentifier, page, listName string
 // synced_fp (kd) and wiki_fp == synced_fp (¬wd) → "apply Keep" route.
 func seedSyncedFromWiki(profileID wikipage.PageIdentifier, page, listName string, store *fakeStore, items []*apiv1.ChecklistItem) {
 	GinkgoHelper()
-	bs := bridge.NewBindingStore(store)
+	bs := keepsync.NewBindingStore(store)
 	state, err := bs.LoadState(profileID)
 	Expect(err).NotTo(HaveOccurred())
 	itemByUID := make(map[string]*apiv1.ChecklistItem, len(items))
@@ -328,7 +329,7 @@ func seedSyncedFromWiki(profileID wikipage.PageIdentifier, page, listName string
 			if !ok {
 				continue
 			}
-			fp := bridge.FingerprintWiki(it)
+			fp := translator.FingerprintWiki(it)
 			ib.SyncedText = fp.Text
 			ib.SyncedChecked = fp.Checked
 			ib.SyncedSortValue = fp.SortValue
@@ -371,18 +372,18 @@ func (fakeAuth) ExchangeMasterTokenForBearer(_ context.Context, _, _ string) (st
 // keepItem is a tiny builder for pull-state items. Sets Updated to a
 // recent fixed time so freshness comparisons work; tests that need
 // staler/newer Keep timestamps mutate the returned node.
-func keepItem(serverID, clientID, parentServer, text string, checked bool, sortValue string) protocol.Node {
-	return protocol.Node{
+func keepItem(serverID, clientID, parentServer, text string, checked bool, sortValue string) gateway.Node {
+	return gateway.Node{
 		Kind:     "notes#node",
 		ID:       clientID,
 		ServerID: serverID,
 		ParentID: parentServer, ParentServerID: parentServer,
-		Type:        protocol.NodeTypeListItem,
+		Type:        gateway.NodeTypeListItem,
 		Text:        text,
 		Checked:     checked,
 		SortValue:   sortValue,
 		BaseVersion: "v-base-" + serverID,
-		Timestamps: protocol.Timestamps{
+		Timestamps: gateway.Timestamps{
 			Updated: tKeepRecent,
 		},
 	}
@@ -416,7 +417,7 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 
 	var (
 		ctx context.Context
-		c   *bridge.Connector
+		c   *keepsync.Connector
 		kc  *fakeKeepClient
 		chk *fakeChecklist
 	)
@@ -434,9 +435,9 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 			chk.items = []*apiv1.ChecklistItem{
 				{Uid: "uid-A", Text: "Apples", SortOrder: 1000, UpdatedAt: recentTime()},
 			}
-			kc.pullState = protocol.ChangesResponse{
+			kc.pullState = gateway.ChangesResponse{
 				ToVersion: "v0",
-				Nodes: []protocol.Node{
+				Nodes: []gateway.Node{
 					keepItem("srv-A", "client-A", listSrv, "Apples", false, "1000"),
 				},
 			}
@@ -458,9 +459,9 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 				{Uid: "uid-A", Text: "Apples", SortOrder: 1000, UpdatedAt: recentTime()},
 				{Uid: "uid-NEW", Text: "Bread", SortOrder: 2000, UpdatedAt: recentTime()},
 			}
-			kc.pullState = protocol.ChangesResponse{
+			kc.pullState = gateway.ChangesResponse{
 				ToVersion: "v0",
-				Nodes: []protocol.Node{
+				Nodes: []gateway.Node{
 					keepItem("srv-A", "client-A", listSrv, "Apples", false, "1000"),
 				},
 			}
@@ -493,9 +494,9 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 			chk.items = []*apiv1.ChecklistItem{
 				{Uid: "uid-A", Text: "Apples", Checked: true, SortOrder: 1000, UpdatedAt: recentTime()},
 			}
-			kc.pullState = protocol.ChangesResponse{
+			kc.pullState = gateway.ChangesResponse{
 				ToVersion: "v0",
-				Nodes: []protocol.Node{
+				Nodes: []gateway.Node{
 					keepItem("srv-A", "client-A", listSrv, "Apples", false, "1000"),
 				},
 			}
@@ -527,9 +528,9 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 			chk.items = []*apiv1.ChecklistItem{
 				{Uid: "uid-A", Text: "Green Apples", SortOrder: 1000, UpdatedAt: recentTime()},
 			}
-			kc.pullState = protocol.ChangesResponse{
+			kc.pullState = gateway.ChangesResponse{
 				ToVersion: "v0",
-				Nodes: []protocol.Node{
+				Nodes: []gateway.Node{
 					keepItem("srv-A", "client-A", listSrv, "Apples", false, "1000"),
 				},
 			}
@@ -566,9 +567,9 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 			chk.items = []*apiv1.ChecklistItem{
 				{Uid: "uid-A", Text: "Apples", Tags: []string{"fruit", "produce"}, SortOrder: 1000, UpdatedAt: recentTime()},
 			}
-			kc.pullState = protocol.ChangesResponse{
+			kc.pullState = gateway.ChangesResponse{
 				ToVersion: "v0",
-				Nodes: []protocol.Node{
+				Nodes: []gateway.Node{
 					keepItem("srv-A", "client-A", listSrv, "Apples", false, "1000"),
 				},
 			}
@@ -595,9 +596,9 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 			chk.items = []*apiv1.ChecklistItem{
 				{Uid: "uid-A", Text: "Apples", Description: &desc, SortOrder: 1000, UpdatedAt: recentTime()},
 			}
-			kc.pullState = protocol.ChangesResponse{
+			kc.pullState = gateway.ChangesResponse{
 				ToVersion: "v0",
-				Nodes: []protocol.Node{
+				Nodes: []gateway.Node{
 					keepItem("srv-A", "client-A", listSrv, "Apples", false, "1000"),
 				},
 			}
@@ -623,9 +624,9 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 			chk.items = []*apiv1.ChecklistItem{
 				{Uid: "uid-A", Text: "Apples", SortOrder: 5000, UpdatedAt: recentTime()},
 			}
-			kc.pullState = protocol.ChangesResponse{
+			kc.pullState = gateway.ChangesResponse{
 				ToVersion: "v0",
-				Nodes: []protocol.Node{
+				Nodes: []gateway.Node{
 					keepItem("srv-A", "client-A", listSrv, "Apples", false, "1000"),
 				},
 			}
@@ -651,9 +652,9 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 				{Uid: "uid-A", Text: "Apples", SortOrder: 1000, UpdatedAt: recentTime()},
 				// uid-B removed
 			}
-			kc.pullState = protocol.ChangesResponse{
+			kc.pullState = gateway.ChangesResponse{
 				ToVersion: "v0",
-				Nodes: []protocol.Node{
+				Nodes: []gateway.Node{
 					keepItem("srv-A", "client-A", listSrv, "Apples", false, "1000"),
 					keepItem("srv-B", "client-B", listSrv, "Bread", false, "2000"),
 				},
@@ -696,10 +697,10 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 				{Uid: "uid-A", Text: "Apples", SortOrder: 1000, UpdatedAt: recentTime()},
 				// uid-B removed wiki-side
 			}
-			kc.pullState = protocol.ChangesResponse{
+			kc.pullState = gateway.ChangesResponse{
 				ToVersion:   "v-after",
 				Incremental: true,
-				Nodes: []protocol.Node{
+				Nodes: []gateway.Node{
 					keepItem("srv-A", "client-A", listSrv, "Apples", false, "1000"),
 					// srv-B intentionally absent — it's been quiet
 					// on Keep since the last cursor.
@@ -712,7 +713,7 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 			Expect(kc.pushCount()).To(Equal(1))
 			var foundSoftDelete bool
 			for _, n := range kc.lastPush().Nodes {
-				if n.Type == protocol.NodeTypeListItem && n.ServerID == "srv-B" && !n.Timestamps.Deleted.IsZero() {
+				if n.Type == gateway.NodeTypeListItem && n.ServerID == "srv-B" && !n.Timestamps.Deleted.IsZero() {
 					foundSoftDelete = true
 				}
 			}
@@ -735,9 +736,9 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 			chk.items = []*apiv1.ChecklistItem{
 				{Uid: "uid-A", Text: "Apples", SortOrder: 1000, UpdatedAt: recentTime()},
 			}
-			kc.pullState = protocol.ChangesResponse{
+			kc.pullState = gateway.ChangesResponse{
 				ToVersion: "v0",
-				Nodes: []protocol.Node{
+				Nodes: []gateway.Node{
 					keepItem("srv-A", "client-A", listSrv, "Apples", false, "1000"),
 					keepItem("srv-NEW", "client-NEW", listSrv, "Bread", false, "2000"),
 				},
@@ -758,9 +759,9 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 			chk.items = []*apiv1.ChecklistItem{
 				{Uid: "wiki-uid-A", Text: "Apples", SortOrder: 1000, UpdatedAt: recentTime()},
 			}
-			kc.pullState = protocol.ChangesResponse{
+			kc.pullState = gateway.ChangesResponse{
 				ToVersion: "v0",
-				Nodes: []protocol.Node{
+				Nodes: []gateway.Node{
 					keepItem("srv-A", "client-A", listSrv, "Apples", false, "1000"),
 				},
 			}
@@ -783,9 +784,9 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 			}
 			n := keepItem("srv-A", "client-A", listSrv, "Apples", true, "1000")
 			n.Timestamps.UserEdited = tKeepRecent2
-			kc.pullState = protocol.ChangesResponse{
+			kc.pullState = gateway.ChangesResponse{
 				ToVersion: "v0",
-				Nodes:     []protocol.Node{n},
+				Nodes:     []gateway.Node{n},
 			}
 			Expect(c.SyncToKeep(ctx, profile, page, listName)).To(Succeed())
 		})
@@ -816,9 +817,9 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 			}
 			n := keepItem("srv-A", "client-A", listSrv, "Green Apples", false, "1000")
 			n.Timestamps.UserEdited = tKeepRecent2
-			kc.pullState = protocol.ChangesResponse{
+			kc.pullState = gateway.ChangesResponse{
 				ToVersion: "v0",
-				Nodes:     []protocol.Node{n},
+				Nodes:     []gateway.Node{n},
 			}
 			Expect(c.SyncToKeep(ctx, profile, page, listName)).To(Succeed())
 		})
@@ -841,9 +842,9 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 			}
 			n := keepItem("srv-A", "client-A", listSrv, "Apples", false, "1000")
 			n.Timestamps.Trashed = tKeepRecent2
-			kc.pullState = protocol.ChangesResponse{
+			kc.pullState = gateway.ChangesResponse{
 				ToVersion: "v0",
-				Nodes:     []protocol.Node{n},
+				Nodes:     []gateway.Node{n},
 			}
 			Expect(c.SyncToKeep(ctx, profile, page, listName)).To(Succeed())
 		})
@@ -870,19 +871,19 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 			chk.items = []*apiv1.ChecklistItem{
 				{Uid: "uid-A", Text: "Apples", SortOrder: 1000, UpdatedAt: recentTime()},
 			}
-			tomb := protocol.Node{
+			tomb := gateway.Node{
 				Kind:     "notes#node",
 				ID:       "client-A",
 				ServerID: "srv-A",
 				// Type left as zero (UnknownNodeType) — production
 				// tombstone shape from Keep.
-				Timestamps: protocol.Timestamps{
+				Timestamps: gateway.Timestamps{
 					Deleted: tEpochPlusMs,
 				},
 			}
-			kc.pullState = protocol.ChangesResponse{
+			kc.pullState = gateway.ChangesResponse{
 				ToVersion: "v0",
-				Nodes:     []protocol.Node{tomb},
+				Nodes:     []gateway.Node{tomb},
 			}
 			Expect(c.SyncToKeep(ctx, profile, page, listName)).To(Succeed())
 		})
@@ -915,20 +916,20 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 			chk.items = []*apiv1.ChecklistItem{
 				{Uid: "uid-A", Text: "Apples", SortOrder: 1000, UpdatedAt: recentTime()},
 			}
-			tomb := protocol.Node{
+			tomb := gateway.Node{
 				Kind:     "notes#node",
 				ID:       "client-A",
 				ServerID: "srv-A",
 				// ParentID and ParentServerID intentionally blank —
 				// production Keep tombstone shape.
-				Type: protocol.NodeTypeListItem,
-				Timestamps: protocol.Timestamps{
+				Type: gateway.NodeTypeListItem,
+				Timestamps: gateway.Timestamps{
 					Deleted: tEpochPlusMs,
 				},
 			}
-			kc.pullState = protocol.ChangesResponse{
+			kc.pullState = gateway.ChangesResponse{
 				ToVersion: "v0",
-				Nodes:     []protocol.Node{tomb},
+				Nodes:     []gateway.Node{tomb},
 			}
 			Expect(c.SyncToKeep(ctx, profile, page, listName)).To(Succeed())
 		})
@@ -968,9 +969,9 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 				{Uid: "uid-B", Text: "Bread", SortOrder: 2000, UpdatedAt: timestamppb.New(tStaleA)},
 			}
 			// Pull only returns srv-A; srv-B was hard-deleted in Keep.
-			kc.pullState = protocol.ChangesResponse{
+			kc.pullState = gateway.ChangesResponse{
 				ToVersion: "v0",
-				Nodes: []protocol.Node{
+				Nodes: []gateway.Node{
 					keepItem("srv-A", "client-A", listSrv, "Apples", false, "1000"),
 				},
 				Truncated: false,
@@ -1010,9 +1011,9 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 				{Uid: "uid-A", Text: "Apples", SortOrder: 1000, UpdatedAt: timestamppb.New(tStaleA)},
 				{Uid: "uid-NEW", Text: "FreshLocal", SortOrder: 2000, UpdatedAt: timestamppb.New(tStaleA)}, // never pushed
 			}
-			kc.pullState = protocol.ChangesResponse{
+			kc.pullState = gateway.ChangesResponse{
 				ToVersion: "v0",
-				Nodes: []protocol.Node{
+				Nodes: []gateway.Node{
 					keepItem("srv-A", "client-A", listSrv, "Apples", false, "1000"),
 				},
 				Truncated: false,
@@ -1043,9 +1044,9 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 				{Uid: "uid-B", Text: "Bread", SortOrder: 2000, UpdatedAt: timestamppb.New(tStaleA)},
 			}
 			// Pull returns nothing for this binding.
-			kc.pullState = protocol.ChangesResponse{
+			kc.pullState = gateway.ChangesResponse{
 				ToVersion: "v0",
-				Nodes:     []protocol.Node{},
+				Nodes:     []gateway.Node{},
 				Truncated: false,
 			}
 			Expect(c.SyncToKeep(ctx, profile, page, listName)).To(Succeed())
@@ -1068,9 +1069,9 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 				{Uid: "uid-A", Text: "Apples", SortOrder: 1000, UpdatedAt: timestamppb.New(tStaleA)},
 				{Uid: "uid-B", Text: "Bread", SortOrder: 2000, UpdatedAt: timestamppb.New(tStaleA)},
 			}
-			kc.pullState = protocol.ChangesResponse{
+			kc.pullState = gateway.ChangesResponse{
 				ToVersion: "v0",
-				Nodes: []protocol.Node{
+				Nodes: []gateway.Node{
 					keepItem("srv-A", "client-A", listSrv, "Apples", false, "1000"),
 				},
 				Truncated: true, // <- key difference
@@ -1105,9 +1106,9 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 			// Incremental pull: only uid-A is in the delta. uid-B and
 			// uid-Dog still exist on Keep but are unchanged since the
 			// cursor, so they're omitted.
-			kc.pullState = protocol.ChangesResponse{
+			kc.pullState = gateway.ChangesResponse{
 				ToVersion: "v-after",
-				Nodes: []protocol.Node{
+				Nodes: []gateway.Node{
 					keepItem("srv-A", "client-A", listSrv, "Apples", false, "1000"),
 				},
 				Truncated:   false,
@@ -1150,9 +1151,9 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 				{Uid: "uid-Dog", Text: "Dog Treats", SortOrder: 3000, UpdatedAt: timestamppb.New(tStaleA)},
 			}
 			// Full pull: returns A and B; Dog Treats was hard-deleted.
-			kc.pullState = protocol.ChangesResponse{
+			kc.pullState = gateway.ChangesResponse{
 				ToVersion: "v-after",
-				Nodes: []protocol.Node{
+				Nodes: []gateway.Node{
 					keepItem("srv-A", "client-A", listSrv, "Apples", false, "1000"),
 					keepItem("srv-B", "client-B", listSrv, "Bread", false, "2000"),
 				},
@@ -1191,15 +1192,15 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 				{Uid: "uid-A", Text: "Apples", SortOrder: 1000, UpdatedAt: timestamppb.New(tStaleA)},
 			}
 			// Pre-set a cursor so we can verify it gets cleared.
-			bs := bridge.NewBindingStore(store)
+			bs := keepsync.NewBindingStore(store)
 			st, loadErr := bs.LoadState(profile)
 			Expect(loadErr).ToNot(HaveOccurred())
 			st.Bindings[0].KeepCursor = "v-stale-cursor"
 			Expect(bs.SaveState(profile, st)).To(Succeed())
 
-			kc.pullState = protocol.ChangesResponse{
+			kc.pullState = gateway.ChangesResponse{
 				ToVersion: "v-after",
-				Nodes: []protocol.Node{
+				Nodes: []gateway.Node{
 					keepItem("srv-A", "client-A", listSrv, "Apples", false, "1000"),
 				},
 				Truncated:       false,
@@ -1236,9 +1237,9 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 				{Uid: "uid-A", Text: "Apples", SortOrder: 1000},
 				{Uid: "uid-bananas", Text: "Bananas", SortOrder: 2000},
 			}
-			kc.pullState = protocol.ChangesResponse{
+			kc.pullState = gateway.ChangesResponse{
 				ToVersion: "v-after",
-				Nodes: []protocol.Node{
+				Nodes: []gateway.Node{
 					// Only Apples; bananas hard-deleted on Keep.
 					keepItem("srv-A", "client-A", listSrv, "Apples", false, "1000"),
 				},
@@ -1277,9 +1278,9 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 			chk.items = []*apiv1.ChecklistItem{
 				{Uid: "uid-A", Text: "Apples", SortOrder: 1000},
 			}
-			kc.pullState = protocol.ChangesResponse{
+			kc.pullState = gateway.ChangesResponse{
 				ToVersion: "v-after",
-				Nodes: []protocol.Node{
+				Nodes: []gateway.Node{
 					keepItem("srv-A", "client-A", listSrv, "Apples", false, "1000"),
 				},
 			}
@@ -1313,9 +1314,9 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 			chk.items = []*apiv1.ChecklistItem{
 				{Uid: "uid-A", Text: "Apples", SortOrder: 1000},
 			}
-			kc.pullState = protocol.ChangesResponse{
+			kc.pullState = gateway.ChangesResponse{
 				ToVersion: "v-1",
-				Nodes: []protocol.Node{
+				Nodes: []gateway.Node{
 					keepItem("srv-A", "client-A", listSrv, "Apples", false, "1000"),
 					keepItem("srv-bananas", "client-bananas", listSrv, "Bananas", false, "2000"),
 				},
@@ -1344,9 +1345,9 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 			Expect(bananasUID).NotTo(BeEmpty(), "bananas should be in id_map after tick 1")
 
 			// Tick 2: Keep no longer has bananas. Wiki idle.
-			kc.pullState = protocol.ChangesResponse{
+			kc.pullState = gateway.ChangesResponse{
 				ToVersion: "v-2",
-				Nodes: []protocol.Node{
+				Nodes: []gateway.Node{
 					keepItem("srv-A", "client-A", listSrv, "Apples", false, "1000"),
 				},
 			}
@@ -1386,15 +1387,15 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 				{Uid: "uid-B", Text: "Bread", SortOrder: 2000},
 			}
 			// Pull contains only uid-A; uid-B hard-deleted on Keep.
-			kc.pullState = protocol.ChangesResponse{
+			kc.pullState = gateway.ChangesResponse{
 				ToVersion: "v-after",
-				Nodes: []protocol.Node{
+				Nodes: []gateway.Node{
 					keepItem("srv-A", "client-A", listSrv, "Apples", false, "1000"),
 				},
 			}
 			// Synced baseline: pre-edit Apples for uid-A; current
 			// Bread for uid-B (wiki idle).
-			seedSyncedFromKeep(profile, page, listName, store, []protocol.Node{
+			seedSyncedFromKeep(profile, page, listName, store, []gateway.Node{
 				keepItem("srv-A", "client-A", listSrv, "Apples", false, "1000"),
 				keepItem("srv-B", "client-B", listSrv, "Bread", false, "2000"),
 			})
@@ -1434,9 +1435,9 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 			}
 			n := keepItem("srv-A", "client-A", listSrv, "Apples", false, "1000")
 			n.Timestamps.Deleted = tKeepRecent2
-			kc.pullState = protocol.ChangesResponse{
+			kc.pullState = gateway.ChangesResponse{
 				ToVersion: "v0",
-				Nodes:     []protocol.Node{n},
+				Nodes:     []gateway.Node{n},
 			}
 			Expect(c.SyncToKeep(ctx, profile, page, listName)).To(Succeed())
 		})
@@ -1460,9 +1461,9 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 			n := keepItem("srv-A", "client-A", listSrv, "Apples", true, "1000")
 			n.Timestamps.Updated = tEpochPlusMs // 1970-01-01T00:00:00.001Z
 			n.Timestamps.UserEdited = tKeepRecent2
-			kc.pullState = protocol.ChangesResponse{
+			kc.pullState = gateway.ChangesResponse{
 				ToVersion: "v0",
-				Nodes:     []protocol.Node{n},
+				Nodes:     []gateway.Node{n},
 			}
 			Expect(c.SyncToKeep(ctx, profile, page, listName)).To(Succeed())
 		})
@@ -1483,10 +1484,10 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 				{Uid: "uid-A", Text: "Apples", SortOrder: 1000, UpdatedAt: recentTime()},
 			}
 			n := keepItem("srv-A", "client-A", listSrv, "Apples", false, "1000")
-			n.Timestamps = protocol.Timestamps{} // both zero
-			kc.pullState = protocol.ChangesResponse{
+			n.Timestamps = gateway.Timestamps{} // both zero
+			kc.pullState = gateway.ChangesResponse{
 				ToVersion: "v0",
-				Nodes:     []protocol.Node{n},
+				Nodes:     []gateway.Node{n},
 			}
 			Expect(c.SyncToKeep(ctx, profile, page, listName)).To(Succeed())
 		})
@@ -1511,9 +1512,9 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 			}
 			n := keepItem("srv-A", "client-A", listSrv, "keep edit", false, "1000")
 			n.Timestamps.UserEdited = tKeepRecent2
-			kc.pullState = protocol.ChangesResponse{
+			kc.pullState = gateway.ChangesResponse{
 				ToVersion: "v0",
-				Nodes:     []protocol.Node{n},
+				Nodes:     []gateway.Node{n},
 			}
 			Expect(c.SyncToKeep(ctx, profile, page, listName)).To(Succeed())
 		})
@@ -1544,9 +1545,9 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 			}
 			n := keepItem("srv-A", "client-A", listSrv, "keep edit", false, "1000")
 			n.Timestamps.UserEdited = tKeepRecent2
-			kc.pullState = protocol.ChangesResponse{
+			kc.pullState = gateway.ChangesResponse{
 				ToVersion: "v0",
-				Nodes:     []protocol.Node{n},
+				Nodes:     []gateway.Node{n},
 			}
 			// Seed synced_fp = keep_fp: synced baseline matches Keep's
 			// current state, so kd=false. Only wiki diverged.
@@ -1574,9 +1575,9 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 				{Uid: "uid-A", Text: "Apples", SortOrder: 1000, UpdatedAt: recentTime()},
 			}
 			// pull DOES NOT contain srv-already-gone
-			kc.pullState = protocol.ChangesResponse{
+			kc.pullState = gateway.ChangesResponse{
 				ToVersion: "v0",
-				Nodes: []protocol.Node{
+				Nodes: []gateway.Node{
 					keepItem("srv-A", "client-A", listSrv, "Apples", false, "1000"),
 				},
 			}
@@ -1596,9 +1597,9 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 				{Uid: "wiki-uid-1", Text: "Apples", SortOrder: 1000, UpdatedAt: recentTime()},
 				{Uid: "wiki-uid-2", Text: "Bread", SortOrder: 2000, UpdatedAt: recentTime()},
 			}
-			kc.pullState = protocol.ChangesResponse{
+			kc.pullState = gateway.ChangesResponse{
 				ToVersion: "v0",
-				Nodes: []protocol.Node{
+				Nodes: []gateway.Node{
 					keepItem("srv-A", "client-A", listSrv, "Apples", false, "1000"),
 					keepItem("srv-B", "client-B", listSrv, "Bread", false, "2000"),
 				},
@@ -1646,9 +1647,9 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 			n := keepItem("srv-A", "client-A", listSrv, "Apples", true, "1000")
 			n.Timestamps.Updated = tEpochPlusMs
 			n.Timestamps.UserEdited = time.Time{}
-			kc.pullState = protocol.ChangesResponse{
+			kc.pullState = gateway.ChangesResponse{
 				ToVersion: "v0",
-				Nodes:     []protocol.Node{n},
+				Nodes:     []gateway.Node{n},
 			}
 			Expect(c.SyncToKeep(ctx, profile, page, listName)).To(Succeed())
 		})
@@ -1672,9 +1673,9 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 				{Uid: "uid-B", Text: "Bread", SortOrder: 2000, UpdatedAt: recentTime()},
 				{Uid: "uid-C", Text: "Cheese", SortOrder: 3000, UpdatedAt: recentTime()},
 			}
-			kc.pullState = protocol.ChangesResponse{
+			kc.pullState = gateway.ChangesResponse{
 				ToVersion: "v0",
-				Nodes: []protocol.Node{
+				Nodes: []gateway.Node{
 					keepItem("srv-A", "client-A", listSrv, "Apples", false, "1000"),
 					keepItem("srv-B", "client-B", listSrv, "Bread", false, "2000"),
 					keepItem("srv-C", "client-C", listSrv, "Cheese", false, "3000"),
@@ -1697,9 +1698,9 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 				"uid-old": "srv-gone",
 			})
 			chk.items = []*apiv1.ChecklistItem{}
-			kc.pullState = protocol.ChangesResponse{
+			kc.pullState = gateway.ChangesResponse{
 				ToVersion: "v0",
-				Nodes: []protocol.Node{
+				Nodes: []gateway.Node{
 					keepItem("srv-fresh", "client-fresh", listSrv, "Apples", false, "1000"),
 				},
 			}
@@ -1727,9 +1728,9 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 			chk.items = []*apiv1.ChecklistItem{}
 			n := keepItem("srv-A", "client-A", listSrv, "Apples", false, "1000")
 			n.Timestamps.Trashed = tKeepRecent2
-			kc.pullState = protocol.ChangesResponse{
+			kc.pullState = gateway.ChangesResponse{
 				ToVersion: "v0",
-				Nodes:     []protocol.Node{n},
+				Nodes:     []gateway.Node{n},
 			}
 			Expect(c.SyncToKeep(ctx, profile, page, listName)).To(Succeed())
 		})
@@ -1758,9 +1759,9 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 			chk.items = []*apiv1.ChecklistItem{}
 			n := keepItem("srv-A", "client-A", listSrv, "Apples", false, "1000")
 			n.Timestamps.Deleted = tKeepRecent2
-			kc.pullState = protocol.ChangesResponse{
+			kc.pullState = gateway.ChangesResponse{
 				ToVersion: "v0",
-				Nodes:     []protocol.Node{n},
+				Nodes:     []gateway.Node{n},
 			}
 			Expect(c.SyncToKeep(ctx, profile, page, listName)).To(Succeed())
 		})
@@ -1790,9 +1791,9 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 			chk.items = []*apiv1.ChecklistItem{
 				{Uid: "uid-A", Text: "Apples", SortOrder: 1000, UpdatedAt: recentTime()},
 			}
-			kc.pullState = protocol.ChangesResponse{
+			kc.pullState = gateway.ChangesResponse{
 				ToVersion: "v0",
-				Nodes:     []protocol.Node{}, // Keep doesn't have srv-gone
+				Nodes:     []gateway.Node{}, // Keep doesn't have srv-gone
 			}
 			Expect(c.SyncToKeep(ctx, profile, page, listName)).To(Succeed())
 		})
@@ -1818,9 +1819,9 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 				{Uid: "uid-A", Text: "Apples", SortOrder: 1000, UpdatedAt: recentTime()},
 			}
 			// Keep has the item under a DIFFERENT serverID (post-recreate).
-			kc.pullState = protocol.ChangesResponse{
+			kc.pullState = gateway.ChangesResponse{
 				ToVersion: "v0",
-				Nodes: []protocol.Node{
+				Nodes: []gateway.Node{
 					keepItem("srv-A-fresh", "client-A", listSrv, "Apples", false, "1000"),
 				},
 			}
@@ -1843,9 +1844,9 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 			}
 			n := keepItem("srv-trash", "client-trash", listSrv, "Apples", false, "1000")
 			n.Timestamps.Trashed = tKeepRecent2
-			kc.pullState = protocol.ChangesResponse{
+			kc.pullState = gateway.ChangesResponse{
 				ToVersion: "v0",
-				Nodes:     []protocol.Node{n},
+				Nodes:     []gateway.Node{n},
 			}
 			Expect(c.SyncToKeep(ctx, profile, page, listName)).To(Succeed())
 		})
@@ -1873,9 +1874,9 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 			}
 			n := keepItem("srv-del", "client-del", listSrv, "Apples", false, "1000")
 			n.Timestamps.Deleted = tKeepRecent2
-			kc.pullState = protocol.ChangesResponse{
+			kc.pullState = gateway.ChangesResponse{
 				ToVersion: "v0",
-				Nodes:     []protocol.Node{n},
+				Nodes:     []gateway.Node{n},
 			}
 			Expect(c.SyncToKeep(ctx, profile, page, listName)).To(Succeed())
 		})
@@ -1902,9 +1903,9 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 			n := keepItem("srv-A", "client-A", listSrv, "keep", false, "1000")
 			n.Timestamps.Updated = equalTime
 			n.Timestamps.UserEdited = equalTime
-			kc.pullState = protocol.ChangesResponse{
+			kc.pullState = gateway.ChangesResponse{
 				ToVersion: "v0",
-				Nodes:     []protocol.Node{n},
+				Nodes:     []gateway.Node{n},
 			}
 			seedSyncedFromKeep(profile, page, listName, store, kc.pullState.Nodes)
 			Expect(c.SyncToKeep(ctx, profile, page, listName)).To(Succeed())
@@ -1931,9 +1932,9 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 			}
 			n := keepItem("srv-A", "client-A", listSrv, "keep", true, "1000")
 			n.Timestamps.UserEdited = tKeepRecent2
-			kc.pullState = protocol.ChangesResponse{
+			kc.pullState = gateway.ChangesResponse{
 				ToVersion: "v0",
-				Nodes:     []protocol.Node{n},
+				Nodes:     []gateway.Node{n},
 			}
 			Expect(c.SyncToKeep(ctx, profile, page, listName)).To(Succeed())
 		})
@@ -1955,9 +1956,9 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 			chk.items = []*apiv1.ChecklistItem{
 				{Uid: "uid-A", Text: "Green Apples", Checked: true, SortOrder: 1000, UpdatedAt: recentTime()},
 			}
-			kc.pullState = protocol.ChangesResponse{
+			kc.pullState = gateway.ChangesResponse{
 				ToVersion: "v0",
-				Nodes: []protocol.Node{
+				Nodes: []gateway.Node{
 					keepItem("srv-A", "client-A", listSrv, "Apples", false, "1000"),
 				},
 			}
@@ -1988,9 +1989,9 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 				{Uid: "uid-B", Text: "Bread NEW", SortOrder: 2000, UpdatedAt: recentTime()},  // text diff
 				{Uid: "uid-C", Text: "Cheese", Checked: true, SortOrder: 3000, UpdatedAt: recentTime()}, // checked diff
 			}
-			kc.pullState = protocol.ChangesResponse{
+			kc.pullState = gateway.ChangesResponse{
 				ToVersion: "v0",
-				Nodes: []protocol.Node{
+				Nodes: []gateway.Node{
 					keepItem("srv-A", "client-A", listSrv, "Apples", false, "1000"),
 					keepItem("srv-B", "client-B", listSrv, "Bread", false, "2000"),
 					keepItem("srv-C", "client-C", listSrv, "Cheese", false, "3000"),
@@ -2033,12 +2034,12 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 			chk.items = []*apiv1.ChecklistItem{
 				{Uid: "uid-A", Text: "Apples", SortOrder: 1000, UpdatedAt: timestamppb.New(tStaleA)},
 			}
-			kc.pullState = protocol.ChangesResponse{
+			kc.pullState = gateway.ChangesResponse{
 				ToVersion: "v0",
-				Nodes: []protocol.Node{
+				Nodes: []gateway.Node{
 					keepItem("srv-A", "client-A", listSrv, "Apples", false, "1000"),
 				},
-				Labels: []protocol.LabelEntry{}, // Keep has no labels yet
+				Labels: []gateway.LabelEntry{}, // Keep has no labels yet
 			}
 			Expect(c.SyncToKeep(ctx, profile, page, listName)).To(Succeed())
 		})
@@ -2054,9 +2055,9 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 		})
 
 		It("should also push a LIST node referencing the new label IDs", func() {
-			var listNode *protocol.Node
+			var listNode *gateway.Node
 			for i, n := range kc.lastPush().Nodes {
-				if n.Type == protocol.NodeTypeList {
+				if n.Type == gateway.NodeTypeList {
 					listNode = &kc.lastPush().Nodes[i]
 					break
 				}
@@ -2066,9 +2067,9 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 		})
 
 		It("should NOT carry the Title field on the LIST push (Keep is authoritative)", func() {
-			var listNode *protocol.Node
+			var listNode *gateway.Node
 			for i, n := range kc.lastPush().Nodes {
-				if n.Type == protocol.NodeTypeList {
+				if n.Type == gateway.NodeTypeList {
 					listNode = &kc.lastPush().Nodes[i]
 					break
 				}
@@ -2093,14 +2094,14 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 			}
 			// Pull echoes the LIST node with a NEW title — user
 			// renamed it in the Keep app.
-			kc.pullState = protocol.ChangesResponse{
+			kc.pullState = gateway.ChangesResponse{
 				ToVersion: "v-after-rename",
-				Nodes: []protocol.Node{
+				Nodes: []gateway.Node{
 					{
 						Kind:     "notes#node",
 						ID:       "list-client-id",
 						ServerID: listSrv,
-						Type:     protocol.NodeTypeList,
+						Type:     gateway.NodeTypeList,
 						Title:    "Renamed in Keep",
 					},
 					keepItem("srv-A", "client-A", listSrv, "Apples", false, "1000"),
@@ -2136,12 +2137,12 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 			chk.items = []*apiv1.ChecklistItem{
 				{Uid: "uid-A", Text: "Apples", SortOrder: 1000, UpdatedAt: timestamppb.New(tStaleA)},
 			}
-			kc.pullState = protocol.ChangesResponse{
+			kc.pullState = gateway.ChangesResponse{
 				ToVersion: "v0",
-				Nodes: []protocol.Node{
+				Nodes: []gateway.Node{
 					keepItem("srv-A", "client-A", listSrv, "Apples", false, "1000"),
 				},
-				Labels: []protocol.LabelEntry{},
+				Labels: []gateway.LabelEntry{},
 			}
 			Expect(c.SyncToKeep(ctx, profile, page, listName)).To(Succeed())
 		})
@@ -2173,12 +2174,12 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 			chk.items = []*apiv1.ChecklistItem{
 				{Uid: "uid-A", Text: "Apples", SortOrder: 1000, UpdatedAt: timestamppb.New(tStaleA)},
 			}
-			kc.pullState = protocol.ChangesResponse{
+			kc.pullState = gateway.ChangesResponse{
 				ToVersion: "v0",
-				Nodes: []protocol.Node{
+				Nodes: []gateway.Node{
 					keepItem("srv-A", "client-A", listSrv, "Apples", false, "1000"),
 				},
-				Labels: []protocol.LabelEntry{
+				Labels: []gateway.LabelEntry{
 					{MainID: "existing-label-id", Name: "household"},
 				},
 			}
@@ -2190,9 +2191,9 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 		})
 
 		It("should push a LIST node referencing the existing label ID", func() {
-			var listNode *protocol.Node
+			var listNode *gateway.Node
 			for i, n := range kc.lastPush().Nodes {
-				if n.Type == protocol.NodeTypeList {
+				if n.Type == gateway.NodeTypeList {
 					listNode = &kc.lastPush().Nodes[i]
 					break
 				}
@@ -2239,7 +2240,7 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 				"uid-A": "srv-A",
 			})
 			// Pre-populate the binding's KeepCursor.
-			bs := bridge.NewBindingStore(store)
+			bs := keepsync.NewBindingStore(store)
 			st, loadErr := bs.LoadState(profile)
 			Expect(loadErr).ToNot(HaveOccurred())
 			st.Bindings[0].KeepCursor = "v-cursor-from-last-sync"
@@ -2248,9 +2249,9 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 			chk.items = []*apiv1.ChecklistItem{
 				{Uid: "uid-A", Text: "Apples", SortOrder: 1000, UpdatedAt: recentTime()},
 			}
-			kc.pullState = protocol.ChangesResponse{
+			kc.pullState = gateway.ChangesResponse{
 				ToVersion: "v-after-pull",
-				Nodes: []protocol.Node{
+				Nodes: []gateway.Node{
 					keepItem("srv-A", "client-A", listSrv, "Apples", false, "1000"),
 				},
 			}
@@ -2272,7 +2273,7 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 			c, store, kc, chk = freshConnector(profile, page, listName, listSrv, map[string]string{
 				"uid-A": "srv-A",
 			})
-			bs := bridge.NewBindingStore(store)
+			bs := keepsync.NewBindingStore(store)
 			st, loadErr := bs.LoadState(profile)
 			Expect(loadErr).ToNot(HaveOccurred())
 			st.Bindings[0].KeepCursor = "v-1"
@@ -2283,9 +2284,9 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 			chk.items = []*apiv1.ChecklistItem{
 				{Uid: "uid-A", Text: "Apples", SortOrder: 1000, UpdatedAt: recentTime()},
 			}
-			kc.pullState = protocol.ChangesResponse{
+			kc.pullState = gateway.ChangesResponse{
 				ToVersion: "v-2",
-				Nodes: []protocol.Node{
+				Nodes: []gateway.Node{
 					keepItem("srv-A", "client-A", listSrv, "Apples", false, "1000"),
 				},
 			}
@@ -2314,7 +2315,7 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 			c, store, kc, chk = freshConnector(profile, page, listName, listSrv, map[string]string{
 				"uid-A": "srv-A",
 			})
-			bs := bridge.NewBindingStore(store)
+			bs := keepsync.NewBindingStore(store)
 			st, loadErr := bs.LoadState(profile)
 			Expect(loadErr).ToNot(HaveOccurred())
 			st.Bindings[0].KeepCursor = "v-1"
@@ -2324,13 +2325,13 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 			chk.items = []*apiv1.ChecklistItem{
 				{Uid: "uid-A", Text: "Green Apples", SortOrder: 1000, UpdatedAt: recentTime()},
 			}
-			kc.pullState = protocol.ChangesResponse{
+			kc.pullState = gateway.ChangesResponse{
 				ToVersion: "v-2",
-				Nodes: []protocol.Node{
+				Nodes: []gateway.Node{
 					keepItem("srv-A", "client-A", listSrv, "Apples", false, "1000"),
 				},
 			}
-			kc.pushResponse = protocol.ChangesResponse{
+			kc.pushResponse = gateway.ChangesResponse{
 				ToVersion: "v-3",
 			}
 			seedSyncedFromKeep(profile, page, listName, store, kc.pullState.Nodes)
@@ -2360,7 +2361,7 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 			c, store, kc, chk = freshConnector(profile, page, listName, listSrv, map[string]string{
 				"uid-A": "srv-A",
 			})
-			bs := bridge.NewBindingStore(store)
+			bs := keepsync.NewBindingStore(store)
 			st, loadErr := bs.LoadState(profile)
 			Expect(loadErr).ToNot(HaveOccurred())
 			st.Bindings[0].KeepCursor = "v-1"
@@ -2369,10 +2370,10 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 			chk.items = []*apiv1.ChecklistItem{
 				{Uid: "uid-A", Text: "Apples", SortOrder: 1000, UpdatedAt: recentTime()},
 			}
-			kc.pullState = protocol.ChangesResponse{
+			kc.pullState = gateway.ChangesResponse{
 				ToVersion: "v-9",
 				Truncated: true,
-				Nodes: []protocol.Node{
+				Nodes: []gateway.Node{
 					keepItem("srv-A", "client-A", listSrv, "Apples", false, "1000"),
 				},
 			}
@@ -2395,7 +2396,7 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 
 		BeforeEach(func() {
 			c, store, kc, chk = freshConnector(profile, page, listName, listSrv, map[string]string{})
-			bs := bridge.NewBindingStore(store)
+			bs := keepsync.NewBindingStore(store)
 			st, loadErr := bs.LoadState(profile)
 			Expect(loadErr).ToNot(HaveOccurred())
 			st.Bindings[0].KeepCursor = "v-1"
@@ -2403,9 +2404,9 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 
 			// No wiki items, no Keep items, empty Nodes slice in pull.
 			chk.items = []*apiv1.ChecklistItem{}
-			kc.pullState = protocol.ChangesResponse{
+			kc.pullState = gateway.ChangesResponse{
 				ToVersion: "v-2",
-				Nodes:     []protocol.Node{},
+				Nodes:     []gateway.Node{},
 			}
 			Expect(c.SyncToKeep(ctx, profile, page, listName)).To(Succeed())
 		})
@@ -2428,10 +2429,10 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 			chk.items = []*apiv1.ChecklistItem{
 				{Uid: "uid-A", Text: "Apples", SortOrder: 1000, UpdatedAt: recentTime()},
 			}
-			kc.pullState = protocol.ChangesResponse{
+			kc.pullState = gateway.ChangesResponse{
 				ToVersion: "v-trunc",
 				Truncated: true,
-				Nodes: []protocol.Node{
+				Nodes: []gateway.Node{
 					keepItem("srv-A", "client-A", listSrv, "Apples", false, "1000"),
 				},
 			}
@@ -2472,7 +2473,7 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 				"uid-A": "srv-A",
 			})
 			// Pre-set the streak to 3 so we can observe the reset.
-			bs := bridge.NewBindingStore(store)
+			bs := keepsync.NewBindingStore(store)
 			st, loadErr := bs.LoadState(profile)
 			Expect(loadErr).ToNot(HaveOccurred())
 			st.Bindings[0].TruncatedTickStreak = 3
@@ -2481,10 +2482,10 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 			chk.items = []*apiv1.ChecklistItem{
 				{Uid: "uid-A", Text: "Apples", SortOrder: 1000, UpdatedAt: recentTime()},
 			}
-			kc.pullState = protocol.ChangesResponse{
+			kc.pullState = gateway.ChangesResponse{
 				ToVersion: "v-clean",
 				Truncated: false,
-				Nodes: []protocol.Node{
+				Nodes: []gateway.Node{
 					keepItem("srv-A", "client-A", listSrv, "Apples", false, "1000"),
 				},
 			}
@@ -2512,7 +2513,7 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 			})
 			// Pre-existing streak just under threshold; a wiki edit will
 			// push and advance synced_fp this tick (progress observed).
-			bs := bridge.NewBindingStore(store)
+			bs := keepsync.NewBindingStore(store)
 			st, loadErr := bs.LoadState(profile)
 			Expect(loadErr).ToNot(HaveOccurred())
 			st.Bindings[0].KeepCursor = "v-prior"
@@ -2523,13 +2524,13 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 			chk.items = []*apiv1.ChecklistItem{
 				{Uid: "uid-A", Text: "Green Apples", SortOrder: 1000, UpdatedAt: recentTime()},
 			}
-			seedSyncedFromKeep(profile, page, listName, store, []protocol.Node{
+			seedSyncedFromKeep(profile, page, listName, store, []gateway.Node{
 				keepItem("srv-A", "client-A", listSrv, "Apples", false, "1000"),
 			})
-			kc.pullState = protocol.ChangesResponse{
+			kc.pullState = gateway.ChangesResponse{
 				ToVersion: "v-prior", // cursor doesn't advance (truncated)
 				Truncated: true,
-				Nodes: []protocol.Node{
+				Nodes: []gateway.Node{
 					keepItem("srv-A", "client-A", listSrv, "Apples", false, "1000"),
 				},
 			}
@@ -2568,7 +2569,7 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 
 			// Pre-set streak to one below threshold; this tick will be
 			// the threshold-crossing one.
-			bs := bridge.NewBindingStore(store)
+			bs := keepsync.NewBindingStore(store)
 			st, loadErr := bs.LoadState(profile)
 			Expect(loadErr).ToNot(HaveOccurred())
 			st.Bindings[0].KeepCursor = "v-stuck"
@@ -2582,10 +2583,10 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 			seedSyncedFromWiki(profile, page, listName, store, chk.items)
 			// Truncated pull whose ToVersion equals the prior cursor:
 			// cursor cannot advance, no items to apply.
-			kc.pullState = protocol.ChangesResponse{
+			kc.pullState = gateway.ChangesResponse{
 				ToVersion: "v-stuck",
 				Truncated: true,
-				Nodes: []protocol.Node{
+				Nodes: []gateway.Node{
 					keepItem("srv-A", "client-A", listSrv, "Apples", false, "1000"),
 				},
 			}
@@ -2626,9 +2627,9 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 			chk.items = []*apiv1.ChecklistItem{
 				{Uid: "uid-A", Text: "Apples", SortOrder: 1000, UpdatedAt: recentTime()},
 			}
-			kc.pullState = protocol.ChangesResponse{
+			kc.pullState = gateway.ChangesResponse{
 				ToVersion: "v0",
-				Nodes: []protocol.Node{
+				Nodes: []gateway.Node{
 					keepItem("srv-A", "client-A", listSrv, "Apples", false, "1000"),
 				},
 			}
@@ -2656,9 +2657,9 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 			chk.items = []*apiv1.ChecklistItem{
 				{Uid: "uid-A", Text: "Green Apples", SortOrder: 1000, UpdatedAt: recentTime()},
 			}
-			kc.pullState = protocol.ChangesResponse{
+			kc.pullState = gateway.ChangesResponse{
 				ToVersion: "v0",
-				Nodes: []protocol.Node{
+				Nodes: []gateway.Node{
 					keepItem("srv-A", "client-A", listSrv, "Apples", false, "1000"),
 				},
 			}
@@ -2693,9 +2694,9 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 			chk.items = []*apiv1.ChecklistItem{
 				{Uid: "uid-A", Text: "Green Apples", SortOrder: 1000, UpdatedAt: recentTime()},
 			}
-			kc.pullState = protocol.ChangesResponse{
+			kc.pullState = gateway.ChangesResponse{
 				ToVersion: "v0",
-				Nodes: []protocol.Node{
+				Nodes: []gateway.Node{
 					keepItem("srv-A", "client-A", listSrv, "Apples", false, "1000"),
 				},
 			}
@@ -2730,9 +2731,9 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 			chk.items = []*apiv1.ChecklistItem{
 				{Uid: "uid-NEW", Text: "Bread", Checked: false, SortOrder: 2000, UpdatedAt: recentTime()},
 			}
-			kc.pullState = protocol.ChangesResponse{
+			kc.pullState = gateway.ChangesResponse{
 				ToVersion: "v0",
-				Nodes:     []protocol.Node{},
+				Nodes:     []gateway.Node{},
 			}
 			// The default fakeKeepClient does not echo pushed nodes
 			// back in its response; without an echo, the connector's
@@ -2742,7 +2743,7 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 			// LIST_ITEM, with a fresh server-assigned ServerID — that
 			// triggers the id_map creation + synced_fp advance path.
 			echoing := &echoingPushClient{inner: kc}
-			c.SetClientBuilder(func(_ string) bridge.KeepClient { return echoing })
+			c.SetClientBuilder(func(_ string) keepsync.KeepClient { return echoing })
 			Expect(c.SyncToKeep(ctx, profile, page, listName)).To(Succeed())
 		})
 
@@ -2797,12 +2798,12 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 			chk.items = []*apiv1.ChecklistItem{
 				{Uid: "uid-NEW", Text: "wiki added", SortOrder: 14000, UpdatedAt: recentTime()},
 			}
-			kc.pullState = protocol.ChangesResponse{
+			kc.pullState = gateway.ChangesResponse{
 				ToVersion: "v0",
-				Nodes:     []protocol.Node{},
+				Nodes:     []gateway.Node{},
 			}
 			realKeep := &realKeepBehaviorPushClient{inner: kc}
-			c.SetClientBuilder(func(_ string) bridge.KeepClient { return realKeep })
+			c.SetClientBuilder(func(_ string) keepsync.KeepClient { return realKeep })
 			Expect(c.SyncToKeep(ctx, profile, page, listName)).To(Succeed())
 		})
 
@@ -2843,17 +2844,17 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 				{Uid: "uid-A", Text: "Green Apples", SortOrder: 1000, UpdatedAt: recentTime()},
 				{Uid: "uid-B", Text: "Bananas New", SortOrder: 2000, UpdatedAt: recentTime()},
 			}
-			kc.pullState = protocol.ChangesResponse{
+			kc.pullState = gateway.ChangesResponse{
 				ToVersion: "v0",
-				Nodes: []protocol.Node{
+				Nodes: []gateway.Node{
 					keepItem("srv-A", "client-A", listSrv, "Apples", false, "1000"),
 					keepItem("srv-B", "client-B", listSrv, "Bananas", false, "2000"),
 				},
 			}
 			seedSyncedFromKeep(profile, page, listName, store, kc.pullState.Nodes)
-			kc.pushResponse = protocol.ChangesResponse{
+			kc.pushResponse = gateway.ChangesResponse{
 				ToVersion: "v-after-push",
-				WriteResults: []protocol.NodeWriteResult{
+				WriteResults: []gateway.NodeWriteResult{
 					{ID: "client-A", Status: "SUCCESS"},
 					{ID: "client-B", Status: "ERROR"},
 				},
@@ -2900,16 +2901,16 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 			chk.items = []*apiv1.ChecklistItem{
 				{Uid: "uid-A", Text: "Green Apples", SortOrder: 1000, UpdatedAt: recentTime()},
 			}
-			kc.pullState = protocol.ChangesResponse{
+			kc.pullState = gateway.ChangesResponse{
 				ToVersion: "v0",
-				Nodes: []protocol.Node{
+				Nodes: []gateway.Node{
 					keepItem("srv-A", "client-A", listSrv, "Apples", false, "1000"),
 				},
 			}
 			seedSyncedFromKeep(profile, page, listName, store, kc.pullState.Nodes)
-			kc.pushResponse = protocol.ChangesResponse{
+			kc.pushResponse = gateway.ChangesResponse{
 				ToVersion: "v-after-push",
-				WriteResults: []protocol.NodeWriteResult{
+				WriteResults: []gateway.NodeWriteResult{
 					{ID: "client-A", Status: "ERROR"},
 				},
 			}
@@ -2953,15 +2954,15 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 			chk.items = []*apiv1.ChecklistItem{
 				{Uid: "uid-A", Text: "Green Apples", SortOrder: 1000, UpdatedAt: recentTime()},
 			}
-			kc.pullState = protocol.ChangesResponse{
+			kc.pullState = gateway.ChangesResponse{
 				ToVersion: "v0",
-				Nodes: []protocol.Node{
+				Nodes: []gateway.Node{
 					keepItem("srv-A", "client-A", listSrv, "Apples", false, "1000"),
 				},
 			}
 			seedSyncedFromKeep(profile, page, listName, store, kc.pullState.Nodes)
 			// Push response carries no WriteResults at all.
-			kc.pushResponse = protocol.ChangesResponse{
+			kc.pushResponse = gateway.ChangesResponse{
 				ToVersion: "v-after-push",
 			}
 			Expect(c.SyncToKeep(ctx, profile, page, listName)).To(Succeed())
@@ -2996,15 +2997,15 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 			chk.items = []*apiv1.ChecklistItem{
 				{Uid: "uid-A", Text: "Green Apples", SortOrder: 1000, UpdatedAt: recentTime()},
 			}
-			kc.pullState = protocol.ChangesResponse{
+			kc.pullState = gateway.ChangesResponse{
 				ToVersion: "v0",
-				Nodes: []protocol.Node{
+				Nodes: []gateway.Node{
 					keepItem("srv-A", "client-A", listSrv, "Apples", false, "1000"),
 				},
 			}
 			seedSyncedFromKeep(profile, page, listName, store, kc.pullState.Nodes)
 			// Pre-set the failure state directly.
-			bs := bridge.NewBindingStore(store)
+			bs := keepsync.NewBindingStore(store)
 			st, loadErr := bs.LoadState(profile)
 			Expect(loadErr).ToNot(HaveOccurred())
 			ib := st.Bindings[0].ItemIDMap["uid-A"]
@@ -3014,9 +3015,9 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 			st.Bindings[0].ItemIDMap["uid-A"] = ib
 			Expect(bs.SaveState(profile, st)).To(Succeed())
 
-			kc.pushResponse = protocol.ChangesResponse{
+			kc.pushResponse = gateway.ChangesResponse{
 				ToVersion: "v-after-push",
-				WriteResults: []protocol.NodeWriteResult{
+				WriteResults: []gateway.NodeWriteResult{
 					{ID: "client-A", Status: "SUCCESS"},
 				},
 			}
@@ -3054,16 +3055,16 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 				{Uid: "uid-A", Text: "Green Apples", SortOrder: 1000, UpdatedAt: recentTime()},
 				{Uid: "uid-B", Text: "Green Bananas", SortOrder: 2000, UpdatedAt: recentTime()},
 			}
-			kc.pullState = protocol.ChangesResponse{
+			kc.pullState = gateway.ChangesResponse{
 				ToVersion: "v0",
-				Nodes: []protocol.Node{
+				Nodes: []gateway.Node{
 					keepItem("srv-A", "client-A", listSrv, "Apples", false, "1000"),
 					keepItem("srv-B", "client-B", listSrv, "Bananas", false, "2000"),
 				},
 			}
 			seedSyncedFromKeep(profile, page, listName, store, kc.pullState.Nodes)
 			// Dead-letter uid-A.
-			bs := bridge.NewBindingStore(store)
+			bs := keepsync.NewBindingStore(store)
 			st, loadErr := bs.LoadState(profile)
 			Expect(loadErr).ToNot(HaveOccurred())
 			ib := st.Bindings[0].ItemIDMap["uid-A"]
@@ -3115,9 +3116,9 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 			chk.items = []*apiv1.ChecklistItem{
 				{Uid: "uid-A", Text: "new text", SortOrder: 1000, UpdatedAt: recentTime()},
 			}
-			kc.pullState = protocol.ChangesResponse{
+			kc.pullState = gateway.ChangesResponse{
 				ToVersion: "v0",
-				Nodes: []protocol.Node{
+				Nodes: []gateway.Node{
 					keepItem("srv-A", "client-A", listSrv, "old text", false, "1000"),
 				},
 			}
@@ -3125,7 +3126,7 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 			// Pre-set: dead-lettered + LastObservedWiki* records the
 			// PRE-edit wiki state. Wiki_fp now differs from
 			// LastObservedWiki* → reset.
-			bs := bridge.NewBindingStore(store)
+			bs := keepsync.NewBindingStore(store)
 			st, loadErr := bs.LoadState(profile)
 			Expect(loadErr).ToNot(HaveOccurred())
 			ib := st.Bindings[0].ItemIDMap["uid-A"]
@@ -3165,9 +3166,9 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 			chk.items = []*apiv1.ChecklistItem{
 				{Uid: "uid-A", Text: "Apples", SortOrder: 1000, UpdatedAt: recentTime()},
 			}
-			kc.pullState = protocol.ChangesResponse{
+			kc.pullState = gateway.ChangesResponse{
 				ToVersion: "v0",
-				Nodes: []protocol.Node{
+				Nodes: []gateway.Node{
 					keepItem("srv-A", "client-A", listSrv, "Apples", false, "1000"),
 				},
 			}
@@ -3198,14 +3199,14 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 			chk.items = []*apiv1.ChecklistItem{
 				{Uid: "uid-A", Text: "Green Apples", SortOrder: 1000, UpdatedAt: recentTime()},
 			}
-			kc.pullState = protocol.ChangesResponse{
+			kc.pullState = gateway.ChangesResponse{
 				ToVersion: "v0",
-				Nodes: []protocol.Node{
+				Nodes: []gateway.Node{
 					keepItem("srv-A", "client-A", listSrv, "Apples", false, "1000"),
 				},
 			}
 			seedSyncedFromKeep(profile, page, listName, store, kc.pullState.Nodes)
-			bs := bridge.NewBindingStore(store)
+			bs := keepsync.NewBindingStore(store)
 			st, loadErr := bs.LoadState(profile)
 			Expect(loadErr).ToNot(HaveOccurred())
 			ib := st.Bindings[0].ItemIDMap["uid-A"]
@@ -3239,16 +3240,16 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 			chk.items = []*apiv1.ChecklistItem{
 				{Uid: "uid-A", Text: "Green Apples", SortOrder: 1000, UpdatedAt: recentTime()},
 			}
-			kc.pullState = protocol.ChangesResponse{
+			kc.pullState = gateway.ChangesResponse{
 				ToVersion: "v0",
-				Nodes: []protocol.Node{
+				Nodes: []gateway.Node{
 					keepItem("srv-A", "client-A", listSrv, "Apples", false, "1000"),
 				},
 			}
 			seedSyncedFromKeep(profile, page, listName, store, kc.pullState.Nodes)
 			// Pre-existing 2 failures → this one becomes the 3rd, so
 			// NextAttemptAt = now + 60 * 2^2 = 240s.
-			bs := bridge.NewBindingStore(store)
+			bs := keepsync.NewBindingStore(store)
 			st, loadErr := bs.LoadState(profile)
 			Expect(loadErr).ToNot(HaveOccurred())
 			ib := st.Bindings[0].ItemIDMap["uid-A"]
@@ -3257,9 +3258,9 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 			st.Bindings[0].ItemIDMap["uid-A"] = ib
 			Expect(bs.SaveState(profile, st)).To(Succeed())
 
-			kc.pushResponse = protocol.ChangesResponse{
+			kc.pushResponse = gateway.ChangesResponse{
 				ToVersion: "v-after-push",
-				WriteResults: []protocol.NodeWriteResult{
+				WriteResults: []gateway.NodeWriteResult{
 					{ID: "client-A", Status: "ERROR"},
 				},
 			}
@@ -3292,32 +3293,32 @@ type realKeepBehaviorPushClient struct {
 	inner *fakeKeepClient
 }
 
-func (e *realKeepBehaviorPushClient) Changes(ctx context.Context, req protocol.ChangesRequest) (protocol.ChangesResponse, error) {
+func (e *realKeepBehaviorPushClient) Changes(ctx context.Context, req gateway.ChangesRequest) (gateway.ChangesResponse, error) {
 	if len(req.Nodes) == 0 && len(req.Labels) == 0 {
 		return e.inner.Changes(ctx, req)
 	}
 	_, err := e.inner.Changes(ctx, req)
 	if err != nil {
-		return protocol.ChangesResponse{}, err
+		return gateway.ChangesResponse{}, err
 	}
-	echoed := make([]protocol.Node, 0, len(req.Nodes))
-	writeResults := make([]protocol.NodeWriteResult, 0, 1)
+	echoed := make([]gateway.Node, 0, len(req.Nodes))
+	writeResults := make([]gateway.NodeWriteResult, 0, 1)
 	for _, n := range req.Nodes {
 		echo := n
-		if echo.Type == protocol.NodeTypeListItem && echo.ServerID == "" {
+		if echo.Type == gateway.NodeTypeListItem && echo.ServerID == "" {
 			echo.ServerID = "echoed-" + n.ID
 		}
 		echoed = append(echoed, echo)
 		// Production Keep emits writeResults ONLY for LIST/NOTE,
 		// not for LIST_ITEM children.
-		if n.Type == protocol.NodeTypeList || n.Type == protocol.NodeTypeNote {
-			writeResults = append(writeResults, protocol.NodeWriteResult{
+		if n.Type == gateway.NodeTypeList || n.Type == gateway.NodeTypeNote {
+			writeResults = append(writeResults, gateway.NodeWriteResult{
 				ID:     n.ID,
 				Status: "SUCCESS",
 			})
 		}
 	}
-	return protocol.ChangesResponse{
+	return gateway.ChangesResponse{
 		ToVersion:    "v-after-push",
 		Nodes:        echoed,
 		WriteResults: writeResults,
@@ -3328,7 +3329,7 @@ func (e *realKeepBehaviorPushClient) CreateList(ctx context.Context, title strin
 	return e.inner.CreateList(ctx, title)
 }
 
-func (e *realKeepBehaviorPushClient) CreateListWithItems(ctx context.Context, title string, items []protocol.ListItemSpec) (protocol.CreateListResult, error) {
+func (e *realKeepBehaviorPushClient) CreateListWithItems(ctx context.Context, title string, items []gateway.ListItemSpec) (gateway.CreateListResult, error) {
 	return e.inner.CreateListWithItems(ctx, title, items)
 }
 
@@ -3341,7 +3342,7 @@ type echoingPushClient struct {
 	inner *fakeKeepClient
 }
 
-func (e *echoingPushClient) Changes(ctx context.Context, req protocol.ChangesRequest) (protocol.ChangesResponse, error) {
+func (e *echoingPushClient) Changes(ctx context.Context, req gateway.ChangesRequest) (gateway.ChangesResponse, error) {
 	if len(req.Nodes) == 0 && len(req.Labels) == 0 {
 		return e.inner.Changes(ctx, req)
 	}
@@ -3350,12 +3351,12 @@ func (e *echoingPushClient) Changes(ctx context.Context, req protocol.ChangesReq
 	// with a fresh ServerID.
 	_, err := e.inner.Changes(ctx, req)
 	if err != nil {
-		return protocol.ChangesResponse{}, err
+		return gateway.ChangesResponse{}, err
 	}
-	echoed := make([]protocol.Node, 0, len(req.Nodes))
-	writeResults := make([]protocol.NodeWriteResult, 0, len(req.Nodes))
+	echoed := make([]gateway.Node, 0, len(req.Nodes))
+	writeResults := make([]gateway.NodeWriteResult, 0, len(req.Nodes))
 	for _, n := range req.Nodes {
-		if n.Type != protocol.NodeTypeListItem {
+		if n.Type != gateway.NodeTypeListItem {
 			continue
 		}
 		echo := n
@@ -3363,12 +3364,12 @@ func (e *echoingPushClient) Changes(ctx context.Context, req protocol.ChangesReq
 			echo.ServerID = "echoed-" + n.ID
 		}
 		echoed = append(echoed, echo)
-		writeResults = append(writeResults, protocol.NodeWriteResult{
+		writeResults = append(writeResults, gateway.NodeWriteResult{
 			ID:     n.ID,
 			Status: "SUCCESS",
 		})
 	}
-	return protocol.ChangesResponse{
+	return gateway.ChangesResponse{
 		ToVersion:    "v-after-push",
 		Nodes:        echoed,
 		WriteResults: writeResults,
@@ -3379,12 +3380,12 @@ func (e *echoingPushClient) CreateList(ctx context.Context, title string) (strin
 	return e.inner.CreateList(ctx, title)
 }
 
-func (e *echoingPushClient) CreateListWithItems(ctx context.Context, title string, items []protocol.ListItemSpec) (protocol.CreateListResult, error) {
+func (e *echoingPushClient) CreateListWithItems(ctx context.Context, title string, items []gateway.ListItemSpec) (gateway.CreateListResult, error) {
 	return e.inner.CreateListWithItems(ctx, title, items)
 }
 
 // fakeInfoLogger captures Info(...) calls for assertion. Satisfies
-// protocol.DebugLogger so SetDebugLogger accepts it.
+// gateway.DebugLogger so SetDebugLogger accepts it.
 type fakeInfoLogger struct {
 	mu       sync.Mutex
 	formats  []string
@@ -3436,7 +3437,7 @@ func truncationResyncThresholdInTests() int {
 var _ = Describe("MigrateBindingFingerprints — full-pull and cursor reset", func() {
 	var (
 		ctx = context.Background()
-		c   *bridge.Connector
+		c   *keepsync.Connector
 		kc  *fakeKeepClient
 		chk *fakeChecklist
 	)
@@ -3465,16 +3466,16 @@ var _ = Describe("MigrateBindingFingerprints — full-pull and cursor reset", fu
 			}
 			// Pre-set MigratedFingerprints=false (legacy) and a stale
 			// KeepCursor so we can verify the migration ignores it.
-			bs := bridge.NewBindingStore(store)
+			bs := keepsync.NewBindingStore(store)
 			st, loadErr := bs.LoadState(profile)
 			Expect(loadErr).ToNot(HaveOccurred())
 			st.Bindings[0].MigratedFingerprints = false
 			st.Bindings[0].KeepCursor = "v-stale-cursor"
 			Expect(bs.SaveState(profile, st)).To(Succeed())
 
-			kc.pullState = protocol.ChangesResponse{
+			kc.pullState = gateway.ChangesResponse{
 				ToVersion: "v-after-migration",
-				Nodes: []protocol.Node{
+				Nodes: []gateway.Node{
 					keepItem("srv-A", "client-A", listSrv, "Apples", false, "1000"),
 				},
 				Truncated:   false,
@@ -3507,15 +3508,15 @@ var _ = Describe("MigrateBindingFingerprints — full-pull and cursor reset", fu
 			chk.items = []*apiv1.ChecklistItem{
 				{Uid: "uid-A", Text: "Apples", SortOrder: 1000, UpdatedAt: timestamppb.New(time.Now())},
 			}
-			bs := bridge.NewBindingStore(store)
+			bs := keepsync.NewBindingStore(store)
 			st, loadErr := bs.LoadState(profile)
 			Expect(loadErr).ToNot(HaveOccurred())
 			st.Bindings[0].MigratedFingerprints = false
 			Expect(bs.SaveState(profile, st)).To(Succeed())
 
-			kc.pullState = protocol.ChangesResponse{
+			kc.pullState = gateway.ChangesResponse{
 				ToVersion: "v-after-migration",
-				Nodes: []protocol.Node{
+				Nodes: []gateway.Node{
 					keepItem("srv-A", "client-A", listSrv, "Apples", false, "1000"),
 				},
 				Truncated:   false,
@@ -3550,7 +3551,7 @@ var _ = Describe("SyncToKeep — un-migrated binding gate", func() {
 
 	Describe("when binding has MigratedFingerprints=false", func() {
 		var (
-			c     *bridge.Connector
+			c     *keepsync.Connector
 			kc    *fakeKeepClient
 			store *fakeStore
 			err   error
@@ -3562,7 +3563,7 @@ var _ = Describe("SyncToKeep — un-migrated binding gate", func() {
 			})
 			// Flip the default born-migrated to false to express
 			// the legacy-on-disk shape.
-			bs := bridge.NewBindingStore(store)
+			bs := keepsync.NewBindingStore(store)
 			st, loadErr := bs.LoadState(profile)
 			Expect(loadErr).ToNot(HaveOccurred())
 			st.Bindings[0].MigratedFingerprints = false
@@ -3583,7 +3584,7 @@ var _ = Describe("SyncToKeep — un-migrated binding gate", func() {
 
 	Describe("when SyncToKeep skips the same binding twice", func() {
 		var (
-			c   *bridge.Connector
+			c   *keepsync.Connector
 			lg  *fakeInfoLogger
 		)
 
@@ -3595,7 +3596,7 @@ var _ = Describe("SyncToKeep — un-migrated binding gate", func() {
 			lg = &fakeInfoLogger{}
 			c.SetDebugLogger(lg)
 
-			bs := bridge.NewBindingStore(store)
+			bs := keepsync.NewBindingStore(store)
 			st, loadErr := bs.LoadState(profile)
 			Expect(loadErr).ToNot(HaveOccurred())
 			st.Bindings[0].MigratedFingerprints = false
@@ -3619,7 +3620,7 @@ var _ = Describe("SyncToKeep — un-migrated binding gate", func() {
 	})
 
 	Describe("when a freshly-bound binding is created via Bind", func() {
-		var b bridge.Binding
+		var b keepsync.Binding
 
 		BeforeEach(func() {
 			c, store, _, _ := freshConnector(profile, page, listName, listSrv, map[string]string{
@@ -3627,7 +3628,7 @@ var _ = Describe("SyncToKeep — un-migrated binding gate", func() {
 			})
 			// Drop the seeded binding so Bind() runs against a clean
 			// connected-but-no-bindings state.
-			bs := bridge.NewBindingStore(store)
+			bs := keepsync.NewBindingStore(store)
 			st, loadErr := bs.LoadState(profile)
 			Expect(loadErr).ToNot(HaveOccurred())
 			st.Bindings = nil
@@ -3655,7 +3656,7 @@ var _ = Describe("SyncToKeep — un-migrated binding gate", func() {
 			lg1 := &fakeInfoLogger{}
 			c1.SetDebugLogger(lg1)
 
-			bs := bridge.NewBindingStore(store)
+			bs := keepsync.NewBindingStore(store)
 			st, loadErr := bs.LoadState(profile)
 			Expect(loadErr).ToNot(HaveOccurred())
 			st.Bindings[0].MigratedFingerprints = false
@@ -3665,9 +3666,9 @@ var _ = Describe("SyncToKeep — un-migrated binding gate", func() {
 
 			// Simulate a process restart: build a NEW Connector against
 			// the same store. The throttle map must reset.
-			c2 := bridge.NewConnector(bridge.NewBindingStore(store), nil, fakeClock{})
-			c2.SetClientBuilder(func(_ string) bridge.KeepClient { return &fakeKeepClient{} })
-			c2.SetAuthBuilder(func(_ string) bridge.AuthExchanger { return fakeAuth{} })
+			c2 := keepsync.NewConnector(keepsync.NewBindingStore(store), nil, fakeClock{})
+			c2.SetClientBuilder(func(_ string) keepsync.KeepClient { return &fakeKeepClient{} })
+			c2.SetAuthBuilder(func(_ string) keepsync.AuthExchanger { return fakeAuth{} })
 			c2.SetChecklistReader(&fakeChecklist{})
 			c2.SetChecklistMutator(&fakeChecklist{})
 			c2.SetSyncSuppressor(fakeSuppressor{})
@@ -3709,7 +3710,7 @@ var _ = Describe("SyncToKeep — persisted pull-derived state on incremental pul
 
 	var (
 		ctx context.Context
-		c   *bridge.Connector
+		c   *keepsync.Connector
 		kc  *fakeKeepClient
 		chk *fakeChecklist
 	)
@@ -3732,7 +3733,7 @@ var _ = Describe("SyncToKeep — persisted pull-derived state on incremental pul
 			// previously synced with Keep, captured BaseVersion +
 			// ClientID at that time, and stored them on the
 			// ItemBinding. Pre-populate that persisted state.
-			bs := bridge.NewBindingStore(store)
+			bs := keepsync.NewBindingStore(store)
 			st, loadErr := bs.LoadState(profile)
 			Expect(loadErr).ToNot(HaveOccurred())
 			ib := st.Bindings[0].ItemIDMap["uid-A"]
@@ -3752,7 +3753,7 @@ var _ = Describe("SyncToKeep — persisted pull-derived state on incremental pul
 			// uid-A hasn't changed on Keep's side since the last
 			// successful sync. Per-pull baseVersions/originalClientIDs
 			// will therefore be empty for srv-A.
-			kc.pullState = protocol.ChangesResponse{
+			kc.pullState = gateway.ChangesResponse{
 				ToVersion:   "v-after-incremental",
 				Incremental: true,
 				Nodes:       nil,
@@ -3782,7 +3783,7 @@ var _ = Describe("SyncToKeep — persisted pull-derived state on incremental pul
 				{Uid: "uid-A", Text: "Apples", SortOrder: 1000, UpdatedAt: recentTime()},
 			}
 			// Seed an OLD BaseVersion on the persisted ItemBinding.
-			bs := bridge.NewBindingStore(store)
+			bs := keepsync.NewBindingStore(store)
 			st, loadErr := bs.LoadState(profile)
 			Expect(loadErr).ToNot(HaveOccurred())
 			ib := st.Bindings[0].ItemIDMap["uid-A"]
@@ -3803,10 +3804,10 @@ var _ = Describe("SyncToKeep — persisted pull-derived state on incremental pul
 			// the persisted ItemBinding.
 			node := keepItem("srv-A", "client-A-new", listSrv, "Apples", false, "1000")
 			node.BaseVersion = "v-new"
-			kc.pullState = protocol.ChangesResponse{
+			kc.pullState = gateway.ChangesResponse{
 				ToVersion:   "v-after",
 				Incremental: true,
-				Nodes:       []protocol.Node{node},
+				Nodes:       []gateway.Node{node},
 			}
 			Expect(c.SyncToKeep(ctx, profile, page, listName)).To(Succeed())
 		})
@@ -3838,7 +3839,7 @@ var _ = Describe("SyncToKeep — persisted pull-derived state on incremental pul
 			}
 			// Legacy un-migrated binding: no BaseVersion / ClientID
 			// persisted yet, MigratedFingerprints=false.
-			bs := bridge.NewBindingStore(store)
+			bs := keepsync.NewBindingStore(store)
 			st, loadErr := bs.LoadState(profile)
 			Expect(loadErr).ToNot(HaveOccurred())
 			st.Bindings[0].MigratedFingerprints = false
@@ -3850,10 +3851,10 @@ var _ = Describe("SyncToKeep — persisted pull-derived state on incremental pul
 
 			node := keepItem("srv-A", "client-A-migrate", listSrv, "Apples", false, "1000")
 			node.BaseVersion = "v-base-A-migrate"
-			kc.pullState = protocol.ChangesResponse{
+			kc.pullState = gateway.ChangesResponse{
 				ToVersion:   "v-after-migration",
 				Incremental: false,
-				Nodes:       []protocol.Node{node},
+				Nodes:       []gateway.Node{node},
 			}
 			Expect(c.MigrateBindingFingerprints(ctx, profile, page, listName)).To(Succeed())
 		})
@@ -3898,7 +3899,7 @@ var _ = Describe("SyncToKeep — persisted pull-derived state on incremental pul
 			// Pre-populate the persisted label FK on the binding —
 			// simulating "a previous successful pull captured this
 			// label's MainID."
-			bs := bridge.NewBindingStore(store)
+			bs := keepsync.NewBindingStore(store)
 			st, loadErr := bs.LoadState(profile)
 			Expect(loadErr).ToNot(HaveOccurred())
 			st.Bindings[0].LabelIDs = map[string]string{
@@ -3908,7 +3909,7 @@ var _ = Describe("SyncToKeep — persisted pull-derived state on incremental pul
 
 			// Incremental pull with NO labels in the response — the
 			// realistic post-cursor steady state.
-			kc.pullState = protocol.ChangesResponse{
+			kc.pullState = gateway.ChangesResponse{
 				ToVersion:   "v-after-incremental",
 				Incremental: true,
 				Nodes:       nil,
@@ -3922,9 +3923,9 @@ var _ = Describe("SyncToKeep — persisted pull-derived state on incremental pul
 		})
 
 		It("should reference the persisted MainID on the LIST node's labelIds", func() {
-			var listNode *protocol.Node
+			var listNode *gateway.Node
 			for i, n := range kc.lastPush().Nodes {
-				if n.Type == protocol.NodeTypeList {
+				if n.Type == gateway.NodeTypeList {
 					listNode = &kc.lastPush().Nodes[i]
 					break
 				}
@@ -3957,10 +3958,10 @@ var _ = Describe("SyncToKeep — persisted pull-derived state on incremental pul
 			// Pull DOES contain a label entry — Keep just told us
 			// about a label whose MainID we should record on the
 			// binding for future ticks.
-			kc.pullState = protocol.ChangesResponse{
+			kc.pullState = gateway.ChangesResponse{
 				ToVersion:   "v-after",
 				Incremental: true,
-				Labels: []protocol.LabelEntry{
+				Labels: []gateway.LabelEntry{
 					{MainID: "abc", Name: "newtag"},
 				},
 			}
@@ -3999,7 +4000,7 @@ var _ = Describe("SyncToKeep — persisted pull-derived state on incremental pul
 				{Uid: "uid-A", Text: "Apples", SortOrder: 1000, UpdatedAt: recentTime()},
 			}
 
-			bs := bridge.NewBindingStore(store)
+			bs := keepsync.NewBindingStore(store)
 			st, loadErr := bs.LoadState(profile)
 			Expect(loadErr).ToNot(HaveOccurred())
 			st.Bindings[0].LabelIDs = map[string]string{
@@ -4007,10 +4008,10 @@ var _ = Describe("SyncToKeep — persisted pull-derived state on incremental pul
 			}
 			Expect(bs.SaveState(profile, st)).To(Succeed())
 
-			kc.pullState = protocol.ChangesResponse{
+			kc.pullState = gateway.ChangesResponse{
 				ToVersion:   "v-after",
 				Incremental: true,
-				Labels: []protocol.LabelEntry{
+				Labels: []gateway.LabelEntry{
 					{MainID: "old-mid", Name: "tombstoned", Deleted: tNow},
 				},
 			}
@@ -4053,7 +4054,7 @@ var _ = Describe("Bind — initial seed captures BaseVersion, ClientID, and Labe
 
 	var (
 		ctx context.Context
-		c   *bridge.Connector
+		c   *keepsync.Connector
 		kc  *fakeKeepClient
 	)
 
@@ -4062,14 +4063,14 @@ var _ = Describe("Bind — initial seed captures BaseVersion, ClientID, and Labe
 	})
 
 	Describe("bind_seeds_BaseVersion_and_ClientID_per_item", func() {
-		var b bridge.Binding
+		var b keepsync.Binding
 
 		BeforeEach(func() {
 			var store *fakeStore
 			c, store, kc, _ = freshConnector(profile, page, listName, listSrv, map[string]string{})
 			// Drop the seeded binding so Bind() runs against a clean
 			// connected-but-no-bindings state.
-			bs := bridge.NewBindingStore(store)
+			bs := keepsync.NewBindingStore(store)
 			st, loadErr := bs.LoadState(profile)
 			Expect(loadErr).ToNot(HaveOccurred())
 			st.Bindings = nil
@@ -4081,13 +4082,13 @@ var _ = Describe("Bind — initial seed captures BaseVersion, ClientID, and Labe
 			itemA.BaseVersion = "v-base-A"
 			itemB := keepItem("srv-B", "client-B", listSrv, "Bread", false, "2000")
 			itemB.BaseVersion = "v-base-B"
-			kc.pullState = protocol.ChangesResponse{
+			kc.pullState = gateway.ChangesResponse{
 				ToVersion: "v-bind-seed",
-				Nodes:     []protocol.Node{itemA, itemB},
+				Nodes:     []gateway.Node{itemA, itemB},
 			}
 
 			var bindErr error
-			b, bindErr = c.Bind(ctx, profile, page, listName, listSrv, []bridge.InitialItem{
+			b, bindErr = c.Bind(ctx, profile, page, listName, listSrv, []keepsync.InitialItem{
 				{UID: "uid-A", Text: "Apples"},
 				{UID: "uid-B", Text: "Bread"},
 			})
@@ -4111,21 +4112,21 @@ var _ = Describe("Bind — initial seed captures BaseVersion, ClientID, and Labe
 	})
 
 	Describe("bind_seeds_LabelIDs_from_initial_pull", func() {
-		var b bridge.Binding
+		var b keepsync.Binding
 
 		BeforeEach(func() {
 			var store *fakeStore
 			c, store, kc, _ = freshConnector(profile, page, listName, listSrv, map[string]string{})
-			bs := bridge.NewBindingStore(store)
+			bs := keepsync.NewBindingStore(store)
 			st, loadErr := bs.LoadState(profile)
 			Expect(loadErr).ToNot(HaveOccurred())
 			st.Bindings = nil
 			Expect(bs.SaveState(profile, st)).To(Succeed())
 
-			kc.pullState = protocol.ChangesResponse{
+			kc.pullState = gateway.ChangesResponse{
 				ToVersion: "v-bind-seed",
 				Nodes:     nil,
-				Labels: []protocol.LabelEntry{
+				Labels: []gateway.LabelEntry{
 					{MainID: "abc", Name: "household"},
 					{MainID: "def", Name: "weekly"},
 				},
@@ -4158,7 +4159,7 @@ var _ = Describe("MigrateBindingFingerprints — seeds LabelIDs from full pull",
 
 	var (
 		ctx context.Context
-		c   *bridge.Connector
+		c   *keepsync.Connector
 		kc  *fakeKeepClient
 		chk *fakeChecklist
 	)
@@ -4177,7 +4178,7 @@ var _ = Describe("MigrateBindingFingerprints — seeds LabelIDs from full pull",
 				{Uid: "uid-A", Text: "Apples", SortOrder: 1000, UpdatedAt: recentTime()},
 			}
 
-			bs := bridge.NewBindingStore(store)
+			bs := keepsync.NewBindingStore(store)
 			st, loadErr := bs.LoadState(profile)
 			Expect(loadErr).ToNot(HaveOccurred())
 			st.Bindings[0].MigratedFingerprints = false
@@ -4185,11 +4186,11 @@ var _ = Describe("MigrateBindingFingerprints — seeds LabelIDs from full pull",
 
 			node := keepItem("srv-A", "client-A", listSrv, "Apples", false, "1000")
 			node.BaseVersion = "v-base-A"
-			kc.pullState = protocol.ChangesResponse{
+			kc.pullState = gateway.ChangesResponse{
 				ToVersion:   "v-after-migration",
 				Incremental: false,
-				Nodes:       []protocol.Node{node},
-				Labels: []protocol.LabelEntry{
+				Nodes:       []gateway.Node{node},
+				Labels: []gateway.LabelEntry{
 					{MainID: "household-mid", Name: "household"},
 					{MainID: "tombstoned-mid", Name: "tombstoned", Deleted: tNow},
 				},
@@ -4228,7 +4229,7 @@ var _ = Describe("Outbound LIST node id-vs-serverId guard", func() {
 
 	var (
 		ctx context.Context
-		c   *bridge.Connector
+		c   *keepsync.Connector
 		kc  *fakeKeepClient
 		chk *fakeChecklist
 	)
@@ -4247,7 +4248,7 @@ var _ = Describe("Outbound LIST node id-vs-serverId guard", func() {
 			c, store, kc, chk = freshConnector(profile, page, listName, listSrv, map[string]string{
 				"uid-A": "srv-A",
 			})
-			bs := bridge.NewBindingStore(store)
+			bs := keepsync.NewBindingStore(store)
 			st, loadErr := bs.LoadState(profile)
 			Expect(loadErr).ToNot(HaveOccurred())
 			st.Bindings[0].KeepNoteClientID = "list-client-abc"
@@ -4261,20 +4262,20 @@ var _ = Describe("Outbound LIST node id-vs-serverId guard", func() {
 			chk.items = []*apiv1.ChecklistItem{
 				{Uid: "uid-A", Text: "Apples", SortOrder: 1000, UpdatedAt: recentTime()},
 			}
-			kc.pullState = protocol.ChangesResponse{
+			kc.pullState = gateway.ChangesResponse{
 				ToVersion: "v0",
-				Nodes: []protocol.Node{
+				Nodes: []gateway.Node{
 					keepItem("srv-A", "client-A", listSrv, "Apples", false, "1000"),
 				},
-				Labels: []protocol.LabelEntry{},
+				Labels: []gateway.LabelEntry{},
 			}
 			Expect(c.SyncToKeep(ctx, profile, page, listName)).To(Succeed())
 		})
 
 		It("should use KeepNoteClientID as the LIST node's id", func() {
-			var listNode *protocol.Node
+			var listNode *gateway.Node
 			for i, n := range kc.lastPush().Nodes {
-				if n.Type == protocol.NodeTypeList {
+				if n.Type == gateway.NodeTypeList {
 					listNode = &kc.lastPush().Nodes[i]
 					break
 				}
@@ -4284,9 +4285,9 @@ var _ = Describe("Outbound LIST node id-vs-serverId guard", func() {
 		})
 
 		It("should use KeepNoteID as the LIST node's serverId", func() {
-			var listNode *protocol.Node
+			var listNode *gateway.Node
 			for i, n := range kc.lastPush().Nodes {
-				if n.Type == protocol.NodeTypeList {
+				if n.Type == gateway.NodeTypeList {
 					listNode = &kc.lastPush().Nodes[i]
 					break
 				}
@@ -4296,9 +4297,9 @@ var _ = Describe("Outbound LIST node id-vs-serverId guard", func() {
 		})
 
 		It("should send id and serverId as DIFFERENT values", func() {
-			var listNode *protocol.Node
+			var listNode *gateway.Node
 			for i, n := range kc.lastPush().Nodes {
-				if n.Type == protocol.NodeTypeList {
+				if n.Type == gateway.NodeTypeList {
 					listNode = &kc.lastPush().Nodes[i]
 					break
 				}
@@ -4319,7 +4320,7 @@ var _ = Describe("Outbound LIST node id-vs-serverId guard", func() {
 			c, store, kc, chk = freshConnector(profile, page, listName, listSrv, map[string]string{
 				"uid-A": "srv-A",
 			})
-			bs := bridge.NewBindingStore(store)
+			bs := keepsync.NewBindingStore(store)
 			st, loadErr := bs.LoadState(profile)
 			Expect(loadErr).ToNot(HaveOccurred())
 			// Simulate a legacy binding: empty KeepNoteClientID, prior
@@ -4333,10 +4334,10 @@ var _ = Describe("Outbound LIST node id-vs-serverId guard", func() {
 			}
 			// Incremental pull with NO LIST node — the realistic
 			// post-cursor steady state.
-			kc.pullState = protocol.ChangesResponse{
+			kc.pullState = gateway.ChangesResponse{
 				ToVersion:   "v-after",
 				Incremental: true,
-				Nodes: []protocol.Node{
+				Nodes: []gateway.Node{
 					keepItem("srv-A", "client-A", listSrv, "Apples", false, "1000"),
 				},
 			}
@@ -4360,7 +4361,7 @@ var _ = Describe("Outbound LIST node id-vs-serverId guard", func() {
 			c, store, kc, chk = freshConnector(profile, page, listName, listSrv, map[string]string{
 				"uid-A": "srv-A",
 			})
-			bs := bridge.NewBindingStore(store)
+			bs := keepsync.NewBindingStore(store)
 			st, loadErr := bs.LoadState(profile)
 			Expect(loadErr).ToNot(HaveOccurred())
 			st.Bindings[0].KeepNoteClientID = ""
@@ -4369,14 +4370,14 @@ var _ = Describe("Outbound LIST node id-vs-serverId guard", func() {
 			chk.items = []*apiv1.ChecklistItem{
 				{Uid: "uid-A", Text: "Apples", SortOrder: 1000, UpdatedAt: recentTime()},
 			}
-			kc.pullState = protocol.ChangesResponse{
+			kc.pullState = gateway.ChangesResponse{
 				ToVersion: "v0",
-				Nodes: []protocol.Node{
+				Nodes: []gateway.Node{
 					{
 						Kind:     "notes#node",
 						ID:       "list-client-from-pull",
 						ServerID: listSrv,
-						Type:     protocol.NodeTypeList,
+						Type:     gateway.NodeTypeList,
 						Title:    listName,
 					},
 					keepItem("srv-A", "client-A", listSrv, "Apples", false, "1000"),
@@ -4407,7 +4408,7 @@ var _ = Describe("Bind — seeds KeepNoteClientID from initial pull", func() {
 
 	var (
 		ctx context.Context
-		c   *bridge.Connector
+		c   *keepsync.Connector
 		kc  *fakeKeepClient
 	)
 
@@ -4416,25 +4417,25 @@ var _ = Describe("Bind — seeds KeepNoteClientID from initial pull", func() {
 	})
 
 	Describe("bind_seeds_KeepNoteClientID_from_pull", func() {
-		var b bridge.Binding
+		var b keepsync.Binding
 
 		BeforeEach(func() {
 			var store *fakeStore
 			c, store, kc, _ = freshConnector(profile, page, listName, listSrv, map[string]string{})
-			bs := bridge.NewBindingStore(store)
+			bs := keepsync.NewBindingStore(store)
 			st, loadErr := bs.LoadState(profile)
 			Expect(loadErr).ToNot(HaveOccurred())
 			st.Bindings = nil
 			Expect(bs.SaveState(profile, st)).To(Succeed())
 
-			kc.pullState = protocol.ChangesResponse{
+			kc.pullState = gateway.ChangesResponse{
 				ToVersion: "v-bind-seed",
-				Nodes: []protocol.Node{
+				Nodes: []gateway.Node{
 					{
 						Kind:     "notes#node",
 						ID:       "list-client-abc",
 						ServerID: listSrv,
-						Type:     protocol.NodeTypeList,
+						Type:     gateway.NodeTypeList,
 						Title:    listName,
 					},
 				},
@@ -4469,7 +4470,7 @@ var _ = Describe("MigrateBindingFingerprints — seeds KeepNoteClientID from ful
 
 	var (
 		ctx context.Context
-		c   *bridge.Connector
+		c   *keepsync.Connector
 		kc  *fakeKeepClient
 		chk *fakeChecklist
 	)
@@ -4488,7 +4489,7 @@ var _ = Describe("MigrateBindingFingerprints — seeds KeepNoteClientID from ful
 				{Uid: "uid-A", Text: "Apples", SortOrder: 1000, UpdatedAt: recentTime()},
 			}
 
-			bs := bridge.NewBindingStore(store)
+			bs := keepsync.NewBindingStore(store)
 			st, loadErr := bs.LoadState(profile)
 			Expect(loadErr).ToNot(HaveOccurred())
 			st.Bindings[0].MigratedFingerprints = false
@@ -4497,15 +4498,15 @@ var _ = Describe("MigrateBindingFingerprints — seeds KeepNoteClientID from ful
 
 			node := keepItem("srv-A", "client-A", listSrv, "Apples", false, "1000")
 			node.BaseVersion = "v-base-A"
-			kc.pullState = protocol.ChangesResponse{
+			kc.pullState = gateway.ChangesResponse{
 				ToVersion:   "v-after-migration",
 				Incremental: false,
-				Nodes: []protocol.Node{
+				Nodes: []gateway.Node{
 					{
 						Kind:     "notes#node",
 						ID:       "list-client-from-migration",
 						ServerID: listSrv,
-						Type:     protocol.NodeTypeList,
+						Type:     gateway.NodeTypeList,
 						Title:    listName,
 					},
 					node,
@@ -4538,7 +4539,7 @@ var _ = Describe("resolveLabelsForTags — case-insensitive name lookup", func()
 
 	var (
 		ctx context.Context
-		c   *bridge.Connector
+		c   *keepsync.Connector
 		kc  *fakeKeepClient
 		chk *fakeChecklist
 	)
@@ -4564,7 +4565,7 @@ var _ = Describe("resolveLabelsForTags — case-insensitive name lookup", func()
 				{Uid: "uid-A", Text: "Apples", SortOrder: 1000, UpdatedAt: recentTime()},
 			}
 
-			bs := bridge.NewBindingStore(store)
+			bs := keepsync.NewBindingStore(store)
 			st, loadErr := bs.LoadState(profile)
 			Expect(loadErr).ToNot(HaveOccurred())
 			// Persisted under Keep's canonical capitalization.
@@ -4575,7 +4576,7 @@ var _ = Describe("resolveLabelsForTags — case-insensitive name lookup", func()
 
 			// Incremental pull with no labels — the realistic steady
 			// state where the persisted FK is the only source.
-			kc.pullState = protocol.ChangesResponse{
+			kc.pullState = gateway.ChangesResponse{
 				ToVersion:   "v-after",
 				Incremental: true,
 				Labels:      nil,
@@ -4588,9 +4589,9 @@ var _ = Describe("resolveLabelsForTags — case-insensitive name lookup", func()
 		})
 
 		It("should reference the persisted MainID on the LIST node's labelIds", func() {
-			var listNode *protocol.Node
+			var listNode *gateway.Node
 			for i, n := range kc.lastPush().Nodes {
-				if n.Type == protocol.NodeTypeList {
+				if n.Type == gateway.NodeTypeList {
 					listNode = &kc.lastPush().Nodes[i]
 					break
 				}
@@ -4618,10 +4619,10 @@ var _ = Describe("resolveLabelsForTags — case-insensitive name lookup", func()
 				{Uid: "uid-A", Text: "Apples", SortOrder: 1000, UpdatedAt: recentTime()},
 			}
 
-			kc.pullState = protocol.ChangesResponse{
+			kc.pullState = gateway.ChangesResponse{
 				ToVersion:   "v-after",
 				Incremental: true,
-				Labels: []protocol.LabelEntry{
+				Labels: []gateway.LabelEntry{
 					{MainID: "abc", Name: "Household"},
 				},
 			}

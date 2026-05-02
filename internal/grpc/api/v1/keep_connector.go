@@ -10,8 +10,8 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
-	"github.com/brendanjerwin/simple_wiki/internal/keep/bridge"
-	"github.com/brendanjerwin/simple_wiki/internal/keep/protocol"
+	keepsync "github.com/brendanjerwin/simple_wiki/internal/connectors/google_keep/sync"
+	"github.com/brendanjerwin/simple_wiki/internal/connectors/google_keep/gateway"
 	"github.com/brendanjerwin/simple_wiki/tailscale"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 )
@@ -150,11 +150,11 @@ func (s *Server) BindChecklist(ctx context.Context, req *apiv1.BindChecklistRequ
 	// errors here: a missing-checklist or empty-checklist case should
 	// still allow Bind to create an empty Keep note, then the user
 	// can add items on either side and the sync engine reconciles.
-	var initialItems []bridge.InitialItem
+	var initialItems []keepsync.InitialItem
 	if req.GetKeepNoteId() == "" && s.checklistMutator != nil {
 		if checklist, listErr := s.checklistMutator.ListItems(ctx, req.GetPage(), req.GetListName()); listErr == nil {
 			for _, it := range checklist.GetItems() {
-				initialItems = append(initialItems, bridge.InitialItem{
+				initialItems = append(initialItems, keepsync.InitialItem{
 					UID:         it.GetUid(),
 					Text:        it.GetText(),
 					Tags:        it.GetTags(),
@@ -259,7 +259,7 @@ func (s *Server) ClearDeadLetter(ctx context.Context, req *apiv1.ClearDeadLetter
 
 // --- helpers --------------------------------------------------------------
 
-func connectorStateToProto(state bridge.ConnectorState) *apiv1.ConnectorState {
+func connectorStateToProto(state keepsync.ConnectorState) *apiv1.ConnectorState {
 	out := &apiv1.ConnectorState{
 		Configured:          state.IsConfigured(),
 		Email:               state.Email,
@@ -277,7 +277,7 @@ func connectorStateToProto(state bridge.ConnectorState) *apiv1.ConnectorState {
 	return out
 }
 
-func bindingToProto(b bridge.Binding, paused bool) *apiv1.BindingState {
+func bindingToProto(b keepsync.Binding, paused bool) *apiv1.BindingState {
 	out := &apiv1.BindingState{
 		Page:          b.Page,
 		ListName:      b.ListName,
@@ -297,25 +297,25 @@ func mapKeepConnectorErr(err error) error {
 	switch {
 	case err == nil:
 		return nil
-	case errors.Is(err, bridge.ErrConnectorNotConfigured):
+	case errors.Is(err, keepsync.ErrConnectorNotConfigured):
 		return status.Error(codes.FailedPrecondition, "keep_connector_not_configured: connect Google Keep on your profile first")
-	case errors.Is(err, bridge.ErrAlreadyBoundForChecklist):
+	case errors.Is(err, keepsync.ErrAlreadyBoundForChecklist):
 		return status.Error(codes.FailedPrecondition, "already_bound_for_checklist: this checklist is already bound by you")
-	case errors.Is(err, bridge.ErrAlreadyBoundToKeepNote):
+	case errors.Is(err, keepsync.ErrAlreadyBoundToKeepNote):
 		return status.Error(codes.FailedPrecondition, "keep_note_already_bound_by_you: pick a different note or unbind first")
-	case errors.Is(err, bridge.ErrBindingNotFound):
+	case errors.Is(err, keepsync.ErrBindingNotFound):
 		return status.Error(codes.NotFound, "binding_not_found")
-	case errors.Is(err, bridge.ErrDeadLetterItemNotFound):
+	case errors.Is(err, keepsync.ErrDeadLetterItemNotFound):
 		return status.Error(codes.NotFound, "dead_letter_item_not_found")
-	case errors.Is(err, protocol.ErrInvalidCredentials):
+	case errors.Is(err, gateway.ErrInvalidCredentials):
 		return status.Errorf(codes.Unauthenticated, "invalid_credentials: Google rejected the oauth_token (it may have expired — capture a fresh one): %v", err)
-	case errors.Is(err, protocol.ErrAuthRevoked):
+	case errors.Is(err, gateway.ErrAuthRevoked):
 		return status.Error(codes.Unauthenticated, "auth_revoked: re-connect Google Keep on your profile")
-	case errors.Is(err, protocol.ErrProtocolDrift):
+	case errors.Is(err, gateway.ErrProtocolDrift):
 		return status.Error(codes.Internal, "protocol_drift: Google Keep API has changed; update simple_wiki")
-	case errors.Is(err, protocol.ErrRateLimited):
+	case errors.Is(err, gateway.ErrRateLimited):
 		return status.Error(codes.ResourceExhausted, "rate_limited")
-	case errors.Is(err, protocol.ErrBoundNoteDeleted):
+	case errors.Is(err, gateway.ErrBoundNoteDeleted):
 		return status.Error(codes.NotFound, "bound_note_deleted: the Keep note no longer exists")
 	default:
 		return status.Errorf(codes.Internal, "keep connector: %v", err)

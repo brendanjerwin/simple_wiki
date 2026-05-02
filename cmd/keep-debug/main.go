@@ -29,7 +29,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/brendanjerwin/simple_wiki/internal/keep/protocol"
+	"github.com/brendanjerwin/simple_wiki/internal/connectors/google_keep/gateway"
 )
 
 func main() {
@@ -57,7 +57,7 @@ func main() {
 		},
 		Timeout: 30 * time.Second,
 	}
-	auth := protocol.NewAuthenticator(authClient, protocol.AuthURL, deviceID)
+	auth := gateway.NewAuthenticator(authClient, gateway.AuthURL, deviceID)
 	bearer, err := auth.ExchangeMasterTokenForBearer(ctx, email, masterToken)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "Stage 2 failed:", err)
@@ -65,7 +65,7 @@ func main() {
 	}
 	fmt.Println("✓ bearer obtained, len:", len(bearer))
 
-	keep := protocol.NewKeepClient(http.DefaultClient, protocol.DefaultKeepBaseURL, bearer)
+	keep := gateway.NewKeepClient(http.DefaultClient, gateway.DefaultKeepBaseURL, bearer)
 
 	switch *cmd {
 	case "list":
@@ -162,8 +162,8 @@ func main() {
 // list whose text contains the substring `match` (or all alive items
 // if match is empty), then push them back as UPDATES in a single
 // request — reproduces the cron-tick shape.
-func runUpdateItemMatching(ctx context.Context, keep *protocol.KeepClient, listServerID, match string) {
-	pull, err := keep.Changes(ctx, protocol.ChangesRequest{
+func runUpdateItemMatching(ctx context.Context, keep *gateway.KeepClient, listServerID, match string) {
+	pull, err := keep.Changes(ctx, gateway.ChangesRequest{
 		SessionID:       fmt.Sprintf("s--%d--upd-pull", time.Now().UnixMilli()),
 		ClientTimestamp: time.Now().UTC().Format("2006-01-02T15:04:05.000000Z"),
 	})
@@ -171,9 +171,9 @@ func runUpdateItemMatching(ctx context.Context, keep *protocol.KeepClient, listS
 		fmt.Fprintln(os.Stderr, "pull failed:", err)
 		os.Exit(1)
 	}
-	var targets []protocol.Node
+	var targets []gateway.Node
 	for _, n := range pull.Nodes {
-		if n.Type != protocol.NodeTypeListItem {
+		if n.Type != gateway.NodeTypeListItem {
 			continue
 		}
 		if n.ParentID != listServerID && n.ParentServerID != listServerID {
@@ -194,27 +194,27 @@ func runUpdateItemMatching(ctx context.Context, keep *protocol.KeepClient, listS
 	fmt.Printf("found %d targets\n", len(targets))
 
 	now := time.Now().UTC()
-	pushNodes := make([]protocol.Node, 0, len(targets))
+	pushNodes := make([]gateway.Node, 0, len(targets))
 	for i, t := range targets {
 		_ = i
-		pushNodes = append(pushNodes, protocol.Node{
+		pushNodes = append(pushNodes, gateway.Node{
 			Kind:           "notes#node",
 			ID:             t.ID,
 			ServerID:       t.ServerID,
 			ParentID:       listServerID,
 			ParentServerID: listServerID,
-			Type:           protocol.NodeTypeListItem,
+			Type:           gateway.NodeTypeListItem,
 			Text:           t.Text + " edit",
 			Checked:        t.Checked,
 			SortValue:      t.SortValue,
 			BaseVersion:    t.BaseVersion,
-			Timestamps:     protocol.Timestamps{Updated: now},
+			Timestamps:     gateway.Timestamps{Updated: now},
 		})
 	}
 	// Wire-shape debug logger: prints the marshaled wire body so we
 	// see exactly what Keep gets.
 	keep.SetDebugLogger(stderrDebug{})
-	resp, err := keep.Changes(ctx, protocol.ChangesRequest{
+	resp, err := keep.Changes(ctx, gateway.ChangesRequest{
 		Nodes:           pushNodes,
 		TargetVersion:   pull.ToVersion,
 		SessionID:       fmt.Sprintf("s--%d--upd-push", now.UnixMilli()),
@@ -230,15 +230,15 @@ func runUpdateItemMatching(ctx context.Context, keep *protocol.KeepClient, listS
 // runTrashOne: pull, find one alive item under listServerID matching
 // `match` (or any first alive if match==""), push a Trashed=now node
 // for it. Tests the soft-delete wire shape in isolation.
-func runTrashOne(ctx context.Context, keep *protocol.KeepClient, listServerID, match string) {
-	pull, err := keep.Changes(ctx, protocol.ChangesRequest{
+func runTrashOne(ctx context.Context, keep *gateway.KeepClient, listServerID, match string) {
+	pull, err := keep.Changes(ctx, gateway.ChangesRequest{
 		SessionID:       fmt.Sprintf("s--%d--trash-pull", time.Now().UnixMilli()),
 		ClientTimestamp: time.Now().UTC().Format("2006-01-02T15:04:05.000000Z"),
 	})
 	if err != nil { fmt.Fprintln(os.Stderr, "pull:", err); os.Exit(1) }
-	var target protocol.Node
+	var target gateway.Node
 	for _, n := range pull.Nodes {
-		if n.Type != protocol.NodeTypeListItem { continue }
+		if n.Type != gateway.NodeTypeListItem { continue }
 		if n.ParentID != listServerID && n.ParentServerID != listServerID { continue }
 		if !n.Timestamps.Trashed.IsZero() || !n.Timestamps.Deleted.IsZero() { continue }
 		if match != "" && !strings.Contains(n.Text, match) { continue }
@@ -247,19 +247,19 @@ func runTrashOne(ctx context.Context, keep *protocol.KeepClient, listServerID, m
 	if target.ServerID == "" { fmt.Fprintln(os.Stderr, "no alive item match"); os.Exit(1) }
 	now := time.Now().UTC()
 	keep.SetDebugLogger(stderrDebug{})
-	resp, err := keep.Changes(ctx, protocol.ChangesRequest{
-		Nodes: []protocol.Node{{
+	resp, err := keep.Changes(ctx, gateway.ChangesRequest{
+		Nodes: []gateway.Node{{
 			Kind: "notes#node",
 			ID: target.ID,
 			ServerID: target.ServerID,
 			ParentID: listServerID,
 			ParentServerID: listServerID,
-			Type: protocol.NodeTypeListItem,
+			Type: gateway.NodeTypeListItem,
 			Text: target.Text,         // include
 			Checked: target.Checked,   // include
 			SortValue: target.SortValue, // include
 			BaseVersion: target.BaseVersion,
-			Timestamps: protocol.Timestamps{
+			Timestamps: gateway.Timestamps{
 				Updated: now,
 				Deleted: now,  // try Deleted instead of Trashed
 			},
@@ -275,15 +275,15 @@ func runTrashOne(ctx context.Context, keep *protocol.KeepClient, listServerID, m
 // runUpdateAndTrash: pull, find 2 alive items, push 1 update + 1
 // trash in same Changes call. Tests whether bundling updates with
 // soft-deletes is the trigger for the user's 500.
-func runUpdateAndTrash(ctx context.Context, keep *protocol.KeepClient, listServerID string) {
-	pull, err := keep.Changes(ctx, protocol.ChangesRequest{
+func runUpdateAndTrash(ctx context.Context, keep *gateway.KeepClient, listServerID string) {
+	pull, err := keep.Changes(ctx, gateway.ChangesRequest{
 		SessionID:       fmt.Sprintf("s--%d--mix-pull", time.Now().UnixMilli()),
 		ClientTimestamp: time.Now().UTC().Format("2006-01-02T15:04:05.000000Z"),
 	})
 	if err != nil { fmt.Fprintln(os.Stderr, "pull:", err); os.Exit(1) }
-	var alive []protocol.Node
+	var alive []gateway.Node
 	for _, n := range pull.Nodes {
-		if n.Type != protocol.NodeTypeListItem { continue }
+		if n.Type != gateway.NodeTypeListItem { continue }
 		if n.ParentID != listServerID && n.ParentServerID != listServerID { continue }
 		if !n.Timestamps.Trashed.IsZero() || !n.Timestamps.Deleted.IsZero() { continue }
 		alive = append(alive, n)
@@ -292,22 +292,22 @@ func runUpdateAndTrash(ctx context.Context, keep *protocol.KeepClient, listServe
 	if len(alive) < 2 { fmt.Fprintln(os.Stderr, "need >= 2 alive items"); os.Exit(1) }
 	now := time.Now().UTC()
 	keep.SetDebugLogger(stderrDebug{})
-	resp, err := keep.Changes(ctx, protocol.ChangesRequest{
-		Nodes: []protocol.Node{
+	resp, err := keep.Changes(ctx, gateway.ChangesRequest{
+		Nodes: []gateway.Node{
 			{ // update
 				Kind: "notes#node", ID: alive[0].ID, ServerID: alive[0].ServerID,
 				ParentID: listServerID, ParentServerID: listServerID,
-				Type: protocol.NodeTypeListItem, Text: alive[0].Text + " edit",
+				Type: gateway.NodeTypeListItem, Text: alive[0].Text + " edit",
 				Checked: alive[0].Checked, SortValue: alive[0].SortValue,
 				BaseVersion: alive[0].BaseVersion,
-				Timestamps: protocol.Timestamps{Updated: now},
+				Timestamps: gateway.Timestamps{Updated: now},
 			},
 			{ // delete (using Deleted, not Trashed)
 				Kind: "notes#node", ID: alive[1].ID, ServerID: alive[1].ServerID,
 				ParentID: listServerID, ParentServerID: listServerID,
-				Type: protocol.NodeTypeListItem,
+				Type: gateway.NodeTypeListItem,
 				BaseVersion: alive[1].BaseVersion,
-				Timestamps: protocol.Timestamps{Updated: now, Deleted: now},
+				Timestamps: gateway.Timestamps{Updated: now, Deleted: now},
 			},
 		},
 		TargetVersion: pull.ToVersion,
@@ -319,15 +319,15 @@ func runUpdateAndTrash(ctx context.Context, keep *protocol.KeepClient, listServe
 }
 
 // runDeleteMany: delete ALL alive items in a list as one push
-func runDeleteMany(ctx context.Context, keep *protocol.KeepClient, listServerID string) {
-	pull, err := keep.Changes(ctx, protocol.ChangesRequest{
+func runDeleteMany(ctx context.Context, keep *gateway.KeepClient, listServerID string) {
+	pull, err := keep.Changes(ctx, gateway.ChangesRequest{
 		SessionID:       fmt.Sprintf("s--%d--del-pull", time.Now().UnixMilli()),
 		ClientTimestamp: time.Now().UTC().Format("2006-01-02T15:04:05.000000Z"),
 	})
 	if err != nil { fmt.Fprintln(os.Stderr, "pull:", err); os.Exit(1) }
-	var alive []protocol.Node
+	var alive []gateway.Node
 	for _, n := range pull.Nodes {
-		if n.Type != protocol.NodeTypeListItem { continue }
+		if n.Type != gateway.NodeTypeListItem { continue }
 		if n.ParentID != listServerID && n.ParentServerID != listServerID { continue }
 		if !n.Timestamps.Trashed.IsZero() || !n.Timestamps.Deleted.IsZero() { continue }
 		alive = append(alive, n)
@@ -335,18 +335,18 @@ func runDeleteMany(ctx context.Context, keep *protocol.KeepClient, listServerID 
 	if len(alive) == 0 { fmt.Fprintln(os.Stderr, "no alive items"); os.Exit(1) }
 	fmt.Printf("deleting %d items\n", len(alive))
 	now := time.Now().UTC()
-	pushNodes := make([]protocol.Node, 0, len(alive))
+	pushNodes := make([]gateway.Node, 0, len(alive))
 	for _, t := range alive {
-		pushNodes = append(pushNodes, protocol.Node{
+		pushNodes = append(pushNodes, gateway.Node{
 			Kind: "notes#node", ID: t.ID, ServerID: t.ServerID,
 			ParentID: listServerID, ParentServerID: listServerID,
-			Type: protocol.NodeTypeListItem,
+			Type: gateway.NodeTypeListItem,
 			BaseVersion: t.BaseVersion,
-			Timestamps: protocol.Timestamps{Updated: now, Deleted: now},
+			Timestamps: gateway.Timestamps{Updated: now, Deleted: now},
 		})
 	}
 	keep.SetDebugLogger(stderrDebug{})
-	resp, err := keep.Changes(ctx, protocol.ChangesRequest{
+	resp, err := keep.Changes(ctx, gateway.ChangesRequest{
 		Nodes: pushNodes, TargetVersion: pull.ToVersion,
 		SessionID: fmt.Sprintf("s--%d--del-push", now.UnixMilli()),
 		ClientTimestamp: now.Format("2006-01-02T15:04:05.000000Z"),
@@ -372,7 +372,7 @@ func runRawPull(ctx context.Context, email, masterToken, deviceID, filterParent 
 		},
 		Timeout: 30 * time.Second,
 	}
-	auth := protocol.NewAuthenticator(authClient, protocol.AuthURL, deviceID)
+	auth := gateway.NewAuthenticator(authClient, gateway.AuthURL, deviceID)
 	bearer, err := auth.ExchangeMasterTokenForBearer(ctx, email, masterToken)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "auth failed:", err)
@@ -381,7 +381,7 @@ func runRawPull(ctx context.Context, email, masterToken, deviceID, filterParent 
 
 	body := fmt.Sprintf(`{"nodes":[],"clientTimestamp":%q,"requestHeader":{"clientSessionId":"raw-pull","clientPlatform":"ANDROID","clientVersion":{"major":"9","minor":"9","build":"9","revision":"9"},"capabilities":[{"type":"NC"},{"type":"PI"},{"type":"LB"},{"type":"AN"},{"type":"SH"},{"type":"DR"},{"type":"TR"},{"type":"IN"},{"type":"SNB"},{"type":"MI"},{"type":"CO"}]}}`,
 		time.Now().UTC().Format("2006-01-02T15:04:05.000000Z"))
-	req, _ := http.NewRequestWithContext(ctx, "POST", protocol.DefaultKeepBaseURL+"changes", strings.NewReader(body))
+	req, _ := http.NewRequestWithContext(ctx, "POST", gateway.DefaultKeepBaseURL+"changes", strings.NewReader(body))
 	req.Header.Set("Authorization", "OAuth "+bearer)
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("User-Agent", "simple_wiki-keep-debug/1")
@@ -426,12 +426,12 @@ func runRawPull(ctx context.Context, email, masterToken, deviceID, filterParent 
 // We use a raw HTTP request rather than KeepClient.Changes so the
 // literal response body lands on stdout — the typed decoder discards
 // fields it doesn't model.
-func runDumpWriteResults(ctx context.Context, email, masterToken, deviceID string, keep *protocol.KeepClient) {
+func runDumpWriteResults(ctx context.Context, email, masterToken, deviceID string, keep *gateway.KeepClient) {
 	// Step 1: pull to capture toVersion. We use the typed client here
 	// because we just need the cursor; the response body itself is
 	// uninteresting for this diagnostic.
 	now := time.Now().UTC()
-	pull, err := keep.Changes(ctx, protocol.ChangesRequest{
+	pull, err := keep.Changes(ctx, gateway.ChangesRequest{
 		SessionID:       fmt.Sprintf("s--%d--dwr-pull", now.UnixMilli()),
 		ClientTimestamp: now.Format("2006-01-02T15:04:05.000000Z"),
 	})
@@ -451,7 +451,7 @@ func runDumpWriteResults(ctx context.Context, email, masterToken, deviceID strin
 		},
 		Timeout: 30 * time.Second,
 	}
-	auth := protocol.NewAuthenticator(authClient, protocol.AuthURL, deviceID)
+	auth := gateway.NewAuthenticator(authClient, gateway.AuthURL, deviceID)
 	bearer, err := auth.ExchangeMasterTokenForBearer(ctx, email, masterToken)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "raw auth failed:", err)
@@ -514,7 +514,7 @@ func runDumpWriteResults(ctx context.Context, email, masterToken, deviceID strin
 	}
 
 	req, err := http.NewRequestWithContext(ctx, "POST",
-		protocol.DefaultKeepBaseURL+"changes", strings.NewReader(string(body)))
+		gateway.DefaultKeepBaseURL+"changes", strings.NewReader(string(body)))
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "new request failed:", err)
 		os.Exit(1)
@@ -566,7 +566,7 @@ func runDumpWriteResults(ctx context.Context, email, masterToken, deviceID strin
 // This is the Phase-2 prerequisite from the plan's "Pre-flight
 // verification of lex monotonicity" section. Exits 0 on success, 1
 // on the first non-monotonic adjacent pair.
-func runVerifyCursorMonotonic(ctx context.Context, keep *protocol.KeepClient) {
+func runVerifyCursorMonotonic(ctx context.Context, keep *gateway.KeepClient) {
 	const numPulls = 6
 	const interPullDelay = 1500 * time.Millisecond
 
@@ -574,7 +574,7 @@ func runVerifyCursorMonotonic(ctx context.Context, keep *protocol.KeepClient) {
 	prevTarget := ""
 	for i := 0; i < numPulls; i++ {
 		now := time.Now().UTC()
-		req := protocol.ChangesRequest{
+		req := gateway.ChangesRequest{
 			TargetVersion:   prevTarget,
 			SessionID:       fmt.Sprintf("s--%d--vcm-%d", now.UnixMilli(), i),
 			ClientTimestamp: now.Format("2006-01-02T15:04:05.000000Z"),
@@ -620,8 +620,8 @@ func runVerifyCursorMonotonic(ctx context.Context, keep *protocol.KeepClient) {
 	fmt.Printf("verified: %d consecutive to_version values are lexicographically monotonic\n", len(versions))
 }
 
-func runDumpItems(ctx context.Context, keep *protocol.KeepClient, listServerID string) {
-	resp, err := keep.Changes(ctx, protocol.ChangesRequest{
+func runDumpItems(ctx context.Context, keep *gateway.KeepClient, listServerID string) {
+	resp, err := keep.Changes(ctx, gateway.ChangesRequest{
 		SessionID:       fmt.Sprintf("s--%d--dump", time.Now().UnixMilli()),
 		ClientTimestamp: time.Now().UTC().Format("2006-01-02T15:04:05.000000Z"),
 	})
@@ -630,7 +630,7 @@ func runDumpItems(ctx context.Context, keep *protocol.KeepClient, listServerID s
 		os.Exit(1)
 	}
 	for _, n := range resp.Nodes {
-		if n.Type != protocol.NodeTypeListItem {
+		if n.Type != gateway.NodeTypeListItem {
 			continue
 		}
 		if n.ParentID != listServerID && n.ParentServerID != listServerID {
@@ -642,14 +642,14 @@ func runDumpItems(ctx context.Context, keep *protocol.KeepClient, listServerID s
 	}
 }
 
-func runPushItemToExisting(ctx context.Context, keep *protocol.KeepClient, parentServerID, text string) {
+func runPushItemToExisting(ctx context.Context, keep *gateway.KeepClient, parentServerID, text string) {
 	now := time.Now().UTC()
 
 	// Step 1: pull to get the latest toVersion. gkeepapi follows a strict
 	// sync-then-push pattern; pushing with empty TargetVersion gets a 500
 	// "Unknown Error" because the server can't reconcile the partial
 	// node update against an unknown client baseline.
-	pull, err := keep.Changes(ctx, protocol.ChangesRequest{
+	pull, err := keep.Changes(ctx, gateway.ChangesRequest{
 		SessionID:       fmt.Sprintf("s--%d--pull", now.UnixMilli()),
 		ClientTimestamp: now.Format("2006-01-02T15:04:05.000000Z"),
 	})
@@ -675,17 +675,17 @@ func runPushItemToExisting(ctx context.Context, keep *protocol.KeepClient, paren
 	// parent_server_id, Keep returns 500 "Unknown Error" because it
 	// can't reconcile the partial node update against an unknown
 	// parent (gkeepapi node.py line 1585).
-	resp, err := keep.Changes(ctx, protocol.ChangesRequest{
-		Nodes: []protocol.Node{
+	resp, err := keep.Changes(ctx, gateway.ChangesRequest{
+		Nodes: []gateway.Node{
 			{
 				Kind:           "notes#node",
 				ID:             itemClientID,
-				Type:           protocol.NodeTypeListItem,
+				Type:           gateway.NodeTypeListItem,
 				ParentID:       parentServerID,
 				ParentServerID: parentServerID,
 				Text:           text,
 				SortValue:      "1000",
-				Timestamps: protocol.Timestamps{
+				Timestamps: gateway.Timestamps{
 					Created: now,
 					Updated: now,
 				},
@@ -701,23 +701,23 @@ func runPushItemToExisting(ctx context.Context, keep *protocol.KeepClient, paren
 	}
 
 	for _, n := range resp.Nodes {
-		if n.ID == itemClientID && n.Type == protocol.NodeTypeListItem {
+		if n.ID == itemClientID && n.Type == gateway.NodeTypeListItem {
 			fmt.Printf("✓ item created on existing list: %s -> %s\n", itemClientID, n.ServerID)
 			return
 		}
 	}
 	fmt.Println("✗ item NOT echoed back; full response nodes:")
 	for _, n := range resp.Nodes {
-		if n.Type == protocol.NodeTypeListItem {
+		if n.Type == gateway.NodeTypeListItem {
 			fmt.Printf("  id=%s server=%s parent=%s text=%q\n", n.ID, n.ServerID, n.ParentID, n.Text)
 		}
 	}
 }
 
-func runCreateWithItems(ctx context.Context, keep *protocol.KeepClient, title string, items []string) {
-	specs := make([]protocol.ListItemSpec, len(items))
+func runCreateWithItems(ctx context.Context, keep *gateway.KeepClient, title string, items []string) {
+	specs := make([]gateway.ListItemSpec, len(items))
 	for i, txt := range items {
-		specs[i] = protocol.ListItemSpec{
+		specs[i] = gateway.ListItemSpec{
 			Text:      txt,
 			SortValue: fmt.Sprintf("%d", (len(items)-i)*1000),
 		}
@@ -734,8 +734,8 @@ func runCreateWithItems(ctx context.Context, keep *protocol.KeepClient, title st
 	}
 }
 
-func runList(ctx context.Context, keep *protocol.KeepClient) {
-	req := protocol.ChangesRequest{
+func runList(ctx context.Context, keep *gateway.KeepClient) {
+	req := gateway.ChangesRequest{
 		SessionID:       fmt.Sprintf("s--%d--cli", time.Now().UnixMilli()),
 		ClientTimestamp: time.Now().UTC().Format("2006-01-02T15:04:05.000000Z"),
 	}
@@ -745,11 +745,11 @@ func runList(ctx context.Context, keep *protocol.KeepClient) {
 		os.Exit(1)
 	}
 	fmt.Println("✓ Changes returned", len(resp.Nodes), "nodes; toVersion:", resp.ToVersion, "truncated:", resp.Truncated)
-	byType := map[protocol.NodeType]int{}
-	var lists []protocol.Node
+	byType := map[gateway.NodeType]int{}
+	var lists []gateway.Node
 	for _, n := range resp.Nodes {
 		byType[n.Type]++
-		if n.Type == protocol.NodeTypeList {
+		if n.Type == gateway.NodeTypeList {
 			lists = append(lists, n)
 		}
 	}
@@ -767,7 +767,7 @@ func runList(ctx context.Context, keep *protocol.KeepClient) {
 	}
 }
 
-func runCreateAndPush(ctx context.Context, keep *protocol.KeepClient, title string) {
+func runCreateAndPush(ctx context.Context, keep *gateway.KeepClient, title string) {
 	id, err := keep.CreateList(ctx, title)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "CreateList failed:", err)
@@ -776,7 +776,7 @@ func runCreateAndPush(ctx context.Context, keep *protocol.KeepClient, title stri
 	fmt.Println("✓ CreateList returned serverID:", id)
 
 	// Now do a pull to confirm the list shows up.
-	resp, err := keep.Changes(ctx, protocol.ChangesRequest{
+	resp, err := keep.Changes(ctx, gateway.ChangesRequest{
 		SessionID:       fmt.Sprintf("s--%d--cli2", time.Now().UnixMilli()),
 		ClientTimestamp: time.Now().UTC().Format("2006-01-02T15:04:05.000000Z"),
 	})
@@ -794,7 +794,7 @@ func runCreateAndPush(ctx context.Context, keep *protocol.KeepClient, title stri
 	}
 	fmt.Println("✗ created list NOT visible in next pull. Dumping all LIST nodes:")
 	for _, n := range resp.Nodes {
-		if n.Type == protocol.NodeTypeList {
+		if n.Type == gateway.NodeTypeList {
 			fmt.Printf("  serverID=%s title=%q\n", n.ServerID, n.Title)
 		}
 	}
@@ -815,7 +815,7 @@ func runCreateAndPush(ctx context.Context, keep *protocol.KeepClient, title stri
 // the fix targets the right field.
 //
 // Exits 0 on PASS (HTTP 200, no error in response body), 1 on FAIL.
-func runVerifyListPushShape(ctx context.Context, email, masterToken, deviceID string, keep *protocol.KeepClient, listServerID, labelMatch string, sendBrokenShape bool) {
+func runVerifyListPushShape(ctx context.Context, email, masterToken, deviceID string, keep *gateway.KeepClient, listServerID, labelMatch string, sendBrokenShape bool) {
 	mode := "FIXED-SHAPE"
 	if sendBrokenShape {
 		mode = "BROKEN-SHAPE (id==serverId, expecting 500)"
@@ -827,7 +827,7 @@ func runVerifyListPushShape(ctx context.Context, email, masterToken, deviceID st
 	// client_id, the toVersion cursor, the title, and any label that
 	// matches by case-insensitive name.
 	now := time.Now().UTC()
-	pull, err := keep.Changes(ctx, protocol.ChangesRequest{
+	pull, err := keep.Changes(ctx, gateway.ChangesRequest{
 		SessionID:       fmt.Sprintf("s--%d--vlps-pull", now.UnixMilli()),
 		ClientTimestamp: now.Format("2006-01-02T15:04:05.000000Z"),
 	})
@@ -838,7 +838,7 @@ func runVerifyListPushShape(ctx context.Context, email, masterToken, deviceID st
 
 	var listClientID, listTitle string
 	for _, n := range pull.Nodes {
-		if n.Type == protocol.NodeTypeList && n.ServerID == listServerID {
+		if n.Type == gateway.NodeTypeList && n.ServerID == listServerID {
 			listClientID = n.ID
 			listTitle = n.Title
 			break
@@ -983,11 +983,11 @@ func runVerifyListPushShape(ctx context.Context, email, masterToken, deviceID st
 // parentServerId = sandbox list serverID, baseVersion = "" since Keep
 // returns "" for it on every node, deleted = zero, updated = now).
 // Confirms the LIST_ITEM update path against the same hypothesis.
-func runVerifyListItemUpdateShape(ctx context.Context, email, masterToken, deviceID string, keep *protocol.KeepClient, listServerID string) {
+func runVerifyListItemUpdateShape(ctx context.Context, email, masterToken, deviceID string, keep *gateway.KeepClient, listServerID string) {
 	fmt.Fprintf(os.Stderr, "=== verify-listitem-update-shape parent-id=%s ===\n", listServerID)
 
 	now := time.Now().UTC()
-	pull, err := keep.Changes(ctx, protocol.ChangesRequest{
+	pull, err := keep.Changes(ctx, gateway.ChangesRequest{
 		SessionID:       fmt.Sprintf("s--%d--vliu-pull", now.UnixMilli()),
 		ClientTimestamp: now.Format("2006-01-02T15:04:05.000000Z"),
 	})
@@ -996,9 +996,9 @@ func runVerifyListItemUpdateShape(ctx context.Context, email, masterToken, devic
 		os.Exit(1)
 	}
 
-	var target protocol.Node
+	var target gateway.Node
 	for _, n := range pull.Nodes {
-		if n.Type != protocol.NodeTypeListItem {
+		if n.Type != gateway.NodeTypeListItem {
 			continue
 		}
 		if n.ParentID != listServerID && n.ParentServerID != listServerID {
@@ -1413,12 +1413,12 @@ func buildPullBody(sessionTag string) []byte {
 // the no-op push (expect 500) and the change push (expect 200).
 //
 // Exits 0 if BOTH expectations hold, 1 otherwise. Stdout: PASS / FAIL.
-func runVerifyListPushNoop(ctx context.Context, email, masterToken, deviceID string, keep *protocol.KeepClient, listServerID string) {
+func runVerifyListPushNoop(ctx context.Context, email, masterToken, deviceID string, keep *gateway.KeepClient, listServerID string) {
 	fmt.Fprintf(os.Stderr, "=== verify-list-push-noop parent-id=%s ===\n", listServerID)
 
 	// Step 1: pull and locate the LIST node.
 	now := time.Now().UTC()
-	pull, err := keep.Changes(ctx, protocol.ChangesRequest{
+	pull, err := keep.Changes(ctx, gateway.ChangesRequest{
 		SessionID:       fmt.Sprintf("s--%d--vlpn-pull", now.UnixMilli()),
 		ClientTimestamp: now.Format("2006-01-02T15:04:05.000000Z"),
 	})
@@ -1426,9 +1426,9 @@ func runVerifyListPushNoop(ctx context.Context, email, masterToken, deviceID str
 		fmt.Fprintln(os.Stderr, "FAIL: pull failed:", err)
 		os.Exit(1)
 	}
-	var listNode protocol.Node
+	var listNode gateway.Node
 	for _, n := range pull.Nodes {
-		if n.Type == protocol.NodeTypeList && n.ServerID == listServerID {
+		if n.Type == gateway.NodeTypeList && n.ServerID == listServerID {
 			listNode = n
 			break
 		}
@@ -1473,7 +1473,7 @@ func runVerifyListPushNoop(ctx context.Context, email, masterToken, deviceID str
 	// Step 4: re-pull to refresh the cursor for the second push (Keep may
 	// have advanced its toVersion as a side-effect of even a failed push).
 	now2 := time.Now().UTC()
-	pull2, err := keep.Changes(ctx, protocol.ChangesRequest{
+	pull2, err := keep.Changes(ctx, gateway.ChangesRequest{
 		SessionID:       fmt.Sprintf("s--%d--vlpn-pull2", now2.UnixMilli()),
 		ClientTimestamp: now2.Format("2006-01-02T15:04:05.000000Z"),
 	})
@@ -1505,7 +1505,7 @@ func runVerifyListPushNoop(ctx context.Context, email, masterToken, deviceID str
 // pushListWithLabelIDs sends a LIST node update with the given labelIds
 // using the proven push-shape (id == listNode.ID, serverId == listServerID).
 // Returns status code and response body. Used by runVerifyListPushNoop.
-func pushListWithLabelIDs(ctx context.Context, email, masterToken, deviceID string, listNode protocol.Node, listServerID string, labelIDs []string, targetVersion, tag string) (int, []byte) {
+func pushListWithLabelIDs(ctx context.Context, email, masterToken, deviceID string, listNode gateway.Node, listServerID string, labelIDs []string, targetVersion, tag string) (int, []byte) {
 	now := time.Now().UTC()
 	labelIDsBody := make([]any, 0, len(labelIDs))
 	for _, id := range labelIDs {
@@ -1913,12 +1913,12 @@ func rawKeepPost(ctx context.Context, email, masterToken, deviceID string, body 
 		},
 		Timeout: 30 * time.Second,
 	}
-	auth := protocol.NewAuthenticator(authClient, protocol.AuthURL, deviceID)
+	auth := gateway.NewAuthenticator(authClient, gateway.AuthURL, deviceID)
 	bearer, err := auth.ExchangeMasterTokenForBearer(ctx, email, masterToken)
 	if err != nil {
 		return 0, nil, fmt.Errorf("auth: %w", err)
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, protocol.DefaultKeepBaseURL+"changes", strings.NewReader(string(body)))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, gateway.DefaultKeepBaseURL+"changes", strings.NewReader(string(body)))
 	if err != nil {
 		return 0, nil, fmt.Errorf("build request: %w", err)
 	}

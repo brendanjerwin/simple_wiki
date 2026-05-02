@@ -1,4 +1,15 @@
-package bridge
+// Package translator is the Anti-Corruption Layer (DDD sense) between
+// the wiki's ChecklistItem domain model and Google Keep's wire-protocol
+// node shape. The functions here are pure: no I/O, no clock, no
+// orchestrator state — fed a wiki item or a Keep node, they return the
+// other shape.
+//
+// The sibling sync package owns orchestration (Connector, BindingStore,
+// debounce, cron, jobs); the sibling gateway package owns the wire
+// protocol. Translation never reaches across either of those boundaries
+// and never holds connector state, which is why it sits in its own
+// package and not on a struct method.
+package translator
 
 import (
 	"fmt"
@@ -8,8 +19,8 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
+	"github.com/brendanjerwin/simple_wiki/internal/connectors/google_keep/gateway"
 	"github.com/brendanjerwin/simple_wiki/internal/hashtags"
-	"github.com/brendanjerwin/simple_wiki/internal/keep/protocol"
 )
 
 const (
@@ -17,14 +28,14 @@ const (
 	sortOrderBitSize = 64
 )
 
-// descriptionSeparator separates the head line (text + tag suffixes)
+// DescriptionSeparator separates the head line (text + tag suffixes)
 // from the trailing description in a Keep LIST_ITEM's Text field.
 // Newline + em-dash + space — chosen because em-dash is vanishingly
 // rare at the start of a Keep item line in natural input, so reverse-
 // parsing on inbound sync is unambiguous. Tested on Keep mobile: the
 // app renders the embedded newline as a wrapped second line beneath
 // the checkbox, which matches the wiki-side "context line" UX.
-const descriptionSeparator = "\n— "
+const DescriptionSeparator = "\n— "
 
 // WikiToKeep converts a wiki ChecklistItem to a Keep ListItem Node ready
 // to be sent on the changes endpoint. parentNoteServerID is the bound
@@ -38,18 +49,18 @@ const descriptionSeparator = "\n— "
 // Description rides as a trailing "\n— <description>" suffix on the
 // same Text field. Due and alarm are wiki-only — Keep LIST_ITEM has no
 // equivalent.
-func WikiToKeep(item *apiv1.ChecklistItem, parentNoteServerID, keepItemID string) protocol.Node {
-	headLine := encodeTextWithTags(item.GetText(), item.GetTags())
+func WikiToKeep(item *apiv1.ChecklistItem, parentNoteServerID, keepItemID string) gateway.Node {
+	headLine := EncodeTextWithTags(item.GetText(), item.GetTags())
 	text := headLine
 	if d := item.GetDescription(); d != "" {
-		text = headLine + descriptionSeparator + d
+		text = headLine + DescriptionSeparator + d
 	}
 
-	n := protocol.Node{
+	n := gateway.Node{
 		ID:             keepItemID,
 		ParentID:       parentNoteServerID,
 		ParentServerID: parentNoteServerID,
-		Type:           protocol.NodeTypeListItem,
+		Type:           gateway.NodeTypeListItem,
 		Text:           text,
 		Checked:        item.GetChecked(),
 		SortValue:      strconv.FormatInt(item.GetSortOrder(), sortOrderBase),
@@ -96,7 +107,7 @@ func WikiToKeep(item *apiv1.ChecklistItem, parentNoteServerID, keepItemID string
 // error rather than silently coercing a malformed SortValue to 0 —
 // silent coercion would corrupt the wiki ordering on inbound sync
 // without leaving any trace.
-func KeepToWiki(node protocol.Node) (*apiv1.ChecklistItem, error) {
+func KeepToWiki(node gateway.Node) (*apiv1.ChecklistItem, error) {
 	head, description := splitDescription(node.Text)
 	tags := hashtags.Extract(head)
 	cleanText := stripHashtagTokens(head)
@@ -128,7 +139,8 @@ func KeepToWiki(node protocol.Node) (*apiv1.ChecklistItem, error) {
 // divergence-rule sync engine. Two of these are equal iff the wiki
 // item and Keep node have the same canonical text, the same checked
 // flag, and the same SortValue. Used as the "merge-base" — see
-// internal/keep/bridge/MATRIX.md for the full divergence rule.
+// internal/connectors/google_keep/sync/MATRIX.md for the full
+// divergence rule.
 //
 // The text component is canonicalized via the same encoder
 // `WikiToKeep` uses on the way out, so a wiki item and the Keep node
@@ -148,10 +160,10 @@ func FingerprintWiki(item *apiv1.ChecklistItem) Fingerprint {
 	if item == nil {
 		return Fingerprint{}
 	}
-	headLine := encodeTextWithTags(item.GetText(), item.GetTags())
+	headLine := EncodeTextWithTags(item.GetText(), item.GetTags())
 	text := headLine
 	if d := item.GetDescription(); d != "" {
-		text = headLine + descriptionSeparator + d
+		text = headLine + DescriptionSeparator + d
 	}
 	return Fingerprint{
 		Text:      text,
@@ -163,7 +175,7 @@ func FingerprintWiki(item *apiv1.ChecklistItem) Fingerprint {
 // FingerprintKeep returns the fingerprint for a Keep LIST_ITEM node.
 // Reads exactly the three fields the divergence rule cares about; no
 // timestamp comparison.
-func FingerprintKeep(node protocol.Node) Fingerprint {
+func FingerprintKeep(node gateway.Node) Fingerprint {
 	return Fingerprint{
 		Text:      node.Text,
 		Checked:   node.Checked,
@@ -171,21 +183,26 @@ func FingerprintKeep(node protocol.Node) Fingerprint {
 	}
 }
 
-// FingerprintFromItemBinding returns the synced-baseline fingerprint
-// from an ItemBinding. Used by the divergence rule to test whether
-// wiki_fp or keep_fp has diverged from the last successful sync.
-func FingerprintFromItemBinding(ib ItemBinding) Fingerprint {
+// FingerprintFromSyncedFields returns the synced-baseline fingerprint
+// from the three persisted fields of an item binding. Used by the
+// divergence rule to test whether wiki_fp or keep_fp has diverged from
+// the last successful sync.
+//
+// Takes three primitives (not the binding struct) so this package
+// stays free of any sync-layer types — translator must not depend on
+// sync's types or the package boundary becomes a fiction.
+func FingerprintFromSyncedFields(syncedText string, syncedChecked bool, syncedSortValue string) Fingerprint {
 	return Fingerprint{
-		Text:      ib.SyncedText,
-		Checked:   ib.SyncedChecked,
-		SortValue: ib.SyncedSortValue,
+		Text:      syncedText,
+		Checked:   syncedChecked,
+		SortValue: syncedSortValue,
 	}
 }
 
 // stripHashtagTokens removes whitespace-delimited "#tag" tokens from
 // text and collapses the surrounding whitespace. Mirrors the wiki's
 // hashtag convention: #-prefixed tokens are always tags, never literal
-// content. Round-trip pair with encodeTextWithTags:
+// content. Round-trip pair with EncodeTextWithTags:
 //
 //	encode("Buy apples", []string{"fresh"})       → "Buy apples #fresh"
 //	stripHashtagTokens("Buy apples #fresh")        → "Buy apples"
@@ -205,11 +222,11 @@ func stripHashtagTokens(s string) string {
 // Keep LIST_ITEM Text field. If no separator is present, the entire
 // input is the head line and description is empty.
 func splitDescription(text string) (head, description string) {
-	idx := strings.Index(text, descriptionSeparator)
+	idx := strings.Index(text, DescriptionSeparator)
 	if idx < 0 {
 		return text, ""
 	}
-	return text[:idx], text[idx+len(descriptionSeparator):]
+	return text[:idx], text[idx+len(DescriptionSeparator):]
 }
 
 // parseSortValue parses Keep's SortValue field into the wiki's int64
@@ -229,9 +246,9 @@ func parseSortValue(s string) (int64, error) {
 	return 0, fmt.Errorf("sortValue %q is neither an integer nor a float", s)
 }
 
-// encodeTextWithTags appends any tags not already present in text as
+// EncodeTextWithTags appends any tags not already present in text as
 // trailing " #tag" markers. Already-inline #tags survive untouched.
-func encodeTextWithTags(text string, tags []string) string {
+func EncodeTextWithTags(text string, tags []string) string {
 	if len(tags) == 0 {
 		return text
 	}

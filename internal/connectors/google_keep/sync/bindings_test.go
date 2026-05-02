@@ -1,5 +1,5 @@
 //revive:disable:dot-imports
-package bridge_test
+package sync_test
 
 import (
 	"errors"
@@ -11,13 +11,13 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"github.com/brendanjerwin/simple_wiki/internal/keep/bridge"
+	keepsync "github.com/brendanjerwin/simple_wiki/internal/connectors/google_keep/sync"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 )
 
-func TestBridge(t *testing.T) {
+func TestSync(t *testing.T) {
 	RegisterFailHandler(Fail)
-	RunSpecs(t, "internal/keep/bridge")
+	RunSpecs(t, "internal/connectors/google_keep/sync")
 }
 
 // fakeStore is the same in-memory PageReaderMutator pattern the
@@ -110,18 +110,18 @@ const bobProfile wikipage.PageIdentifier = "profile_bob"
 
 var _ = Describe("BindingStore.LoadState", func() {
 	var (
-		store *bridge.BindingStore
+		store *keepsync.BindingStore
 		pages *fakeStore
 	)
 
 	BeforeEach(func() {
 		pages = newFakeStore()
-		store = bridge.NewBindingStore(pages)
+		store = keepsync.NewBindingStore(pages)
 	})
 
 	When("the profile page does not exist", func() {
 		var (
-			state   bridge.ConnectorState
+			state   keepsync.ConnectorState
 			loadErr error
 		)
 
@@ -134,13 +134,13 @@ var _ = Describe("BindingStore.LoadState", func() {
 		})
 
 		It("should return zero state", func() {
-			Expect(state).To(Equal(bridge.ConnectorState{}))
+			Expect(state).To(Equal(keepsync.ConnectorState{}))
 		})
 	})
 
 	When("the profile exists but has no connector frontmatter", func() {
 		var (
-			state   bridge.ConnectorState
+			state   keepsync.ConnectorState
 			loadErr error
 		)
 
@@ -156,13 +156,13 @@ var _ = Describe("BindingStore.LoadState", func() {
 		})
 
 		It("should return zero state", func() {
-			Expect(state).To(Equal(bridge.ConnectorState{}))
+			Expect(state).To(Equal(keepsync.ConnectorState{}))
 		})
 	})
 
 	When("the profile has a complete connector state on disk", func() {
 		var (
-			state   bridge.ConnectorState
+			state   keepsync.ConnectorState
 			loadErr error
 		)
 
@@ -215,7 +215,7 @@ var _ = Describe("BindingStore.LoadState", func() {
 
 	When("decoding an old binding file without the new fields", func() {
 		var (
-			state   bridge.ConnectorState
+			state   keepsync.ConnectorState
 			loadErr error
 		)
 
@@ -291,7 +291,7 @@ var _ = Describe("BindingStore.LoadState", func() {
 		})
 
 		When("the loaded state is re-saved and re-loaded", func() {
-			var roundTripped bridge.ConnectorState
+			var roundTripped keepsync.ConnectorState
 
 			BeforeEach(func() {
 				Expect(store.SaveState(aliceProfile, state)).To(Succeed())
@@ -321,7 +321,7 @@ var _ = Describe("BindingStore.LoadState", func() {
 
 	When("decoding a binding with the new structured shape", func() {
 		var (
-			state   bridge.ConnectorState
+			state   keepsync.ConnectorState
 			loadErr error
 		)
 
@@ -407,7 +407,7 @@ var _ = Describe("BindingStore.LoadState", func() {
 		})
 
 		When("the loaded structured state is re-saved and re-loaded", func() {
-			var roundTripped bridge.ConnectorState
+			var roundTripped keepsync.ConnectorState
 
 			BeforeEach(func() {
 				Expect(store.SaveState(aliceProfile, state)).To(Succeed())
@@ -453,14 +453,14 @@ var _ = Describe("BindingStore.LoadState", func() {
 
 var _ = Describe("BindingStore.AddBinding", func() {
 	var (
-		store *bridge.BindingStore
+		store *keepsync.BindingStore
 		pages *fakeStore
 		now   time.Time
 	)
 
 	BeforeEach(func() {
 		pages = newFakeStore()
-		store = bridge.NewBindingStore(pages)
+		store = keepsync.NewBindingStore(pages)
 		now = time.Date(2026, 4, 25, 17, 14, 0, 0, time.UTC)
 		// Seed Alice's profile with a connector state but no bindings.
 		Expect(pages.WriteFrontMatter(aliceProfile, wikipage.FrontMatter{
@@ -490,7 +490,7 @@ var _ = Describe("BindingStore.AddBinding", func() {
 		var addErr error
 
 		BeforeEach(func() {
-			addErr = store.AddBinding(aliceProfile, bridge.Binding{
+			addErr = store.AddBinding(aliceProfile, keepsync.Binding{
 				Page:          "shopping_lists",
 				ListName:      "groceries",
 				KeepNoteID:    "srv-list-1",
@@ -515,13 +515,13 @@ var _ = Describe("BindingStore.AddBinding", func() {
 		var addErr error
 
 		BeforeEach(func() {
-			Expect(store.AddBinding(aliceProfile, bridge.Binding{
+			Expect(store.AddBinding(aliceProfile, keepsync.Binding{
 				Page:       "shopping_lists",
 				ListName:   "groceries",
 				KeepNoteID: "srv-list-1",
 				BoundAt:    now,
 			})).To(Succeed())
-			addErr = store.AddBinding(aliceProfile, bridge.Binding{
+			addErr = store.AddBinding(aliceProfile, keepsync.Binding{
 				Page:       "shopping_lists",
 				ListName:   "weekend_chores",
 				KeepNoteID: "srv-list-2",
@@ -543,13 +543,13 @@ var _ = Describe("BindingStore.AddBinding", func() {
 		var addErr error
 
 		BeforeEach(func() {
-			Expect(store.AddBinding(aliceProfile, bridge.Binding{
+			Expect(store.AddBinding(aliceProfile, keepsync.Binding{
 				Page:       "shopping_lists",
 				ListName:   "groceries",
 				KeepNoteID: "srv-list-1",
 				BoundAt:    now,
 			})).To(Succeed())
-			addErr = store.AddBinding(aliceProfile, bridge.Binding{
+			addErr = store.AddBinding(aliceProfile, keepsync.Binding{
 				Page:       "shopping_lists",
 				ListName:   "groceries",
 				KeepNoteID: "srv-list-2",
@@ -558,7 +558,7 @@ var _ = Describe("BindingStore.AddBinding", func() {
 		})
 
 		It("should return ErrAlreadyBoundForChecklist", func() {
-			Expect(errors.Is(addErr, bridge.ErrAlreadyBoundForChecklist)).To(BeTrue())
+			Expect(errors.Is(addErr, keepsync.ErrAlreadyBoundForChecklist)).To(BeTrue())
 		})
 
 		It("should not have created a second binding", func() {
@@ -571,13 +571,13 @@ var _ = Describe("BindingStore.AddBinding", func() {
 		var addErr error
 
 		BeforeEach(func() {
-			Expect(store.AddBinding(aliceProfile, bridge.Binding{
+			Expect(store.AddBinding(aliceProfile, keepsync.Binding{
 				Page:       "shopping_lists",
 				ListName:   "groceries",
 				KeepNoteID: "srv-list-1",
 				BoundAt:    now,
 			})).To(Succeed())
-			addErr = store.AddBinding(aliceProfile, bridge.Binding{
+			addErr = store.AddBinding(aliceProfile, keepsync.Binding{
 				Page:       "weekend",
 				ListName:   "chores",
 				KeepNoteID: "srv-list-1", // same Keep note
@@ -586,7 +586,7 @@ var _ = Describe("BindingStore.AddBinding", func() {
 		})
 
 		It("should return ErrAlreadyBoundToKeepNote", func() {
-			Expect(errors.Is(addErr, bridge.ErrAlreadyBoundToKeepNote)).To(BeTrue())
+			Expect(errors.Is(addErr, keepsync.ErrAlreadyBoundToKeepNote)).To(BeTrue())
 		})
 
 		It("should not have created a second binding", func() {
@@ -599,13 +599,13 @@ var _ = Describe("BindingStore.AddBinding", func() {
 		var bobErr error
 
 		BeforeEach(func() {
-			Expect(store.AddBinding(aliceProfile, bridge.Binding{
+			Expect(store.AddBinding(aliceProfile, keepsync.Binding{
 				Page:       "shopping_lists",
 				ListName:   "groceries",
 				KeepNoteID: "srv-alice-1",
 				BoundAt:    now,
 			})).To(Succeed())
-			bobErr = store.AddBinding(bobProfile, bridge.Binding{
+			bobErr = store.AddBinding(bobProfile, keepsync.Binding{
 				Page:       "shopping_lists",
 				ListName:   "groceries",
 				KeepNoteID: "srv-bob-1",
@@ -640,7 +640,7 @@ var _ = Describe("BindingStore.AddBinding", func() {
 				"identifier": "profile_alice",
 			})).To(Succeed())
 
-			addErr = store.AddBinding(aliceProfile, bridge.Binding{
+			addErr = store.AddBinding(aliceProfile, keepsync.Binding{
 				Page:       "shopping_lists",
 				ListName:   "groceries",
 				KeepNoteID: "srv-1",
@@ -649,21 +649,21 @@ var _ = Describe("BindingStore.AddBinding", func() {
 		})
 
 		It("should return ErrConnectorNotConfigured", func() {
-			Expect(errors.Is(addErr, bridge.ErrConnectorNotConfigured)).To(BeTrue())
+			Expect(errors.Is(addErr, keepsync.ErrConnectorNotConfigured)).To(BeTrue())
 		})
 	})
 })
 
 var _ = Describe("BindingStore.RemoveBinding", func() {
 	var (
-		store *bridge.BindingStore
+		store *keepsync.BindingStore
 		pages *fakeStore
 		now   time.Time
 	)
 
 	BeforeEach(func() {
 		pages = newFakeStore()
-		store = bridge.NewBindingStore(pages)
+		store = keepsync.NewBindingStore(pages)
 		now = time.Date(2026, 4, 25, 17, 14, 0, 0, time.UTC)
 		Expect(pages.WriteFrontMatter(aliceProfile, wikipage.FrontMatter{
 			"wiki": map[string]any{
@@ -675,7 +675,7 @@ var _ = Describe("BindingStore.RemoveBinding", func() {
 				},
 			},
 		})).To(Succeed())
-		Expect(store.AddBinding(aliceProfile, bridge.Binding{
+		Expect(store.AddBinding(aliceProfile, keepsync.Binding{
 			Page:       "shopping_lists",
 			ListName:   "groceries",
 			KeepNoteID: "srv-1",
@@ -708,20 +708,20 @@ var _ = Describe("BindingStore.RemoveBinding", func() {
 		})
 
 		It("should return ErrBindingNotFound", func() {
-			Expect(errors.Is(removeErr, bridge.ErrBindingNotFound)).To(BeTrue())
+			Expect(errors.Is(removeErr, keepsync.ErrBindingNotFound)).To(BeTrue())
 		})
 	})
 })
 
 var _ = Describe("BindingStore.SaveState", func() {
 	var (
-		store *bridge.BindingStore
+		store *keepsync.BindingStore
 		pages *fakeStore
 	)
 
 	BeforeEach(func() {
 		pages = newFakeStore()
-		store = bridge.NewBindingStore(pages)
+		store = keepsync.NewBindingStore(pages)
 		Expect(pages.WriteFrontMatter(aliceProfile, wikipage.FrontMatter{
 			"identifier": "profile_alice",
 		})).To(Succeed())
@@ -730,12 +730,12 @@ var _ = Describe("BindingStore.SaveState", func() {
 	When("saving a complete state", func() {
 		var (
 			saveErr  error
-			loadBack bridge.ConnectorState
+			loadBack keepsync.ConnectorState
 			loadErr  error
 		)
 
 		BeforeEach(func() {
-			saveErr = store.SaveState(aliceProfile, bridge.ConnectorState{
+			saveErr = store.SaveState(aliceProfile, keepsync.ConnectorState{
 				Email:          "alice@example.com",
 				MasterToken:    "oauth2rt_1/fake",
 				ConnectedAt:    time.Date(2026, 4, 25, 17, 14, 0, 0, time.UTC),

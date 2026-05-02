@@ -1,6 +1,6 @@
 //revive:disable:dot-imports
 //revive:disable:add-constant
-package bridge_test
+package sync_test
 
 import (
 	"net/http"
@@ -8,7 +8,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"github.com/brendanjerwin/simple_wiki/internal/keep/bridge"
+	keepsync "github.com/brendanjerwin/simple_wiki/internal/connectors/google_keep/sync"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 )
 
@@ -21,7 +21,7 @@ var _ = Describe("KeepCronTickJob", func() {
 	var (
 		enqueuer  *debouncerFakeEnqueuer
 		logger    *debouncerFakeLogger
-		connector *bridge.Connector
+		connector *keepsync.Connector
 		profileID wikipage.PageIdentifier
 	)
 
@@ -33,8 +33,8 @@ var _ = Describe("KeepCronTickJob", func() {
 		enqueuer = &debouncerFakeEnqueuer{}
 		logger = &debouncerFakeLogger{}
 
-		store := bridge.NewBindingStore(newFakeStore())
-		connector = bridge.NewConnector(store, http.DefaultClient, fakeClock{})
+		store := keepsync.NewBindingStore(newFakeStore())
+		connector = keepsync.NewConnector(store, http.DefaultClient, fakeClock{})
 	})
 
 	// ------------------------------------------------------------------ Execute
@@ -42,12 +42,12 @@ var _ = Describe("KeepCronTickJob", func() {
 	Describe("Execute", func() {
 		Describe("when no connector is set (nil connector)", func() {
 			var (
-				job *bridge.KeepCronTickJob
+				job *keepsync.KeepCronTickJob
 				err error
 			)
 
 			BeforeEach(func() {
-				job = bridge.NewKeepCronTickJob(nil, enqueuer, logger, nil)
+				job = keepsync.NewKeepCronTickJob(nil, enqueuer, logger, nil)
 				err = job.Execute()
 			})
 
@@ -62,13 +62,13 @@ var _ = Describe("KeepCronTickJob", func() {
 
 		Describe("when the lister returns zero bindings", func() {
 			var (
-				job *bridge.KeepCronTickJob
+				job *keepsync.KeepCronTickJob
 				err error
 			)
 
 			BeforeEach(func() {
-				lister := func() []bridge.BindingKey { return nil }
-				job = bridge.NewKeepCronTickJob(connector, enqueuer, logger, lister)
+				lister := func() []keepsync.BindingKey { return nil }
+				job = keepsync.NewKeepCronTickJob(connector, enqueuer, logger, lister)
 				err = job.Execute()
 			})
 
@@ -87,18 +87,18 @@ var _ = Describe("KeepCronTickJob", func() {
 
 		Describe("when the lister returns two bindings (registry/discovery walk path)", func() {
 			var (
-				job  *bridge.KeepCronTickJob
+				job  *keepsync.KeepCronTickJob
 				err  error
-				keys []bridge.BindingKey
+				keys []keepsync.BindingKey
 			)
 
 			BeforeEach(func() {
-				keys = []bridge.BindingKey{
+				keys = []keepsync.BindingKey{
 					{ProfileID: profileID, Page: "Board", ListName: "todo"},
 					{ProfileID: profileID, Page: "Board", ListName: "done"},
 				}
-				lister := func() []bridge.BindingKey { return keys }
-				job = bridge.NewKeepCronTickJob(connector, enqueuer, logger, lister)
+				lister := func() []keepsync.BindingKey { return keys }
+				job = keepsync.NewKeepCronTickJob(connector, enqueuer, logger, lister)
 				err = job.Execute()
 			})
 
@@ -117,16 +117,16 @@ var _ = Describe("KeepCronTickJob", func() {
 
 		Describe("when using the in-memory active set (no lister, connector path)", func() {
 			var (
-				job *bridge.KeepCronTickJob
+				job *keepsync.KeepCronTickJob
 				err error
 			)
 
 			BeforeEach(func() {
-				connector.RegisterActiveBindings([]bridge.BindingKey{
+				connector.RegisterActiveBindings([]keepsync.BindingKey{
 					{ProfileID: profileID, Page: "Notes", ListName: "list1"},
 				})
 				// nil lister → falls back to connector.ActiveBindingsSnapshot
-				job = bridge.NewKeepCronTickJob(connector, enqueuer, logger, nil)
+				job = keepsync.NewKeepCronTickJob(connector, enqueuer, logger, nil)
 				err = job.Execute()
 			})
 
@@ -144,10 +144,10 @@ var _ = Describe("KeepCronTickJob", func() {
 
 	Describe("RegisterActiveBindings and ActiveBindingsSnapshot", func() {
 		Describe("when two bindings are registered", func() {
-			var snapshot []bridge.BindingKey
+			var snapshot []keepsync.BindingKey
 
 			BeforeEach(func() {
-				keys := []bridge.BindingKey{
+				keys := []keepsync.BindingKey{
 					{ProfileID: profileID, Page: "A", ListName: "x"},
 					{ProfileID: profileID, Page: "B", ListName: "y"},
 				}
@@ -161,7 +161,7 @@ var _ = Describe("KeepCronTickJob", func() {
 		})
 
 		Describe("when RegisterActiveBindings is called on a fresh connector", func() {
-			var snapshot []bridge.BindingKey
+			var snapshot []keepsync.BindingKey
 
 			BeforeEach(func() {
 				// Fresh connector — no prior registration.

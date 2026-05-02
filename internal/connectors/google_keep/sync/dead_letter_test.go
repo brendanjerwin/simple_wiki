@@ -1,5 +1,5 @@
 //revive:disable:dot-imports
-package bridge_test
+package sync_test
 
 import (
 	"context"
@@ -9,7 +9,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"github.com/brendanjerwin/simple_wiki/internal/keep/bridge"
+	keepsync "github.com/brendanjerwin/simple_wiki/internal/connectors/google_keep/sync"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 )
 
@@ -29,7 +29,7 @@ var _ = Describe("Connector dead-letter operations", func() {
 	Describe("ListDeadLetters", func() {
 		Describe("when the binding has items with mixed PushFailureCount values", func() {
 			var (
-				entries []bridge.DeadLetterEntry
+				entries []keepsync.DeadLetterEntry
 				err     error
 			)
 
@@ -38,10 +38,10 @@ var _ = Describe("Connector dead-letter operations", func() {
 
 				// Hand-craft a binding with three items: below, at,
 				// and above the dead-letter threshold.
-				bs := bridge.NewBindingStore(store)
+				bs := keepsync.NewBindingStore(store)
 				st, loadErr := bs.LoadState(profile)
 				Expect(loadErr).ToNot(HaveOccurred())
-				idMap := map[string]bridge.ItemBinding{
+				idMap := map[string]keepsync.ItemBinding{
 					"uid-below": {
 						ServerID:             "srv-A",
 						LastObservedWikiText: "below threshold",
@@ -81,7 +81,7 @@ var _ = Describe("Connector dead-letter operations", func() {
 			})
 
 			It("should populate text from LastObservedWikiText", func() {
-				byUID := map[string]bridge.DeadLetterEntry{}
+				byUID := map[string]keepsync.DeadLetterEntry{}
 				for _, e := range entries {
 					byUID[e.ItemUID] = e
 				}
@@ -90,7 +90,7 @@ var _ = Describe("Connector dead-letter operations", func() {
 			})
 
 			It("should populate the failure code from LastFailureCode", func() {
-				byUID := map[string]bridge.DeadLetterEntry{}
+				byUID := map[string]keepsync.DeadLetterEntry{}
 				for _, e := range entries {
 					byUID[e.ItemUID] = e
 				}
@@ -99,7 +99,7 @@ var _ = Describe("Connector dead-letter operations", func() {
 			})
 
 			It("should populate the failure count", func() {
-				byUID := map[string]bridge.DeadLetterEntry{}
+				byUID := map[string]keepsync.DeadLetterEntry{}
 				for _, e := range entries {
 					byUID[e.ItemUID] = e
 				}
@@ -110,7 +110,7 @@ var _ = Describe("Connector dead-letter operations", func() {
 
 		Describe("when the binding has no dead-lettered items", func() {
 			var (
-				entries []bridge.DeadLetterEntry
+				entries []keepsync.DeadLetterEntry
 				err     error
 			)
 
@@ -139,7 +139,7 @@ var _ = Describe("Connector dead-letter operations", func() {
 			})
 
 			It("should return ErrBindingNotFound", func() {
-				Expect(errors.Is(err, bridge.ErrBindingNotFound)).To(BeTrue(), "expected ErrBindingNotFound, got: %v", err)
+				Expect(errors.Is(err, keepsync.ErrBindingNotFound)).To(BeTrue(), "expected ErrBindingNotFound, got: %v", err)
 			})
 		})
 	})
@@ -148,17 +148,17 @@ var _ = Describe("Connector dead-letter operations", func() {
 		Describe("when called for a dead-lettered item", func() {
 			var (
 				err            error
-				clearedItem    bridge.ItemBinding
-				preservedItem  bridge.ItemBinding
+				clearedItem    keepsync.ItemBinding
+				preservedItem  keepsync.ItemBinding
 				preservedFound bool
 			)
 
 			BeforeEach(func() {
 				c, store, _, _ := freshConnector(profile, page, listName, listSrv, nil)
-				bs := bridge.NewBindingStore(store)
+				bs := keepsync.NewBindingStore(store)
 				st, loadErr := bs.LoadState(profile)
 				Expect(loadErr).ToNot(HaveOccurred())
-				st.Bindings[0].ItemIDMap = map[string]bridge.ItemBinding{
+				st.Bindings[0].ItemIDMap = map[string]keepsync.ItemBinding{
 					"uid-cleared": {
 						ServerID:         "srv-cleared",
 						SyncedText:       "synced text - preserved",
@@ -235,7 +235,7 @@ var _ = Describe("Connector dead-letter operations", func() {
 			})
 
 			It("should return ErrDeadLetterItemNotFound", func() {
-				Expect(errors.Is(err, bridge.ErrDeadLetterItemNotFound)).To(BeTrue(), "expected ErrDeadLetterItemNotFound, got: %v", err)
+				Expect(errors.Is(err, keepsync.ErrDeadLetterItemNotFound)).To(BeTrue(), "expected ErrDeadLetterItemNotFound, got: %v", err)
 			})
 		})
 
@@ -248,7 +248,7 @@ var _ = Describe("Connector dead-letter operations", func() {
 			})
 
 			It("should return ErrBindingNotFound", func() {
-				Expect(errors.Is(err, bridge.ErrBindingNotFound)).To(BeTrue(), "expected ErrBindingNotFound, got: %v", err)
+				Expect(errors.Is(err, keepsync.ErrBindingNotFound)).To(BeTrue(), "expected ErrBindingNotFound, got: %v", err)
 			})
 		})
 	})

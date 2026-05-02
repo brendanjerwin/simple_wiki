@@ -1,5 +1,5 @@
 //revive:disable:dot-imports
-package protocol_test
+package gateway_test
 
 import (
 	"context"
@@ -12,7 +12,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"github.com/brendanjerwin/simple_wiki/internal/keep/protocol"
+	"github.com/brendanjerwin/simple_wiki/internal/connectors/google_keep/gateway"
 )
 
 // asArr is a small helper for tests that already gate on map/slice
@@ -102,7 +102,7 @@ var _ = Describe("KeepClient.Changes", func() {
 	var (
 		ctx          context.Context
 		fakeServer   *httptest.Server
-		client       *protocol.KeepClient
+		client       *gateway.KeepClient
 		lastRequest  *http.Request
 		lastBody     string
 		responseBody string
@@ -121,7 +121,7 @@ var _ = Describe("KeepClient.Changes", func() {
 			w.WriteHeader(responseCode)
 			_, _ = io.WriteString(w, responseBody)
 		}))
-		client = protocol.NewKeepClient(fakeServer.Client(), fakeServer.URL+"/", "fake-bearer")
+		client = gateway.NewKeepClient(fakeServer.Client(), fakeServer.URL+"/", "fake-bearer")
 	})
 
 	AfterEach(func() {
@@ -130,14 +130,14 @@ var _ = Describe("KeepClient.Changes", func() {
 
 	When("the server returns a well-formed changes response", func() {
 		var (
-			resp     protocol.ChangesResponse
+			resp     gateway.ChangesResponse
 			callErr  error
 			reqBody  map[string]any
 			parseErr error
 		)
 
 		BeforeEach(func() {
-			resp, callErr = client.Changes(ctx, protocol.ChangesRequest{
+			resp, callErr = client.Changes(ctx, gateway.ChangesRequest{
 				TargetVersion:   "v-1",
 				SessionID:       "s--1234--5678901234",
 				ClientTimestamp: "1745601000000000",
@@ -162,9 +162,9 @@ var _ = Describe("KeepClient.Changes", func() {
 		})
 
 		It("should decode the LIST node", func() {
-			var found *protocol.Node
+			var found *gateway.Node
 			for i := range resp.Nodes {
-				if resp.Nodes[i].Type == protocol.NodeTypeList {
+				if resp.Nodes[i].Type == gateway.NodeTypeList {
 					n := resp.Nodes[i]
 					found = &n
 					break
@@ -176,14 +176,14 @@ var _ = Describe("KeepClient.Changes", func() {
 		})
 
 		It("should decode LIST_ITEM nodes with checked state", func() {
-			items := []protocol.Node{}
+			items := []gateway.Node{}
 			for _, n := range resp.Nodes {
-				if n.Type == protocol.NodeTypeListItem {
+				if n.Type == gateway.NodeTypeListItem {
 					items = append(items, n)
 				}
 			}
 			Expect(items).To(HaveLen(2))
-			byText := map[string]protocol.Node{}
+			byText := map[string]gateway.Node{}
 			for _, it := range items {
 				byText[it.Text] = it
 			}
@@ -193,13 +193,13 @@ var _ = Describe("KeepClient.Changes", func() {
 
 		It("should drop nodes with unrecognized types (no error)", func() {
 			for _, n := range resp.Nodes {
-				Expect(n.Type).ToNot(Equal(protocol.UnknownNodeType))
+				Expect(n.Type).ToNot(Equal(gateway.UnknownNodeType))
 			}
 		})
 
 		It("should parse timestamps as UTC time.Time", func() {
 			for _, n := range resp.Nodes {
-				if n.Type == protocol.NodeTypeListItem && n.Text == "Eggs" {
+				if n.Type == gateway.NodeTypeListItem && n.Text == "Eggs" {
 					expectedUpdated := time.Date(2026, 4, 25, 17, 18, 0, 0, time.UTC)
 					Expect(n.Timestamps.Updated).To(BeTemporally("~", expectedUpdated, time.Microsecond))
 				}
@@ -241,7 +241,7 @@ var _ = Describe("KeepClient.Changes", func() {
 		)
 
 		BeforeEach(func() {
-			_, callErr = client.Changes(ctx, protocol.ChangesRequest{
+			_, callErr = client.Changes(ctx, gateway.ChangesRequest{
 				SessionID:       "s--1234--5678901234",
 				ClientTimestamp: "1745601000000000",
 			})
@@ -264,11 +264,11 @@ var _ = Describe("KeepClient.Changes", func() {
 		BeforeEach(func() {
 			responseCode = http.StatusUnauthorized
 			responseBody = `{"error": {"code": 401, "message": "expired"}}`
-			_, callErr = client.Changes(ctx, protocol.ChangesRequest{})
+			_, callErr = client.Changes(ctx, gateway.ChangesRequest{})
 		})
 
 		It("should return ErrAuthRevoked", func() {
-			Expect(callErr).To(MatchError(protocol.ErrAuthRevoked))
+			Expect(callErr).To(MatchError(gateway.ErrAuthRevoked))
 		})
 	})
 
@@ -278,11 +278,11 @@ var _ = Describe("KeepClient.Changes", func() {
 		BeforeEach(func() {
 			responseCode = http.StatusTooManyRequests
 			responseBody = `{"error": {"code": 429, "message": "rate limited"}}`
-			_, callErr = client.Changes(ctx, protocol.ChangesRequest{})
+			_, callErr = client.Changes(ctx, gateway.ChangesRequest{})
 		})
 
 		It("should return ErrRateLimited", func() {
-			Expect(callErr).To(MatchError(protocol.ErrRateLimited))
+			Expect(callErr).To(MatchError(gateway.ErrRateLimited))
 		})
 	})
 
@@ -291,11 +291,11 @@ var _ = Describe("KeepClient.Changes", func() {
 
 		BeforeEach(func() {
 			responseBody = "not-json"
-			_, callErr = client.Changes(ctx, protocol.ChangesRequest{})
+			_, callErr = client.Changes(ctx, gateway.ChangesRequest{})
 		})
 
 		It("should return ErrProtocolDrift", func() {
-			Expect(callErr).To(MatchError(protocol.ErrProtocolDrift))
+			Expect(callErr).To(MatchError(gateway.ErrProtocolDrift))
 		})
 	})
 
@@ -304,11 +304,11 @@ var _ = Describe("KeepClient.Changes", func() {
 
 		BeforeEach(func() {
 			responseBody = `{"kind": "notes#changes", "nodes": []}`
-			_, callErr = client.Changes(ctx, protocol.ChangesRequest{})
+			_, callErr = client.Changes(ctx, gateway.ChangesRequest{})
 		})
 
 		It("should return ErrProtocolDrift", func() {
-			Expect(callErr).To(MatchError(protocol.ErrProtocolDrift))
+			Expect(callErr).To(MatchError(gateway.ErrProtocolDrift))
 		})
 	})
 
@@ -320,20 +320,20 @@ var _ = Describe("KeepClient.Changes", func() {
 		)
 
 		BeforeEach(func() {
-			pushNode := protocol.Node{
+			pushNode := gateway.Node{
 				ID:       "client-id-1",
 				ServerID: "srv-1",
 				ParentID: "srv-list-1",
-				Type:     protocol.NodeTypeListItem,
+				Type:     gateway.NodeTypeListItem,
 				Text:     "Buy bread",
 				Checked:  false,
-				Timestamps: protocol.Timestamps{
+				Timestamps: gateway.Timestamps{
 					Created: time.Date(2026, 4, 25, 17, 14, 0, 0, time.UTC),
 					Updated: time.Date(2026, 4, 25, 17, 14, 0, 0, time.UTC),
 				},
 			}
-			_, callErr = client.Changes(ctx, protocol.ChangesRequest{
-				Nodes:           []protocol.Node{pushNode},
+			_, callErr = client.Changes(ctx, gateway.ChangesRequest{
+				Nodes:           []gateway.Node{pushNode},
 				SessionID:       "s--1234--5678901234",
 				ClientTimestamp: "1745601000000000",
 			})
@@ -371,11 +371,11 @@ var _ = Describe("KeepClient.Changes", func() {
 	})
 
 	When("forceFullResync is true", func() {
-		var resp protocol.ChangesResponse
+		var resp gateway.ChangesResponse
 
 		BeforeEach(func() {
 			responseBody = `{"kind": "notes#changes", "toVersion": "v-2", "forceFullResync": true, "nodes": []}`
-			r, _ := client.Changes(ctx, protocol.ChangesRequest{TargetVersion: "v-1"})
+			r, _ := client.Changes(ctx, gateway.ChangesRequest{TargetVersion: "v-1"})
 			resp = r
 		})
 
@@ -385,11 +385,11 @@ var _ = Describe("KeepClient.Changes", func() {
 	})
 
 	When("incremental is true", func() {
-		var resp protocol.ChangesResponse
+		var resp gateway.ChangesResponse
 
 		BeforeEach(func() {
 			responseBody = `{"kind": "notes#changes", "toVersion": "v-2", "incremental": true, "nodes": []}`
-			r, _ := client.Changes(ctx, protocol.ChangesRequest{TargetVersion: "v-1"})
+			r, _ := client.Changes(ctx, gateway.ChangesRequest{TargetVersion: "v-1"})
 			resp = r
 		})
 
@@ -403,7 +403,7 @@ var _ = Describe("KeepClient.CreateList", func() {
 	var (
 		ctx        context.Context
 		fakeServer *httptest.Server
-		client     *protocol.KeepClient
+		client     *gateway.KeepClient
 		lastBody   string
 	)
 
@@ -441,7 +441,7 @@ var _ = Describe("KeepClient.CreateList", func() {
 			w.Header().Set("Content-Type", "application/json")
 			_, _ = w.Write(respBody)
 		}))
-		client = protocol.NewKeepClient(fakeServer.Client(), fakeServer.URL+"/", "fake-bearer")
+		client = gateway.NewKeepClient(fakeServer.Client(), fakeServer.URL+"/", "fake-bearer")
 	})
 
 	AfterEach(func() {
@@ -498,7 +498,7 @@ var _ = Describe("KeepClient.CreateList", func() {
 var _ = Describe("KeepClient.CreateListWithItems", func() {
 	var (
 		ctx      context.Context
-		client   *protocol.KeepClient
+		client   *gateway.KeepClient
 		lastBody string
 	)
 
@@ -508,7 +508,7 @@ var _ = Describe("KeepClient.CreateListWithItems", func() {
 
 	When("creating a list with initial items", func() {
 		var (
-			result   protocol.CreateListResult
+			result   gateway.CreateListResult
 			err      error
 			reqBody  map[string]any
 			fakeServer *httptest.Server
@@ -547,9 +547,9 @@ var _ = Describe("KeepClient.CreateListWithItems", func() {
 				w.Header().Set("Content-Type", "application/json")
 				_, _ = w.Write(respBody)
 			}))
-			client = protocol.NewKeepClient(fakeServer.Client(), fakeServer.URL+"/", "fake-bearer")
+			client = gateway.NewKeepClient(fakeServer.Client(), fakeServer.URL+"/", "fake-bearer")
 
-			items := []protocol.ListItemSpec{
+			items := []gateway.ListItemSpec{
 				{Text: "Buy milk", Checked: false, SortValue: "1000"},
 				{Text: "Buy eggs", Checked: true, SortValue: "2000"},
 			}
@@ -616,7 +616,7 @@ var _ = Describe("KeepClient.CreateListWithItems", func() {
 				w.Header().Set("Content-Type", "application/json")
 				_, _ = w.Write(respBody)
 			}))
-			client = protocol.NewKeepClient(fakeServer.Client(), fakeServer.URL+"/", "fake-bearer")
+			client = gateway.NewKeepClient(fakeServer.Client(), fakeServer.URL+"/", "fake-bearer")
 			_, err = client.CreateListWithItems(ctx, "groceries", nil)
 		})
 
@@ -625,7 +625,7 @@ var _ = Describe("KeepClient.CreateListWithItems", func() {
 		})
 
 		It("should return ErrProtocolDrift", func() {
-			Expect(err).To(MatchError(protocol.ErrProtocolDrift))
+			Expect(err).To(MatchError(gateway.ErrProtocolDrift))
 		})
 	})
 })
@@ -645,7 +645,7 @@ var _ = Describe("KeepClient.Changes HTTP error classification", func() {
 	var (
 		ctx          context.Context
 		fakeServer   *httptest.Server
-		client       *protocol.KeepClient
+		client       *gateway.KeepClient
 		responseCode int
 	)
 
@@ -661,7 +661,7 @@ var _ = Describe("KeepClient.Changes HTTP error classification", func() {
 				_, _ = io.WriteString(w, `{"error":{"code":404,"message":"not found"}}`)
 			}
 		}))
-		client = protocol.NewKeepClient(fakeServer.Client(), fakeServer.URL+"/", "fake-bearer")
+		client = gateway.NewKeepClient(fakeServer.Client(), fakeServer.URL+"/", "fake-bearer")
 	})
 
 	AfterEach(func() {
@@ -673,11 +673,11 @@ var _ = Describe("KeepClient.Changes HTTP error classification", func() {
 
 		BeforeEach(func() {
 			responseCode = http.StatusNotFound
-			_, err = client.Changes(ctx, protocol.ChangesRequest{})
+			_, err = client.Changes(ctx, gateway.ChangesRequest{})
 		})
 
 		It("should return ErrBoundNoteDeleted", func() {
-			Expect(err).To(MatchError(protocol.ErrBoundNoteDeleted))
+			Expect(err).To(MatchError(gateway.ErrBoundNoteDeleted))
 		})
 	})
 
@@ -686,7 +686,7 @@ var _ = Describe("KeepClient.Changes HTTP error classification", func() {
 
 		BeforeEach(func() {
 			responseCode = http.StatusServiceUnavailable
-			_, err = client.Changes(ctx, protocol.ChangesRequest{})
+			_, err = client.Changes(ctx, gateway.ChangesRequest{})
 		})
 
 		It("should return an error", func() {
@@ -694,10 +694,10 @@ var _ = Describe("KeepClient.Changes HTTP error classification", func() {
 		})
 
 		It("should not return a typed Keep sentinel", func() {
-			Expect(err).ToNot(MatchError(protocol.ErrAuthRevoked))
-			Expect(err).ToNot(MatchError(protocol.ErrRateLimited))
-			Expect(err).ToNot(MatchError(protocol.ErrBoundNoteDeleted))
-			Expect(err).ToNot(MatchError(protocol.ErrProtocolDrift))
+			Expect(err).ToNot(MatchError(gateway.ErrAuthRevoked))
+			Expect(err).ToNot(MatchError(gateway.ErrRateLimited))
+			Expect(err).ToNot(MatchError(gateway.ErrBoundNoteDeleted))
+			Expect(err).ToNot(MatchError(gateway.ErrProtocolDrift))
 		})
 	})
 })
@@ -708,9 +708,9 @@ var _ = Describe("decodeChangesResponse label handling", func() {
 	var (
 		ctx          context.Context
 		fakeServer   *httptest.Server
-		client       *protocol.KeepClient
+		client       *gateway.KeepClient
 		responseBody string
-		resp         protocol.ChangesResponse
+		resp         gateway.ChangesResponse
 		callErr      error
 	)
 
@@ -720,7 +720,7 @@ var _ = Describe("decodeChangesResponse label handling", func() {
 			w.Header().Set("Content-Type", "application/json")
 			_, _ = io.WriteString(w, responseBody)
 		}))
-		client = protocol.NewKeepClient(fakeServer.Client(), fakeServer.URL+"/", "fake-bearer")
+		client = gateway.NewKeepClient(fakeServer.Client(), fakeServer.URL+"/", "fake-bearer")
 	})
 
 	AfterEach(func() {
@@ -745,7 +745,7 @@ var _ = Describe("decodeChangesResponse label handling", func() {
 			    ]
 			  }
 			}`
-			resp, callErr = client.Changes(ctx, protocol.ChangesRequest{})
+			resp, callErr = client.Changes(ctx, gateway.ChangesRequest{})
 		})
 
 		It("should not error", func() {
@@ -781,7 +781,7 @@ var _ = Describe("decodeChangesResponse label handling", func() {
 			    }
 			  ]
 			}`
-			resp, callErr = client.Changes(ctx, protocol.ChangesRequest{})
+			resp, callErr = client.Changes(ctx, gateway.ChangesRequest{})
 		})
 
 		It("should not error", func() {
@@ -813,11 +813,11 @@ var _ = Describe("decodeChangesResponse label handling", func() {
 			    }
 			  ]
 			}`
-			resp, callErr = client.Changes(ctx, protocol.ChangesRequest{})
+			resp, callErr = client.Changes(ctx, gateway.ChangesRequest{})
 		})
 
 		It("should return ErrProtocolDrift", func() {
-			Expect(callErr).To(MatchError(protocol.ErrProtocolDrift))
+			Expect(callErr).To(MatchError(gateway.ErrProtocolDrift))
 		})
 	})
 
@@ -836,7 +836,7 @@ var _ = Describe("decodeChangesResponse label handling", func() {
 			    }
 			  ]
 			}`
-			resp, callErr = client.Changes(ctx, protocol.ChangesRequest{})
+			resp, callErr = client.Changes(ctx, gateway.ChangesRequest{})
 		})
 
 		It("should not error", func() {
@@ -864,9 +864,9 @@ var _ = Describe("decodeChangesResponse WriteResults", func() {
 	var (
 		ctx          context.Context
 		fakeServer   *httptest.Server
-		client       *protocol.KeepClient
+		client       *gateway.KeepClient
 		responseBody string
-		resp         protocol.ChangesResponse
+		resp         gateway.ChangesResponse
 		callErr      error
 	)
 
@@ -876,7 +876,7 @@ var _ = Describe("decodeChangesResponse WriteResults", func() {
 			w.Header().Set("Content-Type", "application/json")
 			_, _ = io.WriteString(w, responseBody)
 		}))
-		client = protocol.NewKeepClient(fakeServer.Client(), fakeServer.URL+"/", "fake-bearer")
+		client = gateway.NewKeepClient(fakeServer.Client(), fakeServer.URL+"/", "fake-bearer")
 	})
 
 	AfterEach(func() {
@@ -893,7 +893,7 @@ var _ = Describe("decodeChangesResponse WriteResults", func() {
 			    {"id": "node-2", "status": "ERROR"}
 			  ]
 			}`
-			resp, callErr = client.Changes(ctx, protocol.ChangesRequest{})
+			resp, callErr = client.Changes(ctx, gateway.ChangesRequest{})
 		})
 
 		It("should not error", func() {
@@ -922,7 +922,7 @@ var _ = Describe("decodeChangesResponse WriteResults", func() {
 			  "toVersion": "v-after",
 			  "writeResults": []
 			}`
-			resp, callErr = client.Changes(ctx, protocol.ChangesRequest{})
+			resp, callErr = client.Changes(ctx, gateway.ChangesRequest{})
 		})
 
 		It("should not error", func() {
@@ -940,7 +940,7 @@ var _ = Describe("decodeChangesResponse WriteResults", func() {
 			  "kind": "notes#downSync",
 			  "toVersion": "v-after"
 			}`
-			resp, callErr = client.Changes(ctx, protocol.ChangesRequest{})
+			resp, callErr = client.Changes(ctx, gateway.ChangesRequest{})
 		})
 
 		It("should not error", func() {
@@ -978,7 +978,7 @@ var _ = Describe("decodeChangesResponse WriteResults", func() {
 			    }
 			  ]
 			}`
-			resp, callErr = client.Changes(ctx, protocol.ChangesRequest{})
+			resp, callErr = client.Changes(ctx, gateway.ChangesRequest{})
 		})
 
 		It("should not error", func() {

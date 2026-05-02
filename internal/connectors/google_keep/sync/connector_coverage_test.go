@@ -1,6 +1,6 @@
 //revive:disable:dot-imports
 //revive:disable:add-constant
-package bridge_test
+package sync_test
 
 import (
 	"context"
@@ -9,8 +9,8 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"github.com/brendanjerwin/simple_wiki/internal/keep/bridge"
-	"github.com/brendanjerwin/simple_wiki/internal/keep/protocol"
+	keepsync "github.com/brendanjerwin/simple_wiki/internal/connectors/google_keep/sync"
+	"github.com/brendanjerwin/simple_wiki/internal/connectors/google_keep/gateway"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 )
 
@@ -20,8 +20,8 @@ const profileA = wikipage.PageIdentifier("alice-profile")
 // baseConnectedState builds a ConnectorState with email + token but no
 // bindings. Tests that need bindings append them before calling
 // SaveState.
-func baseConnectedState() bridge.ConnectorState {
-	return bridge.ConnectorState{
+func baseConnectedState() keepsync.ConnectorState {
+	return keepsync.ConnectorState{
 		Email:       "alice@example.com",
 		MasterToken: "test-master-token",
 	}
@@ -29,8 +29,8 @@ func baseConnectedState() bridge.ConnectorState {
 
 // saveTo is a convenience to SaveState via a BindingStore without
 // needing a local variable for the store.
-func saveTo(store *fakeStore, profileID wikipage.PageIdentifier, state bridge.ConnectorState) {
-	bs := bridge.NewBindingStore(store)
+func saveTo(store *fakeStore, profileID wikipage.PageIdentifier, state keepsync.ConnectorState) {
+	bs := keepsync.NewBindingStore(store)
 	Expect(bs.SaveState(profileID, state)).To(Succeed())
 }
 
@@ -38,10 +38,10 @@ func saveTo(store *fakeStore, profileID wikipage.PageIdentifier, state bridge.Co
 // caller-supplied KeepClient. Both checklist reader and mutator are
 // wired to a fakeChecklist by default; callers can swap them with
 // SetChecklistReader / SetChecklistMutator.
-func newCoverageConnector(store *fakeStore, kc bridge.KeepClient) (*bridge.Connector, *fakeChecklist) {
-	c := bridge.NewConnector(bridge.NewBindingStore(store), nil, fakeClock{})
-	c.SetAuthBuilder(func(_ string) bridge.AuthExchanger { return fakeAuth{} })
-	c.SetClientBuilder(func(_ string) bridge.KeepClient { return kc })
+func newCoverageConnector(store *fakeStore, kc keepsync.KeepClient) (*keepsync.Connector, *fakeChecklist) {
+	c := keepsync.NewConnector(keepsync.NewBindingStore(store), nil, fakeClock{})
+	c.SetAuthBuilder(func(_ string) keepsync.AuthExchanger { return fakeAuth{} })
+	c.SetClientBuilder(func(_ string) keepsync.KeepClient { return kc })
 	chk := &fakeChecklist{}
 	c.SetChecklistReader(chk)
 	c.SetChecklistMutator(chk)
@@ -63,7 +63,7 @@ var _ = Describe("Connector.GetState", func() {
 
 	When("the connector is configured", func() {
 		var (
-			state bridge.ConnectorState
+			state keepsync.ConnectorState
 			err   error
 		)
 
@@ -89,7 +89,7 @@ var _ = Describe("Connector.GetState", func() {
 
 	When("no state has been stored (profile is new)", func() {
 		var (
-			state bridge.ConnectorState
+			state keepsync.ConnectorState
 			err   error
 		)
 
@@ -123,7 +123,7 @@ var _ = Describe("Connector.Disconnect", func() {
 
 	When("the user has a configured connector", func() {
 		var (
-			returned bridge.ConnectorState
+			returned keepsync.ConnectorState
 			err      error
 		)
 
@@ -167,43 +167,43 @@ var _ = Describe("Connector.ListNotes", func() {
 
 	When("Keep returns a mix of live lists and trashed lists", func() {
 		var (
-			notes []bridge.KeepNoteSummary
+			notes []keepsync.KeepNoteSummary
 			err   error
 		)
 
 		BeforeEach(func() {
 			kc := &fakeKeepClient{}
-			kc.pullState = protocol.ChangesResponse{
+			kc.pullState = gateway.ChangesResponse{
 				ToVersion: "v-1",
-				Nodes: []protocol.Node{
+				Nodes: []gateway.Node{
 					{
-						Type:     protocol.NodeTypeList,
+						Type:     gateway.NodeTypeList,
 						ID:       "client-list-1",
 						ServerID: "srv-list-1",
 						Title:    "Groceries",
-						Timestamps: protocol.Timestamps{
+						Timestamps: gateway.Timestamps{
 							Created: tNow.Add(-24 * time.Hour),
 							Updated: tNow,
 						},
 					},
 					{
-						Type:     protocol.NodeTypeList,
+						Type:     gateway.NodeTypeList,
 						ID:       "client-list-2",
 						ServerID: "srv-list-2",
 						Title:    "Old List",
-						Timestamps: protocol.Timestamps{
+						Timestamps: gateway.Timestamps{
 							Created: tNow.Add(-48 * time.Hour),
 							Updated: tNow.Add(-48 * time.Hour),
 							Trashed: tNow.Add(-1 * time.Hour), // trashed
 						},
 					},
 					{
-						Type:     protocol.NodeTypeListItem,
+						Type:     gateway.NodeTypeListItem,
 						ID:       "client-item-1",
 						ServerID: "srv-item-1",
 						ParentID: "srv-list-1",
 						Text:     "Milk",
-						Timestamps: protocol.Timestamps{
+						Timestamps: gateway.Timestamps{
 							Created: tNow.Add(-24 * time.Hour),
 							Updated: tNow,
 						},
@@ -243,7 +243,7 @@ var _ = Describe("Connector.ListNotes", func() {
 		})
 
 		It("should return ErrConnectorNotConfigured", func() {
-			Expect(err).To(MatchError(bridge.ErrConnectorNotConfigured))
+			Expect(err).To(MatchError(keepsync.ErrConnectorNotConfigured))
 		})
 	})
 })
@@ -263,7 +263,7 @@ var _ = Describe("Connector.Bind", func() {
 
 	When("binding a new list with an empty keepNoteID (create-new-note path)", func() {
 		var (
-			binding bridge.Binding
+			binding keepsync.Binding
 			err     error
 		)
 
@@ -292,20 +292,20 @@ var _ = Describe("Connector.Bind", func() {
 
 	When("binding to an existing Keep note", func() {
 		var (
-			binding bridge.Binding
+			binding keepsync.Binding
 			err     error
 		)
 
 		BeforeEach(func() {
 			kc := &fakeKeepClient{}
-			kc.pullState = protocol.ChangesResponse{
+			kc.pullState = gateway.ChangesResponse{
 				ToVersion: "v-1",
-				Nodes: []protocol.Node{
+				Nodes: []gateway.Node{
 					{
-						Type:     protocol.NodeTypeList,
+						Type:     gateway.NodeTypeList,
 						ID:       "client-list-1",
 						ServerID: "srv-existing",
-						Timestamps: protocol.Timestamps{
+						Timestamps: gateway.Timestamps{
 							Created: tNow,
 							Updated: tNow,
 						},
@@ -343,15 +343,15 @@ var _ = Describe("Connector.SyncToKeep error paths", func() {
 
 		BeforeEach(func() {
 			saveTo(store, profile, baseConnectedState())
-			c := bridge.NewConnector(bridge.NewBindingStore(store), nil, fakeClock{})
-			c.SetAuthBuilder(func(_ string) bridge.AuthExchanger { return fakeAuth{} })
-			c.SetClientBuilder(func(_ string) bridge.KeepClient { return &fakeKeepClient{} })
+			c := keepsync.NewConnector(keepsync.NewBindingStore(store), nil, fakeClock{})
+			c.SetAuthBuilder(func(_ string) keepsync.AuthExchanger { return fakeAuth{} })
+			c.SetClientBuilder(func(_ string) keepsync.KeepClient { return &fakeKeepClient{} })
 			// Intentionally NOT calling SetChecklistReader — leaves it nil.
 			err = c.SyncToKeep(ctx, profile, "shopping", "groceries")
 		})
 
 		It("should return ErrChecklistReaderUnavailable", func() {
-			Expect(err).To(MatchError(bridge.ErrChecklistReaderUnavailable))
+			Expect(err).To(MatchError(keepsync.ErrChecklistReaderUnavailable))
 		})
 	})
 
@@ -375,7 +375,7 @@ var _ = Describe("Connector.SyncToKeep error paths", func() {
 
 		BeforeEach(func() {
 			state := baseConnectedState()
-			state.Bindings = []bridge.Binding{{
+			state.Bindings = []keepsync.Binding{{
 				Page:                 "shopping",
 				ListName:             "groceries",
 				KeepNoteID:           "srv-note",
@@ -410,7 +410,7 @@ var _ = Describe("Connector.MigrateBindingFingerprints early-exit paths", func()
 
 		BeforeEach(func() {
 			state := baseConnectedState()
-			state.Bindings = []bridge.Binding{{
+			state.Bindings = []keepsync.Binding{{
 				Page:                 "p",
 				ListName:             "list",
 				KeepNoteID:           "srv-note",
@@ -447,15 +447,15 @@ var _ = Describe("Connector.MigrateBindingFingerprints early-exit paths", func()
 
 		BeforeEach(func() {
 			saveTo(store, profile, baseConnectedState())
-			c := bridge.NewConnector(bridge.NewBindingStore(store), nil, fakeClock{})
-			c.SetAuthBuilder(func(_ string) bridge.AuthExchanger { return fakeAuth{} })
-			c.SetClientBuilder(func(_ string) bridge.KeepClient { return &fakeKeepClient{} })
+			c := keepsync.NewConnector(keepsync.NewBindingStore(store), nil, fakeClock{})
+			c.SetAuthBuilder(func(_ string) keepsync.AuthExchanger { return fakeAuth{} })
+			c.SetClientBuilder(func(_ string) keepsync.KeepClient { return &fakeKeepClient{} })
 			// No SetChecklistReader — leaves it nil.
 			err = c.MigrateBindingFingerprints(ctx, profile, "p", "list")
 		})
 
 		It("should return ErrChecklistReaderUnavailable", func() {
-			Expect(err).To(MatchError(bridge.ErrChecklistReaderUnavailable))
+			Expect(err).To(MatchError(keepsync.ErrChecklistReaderUnavailable))
 		})
 	})
 })

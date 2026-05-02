@@ -14,12 +14,12 @@ import (
 
 	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
 	v1 "github.com/brendanjerwin/simple_wiki/internal/grpc/api/v1"
-	"github.com/brendanjerwin/simple_wiki/internal/keep/bridge"
+	keepsync "github.com/brendanjerwin/simple_wiki/internal/connectors/google_keep/sync"
 	"github.com/brendanjerwin/simple_wiki/tailscale"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 )
 
-// keepConnectorClock satisfies bridge.Clock for tests. The Connector
+// keepConnectorClock satisfies keepsync.Clock for tests. The Connector
 // only consults this for sync operations; the dead-letter handlers
 // don't use it, so any fixed time works.
 type keepConnectorClock struct{}
@@ -109,8 +109,8 @@ var _ = Describe("KeepConnectorService dead-letter handlers", func() {
 			},
 		}
 
-		store := bridge.NewBindingStore(mock)
-		connector := bridge.NewConnector(store, http.DefaultClient, keepConnectorClock{})
+		store := keepsync.NewBindingStore(mock)
+		connector := keepsync.NewConnector(store, http.DefaultClient, keepConnectorClock{})
 
 		server = mustNewServer(mock, nil, nil).WithKeepConnector(connector)
 		ctx = withCallerIdentity(context.Background(), keepConnectorTestEmail)

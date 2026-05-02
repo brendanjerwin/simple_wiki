@@ -1,6 +1,6 @@
 //revive:disable:dot-imports
 //revive:disable:add-constant
-package bridge_test
+package sync_test
 
 import (
 	"fmt"
@@ -10,7 +10,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"github.com/brendanjerwin/simple_wiki/internal/keep/bridge"
+	keepsync "github.com/brendanjerwin/simple_wiki/internal/connectors/google_keep/sync"
 	"github.com/brendanjerwin/simple_wiki/pkg/jobs"
 	"github.com/brendanjerwin/simple_wiki/tailscale"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
@@ -71,7 +71,7 @@ var _ = Describe("SyncDebouncer", func() {
 	var (
 		enqueuer  *debouncerFakeEnqueuer
 		logger    *debouncerFakeLogger
-		debouncer *bridge.SyncDebouncer
+		debouncer *keepsync.SyncDebouncer
 		profileID wikipage.PageIdentifier
 	)
 
@@ -99,7 +99,7 @@ var _ = Describe("SyncDebouncer", func() {
 		logger = &debouncerFakeLogger{}
 		// Connector is only used to construct the sync job, so nil is fine
 		// for tests that only verify enqueue behaviour.
-		debouncer = bridge.NewSyncDebouncer(enqueuer, nil, nil, logger, shortWindow)
+		debouncer = keepsync.NewSyncDebouncer(enqueuer, nil, nil, logger, shortWindow)
 	})
 
 	// ------------------------------------------------------------------ Suppress / Unsuppress
@@ -202,7 +202,7 @@ var _ = Describe("SyncDebouncer", func() {
 					enqueuer.mu.Lock()
 					defer enqueuer.mu.Unlock()
 					return enqueuer.jobs[0].GetName()
-				}, pollTimeout, pollInterval).Should(Equal(bridge.KeepOutboundSyncJobName))
+				}, pollTimeout, pollInterval).Should(Equal(keepsync.KeepOutboundSyncJobName))
 			})
 		})
 
