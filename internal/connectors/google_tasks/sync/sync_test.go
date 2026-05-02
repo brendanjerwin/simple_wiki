@@ -44,10 +44,10 @@ func readyLeaseTable() *connectors.LeaseTable {
 	return lt
 }
 
-// newConnector constructs a Connector with the provided dependencies
+// buildTestConnector constructs a Connector with the provided dependencies
 // (failing the test on misconfiguration). The reader and mutator can
 // be nil; the caller decides whether outbound or inbound is exercised.
-func newConnector(
+func buildTestConnector(
 	store *taskssync.SubscriptionStore,
 	leaseTable *connectors.LeaseTable,
 	client taskssync.TasksClient,
@@ -132,7 +132,7 @@ var _ = Describe("Connector.Sync", func() {
 		BeforeEach(func() {
 			pages := newFakePages()
 			store := newConfiguredStore(pages, nil)
-			c := newConnector(store, readyLeaseTable(), newFakeTasksClient(), newFakeClock(time.Now()), newFakeChecklistReader(), nil, nil)
+			c := buildTestConnector(store, readyLeaseTable(), newFakeTasksClient(), newFakeClock(time.Now()), newFakeChecklistReader(), nil, nil)
 			syncErr = c.Sync(context.Background(), subscriptionKey())
 		})
 
@@ -158,7 +158,7 @@ var _ = Describe("Connector.Sync", func() {
 			}
 			store := newConfiguredStore(pages, &sub)
 			client = newFakeTasksClient()
-			c := newConnector(store, readyLeaseTable(), client, newFakeClock(time.Now()), newFakeChecklistReader(), nil, nil)
+			c := buildTestConnector(store, readyLeaseTable(), client, newFakeClock(time.Now()), newFakeChecklistReader(), nil, nil)
 			syncErr = c.Sync(context.Background(), subscriptionKey())
 		})
 
@@ -191,7 +191,7 @@ var _ = Describe("Connector.Sync", func() {
 			}
 			store := newConfiguredStore(pages, &sub)
 			client = newFakeTasksClient()
-			c := newConnector(store, readyLeaseTable(), client, newFakeClock(now), newFakeChecklistReader(), nil, nil)
+			c := buildTestConnector(store, readyLeaseTable(), client, newFakeClock(now), newFakeChecklistReader(), nil, nil)
 			syncErr = c.Sync(context.Background(), subscriptionKey())
 		})
 
@@ -235,7 +235,7 @@ var _ = Describe("Connector.Sync", func() {
 			reader := newFakeChecklistReader()
 			reader.Set(syncTestPage, syncTestListName, nil)
 			mutator = newFakeChecklistMutatorBoundTo(reader)
-			c := newConnector(store, readyLeaseTable(), client, newFakeClock(now), reader, mutator, nil)
+			c := buildTestConnector(store, readyLeaseTable(), client, newFakeClock(now), reader, mutator, nil)
 			syncErr = c.Sync(context.Background(), subscriptionKey())
 		})
 
@@ -296,7 +296,7 @@ var _ = Describe("Connector.Sync", func() {
 				{Uid: "wiki-1", Text: "Old item"},
 			})
 			mutator = newFakeChecklistMutatorBoundTo(reader)
-			c := newConnector(store, readyLeaseTable(), client, newFakeClock(now), reader, mutator, nil)
+			c := buildTestConnector(store, readyLeaseTable(), client, newFakeClock(now), reader, mutator, nil)
 			syncErr = c.Sync(context.Background(), subscriptionKey())
 		})
 
@@ -339,7 +339,7 @@ var _ = Describe("Connector.Sync", func() {
 			reader.Set(syncTestPage, syncTestListName, nil)
 			mutator := newFakeChecklistMutatorBoundTo(reader)
 			suppressor = newFakeSuppressor()
-			c := newConnector(store, readyLeaseTable(), client, newFakeClock(now), reader, mutator, suppressor)
+			c := buildTestConnector(store, readyLeaseTable(), client, newFakeClock(now), reader, mutator, suppressor)
 			Expect(c.Sync(context.Background(), subscriptionKey())).To(Succeed())
 		})
 
@@ -382,7 +382,7 @@ var _ = Describe("Connector.Sync", func() {
 				{Uid: "wiki-existing", Text: "Buy milk"},
 			})
 			mutator := newFakeChecklistMutatorBoundTo(reader)
-			c := newConnector(store, readyLeaseTable(), client, newFakeClock(now), reader, mutator, nil)
+			c := buildTestConnector(store, readyLeaseTable(), client, newFakeClock(now), reader, mutator, nil)
 			Expect(c.Sync(context.Background(), subscriptionKey())).To(Succeed())
 		})
 
@@ -425,7 +425,7 @@ var _ = Describe("Connector.Sync", func() {
 				{Uid: "wiki-recovered", Text: "Recovered"},
 			})
 			mutator := newFakeChecklistMutatorBoundTo(reader)
-			c := newConnector(store, readyLeaseTable(), client, newFakeClock(now), reader, mutator, nil)
+			c := buildTestConnector(store, readyLeaseTable(), client, newFakeClock(now), reader, mutator, nil)
 			Expect(c.Sync(context.Background(), subscriptionKey())).To(Succeed())
 		})
 
@@ -459,7 +459,7 @@ var _ = Describe("Connector.Sync", func() {
 			reader.Set(syncTestPage, syncTestListName, []*apiv1.ChecklistItem{
 				{Uid: "wiki-new-1", Text: "Eggs"},
 			})
-			c := newConnector(store, readyLeaseTable(), client, newFakeClock(now), reader, nil, nil)
+			c := buildTestConnector(store, readyLeaseTable(), client, newFakeClock(now), reader, nil, nil)
 			Expect(c.Sync(context.Background(), subscriptionKey())).To(Succeed())
 		})
 
@@ -501,7 +501,7 @@ var _ = Describe("Connector.Sync", func() {
 			reader.Set(syncTestPage, syncTestListName, []*apiv1.ChecklistItem{
 				{Uid: "wiki-1", Text: "Edited text"},
 			})
-			c := newConnector(store, readyLeaseTable(), client, newFakeClock(now), reader, nil, nil)
+			c := buildTestConnector(store, readyLeaseTable(), client, newFakeClock(now), reader, nil, nil)
 			Expect(c.Sync(context.Background(), subscriptionKey())).To(Succeed())
 		})
 
@@ -536,7 +536,7 @@ var _ = Describe("Connector.Sync", func() {
 			reader.Set(syncTestPage, syncTestListName, []*apiv1.ChecklistItem{
 				{Uid: "wiki-1", Text: "Edited"},
 			})
-			c := newConnector(store, readyLeaseTable(), client, newFakeClock(now), reader, nil, nil)
+			c := buildTestConnector(store, readyLeaseTable(), client, newFakeClock(now), reader, nil, nil)
 			Expect(c.Sync(context.Background(), subscriptionKey())).To(Succeed())
 		})
 
@@ -565,7 +565,7 @@ var _ = Describe("Connector.Sync", func() {
 			client = newFakeTasksClient()
 			reader := newFakeChecklistReader()
 			reader.Set(syncTestPage, syncTestListName, nil)
-			c := newConnector(store, readyLeaseTable(), client, newFakeClock(now), reader, nil, nil)
+			c := buildTestConnector(store, readyLeaseTable(), client, newFakeClock(now), reader, nil, nil)
 			Expect(c.Sync(context.Background(), subscriptionKey())).To(Succeed())
 		})
 
@@ -605,7 +605,7 @@ var _ = Describe("Connector.Sync", func() {
 			reader.Set(syncTestPage, syncTestListName, []*apiv1.ChecklistItem{
 				{Uid: "wiki-orphaned", Text: "Eggs"},
 			})
-			c := newConnector(store, readyLeaseTable(), client, newFakeClock(now), reader, nil, nil)
+			c := buildTestConnector(store, readyLeaseTable(), client, newFakeClock(now), reader, nil, nil)
 			Expect(c.Sync(context.Background(), subscriptionKey())).To(Succeed())
 		})
 
@@ -641,7 +641,7 @@ var _ = Describe("Connector.Sync", func() {
 			client.errorsForListTasks = []error{gateway.ErrInvalidGrant}
 			reader := newFakeChecklistReader()
 			reader.Set(syncTestPage, syncTestListName, nil)
-			c := newConnector(store, readyLeaseTable(), client, newFakeClock(now), reader, nil, nil)
+			c := buildTestConnector(store, readyLeaseTable(), client, newFakeClock(now), reader, nil, nil)
 			syncErr = c.Sync(context.Background(), subscriptionKey())
 		})
 
@@ -687,7 +687,7 @@ var _ = Describe("Connector.Sync", func() {
 			reader := newFakeChecklistReader()
 			reader.Set(syncTestPage, syncTestListName, nil)
 			mutator = newFakeChecklistMutatorBoundTo(reader)
-			c := newConnector(store, readyLeaseTable(), client, newFakeClock(now), reader, mutator, nil)
+			c := buildTestConnector(store, readyLeaseTable(), client, newFakeClock(now), reader, mutator, nil)
 			Expect(c.Sync(context.Background(), subscriptionKey())).To(Succeed())
 		})
 
@@ -720,7 +720,7 @@ var _ = Describe("Connector.PausedReason", func() {
 				PausedReason: taskssync.PausedReasonAuthFailed,
 			}
 			store := newConfiguredStore(pages, &sub)
-			c := newConnector(store, readyLeaseTable(), newFakeTasksClient(), newFakeClock(time.Now()), nil, nil, nil)
+			c := buildTestConnector(store, readyLeaseTable(), newFakeTasksClient(), newFakeClock(time.Now()), nil, nil, nil)
 			reason, ok = c.PausedReason(subscriptionKey())
 		})
 
@@ -743,7 +743,7 @@ var _ = Describe("Connector.PausedReason", func() {
 				State: taskssync.SubscriptionStateActive,
 			}
 			store := newConfiguredStore(pages, &sub)
-			c := newConnector(store, readyLeaseTable(), newFakeTasksClient(), newFakeClock(time.Now()), nil, nil, nil)
+			c := buildTestConnector(store, readyLeaseTable(), newFakeTasksClient(), newFakeClock(time.Now()), nil, nil, nil)
 			_, ok = c.PausedReason(subscriptionKey())
 		})
 
@@ -783,7 +783,7 @@ var _ = Describe("Connector.ForceFullResync", func() {
 				{Uid: "wiki-A", Text: "A"},
 				{Uid: "wiki-B", Text: "B"},
 			})
-			c := newConnector(store, readyLeaseTable(), client, newFakeClock(now), reader, nil, nil)
+			c := buildTestConnector(store, readyLeaseTable(), client, newFakeClock(now), reader, nil, nil)
 			Expect(c.ForceFullResync(context.Background(), subscriptionKey())).To(Succeed())
 		})
 
@@ -815,7 +815,7 @@ var _ = Describe("Connector.ForceFullResync", func() {
 		BeforeEach(func() {
 			pages := newFakePages()
 			store := newConfiguredStore(pages, nil)
-			c := newConnector(store, readyLeaseTable(), newFakeTasksClient(), newFakeClock(time.Now()), nil, nil, nil)
+			c := buildTestConnector(store, readyLeaseTable(), newFakeTasksClient(), newFakeClock(time.Now()), nil, nil, nil)
 			resyncErr = c.ForceFullResync(context.Background(), subscriptionKey())
 		})
 
@@ -847,7 +847,7 @@ var _ = Describe("Connector.Subscribe", func() {
 			reader.Set(syncTestPage, syncTestListName, []*apiv1.ChecklistItem{
 				{Uid: "wiki-A", Text: "Eggs"},
 			})
-			c := newConnector(store, lt, client, newFakeClock(time.Now()), reader, nil, nil)
+			c := buildTestConnector(store, lt, client, newFakeClock(time.Now()), reader, nil, nil)
 			subscribed, subErr = c.Subscribe(context.Background(), aliceProfile, syncTestPage, syncTestListName, syncTestRemote)
 		})
 
@@ -890,7 +890,7 @@ var _ = Describe("Connector.Subscribe", func() {
 			}
 			reader := newFakeChecklistReader()
 			reader.Set(syncTestPage, syncTestListName, nil)
-			c := newConnector(store, readyLeaseTable(), client, newFakeClock(time.Now()), reader, nil, nil)
+			c := buildTestConnector(store, readyLeaseTable(), client, newFakeClock(time.Now()), reader, nil, nil)
 			_, subErr = c.Subscribe(context.Background(), aliceProfile, syncTestPage, syncTestListName, syncTestRemote)
 		})
 
@@ -911,7 +911,7 @@ var _ = Describe("Connector.Subscribe", func() {
 			client := newFakeTasksClient()
 			reader := newFakeChecklistReader()
 			reader.Set(syncTestPage, syncTestListName, nil)
-			c := newConnector(store, lt, client, newFakeClock(time.Now()), reader, nil, nil)
+			c := buildTestConnector(store, lt, client, newFakeClock(time.Now()), reader, nil, nil)
 			_, subErr = c.Subscribe(context.Background(), aliceProfile, syncTestPage, syncTestListName, syncTestRemote)
 		})
 
@@ -927,7 +927,7 @@ var _ = Describe("Connector.Subscribe", func() {
 			pages := newFakePages()
 			store := newStore(pages)
 			Expect(store.SaveState(aliceProfile, taskssync.ConnectorState{})).To(Succeed())
-			c := newConnector(store, readyLeaseTable(), newFakeTasksClient(), newFakeClock(time.Now()), newFakeChecklistReader(), nil, nil)
+			c := buildTestConnector(store, readyLeaseTable(), newFakeTasksClient(), newFakeClock(time.Now()), newFakeChecklistReader(), nil, nil)
 			_, subErr = c.Subscribe(context.Background(), aliceProfile, syncTestPage, syncTestListName, syncTestRemote)
 		})
 
@@ -952,7 +952,7 @@ var _ = Describe("Connector.Unsubscribe", func() {
 			lt = readyLeaseTable()
 			Expect(lt.Take(connectors.ChecklistKey{Page: syncTestPage, ListName: syncTestListName},
 				connectors.LeaseOwner{Kind: connectors.ConnectorKindGoogleTasks, ProfileID: string(aliceProfile)})).To(Succeed())
-			c := newConnector(store, lt, newFakeTasksClient(), newFakeClock(time.Now()), nil, nil, nil)
+			c := buildTestConnector(store, lt, newFakeTasksClient(), newFakeClock(time.Now()), nil, nil, nil)
 			Expect(c.Unsubscribe(context.Background(), aliceProfile, syncTestPage, syncTestListName)).To(Succeed())
 		})
 
@@ -992,7 +992,7 @@ var _ = Describe("Connector.Resume", func() {
 			}
 			store := newConfiguredStore(pages, &sub)
 			clock = newFakeClock(now)
-			c := newConnector(store, readyLeaseTable(), newFakeTasksClient(), clock, newFakeChecklistReader(), nil, nil)
+			c := buildTestConnector(store, readyLeaseTable(), newFakeTasksClient(), clock, newFakeChecklistReader(), nil, nil)
 			Expect(c.Resume(context.Background(), aliceProfile, syncTestPage, syncTestListName)).To(Succeed())
 		})
 
@@ -1044,7 +1044,7 @@ var _ = Describe("Connector.Resume", func() {
 			reader.Set(syncTestPage, syncTestListName, []*apiv1.ChecklistItem{
 				{Uid: "wiki-eggs", Text: "Eggs"},
 			})
-			c := newConnector(store, readyLeaseTable(), client, newFakeClock(now), reader, nil, nil)
+			c := buildTestConnector(store, readyLeaseTable(), client, newFakeClock(now), reader, nil, nil)
 			Expect(c.Resume(context.Background(), aliceProfile, syncTestPage, syncTestListName)).To(Succeed())
 		})
 
@@ -1081,7 +1081,7 @@ var _ = Describe("Connector.IsChecklistPaused", func() {
 				PausedReason: taskssync.PausedReasonAuthFailed,
 			}
 			store := newConfiguredStore(pages, &sub)
-			c := newConnector(store, readyLeaseTable(), newFakeTasksClient(), newFakeClock(time.Now()), nil, nil, nil)
+			c := buildTestConnector(store, readyLeaseTable(), newFakeTasksClient(), newFakeClock(time.Now()), nil, nil, nil)
 			paused = c.IsChecklistPaused(aliceProfile, syncTestPage, syncTestListName)
 		})
 
@@ -1100,7 +1100,7 @@ var _ = Describe("Connector.IsChecklistPaused", func() {
 				State: taskssync.SubscriptionStateActive,
 			}
 			store := newConfiguredStore(pages, &sub)
-			c := newConnector(store, readyLeaseTable(), newFakeTasksClient(), newFakeClock(time.Now()), nil, nil, nil)
+			c := buildTestConnector(store, readyLeaseTable(), newFakeTasksClient(), newFakeClock(time.Now()), nil, nil, nil)
 			paused = c.IsChecklistPaused(aliceProfile, syncTestPage, syncTestListName)
 		})
 
@@ -1126,7 +1126,7 @@ var _ = Describe("Connector.ListRemoteLists", func() {
 				{ID: "tl-1", Title: "Groceries"},
 				{ID: "tl-2", Title: "Errands"},
 			}
-			c := newConnector(store, readyLeaseTable(), client, newFakeClock(time.Now()), nil, nil, nil)
+			c := buildTestConnector(store, readyLeaseTable(), client, newFakeClock(time.Now()), nil, nil, nil)
 			lists, lerr = c.ListRemoteLists(context.Background(), aliceProfile)
 		})
 
@@ -1148,7 +1148,7 @@ var _ = Describe("Connector.ListRemoteLists", func() {
 			pages := newFakePages()
 			store := newStore(pages)
 			Expect(store.SaveState(aliceProfile, taskssync.ConnectorState{})).To(Succeed())
-			c := newConnector(store, readyLeaseTable(), newFakeTasksClient(), newFakeClock(time.Now()), nil, nil, nil)
+			c := buildTestConnector(store, readyLeaseTable(), newFakeTasksClient(), newFakeClock(time.Now()), nil, nil, nil)
 			_, lerr = c.ListRemoteLists(context.Background(), aliceProfile)
 		})
 
@@ -1172,7 +1172,7 @@ var _ = Describe("Connector.SubscriptionsForProfile", func() {
 					{Page: "p2", ListName: "l2", RemoteListID: "tl2"},
 				},
 			})).To(Succeed())
-			c := newConnector(store, readyLeaseTable(), newFakeTasksClient(), newFakeClock(time.Now()), nil, nil, nil)
+			c := buildTestConnector(store, readyLeaseTable(), newFakeTasksClient(), newFakeClock(time.Now()), nil, nil, nil)
 			var err error
 			keys, err = c.SubscriptionsForProfile(aliceProfile)
 			Expect(err).ToNot(HaveOccurred())
@@ -1286,7 +1286,7 @@ var _ = Describe("Connector.PersistRefreshToken", func() {
 				RefreshToken:  "rt-old",
 				Subscriptions: []taskssync.Subscription{activeSub, pausedSub},
 			})).To(Succeed())
-			c := newConnector(store, readyLeaseTable(), newFakeTasksClient(), newFakeClock(now), newFakeChecklistReader(), nil, nil)
+			c := buildTestConnector(store, readyLeaseTable(), newFakeTasksClient(), newFakeClock(now), newFakeChecklistReader(), nil, nil)
 			Expect(c.PersistRefreshToken(context.Background(), string(aliceProfile), syncTestEmail, "rt-fresh")).To(Succeed())
 		})
 
@@ -1333,7 +1333,7 @@ var _ = Describe("Connector.PersistRefreshToken", func() {
 				Email:        syncTestEmail,
 				RefreshToken: "rt-old",
 			})).To(Succeed())
-			c := newConnector(store, readyLeaseTable(), newFakeTasksClient(), newFakeClock(time.Now()), nil, nil, nil)
+			c := buildTestConnector(store, readyLeaseTable(), newFakeTasksClient(), newFakeClock(time.Now()), nil, nil, nil)
 			err = c.PersistRefreshToken(context.Background(), string(aliceProfile), syncTestEmail, "rt-fresh")
 		})
 
@@ -1354,7 +1354,7 @@ var _ = Describe("Connector.PersistRefreshToken", func() {
 		BeforeEach(func() {
 			pages := newFakePages()
 			store := newStore(pages)
-			c := newConnector(store, readyLeaseTable(), newFakeTasksClient(), newFakeClock(time.Now()), nil, nil, nil)
+			c := buildTestConnector(store, readyLeaseTable(), newFakeTasksClient(), newFakeClock(time.Now()), nil, nil, nil)
 			err = c.PersistRefreshToken(context.Background(), "", syncTestEmail, "rt-fresh")
 		})
 
@@ -1369,7 +1369,7 @@ var _ = Describe("Connector.PersistRefreshToken", func() {
 		BeforeEach(func() {
 			pages := newFakePages()
 			store := newStore(pages)
-			c := newConnector(store, readyLeaseTable(), newFakeTasksClient(), newFakeClock(time.Now()), nil, nil, nil)
+			c := buildTestConnector(store, readyLeaseTable(), newFakeTasksClient(), newFakeClock(time.Now()), nil, nil, nil)
 			err = c.PersistRefreshToken(context.Background(), string(aliceProfile), syncTestEmail, "")
 		})
 

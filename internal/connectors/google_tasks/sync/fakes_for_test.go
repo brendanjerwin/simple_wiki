@@ -13,6 +13,20 @@ import (
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 )
 
+// checklistKeyDelimiter separates (page, listName) components in the
+// fakeChecklistReader's in-memory map keys.
+const checklistKeyDelimiter = "|"
+
+// testUpdatedYear/Month/Day/Hour are the components of the fixed
+// Updated timestamp the fake Tasks client returns. Using named
+// constants avoids magic numbers in every call to time.Date.
+const (
+	testUpdatedYear  = 2026
+	testUpdatedMonth = time.April
+	testUpdatedDay   = 25
+	testUpdatedHour  = 18
+)
+
 // fakeClock returns a deterministic time. Tests advance the clock
 // explicitly via SetNow.
 type fakeClock struct {
@@ -160,7 +174,7 @@ func (f *fakeTasksClient) InsertTask(_ context.Context, tasklistID, title, notes
 		Notes:   notes,
 		Status:  status,
 		Due:     due,
-		Updated: time.Date(2026, 4, 25, 18, 0, 0, 0, time.UTC),
+		Updated: time.Date(testUpdatedYear, testUpdatedMonth, testUpdatedDay, testUpdatedHour, 0, 0, 0, time.UTC),
 	}, nil
 }
 
@@ -182,7 +196,7 @@ func (f *fakeTasksClient) PatchTask(_ context.Context, tasklistID, taskID string
 		Notes:   fields.Notes,
 		Status:  fields.Status,
 		Due:     fields.Due,
-		Updated: time.Date(2026, 4, 25, 18, 0, 0, 0, time.UTC),
+		Updated: time.Date(testUpdatedYear, testUpdatedMonth, testUpdatedDay, testUpdatedHour, 0, 0, 0, time.UTC),
 	}
 	return out, nil
 }
@@ -209,7 +223,7 @@ func newFakeChecklistReader() *fakeChecklistReader {
 func (f *fakeChecklistReader) Set(page, listName string, items []*apiv1.ChecklistItem) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	key := page + "|" + listName
+	key := page + checklistKeyDelimiter + listName
 	f.responses[key] = &apiv1.Checklist{Name: listName, Items: items}
 }
 
@@ -225,7 +239,7 @@ func (f *fakeChecklistReader) ListItems(_ context.Context, page, listName string
 func (f *fakeChecklistReader) appendItem(page, listName string, item *apiv1.ChecklistItem) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	key := page + "|" + listName
+	key := page + checklistKeyDelimiter + listName
 	cl := f.responses[key]
 	if cl == nil {
 		cl = &apiv1.Checklist{Name: listName}

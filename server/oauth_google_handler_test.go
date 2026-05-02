@@ -156,7 +156,7 @@ var _ = Describe("OAuthGoogleHandler", func() {
 				"code":  []string{"auth-code"},
 				"state": []string{issuedState},
 			}
-			handler.handleCallback(recorder, makeRequest(query.Encode()))
+			handler.serveCallback(recorder, makeRequest(query.Encode()))
 		})
 
 		It("should reject with 400 (RFC 9207 strict policy)", func() {
@@ -191,7 +191,7 @@ var _ = Describe("OAuthGoogleHandler", func() {
 				"state": []string{issuedState},
 				"iss":   []string{"https://evil.example.com"},
 			}
-			handler.handleCallback(recorder, makeRequest(query.Encode()))
+			handler.serveCallback(recorder, makeRequest(query.Encode()))
 		})
 
 		It("should reject with 400", func() {
@@ -227,7 +227,7 @@ var _ = Describe("OAuthGoogleHandler", func() {
 				"state": []string{issuedState},
 				"iss":   []string{googleOAuthIssuer},
 			}
-			handler.handleCallback(recorder, makeRequest(query.Encode()))
+			handler.serveCallback(recorder, makeRequest(query.Encode()))
 		})
 
 		It("should redirect to the success page", func() {
@@ -247,7 +247,7 @@ var _ = Describe("OAuthGoogleHandler", func() {
 				"state": []string{"never-issued"},
 				"iss":   []string{googleOAuthIssuer},
 			}
-			handler.handleCallback(recorder, makeRequest(query.Encode()))
+			handler.serveCallback(recorder, makeRequest(query.Encode()))
 		})
 
 		It("should render an error page", func() {
@@ -270,7 +270,7 @@ var _ = Describe("OAuthGoogleHandler", func() {
 				"state": []string{issuedState},
 				"iss":   []string{googleOAuthIssuer},
 			}
-			handler.handleCallback(recorder, makeRequest(query.Encode()))
+			handler.serveCallback(recorder, makeRequest(query.Encode()))
 		})
 
 		It("should render the same expired-session page", func() {
@@ -288,12 +288,12 @@ var _ = Describe("OAuthGoogleHandler", func() {
 				"state": []string{issuedState},
 				"iss":   []string{googleOAuthIssuer},
 			}
-			handler.handleCallback(recorder, makeRequest(query.Encode()))
+			handler.serveCallback(recorder, makeRequest(query.Encode()))
 
 			// Reset and replay the same state.
 			recorder = httptest.NewRecorder()
 			capturedForm = nil
-			handler.handleCallback(recorder, makeRequest(query.Encode()))
+			handler.serveCallback(recorder, makeRequest(query.Encode()))
 		})
 
 		It("should reject the replay", func() {
@@ -313,7 +313,7 @@ var _ = Describe("OAuthGoogleHandler", func() {
 				"state": []string{issuedState},
 				"iss":   []string{googleOAuthIssuer},
 			}
-			handler.handleCallback(recorder, makeRequest(query.Encode()))
+			handler.serveCallback(recorder, makeRequest(query.Encode()))
 		})
 
 		It("should render an error page", func() {
@@ -336,7 +336,7 @@ var _ = Describe("OAuthGoogleHandler", func() {
 				"error":             []string{"access_denied"},
 				"error_description": []string{"user denied"},
 			}
-			handler.handleCallback(recorder, makeRequest(query.Encode()))
+			handler.serveCallback(recorder, makeRequest(query.Encode()))
 		})
 
 		It("should render the access-denied page", func() {
@@ -370,7 +370,7 @@ var _ = Describe("OAuthGoogleHandler", func() {
 				"state": []string{issuedState},
 				"iss":   []string{googleOAuthIssuer},
 			}
-			handler.handleCallback(recorder, makeRequest(query.Encode()))
+			handler.serveCallback(recorder, makeRequest(query.Encode()))
 		})
 
 		It("should render the bad-gateway page", func() {
@@ -413,7 +413,7 @@ var _ = Describe("OAuthGoogleHandler", func() {
 				"state": []string{issuedState},
 				"iss":   []string{googleOAuthIssuer},
 			}
-			handler.handleCallback(recorder, makeRequest(query.Encode()))
+			handler.serveCallback(recorder, makeRequest(query.Encode()))
 		})
 
 		It("should render a 403 scope error page", func() {
@@ -445,7 +445,7 @@ var _ = Describe("OAuthGoogleHandler", func() {
 				"state": []string{issuedState},
 				"iss":   []string{googleOAuthIssuer},
 			}
-			handler.handleCallback(recorder, makeRequest(query.Encode()))
+			handler.serveCallback(recorder, makeRequest(query.Encode()))
 		})
 
 		It("should render an explanatory error page", func() {
@@ -468,7 +468,7 @@ var _ = Describe("OAuthGoogleHandler", func() {
 				"state": []string{issuedState},
 				"iss":   []string{googleOAuthIssuer},
 			}
-			handler.handleCallback(recorder, makeRequest(query.Encode()))
+			handler.serveCallback(recorder, makeRequest(query.Encode()))
 		})
 
 		It("should render a 500 error page", func() {
@@ -489,7 +489,7 @@ var _ = Describe("OAuthGoogleHandler", func() {
 				"state": []string{issuedState},
 				"iss":   []string{googleOAuthIssuer},
 			}
-			handler.handleCallback(recorder, makeRequest(query.Encode()))
+			handler.serveCallback(recorder, makeRequest(query.Encode()))
 		})
 
 		It("should send the wiki's redirect URI in the exchange", func() {

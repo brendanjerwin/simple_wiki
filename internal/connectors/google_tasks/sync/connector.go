@@ -167,7 +167,6 @@ var _ connectors.Connector = (*Connector)(nil)
 // are a steady-state condition, not an error to propagate to the
 // scheduler. The user reconnects via the OAuth flow.
 //
-//revive:disable-next-line:cyclomatic // single-purpose orchestrator; splitting hurts readability
 func (c *Connector) Sync(ctx context.Context, key connectors.SubscriptionKey) error {
 	profileID := wikipage.PageIdentifier(key.ProfileID)
 
@@ -183,24 +182,18 @@ func (c *Connector) Sync(ctx context.Context, key connectors.SubscriptionKey) er
 
 	sub, found := findSubscriptionInState(state, key.Page, key.ListName)
 	if !found {
-		// No subscription — nothing to sync. Not an error.
 		return nil
 	}
-
 	if sub.IsPaused() {
-		// Cursor frozen, no API calls. UI surfaces the paused badge.
 		return nil
 	}
 
-	// Per-connector rate-limit choke (skip-this-tick).
 	now := c.clock.Now().UTC()
 	if !sub.LastSuccessfulSyncAt.IsZero() && now.Sub(sub.LastSuccessfulSyncAt) < rateLimitChokeSeconds*time.Second {
 		return nil
 	}
 
 	if !state.IsConfigured() {
-		// Profile lost its refresh token (Disconnect) — pause the
-		// subscription so the next reconnect resumes cleanly.
 		return c.transitionToPaused(profileID, sub, PausedReasonAuthFailed)
 	}
 
@@ -208,13 +201,20 @@ func (c *Connector) Sync(ctx context.Context, key connectors.SubscriptionKey) er
 	if err != nil {
 		return fmt.Errorf("build tasks client: %w", err)
 	}
-
 	if c.checklistR == nil {
 		return ErrChecklistReaderUnavailable
 	}
 
-	// Inbound apply.
-	updatedSub, maxUpdated, err := c.applyInboundFromTasks(ctx, profileID, state.Email, sub, client)
+	return c.runSyncPasses(ctx, profileID, state.Email, sub, client, now)
+}
+
+// runSyncPasses executes the inbound-then-outbound sync for one subscription:
+// applies Tasks changes to the wiki, pushes wiki changes to Tasks, then
+// advances the cursor and persists.
+//
+//revive:disable-next-line:cyclomatic
+func (c *Connector) runSyncPasses(ctx context.Context, profileID wikipage.PageIdentifier, ownerEmail string, sub Subscription, client TasksClient, now time.Time) error {
+	updatedSub, maxUpdated, err := c.applyInboundFromTasks(ctx, profileID, ownerEmail, sub, client)
 	if err != nil {
 		if c.isAuthFailure(err) {
 			return c.transitionToPaused(profileID, sub, PausedReasonAuthFailed)
@@ -223,7 +223,6 @@ func (c *Connector) Sync(ctx context.Context, key connectors.SubscriptionKey) er
 	}
 	sub = updatedSub
 
-	// Outbound push.
 	updatedSub2, err := c.pushOutboundToTasks(ctx, sub, client)
 	if err != nil {
 		if c.isAuthFailure(err) {
@@ -233,8 +232,7 @@ func (c *Connector) Sync(ctx context.Context, key connectors.SubscriptionKey) er
 	}
 	sub = updatedSub2
 
-	// Apply-then-advance the cursor. Use max(Task.updated) - safety
-	// buffer (per plan §"Cursor — Boundary semantics").
+	// Apply-then-advance the cursor (per plan §"Cursor — Boundary semantics").
 	if !maxUpdated.IsZero() {
 		advance := maxUpdated.Add(-time.Duration(updatedMinSafetyBufferSeconds) * time.Second)
 		if advance.After(sub.LastUpdatedMin) {
@@ -330,13 +328,15 @@ func (c *Connector) ForceFullResync(ctx context.Context, key connectors.Subscrip
 // checklist; ties (multiple wiki items with the same text) are
 // resolved by taking the lowest sort_order — deterministic, but
 // degraded in real-world ambiguity (documented as a known limitation).
-func (c *Connector) rebuildIDMapByTextMatch(ctx context.Context, sub Subscription, client TasksClient) (map[string]string, map[string]string, error) {
-	tasks, err := c.listAllTasks(ctx, client, sub.RemoteListID, time.Time{})
+func (c *Connector) rebuildIDMapByTextMatch(ctx context.Context, sub Subscription, client TasksClient) (idMap map[string]string, etags map[string]string, err error) {
+	var tasks []gateway.Task
+	tasks, err = c.listAllTasks(ctx, client, sub.RemoteListID, time.Time{})
 	if err != nil {
 		return nil, nil, err
 	}
 
-	wikiItems, err := c.checklistR.ListItems(ctx, sub.Page, sub.ListName)
+	var wikiItems *apiv1.Checklist
+	wikiItems, err = c.checklistR.ListItems(ctx, sub.Page, sub.ListName)
 	if err != nil {
 		return nil, nil, fmt.Errorf("read wiki checklist: %w", err)
 	}
@@ -362,8 +362,8 @@ func (c *Connector) rebuildIDMapByTextMatch(ctx context.Context, sub Subscriptio
 		}
 	}
 
-	idMap := map[string]string{}
-	etags := map[string]string{}
+	idMap = map[string]string{}
+	etags = map[string]string{}
 	for _, t := range tasks {
 		if t.Deleted {
 			continue
@@ -411,7 +411,7 @@ func normalizeText(s string) string {
 // listAllTasks consumes every page of ListTasks for the given list
 // before returning. Per plan §"Cursor — Never advance during
 // pagination": multi-page walks finish before any cursor advance.
-func (c *Connector) listAllTasks(ctx context.Context, client TasksClient, remoteListID string, updatedMin time.Time) ([]gateway.Task, error) {
+func (*Connector) listAllTasks(ctx context.Context, client TasksClient, remoteListID string, updatedMin time.Time) ([]gateway.Task, error) {
 	var out []gateway.Task
 	pageToken := ""
 	for {
@@ -458,13 +458,11 @@ func (c *Connector) applyInboundFromTasks(ctx context.Context, profileID wikipag
 			connectors.EventRemoteItemArrived, string(profileID), sub.Page, sub.ListName)
 	}
 
-	// Reverse map: tasks_id → wiki_uid (so we can recognise inbound
-	// updates without scanning the map per task).
+	// Reverse map: tasks_id → wiki_uid.
 	taskToUID := make(map[string]string, len(sub.ItemIDMap))
 	for uid, taskID := range sub.ItemIDMap {
 		taskToUID[taskID] = uid
 	}
-
 	if sub.ItemIDMap == nil {
 		sub.ItemIDMap = map[string]string{}
 	}
@@ -472,30 +470,8 @@ func (c *Connector) applyInboundFromTasks(ctx context.Context, profileID wikipag
 		sub.ItemEtags = map[string]string{}
 	}
 
-	// Pull current wiki state once for marker-loss recovery.
-	var wikiByText map[string]string
-	wikiResolved := false
-
-	resolveWikiByText := func() error {
-		if wikiResolved {
-			return nil
-		}
-		items, err := c.checklistR.ListItems(ctx, sub.Page, sub.ListName)
-		if err != nil {
-			return fmt.Errorf("read wiki checklist: %w", err)
-		}
-		wikiByText = map[string]string{}
-		if items != nil {
-			for _, it := range items.GetItems() {
-				text := normalizeText(it.GetText())
-				if text != "" {
-					wikiByText[text] = it.GetUid()
-				}
-			}
-		}
-		wikiResolved = true
-		return nil
-	}
+	// Lazy loader for wiki-text lookup (marker-loss recovery).
+	resolveWikiByText := c.buildWikiByTextResolver(ctx, sub)
 
 	if c.suppressor != nil {
 		c.suppressor.Suppress(profileID, sub.Page, sub.ListName)
@@ -507,84 +483,118 @@ func (c *Connector) applyInboundFromTasks(ctx context.Context, profileID wikipag
 		if t.Updated.After(maxUpdated) {
 			maxUpdated = t.Updated
 		}
-
 		if t.Deleted {
 			c.applyInboundDeletion(ctx, profileID, ownerEmail, sub, t, taskToUID)
 			continue
 		}
+		if err := c.applyOneInboundTask(ctx, profileID, ownerEmail, sub, taskToUID, t, resolveWikiByText); err != nil {
+			return sub, maxUpdated, err
+		}
+	}
+	return sub, maxUpdated, nil
+}
 
-		// Resolve wiki uid for this task.
-		uid, hasUID := taskToUID[t.ID]
-		if !hasUID {
-			// Marker check first — if the task carries a marker we
-			// already created on a previous push, restore the binding.
-			_, markerUID, hasMarker := translator.StripWikiUIDMarker(t.Notes)
-			if hasMarker && markerUID != "" {
-				uid = markerUID
+// buildWikiByTextResolver returns a lazy loader that reads the wiki
+// checklist once and builds a normalizedText → uid map. Calling it
+// multiple times is idempotent (result cached after first call).
+func (c *Connector) buildWikiByTextResolver(ctx context.Context, sub Subscription) func() (map[string]string, error) {
+	var cached map[string]string
+	return func() (map[string]string, error) {
+		if cached != nil {
+			return cached, nil
+		}
+		items, err := c.checklistR.ListItems(ctx, sub.Page, sub.ListName)
+		if err != nil {
+			return nil, fmt.Errorf("read wiki checklist: %w", err)
+		}
+		cached = map[string]string{}
+		if items != nil {
+			for _, it := range items.GetItems() {
+				text := normalizeText(it.GetText())
+				if text != "" {
+					cached[text] = it.GetUid()
+				}
+			}
+		}
+		return cached, nil
+	}
+}
+
+// applyOneInboundTask processes a single non-deleted inbound task:
+// resolves the wiki uid (via id_map, marker, or text-match), then
+// updates an existing wiki item or adds a new one.
+// sub.ItemIDMap and sub.ItemEtags are maps — mutations here propagate
+// back to the caller because map values are reference types.
+//
+//revive:disable-next-line:cyclomatic,cognitive-complexity
+func (c *Connector) applyOneInboundTask(ctx context.Context, profileID wikipage.PageIdentifier, ownerEmail string, sub Subscription, taskToUID map[string]string, t gateway.Task, resolveWikiByText func() (map[string]string, error)) error {
+	uid, hasUID := taskToUID[t.ID]
+	if !hasUID {
+		_, markerUID, hasMarker := translator.StripWikiUIDMarker(t.Notes)
+		if hasMarker && markerUID != "" {
+			uid = markerUID
+			hasUID = true
+			sub.ItemIDMap[uid] = t.ID
+			taskToUID[t.ID] = uid
+		} else {
+			wikiByText, err := resolveWikiByText()
+			if err != nil {
+				return err
+			}
+			if matched, ok := wikiByText[normalizeText(t.Title)]; ok {
+				uid = matched
 				hasUID = true
 				sub.ItemIDMap[uid] = t.ID
 				taskToUID[t.ID] = uid
-			} else {
-				// Marker-loss recovery path.
-				if err := resolveWikiByText(); err != nil {
-					return sub, maxUpdated, err
-				}
-				if matched, ok := wikiByText[normalizeText(t.Title)]; ok {
-					uid = matched
-					hasUID = true
-					sub.ItemIDMap[uid] = t.ID
-					taskToUID[t.ID] = uid
-				}
-			}
-		}
-
-		item, err := translator.TaskToChecklistItem(translator.Task{
-			ID:        t.ID,
-			ETag:      t.Etag,
-			Title:     t.Title,
-			Notes:     t.Notes,
-			Status:    string(t.Status),
-			Position:  t.Position,
-			Parent:    "", // flatten silently on inbound
-			Updated:   t.Updated,
-			Due:       t.Due,
-			Completed: t.Completed,
-			Deleted:   t.Deleted,
-			Hidden:    t.Hidden,
-		})
-		if err != nil {
-			return sub, maxUpdated, fmt.Errorf("translate task %q: %w", t.ID, err)
-		}
-
-		if hasUID {
-			if c.checklistW != nil {
-				description := item.GetDescription()
-				if updateErr := c.checklistW.UpdateItemForSync(ctx, sub.Page, sub.ListName, ownerEmail, uid, item.GetText(), item.GetChecked(), item.GetTags(), description); updateErr != nil {
-					return sub, maxUpdated, fmt.Errorf("update wiki item %q: %w", uid, updateErr)
-				}
-			}
-			sub.ItemEtags[t.ID] = t.Etag
-			continue
-		}
-
-		// Genuinely new from Tasks: AddItemForSync.
-		if c.checklistW != nil {
-			description := item.GetDescription()
-			newUID, addErr := c.checklistW.AddItemForSync(ctx, sub.Page, sub.ListName, ownerEmail, item.GetText(), item.GetChecked(), item.GetTags(), description, t.Position)
-			if addErr != nil {
-				return sub, maxUpdated, fmt.Errorf("add wiki item from task %q: %w", t.ID, addErr)
-			}
-			if newUID != "" {
-				sub.ItemIDMap[newUID] = t.ID
-				taskToUID[t.ID] = newUID
-				sub.ItemEtags[t.ID] = t.Etag
-				c.logger.Info("tasks bridge: %s profile=%s page=%s list=%s task=%s",
-					connectors.EventRemoteItemArrived, string(profileID), sub.Page, sub.ListName, t.ID)
 			}
 		}
 	}
 
-	return sub, maxUpdated, nil
+	item, err := translator.TaskToChecklistItem(translator.Task{
+		ID:        t.ID,
+		ETag:      t.Etag,
+		Title:     t.Title,
+		Notes:     t.Notes,
+		Status:    string(t.Status),
+		Position:  t.Position,
+		Parent:    "", // flatten silently on inbound
+		Updated:   t.Updated,
+		Due:       t.Due,
+		Completed: t.Completed,
+		Deleted:   t.Deleted,
+		Hidden:    t.Hidden,
+	})
+	if err != nil {
+		return fmt.Errorf("translate task %q: %w", t.ID, err)
+	}
+
+	if hasUID {
+		if c.checklistW != nil {
+			description := item.GetDescription()
+			if updateErr := c.checklistW.UpdateItemForSync(ctx, sub.Page, sub.ListName, ownerEmail, uid, item.GetText(), item.GetChecked(), item.GetTags(), description); updateErr != nil {
+				return fmt.Errorf("update wiki item %q: %w", uid, updateErr)
+			}
+		}
+		sub.ItemEtags[t.ID] = t.Etag
+		return nil
+	}
+
+	// Genuinely new from Tasks: AddItemForSync.
+	if c.checklistW != nil {
+		description := item.GetDescription()
+		newUID, addErr := c.checklistW.AddItemForSync(ctx, sub.Page, sub.ListName, ownerEmail, item.GetText(), item.GetChecked(), item.GetTags(), description, t.Position)
+		if addErr != nil {
+			return fmt.Errorf("add wiki item from task %q: %w", t.ID, addErr)
+		}
+		if newUID != "" {
+			sub.ItemIDMap[newUID] = t.ID
+			taskToUID[t.ID] = newUID
+			sub.ItemEtags[t.ID] = t.Etag
+			c.logger.Info("tasks bridge: %s profile=%s page=%s list=%s task=%s",
+				connectors.EventRemoteItemArrived, string(profileID), sub.Page, sub.ListName, t.ID)
+		}
+	}
+	return nil
 }
 
 // applyInboundDeletion mirrors a Tasks-side delete (or fully hidden
@@ -618,8 +628,6 @@ func (c *Connector) applyInboundDeletion(ctx context.Context, _ wikipage.PageIde
 //
 // Persists the updated ItemIDMap and ItemEtags on the returned
 // Subscription; caller persists.
-//
-//revive:disable-next-line:cyclomatic,cognitive-complexity
 func (c *Connector) pushOutboundToTasks(ctx context.Context, sub Subscription, client TasksClient) (Subscription, error) {
 	if c.checklistR == nil {
 		return sub, ErrChecklistReaderUnavailable
@@ -628,7 +636,6 @@ func (c *Connector) pushOutboundToTasks(ctx context.Context, sub Subscription, c
 	if err != nil {
 		return sub, fmt.Errorf("read wiki checklist: %w", err)
 	}
-
 	if sub.ItemIDMap == nil {
 		sub.ItemIDMap = map[string]string{}
 	}
@@ -645,8 +652,19 @@ func (c *Connector) pushOutboundToTasks(ctx context.Context, sub Subscription, c
 		}
 	}
 
-	// Lazy load of remote tasks: only fetched if we need to scan for
-	// pre-insert marker dedup.
+	sub, err = c.pushOutboundUpserts(ctx, client, sub, currentUIDs)
+	if err != nil {
+		return sub, err
+	}
+	return c.pushOutboundDeletions(ctx, client, sub, currentUIDs)
+}
+
+// pushOutboundUpserts handles the insert-or-patch path for each wiki
+// item that is currently in the checklist.
+//
+//revive:disable-next-line:cyclomatic,cognitive-complexity
+func (c *Connector) pushOutboundUpserts(ctx context.Context, client TasksClient, sub Subscription, currentUIDs map[string]*apiv1.ChecklistItem) (Subscription, error) {
+	// Lazy load of remote tasks for pre-insert marker dedup.
 	var remoteByMarker map[string]gateway.Task
 	loadRemote := func() error {
 		if remoteByMarker != nil {
@@ -669,11 +687,9 @@ func (c *Connector) pushOutboundToTasks(ctx context.Context, sub Subscription, c
 		return nil
 	}
 
-	// Inserts and updates.
 	for uid, item := range currentUIDs {
 		fields := translator.ChecklistItemToTaskFields(item)
 		if taskID, found := sub.ItemIDMap[uid]; found {
-			// Patch path.
 			patched, patchErr := c.patchWithRetry(ctx, client, sub, taskID, fields)
 			if patchErr != nil {
 				return sub, patchErr
@@ -689,9 +705,6 @@ func (c *Connector) pushOutboundToTasks(ctx context.Context, sub Subscription, c
 			return sub, err
 		}
 		if existing, ok := remoteByMarker[uid]; ok {
-			// Marker collision — Patch instead of Insert (idempotent
-			// recovery from a previous outbound that succeeded server-
-			// side but failed before persisting our state).
 			patched, patchErr := c.patchWithRetry(ctx, client, sub, existing.ID, fields)
 			if patchErr != nil {
 				return sub, patchErr
@@ -710,9 +723,12 @@ func (c *Connector) pushOutboundToTasks(ctx context.Context, sub Subscription, c
 		c.logger.Info("tasks bridge: %s profile=%s page=%s list=%s uid=%s task=%s (inserted)",
 			connectors.EventLocalItemPushed, "<profile>", sub.Page, sub.ListName, uid, inserted.ID)
 	}
+	return sub, nil
+}
 
-	// Deletions: id_map entries whose uid is no longer in the wiki
-	// checklist. Google's tasks.delete is idempotent.
+// pushOutboundDeletions removes remote Tasks whose wiki uid is no
+// longer present in the checklist. tasks.delete is idempotent.
+func (*Connector) pushOutboundDeletions(ctx context.Context, client TasksClient, sub Subscription, currentUIDs map[string]*apiv1.ChecklistItem) (Subscription, error) {
 	for uid, taskID := range sub.ItemIDMap {
 		if _, ok := currentUIDs[uid]; ok {
 			continue
@@ -723,13 +739,12 @@ func (c *Connector) pushOutboundToTasks(ctx context.Context, sub Subscription, c
 		delete(sub.ItemIDMap, uid)
 		delete(sub.ItemEtags, taskID)
 	}
-
 	return sub, nil
 }
 
 // patchWithRetry sends a PatchTask with If-Match. On 412 (etag stale)
 // pulls the task fresh and retries once with the new etag.
-func (c *Connector) patchWithRetry(ctx context.Context, client TasksClient, sub Subscription, taskID string, fields translator.TaskFields) (gateway.Task, error) {
+func (*Connector) patchWithRetry(ctx context.Context, client TasksClient, sub Subscription, taskID string, fields translator.TaskFields) (gateway.Task, error) {
 	patch := buildPatchFields(fields)
 	etag := sub.ItemEtags[taskID]
 	patched, err := client.PatchTask(ctx, sub.RemoteListID, taskID, patch, etag)
@@ -781,7 +796,7 @@ func (c *Connector) transitionToPaused(profileID wikipage.PageIdentifier, sub Su
 
 // isAuthFailure reports whether err indicates the OAuth credentials
 // are no longer usable. Triggers the pause transition.
-func (c *Connector) isAuthFailure(err error) bool {
+func (*Connector) isAuthFailure(err error) bool {
 	return errors.Is(err, gateway.ErrInvalidGrant) || errors.Is(err, gateway.ErrAuthRevoked)
 }
 

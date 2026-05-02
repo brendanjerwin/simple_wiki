@@ -1,6 +1,7 @@
 package sync
 
 import (
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -59,16 +60,16 @@ func NewSyncDebouncer(
 	debounceWindow time.Duration,
 ) (*SyncDebouncer, error) {
 	if enqueuer == nil {
-		return nil, fmt.Errorf("tasks bridge: enqueuer must not be nil")
+		return nil, errors.New("tasks bridge: enqueuer must not be nil")
 	}
 	if connector == nil {
-		return nil, fmt.Errorf("tasks bridge: connector must not be nil")
+		return nil, errors.New("tasks bridge: connector must not be nil")
 	}
 	if logger == nil {
-		return nil, fmt.Errorf("tasks bridge: logger must not be nil")
+		return nil, errors.New("tasks bridge: logger must not be nil")
 	}
 	if debounceWindow <= 0 {
-		return nil, fmt.Errorf("tasks bridge: debounceWindow must be > 0")
+		return nil, errors.New("tasks bridge: debounceWindow must be > 0")
 	}
 	return &SyncDebouncer{
 		enqueuer:       enqueuer,

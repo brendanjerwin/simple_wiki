@@ -2,9 +2,18 @@ package translator
 
 import (
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 )
+
+// positionParseBase is the numeric base (decimal) used when parsing
+// Google Tasks position strings.
+const positionParseBase = 10
+
+// positionParseBitSize is the bit-size target (int64) passed to
+// strconv.ParseInt when parsing position strings.
+const positionParseBitSize = 64
 
 // positionDigits is the number of digits Google Tasks uses for the
 // `position` field on tasks returned from the API. Empirically, Tasks
@@ -51,13 +60,13 @@ func PositionToSortOrder(position string) int64 {
 		// All zeros — first task.
 		return 0
 	}
-	n, err := strconv.ParseInt(trimmed, 10, 64)
+	n, err := strconv.ParseInt(trimmed, positionParseBase, positionParseBitSize)
 	if err != nil {
 		// Overflow or non-decimal characters: clamp to int64 max
 		// (preserves "this is later than anything we've seen"
 		// ordering) rather than corrupting the wiki ordering with
 		// a silent zero.
-		return 1<<63 - 1
+		return math.MaxInt64
 	}
 	return n
 }

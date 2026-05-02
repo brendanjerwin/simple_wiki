@@ -746,7 +746,7 @@ type stubTasksAuthURLBuilder struct {
 	err   error
 }
 
-func (s stubTasksAuthURLBuilder) BuildAuthURL(_ context.Context, _, _ string) (string, string, error) {
+func (s stubTasksAuthURLBuilder) BuildAuthURL(_ context.Context, _, _ string) (authURL string, stateToken string, err error) {
 	if s.err != nil {
 		return "", "", s.err
 	}

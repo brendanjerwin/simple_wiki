@@ -188,12 +188,12 @@ func IsNotConfigured(err error) bool {
 //     this callback belongs to AND retrieves the PKCE verifier.
 //  3. code exchange — only after (1) and (2) pass.
 func (h *OAuthGoogleHandler) HandleCallback(c *gin.Context) {
-	h.handleCallback(c.Writer, c.Request)
+	h.serveCallback(c.Writer, c.Request)
 }
 
-// handleCallback is the testable core that takes net/http types
+// serveCallback is the testable core that takes net/http types
 // directly so unit tests don't need a Gin context.
-func (h *OAuthGoogleHandler) handleCallback(w http.ResponseWriter, r *http.Request) {
+func (h *OAuthGoogleHandler) serveCallback(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 
 	if errParam := q.Get("error"); errParam != "" {
@@ -262,6 +262,15 @@ func (h *OAuthGoogleHandler) handleCallback(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
+	// Steps 4–6: exchange code for tokens, validate scope, persist.
+	h.completeExchange(w, r, entry, code)
+}
+
+// completeExchange performs the PKCE code exchange (step 4), scope
+// validation (step 5), and refresh-token persistence (step 6). It
+// renders an error page and returns on any failure; on success it calls
+// renderOAuthSuccess.
+func (h *OAuthGoogleHandler) completeExchange(w http.ResponseWriter, r *http.Request, entry OAuthStateEntry, code string) {
 	// Step 4: exchange code → tokens (PKCE).
 	tokens, err := h.exchangeCodeForTokens(r.Context(), code, entry.CodeVerifier)
 	if err != nil {
@@ -400,11 +409,11 @@ func (h *OAuthGoogleHandler) tryBuildAuthURL(r *http.Request) string {
 	if err != nil || profileID == "" {
 		return ""
 	}
-	url, err := h.AuthURLIssuer.BuildAuthURL(r.Context(), profileID)
+	authURL, err := h.AuthURLIssuer.BuildAuthURL(r.Context(), profileID)
 	if err != nil {
 		return ""
 	}
-	return url
+	return authURL
 }
 
 func (h *OAuthGoogleHandler) logf(format string, args ...any) {
@@ -463,7 +472,7 @@ func getOAuthGoogleHandler() *OAuthGoogleHandler {
 // Until Phase 7 wires a real handler, this renders the "not configured"
 // 503 page so the route is discoverable while the connector stays
 // inert.
-func (s *Site) handleOAuthGoogleCallback(c *gin.Context) {
+func (*Site) handleOAuthGoogleCallback(c *gin.Context) {
 	h := getOAuthGoogleHandler()
 	if h == nil {
 		HandleNotConfiguredCallback(c)

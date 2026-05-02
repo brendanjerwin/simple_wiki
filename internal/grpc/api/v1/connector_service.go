@@ -47,6 +47,10 @@ var errTasksAuthURLBuilderUnavailable = status.Error(
 // so leaving it unset is a programming bug in the caller.
 var errConnectorKindRequired = status.Error(codes.InvalidArgument, "connector_kind required")
 
+// errMsgPageAndListRequired is the shared InvalidArgument message used when
+// an RPC requires both page and list_name but one or both are empty.
+const errMsgPageAndListRequired = "page and list_name are required"
+
 // requireRealUser rejects anonymous and agent identities. Mirrors the
 // /profile route's posture: connector flows are for human users only.
 func requireRealUser(ctx context.Context) (tailscale.IdentityValue, wikipage.PageIdentifier, error) {
@@ -376,7 +380,7 @@ func (s *Server) subscribeTasks(ctx context.Context, req *apiv1.SubscribeRequest
 		return nil, errTasksConnectorNotConfigured
 	}
 	if req.GetPage() == "" || req.GetListName() == "" {
-		return nil, status.Error(codes.InvalidArgument, "page and list_name are required")
+		return nil, status.Error(codes.InvalidArgument, errMsgPageAndListRequired)
 	}
 	if req.GetRemoteListHandle() == "" {
 		return nil, status.Error(codes.InvalidArgument, "remote_list_handle is required for Tasks Subscribe; pick an existing tasklist from ListRemoteLists")
@@ -397,7 +401,7 @@ func (s *Server) subscribeKeep(ctx context.Context, req *apiv1.SubscribeRequest)
 		return nil, errKeepConnectorNotConfigured
 	}
 	if req.GetPage() == "" || req.GetListName() == "" {
-		return nil, status.Error(codes.InvalidArgument, "page and list_name are required")
+		return nil, status.Error(codes.InvalidArgument, errMsgPageAndListRequired)
 	}
 	_, profileID, err := requireRealUser(ctx)
 	if err != nil {
@@ -553,7 +557,7 @@ func (s *Server) listDeadLettersTasks(ctx context.Context, req *apiv1.ListDeadLe
 		return nil, errTasksConnectorNotConfigured
 	}
 	if req.GetPage() == "" || req.GetListName() == "" {
-		return nil, status.Error(codes.InvalidArgument, "page and list_name are required")
+		return nil, status.Error(codes.InvalidArgument, errMsgPageAndListRequired)
 	}
 	if _, _, err := requireRealUser(ctx); err != nil {
 		return nil, err
@@ -566,7 +570,7 @@ func (s *Server) listDeadLettersKeep(ctx context.Context, req *apiv1.ListDeadLet
 		return nil, errKeepConnectorNotConfigured
 	}
 	if req.GetPage() == "" || req.GetListName() == "" {
-		return nil, status.Error(codes.InvalidArgument, "page and list_name are required")
+		return nil, status.Error(codes.InvalidArgument, errMsgPageAndListRequired)
 	}
 	_, profileID, err := requireRealUser(ctx)
 	if err != nil {

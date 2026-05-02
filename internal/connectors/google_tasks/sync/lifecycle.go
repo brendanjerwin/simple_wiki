@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
 	"github.com/brendanjerwin/simple_wiki/internal/connectors"
 	"github.com/brendanjerwin/simple_wiki/internal/connectors/google_tasks/gateway"
 	"github.com/brendanjerwin/simple_wiki/internal/connectors/google_tasks/translator"
@@ -235,74 +236,9 @@ func (c *Connector) Subscribe(ctx context.Context, profileID wikipage.PageIdenti
 
 	var subscribed Subscription
 	cerErr := c.leaseTable.WithChecklistLock(checklistKey, func() error {
-		// Cross-profile/cross-connector existence check via the
-		// LeaseTable — the boot-rebuild + the contract that every
-		// successful Subscribe Takes a lease guarantees this is the
-		// authoritative cross-profile view at this moment.
-		if existing, exists := c.leaseTable.LookupOwner(checklistKey); exists {
-			return fmt.Errorf("%w: %s/%s held by %s/%s",
-				connectors.ErrChecklistAlreadyLeased, page, listName,
-				existing.Kind, existing.ProfileID)
-		}
-
-		// Refuse-to-subscribe if the chosen Tasks list contains a
-		// parent-child hierarchy.
-		tasks, listErr := c.listAllTasks(ctx, client, remoteListID, time.Time{})
-		if listErr != nil {
-			return fmt.Errorf("inspect tasks list: %w", listErr)
-		}
-		if translator.HasSubtasks(toTranslatorTasks(tasks)) {
-			return ErrTasksListHasSubtasks
-		}
-
-		// Subscribe-ceremony seed: text-match wiki items against
-		// existing tasks; build the initial ItemIDMap. The wiki:uid
-		// marker stamping happens on the first outbound push (each
-		// matched task will be Patched and the marker appended via
-		// the translator); doing it here would require an extra
-		// PatchTask call per match.
-		idMap, etags, err := c.seedIDMapForSubscribe(ctx, page, listName, tasks)
-		if err != nil {
-			return fmt.Errorf("seed id_map: %w", err)
-		}
-
-		now := c.clock.Now().UTC()
-
-		// Pull the friendly title for display.
-		remoteTitle := ""
-		taskLists, lookupErr := client.ListTaskLists(ctx)
-		if lookupErr == nil {
-			for _, tl := range taskLists {
-				if tl.ID == remoteListID {
-					remoteTitle = tl.Title
-					break
-				}
-			}
-		}
-
-		sub := Subscription{
-			Page:            page,
-			ListName:        listName,
-			RemoteListID:    remoteListID,
-			RemoteListTitle: remoteTitle,
-			ItemIDMap:       idMap,
-			ItemEtags:       etags,
-			State:           SubscriptionStateActive,
-			SubscribedAt:    now,
-		}
-
-		if err := c.store.AddSubscription(profileID, sub); err != nil {
-			return err
-		}
-		if err := c.leaseTable.Take(checklistKey, owner); err != nil {
-			// Profile already updated — best-effort rollback. The
-			// next subscribe on the same checklist will re-check
-			// the LeaseTable.
-			_ = c.store.RemoveSubscription(profileID, page, listName)
-			return err
-		}
-		subscribed = sub
-		return nil
+		var lockErr error
+		subscribed, lockErr = c.subscribeWithLock(ctx, profileID, page, listName, remoteListID, client, checklistKey, owner)
+		return lockErr
 	})
 	if cerErr != nil {
 		return Subscription{}, cerErr
@@ -313,16 +249,82 @@ func (c *Connector) Subscribe(ctx context.Context, profileID wikipage.PageIdenti
 	return subscribed, nil
 }
 
+// subscribeWithLock performs the subscribe ceremony while the caller
+// holds the per-checklist mutex. Cross-connector existence check,
+// subtask guard, ID-map seed, and lease acquisition all happen here.
+func (c *Connector) subscribeWithLock(ctx context.Context, profileID wikipage.PageIdentifier, page, listName, remoteListID string, client TasksClient, checklistKey connectors.ChecklistKey, owner connectors.LeaseOwner) (Subscription, error) {
+	// Cross-profile/cross-connector existence check via the
+	// LeaseTable — the boot-rebuild + the contract that every
+	// successful Subscribe Takes a lease guarantees this is the
+	// authoritative cross-profile view at this moment.
+	if existing, exists := c.leaseTable.LookupOwner(checklistKey); exists {
+		return Subscription{}, fmt.Errorf("%w: %s/%s held by %s/%s",
+			connectors.ErrChecklistAlreadyLeased, page, listName,
+			existing.Kind, existing.ProfileID)
+	}
+
+	tasks, listErr := c.listAllTasks(ctx, client, remoteListID, time.Time{})
+	if listErr != nil {
+		return Subscription{}, fmt.Errorf("inspect tasks list: %w", listErr)
+	}
+	if translator.HasSubtasks(toTranslatorTasks(tasks)) {
+		return Subscription{}, ErrTasksListHasSubtasks
+	}
+
+	idMap, etags, err := c.seedIDMapForSubscribe(ctx, page, listName, tasks)
+	if err != nil {
+		return Subscription{}, fmt.Errorf("seed id_map: %w", err)
+	}
+
+	remoteTitle := resolveRemoteTitle(ctx, client, remoteListID)
+	sub := Subscription{
+		Page:            page,
+		ListName:        listName,
+		RemoteListID:    remoteListID,
+		RemoteListTitle: remoteTitle,
+		ItemIDMap:       idMap,
+		ItemEtags:       etags,
+		State:           SubscriptionStateActive,
+		SubscribedAt:    c.clock.Now().UTC(),
+	}
+
+	if err := c.store.AddSubscription(profileID, sub); err != nil {
+		return Subscription{}, err
+	}
+	if err := c.leaseTable.Take(checklistKey, owner); err != nil {
+		_ = c.store.RemoveSubscription(profileID, page, listName)
+		return Subscription{}, err
+	}
+	return sub, nil
+}
+
+// resolveRemoteTitle fetches the friendly display title for remoteListID.
+// Returns "" on any error — the title is cosmetic; failure must not
+// block the subscribe ceremony.
+func resolveRemoteTitle(ctx context.Context, client TasksClient, remoteListID string) string {
+	taskLists, err := client.ListTaskLists(ctx)
+	if err != nil {
+		return ""
+	}
+	for _, tl := range taskLists {
+		if tl.ID == remoteListID {
+			return tl.Title
+		}
+	}
+	return ""
+}
+
 // seedIDMapForSubscribe walks the existing tasks list and builds an
 // initial ItemIDMap by matching task titles against the current wiki
 // checklist's items. Tasks already carrying a wiki:uid marker are
 // preferred (a re-subscribe after Disconnect/Reconnect should rebind
 // without relying on text equality).
-func (c *Connector) seedIDMapForSubscribe(ctx context.Context, page, listName string, tasks []gateway.Task) (map[string]string, map[string]string, error) {
+func (c *Connector) seedIDMapForSubscribe(ctx context.Context, page, listName string, tasks []gateway.Task) (idMap map[string]string, etags map[string]string, err error) {
 	if c.checklistR == nil {
 		return nil, nil, ErrChecklistReaderUnavailable
 	}
-	checklist, err := c.checklistR.ListItems(ctx, page, listName)
+	var checklist *apiv1.Checklist
+	checklist, err = c.checklistR.ListItems(ctx, page, listName)
 	if err != nil {
 		return nil, nil, fmt.Errorf("read wiki checklist: %w", err)
 	}
@@ -336,8 +338,8 @@ func (c *Connector) seedIDMapForSubscribe(ctx context.Context, page, listName st
 		}
 	}
 
-	idMap := map[string]string{}
-	etags := map[string]string{}
+	idMap = map[string]string{}
+	etags = map[string]string{}
 	for _, t := range tasks {
 		if t.Deleted {
 			continue

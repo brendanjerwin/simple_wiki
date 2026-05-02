@@ -97,10 +97,12 @@ type inMemoryOAuthStateStore struct {
 }
 
 // NewInMemoryOAuthStateStore constructs an in-memory store and kicks
-// off a background GC goroutine. Call Close to stop the GC when the
-// store is no longer needed (tests should always Close to avoid
-// leaking the goroutine across specs).
-func NewInMemoryOAuthStateStore() *inMemoryOAuthStateStore {
+// off a background GC goroutine. The returned OAuthStateStore is backed
+// by an in-memory map and is suitable for single-process use only (see
+// ADR-0011). Tests should call Close on the underlying implementation to
+// stop the background GC goroutine; production callers rely on process
+// lifetime.
+func NewInMemoryOAuthStateStore() OAuthStateStore {
 	return newInMemoryOAuthStateStoreWithClock(time.Now)
 }
 

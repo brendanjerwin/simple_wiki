@@ -798,21 +798,21 @@ type tasksAuthURLBuilder struct {
 	requiredScope string
 }
 
-func (b *tasksAuthURLBuilder) BuildAuthURL(ctx context.Context, profileID, _ string) (string, string, error) {
+func (b *tasksAuthURLBuilder) BuildAuthURL(ctx context.Context, profileID, _ string) (authURL string, stateToken string, err error) {
 	verifier, err := tasksgateway.GeneratePKCEVerifier()
 	if err != nil {
 		return "", "", fmt.Errorf("generate PKCE verifier: %w", err)
 	}
-	stateToken, err := b.stateStore.Issue(ctx, profileID, verifier)
+	stateToken, err = b.stateStore.Issue(ctx, profileID, verifier)
 	if err != nil {
 		return "", "", fmt.Errorf("issue OAuth state: %w", err)
 	}
 	challenge := tasksgateway.PKCEChallengeS256(verifier)
-	url, err := tasksgateway.BuildAuthURL(b.authURL, b.clientID, b.redirectURI, b.requiredScope, stateToken, challenge)
+	authURL, err = tasksgateway.BuildAuthURL(b.authURL, b.clientID, b.redirectURI, b.requiredScope, stateToken, challenge)
 	if err != nil {
 		return "", "", fmt.Errorf("build auth URL: %w", err)
 	}
-	return url, stateToken, nil
+	return authURL, stateToken, nil
 }
 
 // setupGoogleTasksConnector wires the Google Tasks bridge: SubscriptionStore,
@@ -975,8 +975,11 @@ func setupGoogleTasksConnector(
 		index: site.FrontmatterIndexQueryer,
 	})
 
+	// clientIDTailLen is the number of trailing characters of clientID shown in logs
+	// to confirm the correct credential is loaded without leaking the full ID.
+	const clientIDTailLen = 4
 	logger.Info("Google Tasks connector configured (client_id ends ...%s).",
-		safeTail(clientID, 4))
+		safeTail(clientID, clientIDTailLen))
 
 	return tasksConnector, tasksStore, authURLBuilder, nil
 }

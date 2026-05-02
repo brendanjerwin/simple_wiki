@@ -114,7 +114,7 @@ func (s *SubscriptionStore) AddSubscription(profileID wikipage.PageIdentifier, s
 	unlock := s.lockProfile(profileID)
 	defer unlock()
 
-	state, err := s.loadStateLocked(profileID)
+	state, err := s.fetchStateLocked(profileID)
 	if err != nil {
 		return err
 	}
@@ -136,7 +136,7 @@ func (s *SubscriptionStore) RemoveSubscription(profileID wikipage.PageIdentifier
 	unlock := s.lockProfile(profileID)
 	defer unlock()
 
-	state, err := s.loadStateLocked(profileID)
+	state, err := s.fetchStateLocked(profileID)
 	if err != nil {
 		return err
 	}
@@ -177,7 +177,7 @@ func (s *SubscriptionStore) UpdateSubscription(profileID wikipage.PageIdentifier
 	unlock := s.lockProfile(profileID)
 	defer unlock()
 
-	state, err := s.loadStateLocked(profileID)
+	state, err := s.fetchStateLocked(profileID)
 	if err != nil {
 		return err
 	}
@@ -202,7 +202,7 @@ func (s *SubscriptionStore) WithProfileLock(profileID wikipage.PageIdentifier, f
 // LoadStateLocked reads state without acquiring the per-profile
 // mutex. Caller MUST hold the lock (typically via WithProfileLock).
 func (s *SubscriptionStore) LoadStateLocked(profileID wikipage.PageIdentifier) (ConnectorState, error) {
-	return s.loadStateLocked(profileID)
+	return s.fetchStateLocked(profileID)
 }
 
 // SaveStateLocked overwrites state without acquiring the per-profile
@@ -211,9 +211,10 @@ func (s *SubscriptionStore) SaveStateLocked(profileID wikipage.PageIdentifier, s
 	return s.writeStateLocked(profileID, state)
 }
 
-// loadStateLocked is the unexported, lock-not-acquiring shape used
-// by every public method (which all hold the per-profile mutex).
-func (s *SubscriptionStore) loadStateLocked(profileID wikipage.PageIdentifier) (ConnectorState, error) {
+// fetchStateLocked reads the ConnectorState without acquiring the
+// per-profile mutex. Every public method that holds the lock calls
+// this instead of the locking LoadState.
+func (s *SubscriptionStore) fetchStateLocked(profileID wikipage.PageIdentifier) (ConnectorState, error) {
 	fm, err := s.readFrontMatter(profileID)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
