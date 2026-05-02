@@ -593,7 +593,7 @@ var _ = Describe("GoldmarkRenderer", func() {
 				Expect(string(output)).To(ContainSubstring("<code>code</code>"))
 			})
 
-			It("should not include any part of the type marker as content", func() {
+			It("should not include the complete or split type marker in the output", func() {
 				Expect(string(output)).NotTo(ContainSubstring("[!NOTE]"))
 				Expect(string(output)).NotTo(ContainSubstring("!NOTE]"))
 			})

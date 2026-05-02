@@ -172,12 +172,9 @@ func convertBlockquoteToAlert(bq *ast.Blockquote, alertType AlertType) {
 		child := para.FirstChild()
 		for child != nil {
 			next := child.NextSibling()
-			var isLineEnd bool
-			if textNode, ok := child.(*ast.Text); ok {
-				isLineEnd = textNode.SoftLineBreak()
-			}
+			textNode, isText := child.(*ast.Text)
 			para.RemoveChild(para, child)
-			if isLineEnd {
+			if isText && textNode.SoftLineBreak() {
 				break
 			}
 			child = next
