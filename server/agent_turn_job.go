@@ -113,10 +113,11 @@ func (j *AgentTurnJob) Execute() error {
 		maxTurns = defaultMaxTurns
 	}
 	completion, dispatchErr := j.dispatcher.Dispatch(&apiv1.ScheduledTurnRequest{
-		RequestId: requestID,
-		Page:      j.page,
-		Prompt:    snapshot.GetPrompt(),
-		MaxTurns:  maxTurns,
+		RequestId:    requestID,
+		Page:         j.page,
+		Prompt:       snapshot.GetPrompt(),
+		MaxTurns:     maxTurns,
+		AllowedTools: append([]string(nil), snapshot.GetAllowedTools()...),
 	})
 	if dispatchErr != nil {
 		// Record terminal ERROR via the FROM-current-state transition. The

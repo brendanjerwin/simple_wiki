@@ -83,12 +83,13 @@ func (s *Server) UpsertSchedule(_ context.Context, req *apiv1.UpsertScheduleRequ
 	// layer also strips them; we belt-and-suspenders here so the response
 	// reflects the truth.
 	clean := &apiv1.AgentSchedule{
-		Id:       schedule.GetId(),
-		Cron:     schedule.GetCron(),
-		Prompt:   schedule.GetPrompt(),
-		MaxTurns: schedule.GetMaxTurns(),
-		Enabled:  schedule.GetEnabled(),
-		Timezone: schedule.GetTimezone(),
+		Id:           schedule.GetId(),
+		Cron:         schedule.GetCron(),
+		Prompt:       schedule.GetPrompt(),
+		MaxTurns:     schedule.GetMaxTurns(),
+		Enabled:      schedule.GetEnabled(),
+		Timezone:     schedule.GetTimezone(),
+		AllowedTools: append([]string(nil), schedule.GetAllowedTools()...),
 	}
 	if err := s.agentScheduleStore.Upsert(req.GetPage(), clean); err != nil {
 		return nil, status.Errorf(codes.Internal, "upsert schedule: %v", err)

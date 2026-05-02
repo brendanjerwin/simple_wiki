@@ -66,8 +66,8 @@ func newAgentMetadataServer() (*v1.Server, *server.AgentScheduleStore, *server.A
 
 var _ = Describe("AgentMetadataService handlers", func() {
 	var (
-		ctx    context.Context
-		srv    *v1.Server
+		ctx       context.Context
+		srv       *v1.Server
 		schedules *server.AgentScheduleStore
 		contexts  *server.AgentChatContextStore
 	)
@@ -86,11 +86,12 @@ var _ = Describe("AgentMetadataService handlers", func() {
 				resp, err = srv.UpsertSchedule(ctx, &apiv1.UpsertScheduleRequest{
 					Page: "p",
 					Schedule: &apiv1.AgentSchedule{
-						Id:       "weekly",
-						Cron:     "0 0 9 * * 1",
-						Prompt:   "do thing",
-						MaxTurns: 15,
-						Enabled:  true,
+						Id:           "weekly",
+						Cron:         "0 0 9 * * 1",
+						Prompt:       "do thing",
+						MaxTurns:     15,
+						Enabled:      true,
+						AllowedTools: []string{"Bash(mkdir:*)", "Bash(rm:*)"},
 					},
 				})
 			})
@@ -106,6 +107,12 @@ var _ = Describe("AgentMetadataService handlers", func() {
 			It("should persist the schedule", func() {
 				list, _ := schedules.List("p")
 				Expect(list).To(HaveLen(1))
+			})
+
+			It("should persist allowed_tools", func() {
+				list, _ := schedules.List("p")
+				Expect(list).To(HaveLen(1))
+				Expect(list[0].GetAllowedTools()).To(ConsistOf("Bash(mkdir:*)", "Bash(rm:*)"))
 			})
 		})
 
@@ -132,9 +139,9 @@ var _ = Describe("AgentMetadataService handlers", func() {
 				_, err := srv.UpsertSchedule(ctx, &apiv1.UpsertScheduleRequest{
 					Page: "p",
 					Schedule: &apiv1.AgentSchedule{
-						Id:               "stripped",
-						Cron:             "0 0 9 * * 1",
-						LastErrorMessage: "from the caller — should be dropped",
+						Id:                  "stripped",
+						Cron:                "0 0 9 * * 1",
+						LastErrorMessage:    "from the caller — should be dropped",
 						LastDurationSeconds: 999,
 					},
 				})

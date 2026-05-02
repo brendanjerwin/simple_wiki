@@ -29,7 +29,8 @@ Use the `api_v1_AgentMetadataService_UpsertSchedule` MCP tool:
     "prompt": "Draft the weekend status update based on this week's notes.",
     "max_turns": 30,
     "enabled": true,
-    "timezone": "America/New_York"
+    "timezone": "America/New_York",
+    "allowed_tools": ["Bash(mkdir:*)", "Bash(date:*)"]
   }
 }
 ```
@@ -46,6 +47,7 @@ The wiki validates both the cron expression and (when set) the IANA timezone at 
 | `max_turns` | Cancel the turn after this many agent message chunks. Default 20. |
 | `enabled` | When `false`, the schedule is persisted but not registered with cron. |
 | `timezone` | Optional IANA timezone name. Empty/unset means UTC. |
+| `allowed_tools` | Optional per-schedule permission allowlist for tool calls that trigger `RequestPermission`. Empty/unset denies all permission requests. |
 
 The wiki-managed status fields (`last_run`, `last_status`, `last_error_message`, `last_duration_seconds`) are silently stripped on write — only the wiki itself can mutate them.
 

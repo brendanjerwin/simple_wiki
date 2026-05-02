@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"os"
 	"os/exec"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -36,6 +37,7 @@ const scheduledTurnPreamble = `You are a scheduled background agent acting on wi
 type scheduledTurnClient struct {
 	page         string
 	maxTurns     int32
+	allowedTools []string
 	turnCount    atomic.Int32
 	cancelPrompt context.CancelFunc
 
@@ -45,10 +47,11 @@ type scheduledTurnClient struct {
 
 // newScheduledTurnClient constructs a client. cancelPrompt is the function
 // returned by the context.WithCancel that wraps the Prompt call.
-func newScheduledTurnClient(page string, maxTurns int32, cancelPrompt context.CancelFunc) *scheduledTurnClient {
+func newScheduledTurnClient(page string, maxTurns int32, allowedTools []string, cancelPrompt context.CancelFunc) *scheduledTurnClient {
 	return &scheduledTurnClient{
 		page:         page,
 		maxTurns:     maxTurns,
+		allowedTools: append([]string(nil), allowedTools...),
 		cancelPrompt: cancelPrompt,
 	}
 }
@@ -83,9 +86,64 @@ func (c *scheduledTurnClient) HitLimit() bool {
 
 // RequestPermission implements acp.Client. Scheduled turns must not block on
 // user permission — auto-deny so the agent finishes deterministically.
-func (*scheduledTurnClient) RequestPermission(_ context.Context, _ acp.RequestPermissionRequest) (acp.RequestPermissionResponse, error) {
-	// Use the cancelled outcome so the agent knows the request was refused.
+func (c *scheduledTurnClient) RequestPermission(_ context.Context, req acp.RequestPermissionRequest) (acp.RequestPermissionResponse, error) {
+	if c.permissionAllowed(req) && len(req.Options) > 0 {
+		return permissionSelectedResponse(req.Options[0].OptionId), nil
+	}
 	return permissionCancelledResponse(), nil
+}
+
+func (c *scheduledTurnClient) permissionAllowed(req acp.RequestPermissionRequest) bool {
+	if len(c.allowedTools) == 0 {
+		return false
+	}
+
+	target := string(req.ToolCall.ToolCallId)
+	if req.ToolCall.Title != nil && *req.ToolCall.Title != "" {
+		target = *req.ToolCall.Title
+	}
+
+	for _, pattern := range c.allowedTools {
+		if wildcardMatch(pattern, target) {
+			return true
+		}
+	}
+	return false
+}
+
+func wildcardMatch(pattern, target string) bool {
+	if !strings.Contains(pattern, "*") {
+		return pattern == target
+	}
+
+	parts := strings.Split(pattern, "*")
+	position := 0
+
+	if !strings.HasPrefix(pattern, "*") {
+		if !strings.HasPrefix(target, parts[0]) {
+			return false
+		}
+		position = len(parts[0])
+	}
+
+	lastIndex := len(parts) - 1
+	for i, part := range parts {
+		if part == "" {
+			continue
+		}
+		if i == 0 && !strings.HasPrefix(pattern, "*") {
+			continue
+		}
+		if i == lastIndex && !strings.HasSuffix(pattern, "*") {
+			return strings.HasSuffix(target, part)
+		}
+		next := strings.Index(target[position:], part)
+		if next < 0 {
+			return false
+		}
+		position += next + len(part)
+	}
+	return true
 }
 
 // ReadTextFile implements acp.Client. Filesystem access is disabled.
@@ -231,7 +289,7 @@ func (d *poolDaemon) executeScheduledTurn(ctx context.Context, req *apiv1.Schedu
 	turnCtx, cancelTurn := context.WithCancel(ctx)
 	defer cancelTurn()
 
-	conn, cleanup, spawnErr := d.spawnEphemeralForScheduledTurn(turnCtx, req.GetPage(), req.GetRequestId(), req.GetMaxTurns(), cancelTurn)
+	conn, cleanup, spawnErr := d.spawnEphemeralForScheduledTurn(turnCtx, req.GetPage(), req.GetRequestId(), req.GetMaxTurns(), req.GetAllowedTools(), cancelTurn)
 	if spawnErr != nil {
 		return apiv1.ScheduleStatus_SCHEDULE_STATUS_ERROR, fmt.Sprintf("spawn failed: %v", spawnErr)
 	}
@@ -276,7 +334,7 @@ type scheduledEphemeralConnection struct {
 // are avoided. The earlier code reused buildAgentCmd which always
 // stop+restart's wiki-chat-<page>.scope — that killed both interactive
 // chat instances and competing scheduled turns mid-turn.
-func (d *poolDaemon) spawnEphemeralForScheduledTurn(ctx context.Context, page, requestID string, maxTurns int32, cancelTurn context.CancelFunc) (*scheduledEphemeralConnection, func(), error) {
+func (d *poolDaemon) spawnEphemeralForScheduledTurn(ctx context.Context, page, requestID string, maxTurns int32, allowedTools []string, cancelTurn context.CancelFunc) (*scheduledEphemeralConnection, func(), error) {
 	cmd := d.buildScheduledTurnAgentCmd(ctx, page, requestID)
 	stdinPipe, err := cmd.StdinPipe()
 	if err != nil {
@@ -302,7 +360,7 @@ func (d *poolDaemon) spawnEphemeralForScheduledTurn(ctx context.Context, page, r
 		}()
 	}
 
-	client := newScheduledTurnClient(page, maxTurns, cancelTurn)
+	client := newScheduledTurnClient(page, maxTurns, allowedTools, cancelTurn)
 	conn := acp.NewClientSideConnection(client, stdinPipe, stdoutPipe)
 
 	if _, initErr := conn.Initialize(ctx, acp.InitializeRequest{
