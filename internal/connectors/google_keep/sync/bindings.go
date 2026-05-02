@@ -65,12 +65,12 @@ type Binding struct {
 	// LabelIDs persists the per-binding mapping from label name to
 	// Keep label MainID. Captured from every pull that carries a
 	// non-empty Labels slice and consulted as the PRIMARY lookup in
-	// resolveLabelsForTags so incremental pulls (which usually return
-	// no labels at all) don't cause the connector to emit fresh label
-	// CRUD entries — and a corresponding new MainID — every tick for
-	// labels Keep already knows about. The per-pull Labels slice is
-	// the SECONDARY source: it only updates this map when a label
-	// appears or its MainID changes.
+	// translator.MergeKeepLabels so incremental pulls (which usually
+	// return no labels at all) don't cause the connector to emit
+	// fresh label CRUD entries — and a corresponding new MainID —
+	// every tick for labels Keep already knows about. The per-pull
+	// Labels slice is the SECONDARY source: it only updates this map
+	// when a label appears or its MainID changes.
 	//
 	// Tombstoned labels (LabelEntry.Deleted != 0) are removed from
 	// the map so the next sync re-creates them rather than reusing a
@@ -78,9 +78,9 @@ type Binding struct {
 	//
 	// Empty/nil for legacy bindings until the first pull that carries
 	// a non-empty Labels slice — including the migration job's full
-	// pull and Bind's seed-time full pull. resolveLabelsForTags falls
-	// back to the per-pull byName index until the persisted map is
-	// populated.
+	// pull and Bind's seed-time full pull. translator.MergeKeepLabels
+	// falls back to the per-pull byName index until the persisted map
+	// is populated.
 	LabelIDs map[string]string
 }
 

@@ -11,7 +11,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"strings"
 	"sync"
 	"time"
 
@@ -729,7 +728,7 @@ func (c *Connector) SyncToKeep(ctx context.Context, profileID wikipage.PageIdent
 	// Absorb this pull's labels into the persisted name → MainID map
 	// BEFORE resolving tags. Two effects:
 	//   1. New labels (Keep just learned about them) become available
-	//      to resolveLabelsForTags as the secondary lookup.
+	//      to translator.MergeKeepLabels as the secondary lookup.
 	//   2. Tombstoned labels (Deleted != zero) get evicted so the
 	//      next push re-creates them with a fresh MainID instead of
 	//      reusing a dead one.
@@ -752,12 +751,12 @@ func (c *Connector) SyncToKeep(ctx context.Context, profileID wikipage.PageIdent
 		}
 		binding.LabelIDs[l.Name] = l.MainID
 	}
-	labelPushEntries, listLabelIDs, err := resolveLabelsForTags(pageTags, binding.LabelIDs, pull.Labels, now)
+	labelPushEntries, listLabelIDs, err := translator.MergeKeepLabels(pageTags, binding.LabelIDs, pull.Labels, now)
 	if err != nil {
 		return fmt.Errorf("resolve labels: %w", err)
 	}
 	// Record any freshly-minted labels in the persisted map too, so
-	// the next tick's resolveLabelsForTags sees them as primary even
+	// the next tick's MergeKeepLabels sees them as primary even
 	// before Keep echoes them back in a pull.
 	for _, l := range labelPushEntries {
 		if l.Name == "" || l.MainID == "" {
@@ -1322,19 +1321,16 @@ func (c *Connector) maybeForceFullResyncOnTruncation(ctx context.Context, bindin
 // after a dead-letter). Captured at end-of-tick, not start, so
 // intra-tick wiki edits aren't missed.
 func stampLastObservedWiki(binding *Binding, checklist *apiv1.Checklist) {
-	wikiByUID := make(map[string]*apiv1.ChecklistItem, len(checklist.GetItems()))
-	for _, it := range checklist.GetItems() {
-		if it.GetUid() == "" {
-			continue
-		}
-		wikiByUID[it.GetUid()] = it
+	pairedUIDs := make(map[string]struct{}, len(binding.ItemIDMap))
+	for uid := range binding.ItemIDMap {
+		pairedUIDs[uid] = struct{}{}
 	}
-	for uid, ib := range binding.ItemIDMap {
-		item, ok := wikiByUID[uid]
+	fingerprints := translator.LastObservedWikiFingerprints(pairedUIDs, checklist)
+	for uid, fp := range fingerprints {
+		ib, ok := binding.ItemIDMap[uid]
 		if !ok {
 			continue
 		}
-		fp := translator.FingerprintWiki(item)
 		ib.LastObservedWikiText = fp.Text
 		ib.LastObservedWikiChecked = fp.Checked
 		ib.LastObservedWikiSortValue = fp.SortValue
@@ -1877,12 +1873,12 @@ func (c *Connector) persistBindingMap(profileID wikipage.PageIdentifier, binding
 // Keep list at bind time so future syncs don't duplicate items.
 //
 // Strategy: pull the bound list's existing LIST_ITEMs from Keep, then
-// for each wiki item find a Keep item by exact head-line match (text +
-// inline tags, before any "\n— description" suffix). Match-by-text is
-// imperfect (collisions on identical-text items) but it's the only
-// signal we have at bind time — Keep doesn't know wiki UIDs and wiki
-// has no record of Keep serverIDs yet. Subsequent edits round-trip
-// cleanly through the id_map.
+// delegate the pure matching to translator.MatchWikiItemsToKeepNodes
+// (exact head-line match: text + inline tags, before any "\n— description"
+// suffix). Match-by-text is imperfect (collisions on identical-text
+// items) but it's the only signal we have at bind time — Keep doesn't
+// know wiki UIDs and wiki has no record of Keep serverIDs yet.
+// Subsequent edits round-trip cleanly through the id_map.
 //
 // Returns:
 //   - idMap: per-wiki-uid ItemBinding with ServerID, BaseVersion, and
@@ -1905,8 +1901,6 @@ func (c *Connector) persistBindingMap(profileID wikipage.PageIdentifier, binding
 // won't — Keep accepts duplicate-text items. So this DOES matter, but
 // we'd rather have a working bind than a hard failure if the pull
 // flakes.).
-//
-//revive:disable-next-line:function-result-limit,cognitive-complexity,function-length
 func (c *Connector) seedIDMapFromExistingList(ctx context.Context, client KeepClient, listServerID string, wikiItems []InitialItem) (map[string]ItemBinding, map[string]string, string) {
 	idMap := map[string]ItemBinding{}
 	labelIDs := map[string]string{}
@@ -1921,88 +1915,38 @@ func (c *Connector) seedIDMapFromExistingList(ctx context.Context, client KeepCl
 	}
 	// Capture the LIST node's client-side `id` so subsequent outbound
 	// LIST updates send `id != serverId`. Keep 500s when they match.
-	for _, n := range pull.Nodes {
-		if n.Type == gateway.NodeTypeList && n.ServerID == listServerID {
-			keepNoteClientID = n.ID
-			break
+	keepNoteClientID = translator.FindListClientID(pull.Nodes, listServerID)
+
+	// Translator owns the pairing logic: build a normalized-text index
+	// over live LIST_ITEMs under our list, then match wiki items by
+	// text. We construct ItemBinding from the gateway-level seed match
+	// fields here because ItemBinding is a sync-package type.
+	seeds := translator.MatchWikiItemsToKeepNodes(pull.Nodes, listServerID, toSeedWikiItems(wikiItems))
+	for uid, m := range seeds {
+		idMap[uid] = ItemBinding{
+			ServerID:    m.ServerID,
+			BaseVersion: m.BaseVersion,
+			ClientID:    m.ClientID,
 		}
 	}
-	// Build base-text → Keep node index for live LIST_ITEMs whose
-	// parent matches our bound list. We retain the full node (not
-	// just serverID) so the per-item ItemBinding can capture
-	// BaseVersion and ClientID — both required by Keep's outbound
-	// push protocol on subsequent syncs.
-	keepByBase := make(map[string]gateway.Node, len(pull.Nodes))
-	for _, n := range pull.Nodes {
-		if n.Type != gateway.NodeTypeListItem {
-			continue
-		}
-		if n.ParentID != listServerID && n.ParentServerID != listServerID {
-			continue
-		}
-		if !n.Timestamps.Trashed.IsZero() || !n.Timestamps.Deleted.IsZero() {
-			continue
-		}
-		base := normalizeForSeedMatch(n.Text)
-		if base == "" {
-			continue
-		}
-		if _, exists := keepByBase[base]; exists {
-			// Duplicate-base Keep items: first match wins; second
-			// will look fresh to the sync engine and get a new
-			// client_id. User can manually clean up.
-			continue
-		}
-		keepByBase[base] = n
-	}
-	for _, w := range wikiItems {
-		if w.UID == "" {
-			continue
-		}
-		base := normalizeForSeedMatch(w.Text)
-		if base == "" {
-			continue
-		}
-		if node, ok := keepByBase[base]; ok {
-			idMap[w.UID] = ItemBinding{
-				ServerID:    node.ServerID,
-				BaseVersion: node.BaseVersion,
-				ClientID:    node.ID,
-			}
-		}
-	}
+
 	// Seed the per-name label MainID map from the bind-time pull so
-	// resolveLabelsForTags on the first post-bind sync uses persisted
-	// FKs instead of emitting fresh label CRUD entries every tick.
-	for _, l := range pull.Labels {
-		if l.Name == "" || l.MainID == "" {
-			continue
-		}
-		if !l.Deleted.IsZero() {
-			continue
-		}
-		labelIDs[l.Name] = l.MainID
-	}
+	// MergeKeepLabels on the first post-bind sync uses persisted FKs
+	// instead of emitting fresh label CRUD entries every tick.
+	labelIDs = translator.IndexLabelsByName(pull.Labels)
 	return idMap, labelIDs, keepNoteClientID
 }
 
-// normalizeForSeedMatch reduces a LIST_ITEM text to its bare item-name
-// portion: strips any "\n— description" suffix and any inline " #tag"
-// markers, lowercases, and trims surrounding whitespace. Used only at
-// bind time to find loose matches between wiki items (typically tagged
-// + described) and existing Keep items (typically plain text).
-func normalizeForSeedMatch(text string) string {
-	head, _, _ := strings.Cut(text, "\n— ")
-	// Walk word-by-word; drop tokens that start with '#'.
-	fields := strings.Fields(head)
-	cleaned := make([]string, 0, len(fields))
-	for _, f := range fields {
-		if strings.HasPrefix(f, "#") {
-			continue
-		}
-		cleaned = append(cleaned, f)
+// toSeedWikiItems projects []InitialItem to the translator's
+// SeedWikiItem shape (UID + Text only). The other InitialItem fields
+// (Tags, Description, Checked) aren't consulted by base-text matching;
+// they round-trip via SyncToKeep once pairing is established.
+func toSeedWikiItems(items []InitialItem) []translator.SeedWikiItem {
+	out := make([]translator.SeedWikiItem, len(items))
+	for i, w := range items {
+		out[i] = translator.SeedWikiItem{UID: w.UID, Text: w.Text}
 	}
-	return strings.ToLower(strings.Join(cleaned, " "))
+	return out
 }
 
 // readPageTags returns the union of (1) the host page's frontmatter
@@ -2056,93 +2000,6 @@ func (c *Connector) readPageTags(page string) ([]string, error) {
 	}
 
 	return out, nil
-}
-
-// resolveLabelsForTags reconciles the host page's tags against the
-// user's existing Keep labels. Returns:
-//   - labelPush: Label CRUD entries for tags that don't have a Keep
-//     label yet (one fresh MainID per missing tag).
-//   - listLabelIDs: the set of Keep label MainIDs that should be
-//     assigned to the bound LIST after the push.
-//
-// Lookup precedence:
-//  1. persistedLabelIDs (the binding's persistent name → MainID map):
-//     primary source. Survives incremental pulls that return no
-//     labels at all, so the connector stops emitting fresh label
-//     CRUD entries every tick for labels Keep already has.
-//  2. existingLabels (from this pull's Labels slice): secondary
-//     source. Picks up labels that Keep returned this tick but the
-//     binding hasn't observed yet — typically the very first sync
-//     after Bind, or after a forced full resync.
-//
-// Tombstoned labels in existingLabels (Deleted != zero) are skipped
-// — we re-create rather than reviving.
-func resolveLabelsForTags(tags []string, persistedLabelIDs map[string]string, existingLabels []gateway.LabelEntry, now time.Time) (labelPush []gateway.LabelEntry, listLabelIDs []string, err error) {
-	if len(tags) == 0 {
-		return nil, nil, nil
-	}
-	// Lookup is keyed by lowercased name so a wiki tag like `household`
-	// resolves to a Keep label whose canonical name is "Household". The
-	// PERSISTED map (binding.LabelIDs) preserves Keep's canonical case
-	// — see the post-pull persistence loop in SyncToKeep — but the
-	// LOOKUP normalizes both sides; otherwise every tick mints a fresh
-	// MainID and emits a duplicate-label CRUD entry.
-	byName := make(map[string]string, len(persistedLabelIDs)+len(existingLabels))
-	// Primary: persisted FKs from prior pulls. Survives incremental
-	// pulls that don't echo labels back.
-	for name, mainID := range persistedLabelIDs {
-		if mainID == "" {
-			continue
-		}
-		byName[strings.ToLower(name)] = mainID
-	}
-	// Secondary: this pull's labels. Overlay so a label whose MainID
-	// has changed (rare but possible — Keep can re-issue) gets
-	// absorbed; the post-pull update in SyncToKeep will then write
-	// the new value back into the persisted map.
-	for _, l := range existingLabels {
-		if !l.Deleted.IsZero() {
-			continue
-		}
-		if l.MainID == "" {
-			continue
-		}
-		byName[strings.ToLower(l.Name)] = l.MainID
-	}
-	listLabelIDs = make([]string, 0, len(tags))
-	for _, tag := range tags {
-		key := strings.ToLower(tag)
-		if existingID, ok := byName[key]; ok {
-			listLabelIDs = append(listLabelIDs, existingID)
-			continue
-		}
-		newID, err := generateLabelMainID(now, len(labelPush))
-		if err != nil {
-			return nil, nil, err
-		}
-		labelPush = append(labelPush, gateway.LabelEntry{
-			MainID:  newID,
-			Name:    tag,
-			Created: now,
-			Updated: now,
-		})
-		listLabelIDs = append(listLabelIDs, newID)
-		// Cache the just-created mapping so a duplicate tag in the
-		// input list reuses the same MainID rather than creating
-		// another (Keep tolerates duplicates but we'd rather not).
-		byName[key] = newID
-	}
-	return labelPush, listLabelIDs, nil
-}
-
-// generateLabelMainID makes a Keep-style label MainID. Same shape as a
-// Node ID ("ms-hex.16-hex"); gkeepapi node.py:1077-1085 (Label._gen_id).
-func generateLabelMainID(now time.Time, idx int) (string, error) {
-	var entropy [8]byte
-	if _, err := io.ReadFull(rand.Reader, entropy[:]); err != nil {
-		return "", err
-	}
-	return fmt.Sprintf("%x.%016x", now.UnixMilli()+int64(idx), binary.BigEndian.Uint64(entropy[:])), nil
 }
 
 // generatePushClientID makes a Keep-style client id for a brand-new

@@ -926,10 +926,11 @@ func runVerifyListPushShape(ctx context.Context, email, masterToken, deviceID st
 	// to a node is just a labelIds-only update on the node itself; no
 	// userInfo.labels CRUD entry needed.
 	//
-	// The production push path (resolveLabelsForTags) only emits a
-	// userInfo.labels CRUD entry when the label does NOT already exist
-	// — i.e. for a wiki tag that has no Keep label yet. Echoing a label
-	// here would make this verifier diverge from the prod shape.
+	// The production push path (translator.MergeKeepLabels) only emits
+	// a userInfo.labels CRUD entry when the label does NOT already
+	// exist — i.e. for a wiki tag that has no Keep label yet. Echoing
+	// a label here would make this verifier diverge from the prod
+	// shape.
 	_ = labelCanonicalName
 
 	bodyBytes, err := json.MarshalIndent(pushBody, "", "  ")

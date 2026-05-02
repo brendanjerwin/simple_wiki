@@ -4023,8 +4023,8 @@ var _ = Describe("SyncToKeep — persisted pull-derived state on incremental pul
 			Expect(err).ToNot(HaveOccurred())
 			Expect(found).To(BeTrue())
 			// The tombstone-eviction step removes the dead MainID;
-			// then resolveLabelsForTags mints a fresh MainID for the
-			// tag (since the dead one is gone) and the post-resolve
+			// then translator.MergeKeepLabels mints a fresh MainID for
+			// the tag (since the dead one is gone) and the post-resolve
 			// loop writes it back. End-state: the name is mapped to
 			// a NEW MainID, not the dead one.
 			Expect(b.LabelIDs["tombstoned"]).NotTo(BeEmpty())
@@ -4529,7 +4529,7 @@ var _ = Describe("MigrateBindingFingerprints — seeds KeepNoteClientID from ful
 // canonical capitalization (e.g. "Household"). A case-sensitive
 // lookup misses the FK and re-mints a fresh MainID every tick — the
 // "duplicate label per push" bug observed in production.
-var _ = Describe("resolveLabelsForTags — case-insensitive name lookup", func() {
+var _ = Describe("MergeKeepLabels — case-insensitive name lookup", func() {
 	const (
 		profile  = wikipage.PageIdentifier("profile_test_label_case")
 		page     = "shopping"
