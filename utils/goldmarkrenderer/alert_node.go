@@ -159,14 +159,28 @@ func convertBlockquoteToAlert(bq *ast.Blockquote, alertType AlertType) {
 		return
 	}
 
-	// Remove the [!TYPE] inline content from the leading paragraph.
-	// In goldmark, a soft line break is represented as a flag on an ast.Text node
-	// (Text.SoftLineBreak()), not as a separate AST node type. Removing the first
-	// child (the Text containing "[!TYPE]") is sufficient.
+	// Remove the [!TYPE] first line from the leading paragraph.
+	// goldmark's link parser may split [!TYPE] into multiple inline nodes
+	// (e.g., "[" as one ast.Text node and "!TYPE]" as another) when it
+	// backtracks after failing to form a link. We therefore remove ALL inline
+	// nodes that belong to the first line — i.e., every node up to and
+	// including the first ast.Text node with SoftLineBreak() == true (the
+	// goldmark signal that a line ends here). If no such node is found, the
+	// entire paragraph consists only of the marker line and we remove all
+	// children, then the paragraph itself.
 	if para, ok := bq.FirstChild().(*ast.Paragraph); ok {
-		firstInline := para.FirstChild()
-		if firstInline != nil {
-			para.RemoveChild(para, firstInline)
+		child := para.FirstChild()
+		for child != nil {
+			next := child.NextSibling()
+			var isLineEnd bool
+			if textNode, ok := child.(*ast.Text); ok {
+				isLineEnd = textNode.SoftLineBreak()
+			}
+			para.RemoveChild(para, child)
+			if isLineEnd {
+				break
+			}
+			child = next
 		}
 		// If the paragraph is now empty, remove it from the blockquote.
 		if para.FirstChild() == nil {
