@@ -43,7 +43,7 @@ var _ = Describe("WikiUIDMarker", func() {
 		It("should embed the zero-width prefix character", func() {
 			// U+200B ZERO WIDTH SPACE renders invisibly so the marker
 			// line doesn't visually clutter the Tasks UI.
-			Expect(marker).To(ContainSubstring("​"))
+			Expect(marker).To(ContainSubstring("\u200b"))
 		})
 	})
 })

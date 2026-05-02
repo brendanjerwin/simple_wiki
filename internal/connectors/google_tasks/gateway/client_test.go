@@ -56,7 +56,6 @@ type recordedRequest struct {
 type fakeTasksAPI struct {
 	server   *httptest.Server
 	requests []recordedRequest
-	handler  http.HandlerFunc
 }
 
 func newFakeTasksAPI(handler http.HandlerFunc) *fakeTasksAPI {
@@ -225,13 +224,18 @@ var _ = Describe("TasksClient.ListTasks", func() {
 		BeforeEach(func() {
 			api = newFakeTasksAPI(func(w http.ResponseWriter, _ *http.Request) {
 				w.Header().Set("Content-Type", "application/json")
+				// The notes field embeds the wiki uid marker, which begins
+				// with U+200B (zero-width space). Use the ​ escape
+				// (split out of the raw string via concatenation) so the
+				// source form is explicit and staticcheck ST1018 stays
+				// quiet — the runtime byte sequence is unchanged.
 				_, _ = io.WriteString(w, `{
 					"items":[
 						{
 							"id":"task-1",
 							"etag":"etag-1",
 							"title":"Buy milk",
-							"notes":"​— wiki:uid=01H...",
+							"notes":"`+"\u200b"+`— wiki:uid=01H...",
 							"status":"needsAction",
 							"position":"00000000000000000001",
 							"updated":"2026-04-25T17:14:00.000Z"

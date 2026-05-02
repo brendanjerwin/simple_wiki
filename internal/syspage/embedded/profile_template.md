@@ -16,3 +16,5 @@ This is your personal profile page. Edit it however you like.
 ## Connectors
 
 {{"{{ KeepConnect }}"}}
+
+{{printf "{{ GoogleTasksConnect %q }}" .Identifier}}

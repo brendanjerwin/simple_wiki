@@ -11,7 +11,7 @@ import "strings"
 //
 // The exact form is:
 //
-//	"\n​— wiki:uid="
+//	"\n\u200b— wiki:uid="
 //
 // Concrete tradeoff: Tasks's mobile UI does render multi-line `notes`
 // as wrapped text, so a fully invisible marker is impossible — the
@@ -19,7 +19,11 @@ import "strings"
 // limitation in help_google_tasks.md (per plan §3, "Outbound
 // idempotence — Marker-loss robustness"): users should not manually
 // delete the line.
-const wikiUIDMarkerPrefix = "\n​— wiki:uid="
+//
+// The U+200B character is written as the \u200b escape (rather than the
+// literal codepoint) so the source is explicit; the runtime byte
+// sequence is identical.
+const wikiUIDMarkerPrefix = "\n\u200b— wiki:uid="
 
 // WikiUIDMarker returns the literal string that should be appended to
 // Tasks `notes` to encode a wiki ULID for outbound idempotence. The

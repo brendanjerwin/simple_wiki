@@ -317,10 +317,6 @@ type deleteItemCall struct {
 	UID        string
 }
 
-func newFakeChecklistMutator() *fakeChecklistMutator {
-	return &fakeChecklistMutator{uidPrefix: "wiki-uid-"}
-}
-
 // newFakeChecklistMutatorBoundTo wires the mutator to a reader so
 // every Add/Update/Delete keeps the reader's view consistent — the
 // real wiki's mutator and the reader share the underlying page
