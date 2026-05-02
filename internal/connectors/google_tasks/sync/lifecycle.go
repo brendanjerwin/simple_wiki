@@ -194,13 +194,20 @@ func (c *Connector) ListRemoteLists(ctx context.Context, profileID wikipage.Page
 //  2. Acquire the per-checklist mutex.
 //  3. Fan-out re-read: verify no Subscription exists for
 //     (page, listName) on any profile / connector.
-//  4. Refuse-to-subscribe if the Tasks list contains subtasks.
-//  5. Subscribe-ceremony seed: text-match wiki items against
+//  4. If remoteListID is empty, create a fresh Tasks list named
+//     after the wiki listName (the "Bind to a new list" path).
+//  5. Refuse-to-subscribe if the (existing) Tasks list contains subtasks.
+//  6. Subscribe-ceremony seed: text-match wiki items against
 //     existing tasks, build initial ItemIDMap, stamp wiki:uid markers
 //     on existing matched tasks (deferred to first outbound push).
-//  6. Persist the Subscription on the profile.
-//  7. Take the lease.
-//  8. Release mutex; emit EventSubscriptionEstablished.
+//  7. Persist the Subscription on the profile.
+//  8. Take the lease.
+//  9. Release mutex; emit EventSubscriptionEstablished.
+//
+// Empty remoteListID means "create a new Tasks list named <listName>"
+// — mirrors the Keep bridge's empty-keepNoteID semantics. The first
+// outbound sync (cron tick or save-debounce) populates the new list
+// with whatever wiki items already exist.
 //
 // Returns the persisted Subscription on success.
 func (c *Connector) Subscribe(ctx context.Context, profileID wikipage.PageIdentifier, page, listName, remoteListID string) (Subscription, error) {
@@ -209,9 +216,6 @@ func (c *Connector) Subscribe(ctx context.Context, profileID wikipage.PageIdenti
 	}
 	if listName == "" {
 		return Subscription{}, errors.New("tasks bridge: list_name is required")
-	}
-	if remoteListID == "" {
-		return Subscription{}, errors.New("tasks bridge: remote_list_id is required")
 	}
 
 	if err := c.leaseTable.WaitReady(ctx); err != nil {
@@ -245,13 +249,19 @@ func (c *Connector) Subscribe(ctx context.Context, profileID wikipage.PageIdenti
 	}
 
 	c.logger.Info("tasks bridge: %s profile=%s page=%s list=%s remote=%s",
-		connectors.EventSubscriptionEstablished, string(profileID), page, listName, remoteListID)
+		connectors.EventSubscriptionEstablished, string(profileID), subscribed.Page, subscribed.ListName, subscribed.RemoteListID)
 	return subscribed, nil
 }
 
 // subscribeWithLock performs the subscribe ceremony while the caller
 // holds the per-checklist mutex. Cross-connector existence check,
-// subtask guard, ID-map seed, and lease acquisition all happen here.
+// optional create-new tasklist, subtask guard, ID-map seed, and lease
+// acquisition all happen here.
+//
+// Empty remoteListID means "create a fresh Tasks list named after
+// listName" — mirrors the Keep bridge's empty-keepNoteID semantics.
+// A create failure surfaces directly because nothing has been
+// persisted yet.
 func (c *Connector) subscribeWithLock(ctx context.Context, profileID wikipage.PageIdentifier, page, listName, remoteListID string, client TasksClient, checklistKey connectors.ChecklistKey, owner connectors.LeaseOwner) (Subscription, error) {
 	// Cross-profile/cross-connector existence check via the
 	// LeaseTable — the boot-rebuild + the contract that every
@@ -263,7 +273,18 @@ func (c *Connector) subscribeWithLock(ctx context.Context, profileID wikipage.Pa
 			existing.Kind, existing.ProfileID)
 	}
 
-	tasks, listErr := c.listAllTasks(ctx, client, remoteListID, time.Time{})
+	effectiveRemoteID := remoteListID
+	effectiveRemoteTitle := ""
+	if effectiveRemoteID == "" {
+		created, createErr := client.CreateTaskList(ctx, listName)
+		if createErr != nil {
+			return Subscription{}, fmt.Errorf("create tasks list: %w", createErr)
+		}
+		effectiveRemoteID = created.ID
+		effectiveRemoteTitle = created.Title
+	}
+
+	tasks, listErr := c.listAllTasks(ctx, client, effectiveRemoteID, time.Time{})
 	if listErr != nil {
 		return Subscription{}, fmt.Errorf("inspect tasks list: %w", listErr)
 	}
@@ -276,12 +297,14 @@ func (c *Connector) subscribeWithLock(ctx context.Context, profileID wikipage.Pa
 		return Subscription{}, fmt.Errorf("seed id_map: %w", err)
 	}
 
-	remoteTitle := resolveRemoteTitle(ctx, client, remoteListID)
+	if effectiveRemoteTitle == "" {
+		effectiveRemoteTitle = resolveRemoteTitle(ctx, client, effectiveRemoteID)
+	}
 	sub := Subscription{
 		Page:            page,
 		ListName:        listName,
-		RemoteListID:    remoteListID,
-		RemoteListTitle: remoteTitle,
+		RemoteListID:    effectiveRemoteID,
+		RemoteListTitle: effectiveRemoteTitle,
 		ItemIDMap:       idMap,
 		ItemEtags:       etags,
 		State:           SubscriptionStateActive,

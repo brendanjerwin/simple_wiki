@@ -382,9 +382,9 @@ func (s *Server) subscribeTasks(ctx context.Context, req *apiv1.SubscribeRequest
 	if req.GetPage() == "" || req.GetListName() == "" {
 		return nil, status.Error(codes.InvalidArgument, errMsgPageAndListRequired)
 	}
-	if req.GetRemoteListHandle() == "" {
-		return nil, status.Error(codes.InvalidArgument, "remote_list_handle is required for Tasks Subscribe; pick an existing tasklist from ListRemoteLists")
-	}
+	// remote_list_handle == "" is the "Bind to a new Tasks list" signal
+	// — the connector creates a fresh tasklist named after listName and
+	// binds to it. Mirrors the Keep bridge's empty-keepNoteID semantics.
 	_, profileID, err := requireRealUser(ctx)
 	if err != nil {
 		return nil, err

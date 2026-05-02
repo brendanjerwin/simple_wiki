@@ -97,6 +97,19 @@ type fakeTasksClient struct {
 
 	// nextInsertID returns ascending ids for InsertTask.
 	nextInsertID int
+
+	// createdTaskLists captures CreateTaskList calls in order.
+	createdTaskLists []createdTaskListCall
+
+	// createTaskListErr is returned from CreateTaskList when non-nil.
+	createTaskListErr error
+
+	// nextCreatedListID returns ascending ids for CreateTaskList.
+	nextCreatedListID int
+}
+
+type createdTaskListCall struct {
+	Title string
 }
 
 type insertedCall struct {
@@ -131,6 +144,25 @@ func (f *fakeTasksClient) ListTaskLists(_ context.Context) ([]gateway.TaskList, 
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return append([]gateway.TaskList(nil), f.taskLists...), nil
+}
+
+func (f *fakeTasksClient) CreateTaskList(_ context.Context, title string) (gateway.TaskList, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.createTaskListErr != nil {
+		return gateway.TaskList{}, f.createTaskListErr
+	}
+	f.createdTaskLists = append(f.createdTaskLists, createdTaskListCall{Title: title})
+	f.nextCreatedListID++
+	id := fmt.Sprintf("created-list-%d", f.nextCreatedListID)
+	tl := gateway.TaskList{
+		ID:      id,
+		Etag:    "etag-" + id,
+		Title:   title,
+		Updated: time.Date(testUpdatedYear, testUpdatedMonth, testUpdatedDay, testUpdatedHour, 0, 0, 0, time.UTC),
+	}
+	f.taskLists = append(f.taskLists, tl)
+	return tl, nil
 }
 
 func (f *fakeTasksClient) ListTasks(_ context.Context, tasklistID string, _ time.Time, pageToken string) (gateway.TasksPage, error) {

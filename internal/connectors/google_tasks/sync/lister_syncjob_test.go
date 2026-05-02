@@ -71,7 +71,7 @@ var _ = Describe("TasksOutboundSyncJob", func() {
 	Describe("GetName", func() {
 		It("should return the registered queue name constant", func() {
 			store := newConfiguredStore(pages, nil)
-			c := newConnector(store, readyLeaseTable(), client, clock, nil, nil, nil)
+			c := buildTestConnector(store, readyLeaseTable(), client, clock, nil, nil, nil)
 			job := taskssync.NewTasksOutboundSyncJob(c, aliceProfile, syncTestPage, syncTestListName)
 			Expect(job.GetName()).To(Equal(taskssync.TasksOutboundSyncJobName))
 		})
@@ -84,7 +84,7 @@ var _ = Describe("TasksOutboundSyncJob", func() {
 			BeforeEach(func() {
 				// Store has no subscription for (syncTestPage, syncTestListName).
 				store := newConfiguredStore(pages, nil)
-				c := newConnector(store, readyLeaseTable(), client, clock, nil, nil, nil)
+				c := buildTestConnector(store, readyLeaseTable(), client, clock, nil, nil, nil)
 				job := taskssync.NewTasksOutboundSyncJob(c, aliceProfile, syncTestPage, syncTestListName)
 				execErr = job.Execute()
 			})
@@ -110,7 +110,7 @@ var _ = Describe("TasksOutboundSyncJob", func() {
 				reader := newFakeChecklistReader()
 				reader.Set(syncTestPage, syncTestListName, nil)
 				store := newConfiguredStore(pages, sub)
-				c := newConnector(store, readyLeaseTable(), client, clock, reader, nil, nil)
+				c := buildTestConnector(store, readyLeaseTable(), client, clock, reader, nil, nil)
 				job := taskssync.NewTasksOutboundSyncJob(c, aliceProfile, syncTestPage, syncTestListName)
 				execErr = job.Execute()
 			})

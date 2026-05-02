@@ -297,6 +297,92 @@ var _ = Describe("TasksClient.ListTasks", func() {
 	})
 })
 
+var _ = Describe("TasksClient.CreateTaskList", func() {
+	var (
+		api    *fakeTasksAPI
+		client *gateway.TasksClient
+		ctx    context.Context
+	)
+
+	BeforeEach(func() { ctx = context.Background() })
+
+	AfterEach(func() {
+		if api != nil {
+			api.Close()
+		}
+	})
+
+	When("the server accepts the create", func() {
+		var (
+			tasklist gateway.TaskList
+			err      error
+			body     map[string]any
+		)
+
+		BeforeEach(func() {
+			api = newFakeTasksAPI(func(w http.ResponseWriter, _ *http.Request) {
+				_ = json.Unmarshal([]byte(api.requests[len(api.requests)-1].body), &body)
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = io.WriteString(w, `{
+					"kind":"tasks#taskList",
+					"id":"new-list-id",
+					"etag":"etag-new",
+					"title":"Groceries",
+					"updated":"2026-04-25T17:14:00.000Z"
+				}`)
+			})
+			client, _ = gateway.NewTasksClient(api.server.Client(), api.URL(), newStaticTokenSource("tok"))
+			tasklist, err = client.CreateTaskList(ctx, "Groceries")
+		})
+
+		It("should not error", func() {
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should return the server-assigned tasklist id", func() {
+			Expect(tasklist.ID).To(Equal("new-list-id"))
+		})
+
+		It("should return the title", func() {
+			Expect(tasklist.Title).To(Equal("Groceries"))
+		})
+
+		It("should POST to the lists endpoint", func() {
+			Expect(api.requests[0].method).To(Equal(http.MethodPost))
+			Expect(api.requests[0].path).To(Equal("/users/@me/lists"))
+		})
+
+		It("should send the title in the JSON body", func() {
+			Expect(body["title"]).To(Equal("Groceries"))
+		})
+	})
+
+	When("title is empty", func() {
+		It("should error before sending a request", func() {
+			client, _ = gateway.NewTasksClient(http.DefaultClient, "https://x/", newStaticTokenSource("t"))
+			_, err := client.CreateTaskList(ctx, "")
+			Expect(err).To(MatchError(ContainSubstring("title")))
+		})
+	})
+
+	When("the server returns 401 twice in a row", func() {
+		var err error
+
+		BeforeEach(func() {
+			api = newFakeTasksAPI(func(w http.ResponseWriter, _ *http.Request) {
+				w.WriteHeader(http.StatusUnauthorized)
+				_, _ = io.WriteString(w, `{"error":{"code":401}}`)
+			})
+			client, _ = gateway.NewTasksClient(api.server.Client(), api.URL(), newStaticTokenSource("a", "b"))
+			_, err = client.CreateTaskList(ctx, "Groceries")
+		})
+
+		It("should return ErrAuthRevoked", func() {
+			Expect(err).To(MatchError(gateway.ErrAuthRevoked))
+		})
+	})
+})
+
 var _ = Describe("TasksClient.InsertTask", func() {
 	var (
 		api    *fakeTasksAPI

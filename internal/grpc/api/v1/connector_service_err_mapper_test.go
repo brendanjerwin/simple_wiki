@@ -31,6 +31,10 @@ func (f *errMapperTasksClient) ListTaskLists(_ context.Context) ([]tasksgateway.
 	return f.taskListsToReturn, nil
 }
 
+func (*errMapperTasksClient) CreateTaskList(_ context.Context, _ string) (tasksgateway.TaskList, error) {
+	return tasksgateway.TaskList{}, nil
+}
+
 func (f *errMapperTasksClient) ListTasks(_ context.Context, _ string, _ time.Time, _ string) (tasksgateway.TasksPage, error) {
 	if f.listTasksErr != nil {
 		return tasksgateway.TasksPage{}, f.listTasksErr

@@ -122,6 +122,34 @@ func (c *TasksClient) listTaskListsPage(ctx context.Context, pageToken string) (
 	return out, wire.NextPageToken, nil
 }
 
+// CreateTaskList creates a new Google Tasks tasklist with the given
+// title. Mirrors the wire shape of the tasklists.insert endpoint —
+// POST /tasks/v1/users/@me/lists with body {"title": "..."}. Returns
+// the server-assigned TaskList (id, etag, updated populated).
+//
+// Used by the subscribe-ceremony when the user opts to "Bind to a new
+// Tasks list" rather than picking from an existing tasklist. Mirrors
+// the Keep gateway's CreateList convenience.
+func (c *TasksClient) CreateTaskList(ctx context.Context, title string) (TaskList, error) {
+	if title == "" {
+		return TaskList{}, errors.New("tasks: title must not be empty")
+	}
+	wire := wireTaskList{Title: title}
+	reqBody, err := json.Marshal(wire)
+	if err != nil {
+		return TaskList{}, fmt.Errorf("encode tasklist: %w", err)
+	}
+	respBody, err := c.do(ctx, http.MethodPost, "users/@me/lists", nil, reqBody, "")
+	if err != nil {
+		return TaskList{}, err
+	}
+	var got wireTaskList
+	if err := json.Unmarshal(respBody, &got); err != nil {
+		return TaskList{}, fmt.Errorf("%w: decode createTaskList response: %w", ErrProtocolDrift, err)
+	}
+	return decodeTaskList(got)
+}
+
 // ListTasks fetches one page of tasks.list from the given tasklist.
 // updatedMin is the cursor (zero = first sync); pageToken is the
 // continuation cursor when walking a multi-page response. The caller

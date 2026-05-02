@@ -45,11 +45,24 @@ type fakeTasksClient struct {
 	listTasksResp      gateway.TasksPage
 	listTaskListsErr   error
 	insertTaskErr      error
+	createTaskListErr  error
+	createdTaskLists   []string
 	listsListedForList []string
 }
 
 func (f *fakeTasksClient) ListTaskLists(_ context.Context) ([]gateway.TaskList, error) {
 	return f.taskListsToReturn, f.listTaskListsErr
+}
+
+func (f *fakeTasksClient) CreateTaskList(_ context.Context, title string) (gateway.TaskList, error) {
+	if f.createTaskListErr != nil {
+		return gateway.TaskList{}, f.createTaskListErr
+	}
+	f.createdTaskLists = append(f.createdTaskLists, title)
+	id := "created-" + title
+	tl := gateway.TaskList{ID: id, Title: title}
+	f.taskListsToReturn = append(f.taskListsToReturn, tl)
+	return tl, nil
 }
 
 func (f *fakeTasksClient) ListTasks(_ context.Context, tasklistID string, _ time.Time, _ string) (gateway.TasksPage, error) {
@@ -507,14 +520,19 @@ var _ = Describe("ConnectorService handlers (GOOGLE_TASKS)", func() {
 	// ---------------------------------------------------------- Subscribe (Tasks)
 
 	Describe("Subscribe", func() {
-		Describe("when called with empty remote_list_handle", func() {
-			var err error
+		Describe("when called with empty remote_list_handle (Bind to a new Tasks list)", func() {
+			var (
+				resp   *apiv1.SubscribeResponse
+				err    error
+				client *fakeTasksClient
+			)
 
 			BeforeEach(func() {
 				mock := connectedTasksProfileMock(profileID)
-				c := buildTasksConnector(mock, nil)
+				client = &fakeTasksClient{}
+				c := buildTasksConnector(mock, client)
 				server := mustNewServer(mock, nil, nil).WithGoogleTasksConnector(c)
-				_, err = server.Subscribe(ctx, &apiv1.SubscribeRequest{
+				resp, err = server.Subscribe(ctx, &apiv1.SubscribeRequest{
 					ConnectorKind:    apiv1.ConnectorKind_CONNECTOR_KIND_GOOGLE_TASKS,
 					Page:             tasksTestPage,
 					ListName:         tasksTestListName,
@@ -522,8 +540,16 @@ var _ = Describe("ConnectorService handlers (GOOGLE_TASKS)", func() {
 				})
 			})
 
-			It("should return InvalidArgument because Tasks Subscribe requires picking an existing list", func() {
-				Expect(err).To(HaveGrpcStatusWithSubstr(codes.InvalidArgument, "remote_list_handle is required"))
+			It("should not error", func() {
+				Expect(err).ToNot(HaveOccurred())
+			})
+
+			It("should call CreateTaskList with the wiki list name as the title", func() {
+				Expect(client.createdTaskLists).To(ConsistOf(tasksTestListName))
+			})
+
+			It("should bind the subscription to the freshly-created tasklist id", func() {
+				Expect(resp.GetSubscription().GetRemoteListHandle()).To(Equal("created-" + tasksTestListName))
 			})
 		})
 

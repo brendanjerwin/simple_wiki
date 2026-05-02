@@ -935,6 +935,47 @@ var _ = Describe("Connector.Subscribe", func() {
 			Expect(errors.Is(subErr, taskssync.ErrConnectorNotConfigured)).To(BeTrue())
 		})
 	})
+
+	When("remoteListID is empty (Bind to a new Tasks list)", func() {
+		var (
+			subscribed taskssync.Subscription
+			subErr     error
+			client     *fakeTasksClient
+		)
+
+		BeforeEach(func() {
+			pages := newFakePages()
+			store := newConfiguredStore(pages, nil)
+			client = newFakeTasksClient()
+			reader := newFakeChecklistReader()
+			reader.Set(syncTestPage, syncTestListName, []*apiv1.ChecklistItem{
+				{Uid: "wiki-1", Text: "Eggs"},
+			})
+			c := buildTestConnector(store, readyLeaseTable(), client, newFakeClock(time.Now()), reader, nil, nil)
+			subscribed, subErr = c.Subscribe(context.Background(), aliceProfile, syncTestPage, syncTestListName, "")
+		})
+
+		It("should not error", func() {
+			Expect(subErr).ToNot(HaveOccurred())
+		})
+
+		It("should call CreateTaskList with the wiki list name", func() {
+			Expect(client.createdTaskLists).To(HaveLen(1))
+			Expect(client.createdTaskLists[0].Title).To(Equal(syncTestListName))
+		})
+
+		It("should bind to the freshly-created tasklist id", func() {
+			Expect(subscribed.RemoteListID).To(Equal("created-list-1"))
+		})
+
+		It("should populate the friendly title from the create response", func() {
+			Expect(subscribed.RemoteListTitle).To(Equal(syncTestListName))
+		})
+
+		It("should produce an empty initial ItemIDMap (fresh list has no tasks)", func() {
+			Expect(subscribed.ItemIDMap).To(BeEmpty())
+		})
+	})
 })
 
 var _ = Describe("Connector.Unsubscribe", func() {

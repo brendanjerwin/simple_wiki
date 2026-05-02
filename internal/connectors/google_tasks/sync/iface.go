@@ -35,6 +35,7 @@ type Logger interface {
 // without spinning up an httptest.Server.
 type TasksClient interface {
 	ListTaskLists(ctx context.Context) ([]gateway.TaskList, error)
+	CreateTaskList(ctx context.Context, title string) (gateway.TaskList, error)
 	ListTasks(ctx context.Context, tasklistID string, updatedMin time.Time, pageToken string) (gateway.TasksPage, error)
 	InsertTask(ctx context.Context, tasklistID, title, notes string, status gateway.TaskStatus, due time.Time, parent string) (gateway.Task, error)
 	PatchTask(ctx context.Context, tasklistID, taskID string, fields gateway.PatchFields, etag string) (gateway.Task, error)
