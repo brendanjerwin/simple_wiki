@@ -574,6 +574,208 @@ var _ = Describe("OAuthGoogleHandler", func() {
 			Expect(IsNotConfigured(nil)).To(BeFalse())
 		})
 	})
+
+	Describe("SetOAuthGoogleHandler / getOAuthGoogleHandler / handleOAuthGoogleCallback", func() {
+		AfterEach(func() {
+			// Reset the global so other tests start clean.
+			SetOAuthGoogleHandler(nil)
+		})
+
+		Describe("when no handler has been installed", func() {
+			BeforeEach(func() {
+				SetOAuthGoogleHandler(nil)
+			})
+
+			It("getOAuthGoogleHandler should return nil", func() {
+				Expect(getOAuthGoogleHandler()).To(BeNil())
+			})
+		})
+
+		Describe("when a handler has been installed", func() {
+			var installed *OAuthGoogleHandler
+
+			BeforeEach(func() {
+				installed = &OAuthGoogleHandler{
+					IssuerExpected: "https://installed.example.com",
+				}
+				SetOAuthGoogleHandler(installed)
+			})
+
+			It("getOAuthGoogleHandler should return it", func() {
+				Expect(getOAuthGoogleHandler()).To(Equal(installed))
+			})
+		})
+
+		Describe("handleOAuthGoogleCallback", func() {
+			Describe("when no handler is installed", func() {
+				var rec *httptest.ResponseRecorder
+
+				BeforeEach(func() {
+					SetOAuthGoogleHandler(nil)
+					s := &Site{}
+					rec = httptest.NewRecorder()
+					gctx, _ := gin.CreateTestContext(rec)
+					gctx.Request = httptest.NewRequest(http.MethodGet, "/oauth/google/callback", nil)
+					s.handleOAuthGoogleCallback(gctx)
+				})
+
+				It("should render 503 not-configured page", func() {
+					Expect(rec.Code).To(Equal(http.StatusServiceUnavailable))
+				})
+			})
+
+			Describe("when a handler is installed", func() {
+				var rec *httptest.ResponseRecorder
+
+				BeforeEach(func() {
+					startServer()
+					// Install the real handler constructed in startServer.
+					SetOAuthGoogleHandler(handler)
+					rec = httptest.NewRecorder()
+					gctx, _ := gin.CreateTestContext(rec)
+					// Build a request that will be rejected by iss validation
+					// (no iss param) so we get a deterministic non-500 result
+					// without needing a full happy-path token exchange.
+					gctx.Request = httptest.NewRequest(http.MethodGet, "/oauth/google/callback", nil)
+					s := &Site{}
+					s.handleOAuthGoogleCallback(gctx)
+				})
+
+				It("should delegate to the installed handler", func() {
+					// iss absent → 400 per RFC 9207 strict policy.
+					Expect(rec.Code).To(Equal(http.StatusBadRequest))
+				})
+			})
+		})
+
+		Describe("HandleCallback (gin wrapper)", func() {
+			Describe("when called via a gin context", func() {
+				var rec *httptest.ResponseRecorder
+
+				BeforeEach(func() {
+					startServer()
+					rec = httptest.NewRecorder()
+					gctx, _ := gin.CreateTestContext(rec)
+					// No iss param → 400 immediately.
+					gctx.Request = httptest.NewRequest(http.MethodGet, "/oauth/google/callback", nil)
+					handler.HandleCallback(gctx)
+				})
+
+				It("should produce the same result as handleCallback", func() {
+					Expect(rec.Code).To(Equal(http.StatusBadRequest))
+				})
+			})
+		})
+	})
+
+	Describe("NewOAuthGoogleHandler", func() {
+		Describe("when required environment variables are set", func() {
+			var (
+				h   *OAuthGoogleHandler
+				err error
+			)
+
+			BeforeEach(func() {
+				GinkgoT().Setenv(envGoogleTasksClientID, "cid-test")
+				GinkgoT().Setenv(envGoogleTasksClientSecret, "csec-test")
+				GinkgoT().Setenv(envGoogleTasksRedirectURI, "https://wiki.example/oauth/google/callback")
+				h, err = NewOAuthGoogleHandler(stateStore, persister, identity, authIssuer)
+			})
+
+			It("should not error", func() {
+				Expect(err).ToNot(HaveOccurred())
+			})
+
+			It("should populate ClientID from env", func() {
+				Expect(h.ClientID).To(Equal("cid-test"))
+			})
+
+			It("should populate ClientSecret from env", func() {
+				Expect(h.ClientSecret).To(Equal("csec-test"))
+			})
+
+			It("should populate RedirectURI from env", func() {
+				Expect(h.RedirectURI).To(Equal("https://wiki.example/oauth/google/callback"))
+			})
+
+			It("should pin the Google issuer", func() {
+				Expect(h.IssuerExpected).To(Equal(googleOAuthIssuer))
+			})
+		})
+
+		Describe("when CLIENT_ID env var is absent", func() {
+			var err error
+
+			BeforeEach(func() {
+				GinkgoT().Setenv(envGoogleTasksClientID, "")
+				GinkgoT().Setenv(envGoogleTasksClientSecret, "csec")
+				GinkgoT().Setenv(envGoogleTasksRedirectURI, "https://redir")
+				_, err = NewOAuthGoogleHandler(stateStore, persister, identity, authIssuer)
+			})
+
+			It("should return errNotConfigured", func() {
+				Expect(IsNotConfigured(err)).To(BeTrue())
+			})
+		})
+	})
+
+	Describe("tryBuildAuthURL", func() {
+		Describe("when AuthURLIssuer is nil", func() {
+			var result string
+
+			BeforeEach(func() {
+				startServer()
+				handler.AuthURLIssuer = nil
+				result = handler.tryBuildAuthURL(httptest.NewRequest(http.MethodGet, "/", nil))
+			})
+
+			It("should return empty string", func() {
+				Expect(result).To(BeEmpty())
+			})
+		})
+
+		Describe("when IdentityResolver is nil", func() {
+			var result string
+
+			BeforeEach(func() {
+				startServer()
+				handler.IdentityResolver = nil
+				result = handler.tryBuildAuthURL(httptest.NewRequest(http.MethodGet, "/", nil))
+			})
+
+			It("should return empty string", func() {
+				Expect(result).To(BeEmpty())
+			})
+		})
+
+		Describe("when IdentityResolver returns an error", func() {
+			var result string
+
+			BeforeEach(func() {
+				startServer()
+				handler.IdentityResolver = &fakeIdentityResolver{err: io.EOF}
+				result = handler.tryBuildAuthURL(httptest.NewRequest(http.MethodGet, "/", nil))
+			})
+
+			It("should return empty string", func() {
+				Expect(result).To(BeEmpty())
+			})
+		})
+
+		Describe("when AuthURLIssuer returns an error", func() {
+			var result string
+
+			BeforeEach(func() {
+				startServer()
+				handler.AuthURLIssuer = &fakeAuthURLIssuer{err: io.EOF}
+				result = handler.tryBuildAuthURL(httptest.NewRequest(http.MethodGet, "/", nil))
+			})
+
+			It("should return empty string", func() {
+				Expect(result).To(BeEmpty())
+			})
+		})
+	})
 })
 
 // errFakePersist is a sentinel used by the persist-failure test case.

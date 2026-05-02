@@ -623,3 +623,105 @@ var _ = Describe("SubscriptionStore.UpdateSubscription", func() {
 		})
 	})
 })
+
+var _ = Describe("SubscriptionStore.WithProfileLock", func() {
+	var (
+		store *taskssync.SubscriptionStore
+		pages *fakePages
+	)
+
+	BeforeEach(func() {
+		pages = newFakePages()
+		store = newStore(pages)
+	})
+
+	When("the callback succeeds", func() {
+		var (
+			fnCalled bool
+			lockErr  error
+		)
+
+		BeforeEach(func() {
+			fnCalled = false
+			lockErr = store.WithProfileLock(aliceProfile, func() error {
+				fnCalled = true
+				return nil
+			})
+		})
+
+		It("should call the function", func() {
+			Expect(fnCalled).To(BeTrue())
+		})
+
+		It("should not error", func() {
+			Expect(lockErr).ToNot(HaveOccurred())
+		})
+	})
+
+	When("the callback returns an error", func() {
+		var lockErr error
+
+		BeforeEach(func() {
+			lockErr = store.WithProfileLock(aliceProfile, func() error {
+				return errors.New("fn error")
+			})
+		})
+
+		It("should propagate the error", func() {
+			Expect(lockErr).To(MatchError("fn error"))
+		})
+	})
+})
+
+var _ = Describe("SubscriptionStore.LoadStateLocked / SaveStateLocked", func() {
+	var (
+		store *taskssync.SubscriptionStore
+		pages *fakePages
+	)
+
+	BeforeEach(func() {
+		pages = newFakePages()
+		store = newStore(pages)
+	})
+
+	When("used within WithProfileLock", func() {
+		var (
+			originalEmail string
+			saveErr       error
+		)
+
+		BeforeEach(func() {
+			// First save some state via the public API so there's something to load.
+			initial := taskssync.ConnectorState{
+				Email:        "alice@example.com",
+				RefreshToken: "rt-initial",
+			}
+			Expect(store.SaveState(aliceProfile, initial)).To(Succeed())
+
+			// Use WithProfileLock to exercise LoadStateLocked + SaveStateLocked.
+			saveErr = store.WithProfileLock(aliceProfile, func() error {
+				loadedState, err := store.LoadStateLocked(aliceProfile)
+				if err != nil {
+					return err
+				}
+				originalEmail = loadedState.Email // capture before mutation
+				loadedState.Email = "alice-updated@example.com"
+				return store.SaveStateLocked(aliceProfile, loadedState)
+			})
+		})
+
+		It("should not error on WithProfileLock", func() {
+			Expect(saveErr).ToNot(HaveOccurred())
+		})
+
+		It("should load the previously saved state via LoadStateLocked", func() {
+			Expect(originalEmail).To(Equal("alice@example.com"))
+		})
+
+		It("should persist the updated state via SaveStateLocked", func() {
+			state, err := store.LoadState(aliceProfile)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(state.Email).To(Equal("alice-updated@example.com"))
+		})
+	})
+})

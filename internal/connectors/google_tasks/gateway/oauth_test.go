@@ -581,5 +581,66 @@ var _ = It("error sentinels are distinct", func() {
 	Expect(errors.Is(gateway.ErrScopeDowngraded, gateway.ErrInvalidGrant)).To(BeFalse())
 })
 
+var _ = Describe("RefreshClient.ExpiresAt", func() {
+	var (
+		stub   *stubTokenServer
+		client *gateway.RefreshClient
+	)
+
+	BeforeEach(func() {
+		stub = newStubTokenServer()
+	})
+
+	AfterEach(func() {
+		stub.Close()
+	})
+
+	When("no access token has been fetched yet", func() {
+		BeforeEach(func() {
+			var err error
+			client, err = gateway.NewRefreshClient(
+				stub.server.Client(),
+				stub.URL(),
+				"client-id",
+				"client-secret",
+				gateway.NewStaticRefreshTokenStore("rt"),
+			)
+			Expect(err).ToNot(HaveOccurred())
+		})
+
+		It("should return the zero time", func() {
+			Expect(client.ExpiresAt()).To(BeZero())
+		})
+	})
+
+	When("a successful token refresh has occurred", func() {
+		BeforeEach(func() {
+			stub.responses = []stubTokenResponse{{
+				status: http.StatusOK,
+				body:   `{"access_token":"ya29.new","expires_in":3600,"token_type":"Bearer","scope":"https://www.googleapis.com/auth/tasks"}`,
+			}}
+			var err error
+			client, err = gateway.NewRefreshClient(
+				stub.server.Client(),
+				stub.URL(),
+				"client-id",
+				"client-secret",
+				gateway.NewStaticRefreshTokenStore("seed-rt"),
+			)
+			Expect(err).ToNot(HaveOccurred())
+			_, err = client.AccessToken(context.Background())
+			Expect(err).ToNot(HaveOccurred())
+		})
+
+		It("should return a non-zero expiry", func() {
+			Expect(client.ExpiresAt()).ToNot(BeZero())
+		})
+
+		It("should return a future expiry time", func() {
+			Expect(client.ExpiresAt()).To(BeTemporally(">", time.Now()))
+		})
+	})
+})
+
 // keep the time import used
 var _ = time.Second
