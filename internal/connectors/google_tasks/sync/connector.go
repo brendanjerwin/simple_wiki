@@ -146,17 +146,19 @@ var _ connectors.Connector = (*Connector)(nil)
 //
 // Algorithm (per plan §"Sync semantics specification"):
 //
-//  1. Load the Subscription. Return early if paused (cursor frozen).
-//  2. Per-connector rate-limit choke: skip if last successful sync
+//  1. Load the full profile state once (derives refreshToken, email,
+//     and the matching Subscription in a single read).
+//  2. Return early if no subscription found or if it is paused.
+//  3. Per-connector rate-limit choke: skip if last successful sync
 //     was within rateLimitChokeSeconds of now.
-//  3. Build a TasksClient bound to this profile's refresh token.
-//  4. Inbound: walk all pages of ListTasks(updatedMin=cursor); apply
+//  4. Build a TasksClient bound to this profile's refresh token.
+//  5. Inbound: walk all pages of ListTasks(updatedMin=cursor); apply
 //     to wiki via mutator (suppressed); flatten subtasks if any
 //     observed. Capture max(Task.updated) for cursor advance.
-//  5. Outbound: diff current wiki items against ItemIDMap; insert
+//  6. Outbound: diff current wiki items against ItemIDMap; insert
 //     new uids (with pre-insert marker scan), patch updated uids
 //     (with If-Match etag), delete missing uids.
-//  6. Apply-then-advance: persist updated ItemIDMap + cursor on the
+//  7. Apply-then-advance: persist updated ItemIDMap + cursor on the
 //     subscription record AFTER both directions succeed.
 //
 // On gateway.ErrInvalidGrant or gateway.ErrAuthRevoked (after
@@ -168,10 +170,18 @@ var _ connectors.Connector = (*Connector)(nil)
 //revive:disable-next-line:cyclomatic // single-purpose orchestrator; splitting hurts readability
 func (c *Connector) Sync(ctx context.Context, key connectors.SubscriptionKey) error {
 	profileID := wikipage.PageIdentifier(key.ProfileID)
-	sub, found, err := c.store.FindSubscription(profileID, key.Page, key.ListName)
+
+	// Single profile read: derive refreshToken, email, and the
+	// matching Subscription from this one result rather than calling
+	// FindSubscription (which internally calls LoadState) and then
+	// LoadState again — that was two round-trips through the same
+	// frontmatter for every Sync tick.
+	state, err := c.store.LoadState(profileID)
 	if err != nil {
-		return fmt.Errorf("load subscription: %w", err)
+		return fmt.Errorf("load profile state: %w", err)
 	}
+
+	sub, found := findSubscriptionInState(state, key.Page, key.ListName)
 	if !found {
 		// No subscription — nothing to sync. Not an error.
 		return nil
@@ -188,10 +198,6 @@ func (c *Connector) Sync(ctx context.Context, key connectors.SubscriptionKey) er
 		return nil
 	}
 
-	state, err := c.store.LoadState(profileID)
-	if err != nil {
-		return fmt.Errorf("load profile state: %w", err)
-	}
 	if !state.IsConfigured() {
 		// Profile lost its refresh token (Disconnect) — pause the
 		// subscription so the next reconnect resumes cleanly.
@@ -777,6 +783,18 @@ func (c *Connector) transitionToPaused(profileID wikipage.PageIdentifier, sub Su
 // are no longer usable. Triggers the pause transition.
 func (c *Connector) isAuthFailure(err error) bool {
 	return errors.Is(err, gateway.ErrInvalidGrant) || errors.Is(err, gateway.ErrAuthRevoked)
+}
+
+// findSubscriptionInState locates the subscription for (page, listName)
+// within an already-loaded ConnectorState. Avoids a second LoadState
+// call inside FindSubscription.
+func findSubscriptionInState(state ConnectorState, page, listName string) (Subscription, bool) {
+	for _, sub := range state.Subscriptions {
+		if sub.Page == page && sub.ListName == listName {
+			return sub, true
+		}
+	}
+	return Subscription{}, false
 }
 
 // toTranslatorTasks converts gateway.Task slices to the translator's
