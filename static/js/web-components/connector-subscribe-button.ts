@@ -382,7 +382,7 @@ export class ConnectorSubscribeButton extends LitElement {
       case 'list-pick':
         return this.renderListPicker();
       case 'subscribing':
-        return html`<span class="sync-badge">Subscribing…</span>`;
+        return html`<span class="sync-badge">Binding…</span>`;
       case 'subscribed':
         return this.renderSubscribed();
       default:
@@ -396,7 +396,7 @@ export class ConnectorSubscribeButton extends LitElement {
     // detectAuthedConnectors decides single-pick vs multi-pick.
     return html`
       <button class="subscribe-trigger" type="button" @click=${this.handleSubscribeClick}>
-        Subscribe to a connected list
+        Bind to a cloud service
       </button>
     `;
   }
@@ -404,7 +404,7 @@ export class ConnectorSubscribeButton extends LitElement {
   private renderConnectorPicker() {
     return html`
       <div class="picker">
-        <p>Subscribe <strong>${this.listName}</strong> to:</p>
+        <p>Bind <strong>${this.listName}</strong> to:</p>
         ${this.authedKinds.map(
           (kind) => html`
             <button
@@ -432,7 +432,7 @@ export class ConnectorSubscribeButton extends LitElement {
     const productName = PRODUCT_NAME[this.chosenKind];
     return html`
       <div class="picker">
-        <p>Subscribe <strong>${this.listName}</strong> to ${productName} ${noun}:</p>
+        <p>Bind <strong>${this.listName}</strong> to ${productName} ${noun}:</p>
         <select
           .value=${this.selectedRemoteListHandle}
           @change=${(e: Event) => {
@@ -452,7 +452,7 @@ export class ConnectorSubscribeButton extends LitElement {
           type="button"
           @click=${this.handleSubscribeConfirm}
         >
-          Subscribe
+          Bind
         </button>
         <button
           class="subscribe-trigger"
@@ -476,14 +476,16 @@ export class ConnectorSubscribeButton extends LitElement {
     const productName = PRODUCT_NAME[sub.connectorKind];
     const noun = REMOTE_LIST_NOUN[sub.connectorKind];
     const titleSuffix = sub.remoteListTitle ? ` ${sub.remoteListTitle}` : '';
-    // Copy: "✓ Synced with Google Keep note <title>". The leading checkmark
-    // comes from the .sync-badge::before rule.
+    // Copy: "✓ Bound to Google Keep note <title>". The leading checkmark
+    // comes from the .sync-badge::before rule. Verb in the user-facing copy
+    // is "Bound" (the binding state); the underlying activity is still
+    // "syncing", which is why the unbind confirm reads "Stop syncing?".
     return html`
-      <span class="sync-badge">Synced with ${productName} ${noun}${titleSuffix}</span>
+      <span class="sync-badge">Bound to ${productName} ${noun}${titleSuffix}</span>
       <confirmation-interlock-button
-        label="Unsubscribe"
+        label="Unbind"
         confirmLabel="Stop syncing?"
-        yesLabel="Unsubscribe"
+        yesLabel="Unbind"
         noLabel="Cancel"
         class="subscribe-trigger"
         @confirmed=${this.handleUnsubscribe}

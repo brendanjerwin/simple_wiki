@@ -256,12 +256,12 @@ export class KeepConnect extends LitElement {
         Connected as <strong>${this.state.email}</strong>.
         <span class="muted">Last verified: ${verified}.</span>
       </p>
-      <h4>Subscriptions</h4>
+      <h4>Bindings</h4>
       ${this.renderSubscriptions()}
       <p>
         <confirmation-interlock-button
           label="Disconnect Google Keep"
-          confirmLabel="Disconnect — subscriptions will be paused"
+          confirmLabel="Disconnect — bindings will be paused"
           yesLabel="Disconnect"
           noLabel="Cancel"
           @confirmed=${this.handleDisconnect}
@@ -274,8 +274,8 @@ export class KeepConnect extends LitElement {
     const subscriptions = this.state?.subscriptions ?? [];
     if (subscriptions.length === 0) {
       return html`<p class="muted">
-        No checklists subscribed yet. Open a checklist page and click
-        <em>Bind to Keep List</em>.
+        No checklists bound yet. Open a checklist page and click
+        <em>Bind to Google Keep</em>.
       </p>`;
     }
     return html`
@@ -288,8 +288,8 @@ export class KeepConnect extends LitElement {
               ${s.paused ? html`<span class="pill pill-warn">paused</span>` : nothing}
               <confirmation-interlock-button
                 label="✕"
-                confirmLabel="Stop syncing this subscription?"
-                yesLabel="Unsubscribe"
+                confirmLabel="Stop syncing this binding?"
+                yesLabel="Unbind"
                 noLabel="Cancel"
                 @confirmed=${() => this.handleUnbind(s)}
               ></confirmation-interlock-button>

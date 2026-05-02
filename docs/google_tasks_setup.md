@@ -103,9 +103,9 @@ After restart, walk through the verification flow. Each step has a concrete succ
 1. **Open `/profile` on the wiki.** You should see a **Google Tasks** section with a **Connect Google Tasks** button. *If the section says "not configured by this wiki's operator", the env vars didn't make it into the running service environment.*
 2. **Click Connect Google Tasks.** You should be redirected to Google's consent screen showing your project's app name (e.g. `MyHousehold Wiki`) and the requested scope (`See, edit, create, and delete all your tasks`). *If you see `redirect_uri_mismatch` here, the redirect URI registered in GCP doesn't byte-match the env var. Trailing slash is the most common cause.*
 3. **Approve.** You should be redirected back to your wiki profile, which should now read **Connected as `<your-google-email>`**.
-4. **Open any page with a `{{"{{ Checklist \"name\" }}"}}` macro.** The checklist should now show a **Subscribe to Google Tasks list** button.
+4. **Open any page with a `{{"{{ Checklist \"name\" }}"}}` macro.** The checklist should now show a **Bind to a cloud service** button.
 5. **Click it.** A list picker should open populated with your actual Google Tasks lists. *If the picker is empty but you have Tasks lists in the Google Tasks app, check that the OAuth consent screen scope includes `tasks` (not `tasks.readonly`) and that the test user email matches the Google account you authenticated with.*
-6. **Pick a list and confirm.** The button should be replaced with `✓ Synced with Google Tasks list <title>`.
+6. **Pick a list and confirm.** The button should be replaced with `✓ Bound to Google Tasks list <title>`.
 7. **Add an item to the wiki checklist.** Within ~30 seconds, it should appear in your Google Tasks app. If you inspect via the Tasks API, the task's `notes` field will contain a trailing line like `— wiki:uid=01HZX9...` — that's the wiki's identity marker.
 8. **Add an item in the Google Tasks app.** Within ~30 seconds, it should appear in the wiki checklist.
 

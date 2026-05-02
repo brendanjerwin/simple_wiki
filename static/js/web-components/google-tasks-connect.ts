@@ -222,7 +222,7 @@ export class GoogleTasksConnect extends LitElement {
       <p>
         <confirmation-interlock-button
           label="Disconnect Google Tasks"
-          confirmLabel="Disconnect — subscriptions will be paused"
+          confirmLabel="Disconnect — bindings will be paused"
           yesLabel="Disconnect"
           noLabel="Cancel"
           @confirmed=${this.handleDisconnect}

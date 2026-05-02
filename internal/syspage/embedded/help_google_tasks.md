@@ -11,7 +11,7 @@ system = true
 
 > See [[help-connectors]] for the index of all checklist bridges.
 
-Subscribe a wiki checklist to a Google Tasks list and items round-trip both ways. Add `Buy milk` in the wiki, it shows up on your phone in the Google Tasks app within ~30 seconds. Check it off in the app, the wiki ticks it next sync. Same the other direction.
+Bind a wiki checklist to a Google Tasks list and items round-trip both ways. Add `Buy milk` in the wiki, it shows up on your phone in the Google Tasks app within ~30 seconds. Check it off in the app, the wiki ticks it next sync. Same the other direction.
 
 Tasks is the Google-native task surface, so unlike the [[help-google-keep]] bridge there's a real public API and no reverse-engineered protocol. Connection is OAuth — no password capture, no master tokens.
 
@@ -20,7 +20,7 @@ Tasks is the Google-native task surface, so unlike the [[help-google-keep]] brid
 - Bidirectional sync between one wiki checklist and one Google Tasks list.
 - Items added on either side appear on the other within ~30 seconds.
 - Check/uncheck, edit text, change due date, reorder — all round-trip.
-- Per-user, per-checklist. Each household member subscribes their own checklists to their own Tasks lists.
+- Per-user, per-checklist. Each household member binds their own checklists to their own Tasks lists.
 
 ## How to set up
 
@@ -31,9 +31,9 @@ If your wiki operator has set up Google Tasks integration (see the operator note
 3. You're sent to Google's consent screen. Approve.
 4. Back on the profile, you should see **Connected as you@example.com**.
 5. Open any page with a `{{"{{ Checklist \"name\" }}"}}` macro.
-6. Click **Subscribe to Google Tasks list** on the checklist.
+6. Click **Bind to a cloud service** on the checklist (the picker will show Google Tasks as your only option if Tasks is your only authenticated connector).
 7. Pick an existing Tasks list from the dropdown, or create a new one.
-8. Done. The button is replaced with a `✓ Synced with Google Tasks list <title>` badge.
+8. Done. The button is replaced with a `✓ Bound to Google Tasks list <title>` badge.
 
 > **If the connect button isn't there:** the wiki's operator hasn't configured Google Tasks credentials yet. They'll need to follow the operator setup guide in `docs/google_tasks_setup.md` in the simple_wiki repo. This is a one-time, per-deployment setup; not something each user can do for themselves.
 
@@ -56,8 +56,8 @@ If your wiki operator has set up Google Tasks integration (see the operator note
 
 The wiki has flat lists. This causes two distinct rough edges around subtasks:
 
-- **The wiki refuses to subscribe to a Tasks list that already has subtasks.** If you try, you'll get an error. Move or delete the subtasks in the Google Tasks app first, then subscribe.
-- **Subtasks added in Google Tasks after subscribing become regular items in the wiki.** They won't be deleted, but the parent-child relationship is lost on the wiki side. The next outbound sync may flatten them on the Tasks side too.
+- **The wiki refuses to bind to a Tasks list that already has subtasks.** If you try, you'll get an error. Move or delete the subtasks in the Google Tasks app first, then bind.
+- **Subtasks added in Google Tasks after binding become regular items in the wiki.** They won't be deleted, but the parent-child relationship is lost on the wiki side. The next outbound sync may flatten them on the Tasks side too.
 
 If you need hierarchy, keep using Google Tasks directly without the wiki bridge for those lists.
 
@@ -78,10 +78,10 @@ If you accidentally delete it (e.g. you cleared a task's notes), the wiki tries 
 - **Alarms (`VALARM` payload).** Wiki checklists can carry alarm metadata that flows through the [[help-caldav]] bridge to Apple Reminders. Tasks has no alarm primitive on the API; alarms stay wiki-side and don't appear in the Tasks app.
 - **Tags as native concepts.** Tasks doesn't have tags, so the wiki's `#tag` tokens travel as part of the `title` text. They survive a round-trip but don't filter or group on the Tasks side.
 
-## Disconnecting and unsubscribing
+## Disconnecting and unbinding
 
-- **Disconnect** (profile page) — revokes the OAuth token and pauses all your subscriptions. Reconnecting later resumes them; subscriptions aren't lost.
-- **Unsubscribe** (per-checklist) — severs one specific binding. The Google Tasks list and the wiki checklist both stay exactly as they are; only the connection between them is removed.
+- **Disconnect** (profile page) — revokes the OAuth token and pauses all your bindings. Reconnecting later resumes them; bindings aren't lost.
+- **Unbind** (per-checklist) — severs one specific binding. The Google Tasks list and the wiki checklist both stay exactly as they are; only the connection between them is removed.
 
 ## Troubleshooting
 
@@ -89,20 +89,26 @@ If you accidentally delete it (e.g. you cleared a task's notes), the wiki tries 
 - **Items I added in the wiki aren't showing up in Tasks.** Check your profile page. If the connector shows paused, click the paused badge and reconnect. If it's connected and items still aren't appearing, give it the full ~30 second tick window.
 - **Items I added in Google Tasks aren't showing up in the wiki.** Same drill — check pause state on the profile page first. If connected, the next ~30 second tick should pull them in.
 - **"Tasks integration not configured by this wiki's operator."** The operator hasn't set the OAuth env vars. Point them at `docs/google_tasks_setup.md`.
-- **Subscribe picker is empty.** You're connected but have no Tasks lists yet. Open Google Tasks and create one, then refresh the picker.
+- **Bind picker is empty.** You're connected but have no Tasks lists yet. The picker still shows a "Create new" entry as the first option — pick it and the wiki creates a fresh Tasks list named after your wiki checklist on the spot.
+
+## "Create new" — Bind to a fresh Tasks list
+
+If you don't already have a Tasks list set up (or you'd rather not pick an existing one), the bind picker's first entry is **Create new "<list-name>"**. Pick it and the wiki calls Tasks's `tasklists.insert` for you, names the new list after your wiki checklist's `list_name`, and binds to it on the spot. Subsequent syncs populate the new list with whatever items already exist on the wiki side.
+
+Mirrors the [[help-google-keep]] bridge's behavior — empty `remote_list_handle` means "make a new one."
 
 ## Errors you might see
 
 | Banner | What it means | What to do |
 | --- | --- | --- |
 | `auth_failed` | OAuth token rejected (revoked, expired beyond refresh, or rotated and lost) | Click the paused badge on profile or checklist; reauthorize via Google |
-| `subscription_collision` | Someone else already subscribed this checklist to a different connector or list | Use a different checklist or have them unsubscribe first |
-| `subtasks_present` | Tried to subscribe to a Tasks list that has subtasks | Open the Tasks app, flatten the list (move subtasks to top level), then retry |
+| `subscription_collision` | Someone else already bound this checklist to a different cloud service or list | Use a different checklist or have them unbind first |
+| `subtasks_present` | Tried to bind to a Tasks list that has subtasks | Open the Tasks app, flatten the list (move subtasks to top level), then retry |
 | `rate_limited` | Hitting Tasks API too hard | Wait a few minutes; sync resumes automatically |
 
 ## CalDAV invisibility
 
-Subscriptions are invisible to CalDAV. If you also subscribe a checklist to Apple Reminders or DAVx5 via [[help-caldav]], the Reminders/DAVx5 client never sees `wiki.connectors.*` state — the bridges don't leak each other's metadata.
+Your bindings are invisible to CalDAV. If you also bind a checklist to Apple Reminders or DAVx5 via [[help-caldav]], the Reminders/DAVx5 client never sees `wiki.connectors.*` state — the bridges don't leak each other's metadata.
 
 ## For agents
 
@@ -114,7 +120,7 @@ The bridge is exposed through the unified per-user gRPC service `api.v1.Connecto
 - `GetState(connector_kind=GOOGLE_TASKS) → ConnectorState` — reads connector + subscriptions.
 - `ListRemoteLists(connector_kind=GOOGLE_TASKS) → RemoteListSummary[]` — proxies to the user's Tasks account (`tasklists.list`).
 - `ListMySubscriptions(connector_kind=GOOGLE_TASKS) → SubscriptionState[]`
-- `Subscribe(connector_kind=GOOGLE_TASKS, page, list_name, remote_list_handle) → SubscriptionState` — `remote_list_handle` is the Google `tasklist.id`. Refuses with `FailedPrecondition` if the target list contains subtasks.
+- `Subscribe(connector_kind=GOOGLE_TASKS, page, list_name, remote_list_handle) → SubscriptionState` — `remote_list_handle` is the Google `tasklist.id`, or empty string to bind to a new Tasks list (the wiki calls `tasklists.insert` with `title=list_name` and binds to the freshly-created list). Refuses with `FailedPrecondition` if a non-empty target list already contains subtasks.
 - `Unsubscribe(connector_kind=GOOGLE_TASKS, page, list_name) → ()`
 - `GetChecklistSubscriptionState(page, list_name) → ChecklistSubscriptionState` — small surface used by the Checklist component on render. **Does not take connector_kind**; returns whichever connector owns the checklist.
 - `ListDeadLetters(connector_kind=GOOGLE_TASKS, page, list_name) → DeadLetterItem[]`

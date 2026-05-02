@@ -46,9 +46,9 @@ Each entry below is a piece of the current `profile_template`. Pick the ones you
 
 ### `<profile-paused-banner>` (raw element)
 
-**What it does.** Silent unless one of your connector subscriptions has been paused (usually because an OAuth credential expired or was revoked). When that happens, a banner appears at the top of your profile with a click-target that scrolls to the matching connect button so you can reconnect in one click.
+**What it does.** Silent unless one of your connector bindings has been paused (usually because an OAuth credential expired or was revoked). When that happens, a banner appears at the top of your profile with a click-target that scrolls to the matching connect button so you can reconnect in one click.
 
-**Why you might want it.** If you use any of the [[help-connectors]] — Google Keep, Google Tasks, etc. — sync can stop silently when credentials expire. Without this banner, the first you'll know is when a checklist stops round-tripping. With it, paused subscriptions get a loud, actionable surface the moment you open your profile.
+**Why you might want it.** If you use any of the [[help-connectors]] — Google Keep, Google Tasks, etc. — sync can stop silently when credentials expire. Without this banner, the first you'll know is when a checklist stops round-tripping. With it, paused bindings get a loud, actionable surface the moment you open your profile.
 
 **How to add it.** Paste the raw element anywhere in the body. The conventional spot is at the top of a `## Connectors` section so paused-state surfaces near the connect buttons it directs you to.
 
@@ -62,7 +62,7 @@ This one is the exception to the macro rule — there's no `{{ ProfilePausedBann
 
 ### `{{ KeepConnect }}` (macro)
 
-**What it does.** Renders the **Connect Google Keep** button (and its connected/error states). Once connected, your wiki checklists can subscribe to individual Keep notes and round-trip items.
+**What it does.** Renders the **Connect Google Keep** button (and its connected/error states). Once connected, your wiki checklists can be bound to individual Keep notes and round-trip items.
 
 **Why you might want it.** Add it if you want to bridge wiki checklists to the Google Keep app on your phone or laptop. Read [[help-google-keep]] before connecting — Keep uses an unofficial API that requires capturing an `oauth_token` cookie, and the trust model is worth your attention.
 
@@ -76,11 +76,11 @@ This is a macro, not a raw element — paste it exactly as shown, with the `{{ }
 
 The macro takes no arguments.
 
-**When to skip it.** Skip if you don't use Google Keep, or if you'd rather use [[help-google-tasks]] or [[help-caldav]] instead. Each checklist binding is globally exclusive — you can't subscribe one checklist to two services at once — so picking your bridge per use-case matters.
+**When to skip it.** Skip if you don't use Google Keep, or if you'd rather use [[help-google-tasks]] or [[help-caldav]] instead. Each checklist binding is globally exclusive — you can't bind one checklist to two cloud services at once — so picking your bridge per use-case matters.
 
 ### `{{ GoogleTasksConnect }}` (macro)
 
-**What it does.** Renders the **Connect Google Tasks** button (and its connected/error states). Standard OAuth — no password capture, no master tokens. Once connected, wiki checklists can subscribe to Google Tasks lists and round-trip items.
+**What it does.** Renders the **Connect Google Tasks** button (and its connected/error states). Standard OAuth — no password capture, no master tokens. Once connected, wiki checklists can be bound to Google Tasks lists and round-trip items.
 
 **Why you might want it.** Google Tasks is the cleanest of the Google bridges: real public API, real OAuth, no reverse-engineered protocol. If you live on Android or use Tasks via Calendar on the web, this is the connector to add. See [[help-google-tasks]] for the full setup including the per-deployment operator step.
 

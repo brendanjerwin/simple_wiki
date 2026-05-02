@@ -130,9 +130,9 @@ describe('KeepConnect', () => {
       expect(btns?.length ?? 0).to.be.greaterThan(0);
     });
 
-    it('should display the empty-subscriptions message', () => {
+    it('should display the empty-bindings message', () => {
       const text = el.shadowRoot?.textContent ?? '';
-      expect(text).to.include('No checklists subscribed');
+      expect(text).to.include('No checklists bound');
     });
   });
 

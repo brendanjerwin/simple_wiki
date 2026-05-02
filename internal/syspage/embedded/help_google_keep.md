@@ -75,23 +75,23 @@ You should see **Connected as alice@example.com** within a couple of seconds.
 - **"oauth_token isn't in the cookie list."** You missed step 1, or you completed sign-in on a different domain. The cookie only appears on `accounts.google.com` after a successful EmbeddedSetup sign-in. Try again in a private/incognito window.
 - **"BadAuthentication"** after pasting. The token may be expired (they're short-lived — capture and paste within a minute or two), or the token was for a different account than the email you entered. Capture again.
 
-## Subscribe a wiki checklist to a Keep note
+## Bind a wiki checklist to a Keep note
 
 1. Open any page with a `{{"{{ Checklist \"name\" }}"}}` macro.
-2. The checklist now shows a **Subscribe to a connected list** button (only visible if *you* have a connector authenticated — other household members see their own button or no button, depending on their own profile).
+2. The checklist now shows a **Bind to a cloud service** button (only visible if *you* have a connector authenticated — other household members see their own button or no button, depending on their own profile).
 3. Click it. The behaviour depends on which connectors you've authenticated:
-   - **Only Google Keep authenticated:** the wiki skips the connector pick and goes straight to the list picker — choose an existing Keep note from the dropdown, or leave the option set to **Create new "<list_name>"** to make a fresh one.
-   - **Google Keep and Google Tasks both authenticated:** the wiki first asks **Subscribe <list> to:** with a button per connector. Pick **Google Keep**, then the list picker appears.
-4. Click **Subscribe**. The button is replaced with a **✓ Synced with Google Keep note <title>** pill and an **Unsubscribe** affordance.
+   - **Only Google Keep authenticated:** the wiki skips the cloud-service pick and goes straight to the list picker — choose an existing Keep note from the dropdown, or leave the option set to **Create new "<list_name>"** to make a fresh one.
+   - **Google Keep and Google Tasks both authenticated:** the wiki first asks **Bind <list> to:** with a button per cloud service. Pick **Google Keep**, then the list picker appears.
+4. Click **Bind**. The button is replaced with a **✓ Bound to Google Keep note <title>** pill and an **Unbind** affordance.
 
-### Multi-user (household) subscriptions
+### Multi-user (household) bindings
 
-Each user's subscriptions live on their own profile page. The same wiki checklist can be subscribed to *different* Keep notes by different users — Alice subscribes `groceries` to her Keep note, Bob (signing in via his own Tailscale identity) subscribes the same `groceries` checklist to his own Keep note. The wiki is the hub; each person's Keep note is a peer.
+Each user's bindings live on their own profile page. The same wiki checklist can be bound to *different* Keep notes by different users — Alice binds `groceries` to her Keep note, Bob (signing in via his own Tailscale identity) binds the same `groceries` checklist to his own Keep note. The wiki is the hub; each person's Keep note is a peer.
 
 Per-user collision rules:
-- You can't subscribe the same `(page, list)` twice (unsubscribe and re-subscribe to a different note instead).
-- You can't subscribe two different checklists to the same Keep note in your account.
-- Two different users subscribing the same `(page, list)` to their own Keep notes is the explicit intended pattern.
+- You can't bind the same `(page, list)` twice (unbind and re-bind to a different note instead).
+- You can't bind two different checklists to the same Keep note in your account.
+- Two different users binding the same `(page, list)` to their own Keep notes is the explicit intended pattern.
 
 ## What sync does today
 
@@ -99,9 +99,9 @@ This bridge ships with **verification-only sync** in v1: the wiki periodically c
 
 What works today:
 - Connect / disconnect.
-- Subscribe / unsubscribe.
+- Bind / unbind.
 - Listing your Keep notes (for the picker).
-- Verifying that a subscribed note still exists.
+- Verifying that a bound note still exists.
 
 What's not in v1:
 - Items added on the wiki do **not** appear in the Keep note yet.
@@ -111,11 +111,11 @@ This will land in a follow-up. Track it on the GitHub issue for the bridge.
 
 ## Disconnecting
 
-From your profile page, click **Disconnect Google Keep**. This wipes the master token but **preserves your subscriptions** as paused. Reconnecting later resumes them with no re-subscribe needed.
+From your profile page, click **Disconnect Google Keep**. This wipes the master token but **preserves your bindings** as paused. Reconnecting later resumes them with no re-bind needed.
 
-When a subscription is paused, the checklist shows a **⚠️ Sync paused — changes since <time> not yet sent. Click to reconnect.** badge in place of the synced pill. The badge is a click-target — clicking it kicks off the reconnect flow. Recent pauses (under an hour) appear muted; pauses between an hour and a day go warning-orange; pauses of a day or more turn red so you don't miss them at a glance.
+When a binding is paused, the checklist shows a **⚠️ Sync paused — changes since <time> not yet sent. Click to reconnect.** badge in place of the bound pill. The badge is a click-target — clicking it kicks off the reconnect flow. Recent pauses (under an hour) appear muted; pauses between an hour and a day go warning-orange; pauses of a day or more turn red so you don't miss them at a glance.
 
-To remove a single subscription (without disconnecting the whole connector), click the **✕** next to its row in the subscriptions list, or click **Unsubscribe** on the Checklist component itself. Wiki data and Keep notes are both left exactly as they are — unsubscribe is a connection severance, not a delete.
+To remove a single binding (without disconnecting the whole connector), click the **✕** next to its row in the bindings list, or click **Unbind** on the Checklist component itself. Wiki data and Keep notes are both left exactly as they are — unbind is a connection severance, not a delete.
 
 ## Errors you might see
 
@@ -125,7 +125,7 @@ To remove a single subscription (without disconnecting the whole connector), cli
 | `auth_revoked` | Master token no longer valid (you signed out, or Google revoked it) | Recapture an oauth_token and re-connect |
 | `protocol_drift` | Google changed the Keep wire format | Update simple_wiki and try again |
 | `rate_limited` | We're hitting Keep too hard | Wait a few minutes; sync resumes automatically |
-| `bound_note_deleted` | The subscribed note was deleted from your Keep app | Re-subscribe or remove the subscription |
+| `bound_note_deleted` | The bound note was deleted from your Keep app | Re-bind or remove the binding |
 
 Errors branch on typed codes only — never on the human-readable banner text.
 

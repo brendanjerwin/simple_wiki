@@ -127,7 +127,7 @@ describe('ConnectorSubscribeButton', () => {
     it('should render nothing (phase=hidden)', () => {
       const content = el.shadowRoot?.innerHTML.trim() ?? '';
       expect(content).to.not.include('<button');
-      expect(content).to.not.include('Subscribe');
+      expect(content).to.not.include('Bind');
     });
   });
 
@@ -167,12 +167,12 @@ describe('ConnectorSubscribeButton', () => {
       await Promise.race([el.updateComplete, timeout(3000, 'updateComplete timed out')]);
     });
 
-    it('should render the Subscribe trigger button', () => {
+    it('should render the Bind trigger button', () => {
       const btn = el.shadowRoot?.querySelector('button.subscribe-trigger');
       expect(btn).to.exist;
     });
 
-    it('should not render an unsubscribe interlock', () => {
+    it('should not render an unbind interlock', () => {
       const interlock = el.shadowRoot?.querySelector('confirmation-interlock-button');
       expect(interlock).to.not.exist;
     });
@@ -217,18 +217,18 @@ describe('ConnectorSubscribeButton', () => {
       expect(badge).to.exist;
     });
 
-    it('should display "Synced with Google Keep note <title>"', () => {
+    it('should display "Bound to Google Keep note <title>"', () => {
       const text = el.shadowRoot?.textContent ?? '';
-      expect(text).to.include('Synced with Google Keep note');
+      expect(text).to.include('Bound to Google Keep note');
       expect(text).to.include('My Keep note');
     });
 
-    it('should render the unsubscribe interlock', () => {
+    it('should render the unbind interlock', () => {
       const interlock = el.shadowRoot?.querySelector('confirmation-interlock-button');
       expect(interlock).to.exist;
     });
 
-    it('should not render the Subscribe trigger button', () => {
+    it('should not render the Bind trigger button', () => {
       const btn = el.shadowRoot?.querySelector('button.subscribe-trigger');
       expect(btn).to.not.exist;
     });
@@ -263,9 +263,9 @@ describe('ConnectorSubscribeButton', () => {
       await Promise.race([el.updateComplete, timeout(3000, 'updateComplete timed out')]);
     });
 
-    it('should display "Synced with Google Tasks list <title>"', () => {
+    it('should display "Bound to Google Tasks list <title>"', () => {
       const text = el.shadowRoot?.textContent ?? '';
-      expect(text).to.include('Synced with Google Tasks list');
+      expect(text).to.include('Bound to Google Tasks list');
       expect(text).to.include('My Tasks list');
     });
   });
@@ -308,7 +308,7 @@ describe('ConnectorSubscribeButton', () => {
 
   // ------------------------------------------------------------------ default-to-authed: only Keep
 
-  describe('when only Google Keep is authenticated and Subscribe is clicked', () => {
+  describe('when only Google Keep is authenticated and Bind is clicked', () => {
     let listRemoteListsStub: sinon.SinonStub;
 
     beforeEach(async () => {
@@ -364,7 +364,7 @@ describe('ConnectorSubscribeButton', () => {
 
   // ------------------------------------------------------------------ default-to-authed: only Tasks
 
-  describe('when only Google Tasks is authenticated and Subscribe is clicked', () => {
+  describe('when only Google Tasks is authenticated and Bind is clicked', () => {
     let listRemoteListsStub: sinon.SinonStub;
 
     beforeEach(async () => {
@@ -414,7 +414,7 @@ describe('ConnectorSubscribeButton', () => {
 
   // ------------------------------------------------------------------ multi-authed: both Keep + Tasks
 
-  describe('when both connectors are authenticated and Subscribe is clicked', () => {
+  describe('when both connectors are authenticated and Bind is clicked', () => {
     beforeEach(async () => {
       el = document.createElement('connector-subscribe-button') as ConnectorSubscribeButton;
       el.setAttribute('page', 'Board');
@@ -513,7 +513,7 @@ describe('ConnectorSubscribeButton', () => {
 
   // ------------------------------------------------------------------ subscribe action (Keep)
 
-  describe('when Subscribe is confirmed after picking a Keep note', () => {
+  describe('when Bind is confirmed after picking a Keep note', () => {
     let subscribeStub: sinon.SinonStub;
 
     beforeEach(async () => {
@@ -558,8 +558,8 @@ describe('ConnectorSubscribeButton', () => {
       const btns = Array.from(
         el.shadowRoot?.querySelectorAll('button.subscribe-trigger') ?? [],
       ) as HTMLButtonElement[];
-      const subscribeBtn = btns.find((b) => b.textContent?.trim() === 'Subscribe');
-      subscribeBtn?.click();
+      const bindBtn = btns.find((b) => b.textContent?.trim() === 'Bind');
+      bindBtn?.click();
       await Promise.race([el.updateComplete, timeout(3000, 'updateComplete timed out')]);
       await Promise.race([el.updateComplete, timeout(3000, 'updateComplete timed out')]);
     });
