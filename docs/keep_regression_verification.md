@@ -62,7 +62,7 @@ go run ./cmd/keep-debug -cmd=list
 
 **Expected output** (`cmd/keep-debug/main.go:737–768`):
 
-```
+```text
 ✓ bearer obtained, len: <some int>
 ✓ Changes returned <N> nodes; toVersion: <opaque-cursor> truncated: false
 by type: map[NOTE:… LIST:… LIST_ITEM:… …]
@@ -78,6 +78,7 @@ node types after the `internal/keep/protocol` → `internal/connectors/
 google_keep/gateway` lift.
 
 **What failure would mean:**
+
 - `Stage 2 failed` → master token bad/expired or device ID malformed (gateway
   authenticator is in `internal/connectors/google_keep/gateway/gpsoauth.go`).
   Not a regression — the credential just needs refreshing.
@@ -98,7 +99,7 @@ go run ./cmd/keep-debug -cmd=create-and-push -title="Wiki regression test $(date
 
 **Expected output** (`cmd/keep-debug/main.go:770–800`):
 
-```
+```text
 ✓ bearer obtained, len: …
 ✓ CreateList returned serverID: <new-list-server-id>
 ✓ found new list in pull:
@@ -117,6 +118,7 @@ go run ./cmd/keep-debug -cmd=create-and-push -title="Wiki regression test $(date
 keep.google.com — the new (empty) list should appear within a few seconds.
 
 **What failure would mean:**
+
 - `CreateList failed` → the create-list path in `gateway.KeepClient`
   regressed in the lift.
 - Created but `NOT visible in next pull` → pull/cursor handling regression
@@ -132,7 +134,7 @@ go run ./cmd/keep-debug -cmd=create-with-items \
 
 **Expected output** (`cmd/keep-debug/main.go:717–735`):
 
-```
+```text
 ✓ bearer obtained, len: …
 ✓ list created: serverID=<new-list-server-id>
 ✓ 3 items pushed; server-assigned IDs:
@@ -164,7 +166,7 @@ go run ./cmd/keep-debug -cmd=push-item-to-existing \
 
 **Expected output** (`cmd/keep-debug/main.go:645–715`):
 
-```
+```text
 ✓ bearer obtained, len: …
 ✓ pull got toVersion=<cursor> (<N> nodes)
 ✓ item created on existing list: <client-id> -> <new-item-server-id>
@@ -173,6 +175,7 @@ go run ./cmd/keep-debug -cmd=push-item-to-existing \
 **Verify in Google Keep app:** the item appears in the list from step 3.
 
 **What failure would mean:**
+
 - `pull failed` → pull-then-push pattern broken (Keep requires a fresh
   `TargetVersion` on push; the gateway must forward it correctly).
 - `push-item-to-existing failed: … 500 Unknown Error` → almost always means
@@ -191,7 +194,7 @@ go run ./cmd/keep-debug -cmd=verify-cursor-monotonic
 
 **Expected output** (`cmd/keep-debug/main.go:569–621`):
 
-```
+```text
 ✓ bearer obtained, len: …
 pull[0] targetVersion="" -> toVersion="<cursor-0>" (nodes=…, truncated=false)
 pull[1] targetVersion="<cursor-0>" -> toVersion="<cursor-1>" (nodes=0, truncated=false)
@@ -207,6 +210,7 @@ across consecutive pulls; the cron-tick + debouncer story stays sound after
 the lift.
 
 **What failure would mean:**
+
 - `FAIL: lex order violated at pair […]` → cursor regression. The wiki's
   delta-pull loop will eventually re-deliver old changes or skip new ones.
   This breaks the at-least-once semantics for inbound sync.

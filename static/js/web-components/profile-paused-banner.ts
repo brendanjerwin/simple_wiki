@@ -41,6 +41,7 @@ import {
   GetStateRequestSchema,
 } from '../gen/api/v1/connector_service_pb.js';
 import type { SubscriptionState } from '../gen/api/v1/connector_service_pb.js';
+import type { RequestReconnectEventDetail } from './connector-paused-badge.js';
 import { foundationCSS, sharedStyles } from './shared-styles.js';
 
 // PROFILE_PATH is the canonical path the wiki serves for the
@@ -217,7 +218,8 @@ export class ProfilePausedBanner extends LitElement {
   // the user can complete the OAuth (Tasks) or paste-token (Keep)
   // ceremony.
   private handleRequestReconnect(e: Event): void {
-    const detail = (e as CustomEvent<{ connectorKind?: string }>).detail;
+    if (!(e instanceof CustomEvent)) return;
+    const detail: RequestReconnectEventDetail | undefined = e.detail;
     const slug = detail?.connectorKind;
     if (slug !== 'google_keep' && slug !== 'google_tasks') return;
     const tag = slug === 'google_keep' ? 'keep-connect' : 'google-tasks-connect';

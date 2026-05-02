@@ -46,7 +46,7 @@ Personal abbreviation of the verification section in the generic guide:
 
 1. Restart wiki: `<placeholder — e.g. systemctl --user restart simple-wiki>`
 2. Open `<https://<tailnet-hostname>/profile>`
-3. Connect Google Tasks → consent → confirm "Connected as brendanjerwin@gmail.com"
+3. Connect Google Tasks → consent → confirm "Connected as <brendanjerwin@gmail.com>"
 4. On a known checklist page (e.g. `<placeholder — e.g. /shopping/this_week>`), subscribe to a Tasks list
 5. Add an item, verify in Google Tasks app on the phone within 30s
 6. Add an item in the phone app, verify in the wiki within 30s

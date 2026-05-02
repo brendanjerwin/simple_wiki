@@ -19,6 +19,16 @@ const DAY_MS = 24 * HOUR_MS;
 
 export type ConnectorKindSlug = 'google_keep' | 'google_tasks';
 
+/**
+ * Detail payload for the `request-reconnect` CustomEvent emitted by
+ * <connector-paused-badge> when the user clicks to reconnect a paused
+ * subscription. Listeners (e.g. <profile-paused-banner>) use the
+ * `connectorKind` slug to route to the right reconnect surface.
+ */
+export interface RequestReconnectEventDetail {
+  connectorKind: ConnectorKindSlug;
+}
+
 type UrgencyTier = 'muted' | 'warning' | 'danger';
 
 const localCSS = css`
@@ -117,7 +127,7 @@ export class ConnectorPausedBadge extends LitElement {
 
   private handleClick(): void {
     this.dispatchEvent(
-      new CustomEvent('request-reconnect', {
+      new CustomEvent<RequestReconnectEventDetail>('request-reconnect', {
         detail: { connectorKind: this.connectorKind },
         bubbles: true,
         composed: true,
