@@ -5,21 +5,21 @@ import { ConnectError, Code } from '@connectrpc/connect';
 import './keep-bind-button.js';
 import type { KeepBindButton } from './keep-bind-button.js';
 import {
-  GetChecklistBindingStateResponseSchema,
-  ChecklistBindingStateSchema,
-  BindingStateSchema,
-  ListNotesResponseSchema,
-  KeepNoteSummarySchema,
-  BindChecklistResponseSchema,
-  UnbindChecklistResponseSchema,
-} from '../gen/api/v1/keep_connector_pb.js';
+  GetChecklistSubscriptionStateResponseSchema,
+  ChecklistSubscriptionStateSchema,
+  SubscriptionStateSchema,
+  ListRemoteListsResponseSchema,
+  RemoteListSummarySchema,
+  SubscribeResponseSchema,
+  UnsubscribeResponseSchema,
+} from '../gen/api/v1/connector_service_pb.js';
 
 // Access private client via type cast.
 interface KeepBindButtonClient {
-  getChecklistBindingState: sinon.SinonStub;
-  listNotes: sinon.SinonStub;
-  bindChecklist: sinon.SinonStub;
-  unbindChecklist: sinon.SinonStub;
+  getChecklistSubscriptionState: sinon.SinonStub;
+  listRemoteLists: sinon.SinonStub;
+  subscribe: sinon.SinonStub;
+  unsubscribe: sinon.SinonStub;
 }
 
 function clientOf(el: KeepBindButton): KeepBindButtonClient {
@@ -77,10 +77,10 @@ describe('KeepBindButton', () => {
       el = document.createElement('keep-bind-button') as KeepBindButton;
       el.setAttribute('page', 'Board');
       el.setAttribute('list-name', 'todo');
-      const state = create(ChecklistBindingStateSchema, { connectorConfigured: false });
+      const state = create(ChecklistSubscriptionStateSchema, { connectorConfigured: false });
       sinon
-        .stub(clientOf(el), 'getChecklistBindingState')
-        .resolves(create(GetChecklistBindingStateResponseSchema, { state }));
+        .stub(clientOf(el), 'getChecklistSubscriptionState')
+        .resolves(create(GetChecklistSubscriptionStateResponseSchema, { state }));
       document.body.appendChild(el);
       await Promise.race([el.updateComplete, timeout(3000, 'updateComplete timed out')]);
     });
@@ -92,15 +92,15 @@ describe('KeepBindButton', () => {
     });
   });
 
-  // ------------------------------------------------------------------ getChecklistBindingState errors → hidden
+  // ------------------------------------------------------------------ getChecklistSubscriptionState errors → hidden
 
-  describe('when getChecklistBindingState rejects', () => {
+  describe('when getChecklistSubscriptionState rejects', () => {
     beforeEach(async () => {
       el = document.createElement('keep-bind-button') as KeepBindButton;
       el.setAttribute('page', 'Board');
       el.setAttribute('list-name', 'todo');
       sinon
-        .stub(clientOf(el), 'getChecklistBindingState')
+        .stub(clientOf(el), 'getChecklistSubscriptionState')
         .rejects(new ConnectError('unavailable', Code.Unavailable));
       document.body.appendChild(el);
       await Promise.race([el.updateComplete, timeout(3000, 'updateComplete timed out')]);
@@ -114,15 +114,15 @@ describe('KeepBindButton', () => {
 
   // ------------------------------------------------------------------ unbound state
 
-  describe('when connector is configured but no binding exists', () => {
+  describe('when connector is configured but no subscription exists', () => {
     beforeEach(async () => {
       el = document.createElement('keep-bind-button') as KeepBindButton;
       el.setAttribute('page', 'Board');
       el.setAttribute('list-name', 'todo');
-      const state = create(ChecklistBindingStateSchema, { connectorConfigured: true });
+      const state = create(ChecklistSubscriptionStateSchema, { connectorConfigured: true });
       sinon
-        .stub(clientOf(el), 'getChecklistBindingState')
-        .resolves(create(GetChecklistBindingStateResponseSchema, { state }));
+        .stub(clientOf(el), 'getChecklistSubscriptionState')
+        .resolves(create(GetChecklistSubscriptionStateResponseSchema, { state }));
       document.body.appendChild(el);
       await Promise.race([el.updateComplete, timeout(3000, 'updateComplete timed out')]);
     });
@@ -145,24 +145,24 @@ describe('KeepBindButton', () => {
 
   // ------------------------------------------------------------------ bound state
 
-  describe('when a binding exists', () => {
+  describe('when a subscription exists', () => {
     beforeEach(async () => {
       el = document.createElement('keep-bind-button') as KeepBindButton;
       el.setAttribute('page', 'Board');
       el.setAttribute('list-name', 'todo');
-      const binding = create(BindingStateSchema, {
+      const subscription = create(SubscriptionStateSchema, {
         page: 'Board',
         listName: 'todo',
-        keepNoteId: 'note-1',
-        keepNoteTitle: 'My Keep note',
+        remoteListHandle: 'note-1',
+        remoteListTitle: 'My Keep note',
       });
-      const state = create(ChecklistBindingStateSchema, {
+      const state = create(ChecklistSubscriptionStateSchema, {
         connectorConfigured: true,
-        currentBinding: binding,
+        currentSubscription: subscription,
       });
       sinon
-        .stub(clientOf(el), 'getChecklistBindingState')
-        .resolves(create(GetChecklistBindingStateResponseSchema, { state }));
+        .stub(clientOf(el), 'getChecklistSubscriptionState')
+        .resolves(create(GetChecklistSubscriptionStateResponseSchema, { state }));
       document.body.appendChild(el);
       await Promise.race([el.updateComplete, timeout(3000, 'updateComplete timed out')]);
     });
@@ -191,21 +191,21 @@ describe('KeepBindButton', () => {
   // ------------------------------------------------------------------ picker phase
 
   describe('when Bind to Keep button is clicked', () => {
-    let listNotesStub: sinon.SinonStub;
+    let listRemoteListsStub: sinon.SinonStub;
 
     beforeEach(async () => {
       el = document.createElement('keep-bind-button') as KeepBindButton;
       el.setAttribute('page', 'Board');
       el.setAttribute('list-name', 'sprint');
-      const state = create(ChecklistBindingStateSchema, { connectorConfigured: true });
+      const state = create(ChecklistSubscriptionStateSchema, { connectorConfigured: true });
       sinon
-        .stub(clientOf(el), 'getChecklistBindingState')
-        .resolves(create(GetChecklistBindingStateResponseSchema, { state }));
+        .stub(clientOf(el), 'getChecklistSubscriptionState')
+        .resolves(create(GetChecklistSubscriptionStateResponseSchema, { state }));
 
-      const note = create(KeepNoteSummarySchema, { keepNoteId: 'n1', title: 'Sprint notes' });
-      listNotesStub = sinon
-        .stub(clientOf(el), 'listNotes')
-        .resolves(create(ListNotesResponseSchema, { notes: [note] }));
+      const note = create(RemoteListSummarySchema, { remoteListHandle: 'n1', title: 'Sprint notes' });
+      listRemoteListsStub = sinon
+        .stub(clientOf(el), 'listRemoteLists')
+        .resolves(create(ListRemoteListsResponseSchema, { lists: [note] }));
 
       document.body.appendChild(el);
       await Promise.race([el.updateComplete, timeout(3000, 'updateComplete timed out')]);
@@ -216,8 +216,8 @@ describe('KeepBindButton', () => {
       await Promise.race([el.updateComplete, timeout(3000, 'updateComplete timed out')]);
     });
 
-    it('should call listNotes', () => {
-      expect(listNotesStub.calledOnce).to.be.true;
+    it('should call listRemoteLists', () => {
+      expect(listRemoteListsStub.calledOnce).to.be.true;
     });
 
     it('should render the note picker select', () => {
@@ -247,10 +247,10 @@ describe('KeepBindButton', () => {
     });
   });
 
-  // ------------------------------------------------------------------ bind action
+  // ------------------------------------------------------------------ subscribe action
 
   describe('when Bind is confirmed after picking a note', () => {
-    let bindStub: sinon.SinonStub;
+    let subscribeStub: sinon.SinonStub;
     let getStateStub: sinon.SinonStub;
 
     beforeEach(async () => {
@@ -258,30 +258,30 @@ describe('KeepBindButton', () => {
       el.setAttribute('page', 'Board');
       el.setAttribute('list-name', 'sprint');
 
-      const unboundState = create(ChecklistBindingStateSchema, { connectorConfigured: true });
+      const unboundState = create(ChecklistSubscriptionStateSchema, { connectorConfigured: true });
 
-      // After bind, refresh returns bound state
-      const boundBinding = create(BindingStateSchema, {
+      // After subscribe, refresh returns bound state
+      const boundSubscription = create(SubscriptionStateSchema, {
         page: 'Board',
         listName: 'sprint',
-        keepNoteId: 'n1',
-        keepNoteTitle: 'Sprint notes',
+        remoteListHandle: 'n1',
+        remoteListTitle: 'Sprint notes',
       });
-      const boundState = create(ChecklistBindingStateSchema, {
+      const boundState = create(ChecklistSubscriptionStateSchema, {
         connectorConfigured: true,
-        currentBinding: boundBinding,
+        currentSubscription: boundSubscription,
       });
-      getStateStub = sinon.stub(clientOf(el), 'getChecklistBindingState');
-      getStateStub.onFirstCall().resolves(create(GetChecklistBindingStateResponseSchema, { state: unboundState }));
-      getStateStub.onSecondCall().resolves(create(GetChecklistBindingStateResponseSchema, { state: boundState }));
+      getStateStub = sinon.stub(clientOf(el), 'getChecklistSubscriptionState');
+      getStateStub.onFirstCall().resolves(create(GetChecklistSubscriptionStateResponseSchema, { state: unboundState }));
+      getStateStub.onSecondCall().resolves(create(GetChecklistSubscriptionStateResponseSchema, { state: boundState }));
 
       sinon
-        .stub(clientOf(el), 'listNotes')
-        .resolves(create(ListNotesResponseSchema, { notes: [] }));
+        .stub(clientOf(el), 'listRemoteLists')
+        .resolves(create(ListRemoteListsResponseSchema, { lists: [] }));
 
-      bindStub = sinon
-        .stub(clientOf(el), 'bindChecklist')
-        .resolves(create(BindChecklistResponseSchema, {}));
+      subscribeStub = sinon
+        .stub(clientOf(el), 'subscribe')
+        .resolves(create(SubscribeResponseSchema, {}));
 
       document.body.appendChild(el);
       await Promise.race([el.updateComplete, timeout(3000, 'updateComplete timed out')]);
@@ -300,8 +300,8 @@ describe('KeepBindButton', () => {
       await Promise.race([el.updateComplete, timeout(3000, 'updateComplete timed out')]);
     });
 
-    it('should call bindChecklist', () => {
-      expect(bindStub.calledOnce).to.be.true;
+    it('should call subscribe', () => {
+      expect(subscribeStub.calledOnce).to.be.true;
     });
 
     it('should refresh and show bound phase', () => {
@@ -310,34 +310,34 @@ describe('KeepBindButton', () => {
     });
   });
 
-  // ------------------------------------------------------------------ unbind action
+  // ------------------------------------------------------------------ unsubscribe action
 
   describe('when handleUnbind is invoked', () => {
-    let unbindStub: sinon.SinonStub;
+    let unsubscribeStub: sinon.SinonStub;
 
     beforeEach(async () => {
       el = document.createElement('keep-bind-button') as KeepBindButton;
       el.setAttribute('page', 'Board');
       el.setAttribute('list-name', 'todo');
 
-      const binding = create(BindingStateSchema, {
+      const subscription = create(SubscriptionStateSchema, {
         page: 'Board',
         listName: 'todo',
-        keepNoteId: 'note-1',
+        remoteListHandle: 'note-1',
       });
-      const boundState = create(ChecklistBindingStateSchema, {
+      const boundState = create(ChecklistSubscriptionStateSchema, {
         connectorConfigured: true,
-        currentBinding: binding,
+        currentSubscription: subscription,
       });
-      const unboundState = create(ChecklistBindingStateSchema, { connectorConfigured: true });
+      const unboundState = create(ChecklistSubscriptionStateSchema, { connectorConfigured: true });
 
-      const getStateStub = sinon.stub(clientOf(el), 'getChecklistBindingState');
-      getStateStub.onFirstCall().resolves(create(GetChecklistBindingStateResponseSchema, { state: boundState }));
-      getStateStub.onSecondCall().resolves(create(GetChecklistBindingStateResponseSchema, { state: unboundState }));
+      const getStateStub = sinon.stub(clientOf(el), 'getChecklistSubscriptionState');
+      getStateStub.onFirstCall().resolves(create(GetChecklistSubscriptionStateResponseSchema, { state: boundState }));
+      getStateStub.onSecondCall().resolves(create(GetChecklistSubscriptionStateResponseSchema, { state: unboundState }));
 
-      unbindStub = sinon
-        .stub(clientOf(el), 'unbindChecklist')
-        .resolves(create(UnbindChecklistResponseSchema, {}));
+      unsubscribeStub = sinon
+        .stub(clientOf(el), 'unsubscribe')
+        .resolves(create(UnsubscribeResponseSchema, {}));
 
       document.body.appendChild(el);
       await Promise.race([el.updateComplete, timeout(3000, 'updateComplete timed out')]);
@@ -348,8 +348,8 @@ describe('KeepBindButton', () => {
       await Promise.race([el.updateComplete, timeout(3000, 'updateComplete timed out')]);
     });
 
-    it('should call unbindChecklist', () => {
-      expect(unbindStub.calledOnce).to.be.true;
+    it('should call unsubscribe', () => {
+      expect(unsubscribeStub.calledOnce).to.be.true;
     });
 
     it('should transition back to unbound phase', () => {

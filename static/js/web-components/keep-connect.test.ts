@@ -7,15 +7,15 @@ import type { KeepConnect } from './keep-connect.js';
 import {
   GetStateResponseSchema,
   ConnectorStateSchema,
-  BindingStateSchema,
-} from '../gen/api/v1/keep_connector_pb.js';
+  SubscriptionStateSchema,
+} from '../gen/api/v1/connector_service_pb.js';
 
 // Access private client fields via type cast.
 interface KeepConnectClient {
   getState: sinon.SinonStub;
-  exchangeAndStore: sinon.SinonStub;
+  completeAuth: sinon.SinonStub;
   disconnect: sinon.SinonStub;
-  unbindChecklist: sinon.SinonStub;
+  unsubscribe: sinon.SinonStub;
 }
 
 function clientOf(el: KeepConnect): KeepConnectClient {
@@ -105,9 +105,9 @@ describe('KeepConnect', () => {
     });
   });
 
-  // ------------------------------------------------------------------ connected phase (no bindings)
+  // ------------------------------------------------------------------ connected phase (no subscriptions)
 
-  describe('when getState returns configured=true with no bindings', () => {
+  describe('when getState returns configured=true with no subscriptions', () => {
     beforeEach(async () => {
       el = document.createElement('keep-connect') as KeepConnect;
       stubGetStateConnected('alice@example.com');
@@ -130,27 +130,27 @@ describe('KeepConnect', () => {
       expect(btns?.length ?? 0).to.be.greaterThan(0);
     });
 
-    it('should display the empty-bindings message', () => {
+    it('should display the empty-subscriptions message', () => {
       const text = el.shadowRoot?.textContent ?? '';
-      expect(text).to.include('No checklists bound');
+      expect(text).to.include('No checklists subscribed');
     });
   });
 
-  // ------------------------------------------------------------------ connected phase (with bindings)
+  // ------------------------------------------------------------------ connected phase (with subscriptions)
 
-  describe('when getState returns configured=true with one binding', () => {
+  describe('when getState returns configured=true with one subscription', () => {
     beforeEach(async () => {
       el = document.createElement('keep-connect') as KeepConnect;
-      const binding = create(BindingStateSchema, {
+      const subscription = create(SubscriptionStateSchema, {
         page: 'Board',
         listName: 'todo',
-        keepNoteId: 'note-abc',
-        keepNoteTitle: 'My todo list',
+        remoteListHandle: 'note-abc',
+        remoteListTitle: 'My todo list',
       });
       const state = create(ConnectorStateSchema, {
         configured: true,
         email: 'bob@example.com',
-        bindings: [binding],
+        subscriptions: [subscription],
       });
       sinon
         .stub(clientOf(el), 'getState')
@@ -159,12 +159,12 @@ describe('KeepConnect', () => {
       await Promise.race([el.updateComplete, timeout(3000, 'updateComplete timed out')]);
     });
 
-    it('should render the binding page name', () => {
+    it('should render the subscription page name', () => {
       const text = el.shadowRoot?.textContent ?? '';
       expect(text).to.include('Board');
     });
 
-    it('should render the binding list name', () => {
+    it('should render the subscription list name', () => {
       const text = el.shadowRoot?.textContent ?? '';
       expect(text).to.include('todo');
     });
@@ -174,9 +174,9 @@ describe('KeepConnect', () => {
       expect(text).to.include('My todo list');
     });
 
-    it('should render an unbind interlock per binding plus one Disconnect button', () => {
+    it('should render an unbind interlock per subscription plus one Disconnect button', () => {
       const btns = el.shadowRoot?.querySelectorAll('confirmation-interlock-button');
-      // 1 Disconnect + 1 per binding
+      // 1 Disconnect + 1 per subscription
       expect(btns?.length ?? 0).to.equal(2);
     });
   });
@@ -224,8 +224,8 @@ describe('KeepConnect', () => {
       expect(errorEl).to.exist;
     });
 
-    it('should not call exchangeAndStore', () => {
-      // exchangeAndStore stub was never set up — assert it was never reached
+    it('should not call completeAuth', () => {
+      // completeAuth stub was never set up — assert it was never reached
       // by verifying phase stayed at 'disconnected' (form is still visible)
       const form = el.shadowRoot?.querySelector('form');
       expect(form).to.exist;
@@ -235,7 +235,7 @@ describe('KeepConnect', () => {
   // ------------------------------------------------------------------ successful connect
 
   describe('when connect form is submitted with valid credentials', () => {
-    let exchangeStub: sinon.SinonStub;
+    let completeAuthStub: sinon.SinonStub;
 
     beforeEach(async () => {
       el = document.createElement('keep-connect') as KeepConnect;
@@ -243,15 +243,15 @@ describe('KeepConnect', () => {
       document.body.appendChild(el);
       await Promise.race([el.updateComplete, timeout(3000, 'updateComplete timed out')]);
 
-      // Set up the exchangeAndStore stub to return connected state
+      // Set up the completeAuth stub to return connected state
       const connectedState = create(ConnectorStateSchema, {
         configured: true,
         email: 'new@example.com',
       });
-      const { ExchangeAndStoreResponseSchema } = await import('../gen/api/v1/keep_connector_pb.js');
-      exchangeStub = sinon
-        .stub(clientOf(el), 'exchangeAndStore')
-        .resolves(create(ExchangeAndStoreResponseSchema, { state: connectedState }));
+      const { CompleteAuthResponseSchema } = await import('../gen/api/v1/connector_service_pb.js');
+      completeAuthStub = sinon
+        .stub(clientOf(el), 'completeAuth')
+        .resolves(create(CompleteAuthResponseSchema, { state: connectedState }));
 
       // Populate the private form fields
       // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-type-assertion
@@ -264,8 +264,8 @@ describe('KeepConnect', () => {
       await el.updateComplete;
     });
 
-    it('should call exchangeAndStore once', () => {
-      expect(exchangeStub.calledOnce).to.be.true;
+    it('should call completeAuth once', () => {
+      expect(completeAuthStub.calledOnce).to.be.true;
     });
 
     it('should transition to connected phase (no form)', () => {
@@ -290,7 +290,7 @@ describe('KeepConnect', () => {
       document.body.appendChild(el);
       await Promise.race([el.updateComplete, timeout(3000, 'updateComplete timed out')]);
 
-      const { DisconnectResponseSchema } = await import('../gen/api/v1/keep_connector_pb.js');
+      const { DisconnectResponseSchema } = await import('../gen/api/v1/connector_service_pb.js');
       const disconnectedState = create(ConnectorStateSchema, { configured: false });
       disconnectStub = sinon
         .stub(clientOf(el), 'disconnect')

@@ -127,16 +127,19 @@ Errors branch on typed codes only — never on the human-readable banner text.
 
 ## For agents
 
-The bridge exposes a per-user gRPC service `api.v1.KeepConnectorService` with these methods. All scope to the calling user via Tailscale identity → ProfileIdentifierFor; no method ever leaks another user's master token or bindings.
+The bridge is exposed through the unified per-user gRPC service `api.v1.ConnectorService`. All RPCs accept a `connector_kind` enum to disambiguate; pass `CONNECTOR_KIND_GOOGLE_KEEP` for Keep flows. Every method scopes to the calling user via Tailscale identity → ProfileIdentifierFor; no method ever leaks another user's master token or subscriptions.
 
-- `ExchangeAndStore(email, oauth_token) → ConnectorState` — connect.
-- `Disconnect() → ConnectorState` — pause.
-- `GetState() → ConnectorState` — read connector + bindings.
-- `ListNotes() → KeepNoteSummary[]` — proxy to the user's Keep account.
-- `ListMyBindings() → BindingState[]`
-- `BindChecklist(page, list_name, keep_note_id?) → BindingState`
-- `UnbindChecklist(page, list_name) → ()`
-- `GetChecklistBindingState(page, list_name) → ChecklistBindingState` — small surface used by the Checklist component on render.
+- `BeginAuth(connector_kind=GOOGLE_KEEP) → BeginAuthResponse` — no-op for Keep (its flow is single-shot via `CompleteAuth`); documented for symmetry with other connectors.
+- `CompleteAuth(connector_kind=GOOGLE_KEEP, email, oauth_token) → ConnectorState` — exchanges the oauth_token for a master token and persists `wiki.connectors.google_keep.*`.
+- `Disconnect(connector_kind=GOOGLE_KEEP) → ConnectorState` — pauses subscriptions.
+- `GetState(connector_kind=GOOGLE_KEEP) → ConnectorState` — reads connector + subscriptions.
+- `ListRemoteLists(connector_kind=GOOGLE_KEEP) → RemoteListSummary[]` — proxies to the user's Keep account.
+- `ListMySubscriptions(connector_kind=GOOGLE_KEEP) → SubscriptionState[]`
+- `Subscribe(connector_kind=GOOGLE_KEEP, page, list_name, remote_list_handle?) → SubscriptionState`
+- `Unsubscribe(connector_kind=GOOGLE_KEEP, page, list_name) → ()`
+- `GetChecklistSubscriptionState(page, list_name) → ChecklistSubscriptionState` — small surface used by the Checklist component on render. **Does not take connector_kind**; returns whichever connector owns the checklist.
+- `ListDeadLetters(connector_kind=GOOGLE_KEEP, page, list_name) → DeadLetterItem[]`
+- `ClearDeadLetter(connector_kind=GOOGLE_KEEP, page, list_name, item_uid) → ()`
 
 ## Why we ship the unofficial API anyway
 

@@ -102,7 +102,7 @@ type Server struct {
 	apiv1.UnimplementedScheduledTurnServiceServer
 	apiv1.UnimplementedAgentMetadataServiceServer
 	apiv1.UnimplementedChecklistServiceServer
-	apiv1.UnimplementedKeepConnectorServiceServer
+	apiv1.UnimplementedConnectorServiceServer
 	commit                  string
 	buildTime               time.Time
 	pageReaderMutator       wikipage.PageReaderMutator
@@ -217,8 +217,9 @@ func (s *Server) WithChecklistMutator(m *checklistmutator.Mutator) *Server {
 }
 
 // WithKeepConnector wires the Keep connector orchestrator into the server.
-// Required for KeepConnectorService handlers to function. Optional —
-// without it, KeepConnectorService methods return Unimplemented-equivalent.
+// Required for ConnectorService handlers (connector_kind = GOOGLE_KEEP)
+// to function. Optional — without it, those branches return a clear
+// "not configured" error.
 func (s *Server) WithKeepConnector(c *keepsync.Connector) *Server {
 	s.keepConnector = c
 	return s
@@ -237,7 +238,7 @@ func (s *Server) RegisterWithServer(grpcServer *grpc.Server) {
 	apiv1.RegisterScheduledTurnServiceServer(grpcServer, s)
 	apiv1.RegisterAgentMetadataServiceServer(grpcServer, s)
 	apiv1.RegisterChecklistServiceServer(grpcServer, s)
-	apiv1.RegisterKeepConnectorServiceServer(grpcServer, s)
+	apiv1.RegisterConnectorServiceServer(grpcServer, s)
 }
 
 // LoggingInterceptor returns a gRPC unary interceptor for logging method calls.

@@ -1,9 +1,10 @@
 // keep-bind-button — embedded inside <wiki-checklist> to expose the
-// Bind/Unbind controls when the calling user has KeepConnect configured.
+// Subscribe/Unsubscribe controls when the calling user has Google Keep
+// configured.
 //
 // Renders nothing when the user has no connector. Renders a "Bind to Keep
-// List" button when configured but unbound. Renders a status pill +
-// Unbind affordance when bound.
+// List" button when configured but unsubscribed. Renders a status pill +
+// Unsubscribe affordance when subscribed.
 
 import { css, html, LitElement, nothing } from 'lit';
 import { property, state } from 'lit/decorators.js';
@@ -11,16 +12,17 @@ import { createClient } from '@connectrpc/connect';
 import { create } from '@bufbuild/protobuf';
 import { getGrpcWebTransport } from './grpc-transport.js';
 import {
-  KeepConnectorService,
-  GetChecklistBindingStateRequestSchema,
-  ListNotesRequestSchema,
-  BindChecklistRequestSchema,
-  UnbindChecklistRequestSchema,
-} from '../gen/api/v1/keep_connector_pb.js';
+  ConnectorService,
+  ConnectorKind,
+  GetChecklistSubscriptionStateRequestSchema,
+  ListRemoteListsRequestSchema,
+  SubscribeRequestSchema,
+  UnsubscribeRequestSchema,
+} from '../gen/api/v1/connector_service_pb.js';
 import type {
-  ChecklistBindingState,
-  KeepNoteSummary,
-} from '../gen/api/v1/keep_connector_pb.js';
+  ChecklistSubscriptionState,
+  RemoteListSummary,
+} from '../gen/api/v1/connector_service_pb.js';
 import {
   foundationCSS,
   buttonCSS,
@@ -127,21 +129,21 @@ export class KeepBindButton extends LitElement {
   declare listName: string;
 
   @state() declare private phase: Phase;
-  @state() declare private bindingState: ChecklistBindingState | null;
-  @state() declare private notes: KeepNoteSummary[];
-  @state() declare private selectedNoteID: string;
+  @state() declare private subscriptionState: ChecklistSubscriptionState | null;
+  @state() declare private remoteLists: RemoteListSummary[];
+  @state() declare private selectedRemoteListHandle: string;
   @state() declare private error: AugmentedError | null;
 
-  private client = createClient(KeepConnectorService, getGrpcWebTransport());
+  private client = createClient(ConnectorService, getGrpcWebTransport());
 
   constructor() {
     super();
     this.page = '';
     this.listName = '';
     this.phase = 'loading';
-    this.bindingState = null;
-    this.notes = [];
-    this.selectedNoteID = '';
+    this.subscriptionState = null;
+    this.remoteLists = [];
+    this.selectedRemoteListHandle = '';
     this.error = null;
   }
 
@@ -156,16 +158,16 @@ export class KeepBindButton extends LitElement {
       return;
     }
     try {
-      const resp = await this.client.getChecklistBindingState(
-        create(GetChecklistBindingStateRequestSchema, {
+      const resp = await this.client.getChecklistSubscriptionState(
+        create(GetChecklistSubscriptionStateRequestSchema, {
           page: this.page,
           listName: this.listName,
         }),
       );
-      this.bindingState = resp.state ?? null;
-      if (!this.bindingState?.connectorConfigured) {
+      this.subscriptionState = resp.state ?? null;
+      if (!this.subscriptionState?.connectorConfigured) {
         this.phase = 'hidden';
-      } else if (this.bindingState.currentBinding) {
+      } else if (this.subscriptionState.currentSubscription) {
         this.phase = 'bound';
       } else {
         this.phase = 'unbound';
@@ -183,10 +185,14 @@ export class KeepBindButton extends LitElement {
     this.error = null;
     this.phase = 'picker';
     try {
-      const resp = await this.client.listNotes(create(ListNotesRequestSchema, {}));
-      this.notes = resp.notes;
+      const resp = await this.client.listRemoteLists(
+        create(ListRemoteListsRequestSchema, {
+          connectorKind: ConnectorKind.GOOGLE_KEEP,
+        }),
+      );
+      this.remoteLists = resp.lists;
     } catch (err: unknown) {
-      this.notes = [];
+      this.remoteLists = [];
       this.error = AugmentErrorService.augmentError(err, 'list Keep notes');
     }
   }
@@ -195,17 +201,18 @@ export class KeepBindButton extends LitElement {
     this.error = null;
     this.phase = 'binding';
     try {
-      await this.client.bindChecklist(
-        create(BindChecklistRequestSchema, {
+      await this.client.subscribe(
+        create(SubscribeRequestSchema, {
+          connectorKind: ConnectorKind.GOOGLE_KEEP,
           page: this.page,
           listName: this.listName,
-          keepNoteId: this.selectedNoteID, // empty → server creates new note
+          remoteListHandle: this.selectedRemoteListHandle, // empty → server creates new note
         }),
       );
-      this.selectedNoteID = '';
+      this.selectedRemoteListHandle = '';
       await this.refresh();
     } catch (err: unknown) {
-      this.error = AugmentErrorService.augmentError(err, 'bind checklist to Keep');
+      this.error = AugmentErrorService.augmentError(err, 'subscribe checklist to Keep');
       this.phase = 'picker';
     }
   }
@@ -215,15 +222,16 @@ export class KeepBindButton extends LitElement {
   // handler runs only after the user clicks the "Yes" leg.
   private async handleUnbind(): Promise<void> {
     try {
-      await this.client.unbindChecklist(
-        create(UnbindChecklistRequestSchema, {
+      await this.client.unsubscribe(
+        create(UnsubscribeRequestSchema, {
+          connectorKind: ConnectorKind.GOOGLE_KEEP,
           page: this.page,
           listName: this.listName,
         }),
       );
       await this.refresh();
     } catch (err: unknown) {
-      this.error = AugmentErrorService.augmentError(err, 'unbind checklist');
+      this.error = AugmentErrorService.augmentError(err, 'unsubscribe checklist');
     }
   }
 
@@ -255,16 +263,16 @@ export class KeepBindButton extends LitElement {
           <div class="picker">
             <p>Bind <strong>${this.listName}</strong> →</p>
             <select
-              .value=${this.selectedNoteID}
+              .value=${this.selectedRemoteListHandle}
               @change=${(e: Event) => {
                 if (!(e.target instanceof HTMLSelectElement)) return;
-                this.selectedNoteID = e.target.value;
+                this.selectedRemoteListHandle = e.target.value;
               }}
             >
               <option value="">Create new "${this.listName}"</option>
-              ${this.notes.map(
+              ${this.remoteLists.map(
                 (n) => html`
-                  <option value=${n.keepNoteId}>${n.title || '(untitled)'}</option>
+                  <option value=${n.remoteListHandle}>${n.title || '(untitled)'}</option>
                 `,
               )}
             </select>
@@ -283,8 +291,8 @@ export class KeepBindButton extends LitElement {
       case 'bound':
         return html`
           <span class="sync-badge"
-            >Synced${this.bindingState?.currentBinding?.keepNoteTitle
-              ? html` · ${this.bindingState.currentBinding.keepNoteTitle}`
+            >Synced${this.subscriptionState?.currentSubscription?.remoteListTitle
+              ? html` · ${this.subscriptionState.currentSubscription.remoteListTitle}`
               : nothing}</span
           >
           <confirmation-interlock-button

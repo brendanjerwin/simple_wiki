@@ -13,8 +13,8 @@ import (
 	"google.golang.org/grpc/codes"
 
 	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
-	v1 "github.com/brendanjerwin/simple_wiki/internal/grpc/api/v1"
 	keepsync "github.com/brendanjerwin/simple_wiki/internal/connectors/google_keep/sync"
+	v1 "github.com/brendanjerwin/simple_wiki/internal/grpc/api/v1"
 	"github.com/brendanjerwin/simple_wiki/tailscale"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 )
@@ -43,7 +43,7 @@ func withCallerIdentity(ctx context.Context, login string) context.Context {
 	return tailscale.ContextWithIdentity(ctx, tailscale.NewIdentity(login, "Alice", "node-1"))
 }
 
-var _ = Describe("KeepConnectorService dead-letter handlers", func() {
+var _ = Describe("ConnectorService dead-letter handlers (GOOGLE_KEEP)", func() {
 	var (
 		ctx       context.Context
 		server    *v1.Server
@@ -125,8 +125,9 @@ var _ = Describe("KeepConnectorService dead-letter handlers", func() {
 
 			BeforeEach(func() {
 				resp, err = server.ListDeadLetters(ctx, &apiv1.ListDeadLettersRequest{
-					Page:     page,
-					ListName: listName,
+					ConnectorKind: apiv1.ConnectorKind_CONNECTOR_KIND_GOOGLE_KEEP,
+					Page:          page,
+					ListName:      listName,
 				})
 			})
 
@@ -175,8 +176,9 @@ var _ = Describe("KeepConnectorService dead-letter handlers", func() {
 
 			BeforeEach(func() {
 				_, err = server.ListDeadLetters(context.Background(), &apiv1.ListDeadLettersRequest{
-					Page:     page,
-					ListName: listName,
+					ConnectorKind: apiv1.ConnectorKind_CONNECTOR_KIND_GOOGLE_KEEP,
+					Page:          page,
+					ListName:      listName,
 				})
 			})
 
@@ -190,13 +192,45 @@ var _ = Describe("KeepConnectorService dead-letter handlers", func() {
 
 			BeforeEach(func() {
 				_, err = server.ListDeadLetters(ctx, &apiv1.ListDeadLettersRequest{
-					Page:     "",
-					ListName: listName,
+					ConnectorKind: apiv1.ConnectorKind_CONNECTOR_KIND_GOOGLE_KEEP,
+					Page:          "",
+					ListName:      listName,
 				})
 			})
 
 			It("should return InvalidArgument", func() {
 				Expect(err).To(HaveGrpcStatusWithSubstr(codes.InvalidArgument, "page"))
+			})
+		})
+
+		Describe("when called without a connector_kind", func() {
+			var err error
+
+			BeforeEach(func() {
+				_, err = server.ListDeadLetters(ctx, &apiv1.ListDeadLettersRequest{
+					Page:     page,
+					ListName: listName,
+				})
+			})
+
+			It("should return InvalidArgument", func() {
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.InvalidArgument, "connector_kind"))
+			})
+		})
+
+		Describe("when called with a connector_kind that has no configured connector", func() {
+			var err error
+
+			BeforeEach(func() {
+				_, err = server.ListDeadLetters(ctx, &apiv1.ListDeadLettersRequest{
+					ConnectorKind: apiv1.ConnectorKind_CONNECTOR_KIND_GOOGLE_TASKS,
+					Page:          page,
+					ListName:      listName,
+				})
+			})
+
+			It("should return Unimplemented", func() {
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.Unimplemented, "unsupported connector_kind"))
 			})
 		})
 	})
@@ -211,16 +245,18 @@ var _ = Describe("KeepConnectorService dead-letter handlers", func() {
 
 			BeforeEach(func() {
 				_, err = server.ClearDeadLetter(ctx, &apiv1.ClearDeadLetterRequest{
-					Page:     page,
-					ListName: listName,
-					ItemUid:  "uid-at",
+					ConnectorKind: apiv1.ConnectorKind_CONNECTOR_KIND_GOOGLE_KEEP,
+					Page:          page,
+					ListName:      listName,
+					ItemUid:       "uid-at",
 				})
 
 				// Verify by re-listing.
 				if err == nil {
 					postClearListing, _ = server.ListDeadLetters(ctx, &apiv1.ListDeadLettersRequest{
-						Page:     page,
-						ListName: listName,
+						ConnectorKind: apiv1.ConnectorKind_CONNECTOR_KIND_GOOGLE_KEEP,
+						Page:          page,
+						ListName:      listName,
 					})
 				}
 				// Inspect the persisted frontmatter to verify
@@ -269,9 +305,10 @@ var _ = Describe("KeepConnectorService dead-letter handlers", func() {
 
 			BeforeEach(func() {
 				_, err = server.ClearDeadLetter(ctx, &apiv1.ClearDeadLetterRequest{
-					Page:     page,
-					ListName: listName,
-					ItemUid:  "uid-bogus",
+					ConnectorKind: apiv1.ConnectorKind_CONNECTOR_KIND_GOOGLE_KEEP,
+					Page:          page,
+					ListName:      listName,
+					ItemUid:       "uid-bogus",
 				})
 			})
 
@@ -280,19 +317,20 @@ var _ = Describe("KeepConnectorService dead-letter handlers", func() {
 			})
 		})
 
-		Describe("when called for an unknown binding", func() {
+		Describe("when called for an unknown subscription", func() {
 			var err error
 
 			BeforeEach(func() {
 				_, err = server.ClearDeadLetter(ctx, &apiv1.ClearDeadLetterRequest{
-					Page:     "ghost-page",
-					ListName: "ghost-list",
-					ItemUid:  "uid-x",
+					ConnectorKind: apiv1.ConnectorKind_CONNECTOR_KIND_GOOGLE_KEEP,
+					Page:          "ghost-page",
+					ListName:      "ghost-list",
+					ItemUid:       "uid-x",
 				})
 			})
 
-			It("should return NotFound binding_not_found", func() {
-				Expect(err).To(HaveGrpcStatusWithSubstr(codes.NotFound, "binding_not_found"))
+			It("should return NotFound subscription_not_found", func() {
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.NotFound, "subscription_not_found"))
 			})
 		})
 
@@ -301,14 +339,31 @@ var _ = Describe("KeepConnectorService dead-letter handlers", func() {
 
 			BeforeEach(func() {
 				_, err = server.ClearDeadLetter(ctx, &apiv1.ClearDeadLetterRequest{
-					Page:     page,
-					ListName: listName,
-					ItemUid:  "",
+					ConnectorKind: apiv1.ConnectorKind_CONNECTOR_KIND_GOOGLE_KEEP,
+					Page:          page,
+					ListName:      listName,
+					ItemUid:       "",
 				})
 			})
 
 			It("should return InvalidArgument", func() {
 				Expect(err).To(HaveGrpcStatusWithSubstr(codes.InvalidArgument, "item_uid"))
+			})
+		})
+
+		Describe("when called without a connector_kind", func() {
+			var err error
+
+			BeforeEach(func() {
+				_, err = server.ClearDeadLetter(ctx, &apiv1.ClearDeadLetterRequest{
+					Page:     page,
+					ListName: listName,
+					ItemUid:  "uid-at",
+				})
+			})
+
+			It("should return InvalidArgument", func() {
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.InvalidArgument, "connector_kind"))
 			})
 		})
 	})

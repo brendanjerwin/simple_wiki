@@ -405,10 +405,10 @@ func BuildVanguardTranscoder(grpcServer *grpc.Server, ginRouter http.Handler) (h
 		"api.v1.AgentMetadataService",
 		"api.v1.ChatService",
 		"api.v1.ChecklistService",
+		"api.v1.ConnectorService",
 		"api.v1.FileStorageService",
 		"api.v1.Frontmatter",
 		"api.v1.InventoryManagementService",
-		"api.v1.KeepConnectorService",
 		"api.v1.PageImportService",
 		"api.v1.PageManagementService",
 		"api.v1.ScheduledTurnService",
@@ -477,8 +477,8 @@ func setupGRPCServer(
 
 	// Keep connector — Google Keep bridge orchestrator. Per-user state on
 	// profile pages (wiki.connectors.google_keep.*) plus a sync scheduler
-	// (added separately). Optional — without it KeepConnectorService
-	// returns a clear "not configured" error.
+	// (added separately). Optional — without it ConnectorService's
+	// GOOGLE_KEEP branches return a clear "not configured" error.
 	keepConnector := keepsync.NewConnector(
 		keepsync.NewBindingStore(site),
 		http.DefaultClient,

@@ -83,6 +83,7 @@ add `{{"{{ KeepConnect }}"}}` to your profile page's body to enable it.
 ## For agents
 
 There is no gRPC or MCP service for managing profiles directly. Agents
-that need per-user external-service state should call the
-per-connector services (e.g. `api.v1.KeepConnectorService`) — those
-scope to the calling identity automatically.
+that need per-user external-service state should call the unified
+`api.v1.ConnectorService` with the appropriate `connector_kind`
+(e.g. `CONNECTOR_KIND_GOOGLE_KEEP`) — it scopes to the calling
+identity automatically.

@@ -429,7 +429,8 @@ func renderChecklistFallback(frontmatter map[string]any, listName string) string
 
 // BuildKeepConnect returns a template function that renders the
 // <keep-connect> custom element. Intended for use on profile pages —
-// the element queries gRPC KeepConnectorService for state and renders
+// the element queries gRPC ConnectorService (with
+// connector_kind=GOOGLE_KEEP) for state and renders
 // connect/connected/error UX accordingly. Takes no arguments.
 func BuildKeepConnect(_ TemplateContext) func() string {
 	return func() string {
