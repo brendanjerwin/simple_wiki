@@ -2013,37 +2013,24 @@ var _ = Describe("ValidateTemplate", func() {
 })
 
 var _ = Describe("BuildGoogleTasksConnect", func() {
-	When("invoked with a profile identifier", func() {
+	When("invoked", func() {
 		var rendered string
 
 		BeforeEach(func() {
 			fn := templating.BuildGoogleTasksConnect(templating.TemplateContext{Identifier: "alice_profile"})
-			rendered = fn("alice_profile")
+			rendered = fn()
 		})
 
 		It("should render the google-tasks-connect custom element", func() {
 			Expect(rendered).To(ContainSubstring("<google-tasks-connect"))
 		})
 
-		It("should include the profileID as the profile-id attribute", func() {
-			Expect(rendered).To(ContainSubstring(`profile-id="alice_profile"`))
+		It("should not emit a profile-id attribute (the server derives the profile from the caller's identity)", func() {
+			Expect(rendered).NotTo(ContainSubstring("profile-id"))
 		})
 
 		It("should close the element", func() {
 			Expect(rendered).To(ContainSubstring("</google-tasks-connect>"))
-		})
-	})
-
-	When("invoked with a profile identifier containing HTML metacharacters", func() {
-		var rendered string
-
-		BeforeEach(func() {
-			fn := templating.BuildGoogleTasksConnect(templating.TemplateContext{})
-			rendered = fn(`a"b<c`)
-		})
-
-		It("should HTML-escape the attribute value", func() {
-			Expect(rendered).To(ContainSubstring(`profile-id="a&#34;b&lt;c"`))
 		})
 	})
 })

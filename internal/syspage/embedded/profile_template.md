@@ -19,4 +19,4 @@ This is your personal profile page. Edit it however you like.
 
 {{"{{ KeepConnect }}"}}
 
-{{printf "{{ GoogleTasksConnect %q }}" .Identifier}}
+{{"{{ GoogleTasksConnect }}"}}

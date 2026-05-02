@@ -78,32 +78,21 @@ The macro takes no arguments.
 
 **When to skip it.** Skip if you don't use Google Keep, or if you'd rather use [[help-google-tasks]] or [[help-caldav]] instead. Each checklist binding is globally exclusive — you can't subscribe one checklist to two services at once — so picking your bridge per use-case matters.
 
-### `{{ GoogleTasksConnect "<profile-identifier>" }}` (macro)
+### `{{ GoogleTasksConnect }}` (macro)
 
 **What it does.** Renders the **Connect Google Tasks** button (and its connected/error states). Standard OAuth — no password capture, no master tokens. Once connected, wiki checklists can subscribe to Google Tasks lists and round-trip items.
 
 **Why you might want it.** Google Tasks is the cleanest of the Google bridges: real public API, real OAuth, no reverse-engineered protocol. If you live on Android or use Tasks via Calendar on the web, this is the connector to add. See [[help-google-tasks]] for the full setup including the per-deployment operator step.
 
-**How to add it.** Paste the macro into the body, conventionally under a `## Connectors` heading. Replace `<profile-identifier>` with your actual profile page's identifier (a quoted string).
+**How to add it.** Paste the macro into the body, conventionally under a `## Connectors` heading.
 
 ```
-{{ GoogleTasksConnect "<profile-identifier>" }}
+{{ GoogleTasksConnect }}
 ```
 
-A real example, after substitution:
+This is a macro, not a raw element — paste it exactly as shown, with the `{{ }}` braces. The templating engine expands it into a `<google-tasks-connect>` element that queries the connector backend and scopes to the calling identity. Pasting `<google-tasks-connect>` directly would render an unwired element and not work.
 
-```
-{{ GoogleTasksConnect "profile_brendanjerwin_gmail_com" }}
-```
-
-This is a macro, not a raw element — paste it exactly with the `{{ }}` braces. The templating engine expands it into a `<google-tasks-connect profile-id="…">` element with the OAuth state scoped to that profile. Pasting `<google-tasks-connect>` directly would render an unwired element and not work.
-
-The identifier argument is **required** — it scopes the rendered element's OAuth state lookups to your specific profile page.
-
-**Finding your profile identifier.** Two equally good ways:
-
-1. **Look at the URL.** When you're on your profile page, the part of the URL after the host is the identifier. If you're at `https://wiki.example.com/profile_brendanjerwin_gmail_com`, then `profile_brendanjerwin_gmail_com` is your identifier — the page name *is* the identifier.
-2. **Look at the frontmatter.** Open your profile in the editor and look at the `+++` frontmatter block at the top. You'll see a line like `identifier = "profile_brendanjerwin_gmail_com"`. Copy the quoted value.
+The macro takes no arguments — the server scopes OAuth state to the calling user automatically.
 
 **When to skip it.** Skip if you don't use Google Tasks, or if your wiki operator hasn't configured the Google Tasks OAuth client for this deployment yet (the connect button will tell you so).
 

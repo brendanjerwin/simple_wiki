@@ -438,15 +438,15 @@ func BuildKeepConnect(_ TemplateContext) func() string {
 
 // BuildGoogleTasksConnect returns a template function that renders the
 // <google-tasks-connect> custom element. Intended for use on profile
-// pages — mirrors BuildKeepConnect but accepts a profileID argument
-// so the rendered element can scope its OAuth/state lookups to a
-// specific profile page. The profileID is HTML-escaped before being
-// emitted as the profile-id attribute.
-func BuildGoogleTasksConnect(_ TemplateContext) func(string) string {
-	return func(profileID string) string {
-		return fmt.Sprintf(`<google-tasks-connect profile-id="%s"></google-tasks-connect>`,
-			html.EscapeString(profileID),
-		)
+// pages — mirrors BuildKeepConnect: takes no arguments. The rendered
+// element queries ConnectorService (with connector_kind=GOOGLE_TASKS)
+// for state, and the server scopes that lookup to the calling user's
+// Tailscale principal. Passing a profile identifier from the template
+// would be redundant and a soft footgun (a user could paste another
+// user's identifier and confuse the UI).
+func BuildGoogleTasksConnect(_ TemplateContext) func() string {
+	return func() string {
+		return `<google-tasks-connect></google-tasks-connect>`
 	}
 }
 
@@ -719,7 +719,7 @@ func buildChatTemplateWithFunctions(ctx context.Context, templateString string, 
 		funcNameBlog:               func(string, int) string { return "" },
 		funcNameSurvey:             func(string) string { return "" },
 		funcNameKeepConnect:        func() string { return "" },
-		funcNameGoogleTasksConnect: func(string) string { return "" },
+		funcNameGoogleTasksConnect: func() string { return "" },
 	}
 
 	return template.New("page").Funcs(funcs).Parse(templateString)
@@ -825,7 +825,7 @@ func validationFuncMap() template.FuncMap {
 		funcNameBlog:               func(string, int) string { return "" },
 		funcNameSurvey:             func(string) string { return "" },
 		funcNameKeepConnect:        func() string { return "" },
-		funcNameGoogleTasksConnect: func(string) string { return "" },
+		funcNameGoogleTasksConnect: func() string { return "" },
 	}
 }
 
