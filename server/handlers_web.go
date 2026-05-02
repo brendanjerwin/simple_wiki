@@ -262,6 +262,7 @@ func (s *Site) registerRoutes(router *gin.Engine) {
 	router.POST("/uploads", s.handleUpload)
 	router.GET("/cli/:binary", serveCLIBinary)
 	router.GET("/extensions/:file", serveExtensionFile)
+	router.GET("/oauth/google/callback", s.handleOAuthGoogleCallback)
 
 	router.GET("/:page", func(c *gin.Context) {
 		page := sanitizePageName(c.Param("page"))
