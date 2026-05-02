@@ -113,10 +113,12 @@ func (j *AgentTurnJob) Execute() error {
 		maxTurns = defaultMaxTurns
 	}
 	completion, dispatchErr := j.dispatcher.Dispatch(&apiv1.ScheduledTurnRequest{
-		RequestId:    requestID,
-		Page:         j.page,
-		Prompt:       snapshot.GetPrompt(),
-		MaxTurns:     maxTurns,
+		RequestId: requestID,
+		Page:      j.page,
+		Prompt:    snapshot.GetPrompt(),
+		MaxTurns:  maxTurns,
+		// Protobuf repeated fields share backing arrays; pass a copy so any
+		// downstream mutation in dispatch handling cannot alias store-owned data.
 		AllowedTools: append([]string(nil), snapshot.GetAllowedTools()...),
 	})
 	if dispatchErr != nil {

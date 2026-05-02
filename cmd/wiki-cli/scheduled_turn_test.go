@@ -213,6 +213,56 @@ var _ = Describe("scheduledTurnClient RequestPermission", func() {
 	})
 })
 
+var _ = Describe("wildcardMatch", func() {
+	When("pattern has no wildcard", func() {
+		var matched bool
+
+		BeforeEach(func() {
+			matched = wildcardMatch("Bash(date:now)", "Bash(date:now)")
+		})
+
+		It("should require an exact match", func() {
+			Expect(matched).To(BeTrue())
+		})
+	})
+
+	When("pattern has a wildcard suffix", func() {
+		var matched bool
+
+		BeforeEach(func() {
+			matched = wildcardMatch("Bash(mkdir:*)", "Bash(mkdir:/tmp/menu)")
+		})
+
+		It("should match command arguments containing slashes", func() {
+			Expect(matched).To(BeTrue())
+		})
+	})
+
+	When("pattern has multiple wildcard segments", func() {
+		var matched bool
+
+		BeforeEach(func() {
+			matched = wildcardMatch("Bash(*mkdir*menu*)", "Bash(mkdir:/tmp/menu)")
+		})
+
+		It("should match segments in order", func() {
+			Expect(matched).To(BeTrue())
+		})
+	})
+
+	When("pattern does not match target", func() {
+		var matched bool
+
+		BeforeEach(func() {
+			matched = wildcardMatch("Bash(mkdir:*)", "Bash(rm:/tmp/menu)")
+		})
+
+		It("should return false", func() {
+			Expect(matched).To(BeFalse())
+		})
+	})
+})
+
 var _ = Describe("buildScheduledTurnAgentCmd", func() {
 	When("useSystemd is true and request_id is longer than scheduledTurnRequestIDInUnit", func() {
 		var (

@@ -98,10 +98,13 @@ func (c *scheduledTurnClient) permissionAllowed(req acp.RequestPermissionRequest
 		return false
 	}
 
-	target := string(req.ToolCall.ToolCallId)
-	if req.ToolCall.Title != nil && *req.ToolCall.Title != "" {
-		target = *req.ToolCall.Title
+	// Prefer the human-readable title when available because that's the value
+	// Claude emits in RequestPermission for tool invocations like
+	// "Bash(mkdir:/tmp/menu)", which is what allowlist patterns target.
+	if req.ToolCall.Title == nil || *req.ToolCall.Title == "" {
+		return false
 	}
+	target := *req.ToolCall.Title
 
 	for _, pattern := range c.allowedTools {
 		if wildcardMatch(pattern, target) {
@@ -112,6 +115,9 @@ func (c *scheduledTurnClient) permissionAllowed(req acp.RequestPermissionRequest
 }
 
 func wildcardMatch(pattern, target string) bool {
+	// path.Match/filepath.Match are not suitable here because '*' does not
+	// match '/' there. We need "Bash(mkdir:*)" to match
+	// "Bash(mkdir:/tmp/menu)".
 	if !strings.Contains(pattern, "*") {
 		return pattern == target
 	}
