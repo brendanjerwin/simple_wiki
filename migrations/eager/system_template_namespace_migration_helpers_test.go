@@ -112,7 +112,7 @@ var _ = Describe("SystemTemplateNamespaceMigrationScanJob", func() {
 			})
 
 			It("should not enqueue any jobs", func() {
-				Expect(coordinator.GetActiveQueues()).To(BeEmpty())
+				Expect(coordinator.GetJobProgress().QueueStats).To(BeEmpty())
 			})
 		})
 
@@ -144,12 +144,13 @@ var _ = Describe("SystemTemplateNamespaceMigrationScanJob", func() {
 			})
 
 			It("should enqueue a per-page migration job for each legacy page", func() {
-				queues := coordinator.GetActiveQueues()
-				totalJobs := 0
-				for _, q := range queues {
-					totalJobs += int(q.HighWaterMark)
-				}
-				Expect(totalJobs).To(BeNumerically(">=", 2))
+				// Each per-page migration job has a unique queue name
+				// (`SystemTemplateNamespaceMigrationJob-<id>`), so the
+				// count of registered queues equals the count of
+				// distinct enqueues. QueueStats is stable across worker
+				// drain (entries persist in coordinator.stats); GetActiveQueues
+				// or HighWaterMark race the drain and flake.
+				Expect(coordinator.GetJobProgress().QueueStats).To(HaveLen(2))
 			})
 		})
 
@@ -166,7 +167,7 @@ var _ = Describe("SystemTemplateNamespaceMigrationScanJob", func() {
 			})
 
 			It("should not enqueue any jobs (idempotent)", func() {
-				Expect(coordinator.GetActiveQueues()).To(BeEmpty())
+				Expect(coordinator.GetJobProgress().QueueStats).To(BeEmpty())
 			})
 		})
 
@@ -184,12 +185,10 @@ var _ = Describe("SystemTemplateNamespaceMigrationScanJob", func() {
 			})
 
 			It("should enqueue at most one job per unique identifier", func() {
-				queues := coordinator.GetActiveQueues()
-				totalJobs := 0
-				for _, q := range queues {
-					totalJobs += int(q.HighWaterMark)
-				}
-				Expect(totalJobs).To(BeNumerically("<=", 1))
+				// Same QueueStats-vs-GetActiveQueues rationale as
+				// the per-page test above: count distinct queues
+				// (one per identifier) for a stable assertion.
+				Expect(coordinator.GetJobProgress().QueueStats).To(HaveLen(1))
 			})
 		})
 
@@ -203,7 +202,7 @@ var _ = Describe("SystemTemplateNamespaceMigrationScanJob", func() {
 
 			It("should silently skip the file rather than error", func() {
 				Expect(err).NotTo(HaveOccurred())
-				Expect(coordinator.GetActiveQueues()).To(BeEmpty())
+				Expect(coordinator.GetJobProgress().QueueStats).To(BeEmpty())
 			})
 		})
 	})
