@@ -3,9 +3,13 @@
 // This file implements the /oauth/google/callback endpoint. The flow:
 //
 //  1. RFC 9207 `iss` validation against the pinned Google issuer URL.
-//     If the iss param is present, it MUST match exactly. If absent,
-//     tolerate (Google may not always send it on classic OAuth flows
-//     vs OIDC) but log so an operator can spot a downgrade.
+//     The `iss` parameter is REQUIRED — if absent OR mismatched, the
+//     callback is rejected. The plan ("OAuth security profile") is
+//     unqualified: validate iss against the configured authorization
+//     server's issuer. Strict (not pragmatic) is chosen deliberately
+//     so the security posture matches the documented stance from day
+//     one — if Google omits iss on a real flow we'd rather find out
+//     immediately than carry a tolerated-absence loophole forever.
 //  2. State token validation via the single-use server-side store.
 //     The store enforces ≥256 bits of entropy, single-use, 10-min TTL.
 //  3. **Validation order matters**: `iss` and `state` are validated
@@ -205,18 +209,30 @@ func (h *OAuthGoogleHandler) handleCallback(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	// Step 1: iss validation (RFC 9207). Tolerate absence — Google
-	// does not always set iss on plain OAuth flows — but if present
-	// it MUST match the pinned issuer.
-	if iss := q.Get("iss"); iss != "" && iss != h.IssuerExpected {
+	// Step 1: iss validation (RFC 9207). The plan's "OAuth security
+	// profile" specifies validating iss against the configured
+	// authorization server's issuer with no qualification, so we
+	// require its presence — absent OR mismatched both reject. If
+	// this turns out to break a legitimate Google OAuth flow in
+	// practice (some non-OIDC variants reportedly omit iss), the
+	// resolution is to relax the policy here AFTER discovering it,
+	// not to pre-emptively tolerate the gap.
+	iss := q.Get("iss")
+	if iss == "" {
+		h.logf("oauth google callback: iss param absent (rejected per RFC 9207)")
+		renderOAuthErrorPage(w, http.StatusBadRequest,
+			"Authorization server identification missing",
+			"The OAuth response did not include the issuer parameter required for RFC 9207 verification. This usually means the OAuth response was tampered with or did not originate from Google's sign-in service.",
+			"", "", oauthSuccessRedirectPath)
+		return
+	}
+	if iss != h.IssuerExpected {
 		h.logf("oauth google callback: iss mismatch: got %q want %q", iss, h.IssuerExpected)
 		renderOAuthErrorPage(w, http.StatusBadRequest,
 			"Authorization server mismatch",
 			"The OAuth response did not come from the expected Google sign-in service. This usually means the callback URL or the wiki's OAuth client is misconfigured.",
 			"", "", oauthSuccessRedirectPath)
 		return
-	} else if iss == "" {
-		h.logf("oauth google callback: iss param absent (tolerated)")
 	}
 
 	// Step 2: state validation. Single-use, server-side keyed by the

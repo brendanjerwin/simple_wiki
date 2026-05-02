@@ -159,13 +159,26 @@ var _ = Describe("OAuthGoogleHandler", func() {
 			handler.handleCallback(recorder, makeRequest(query.Encode()))
 		})
 
-		It("should tolerate the missing iss and complete the exchange", func() {
-			Expect(recorder.Code).To(Equal(http.StatusFound))
+		It("should reject with 400 (RFC 9207 strict policy)", func() {
+			Expect(recorder.Code).To(Equal(http.StatusBadRequest))
 		})
 
-		It("should persist the refresh token", func() {
-			Expect(persister.called).To(BeTrue())
-			Expect(persister.token).To(Equal("1//refresh-token"))
+		It("should NOT call the token endpoint", func() {
+			Expect(capturedForm).To(BeNil())
+		})
+
+		It("should NOT persist a refresh token", func() {
+			Expect(persister.called).To(BeFalse())
+		})
+
+		It("should NOT consume the state token (rejected before state lookup)", func() {
+			_, err := stateStore.Consume(ctx, issuedState)
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should render a wiki-styled error page", func() {
+			Expect(recorder.Header().Get("Content-Type")).To(ContainSubstring("text/html"))
+			Expect(recorder.Body.String()).To(ContainSubstring("Authorization server identification missing"))
 		})
 	})
 
@@ -232,6 +245,7 @@ var _ = Describe("OAuthGoogleHandler", func() {
 			query := url.Values{
 				"code":  []string{"auth-code"},
 				"state": []string{"never-issued"},
+				"iss":   []string{googleOAuthIssuer},
 			}
 			handler.handleCallback(recorder, makeRequest(query.Encode()))
 		})
@@ -254,6 +268,7 @@ var _ = Describe("OAuthGoogleHandler", func() {
 			query := url.Values{
 				"code":  []string{"auth-code"},
 				"state": []string{issuedState},
+				"iss":   []string{googleOAuthIssuer},
 			}
 			handler.handleCallback(recorder, makeRequest(query.Encode()))
 		})
@@ -271,6 +286,7 @@ var _ = Describe("OAuthGoogleHandler", func() {
 			query := url.Values{
 				"code":  []string{"auth-code"},
 				"state": []string{issuedState},
+				"iss":   []string{googleOAuthIssuer},
 			}
 			handler.handleCallback(recorder, makeRequest(query.Encode()))
 
@@ -295,6 +311,7 @@ var _ = Describe("OAuthGoogleHandler", func() {
 			issuedState = issueState()
 			query := url.Values{
 				"state": []string{issuedState},
+				"iss":   []string{googleOAuthIssuer},
 			}
 			handler.handleCallback(recorder, makeRequest(query.Encode()))
 		})
@@ -351,6 +368,7 @@ var _ = Describe("OAuthGoogleHandler", func() {
 			query := url.Values{
 				"code":  []string{"auth-code"},
 				"state": []string{issuedState},
+				"iss":   []string{googleOAuthIssuer},
 			}
 			handler.handleCallback(recorder, makeRequest(query.Encode()))
 		})
@@ -393,6 +411,7 @@ var _ = Describe("OAuthGoogleHandler", func() {
 			query := url.Values{
 				"code":  []string{"auth-code"},
 				"state": []string{issuedState},
+				"iss":   []string{googleOAuthIssuer},
 			}
 			handler.handleCallback(recorder, makeRequest(query.Encode()))
 		})
@@ -424,6 +443,7 @@ var _ = Describe("OAuthGoogleHandler", func() {
 			query := url.Values{
 				"code":  []string{"auth-code"},
 				"state": []string{issuedState},
+				"iss":   []string{googleOAuthIssuer},
 			}
 			handler.handleCallback(recorder, makeRequest(query.Encode()))
 		})
@@ -446,6 +466,7 @@ var _ = Describe("OAuthGoogleHandler", func() {
 			query := url.Values{
 				"code":  []string{"auth-code"},
 				"state": []string{issuedState},
+				"iss":   []string{googleOAuthIssuer},
 			}
 			handler.handleCallback(recorder, makeRequest(query.Encode()))
 		})

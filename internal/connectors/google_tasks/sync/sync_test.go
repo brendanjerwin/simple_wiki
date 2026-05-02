@@ -1252,3 +1252,130 @@ var _ = Describe("Connector.Connect / Disconnect", func() {
 	})
 })
 
+var _ = Describe("Connector.PersistRefreshToken", func() {
+	When("the profile has paused subscriptions", func() {
+		var (
+			pages *fakePages
+			now   time.Time
+		)
+
+		BeforeEach(func() {
+			pages = newFakePages()
+			now = time.Date(2026, 5, 1, 12, 0, 0, 0, time.UTC)
+			pausedAt := now.Add(-1 * time.Hour)
+			activeSub := taskssync.Subscription{
+				Page:     "active_page",
+				ListName: "active_list",
+				RemoteListID: syncTestRemote,
+				State:    taskssync.SubscriptionStateActive,
+				LastUpdatedMin: pausedAt,
+			}
+			pausedSub := taskssync.Subscription{
+				Page:           syncTestPage,
+				ListName:       syncTestListName,
+				RemoteListID:   syncTestRemote,
+				State:          taskssync.SubscriptionStatePaused,
+				PausedReason:   taskssync.PausedReasonAuthFailed,
+				PausedAt:       pausedAt,
+				LastUpdatedMin: pausedAt.Add(-1 * time.Hour),
+				ItemIDMap:      map[string]string{"u": "t"},
+			}
+			store := newStore(pages)
+			Expect(store.SaveState(aliceProfile, taskssync.ConnectorState{
+				Email:         syncTestEmail,
+				RefreshToken:  "rt-old",
+				Subscriptions: []taskssync.Subscription{activeSub, pausedSub},
+			})).To(Succeed())
+			c := newConnector(store, readyLeaseTable(), newFakeTasksClient(), newFakeClock(now), newFakeChecklistReader(), nil, nil)
+			Expect(c.PersistRefreshToken(context.Background(), string(aliceProfile), syncTestEmail, "rt-fresh")).To(Succeed())
+		})
+
+		It("should persist the new refresh token", func() {
+			store := newStore(pages)
+			state, _ := store.LoadState(aliceProfile)
+			Expect(state.RefreshToken).To(Equal("rt-fresh"))
+		})
+
+		It("should auto-resume the paused subscription", func() {
+			store := newStore(pages)
+			loaded, found, _ := store.FindSubscription(aliceProfile, syncTestPage, syncTestListName)
+			Expect(found).To(BeTrue())
+			Expect(loaded.State).To(Equal(taskssync.SubscriptionStateActive))
+			Expect(loaded.PausedReason).To(BeEmpty())
+			Expect(loaded.PausedAt.IsZero()).To(BeTrue())
+		})
+
+		It("should preserve the paused subscription's ItemIDMap (no full resync at <7d)", func() {
+			store := newStore(pages)
+			loaded, found, _ := store.FindSubscription(aliceProfile, syncTestPage, syncTestListName)
+			Expect(found).To(BeTrue())
+			Expect(loaded.ItemIDMap).To(HaveKeyWithValue("u", "t"))
+		})
+
+		It("should leave already-active subscriptions unchanged (idempotent)", func() {
+			store := newStore(pages)
+			loaded, found, _ := store.FindSubscription(aliceProfile, "active_page", "active_list")
+			Expect(found).To(BeTrue())
+			Expect(loaded.State).To(Equal(taskssync.SubscriptionStateActive))
+		})
+	})
+
+	When("the profile has no subscriptions", func() {
+		var (
+			pages *fakePages
+			err   error
+		)
+
+		BeforeEach(func() {
+			pages = newFakePages()
+			store := newStore(pages)
+			Expect(store.SaveState(aliceProfile, taskssync.ConnectorState{
+				Email:        syncTestEmail,
+				RefreshToken: "rt-old",
+			})).To(Succeed())
+			c := newConnector(store, readyLeaseTable(), newFakeTasksClient(), newFakeClock(time.Now()), nil, nil, nil)
+			err = c.PersistRefreshToken(context.Background(), string(aliceProfile), syncTestEmail, "rt-fresh")
+		})
+
+		It("should not error", func() {
+			Expect(err).ToNot(HaveOccurred())
+		})
+
+		It("should still persist the refresh token", func() {
+			store := newStore(pages)
+			state, _ := store.LoadState(aliceProfile)
+			Expect(state.RefreshToken).To(Equal("rt-fresh"))
+		})
+	})
+
+	When("an empty profileID is supplied", func() {
+		var err error
+
+		BeforeEach(func() {
+			pages := newFakePages()
+			store := newStore(pages)
+			c := newConnector(store, readyLeaseTable(), newFakeTasksClient(), newFakeClock(time.Now()), nil, nil, nil)
+			err = c.PersistRefreshToken(context.Background(), "", syncTestEmail, "rt-fresh")
+		})
+
+		It("should return an error", func() {
+			Expect(err).To(MatchError(ContainSubstring("profileID is required")))
+		})
+	})
+
+	When("an empty refresh token is supplied", func() {
+		var err error
+
+		BeforeEach(func() {
+			pages := newFakePages()
+			store := newStore(pages)
+			c := newConnector(store, readyLeaseTable(), newFakeTasksClient(), newFakeClock(time.Now()), nil, nil, nil)
+			err = c.PersistRefreshToken(context.Background(), string(aliceProfile), syncTestEmail, "")
+		})
+
+		It("should return an error", func() {
+			Expect(err).To(MatchError(ContainSubstring("refresh_token is required")))
+		})
+	})
+})
+

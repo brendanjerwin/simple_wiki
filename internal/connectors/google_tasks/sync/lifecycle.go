@@ -70,9 +70,14 @@ func (c *Connector) Connect(_ context.Context, profileID wikipage.PageIdentifier
 //   - Suitable for headless boundary callers that don't want to reason
 //     about the per-profile state shape.
 //
-// Existing subscriptions are preserved so a reconnect (which arrives
-// here with a fresh refresh token) auto-resumes them on the next sync.
-func (c *Connector) PersistRefreshToken(_ context.Context, profileID, accountEmail, refreshToken string) error {
+// Auto-resume on reconnect (per plan §"Auth-failed UX"): after persisting
+// the fresh token, every paused subscription on the profile is walked
+// and Resume() is called on each. Resume is idempotent — calling it on
+// an already-active subscription is a no-op — so the walk is safe to
+// run unconditionally. A best-effort failure to resume a single
+// subscription is logged but does not roll back the token persistence;
+// the next scheduler tick re-attempts naturally.
+func (c *Connector) PersistRefreshToken(ctx context.Context, profileID, accountEmail, refreshToken string) error {
 	if profileID == "" {
 		return errors.New("tasks bridge: profileID is required")
 	}
@@ -95,6 +100,30 @@ func (c *Connector) PersistRefreshToken(_ context.Context, profileID, accountEma
 	state.LastVerifiedAt = now
 	if err := c.store.SaveState(pid, state); err != nil {
 		return fmt.Errorf("persist profile state: %w", err)
+	}
+
+	// Auto-resume paused subscriptions. Snapshot the (page, list)
+	// pairs from the freshly-saved state — Resume() takes its own
+	// lock on the profile, so we cannot iterate state.Subscriptions
+	// while holding any mutex.
+	type pausedKey struct {
+		page, listName string
+	}
+	paused := make([]pausedKey, 0, len(state.Subscriptions))
+	for _, sub := range state.Subscriptions {
+		if sub.IsPaused() {
+			paused = append(paused, pausedKey{page: sub.Page, listName: sub.ListName})
+		}
+	}
+	for _, k := range paused {
+		if resumeErr := c.Resume(ctx, pid, k.page, k.listName); resumeErr != nil {
+			// Best-effort: a single failed Resume should not roll back
+			// the token persistence. The next scheduler tick will
+			// observe the still-paused subscription and try again
+			// once the connector tries to sync against the fresh token.
+			c.logger.Error("tasks bridge: auto-resume failed profile=%s page=%s list=%s err=%v",
+				profileID, k.page, k.listName, resumeErr)
+		}
 	}
 	return nil
 }
