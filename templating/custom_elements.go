@@ -40,5 +40,6 @@ func MacroCustomElements() []CustomElement {
 		{Name: "keep-connect"},
 		{Name: "google-tasks-connect", Attrs: []string{"profile-id"}},
 		{Name: "connector-subscribe-button", Attrs: []string{pageAttr, "list-name"}},
+		{Name: "profile-paused-banner"},
 	}
 }

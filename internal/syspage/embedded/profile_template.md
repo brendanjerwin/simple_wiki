@@ -15,6 +15,8 @@ This is your personal profile page. Edit it however you like.
 
 ## Connectors
 
+<profile-paused-banner></profile-paused-banner>
+
 {{"{{ KeepConnect }}"}}
 
 {{printf "{{ GoogleTasksConnect %q }}" .Identifier}}
