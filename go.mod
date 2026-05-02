@@ -3,7 +3,7 @@ module github.com/brendanjerwin/simple_wiki
 go 1.26.1
 
 require (
-	connectrpc.com/connect v1.19.1
+	connectrpc.com/connect v1.19.2
 	connectrpc.com/grpcreflect v1.3.0
 	connectrpc.com/vanguard v0.4.0
 	github.com/adrg/frontmatter v0.2.0
@@ -19,11 +19,11 @@ require (
 	github.com/jcelliott/lumber v0.0.0-20160324203708-dd349441af25
 	github.com/k3a/html2text v1.4.0
 	github.com/karalabe/usb v0.0.2
-	github.com/mark3labs/mcp-go v0.48.0
+	github.com/mark3labs/mcp-go v0.49.0
 	github.com/mborders/artifex v0.5.1
 	github.com/microcosm-cc/bluemonday v1.0.27
 	github.com/oklog/ulid/v2 v2.1.1
-	github.com/onsi/ginkgo/v2 v2.28.1
+	github.com/onsi/ginkgo/v2 v2.28.2
 	github.com/onsi/gomega v1.39.1
 	github.com/pelletier/go-toml/v2 v2.3.0
 	github.com/redpanda-data/protoc-gen-go-mcp v0.0.0-20250930092048-a98b94b5957a
