@@ -91,7 +91,7 @@ export class KeepConnect extends LitElement {
       this.state = resp.state ?? null;
       this.phase = this.state?.configured ? 'connected' : 'disconnected';
     } catch (err: unknown) {
-      this.error = AugmentErrorService.augmentError(err, 'load Google Keep connector state');
+      this.error = AugmentErrorService.augmentError(err, 'load Google Keep setup');
       this.phase = 'disconnected';
     }
   }
@@ -174,7 +174,7 @@ export class KeepConnect extends LitElement {
   private renderPhase() {
     switch (this.phase) {
       case 'loading':
-        return html`<p class="muted">Loading connector state…</p>`;
+        return html`<p class="muted">Checking Google Keep setup…</p>`;
       case 'disconnected':
         return this.renderDisconnected();
       case 'connecting':

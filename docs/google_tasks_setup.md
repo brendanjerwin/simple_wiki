@@ -8,9 +8,15 @@ If you don't do this, the wiki's Tasks integration stays disabled with a clear "
 
 Google does not allow shared OAuth credentials for self-hosted apps. Each deployment of simple_wiki must provision its own Google Cloud Platform project and create its own OAuth client. Dynamic Client Registration (DCR) isn't an option — Google's IdP doesn't support it for the Tasks API. So this is a per-deployment, one-time chore.
 
-## Step-by-step
+## About these screenshots
 
-> **Note on screenshots:** the GCP Console UI changes regularly. This doc describes the flow without inline screenshots because they go stale fast. If you're adding screenshots, include a `_Last verified: YYYY-MM-DD_` marker so the next operator can tell at a glance whether they're current.
+The screenshots embedded below live in `docs/google_tasks_setup/` and use **dated filenames** (e.g. `2026-05-02-gcp-project-creation.png`). The capture date is baked into the filename so staleness is immediately obvious — the GCP Console UI changes regularly, and a screenshot from years past usually no longer matches reality.
+
+If you update a screenshot, save it under a **new** dated filename and delete the old one. Do not overwrite a stale filename in place. See `docs/google_tasks_setup/README.md` for the full convention.
+
+Until the operator captures actual screenshots, you'll see placeholder image references below marked `<!-- TODO: capture screenshot -->`. The text walkthrough is complete on its own; the screenshots are supplementary.
+
+## Step-by-step
 
 ### 1. Create a GCP project
 
@@ -20,11 +26,17 @@ Google does not allow shared OAuth credentials for self-hosted apps. Each deploy
 4. Leave organization / location at defaults unless you have a reason to change them.
 5. Click **Create**.
 
+<!-- TODO: capture screenshot at docs/google_tasks_setup/2026-05-02-gcp-project-creation.png showing the New Project dialog -->
+![GCP Project Creation – 2026-05-02](google_tasks_setup/2026-05-02-gcp-project-creation.png)
+
 ### 2. Enable the Google Tasks API
 
 1. In your new project, go to **APIs & Services → Library**.
 2. Search for **Google Tasks API**.
 3. Click it, then click **Enable**.
+
+<!-- TODO: capture screenshot at docs/google_tasks_setup/2026-05-02-tasks-api-enable.png showing the Tasks API enable button -->
+![Google Tasks API Enable – 2026-05-02](google_tasks_setup/2026-05-02-tasks-api-enable.png)
 
 ### 3. Configure the OAuth consent screen
 
@@ -41,6 +53,12 @@ Google does not allow shared OAuth credentials for self-hosted apps. Each deploy
 7. **Test users**: add each household member's Google email. Cap is 100 — sufficient for households. Each test user must explicitly accept this app's consent screen the first time they connect.
 8. Click **Save and Continue**, then **Back to Dashboard**.
 
+<!-- TODO: capture screenshot at docs/google_tasks_setup/2026-05-02-oauth-consent-scope-picker.png showing the scope picker with `tasks` selected -->
+![OAuth Consent Scope Picker – 2026-05-02](google_tasks_setup/2026-05-02-oauth-consent-scope-picker.png)
+
+<!-- TODO: capture screenshot at docs/google_tasks_setup/2026-05-02-oauth-consent-test-users.png showing the test users list -->
+![OAuth Consent Test Users – 2026-05-02](google_tasks_setup/2026-05-02-oauth-consent-test-users.png)
+
 > **Stay in Testing mode.** Production-mode verification requires a privacy policy URL, app verification by Google, and supports >100 users. For household use, Testing mode is indefinite and sufficient.
 
 ### 4. Create the OAuth client credentials
@@ -50,13 +68,21 @@ Google does not allow shared OAuth credentials for self-hosted apps. Each deploy
 3. **Application type**: **Web application**.
 4. **Name**: e.g. `simple_wiki web client`. Internal label only.
 5. **Authorized redirect URIs**: add exactly:
+
    ```text
    https://<your-tailscale-hostname>/oauth/google/callback
    ```
+
    Replace `<your-tailscale-hostname>` with your wiki's actual hostname (e.g. `wiki.tailnet-name.ts.net`).
 
    > **⚠️ Byte-exact match required.** RFC 9700 §4.1.1 requires the redirect URI in the OAuth request to byte-match what's registered here. Trailing slash matters. Scheme matters. Path matters. If `https://wiki.example.com/oauth/google/callback` is registered, then `https://wiki.example.com/oauth/google/callback/` (with trailing slash) will be rejected by Google with `redirect_uri_mismatch`.
 6. Click **Create**. A modal shows your **Client ID** and **Client Secret**. Copy both now — you'll plug them into the wiki's environment in the next step.
+
+<!-- TODO: capture screenshot at docs/google_tasks_setup/2026-05-02-credentials-redirect-uri-form.png showing the OAuth client creation form with redirect URI filled in -->
+![Credentials Redirect URI Form – 2026-05-02](google_tasks_setup/2026-05-02-credentials-redirect-uri-form.png)
+
+<!-- TODO: capture screenshot at docs/google_tasks_setup/2026-05-02-client-id-secret-modal.png showing the Client ID + Secret modal (REDACT the actual values before committing) -->
+![Client ID and Secret Modal – 2026-05-02](google_tasks_setup/2026-05-02-client-id-secret-modal.png)
 
 ### 5. Configure the wiki
 

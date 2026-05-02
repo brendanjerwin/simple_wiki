@@ -93,7 +93,7 @@ export class GoogleTasksConnect extends LitElement {
       this.state = resp.state ?? null;
       this.phase = this.state?.configured ? 'connected' : 'disconnected';
     } catch (err: unknown) {
-      this.error = AugmentErrorService.augmentError(err, 'load Google Tasks connector state');
+      this.error = AugmentErrorService.augmentError(err, 'load Google Tasks setup');
       this.phase = 'disconnected';
     }
   }
@@ -160,7 +160,7 @@ export class GoogleTasksConnect extends LitElement {
   private renderPhase() {
     switch (this.phase) {
       case 'loading':
-        return html`<p class="muted">Loading connector state…</p>`;
+        return html`<p class="muted">Checking Google Tasks setup…</p>`;
       case 'unconfigured':
         return this.renderUnconfigured();
       case 'disconnected':
