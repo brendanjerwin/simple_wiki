@@ -125,6 +125,72 @@ describe('WikiSurvey', () => {
     });
   });
 
+  describe('when survey has a select field', () => {
+    const surveyFrontmatter: JsonObject = {
+      surveys: {
+        my_survey: {
+          question: 'What do you prefer?',
+          fields: [
+            { name: 'protein_preference', type: 'select', label: 'Protein preference', options: ['Chicken', 'Beef', 'Fish'] },
+          ],
+        },
+      },
+    } as unknown as JsonObject;
+
+    beforeEach(async () => {
+      globalThis.simple_wiki = { ...(globalThis.simple_wiki ?? {}), username: 'alice' };
+      el = buildElement();
+      stubGetFrontmatter(el, surveyFrontmatter);
+      document.body.appendChild(el);
+      await waitUntil(() => !el.loading, 'fetch should complete', { timeout: 3000 });
+    });
+
+    it('should render a <select> element', () => {
+      const select = el.shadowRoot?.querySelector('select');
+      expect(select).to.exist;
+    });
+
+    it('should render the options inside the select', () => {
+      const options = el.shadowRoot?.querySelectorAll('select option');
+      const optionValues = Array.from(options ?? []).map(o => (o as HTMLOptionElement).value);
+      expect(optionValues).to.include('Chicken');
+      expect(optionValues).to.include('Beef');
+      expect(optionValues).to.include('Fish');
+    });
+
+    it('should render the human-readable label text', () => {
+      const label = el.shadowRoot?.querySelector('label[for="field-protein_preference"]');
+      expect(label?.textContent?.trim()).to.include('Protein preference');
+    });
+  });
+
+  describe('when a field has a label', () => {
+    const surveyFrontmatter: JsonObject = {
+      surveys: {
+        my_survey: {
+          question: 'How are you?',
+          fields: [
+            { name: 'mood_score', type: 'number', label: 'How do you feel? (1–5)' },
+          ],
+        },
+      },
+    } as unknown as JsonObject;
+
+    beforeEach(async () => {
+      globalThis.simple_wiki = { ...(globalThis.simple_wiki ?? {}), username: 'alice' };
+      el = buildElement();
+      stubGetFrontmatter(el, surveyFrontmatter);
+      document.body.appendChild(el);
+      await waitUntil(() => !el.loading, 'fetch should complete', { timeout: 3000 });
+    });
+
+    it('should render the label text instead of the field name', () => {
+      const label = el.shadowRoot?.querySelector('label[for="field-mood_score"]');
+      expect(label?.textContent?.trim()).to.include('How do you feel? (1–5)');
+    });
+  });
+
+
   describe('when user is not logged in', () => {
     const surveyFrontmatter: JsonObject = {
       surveys: {
