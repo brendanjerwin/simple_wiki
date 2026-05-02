@@ -90,7 +90,7 @@ func (m *Mutator) UpsertFromCalDAV(
 	now := m.clock.Now()
 
 	if item != nil {
-		updatedItem, err := m.upsertExistingItem(checklist, idx, item, args, ifMatch, ifNoneMatch, identity, now)
+		updatedItem, err := m.upsertExistingItem(page, listName, checklist, idx, item, args, ifMatch, ifNoneMatch, identity, now)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -103,7 +103,7 @@ func (m *Mutator) UpsertFromCalDAV(
 	if ifMatch != "" {
 		return nil, nil, status.Errorf(codes.FailedPrecondition, "If-Match set but uid %s does not exist", uid)
 	}
-	newItem := m.upsertNewItem(checklist, uid, args, identity, now)
+	newItem := m.upsertNewItem(page, listName, checklist, uid, args, identity, now)
 	if err := m.persist(page, fm, listName, checklist); err != nil {
 		return nil, nil, err
 	}
@@ -113,7 +113,8 @@ func (m *Mutator) UpsertFromCalDAV(
 // upsertExistingItem handles the update branch of UpsertFromCalDAV.
 // Returns the (possibly mutated) item or an error mapped from a failed
 // precondition. The caller is responsible for persisting the checklist.
-func (*Mutator) upsertExistingItem(
+func (m *Mutator) upsertExistingItem(
+	page, listName string,
 	checklist *apiv1.Checklist,
 	idx int,
 	item *apiv1.ChecklistItem,
@@ -152,7 +153,7 @@ func (*Mutator) upsertExistingItem(
 		densifyAroundSortOrder(checklist.Items, idx)
 		sortItems(checklist.Items)
 	}
-	pruneTombstones(checklist, now)
+	m.pruneTombstones(page, listName, checklist, now)
 	if !sortOrderChanged {
 		checklist.Items[idx] = item
 	}
@@ -161,7 +162,8 @@ func (*Mutator) upsertExistingItem(
 
 // upsertNewItem handles the create branch of UpsertFromCalDAV. The
 // caller is responsible for persisting the checklist.
-func (*Mutator) upsertNewItem(
+func (m *Mutator) upsertNewItem(
+	page, listName string,
 	checklist *apiv1.Checklist,
 	uid string,
 	args UpsertFromCalDAVArgs,
@@ -197,7 +199,7 @@ func (*Mutator) upsertNewItem(
 	checklist.Items = append(checklist.Items, newItem)
 	sortItems(checklist.Items)
 	bumpSyncToken(checklist, now)
-	pruneTombstones(checklist, now)
+	m.pruneTombstones(page, listName, checklist, now)
 	return newItem
 }
 

@@ -101,6 +101,16 @@ func deepCopyFM(in wikipage.FrontMatter) wikipage.FrontMatter {
 	return out
 }
 
+// stubPausedChecker is a fake PausedChecker for the tombstone GC tests.
+// Returns its preset value for every (page, listName) combination.
+type stubPausedChecker struct {
+	paused bool
+}
+
+func (s stubPausedChecker) IsAnyChecklistSubscriptionPaused(_, _ string) bool {
+	return s.paused
+}
+
 func deepCopyValue(v any) any {
 	switch x := v.(type) {
 	case map[string]any:
@@ -398,6 +408,22 @@ var _ = Describe("Mutator", func() {
 				clock.advance(time.Hour)
 				_, list, _ := mutator.AddItem(ctx, "p", "list", checklistmutator.AddItemArgs{Text: "fresh"}, human)
 				Expect(list.Tombstones).To(HaveLen(1))
+			})
+		})
+
+		When("a connector subscription on this checklist is paused", func() {
+			BeforeEach(func() {
+				mutator.SetPausedChecker(stubPausedChecker{paused: true})
+			})
+
+			It("should retain expired tombstones so the deletion replays on resume", func() {
+				// Advance well past the TTL — under the default policy
+				// the tombstone would be GC'd. Pause must extend
+				// retention until the subscription resumes.
+				clock.advance(checklistmutator.TombstoneTTL + time.Hour)
+				_, list, _ := mutator.AddItem(ctx, "p", "list", checklistmutator.AddItemArgs{Text: "fresh-while-paused"}, human)
+				Expect(list.Tombstones).To(HaveLen(1))
+				Expect(list.Tombstones[0].Uid).To(Equal(deletedUID))
 			})
 		})
 	})

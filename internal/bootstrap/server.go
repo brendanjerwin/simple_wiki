@@ -1,18 +1,25 @@
 package bootstrap
 
 import (
+	"context"
 	"crypto/tls"
+	"errors"
 	"fmt"
+	"log"
 	"net"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
 	"connectrpc.com/grpcreflect"
 	"connectrpc.com/vanguard"
+
 	"github.com/brendanjerwin/simple_wiki/internal/caldav"
 	"github.com/brendanjerwin/simple_wiki/internal/connectors"
 	keepsync "github.com/brendanjerwin/simple_wiki/internal/connectors/google_keep/sync"
+	tasksgateway "github.com/brendanjerwin/simple_wiki/internal/connectors/google_tasks/gateway"
+	taskssync "github.com/brendanjerwin/simple_wiki/internal/connectors/google_tasks/sync"
 	grpcapi "github.com/brendanjerwin/simple_wiki/internal/grpc/api/v1"
 	wikimcp "github.com/brendanjerwin/simple_wiki/internal/mcp"
 	"github.com/brendanjerwin/simple_wiki/internal/observability"
@@ -450,6 +457,24 @@ func BuildVanguardTranscoder(grpcServer *grpc.Server, ginRouter http.Handler) (h
 // the backlog before it became a problem.
 const keepOutboundSyncQueueDepth = 256
 
+// googleTasksOutboundSyncQueueDepth bounds the per-worker queue for
+// Google Tasks outbound sync jobs. Same rationale as Keep; Tasks's
+// per-user write quota is well above what household-scale workloads
+// produce.
+const googleTasksOutboundSyncQueueDepth = 256
+
+// googleTasksHTTPTimeoutSeconds is the timeout the Tasks HTTP client
+// uses for both refresh-grant and Tasks REST v1 calls. 30s is generous
+// enough for a slow consumer broadband round trip without letting a
+// stuck connection wedge a sync worker forever.
+const googleTasksHTTPTimeoutSeconds = 30
+
+// googleTasksSyncDebounceWindow is how long the SyncDebouncer batches
+// rapid checklist edits before enqueuing a single outbound push.
+// Mirrors the Keep bridge's 1500ms — the same trade-off (coalesce
+// burst edits, propagate within a couple of seconds).
+const googleTasksSyncDebounceWindow = 1500 * time.Millisecond
+
 // setupGRPCServer creates and configures the gRPC server with interceptors.
 // It returns both the gRPC transport server and the underlying API server for direct in-process calls.
 //
@@ -615,6 +640,17 @@ func setupGRPCServer(
 	); regErr != nil {
 		return nil, nil, fmt.Errorf("register Keep with sync scheduler: %w", regErr)
 	}
+
+	// Google Tasks connector — env-var-conditional. The OAuth client id +
+	// secret + redirect URI live in env so the secret never lands in
+	// the data dir. If any are unset the connector stays unwired and
+	// every Tasks-kind ConnectorService RPC returns FailedPrecondition
+	// with a "set up Google Tasks on profile" message.
+	tasksConnector, tasksAuthURLBuilder, err := setupGoogleTasksConnector(site, syncScheduler, checklistMutator, logger)
+	if err != nil {
+		return nil, nil, err
+	}
+
 	if _, err := site.CronScheduler.Schedule("@every 30s", syncScheduler); err != nil {
 		return nil, nil, fmt.Errorf("schedule connector sync tick: %w", err)
 	}
@@ -639,6 +675,13 @@ func setupGRPCServer(
 		WithAgentChatContextStore(site.AgentChatContextStore).
 		WithChecklistMutator(checklistMutator).
 		WithKeepConnector(keepConnector)
+
+	if tasksConnector != nil {
+		grpcAPIServer = grpcAPIServer.WithGoogleTasksConnector(tasksConnector)
+	}
+	if tasksAuthURLBuilder != nil {
+		grpcAPIServer = grpcAPIServer.WithTasksAuthURLBuilder(tasksAuthURLBuilder)
+	}
 
 	unaryInterceptors, streamInterceptors, err := buildGRPCInterceptors(
 		identityResolver, grpcAPIServer.LoggingInterceptor(), counters, logger,
@@ -680,5 +723,288 @@ func (*metricsPersistJob) GetName() string {
 func (j *metricsPersistJob) Execute() error {
 	j.recorder.PersistAsync()
 	return nil
+}
+
+// tasksProfileTokenStore adapts the Tasks SubscriptionStore to the
+// gateway's RefreshTokenStore contract. The gateway calls
+// LoadRefreshToken on first refresh and SaveRefreshToken after each
+// rotation; both round-trip through the per-profile frontmatter.
+type tasksProfileTokenStore struct {
+	store     *taskssync.SubscriptionStore
+	profileID wikipage.PageIdentifier
+}
+
+func (t *tasksProfileTokenStore) LoadRefreshToken(_ context.Context) (string, error) {
+	state, err := t.store.LoadState(t.profileID)
+	if err != nil {
+		return "", fmt.Errorf("tasks bridge: load refresh token: %w", err)
+	}
+	if state.RefreshToken == "" {
+		return "", errors.New("tasks bridge: profile has no refresh token (Disconnect or never connected)")
+	}
+	return state.RefreshToken, nil
+}
+
+func (t *tasksProfileTokenStore) SaveRefreshToken(_ context.Context, token string) error {
+	if token == "" {
+		return errors.New("tasks bridge: refresh token must not be empty")
+	}
+	return t.store.WithProfileLock(t.profileID, func() error {
+		state, err := t.store.LoadStateLocked(t.profileID)
+		if err != nil {
+			return fmt.Errorf("tasks bridge: load profile state for token rotation: %w", err)
+		}
+		state.RefreshToken = token
+		return t.store.SaveStateLocked(t.profileID, state)
+	})
+}
+
+// tasksAuthURLBuilder mints fresh Google authorization URLs for the
+// BeginAuth(GOOGLE_TASKS) gRPC. Issues a state token + PKCE pair via
+// the OAuth state store, then assembles the URL with the pinned
+// scope (tasks read/write).
+type tasksAuthURLBuilder struct {
+	stateStore   server.OAuthStateStore
+	authURL      string
+	clientID     string
+	redirectURI  string
+	requiredScope string
+}
+
+func (b *tasksAuthURLBuilder) BuildAuthURL(ctx context.Context, profileID, _ string) (string, string, error) {
+	verifier, err := tasksgateway.GeneratePKCEVerifier()
+	if err != nil {
+		return "", "", fmt.Errorf("generate PKCE verifier: %w", err)
+	}
+	stateToken, err := b.stateStore.Issue(ctx, profileID, verifier)
+	if err != nil {
+		return "", "", fmt.Errorf("issue OAuth state: %w", err)
+	}
+	challenge := tasksgateway.PKCEChallengeS256(verifier)
+	url, err := tasksgateway.BuildAuthURL(b.authURL, b.clientID, b.redirectURI, b.requiredScope, stateToken, challenge)
+	if err != nil {
+		return "", "", fmt.Errorf("build auth URL: %w", err)
+	}
+	return url, stateToken, nil
+}
+
+// setupGoogleTasksConnector wires the Google Tasks bridge: SubscriptionStore,
+// gateway client factory, debouncer, scheduler registration, OAuth handler.
+// Returns (nil, nil, nil) if the operator hasn't set the required env
+// vars — that's the documented opt-out shape.
+//
+//revive:disable-next-line:function-length
+func setupGoogleTasksConnector(
+	site *server.Site,
+	syncScheduler *connectors.SyncScheduler,
+	checklistMutator *checklistmutator.Mutator,
+	logger *lumber.ConsoleLogger,
+) (*taskssync.Connector, grpcapi.TasksAuthURLBuilder, error) {
+	clientID := os.Getenv("SIMPLE_WIKI_GOOGLE_TASKS_CLIENT_ID")
+	clientSecret := os.Getenv("SIMPLE_WIKI_GOOGLE_TASKS_CLIENT_SECRET")
+	redirectURI := os.Getenv("SIMPLE_WIKI_GOOGLE_TASKS_REDIRECT_URI")
+	if clientID == "" || clientSecret == "" || redirectURI == "" {
+		// Operator opt-out: connector stays unwired, gRPC handlers
+		// surface a clear "not configured by this wiki's operator"
+		// message.
+		logger.Info("Google Tasks connector not configured (env vars unset); Tasks features disabled.")
+		return nil, nil, nil
+	}
+
+	tasksStore, err := taskssync.NewSubscriptionStore(site)
+	if err != nil {
+		return nil, nil, fmt.Errorf("build Tasks subscription store: %w", err)
+	}
+
+	httpClient := &http.Client{Timeout: googleTasksHTTPTimeoutSeconds * time.Second}
+
+	// Per-profile factory: each call constructs a fresh RefreshClient
+	// against the profile's frontmatter-backed token store, then builds
+	// a TasksClient on top of it. The connector calls this once per
+	// Sync invocation; the RefreshClient caches the access token
+	// internally for the lifetime of that one call.
+	clientFactory := func(profileID wikipage.PageIdentifier, _ string) (taskssync.TasksClient, tasksgateway.TokenSource, error) {
+		tokenStore := &tasksProfileTokenStore{store: tasksStore, profileID: profileID}
+		refreshClient, err := tasksgateway.NewRefreshClient(httpClient, tasksgateway.DefaultGoogleTokenURL, clientID, clientSecret, tokenStore)
+		if err != nil {
+			return nil, nil, fmt.Errorf("build refresh client: %w", err)
+		}
+		client, err := tasksgateway.NewTasksClient(httpClient, tasksgateway.DefaultTasksBaseURL, refreshClient)
+		if err != nil {
+			return nil, nil, fmt.Errorf("build tasks client: %w", err)
+		}
+		return client, refreshClient, nil
+	}
+
+	leaseTable := connectors.NewLeaseTable()
+	// TODO(phase 7+): rebuild the lease table from existing Tasks
+	// subscriptions on profile pages before signaling ready. For now
+	// we signal ready immediately — the per-profile and per-checklist
+	// uniqueness checks in SubscriptionStore.AddSubscription provide
+	// a baseline of protection while a proper boot rebuild lands.
+	leaseTable.SignalReady()
+
+	tasksConnector, err := taskssync.NewConnector(
+		tasksStore,
+		leaseTable,
+		clientFactory,
+		logger,
+		taskssync.SystemClock{},
+	)
+	if err != nil {
+		return nil, nil, fmt.Errorf("build tasks connector: %w", err)
+	}
+	tasksConnector.SetChecklistReader(checklistMutator)
+	tasksConnector.SetChecklistMutator(checklistMutator)
+
+	// Per-key debouncer: rapid checklist edits coalesce into one
+	// outbound push; the debouncer also doubles as the SyncSuppressor
+	// for inbound apply (so wiki writes during inbound replay don't
+	// loop back as new sync triggers).
+	tasksDebouncer, err := taskssync.NewSyncDebouncer(
+		site.GetJobQueueCoordinator(),
+		tasksConnector,
+		logger,
+		googleTasksSyncDebounceWindow,
+	)
+	if err != nil {
+		return nil, nil, fmt.Errorf("build tasks sync debouncer: %w", err)
+	}
+	tasksConnector.SetSyncSuppressor(tasksDebouncer)
+
+	// Single-worker queue per Tasks per the same rationale as Keep:
+	// outbound order matters (position deltas), and the per-user
+	// write quota is more than enough for a serialized worker.
+	if err := site.GetJobQueueCoordinator().RegisterQueue(
+		taskssync.TasksOutboundSyncJobName, 1, googleTasksOutboundSyncQueueDepth,
+	); err != nil {
+		return nil, nil, fmt.Errorf("register Tasks outbound sync queue: %w", err)
+	}
+
+	tasksSubscriptionLister := func() []connectors.SubscriptionKey {
+		out := make([]connectors.SubscriptionKey, 0, 8)
+		// Tasks state stores email under wiki.connectors.google_tasks.email.
+		// Same indexing caveat as Keep: arrays of maps don't appear in
+		// the frontmatter index, so use the leaf email field as the
+		// "is connected?" probe.
+		for _, p := range site.FrontmatterIndexQueryer.QueryKeyExistence("wiki.connectors.google_tasks.email") {
+			state, err := tasksStore.LoadState(p)
+			if err != nil || !state.IsConfigured() {
+				continue
+			}
+			for _, sub := range state.Subscriptions {
+				out = append(out, connectors.SubscriptionKey{
+					ProfileID: string(p),
+					Page:      sub.Page,
+					ListName:  sub.ListName,
+				})
+			}
+		}
+		return out
+	}
+	if regErr := syncScheduler.Register(
+		tasksConnector,
+		tasksSubscriptionLister,
+		func(_ connectors.Connector, key connectors.SubscriptionKey) jobs.Job {
+			return taskssync.NewTasksOutboundSyncJob(
+				tasksConnector,
+				wikipage.PageIdentifier(key.ProfileID),
+				key.Page,
+				key.ListName,
+			)
+		},
+	); regErr != nil {
+		return nil, nil, fmt.Errorf("register Tasks with sync scheduler: %w", regErr)
+	}
+
+	// OAuth callback handler — Phase 6 owns the route; bootstrap calls
+	// SetOAuthGoogleHandler to install the live wiring once Tasks is
+	// fully configured. Until then, callbacks render the "not
+	// configured" 503 page.
+	oauthStateStore := server.NewInMemoryOAuthStateStore()
+	server.SetOAuthGoogleHandler(&server.OAuthGoogleHandler{
+		StateStore:     oauthStateStore,
+		TokenPersister: tasksConnector,
+		HTTPClient:     httpClient,
+		ClientID:       clientID,
+		ClientSecret:   clientSecret,
+		RedirectURI:    redirectURI,
+		IssuerExpected: tasksgateway.GoogleIssuer,
+		TokenEndpoint:  tasksgateway.DefaultGoogleTokenURL,
+		RequiredScope:  tasksgateway.TasksScope,
+		Logger:         log.Default(),
+	})
+
+	authURLBuilder := &tasksAuthURLBuilder{
+		stateStore:    oauthStateStore,
+		authURL:       tasksgateway.DefaultGoogleAuthURL,
+		clientID:      clientID,
+		redirectURI:   redirectURI,
+		requiredScope: tasksgateway.TasksScope,
+	}
+
+	// Tombstone GC retention: when any Tasks subscription on a
+	// checklist is paused, retain its tombstones beyond the default
+	// 7-day TTL so the deletion replay on resume isn't undone by GC.
+	checklistMutator.SetPausedChecker(&tasksFannedOutPausedChecker{
+		store: tasksStore,
+		index: site.FrontmatterIndexQueryer,
+	})
+
+	logger.Info("Google Tasks connector configured (client_id ends ...%s).",
+		safeTail(clientID, 4))
+
+	return tasksConnector, authURLBuilder, nil
+}
+
+// safeTail returns the last n chars of s, or all of s if shorter. Used
+// for log lines that want to confirm "the right credential is loaded"
+// without leaking the full client_id.
+func safeTail(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	return s[len(s)-n:]
+}
+
+// tasksFannedOutPausedChecker satisfies checklistmutator.PausedChecker
+// by fanning out the per-profile Tasks Connector check across every
+// profile that has the connector configured. The fan-out is keyed off
+// the frontmatter index (same probe the SubscriptionLister uses), so
+// it picks up profiles connected since process start.
+//
+// Returns true if any subscription on (page, listName) on any profile
+// is currently paused. Per ADR-0011 a checklist has at most one owner
+// at a time, so the OR-fan-out is conservative-correct: a non-owning
+// profile's response is "no paused subscription here", which won't
+// flip the answer to true unless the actual owner is paused.
+type tasksFannedOutPausedChecker struct {
+	store *taskssync.SubscriptionStore
+	index frontmatterEmailQueryer
+}
+
+// frontmatterEmailQueryer is the subset of the wiki's frontmatter
+// index the paused checker uses. Stated as an interface here so the
+// constructor can take site.FrontmatterIndexQueryer without dragging
+// in the whole index package.
+type frontmatterEmailQueryer interface {
+	QueryKeyExistence(key string) []wikipage.PageIdentifier
+}
+
+// IsAnyChecklistSubscriptionPaused fans out the per-profile pause
+// check.
+func (c *tasksFannedOutPausedChecker) IsAnyChecklistSubscriptionPaused(page, listName string) bool {
+	for _, profileID := range c.index.QueryKeyExistence("wiki.connectors.google_tasks.email") {
+		state, err := c.store.LoadState(profileID)
+		if err != nil || !state.IsConfigured() {
+			continue
+		}
+		for _, sub := range state.Subscriptions {
+			if sub.Page == page && sub.ListName == listName && sub.IsPaused() {
+				return true
+			}
+		}
+	}
+	return false
 }
 

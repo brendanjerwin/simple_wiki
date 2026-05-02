@@ -75,6 +75,28 @@ type Subscriber interface {
 	OnChecklistMutated(page, listName string, identity tailscale.IdentityValue)
 }
 
+// PausedChecker reports whether any connector subscription on the
+// given checklist is currently paused. Used by the tombstone GC walker
+// to extend retention beyond the default TTL when a subscription is
+// paused — otherwise a long pause (auth_failed → reconnect after
+// >7 days) would lose the deletion replay because the tombstone got
+// collected on a wiki edit during the pause window.
+//
+// The bootstrap fan-out implementation queries every configured
+// connector (Tasks, Keep when it gains a paused state); the per-
+// connector check is `Connector.IsChecklistPaused(profileID, page,
+// listName)` and the fan-out aggregates with OR.
+//
+// Optional: callers that don't wire a checker get the default TTL
+// behavior, which is the right answer for systems without paused-
+// subscription support.
+type PausedChecker interface {
+	// IsAnyChecklistSubscriptionPaused returns true if at least one
+	// active subscription on (page, listName) is in the paused state
+	// across all configured connectors.
+	IsAnyChecklistSubscriptionPaused(page, listName string) bool
+}
+
 // Mutator is the single funnel for checklist mutations. Construct one per
 // process via New; share across handlers.
 type Mutator struct {
@@ -97,6 +119,14 @@ type Mutator struct {
 	// pointer.
 	subMu      sync.RWMutex
 	subscriber Subscriber
+
+	// pausedCheckerMu + pausedChecker: optional hook used by the GC
+	// walker to retain tombstones when a connector subscription on
+	// (page, listName) is paused. Set via SetPausedChecker; the
+	// default (nil) behaves as "no subscription is paused", i.e.
+	// the legacy 7-day TTL.
+	pausedCheckerMu sync.RWMutex
+	pausedChecker   PausedChecker
 }
 
 // SetSubscriber installs (or replaces) the post-mutation subscriber.
@@ -223,7 +253,7 @@ func (m *Mutator) AddItem(_ context.Context, page, listName string, args AddItem
 	checklist.Items = append(checklist.Items, item)
 	sortItems(checklist.Items)
 	bumpSyncToken(checklist, now)
-	pruneTombstones(checklist, now)
+	m.pruneTombstones(page, listName, checklist, now)
 
 	if err := m.persist(page, fm, listName, checklist); err != nil {
 		return nil, nil, err
@@ -300,7 +330,7 @@ func (m *Mutator) UpdateItem(_ context.Context, page, listName, uid string, args
 		item.UpdatedAt = timestamppb.New(now)
 		bumpSyncToken(checklist, now)
 	}
-	pruneTombstones(checklist, now)
+	m.pruneTombstones(page, listName, checklist, now)
 	checklist.Items[idx] = item
 
 	if err := m.persist(page, fm, listName, checklist); err != nil {
@@ -349,7 +379,7 @@ func (m *Mutator) ToggleItem(_ context.Context, page, listName, uid string, expe
 	item.UpdatedAt = timestamppb.New(now)
 	item.Automated = identity.IsAgent()
 	bumpSyncToken(checklist, now)
-	pruneTombstones(checklist, now)
+	m.pruneTombstones(page, listName, checklist, now)
 	checklist.Items[idx] = item
 
 	if err := m.persist(page, fm, listName, checklist); err != nil {
@@ -393,7 +423,7 @@ func (m *Mutator) DeleteItem(_ context.Context, page, listName, uid string, expe
 		GcAfter:   timestamppb.New(now.Add(TombstoneTTL)),
 		SyncToken: checklist.SyncToken,
 	})
-	pruneTombstones(checklist, now)
+	m.pruneTombstones(page, listName, checklist, now)
 
 	if err := m.persist(page, fm, listName, checklist); err != nil {
 		return nil, err
@@ -438,7 +468,7 @@ func (m *Mutator) ReorderItem(_ context.Context, page, listName, uid string, new
 		sortItems(checklist.Items)
 		bumpSyncToken(checklist, now)
 	}
-	pruneTombstones(checklist, now)
+	m.pruneTombstones(page, listName, checklist, now)
 
 	if err := m.persist(page, fm, listName, checklist); err != nil {
 		return nil, err
@@ -651,9 +681,19 @@ func bumpSyncToken(checklist *apiv1.Checklist, now time.Time) {
 	checklist.UpdatedAt = timestamppb.New(now)
 }
 
-// pruneTombstones drops tombstones whose gc_after has passed.
-func pruneTombstones(checklist *apiv1.Checklist, now time.Time) {
+// pruneTombstones drops tombstones whose gc_after has passed unless a
+// connector subscription on (page, listName) is currently paused, in
+// which case retention extends until the subscription resumes — see
+// PausedChecker for why.
+func (m *Mutator) pruneTombstones(page, listName string, checklist *apiv1.Checklist, now time.Time) {
 	if len(checklist.Tombstones) == 0 {
+		return
+	}
+	if m.isChecklistSubscriptionPaused(page, listName) {
+		// Pause retention: leave every tombstone in place. A paused
+		// subscription will replay deletions on resume; collecting the
+		// tombstones now would silently un-delete those items on the
+		// remote side.
 		return
 	}
 	kept := checklist.Tombstones[:0]
@@ -663,6 +703,25 @@ func pruneTombstones(checklist *apiv1.Checklist, now time.Time) {
 		}
 	}
 	checklist.Tombstones = kept
+}
+
+// SetPausedChecker installs (or replaces) the paused-subscription
+// checker used by the tombstone GC walker. Pass nil to detach (the
+// walker reverts to the default TTL behavior).
+func (m *Mutator) SetPausedChecker(c PausedChecker) {
+	m.pausedCheckerMu.Lock()
+	m.pausedChecker = c
+	m.pausedCheckerMu.Unlock()
+}
+
+func (m *Mutator) isChecklistSubscriptionPaused(page, listName string) bool {
+	m.pausedCheckerMu.RLock()
+	c := m.pausedChecker
+	m.pausedCheckerMu.RUnlock()
+	if c == nil {
+		return false
+	}
+	return c.IsAnyChecklistSubscriptionPaused(page, listName)
 }
 
 func slicesEqual(a, b []string) bool {

@@ -53,6 +53,52 @@ func (c *Connector) Connect(_ context.Context, profileID wikipage.PageIdentifier
 	return state, nil
 }
 
+// PersistRefreshToken stores a fresh refresh token on the user's profile
+// after the OAuth callback handler has completed the auth-code exchange.
+// Implements server.RefreshTokenPersister — Phase 6's handler invokes
+// this on a successful callback (after iss/state/PKCE/scope checks
+// pass).
+//
+// Differs from Connect in two ways:
+//
+//   - Email is optional. The OAuth callback handler does not parse the
+//     id_token, so it has no email to forward; Connect REQUIRES an
+//     email and would reject. PersistRefreshToken stores the token on
+//     whatever email already exists on the profile (typically empty;
+//     the user can fill it in via a separate UI flow if desired). The
+//     refresh token is the load-bearing artifact, not the email.
+//   - Suitable for headless boundary callers that don't want to reason
+//     about the per-profile state shape.
+//
+// Existing subscriptions are preserved so a reconnect (which arrives
+// here with a fresh refresh token) auto-resumes them on the next sync.
+func (c *Connector) PersistRefreshToken(_ context.Context, profileID, accountEmail, refreshToken string) error {
+	if profileID == "" {
+		return errors.New("tasks bridge: profileID is required")
+	}
+	if refreshToken == "" {
+		return errors.New("tasks bridge: refresh_token is required")
+	}
+	now := c.clock.Now().UTC()
+	pid := wikipage.PageIdentifier(profileID)
+	state, err := c.store.LoadState(pid)
+	if err != nil {
+		return fmt.Errorf("load profile state: %w", err)
+	}
+	if accountEmail != "" {
+		state.Email = accountEmail
+	}
+	state.RefreshToken = refreshToken
+	if state.ConnectedAt.IsZero() {
+		state.ConnectedAt = now
+	}
+	state.LastVerifiedAt = now
+	if err := c.store.SaveState(pid, state); err != nil {
+		return fmt.Errorf("persist profile state: %w", err)
+	}
+	return nil
+}
+
 // Disconnect wipes the refresh token from the calling user's profile
 // but preserves the subscription list (paused). Reconnect resumes
 // them.

@@ -271,8 +271,8 @@ var _ = Describe("ConnectorService handlers (GOOGLE_KEEP)", func() {
 				})
 			})
 
-			It("should return Unimplemented", func() {
-				Expect(err).To(HaveGrpcStatusWithSubstr(codes.Unimplemented, "unsupported connector_kind"))
+			It("should return FailedPrecondition signalling the operator hasn't enabled Tasks", func() {
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.FailedPrecondition, "not configured by this wiki's operator"))
 			})
 		})
 	})
