@@ -26,13 +26,13 @@ import (
 // tests can substitute a fake without spinning up a real Keep
 // client. Production wires *keepsync.Connector here at startup.
 type KeepBridgeFingerprintMigrator interface {
-	MigrateBindingFingerprints(ctx context.Context, profileID wikipage.PageIdentifier, page, listName string) error
+	MigrateSubscriptionFingerprints(ctx context.Context, profileID wikipage.PageIdentifier, page, listName string) error
 }
 
-// KeepBridgeBindingStateLoader is the subset of keepsync.BindingStore
+// KeepBridgeSubscriptionStateLoader is the subset of keepsync.SubscriptionStore
 // the scan job calls to identify legacy bindings on a profile page.
-// Production wires *keepsync.BindingStore; tests substitute a fake.
-type KeepBridgeBindingStateLoader interface {
+// Production wires *keepsync.SubscriptionStore; tests substitute a fake.
+type KeepBridgeSubscriptionStateLoader interface {
 	LoadState(profileID wikipage.PageIdentifier) (keepsync.ConnectorState, error)
 }
 
@@ -41,23 +41,23 @@ type KeepBridgeBindingStateLoader interface {
 // migration job for every binding whose MigratedFingerprints flag
 // is unset. Mirrors ChecklistTagSyntaxMigrationScanJob's structure;
 // the per-page guard reads `wiki.connectors.google_keep.email` to
-// gate the keepsync.BindingStore lookup.
+// gate the keepsync.SubscriptionStore lookup.
 type KeepBridgeFingerprintMigrationScanJob struct {
 	scanner     DataDirScanner
 	coordinator *jobs.JobQueueCoordinator
 	migrator    KeepBridgeFingerprintMigrator
-	loader      KeepBridgeBindingStateLoader
+	loader      KeepBridgeSubscriptionStateLoader
 }
 
 // NewKeepBridgeFingerprintMigrationScanJob constructs the scan job.
 // The migrator and loader are typically *keepsync.Connector and
-// *keepsync.BindingStore respectively; the interfaces let tests
+// *keepsync.SubscriptionStore respectively; the interfaces let tests
 // inject fakes.
 func NewKeepBridgeFingerprintMigrationScanJob(
 	scanner DataDirScanner,
 	coordinator *jobs.JobQueueCoordinator,
 	migrator KeepBridgeFingerprintMigrator,
-	loader KeepBridgeBindingStateLoader,
+	loader KeepBridgeSubscriptionStateLoader,
 ) *KeepBridgeFingerprintMigrationScanJob {
 	return &KeepBridgeFingerprintMigrationScanJob{
 		scanner:     scanner,
@@ -110,7 +110,7 @@ func (j *KeepBridgeFingerprintMigrationScanJob) Execute() error {
 			// the rest of the data dir's migrations moving.
 			continue
 		}
-		for _, b := range state.Bindings {
+		for _, b := range state.Subscriptions {
 			if b.MigratedFingerprints {
 				continue
 			}
@@ -182,7 +182,7 @@ func (j *KeepBridgeFingerprintMigrationScanJob) profileIDIfHasKeepConnector(file
 // pull Keep once, apply agreement-or-Keep-wins to populate synced_fp,
 // drop unpaired entries, stamp KeepCursor + MigratedFingerprints,
 // persist. The heavy lifting lives in
-// keepsync.Connector.MigrateBindingFingerprints (which handles the
+// keepsync.Connector.MigrateSubscriptionFingerprints (which handles the
 // per-profile mutex, the network round-trip, and the rule); this
 // job is the queue-shaped wrapper around that single call so a
 // failure surfaces as a queue retry rather than a swallowed error.
@@ -224,7 +224,7 @@ func (j *KeepBridgeFingerprintMigrationJob) GetName() string {
 // MigratedFingerprints stays false until the migration succeeds,
 // keeping the SyncToKeep gate engaged.
 func (j *KeepBridgeFingerprintMigrationJob) Execute() error {
-	if err := j.migrator.MigrateBindingFingerprints(context.Background(), j.profileID, j.page, j.listName); err != nil {
+	if err := j.migrator.MigrateSubscriptionFingerprints(context.Background(), j.profileID, j.page, j.listName); err != nil {
 		return fmt.Errorf("migrate keep-bridge fingerprints for %s/%s/%s: %w",
 			j.profileID, j.page, j.listName, err)
 	}

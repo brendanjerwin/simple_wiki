@@ -15,13 +15,13 @@ import (
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 )
 
-// Binding is a single user's link from a wiki checklist (page + list_name)
+// Subscription is a single user's link from a wiki checklist (page + list_name)
 // to a Keep note in their account.
 //
-// ItemIDMap is the per-binding map from wiki item UID to ItemBinding —
+// ItemIDMap is the per-binding map from wiki item UID to ItemMapping —
 // the structured per-item sync record. Populated at bind time by the
 // bundled CreateListWithItems path and updated on every successful sync.
-// See ItemBinding for the full per-item shape.
+// See ItemMapping for the full per-item shape.
 //
 // KeepCursor holds the last successful pull's `to_version` (Keep's
 // monotonic server-side commit cursor). Sent as `target_version` on
@@ -37,9 +37,9 @@ import (
 // SyncToKeep gate refuses to sync until this is true (prevents acting
 // on stale id_map state without per-item fingerprints).
 //
-// BoundAt is informational-only — used by the KeepConnect macro to
+// SubscribedAt is informational-only — used by the KeepConnect macro to
 // render "bound on YYYY-MM-DD"; not consulted by sync logic.
-type Binding struct {
+type Subscription struct {
 	Page          string
 	ListName      string
 	KeepNoteID    string
@@ -52,16 +52,16 @@ type Binding struct {
 	//   1. Bind time, from seedIDMapFromExistingList's pull walking the
 	//      LIST node itself.
 	//   2. Bootstrap time, from CreateListWithItems's generated client_id.
-	//   3. Migration time, from MigrateBindingFingerprints's full pull.
+	//   3. Migration time, from MigrateSubscriptionFingerprints's full pull.
 	// Empty for legacy bindings until first observed; a self-heal in
 	// SyncToKeep clears KeepCursor on the empty case to force a full
 	// pull whose LIST node populates this field.
 	KeepNoteClientID     string
-	BoundAt              time.Time
+	SubscribedAt              time.Time
 	KeepCursor           string
 	TruncatedTickStreak  int
 	MigratedFingerprints bool
-	ItemIDMap            map[string]ItemBinding
+	ItemIDMap            map[string]ItemMapping
 	// LabelIDs persists the per-binding mapping from label name to
 	// Keep label MainID. Captured from every pull that carries a
 	// non-empty Labels slice and consulted as the PRIMARY lookup in
@@ -84,7 +84,7 @@ type Binding struct {
 	LabelIDs map[string]string
 }
 
-// ItemBinding is the per-item sync record for one wiki UID inside a
+// ItemMapping is the per-item sync record for one wiki UID inside a
 // binding. It carries the Keep ServerID and the fingerprint baseline
 // used by the divergence rule.
 //
@@ -117,7 +117,7 @@ type Binding struct {
 // NextAttemptAt is in the future. Zero value (always-eligible) is the
 // normal steady state — only failed items carry a non-zero value, and
 // successful pushes reset it back to zero alongside the failure count.
-type ItemBinding struct {
+type ItemMapping struct {
 	ServerID                  string
 	SyncedText                string
 	SyncedChecked             bool
@@ -157,7 +157,7 @@ type ConnectorState struct {
 	ConnectedAt         time.Time
 	LastVerifiedAt      time.Time
 	PollIntervalSeconds int64
-	Bindings            []Binding
+	Subscriptions            []Subscription
 }
 
 // IsConfigured reports whether the connector has a master token (i.e. the
@@ -165,26 +165,26 @@ type ConnectorState struct {
 // "not configured" via this check.
 func (s ConnectorState) IsConfigured() bool { return s.MasterToken != "" }
 
-// Errors returned by BindingStore. RPC handlers map these to gRPC codes.
+// Errors returned by SubscriptionStore. RPC handlers map these to gRPC codes.
 var (
-	// ErrAlreadyBoundForChecklist is returned by Add when the calling
-	// user already has a binding for (page, list_name). Per the plan's
+	// ErrAlreadySubscribedForChecklist is returned by Add when the calling
+	// user already has a subscription for (page, list_name). Per the plan's
 	// per-user collision matrix.
-	ErrAlreadyBoundForChecklist = errors.New("keep bridge: this checklist is already bound by you")
+	ErrAlreadySubscribedForChecklist = errors.New("keep bridge: this checklist is already subscribed by you")
 
-	// ErrAlreadyBoundToKeepNote is returned by Add when the calling user
-	// already has a binding to the same Keep note (different checklist).
-	ErrAlreadyBoundToKeepNote = errors.New("keep bridge: this Keep note is already bound by you")
+	// ErrKeepNoteAlreadyClaimed is returned by Add when the calling user
+	// already has a subscription to the same Keep note (different checklist).
+	ErrKeepNoteAlreadyClaimed = errors.New("keep bridge: this Keep note is already subscribed by you")
 
-	// ErrBindingNotFound is returned by Remove when no binding matches.
-	ErrBindingNotFound = errors.New("keep bridge: binding not found")
+	// ErrSubscriptionNotFound is returned by Remove when no subscription matches.
+	ErrSubscriptionNotFound = errors.New("keep bridge: subscription not found")
 
 	// ErrConnectorNotConfigured is returned by methods that require an
 	// active connector when the profile has no master_token.
 	ErrConnectorNotConfigured = errors.New("keep bridge: connector not configured for this user")
 
 	// ErrDeadLetterItemNotFound is returned by ClearDeadLetter when no
-	// ItemBinding exists for the given (page, listName, itemUID). The
+	// ItemMapping exists for the given (page, listName, itemUID). The
 	// gRPC layer maps this to NotFound so the macro can surface a
 	// "this item no longer exists" message.
 	ErrDeadLetterItemNotFound = errors.New("keep bridge: dead-letter item not found")
@@ -194,7 +194,7 @@ var (
 //   wiki.connectors.google_keep.*
 // on the user's profile page. wiki.* is a reserved top-level namespace
 // (wikipage/reserved_namespaces.go) so generic MergeFrontmatter rejects
-// writes here — the typed BindingStore is the sole funnel.
+// writes here — the typed SubscriptionStore is the sole funnel.
 const (
 	wikiKey       = "wiki"
 	connectorsKey = "connectors"
@@ -233,24 +233,24 @@ const (
 	itemBindingClientIDField                  = "client_id"
 )
 
-// BindingStore is the typed funnel for connector-state writes on profile
+// SubscriptionStore is the typed funnel for connector-state writes on profile
 // pages. Mirrors the checklistmutator pattern: per-page mutex, all writes
 // through wikipage.PageReaderMutator, no direct frontmatter mutation
 // outside this package.
-type BindingStore struct {
+type SubscriptionStore struct {
 	pages    wikipage.PageReaderMutator
 	profilMu sync.Map // keyed by profileID; values *sync.Mutex
 }
 
-// NewBindingStore constructs a BindingStore.
-func NewBindingStore(pages wikipage.PageReaderMutator) *BindingStore {
-	return &BindingStore{pages: pages}
+// NewSubscriptionStore constructs a SubscriptionStore.
+func NewSubscriptionStore(pages wikipage.PageReaderMutator) *SubscriptionStore {
+	return &SubscriptionStore{pages: pages}
 }
 
 // LoadState reads the full connector state for the given profile page.
 // Missing profile or absent connector frontmatter both return a zero
 // ConnectorState (no error) so callers can render "not connected".
-func (s *BindingStore) LoadState(profileID wikipage.PageIdentifier) (ConnectorState, error) {
+func (s *SubscriptionStore) LoadState(profileID wikipage.PageIdentifier) (ConnectorState, error) {
 	unlock := s.lockProfile(profileID)
 	defer unlock()
 
@@ -267,7 +267,7 @@ func (s *BindingStore) LoadState(profileID wikipage.PageIdentifier) (ConnectorSt
 // SaveState overwrites the entire connector state on the profile page.
 // Used by ExchangeAndStore (after a verified token exchange) and by
 // Disconnect (to clear). Preserves all other top-level frontmatter.
-func (s *BindingStore) SaveState(profileID wikipage.PageIdentifier, state ConnectorState) error {
+func (s *SubscriptionStore) SaveState(profileID wikipage.PageIdentifier, state ConnectorState) error {
 	unlock := s.lockProfile(profileID)
 	defer unlock()
 
@@ -282,9 +282,9 @@ func (s *BindingStore) SaveState(profileID wikipage.PageIdentifier, state Connec
 	return s.writeFrontMatter(profileID, fm)
 }
 
-// AddBinding appends a new binding to the calling user's profile after
+// AddSubscription appends a new binding to the calling user's profile after
 // running the per-user collision matrix.
-func (s *BindingStore) AddBinding(profileID wikipage.PageIdentifier, b Binding) error {
+func (s *SubscriptionStore) AddSubscription(profileID wikipage.PageIdentifier, b Subscription) error {
 	unlock := s.lockProfile(profileID)
 	defer unlock()
 
@@ -300,23 +300,23 @@ func (s *BindingStore) AddBinding(profileID wikipage.PageIdentifier, b Binding) 
 		return ErrConnectorNotConfigured
 	}
 
-	for _, existing := range state.Bindings {
+	for _, existing := range state.Subscriptions {
 		if existing.Page == b.Page && existing.ListName == b.ListName {
-			return ErrAlreadyBoundForChecklist
+			return ErrAlreadySubscribedForChecklist
 		}
 		if existing.KeepNoteID == b.KeepNoteID {
-			return ErrAlreadyBoundToKeepNote
+			return ErrKeepNoteAlreadyClaimed
 		}
 	}
-	state.Bindings = append(state.Bindings, b)
+	state.Subscriptions = append(state.Subscriptions, b)
 
 	encodeState(fm, state)
 	return s.writeFrontMatter(profileID, fm)
 }
 
-// RemoveBinding removes the calling user's binding for (page, listName).
-// Returns ErrBindingNotFound if no match.
-func (s *BindingStore) RemoveBinding(profileID wikipage.PageIdentifier, page, listName string) error {
+// RemoveSubscription removes the calling user's binding for (page, listName).
+// Returns ErrSubscriptionNotFound if no match.
+func (s *SubscriptionStore) RemoveSubscription(profileID wikipage.PageIdentifier, page, listName string) error {
 	unlock := s.lockProfile(profileID)
 	defer unlock()
 
@@ -329,34 +329,34 @@ func (s *BindingStore) RemoveBinding(profileID wikipage.PageIdentifier, page, li
 		return err
 	}
 
-	for i, existing := range state.Bindings {
+	for i, existing := range state.Subscriptions {
 		if existing.Page == page && existing.ListName == listName {
-			state.Bindings = append(state.Bindings[:i], state.Bindings[i+1:]...)
+			state.Subscriptions = append(state.Subscriptions[:i], state.Subscriptions[i+1:]...)
 			encodeState(fm, state)
 			return s.writeFrontMatter(profileID, fm)
 		}
 	}
-	return ErrBindingNotFound
+	return ErrSubscriptionNotFound
 }
 
-// FindBinding returns the calling user's binding for (page, listName), if
+// FindSubscription returns the calling user's binding for (page, listName), if
 // any. The boolean second return is "found".
-func (s *BindingStore) FindBinding(profileID wikipage.PageIdentifier, page, listName string) (Binding, bool, error) {
+func (s *SubscriptionStore) FindSubscription(profileID wikipage.PageIdentifier, page, listName string) (Subscription, bool, error) {
 	state, err := s.LoadState(profileID)
 	if err != nil {
-		return Binding{}, false, err
+		return Subscription{}, false, err
 	}
-	for _, b := range state.Bindings {
+	for _, b := range state.Subscriptions {
 		if b.Page == page && b.ListName == listName {
 			return b, true, nil
 		}
 	}
-	return Binding{}, false, nil
+	return Subscription{}, false, nil
 }
 
 // readFrontMatter reads the page's frontmatter, returning os.ErrNotExist
 // for missing pages so callers can branch.
-func (s *BindingStore) readFrontMatter(profileID wikipage.PageIdentifier) (wikipage.FrontMatter, error) {
+func (s *SubscriptionStore) readFrontMatter(profileID wikipage.PageIdentifier) (wikipage.FrontMatter, error) {
 	_, fm, err := s.pages.ReadFrontMatter(profileID)
 	if err != nil {
 		return nil, err
@@ -367,7 +367,7 @@ func (s *BindingStore) readFrontMatter(profileID wikipage.PageIdentifier) (wikip
 	return fm, nil
 }
 
-func (s *BindingStore) writeFrontMatter(profileID wikipage.PageIdentifier, fm wikipage.FrontMatter) error {
+func (s *SubscriptionStore) writeFrontMatter(profileID wikipage.PageIdentifier, fm wikipage.FrontMatter) error {
 	if err := s.pages.WriteFrontMatter(profileID, fm); err != nil {
 		return fmt.Errorf("keep bridge: write frontmatter: %w", err)
 	}
@@ -375,7 +375,7 @@ func (s *BindingStore) writeFrontMatter(profileID wikipage.PageIdentifier, fm wi
 }
 
 // lockProfile acquires the per-profile mutex.
-func (s *BindingStore) lockProfile(profileID wikipage.PageIdentifier) func() {
+func (s *SubscriptionStore) lockProfile(profileID wikipage.PageIdentifier) func() {
 	v, _ := s.profilMu.LoadOrStore(profileID, &sync.Mutex{})
 	// INVARIANT ASSERTION: every value stored in profilMu is *sync.Mutex.
 	// Anything else here is a programming bug — falling back to a fresh
@@ -393,8 +393,8 @@ func (s *BindingStore) lockProfile(profileID wikipage.PageIdentifier) func() {
 // Caller MUST hold the lock (typically via WithProfileLock). Used by
 // the eager migration job to read-then-write under one lock window.
 // INVARIANT ASSERTION: this is documentation, not enforced; misuse
-// races against AddBinding/RemoveBinding/SaveState.
-func (s *BindingStore) LoadStateLocked(profileID wikipage.PageIdentifier) (ConnectorState, error) {
+// races against AddSubscription/RemoveSubscription/SaveState.
+func (s *SubscriptionStore) LoadStateLocked(profileID wikipage.PageIdentifier) (ConnectorState, error) {
 	fm, err := s.readFrontMatter(profileID)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
@@ -408,7 +408,7 @@ func (s *BindingStore) LoadStateLocked(profileID wikipage.PageIdentifier) (Conne
 // SaveStateLocked overwrites state without acquiring the per-profile
 // mutex. Caller MUST hold the lock. Pairs with LoadStateLocked for
 // the eager migration job's read-rebaseline-write cycle.
-func (s *BindingStore) SaveStateLocked(profileID wikipage.PageIdentifier, state ConnectorState) error {
+func (s *SubscriptionStore) SaveStateLocked(profileID wikipage.PageIdentifier, state ConnectorState) error {
 	fm, err := s.readFrontMatter(profileID)
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err
@@ -426,7 +426,7 @@ func (s *BindingStore) SaveStateLocked(profileID wikipage.PageIdentifier, state 
 // eager migration job to span its read-pull-rebaseline-write cycle
 // inside one lock window so concurrent macro actions, cron ticks,
 // and Bind/Unbind calls serialize against migration cleanly.
-func (s *BindingStore) WithProfileLock(profileID wikipage.PageIdentifier, fn func() error) error {
+func (s *SubscriptionStore) WithProfileLock(profileID wikipage.PageIdentifier, fn func() error) error {
 	unlock := s.lockProfile(profileID)
 	defer unlock()
 	return fn()
@@ -457,11 +457,11 @@ func decodeState(fm wikipage.FrontMatter) (ConnectorState, error) {
 		ConnectedAt:         connectedAt,
 		LastVerifiedAt:      lastVerifiedAt,
 		PollIntervalSeconds: getInt64(connector, pollIntervalSecondsField),
-		Bindings:            bindings,
+		Subscriptions:            bindings,
 	}, nil
 }
 
-func decodeBindings(raw any) ([]Binding, error) {
+func decodeBindings(raw any) ([]Subscription, error) {
 	if raw == nil {
 		return nil, nil
 	}
@@ -469,7 +469,7 @@ func decodeBindings(raw any) ([]Binding, error) {
 	if !ok {
 		return nil, fmt.Errorf("wiki.connectors.google_keep.bindings is %T, expected list", raw)
 	}
-	out := make([]Binding, 0, len(arr))
+	out := make([]Subscription, 0, len(arr))
 	for i, entry := range arr {
 		m, ok := entry.(map[string]any)
 		if !ok {
@@ -487,13 +487,13 @@ func decodeBindings(raw any) ([]Binding, error) {
 		if err != nil {
 			return nil, fmt.Errorf("wiki.connectors.google_keep.bindings[%d].label_ids: %w", i, err)
 		}
-		out = append(out, Binding{
+		out = append(out, Subscription{
 			Page:                 getString(m, bindingPageField),
 			ListName:             getString(m, bindingListNameField),
 			KeepNoteID:           getString(m, bindingKeepNoteIDField),
 			KeepNoteTitle:        getString(m, bindingKeepNoteTitleField),
 			KeepNoteClientID:     getString(m, bindingKeepNoteClientIDField),
-			BoundAt:              boundAt,
+			SubscribedAt:              boundAt,
 			KeepCursor:           getString(m, bindingKeepCursorField),
 			TruncatedTickStreak:  getInt(m, bindingTruncatedTickStreakField),
 			MigratedFingerprints: getBool(m, bindingMigratedFingerprintsField),
@@ -531,14 +531,14 @@ func encodeState(fm wikipage.FrontMatter, state ConnectorState) {
 	} else {
 		delete(connector, pollIntervalSecondsField)
 	}
-	if len(state.Bindings) > 0 {
-		connector[bindingsField] = encodeBindings(state.Bindings)
+	if len(state.Subscriptions) > 0 {
+		connector[bindingsField] = encodeBindings(state.Subscriptions)
 	} else {
 		delete(connector, bindingsField)
 	}
 }
 
-func encodeBindings(bindings []Binding) []any {
+func encodeBindings(bindings []Subscription) []any {
 	out := make([]any, len(bindings))
 	for i, b := range bindings {
 		entry := map[string]any{
@@ -552,8 +552,8 @@ func encodeBindings(bindings []Binding) []any {
 		if b.KeepNoteClientID != "" {
 			entry[bindingKeepNoteClientIDField] = b.KeepNoteClientID
 		}
-		if !b.BoundAt.IsZero() {
-			entry[bindingBoundAtField] = b.BoundAt.UTC().Format(time.RFC3339)
+		if !b.SubscribedAt.IsZero() {
+			entry[bindingBoundAtField] = b.SubscribedAt.UTC().Format(time.RFC3339)
 		}
 		if b.KeepCursor != "" {
 			entry[bindingKeepCursorField] = b.KeepCursor
@@ -583,11 +583,11 @@ func encodeBindings(bindings []Binding) []any {
 	return out
 }
 
-// encodeItemBinding writes one ItemBinding as a frontmatter map. Always
+// encodeItemBinding writes one ItemMapping as a frontmatter map. Always
 // uses the new structured shape; legacy decoding still accepts the flat
 // string shape for backwards compatibility with files written before
 // this rewrite.
-func encodeItemBinding(ib ItemBinding) map[string]any {
+func encodeItemBinding(ib ItemMapping) map[string]any {
 	out := map[string]any{
 		itemBindingServerIDField: ib.ServerID,
 	}
@@ -627,15 +627,15 @@ func encodeItemBinding(ib ItemBinding) map[string]any {
 	return out
 }
 
-// decodeItemIDMap reads the per-binding wiki-uid → ItemBinding map.
+// decodeItemIDMap reads the per-binding wiki-uid → ItemMapping map.
 // Accepts BOTH the old flat shape (map[uid]string of serverID) for
 // backwards compatibility with bindings persisted before this rewrite,
 // AND the new structured shape (map[uid]map[field]any with synced_*,
 // last_observed_wiki_*, push_failure_count, last_failure_code).
 //
-// Old-shape entries decode as ItemBinding{ServerID: v, …zero…} —
+// Old-shape entries decode as ItemMapping{ServerID: v, …zero…} —
 // the eager migration job populates the rest.
-func decodeItemIDMap(raw any) (map[string]ItemBinding, error) {
+func decodeItemIDMap(raw any) (map[string]ItemMapping, error) {
 	if raw == nil {
 		return nil, nil
 	}
@@ -643,19 +643,19 @@ func decodeItemIDMap(raw any) (map[string]ItemBinding, error) {
 	if !ok {
 		return nil, fmt.Errorf("expected map, got %T", raw)
 	}
-	out := make(map[string]ItemBinding, len(m))
+	out := make(map[string]ItemMapping, len(m))
 	for k, v := range m {
 		switch typed := v.(type) {
 		case string:
 			// Legacy flat shape: just the serverID.
-			out[k] = ItemBinding{ServerID: typed}
+			out[k] = ItemMapping{ServerID: typed}
 		case map[string]any:
 			// New structured shape.
 			nextAttemptAt, err := parseTime(getString(typed, itemBindingNextAttemptAtField))
 			if err != nil {
 				return nil, fmt.Errorf("key %q next_attempt_at: %w", k, err)
 			}
-			out[k] = ItemBinding{
+			out[k] = ItemMapping{
 				ServerID:                  getString(typed, itemBindingServerIDField),
 				SyncedText:                getString(typed, itemBindingSyncedTextField),
 				SyncedChecked:             getBool(typed, itemBindingSyncedCheckedField),

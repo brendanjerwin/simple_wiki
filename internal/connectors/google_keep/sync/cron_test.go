@@ -8,6 +8,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	"github.com/brendanjerwin/simple_wiki/internal/connectors"
 	keepsync "github.com/brendanjerwin/simple_wiki/internal/connectors/google_keep/sync"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 )
@@ -33,8 +34,12 @@ var _ = Describe("KeepCronTickJob", func() {
 		enqueuer = &debouncerFakeEnqueuer{}
 		logger = &debouncerFakeLogger{}
 
-		store := keepsync.NewBindingStore(newFakeStore())
-		connector = keepsync.NewConnector(store, http.DefaultClient, fakeClock{})
+		store := keepsync.NewSubscriptionStore(newFakeStore())
+		leaseTable := connectors.NewLeaseTable()
+		leaseTable.SignalReady()
+		var nerr error
+		connector, nerr = keepsync.NewConnector(store, leaseTable, http.DefaultClient, fakeClock{})
+		Expect(nerr).ToNot(HaveOccurred())
 	})
 
 	// ------------------------------------------------------------------ Execute
@@ -122,10 +127,10 @@ var _ = Describe("KeepCronTickJob", func() {
 			)
 
 			BeforeEach(func() {
-				connector.RegisterActiveBindings([]keepsync.BindingKey{
+				connector.RegisterActiveSubscriptions([]keepsync.BindingKey{
 					{ProfileID: profileID, Page: "Notes", ListName: "list1"},
 				})
-				// nil lister → falls back to connector.ActiveBindingsSnapshot
+				// nil lister → falls back to connector.ActiveSubscriptionsSnapshot
 				job = keepsync.NewKeepCronTickJob(connector, enqueuer, logger, nil)
 				err = job.Execute()
 			})
@@ -140,9 +145,9 @@ var _ = Describe("KeepCronTickJob", func() {
 		})
 	})
 
-	// ------------------------------------------------------------------ RegisterActiveBindings / ActiveBindingsSnapshot
+	// ------------------------------------------------------------------ RegisterActiveSubscriptions / ActiveSubscriptionsSnapshot
 
-	Describe("RegisterActiveBindings and ActiveBindingsSnapshot", func() {
+	Describe("RegisterActiveSubscriptions and ActiveSubscriptionsSnapshot", func() {
 		Describe("when two bindings are registered", func() {
 			var snapshot []keepsync.BindingKey
 
@@ -151,8 +156,8 @@ var _ = Describe("KeepCronTickJob", func() {
 					{ProfileID: profileID, Page: "A", ListName: "x"},
 					{ProfileID: profileID, Page: "B", ListName: "y"},
 				}
-				connector.RegisterActiveBindings(keys)
-				snapshot = connector.ActiveBindingsSnapshot()
+				connector.RegisterActiveSubscriptions(keys)
+				snapshot = connector.ActiveSubscriptionsSnapshot()
 			})
 
 			It("should return two entries in the snapshot", func() {
@@ -160,12 +165,12 @@ var _ = Describe("KeepCronTickJob", func() {
 			})
 		})
 
-		Describe("when RegisterActiveBindings is called on a fresh connector", func() {
+		Describe("when RegisterActiveSubscriptions is called on a fresh connector", func() {
 			var snapshot []keepsync.BindingKey
 
 			BeforeEach(func() {
 				// Fresh connector — no prior registration.
-				snapshot = connector.ActiveBindingsSnapshot()
+				snapshot = connector.ActiveSubscriptionsSnapshot()
 			})
 
 			It("should return an empty snapshot", func() {

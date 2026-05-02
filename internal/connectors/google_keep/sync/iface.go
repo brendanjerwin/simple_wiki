@@ -56,15 +56,15 @@ func (c *Connector) ForceFullResync(_ context.Context, key connectors.Subscripti
 			return err
 		}
 		updated := false
-		for i := range state.Bindings {
-			if state.Bindings[i].Page == key.Page && state.Bindings[i].ListName == key.ListName {
-				state.Bindings[i].KeepCursor = ""
-				state.Bindings[i].TruncatedTickStreak = 0
+		for i := range state.Subscriptions {
+			if state.Subscriptions[i].Page == key.Page && state.Subscriptions[i].ListName == key.ListName {
+				state.Subscriptions[i].KeepCursor = ""
+				state.Subscriptions[i].TruncatedTickStreak = 0
 				updated = true
 			}
 		}
 		if !updated {
-			return ErrBindingNotFound
+			return ErrSubscriptionNotFound
 		}
 		return c.store.SaveStateLocked(profileID, state)
 	})

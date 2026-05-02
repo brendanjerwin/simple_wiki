@@ -125,7 +125,7 @@ To remove a single subscription (without disconnecting the whole connector), cli
 | `auth_revoked` | Master token no longer valid (you signed out, or Google revoked it) | Recapture an oauth_token and re-connect |
 | `protocol_drift` | Google changed the Keep wire format | Update simple_wiki and try again |
 | `rate_limited` | We're hitting Keep too hard | Wait a few minutes; sync resumes automatically |
-| `bound_note_deleted` | The bound note was deleted from your Keep app | Rebind or remove the binding |
+| `bound_note_deleted` | The subscribed note was deleted from your Keep app | Re-subscribe or remove the subscription |
 
 Errors branch on typed codes only — never on the human-readable banner text.
 

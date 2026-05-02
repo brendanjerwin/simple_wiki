@@ -16,6 +16,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
+	"github.com/brendanjerwin/simple_wiki/internal/connectors"
 	keepsync "github.com/brendanjerwin/simple_wiki/internal/connectors/google_keep/sync"
 	"github.com/brendanjerwin/simple_wiki/internal/connectors/google_keep/gateway"
 	"github.com/brendanjerwin/simple_wiki/pkg/jobs"
@@ -25,7 +26,7 @@ import (
 // --- fakes ----------------------------------------------------------------
 
 // fakePageReaderMutator is a minimal in-memory PageReaderMutator
-// the keepsync.BindingStore writes against.
+// the keepsync.SubscriptionStore writes against.
 type fakePageReaderMutator struct {
 	mu       sync.Mutex
 	pages    map[wikipage.PageIdentifier]wikipage.FrontMatter
@@ -44,7 +45,7 @@ func (f *fakePageReaderMutator) ReadFrontMatter(id wikipage.PageIdentifier) (wik
 	defer f.mu.Unlock()
 	fm, ok := f.pages[id]
 	if !ok {
-		// Bridge BindingStore branches on os.ErrNotExist to treat
+		// Bridge SubscriptionStore branches on os.ErrNotExist to treat
 		// missing profile pages as "not connected" rather than a
 		// hard error; mirror that here so SaveState can write the
 		// initial state on a fresh page.
@@ -233,14 +234,14 @@ type migratorCall struct {
 	Page, ListName string
 }
 
-func (f *fakeMigratorRecorder) MigrateBindingFingerprints(_ context.Context, profileID wikipage.PageIdentifier, page, listName string) error {
+func (f *fakeMigratorRecorder) MigrateSubscriptionFingerprints(_ context.Context, profileID wikipage.PageIdentifier, page, listName string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.calls = append(f.calls, migratorCall{ProfileID: profileID, Page: page, ListName: listName})
 	return f.err
 }
 
-// fakeStateLoader satisfies KeepBridgeBindingStateLoader for the
+// fakeStateLoader satisfies KeepBridgeSubscriptionStateLoader for the
 // scan-job tests so we can express bindings without a real
 // frontmatter file.
 type fakeStateLoader struct {
@@ -262,7 +263,7 @@ func (migrationClock) Now() time.Time {
 }
 
 // freshConnectorForMigration returns a real keepsync.Connector wired
-// with all fakes plus the BindingStore against the given pages
+// with all fakes plus the SubscriptionStore against the given pages
 // store. The seeded binding (page, listName) is MigratedFingerprints
 // =false (legacy) by default.
 //
@@ -270,19 +271,19 @@ func (migrationClock) Now() time.Time {
 func freshConnectorForMigration(
 	profileID wikipage.PageIdentifier,
 	page, listName, keepNoteID string,
-	itemBindings map[string]keepsync.ItemBinding,
-) (*keepsync.Connector, *keepsync.BindingStore, *fakeMigrationKeepClient, *fakeMigrationChecklist) {
+	itemBindings map[string]keepsync.ItemMapping,
+) (*keepsync.Connector, *keepsync.SubscriptionStore, *fakeMigrationKeepClient, *fakeMigrationChecklist) {
 	pages := newFakePageReaderMutator()
-	store := keepsync.NewBindingStore(pages)
+	store := keepsync.NewSubscriptionStore(pages)
 
 	// Seed the connector state on the profile page.
 	state := keepsync.ConnectorState{
 		Email:       "user@example.com",
 		MasterToken: "tok",
-		Bindings: []keepsync.Binding{{
+		Subscriptions: []keepsync.Subscription{{
 			Page: page, ListName: listName,
 			KeepNoteID: keepNoteID, KeepNoteTitle: listName,
-			BoundAt:              time.Now().UTC(),
+			SubscribedAt:              time.Now().UTC(),
 			MigratedFingerprints: false,
 			ItemIDMap:            itemBindings,
 		}},
@@ -292,7 +293,10 @@ func freshConnectorForMigration(
 	keep := &fakeMigrationKeepClient{}
 	chk := &fakeMigrationChecklist{}
 
-	c := keepsync.NewConnector(store, nil, migrationClock{})
+	leaseTable := connectors.NewLeaseTable()
+	leaseTable.SignalReady()
+	c, nerr := keepsync.NewConnector(store, leaseTable, nil, migrationClock{})
+	Expect(nerr).ToNot(HaveOccurred())
 	c.SetClientBuilder(func(_ string) keepsync.KeepClient { return keep })
 	c.SetAuthBuilder(func(_ string) keepsync.AuthExchanger { return fakeMigrationAuth{} })
 	c.SetChecklistReader(chk)
@@ -361,14 +365,14 @@ This page has no Keep connector configured.`))
 			loader := &fakeStateLoader{states: map[wikipage.PageIdentifier]keepsync.ConnectorState{
 				profileID: {
 					Email: "user@example.com", MasterToken: "tok",
-					Bindings: []keepsync.Binding{
+					Subscriptions: []keepsync.Subscription{
 						{Page: "shopping", ListName: "Grocery", MigratedFingerprints: false},
 						{Page: "shopping", ListName: "Hardware", MigratedFingerprints: false},
 					},
 				},
 				profileIDMigrated: {
 					Email: "other@example.com", MasterToken: "tok",
-					Bindings: []keepsync.Binding{
+					Subscriptions: []keepsync.Subscription{
 						{Page: "x", ListName: "Y", MigratedFingerprints: true},
 					},
 				},
@@ -427,7 +431,7 @@ var _ = Describe("KeepBridgeFingerprintMigrationJob — silent rebaseline", func
 
 	var (
 		c     *keepsync.Connector
-		store *keepsync.BindingStore
+		store *keepsync.SubscriptionStore
 		keep  *fakeMigrationKeepClient
 		chk   *fakeMigrationChecklist
 	)
@@ -435,7 +439,7 @@ var _ = Describe("KeepBridgeFingerprintMigrationJob — silent rebaseline", func
 	Describe("when wiki and Keep already agree on every paired item", func() {
 		BeforeEach(func() {
 			c, store, keep, chk = freshConnectorForMigration(profileID, page, listName, noteID,
-				map[string]keepsync.ItemBinding{
+				map[string]keepsync.ItemMapping{
 					"uid-A": {ServerID: "srv-A"},
 				},
 			)
@@ -466,14 +470,14 @@ var _ = Describe("KeepBridgeFingerprintMigrationJob — silent rebaseline", func
 		It("should populate synced_fp from the agreed content", func() {
 			st, err := store.LoadState(profileID)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(st.Bindings[0].ItemIDMap["uid-A"].SyncedText).To(Equal("Apples"))
-			Expect(st.Bindings[0].ItemIDMap["uid-A"].SyncedSortValue).To(Equal("1000"))
+			Expect(st.Subscriptions[0].ItemIDMap["uid-A"].SyncedText).To(Equal("Apples"))
+			Expect(st.Subscriptions[0].ItemIDMap["uid-A"].SyncedSortValue).To(Equal("1000"))
 		})
 
 		It("should stamp MigratedFingerprints=true", func() {
 			st, err := store.LoadState(profileID)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(st.Bindings[0].MigratedFingerprints).To(BeTrue())
+			Expect(st.Subscriptions[0].MigratedFingerprints).To(BeTrue())
 		})
 
 		It("should clear KeepCursor so the next sync does a full pull", func() {
@@ -486,7 +490,7 @@ var _ = Describe("KeepBridgeFingerprintMigrationJob — silent rebaseline", func
 			// mass-delete bug remediation.
 			st, err := store.LoadState(profileID)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(st.Bindings[0].KeepCursor).To(BeEmpty())
+			Expect(st.Subscriptions[0].KeepCursor).To(BeEmpty())
 		})
 	})
 })
@@ -499,7 +503,7 @@ var _ = Describe("KeepBridgeFingerprintMigrationJob — Keep-wins divergence", f
 
 	var (
 		c     *keepsync.Connector
-		store *keepsync.BindingStore
+		store *keepsync.SubscriptionStore
 		keep  *fakeMigrationKeepClient
 		chk   *fakeMigrationChecklist
 	)
@@ -507,7 +511,7 @@ var _ = Describe("KeepBridgeFingerprintMigrationJob — Keep-wins divergence", f
 	Describe("when wiki and Keep have different content for a paired item", func() {
 		BeforeEach(func() {
 			c, store, keep, chk = freshConnectorForMigration(profileID, page, listName, noteID,
-				map[string]keepsync.ItemBinding{
+				map[string]keepsync.ItemMapping{
 					"uid-A": {ServerID: "srv-A"},
 				},
 			)
@@ -536,13 +540,13 @@ var _ = Describe("KeepBridgeFingerprintMigrationJob — Keep-wins divergence", f
 		It("should populate synced_fp from Keep's content", func() {
 			st, err := store.LoadState(profileID)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(st.Bindings[0].ItemIDMap["uid-A"].SyncedText).To(Equal("Apples (Keep version)"))
+			Expect(st.Subscriptions[0].ItemIDMap["uid-A"].SyncedText).To(Equal("Apples (Keep version)"))
 		})
 
 		It("should stamp MigratedFingerprints=true after applying Keep", func() {
 			st, err := store.LoadState(profileID)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(st.Bindings[0].MigratedFingerprints).To(BeTrue())
+			Expect(st.Subscriptions[0].MigratedFingerprints).To(BeTrue())
 		})
 
 		It("should pass the binding owner's email as ownerEmail to the mutator", func() {
@@ -561,7 +565,7 @@ var _ = Describe("KeepBridgeFingerprintMigrationJob — drops entries Keep no lo
 
 	var (
 		c     *keepsync.Connector
-		store *keepsync.BindingStore
+		store *keepsync.SubscriptionStore
 		keep  *fakeMigrationKeepClient
 		chk   *fakeMigrationChecklist
 	)
@@ -569,7 +573,7 @@ var _ = Describe("KeepBridgeFingerprintMigrationJob — drops entries Keep no lo
 	Describe("when an id_map entry's serverID is missing from the pull", func() {
 		BeforeEach(func() {
 			c, store, keep, chk = freshConnectorForMigration(profileID, page, listName, noteID,
-				map[string]keepsync.ItemBinding{
+				map[string]keepsync.ItemMapping{
 					"uid-A":   {ServerID: "srv-A"}, // present in pull
 					"uid-OLD": {ServerID: "srv-OLD"}, // absent from pull (Keep deleted)
 				},
@@ -592,13 +596,13 @@ var _ = Describe("KeepBridgeFingerprintMigrationJob — drops entries Keep no lo
 		It("should drop the unpaired uid from id_map", func() {
 			st, err := store.LoadState(profileID)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(st.Bindings[0].ItemIDMap).ToNot(HaveKey("uid-OLD"))
+			Expect(st.Subscriptions[0].ItemIDMap).ToNot(HaveKey("uid-OLD"))
 		})
 
 		It("should keep the still-paired uid in id_map", func() {
 			st, err := store.LoadState(profileID)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(st.Bindings[0].ItemIDMap).To(HaveKey("uid-A"))
+			Expect(st.Subscriptions[0].ItemIDMap).To(HaveKey("uid-A"))
 		})
 
 		It("should NOT call UpdateItemForSync for the dropped entry", func() {
@@ -620,21 +624,21 @@ var _ = Describe("KeepBridgeFingerprintMigrationJob — idempotent on already-mi
 	Describe("when MigratedFingerprints is already true", func() {
 		var (
 			c     *keepsync.Connector
-			store *keepsync.BindingStore
+			store *keepsync.SubscriptionStore
 			keep  *fakeMigrationKeepClient
 			chk   *fakeMigrationChecklist
 		)
 
 		BeforeEach(func() {
 			c, store, keep, chk = freshConnectorForMigration(profileID, page, listName, noteID,
-				map[string]keepsync.ItemBinding{
+				map[string]keepsync.ItemMapping{
 					"uid-A": {ServerID: "srv-A", SyncedText: "Apples", SyncedSortValue: "1000"},
 				},
 			)
 			// Flip the flag to true; second-tick re-run case.
 			st, err := store.LoadState(profileID)
 			Expect(err).ToNot(HaveOccurred())
-			st.Bindings[0].MigratedFingerprints = true
+			st.Subscriptions[0].MigratedFingerprints = true
 			Expect(store.SaveState(profileID, st)).To(Succeed())
 
 			chk.items = []*apiv1.ChecklistItem{
@@ -659,7 +663,7 @@ var _ = Describe("KeepBridgeFingerprintMigrationJob — idempotent on already-mi
 		It("should leave the binding's synced_fp untouched", func() {
 			st, err := store.LoadState(profileID)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(st.Bindings[0].ItemIDMap["uid-A"].SyncedText).To(Equal("Apples"))
+			Expect(st.Subscriptions[0].ItemIDMap["uid-A"].SyncedText).To(Equal("Apples"))
 		})
 	})
 })
@@ -673,14 +677,14 @@ var _ = Describe("KeepBridgeFingerprintMigrationJob — failure leaves binding u
 	Describe("when the Keep pull returns an error", func() {
 		var (
 			c     *keepsync.Connector
-			store *keepsync.BindingStore
+			store *keepsync.SubscriptionStore
 			keep  *fakeMigrationKeepClient
 			jobErr error
 		)
 
 		BeforeEach(func() {
 			c, store, keep, _ = freshConnectorForMigration(profileID, page, listName, noteID,
-				map[string]keepsync.ItemBinding{
+				map[string]keepsync.ItemMapping{
 					"uid-A": {ServerID: "srv-A"},
 				},
 			)
@@ -698,7 +702,7 @@ var _ = Describe("KeepBridgeFingerprintMigrationJob — failure leaves binding u
 		It("should leave MigratedFingerprints=false so the queue retries", func() {
 			st, err := store.LoadState(profileID)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(st.Bindings[0].MigratedFingerprints).To(BeFalse())
+			Expect(st.Subscriptions[0].MigratedFingerprints).To(BeFalse())
 		})
 	})
 })
@@ -709,26 +713,26 @@ var _ = Describe("KeepBridgeFingerprintMigrationJob — profile mutex serializat
 	const listName = "Grocery"
 	const noteID = "list-server-id"
 
-	Describe("when a concurrent BindingStore.AddBinding waits for the migration write window", func() {
+	Describe("when a concurrent SubscriptionStore.AddSubscription waits for the migration write window", func() {
 		// We test the mutex by holding the write window: the migration's
 		// final SaveStateLocked happens inside WithProfileLock. While
-		// the job is running, a concurrent AddBinding call must block
+		// the job is running, a concurrent AddSubscription call must block
 		// until the migration releases the lock.
 		//
 		// We cannot easily inject a "pause" inside the Connector, so
 		// instead we drive the test by:
 		//   1. running the migration successfully (acquires + releases
 		//      the lock).
-		//   2. immediately running an AddBinding for a different
+		//   2. immediately running an AddSubscription for a different
 		//      checklist on the same profile.
 		//   3. asserting both completed and the new binding is present.
 		// This exercises the full lock-acquire/release path and would
 		// deadlock if WithProfileLock failed to release.
-		var store *keepsync.BindingStore
+		var store *keepsync.SubscriptionStore
 
 		BeforeEach(func() {
 			c, st, _, chk := freshConnectorForMigration(profileID, page, listName, noteID,
-				map[string]keepsync.ItemBinding{
+				map[string]keepsync.ItemMapping{
 					"uid-A": {ServerID: "srv-A"},
 				},
 			)
@@ -750,10 +754,10 @@ var _ = Describe("KeepBridgeFingerprintMigrationJob — profile mutex serializat
 			Expect(job.Execute()).To(Succeed())
 
 			// Concurrent macro-style add: must succeed (lock was released).
-			Expect(store.AddBinding(profileID, keepsync.Binding{
+			Expect(store.AddSubscription(profileID, keepsync.Subscription{
 				Page: "shopping", ListName: "AnotherList",
 				KeepNoteID: "another-note-id",
-				BoundAt:    time.Now().UTC(),
+				SubscribedAt:    time.Now().UTC(),
 				MigratedFingerprints: true,
 			})).To(Succeed())
 		})
@@ -761,7 +765,7 @@ var _ = Describe("KeepBridgeFingerprintMigrationJob — profile mutex serializat
 		It("should have both the migrated original binding and the concurrently-added one", func() {
 			final, err := store.LoadState(profileID)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(final.Bindings).To(HaveLen(2))
+			Expect(final.Subscriptions).To(HaveLen(2))
 		})
 	})
 })

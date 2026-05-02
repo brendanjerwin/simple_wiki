@@ -108,15 +108,15 @@ func deepCopyAny(v any) any {
 const aliceProfile wikipage.PageIdentifier = "profile_alice"
 const bobProfile wikipage.PageIdentifier = "profile_bob"
 
-var _ = Describe("BindingStore.LoadState", func() {
+var _ = Describe("SubscriptionStore.LoadState", func() {
 	var (
-		store *keepsync.BindingStore
+		store *keepsync.SubscriptionStore
 		pages *fakeStore
 	)
 
 	BeforeEach(func() {
 		pages = newFakeStore()
-		store = keepsync.NewBindingStore(pages)
+		store = keepsync.NewSubscriptionStore(pages)
 	})
 
 	When("the profile page does not exist", func() {
@@ -206,10 +206,10 @@ var _ = Describe("BindingStore.LoadState", func() {
 		})
 
 		It("should populate the bindings slice", func() {
-			Expect(state.Bindings).To(HaveLen(1))
-			Expect(state.Bindings[0].Page).To(Equal("shopping_lists"))
-			Expect(state.Bindings[0].ListName).To(Equal("groceries"))
-			Expect(state.Bindings[0].KeepNoteID).To(Equal("srv-list-1"))
+			Expect(state.Subscriptions).To(HaveLen(1))
+			Expect(state.Subscriptions[0].Page).To(Equal("shopping_lists"))
+			Expect(state.Subscriptions[0].ListName).To(Equal("groceries"))
+			Expect(state.Subscriptions[0].KeepNoteID).To(Equal("srv-list-1"))
 		})
 	})
 
@@ -253,21 +253,21 @@ var _ = Describe("BindingStore.LoadState", func() {
 			Expect(loadErr).ToNot(HaveOccurred())
 		})
 
-		It("should load the legacy flat id_map as ItemBinding entries with only ServerID populated", func() {
-			Expect(state.Bindings).To(HaveLen(1))
-			Expect(state.Bindings[0].ItemIDMap).To(HaveKey("wiki-uid-1"))
-			Expect(state.Bindings[0].ItemIDMap["wiki-uid-1"].ServerID).To(Equal("srv-A"))
+		It("should load the legacy flat id_map as ItemMapping entries with only ServerID populated", func() {
+			Expect(state.Subscriptions).To(HaveLen(1))
+			Expect(state.Subscriptions[0].ItemIDMap).To(HaveKey("wiki-uid-1"))
+			Expect(state.Subscriptions[0].ItemIDMap["wiki-uid-1"].ServerID).To(Equal("srv-A"))
 		})
 
 		It("should default the new binding-level fields to zero values", func() {
-			b := state.Bindings[0]
+			b := state.Subscriptions[0]
 			Expect(b.KeepCursor).To(Equal(""))
 			Expect(b.TruncatedTickStreak).To(Equal(0))
 			Expect(b.MigratedFingerprints).To(BeFalse())
 		})
 
 		It("should default per-item synced/observed/failure fields to zero values", func() {
-			ib := state.Bindings[0].ItemIDMap["wiki-uid-1"]
+			ib := state.Subscriptions[0].ItemIDMap["wiki-uid-1"]
 			Expect(ib.SyncedText).To(Equal(""))
 			Expect(ib.SyncedChecked).To(BeFalse())
 			Expect(ib.SyncedSortValue).To(Equal(""))
@@ -280,13 +280,13 @@ var _ = Describe("BindingStore.LoadState", func() {
 		})
 
 		It("should default per-item Keep-cursor fields (BaseVersion, ClientID) to zero values", func() {
-			ib := state.Bindings[0].ItemIDMap["wiki-uid-1"]
+			ib := state.Subscriptions[0].ItemIDMap["wiki-uid-1"]
 			Expect(ib.BaseVersion).To(Equal(""))
 			Expect(ib.ClientID).To(Equal(""))
 		})
 
 		It("should default LabelIDs to empty/nil for legacy bindings", func() {
-			b := state.Bindings[0]
+			b := state.Subscriptions[0]
 			Expect(b.LabelIDs).To(BeEmpty())
 		})
 
@@ -301,8 +301,8 @@ var _ = Describe("BindingStore.LoadState", func() {
 			})
 
 			It("should preserve zero values for all new fields after a save→load round trip", func() {
-				Expect(roundTripped.Bindings).To(HaveLen(1))
-				b := roundTripped.Bindings[0]
+				Expect(roundTripped.Subscriptions).To(HaveLen(1))
+				b := roundTripped.Subscriptions[0]
 				Expect(b.KeepCursor).To(Equal(""))
 				Expect(b.TruncatedTickStreak).To(Equal(0))
 				Expect(b.MigratedFingerprints).To(BeFalse())
@@ -313,7 +313,7 @@ var _ = Describe("BindingStore.LoadState", func() {
 			})
 
 			It("should preserve empty LabelIDs after a save→load round trip", func() {
-				b := roundTripped.Bindings[0]
+				b := roundTripped.Subscriptions[0]
 				Expect(b.LabelIDs).To(BeEmpty())
 			})
 		})
@@ -372,14 +372,14 @@ var _ = Describe("BindingStore.LoadState", func() {
 		})
 
 		It("should populate the new binding-level fields", func() {
-			b := state.Bindings[0]
+			b := state.Subscriptions[0]
 			Expect(b.KeepCursor).To(Equal("v-abc-123"))
 			Expect(b.TruncatedTickStreak).To(Equal(3))
 			Expect(b.MigratedFingerprints).To(BeTrue())
 		})
 
 		It("should populate the new per-item structured fields", func() {
-			ib := state.Bindings[0].ItemIDMap["wiki-uid-1"]
+			ib := state.Subscriptions[0].ItemIDMap["wiki-uid-1"]
 			Expect(ib.ServerID).To(Equal("srv-A"))
 			Expect(ib.SyncedText).To(Equal("Apples #produce"))
 			Expect(ib.SyncedChecked).To(BeTrue())
@@ -389,19 +389,19 @@ var _ = Describe("BindingStore.LoadState", func() {
 		})
 
 		It("should populate BaseVersion and ClientID", func() {
-			ib := state.Bindings[0].ItemIDMap["wiki-uid-1"]
+			ib := state.Subscriptions[0].ItemIDMap["wiki-uid-1"]
 			Expect(ib.BaseVersion).To(Equal("v-base-A"))
 			Expect(ib.ClientID).To(Equal("client-A"))
 		})
 
 		It("should populate LabelIDs from the label_ids frontmatter map", func() {
-			b := state.Bindings[0]
+			b := state.Subscriptions[0]
 			Expect(b.LabelIDs).To(HaveKeyWithValue("household", "label-mid-1"))
 			Expect(b.LabelIDs).To(HaveKeyWithValue("groceries", "label-mid-2"))
 		})
 
 		It("should parse next_attempt_at as a UTC time", func() {
-			ib := state.Bindings[0].ItemIDMap["wiki-uid-1"]
+			ib := state.Subscriptions[0].ItemIDMap["wiki-uid-1"]
 			expected := time.Date(2026, 5, 1, 12, 1, 0, 0, time.UTC)
 			Expect(ib.NextAttemptAt).To(BeTemporally("~", expected, time.Second))
 		})
@@ -417,33 +417,33 @@ var _ = Describe("BindingStore.LoadState", func() {
 			})
 
 			It("should round-trip NextAttemptAt", func() {
-				ib := roundTripped.Bindings[0].ItemIDMap["wiki-uid-1"]
+				ib := roundTripped.Subscriptions[0].ItemIDMap["wiki-uid-1"]
 				expected := time.Date(2026, 5, 1, 12, 1, 0, 0, time.UTC)
 				Expect(ib.NextAttemptAt).To(BeTemporally("~", expected, time.Second))
 			})
 
 			It("should round-trip PushFailureCount", func() {
-				ib := roundTripped.Bindings[0].ItemIDMap["wiki-uid-1"]
+				ib := roundTripped.Subscriptions[0].ItemIDMap["wiki-uid-1"]
 				Expect(ib.PushFailureCount).To(Equal(2))
 			})
 
 			It("should round-trip LastFailureCode", func() {
-				ib := roundTripped.Bindings[0].ItemIDMap["wiki-uid-1"]
+				ib := roundTripped.Subscriptions[0].ItemIDMap["wiki-uid-1"]
 				Expect(ib.LastFailureCode).To(Equal("rate_limited"))
 			})
 
 			It("should round-trip BaseVersion", func() {
-				ib := roundTripped.Bindings[0].ItemIDMap["wiki-uid-1"]
+				ib := roundTripped.Subscriptions[0].ItemIDMap["wiki-uid-1"]
 				Expect(ib.BaseVersion).To(Equal("v-base-A"))
 			})
 
 			It("should round-trip ClientID", func() {
-				ib := roundTripped.Bindings[0].ItemIDMap["wiki-uid-1"]
+				ib := roundTripped.Subscriptions[0].ItemIDMap["wiki-uid-1"]
 				Expect(ib.ClientID).To(Equal("client-A"))
 			})
 
 			It("should round-trip LabelIDs", func() {
-				b := roundTripped.Bindings[0]
+				b := roundTripped.Subscriptions[0]
 				Expect(b.LabelIDs).To(HaveKeyWithValue("household", "label-mid-1"))
 				Expect(b.LabelIDs).To(HaveKeyWithValue("groceries", "label-mid-2"))
 			})
@@ -451,16 +451,16 @@ var _ = Describe("BindingStore.LoadState", func() {
 	})
 })
 
-var _ = Describe("BindingStore.AddBinding", func() {
+var _ = Describe("SubscriptionStore.AddSubscription", func() {
 	var (
-		store *keepsync.BindingStore
+		store *keepsync.SubscriptionStore
 		pages *fakeStore
 		now   time.Time
 	)
 
 	BeforeEach(func() {
 		pages = newFakeStore()
-		store = keepsync.NewBindingStore(pages)
+		store = keepsync.NewSubscriptionStore(pages)
 		now = time.Date(2026, 4, 25, 17, 14, 0, 0, time.UTC)
 		// Seed Alice's profile with a connector state but no bindings.
 		Expect(pages.WriteFrontMatter(aliceProfile, wikipage.FrontMatter{
@@ -490,12 +490,12 @@ var _ = Describe("BindingStore.AddBinding", func() {
 		var addErr error
 
 		BeforeEach(func() {
-			addErr = store.AddBinding(aliceProfile, keepsync.Binding{
+			addErr = store.AddSubscription(aliceProfile, keepsync.Subscription{
 				Page:          "shopping_lists",
 				ListName:      "groceries",
 				KeepNoteID:    "srv-list-1",
 				KeepNoteTitle: "groceries",
-				BoundAt:       now,
+				SubscribedAt:       now,
 			})
 		})
 
@@ -506,8 +506,8 @@ var _ = Describe("BindingStore.AddBinding", func() {
 		It("should make the binding visible in LoadState", func() {
 			s, err := store.LoadState(aliceProfile)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(s.Bindings).To(HaveLen(1))
-			Expect(s.Bindings[0].KeepNoteID).To(Equal("srv-list-1"))
+			Expect(s.Subscriptions).To(HaveLen(1))
+			Expect(s.Subscriptions[0].KeepNoteID).To(Equal("srv-list-1"))
 		})
 	})
 
@@ -515,17 +515,17 @@ var _ = Describe("BindingStore.AddBinding", func() {
 		var addErr error
 
 		BeforeEach(func() {
-			Expect(store.AddBinding(aliceProfile, keepsync.Binding{
+			Expect(store.AddSubscription(aliceProfile, keepsync.Subscription{
 				Page:       "shopping_lists",
 				ListName:   "groceries",
 				KeepNoteID: "srv-list-1",
-				BoundAt:    now,
+				SubscribedAt:    now,
 			})).To(Succeed())
-			addErr = store.AddBinding(aliceProfile, keepsync.Binding{
+			addErr = store.AddSubscription(aliceProfile, keepsync.Subscription{
 				Page:       "shopping_lists",
 				ListName:   "weekend_chores",
 				KeepNoteID: "srv-list-2",
-				BoundAt:    now,
+				SubscribedAt:    now,
 			})
 		})
 
@@ -535,7 +535,7 @@ var _ = Describe("BindingStore.AddBinding", func() {
 
 		It("should keep both bindings", func() {
 			s, _ := store.LoadState(aliceProfile)
-			Expect(s.Bindings).To(HaveLen(2))
+			Expect(s.Subscriptions).To(HaveLen(2))
 		})
 	})
 
@@ -543,27 +543,27 @@ var _ = Describe("BindingStore.AddBinding", func() {
 		var addErr error
 
 		BeforeEach(func() {
-			Expect(store.AddBinding(aliceProfile, keepsync.Binding{
+			Expect(store.AddSubscription(aliceProfile, keepsync.Subscription{
 				Page:       "shopping_lists",
 				ListName:   "groceries",
 				KeepNoteID: "srv-list-1",
-				BoundAt:    now,
+				SubscribedAt:    now,
 			})).To(Succeed())
-			addErr = store.AddBinding(aliceProfile, keepsync.Binding{
+			addErr = store.AddSubscription(aliceProfile, keepsync.Subscription{
 				Page:       "shopping_lists",
 				ListName:   "groceries",
 				KeepNoteID: "srv-list-2",
-				BoundAt:    now,
+				SubscribedAt:    now,
 			})
 		})
 
-		It("should return ErrAlreadyBoundForChecklist", func() {
-			Expect(errors.Is(addErr, keepsync.ErrAlreadyBoundForChecklist)).To(BeTrue())
+		It("should return ErrAlreadySubscribedForChecklist", func() {
+			Expect(errors.Is(addErr, keepsync.ErrAlreadySubscribedForChecklist)).To(BeTrue())
 		})
 
 		It("should not have created a second binding", func() {
 			s, _ := store.LoadState(aliceProfile)
-			Expect(s.Bindings).To(HaveLen(1))
+			Expect(s.Subscriptions).To(HaveLen(1))
 		})
 	})
 
@@ -571,27 +571,27 @@ var _ = Describe("BindingStore.AddBinding", func() {
 		var addErr error
 
 		BeforeEach(func() {
-			Expect(store.AddBinding(aliceProfile, keepsync.Binding{
+			Expect(store.AddSubscription(aliceProfile, keepsync.Subscription{
 				Page:       "shopping_lists",
 				ListName:   "groceries",
 				KeepNoteID: "srv-list-1",
-				BoundAt:    now,
+				SubscribedAt:    now,
 			})).To(Succeed())
-			addErr = store.AddBinding(aliceProfile, keepsync.Binding{
+			addErr = store.AddSubscription(aliceProfile, keepsync.Subscription{
 				Page:       "weekend",
 				ListName:   "chores",
 				KeepNoteID: "srv-list-1", // same Keep note
-				BoundAt:    now,
+				SubscribedAt:    now,
 			})
 		})
 
-		It("should return ErrAlreadyBoundToKeepNote", func() {
-			Expect(errors.Is(addErr, keepsync.ErrAlreadyBoundToKeepNote)).To(BeTrue())
+		It("should return ErrKeepNoteAlreadyClaimed", func() {
+			Expect(errors.Is(addErr, keepsync.ErrKeepNoteAlreadyClaimed)).To(BeTrue())
 		})
 
 		It("should not have created a second binding", func() {
 			s, _ := store.LoadState(aliceProfile)
-			Expect(s.Bindings).To(HaveLen(1))
+			Expect(s.Subscriptions).To(HaveLen(1))
 		})
 	})
 
@@ -599,17 +599,17 @@ var _ = Describe("BindingStore.AddBinding", func() {
 		var bobErr error
 
 		BeforeEach(func() {
-			Expect(store.AddBinding(aliceProfile, keepsync.Binding{
+			Expect(store.AddSubscription(aliceProfile, keepsync.Subscription{
 				Page:       "shopping_lists",
 				ListName:   "groceries",
 				KeepNoteID: "srv-alice-1",
-				BoundAt:    now,
+				SubscribedAt:    now,
 			})).To(Succeed())
-			bobErr = store.AddBinding(bobProfile, keepsync.Binding{
+			bobErr = store.AddSubscription(bobProfile, keepsync.Subscription{
 				Page:       "shopping_lists",
 				ListName:   "groceries",
 				KeepNoteID: "srv-bob-1",
-				BoundAt:    now,
+				SubscribedAt:    now,
 			})
 		})
 
@@ -619,14 +619,14 @@ var _ = Describe("BindingStore.AddBinding", func() {
 
 		It("should leave Alice's binding intact", func() {
 			s, _ := store.LoadState(aliceProfile)
-			Expect(s.Bindings).To(HaveLen(1))
-			Expect(s.Bindings[0].KeepNoteID).To(Equal("srv-alice-1"))
+			Expect(s.Subscriptions).To(HaveLen(1))
+			Expect(s.Subscriptions[0].KeepNoteID).To(Equal("srv-alice-1"))
 		})
 
 		It("should record Bob's binding on Bob's profile", func() {
 			s, _ := store.LoadState(bobProfile)
-			Expect(s.Bindings).To(HaveLen(1))
-			Expect(s.Bindings[0].KeepNoteID).To(Equal("srv-bob-1"))
+			Expect(s.Subscriptions).To(HaveLen(1))
+			Expect(s.Subscriptions[0].KeepNoteID).To(Equal("srv-bob-1"))
 		})
 	})
 
@@ -640,11 +640,11 @@ var _ = Describe("BindingStore.AddBinding", func() {
 				"identifier": "profile_alice",
 			})).To(Succeed())
 
-			addErr = store.AddBinding(aliceProfile, keepsync.Binding{
+			addErr = store.AddSubscription(aliceProfile, keepsync.Subscription{
 				Page:       "shopping_lists",
 				ListName:   "groceries",
 				KeepNoteID: "srv-1",
-				BoundAt:    now,
+				SubscribedAt:    now,
 			})
 		})
 
@@ -654,16 +654,16 @@ var _ = Describe("BindingStore.AddBinding", func() {
 	})
 })
 
-var _ = Describe("BindingStore.RemoveBinding", func() {
+var _ = Describe("SubscriptionStore.RemoveSubscription", func() {
 	var (
-		store *keepsync.BindingStore
+		store *keepsync.SubscriptionStore
 		pages *fakeStore
 		now   time.Time
 	)
 
 	BeforeEach(func() {
 		pages = newFakeStore()
-		store = keepsync.NewBindingStore(pages)
+		store = keepsync.NewSubscriptionStore(pages)
 		now = time.Date(2026, 4, 25, 17, 14, 0, 0, time.UTC)
 		Expect(pages.WriteFrontMatter(aliceProfile, wikipage.FrontMatter{
 			"wiki": map[string]any{
@@ -675,11 +675,11 @@ var _ = Describe("BindingStore.RemoveBinding", func() {
 				},
 			},
 		})).To(Succeed())
-		Expect(store.AddBinding(aliceProfile, keepsync.Binding{
+		Expect(store.AddSubscription(aliceProfile, keepsync.Subscription{
 			Page:       "shopping_lists",
 			ListName:   "groceries",
 			KeepNoteID: "srv-1",
-			BoundAt:    now,
+			SubscribedAt:    now,
 		})).To(Succeed())
 	})
 
@@ -687,7 +687,7 @@ var _ = Describe("BindingStore.RemoveBinding", func() {
 		var removeErr error
 
 		BeforeEach(func() {
-			removeErr = store.RemoveBinding(aliceProfile, "shopping_lists", "groceries")
+			removeErr = store.RemoveSubscription(aliceProfile, "shopping_lists", "groceries")
 		})
 
 		It("should not error", func() {
@@ -696,7 +696,7 @@ var _ = Describe("BindingStore.RemoveBinding", func() {
 
 		It("should leave the binding list empty", func() {
 			s, _ := store.LoadState(aliceProfile)
-			Expect(s.Bindings).To(BeEmpty())
+			Expect(s.Subscriptions).To(BeEmpty())
 		})
 	})
 
@@ -704,24 +704,24 @@ var _ = Describe("BindingStore.RemoveBinding", func() {
 		var removeErr error
 
 		BeforeEach(func() {
-			removeErr = store.RemoveBinding(aliceProfile, "shopping_lists", "nope")
+			removeErr = store.RemoveSubscription(aliceProfile, "shopping_lists", "nope")
 		})
 
-		It("should return ErrBindingNotFound", func() {
-			Expect(errors.Is(removeErr, keepsync.ErrBindingNotFound)).To(BeTrue())
+		It("should return ErrSubscriptionNotFound", func() {
+			Expect(errors.Is(removeErr, keepsync.ErrSubscriptionNotFound)).To(BeTrue())
 		})
 	})
 })
 
-var _ = Describe("BindingStore.SaveState", func() {
+var _ = Describe("SubscriptionStore.SaveState", func() {
 	var (
-		store *keepsync.BindingStore
+		store *keepsync.SubscriptionStore
 		pages *fakeStore
 	)
 
 	BeforeEach(func() {
 		pages = newFakeStore()
-		store = keepsync.NewBindingStore(pages)
+		store = keepsync.NewSubscriptionStore(pages)
 		Expect(pages.WriteFrontMatter(aliceProfile, wikipage.FrontMatter{
 			"identifier": "profile_alice",
 		})).To(Succeed())

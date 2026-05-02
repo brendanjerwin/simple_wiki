@@ -234,7 +234,8 @@ func (fakeSuppressor) Unsuppress(_ wikipage.PageIdentifier, _, _ string) {}
 //revive:disable-next-line:max-public-structs,function-result-limit
 func freshConnector(profileID wikipage.PageIdentifier, page, listName, keepNoteID string, idMap map[string]string) (*keepsync.Connector, *fakeStore, *fakeKeepClient, *fakeChecklist) {
 	store := newFakeStore()
-	c := keepsync.NewConnector(keepsync.NewBindingStore(store), nil, fakeClock{})
+	c, nerr := keepsync.NewConnector(keepsync.NewSubscriptionStore(store), newReadyLeaseTable(), nil, fakeClock{})
+	Expect(nerr).ToNot(HaveOccurred())
 	keep := &fakeKeepClient{}
 	c.SetClientBuilder(func(_ string) keepsync.KeepClient { return keep })
 	c.SetAuthBuilder(func(_ string) keepsync.AuthExchanger { return fakeAuth{} })
@@ -244,10 +245,10 @@ func freshConnector(profileID wikipage.PageIdentifier, page, listName, keepNoteI
 	c.SetSyncSuppressor(fakeSuppressor{})
 
 	// Convert legacy flat idMap to the new structured shape. Tests that
-	// need richer fingerprint state set ItemBinding values directly.
-	itemBindings := make(map[string]keepsync.ItemBinding, len(idMap))
+	// need richer fingerprint state set ItemMapping values directly.
+	itemBindings := make(map[string]keepsync.ItemMapping, len(idMap))
 	for uid, serverID := range idMap {
-		itemBindings[uid] = keepsync.ItemBinding{ServerID: serverID}
+		itemBindings[uid] = keepsync.ItemMapping{ServerID: serverID}
 	}
 
 	// Default test bindings are MigratedFingerprints=true so the sync
@@ -258,28 +259,28 @@ func freshConnector(profileID wikipage.PageIdentifier, page, listName, keepNoteI
 	state := keepsync.ConnectorState{
 		Email:       "test@example.com",
 		MasterToken: "token",
-		Bindings: []keepsync.Binding{{
+		Subscriptions: []keepsync.Subscription{{
 			Page: page, ListName: listName,
 			KeepNoteID: keepNoteID, KeepNoteTitle: listName,
 			KeepNoteClientID:     "list-client-" + keepNoteID,
-			BoundAt:              time.Now().UTC(),
+			SubscribedAt:              time.Now().UTC(),
 			MigratedFingerprints: true,
 			ItemIDMap:            itemBindings,
 		}},
 	}
-	Expect(keepsync.NewBindingStore(store).SaveState(profileID, state)).To(Succeed())
+	Expect(keepsync.NewSubscriptionStore(store).SaveState(profileID, state)).To(Succeed())
 	return c, store, keep, chk
 }
 
 // seedSyncedFromKeep copies each pull node's content fingerprint into
-// the corresponding ItemBinding's Synced{Text,Checked,SortValue}
+// the corresponding ItemMapping's Synced{Text,Checked,SortValue}
 // fields, keyed by serverID. Use to express the test's pre-tick
 // synced baseline for scenarios where wiki edited and Keep stayed
 // at the previously-synced state — so wiki_fp != synced_fp (wd) and
 // keep_fp == synced_fp (¬kd) → "push wiki" route.
 func seedSyncedFromKeep(profileID wikipage.PageIdentifier, page, listName string, store *fakeStore, nodes []gateway.Node) {
 	GinkgoHelper()
-	bs := keepsync.NewBindingStore(store)
+	bs := keepsync.NewSubscriptionStore(store)
 	state, err := bs.LoadState(profileID)
 	Expect(err).NotTo(HaveOccurred())
 	nodeByServerID := make(map[string]gateway.Node, len(nodes))
@@ -289,7 +290,7 @@ func seedSyncedFromKeep(profileID wikipage.PageIdentifier, page, listName string
 		}
 		nodeByServerID[n.ServerID] = n
 	}
-	for i, b := range state.Bindings {
+	for i, b := range state.Subscriptions {
 		if b.Page != page || b.ListName != listName {
 			continue
 		}
@@ -301,26 +302,26 @@ func seedSyncedFromKeep(profileID wikipage.PageIdentifier, page, listName string
 			ib.SyncedText = node.Text
 			ib.SyncedChecked = node.Checked
 			ib.SyncedSortValue = node.SortValue
-			state.Bindings[i].ItemIDMap[uid] = ib
+			state.Subscriptions[i].ItemIDMap[uid] = ib
 		}
 	}
 	Expect(bs.SaveState(profileID, state)).To(Succeed())
 }
 
-// seedSyncedFromWiki seeds each ItemBinding's synced_fp from the
+// seedSyncedFromWiki seeds each ItemMapping's synced_fp from the
 // matching wiki item (by uid). Use for scenarios where Keep edited
 // and wiki stayed at the previously-synced state — so keep_fp !=
 // synced_fp (kd) and wiki_fp == synced_fp (¬wd) → "apply Keep" route.
 func seedSyncedFromWiki(profileID wikipage.PageIdentifier, page, listName string, store *fakeStore, items []*apiv1.ChecklistItem) {
 	GinkgoHelper()
-	bs := keepsync.NewBindingStore(store)
+	bs := keepsync.NewSubscriptionStore(store)
 	state, err := bs.LoadState(profileID)
 	Expect(err).NotTo(HaveOccurred())
 	itemByUID := make(map[string]*apiv1.ChecklistItem, len(items))
 	for _, it := range items {
 		itemByUID[it.GetUid()] = it
 	}
-	for i, b := range state.Bindings {
+	for i, b := range state.Subscriptions {
 		if b.Page != page || b.ListName != listName {
 			continue
 		}
@@ -333,7 +334,7 @@ func seedSyncedFromWiki(profileID wikipage.PageIdentifier, page, listName string
 			ib.SyncedText = fp.Text
 			ib.SyncedChecked = fp.Checked
 			ib.SyncedSortValue = fp.SortValue
-			state.Bindings[i].ItemIDMap[uid] = ib
+			state.Subscriptions[i].ItemIDMap[uid] = ib
 		}
 	}
 	Expect(bs.SaveState(profileID, state)).To(Succeed())
@@ -894,7 +895,7 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 		})
 
 		It("should drop the id_map entry", func() {
-			b, found, ferr := c.FindBinding(ctx, profile, page, listName)
+			b, found, ferr := c.FindSubscription(ctx, profile, page, listName)
 			Expect(ferr).ToNot(HaveOccurred())
 			Expect(found).To(BeTrue())
 			Expect(b.ItemIDMap).NotTo(HaveKey("uid-A"))
@@ -940,7 +941,7 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 		})
 
 		It("should drop the id_map entry", func() {
-			b, found, ferr := c.FindBinding(ctx, profile, page, listName)
+			b, found, ferr := c.FindSubscription(ctx, profile, page, listName)
 			Expect(ferr).ToNot(HaveOccurred())
 			Expect(found).To(BeTrue())
 			Expect(b.ItemIDMap).NotTo(HaveKey("uid-A"))
@@ -1123,7 +1124,7 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 		})
 
 		It("should leave the id_map intact for items absent from the incremental delta", func() {
-			b, found, ferr := c.FindBinding(ctx, profile, page, listName)
+			b, found, ferr := c.FindSubscription(ctx, profile, page, listName)
 			Expect(ferr).ToNot(HaveOccurred())
 			Expect(found).To(BeTrue())
 			Expect(b.ItemIDMap).To(HaveKey("uid-B"))
@@ -1170,7 +1171,7 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 		})
 
 		It("should drop the hard-deleted item from id_map", func() {
-			b, found, ferr := c.FindBinding(ctx, profile, page, listName)
+			b, found, ferr := c.FindSubscription(ctx, profile, page, listName)
 			Expect(ferr).ToNot(HaveOccurred())
 			Expect(found).To(BeTrue())
 			Expect(b.ItemIDMap).NotTo(HaveKey("uid-Dog"))
@@ -1192,10 +1193,10 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 				{Uid: "uid-A", Text: "Apples", SortOrder: 1000, UpdatedAt: timestamppb.New(tStaleA)},
 			}
 			// Pre-set a cursor so we can verify it gets cleared.
-			bs := keepsync.NewBindingStore(store)
+			bs := keepsync.NewSubscriptionStore(store)
 			st, loadErr := bs.LoadState(profile)
 			Expect(loadErr).ToNot(HaveOccurred())
-			st.Bindings[0].KeepCursor = "v-stale-cursor"
+			st.Subscriptions[0].KeepCursor = "v-stale-cursor"
 			Expect(bs.SaveState(profile, st)).To(Succeed())
 
 			kc.pullState = gateway.ChangesResponse{
@@ -1211,7 +1212,7 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 		})
 
 		It("should clear the binding's KeepCursor", func() {
-			b, found, ferr := c.FindBinding(ctx, profile, page, listName)
+			b, found, ferr := c.FindSubscription(ctx, profile, page, listName)
 			Expect(ferr).ToNot(HaveOccurred())
 			Expect(found).To(BeTrue())
 			Expect(b.KeepCursor).To(BeEmpty())
@@ -1259,7 +1260,7 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 		})
 
 		It("should drop the hard-deleted item from id_map", func() {
-			b, found, ferr := c.FindBinding(ctx, profile, page, listName)
+			b, found, ferr := c.FindSubscription(ctx, profile, page, listName)
 			Expect(ferr).ToNot(HaveOccurred())
 			Expect(found).To(BeTrue())
 			Expect(b.ItemIDMap).NotTo(HaveKey("uid-bananas"))
@@ -1332,7 +1333,7 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 			Expect(chk.addCalls[0].Text).To(Equal("Bananas"))
 
 			// Verify id_map gained the entry with seeded synced_fp.
-			b, found, ferr := c.FindBinding(ctx, profile, page, listName)
+			b, found, ferr := c.FindSubscription(ctx, profile, page, listName)
 			Expect(ferr).ToNot(HaveOccurred())
 			Expect(found).To(BeTrue())
 			var bananasUID string
@@ -1358,7 +1359,7 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 			Expect(chk.delCalls[0].UID).To(Equal(bananasUID))
 
 			// Bananas dropped from id_map.
-			b2, found2, ferr2 := c.FindBinding(ctx, profile, page, listName)
+			b2, found2, ferr2 := c.FindSubscription(ctx, profile, page, listName)
 			Expect(ferr2).ToNot(HaveOccurred())
 			Expect(found2).To(BeTrue())
 			Expect(b2.ItemIDMap).NotTo(HaveKey(bananasUID))
@@ -2111,7 +2112,7 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 		})
 
 		It("should update binding.KeepNoteTitle to the value Keep echoes", func() {
-			b, found, err := c.FindBinding(ctx, profile, page, listName)
+			b, found, err := c.FindSubscription(ctx, profile, page, listName)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(found).To(BeTrue())
 			Expect(b.KeepNoteTitle).To(Equal("Renamed in Keep"),
@@ -2240,10 +2241,10 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 				"uid-A": "srv-A",
 			})
 			// Pre-populate the binding's KeepCursor.
-			bs := keepsync.NewBindingStore(store)
+			bs := keepsync.NewSubscriptionStore(store)
 			st, loadErr := bs.LoadState(profile)
 			Expect(loadErr).ToNot(HaveOccurred())
-			st.Bindings[0].KeepCursor = "v-cursor-from-last-sync"
+			st.Subscriptions[0].KeepCursor = "v-cursor-from-last-sync"
 			Expect(bs.SaveState(profile, st)).To(Succeed())
 
 			chk.items = []*apiv1.ChecklistItem{
@@ -2273,10 +2274,10 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 			c, store, kc, chk = freshConnector(profile, page, listName, listSrv, map[string]string{
 				"uid-A": "srv-A",
 			})
-			bs := keepsync.NewBindingStore(store)
+			bs := keepsync.NewSubscriptionStore(store)
 			st, loadErr := bs.LoadState(profile)
 			Expect(loadErr).ToNot(HaveOccurred())
-			st.Bindings[0].KeepCursor = "v-1"
+			st.Subscriptions[0].KeepCursor = "v-1"
 			Expect(bs.SaveState(profile, st)).To(Succeed())
 
 			// Wiki and Keep agree → no push happens, so only the pull
@@ -2294,7 +2295,7 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 		})
 
 		It("should advance KeepCursor to pull.ToVersion", func() {
-			b, found, ferr := c.FindBinding(ctx, profile, page, listName)
+			b, found, ferr := c.FindSubscription(ctx, profile, page, listName)
 			Expect(ferr).ToNot(HaveOccurred())
 			Expect(found).To(BeTrue())
 			Expect(b.KeepCursor).To(Equal("v-2"))
@@ -2315,10 +2316,10 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 			c, store, kc, chk = freshConnector(profile, page, listName, listSrv, map[string]string{
 				"uid-A": "srv-A",
 			})
-			bs := keepsync.NewBindingStore(store)
+			bs := keepsync.NewSubscriptionStore(store)
 			st, loadErr := bs.LoadState(profile)
 			Expect(loadErr).ToNot(HaveOccurred())
-			st.Bindings[0].KeepCursor = "v-1"
+			st.Subscriptions[0].KeepCursor = "v-1"
 			Expect(bs.SaveState(profile, st)).To(Succeed())
 
 			// Wiki text differs → push happens.
@@ -2339,7 +2340,7 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 		})
 
 		It("should advance KeepCursor to push.ToVersion (newer than pull's)", func() {
-			b, found, ferr := c.FindBinding(ctx, profile, page, listName)
+			b, found, ferr := c.FindSubscription(ctx, profile, page, listName)
 			Expect(ferr).ToNot(HaveOccurred())
 			Expect(found).To(BeTrue())
 			Expect(b.KeepCursor).To(Equal("v-3"))
@@ -2361,10 +2362,10 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 			c, store, kc, chk = freshConnector(profile, page, listName, listSrv, map[string]string{
 				"uid-A": "srv-A",
 			})
-			bs := keepsync.NewBindingStore(store)
+			bs := keepsync.NewSubscriptionStore(store)
 			st, loadErr := bs.LoadState(profile)
 			Expect(loadErr).ToNot(HaveOccurred())
-			st.Bindings[0].KeepCursor = "v-1"
+			st.Subscriptions[0].KeepCursor = "v-1"
 			Expect(bs.SaveState(profile, st)).To(Succeed())
 
 			chk.items = []*apiv1.ChecklistItem{
@@ -2381,7 +2382,7 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 		})
 
 		It("should NOT advance KeepCursor (truncation means missing data)", func() {
-			b, found, ferr := c.FindBinding(ctx, profile, page, listName)
+			b, found, ferr := c.FindSubscription(ctx, profile, page, listName)
 			Expect(ferr).ToNot(HaveOccurred())
 			Expect(found).To(BeTrue())
 			Expect(b.KeepCursor).To(Equal("v-1"))
@@ -2396,10 +2397,10 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 
 		BeforeEach(func() {
 			c, store, kc, chk = freshConnector(profile, page, listName, listSrv, map[string]string{})
-			bs := keepsync.NewBindingStore(store)
+			bs := keepsync.NewSubscriptionStore(store)
 			st, loadErr := bs.LoadState(profile)
 			Expect(loadErr).ToNot(HaveOccurred())
-			st.Bindings[0].KeepCursor = "v-1"
+			st.Subscriptions[0].KeepCursor = "v-1"
 			Expect(bs.SaveState(profile, st)).To(Succeed())
 
 			// No wiki items, no Keep items, empty Nodes slice in pull.
@@ -2412,7 +2413,7 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 		})
 
 		It("should advance KeepCursor even when no nodes changed", func() {
-			b, found, ferr := c.FindBinding(ctx, profile, page, listName)
+			b, found, ferr := c.FindSubscription(ctx, profile, page, listName)
 			Expect(ferr).ToNot(HaveOccurred())
 			Expect(found).To(BeTrue())
 			Expect(b.KeepCursor).To(Equal("v-2"))
@@ -2420,7 +2421,7 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 	})
 
 	// truncation_streak_increments_on_truncated_pull — task #79. Each
-	// truncated pull bumps Binding.TruncatedTickStreak by one.
+	// truncated pull bumps Subscription.TruncatedTickStreak by one.
 	Describe("truncation_streak_increments_on_truncated_pull", func() {
 		BeforeEach(func() {
 			c, _, kc, chk = freshConnector(profile, page, listName, listSrv, map[string]string{
@@ -2441,7 +2442,7 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 		})
 
 		It("should bump TruncatedTickStreak from 0 to 1 after first truncated pull", func() {
-			b, found, ferr := c.FindBinding(ctx, profile, page, listName)
+			b, found, ferr := c.FindSubscription(ctx, profile, page, listName)
 			Expect(ferr).ToNot(HaveOccurred())
 			Expect(found).To(BeTrue())
 			Expect(b.TruncatedTickStreak).To(Equal(1))
@@ -2454,7 +2455,7 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 			})
 
 			It("should bump TruncatedTickStreak from 1 to 2", func() {
-				b, found, ferr := c.FindBinding(ctx, profile, page, listName)
+				b, found, ferr := c.FindSubscription(ctx, profile, page, listName)
 				Expect(ferr).ToNot(HaveOccurred())
 				Expect(found).To(BeTrue())
 				Expect(b.TruncatedTickStreak).To(Equal(2))
@@ -2463,7 +2464,7 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 	})
 
 	// truncation_streak_resets_on_non_truncated_pull — task #79. Any
-	// non-truncated pull clears Binding.TruncatedTickStreak back to 0,
+	// non-truncated pull clears Subscription.TruncatedTickStreak back to 0,
 	// even if it was previously elevated.
 	Describe("truncation_streak_resets_on_non_truncated_pull", func() {
 		var store *fakeStore
@@ -2473,10 +2474,10 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 				"uid-A": "srv-A",
 			})
 			// Pre-set the streak to 3 so we can observe the reset.
-			bs := keepsync.NewBindingStore(store)
+			bs := keepsync.NewSubscriptionStore(store)
 			st, loadErr := bs.LoadState(profile)
 			Expect(loadErr).ToNot(HaveOccurred())
-			st.Bindings[0].TruncatedTickStreak = 3
+			st.Subscriptions[0].TruncatedTickStreak = 3
 			Expect(bs.SaveState(profile, st)).To(Succeed())
 
 			chk.items = []*apiv1.ChecklistItem{
@@ -2493,7 +2494,7 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 		})
 
 		It("should reset TruncatedTickStreak to 0 on a non-truncated pull", func() {
-			b, found, ferr := c.FindBinding(ctx, profile, page, listName)
+			b, found, ferr := c.FindSubscription(ctx, profile, page, listName)
 			Expect(ferr).ToNot(HaveOccurred())
 			Expect(found).To(BeTrue())
 			Expect(b.TruncatedTickStreak).To(Equal(0))
@@ -2513,11 +2514,11 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 			})
 			// Pre-existing streak just under threshold; a wiki edit will
 			// push and advance synced_fp this tick (progress observed).
-			bs := keepsync.NewBindingStore(store)
+			bs := keepsync.NewSubscriptionStore(store)
 			st, loadErr := bs.LoadState(profile)
 			Expect(loadErr).ToNot(HaveOccurred())
-			st.Bindings[0].KeepCursor = "v-prior"
-			st.Bindings[0].TruncatedTickStreak = truncationResyncThresholdInTests()
+			st.Subscriptions[0].KeepCursor = "v-prior"
+			st.Subscriptions[0].TruncatedTickStreak = truncationResyncThresholdInTests()
 			Expect(bs.SaveState(profile, st)).To(Succeed())
 
 			// Wiki text differs from Keep → push happens (synced_fp advances).
@@ -2538,14 +2539,14 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 		})
 
 		It("should NOT drop KeepCursor (progress was made via synced_fp advance)", func() {
-			b, found, ferr := c.FindBinding(ctx, profile, page, listName)
+			b, found, ferr := c.FindSubscription(ctx, profile, page, listName)
 			Expect(ferr).ToNot(HaveOccurred())
 			Expect(found).To(BeTrue())
 			Expect(b.KeepCursor).ToNot(BeEmpty())
 		})
 
 		It("should still increment the streak (truncated tick) but not reset it via the escape hatch", func() {
-			b, _, _ := c.FindBinding(ctx, profile, page, listName)
+			b, _, _ := c.FindSubscription(ctx, profile, page, listName)
 			Expect(b.TruncatedTickStreak).To(BeNumerically(">=", truncationResyncThresholdInTests()+1))
 		})
 	})
@@ -2569,11 +2570,11 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 
 			// Pre-set streak to one below threshold; this tick will be
 			// the threshold-crossing one.
-			bs := keepsync.NewBindingStore(store)
+			bs := keepsync.NewSubscriptionStore(store)
 			st, loadErr := bs.LoadState(profile)
 			Expect(loadErr).ToNot(HaveOccurred())
-			st.Bindings[0].KeepCursor = "v-stuck"
-			st.Bindings[0].TruncatedTickStreak = truncationResyncThresholdInTests() - 1
+			st.Subscriptions[0].KeepCursor = "v-stuck"
+			st.Subscriptions[0].TruncatedTickStreak = truncationResyncThresholdInTests() - 1
 			Expect(bs.SaveState(profile, st)).To(Succeed())
 
 			// Wiki and Keep agree, no synced_fp advance, no inbound mutation.
@@ -2594,14 +2595,14 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 		})
 
 		It("should drop KeepCursor to empty (forces full resync next tick)", func() {
-			b, found, ferr := c.FindBinding(ctx, profile, page, listName)
+			b, found, ferr := c.FindSubscription(ctx, profile, page, listName)
 			Expect(ferr).ToNot(HaveOccurred())
 			Expect(found).To(BeTrue())
 			Expect(b.KeepCursor).To(BeEmpty())
 		})
 
 		It("should reset TruncatedTickStreak to 0 after triggering the escape hatch", func() {
-			b, _, _ := c.FindBinding(ctx, profile, page, listName)
+			b, _, _ := c.FindSubscription(ctx, profile, page, listName)
 			Expect(b.TruncatedTickStreak).To(Equal(0))
 		})
 
@@ -2680,7 +2681,7 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 	})
 
 	// outbound_advances_synced_fp_after_successful_push — task #77.
-	// After a successful push, the ItemBinding's synced_fp must be
+	// After a successful push, the ItemMapping's synced_fp must be
 	// advanced to the just-pushed content. Without this, the next tick
 	// would re-read wiki_fp, compare against the unchanged synced_fp,
 	// and re-push the same edit forever.
@@ -2705,8 +2706,8 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 			Expect(c.SyncToKeep(ctx, profile, page, listName)).To(Succeed())
 		})
 
-		It("should advance ItemBinding.SyncedText to the pushed value", func() {
-			b, found, ferr := c.FindBinding(ctx, profile, page, listName)
+		It("should advance ItemMapping.SyncedText to the pushed value", func() {
+			b, found, ferr := c.FindSubscription(ctx, profile, page, listName)
 			Expect(ferr).ToNot(HaveOccurred())
 			Expect(found).To(BeTrue())
 			ib, ok := b.ItemIDMap["uid-A"]
@@ -2714,14 +2715,14 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 			Expect(ib.SyncedText).To(Equal("Green Apples"))
 		})
 
-		It("should advance ItemBinding.SyncedSortValue to the pushed value", func() {
-			b, _, _ := c.FindBinding(ctx, profile, page, listName)
+		It("should advance ItemMapping.SyncedSortValue to the pushed value", func() {
+			b, _, _ := c.FindSubscription(ctx, profile, page, listName)
 			Expect(b.ItemIDMap["uid-A"].SyncedSortValue).To(Equal("1000"))
 		})
 	})
 
 	// outbound_advances_synced_fp_for_fresh_items_after_push — task #77.
-	// Fresh items (no id_map entry pre-push) get an ItemBinding created
+	// Fresh items (no id_map entry pre-push) get an ItemMapping created
 	// during the response walk when Keep echoes back a server-assigned
 	// ID. That new entry must also carry synced_fp at the pushed values
 	// so the next tick sees wiki_fp == synced_fp.
@@ -2748,7 +2749,7 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 		})
 
 		It("should populate id_map[uid-NEW] with a serverID", func() {
-			b, found, ferr := c.FindBinding(ctx, profile, page, listName)
+			b, found, ferr := c.FindSubscription(ctx, profile, page, listName)
 			Expect(ferr).ToNot(HaveOccurred())
 			Expect(found).To(BeTrue())
 			ib, ok := b.ItemIDMap["uid-NEW"]
@@ -2757,7 +2758,7 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 		})
 
 		It("should populate id_map[uid-NEW] with the generated ClientID matching the push", func() {
-			b, found, ferr := c.FindBinding(ctx, profile, page, listName)
+			b, found, ferr := c.FindSubscription(ctx, profile, page, listName)
 			Expect(ferr).ToNot(HaveOccurred())
 			Expect(found).To(BeTrue())
 			ib := b.ItemIDMap["uid-NEW"]
@@ -2768,17 +2769,17 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 		})
 
 		It("should advance the new id_map entry's SyncedText", func() {
-			b, _, _ := c.FindBinding(ctx, profile, page, listName)
+			b, _, _ := c.FindSubscription(ctx, profile, page, listName)
 			Expect(b.ItemIDMap["uid-NEW"].SyncedText).To(Equal("Bread"))
 		})
 
 		It("should advance the new id_map entry's SyncedChecked", func() {
-			b, _, _ := c.FindBinding(ctx, profile, page, listName)
+			b, _, _ := c.FindSubscription(ctx, profile, page, listName)
 			Expect(b.ItemIDMap["uid-NEW"].SyncedChecked).To(BeFalse())
 		})
 
 		It("should advance the new id_map entry's SyncedSortValue", func() {
-			b, _, _ := c.FindBinding(ctx, profile, page, listName)
+			b, _, _ := c.FindSubscription(ctx, profile, page, listName)
 			Expect(b.ItemIDMap["uid-NEW"].SyncedSortValue).To(Equal("2000"))
 		})
 	})
@@ -2808,7 +2809,7 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 		})
 
 		It("should advance SyncedText for the wiki-added item", func() {
-			b, found, ferr := c.FindBinding(ctx, profile, page, listName)
+			b, found, ferr := c.FindSubscription(ctx, profile, page, listName)
 			Expect(ferr).ToNot(HaveOccurred())
 			Expect(found).To(BeTrue())
 			ib := b.ItemIDMap["uid-NEW"]
@@ -2817,12 +2818,12 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 		})
 
 		It("should NOT increment PushFailureCount", func() {
-			b, _, _ := c.FindBinding(ctx, profile, page, listName)
+			b, _, _ := c.FindSubscription(ctx, profile, page, listName)
 			Expect(b.ItemIDMap["uid-NEW"].PushFailureCount).To(Equal(0))
 		})
 
 		It("should NOT set LastFailureCode", func() {
-			b, _, _ := c.FindBinding(ctx, profile, page, listName)
+			b, _, _ := c.FindSubscription(ctx, profile, page, listName)
 			Expect(b.ItemIDMap["uid-NEW"].LastFailureCode).To(BeEmpty())
 		})
 	})
@@ -2863,27 +2864,27 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 		})
 
 		It("should advance synced_fp for the SUCCESS uid", func() {
-			b, _, _ := c.FindBinding(ctx, profile, page, listName)
+			b, _, _ := c.FindSubscription(ctx, profile, page, listName)
 			Expect(b.ItemIDMap["uid-A"].SyncedText).To(Equal("Green Apples"))
 		})
 
 		It("should reset PushFailureCount to 0 for the SUCCESS uid", func() {
-			b, _, _ := c.FindBinding(ctx, profile, page, listName)
+			b, _, _ := c.FindSubscription(ctx, profile, page, listName)
 			Expect(b.ItemIDMap["uid-A"].PushFailureCount).To(Equal(0))
 		})
 
 		It("should leave synced_fp at its prior baseline for the ERROR uid", func() {
-			b, _, _ := c.FindBinding(ctx, profile, page, listName)
+			b, _, _ := c.FindSubscription(ctx, profile, page, listName)
 			Expect(b.ItemIDMap["uid-B"].SyncedText).To(Equal("Bananas"))
 		})
 
 		It("should set PushFailureCount=1 for the ERROR uid", func() {
-			b, _, _ := c.FindBinding(ctx, profile, page, listName)
+			b, _, _ := c.FindSubscription(ctx, profile, page, listName)
 			Expect(b.ItemIDMap["uid-B"].PushFailureCount).To(Equal(1))
 		})
 
 		It("should set LastFailureCode to the Keep status for the ERROR uid", func() {
-			b, _, _ := c.FindBinding(ctx, profile, page, listName)
+			b, _, _ := c.FindSubscription(ctx, profile, page, listName)
 			Expect(b.ItemIDMap["uid-B"].LastFailureCode).To(Equal("ERROR"))
 		})
 	})
@@ -2918,22 +2919,22 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 		})
 
 		It("should leave SyncedText unchanged at the prior baseline", func() {
-			b, _, _ := c.FindBinding(ctx, profile, page, listName)
+			b, _, _ := c.FindSubscription(ctx, profile, page, listName)
 			Expect(b.ItemIDMap["uid-A"].SyncedText).To(Equal("Apples"))
 		})
 
 		It("should set PushFailureCount to 1", func() {
-			b, _, _ := c.FindBinding(ctx, profile, page, listName)
+			b, _, _ := c.FindSubscription(ctx, profile, page, listName)
 			Expect(b.ItemIDMap["uid-A"].PushFailureCount).To(Equal(1))
 		})
 
 		It("should set LastFailureCode to the returned status", func() {
-			b, _, _ := c.FindBinding(ctx, profile, page, listName)
+			b, _, _ := c.FindSubscription(ctx, profile, page, listName)
 			Expect(b.ItemIDMap["uid-A"].LastFailureCode).To(Equal("ERROR"))
 		})
 
 		It("should set NextAttemptAt to now+60s", func() {
-			b, _, _ := c.FindBinding(ctx, profile, page, listName)
+			b, _, _ := c.FindSubscription(ctx, profile, page, listName)
 			expected := tNow.Add(60 * time.Second)
 			Expect(b.ItemIDMap["uid-A"].NextAttemptAt).To(BeTemporally("~", expected, time.Second))
 		})
@@ -2969,17 +2970,17 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 		})
 
 		It("should leave SyncedText at the prior baseline", func() {
-			b, _, _ := c.FindBinding(ctx, profile, page, listName)
+			b, _, _ := c.FindSubscription(ctx, profile, page, listName)
 			Expect(b.ItemIDMap["uid-A"].SyncedText).To(Equal("Apples"))
 		})
 
 		It("should bump PushFailureCount to 1", func() {
-			b, _, _ := c.FindBinding(ctx, profile, page, listName)
+			b, _, _ := c.FindSubscription(ctx, profile, page, listName)
 			Expect(b.ItemIDMap["uid-A"].PushFailureCount).To(Equal(1))
 		})
 
 		It("should set LastFailureCode to the no_response_status sentinel", func() {
-			b, _, _ := c.FindBinding(ctx, profile, page, listName)
+			b, _, _ := c.FindSubscription(ctx, profile, page, listName)
 			Expect(b.ItemIDMap["uid-A"].LastFailureCode).To(Equal("no_response_status"))
 		})
 	})
@@ -3005,14 +3006,14 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 			}
 			seedSyncedFromKeep(profile, page, listName, store, kc.pullState.Nodes)
 			// Pre-set the failure state directly.
-			bs := keepsync.NewBindingStore(store)
+			bs := keepsync.NewSubscriptionStore(store)
 			st, loadErr := bs.LoadState(profile)
 			Expect(loadErr).ToNot(HaveOccurred())
-			ib := st.Bindings[0].ItemIDMap["uid-A"]
+			ib := st.Subscriptions[0].ItemIDMap["uid-A"]
 			ib.PushFailureCount = 5
 			ib.LastFailureCode = "rate_limited"
 			ib.NextAttemptAt = tStaleA // already-past, won't gate
-			st.Bindings[0].ItemIDMap["uid-A"] = ib
+			st.Subscriptions[0].ItemIDMap["uid-A"] = ib
 			Expect(bs.SaveState(profile, st)).To(Succeed())
 
 			kc.pushResponse = gateway.ChangesResponse{
@@ -3025,17 +3026,17 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 		})
 
 		It("should reset PushFailureCount to 0", func() {
-			b, _, _ := c.FindBinding(ctx, profile, page, listName)
+			b, _, _ := c.FindSubscription(ctx, profile, page, listName)
 			Expect(b.ItemIDMap["uid-A"].PushFailureCount).To(Equal(0))
 		})
 
 		It("should clear LastFailureCode", func() {
-			b, _, _ := c.FindBinding(ctx, profile, page, listName)
+			b, _, _ := c.FindSubscription(ctx, profile, page, listName)
 			Expect(b.ItemIDMap["uid-A"].LastFailureCode).To(Equal(""))
 		})
 
 		It("should clear NextAttemptAt", func() {
-			b, _, _ := c.FindBinding(ctx, profile, page, listName)
+			b, _, _ := c.FindSubscription(ctx, profile, page, listName)
 			Expect(b.ItemIDMap["uid-A"].NextAttemptAt.IsZero()).To(BeTrue())
 		})
 	})
@@ -3064,13 +3065,13 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 			}
 			seedSyncedFromKeep(profile, page, listName, store, kc.pullState.Nodes)
 			// Dead-letter uid-A.
-			bs := keepsync.NewBindingStore(store)
+			bs := keepsync.NewSubscriptionStore(store)
 			st, loadErr := bs.LoadState(profile)
 			Expect(loadErr).ToNot(HaveOccurred())
-			ib := st.Bindings[0].ItemIDMap["uid-A"]
+			ib := st.Subscriptions[0].ItemIDMap["uid-A"]
 			ib.PushFailureCount = 10
 			ib.LastFailureCode = "permanent_failure"
-			st.Bindings[0].ItemIDMap["uid-A"] = ib
+			st.Subscriptions[0].ItemIDMap["uid-A"] = ib
 			Expect(bs.SaveState(profile, st)).To(Succeed())
 			Expect(c.SyncToKeep(ctx, profile, page, listName)).To(Succeed())
 		})
@@ -3096,7 +3097,7 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 		})
 
 		It("should preserve the dead-lettered item's PushFailureCount", func() {
-			b, _, _ := c.FindBinding(ctx, profile, page, listName)
+			b, _, _ := c.FindSubscription(ctx, profile, page, listName)
 			Expect(b.ItemIDMap["uid-A"].PushFailureCount).To(Equal(10))
 		})
 	})
@@ -3126,15 +3127,15 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 			// Pre-set: dead-lettered + LastObservedWiki* records the
 			// PRE-edit wiki state. Wiki_fp now differs from
 			// LastObservedWiki* → reset.
-			bs := keepsync.NewBindingStore(store)
+			bs := keepsync.NewSubscriptionStore(store)
 			st, loadErr := bs.LoadState(profile)
 			Expect(loadErr).ToNot(HaveOccurred())
-			ib := st.Bindings[0].ItemIDMap["uid-A"]
+			ib := st.Subscriptions[0].ItemIDMap["uid-A"]
 			ib.PushFailureCount = 10
 			ib.LastFailureCode = "rate_limited"
 			ib.LastObservedWikiText = "old text"
 			ib.LastObservedWikiSortValue = "1000"
-			st.Bindings[0].ItemIDMap["uid-A"] = ib
+			st.Subscriptions[0].ItemIDMap["uid-A"] = ib
 			Expect(bs.SaveState(profile, st)).To(Succeed())
 			Expect(c.SyncToKeep(ctx, profile, page, listName)).To(Succeed())
 		})
@@ -3145,12 +3146,12 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 		})
 
 		It("should reset PushFailureCount to 0", func() {
-			b, _, _ := c.FindBinding(ctx, profile, page, listName)
+			b, _, _ := c.FindSubscription(ctx, profile, page, listName)
 			Expect(b.ItemIDMap["uid-A"].PushFailureCount).To(Equal(0))
 		})
 
 		It("should clear LastFailureCode", func() {
-			b, _, _ := c.FindBinding(ctx, profile, page, listName)
+			b, _, _ := c.FindSubscription(ctx, profile, page, listName)
 			Expect(b.ItemIDMap["uid-A"].LastFailureCode).To(Equal(""))
 		})
 	})
@@ -3176,12 +3177,12 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 		})
 
 		It("should populate LastObservedWikiText for items in id_map", func() {
-			b, _, _ := c.FindBinding(ctx, profile, page, listName)
+			b, _, _ := c.FindSubscription(ctx, profile, page, listName)
 			Expect(b.ItemIDMap["uid-A"].LastObservedWikiText).To(Equal("Apples"))
 		})
 
 		It("should populate LastObservedWikiSortValue for items in id_map", func() {
-			b, _, _ := c.FindBinding(ctx, profile, page, listName)
+			b, _, _ := c.FindSubscription(ctx, profile, page, listName)
 			Expect(b.ItemIDMap["uid-A"].LastObservedWikiSortValue).To(Equal("1000"))
 		})
 	})
@@ -3206,14 +3207,14 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 				},
 			}
 			seedSyncedFromKeep(profile, page, listName, store, kc.pullState.Nodes)
-			bs := keepsync.NewBindingStore(store)
+			bs := keepsync.NewSubscriptionStore(store)
 			st, loadErr := bs.LoadState(profile)
 			Expect(loadErr).ToNot(HaveOccurred())
-			ib := st.Bindings[0].ItemIDMap["uid-A"]
+			ib := st.Subscriptions[0].ItemIDMap["uid-A"]
 			ib.PushFailureCount = 1
 			ib.LastFailureCode = "rate_limited"
 			ib.NextAttemptAt = tNow.Add(60 * time.Second)
-			st.Bindings[0].ItemIDMap["uid-A"] = ib
+			st.Subscriptions[0].ItemIDMap["uid-A"] = ib
 			Expect(bs.SaveState(profile, st)).To(Succeed())
 			Expect(c.SyncToKeep(ctx, profile, page, listName)).To(Succeed())
 		})
@@ -3223,7 +3224,7 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 		})
 
 		It("should preserve PushFailureCount during the backoff skip", func() {
-			b, _, _ := c.FindBinding(ctx, profile, page, listName)
+			b, _, _ := c.FindSubscription(ctx, profile, page, listName)
 			Expect(b.ItemIDMap["uid-A"].PushFailureCount).To(Equal(1))
 		})
 	})
@@ -3249,13 +3250,13 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 			seedSyncedFromKeep(profile, page, listName, store, kc.pullState.Nodes)
 			// Pre-existing 2 failures → this one becomes the 3rd, so
 			// NextAttemptAt = now + 60 * 2^2 = 240s.
-			bs := keepsync.NewBindingStore(store)
+			bs := keepsync.NewSubscriptionStore(store)
 			st, loadErr := bs.LoadState(profile)
 			Expect(loadErr).ToNot(HaveOccurred())
-			ib := st.Bindings[0].ItemIDMap["uid-A"]
+			ib := st.Subscriptions[0].ItemIDMap["uid-A"]
 			ib.PushFailureCount = 2
 			ib.LastFailureCode = "rate_limited"
-			st.Bindings[0].ItemIDMap["uid-A"] = ib
+			st.Subscriptions[0].ItemIDMap["uid-A"] = ib
 			Expect(bs.SaveState(profile, st)).To(Succeed())
 
 			kc.pushResponse = gateway.ChangesResponse{
@@ -3268,12 +3269,12 @@ var _ = Describe("Connector.SyncToKeep — interaction matrix", func() {
 		})
 
 		It("should advance PushFailureCount to 3", func() {
-			b, _, _ := c.FindBinding(ctx, profile, page, listName)
+			b, _, _ := c.FindSubscription(ctx, profile, page, listName)
 			Expect(b.ItemIDMap["uid-A"].PushFailureCount).To(Equal(3))
 		})
 
 		It("should set NextAttemptAt to now + 240s (60 * 2^2)", func() {
-			b, _, _ := c.FindBinding(ctx, profile, page, listName)
+			b, _, _ := c.FindSubscription(ctx, profile, page, listName)
 			expected := tNow.Add(240 * time.Second)
 			Expect(b.ItemIDMap["uid-A"].NextAttemptAt).To(BeTemporally("~", expected, time.Second))
 		})
@@ -3434,7 +3435,7 @@ func truncationResyncThresholdInTests() int {
 // plan rejected). The gate also throttles its INFO log to the first
 // skip per binding per process so a stuck-un-migrated binding doesn't
 // spam the journal at the cron cadence.
-var _ = Describe("MigrateBindingFingerprints — full-pull and cursor reset", func() {
+var _ = Describe("MigrateSubscriptionFingerprints — full-pull and cursor reset", func() {
 	var (
 		ctx = context.Background()
 		c   *keepsync.Connector
@@ -3466,11 +3467,11 @@ var _ = Describe("MigrateBindingFingerprints — full-pull and cursor reset", fu
 			}
 			// Pre-set MigratedFingerprints=false (legacy) and a stale
 			// KeepCursor so we can verify the migration ignores it.
-			bs := keepsync.NewBindingStore(store)
+			bs := keepsync.NewSubscriptionStore(store)
 			st, loadErr := bs.LoadState(profile)
 			Expect(loadErr).ToNot(HaveOccurred())
-			st.Bindings[0].MigratedFingerprints = false
-			st.Bindings[0].KeepCursor = "v-stale-cursor"
+			st.Subscriptions[0].MigratedFingerprints = false
+			st.Subscriptions[0].KeepCursor = "v-stale-cursor"
 			Expect(bs.SaveState(profile, st)).To(Succeed())
 
 			kc.pullState = gateway.ChangesResponse{
@@ -3481,7 +3482,7 @@ var _ = Describe("MigrateBindingFingerprints — full-pull and cursor reset", fu
 				Truncated:   false,
 				Incremental: false,
 			}
-			Expect(c.MigrateBindingFingerprints(ctx, profile, page, listName)).To(Succeed())
+			Expect(c.MigrateSubscriptionFingerprints(ctx, profile, page, listName)).To(Succeed())
 		})
 
 		It("should issue exactly one pull", func() {
@@ -3508,10 +3509,10 @@ var _ = Describe("MigrateBindingFingerprints — full-pull and cursor reset", fu
 			chk.items = []*apiv1.ChecklistItem{
 				{Uid: "uid-A", Text: "Apples", SortOrder: 1000, UpdatedAt: timestamppb.New(time.Now())},
 			}
-			bs := keepsync.NewBindingStore(store)
+			bs := keepsync.NewSubscriptionStore(store)
 			st, loadErr := bs.LoadState(profile)
 			Expect(loadErr).ToNot(HaveOccurred())
-			st.Bindings[0].MigratedFingerprints = false
+			st.Subscriptions[0].MigratedFingerprints = false
 			Expect(bs.SaveState(profile, st)).To(Succeed())
 
 			kc.pullState = gateway.ChangesResponse{
@@ -3522,18 +3523,18 @@ var _ = Describe("MigrateBindingFingerprints — full-pull and cursor reset", fu
 				Truncated:   false,
 				Incremental: false,
 			}
-			Expect(c.MigrateBindingFingerprints(ctx, profile, page, listName)).To(Succeed())
+			Expect(c.MigrateSubscriptionFingerprints(ctx, profile, page, listName)).To(Succeed())
 		})
 
 		It("should clear KeepCursor", func() {
-			b, found, ferr := c.FindBinding(ctx, profile, page, listName)
+			b, found, ferr := c.FindSubscription(ctx, profile, page, listName)
 			Expect(ferr).ToNot(HaveOccurred())
 			Expect(found).To(BeTrue())
 			Expect(b.KeepCursor).To(BeEmpty())
 		})
 
 		It("should still stamp MigratedFingerprints=true", func() {
-			b, found, ferr := c.FindBinding(ctx, profile, page, listName)
+			b, found, ferr := c.FindSubscription(ctx, profile, page, listName)
 			Expect(ferr).ToNot(HaveOccurred())
 			Expect(found).To(BeTrue())
 			Expect(b.MigratedFingerprints).To(BeTrue())
@@ -3563,10 +3564,10 @@ var _ = Describe("SyncToKeep — un-migrated binding gate", func() {
 			})
 			// Flip the default born-migrated to false to express
 			// the legacy-on-disk shape.
-			bs := keepsync.NewBindingStore(store)
+			bs := keepsync.NewSubscriptionStore(store)
 			st, loadErr := bs.LoadState(profile)
 			Expect(loadErr).ToNot(HaveOccurred())
-			st.Bindings[0].MigratedFingerprints = false
+			st.Subscriptions[0].MigratedFingerprints = false
 			Expect(bs.SaveState(profile, st)).To(Succeed())
 
 			err = c.SyncToKeep(context.Background(), profile, page, listName)
@@ -3596,10 +3597,10 @@ var _ = Describe("SyncToKeep — un-migrated binding gate", func() {
 			lg = &fakeInfoLogger{}
 			c.SetDebugLogger(lg)
 
-			bs := keepsync.NewBindingStore(store)
+			bs := keepsync.NewSubscriptionStore(store)
 			st, loadErr := bs.LoadState(profile)
 			Expect(loadErr).ToNot(HaveOccurred())
-			st.Bindings[0].MigratedFingerprints = false
+			st.Subscriptions[0].MigratedFingerprints = false
 			Expect(bs.SaveState(profile, st)).To(Succeed())
 
 			Expect(c.SyncToKeep(context.Background(), profile, page, listName)).To(Succeed())
@@ -3620,7 +3621,7 @@ var _ = Describe("SyncToKeep — un-migrated binding gate", func() {
 	})
 
 	Describe("when a freshly-bound binding is created via Bind", func() {
-		var b keepsync.Binding
+		var b keepsync.Subscription
 
 		BeforeEach(func() {
 			c, store, _, _ := freshConnector(profile, page, listName, listSrv, map[string]string{
@@ -3628,10 +3629,10 @@ var _ = Describe("SyncToKeep — un-migrated binding gate", func() {
 			})
 			// Drop the seeded binding so Bind() runs against a clean
 			// connected-but-no-bindings state.
-			bs := keepsync.NewBindingStore(store)
+			bs := keepsync.NewSubscriptionStore(store)
 			st, loadErr := bs.LoadState(profile)
 			Expect(loadErr).ToNot(HaveOccurred())
-			st.Bindings = nil
+			st.Subscriptions = nil
 			Expect(bs.SaveState(profile, st)).To(Succeed())
 
 			var bindErr error
@@ -3656,17 +3657,18 @@ var _ = Describe("SyncToKeep — un-migrated binding gate", func() {
 			lg1 := &fakeInfoLogger{}
 			c1.SetDebugLogger(lg1)
 
-			bs := keepsync.NewBindingStore(store)
+			bs := keepsync.NewSubscriptionStore(store)
 			st, loadErr := bs.LoadState(profile)
 			Expect(loadErr).ToNot(HaveOccurred())
-			st.Bindings[0].MigratedFingerprints = false
+			st.Subscriptions[0].MigratedFingerprints = false
 			Expect(bs.SaveState(profile, st)).To(Succeed())
 
 			Expect(c1.SyncToKeep(context.Background(), profile, page, listName)).To(Succeed())
 
 			// Simulate a process restart: build a NEW Connector against
 			// the same store. The throttle map must reset.
-			c2 := keepsync.NewConnector(keepsync.NewBindingStore(store), nil, fakeClock{})
+			c2, nerr := keepsync.NewConnector(keepsync.NewSubscriptionStore(store), newReadyLeaseTable(), nil, fakeClock{})
+			Expect(nerr).ToNot(HaveOccurred())
 			c2.SetClientBuilder(func(_ string) keepsync.KeepClient { return &fakeKeepClient{} })
 			c2.SetAuthBuilder(func(_ string) keepsync.AuthExchanger { return fakeAuth{} })
 			c2.SetChecklistReader(&fakeChecklist{})
@@ -3697,7 +3699,7 @@ var _ = Describe("SyncToKeep — un-migrated binding gate", func() {
 // only carry items that CHANGED since the last cursor — items that
 // didn't change are silently absent. Per-pull-derived state used in
 // the push path (BaseVersion, ClientID) must therefore be persisted
-// on ItemBinding to survive incremental pulls; the per-pull maps
+// on ItemMapping to survive incremental pulls; the per-pull maps
 // are only for ABSORBING fresh values. Without this, the second
 // post-cursor push 500s with empty baseVersion (Keep's OCC token).
 var _ = Describe("SyncToKeep — persisted pull-derived state on incremental pulls", func() {
@@ -3732,11 +3734,11 @@ var _ = Describe("SyncToKeep — persisted pull-derived state on incremental pul
 			// Simulate the post-task-#75 steady state: this binding
 			// previously synced with Keep, captured BaseVersion +
 			// ClientID at that time, and stored them on the
-			// ItemBinding. Pre-populate that persisted state.
-			bs := keepsync.NewBindingStore(store)
+			// ItemMapping. Pre-populate that persisted state.
+			bs := keepsync.NewSubscriptionStore(store)
 			st, loadErr := bs.LoadState(profile)
 			Expect(loadErr).ToNot(HaveOccurred())
-			ib := st.Bindings[0].ItemIDMap["uid-A"]
+			ib := st.Subscriptions[0].ItemIDMap["uid-A"]
 			ib.BaseVersion = "v-base-A-persisted"
 			ib.ClientID = "client-A-persisted"
 			// Seed synced_fp from the prior baseline (Keep at
@@ -3745,7 +3747,7 @@ var _ = Describe("SyncToKeep — persisted pull-derived state on incremental pul
 			ib.SyncedText = "Apples"
 			ib.SyncedChecked = false
 			ib.SyncedSortValue = "1000"
-			st.Bindings[0].ItemIDMap["uid-A"] = ib
+			st.Subscriptions[0].ItemIDMap["uid-A"] = ib
 			Expect(bs.SaveState(profile, st)).To(Succeed())
 
 			// Incremental pull that does NOT contain srv-A — Keep's
@@ -3782,11 +3784,11 @@ var _ = Describe("SyncToKeep — persisted pull-derived state on incremental pul
 			chk.items = []*apiv1.ChecklistItem{
 				{Uid: "uid-A", Text: "Apples", SortOrder: 1000, UpdatedAt: recentTime()},
 			}
-			// Seed an OLD BaseVersion on the persisted ItemBinding.
-			bs := keepsync.NewBindingStore(store)
+			// Seed an OLD BaseVersion on the persisted ItemMapping.
+			bs := keepsync.NewSubscriptionStore(store)
 			st, loadErr := bs.LoadState(profile)
 			Expect(loadErr).ToNot(HaveOccurred())
-			ib := st.Bindings[0].ItemIDMap["uid-A"]
+			ib := st.Subscriptions[0].ItemIDMap["uid-A"]
 			ib.BaseVersion = "v-old"
 			ib.ClientID = "client-A-old"
 			// Match synced_fp to the pull's content so this is a
@@ -3796,12 +3798,12 @@ var _ = Describe("SyncToKeep — persisted pull-derived state on incremental pul
 			ib.SyncedText = "Apples"
 			ib.SyncedChecked = false
 			ib.SyncedSortValue = "1000"
-			st.Bindings[0].ItemIDMap["uid-A"] = ib
+			st.Subscriptions[0].ItemIDMap["uid-A"] = ib
 			Expect(bs.SaveState(profile, st)).To(Succeed())
 
 			// Pull DOES contain srv-A this time, with a NEW
 			// BaseVersion. The connector should absorb it into
-			// the persisted ItemBinding.
+			// the persisted ItemMapping.
 			node := keepItem("srv-A", "client-A-new", listSrv, "Apples", false, "1000")
 			node.BaseVersion = "v-new"
 			kc.pullState = gateway.ChangesResponse{
@@ -3813,14 +3815,14 @@ var _ = Describe("SyncToKeep — persisted pull-derived state on incremental pul
 		})
 
 		It("should update persisted BaseVersion to the value from the pull", func() {
-			b, found, err := c.FindBinding(ctx, profile, page, listName)
+			b, found, err := c.FindSubscription(ctx, profile, page, listName)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(found).To(BeTrue())
 			Expect(b.ItemIDMap["uid-A"].BaseVersion).To(Equal("v-new"))
 		})
 
 		It("should update persisted ClientID to the value from the pull", func() {
-			b, found, err := c.FindBinding(ctx, profile, page, listName)
+			b, found, err := c.FindSubscription(ctx, profile, page, listName)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(found).To(BeTrue())
 			Expect(b.ItemIDMap["uid-A"].ClientID).To(Equal("client-A-new"))
@@ -3839,14 +3841,14 @@ var _ = Describe("SyncToKeep — persisted pull-derived state on incremental pul
 			}
 			// Legacy un-migrated binding: no BaseVersion / ClientID
 			// persisted yet, MigratedFingerprints=false.
-			bs := keepsync.NewBindingStore(store)
+			bs := keepsync.NewSubscriptionStore(store)
 			st, loadErr := bs.LoadState(profile)
 			Expect(loadErr).ToNot(HaveOccurred())
-			st.Bindings[0].MigratedFingerprints = false
-			ib := st.Bindings[0].ItemIDMap["uid-A"]
+			st.Subscriptions[0].MigratedFingerprints = false
+			ib := st.Subscriptions[0].ItemIDMap["uid-A"]
 			ib.BaseVersion = ""
 			ib.ClientID = ""
-			st.Bindings[0].ItemIDMap["uid-A"] = ib
+			st.Subscriptions[0].ItemIDMap["uid-A"] = ib
 			Expect(bs.SaveState(profile, st)).To(Succeed())
 
 			node := keepItem("srv-A", "client-A-migrate", listSrv, "Apples", false, "1000")
@@ -3856,18 +3858,18 @@ var _ = Describe("SyncToKeep — persisted pull-derived state on incremental pul
 				Incremental: false,
 				Nodes:       []gateway.Node{node},
 			}
-			Expect(c.MigrateBindingFingerprints(ctx, profile, page, listName)).To(Succeed())
+			Expect(c.MigrateSubscriptionFingerprints(ctx, profile, page, listName)).To(Succeed())
 		})
 
 		It("should stamp BaseVersion from the migration's full pull", func() {
-			b, found, err := c.FindBinding(ctx, profile, page, listName)
+			b, found, err := c.FindSubscription(ctx, profile, page, listName)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(found).To(BeTrue())
 			Expect(b.ItemIDMap["uid-A"].BaseVersion).To(Equal("v-base-A-migrate"))
 		})
 
 		It("should stamp ClientID from the migration's full pull", func() {
-			b, found, err := c.FindBinding(ctx, profile, page, listName)
+			b, found, err := c.FindSubscription(ctx, profile, page, listName)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(found).To(BeTrue())
 			Expect(b.ItemIDMap["uid-A"].ClientID).To(Equal("client-A-migrate"))
@@ -3899,10 +3901,10 @@ var _ = Describe("SyncToKeep — persisted pull-derived state on incremental pul
 			// Pre-populate the persisted label FK on the binding —
 			// simulating "a previous successful pull captured this
 			// label's MainID."
-			bs := keepsync.NewBindingStore(store)
+			bs := keepsync.NewSubscriptionStore(store)
 			st, loadErr := bs.LoadState(profile)
 			Expect(loadErr).ToNot(HaveOccurred())
-			st.Bindings[0].LabelIDs = map[string]string{
+			st.Subscriptions[0].LabelIDs = map[string]string{
 				"household": "stable-mid-1",
 			}
 			Expect(bs.SaveState(profile, st)).To(Succeed())
@@ -3969,7 +3971,7 @@ var _ = Describe("SyncToKeep — persisted pull-derived state on incremental pul
 		})
 
 		It("should persist the label name → MainID mapping on the binding", func() {
-			b, found, err := c.FindBinding(ctx, profile, page, listName)
+			b, found, err := c.FindSubscription(ctx, profile, page, listName)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(found).To(BeTrue())
 			Expect(b.LabelIDs).To(HaveKeyWithValue("newtag", "abc"))
@@ -4000,10 +4002,10 @@ var _ = Describe("SyncToKeep — persisted pull-derived state on incremental pul
 				{Uid: "uid-A", Text: "Apples", SortOrder: 1000, UpdatedAt: recentTime()},
 			}
 
-			bs := keepsync.NewBindingStore(store)
+			bs := keepsync.NewSubscriptionStore(store)
 			st, loadErr := bs.LoadState(profile)
 			Expect(loadErr).ToNot(HaveOccurred())
-			st.Bindings[0].LabelIDs = map[string]string{
+			st.Subscriptions[0].LabelIDs = map[string]string{
 				"tombstoned": "old-mid",
 			}
 			Expect(bs.SaveState(profile, st)).To(Succeed())
@@ -4019,7 +4021,7 @@ var _ = Describe("SyncToKeep — persisted pull-derived state on incremental pul
 		})
 
 		It("should evict the dead MainID and replace it with the freshly-minted one", func() {
-			b, found, err := c.FindBinding(ctx, profile, page, listName)
+			b, found, err := c.FindSubscription(ctx, profile, page, listName)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(found).To(BeTrue())
 			// The tombstone-eviction step removes the dead MainID;
@@ -4040,8 +4042,8 @@ var _ = Describe("SyncToKeep — persisted pull-derived state on incremental pul
 })
 
 // Bind seeding tests. seedIDMapFromExistingList captures per-item
-// pull data into the ItemBinding (ServerID, BaseVersion, ClientID)
-// AND captures per-name → MainID for labels into Binding.LabelIDs,
+// pull data into the ItemMapping (ServerID, BaseVersion, ClientID)
+// AND captures per-name → MainID for labels into Subscription.LabelIDs,
 // so a fresh post-bind sync doesn't 500 on outbound updates and
 // doesn't spam Keep with duplicate labels.
 var _ = Describe("Bind — initial seed captures BaseVersion, ClientID, and LabelIDs", func() {
@@ -4063,17 +4065,17 @@ var _ = Describe("Bind — initial seed captures BaseVersion, ClientID, and Labe
 	})
 
 	Describe("bind_seeds_BaseVersion_and_ClientID_per_item", func() {
-		var b keepsync.Binding
+		var b keepsync.Subscription
 
 		BeforeEach(func() {
 			var store *fakeStore
 			c, store, kc, _ = freshConnector(profile, page, listName, listSrv, map[string]string{})
 			// Drop the seeded binding so Bind() runs against a clean
 			// connected-but-no-bindings state.
-			bs := keepsync.NewBindingStore(store)
+			bs := keepsync.NewSubscriptionStore(store)
 			st, loadErr := bs.LoadState(profile)
 			Expect(loadErr).ToNot(HaveOccurred())
-			st.Bindings = nil
+			st.Subscriptions = nil
 			Expect(bs.SaveState(profile, st)).To(Succeed())
 
 			// Fake Keep client returns a pull with two items, each
@@ -4112,15 +4114,15 @@ var _ = Describe("Bind — initial seed captures BaseVersion, ClientID, and Labe
 	})
 
 	Describe("bind_seeds_LabelIDs_from_initial_pull", func() {
-		var b keepsync.Binding
+		var b keepsync.Subscription
 
 		BeforeEach(func() {
 			var store *fakeStore
 			c, store, kc, _ = freshConnector(profile, page, listName, listSrv, map[string]string{})
-			bs := keepsync.NewBindingStore(store)
+			bs := keepsync.NewSubscriptionStore(store)
 			st, loadErr := bs.LoadState(profile)
 			Expect(loadErr).ToNot(HaveOccurred())
-			st.Bindings = nil
+			st.Subscriptions = nil
 			Expect(bs.SaveState(profile, st)).To(Succeed())
 
 			kc.pullState = gateway.ChangesResponse{
@@ -4144,12 +4146,12 @@ var _ = Describe("Bind — initial seed captures BaseVersion, ClientID, and Labe
 	})
 })
 
-// Migration LabelIDs seeding test. MigrateBindingFingerprints must
-// also capture the full pull's labels into Binding.LabelIDs so the
+// Migration LabelIDs seeding test. MigrateSubscriptionFingerprints must
+// also capture the full pull's labels into Subscription.LabelIDs so the
 // first post-migration tick (which is incremental on every
 // subsequent tick after the initial full pull) doesn't re-mint
 // fresh label MainIDs.
-var _ = Describe("MigrateBindingFingerprints — seeds LabelIDs from full pull", func() {
+var _ = Describe("MigrateSubscriptionFingerprints — seeds LabelIDs from full pull", func() {
 	const (
 		profile  = wikipage.PageIdentifier("profile_test_migrate_labels")
 		page     = "shopping"
@@ -4178,10 +4180,10 @@ var _ = Describe("MigrateBindingFingerprints — seeds LabelIDs from full pull",
 				{Uid: "uid-A", Text: "Apples", SortOrder: 1000, UpdatedAt: recentTime()},
 			}
 
-			bs := keepsync.NewBindingStore(store)
+			bs := keepsync.NewSubscriptionStore(store)
 			st, loadErr := bs.LoadState(profile)
 			Expect(loadErr).ToNot(HaveOccurred())
-			st.Bindings[0].MigratedFingerprints = false
+			st.Subscriptions[0].MigratedFingerprints = false
 			Expect(bs.SaveState(profile, st)).To(Succeed())
 
 			node := keepItem("srv-A", "client-A", listSrv, "Apples", false, "1000")
@@ -4195,18 +4197,18 @@ var _ = Describe("MigrateBindingFingerprints — seeds LabelIDs from full pull",
 					{MainID: "tombstoned-mid", Name: "tombstoned", Deleted: tNow},
 				},
 			}
-			Expect(c.MigrateBindingFingerprints(ctx, profile, page, listName)).To(Succeed())
+			Expect(c.MigrateSubscriptionFingerprints(ctx, profile, page, listName)).To(Succeed())
 		})
 
-		It("should capture live labels by name → MainID into Binding.LabelIDs", func() {
-			b, found, err := c.FindBinding(ctx, profile, page, listName)
+		It("should capture live labels by name → MainID into Subscription.LabelIDs", func() {
+			b, found, err := c.FindSubscription(ctx, profile, page, listName)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(found).To(BeTrue())
 			Expect(b.LabelIDs).To(HaveKeyWithValue("household", "household-mid"))
 		})
 
 		It("should skip tombstoned labels when seeding LabelIDs", func() {
-			b, found, err := c.FindBinding(ctx, profile, page, listName)
+			b, found, err := c.FindSubscription(ctx, profile, page, listName)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(found).To(BeTrue())
 			Expect(b.LabelIDs).NotTo(HaveKey("tombstoned"))
@@ -4248,10 +4250,10 @@ var _ = Describe("Outbound LIST node id-vs-serverId guard", func() {
 			c, store, kc, chk = freshConnector(profile, page, listName, listSrv, map[string]string{
 				"uid-A": "srv-A",
 			})
-			bs := keepsync.NewBindingStore(store)
+			bs := keepsync.NewSubscriptionStore(store)
 			st, loadErr := bs.LoadState(profile)
 			Expect(loadErr).ToNot(HaveOccurred())
-			st.Bindings[0].KeepNoteClientID = "list-client-abc"
+			st.Subscriptions[0].KeepNoteClientID = "list-client-abc"
 			Expect(bs.SaveState(profile, st)).To(Succeed())
 
 			pageID := wikipage.PageIdentifier(page)
@@ -4320,13 +4322,13 @@ var _ = Describe("Outbound LIST node id-vs-serverId guard", func() {
 			c, store, kc, chk = freshConnector(profile, page, listName, listSrv, map[string]string{
 				"uid-A": "srv-A",
 			})
-			bs := keepsync.NewBindingStore(store)
+			bs := keepsync.NewSubscriptionStore(store)
 			st, loadErr := bs.LoadState(profile)
 			Expect(loadErr).ToNot(HaveOccurred())
 			// Simulate a legacy binding: empty KeepNoteClientID, prior
 			// cursor that would otherwise advance on this pull.
-			st.Bindings[0].KeepNoteClientID = ""
-			st.Bindings[0].KeepCursor = "v-prior"
+			st.Subscriptions[0].KeepNoteClientID = ""
+			st.Subscriptions[0].KeepCursor = "v-prior"
 			Expect(bs.SaveState(profile, st)).To(Succeed())
 
 			chk.items = []*apiv1.ChecklistItem{
@@ -4345,7 +4347,7 @@ var _ = Describe("Outbound LIST node id-vs-serverId guard", func() {
 		})
 
 		It("should clear KeepCursor so the next tick pulls fully", func() {
-			b, found, err := c.FindBinding(ctx, profile, page, listName)
+			b, found, err := c.FindSubscription(ctx, profile, page, listName)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(found).To(BeTrue())
 			Expect(b.KeepCursor).To(Equal(""))
@@ -4361,10 +4363,10 @@ var _ = Describe("Outbound LIST node id-vs-serverId guard", func() {
 			c, store, kc, chk = freshConnector(profile, page, listName, listSrv, map[string]string{
 				"uid-A": "srv-A",
 			})
-			bs := keepsync.NewBindingStore(store)
+			bs := keepsync.NewSubscriptionStore(store)
 			st, loadErr := bs.LoadState(profile)
 			Expect(loadErr).ToNot(HaveOccurred())
-			st.Bindings[0].KeepNoteClientID = ""
+			st.Subscriptions[0].KeepNoteClientID = ""
 			Expect(bs.SaveState(profile, st)).To(Succeed())
 
 			chk.items = []*apiv1.ChecklistItem{
@@ -4387,7 +4389,7 @@ var _ = Describe("Outbound LIST node id-vs-serverId guard", func() {
 		})
 
 		It("should capture the LIST node's client-side id into KeepNoteClientID", func() {
-			b, found, err := c.FindBinding(ctx, profile, page, listName)
+			b, found, err := c.FindSubscription(ctx, profile, page, listName)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(found).To(BeTrue())
 			Expect(b.KeepNoteClientID).To(Equal("list-client-from-pull"))
@@ -4417,15 +4419,15 @@ var _ = Describe("Bind — seeds KeepNoteClientID from initial pull", func() {
 	})
 
 	Describe("bind_seeds_KeepNoteClientID_from_pull", func() {
-		var b keepsync.Binding
+		var b keepsync.Subscription
 
 		BeforeEach(func() {
 			var store *fakeStore
 			c, store, kc, _ = freshConnector(profile, page, listName, listSrv, map[string]string{})
-			bs := keepsync.NewBindingStore(store)
+			bs := keepsync.NewSubscriptionStore(store)
 			st, loadErr := bs.LoadState(profile)
 			Expect(loadErr).ToNot(HaveOccurred())
-			st.Bindings = nil
+			st.Subscriptions = nil
 			Expect(bs.SaveState(profile, st)).To(Succeed())
 
 			kc.pullState = gateway.ChangesResponse{
@@ -4460,7 +4462,7 @@ var _ = Describe("Bind — seeds KeepNoteClientID from initial pull", func() {
 // node. Legacy bindings must end up with a populated KeepNoteClientID
 // after the migration job runs so the first post-migration push
 // doesn't 500.
-var _ = Describe("MigrateBindingFingerprints — seeds KeepNoteClientID from full pull", func() {
+var _ = Describe("MigrateSubscriptionFingerprints — seeds KeepNoteClientID from full pull", func() {
 	const (
 		profile  = wikipage.PageIdentifier("profile_test_migrate_clientid")
 		page     = "shopping"
@@ -4489,11 +4491,11 @@ var _ = Describe("MigrateBindingFingerprints — seeds KeepNoteClientID from ful
 				{Uid: "uid-A", Text: "Apples", SortOrder: 1000, UpdatedAt: recentTime()},
 			}
 
-			bs := keepsync.NewBindingStore(store)
+			bs := keepsync.NewSubscriptionStore(store)
 			st, loadErr := bs.LoadState(profile)
 			Expect(loadErr).ToNot(HaveOccurred())
-			st.Bindings[0].MigratedFingerprints = false
-			st.Bindings[0].KeepNoteClientID = ""
+			st.Subscriptions[0].MigratedFingerprints = false
+			st.Subscriptions[0].KeepNoteClientID = ""
 			Expect(bs.SaveState(profile, st)).To(Succeed())
 
 			node := keepItem("srv-A", "client-A", listSrv, "Apples", false, "1000")
@@ -4512,11 +4514,11 @@ var _ = Describe("MigrateBindingFingerprints — seeds KeepNoteClientID from ful
 					node,
 				},
 			}
-			Expect(c.MigrateBindingFingerprints(ctx, profile, page, listName)).To(Succeed())
+			Expect(c.MigrateSubscriptionFingerprints(ctx, profile, page, listName)).To(Succeed())
 		})
 
 		It("should capture the LIST node's client-side id into KeepNoteClientID", func() {
-			b, found, err := c.FindBinding(ctx, profile, page, listName)
+			b, found, err := c.FindSubscription(ctx, profile, page, listName)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(found).To(BeTrue())
 			Expect(b.KeepNoteClientID).To(Equal("list-client-from-migration"))
@@ -4565,11 +4567,11 @@ var _ = Describe("MergeKeepLabels — case-insensitive name lookup", func() {
 				{Uid: "uid-A", Text: "Apples", SortOrder: 1000, UpdatedAt: recentTime()},
 			}
 
-			bs := keepsync.NewBindingStore(store)
+			bs := keepsync.NewSubscriptionStore(store)
 			st, loadErr := bs.LoadState(profile)
 			Expect(loadErr).ToNot(HaveOccurred())
 			// Persisted under Keep's canonical capitalization.
-			st.Bindings[0].LabelIDs = map[string]string{
+			st.Subscriptions[0].LabelIDs = map[string]string{
 				"Household": "stable-mid-1",
 			}
 			Expect(bs.SaveState(profile, st)).To(Succeed())
@@ -4630,7 +4632,7 @@ var _ = Describe("MergeKeepLabels — case-insensitive name lookup", func() {
 		})
 
 		It("should persist the label under Keep's canonical capitalization", func() {
-			b, found, err := c.FindBinding(ctx, profile, page, listName)
+			b, found, err := c.FindSubscription(ctx, profile, page, listName)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(found).To(BeTrue())
 			Expect(b.LabelIDs).To(HaveKeyWithValue("Household", "abc"))

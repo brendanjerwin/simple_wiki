@@ -12,6 +12,7 @@ import (
 	"google.golang.org/grpc/codes"
 
 	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
+	"github.com/brendanjerwin/simple_wiki/internal/connectors"
 	"github.com/brendanjerwin/simple_wiki/internal/connectors/google_keep/gateway"
 	keepsync "github.com/brendanjerwin/simple_wiki/internal/connectors/google_keep/sync"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
@@ -53,8 +54,11 @@ func (*handlerFakeKeepClient) CreateListWithItems(_ context.Context, _ string, _
 // buildHandlerConnector constructs a Connector with injectable fakes.
 // auth and kc may be nil (production defaults are used when nil).
 func buildHandlerConnector(mock *MockPageReaderMutator, auth keepsync.AuthExchanger, kc *handlerFakeKeepClient) *keepsync.Connector {
-	store := keepsync.NewBindingStore(mock)
-	c := keepsync.NewConnector(store, http.DefaultClient, keepConnectorClock{})
+	store := keepsync.NewSubscriptionStore(mock)
+	leaseTable := connectors.NewLeaseTable()
+	leaseTable.SignalReady()
+	c, err := keepsync.NewConnector(store, leaseTable, http.DefaultClient, keepConnectorClock{})
+	Expect(err).ToNot(HaveOccurred())
 	if auth != nil {
 		c.SetAuthBuilder(func(_ string) keepsync.AuthExchanger { return auth })
 	}
@@ -743,7 +747,7 @@ var _ = Describe("ConnectorService handlers (GOOGLE_KEEP)", func() {
 				})
 			})
 
-			// Connector.Unbind is idempotent: ErrBindingNotFound is swallowed so
+			// Connector.Unbind is idempotent: ErrSubscriptionNotFound is swallowed so
 			// that UI rebind/remove flows don't have to disambiguate.
 			It("should not error (idempotent unsubscribe)", func() {
 				Expect(err).ToNot(HaveOccurred())

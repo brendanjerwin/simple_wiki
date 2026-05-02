@@ -239,7 +239,7 @@ func (m *metrics) setMigrationPending(ctx context.Context, profileID wikipage.Pa
 // SetMigrationPendingMetric is the exported entry point used by the
 // eager-migration scan job (in migrations/eager) to mark a binding
 // as un-migrated when it enqueues a migration job. The bridge's
-// MigrateBindingFingerprints clears the gauge to 0 on successful
+// MigrateSubscriptionFingerprints clears the gauge to 0 on successful
 // completion. Lives here (not on Connector) because the scan job
 // runs at startup before any Connector is wired into hot paths,
 // and pure-functional access keeps the migration package free of

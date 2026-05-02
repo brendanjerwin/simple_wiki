@@ -11,6 +11,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
+	"github.com/brendanjerwin/simple_wiki/internal/connectors"
 	"github.com/brendanjerwin/simple_wiki/internal/connectors/google_keep/gateway"
 	keepsync "github.com/brendanjerwin/simple_wiki/internal/connectors/google_keep/sync"
 	tasksgateway "github.com/brendanjerwin/simple_wiki/internal/connectors/google_tasks/gateway"
@@ -290,9 +291,9 @@ func (s *Server) listMySubscriptionsKeep(ctx context.Context) (*apiv1.ListMySubs
 	if err != nil {
 		return nil, mapKeepConnectorErr(err)
 	}
-	out := make([]*apiv1.SubscriptionState, 0, len(state.Bindings))
-	for _, b := range state.Bindings {
-		out = append(out, keepBindingToProto(b, !state.IsConfigured()))
+	out := make([]*apiv1.SubscriptionState, 0, len(state.Subscriptions))
+	for _, b := range state.Subscriptions {
+		out = append(out, keepSubscriptionToProto(b, !state.IsConfigured()))
 	}
 	return &apiv1.ListMySubscriptionsResponse{Subscriptions: out}, nil
 }
@@ -422,11 +423,11 @@ func (s *Server) subscribeKeep(ctx context.Context, req *apiv1.SubscribeRequest)
 			}
 		}
 	}
-	binding, err := s.keepConnector.Bind(ctx, profileID, req.GetPage(), req.GetListName(), req.GetRemoteListHandle(), initialItems)
+	subscription, err := s.keepConnector.Bind(ctx, profileID, req.GetPage(), req.GetListName(), req.GetRemoteListHandle(), initialItems)
 	if err != nil {
 		return nil, mapKeepConnectorErr(err)
 	}
-	return &apiv1.SubscribeResponse{Subscription: keepBindingToProto(binding, false)}, nil
+	return &apiv1.SubscribeResponse{Subscription: keepSubscriptionToProto(subscription, false)}, nil
 }
 
 // Unsubscribe implements the Unsubscribe RPC.
@@ -517,9 +518,9 @@ func (s *Server) GetChecklistSubscriptionState(ctx context.Context, req *apiv1.G
 		if keepState.IsConfigured() {
 			out.ConnectorConfigured = true
 		}
-		for _, b := range keepState.Bindings {
+		for _, b := range keepState.Subscriptions {
 			if b.Page == req.GetPage() && b.ListName == req.GetListName() {
-				out.CurrentSubscription = keepBindingToProto(b, false)
+				out.CurrentSubscription = keepSubscriptionToProto(b, false)
 				return &apiv1.GetChecklistSubscriptionStateResponse{State: out}, nil
 			}
 		}
@@ -649,13 +650,13 @@ func connectorStateToProto(state keepsync.ConnectorState, kind apiv1.ConnectorKi
 	if !state.LastVerifiedAt.IsZero() {
 		out.LastVerifiedAt = timestamppb.New(state.LastVerifiedAt)
 	}
-	for _, b := range state.Bindings {
-		out.Subscriptions = append(out.Subscriptions, keepBindingToProto(b, !state.IsConfigured()))
+	for _, b := range state.Subscriptions {
+		out.Subscriptions = append(out.Subscriptions, keepSubscriptionToProto(b, !state.IsConfigured()))
 	}
 	return out
 }
 
-func keepBindingToProto(b keepsync.Binding, paused bool) *apiv1.SubscriptionState {
+func keepSubscriptionToProto(b keepsync.Subscription, paused bool) *apiv1.SubscriptionState {
 	out := &apiv1.SubscriptionState{
 		Page:             b.Page,
 		ListName:         b.ListName,
@@ -664,8 +665,8 @@ func keepBindingToProto(b keepsync.Binding, paused bool) *apiv1.SubscriptionStat
 		Paused:           paused,
 		ConnectorKind:    apiv1.ConnectorKind_CONNECTOR_KIND_GOOGLE_KEEP,
 	}
-	if !b.BoundAt.IsZero() {
-		out.SubscribedAt = timestamppb.New(b.BoundAt)
+	if !b.SubscribedAt.IsZero() {
+		out.SubscribedAt = timestamppb.New(b.SubscribedAt)
 	}
 	return out
 }
@@ -745,11 +746,13 @@ func mapKeepConnectorErr(err error) error {
 		return nil
 	case errors.Is(err, keepsync.ErrConnectorNotConfigured):
 		return status.Error(codes.FailedPrecondition, "keep_connector_not_configured: connect Google Keep on your profile first")
-	case errors.Is(err, keepsync.ErrAlreadyBoundForChecklist):
-		return status.Error(codes.FailedPrecondition, "already_subscribed_for_checklist: this checklist is already subscribed by you")
-	case errors.Is(err, keepsync.ErrAlreadyBoundToKeepNote):
-		return status.Error(codes.FailedPrecondition, "remote_list_already_subscribed_by_you: pick a different remote list or unsubscribe first")
-	case errors.Is(err, keepsync.ErrBindingNotFound):
+	case errors.Is(err, keepsync.ErrAlreadySubscribedForChecklist):
+		return status.Error(codes.AlreadyExists, "already_subscribed_for_checklist: this checklist is already subscribed by you")
+	case errors.Is(err, keepsync.ErrKeepNoteAlreadyClaimed):
+		return status.Error(codes.AlreadyExists, "remote_list_already_subscribed_by_you: pick a different remote list or unsubscribe first")
+	case errors.Is(err, connectors.ErrChecklistAlreadyLeased):
+		return status.Error(codes.AlreadyExists, "already_subscribed_for_checklist: this checklist is already subscribed (cross-connector)")
+	case errors.Is(err, keepsync.ErrSubscriptionNotFound):
 		return status.Error(codes.NotFound, "subscription_not_found")
 	case errors.Is(err, keepsync.ErrDeadLetterItemNotFound):
 		return status.Error(codes.NotFound, "dead_letter_item_not_found")

@@ -15,6 +15,7 @@ import (
 	"time"
 
 	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
+	"github.com/brendanjerwin/simple_wiki/internal/connectors"
 	"github.com/brendanjerwin/simple_wiki/internal/connectors/google_keep/gateway"
 	"github.com/brendanjerwin/simple_wiki/internal/connectors/google_keep/translator"
 	"github.com/brendanjerwin/simple_wiki/internal/hashtags"
@@ -80,7 +81,8 @@ type ChecklistMutator interface {
 // long-running goroutines (those live in the scheduler) — every method
 // completes in the caller's context.
 type Connector struct {
-	store         *BindingStore
+	store         *SubscriptionStore
+	leaseTable    *connectors.LeaseTable
 	httpClient    *http.Client
 	clock         Clock
 	debug         gateway.DebugLogger
@@ -92,7 +94,7 @@ type Connector struct {
 	clientBuilder KeepClientFactory
 
 	activeMu sync.Mutex
-	active   *activeBindings
+	active   *activeSubscriptions
 
 	// loggedSkip records bindings whose un-migrated SyncToKeep skip has
 	// already produced an INFO log this process. Keys are BindingKey
@@ -157,15 +159,31 @@ func (c *Connector) SetAuthBuilder(f func(deviceID string) AuthExchanger) {
 // NewConnector wires the production dependencies. Tests construct a
 // Connector directly with stubbed builders.
 //
+// leaseTable is the cross-connector exclusivity registry. Keep's
+// subscribe-ceremony (Bind) takes the lease through this table so a
+// checklist can have at most one Subscription across all connectors
+// (Keep + Tasks + future iCloud) per ADR-0011's
+// ChecklistSubscription aggregate invariant.
+//
 // The auth-side http.Client forces HTTP/1.1 (no h2 ALPN advertisement)
 // because gpsoauth's auth endpoint at android.clients.google.com/auth
 // returns 403 Bad Authentication when an h2 ALPN protocol is offered.
 // The Python gpsoauth library applies the same quirk via a custom
 // HTTPAdapter; mirroring it here.
-func NewConnector(store *BindingStore, httpClient *http.Client, clock Clock) *Connector {
+func NewConnector(store *SubscriptionStore, leaseTable *connectors.LeaseTable, httpClient *http.Client, clock Clock) (*Connector, error) {
+	if store == nil {
+		return nil, errors.New("keep bridge: store must not be nil")
+	}
+	if leaseTable == nil {
+		return nil, errors.New("keep bridge: leaseTable must not be nil")
+	}
+	if clock == nil {
+		return nil, errors.New("keep bridge: clock must not be nil")
+	}
 	authClient := newAuthHTTPClient()
 	c := &Connector{
 		store:      store,
+		leaseTable: leaseTable,
 		httpClient: httpClient,
 		clock:      clock,
 		authBuilder: func(deviceID string) AuthExchanger {
@@ -179,7 +197,7 @@ func NewConnector(store *BindingStore, httpClient *http.Client, clock Clock) *Co
 		}
 		return kc
 	}
-	return c
+	return c, nil
 }
 
 // newAuthHTTPClient returns an http.Client that mirrors the TLS quirks
@@ -376,25 +394,50 @@ type InitialItem struct {
 // the binding is recorded with a base-text-match seed of the
 // item_id_map so the first sync diff doesn't duplicate items
 // already present on Keep.
-func (c *Connector) Bind(ctx context.Context, profileID wikipage.PageIdentifier, page, listName, keepNoteID string, initialItems []InitialItem) (Binding, error) {
-	idMap := map[string]ItemBinding{}
+//
+// Per ADR-0011's ChecklistSubscription aggregate invariant, this
+// implements the subscribe-ceremony:
+//
+//  1. Block until the LeaseTable has finished its boot rebuild.
+//  2. Acquire the per-checklist mutex.
+//  3. Cross-connector existence check via LookupOwner — if any
+//     connector (Keep, Tasks, …) already owns this (page, list_name)
+//     return ErrChecklistAlreadyLeased.
+//  4. Persist the Subscription on the profile.
+//  5. Take the lease (best-effort rollback on Take failure).
+//  6. Release mutex; emit EventSubscriptionEstablished.
+//
+//revive:disable-next-line:function-length // single-purpose subscribe ceremony; splitting hurts readability
+func (c *Connector) Bind(ctx context.Context, profileID wikipage.PageIdentifier, page, listName, keepNoteID string, initialItems []InitialItem) (Subscription, error) {
+	if page == "" {
+		return Subscription{}, errors.New("keep bridge: page is required")
+	}
+	if listName == "" {
+		return Subscription{}, errors.New("keep bridge: list_name is required")
+	}
+
+	if err := c.leaseTable.WaitReady(ctx); err != nil {
+		return Subscription{}, fmt.Errorf("await lease-table ready: %w", err)
+	}
+
+	idMap := map[string]ItemMapping{}
 	labelIDs := map[string]string{}
 	var keepNoteClientID string
 	if keepNoteID != "" {
 		client, _, err := c.keepClientFor(ctx, profileID)
 		if err != nil {
-			return Binding{}, err
+			return Subscription{}, err
 		}
 		idMap, labelIDs, keepNoteClientID = c.seedIDMapFromExistingList(ctx, client, keepNoteID, initialItems)
 	}
 
-	binding := Binding{
+	binding := Subscription{
 		Page:             page,
 		ListName:         listName,
 		KeepNoteID:       keepNoteID,
 		KeepNoteTitle:    listName,
 		KeepNoteClientID: keepNoteClientID,
-		BoundAt:          c.clock.Now().UTC(),
+		SubscribedAt:          c.clock.Now().UTC(),
 		// Born-migrated: a fresh binding has nothing to migrate; its
 		// fingerprints will be populated by the bootstrap push response
 		// or by the per-item synced_fp updates on subsequent syncs.
@@ -402,10 +445,37 @@ func (c *Connector) Bind(ctx context.Context, profileID wikipage.PageIdentifier,
 		ItemIDMap:            idMap,
 		LabelIDs:             labelIDs,
 	}
-	if err := c.store.AddBinding(profileID, binding); err != nil {
-		return Binding{}, err
+
+	checklistKey := connectors.ChecklistKey{Page: page, ListName: listName}
+	owner := connectors.LeaseOwner{Kind: connectors.ConnectorKindGoogleKeep, ProfileID: string(profileID)}
+
+	cerErr := c.leaseTable.WithChecklistLock(checklistKey, func() error {
+		// Cross-profile/cross-connector existence check via the
+		// LeaseTable — boot-rebuild + the Take-on-Subscribe contract
+		// guarantee this is the authoritative cross-profile view.
+		if existing, exists := c.leaseTable.LookupOwner(checklistKey); exists {
+			return fmt.Errorf("%w: %s/%s held by %s/%s",
+				connectors.ErrChecklistAlreadyLeased, page, listName,
+				existing.Kind, existing.ProfileID)
+		}
+
+		if err := c.store.AddSubscription(profileID, binding); err != nil {
+			return err
+		}
+		if err := c.leaseTable.Take(checklistKey, owner); err != nil {
+			// Profile already updated — best-effort rollback so the
+			// next subscribe on the same checklist sees a clean
+			// LeaseTable + clean profile state.
+			_ = c.store.RemoveSubscription(profileID, page, listName)
+			return err
+		}
+		return nil
+	})
+	if cerErr != nil {
+		return Subscription{}, cerErr
 	}
-	c.noteBindingAdded(BindingKey{ProfileID: profileID, Page: page, ListName: listName})
+
+	c.noteSubscriptionAdded(BindingKey{ProfileID: profileID, Page: page, ListName: listName})
 
 	// Enqueue the unified sync — same job the cron tick and the
 	// SyncDebouncer enqueue. SyncToKeep reads wiki state, creates the
@@ -464,7 +534,7 @@ const deadLetterThreshold = 10
 // the exponential per-item retry schedule. After the n-th consecutive
 // failure, the connector waits min(60 * 2^(n-1), 3600) seconds before
 // the next push attempt for that item. NextAttemptAt on the
-// ItemBinding records the absolute wall-clock deadline; the diff loop
+// ItemMapping records the absolute wall-clock deadline; the diff loop
 // skips items whose NextAttemptAt is in the future. Source: plan
 // §"Bounded retry + dead-letter".
 const (
@@ -555,7 +625,7 @@ func (c *Connector) SyncToKeep(ctx context.Context, profileID wikipage.PageIdent
 		return ErrChecklistReaderUnavailable
 	}
 
-	binding, found, err := c.store.FindBinding(profileID, page, listName)
+	binding, found, err := c.store.FindSubscription(profileID, page, listName)
 	if err != nil {
 		return fmt.Errorf("load binding: %w", err)
 	}
@@ -772,7 +842,7 @@ func (c *Connector) SyncToKeep(ctx context.Context, profileID wikipage.PageIdent
 	// COMPLETED pull and are inherently sparse on incremental pulls
 	// (only items that CHANGED since our last cursor appear). The
 	// authoritative source for outbound updates is the persisted
-	// ItemBinding.BaseVersion / ClientID — we use the per-pull maps
+	// ItemMapping.BaseVersion / ClientID — we use the per-pull maps
 	// here only to UPDATE the persisted values when an item is in
 	// the pull. Items absent from this pull keep whatever they had
 	// from the last successful pull that included them.
@@ -804,13 +874,13 @@ func (c *Connector) SyncToKeep(ctx context.Context, profileID wikipage.PageIdent
 		}
 		keepNodes[n.ServerID] = n
 	}
-	// Update the persisted BaseVersion / ClientID on each ItemBinding
+	// Update the persisted BaseVersion / ClientID on each ItemMapping
 	// for serverIDs that DID appear in this pull. Items absent from
 	// the pull retain whatever was previously persisted — this is the
 	// fix for the incremental-pull regression that made every push
 	// after the second tick 500 with empty baseVersion.
 	if binding.ItemIDMap == nil {
-		binding.ItemIDMap = map[string]ItemBinding{}
+		binding.ItemIDMap = map[string]ItemMapping{}
 	}
 	for uid, ib := range binding.ItemIDMap {
 		serverID := ib.ServerID
@@ -836,7 +906,7 @@ func (c *Connector) SyncToKeep(ctx context.Context, profileID wikipage.PageIdent
 	freshUIDs := make([]string, 0)        // index-aligned with the appended fresh items below
 	freshClientIDs := make([]string, 0)
 	// pushedFP[uid] = the Fingerprint we sent for that item. After a
-	// successful push, each ItemBinding's synced_fp is advanced to its
+	// successful push, each ItemMapping's synced_fp is advanced to its
 	// entry here ONLY for nodes Keep reports as Status=SUCCESS in
 	// WriteResults. Items missing from WriteResults or marked non-
 	// SUCCESS leave synced_fp at its prior value so the next tick re-
@@ -925,7 +995,7 @@ func (c *Connector) SyncToKeep(ctx context.Context, profileID wikipage.PageIdent
 			covered[uid] = true
 		} else {
 			// Source `id` and `baseVersion` from the persisted
-			// ItemBinding. The just-completed pull's per-pull maps
+			// ItemMapping. The just-completed pull's per-pull maps
 			// are sparse on incremental pulls — they ONLY contain
 			// items that changed since our last cursor. Reading from
 			// the persisted value keeps both fields populated for
@@ -1008,7 +1078,7 @@ func (c *Connector) SyncToKeep(ctx context.Context, profileID wikipage.PageIdent
 		// Same id-vs-serverId distinction as the update path above:
 		// prefer the persisted client_id (or fall back to serverID
 		// if we never observed one). Reading from the persisted
-		// ItemBinding rather than per-pull maps so soft-deletes
+		// ItemMapping rather than per-pull maps so soft-deletes
 		// also survive incremental pulls without 500ing.
 		clientID := serverID
 		if ib.ClientID != "" {
@@ -1112,7 +1182,7 @@ func (c *Connector) SyncToKeep(ctx context.Context, profileID wikipage.PageIdent
 	// An item with no WriteResults entry counts as a failure with
 	// LastFailureCode=noResponseStatusCode.
 	if binding.ItemIDMap == nil {
-		binding.ItemIDMap = map[string]ItemBinding{}
+		binding.ItemIDMap = map[string]ItemMapping{}
 	}
 	for _, n := range resp.Nodes {
 		if n.Type != gateway.NodeTypeListItem {
@@ -1262,7 +1332,7 @@ func (c *Connector) SyncToKeep(ctx context.Context, profileID wikipage.PageIdent
 // at-or-above the dead-letter threshold. Used as the snapshot value
 // for the keep_bridge_dead_letter_count gauge at end of each
 // SyncToKeep tick.
-func countDeadLetters(idMap map[string]ItemBinding) int64 {
+func countDeadLetters(idMap map[string]ItemMapping) int64 {
 	var n int64
 	for _, ib := range idMap {
 		if ib.PushFailureCount >= deadLetterThreshold {
@@ -1293,7 +1363,7 @@ func countDeadLetters(idMap map[string]ItemBinding) int64 {
 // information added.
 //
 //revive:disable-next-line:flag-parameter
-func (c *Connector) maybeForceFullResyncOnTruncation(ctx context.Context, binding *Binding, priorCursor string, progressed bool, profileID wikipage.PageIdentifier) {
+func (c *Connector) maybeForceFullResyncOnTruncation(ctx context.Context, binding *Subscription, priorCursor string, progressed bool, profileID wikipage.PageIdentifier) {
 	if binding.TruncatedTickStreak < truncationResyncThreshold {
 		return
 	}
@@ -1320,7 +1390,7 @@ func (c *Connector) maybeForceFullResyncOnTruncation(ctx context.Context, bindin
 // PushFailureCount and clears any backoff (the obvious user-fix path
 // after a dead-letter). Captured at end-of-tick, not start, so
 // intra-tick wiki edits aren't missed.
-func stampLastObservedWiki(binding *Binding, checklist *apiv1.Checklist) {
+func stampLastObservedWiki(binding *Subscription, checklist *apiv1.Checklist) {
 	pairedUIDs := make(map[string]struct{}, len(binding.ItemIDMap))
 	for uid := range binding.ItemIDMap {
 		pairedUIDs[uid] = struct{}{}
@@ -1367,7 +1437,7 @@ func pushFailureBackoff(n int) time.Duration {
 //
 // On success the binding is fully initialized; the next sync (cron or
 // edit-triggered) falls through to the normal pull/apply/push path.
-func (c *Connector) bootstrapKeepListForBinding(ctx context.Context, profileID wikipage.PageIdentifier, binding Binding, checklist *apiv1.Checklist, client KeepClient, now time.Time) error {
+func (c *Connector) bootstrapKeepListForBinding(ctx context.Context, profileID wikipage.PageIdentifier, binding Subscription, checklist *apiv1.Checklist, client KeepClient, now time.Time) error {
 	wikiItems := checklist.GetItems()
 	specs := make([]gateway.ListItemSpec, len(wikiItems))
 	for i, it := range wikiItems {
@@ -1397,7 +1467,7 @@ func (c *Connector) bootstrapKeepListForBinding(ctx context.Context, profileID w
 	// LIST updates send `id != serverId` (Keep 500s when they match).
 	binding.KeepNoteClientID = result.ListClientID
 	if binding.ItemIDMap == nil {
-		binding.ItemIDMap = map[string]ItemBinding{}
+		binding.ItemIDMap = map[string]ItemMapping{}
 	}
 	for i, serverID := range result.ItemServerIDs {
 		if i >= len(wikiItems) || serverID == "" {
@@ -1425,19 +1495,19 @@ func (c *Connector) bootstrapKeepListForBinding(ctx context.Context, profileID w
 
 // markBindingSynced persists the updated binding (id_map changes,
 // KeepCursor advance, per-item synced_fp updates). Holds the per-
-// profile mutex via BindingStore so concurrent syncs serialize.
+// profile mutex via SubscriptionStore so concurrent syncs serialize.
 //
 // `now` is reserved for future per-item synced_fp stamping; not
 // consulted by the gate logic, which uses content fingerprints
 // instead of timestamps.
-func (c *Connector) markBindingSynced(profileID wikipage.PageIdentifier, binding Binding, _ time.Time) error {
+func (c *Connector) markBindingSynced(profileID wikipage.PageIdentifier, binding Subscription, _ time.Time) error {
 	state, err := c.store.LoadState(profileID)
 	if err != nil {
 		return fmt.Errorf("reload state for sync persist: %w", err)
 	}
-	for i, b := range state.Bindings {
+	for i, b := range state.Subscriptions {
 		if b.Page == binding.Page && b.ListName == binding.ListName {
-			state.Bindings[i] = binding
+			state.Subscriptions[i] = binding
 			break
 		}
 	}
@@ -1486,7 +1556,7 @@ func (c *Connector) markBindingSynced(profileID wikipage.PageIdentifier, binding
 // itself produces new wiki state via the response (e.g. new Keep
 // serverIDs), those land via the response-walk in the caller.
 //revive:disable-next-line:function-result-limit,function-length,cognitive-complexity,cyclomatic
-func (c *Connector) applyInboundFromKeep(ctx context.Context, profileID wikipage.PageIdentifier, ownerEmail string, binding Binding, pull gateway.ChangesResponse, currentChecklist *apiv1.Checklist) (Binding, *apiv1.Checklist, bool, error) {
+func (c *Connector) applyInboundFromKeep(ctx context.Context, profileID wikipage.PageIdentifier, ownerEmail string, binding Subscription, pull gateway.ChangesResponse, currentChecklist *apiv1.Checklist) (Subscription, *apiv1.Checklist, bool, error) {
 	if c.checklistW == nil {
 		// No mutator wired — outbound-only mode. Return inputs as-is.
 		return binding, currentChecklist, false, nil
@@ -1526,7 +1596,7 @@ func (c *Connector) applyInboundFromKeep(ctx context.Context, profileID wikipage
 	}
 
 	if binding.ItemIDMap == nil {
-		binding.ItemIDMap = map[string]ItemBinding{}
+		binding.ItemIDMap = map[string]ItemMapping{}
 	}
 
 	// progressed tracks whether ANY synced_fp moved during this apply
@@ -1782,11 +1852,11 @@ func (c *Connector) applyInboundFromKeep(ctx context.Context, profileID wikipage
 // Returns true if a new id_map entry was created (synced_fp seeded);
 // the caller uses this signal as part of the "progress made this tick"
 // computation for the truncation escape hatch.
-func (c *Connector) applyInboundNewFromKeep(ctx context.Context, ownerEmail string, binding *Binding, n gateway.Node, wikiByText map[string]string) bool {
+func (c *Connector) applyInboundNewFromKeep(ctx context.Context, ownerEmail string, binding *Subscription, n gateway.Node, wikiByText map[string]string) bool {
 	if existingUID, found := wikiByText[n.Text]; found {
 		if _, alreadyMapped := binding.ItemIDMap[existingUID]; !alreadyMapped {
 			keepFP := translator.FingerprintKeep(n)
-			binding.ItemIDMap[existingUID] = ItemBinding{
+			binding.ItemIDMap[existingUID] = ItemMapping{
 				ServerID:        n.ServerID,
 				SyncedText:      keepFP.Text,
 				SyncedChecked:   keepFP.Checked,
@@ -1813,7 +1883,7 @@ func (c *Connector) applyInboundNewFromKeep(ctx context.Context, ownerEmail stri
 		return false
 	}
 	keepFP := translator.FingerprintKeep(n)
-	binding.ItemIDMap[newUID] = ItemBinding{
+	binding.ItemIDMap[newUID] = ItemMapping{
 		ServerID:        n.ServerID,
 		SyncedText:      keepFP.Text,
 		SyncedChecked:   keepFP.Checked,
@@ -1855,14 +1925,14 @@ func (c *Connector) applyKeepUpdate(ctx context.Context, ownerEmail, page, listN
 // persistBindingMap writes the updated binding back to the store.
 // Used after inbound apply to lock in id_map changes (new uids,
 // dropped trashed entries) before the outbound push runs.
-func (c *Connector) persistBindingMap(profileID wikipage.PageIdentifier, binding Binding) error {
+func (c *Connector) persistBindingMap(profileID wikipage.PageIdentifier, binding Subscription) error {
 	state, err := c.store.LoadState(profileID)
 	if err != nil {
 		return err
 	}
-	for i, b := range state.Bindings {
+	for i, b := range state.Subscriptions {
 		if b.Page == binding.Page && b.ListName == binding.ListName {
-			state.Bindings[i] = binding
+			state.Subscriptions[i] = binding
 			break
 		}
 	}
@@ -1881,7 +1951,7 @@ func (c *Connector) persistBindingMap(profileID wikipage.PageIdentifier, binding
 // Subsequent edits round-trip cleanly through the id_map.
 //
 // Returns:
-//   - idMap: per-wiki-uid ItemBinding with ServerID, BaseVersion, and
+//   - idMap: per-wiki-uid ItemMapping with ServerID, BaseVersion, and
 //     ClientID populated from the bind-time pull. Seeding all three
 //     here is what lets the very first outbound push from a fresh
 //     bind avoid the "missing baseVersion → 500 Unknown Error" path.
@@ -1901,8 +1971,8 @@ func (c *Connector) persistBindingMap(profileID wikipage.PageIdentifier, binding
 // won't — Keep accepts duplicate-text items. So this DOES matter, but
 // we'd rather have a working bind than a hard failure if the pull
 // flakes.).
-func (c *Connector) seedIDMapFromExistingList(ctx context.Context, client KeepClient, listServerID string, wikiItems []InitialItem) (map[string]ItemBinding, map[string]string, string) {
-	idMap := map[string]ItemBinding{}
+func (c *Connector) seedIDMapFromExistingList(ctx context.Context, client KeepClient, listServerID string, wikiItems []InitialItem) (map[string]ItemMapping, map[string]string, string) {
+	idMap := map[string]ItemMapping{}
 	labelIDs := map[string]string{}
 	var keepNoteClientID string
 	now := c.clock.Now().UTC()
@@ -1919,11 +1989,11 @@ func (c *Connector) seedIDMapFromExistingList(ctx context.Context, client KeepCl
 
 	// Translator owns the pairing logic: build a normalized-text index
 	// over live LIST_ITEMs under our list, then match wiki items by
-	// text. We construct ItemBinding from the gateway-level seed match
-	// fields here because ItemBinding is a sync-package type.
+	// text. We construct ItemMapping from the gateway-level seed match
+	// fields here because ItemMapping is a sync-package type.
 	seeds := translator.MatchWikiItemsToKeepNodes(pull.Nodes, listServerID, toSeedWikiItems(wikiItems))
 	for uid, m := range seeds {
-		idMap[uid] = ItemBinding{
+		idMap[uid] = ItemMapping{
 			ServerID:    m.ServerID,
 			BaseVersion: m.BaseVersion,
 			ClientID:    m.ClientID,
@@ -2024,21 +2094,40 @@ func generatePushSessionID(now time.Time) (string, error) {
 		(binary.BigEndian.Uint64(entropy[:])%keepSessionIDSpan)+keepSessionIDOffset), nil
 }
 
-// Unbind removes the calling user's binding for (page, listName).
-func (c *Connector) Unbind(_ context.Context, profileID wikipage.PageIdentifier, page, listName string) error {
-	err := c.store.RemoveBinding(profileID, page, listName)
-	c.noteBindingRemoved(BindingKey{ProfileID: profileID, Page: page, ListName: listName})
-	if errors.Is(err, ErrBindingNotFound) {
-		// Idempotent at the orchestrator boundary — UI calls this on
-		// rebind/remove flows and shouldn't have to disambiguate.
-		return nil
+// Unbind removes the calling user's binding for (page, listName) and
+// releases the LeaseTable claim. Per ADR-0011's unsubscribe contract:
+// per-checklist mutex acquire → write profile → release lease →
+// release mutex.
+func (c *Connector) Unbind(ctx context.Context, profileID wikipage.PageIdentifier, page, listName string) error {
+	if err := c.leaseTable.WaitReady(ctx); err != nil {
+		return fmt.Errorf("await lease-table ready: %w", err)
 	}
-	return err
+
+	checklistKey := connectors.ChecklistKey{Page: page, ListName: listName}
+	cerErr := c.leaseTable.WithChecklistLock(checklistKey, func() error {
+		err := c.store.RemoveSubscription(profileID, page, listName)
+		if errors.Is(err, ErrSubscriptionNotFound) {
+			// Idempotent at the orchestrator boundary — UI calls this
+			// on rebind/remove flows and shouldn't have to
+			// disambiguate. Still release the lease in case the
+			// LeaseTable carries a stale entry whose profile-side
+			// record was already gone.
+			c.leaseTable.Release(checklistKey)
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		c.leaseTable.Release(checklistKey)
+		return nil
+	})
+	c.noteSubscriptionRemoved(BindingKey{ProfileID: profileID, Page: page, ListName: listName})
+	return cerErr
 }
 
-// FindBinding mirrors BindingStore.FindBinding for handler convenience.
-func (c *Connector) FindBinding(_ context.Context, profileID wikipage.PageIdentifier, page, listName string) (Binding, bool, error) {
-	return c.store.FindBinding(profileID, page, listName)
+// FindSubscription mirrors SubscriptionStore.FindSubscription for handler convenience.
+func (c *Connector) FindSubscription(_ context.Context, profileID wikipage.PageIdentifier, page, listName string) (Subscription, bool, error) {
+	return c.store.FindSubscription(profileID, page, listName)
 }
 
 // VerifyBinding pings Keep with the user's bearer to confirm the bound
@@ -2048,7 +2137,7 @@ func (c *Connector) FindBinding(_ context.Context, profileID wikipage.PageIdenti
 //
 // Pulled out as its own method so the scheduler can call it on a tick
 // without knowing about Keep's wire shape.
-func (c *Connector) VerifyBinding(ctx context.Context, profileID wikipage.PageIdentifier, binding Binding) error {
+func (c *Connector) VerifyBinding(ctx context.Context, profileID wikipage.PageIdentifier, binding Subscription) error {
 	client, _, err := c.keepClientFor(ctx, profileID)
 	if err != nil {
 		return err
@@ -2080,7 +2169,7 @@ func (c *Connector) VerifyBinding(ctx context.Context, profileID wikipage.PageId
 // user's account anymore (e.g., they deleted it from the Keep app).
 var ErrBoundNoteDeletedLocal = gateway.ErrBoundNoteDeleted
 
-// MigrateBindingFingerprints rebases a legacy binding's per-item
+// MigrateSubscriptionFingerprints rebases a legacy binding's per-item
 // synced_fp baseline so the new sync engine has a real merge-base to
 // test divergence against. Called by the eager migration job (one
 // per legacy binding) at startup; idempotent on already-migrated
@@ -2117,7 +2206,7 @@ var ErrBoundNoteDeletedLocal = gateway.ErrBoundNoteDeleted
 // binding via the gate until migration finally succeeds.
 //
 //revive:disable-next-line:function-length,cognitive-complexity,cyclomatic
-func (c *Connector) MigrateBindingFingerprints(ctx context.Context, profileID wikipage.PageIdentifier, page, listName string) error {
+func (c *Connector) MigrateSubscriptionFingerprints(ctx context.Context, profileID wikipage.PageIdentifier, page, listName string) error {
 	if c.checklistR == nil {
 		return ErrChecklistReaderUnavailable
 	}
@@ -2136,14 +2225,14 @@ func (c *Connector) MigrateBindingFingerprints(ctx context.Context, profileID wi
 	// Pre-check under the lock: the binding might already be migrated
 	// by a concurrent run, or might not exist anymore. Check before
 	// the (potentially expensive) pull.
-	var preBinding Binding
+	var preBinding Subscription
 	var preFound bool
 	preCheckErr := c.store.WithProfileLock(profileID, func() error {
 		st, lerr := c.store.LoadStateLocked(profileID)
 		if lerr != nil {
 			return lerr
 		}
-		for _, b := range st.Bindings {
+		for _, b := range st.Subscriptions {
 			if b.Page == page && b.ListName == listName {
 				preBinding = b
 				preFound = true
@@ -2156,7 +2245,7 @@ func (c *Connector) MigrateBindingFingerprints(ctx context.Context, profileID wi
 		return fmt.Errorf("pre-check binding for migration: %w", preCheckErr)
 	}
 	if !preFound {
-		// Binding was removed (e.g., user unbound between scan-time
+		// Subscription was removed (e.g., user unbound between scan-time
 		// and now). Nothing to migrate; succeed silently.
 		return nil
 	}
@@ -2231,18 +2320,18 @@ func (c *Connector) MigrateBindingFingerprints(ctx context.Context, profileID wi
 		// once more under the lock — concurrent migration runs and
 		// Bind/Unbind churn could have changed it.
 		idx := -1
-		for i, b := range st.Bindings {
+		for i, b := range st.Subscriptions {
 			if b.Page == page && b.ListName == listName {
 				idx = i
 				break
 			}
 		}
 		if idx < 0 {
-			// Binding was removed between pull and write. Not an
+			// Subscription was removed between pull and write. Not an
 			// error — the user unbound and that's authoritative.
 			return nil
 		}
-		binding := st.Bindings[idx]
+		binding := st.Subscriptions[idx]
 		if binding.MigratedFingerprints {
 			return nil
 		}
@@ -2260,7 +2349,7 @@ func (c *Connector) MigrateBindingFingerprints(ctx context.Context, profileID wi
 		}
 
 		priorCursor := binding.KeepCursor
-		newIDMap := make(map[string]ItemBinding, len(binding.ItemIDMap))
+		newIDMap := make(map[string]ItemMapping, len(binding.ItemIDMap))
 		for uid, ib := range binding.ItemIDMap {
 			serverID := ib.ServerID
 			if serverID == "" {
@@ -2273,7 +2362,7 @@ func (c *Connector) MigrateBindingFingerprints(ctx context.Context, profileID wi
 				// drop the entry so subsequent syncs don't try to
 				// touch a non-existent serverID.
 				if c.debug != nil {
-					c.debug.Info("MigrateBindingFingerprints: dropping unpaired entry profile=%s page=%s list=%s uid=%s serverID=%s prior_cursor=%s",
+					c.debug.Info("MigrateSubscriptionFingerprints: dropping unpaired entry profile=%s page=%s list=%s uid=%s serverID=%s prior_cursor=%s",
 						profileID, page, listName, uid, serverID, priorCursor)
 				}
 				continue
@@ -2298,7 +2387,7 @@ func (c *Connector) MigrateBindingFingerprints(ctx context.Context, profileID wi
 				}
 				newIDMap[uid] = ib
 				if c.debug != nil {
-					c.debug.Info("MigrateBindingFingerprints: orphan-uid baseline-from-keep profile=%s page=%s list=%s uid=%s serverID=%s keep_fp_text=%q prior_cursor=%s",
+					c.debug.Info("MigrateSubscriptionFingerprints: orphan-uid baseline-from-keep profile=%s page=%s list=%s uid=%s serverID=%s keep_fp_text=%q prior_cursor=%s",
 						profileID, page, listName, uid, serverID, keepNode.Text, priorCursor)
 				}
 				continue
@@ -2321,7 +2410,7 @@ func (c *Connector) MigrateBindingFingerprints(ctx context.Context, profileID wi
 				newIDMap[uid] = ib
 				getMetrics().recordSilentRebaseline(ctx, profileID, page, listName)
 				if c.debug != nil {
-					c.debug.Info("MigrateBindingFingerprints: silent-rebaseline profile=%s page=%s list=%s uid=%s serverID=%s fp_text=%q fp_checked=%t fp_sort=%q prior_cursor=%s",
+					c.debug.Info("MigrateSubscriptionFingerprints: silent-rebaseline profile=%s page=%s list=%s uid=%s serverID=%s fp_text=%q fp_checked=%t fp_sort=%q prior_cursor=%s",
 						profileID, page, listName, uid, serverID, wikiFP.Text, wikiFP.Checked, wikiFP.SortValue, priorCursor)
 				}
 				continue
@@ -2353,7 +2442,7 @@ func (c *Connector) MigrateBindingFingerprints(ctx context.Context, profileID wi
 			}
 			newIDMap[uid] = ib
 			if c.debug != nil {
-				c.debug.Info("MigrateBindingFingerprints: keep-wins profile=%s page=%s list=%s uid=%s serverID=%s wiki_fp_text=%q keep_fp_text=%q prior_cursor=%s",
+				c.debug.Info("MigrateSubscriptionFingerprints: keep-wins profile=%s page=%s list=%s uid=%s serverID=%s wiki_fp_text=%q keep_fp_text=%q prior_cursor=%s",
 					profileID, page, listName, uid, serverID, wikiFP.Text, keepFP.Text, priorCursor)
 			}
 		}
@@ -2394,7 +2483,7 @@ func (c *Connector) MigrateBindingFingerprints(ctx context.Context, profileID wi
 		// Source: post-deploy mass-delete bug remediation.
 		binding.KeepCursor = ""
 		binding.MigratedFingerprints = true
-		st.Bindings[idx] = binding
+		st.Subscriptions[idx] = binding
 		if perr := c.store.SaveStateLocked(profileID, st); perr != nil {
 			return fmt.Errorf("persist migrated binding: %w", perr)
 		}
@@ -2429,19 +2518,19 @@ type DeadLetterEntry struct {
 	LastFailureCode string
 }
 
-// ListDeadLetters returns every ItemBinding in the (profileID, page,
+// ListDeadLetters returns every ItemMapping in the (profileID, page,
 // listName) binding whose PushFailureCount is at-or-above the dead-
 // letter threshold. Used by the <keep-connect> macro UI to render
 // per-item failure rows. Returns an empty slice (not an error) when
-// the binding has no dead-lettered items, and ErrBindingNotFound when
+// the binding has no dead-lettered items, and ErrSubscriptionNotFound when
 // the binding itself doesn't exist.
 func (c *Connector) ListDeadLetters(_ context.Context, profileID wikipage.PageIdentifier, page, listName string) ([]DeadLetterEntry, error) {
-	binding, found, err := c.store.FindBinding(profileID, page, listName)
+	binding, found, err := c.store.FindSubscription(profileID, page, listName)
 	if err != nil {
 		return nil, fmt.Errorf("load binding for dead-letter list: %w", err)
 	}
 	if !found {
-		return nil, ErrBindingNotFound
+		return nil, ErrSubscriptionNotFound
 	}
 	out := make([]DeadLetterEntry, 0)
 	for uid, ib := range binding.ItemIDMap {
@@ -2459,13 +2548,13 @@ func (c *Connector) ListDeadLetters(_ context.Context, profileID wikipage.PageId
 }
 
 // ClearDeadLetter resets the failure-tracking fields on one
-// ItemBinding so the next sync tick re-attempts the push.
+// ItemMapping so the next sync tick re-attempts the push.
 // Specifically: PushFailureCount → 0, LastFailureCode → "",
 // NextAttemptAt → zero. Synced{Text,Checked,SortValue} (the merge-
 // base baseline) and ServerID are preserved — clearing only undoes
 // the failure state, not the divergence rule's anchor. Returns
-// ErrBindingNotFound if the binding doesn't exist and
-// ErrDeadLetterItemNotFound if the binding has no ItemBinding for
+// ErrSubscriptionNotFound if the binding doesn't exist and
+// ErrDeadLetterItemNotFound if the binding has no ItemMapping for
 // the given uid.
 //
 // Per the plan §"Concurrent macro action vs sync tick", a Clear
@@ -2478,23 +2567,23 @@ func (c *Connector) ClearDeadLetter(_ context.Context, profileID wikipage.PageId
 			return fmt.Errorf("load state for clear dead-letter: %w", err)
 		}
 		idx := -1
-		for i, b := range st.Bindings {
+		for i, b := range st.Subscriptions {
 			if b.Page == page && b.ListName == listName {
 				idx = i
 				break
 			}
 		}
 		if idx == -1 {
-			return ErrBindingNotFound
+			return ErrSubscriptionNotFound
 		}
-		ib, ok := st.Bindings[idx].ItemIDMap[itemUID]
+		ib, ok := st.Subscriptions[idx].ItemIDMap[itemUID]
 		if !ok {
 			return ErrDeadLetterItemNotFound
 		}
 		ib.PushFailureCount = 0
 		ib.LastFailureCode = ""
 		ib.NextAttemptAt = time.Time{}
-		st.Bindings[idx].ItemIDMap[itemUID] = ib
+		st.Subscriptions[idx].ItemIDMap[itemUID] = ib
 		if perr := c.store.SaveStateLocked(profileID, st); perr != nil {
 			return fmt.Errorf("persist cleared dead-letter: %w", perr)
 		}

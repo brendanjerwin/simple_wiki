@@ -38,10 +38,10 @@ var _ = Describe("Connector dead-letter operations", func() {
 
 				// Hand-craft a binding with three items: below, at,
 				// and above the dead-letter threshold.
-				bs := keepsync.NewBindingStore(store)
+				bs := keepsync.NewSubscriptionStore(store)
 				st, loadErr := bs.LoadState(profile)
 				Expect(loadErr).ToNot(HaveOccurred())
-				idMap := map[string]keepsync.ItemBinding{
+				idMap := map[string]keepsync.ItemMapping{
 					"uid-below": {
 						ServerID:             "srv-A",
 						LastObservedWikiText: "below threshold",
@@ -62,7 +62,7 @@ var _ = Describe("Connector dead-letter operations", func() {
 						LastFailureCode:      "FATAL",
 					},
 				}
-				st.Bindings[0].ItemIDMap = idMap
+				st.Subscriptions[0].ItemIDMap = idMap
 				Expect(bs.SaveState(profile, st)).To(Succeed())
 
 				entries, err = c.ListDeadLetters(context.Background(), profile, page, listName)
@@ -138,8 +138,8 @@ var _ = Describe("Connector dead-letter operations", func() {
 				_, err = c.ListDeadLetters(context.Background(), profile, "nonexistent-page", "nonexistent-list")
 			})
 
-			It("should return ErrBindingNotFound", func() {
-				Expect(errors.Is(err, keepsync.ErrBindingNotFound)).To(BeTrue(), "expected ErrBindingNotFound, got: %v", err)
+			It("should return ErrSubscriptionNotFound", func() {
+				Expect(errors.Is(err, keepsync.ErrSubscriptionNotFound)).To(BeTrue(), "expected ErrSubscriptionNotFound, got: %v", err)
 			})
 		})
 	})
@@ -148,17 +148,17 @@ var _ = Describe("Connector dead-letter operations", func() {
 		Describe("when called for a dead-lettered item", func() {
 			var (
 				err            error
-				clearedItem    keepsync.ItemBinding
-				preservedItem  keepsync.ItemBinding
+				clearedItem    keepsync.ItemMapping
+				preservedItem  keepsync.ItemMapping
 				preservedFound bool
 			)
 
 			BeforeEach(func() {
 				c, store, _, _ := freshConnector(profile, page, listName, listSrv, nil)
-				bs := keepsync.NewBindingStore(store)
+				bs := keepsync.NewSubscriptionStore(store)
 				st, loadErr := bs.LoadState(profile)
 				Expect(loadErr).ToNot(HaveOccurred())
-				st.Bindings[0].ItemIDMap = map[string]keepsync.ItemBinding{
+				st.Subscriptions[0].ItemIDMap = map[string]keepsync.ItemMapping{
 					"uid-cleared": {
 						ServerID:         "srv-cleared",
 						SyncedText:       "synced text - preserved",
@@ -181,8 +181,8 @@ var _ = Describe("Connector dead-letter operations", func() {
 				// Re-load to inspect the persisted state.
 				postState, postErr := bs.LoadState(profile)
 				Expect(postErr).ToNot(HaveOccurred())
-				clearedItem = postState.Bindings[0].ItemIDMap["uid-cleared"]
-				preservedItem, preservedFound = postState.Bindings[0].ItemIDMap["uid-other"]
+				clearedItem = postState.Subscriptions[0].ItemIDMap["uid-cleared"]
+				preservedItem, preservedFound = postState.Subscriptions[0].ItemIDMap["uid-other"]
 			})
 
 			It("should not error", func() {
@@ -247,8 +247,8 @@ var _ = Describe("Connector dead-letter operations", func() {
 				err = c.ClearDeadLetter(context.Background(), profile, "missing-page", "missing-list", "uid-x")
 			})
 
-			It("should return ErrBindingNotFound", func() {
-				Expect(errors.Is(err, keepsync.ErrBindingNotFound)).To(BeTrue(), "expected ErrBindingNotFound, got: %v", err)
+			It("should return ErrSubscriptionNotFound", func() {
+				Expect(errors.Is(err, keepsync.ErrSubscriptionNotFound)).To(BeTrue(), "expected ErrSubscriptionNotFound, got: %v", err)
 			})
 		})
 	})

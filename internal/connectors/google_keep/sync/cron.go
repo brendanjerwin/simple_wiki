@@ -15,32 +15,32 @@ type BindingKey struct {
 	ListName  string
 }
 
-// activeBindings tracks every binding the current process knows about
+// activeSubscriptions tracks every binding the current process knows about
 // so the cron tick can enumerate them without re-scanning the page
-// store on each tick. Populated at bootstrap by RegisterActiveBindings
+// store on each tick. Populated at bootstrap by RegisterActiveSubscriptions
 // (one-time scan of profile_* pages) and updated on Bind/Unbind.
-type activeBindings struct {
+type activeSubscriptions struct {
 	mu    sync.Mutex
 	known map[BindingKey]struct{}
 }
 
-func newActiveBindings() *activeBindings {
-	return &activeBindings{known: map[BindingKey]struct{}{}}
+func newActiveSubscriptions() *activeSubscriptions {
+	return &activeSubscriptions{known: map[BindingKey]struct{}{}}
 }
 
-func (a *activeBindings) add(k BindingKey) {
+func (a *activeSubscriptions) add(k BindingKey) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	a.known[k] = struct{}{}
 }
 
-func (a *activeBindings) remove(k BindingKey) {
+func (a *activeSubscriptions) remove(k BindingKey) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	delete(a.known, k)
 }
 
-func (a *activeBindings) snapshot() []BindingKey {
+func (a *activeSubscriptions) snapshot() []BindingKey {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	out := make([]BindingKey, 0, len(a.known))
@@ -50,14 +50,14 @@ func (a *activeBindings) snapshot() []BindingKey {
 	return out
 }
 
-// RegisterActiveBindings is called at bootstrap (after a one-time scan
+// RegisterActiveSubscriptions is called at bootstrap (after a one-time scan
 // of profile_* pages) to seed the cron-tick's enumeration set with
 // every binding that already exists on disk. Subsequent Bind/Unbind
 // calls keep the set fresh in-process.
-func (c *Connector) RegisterActiveBindings(keys []BindingKey) {
+func (c *Connector) RegisterActiveSubscriptions(keys []BindingKey) {
 	c.activeMu.Lock()
 	if c.active == nil {
-		c.active = newActiveBindings()
+		c.active = newActiveSubscriptions()
 	}
 	c.activeMu.Unlock()
 	for _, k := range keys {
@@ -65,46 +65,46 @@ func (c *Connector) RegisterActiveBindings(keys []BindingKey) {
 	}
 }
 
-// ActiveBindingsSnapshot returns a copy of the currently-tracked
+// ActiveSubscriptionsSnapshot returns a copy of the currently-tracked
 // binding set. Used by the cron tick to enumerate sync targets.
-func (c *Connector) ActiveBindingsSnapshot() []BindingKey {
+func (c *Connector) ActiveSubscriptionsSnapshot() []BindingKey {
 	c.activeMu.Lock()
 	if c.active == nil {
-		c.active = newActiveBindings()
+		c.active = newActiveSubscriptions()
 	}
 	c.activeMu.Unlock()
 	return c.active.snapshot()
 }
 
-// noteBindingAdded is called from Bind after a successful AddBinding
+// noteSubscriptionAdded is called from Bind after a successful AddSubscription
 // to keep the active-set in sync with on-disk state.
-func (c *Connector) noteBindingAdded(k BindingKey) {
+func (c *Connector) noteSubscriptionAdded(k BindingKey) {
 	c.activeMu.Lock()
 	if c.active == nil {
-		c.active = newActiveBindings()
+		c.active = newActiveSubscriptions()
 	}
 	c.activeMu.Unlock()
 	c.active.add(k)
 }
 
-// noteBindingRemoved is called from Unbind for the same reason.
-func (c *Connector) noteBindingRemoved(k BindingKey) {
+// noteSubscriptionRemoved is called from Unbind for the same reason.
+func (c *Connector) noteSubscriptionRemoved(k BindingKey) {
 	c.activeMu.Lock()
 	if c.active == nil {
-		c.active = newActiveBindings()
+		c.active = newActiveSubscriptions()
 	}
 	c.activeMu.Unlock()
 	c.active.remove(k)
 }
 
-// BindingsLister returns the currently-known set of bindings. Called
+// SubscriptionsLister returns the currently-known set of bindings. Called
 // by the cron tick on every fire so the result reflects on-disk state
 // (handles pre-existing bindings that weren't bound during this
 // process's lifetime). Bootstrap satisfies this via the frontmatter
 // index's QueryKeyExistence + per-profile decode.
-type BindingsLister func() []BindingKey
+type SubscriptionsLister func() []BindingKey
 
-// KeepCronTickJob enumerates active bindings via the BindingsLister
+// KeepCronTickJob enumerates active bindings via the SubscriptionsLister
 // callback and enqueues a sync job per binding. Cron schedule of
 // "every 30 seconds" gives Keep-side edits a worst-case 30s latency
 // to flow into the wiki, even when no wiki-side trigger fires the
@@ -116,14 +116,14 @@ type KeepCronTickJob struct {
 	connector *Connector
 	enqueuer  JobEnqueuer
 	logger    SubscriberLogger
-	lister    BindingsLister
+	lister    SubscriptionsLister
 }
 
 // NewKeepCronTickJob constructs the periodic tick job. The lister is
 // called fresh on every Execute so changes to on-disk binding state
 // (including pre-existing bindings discovered after startup) are
 // picked up without needing a process restart.
-func NewKeepCronTickJob(connector *Connector, enqueuer JobEnqueuer, logger SubscriberLogger, lister BindingsLister) *KeepCronTickJob {
+func NewKeepCronTickJob(connector *Connector, enqueuer JobEnqueuer, logger SubscriberLogger, lister SubscriptionsLister) *KeepCronTickJob {
 	return &KeepCronTickJob{
 		connector: connector,
 		enqueuer:  enqueuer,
@@ -140,7 +140,7 @@ func (*KeepCronTickJob) GetName() string { return "KeepCronTick" }
 // EnqueueJob (queue full, worker stopped) are logged and counted as
 // the job's overall failure but don't interrupt enqueuing the rest.
 //
-// If a BindingsLister is wired, its result is the source of truth
+// If a SubscriptionsLister is wired, its result is the source of truth
 // (re-read each tick). Otherwise we fall back to the in-memory active
 // set populated by Bind/Unbind. The lister-driven path ensures cold
 // pre-existing bindings get picked up without a wiki-side trigger.
@@ -152,7 +152,7 @@ func (j *KeepCronTickJob) Execute() error {
 	if j.lister != nil {
 		keys = j.lister()
 	} else {
-		keys = j.connector.ActiveBindingsSnapshot()
+		keys = j.connector.ActiveSubscriptionsSnapshot()
 	}
 	// TEMP: log every tick (even zero-binding ticks) while we're
 	// debugging the post-restart "lister returns 0 keys" symptom.

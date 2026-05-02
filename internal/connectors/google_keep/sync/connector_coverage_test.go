@@ -9,10 +9,20 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	"github.com/brendanjerwin/simple_wiki/internal/connectors"
 	keepsync "github.com/brendanjerwin/simple_wiki/internal/connectors/google_keep/sync"
 	"github.com/brendanjerwin/simple_wiki/internal/connectors/google_keep/gateway"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 )
+
+// newReadyLeaseTable returns a LeaseTable already in the ready state
+// for tests. Production wiring blocks Subscribe until the boot rebuild
+// signals ready; tests skip the rebuild and signal immediately.
+func newReadyLeaseTable() *connectors.LeaseTable {
+	lt := connectors.NewLeaseTable()
+	lt.SignalReady()
+	return lt
+}
 
 // profileA is a stable profile ID used across the coverage tests.
 const profileA = wikipage.PageIdentifier("alice-profile")
@@ -27,10 +37,10 @@ func baseConnectedState() keepsync.ConnectorState {
 	}
 }
 
-// saveTo is a convenience to SaveState via a BindingStore without
+// saveTo is a convenience to SaveState via a SubscriptionStore without
 // needing a local variable for the store.
 func saveTo(store *fakeStore, profileID wikipage.PageIdentifier, state keepsync.ConnectorState) {
-	bs := keepsync.NewBindingStore(store)
+	bs := keepsync.NewSubscriptionStore(store)
 	Expect(bs.SaveState(profileID, state)).To(Succeed())
 }
 
@@ -39,7 +49,8 @@ func saveTo(store *fakeStore, profileID wikipage.PageIdentifier, state keepsync.
 // wired to a fakeChecklist by default; callers can swap them with
 // SetChecklistReader / SetChecklistMutator.
 func newCoverageConnector(store *fakeStore, kc keepsync.KeepClient) (*keepsync.Connector, *fakeChecklist) {
-	c := keepsync.NewConnector(keepsync.NewBindingStore(store), nil, fakeClock{})
+	c, nerr := keepsync.NewConnector(keepsync.NewSubscriptionStore(store), newReadyLeaseTable(), nil, fakeClock{})
+	Expect(nerr).ToNot(HaveOccurred())
 	c.SetAuthBuilder(func(_ string) keepsync.AuthExchanger { return fakeAuth{} })
 	c.SetClientBuilder(func(_ string) keepsync.KeepClient { return kc })
 	chk := &fakeChecklist{}
@@ -263,7 +274,7 @@ var _ = Describe("Connector.Bind", func() {
 
 	When("binding a new list with an empty keepNoteID (create-new-note path)", func() {
 		var (
-			binding keepsync.Binding
+			binding keepsync.Subscription
 			err     error
 		)
 
@@ -292,7 +303,7 @@ var _ = Describe("Connector.Bind", func() {
 
 	When("binding to an existing Keep note", func() {
 		var (
-			binding keepsync.Binding
+			binding keepsync.Subscription
 			err     error
 		)
 
@@ -343,7 +354,8 @@ var _ = Describe("Connector.SyncToKeep error paths", func() {
 
 		BeforeEach(func() {
 			saveTo(store, profile, baseConnectedState())
-			c := keepsync.NewConnector(keepsync.NewBindingStore(store), nil, fakeClock{})
+			c, nerr := keepsync.NewConnector(keepsync.NewSubscriptionStore(store), newReadyLeaseTable(), nil, fakeClock{})
+	Expect(nerr).ToNot(HaveOccurred())
 			c.SetAuthBuilder(func(_ string) keepsync.AuthExchanger { return fakeAuth{} })
 			c.SetClientBuilder(func(_ string) keepsync.KeepClient { return &fakeKeepClient{} })
 			// Intentionally NOT calling SetChecklistReader — leaves it nil.
@@ -361,7 +373,7 @@ var _ = Describe("Connector.SyncToKeep error paths", func() {
 		BeforeEach(func() {
 			saveTo(store, profile, baseConnectedState())
 			c, _ := newCoverageConnector(store, &fakeKeepClient{})
-			// Profile has no bindings, so FindBinding returns not-found.
+			// Profile has no bindings, so FindSubscription returns not-found.
 			err = c.SyncToKeep(ctx, profile, "missing-page", "missing-list")
 		})
 
@@ -375,12 +387,12 @@ var _ = Describe("Connector.SyncToKeep error paths", func() {
 
 		BeforeEach(func() {
 			state := baseConnectedState()
-			state.Bindings = []keepsync.Binding{{
+			state.Subscriptions = []keepsync.Subscription{{
 				Page:                 "shopping",
 				ListName:             "groceries",
 				KeepNoteID:           "srv-note",
 				MigratedFingerprints: false, // un-migrated
-				BoundAt:              tNow,
+				SubscribedAt:              tNow,
 			}}
 			saveTo(store, profile, state)
 			c, _ := newCoverageConnector(store, &fakeKeepClient{})
@@ -393,7 +405,7 @@ var _ = Describe("Connector.SyncToKeep error paths", func() {
 	})
 })
 
-var _ = Describe("Connector.MigrateBindingFingerprints early-exit paths", func() {
+var _ = Describe("Connector.MigrateSubscriptionFingerprints early-exit paths", func() {
 	var (
 		ctx     context.Context
 		store   *fakeStore
@@ -410,16 +422,16 @@ var _ = Describe("Connector.MigrateBindingFingerprints early-exit paths", func()
 
 		BeforeEach(func() {
 			state := baseConnectedState()
-			state.Bindings = []keepsync.Binding{{
+			state.Subscriptions = []keepsync.Subscription{{
 				Page:                 "p",
 				ListName:             "list",
 				KeepNoteID:           "srv-note",
 				MigratedFingerprints: true, // already done
-				BoundAt:              tNow,
+				SubscribedAt:              tNow,
 			}}
 			saveTo(store, profile, state)
 			c, _ := newCoverageConnector(store, &fakeKeepClient{})
-			err = c.MigrateBindingFingerprints(ctx, profile, "p", "list")
+			err = c.MigrateSubscriptionFingerprints(ctx, profile, "p", "list")
 		})
 
 		It("should return nil (idempotent no-op)", func() {
@@ -434,7 +446,7 @@ var _ = Describe("Connector.MigrateBindingFingerprints early-exit paths", func()
 			// Profile has no bindings.
 			saveTo(store, profile, baseConnectedState())
 			c, _ := newCoverageConnector(store, &fakeKeepClient{})
-			err = c.MigrateBindingFingerprints(ctx, profile, "missing-page", "missing-list")
+			err = c.MigrateSubscriptionFingerprints(ctx, profile, "missing-page", "missing-list")
 		})
 
 		It("should return nil (binding removed — succeed silently)", func() {
@@ -447,11 +459,12 @@ var _ = Describe("Connector.MigrateBindingFingerprints early-exit paths", func()
 
 		BeforeEach(func() {
 			saveTo(store, profile, baseConnectedState())
-			c := keepsync.NewConnector(keepsync.NewBindingStore(store), nil, fakeClock{})
+			c, nerr := keepsync.NewConnector(keepsync.NewSubscriptionStore(store), newReadyLeaseTable(), nil, fakeClock{})
+	Expect(nerr).ToNot(HaveOccurred())
 			c.SetAuthBuilder(func(_ string) keepsync.AuthExchanger { return fakeAuth{} })
 			c.SetClientBuilder(func(_ string) keepsync.KeepClient { return &fakeKeepClient{} })
 			// No SetChecklistReader — leaves it nil.
-			err = c.MigrateBindingFingerprints(ctx, profile, "p", "list")
+			err = c.MigrateSubscriptionFingerprints(ctx, profile, "p", "list")
 		})
 
 		It("should return ErrChecklistReaderUnavailable", func() {

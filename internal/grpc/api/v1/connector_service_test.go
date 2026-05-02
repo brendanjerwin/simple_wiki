@@ -13,6 +13,7 @@ import (
 	"google.golang.org/grpc/codes"
 
 	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
+	"github.com/brendanjerwin/simple_wiki/internal/connectors"
 	keepsync "github.com/brendanjerwin/simple_wiki/internal/connectors/google_keep/sync"
 	v1 "github.com/brendanjerwin/simple_wiki/internal/grpc/api/v1"
 	"github.com/brendanjerwin/simple_wiki/tailscale"
@@ -63,7 +64,7 @@ var _ = Describe("ConnectorService dead-letter handlers (GOOGLE_KEEP)", func() {
 
 		mock = &MockPageReaderMutator{}
 		// Seed the profile page with a connector and one binding so
-		// FindBinding succeeds. ItemIDMap shape mirrors what the
+		// FindSubscription succeeds. ItemIDMap shape mirrors what the
 		// frontmatter codec produces.
 		mock.WrittenFrontmatterByID = map[string]map[string]any{
 			string(profileID): {
@@ -109,8 +110,11 @@ var _ = Describe("ConnectorService dead-letter handlers (GOOGLE_KEEP)", func() {
 			},
 		}
 
-		store := keepsync.NewBindingStore(mock)
-		connector := keepsync.NewConnector(store, http.DefaultClient, keepConnectorClock{})
+		store := keepsync.NewSubscriptionStore(mock)
+		leaseTable := connectors.NewLeaseTable()
+		leaseTable.SignalReady()
+		connector, nerr := keepsync.NewConnector(store, leaseTable, http.DefaultClient, keepConnectorClock{})
+		Expect(nerr).ToNot(HaveOccurred())
 
 		server = mustNewServer(mock, nil, nil).WithKeepConnector(connector)
 		ctx = withCallerIdentity(context.Background(), keepConnectorTestEmail)
