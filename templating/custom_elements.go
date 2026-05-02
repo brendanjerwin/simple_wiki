@@ -38,6 +38,7 @@ func MacroCustomElements() []CustomElement {
 		{Name: "wiki-survey", Attrs: []string{"name", pageAttr}},
 		{Name: "wiki-blog", Attrs: []string{"blog-id", "max-articles", pageAttr, "hide-new-post"}},
 		{Name: "keep-connect"},
+		{Name: "google-tasks-connect"},
 		{Name: "connector-subscribe-button", Attrs: []string{pageAttr, "list-name"}},
 	}
 }
