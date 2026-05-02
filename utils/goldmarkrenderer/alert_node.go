@@ -164,9 +164,10 @@ func convertBlockquoteToAlert(bq *ast.Blockquote, alertType AlertType) {
 	// (e.g., "[" as one ast.Text node and "!TYPE]" as another) when it
 	// backtracks after failing to form a link. We therefore remove ALL inline
 	// nodes that belong to the first line — i.e., every node up to and
-	// including the first ast.Text node with SoftLineBreak() == true (the
-	// goldmark signal that a line ends here). If no such node is found, the
-	// entire paragraph consists only of the marker line and we remove all
+	// including the first ast.Text node that ends a line. In goldmark a line
+	// ending is signalled by either SoftLineBreak()==true (normal newline) or
+	// HardLineBreak()==true (two trailing spaces). If no such node is found,
+	// the entire paragraph consists only of the marker line and we remove all
 	// children, then the paragraph itself.
 	if para, ok := bq.FirstChild().(*ast.Paragraph); ok {
 		child := para.FirstChild()
@@ -174,7 +175,7 @@ func convertBlockquoteToAlert(bq *ast.Blockquote, alertType AlertType) {
 			next := child.NextSibling()
 			textNode, isText := child.(*ast.Text)
 			para.RemoveChild(para, child)
-			if isText && textNode.SoftLineBreak() {
+			if isText && (textNode.SoftLineBreak() || textNode.HardLineBreak()) {
 				break
 			}
 			child = next

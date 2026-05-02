@@ -599,6 +599,28 @@ var _ = Describe("GoldmarkRenderer", func() {
 			})
 		})
 
+		When("rendering a NOTE alert where the marker line ends with a hard line break (two trailing spaces)", func() {
+			BeforeEach(func() {
+				// Two trailing spaces force a hard line break in goldmark
+				// (HardLineBreak()==true, SoftLineBreak()==false on the marker node).
+				source = []byte("> [!NOTE]  \n> Content after hard break.")
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should render a markdown-alert div", func() {
+				Expect(string(output)).To(ContainSubstring(`class="markdown-alert markdown-alert-note"`))
+			})
+
+			It("should render the content and not the marker", func() {
+				Expect(string(output)).To(ContainSubstring("Content after hard break."))
+				Expect(string(output)).NotTo(ContainSubstring("[!NOTE]"))
+				Expect(string(output)).NotTo(ContainSubstring("!NOTE]"))
+			})
+		})
+
 		When("rendering a blockquote without an alert marker", func() {
 			BeforeEach(func() {
 				source = []byte("> Regular blockquote content.")
