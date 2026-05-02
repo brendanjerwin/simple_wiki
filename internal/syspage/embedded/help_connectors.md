@@ -17,6 +17,8 @@ Connectors bridge wiki checklists to apps you already use on your phone or compu
 - [[help-google-tasks]] — **Google Tasks**. Standard OAuth; per-deployment setup by your wiki operator. Cleanest of the Google bridges.
 - [[help-caldav]] — **CalDAV** (Apple Reminders, DAVx5 + tasks.org / Jtx Board). Built into the wiki; no per-user setup, no API tokens.
 
+> If you're connecting Google Keep or Google Tasks for the first time on an existing profile, see [[help-profile-features]] for how to add the connect buttons to your profile body. Profile pages don't auto-upgrade when new connectors ship, so the snippet has to be pasted in once.
+
 ## Roadmap
 
 - **iCloud Reminders** — direct OAuth bridge (vs. the current CalDAV path through Apple's calendar server). Next on deck after Tasks lands.

@@ -14,6 +14,12 @@ The wiki gives every authenticated user a personal **profile page**. Visit
 `/profile` from any browser tab — the wiki resolves your Tailscale identity
 and redirects you to your own profile page.
 
+> For the latest features your profile could include — new connect
+> buttons, banners, and other widgets that ship with the wiki — see
+> [[help-profile-features]]. Existing profile pages don't auto-upgrade
+> when new features land, so that page is the canonical catalog of
+> snippets to paste in.
+
 ## Identifier scheme
 
 The profile-page identifier is derived deterministically from your login
@@ -76,9 +82,11 @@ Per-user external-app connector state lives on your profile page under
 bindings here — see [[help-google-keep]] for the full setup. Other
 connector types (Google Tasks, etc.) will follow the same pattern.
 
-The `KeepConnect` macro on the default profile template renders the
-connect/disconnect UI; if your profile was created before Keep landed,
-add `{{"{{ KeepConnect }}"}}` to your profile page's body to enable it.
+The default profile template renders connect/disconnect UI for each
+supported connector. If your profile was created before a given
+connector landed, see [[help-profile-features]] for the snippet to
+paste in — that page is kept up to date as new connectors and profile
+widgets ship.
 
 ## For agents
 
