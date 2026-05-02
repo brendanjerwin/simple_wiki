@@ -32,59 +32,78 @@ So instead of auto-upgrading, this page lists every part of the current `profile
 
 If you have shell access and prefer to use the agent surface, the `mcp__wiki__api_v1_PageManagementService_UpdatePageContent` RPC updates the body without touching the frontmatter — that's the safest CLI path.
 
+## Macros vs. raw elements
+
+The wiki's templating engine renders **macros** like `{{ KeepConnect }}` into the right HTML element with the right attributes wired up. You paste the macro form. Pasting raw `<keep-connect>` would land an unwired element on the page — it would render visually but wouldn't query the connector backend, scope to your identity, or surface connect/connected/error states.
+
+The exception is `<profile-paused-banner>`, which has no macro wrapper today — paste it as-is.
+
+When in doubt: **macro form goes inside `{{ … }}` braces; raw elements look like `<…>` HTML tags.** This catalog tells you which form each part wants.
+
 ## The parts of a profile
 
 Each entry below is a piece of the current `profile_template`. Pick the ones you want; skip the ones you don't use.
 
-### `<profile-paused-banner>`
+### `<profile-paused-banner>` (raw element)
 
 **What it does.** Silent unless one of your connector subscriptions has been paused (usually because an OAuth credential expired or was revoked). When that happens, a banner appears at the top of your profile with a click-target that scrolls to the matching connect button so you can reconnect in one click.
 
 **Why you might want it.** If you use any of the [[help-connectors]] — Google Keep, Google Tasks, etc. — sync can stop silently when credentials expire. Without this banner, the first you'll know is when a checklist stops round-tripping. With it, paused subscriptions get a loud, actionable surface the moment you open your profile.
 
-**How to add it.** Paste anywhere in the body. The conventional spot is at the top of a `## Connectors` section so paused-state surfaces near the connect buttons it directs you to.
+**How to add it.** Paste the raw element anywhere in the body. The conventional spot is at the top of a `## Connectors` section so paused-state surfaces near the connect buttons it directs you to.
 
 ```html
 <profile-paused-banner></profile-paused-banner>
 ```
 
+This one is the exception to the macro rule — there's no `{{ ProfilePausedBanner }}` wrapper today, so paste the element tag directly.
+
 **When to skip it.** If you don't use any connectors at all, the banner will simply never show — there's no harm in leaving it there, but no benefit either.
 
-### `{{ KeepConnect }}`
+### `{{ KeepConnect }}` (macro)
 
 **What it does.** Renders the **Connect Google Keep** button (and its connected/error states). Once connected, your wiki checklists can subscribe to individual Keep notes and round-trip items.
 
 **Why you might want it.** Add it if you want to bridge wiki checklists to the Google Keep app on your phone or laptop. Read [[help-google-keep]] before connecting — Keep uses an unofficial API that requires capturing an `oauth_token` cookie, and the trust model is worth your attention.
 
-**How to add it.** Paste into the body, conventionally under a `## Connectors` heading.
+**How to add it.** Paste the macro into the body, conventionally under a `## Connectors` heading.
 
 ```
 {{ KeepConnect }}
 ```
 
-The macro takes no arguments — the rendered `<keep-connect>` element queries the connector backend on its own and scopes to the calling identity.
+This is a macro, not a raw element — paste it exactly as shown, with the `{{ }}` braces. The templating engine expands it into a `<keep-connect>` element that queries the connector backend and scopes to the calling identity. Pasting `<keep-connect>` directly would render an unwired element and not work.
+
+The macro takes no arguments.
 
 **When to skip it.** Skip if you don't use Google Keep, or if you'd rather use [[help-google-tasks]] or [[help-caldav]] instead. Each checklist binding is globally exclusive — you can't subscribe one checklist to two services at once — so picking your bridge per use-case matters.
 
-### `{{ GoogleTasksConnect .Identifier }}`
+### `{{ GoogleTasksConnect "<profile-identifier>" }}` (macro)
 
 **What it does.** Renders the **Connect Google Tasks** button (and its connected/error states). Standard OAuth — no password capture, no master tokens. Once connected, wiki checklists can subscribe to Google Tasks lists and round-trip items.
 
 **Why you might want it.** Google Tasks is the cleanest of the Google bridges: real public API, real OAuth, no reverse-engineered protocol. If you live on Android or use Tasks via Calendar on the web, this is the connector to add. See [[help-google-tasks]] for the full setup including the per-deployment operator step.
 
-**How to add it.** Paste into the body, conventionally under a `## Connectors` heading. The argument is **required** — it scopes the rendered element's OAuth state lookups to your specific profile page.
+**How to add it.** Paste the macro into the body, conventionally under a `## Connectors` heading. Replace `<profile-identifier>` with your actual profile page's identifier (a quoted string).
 
 ```
-{{ GoogleTasksConnect .Identifier }}
+{{ GoogleTasksConnect "<profile-identifier>" }}
 ```
 
-`.Identifier` is the standard template variable that resolves to the current page's identifier. Because your profile page renders this macro on itself, `.Identifier` evaluates to your profile slug (e.g. `profile_brendanjerwin_gmail_com_4f3a91c2`) automatically — you don't need to hardcode it.
-
-If you're pasting into a context where `.Identifier` isn't bound (rare, but possible if you've structured your profile unusually), you can pass the slug as a literal string instead:
+A real example, after substitution:
 
 ```
-{{ GoogleTasksConnect "profile_yourname_example_com_abc12345" }}
+{{ GoogleTasksConnect "profile_brendanjerwin_gmail_com" }}
 ```
+
+This is a macro, not a raw element — paste it exactly with the `{{ }}` braces. The templating engine expands it into a `<google-tasks-connect profile-id="…">` element with the OAuth state scoped to that profile. Pasting `<google-tasks-connect>` directly would render an unwired element and not work.
+
+The identifier argument is **required** — it scopes the rendered element's OAuth state lookups to your specific profile page.
+
+**Finding your profile identifier.** Two equally good ways:
+
+1. **Look at the URL.** When you're on your profile page, the part of the URL after the host is the identifier. If you're at `https://wiki.example.com/profile_brendanjerwin_gmail_com`, then `profile_brendanjerwin_gmail_com` is your identifier — the page name *is* the identifier.
+2. **Look at the frontmatter.** Open your profile in the editor and look at the `+++` frontmatter block at the top. You'll see a line like `identifier = "profile_brendanjerwin_gmail_com"`. Copy the quoted value.
 
 **When to skip it.** Skip if you don't use Google Tasks, or if your wiki operator hasn't configured the Google Tasks OAuth client for this deployment yet (the connect button will tell you so).
 
