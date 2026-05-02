@@ -140,6 +140,32 @@ content here`)
 				Expect(applies).To(BeFalse())
 			})
 		})
+
+		Describe("when an empty parent table is immediately followed by its child table", func() {
+			// Regression: pelletier/go-toml/v2 marshals nested empty parent tables
+			// as consecutive headers (e.g., [wiki]\n[wiki.connectors]\n[wiki.connectors.google_tasks]).
+			// The previous behavior treated this as needing a blank line and inserted one,
+			// which the next toml.Marshal stripped — producing a write-loop on every read.
+			var applies bool
+
+			BeforeEach(func() {
+				content := []byte(`+++
+identifier = 'profile_test'
+
+[wiki]
+[wiki.connectors]
+[wiki.connectors.google_tasks]
+email = 'a@b'
++++
+body
+`)
+				applies = migration.AppliesTo(content)
+			})
+
+			It("should return false", func() {
+				Expect(applies).To(BeFalse())
+			})
+		})
 	})
 
 	Describe("Apply", func() {
@@ -308,6 +334,37 @@ level = 1
 +++
 content here`)
 				Expect(result).To(Equal(expected))
+			})
+		})
+
+		Describe("when an empty parent table is immediately followed by its child table", func() {
+			// Regression: see matching AppliesTo test above. Apply must not insert
+			// blank lines between empty parent and child table headers, otherwise
+			// toml.Marshal output (which has none) creates a write-loop.
+			var content []byte
+			var result []byte
+			var err error
+
+			BeforeEach(func() {
+				content = []byte(`+++
+identifier = 'profile_test'
+
+[wiki]
+[wiki.connectors]
+[wiki.connectors.google_tasks]
+email = 'a@b'
++++
+body
+`)
+				result, err = migration.Apply(content)
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should leave the content unchanged", func() {
+				Expect(string(result)).To(Equal(string(content)))
 			})
 		})
 	})
