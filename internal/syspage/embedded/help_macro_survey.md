@@ -34,7 +34,7 @@ A single page can have multiple surveys with different names.
 
 ## UI Features
 
-- **Form fields**: Renders `select` and `text` field types based on frontmatter config
+- **Form fields**: Renders `choice` (dropdown), `text`, `number`, and `boolean` field types based on frontmatter config
 - **Pre-fill**: If the current user has already submitted, their previous response is pre-filled for editing
 - **Upsert on resubmit**: Submitting again replaces the user's previous response (no duplicates)
 - **Authentication required**: Unauthenticated visitors see a "please log in" message — the macro relies on the configured authentication provider's user identity (any string user identifier works)
@@ -52,7 +52,7 @@ question = "How would you like to work this week?"
 
 [[surveys.team-preferences.fields]]
 name = "location"
-type = "select"
+type = "choice"
 label = "Where will you be?"
 options = ["office", "home", "hybrid"]
 
@@ -76,8 +76,29 @@ notes = "Heads-down sprint."
 
 | Type | Description |
 |------|-------------|
-| `select` | Dropdown; requires `options` array |
+| `choice` | Dropdown; requires `options` array. (Alias: `select`.) |
 | `text` | Free-form text input |
+| `number` | Numeric input; optional `min` / `max` |
+| `boolean` | Checkbox |
+
+### Field Labeling
+
+- Use `label` on a field to render a custom prompt verbatim.
+- If `label` is omitted, the UI auto-humanizes `name` from snake_case/kebab-case to Title Case.
+
+Example:
+
+```toml
+[[surveys.team-preferences.fields]]
+name = "protein_preference"
+type = "text"
+# Renders as "Protein Preference" if label is omitted
+
+[[surveys.team-preferences.fields]]
+name = "protein_notes"
+type = "text"
+label = "What's your preferred protein?"
+```
 
 ### Response Fields
 

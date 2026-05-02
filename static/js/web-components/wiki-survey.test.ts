@@ -314,7 +314,8 @@ describe('WikiSurvey', () => {
             question: 'How was it?',
             fields: [
               { name: 'rating', type: 'number', min: 1, max: 5 },
-              { name: 'notes', type: 'text' },
+              { name: 'protein_preference', type: 'text' },
+              { name: 'favorite_food', type: 'text', label: "What's your favorite food?" },
               { name: 'agreed', type: 'boolean' },
               { name: 'mood', type: 'choice', options: ['happy', 'sad'] },
             ],
@@ -337,7 +338,7 @@ describe('WikiSurvey', () => {
         });
 
         it('should have a label associated with the text input', () => {
-          const label = el.shadowRoot?.querySelector('label[for="field-notes"]');
+          const label = el.shadowRoot?.querySelector('label[for="field-protein_preference"]');
           expect(label).to.exist;
         });
 
@@ -349,6 +350,30 @@ describe('WikiSurvey', () => {
         it('should have a label associated with the select input', () => {
           const label = el.shadowRoot?.querySelector('label[for="field-mood"]');
           expect(label).to.exist;
+        });
+
+        describe('when field has no explicit label', () => {
+          let label: HTMLLabelElement | null | undefined;
+
+          beforeEach(() => {
+            label = el.shadowRoot?.querySelector('label[for="field-protein_preference"]');
+          });
+
+          it('should auto-humanize field names', () => {
+            expect(label?.textContent?.trim()).to.equal('Protein Preference');
+          });
+        });
+
+        describe('when field has an explicit label', () => {
+          let label: HTMLLabelElement | null | undefined;
+
+          beforeEach(() => {
+            label = el.shadowRoot?.querySelector('label[for="field-favorite_food"]');
+          });
+
+          it('should render the explicit label verbatim', () => {
+            expect(label?.textContent?.trim()).to.equal("What's your favorite food?");
+          });
         });
       });
 
