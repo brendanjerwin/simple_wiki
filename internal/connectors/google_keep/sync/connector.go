@@ -1500,6 +1500,44 @@ func (c *Connector) bootstrapKeepListForBinding(ctx context.Context, profileID w
 	return c.persistBindingMap(profileID, binding)
 }
 
+// FetchRemoteListTitle implements connectors.BackendAdapter.
+//
+// Returns the most recent title Keep reported for the bound note,
+// as observed by the inline title-sync block in applyInboundFromKeep
+// (which already walks every pull's nodes for the matching serverID).
+// The persisted Subscription.KeepNoteTitle is the durable record of
+// that observation.
+//
+// This implementation does NOT make a fresh API call — Keep already
+// updates the cached title every tick as a side effect of the
+// normal pull. A dedicated fetch would duplicate the work, and
+// running it through the interface lets the orchestrator pick up
+// the cached value uniformly across backends.
+//
+// TODO(post-#999): once the SyncEngine extraction lands and drives
+// per-tick title sync via the interface, the inline title-sync code
+// in applyInboundFromKeep will move here so this method is the
+// canonical path. For now the inline code populates the cache; this
+// method only reads it.
+func (c *Connector) FetchRemoteListTitle(_ context.Context, profileID wikipage.PageIdentifier, remoteListHandle string) (string, bool, error) {
+	if remoteListHandle == "" {
+		return "", false, nil
+	}
+	state, err := c.store.LoadState(profileID)
+	if err != nil {
+		return "", false, nil
+	}
+	for _, b := range state.Subscriptions {
+		if b.KeepNoteID == remoteListHandle {
+			if b.KeepNoteTitle == "" {
+				return "", false, nil
+			}
+			return b.KeepNoteTitle, true, nil
+		}
+	}
+	return "", false, nil
+}
+
 // markBindingSynced persists the updated binding (id_map changes,
 // KeepCursor advance, per-item synced_fp updates). Holds the per-
 // profile mutex via SubscriptionStore so concurrent syncs serialize.

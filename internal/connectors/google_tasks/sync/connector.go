@@ -149,6 +149,14 @@ func (*Connector) Kind() connectors.ConnectorKind {
 // connector dispatch shape.
 var _ connectors.Connector = (*Connector)(nil)
 
+// Compile-time assertion: every connector MUST implement
+// BackendAdapter (per ADR-0015 + the user's directive that
+// shared primitives like remote-title sync are required across
+// backends). Adding a method to BackendAdapter and forgetting to
+// implement it here is now a compile error rather than a parity
+// bug shipped to production.
+var _ connectors.BackendAdapter = (*Connector)(nil)
+
 // Sync runs one inbound-then-outbound reconcile pass for the given
 // subscription. Implements connectors.Connector.Sync.
 //
@@ -258,13 +266,14 @@ func (c *Connector) runSyncPasses(ctx context.Context, profileID wikipage.PageId
 	sub = updatedSub2
 
 	// Title sync: Google Tasks is authoritative for the tasklist's
-	// display name once bound. If the user renames the list in the
-	// Tasks app, mirror that into sub.RemoteListTitle so the wiki UI
-	// surfaces the current name. Mirrors Keep's behavior at
-	// google_keep/sync/connector.go:711-723. Best-effort — a
-	// ListTaskLists failure is logged-and-ignored so a transient
-	// title-fetch error doesn't block an otherwise-successful sync.
-	if newTitle, ok := c.fetchRemoteTitle(ctx, client, sub.RemoteListID); ok && newTitle != sub.RemoteListTitle {
+	// display name once bound. Goes through the BackendAdapter
+	// interface (var _ connectors.BackendAdapter = (*Connector)(nil)
+	// up at the package level) so iCloud and any future backend
+	// must implement the same primitive — caught by the compile-
+	// time assertion if they forget.
+	if newTitle, ok, terr := c.FetchRemoteListTitle(ctx, profileID, sub.RemoteListID); terr == nil && ok && newTitle != sub.RemoteListTitle {
+		c.logger.Info("tasks bridge: title_sync_updated profile=%s remote=%s old=%q new=%q",
+			string(profileID), sub.RemoteListID, sub.RemoteListTitle, newTitle)
 		sub.RemoteListTitle = newTitle
 	}
 

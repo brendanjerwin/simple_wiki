@@ -388,6 +388,33 @@ func (*Connector) fetchRemoteTitle(ctx context.Context, client TasksClient, remo
 	return fetchRemoteTitleViaClient(ctx, client, remoteListID)
 }
 
+// FetchRemoteListTitle implements connectors.BackendAdapter. The
+// connector resolves a per-profile client internally from the
+// stored refresh token. Returns ("", false, nil) on any transient
+// API failure; non-nil error only on auth failures the orchestrator
+// should surface (currently never — the gateway swallows auth
+// errors silently as part of best-effort title sync).
+func (c *Connector) FetchRemoteListTitle(ctx context.Context, profileID wikipage.PageIdentifier, remoteListHandle string) (string, bool, error) {
+	if remoteListHandle == "" {
+		return "", false, nil
+	}
+	state, err := c.store.LoadState(profileID)
+	if err != nil {
+		return "", false, nil
+	}
+	if !state.IsConfigured() {
+		return "", false, nil
+	}
+	client, _, err := c.clientFactory(profileID, state.RefreshToken)
+	if err != nil {
+		return "", false, nil
+	}
+	title, ok := fetchRemoteTitleViaClient(ctx, client, remoteListHandle)
+	c.logger.Info("tasks bridge: fetch_remote_title profile=%s remote=%s ok=%v title=%q",
+		string(profileID), remoteListHandle, ok, title)
+	return title, ok, nil
+}
+
 // fetchRemoteTitleViaClient is the implementation shared by
 // resolveRemoteTitle (subscribe-time) and Connector.fetchRemoteTitle
 // (per-tick). Kept as a free function to keep both call sites

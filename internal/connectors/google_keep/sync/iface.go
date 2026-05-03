@@ -73,3 +73,11 @@ func (c *Connector) ForceFullResync(_ context.Context, key connectors.Subscripti
 // Compile-time check: the Keep Connector satisfies the cross-connector
 // dispatch shape. Catches drift if the interface evolves.
 var _ connectors.Connector = (*Connector)(nil)
+
+// Compile-time assertion: every connector MUST implement
+// BackendAdapter (per ADR-0015 + the user's directive that
+// shared primitives like remote-title sync are required across
+// backends). Adding a method to BackendAdapter and forgetting to
+// implement it here is now a compile error rather than a parity
+// bug shipped to production.
+var _ connectors.BackendAdapter = (*Connector)(nil)
