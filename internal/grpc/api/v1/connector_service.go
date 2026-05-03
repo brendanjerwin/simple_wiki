@@ -735,6 +735,14 @@ func mapTasksConnectorErr(err error) error {
 		return status.Error(codes.FailedPrecondition, "tasks_list_has_subtasks: pick a flat tasks list (subtasks are not supported by the wiki's checklist model)")
 	case errors.Is(err, tasksgateway.ErrAuthRevoked), errors.Is(err, tasksgateway.ErrInvalidGrant):
 		return status.Error(codes.Unauthenticated, "auth_revoked: re-connect Google Tasks on your profile")
+	case errors.Is(err, tasksgateway.ErrServiceDisabled):
+		// Operator setup error: the Tasks API is not enabled on the
+		// GCP project. The activation URL (when present) is already
+		// embedded in the gateway error's message — surface it
+		// verbatim so the user can click through to enable the API.
+		return status.Errorf(codes.FailedPrecondition, "tasks_api_not_enabled: %v", err)
+	case errors.Is(err, tasksgateway.ErrPermissionDenied):
+		return status.Errorf(codes.PermissionDenied, "permission_denied: %v", err)
 	case errors.Is(err, tasksgateway.ErrRateLimited):
 		return status.Error(codes.ResourceExhausted, "rate_limited")
 	default:

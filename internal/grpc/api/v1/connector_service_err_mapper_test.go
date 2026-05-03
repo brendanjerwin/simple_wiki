@@ -234,6 +234,64 @@ var _ = Describe("mapTasksConnectorErr coverage", func() {
 		})
 	})
 
+	// ------------------------------------------------------------------ ErrServiceDisabled (gateway)
+
+	Describe("when the tasks gateway returns ErrServiceDisabled during Subscribe (tasks_api_not_enabled)", func() {
+		var err error
+
+		BeforeEach(func() {
+			// Simulate the activation-URL embedded message the gateway
+			// produces when Google's 403 body advertises SERVICE_DISABLED.
+			wrapped := errors.New("https://console.developers.google.com/apis/api/tasks.googleapis.com/overview?project=703961900896")
+			injected := errors.Join(tasksgateway.ErrServiceDisabled, wrapped)
+			client := &errMapperTasksClient{
+				listTasksErr: injected,
+			}
+			mock := connectedTasksProfileMock(profileID)
+			c := buildErrMapperTasksConnector(mock, client)
+			server = mustNewServer(mock, nil, nil).WithGoogleTasksConnector(c)
+			_, err = server.Subscribe(ctx, &apiv1.SubscribeRequest{
+				ConnectorKind:    apiv1.ConnectorKind_CONNECTOR_KIND_GOOGLE_TASKS,
+				Page:             errMapPage,
+				ListName:         errMapListName,
+				RemoteListHandle: errMapRemoteID,
+			})
+		})
+
+		It("should return FailedPrecondition tasks_api_not_enabled", func() {
+			Expect(err).To(HaveGrpcStatusWithSubstr(codes.FailedPrecondition, "tasks_api_not_enabled"))
+		})
+
+		It("should preserve the activationUrl in the message", func() {
+			Expect(err).To(HaveGrpcStatusWithSubstr(codes.FailedPrecondition, "console.developers.google.com"))
+		})
+	})
+
+	// ------------------------------------------------------------------ ErrPermissionDenied (gateway)
+
+	Describe("when the tasks gateway returns ErrPermissionDenied during Subscribe (permission_denied)", func() {
+		var err error
+
+		BeforeEach(func() {
+			client := &errMapperTasksClient{
+				listTasksErr: tasksgateway.ErrPermissionDenied,
+			}
+			mock := connectedTasksProfileMock(profileID)
+			c := buildErrMapperTasksConnector(mock, client)
+			server = mustNewServer(mock, nil, nil).WithGoogleTasksConnector(c)
+			_, err = server.Subscribe(ctx, &apiv1.SubscribeRequest{
+				ConnectorKind:    apiv1.ConnectorKind_CONNECTOR_KIND_GOOGLE_TASKS,
+				Page:             errMapPage,
+				ListName:         errMapListName,
+				RemoteListHandle: errMapRemoteID,
+			})
+		})
+
+		It("should return PermissionDenied permission_denied", func() {
+			Expect(err).To(HaveGrpcStatusWithSubstr(codes.PermissionDenied, "permission_denied"))
+		})
+	})
+
 	// ------------------------------------------------------------------ default branch
 
 	Describe("when the tasks gateway returns an unrecognised error during Subscribe (default branch)", func() {

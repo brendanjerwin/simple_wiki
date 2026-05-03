@@ -745,3 +745,135 @@ var _ = Describe("Task decode", func() {
 		})
 	})
 })
+
+var _ = Describe("403 classification", func() {
+	var (
+		api    *fakeTasksAPI
+		client *gateway.TasksClient
+		err    error
+	)
+
+	AfterEach(func() {
+		if api != nil {
+			api.Close()
+		}
+	})
+
+	When("the body carries errors[].reason=accessNotConfigured (Tasks API not enabled)", func() {
+		var errMsg string
+
+		BeforeEach(func() {
+			body := `{
+				"error": {
+					"code": 403,
+					"message": "Google Tasks API has not been used in project 703961900896 before or it is disabled.",
+					"errors": [{
+						"message": "Google Tasks API has not been used in project ...",
+						"domain": "usageLimits",
+						"reason": "accessNotConfigured"
+					}],
+					"status": "PERMISSION_DENIED",
+					"details": [{
+						"@type": "type.googleapis.com/google.rpc.ErrorInfo",
+						"reason": "SERVICE_DISABLED",
+						"domain": "googleapis.com",
+						"metadata": {
+							"activationUrl": "https://console.developers.google.com/apis/api/tasks.googleapis.com/overview?project=703961900896",
+							"service": "tasks.googleapis.com"
+						}
+					}]
+				}
+			}`
+			api = newFakeTasksAPI(func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusForbidden)
+				_, _ = io.WriteString(w, body)
+			})
+			client, _ = gateway.NewTasksClient(api.server.Client(), api.URL(), newStaticTokenSource("t"))
+			_, err = client.ListTaskLists(context.Background())
+			if err != nil {
+				errMsg = err.Error()
+			}
+		})
+
+		It("should return ErrServiceDisabled (NOT ErrRateLimited)", func() {
+			Expect(err).To(MatchError(gateway.ErrServiceDisabled))
+		})
+
+		It("should NOT classify as rate-limited", func() {
+			Expect(err).NotTo(MatchError(gateway.ErrRateLimited))
+		})
+
+		It("should embed the activationUrl in the error message", func() {
+			Expect(errMsg).To(ContainSubstring("https://console.developers.google.com/apis/api/tasks.googleapis.com/overview?project=703961900896"))
+		})
+	})
+
+	When("the body carries status=RESOURCE_EXHAUSTED on a 403 (quota exhaustion served as 403)", func() {
+		BeforeEach(func() {
+			body := `{
+				"error": {
+					"code": 403,
+					"message": "Quota exceeded for quota metric 'Queries' and limit 'Queries per minute per user'.",
+					"errors": [{
+						"message": "Quota exceeded.",
+						"domain": "global",
+						"reason": "rateLimitExceeded"
+					}],
+					"status": "RESOURCE_EXHAUSTED"
+				}
+			}`
+			api = newFakeTasksAPI(func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusForbidden)
+				_, _ = io.WriteString(w, body)
+			})
+			client, _ = gateway.NewTasksClient(api.server.Client(), api.URL(), newStaticTokenSource("t"))
+			_, err = client.ListTaskLists(context.Background())
+		})
+
+		It("should return ErrRateLimited", func() {
+			Expect(err).To(MatchError(gateway.ErrRateLimited))
+		})
+
+		It("should NOT classify as ErrServiceDisabled", func() {
+			Expect(err).NotTo(MatchError(gateway.ErrServiceDisabled))
+		})
+	})
+
+	When("the body carries a generic permission failure (no SERVICE_DISABLED, not RESOURCE_EXHAUSTED)", func() {
+		BeforeEach(func() {
+			body := `{
+				"error": {
+					"code": 403,
+					"message": "The caller does not have permission",
+					"errors": [{
+						"message": "The caller does not have permission",
+						"domain": "global",
+						"reason": "forbidden"
+					}],
+					"status": "PERMISSION_DENIED"
+				}
+			}`
+			api = newFakeTasksAPI(func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusForbidden)
+				_, _ = io.WriteString(w, body)
+			})
+			client, _ = gateway.NewTasksClient(api.server.Client(), api.URL(), newStaticTokenSource("t"))
+			_, err = client.ListTaskLists(context.Background())
+		})
+
+		It("should return ErrPermissionDenied", func() {
+			Expect(err).To(MatchError(gateway.ErrPermissionDenied))
+		})
+
+		It("should NOT classify as ErrRateLimited", func() {
+			Expect(err).NotTo(MatchError(gateway.ErrRateLimited))
+		})
+
+		It("should NOT classify as ErrServiceDisabled", func() {
+			Expect(err).NotTo(MatchError(gateway.ErrServiceDisabled))
+		})
+	})
+})

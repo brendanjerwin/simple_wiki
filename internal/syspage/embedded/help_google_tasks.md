@@ -104,6 +104,8 @@ Mirrors the [[help-google-keep]] bridge's behavior — empty `remote_list_handle
 | `auth_failed` | OAuth token rejected (revoked, expired beyond refresh, or rotated and lost) | Click the paused badge on profile or checklist; reauthorize via Google |
 | `subscription_collision` | Someone else already bound this checklist to a different cloud service or list | Use a different checklist or have them unbind first |
 | `subtasks_present` | Tried to bind to a Tasks list that has subtasks | Open the Tasks app, flatten the list (move subtasks to top level), then retry |
+| `tasks_api_not_enabled` | The Google Tasks API is not enabled on the GCP project that issued the OAuth client | Click the activation URL in the error message (or visit the [Google Cloud Console](https://console.developers.google.com/apis/api/tasks.googleapis.com/overview) for the project that owns your OAuth client) and enable the Tasks API, then retry |
+| `permission_denied` | Google rejected the request with a generic 403 (token valid, but the resource is off-limits) | Check the OAuth scope grant on your profile; if you recently changed scopes, reauthorize |
 | `rate_limited` | Hitting Tasks API too hard | Wait a few minutes; sync resumes automatically |
 
 ## CalDAV invisibility
@@ -126,7 +128,7 @@ The bridge is exposed through the unified per-user gRPC service `api.v1.Connecto
 - `ListDeadLetters(connector_kind=GOOGLE_TASKS, page, list_name) → DeadLetterItem[]`
 - `ClearDeadLetter(connector_kind=GOOGLE_TASKS, page, list_name, item_uid) → ()`
 
-Errors branch on typed connect codes, never on banner text. `auth_failed` → `Unauthenticated`; subscription collision → `AlreadyExists`; subtask refuse-to-subscribe → `FailedPrecondition`.
+Errors branch on typed connect codes, never on banner text. `auth_failed` → `Unauthenticated`; subscription collision → `AlreadyExists`; subtask refuse-to-subscribe → `FailedPrecondition`; `tasks_api_not_enabled` → `FailedPrecondition` (with the Google activation URL embedded in the message); `permission_denied` → `PermissionDenied`; `rate_limited` → `ResourceExhausted`.
 
 ## Why OAuth instead of paste-token
 

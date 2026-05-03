@@ -27,6 +27,10 @@ const dueDateFormat = "2006-01-02T15:04:05.000Z"
 // TasksClient methods that require a non-empty tasklist id.
 const errEmptyTasklistID = "tasks: tasklistID must not be empty"
 
+// httpStatusErrorFmt is the canonical wrap-format for non-2xx Tasks
+// responses: sentinel + HTTP status + truncated body.
+const httpStatusErrorFmt = "%w: HTTP %d: %s"
+
 // TokenSource is the contract the TasksClient uses to obtain a fresh
 // bearer access token on each request. The RefreshClient implements
 // this; tests inject a static stub.
@@ -327,41 +331,123 @@ func (c *TasksClient) do(ctx context.Context, method, relPath string, query url.
 			c.tokenSource.Invalidate()
 			continue
 		}
-		if classified := classifyTasksHTTPStatus(resp.StatusCode); classified != nil {
-			return nil, fmt.Errorf("%w: HTTP %d: %s", classified, resp.StatusCode, truncateBody(respBody))
+		if classified := classifyTasksHTTPResponse(resp.StatusCode, respBody); classified != nil {
+			return nil, classified
 		}
 		return respBody, nil
 	}
 	return nil, fmt.Errorf("%w: token rejected after retry", ErrAuthRevoked)
 }
 
-// classifyTasksHTTPStatus maps Tasks REST v1 status codes to typed
-// errors. nil means "proceed with body decode."
-func classifyTasksHTTPStatus(code int) error {
+// classifyTasksHTTPResponse maps Tasks REST v1 responses to typed,
+// pre-wrapped errors. nil means "proceed with body decode." For 403
+// it inspects the JSON error body to distinguish three operator-
+// visible cases that look identical at the status-code level:
+// service-not-enabled, quota-exhaustion, and generic permission
+// denial. See errors.go for the sentinel descriptions.
+func classifyTasksHTTPResponse(code int, body []byte) error {
 	switch code {
 	case http.StatusOK, http.StatusNoContent:
 		return nil
 	case http.StatusUnauthorized:
-		return ErrAuthRevoked
+		return fmt.Errorf(httpStatusErrorFmt, ErrAuthRevoked, code, truncateBody(body))
 	case http.StatusTooManyRequests:
-		return ErrRateLimited
+		return fmt.Errorf(httpStatusErrorFmt, ErrRateLimited, code, truncateBody(body))
 	case http.StatusForbidden:
-		// Google often uses 403 for rate-limit; the bridge's caller
-		// can't easily disambiguate without the response body, so
-		// classify as rate-limited — back-off-and-retry is the right
-		// answer for either reason.
-		return ErrRateLimited
+		return classifyTasksForbidden(body)
 	case http.StatusNotFound:
-		return ErrNotFound
+		return fmt.Errorf(httpStatusErrorFmt, ErrNotFound, code, truncateBody(body))
 	case http.StatusPreconditionFailed:
-		return ErrPreconditionFailed
+		return fmt.Errorf(httpStatusErrorFmt, ErrPreconditionFailed, code, truncateBody(body))
 	case http.StatusBadRequest:
-		return errors.New("tasks: bad request")
+		return fmt.Errorf("tasks: bad request: HTTP %d: %s", code, truncateBody(body))
 	case http.StatusInternalServerError, http.StatusBadGateway, http.StatusServiceUnavailable, http.StatusGatewayTimeout:
-		return errors.New("tasks: upstream unavailable")
+		return fmt.Errorf("tasks: upstream unavailable: HTTP %d: %s", code, truncateBody(body))
 	default:
-		return fmt.Errorf("tasks: unexpected status %d", code)
+		return fmt.Errorf("tasks: unexpected status %d: %s", code, truncateBody(body))
 	}
+}
+
+// wireGoogleAPIError mirrors the error envelope Google returns for
+// non-2xx responses on the Tasks REST API. We only model the fields
+// the classifier branches on; the rest round-trips through the
+// truncated body in the wrapped error message.
+type wireGoogleAPIError struct {
+	Error wireGoogleAPIErrorBody `json:"error"`
+}
+
+// wireGoogleAPIErrorBody is the inner `error` object of Google's
+// API error envelope (see wireGoogleAPIError).
+type wireGoogleAPIErrorBody struct {
+	Code    int                       `json:"code"`
+	Message string                    `json:"message"`
+	Status  string                    `json:"status"`
+	Errors  []wireGoogleAPIErrorEntry `json:"errors"`
+	Details []wireGoogleAPIErrorInfo  `json:"details"`
+}
+
+// wireGoogleAPIErrorEntry is one entry in `error.errors[]` — the
+// usageLimits / accessNotConfigured / rateLimitExceeded reason
+// surface.
+type wireGoogleAPIErrorEntry struct {
+	Message string `json:"message"`
+	Domain  string `json:"domain"`
+	Reason  string `json:"reason"`
+}
+
+// wireGoogleAPIErrorInfo is one entry in `error.details[]` — Google's
+// `google.rpc.ErrorInfo` carrier; SERVICE_DISABLED + activationUrl
+// live here.
+type wireGoogleAPIErrorInfo struct {
+	Type     string         `json:"@type"`
+	Reason   string         `json:"reason"`
+	Domain   string         `json:"domain"`
+	Metadata map[string]any `json:"metadata"`
+}
+
+// classifyTasksForbidden inspects a 403 body and returns the most
+// specific sentinel that fits.
+//
+//   - body status RESOURCE_EXHAUSTED                   → ErrRateLimited
+//   - errors[].reason == "accessNotConfigured" OR
+//     details[].reason == "SERVICE_DISABLED"           → ErrServiceDisabled
+//     (with the Google activation URL embedded in the
+//     message when present at details[].metadata.activationUrl)
+//   - everything else                                   → ErrPermissionDenied
+func classifyTasksForbidden(body []byte) error {
+	var wire wireGoogleAPIError
+	// Best-effort decode: a malformed body just falls through to
+	// ErrPermissionDenied with the truncated raw body for context.
+	_ = json.Unmarshal(body, &wire)
+
+	if wire.Error.Status == "RESOURCE_EXHAUSTED" {
+		return fmt.Errorf("%w: HTTP 403: %s", ErrRateLimited, truncateBody(body))
+	}
+
+	serviceDisabled := false
+	for _, e := range wire.Error.Errors {
+		if e.Reason == "accessNotConfigured" {
+			serviceDisabled = true
+			break
+		}
+	}
+	var activationURL string
+	for _, d := range wire.Error.Details {
+		if d.Reason == "SERVICE_DISABLED" {
+			serviceDisabled = true
+		}
+		if u, ok := d.Metadata["activationUrl"].(string); ok && u != "" {
+			activationURL = u
+		}
+	}
+	if serviceDisabled {
+		if activationURL != "" {
+			return fmt.Errorf("%w: Google Tasks API is not enabled on the GCP project. Enable it at %s and try again. (HTTP 403: %s)", ErrServiceDisabled, activationURL, truncateBody(body))
+		}
+		return fmt.Errorf("%w: Google Tasks API is not enabled on the GCP project. Enable it in the Google Cloud Console and try again. (HTTP 403: %s)", ErrServiceDisabled, truncateBody(body))
+	}
+
+	return fmt.Errorf("%w: HTTP 403: %s", ErrPermissionDenied, truncateBody(body))
 }
 
 // --- wire types -----------------------------------------------------

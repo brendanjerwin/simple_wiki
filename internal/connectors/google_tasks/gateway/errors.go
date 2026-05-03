@@ -28,10 +28,27 @@ var (
 	// back as ErrInvalidGrant.
 	ErrAuthRevoked = errors.New("tasks: auth revoked")
 
-	// ErrRateLimited means Google returned 429 or a 403 with a
-	// rate-limit reason. Caller should back off and retry on a later
-	// tick.
+	// ErrRateLimited means Google returned 429, or a 403 whose body
+	// carries a quota-exhaustion reason (status RESOURCE_EXHAUSTED).
+	// Caller should back off and retry on a later tick.
 	ErrRateLimited = errors.New("tasks: rate limited")
+
+	// ErrServiceDisabled means Google returned 403 with a body
+	// indicating the Tasks API is not enabled on the GCP project
+	// (errors[].reason == "accessNotConfigured" OR
+	// details[].reason == "SERVICE_DISABLED"). This is an operator
+	// setup error — not retryable. Surfaces as FailedPrecondition with
+	// the Google activation URL embedded in the message when
+	// available.
+	ErrServiceDisabled = errors.New("tasks: service disabled")
+
+	// ErrPermissionDenied means Google returned 403 for a reason
+	// other than rate-limiting or service-disabled (e.g. the OAuth
+	// scope doesn't permit the operation, the resource is owned by a
+	// different account, etc). Distinct from ErrAuthRevoked because
+	// the token itself is still valid — it just can't reach this
+	// resource.
+	ErrPermissionDenied = errors.New("tasks: permission denied")
 
 	// ErrPreconditionFailed means a tasks.patch with If-Match returned
 	// 412 — the local etag is stale. Caller should pull-and-retry-once
