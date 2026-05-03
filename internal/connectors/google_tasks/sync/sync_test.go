@@ -1947,6 +1947,83 @@ var _ = Describe("Connector.Subscribe", func() {
 			Expect(subErr).To(MatchError(ContainSubstring("API quota exceeded")))
 		})
 	})
+
+	// Regression: Google Tasks has a small read-after-write
+	// eventual-consistency window where tasks.list returns 404
+	// immediately after tasklists.insert. The create-new branch
+	// previously called listAllTasks unconditionally and bubbled the
+	// 404 up as "inspect tasks list: tasks: not found", failing the
+	// whole Subscribe even though the brand-new list was perfectly
+	// usable. Subscribe must skip the inspect on the create-new
+	// branch (the list is empty by definition).
+	When("remoteListID is empty and the freshly-created list 404s on inspect (eventual-consistency)", func() {
+		var (
+			subscribed taskssync.Subscription
+			subErr     error
+			client     *fakeTasksClient
+		)
+
+		BeforeEach(func() {
+			pages := newFakePages()
+			store := newConfiguredStore(pages, nil)
+			client = newFakeTasksClient()
+			// Queue the kind of 404 Google returns when the list ID
+			// hasn't propagated yet. If Subscribe is correct, this
+			// error is never consumed (no ListTasks call happens on
+			// the create-new branch).
+			client.errorsForListTasks = []error{gateway.ErrNotFound}
+			reader := newFakeChecklistReader()
+			reader.Set(syncTestPage, syncTestListName, []*apiv1.ChecklistItem{
+				{Uid: "wiki-1", Text: "Eggs"},
+			})
+			c := buildTestConnector(store, readyLeaseTable(), client, newFakeClock(time.Now()), reader, nil, nil)
+			subscribed, subErr = c.Subscribe(context.Background(), aliceProfile, syncTestPage, syncTestListName, "")
+		})
+
+		It("should NOT error", func() {
+			Expect(subErr).ToNot(HaveOccurred())
+		})
+
+		It("should bind to the freshly-created tasklist", func() {
+			Expect(subscribed.RemoteListID).To(Equal("created-list-1"))
+		})
+
+		It("should NOT have consumed the queued ListTasks error (proving inspect was skipped)", func() {
+			Expect(client.errorsForListTasks).To(HaveLen(1),
+				"errorsForListTasks should remain queued — Subscribe must not call ListTasks on the create-new branch")
+		})
+
+		It("should still push wiki items into the new list", func() {
+			Expect(client.inserted).To(HaveLen(1))
+			Expect(client.inserted[0].TasklistID).To(Equal("created-list-1"))
+		})
+	})
+
+	// When the user picks an existing list and inspect fails, the
+	// error must include the offending list ID so the journal log
+	// and any user-visible error message names what was rejected.
+	// Diagnostic clarity for future occurrences.
+	When("remoteListID is non-empty and inspect fails", func() {
+		var subErr error
+
+		BeforeEach(func() {
+			pages := newFakePages()
+			store := newConfiguredStore(pages, nil)
+			client := newFakeTasksClient()
+			client.errorsForListTasks = []error{gateway.ErrNotFound}
+			reader := newFakeChecklistReader()
+			c := buildTestConnector(store, readyLeaseTable(), client, newFakeClock(time.Now()), reader, nil, nil)
+			_, subErr = c.Subscribe(context.Background(), aliceProfile, syncTestPage, syncTestListName, "stale-tasklist-id")
+		})
+
+		It("should wrap the underlying gateway error", func() {
+			Expect(subErr).To(MatchError(gateway.ErrNotFound))
+		})
+
+		It("should name the offending list ID in the error message", func() {
+			Expect(subErr).To(MatchError(ContainSubstring("stale-tasklist-id")))
+		})
+	})
 })
 
 var _ = Describe("Connector.Unsubscribe", func() {

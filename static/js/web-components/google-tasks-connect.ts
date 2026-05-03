@@ -237,11 +237,22 @@ export class GoogleTasksConnect extends LitElement {
     const verified = this.state.lastVerifiedAt
       ? new Date(Number(this.state.lastVerifiedAt.seconds) * 1000).toLocaleString()
       : 'never';
+    // Invariant: never render "Connected as ." with an empty email.
+    // The OAuth callback now refuses to persist an empty email
+    // (see emailFromIDToken in oauth_google_handler.go), but
+    // pre-existing connections from before that fix can still be on
+    // disk with state.email == "". Surface the gap as actionable
+    // rather than as a half-rendered sentence.
+    const identityLine = this.state.email
+      ? html`Connected as <strong>${this.state.email}</strong>.
+          <span class="muted">Last verified: ${verified}.</span>`
+      : html`<span class="muted">
+          Connected, but the account email is missing on this profile.
+          Disconnect and reconnect to refresh — recent OAuth scope changes
+          add the email claim. Last verified: ${verified}.
+        </span>`;
     return html`
-      <p>
-        Connected as <strong>${this.state.email}</strong>.
-        <span class="muted">Last verified: ${verified}.</span>
-      </p>
+      <p>${identityLine}</p>
       <h4>Bindings</h4>
       ${this.renderSubscriptions()}
       <p>

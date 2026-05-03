@@ -789,7 +789,8 @@ func (t *tasksProfileTokenStore) SaveRefreshToken(_ context.Context, token strin
 // tasksAuthURLBuilder mints fresh Google authorization URLs for the
 // BeginAuth(GOOGLE_TASKS) gRPC. Issues a state token + PKCE pair via
 // the OAuth state store, then assembles the URL with the pinned
-// scope (tasks read/write).
+// scope set (openid + email + tasks read/write — see
+// tasksgateway.RequestedScopes for why we ask for openid/email).
 type tasksAuthURLBuilder struct {
 	stateStore   server.OAuthStateStore
 	authURL      string
@@ -979,7 +980,7 @@ func setupGoogleTasksConnector(
 		authURL:       tasksgateway.DefaultGoogleAuthURL,
 		clientID:      clientID,
 		redirectURI:   redirectURI,
-		requiredScope: tasksgateway.TasksScope,
+		requiredScope: tasksgateway.RequestedScopes,
 	}
 
 	// Tombstone GC retention: when any Tasks subscription on a

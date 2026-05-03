@@ -94,8 +94,12 @@ var _ = Describe("OAuthGoogleHandler", func() {
 		capturedForm = nil
 
 		// Default token-server response: success with the expected
-		// scope and a refresh token. Per-test BeforeEach can replace
-		// tokenHandler before the server is started.
+		// scope, a refresh token, and a verified-email id_token. Per-test
+		// BeforeEach can replace tokenHandler before the server is
+		// started. The id_token is a JWT-shaped fixture: only the
+		// payload segment is meaningful (signature is not verified).
+		idTokenPayload := `{"email":"alice@example.com","email_verified":true}`
+		idTokenFixture := "header." + base64.RawURLEncoding.EncodeToString([]byte(idTokenPayload)) + ".sig"
 		tokenHandler = func(w http.ResponseWriter, r *http.Request) {
 			body, _ := io.ReadAll(r.Body)
 			parsed, _ := url.ParseQuery(string(body))
@@ -107,6 +111,7 @@ var _ = Describe("OAuthGoogleHandler", func() {
 				ExpiresIn:    3600,
 				RefreshToken: "1//refresh-token",
 				Scope:        "https://www.googleapis.com/auth/tasks",
+				IDToken:      idTokenFixture,
 			})
 		}
 	})
@@ -788,48 +793,84 @@ func (e stringError) Error() string { return string(e) }
 
 var _ = Describe("emailFromIDToken", func() {
 	When("the id_token is empty", func() {
-		It("should return an empty string", func() {
-			Expect(emailFromIDToken("")).To(Equal(""))
+		var email string
+		var err error
+
+		BeforeEach(func() {
+			email, err = emailFromIDToken("")
+		})
+
+		It("should return ErrIDTokenMissing", func() {
+			Expect(err).To(MatchError(ErrIDTokenMissing))
+		})
+
+		It("should return an empty email", func() {
+			Expect(email).To(Equal(""))
 		})
 	})
 
 	When("the id_token does not have three segments", func() {
-		It("should return an empty string", func() {
-			Expect(emailFromIDToken("not.a.valid.jwt.shape")).To(Equal(""))
-			Expect(emailFromIDToken("only-one-segment")).To(Equal(""))
+		It("should return ErrIDTokenMalformed", func() {
+			_, err := emailFromIDToken("not.a.valid.jwt.shape")
+			Expect(err).To(MatchError(ErrIDTokenMalformed))
+		})
+
+		It("should reject single-segment input", func() {
+			_, err := emailFromIDToken("only-one-segment")
+			Expect(err).To(MatchError(ErrIDTokenMalformed))
 		})
 	})
 
 	When("the payload segment is not valid base64url", func() {
-		It("should return an empty string", func() {
-			Expect(emailFromIDToken("aGVhZGVy.!!!notbase64!!!.c2ln")).To(Equal(""))
+		It("should return ErrIDTokenMalformed", func() {
+			_, err := emailFromIDToken("aGVhZGVy.!!!notbase64!!!.c2ln")
+			Expect(err).To(MatchError(ErrIDTokenMalformed))
 		})
 	})
 
 	When("the payload is base64url-encoded JSON with a verified email claim", func() {
-		It("should return the email", func() {
+		var email string
+		var err error
+
+		BeforeEach(func() {
 			payload := `{"email":"alice@example.com","email_verified":true}`
-			encoded := encodeJWTSegment(payload)
-			token := "header." + encoded + ".sig"
-			Expect(emailFromIDToken(token)).To(Equal("alice@example.com"))
+			token := "header." + encodeJWTSegment(payload) + ".sig"
+			email, err = emailFromIDToken(token)
+		})
+
+		It("should not error", func() {
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should return the email", func() {
+			Expect(email).To(Equal("alice@example.com"))
 		})
 	})
 
 	When("the payload's email_verified is false", func() {
-		It("should return an empty string (refuse unverified attribution)", func() {
+		It("should return ErrIDTokenEmailMissing", func() {
 			payload := `{"email":"alice@example.com","email_verified":false}`
-			encoded := encodeJWTSegment(payload)
-			token := "header." + encoded + ".sig"
-			Expect(emailFromIDToken(token)).To(Equal(""))
+			token := "header." + encodeJWTSegment(payload) + ".sig"
+			_, err := emailFromIDToken(token)
+			Expect(err).To(MatchError(ErrIDTokenEmailMissing))
 		})
 	})
 
 	When("the payload omits email_verified", func() {
-		It("should return an empty string (default-deny on unverified)", func() {
+		It("should return ErrIDTokenEmailMissing (default-deny)", func() {
 			payload := `{"email":"alice@example.com"}`
-			encoded := encodeJWTSegment(payload)
-			token := "header." + encoded + ".sig"
-			Expect(emailFromIDToken(token)).To(Equal(""))
+			token := "header." + encodeJWTSegment(payload) + ".sig"
+			_, err := emailFromIDToken(token)
+			Expect(err).To(MatchError(ErrIDTokenEmailMissing))
+		})
+	})
+
+	When("the payload omits the email claim entirely", func() {
+		It("should return ErrIDTokenEmailMissing", func() {
+			payload := `{"email_verified":true}`
+			token := "header." + encodeJWTSegment(payload) + ".sig"
+			_, err := emailFromIDToken(token)
+			Expect(err).To(MatchError(ErrIDTokenEmailMissing))
 		})
 	})
 })

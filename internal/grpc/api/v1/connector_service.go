@@ -391,6 +391,17 @@ func (s *Server) subscribeTasks(ctx context.Context, req *apiv1.SubscribeRequest
 	}
 	sub, err := s.tasksConnector.Subscribe(ctx, profileID, req.GetPage(), req.GetListName(), req.GetRemoteListHandle())
 	if err != nil {
+		// Log the full error chain server-side before mapping to a
+		// gRPC code. The boundary mapping in mapTasksConnectorErr
+		// collapses unknown causes to Internal with a generic
+		// message; without this log the journal showed only
+		// "[GRPC] Internal" with no signal about which list, which
+		// step, or what the upstream said. See
+		// feedback_never_obscure_errors_at_boundaries.
+		if s.logger != nil {
+			s.logger.Error("ConnectorService.Subscribe(GOOGLE_TASKS) failed for profile=%s page=%s list=%s remote=%q: %v",
+				string(profileID), req.GetPage(), req.GetListName(), req.GetRemoteListHandle(), err)
+		}
 		return nil, mapTasksConnectorErr(err)
 	}
 	return &apiv1.SubscribeResponse{Subscription: tasksSubscriptionToProto(sub)}, nil

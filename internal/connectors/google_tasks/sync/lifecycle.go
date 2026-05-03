@@ -288,17 +288,37 @@ func (c *Connector) subscribeWithLock(ctx context.Context, profileID wikipage.Pa
 		createdNewList = true
 	}
 
-	tasks, listErr := c.listAllTasks(ctx, client, effectiveRemoteID, time.Time{})
-	if listErr != nil {
-		return Subscription{}, fmt.Errorf("inspect tasks list: %w", listErr)
-	}
-	if translator.HasSubtasks(toTranslatorTasks(tasks)) {
-		return Subscription{}, ErrTasksListHasSubtasks
-	}
+	// Inspect the list for subtasks (refuse-to-subscribe per plan)
+	// and seed the id_map by text-matching existing items. Skip both
+	// when we just created the list — it's empty by definition, and
+	// Google Tasks has a small read-after-write eventual-consistency
+	// window where tasks.list returns 404 immediately after
+	// tasklists.insert. Querying it is unnecessary work that
+	// occasionally fails. The post-create seed_from_wiki path
+	// populates the id_map from scratch via inserts.
+	var idMap map[string]string
+	var etags map[string]string
+	if !createdNewList {
+		tasks, listErr := c.listAllTasks(ctx, client, effectiveRemoteID, time.Time{})
+		if listErr != nil {
+			// Wrap with the list ID so journal logs and bug
+			// reports name the list that was rejected — the bare
+			// "tasks: not found" message gave us no diagnostic
+			// signal when this hit production.
+			return Subscription{}, fmt.Errorf("inspect tasks list %q: %w", effectiveRemoteID, listErr)
+		}
+		if translator.HasSubtasks(toTranslatorTasks(tasks)) {
+			return Subscription{}, ErrTasksListHasSubtasks
+		}
 
-	idMap, etags, err := c.seedIDMapForSubscribe(ctx, page, listName, tasks)
-	if err != nil {
-		return Subscription{}, fmt.Errorf("seed id_map: %w", err)
+		var seedErr error
+		idMap, etags, seedErr = c.seedIDMapForSubscribe(ctx, page, listName, tasks)
+		if seedErr != nil {
+			return Subscription{}, fmt.Errorf("seed id_map: %w", seedErr)
+		}
+	} else {
+		idMap = map[string]string{}
+		etags = map[string]string{}
 	}
 
 	// Push existing wiki items into the freshly-created tasklist so

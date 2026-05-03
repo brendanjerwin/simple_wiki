@@ -33,9 +33,21 @@ const DefaultGoogleAuthURL = "https://accounts.google.com/o/oauth2/v2/auth"
 // supporting iCloud/Microsoft (per plan OAuth security profile).
 const GoogleIssuer = "https://accounts.google.com"
 
-// TasksScope is the OAuth scope the wiki requests. tasks.readonly does
-// NOT satisfy tasks.insert/patch/delete (per plan §"Scope").
+// TasksScope is the Tasks-API OAuth scope. tasks.readonly does NOT
+// satisfy tasks.insert/patch/delete (per plan §"Scope"). This is the
+// scope the post-exchange echo check requires (RFC 6749 §3.3).
 const TasksScope = "https://www.googleapis.com/auth/tasks"
+
+// RequestedScopes is the full scope string sent on the auth-URL. We
+// add OIDC's openid+email so the token-endpoint response includes a
+// signed id_token whose claims carry the verified account email. The
+// connector's downstream identity attribution (state.Email) depends
+// on it — without these scopes Google issues an id_token with no
+// email claim, the user's profile shows "Connected as ." with empty
+// value, and Tasks-side system writes fall through to the generic
+// "system:connector-sync" attribution. Order isn't significant; the
+// space-separated form matches Google's documented examples.
+const RequestedScopes = "openid email " + TasksScope
 
 // accessTokenLeewaySeconds is how long before a cached access token's
 // nominal expiry we consider it "stale" and refresh proactively. Google

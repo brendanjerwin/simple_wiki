@@ -318,7 +318,22 @@ func (h *OAuthGoogleHandler) completeExchange(w http.ResponseWriter, r *http.Req
 	// (HTTPS to a known issuer), so we trust claims for attribution
 	// purposes only. Authn decisions still rely on the refresh-token
 	// round-trip, never on these claims.
-	accountEmail := emailFromIDToken(tokens.IDToken)
+	//
+	// We treat email-extraction failure as a hard fail of the OAuth
+	// flow rather than persist an empty string. Empty Email
+	// previously produced the "Connected as ." display bug and broke
+	// identity attribution. Per feedback_function_contract_purity:
+	// the function does what it says or it errors — no third state.
+	accountEmail, emailErr := emailFromIDToken(tokens.IDToken)
+	if emailErr != nil {
+		h.logf("oauth google callback: email extraction failed: %v", emailErr)
+		retry := h.tryBuildAuthURL(r)
+		renderOAuthErrorPage(w, http.StatusBadRequest,
+			"Could not read your Google account email",
+			"Google's response didn't include a verified email claim. The wiki needs this to label your connection and attribute changes to you. This usually means the OAuth client's consent screen is missing the openid/email scopes — verify the GCP configuration and try again.",
+			emailErr.Error(), retry, oauthSuccessRedirectPath)
+		return
+	}
 
 	if persistErr := h.TokenPersister.PersistRefreshToken(
 		r.Context(), entry.ProfileID, accountEmail, tokens.RefreshToken,
@@ -503,41 +518,58 @@ const idTokenJWTSegmentCount = 3
 // payload within a JWT's three segments.
 const idTokenPayloadSegmentIndex = 1
 
+// ErrIDTokenMissing is returned when the token-endpoint response did
+// not include an id_token at all. Almost always means the auth-URL
+// scope is missing `openid` (the OIDC contract).
+var ErrIDTokenMissing = errors.New("id_token absent from token response")
+
+// ErrIDTokenMalformed is returned when the id_token isn't a parseable
+// three-segment JWT (decoding the payload segment failed).
+var ErrIDTokenMalformed = errors.New("id_token malformed")
+
+// ErrIDTokenEmailMissing is returned when the id_token decodes but
+// the email claim is empty or email_verified is false. Almost always
+// means the auth-URL scope is missing `email`.
+var ErrIDTokenEmailMissing = errors.New("id_token has no verified email claim")
+
 // emailFromIDToken extracts the verified email claim from a Google
-// OIDC id_token. Returns "" on any decoding failure — the caller
-// treats absence as "no email" rather than aborting the connection,
-// since the refresh token is the load-bearing artifact and the email
-// is for attribution only. The signature is intentionally NOT
-// verified here: the id_token arrived over the back-channel HTTPS
-// token-endpoint exchange directly from Google, so trusting claims
-// for attribution is acceptable. Authentication decisions still rely
-// on the refresh-token round-trip, never on these claims.
-func emailFromIDToken(idToken string) string {
+// OIDC id_token. Returns a typed error on any failure — the caller
+// MUST surface this to the user via the wiki-styled error page. We
+// previously fail-silenced to "" and persisted an empty Email, which
+// produced the "Connected as ." display bug and broke downstream
+// identity attribution; do not regress that pattern.
+//
+// The signature is intentionally NOT verified here: the id_token
+// arrived over the back-channel HTTPS token-endpoint exchange
+// directly from Google, so trusting claims for attribution is
+// acceptable. Authentication decisions still rely on the
+// refresh-token round-trip, never on these claims.
+func emailFromIDToken(idToken string) (string, error) {
 	if idToken == "" {
-		return ""
+		return "", ErrIDTokenMissing
 	}
 	parts := strings.Split(idToken, ".")
 	if len(parts) != idTokenJWTSegmentCount {
-		return ""
+		return "", fmt.Errorf("%w: expected %d JWT segments, got %d",
+			ErrIDTokenMalformed, idTokenJWTSegmentCount, len(parts))
 	}
 	payload, err := base64.RawURLEncoding.DecodeString(parts[idTokenPayloadSegmentIndex])
 	if err != nil {
-		return ""
+		return "", fmt.Errorf("%w: payload base64-decode: %w", ErrIDTokenMalformed, err)
 	}
 	var claims struct {
 		Email         string `json:"email"`
 		EmailVerified bool   `json:"email_verified"`
 	}
 	if err := json.Unmarshal(payload, &claims); err != nil {
-		return ""
+		return "", fmt.Errorf("%w: payload JSON unmarshal: %w", ErrIDTokenMalformed, err)
+	}
+	if claims.Email == "" {
+		return "", fmt.Errorf("%w: claim absent", ErrIDTokenEmailMissing)
 	}
 	if !claims.EmailVerified {
-		// Google sets email_verified=true for any account whose
-		// email comes from an authenticated Google domain. An
-		// unverified email shouldn't be persisted as the
-		// authoritative attribution string — fall back to "" and
-		// let the connector use the system fallback identity.
-		return ""
+		return "", fmt.Errorf("%w: email_verified=false for %q",
+			ErrIDTokenEmailMissing, claims.Email)
 	}
-	return claims.Email
+	return claims.Email, nil
 }

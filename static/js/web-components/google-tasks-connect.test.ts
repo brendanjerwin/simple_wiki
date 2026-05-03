@@ -131,6 +131,34 @@ describe('GoogleTasksConnect', () => {
     });
   });
 
+  // ------------------------------------------------------------------ connected phase (legacy empty-email state)
+
+  describe('when getState returns configured=true with an empty email (legacy state)', () => {
+    beforeEach(async () => {
+      el = document.createElement('google-tasks-connect') as GoogleTasksConnect;
+      stubGetStateConnected('');
+      document.body.appendChild(el);
+      await Promise.race([el.updateComplete, timeout(3000, 'updateComplete timed out')]);
+    });
+
+    it('should NOT render the half-rendered "Connected as ." with empty value', () => {
+      const text = el.shadowRoot?.textContent ?? '';
+      // Invariant: the literal "Connected as ." (period after empty email)
+      // is the bug we are fixing; it must never appear.
+      expect(text).to.not.match(/Connected as\s*\./);
+    });
+
+    it('should surface the gap with a reconnect prompt', () => {
+      const text = el.shadowRoot?.textContent ?? '';
+      expect(text.toLowerCase()).to.include('email is missing');
+    });
+
+    it('should still render the Disconnect interlock so the user can recover', () => {
+      const btns = el.shadowRoot?.querySelectorAll('confirmation-interlock-button');
+      expect(btns?.length ?? 0).to.equal(1);
+    });
+  });
+
   // ------------------------------------------------------------------ connected phase (no subscriptions)
 
   describe('when getState returns configured=true with no subscriptions', () => {
