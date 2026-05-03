@@ -186,6 +186,12 @@ func (s *Server) disconnectTasks(ctx context.Context) (*apiv1.DisconnectResponse
 	}
 	state, err := s.tasksConnector.Disconnect(ctx, profileID)
 	if err != nil {
+		// Log the full error chain server-side before mapping to a
+		// gRPC code. See feedback_never_obscure_errors_at_boundaries.
+		if s.logger != nil {
+			s.logger.Error("ConnectorService.Disconnect(GOOGLE_TASKS) failed for profile=%s: %v",
+				string(profileID), err)
+		}
 		return nil, mapTasksConnectorErr(err)
 	}
 	return &apiv1.DisconnectResponse{State: tasksStateToProto(state)}, nil
@@ -201,6 +207,12 @@ func (s *Server) disconnectKeep(ctx context.Context) (*apiv1.DisconnectResponse,
 	}
 	state, err := s.keepConnector.Disconnect(ctx, profileID)
 	if err != nil {
+		// Log the full error chain server-side before mapping to a
+		// gRPC code. See feedback_never_obscure_errors_at_boundaries.
+		if s.logger != nil {
+			s.logger.Error("ConnectorService.Disconnect(GOOGLE_KEEP) failed for profile=%s: %v",
+				string(profileID), err)
+		}
 		return nil, mapKeepConnectorErr(err)
 	}
 	return &apiv1.DisconnectResponse{State: connectorStateToProto(state, apiv1.ConnectorKind_CONNECTOR_KIND_GOOGLE_KEEP)}, nil
@@ -230,6 +242,12 @@ func (s *Server) getStateTasks(ctx context.Context) (*apiv1.GetStateResponse, er
 	}
 	state, err := s.tasksConnector.GetState(ctx, profileID)
 	if err != nil {
+		// Log the full error chain server-side before mapping to a
+		// gRPC code. See feedback_never_obscure_errors_at_boundaries.
+		if s.logger != nil {
+			s.logger.Error("ConnectorService.GetState(GOOGLE_TASKS) failed for profile=%s: %v",
+				string(profileID), err)
+		}
 		return nil, mapTasksConnectorErr(err)
 	}
 	return &apiv1.GetStateResponse{State: tasksStateToProto(state)}, nil
@@ -245,6 +263,12 @@ func (s *Server) getStateKeep(ctx context.Context) (*apiv1.GetStateResponse, err
 	}
 	state, err := s.keepConnector.GetState(ctx, profileID)
 	if err != nil {
+		// Log the full error chain server-side before mapping to a
+		// gRPC code. See feedback_never_obscure_errors_at_boundaries.
+		if s.logger != nil {
+			s.logger.Error("ConnectorService.GetState(GOOGLE_KEEP) failed for profile=%s: %v",
+				string(profileID), err)
+		}
 		return nil, mapKeepConnectorErr(err)
 	}
 	return &apiv1.GetStateResponse{State: connectorStateToProto(state, apiv1.ConnectorKind_CONNECTOR_KIND_GOOGLE_KEEP)}, nil
@@ -274,6 +298,12 @@ func (s *Server) listMySubscriptionsTasks(ctx context.Context) (*apiv1.ListMySub
 	}
 	state, err := s.tasksConnector.GetState(ctx, profileID)
 	if err != nil {
+		// Log the full error chain server-side before mapping to a
+		// gRPC code. See feedback_never_obscure_errors_at_boundaries.
+		if s.logger != nil {
+			s.logger.Error("ConnectorService.ListMySubscriptions(GOOGLE_TASKS) failed for profile=%s: %v",
+				string(profileID), err)
+		}
 		return nil, mapTasksConnectorErr(err)
 	}
 	out := make([]*apiv1.SubscriptionState, 0, len(state.Subscriptions))
@@ -293,6 +323,12 @@ func (s *Server) listMySubscriptionsKeep(ctx context.Context) (*apiv1.ListMySubs
 	}
 	state, err := s.keepConnector.GetState(ctx, profileID)
 	if err != nil {
+		// Log the full error chain server-side before mapping to a
+		// gRPC code. See feedback_never_obscure_errors_at_boundaries.
+		if s.logger != nil {
+			s.logger.Error("ConnectorService.ListMySubscriptions(GOOGLE_KEEP) failed for profile=%s: %v",
+				string(profileID), err)
+		}
 		return nil, mapKeepConnectorErr(err)
 	}
 	out := make([]*apiv1.SubscriptionState, 0, len(state.Subscriptions))
@@ -326,6 +362,12 @@ func (s *Server) listRemoteListsTasks(ctx context.Context) (*apiv1.ListRemoteLis
 	}
 	lists, err := s.tasksConnector.ListRemoteLists(ctx, profileID)
 	if err != nil {
+		// Log the full error chain server-side before mapping to a
+		// gRPC code. See feedback_never_obscure_errors_at_boundaries.
+		if s.logger != nil {
+			s.logger.Error("ConnectorService.ListRemoteLists(GOOGLE_TASKS) failed for profile=%s: %v",
+				string(profileID), err)
+		}
 		return nil, mapTasksConnectorErr(err)
 	}
 	out := make([]*apiv1.RemoteListSummary, 0, len(lists))
@@ -348,6 +390,12 @@ func (s *Server) listRemoteListsKeep(ctx context.Context) (*apiv1.ListRemoteList
 	}
 	notes, err := s.keepConnector.ListNotes(ctx, profileID)
 	if err != nil {
+		// Log the full error chain server-side before mapping to a
+		// gRPC code. See feedback_never_obscure_errors_at_boundaries.
+		if s.logger != nil {
+			s.logger.Error("ConnectorService.ListRemoteLists(GOOGLE_KEEP) failed for profile=%s: %v",
+				string(profileID), err)
+		}
 		return nil, mapKeepConnectorErr(err)
 	}
 	out := make([]*apiv1.RemoteListSummary, 0, len(notes))
@@ -440,6 +488,12 @@ func (s *Server) subscribeKeep(ctx context.Context, req *apiv1.SubscribeRequest)
 	}
 	subscription, err := s.keepConnector.Bind(ctx, profileID, req.GetPage(), req.GetListName(), req.GetRemoteListHandle(), initialItems)
 	if err != nil {
+		// Log the full error chain server-side before mapping to a
+		// gRPC code. See feedback_never_obscure_errors_at_boundaries.
+		if s.logger != nil {
+			s.logger.Error("ConnectorService.Subscribe(GOOGLE_KEEP) failed for profile=%s page=%s list=%s remote=%q: %v",
+				string(profileID), req.GetPage(), req.GetListName(), req.GetRemoteListHandle(), err)
+		}
 		return nil, mapKeepConnectorErr(err)
 	}
 	return &apiv1.SubscribeResponse{Subscription: keepSubscriptionToProto(subscription, false)}, nil
@@ -468,6 +522,12 @@ func (s *Server) unsubscribeTasks(ctx context.Context, req *apiv1.UnsubscribeReq
 		return nil, err
 	}
 	if err := s.tasksConnector.Unsubscribe(ctx, profileID, req.GetPage(), req.GetListName()); err != nil {
+		// Log the full error chain server-side before mapping to a
+		// gRPC code. See feedback_never_obscure_errors_at_boundaries.
+		if s.logger != nil {
+			s.logger.Error("ConnectorService.Unsubscribe(GOOGLE_TASKS) failed for profile=%s page=%s list=%s: %v",
+				string(profileID), req.GetPage(), req.GetListName(), err)
+		}
 		return nil, mapTasksConnectorErr(err)
 	}
 	return &apiv1.UnsubscribeResponse{}, nil
@@ -482,6 +542,12 @@ func (s *Server) unsubscribeKeep(ctx context.Context, req *apiv1.UnsubscribeRequ
 		return nil, err
 	}
 	if err := s.keepConnector.Unbind(ctx, profileID, req.GetPage(), req.GetListName()); err != nil {
+		// Log the full error chain server-side before mapping to a
+		// gRPC code. See feedback_never_obscure_errors_at_boundaries.
+		if s.logger != nil {
+			s.logger.Error("ConnectorService.Unsubscribe(GOOGLE_KEEP) failed for profile=%s page=%s list=%s: %v",
+				string(profileID), req.GetPage(), req.GetListName(), err)
+		}
 		return nil, mapKeepConnectorErr(err)
 	}
 	return &apiv1.UnsubscribeResponse{}, nil
@@ -512,6 +578,12 @@ func (s *Server) GetChecklistSubscriptionState(ctx context.Context, req *apiv1.G
 	if s.tasksConnector != nil {
 		tasksState, err := s.tasksConnector.GetState(ctx, profileID)
 		if err != nil {
+			// Log the full error chain server-side before mapping to a
+			// gRPC code. See feedback_never_obscure_errors_at_boundaries.
+			if s.logger != nil {
+				s.logger.Error("ConnectorService.GetChecklistSubscriptionState(GOOGLE_TASKS) failed for profile=%s page=%s list=%s: %v",
+					string(profileID), req.GetPage(), req.GetListName(), err)
+			}
 			return nil, mapTasksConnectorErr(err)
 		}
 		if tasksState.IsConfigured() {
@@ -528,6 +600,12 @@ func (s *Server) GetChecklistSubscriptionState(ctx context.Context, req *apiv1.G
 	if s.keepConnector != nil {
 		keepState, err := s.keepConnector.GetState(ctx, profileID)
 		if err != nil {
+			// Log the full error chain server-side before mapping to a
+			// gRPC code. See feedback_never_obscure_errors_at_boundaries.
+			if s.logger != nil {
+				s.logger.Error("ConnectorService.GetChecklistSubscriptionState(GOOGLE_KEEP) failed for profile=%s page=%s list=%s: %v",
+					string(profileID), req.GetPage(), req.GetListName(), err)
+			}
 			return nil, mapKeepConnectorErr(err)
 		}
 		if keepState.IsConfigured() {
@@ -589,6 +667,12 @@ func (s *Server) listDeadLettersKeep(ctx context.Context, req *apiv1.ListDeadLet
 	}
 	entries, err := s.keepConnector.ListDeadLetters(ctx, profileID, req.GetPage(), req.GetListName())
 	if err != nil {
+		// Log the full error chain server-side before mapping to a
+		// gRPC code. See feedback_never_obscure_errors_at_boundaries.
+		if s.logger != nil {
+			s.logger.Error("ConnectorService.ListDeadLetters(GOOGLE_KEEP) failed for profile=%s page=%s list=%s: %v",
+				string(profileID), req.GetPage(), req.GetListName(), err)
+		}
 		return nil, mapKeepConnectorErr(err)
 	}
 	out := make([]*apiv1.DeadLetterItem, 0, len(entries))
@@ -645,6 +729,12 @@ func (s *Server) clearDeadLetterKeep(ctx context.Context, req *apiv1.ClearDeadLe
 		return nil, err
 	}
 	if err := s.keepConnector.ClearDeadLetter(ctx, profileID, req.GetPage(), req.GetListName(), req.GetItemUid()); err != nil {
+		// Log the full error chain server-side before mapping to a
+		// gRPC code. See feedback_never_obscure_errors_at_boundaries.
+		if s.logger != nil {
+			s.logger.Error("ConnectorService.ClearDeadLetter(GOOGLE_KEEP) failed for profile=%s page=%s list=%s item_uid=%s: %v",
+				string(profileID), req.GetPage(), req.GetListName(), req.GetItemUid(), err)
+		}
 		return nil, mapKeepConnectorErr(err)
 	}
 	return &emptypb.Empty{}, nil
