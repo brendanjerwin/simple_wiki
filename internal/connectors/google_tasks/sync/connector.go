@@ -223,7 +223,7 @@ func (c *Connector) runSyncPasses(ctx context.Context, profileID wikipage.PageId
 	}
 	sub = updatedSub
 
-	updatedSub2, err := c.pushOutboundToTasks(ctx, sub, client)
+	updatedSub2, err := c.pushOutboundToTasks(ctx, profileID, ownerEmail, sub, client)
 	if err != nil {
 		if c.isAuthFailure(err) {
 			return c.transitionToPaused(profileID, sub, PausedReasonAuthFailed)
@@ -469,6 +469,9 @@ func (c *Connector) applyInboundFromTasks(ctx context.Context, profileID wikipag
 	if sub.ItemEtags == nil {
 		sub.ItemEtags = map[string]string{}
 	}
+	if sub.SyncedItems == nil {
+		sub.SyncedItems = map[string]ItemSyncState{}
+	}
 
 	// Lazy loader for wiki-text lookup (marker-loss recovery).
 	resolveWikiByText := c.buildWikiByTextResolver(ctx, sub)
@@ -576,6 +579,7 @@ func (c *Connector) applyOneInboundTask(ctx context.Context, profileID wikipage.
 			}
 		}
 		sub.ItemEtags[t.ID] = t.Etag
+		stampSyncedFromWikiItem(sub.SyncedItems, uid, item)
 		return nil
 	}
 
@@ -590,11 +594,29 @@ func (c *Connector) applyOneInboundTask(ctx context.Context, profileID wikipage.
 			sub.ItemIDMap[newUID] = t.ID
 			taskToUID[t.ID] = newUID
 			sub.ItemEtags[t.ID] = t.Etag
+			stampSyncedFromWikiItem(sub.SyncedItems, newUID, item)
 			c.logger.Info("tasks bridge: %s profile=%s page=%s list=%s task=%s",
 				connectors.EventRemoteItemArrived, string(profileID), sub.Page, sub.ListName, t.ID)
 		}
 	}
 	return nil
+}
+
+// stampSyncedFromWikiItem advances the SyncedItems entry for uid to
+// the wiki-side translation of item. Used by inbound apply paths so
+// the next outbound diff sees "wiki == synced" (marker included) and
+// skips a redundant patch. Stamping from raw remote fields would miss
+// the wiki:uid marker that the outbound encoder appends, causing
+// every tick to re-push the just-applied state.
+func stampSyncedFromWikiItem(synced map[string]ItemSyncState, uid string, item *apiv1.ChecklistItem) {
+	item.Uid = uid
+	fields := translator.ChecklistItemToTaskFields(item)
+	synced[uid] = ItemSyncState{
+		SyncedTitle:  fields.Title,
+		SyncedNotes:  fields.Notes,
+		SyncedStatus: fields.Status,
+		SyncedDue:    fields.Due,
+	}
 }
 
 // applyInboundDeletion mirrors a Tasks-side delete (or fully hidden
@@ -611,6 +633,7 @@ func (c *Connector) applyInboundDeletion(ctx context.Context, _ wikipage.PageIde
 	delete(sub.ItemIDMap, uid)
 	delete(taskToUID, t.ID)
 	delete(sub.ItemEtags, t.ID)
+	delete(sub.SyncedItems, uid)
 }
 
 // pushOutboundToTasks diffs the wiki checklist against the
@@ -621,14 +644,21 @@ func (c *Connector) applyInboundDeletion(ctx context.Context, _ wikipage.PageIde
 //   - new (not in id_map): pre-insert marker scan; if a Tasks task
 //     carries this uid in its notes, switch to PatchTask. Otherwise
 //     InsertTask with the uid marker appended.
-//   - updated (in id_map): PatchTask with If-Match. On 412 pull-and-
-//     retry-once with fresh etag.
+//   - updated (in id_map): PatchTask with If-Match BUT ONLY when the
+//     current wiki state differs from the SyncedItems baseline. If
+//     it matches, skip the patch entirely — there is no local change
+//     to push, and patching anyway would overwrite remote changes
+//     that arrived between ticks (this was a real production bug).
+//     On 412 (etag stale): pull the remote item and apply its state
+//     back into the wiki via the mutator. We do NOT blind-retry the
+//     patch — that path is last-write-wins and silently destroys
+//     user changes from the phone.
 //   - missing wiki uid (in id_map but not in current wiki items):
 //     DeleteTask. Idempotent server-side.
 //
-// Persists the updated ItemIDMap and ItemEtags on the returned
-// Subscription; caller persists.
-func (c *Connector) pushOutboundToTasks(ctx context.Context, sub Subscription, client TasksClient) (Subscription, error) {
+// Persists the updated ItemIDMap, ItemEtags, and SyncedItems on the
+// returned Subscription; caller persists.
+func (c *Connector) pushOutboundToTasks(ctx context.Context, profileID wikipage.PageIdentifier, ownerEmail string, sub Subscription, client TasksClient) (Subscription, error) {
 	if c.checklistR == nil {
 		return sub, ErrChecklistReaderUnavailable
 	}
@@ -642,6 +672,9 @@ func (c *Connector) pushOutboundToTasks(ctx context.Context, sub Subscription, c
 	if sub.ItemEtags == nil {
 		sub.ItemEtags = map[string]string{}
 	}
+	if sub.SyncedItems == nil {
+		sub.SyncedItems = map[string]ItemSyncState{}
+	}
 
 	currentUIDs := map[string]*apiv1.ChecklistItem{}
 	if checklist != nil {
@@ -652,18 +685,30 @@ func (c *Connector) pushOutboundToTasks(ctx context.Context, sub Subscription, c
 		}
 	}
 
-	sub, err = c.pushOutboundUpserts(ctx, client, sub, currentUIDs)
+	sub, err = c.pushOutboundUpserts(ctx, profileID, ownerEmail, client, sub, currentUIDs)
 	if err != nil {
 		return sub, err
 	}
-	return c.pushOutboundDeletions(ctx, client, sub, currentUIDs)
+	sub, err = c.pushOutboundDeletions(ctx, client, sub, currentUIDs)
+	if err != nil {
+		return sub, err
+	}
+	stampLastObservedWiki(&sub, currentUIDs)
+	return sub, nil
 }
 
 // pushOutboundUpserts handles the insert-or-patch path for each wiki
 // item that is currently in the checklist.
 //
-//revive:disable-next-line:cyclomatic,cognitive-complexity
-func (c *Connector) pushOutboundUpserts(ctx context.Context, client TasksClient, sub Subscription, currentUIDs map[string]*apiv1.ChecklistItem) (Subscription, error) {
+// Diff-before-push (the load-bearing rule): if a wiki uid is already
+// in the id_map AND the current wiki fields equal the SyncedItems
+// baseline, the patch is SKIPPED — the wiki has not changed since
+// the last successful push, so re-patching would be a wasted call
+// that overwrites whatever the user changed on Google's side
+// (phone) since our last tick.
+//
+//revive:disable-next-line:cyclomatic,cognitive-complexity,function-length
+func (c *Connector) pushOutboundUpserts(ctx context.Context, profileID wikipage.PageIdentifier, ownerEmail string, client TasksClient, sub Subscription, currentUIDs map[string]*apiv1.ChecklistItem) (Subscription, error) {
 	// Lazy load of remote tasks for pre-insert marker dedup.
 	var remoteByMarker map[string]gateway.Task
 	loadRemote := func() error {
@@ -690,13 +735,28 @@ func (c *Connector) pushOutboundUpserts(ctx context.Context, client TasksClient,
 	for uid, item := range currentUIDs {
 		fields := translator.ChecklistItemToTaskFields(item)
 		if taskID, found := sub.ItemIDMap[uid]; found {
-			patched, patchErr := c.patchWithRetry(ctx, client, sub, taskID, fields)
+			// DIFF-BEFORE-PUSH: skip the patch when the wiki state
+			// matches the last successfully-pushed snapshot. This is
+			// the fix for the every-tick-overwrites-phone bug — see
+			// the function comment.
+			if synced, ok := sub.SyncedItems[uid]; ok && syncedMatchesFields(synced, fields) {
+				continue
+			}
+			patched, applied, patchErr := c.patchOrApplyRemote(ctx, profileID, ownerEmail, client, sub, uid, taskID, fields)
 			if patchErr != nil {
 				return sub, patchErr
 			}
+			if applied {
+				// 412 → remote authoritative; we re-applied the
+				// remote state to the wiki and did NOT push. The
+				// next tick will re-evaluate after the wiki side is
+				// caught up.
+				continue
+			}
 			sub.ItemEtags[patched.ID] = patched.Etag
+			sub.SyncedItems[uid] = stampSyncedFromFields(sub.SyncedItems[uid], fields)
 			c.logger.Info("tasks bridge: %s profile=%s page=%s list=%s uid=%s task=%s",
-				connectors.EventLocalItemPushed, "<profile>", sub.Page, sub.ListName, uid, patched.ID)
+				connectors.EventLocalItemPushed, string(profileID), sub.Page, sub.ListName, uid, patched.ID)
 			continue
 		}
 
@@ -705,12 +765,17 @@ func (c *Connector) pushOutboundUpserts(ctx context.Context, client TasksClient,
 			return sub, err
 		}
 		if existing, ok := remoteByMarker[uid]; ok {
-			patched, patchErr := c.patchWithRetry(ctx, client, sub, existing.ID, fields)
+			patched, applied, patchErr := c.patchOrApplyRemote(ctx, profileID, ownerEmail, client, sub, uid, existing.ID, fields)
 			if patchErr != nil {
 				return sub, patchErr
 			}
+			if applied {
+				sub.ItemIDMap[uid] = existing.ID
+				continue
+			}
 			sub.ItemIDMap[uid] = patched.ID
 			sub.ItemEtags[patched.ID] = patched.Etag
+			sub.SyncedItems[uid] = stampSyncedFromFields(sub.SyncedItems[uid], fields)
 			continue
 		}
 
@@ -720,8 +785,9 @@ func (c *Connector) pushOutboundUpserts(ctx context.Context, client TasksClient,
 		}
 		sub.ItemIDMap[uid] = inserted.ID
 		sub.ItemEtags[inserted.ID] = inserted.Etag
+		sub.SyncedItems[uid] = stampSyncedFromFields(sub.SyncedItems[uid], fields)
 		c.logger.Info("tasks bridge: %s profile=%s page=%s list=%s uid=%s task=%s (inserted)",
-			connectors.EventLocalItemPushed, "<profile>", sub.Page, sub.ListName, uid, inserted.ID)
+			connectors.EventLocalItemPushed, string(profileID), sub.Page, sub.ListName, uid, inserted.ID)
 	}
 	return sub, nil
 }
@@ -738,29 +804,172 @@ func (*Connector) pushOutboundDeletions(ctx context.Context, client TasksClient,
 		}
 		delete(sub.ItemIDMap, uid)
 		delete(sub.ItemEtags, taskID)
+		delete(sub.SyncedItems, uid)
 	}
 	return sub, nil
 }
 
-// patchWithRetry sends a PatchTask with If-Match. On 412 (etag stale)
-// pulls the task fresh and retries once with the new etag.
-func (*Connector) patchWithRetry(ctx context.Context, client TasksClient, sub Subscription, taskID string, fields translator.TaskFields) (gateway.Task, error) {
+// patchOrApplyRemote sends a PatchTask with If-Match. On 412 (etag
+// stale) it does NOT blind-retry the patch — that would be
+// last-write-wins and silently destroy whatever the user changed on
+// Google's side (typically from their phone) since our last
+// observation. Instead, it pulls the current remote state and folds
+// it into the wiki via the inbound apply path; the wiki is now
+// caught up, and the next tick (after a real wiki edit) will re-push
+// cleanly.
+//
+// Returns:
+//
+//   - patched: the gateway.Task returned by a successful PatchTask
+//     (when applied is false).
+//   - applied: true when the 412 path ran — caller must NOT update
+//     SyncedItems/etags from a phantom patch result.
+//   - err: any non-412 error from the gateway, or any error from the
+//     remote pull / mutator apply during the 412 path.
+//
+// On a 412 with no remote item visible (the task got deleted between
+// our patch and our follow-up list), the remote-side delete is mirrored
+// into the wiki via the mutator and the id_map / etags / synced state
+// for this uid is cleaned up.
+//
+//revive:disable-next-line:cyclomatic,cognitive-complexity
+func (c *Connector) patchOrApplyRemote(ctx context.Context, profileID wikipage.PageIdentifier, ownerEmail string, client TasksClient, sub Subscription, uid, taskID string, fields translator.TaskFields) (patched gateway.Task, applied bool, err error) {
 	patch := buildPatchFields(fields)
 	etag := sub.ItemEtags[taskID]
-	patched, err := client.PatchTask(ctx, sub.RemoteListID, taskID, patch, etag)
+	patched, err = client.PatchTask(ctx, sub.RemoteListID, taskID, patch, etag)
 	if err == nil {
-		return patched, nil
+		return patched, false, nil
 	}
 	if !errors.Is(err, gateway.ErrPreconditionFailed) {
-		return gateway.Task{}, err
+		return gateway.Task{}, false, err
 	}
-	// 412 — refetch and retry once with no If-Match (last-write-wins
-	// is the deliberate fallback per plan §"Outbound idempotence").
-	patched, retryErr := client.PatchTask(ctx, sub.RemoteListID, taskID, patch, "")
-	if retryErr != nil {
-		return gateway.Task{}, retryErr
+	// 412 — remote moved under us. Pull the current authoritative
+	// remote state and apply it to the wiki; do NOT push.
+	c.logger.Info("tasks bridge: precondition_failed_on_patch profile=%s page=%s list=%s uid=%s task=%s",
+		string(profileID), sub.Page, sub.ListName, uid, taskID)
+	if applyErr := c.applyRemoteAuthoritative(ctx, profileID, ownerEmail, sub, client, uid, taskID); applyErr != nil {
+		return gateway.Task{}, false, fmt.Errorf("apply remote authoritative on 412: %w", applyErr)
 	}
-	return patched, nil
+	return gateway.Task{}, true, nil
+}
+
+// applyRemoteAuthoritative pulls the current remote state for
+// taskID, then folds it back into the wiki via the inbound mutator.
+// Used by the 412-on-patch path so a remote-side change wins over a
+// stale local change rather than being silently overwritten.
+//
+// Implementation note: the gateway exposes ListTasks (paginated) but
+// not single-task GET, so we list with updatedMin=zero and find the
+// matching id. For typical household-scale tasklists (<200 tasks)
+// this is a single page; the pagination loop handles the rest.
+func (c *Connector) applyRemoteAuthoritative(ctx context.Context, profileID wikipage.PageIdentifier, ownerEmail string, sub Subscription, client TasksClient, uid, taskID string) error {
+	tasks, err := c.listAllTasks(ctx, client, sub.RemoteListID, time.Time{})
+	if err != nil {
+		return fmt.Errorf("list tasks for remote authoritative pull: %w", err)
+	}
+	var found *gateway.Task
+	for i := range tasks {
+		if tasks[i].ID == taskID {
+			found = &tasks[i]
+			break
+		}
+	}
+	if found == nil || found.Deleted {
+		// Remote is gone. Mirror the delete into the wiki via the
+		// suppressed mutator path so the next outbound diff doesn't
+		// re-push a stale local item.
+		if c.checklistW != nil {
+			if c.suppressor != nil {
+				c.suppressor.Suppress(profileID, sub.Page, sub.ListName)
+				defer c.suppressor.Unsuppress(profileID, sub.Page, sub.ListName)
+			}
+			_ = c.checklistW.DeleteItemForSync(ctx, sub.Page, sub.ListName, ownerEmail, uid)
+		}
+		delete(sub.ItemIDMap, uid)
+		delete(sub.ItemEtags, taskID)
+		delete(sub.SyncedItems, uid)
+		return nil
+	}
+	// Translate the remote task to a wiki item and apply.
+	item, err := translator.TaskToChecklistItem(translator.Task{
+		ID:        found.ID,
+		ETag:      found.Etag,
+		Title:     found.Title,
+		Notes:     found.Notes,
+		Status:    string(found.Status),
+		Position:  found.Position,
+		Updated:   found.Updated,
+		Due:       found.Due,
+		Completed: found.Completed,
+	})
+	if err != nil {
+		return fmt.Errorf("translate remote task on 412: %w", err)
+	}
+	if c.checklistW != nil {
+		if c.suppressor != nil {
+			c.suppressor.Suppress(profileID, sub.Page, sub.ListName)
+			defer c.suppressor.Unsuppress(profileID, sub.Page, sub.ListName)
+		}
+		if updateErr := c.checklistW.UpdateItemForSync(ctx, sub.Page, sub.ListName, ownerEmail, uid, item.GetText(), item.GetChecked(), item.GetTags(), item.GetDescription()); updateErr != nil {
+			return fmt.Errorf("update wiki item on 412: %w", updateErr)
+		}
+	}
+	// Refresh etag + Synced* baseline from the wiki-side translation
+	// of the just-applied item — the next outbound diff compares
+	// wiki-derived fields, so the synced floor must match those.
+	sub.ItemEtags[taskID] = found.Etag
+	stampSyncedFromWikiItem(sub.SyncedItems, uid, item)
+	return nil
+}
+
+// syncedMatchesFields reports whether the SyncedItems baseline for a
+// uid equals the wiki fields we'd otherwise send in a patch. When
+// true, the diff loop SKIPS the patch — there is no local change.
+func syncedMatchesFields(s ItemSyncState, fields translator.TaskFields) bool {
+	if s.SyncedTitle != fields.Title {
+		return false
+	}
+	if s.SyncedNotes != fields.Notes {
+		return false
+	}
+	if s.SyncedStatus != fields.Status {
+		return false
+	}
+	if !s.SyncedDue.Equal(fields.Due) {
+		return false
+	}
+	return true
+}
+
+// stampSyncedFromFields returns a new ItemSyncState with the Synced*
+// fields advanced to reflect a successful push. LastObservedWiki* is
+// preserved so the next tick can detect "wiki re-edited locally
+// after our push."
+func stampSyncedFromFields(prev ItemSyncState, fields translator.TaskFields) ItemSyncState {
+	prev.SyncedTitle = fields.Title
+	prev.SyncedNotes = fields.Notes
+	prev.SyncedStatus = fields.Status
+	prev.SyncedDue = fields.Due
+	return prev
+}
+
+// stampLastObservedWiki updates the LastObservedWiki* fields on every
+// SyncedItems entry to match the current wiki state. Called at the
+// end of every outbound pass so the next tick can compare against
+// "what the wiki looked like after we last observed it."
+func stampLastObservedWiki(sub *Subscription, currentUIDs map[string]*apiv1.ChecklistItem) {
+	if sub.SyncedItems == nil {
+		sub.SyncedItems = map[string]ItemSyncState{}
+	}
+	for uid, item := range currentUIDs {
+		fields := translator.ChecklistItemToTaskFields(item)
+		entry := sub.SyncedItems[uid]
+		entry.LastObservedWikiTitle = fields.Title
+		entry.LastObservedWikiNotes = fields.Notes
+		entry.LastObservedWikiStatus = fields.Status
+		entry.LastObservedWikiDue = fields.Due
+		sub.SyncedItems[uid] = entry
+	}
 }
 
 // buildPatchFields turns the translator's TaskFields shape into the

@@ -21,6 +21,8 @@ Tasks is the Google-native task surface, so unlike the [[help-google-keep]] brid
 - Items added on either side appear on the other within ~30 seconds.
 - Check/uncheck, edit text, change due date, reorder — all round-trip.
 - Per-user, per-checklist. Each household member binds their own checklists to their own Tasks lists.
+- **No phantom overwrites.** Each tick only patches an item if you actually changed it on the wiki side. If nothing changed locally between two ticks, the wiki sends zero PATCH calls — your phone-side edits in that window are safe.
+- **Phone wins on conflict.** If you edit the same item on the wiki and the phone simultaneously and the wiki's push collides with Google's optimistic-concurrency check, the wiki pulls the phone state and writes it into the wiki. We don't blindly retry — that would silently destroy whatever you just typed on your phone.
 
 ## How to set up
 

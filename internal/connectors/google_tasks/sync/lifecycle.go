@@ -262,6 +262,8 @@ func (c *Connector) Subscribe(ctx context.Context, profileID wikipage.PageIdenti
 // listName" — mirrors the Keep bridge's empty-keepNoteID semantics.
 // A create failure surfaces directly because nothing has been
 // persisted yet.
+//
+//revive:disable-next-line:function-length
 func (c *Connector) subscribeWithLock(ctx context.Context, profileID wikipage.PageIdentifier, page, listName, remoteListID string, client TasksClient, checklistKey connectors.ChecklistKey, owner connectors.LeaseOwner) (Subscription, error) {
 	// Cross-profile/cross-connector existence check via the
 	// LeaseTable — the boot-rebuild + the contract that every
@@ -307,13 +309,15 @@ func (c *Connector) subscribeWithLock(ctx context.Context, profileID wikipage.Pa
 	// seed path. Only runs when we just created the list — for the
 	// bind-to-existing path the next scheduler tick's outbound pass
 	// pushes any wiki-only items (idMap-miss → insert).
+	syncedItems := map[string]ItemSyncState{}
 	if createdNewList {
-		seededMap, seededEtags, seedErr := c.seedNewTasklistFromWiki(ctx, page, listName, effectiveRemoteID, client)
+		seeded, seedErr := c.seedNewTasklistFromWiki(ctx, page, listName, effectiveRemoteID, client)
 		if seedErr != nil {
 			return Subscription{}, fmt.Errorf("seed new tasklist from wiki: %w", seedErr)
 		}
-		idMap = seededMap
-		etags = seededEtags
+		idMap = seeded.IDMap
+		etags = seeded.Etags
+		syncedItems = seeded.SyncedItems
 	}
 
 	if effectiveRemoteTitle == "" {
@@ -326,6 +330,7 @@ func (c *Connector) subscribeWithLock(ctx context.Context, profileID wikipage.Pa
 		RemoteListTitle: effectiveRemoteTitle,
 		ItemIDMap:       idMap,
 		ItemEtags:       etags,
+		SyncedItems:     syncedItems,
 		State:           SubscriptionStateActive,
 		SubscribedAt:    c.clock.Now().UTC(),
 	}
@@ -367,18 +372,38 @@ func resolveRemoteTitle(ctx context.Context, client TasksClient, remoteListID st
 // existing remote tasks (see seedIDMapForSubscribe) and the next
 // scheduler tick's outbound pass handles wiki items missing from the
 // remote.
-func (c *Connector) seedNewTasklistFromWiki(ctx context.Context, page, listName, remoteListID string, client TasksClient) (idMap map[string]string, etags map[string]string, err error) {
+// seedNewTasklistResult bundles the three maps seedNewTasklistFromWiki
+// produces — kept as a single return rather than four positional
+// values so the call site reads cleanly and revive's max-return-arity
+// rule (3) holds. The fields are independent and never decoupled
+// from each other in production code, so this is a true result
+// aggregate, not a config-struct anti-pattern.
+type seedNewTasklistResult struct {
+	IDMap       map[string]string
+	Etags       map[string]string
+	SyncedItems map[string]ItemSyncState
+}
+
+func (c *Connector) seedNewTasklistFromWiki(ctx context.Context, page, listName, remoteListID string, client TasksClient) (seedNewTasklistResult, error) {
+	empty := seedNewTasklistResult{
+		IDMap:       map[string]string{},
+		Etags:       map[string]string{},
+		SyncedItems: map[string]ItemSyncState{},
+	}
 	if c.checklistR == nil {
-		return nil, nil, ErrChecklistReaderUnavailable
+		return empty, ErrChecklistReaderUnavailable
 	}
 	checklist, err := c.checklistR.ListItems(ctx, page, listName)
 	if err != nil {
-		return nil, nil, fmt.Errorf("read wiki checklist: %w", err)
+		return empty, fmt.Errorf("read wiki checklist: %w", err)
 	}
-	idMap = map[string]string{}
-	etags = map[string]string{}
+	out := seedNewTasklistResult{
+		IDMap:       map[string]string{},
+		Etags:       map[string]string{},
+		SyncedItems: map[string]ItemSyncState{},
+	}
 	if checklist == nil {
-		return idMap, etags, nil
+		return out, nil
 	}
 	for _, item := range checklist.GetItems() {
 		uid := item.GetUid()
@@ -391,14 +416,28 @@ func (c *Connector) seedNewTasklistFromWiki(ctx context.Context, page, listName,
 		fields := translator.ChecklistItemToTaskFields(item)
 		inserted, insertErr := client.InsertTask(ctx, remoteListID, fields.Title, fields.Notes, gateway.TaskStatus(fields.Status), fields.Due, "")
 		if insertErr != nil {
-			return nil, nil, fmt.Errorf("insert wiki item uid=%s: %w", uid, insertErr)
+			return empty, fmt.Errorf("insert wiki item uid=%s: %w", uid, insertErr)
 		}
-		idMap[uid] = inserted.ID
+		out.IDMap[uid] = inserted.ID
 		if inserted.Etag != "" {
-			etags[inserted.ID] = inserted.Etag
+			out.Etags[inserted.ID] = inserted.Etag
+		}
+		// Stamp Synced* AND LastObservedWiki* from the just-pushed
+		// fields so the next tick's diff has a baseline (otherwise
+		// the next tick would treat every seeded item as "needs push"
+		// and re-patch them all).
+		out.SyncedItems[uid] = ItemSyncState{
+			SyncedTitle:            fields.Title,
+			SyncedNotes:            fields.Notes,
+			SyncedStatus:           fields.Status,
+			SyncedDue:              fields.Due,
+			LastObservedWikiTitle:  fields.Title,
+			LastObservedWikiNotes:  fields.Notes,
+			LastObservedWikiStatus: fields.Status,
+			LastObservedWikiDue:    fields.Due,
 		}
 	}
-	return idMap, etags, nil
+	return out, nil
 }
 
 // seedIDMapForSubscribe walks the existing tasks list and builds an

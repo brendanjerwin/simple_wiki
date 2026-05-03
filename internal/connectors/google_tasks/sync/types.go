@@ -66,6 +66,14 @@ const PausedReasonAuthFailed = "auth_failed"
 // ItemEtags caches Tasks etags from the last fetched state per task
 // id. Used as If-Match on outbound patches; on 412 the orchestrator
 // pulls fresh and retries once. Maintained by the inbound apply path.
+//
+// SyncedItems is the per-item sync state, keyed by wiki uid. Carries
+// both the LAST SUCCESSFULLY PUSHED state (Synced*) and the wiki state
+// observed at the END of the last tick (LastObservedWiki*). The
+// outbound diff loop uses these to skip patches when nothing changed
+// in the wiki since the last push — without this, every tick would
+// patch every item and overwrite phone-side changes that happened
+// in between ticks. Mirrors Keep's per-item ItemMapping pattern.
 type Subscription struct {
 	// Page is the wiki page identifier carrying the checklist.
 	Page string
@@ -112,6 +120,49 @@ type Subscription struct {
 	// SubscribedAt is the wall-clock time the subscription was
 	// established. Informational only (rendered by the UI).
 	SubscribedAt time.Time
+	// SyncedItems is the per-item sync state keyed by wiki uid. Each
+	// entry records what was last successfully pushed to Google
+	// (Synced*) and what wiki state was observed at the end of the
+	// last tick (LastObservedWiki*). The outbound diff loop reads
+	// this map to decide whether a wiki item changed since the last
+	// push; if it didn't, we skip the patch — preventing every-tick
+	// overwrites of phone-side edits.
+	//
+	// Always populated alongside ItemIDMap: when a uid is added to
+	// ItemIDMap, a corresponding SyncedItems entry is created; when
+	// it's removed, the SyncedItems entry is removed too.
+	SyncedItems map[string]ItemSyncState
+}
+
+// ItemSyncState is the per-item sync record for one wiki uid. It
+// carries:
+//
+//   - SyncedTitle, SyncedNotes, SyncedStatus, SyncedDue: the
+//     authoritative "what we last pushed to Google" snapshot. Set on
+//     every successful insert/patch. The outbound diff compares
+//     current wiki fields to these values; equal → skip the patch.
+//
+//   - LastObservedWikiTitle, LastObservedWikiNotes,
+//     LastObservedWikiStatus, LastObservedWikiDue: the wiki content
+//     observed at the END of the last tick. Used on the next tick to
+//     detect "wiki changed since last observation" — in concert with
+//     Synced* this is how we tell apart "the user edited the wiki"
+//     from "no local change."
+//
+// All fields can be empty/zero on first-tick or freshly-bound items;
+// the outbound diff treats an empty SyncedTitle as "never pushed →
+// must push" (the insert-first-time path). The TaskID lives in the
+// parallel ItemIDMap.
+type ItemSyncState struct {
+	SyncedTitle  string
+	SyncedNotes  string
+	SyncedStatus string
+	SyncedDue    time.Time
+
+	LastObservedWikiTitle  string
+	LastObservedWikiNotes  string
+	LastObservedWikiStatus string
+	LastObservedWikiDue    time.Time
 }
 
 // IsPaused reports whether the subscription is in the paused state.

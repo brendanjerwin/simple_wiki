@@ -53,12 +53,22 @@ const (
 	subRemoteListTitleField      = "remote_list_title"
 	subItemIDMapField            = "item_id_map"
 	subItemEtagsField            = "item_etags"
+	subSyncedItemsField          = "synced_items"
 	subLastUpdatedMinField       = "last_updated_min"
 	subLastSuccessfulSyncAtField = "last_successful_sync_at"
 	subStateField                = "state"
 	subPausedReasonField         = "paused_reason"
 	subPausedAtField             = "paused_at"
 	subSubscribedAtField         = "subscribed_at"
+
+	syncedItemSyncedTitleField           = "synced_title"
+	syncedItemSyncedNotesField           = "synced_notes"
+	syncedItemSyncedStatusField          = "synced_status"
+	syncedItemSyncedDueField             = "synced_due"
+	syncedItemLastObservedWikiTitleField  = "last_observed_wiki_title"
+	syncedItemLastObservedWikiNotesField  = "last_observed_wiki_notes"
+	syncedItemLastObservedWikiStatusField = "last_observed_wiki_status"
+	syncedItemLastObservedWikiDueField    = "last_observed_wiki_due"
 )
 
 // SubscriptionStore is the typed funnel for connector-state writes on
@@ -317,6 +327,10 @@ func decodeSubscriptions(raw any) ([]Subscription, error) {
 		if err != nil {
 			return nil, fmt.Errorf("wiki.connectors.google_tasks.subscriptions[%d].item_etags: %w", i, err)
 		}
+		syncedItems, err := decodeSyncedItems(m[subSyncedItemsField])
+		if err != nil {
+			return nil, fmt.Errorf("wiki.connectors.google_tasks.subscriptions[%d].synced_items: %w", i, err)
+		}
 		lastUpdatedMin, err := parseTime(getString(m, subLastUpdatedMinField))
 		if err != nil {
 			return nil, fmt.Errorf("wiki.connectors.google_tasks.subscriptions[%d].last_updated_min: %w", i, err)
@@ -344,6 +358,7 @@ func decodeSubscriptions(raw any) ([]Subscription, error) {
 			RemoteListTitle:      getString(m, subRemoteListTitleField),
 			ItemIDMap:            idMap,
 			ItemEtags:            etags,
+			SyncedItems:          syncedItems,
 			LastUpdatedMin:       lastUpdatedMin,
 			LastSuccessfulSyncAt: lastSync,
 			State:                state,
@@ -401,6 +416,9 @@ func encodeSubscriptions(subs []Subscription) []any {
 		if len(sub.ItemEtags) > 0 {
 			entry[subItemEtagsField] = stringMapToAnyMap(sub.ItemEtags)
 		}
+		if len(sub.SyncedItems) > 0 {
+			entry[subSyncedItemsField] = encodeSyncedItems(sub.SyncedItems)
+		}
 		if !sub.LastUpdatedMin.IsZero() {
 			entry[subLastUpdatedMinField] = sub.LastUpdatedMin.UTC().Format(time.RFC3339)
 		}
@@ -430,6 +448,84 @@ func stringMapToAnyMap(in map[string]string) map[string]any {
 		out[k] = v
 	}
 	return out
+}
+
+// encodeSyncedItems writes the per-uid ItemSyncState map as a
+// frontmatter map. Entries with all-zero fields are omitted entirely
+// to keep the persisted shape compact.
+func encodeSyncedItems(in map[string]ItemSyncState) map[string]any {
+	out := make(map[string]any, len(in))
+	for uid, s := range in {
+		entry := map[string]any{}
+		if s.SyncedTitle != "" {
+			entry[syncedItemSyncedTitleField] = s.SyncedTitle
+		}
+		if s.SyncedNotes != "" {
+			entry[syncedItemSyncedNotesField] = s.SyncedNotes
+		}
+		if s.SyncedStatus != "" {
+			entry[syncedItemSyncedStatusField] = s.SyncedStatus
+		}
+		if !s.SyncedDue.IsZero() {
+			entry[syncedItemSyncedDueField] = s.SyncedDue.UTC().Format(time.RFC3339)
+		}
+		if s.LastObservedWikiTitle != "" {
+			entry[syncedItemLastObservedWikiTitleField] = s.LastObservedWikiTitle
+		}
+		if s.LastObservedWikiNotes != "" {
+			entry[syncedItemLastObservedWikiNotesField] = s.LastObservedWikiNotes
+		}
+		if s.LastObservedWikiStatus != "" {
+			entry[syncedItemLastObservedWikiStatusField] = s.LastObservedWikiStatus
+		}
+		if !s.LastObservedWikiDue.IsZero() {
+			entry[syncedItemLastObservedWikiDueField] = s.LastObservedWikiDue.UTC().Format(time.RFC3339)
+		}
+		if len(entry) > 0 {
+			out[uid] = entry
+		}
+	}
+	return out
+}
+
+// decodeSyncedItems reads the per-uid ItemSyncState map. Empty/missing
+// → nil map (legacy subscriptions written before this field existed
+// decode cleanly with no synced state, which the outbound diff treats
+// as "never observed → must re-push to seed the baseline").
+func decodeSyncedItems(raw any) (map[string]ItemSyncState, error) {
+	if raw == nil {
+		return nil, nil
+	}
+	m, ok := raw.(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("expected map, got %T", raw)
+	}
+	out := make(map[string]ItemSyncState, len(m))
+	for uid, v := range m {
+		entry, ok := v.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf("key %q value is %T, expected map", uid, v)
+		}
+		syncedDue, err := parseTime(getString(entry, syncedItemSyncedDueField))
+		if err != nil {
+			return nil, fmt.Errorf("key %q synced_due: %w", uid, err)
+		}
+		lastObservedDue, err := parseTime(getString(entry, syncedItemLastObservedWikiDueField))
+		if err != nil {
+			return nil, fmt.Errorf("key %q last_observed_wiki_due: %w", uid, err)
+		}
+		out[uid] = ItemSyncState{
+			SyncedTitle:            getString(entry, syncedItemSyncedTitleField),
+			SyncedNotes:            getString(entry, syncedItemSyncedNotesField),
+			SyncedStatus:           getString(entry, syncedItemSyncedStatusField),
+			SyncedDue:              syncedDue,
+			LastObservedWikiTitle:  getString(entry, syncedItemLastObservedWikiTitleField),
+			LastObservedWikiNotes:  getString(entry, syncedItemLastObservedWikiNotesField),
+			LastObservedWikiStatus: getString(entry, syncedItemLastObservedWikiStatusField),
+			LastObservedWikiDue:    lastObservedDue,
+		}
+	}
+	return out, nil
 }
 
 func decodeStringMap(raw any) (map[string]string, error) {

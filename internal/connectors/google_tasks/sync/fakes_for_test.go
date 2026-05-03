@@ -174,7 +174,7 @@ func (f *fakeTasksClient) CreateTaskList(_ context.Context, title string) (gatew
 	return tl, nil
 }
 
-func (f *fakeTasksClient) ListTasks(_ context.Context, tasklistID string, _ time.Time, pageToken string) (gateway.TasksPage, error) {
+func (f *fakeTasksClient) ListTasks(_ context.Context, tasklistID string, updatedMin time.Time, pageToken string) (gateway.TasksPage, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if len(f.errorsForListTasks) > 0 {
@@ -195,7 +195,20 @@ func (f *fakeTasksClient) ListTasks(_ context.Context, tasklistID string, _ time
 		return gateway.TasksPage{}, nil
 	}
 	if all, ok := f.listAllForList[tasklistID]; ok {
-		return gateway.TasksPage{Tasks: all}, nil
+		// Honor updatedMin filtering — production callers use
+		// LastUpdatedMin as the cursor, and tests rely on this to
+		// distinguish "inbound-only" from "outbound-only" scenarios.
+		// Empty updatedMin means "return everything" (initial pull).
+		if updatedMin.IsZero() {
+			return gateway.TasksPage{Tasks: all}, nil
+		}
+		filtered := make([]gateway.Task, 0, len(all))
+		for _, t := range all {
+			if t.Updated.After(updatedMin) || t.Updated.Equal(updatedMin) {
+				filtered = append(filtered, t)
+			}
+		}
+		return gateway.TasksPage{Tasks: filtered}, nil
 	}
 	return gateway.TasksPage{}, nil
 }

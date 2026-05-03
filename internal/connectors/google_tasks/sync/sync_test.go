@@ -516,34 +516,295 @@ var _ = Describe("Connector.Sync", func() {
 	})
 
 	When("outbound PatchTask returns 412 (etag stale)", func() {
+		var (
+			client  *fakeTasksClient
+			mutator *fakeChecklistMutator
+			pages   *fakePages
+		)
+
+		BeforeEach(func() {
+			pages = newFakePages()
+			now := time.Date(2026, 4, 25, 17, 14, 0, 0, time.UTC)
+			// Cursor is in the future so inbound returns no tasks
+			// — this isolates the outbound 412 path. The
+			// updatedMin filter is enforced in production, but the
+			// test fake ignores it; we model "no inbound" with an
+			// empty listAllForList and only set listsForList for
+			// the outbound 412 pull.
+			sub := taskssync.Subscription{
+				Page:           syncTestPage,
+				ListName:       syncTestListName,
+				RemoteListID:   syncTestRemote,
+				State:          taskssync.SubscriptionStateActive,
+				LastUpdatedMin: now.Add(time.Hour),
+				ItemIDMap:      map[string]string{"wiki-1": "task-1"},
+				ItemEtags:      map[string]string{"task-1": "etag-stale"},
+				SyncedItems: map[string]taskssync.ItemSyncState{
+					"wiki-1": {SyncedTitle: "Old", SyncedStatus: "needsAction"},
+				},
+			}
+			store := newConfiguredStore(pages, &sub)
+			client = newFakeTasksClient()
+			client.patchErrors = []error{gateway.ErrPreconditionFailed}
+			// The remote authoritative pull on 412 will see this
+			// — Google's view of the item after the phone edit.
+			client.listAllForList[syncTestRemote] = []gateway.Task{{
+				ID:      "task-1",
+				Etag:    "etag-fresh",
+				Title:   "Remote-Edited-By-Phone",
+				Status:  gateway.TaskStatusCompleted,
+				Updated: now,
+			}}
+			reader := newFakeChecklistReader()
+			reader.Set(syncTestPage, syncTestListName, []*apiv1.ChecklistItem{
+				{Uid: "wiki-1", Text: "Local edit that lost the race"},
+			})
+			mutator = newFakeChecklistMutatorBoundTo(reader)
+			c := buildTestConnector(store, readyLeaseTable(), client, newFakeClock(now), reader, mutator, nil)
+			Expect(c.Sync(context.Background(), subscriptionKey())).To(Succeed())
+		})
+
+		It("should NOT blind-retry the patch with empty If-Match", func() {
+			// Only the original etag-bearing patch attempt should
+			// have been sent. A second blind retry would be
+			// last-write-wins and silently destroy the phone-side
+			// change — that's the bug this fix prevents.
+			Expect(client.patched).To(HaveLen(1))
+			Expect(client.patched[0].Etag).To(Equal("etag-stale"))
+		})
+
+		It("should apply the remote authoritative state into the wiki via the mutator", func() {
+			Expect(mutator.updated).To(HaveLen(1))
+			Expect(mutator.updated[0].UID).To(Equal("wiki-1"))
+			Expect(mutator.updated[0].Text).To(Equal("Remote-Edited-By-Phone"))
+			Expect(mutator.updated[0].Checked).To(BeTrue())
+		})
+
+		It("should refresh the cached etag from the remote authoritative pull", func() {
+			store := newStore(pages)
+			loaded, _, _ := store.FindSubscription(aliceProfile, syncTestPage, syncTestListName)
+			Expect(loaded.ItemEtags["task-1"]).To(Equal("etag-fresh"))
+		})
+
+		It("should advance the SyncedItems baseline to the remote-authoritative state", func() {
+			store := newStore(pages)
+			loaded, _, _ := store.FindSubscription(aliceProfile, syncTestPage, syncTestListName)
+			synced, ok := loaded.SyncedItems["wiki-1"]
+			Expect(ok).To(BeTrue())
+			Expect(synced.SyncedTitle).To(Equal("Remote-Edited-By-Phone"))
+			Expect(synced.SyncedStatus).To(Equal("completed"))
+		})
+	})
+
+	When("the wiki is unchanged since the last successful push", func() {
+		// REGRESSION TEST: This is the every-tick-overwrites-phone
+		// bug. With diff-before-push, a tick where nothing changed
+		// in the wiki must NOT call PatchTask — patching anyway
+		// would race against and clobber phone-side edits the user
+		// is making at the same time.
 		var client *fakeTasksClient
 
 		BeforeEach(func() {
 			pages := newFakePages()
 			now := time.Date(2026, 4, 25, 17, 14, 0, 0, time.UTC)
+			// SyncedItems baseline matches what the wiki currently
+			// shows — i.e., we've already pushed this state once
+			// and the wiki hasn't been edited since.
+			syncedFields := taskssync.ItemSyncState{
+				SyncedTitle:  "Eggs",
+				SyncedNotes:  translator.WikiUIDMarker("wiki-1"),
+				SyncedStatus: "needsAction",
+			}
 			sub := taskssync.Subscription{
 				Page:         syncTestPage,
 				ListName:     syncTestListName,
 				RemoteListID: syncTestRemote,
 				State:        taskssync.SubscriptionStateActive,
 				ItemIDMap:    map[string]string{"wiki-1": "task-1"},
-				ItemEtags:    map[string]string{"task-1": "etag-stale"},
+				ItemEtags:    map[string]string{"task-1": "etag-known"},
+				SyncedItems:  map[string]taskssync.ItemSyncState{"wiki-1": syncedFields},
 			}
 			store := newConfiguredStore(pages, &sub)
 			client = newFakeTasksClient()
-			client.patchErrors = []error{gateway.ErrPreconditionFailed}
 			reader := newFakeChecklistReader()
 			reader.Set(syncTestPage, syncTestListName, []*apiv1.ChecklistItem{
-				{Uid: "wiki-1", Text: "Edited"},
+				{Uid: "wiki-1", Text: "Eggs"},
 			})
 			c := buildTestConnector(store, readyLeaseTable(), client, newFakeClock(now), reader, nil, nil)
 			Expect(c.Sync(context.Background(), subscriptionKey())).To(Succeed())
 		})
 
-		It("should retry the patch once with empty If-Match", func() {
+		It("should NOT call PatchTask (no local change to push)", func() {
+			Expect(client.patched).To(BeEmpty())
+		})
+
+		It("should NOT call InsertTask", func() {
+			Expect(client.inserted).To(BeEmpty())
+		})
+
+		It("should NOT call DeleteTask", func() {
+			Expect(client.deleted).To(BeEmpty())
+		})
+	})
+
+	When("a wiki item changed since the last successful push", func() {
+		// Complement to the no-change regression test: the diff
+		// MUST detect a real local change and push it.
+		var (
+			client *fakeTasksClient
+			pages  *fakePages
+		)
+
+		BeforeEach(func() {
+			pages = newFakePages()
+			now := time.Date(2026, 4, 25, 17, 14, 0, 0, time.UTC)
+			// SyncedItems baseline is the OLD state.
+			syncedFields := taskssync.ItemSyncState{
+				SyncedTitle:  "Old text",
+				SyncedNotes:  translator.WikiUIDMarker("wiki-1"),
+				SyncedStatus: "needsAction",
+			}
+			sub := taskssync.Subscription{
+				Page:         syncTestPage,
+				ListName:     syncTestListName,
+				RemoteListID: syncTestRemote,
+				State:        taskssync.SubscriptionStateActive,
+				ItemIDMap:    map[string]string{"wiki-1": "task-1"},
+				ItemEtags:    map[string]string{"task-1": "etag-known"},
+				SyncedItems:  map[string]taskssync.ItemSyncState{"wiki-1": syncedFields},
+			}
+			store := newConfiguredStore(pages, &sub)
+			client = newFakeTasksClient()
+			reader := newFakeChecklistReader()
+			// Wiki now reflects the user's edit.
+			reader.Set(syncTestPage, syncTestListName, []*apiv1.ChecklistItem{
+				{Uid: "wiki-1", Text: "New text"},
+			})
+			c := buildTestConnector(store, readyLeaseTable(), client, newFakeClock(now), reader, nil, nil)
+			Expect(c.Sync(context.Background(), subscriptionKey())).To(Succeed())
+		})
+
+		It("should call PatchTask exactly once for the changed item", func() {
+			Expect(client.patched).To(HaveLen(1))
+			Expect(client.patched[0].Fields.Title).To(Equal("New text"))
+		})
+
+		It("should advance SyncedItems.SyncedTitle to the just-pushed value", func() {
+			store := newStore(pages)
+			loaded, _, _ := store.FindSubscription(aliceProfile, syncTestPage, syncTestListName)
+			Expect(loaded.SyncedItems["wiki-1"].SyncedTitle).To(Equal("New text"))
+		})
+	})
+
+	When("two consecutive ticks fire with no wiki changes between them", func() {
+		// REGRESSION TEST: end-to-end "second tick is a no-op."
+		// This mirrors the production failure mode — every 30s tick
+		// re-patching every item even though nothing local changed.
+		var (
+			client *fakeTasksClient
+			clock  *fakeClock
+			c      *taskssync.Connector
+			pages  *fakePages
+		)
+
+		BeforeEach(func() {
+			pages = newFakePages()
+			now := time.Date(2026, 4, 25, 17, 14, 0, 0, time.UTC)
+			clock = newFakeClock(now)
+			sub := taskssync.Subscription{
+				Page:         syncTestPage,
+				ListName:     syncTestListName,
+				RemoteListID: syncTestRemote,
+				State:        taskssync.SubscriptionStateActive,
+				ItemIDMap:    map[string]string{"wiki-1": "task-1", "wiki-2": "task-2"},
+				ItemEtags:    map[string]string{"task-1": "e1", "task-2": "e2"},
+				// SyncedItems EMPTY initially — first tick will push
+				// to seed the baseline. Second tick should be a no-op.
+			}
+			store := newConfiguredStore(pages, &sub)
+			client = newFakeTasksClient()
+			reader := newFakeChecklistReader()
+			reader.Set(syncTestPage, syncTestListName, []*apiv1.ChecklistItem{
+				{Uid: "wiki-1", Text: "Eggs"},
+				{Uid: "wiki-2", Text: "Milk"},
+			})
+			c = buildTestConnector(store, readyLeaseTable(), client, clock, reader, nil, nil)
+			// First tick — establishes baseline by pushing.
+			Expect(c.Sync(context.Background(), subscriptionKey())).To(Succeed())
+			// Advance past the rate-limit choke and run again with
+			// no wiki changes.
+			clock.Advance(60 * time.Second)
+			// Snapshot the patch count after tick 1.
+			countAfterTick1 := len(client.patched)
+			Expect(countAfterTick1).To(BeNumerically(">", 0))
+			// Second tick.
+			Expect(c.Sync(context.Background(), subscriptionKey())).To(Succeed())
+			// Stash for assertions.
+			DeferCleanup(func() {
+				_ = countAfterTick1
+			})
+		})
+
+		It("should send no additional PatchTask on the second tick (no-change is a no-op)", func() {
+			// Tick 1 pushes 2 patches (to seed Synced*). Tick 2 must add zero.
 			Expect(client.patched).To(HaveLen(2))
-			Expect(client.patched[0].Etag).To(Equal("etag-stale"))
-			Expect(client.patched[1].Etag).To(Equal(""))
+		})
+	})
+
+	When("a remote-only change arrives and no wiki edit happened locally", func() {
+		// REGRESSION TEST: an inbound change must NOT trigger an
+		// outbound patch back at Google for the same item.
+		var (
+			client  *fakeTasksClient
+			pages   *fakePages
+			mutator *fakeChecklistMutator
+		)
+
+		BeforeEach(func() {
+			pages = newFakePages()
+			now := time.Date(2026, 4, 25, 17, 14, 0, 0, time.UTC)
+			// Wiki and Synced* are already aligned (nothing local
+			// changed). Then inbound brings a phone-side update.
+			syncedFields := taskssync.ItemSyncState{
+				SyncedTitle:  "Old",
+				SyncedNotes:  translator.WikiUIDMarker("wiki-1"),
+				SyncedStatus: "needsAction",
+			}
+			sub := taskssync.Subscription{
+				Page:         syncTestPage,
+				ListName:     syncTestListName,
+				RemoteListID: syncTestRemote,
+				State:        taskssync.SubscriptionStateActive,
+				ItemIDMap:    map[string]string{"wiki-1": "task-1"},
+				ItemEtags:    map[string]string{"task-1": "e-old"},
+				SyncedItems:  map[string]taskssync.ItemSyncState{"wiki-1": syncedFields},
+			}
+			store := newConfiguredStore(pages, &sub)
+			client = newFakeTasksClient()
+			// Fresh remote state arrives via inbound.
+			client.listAllForList[syncTestRemote] = []gateway.Task{{
+				ID: "task-1", Etag: "e-fresh",
+				Title: "Phone update", Status: gateway.TaskStatusCompleted,
+				Updated: now.Add(60 * time.Second),
+			}}
+			reader := newFakeChecklistReader()
+			// Wiki currently reflects the OLD state — exactly
+			// matching SyncedItems → no local change.
+			reader.Set(syncTestPage, syncTestListName, []*apiv1.ChecklistItem{
+				{Uid: "wiki-1", Text: "Old"},
+			})
+			mutator = newFakeChecklistMutatorBoundTo(reader)
+			c := buildTestConnector(store, readyLeaseTable(), client, newFakeClock(now), reader, mutator, nil)
+			Expect(c.Sync(context.Background(), subscriptionKey())).To(Succeed())
+		})
+
+		It("should apply the inbound update via the mutator", func() {
+			Expect(mutator.updated).To(HaveLen(1))
+			Expect(mutator.updated[0].Text).To(Equal("Phone update"))
+		})
+
+		It("should NOT call PatchTask (no local change to push back)", func() {
+			Expect(client.patched).To(BeEmpty())
 		})
 	})
 
