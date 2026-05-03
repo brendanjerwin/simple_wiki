@@ -373,21 +373,6 @@ func resolveRemoteTitle(ctx context.Context, client TasksClient, remoteListID st
 	return title
 }
 
-// fetchRemoteTitle is the per-tick title-sync helper. Returns the
-// current friendly title for sub.RemoteListID and a found-flag.
-// found=false on any API error or "tasklist not in response" — caller
-// keeps the prior title (best-effort; a transient title-fetch failure
-// must not block sync).
-//
-// Mirrors Keep's title-sync pattern at
-// google_keep/sync/connector.go:711-723: the cloud is authoritative
-// for the display name once bound. If the user renames the tasklist
-// in the Tasks app, the wiki UI surfaces the current name on the
-// next tick after the rename propagates.
-func (*Connector) fetchRemoteTitle(ctx context.Context, client TasksClient, remoteListID string) (string, bool) {
-	return fetchRemoteTitleViaClient(ctx, client, remoteListID)
-}
-
 // FetchRemoteListTitle implements connectors.BackendAdapter. The
 // connector resolves a per-profile client internally from the
 // stored refresh token. Returns ("", false, nil) on any transient

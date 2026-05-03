@@ -228,7 +228,7 @@ func (c *Connector) Sync(ctx context.Context, key connectors.SubscriptionKey) er
 // applies Tasks changes to the wiki, pushes wiki changes to Tasks, then
 // advances the cursor and persists.
 //
-//revive:disable-next-line:cyclomatic
+//revive:disable-next-line:cyclomatic,cognitive-complexity
 func (c *Connector) runSyncPasses(ctx context.Context, profileID wikipage.PageIdentifier, ownerEmail string, sub Subscription, client TasksClient, now time.Time) error {
 	// Read the checklist's op-log so the engine can classify per-uid
 	// divergence before we apply remote state. Per ADR-0015: events
@@ -643,7 +643,7 @@ func (c *Connector) buildWikiByUIDResolver(ctx context.Context, sub Subscription
 // back to the caller because map values are reference types.
 //
 //revive:disable-next-line:cyclomatic,cognitive-complexity,function-length
-func (c *Connector) applyOneInboundTask(ctx context.Context, profileID wikipage.PageIdentifier, ownerEmail string, sub Subscription, taskToUID map[string]string, t gateway.Task, resolveWikiByText func() (map[string]string, error), resolveWikiByUID func() (map[string]*apiv1.ChecklistItem, error), classification map[string]engine.EventClassification) error {
+func (c *Connector) applyOneInboundTask(ctx context.Context, profileID wikipage.PageIdentifier, ownerEmail string, sub Subscription, taskToUID map[string]string, t gateway.Task, resolveWikiByText func() (map[string]string, error), _ func() (map[string]*apiv1.ChecklistItem, error), classification map[string]engine.EventClassification) error {
 	uid, hasUID := taskToUID[t.ID]
 	if !hasUID {
 		_, markerUID, hasMarker := translator.StripWikiUIDMarker(t.Notes)
