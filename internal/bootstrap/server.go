@@ -907,11 +907,18 @@ func setupGoogleTasksConnector(
 
 	tasksSubscriptionLister := func() []connectors.SubscriptionKey {
 		out := make([]connectors.SubscriptionKey, 0, 8)
-		// Tasks state stores email under wiki.connectors.google_tasks.email.
-		// Same indexing caveat as Keep: arrays of maps don't appear in
-		// the frontmatter index, so use the leaf email field as the
-		// "is connected?" probe.
-		for _, p := range site.FrontmatterIndexQueryer.QueryKeyExistence("wiki.connectors.google_tasks.email") {
+		// Probe by refresh_token, not email: Google's
+		// /oauth2/v3/token response doesn't include the user's
+		// address, so PersistRefreshToken (the OAuth-callback
+		// persister) writes refresh_token but leaves email empty.
+		// Probing on email would render every Tasks-only profile
+		// invisible to the scheduler. refresh_token is the
+		// canonical "is connected?" leaf — it's set on every
+		// connect and cleared by Disconnect. Same indexing caveat
+		// as Keep: arrays of maps don't appear in the frontmatter
+		// index, so we probe a scalar leaf rather than the
+		// subscriptions[] array.
+		for _, p := range site.FrontmatterIndexQueryer.QueryKeyExistence("wiki.connectors.google_tasks.refresh_token") {
 			state, err := tasksStore.LoadState(p)
 			if err != nil || !state.IsConfigured() {
 				continue
@@ -1070,7 +1077,12 @@ func rebuildLeaseTableTasks(
 	tasksStore *taskssync.SubscriptionStore,
 ) (int, error) {
 	count := 0
-	for _, profileID := range site.FrontmatterIndexQueryer.QueryKeyExistence("wiki.connectors.google_tasks.email") {
+	// Probe by refresh_token, not email — see tasksSubscriptionLister
+	// for the rationale. Tasks profiles connected via the OAuth
+	// callback have only refresh_token populated; emailing-probing
+	// here would skip them on boot rebuild and break cross-connector
+	// LookupOwner until process restart re-ran with email present.
+	for _, profileID := range site.FrontmatterIndexQueryer.QueryKeyExistence("wiki.connectors.google_tasks.refresh_token") {
 		state, err := tasksStore.LoadState(profileID)
 		if err != nil {
 			return count, fmt.Errorf("decode Tasks state for %s: %w", profileID, err)
@@ -1104,21 +1116,26 @@ func rebuildLeaseTableTasks(
 // flip the answer to true unless the actual owner is paused.
 type tasksFannedOutPausedChecker struct {
 	store *taskssync.SubscriptionStore
-	index frontmatterEmailQueryer
+	index frontmatterKeyQueryer
 }
 
-// frontmatterEmailQueryer is the subset of the wiki's frontmatter
+// frontmatterKeyQueryer is the subset of the wiki's frontmatter
 // index the paused checker uses. Stated as an interface here so the
 // constructor can take site.FrontmatterIndexQueryer without dragging
 // in the whole index package.
-type frontmatterEmailQueryer interface {
+type frontmatterKeyQueryer interface {
 	QueryKeyExistence(key string) []wikipage.PageIdentifier
 }
 
 // IsAnyChecklistSubscriptionPaused fans out the per-profile pause
 // check.
 func (c *tasksFannedOutPausedChecker) IsAnyChecklistSubscriptionPaused(page, listName string) bool {
-	for _, profileID := range c.index.QueryKeyExistence("wiki.connectors.google_tasks.email") {
+	// Probe by refresh_token, not email — see tasksSubscriptionLister
+	// for the rationale. Probing email would silently miss profiles
+	// connected via the OAuth callback (which doesn't supply email),
+	// causing the tombstone GC to under-retain on auth-paused
+	// subscriptions for those users.
+	for _, profileID := range c.index.QueryKeyExistence("wiki.connectors.google_tasks.refresh_token") {
 		state, err := c.store.LoadState(profileID)
 		if err != nil || !state.IsConfigured() {
 			continue
