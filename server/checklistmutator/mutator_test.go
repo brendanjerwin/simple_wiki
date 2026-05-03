@@ -484,4 +484,61 @@ var _ = Describe("Mutator", func() {
 			Expect(list.Items).To(HaveLen(concurrency + 1))
 		})
 	})
+
+	Describe("AddSubscriber (multi-subscriber fan-out)", func() {
+		// REGRESSION GUARD: each connector (Keep, Tasks, future iCloud)
+		// must receive its own OnChecklistMutated notify so wiki edits
+		// debounce-trigger outbound sync on every connector, not just
+		// the last-registered one. SetSubscriber's single-slot
+		// semantics caused the user-reported "Tasks never receives
+		// outbound triggers from the wiki UI" bug.
+		When("two subscribers are added and a mutation fires", func() {
+			var subA, subB *recordingSubscriber
+
+			BeforeEach(func() {
+				subA = &recordingSubscriber{}
+				subB = &recordingSubscriber{}
+				mutator.AddSubscriber(subA)
+				mutator.AddSubscriber(subB)
+				_, _, _ = mutator.AddItem(ctx, "p", "list", checklistmutator.AddItemArgs{Text: "T"}, human)
+			})
+
+			It("should notify the first subscriber", func() {
+				Expect(subA.calls).To(HaveLen(1))
+			})
+
+			It("should notify the second subscriber", func() {
+				Expect(subB.calls).To(HaveLen(1))
+			})
+
+			It("should pass the page to every subscriber", func() {
+				Expect(subA.calls[0].page).To(Equal("p"))
+				Expect(subB.calls[0].page).To(Equal("p"))
+			})
+
+			It("should pass the listName to every subscriber", func() {
+				Expect(subA.calls[0].listName).To(Equal("list"))
+				Expect(subB.calls[0].listName).To(Equal("list"))
+			})
+		})
+	})
 })
+
+// recordingSubscriber records every OnChecklistMutated call for
+// fan-out verification.
+type recordingSubscriber struct {
+	mu    sync.Mutex
+	calls []recordedCall
+}
+
+type recordedCall struct {
+	page     string
+	listName string
+	identity tailscale.IdentityValue
+}
+
+func (r *recordingSubscriber) OnChecklistMutated(page, listName string, identity tailscale.IdentityValue) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.calls = append(r.calls, recordedCall{page: page, listName: listName, identity: identity})
+}

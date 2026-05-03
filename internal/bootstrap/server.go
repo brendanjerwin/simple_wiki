@@ -552,7 +552,7 @@ func setupGRPCServer(
 		logger,
 		1500*time.Millisecond,
 	)
-	checklistMutator.SetSubscriber(keepSyncDebouncer)
+	checklistMutator.AddSubscriber(keepSyncDebouncer)
 	// Inbound apply: SyncToKeep also pulls Keep state into the wiki.
 	// Mutator writes during apply must NOT loop back as fresh sync
 	// triggers, so the suppressor wraps the apply window. Mutator
@@ -895,6 +895,14 @@ func setupGoogleTasksConnector(
 		return nil, nil, nil, fmt.Errorf("build tasks sync debouncer: %w", err)
 	}
 	tasksConnector.SetSyncSuppressor(tasksDebouncer)
+	// Wire the Tasks debouncer to the mutator's fan-out. Without this
+	// every wiki UI edit would only trigger Keep's outbound sync —
+	// Tasks would silently never push, with the per-30s scheduler
+	// tick masking the bug as inbound-only behavior. AddSubscriber
+	// (not SetSubscriber) is mandatory because Keep was registered
+	// earlier and its single-slot replace would clobber Keep's
+	// notify.
+	checklistMutator.AddSubscriber(tasksDebouncer)
 
 	// Single-worker queue per Tasks per the same rationale as Keep:
 	// outbound order matters (position deltas), and the per-user

@@ -113,12 +113,19 @@ type Mutator struct {
 	// observable RAM pressure for any realistic wiki.
 	pageMu sync.Map
 
-	// subMu protects subscriber. We use atomic.Value-style "set once,
-	// read many" — the mutex only serializes SetSubscriber callers
-	// against each other; readers (notify) take a brief read of the
-	// pointer.
-	subMu      sync.RWMutex
-	subscriber Subscriber
+	// subMu protects subscribers. We use atomic.Value-style "set once,
+	// read many" — the mutex only serializes SetSubscriber/AddSubscriber
+	// callers against each other; readers (notify) take a brief read
+	// of the slice header.
+	//
+	// Multiple subscribers (slice, not single pointer) so each
+	// connector — Keep, Tasks, future iCloud — receives every
+	// post-mutation notify. A single-slot subscriber meant the
+	// last-registered connector was the only one whose debouncer
+	// got triggered, which was the user-reported "Tasks never
+	// receives outbound triggers from the wiki UI" bug.
+	subMu       sync.RWMutex
+	subscribers []Subscriber
 
 	// pausedCheckerMu + pausedChecker: optional hook used by the GC
 	// walker to retain tombstones when a connector subscription on
@@ -129,28 +136,54 @@ type Mutator struct {
 	pausedChecker   PausedChecker
 }
 
-// SetSubscriber installs (or replaces) the post-mutation subscriber.
-// Pass nil to detach. Safe to call concurrently with mutations; the
-// next mutation observes the new subscriber.
+// SetSubscriber replaces the subscriber list with exactly the given
+// subscriber. Pass nil to detach all subscribers. Prefer AddSubscriber
+// in production code where multiple connectors must receive notifies.
+//
+// Safe to call concurrently with mutations; the next mutation observes
+// the new subscriber set.
 func (m *Mutator) SetSubscriber(sub Subscriber) {
 	m.subMu.Lock()
-	m.subscriber = sub
-	m.subMu.Unlock()
+	defer m.subMu.Unlock()
+	if sub == nil {
+		m.subscribers = nil
+		return
+	}
+	m.subscribers = []Subscriber{sub}
 }
 
-// notify fires the subscriber, if any. Called at the tail of every
-// successful mutating method. The subscriber's hook is expected to
-// be cheap (debounce/enqueue) — slow work in OnChecklistMutated would
-// drag every wiki edit. Any error from the subscriber is the
-// subscriber's problem to log; the mutation has already committed.
-func (m *Mutator) notify(page, listName string, identity tailscale.IdentityValue) {
-	m.subMu.RLock()
-	sub := m.subscriber
-	m.subMu.RUnlock()
+// AddSubscriber appends a subscriber to the fan-out list. Every
+// subsequent mutation calls OnChecklistMutated on each registered
+// subscriber in registration order. Use this when multiple connectors
+// (Keep, Tasks, …) all need to react to wiki-side checklist edits.
+//
+// Safe to call concurrently with mutations; the next mutation observes
+// the appended subscriber.
+func (m *Mutator) AddSubscriber(sub Subscriber) {
 	if sub == nil {
 		return
 	}
-	sub.OnChecklistMutated(page, listName, identity)
+	m.subMu.Lock()
+	defer m.subMu.Unlock()
+	m.subscribers = append(m.subscribers, sub)
+}
+
+// notify fires every registered subscriber. Called at the tail of
+// every successful mutating method. Subscriber hooks are expected to
+// be cheap (debounce/enqueue) — slow work in OnChecklistMutated would
+// drag every wiki edit. Any error from a subscriber is its own
+// problem to log; the mutation has already committed.
+func (m *Mutator) notify(page, listName string, identity tailscale.IdentityValue) {
+	m.subMu.RLock()
+	// Snapshot the slice header so we don't hold the read lock across
+	// subscriber callbacks (which could deadlock if a subscriber
+	// re-enters the mutator).
+	subs := make([]Subscriber, len(m.subscribers))
+	copy(subs, m.subscribers)
+	m.subMu.RUnlock()
+	for _, sub := range subs {
+		sub.OnChecklistMutated(page, listName, identity)
+	}
 }
 
 // New constructs a Mutator with the given dependencies.

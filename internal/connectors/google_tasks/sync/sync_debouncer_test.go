@@ -2,6 +2,7 @@
 package sync_test
 
 import (
+	"context"
 	"sync"
 	"time"
 
@@ -11,6 +12,8 @@ import (
 	"github.com/brendanjerwin/simple_wiki/internal/connectors"
 	taskssync "github.com/brendanjerwin/simple_wiki/internal/connectors/google_tasks/sync"
 	"github.com/brendanjerwin/simple_wiki/pkg/jobs"
+	"github.com/brendanjerwin/simple_wiki/pkg/ulid"
+	"github.com/brendanjerwin/simple_wiki/server/checklistmutator"
 	"github.com/brendanjerwin/simple_wiki/tailscale"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 )
@@ -235,3 +238,112 @@ var _ = Describe("ActiveSubscriptions", func() {
 		})
 	})
 })
+
+// realMutatorClock is a minimal Clock for the checklistmutator
+// integration test below.
+type realMutatorClock struct{ now time.Time }
+
+func (c realMutatorClock) Now() time.Time { return c.now }
+
+var _ = Describe("Mutator AddSubscriber integration with SyncDebouncer", func() {
+	// REGRESSION GUARD for the user-reported "wiki UI mutation
+	// produces zero outbound PATCH" bug. Validates the full chain
+	// the bootstrap wires:
+	//
+	//   wiki UI → ChecklistMutator.AddItem
+	//          → notify(page, list, identity)
+	//          → SyncDebouncer.OnChecklistMutated
+	//          → JobEnqueuer.EnqueueJob(TasksOutboundSyncJob)
+	//
+	// A unit test on either side alone (Mutator unit tests don't
+	// know about Tasks; SyncDebouncer unit tests don't go through
+	// the Mutator) leaves the wiring gap that produced this bug.
+	When("a checklist mutation is performed via the real Mutator with the debouncer registered as a subscriber", func() {
+		var (
+			enq          *recordingEnqueuer
+			snapshotJobs []jobs.Job
+		)
+
+		BeforeEach(func() {
+			pages := newRealMutatorBackingStore()
+			clock := realMutatorClock{now: time.Date(2026, 4, 25, 17, 0, 0, 0, time.UTC)}
+			ulids := ulid.NewSequenceGenerator(
+				"01HXAAAAAAAAAAAAAAAAAAAAAA",
+				"01HXBBBBBBBBBBBBBBBBBBBBBB",
+			)
+			mutator := checklistmutator.New(pages, clock, ulids)
+
+			store := newConfiguredStore(newFakePages(), nil)
+			c, err := taskssync.NewConnector(store, readyLeaseTable(), stubFactoryThatReturns(newFakeTasksClient()), silentLogger{}, newFakeClock(time.Now()))
+			Expect(err).ToNot(HaveOccurred())
+			enq = &recordingEnqueuer{}
+			d, err := taskssync.NewSyncDebouncer(enq, c, silentLogger{}, 20*time.Millisecond)
+			Expect(err).ToNot(HaveOccurred())
+			mutator.AddSubscriber(d)
+
+			// Use a real-shape identity so OnChecklistMutated resolves
+			// to a profile and schedules the enqueue.
+			identity := tailscale.NewIdentity("alice@example.com", "Alice", "alice-laptop")
+			_, _, addErr := mutator.AddItem(context.Background(), "shopping", "groceries",
+				checklistmutator.AddItemArgs{Text: "Eggs"}, identity)
+			Expect(addErr).ToNot(HaveOccurred())
+
+			// Wait past the debounce window for the timer to fire.
+			Eventually(func() int {
+				return len(enq.Snapshot())
+			}, 500*time.Millisecond, 10*time.Millisecond).Should(BeNumerically(">", 0))
+			snapshotJobs = enq.Snapshot()
+		})
+
+		It("should enqueue exactly one TasksOutboundSyncJob via the debouncer", func() {
+			Expect(snapshotJobs).To(HaveLen(1))
+		})
+
+		It("should enqueue a Tasks-kind job (not a Keep job)", func() {
+			Expect(snapshotJobs[0].GetName()).To(Equal(taskssync.TasksOutboundSyncJobName))
+		})
+	})
+})
+
+// realMutatorBackingStore satisfies wikipage.PageReaderMutator for the
+// integration test above. The checklistmutator only touches
+// ReadFrontMatter / WriteFrontMatter so the other methods are stubs.
+type realMutatorBackingStore struct {
+	mu    sync.Mutex
+	pages map[wikipage.PageIdentifier]wikipage.FrontMatter
+}
+
+func newRealMutatorBackingStore() *realMutatorBackingStore {
+	return &realMutatorBackingStore{pages: make(map[wikipage.PageIdentifier]wikipage.FrontMatter)}
+}
+
+func (s *realMutatorBackingStore) ReadFrontMatter(id wikipage.PageIdentifier) (wikipage.PageIdentifier, wikipage.FrontMatter, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	fm, ok := s.pages[id]
+	if !ok {
+		fm = wikipage.FrontMatter{}
+	}
+	return id, fm, nil
+}
+
+func (s *realMutatorBackingStore) WriteFrontMatter(id wikipage.PageIdentifier, fm wikipage.FrontMatter) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.pages[id] = fm
+	return nil
+}
+
+func (*realMutatorBackingStore) ReadMarkdown(id wikipage.PageIdentifier) (wikipage.PageIdentifier, wikipage.Markdown, error) {
+	return id, wikipage.Markdown(""), nil
+}
+
+func (*realMutatorBackingStore) WriteMarkdown(wikipage.PageIdentifier, wikipage.Markdown) error {
+	return nil
+}
+
+func (*realMutatorBackingStore) DeletePage(wikipage.PageIdentifier) error { return nil }
+
+func (*realMutatorBackingStore) ModifyMarkdown(wikipage.PageIdentifier, func(wikipage.Markdown) (wikipage.Markdown, error)) error {
+	return nil
+}
