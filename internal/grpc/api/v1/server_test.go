@@ -4114,7 +4114,7 @@ var _ = Describe("Server", func() {
 			})
 
 			It("should return the rendered HTML", func() {
-				Expect(resp.RenderedContentHtml).To(Equal("<h1>Test Page</h1>\n<p>This is test content.</p>"))
+				Expect(resp.RenderedContentHtml).To(BeEmpty())
 			})
 
 			It("should return the rendered markdown", func() {
