@@ -16,8 +16,9 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
-	"github.com/brendanjerwin/simple_wiki/internal/keep/bridge"
-	"github.com/brendanjerwin/simple_wiki/internal/keep/protocol"
+	"github.com/brendanjerwin/simple_wiki/internal/connectors"
+	keepsync "github.com/brendanjerwin/simple_wiki/internal/connectors/google_keep/sync"
+	"github.com/brendanjerwin/simple_wiki/internal/connectors/google_keep/gateway"
 	"github.com/brendanjerwin/simple_wiki/pkg/jobs"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 )
@@ -25,7 +26,7 @@ import (
 // --- fakes ----------------------------------------------------------------
 
 // fakePageReaderMutator is a minimal in-memory PageReaderMutator
-// the bridge.BindingStore writes against.
+// the keepsync.SubscriptionStore writes against.
 type fakePageReaderMutator struct {
 	mu       sync.Mutex
 	pages    map[wikipage.PageIdentifier]wikipage.FrontMatter
@@ -44,7 +45,7 @@ func (f *fakePageReaderMutator) ReadFrontMatter(id wikipage.PageIdentifier) (wik
 	defer f.mu.Unlock()
 	fm, ok := f.pages[id]
 	if !ok {
-		// Bridge BindingStore branches on os.ErrNotExist to treat
+		// Bridge SubscriptionStore branches on os.ErrNotExist to treat
 		// missing profile pages as "not connected" rather than a
 		// hard error; mirror that here so SaveState can write the
 		// initial state on a fresh page.
@@ -117,30 +118,30 @@ func deepCopyAnyForFM(v any) any {
 // canned pull response.
 type fakeMigrationKeepClient struct {
 	mu             sync.Mutex
-	pullState      protocol.ChangesResponse
+	pullState      gateway.ChangesResponse
 	pullError      error
-	pulledRequests []protocol.ChangesRequest
+	pulledRequests []gateway.ChangesRequest
 }
 
-func (c *fakeMigrationKeepClient) Changes(_ context.Context, req protocol.ChangesRequest) (protocol.ChangesResponse, error) {
+func (c *fakeMigrationKeepClient) Changes(_ context.Context, req gateway.ChangesRequest) (gateway.ChangesResponse, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.pullError != nil {
-		return protocol.ChangesResponse{}, c.pullError
+		return gateway.ChangesResponse{}, c.pullError
 	}
 	if len(req.Nodes) == 0 && len(req.Labels) == 0 {
 		c.pulledRequests = append(c.pulledRequests, req)
 		return c.pullState, nil
 	}
-	return protocol.ChangesResponse{}, errors.New("migration must not push")
+	return gateway.ChangesResponse{}, errors.New("migration must not push")
 }
 
 func (*fakeMigrationKeepClient) CreateList(_ context.Context, _ string) (string, error) {
 	return "", errors.New("CreateList not used in migration tests")
 }
 
-func (*fakeMigrationKeepClient) CreateListWithItems(_ context.Context, _ string, _ []protocol.ListItemSpec) (protocol.CreateListResult, error) {
-	return protocol.CreateListResult{}, errors.New("CreateListWithItems not used in migration tests")
+func (*fakeMigrationKeepClient) CreateListWithItems(_ context.Context, _ string, _ []gateway.ListItemSpec) (gateway.CreateListResult, error) {
+	return gateway.CreateListResult{}, errors.New("CreateListWithItems not used in migration tests")
 }
 
 func (c *fakeMigrationKeepClient) pullCount() int {
@@ -212,7 +213,7 @@ func (c *fakeMigrationChecklist) DeleteItemForSync(_ context.Context, _, _, _, _
 	return errors.New("DeleteItemForSync should not be called by migration")
 }
 
-// fakeMigrationSuppressor satisfies bridge.SyncSuppressor with no-op behavior.
+// fakeMigrationSuppressor satisfies keepsync.SyncSuppressor with no-op behavior.
 type fakeMigrationSuppressor struct{}
 
 func (fakeMigrationSuppressor) Suppress(_ wikipage.PageIdentifier, _, _ string)   {}
@@ -233,23 +234,23 @@ type migratorCall struct {
 	Page, ListName string
 }
 
-func (f *fakeMigratorRecorder) MigrateBindingFingerprints(_ context.Context, profileID wikipage.PageIdentifier, page, listName string) error {
+func (f *fakeMigratorRecorder) MigrateSubscriptionFingerprints(_ context.Context, profileID wikipage.PageIdentifier, page, listName string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.calls = append(f.calls, migratorCall{ProfileID: profileID, Page: page, ListName: listName})
 	return f.err
 }
 
-// fakeStateLoader satisfies KeepBridgeBindingStateLoader for the
+// fakeStateLoader satisfies KeepBridgeSubscriptionStateLoader for the
 // scan-job tests so we can express bindings without a real
 // frontmatter file.
 type fakeStateLoader struct {
-	states map[wikipage.PageIdentifier]bridge.ConnectorState
+	states map[wikipage.PageIdentifier]keepsync.ConnectorState
 }
 
-func (f *fakeStateLoader) LoadState(profileID wikipage.PageIdentifier) (bridge.ConnectorState, error) {
+func (f *fakeStateLoader) LoadState(profileID wikipage.PageIdentifier) (keepsync.ConnectorState, error) {
 	if f.states == nil {
-		return bridge.ConnectorState{}, nil
+		return keepsync.ConnectorState{}, nil
 	}
 	return f.states[profileID], nil
 }
@@ -261,8 +262,8 @@ func (migrationClock) Now() time.Time {
 	return time.Date(2026, time.May, 1, 12, 0, 0, 0, time.UTC)
 }
 
-// freshConnectorForMigration returns a real bridge.Connector wired
-// with all fakes plus the BindingStore against the given pages
+// freshConnectorForMigration returns a real keepsync.Connector wired
+// with all fakes plus the SubscriptionStore against the given pages
 // store. The seeded binding (page, listName) is MigratedFingerprints
 // =false (legacy) by default.
 //
@@ -270,19 +271,19 @@ func (migrationClock) Now() time.Time {
 func freshConnectorForMigration(
 	profileID wikipage.PageIdentifier,
 	page, listName, keepNoteID string,
-	itemBindings map[string]bridge.ItemBinding,
-) (*bridge.Connector, *bridge.BindingStore, *fakeMigrationKeepClient, *fakeMigrationChecklist) {
+	itemBindings map[string]keepsync.ItemMapping,
+) (*keepsync.Connector, *keepsync.SubscriptionStore, *fakeMigrationKeepClient, *fakeMigrationChecklist) {
 	pages := newFakePageReaderMutator()
-	store := bridge.NewBindingStore(pages)
+	store := keepsync.NewSubscriptionStore(pages)
 
 	// Seed the connector state on the profile page.
-	state := bridge.ConnectorState{
+	state := keepsync.ConnectorState{
 		Email:       "user@example.com",
 		MasterToken: "tok",
-		Bindings: []bridge.Binding{{
+		Subscriptions: []keepsync.Subscription{{
 			Page: page, ListName: listName,
 			KeepNoteID: keepNoteID, KeepNoteTitle: listName,
-			BoundAt:              time.Now().UTC(),
+			SubscribedAt:              time.Now().UTC(),
 			MigratedFingerprints: false,
 			ItemIDMap:            itemBindings,
 		}},
@@ -292,9 +293,12 @@ func freshConnectorForMigration(
 	keep := &fakeMigrationKeepClient{}
 	chk := &fakeMigrationChecklist{}
 
-	c := bridge.NewConnector(store, nil, migrationClock{})
-	c.SetClientBuilder(func(_ string) bridge.KeepClient { return keep })
-	c.SetAuthBuilder(func(_ string) bridge.AuthExchanger { return fakeMigrationAuth{} })
+	leaseTable := connectors.NewLeaseTable()
+	leaseTable.SignalReady()
+	c, nerr := keepsync.NewConnector(store, leaseTable, nil, migrationClock{})
+	Expect(nerr).ToNot(HaveOccurred())
+	c.SetClientBuilder(func(_ string) keepsync.KeepClient { return keep })
+	c.SetAuthBuilder(func(_ string) keepsync.AuthExchanger { return fakeMigrationAuth{} })
 	c.SetChecklistReader(chk)
 	c.SetChecklistMutator(chk)
 	c.SetSyncSuppressor(fakeMigrationSuppressor{})
@@ -302,14 +306,14 @@ func freshConnectorForMigration(
 }
 
 // keepNodeForMigration is a helper to build pull-side LIST_ITEM nodes.
-func keepNodeForMigration(serverID, parentNoteID, text string, checked bool, sortValue string) protocol.Node {
-	return protocol.Node{
+func keepNodeForMigration(serverID, parentNoteID, text string, checked bool, sortValue string) gateway.Node {
+	return gateway.Node{
 		Kind:           "notes#node",
 		ID:             "client-" + serverID,
 		ServerID:       serverID,
 		ParentID:       parentNoteID,
 		ParentServerID: parentNoteID,
-		Type:           protocol.NodeTypeListItem,
+		Type:           gateway.NodeTypeListItem,
 		Text:           text,
 		Checked:        checked,
 		SortValue:      sortValue,
@@ -358,17 +362,17 @@ This page has no Keep connector configured.`))
 			recorder = &fakeMigratorRecorder{}
 			coordinator = jobs.NewJobQueueCoordinator(stubLogger{})
 
-			loader := &fakeStateLoader{states: map[wikipage.PageIdentifier]bridge.ConnectorState{
+			loader := &fakeStateLoader{states: map[wikipage.PageIdentifier]keepsync.ConnectorState{
 				profileID: {
 					Email: "user@example.com", MasterToken: "tok",
-					Bindings: []bridge.Binding{
+					Subscriptions: []keepsync.Subscription{
 						{Page: "shopping", ListName: "Grocery", MigratedFingerprints: false},
 						{Page: "shopping", ListName: "Hardware", MigratedFingerprints: false},
 					},
 				},
 				profileIDMigrated: {
 					Email: "other@example.com", MasterToken: "tok",
-					Bindings: []bridge.Binding{
+					Subscriptions: []keepsync.Subscription{
 						{Page: "x", ListName: "Y", MigratedFingerprints: true},
 					},
 				},
@@ -426,8 +430,8 @@ var _ = Describe("KeepBridgeFingerprintMigrationJob — silent rebaseline", func
 	const noteID = "list-server-id"
 
 	var (
-		c     *bridge.Connector
-		store *bridge.BindingStore
+		c     *keepsync.Connector
+		store *keepsync.SubscriptionStore
 		keep  *fakeMigrationKeepClient
 		chk   *fakeMigrationChecklist
 	)
@@ -435,16 +439,16 @@ var _ = Describe("KeepBridgeFingerprintMigrationJob — silent rebaseline", func
 	Describe("when wiki and Keep already agree on every paired item", func() {
 		BeforeEach(func() {
 			c, store, keep, chk = freshConnectorForMigration(profileID, page, listName, noteID,
-				map[string]bridge.ItemBinding{
+				map[string]keepsync.ItemMapping{
 					"uid-A": {ServerID: "srv-A"},
 				},
 			)
 			chk.items = []*apiv1.ChecklistItem{
 				{Uid: "uid-A", Text: "Apples", SortOrder: 1000, UpdatedAt: timestamppb.New(time.Now())},
 			}
-			keep.pullState = protocol.ChangesResponse{
+			keep.pullState = gateway.ChangesResponse{
 				ToVersion: "v-after-pull",
-				Nodes: []protocol.Node{
+				Nodes: []gateway.Node{
 					keepNodeForMigration("srv-A", noteID, "Apples", false, "1000"),
 				},
 			}
@@ -466,14 +470,14 @@ var _ = Describe("KeepBridgeFingerprintMigrationJob — silent rebaseline", func
 		It("should populate synced_fp from the agreed content", func() {
 			st, err := store.LoadState(profileID)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(st.Bindings[0].ItemIDMap["uid-A"].SyncedText).To(Equal("Apples"))
-			Expect(st.Bindings[0].ItemIDMap["uid-A"].SyncedSortValue).To(Equal("1000"))
+			Expect(st.Subscriptions[0].ItemIDMap["uid-A"].SyncedText).To(Equal("Apples"))
+			Expect(st.Subscriptions[0].ItemIDMap["uid-A"].SyncedSortValue).To(Equal("1000"))
 		})
 
 		It("should stamp MigratedFingerprints=true", func() {
 			st, err := store.LoadState(profileID)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(st.Bindings[0].MigratedFingerprints).To(BeTrue())
+			Expect(st.Subscriptions[0].MigratedFingerprints).To(BeTrue())
 		})
 
 		It("should clear KeepCursor so the next sync does a full pull", func() {
@@ -486,7 +490,7 @@ var _ = Describe("KeepBridgeFingerprintMigrationJob — silent rebaseline", func
 			// mass-delete bug remediation.
 			st, err := store.LoadState(profileID)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(st.Bindings[0].KeepCursor).To(BeEmpty())
+			Expect(st.Subscriptions[0].KeepCursor).To(BeEmpty())
 		})
 	})
 })
@@ -498,8 +502,8 @@ var _ = Describe("KeepBridgeFingerprintMigrationJob — Keep-wins divergence", f
 	const noteID = "list-server-id"
 
 	var (
-		c     *bridge.Connector
-		store *bridge.BindingStore
+		c     *keepsync.Connector
+		store *keepsync.SubscriptionStore
 		keep  *fakeMigrationKeepClient
 		chk   *fakeMigrationChecklist
 	)
@@ -507,16 +511,16 @@ var _ = Describe("KeepBridgeFingerprintMigrationJob — Keep-wins divergence", f
 	Describe("when wiki and Keep have different content for a paired item", func() {
 		BeforeEach(func() {
 			c, store, keep, chk = freshConnectorForMigration(profileID, page, listName, noteID,
-				map[string]bridge.ItemBinding{
+				map[string]keepsync.ItemMapping{
 					"uid-A": {ServerID: "srv-A"},
 				},
 			)
 			chk.items = []*apiv1.ChecklistItem{
 				{Uid: "uid-A", Text: "Apples (wiki version)", SortOrder: 1000, UpdatedAt: timestamppb.New(time.Now())},
 			}
-			keep.pullState = protocol.ChangesResponse{
+			keep.pullState = gateway.ChangesResponse{
 				ToVersion: "v-after-pull",
-				Nodes: []protocol.Node{
+				Nodes: []gateway.Node{
 					keepNodeForMigration("srv-A", noteID, "Apples (Keep version)", false, "1000"),
 				},
 			}
@@ -536,13 +540,13 @@ var _ = Describe("KeepBridgeFingerprintMigrationJob — Keep-wins divergence", f
 		It("should populate synced_fp from Keep's content", func() {
 			st, err := store.LoadState(profileID)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(st.Bindings[0].ItemIDMap["uid-A"].SyncedText).To(Equal("Apples (Keep version)"))
+			Expect(st.Subscriptions[0].ItemIDMap["uid-A"].SyncedText).To(Equal("Apples (Keep version)"))
 		})
 
 		It("should stamp MigratedFingerprints=true after applying Keep", func() {
 			st, err := store.LoadState(profileID)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(st.Bindings[0].MigratedFingerprints).To(BeTrue())
+			Expect(st.Subscriptions[0].MigratedFingerprints).To(BeTrue())
 		})
 
 		It("should pass the binding owner's email as ownerEmail to the mutator", func() {
@@ -560,8 +564,8 @@ var _ = Describe("KeepBridgeFingerprintMigrationJob — drops entries Keep no lo
 	const noteID = "list-server-id"
 
 	var (
-		c     *bridge.Connector
-		store *bridge.BindingStore
+		c     *keepsync.Connector
+		store *keepsync.SubscriptionStore
 		keep  *fakeMigrationKeepClient
 		chk   *fakeMigrationChecklist
 	)
@@ -569,7 +573,7 @@ var _ = Describe("KeepBridgeFingerprintMigrationJob — drops entries Keep no lo
 	Describe("when an id_map entry's serverID is missing from the pull", func() {
 		BeforeEach(func() {
 			c, store, keep, chk = freshConnectorForMigration(profileID, page, listName, noteID,
-				map[string]bridge.ItemBinding{
+				map[string]keepsync.ItemMapping{
 					"uid-A":   {ServerID: "srv-A"}, // present in pull
 					"uid-OLD": {ServerID: "srv-OLD"}, // absent from pull (Keep deleted)
 				},
@@ -578,9 +582,9 @@ var _ = Describe("KeepBridgeFingerprintMigrationJob — drops entries Keep no lo
 				{Uid: "uid-A", Text: "Apples", SortOrder: 1000, UpdatedAt: timestamppb.New(time.Now())},
 				{Uid: "uid-OLD", Text: "OldItem", SortOrder: 2000, UpdatedAt: timestamppb.New(time.Now())},
 			}
-			keep.pullState = protocol.ChangesResponse{
+			keep.pullState = gateway.ChangesResponse{
 				ToVersion: "v-after-pull",
-				Nodes: []protocol.Node{
+				Nodes: []gateway.Node{
 					keepNodeForMigration("srv-A", noteID, "Apples", false, "1000"),
 				},
 			}
@@ -592,13 +596,13 @@ var _ = Describe("KeepBridgeFingerprintMigrationJob — drops entries Keep no lo
 		It("should drop the unpaired uid from id_map", func() {
 			st, err := store.LoadState(profileID)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(st.Bindings[0].ItemIDMap).ToNot(HaveKey("uid-OLD"))
+			Expect(st.Subscriptions[0].ItemIDMap).ToNot(HaveKey("uid-OLD"))
 		})
 
 		It("should keep the still-paired uid in id_map", func() {
 			st, err := store.LoadState(profileID)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(st.Bindings[0].ItemIDMap).To(HaveKey("uid-A"))
+			Expect(st.Subscriptions[0].ItemIDMap).To(HaveKey("uid-A"))
 		})
 
 		It("should NOT call UpdateItemForSync for the dropped entry", func() {
@@ -619,28 +623,28 @@ var _ = Describe("KeepBridgeFingerprintMigrationJob — idempotent on already-mi
 
 	Describe("when MigratedFingerprints is already true", func() {
 		var (
-			c     *bridge.Connector
-			store *bridge.BindingStore
+			c     *keepsync.Connector
+			store *keepsync.SubscriptionStore
 			keep  *fakeMigrationKeepClient
 			chk   *fakeMigrationChecklist
 		)
 
 		BeforeEach(func() {
 			c, store, keep, chk = freshConnectorForMigration(profileID, page, listName, noteID,
-				map[string]bridge.ItemBinding{
+				map[string]keepsync.ItemMapping{
 					"uid-A": {ServerID: "srv-A", SyncedText: "Apples", SyncedSortValue: "1000"},
 				},
 			)
 			// Flip the flag to true; second-tick re-run case.
 			st, err := store.LoadState(profileID)
 			Expect(err).ToNot(HaveOccurred())
-			st.Bindings[0].MigratedFingerprints = true
+			st.Subscriptions[0].MigratedFingerprints = true
 			Expect(store.SaveState(profileID, st)).To(Succeed())
 
 			chk.items = []*apiv1.ChecklistItem{
 				{Uid: "uid-A", Text: "Apples", SortOrder: 1000, UpdatedAt: timestamppb.New(time.Now())},
 			}
-			keep.pullState = protocol.ChangesResponse{ToVersion: "v"}
+			keep.pullState = gateway.ChangesResponse{ToVersion: "v"}
 
 			job := NewKeepBridgeFingerprintMigrationJob(c, profileID, page, listName)
 			Expect(job.Execute()).To(Succeed())
@@ -659,7 +663,7 @@ var _ = Describe("KeepBridgeFingerprintMigrationJob — idempotent on already-mi
 		It("should leave the binding's synced_fp untouched", func() {
 			st, err := store.LoadState(profileID)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(st.Bindings[0].ItemIDMap["uid-A"].SyncedText).To(Equal("Apples"))
+			Expect(st.Subscriptions[0].ItemIDMap["uid-A"].SyncedText).To(Equal("Apples"))
 		})
 	})
 })
@@ -672,15 +676,15 @@ var _ = Describe("KeepBridgeFingerprintMigrationJob — failure leaves binding u
 
 	Describe("when the Keep pull returns an error", func() {
 		var (
-			c     *bridge.Connector
-			store *bridge.BindingStore
+			c     *keepsync.Connector
+			store *keepsync.SubscriptionStore
 			keep  *fakeMigrationKeepClient
 			jobErr error
 		)
 
 		BeforeEach(func() {
 			c, store, keep, _ = freshConnectorForMigration(profileID, page, listName, noteID,
-				map[string]bridge.ItemBinding{
+				map[string]keepsync.ItemMapping{
 					"uid-A": {ServerID: "srv-A"},
 				},
 			)
@@ -698,7 +702,7 @@ var _ = Describe("KeepBridgeFingerprintMigrationJob — failure leaves binding u
 		It("should leave MigratedFingerprints=false so the queue retries", func() {
 			st, err := store.LoadState(profileID)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(st.Bindings[0].MigratedFingerprints).To(BeFalse())
+			Expect(st.Subscriptions[0].MigratedFingerprints).To(BeFalse())
 		})
 	})
 })
@@ -709,39 +713,39 @@ var _ = Describe("KeepBridgeFingerprintMigrationJob — profile mutex serializat
 	const listName = "Grocery"
 	const noteID = "list-server-id"
 
-	Describe("when a concurrent BindingStore.AddBinding waits for the migration write window", func() {
+	Describe("when a concurrent SubscriptionStore.AddSubscription waits for the migration write window", func() {
 		// We test the mutex by holding the write window: the migration's
 		// final SaveStateLocked happens inside WithProfileLock. While
-		// the job is running, a concurrent AddBinding call must block
+		// the job is running, a concurrent AddSubscription call must block
 		// until the migration releases the lock.
 		//
 		// We cannot easily inject a "pause" inside the Connector, so
 		// instead we drive the test by:
 		//   1. running the migration successfully (acquires + releases
 		//      the lock).
-		//   2. immediately running an AddBinding for a different
+		//   2. immediately running an AddSubscription for a different
 		//      checklist on the same profile.
 		//   3. asserting both completed and the new binding is present.
 		// This exercises the full lock-acquire/release path and would
 		// deadlock if WithProfileLock failed to release.
-		var store *bridge.BindingStore
+		var store *keepsync.SubscriptionStore
 
 		BeforeEach(func() {
 			c, st, _, chk := freshConnectorForMigration(profileID, page, listName, noteID,
-				map[string]bridge.ItemBinding{
+				map[string]keepsync.ItemMapping{
 					"uid-A": {ServerID: "srv-A"},
 				},
 			)
 			store = st
 
 			fakeKeep := &fakeMigrationKeepClient{}
-			fakeKeep.pullState = protocol.ChangesResponse{
+			fakeKeep.pullState = gateway.ChangesResponse{
 				ToVersion: "v",
-				Nodes: []protocol.Node{
+				Nodes: []gateway.Node{
 					keepNodeForMigration("srv-A", noteID, "Apples", false, "1000"),
 				},
 			}
-			c.SetClientBuilder(func(_ string) bridge.KeepClient { return fakeKeep })
+			c.SetClientBuilder(func(_ string) keepsync.KeepClient { return fakeKeep })
 			chk.items = []*apiv1.ChecklistItem{
 				{Uid: "uid-A", Text: "Apples", SortOrder: 1000, UpdatedAt: timestamppb.New(time.Now())},
 			}
@@ -750,10 +754,10 @@ var _ = Describe("KeepBridgeFingerprintMigrationJob — profile mutex serializat
 			Expect(job.Execute()).To(Succeed())
 
 			// Concurrent macro-style add: must succeed (lock was released).
-			Expect(store.AddBinding(profileID, bridge.Binding{
+			Expect(store.AddSubscription(profileID, keepsync.Subscription{
 				Page: "shopping", ListName: "AnotherList",
 				KeepNoteID: "another-note-id",
-				BoundAt:    time.Now().UTC(),
+				SubscribedAt:    time.Now().UTC(),
 				MigratedFingerprints: true,
 			})).To(Succeed())
 		})
@@ -761,7 +765,7 @@ var _ = Describe("KeepBridgeFingerprintMigrationJob — profile mutex serializat
 		It("should have both the migrated original binding and the concurrently-added one", func() {
 			final, err := store.LoadState(profileID)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(final.Bindings).To(HaveLen(2))
+			Expect(final.Subscriptions).To(HaveLen(2))
 		})
 	})
 })

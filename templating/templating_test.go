@@ -19,14 +19,14 @@ import (
 )
 
 const (
-	containerA     = "container_a"
-	containerB     = "container_b"
-	titleKey       = "title"
-	identifierKey  = "identifier"
-	inventoryKey   = "inventory"
-	itemsKey       = "items"
-	maxTestLevels  = 12
-	levelTemplate  = "level_%d"
+	containerA    = "container_a"
+	containerB    = "container_b"
+	titleKey      = "title"
+	identifierKey = "identifier"
+	inventoryKey  = "inventory"
+	itemsKey      = "items"
+	maxTestLevels = 12
+	levelTemplate = "level_%d"
 )
 
 // Mock implementations for testing
@@ -221,7 +221,7 @@ var _ = Describe("BuildShowInventoryContentsOf", func() {
 						// No inventory.items in direct frontmatter
 					},
 					"item_from_index": {
-						identifierKey: "item_from_index", 
+						identifierKey: "item_from_index",
 						titleKey:      "Item From Index",
 						inventoryKey: map[string]any{
 							"container": "test_container", // This item points to test_container
@@ -305,7 +305,7 @@ var _ = Describe("BuildShowInventoryContentsOf", func() {
 			isolatedMockIndex = &mockFrontmatterIndex{
 				index: map[string]map[string][]wikipage.PageIdentifier{
 					"inventory.container": {
-						"isolated_mixed_container": []wikipage.PageIdentifier{"isolated_index_item"}, 
+						"isolated_mixed_container": []wikipage.PageIdentifier{"isolated_index_item"},
 					},
 				},
 				values: map[string]map[string]string{
@@ -340,17 +340,17 @@ var _ = Describe("BuildShowInventoryContentsOf", func() {
 		)
 
 		BeforeEach(func() {
-			// Arrange - Simplified setup to test template execution  
+			// Arrange - Simplified setup to test template execution
 			mockSite = &mockPageReader{
 				pages: map[string]wikipage.FrontMatter{
 					"test_container": {
 						identifierKey: "test_container",
-						titleKey:      "Test Container", 
+						titleKey:      "Test Container",
 						inventoryKey: map[string]any{
 							itemsKey: []string{"simple_item"}, // Direct inventory item
 						},
 					},
-					"simple_item": { 
+					"simple_item": {
 						identifierKey: "simple_item",
 						titleKey:      "Simple Item",
 					},
@@ -358,7 +358,7 @@ var _ = Describe("BuildShowInventoryContentsOf", func() {
 			}
 
 			mockIndex = &mockFrontmatterIndex{
-				index:  map[string]map[string][]wikipage.PageIdentifier{},
+				index: map[string]map[string][]wikipage.PageIdentifier{},
 				values: map[string]map[string]string{
 					"simple_item": {
 						titleKey: "Simple Item",
@@ -380,12 +380,12 @@ var _ = Describe("BuildShowInventoryContentsOf", func() {
 		var (
 			containerFrontmatter wikipage.FrontMatter
 			templateContext      templating.TemplateContext
-			tmplString          string
-			funcs               map[string]any
-			tmpl                *template.Template
-			buf                 *bytes.Buffer
-			result              string
-			err                 error
+			tmplString           string
+			funcs                map[string]any
+			tmpl                 *template.Template
+			buf                  *bytes.Buffer
+			result               string
+			err                  error
 		)
 
 		BeforeEach(func() {
@@ -394,12 +394,12 @@ var _ = Describe("BuildShowInventoryContentsOf", func() {
 				pages: map[string]wikipage.FrontMatter{
 					"test_container": {
 						identifierKey: "test_container",
-						titleKey:      "Test Container", 
+						titleKey:      "Test Container",
 						inventoryKey: map[string]any{
 							itemsKey: []string{"simple_item"}, // Direct inventory item
 						},
 					},
-					"simple_item": { 
+					"simple_item": {
 						identifierKey: "simple_item",
 						titleKey:      "Simple Item",
 					},
@@ -407,7 +407,7 @@ var _ = Describe("BuildShowInventoryContentsOf", func() {
 			}
 
 			mockIndex := &mockFrontmatterIndex{
-				index:  map[string]map[string][]wikipage.PageIdentifier{},
+				index: map[string]map[string][]wikipage.PageIdentifier{},
 				values: map[string]map[string]string{
 					"simple_item": {
 						titleKey: "Simple Item",
@@ -418,11 +418,11 @@ var _ = Describe("BuildShowInventoryContentsOf", func() {
 			// Act - manually execute the same template that BuildShowInventoryContentsOf uses
 			_, containerFrontmatter, err = mockSite.ReadFrontMatter("test_container")
 			Expect(err).NotTo(HaveOccurred())
-			
+
 			templateContext, err = templating.ConstructTemplateContextFromFrontmatterWithVisited(
 				containerFrontmatter, mockIndex, make(map[string]bool))
 			Expect(err).NotTo(HaveOccurred())
-			
+
 			// Use a simplified template string (without ShowInventoryContentsOf for now)
 			tmplString = `
 {{ range .Inventory.Items }}
@@ -433,20 +433,20 @@ var _ = Describe("BuildShowInventoryContentsOf", func() {
 {{ end }}
 {{ end }}
 `
-			
+
 			// Build the same functions
 			funcs = map[string]any{
-				"LinkTo":      templating.BuildLinkTo(mockSite, templateContext, mockIndex), 
+				"LinkTo":      templating.BuildLinkTo(mockSite, templateContext, mockIndex),
 				"IsContainer": templating.BuildIsContainer(mockIndex),
 			}
-			
+
 			tmpl, err = template.New("test").Funcs(funcs).Parse(tmplString)
 			Expect(err).NotTo(HaveOccurred())
-			
+
 			buf = &bytes.Buffer{}
 			err = tmpl.Execute(buf, templateContext)
 			Expect(err).NotTo(HaveOccurred())
-			
+
 			result = buf.String()
 		})
 
@@ -479,22 +479,21 @@ var _ = Describe("BuildShowInventoryContentsOf", func() {
 			mockIndex := &mockFrontmatterIndex{
 				index: map[string]map[string][]wikipage.PageIdentifier{
 					"inventory.container": {
-						"mixed_container": []wikipage.PageIdentifier{"index_item"}, 
+						"mixed_container": []wikipage.PageIdentifier{"index_item"},
 					},
 				},
 				values: map[string]map[string]string{
 					"direct_item": {titleKey: "Direct Item"},
-					"index_item": {titleKey: "Index Item"},
+					"index_item":  {titleKey: "Index Item"},
 				},
 			}
 
 			_, containerFrontmatter, err := mockSite.ReadFrontMatter("mixed_container")
 			Expect(err).NotTo(HaveOccurred())
-			
+
 			templateContext, err := templating.ConstructTemplateContextFromFrontmatterWithVisited(
 				containerFrontmatter, mockIndex, make(map[string]bool))
 			Expect(err).NotTo(HaveOccurred())
-			
 
 			// Use the exact same template string from BuildShowInventoryContentsOfWithLimit
 			tmplString := `
@@ -506,22 +505,22 @@ var _ = Describe("BuildShowInventoryContentsOf", func() {
 {{ end }}
 {{ end }}
 `
-			
+
 			// Build the same functions exactly as in BuildShowInventoryContentsOfWithLimit
 			funcs := map[string]any{
-				"LinkTo":      templating.BuildLinkTo(mockSite, templateContext, mockIndex), 
+				"LinkTo":      templating.BuildLinkTo(mockSite, templateContext, mockIndex),
 				"IsContainer": templating.BuildIsContainer(mockIndex),
 			}
-			
+
 			tmpl, err := template.New("test").Funcs(funcs).Parse(tmplString)
 			Expect(err).NotTo(HaveOccurred())
-			
+
 			buf := &bytes.Buffer{}
 			err = tmpl.Execute(buf, templateContext)
 			Expect(err).NotTo(HaveOccurred())
-			
+
 			result := buf.String()
-			
+
 			// This should work if the template execution is correct
 			Expect(result).To(ContainSubstring("Direct Item"))
 			Expect(result).To(ContainSubstring("Index Item"))
@@ -535,7 +534,7 @@ var _ = Describe("BuildShowInventoryContentsOf", func() {
 						identifierKey: "mixed_container",
 						titleKey:      "Mixed Container",
 						inventoryKey: map[string]any{
-							itemsKey: []string{"direct_item"}, 
+							itemsKey: []string{"direct_item"},
 						},
 					},
 					"direct_item": {
@@ -552,22 +551,21 @@ var _ = Describe("BuildShowInventoryContentsOf", func() {
 			mockIndex := &mockFrontmatterIndex{
 				index: map[string]map[string][]wikipage.PageIdentifier{
 					"inventory.container": {
-						"mixed_container": []wikipage.PageIdentifier{"index_item"}, 
+						"mixed_container": []wikipage.PageIdentifier{"index_item"},
 					},
 				},
 				values: map[string]map[string]string{
 					"direct_item": {titleKey: "Direct Item"},
-					"index_item": {titleKey: "Index Item"},
+					"index_item":  {titleKey: "Index Item"},
 				},
 			}
 
 			_, containerFrontmatter, err := mockSite.ReadFrontMatter("mixed_container")
 			Expect(err).NotTo(HaveOccurred())
-			
+
 			templateContext, err := templating.ConstructTemplateContextFromFrontmatterWithVisited(
 				containerFrontmatter, mockIndex, make(map[string]bool))
 			Expect(err).NotTo(HaveOccurred())
-			
 
 			// Use the EXACT template and functions from BuildShowInventoryContentsOfWithLimit
 			tmplString := `
@@ -580,9 +578,9 @@ var _ = Describe("BuildShowInventoryContentsOf", func() {
 {{ end }}
 {{ end }}
 `
-			// EXACT same functions as BuildShowInventoryContentsOf 
+			// EXACT same functions as BuildShowInventoryContentsOf
 			isContainer := templating.BuildIsContainer(mockIndex)
-			
+
 			funcs := template.FuncMap{
 				"LinkTo":                  templating.BuildLinkTo(mockSite, templateContext, mockIndex),
 				"ShowInventoryContentsOf": templating.BuildShowInventoryContentsOf(mockSite, mockIndex, 1),
@@ -592,16 +590,16 @@ var _ = Describe("BuildShowInventoryContentsOf", func() {
 				"FindByKeyExistence":      mockIndex.QueryKeyExistence,
 				"__Indent":                func() string { return strings.Repeat(" ", 0*2) },
 			}
-			
+
 			tmpl, err := template.New("test").Funcs(funcs).Parse(tmplString)
 			Expect(err).NotTo(HaveOccurred())
-			
+
 			buf := &bytes.Buffer{}
 			err = tmpl.Execute(buf, templateContext)
 			Expect(err).NotTo(HaveOccurred())
-			
+
 			result := buf.String()
-			
+
 			// This should work if the bug is not in the template setup
 			Expect(result).To(ContainSubstring("Direct Item"))
 			Expect(result).To(ContainSubstring("Index Item"))
@@ -648,7 +646,7 @@ var _ = Describe("BuildShowInventoryContentsOf", func() {
 			unmarshalableFunc := func() {
 				// No-op — used only for its type (functions are not JSON-serializable)
 			}
-			
+
 			// Create container with invalid frontmatter structure
 			mockSite = &mockPageReader{
 				pages: map[string]wikipage.FrontMatter{
@@ -689,7 +687,7 @@ var _ = Describe("ConstructTemplateContextFromFrontmatterWithVisited", func() {
 				identifierKey: "test_container",
 				titleKey:      "Test Container",
 				inventoryKey: map[string]any{
-					itemsKey: []string{"///"},  // This will fail MungeIdentifier
+					itemsKey: []string{"///"}, // This will fail MungeIdentifier
 				},
 			}
 
@@ -719,9 +717,9 @@ var _ = Describe("ConstructTemplateContextFromFrontmatterWithVisited", func() {
 	Describe("when frontmatter index contains items for container", func() {
 		var (
 			templateContext templating.TemplateContext
-			err            error
-			mockIndex      *mockFrontmatterIndex
-			frontmatter    wikipage.FrontMatter
+			err             error
+			mockIndex       *mockFrontmatterIndex
+			frontmatter     wikipage.FrontMatter
 		)
 
 		BeforeEach(func() {
@@ -871,7 +869,7 @@ var _ = Describe("ConstructTemplateContextFromFrontmatterWithVisited with circul
 	var (
 		mockIndex       *mockFrontmatterIndex
 		templateContext templating.TemplateContext
-		err            error
+		err             error
 	)
 
 	BeforeEach(func() {
@@ -923,7 +921,7 @@ func createDeepNestedPages() map[string]wikipage.FrontMatter {
 		if i < maxTestLevels {
 			nextItems = []string{fmt.Sprintf(levelTemplate, i+1)}
 		}
-		
+
 		pages[levelKey] = wikipage.FrontMatter{
 			identifierKey: levelKey,
 			titleKey:      fmt.Sprintf("Level %d", i),
@@ -1113,7 +1111,7 @@ var _ = Describe("BuildLinkTo", func() {
 		BeforeEach(func() {
 			// Use BuildLinkToWithVisited with the identifier already visited
 			visited := map[string]bool{
-				"///": true,  // Invalid identifier that's already visited
+				"///": true, // Invalid identifier that's already visited
 			}
 			linkToFunc = templating.BuildLinkToWithVisited(mockSite, currentPageTemplateContext, mockIndex, visited)
 
@@ -1179,7 +1177,7 @@ var _ = Describe("BuildLinkTo", func() {
 			// We need to use a real identifier for lookup, but the returned identifier
 			// from ReadFrontMatter will be the one we control
 			mockSite.pages["valid_lookup"] = wikipage.FrontMatter{
-				identifierKey: "###",  // This will fail munging after successful read
+				identifierKey: "###", // This will fail munging after successful read
 				titleKey:      "Test Page",
 			}
 			linkToFunc = templating.BuildLinkTo(mockSite, currentPageTemplateContext, mockIndex)
@@ -1196,7 +1194,7 @@ var _ = Describe("BuildLinkTo", func() {
 
 var _ = Describe("BuildIsContainer edge cases", func() {
 	var (
-		mockIndex      *mockFrontmatterIndex
+		mockIndex       *mockFrontmatterIndex
 		isContainerFunc func(string) bool
 	)
 
@@ -1443,7 +1441,7 @@ var _ = Describe("ExecuteTemplate", func() {
 
 	Context("with template parsing error", func() {
 		It("should return error with context", func() {
-			templateString := "{{ .Title }"  // Missing closing brace
+			templateString := "{{ .Title }" // Missing closing brace
 			frontmatter := wikipage.FrontMatter{
 				identifierKey: "test_page",
 				titleKey:      "Test Page",
@@ -1457,7 +1455,7 @@ var _ = Describe("ExecuteTemplate", func() {
 
 	Context("with template execution error", func() {
 		It("should return error with context", func() {
-			templateString := "{{ .NonExistentField.SubField }}"  // Will cause nil pointer during execution
+			templateString := "{{ .NonExistentField.SubField }}" // Will cause nil pointer during execution
 			frontmatter := wikipage.FrontMatter{
 				identifierKey: "test_page",
 				titleKey:      "Test Page",
@@ -1763,20 +1761,20 @@ var _ = Describe("BuildBlog", func() {
 			},
 			values: map[string]map[string]string{
 				"post_one": {
-					"title":              "First Post",
-					"blog.identifier":    "my-blog",
+					"title":               "First Post",
+					"blog.identifier":     "my-blog",
 					"blog.published-date": "2026-03-15",
 				},
 				"post_two": {
-					"title":              "Second Post",
-					"blog.identifier":    "my-blog",
+					"title":               "Second Post",
+					"blog.identifier":     "my-blog",
 					"blog.published-date": "2026-03-10",
 					"blog.subtitle":       "A great subtitle",
 				},
 				"post_three": {
-					"title":                "Third Post",
-					"blog.identifier":      "my-blog",
-					"blog.published-date":  "2026-03-01",
+					"title":                 "Third Post",
+					"blog.identifier":       "my-blog",
+					"blog.published-date":   "2026-03-01",
 					"blog.summary_markdown": "Custom summary for the blog list.",
 				},
 			},
@@ -2011,5 +2009,28 @@ var _ = Describe("ValidateTemplate", func() {
 		err := templating.ValidateTemplate("{{ .Unclosed")
 		Expect(err).NotTo(BeNil())
 		Expect(err.Error()).To(ContainSubstring("invalid template syntax"))
+	})
+})
+
+var _ = Describe("BuildGoogleTasksConnect", func() {
+	When("invoked", func() {
+		var rendered string
+
+		BeforeEach(func() {
+			fn := templating.BuildGoogleTasksConnect(templating.TemplateContext{Identifier: "alice_profile"})
+			rendered = fn()
+		})
+
+		It("should render the google-tasks-connect custom element", func() {
+			Expect(rendered).To(ContainSubstring("<google-tasks-connect"))
+		})
+
+		It("should not emit a profile-id attribute (the server derives the profile from the caller's identity)", func() {
+			Expect(rendered).NotTo(ContainSubstring("profile-id"))
+		})
+
+		It("should close the element", func() {
+			Expect(rendered).To(ContainSubstring("</google-tasks-connect>"))
+		})
 	})
 })

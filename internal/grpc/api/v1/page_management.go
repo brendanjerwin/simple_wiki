@@ -85,6 +85,8 @@ func resolveMarkdownContent(originalMarkdown wikipage.Markdown, oldContentMarkdo
 func (s *Server) verifyStoredContent(pageID wikipage.PageIdentifier, originalMarkdown wikipage.Markdown) (wikipage.Markdown, error) {
 	_, storedMarkdown, readBackErr := s.pageReaderMutator.ReadMarkdown(pageID)
 	if readBackErr != nil || strings.TrimSpace(string(storedMarkdown)) == "" {
+		// Best-effort restore of the original content; the verification error is what we surface.
+		// nosemgrep: go.error-discarded-with-blank-identifier
 		_ = s.pageReaderMutator.WriteMarkdown(pageID, originalMarkdown)
 		if readBackErr != nil {
 			return "", status.Errorf(codes.Internal, "failed to verify stored content after write: %v", readBackErr)

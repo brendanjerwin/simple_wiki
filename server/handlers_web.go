@@ -262,6 +262,7 @@ func (s *Site) registerRoutes(router *gin.Engine) {
 	router.POST("/uploads", s.handleUpload)
 	router.GET("/cli/:binary", serveCLIBinary)
 	router.GET("/extensions/:file", serveExtensionFile)
+	router.GET("/oauth/google/callback", s.handleOAuthGoogleCallback)
 
 	router.GET("/:page", func(c *gin.Context) {
 		page := sanitizePageName(c.Param("page"))
@@ -465,6 +466,8 @@ func (s *Site) renderPageContent(c *gin.Context, page, command string, p *wikipa
 
 	directoryListing, command, err := s.getDirectoryEntries(page, command)
 	if err != nil {
+		// Gin's AbortWithError returns the same error for chaining; we already passed it in.
+		// nosemgrep: go.error-discarded-with-blank-identifier
 		_ = c.AbortWithError(http.StatusInternalServerError, err)
 		return
 	}
@@ -661,12 +664,16 @@ func (s *Site) handlePageUpdate(c *gin.Context) {
 
 func (s *Site) handleUpload(c *gin.Context) {
 	if !s.Fileuploads {
+		// Gin's AbortWithError returns the same error for chaining; the abort itself is the side effect.
+		// nosemgrep: go.error-discarded-with-blank-identifier
 		_ = c.AbortWithError(http.StatusInternalServerError, errors.New("uploads are disabled on this server"))
 		return
 	}
 
 	file, info, err := c.Request.FormFile("file")
 	if err != nil {
+		// Gin's AbortWithError returns the same error for chaining; we already passed it in.
+		// nosemgrep: go.error-discarded-with-blank-identifier
 		_ = c.AbortWithError(http.StatusInternalServerError, err)
 		s.Logger.Error(uploadFailureMessage, err.Error())
 		return
@@ -675,6 +682,8 @@ func (s *Site) handleUpload(c *gin.Context) {
 
 	fileInfo, err := s.FileStorer.Store(file)
 	if err != nil {
+		// Gin's AbortWithError returns the same error for chaining; we already passed it in.
+		// nosemgrep: go.error-discarded-with-blank-identifier
 		_ = c.AbortWithError(http.StatusInternalServerError, err)
 		s.Logger.Error(uploadFailureMessage, err.Error())
 		return
@@ -738,6 +747,8 @@ func (s *Site) handleUploads(c *gin.Context, command string) {
 		return
 	}
 	if !s.Fileuploads {
+		// Gin's AbortWithError returns the same error for chaining; the abort itself is the side effect.
+		// nosemgrep: go.error-discarded-with-blank-identifier
 		_ = c.AbortWithError(http.StatusInternalServerError, errors.New("uploads are disabled on this server"))
 		return
 	}

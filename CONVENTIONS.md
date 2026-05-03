@@ -1110,12 +1110,25 @@ The project uses different linters for different parts of the codebase:
 
 - **Go linting**: Use `devbox run go:lint` to run the Go linter (revive)
 - **Frontend linting**: Use `devbox run fe:lint` to run the frontend TypeScript/JavaScript linter (ESLint)
+- **Convention enforcement (opengrep)**: Use `devbox run opengrep:lint` to run the project-wide convention checks defined in `.semgrep/rules.yml`
 - **All linting**: Use `devbox run lint:everything` to run all linters, tests, and builds
 
 Each linter enforces specific rules:
 
 - Go linter enforces using `any` instead of `interface{}` and other Go best practices
 - Frontend linter enforces TypeScript strict typing with `@typescript-eslint/no-explicit-any` rule enabled
+- Opengrep enforces project conventions (error wrapping, no opaque catch strings, no panic in library code, etc.) — same rules run in CI and at edit time
+
+### Convention Enforcement at Edit Time
+
+A Claude Code `PostToolUse` hook runs opengrep against any file touched by `Edit`, `Write`, or `NotebookEdit` and surfaces convention violations immediately so agents can fix them before committing. CI is still authoritative, but the hook gives same-keystroke feedback.
+
+- **Hook script**: `.claude/hooks/run-opengrep-on-write.sh`
+- **Wired in**: `.claude/settings.json` under `hooks.PostToolUse`
+- **Rules**: `.semgrep/rules.yml` (shared with CI's `opengrep` job)
+- **Behavior**: Exits 0 when clean, non-zero when opengrep reports findings. Non-zero exit prompts the agent to address violations before continuing.
+- **Scope**: Only the files passed via `CLAUDE_FILE_PATHS` are scanned (typically <1–3s per call). The hook does not scan the whole repo.
+- **Bypass**: For a single justified exception, add an inline `// nosemgrep:<rule-id>` comment with a justification at the offending line. Do not disable the hook globally.
 
 ### Required Before Each Commit to Make Sure Everything Works
 

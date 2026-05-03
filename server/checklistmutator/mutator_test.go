@@ -101,6 +101,16 @@ func deepCopyFM(in wikipage.FrontMatter) wikipage.FrontMatter {
 	return out
 }
 
+// stubPausedChecker is a fake PausedChecker for the tombstone GC tests.
+// Returns its preset value for every (page, listName) combination.
+type stubPausedChecker struct {
+	paused bool
+}
+
+func (s stubPausedChecker) IsAnyChecklistSubscriptionPaused(_, _ string) bool {
+	return s.paused
+}
+
 func deepCopyValue(v any) any {
 	switch x := v.(type) {
 	case map[string]any:
@@ -207,6 +217,48 @@ var _ = Describe("Mutator", func() {
 				_, _, _ = mutator.AddItem(ctx, "p", "list", checklistmutator.AddItemArgs{Text: "first"}, human)
 				added, _, _ := mutator.AddItem(ctx, "p", "list", checklistmutator.AddItemArgs{Text: "second"}, human)
 				Expect(added.SortOrder).To(Equal(int64(2000)))
+			})
+		})
+
+		// Per ADR-0015: every mutation appends a ChecklistEvent to the
+		// per-checklist log. The event-log entry's src is the engine's
+		// causal authority for the merge rule; verify it carries the
+		// right shape on each path.
+		When("a user adds an item", func() {
+			var checklist *apiv1.Checklist
+
+			BeforeEach(func() {
+				_, checklist, _ = mutator.AddItem(ctx, "p", "list", checklistmutator.AddItemArgs{Text: "Eggs"}, human)
+			})
+
+			It("should emit one event with op=add", func() {
+				Expect(checklist.Events).To(HaveLen(1))
+				Expect(checklist.Events[0].Op).To(Equal("add"))
+			})
+
+			It("should attribute src to the user identity", func() {
+				Expect(checklist.Events[0].Src).To(Equal("user:alice@example.com"))
+			})
+
+			It("should bump MaxSeq to 1", func() {
+				Expect(checklist.MaxSeq).To(Equal(int64(1)))
+			})
+		})
+
+		When("a connector calls AddItemForSync with WithSource(ctx, …)", func() {
+			var checklist *apiv1.Checklist
+
+			BeforeEach(func() {
+				connectorCtx := checklistmutator.WithSource(ctx,
+					checklistmutator.ConnectorSource("google_tasks", "apply"))
+				_, _ = mutator.AddItemForSync(connectorCtx, "p", "list", "alice@example.com",
+					"From Tasks", false, nil, "", "")
+				checklist, _ = mutator.ListItems(ctx, "p", "list")
+			})
+
+			It("should attribute the event's src to the connector, not the user", func() {
+				Expect(checklist.Events).To(HaveLen(1))
+				Expect(checklist.Events[0].Src).To(Equal("connector:google_tasks:apply"))
 			})
 		})
 	})
@@ -400,6 +452,22 @@ var _ = Describe("Mutator", func() {
 				Expect(list.Tombstones).To(HaveLen(1))
 			})
 		})
+
+		When("a connector subscription on this checklist is paused", func() {
+			BeforeEach(func() {
+				mutator.SetPausedChecker(stubPausedChecker{paused: true})
+			})
+
+			It("should retain expired tombstones so the deletion replays on resume", func() {
+				// Advance well past the TTL — under the default policy
+				// the tombstone would be GC'd. Pause must extend
+				// retention until the subscription resumes.
+				clock.advance(checklistmutator.TombstoneTTL + time.Hour)
+				_, list, _ := mutator.AddItem(ctx, "p", "list", checklistmutator.AddItemArgs{Text: "fresh-while-paused"}, human)
+				Expect(list.Tombstones).To(HaveLen(1))
+				Expect(list.Tombstones[0].Uid).To(Equal(deletedUID))
+			})
+		})
 	})
 
 	Describe("legacy item promotion on first mutation", func() {
@@ -458,4 +526,61 @@ var _ = Describe("Mutator", func() {
 			Expect(list.Items).To(HaveLen(concurrency + 1))
 		})
 	})
+
+	Describe("AddSubscriber (multi-subscriber fan-out)", func() {
+		// REGRESSION GUARD: each connector (Keep, Tasks, future iCloud)
+		// must receive its own OnChecklistMutated notify so wiki edits
+		// debounce-trigger outbound sync on every connector, not just
+		// the last-registered one. SetSubscriber's single-slot
+		// semantics caused the user-reported "Tasks never receives
+		// outbound triggers from the wiki UI" bug.
+		When("two subscribers are added and a mutation fires", func() {
+			var subA, subB *recordingSubscriber
+
+			BeforeEach(func() {
+				subA = &recordingSubscriber{}
+				subB = &recordingSubscriber{}
+				mutator.AddSubscriber(subA)
+				mutator.AddSubscriber(subB)
+				_, _, _ = mutator.AddItem(ctx, "p", "list", checklistmutator.AddItemArgs{Text: "T"}, human)
+			})
+
+			It("should notify the first subscriber", func() {
+				Expect(subA.calls).To(HaveLen(1))
+			})
+
+			It("should notify the second subscriber", func() {
+				Expect(subB.calls).To(HaveLen(1))
+			})
+
+			It("should pass the page to every subscriber", func() {
+				Expect(subA.calls[0].page).To(Equal("p"))
+				Expect(subB.calls[0].page).To(Equal("p"))
+			})
+
+			It("should pass the listName to every subscriber", func() {
+				Expect(subA.calls[0].listName).To(Equal("list"))
+				Expect(subB.calls[0].listName).To(Equal("list"))
+			})
+		})
+	})
 })
+
+// recordingSubscriber records every OnChecklistMutated call for
+// fan-out verification.
+type recordingSubscriber struct {
+	mu    sync.Mutex
+	calls []recordedCall
+}
+
+type recordedCall struct {
+	page     string
+	listName string
+	identity tailscale.IdentityValue
+}
+
+func (r *recordingSubscriber) OnChecklistMutated(page, listName string, identity tailscale.IdentityValue) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.calls = append(r.calls, recordedCall{page: page, listName: listName, identity: identity})
+}

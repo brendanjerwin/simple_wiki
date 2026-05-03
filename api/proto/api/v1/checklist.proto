@@ -172,6 +172,55 @@ message Tombstone {
   int64 sync_token = 4;
 }
 
+// ChecklistEvent — one entry in the per-checklist operation log.
+//
+// Per ADR-0015, this log is the engine's causal merge-base. Each
+// successful mutation (user edit, connector apply, migration backfill)
+// appends one event to the owning Checklist. The sync engine reads
+// events with `seq > sub.LastSyncedSeq` to classify per-item
+// divergence, replacing the old value-fingerprint baseline.
+message ChecklistEvent {
+  // Monotonic per-checklist sequence. Assigned at write time under
+  // the same lock that mutates items. Never reused, never reset.
+  int64 seq = 1;
+  // Wall-clock when the mutation was applied. Diagnostic only — seq
+  // is the causal authority.
+  google.protobuf.Timestamp ts = 2;
+  // Source attribution. Conventional values:
+  //   user:<email>                    — direct user edit via wiki UI/API
+  //   connector:<kind>:apply          — inbound apply from a connector
+  //   connector:<kind>:push_recovery  — connector wrote remote state
+  //                                     back into wiki on 412/conflict
+  //   migration:<reason>              — migration-synthesized event
+  //   system:<rule>                   — wiki-internal rule (e.g., GC)
+  // <kind> matches the ConnectorKind enum spelling
+  // (google_keep, google_tasks, icloud_reminders, …).
+  string src = 3;
+  // The operation kind (open enum — additions don't break older
+  // readers; unknown ops conservatively classify as user_diverged so
+  // the engine fails safe). Conventional values: add, delete, toggle,
+  // set_text, set_due, set_description, set_tags, set_sort_order,
+  // bulk_update, baseline.
+  string op = 4;
+  // The item this event mutates. Empty only for whole-list ops if any
+  // are added later.
+  string uid = 5;
+  // Field deltas. Each event carries only the fields its op mutated.
+  // Older values are reconstructible by walking earlier events for
+  // the same uid.
+  optional bool checked = 6;
+  optional string text = 7;
+  optional google.protobuf.Timestamp due = 8;
+  optional string description = 9;
+  // Whether `tags` is meaningful for this event. Distinguishes
+  // "tags unchanged" (omit + tags_set=false) from "tags cleared"
+  // (empty list + tags_set=true). Repeated fields cannot be optional
+  // in proto3 so this companion bool carries the presence bit.
+  repeated string tags = 10;
+  bool tags_set = 11;
+  optional int64 sort_order = 12;
+}
+
 // Checklist — one named checklist on a page.
 message Checklist {
   // Stable name (the <name> in checklists.<name>). Used as the path
@@ -188,6 +237,15 @@ message Checklist {
   repeated ChecklistItem items = 4;
   // Tombstones for items deleted in the last 7+ days (lazy GC).
   repeated Tombstone tombstones = 5;
+  // Per-checklist operation log (ADR-0015). The engine consumes this
+  // to drive its causal merge rule. Compacted lazily — entries with
+  // seq < min(LastSyncedSeq across bindings) AND age > 30d are GC'd.
+  repeated ChecklistEvent events = 6;
+  // Highest seq ever assigned in this checklist. Persists across
+  // compaction (events list may be shorter than max_seq) so seq
+  // monotonicity holds even as old entries are GC'd. Zero on freshly-
+  // initialized lists; bumped on every event append.
+  int64 max_seq = 7;
 }
 
 // AddItem
