@@ -73,6 +73,15 @@ type ChecklistMutator interface {
 	// DeleteItemForSync mirrors a Tasks-side deletion (or hidden
 	// completed task) into the wiki. Idempotent.
 	DeleteItemForSync(ctx context.Context, page, listName, ownerEmail, uid string) error
+	// AppendSyncEvent emits a self-source event into the checklist's
+	// op-log without mutating any item. Per ADR-0015: connectors call
+	// this after a successful outbound push so their LastSyncedSeq
+	// cursor advances past the user-event that triggered the push.
+	// Without this, the user-event remains "above the cursor"
+	// permanently and any subsequent Tasks-side change for the same
+	// uid is silently blocked from inbound-applying. `op` is a
+	// diagnostic label (e.g. `outbound_pushed`).
+	AppendSyncEvent(ctx context.Context, page, listName, uid, op string) error
 }
 
 // SyncSuppressor is the notify-suppression interface the inbound-

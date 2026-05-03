@@ -369,10 +369,18 @@ type fakeChecklistMutator struct {
 	added          []addItemCall
 	updated        []updateItemCall
 	deleted        []deleteItemCall
+	syncEvents     []syncEventCall
 	nextAdded      int
 	uidPrefix      string
 	addReturnError error
 	reader         *fakeChecklistReader
+}
+
+type syncEventCall struct {
+	Page     string
+	ListName string
+	UID      string
+	Op       string
 }
 
 type addItemCall struct {
@@ -464,6 +472,20 @@ func (f *fakeChecklistMutator) DeleteItemForSync(_ context.Context, page, listNa
 	if f.reader != nil {
 		f.reader.deleteItem(page, listName, uid)
 	}
+	return nil
+}
+
+// AppendSyncEvent records the call (no-op against the in-memory
+// reader since the fake reader doesn't maintain an op-log; tests
+// that need event-log semantics drive engine.Classify directly via
+// reader.SetEvents). Tracks calls so tests can assert outbound emit
+// happened for the right uids.
+func (f *fakeChecklistMutator) AppendSyncEvent(_ context.Context, page, listName, uid, op string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.syncEvents = append(f.syncEvents, syncEventCall{
+		Page: page, ListName: listName, UID: uid, Op: op,
+	})
 	return nil
 }
 

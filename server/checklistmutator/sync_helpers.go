@@ -3,7 +3,12 @@ package checklistmutator
 import (
 	"context"
 
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+
+	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
 	"github.com/brendanjerwin/simple_wiki/tailscale"
+	"github.com/brendanjerwin/simple_wiki/wikipage"
 )
 
 // syncIdentityFor builds the per-call sync identity used when applying
@@ -132,6 +137,51 @@ func (m *Mutator) DeleteItemForSync(ctx context.Context, page, listName, ownerEm
 	source := resolveSyncSource(ctx)
 	_, err := m.deleteItemImpl(ctx, page, listName, uid, nil, syncIdentityFor(ownerEmail), source)
 	return err
+}
+
+// AppendSyncEvent emits a self-source event into the checklist's
+// op-log without mutating any item. Per ADR-0015, connectors call
+// this after a successful outbound push so their LastSyncedSeq
+// cursor advances past the user-event that triggered the push.
+//
+// Without this, the user-event remains "above the cursor" forever
+// (outbound push doesn't go through the wiki mutator and doesn't
+// emit an event on its own), and the next tick's engine.Classify
+// keeps reporting wiki_diverged for that uid — which silently
+// blocks the inbound apply for any subsequent remote-side change
+// to the same item.
+//
+// `source` MUST be set via WithSource(ctx, …) — typically
+// ConnectorSource("<kind>", "outbound_push") — so the event is
+// classified as a self-write by engine.Classify. Empty/missing
+// override falls through to ConnectorSource("unknown", "apply"),
+// which is still a self-write for any single-connector setup but
+// loses cross-connector specificity; callers should always set it.
+//
+// `op` is a free-form descriptor (`outbound_push`, `seed_seeded`, …)
+// — diagnostic only.
+func (m *Mutator) AppendSyncEvent(ctx context.Context, page, listName, uid, op string) error {
+	listName = wikipage.NormalizeListName(listName)
+	if uid == "" {
+		return status.Error(codes.InvalidArgument, "uid is required")
+	}
+	source := resolveSyncSource(ctx)
+
+	unlock := m.lockPage(page)
+	defer unlock()
+
+	fm, err := m.readFrontMatter(page)
+	if err != nil {
+		return err
+	}
+	checklist := m.readChecklistForMutation(fm, listName)
+	now := m.clock.Now()
+	appendEvent(checklist, &apiv1.ChecklistEvent{
+		Src: source.String(),
+		Op:  op,
+		Uid: uid,
+	}, now)
+	return m.persist(page, fm, listName, checklist)
 }
 
 // decimalRadix is the multiplicative base used by parseSortHint to

@@ -22,13 +22,19 @@ import (
 // outbound on a checklist that just synced (e.g., a debounced
 // outbound and the cron tick racing).
 //
-// Set high enough that household-scale throughput stays comfortable
-// (a person editing checklist items a few times a minute will see
-// changes propagate within one cron tick) and low enough that the
-// Tasks API's per-user limit (50 read req/sec, 50 write req/sec
-// observed in dev) is never approached at household scale. 25s
-// matches the Keep bridge's cron cadence minus a small jitter buffer.
-const rateLimitChokeSeconds = 25
+// 5s. The SyncDebouncer batches edits for 1.5s before firing, so
+// back-to-back wiki edits within a 1.5s window collapse into one
+// sync. The 5s choke catches the small remainder where two human-
+// paced edits arrive 1.6s–4.9s apart and would each trigger their
+// own debouncer-driven sync. The previous 25s value was an over-
+// conservative initial guess that effectively neutered the
+// debouncer — against a 30s scheduler tick stride, only a 5s
+// window per cycle was choke-eligible, so user-driven syncs almost
+// always fell into the 25s post-tick choke and waited for the next
+// cron tick (~25s of latency on every wiki edit). Tasks API's
+// 600 req/min/user quota leaves plenty of headroom for a tighter
+// choke at household scale.
+const rateLimitChokeSeconds = 5
 
 // updatedMinSafetyBufferSeconds is the seconds we subtract from
 // max(Task.updated) when advancing the cursor. Tasks's docs do not
@@ -780,6 +786,14 @@ func (c *Connector) applyInboundDeletion(ctx context.Context, _ wikipage.PageIde
 // Persists the updated ItemIDMap, ItemEtags, and SyncedItems on the
 // returned Subscription; caller persists.
 func (c *Connector) pushOutboundToTasks(ctx context.Context, profileID wikipage.PageIdentifier, ownerEmail string, sub Subscription, client TasksClient) (Subscription, error) {
+	// Tag self-events emitted from the outbound path so the engine's
+	// causal merge rule (ADR-0015) sees them as our own writes. The
+	// outbound's per-uid AppendSyncEvent calls (after each successful
+	// patch/insert/delete) produce events with this src; the tick's
+	// cursor advance then walks past both the user-event that
+	// triggered the push AND our self-event, clearing divergence
+	// for that uid.
+	ctx = checklistmutator.WithSource(ctx, checklistmutator.ConnectorSource("google_tasks", "outbound_push"))
 	if c.checklistR == nil {
 		return sub, ErrChecklistReaderUnavailable
 	}
@@ -876,6 +890,7 @@ func (c *Connector) pushOutboundUpserts(ctx context.Context, profileID wikipage.
 			}
 			sub.ItemEtags[patched.ID] = patched.Etag
 			sub.SyncedItems[uid] = stampSyncedFromFields(sub.SyncedItems[uid], fields)
+			c.emitSyncEvent(ctx, sub.Page, sub.ListName, uid, "outbound_patched")
 			c.logger.Info("tasks bridge: %s profile=%s page=%s list=%s uid=%s task=%s",
 				connectors.EventLocalItemPushed, string(profileID), sub.Page, sub.ListName, uid, patched.ID)
 			continue
@@ -897,6 +912,7 @@ func (c *Connector) pushOutboundUpserts(ctx context.Context, profileID wikipage.
 			sub.ItemIDMap[uid] = patched.ID
 			sub.ItemEtags[patched.ID] = patched.Etag
 			sub.SyncedItems[uid] = stampSyncedFromFields(sub.SyncedItems[uid], fields)
+			c.emitSyncEvent(ctx, sub.Page, sub.ListName, uid, "outbound_patched")
 			continue
 		}
 
@@ -907,15 +923,32 @@ func (c *Connector) pushOutboundUpserts(ctx context.Context, profileID wikipage.
 		sub.ItemIDMap[uid] = inserted.ID
 		sub.ItemEtags[inserted.ID] = inserted.Etag
 		sub.SyncedItems[uid] = stampSyncedFromFields(sub.SyncedItems[uid], fields)
+		c.emitSyncEvent(ctx, sub.Page, sub.ListName, uid, "outbound_inserted")
 		c.logger.Info("tasks bridge: %s profile=%s page=%s list=%s uid=%s task=%s (inserted)",
 			connectors.EventLocalItemPushed, string(profileID), sub.Page, sub.ListName, uid, inserted.ID)
 	}
 	return sub, nil
 }
 
+// emitSyncEvent writes a self-source event into the checklist's
+// op-log. Best-effort: a failure logs and is ignored, since the
+// tick has already succeeded materially (the remote write happened);
+// missing the cursor advance just means next tick re-classifies as
+// diverged and re-pushes (idempotent under the diff-before-push
+// rule). See ADR-0015 for the role of self-events in cursor advance.
+func (c *Connector) emitSyncEvent(ctx context.Context, page, listName, uid, op string) {
+	if c.checklistW == nil {
+		return
+	}
+	if err := c.checklistW.AppendSyncEvent(ctx, page, listName, uid, op); err != nil {
+		c.logger.Info("tasks bridge: append_sync_event_failed page=%s list=%s uid=%s op=%s err=%v",
+			page, listName, uid, op, err)
+	}
+}
+
 // pushOutboundDeletions removes remote Tasks whose wiki uid is no
 // longer present in the checklist. tasks.delete is idempotent.
-func (*Connector) pushOutboundDeletions(ctx context.Context, client TasksClient, sub Subscription, currentUIDs map[string]*apiv1.ChecklistItem) (Subscription, error) {
+func (c *Connector) pushOutboundDeletions(ctx context.Context, client TasksClient, sub Subscription, currentUIDs map[string]*apiv1.ChecklistItem) (Subscription, error) {
 	for uid, taskID := range sub.ItemIDMap {
 		if _, ok := currentUIDs[uid]; ok {
 			continue
@@ -926,6 +959,7 @@ func (*Connector) pushOutboundDeletions(ctx context.Context, client TasksClient,
 		delete(sub.ItemIDMap, uid)
 		delete(sub.ItemEtags, taskID)
 		delete(sub.SyncedItems, uid)
+		c.emitSyncEvent(ctx, sub.Page, sub.ListName, uid, "outbound_deleted")
 	}
 	return sub, nil
 }
