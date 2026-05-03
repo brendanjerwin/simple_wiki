@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"net/http"
 	"os"
 	"os/exec"
 	"sync"
@@ -160,7 +159,7 @@ func (d *poolDaemon) runScheduledTurnLoop(ctx context.Context) {
 // each ScheduledTurnRequest to its own goroutine. Returns the underlying
 // stream error if the connection drops.
 func (d *poolDaemon) subscribeScheduledTurns(ctx context.Context) error {
-	httpClient := &http.Client{}
+	httpClient := newAgentAwareHTTPClient(nil)
 	client := apiv1connect.NewScheduledTurnServiceClient(httpClient, d.wikiURL)
 
 	stream, err := client.SubscribeScheduledTurns(ctx, connect.NewRequest(&apiv1.SubscribeScheduledTurnsRequest{}))

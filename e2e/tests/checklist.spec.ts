@@ -158,11 +158,11 @@ identifier = "${TEST_PAGE_NAME.toLowerCase()}"
       timeout: COMPONENT_LOAD_TIMEOUT_MS,
     });
 
-    // Add an item with tags using :tag syntax
+    // Add an item with tags using #tag syntax
     const addInput = checklist.locator('.add-text-input');
     const addButton = checklist.locator('.add-btn');
 
-    await addInput.fill('Buy milk :dairy :grocery');
+    await addInput.fill('Buy milk #dairy #grocery');
     await addButton.click();
 
     // Wait for save and poll

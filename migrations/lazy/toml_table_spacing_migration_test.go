@@ -140,6 +140,99 @@ content here`)
 				Expect(applies).To(BeFalse())
 			})
 		})
+
+		Describe("when an empty parent table is immediately followed by its child table", func() {
+			// Regression: pelletier/go-toml/v2 marshals nested empty parent tables
+			// as consecutive headers (e.g., [wiki]\n[wiki.connectors]\n[wiki.connectors.google_tasks]).
+			// The previous behavior treated this as needing a blank line and inserted one,
+			// which the next toml.Marshal stripped — producing a write-loop on every read.
+			var applies bool
+
+			BeforeEach(func() {
+				content := []byte(`+++
+identifier = 'profile_test'
+
+[wiki]
+[wiki.connectors]
+[wiki.connectors.google_tasks]
+email = 'a@b'
++++
+body
+`)
+				applies = migration.AppliesTo(content)
+			})
+
+			It("should return false", func() {
+				Expect(applies).To(BeFalse())
+			})
+		})
+
+		Describe("when two sibling table headers are immediately adjacent (no ancestor relationship)", func() {
+			// Two consecutive unrelated tables [inventory]\n[game] — neither is an ancestor
+			// of the other, so a blank line IS required between them.
+			var applies bool
+
+			BeforeEach(func() {
+				content := []byte(`+++
+title = "test"
+
+[inventory]
+[game]
+level = 1
++++
+content here`)
+				applies = migration.AppliesTo(content)
+			})
+
+			It("should return true", func() {
+				Expect(applies).To(BeTrue())
+			})
+		})
+
+		Describe("when a table header is immediately preceded by an identical table header", func() {
+			// Duplicate table headers ([x]\n[x]) are invalid TOML but the migration
+			// must not treat them as ancestor/descendant — it should still require
+			// a blank line between them.
+			var applies bool
+
+			BeforeEach(func() {
+				content := []byte(`+++
+title = "test"
+
+[inventory]
+[inventory]
+items = []
++++
+content here`)
+				applies = migration.AppliesTo(content)
+			})
+
+			It("should return true", func() {
+				Expect(applies).To(BeTrue())
+			})
+		})
+
+		Describe("when array-of-tables headers are immediately adjacent", func() {
+			// [[items]]\n[[items]] — the regex captures '[items' (with the leading bracket)
+			// for each; isAncestorTablePath detects the '[' prefix and refuses to treat
+			// them as parent/child, so a blank line IS required.
+			var applies bool
+
+			BeforeEach(func() {
+				content := []byte(`+++
+title = "test"
+
+[[items]]
+[[items]]
++++
+content here`)
+				applies = migration.AppliesTo(content)
+			})
+
+			It("should return true", func() {
+				Expect(applies).To(BeTrue())
+			})
+		})
 	})
 
 	Describe("Apply", func() {
@@ -308,6 +401,64 @@ level = 1
 +++
 content here`)
 				Expect(result).To(Equal(expected))
+			})
+		})
+
+		Describe("when an empty parent table is immediately followed by its child table", func() {
+			// Regression: see matching AppliesTo test above. Apply must not insert
+			// blank lines between empty parent and child table headers, otherwise
+			// toml.Marshal output (which has none) creates a write-loop.
+			var content []byte
+			var result []byte
+			var err error
+
+			BeforeEach(func() {
+				content = []byte(`+++
+identifier = 'profile_test'
+
+[wiki]
+[wiki.connectors]
+[wiki.connectors.google_tasks]
+email = 'a@b'
++++
+body
+`)
+				result, err = migration.Apply(content)
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should leave the content unchanged", func() {
+				Expect(string(result)).To(Equal(string(content)))
+			})
+		})
+
+		Describe("when two sibling table headers are immediately adjacent", func() {
+			// [inventory] immediately followed by [game] — neither is an ancestor of
+			// the other, so Apply must insert a blank line between them.
+			var result []byte
+			var err error
+
+			BeforeEach(func() {
+				content := []byte(`+++
+title = "test"
+
+[inventory]
+[game]
+level = 1
++++
+content here`)
+				result, err = migration.Apply(content)
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should insert a blank line between the sibling table headers", func() {
+				Expect(string(result)).To(ContainSubstring("[inventory]\n\n[game]"))
 			})
 		})
 	})

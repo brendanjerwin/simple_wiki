@@ -21,6 +21,7 @@ import (
 	"github.com/brendanjerwin/simple_wiki/index/frontmatter"
 	"github.com/brendanjerwin/simple_wiki/migrations/eager"
 	"github.com/brendanjerwin/simple_wiki/migrations/lazy"
+	"github.com/brendanjerwin/simple_wiki/pkg/ulid"
 	"github.com/brendanjerwin/simple_wiki/pkg/jobs"
 	"github.com/brendanjerwin/simple_wiki/templating"
 	"github.com/brendanjerwin/simple_wiki/utils/base32tools"
@@ -81,7 +82,20 @@ type Site struct {
 	AgentScheduleConcurrency int
 	AgentScheduleQueueCap    int
 	AgentTurnHardTimeout     time.Duration
-	saveMut                  sync.RWMutex
+	// caldavServer dispatches CalDAV-shaped HTTP traffic. The
+	// caldavGateway middleware (registered before route matching)
+	// forwards qualifying requests here; everything else falls through
+	// to the regular Gin routes. nil disables CalDAV routing — used in
+	// tests that don't need the CalDAV surface.
+	caldavServer http.Handler
+	saveMut      sync.RWMutex
+}
+
+// SetCalDAVServer installs the CalDAV HTTP handler the caldavGateway
+// middleware will dispatch CalDAV-shaped requests to. Pass nil to
+// disable CalDAV routing (the gateway becomes a no-op pass-through).
+func (s *Site) SetCalDAVServer(h http.Handler) {
+	s.caldavServer = h
 }
 
 // LoadCustomCSS reads custom CSS from the given file path and assigns it to s.CSS.
@@ -185,6 +199,44 @@ func (s *Site) startMigrationJobs() {
 		s.Logger.Error("Failed to enqueue JSON archive migration job: %v", err)
 	} else {
 		s.Logger.Info("JSON archive migration started.")
+	}
+
+	// One-shot migration: rewrite legacy `:tag` checklist items to `#tag` and
+	// stamp `migrated_tags_syntax = true`. Once we're confident no pages have
+	// the old syntax in the wild, the scan/job pair can be deleted entirely.
+	checklistTagMigration := eager.NewChecklistTagSyntaxMigrationScanJob(dataDirScanner, s.JobQueueCoordinator, s)
+	if err := s.JobQueueCoordinator.EnqueueJob(checklistTagMigration); err != nil {
+		s.Logger.Error("Failed to enqueue checklist tag-syntax migration job: %v", err)
+	} else {
+		s.Logger.Info("Checklist tag-syntax migration started.")
+	}
+
+	// One-shot migration: promote legacy checklist items to the #984 shape
+	// (ULIDs, per-item created_at/updated_at, per-list sync_token under
+	// wiki.checklists.*). Once every page has been migrated and the
+	// migrated_data_model flag is set everywhere, this scan becomes a
+	// no-op and the migration code can be deleted.
+	checklistDataModelMigration := eager.NewChecklistDataModelMigrationScanJob(
+		dataDirScanner, s.JobQueueCoordinator, s, ulid.NewSystemGenerator(),
+	)
+	if err := s.JobQueueCoordinator.EnqueueJob(checklistDataModelMigration); err != nil {
+		s.Logger.Error("Failed to enqueue checklist data-model migration job: %v", err)
+	} else {
+		s.Logger.Info("Checklist data-model migration started.")
+	}
+
+	// One-shot migration: move legacy top-level `system` and `template`
+	// frontmatter keys under the reserved `wiki.*` namespace (per #997 and
+	// ADR-0010). Once every page carries `wiki.migrated_namespaces = true`
+	// and the dual-read fallback is removed (#1001), this scan can be
+	// deleted entirely.
+	namespaceMigration := eager.NewSystemTemplateNamespaceMigrationScanJob(
+		dataDirScanner, s.JobQueueCoordinator, s,
+	)
+	if err := s.JobQueueCoordinator.EnqueueJob(namespaceMigration); err != nil {
+		s.Logger.Error("Failed to enqueue system/template namespace migration job: %v", err)
+	} else {
+		s.Logger.Info("System/template namespace migration started.")
 	}
 }
 

@@ -198,6 +198,17 @@ export class WikiSurvey extends LitElement {
     this.saved = false;
   }
 
+  private _getFieldLabel(field: SurveyField): string {
+    if (field.label) return field.label;
+    return field.name
+      .replace(/[_-]+/g, ' ')
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean)
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+      .join(' ');
+  }
+
   private _renderField(field: SurveyField) {
     switch (field.type) {
       case 'number':  return this._renderNumberField(field);
@@ -210,10 +221,11 @@ export class WikiSurvey extends LitElement {
   private _renderNumberField(field: SurveyField) {
     const currentValue = this.fieldValues[field.name];
     const numVal = typeof currentValue === 'number' ? currentValue : '';
+    const label = this._getFieldLabel(field);
     return html`
       <div class="field-group">
         <label class="field-label" for="field-${field.name}">
-          ${field.name}${field.required ? html`<span class="required-indicator" aria-hidden="true"> *</span>` : nothing}
+          ${label}${field.required ? html`<span class="required-indicator" aria-hidden="true"> *</span>` : nothing}
         </label>
         <input
           id="field-${field.name}"
@@ -237,6 +249,7 @@ export class WikiSurvey extends LitElement {
   private _renderBooleanField(field: SurveyField) {
     const currentValue = this.fieldValues[field.name];
     const boolVal = Boolean(currentValue);
+    const label = this._getFieldLabel(field);
     return html`
       <div class="field-group">
         <div class="checkbox-group">
@@ -252,7 +265,7 @@ export class WikiSurvey extends LitElement {
             }}"
           />
           <label class="field-label" for="field-${field.name}">
-            ${field.name}${field.required ? html`<span class="required-indicator" aria-hidden="true"> *</span>` : nothing}
+            ${label}${field.required ? html`<span class="required-indicator" aria-hidden="true"> *</span>` : nothing}
           </label>
         </div>
       </div>
@@ -263,10 +276,11 @@ export class WikiSurvey extends LitElement {
     const currentValue = this.fieldValues[field.name];
     const choiceVal = typeof currentValue === 'string' ? currentValue : '';
     const options = field.options ?? [];
+    const label = this._getFieldLabel(field);
     return html`
       <div class="field-group">
         <label class="field-label" for="field-${field.name}">
-          ${field.name}${field.required ? html`<span class="required-indicator" aria-hidden="true"> *</span>` : nothing}
+          ${label}${field.required ? html`<span class="required-indicator" aria-hidden="true"> *</span>` : nothing}
         </label>
         <select
           id="field-${field.name}"
@@ -289,10 +303,11 @@ export class WikiSurvey extends LitElement {
   private _renderTextField(field: SurveyField) {
     const currentValue = this.fieldValues[field.name];
     const textVal = typeof currentValue === 'string' ? currentValue : '';
+    const label = this._getFieldLabel(field);
     return html`
       <div class="field-group">
         <label class="field-label" for="field-${field.name}">
-          ${field.name}${field.required ? html`<span class="required-indicator" aria-hidden="true"> *</span>` : nothing}
+          ${label}${field.required ? html`<span class="required-indicator" aria-hidden="true"> *</span>` : nothing}
         </label>
         <input
           id="field-${field.name}"

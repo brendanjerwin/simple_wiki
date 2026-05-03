@@ -2,7 +2,9 @@ import { expect, waitUntil } from '@open-wc/testing';
 import sinon from 'sinon';
 import './wiki-search.js';
 import type { SearchResult } from '../gen/api/v1/search_pb.js';
-import type { InventoryFilterChangedEventDetail } from './event-types.js';
+import type {
+  InventoryFilterChangedEventDetail,
+} from './event-types.js';
 import type { AugmentedError } from './augment-error-service.js';
 
 const INVENTORY_ONLY_STORAGE_KEY = 'wiki-search-inventory-only';

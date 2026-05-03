@@ -1,7 +1,9 @@
 // Main entry point for web components
 import './web-components/wiki-search.js';
+import './web-components/wiki-hashtag.js';
 import './web-components/system-info.js';
 import './web-components/frontmatter-editor-dialog.js';
+import './web-components/agent-details-dialog.js';
 import './web-components/confirmation-dialog.js';
 import './web-components/kernel-panic.js'; // Import to register the component
 import './web-components/inventory-add-item-dialog.js';
@@ -10,6 +12,10 @@ import './web-components/wiki-image.js';
 import './web-components/page-import-dialog.js';
 import './web-components/insert-new-page-dialog.js';
 import './web-components/wiki-checklist.js';
+import './web-components/keep-connect.js';
+import './web-components/google-tasks-connect.js';
+import './web-components/connector-subscribe-button.js';
+import './web-components/profile-paused-banner.js';
 import './web-components/wiki-survey.js';
 import './web-components/wiki-blog.js';
 import './web-components/blog-new-post-dialog.js';
@@ -26,6 +32,7 @@ import { initInventoryMenu } from './web-components/inventory-menu.js';
 import { initPrintMenu } from './web-components/print-label.js';
 import { initPageImportMenu } from './web-components/page-import-menu.js';
 import type { FrontmatterEditorDialog } from './web-components/frontmatter-editor-dialog.js';
+import type { AgentDetailsDialog } from './web-components/agent-details-dialog.js';
 
 // Set up global error handling to catch unhandled errors
 setupGlobalErrorHandler();
@@ -51,6 +58,15 @@ editFrontmatterEl?.addEventListener('click', (e) => {
   e.preventDefault();
   // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- frontmatter-editor-dialog is registered in HTMLElementTagNameMap
   const dialog = document.getElementById('frontmatter-dialog') as FrontmatterEditorDialog | null;
+  dialog?.openDialog(globalThis.simple_wiki?.pageName ?? '');
+});
+
+// Handle agent details
+const agentDetailsEl = document.getElementById('agentDetails');
+agentDetailsEl?.addEventListener('click', (e) => {
+  e.preventDefault();
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- agent-details-dialog is registered in HTMLElementTagNameMap
+  const dialog = document.getElementById('agent-details-dialog') as AgentDetailsDialog | null;
   dialog?.openDialog(globalThis.simple_wiki?.pageName ?? '');
 });
 

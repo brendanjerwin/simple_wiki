@@ -462,4 +462,83 @@ var _ = Describe("AgentChatContextStore", func() {
 			})
 		})
 	})
+
+	// Issue #973: a single fat-fingered last_updated value (e.g. a date-only
+	// string instead of RFC3339) used to brick chat for the page — every Read
+	// would error and no UpdateMerge could write through. The decode path is
+	// now lenient: malformed timestamps are scrubbed silently and the server
+	// re-stamps on the next legitimate write.
+	Describe("Read with a malformed last_updated timestamp on disk (issue #973)", func() {
+		var ctx *apiv1.ChatContext
+		var err error
+
+		BeforeEach(func() {
+			_ = pages.WriteFrontMatter("brick_attempt", wikipage.FrontMatter{
+				"agent": map[string]any{
+					"chat_context": map[string]any{
+						"last_conversation_summary": "kept across the bad field",
+						"last_updated":              "2026-04-23", // date-only — invalid RFC3339
+					},
+				},
+			})
+			ctx, err = store.Read("brick_attempt")
+		})
+
+		It("should NOT return an error", func() {
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should preserve the still-valid fields", func() {
+			Expect(ctx.GetLastConversationSummary()).To(Equal("kept across the bad field"))
+		})
+
+		It("should drop the malformed last_updated rather than blocking the whole read", func() {
+			Expect(ctx.GetLastUpdated()).To(BeNil())
+		})
+	})
+
+	Describe("Read with a malformed timestamp inside a background_activity entry", func() {
+		var ctx *apiv1.ChatContext
+		var err error
+
+		BeforeEach(func() {
+			_ = pages.WriteFrontMatter("partial_log", wikipage.FrontMatter{
+				"agent": map[string]any{
+					"chat_context": map[string]any{
+						"background_activity": []any{
+							map[string]any{
+								"timestamp":   "garbage",
+								"schedule_id": "weekly",
+								"status":      "SCHEDULE_STATUS_OK",
+								"summary":     "had a bad ts",
+							},
+							map[string]any{
+								"timestamp":   "2026-04-25T00:00:00Z",
+								"schedule_id": "weekly",
+								"status":      "SCHEDULE_STATUS_OK",
+								"summary":     "had a good ts",
+							},
+						},
+					},
+				},
+			})
+			ctx, err = store.Read("partial_log")
+		})
+
+		It("should NOT return an error", func() {
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should retain both entries (only the timestamp is scrubbed on the bad one)", func() {
+			Expect(ctx.GetBackgroundActivity()).To(HaveLen(2))
+		})
+
+		It("should leave the bad entry's timestamp nil", func() {
+			Expect(ctx.GetBackgroundActivity()[0].GetTimestamp()).To(BeNil())
+		})
+
+		It("should leave the bad entry's summary intact", func() {
+			Expect(ctx.GetBackgroundActivity()[0].GetSummary()).To(Equal("had a bad ts"))
+		})
+	})
 })

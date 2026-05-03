@@ -83,6 +83,8 @@ func (*alertTransformer) Transform(doc *ast.Document, reader text.Reader, _ pars
 	source := reader.Source()
 
 	var blockquotes []*ast.Blockquote
+	// ast.Walk only errors if the visitor returns one; ours always returns nil.
+	// nosemgrep: go.error-discarded-with-blank-identifier
 	_ = ast.Walk(doc, func(n ast.Node, entering bool) (ast.WalkStatus, error) {
 		if !entering {
 			return ast.WalkContinue, nil

@@ -139,8 +139,8 @@ func (s *Server) validateRecordTemplate(parsed pageimport.ParsedRecord) []string
 		}
 		return []string{fmt.Sprintf("failed to read template '%s': %v", parsed.Template, err)}
 	}
-	if !isTemplatePage(templateFm) {
-		return []string{fmt.Sprintf("page '%s' is not a template (missing template: true)", parsed.Template)}
+	if !wikipage.IsTemplatePage(templateFm) {
+		return []string{fmt.Sprintf("page '%s' is not a template (missing wiki.template = true)", parsed.Template)}
 	}
 	return nil
 }

@@ -28,15 +28,54 @@ type InventoryFrontmatter struct {
 	Items     []string `json:"items"`
 }
 
+// WikiACL is the access-control surface owned by the wiki.authorization
+// reserved subtree. Single-owner today; readers/writers will join when
+// the enforcement layer arrives.
+type WikiACL struct {
+	Owner string `json:"owner"`
+}
+
+// readWikiAuthorization extracts the typed view of fm["wiki"]["authorization"].
+// Missing or malformed entries yield zero values rather than errors — templates
+// must never fail to render because authorization metadata is absent.
+func readWikiAuthorization(fm wikipage.FrontMatter) WikiAuthorization {
+	wikiSubtree, ok := fm["wiki"].(map[string]any)
+	if !ok {
+		return WikiAuthorization{}
+	}
+	authSubtree, ok := wikiSubtree["authorization"].(map[string]any)
+	if !ok {
+		return WikiAuthorization{}
+	}
+	out := WikiAuthorization{}
+	if aclSubtree, ok := authSubtree["acl"].(map[string]any); ok {
+		if owner, ok := aclSubtree["owner"].(string); ok {
+			out.ACL.Owner = owner
+		}
+	}
+	if allow, ok := authSubtree["allow_agent_access"].(bool); ok {
+		out.AllowAgentAccess = allow
+	}
+	return out
+}
+
+// WikiAuthorization is the typed view of the page's wiki.authorization
+// reserved subtree. Templates access it via TemplateContext.WikiAuthorization
+// so they don't have to dig through the raw Map.
+type WikiAuthorization struct {
+	ACL              WikiACL `json:"acl"`
+	AllowAgentAccess bool    `json:"allow_agent_access"`
+}
 
 type TemplateContext struct {
 	// CAUTION: avoid changing the structure of TemplateContext without considering backward compatibility.
 	// If you change the structure, consider adding a migration to handle existing pages that may rely on the old structure.
-	Identifier  string `json:"identifier"`
-	Title       string `json:"title"`
-	Description string `json:"description"`
-	Map         map[string]any
-	Inventory   InventoryFrontmatter `json:"inventory"`
+	Identifier        string `json:"identifier"`
+	Title             string `json:"title"`
+	Description       string `json:"description"`
+	Map               map[string]any
+	Inventory         InventoryFrontmatter `json:"inventory"`
+	WikiAuthorization WikiAuthorization    `json:"-"`
 }
 
 func ConstructTemplateContextFromFrontmatter(fm wikipage.FrontMatter, query wikipage.IQueryFrontmatterIndex) (TemplateContext, error) {
@@ -56,6 +95,7 @@ func ConstructTemplateContextFromFrontmatterWithVisited(fm wikipage.FrontMatter,
 	}
 
 	templateContext.Map = fm
+	templateContext.WikiAuthorization = readWikiAuthorization(fm)
 
 	// Check for circular reference in inventory processing
 	if visited[templateContext.Identifier] {
@@ -90,8 +130,7 @@ func ConstructTemplateContextFromFrontmatterWithVisited(fm wikipage.FrontMatter,
 
 	// Add new items to the map (protected from circular references)
 	itemsFromIndex := query.QueryExactMatch("inventory.container", templateContext.Identifier)
-	
-	
+
 	for _, item := range itemsFromIndex {
 		// If there was an item that existed as a title in the list of items, remove it.
 		// This is to support the workflow of items first being listed directly on the inventory container,
@@ -119,19 +158,20 @@ const (
 	timeoutMessage           = "  [Template execution timeout]"
 
 	// Template function name constants (used in FuncMaps and validation stubs)
-	funcNameShowInventory    = "ShowInventoryContentsOf"
-	funcNameLinkTo           = "LinkTo"
-	funcNameIsContainer      = "IsContainer"
-	funcNameFindBy           = "FindBy"
-	funcNameFindByPrefix     = "FindByPrefix"
-	funcNameFindByKeyExists  = "FindByKeyExistence"
-	funcNameChecklist        = "Checklist"
-	funcNameBlog             = "Blog"
-	funcNameSurvey           = "Survey"
+	funcNameShowInventory      = "ShowInventoryContentsOf"
+	funcNameLinkTo             = "LinkTo"
+	funcNameIsContainer        = "IsContainer"
+	funcNameFindBy             = "FindBy"
+	funcNameFindByPrefix       = "FindByPrefix"
+	funcNameFindByKeyExists    = "FindByKeyExistence"
+	funcNameChecklist          = "Checklist"
+	funcNameBlog               = "Blog"
+	funcNameSurvey             = "Survey"
+	funcNameKeepConnect        = "KeepConnect"
+	funcNameGoogleTasksConnect = "GoogleTasksConnect"
 
 	templateTimeoutErrFmt = "template execution timed out after %v"
 )
-
 
 func BuildShowInventoryContentsOf(site wikipage.PageReader, query wikipage.IQueryFrontmatterIndex, indent int) func(string) string {
 	// Create a background context for backward compatibility
@@ -171,14 +211,14 @@ func buildShowInventoryContentsOfSync(ctx context.Context, site wikipage.PageRea
 	if err != nil {
 		return err.Error()
 	}
-	
+
 	// Check context cancellation after reading frontmatter
 	select {
 	case <-ctx.Done():
 		return timeoutMessage
 	default:
 	}
-	
+
 	// Use the simple version without visited map complexity
 	containerTemplateContext, err := ConstructTemplateContextFromFrontmatter(containerFrontmatter, query)
 	if err != nil {
@@ -322,17 +362,42 @@ func BuildChecklist(templateContext TemplateContext) func(string) string {
 	}
 }
 
-func renderChecklistFallback(frontmatter map[string]any, listName string) string {
-	checklists, ok := frontmatter["checklists"].(map[string]any)
-	if !ok {
-		return ""
+// lookupChecklistItems returns the items[] for the named checklist,
+// preferring the reserved wiki.checklists.<list>.items[] location and
+// falling through to the legacy checklists.<list>.items[] for pages the
+// eager migration hasn't swept yet (per ADR-0010).
+func lookupChecklistItems(frontmatter map[string]any, listName string) []any {
+	listName = wikipage.NormalizeListName(listName)
+	wiki, ok := frontmatter["wiki"].(map[string]any)
+	if ok {
+		wikiChecklists, ok := wiki["checklists"].(map[string]any)
+		if ok {
+			list, ok := wikiChecklists[listName].(map[string]any)
+			if ok {
+				if items, ok := list["items"].([]any); ok && len(items) > 0 {
+					return items
+				}
+			}
+		}
 	}
-	list, ok := checklists[listName].(map[string]any)
+	legacy, ok := frontmatter["checklists"].(map[string]any)
 	if !ok {
-		return ""
+		return nil
+	}
+	list, ok := legacy[listName].(map[string]any)
+	if !ok {
+		return nil
 	}
 	items, ok := list["items"].([]any)
-	if !ok || len(items) == 0 {
+	if !ok {
+		return nil
+	}
+	return items
+}
+
+func renderChecklistFallback(frontmatter map[string]any, listName string) string {
+	items := lookupChecklistItems(frontmatter, listName)
+	if len(items) == 0 {
 		return ""
 	}
 
@@ -358,6 +423,31 @@ func renderChecklistFallback(frontmatter map[string]any, listName string) string
 		_, _ = fmt.Fprintf(&buf, `<span class="checklist-item">%s %s</span>`, marker, html.EscapeString(text))
 	}
 	return buf.String()
+}
+
+// BuildKeepConnect returns a template function that renders the
+// <keep-connect> custom element. Intended for use on profile pages —
+// the element queries gRPC ConnectorService (with
+// connector_kind=GOOGLE_KEEP) for state and renders
+// connect/connected/error UX accordingly. Takes no arguments.
+func BuildKeepConnect(_ TemplateContext) func() string {
+	return func() string {
+		return `<keep-connect></keep-connect>`
+	}
+}
+
+// BuildGoogleTasksConnect returns a template function that renders the
+// <google-tasks-connect> custom element. Intended for use on profile
+// pages — mirrors BuildKeepConnect: takes no arguments. The rendered
+// element queries ConnectorService (with connector_kind=GOOGLE_TASKS)
+// for state, and the server scopes that lookup to the calling user's
+// Tailscale principal. Passing a profile identifier from the template
+// would be redundant and a soft footgun (a user could paste another
+// user's identifier and confuse the UI).
+func BuildGoogleTasksConnect(_ TemplateContext) func() string {
+	return func() string {
+		return `<google-tasks-connect></google-tasks-connect>`
+	}
 }
 
 // BuildSurvey returns a template function that renders a wiki-survey custom element
@@ -625,9 +715,11 @@ func buildChatTemplateWithFunctions(ctx context.Context, templateString string, 
 		funcNameFindByKeyExists: query.QueryKeyExistence,
 		// Stubs for interactive widget macros that are not supported in chat context.
 		// These prevent parse errors when messages contain Checklist, Blog, or Survey macros.
-		funcNameChecklist: func(string) string { return "" },
-		funcNameBlog:      func(string, int) string { return "" },
-		funcNameSurvey:    func(string) string { return "" },
+		funcNameChecklist:          func(string) string { return "" },
+		funcNameBlog:               func(string, int) string { return "" },
+		funcNameSurvey:             func(string) string { return "" },
+		funcNameKeepConnect:        func() string { return "" },
+		funcNameGoogleTasksConnect: func() string { return "" },
 	}
 
 	return template.New("page").Funcs(funcs).Parse(templateString)
@@ -643,11 +735,6 @@ func ExecuteTemplate(templateString string, fm wikipage.FrontMatter, site wikipa
 	// Create a new visited map for this template execution to prevent circular references
 	return executeTemplateWorker(ctx, templateString, fm, site, query, make(map[string]bool))
 }
-
-
-
-
-
 
 // executeTemplateWorker performs the actual template execution with context cancellation support.
 func executeTemplateWorker(ctx context.Context, templateString string, fm wikipage.FrontMatter, site wikipage.PageReader, query wikipage.IQueryFrontmatterIndex, visited map[string]bool) ([]byte, error) {
@@ -678,7 +765,6 @@ func executeTemplateWorker(ctx context.Context, templateString string, fm wikipa
 	return executeTemplateInternal(ctx, tmpl, templateContext)
 }
 
-
 // buildTemplateWithFunctions creates a template with all necessary functions.
 func buildTemplateWithFunctions(ctx context.Context, templateString string, site wikipage.PageReader, query wikipage.IQueryFrontmatterIndex, templateContext TemplateContext) (*template.Template, error) {
 	// Check context cancellation before building functions
@@ -689,15 +775,17 @@ func buildTemplateWithFunctions(ctx context.Context, templateString string, site
 	}
 
 	funcs := template.FuncMap{
-		funcNameShowInventory:   BuildShowInventoryContentsOfWithContext(ctx, site, query, 0),
-		funcNameLinkTo:          BuildLinkTo(site, templateContext, query),
-		funcNameIsContainer:     BuildIsContainer(query),
-		funcNameFindBy:          query.QueryExactMatch,
-		funcNameFindByPrefix:    query.QueryPrefixMatch,
-		funcNameFindByKeyExists: query.QueryKeyExistence,
-		funcNameChecklist:       BuildChecklist(templateContext),
-		funcNameBlog:            BuildBlog(templateContext, query, site),
-		funcNameSurvey:          BuildSurvey(templateContext),
+		funcNameShowInventory:      BuildShowInventoryContentsOfWithContext(ctx, site, query, 0),
+		funcNameLinkTo:             BuildLinkTo(site, templateContext, query),
+		funcNameIsContainer:        BuildIsContainer(query),
+		funcNameFindBy:             query.QueryExactMatch,
+		funcNameFindByPrefix:       query.QueryPrefixMatch,
+		funcNameFindByKeyExists:    query.QueryKeyExistence,
+		funcNameChecklist:          BuildChecklist(templateContext),
+		funcNameBlog:               BuildBlog(templateContext, query, site),
+		funcNameSurvey:             BuildSurvey(templateContext),
+		funcNameKeepConnect:        BuildKeepConnect(templateContext),
+		funcNameGoogleTasksConnect: BuildGoogleTasksConnect(templateContext),
 	}
 
 	return template.New("page").Funcs(funcs).Parse(templateString)
@@ -727,15 +815,17 @@ func executeTemplateInternal(ctx context.Context, tmpl *template.Template, templ
 // This map must be kept in sync with the runtime FuncMap in buildTemplateWithFunctions.
 func validationFuncMap() template.FuncMap {
 	return template.FuncMap{
-		funcNameShowInventory:   func(string) string { return "" },
-		funcNameLinkTo:          func(string) string { return "" },
-		funcNameIsContainer:     func(string) bool { return false },
-		funcNameFindBy:          func(string, string) []string { return nil },
-		funcNameFindByPrefix:    func(string, string) []string { return nil },
-		funcNameFindByKeyExists: func(string) []string { return nil },
-		funcNameChecklist:       func(string) string { return "" },
-		funcNameBlog:            func(string, int) string { return "" },
-		funcNameSurvey:          func(string) string { return "" },
+		funcNameShowInventory:      func(string) string { return "" },
+		funcNameLinkTo:             func(string) string { return "" },
+		funcNameIsContainer:        func(string) bool { return false },
+		funcNameFindBy:             func(string, string) []string { return nil },
+		funcNameFindByPrefix:       func(string, string) []string { return nil },
+		funcNameFindByKeyExists:    func(string) []string { return nil },
+		funcNameChecklist:          func(string) string { return "" },
+		funcNameBlog:               func(string, int) string { return "" },
+		funcNameSurvey:             func(string) string { return "" },
+		funcNameKeepConnect:        func() string { return "" },
+		funcNameGoogleTasksConnect: func() string { return "" },
 	}
 }
 
@@ -830,4 +920,3 @@ func findMacroSuggestion(unknown string, known []string) string {
 	}
 	return ""
 }
-

@@ -67,7 +67,7 @@ describe('PageImportDialog', () => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (el as any).file = new File(['test'], 'test.csv', { type: 'text/csv' });
         await el.updateComplete;
-        el.closeDialog();
+        el.close();
         el.openDialog();
         await el.updateComplete;
       });
@@ -89,12 +89,12 @@ describe('PageImportDialog', () => {
     });
   });
 
-  describe('closeDialog', () => {
+  describe('close', () => {
     describe('when called', () => {
       beforeEach(async () => {
         el.openDialog();
         await el.updateComplete;
-        el.closeDialog();
+        el.close();
       });
 
       it('should set open to false', () => {
@@ -108,11 +108,13 @@ describe('PageImportDialog', () => {
   });
 
   describe('keyboard handling', () => {
-    describe('when escape key is pressed while open', () => {
+    describe('when escape key is pressed while open (cancel event)', () => {
       beforeEach(async () => {
         el.openDialog();
         await el.updateComplete;
-        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+        const dialog = el.shadowRoot?.querySelector('dialog');
+        dialog?.dispatchEvent(new Event('cancel', { cancelable: true }));
+        await el.updateComplete;
       });
 
       it('should close the dialog', () => {
@@ -120,40 +122,29 @@ describe('PageImportDialog', () => {
       });
     });
 
-    describe('when escape key is pressed while closed', () => {
-      beforeEach(() => {
-        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    describe('when cancel event fires while closed', () => {
+      beforeEach(async () => {
+        // Dialog is closed, so the cancel event would not fire from native dialog
+        // but we can verify open remains false
       });
 
       it('should remain closed', () => {
         expect(el.open).to.be.false;
       });
     });
-
-    describe('when other key is pressed while open', () => {
-      beforeEach(async () => {
-        el.openDialog();
-        await el.updateComplete;
-        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }));
-      });
-
-      it('should not close the dialog', () => {
-        expect(el.open).to.be.true;
-      });
-    });
   });
 
-  describe('backdrop click handling', () => {
-    describe('when backdrop is clicked', () => {
+  describe('close button handling', () => {
+    describe('when close button is clicked', () => {
       let closeDialogSpy: sinon.SinonSpy;
 
       beforeEach(async () => {
-        closeDialogSpy = sinon.spy(el, 'closeDialog');
+        closeDialogSpy = sinon.spy(el, '_closeDialog' as keyof typeof el);
         el.openDialog();
         await el.updateComplete;
-        const backdrop = el.shadowRoot?.querySelector<HTMLElement>('.backdrop');
-        expect(backdrop).to.exist;
-        backdrop!.click();
+        const closeBtn = el.shadowRoot?.querySelector<HTMLButtonElement>('[aria-label="Close dialog"]');
+        expect(closeBtn).to.exist;
+        closeBtn!.click();
       });
 
       it('should close the dialog', () => {
@@ -167,16 +158,34 @@ describe('PageImportDialog', () => {
       let closeDialogSpy: sinon.SinonSpy;
 
       beforeEach(async () => {
-        closeDialogSpy = sinon.spy(el, 'closeDialog');
+        closeDialogSpy = sinon.spy(el, '_closeDialog' as keyof typeof el);
         el.openDialog();
         await el.updateComplete;
-        const dialog = el.shadowRoot?.querySelector<HTMLElement>('.dialog');
-        expect(dialog).to.exist;
-        dialog!.click();
+        // Click a child element inside the dialog (not the backdrop area)
+        const header = el.shadowRoot?.querySelector<HTMLElement>('.dialog-header');
+        expect(header).to.exist;
+        header!.click();
       });
 
       it('should not close the dialog', () => {
         expect(closeDialogSpy).to.not.have.been.called;
+      });
+    });
+
+    describe('when backdrop is clicked', () => {
+      beforeEach(async () => {
+        el.openDialog();
+        await el.updateComplete;
+        // Simulate a backdrop click by dispatching a click event directly on the dialog element.
+        // When the native dialog backdrop is clicked, the browser fires a click event on the
+        // dialog element itself with target === dialog (not a child element).
+        const dialog = el.shadowRoot?.querySelector('dialog') as HTMLDialogElement;
+        dialog.dispatchEvent(new MouseEvent('click', { bubbles: false }));
+        await el.updateComplete;
+      });
+
+      it('should close the dialog', () => {
+        expect(el.open).to.be.false;
       });
     });
   });
@@ -293,6 +302,28 @@ describe('PageImportDialog', () => {
         const title = el.shadowRoot?.querySelector('.dialog-title');
         expect(title?.textContent).to.equal('Importing Pages');
       });
+    });
+  });
+
+  describe('dialog ARIA attributes', () => {
+    beforeEach(async () => {
+      el.openDialog();
+      await el.updateComplete;
+    });
+
+    it('should have aria-labelledby pointing to the title', () => {
+      const dialog = el.shadowRoot?.querySelector('dialog');
+      expect(dialog?.getAttribute('aria-labelledby')).to.equal('page-import-dialog-title');
+    });
+
+    it('should have a title element with the correct id', () => {
+      const title = el.shadowRoot?.querySelector('#page-import-dialog-title');
+      expect(title).to.exist;
+    });
+
+    it('should have a close button with aria-label', () => {
+      const closeBtn = el.shadowRoot?.querySelector('[aria-label="Close dialog"]');
+      expect(closeBtn).to.exist;
     });
   });
 
@@ -456,7 +487,7 @@ describe('PageImportDialog', () => {
       let closeDialogSpy: sinon.SinonSpy;
 
       beforeEach(async () => {
-        closeDialogSpy = sinon.spy(el, 'closeDialog');
+        closeDialogSpy = sinon.spy(el, '_closeDialog' as keyof typeof el);
         el.openDialog();
         await el.updateComplete;
         // Use .footer selector to avoid matching the "Select CSV File" button
@@ -1464,45 +1495,6 @@ describe('PageImportDialog', () => {
       it('should not set streamingDisconnected', () => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         expect((el as any).streamingDisconnected).to.be.false;
-      });
-    });
-  });
-
-  describe('event listener lifecycle', () => {
-    let lifecycleEl: PageImportDialog;
-
-    afterEach(() => {
-      if (lifecycleEl && lifecycleEl.parentNode) {
-        lifecycleEl.remove();
-      }
-    });
-
-    describe('when component is connected', () => {
-      let addEventListenerSpy: sinon.SinonSpy;
-
-      beforeEach(async () => {
-        addEventListenerSpy = sinon.spy(document, 'addEventListener');
-        lifecycleEl = await fixture(html`<page-import-dialog></page-import-dialog>`);
-        await lifecycleEl.updateComplete;
-      });
-
-      it('should add keydown event listener', () => {
-        expect(addEventListenerSpy).to.have.been.calledWith('keydown', lifecycleEl._handleKeydown);
-      });
-    });
-
-    describe('when component is disconnected', () => {
-      let removeEventListenerSpy: sinon.SinonSpy;
-
-      beforeEach(async () => {
-        removeEventListenerSpy = sinon.spy(document, 'removeEventListener');
-        lifecycleEl = await fixture(html`<page-import-dialog></page-import-dialog>`);
-        await lifecycleEl.updateComplete;
-        lifecycleEl.remove();
-      });
-
-      it('should remove keydown event listener', () => {
-        expect(removeEventListenerSpy).to.have.been.calledWith('keydown', lifecycleEl._handleKeydown);
       });
     });
   });

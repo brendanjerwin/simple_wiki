@@ -236,13 +236,13 @@ var _ = Describe("enqueueImportJobs internal", func() {
 	})
 })
 
-var _ = Describe("preserveAgentSubtree", func() {
+var _ = Describe("preserveReservedSubtrees", func() {
 	When("existing is nil and incoming is non-nil", func() {
 		var incoming map[string]any
 
 		BeforeEach(func() {
 			incoming = map[string]any{"title": "T"}
-			preserveAgentSubtree(nil, incoming)
+			preserveReservedSubtrees(nil, incoming)
 		})
 
 		It("should not add an agent key to incoming", func() {
@@ -261,7 +261,7 @@ var _ = Describe("preserveAgentSubtree", func() {
 		BeforeEach(func() {
 			existing = map[string]any{"agent": map[string]any{"x": 1}}
 			preserveCall = func() {
-				preserveAgentSubtree(existing, nil)
+				preserveReservedSubtrees(existing, nil)
 			}
 		})
 
@@ -275,7 +275,7 @@ var _ = Describe("preserveAgentSubtree", func() {
 
 		BeforeEach(func() {
 			preserveCall = func() {
-				preserveAgentSubtree(nil, nil)
+				preserveReservedSubtrees(nil, nil)
 			}
 		})
 
@@ -290,7 +290,7 @@ var _ = Describe("preserveAgentSubtree", func() {
 		BeforeEach(func() {
 			existing = map[string]any{"title": "Old"}
 			incoming = map[string]any{"title": "New"}
-			preserveAgentSubtree(existing, incoming)
+			preserveReservedSubtrees(existing, incoming)
 		})
 
 		It("should not add an agent key to incoming", func() {
@@ -307,7 +307,7 @@ var _ = Describe("preserveAgentSubtree", func() {
 				"agent": map[string]any{"schedules": []any{"s1"}},
 			}
 			incoming = map[string]any{"title": "New"}
-			preserveAgentSubtree(existing, incoming)
+			preserveReservedSubtrees(existing, incoming)
 		})
 
 		It("should copy the agent subtree into incoming", func() {

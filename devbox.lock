@@ -761,6 +761,170 @@
         }
       }
     },
+    "todoman@latest": {
+      "last_modified": "2026-04-16T08:46:55Z",
+      "resolved": "github:NixOS/nixpkgs/b86751bc4085f48661017fa226dee99fab6c651b#todoman",
+      "source": "devbox-search",
+      "version": "4.6.0",
+      "systems": {
+        "aarch64-darwin": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/1r8mhw4wfp3sr56i8l4z6mgwmcgxvazw-todoman-4.6.0",
+              "default": true
+            },
+            {
+              "name": "man",
+              "path": "/nix/store/lxcm9zivvbh7l87fys5vsk6qp2z0h5vr-todoman-4.6.0-man",
+              "default": true
+            },
+            {
+              "name": "dist",
+              "path": "/nix/store/636srxhdz13hqanjfazx0zxxp62lcz69-todoman-4.6.0-dist"
+            },
+            {
+              "name": "doc",
+              "path": "/nix/store/f5zbkzinlnnpnv2yf3vbmvrahc2690v8-todoman-4.6.0-doc"
+            }
+          ],
+          "store_path": "/nix/store/1r8mhw4wfp3sr56i8l4z6mgwmcgxvazw-todoman-4.6.0"
+        },
+        "aarch64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/sy7qbvmbn0jsv15x444r01mf91mqnjcq-todoman-4.6.0",
+              "default": true
+            },
+            {
+              "name": "man",
+              "path": "/nix/store/an65m0jh0jzahcvyz8rp26xrjwnv91kc-todoman-4.6.0-man",
+              "default": true
+            },
+            {
+              "name": "dist",
+              "path": "/nix/store/xp0g8ayxihd5xnb4qizz2xkg9jlbicvb-todoman-4.6.0-dist"
+            },
+            {
+              "name": "doc",
+              "path": "/nix/store/6ar686rxylcflgrak5bvfhjwa0g1r3gr-todoman-4.6.0-doc"
+            }
+          ],
+          "store_path": "/nix/store/sy7qbvmbn0jsv15x444r01mf91mqnjcq-todoman-4.6.0"
+        },
+        "x86_64-darwin": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/mks38fk28m0w52r3c6zxjjg04wpsmwpb-todoman-4.6.0",
+              "default": true
+            },
+            {
+              "name": "man",
+              "path": "/nix/store/xbi7hdzcly3ljbrn20fa15qwydk9kprx-todoman-4.6.0-man",
+              "default": true
+            },
+            {
+              "name": "doc",
+              "path": "/nix/store/94bjllfaz46c67zqw3y0rzxyc7g894my-todoman-4.6.0-doc"
+            },
+            {
+              "name": "dist",
+              "path": "/nix/store/m2vv1w3zlw4ak2qmax7fsgbkb6js68ln-todoman-4.6.0-dist"
+            }
+          ],
+          "store_path": "/nix/store/mks38fk28m0w52r3c6zxjjg04wpsmwpb-todoman-4.6.0"
+        },
+        "x86_64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/4lyzssgq5hwd4f9dc0rr6a3krsfydyvz-todoman-4.6.0",
+              "default": true
+            },
+            {
+              "name": "man",
+              "path": "/nix/store/447ngb0xyx7zpsnnnk8343wxiv647f7z-todoman-4.6.0-man",
+              "default": true
+            },
+            {
+              "name": "dist",
+              "path": "/nix/store/xkj88g32a9l5ywz4gjl8q1vwi8rs6rz4-todoman-4.6.0-dist"
+            },
+            {
+              "name": "doc",
+              "path": "/nix/store/vsfs04688j32ji87km6if9cyg5lp5iw6-todoman-4.6.0-doc"
+            }
+          ],
+          "store_path": "/nix/store/4lyzssgq5hwd4f9dc0rr6a3krsfydyvz-todoman-4.6.0"
+        }
+      }
+    },
+    "vdirsyncer@latest": {
+      "last_modified": "2026-04-16T08:46:55Z",
+      "resolved": "github:NixOS/nixpkgs/b86751bc4085f48661017fa226dee99fab6c651b#vdirsyncer",
+      "source": "devbox-search",
+      "version": "0.20.0",
+      "systems": {
+        "aarch64-darwin": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/5am0vjfzf9fgnfk4gy2nc9c9vfgwzxmg-python3.13-vdirsyncer-0.20.0",
+              "default": true
+            },
+            {
+              "name": "dist",
+              "path": "/nix/store/a5gs633lxk6pp1w8y9yd8hq0minjkrr9-python3.13-vdirsyncer-0.20.0-dist"
+            }
+          ],
+          "store_path": "/nix/store/5am0vjfzf9fgnfk4gy2nc9c9vfgwzxmg-python3.13-vdirsyncer-0.20.0"
+        },
+        "aarch64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/xchf1by869z0c7ndf04v3vlq8h8zzn6k-python3.13-vdirsyncer-0.20.0",
+              "default": true
+            },
+            {
+              "name": "dist",
+              "path": "/nix/store/n5y06svi8ipi6l3zwhp7jk1bs542z3kk-python3.13-vdirsyncer-0.20.0-dist"
+            }
+          ],
+          "store_path": "/nix/store/xchf1by869z0c7ndf04v3vlq8h8zzn6k-python3.13-vdirsyncer-0.20.0"
+        },
+        "x86_64-darwin": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/qrbkhzhfm3j47zs3xwbvjbcf9k41527j-python3.13-vdirsyncer-0.20.0",
+              "default": true
+            },
+            {
+              "name": "dist",
+              "path": "/nix/store/zjlw3bhpnykp7anzv9lafv98yhj7cw8s-python3.13-vdirsyncer-0.20.0-dist"
+            }
+          ],
+          "store_path": "/nix/store/qrbkhzhfm3j47zs3xwbvjbcf9k41527j-python3.13-vdirsyncer-0.20.0"
+        },
+        "x86_64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/j6qdbqsc043ajx0pmkn9lajq87jldgyv-python3.13-vdirsyncer-0.20.0",
+              "default": true
+            },
+            {
+              "name": "dist",
+              "path": "/nix/store/88162zygj6md8ypjy7k7z1wfcv4km9wv-python3.13-vdirsyncer-0.20.0-dist"
+            }
+          ],
+          "store_path": "/nix/store/j6qdbqsc043ajx0pmkn9lajq87jldgyv-python3.13-vdirsyncer-0.20.0"
+        }
+      }
+    },
     "web-ext@latest": {
       "last_modified": "2026-02-23T15:40:43Z",
       "resolved": "github:NixOS/nixpkgs/80d901ec0377e19ac3f7bb8c035201e2e098cc97#web-ext",

@@ -1,0 +1,89 @@
+# Subset of rules from ../rules.yml used for unit-testing the test fixtures.
+# Keep these in sync with the production rules.
+rules:
+  - id: go.error-wrapped-with-percent-v
+    languages: [go]
+    message: "use %w"
+    severity: ERROR
+    patterns:
+      - pattern: fmt.Errorf($MSG, ..., $ERR)
+      - metavariable-regex:
+          metavariable: $MSG
+          regex: '^"[^"]*%v[^"]*"$'
+      - metavariable-regex:
+          metavariable: $ERR
+          regex: '^err$|^.*Err$'
+
+  - id: go.error-discarded-with-blank-identifier
+    languages: [go]
+    message: "discarded error"
+    severity: WARNING
+    patterns:
+      - pattern: _ = $CALL($...ARGS)
+      - pattern-not: _ = $X.Close()
+      - pattern-not: _ = $X.Close($...ARGS)
+      - pattern-not: var _ $TYPE = $EXPR
+
+  - id: go.handler-returns-nil-after-error-logged
+    languages: [go]
+    message: "log+swallow"
+    severity: WARNING
+    patterns:
+      - pattern-either:
+          - pattern: |
+              if $ERR != nil {
+                  ...
+                  slog.Error(...)
+                  ...
+                  return nil
+              }
+          - pattern: |
+              if $ERR != nil {
+                  ...
+                  log.Printf(...)
+                  ...
+                  return nil
+              }
+          - pattern: |
+              if $ERR != nil {
+                  ...
+                  log.Println(...)
+                  ...
+                  return nil
+              }
+
+  - id: go.errors-As-without-target-pointer
+    languages: [go]
+    message: "needs &target"
+    severity: ERROR
+    patterns:
+      - pattern: errors.As($ERR, $TARGET)
+      - metavariable-regex:
+          metavariable: $TARGET
+          regex: '^[^&]'
+
+  - id: go.error-classified-by-status-code-only
+    languages: [go]
+    message: "inspect body, not just status"
+    severity: WARNING
+    patterns:
+      - pattern-either:
+          - pattern: |
+              if $RESP.StatusCode == $STATUS {
+                  return ..., $ERR
+              }
+          - pattern: |
+              if $RESP.StatusCode >= $STATUS {
+                  return ..., $ERR
+              }
+          - pattern: |
+              if $RESP.StatusCode == $STATUS {
+                  return $ERR
+              }
+          - pattern: |
+              if $RESP.StatusCode >= $STATUS {
+                  return $ERR
+              }
+      - metavariable-regex:
+          metavariable: $ERR
+          regex: '^Err[A-Z]'

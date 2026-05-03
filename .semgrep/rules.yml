@@ -78,6 +78,179 @@ rules:
       include:
         - "*_test.go"
 
+  # ------------------------------------------------------------
+  # Error-mishandling rules (CLAUDE.md: Fixing Problems / Error Handling)
+  # ------------------------------------------------------------
+  #
+  # NOTE on a pattern we deliberately do NOT lint:
+  #   "Subscribe returned OK but skipped persist" (handler-returns-nil-without-
+  #   completing-promised-steps) requires inter-procedural reasoning that
+  #   opengrep cannot do statically. Catch it in code review and integration
+  #   tests instead.
+
+  - id: go.error-wrapped-with-percent-v
+    languages: [go]
+    message: >-
+      `fmt.Errorf("...%v", err)` discards the wrapped chain. Use `%w` so
+      callers can `errors.Is`/`errors.As` against the cause.
+      See CLAUDE.md: Error Wrapping Pattern.
+    severity: ERROR
+    patterns:
+      - pattern: fmt.Errorf($MSG, ..., $ERR)
+      - metavariable-regex:
+          metavariable: $MSG
+          regex: '^"[^"]*%v[^"]*"$'
+      - metavariable-regex:
+          metavariable: $ERR
+          regex: '^err$|^.*Err$'
+    paths:
+      exclude:
+        - gen/
+        - vendor/
+        - "*_test.go"
+        # Parallel error-classification work in flight; re-include after merge.
+        - internal/connectors/google_tasks/gateway/
+        - internal/connectors/google_tasks/sync/
+        - internal/connectors/google_keep/gateway/
+
+  - id: go.error-classified-by-status-code-only
+    languages: [go]
+    message: >-
+      Classifying an HTTP response by status code alone obscures the real
+      cause. Inspect the body (e.g. parse the Google error reason) and
+      dispatch to a specific sentinel. See feedback_never_obscure_errors_at_boundaries.md.
+    severity: WARNING
+    patterns:
+      - pattern-either:
+          - pattern: |
+              if $RESP.StatusCode == $STATUS {
+                  return ..., $ERR
+              }
+          - pattern: |
+              if $RESP.StatusCode >= $STATUS {
+                  return ..., $ERR
+              }
+          - pattern: |
+              if $RESP.StatusCode == $STATUS {
+                  return $ERR
+              }
+          - pattern: |
+              if $RESP.StatusCode >= $STATUS {
+                  return $ERR
+              }
+      - metavariable-regex:
+          metavariable: $ERR
+          regex: '^Err[A-Z]'
+    paths:
+      exclude:
+        - gen/
+        - vendor/
+        - "*_test.go"
+        - cmd/
+        # Parallel error-classification work in flight; re-include after merge.
+        - internal/connectors/google_tasks/gateway/
+        - internal/connectors/google_tasks/sync/
+        - internal/connectors/google_keep/gateway/
+
+  - id: go.handler-returns-nil-after-error-logged
+    languages: [go]
+    message: >-
+      Logging an error and then returning nil is a silent-failure anti-pattern.
+      Errors must propagate to the caller. If this is an intentional boundary
+      handler (e.g. a job runner that records terminal status separately),
+      add `// nosemgrep: go.handler-returns-nil-after-error-logged` with a
+      brief justification. See CLAUDE.md: Never Just Log Errors.
+    severity: WARNING
+    patterns:
+      - pattern-either:
+          - pattern: |
+              if $ERR != nil {
+                  ...
+                  slog.Error(...)
+                  ...
+                  return nil
+              }
+          - pattern: |
+              if $ERR != nil {
+                  ...
+                  log.Printf(...)
+                  ...
+                  return nil
+              }
+          - pattern: |
+              if $ERR != nil {
+                  ...
+                  log.Println(...)
+                  ...
+                  return nil
+              }
+    paths:
+      exclude:
+        - gen/
+        - vendor/
+        - "*_test.go"
+        - main.go
+        # Parallel error-classification work in flight; re-include after merge.
+        - internal/connectors/google_tasks/gateway/
+        - internal/connectors/google_tasks/sync/
+        - internal/connectors/google_keep/gateway/
+
+  - id: go.errors-As-without-target-pointer
+    languages: [go]
+    message: >-
+      `errors.As` requires a pointer-to-target as its second argument; passing
+      a non-pointer panics at runtime. Use `&target`. See CLAUDE.md: Custom
+      Error Type Pattern.
+    severity: ERROR
+    patterns:
+      - pattern: errors.As($ERR, $TARGET)
+      - metavariable-regex:
+          metavariable: $TARGET
+          regex: '^[^&]'
+    paths:
+      exclude:
+        - gen/
+        - vendor/
+
+  # Detects `_ = errReturningCall()` where a function's *sole* return value is
+  # discarded. Excludes:
+  #   - the canonical `_ = resp.Body.Close()` cleanup idiom (cleanup error path
+  #     where there's nothing useful to do)
+  #   - `var _ Iface = (*T)(nil)` interface-assertion idiom (no call at all,
+  #     compile-time conformance check)
+  #   - `_, ok := m[k]` and similar comma-ok forms (those have a non-error
+  #     second return, not a discarded error)
+  - id: go.error-discarded-with-blank-identifier
+    languages: [go]
+    message: >-
+      Discarding an error with `_ =` swallows failures that may matter to the
+      caller. If the error is genuinely irrelevant (e.g. best-effort cleanup),
+      add `// nosemgrep: go.error-discarded-with-blank-identifier` with a
+      justification comment. See CLAUDE.md: Never Just Log Errors.
+    severity: WARNING
+    patterns:
+      - pattern: _ = $CALL($...ARGS)
+      - pattern-not: _ = $X.Close()
+      - pattern-not: _ = $X.Close($...ARGS)
+      - pattern-not: var _ $TYPE = $EXPR
+    paths:
+      include:
+        - "*.go"
+      exclude:
+        - gen/
+        - vendor/
+        - "*_test.go"
+        - "*_test_support.go"
+        - main.go
+        - cmd/
+        # The Google Tasks/Keep gateway and Tasks sync packages are being
+        # actively reworked by parallel error-classification work. They will be
+        # re-included once that work merges and existing discards have been
+        # given justifications inline.
+        - internal/connectors/google_tasks/gateway/
+        - internal/connectors/google_tasks/sync/
+        - internal/connectors/google_keep/gateway/
+
   # ============================================================
   # TypeScript / JavaScript Rules
   # ============================================================

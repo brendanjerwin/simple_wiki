@@ -334,6 +334,7 @@ func cloneScheduleClient(sc *apiv1.AgentSchedule) *apiv1.AgentSchedule {
 		Prompt:   sc.GetPrompt(),
 		MaxTurns: sc.GetMaxTurns(),
 		Enabled:  sc.GetEnabled(),
+		Timezone: sc.GetTimezone(),
 	}
 }
 

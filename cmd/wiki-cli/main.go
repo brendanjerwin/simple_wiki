@@ -295,6 +295,7 @@ describe that type too to see its nested structure.`,
 		buildCallCommand(urlFlag),
 		buildMCPCommand(urlFlag),
 		buildPoolCommand(urlFlag),
+		buildChecklistCommand(urlFlag),
 	}
 }
 

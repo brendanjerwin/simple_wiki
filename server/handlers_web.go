@@ -10,6 +10,7 @@ import (
 	"mime"
 	"net/http"
 	"net/url"
+	"os"
 	"path"
 	"path/filepath"
 	"slices"
@@ -79,8 +80,166 @@ func (s *Site) GinRouter(middleware ...gin.HandlerFunc) *gin.Engine {
 
 	router.Use(sessions.Sessions("_session", s.SessionStore))
 
+	// The CalDAV gateway runs before route matching so CalDAV-shaped
+	// requests bypass Gin's wildcard GET handler and reach the
+	// dedicated CalDAV server. Non-CalDAV traffic falls through to the
+	// regular routes registered below. nil caldavServer makes the
+	// gateway a no-op so test sites that don't wire CalDAV continue to
+	// work unchanged.
+	router.Use(s.caldavGateway())
+
 	s.registerRoutes(router)
 	return router
+}
+
+// caldavGateway returns a Gin middleware that intercepts CalDAV-shaped
+// HTTP traffic and forwards it to the configured caldavServer. Regular
+// page GETs, edits, and API calls fall through via c.Next().
+//
+// The gateway is registered before route matching so CalDAV verbs that
+// Gin's wildcard /:page/*command handler would otherwise swallow (e.g.
+// PROPFIND, REPORT) reach the dedicated CalDAV server instead. A nil
+// caldavServer makes the gateway a pass-through — used in tests that
+// don't need the CalDAV surface and in environments where CalDAV has
+// not yet been wired by bootstrap.
+func (s *Site) caldavGateway() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if s.caldavServer == nil || !shouldRouteToCalDAV(c.Request) {
+			c.Next()
+			return
+		}
+		// Authorize against the page named in the URL before forwarding to
+		// the CalDAV server. CalDAV resource paths always begin with the
+		// page identifier (e.g. /<page>/<list>/<uid>.ics for items, or
+		// /<page>/ for collection lists), so taking the first segment is
+		// sufficient. OPTIONS at the root has no page to gate — let it
+		// through; the CalDAV server's own requireIdentity stops anonymous
+		// callers from learning anything past the capability advertisement.
+		if pageID := caldavRequestPageID(c.Request); pageID != "" {
+			if !s.caldavCallerAuthorized(c.Request, pageID) {
+				c.AbortWithStatus(http.StatusForbidden)
+				return
+			}
+		}
+		s.caldavServer.ServeHTTP(c.Writer, c.Request)
+		c.Abort()
+	}
+}
+
+// caldavRequestPageID extracts the wiki page identifier from a CalDAV
+// request URL. Returns "" when the path has no page segment (e.g. the
+// root OPTIONS probe), which the gateway treats as "no authorization
+// needed at this layer."
+func caldavRequestPageID(r *http.Request) wikipage.PageIdentifier {
+	trimmed := strings.Trim(r.URL.Path, rootPath)
+	if trimmed == "" {
+		return ""
+	}
+	first := strings.SplitN(trimmed, rootPath, 2)[0]
+	return wikipage.PageIdentifier(first)
+}
+
+// caldavCallerAuthorized returns whether the request's caller is allowed
+// to access the named page under the wiki.authorization rules.
+//
+// Pages that don't exist are treated as authorized — the underlying
+// CalDAV layer will produce its own 404. We don't synthesize a 404 here
+// because that would leak existence information that the regular wiki
+// layer also doesn't try to hide.
+func (s *Site) caldavCallerAuthorized(r *http.Request, pageID wikipage.PageIdentifier) bool {
+	_, fm, err := s.ReadFrontMatter(pageID)
+	if err != nil {
+		// Page absent → nothing to authorize against; let the CalDAV
+		// layer handle it (it'll respond with the appropriate 404 / 405).
+		// Other read errors fail closed so a transient disk issue cannot
+		// silently expose a restricted page.
+		return errors.Is(err, os.ErrNotExist)
+	}
+	identity := tailscale.IdentityFromContext(r.Context())
+	return wikipage.Authorize(identity, fm) == nil
+}
+
+// CalDAV / WebDAV verbs the gateway forwards unconditionally. Gin's
+// router matches GET/POST/PUT/DELETE/HEAD/OPTIONS/PATCH but has no
+// concept of these WebDAV-specific methods, so the only sane place to
+// dispatch them is from middleware that runs before route matching.
+const (
+	methodPROPFIND   = "PROPFIND"
+	methodREPORT     = "REPORT"
+	methodMKCALENDAR = "MKCALENDAR"
+	methodCOPY       = "COPY"
+	methodMOVE       = "MOVE"
+	methodPROPPATCH  = "PROPPATCH"
+)
+
+// icsExtension is the file extension on per-item CalDAV resource URLs
+// (e.g. /<page>/<list>/<uid>.ics). Used to recognize GETs that should
+// route to the CalDAV server instead of the wiki's page handler.
+const icsExtension = ".ics"
+
+// minICSPathSegments is the smallest number of "/"-separated path
+// segments a /<page>/<list>/<uid>.ics URL must have. Anything shorter
+// (e.g. /foo/bar.ics) is not an item resource and should fall through
+// to the regular page handler.
+const minICSPathSegments = 3
+
+// shouldRouteToCalDAV reports whether the gateway should forward a
+// request to the CalDAV server instead of letting it hit the regular
+// Gin routes. The conditions are:
+//
+//   - Method is a CalDAV / WebDAV verb (OPTIONS, PROPFIND, REPORT,
+//     PUT, DELETE, MKCALENDAR, COPY, MOVE, PROPPATCH).
+//   - Method is GET / HEAD AND the path looks like
+//     /<page>/<list>/<uid>.ics (3+ segments, last segment ends in
+//     ".ics").
+//
+// OPTIONS is included even though Gin handles it natively because
+// CalDAV clients fire OPTIONS as the capability-discovery probe and
+// need the DAV / Allow headers the CalDAV server emits.
+func shouldRouteToCalDAV(r *http.Request) bool {
+	switch r.Method {
+	case http.MethodOptions,
+		methodPROPFIND,
+		methodREPORT,
+		http.MethodPut,
+		http.MethodDelete,
+		methodMKCALENDAR,
+		methodCOPY,
+		methodMOVE,
+		methodPROPPATCH:
+		return true
+	case http.MethodGet, http.MethodHead:
+		return isICSResourcePath(r.URL.Path)
+	default:
+		return false
+	}
+}
+
+// isICSResourcePath reports whether p has the shape of a per-item
+// CalDAV resource URL (3+ segments, last segment ends in ".ics").
+// Reuses the same prefix/trim conventions as
+// internal/caldav.parsePath so the gateway and the CalDAV server agree
+// on what a per-item URL looks like.
+func isICSResourcePath(p string) bool {
+	if !strings.HasSuffix(p, icsExtension) {
+		return false
+	}
+	trimmed := strings.TrimPrefix(p, rootPath)
+	trimmed = strings.TrimSuffix(trimmed, rootPath)
+	if trimmed == "" {
+		return false
+	}
+	segments := strings.Split(trimmed, rootPath)
+	return len(segments) >= minICSPathSegments
+}
+
+// redirectToCanonicalProfile sends a 302 to the canonical lowercase
+// `/profile` route. Used for case variants (Profile, PROFILE) that the
+// case-sensitive Gin router would otherwise drop into the catch-all
+// `/:page` route — that path resolves a literal page named "profile",
+// not the user's personal profile.
+func redirectToCanonicalProfile(c *gin.Context) {
+	c.Redirect(httpStatusFound, "/profile")
 }
 
 func (s *Site) registerRoutes(router *gin.Engine) {
@@ -88,9 +247,22 @@ func (s *Site) registerRoutes(router *gin.Engine) {
 		c.Redirect(httpStatusFound, "/"+s.DefaultPage+"/view")
 	})
 
+	// `/profile` resolves the current user's identity and redirects to their
+	// personal profile page. Registered before the catch-all `/:page` so the
+	// router never treats `profile` as an arbitrary page identifier.
+	//
+	// Gin routing is case-sensitive — `/Profile`, `/PROFILE`, etc. would
+	// otherwise fall through to `/:page` and resolve to the literal page
+	// named "profile" (after lowercasing) rather than the user's personal
+	// profile. Register the exact-case variants too with a 302 to canonical.
+	router.GET("/profile", s.handleProfile)
+	router.GET("/Profile", redirectToCanonicalProfile)
+	router.GET("/PROFILE", redirectToCanonicalProfile)
+
 	router.POST("/uploads", s.handleUpload)
 	router.GET("/cli/:binary", serveCLIBinary)
 	router.GET("/extensions/:file", serveExtensionFile)
+	router.GET("/oauth/google/callback", s.handleOAuthGoogleCallback)
 
 	router.GET("/:page", func(c *gin.Context) {
 		page := sanitizePageName(c.Param("page"))
@@ -240,6 +412,23 @@ func (s *Site) handlePageRequest(c *gin.Context) {
 		return
 	}
 
+	// Authorize against the page's wiki.authorization rules. Brand-new pages
+	// (no frontmatter on disk yet) are wide open — the creator becomes the
+	// owner via subsequent saves.
+	if !p.IsNew() {
+		fm, fmErr := p.GetFrontMatter()
+		if fmErr != nil {
+			s.Logger.Error("Failed to read frontmatter for authorization check on '%s': %v", page, fmErr)
+			c.String(http.StatusInternalServerError, "Failed to read page frontmatter")
+			return
+		}
+		identity := tailscale.IdentityFromContext(c.Request.Context())
+		if authErr := wikipage.Authorize(identity, fm); authErr != nil {
+			c.String(http.StatusForbidden, "access denied by wiki.authorization rules")
+			return
+		}
+	}
+
 	// Render the page content
 	s.renderPageContent(c, page, command, p)
 }
@@ -277,6 +466,8 @@ func (s *Site) renderPageContent(c *gin.Context, page, command string, p *wikipa
 
 	directoryListing, command, err := s.getDirectoryEntries(page, command)
 	if err != nil {
+		// Gin's AbortWithError returns the same error for chaining; we already passed it in.
+		// nosemgrep: go.error-discarded-with-blank-identifier
 		_ = c.AbortWithError(http.StatusInternalServerError, err)
 		return
 	}
@@ -339,11 +530,38 @@ func (s *Site) buildTemplateData(page, command string, listing DirectoryListing,
 		"UnixTime":         time.Now().Unix(),
 		"AllowFileUploads": s.Fileuploads,
 		"MaxUploadMB":      s.MaxUploadSize,
-		"WikiBaseURL": requestBaseURL(c),
-		"Username":    identity.LoginName(),
+		"WikiBaseURL":      requestBaseURL(c),
+		"Username":         identity.LoginName(),
+		"IsSystemPage":     s.isSystemPage(page),
 	}
 }
 
+// isSystemPage reports whether the given page identifier refers to a page
+// flagged `system = true` in its frontmatter (sourced from the embedded help
+// corpus). The check is best-effort — if the page can't be read we assume
+// not-system rather than blocking the render.
+func (s *Site) isSystemPage(page string) bool {
+	_, fm, err := s.ReadFrontMatter(wikipage.PageIdentifier(page))
+	if err != nil {
+		return false
+	}
+	return wikipage.IsSystemPage(fm)
+}
+
+// getRecentlyEdited returns the per-user list of recently visited pages,
+// recorded in the user's cookie session. Despite the misleading name, this is
+// driven by GET visits (in handlePageRequest), not by writes — and the list
+// is private to each browser session, never aggregated globally.
+//
+// Issue #980 asked us to "filter system-page writes out of the recent-changes
+// feed (or mark them specially) — startup overwrites would otherwise dominate
+// the feed on every deploy." The concern there assumed a global, write-driven
+// feed. Because this implementation is session-only and visit-driven, startup
+// syspage.Sync writes cannot pollute it: the only way a system page lands in
+// any user's list is if that user navigates to it themselves. No filter is
+// applied here for that reason. If a global recent-changes feed is added in
+// the future, that surface should call syspage.IsSystemPage to skip system
+// pages.
 func getRecentlyEdited(title string, c *gin.Context, logger *lumber.ConsoleLogger) []string {
 	session := sessions.Default(c)
 	var recentlyEdited string
@@ -410,6 +628,24 @@ func (s *Site) handlePageUpdate(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "Failed to open page"})
 		return
 	}
+
+	// Authorize against the existing page's wiki.authorization. Brand-new
+	// pages have no existing rules to enforce — the first save establishes
+	// ownership.
+	if !p.IsNew() {
+		fm, fmErr := p.GetFrontMatter()
+		if fmErr != nil {
+			s.Logger.Error("Failed to read frontmatter for authorization check on '%s': %v", json.Page, fmErr)
+			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "Failed to read page frontmatter"})
+			return
+		}
+		identity := tailscale.IdentityFromContext(c.Request.Context())
+		if authErr := wikipage.Authorize(identity, fm); authErr != nil {
+			c.JSON(http.StatusForbidden, gin.H{"success": false, "message": "access denied by wiki.authorization rules"})
+			return
+		}
+	}
+
 	unixTime := time.Now().Unix()
 	if json.FetchedAt > 0 && p.IsModifiedSince(json.FetchedAt) {
 		c.JSON(http.StatusConflict, gin.H{"success": false, "message": "Refusing to overwrite others' work", "unix_time": unixTime})
@@ -428,12 +664,16 @@ func (s *Site) handlePageUpdate(c *gin.Context) {
 
 func (s *Site) handleUpload(c *gin.Context) {
 	if !s.Fileuploads {
+		// Gin's AbortWithError returns the same error for chaining; the abort itself is the side effect.
+		// nosemgrep: go.error-discarded-with-blank-identifier
 		_ = c.AbortWithError(http.StatusInternalServerError, errors.New("uploads are disabled on this server"))
 		return
 	}
 
 	file, info, err := c.Request.FormFile("file")
 	if err != nil {
+		// Gin's AbortWithError returns the same error for chaining; we already passed it in.
+		// nosemgrep: go.error-discarded-with-blank-identifier
 		_ = c.AbortWithError(http.StatusInternalServerError, err)
 		s.Logger.Error(uploadFailureMessage, err.Error())
 		return
@@ -442,6 +682,8 @@ func (s *Site) handleUpload(c *gin.Context) {
 
 	fileInfo, err := s.FileStorer.Store(file)
 	if err != nil {
+		// Gin's AbortWithError returns the same error for chaining; we already passed it in.
+		// nosemgrep: go.error-discarded-with-blank-identifier
 		_ = c.AbortWithError(http.StatusInternalServerError, err)
 		s.Logger.Error(uploadFailureMessage, err.Error())
 		return
@@ -505,6 +747,8 @@ func (s *Site) handleUploads(c *gin.Context, command string) {
 		return
 	}
 	if !s.Fileuploads {
+		// Gin's AbortWithError returns the same error for chaining; the abort itself is the side effect.
+		// nosemgrep: go.error-discarded-with-blank-identifier
 		_ = c.AbortWithError(http.StatusInternalServerError, errors.New("uploads are disabled on this server"))
 		return
 	}

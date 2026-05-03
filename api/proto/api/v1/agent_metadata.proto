@@ -26,13 +26,16 @@ service AgentMetadataService {
   rpc UpsertSchedule(UpsertScheduleRequest) returns (UpsertScheduleResponse) {
     option (api.v1.description) =
         "Create or replace a schedule on a page. The cron expression must be a "
-        "valid 6-field expression (sec min hr dom mon dow). Wiki-managed fields "
-        "(last_run, last_status, last_error_message, last_duration_seconds) on the "
+        "valid 6-field expression (sec min hr dom mon dow). The optional "
+        "timezone field is an IANA name (e.g. \"America/New_York\") that "
+        "controls how the cron expression is interpreted; if empty/unset, the "
+        "expression is interpreted in UTC. Wiki-managed fields (last_run, "
+        "last_status, last_error_message, last_duration_seconds) on the "
         "request are silently stripped.";
     option (api.v1.example_request) =
         "{\"page\": \"pastry_project\", \"schedule\": {\"id\": \"friday_draft\", "
         "\"cron\": \"0 0 18 * * 5\", \"prompt\": \"Draft the weekend order.\", "
-        "\"max_turns\": 30, \"enabled\": true}}";
+        "\"max_turns\": 30, \"enabled\": true, \"timezone\": \"America/New_York\"}}";
   }
 
   // DeleteSchedule — see (api.v1.description).
@@ -100,6 +103,12 @@ message AgentSchedule {
   string last_error_message = 8;
   // Wiki-managed: wall-clock duration of the most recent fire.
   int32 last_duration_seconds = 9;
+  // IANA timezone name (e.g. "America/New_York", "Europe/London") used to
+  // interpret the cron expression. Empty/unset is treated as "UTC". Invalid
+  // names are rejected by UpsertSchedule. Implementation prepends
+  // "CRON_TZ=<timezone>" to the cron expression at registration time, so any
+  // change here takes effect on the next refresh / save-hook.
+  string timezone = 10;
 }
 
 // BackgroundActivityEntry records one terminal scheduled-turn outcome on a page.

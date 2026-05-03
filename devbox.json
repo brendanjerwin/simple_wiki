@@ -18,7 +18,9 @@
     "playwright-test@latest",
     "gh@latest",
     "zip@latest",
-    "web-ext@latest"
+    "web-ext@latest",
+    "vdirsyncer@latest",
+    "todoman@latest"
   ],
   "shell": {
     "init_hook": [

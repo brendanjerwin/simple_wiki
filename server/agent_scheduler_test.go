@@ -107,12 +107,30 @@ var _ = Describe("AgentScheduler.LoadAll", func() {
 			Expect(cronReg.scheduled).To(HaveLen(1))
 		})
 
-		It("should register the cron expression from the schedule", func() {
-			Expect(cronReg.scheduled[0].cron).To(Equal("0 0 9 * * 1"))
+		It("should register the cron expression from the schedule with a CRON_TZ=UTC prefix (default)", func() {
+			Expect(cronReg.scheduled[0].cron).To(Equal("CRON_TZ=UTC 0 0 9 * * 1"))
 		})
 
 		It("should register an AgentTurn job", func() {
 			Expect(cronReg.scheduled[0].job.GetName()).To(Equal("AgentTurn"))
+		})
+	})
+
+	Describe("when a schedule has an explicit timezone", func() {
+		BeforeEach(func() {
+			Expect(store.Upsert("p", &apiv1.AgentSchedule{
+				Id: "tz_explicit", Cron: "0 0 9 * * 1", Prompt: "p",
+				Enabled: true, Timezone: "America/New_York",
+			})).To(Succeed())
+			idx.pages = []wikipage.PageIdentifier{"p"}
+
+			scheduler := server.NewAgentScheduler(store, dispatch, idx, cronReg, time.Minute)
+			Expect(scheduler.LoadAll()).To(Succeed())
+		})
+
+		It("should register with CRON_TZ=<timezone> prefix", func() {
+			Expect(cronReg.scheduled).To(HaveLen(1))
+			Expect(cronReg.scheduled[0].cron).To(Equal("CRON_TZ=America/New_York 0 0 9 * * 1"))
 		})
 	})
 })
@@ -301,8 +319,8 @@ var _ = Describe("AgentScheduler.loadPage edge cases", func() {
 			Expect(cronReg.scheduled).To(HaveLen(1))
 		})
 
-		It("should register the enabled schedule's cron expression", func() {
-			Expect(cronReg.scheduled[0].cron).To(Equal("0 0 9 * * 1"))
+		It("should register the enabled schedule's cron expression with the default UTC prefix", func() {
+			Expect(cronReg.scheduled[0].cron).To(Equal("CRON_TZ=UTC 0 0 9 * * 1"))
 		})
 	})
 

@@ -400,8 +400,14 @@ export class ConfirmationInterlockButton extends LitElement {
   };
 
   private _renderTriggerButton() {
+    // part="trigger" lets parent components style the trigger via
+    // ::part(trigger) without forking this component for every visual
+    // variant. Used e.g. by connector-subscribe-button to render the
+    // Unsubscribe affordance as a ghost-style sibling of the
+    // sync-status badge.
     return html`
       <button
+        part="trigger"
         class="button-base button-secondary button-small border-radius-small button-trigger"
         @click=${this._handleTriggerClick}
         ?disabled=${this.disabled}

@@ -1110,12 +1110,25 @@ The project uses different linters for different parts of the codebase:
 
 - **Go linting**: Use `devbox run go:lint` to run the Go linter (revive)
 - **Frontend linting**: Use `devbox run fe:lint` to run the frontend TypeScript/JavaScript linter (ESLint)
+- **Convention enforcement (opengrep)**: Use `devbox run opengrep:lint` to run the project-wide convention checks defined in `.semgrep/rules.yml`
 - **All linting**: Use `devbox run lint:everything` to run all linters, tests, and builds
 
 Each linter enforces specific rules:
 
 - Go linter enforces using `any` instead of `interface{}` and other Go best practices
 - Frontend linter enforces TypeScript strict typing with `@typescript-eslint/no-explicit-any` rule enabled
+- Opengrep enforces project conventions (error wrapping, no opaque catch strings, no panic in library code, etc.) — same rules run in CI and at edit time
+
+### Convention Enforcement at Edit Time
+
+A Claude Code `PostToolUse` hook runs opengrep against any file touched by `Edit`, `Write`, or `NotebookEdit` and surfaces convention violations immediately so agents can fix them before committing. CI is still authoritative, but the hook gives same-keystroke feedback.
+
+- **Hook script**: `.claude/hooks/run-opengrep-on-write.sh`
+- **Wired in**: `.claude/settings.json` under `hooks.PostToolUse`
+- **Rules**: `.semgrep/rules.yml` (shared with CI's `opengrep` job)
+- **Behavior**: Exits 0 when clean, non-zero when opengrep reports findings. Non-zero exit prompts the agent to address violations before continuing.
+- **Scope**: Only the files passed via `CLAUDE_FILE_PATHS` are scanned (typically <1–3s per call). The hook does not scan the whole repo.
+- **Bypass**: For a single justified exception, add an inline `// nosemgrep:<rule-id>` comment with a justification at the offending line. Do not disable the hook globally.
 
 ### Required Before Each Commit to Make Sure Everything Works
 
@@ -1174,6 +1187,40 @@ defer span.End()
 ```
 
 See `internal/observability/doc.go` for detailed documentation.
+
+## Help Documentation
+
+The wiki ships its help corpus from `internal/syspage/embedded/` — every help page is bundled into the binary and synced to the page store on startup (see `internal/syspage/loader.go`). When you add, change, or remove a feature that users interact with, you MUST update the corresponding embedded help page in the same change. This includes:
+
+- New macros, template functions, or page conventions → update or add a page under `internal/syspage/embedded/help_*.md`.
+- New or changed gRPC/MCP tools that agents use → update the relevant help page's "For Agents" section.
+- New search or tagging behavior → update `help_search` and `help_hashtags`.
+- New top-level features → add a new entry to `help` and a dedicated page if warranted.
+
+Do not punt this to a follow-up. Help is part of the deliverable. If you can't update the help in the same PR, the feature isn't done. Reviewers should reject feature PRs that don't include the corresponding help update.
+
+## Planning
+
+For any non-trivial change (anything bigger than a typo or single-line fix), produce a written plan before implementation and break the work into discrete, TDD-shaped todos.
+
+- **Plan file first.** Write the plan to a plan file (the harness's plan-mode flow is the right tool — `/plan ...` then `ExitPlanMode`). The plan file is the authoritative task list, not chat memory.
+- **Per-capability TDD todos.** For each new function/method/component: emit four distinct todos following the project TDD workflow — **Skeleton → Red → Green → Refactor**:
+  1. Skeleton — add the no-op signature so dependents can compile.
+  2. Red — write a failing test that pins down the desired behavior.
+  3. Green — minimal implementation to pass the test.
+  4. Refactor — clean up while keeping tests green.
+- **Use `TaskCreate`/`TaskUpdate`.** Mirror the plan file into the harness's task list. Mark each todo `in_progress` when started and `completed` immediately when its tests pass — no batching at the end.
+- **No off-the-books work.** Every concrete action that mutates state — branch creation, issue updates, follow-up issue filings, refactors of adjacent files, doc updates, lint runs, smoke tests, code-review subagents, transcript-review subagents, commits, pushes, PR creation, deploys — must be its own todo before it happens. If you do something that wasn't a todo, you've drifted from the plan; stop and add the todo (or amend the plan) before continuing. The bar isn't "did I track most things" — it's "could a reviewer reconcile every line of the diff with a specific todo, and every commit/push/deploy with a specific todo".
+- **End-of-work review todos are mandatory for non-trivial work.** Every plan that produces a substantive diff must end with two review-subagent todos before the ship steps:
+  1. **Plan-vs-code review** — spawn a fresh subagent with the plan file and `git diff main...HEAD`. It must report any code change without a backing todo, any todo without a corresponding code change, and any deviation from the plan's design decisions. Block on its findings until resolved or explicitly waived.
+  2. **Plan-vs-transcript review** — spawn a fresh subagent with the plan file and the session transcript (`~/.claude/projects/<project-slug>/<session-id>.jsonl`). It must report any tool call not on the todo list, any silently skipped todo, and any unilateral design change made without updating the plan first.
+
+  These reviewers exist to catch the operator's own drift. Don't skip them because "the diff looks fine" — the whole point is that the operator who wrote the code is the wrong person to judge whether they stuck to the plan.
+- **Audit at plan time, not implementation time.** When a plan references a function name, file path, error API, or framework convention you don't know exactly, look it up before locking the plan. Don't list "open question to resolve during impl" for things you could resolve in 30 seconds with a `grep` or a file read. Mid-flight investigations during execution are how plans turn into vibes.
+- **Surface parallelism.** Group todos by dependency. Items with no shared files and no upstream blockers should be flagged as parallelizable so the executor can dispatch them concurrently. Items that must wait should declare what they're waiting on.
+- **Help docs ride along.** Each feature todo group should include an entry that updates the relevant `internal/syspage/embedded/help_*.md` page (see "Help Documentation" above) — the help update is part of "Done" for that feature, not a follow-up.
+
+This applies to both human contributors and agents. If you find yourself implementing without a plan, stop and write one.
 
 ## README
 

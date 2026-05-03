@@ -4,12 +4,14 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"time"
 
 	"github.com/robfig/cron/v3"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
 	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
+	"github.com/brendanjerwin/simple_wiki/wikipage"
 )
 
 // errAgentScheduleStoreNotConfigured is returned when an AgentMetadataService
@@ -46,11 +48,17 @@ func (s *Server) ListSchedules(_ context.Context, req *apiv1.ListSchedulesReques
 // so the only legal mutation path for those fields remains the schedule
 // state machine.
 func (s *Server) UpsertSchedule(_ context.Context, req *apiv1.UpsertScheduleRequest) (*apiv1.UpsertScheduleResponse, error) {
-	if s.agentScheduleStore == nil {
-		return nil, errAgentScheduleStoreNotConfigured
-	}
 	if req.GetPage() == "" {
 		return nil, status.Error(codes.InvalidArgument, errPageRequired)
+	}
+	// Guard runs before the store-not-configured check so a request against a
+	// system page reports the actionable "system page" error instead of the
+	// internal-wiring error.
+	if guardErr := requireUserMutable(s.pageReaderMutator, wikipage.PageIdentifier(req.GetPage())); guardErr != nil {
+		return nil, guardErr
+	}
+	if s.agentScheduleStore == nil {
+		return nil, errAgentScheduleStoreNotConfigured
 	}
 	schedule := req.GetSchedule()
 	if schedule == nil {
@@ -62,6 +70,14 @@ func (s *Server) UpsertSchedule(_ context.Context, req *apiv1.UpsertScheduleRequ
 	if _, err := scheduleCronParser.Parse(schedule.GetCron()); err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, "invalid cron expression %q: %v", schedule.GetCron(), err)
 	}
+	// Empty timezone is treated as UTC at register time. A non-empty value
+	// must be a valid IANA name so we don't surface the failure deep in the
+	// scheduler later when the user can't see it.
+	if tz := schedule.GetTimezone(); tz != "" {
+		if _, tzErr := time.LoadLocation(tz); tzErr != nil {
+			return nil, status.Errorf(codes.InvalidArgument, "invalid timezone %q: %v", tz, tzErr)
+		}
+	}
 
 	// Strip wiki-managed fields so callers cannot forge status. The store
 	// layer also strips them; we belt-and-suspenders here so the response
@@ -72,6 +88,7 @@ func (s *Server) UpsertSchedule(_ context.Context, req *apiv1.UpsertScheduleRequ
 		Prompt:   schedule.GetPrompt(),
 		MaxTurns: schedule.GetMaxTurns(),
 		Enabled:  schedule.GetEnabled(),
+		Timezone: schedule.GetTimezone(),
 	}
 	if err := s.agentScheduleStore.Upsert(req.GetPage(), clean); err != nil {
 		return nil, status.Errorf(codes.Internal, "upsert schedule: %v", err)
@@ -93,11 +110,17 @@ func (s *Server) UpsertSchedule(_ context.Context, req *apiv1.UpsertScheduleRequ
 
 // DeleteSchedule implements the DeleteSchedule RPC. Idempotent.
 func (s *Server) DeleteSchedule(_ context.Context, req *apiv1.DeleteScheduleRequest) (*apiv1.DeleteScheduleResponse, error) {
-	if s.agentScheduleStore == nil {
-		return nil, errAgentScheduleStoreNotConfigured
-	}
 	if req.GetPage() == "" {
 		return nil, status.Error(codes.InvalidArgument, errPageRequired)
+	}
+	// Guard runs before the store-not-configured check so a request against a
+	// system page reports the actionable "system page" error instead of the
+	// internal-wiring error.
+	if guardErr := requireUserMutable(s.pageReaderMutator, wikipage.PageIdentifier(req.GetPage())); guardErr != nil {
+		return nil, guardErr
+	}
+	if s.agentScheduleStore == nil {
+		return nil, errAgentScheduleStoreNotConfigured
 	}
 	if req.GetScheduleId() == "" {
 		return nil, status.Error(codes.InvalidArgument, "schedule_id is required")
@@ -126,11 +149,17 @@ func (s *Server) GetChatContext(_ context.Context, req *apiv1.GetChatContextRequ
 // UpdateChatContext implements the UpdateChatContext RPC. The store
 // server-stamps last_updated; merge semantics are documented on the store.
 func (s *Server) UpdateChatContext(_ context.Context, req *apiv1.UpdateChatContextRequest) (*apiv1.UpdateChatContextResponse, error) {
-	if s.agentChatContextStore == nil {
-		return nil, errAgentChatContextStoreNotConfigured
-	}
 	if req.GetPage() == "" {
 		return nil, status.Error(codes.InvalidArgument, errPageRequired)
+	}
+	// Guard runs before the store-not-configured check so a request against a
+	// system page reports the actionable "system page" error instead of the
+	// internal-wiring error.
+	if guardErr := requireUserMutable(s.pageReaderMutator, wikipage.PageIdentifier(req.GetPage())); guardErr != nil {
+		return nil, guardErr
+	}
+	if s.agentChatContextStore == nil {
+		return nil, errAgentChatContextStoreNotConfigured
 	}
 	if req.GetChatContext() == nil {
 		return nil, status.Error(codes.InvalidArgument, "chat_context is required")
@@ -147,11 +176,17 @@ func (s *Server) UpdateChatContext(_ context.Context, req *apiv1.UpdateChatConte
 // codes.NotFound so callers (typically scheduled agents calling out of order)
 // see a clear failure mode.
 func (s *Server) AppendBackgroundActivitySummary(_ context.Context, req *apiv1.AppendBackgroundActivitySummaryRequest) (*apiv1.AppendBackgroundActivitySummaryResponse, error) {
-	if s.agentChatContextStore == nil {
-		return nil, errAgentChatContextStoreNotConfigured
-	}
 	if req.GetPage() == "" {
 		return nil, status.Error(codes.InvalidArgument, errPageRequired)
+	}
+	// Guard runs before the store-not-configured check so a request against a
+	// system page reports the actionable "system page" error instead of the
+	// internal-wiring error.
+	if guardErr := requireUserMutable(s.pageReaderMutator, wikipage.PageIdentifier(req.GetPage())); guardErr != nil {
+		return nil, guardErr
+	}
+	if s.agentChatContextStore == nil {
+		return nil, errAgentChatContextStoreNotConfigured
 	}
 	if req.GetScheduleId() == "" {
 		return nil, status.Error(codes.InvalidArgument, "schedule_id is required")
