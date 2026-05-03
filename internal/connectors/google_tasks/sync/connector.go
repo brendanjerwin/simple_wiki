@@ -742,6 +742,21 @@ func (c *Connector) pushOutboundUpserts(ctx context.Context, profileID wikipage.
 			if synced, ok := sub.SyncedItems[uid]; ok && syncedMatchesFields(synced, fields) {
 				continue
 			}
+			// Diagnostic: log WHY a patch is going to fire so we can
+			// distinguish "no synced state yet" (first tick after
+			// upgrade) from "synced state diverges from wiki" (real
+			// or false-positive divergence).
+			if synced, ok := sub.SyncedItems[uid]; ok {
+				c.logger.Info("tasks bridge: outbound_diff_mismatch profile=%s page=%s list=%s uid=%s task=%s synced_title=%q vs wiki_title=%q | synced_notes_len=%d vs wiki_notes_len=%d | synced_status=%q vs wiki_status=%q | synced_due=%s vs wiki_due=%s",
+					string(profileID), sub.Page, sub.ListName, uid, taskID,
+					synced.SyncedTitle, fields.Title,
+					len(synced.SyncedNotes), len(fields.Notes),
+					synced.SyncedStatus, fields.Status,
+					synced.SyncedDue.Format(time.RFC3339Nano), fields.Due.Format(time.RFC3339Nano))
+			} else {
+				c.logger.Info("tasks bridge: outbound_diff_no_synced profile=%s page=%s list=%s uid=%s task=%s",
+					string(profileID), sub.Page, sub.ListName, uid, taskID)
+			}
 			patched, applied, patchErr := c.patchOrApplyRemote(ctx, profileID, ownerEmail, client, sub, uid, taskID, fields)
 			if patchErr != nil {
 				return sub, patchErr
