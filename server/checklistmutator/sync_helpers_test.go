@@ -26,8 +26,11 @@ var _ = Describe("syncIdentityFor", func() {
 	When("the binding owner email is empty", func() {
 		identity := syncIdentityFor("")
 
-		It("should fall back to the system loginName so callers still get a stable string", func() {
-			Expect(identity.Name()).To(Equal("system:keep-sync"))
+		It("should fall back to a generic system loginName (NOT keep-specific) so attribution stays neutral across connectors", func() {
+			// Renamed from "system:keep-sync" so a Tasks-side write
+			// with a missing email isn't misattributed to Keep in
+			// the wiki's checklist UI.
+			Expect(identity.Name()).To(Equal("system:connector-sync"))
 		})
 
 		It("should still report IsAgent()=false (the cron is transport, not actor)", func() {

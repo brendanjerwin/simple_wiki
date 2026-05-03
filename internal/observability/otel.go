@@ -2,6 +2,7 @@ package observability
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"time"
@@ -77,7 +78,7 @@ func (t *TelemetryProvider) Shutdown(ctx context.Context) error {
 	}
 
 	if len(errs) > 0 {
-		return fmt.Errorf("shutdown errors: %v", errs)
+		return errors.Join(errs...)
 	}
 
 	return nil
@@ -116,7 +117,9 @@ func Initialize(ctx context.Context, version string) (*TelemetryProvider, error)
 	// Initialize metrics exporter
 	meterProvider, err := initMeter(ctx, res)
 	if err != nil {
-		// Clean up tracer if meter initialization fails
+		// Clean up tracer if meter initialization fails. Best-effort cleanup;
+		// the meter init error is what callers need.
+		// nosemgrep: go.error-discarded-with-blank-identifier
 		_ = tracerProvider.Shutdown(ctx)
 		return nil, fmt.Errorf("failed to initialize meter: %w", err)
 	}

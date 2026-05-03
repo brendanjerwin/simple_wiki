@@ -62,12 +62,49 @@ func needsBlankLineBefore(lines []string, i int) bool {
 
 // tableHeaderNeedsBlankLineBefore returns true if line i is a TOML table header
 // that has a non-blank line immediately before it (i.e., it needs a blank line inserted).
+//
+// One exception: when the previous non-blank line is itself a table header that
+// is an ancestor of this one (e.g. [wiki] immediately followed by [wiki.connectors]),
+// we don't insert a blank line. pelletier/go-toml/v2 marshals nested empty parent
+// tables as consecutive headers; inserting blank lines between them creates a
+// write-loop because every connector write strips them again on re-marshal.
 func tableHeaderNeedsBlankLineBefore(lines []string, i int, tableRegex *regexp.Regexp) bool {
 	trimmed := strings.TrimSpace(lines[i])
-	if !tableRegex.MatchString(trimmed) {
+	matches := tableRegex.FindStringSubmatch(trimmed)
+	if matches == nil {
 		return false
 	}
-	return needsBlankLineBefore(lines, i)
+	if !needsBlankLineBefore(lines, i) {
+		return false
+	}
+	// If the immediately-previous line is a table header that is an ancestor of
+	// this one (parent or higher), skip the blank-line requirement.
+	prevTrimmed := strings.TrimSpace(lines[i-1])
+	prevMatches := tableRegex.FindStringSubmatch(prevTrimmed)
+	if prevMatches != nil && isAncestorTablePath(prevMatches[1], matches[1]) {
+		return false
+	}
+	return true
+}
+
+// isAncestorTablePath reports whether ancestor is a strict ancestor of descendant
+// in TOML dotted-path semantics. Both inputs are the un-bracketed table key
+// (e.g. "wiki" and "wiki.connectors"). Array-of-tables headers ([[...]]) are
+// captured by the same regex with a leading "[" — those don't form ancestor
+// relationships with regular tables, so they fall through to the default
+// (blank-line required), which matches existing behavior.
+func isAncestorTablePath(ancestor, descendant string) bool {
+	if ancestor == "" || descendant == "" {
+		return false
+	}
+	if strings.HasPrefix(ancestor, "[") || strings.HasPrefix(descendant, "[") {
+		return false
+	}
+	if ancestor == descendant {
+		return false
+	}
+	prefix := ancestor + "."
+	return strings.HasPrefix(descendant, prefix)
 }
 
 func addBlankLinesBeforeTables(frontmatter string) string {

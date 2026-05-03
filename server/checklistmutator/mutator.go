@@ -75,6 +75,28 @@ type Subscriber interface {
 	OnChecklistMutated(page, listName string, identity tailscale.IdentityValue)
 }
 
+// PausedChecker reports whether any connector subscription on the
+// given checklist is currently paused. Used by the tombstone GC walker
+// to extend retention beyond the default TTL when a subscription is
+// paused — otherwise a long pause (auth_failed → reconnect after
+// >7 days) would lose the deletion replay because the tombstone got
+// collected on a wiki edit during the pause window.
+//
+// The bootstrap fan-out implementation queries every configured
+// connector (Tasks, Keep when it gains a paused state); the per-
+// connector check is `Connector.IsChecklistPaused(profileID, page,
+// listName)` and the fan-out aggregates with OR.
+//
+// Optional: callers that don't wire a checker get the default TTL
+// behavior, which is the right answer for systems without paused-
+// subscription support.
+type PausedChecker interface {
+	// IsAnyChecklistSubscriptionPaused returns true if at least one
+	// active subscription on (page, listName) is in the paused state
+	// across all configured connectors.
+	IsAnyChecklistSubscriptionPaused(page, listName string) bool
+}
+
 // Mutator is the single funnel for checklist mutations. Construct one per
 // process via New; share across handlers.
 type Mutator struct {
@@ -91,36 +113,77 @@ type Mutator struct {
 	// observable RAM pressure for any realistic wiki.
 	pageMu sync.Map
 
-	// subMu protects subscriber. We use atomic.Value-style "set once,
-	// read many" — the mutex only serializes SetSubscriber callers
-	// against each other; readers (notify) take a brief read of the
-	// pointer.
-	subMu      sync.RWMutex
-	subscriber Subscriber
+	// subMu protects subscribers. We use atomic.Value-style "set once,
+	// read many" — the mutex only serializes SetSubscriber/AddSubscriber
+	// callers against each other; readers (notify) take a brief read
+	// of the slice header.
+	//
+	// Multiple subscribers (slice, not single pointer) so each
+	// connector — Keep, Tasks, future iCloud — receives every
+	// post-mutation notify. A single-slot subscriber meant the
+	// last-registered connector was the only one whose debouncer
+	// got triggered, which was the user-reported "Tasks never
+	// receives outbound triggers from the wiki UI" bug.
+	subMu       sync.RWMutex
+	subscribers []Subscriber
+
+	// pausedCheckerMu + pausedChecker: optional hook used by the GC
+	// walker to retain tombstones when a connector subscription on
+	// (page, listName) is paused. Set via SetPausedChecker; the
+	// default (nil) behaves as "no subscription is paused", i.e.
+	// the legacy 7-day TTL.
+	pausedCheckerMu sync.RWMutex
+	pausedChecker   PausedChecker
 }
 
-// SetSubscriber installs (or replaces) the post-mutation subscriber.
-// Pass nil to detach. Safe to call concurrently with mutations; the
-// next mutation observes the new subscriber.
+// SetSubscriber replaces the subscriber list with exactly the given
+// subscriber. Pass nil to detach all subscribers. Prefer AddSubscriber
+// in production code where multiple connectors must receive notifies.
+//
+// Safe to call concurrently with mutations; the next mutation observes
+// the new subscriber set.
 func (m *Mutator) SetSubscriber(sub Subscriber) {
 	m.subMu.Lock()
-	m.subscriber = sub
-	m.subMu.Unlock()
+	defer m.subMu.Unlock()
+	if sub == nil {
+		m.subscribers = nil
+		return
+	}
+	m.subscribers = []Subscriber{sub}
 }
 
-// notify fires the subscriber, if any. Called at the tail of every
-// successful mutating method. The subscriber's hook is expected to
-// be cheap (debounce/enqueue) — slow work in OnChecklistMutated would
-// drag every wiki edit. Any error from the subscriber is the
-// subscriber's problem to log; the mutation has already committed.
-func (m *Mutator) notify(page, listName string, identity tailscale.IdentityValue) {
-	m.subMu.RLock()
-	sub := m.subscriber
-	m.subMu.RUnlock()
+// AddSubscriber appends a subscriber to the fan-out list. Every
+// subsequent mutation calls OnChecklistMutated on each registered
+// subscriber in registration order. Use this when multiple connectors
+// (Keep, Tasks, …) all need to react to wiki-side checklist edits.
+//
+// Safe to call concurrently with mutations; the next mutation observes
+// the appended subscriber.
+func (m *Mutator) AddSubscriber(sub Subscriber) {
 	if sub == nil {
 		return
 	}
-	sub.OnChecklistMutated(page, listName, identity)
+	m.subMu.Lock()
+	defer m.subMu.Unlock()
+	m.subscribers = append(m.subscribers, sub)
+}
+
+// notify fires every registered subscriber. Called at the tail of
+// every successful mutating method. Subscriber hooks are expected to
+// be cheap (debounce/enqueue) — slow work in OnChecklistMutated would
+// drag every wiki edit. Any error from a subscriber is its own
+// problem to log; the mutation has already committed.
+func (m *Mutator) notify(page, listName string, identity tailscale.IdentityValue) {
+	m.subMu.RLock()
+	// Snapshot the slice header so we don't hold the read lock across
+	// subscriber callbacks (which could deadlock if a subscriber
+	// re-enters the mutator).
+	subs := make([]Subscriber, len(m.subscribers))
+	copy(subs, m.subscribers)
+	m.subMu.RUnlock()
+	for _, sub := range subs {
+		sub.OnChecklistMutated(page, listName, identity)
+	}
 }
 
 // New constructs a Mutator with the given dependencies.
@@ -179,7 +242,20 @@ var (
 // generates the uid and stamps created_at = updated_at = clock.Now().
 // automated is derived from identity.IsAgent(); completed_by is left
 // unset (the new item is not checked yet).
-func (m *Mutator) AddItem(_ context.Context, page, listName string, args AddItemArgs, identity tailscale.IdentityValue) (*apiv1.ChecklistItem, *apiv1.Checklist, error) {
+//
+// The event log entry is attributed via UserSource(identity.LoginName()).
+// Connectors' inbound applies should call addItemImpl directly with
+// ConnectorSource(...) instead — see sync_helpers.go.
+func (m *Mutator) AddItem(ctx context.Context, page, listName string, args AddItemArgs, identity tailscale.IdentityValue) (*apiv1.ChecklistItem, *apiv1.Checklist, error) {
+	return m.addItemImpl(ctx, page, listName, args, identity, UserSource(identity.LoginName()))
+}
+
+// addItemImpl is the source-aware internal entry point. AddItem (public,
+// user-driven) and AddItemForSync (connector-driven) both delegate here
+// after computing their respective Source. Per ADR-0015, the source
+// drives the event-log attribution used by the engine's causal merge
+// rule.
+func (m *Mutator) addItemImpl(_ context.Context, page, listName string, args AddItemArgs, identity tailscale.IdentityValue, source Source) (*apiv1.ChecklistItem, *apiv1.Checklist, error) {
 	listName = wikipage.NormalizeListName(listName)
 	if listName == "" {
 		return nil, nil, status.Error(codes.InvalidArgument, "list_name is required")
@@ -223,7 +299,32 @@ func (m *Mutator) AddItem(_ context.Context, page, listName string, args AddItem
 	checklist.Items = append(checklist.Items, item)
 	sortItems(checklist.Items)
 	bumpSyncToken(checklist, now)
-	pruneTombstones(checklist, now)
+	m.pruneTombstones(page, listName, checklist, now)
+
+	// Emit event AFTER mutation, BEFORE persist, while we still hold
+	// the lock. Per ADR-0015: seq monotonicity is the engine's causal
+	// authority and must not race.
+	textCopy := item.Text
+	checkedCopy := item.Checked
+	sortOrderCopy := item.SortOrder
+	ev := &apiv1.ChecklistEvent{
+		Src:       source.String(),
+		Op:        "add",
+		Uid:       item.Uid,
+		Text:      &textCopy,
+		Checked:   &checkedCopy,
+		Tags:      append([]string(nil), item.Tags...),
+		TagsSet:   true,
+		SortOrder: &sortOrderCopy,
+	}
+	if item.Description != nil {
+		descCopy := *item.Description
+		ev.Description = &descCopy
+	}
+	if item.Due != nil {
+		ev.Due = item.Due
+	}
+	appendEvent(checklist, ev, now)
 
 	if err := m.persist(page, fm, listName, checklist); err != nil {
 		return nil, nil, err
@@ -269,7 +370,12 @@ func applyUserMutableFields(item *apiv1.ChecklistItem, args UpdateItemArgs) bool
 
 // UpdateItem mutates user-mutable fields of an existing item. Wiki-managed
 // fields on the request are ignored; updated_at is server-stamped.
-func (m *Mutator) UpdateItem(_ context.Context, page, listName, uid string, args UpdateItemArgs, expectedUpdatedAt *time.Time, identity tailscale.IdentityValue) (*apiv1.ChecklistItem, *apiv1.Checklist, error) {
+func (m *Mutator) UpdateItem(ctx context.Context, page, listName, uid string, args UpdateItemArgs, expectedUpdatedAt *time.Time, identity tailscale.IdentityValue) (*apiv1.ChecklistItem, *apiv1.Checklist, error) {
+	return m.updateItemImpl(ctx, page, listName, uid, args, expectedUpdatedAt, identity, UserSource(identity.LoginName()))
+}
+
+// updateItemImpl is the source-aware internal entry point.
+func (m *Mutator) updateItemImpl(_ context.Context, page, listName, uid string, args UpdateItemArgs, expectedUpdatedAt *time.Time, identity tailscale.IdentityValue, source Source) (*apiv1.ChecklistItem, *apiv1.Checklist, error) {
 	listName = wikipage.NormalizeListName(listName)
 	if uid == "" {
 		return nil, nil, status.Error(codes.InvalidArgument, errUIDRequiredMsg)
@@ -299,8 +405,32 @@ func (m *Mutator) UpdateItem(_ context.Context, page, listName, uid string, args
 	if changed {
 		item.UpdatedAt = timestamppb.New(now)
 		bumpSyncToken(checklist, now)
+		// Emit event reflecting only the fields that actually changed.
+		// "bulk_update" op covers any combination of field changes;
+		// engine readers consult deltas (Text/Tags/Due/…), not the op.
+		ev := &apiv1.ChecklistEvent{
+			Src: source.String(),
+			Op:  "bulk_update",
+			Uid: item.Uid,
+		}
+		if args.Text != nil {
+			textCopy := *args.Text
+			ev.Text = &textCopy
+		}
+		if args.TagsSet {
+			ev.Tags = append([]string(nil), item.Tags...)
+			ev.TagsSet = true
+		}
+		if args.DescriptionSet && item.Description != nil {
+			descCopy := *item.Description
+			ev.Description = &descCopy
+		}
+		if args.DueSet {
+			ev.Due = item.Due
+		}
+		appendEvent(checklist, ev, now)
 	}
-	pruneTombstones(checklist, now)
+	m.pruneTombstones(page, listName, checklist, now)
 	checklist.Items[idx] = item
 
 	if err := m.persist(page, fm, listName, checklist); err != nil {
@@ -312,7 +442,12 @@ func (m *Mutator) UpdateItem(_ context.Context, page, listName, uid string, args
 
 // ToggleItem flips the checked field. False→true sets completed_at and
 // completed_by; true→false clears both.
-func (m *Mutator) ToggleItem(_ context.Context, page, listName, uid string, expectedUpdatedAt *time.Time, identity tailscale.IdentityValue) (*apiv1.ChecklistItem, *apiv1.Checklist, error) {
+func (m *Mutator) ToggleItem(ctx context.Context, page, listName, uid string, expectedUpdatedAt *time.Time, identity tailscale.IdentityValue) (*apiv1.ChecklistItem, *apiv1.Checklist, error) {
+	return m.toggleItemImpl(ctx, page, listName, uid, expectedUpdatedAt, identity, UserSource(identity.LoginName()))
+}
+
+// toggleItemImpl is the source-aware internal entry point.
+func (m *Mutator) toggleItemImpl(_ context.Context, page, listName, uid string, expectedUpdatedAt *time.Time, identity tailscale.IdentityValue, source Source) (*apiv1.ChecklistItem, *apiv1.Checklist, error) {
 	listName = wikipage.NormalizeListName(listName)
 	if uid == "" {
 		return nil, nil, status.Error(codes.InvalidArgument, errUIDRequiredMsg)
@@ -349,7 +484,14 @@ func (m *Mutator) ToggleItem(_ context.Context, page, listName, uid string, expe
 	item.UpdatedAt = timestamppb.New(now)
 	item.Automated = identity.IsAgent()
 	bumpSyncToken(checklist, now)
-	pruneTombstones(checklist, now)
+	checkedCopy := item.Checked
+	appendEvent(checklist, &apiv1.ChecklistEvent{
+		Src:     source.String(),
+		Op:      "toggle",
+		Uid:     item.Uid,
+		Checked: &checkedCopy,
+	}, now)
+	m.pruneTombstones(page, listName, checklist, now)
 	checklist.Items[idx] = item
 
 	if err := m.persist(page, fm, listName, checklist); err != nil {
@@ -360,7 +502,12 @@ func (m *Mutator) ToggleItem(_ context.Context, page, listName, uid string, expe
 }
 
 // DeleteItem removes uid from the named checklist and writes a tombstone.
-func (m *Mutator) DeleteItem(_ context.Context, page, listName, uid string, expectedUpdatedAt *time.Time, identity tailscale.IdentityValue) (*apiv1.Checklist, error) {
+func (m *Mutator) DeleteItem(ctx context.Context, page, listName, uid string, expectedUpdatedAt *time.Time, identity tailscale.IdentityValue) (*apiv1.Checklist, error) {
+	return m.deleteItemImpl(ctx, page, listName, uid, expectedUpdatedAt, identity, UserSource(identity.LoginName()))
+}
+
+// deleteItemImpl is the source-aware internal entry point.
+func (m *Mutator) deleteItemImpl(_ context.Context, page, listName, uid string, expectedUpdatedAt *time.Time, identity tailscale.IdentityValue, source Source) (*apiv1.Checklist, error) {
 	listName = wikipage.NormalizeListName(listName)
 	if uid == "" {
 		return nil, status.Error(codes.InvalidArgument, errUIDRequiredMsg)
@@ -383,6 +530,7 @@ func (m *Mutator) DeleteItem(_ context.Context, page, listName, uid string, expe
 	if item == nil {
 		return nil, ErrItemNotFound
 	}
+	_ = item
 
 	now := m.clock.Now()
 	checklist.Items = append(checklist.Items[:idx], checklist.Items[idx+1:]...)
@@ -393,7 +541,12 @@ func (m *Mutator) DeleteItem(_ context.Context, page, listName, uid string, expe
 		GcAfter:   timestamppb.New(now.Add(TombstoneTTL)),
 		SyncToken: checklist.SyncToken,
 	})
-	pruneTombstones(checklist, now)
+	appendEvent(checklist, &apiv1.ChecklistEvent{
+		Src: source.String(),
+		Op:  "delete",
+		Uid: uid,
+	}, now)
+	m.pruneTombstones(page, listName, checklist, now)
 
 	if err := m.persist(page, fm, listName, checklist); err != nil {
 		return nil, err
@@ -437,8 +590,15 @@ func (m *Mutator) ReorderItem(_ context.Context, page, listName, uid string, new
 		densifyAroundSortOrder(checklist.Items, idx)
 		sortItems(checklist.Items)
 		bumpSyncToken(checklist, now)
+		sortOrderCopy := item.SortOrder
+		appendEvent(checklist, &apiv1.ChecklistEvent{
+			Src:       UserSource(identity.LoginName()).String(),
+			Op:        "set_sort_order",
+			Uid:       item.Uid,
+			SortOrder: &sortOrderCopy,
+		}, now)
 	}
-	pruneTombstones(checklist, now)
+	m.pruneTombstones(page, listName, checklist, now)
 
 	if err := m.persist(page, fm, listName, checklist); err != nil {
 		return nil, err
@@ -651,9 +811,19 @@ func bumpSyncToken(checklist *apiv1.Checklist, now time.Time) {
 	checklist.UpdatedAt = timestamppb.New(now)
 }
 
-// pruneTombstones drops tombstones whose gc_after has passed.
-func pruneTombstones(checklist *apiv1.Checklist, now time.Time) {
+// pruneTombstones drops tombstones whose gc_after has passed unless a
+// connector subscription on (page, listName) is currently paused, in
+// which case retention extends until the subscription resumes — see
+// PausedChecker for why.
+func (m *Mutator) pruneTombstones(page, listName string, checklist *apiv1.Checklist, now time.Time) {
 	if len(checklist.Tombstones) == 0 {
+		return
+	}
+	if m.isChecklistSubscriptionPaused(page, listName) {
+		// Pause retention: leave every tombstone in place. A paused
+		// subscription will replay deletions on resume; collecting the
+		// tombstones now would silently un-delete those items on the
+		// remote side.
 		return
 	}
 	kept := checklist.Tombstones[:0]
@@ -663,6 +833,25 @@ func pruneTombstones(checklist *apiv1.Checklist, now time.Time) {
 		}
 	}
 	checklist.Tombstones = kept
+}
+
+// SetPausedChecker installs (or replaces) the paused-subscription
+// checker used by the tombstone GC walker. Pass nil to detach (the
+// walker reverts to the default TTL behavior).
+func (m *Mutator) SetPausedChecker(c PausedChecker) {
+	m.pausedCheckerMu.Lock()
+	m.pausedChecker = c
+	m.pausedCheckerMu.Unlock()
+}
+
+func (m *Mutator) isChecklistSubscriptionPaused(page, listName string) bool {
+	m.pausedCheckerMu.RLock()
+	c := m.pausedChecker
+	m.pausedCheckerMu.RUnlock()
+	if c == nil {
+		return false
+	}
+	return c.IsAnyChecklistSubscriptionPaused(page, listName)
 }
 
 func slicesEqual(a, b []string) bool {

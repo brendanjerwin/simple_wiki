@@ -338,6 +338,9 @@ func migrateOneList(legacyList, wikiList map[string]any, ulids ulid.Generator, n
 	}
 
 	wikiList[itemsFMKey] = merged
+	// ensureFlagAndDefaults returns a bool ("changed?") not an error; we ignore it
+	// because the migration always reports true in this branch.
+	// nosemgrep: go.error-discarded-with-blank-identifier
 	_ = ensureFlagAndDefaults(wikiList, now)
 	return true
 }
