@@ -90,8 +90,16 @@ var _ = Describe("Classify", func() {
 	})
 
 	When("a migration baseline event exists since the cursor", func() {
-		It("should report WikiDiverged=true (treat as non-self, fail-safe)", func() {
+		It("should report WikiDiverged=false (synthesized baseline IS the synced state)", func() {
 			cl := makeChecklist(event(7, "u1", "migration:initial_baseline"))
+			result := engine.Classify(cl, engine.SubscriptionCursor{LastSyncedSeq: 5}, "google_tasks")
+			Expect(result["u1"].WikiDiverged).To(BeFalse())
+		})
+	})
+
+	When("an unknown source prefix appears", func() {
+		It("should fail-safe: treat as divergent (preserve potential user edits)", func() {
+			cl := makeChecklist(event(7, "u1", "future_origin:something"))
 			result := engine.Classify(cl, engine.SubscriptionCursor{LastSyncedSeq: 5}, "google_tasks")
 			Expect(result["u1"].WikiDiverged).To(BeTrue())
 		})

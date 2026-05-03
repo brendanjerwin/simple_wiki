@@ -65,6 +65,37 @@ func SourcePrefixForKind(kind string) string {
 	return "connector:" + kind + ":"
 }
 
+// isDivergentSource reports whether a single event's source string
+// represents a divergence relative to the calling connector. Only
+// user edits and OTHER connectors' applies count as divergence.
+//
+// Self-writes (this connector's own apply / push_recovery) and the
+// migration:initial_baseline events are NOT divergence — they are
+// the synced baseline (or our own previous applies returned by the
+// cursor-safety-buffer's idempotent re-fetch). Per ADR-0015's 4-cell
+// table.
+//
+// Unknown sources fall through as divergent — fail-safe ("treat as
+// possibly user-edited") rather than silently losing a pending edit.
+func isDivergentSource(src, selfPrefix string) bool {
+	switch {
+	case strings.HasPrefix(src, selfPrefix):
+		return false
+	case strings.HasPrefix(src, "migration:"):
+		return false
+	case strings.HasPrefix(src, "user:"):
+		return true
+	case strings.HasPrefix(src, "connector:"):
+		// Different connector than this one — divergence.
+		return true
+	default:
+		// Unknown source (system: or future additions): treat as
+		// divergent. Conservative classification preserves user edits
+		// at the cost of the occasional unnecessary deferred apply.
+		return true
+	}
+}
+
 // Classify walks the checklist's events with seq > cursor.LastSyncedSeq
 // and computes per-uid divergence relative to the calling connector
 // (myKind). Returns a map keyed by uid; uids with no events since the
@@ -87,26 +118,23 @@ func Classify(checklist *apiv1.Checklist, cursor SubscriptionCursor, myKind stri
 			continue
 		}
 		uid := ev.GetUid()
-		isSelfWrite := strings.HasPrefix(ev.GetSrc(), selfPrefix)
+		divergent := isDivergentSource(ev.GetSrc(), selfPrefix)
 		prev, exists := out[uid]
-		// Always advance to the latest event for diagnostic clarity;
-		// divergence is sticky once any non-self event exists.
-		latest := EventClassification{
-			UID:                uid,
-			WikiDiverged:       prev.WikiDiverged || !isSelfWrite,
-			LatestEventSeq:     ev.GetSeq(),
-			LatestEventSource:  ev.GetSrc(),
+		// Divergence is sticky: once any divergent event lands since
+		// the cursor, subsequent self-writes don't clear the bit.
+		newDiverged := prev.WikiDiverged || divergent
+		latestSeq := prev.LatestEventSeq
+		latestSrc := prev.LatestEventSource
+		if !exists || ev.GetSeq() > latestSeq {
+			latestSeq = ev.GetSeq()
+			latestSrc = ev.GetSrc()
 		}
-		if exists && ev.GetSeq() < prev.LatestEventSeq {
-			// Out-of-order event: keep prev's latest fields, but
-			// preserve the divergence bit if this earlier event is
-			// non-self.
-			latest = prev
-			if !isSelfWrite {
-				latest.WikiDiverged = true
-			}
+		out[uid] = EventClassification{
+			UID:               uid,
+			WikiDiverged:      newDiverged,
+			LatestEventSeq:    latestSeq,
+			LatestEventSource: latestSrc,
 		}
-		out[uid] = latest
 	}
 	return out
 }
