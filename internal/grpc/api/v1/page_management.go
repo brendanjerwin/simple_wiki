@@ -301,14 +301,15 @@ func (s *Server) ReadPage(ctx context.Context, req *apiv1.ReadPageRequest) (*api
 
 	pageText := buildPageText(frontmatter, frontmatterToml, markdown)
 
-	// Create a Page object and render it
+	// Create a Page object to execute template macros (for template-expanded markdown).
+	// HTML rendering is intentionally excluded from this response; use RenderPage for HTML.
 	page := &wikipage.Page{
 		Identifier: req.PageName,
 		Text:       pageText,
 	}
 
 	// Render the page if rendering dependencies are available (for template-expanded markdown).
-	// HTML rendering is intentionally excluded from this response; use RenderPage for HTML.
+	// HTML output is intentionally not captured; use RenderPage for HTML.
 	var renderedMarkdown string
 
 	if s.markdownRenderer != nil && s.templateExecutor != nil {
