@@ -7,22 +7,27 @@ import (
 )
 
 // syncIdentityFor builds the per-call sync identity used when applying
-// inbound Keep changes. The change originated from a human action — the
-// binding owner toggling/editing the item in Keep — even though the
-// cron tick is what actually replays it on the wiki side. So we treat
-// the apply as the user's own action: NewIdentity (not NewAgentIdentity),
-// so the wiki's checklist UI surfaces "Done by alice@gmail.com · Nm ago"
-// rather than collapsing to "Done by an agent". The cron is transport,
-// not actor.
+// inbound connector changes. The change originated from a human
+// action — the subscription owner toggling/editing the item in the
+// remote (Keep, Tasks, …) — even though the cron tick is what
+// actually replays it on the wiki side. So we treat the apply as the
+// user's own action: NewIdentity (not NewAgentIdentity), so the
+// wiki's checklist UI surfaces "Done by alice@gmail.com · Nm ago"
+// rather than collapsing to "Done by an agent." The cron is
+// transport, not actor.
 //
-// Empty ownerEmail falls back to a system loginName so the call still
-// has a stable string for downstream rendering. Production should never
-// hit that path because every binding requires a connected account.
+// Empty ownerEmail falls back to a generic "system:connector-sync"
+// loginName. The previous fallback was "system:keep-sync", which
+// misattributed Tasks-side writes to Keep when the Tasks connector's
+// state was missing the email field — masking the real offender
+// during cross-connector debugging. Production should never hit the
+// empty-ownerEmail path because every Subscribe requires a connected
+// account; the fallback exists only to keep the function total.
 func syncIdentityFor(ownerEmail string) tailscale.IdentityValue {
 	if ownerEmail == "" {
-		return tailscale.NewIdentity("system:keep-sync", "Keep Sync (system)", "keep-sync")
+		return tailscale.NewIdentity("system:connector-sync", "Connector Sync (system)", "connector-sync")
 	}
-	return tailscale.NewIdentity(ownerEmail, ownerEmail, "keep-sync")
+	return tailscale.NewIdentity(ownerEmail, ownerEmail, "connector-sync")
 }
 
 // AddItemForSync is the Keep-sync entry point for "add this Keep

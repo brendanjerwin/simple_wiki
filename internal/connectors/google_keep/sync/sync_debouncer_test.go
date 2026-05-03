@@ -172,13 +172,25 @@ var _ = Describe("SyncDebouncer", func() {
 			})
 		})
 
-		Describe("when called with the synthetic keep-sync identity", func() {
+		Describe("when called with the legacy keep-sync identity", func() {
 			BeforeEach(func() {
 				synthIdentity := tailscale.NewIdentity("system:keep-sync", "sync", "node-sync")
 				debouncer.OnChecklistMutated(debouncePage, debounceListName, synthIdentity)
 			})
 
 			It("should not enqueue a job (prevents inbound-apply loop)", func() {
+				time.Sleep(waitBeyond)
+				Expect(enqueuer.jobCount()).To(Equal(0))
+			})
+		})
+
+		Describe("when called with the shared connector-sync fallback identity", func() {
+			BeforeEach(func() {
+				synthIdentity := tailscale.NewIdentity("system:connector-sync", "sync", "node-sync")
+				debouncer.OnChecklistMutated(debouncePage, debounceListName, synthIdentity)
+			})
+
+			It("should not enqueue a job (prevents cross-connector inbound-apply loop)", func() {
 				time.Sleep(waitBeyond)
 				Expect(enqueuer.jobCount()).To(Equal(0))
 			})

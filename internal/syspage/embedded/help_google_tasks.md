@@ -22,7 +22,7 @@ Tasks is the Google-native task surface, so unlike the [[help-google-keep]] brid
 - Check/uncheck, edit text, change due date, reorder — all round-trip.
 - Per-user, per-checklist. Each household member binds their own checklists to their own Tasks lists.
 - **No phantom overwrites.** Each tick only patches an item if you actually changed it on the wiki side. If nothing changed locally between two ticks, the wiki sends zero PATCH calls — your phone-side edits in that window are safe.
-- **Phone wins on conflict.** If you edit the same item on the wiki and the phone simultaneously and the wiki's push collides with Google's optimistic-concurrency check, the wiki pulls the phone state and writes it into the wiki. We don't blindly retry — that would silently destroy whatever you just typed on your phone.
+- **Phone wins on real conflict, wiki wins on phantom conflict.** If you edit the same item on the wiki and the phone at the same time and the wiki's push collides with Google's optimistic-concurrency check (a 412 Precondition Failed), the wiki pulls the current Tasks state. If the Tasks state has actually changed since our last successful push, the wiki yields and applies the phone's edit (so your phone work isn't destroyed). If the Tasks state matches what we last pushed — i.e., the 412 was a phantom (etag desync, server-side internal bump) — the wiki refreshes the etag and re-PATCHes so YOUR wiki edit wins instead of being thrown away. Either way, we never blindly retry with an empty If-Match.
 
 ## How to set up
 

@@ -111,6 +111,19 @@ func (d *SyncDebouncer) Unsuppress(profileID wikipage.PageIdentifier, page, list
 // inbound apply.
 const SyncIdentityLoginName = "system:tasks-sync"
 
+// sharedConnectorSyncIdentityLoginName is the fallback string the
+// shared checklistmutator.syncIdentityFor returns when ownerEmail is
+// empty. Tasks's debouncer must filter it (along with Keep's legacy
+// "system:keep-sync") so an inbound apply with a missing owner email
+// doesn't re-trigger the same connector's outbound debounce loop.
+const sharedConnectorSyncIdentityLoginName = "system:connector-sync"
+
+// legacyKeepSyncIdentityLoginName is the historical fallback string
+// from checklistmutator (renamed to system:connector-sync). Kept here
+// to filter out re-entrant events from any in-flight inbound apply
+// that started under the old binary before deploy.
+const legacyKeepSyncIdentityLoginName = "system:keep-sync"
+
 // OnChecklistMutated implements checklistmutator.Subscriber.
 // Resolves the calling identity to a profileID, then debounces an
 // outbound sync enqueue for (profileID, page, listName).
@@ -129,7 +142,9 @@ func (d *SyncDebouncer) OnChecklistMutated(page, listName string, identity tails
 	if login == "" {
 		return
 	}
-	if login == SyncIdentityLoginName {
+	if login == SyncIdentityLoginName ||
+		login == sharedConnectorSyncIdentityLoginName ||
+		login == legacyKeepSyncIdentityLoginName {
 		return
 	}
 	profileID, err := wikipage.ProfileIdentifierFor(login)

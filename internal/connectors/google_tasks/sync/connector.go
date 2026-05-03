@@ -810,27 +810,39 @@ func (*Connector) pushOutboundDeletions(ctx context.Context, client TasksClient,
 }
 
 // patchOrApplyRemote sends a PatchTask with If-Match. On 412 (etag
-// stale) it does NOT blind-retry the patch — that would be
-// last-write-wins and silently destroy whatever the user changed on
-// Google's side (typically from their phone) since our last
-// observation. Instead, it pulls the current remote state and folds
-// it into the wiki via the inbound apply path; the wiki is now
-// caught up, and the next tick (after a real wiki edit) will re-push
-// cleanly.
+// stale) it does NOT blind-retry the patch with an empty If-Match —
+// that would be last-write-wins and silently destroy whatever the
+// user changed on Google's side (typically from their phone) since
+// our last observation.
+//
+// Instead, on 412 we pull the current remote state and decide:
+//
+//   - If the remote task is GONE (deleted between PATCH and the
+//     follow-up list): mirror the delete into the wiki and clean up
+//     id_map/etags/synced state. Logged as 412_remote_deleted.
+//
+//   - If the remote task's fields match our last successfully-pushed
+//     SyncedItems baseline (i.e., the remote has NOT actually changed
+//     since our last successful push): the 412 was phantom — etag
+//     desync, sequencing race, server-side internal bump. The user's
+//     wiki edit is the only real change. Refresh the etag from the
+//     pulled remote and RE-PATCH with the fresh etag, so the user's
+//     edit wins. Logged as 412_remote_unchanged_repatch.
+//
+//   - Otherwise (remote actually moved): fold the remote state back
+//     into the wiki via the inbound apply path. The next tick re-
+//     evaluates the diff against the now-authoritative wiki state.
+//     Logged as 412_remote_authoritative_apply.
 //
 // Returns:
 //
 //   - patched: the gateway.Task returned by a successful PatchTask
 //     (when applied is false).
-//   - applied: true when the 412 path ran — caller must NOT update
-//     SyncedItems/etags from a phantom patch result.
+//   - applied: true when the 412 path WROTE TO THE WIKI (delete or
+//     authoritative apply) — caller must NOT update SyncedItems /
+//     etags from a phantom patch result.
 //   - err: any non-412 error from the gateway, or any error from the
-//     remote pull / mutator apply during the 412 path.
-//
-// On a 412 with no remote item visible (the task got deleted between
-// our patch and our follow-up list), the remote-side delete is mirrored
-// into the wiki via the mutator and the id_map / etags / synced state
-// for this uid is cleaned up.
+//     remote pull / mutator apply / re-PATCH during the 412 path.
 //
 //revive:disable-next-line:cyclomatic,cognitive-complexity
 func (c *Connector) patchOrApplyRemote(ctx context.Context, profileID wikipage.PageIdentifier, ownerEmail string, client TasksClient, sub Subscription, uid, taskID string, fields translator.TaskFields) (patched gateway.Task, applied bool, err error) {
@@ -843,29 +855,30 @@ func (c *Connector) patchOrApplyRemote(ctx context.Context, profileID wikipage.P
 	if !errors.Is(err, gateway.ErrPreconditionFailed) {
 		return gateway.Task{}, false, err
 	}
-	// 412 — remote moved under us. Pull the current authoritative
-	// remote state and apply it to the wiki; do NOT push.
 	c.logger.Info("tasks bridge: precondition_failed_on_patch profile=%s page=%s list=%s uid=%s task=%s",
 		string(profileID), sub.Page, sub.ListName, uid, taskID)
-	if applyErr := c.applyRemoteAuthoritative(ctx, profileID, ownerEmail, sub, client, uid, taskID); applyErr != nil {
-		return gateway.Task{}, false, fmt.Errorf("apply remote authoritative on 412: %w", applyErr)
+	patched, applied, err = c.recoverFromPrecondition(ctx, profileID, ownerEmail, sub, client, uid, taskID, fields)
+	if err != nil {
+		return gateway.Task{}, false, fmt.Errorf("recover from 412: %w", err)
 	}
-	return gateway.Task{}, true, nil
+	return patched, applied, nil
 }
 
-// applyRemoteAuthoritative pulls the current remote state for
-// taskID, then folds it back into the wiki via the inbound mutator.
-// Used by the 412-on-patch path so a remote-side change wins over a
-// stale local change rather than being silently overwritten.
+// recoverFromPrecondition handles the 412 branches: remote-deleted,
+// remote-unchanged (re-PATCH), or remote-actually-moved (apply
+// authoritative). Each branch logs a distinct event so the journal
+// shows which path executed, replacing the previous silence after the
+// initial precondition_failed_on_patch line.
 //
-// Implementation note: the gateway exposes ListTasks (paginated) but
-// not single-task GET, so we list with updatedMin=zero and find the
-// matching id. For typical household-scale tasklists (<200 tasks)
-// this is a single page; the pagination loop handles the rest.
-func (c *Connector) applyRemoteAuthoritative(ctx context.Context, profileID wikipage.PageIdentifier, ownerEmail string, sub Subscription, client TasksClient, uid, taskID string) error {
+// Returns the same triple as patchOrApplyRemote: a patched Task on
+// successful re-PATCH, the applied=true flag when the wiki was
+// written (not when re-PATCH succeeded), and any error.
+//
+//revive:disable-next-line:cyclomatic,cognitive-complexity,function-length
+func (c *Connector) recoverFromPrecondition(ctx context.Context, profileID wikipage.PageIdentifier, ownerEmail string, sub Subscription, client TasksClient, uid, taskID string, fields translator.TaskFields) (patched gateway.Task, applied bool, err error) {
 	tasks, err := c.listAllTasks(ctx, client, sub.RemoteListID, time.Time{})
 	if err != nil {
-		return fmt.Errorf("list tasks for remote authoritative pull: %w", err)
+		return gateway.Task{}, false, fmt.Errorf("list tasks for remote authoritative pull: %w", err)
 	}
 	var found *gateway.Task
 	for i := range tasks {
@@ -875,9 +888,8 @@ func (c *Connector) applyRemoteAuthoritative(ctx context.Context, profileID wiki
 		}
 	}
 	if found == nil || found.Deleted {
-		// Remote is gone. Mirror the delete into the wiki via the
-		// suppressed mutator path so the next outbound diff doesn't
-		// re-push a stale local item.
+		c.logger.Info("tasks bridge: 412_remote_deleted profile=%s page=%s list=%s uid=%s task=%s — mirroring delete into wiki",
+			string(profileID), sub.Page, sub.ListName, uid, taskID)
 		if c.checklistW != nil {
 			if c.suppressor != nil {
 				c.suppressor.Suppress(profileID, sub.Page, sub.ListName)
@@ -888,9 +900,39 @@ func (c *Connector) applyRemoteAuthoritative(ctx context.Context, profileID wiki
 		delete(sub.ItemIDMap, uid)
 		delete(sub.ItemEtags, taskID)
 		delete(sub.SyncedItems, uid)
-		return nil
+		return gateway.Task{}, true, nil
 	}
-	// Translate the remote task to a wiki item and apply.
+
+	// Re-PATCH branch: when the remote task's fields match what we
+	// last successfully pushed (SyncedItems baseline), the remote did
+	// NOT actually move under us — the 412 was phantom. The user's
+	// wiki edit (the reason we entered patchOrApplyRemote) is the
+	// only real change. Refresh the etag from the listed task and
+	// re-PATCH with it so the user's edit lands instead of being
+	// destroyed by an authoritative-apply overwrite.
+	remoteFields := translator.TaskFields{
+		Title:     found.Title,
+		Notes:     found.Notes,
+		Status:    string(found.Status),
+		Due:       found.Due,
+		Completed: found.Completed,
+	}
+	if synced, ok := sub.SyncedItems[uid]; ok && syncedMatchesFields(synced, remoteFields) {
+		c.logger.Info("tasks bridge: 412_remote_unchanged_repatch profile=%s page=%s list=%s uid=%s task=%s — refreshing etag and re-patching",
+			string(profileID), sub.Page, sub.ListName, uid, taskID)
+		sub.ItemEtags[taskID] = found.Etag
+		patched, err = client.PatchTask(ctx, sub.RemoteListID, taskID, buildPatchFields(fields), found.Etag)
+		if err != nil {
+			return gateway.Task{}, false, fmt.Errorf("re-patch with fresh etag: %w", err)
+		}
+		return patched, false, nil
+	}
+
+	// Authoritative-apply branch: remote really did move under us.
+	// Fold the remote state back into the wiki; the next tick re-
+	// evaluates the diff against the now-caught-up wiki state.
+	c.logger.Info("tasks bridge: 412_remote_authoritative_apply profile=%s page=%s list=%s uid=%s task=%s — overwriting wiki with remote",
+		string(profileID), sub.Page, sub.ListName, uid, taskID)
 	item, err := translator.TaskToChecklistItem(translator.Task{
 		ID:        found.ID,
 		ETag:      found.Etag,
@@ -903,7 +945,7 @@ func (c *Connector) applyRemoteAuthoritative(ctx context.Context, profileID wiki
 		Completed: found.Completed,
 	})
 	if err != nil {
-		return fmt.Errorf("translate remote task on 412: %w", err)
+		return gateway.Task{}, false, fmt.Errorf("translate remote task on 412: %w", err)
 	}
 	if c.checklistW != nil {
 		if c.suppressor != nil {
@@ -911,7 +953,7 @@ func (c *Connector) applyRemoteAuthoritative(ctx context.Context, profileID wiki
 			defer c.suppressor.Unsuppress(profileID, sub.Page, sub.ListName)
 		}
 		if updateErr := c.checklistW.UpdateItemForSync(ctx, sub.Page, sub.ListName, ownerEmail, uid, item.GetText(), item.GetChecked(), item.GetTags(), item.GetDescription()); updateErr != nil {
-			return fmt.Errorf("update wiki item on 412: %w", updateErr)
+			return gateway.Task{}, false, fmt.Errorf("update wiki item on 412: %w", updateErr)
 		}
 	}
 	// Refresh etag + Synced* baseline from the wiki-side translation
@@ -919,7 +961,7 @@ func (c *Connector) applyRemoteAuthoritative(ctx context.Context, profileID wiki
 	// wiki-derived fields, so the synced floor must match those.
 	sub.ItemEtags[taskID] = found.Etag
 	stampSyncedFromWikiItem(sub.SyncedItems, uid, item)
-	return nil
+	return gateway.Task{}, true, nil
 }
 
 // syncedMatchesFields reports whether the SyncedItems baseline for a

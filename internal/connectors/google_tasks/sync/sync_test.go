@@ -597,6 +597,96 @@ var _ = Describe("Connector.Sync", func() {
 		})
 	})
 
+	// REGRESSION TEST for "Tasks 412 destroys local edit when remote
+	// hasn't actually changed since synced." Production bug: a 412 on
+	// PATCH was treated as "remote moved under us" even when the
+	// remote task's fields equal SyncedItems baseline (the etag was
+	// stale for some other reason — server-side internal bump,
+	// sequencing race). The old recovery path would overwrite the
+	// wiki with the unchanged remote state, destroying the user's
+	// local edit. The fix: when remote == synced, refresh the etag
+	// and RE-PATCH so the user's edit lands.
+	When("outbound PatchTask returns 412 but remote fields match SyncedItems baseline", func() {
+		var (
+			client  *fakeTasksClient
+			mutator *fakeChecklistMutator
+			pages   *fakePages
+		)
+
+		BeforeEach(func() {
+			pages = newFakePages()
+			now := time.Date(2026, 4, 25, 17, 14, 0, 0, time.UTC)
+			sub := taskssync.Subscription{
+				Page:           syncTestPage,
+				ListName:       syncTestListName,
+				RemoteListID:   syncTestRemote,
+				State:          taskssync.SubscriptionStateActive,
+				LastUpdatedMin: now.Add(time.Hour),
+				ItemIDMap:      map[string]string{"wiki-1": "task-1"},
+				ItemEtags:      map[string]string{"task-1": "etag-stale"},
+				// Synced baseline: needsAction. Wiki was just toggled
+				// to checked=true (status=completed). Remote has NOT
+				// changed since synced — it still says needsAction.
+				SyncedItems: map[string]taskssync.ItemSyncState{
+					"wiki-1": {
+						SyncedTitle:  "Take out trash",
+						SyncedStatus: "needsAction",
+					},
+				},
+			}
+			store := newConfiguredStore(pages, &sub)
+			client = newFakeTasksClient()
+			// First PATCH attempt returns 412. Second PATCH (re-
+			// PATCH with fresh etag) succeeds via the default fake
+			// behavior.
+			client.patchErrors = []error{gateway.ErrPreconditionFailed, nil}
+			// The 412-recovery list-call returns the remote in its
+			// pre-edit state (needsAction) — same as SyncedItems
+			// baseline. This is the "phantom 412" case.
+			client.listAllForList[syncTestRemote] = []gateway.Task{{
+				ID:      "task-1",
+				Etag:    "etag-fresh",
+				Title:   "Take out trash",
+				Status:  gateway.TaskStatusNeedsAction,
+				Updated: now,
+			}}
+			reader := newFakeChecklistReader()
+			// Wiki was toggled to checked=true (the user's edit that
+			// triggered this outbound push).
+			reader.Set(syncTestPage, syncTestListName, []*apiv1.ChecklistItem{
+				{Uid: "wiki-1", Text: "Take out trash", Checked: true},
+			})
+			mutator = newFakeChecklistMutatorBoundTo(reader)
+			c := buildTestConnector(store, readyLeaseTable(), client, newFakeClock(now), reader, mutator, nil)
+			Expect(c.Sync(context.Background(), subscriptionKey())).To(Succeed())
+		})
+
+		It("should re-PATCH with the refreshed etag instead of overwriting the wiki", func() {
+			// Two PATCH attempts: the first with the stale etag, the
+			// second with the fresh one from the recovery list.
+			Expect(client.patched).To(HaveLen(2))
+			Expect(client.patched[0].Etag).To(Equal("etag-stale"))
+			Expect(client.patched[1].Etag).To(Equal("etag-fresh"))
+		})
+
+		It("should send the user's edit (status=completed) on the re-PATCH", func() {
+			Expect(client.patched).To(HaveLen(2))
+			Expect(client.patched[1].Fields.Status).To(Equal(gateway.TaskStatusCompleted))
+		})
+
+		It("should NOT call UpdateItemForSync on the wiki (no authoritative-apply overwrite)", func() {
+			Expect(mutator.updated).To(BeEmpty())
+		})
+
+		It("should advance SyncedItems to reflect the re-patched state", func() {
+			store := newStore(pages)
+			loaded, _, _ := store.FindSubscription(aliceProfile, syncTestPage, syncTestListName)
+			synced, ok := loaded.SyncedItems["wiki-1"]
+			Expect(ok).To(BeTrue())
+			Expect(synced.SyncedStatus).To(Equal("completed"))
+		})
+	})
+
 	When("the wiki Due has a time-of-day but Synced* was stamped from Tasks's date-only response", func() {
 		// REGRESSION TEST for the production bug: Google Tasks
 		// truncates `due` to date-only on the wire, so an inbound

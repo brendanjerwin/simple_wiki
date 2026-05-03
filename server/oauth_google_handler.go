@@ -30,6 +30,7 @@ package server
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -307,8 +308,20 @@ func (h *OAuthGoogleHandler) completeExchange(w http.ResponseWriter, r *http.Req
 		return
 	}
 
+	// Extract the verified email from the id_token claims so the
+	// account email lands on the profile alongside the refresh token.
+	// Without this the connector's downstream identity-attribution
+	// path falls through to the generic "system:connector-sync"
+	// fallback, which makes Tasks-side writes look like Keep-side
+	// writes in the wiki's checklist UI. The id_token signature is
+	// not verified here — Google's token endpoint is mTLS-equivalent
+	// (HTTPS to a known issuer), so we trust claims for attribution
+	// purposes only. Authn decisions still rely on the refresh-token
+	// round-trip, never on these claims.
+	accountEmail := emailFromIDToken(tokens.IDToken)
+
 	if persistErr := h.TokenPersister.PersistRefreshToken(
-		r.Context(), entry.ProfileID, /* accountEmail */ "", tokens.RefreshToken,
+		r.Context(), entry.ProfileID, accountEmail, tokens.RefreshToken,
 	); persistErr != nil {
 		h.logf("oauth google callback: persist failed: %v", persistErr)
 		renderOAuthErrorPage(w, http.StatusInternalServerError,
@@ -479,4 +492,52 @@ func (*Site) handleOAuthGoogleCallback(c *gin.Context) {
 		return
 	}
 	h.HandleCallback(c)
+}
+
+// idTokenJWTSegmentCount is the canonical JWT segment count
+// (header.payload.signature). An id_token with a different shape is
+// rejected.
+const idTokenJWTSegmentCount = 3
+
+// idTokenPayloadSegmentIndex is the zero-based index of the claims
+// payload within a JWT's three segments.
+const idTokenPayloadSegmentIndex = 1
+
+// emailFromIDToken extracts the verified email claim from a Google
+// OIDC id_token. Returns "" on any decoding failure — the caller
+// treats absence as "no email" rather than aborting the connection,
+// since the refresh token is the load-bearing artifact and the email
+// is for attribution only. The signature is intentionally NOT
+// verified here: the id_token arrived over the back-channel HTTPS
+// token-endpoint exchange directly from Google, so trusting claims
+// for attribution is acceptable. Authentication decisions still rely
+// on the refresh-token round-trip, never on these claims.
+func emailFromIDToken(idToken string) string {
+	if idToken == "" {
+		return ""
+	}
+	parts := strings.Split(idToken, ".")
+	if len(parts) != idTokenJWTSegmentCount {
+		return ""
+	}
+	payload, err := base64.RawURLEncoding.DecodeString(parts[idTokenPayloadSegmentIndex])
+	if err != nil {
+		return ""
+	}
+	var claims struct {
+		Email         string `json:"email"`
+		EmailVerified bool   `json:"email_verified"`
+	}
+	if err := json.Unmarshal(payload, &claims); err != nil {
+		return ""
+	}
+	if !claims.EmailVerified {
+		// Google sets email_verified=true for any account whose
+		// email comes from an authenticated Google domain. An
+		// unverified email shouldn't be persisted as the
+		// authoritative attribution string — fall back to "" and
+		// let the connector use the system fallback identity.
+		return ""
+	}
+	return claims.Email
 }

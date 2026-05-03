@@ -3,6 +3,7 @@ package server
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -784,4 +785,58 @@ var errFakePersist = stringError("persist exploded")
 type stringError string
 
 func (e stringError) Error() string { return string(e) }
+
+var _ = Describe("emailFromIDToken", func() {
+	When("the id_token is empty", func() {
+		It("should return an empty string", func() {
+			Expect(emailFromIDToken("")).To(Equal(""))
+		})
+	})
+
+	When("the id_token does not have three segments", func() {
+		It("should return an empty string", func() {
+			Expect(emailFromIDToken("not.a.valid.jwt.shape")).To(Equal(""))
+			Expect(emailFromIDToken("only-one-segment")).To(Equal(""))
+		})
+	})
+
+	When("the payload segment is not valid base64url", func() {
+		It("should return an empty string", func() {
+			Expect(emailFromIDToken("aGVhZGVy.!!!notbase64!!!.c2ln")).To(Equal(""))
+		})
+	})
+
+	When("the payload is base64url-encoded JSON with a verified email claim", func() {
+		It("should return the email", func() {
+			payload := `{"email":"alice@example.com","email_verified":true}`
+			encoded := encodeJWTSegment(payload)
+			token := "header." + encoded + ".sig"
+			Expect(emailFromIDToken(token)).To(Equal("alice@example.com"))
+		})
+	})
+
+	When("the payload's email_verified is false", func() {
+		It("should return an empty string (refuse unverified attribution)", func() {
+			payload := `{"email":"alice@example.com","email_verified":false}`
+			encoded := encodeJWTSegment(payload)
+			token := "header." + encoded + ".sig"
+			Expect(emailFromIDToken(token)).To(Equal(""))
+		})
+	})
+
+	When("the payload omits email_verified", func() {
+		It("should return an empty string (default-deny on unverified)", func() {
+			payload := `{"email":"alice@example.com"}`
+			encoded := encodeJWTSegment(payload)
+			token := "header." + encoded + ".sig"
+			Expect(emailFromIDToken(token)).To(Equal(""))
+		})
+	})
+})
+
+// encodeJWTSegment base64url-encodes a JSON payload as a JWT
+// segment (no padding, RFC 7515 §2 requires base64url-without-pad).
+func encodeJWTSegment(s string) string {
+	return base64.RawURLEncoding.EncodeToString([]byte(s))
+}
 

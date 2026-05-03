@@ -95,11 +95,21 @@ func (d *SyncDebouncer) Unsuppress(profileID wikipage.PageIdentifier, page, list
 }
 
 // syncIdentityLoginName is the LoginName the inbound-sync code path
-// uses for its synthetic identity. Hard-coded here (rather than
-// imported from checklistmutator.SyncIdentity) to avoid a bridge →
-// checklistmutator import cycle. Kept in sync with the const in
-// server/checklistmutator/sync_helpers.go.
-const syncIdentityLoginName = "system:keep-sync"
+// uses for its synthetic identity when ownerEmail is missing. Hard-
+// coded here (rather than imported from checklistmutator.SyncIdentity)
+// to avoid a bridge → checklistmutator import cycle. Kept in sync
+// with the const in server/checklistmutator/sync_helpers.go.
+//
+// Renamed from "system:keep-sync" to "system:connector-sync" so the
+// fallback isn't misattributed to Keep when Tasks (or any future
+// connector) hits the empty-ownerEmail path.
+const syncIdentityLoginName = "system:connector-sync"
+
+// legacySyncIdentityLoginName is the historical fallback string. Kept
+// to filter out re-entrant events from any in-flight inbound apply
+// that started under the old binary before deploy and is being
+// observed by a process running new code.
+const legacySyncIdentityLoginName = "system:keep-sync"
 
 // OnChecklistMutated implements checklistmutator.Subscriber. Resolves
 // the calling identity to a profileID, then debounces an outbound
@@ -123,7 +133,7 @@ func (d *SyncDebouncer) OnChecklistMutated(page, listName string, identity tails
 	if login == "" {
 		return
 	}
-	if login == syncIdentityLoginName {
+	if login == syncIdentityLoginName || login == legacySyncIdentityLoginName {
 		return
 	}
 	profileID, err := wikipage.ProfileIdentifierFor(login)
