@@ -64,6 +64,15 @@ type Phase = 'loading' | 'unconfigured' | 'disconnected' | 'connecting' | 'conne
 // button scrolls the user *to* — without an actionable CTA inside
 // the card the user lands somewhere with no clear next step (just a
 // "paused" pill next to a binding row), which is the gap this fixes.
+//
+// Theme tokens used here are defined in static/css/default.css for both
+// :root (light) and the prefers-color-scheme: dark media query:
+//   --color-warning      → amber accent  (light: #ffc107, dark: #d29922)
+//   --color-warning-bg   → tinted surface (light: #fff3cd, dark: #2d2000)
+//   --color-warning-text → readable text  (light: #856404, dark: #ffda6a)
+// The button keeps a hardcoded #1e1e1e for foreground because amber-
+// on-amber text is unreadable in either mode and there's no token for
+// "text on warning accent."
 const reconnectBannerCSS = css`
   .reconnect-banner {
     display: flex;
@@ -72,9 +81,9 @@ const reconnectBannerCSS = css`
     padding: 12px 16px;
     margin: 12px 0;
     border-radius: 6px;
-    background: var(--color-warning-surface, #fff8e1);
-    border: 1px solid var(--color-warning, #d29922);
-    color: var(--color-text-primary, #1f2328);
+    background: var(--color-warning-bg);
+    border: 1px solid var(--color-warning);
+    color: var(--color-warning-text);
     font-size: 14px;
     line-height: 1.45;
   }
@@ -96,16 +105,15 @@ const reconnectBannerCSS = css`
     font-weight: 600;
     padding: 8px 16px;
     border-radius: 4px;
-    background: var(--color-warning, #d29922);
-    color: var(--color-text-on-warning, #1f2328);
-    border: 1px solid var(--color-warning, #d29922);
+    background: var(--color-warning);
+    color: #1e1e1e;
+    border: 1px solid var(--color-warning);
     cursor: pointer;
     flex-shrink: 0;
     align-self: center;
   }
   .reconnect-banner button.reconnect-btn:hover {
-    background: var(--color-warning-hover, #b8841d);
-    border-color: var(--color-warning-hover, #b8841d);
+    filter: brightness(0.9);
   }
 `;
 
