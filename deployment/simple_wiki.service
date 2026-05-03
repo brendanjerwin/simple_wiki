@@ -8,6 +8,9 @@ After=network-online.target
 # -force-redirect-tailnet-https: Redirect tailnet clients to HTTPS on the tailnet hostname
 ExecStart=/srv/wiki/bin/simple_wiki -port 80 -tailscale-serve -force-redirect-tailnet-https -data /srv/wiki/data
 Environment=WIKI_TEMPLATE_DEBUG=true
+Environment=SIMPLE_WIKI_GOOGLE_TASKS_CLIENT_ID=${SIMPLE_WIKI_GOOGLE_TASKS_CLIENT_ID}
+Environment=SIMPLE_WIKI_GOOGLE_TASKS_CLIENT_SECRET=${SIMPLE_WIKI_GOOGLE_TASKS_CLIENT_SECRET}
+Environment=SIMPLE_WIKI_GOOGLE_TASKS_REDIRECT_URI=${SIMPLE_WIKI_GOOGLE_TASKS_REDIRECT_URI}
 Restart=always
 RestartSec=30
 CPUWeight=20

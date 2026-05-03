@@ -95,6 +95,7 @@ func emittedCustomElementsByMacros() []string {
 		// stub harness; for now Blog only emits wiki-blog which is
 		// already covered.
 		{name: "KeepConnect", factory: templating.BuildKeepConnect, args: []reflect.Value{tcontextArg}},
+		{name: "GoogleTasksConnect", factory: templating.BuildGoogleTasksConnect, args: []reflect.Value{tcontextArg}},
 	}
 
 	emitted := make(map[string]struct{})
