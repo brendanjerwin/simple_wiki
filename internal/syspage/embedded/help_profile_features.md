@@ -34,11 +34,11 @@ If you have shell access and prefer to use the agent surface, the `mcp__wiki__ap
 
 ## Macros vs. raw elements
 
-The wiki's templating engine renders **macros** like `{{ KeepConnect }}` into the right HTML element with the right attributes wired up. You paste the macro form. Pasting raw `<keep-connect>` would land an unwired element on the page — it would render visually but wouldn't query the connector backend, scope to your identity, or surface connect/connected/error states.
+The wiki's templating engine renders **macros** like `{{"{{ KeepConnect }}"}}` into the right HTML element with the right attributes wired up. You paste the macro form. Pasting raw `<keep-connect>` would land an unwired element on the page — it would render visually but wouldn't query the connector backend, scope to your identity, or surface connect/connected/error states.
 
 The exception is `<profile-paused-banner>`, which has no macro wrapper today — paste it as-is.
 
-When in doubt: **macro form goes inside `{{ … }}` braces; raw elements look like `<…>` HTML tags.** This catalog tells you which form each part wants.
+When in doubt: **macro form goes inside `{{"{{ ... }}"}}` braces; raw elements look like `<...>` HTML tags.** This catalog tells you which form each part wants.
 
 ## The parts of a profile
 
@@ -56,11 +56,11 @@ Each entry below is a piece of the current `profile_template`. Pick the ones you
 <profile-paused-banner></profile-paused-banner>
 ```
 
-This one is the exception to the macro rule — there's no `{{ ProfilePausedBanner }}` wrapper today, so paste the element tag directly.
+This one is the exception to the macro rule — there's no `{{"{{ ProfilePausedBanner }}"}}` wrapper today, so paste the element tag directly.
 
 **When to skip it.** If you don't use any connectors at all, the banner will simply never show — there's no harm in leaving it there, but no benefit either.
 
-### `{{ KeepConnect }}` (macro)
+### `{{"{{ KeepConnect }}"}}` (macro)
 
 **What it does.** Renders the **Connect Google Keep** button (and its connected/error states). Once connected, your wiki checklists can be bound to individual Keep notes and round-trip items.
 
@@ -69,16 +69,16 @@ This one is the exception to the macro rule — there's no `{{ ProfilePausedBann
 **How to add it.** Paste the macro into the body, conventionally under a `## Connectors` heading.
 
 ```
-{{ KeepConnect }}
+{{"{{ KeepConnect }}"}}
 ```
 
-This is a macro, not a raw element — paste it exactly as shown, with the `{{ }}` braces. The templating engine expands it into a `<keep-connect>` element that queries the connector backend and scopes to the calling identity. Pasting `<keep-connect>` directly would render an unwired element and not work.
+This is a macro, not a raw element — paste it exactly as shown, with the `{{"{{ }}"}}` braces. The templating engine expands it into a `<keep-connect>` element that queries the connector backend and scopes to the calling identity. Pasting `<keep-connect>` directly would render an unwired element and not work.
 
 The macro takes no arguments.
 
 **When to skip it.** Skip if you don't use Google Keep, or if you'd rather use [[help-google-tasks]] or [[help-caldav]] instead. Each checklist binding is globally exclusive — you can't bind one checklist to two cloud services at once — so picking your bridge per use-case matters.
 
-### `{{ GoogleTasksConnect }}` (macro)
+### `{{"{{ GoogleTasksConnect }}"}}` (macro)
 
 **What it does.** Renders the **Connect Google Tasks** button (and its connected/error states). Standard OAuth — no password capture, no master tokens. Once connected, wiki checklists can be bound to Google Tasks lists and round-trip items.
 
@@ -87,10 +87,10 @@ The macro takes no arguments.
 **How to add it.** Paste the macro into the body, conventionally under a `## Connectors` heading.
 
 ```
-{{ GoogleTasksConnect }}
+{{"{{ GoogleTasksConnect }}"}}
 ```
 
-This is a macro, not a raw element — paste it exactly as shown, with the `{{ }}` braces. The templating engine expands it into a `<google-tasks-connect>` element that queries the connector backend and scopes to the calling identity. Pasting `<google-tasks-connect>` directly would render an unwired element and not work.
+This is a macro, not a raw element — paste it exactly as shown, with the `{{"{{ }}"}}` braces. The templating engine expands it into a `<google-tasks-connect>` element that queries the connector backend and scopes to the calling identity. Pasting `<google-tasks-connect>` directly would render an unwired element and not work.
 
 The macro takes no arguments — the server scopes OAuth state to the calling user automatically.
 
