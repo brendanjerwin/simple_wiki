@@ -1002,3 +1002,165 @@ var _ = Describe("decodeChangesResponse WriteResults", func() {
 	})
 })
 
+// 403 classification tests pin the body-aware branches of
+// classifyKeepHTTPResponse: a bare `if status == 403 { return ErrFoo }`
+// pattern collapses three operationally-distinct upstream conditions
+// (API not enabled, quota exhausted served as 403, generic permission
+// denial) into a single sentinel and ate hours of debugging in the
+// 2026-05-02 Tasks gateway incident. These tests guard the same fix
+// here.
+var _ = Describe("KeepClient.Changes 403 classification", func() {
+	var (
+		ctx        context.Context
+		fakeServer *httptest.Server
+		client     *gateway.KeepClient
+		body       string
+	)
+
+	BeforeEach(func() {
+		ctx = context.Background()
+		fakeServer = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusForbidden)
+			_, _ = io.WriteString(w, body)
+		}))
+		client = gateway.NewKeepClient(fakeServer.Client(), fakeServer.URL+"/", "fake-bearer")
+	})
+
+	AfterEach(func() {
+		fakeServer.Close()
+	})
+
+	When("the body carries errors[].reason=accessNotConfigured (Keep API not enabled)", func() {
+		var (
+			err    error
+			errMsg string
+		)
+
+		BeforeEach(func() {
+			body = `{
+				"error": {
+					"code": 403,
+					"message": "Google Keep API has not been used in project 703961900896 before or it is disabled.",
+					"errors": [{
+						"message": "Google Keep API has not been used in project ...",
+						"domain": "usageLimits",
+						"reason": "accessNotConfigured"
+					}],
+					"status": "PERMISSION_DENIED",
+					"details": [{
+						"@type": "type.googleapis.com/google.rpc.ErrorInfo",
+						"reason": "SERVICE_DISABLED",
+						"domain": "googleapis.com",
+						"metadata": {
+							"activationUrl": "https://console.developers.google.com/apis/api/keep.googleapis.com/overview?project=703961900896",
+							"service": "keep.googleapis.com"
+						}
+					}]
+				}
+			}`
+			_, err = client.Changes(ctx, gateway.ChangesRequest{})
+			if err != nil {
+				errMsg = err.Error()
+			}
+		})
+
+		It("should return ErrServiceDisabled (NOT ErrRateLimited)", func() {
+			Expect(err).To(MatchError(gateway.ErrServiceDisabled))
+		})
+
+		It("should NOT classify as rate-limited", func() {
+			Expect(err).NotTo(MatchError(gateway.ErrRateLimited))
+		})
+
+		It("should NOT classify as auth revoked", func() {
+			Expect(err).NotTo(MatchError(gateway.ErrAuthRevoked))
+		})
+
+		It("should embed the activationUrl in the error message", func() {
+			Expect(errMsg).To(ContainSubstring("https://console.developers.google.com/apis/api/keep.googleapis.com/overview?project=703961900896"))
+		})
+	})
+
+	When("the body carries status=RESOURCE_EXHAUSTED on a 403 (quota exhaustion served as 403)", func() {
+		var err error
+
+		BeforeEach(func() {
+			body = `{
+				"error": {
+					"code": 403,
+					"message": "Quota exceeded for quota metric 'Queries' and limit 'Queries per minute per user'.",
+					"errors": [{
+						"message": "Quota exceeded.",
+						"domain": "global",
+						"reason": "rateLimitExceeded"
+					}],
+					"status": "RESOURCE_EXHAUSTED"
+				}
+			}`
+			_, err = client.Changes(ctx, gateway.ChangesRequest{})
+		})
+
+		It("should return ErrRateLimited", func() {
+			Expect(err).To(MatchError(gateway.ErrRateLimited))
+		})
+
+		It("should NOT classify as ErrServiceDisabled", func() {
+			Expect(err).NotTo(MatchError(gateway.ErrServiceDisabled))
+		})
+
+		It("should NOT classify as ErrPermissionDenied", func() {
+			Expect(err).NotTo(MatchError(gateway.ErrPermissionDenied))
+		})
+	})
+
+	When("the body carries a generic permission failure (no SERVICE_DISABLED, not RESOURCE_EXHAUSTED)", func() {
+		var err error
+
+		BeforeEach(func() {
+			body = `{
+				"error": {
+					"code": 403,
+					"message": "The caller does not have permission",
+					"errors": [{
+						"message": "The caller does not have permission",
+						"domain": "global",
+						"reason": "forbidden"
+					}],
+					"status": "PERMISSION_DENIED"
+				}
+			}`
+			_, err = client.Changes(ctx, gateway.ChangesRequest{})
+		})
+
+		It("should return ErrPermissionDenied", func() {
+			Expect(err).To(MatchError(gateway.ErrPermissionDenied))
+		})
+
+		It("should NOT classify as ErrRateLimited", func() {
+			Expect(err).NotTo(MatchError(gateway.ErrRateLimited))
+		})
+
+		It("should NOT classify as ErrServiceDisabled", func() {
+			Expect(err).NotTo(MatchError(gateway.ErrServiceDisabled))
+		})
+
+		It("should NOT classify as ErrAuthRevoked", func() {
+			Expect(err).NotTo(MatchError(gateway.ErrAuthRevoked))
+		})
+	})
+
+	When("the body is malformed JSON (defensive fallback)", func() {
+		var err error
+
+		BeforeEach(func() {
+			body = `not json at all`
+			_, err = client.Changes(ctx, gateway.ChangesRequest{})
+		})
+
+		It("should still return ErrPermissionDenied (no panic, no protocol drift)", func() {
+			Expect(err).To(MatchError(gateway.ErrPermissionDenied))
+		})
+	})
+})
+

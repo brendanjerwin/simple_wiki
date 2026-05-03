@@ -774,6 +774,15 @@ func mapKeepConnectorErr(err error) error {
 		return status.Error(codes.Unauthenticated, "auth_revoked: re-connect Google Keep on your profile")
 	case errors.Is(err, gateway.ErrProtocolDrift):
 		return status.Error(codes.Internal, "protocol_drift: Google Keep API has changed; update simple_wiki")
+	case errors.Is(err, gateway.ErrServiceDisabled):
+		// Operator setup error: the Keep API is not enabled on the
+		// GCP project. The activation URL (when present) is already
+		// embedded in the gateway error's message — surface it
+		// verbatim so the user can click through to enable the API.
+		// Mirrors the Tasks branch of the same name.
+		return status.Errorf(codes.FailedPrecondition, "keep_api_not_enabled: %v", err)
+	case errors.Is(err, gateway.ErrPermissionDenied):
+		return status.Errorf(codes.PermissionDenied, "permission_denied: %v", err)
 	case errors.Is(err, gateway.ErrRateLimited):
 		return status.Error(codes.ResourceExhausted, "rate_limited")
 	case errors.Is(err, gateway.ErrBoundNoteDeleted):

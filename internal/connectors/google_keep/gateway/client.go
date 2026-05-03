@@ -259,23 +259,22 @@ func (c *KeepClient) Changes(ctx context.Context, req ChangesRequest) (ChangesRe
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	if classified := classifyHTTPStatus(resp.StatusCode); classified != nil {
-		// Read the body so the error chain can show what Keep actually
-		// said. Bodies are typically JSON like {"error":{"code":401,
-		// "message":"..."}}; surfacing them is critical for diagnosing
-		// "Stage 2 succeeded but the bearer doesn't pass the Keep API
-		// auth check" — distinct from any of the auth-stage rejections.
-		errBody, readErr := io.ReadAll(resp.Body)
-		bodyTxt := truncateBody(errBody)
-		if readErr != nil {
-			bodyTxt = fmt.Sprintf("(body read failed: %v) %s", readErr, bodyTxt)
-		}
-		return ChangesResponse{}, fmt.Errorf("%w: stage3 HTTP %d: %s", classified, resp.StatusCode, bodyTxt)
-	}
-
+	// Read the body up-front so the classifier can inspect it on 4xx
+	// responses (Google returns a structured error envelope under
+	// `{"error": {...}}` whose `errors[].reason`, `status`, and
+	// `details[].reason` distinguish "API not enabled," "rate limited,"
+	// and generic permission failures). Bare status-code matching
+	// collapses these into a single sentinel and obscures the cause —
+	// the Tasks gateway's classifyTasksForbidden is the exemplar (the
+	// 2026-05-02 production incident misclassified an "API not
+	// enabled" 403 as "rate limited" — same anti-pattern, same fix).
 	rawBody, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return ChangesResponse{}, fmt.Errorf("%w: read response: %w", ErrProtocolDrift, err)
+	}
+
+	if classified := classifyKeepHTTPResponse(resp.StatusCode, rawBody); classified != nil {
+		return ChangesResponse{}, classified
 	}
 	if c.debug != nil {
 		c.debug.Info("keep changes response (req nodes=%d targetVersion=%q): %s",
@@ -325,21 +324,109 @@ var bearerLikeRE = regexp.MustCompile(`ya29\.[A-Za-z0-9_-]{20,}`)
 // (oauth2_<digits>/...).
 var masterTokenLikeRE = regexp.MustCompile(`oauth2(?:rt)?_[0-9]+/[A-Za-z0-9_/+=-]{20,}`)
 
-// classifyHTTPStatus maps Keep API status codes to typed errors. nil means
-// "proceed with body decode."
-func classifyHTTPStatus(code int) error {
+// classifyKeepHTTPResponse maps Keep API responses to typed,
+// pre-wrapped errors. nil means "proceed with body decode." For 403
+// it inspects the JSON error envelope (Google API standard shape) to
+// distinguish three operator-visible cases that look identical at the
+// status-code level: service-not-enabled, quota-exhaustion, and
+// generic permission denial. See errors.go for the sentinel
+// descriptions.
+//
+// Bodies are typically JSON like {"error":{"code":401,
+// "message":"..."}}; surfacing them is critical for diagnosing
+// "Stage 2 succeeded but the bearer doesn't pass the Keep API
+// auth check" — distinct from any of the auth-stage rejections.
+//
+// Mirrors the Tasks gateway's classifyTasksHTTPResponse — the response
+// envelope shape is identical across Google REST APIs, but the
+// per-package sentinels keep callers branching against the right
+// gateway's typed errors.
+func classifyKeepHTTPResponse(code int, body []byte) error {
+	bodyTxt := truncateBody(body)
 	switch code {
 	case http.StatusOK:
 		return nil
 	case http.StatusUnauthorized:
-		return ErrAuthRevoked
+		return fmt.Errorf("%w: stage3 HTTP %d: %s", ErrAuthRevoked, code, bodyTxt)
 	case http.StatusTooManyRequests:
-		return ErrRateLimited
+		return fmt.Errorf("%w: stage3 HTTP %d: %s", ErrRateLimited, code, bodyTxt)
+	case http.StatusForbidden:
+		return classifyKeepForbidden(body)
 	case http.StatusNotFound:
-		return ErrBoundNoteDeleted
+		return fmt.Errorf("%w: stage3 HTTP %d: %s", ErrBoundNoteDeleted, code, bodyTxt)
 	default:
-		return fmt.Errorf("keep: unexpected status %d", code)
+		return fmt.Errorf("keep: unexpected status %d: %s", code, bodyTxt)
 	}
+}
+
+// wireGoogleAPIError mirrors the error envelope Google returns for
+// non-2xx responses on standard Google REST APIs. Keep's REST surface
+// returns the same shape — same error envelope as Tasks because the
+// underlying serving layer is shared. We only model the fields the
+// classifier branches on; the rest round-trips through the truncated
+// body in the wrapped error message.
+type wireGoogleAPIError struct {
+	Error struct {
+		Code    int    `json:"code"`
+		Message string `json:"message"`
+		Status  string `json:"status"`
+		Errors  []struct {
+			Message string `json:"message"`
+			Domain  string `json:"domain"`
+			Reason  string `json:"reason"`
+		} `json:"errors"`
+		Details []struct {
+			Type     string         `json:"@type"`
+			Reason   string         `json:"reason"`
+			Domain   string         `json:"domain"`
+			Metadata map[string]any `json:"metadata"`
+		} `json:"details"`
+	} `json:"error"`
+}
+
+// classifyKeepForbidden inspects a 403 body and returns the most
+// specific sentinel that fits.
+//
+//   - body status RESOURCE_EXHAUSTED                   → ErrRateLimited
+//   - errors[].reason == "accessNotConfigured" OR
+//     details[].reason == "SERVICE_DISABLED"           → ErrServiceDisabled
+//     (with the Google activation URL embedded in the
+//     message when present at details[].metadata.activationUrl)
+//   - everything else                                   → ErrPermissionDenied
+func classifyKeepForbidden(body []byte) error {
+	var wire wireGoogleAPIError
+	// Best-effort decode: a malformed body just falls through to
+	// ErrPermissionDenied with the truncated raw body for context.
+	_ = json.Unmarshal(body, &wire)
+
+	if wire.Error.Status == "RESOURCE_EXHAUSTED" {
+		return fmt.Errorf("%w: stage3 HTTP 403: %s", ErrRateLimited, truncateBody(body))
+	}
+
+	serviceDisabled := false
+	for _, e := range wire.Error.Errors {
+		if e.Reason == "accessNotConfigured" {
+			serviceDisabled = true
+			break
+		}
+	}
+	var activationURL string
+	for _, d := range wire.Error.Details {
+		if d.Reason == "SERVICE_DISABLED" {
+			serviceDisabled = true
+		}
+		if u, ok := d.Metadata["activationUrl"].(string); ok && u != "" {
+			activationURL = u
+		}
+	}
+	if serviceDisabled {
+		if activationURL != "" {
+			return fmt.Errorf("%w: Google Keep API is not enabled on the GCP project. Enable it at %s and try again. (stage3 HTTP 403: %s)", ErrServiceDisabled, activationURL, truncateBody(body))
+		}
+		return fmt.Errorf("%w: Google Keep API is not enabled on the GCP project. Enable it in the Google Cloud Console and try again. (stage3 HTTP 403: %s)", ErrServiceDisabled, truncateBody(body))
+	}
+
+	return fmt.Errorf("%w: stage3 HTTP 403: %s", ErrPermissionDenied, truncateBody(body))
 }
 
 // --- wire types -----------------------------------------------------------
