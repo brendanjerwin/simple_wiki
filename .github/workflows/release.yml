@@ -123,12 +123,23 @@ jobs:
           tags: tag:github-actions
 
       - name: Prepare deployment files
+        env:
+          SIMPLE_WIKI_GOOGLE_TASKS_CLIENT_ID: ${{ secrets.SIMPLE_WIKI_GOOGLE_TASKS_CLIENT_ID }}
+          SIMPLE_WIKI_GOOGLE_TASKS_CLIENT_SECRET: ${{ secrets.SIMPLE_WIKI_GOOGLE_TASKS_CLIENT_SECRET }}
+          SIMPLE_WIKI_GOOGLE_TASKS_REDIRECT_URI: ${{ secrets.SIMPLE_WIKI_GOOGLE_TASKS_REDIRECT_URI }}
         run: |
           mkdir -p deployment-package
           cp simple_wiki-linux-amd64 deployment-package/
-          cp deployment/simple_wiki.service deployment-package/
           cp deployment/deploy.sh deployment-package/
           chmod +x deployment-package/deploy.sh
+          # systemd does NOT expand ${VAR} in Environment= directives, so we
+          # interpolate the OAuth secrets here (in CI) before uploading the
+          # unit file. Without this, the deployed unit ships with literal
+          # ${SIMPLE_WIKI_GOOGLE_TASKS_*} placeholders and the wiki binary
+          # sees bogus client_id/secret/redirect_uri at startup. Mirrors the
+          # same step in deploy.yml.
+          envsubst '$SIMPLE_WIKI_GOOGLE_TASKS_CLIENT_ID $SIMPLE_WIKI_GOOGLE_TASKS_CLIENT_SECRET $SIMPLE_WIKI_GOOGLE_TASKS_REDIRECT_URI' \
+            < deployment/simple_wiki.service > deployment-package/simple_wiki.service
 
       - name: Deploy to server
         uses: FarisZR/tailscale-ssh-deploy@8bd320c7dfaa9d766843564c47d5ce67f46e17b4 # v1
