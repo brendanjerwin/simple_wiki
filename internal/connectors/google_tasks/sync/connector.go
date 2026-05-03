@@ -227,25 +227,8 @@ func (c *Connector) Sync(ctx context.Context, key connectors.SubscriptionKey) er
 // runSyncPasses executes the inbound-then-outbound sync for one subscription:
 // applies Tasks changes to the wiki, pushes wiki changes to Tasks, then
 // advances the cursor and persists.
-//
-//revive:disable-next-line:cyclomatic,cognitive-complexity
 func (c *Connector) runSyncPasses(ctx context.Context, profileID wikipage.PageIdentifier, ownerEmail string, sub Subscription, client TasksClient, now time.Time) error {
-	// Read the checklist's op-log so the engine can classify per-uid
-	// divergence before we apply remote state. Per ADR-0015: events
-	// with seq > sub.LastSyncedSeq drive the causal merge rule.
-	// Best-effort — a read error logs and falls back to "no
-	// classification info," which means we don't skip any apply
-	// (legacy behavior).
-	var classification map[string]engine.EventClassification
-	if c.checklistR != nil {
-		if cl, err := c.checklistR.ListItems(ctx, sub.Page, sub.ListName); err == nil && cl != nil {
-			classification = engine.Classify(cl, engine.SubscriptionCursor{
-				Page:          sub.Page,
-				ListName:      sub.ListName,
-				LastSyncedSeq: sub.LastSyncedSeq,
-			}, "google_tasks")
-		}
-	}
+	classification := c.classifyInboundDivergence(ctx, sub)
 
 	updatedSub, maxUpdated, err := c.applyInboundFromTasks(ctx, profileID, ownerEmail, sub, client, classification)
 	if err != nil {
@@ -265,17 +248,7 @@ func (c *Connector) runSyncPasses(ctx context.Context, profileID wikipage.PageId
 	}
 	sub = updatedSub2
 
-	// Title sync: Google Tasks is authoritative for the tasklist's
-	// display name once bound. Goes through the BackendAdapter
-	// interface (var _ connectors.BackendAdapter = (*Connector)(nil)
-	// up at the package level) so iCloud and any future backend
-	// must implement the same primitive — caught by the compile-
-	// time assertion if they forget.
-	if newTitle, ok, terr := c.FetchRemoteListTitle(ctx, profileID, sub.RemoteListID); terr == nil && ok && newTitle != sub.RemoteListTitle {
-		c.logger.Info("tasks bridge: title_sync_updated profile=%s remote=%s old=%q new=%q",
-			string(profileID), sub.RemoteListID, sub.RemoteListTitle, newTitle)
-		sub.RemoteListTitle = newTitle
-	}
+	c.applyTitleSyncFromAdapter(ctx, profileID, &sub)
 
 	// Apply-then-advance the cursor (per plan §"Cursor — Boundary semantics").
 	if !maxUpdated.IsZero() {
@@ -285,34 +258,74 @@ func (c *Connector) runSyncPasses(ctx context.Context, profileID wikipage.PageId
 		}
 	}
 	sub.LastSuccessfulSyncAt = now
-
-	// Advance LastSyncedSeq past every self-event written this tick.
-	// Per ADR-0015: cursor advances ONLY past our own writes, NOT to
-	// MaxSeq, so any user/cross-connector event that happened between
-	// our writes and this read stays visible to next tick's classify.
-	if c.checklistR != nil {
-		if finalCl, finalErr := c.checklistR.ListItems(ctx, sub.Page, sub.ListName); finalErr == nil && finalCl != nil {
-			selfPrefix := engine.SourcePrefixForKind("google_tasks")
-			maxSelfSeq := sub.LastSyncedSeq
-			for _, ev := range finalCl.GetEvents() {
-				if ev == nil {
-					continue
-				}
-				if !strings.HasPrefix(ev.GetSrc(), selfPrefix) {
-					continue
-				}
-				if ev.GetSeq() > maxSelfSeq {
-					maxSelfSeq = ev.GetSeq()
-				}
-			}
-			sub.LastSyncedSeq = maxSelfSeq
-		}
-	}
+	sub.LastSyncedSeq = c.advanceLastSyncedSeq(ctx, sub)
 
 	if err := c.store.UpdateSubscription(profileID, sub); err != nil {
 		return fmt.Errorf("persist subscription: %w", err)
 	}
 	return nil
+}
+
+// classifyInboundDivergence reads the checklist's op-log and runs the
+// engine's causal classifier. Per ADR-0015: events with seq >
+// sub.LastSyncedSeq drive the merge rule. Best-effort — a read error
+// returns nil ("no classification info," meaning don't skip any
+// apply, the legacy behavior).
+func (c *Connector) classifyInboundDivergence(ctx context.Context, sub Subscription) map[string]engine.EventClassification {
+	if c.checklistR == nil {
+		return nil
+	}
+	cl, err := c.checklistR.ListItems(ctx, sub.Page, sub.ListName)
+	if err != nil || cl == nil {
+		return nil
+	}
+	return engine.Classify(cl, engine.SubscriptionCursor{
+		Page:          sub.Page,
+		ListName:      sub.ListName,
+		LastSyncedSeq: sub.LastSyncedSeq,
+	}, "google_tasks")
+}
+
+// applyTitleSyncFromAdapter calls the BackendAdapter's
+// FetchRemoteListTitle (var _ connectors.BackendAdapter =
+// (*Connector)(nil) at package level) and updates sub.RemoteListTitle
+// if the cloud reports a different value. The interface ensures
+// future backends (iCloud) must also implement title sync — the
+// compile-time assertion catches missing implementations.
+func (c *Connector) applyTitleSyncFromAdapter(ctx context.Context, profileID wikipage.PageIdentifier, sub *Subscription) {
+	newTitle, ok, terr := c.FetchRemoteListTitle(ctx, profileID, sub.RemoteListID)
+	if terr != nil || !ok || newTitle == sub.RemoteListTitle {
+		return
+	}
+	c.logger.Info("tasks bridge: title_sync_updated profile=%s remote=%s old=%q new=%q",
+		string(profileID), sub.RemoteListID, sub.RemoteListTitle, newTitle)
+	sub.RemoteListTitle = newTitle
+}
+
+// advanceLastSyncedSeq returns the new cursor value for sub. Per
+// ADR-0015: cursor advances ONLY past our own writes (events whose
+// src starts with `connector:google_tasks:`), NOT to MaxSeq, so any
+// user / cross-connector event that interleaved with our work stays
+// visible to next tick's classify.
+func (c *Connector) advanceLastSyncedSeq(ctx context.Context, sub Subscription) int64 {
+	if c.checklistR == nil {
+		return sub.LastSyncedSeq
+	}
+	finalCl, err := c.checklistR.ListItems(ctx, sub.Page, sub.ListName)
+	if err != nil || finalCl == nil {
+		return sub.LastSyncedSeq
+	}
+	selfPrefix := engine.SourcePrefixForKind("google_tasks")
+	maxSelfSeq := sub.LastSyncedSeq
+	for _, ev := range finalCl.GetEvents() {
+		if ev == nil || !strings.HasPrefix(ev.GetSrc(), selfPrefix) {
+			continue
+		}
+		if ev.GetSeq() > maxSelfSeq {
+			maxSelfSeq = ev.GetSeq()
+		}
+	}
+	return maxSelfSeq
 }
 
 // PausedReason reports whether the given subscription is paused and,
