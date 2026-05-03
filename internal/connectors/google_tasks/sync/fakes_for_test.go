@@ -98,6 +98,9 @@ type fakeTasksClient struct {
 	// nextInsertID returns ascending ids for InsertTask.
 	nextInsertID int
 
+	// insertErr is returned from InsertTask when non-nil.
+	insertErr error
+
 	// createdTaskLists captures CreateTaskList calls in order.
 	createdTaskLists []createdTaskListCall
 
@@ -200,6 +203,9 @@ func (f *fakeTasksClient) ListTasks(_ context.Context, tasklistID string, _ time
 func (f *fakeTasksClient) InsertTask(_ context.Context, tasklistID, title, notes string, status gateway.TaskStatus, due time.Time, parent string) (gateway.Task, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if f.insertErr != nil {
+		return gateway.Task{}, f.insertErr
+	}
 	f.nextInsertID++
 	id := fmt.Sprintf("inserted-%d", f.nextInsertID)
 	f.inserted = append(f.inserted, insertedCall{

@@ -901,6 +901,17 @@ var _ = Describe("Connector.Subscribe", func() {
 			_, found, _ := store.FindSubscription(aliceProfile, syncTestPage, syncTestListName)
 			Expect(found).To(BeTrue())
 		})
+
+		It("should persist the Subscription with the correct fields via LoadState", func() {
+			store := newStore(pages)
+			loaded, err := store.LoadState(aliceProfile)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(loaded.Subscriptions).To(HaveLen(1))
+			Expect(loaded.Subscriptions[0].Page).To(Equal(syncTestPage))
+			Expect(loaded.Subscriptions[0].ListName).To(Equal(syncTestListName))
+			Expect(loaded.Subscriptions[0].RemoteListID).To(Equal(syncTestRemote))
+			Expect(loaded.Subscriptions[0].State).To(Equal(taskssync.SubscriptionStateActive))
+		})
 	})
 
 	When("ListTaskLists fails during resolveRemoteTitle", func() {
@@ -990,20 +1001,22 @@ var _ = Describe("Connector.Subscribe", func() {
 		})
 	})
 
-	When("remoteListID is empty (Bind to a new Tasks list)", func() {
+	When("remoteListID is empty (Bind to a new Tasks list) with existing wiki items", func() {
 		var (
 			subscribed taskssync.Subscription
 			subErr     error
 			client     *fakeTasksClient
+			pages      *fakePages
 		)
 
 		BeforeEach(func() {
-			pages := newFakePages()
+			pages = newFakePages()
 			store := newConfiguredStore(pages, nil)
 			client = newFakeTasksClient()
 			reader := newFakeChecklistReader()
 			reader.Set(syncTestPage, syncTestListName, []*apiv1.ChecklistItem{
 				{Uid: "wiki-1", Text: "Eggs"},
+				{Uid: "wiki-2", Text: "Milk"},
 			})
 			c := buildTestConnector(store, readyLeaseTable(), client, newFakeClock(time.Now()), reader, nil, nil)
 			subscribed, subErr = c.Subscribe(context.Background(), aliceProfile, syncTestPage, syncTestListName, "")
@@ -1026,8 +1039,104 @@ var _ = Describe("Connector.Subscribe", func() {
 			Expect(subscribed.RemoteListTitle).To(Equal(syncTestListName))
 		})
 
-		It("should produce an empty initial ItemIDMap (fresh list has no tasks)", func() {
+		It("should InsertTask once per wiki item into the freshly-created tasklist", func() {
+			Expect(client.inserted).To(HaveLen(2))
+			Expect(client.inserted[0].TasklistID).To(Equal("created-list-1"))
+			Expect(client.inserted[1].TasklistID).To(Equal("created-list-1"))
+		})
+
+		It("should stamp the wiki:uid marker on each inserted task's notes", func() {
+			Expect(client.inserted[0].Notes).To(ContainSubstring(translator.WikiUIDMarker("wiki-1")))
+			Expect(client.inserted[1].Notes).To(ContainSubstring(translator.WikiUIDMarker("wiki-2")))
+		})
+
+		It("should populate the initial ItemIDMap with the inserted task ids", func() {
+			Expect(subscribed.ItemIDMap).To(HaveLen(2))
+			Expect(subscribed.ItemIDMap).To(HaveKeyWithValue("wiki-1", "inserted-1"))
+			Expect(subscribed.ItemIDMap).To(HaveKeyWithValue("wiki-2", "inserted-2"))
+		})
+
+		It("should populate ItemEtags for the inserted tasks", func() {
+			Expect(subscribed.ItemEtags).To(HaveKeyWithValue("inserted-1", "etag-inserted-1"))
+			Expect(subscribed.ItemEtags).To(HaveKeyWithValue("inserted-2", "etag-inserted-2"))
+		})
+
+		It("should persist the Subscription to the user profile", func() {
+			store := newStore(pages)
+			loaded, err := store.LoadState(aliceProfile)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(loaded.Subscriptions).To(HaveLen(1))
+			Expect(loaded.Subscriptions[0].Page).To(Equal(syncTestPage))
+			Expect(loaded.Subscriptions[0].ListName).To(Equal(syncTestListName))
+			Expect(loaded.Subscriptions[0].RemoteListID).To(Equal("created-list-1"))
+			Expect(loaded.Subscriptions[0].ItemIDMap).To(HaveKeyWithValue("wiki-1", "inserted-1"))
+			Expect(loaded.Subscriptions[0].ItemIDMap).To(HaveKeyWithValue("wiki-2", "inserted-2"))
+		})
+	})
+
+	When("remoteListID is empty and the wiki checklist has no items", func() {
+		var (
+			subscribed taskssync.Subscription
+			subErr     error
+			client     *fakeTasksClient
+		)
+
+		BeforeEach(func() {
+			pages := newFakePages()
+			store := newConfiguredStore(pages, nil)
+			client = newFakeTasksClient()
+			reader := newFakeChecklistReader()
+			reader.Set(syncTestPage, syncTestListName, nil)
+			c := buildTestConnector(store, readyLeaseTable(), client, newFakeClock(time.Now()), reader, nil, nil)
+			subscribed, subErr = c.Subscribe(context.Background(), aliceProfile, syncTestPage, syncTestListName, "")
+		})
+
+		It("should not error", func() {
+			Expect(subErr).ToNot(HaveOccurred())
+		})
+
+		It("should not call InsertTask", func() {
+			Expect(client.inserted).To(BeEmpty())
+		})
+
+		It("should produce an empty initial ItemIDMap", func() {
 			Expect(subscribed.ItemIDMap).To(BeEmpty())
+		})
+	})
+
+	When("remoteListID is empty and InsertTask fails partway through seeding", func() {
+		var (
+			subErr error
+			client *fakeTasksClient
+			pages  *fakePages
+		)
+
+		BeforeEach(func() {
+			pages = newFakePages()
+			store := newConfiguredStore(pages, nil)
+			client = newFakeTasksClient()
+			client.insertErr = errors.New("transient API error")
+			reader := newFakeChecklistReader()
+			reader.Set(syncTestPage, syncTestListName, []*apiv1.ChecklistItem{
+				{Uid: "wiki-1", Text: "Eggs"},
+			})
+			c := buildTestConnector(store, readyLeaseTable(), client, newFakeClock(time.Now()), reader, nil, nil)
+			_, subErr = c.Subscribe(context.Background(), aliceProfile, syncTestPage, syncTestListName, "")
+		})
+
+		It("should return an error wrapping the insert failure", func() {
+			Expect(subErr).To(MatchError(ContainSubstring("seed new tasklist from wiki")))
+		})
+
+		It("should propagate the underlying API error", func() {
+			Expect(subErr).To(MatchError(ContainSubstring("transient API error")))
+		})
+
+		It("should not persist a Subscription to the user profile", func() {
+			store := newStore(pages)
+			loaded, err := store.LoadState(aliceProfile)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(loaded.Subscriptions).To(BeEmpty())
 		})
 	})
 

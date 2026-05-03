@@ -275,6 +275,7 @@ func (c *Connector) subscribeWithLock(ctx context.Context, profileID wikipage.Pa
 
 	effectiveRemoteID := remoteListID
 	effectiveRemoteTitle := ""
+	createdNewList := false
 	if effectiveRemoteID == "" {
 		created, createErr := client.CreateTaskList(ctx, listName)
 		if createErr != nil {
@@ -282,6 +283,7 @@ func (c *Connector) subscribeWithLock(ctx context.Context, profileID wikipage.Pa
 		}
 		effectiveRemoteID = created.ID
 		effectiveRemoteTitle = created.Title
+		createdNewList = true
 	}
 
 	tasks, listErr := c.listAllTasks(ctx, client, effectiveRemoteID, time.Time{})
@@ -295,6 +297,23 @@ func (c *Connector) subscribeWithLock(ctx context.Context, profileID wikipage.Pa
 	idMap, etags, err := c.seedIDMapForSubscribe(ctx, page, listName, tasks)
 	if err != nil {
 		return Subscription{}, fmt.Errorf("seed id_map: %w", err)
+	}
+
+	// Push existing wiki items into the freshly-created tasklist so
+	// the user sees their checklist contents in Google Tasks
+	// immediately — without waiting for the next scheduler tick (which
+	// would also be the FIRST tick after persist, but the new list
+	// would be empty until then). Mirrors the Keep bridge's create-new
+	// seed path. Only runs when we just created the list — for the
+	// bind-to-existing path the next scheduler tick's outbound pass
+	// pushes any wiki-only items (idMap-miss → insert).
+	if createdNewList {
+		seededMap, seededEtags, seedErr := c.seedNewTasklistFromWiki(ctx, page, listName, effectiveRemoteID, client)
+		if seedErr != nil {
+			return Subscription{}, fmt.Errorf("seed new tasklist from wiki: %w", seedErr)
+		}
+		idMap = seededMap
+		etags = seededEtags
 	}
 
 	if effectiveRemoteTitle == "" {
@@ -335,6 +354,51 @@ func resolveRemoteTitle(ctx context.Context, client TasksClient, remoteListID st
 		}
 	}
 	return ""
+}
+
+// seedNewTasklistFromWiki pushes every wiki checklist item into the
+// freshly-created tasklist via InsertTask, then returns the resulting
+// ItemIDMap (wiki uid → tasks id) and ItemEtags (tasks id → etag).
+// Each insert's notes carry the wiki:uid marker so subsequent
+// inbound pulls can recover the binding without text-match.
+//
+// Called only by the create-new path of subscribeWithLock — for the
+// bind-to-existing path, the seed runs via text-match against the
+// existing remote tasks (see seedIDMapForSubscribe) and the next
+// scheduler tick's outbound pass handles wiki items missing from the
+// remote.
+func (c *Connector) seedNewTasklistFromWiki(ctx context.Context, page, listName, remoteListID string, client TasksClient) (idMap map[string]string, etags map[string]string, err error) {
+	if c.checklistR == nil {
+		return nil, nil, ErrChecklistReaderUnavailable
+	}
+	checklist, err := c.checklistR.ListItems(ctx, page, listName)
+	if err != nil {
+		return nil, nil, fmt.Errorf("read wiki checklist: %w", err)
+	}
+	idMap = map[string]string{}
+	etags = map[string]string{}
+	if checklist == nil {
+		return idMap, etags, nil
+	}
+	for _, item := range checklist.GetItems() {
+		uid := item.GetUid()
+		if uid == "" {
+			// Items without a uid can't be re-bound on the inbound
+			// pass — skip them. The outbound sync's upsert path
+			// will pick them up after the wiki stamps a uid.
+			continue
+		}
+		fields := translator.ChecklistItemToTaskFields(item)
+		inserted, insertErr := client.InsertTask(ctx, remoteListID, fields.Title, fields.Notes, gateway.TaskStatus(fields.Status), fields.Due, "")
+		if insertErr != nil {
+			return nil, nil, fmt.Errorf("insert wiki item uid=%s: %w", uid, insertErr)
+		}
+		idMap[uid] = inserted.ID
+		if inserted.Etag != "" {
+			etags[inserted.ID] = inserted.Etag
+		}
+	}
+	return idMap, etags, nil
 }
 
 // seedIDMapForSubscribe walks the existing tasks list and builds an

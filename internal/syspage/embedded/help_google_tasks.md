@@ -93,7 +93,7 @@ If you accidentally delete it (e.g. you cleared a task's notes), the wiki tries 
 
 ## "Create new" — Bind to a fresh Tasks list
 
-If you don't already have a Tasks list set up (or you'd rather not pick an existing one), the bind picker's first entry is **Create new "<list-name>"**. Pick it and the wiki calls Tasks's `tasklists.insert` for you, names the new list after your wiki checklist's `list_name`, and binds to it on the spot. Subsequent syncs populate the new list with whatever items already exist on the wiki side.
+If you don't already have a Tasks list set up (or you'd rather not pick an existing one), the bind picker's first entry is **Create new "<list-name>"**. Pick it and the wiki calls Tasks's `tasklists.insert` for you, names the new list after your wiki checklist's `list_name`, and binds to it on the spot. The bind ceremony also pushes every wiki item already on the checklist into the new Tasks list immediately — each task gets stamped with the wiki:uid marker so subsequent inbound syncs round-trip cleanly. You won't have to wait for the first cron tick to see your items in Google Tasks.
 
 Mirrors the [[help-google-keep]] bridge's behavior — empty `remote_list_handle` means "make a new one."
 
