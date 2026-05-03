@@ -225,6 +225,135 @@ describe('GoogleTasksConnect', () => {
     });
   });
 
+  // ------------------------------------------------------------------ paused subscription → reconnect banner CTA
+
+  describe('when getState returns configured=true with a paused subscription', () => {
+    beforeEach(async () => {
+      el = document.createElement('google-tasks-connect') as GoogleTasksConnect;
+      const subscription = create(SubscriptionStateSchema, {
+        page: 'shopping',
+        listName: 'this_week',
+        remoteListHandle: 'tasklist-xyz',
+        remoteListTitle: 'This Week',
+        paused: true,
+      });
+      const state = create(ConnectorStateSchema, {
+        configured: true,
+        email: 'paused@example.com',
+        subscriptions: [subscription],
+      });
+      sinon
+        .stub(clientOf(el), 'getState')
+        .resolves(create(GetStateResponseSchema, { state }));
+      document.body.appendChild(el);
+      await Promise.race([el.updateComplete, timeout(3000, 'updateComplete timed out')]);
+    });
+
+    it('should render a reconnect-banner', () => {
+      const banner = el.shadowRoot?.querySelector('.reconnect-banner');
+      expect(banner).to.not.be.null;
+    });
+
+    it('should explain *why* reconnection is needed in the banner copy', () => {
+      const text = el.shadowRoot?.querySelector('.reconnect-banner')?.textContent ?? '';
+      expect(text).to.match(/refresh|revoked|authorization|expired/i);
+    });
+
+    it('should render a prominent Reconnect button inside the banner', () => {
+      const btn = el.shadowRoot?.querySelector('.reconnect-banner button.reconnect-btn');
+      expect(btn?.textContent ?? '').to.include('Reconnect');
+    });
+
+    it('should mention bindings will resume automatically (auto-resume on reconnect)', () => {
+      const text = el.shadowRoot?.querySelector('.reconnect-banner')?.textContent ?? '';
+      expect(text).to.match(/automatic|resume/i);
+    });
+  });
+
+  describe('when getState returns configured=true with no paused subscriptions', () => {
+    beforeEach(async () => {
+      el = document.createElement('google-tasks-connect') as GoogleTasksConnect;
+      const subscription = create(SubscriptionStateSchema, {
+        page: 'shopping',
+        listName: 'weekly',
+        remoteListHandle: 'tasklist-abc',
+        remoteListTitle: 'Weekly',
+        paused: false,
+      });
+      const state = create(ConnectorStateSchema, {
+        configured: true,
+        email: 'healthy@example.com',
+        subscriptions: [subscription],
+      });
+      sinon
+        .stub(clientOf(el), 'getState')
+        .resolves(create(GetStateResponseSchema, { state }));
+      document.body.appendChild(el);
+      await Promise.race([el.updateComplete, timeout(3000, 'updateComplete timed out')]);
+    });
+
+    it('should NOT render a reconnect-banner (no paused subscriptions)', () => {
+      const banner = el.shadowRoot?.querySelector('.reconnect-banner');
+      expect(banner).to.be.null;
+    });
+  });
+
+  describe('when the Reconnect button in the paused banner is clicked', () => {
+    let beginAuthStub: sinon.SinonStub;
+    let redirectSpy: sinon.SinonSpy;
+
+    beforeEach(async () => {
+      el = document.createElement('google-tasks-connect') as GoogleTasksConnect;
+      const subscription = create(SubscriptionStateSchema, {
+        page: 'shopping',
+        listName: 'this_week',
+        remoteListHandle: 'tasklist-xyz',
+        remoteListTitle: 'This Week',
+        paused: true,
+      });
+      const state = create(ConnectorStateSchema, {
+        configured: true,
+        email: 'paused@example.com',
+        subscriptions: [subscription],
+      });
+      sinon
+        .stub(clientOf(el), 'getState')
+        .resolves(create(GetStateResponseSchema, { state }));
+      document.body.appendChild(el);
+      await Promise.race([el.updateComplete, timeout(3000, 'updateComplete timed out')]);
+
+      beginAuthStub = sinon
+        .stub(clientOf(el), 'beginAuth')
+        .resolves(
+          create(BeginAuthResponseSchema, {
+            authorizationUrl: 'https://accounts.google.com/o/oauth2/auth?client_id=fake',
+            state: 'opaque-state-token',
+          }),
+        );
+
+      redirectSpy = sinon.spy();
+      el.redirect = redirectSpy;
+
+      const btn = el.shadowRoot?.querySelector(
+        '.reconnect-banner button.reconnect-btn',
+      ) as HTMLButtonElement | null;
+      btn?.click();
+      await el.updateComplete;
+      await el.updateComplete;
+    });
+
+    it('should call beginAuth once', () => {
+      expect(beginAuthStub.calledOnce).to.be.true;
+    });
+
+    it('should redirect to the OAuth authorization URL', () => {
+      expect(redirectSpy.calledOnce).to.be.true;
+      expect(redirectSpy.firstCall.args[0]).to.equal(
+        'https://accounts.google.com/o/oauth2/auth?client_id=fake',
+      );
+    });
+  });
+
   // ------------------------------------------------------------------ unsubscribe
 
   describe('when handleUnbind is invoked for a subscription', () => {
