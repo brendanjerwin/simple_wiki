@@ -71,14 +71,12 @@ The log is **a checklist concept, not a binding concept** — see "Why checklist
 
 ### Event entry schema
 
-| Field | Type | Notes |
-|---|---|---|
-| `seq` | int64 | Monotonic per-checklist counter. Assigned at write time under the same lock that mutates `items`. Never reused, never reset. |
-| `ts` | RFC3339 | Wall-clock when the mutation was applied. Diagnostic only — `seq` is the causal authority. |
-| `src` | string | `user:<email>` ‖ `connector:<kind>:apply` ‖ `connector:<kind>:push_recovery` ‖ `system:<rule>` ‖ `migration:<reason>`. The `<kind>` matches the existing `ConnectorKind` enum (`google_keep`, `google_tasks`, `icloud_reminders`, …). |
-| `op` | string | One of: `add`, `delete`, `toggle`, `set_text`, `set_due`, `set_description`, `set_tags`, `set_sort_order`, `baseline`. New ops added as wiki capabilities grow. |
-| `uid` | string | The item's wiki ULID. Empty only for whole-list ops if any are added later. |
-| field deltas | typed | Just the fields the op mutates: `checked`, `text`, `due`, etc. Old values are reconstructible from the previous event for the same uid. |
+- **`seq`** (int64): Monotonic per-checklist counter. Assigned at write time under the same lock that mutates `items`. Never reused, never reset.
+- **`ts`** (RFC3339): Wall-clock when the mutation was applied. Diagnostic only — `seq` is the causal authority.
+- **`src`** (string): One of `user:<email>`, `connector:<kind>:apply`, `connector:<kind>:push_recovery`, `system:<rule>`, or `migration:<reason>`. The `<kind>` matches the existing `ConnectorKind` enum (`google_keep`, `google_tasks`, `icloud_reminders`, …).
+- **`op`** (string): One of `add`, `delete`, `toggle`, `set_text`, `set_due`, `set_description`, `set_tags`, `set_sort_order`, `baseline`. New ops added as wiki capabilities grow.
+- **`uid`** (string): The item's wiki ULID. Empty only for whole-list ops if any are added later.
+- **field deltas** (typed): Just the fields the op mutates (`checked`, `text`, `due`, etc.). Old values are reconstructible from the previous event for the same uid.
 
 ### Engine-owned merge rule
 
@@ -112,6 +110,7 @@ type BackendAdapter interface {
 ```
 
 The engine owns:
+
 - Op-log read against `LastSyncedSeq`.
 - Per-item divergence classification using the log (causal, not value-based).
 - The 4-cell merge: no-op / push-wiki / apply-remote / conflict-remote-wins.
@@ -154,13 +153,11 @@ type Subscription struct {
 
 Per item, on each tick, the engine looks at events with `seq > sub.LastSyncedSeq`:
 
-| Event(s) since last sync | Classification |
-|---|---|
-| None for this uid | `¬wiki_diverged` |
-| Latest is `src=user:…` | `wiki_diverged` |
-| Latest is `src=connector:<this>:…` | `¬wiki_diverged` (our own apply, idempotent re-fetch) |
-| Latest is `src=connector:<other>:…` | `wiki_diverged` (cross-connector — defer to that connector's authority) |
-| Latest is `src=migration:…` | `¬wiki_diverged` |
+- No events for this uid → `¬wiki_diverged`.
+- Latest event is `src=user:…` → `wiki_diverged`.
+- Latest event is `src=connector:<this>:…` → `¬wiki_diverged` (our own apply, idempotent re-fetch).
+- Latest event is `src=connector:<other>:…` → `wiki_diverged` (cross-connector — defer to that connector's authority).
+- Latest event is `src=migration:…` → `¬wiki_diverged`.
 
 Combined with `remote_diverged` (computed from the adapter's pull result vs the previous remote snapshot), the merge produces the same 4-cell decision Keep already documents in `connector.go:1527-1554` — but driven by causality instead of by value compare.
 
