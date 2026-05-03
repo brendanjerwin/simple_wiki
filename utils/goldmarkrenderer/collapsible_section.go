@@ -53,6 +53,8 @@ func NewCollapsibleSectionTransformer() parser.ASTTransformer {
 func (*collapsibleSectionTransformer) Transform(doc *ast.Document, _ text.Reader, _ parser.Context) { //nolint:revive // receiver unused by design
 	// Collect all collapsible heading nodes first to avoid modifying while iterating.
 	var headings []*CollapsibleHeadingNode
+	// ast.Walk only errors if the visitor returns one; ours always returns nil.
+	// nosemgrep: go.error-discarded-with-blank-identifier
 	_ = ast.Walk(doc, func(n ast.Node, entering bool) (ast.WalkStatus, error) {
 		if !entering {
 			return ast.WalkContinue, nil

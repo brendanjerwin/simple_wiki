@@ -88,7 +88,7 @@ var _ = Describe("ChecklistDataModelMigrationScanJob", func() {
 			})
 
 			It("should not enqueue any jobs", func() {
-				Expect(coordinator.GetActiveQueues()).To(BeEmpty())
+				Expect(coordinator.GetJobProgress().QueueStats).To(BeEmpty())
 			})
 		})
 
@@ -118,7 +118,7 @@ var _ = Describe("ChecklistDataModelMigrationScanJob", func() {
 			})
 
 			It("should not enqueue any jobs", func() {
-				Expect(coordinator.GetActiveQueues()).To(BeEmpty())
+				Expect(coordinator.GetJobProgress().QueueStats).To(BeEmpty())
 			})
 		})
 
@@ -149,7 +149,7 @@ var _ = Describe("ChecklistDataModelMigrationScanJob", func() {
 			})
 
 			It("should not enqueue any jobs", func() {
-				Expect(coordinator.GetActiveQueues()).To(BeEmpty())
+				Expect(coordinator.GetJobProgress().QueueStats).To(BeEmpty())
 			})
 		})
 
@@ -166,7 +166,7 @@ var _ = Describe("ChecklistDataModelMigrationScanJob", func() {
 			})
 
 			It("should not enqueue any jobs", func() {
-				Expect(coordinator.GetActiveQueues()).To(BeEmpty())
+				Expect(coordinator.GetJobProgress().QueueStats).To(BeEmpty())
 			})
 		})
 
@@ -183,7 +183,7 @@ var _ = Describe("ChecklistDataModelMigrationScanJob", func() {
 			})
 
 			It("should enqueue a migration job", func() {
-				Expect(coordinator.GetActiveQueues()).NotTo(BeEmpty())
+				Expect(coordinator.GetJobProgress().QueueStats).NotTo(BeEmpty())
 			})
 		})
 
@@ -201,7 +201,9 @@ var _ = Describe("ChecklistDataModelMigrationScanJob", func() {
 			})
 
 			It("should only enqueue one migration job for the duplicated identifier", func() {
-				Expect(coordinator.GetActiveQueues()).To(HaveLen(1))
+				// QueueStats persists in coordinator.stats across worker drain;
+// GetActiveQueues races the worker and flakes between 0 and 1.
+Expect(coordinator.GetJobProgress().QueueStats).To(HaveLen(1))
 			})
 		})
 	})

@@ -1,27 +1,28 @@
 // keep-connect — profile-page Lit component for Google Keep connector.
 //
 // Renders the "Connect Google Keep" form, the connected state, and the
-// per-binding remove controls. The connect form takes the user's Google
-// email + an oauth_token cookie value captured from a Google sign-in
-// (see help_google_keep for capture instructions). The wiki exchanges
-// the oauth_token for a long-lived master token via gpsoauth and stores
-// only the master token. The captured oauth_token is consumed once and
-// discarded.
+// per-subscription remove controls. The connect form takes the user's
+// Google email + an oauth_token cookie value captured from a Google
+// sign-in (see help_google_keep for capture instructions). The wiki
+// exchanges the oauth_token for a long-lived master token via gpsoauth
+// and stores only the master token. The captured oauth_token is
+// consumed once and discarded.
 //
 // Why oauth_token (not an App-Specific Password): Google deprecated
 // password-based gpsoauth master-login. ASPs reliably get rejected
 // regardless of correctness. The browser-captured oauth_token is the
 // only credential type that still works for the unofficial Keep API.
 //
-// Future work — per-item dead-letter rendering: the KeepConnectorService
-// exposes ListDeadLetters(page, list_name) → repeated DeadLetterItem
-// and ClearDeadLetter(page, list_name, item_uid) → Empty. A future
-// change should fan out one ListDeadLetters call per binding on
-// render and emit one row per returned item showing the wiki text,
-// the failure code, and a Clear button that calls ClearDeadLetter
-// and re-fetches. Until that lands, dead-lettered items are visible
-// via the keep_bridge_dead_letter_count metric and the journal INFO
-// log emitted by the connector. Source: plan §"Dead-letter macro UI
+// Future work — per-item dead-letter rendering: ConnectorService
+// exposes ListDeadLetters(connector_kind, page, list_name) → repeated
+// DeadLetterItem and ClearDeadLetter(connector_kind, page, list_name,
+// item_uid) → Empty. A future change should fan out one
+// ListDeadLetters call per subscription on render and emit one row
+// per returned item showing the wiki text, the failure code, and a
+// Clear button that calls ClearDeadLetter and re-fetches. Until that
+// lands, dead-lettered items are visible via the
+// keep_bridge_dead_letter_count metric and the journal INFO log
+// emitted by the connector. Source: plan §"Dead-letter macro UI
 // scope".
 
 import { html, LitElement, nothing } from 'lit';
@@ -30,16 +31,17 @@ import { createClient } from '@connectrpc/connect';
 import { create } from '@bufbuild/protobuf';
 import { getGrpcWebTransport } from './grpc-transport.js';
 import {
-  KeepConnectorService,
+  ConnectorService,
+  ConnectorKind,
   GetStateRequestSchema,
-  ExchangeAndStoreRequestSchema,
+  CompleteAuthRequestSchema,
   DisconnectRequestSchema,
-  UnbindChecklistRequestSchema,
-} from '../gen/api/v1/keep_connector_pb.js';
+  UnsubscribeRequestSchema,
+} from '../gen/api/v1/connector_service_pb.js';
 import type {
   ConnectorState,
-  BindingState,
-} from '../gen/api/v1/keep_connector_pb.js';
+  SubscriptionState,
+} from '../gen/api/v1/connector_service_pb.js';
 import {
   foundationCSS,
   buttonCSS,
@@ -62,7 +64,7 @@ export class KeepConnect extends LitElement {
   @state() declare private formOAuthToken: string;
   @state() declare private error: AugmentedError | null;
 
-  private client = createClient(KeepConnectorService, getGrpcWebTransport());
+  private client = createClient(ConnectorService, getGrpcWebTransport());
 
   constructor() {
     super();
@@ -81,11 +83,15 @@ export class KeepConnect extends LitElement {
   private async refresh(): Promise<void> {
     this.error = null;
     try {
-      const resp = await this.client.getState(create(GetStateRequestSchema, {}));
+      const resp = await this.client.getState(
+        create(GetStateRequestSchema, {
+          connectorKind: ConnectorKind.GOOGLE_KEEP,
+        }),
+      );
       this.state = resp.state ?? null;
       this.phase = this.state?.configured ? 'connected' : 'disconnected';
     } catch (err: unknown) {
-      this.error = AugmentErrorService.augmentError(err, 'load Google Keep connector state');
+      this.error = AugmentErrorService.augmentError(err, 'load Google Keep setup');
       this.phase = 'disconnected';
     }
   }
@@ -102,8 +108,9 @@ export class KeepConnect extends LitElement {
     }
     this.phase = 'connecting';
     try {
-      const resp = await this.client.exchangeAndStore(
-        create(ExchangeAndStoreRequestSchema, {
+      const resp = await this.client.completeAuth(
+        create(CompleteAuthRequestSchema, {
+          connectorKind: ConnectorKind.GOOGLE_KEEP,
           email: this.formEmail,
           oauthToken: this.formOAuthToken,
         }),
@@ -118,13 +125,17 @@ export class KeepConnect extends LitElement {
     }
   }
 
-  // Disconnect and per-binding Unbind both go through
+  // Disconnect and per-subscription Unsubscribe both go through
   // <confirmation-interlock-button> for safety; these handlers run only
   // after the interlock fires its `confirmed` event. The interlock
   // auto-disarms after a short timeout if the user walks away.
   private async handleDisconnect(): Promise<void> {
     try {
-      const resp = await this.client.disconnect(create(DisconnectRequestSchema, {}));
+      const resp = await this.client.disconnect(
+        create(DisconnectRequestSchema, {
+          connectorKind: ConnectorKind.GOOGLE_KEEP,
+        }),
+      );
       this.state = resp.state ?? null;
       this.phase = 'disconnected';
     } catch (err: unknown) {
@@ -132,17 +143,18 @@ export class KeepConnect extends LitElement {
     }
   }
 
-  private async handleUnbind(binding: BindingState): Promise<void> {
+  private async handleUnbind(subscription: SubscriptionState): Promise<void> {
     try {
-      await this.client.unbindChecklist(
-        create(UnbindChecklistRequestSchema, {
-          page: binding.page,
-          listName: binding.listName,
+      await this.client.unsubscribe(
+        create(UnsubscribeRequestSchema, {
+          connectorKind: ConnectorKind.GOOGLE_KEEP,
+          page: subscription.page,
+          listName: subscription.listName,
         }),
       );
       await this.refresh();
     } catch (err: unknown) {
-      this.error = AugmentErrorService.augmentError(err, 'unbind checklist');
+      this.error = AugmentErrorService.augmentError(err, 'unsubscribe checklist');
     }
   }
 
@@ -162,7 +174,7 @@ export class KeepConnect extends LitElement {
   private renderPhase() {
     switch (this.phase) {
       case 'loading':
-        return html`<p class="muted">Loading connector state…</p>`;
+        return html`<p class="muted">Checking Google Keep setup…</p>`;
       case 'disconnected':
         return this.renderDisconnected();
       case 'connecting':
@@ -245,7 +257,7 @@ export class KeepConnect extends LitElement {
         <span class="muted">Last verified: ${verified}.</span>
       </p>
       <h4>Bindings</h4>
-      ${this.renderBindings()}
+      ${this.renderSubscriptions()}
       <p>
         <confirmation-interlock-button
           label="Disconnect Google Keep"
@@ -258,28 +270,28 @@ export class KeepConnect extends LitElement {
     `;
   }
 
-  private renderBindings() {
-    const bindings = this.state?.bindings ?? [];
-    if (bindings.length === 0) {
+  private renderSubscriptions() {
+    const subscriptions = this.state?.subscriptions ?? [];
+    if (subscriptions.length === 0) {
       return html`<p class="muted">
         No checklists bound yet. Open a checklist page and click
-        <em>Bind to Keep List</em>.
+        <em>Bind to Google Keep</em>.
       </p>`;
     }
     return html`
       <ul class="bindings">
-        ${bindings.map(
-          (b) => html`
+        ${subscriptions.map(
+          (s) => html`
             <li>
-              <strong>${b.page} / ${b.listName}</strong>
-              → Keep note "${b.keepNoteTitle || b.keepNoteId}"
-              ${b.paused ? html`<span class="pill pill-warn">paused</span>` : nothing}
+              <strong>${s.page} / ${s.listName}</strong>
+              → Keep note "${s.remoteListTitle || s.remoteListHandle}"
+              ${s.paused ? html`<span class="pill pill-warn">paused</span>` : nothing}
               <confirmation-interlock-button
                 label="✕"
                 confirmLabel="Stop syncing this binding?"
                 yesLabel="Unbind"
                 noLabel="Cancel"
-                @confirmed=${() => this.handleUnbind(b)}
+                @confirmed=${() => this.handleUnbind(s)}
               ></confirmation-interlock-button>
             </li>
           `,

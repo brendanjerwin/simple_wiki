@@ -83,6 +83,8 @@ func (*alertTransformer) Transform(doc *ast.Document, reader text.Reader, _ pars
 	source := reader.Source()
 
 	var blockquotes []*ast.Blockquote
+	// ast.Walk only errors if the visitor returns one; ours always returns nil.
+	// nosemgrep: go.error-discarded-with-blank-identifier
 	_ = ast.Walk(doc, func(n ast.Node, entering bool) (ast.WalkStatus, error) {
 		if !entering {
 			return ast.WalkContinue, nil
@@ -159,14 +161,26 @@ func convertBlockquoteToAlert(bq *ast.Blockquote, alertType AlertType) {
 		return
 	}
 
-	// Remove the [!TYPE] inline content from the leading paragraph.
-	// In goldmark, a soft line break is represented as a flag on an ast.Text node
-	// (Text.SoftLineBreak()), not as a separate AST node type. Removing the first
-	// child (the Text containing "[!TYPE]") is sufficient.
+	// Remove the [!TYPE] first line from the leading paragraph.
+	// goldmark's link parser may split [!TYPE] into multiple inline nodes
+	// (e.g., "[" as one ast.Text node and "!TYPE]" as another) when it
+	// backtracks after failing to form a link. We therefore remove ALL inline
+	// nodes that belong to the first line — i.e., every node up to and
+	// including the first ast.Text node that ends a line. In goldmark a line
+	// ending is signalled by either SoftLineBreak()==true (normal newline) or
+	// HardLineBreak()==true (two trailing spaces). If no such node is found,
+	// the entire paragraph consists only of the marker line and we remove all
+	// children, then the paragraph itself.
 	if para, ok := bq.FirstChild().(*ast.Paragraph); ok {
-		firstInline := para.FirstChild()
-		if firstInline != nil {
-			para.RemoveChild(para, firstInline)
+		child := para.FirstChild()
+		for child != nil {
+			next := child.NextSibling()
+			textNode, isText := child.(*ast.Text)
+			para.RemoveChild(para, child)
+			if isText && (textNode.SoftLineBreak() || textNode.HardLineBreak()) {
+				break
+			}
+			child = next
 		}
 		// If the paragraph is now empty, remove it from the blockquote.
 		if para.FirstChild() == nil {

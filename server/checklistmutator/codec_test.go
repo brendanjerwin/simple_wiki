@@ -668,6 +668,378 @@ var _ = Describe("encodeItem", func() {
 	})
 })
 
+var _ = Describe("decodeEvents", func() {
+	When("raw is nil", func() {
+		It("should return nil", func() {
+			Expect(decodeEvents(nil)).To(BeNil())
+		})
+	})
+
+	When("raw is empty", func() {
+		It("should return nil", func() {
+			Expect(decodeEvents([]any{})).To(BeNil())
+		})
+	})
+
+	When("raw contains a fully-populated event", func() {
+		var result []*apiv1.ChecklistEvent
+
+		BeforeEach(func() {
+			ts := codecNow
+			raw := []any{
+				map[string]any{
+					"seq":      int64(1247),
+					"ts":       ts.Format(time.RFC3339Nano),
+					"src":      "user:brendanjerwin@gmail.com",
+					"op":       "toggle",
+					"uid":      "01KQ-ULID",
+					"checked":  false,
+					"text":     "Sun: Make Dinner",
+					"due":      ts.Format(time.RFC3339Nano),
+					"tags":     []any{"sunday", "cooking"},
+					"tags_set": true,
+				},
+			}
+			result = decodeEvents(raw)
+		})
+
+		It("should decode exactly one event", func() {
+			Expect(result).To(HaveLen(1))
+		})
+
+		It("should decode seq as int64", func() {
+			Expect(result[0].Seq).To(Equal(int64(1247)))
+		})
+
+		It("should decode src as the conventional source string", func() {
+			Expect(result[0].Src).To(Equal("user:brendanjerwin@gmail.com"))
+		})
+
+		It("should decode op", func() {
+			Expect(result[0].Op).To(Equal("toggle"))
+		})
+
+		It("should decode uid", func() {
+			Expect(result[0].Uid).To(Equal("01KQ-ULID"))
+		})
+
+		It("should decode the checked delta", func() {
+			Expect(result[0].Checked).NotTo(BeNil())
+			Expect(*result[0].Checked).To(BeFalse())
+		})
+
+		It("should decode the text delta", func() {
+			Expect(result[0].Text).NotTo(BeNil())
+			Expect(*result[0].Text).To(Equal("Sun: Make Dinner"))
+		})
+
+		It("should decode the due timestamp", func() {
+			Expect(result[0].Due).NotTo(BeNil())
+		})
+
+		It("should decode tags when tags_set=true", func() {
+			Expect(result[0].TagsSet).To(BeTrue())
+			Expect(result[0].Tags).To(ConsistOf("sunday", "cooking"))
+		})
+	})
+
+	When("an event omits tags_set but has empty tags", func() {
+		var result []*apiv1.ChecklistEvent
+
+		BeforeEach(func() {
+			raw := []any{
+				map[string]any{
+					"seq": int64(1),
+					"src": "user:alice@example.com",
+					"op":  "toggle",
+					"uid": "u1",
+				},
+			}
+			result = decodeEvents(raw)
+		})
+
+		It("should leave TagsSet=false", func() {
+			Expect(result[0].TagsSet).To(BeFalse())
+		})
+
+		It("should leave Tags empty", func() {
+			Expect(result[0].Tags).To(BeEmpty())
+		})
+	})
+
+	When("raw contains non-map entries", func() {
+		It("should skip them", func() {
+			raw := []any{"not-a-map", 42}
+			Expect(decodeEvents(raw)).To(BeEmpty())
+		})
+	})
+
+	When("seq is encoded as float64 (TOML/JSON round-trip)", func() {
+		It("should coerce to int64", func() {
+			raw := []any{map[string]any{
+				"seq": float64(99),
+				"src": "user:bob@example.com",
+				"op":  "toggle",
+				"uid": "u2",
+			}}
+			result := decodeEvents(raw)
+			Expect(result).To(HaveLen(1))
+			Expect(result[0].Seq).To(Equal(int64(99)))
+		})
+	})
+})
+
+var _ = Describe("encodeEvents", func() {
+	When("an event mutates one field", func() {
+		var encoded []any
+
+		BeforeEach(func() {
+			checked := true
+			ev := &apiv1.ChecklistEvent{
+				Seq: 42,
+				Ts:  timestamppb.New(codecNow),
+				Src: "connector:google_tasks:apply",
+				Op:  "toggle",
+				Uid: "01KQ",
+				Checked: &checked,
+			}
+			encoded = encodeEvents([]*apiv1.ChecklistEvent{ev})
+		})
+
+		It("should encode seq", func() {
+			m := asMap(encoded[0])
+			Expect(m["seq"]).To(Equal(int64(42)))
+		})
+
+		It("should encode src", func() {
+			m := asMap(encoded[0])
+			Expect(m["src"]).To(Equal("connector:google_tasks:apply"))
+		})
+
+		It("should encode the checked delta", func() {
+			m := asMap(encoded[0])
+			Expect(m["checked"]).To(Equal(true))
+		})
+
+		It("should NOT encode field deltas the event didn't mutate", func() {
+			m := asMap(encoded[0])
+			Expect(m).NotTo(HaveKey("text"))
+			Expect(m).NotTo(HaveKey("due"))
+			Expect(m).NotTo(HaveKey("description"))
+		})
+
+		It("should NOT encode tags when tags_set=false", func() {
+			m := asMap(encoded[0])
+			Expect(m).NotTo(HaveKey("tags"))
+			Expect(m).NotTo(HaveKey("tags_set"))
+		})
+	})
+
+	When("an event clears tags (tags_set=true, empty list)", func() {
+		It("should encode tags_set=true and an empty tags list", func() {
+			ev := &apiv1.ChecklistEvent{
+				Seq: 1, Ts: timestamppb.New(codecNow),
+				Src: "user:a@b", Op: "set_tags", Uid: "u",
+				TagsSet: true,
+				Tags:    nil,
+			}
+			encoded := encodeEvents([]*apiv1.ChecklistEvent{ev})
+			m := asMap(encoded[0])
+			Expect(m["tags_set"]).To(Equal(true))
+			Expect(m).To(HaveKey("tags"))
+		})
+	})
+
+	When("encoding then decoding round-trips", func() {
+		It("should preserve all set fields", func() {
+			checked := false
+			text := "Buy eggs"
+			desc := "from Shaw's"
+			sortOrder := int64(7000)
+			original := []*apiv1.ChecklistEvent{
+				{
+					Seq: 100, Ts: timestamppb.New(codecNow),
+					Src: "user:alice@example.com", Op: "bulk_update", Uid: "01KQ",
+					Checked:     &checked,
+					Text:        &text,
+					Description: &desc,
+					SortOrder:   &sortOrder,
+					TagsSet:     true,
+					Tags:        []string{"shopping"},
+				},
+			}
+			encoded := encodeEvents(original)
+			decoded := decodeEvents(encoded)
+			Expect(decoded).To(HaveLen(1))
+			Expect(decoded[0].Seq).To(Equal(int64(100)))
+			Expect(decoded[0].Src).To(Equal("user:alice@example.com"))
+			Expect(*decoded[0].Checked).To(BeFalse())
+			Expect(*decoded[0].Text).To(Equal("Buy eggs"))
+			Expect(*decoded[0].Description).To(Equal("from Shaw's"))
+			Expect(*decoded[0].SortOrder).To(Equal(int64(7000)))
+			Expect(decoded[0].TagsSet).To(BeTrue())
+			Expect(decoded[0].Tags).To(ConsistOf("shopping"))
+		})
+	})
+})
+
+var _ = Describe("appendEvent", func() {
+	When("the checklist has no prior events", func() {
+		var checklist *apiv1.Checklist
+
+		BeforeEach(func() {
+			checklist = &apiv1.Checklist{Name: "dad"}
+			appendEvent(checklist, &apiv1.ChecklistEvent{
+				Src: "user:a@b", Op: "toggle", Uid: "u1",
+			}, codecNow)
+		})
+
+		It("should assign seq=1 to the first event", func() {
+			Expect(checklist.Events).To(HaveLen(1))
+			Expect(checklist.Events[0].Seq).To(Equal(int64(1)))
+		})
+
+		It("should advance MaxSeq to 1", func() {
+			Expect(checklist.MaxSeq).To(Equal(int64(1)))
+		})
+
+		It("should stamp ts when nil", func() {
+			Expect(checklist.Events[0].Ts).NotTo(BeNil())
+			Expect(checklist.Events[0].Ts.AsTime()).To(Equal(codecNow))
+		})
+	})
+
+	When("the checklist already has events", func() {
+		var checklist *apiv1.Checklist
+
+		BeforeEach(func() {
+			checklist = &apiv1.Checklist{
+				Name:    "dad",
+				MaxSeq:  5,
+				Events:  []*apiv1.ChecklistEvent{{Seq: 5}},
+			}
+			appendEvent(checklist, &apiv1.ChecklistEvent{
+				Src: "user:a@b", Op: "toggle", Uid: "u1",
+			}, codecNow)
+		})
+
+		It("should assign the next seq (6)", func() {
+			Expect(checklist.Events).To(HaveLen(2))
+			Expect(checklist.Events[1].Seq).To(Equal(int64(6)))
+		})
+
+		It("should advance MaxSeq", func() {
+			Expect(checklist.MaxSeq).To(Equal(int64(6)))
+		})
+	})
+
+	When("MaxSeq is ahead of len(events) due to compaction", func() {
+		It("should still allocate the next seq from MaxSeq, not len(events)", func() {
+			checklist := &apiv1.Checklist{Name: "dad", MaxSeq: 100, Events: nil}
+			appendEvent(checklist, &apiv1.ChecklistEvent{Src: "user:a@b", Op: "toggle", Uid: "u"}, codecNow)
+			Expect(checklist.Events[0].Seq).To(Equal(int64(101)))
+			Expect(checklist.MaxSeq).To(Equal(int64(101)))
+		})
+	})
+
+	When("called repeatedly", func() {
+		It("should produce monotonically increasing seq values", func() {
+			checklist := &apiv1.Checklist{Name: "dad"}
+			for i := 0; i < 5; i++ {
+				appendEvent(checklist, &apiv1.ChecklistEvent{
+					Src: "user:a@b", Op: "toggle", Uid: "u",
+				}, codecNow)
+			}
+			seqs := make([]int64, len(checklist.Events))
+			for i, ev := range checklist.Events {
+				seqs[i] = ev.Seq
+			}
+			Expect(seqs).To(Equal([]int64{1, 2, 3, 4, 5}))
+		})
+	})
+})
+
+var _ = Describe("backfillBaselineEvents", func() {
+	When("the checklist has items but an empty event log", func() {
+		var checklist *apiv1.Checklist
+
+		BeforeEach(func() {
+			checklist = &apiv1.Checklist{
+				Items: []*apiv1.ChecklistItem{
+					{Uid: "u1", Text: "Eggs", Checked: false, SortOrder: 1000},
+					{Uid: "u2", Text: "Milk", Checked: true, SortOrder: 2000},
+				},
+			}
+			backfillBaselineEvents(checklist, codecNow)
+		})
+
+		It("should synthesize one event per item", func() {
+			Expect(checklist.Events).To(HaveLen(2))
+		})
+
+		It("should assign monotonic seqs starting at 1", func() {
+			Expect(checklist.Events[0].Seq).To(Equal(int64(1)))
+			Expect(checklist.Events[1].Seq).To(Equal(int64(2)))
+		})
+
+		It("should set MaxSeq to the highest seq", func() {
+			Expect(checklist.MaxSeq).To(Equal(int64(2)))
+		})
+
+		It("should attribute every event to migration:initial_baseline", func() {
+			for _, ev := range checklist.Events {
+				Expect(ev.Src).To(Equal("migration:initial_baseline"))
+			}
+		})
+
+		It("should snapshot per-item state into the event deltas", func() {
+			Expect(*checklist.Events[0].Checked).To(BeFalse())
+			Expect(*checklist.Events[1].Checked).To(BeTrue())
+		})
+	})
+
+	When("the checklist already has events", func() {
+		It("should NOT synthesize duplicates (idempotent on re-read)", func() {
+			existing := &apiv1.ChecklistEvent{
+				Seq: 7, Src: "user:a@b", Op: "toggle", Uid: "u1",
+			}
+			checklist := &apiv1.Checklist{
+				Items:  []*apiv1.ChecklistItem{{Uid: "u1", Text: "T"}},
+				Events: []*apiv1.ChecklistEvent{existing},
+				MaxSeq: 7,
+			}
+			backfillBaselineEvents(checklist, codecNow)
+			Expect(checklist.Events).To(HaveLen(1))
+			Expect(checklist.MaxSeq).To(Equal(int64(7)))
+		})
+	})
+
+	When("the checklist has no items at all", func() {
+		It("should be a no-op", func() {
+			checklist := &apiv1.Checklist{}
+			backfillBaselineEvents(checklist, codecNow)
+			Expect(checklist.Events).To(BeNil())
+			Expect(checklist.MaxSeq).To(Equal(int64(0)))
+		})
+	})
+
+	When("backfill runs twice", func() {
+		It("should produce identical results (deterministic)", func() {
+			items := []*apiv1.ChecklistItem{
+				{Uid: "u1", Text: "Eggs", SortOrder: 1000},
+			}
+			a := &apiv1.Checklist{Items: items}
+			b := &apiv1.Checklist{Items: items}
+			backfillBaselineEvents(a, codecNow)
+			backfillBaselineEvents(b, codecNow)
+			Expect(len(a.Events)).To(Equal(len(b.Events)))
+			Expect(a.Events[0].Seq).To(Equal(b.Events[0].Seq))
+			Expect(a.Events[0].Src).To(Equal(b.Events[0].Src))
+			Expect(*a.Events[0].Text).To(Equal(*b.Events[0].Text))
+		})
+	})
+})
+
 var _ = Describe("encodeTombstones", func() {
 	When("tombstones are given", func() {
 		It("should sort by deleted_at ascending", func() {

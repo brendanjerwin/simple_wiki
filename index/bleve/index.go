@@ -115,8 +115,12 @@ func (b *Index) AddPageToIndex(requestedIdentifier wikipage.PageIdentifier) erro
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
+	// Delete-before-reindex: missing-key errors are expected (first index of a page).
+	// nosemgrep: go.error-discarded-with-blank-identifier
 	_ = b.index.Delete(string(identifier))
+	// nosemgrep: go.error-discarded-with-blank-identifier
 	_ = b.index.Delete(string(requestedIdentifier))
+	// nosemgrep: go.error-discarded-with-blank-identifier
 	_ = b.index.Delete(mungedIdentifier)
 
 	err = b.index.Index(string(identifier), pageFrontmatter)
