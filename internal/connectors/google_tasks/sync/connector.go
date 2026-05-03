@@ -11,6 +11,7 @@ import (
 	"github.com/brendanjerwin/simple_wiki/internal/connectors"
 	"github.com/brendanjerwin/simple_wiki/internal/connectors/google_tasks/gateway"
 	"github.com/brendanjerwin/simple_wiki/internal/connectors/google_tasks/translator"
+	"github.com/brendanjerwin/simple_wiki/server/checklistmutator"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 )
 
@@ -445,6 +446,10 @@ func (*Connector) listAllTasks(ctx context.Context, client TasksClient, remoteLi
 //
 //revive:disable-next-line:cyclomatic,cognitive-complexity
 func (c *Connector) applyInboundFromTasks(ctx context.Context, profileID wikipage.PageIdentifier, ownerEmail string, sub Subscription, client TasksClient) (Subscription, time.Time, error) {
+	// Tag every event-log entry written from this apply pass with our
+	// connector kind so the engine's causal merge rule (ADR-0015) can
+	// distinguish "we just applied this" from "user edited locally."
+	ctx = checklistmutator.WithSource(ctx, checklistmutator.ConnectorSource("google_tasks", "apply"))
 	tasks, err := c.listAllTasks(ctx, client, sub.RemoteListID, sub.LastUpdatedMin)
 	if err != nil {
 		return sub, time.Time{}, err
@@ -946,6 +951,12 @@ func (c *Connector) patchOrApplyRemote(ctx context.Context, profileID wikipage.P
 //
 //revive:disable-next-line:cyclomatic,cognitive-complexity,function-length
 func (c *Connector) recoverFromPrecondition(ctx context.Context, profileID wikipage.PageIdentifier, ownerEmail string, sub Subscription, client TasksClient, uid, taskID string, fields translator.TaskFields) (patched gateway.Task, applied bool, err error) {
+	// Tag any wiki write performed by the recovery branches
+	// (412_remote_deleted / 412_remote_authoritative_apply) with the
+	// push_recovery op so the engine's causal merge rule can
+	// distinguish "we recovered remote-authoritative state" from a
+	// normal inbound apply.
+	ctx = checklistmutator.WithSource(ctx, checklistmutator.ConnectorSource("google_tasks", "push_recovery"))
 	tasks, err := c.listAllTasks(ctx, client, sub.RemoteListID, time.Time{})
 	if err != nil {
 		return gateway.Task{}, false, fmt.Errorf("list tasks for remote authoritative pull: %w", err)

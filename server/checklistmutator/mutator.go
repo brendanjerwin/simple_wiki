@@ -242,7 +242,20 @@ var (
 // generates the uid and stamps created_at = updated_at = clock.Now().
 // automated is derived from identity.IsAgent(); completed_by is left
 // unset (the new item is not checked yet).
-func (m *Mutator) AddItem(_ context.Context, page, listName string, args AddItemArgs, identity tailscale.IdentityValue) (*apiv1.ChecklistItem, *apiv1.Checklist, error) {
+//
+// The event log entry is attributed via UserSource(identity.LoginName()).
+// Connectors' inbound applies should call addItemImpl directly with
+// ConnectorSource(...) instead — see sync_helpers.go.
+func (m *Mutator) AddItem(ctx context.Context, page, listName string, args AddItemArgs, identity tailscale.IdentityValue) (*apiv1.ChecklistItem, *apiv1.Checklist, error) {
+	return m.addItemImpl(ctx, page, listName, args, identity, UserSource(identity.LoginName()))
+}
+
+// addItemImpl is the source-aware internal entry point. AddItem (public,
+// user-driven) and AddItemForSync (connector-driven) both delegate here
+// after computing their respective Source. Per ADR-0015, the source
+// drives the event-log attribution used by the engine's causal merge
+// rule.
+func (m *Mutator) addItemImpl(_ context.Context, page, listName string, args AddItemArgs, identity tailscale.IdentityValue, source Source) (*apiv1.ChecklistItem, *apiv1.Checklist, error) {
 	listName = wikipage.NormalizeListName(listName)
 	if listName == "" {
 		return nil, nil, status.Error(codes.InvalidArgument, "list_name is required")
@@ -288,6 +301,31 @@ func (m *Mutator) AddItem(_ context.Context, page, listName string, args AddItem
 	bumpSyncToken(checklist, now)
 	m.pruneTombstones(page, listName, checklist, now)
 
+	// Emit event AFTER mutation, BEFORE persist, while we still hold
+	// the lock. Per ADR-0015: seq monotonicity is the engine's causal
+	// authority and must not race.
+	textCopy := item.Text
+	checkedCopy := item.Checked
+	sortOrderCopy := item.SortOrder
+	ev := &apiv1.ChecklistEvent{
+		Src:       source.String(),
+		Op:        "add",
+		Uid:       item.Uid,
+		Text:      &textCopy,
+		Checked:   &checkedCopy,
+		Tags:      append([]string(nil), item.Tags...),
+		TagsSet:   true,
+		SortOrder: &sortOrderCopy,
+	}
+	if item.Description != nil {
+		descCopy := *item.Description
+		ev.Description = &descCopy
+	}
+	if item.Due != nil {
+		ev.Due = item.Due
+	}
+	appendEvent(checklist, ev, now)
+
 	if err := m.persist(page, fm, listName, checklist); err != nil {
 		return nil, nil, err
 	}
@@ -332,7 +370,12 @@ func applyUserMutableFields(item *apiv1.ChecklistItem, args UpdateItemArgs) bool
 
 // UpdateItem mutates user-mutable fields of an existing item. Wiki-managed
 // fields on the request are ignored; updated_at is server-stamped.
-func (m *Mutator) UpdateItem(_ context.Context, page, listName, uid string, args UpdateItemArgs, expectedUpdatedAt *time.Time, identity tailscale.IdentityValue) (*apiv1.ChecklistItem, *apiv1.Checklist, error) {
+func (m *Mutator) UpdateItem(ctx context.Context, page, listName, uid string, args UpdateItemArgs, expectedUpdatedAt *time.Time, identity tailscale.IdentityValue) (*apiv1.ChecklistItem, *apiv1.Checklist, error) {
+	return m.updateItemImpl(ctx, page, listName, uid, args, expectedUpdatedAt, identity, UserSource(identity.LoginName()))
+}
+
+// updateItemImpl is the source-aware internal entry point.
+func (m *Mutator) updateItemImpl(_ context.Context, page, listName, uid string, args UpdateItemArgs, expectedUpdatedAt *time.Time, identity tailscale.IdentityValue, source Source) (*apiv1.ChecklistItem, *apiv1.Checklist, error) {
 	listName = wikipage.NormalizeListName(listName)
 	if uid == "" {
 		return nil, nil, status.Error(codes.InvalidArgument, errUIDRequiredMsg)
@@ -362,6 +405,30 @@ func (m *Mutator) UpdateItem(_ context.Context, page, listName, uid string, args
 	if changed {
 		item.UpdatedAt = timestamppb.New(now)
 		bumpSyncToken(checklist, now)
+		// Emit event reflecting only the fields that actually changed.
+		// "bulk_update" op covers any combination of field changes;
+		// engine readers consult deltas (Text/Tags/Due/…), not the op.
+		ev := &apiv1.ChecklistEvent{
+			Src: source.String(),
+			Op:  "bulk_update",
+			Uid: item.Uid,
+		}
+		if args.Text != nil {
+			textCopy := *args.Text
+			ev.Text = &textCopy
+		}
+		if args.TagsSet {
+			ev.Tags = append([]string(nil), item.Tags...)
+			ev.TagsSet = true
+		}
+		if args.DescriptionSet && item.Description != nil {
+			descCopy := *item.Description
+			ev.Description = &descCopy
+		}
+		if args.DueSet {
+			ev.Due = item.Due
+		}
+		appendEvent(checklist, ev, now)
 	}
 	m.pruneTombstones(page, listName, checklist, now)
 	checklist.Items[idx] = item
@@ -375,7 +442,12 @@ func (m *Mutator) UpdateItem(_ context.Context, page, listName, uid string, args
 
 // ToggleItem flips the checked field. False→true sets completed_at and
 // completed_by; true→false clears both.
-func (m *Mutator) ToggleItem(_ context.Context, page, listName, uid string, expectedUpdatedAt *time.Time, identity tailscale.IdentityValue) (*apiv1.ChecklistItem, *apiv1.Checklist, error) {
+func (m *Mutator) ToggleItem(ctx context.Context, page, listName, uid string, expectedUpdatedAt *time.Time, identity tailscale.IdentityValue) (*apiv1.ChecklistItem, *apiv1.Checklist, error) {
+	return m.toggleItemImpl(ctx, page, listName, uid, expectedUpdatedAt, identity, UserSource(identity.LoginName()))
+}
+
+// toggleItemImpl is the source-aware internal entry point.
+func (m *Mutator) toggleItemImpl(_ context.Context, page, listName, uid string, expectedUpdatedAt *time.Time, identity tailscale.IdentityValue, source Source) (*apiv1.ChecklistItem, *apiv1.Checklist, error) {
 	listName = wikipage.NormalizeListName(listName)
 	if uid == "" {
 		return nil, nil, status.Error(codes.InvalidArgument, errUIDRequiredMsg)
@@ -412,6 +484,13 @@ func (m *Mutator) ToggleItem(_ context.Context, page, listName, uid string, expe
 	item.UpdatedAt = timestamppb.New(now)
 	item.Automated = identity.IsAgent()
 	bumpSyncToken(checklist, now)
+	checkedCopy := item.Checked
+	appendEvent(checklist, &apiv1.ChecklistEvent{
+		Src:     source.String(),
+		Op:      "toggle",
+		Uid:     item.Uid,
+		Checked: &checkedCopy,
+	}, now)
 	m.pruneTombstones(page, listName, checklist, now)
 	checklist.Items[idx] = item
 
@@ -423,7 +502,12 @@ func (m *Mutator) ToggleItem(_ context.Context, page, listName, uid string, expe
 }
 
 // DeleteItem removes uid from the named checklist and writes a tombstone.
-func (m *Mutator) DeleteItem(_ context.Context, page, listName, uid string, expectedUpdatedAt *time.Time, identity tailscale.IdentityValue) (*apiv1.Checklist, error) {
+func (m *Mutator) DeleteItem(ctx context.Context, page, listName, uid string, expectedUpdatedAt *time.Time, identity tailscale.IdentityValue) (*apiv1.Checklist, error) {
+	return m.deleteItemImpl(ctx, page, listName, uid, expectedUpdatedAt, identity, UserSource(identity.LoginName()))
+}
+
+// deleteItemImpl is the source-aware internal entry point.
+func (m *Mutator) deleteItemImpl(_ context.Context, page, listName, uid string, expectedUpdatedAt *time.Time, identity tailscale.IdentityValue, source Source) (*apiv1.Checklist, error) {
 	listName = wikipage.NormalizeListName(listName)
 	if uid == "" {
 		return nil, status.Error(codes.InvalidArgument, errUIDRequiredMsg)
@@ -446,6 +530,7 @@ func (m *Mutator) DeleteItem(_ context.Context, page, listName, uid string, expe
 	if item == nil {
 		return nil, ErrItemNotFound
 	}
+	_ = item
 
 	now := m.clock.Now()
 	checklist.Items = append(checklist.Items[:idx], checklist.Items[idx+1:]...)
@@ -456,6 +541,11 @@ func (m *Mutator) DeleteItem(_ context.Context, page, listName, uid string, expe
 		GcAfter:   timestamppb.New(now.Add(TombstoneTTL)),
 		SyncToken: checklist.SyncToken,
 	})
+	appendEvent(checklist, &apiv1.ChecklistEvent{
+		Src: source.String(),
+		Op:  "delete",
+		Uid: uid,
+	}, now)
 	m.pruneTombstones(page, listName, checklist, now)
 
 	if err := m.persist(page, fm, listName, checklist); err != nil {
@@ -500,6 +590,13 @@ func (m *Mutator) ReorderItem(_ context.Context, page, listName, uid string, new
 		densifyAroundSortOrder(checklist.Items, idx)
 		sortItems(checklist.Items)
 		bumpSyncToken(checklist, now)
+		sortOrderCopy := item.SortOrder
+		appendEvent(checklist, &apiv1.ChecklistEvent{
+			Src:       UserSource(identity.LoginName()).String(),
+			Op:        "set_sort_order",
+			Uid:       item.Uid,
+			SortOrder: &sortOrderCopy,
+		}, now)
 	}
 	m.pruneTombstones(page, listName, checklist, now)
 

@@ -30,15 +30,31 @@ func syncIdentityFor(ownerEmail string) tailscale.IdentityValue {
 	return tailscale.NewIdentity(ownerEmail, ownerEmail, "connector-sync")
 }
 
-// AddItemForSync is the Keep-sync entry point for "add this Keep
-// item to the wiki." Attributes the add to the binding owner's email
-// via ownerEmail (see syncIdentityFor).
+// resolveSyncSource returns the explicit Source override the caller
+// threaded via WithSource(ctx, …), falling back to a generic
+// connector-apply attribution when the caller didn't override. Per
+// ADR-0015: connector packages should always set the override so the
+// engine's causal merge rule sees the right kind. The fallback
+// preserves correctness (the event is at least tagged "not user")
+// when a legacy caller hasn't been updated yet.
+func resolveSyncSource(ctx context.Context) Source {
+	if s, ok := sourceFromContext(ctx); ok {
+		return s
+	}
+	return ConnectorSource("unknown", "apply")
+}
+
+// AddItemForSync is the connector-sync entry point for "add this
+// remote item to the wiki." Attributes the add to the binding owner's
+// email via ownerEmail (used for completed_by). The event-log entry's
+// src is taken from WithSource(ctx, …) — set at the top of the
+// connector's inbound apply pass.
 //
 // SortValueHint is forwarded as args.SortOrder when non-zero —
-// preserves Keep's relative ordering when seeding fresh items.
+// preserves the remote's relative ordering when seeding fresh items.
 //
-// `checked` is a value, not a control flag — it's Keep's reported
-// checkbox state for the new item.
+// `checked` is a value, not a control flag — it's the remote's
+// reported checkbox state for the new item.
 //
 //revive:disable-next-line:flag-parameter
 func (m *Mutator) AddItemForSync(ctx context.Context, page, listName, ownerEmail, text string, checked bool, tags []string, description, sortValueHint string) (string, error) {
@@ -58,27 +74,29 @@ func (m *Mutator) AddItemForSync(ctx context.Context, page, listName, ownerEmail
 		}
 	}
 	identity := syncIdentityFor(ownerEmail)
-	item, _, err := m.AddItem(ctx, page, listName, args, identity)
+	source := resolveSyncSource(ctx)
+	item, _, err := m.addItemImpl(ctx, page, listName, args, identity, source)
 	if err != nil {
 		return "", err
 	}
 	if checked {
 		// Toggle to set checked=true; the toggle path stamps
 		// completed_at correctly.
-		if _, _, err := m.ToggleItem(ctx, page, listName, item.GetUid(), nil, identity); err != nil {
+		if _, _, err := m.toggleItemImpl(ctx, page, listName, item.GetUid(), nil, identity, source); err != nil {
 			return item.GetUid(), err
 		}
 	}
 	return item.GetUid(), nil
 }
 
-// UpdateItemForSync is the Keep-sync entry point for "Keep changed
-// this item; mirror it on the wiki side." Replaces text/tags/
-// description and reconciles checked. Attribution goes to ownerEmail.
+// UpdateItemForSync is the connector-sync entry point for "remote
+// changed this item; mirror it on the wiki side." Replaces text/tags/
+// description and reconciles checked. completed_by goes to ownerEmail;
+// the event-log entry's src is taken from WithSource(ctx, …).
 //
 // `checked` is a value, not a control flag — it's the new desired
-// checkbox state from Keep. The connector passes whatever Keep
-// reports (checked or unchecked) and this function applies it.
+// checkbox state from the remote. The connector passes whatever the
+// remote reports (checked or unchecked) and this function applies it.
 //
 //revive:disable-next-line:flag-parameter
 func (m *Mutator) UpdateItemForSync(ctx context.Context, page, listName, ownerEmail, uid, text string, checked bool, tags []string, description string) error {
@@ -93,23 +111,26 @@ func (m *Mutator) UpdateItemForSync(ctx context.Context, page, listName, ownerEm
 		args.Description = &d
 	}
 	identity := syncIdentityFor(ownerEmail)
-	current, _, err := m.UpdateItem(ctx, page, listName, uid, args, nil, identity)
+	source := resolveSyncSource(ctx)
+	current, _, err := m.updateItemImpl(ctx, page, listName, uid, args, nil, identity, source)
 	if err != nil {
 		return err
 	}
 	if current.GetChecked() != checked {
-		if _, _, err := m.ToggleItem(ctx, page, listName, uid, nil, identity); err != nil {
+		if _, _, err := m.toggleItemImpl(ctx, page, listName, uid, nil, identity, source); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-// DeleteItemForSync is the Keep-sync entry point for "Keep trashed
-// this item; remove it from the wiki side too." Attribution (for
-// audit logging) goes to ownerEmail.
+// DeleteItemForSync is the connector-sync entry point for "remote
+// trashed this item; remove it from the wiki side too." Attribution
+// (for audit logging) goes to ownerEmail; event-log src is taken from
+// WithSource(ctx, …).
 func (m *Mutator) DeleteItemForSync(ctx context.Context, page, listName, ownerEmail, uid string) error {
-	_, err := m.DeleteItem(ctx, page, listName, uid, nil, syncIdentityFor(ownerEmail))
+	source := resolveSyncSource(ctx)
+	_, err := m.deleteItemImpl(ctx, page, listName, uid, nil, syncIdentityFor(ownerEmail), source)
 	return err
 }
 

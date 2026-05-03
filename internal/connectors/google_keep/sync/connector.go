@@ -19,6 +19,7 @@ import (
 	"github.com/brendanjerwin/simple_wiki/internal/connectors/google_keep/gateway"
 	"github.com/brendanjerwin/simple_wiki/internal/connectors/google_keep/translator"
 	"github.com/brendanjerwin/simple_wiki/internal/hashtags"
+	"github.com/brendanjerwin/simple_wiki/server/checklistmutator"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 )
 
@@ -1565,6 +1566,10 @@ func (c *Connector) applyInboundFromKeep(ctx context.Context, profileID wikipage
 		// No mutator wired — outbound-only mode. Return inputs as-is.
 		return binding, currentChecklist, false, nil
 	}
+	// Tag every event-log entry written from this apply pass with our
+	// connector kind so the engine's causal merge rule (ADR-0015) can
+	// distinguish "we just applied this" from "user edited locally."
+	ctx = checklistmutator.WithSource(ctx, checklistmutator.ConnectorSource("google_keep", "apply"))
 	if c.suppressor != nil {
 		c.suppressor.Suppress(profileID, binding.Page, binding.ListName)
 		defer c.suppressor.Unsuppress(profileID, binding.Page, binding.ListName)

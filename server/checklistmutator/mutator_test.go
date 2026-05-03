@@ -219,6 +219,48 @@ var _ = Describe("Mutator", func() {
 				Expect(added.SortOrder).To(Equal(int64(2000)))
 			})
 		})
+
+		// Per ADR-0015: every mutation appends a ChecklistEvent to the
+		// per-checklist log. The event-log entry's src is the engine's
+		// causal authority for the merge rule; verify it carries the
+		// right shape on each path.
+		When("a user adds an item", func() {
+			var checklist *apiv1.Checklist
+
+			BeforeEach(func() {
+				_, checklist, _ = mutator.AddItem(ctx, "p", "list", checklistmutator.AddItemArgs{Text: "Eggs"}, human)
+			})
+
+			It("should emit one event with op=add", func() {
+				Expect(checklist.Events).To(HaveLen(1))
+				Expect(checklist.Events[0].Op).To(Equal("add"))
+			})
+
+			It("should attribute src to the user identity", func() {
+				Expect(checklist.Events[0].Src).To(Equal("user:alice@example.com"))
+			})
+
+			It("should bump MaxSeq to 1", func() {
+				Expect(checklist.MaxSeq).To(Equal(int64(1)))
+			})
+		})
+
+		When("a connector calls AddItemForSync with WithSource(ctx, …)", func() {
+			var checklist *apiv1.Checklist
+
+			BeforeEach(func() {
+				connectorCtx := checklistmutator.WithSource(ctx,
+					checklistmutator.ConnectorSource("google_tasks", "apply"))
+				_, _ = mutator.AddItemForSync(connectorCtx, "p", "list", "alice@example.com",
+					"From Tasks", false, nil, "", "")
+				checklist, _ = mutator.ListItems(ctx, "p", "list")
+			})
+
+			It("should attribute the event's src to the connector, not the user", func() {
+				Expect(checklist.Events).To(HaveLen(1))
+				Expect(checklist.Events[0].Src).To(Equal("connector:google_tasks:apply"))
+			})
+		})
 	})
 
 	Describe("ToggleItem", func() {
