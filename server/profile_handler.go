@@ -119,6 +119,8 @@ func createProfileFromTemplate(
 		// Roll back the partial write so the next /profile visit sees a
 		// clean missing-page state and re-tries from scratch instead of
 		// redirecting the user to a frontmatter-only stub with no body.
+		// Best-effort rollback; the WriteMarkdown error is the one we report.
+		// nosemgrep: go.error-discarded-with-blank-identifier
 		_ = mutator.DeletePage(id)
 		return fmt.Errorf("write new profile markdown: %w", err)
 	}

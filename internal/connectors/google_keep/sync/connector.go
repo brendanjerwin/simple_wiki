@@ -465,7 +465,9 @@ func (c *Connector) Bind(ctx context.Context, profileID wikipage.PageIdentifier,
 		if err := c.leaseTable.Take(checklistKey, owner); err != nil {
 			// Profile already updated — best-effort rollback so the
 			// next subscribe on the same checklist sees a clean
-			// LeaseTable + clean profile state.
+			// LeaseTable + clean profile state. Best-effort cleanup;
+			// the original Take error is the one we report.
+			// nosemgrep: go.error-discarded-with-blank-identifier
 			_ = c.store.RemoveSubscription(profileID, page, listName)
 			return err
 		}
@@ -485,6 +487,8 @@ func (c *Connector) Bind(ctx context.Context, profileID wikipage.PageIdentifier,
 	// should return promptly; the queue worker will pick this up
 	// within milliseconds.
 	if c.enqueuer != nil {
+		// Fire-and-forget enqueue; the cron tick will pick up the work if this enqueue is rejected.
+		// nosemgrep: go.error-discarded-with-blank-identifier
 		_ = c.enqueuer.EnqueueJob(NewKeepOutboundSyncJob(c, profileID, page, listName))
 	}
 	return binding, nil

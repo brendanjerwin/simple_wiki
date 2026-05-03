@@ -515,6 +515,8 @@ func (c *wikiChatClient) handleAgentMessage(chunk *acp.SessionUpdateAgentMessage
 			Content:   fullText,
 			ReplyToId: replyTo,
 		}))
+		// Streaming reply is best-effort — we'd rather drop one chunk than tear down the agent session.
+		// nosemgrep: go.handler-returns-nil-after-error-logged
 		if err != nil {
 			slog.Error("failed to create streaming reply", logKeyPage, c.page, logKeyError, err)
 			return nil

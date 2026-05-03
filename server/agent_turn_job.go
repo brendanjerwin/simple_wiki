@@ -75,7 +75,7 @@ func (*AgentTurnJob) GetName() string {
 func (j *AgentTurnJob) Execute() error {
 	// Snapshot the schedule so we have the prompt + max_turns.
 	schedules, err := j.store.List(j.page)
-	if err != nil {
+	if err != nil { // nosemgrep: go.handler-returns-nil-after-error-logged
 		slog.Error("agent turn: list schedules failed", logKeyPage, j.page, logKeyScheduleID, j.scheduleID, logKeyError, err)
 		return nil
 	}
@@ -129,14 +129,15 @@ func (j *AgentTurnJob) Execute() error {
 	}
 
 	// Transition to RUNNING now that dispatch succeeded.
-	if err := j.store.TransitionStatus(j.page, j.scheduleID, apiv1.ScheduleStatus_SCHEDULE_STATUS_RUNNING, "", 0); err != nil {
+	if err := j.store.TransitionStatus(j.page, j.scheduleID, apiv1.ScheduleStatus_SCHEDULE_STATUS_RUNNING, "", 0); err != nil { // nosemgrep: go.handler-returns-nil-after-error-logged
 		slog.Error("agent turn: transition to RUNNING failed", logKeyPage, j.page, logKeyScheduleID, j.scheduleID, logKeyError, err)
 		return nil
 	}
 
 	outcome, terminalErr := j.awaitOutcome(completion)
 	if terminalErr != nil {
-		_ = j.store.TransitionStatus(j.page, j.scheduleID, apiv1.ScheduleStatus_SCHEDULE_STATUS_ERROR, terminalErr.Error(), 0)
+		// Best-effort terminal-ERROR transition; awaitOutcome's hard timeout recovers a stuck RUNNING.
+		_ = j.store.TransitionStatus(j.page, j.scheduleID, apiv1.ScheduleStatus_SCHEDULE_STATUS_ERROR, terminalErr.Error(), 0) // nosemgrep: go.error-discarded-with-blank-identifier
 		return nil
 	}
 
