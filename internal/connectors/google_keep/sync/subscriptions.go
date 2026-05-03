@@ -82,6 +82,16 @@ type Subscription struct {
 	// falls back to the per-pull byName index until the persisted map
 	// is populated.
 	LabelIDs map[string]string
+
+	// LastSyncedSeq is this binding's cursor in the per-checklist
+	// op-log (ADR-0015). Each successful round-trip advances it past
+	// every self-event written this tick; subsequent inbound applies
+	// classify divergence by scanning events with seq > LastSyncedSeq.
+	//
+	// Zero on freshly-created or pre-deploy subscriptions; the
+	// codec's backfillBaselineEvents synthesizes a baseline event
+	// per item, and the first tick advances cursor past those.
+	LastSyncedSeq int64
 }
 
 // ItemMapping is the per-item sync record for one wiki UID inside a
@@ -218,6 +228,7 @@ const (
 	bindingMigratedFingerprintsField = "migrated_fingerprints"
 	bindingItemIDMapField            = "item_id_map"
 	bindingLabelIDsField             = "label_ids"
+	bindingLastSyncedSeqField        = "last_synced_seq"
 
 	itemBindingServerIDField                  = "server_id"
 	itemBindingSyncedTextField                = "synced_text"
@@ -499,6 +510,7 @@ func decodeBindings(raw any) ([]Subscription, error) {
 			MigratedFingerprints: getBool(m, bindingMigratedFingerprintsField),
 			ItemIDMap:            idMap,
 			LabelIDs:             labelIDs,
+			LastSyncedSeq:        getInt64(m, bindingLastSyncedSeqField),
 		})
 	}
 	return out, nil
@@ -577,6 +589,9 @@ func encodeBindings(bindings []Subscription) []any {
 				m[name] = mainID
 			}
 			entry[bindingLabelIDsField] = m
+		}
+		if b.LastSyncedSeq > 0 {
+			entry[bindingLastSyncedSeqField] = b.LastSyncedSeq
 		}
 		out[i] = entry
 	}

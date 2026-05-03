@@ -11,11 +11,13 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
 	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
 	"github.com/brendanjerwin/simple_wiki/internal/connectors"
+	"github.com/brendanjerwin/simple_wiki/internal/connectors/engine"
 	"github.com/brendanjerwin/simple_wiki/internal/connectors/google_keep/gateway"
 	"github.com/brendanjerwin/simple_wiki/internal/connectors/google_keep/translator"
 	"github.com/brendanjerwin/simple_wiki/internal/hashtags"
@@ -1505,7 +1507,30 @@ func (c *Connector) bootstrapKeepListForBinding(ctx context.Context, profileID w
 // `now` is reserved for future per-item synced_fp stamping; not
 // consulted by the gate logic, which uses content fingerprints
 // instead of timestamps.
+//
+// Also advances binding.LastSyncedSeq past every self-event written
+// during this tick. Per ADR-0015: cursor advances ONLY past our own
+// writes — never past user / cross-connector events that interleaved
+// with our work, so the next tick's engine.Classify still sees them.
 func (c *Connector) markBindingSynced(profileID wikipage.PageIdentifier, binding Subscription, _ time.Time) error {
+	if c.checklistR != nil {
+		if cl, err := c.checklistR.ListItems(context.Background(), binding.Page, binding.ListName); err == nil && cl != nil {
+			selfPrefix := engine.SourcePrefixForKind("google_keep")
+			maxSelf := binding.LastSyncedSeq
+			for _, ev := range cl.GetEvents() {
+				if ev == nil {
+					continue
+				}
+				if !strings.HasPrefix(ev.GetSrc(), selfPrefix) {
+					continue
+				}
+				if ev.GetSeq() > maxSelf {
+					maxSelf = ev.GetSeq()
+				}
+			}
+			binding.LastSyncedSeq = maxSelf
+		}
+	}
 	state, err := c.store.LoadState(profileID)
 	if err != nil {
 		return fmt.Errorf("reload state for sync persist: %w", err)
