@@ -15,7 +15,7 @@ import (
 	"github.com/brendanjerwin/simple_wiki/internal/connectors"
 	tasksgateway "github.com/brendanjerwin/simple_wiki/internal/connectors/google_tasks/gateway"
 	taskssync "github.com/brendanjerwin/simple_wiki/internal/connectors/google_tasks/sync"
-	v1 "github.com/brendanjerwin/simple_wiki/internal/grpc/api/v1"
+	"github.com/brendanjerwin/simple_wiki/internal/grpc/api/v1"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 )
 
@@ -42,7 +42,7 @@ func (f *errMapperTasksClient) ListTasks(_ context.Context, _ string, _ time.Tim
 	return tasksgateway.TasksPage{Tasks: f.tasksToReturn}, nil
 }
 
-func (f *errMapperTasksClient) InsertTask(_ context.Context, _, _, _ string, _ tasksgateway.TaskStatus, _ time.Time, _ string) (tasksgateway.Task, error) {
+func (*errMapperTasksClient) InsertTask(_ context.Context, _, _, _ string, _ tasksgateway.TaskStatus, _ time.Time, _ string) (tasksgateway.Task, error) {
 	return tasksgateway.Task{}, nil
 }
 
