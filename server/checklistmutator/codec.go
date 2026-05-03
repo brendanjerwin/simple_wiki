@@ -33,6 +33,8 @@ const (
 	checklistsKey      = "checklists"
 	itemsKey           = "items"
 	tombstonesKey      = "tombstones"
+	eventsKey          = "events"
+	maxSeqKey          = "max_seq"
 	syncTokenKey       = "sync_token"
 	updatedAtKey       = "updated_at"
 	uidKey             = "uid"
@@ -47,6 +49,14 @@ const (
 	completedAtKey     = "completed_at"
 	completedByKey     = "completed_by"
 	automatedKey       = "automated"
+
+	// Per ADR-0015: per-checklist event-log fields. Living next to
+	// items + tombstones in the wiki-managed subtree.
+	eventSeqKey         = "seq"
+	eventTimestampKey   = "ts"
+	eventSourceKey      = "src"
+	eventOpKey          = "op"
+	eventTagsSetKey     = "tags_set"
 )
 
 // decodeChecklist reads the named checklist out of fm. Reads from
@@ -69,6 +79,10 @@ func decodeChecklist(fm wikipage.FrontMatter, listName string, clock Clock) *api
 			out.UpdatedAt = t
 		}
 		out.Tombstones = decodeTombstones(readSlice(wikiList, tombstonesKey))
+		out.Events = decodeEvents(readSlice(wikiList, eventsKey))
+		if maxSeq, ok := readInt64(wikiList, maxSeqKey); ok {
+			out.MaxSeq = maxSeq
+		}
 		for _, raw := range readSlice(wikiList, itemsKey) {
 			itemMap, ok := raw.(map[string]any)
 			if !ok {
@@ -156,6 +170,121 @@ func decodeLegacyItem(itemMap map[string]any, now time.Time) *apiv1.ChecklistIte
 	return item
 }
 
+// decodeEvents reads the events slice from wiki-managed data.
+// Per ADR-0015: each entry is the durable record of one mutation
+// (user edit, connector apply, migration backfill). Order is preserved
+// as written; no sort applied — the seq counter is the authoritative
+// causal order.
+func decodeEvents(raw []any) []*apiv1.ChecklistEvent {
+	if len(raw) == 0 {
+		return nil
+	}
+	out := make([]*apiv1.ChecklistEvent, 0, len(raw))
+	for _, r := range raw {
+		m, ok := r.(map[string]any)
+		if !ok {
+			continue
+		}
+		ev := &apiv1.ChecklistEvent{
+			Uid: stringValue(m, uidKey),
+			Src: stringValue(m, eventSourceKey),
+			Op:  stringValue(m, eventOpKey),
+		}
+		if seq, ok := readInt64(m, eventSeqKey); ok {
+			ev.Seq = seq
+		}
+		if ts, ok := readTimestamp(m, eventTimestampKey); ok {
+			ev.Ts = ts
+		}
+		// Optional field deltas: only present if the op mutated them.
+		if v, ok := m[checkedKey]; ok {
+			if b, isBool := v.(bool); isBool {
+				ev.Checked = &b
+			}
+		}
+		if v := stringValue(m, textKey); v != "" {
+			vCopy := v
+			ev.Text = &vCopy
+		}
+		if ts, ok := readTimestamp(m, dueKey); ok {
+			ev.Due = ts
+		}
+		if v := stringValue(m, descriptionKey); v != "" {
+			vCopy := v
+			ev.Description = &vCopy
+		}
+		if tags := stringSlice(m, tagsKey); tags != nil {
+			ev.Tags = tags
+		}
+		ev.TagsSet = boolValue(m, eventTagsSetKey)
+		if so, ok := readInt64(m, sortOrderKey); ok {
+			soCopy := so
+			ev.SortOrder = &soCopy
+		}
+		out = append(out, ev)
+	}
+	return out
+}
+
+// appendEvent adds one event to the checklist's log under the next
+// available seq, advancing MaxSeq. The caller must hold the same lock
+// that protects the checklist's items slice — seq monotonicity is the
+// engine's causal ordering guarantee, so it must not race.
+//
+// Per ADR-0015: seq is the authoritative causal counter; ts is
+// diagnostic only. MaxSeq survives compaction (events list may shrink
+// below it) so seq values are never reused after GC.
+func appendEvent(checklist *apiv1.Checklist, ev *apiv1.ChecklistEvent, now time.Time) {
+	if checklist == nil || ev == nil {
+		return
+	}
+	checklist.MaxSeq++
+	ev.Seq = checklist.MaxSeq
+	if ev.Ts == nil {
+		ev.Ts = timestamppb.New(now)
+	}
+	checklist.Events = append(checklist.Events, ev)
+}
+
+// encodeEvents serializes the events slice for wiki-managed data.
+// Field deltas are only written when set (presence-aware) so the TOML
+// stays minimal — an event for a single field change writes one row.
+func encodeEvents(events []*apiv1.ChecklistEvent) []any {
+	out := make([]any, 0, len(events))
+	for _, ev := range events {
+		m := map[string]any{
+			eventSeqKey:    ev.Seq,
+			eventSourceKey: ev.Src,
+			eventOpKey:     ev.Op,
+			uidKey:         ev.Uid,
+		}
+		if ev.Ts != nil {
+			m[eventTimestampKey] = ev.Ts.AsTime().Format(time.RFC3339Nano)
+		}
+		if ev.Checked != nil {
+			m[checkedKey] = *ev.Checked
+		}
+		if ev.Text != nil {
+			m[textKey] = *ev.Text
+		}
+		if ev.Due != nil {
+			m[dueKey] = ev.Due.AsTime().Format(time.RFC3339Nano)
+		}
+		if ev.Description != nil {
+			m[descriptionKey] = *ev.Description
+		}
+		if ev.TagsSet {
+			m[eventTagsSetKey] = true
+			m[tagsKey] = stringSliceToAny(ev.Tags)
+		}
+		if ev.SortOrder != nil {
+			m[sortOrderKey] = *ev.SortOrder
+		}
+		out = append(out, m)
+	}
+	return out
+}
+
 // decodeTombstones reads the tombstones slice from wiki-managed data.
 func decodeTombstones(raw []any) []*apiv1.Tombstone {
 	if len(raw) == 0 {
@@ -202,6 +331,16 @@ func encodeChecklist(fm wikipage.FrontMatter, listName string, checklist *apiv1.
 		wikiList[tombstonesKey] = encodeTombstones(checklist.Tombstones)
 	} else {
 		delete(wikiList, tombstonesKey)
+	}
+	if len(checklist.Events) > 0 {
+		wikiList[eventsKey] = encodeEvents(checklist.Events)
+	} else {
+		delete(wikiList, eventsKey)
+	}
+	if checklist.MaxSeq > 0 {
+		wikiList[maxSeqKey] = checklist.MaxSeq
+	} else {
+		delete(wikiList, maxSeqKey)
 	}
 
 	// Remove the legacy checklists.<list> subtree if present — the

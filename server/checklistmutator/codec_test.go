@@ -668,6 +668,297 @@ var _ = Describe("encodeItem", func() {
 	})
 })
 
+var _ = Describe("decodeEvents", func() {
+	When("raw is nil", func() {
+		It("should return nil", func() {
+			Expect(decodeEvents(nil)).To(BeNil())
+		})
+	})
+
+	When("raw is empty", func() {
+		It("should return nil", func() {
+			Expect(decodeEvents([]any{})).To(BeNil())
+		})
+	})
+
+	When("raw contains a fully-populated event", func() {
+		var result []*apiv1.ChecklistEvent
+
+		BeforeEach(func() {
+			ts := codecNow
+			raw := []any{
+				map[string]any{
+					"seq":      int64(1247),
+					"ts":       ts.Format(time.RFC3339Nano),
+					"src":      "user:brendanjerwin@gmail.com",
+					"op":       "toggle",
+					"uid":      "01KQ-ULID",
+					"checked":  false,
+					"text":     "Sun: Make Dinner",
+					"due":      ts.Format(time.RFC3339Nano),
+					"tags":     []any{"sunday", "cooking"},
+					"tags_set": true,
+				},
+			}
+			result = decodeEvents(raw)
+		})
+
+		It("should decode exactly one event", func() {
+			Expect(result).To(HaveLen(1))
+		})
+
+		It("should decode seq as int64", func() {
+			Expect(result[0].Seq).To(Equal(int64(1247)))
+		})
+
+		It("should decode src as the conventional source string", func() {
+			Expect(result[0].Src).To(Equal("user:brendanjerwin@gmail.com"))
+		})
+
+		It("should decode op", func() {
+			Expect(result[0].Op).To(Equal("toggle"))
+		})
+
+		It("should decode uid", func() {
+			Expect(result[0].Uid).To(Equal("01KQ-ULID"))
+		})
+
+		It("should decode the checked delta", func() {
+			Expect(result[0].Checked).NotTo(BeNil())
+			Expect(*result[0].Checked).To(BeFalse())
+		})
+
+		It("should decode the text delta", func() {
+			Expect(result[0].Text).NotTo(BeNil())
+			Expect(*result[0].Text).To(Equal("Sun: Make Dinner"))
+		})
+
+		It("should decode the due timestamp", func() {
+			Expect(result[0].Due).NotTo(BeNil())
+		})
+
+		It("should decode tags when tags_set=true", func() {
+			Expect(result[0].TagsSet).To(BeTrue())
+			Expect(result[0].Tags).To(ConsistOf("sunday", "cooking"))
+		})
+	})
+
+	When("an event omits tags_set but has empty tags", func() {
+		var result []*apiv1.ChecklistEvent
+
+		BeforeEach(func() {
+			raw := []any{
+				map[string]any{
+					"seq": int64(1),
+					"src": "user:alice@example.com",
+					"op":  "toggle",
+					"uid": "u1",
+				},
+			}
+			result = decodeEvents(raw)
+		})
+
+		It("should leave TagsSet=false", func() {
+			Expect(result[0].TagsSet).To(BeFalse())
+		})
+
+		It("should leave Tags empty", func() {
+			Expect(result[0].Tags).To(BeEmpty())
+		})
+	})
+
+	When("raw contains non-map entries", func() {
+		It("should skip them", func() {
+			raw := []any{"not-a-map", 42}
+			Expect(decodeEvents(raw)).To(BeEmpty())
+		})
+	})
+
+	When("seq is encoded as float64 (TOML/JSON round-trip)", func() {
+		It("should coerce to int64", func() {
+			raw := []any{map[string]any{
+				"seq": float64(99),
+				"src": "user:bob@example.com",
+				"op":  "toggle",
+				"uid": "u2",
+			}}
+			result := decodeEvents(raw)
+			Expect(result).To(HaveLen(1))
+			Expect(result[0].Seq).To(Equal(int64(99)))
+		})
+	})
+})
+
+var _ = Describe("encodeEvents", func() {
+	When("an event mutates one field", func() {
+		var encoded []any
+
+		BeforeEach(func() {
+			checked := true
+			ev := &apiv1.ChecklistEvent{
+				Seq: 42,
+				Ts:  timestamppb.New(codecNow),
+				Src: "connector:google_tasks:apply",
+				Op:  "toggle",
+				Uid: "01KQ",
+				Checked: &checked,
+			}
+			encoded = encodeEvents([]*apiv1.ChecklistEvent{ev})
+		})
+
+		It("should encode seq", func() {
+			m := asMap(encoded[0])
+			Expect(m["seq"]).To(Equal(int64(42)))
+		})
+
+		It("should encode src", func() {
+			m := asMap(encoded[0])
+			Expect(m["src"]).To(Equal("connector:google_tasks:apply"))
+		})
+
+		It("should encode the checked delta", func() {
+			m := asMap(encoded[0])
+			Expect(m["checked"]).To(Equal(true))
+		})
+
+		It("should NOT encode field deltas the event didn't mutate", func() {
+			m := asMap(encoded[0])
+			Expect(m).NotTo(HaveKey("text"))
+			Expect(m).NotTo(HaveKey("due"))
+			Expect(m).NotTo(HaveKey("description"))
+		})
+
+		It("should NOT encode tags when tags_set=false", func() {
+			m := asMap(encoded[0])
+			Expect(m).NotTo(HaveKey("tags"))
+			Expect(m).NotTo(HaveKey("tags_set"))
+		})
+	})
+
+	When("an event clears tags (tags_set=true, empty list)", func() {
+		It("should encode tags_set=true and an empty tags list", func() {
+			ev := &apiv1.ChecklistEvent{
+				Seq: 1, Ts: timestamppb.New(codecNow),
+				Src: "user:a@b", Op: "set_tags", Uid: "u",
+				TagsSet: true,
+				Tags:    nil,
+			}
+			encoded := encodeEvents([]*apiv1.ChecklistEvent{ev})
+			m := asMap(encoded[0])
+			Expect(m["tags_set"]).To(Equal(true))
+			Expect(m).To(HaveKey("tags"))
+		})
+	})
+
+	When("encoding then decoding round-trips", func() {
+		It("should preserve all set fields", func() {
+			checked := false
+			text := "Buy eggs"
+			desc := "from Shaw's"
+			sortOrder := int64(7000)
+			original := []*apiv1.ChecklistEvent{
+				{
+					Seq: 100, Ts: timestamppb.New(codecNow),
+					Src: "user:alice@example.com", Op: "bulk_update", Uid: "01KQ",
+					Checked:     &checked,
+					Text:        &text,
+					Description: &desc,
+					SortOrder:   &sortOrder,
+					TagsSet:     true,
+					Tags:        []string{"shopping"},
+				},
+			}
+			encoded := encodeEvents(original)
+			decoded := decodeEvents(encoded)
+			Expect(decoded).To(HaveLen(1))
+			Expect(decoded[0].Seq).To(Equal(int64(100)))
+			Expect(decoded[0].Src).To(Equal("user:alice@example.com"))
+			Expect(*decoded[0].Checked).To(BeFalse())
+			Expect(*decoded[0].Text).To(Equal("Buy eggs"))
+			Expect(*decoded[0].Description).To(Equal("from Shaw's"))
+			Expect(*decoded[0].SortOrder).To(Equal(int64(7000)))
+			Expect(decoded[0].TagsSet).To(BeTrue())
+			Expect(decoded[0].Tags).To(ConsistOf("shopping"))
+		})
+	})
+})
+
+var _ = Describe("appendEvent", func() {
+	When("the checklist has no prior events", func() {
+		var checklist *apiv1.Checklist
+
+		BeforeEach(func() {
+			checklist = &apiv1.Checklist{Name: "dad"}
+			appendEvent(checklist, &apiv1.ChecklistEvent{
+				Src: "user:a@b", Op: "toggle", Uid: "u1",
+			}, codecNow)
+		})
+
+		It("should assign seq=1 to the first event", func() {
+			Expect(checklist.Events).To(HaveLen(1))
+			Expect(checklist.Events[0].Seq).To(Equal(int64(1)))
+		})
+
+		It("should advance MaxSeq to 1", func() {
+			Expect(checklist.MaxSeq).To(Equal(int64(1)))
+		})
+
+		It("should stamp ts when nil", func() {
+			Expect(checklist.Events[0].Ts).NotTo(BeNil())
+			Expect(checklist.Events[0].Ts.AsTime()).To(Equal(codecNow))
+		})
+	})
+
+	When("the checklist already has events", func() {
+		var checklist *apiv1.Checklist
+
+		BeforeEach(func() {
+			checklist = &apiv1.Checklist{
+				Name:    "dad",
+				MaxSeq:  5,
+				Events:  []*apiv1.ChecklistEvent{{Seq: 5}},
+			}
+			appendEvent(checklist, &apiv1.ChecklistEvent{
+				Src: "user:a@b", Op: "toggle", Uid: "u1",
+			}, codecNow)
+		})
+
+		It("should assign the next seq (6)", func() {
+			Expect(checklist.Events).To(HaveLen(2))
+			Expect(checklist.Events[1].Seq).To(Equal(int64(6)))
+		})
+
+		It("should advance MaxSeq", func() {
+			Expect(checklist.MaxSeq).To(Equal(int64(6)))
+		})
+	})
+
+	When("MaxSeq is ahead of len(events) due to compaction", func() {
+		It("should still allocate the next seq from MaxSeq, not len(events)", func() {
+			checklist := &apiv1.Checklist{Name: "dad", MaxSeq: 100, Events: nil}
+			appendEvent(checklist, &apiv1.ChecklistEvent{Src: "user:a@b", Op: "toggle", Uid: "u"}, codecNow)
+			Expect(checklist.Events[0].Seq).To(Equal(int64(101)))
+			Expect(checklist.MaxSeq).To(Equal(int64(101)))
+		})
+	})
+
+	When("called repeatedly", func() {
+		It("should produce monotonically increasing seq values", func() {
+			checklist := &apiv1.Checklist{Name: "dad"}
+			for i := 0; i < 5; i++ {
+				appendEvent(checklist, &apiv1.ChecklistEvent{
+					Src: "user:a@b", Op: "toggle", Uid: "u",
+				}, codecNow)
+			}
+			seqs := make([]int64, len(checklist.Events))
+			for i, ev := range checklist.Events {
+				seqs[i] = ev.Seq
+			}
+			Expect(seqs).To(Equal([]int64{1, 2, 3, 4, 5}))
+		})
+	})
+})
+
 var _ = Describe("encodeTombstones", func() {
 	When("tombstones are given", func() {
 		It("should sort by deleted_at ascending", func() {
