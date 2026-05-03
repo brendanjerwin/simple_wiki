@@ -8,6 +8,7 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
 	"github.com/brendanjerwin/simple_wiki/internal/connectors"
@@ -593,6 +594,52 @@ var _ = Describe("Connector.Sync", func() {
 			Expect(ok).To(BeTrue())
 			Expect(synced.SyncedTitle).To(Equal("Remote-Edited-By-Phone"))
 			Expect(synced.SyncedStatus).To(Equal("completed"))
+		})
+	})
+
+	When("the wiki Due has a time-of-day but Synced* was stamped from Tasks's date-only response", func() {
+		// REGRESSION TEST for the production bug: Google Tasks
+		// truncates `due` to date-only on the wire, so an inbound
+		// observation always sees Due=00:00. The wiki keeps the
+		// original time-of-day (e.g. 21:30) on its Due proto. If the
+		// diff compares timestamps at full resolution, every tick
+		// fires a phantom patch; comparing at date-only resolution
+		// matches Tasks's actual semantics and is correct.
+		var client *fakeTasksClient
+
+		BeforeEach(func() {
+			pages := newFakePages()
+			now := time.Date(2026, 4, 25, 17, 14, 0, 0, time.UTC)
+			wikiDue := time.Date(2026, 5, 3, 21, 30, 0, 0, time.UTC)
+			tasksDue := time.Date(2026, 5, 3, 0, 0, 0, 0, time.UTC)
+			syncedFields := taskssync.ItemSyncState{
+				SyncedTitle:  "Sun: Make Dinner",
+				SyncedNotes:  translator.WikiUIDMarker("wiki-1"),
+				SyncedStatus: "needsAction",
+				SyncedDue:    tasksDue, // Tasks-side observed value
+			}
+			sub := taskssync.Subscription{
+				Page:           syncTestPage,
+				ListName:       syncTestListName,
+				RemoteListID:   syncTestRemote,
+				State:          taskssync.SubscriptionStateActive,
+				LastUpdatedMin: now.Add(time.Hour),
+				ItemIDMap:      map[string]string{"wiki-1": "task-1"},
+				ItemEtags:      map[string]string{"task-1": "etag-known"},
+				SyncedItems:    map[string]taskssync.ItemSyncState{"wiki-1": syncedFields},
+			}
+			store := newConfiguredStore(pages, &sub)
+			client = newFakeTasksClient()
+			reader := newFakeChecklistReader()
+			reader.Set(syncTestPage, syncTestListName, []*apiv1.ChecklistItem{
+				{Uid: "wiki-1", Text: "Sun: Make Dinner", Due: timestamppb.New(wikiDue)},
+			})
+			c := buildTestConnector(store, readyLeaseTable(), client, newFakeClock(now), reader, nil, nil)
+			Expect(c.Sync(context.Background(), subscriptionKey())).To(Succeed())
+		})
+
+		It("should NOT call PatchTask (date-only comparison treats wikiDue and tasksDue as equal)", func() {
+			Expect(client.patched).To(BeEmpty())
 		})
 	})
 
