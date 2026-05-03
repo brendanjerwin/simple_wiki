@@ -580,7 +580,6 @@ var _ = Describe("Connector.PausedReason", func() {
 			Expect(reason).To(ContainSubstring("Google Keep"))
 		})
 	})
-
 })
 
 var _ = Describe("Connector.ForceFullResync", func() {
