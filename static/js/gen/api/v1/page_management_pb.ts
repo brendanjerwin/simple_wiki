@@ -110,13 +110,6 @@ export type ReadPageResponse = Message<"api.v1.ReadPageResponse"> & {
   frontMatterToml: string;
 
   /**
-   * Deprecated: always empty. Use RenderPage to obtain rendered HTML.
-   *
-   * @generated from field: string rendered_content_html = 3;
-   */
-  renderedContentHtml: string;
-
-  /**
    * rendered_content_markdown contains the markdown content after template expansion
    * but before HTML conversion. This is useful for LLM consumption as it includes
    * all template-expanded content like inventory lists from ShowInventoryContentsOf.

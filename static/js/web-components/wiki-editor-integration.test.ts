@@ -69,7 +69,6 @@ describe('WikiEditor integration with toolbar', () => {
         contentMarkdown: 'Hello world',
         frontMatterToml: '',
         versionHash: 'hash1',
-        renderedContentHtml: '',
         renderedContentMarkdown: '',
       })
     );

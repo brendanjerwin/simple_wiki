@@ -139,8 +139,8 @@ message ReadPageRequest {
 message ReadPageResponse {
   string content_markdown = 1;
   string front_matter_toml = 2;
-  // Deprecated: always empty. Use RenderPage to obtain rendered HTML.
-  string rendered_content_html = 3;
+  reserved 3;
+  reserved "rendered_content_html";
   // rendered_content_markdown contains the markdown content after template expansion
   // but before HTML conversion. This is useful for LLM consumption as it includes
   // all template-expanded content like inventory lists from ShowInventoryContentsOf.
