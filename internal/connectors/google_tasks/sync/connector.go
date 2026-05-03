@@ -475,6 +475,8 @@ func (c *Connector) applyInboundFromTasks(ctx context.Context, profileID wikipag
 
 	// Lazy loader for wiki-text lookup (marker-loss recovery).
 	resolveWikiByText := c.buildWikiByTextResolver(ctx, sub)
+	// Lazy loader for wiki uid → item lookup (divergence guard).
+	resolveWikiByUID := c.buildWikiByUIDResolver(ctx, sub)
 
 	if c.suppressor != nil {
 		c.suppressor.Suppress(profileID, sub.Page, sub.ListName)
@@ -490,7 +492,7 @@ func (c *Connector) applyInboundFromTasks(ctx context.Context, profileID wikipag
 			c.applyInboundDeletion(ctx, profileID, ownerEmail, sub, t, taskToUID)
 			continue
 		}
-		if err := c.applyOneInboundTask(ctx, profileID, ownerEmail, sub, taskToUID, t, resolveWikiByText); err != nil {
+		if err := c.applyOneInboundTask(ctx, profileID, ownerEmail, sub, taskToUID, t, resolveWikiByText, resolveWikiByUID); err != nil {
 			return sub, maxUpdated, err
 		}
 	}
@@ -523,14 +525,53 @@ func (c *Connector) buildWikiByTextResolver(ctx context.Context, sub Subscriptio
 	}
 }
 
+// buildWikiByUIDResolver returns a lazy loader that reads the wiki
+// checklist once and builds a uid → ChecklistItem map. Used by the
+// inbound divergence guard to compare current wiki state against the
+// SyncedItems baseline before applying a remote update.
+func (c *Connector) buildWikiByUIDResolver(ctx context.Context, sub Subscription) func() (map[string]*apiv1.ChecklistItem, error) {
+	var cached map[string]*apiv1.ChecklistItem
+	return func() (map[string]*apiv1.ChecklistItem, error) {
+		if cached != nil {
+			return cached, nil
+		}
+		items, err := c.checklistR.ListItems(ctx, sub.Page, sub.ListName)
+		if err != nil {
+			return nil, fmt.Errorf("read wiki checklist: %w", err)
+		}
+		cached = map[string]*apiv1.ChecklistItem{}
+		if items != nil {
+			for _, it := range items.GetItems() {
+				if it.GetUid() != "" {
+					cached[it.GetUid()] = it
+				}
+			}
+		}
+		return cached, nil
+	}
+}
+
 // applyOneInboundTask processes a single non-deleted inbound task:
 // resolves the wiki uid (via id_map, marker, or text-match), then
-// updates an existing wiki item or adds a new one.
+// updates an existing wiki item or adds a new one. Two guards
+// prevent the inbound from clobbering pending wiki edits:
+//
+//  1. Same-etag skip — the cursor-safety-buffer's idempotent re-fetch
+//     will return the same task on every tick until Tasks bumps the
+//     etag. Without this guard, every tick rewrites the wiki to the
+//     same state, overwriting any local edits made since the last
+//     tick.
+//  2. Wiki-divergence skip — even when the etag has bumped, if the
+//     wiki has been edited locally since our last successful
+//     round-trip (current wiki ≠ SyncedItems baseline), applying the
+//     remote here would clobber the pending edit. Skip; outbound
+//     pushes the local edit; a later inbound tick reconciles.
+//
 // sub.ItemIDMap and sub.ItemEtags are maps — mutations here propagate
 // back to the caller because map values are reference types.
 //
-//revive:disable-next-line:cyclomatic,cognitive-complexity
-func (c *Connector) applyOneInboundTask(ctx context.Context, profileID wikipage.PageIdentifier, ownerEmail string, sub Subscription, taskToUID map[string]string, t gateway.Task, resolveWikiByText func() (map[string]string, error)) error {
+//revive:disable-next-line:cyclomatic,cognitive-complexity,function-length
+func (c *Connector) applyOneInboundTask(ctx context.Context, profileID wikipage.PageIdentifier, ownerEmail string, sub Subscription, taskToUID map[string]string, t gateway.Task, resolveWikiByText func() (map[string]string, error), resolveWikiByUID func() (map[string]*apiv1.ChecklistItem, error)) error {
 	uid, hasUID := taskToUID[t.ID]
 	if !hasUID {
 		_, markerUID, hasMarker := translator.StripWikiUIDMarker(t.Notes)
@@ -572,6 +613,35 @@ func (c *Connector) applyOneInboundTask(ctx context.Context, profileID wikipage.
 	}
 
 	if hasUID {
+		// Guard 1: same-etag skip. The cursor-safety-buffer (advance =
+		// max(Task.updated) - 1s) deliberately re-fetches the task that
+		// triggered the cursor advance. Without this skip, every
+		// subsequent tick re-applies the same remote state, clobbering
+		// any wiki edits made since.
+		if knownEtag, ok := sub.ItemEtags[t.ID]; ok && knownEtag == t.Etag {
+			c.logger.Info("tasks bridge: %s profile=%s page=%s list=%s uid=%s task=%s",
+				connectors.EventInboundSkippedSameEtag, string(profileID), sub.Page, sub.ListName, uid, t.ID)
+			return nil
+		}
+		// Guard 2: wiki-divergence skip. If the wiki has been edited
+		// locally since our last successful round-trip, applying the
+		// remote here would overwrite the pending edit. Outbound will
+		// push the wiki state on the same tick or the next; a later
+		// inbound tick reconciles from the post-push etag.
+		if synced, hasSynced := sub.SyncedItems[uid]; hasSynced {
+			wikiByUID, wikiErr := resolveWikiByUID()
+			if wikiErr == nil {
+				if currentItem, has := wikiByUID[uid]; has && currentItem != nil {
+					currentFields := translator.ChecklistItemToTaskFields(currentItem)
+					if !syncedMatchesFields(synced, currentFields) {
+						c.logger.Info("tasks bridge: %s profile=%s page=%s list=%s uid=%s task=%s",
+							connectors.EventWikiDivergedSkippedInbound, string(profileID), sub.Page, sub.ListName, uid, t.ID)
+						return nil
+					}
+				}
+			}
+		}
+
 		if c.checklistW != nil {
 			description := item.GetDescription()
 			if updateErr := c.checklistW.UpdateItemForSync(ctx, sub.Page, sub.ListName, ownerEmail, uid, item.GetText(), item.GetChecked(), item.GetTags(), description); updateErr != nil {

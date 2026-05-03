@@ -1108,6 +1108,118 @@ var _ = Describe("Connector.Sync", func() {
 		})
 	})
 
+	// REGRESSION (2026-05-03): the cursor advances to max(Task.updated)
+	// minus a 1s safety buffer, so the very next tick re-fetches the
+	// task whose update triggered the advance. Without an etag-skip
+	// guard, every tick re-applies the same remote state and clobbers
+	// any local wiki edits made since.
+	When("inbound returns a task whose etag equals the etag we last applied", func() {
+		var (
+			mutator *fakeChecklistMutator
+			client  *fakeTasksClient
+		)
+
+		BeforeEach(func() {
+			pages := newFakePages()
+			now := time.Date(2026, 4, 25, 17, 14, 0, 0, time.UTC)
+			sub := taskssync.Subscription{
+				Page:         syncTestPage,
+				ListName:     syncTestListName,
+				RemoteListID: syncTestRemote,
+				State:        taskssync.SubscriptionStateActive,
+				ItemIDMap:    map[string]string{"wiki-1": "task-1"},
+				ItemEtags:    map[string]string{"task-1": "etag-stable"},
+				SyncedItems: map[string]taskssync.ItemSyncState{
+					"wiki-1": {SyncedTitle: "Eggs", SyncedNotes: translator.WikiUIDMarker("wiki-1"), SyncedStatus: "completed"},
+				},
+			}
+			store := newConfiguredStore(pages, &sub)
+			client = newFakeTasksClient()
+			// Same etag we already have stored — the safety-buffer
+			// re-fetch returns the identical task.
+			client.listAllForList[syncTestRemote] = []gateway.Task{{
+				ID: "task-1", Etag: "etag-stable",
+				Title: "Eggs", Status: gateway.TaskStatusCompleted,
+				Updated: now.Add(-30 * time.Second),
+			}}
+			reader := newFakeChecklistReader()
+			// Wiki was edited locally to unchecked (user just toggled).
+			// Without the etag-skip guard, applyOneInboundTask would
+			// overwrite this back to checked=true.
+			reader.Set(syncTestPage, syncTestListName, []*apiv1.ChecklistItem{
+				{Uid: "wiki-1", Text: "Eggs", Checked: false},
+			})
+			mutator = newFakeChecklistMutatorBoundTo(reader)
+			c := buildTestConnector(store, readyLeaseTable(), client, newFakeClock(now), reader, mutator, nil)
+			Expect(c.Sync(context.Background(), subscriptionKey())).To(Succeed())
+		})
+
+		It("should NOT call UpdateItemForSync (etag-skip prevents re-apply)", func() {
+			Expect(mutator.updated).To(BeEmpty())
+		})
+
+		It("should still allow outbound to push the local uncheck", func() {
+			Expect(client.patched).To(HaveLen(1))
+			Expect(client.patched[0].Fields.Status).To(Equal(gateway.TaskStatusNeedsAction))
+		})
+	})
+
+	// REGRESSION (2026-05-03, the "uncheck-from-wiki bounces back to
+	// checked" bug): if the wiki has been edited locally since the
+	// last successful round-trip AND inbound has a remote update with
+	// a fresh etag, applying the remote here clobbers the pending
+	// local edit. Skip the apply and let outbound win this tick.
+	When("inbound has a fresh remote update but the wiki has diverged from SyncedItems", func() {
+		var (
+			mutator *fakeChecklistMutator
+			client  *fakeTasksClient
+		)
+
+		BeforeEach(func() {
+			pages := newFakePages()
+			now := time.Date(2026, 4, 25, 17, 14, 0, 0, time.UTC)
+			sub := taskssync.Subscription{
+				Page:         syncTestPage,
+				ListName:     syncTestListName,
+				RemoteListID: syncTestRemote,
+				State:        taskssync.SubscriptionStateActive,
+				ItemIDMap:    map[string]string{"wiki-1": "task-1"},
+				ItemEtags:    map[string]string{"task-1": "etag-prev"},
+				// Last-pushed baseline: completed.
+				SyncedItems: map[string]taskssync.ItemSyncState{
+					"wiki-1": {SyncedTitle: "Eggs", SyncedNotes: translator.WikiUIDMarker("wiki-1"), SyncedStatus: "completed"},
+				},
+			}
+			store := newConfiguredStore(pages, &sub)
+			client = newFakeTasksClient()
+			// Tasks-side bumped to a new etag (some unrelated change
+			// like position or notes), still status=completed.
+			client.listAllForList[syncTestRemote] = []gateway.Task{{
+				ID: "task-1", Etag: "etag-fresh",
+				Title: "Eggs", Status: gateway.TaskStatusCompleted,
+				Updated: now.Add(60 * time.Second),
+			}}
+			reader := newFakeChecklistReader()
+			// Wiki was just unchecked locally — diverged from the
+			// SyncedItems baseline.
+			reader.Set(syncTestPage, syncTestListName, []*apiv1.ChecklistItem{
+				{Uid: "wiki-1", Text: "Eggs", Checked: false},
+			})
+			mutator = newFakeChecklistMutatorBoundTo(reader)
+			c := buildTestConnector(store, readyLeaseTable(), client, newFakeClock(now), reader, mutator, nil)
+			Expect(c.Sync(context.Background(), subscriptionKey())).To(Succeed())
+		})
+
+		It("should NOT overwrite the wiki (divergence guard)", func() {
+			Expect(mutator.updated).To(BeEmpty())
+		})
+
+		It("should let outbound push the wiki state to Tasks", func() {
+			Expect(client.patched).To(HaveLen(1))
+			Expect(client.patched[0].Fields.Status).To(Equal(gateway.TaskStatusNeedsAction))
+		})
+	})
+
 	When("the SyncSuppressor is wired and inbound apply runs", func() {
 		// MIRROR of Keep B1 / inbound-apply isolation. Verifies the
 		// real wiring: inbound writes via the mutator MUST be wrapped

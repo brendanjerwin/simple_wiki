@@ -42,4 +42,20 @@ const (
 	// truncation-recovery path or an explicit ForceFullResync call
 	// schedules a one-shot full re-fetch.
 	EventForceFullResyncTriggered = "force_full_resync_triggered"
+
+	// EventInboundSkippedSameEtag fires when inbound apply observes
+	// a remote item whose etag matches the etag we last applied — a
+	// duplicate from the cursor-safety-buffer's idempotent re-fetch
+	// window. Skipping the apply prevents re-writing the wiki with
+	// state we already have, which (without this guard) clobbers
+	// any local wiki edits made since the last successful round-trip.
+	EventInboundSkippedSameEtag = "inbound_skipped_same_etag"
+
+	// EventWikiDivergedSkippedInbound fires when inbound apply
+	// detects that the wiki has been edited locally since our last
+	// SyncedItems baseline, and a remote update arrived for the
+	// same item. Applying the remote here would clobber the pending
+	// local edit. Skip the apply; outbound will push the wiki state
+	// and a later inbound tick will reconcile from the post-push etag.
+	EventWikiDivergedSkippedInbound = "wiki_diverged_skipped_inbound"
 )
