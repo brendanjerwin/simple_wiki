@@ -575,51 +575,74 @@ func (s *Server) GetChecklistSubscriptionState(ctx context.Context, req *apiv1.G
 	}
 	out := &apiv1.ChecklistSubscriptionState{}
 
-	if s.tasksConnector != nil {
-		tasksState, err := s.tasksConnector.GetState(ctx, profileID)
-		if err != nil {
-			// Log the full error chain server-side before mapping to a
-			// gRPC code. See feedback_never_obscure_errors_at_boundaries.
-			if s.logger != nil {
-				s.logger.Error("ConnectorService.GetChecklistSubscriptionState(GOOGLE_TASKS) failed for profile=%s page=%s list=%s: %v",
-					string(profileID), req.GetPage(), req.GetListName(), err)
-			}
-			return nil, mapTasksConnectorErr(err)
-		}
-		if tasksState.IsConfigured() {
-			out.ConnectorConfigured = true
-		}
-		for _, sub := range tasksState.Subscriptions {
-			if sub.Page == req.GetPage() && sub.ListName == req.GetListName() {
-				out.CurrentSubscription = tasksSubscriptionToProto(sub)
-				return &apiv1.GetChecklistSubscriptionStateResponse{State: out}, nil
-			}
-		}
+	if hit, err := s.checklistSubscriptionFromTasks(ctx, profileID, req, out); err != nil {
+		return nil, err
+	} else if hit {
+		return &apiv1.GetChecklistSubscriptionStateResponse{State: out}, nil
 	}
 
-	if s.keepConnector != nil {
-		keepState, err := s.keepConnector.GetState(ctx, profileID)
-		if err != nil {
-			// Log the full error chain server-side before mapping to a
-			// gRPC code. See feedback_never_obscure_errors_at_boundaries.
-			if s.logger != nil {
-				s.logger.Error("ConnectorService.GetChecklistSubscriptionState(GOOGLE_KEEP) failed for profile=%s page=%s list=%s: %v",
-					string(profileID), req.GetPage(), req.GetListName(), err)
-			}
-			return nil, mapKeepConnectorErr(err)
-		}
-		if keepState.IsConfigured() {
-			out.ConnectorConfigured = true
-		}
-		for _, b := range keepState.Subscriptions {
-			if b.Page == req.GetPage() && b.ListName == req.GetListName() {
-				out.CurrentSubscription = keepSubscriptionToProto(b, false)
-				return &apiv1.GetChecklistSubscriptionStateResponse{State: out}, nil
-			}
-		}
+	if hit, err := s.checklistSubscriptionFromKeep(ctx, profileID, req, out); err != nil {
+		return nil, err
+	} else if hit {
+		return &apiv1.GetChecklistSubscriptionStateResponse{State: out}, nil
 	}
 
 	return &apiv1.GetChecklistSubscriptionStateResponse{State: out}, nil
+}
+
+// checklistSubscriptionFromTasks fills out's CurrentSubscription if
+// the Tasks connector owns (page, list_name) for this profile.
+// Returns hit=true when a match was written; hit=false on no match
+// (caller falls through to Keep). ConnectorConfigured is set
+// regardless when Tasks is configured for this profile.
+func (s *Server) checklistSubscriptionFromTasks(ctx context.Context, profileID wikipage.PageIdentifier, req *apiv1.GetChecklistSubscriptionStateRequest, out *apiv1.ChecklistSubscriptionState) (bool, error) {
+	if s.tasksConnector == nil {
+		return false, nil
+	}
+	tasksState, err := s.tasksConnector.GetState(ctx, profileID)
+	if err != nil {
+		if s.logger != nil {
+			s.logger.Error("ConnectorService.GetChecklistSubscriptionState(GOOGLE_TASKS) failed for profile=%s page=%s list=%s: %v",
+				string(profileID), req.GetPage(), req.GetListName(), err)
+		}
+		return false, mapTasksConnectorErr(err)
+	}
+	if tasksState.IsConfigured() {
+		out.ConnectorConfigured = true
+	}
+	for _, sub := range tasksState.Subscriptions {
+		if sub.Page == req.GetPage() && sub.ListName == req.GetListName() {
+			out.CurrentSubscription = tasksSubscriptionToProto(sub)
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+// checklistSubscriptionFromKeep is the Keep counterpart of
+// checklistSubscriptionFromTasks; same semantics.
+func (s *Server) checklistSubscriptionFromKeep(ctx context.Context, profileID wikipage.PageIdentifier, req *apiv1.GetChecklistSubscriptionStateRequest, out *apiv1.ChecklistSubscriptionState) (bool, error) {
+	if s.keepConnector == nil {
+		return false, nil
+	}
+	keepState, err := s.keepConnector.GetState(ctx, profileID)
+	if err != nil {
+		if s.logger != nil {
+			s.logger.Error("ConnectorService.GetChecklistSubscriptionState(GOOGLE_KEEP) failed for profile=%s page=%s list=%s: %v",
+				string(profileID), req.GetPage(), req.GetListName(), err)
+		}
+		return false, mapKeepConnectorErr(err)
+	}
+	if keepState.IsConfigured() {
+		out.ConnectorConfigured = true
+	}
+	for _, b := range keepState.Subscriptions {
+		if b.Page == req.GetPage() && b.ListName == req.GetListName() {
+			out.CurrentSubscription = keepSubscriptionToProto(b, false)
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 // ListDeadLetters implements the ListDeadLetters RPC.

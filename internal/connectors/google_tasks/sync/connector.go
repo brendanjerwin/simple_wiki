@@ -36,6 +36,17 @@ import (
 // choke at household scale.
 const rateLimitChokeSeconds = 5
 
+// connectorKindGoogleTasks is the wire-string for this connector's
+// kind, used in op-log event sources, engine.Classify's self-prefix,
+// and per-source attribution. Kept as a constant so renames are a
+// single edit.
+const connectorKindGoogleTasks = "google_tasks"
+
+// errMsgReadWikiChecklist is the wrap message used when a
+// ChecklistReader.ListItems call fails inside a sync path. Kept as a
+// constant so the wording stays uniform across the file.
+const errMsgReadWikiChecklist = "read wiki checklist: %w"
+
 // updatedMinSafetyBufferSeconds is the seconds we subtract from
 // max(Task.updated) when advancing the cursor. Tasks's docs do not
 // state whether updatedMin is inclusive or exclusive; the cmd/tasks-
@@ -283,7 +294,7 @@ func (c *Connector) classifyInboundDivergence(ctx context.Context, sub Subscript
 		Page:          sub.Page,
 		ListName:      sub.ListName,
 		LastSyncedSeq: sub.LastSyncedSeq,
-	}, "google_tasks")
+	}, connectorKindGoogleTasks)
 }
 
 // applyTitleSyncFromAdapter calls the BackendAdapter's
@@ -315,7 +326,7 @@ func (c *Connector) advanceLastSyncedSeq(ctx context.Context, sub Subscription) 
 	if err != nil || finalCl == nil {
 		return sub.LastSyncedSeq
 	}
-	selfPrefix := engine.SourcePrefixForKind("google_tasks")
+	selfPrefix := engine.SourcePrefixForKind(connectorKindGoogleTasks)
 	maxSelfSeq := sub.LastSyncedSeq
 	for _, ev := range finalCl.GetEvents() {
 		if ev == nil || !strings.HasPrefix(ev.GetSrc(), selfPrefix) {
@@ -419,7 +430,7 @@ func (c *Connector) rebuildIDMapByTextMatch(ctx context.Context, sub Subscriptio
 	var wikiItems *apiv1.Checklist
 	wikiItems, err = c.checklistR.ListItems(ctx, sub.Page, sub.ListName)
 	if err != nil {
-		return nil, nil, fmt.Errorf("read wiki checklist: %w", err)
+		return nil, nil, fmt.Errorf(errMsgReadWikiChecklist, err)
 	}
 
 	// Build lookup from normalized wiki text → wiki uid (lowest
@@ -529,7 +540,7 @@ func (c *Connector) applyInboundFromTasks(ctx context.Context, profileID wikipag
 	// Tag every event-log entry written from this apply pass with our
 	// connector kind so the engine's causal merge rule (ADR-0015) can
 	// distinguish "we just applied this" from "user edited locally."
-	ctx = checklistmutator.WithSource(ctx, checklistmutator.ConnectorSource("google_tasks", "apply"))
+	ctx = checklistmutator.WithSource(ctx, checklistmutator.ConnectorSource(connectorKindGoogleTasks, "apply"))
 	tasks, err := c.listAllTasks(ctx, client, sub.RemoteListID, sub.LastUpdatedMin)
 	if err != nil {
 		return sub, time.Time{}, err
@@ -595,7 +606,7 @@ func (c *Connector) buildWikiByTextResolver(ctx context.Context, sub Subscriptio
 		}
 		items, err := c.checklistR.ListItems(ctx, sub.Page, sub.ListName)
 		if err != nil {
-			return nil, fmt.Errorf("read wiki checklist: %w", err)
+			return nil, fmt.Errorf(errMsgReadWikiChecklist, err)
 		}
 		cached = map[string]string{}
 		if items != nil {
@@ -622,7 +633,7 @@ func (c *Connector) buildWikiByUIDResolver(ctx context.Context, sub Subscription
 		}
 		items, err := c.checklistR.ListItems(ctx, sub.Page, sub.ListName)
 		if err != nil {
-			return nil, fmt.Errorf("read wiki checklist: %w", err)
+			return nil, fmt.Errorf(errMsgReadWikiChecklist, err)
 		}
 		cached = map[string]*apiv1.ChecklistItem{}
 		if items != nil {
@@ -815,13 +826,13 @@ func (c *Connector) pushOutboundToTasks(ctx context.Context, profileID wikipage.
 	// cursor advance then walks past both the user-event that
 	// triggered the push AND our self-event, clearing divergence
 	// for that uid.
-	ctx = checklistmutator.WithSource(ctx, checklistmutator.ConnectorSource("google_tasks", "outbound_push"))
+	ctx = checklistmutator.WithSource(ctx, checklistmutator.ConnectorSource(connectorKindGoogleTasks, "outbound_push"))
 	if c.checklistR == nil {
 		return sub, ErrChecklistReaderUnavailable
 	}
 	checklist, err := c.checklistR.ListItems(ctx, sub.Page, sub.ListName)
 	if err != nil {
-		return sub, fmt.Errorf("read wiki checklist: %w", err)
+		return sub, fmt.Errorf(errMsgReadWikiChecklist, err)
 	}
 	if sub.ItemIDMap == nil {
 		sub.ItemIDMap = map[string]string{}
@@ -1058,7 +1069,7 @@ func (c *Connector) recoverFromPrecondition(ctx context.Context, profileID wikip
 	// push_recovery op so the engine's causal merge rule can
 	// distinguish "we recovered remote-authoritative state" from a
 	// normal inbound apply.
-	ctx = checklistmutator.WithSource(ctx, checklistmutator.ConnectorSource("google_tasks", "push_recovery"))
+	ctx = checklistmutator.WithSource(ctx, checklistmutator.ConnectorSource(connectorKindGoogleTasks, "push_recovery"))
 	tasks, err := c.listAllTasks(ctx, client, sub.RemoteListID, time.Time{})
 	if err != nil {
 		return gateway.Task{}, false, fmt.Errorf("list tasks for remote authoritative pull: %w", err)
