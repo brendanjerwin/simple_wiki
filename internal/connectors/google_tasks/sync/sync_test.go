@@ -733,6 +733,33 @@ var _ = Describe("Connector.PausedReason", func() {
 		})
 	})
 
+	When("the subscription is paused but PausedReason is empty", func() {
+		var (
+			reason string
+			ok     bool
+		)
+
+		BeforeEach(func() {
+			pages := newFakePages()
+			sub := taskssync.Subscription{
+				Page: syncTestPage, ListName: syncTestListName, RemoteListID: syncTestRemote,
+				State:        taskssync.SubscriptionStatePaused,
+				PausedReason: "",
+			}
+			store := newConfiguredStore(pages, &sub)
+			c := buildTestConnector(store, readyLeaseTable(), newFakeTasksClient(), newFakeClock(time.Now()), nil, nil, nil)
+			reason, ok = c.PausedReason(subscriptionKey())
+		})
+
+		It("should return true", func() {
+			Expect(ok).To(BeTrue())
+		})
+
+		It("should return the generic paused reason", func() {
+			Expect(reason).To(Equal("paused"))
+		})
+	})
+
 	When("the subscription is active", func() {
 		var ok bool
 
@@ -876,6 +903,33 @@ var _ = Describe("Connector.Subscribe", func() {
 		})
 	})
 
+	When("ListTaskLists fails during resolveRemoteTitle", func() {
+		var (
+			subscribed taskssync.Subscription
+			subErr     error
+		)
+
+		BeforeEach(func() {
+			pages := newFakePages()
+			store := newConfiguredStore(pages, nil)
+			client := newFakeTasksClient()
+			// ListTaskLists will fail — resolveRemoteTitle must tolerate this and
+			// let Subscribe succeed with an empty RemoteListTitle.
+			client.listTaskListsErr = errors.New("service unavailable")
+			reader := newFakeChecklistReader()
+			c := buildTestConnector(store, readyLeaseTable(), client, newFakeClock(time.Now()), reader, nil, nil)
+			subscribed, subErr = c.Subscribe(context.Background(), aliceProfile, syncTestPage, syncTestListName, syncTestRemote)
+		})
+
+		It("should not error (title resolution failure is non-fatal)", func() {
+			Expect(subErr).ToNot(HaveOccurred())
+		})
+
+		It("should produce an empty RemoteListTitle", func() {
+			Expect(subscribed.RemoteListTitle).To(BeEmpty())
+		})
+	})
+
 	When("the chosen Tasks list contains a subtask hierarchy", func() {
 		var subErr error
 
@@ -974,6 +1028,28 @@ var _ = Describe("Connector.Subscribe", func() {
 
 		It("should produce an empty initial ItemIDMap (fresh list has no tasks)", func() {
 			Expect(subscribed.ItemIDMap).To(BeEmpty())
+		})
+	})
+
+	When("remoteListID is empty and CreateTaskList fails", func() {
+		var subErr error
+
+		BeforeEach(func() {
+			pages := newFakePages()
+			store := newConfiguredStore(pages, nil)
+			client := newFakeTasksClient()
+			client.createTaskListErr = errors.New("API quota exceeded")
+			reader := newFakeChecklistReader()
+			c := buildTestConnector(store, readyLeaseTable(), client, newFakeClock(time.Now()), reader, nil, nil)
+			_, subErr = c.Subscribe(context.Background(), aliceProfile, syncTestPage, syncTestListName, "")
+		})
+
+		It("should return an error wrapping the create failure", func() {
+			Expect(subErr).To(MatchError(ContainSubstring("create tasks list")))
+		})
+
+		It("should propagate the underlying API error", func() {
+			Expect(subErr).To(MatchError(ContainSubstring("API quota exceeded")))
 		})
 	})
 })

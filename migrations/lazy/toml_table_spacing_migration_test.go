@@ -166,6 +166,73 @@ body
 				Expect(applies).To(BeFalse())
 			})
 		})
+
+		Describe("when two sibling table headers are immediately adjacent (no ancestor relationship)", func() {
+			// Two consecutive unrelated tables [inventory]\n[game] — neither is an ancestor
+			// of the other, so a blank line IS required between them.
+			var applies bool
+
+			BeforeEach(func() {
+				content := []byte(`+++
+title = "test"
+
+[inventory]
+[game]
+level = 1
++++
+content here`)
+				applies = migration.AppliesTo(content)
+			})
+
+			It("should return true", func() {
+				Expect(applies).To(BeTrue())
+			})
+		})
+
+		Describe("when a table header is immediately preceded by an identical table header", func() {
+			// Duplicate table headers ([x]\n[x]) are invalid TOML but the migration
+			// must not treat them as ancestor/descendant — it should still require
+			// a blank line between them.
+			var applies bool
+
+			BeforeEach(func() {
+				content := []byte(`+++
+title = "test"
+
+[inventory]
+[inventory]
+items = []
++++
+content here`)
+				applies = migration.AppliesTo(content)
+			})
+
+			It("should return true", func() {
+				Expect(applies).To(BeTrue())
+			})
+		})
+
+		Describe("when array-of-tables headers are immediately adjacent", func() {
+			// [[items]]\n[[items]] — the regex captures '[items' (with the leading bracket)
+			// for each; isAncestorTablePath detects the '[' prefix and refuses to treat
+			// them as parent/child, so a blank line IS required.
+			var applies bool
+
+			BeforeEach(func() {
+				content := []byte(`+++
+title = "test"
+
+[[items]]
+[[items]]
++++
+content here`)
+				applies = migration.AppliesTo(content)
+			})
+
+			It("should return true", func() {
+				Expect(applies).To(BeTrue())
+			})
+		})
 	})
 
 	Describe("Apply", func() {
@@ -365,6 +432,33 @@ body
 
 			It("should leave the content unchanged", func() {
 				Expect(string(result)).To(Equal(string(content)))
+			})
+		})
+
+		Describe("when two sibling table headers are immediately adjacent", func() {
+			// [inventory] immediately followed by [game] — neither is an ancestor of
+			// the other, so Apply must insert a blank line between them.
+			var result []byte
+			var err error
+
+			BeforeEach(func() {
+				content := []byte(`+++
+title = "test"
+
+[inventory]
+[game]
+level = 1
++++
+content here`)
+				result, err = migration.Apply(content)
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should insert a blank line between the sibling table headers", func() {
+				Expect(string(result)).To(ContainSubstring("[inventory]\n\n[game]"))
 			})
 		})
 	})

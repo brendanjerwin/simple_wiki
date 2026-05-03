@@ -104,6 +104,9 @@ type fakeTasksClient struct {
 	// createTaskListErr is returned from CreateTaskList when non-nil.
 	createTaskListErr error
 
+	// listTaskListsErr is returned from ListTaskLists when non-nil.
+	listTaskListsErr error
+
 	// nextCreatedListID returns ascending ids for CreateTaskList.
 	nextCreatedListID int
 }
@@ -143,6 +146,9 @@ func newFakeTasksClient() *fakeTasksClient {
 func (f *fakeTasksClient) ListTaskLists(_ context.Context) ([]gateway.TaskList, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if f.listTaskListsErr != nil {
+		return nil, f.listTaskListsErr
+	}
 	return append([]gateway.TaskList(nil), f.taskLists...), nil
 }
 
