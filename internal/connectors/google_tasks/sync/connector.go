@@ -233,6 +233,17 @@ func (c *Connector) runSyncPasses(ctx context.Context, profileID wikipage.PageId
 	}
 	sub = updatedSub2
 
+	// Title sync: Google Tasks is authoritative for the tasklist's
+	// display name once bound. If the user renames the list in the
+	// Tasks app, mirror that into sub.RemoteListTitle so the wiki UI
+	// surfaces the current name. Mirrors Keep's behavior at
+	// google_keep/sync/connector.go:711-723. Best-effort — a
+	// ListTaskLists failure is logged-and-ignored so a transient
+	// title-fetch error doesn't block an otherwise-successful sync.
+	if newTitle, ok := c.fetchRemoteTitle(ctx, client, sub.RemoteListID); ok && newTitle != sub.RemoteListTitle {
+		sub.RemoteListTitle = newTitle
+	}
+
 	// Apply-then-advance the cursor (per plan §"Cursor — Boundary semantics").
 	if !maxUpdated.IsZero() {
 		advance := maxUpdated.Add(-time.Duration(updatedMinSafetyBufferSeconds) * time.Second)

@@ -369,16 +369,40 @@ func (c *Connector) subscribeWithLock(ctx context.Context, profileID wikipage.Pa
 // Returns "" on any error — the title is cosmetic; failure must not
 // block the subscribe ceremony.
 func resolveRemoteTitle(ctx context.Context, client TasksClient, remoteListID string) string {
+	title, _ := fetchRemoteTitleViaClient(ctx, client, remoteListID)
+	return title
+}
+
+// fetchRemoteTitle is the per-tick title-sync helper. Returns the
+// current friendly title for sub.RemoteListID and a found-flag.
+// found=false on any API error or "tasklist not in response" — caller
+// keeps the prior title (best-effort; a transient title-fetch failure
+// must not block sync).
+//
+// Mirrors Keep's title-sync pattern at
+// google_keep/sync/connector.go:711-723: the cloud is authoritative
+// for the display name once bound. If the user renames the tasklist
+// in the Tasks app, the wiki UI surfaces the current name on the
+// next tick after the rename propagates.
+func (*Connector) fetchRemoteTitle(ctx context.Context, client TasksClient, remoteListID string) (string, bool) {
+	return fetchRemoteTitleViaClient(ctx, client, remoteListID)
+}
+
+// fetchRemoteTitleViaClient is the implementation shared by
+// resolveRemoteTitle (subscribe-time) and Connector.fetchRemoteTitle
+// (per-tick). Kept as a free function to keep both call sites
+// trivially mockable in tests.
+func fetchRemoteTitleViaClient(ctx context.Context, client TasksClient, remoteListID string) (string, bool) {
 	taskLists, err := client.ListTaskLists(ctx)
 	if err != nil {
-		return ""
+		return "", false
 	}
 	for _, tl := range taskLists {
 		if tl.ID == remoteListID {
-			return tl.Title
+			return tl.Title, true
 		}
 	}
-	return ""
+	return "", false
 }
 
 // seedNewTasklistFromWiki pushes every wiki checklist item into the

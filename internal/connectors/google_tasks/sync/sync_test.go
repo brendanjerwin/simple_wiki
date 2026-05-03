@@ -1164,6 +1164,77 @@ var _ = Describe("Connector.Sync", func() {
 		})
 	})
 
+	// REGRESSION (2026-05-03): Tasks-side rename of the tasklist
+	// must mirror into sub.RemoteListTitle on the next tick — Keep
+	// already does this; Tasks was missing it.
+	When("the Tasks-side title differs from the stored RemoteListTitle", func() {
+		var pages *fakePages
+
+		BeforeEach(func() {
+			pages = newFakePages()
+			now := time.Date(2026, 4, 25, 17, 14, 0, 0, time.UTC)
+			sub := taskssync.Subscription{
+				Page:            syncTestPage,
+				ListName:         syncTestListName,
+				RemoteListID:     syncTestRemote,
+				RemoteListTitle:  "old title",
+				State:            taskssync.SubscriptionStateActive,
+				ItemIDMap:        map[string]string{},
+				ItemEtags:        map[string]string{},
+				SyncedItems:      map[string]taskssync.ItemSyncState{},
+			}
+			store := newConfiguredStore(pages, &sub)
+			client := newFakeTasksClient()
+			// Tasks-side reports the renamed title.
+			client.taskLists = []gateway.TaskList{
+				{ID: syncTestRemote, Title: "renamed in Tasks"},
+			}
+			reader := newFakeChecklistReader()
+			reader.Set(syncTestPage, syncTestListName, nil)
+			c := buildTestConnector(store, readyLeaseTable(), client, newFakeClock(now), reader, nil, nil)
+			Expect(c.Sync(context.Background(), subscriptionKey())).To(Succeed())
+		})
+
+		It("should update the persisted RemoteListTitle to the cloud value", func() {
+			loaded, err := newStore(pages).LoadState(aliceProfile)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(loaded.Subscriptions).To(HaveLen(1))
+			Expect(loaded.Subscriptions[0].RemoteListTitle).To(Equal("renamed in Tasks"))
+		})
+	})
+
+	When("ListTaskLists fails during a tick", func() {
+		var pages *fakePages
+
+		BeforeEach(func() {
+			pages = newFakePages()
+			now := time.Date(2026, 4, 25, 17, 14, 0, 0, time.UTC)
+			sub := taskssync.Subscription{
+				Page:            syncTestPage,
+				ListName:         syncTestListName,
+				RemoteListID:     syncTestRemote,
+				RemoteListTitle:  "old title",
+				State:            taskssync.SubscriptionStateActive,
+				ItemIDMap:        map[string]string{},
+				ItemEtags:        map[string]string{},
+				SyncedItems:      map[string]taskssync.ItemSyncState{},
+			}
+			store := newConfiguredStore(pages, &sub)
+			client := newFakeTasksClient()
+			client.listTaskListsErr = errors.New("transient API error")
+			reader := newFakeChecklistReader()
+			reader.Set(syncTestPage, syncTestListName, nil)
+			c := buildTestConnector(store, readyLeaseTable(), client, newFakeClock(now), reader, nil, nil)
+			Expect(c.Sync(context.Background(), subscriptionKey())).To(Succeed())
+		})
+
+		It("should keep the prior RemoteListTitle (title-fetch is best-effort)", func() {
+			loaded, err := newStore(pages).LoadState(aliceProfile)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(loaded.Subscriptions[0].RemoteListTitle).To(Equal("old title"))
+		})
+	})
+
 	// REGRESSION (2026-05-03, the "uncheck-from-wiki bounces back to
 	// checked" bug): if the wiki has been edited locally since the
 	// last successful round-trip AND inbound has a remote update with
