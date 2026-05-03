@@ -107,7 +107,66 @@ func decodeChecklist(fm wikipage.FrontMatter, listName string, clock Clock) *api
 	}
 
 	sortItems(out.Items)
+	backfillBaselineEvents(out, now)
 	return out
+}
+
+// backfillBaselineEvents synthesizes a baseline event per item when
+// the checklist has items but an empty event log. Per ADR-0015: this
+// runs on every read of an un-migrated checklist; the synthesized
+// events are deterministic from the items list, so re-reads produce
+// identical state. The first mutation persists the synthesized events
+// (they sit in the in-memory checklist that encodeChecklist writes
+// back), making the backfill durable.
+//
+// The baseline event lets the engine's causal merge rule have a
+// well-defined "synced baseline" for items that existed before the
+// op-log feature shipped — without it, every existing item would
+// look freshly user-edited on the first post-deploy tick and trigger
+// outbound pushes for state the remote already has.
+func backfillBaselineEvents(checklist *apiv1.Checklist, now time.Time) {
+	if checklist == nil {
+		return
+	}
+	if len(checklist.Events) > 0 || len(checklist.Items) == 0 {
+		return
+	}
+	src := string(MigrationSource("initial_baseline"))
+	ts := timestamppb.New(now)
+	if checklist.UpdatedAt != nil {
+		ts = checklist.UpdatedAt
+	}
+	for i, item := range checklist.Items {
+		seq := int64(i + 1)
+		textCopy := item.Text
+		checkedCopy := item.Checked
+		ev := &apiv1.ChecklistEvent{
+			Seq:     seq,
+			Ts:      ts,
+			Src:     src,
+			Op:      "baseline",
+			Uid:     item.Uid,
+			Text:    &textCopy,
+			Checked: &checkedCopy,
+			Tags:    append([]string(nil), item.Tags...),
+			TagsSet: true,
+		}
+		if item.Description != nil {
+			d := *item.Description
+			ev.Description = &d
+		}
+		if item.Due != nil {
+			ev.Due = item.Due
+		}
+		if item.SortOrder != 0 {
+			so := item.SortOrder
+			ev.SortOrder = &so
+		}
+		checklist.Events = append(checklist.Events, ev)
+	}
+	if int64(len(checklist.Items)) > checklist.MaxSeq {
+		checklist.MaxSeq = int64(len(checklist.Items))
+	}
 }
 
 // decodeItem reads a single fully-shaped item from wiki.checklists.*.

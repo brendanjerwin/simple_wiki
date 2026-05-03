@@ -959,6 +959,87 @@ var _ = Describe("appendEvent", func() {
 	})
 })
 
+var _ = Describe("backfillBaselineEvents", func() {
+	When("the checklist has items but an empty event log", func() {
+		var checklist *apiv1.Checklist
+
+		BeforeEach(func() {
+			checklist = &apiv1.Checklist{
+				Items: []*apiv1.ChecklistItem{
+					{Uid: "u1", Text: "Eggs", Checked: false, SortOrder: 1000},
+					{Uid: "u2", Text: "Milk", Checked: true, SortOrder: 2000},
+				},
+			}
+			backfillBaselineEvents(checklist, codecNow)
+		})
+
+		It("should synthesize one event per item", func() {
+			Expect(checklist.Events).To(HaveLen(2))
+		})
+
+		It("should assign monotonic seqs starting at 1", func() {
+			Expect(checklist.Events[0].Seq).To(Equal(int64(1)))
+			Expect(checklist.Events[1].Seq).To(Equal(int64(2)))
+		})
+
+		It("should set MaxSeq to the highest seq", func() {
+			Expect(checklist.MaxSeq).To(Equal(int64(2)))
+		})
+
+		It("should attribute every event to migration:initial_baseline", func() {
+			for _, ev := range checklist.Events {
+				Expect(ev.Src).To(Equal("migration:initial_baseline"))
+			}
+		})
+
+		It("should snapshot per-item state into the event deltas", func() {
+			Expect(*checklist.Events[0].Checked).To(BeFalse())
+			Expect(*checklist.Events[1].Checked).To(BeTrue())
+		})
+	})
+
+	When("the checklist already has events", func() {
+		It("should NOT synthesize duplicates (idempotent on re-read)", func() {
+			existing := &apiv1.ChecklistEvent{
+				Seq: 7, Src: "user:a@b", Op: "toggle", Uid: "u1",
+			}
+			checklist := &apiv1.Checklist{
+				Items:  []*apiv1.ChecklistItem{{Uid: "u1", Text: "T"}},
+				Events: []*apiv1.ChecklistEvent{existing},
+				MaxSeq: 7,
+			}
+			backfillBaselineEvents(checklist, codecNow)
+			Expect(checklist.Events).To(HaveLen(1))
+			Expect(checklist.MaxSeq).To(Equal(int64(7)))
+		})
+	})
+
+	When("the checklist has no items at all", func() {
+		It("should be a no-op", func() {
+			checklist := &apiv1.Checklist{}
+			backfillBaselineEvents(checklist, codecNow)
+			Expect(checklist.Events).To(BeNil())
+			Expect(checklist.MaxSeq).To(Equal(int64(0)))
+		})
+	})
+
+	When("backfill runs twice", func() {
+		It("should produce identical results (deterministic)", func() {
+			items := []*apiv1.ChecklistItem{
+				{Uid: "u1", Text: "Eggs", SortOrder: 1000},
+			}
+			a := &apiv1.Checklist{Items: items}
+			b := &apiv1.Checklist{Items: items}
+			backfillBaselineEvents(a, codecNow)
+			backfillBaselineEvents(b, codecNow)
+			Expect(len(a.Events)).To(Equal(len(b.Events)))
+			Expect(a.Events[0].Seq).To(Equal(b.Events[0].Seq))
+			Expect(a.Events[0].Src).To(Equal(b.Events[0].Src))
+			Expect(*a.Events[0].Text).To(Equal(*b.Events[0].Text))
+		})
+	})
+})
+
 var _ = Describe("encodeTombstones", func() {
 	When("tombstones are given", func() {
 		It("should sort by deleted_at ascending", func() {
