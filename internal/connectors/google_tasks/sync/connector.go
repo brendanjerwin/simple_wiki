@@ -165,7 +165,7 @@ var _ connectors.Connector = (*Connector)(nil)
 // shared primitives like remote-title sync are required across
 // backends). Adding a method to BackendAdapter and forgetting to
 // implement it here is now a compile error rather than a parity
-// bug shipped to production.
+// gap shipped to production.
 var _ connectors.BackendAdapter = (*Connector)(nil)
 
 // Sync runs one inbound-then-outbound reconcile pass for the given

@@ -366,22 +366,36 @@ func classifyKeepHTTPResponse(code int, body []byte) error {
 // classifier branches on; the rest round-trips through the truncated
 // body in the wrapped error message.
 type wireGoogleAPIError struct {
-	Error struct {
-		Code    int    `json:"code"`
-		Message string `json:"message"`
-		Status  string `json:"status"`
-		Errors  []struct {
-			Message string `json:"message"`
-			Domain  string `json:"domain"`
-			Reason  string `json:"reason"`
-		} `json:"errors"`
-		Details []struct {
-			Type     string         `json:"@type"`
-			Reason   string         `json:"reason"`
-			Domain   string         `json:"domain"`
-			Metadata map[string]any `json:"metadata"`
-		} `json:"details"`
-	} `json:"error"`
+	Error wireGoogleAPIErrorBody `json:"error"`
+}
+
+// wireGoogleAPIErrorBody is the inner `error` object of Google's
+// API error envelope (see wireGoogleAPIError).
+type wireGoogleAPIErrorBody struct {
+	Code    int                       `json:"code"`
+	Message string                    `json:"message"`
+	Status  string                    `json:"status"`
+	Errors  []wireGoogleAPIErrorEntry `json:"errors"`
+	Details []wireGoogleAPIErrorInfo  `json:"details"`
+}
+
+// wireGoogleAPIErrorEntry is one entry in `error.errors[]` — the
+// usageLimits / accessNotConfigured / rateLimitExceeded reason
+// surface.
+type wireGoogleAPIErrorEntry struct {
+	Message string `json:"message"`
+	Domain  string `json:"domain"`
+	Reason  string `json:"reason"`
+}
+
+// wireGoogleAPIErrorInfo is one entry in `error.details[]` — Google's
+// `google.rpc.ErrorInfo` carrier; SERVICE_DISABLED + activationUrl
+// live here.
+type wireGoogleAPIErrorInfo struct {
+	Type     string         `json:"@type"`
+	Reason   string         `json:"reason"`
+	Domain   string         `json:"domain"`
+	Metadata map[string]any `json:"metadata"`
 }
 
 // classifyKeepForbidden inspects a 403 body and returns the most

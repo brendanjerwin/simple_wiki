@@ -1514,11 +1514,11 @@ func (c *Connector) bootstrapKeepListForBinding(ctx context.Context, profileID w
 // running it through the interface lets the orchestrator pick up
 // the cached value uniformly across backends.
 //
-// TODO(post-#999): once the SyncEngine extraction lands and drives
-// per-tick title sync via the interface, the inline title-sync code
-// in applyInboundFromKeep will move here so this method is the
-// canonical path. For now the inline code populates the cache; this
-// method only reads it.
+// Future work (post-#999, see ADR-0015): once the SyncEngine
+// extraction lands and drives per-tick title sync via the interface,
+// the inline title-sync code in applyInboundFromKeep will move here
+// so this method is the canonical path. For now the inline code
+// populates the cache; this method only reads it.
 func (c *Connector) FetchRemoteListTitle(_ context.Context, profileID wikipage.PageIdentifier, remoteListHandle string) (string, bool, error) {
 	if remoteListHandle == "" {
 		return "", false, nil

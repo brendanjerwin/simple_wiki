@@ -739,7 +739,7 @@ var _ = Describe("Connector.Sync", func() {
 
 	When("the wiki is unchanged since the last successful push", func() {
 		// REGRESSION TEST: This is the every-tick-overwrites-phone
-		// bug. With diff-before-push, a tick where nothing changed
+		// regression. With diff-before-push, a tick where nothing changed
 		// in the wiki must NOT call PatchTask — patching anyway
 		// would race against and clobber phone-side edits the user
 		// is making at the same time.

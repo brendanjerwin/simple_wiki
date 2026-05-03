@@ -30,7 +30,7 @@ var _ = Describe("mapKeepConnectorErr 403-class coverage", func() {
 			// into the error message via fmt.Errorf("%w: ... %s ...").
 			// Mirror that shape here so the FailedPrecondition message
 			// surfaces the URL the user clicks through to enable the API.
-			injected := fmt.Errorf("%w: Google Keep API is not enabled on the GCP project. Enable it at https://console.developers.google.com/apis/api/keep.googleapis.com/overview?project=703961900896 and try again.", keepgateway.ErrServiceDisabled)
+			injected := fmt.Errorf("%w: Google Keep API is not enabled on the GCP project. Enable it at https://console.developers.google.com/apis/api/keep.googleapis.com/overview?project=703961900896 and try again. (stage3 HTTP 403: dummy body)", keepgateway.ErrServiceDisabled)
 			result = mapKeepConnectorErr(injected)
 		})
 
