@@ -38,8 +38,12 @@ import {
   GetStateRequestSchema,
   BeginAuthRequestSchema,
   DisconnectRequestSchema,
+  UnsubscribeRequestSchema,
 } from '../gen/api/v1/connector_service_pb.js';
-import type { ConnectorState } from '../gen/api/v1/connector_service_pb.js';
+import type {
+  ConnectorState,
+  SubscriptionState,
+} from '../gen/api/v1/connector_service_pb.js';
 import {
   foundationCSS,
   buttonCSS,
@@ -124,6 +128,25 @@ export class GoogleTasksConnect extends LitElement {
       }
       this.phase = 'disconnected';
       this.error = AugmentErrorService.augmentError(err, 'begin Google Tasks auth');
+    }
+  }
+
+  // handleUnbind removes a single subscription. Mirrors the
+  // per-subscription remove control on <keep-connect>; the binding row
+  // is rendered with a <confirmation-interlock-button> so this only
+  // runs after the user confirms.
+  private async handleUnbind(subscription: SubscriptionState): Promise<void> {
+    try {
+      await this.client.unsubscribe(
+        create(UnsubscribeRequestSchema, {
+          connectorKind: ConnectorKind.GOOGLE_TASKS,
+          page: subscription.page,
+          listName: subscription.listName,
+        }),
+      );
+      await this.refresh();
+    } catch (err: unknown) {
+      this.error = AugmentErrorService.augmentError(err, 'unsubscribe checklist');
     }
   }
 
@@ -219,6 +242,8 @@ export class GoogleTasksConnect extends LitElement {
         Connected as <strong>${this.state.email}</strong>.
         <span class="muted">Last verified: ${verified}.</span>
       </p>
+      <h4>Bindings</h4>
+      ${this.renderSubscriptions()}
       <p>
         <confirmation-interlock-button
           label="Disconnect Google Tasks"
@@ -228,6 +253,40 @@ export class GoogleTasksConnect extends LitElement {
           @confirmed=${this.handleDisconnect}
         ></confirmation-interlock-button>
       </p>
+    `;
+  }
+
+  // Render the per-binding rows. Mirror of <keep-connect>'s
+  // renderSubscriptions, but uses the Tasks-specific noun ("Tasks list")
+  // so the row reads "Bound to Google Tasks list <title>" — matching
+  // the vocabulary established by <connector-subscribe-button>.
+  private renderSubscriptions() {
+    const subscriptions = this.state?.subscriptions ?? [];
+    if (subscriptions.length === 0) {
+      return html`<p class="muted">
+        No checklists bound yet. Open a checklist page and click
+        <em>Bind to Google Tasks</em>.
+      </p>`;
+    }
+    return html`
+      <ul class="bindings">
+        ${subscriptions.map(
+          (s) => html`
+            <li>
+              <strong>${s.page} / ${s.listName}</strong>
+              → Bound to Google Tasks list "${s.remoteListTitle || s.remoteListHandle}"
+              ${s.paused ? html`<span class="pill pill-warn">paused</span>` : nothing}
+              <confirmation-interlock-button
+                label="✕"
+                confirmLabel="Stop syncing this binding?"
+                yesLabel="Unbind"
+                noLabel="Cancel"
+                @confirmed=${() => this.handleUnbind(s)}
+              ></confirmation-interlock-button>
+            </li>
+          `,
+        )}
+      </ul>
     `;
   }
 }

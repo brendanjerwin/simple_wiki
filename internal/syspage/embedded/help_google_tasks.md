@@ -31,7 +31,7 @@ If your wiki operator has set up Google Tasks integration (see the operator note
 1. Visit **/profile** on the wiki — you land on your own profile page.
 2. Find the **Google Tasks** section and click **Connect Google Tasks**.
 3. You're sent to Google's consent screen. Approve.
-4. Back on the profile, you should see **Connected as you@example.com**.
+4. Back on the profile, you should see **Connected as you@example.com** plus a **Bindings** list of every checklist you've bound to a Google Tasks list (mirrors the Google Keep section). Each row carries an unbind affordance.
 5. Open any page with a `{{"{{ Checklist \"name\" }}"}}` macro.
 6. Click **Bind to a cloud service** on the checklist (the picker will show Google Tasks as your only option if Tasks is your only authenticated connector).
 7. Pick an existing Tasks list from the dropdown, or create a new one.

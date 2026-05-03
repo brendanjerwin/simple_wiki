@@ -9,12 +9,15 @@ import {
   ConnectorStateSchema,
   BeginAuthResponseSchema,
   DisconnectResponseSchema,
+  SubscriptionStateSchema,
+  UnsubscribeResponseSchema,
 } from '../gen/api/v1/connector_service_pb.js';
 
 interface GoogleTasksConnectClient {
   getState: sinon.SinonStub;
   beginAuth: sinon.SinonStub;
   disconnect: sinon.SinonStub;
+  unsubscribe: sinon.SinonStub;
 }
 
 function clientOf(el: GoogleTasksConnect): GoogleTasksConnectClient {
@@ -125,6 +128,123 @@ describe('GoogleTasksConnect', () => {
     it('should render a Disconnect interlock button', () => {
       const btns = el.shadowRoot?.querySelectorAll('confirmation-interlock-button');
       expect(btns?.length ?? 0).to.equal(1);
+    });
+  });
+
+  // ------------------------------------------------------------------ connected phase (no subscriptions)
+
+  describe('when getState returns configured=true with no subscriptions', () => {
+    beforeEach(async () => {
+      el = document.createElement('google-tasks-connect') as GoogleTasksConnect;
+      stubGetStateConnected('alice@example.com');
+      document.body.appendChild(el);
+      await Promise.race([el.updateComplete, timeout(3000, 'updateComplete timed out')]);
+    });
+
+    it('should display the empty-bindings message', () => {
+      const text = el.shadowRoot?.textContent ?? '';
+      expect(text).to.include('No checklists bound');
+    });
+  });
+
+  // ------------------------------------------------------------------ connected phase (with subscriptions)
+
+  describe('when getState returns configured=true with one subscription', () => {
+    beforeEach(async () => {
+      el = document.createElement('google-tasks-connect') as GoogleTasksConnect;
+      const subscription = create(SubscriptionStateSchema, {
+        page: 'Board',
+        listName: 'todo',
+        remoteListHandle: 'tasklist-abc',
+        remoteListTitle: 'My todo list',
+      });
+      const state = create(ConnectorStateSchema, {
+        configured: true,
+        email: 'bob@example.com',
+        subscriptions: [subscription],
+      });
+      sinon
+        .stub(clientOf(el), 'getState')
+        .resolves(create(GetStateResponseSchema, { state }));
+      document.body.appendChild(el);
+      await Promise.race([el.updateComplete, timeout(3000, 'updateComplete timed out')]);
+    });
+
+    it('should render the subscription page name', () => {
+      const text = el.shadowRoot?.textContent ?? '';
+      expect(text).to.include('Board');
+    });
+
+    it('should render the subscription list name', () => {
+      const text = el.shadowRoot?.textContent ?? '';
+      expect(text).to.include('todo');
+    });
+
+    it('should render the Tasks list title', () => {
+      const text = el.shadowRoot?.textContent ?? '';
+      expect(text).to.include('My todo list');
+    });
+
+    it('should use the "Bound to ... Tasks list" vocabulary', () => {
+      const text = el.shadowRoot?.textContent ?? '';
+      expect(text).to.include('Tasks list');
+    });
+
+    it('should render an unbind interlock per subscription plus one Disconnect button', () => {
+      const btns = el.shadowRoot?.querySelectorAll('confirmation-interlock-button');
+      // 1 Disconnect + 1 per subscription
+      expect(btns?.length ?? 0).to.equal(2);
+    });
+  });
+
+  // ------------------------------------------------------------------ unsubscribe
+
+  describe('when handleUnbind is invoked for a subscription', () => {
+    let unsubscribeStub: sinon.SinonStub;
+    let getStateStub: sinon.SinonStub;
+
+    beforeEach(async () => {
+      el = document.createElement('google-tasks-connect') as GoogleTasksConnect;
+      const subscription = create(SubscriptionStateSchema, {
+        page: 'Board',
+        listName: 'todo',
+        remoteListHandle: 'tasklist-abc',
+        remoteListTitle: 'My todo list',
+      });
+      const state = create(ConnectorStateSchema, {
+        configured: true,
+        email: 'bob@example.com',
+        subscriptions: [subscription],
+      });
+      getStateStub = sinon
+        .stub(clientOf(el), 'getState')
+        .resolves(create(GetStateResponseSchema, { state }));
+      document.body.appendChild(el);
+      await Promise.race([el.updateComplete, timeout(3000, 'updateComplete timed out')]);
+
+      unsubscribeStub = sinon
+        .stub(clientOf(el), 'unsubscribe')
+        .resolves(create(UnsubscribeResponseSchema, {}));
+
+      // Call private handleUnbind directly to bypass the interlock.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-type-assertion
+      await (el as any).handleUnbind(subscription);
+      await el.updateComplete;
+    });
+
+    it('should call unsubscribe once', () => {
+      expect(unsubscribeStub.calledOnce).to.be.true;
+    });
+
+    it('should call unsubscribe with the page and listName', () => {
+      const arg = unsubscribeStub.firstCall.args[0] as { page: string; listName: string };
+      expect(arg.page).to.equal('Board');
+      expect(arg.listName).to.equal('todo');
+    });
+
+    it('should refresh state after unsubscribe', () => {
+      // initial mount + post-unsubscribe refresh
+      expect(getStateStub.callCount).to.equal(2);
     });
   });
 
