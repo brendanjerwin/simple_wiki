@@ -9,6 +9,7 @@ import (
 
 	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
 	"github.com/brendanjerwin/simple_wiki/internal/connectors"
+	"github.com/brendanjerwin/simple_wiki/internal/connectors/engine"
 	"github.com/brendanjerwin/simple_wiki/internal/connectors/google_tasks/gateway"
 	"github.com/brendanjerwin/simple_wiki/internal/connectors/google_tasks/translator"
 	"github.com/brendanjerwin/simple_wiki/server/checklistmutator"
@@ -215,7 +216,24 @@ func (c *Connector) Sync(ctx context.Context, key connectors.SubscriptionKey) er
 //
 //revive:disable-next-line:cyclomatic
 func (c *Connector) runSyncPasses(ctx context.Context, profileID wikipage.PageIdentifier, ownerEmail string, sub Subscription, client TasksClient, now time.Time) error {
-	updatedSub, maxUpdated, err := c.applyInboundFromTasks(ctx, profileID, ownerEmail, sub, client)
+	// Read the checklist's op-log so the engine can classify per-uid
+	// divergence before we apply remote state. Per ADR-0015: events
+	// with seq > sub.LastSyncedSeq drive the causal merge rule.
+	// Best-effort — a read error logs and falls back to "no
+	// classification info," which means we don't skip any apply
+	// (legacy behavior).
+	var classification map[string]engine.EventClassification
+	if c.checklistR != nil {
+		if cl, err := c.checklistR.ListItems(ctx, sub.Page, sub.ListName); err == nil && cl != nil {
+			classification = engine.Classify(cl, engine.SubscriptionCursor{
+				Page:          sub.Page,
+				ListName:      sub.ListName,
+				LastSyncedSeq: sub.LastSyncedSeq,
+			}, "google_tasks")
+		}
+	}
+
+	updatedSub, maxUpdated, err := c.applyInboundFromTasks(ctx, profileID, ownerEmail, sub, client, classification)
 	if err != nil {
 		if c.isAuthFailure(err) {
 			return c.transitionToPaused(profileID, sub, PausedReasonAuthFailed)
@@ -252,6 +270,29 @@ func (c *Connector) runSyncPasses(ctx context.Context, profileID wikipage.PageId
 		}
 	}
 	sub.LastSuccessfulSyncAt = now
+
+	// Advance LastSyncedSeq past every self-event written this tick.
+	// Per ADR-0015: cursor advances ONLY past our own writes, NOT to
+	// MaxSeq, so any user/cross-connector event that happened between
+	// our writes and this read stays visible to next tick's classify.
+	if c.checklistR != nil {
+		if finalCl, finalErr := c.checklistR.ListItems(ctx, sub.Page, sub.ListName); finalErr == nil && finalCl != nil {
+			selfPrefix := engine.SourcePrefixForKind("google_tasks")
+			maxSelfSeq := sub.LastSyncedSeq
+			for _, ev := range finalCl.GetEvents() {
+				if ev == nil {
+					continue
+				}
+				if !strings.HasPrefix(ev.GetSrc(), selfPrefix) {
+					continue
+				}
+				if ev.GetSeq() > maxSelfSeq {
+					maxSelfSeq = ev.GetSeq()
+				}
+			}
+			sub.LastSyncedSeq = maxSelfSeq
+		}
+	}
 
 	if err := c.store.UpdateSubscription(profileID, sub); err != nil {
 		return fmt.Errorf("persist subscription: %w", err)
@@ -456,7 +497,7 @@ func (*Connector) listAllTasks(ctx context.Context, client TasksClient, remoteLi
 // task is treated as a fresh inbound arrival.
 //
 //revive:disable-next-line:cyclomatic,cognitive-complexity
-func (c *Connector) applyInboundFromTasks(ctx context.Context, profileID wikipage.PageIdentifier, ownerEmail string, sub Subscription, client TasksClient) (Subscription, time.Time, error) {
+func (c *Connector) applyInboundFromTasks(ctx context.Context, profileID wikipage.PageIdentifier, ownerEmail string, sub Subscription, client TasksClient, classification map[string]engine.EventClassification) (Subscription, time.Time, error) {
 	// Tag every event-log entry written from this apply pass with our
 	// connector kind so the engine's causal merge rule (ADR-0015) can
 	// distinguish "we just applied this" from "user edited locally."
@@ -508,7 +549,7 @@ func (c *Connector) applyInboundFromTasks(ctx context.Context, profileID wikipag
 			c.applyInboundDeletion(ctx, profileID, ownerEmail, sub, t, taskToUID)
 			continue
 		}
-		if err := c.applyOneInboundTask(ctx, profileID, ownerEmail, sub, taskToUID, t, resolveWikiByText, resolveWikiByUID); err != nil {
+		if err := c.applyOneInboundTask(ctx, profileID, ownerEmail, sub, taskToUID, t, resolveWikiByText, resolveWikiByUID, classification); err != nil {
 			return sub, maxUpdated, err
 		}
 	}
@@ -587,7 +628,7 @@ func (c *Connector) buildWikiByUIDResolver(ctx context.Context, sub Subscription
 // back to the caller because map values are reference types.
 //
 //revive:disable-next-line:cyclomatic,cognitive-complexity,function-length
-func (c *Connector) applyOneInboundTask(ctx context.Context, profileID wikipage.PageIdentifier, ownerEmail string, sub Subscription, taskToUID map[string]string, t gateway.Task, resolveWikiByText func() (map[string]string, error), resolveWikiByUID func() (map[string]*apiv1.ChecklistItem, error)) error {
+func (c *Connector) applyOneInboundTask(ctx context.Context, profileID wikipage.PageIdentifier, ownerEmail string, sub Subscription, taskToUID map[string]string, t gateway.Task, resolveWikiByText func() (map[string]string, error), resolveWikiByUID func() (map[string]*apiv1.ChecklistItem, error), classification map[string]engine.EventClassification) error {
 	uid, hasUID := taskToUID[t.ID]
 	if !hasUID {
 		_, markerUID, hasMarker := translator.StripWikiUIDMarker(t.Notes)
@@ -639,23 +680,17 @@ func (c *Connector) applyOneInboundTask(ctx context.Context, profileID wikipage.
 				connectors.EventInboundSkippedSameEtag, string(profileID), sub.Page, sub.ListName, uid, t.ID)
 			return nil
 		}
-		// Guard 2: wiki-divergence skip. If the wiki has been edited
-		// locally since our last successful round-trip, applying the
-		// remote here would overwrite the pending edit. Outbound will
-		// push the wiki state on the same tick or the next; a later
-		// inbound tick reconciles from the post-push etag.
-		if synced, hasSynced := sub.SyncedItems[uid]; hasSynced {
-			wikiByUID, wikiErr := resolveWikiByUID()
-			if wikiErr == nil {
-				if currentItem, has := wikiByUID[uid]; has && currentItem != nil {
-					currentFields := translator.ChecklistItemToTaskFields(currentItem)
-					if !syncedMatchesFields(synced, currentFields) {
-						c.logger.Info("tasks bridge: %s profile=%s page=%s list=%s uid=%s task=%s",
-							connectors.EventWikiDivergedSkippedInbound, string(profileID), sub.Page, sub.ListName, uid, t.ID)
-						return nil
-					}
-				}
-			}
+		// Guard 2: causal divergence skip via the engine's classifier
+		// (ADR-0015). If the per-checklist op-log shows a non-self
+		// event for this uid since our LastSyncedSeq, the wiki has
+		// been edited locally; applying remote here would clobber
+		// the pending edit. Outbound pushes the wiki state on the
+		// same tick or the next; a later inbound tick reconciles
+		// from the post-push etag.
+		if cls, has := classification[uid]; has && cls.WikiDiverged {
+			c.logger.Info("tasks bridge: %s profile=%s page=%s list=%s uid=%s task=%s latest_src=%s",
+				connectors.EventWikiDivergedSkippedInbound, string(profileID), sub.Page, sub.ListName, uid, t.ID, cls.LatestEventSource)
+			return nil
 		}
 
 		if c.checklistW != nil {

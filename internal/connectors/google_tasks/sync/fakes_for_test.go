@@ -284,6 +284,22 @@ func (f *fakeChecklistReader) Set(page, listName string, items []*apiv1.Checklis
 	f.responses[key] = &apiv1.Checklist{Name: listName, Items: items}
 }
 
+// SetEvents replaces the Events slice for the named checklist. Used
+// by tests that drive engine.Classify behavior. Caller is responsible
+// for matching MaxSeq if present.
+func (f *fakeChecklistReader) SetEvents(page, listName string, events []*apiv1.ChecklistEvent, maxSeq int64) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	key := page + checklistKeyDelimiter + listName
+	cl := f.responses[key]
+	if cl == nil {
+		cl = &apiv1.Checklist{Name: listName}
+		f.responses[key] = cl
+	}
+	cl.Events = events
+	cl.MaxSeq = maxSeq
+}
+
 func (f *fakeChecklistReader) ListItems(_ context.Context, page, listName string) (*apiv1.Checklist, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()

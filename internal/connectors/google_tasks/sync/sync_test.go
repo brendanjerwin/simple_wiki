@@ -1236,11 +1236,13 @@ var _ = Describe("Connector.Sync", func() {
 	})
 
 	// REGRESSION (2026-05-03, the "uncheck-from-wiki bounces back to
-	// checked" bug): if the wiki has been edited locally since the
-	// last successful round-trip AND inbound has a remote update with
-	// a fresh etag, applying the remote here clobbers the pending
-	// local edit. Skip the apply and let outbound win this tick.
-	When("inbound has a fresh remote update but the wiki has diverged from SyncedItems", func() {
+	// checked" bug): if the per-checklist op-log shows a user-source
+	// event with seq > sub.LastSyncedSeq AND inbound has a remote
+	// update with a fresh etag, applying the remote here clobbers
+	// the pending local edit. Per ADR-0015 the engine's causal
+	// classifier (engine.Classify) drives the skip; the connector
+	// no longer needs a value-fingerprint heuristic.
+	When("the op-log has a user-source event for this uid since LastSyncedSeq", func() {
 		var (
 			mutator *fakeChecklistMutator
 			client  *fakeTasksClient
@@ -1250,16 +1252,13 @@ var _ = Describe("Connector.Sync", func() {
 			pages := newFakePages()
 			now := time.Date(2026, 4, 25, 17, 14, 0, 0, time.UTC)
 			sub := taskssync.Subscription{
-				Page:         syncTestPage,
-				ListName:     syncTestListName,
-				RemoteListID: syncTestRemote,
-				State:        taskssync.SubscriptionStateActive,
-				ItemIDMap:    map[string]string{"wiki-1": "task-1"},
-				ItemEtags:    map[string]string{"task-1": "etag-prev"},
-				// Last-pushed baseline: completed.
-				SyncedItems: map[string]taskssync.ItemSyncState{
-					"wiki-1": {SyncedTitle: "Eggs", SyncedNotes: translator.WikiUIDMarker("wiki-1"), SyncedStatus: "completed"},
-				},
+				Page:          syncTestPage,
+				ListName:      syncTestListName,
+				RemoteListID:  syncTestRemote,
+				State:         taskssync.SubscriptionStateActive,
+				ItemIDMap:     map[string]string{"wiki-1": "task-1"},
+				ItemEtags:     map[string]string{"task-1": "etag-prev"},
+				LastSyncedSeq: 5,
 			}
 			store := newConfiguredStore(pages, &sub)
 			client = newFakeTasksClient()
@@ -1271,17 +1270,21 @@ var _ = Describe("Connector.Sync", func() {
 				Updated: now.Add(60 * time.Second),
 			}}
 			reader := newFakeChecklistReader()
-			// Wiki was just unchecked locally — diverged from the
-			// SyncedItems baseline.
+			// Wiki was just unchecked locally — recorded in the log
+			// as a user-source event past sub.LastSyncedSeq (=5).
 			reader.Set(syncTestPage, syncTestListName, []*apiv1.ChecklistItem{
 				{Uid: "wiki-1", Text: "Eggs", Checked: false},
 			})
+			reader.SetEvents(syncTestPage, syncTestListName,
+				[]*apiv1.ChecklistEvent{{
+					Seq: 7, Src: "user:alice@example.com", Op: "toggle", Uid: "wiki-1",
+				}}, 7)
 			mutator = newFakeChecklistMutatorBoundTo(reader)
 			c := buildTestConnector(store, readyLeaseTable(), client, newFakeClock(now), reader, mutator, nil)
 			Expect(c.Sync(context.Background(), subscriptionKey())).To(Succeed())
 		})
 
-		It("should NOT overwrite the wiki (divergence guard)", func() {
+		It("should NOT overwrite the wiki (engine classifier reports diverged)", func() {
 			Expect(mutator.updated).To(BeEmpty())
 		})
 

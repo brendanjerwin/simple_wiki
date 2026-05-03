@@ -132,6 +132,15 @@ type Subscription struct {
 	// ItemIDMap, a corresponding SyncedItems entry is created; when
 	// it's removed, the SyncedItems entry is removed too.
 	SyncedItems map[string]ItemSyncState
+	// LastSyncedSeq is this binding's cursor in the per-checklist
+	// op-log (ADR-0015). Each successful round-trip advances it past
+	// every self-event written this tick; subsequent inbound applies
+	// classify divergence by scanning events with seq > LastSyncedSeq.
+	//
+	// Zero on freshly-created or pre-deploy subscriptions; the
+	// codec's backfillBaselineEvents synthesizes a baseline event
+	// per item, and the first tick advances cursor past those.
+	LastSyncedSeq int64
 }
 
 // ItemSyncState is the per-item sync record for one wiki uid. It

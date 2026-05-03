@@ -60,6 +60,7 @@ const (
 	subPausedReasonField         = "paused_reason"
 	subPausedAtField             = "paused_at"
 	subSubscribedAtField         = "subscribed_at"
+	subLastSyncedSeqField        = "last_synced_seq"
 
 	syncedItemSyncedTitleField           = "synced_title"
 	syncedItemSyncedNotesField           = "synced_notes"
@@ -365,6 +366,7 @@ func decodeSubscriptions(raw any) ([]Subscription, error) {
 			PausedReason:         getString(m, subPausedReasonField),
 			PausedAt:             pausedAt,
 			SubscribedAt:         subscribedAt,
+			LastSyncedSeq:        getInt64(m, subLastSyncedSeqField),
 		})
 	}
 	return out, nil
@@ -436,6 +438,9 @@ func encodeSubscriptions(subs []Subscription) []any {
 		}
 		if !sub.SubscribedAt.IsZero() {
 			entry[subSubscribedAtField] = sub.SubscribedAt.UTC().Format(time.RFC3339)
+		}
+		if sub.LastSyncedSeq > 0 {
+			entry[subLastSyncedSeqField] = sub.LastSyncedSeq
 		}
 		out[i] = entry
 	}
@@ -587,6 +592,23 @@ func ensureConnectorMap(fm wikipage.FrontMatter) map[string]any {
 //
 //revive:disable-next-line:unchecked-type-assertion
 func getString(m map[string]any, key string) string { s, _ := m[key].(string); return s }
+
+// getInt64 reads an int64 field from a TOML-decoded map. TOML's int
+// type decodes as int64 directly; JSON-via-structpb round-trips
+// integers through float64. Treat both as authoritative; everything
+// else returns 0.
+func getInt64(m map[string]any, key string) int64 {
+	switch v := m[key].(type) {
+	case int64:
+		return v
+	case int:
+		return int64(v)
+	case float64:
+		return int64(v)
+	default:
+		return 0
+	}
+}
 
 // parseTime accepts an empty string (returns zero, no error —
 // "absent") or an RFC3339 string.
