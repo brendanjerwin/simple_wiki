@@ -472,3 +472,280 @@ var _ = Describe("Connector.MigrateSubscriptionFingerprints early-exit paths", f
 		})
 	})
 })
+
+var _ = Describe("Connector.Kind", func() {
+	When("called on a Keep connector", func() {
+		var kind connectors.ConnectorKind
+
+		BeforeEach(func() {
+			c, _ := newCoverageConnector(newFakeStore(), &fakeKeepClient{})
+			kind = c.Kind()
+		})
+
+		It("should return ConnectorKindGoogleKeep", func() {
+			Expect(kind).To(Equal(connectors.ConnectorKindGoogleKeep))
+		})
+	})
+})
+
+var _ = Describe("Connector.Sync (interface dispatch)", func() {
+	var (
+		ctx     context.Context
+		store   *fakeStore
+		profile = profileA
+	)
+
+	BeforeEach(func() {
+		ctx = context.Background()
+		store = newFakeStore()
+	})
+
+	When("the SubscriptionKey points at a non-existent binding", func() {
+		var err error
+
+		BeforeEach(func() {
+			saveTo(store, profile, baseConnectedState())
+			c, _ := newCoverageConnector(store, &fakeKeepClient{})
+			err = c.Sync(ctx, connectors.SubscriptionKey{
+				ProfileID: string(profile),
+				Page:      "missing-page",
+				ListName:  "missing-list",
+			})
+		})
+
+		It("should return nil (no-op for missing binding)", func() {
+			Expect(err).ToNot(HaveOccurred())
+		})
+	})
+})
+
+var _ = Describe("Connector.PausedReason", func() {
+	var (
+		store   *fakeStore
+		profile = profileA
+	)
+
+	BeforeEach(func() {
+		store = newFakeStore()
+	})
+
+	When("the connector is configured (master token present)", func() {
+		var (
+			reason string
+			paused bool
+		)
+
+		BeforeEach(func() {
+			saveTo(store, profile, baseConnectedState())
+			c, _ := newCoverageConnector(store, &fakeKeepClient{})
+			reason, paused = c.PausedReason(connectors.SubscriptionKey{
+				ProfileID: string(profile),
+				Page:      "p",
+				ListName:  "l",
+			})
+		})
+
+		It("should report paused=false", func() {
+			Expect(paused).To(BeFalse())
+		})
+
+		It("should return an empty reason", func() {
+			Expect(reason).To(BeEmpty())
+		})
+	})
+
+	When("the connector is disconnected (master token cleared)", func() {
+		var (
+			reason string
+			paused bool
+		)
+
+		BeforeEach(func() {
+			disconnected := baseConnectedState()
+			disconnected.MasterToken = ""
+			saveTo(store, profile, disconnected)
+			c, _ := newCoverageConnector(store, &fakeKeepClient{})
+			reason, paused = c.PausedReason(connectors.SubscriptionKey{
+				ProfileID: string(profile),
+				Page:      "p",
+				ListName:  "l",
+			})
+		})
+
+		It("should report paused=true", func() {
+			Expect(paused).To(BeTrue())
+		})
+
+		It("should return a user-facing reason mentioning Google Keep", func() {
+			Expect(reason).To(ContainSubstring("Google Keep"))
+		})
+	})
+
+})
+
+var _ = Describe("Connector.ForceFullResync", func() {
+	var (
+		ctx     context.Context
+		store   *fakeStore
+		profile = profileA
+	)
+
+	BeforeEach(func() {
+		ctx = context.Background()
+		store = newFakeStore()
+	})
+
+	When("the binding has a populated cursor and a streak", func() {
+		var (
+			err   error
+			after keepsync.ConnectorState
+		)
+
+		BeforeEach(func() {
+			state := baseConnectedState()
+			state.Subscriptions = []keepsync.Subscription{{
+				Page:                 "shopping",
+				ListName:             "groceries",
+				KeepNoteID:           "srv-note",
+				KeepCursor:           "v-42",
+				TruncatedTickStreak:  3,
+				MigratedFingerprints: true,
+				SubscribedAt:         tNow,
+			}}
+			saveTo(store, profile, state)
+			c, _ := newCoverageConnector(store, &fakeKeepClient{})
+			err = c.ForceFullResync(ctx, connectors.SubscriptionKey{
+				ProfileID: string(profile),
+				Page:      "shopping",
+				ListName:  "groceries",
+			})
+			bs := keepsync.NewSubscriptionStore(store)
+			after, _ = bs.LoadState(profile)
+		})
+
+		It("should not error", func() {
+			Expect(err).ToNot(HaveOccurred())
+		})
+
+		It("should clear the binding's KeepCursor", func() {
+			Expect(after.Subscriptions[0].KeepCursor).To(BeEmpty())
+		})
+
+		It("should reset the TruncatedTickStreak counter", func() {
+			Expect(after.Subscriptions[0].TruncatedTickStreak).To(Equal(0))
+		})
+	})
+
+	When("no binding matches the SubscriptionKey", func() {
+		var err error
+
+		BeforeEach(func() {
+			saveTo(store, profile, baseConnectedState())
+			c, _ := newCoverageConnector(store, &fakeKeepClient{})
+			err = c.ForceFullResync(ctx, connectors.SubscriptionKey{
+				ProfileID: string(profile),
+				Page:      "missing-page",
+				ListName:  "missing-list",
+			})
+		})
+
+		It("should return ErrSubscriptionNotFound", func() {
+			Expect(err).To(MatchError(keepsync.ErrSubscriptionNotFound))
+		})
+	})
+})
+
+var _ = Describe("Connector.FetchRemoteListTitle", func() {
+	var (
+		ctx     context.Context
+		store   *fakeStore
+		profile = profileA
+	)
+
+	BeforeEach(func() {
+		ctx = context.Background()
+		store = newFakeStore()
+	})
+
+	When("the binding has a cached KeepNoteTitle", func() {
+		var (
+			title string
+			ok    bool
+			err   error
+		)
+
+		BeforeEach(func() {
+			state := baseConnectedState()
+			state.Subscriptions = []keepsync.Subscription{{
+				Page:          "p",
+				ListName:      "l",
+				KeepNoteID:    "srv-note",
+				KeepNoteTitle: "Groceries List",
+				SubscribedAt:  tNow,
+			}}
+			saveTo(store, profile, state)
+			c, _ := newCoverageConnector(store, &fakeKeepClient{})
+			title, ok, err = c.FetchRemoteListTitle(ctx, profile, "srv-note")
+		})
+
+		It("should not error", func() {
+			Expect(err).ToNot(HaveOccurred())
+		})
+
+		It("should return ok=true", func() {
+			Expect(ok).To(BeTrue())
+		})
+
+		It("should return the cached title", func() {
+			Expect(title).To(Equal("Groceries List"))
+		})
+	})
+
+	When("the binding has an empty KeepNoteTitle", func() {
+		var (
+			ok  bool
+			err error
+		)
+
+		BeforeEach(func() {
+			state := baseConnectedState()
+			state.Subscriptions = []keepsync.Subscription{{
+				Page:         "p",
+				ListName:     "l",
+				KeepNoteID:   "srv-note",
+				SubscribedAt: tNow,
+			}}
+			saveTo(store, profile, state)
+			c, _ := newCoverageConnector(store, &fakeKeepClient{})
+			_, ok, err = c.FetchRemoteListTitle(ctx, profile, "srv-note")
+		})
+
+		It("should not error", func() {
+			Expect(err).ToNot(HaveOccurred())
+		})
+
+		It("should return ok=false (cache empty → no title)", func() {
+			Expect(ok).To(BeFalse())
+		})
+	})
+
+	When("the remoteListHandle is empty", func() {
+		var (
+			ok  bool
+			err error
+		)
+
+		BeforeEach(func() {
+			c, _ := newCoverageConnector(store, &fakeKeepClient{})
+			_, ok, err = c.FetchRemoteListTitle(ctx, profile, "")
+		})
+
+		It("should not error", func() {
+			Expect(err).ToNot(HaveOccurred())
+		})
+
+		It("should return ok=false", func() {
+			Expect(ok).To(BeFalse())
+		})
+	})
+})
