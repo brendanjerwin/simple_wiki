@@ -469,8 +469,12 @@ var _ = Describe("Connector.Sync", func() {
 			Expect(client.inserted[0].Title).To(Equal("Eggs"))
 		})
 
-		It("should append the wiki:uid marker to the inserted task notes", func() {
-			Expect(client.inserted[0].Notes).To(ContainSubstring("wiki:uid=wiki-new-1"))
+		It("should NOT leak the wiki uid into the user-visible notes field", func() {
+			// Outbound writes no longer stamp wiki:uid into notes —
+			// the binding lives on Subscription.ItemIDMap, not in the
+			// user-facing "Details" field of the Tasks UI. See
+			// feedback_no_implementation_in_user_fields.md.
+			Expect(client.inserted[0].Notes).NotTo(ContainSubstring("wiki:uid"))
 		})
 
 		It("should record the new task id in ItemIDMap", func() {
@@ -704,7 +708,7 @@ var _ = Describe("Connector.Sync", func() {
 			tasksDue := time.Date(2026, 5, 3, 0, 0, 0, 0, time.UTC)
 			syncedFields := taskssync.ItemSyncState{
 				SyncedTitle:  "Sun: Make Dinner",
-				SyncedNotes:  translator.WikiUIDMarker("wiki-1"),
+				SyncedNotes:  "", // outbound writes empty notes for items with no description
 				SyncedStatus: "needsAction",
 				SyncedDue:    tasksDue, // Tasks-side observed value
 			}
@@ -749,7 +753,7 @@ var _ = Describe("Connector.Sync", func() {
 			// and the wiki hasn't been edited since.
 			syncedFields := taskssync.ItemSyncState{
 				SyncedTitle:  "Eggs",
-				SyncedNotes:  translator.WikiUIDMarker("wiki-1"),
+				SyncedNotes:  "", // outbound writes empty notes for items with no description
 				SyncedStatus: "needsAction",
 			}
 			sub := taskssync.Subscription{
@@ -798,7 +802,7 @@ var _ = Describe("Connector.Sync", func() {
 			// SyncedItems baseline is the OLD state.
 			syncedFields := taskssync.ItemSyncState{
 				SyncedTitle:  "Old text",
-				SyncedNotes:  translator.WikiUIDMarker("wiki-1"),
+				SyncedNotes:  "", // outbound writes empty notes for items with no description
 				SyncedStatus: "needsAction",
 			}
 			sub := taskssync.Subscription{
@@ -850,7 +854,7 @@ var _ = Describe("Connector.Sync", func() {
 			// Baseline: item was synced as needsAction.
 			syncedFields := taskssync.ItemSyncState{
 				SyncedTitle:  "Eggs",
-				SyncedNotes:  translator.WikiUIDMarker("wiki-1"),
+				SyncedNotes:  "", // outbound writes empty notes for items with no description
 				SyncedStatus: "needsAction",
 			}
 			sub := taskssync.Subscription{
@@ -907,7 +911,7 @@ var _ = Describe("Connector.Sync", func() {
 			now := time.Date(2026, 4, 25, 17, 14, 0, 0, time.UTC)
 			syncedFields := taskssync.ItemSyncState{
 				SyncedTitle:  "Eggs",
-				SyncedNotes:  translator.WikiUIDMarker("wiki-1"),
+				SyncedNotes:  "", // outbound writes empty notes for items with no description
 				SyncedStatus: "completed",
 			}
 			sub := taskssync.Subscription{
@@ -963,9 +967,10 @@ var _ = Describe("Connector.Sync", func() {
 					"task-A": "eA", "task-B": "eB", "task-C": "eC",
 				},
 				SyncedItems: map[string]taskssync.ItemSyncState{
-					"wiki-A": {SyncedTitle: "Apple", SyncedNotes: translator.WikiUIDMarker("wiki-A"), SyncedStatus: "needsAction"},
-					"wiki-B": {SyncedTitle: "Banana", SyncedNotes: translator.WikiUIDMarker("wiki-B"), SyncedStatus: "needsAction"},
-					"wiki-C": {SyncedTitle: "Cherry", SyncedNotes: translator.WikiUIDMarker("wiki-C"), SyncedStatus: "needsAction"},
+					// SyncedNotes empty: outbound now writes notes = description (markerless).
+					"wiki-A": {SyncedTitle: "Apple", SyncedNotes: "", SyncedStatus: "needsAction"},
+					"wiki-B": {SyncedTitle: "Banana", SyncedNotes: "", SyncedStatus: "needsAction"},
+					"wiki-C": {SyncedTitle: "Cherry", SyncedNotes: "", SyncedStatus: "needsAction"},
 				},
 			}
 			store := newConfiguredStore(pages, &sub)
@@ -1029,7 +1034,8 @@ var _ = Describe("Connector.Sync", func() {
 				ItemIDMap:    map[string]string{"wiki-1": "task-1"},
 				ItemEtags:    map[string]string{"task-1": "e1"},
 				SyncedItems: map[string]taskssync.ItemSyncState{
-					"wiki-1": {SyncedTitle: "Old", SyncedNotes: translator.WikiUIDMarker("wiki-1"), SyncedStatus: "needsAction"},
+					// SyncedNotes empty: outbound now writes notes = description (markerless).
+					"wiki-1": {SyncedTitle: "Old", SyncedNotes: "", SyncedStatus: "needsAction"},
 				},
 			}
 			store := newConfiguredStore(pages, &sub)
@@ -1075,7 +1081,8 @@ var _ = Describe("Connector.Sync", func() {
 				ItemIDMap:    map[string]string{"wiki-1": "task-1"},
 				ItemEtags:    map[string]string{"task-1": "etag-old"},
 				SyncedItems: map[string]taskssync.ItemSyncState{
-					"wiki-1": {SyncedTitle: "Eggs", SyncedNotes: translator.WikiUIDMarker("wiki-1"), SyncedStatus: "needsAction"},
+					// SyncedNotes empty: outbound now writes notes = description (markerless).
+					"wiki-1": {SyncedTitle: "Eggs", SyncedNotes: "", SyncedStatus: "needsAction"},
 				},
 			}
 			store := newConfiguredStore(pages, &sub)
@@ -1130,7 +1137,8 @@ var _ = Describe("Connector.Sync", func() {
 				ItemIDMap:    map[string]string{"wiki-1": "task-1"},
 				ItemEtags:    map[string]string{"task-1": "etag-stable"},
 				SyncedItems: map[string]taskssync.ItemSyncState{
-					"wiki-1": {SyncedTitle: "Eggs", SyncedNotes: translator.WikiUIDMarker("wiki-1"), SyncedStatus: "completed"},
+					// SyncedNotes empty: outbound now writes notes = description (markerless).
+					"wiki-1": {SyncedTitle: "Eggs", SyncedNotes: "", SyncedStatus: "completed"},
 				},
 			}
 			store := newConfiguredStore(pages, &sub)
@@ -1370,7 +1378,8 @@ var _ = Describe("Connector.Sync", func() {
 				ItemIDMap:    map[string]string{"wiki-1": "task-1"},
 				ItemEtags:    map[string]string{"task-1": "e1"},
 				SyncedItems: map[string]taskssync.ItemSyncState{
-					"wiki-1": {SyncedTitle: "Eggs", SyncedNotes: translator.WikiUIDMarker("wiki-1"), SyncedStatus: "needsAction"},
+					// SyncedNotes empty: outbound now writes notes = description (markerless).
+					"wiki-1": {SyncedTitle: "Eggs", SyncedNotes: "", SyncedStatus: "needsAction"},
 				},
 			}
 			store := newConfiguredStore(pages, &sub)
@@ -1478,7 +1487,7 @@ var _ = Describe("Connector.Sync", func() {
 			// changed). Then inbound brings a phone-side update.
 			syncedFields := taskssync.ItemSyncState{
 				SyncedTitle:  "Old",
-				SyncedNotes:  translator.WikiUIDMarker("wiki-1"),
+				SyncedNotes:  "", // outbound writes empty notes for items with no description
 				SyncedStatus: "needsAction",
 			}
 			sub := taskssync.Subscription{
@@ -2017,9 +2026,13 @@ var _ = Describe("Connector.Subscribe", func() {
 			Expect(client.inserted[1].TasklistID).To(Equal("created-list-1"))
 		})
 
-		It("should stamp the wiki:uid marker on each inserted task's notes", func() {
-			Expect(client.inserted[0].Notes).To(ContainSubstring(translator.WikiUIDMarker("wiki-1")))
-			Expect(client.inserted[1].Notes).To(ContainSubstring(translator.WikiUIDMarker("wiki-2")))
+		It("should NOT leak the wiki uid into the user-visible notes field on either insert", func() {
+			// Outbound writes no longer stamp wiki:uid into notes —
+			// the binding lives on Subscription.ItemIDMap, not in the
+			// user-facing "Details" field of the Tasks UI. See
+			// feedback_no_implementation_in_user_fields.md.
+			Expect(client.inserted[0].Notes).NotTo(ContainSubstring("wiki:uid"))
+			Expect(client.inserted[1].Notes).NotTo(ContainSubstring("wiki:uid"))
 		})
 
 		It("should populate the initial ItemIDMap with the inserted task ids", func() {

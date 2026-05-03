@@ -25,6 +25,13 @@ import (
 // it via a separate accessor — but this function focuses purely on
 // schema translation and never sets `uid` on the returned item.
 //
+// Backward-compat note: the strip-on-read here is preserved on
+// purpose. Outbound writes no longer append a wiki:uid marker (we
+// don't dump implementation detail into a user-visible field), but
+// tasks created by older builds may still carry the marker in their
+// notes. Stripping on read keeps those items pairing correctly until
+// the next outbound tick rewrites their notes without the marker.
+//
 // Returns an error rather than coercing malformed input silently —
 // future fields (etag, links, etc.) that surface decode-time issues
 // should bubble through this signature.
@@ -70,11 +77,16 @@ func TaskToChecklistItem(task Task) (*apiv1.ChecklistItem, error) {
 //     through unchanged; the gateway layer is responsible for the
 //     RFC3339 serialization.
 //
-//   - The wiki uid marker is appended to `notes` here. The marker is
-//     the wiki↔Tasks identity binding per plan §"Outbound
-//     idempotence". If the wiki item has no uid, no marker is
-//     appended (the gateway will be inserting a brand-new task and
-//     will assign the uid before persisting the result).
+//   - The wiki uid is NOT appended to `notes`. Earlier builds stamped
+//     a "wiki:uid=…" marker into the notes field as the wiki↔Tasks
+//     identity binding, but `notes` is user-visible (it surfaces as
+//     "Details" in the Google Tasks UI), and dumping internal
+//     identifiers into a user-facing field is the wrong layering. The
+//     wiki↔Tasks binding lives on the Subscription's ItemIDMap. Tasks
+//     created by older builds may still carry the marker in their
+//     notes; TaskToChecklistItem strips it on read for backward
+//     compat, and the next outbound tick that touches such an item
+//     will rewrite its notes without the marker (one-time migration).
 //
 //   - When `checked` flips false→true the wiki's stamped completed_at
 //     is sent as Tasks's `completed`. When false (or unset), both
@@ -87,7 +99,6 @@ func ChecklistItemToTaskFields(item *apiv1.ChecklistItem) TaskFields {
 	}
 	title := EncodeTitleWithTags(item.GetText(), item.GetTags())
 	notes := item.GetDescription()
-	notes += WikiUIDMarker(item.GetUid())
 
 	fields := TaskFields{
 		Title: title,

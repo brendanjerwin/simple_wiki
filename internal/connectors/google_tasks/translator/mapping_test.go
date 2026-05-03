@@ -194,8 +194,11 @@ var _ = Describe("ChecklistItemToTaskFields", func() {
 			Expect(fields.Status).To(Equal(translator.TaskStatusNeedsAction))
 		})
 
-		It("should append the wiki uid marker to notes", func() {
-			Expect(fields.Notes).To(ContainSubstring("wiki:uid=01HABC"))
+		It("should NOT leak the wiki uid into the user-visible notes field", func() {
+			// The wiki↔Tasks binding lives on the Subscription's
+			// ItemIDMap, not in the user-visible "Details" field of
+			// the Tasks UI. See feedback_no_implementation_in_user_fields.
+			Expect(fields.Notes).NotTo(ContainSubstring("wiki:uid"))
 		})
 	})
 
@@ -227,12 +230,12 @@ var _ = Describe("ChecklistItemToTaskFields", func() {
 			})
 		})
 
-		It("should put the description before the marker in notes", func() {
-			Expect(fields.Notes).To(HavePrefix("fresh local"))
+		It("should pass the description through verbatim", func() {
+			Expect(fields.Notes).To(Equal("fresh local"))
 		})
 
-		It("should still include the marker", func() {
-			Expect(fields.Notes).To(ContainSubstring("wiki:uid=01HXYZ"))
+		It("should NOT append a wiki uid marker", func() {
+			Expect(fields.Notes).NotTo(ContainSubstring("wiki:uid"))
 		})
 	})
 
