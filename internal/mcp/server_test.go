@@ -444,11 +444,7 @@ var _ = Describe("NewStreamableHTTPHandler", func() {
 				Expect(callResult).To(HaveKey("result"))
 			})
 
-			It("returns an isError tool result indicating page not found (not empty content)", func() {
-				// The key assertion: with the old bug, identifier was silently discarded
-				// and the tool returned empty content with no error. After the fix, the
-				// identifier is properly used as the page name, causing a not-found error
-				// to be returned (which surfaces as isError=true) rather than empty success.
+			It("returns an isError tool result for the nonexistent page (not empty content)", func() {
 				resultMap, ok := callResult["result"].(map[string]any)
 				Expect(ok).To(BeTrue(), "result should be a map, got: %T", callResult["result"])
 				Expect(resultMap["isError"]).To(Equal(true), "tool should return isError=true (page not found), not silent empty content; content: %v", resultMap["content"])
