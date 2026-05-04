@@ -278,10 +278,10 @@ func (s *Server) DeletePage(ctx context.Context, req *apiv1.DeletePageRequest) (
 
 // ReadPage implements the ReadPage RPC.
 func (s *Server) ReadPage(ctx context.Context, req *apiv1.ReadPageRequest) (*apiv1.ReadPageResponse, error) {
-	// page_name takes precedence; identifier is accepted as an alias for MCP compatibility.
-	pageName := req.PageName
+	// page_name and identifier are mutually exclusive via oneof; exactly one must be set.
+	pageName := req.GetPageName()
 	if pageName == "" {
-		pageName = req.Identifier
+		pageName = req.GetIdentifier()
 	}
 
 	if authErr := requireAuthorized(ctx, s.pageReaderMutator, wikipage.PageIdentifier(pageName)); authErr != nil {
