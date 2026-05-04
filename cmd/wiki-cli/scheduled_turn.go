@@ -31,6 +31,8 @@ const scheduledTurnPreamble = `You are a scheduled background agent acting on wi
 
 %s`
 
+const wildcardPattern = "*"
+
 // scheduledTurnClient implements the acp.Client interface for one ephemeral
 // scheduled-turn instance. It counts AgentMessageChunk callbacks and cancels
 // the prompt context when the count reaches maxTurns.
@@ -118,14 +120,14 @@ func wildcardMatch(pattern, target string) bool {
 	// path.Match/filepath.Match are not suitable here because '*' does not
 	// match '/' there. We need "Bash(mkdir:*)" to match
 	// "Bash(mkdir:/tmp/menu)".
-	if !strings.Contains(pattern, "*") {
+	if !strings.Contains(pattern, wildcardPattern) {
 		return pattern == target
 	}
 
-	parts := strings.Split(pattern, "*")
+	parts := strings.Split(pattern, wildcardPattern)
 	position := 0
 
-	if !strings.HasPrefix(pattern, "*") {
+	if !strings.HasPrefix(pattern, wildcardPattern) {
 		if !strings.HasPrefix(target, parts[0]) {
 			return false
 		}
@@ -137,10 +139,10 @@ func wildcardMatch(pattern, target string) bool {
 		if part == "" {
 			continue
 		}
-		if i == 0 && !strings.HasPrefix(pattern, "*") {
+		if i == 0 && !strings.HasPrefix(pattern, wildcardPattern) {
 			continue
 		}
-		if i == lastIndex && !strings.HasSuffix(pattern, "*") {
+		if i == lastIndex && !strings.HasSuffix(pattern, wildcardPattern) {
 			return strings.HasSuffix(target, part)
 		}
 		next := strings.Index(target[position:], part)
