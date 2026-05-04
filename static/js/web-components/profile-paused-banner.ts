@@ -73,6 +73,19 @@ interface PausedKindRow {
   pausedSubscriptions: SubscriptionState[];
 }
 
+// Theme tokens used here are defined in static/css/default.css for both
+// :root (light) and the prefers-color-scheme: dark media query:
+//   --color-warning      → amber accent  (light: #ffc107, dark: #d29922)
+//   --color-warning-bg   → tinted surface (light: #fff3cd, dark: #2d2000)
+//   --color-warning-text → readable text  (light: #856404, dark: #ffda6a)
+// Earlier versions of this banner used a non-existent `--color-warning-
+// surface` plus `--color-text-primary` for body text, which produced
+// light-gray text on a light-yellow surface in dark mode (the dark
+// fallback chain skipped over the unset surface token and landed on
+// the hardcoded light fallback). Always use the warning-* trio so light
+// and dark both render correctly. The button keeps a hardcoded #1e1e1e
+// for foreground because amber-on-amber text is unreadable in either
+// mode and there's no token for "text on warning accent".
 const localCSS = css`
   :host {
     display: block;
@@ -84,9 +97,9 @@ const localCSS = css`
     padding: 12px 16px;
     margin: 8px 0;
     border-radius: 6px;
-    background: var(--color-warning-surface, #fff8e1);
-    border: 1px solid var(--color-warning, #d29922);
-    color: var(--color-text-primary, #1f2328);
+    background: var(--color-warning-bg);
+    border: 1px solid var(--color-warning);
+    color: var(--color-warning-text);
     font-size: 14px;
   }
   .icon {
@@ -102,14 +115,13 @@ const localCSS = css`
     font-weight: 600;
     padding: 6px 14px;
     border-radius: 4px;
-    background: var(--color-warning, #d29922);
-    color: var(--color-text-on-warning, #1f2328);
-    border: 1px solid var(--color-warning, #d29922);
+    background: var(--color-warning);
+    color: #1e1e1e;
+    border: 1px solid var(--color-warning);
     cursor: pointer;
   }
   button.reconnect:hover {
-    background: var(--color-warning-hover, #b8841d);
-    border-color: var(--color-warning-hover, #b8841d);
+    filter: brightness(0.9);
   }
 `;
 
