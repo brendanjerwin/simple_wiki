@@ -26,7 +26,7 @@
 // load. So we wait until the user clicks Connect, then surface the
 // distinction by catching FailedPrecondition.
 
-import { html, LitElement, nothing } from 'lit';
+import { css, html, LitElement, nothing } from 'lit';
 import { state } from 'lit/decorators.js';
 import { createClient } from '@connectrpc/connect';
 import { ConnectError, Code } from '@connectrpc/connect';
@@ -57,8 +57,68 @@ import './confirmation-interlock-button.js';
 
 type Phase = 'loading' | 'unconfigured' | 'disconnected' | 'connecting' | 'connected';
 
+// Local styles for the in-card reconnect banner. Mirrors the
+// <profile-paused-banner> visual language so the two surfaces feel
+// like one experience: same icon, same warning palette, same button
+// shape. The banner here is what the page-level banner's Reconnect
+// button scrolls the user *to* — without an actionable CTA inside
+// the card the user lands somewhere with no clear next step (just a
+// "paused" pill next to a binding row), which is the gap this fixes.
+//
+// Theme tokens used here are defined in static/css/default.css for both
+// :root (light) and the prefers-color-scheme: dark media query:
+//   --color-warning      → amber accent  (light: #ffc107, dark: #d29922)
+//   --color-warning-bg   → tinted surface (light: #fff3cd, dark: #2d2000)
+//   --color-warning-text → readable text  (light: #856404, dark: #ffda6a)
+// The button keeps a hardcoded #1e1e1e for foreground because amber-
+// on-amber text is unreadable in either mode and there's no token for
+// "text on warning accent."
+const reconnectBannerCSS = css`
+  .reconnect-banner {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 12px 16px;
+    margin: 12px 0;
+    border-radius: 6px;
+    background: var(--color-warning-bg);
+    border: 1px solid var(--color-warning);
+    color: var(--color-warning-text);
+    font-size: 14px;
+    line-height: 1.45;
+  }
+  .reconnect-banner .banner-icon {
+    font-size: 18px;
+    line-height: 1.4;
+    flex-shrink: 0;
+  }
+  .reconnect-banner .banner-copy {
+    flex: 1;
+  }
+  .reconnect-banner .banner-copy strong {
+    display: block;
+    margin-bottom: 4px;
+  }
+  .reconnect-banner button.reconnect-btn {
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    padding: 8px 16px;
+    border-radius: 4px;
+    background: var(--color-warning);
+    color: #1e1e1e;
+    border: 1px solid var(--color-warning);
+    cursor: pointer;
+    flex-shrink: 0;
+    align-self: center;
+  }
+  .reconnect-banner button.reconnect-btn:hover {
+    filter: brightness(0.9);
+  }
+`;
+
 export class GoogleTasksConnect extends LitElement {
-  static override styles = [foundationCSS, buttonCSS, inputCSS, pillCSS];
+  static override styles = [foundationCSS, buttonCSS, inputCSS, pillCSS, reconnectBannerCSS];
 
   @state() declare private phase: Phase;
   @state() declare private state: ConnectorState | null;
@@ -253,6 +313,7 @@ export class GoogleTasksConnect extends LitElement {
         </span>`;
     return html`
       <p>${identityLine}</p>
+      ${this.renderReconnectBannerIfPaused()}
       <h4>Bindings</h4>
       ${this.renderSubscriptions()}
       <p>
@@ -264,6 +325,52 @@ export class GoogleTasksConnect extends LitElement {
           @confirmed=${this.handleDisconnect}
         ></confirmation-interlock-button>
       </p>
+    `;
+  }
+
+  // hasPausedSubscriptions reports whether any subscription on this
+  // connector is currently paused. The connector-level OAuth credential
+  // is shared across all subscriptions (one refresh_token per profile),
+  // so a single auth failure pauses *every* subscription on that profile
+  // simultaneously. We surface that as a single connector-level banner
+  // rather than a per-row mention.
+  private get hasPausedSubscriptions(): boolean {
+    return this.state?.subscriptions?.some((s) => s.paused) ?? false;
+  }
+
+  // renderReconnectBannerIfPaused shows a prominent CTA + plain-language
+  // "what happened and what to do" explanation when at least one
+  // subscription on this connector is paused. The page-level
+  // <profile-paused-banner> at the top of the profile page scrolls the
+  // user *to* this component on click; without an actionable CTA in
+  // the card itself, the user lands here with only a tiny "paused" pill
+  // next to a binding row and no obvious next step. The Reconnect
+  // button reuses handleConnect() — same OAuth re-authorization that
+  // the from-scratch Connect flow uses; existing bindings auto-resume
+  // on success.
+  private renderReconnectBannerIfPaused() {
+    if (!this.hasPausedSubscriptions) return nothing;
+    return html`
+      <div class="reconnect-banner" role="status">
+        <span class="banner-icon" aria-hidden="true">⚠️</span>
+        <div class="banner-copy">
+          <strong>Sync needs reconnection.</strong>
+          The wiki can't refresh its Google Tasks access right now. The most
+          common causes are: the authorization was revoked at
+          <em>myaccount.google.com</em>, the refresh token expired (Google's
+          7-day inactivity window for unverified clients), or the OAuth
+          client configuration changed on the wiki side. Click
+          <em>Reconnect</em> to re-authorize — your existing bindings will
+          resume automatically.
+        </div>
+        <button
+          type="button"
+          class="reconnect-btn"
+          @click=${this.handleConnect}
+        >
+          Reconnect Google Tasks
+        </button>
+      </div>
     `;
   }
 
