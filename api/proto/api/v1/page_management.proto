@@ -133,6 +133,10 @@ message CreatePageResponse {
 // Read Page
 message ReadPageRequest {
   string page_name = 1;
+  // identifier is an alias for page_name accepted for MCP compatibility.
+  // When page_name is empty and identifier is non-empty, identifier is used
+  // as the page identifier. Prefer page_name for direct gRPC calls.
+  string identifier = 2;
 }
 
 message ReadPageResponse {

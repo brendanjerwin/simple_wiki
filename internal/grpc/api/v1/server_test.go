@@ -4152,6 +4152,47 @@ var _ = Describe("Server", func() {
 				Expect(resp.ContentMarkdown).To(Equal("# Simple Page"))
 			})
 		})
+
+		When("only the identifier field is set (MCP compatibility alias)", func() {
+			BeforeEach(func() {
+				req = &apiv1.ReadPageRequest{
+					Identifier: "test-page",
+				}
+				mockPageReaderMutator.Markdown = "# Identifier Alias Page"
+				mockPageReaderMutator.Frontmatter = nil
+				mockTemplateExecutor.Result = []byte("# Identifier Alias Page")
+				mockMarkdownRenderer.Result = []byte("<h1>Identifier Alias Page</h1>")
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should return the markdown content", func() {
+				Expect(resp.ContentMarkdown).To(Equal("# Identifier Alias Page"))
+			})
+		})
+
+		When("both page_name and identifier are set", func() {
+			BeforeEach(func() {
+				req = &apiv1.ReadPageRequest{
+					PageName:   "test-page",
+					Identifier: "other-page",
+				}
+				mockPageReaderMutator.Markdown = "# Page Name Wins"
+				mockPageReaderMutator.Frontmatter = nil
+				mockTemplateExecutor.Result = []byte("# Page Name Wins")
+				mockMarkdownRenderer.Result = []byte("<h1>Page Name Wins</h1>")
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should use page_name over identifier and return content", func() {
+				Expect(resp.ContentMarkdown).To(Equal("# Page Name Wins"))
+			})
+		})
 	})
 
 	Describe("RenderMarkdown", func() {
