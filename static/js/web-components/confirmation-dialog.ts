@@ -285,6 +285,7 @@ export class ConfirmationDialog extends LitElement {
    * Opens the confirmation dialog with the specified configuration
    */
   openDialog(config: ConfirmationConfig) {
+    this._previouslyFocusedElement = document.activeElement;
     this.config = config;
     this.augmentedError = undefined;
     this.loading = false;
@@ -293,7 +294,6 @@ export class ConfirmationDialog extends LitElement {
     void this.updateComplete.then(() => {
       const dialog = this.shadowRoot?.querySelector('dialog');
       if (dialog && !dialog.open && this.isConnected) {
-        this._previouslyFocusedElement = document.activeElement;
         dialog.showModal();
       }
     });

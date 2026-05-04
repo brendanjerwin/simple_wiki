@@ -181,7 +181,6 @@ export class InventoryAddItemDialog extends LitElement {
       const dialog = this.shadowRoot?.querySelector('dialog');
       if (!dialog) return;
       if (this.open && !dialog.open && this.isConnected) {
-        this._previouslyFocusedElement = document.activeElement;
         dialog.showModal();
       } else if (!this.open && dialog.open) {
         dialog.close();
@@ -217,6 +216,7 @@ export class InventoryAddItemDialog extends LitElement {
   };
 
   public openDialog(container: string): void {
+    this._previouslyFocusedElement = document.activeElement;
     this.container = container;
     this.itemTitle = '';
     this.itemIdentifier = '';

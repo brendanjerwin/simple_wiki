@@ -288,7 +288,6 @@ export class InventoryMoveItemDialog extends LitElement {
       const dialog = this.shadowRoot?.querySelector('dialog');
       if (!dialog) return;
       if (this.open && !dialog.open && this.isConnected) {
-        this._previouslyFocusedElement = document.activeElement;
         dialog.showModal();
       } else if (!this.open && dialog.open) {
         dialog.close();
@@ -328,6 +327,7 @@ export class InventoryMoveItemDialog extends LitElement {
   };
 
   public openDialog(itemIdentifier: string, currentContainer: string): void {
+    this._previouslyFocusedElement = document.activeElement;
     this.itemIdentifier = itemIdentifier;
     this.currentContainer = currentContainer;
     this.searchQuery = '';
