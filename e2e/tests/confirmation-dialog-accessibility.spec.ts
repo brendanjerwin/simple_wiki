@@ -145,9 +145,13 @@ test.describe('ConfirmationDialog accessibility (via erasePage flow)', () => {
         });
       });
 
-      test('should return focus to the #erasePage button', async ({ page }) => {
+      // #erasePage lives inside a CSS hover menu that is display:none while the
+      // modal is open (the backdrop blocks pointer events, so :hover is inactive).
+      // restoreFocus() falls back to the nearest visible focusable ancestor —
+      // the always-visible #tools-menu trigger anchor.
+      test('should return focus to the tools-menu trigger', async ({ page }) => {
         await expect.poll(
-          () => page.evaluate(() => document.activeElement?.id === 'erasePage'),
+          () => page.evaluate(() => document.activeElement?.id === 'tools-menu'),
           { timeout: DIALOG_APPEAR_TIMEOUT_MS },
         ).toBe(true);
       });
@@ -161,9 +165,11 @@ test.describe('ConfirmationDialog accessibility (via erasePage flow)', () => {
         });
       });
 
-      test('should return focus to the #erasePage button', async ({ page }) => {
+      // Same fallback as the Cancel case: #erasePage is display:none while the
+      // modal backdrop is up, so focus returns to #tools-menu instead.
+      test('should return focus to the tools-menu trigger', async ({ page }) => {
         await expect.poll(
-          () => page.evaluate(() => document.activeElement?.id === 'erasePage'),
+          () => page.evaluate(() => document.activeElement?.id === 'tools-menu'),
           { timeout: DIALOG_APPEAR_TIMEOUT_MS },
         ).toBe(true);
       });

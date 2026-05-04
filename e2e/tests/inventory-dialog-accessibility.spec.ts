@@ -192,8 +192,8 @@ E2E accessibility test container.`);
       await expect(page.locator('#rendered')).toBeAttached({ timeout: COMPONENT_LOAD_TIMEOUT_MS });
       await expect(page.locator('#inventory-add-item')).toBeAttached({ timeout: MENU_APPEAR_TIMEOUT_MS });
 
-      // Focus the trigger element explicitly before clicking so it is captured as
-      // _previouslyFocusedElement when the dialog opens.
+      // Focus the trigger element explicitly before clicking so document.activeElement
+      // is captured correctly when the dialog opens (before the submenu closes).
       await page.locator('.tools-menu').hover();
       await page.locator('#inventory-submenu-trigger').click();
       const triggerBtn = page.locator('#inventory-add-item');
@@ -207,8 +207,9 @@ E2E accessibility test container.`);
       await dialog.locator('button.button-secondary').click();
       await expect(dialog).not.toHaveAttribute('open', { timeout: DIALOG_APPEAR_TIMEOUT_MS });
 
-      // Focus should have returned to the element that triggered the dialog open
-      await expect(page.locator('#inventory-add-item')).toBeFocused({ timeout: DIALOG_APPEAR_TIMEOUT_MS });
+      // #inventory-add-item is display:none (submenu is closed), so restoreFocus()
+      // falls back to the nearest visible focusable ancestor — the submenu trigger.
+      await expect(page.locator('#inventory-submenu-trigger')).toBeFocused({ timeout: DIALOG_APPEAR_TIMEOUT_MS });
     });
 
     test('Tab key stays within dialog (focus trap)', async ({ page }) => {
