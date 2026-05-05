@@ -376,134 +376,6 @@ var _ = Describe("FrontmatterBindingStore", func() {
 			})
 		})
 
-		When("the profile has legacy-shape subscriptions[]", func() {
-			var (
-				bindings []connectors.Binding
-				err      error
-			)
-
-			BeforeEach(func() {
-				pages.Seed(bindingStoreProfileAlice, wikipage.FrontMatter{
-					"wiki": map[string]any{
-						"connectors": map[string]any{
-							"google_tasks": map[string]any{
-								"refresh_token": "rt",
-								"subscriptions": []any{
-									map[string]any{
-										"page":              "shopping",
-										"list_name":         "groceries",
-										"remote_list_id":    "tasklist-id-xyz",
-										"remote_list_title": "Groceries",
-										"state":             "paused",
-										"paused_reason":     "auth_failed",
-										"paused_at":         bindingStoreFixedTime(0).Format(time.RFC3339),
-										"subscribed_at":     bindingStoreFixedTime(-3600).Format(time.RFC3339),
-										"last_synced_seq":   int64(99),
-										"item_id_map":       map[string]any{"uid-1": "task-1"},
-										"item_etags":        map[string]any{"task-1": "etag-1"},
-										"last_updated_min":  "2026-05-04T14:00:00Z",
-									},
-								},
-							},
-						},
-					},
-				})
-				bindings, err = store.LoadBindings(bindingStoreProfileAlice, connectors.ConnectorKindGoogleTasks)
-			})
-
-			It("should return no error", func() {
-				Expect(err).NotTo(HaveOccurred())
-			})
-
-			It("should translate the legacy entry into a Binding", func() {
-				Expect(bindings).To(HaveLen(1))
-			})
-
-			It("should map identity fields", func() {
-				Expect(bindings[0].Page).To(Equal("shopping"))
-				Expect(bindings[0].ListName).To(Equal("groceries"))
-			})
-
-			It("should map remote_list_id to RemoteHandle", func() {
-				Expect(bindings[0].RemoteHandle).To(Equal("tasklist-id-xyz"))
-			})
-
-			It("should map state and paused fields", func() {
-				Expect(bindings[0].State).To(Equal(connectors.BindingStatePaused))
-				Expect(bindings[0].PausedReason).To(Equal("auth_failed"))
-				Expect(bindings[0].PausedAt).To(Equal(bindingStoreFixedTime(0)))
-			})
-
-			It("should map subscribed_at to BoundAt", func() {
-				Expect(bindings[0].BoundAt).To(Equal(bindingStoreFixedTime(-3600)))
-			})
-
-			It("should map last_synced_seq", func() {
-				Expect(bindings[0].LastSyncedSeq).To(Equal(int64(99)))
-			})
-
-			It("should put adapter-specific fields under AdapterState", func() {
-				Expect(bindings[0].AdapterState).To(HaveKey("item_id_map"))
-				Expect(bindings[0].AdapterState).To(HaveKey("item_etags"))
-				Expect(bindings[0].AdapterState).To(HaveKey("last_updated_min"))
-			})
-
-			It("should not leak engine-owned fields into AdapterState", func() {
-				Expect(bindings[0].AdapterState).NotTo(HaveKey("page"))
-				Expect(bindings[0].AdapterState).NotTo(HaveKey("list_name"))
-				Expect(bindings[0].AdapterState).NotTo(HaveKey("remote_list_id"))
-				Expect(bindings[0].AdapterState).NotTo(HaveKey("state"))
-				Expect(bindings[0].AdapterState).NotTo(HaveKey("paused_reason"))
-				Expect(bindings[0].AdapterState).NotTo(HaveKey("paused_at"))
-				Expect(bindings[0].AdapterState).NotTo(HaveKey("subscribed_at"))
-				Expect(bindings[0].AdapterState).NotTo(HaveKey("last_synced_seq"))
-				Expect(bindings[0].AdapterState).NotTo(HaveKey("remote_list_title"))
-			})
-		})
-
-		When("the profile has BOTH new-shape bindings[] and legacy subscriptions[]", func() {
-			var (
-				bindings []connectors.Binding
-				err      error
-			)
-
-			BeforeEach(func() {
-				pages.Seed(bindingStoreProfileAlice, wikipage.FrontMatter{
-					"wiki": map[string]any{
-						"connectors": map[string]any{
-							"google_tasks": map[string]any{
-								"bindings": []any{
-									map[string]any{
-										"page":          "shopping",
-										"list_name":     "new",
-										"remote_handle": "new-handle",
-									},
-								},
-								"subscriptions": []any{
-									map[string]any{
-										"page":           "shopping",
-										"list_name":      "legacy",
-										"remote_list_id": "legacy-handle",
-									},
-								},
-							},
-						},
-					},
-				})
-				bindings, err = store.LoadBindings(bindingStoreProfileAlice, connectors.ConnectorKindGoogleTasks)
-			})
-
-			It("should return no error", func() {
-				Expect(err).NotTo(HaveOccurred())
-			})
-
-			It("should return only the new-shape entries (legacy ignored)", func() {
-				Expect(bindings).To(HaveLen(1))
-				Expect(bindings[0].ListName).To(Equal("new"))
-				Expect(bindings[0].RemoteHandle).To(Equal("new-handle"))
-			})
-		})
-
 		When("ReadFrontMatter returns a non-NotExist error", func() {
 			var (
 				bindings []connectors.Binding
@@ -522,6 +394,47 @@ var _ = Describe("FrontmatterBindingStore", func() {
 
 			It("should not return any bindings", func() {
 				Expect(bindings).To(BeNil())
+			})
+		})
+
+		// The Phase 7 startup migration rewrites legacy subscriptions[]
+		// data into bindings[] before the engine first reads it, so the
+		// binding store no longer carries a dual-read fallback. If a
+		// profile somehow boots with only the legacy shape (migration
+		// hasn't run yet, or a hand-edited frontmatter), LoadBindings
+		// must return zero bindings — anything else would mask the fact
+		// that the migration didn't run.
+		When("the profile has only the legacy subscriptions[] shape", func() {
+			var (
+				bindings []connectors.Binding
+				err      error
+			)
+
+			BeforeEach(func() {
+				pages.Seed(bindingStoreProfileAlice, wikipage.FrontMatter{
+					"wiki": map[string]any{
+						"connectors": map[string]any{
+							"google_tasks": map[string]any{
+								"subscriptions": []any{
+									map[string]any{
+										"page":           "shopping",
+										"list_name":      "groceries",
+										"remote_list_id": "tasklist-id-xyz",
+									},
+								},
+							},
+						},
+					},
+				})
+				bindings, err = store.LoadBindings(bindingStoreProfileAlice, connectors.ConnectorKindGoogleTasks)
+			})
+
+			It("should return no error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should return zero bindings (migration is responsible for the rewrite)", func() {
+				Expect(bindings).To(BeEmpty())
 			})
 		})
 	})
@@ -1161,54 +1074,6 @@ var _ = Describe("FrontmatterBindingStore", func() {
 
 			It("should include profiles with the new-shape key", func() {
 				Expect(out).To(ContainElement(bindingStoreProfileAlice))
-			})
-		})
-
-		When("profiles have legacy subscriptions[] for the queried kind", func() {
-			var (
-				out []wikipage.PageIdentifier
-				err error
-			)
-
-			BeforeEach(func() {
-				profiles.Set("wiki.connectors.google_tasks.bindings", nil)
-				profiles.Set("wiki.connectors.google_tasks.subscriptions", []wikipage.PageIdentifier{bindingStoreProfileBob})
-				out, err = store.ListAllProfilesWithBindings(connectors.ConnectorKindGoogleTasks)
-			})
-
-			It("should return no error", func() {
-				Expect(err).NotTo(HaveOccurred())
-			})
-
-			It("should include profiles whose data is still in legacy shape", func() {
-				Expect(out).To(ContainElement(bindingStoreProfileBob))
-			})
-		})
-
-		When("a profile has bindings for both shapes", func() {
-			var (
-				out []wikipage.PageIdentifier
-				err error
-			)
-
-			BeforeEach(func() {
-				profiles.Set("wiki.connectors.google_tasks.bindings", []wikipage.PageIdentifier{bindingStoreProfileAlice})
-				profiles.Set("wiki.connectors.google_tasks.subscriptions", []wikipage.PageIdentifier{bindingStoreProfileAlice})
-				out, err = store.ListAllProfilesWithBindings(connectors.ConnectorKindGoogleTasks)
-			})
-
-			It("should return no error", func() {
-				Expect(err).NotTo(HaveOccurred())
-			})
-
-			It("should include the profile only once (deduplicated)", func() {
-				count := 0
-				for _, p := range out {
-					if p == bindingStoreProfileAlice {
-						count++
-					}
-				}
-				Expect(count).To(Equal(1))
 			})
 		})
 

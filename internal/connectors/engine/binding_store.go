@@ -44,8 +44,7 @@ type ProfileLister interface {
 	// ListProfilesWithKey returns every page whose frontmatter has a
 	// value at the given dotted key path. Used by the binding store's
 	// ListAllProfilesWithBindings to find profiles with new-shape
-	// bindings[] AND legacy subscriptions[] (until the Phase 7
-	// migration sweeps the latter).
+	// bindings[].
 	ListProfilesWithKey(dottedKeyPath wikipage.DottedKeyPath) []wikipage.PageIdentifier
 }
 
@@ -54,11 +53,12 @@ type ProfileLister interface {
 // wiki.connectors.<kind>.bindings[] key, with each adapter's per-binding
 // state in a nested adapter_state subtree (per ADR-0016).
 //
-// Defensive read path: LoadBindings / FindBinding read both the new
-// shape and the legacy wiki.connectors.<kind>.subscriptions[] shape;
-// the new shape wins when both are present. The Phase 7 eager
-// migration rewrites legacy data on first read; until then dual-read
-// is the load-bearing guard against breaking existing bindings.
+// The store reads and writes ONLY the new shape. The Phase 7 eager
+// migration (migrations/eager/connectors_subscriptions_to_bindings_migration.go)
+// rewrites the pre-engine wiki.connectors.<kind>.subscriptions[] shape
+// into bindings[] on first boot after the migration ships; the dual-read
+// fallback this store used to carry was deleted once that migration
+// landed.
 //
 // Concurrency: a per-profile sync.Mutex serializes critical sections
 // (Save, Delete, WithProfileLock). The Bind / Unbind ceremonies in
@@ -105,12 +105,11 @@ func NewFrontmatterBindingStore(pages FrontmatterReadWriter, profiles ProfileLis
 const (
 	fmKeyWiki         = "wiki"
 	fmKeyConnectors   = "connectors"
-	fmKeyBindings     = "bindings"      // new shape
-	fmKeySubscriptions = "subscriptions" // legacy shape (dual-read only)
+	fmKeyBindings     = "bindings"
 	fmKeyAdapterState = "adapter_state"
 
-	// Engine-owned per-binding fields (new shape). Top-level on the
-	// binding entry; round-tripped verbatim by Save and Load.
+	// Engine-owned per-binding fields. Top-level on the binding entry;
+	// round-tripped verbatim by Save and Load.
 	fmKeyPage                 = "page"
 	fmKeyListName             = "list_name"
 	fmKeyRemoteHandle         = "remote_handle"
@@ -121,44 +120,15 @@ const (
 	fmKeyBoundAt              = "bound_at"
 	fmKeyLastSyncedSeq        = "last_synced_seq"
 	fmKeyLastSuccessfulSyncAt = "last_successful_sync_at"
-
-	// Legacy-shape engine field aliases (read-only; LoadBindings maps
-	// these to the new-shape fields when dual-reading).
-	fmLegacyKeyRemoteListID = "remote_list_id"
-	fmLegacyKeySubscribedAt = "subscribed_at"
 )
-
-// engineOwnedLegacyKeys is the set of keys on a legacy subscription
-// entry that LoadBindings interprets as engine-owned (i.e. they map to
-// fields on the Binding struct rather than landing in AdapterState).
-// Anything NOT in this set on a legacy entry is preserved in
-// AdapterState verbatim. This is the load-bearing rule that lets us
-// safely round-trip Tasks's adapter-specific bookkeeping
-// (item_id_map, item_etags, last_updated_min, synced_items) and Keep's
-// equivalents (item_mapping, label_ids, keep_cursor, ...) through the
-// dual-read without per-adapter conditionals here.
-var engineOwnedLegacyKeys = map[string]struct{}{
-	fmKeyPage:                 {},
-	fmKeyListName:             {},
-	fmKeyRemoteHandle:         {},
-	fmLegacyKeyRemoteListID:   {},
-	fmKeyRemoteListTitle:      {},
-	fmKeyState:                {},
-	fmKeyPausedReason:         {},
-	fmKeyPausedAt:             {},
-	fmKeyBoundAt:              {},
-	fmLegacyKeySubscribedAt:   {},
-	fmKeyLastSyncedSeq:        {},
-	fmKeyLastSuccessfulSyncAt: {},
-}
 
 // LoadBindings implements BindingStore.LoadBindings.
 //
-// Reads the new wiki.connectors.<kind>.bindings[] shape first; if
-// absent or empty, falls back to the legacy
-// wiki.connectors.<kind>.subscriptions[] shape and translates each
-// entry. The new shape wins when both keys are present (transitional
-// state during Phase 7 migration).
+// Reads the wiki.connectors.<kind>.bindings[] shape exclusively.
+// Pre-engine wiki.connectors.<kind>.subscriptions[] data is rewritten
+// to bindings[] by the Phase 7 eager startup migration before the
+// engine ever calls LoadBindings; this method does not carry a
+// fallback for the legacy shape.
 func (s *FrontmatterBindingStore) LoadBindings(profileID wikipage.PageIdentifier, kind connectors.ConnectorKind) ([]connectors.Binding, error) {
 	connector, err := s.readConnectorMap(profileID, kind)
 	if err != nil {
@@ -184,10 +154,9 @@ func (s *FrontmatterBindingStore) FindBinding(profileID wikipage.PageIdentifier,
 	return connectors.Binding{}, false, nil
 }
 
-// SaveBinding implements BindingStore.SaveBinding. Always writes the
-// new shape (bindings[] with adapter_state subtree). Does NOT touch
-// the legacy subscriptions[] key — the Phase 7 eager migration sweeps
-// that on first read.
+// SaveBinding implements BindingStore.SaveBinding. Writes the
+// bindings[] shape with each binding's adapter-specific state nested
+// under adapter_state.
 //
 // A missing profile page is treated as a fresh write: the store
 // constructs an empty frontmatter map and proceeds to write the new
@@ -276,21 +245,14 @@ func (s *FrontmatterBindingStore) WithProfileLock(profileID wikipage.PageIdentif
 
 // ListAllProfilesWithBindings implements
 // BindingStore.ListAllProfilesWithBindings. Queries the frontmatter
-// index for both the new bindings[] key and the legacy subscriptions[]
-// key (until Phase 7's migration sweeps the latter), then deduplicates.
+// index for the bindings[] key. Pre-engine subscriptions[] data is
+// rewritten to bindings[] by the Phase 7 eager startup migration
+// before the engine schedules ticks against it.
 func (s *FrontmatterBindingStore) ListAllProfilesWithBindings(kind connectors.ConnectorKind) ([]wikipage.PageIdentifier, error) {
 	newKey := connectorKeyPath(kind, fmKeyBindings)
-	legacyKey := connectorKeyPath(kind, fmKeySubscriptions)
 	seen := map[wikipage.PageIdentifier]struct{}{}
 	var out []wikipage.PageIdentifier
 	for _, p := range s.profiles.ListProfilesWithKey(newKey) {
-		if _, ok := seen[p]; ok {
-			continue
-		}
-		seen[p] = struct{}{}
-		out = append(out, p)
-	}
-	for _, p := range s.profiles.ListProfilesWithKey(legacyKey) {
 		if _, ok := seen[p]; ok {
 			continue
 		}
@@ -332,20 +294,13 @@ func (s *FrontmatterBindingStore) readConnectorMap(profileID wikipage.PageIdenti
 	return connectorMap(fm, kind), nil
 }
 
-// decodeBindingsList walks the connector's bindings[] (new shape) or
-// subscriptions[] (legacy) and produces engine Bindings. New shape
-// wins when both are present.
+// decodeBindingsList walks the connector's bindings[] and produces
+// engine Bindings.
 func decodeBindingsList(profileID wikipage.PageIdentifier, connector map[string]any) ([]connectors.Binding, error) {
-	if rawList, ok := connector[fmKeyBindings].([]any); ok && len(rawList) > 0 {
-		return decodeNewShapeBindings(profileID, rawList)
+	rawList, ok := connector[fmKeyBindings].([]any)
+	if !ok || len(rawList) == 0 {
+		return nil, nil
 	}
-	if rawList, ok := connector[fmKeySubscriptions].([]any); ok && len(rawList) > 0 {
-		return decodeLegacyBindings(profileID, rawList)
-	}
-	return nil, nil
-}
-
-func decodeNewShapeBindings(profileID wikipage.PageIdentifier, rawList []any) ([]connectors.Binding, error) {
 	out := make([]connectors.Binding, 0, len(rawList))
 	for i, entry := range rawList {
 		m, ok := entry.(map[string]any)
@@ -392,82 +347,6 @@ func decodeNewShapeBinding(profileID wikipage.PageIdentifier, m map[string]any) 
 		BoundAt:              boundAt,
 		LastSuccessfulSyncAt: lastSync,
 		AdapterState:         connectors.AdapterState(deepCopyMap(rawAdapterState)),
-	}, nil
-}
-
-// decodeLegacyBindings translates legacy subscriptions[] entries into
-// engine Bindings. Engine-owned fields (page, list_name,
-// remote_list_id, state, paused_*, subscribed_at, last_synced_seq)
-// map to the corresponding Binding fields; everything else on the
-// entry lands in AdapterState verbatim. This is the load-bearing
-// guard that preserves Tasks's item_id_map / item_etags /
-// last_updated_min / synced_items and Keep's analogous bookkeeping
-// during the dual-read window.
-func decodeLegacyBindings(profileID wikipage.PageIdentifier, rawList []any) ([]connectors.Binding, error) {
-	out := make([]connectors.Binding, 0, len(rawList))
-	for i, entry := range rawList {
-		m, ok := entry.(map[string]any)
-		if !ok {
-			return nil, fmt.Errorf("connectors/engine: subscriptions[%d] is %T, expected map", i, entry)
-		}
-		b, err := decodeLegacyBinding(profileID, m)
-		if err != nil {
-			return nil, fmt.Errorf("connectors/engine: subscriptions[%d]: %w", i, err)
-		}
-		out = append(out, b)
-	}
-	return out, nil
-}
-
-func decodeLegacyBinding(profileID wikipage.PageIdentifier, m map[string]any) (connectors.Binding, error) {
-	pausedAt, err := parseRFC3339(getString(m, fmKeyPausedAt))
-	if err != nil {
-		return connectors.Binding{}, fmt.Errorf("paused_at: %w", err)
-	}
-	boundAt, err := parseRFC3339(getString(m, fmLegacyKeySubscribedAt))
-	if err != nil {
-		return connectors.Binding{}, fmt.Errorf("subscribed_at: %w", err)
-	}
-	lastSync, err := parseRFC3339(getString(m, fmKeyLastSuccessfulSyncAt))
-	if err != nil {
-		return connectors.Binding{}, fmt.Errorf("last_successful_sync_at: %w", err)
-	}
-	state := connectors.BindingState(getString(m, fmKeyState))
-	if state == "" {
-		state = connectors.BindingStateActive
-	}
-	// Remote handle: prefer the new key if it's somehow present in a
-	// legacy entry; otherwise the legacy remote_list_id.
-	remoteHandle := getString(m, fmKeyRemoteHandle)
-	if remoteHandle == "" {
-		remoteHandle = getString(m, fmLegacyKeyRemoteListID)
-	}
-	// Adapter state: every key on the entry NOT in the engine-owned
-	// allowlist rides through verbatim (deep-copied so the loaded
-	// Binding is independent of the source frontmatter map).
-	adapterState := connectors.AdapterState{}
-	for k, v := range m {
-		if _, owned := engineOwnedLegacyKeys[k]; owned {
-			continue
-		}
-		adapterState[k] = deepCopyAny(v)
-	}
-	if len(adapterState) == 0 {
-		adapterState = nil
-	}
-	return connectors.Binding{
-		ProfileID:            profileID,
-		Page:                 getString(m, fmKeyPage),
-		ListName:             getString(m, fmKeyListName),
-		RemoteHandle:         remoteHandle,
-		RemoteListTitle:      getString(m, fmKeyRemoteListTitle),
-		LastSyncedSeq:        getInt64(m, fmKeyLastSyncedSeq),
-		State:                state,
-		PausedReason:         getString(m, fmKeyPausedReason),
-		PausedAt:             pausedAt,
-		BoundAt:              boundAt,
-		LastSuccessfulSyncAt: lastSync,
-		AdapterState:         adapterState,
 	}, nil
 }
 
