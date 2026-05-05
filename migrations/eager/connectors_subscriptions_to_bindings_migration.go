@@ -71,6 +71,16 @@ const (
 	// in adapter_state.
 	connectorsLegacyKeyRemoteListID = "remote_list_id"
 	connectorsLegacyKeySubscribedAt = "subscribed_at"
+
+	// Keep-specific legacy field aliases. The pre-engine google_keep
+	// connector stored the bound note's ServerID under keep_note_id
+	// (and the title under keep_note_title) instead of the engine's
+	// kind-agnostic remote_handle / remote_list_title. The migration
+	// translates these to top-level engine fields during legacy
+	// translation AND hoists them from adapter_state for already-
+	// migrated bindings whose pre-fix translation buried them.
+	connectorsLegacyKeyKeepNoteID    = "keep_note_id"
+	connectorsLegacyKeyKeepNoteTitle = "keep_note_title"
 )
 
 // engineOwnedLegacyKeys is the set of keys on a legacy subscription
@@ -83,7 +93,9 @@ var engineOwnedLegacyKeys = map[string]struct{}{
 	connectorsKeyListName:             {},
 	connectorsKeyRemoteHandle:         {},
 	connectorsLegacyKeyRemoteListID:   {},
+	connectorsLegacyKeyKeepNoteID:     {},
 	connectorsKeyRemoteListTitle:      {},
+	connectorsLegacyKeyKeepNoteTitle:  {},
 	connectorsKeyState:                {},
 	connectorsKeyPausedReason:         {},
 	connectorsKeyPausedAt:             {},
@@ -246,12 +258,13 @@ func pageNeedsConnectorsMigration(fm map[string]any) bool {
 }
 
 // hasLegacyAdapterStateBloat reports whether any binding entry carries
-// kind-specific legacy adapter_state keys that the new code never reads
-// (Tasks: synced_items; Keep: synced_text/checked/sort_value at the
-// top level — Keep's per-uid fingerprints are scrubbed by
-// cleanKeepAdapterState during translation, but already-migrated
-// bindings whose legacy item_id_map was eaten by the buggy engine still
-// retain top-level synced_*).
+// kind-specific legacy adapter_state keys that the new code never
+// reads, OR (for Keep) whose top-level engine fields were never
+// translated from legacy aliases buried in adapter_state.
+//
+//   - Tasks: synced_items in adapter_state (drop)
+//   - Keep: keep_note_id / keep_note_title in adapter_state but empty
+//     top-level remote_handle / remote_list_title (hoist)
 func hasLegacyAdapterStateBloat(kindName string, bindingsRaw any) bool {
 	bindings, ok := bindingsRaw.([]any)
 	if !ok {
@@ -271,6 +284,30 @@ func hasLegacyAdapterStateBloat(kindName string, bindingsRaw any) bool {
 			if _, has := adapterState[tasksLegacyKeySyncedItems]; has {
 				return true
 			}
+		case "google_keep":
+			if topLevelRemoteHandleIsEmpty(m) && hasAny(adapterState, connectorsLegacyKeyKeepNoteID, connectorsLegacyKeyKeepNoteTitle) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// topLevelRemoteHandleIsEmpty reports whether the binding entry has no
+// usable top-level remote_handle (missing or empty string).
+func topLevelRemoteHandleIsEmpty(entry map[string]any) bool {
+	v, ok := entry[connectorsKeyRemoteHandle]
+	if !ok {
+		return true
+	}
+	return isEmptyString(v)
+}
+
+// hasAny reports whether m contains any of the named keys.
+func hasAny(m map[string]any, keys ...string) bool {
+	for _, k := range keys {
+		if _, ok := m[k]; ok {
+			return true
 		}
 	}
 	return false
@@ -472,12 +509,24 @@ func translateLegacyEntry(kindName string, m map[string]any) map[string]any {
 	copyIfPresent(m, out, connectorsKeyLastSuccessfulSyncAt)
 
 	// remote_handle: prefer the new key if a transitional row carried
-	// it; otherwise the legacy remote_list_id. Either way the new-shape
-	// entry stores it at remote_handle.
-	if v, ok := m[connectorsKeyRemoteHandle]; ok {
+	// it; otherwise the legacy aliases (Tasks: remote_list_id; Keep:
+	// keep_note_id). Either way the new-shape entry stores it at
+	// remote_handle.
+	if v, ok := m[connectorsKeyRemoteHandle]; ok && !isEmptyString(v) {
 		out[connectorsKeyRemoteHandle] = v
 	} else if v, ok := m[connectorsLegacyKeyRemoteListID]; ok {
 		out[connectorsKeyRemoteHandle] = v
+	} else if v, ok := m[connectorsLegacyKeyKeepNoteID]; ok {
+		out[connectorsKeyRemoteHandle] = v
+	}
+
+	// remote_list_title: prefer new key; Keep's legacy alias was
+	// keep_note_title.
+	if v, ok := m[connectorsKeyRemoteListTitle]; ok && !isEmptyString(v) {
+		// already copied at the top
+		_ = v
+	} else if v, ok := m[connectorsLegacyKeyKeepNoteTitle]; ok {
+		out[connectorsKeyRemoteListTitle] = v
 	}
 
 	// bound_at: prefer the new key if present; otherwise legacy subscribed_at.
@@ -601,10 +650,16 @@ func cleanTasksAdapterState(adapterState map[string]any) {
 	delete(adapterState, tasksLegacyKeySyncedItems)
 }
 
-// dropLegacyAdapterStateBloat strips kind-specific legacy adapter_state
-// keys that the new code never reads. Returns true when at least one
-// entry was modified. Used by the migration's repair pass to clean up
-// already-migrated bindings that the pre-fix code left bloated.
+// dropLegacyAdapterStateBloat repairs each binding entry's
+// adapter_state per kind:
+//
+//   - Tasks: drops synced_items (causal divergence replaced fingerprint).
+//   - Keep: hoists keep_note_id / keep_note_title from adapter_state to
+//     top-level remote_handle / remote_list_title when those top-level
+//     fields are empty (the pre-fix migration didn't know about Keep's
+//     legacy aliases).
+//
+// Returns true when at least one entry was modified.
 func dropLegacyAdapterStateBloat(kindName string, bindingsRaw any) bool {
 	bindings, ok := bindingsRaw.([]any)
 	if !ok {
@@ -626,9 +681,47 @@ func dropLegacyAdapterStateBloat(kindName string, bindingsRaw any) bool {
 				delete(adapterState, tasksLegacyKeySyncedItems)
 				dropped = true
 			}
+		case "google_keep":
+			if hoistKeepLegacyAliases(m, adapterState) {
+				dropped = true
+			}
 		}
 	}
 	return dropped
+}
+
+// hoistKeepLegacyAliases moves keep_note_id / keep_note_title out of
+// adapter_state up to top-level remote_handle / remote_list_title when
+// those top-level fields are missing or empty. Returns true on any
+// change.
+func hoistKeepLegacyAliases(entry, adapterState map[string]any) bool {
+	changed := false
+	if topLevelRemoteHandleIsEmpty(entry) {
+		if v, ok := adapterState[connectorsLegacyKeyKeepNoteID].(string); ok && v != "" {
+			entry[connectorsKeyRemoteHandle] = v
+			changed = true
+		}
+	}
+	if v, ok := adapterState[connectorsLegacyKeyKeepNoteID]; ok {
+		_ = v
+		delete(adapterState, connectorsLegacyKeyKeepNoteID)
+		changed = true
+	}
+	titleEmpty := false
+	if t, ok := entry[connectorsKeyRemoteListTitle]; !ok || isEmptyString(t) {
+		titleEmpty = true
+	}
+	if titleEmpty {
+		if v, ok := adapterState[connectorsLegacyKeyKeepNoteTitle].(string); ok && v != "" {
+			entry[connectorsKeyRemoteListTitle] = v
+			changed = true
+		}
+	}
+	if _, ok := adapterState[connectorsLegacyKeyKeepNoteTitle]; ok {
+		delete(adapterState, connectorsLegacyKeyKeepNoteTitle)
+		changed = true
+	}
+	return changed
 }
 
 // repairStuckBindings clears push_failures on any binding entry in the
@@ -665,4 +758,13 @@ func copyIfPresent(src, dst map[string]any, key string) {
 	if v, ok := src[key]; ok {
 		dst[key] = v
 	}
+}
+
+// isEmptyString returns true when v is a string equal to "". Used to
+// decide whether a transitional row's already-present new-shape field
+// (e.g., remote_handle) is the canonical value or just an empty
+// placeholder that should be replaced by a legacy alias's value.
+func isEmptyString(v any) bool {
+	s, ok := v.(string)
+	return ok && s == ""
 }

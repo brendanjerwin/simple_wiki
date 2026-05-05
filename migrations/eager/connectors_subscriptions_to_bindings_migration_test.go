@@ -210,6 +210,125 @@ var _ = Describe("ConnectorsSubscriptionsToBindingsMigrationJob", func() {
 		})
 	})
 
+	When("a legacy Keep subscription carries keep_note_id (Keep's remote_handle alias)", func() {
+		// Tasks's legacy alias was remote_list_id. Keep's was keep_note_id.
+		// The pre-fix migration only knew about Tasks's alias, so Keep
+		// bindings ended up with empty remote_handle — every operation
+		// (PullRemote filter, InsertRemote, PatchRemote) silently no-ops.
+		BeforeEach(func() {
+			store = newFakeReaderMutator(map[string]wikipage.FrontMatter{
+				"profile_irene": {
+					"identifier": "profile_irene",
+					"wiki": map[string]any{
+						"connectors": map[string]any{
+							"google_keep": map[string]any{
+								"subscriptions": []any{
+									map[string]any{
+										"page":            "shopping",
+										"list_name":       "groceries",
+										"keep_note_id":    "keep-note-1",
+										"keep_note_title": "Groceries",
+									},
+								},
+							},
+						},
+					},
+				},
+			})
+			job = eager.NewConnectorsSubscriptionsToBindingsMigrationJob(store, "profile_irene")
+			Expect(job.Execute()).To(Succeed())
+		})
+
+		It("should translate keep_note_id to remote_handle", func() {
+			keep := connectorSubtreeFM(store.pages["profile_irene"], "google_keep")
+			bindings := asAnySlice(keep["bindings"])
+			entry := asMap(bindings[0])
+			Expect(entry["remote_handle"]).To(Equal("keep-note-1"))
+		})
+
+		It("should translate keep_note_title to remote_list_title", func() {
+			keep := connectorSubtreeFM(store.pages["profile_irene"], "google_keep")
+			bindings := asAnySlice(keep["bindings"])
+			entry := asMap(bindings[0])
+			Expect(entry["remote_list_title"]).To(Equal("Groceries"))
+		})
+
+		It("should not leak the legacy keep_note_id key", func() {
+			keep := connectorSubtreeFM(store.pages["profile_irene"], "google_keep")
+			bindings := asAnySlice(keep["bindings"])
+			entry := asMap(bindings[0])
+			Expect(entry).NotTo(HaveKey("keep_note_id"))
+			Expect(entry).NotTo(HaveKey("keep_note_title"))
+			adapterState, _ := entry["adapter_state"].(map[string]any)
+			if adapterState != nil {
+				Expect(adapterState).NotTo(HaveKey("keep_note_id"))
+				Expect(adapterState).NotTo(HaveKey("keep_note_title"))
+			}
+		})
+	})
+
+	When("an already-migrated Keep binding has empty remote_handle but adapter_state.keep_note_id", func() {
+		// Repair: bindings translated by the buggy code that didn't
+		// understand keep_note_id ended up with empty remote_handle and
+		// the legacy key buried in adapter_state. Migration must hoist
+		// it back to top-level remote_handle.
+		BeforeEach(func() {
+			store = newFakeReaderMutator(map[string]wikipage.FrontMatter{
+				"profile_jasper": {
+					"identifier": "profile_jasper",
+					"wiki": map[string]any{
+						"connectors": map[string]any{
+							"google_keep": map[string]any{
+								"bindings": []any{
+									map[string]any{
+										"page":          "shopping",
+										"list_name":     "groceries",
+										"remote_handle": "",
+										"adapter_state": map[string]any{
+											"keep_note_id":    "keep-note-1",
+											"keep_note_title": "Groceries",
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			})
+			job = eager.NewConnectorsSubscriptionsToBindingsMigrationJob(store, "profile_jasper")
+			Expect(job.Execute()).To(Succeed())
+		})
+
+		It("should hoist keep_note_id from adapter_state to top-level remote_handle", func() {
+			keep := connectorSubtreeFM(store.pages["profile_jasper"], "google_keep")
+			bindings := asAnySlice(keep["bindings"])
+			entry := asMap(bindings[0])
+			Expect(entry["remote_handle"]).To(Equal("keep-note-1"))
+		})
+
+		It("should hoist keep_note_title to top-level remote_list_title", func() {
+			keep := connectorSubtreeFM(store.pages["profile_jasper"], "google_keep")
+			bindings := asAnySlice(keep["bindings"])
+			entry := asMap(bindings[0])
+			Expect(entry["remote_list_title"]).To(Equal("Groceries"))
+		})
+
+		It("should remove the legacy keys from adapter_state", func() {
+			keep := connectorSubtreeFM(store.pages["profile_jasper"], "google_keep")
+			bindings := asAnySlice(keep["bindings"])
+			entry := asMap(bindings[0])
+			adapterState, _ := entry["adapter_state"].(map[string]any)
+			if adapterState != nil {
+				Expect(adapterState).NotTo(HaveKey("keep_note_id"))
+				Expect(adapterState).NotTo(HaveKey("keep_note_title"))
+			}
+		})
+
+		It("should write the page (page changed)", func() {
+			Expect(store.writeCount).To(BeNumerically(">=", 1))
+		})
+	})
+
 	When("a legacy Keep subscription carries item_id_map structured entries", func() {
 		// Legacy Keep persisted ItemMapping under item_id_map[uid] = {
 		//   server_id, base_version, client_id,
