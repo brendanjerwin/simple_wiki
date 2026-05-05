@@ -18,6 +18,8 @@ import (
 	"github.com/brendanjerwin/simple_wiki/internal/caldav"
 	"github.com/brendanjerwin/simple_wiki/internal/connectors"
 	keepsync "github.com/brendanjerwin/simple_wiki/internal/connectors/google_keep/sync"
+	"github.com/brendanjerwin/simple_wiki/internal/connectors/engine"
+	googletasks "github.com/brendanjerwin/simple_wiki/internal/connectors/google_tasks"
 	tasksgateway "github.com/brendanjerwin/simple_wiki/internal/connectors/google_tasks/gateway"
 	taskssync "github.com/brendanjerwin/simple_wiki/internal/connectors/google_tasks/sync"
 	grpcapi "github.com/brendanjerwin/simple_wiki/internal/grpc/api/v1"
@@ -942,10 +944,53 @@ func setupGoogleTasksConnector(
 		}
 		return out
 	}
+	// Phase 4-2: build the SyncEngine + TasksAdapter alongside the
+	// legacy Connector and register the engine (not the legacy
+	// connector) as the dispatch shape on the SyncScheduler. Per the
+	// extract-sync-engine plan (Phase 4-2 of /home/.../warm-glacier.md),
+	// the legacy Connector type is no longer referenced by the dispatch
+	// layer but its files still compile — gRPC handlers continue to
+	// route Subscribe/Unsubscribe/GetState/Connect/Disconnect through
+	// the legacy connector during the brief Phase-4 cohabitation; only
+	// the per-30s scheduler tick + ForceFullResync flow goes through
+	// the engine in this commit. Phase 5 (Keep collapse) and Phase 6
+	// (rename) finish the cutover.
+	tasksAdapter, taerr := buildTasksAdapter(site, tasksStore, clientFactory, logger)
+	if taerr != nil {
+		return nil, nil, nil, taerr
+	}
+	tasksBindingStore, tbsErr := engine.NewFrontmatterBindingStore(
+		site,
+		&frontmatterIndexProfileLister{index: site.FrontmatterIndexQueryer},
+		logger,
+	)
+	if tbsErr != nil {
+		return nil, nil, nil, fmt.Errorf("build tasks engine binding store: %w", tbsErr)
+	}
+	tasksEngine, teerr := engine.NewEngine(
+		tasksAdapter,
+		leaseTable,
+		checklistMutator,
+		checklistMutator,
+		tasksDebouncer,
+		logger,
+		systemWallClock{},
+		tasksBindingStore,
+	)
+	if teerr != nil {
+		return nil, nil, nil, fmt.Errorf("build tasks sync engine: %w", teerr)
+	}
+
 	if regErr := syncScheduler.Register(
-		tasksConnector,
+		tasksEngine,
 		tasksSubscriptionLister,
 		func(_ connectors.Connector, key connectors.SubscriptionKey) jobs.Job {
+			// The outbound sync job still routes through the legacy
+			// Connector for the brief Phase-4 cohabitation. The
+			// scheduler-tick path goes through the engine; the
+			// debouncer-driven sync goes through the legacy connector
+			// (its sync_job.go calls connector.Sync). Phase 4-3
+			// removes the legacy path entirely.
 			return taskssync.NewTasksOutboundSyncJob(
 				tasksConnector,
 				wikipage.PageIdentifier(key.ProfileID),
@@ -1156,5 +1201,74 @@ func (c *tasksFannedOutPausedChecker) IsAnyChecklistSubscriptionPaused(page, lis
 		}
 	}
 	return false
+}
+
+// systemWallClock implements engine.Clock against time.Now. Production
+// wiring; tests substitute their own clocks.
+type systemWallClock struct{}
+
+// Now returns the current wall-clock time.
+func (systemWallClock) Now() time.Time { return time.Now() }
+
+// frontmatterIndexProfileLister adapts the wiki's IQueryFrontmatterIndex
+// to the engine's ProfileLister contract. Engine's ProfileLister wants a
+// ListProfilesWithKey(DottedKeyPath) []PageIdentifier method; the wiki's
+// IQueryFrontmatterIndex exposes QueryKeyExistence with the same shape.
+type frontmatterIndexProfileLister struct {
+	index wikipage.IQueryFrontmatterIndex
+}
+
+// ListProfilesWithKey delegates to QueryKeyExistence.
+func (l *frontmatterIndexProfileLister) ListProfilesWithKey(dottedKeyPath wikipage.DottedKeyPath) []wikipage.PageIdentifier {
+	return l.index.QueryKeyExistence(dottedKeyPath)
+}
+
+// buildTasksAdapter wires a TasksAdapter for the engine path. The
+// adapter reads refresh tokens from the same per-profile frontmatter
+// the legacy SubscriptionStore uses, so both code paths see the same
+// credential bundle until Phase 4-3 deletes the legacy code.
+func buildTasksAdapter(
+	site *server.Site,
+	tasksStore *taskssync.SubscriptionStore,
+	clientFactory taskssync.TasksClientFactory,
+	logger *lumber.ConsoleLogger,
+) (*googletasks.TasksAdapter, error) {
+	_ = site // reserved for future expansion (e.g., direct frontmatter reads)
+	creds := &tasksStoreCredentialReader{store: tasksStore}
+	// Engine-shaped client factory: forwards to the legacy
+	// taskssync.TasksClientFactory (which the bootstrap already wires
+	// against the gateway's RefreshClient). The legacy factory's
+	// TokenSource return is dropped — the engine adapter doesn't need
+	// it because it asks for a fresh client per call.
+	engineFactory := googletasks.TasksClientFactory(func(_ context.Context, profileID wikipage.PageIdentifier, refreshToken string) (googletasks.TasksClient, error) {
+		client, _, err := clientFactory(profileID, refreshToken)
+		if err != nil {
+			return nil, err
+		}
+		return client, nil
+	})
+	return googletasks.NewTasksAdapter(creds, engineFactory, logger)
+}
+
+// tasksStoreCredentialReader satisfies googletasks.CredentialReader by
+// reading refresh tokens from the legacy taskssync.SubscriptionStore.
+// The legacy store and the new engine path share the same credential
+// bundle on the profile page; once the legacy code is gone, this
+// reader is replaced by FrontmatterCredentialReader directly.
+type tasksStoreCredentialReader struct {
+	store *taskssync.SubscriptionStore
+}
+
+// LoadRefreshToken reads the refresh token for the given profile.
+// Returns ErrCredentialMissing when the profile has no refresh token.
+func (r *tasksStoreCredentialReader) LoadRefreshToken(_ context.Context, profileID wikipage.PageIdentifier) (string, error) {
+	state, err := r.store.LoadState(profileID)
+	if err != nil {
+		return "", fmt.Errorf("load tasks state for %s: %w", profileID, err)
+	}
+	if !state.IsConfigured() {
+		return "", googletasks.ErrCredentialMissing
+	}
+	return state.RefreshToken, nil
 }
 
