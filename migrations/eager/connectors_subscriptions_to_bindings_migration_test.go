@@ -498,6 +498,64 @@ var _ = Describe("ConnectorsSubscriptionsToBindingsMigrationJob", func() {
 		})
 	})
 
+	When("an already-migrated Tasks binding still carries synced_items", func() {
+		// Phase 7 plan said drop synced_items on translation. The buggy
+		// migration carried it through verbatim. Bindings translated by
+		// the buggy code now have stale synced_items in their
+		// adapter_state. Repair: drop it idempotently regardless of
+		// whether the binding is "stuck."
+		BeforeEach(func() {
+			store = newFakeReaderMutator(map[string]wikipage.FrontMatter{
+				"profile_henry": {
+					"identifier": "profile_henry",
+					"wiki": map[string]any{
+						"connectors": map[string]any{
+							"google_tasks": map[string]any{
+								"bindings": []any{
+									map[string]any{
+										"page":          "shopping",
+										"list_name":     "groceries",
+										"remote_handle": "tasklist-1",
+										"adapter_state": map[string]any{
+											"item_id_map": map[string]any{"uid-X": "task-X"},
+											"synced_items": map[string]any{
+												"uid-X": map[string]any{
+													"synced_title": "Eggs (stale)",
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			})
+			job = eager.NewConnectorsSubscriptionsToBindingsMigrationJob(store, "profile_henry")
+			Expect(job.Execute()).To(Succeed())
+		})
+
+		It("should drop synced_items from adapter_state", func() {
+			tasks := connectorSubtreeFM(store.pages["profile_henry"], "google_tasks")
+			bindings := asAnySlice(tasks["bindings"])
+			entry := asMap(bindings[0])
+			adapterState := asMap(entry["adapter_state"])
+			Expect(adapterState).NotTo(HaveKey("synced_items"))
+		})
+
+		It("should preserve item_id_map", func() {
+			tasks := connectorSubtreeFM(store.pages["profile_henry"], "google_tasks")
+			bindings := asAnySlice(tasks["bindings"])
+			entry := asMap(bindings[0])
+			adapterState := asMap(entry["adapter_state"])
+			Expect(adapterState).To(HaveKey("item_id_map"))
+		})
+
+		It("should write the page (page changed)", func() {
+			Expect(store.writeCount).To(BeNumerically(">=", 1))
+		})
+	})
+
 	When("a binding has populated item_id_map AND push_failures (NOT stuck)", func() {
 		// Negative case: a binding with both item_id_map AND push_failures
 		// is in normal failure-handling territory, not the stuck state.

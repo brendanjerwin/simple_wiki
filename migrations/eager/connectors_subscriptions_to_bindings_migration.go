@@ -227,7 +227,7 @@ func pageNeedsConnectorsMigration(fm map[string]any) bool {
 	if !ok {
 		return false
 	}
-	for _, kindRaw := range conns {
+	for kindName, kindRaw := range conns {
 		kindMap, ok := kindRaw.(map[string]any)
 		if !ok {
 			continue
@@ -237,6 +237,40 @@ func pageNeedsConnectorsMigration(fm map[string]any) bool {
 		}
 		if hasStuckBindings(kindMap[connectorsKeyBindings]) {
 			return true
+		}
+		if hasLegacyAdapterStateBloat(kindName, kindMap[connectorsKeyBindings]) {
+			return true
+		}
+	}
+	return false
+}
+
+// hasLegacyAdapterStateBloat reports whether any binding entry carries
+// kind-specific legacy adapter_state keys that the new code never reads
+// (Tasks: synced_items; Keep: synced_text/checked/sort_value at the
+// top level — Keep's per-uid fingerprints are scrubbed by
+// cleanKeepAdapterState during translation, but already-migrated
+// bindings whose legacy item_id_map was eaten by the buggy engine still
+// retain top-level synced_*).
+func hasLegacyAdapterStateBloat(kindName string, bindingsRaw any) bool {
+	bindings, ok := bindingsRaw.([]any)
+	if !ok {
+		return false
+	}
+	for _, entry := range bindings {
+		m, ok := entry.(map[string]any)
+		if !ok {
+			continue
+		}
+		adapterState, ok := m[connectorsKeyAdapterState].(map[string]any)
+		if !ok {
+			continue
+		}
+		switch kindName {
+		case "google_tasks":
+			if _, has := adapterState[tasksLegacyKeySyncedItems]; has {
+				return true
+			}
 		}
 	}
 	return false
@@ -363,6 +397,13 @@ func rewriteConnectorsSubscriptions(fm map[string]any) bool {
 
 		// Repair pass for already-migrated profiles in the stuck state.
 		if repairStuckBindings(kindMap[connectorsKeyBindings]) {
+			changed = true
+		}
+
+		// Repair pass: drop legacy adapter_state bloat from
+		// already-migrated bindings (Phase 7 plan said drop, but the
+		// pre-fix migration carried it through verbatim).
+		if dropLegacyAdapterStateBloat(kindName, kindMap[connectorsKeyBindings]) {
 			changed = true
 		}
 	}
@@ -558,6 +599,36 @@ func decodeKeepLegacyItemEntry(raw any) (string, map[string]any) {
 // synced_items is dead weight on the profile frontmatter.
 func cleanTasksAdapterState(adapterState map[string]any) {
 	delete(adapterState, tasksLegacyKeySyncedItems)
+}
+
+// dropLegacyAdapterStateBloat strips kind-specific legacy adapter_state
+// keys that the new code never reads. Returns true when at least one
+// entry was modified. Used by the migration's repair pass to clean up
+// already-migrated bindings that the pre-fix code left bloated.
+func dropLegacyAdapterStateBloat(kindName string, bindingsRaw any) bool {
+	bindings, ok := bindingsRaw.([]any)
+	if !ok {
+		return false
+	}
+	dropped := false
+	for _, entry := range bindings {
+		m, ok := entry.(map[string]any)
+		if !ok {
+			continue
+		}
+		adapterState, ok := m[connectorsKeyAdapterState].(map[string]any)
+		if !ok {
+			continue
+		}
+		switch kindName {
+		case "google_tasks":
+			if _, has := adapterState[tasksLegacyKeySyncedItems]; has {
+				delete(adapterState, tasksLegacyKeySyncedItems)
+				dropped = true
+			}
+		}
+	}
+	return dropped
 }
 
 // repairStuckBindings clears push_failures on any binding entry in the
