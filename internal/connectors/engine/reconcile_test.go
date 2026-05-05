@@ -963,6 +963,61 @@ var _ = Describe("Engine.reconcile", func() {
 		})
 	})
 
+	When("InsertRemote returns ErrorClassPreconditionFailed", func() {
+		// Insert-recovery: when an Insert returns a precondition failure
+		// (e.g., Keep stage3-500 from a stale cursor or a duplicate), the
+		// engine must call RebuildAdapterState to refresh state and
+		// persist the rebuilt binding. Skips the item this tick; the
+		// next tick will Patch via the rebuilt mapping rather than
+		// Insert. Without this path Insert dead-letters every item
+		// after 10 retries (production bug 2026-05-05).
+		const newUID = "uid-precondition-1"
+		var (
+			syncErr      error
+			savedBinding connectors.Binding
+			rebuiltState = connectors.AdapterState{
+				"item_id_map":  map[string]string{},
+				"item_mapping": map[string]any{"server-fresh": map[string]any{"server_id": "server-fresh"}},
+			}
+		)
+
+		BeforeEach(func() {
+			fbs.SeedBinding(connectors.Binding{
+				ProfileID: profileID, Page: page, ListName: listName,
+				RemoteHandle:         "tasklist-1",
+				State:                connectors.BindingStateActive,
+				LastSuccessfulSyncAt: reconcilePastChokePausedAt,
+				AdapterState:         connectors.AdapterState{"item_id_map": map[string]string{}},
+			}, ownerKind)
+
+			fa.SetPullRemoteResponse(connectors.RemotePullResult{}, nil)
+			fa.SetInsertRemoteResponse("", errReconcileProgrammed)
+			fa.SetClassifyErrorResponse(connectors.ErrorClassPreconditionFailed)
+			fa.SetRebuildAdapterStateResponse(rebuiltState, nil)
+			reader.checklist = &apiv1.Checklist{
+				Items: []*apiv1.ChecklistItem{{Uid: newUID, Text: "eggs"}},
+			}
+
+			syncErr = eng.Sync(ctx, key)
+			if len(fbs.RecordedSaveBinding) > 0 {
+				savedBinding = fbs.RecordedSaveBinding[len(fbs.RecordedSaveBinding)-1].Binding
+			}
+		})
+
+		It("should not return an error (recovery is steady-state)", func() {
+			Expect(syncErr).NotTo(HaveOccurred())
+		})
+
+		It("should call RebuildAdapterState once", func() {
+			Expect(fa.RecordedRebuildAdapterState).To(HaveLen(1))
+		})
+
+		It("should persist the rebuilt AdapterState on the binding", func() {
+			Expect(savedBinding.AdapterState).To(HaveKey("item_mapping"))
+			Expect(savedBinding.AdapterState["item_mapping"]).To(Equal(rebuiltState["item_mapping"]))
+		})
+	})
+
 	When("the suppressor wraps the inbound apply pass", func() {
 		const knownUID = "uid-supr-1"
 

@@ -428,8 +428,23 @@ func (e *Engine) pushOutbound(
 				case connectors.ErrorClassRetryable:
 					binding = e.recordPushFailure(binding, uid, "outbound_inserted", insErr)
 					continue
+				case connectors.ErrorClassPreconditionFailed:
+					// Insert-recovery: a precondition failure on Insert
+					// (e.g., Keep stage3-500 from a stale cursor or a
+					// duplicate ServerID) means the local view diverged
+					// from the remote. Rebuild AdapterState from a fresh
+					// full pull so the next tick sees existing remote
+					// items and Patches them via the rebuilt mapping
+					// instead of re-attempting Insert. Bails out of the
+					// outbound loop cleanly so the caller persists the
+					// rebuilt state.
+					recovered, recErr := e.runInsertRecovery(ctx, binding, uid, idMap)
+					if recErr != nil {
+						return binding, false, recErr
+					}
+					return recovered, false, nil
 				case connectors.ErrorClassNone, connectors.ErrorClassTransient,
-					connectors.ErrorClassFatal, connectors.ErrorClassPreconditionFailed,
+					connectors.ErrorClassFatal,
 					connectors.ErrorClassRateLimited, connectors.ErrorClassNotFound:
 					fallthrough
 				default:
