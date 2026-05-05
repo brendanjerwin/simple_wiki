@@ -210,6 +210,220 @@ var _ = Describe("ConnectorsSubscriptionsToBindingsMigrationJob", func() {
 		})
 	})
 
+	When("a legacy Keep subscription carries item_id_map structured entries", func() {
+		// Legacy Keep persisted ItemMapping under item_id_map[uid] = {
+		//   server_id, base_version, client_id,
+		//   synced_text, synced_checked, synced_sort_value,
+		//   last_observed_wiki_*, push_failure_count, ...
+		// }. The new KeepAdapter reads item_mapping[server_id] = {
+		//   server_id, base_version, client_id
+		// }. The migration must translate the shape AND drop the legacy
+		// fingerprint baselines (per the Phase 7 plan).
+		BeforeEach(func() {
+			store = newFakeReaderMutator(map[string]wikipage.FrontMatter{
+				"profile_carol": {
+					"identifier": "profile_carol",
+					"wiki": map[string]any{
+						"connectors": map[string]any{
+							"google_keep": map[string]any{
+								"subscriptions": []any{
+									map[string]any{
+										"page":           "shopping",
+										"list_name":     "groceries",
+										"remote_list_id": "keep-note-1",
+										"keep_cursor":    "cursor-token",
+										"item_id_map": map[string]any{
+											"uid-A": map[string]any{
+												"server_id":         "server-A",
+												"base_version":      "v-A",
+												"client_id":         "client-A",
+												"synced_text":       "Milk",
+												"synced_checked":    false,
+												"synced_sort_value": "1000",
+											},
+											"uid-B": map[string]any{
+												"server_id":    "server-B",
+												"base_version": "v-B",
+												"client_id":    "client-B",
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			})
+			job = eager.NewConnectorsSubscriptionsToBindingsMigrationJob(store, "profile_carol")
+			Expect(job.Execute()).To(Succeed())
+		})
+
+		It("should write item_mapping under adapter_state (Keep adapter's structured shape)", func() {
+			keep := connectorSubtreeFM(store.pages["profile_carol"], "google_keep")
+			bindings := asAnySlice(keep["bindings"])
+			entry := asMap(bindings[0])
+			adapterState := asMap(entry["adapter_state"])
+			Expect(adapterState).To(HaveKey("item_mapping"))
+		})
+
+		It("should index item_mapping by server_id", func() {
+			keep := connectorSubtreeFM(store.pages["profile_carol"], "google_keep")
+			bindings := asAnySlice(keep["bindings"])
+			entry := asMap(bindings[0])
+			itemMapping := asMap(asMap(entry["adapter_state"])["item_mapping"])
+			Expect(itemMapping).To(HaveKey("server-A"))
+			Expect(itemMapping).To(HaveKey("server-B"))
+			Expect(itemMapping).NotTo(HaveKey("uid-A"))
+			Expect(itemMapping).NotTo(HaveKey("uid-B"))
+		})
+
+		It("should preserve server_id, base_version, client_id on each entry", func() {
+			keep := connectorSubtreeFM(store.pages["profile_carol"], "google_keep")
+			bindings := asAnySlice(keep["bindings"])
+			entry := asMap(bindings[0])
+			itemMapping := asMap(asMap(entry["adapter_state"])["item_mapping"])
+			a := asMap(itemMapping["server-A"])
+			Expect(a["server_id"]).To(Equal("server-A"))
+			Expect(a["base_version"]).To(Equal("v-A"))
+			Expect(a["client_id"]).To(Equal("client-A"))
+		})
+
+		It("should drop legacy fingerprint baselines (synced_text/checked/sort_value)", func() {
+			keep := connectorSubtreeFM(store.pages["profile_carol"], "google_keep")
+			bindings := asAnySlice(keep["bindings"])
+			entry := asMap(bindings[0])
+			itemMapping := asMap(asMap(entry["adapter_state"])["item_mapping"])
+			a := asMap(itemMapping["server-A"])
+			Expect(a).NotTo(HaveKey("synced_text"))
+			Expect(a).NotTo(HaveKey("synced_checked"))
+			Expect(a).NotTo(HaveKey("synced_sort_value"))
+		})
+
+		It("should preserve adjacent adapter_state keys (keep_cursor)", func() {
+			keep := connectorSubtreeFM(store.pages["profile_carol"], "google_keep")
+			bindings := asAnySlice(keep["bindings"])
+			entry := asMap(bindings[0])
+			adapterState := asMap(entry["adapter_state"])
+			Expect(adapterState["keep_cursor"]).To(Equal("cursor-token"))
+		})
+
+		It("should also write item_id_map (uid -> server_id) for the engine's flat lookup", func() {
+			// The engine's reconcile loop reads item_id_map[uid] = serverID
+			// (flat map[string]string) to decide insert vs. patch. Without
+			// this, the engine treats every item as new and dead-letters.
+			keep := connectorSubtreeFM(store.pages["profile_carol"], "google_keep")
+			bindings := asAnySlice(keep["bindings"])
+			entry := asMap(bindings[0])
+			adapterState := asMap(entry["adapter_state"])
+			itemIDMap := asMap(adapterState["item_id_map"])
+			Expect(itemIDMap["uid-A"]).To(Equal("server-A"))
+			Expect(itemIDMap["uid-B"]).To(Equal("server-B"))
+		})
+	})
+
+	When("a legacy Keep subscription carries item_id_map flat-string entries", func() {
+		// Old-old Keep shape: item_id_map[uid] = "server_id" (just a
+		// string). The migration must still produce the new shape; the
+		// resulting item_mapping entry has only server_id populated
+		// (base_version/client_id absent, will be repopulated by the
+		// engine's RebuildAdapterState on next tick).
+		BeforeEach(func() {
+			store = newFakeReaderMutator(map[string]wikipage.FrontMatter{
+				"profile_dave": {
+					"identifier": "profile_dave",
+					"wiki": map[string]any{
+						"connectors": map[string]any{
+							"google_keep": map[string]any{
+								"subscriptions": []any{
+									map[string]any{
+										"page":           "shopping",
+										"list_name":     "groceries",
+										"remote_list_id": "keep-note-1",
+										"item_id_map": map[string]any{
+											"uid-X": "server-X",
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			})
+			job = eager.NewConnectorsSubscriptionsToBindingsMigrationJob(store, "profile_dave")
+			Expect(job.Execute()).To(Succeed())
+		})
+
+		It("should index item_mapping by the string server_id", func() {
+			keep := connectorSubtreeFM(store.pages["profile_dave"], "google_keep")
+			bindings := asAnySlice(keep["bindings"])
+			entry := asMap(bindings[0])
+			itemMapping := asMap(asMap(entry["adapter_state"])["item_mapping"])
+			Expect(itemMapping).To(HaveKey("server-X"))
+			Expect(asMap(itemMapping["server-X"])["server_id"]).To(Equal("server-X"))
+		})
+
+		It("should also write item_id_map (uid -> server_id)", func() {
+			keep := connectorSubtreeFM(store.pages["profile_dave"], "google_keep")
+			bindings := asAnySlice(keep["bindings"])
+			entry := asMap(bindings[0])
+			itemIDMap := asMap(asMap(entry["adapter_state"])["item_id_map"])
+			Expect(itemIDMap["uid-X"]).To(Equal("server-X"))
+		})
+	})
+
+	When("a legacy Tasks subscription carries synced_items fingerprint baselines", func() {
+		// Tasks's legacy ConnectorState had a per-binding synced_items
+		// subtree (per-uid fingerprint baselines used for the old
+		// fingerprint-based divergence check). The new engine uses
+		// causal divergence (op-log + last_synced_seq) and never reads
+		// synced_items. The migration must drop it.
+		BeforeEach(func() {
+			store = newFakeReaderMutator(map[string]wikipage.FrontMatter{
+				"profile_erin": {
+					"identifier": "profile_erin",
+					"wiki": map[string]any{
+						"connectors": map[string]any{
+							"google_tasks": map[string]any{
+								"subscriptions": []any{
+									map[string]any{
+										"page":           "shopping",
+										"list_name":     "groceries",
+										"remote_list_id": "tasklist-1",
+										"item_id_map":    map[string]any{"uid-1": "task-1"},
+										"synced_items": map[string]any{
+											"uid-1": map[string]any{
+												"synced_title":  "old title",
+												"synced_status": "needsAction",
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			})
+			job = eager.NewConnectorsSubscriptionsToBindingsMigrationJob(store, "profile_erin")
+			Expect(job.Execute()).To(Succeed())
+		})
+
+		It("should drop synced_items from adapter_state", func() {
+			tasks := connectorSubtreeFM(store.pages["profile_erin"], "google_tasks")
+			bindings := asAnySlice(tasks["bindings"])
+			entry := asMap(bindings[0])
+			adapterState := asMap(entry["adapter_state"])
+			Expect(adapterState).NotTo(HaveKey("synced_items"))
+		})
+
+		It("should preserve item_id_map (Tasks engine still uses this shape)", func() {
+			tasks := connectorSubtreeFM(store.pages["profile_erin"], "google_tasks")
+			bindings := asAnySlice(tasks["bindings"])
+			entry := asMap(bindings[0])
+			adapterState := asMap(entry["adapter_state"])
+			Expect(adapterState).To(HaveKey("item_id_map"))
+		})
+	})
+
 	When("the page has no connectors at all", func() {
 		BeforeEach(func() {
 			store = newFakeReaderMutator(map[string]wikipage.FrontMatter{

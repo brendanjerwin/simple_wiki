@@ -286,7 +286,7 @@ func rewriteConnectorsSubscriptions(fm map[string]any) bool {
 	}
 
 	changed := false
-	for _, kindRaw := range conns {
+	for kindName, kindRaw := range conns {
 		kindMap, ok := kindRaw.(map[string]any)
 		if !ok {
 			continue
@@ -299,7 +299,7 @@ func rewriteConnectorsSubscriptions(fm map[string]any) bool {
 		// New-shape data wins on conflict; legacy is dropped without
 		// being translated.
 		if _, hasNew := kindMap[connectorsKeyBindings]; !hasNew {
-			translated := translateLegacyEntries(legacyRaw)
+			translated := translateLegacyEntries(kindName, legacyRaw)
 			// Empty legacy array → no bindings[] written at all (the
 			// connector subtree is left without either key, which is
 			// the same shape a never-bound profile carries).
@@ -318,7 +318,12 @@ func rewriteConnectorsSubscriptions(fm map[string]any) bool {
 // a new-shape bindings[] slice. Non-map entries are dropped silently
 // (they were unreachable by the engine anyway — every code path that
 // wrote subscriptions[] wrote map entries).
-func translateLegacyEntries(legacy any) []any {
+//
+// kindName is the connector kind (e.g., "google_keep", "google_tasks") —
+// used to drive kind-specific adapter_state cleanup (Keep's item_id_map
+// shape translation; Tasks's synced_items drop). Unknown kinds get the
+// kind-agnostic ride-through translation.
+func translateLegacyEntries(kindName string, legacy any) []any {
 	rawList, ok := legacy.([]any)
 	if !ok {
 		return nil
@@ -329,7 +334,7 @@ func translateLegacyEntries(legacy any) []any {
 		if !ok {
 			continue
 		}
-		out = append(out, translateLegacyEntry(m))
+		out = append(out, translateLegacyEntry(kindName, m))
 	}
 	return out
 }
@@ -338,12 +343,25 @@ func translateLegacyEntries(legacy any) []any {
 // its new-shape equivalent. Engine-owned keys (the legacy
 // remote_list_id and subscribed_at aliases included) are routed to
 // their new-shape names at the top of the entry; everything else
-// rides through into the entry's adapter_state subtree verbatim.
+// rides through into the entry's adapter_state subtree.
+//
+// kindName drives kind-specific adapter_state cleanup:
+//   - google_keep: legacy item_id_map[uid] = ItemMapping{...} translates
+//     to item_mapping[server_id] = {server_id, base_version, client_id}
+//     because the new KeepAdapter reads item_mapping indexed by ServerID.
+//     Legacy fingerprint baselines (synced_*, last_observed_wiki_*,
+//     push_failure_count, last_failure_code, next_attempt_at) drop —
+//     the engine no longer fingerprint-compares (causal divergence
+//     replaced it per ADR-0015).
+//   - google_tasks: legacy synced_items drops (causal divergence
+//     replaces it).
+//
+// Unknown kinds get the kind-agnostic ride-through translation.
 //
 // This is the load-bearing rule: the dual-read in the pre-Phase-7
 // FrontmatterBindingStore used exactly this allowlist. Both code
 // paths must produce identical Bindings for the same legacy input.
-func translateLegacyEntry(m map[string]any) map[string]any {
+func translateLegacyEntry(kindName string, m map[string]any) map[string]any {
 	out := map[string]any{}
 
 	// Engine-owned fields whose new-shape names match the legacy
@@ -374,7 +392,7 @@ func translateLegacyEntry(m map[string]any) map[string]any {
 	}
 
 	// Adapter state: every key NOT in the engine-owned allowlist rides
-	// through verbatim under the adapter_state subtree.
+	// through. Per-kind translation/cleanup runs at the end.
 	adapterState := map[string]any{}
 	for k, v := range m {
 		if _, owned := engineOwnedLegacyKeys[k]; owned {
@@ -382,11 +400,109 @@ func translateLegacyEntry(m map[string]any) map[string]any {
 		}
 		adapterState[k] = v
 	}
+
+	cleanAdapterStateForKind(kindName, adapterState)
+
 	if len(adapterState) > 0 {
 		out[connectorsKeyAdapterState] = adapterState
 	}
 
 	return out
+}
+
+// Per-kind adapter_state keys that the migration translates or drops.
+const (
+	keepLegacyKeyItemIDMap = "item_id_map"   // legacy Keep: indexed by uid
+	keepKeyItemMapping     = "item_mapping"  // new Keep: indexed by ServerID
+	keepKeyServerID        = "server_id"
+	keepKeyBaseVersion     = "base_version"
+	keepKeyClientID        = "client_id"
+	tasksLegacyKeySyncedItems = "synced_items" // dropped: causal divergence replaces fingerprint
+)
+
+// cleanAdapterStateForKind applies kind-specific cleanup to a
+// translated adapter_state map. Mutates in place. See translateLegacyEntry's
+// docstring for the per-kind rules.
+func cleanAdapterStateForKind(kindName string, adapterState map[string]any) {
+	switch kindName {
+	case "google_keep":
+		cleanKeepAdapterState(adapterState)
+	case "google_tasks":
+		cleanTasksAdapterState(adapterState)
+	}
+}
+
+// cleanKeepAdapterState splits the legacy item_id_map (uid → ItemMapping
+// or uid → server_id flat string) into:
+//   - item_id_map[uid] = server_id (engine's flat shape — used to decide
+//     insert vs. patch in reconcile.go's outbound loop)
+//   - item_mapping[server_id] = {server_id, base_version, client_id}
+//     (Keep adapter's structured shape — used by PatchRemote for
+//     baseVersion + ClientID lookup)
+//
+// Drops legacy fingerprint baselines (synced_*) — the new adapter
+// doesn't read them, the engine uses causal divergence instead.
+func cleanKeepAdapterState(adapterState map[string]any) {
+	legacy, ok := adapterState[keepLegacyKeyItemIDMap].(map[string]any)
+	if !ok {
+		return
+	}
+	delete(adapterState, keepLegacyKeyItemIDMap)
+
+	itemIDMap := map[string]any{}
+	itemMapping := map[string]any{}
+	for uid, raw := range legacy {
+		serverID, entry := decodeKeepLegacyItemEntry(raw)
+		if serverID == "" {
+			continue
+		}
+		itemIDMap[uid] = serverID
+		itemMapping[serverID] = entry
+	}
+	if len(itemIDMap) > 0 {
+		adapterState[keepLegacyKeyItemIDMap] = itemIDMap
+	}
+	if len(itemMapping) > 0 {
+		adapterState[keepKeyItemMapping] = itemMapping
+	}
+}
+
+// decodeKeepLegacyItemEntry handles both legacy Keep ItemMapping shapes:
+//   - flat string: item_id_map[uid] = "server_id"  → {server_id}
+//   - structured map: item_id_map[uid] = {server_id, base_version, client_id, ...}
+//     → {server_id, base_version, client_id} (drops fingerprint fields)
+//
+// Returns ("", nil) when the entry has no usable server_id.
+func decodeKeepLegacyItemEntry(raw any) (string, map[string]any) {
+	switch v := raw.(type) {
+	case string:
+		if v == "" {
+			return "", nil
+		}
+		return v, map[string]any{keepKeyServerID: v}
+	case map[string]any:
+		serverID, _ := v[keepKeyServerID].(string)
+		if serverID == "" {
+			return "", nil
+		}
+		out := map[string]any{keepKeyServerID: serverID}
+		if bv, ok := v[keepKeyBaseVersion].(string); ok && bv != "" {
+			out[keepKeyBaseVersion] = bv
+		}
+		if cid, ok := v[keepKeyClientID].(string); ok && cid != "" {
+			out[keepKeyClientID] = cid
+		}
+		return serverID, out
+	default:
+		return "", nil
+	}
+}
+
+// cleanTasksAdapterState drops Tasks's legacy fingerprint baselines.
+// The new engine uses causal divergence (op-log + last_synced_seq) so
+// synced_items is dead weight on the profile frontmatter.
+func cleanTasksAdapterState(adapterState map[string]any) {
+	delete(adapterState, tasksLegacyKeySyncedItems)
 }
 
 // copyIfPresent is a small helper that copies key from src to dst
