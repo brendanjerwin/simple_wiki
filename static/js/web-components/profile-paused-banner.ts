@@ -8,7 +8,7 @@
 //
 // On mount, the component fans out two GetState RPCs (one per connector
 // kind) and renders banners for each kind whose ConnectorState contains
-// any paused SubscriptionState. The component is connector-agnostic in
+// any paused BindingState. The component is connector-agnostic in
 // shape: adding a third connector (iCloud Reminders) means adding one
 // entry to the kinds[] table below; no behavioral changes required.
 //
@@ -17,7 +17,7 @@
 // subscriptions atomically (the auth credential is per-connector, not
 // per-subscription). Per-subscription banners would imply per-sub
 // reconnects, which isn't the underlying model. The badge inside
-// <connector-subscribe-button> on individual checklist pages is the
+// <connector-bind-button> on individual checklist pages is the
 // per-sub surface; this banner is the cross-cutting profile-page
 // surface.
 //
@@ -40,7 +40,7 @@ import {
   ConnectorKind,
   GetStateRequestSchema,
 } from '../gen/api/v1/connector_service_pb.js';
-import type { SubscriptionState } from '../gen/api/v1/connector_service_pb.js';
+import type { BindingState } from '../gen/api/v1/connector_service_pb.js';
 import type { RequestReconnectEventDetail } from './connector-paused-badge.js';
 import { foundationCSS, sharedStyles } from './shared-styles.js';
 
@@ -70,7 +70,7 @@ interface PausedKindRow {
   connectComponentTag: string;
   // Latest paused subscription on this kind, used both to decide
   // whether to render a banner and to surface the count.
-  pausedSubscriptions: SubscriptionState[];
+  pausedSubscriptions: BindingState[];
 }
 
 // Theme tokens used here are defined in static/css/default.css for both
@@ -207,7 +207,7 @@ export class ProfilePausedBanner extends LitElement {
       if (!row) continue;
       const result = responses[i];
       if (!result || result.status !== 'fulfilled') continue;
-      const subscriptions = result.value.state?.subscriptions ?? [];
+      const subscriptions = result.value.state?.bindings ?? [];
       const paused = subscriptions.filter((s) => s.paused);
       if (paused.length === 0) continue;
       next.push({

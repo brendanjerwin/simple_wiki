@@ -71,7 +71,7 @@ const adapterStateItemIDMapKey = "item_id_map"
 // the adapter codec round-trips them. This is documented in ADR-0015.
 //
 //revive:disable-next-line:cyclomatic,cognitive-complexity,function-length
-func (e *Engine) reconcile(ctx context.Context, key connectors.SubscriptionKey) error {
+func (e *Engine) reconcile(ctx context.Context, key connectors.BindingKey) error {
 	if err := e.lease.WaitReady(ctx); err != nil {
 		return fmt.Errorf("await lease-table ready: %w", err)
 	}
@@ -176,7 +176,7 @@ func (e *Engine) classifyDivergence(ctx context.Context, binding connectors.Bind
 	if err != nil || cl == nil {
 		return nil
 	}
-	return Classify(cl, SubscriptionCursor{
+	return Classify(cl, BindingCursor{
 		Page:          binding.Page,
 		ListName:      binding.ListName,
 		LastSyncedSeq: binding.LastSyncedSeq,

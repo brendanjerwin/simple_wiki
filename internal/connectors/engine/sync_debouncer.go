@@ -28,7 +28,7 @@ const postSyncChokeWindow = 5 * time.Second
 
 // SyncDebouncerKey is the per-binding key the debouncer uses to track
 // pending timers and post-success choke windows. Distinct from
-// connectors.SubscriptionKey because the wiki-side mutator notify
+// connectors.BindingKey because the wiki-side mutator notify
 // already provides ProfileID + page + listName as raw strings — no
 // need to round-trip through wikipage.PageIdentifier.
 type SyncDebouncerKey struct {

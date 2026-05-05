@@ -56,18 +56,18 @@ type fakeConnector struct {
 
 func (f *fakeConnector) Kind() connectors.ConnectorKind { return f.kind }
 
-func (*fakeConnector) Sync(_ context.Context, _ connectors.SubscriptionKey) error { return nil }
+func (*fakeConnector) Sync(_ context.Context, _ connectors.BindingKey) error { return nil }
 
-func (*fakeConnector) PausedReason(_ connectors.SubscriptionKey) (string, bool) { return "", false }
+func (*fakeConnector) PausedReason(_ connectors.BindingKey) (string, bool) { return "", false }
 
-func (*fakeConnector) ForceFullResync(_ context.Context, _ connectors.SubscriptionKey) error {
+func (*fakeConnector) ForceFullResync(_ context.Context, _ connectors.BindingKey) error {
 	return nil
 }
 
 // stubJob is a placeholder Job used by scheduler tests.
 type stubJob struct {
 	name string
-	key  connectors.SubscriptionKey
+	key  connectors.BindingKey
 }
 
 func (j *stubJob) GetName() string { return j.name }
@@ -103,8 +103,8 @@ var _ = Describe("SyncScheduler", func() {
 
 		BeforeEach(func() {
 			s, _ := connectors.NewSyncScheduler(&fakeEnqueuer{}, &recordingLogger{})
-			err = s.Register(nil, func() []connectors.SubscriptionKey { return nil },
-				func(_ connectors.Connector, _ connectors.SubscriptionKey) jobs.Job { return &stubJob{} })
+			err = s.Register(nil, func() []connectors.BindingKey { return nil },
+				func(_ connectors.Connector, _ connectors.BindingKey) jobs.Job { return &stubJob{} })
 		})
 
 		It("should error", func() {
@@ -118,7 +118,7 @@ var _ = Describe("SyncScheduler", func() {
 		BeforeEach(func() {
 			s, _ := connectors.NewSyncScheduler(&fakeEnqueuer{}, &recordingLogger{})
 			err = s.Register(&fakeConnector{kind: connectors.ConnectorKindGoogleKeep}, nil,
-				func(_ connectors.Connector, _ connectors.SubscriptionKey) jobs.Job { return &stubJob{} })
+				func(_ connectors.Connector, _ connectors.BindingKey) jobs.Job { return &stubJob{} })
 		})
 
 		It("should error", func() {
@@ -133,7 +133,7 @@ var _ = Describe("SyncScheduler", func() {
 			s, _ := connectors.NewSyncScheduler(&fakeEnqueuer{}, &recordingLogger{})
 			err = s.Register(
 				&fakeConnector{kind: connectors.ConnectorKindGoogleKeep},
-				func() []connectors.SubscriptionKey { return nil },
+				func() []connectors.BindingKey { return nil },
 				nil,
 			)
 		})
@@ -172,10 +172,10 @@ var _ = Describe("SyncScheduler", func() {
 			c := &fakeConnector{kind: connectors.ConnectorKindGoogleKeep}
 			Expect(s.Register(
 				c,
-				func() []connectors.SubscriptionKey {
-					return []connectors.SubscriptionKey{{ProfileID: "p", Page: "pg", ListName: "ln"}}
+				func() []connectors.BindingKey {
+					return []connectors.BindingKey{{ProfileID: "p", Page: "pg", ListName: "ln"}}
 				},
-				func(_ connectors.Connector, k connectors.SubscriptionKey) jobs.Job {
+				func(_ connectors.Connector, k connectors.BindingKey) jobs.Job {
 					return &stubJob{name: "fakeJob", key: k}
 				},
 			)).To(Succeed())
@@ -193,7 +193,7 @@ var _ = Describe("SyncScheduler", func() {
 		It("should pass the subscription key to the job maker", func() {
 			j, ok := enq.enqueued[0].(*stubJob)
 			Expect(ok).To(BeTrue())
-			Expect(j.key).To(Equal(connectors.SubscriptionKey{ProfileID: "p", Page: "pg", ListName: "ln"}))
+			Expect(j.key).To(Equal(connectors.BindingKey{ProfileID: "p", Page: "pg", ListName: "ln"}))
 		})
 	})
 
@@ -205,19 +205,19 @@ var _ = Describe("SyncScheduler", func() {
 			s, _ := connectors.NewSyncScheduler(enq, &recordingLogger{})
 			Expect(s.Register(
 				&fakeConnector{kind: connectors.ConnectorKindGoogleKeep},
-				func() []connectors.SubscriptionKey {
-					return []connectors.SubscriptionKey{{ProfileID: "p1", Page: "a", ListName: "l1"}}
+				func() []connectors.BindingKey {
+					return []connectors.BindingKey{{ProfileID: "p1", Page: "a", ListName: "l1"}}
 				},
-				func(_ connectors.Connector, k connectors.SubscriptionKey) jobs.Job {
+				func(_ connectors.Connector, k connectors.BindingKey) jobs.Job {
 					return &stubJob{name: "keep", key: k}
 				},
 			)).To(Succeed())
 			Expect(s.Register(
 				&fakeConnector{kind: connectors.ConnectorKindGoogleTasks},
-				func() []connectors.SubscriptionKey {
-					return []connectors.SubscriptionKey{{ProfileID: "p2", Page: "b", ListName: "l2"}}
+				func() []connectors.BindingKey {
+					return []connectors.BindingKey{{ProfileID: "p2", Page: "b", ListName: "l2"}}
 				},
-				func(_ connectors.Connector, k connectors.SubscriptionKey) jobs.Job {
+				func(_ connectors.Connector, k connectors.BindingKey) jobs.Job {
 					return &stubJob{name: "tasks", key: k}
 				},
 			)).To(Succeed())
@@ -240,10 +240,10 @@ var _ = Describe("SyncScheduler", func() {
 			s, _ := connectors.NewSyncScheduler(enq, rl)
 			Expect(s.Register(
 				&fakeConnector{kind: connectors.ConnectorKindGoogleKeep},
-				func() []connectors.SubscriptionKey {
-					return []connectors.SubscriptionKey{{ProfileID: "p", Page: "pg", ListName: "ln"}}
+				func() []connectors.BindingKey {
+					return []connectors.BindingKey{{ProfileID: "p", Page: "pg", ListName: "ln"}}
 				},
-				func(_ connectors.Connector, k connectors.SubscriptionKey) jobs.Job {
+				func(_ connectors.Connector, k connectors.BindingKey) jobs.Job {
 					return &stubJob{name: "j", key: k}
 				},
 			)).To(Succeed())
@@ -269,10 +269,10 @@ var _ = Describe("SyncScheduler", func() {
 			s, _ := connectors.NewSyncScheduler(enq, &recordingLogger{})
 			Expect(s.Register(
 				&fakeConnector{kind: connectors.ConnectorKindGoogleKeep},
-				func() []connectors.SubscriptionKey {
-					return []connectors.SubscriptionKey{{ProfileID: "p", Page: "pg", ListName: "ln"}}
+				func() []connectors.BindingKey {
+					return []connectors.BindingKey{{ProfileID: "p", Page: "pg", ListName: "ln"}}
 				},
-				func(_ connectors.Connector, k connectors.SubscriptionKey) jobs.Job {
+				func(_ connectors.Connector, k connectors.BindingKey) jobs.Job {
 					return &stubJob{key: k}
 				},
 			)).To(Succeed())

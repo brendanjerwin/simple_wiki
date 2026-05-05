@@ -27,7 +27,7 @@ enum ConnectorKind {
 // handler. The wiki.connectors.* namespace is reserved per ADR-0009.
 service ConnectorService {
   option (api.v1.service_description) =
-      "Unified connector orchestration: subscribe wiki checklists to "
+      "Unified connector orchestration: bind wiki checklists to "
       "remote lists across Google Keep, Google Tasks, etc. RPCs accept "
       "connector_kind to disambiguate; per-kind validation happens in "
       "the handler. The wiki.connectors.* namespace is reserved per "
@@ -62,22 +62,22 @@ service ConnectorService {
   rpc Disconnect(DisconnectRequest) returns (DisconnectResponse) {
     option (api.v1.description) =
         "Wipe credentials from the calling user's profile and pause all "
-        "subscriptions for the named connector. Subscriptions remain on "
+        "bindings for the named connector. Bindings remain on "
         "the profile (paused) so reconnect can resume them with cursors "
-        "preserved. Other users' subscriptions are untouched.";
+        "preserved. Other users' bindings are untouched.";
   }
 
   rpc GetState(GetStateRequest) returns (GetStateResponse) {
     option (api.v1.description) =
         "Return the calling user's connector state — connected/not, "
-        "email, last verified at, and the subscriptions list. Used by "
+        "email, last verified at, and the bindings list. Used by "
         "the profile page connector macros.";
     option (api.v1.read_only) = true;
   }
 
   // ListRemoteLists enumerates the lists the calling user owns on the
   // remote side (Keep notes, Tasks tasklists, etc.). Used to populate
-  // the subscribe picker in the Checklist component. Returns an
+  // the bind picker in the Checklist component. Returns an
   // auth-revoked error if credentials no longer work.
   rpc ListRemoteLists(ListRemoteListsRequest) returns (ListRemoteListsResponse) {
     option (api.v1.description) =
@@ -87,48 +87,48 @@ service ConnectorService {
     option (api.v1.read_only) = true;
   }
 
-  rpc ListMySubscriptions(ListMySubscriptionsRequest) returns (ListMySubscriptionsResponse) {
+  rpc ListMyBindings(ListMyBindingsRequest) returns (ListMyBindingsResponse) {
     option (api.v1.description) =
-        "Return all of the calling user's subscriptions for the named "
+        "Return all of the calling user's bindings for the named "
         "connector with sync status. Used by the profile-page connector "
         "macros to render per-row remove controls.";
     option (api.v1.read_only) = true;
   }
 
-  rpc Subscribe(SubscribeRequest) returns (SubscribeResponse) {
+  rpc Bind(BindRequest) returns (BindResponse) {
     option (api.v1.description) =
-        "Subscribe a wiki checklist to a remote list for the calling "
+        "Bind a wiki checklist to a remote list for the calling "
         "user. If remote_list_handle is empty, the connector creates a "
         "new remote list named list_name. Per-user collision rules: a "
-        "user cannot subscribe the same (page, list_name) twice or "
-        "subscribe two different checklists to the same remote list "
+        "user cannot bind the same (page, list_name) twice or "
+        "bind two different checklists to the same remote list "
         "(returns FAILED_PRECONDITION).";
   }
 
-  rpc Unsubscribe(UnsubscribeRequest) returns (UnsubscribeResponse) {
+  rpc Unbind(UnbindRequest) returns (UnbindResponse) {
     option (api.v1.description) =
-        "Remove the calling user's subscription for (page, list_name) "
+        "Remove the calling user's binding for (page, list_name) "
         "on the named connector. Wiki data and the remote list are "
         "both left as-is. Idempotent: returns OK whether the "
-        "subscription existed or not.";
+        "binding existed or not.";
   }
 
-  // GetChecklistSubscriptionState does NOT take connector_kind: at most
+  // GetChecklistBindingState does NOT take connector_kind: at most
   // one connector owns a given (page, list_name) for a given user, so
   // the response identifies which connector (if any) is authoritative.
-  rpc GetChecklistSubscriptionState(GetChecklistSubscriptionStateRequest) returns (GetChecklistSubscriptionStateResponse) {
+  rpc GetChecklistBindingState(GetChecklistBindingStateRequest) returns (GetChecklistBindingStateResponse) {
     option (api.v1.description) =
-        "Per-(page, list_name) subscription state for the calling user, "
+        "Per-(page, list_name) binding state for the calling user, "
         "returning whichever connector (if any) owns the checklist. "
         "Used by the Checklist component on render to decide whether "
-        "to show the subscribe button, an unsubscribe affordance, or "
+        "to show the bind button, an unbind affordance, or "
         "nothing.";
     option (api.v1.read_only) = true;
   }
 
   rpc ListDeadLetters(ListDeadLettersRequest) returns (ListDeadLettersResponse) {
     option (api.v1.description) =
-        "Return the per-subscription dead-letter set: items whose "
+        "Return the per-binding dead-letter set: items whose "
         "PushFailureCount has reached the dead-letter threshold and "
         "are no longer being attempted on cron ticks. Scoped to the "
         "calling user's profile and the named connector.";
@@ -154,7 +154,7 @@ message ConnectorState {
   google.protobuf.Timestamp connected_at = 3;
   google.protobuf.Timestamp last_verified_at = 4;
   int64 poll_interval_seconds = 5;
-  repeated SubscriptionState subscriptions = 6;
+  repeated BindingState bindings = 6;
   // last_error is populated when the most recent verification call failed.
   ConnectorError last_error = 7;
   // connector_kind is echoed back so the frontend can disambiguate
@@ -162,8 +162,8 @@ message ConnectorState {
   ConnectorKind connector_kind = 8;
 }
 
-// SubscriptionState is a single subscription plus its sync health.
-message SubscriptionState {
+// BindingState is a single binding plus its sync health.
+message BindingState {
   string page = 1;
   string list_name = 2;
   // remote_list_handle is the connector-agnostic identifier the
@@ -172,22 +172,22 @@ message SubscriptionState {
   // iCloud Reminders).
   string remote_list_handle = 3;
   // remote_list_title is the human-readable name of the remote list,
-  // used by the UI to render a recognizable subscription row.
+  // used by the UI to render a recognizable binding row.
   string remote_list_title = 4;
-  google.protobuf.Timestamp subscribed_at = 5;
+  google.protobuf.Timestamp bound_at = 5;
   google.protobuf.Timestamp last_pull_at = 6;
   google.protobuf.Timestamp last_push_at = 7;
   google.protobuf.Timestamp last_verified_at = 8;
   ConnectorError last_error = 9;
   // paused is true when the user disconnected the connector —
-  // subscriptions remain on the profile but no cron entries are
+  // bindings remain on the profile but no cron entries are
   // registered.
   bool paused = 10;
   ConnectorKind connector_kind = 11;
 }
 
 // RemoteListSummary describes one of the user's remote lists for the
-// subscribe picker (Keep list-typed note, Tasks tasklist, etc.).
+// bind picker (Keep list-typed note, Tasks tasklist, etc.).
 message RemoteListSummary {
   // remote_list_handle is the gateway-level identifier (Keep note id,
   // Tasks tasklist id, etc.).
@@ -213,15 +213,15 @@ message ConnectorError {
   google.protobuf.Timestamp occurred_at = 3;
 }
 
-// ChecklistSubscriptionState is the response shape the Checklist
+// ChecklistBindingState is the response shape the Checklist
 // component queries on render — small surface intentionally so we
 // don't leak more than the component needs.
-message ChecklistSubscriptionState {
+message ChecklistBindingState {
   bool connector_configured = 1;
-  // current_subscription is null when the user has no subscription
+  // current_binding is null when the user has no binding
   // for this checklist (button shows the connector-agnostic
-  // "Subscribe" affordance).
-  SubscriptionState current_subscription = 2;
+  // "Bind" affordance).
+  BindingState current_binding = 2;
   ConnectorError last_error = 3;
 }
 
@@ -287,39 +287,39 @@ message ListRemoteListsResponse {
   repeated RemoteListSummary lists = 1;
 }
 
-message ListMySubscriptionsRequest {
+message ListMyBindingsRequest {
   ConnectorKind connector_kind = 1;
 }
-message ListMySubscriptionsResponse {
-  repeated SubscriptionState subscriptions = 1;
+message ListMyBindingsResponse {
+  repeated BindingState bindings = 1;
 }
 
-message SubscribeRequest {
+message BindRequest {
   ConnectorKind connector_kind = 1;
   string page = 2;
   string list_name = 3;
-  // remote_list_handle subscribes to an existing remote list. If
+  // remote_list_handle binds to an existing remote list. If
   // empty, the connector creates a new remote list with title =
   // list_name.
   string remote_list_handle = 4;
 }
-message SubscribeResponse {
-  SubscriptionState subscription = 1;
+message BindResponse {
+  BindingState binding = 1;
 }
 
-message UnsubscribeRequest {
+message UnbindRequest {
   ConnectorKind connector_kind = 1;
   string page = 2;
   string list_name = 3;
 }
-message UnsubscribeResponse {}
+message UnbindResponse {}
 
-message GetChecklistSubscriptionStateRequest {
+message GetChecklistBindingStateRequest {
   string page = 1;
   string list_name = 2;
 }
-message GetChecklistSubscriptionStateResponse {
-  ChecklistSubscriptionState state = 1;
+message GetChecklistBindingStateResponse {
+  ChecklistBindingState state = 1;
 }
 
 // DeadLetterItem describes one wiki item whose push has reached the

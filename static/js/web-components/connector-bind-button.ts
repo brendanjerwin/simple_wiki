@@ -1,4 +1,4 @@
-// connector-subscribe-button — embedded inside <wiki-checklist> as the
+// connector-bind-button — embedded inside <wiki-checklist> as the
 // single subscribe affordance. Renders nothing when the user has no
 // connectors authenticated. Otherwise:
 //
@@ -22,16 +22,16 @@ import { getGrpcWebTransport } from './grpc-transport.js';
 import {
   ConnectorService,
   ConnectorKind,
-  GetChecklistSubscriptionStateRequestSchema,
+  GetChecklistBindingStateRequestSchema,
   GetStateRequestSchema,
   ListRemoteListsRequestSchema,
-  SubscribeRequestSchema,
-  UnsubscribeRequestSchema,
+  BindRequestSchema,
+  UnbindRequestSchema,
 } from '../gen/api/v1/connector_service_pb.js';
 import type {
-  ChecklistSubscriptionState,
+  ChecklistBindingState,
   RemoteListSummary,
-  SubscriptionState,
+  BindingState,
 } from '../gen/api/v1/connector_service_pb.js';
 import {
   foundationCSS,
@@ -60,7 +60,7 @@ const localCSS = css`
   }
   /* Subscribe-mode trigger: ghost-style, matches the muted text scale of
      a checklist's caption row, doesn't compete with primary actions. */
-  .subscribe-trigger {
+  .bind-trigger {
     background: transparent;
     border: 1px solid var(--color-border-default, rgba(0, 0, 0, 0.12));
     color: var(--color-text-secondary, #6c757d);
@@ -71,7 +71,7 @@ const localCSS = css`
     cursor: pointer;
     line-height: 1.2;
   }
-  .subscribe-trigger:hover {
+  .bind-trigger:hover {
     color: var(--color-text-primary, inherit);
     border-color: var(--color-border-strong, rgba(0, 0, 0, 0.24));
   }
@@ -183,7 +183,7 @@ function kindToSlug(kind: ConnectorKind): 'google_keep' | 'google_tasks' {
   }
 }
 
-export class ConnectorSubscribeButton extends LitElement {
+export class ConnectorBindButton extends LitElement {
   static override styles = [foundationCSS, buttonCSS, inputCSS, pillCSS, localCSS];
 
   @property({ type: String, attribute: 'page' })
@@ -193,7 +193,7 @@ export class ConnectorSubscribeButton extends LitElement {
   declare listName: string;
 
   @state() declare private phase: Phase;
-  @state() declare private subscriptionState: ChecklistSubscriptionState | null;
+  @state() declare private subscriptionState: ChecklistBindingState | null;
   @state() declare private authedKinds: ConnectorKind[];
   @state() declare private chosenKind: ConnectorKind;
   @state() declare private remoteLists: RemoteListSummary[];
@@ -226,8 +226,8 @@ export class ConnectorSubscribeButton extends LitElement {
       return;
     }
     try {
-      const resp = await this.client.getChecklistSubscriptionState(
-        create(GetChecklistSubscriptionStateRequestSchema, {
+      const resp = await this.client.getChecklistBindingState(
+        create(GetChecklistBindingStateRequestSchema, {
           page: this.page,
           listName: this.listName,
         }),
@@ -235,7 +235,7 @@ export class ConnectorSubscribeButton extends LitElement {
       this.subscriptionState = resp.state ?? null;
       if (!this.subscriptionState?.connectorConfigured) {
         this.phase = 'hidden';
-      } else if (this.subscriptionState.currentSubscription) {
+      } else if (this.subscriptionState.currentBinding) {
         this.phase = 'subscribed';
       } else {
         this.phase = 'unsubscribed';
@@ -276,7 +276,7 @@ export class ConnectorSubscribeButton extends LitElement {
     return this.authedKinds;
   }
 
-  private async handleSubscribeClick(): Promise<void> {
+  private async handleBindClick(): Promise<void> {
     this.error = null;
     const authed = await this.detectAuthedConnectors();
     if (authed.length === 0) {
@@ -319,8 +319,8 @@ export class ConnectorSubscribeButton extends LitElement {
     this.error = null;
     this.phase = 'subscribing';
     try {
-      await this.client.subscribe(
-        create(SubscribeRequestSchema, {
+      await this.client.bind(
+        create(BindRequestSchema, {
           connectorKind: this.chosenKind,
           page: this.page,
           listName: this.listName,
@@ -338,15 +338,15 @@ export class ConnectorSubscribeButton extends LitElement {
     }
   }
 
-  // handleUnsubscribe is invoked by <confirmation-interlock-button>'s
+  // handleUnbind is invoked by <confirmation-interlock-button>'s
   // `confirmed` event — the interlock provides the safety prompt; this
   // handler runs only after the user clicks the "Yes" leg.
-  private async handleUnsubscribe(): Promise<void> {
-    const sub = this.subscriptionState?.currentSubscription;
+  private async handleUnbind(): Promise<void> {
+    const sub = this.subscriptionState?.currentBinding;
     if (!sub) return;
     try {
-      await this.client.unsubscribe(
-        create(UnsubscribeRequestSchema, {
+      await this.client.unbind(
+        create(UnbindRequestSchema, {
           connectorKind: sub.connectorKind,
           page: this.page,
           listName: this.listName,
@@ -395,7 +395,7 @@ export class ConnectorSubscribeButton extends LitElement {
     // GetState), give a connector-agnostic label. Once the user clicks,
     // detectAuthedConnectors decides single-pick vs multi-pick.
     return html`
-      <button class="subscribe-trigger" type="button" @click=${this.handleSubscribeClick}>
+      <button class="bind-trigger" type="button" @click=${this.handleBindClick}>
         Bind to a cloud service
       </button>
     `;
@@ -417,7 +417,7 @@ export class ConnectorSubscribeButton extends LitElement {
           `,
         )}
         <button
-          class="subscribe-trigger"
+          class="bind-trigger"
           type="button"
           @click=${() => (this.phase = 'unsubscribed')}
         >
@@ -448,14 +448,14 @@ export class ConnectorSubscribeButton extends LitElement {
           )}
         </select>
         <button
-          class="subscribe-trigger"
+          class="bind-trigger"
           type="button"
           @click=${this.handleSubscribeConfirm}
         >
           Bind
         </button>
         <button
-          class="subscribe-trigger"
+          class="bind-trigger"
           type="button"
           @click=${() => (this.phase = 'unsubscribed')}
         >
@@ -466,13 +466,13 @@ export class ConnectorSubscribeButton extends LitElement {
   }
 
   private renderSubscribed() {
-    const sub = this.subscriptionState?.currentSubscription;
+    const sub = this.subscriptionState?.currentBinding;
     if (!sub) return nothing;
     if (sub.paused) return this.renderPausedBadge(sub);
     return this.renderSyncedBadge(sub);
   }
 
-  private renderSyncedBadge(sub: SubscriptionState) {
+  private renderSyncedBadge(sub: BindingState) {
     const productName = PRODUCT_NAME[sub.connectorKind];
     const noun = REMOTE_LIST_NOUN[sub.connectorKind];
     const titleSuffix = sub.remoteListTitle ? ` ${sub.remoteListTitle}` : '';
@@ -487,19 +487,19 @@ export class ConnectorSubscribeButton extends LitElement {
         confirmLabel="Stop syncing?"
         yesLabel="Unbind"
         noLabel="Cancel"
-        class="subscribe-trigger"
-        @confirmed=${this.handleUnsubscribe}
+        class="bind-trigger"
+        @confirmed=${this.handleUnbind}
       ></confirmation-interlock-button>
     `;
   }
 
-  private renderPausedBadge(sub: SubscriptionState) {
+  private renderPausedBadge(sub: BindingState) {
     // Pause start: best signal we have today is last_pull_at — the most
     // recent successful inbound poll. (last_verified_at is also a
     // candidate, but pull is the user-facing "last time we heard from
     // the list".) Fall back to subscribed_at if neither is set.
     const pausedAt = timestampToDate(
-      sub.lastPullAt ?? sub.lastVerifiedAt ?? sub.subscribedAt,
+      sub.lastPullAt ?? sub.lastVerifiedAt ?? sub.boundAt,
     );
     return html`
       <connector-paused-badge
@@ -528,8 +528,8 @@ function timestampToDate(ts: ProtoTimestamp | undefined): Date {
 
 declare global {
   interface HTMLElementTagNameMap {
-    'connector-subscribe-button': ConnectorSubscribeButton;
+    'connector-bind-button': ConnectorBindButton;
   }
 }
 
-customElements.define('connector-subscribe-button', ConnectorSubscribeButton);
+customElements.define('connector-bind-button', ConnectorBindButton);

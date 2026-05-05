@@ -99,7 +99,7 @@ var _ = Describe("mapTasksConnectorErr coverage", func() {
 			}
 			w := buildTasksWiring(mock, &errMapperTasksClient{})
 			server = withTasks(mustNewServer(mock, nil, nil), w)
-			_, err = server.Subscribe(ctx, &apiv1.SubscribeRequest{
+			_, err = server.Bind(ctx, &apiv1.BindRequest{
 				ConnectorKind:    apiv1.ConnectorKind_CONNECTOR_KIND_GOOGLE_TASKS,
 				Page:             errMapPage,
 				ListName:         errMapListName,
@@ -130,7 +130,7 @@ var _ = Describe("mapTasksConnectorErr coverage", func() {
 			// However, a fresher approach: simply call Subscribe twice. The
 			// first succeeds; the second sees ErrAlreadyBoundForChecklist.
 			server = withTasks(mustNewServer(mock, nil, nil), w)
-			_, err = server.Subscribe(ctx, &apiv1.SubscribeRequest{
+			_, err = server.Bind(ctx, &apiv1.BindRequest{
 				ConnectorKind:    apiv1.ConnectorKind_CONNECTOR_KIND_GOOGLE_TASKS,
 				Page:             errMapPage,
 				ListName:         errMapListName,
@@ -174,7 +174,7 @@ var _ = Describe("mapTasksConnectorErr coverage", func() {
 			mock := connectedTasksProfileMock(profileID)
 			w := buildTasksWiring(mock, client)
 			server = withTasks(mustNewServer(mock, nil, nil), w)
-			_, err = server.Subscribe(ctx, &apiv1.SubscribeRequest{
+			_, err = server.Bind(ctx, &apiv1.BindRequest{
 				ConnectorKind:    apiv1.ConnectorKind_CONNECTOR_KIND_GOOGLE_TASKS,
 				Page:             errMapPage,
 				ListName:         errMapListName,
@@ -199,7 +199,7 @@ var _ = Describe("mapTasksConnectorErr coverage", func() {
 			mock := connectedTasksProfileMock(profileID)
 			w := buildTasksWiring(mock, client)
 			server = withTasks(mustNewServer(mock, nil, nil), w)
-			_, err = server.Subscribe(ctx, &apiv1.SubscribeRequest{
+			_, err = server.Bind(ctx, &apiv1.BindRequest{
 				ConnectorKind:    apiv1.ConnectorKind_CONNECTOR_KIND_GOOGLE_TASKS,
 				Page:             errMapPage,
 				ListName:         errMapListName,
@@ -224,7 +224,7 @@ var _ = Describe("mapTasksConnectorErr coverage", func() {
 			mock := connectedTasksProfileMock(profileID)
 			w := buildTasksWiring(mock, client)
 			server = withTasks(mustNewServer(mock, nil, nil), w)
-			_, err = server.Subscribe(ctx, &apiv1.SubscribeRequest{
+			_, err = server.Bind(ctx, &apiv1.BindRequest{
 				ConnectorKind:    apiv1.ConnectorKind_CONNECTOR_KIND_GOOGLE_TASKS,
 				Page:             errMapPage,
 				ListName:         errMapListName,
@@ -253,7 +253,7 @@ var _ = Describe("mapTasksConnectorErr coverage", func() {
 			mock := connectedTasksProfileMock(profileID)
 			w := buildTasksWiring(mock, client)
 			server = withTasks(mustNewServer(mock, nil, nil), w)
-			_, err = server.Subscribe(ctx, &apiv1.SubscribeRequest{
+			_, err = server.Bind(ctx, &apiv1.BindRequest{
 				ConnectorKind:    apiv1.ConnectorKind_CONNECTOR_KIND_GOOGLE_TASKS,
 				Page:             errMapPage,
 				ListName:         errMapListName,
@@ -282,7 +282,7 @@ var _ = Describe("mapTasksConnectorErr coverage", func() {
 			mock := connectedTasksProfileMock(profileID)
 			w := buildTasksWiring(mock, client)
 			server = withTasks(mustNewServer(mock, nil, nil), w)
-			_, err = server.Subscribe(ctx, &apiv1.SubscribeRequest{
+			_, err = server.Bind(ctx, &apiv1.BindRequest{
 				ConnectorKind:    apiv1.ConnectorKind_CONNECTOR_KIND_GOOGLE_TASKS,
 				Page:             errMapPage,
 				ListName:         errMapListName,
@@ -307,7 +307,7 @@ var _ = Describe("mapTasksConnectorErr coverage", func() {
 			mock := connectedTasksProfileMock(profileID)
 			w := buildTasksWiring(mock, client)
 			server = withTasks(mustNewServer(mock, nil, nil), w)
-			_, err = server.Subscribe(ctx, &apiv1.SubscribeRequest{
+			_, err = server.Bind(ctx, &apiv1.BindRequest{
 				ConnectorKind:    apiv1.ConnectorKind_CONNECTOR_KIND_GOOGLE_TASKS,
 				Page:             errMapPage,
 				ListName:         errMapListName,

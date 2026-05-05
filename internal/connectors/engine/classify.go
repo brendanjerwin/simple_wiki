@@ -21,10 +21,10 @@ import (
 	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
 )
 
-// SubscriptionCursor identifies a binding's position in a checklist's
+// BindingCursor identifies a binding's position in a checklist's
 // op-log. Each successful round-trip advances LastSyncedSeq to the
 // max(seq) consumed; subsequent ticks scan forward from there.
-type SubscriptionCursor struct {
+type BindingCursor struct {
 	Page          string
 	ListName      string
 	LastSyncedSeq int64
@@ -104,7 +104,7 @@ func isDivergentSource(src, selfPrefix string) bool {
 // The classifier is pure: it reads the checklist + cursor, returns a
 // map. No I/O. No mutation. Adapters call it once per tick, before
 // the inbound apply loop, and consult the result per remote item.
-func Classify(checklist *apiv1.Checklist, cursor SubscriptionCursor, myKind string) map[string]EventClassification {
+func Classify(checklist *apiv1.Checklist, cursor BindingCursor, myKind string) map[string]EventClassification {
 	out := map[string]EventClassification{}
 	if checklist == nil {
 		return out

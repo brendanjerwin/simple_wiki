@@ -258,7 +258,7 @@ var _ = Describe("tasksFannedOutPausedChecker", func() {
 				index:    fakeIndex,
 			}
 
-			isPaused = checker.IsAnyChecklistSubscriptionPaused(pageName, listName)
+			isPaused = checker.IsAnyChecklistBindingPaused(pageName, listName)
 		})
 
 		It("should report the paused binding via fan-out", func() {

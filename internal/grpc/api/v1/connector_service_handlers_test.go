@@ -90,9 +90,9 @@ var _ = Describe("ConnectorService handlers (GOOGLE_KEEP, engine path)", func() 
 		})
 	})
 
-	Describe("ListMySubscriptions(GOOGLE_KEEP) when Keep is not wired", func() {
+	Describe("ListMyBindings(GOOGLE_KEEP) when Keep is not wired", func() {
 		It("should return FailedPrecondition", func() {
-			_, err := server.ListMySubscriptions(ctx, &apiv1.ListMySubscriptionsRequest{
+			_, err := server.ListMyBindings(ctx, &apiv1.ListMyBindingsRequest{
 				ConnectorKind: apiv1.ConnectorKind_CONNECTOR_KIND_GOOGLE_KEEP,
 			})
 			Expect(err).To(HaveGrpcStatusWithSubstr(codes.FailedPrecondition, "not configured"))
@@ -110,7 +110,7 @@ var _ = Describe("ConnectorService handlers (GOOGLE_KEEP, engine path)", func() 
 
 	Describe("Subscribe(GOOGLE_KEEP) when Keep is not wired", func() {
 		It("should return FailedPrecondition", func() {
-			_, err := server.Subscribe(ctx, &apiv1.SubscribeRequest{
+			_, err := server.Bind(ctx, &apiv1.BindRequest{
 				ConnectorKind: apiv1.ConnectorKind_CONNECTOR_KIND_GOOGLE_KEEP,
 				Page:          handlerTestPage,
 				ListName:      handlerTestListName,
@@ -121,7 +121,7 @@ var _ = Describe("ConnectorService handlers (GOOGLE_KEEP, engine path)", func() 
 
 	Describe("Unsubscribe(GOOGLE_KEEP) when Keep is not wired", func() {
 		It("should return FailedPrecondition", func() {
-			_, err := server.Unsubscribe(ctx, &apiv1.UnsubscribeRequest{
+			_, err := server.Unbind(ctx, &apiv1.UnbindRequest{
 				ConnectorKind: apiv1.ConnectorKind_CONNECTOR_KIND_GOOGLE_KEEP,
 				Page:          handlerTestPage,
 				ListName:      handlerTestListName,

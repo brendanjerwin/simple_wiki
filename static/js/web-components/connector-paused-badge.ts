@@ -1,5 +1,5 @@
 // connector-paused-badge — click-target rendered inside
-// <connector-subscribe-button> when a subscription is paused. Communicates
+// <connector-bind-button> when a subscription is paused. Communicates
 // *what was lost* (relative or absolute "since when") and offers a
 // reconnect affordance with pause-duration urgency escalation:
 //   < 1h        → muted
@@ -7,7 +7,7 @@
 //   >= 24h      → danger (red)
 //
 // Click dispatches a `request-reconnect` event with `{connectorKind}` detail.
-// The parent (Phase 8/9: <connector-subscribe-button> + profile flow) is
+// The parent (Phase 8/9: <connector-bind-button> + profile flow) is
 // responsible for actually launching the reconnect modal.
 
 import { css, html, LitElement } from 'lit';

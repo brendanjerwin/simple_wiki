@@ -128,21 +128,21 @@ func (e *Engine) Kind() connectors.ConnectorKind {
 
 // Sync runs one reconcile pass for the given binding. Implements
 // connectors.Connector.Sync. Body lives in reconcile.go.
-func (e *Engine) Sync(ctx context.Context, key connectors.SubscriptionKey) error {
+func (e *Engine) Sync(ctx context.Context, key connectors.BindingKey) error {
 	return e.reconcile(ctx, key)
 }
 
 // PausedReason reports the binding's pause state. Implements
 // connectors.Connector.PausedReason. Body in resume.go (the file
 // that owns pause/resume state machinery).
-func (e *Engine) PausedReason(key connectors.SubscriptionKey) (string, bool) {
+func (e *Engine) PausedReason(key connectors.BindingKey) (string, bool) {
 	return e.lookupPausedReason(key)
 }
 
 // ForceFullResync triggers a one-shot full re-fetch on the next Sync.
 // Implements connectors.Connector.ForceFullResync. Body in
 // force_resync.go.
-func (e *Engine) ForceFullResync(ctx context.Context, key connectors.SubscriptionKey) error {
+func (e *Engine) ForceFullResync(ctx context.Context, key connectors.BindingKey) error {
 	return e.runForceFullResync(ctx, key)
 }
 

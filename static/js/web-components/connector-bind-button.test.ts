@@ -2,32 +2,32 @@ import { expect } from '@open-wc/testing';
 import sinon from 'sinon';
 import { create } from '@bufbuild/protobuf';
 import { ConnectError, Code } from '@connectrpc/connect';
-import './connector-subscribe-button.js';
-import type { ConnectorSubscribeButton } from './connector-subscribe-button.js';
+import './connector-bind-button.js';
+import type { ConnectorBindButton } from './connector-bind-button.js';
 import {
   ConnectorKind,
-  GetChecklistSubscriptionStateResponseSchema,
-  ChecklistSubscriptionStateSchema,
-  SubscriptionStateSchema,
+  GetChecklistBindingStateResponseSchema,
+  ChecklistBindingStateSchema,
+  BindingStateSchema,
   ListRemoteListsResponseSchema,
   RemoteListSummarySchema,
-  SubscribeResponseSchema,
-  UnsubscribeResponseSchema,
+  BindResponseSchema,
+  UnbindResponseSchema,
   GetStateResponseSchema,
   ConnectorStateSchema,
 } from '../gen/api/v1/connector_service_pb.js';
 
-interface SubscribeButtonClient {
-  getChecklistSubscriptionState: sinon.SinonStub;
+interface BindButtonClient {
+  getChecklistBindingState: sinon.SinonStub;
   getState: sinon.SinonStub;
   listRemoteLists: sinon.SinonStub;
-  subscribe: sinon.SinonStub;
-  unsubscribe: sinon.SinonStub;
+  bind: sinon.SinonStub;
+  unbind: sinon.SinonStub;
 }
 
-function clientOf(el: ConnectorSubscribeButton): SubscribeButtonClient {
+function clientOf(el: ConnectorBindButton): BindButtonClient {
   // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion, @typescript-eslint/no-explicit-any
-  return (el as any).client as SubscribeButtonClient;
+  return (el as any).client as BindButtonClient;
 }
 
 function timeout(ms: number, message: string): Promise<never> {
@@ -36,23 +36,23 @@ function timeout(ms: number, message: string): Promise<never> {
   );
 }
 
-function stubAllRpcs(el: ConnectorSubscribeButton): SubscribeButtonClient {
+function stubAllRpcs(el: ConnectorBindButton): BindButtonClient {
   const client = clientOf(el);
   // Default-stub every RPC so unrelated calls don't hang. Tests override
   // specific methods by re-stubbing after this is called.
-  sinon.stub(client, 'getChecklistSubscriptionState');
+  sinon.stub(client, 'getChecklistBindingState');
   sinon.stub(client, 'getState');
   sinon.stub(client, 'listRemoteLists');
-  sinon.stub(client, 'subscribe');
-  sinon.stub(client, 'unsubscribe');
+  sinon.stub(client, 'bind');
+  sinon.stub(client, 'unbind');
   return client;
 }
 
-function configuredState(currentSubscription?: ReturnType<typeof create>) {
-  return create(ChecklistSubscriptionStateSchema, {
+function configuredState(currentBinding?: ReturnType<typeof create>) {
+  return create(ChecklistBindingStateSchema, {
     connectorConfigured: true,
     // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-explicit-any
-    currentSubscription: currentSubscription as any,
+    currentBinding: currentBinding as any,
   });
 }
 
@@ -75,8 +75,8 @@ function unauthedKindResponse(kind: ConnectorKind) {
   });
 }
 
-describe('ConnectorSubscribeButton', () => {
-  let el: ConnectorSubscribeButton;
+describe('ConnectorBindButton', () => {
+  let el: ConnectorBindButton;
 
   afterEach(() => {
     if (el && el.parentNode) el.remove();
@@ -87,7 +87,7 @@ describe('ConnectorSubscribeButton', () => {
 
   describe('when page and list-name attributes are not set', () => {
     beforeEach(async () => {
-      el = document.createElement('connector-subscribe-button') as ConnectorSubscribeButton;
+      el = document.createElement('connector-bind-button') as ConnectorBindButton;
       document.body.appendChild(el);
       await Promise.race([el.updateComplete, timeout(3000, 'updateComplete timed out')]);
     });
@@ -97,7 +97,7 @@ describe('ConnectorSubscribeButton', () => {
     });
 
     it('should have the correct tag name', () => {
-      expect(el.tagName).to.equal('CONNECTOR-SUBSCRIBE-BUTTON');
+      expect(el.tagName).to.equal('CONNECTOR-BIND-BUTTON');
     });
 
     it('should render nothing (phase=hidden)', () => {
@@ -112,13 +112,13 @@ describe('ConnectorSubscribeButton', () => {
 
   describe('when no connector is configured', () => {
     beforeEach(async () => {
-      el = document.createElement('connector-subscribe-button') as ConnectorSubscribeButton;
+      el = document.createElement('connector-bind-button') as ConnectorBindButton;
       el.setAttribute('page', 'Board');
       el.setAttribute('list-name', 'todo');
       const client = stubAllRpcs(el);
-      const state = create(ChecklistSubscriptionStateSchema, { connectorConfigured: false });
-      client.getChecklistSubscriptionState.resolves(
-        create(GetChecklistSubscriptionStateResponseSchema, { state }),
+      const state = create(ChecklistBindingStateSchema, { connectorConfigured: false });
+      client.getChecklistBindingState.resolves(
+        create(GetChecklistBindingStateResponseSchema, { state }),
       );
       document.body.appendChild(el);
       await Promise.race([el.updateComplete, timeout(3000, 'updateComplete timed out')]);
@@ -131,15 +131,15 @@ describe('ConnectorSubscribeButton', () => {
     });
   });
 
-  // ------------------------------------------------------------------ getChecklistSubscriptionState errors → hidden
+  // ------------------------------------------------------------------ getChecklistBindingState errors → hidden
 
-  describe('when getChecklistSubscriptionState rejects', () => {
+  describe('when getChecklistBindingState rejects', () => {
     beforeEach(async () => {
-      el = document.createElement('connector-subscribe-button') as ConnectorSubscribeButton;
+      el = document.createElement('connector-bind-button') as ConnectorBindButton;
       el.setAttribute('page', 'Board');
       el.setAttribute('list-name', 'todo');
       const client = stubAllRpcs(el);
-      client.getChecklistSubscriptionState.rejects(
+      client.getChecklistBindingState.rejects(
         new ConnectError('unavailable', Code.Unavailable),
       );
       document.body.appendChild(el);
@@ -156,19 +156,19 @@ describe('ConnectorSubscribeButton', () => {
 
   describe('when a connector is configured but no subscription exists', () => {
     beforeEach(async () => {
-      el = document.createElement('connector-subscribe-button') as ConnectorSubscribeButton;
+      el = document.createElement('connector-bind-button') as ConnectorBindButton;
       el.setAttribute('page', 'Board');
       el.setAttribute('list-name', 'todo');
       const client = stubAllRpcs(el);
-      client.getChecklistSubscriptionState.resolves(
-        create(GetChecklistSubscriptionStateResponseSchema, { state: configuredState() }),
+      client.getChecklistBindingState.resolves(
+        create(GetChecklistBindingStateResponseSchema, { state: configuredState() }),
       );
       document.body.appendChild(el);
       await Promise.race([el.updateComplete, timeout(3000, 'updateComplete timed out')]);
     });
 
     it('should render the Bind trigger button', () => {
-      const btn = el.shadowRoot?.querySelector('button.subscribe-trigger');
+      const btn = el.shadowRoot?.querySelector('button.bind-trigger');
       expect(btn).to.exist;
     });
 
@@ -192,19 +192,19 @@ describe('ConnectorSubscribeButton', () => {
 
   describe('when subscribed to a Google Keep note', () => {
     beforeEach(async () => {
-      el = document.createElement('connector-subscribe-button') as ConnectorSubscribeButton;
+      el = document.createElement('connector-bind-button') as ConnectorBindButton;
       el.setAttribute('page', 'Board');
       el.setAttribute('list-name', 'todo');
       const client = stubAllRpcs(el);
-      const subscription = create(SubscriptionStateSchema, {
+      const subscription = create(BindingStateSchema, {
         page: 'Board',
         listName: 'todo',
         remoteListHandle: 'note-1',
         remoteListTitle: 'My Keep note',
         connectorKind: ConnectorKind.GOOGLE_KEEP,
       });
-      client.getChecklistSubscriptionState.resolves(
-        create(GetChecklistSubscriptionStateResponseSchema, {
+      client.getChecklistBindingState.resolves(
+        create(GetChecklistBindingStateResponseSchema, {
           state: configuredState(subscription),
         }),
       );
@@ -229,7 +229,7 @@ describe('ConnectorSubscribeButton', () => {
     });
 
     it('should not render the Bind trigger button', () => {
-      const btn = el.shadowRoot?.querySelector('button.subscribe-trigger');
+      const btn = el.shadowRoot?.querySelector('button.bind-trigger');
       expect(btn).to.not.exist;
     });
 
@@ -243,19 +243,19 @@ describe('ConnectorSubscribeButton', () => {
 
   describe('when subscribed to a Google Tasks list', () => {
     beforeEach(async () => {
-      el = document.createElement('connector-subscribe-button') as ConnectorSubscribeButton;
+      el = document.createElement('connector-bind-button') as ConnectorBindButton;
       el.setAttribute('page', 'Board');
       el.setAttribute('list-name', 'todo');
       const client = stubAllRpcs(el);
-      const subscription = create(SubscriptionStateSchema, {
+      const subscription = create(BindingStateSchema, {
         page: 'Board',
         listName: 'todo',
         remoteListHandle: 'tl-1',
         remoteListTitle: 'My Tasks list',
         connectorKind: ConnectorKind.GOOGLE_TASKS,
       });
-      client.getChecklistSubscriptionState.resolves(
-        create(GetChecklistSubscriptionStateResponseSchema, {
+      client.getChecklistBindingState.resolves(
+        create(GetChecklistBindingStateResponseSchema, {
           state: configuredState(subscription),
         }),
       );
@@ -274,11 +274,11 @@ describe('ConnectorSubscribeButton', () => {
 
   describe('when the subscription is paused', () => {
     beforeEach(async () => {
-      el = document.createElement('connector-subscribe-button') as ConnectorSubscribeButton;
+      el = document.createElement('connector-bind-button') as ConnectorBindButton;
       el.setAttribute('page', 'Board');
       el.setAttribute('list-name', 'todo');
       const client = stubAllRpcs(el);
-      const subscription = create(SubscriptionStateSchema, {
+      const subscription = create(BindingStateSchema, {
         page: 'Board',
         listName: 'todo',
         remoteListHandle: 'tl-1',
@@ -286,8 +286,8 @@ describe('ConnectorSubscribeButton', () => {
         connectorKind: ConnectorKind.GOOGLE_TASKS,
         paused: true,
       });
-      client.getChecklistSubscriptionState.resolves(
-        create(GetChecklistSubscriptionStateResponseSchema, {
+      client.getChecklistBindingState.resolves(
+        create(GetChecklistBindingStateResponseSchema, {
           state: configuredState(subscription),
         }),
       );
@@ -312,12 +312,12 @@ describe('ConnectorSubscribeButton', () => {
     let listRemoteListsStub: sinon.SinonStub;
 
     beforeEach(async () => {
-      el = document.createElement('connector-subscribe-button') as ConnectorSubscribeButton;
+      el = document.createElement('connector-bind-button') as ConnectorBindButton;
       el.setAttribute('page', 'Board');
       el.setAttribute('list-name', 'sprint');
       const client = stubAllRpcs(el);
-      client.getChecklistSubscriptionState.resolves(
-        create(GetChecklistSubscriptionStateResponseSchema, { state: configuredState() }),
+      client.getChecklistBindingState.resolves(
+        create(GetChecklistBindingStateResponseSchema, { state: configuredState() }),
       );
       client.getState
         .withArgs(sinon.match({ connectorKind: ConnectorKind.GOOGLE_KEEP }))
@@ -337,7 +337,7 @@ describe('ConnectorSubscribeButton', () => {
       document.body.appendChild(el);
       await Promise.race([el.updateComplete, timeout(3000, 'updateComplete timed out')]);
 
-      const btn = el.shadowRoot?.querySelector('button.subscribe-trigger') as HTMLButtonElement;
+      const btn = el.shadowRoot?.querySelector('button.bind-trigger') as HTMLButtonElement;
       btn.click();
       // Two ticks: connector-pick decision (resolves GetState) + list fetch.
       await Promise.race([el.updateComplete, timeout(3000, 'updateComplete timed out')]);
@@ -368,12 +368,12 @@ describe('ConnectorSubscribeButton', () => {
     let listRemoteListsStub: sinon.SinonStub;
 
     beforeEach(async () => {
-      el = document.createElement('connector-subscribe-button') as ConnectorSubscribeButton;
+      el = document.createElement('connector-bind-button') as ConnectorBindButton;
       el.setAttribute('page', 'Board');
       el.setAttribute('list-name', 'sprint');
       const client = stubAllRpcs(el);
-      client.getChecklistSubscriptionState.resolves(
-        create(GetChecklistSubscriptionStateResponseSchema, { state: configuredState() }),
+      client.getChecklistBindingState.resolves(
+        create(GetChecklistBindingStateResponseSchema, { state: configuredState() }),
       );
       client.getState
         .withArgs(sinon.match({ connectorKind: ConnectorKind.GOOGLE_KEEP }))
@@ -393,7 +393,7 @@ describe('ConnectorSubscribeButton', () => {
       document.body.appendChild(el);
       await Promise.race([el.updateComplete, timeout(3000, 'updateComplete timed out')]);
 
-      const btn = el.shadowRoot?.querySelector('button.subscribe-trigger') as HTMLButtonElement;
+      const btn = el.shadowRoot?.querySelector('button.bind-trigger') as HTMLButtonElement;
       btn.click();
       await Promise.race([el.updateComplete, timeout(3000, 'updateComplete timed out')]);
       await Promise.race([el.updateComplete, timeout(3000, 'updateComplete timed out')]);
@@ -416,12 +416,12 @@ describe('ConnectorSubscribeButton', () => {
 
   describe('when both connectors are authenticated and Bind is clicked', () => {
     beforeEach(async () => {
-      el = document.createElement('connector-subscribe-button') as ConnectorSubscribeButton;
+      el = document.createElement('connector-bind-button') as ConnectorBindButton;
       el.setAttribute('page', 'Board');
       el.setAttribute('list-name', 'sprint');
       const client = stubAllRpcs(el);
-      client.getChecklistSubscriptionState.resolves(
-        create(GetChecklistSubscriptionStateResponseSchema, { state: configuredState() }),
+      client.getChecklistBindingState.resolves(
+        create(GetChecklistBindingStateResponseSchema, { state: configuredState() }),
       );
       client.getState
         .withArgs(sinon.match({ connectorKind: ConnectorKind.GOOGLE_KEEP }))
@@ -433,7 +433,7 @@ describe('ConnectorSubscribeButton', () => {
       document.body.appendChild(el);
       await Promise.race([el.updateComplete, timeout(3000, 'updateComplete timed out')]);
 
-      const btn = el.shadowRoot?.querySelector('button.subscribe-trigger') as HTMLButtonElement;
+      const btn = el.shadowRoot?.querySelector('button.bind-trigger') as HTMLButtonElement;
       btn.click();
       await Promise.race([el.updateComplete, timeout(3000, 'updateComplete timed out')]);
       await Promise.race([el.updateComplete, timeout(3000, 'updateComplete timed out')]);
@@ -457,12 +457,12 @@ describe('ConnectorSubscribeButton', () => {
     let listRemoteListsStub: sinon.SinonStub;
 
     beforeEach(async () => {
-      el = document.createElement('connector-subscribe-button') as ConnectorSubscribeButton;
+      el = document.createElement('connector-bind-button') as ConnectorBindButton;
       el.setAttribute('page', 'Board');
       el.setAttribute('list-name', 'sprint');
       const client = stubAllRpcs(el);
-      client.getChecklistSubscriptionState.resolves(
-        create(GetChecklistSubscriptionStateResponseSchema, { state: configuredState() }),
+      client.getChecklistBindingState.resolves(
+        create(GetChecklistBindingStateResponseSchema, { state: configuredState() }),
       );
       client.getState
         .withArgs(sinon.match({ connectorKind: ConnectorKind.GOOGLE_KEEP }))
@@ -477,9 +477,9 @@ describe('ConnectorSubscribeButton', () => {
       document.body.appendChild(el);
       await Promise.race([el.updateComplete, timeout(3000, 'updateComplete timed out')]);
 
-      const btn = el.shadowRoot?.querySelector('button.subscribe-trigger') as HTMLButtonElement;
+      const btn = el.shadowRoot?.querySelector('button.bind-trigger') as HTMLButtonElement;
       btn.click();
-      // handleSubscribeClick awaits Promise.all of two GetState calls
+      // handleBindClick awaits Promise.all of two GetState calls
       // before setting phase = 'connector-pick'. Pump microtasks until
       // the connector-pick phase actually renders.
       for (let i = 0; i < 10; i += 1) {
@@ -514,28 +514,28 @@ describe('ConnectorSubscribeButton', () => {
   // ------------------------------------------------------------------ subscribe action (Keep)
 
   describe('when Bind is confirmed after picking a Keep note', () => {
-    let subscribeStub: sinon.SinonStub;
+    let bindStub: sinon.SinonStub;
 
     beforeEach(async () => {
-      el = document.createElement('connector-subscribe-button') as ConnectorSubscribeButton;
+      el = document.createElement('connector-bind-button') as ConnectorBindButton;
       el.setAttribute('page', 'Board');
       el.setAttribute('list-name', 'sprint');
 
       const client = stubAllRpcs(el);
       const unboundState = configuredState();
-      const boundSubscription = create(SubscriptionStateSchema, {
+      const boundBinding = create(BindingStateSchema, {
         page: 'Board',
         listName: 'sprint',
         remoteListHandle: 'n1',
         remoteListTitle: 'Sprint notes',
         connectorKind: ConnectorKind.GOOGLE_KEEP,
       });
-      const boundState = configuredState(boundSubscription);
-      client.getChecklistSubscriptionState.onFirstCall().resolves(
-        create(GetChecklistSubscriptionStateResponseSchema, { state: unboundState }),
+      const boundState = configuredState(boundBinding);
+      client.getChecklistBindingState.onFirstCall().resolves(
+        create(GetChecklistBindingStateResponseSchema, { state: unboundState }),
       );
-      client.getChecklistSubscriptionState.onSecondCall().resolves(
-        create(GetChecklistSubscriptionStateResponseSchema, { state: boundState }),
+      client.getChecklistBindingState.onSecondCall().resolves(
+        create(GetChecklistBindingStateResponseSchema, { state: boundState }),
       );
       client.getState
         .withArgs(sinon.match({ connectorKind: ConnectorKind.GOOGLE_KEEP }))
@@ -544,19 +544,19 @@ describe('ConnectorSubscribeButton', () => {
         .withArgs(sinon.match({ connectorKind: ConnectorKind.GOOGLE_TASKS }))
         .resolves(unauthedKindResponse(ConnectorKind.GOOGLE_TASKS));
       client.listRemoteLists.resolves(create(ListRemoteListsResponseSchema, { lists: [] }));
-      subscribeStub = client.subscribe.resolves(create(SubscribeResponseSchema, {}));
+      bindStub = client.bind.resolves(create(BindResponseSchema, {}));
 
       document.body.appendChild(el);
       await Promise.race([el.updateComplete, timeout(3000, 'updateComplete timed out')]);
 
-      const triggerBtn = el.shadowRoot?.querySelector('button.subscribe-trigger') as HTMLButtonElement;
+      const triggerBtn = el.shadowRoot?.querySelector('button.bind-trigger') as HTMLButtonElement;
       triggerBtn.click();
       await Promise.race([el.updateComplete, timeout(3000, 'updateComplete timed out')]);
       await Promise.race([el.updateComplete, timeout(3000, 'updateComplete timed out')]);
       await Promise.race([el.updateComplete, timeout(3000, 'updateComplete timed out')]);
 
       const btns = Array.from(
-        el.shadowRoot?.querySelectorAll('button.subscribe-trigger') ?? [],
+        el.shadowRoot?.querySelectorAll('button.bind-trigger') ?? [],
       ) as HTMLButtonElement[];
       const bindBtn = btns.find((b) => b.textContent?.trim() === 'Bind');
       bindBtn?.click();
@@ -565,11 +565,11 @@ describe('ConnectorSubscribeButton', () => {
     });
 
     it('should call subscribe', () => {
-      expect(subscribeStub.calledOnce).to.be.true;
+      expect(bindStub.calledOnce).to.be.true;
     });
 
     it('should pass the correct connectorKind to subscribe', () => {
-      const call = subscribeStub.firstCall.args[0] as { connectorKind: ConnectorKind };
+      const call = bindStub.firstCall.args[0] as { connectorKind: ConnectorKind };
       expect(call.connectorKind).to.equal(ConnectorKind.GOOGLE_KEEP);
     });
 
@@ -581,16 +581,16 @@ describe('ConnectorSubscribeButton', () => {
 
   // ------------------------------------------------------------------ unsubscribe action
 
-  describe('when handleUnsubscribe is invoked', () => {
-    let unsubscribeStub: sinon.SinonStub;
+  describe('when handleUnbind is invoked', () => {
+    let unbindStub: sinon.SinonStub;
 
     beforeEach(async () => {
-      el = document.createElement('connector-subscribe-button') as ConnectorSubscribeButton;
+      el = document.createElement('connector-bind-button') as ConnectorBindButton;
       el.setAttribute('page', 'Board');
       el.setAttribute('list-name', 'todo');
 
       const client = stubAllRpcs(el);
-      const subscription = create(SubscriptionStateSchema, {
+      const subscription = create(BindingStateSchema, {
         page: 'Board',
         listName: 'todo',
         remoteListHandle: 'note-1',
@@ -598,36 +598,36 @@ describe('ConnectorSubscribeButton', () => {
       });
       const boundState = configuredState(subscription);
       const unboundState = configuredState();
-      client.getChecklistSubscriptionState.onFirstCall().resolves(
-        create(GetChecklistSubscriptionStateResponseSchema, { state: boundState }),
+      client.getChecklistBindingState.onFirstCall().resolves(
+        create(GetChecklistBindingStateResponseSchema, { state: boundState }),
       );
-      client.getChecklistSubscriptionState.onSecondCall().resolves(
-        create(GetChecklistSubscriptionStateResponseSchema, { state: unboundState }),
+      client.getChecklistBindingState.onSecondCall().resolves(
+        create(GetChecklistBindingStateResponseSchema, { state: unboundState }),
       );
-      unsubscribeStub = client.unsubscribe.resolves(create(UnsubscribeResponseSchema, {}));
+      unbindStub = client.unbind.resolves(create(UnbindResponseSchema, {}));
 
       document.body.appendChild(el);
       await Promise.race([el.updateComplete, timeout(3000, 'updateComplete timed out')]);
 
       // Call private handler directly (bypasses interlock confirmation)
       // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-type-assertion
-      await (el as any).handleUnsubscribe();
+      await (el as any).handleUnbind();
       await Promise.race([el.updateComplete, timeout(3000, 'updateComplete timed out')]);
     });
 
     it('should call unsubscribe', () => {
-      expect(unsubscribeStub.calledOnce).to.be.true;
+      expect(unbindStub.calledOnce).to.be.true;
     });
 
     it('should pass the connectorKind from the current subscription', () => {
-      const call = unsubscribeStub.firstCall.args[0] as { connectorKind: ConnectorKind };
+      const call = unbindStub.firstCall.args[0] as { connectorKind: ConnectorKind };
       expect(call.connectorKind).to.equal(ConnectorKind.GOOGLE_KEEP);
     });
 
     it('should transition back to unsubscribed phase', () => {
       const badge = el.shadowRoot?.querySelector('.sync-badge');
       expect(badge).to.not.exist;
-      const btn = el.shadowRoot?.querySelector('button.subscribe-trigger');
+      const btn = el.shadowRoot?.querySelector('button.bind-trigger');
       expect(btn).to.exist;
     });
   });

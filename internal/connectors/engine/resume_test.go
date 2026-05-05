@@ -60,7 +60,7 @@ var _ = Describe("Engine.PausedReason", func() {
 		fbs   *enginetesting.FakeBindingStore
 		lease *connectors.LeaseTable
 		eng   *engine.Engine
-		key   connectors.SubscriptionKey
+		key   connectors.BindingKey
 	)
 
 	BeforeEach(func() {
@@ -77,7 +77,7 @@ var _ = Describe("Engine.PausedReason", func() {
 		)
 		Expect(err).NotTo(HaveOccurred())
 
-		key = connectors.SubscriptionKey{
+		key = connectors.BindingKey{
 			ProfileID: string(profileID),
 			Page:      page,
 			ListName:  listName,

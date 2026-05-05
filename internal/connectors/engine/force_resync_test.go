@@ -50,7 +50,7 @@ var _ = Describe("Engine.ForceFullResync", func() {
 		lease *connectors.LeaseTable
 		eng   *engine.Engine
 		ctx   context.Context
-		key   connectors.SubscriptionKey
+		key   connectors.BindingKey
 	)
 
 	BeforeEach(func() {
@@ -69,7 +69,7 @@ var _ = Describe("Engine.ForceFullResync", func() {
 		)
 		Expect(err).NotTo(HaveOccurred())
 
-		key = connectors.SubscriptionKey{
+		key = connectors.BindingKey{
 			ProfileID: string(profileID),
 			Page:      page,
 			ListName:  listName,

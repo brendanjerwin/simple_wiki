@@ -491,7 +491,7 @@ var _ = Describe("Engine dead-letter retry bookkeeping", func() {
 				)
 				Expect(err).NotTo(HaveOccurred())
 
-				_ = eng.Sync(ctx, connectors.SubscriptionKey{
+				_ = eng.Sync(ctx, connectors.BindingKey{
 					ProfileID: string(profileID),
 					Page:      page,
 					ListName:  listName,
@@ -545,7 +545,7 @@ var _ = Describe("Engine dead-letter retry bookkeeping", func() {
 				)
 				Expect(err).NotTo(HaveOccurred())
 
-				_ = eng.Sync(ctx, connectors.SubscriptionKey{
+				_ = eng.Sync(ctx, connectors.BindingKey{
 					ProfileID: string(profileID),
 					Page:      page,
 					ListName:  listName,

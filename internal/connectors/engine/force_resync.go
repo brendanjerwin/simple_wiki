@@ -50,7 +50,7 @@ var ErrBindingNotFound = errors.New("connectors/engine: binding not found")
 //     RemotePullResult.Truncated=true).
 //   - The pause-resume horizon path (resume.go) when pause >= 7 days.
 //   - An operator-triggered admin RPC.
-func (e *Engine) runForceFullResync(ctx context.Context, key connectors.SubscriptionKey) error {
+func (e *Engine) runForceFullResync(ctx context.Context, key connectors.BindingKey) error {
 	if err := e.lease.WaitReady(ctx); err != nil {
 		return fmt.Errorf("await lease-table ready: %w", err)
 	}

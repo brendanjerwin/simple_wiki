@@ -503,7 +503,7 @@ func setupGRPCServer(
 	leaseTable := connectors.NewLeaseTable()
 
 	// Unified per-30s connector tick. The SyncScheduler walks every
-	// registered connector's SubscriptionLister on each fire and
+	// registered connector's BindingLister on each fire and
 	// enqueues a per-subscription sync job through that connector's
 	// per-kind queue. Per-connector pause/rate-limit "skip-this-tick"
 	// logic stays inside each Connector's Sync impl — the scheduler
@@ -830,7 +830,7 @@ func setupGoogleTasks(
 	// forwards to the engine debouncer's OnChecklistMutated; on
 	// debounceWindow expiry the engine fires Sync via the SyncFunc.
 	syncFn := func(ctx context.Context, key engine.SyncDebouncerKey) error {
-		return tasksEngine.Sync(ctx, connectors.SubscriptionKey{
+		return tasksEngine.Sync(ctx, connectors.BindingKey{
 			ProfileID: key.ProfileID,
 			Page:      key.Page,
 			ListName:  key.ListName,
@@ -848,8 +848,8 @@ func setupGoogleTasks(
 	bridge.attachDebouncer(debouncer)
 	checklistMutator.AddSubscriber(bridge)
 
-	tasksSubscriptionLister := func() []connectors.SubscriptionKey {
-		out := make([]connectors.SubscriptionKey, 0, 8)
+	tasksSubscriptionLister := func() []connectors.BindingKey {
+		out := make([]connectors.BindingKey, 0, 8)
 		// Probe by refresh_token (the canonical "is connected?" leaf).
 		// Email may be absent on profiles connected via the OAuth
 		// callback — refresh_token is set on every connect and cleared
@@ -860,7 +860,7 @@ func setupGoogleTasks(
 				continue
 			}
 			for _, b := range bindings {
-				out = append(out, connectors.SubscriptionKey{
+				out = append(out, connectors.BindingKey{
 					ProfileID: string(p),
 					Page:      b.Page,
 					ListName:  b.ListName,
@@ -873,7 +873,7 @@ func setupGoogleTasks(
 	if regErr := syncScheduler.Register(
 		tasksEngine,
 		tasksSubscriptionLister,
-		func(c connectors.Connector, key connectors.SubscriptionKey) jobs.Job {
+		func(c connectors.Connector, key connectors.BindingKey) jobs.Job {
 			return &engineSyncJob{connector: c, key: key, queueName: tasksOutboundSyncJobName}
 		},
 	); regErr != nil {
@@ -988,7 +988,7 @@ func resumeAllTasksBindings(ctx context.Context, eng *engine.Engine, store engin
 // serializes pushes per worker.
 type engineSyncJob struct {
 	connector connectors.Connector
-	key       connectors.SubscriptionKey
+	key       connectors.BindingKey
 	queueName string
 }
 
@@ -1137,9 +1137,9 @@ type frontmatterKeyQueryer interface {
 	QueryKeyExistence(key string) []wikipage.PageIdentifier
 }
 
-// IsAnyChecklistSubscriptionPaused fans out the per-profile pause
+// IsAnyChecklistBindingPaused fans out the per-profile pause
 // check.
-func (c *tasksFannedOutPausedChecker) IsAnyChecklistSubscriptionPaused(page, listName string) bool {
+func (c *tasksFannedOutPausedChecker) IsAnyChecklistBindingPaused(page, listName string) bool {
 	for _, profileID := range c.index.QueryKeyExistence("wiki.connectors.google_tasks.refresh_token") {
 		bindings, err := c.bindings.LoadBindings(profileID, connectors.ConnectorKindGoogleTasks)
 		if err != nil {

@@ -29,7 +29,7 @@ const resumeFullResyncHorizon = 7 * 24 * time.Hour
 // path (called via the gRPC GetStatus handler), not an authoritative
 // read — surfacing a transient store error here would disrupt the UI
 // for what is effectively a "we don't know" condition.
-func (e *Engine) lookupPausedReason(key connectors.SubscriptionKey) (string, bool) {
+func (e *Engine) lookupPausedReason(key connectors.BindingKey) (string, bool) {
 	profileID := wikipage.PageIdentifier(key.ProfileID)
 	kind := e.adapter.Kind()
 
@@ -168,7 +168,7 @@ func (e *Engine) Resume(ctx context.Context, profileID wikipage.PageIdentifier, 
 
 	pauseDuration := e.clock.Now().Sub(binding.PausedAt)
 	if pauseDuration >= resumeFullResyncHorizon {
-		key := connectors.SubscriptionKey{
+		key := connectors.BindingKey{
 			ProfileID: string(profileID),
 			Page:      page,
 			ListName:  listName,

@@ -509,12 +509,12 @@ var _ = Describe("ConnectorService handlers (GOOGLE_KEEP)", func() {
 		})
 	})
 
-	// ---------------------------------------------------------- ListMySubscriptions (Keep)
+	// ---------------------------------------------------------- ListMyBindings (Keep)
 
-	Describe("ListMySubscriptions", func() {
+	Describe("ListMyBindings", func() {
 		Describe("when the user has one binding", func() {
 			var (
-				resp *apiv1.ListMySubscriptionsResponse
+				resp *apiv1.ListMyBindingsResponse
 				err  error
 			)
 
@@ -522,7 +522,7 @@ var _ = Describe("ConnectorService handlers (GOOGLE_KEEP)", func() {
 				mock := connectedKeepProfileMockWithBinding(profileID, keepTestPage, keepTestListName, keepTestRemoteHandle)
 				w := buildKeepWiring(mock, nil)
 				server := withKeep(mustNewServer(mock, nil, nil), w)
-				resp, err = server.ListMySubscriptions(ctx, &apiv1.ListMySubscriptionsRequest{
+				resp, err = server.ListMyBindings(ctx, &apiv1.ListMyBindingsRequest{
 					ConnectorKind: apiv1.ConnectorKind_CONNECTOR_KIND_GOOGLE_KEEP,
 				})
 			})
@@ -532,27 +532,27 @@ var _ = Describe("ConnectorService handlers (GOOGLE_KEEP)", func() {
 			})
 
 			It("should return one subscription", func() {
-				Expect(resp.GetSubscriptions()).To(HaveLen(1))
+				Expect(resp.GetBindings()).To(HaveLen(1))
 			})
 
 			It("should return the correct page and list_name", func() {
-				s := resp.GetSubscriptions()[0]
+				s := resp.GetBindings()[0]
 				Expect(s.GetPage()).To(Equal(keepTestPage))
 				Expect(s.GetListName()).To(Equal(keepTestListName))
 			})
 
 			It("should populate the remote_list_handle from the Keep ServerID", func() {
-				Expect(resp.GetSubscriptions()[0].GetRemoteListHandle()).To(Equal(keepTestRemoteHandle))
+				Expect(resp.GetBindings()[0].GetRemoteListHandle()).To(Equal(keepTestRemoteHandle))
 			})
 
 			It("should set GOOGLE_KEEP as the connector_kind on the subscription", func() {
-				Expect(resp.GetSubscriptions()[0].GetConnectorKind()).To(Equal(apiv1.ConnectorKind_CONNECTOR_KIND_GOOGLE_KEEP))
+				Expect(resp.GetBindings()[0].GetConnectorKind()).To(Equal(apiv1.ConnectorKind_CONNECTOR_KIND_GOOGLE_KEEP))
 			})
 		})
 
 		Describe("when the user has no bindings", func() {
 			var (
-				resp *apiv1.ListMySubscriptionsResponse
+				resp *apiv1.ListMyBindingsResponse
 				err  error
 			)
 
@@ -560,7 +560,7 @@ var _ = Describe("ConnectorService handlers (GOOGLE_KEEP)", func() {
 				mock := connectedKeepProfileMock(profileID)
 				w := buildKeepWiring(mock, nil)
 				server := withKeep(mustNewServer(mock, nil, nil), w)
-				resp, err = server.ListMySubscriptions(ctx, &apiv1.ListMySubscriptionsRequest{
+				resp, err = server.ListMyBindings(ctx, &apiv1.ListMyBindingsRequest{
 					ConnectorKind: apiv1.ConnectorKind_CONNECTOR_KIND_GOOGLE_KEEP,
 				})
 			})
@@ -570,7 +570,7 @@ var _ = Describe("ConnectorService handlers (GOOGLE_KEEP)", func() {
 			})
 
 			It("should return zero subscriptions", func() {
-				Expect(resp.GetSubscriptions()).To(BeEmpty())
+				Expect(resp.GetBindings()).To(BeEmpty())
 			})
 		})
 	})
@@ -639,7 +639,7 @@ var _ = Describe("ConnectorService handlers (GOOGLE_KEEP)", func() {
 	Describe("Subscribe", func() {
 		Describe("when called with empty remote_list_handle (Bind to a new Keep note)", func() {
 			var (
-				resp   *apiv1.SubscribeResponse
+				resp   *apiv1.BindResponse
 				err    error
 				client *fakeKeepClient
 			)
@@ -649,7 +649,7 @@ var _ = Describe("ConnectorService handlers (GOOGLE_KEEP)", func() {
 				client = &fakeKeepClient{}
 				w := buildKeepWiring(mock, client)
 				server := withKeep(mustNewServer(mock, nil, nil), w)
-				resp, err = server.Subscribe(ctx, &apiv1.SubscribeRequest{
+				resp, err = server.Bind(ctx, &apiv1.BindRequest{
 					ConnectorKind:    apiv1.ConnectorKind_CONNECTOR_KIND_GOOGLE_KEEP,
 					Page:             keepTestPage,
 					ListName:         keepTestListName,
@@ -666,7 +666,7 @@ var _ = Describe("ConnectorService handlers (GOOGLE_KEEP)", func() {
 			})
 
 			It("should bind to the freshly-created Keep note's ServerID", func() {
-				Expect(resp.GetSubscription().GetRemoteListHandle()).To(Equal("created-" + keepTestListName))
+				Expect(resp.GetBinding().GetRemoteListHandle()).To(Equal("created-" + keepTestListName))
 			})
 		})
 
@@ -677,7 +677,7 @@ var _ = Describe("ConnectorService handlers (GOOGLE_KEEP)", func() {
 				mock := connectedKeepProfileMock(profileID)
 				w := buildKeepWiring(mock, nil)
 				server := withKeep(mustNewServer(mock, nil, nil), w)
-				_, err = server.Subscribe(ctx, &apiv1.SubscribeRequest{
+				_, err = server.Bind(ctx, &apiv1.BindRequest{
 					ConnectorKind:    apiv1.ConnectorKind_CONNECTOR_KIND_GOOGLE_KEEP,
 					Page:             "",
 					ListName:         keepTestListName,
@@ -692,7 +692,7 @@ var _ = Describe("ConnectorService handlers (GOOGLE_KEEP)", func() {
 
 		Describe("when subscribing to an existing Keep LIST node", func() {
 			var (
-				resp *apiv1.SubscribeResponse
+				resp *apiv1.BindResponse
 				err  error
 			)
 
@@ -705,7 +705,7 @@ var _ = Describe("ConnectorService handlers (GOOGLE_KEEP)", func() {
 				}
 				w := buildKeepWiring(mock, client)
 				server := withKeep(mustNewServer(mock, nil, nil), w)
-				resp, err = server.Subscribe(ctx, &apiv1.SubscribeRequest{
+				resp, err = server.Bind(ctx, &apiv1.BindRequest{
 					ConnectorKind:    apiv1.ConnectorKind_CONNECTOR_KIND_GOOGLE_KEEP,
 					Page:             keepTestPage,
 					ListName:         keepTestListName,
@@ -718,19 +718,19 @@ var _ = Describe("ConnectorService handlers (GOOGLE_KEEP)", func() {
 			})
 
 			It("should return the persisted subscription", func() {
-				Expect(resp.GetSubscription()).ToNot(BeNil())
+				Expect(resp.GetBinding()).ToNot(BeNil())
 			})
 
 			It("should populate page", func() {
-				Expect(resp.GetSubscription().GetPage()).To(Equal(keepTestPage))
+				Expect(resp.GetBinding().GetPage()).To(Equal(keepTestPage))
 			})
 
 			It("should populate list_name", func() {
-				Expect(resp.GetSubscription().GetListName()).To(Equal(keepTestListName))
+				Expect(resp.GetBinding().GetListName()).To(Equal(keepTestListName))
 			})
 
 			It("should populate remote_list_handle", func() {
-				Expect(resp.GetSubscription().GetRemoteListHandle()).To(Equal(keepTestRemoteHandle))
+				Expect(resp.GetBinding().GetRemoteListHandle()).To(Equal(keepTestRemoteHandle))
 			})
 		})
 
@@ -747,7 +747,7 @@ var _ = Describe("ConnectorService handlers (GOOGLE_KEEP)", func() {
 				}
 				w := buildKeepWiring(mock, client)
 				server := withKeep(mustNewServer(mock, nil, nil), w)
-				_, err = server.Subscribe(ctx, &apiv1.SubscribeRequest{
+				_, err = server.Bind(ctx, &apiv1.BindRequest{
 					ConnectorKind:    apiv1.ConnectorKind_CONNECTOR_KIND_GOOGLE_KEEP,
 					Page:             keepTestPage,
 					ListName:         keepTestListName,
@@ -767,7 +767,7 @@ var _ = Describe("ConnectorService handlers (GOOGLE_KEEP)", func() {
 				mock := &MockPageReaderMutator{}
 				w := buildKeepWiring(mock, nil)
 				server := withKeep(mustNewServer(mock, nil, nil), w)
-				_, err = server.Subscribe(ctx, &apiv1.SubscribeRequest{
+				_, err = server.Bind(ctx, &apiv1.BindRequest{
 					ConnectorKind:    apiv1.ConnectorKind_CONNECTOR_KIND_GOOGLE_KEEP,
 					Page:             keepTestPage,
 					ListName:         keepTestListName,
@@ -791,7 +791,7 @@ var _ = Describe("ConnectorService handlers (GOOGLE_KEEP)", func() {
 				mock := connectedKeepProfileMockWithBinding(profileID, keepTestPage, keepTestListName, keepTestRemoteHandle)
 				w := buildKeepWiring(mock, nil)
 				server := withKeep(mustNewServer(mock, nil, nil), w)
-				_, err = server.Unsubscribe(ctx, &apiv1.UnsubscribeRequest{
+				_, err = server.Unbind(ctx, &apiv1.UnbindRequest{
 					ConnectorKind: apiv1.ConnectorKind_CONNECTOR_KIND_GOOGLE_KEEP,
 					Page:          keepTestPage,
 					ListName:      keepTestListName,
@@ -810,7 +810,7 @@ var _ = Describe("ConnectorService handlers (GOOGLE_KEEP)", func() {
 				mock := connectedKeepProfileMock(profileID)
 				w := buildKeepWiring(mock, nil)
 				server := withKeep(mustNewServer(mock, nil, nil), w)
-				_, err = server.Unsubscribe(ctx, &apiv1.UnsubscribeRequest{
+				_, err = server.Unbind(ctx, &apiv1.UnbindRequest{
 					ConnectorKind: apiv1.ConnectorKind_CONNECTOR_KIND_GOOGLE_KEEP,
 					Page:          "no-such-page",
 					ListName:      "no-such-list",
@@ -818,7 +818,7 @@ var _ = Describe("ConnectorService handlers (GOOGLE_KEEP)", func() {
 			})
 
 			It("should return NotFound", func() {
-				Expect(err).To(HaveGrpcStatusWithSubstr(codes.NotFound, "subscription_not_found"))
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.NotFound, "binding_not_found"))
 			})
 		})
 	})
@@ -875,12 +875,12 @@ var _ = Describe("ConnectorService handlers (GOOGLE_KEEP)", func() {
 		})
 	})
 
-	// ---------------------------------------------------------- GetChecklistSubscriptionState (Keep)
+	// ---------------------------------------------------------- GetChecklistBindingState (Keep)
 
-	Describe("GetChecklistSubscriptionState", func() {
+	Describe("GetChecklistBindingState", func() {
 		Describe("when only the Keep connector is wired and the user has a Keep binding", func() {
 			var (
-				resp *apiv1.GetChecklistSubscriptionStateResponse
+				resp *apiv1.GetChecklistBindingStateResponse
 				err  error
 			)
 
@@ -888,7 +888,7 @@ var _ = Describe("ConnectorService handlers (GOOGLE_KEEP)", func() {
 				mock := connectedKeepProfileMockWithBinding(profileID, keepTestPage, keepTestListName, keepTestRemoteHandle)
 				w := buildKeepWiring(mock, nil)
 				server := withKeep(mustNewServer(mock, nil, nil), w)
-				resp, err = server.GetChecklistSubscriptionState(ctx, &apiv1.GetChecklistSubscriptionStateRequest{
+				resp, err = server.GetChecklistBindingState(ctx, &apiv1.GetChecklistBindingStateRequest{
 					Page:     keepTestPage,
 					ListName: keepTestListName,
 				})
@@ -903,12 +903,12 @@ var _ = Describe("ConnectorService handlers (GOOGLE_KEEP)", func() {
 			})
 
 			It("should return a current_subscription with the Keep remote_list_handle", func() {
-				Expect(resp.GetState().GetCurrentSubscription()).ToNot(BeNil())
-				Expect(resp.GetState().GetCurrentSubscription().GetRemoteListHandle()).To(Equal(keepTestRemoteHandle))
+				Expect(resp.GetState().GetCurrentBinding()).ToNot(BeNil())
+				Expect(resp.GetState().GetCurrentBinding().GetRemoteListHandle()).To(Equal(keepTestRemoteHandle))
 			})
 
 			It("should set GOOGLE_KEEP as the connector_kind on the current_subscription", func() {
-				Expect(resp.GetState().GetCurrentSubscription().GetConnectorKind()).To(Equal(apiv1.ConnectorKind_CONNECTOR_KIND_GOOGLE_KEEP))
+				Expect(resp.GetState().GetCurrentBinding().GetConnectorKind()).To(Equal(apiv1.ConnectorKind_CONNECTOR_KIND_GOOGLE_KEEP))
 			})
 		})
 	})

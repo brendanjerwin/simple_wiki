@@ -7,7 +7,7 @@ import {
   ConnectorKind,
   ConnectorStateSchema,
   GetStateResponseSchema,
-  SubscriptionStateSchema,
+  BindingStateSchema,
 } from '../gen/api/v1/connector_service_pb.js';
 
 interface BannerClient {
@@ -25,7 +25,7 @@ function timeout(ms: number, message: string): Promise<never> {
   );
 }
 
-// pausedSub builds a minimal SubscriptionState marked paused, suitable
+// pausedSub builds a minimal BindingState marked paused, suitable
 // for stubbing GetState responses. Most fields aren't load-bearing for
 // banner-rendering tests; we keep the shape minimal so the test reads
 // as "this connector has a paused sub" rather than "this connector has
@@ -35,7 +35,7 @@ function pausedSub(
   page = 'shopping_lists.this_week',
   listName = 'shopping',
 ) {
-  return create(SubscriptionStateSchema, {
+  return create(BindingStateSchema, {
     page,
     listName,
     paused: true,
@@ -49,7 +49,7 @@ function activeSub(
   page = 'shopping_lists.this_week',
   listName = 'shopping',
 ) {
-  return create(SubscriptionStateSchema, {
+  return create(BindingStateSchema, {
     page,
     listName,
     paused: false,
@@ -60,7 +60,7 @@ function activeSub(
 
 function stateResponse(
   kind: ConnectorKind,
-  subscriptions: ReturnType<typeof create>[],
+  bindings: ReturnType<typeof create>[],
 ) {
   return create(GetStateResponseSchema, {
     state: create(ConnectorStateSchema, {
@@ -68,7 +68,7 @@ function stateResponse(
       email: 'user@example.com',
       connectorKind: kind,
       // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-explicit-any
-      subscriptions: subscriptions as any,
+      bindings: bindings as any,
     }),
   });
 }

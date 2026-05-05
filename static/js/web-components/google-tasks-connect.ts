@@ -38,11 +38,11 @@ import {
   GetStateRequestSchema,
   BeginAuthRequestSchema,
   DisconnectRequestSchema,
-  UnsubscribeRequestSchema,
+  UnbindRequestSchema,
 } from '../gen/api/v1/connector_service_pb.js';
 import type {
   ConnectorState,
-  SubscriptionState,
+  BindingState,
 } from '../gen/api/v1/connector_service_pb.js';
 import {
   foundationCSS,
@@ -195,10 +195,10 @@ export class GoogleTasksConnect extends LitElement {
   // per-subscription remove control on <keep-connect>; the binding row
   // is rendered with a <confirmation-interlock-button> so this only
   // runs after the user confirms.
-  private async handleUnbind(subscription: SubscriptionState): Promise<void> {
+  private async handleUnbind(subscription: BindingState): Promise<void> {
     try {
-      await this.client.unsubscribe(
-        create(UnsubscribeRequestSchema, {
+      await this.client.unbind(
+        create(UnbindRequestSchema, {
           connectorKind: ConnectorKind.GOOGLE_TASKS,
           page: subscription.page,
           listName: subscription.listName,
@@ -315,7 +315,7 @@ export class GoogleTasksConnect extends LitElement {
       <p>${identityLine}</p>
       ${this.renderReconnectBannerIfPaused()}
       <h4>Bindings</h4>
-      ${this.renderSubscriptions()}
+      ${this.renderBindings()}
       <p>
         <confirmation-interlock-button
           label="Disconnect Google Tasks"
@@ -335,7 +335,7 @@ export class GoogleTasksConnect extends LitElement {
   // simultaneously. We surface that as a single connector-level banner
   // rather than a per-row mention.
   private get hasPausedSubscriptions(): boolean {
-    return this.state?.subscriptions?.some((s) => s.paused) ?? false;
+    return this.state?.bindings?.some((s) => s.paused) ?? false;
   }
 
   // renderReconnectBannerIfPaused shows a prominent CTA + plain-language
@@ -375,11 +375,11 @@ export class GoogleTasksConnect extends LitElement {
   }
 
   // Render the per-binding rows. Mirror of <keep-connect>'s
-  // renderSubscriptions, but uses the Tasks-specific noun ("Tasks list")
+  // renderBindings, but uses the Tasks-specific noun ("Tasks list")
   // so the row reads "Bound to Google Tasks list <title>" — matching
-  // the vocabulary established by <connector-subscribe-button>.
-  private renderSubscriptions() {
-    const subscriptions = this.state?.subscriptions ?? [];
+  // the vocabulary established by <connector-bind-button>.
+  private renderBindings() {
+    const subscriptions = this.state?.bindings ?? [];
     if (subscriptions.length === 0) {
       return html`<p class="muted">
         No checklists bound yet. Open a checklist page and click

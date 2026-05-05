@@ -160,7 +160,7 @@ func setupGoogleKeep(
 	// forwards to the engine debouncer's OnChecklistMutated; on
 	// debounceWindow expiry the engine fires Sync via the SyncFunc.
 	syncFn := func(ctx context.Context, key engine.SyncDebouncerKey) error {
-		return keepEngine.Sync(ctx, connectors.SubscriptionKey{
+		return keepEngine.Sync(ctx, connectors.BindingKey{
 			ProfileID: key.ProfileID,
 			Page:      key.Page,
 			ListName:  key.ListName,
@@ -178,8 +178,8 @@ func setupGoogleKeep(
 	bridge.attachDebouncer(debouncer)
 	checklistMutator.AddSubscriber(bridge)
 
-	keepSubscriptionLister := func() []connectors.SubscriptionKey {
-		out := make([]connectors.SubscriptionKey, 0, 8)
+	keepSubscriptionLister := func() []connectors.BindingKey {
+		out := make([]connectors.BindingKey, 0, 8)
 		// Probe by master_token (the canonical "is connected?" leaf).
 		// Mirrors the Tasks lister's refresh_token probe.
 		for _, p := range site.FrontmatterIndexQueryer.QueryKeyExistence("wiki.connectors.google_keep.master_token") {
@@ -188,7 +188,7 @@ func setupGoogleKeep(
 				continue
 			}
 			for _, b := range bindings {
-				out = append(out, connectors.SubscriptionKey{
+				out = append(out, connectors.BindingKey{
 					ProfileID: string(p),
 					Page:      b.Page,
 					ListName:  b.ListName,
@@ -201,7 +201,7 @@ func setupGoogleKeep(
 	if regErr := syncScheduler.Register(
 		keepEngine,
 		keepSubscriptionLister,
-		func(c connectors.Connector, key connectors.SubscriptionKey) jobs.Job {
+		func(c connectors.Connector, key connectors.BindingKey) jobs.Job {
 			return &engineSyncJob{connector: c, key: key, queueName: keepOutboundSyncJobName}
 		},
 	); regErr != nil {
@@ -313,9 +313,9 @@ type keepFannedOutPausedChecker struct {
 	index    frontmatterKeyQueryer
 }
 
-// IsAnyChecklistSubscriptionPaused fans out the per-profile pause
+// IsAnyChecklistBindingPaused fans out the per-profile pause
 // check.
-func (c *keepFannedOutPausedChecker) IsAnyChecklistSubscriptionPaused(page, listName string) bool {
+func (c *keepFannedOutPausedChecker) IsAnyChecklistBindingPaused(page, listName string) bool {
 	for _, profileID := range c.index.QueryKeyExistence("wiki.connectors.google_keep.master_token") {
 		bindings, err := c.bindings.LoadBindings(profileID, connectors.ConnectorKindGoogleKeep)
 		if err != nil {

@@ -15,15 +15,15 @@ type SchedulerLogger interface {
 	Error(format string, args ...any)
 }
 
-// SubscriptionLister returns the set of subscriptions a connector is
+// BindingLister returns the set of subscriptions a connector is
 // currently responsible for. Called fresh on every tick so changes
 // to on-disk subscription state (including subscriptions added since
 // process start) are picked up without a process restart.
 //
-// One SubscriptionLister is registered per ConnectorKind — the
+// One BindingLister is registered per ConnectorKind — the
 // SyncScheduler walks all listers on each tick and dispatches a
 // per-subscription sync job through the Connector's Sync method.
-type SubscriptionLister func() []SubscriptionKey
+type BindingLister func() []BindingKey
 
 // JobEnqueuer is the subset of jobs.JobCoordinator the scheduler uses.
 // Stated as an interface so tests can substitute a fake.
@@ -34,7 +34,7 @@ type JobEnqueuer interface {
 // SyncScheduler is the unified cron-tick job that fires across every
 // registered connector. One scheduler instance is registered with
 // the wiki's CronScheduler at the 30s cadence; on each tick it walks
-// each connector's SubscriptionLister and enqueues a per-subscription
+// each connector's BindingLister and enqueues a per-subscription
 // sync job via the connector's per-kind queue.
 //
 // Per-connector rate-limit choke (skip-this-tick) is the connector's
@@ -44,7 +44,7 @@ type SyncScheduler struct {
 	enqueuer JobEnqueuer
 	logger   SchedulerLogger
 
-	// connectors maps each registered backend to its SubscriptionLister.
+	// connectors maps each registered backend to its BindingLister.
 	// Lookup is by ConnectorKind so the scheduler can route per-tick
 	// metric attribution and per-kind queue selection without hardcoding
 	// the set.
@@ -53,8 +53,8 @@ type SyncScheduler struct {
 
 type connectorEntry struct {
 	connector Connector
-	lister    SubscriptionLister
-	jobMaker  func(c Connector, key SubscriptionKey) jobs.Job
+	lister    BindingLister
+	jobMaker  func(c Connector, key BindingKey) jobs.Job
 }
 
 // NewSyncScheduler constructs an empty scheduler. Connectors register
@@ -82,12 +82,12 @@ func NewSyncScheduler(enqueuer JobEnqueuer, logger SchedulerLogger) (*SyncSchedu
 // Registering the same kind twice replaces the previous entry. This
 // matches the bootstrap reality where there is exactly one Connector
 // per kind per process.
-func (s *SyncScheduler) Register(c Connector, lister SubscriptionLister, jobMaker func(Connector, SubscriptionKey) jobs.Job) error {
+func (s *SyncScheduler) Register(c Connector, lister BindingLister, jobMaker func(Connector, BindingKey) jobs.Job) error {
 	if c == nil {
 		return errors.New("connectors: Register requires a non-nil Connector")
 	}
 	if lister == nil {
-		return errors.New("connectors: Register requires a non-nil SubscriptionLister")
+		return errors.New("connectors: Register requires a non-nil BindingLister")
 	}
 	if jobMaker == nil {
 		return errors.New("connectors: Register requires a non-nil job maker")
