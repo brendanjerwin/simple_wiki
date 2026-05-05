@@ -424,6 +424,130 @@ var _ = Describe("ConnectorsSubscriptionsToBindingsMigrationJob", func() {
 		})
 	})
 
+	When("a binding has empty item_id_map but non-empty push_failures (stuck state)", func() {
+		// Repair pass: profiles migrated by the BUGGY migration (the
+		// pre-fix Phase 7 code) ended up with bindings[] entries whose
+		// item_id_map was emptied (engine's readItemIDMap silently dropped
+		// structured legacy entries because they weren't strings, then
+		// writeItemIDMap clobbered the AdapterState). Items got dead-
+		// lettered (push_failures.count=10) and won't retry — even with
+		// the fixed Insert-recovery deployed, shouldSkipPush returns true
+		// for count >= deadLetterThreshold.
+		//
+		// The migration must clear push_failures on any binding in this
+		// stuck state so the engine retries. With Insert-recovery, the
+		// first attempt's stage3-500 triggers RebuildAdapterState and
+		// the binding self-heals.
+		BeforeEach(func() {
+			store = newFakeReaderMutator(map[string]wikipage.FrontMatter{
+				"profile_frank": {
+					"identifier": "profile_frank",
+					"wiki": map[string]any{
+						"connectors": map[string]any{
+							"google_keep": map[string]any{
+								"bindings": []any{
+									map[string]any{
+										"page":          "shopping",
+										"list_name":     "groceries",
+										"remote_handle": "keep-note-1",
+										"adapter_state": map[string]any{
+											"item_id_map": map[string]any{},
+											"push_failures": map[string]any{
+												"uid-A": map[string]any{
+													"count":           int64(10),
+													"next_attempt_at": "2026-05-05T15:34:38Z",
+												},
+												"uid-B": map[string]any{
+													"count":           int64(10),
+													"next_attempt_at": "2026-05-05T15:34:38Z",
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			})
+			job = eager.NewConnectorsSubscriptionsToBindingsMigrationJob(store, "profile_frank")
+			Expect(job.Execute()).To(Succeed())
+		})
+
+		It("should clear push_failures on the stuck binding", func() {
+			keep := connectorSubtreeFM(store.pages["profile_frank"], "google_keep")
+			bindings := asAnySlice(keep["bindings"])
+			entry := asMap(bindings[0])
+			adapterState := asMap(entry["adapter_state"])
+			pushFailures, present := adapterState["push_failures"]
+			if present {
+				Expect(asMap(pushFailures)).To(BeEmpty())
+			}
+		})
+
+		It("should preserve other adapter_state keys", func() {
+			keep := connectorSubtreeFM(store.pages["profile_frank"], "google_keep")
+			bindings := asAnySlice(keep["bindings"])
+			entry := asMap(bindings[0])
+			adapterState := asMap(entry["adapter_state"])
+			Expect(adapterState).To(HaveKey("item_id_map"))
+		})
+
+		It("should write the page (page changed)", func() {
+			Expect(store.writeCount).To(BeNumerically(">=", 1))
+		})
+	})
+
+	When("a binding has populated item_id_map AND push_failures (NOT stuck)", func() {
+		// Negative case: a binding with both item_id_map AND push_failures
+		// is in normal failure-handling territory, not the stuck state.
+		// The migration must NOT clear push_failures here — that would
+		// reset legitimate backoff state.
+		BeforeEach(func() {
+			store = newFakeReaderMutator(map[string]wikipage.FrontMatter{
+				"profile_grace": {
+					"identifier": "profile_grace",
+					"wiki": map[string]any{
+						"connectors": map[string]any{
+							"google_keep": map[string]any{
+								"bindings": []any{
+									map[string]any{
+										"page":          "shopping",
+										"list_name":     "groceries",
+										"remote_handle": "keep-note-1",
+										"adapter_state": map[string]any{
+											"item_id_map": map[string]any{"uid-X": "server-X"},
+											"push_failures": map[string]any{
+												"uid-X": map[string]any{
+													"count": int64(2),
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			})
+			job = eager.NewConnectorsSubscriptionsToBindingsMigrationJob(store, "profile_grace")
+			Expect(job.Execute()).To(Succeed())
+		})
+
+		It("should preserve push_failures (not stuck state)", func() {
+			keep := connectorSubtreeFM(store.pages["profile_grace"], "google_keep")
+			bindings := asAnySlice(keep["bindings"])
+			entry := asMap(bindings[0])
+			adapterState := asMap(entry["adapter_state"])
+			pushFailures := asMap(adapterState["push_failures"])
+			Expect(pushFailures).To(HaveKey("uid-X"))
+		})
+
+		It("should not write the page (no change)", func() {
+			Expect(store.writeCount).To(Equal(0))
+		})
+	})
+
 	When("the page has no connectors at all", func() {
 		BeforeEach(func() {
 			store = newFakeReaderMutator(map[string]wikipage.FrontMatter{

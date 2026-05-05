@@ -199,14 +199,22 @@ func (j *ConnectorsSubscriptionsToBindingsMigrationJob) Execute() error {
 	return nil
 }
 
-// pageNeedsConnectorsMigration reports whether the page has any
-// connector kind whose subtree still carries a subscriptions[] key
-// (regardless of whether bindings[] is also present). The migration
-// rewrites the legacy key in either case — the new shape wins and
-// the legacy key is deleted.
+// pageNeedsConnectorsMigration reports whether the page needs the
+// connectors migration to run. Triggers in two cases:
 //
-// A page with only the new shape (bindings[]) is skipped — the
-// rewrite is a no-op for it.
+//  1. Legacy shape: the page has a subscriptions[] key on any kind.
+//     The migration translates it to bindings[].
+//
+//  2. Stuck state: the page has bindings[] entries with empty
+//     item_id_map but non-empty push_failures. This is the corrupted
+//     state left by the pre-fix Phase 7 migration (engine's
+//     readItemIDMap silently dropped structured legacy entries; the
+//     subsequent writeItemIDMap clobbered the AdapterState; items
+//     dead-lettered with no recovery path). The migration clears
+//     push_failures so the engine retries — combined with the engine's
+//     Insert-recovery, the binding self-heals on the first 500.
+//
+// A page in neither shape is skipped — the rewrite is a no-op for it.
 func pageNeedsConnectorsMigration(fm map[string]any) bool {
 	if fm == nil {
 		return false
@@ -227,9 +235,54 @@ func pageNeedsConnectorsMigration(fm map[string]any) bool {
 		if _, hasLegacy := kindMap[connectorsKeySubscriptions]; hasLegacy {
 			return true
 		}
+		if hasStuckBindings(kindMap[connectorsKeyBindings]) {
+			return true
+		}
 	}
 	return false
 }
+
+// hasStuckBindings reports whether the bindings[] slice contains any
+// entry in the stuck state — empty item_id_map AND non-empty
+// push_failures. See pageNeedsConnectorsMigration's docstring for
+// context.
+func hasStuckBindings(bindingsRaw any) bool {
+	bindings, ok := bindingsRaw.([]any)
+	if !ok {
+		return false
+	}
+	for _, entry := range bindings {
+		m, ok := entry.(map[string]any)
+		if !ok {
+			continue
+		}
+		if isStuckBinding(m) {
+			return true
+		}
+	}
+	return false
+}
+
+// isStuckBinding reports whether one binding entry is in the stuck
+// state (empty item_id_map AND non-empty push_failures). See
+// pageNeedsConnectorsMigration's docstring for context.
+func isStuckBinding(entry map[string]any) bool {
+	adapterState, ok := entry[connectorsKeyAdapterState].(map[string]any)
+	if !ok {
+		return false
+	}
+	idMap, _ := adapterState[keepLegacyKeyItemIDMap].(map[string]any)
+	if len(idMap) > 0 {
+		return false
+	}
+	failures, ok := adapterState[adapterStateKeyPushFailures].(map[string]any)
+	if !ok {
+		return false
+	}
+	return len(failures) > 0
+}
+
+const adapterStateKeyPushFailures = "push_failures"
 
 // extractConnectorsMigrationFrontmatter pulls just the frontmatter from
 // a .md file. Mirrors the helpers in the sibling migrations.
@@ -291,25 +344,27 @@ func rewriteConnectorsSubscriptions(fm map[string]any) bool {
 		if !ok {
 			continue
 		}
-		legacyRaw, hasLegacy := kindMap[connectorsKeySubscriptions]
-		if !hasLegacy {
-			continue
-		}
 
-		// New-shape data wins on conflict; legacy is dropped without
-		// being translated.
-		if _, hasNew := kindMap[connectorsKeyBindings]; !hasNew {
-			translated := translateLegacyEntries(kindName, legacyRaw)
-			// Empty legacy array → no bindings[] written at all (the
-			// connector subtree is left without either key, which is
-			// the same shape a never-bound profile carries).
-			if len(translated) > 0 {
-				kindMap[connectorsKeyBindings] = translated
+		if legacyRaw, hasLegacy := kindMap[connectorsKeySubscriptions]; hasLegacy {
+			// New-shape data wins on conflict; legacy is dropped without
+			// being translated.
+			if _, hasNew := kindMap[connectorsKeyBindings]; !hasNew {
+				translated := translateLegacyEntries(kindName, legacyRaw)
+				// Empty legacy array → no bindings[] written at all (the
+				// connector subtree is left without either key, which is
+				// the same shape a never-bound profile carries).
+				if len(translated) > 0 {
+					kindMap[connectorsKeyBindings] = translated
+				}
 			}
+			delete(kindMap, connectorsKeySubscriptions)
+			changed = true
 		}
 
-		delete(kindMap, connectorsKeySubscriptions)
-		changed = true
+		// Repair pass for already-migrated profiles in the stuck state.
+		if repairStuckBindings(kindMap[connectorsKeyBindings]) {
+			changed = true
+		}
 	}
 	return changed
 }
@@ -503,6 +558,34 @@ func decodeKeepLegacyItemEntry(raw any) (string, map[string]any) {
 // synced_items is dead weight on the profile frontmatter.
 func cleanTasksAdapterState(adapterState map[string]any) {
 	delete(adapterState, tasksLegacyKeySyncedItems)
+}
+
+// repairStuckBindings clears push_failures on any binding entry in the
+// stuck state (empty item_id_map AND non-empty push_failures). Returns
+// true when at least one entry was repaired. See
+// pageNeedsConnectorsMigration for the broader context.
+func repairStuckBindings(bindingsRaw any) bool {
+	bindings, ok := bindingsRaw.([]any)
+	if !ok {
+		return false
+	}
+	repaired := false
+	for _, entry := range bindings {
+		m, ok := entry.(map[string]any)
+		if !ok {
+			continue
+		}
+		if !isStuckBinding(m) {
+			continue
+		}
+		adapterState, ok := m[connectorsKeyAdapterState].(map[string]any)
+		if !ok {
+			continue
+		}
+		delete(adapterState, adapterStateKeyPushFailures)
+		repaired = true
+	}
+	return repaired
 }
 
 // copyIfPresent is a small helper that copies key from src to dst
