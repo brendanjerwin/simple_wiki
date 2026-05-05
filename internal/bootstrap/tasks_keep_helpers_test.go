@@ -3,6 +3,7 @@ package bootstrap
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/jcelliott/lumber"
@@ -534,6 +535,91 @@ var _ = Describe("pauseAllKeepBindings", func() {
 				}
 			}
 			Expect(paused).To(BeTrue())
+		})
+	})
+})
+
+var _ = Describe("pauseAllKeepBindings — error paths", func() {
+	When("store.LoadBindings returns an error", func() {
+		var (
+			fbs       *enginetesting.FakeBindingStore
+			eng       *engine.Engine
+			pauseErr  error
+			profileID = wikipage.PageIdentifier("profile_keeperr_abc12345")
+		)
+
+		BeforeEach(func() {
+			fbs = enginetesting.NewFakeBindingStore()
+			leaseTable := connectors.NewLeaseTable()
+			fa := &enginetesting.FakeAdapter{ConnectorKind: connectors.ConnectorKindGoogleKeep}
+			eng = buildEngine(fa, leaseTable, fbs)
+
+			fbs.SetLoadBindingsError(errors.New("disk read error"))
+			pauseErr = pauseAllKeepBindings(context.Background(), eng, fbs, profileID, "auth_failed")
+		})
+
+		It("should return the load error", func() {
+			Expect(pauseErr).To(MatchError(ContainSubstring("load bindings")))
+		})
+	})
+
+	When("engine.TransitionToPaused returns an error for an active binding", func() {
+		var (
+			fbs       *enginetesting.FakeBindingStore
+			eng       *engine.Engine
+			pauseErr  error
+			profileID = wikipage.PageIdentifier("profile_keeperr2_abc12345")
+			pageName  = "errpage"
+			listName  = "ErrList"
+		)
+
+		BeforeEach(func() {
+			fbs = enginetesting.NewFakeBindingStore()
+			leaseTable := connectors.NewLeaseTable()
+
+			fbs.SeedBinding(connectors.Binding{
+				ProfileID: profileID,
+				Page:      pageName,
+				ListName:  listName,
+				State:     connectors.BindingStateActive,
+			}, connectors.ConnectorKindGoogleKeep)
+
+			// Queue a SaveBinding error so TransitionToPaused fails.
+			fbs.SetSaveBindingError(errors.New("save failed"))
+
+			fa := &enginetesting.FakeAdapter{ConnectorKind: connectors.ConnectorKindGoogleKeep}
+			eng = buildEngine(fa, leaseTable, fbs)
+
+			pauseErr = pauseAllKeepBindings(context.Background(), eng, fbs, profileID, "auth_failed")
+		})
+
+		It("should return the first error from TransitionToPaused", func() {
+			Expect(pauseErr).To(HaveOccurred())
+		})
+	})
+})
+
+var _ = Describe("resumeAllKeepBindings — error paths", func() {
+	When("store.LoadBindings returns an error", func() {
+		var (
+			fbs       *enginetesting.FakeBindingStore
+			eng       *engine.Engine
+			resumeErr error
+			profileID = wikipage.PageIdentifier("profile_keeperr3_abc12345")
+		)
+
+		BeforeEach(func() {
+			fbs = enginetesting.NewFakeBindingStore()
+			leaseTable := connectors.NewLeaseTable()
+			fa := &enginetesting.FakeAdapter{ConnectorKind: connectors.ConnectorKindGoogleKeep}
+			eng = buildEngine(fa, leaseTable, fbs)
+
+			fbs.SetLoadBindingsError(errors.New("disk read error"))
+			resumeErr = resumeAllKeepBindings(context.Background(), eng, fbs, profileID)
+		})
+
+		It("should return the load error", func() {
+			Expect(resumeErr).To(MatchError(ContainSubstring("load bindings")))
 		})
 	})
 })

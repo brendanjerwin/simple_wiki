@@ -303,6 +303,43 @@ var _ = Describe("keepMutatorBridge", func() {
 				advanceToFireDebounce(fc)
 				Expect(capturedKey).To(Equal(zeroDebouncerKey))
 			})
+
+			It("should route after Unsuppress clears the refcount", func() {
+				var capturedKey engine.SyncDebouncerKey
+				debouncer, fc := buildDebouncerWithCapture(&capturedKey)
+				bridge.attachDebouncer(debouncer)
+
+				profileID, _ := wikipage.ProfileIdentifierFor("bob@example.com")
+				bridge.Suppress(profileID, "notes", "Todo")
+				bridge.Suppress(profileID, "notes", "Todo") // refcount = 2
+
+				bridge.Unsuppress(profileID, "notes", "Todo") // refcount = 1 — still suppressed
+				bridge.OnChecklistMutated("notes", "Todo", &stubIdentity{login: "bob@example.com"})
+				advanceToFireDebounce(fc)
+				Expect(capturedKey).To(Equal(zeroDebouncerKey))
+
+				bridge.Unsuppress(profileID, "notes", "Todo") // refcount = 0 — now clear
+
+				capturedKey = zeroDebouncerKey
+				bridge.OnChecklistMutated("notes", "Todo", &stubIdentity{login: "bob@example.com"})
+				advanceToFireDebounce(fc)
+				Expect(capturedKey.Page).To(Equal("notes"))
+			})
+		})
+
+		When("identity has a login with no alphanumeric characters", func() {
+			It("should not route to debouncer and not panic", func() {
+				var capturedKey engine.SyncDebouncerKey
+				debouncer, fc := buildDebouncerWithCapture(&capturedKey)
+				bridge.attachDebouncer(debouncer)
+
+				Expect(func() {
+					bridge.OnChecklistMutated("notes", "Todo", &stubIdentity{login: "@@@"})
+				}).NotTo(Panic())
+
+				advanceToFireDebounce(fc)
+				Expect(capturedKey).To(Equal(zeroDebouncerKey))
+			})
 		})
 	})
 })
