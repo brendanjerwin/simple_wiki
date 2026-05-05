@@ -245,6 +245,24 @@ type RemoteItem struct {
 	Deleted  bool
 	Position string         // backend-specific ordering hint; translator decides
 	Vendor   map[string]any // adapter-internal extra fields, opaque to engine
+
+	// RemoteDiverged is true when the adapter's PullRemote detected that
+	// the remote item has genuinely changed since the engine last applied
+	// it (i.e., the stored per-item etag or BaseVersion differs from the
+	// incoming value). Used by the engine's applyInbound to implement
+	// ADR-0015's 4-cell merge rule:
+	//
+	//   wd ∧ ¬rd → push-wiki  (skip inbound; outbound will push the wiki edit)
+	//   wd ∧  rd → conflict-remote-wins (apply remote despite wiki divergence)
+	//
+	// Adapters MUST set this to true whenever the remote content
+	// differs from the last-persisted snapshot. Adapters with server-
+	// issued cursors (Keep) may set it unconditionally for all returned
+	// items; adapters with safety-buffer cursors (Tasks) MUST compare
+	// the incoming etag against the stored AdapterState etag.
+	// False when the stored snapshot is absent (first ever pull of an
+	// item — treat as not diverged so the inbound apply proceeds normally).
+	RemoteDiverged bool
 }
 
 // WikiItem is the normalized post-translation shape the engine apply

@@ -525,10 +525,16 @@ var _ = Describe("Engine dead-letter retry bookkeeping", func() {
 				}
 				fbs.SeedBinding(binding, ownerKind)
 
+				// User event (seq=1 > LastSyncedSeq=0) makes WikiDiverged=true
+				// for reconcileUID so the push gate (Fix #2) proceeds to PatchRemote.
 				cl := &apiv1.Checklist{
 					Items: []*apiv1.ChecklistItem{
 						{Uid: reconcileUID, Text: "retryable item"},
 					},
+					Events: []*apiv1.ChecklistEvent{
+						{Seq: 1, Src: "user:alice@example.com", Op: "set_text", Uid: reconcileUID},
+					},
+					MaxSeq: 1,
 				}
 				reader := &recordingChecklistReader{checklist: cl}
 				mutator := &trackingChecklistMutator{recordingChecklistMutator: &recordingChecklistMutator{}}

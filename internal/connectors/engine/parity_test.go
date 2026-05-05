@@ -998,4 +998,207 @@ var _ = Describe("Parity scenarios across real adapters", func() {
 			})
 		})
 	})
+
+	// --- Fix #2 parity: push gate (MATRIX row 1) -------------------------
+
+	Describe("outbound patch skipped when wiki not diverged (Fix #2 push gate)", func() {
+		// An item exists on both wiki and remote, but the wiki has no
+		// user events since LastSyncedSeq → WikiDiverged=false → the
+		// engine must NOT call PatchRemote / Changes for this item.
+		const knownUID = "uid-no-div-parity-1"
+		const ref = "task-no-div-parity-1"
+		const refKeep = "keep-srv-no-div-1"
+
+		setupNoDivergence := func(p *parityContext, mappedRef string) {
+			// No user events → WikiDiverged=false.
+			p.reader.checklist = &apiv1.Checklist{
+				Items: []*apiv1.ChecklistItem{
+					{Uid: knownUID, Text: "milk"},
+				},
+			}
+			p.store.SeedBinding(connectors.Binding{
+				ProfileID: p.profileID, Page: p.page, ListName: p.listName,
+				RemoteHandle:         p.remoteHandle,
+				State:                connectors.BindingStateActive,
+				LastSuccessfulSyncAt: parityPastChoke,
+				LastSyncedSeq:        10,
+				AdapterState:         p.seedItemIDMap(map[string]string{knownUID: mappedRef}),
+			}, p.kind)
+		}
+
+		runScenario := func(p *parityContext) {
+			Expect(p.engine.Sync(ctx, connectors.BindingKey{
+				ProfileID: string(p.profileID),
+				Page:      p.page,
+				ListName:  p.listName,
+			})).To(Succeed())
+		}
+
+		When("the adapter is TasksAdapter", func() {
+			var p *parityContext
+			BeforeEach(func() {
+				p = newTasksParityContext()
+				// Remote returns the item unchanged (same etag — no
+				// RemoteDiverged), wiki has no user events.
+				p.tasksClient.listTasks = []tasksgw.Task{
+					{ID: ref, Title: "milk", Status: tasksgw.TaskStatusNeedsAction, Updated: parityFixedNow},
+				}
+				setupNoDivergence(p, ref)
+				runScenario(p)
+			})
+
+			It("should not call PatchTask (push gate: wiki not diverged)", func() {
+				Expect(p.tasksClient.patchCalls).To(BeEmpty())
+			})
+		})
+
+		When("the adapter is KeepAdapter", func() {
+			var p *parityContext
+			BeforeEach(func() {
+				p = newKeepParityContext()
+				// Remote returns the same item with matching BaseVersion
+				// (bv-<ref> matches stored) → RemoteDiverged=false,
+				// wiki has no user events → WikiDiverged=false.
+				p.keepClient.changesDefault = keepgw.ChangesResponse{
+					ToVersion: "v200",
+					Nodes:     []keepgw.Node{keepNodeForRef(refKeep, "milk", false)},
+				}
+				setupNoDivergence(p, refKeep)
+				runScenario(p)
+			})
+
+			It("should not send a Changes mutation for the item (push gate: wiki not diverged)", func() {
+				// Keep's PullRemote and PatchRemote both go through Changes.
+				// Only one Changes call (the pull) is expected; no patch
+				// call should be present (mutation requests carry Nodes).
+				patchCalls := 0
+				for _, req := range p.keepClient.changes {
+					if len(req.Nodes) > 0 {
+						patchCalls++
+					}
+				}
+				Expect(patchCalls).To(Equal(0))
+			})
+		})
+	})
+
+	// --- Fix #1 parity: 4-cell merge / conflict-remote-wins (MATRIX row 1) -
+
+	Describe("conflict-remote-wins when both wiki and remote diverged (Fix #1 4-cell merge)", func() {
+		// The wiki has user events (WikiDiverged=true) AND the remote
+		// item has a different etag/BaseVersion than stored
+		// (RemoteDiverged=true). Per ADR-0015 conflict-remote-wins rule,
+		// the engine must apply the remote value despite the wiki edit.
+		const knownUID = "uid-conflict-parity-1"
+		const ref = "task-conflict-parity-1"
+		const refKeep = "keep-srv-conflict-1"
+
+		assertConflictRemoteWins := func(p *parityContext, remoteText string) {
+			// UpdateItemForSync must have been called with the remote text.
+			Expect(p.mutator.recordingChecklistMutator.updateCalls).To(HaveLen(1))
+			Expect(p.mutator.recordingChecklistMutator.updateCalls[0].UID).To(Equal(knownUID))
+			Expect(p.mutator.recordingChecklistMutator.updateCalls[0].Text).To(Equal(remoteText))
+			// The conflict-remote-wins log signal must appear.
+			gotLog := false
+			for _, line := range p.logger.snapshot() {
+				if containsSubstring(line.Format, "conflict_remote_wins") {
+					gotLog = true
+					break
+				}
+			}
+			Expect(gotLog).To(BeTrue(), "engine must emit conflict_remote_wins log signal")
+		}
+
+		When("the adapter is TasksAdapter", func() {
+			var p *parityContext
+			BeforeEach(func() {
+				p = newTasksParityContext()
+
+				// Seed the binding with a stored etag for this task so the
+				// adapter can detect RemoteDiverged when a new etag arrives.
+				adapterState := connectors.AdapterState{
+					googletasks.AdapterStateKeyItemIDMap: map[string]string{knownUID: ref},
+					googletasks.AdapterStateKeyItemEtags: map[string]any{ref: "old-etag"},
+					googletasks.AdapterStateKeyLastUpdatedMin: parityFixedNow.Add(-1 * time.Hour).Format(time.RFC3339),
+				}
+				// Wiki diverged: user edited since last sync (seq 11 > LastSyncedSeq 10).
+				p.reader.checklist = &apiv1.Checklist{
+					Items: []*apiv1.ChecklistItem{{Uid: knownUID, Text: "milk-wiki-edit"}},
+					Events: []*apiv1.ChecklistEvent{
+						{Seq: 11, Src: "user:alice@example.com", Op: "set_text", Uid: knownUID},
+					},
+					MaxSeq: 11,
+				}
+				p.store.SeedBinding(connectors.Binding{
+					ProfileID: p.profileID, Page: p.page, ListName: p.listName,
+					RemoteHandle:         p.remoteHandle,
+					State:                connectors.BindingStateActive,
+					LastSuccessfulSyncAt: parityPastChoke,
+					LastSyncedSeq:        10,
+					AdapterState:         adapterState,
+				}, p.kind)
+				// Remote returns the same task with a NEW etag → RemoteDiverged=true.
+				p.tasksClient.listTasks = []tasksgw.Task{
+					{ID: ref, Etag: "new-etag", Title: "milk-remote-wins", Status: tasksgw.TaskStatusNeedsAction, Updated: parityFixedNow},
+				}
+
+				Expect(p.engine.Sync(ctx, connectors.BindingKey{
+					ProfileID: string(p.profileID),
+					Page:      p.page,
+					ListName:  p.listName,
+				})).To(Succeed())
+			})
+
+			It("should apply the remote value (conflict-remote-wins)", func() {
+				assertConflictRemoteWins(p, "milk-remote-wins")
+			})
+		})
+
+		When("the adapter is KeepAdapter", func() {
+			var p *parityContext
+			BeforeEach(func() {
+				p = newKeepParityContext()
+
+				// Seed with a BaseVersion that DIFFERS from what the pull
+				// will return → RemoteDiverged=true.
+				// The keep seedItemIDMap sets base_version to "bv-<ref>".
+				// The pull node below uses a different BaseVersion ("bv-v2-<ref>").
+				adapterState := p.seedItemIDMap(map[string]string{knownUID: refKeep})
+				// Wiki diverged.
+				p.reader.checklist = &apiv1.Checklist{
+					Items: []*apiv1.ChecklistItem{{Uid: knownUID, Text: "milk-wiki-edit"}},
+					Events: []*apiv1.ChecklistEvent{
+						{Seq: 11, Src: "user:alice@example.com", Op: "set_text", Uid: knownUID},
+					},
+					MaxSeq: 11,
+				}
+				p.store.SeedBinding(connectors.Binding{
+					ProfileID: p.profileID, Page: p.page, ListName: p.listName,
+					RemoteHandle:         p.remoteHandle,
+					State:                connectors.BindingStateActive,
+					LastSuccessfulSyncAt: parityPastChoke,
+					LastSyncedSeq:        10,
+					AdapterState:         adapterState,
+				}, p.kind)
+				// Pull returns the item with a NEW BaseVersion → RemoteDiverged=true.
+				// seedItemIDMap stores "bv-<refKeep>"; the node below carries "bv-v2-<refKeep>".
+				changedNode := keepNodeForRef(refKeep, "milk-remote-wins", false)
+				changedNode.BaseVersion = "bv-v2-" + refKeep
+				p.keepClient.changesDefault = keepgw.ChangesResponse{
+					ToVersion: "v200",
+					Nodes:     []keepgw.Node{changedNode},
+				}
+
+				Expect(p.engine.Sync(ctx, connectors.BindingKey{
+					ProfileID: string(p.profileID),
+					Page:      p.page,
+					ListName:  p.listName,
+				})).To(Succeed())
+			})
+
+			It("should apply the remote value (conflict-remote-wins)", func() {
+				assertConflictRemoteWins(p, "milk-remote-wins")
+			})
+		})
+	})
 })

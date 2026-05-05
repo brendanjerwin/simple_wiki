@@ -177,7 +177,18 @@ func (a *TasksAdapter) PullRemote(ctx context.Context, binding connectors.Bindin
 		if t.Updated.After(maxUpdated) {
 			maxUpdated = t.Updated
 		}
-		items = append(items, taskToRemoteItem(t))
+		item := taskToRemoteItem(t)
+		// ADR-0015 Fix #1: populate RemoteDiverged by comparing the
+		// incoming task etag against the stored etag in AdapterState.
+		// Tasks uses a safety-buffer cursor (updatedMin - 1s), so items
+		// can re-appear even when unchanged; the etag comparison
+		// distinguishes a genuine remote update from a re-delivery.
+		// An absent stored etag means we have no baseline → not diverged
+		// (the first inbound apply should proceed normally).
+		if storedEtag := readEtagForTask(binding.AdapterState, string(item.Ref)); storedEtag != "" && storedEtag != item.Etag {
+			item.RemoteDiverged = true
+		}
+		items = append(items, item)
 	}
 	return connectors.RemotePullResult{
 		Items:     items,

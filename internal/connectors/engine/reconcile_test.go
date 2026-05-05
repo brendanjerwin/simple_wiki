@@ -732,7 +732,7 @@ var _ = Describe("Engine.reconcile", func() {
 		})
 	})
 
-	When("outbound has an updated wiki item already in AdapterState mapping", func() {
+	When("outbound has an updated wiki item already in AdapterState mapping and wiki has diverged", func() {
 		const knownUID = "uid-update-1"
 
 		BeforeEach(func() {
@@ -741,6 +741,7 @@ var _ = Describe("Engine.reconcile", func() {
 				RemoteHandle:         "tasklist-1",
 				State:                connectors.BindingStateActive,
 				LastSuccessfulSyncAt: reconcilePastChokePausedAt,
+				LastSyncedSeq:        10,
 				AdapterState: connectors.AdapterState{
 					"item_id_map": map[string]string{knownUID: "task-1"},
 				},
@@ -748,8 +749,13 @@ var _ = Describe("Engine.reconcile", func() {
 
 			fa.SetPullRemoteResponse(connectors.RemotePullResult{}, nil)
 			fa.SetPatchRemoteResponse("task-1", nil)
+			// User event after LastSyncedSeq=10 → WikiDiverged = true for knownUID.
 			reader.checklist = &apiv1.Checklist{
 				Items: []*apiv1.ChecklistItem{{Uid: knownUID, Text: "milk-updated"}},
+				Events: []*apiv1.ChecklistEvent{
+					{Seq: 11, Src: "user:alice@example.com", Op: "set_text", Uid: knownUID},
+				},
+				MaxSeq: 11,
 			}
 
 			Expect(eng.Sync(ctx, key)).To(Succeed())
@@ -763,6 +769,36 @@ var _ = Describe("Engine.reconcile", func() {
 			Expect(mutator.recordingChecklistMutator.appendCalls).To(ContainElement(
 				appendCall{Page: page, ListName: listName, UID: knownUID, Op: "outbound_patched"},
 			))
+		})
+	})
+
+	// Fix #2: push gate — only patch when WikiDiverged = true.
+	When("outbound has a wiki item in AdapterState mapping but wiki has NOT diverged", func() {
+		const knownUID = "uid-nodiv-1"
+
+		BeforeEach(func() {
+			fbs.SeedBinding(connectors.Binding{
+				ProfileID: profileID, Page: page, ListName: listName,
+				RemoteHandle:         "tasklist-1",
+				State:                connectors.BindingStateActive,
+				LastSuccessfulSyncAt: reconcilePastChokePausedAt,
+				LastSyncedSeq:        10,
+				AdapterState: connectors.AdapterState{
+					"item_id_map": map[string]string{knownUID: "task-1"},
+				},
+			}, ownerKind)
+
+			fa.SetPullRemoteResponse(connectors.RemotePullResult{}, nil)
+			// No user events → WikiDiverged = false → patch must be skipped.
+			reader.checklist = &apiv1.Checklist{
+				Items: []*apiv1.ChecklistItem{{Uid: knownUID, Text: "milk"}},
+			}
+
+			Expect(eng.Sync(ctx, key)).To(Succeed())
+		})
+
+		It("should NOT call PatchRemote (wiki not diverged — no outbound push needed)", func() {
+			Expect(fa.RecordedPatchRemote).To(BeEmpty())
 		})
 	})
 
@@ -819,6 +855,7 @@ var _ = Describe("Engine.reconcile", func() {
 				RemoteHandle:         "tasklist-1",
 				State:                connectors.BindingStateActive,
 				LastSuccessfulSyncAt: reconcilePastChokePausedAt,
+				LastSyncedSeq:        10,
 				AdapterState: connectors.AdapterState{
 					"item_id_map": map[string]string{knownUID: "task-1"},
 				},
@@ -834,8 +871,14 @@ var _ = Describe("Engine.reconcile", func() {
 			// happy path. The detailed branch behavior is exercised in
 			// precondition_recovery_test.go; this test verifies only the
 			// integration (recovery is invoked and the sync succeeds).
+			// User event after LastSyncedSeq=10 → WikiDiverged = true so
+			// the push gate proceeds to PatchRemote (Fix #2).
 			reader.checklist = &apiv1.Checklist{
 				Items: []*apiv1.ChecklistItem{{Uid: knownUID, Text: "milk-updated"}},
+				Events: []*apiv1.ChecklistEvent{
+					{Seq: 11, Src: "user:alice@example.com", Op: "set_text", Uid: knownUID},
+				},
+				MaxSeq: 11,
 			}
 
 			syncErr = eng.Sync(ctx, key)
@@ -1047,6 +1090,152 @@ var _ = Describe("Engine.reconcile", func() {
 
 		It("should advance LastSyncedSeq past the latest self-event", func() {
 			Expect(savedBinding.LastSyncedSeq).To(BeNumerically(">=", int64(12)))
+		})
+	})
+
+	// Fix #3: atomicity — partial idMap updates from successful inserts
+	// must be persisted even when a subsequent outbound operation fails.
+	When("outbound insert succeeds then a subsequent outbound insert fails fatally", func() {
+		const uid1 = "uid-partial-1"
+		const uid2 = "uid-partial-2"
+		var savedBinding connectors.Binding
+
+		BeforeEach(func() {
+			fbs.SeedBinding(connectors.Binding{
+				ProfileID: profileID, Page: page, ListName: listName,
+				RemoteHandle:         "tasklist-1",
+				State:                connectors.BindingStateActive,
+				LastSuccessfulSyncAt: reconcilePastChokePausedAt,
+				AdapterState:         connectors.AdapterState{"item_id_map": map[string]string{}},
+			}, ownerKind)
+
+			fa.SetPullRemoteResponse(connectors.RemotePullResult{}, nil)
+			// First insert succeeds; second fails fatally.
+			fa.SetInsertRemoteResponse("task-ok", nil)
+			fa.SetInsertRemoteResponse("", errReconcileProgrammed)
+			fa.SetClassifyErrorResponse(connectors.ErrorClassFatal)
+			// Two wiki items, neither in idMap → both will be inserted.
+			// The order of iteration over a Go map is non-deterministic;
+			// the test asserts that exactly ONE insert succeeded and was
+			// persisted, regardless of which uid was processed first.
+			reader.checklist = &apiv1.Checklist{
+				Items: []*apiv1.ChecklistItem{
+					{Uid: uid1, Text: "item-one"},
+					{Uid: uid2, Text: "item-two"},
+				},
+			}
+
+			_ = eng.Sync(ctx, key) // error is expected; ignore it here
+			if len(fbs.RecordedSaveBinding) > 0 {
+				savedBinding = fbs.RecordedSaveBinding[len(fbs.RecordedSaveBinding)-1].Binding
+			}
+		})
+
+		It("should call SaveBinding to persist partial progress", func() {
+			Expect(fbs.RecordedSaveBinding).NotTo(BeEmpty())
+		})
+
+		It("should persist the successfully-inserted item's ref in idMap", func() {
+			idMap, ok := savedBinding.AdapterState["item_id_map"].(map[string]string)
+			Expect(ok).To(BeTrue())
+			// Exactly one item should have been inserted (task-ok).
+			insertedCount := 0
+			for _, ref := range idMap {
+				if ref == "task-ok" {
+					insertedCount++
+				}
+			}
+			Expect(insertedCount).To(Equal(1))
+		})
+	})
+
+	// Fix #1: 4-cell merge — when wiki diverged AND remote also diverged
+	// (RemoteDiverged=true), the engine must apply remote (conflict-remote-wins).
+	When("inbound item has wiki diverged AND RemoteDiverged=true (conflict-remote-wins)", func() {
+		const knownUID = "uid-conflict-1"
+
+		BeforeEach(func() {
+			fbs.SeedBinding(connectors.Binding{
+				ProfileID: profileID, Page: page, ListName: listName,
+				RemoteHandle:         "tasklist-1",
+				State:                connectors.BindingStateActive,
+				LastSuccessfulSyncAt: reconcilePastChokePausedAt,
+				LastSyncedSeq:        10,
+				AdapterState: connectors.AdapterState{
+					"item_id_map": map[string]string{knownUID: "task-1"},
+				},
+			}, ownerKind)
+
+			// RemoteDiverged=true signals the remote item genuinely changed.
+			fa.SetPullRemoteResponse(connectors.RemotePullResult{
+				Items: []connectors.RemoteItem{{
+					Ref:            "task-1",
+					Title:          "milk-remote-wins",
+					RemoteDiverged: true,
+				}},
+			}, nil)
+			fa.SetRemoteToWikiResponse(connectors.WikiItem{UID: knownUID, Text: "milk-remote-wins"}, nil)
+			// Wiki diverged: user also edited this item.
+			reader.checklist = &apiv1.Checklist{
+				Items: []*apiv1.ChecklistItem{{Uid: knownUID, Text: "milk-wiki-edit"}},
+				Events: []*apiv1.ChecklistEvent{
+					{Seq: 11, Src: "user:alice@example.com", Op: "set_text", Uid: knownUID},
+				},
+				MaxSeq: 11,
+			}
+
+			Expect(eng.Sync(ctx, key)).To(Succeed())
+		})
+
+		It("should call UpdateItemForSync (remote wins in conflict — wd ∧ rd)", func() {
+			Expect(mutator.recordingChecklistMutator.updateCalls).To(HaveLen(1))
+		})
+
+		It("should apply the remote text, not the wiki text", func() {
+			Expect(mutator.recordingChecklistMutator.updateCalls[0].Text).To(Equal("milk-remote-wins"))
+		})
+	})
+
+	// Fix #1 complement: when wiki diverged AND RemoteDiverged=false
+	// (remote is stale/re-delivered), engine must skip inbound apply.
+	When("inbound item has wiki diverged AND RemoteDiverged=false (push-wiki path)", func() {
+		const knownUID = "uid-wikiwins-1"
+
+		BeforeEach(func() {
+			fbs.SeedBinding(connectors.Binding{
+				ProfileID: profileID, Page: page, ListName: listName,
+				RemoteHandle:         "tasklist-1",
+				State:                connectors.BindingStateActive,
+				LastSuccessfulSyncAt: reconcilePastChokePausedAt,
+				LastSyncedSeq:        10,
+				AdapterState: connectors.AdapterState{
+					"item_id_map": map[string]string{knownUID: "task-1"},
+				},
+			}, ownerKind)
+
+			// RemoteDiverged=false: remote item is a stale re-delivery.
+			fa.SetPullRemoteResponse(connectors.RemotePullResult{
+				Items: []connectors.RemoteItem{{
+					Ref:            "task-1",
+					Title:          "milk-stale",
+					RemoteDiverged: false,
+				}},
+			}, nil)
+			fa.SetRemoteToWikiResponse(connectors.WikiItem{UID: knownUID, Text: "milk-stale"}, nil)
+			// Wiki diverged: user edited since last sync.
+			reader.checklist = &apiv1.Checklist{
+				Items: []*apiv1.ChecklistItem{{Uid: knownUID, Text: "milk-user-edit"}},
+				Events: []*apiv1.ChecklistEvent{
+					{Seq: 11, Src: "user:alice@example.com", Op: "set_text", Uid: knownUID},
+				},
+				MaxSeq: 11,
+			}
+
+			Expect(eng.Sync(ctx, key)).To(Succeed())
+		})
+
+		It("should NOT call UpdateItemForSync (wiki diverged, remote unchanged — preserve wiki edit)", func() {
+			Expect(mutator.recordingChecklistMutator.updateCalls).To(BeEmpty())
 		})
 	})
 })

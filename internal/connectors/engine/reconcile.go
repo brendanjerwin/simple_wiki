@@ -146,8 +146,23 @@ func (e *Engine) reconcile(ctx context.Context, key connectors.BindingKey) error
 		return applyErr
 	}
 
-	updatedBinding, outboundAuth, outboundErr := e.pushOutbound(ctx, binding, idMap)
+	// Fix #2: pass classification so pushOutbound can gate patches on WikiDiverged.
+	updatedBinding, outboundAuth, outboundErr := e.pushOutbound(ctx, binding, idMap, classification)
+
+	// Fix #3: always capture partial idMap progress from pushOutbound even on
+	// error. Successful inserts earlier in the loop update idMap with new remote
+	// refs; losing those updates causes duplicate inserts on the next tick.
+	binding = updatedBinding
+	binding = writeItemIDMap(binding, idMap)
+
 	if outboundErr != nil {
+		// Persist partial progress (idMap updates from any successful inserts)
+		// before propagating the error so the next tick doesn't re-insert.
+		// Save result is intentionally discarded: we are already returning
+		// outboundErr and cannot do anything meaningful if the save also fails.
+		_ = e.store.WithProfileLock(profileID, func() error { // nosemgrep: go.error-discarded-with-blank-identifier
+			return e.store.SaveBinding(profileID, kind, binding)
+		})
 		return outboundErr
 	}
 	if outboundAuth {
@@ -156,9 +171,6 @@ func (e *Engine) reconcile(ctx context.Context, key connectors.BindingKey) error
 		// steady-state condition).
 		return e.handleAuthFailure(profileID, kind, key.Page, key.ListName)
 	}
-	binding = updatedBinding
-
-	binding = writeItemIDMap(binding, idMap)
 
 	binding = e.adapter.AdvanceCursor(binding, pullResult)
 
@@ -266,10 +278,21 @@ func (e *Engine) applyInbound(
 		}
 
 		if uid != "" {
-			if cls, has := classification[uid]; has && cls.WikiDiverged {
+			if cls, has := classification[uid]; has && cls.WikiDiverged && !remoteItem.RemoteDiverged {
+				// ADR-0015 4-cell merge: wd ∧ ¬rd → push-wiki.
+				// The wiki has local edits but the remote item is unchanged
+				// (stale re-delivery via cursor safety buffer). Preserve the
+				// wiki edit; the outbound push will carry it to remote.
 				e.logger.Info("connectors/engine: wiki_diverged_skipped_inbound kind=%s profile=%s page=%s list=%s uid=%s ref=%s latest_src=%s",
 					e.adapter.Kind(), string(binding.ProfileID), binding.Page, binding.ListName, uid, string(remoteItem.Ref), cls.LatestEventSource)
 				continue
+			}
+			if cls, has := classification[uid]; has && cls.WikiDiverged && remoteItem.RemoteDiverged {
+				// ADR-0015 4-cell merge: wd ∧ rd → conflict-remote-wins.
+				// Both wiki and remote have changed; the engine applies the
+				// remote authoritative version per the merge policy.
+				e.logger.Info("connectors/engine: conflict_remote_wins kind=%s profile=%s page=%s list=%s uid=%s ref=%s latest_src=%s",
+					e.adapter.Kind(), string(binding.ProfileID), binding.Page, binding.ListName, uid, string(remoteItem.Ref), cls.LatestEventSource)
 			}
 			if updErr := e.mutator.UpdateItemForSync(ctx, binding.Page, binding.ListName, "", uid,
 				wikiItem.Text, wikiItem.Checked, wikiItem.Tags, wikiItem.Description); updErr != nil {
@@ -304,6 +327,16 @@ func (e *Engine) applyInbound(
 //     (caller transitions to paused),
 //   - any non-recoverable error that aborts the sync.
 //
+// Per ADR-0015's 4-cell merge rule (Fix #2):
+//
+//   - Inserts (uid not in idMap): always push — the wiki has a new item
+//     the remote has never seen.
+//   - Patches (uid in idMap): only push when classification[uid].WikiDiverged
+//     is true — remote already has the content; pushing a stale copy causes
+//     unnecessary API churn, version bumps, and quota exhaustion.
+//   - Deletes (uid in idMap but absent from wiki): always delete — the
+//     wiki deleted the item; remote must follow.
+//
 // Per Tasks's existing behavior (single-item retryable errors don't
 // abort the whole sync), retryable errors are routed to
 // recordPushFailure and the loop continues to the next item.
@@ -323,6 +356,7 @@ func (e *Engine) pushOutbound(
 	ctx context.Context,
 	binding connectors.Binding,
 	idMap map[string]string,
+	classification map[string]EventClassification,
 ) (connectors.Binding, bool, error) {
 	// Tag self-events emitted from the outbound path so the engine's
 	// causal merge rule sees them as our own writes per ADR-0015.
@@ -390,6 +424,14 @@ func (e *Engine) pushOutbound(
 				e.logger.Info("connectors/engine: append_sync_event_failed page=%s list=%s uid=%s op=outbound_inserted err=%v",
 					binding.Page, binding.ListName, uid, appendErr)
 			}
+			continue
+		}
+
+		// ADR-0015 Fix #2: only patch when the wiki has diverged since last
+		// sync (i.e., there are user/cross-connector events for this uid
+		// with seq > LastSyncedSeq). If the wiki hasn't changed, remote
+		// already has the authoritative content — patching is pure churn.
+		if cls := classification[uid]; !cls.WikiDiverged {
 			continue
 		}
 

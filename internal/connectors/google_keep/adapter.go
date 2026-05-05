@@ -239,7 +239,19 @@ func (a *KeepAdapter) PullRemote(ctx context.Context, binding connectors.Binding
 		if n.ParentID != binding.RemoteHandle && n.ParentServerID != binding.RemoteHandle {
 			continue
 		}
-		items = append(items, listItemNodeToRemoteItem(n))
+		item := listItemNodeToRemoteItem(n)
+		// ADR-0015 Fix #1: populate RemoteDiverged by comparing the
+		// incoming node's BaseVersion against the stored BaseVersion in
+		// AdapterState. Keep's cursor is server-issued (not safety-
+		// buffered), so items only appear when they genuinely changed —
+		// but we still compare to maintain correctness if the cursor
+		// rewinds (e.g., after a ForceFullResync).
+		// An absent stored BaseVersion means we have no baseline → not
+		// diverged (the first inbound apply should proceed normally).
+		if stored := readItemMapping(binding.AdapterState, n.ServerID).BaseVersion; stored != "" && stored != n.BaseVersion {
+			item.RemoteDiverged = true
+		}
+		items = append(items, item)
 	}
 	return connectors.RemotePullResult{
 		Items:     items,
