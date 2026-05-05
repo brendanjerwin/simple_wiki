@@ -645,9 +645,9 @@ type stubConnector struct {
 	syncKey    connectors.BindingKey
 }
 
-func (s *stubConnector) Kind() connectors.ConnectorKind                      { return "stub" }
-func (s *stubConnector) PausedReason(_ connectors.BindingKey) (string, bool) { return "", false }
-func (s *stubConnector) ForceFullResync(_ context.Context, _ connectors.BindingKey) error {
+func (*stubConnector) Kind() connectors.ConnectorKind                      { return "stub" }
+func (*stubConnector) PausedReason(_ connectors.BindingKey) (string, bool) { return "", false }
+func (*stubConnector) ForceFullResync(_ context.Context, _ connectors.BindingKey) error {
 	return nil
 }
 func (s *stubConnector) Sync(_ context.Context, key connectors.BindingKey) error {

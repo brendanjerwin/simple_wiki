@@ -20,21 +20,26 @@ type stubIdentity struct {
 	login string
 }
 
-func (s *stubIdentity) IsAnonymous() bool   { return s.login == "" }
-func (s *stubIdentity) LoginName() string   { return s.login }
-func (s *stubIdentity) DisplayName() string { return "" }
-func (s *stubIdentity) NodeName() string    { return "" }
-func (s *stubIdentity) ForLog() string      { return s.login }
-func (s *stubIdentity) String() string      { return s.login }
-func (s *stubIdentity) IsAgent() bool       { return false }
-func (s *stubIdentity) Name() string        { return s.login }
+func (s *stubIdentity) IsAnonymous() bool { return s.login == "" }
+func (s *stubIdentity) LoginName() string { return s.login }
+func (*stubIdentity) DisplayName() string { return "" }
+func (*stubIdentity) NodeName() string    { return "" }
+func (s *stubIdentity) ForLog() string    { return s.login }
+func (s *stubIdentity) String() string    { return s.login }
+func (*stubIdentity) IsAgent() bool       { return false }
+func (s *stubIdentity) Name() string      { return s.login }
 
 var _ tailscale.IdentityValue = (*stubIdentity)(nil)
+
+// bridgeFixedNow is the wall-clock fixed point used by the debouncer
+// fixtures in this file. Extracted to a package-level var so the date
+// components don't trip revive's magic-number rule inline.
+var bridgeFixedNow = time.Date(2026, 5, 4, 12, 0, 0, 0, time.UTC) //nolint:gochecknoglobals // test fixture
 
 // buildDebouncerWithCapture creates a SyncDebouncer + FakeClock pair
 // whose syncFn stores the most recently fired key into *out.
 func buildDebouncerWithCapture(out *engine.SyncDebouncerKey) (*engine.SyncDebouncer, *enginetesting.FakeClock) {
-	fc := enginetesting.NewFakeClock(time.Date(2026, 5, 4, 12, 0, 0, 0, time.UTC))
+	fc := enginetesting.NewFakeClock(bridgeFixedNow)
 	debouncer, _ := engine.NewSyncDebouncer(fc, fc, func(_ context.Context, key engine.SyncDebouncerKey) error {
 		*out = key
 		return nil

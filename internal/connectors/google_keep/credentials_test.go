@@ -4,7 +4,6 @@ package google_keep_test
 import (
 	"context"
 	"errors"
-	"fmt"
 	"os"
 	"time"
 
@@ -367,7 +366,7 @@ var _ = Describe("FrontmatterCredentialStore (keep)", func() {
 					rw2, clk, lumber.NewConsoleLogger(lumber.WARN),
 					nil,
 					func(_ context.Context, _ wikipage.PageIdentifier) error {
-						return fmt.Errorf("hook failure")
+						return errors.New("hook failure")
 					},
 				)
 				Expect(err).NotTo(HaveOccurred())
@@ -464,7 +463,7 @@ var _ = Describe("FrontmatterCredentialStore (keep)", func() {
 				s2, err := googlekeep.NewFrontmatterCredentialStore(
 					rw2, clk, lumber.NewConsoleLogger(lumber.WARN),
 					func(_ context.Context, _ wikipage.PageIdentifier, _ string) error {
-						return fmt.Errorf("pause hook failure")
+						return errors.New("pause hook failure")
 					},
 					nil,
 				)
