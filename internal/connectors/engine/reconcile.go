@@ -70,6 +70,19 @@ const adapterStateItemIDMapKey = "item_id_map"
 // outbound diff. Other adapter-state fields ride through opaquely;
 // the adapter codec round-trips them. This is documented in ADR-0015.
 //
+// Suppression rationale: the function is intentionally monolithic
+// because the per-tick step sequence (WaitReady → FindBinding → choke →
+// classify → PullRemote → auth/truncated branches → applyInbound →
+// pushOutbound → AdvanceCursor → LastSyncedSeq → SaveBinding) is the
+// load-bearing invariant the comment-doc enumerates step-by-step. Per
+// ADR-0011's operation contract, splitting the body into helpers that
+// take a context-laden state struct would reorder the steps in a way
+// reviewers would have to re-derive. The branches inside have already
+// been factored out (classifyDivergence, applyInbound, pushOutbound,
+// advanceLastSyncedSeq, handleAuthFailure); what remains here IS the
+// orchestration. revive's complexity rule trips on the orchestration
+// itself, which is the intended shape.
+//
 //revive:disable-next-line:cyclomatic,cognitive-complexity,function-length
 func (e *Engine) reconcile(ctx context.Context, key connectors.BindingKey) error {
 	if err := e.lease.WaitReady(ctx); err != nil {
@@ -189,6 +202,16 @@ func (e *Engine) classifyDivergence(ctx context.Context, binding connectors.Bind
 // suppressor pause runs across the whole loop so a post-mutator
 // debouncer fire doesn't loop back as an outbound trigger.
 //
+// Suppression rationale: the per-item branch table (deleted? unknown
+// uid? known-uid + diverged? known-uid + clean? translation error?)
+// IS the divergence-skip rule from ADR-0015 §"Causal divergence rule"
+// — extracting each branch into its own helper makes the rule harder
+// to read against the ADR. Each branch is short (1–3 statements);
+// the cognitive-complexity score comes from the count of cases, not
+// from per-case logic. Suppressing here is preferable to a
+// case-statement-of-helpers that obscures the rule's per-case
+// disposition.
+//
 //revive:disable-next-line:cyclomatic,cognitive-complexity
 func (e *Engine) applyInbound(
 	ctx context.Context,
@@ -284,6 +307,16 @@ func (e *Engine) applyInbound(
 // Per Tasks's existing behavior (single-item retryable errors don't
 // abort the whole sync), retryable errors are routed to
 // recordPushFailure and the loop continues to the next item.
+//
+// Suppression rationale: the per-item insert/patch/delete diff is the
+// outbound side of the engine's MATRIX.md row 1 contract. The
+// branches are dead-letter-skip → recordPushSuccess-on-success →
+// auth-failed-abort → precondition-recovery → retryable-record →
+// unrecoverable-return — exactly the disposition table from MATRIX
+// row 1 + row 7. Splitting into helpers fragments that table across
+// files. The branches inside are minimal; the function-length score
+// is dominated by the diff loop's case enumeration, which IS the
+// engine's contract here.
 //
 //revive:disable-next-line:cyclomatic,cognitive-complexity,function-length
 func (e *Engine) pushOutbound(

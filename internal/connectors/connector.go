@@ -31,7 +31,7 @@ const (
 )
 
 // BindingKey is the (profile, page, list) tuple that identifies
-// a single checklist's subscription to a remote list. The wiki-side
+// a single checklist's binding to a remote list. The wiki-side
 // fields (Page, ListName) are owned by the wiki's checklist namespace;
 // ProfileID is the per-user wiki profile page id that holds the
 // connector state.
@@ -61,20 +61,20 @@ type Connector interface {
 	// answer "which backend currently owns this checklist?"
 	Kind() ConnectorKind
 
-	// Sync runs one reconcile pass for the given subscription.
+	// Sync runs one reconcile pass for the given binding.
 	// Returns an error if the run failed in a way the caller should
 	// know about; the per-connector rate-limit / pause-state
 	// "skip-this-tick" logic is handled INSIDE Sync (returning nil
-	// is the right answer when a subscription is paused).
+	// is the right answer when a binding is paused).
 	Sync(ctx context.Context, key BindingKey) error
 
-	// PausedReason reports whether the given subscription is paused
+	// PausedReason reports whether the given binding is paused
 	// and, if so, a human-readable reason. Returns ("", false) when
-	// the subscription is healthy. The reason string is surfaced to
+	// the binding is healthy. The reason string is surfaced to
 	// the UI's paused-badge tooltip — keep it short and actionable.
 	PausedReason(key BindingKey) (string, bool)
 
-	// ForceFullResync marks the given subscription for a one-shot
+	// ForceFullResync marks the given binding for a one-shot
 	// full re-fetch on the next Sync. Used by the cursor-truncation
 	// recovery path and by an operator-triggered admin RPC.
 	ForceFullResync(ctx context.Context, key BindingKey) error

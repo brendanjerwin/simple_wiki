@@ -15,14 +15,14 @@ type SchedulerLogger interface {
 	Error(format string, args ...any)
 }
 
-// BindingLister returns the set of subscriptions a connector is
+// BindingLister returns the set of bindings a connector is
 // currently responsible for. Called fresh on every tick so changes
-// to on-disk subscription state (including subscriptions added since
+// to on-disk binding state (including bindings added since
 // process start) are picked up without a process restart.
 //
 // One BindingLister is registered per ConnectorKind — the
 // SyncScheduler walks all listers on each tick and dispatches a
-// per-subscription sync job through the Connector's Sync method.
+// per-binding sync job through the Connector's Sync method.
 type BindingLister func() []BindingKey
 
 // JobEnqueuer is the subset of jobs.JobCoordinator the scheduler uses.
@@ -34,7 +34,7 @@ type JobEnqueuer interface {
 // SyncScheduler is the unified cron-tick job that fires across every
 // registered connector. One scheduler instance is registered with
 // the wiki's CronScheduler at the 30s cadence; on each tick it walks
-// each connector's BindingLister and enqueues a per-subscription
+// each connector's BindingLister and enqueues a per-binding
 // sync job via the connector's per-kind queue.
 //
 // Per-connector rate-limit choke (skip-this-tick) is the connector's
@@ -75,7 +75,7 @@ func NewSyncScheduler(enqueuer JobEnqueuer, logger SchedulerLogger) (*SyncSchedu
 }
 
 // Register wires a connector into the scheduler. lister is called
-// fresh each tick so the scheduler picks up subscriptions added since
+// fresh each tick so the scheduler picks up bindings added since
 // process start; jobMaker turns a (connector, key) pair into a queueable
 // job that the per-kind queue runs.
 //
@@ -104,7 +104,7 @@ func (s *SyncScheduler) Register(c Connector, lister BindingLister, jobMaker fun
 // job name in scheduler logs.
 func (*SyncScheduler) GetName() string { return "ConnectorSyncScheduler" }
 
-// Execute fires off one sync job per active subscription across every
+// Execute fires off one sync job per active binding across every
 // registered connector. Errors from EnqueueJob (queue full, worker
 // stopped) are logged and counted as the job's overall failure but
 // don't interrupt enqueuing the rest.
@@ -114,7 +114,7 @@ func (*SyncScheduler) GetName() string { return "ConnectorSyncScheduler" }
 func (s *SyncScheduler) Execute() error {
 	for kind, entry := range s.connectors {
 		keys := entry.lister()
-		s.logger.Info("ConnectorSyncScheduler: tick fired for %s, %d active subscription(s)", kind, len(keys))
+		s.logger.Info("ConnectorSyncScheduler: tick fired for %s, %d active binding(s)", kind, len(keys))
 		for _, k := range keys {
 			job := entry.jobMaker(entry.connector, k)
 			if err := s.enqueuer.EnqueueJob(job); err != nil {
