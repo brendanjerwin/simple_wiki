@@ -13,8 +13,9 @@ import (
 
 	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
 	"github.com/brendanjerwin/simple_wiki/internal/connectors"
+	"github.com/brendanjerwin/simple_wiki/internal/connectors/engine"
 	"github.com/brendanjerwin/simple_wiki/internal/connectors/google_tasks/gateway"
-	taskssync "github.com/brendanjerwin/simple_wiki/internal/connectors/google_tasks/sync"
+	googletasks "github.com/brendanjerwin/simple_wiki/internal/connectors/google_tasks"
 	v1 "github.com/brendanjerwin/simple_wiki/internal/grpc/api/v1"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 )
@@ -34,12 +35,12 @@ func (tasksTestClock) Now() time.Time {
 type silentTasksLogger struct{}
 
 func (silentTasksLogger) Info(string, ...any)  {}
+func (silentTasksLogger) Warn(string, ...any)  {}
 func (silentTasksLogger) Error(string, ...any) {}
 
 // fakeTasksClient is a minimal in-memory stand-in for *gateway.TasksClient.
-// Records the calls the connector makes so tests can assert delegation
-// reached the gateway, but doesn't model multi-page semantics — handler
-// tests don't need that.
+// Records the calls the engine/adapter make so tests can assert delegation
+// reached the gateway.
 type fakeTasksClient struct {
 	taskListsToReturn  []gateway.TaskList
 	listTasksResp      gateway.TasksPage
@@ -86,14 +87,13 @@ func (*fakeTasksClient) DeleteTask(_ context.Context, _, _ string) error {
 }
 
 // tasksTestProfileEmail must round-trip through ProfileIdentifierFor so
-// the per-profile lookup in the SubscriptionStore matches what the
-// requireRealUser handler derives.
+// the per-profile lookup in the binding/credential store matches what
+// the requireRealUser handler derives.
 const tasksTestProfileEmail = "alice@example.com"
 
 // connectedTasksProfileMock builds a MockPageReaderMutator seeded with
-// a Tasks-connected profile (email + refresh_token). Mirrors
-// connectedProfileMock for Keep but writes the wiki.connectors.google_tasks.*
-// subtree.
+// a Tasks-connected profile (email + refresh_token). The credential
+// store reads from this same wiki.connectors.google_tasks.* subtree.
 func connectedTasksProfileMock(profileID wikipage.PageIdentifier) *MockPageReaderMutator {
 	mock := &MockPageReaderMutator{}
 	mock.WrittenFrontmatterByID = map[string]map[string]any{
@@ -111,9 +111,10 @@ func connectedTasksProfileMock(profileID wikipage.PageIdentifier) *MockPageReade
 	return mock
 }
 
-// connectedTasksProfileMockWithSubscription extends the above with one
-// subscription so list/get state tests have something to read back.
-func connectedTasksProfileMockWithSubscription(profileID wikipage.PageIdentifier, page, listName, remoteID string) *MockPageReaderMutator {
+// connectedTasksProfileMockWithBinding extends the above with one
+// engine-shape binding so list/get state tests have something to read
+// back. The new shape uses bindings[] (not legacy subscriptions[]).
+func connectedTasksProfileMockWithBinding(profileID wikipage.PageIdentifier, page, listName, remoteHandle string) *MockPageReaderMutator {
 	mock := &MockPageReaderMutator{}
 	mock.WrittenFrontmatterByID = map[string]map[string]any{
 		string(profileID): {
@@ -122,12 +123,13 @@ func connectedTasksProfileMockWithSubscription(profileID wikipage.PageIdentifier
 					"google_tasks": map[string]any{
 						"email":         tasksTestProfileEmail,
 						"refresh_token": "rt-test-token",
-						"subscriptions": []any{
+						"bindings": []any{
 							map[string]any{
 								"page":              page,
 								"list_name":         listName,
-								"remote_list_id":    remoteID,
+								"remote_handle":     remoteHandle,
 								"remote_list_title": "Tasks list",
+								"state":             "active",
 							},
 						},
 					},
@@ -139,7 +141,7 @@ func connectedTasksProfileMockWithSubscription(profileID wikipage.PageIdentifier
 }
 
 // readyLeaseTable returns a LeaseTable that has already signaled ready
-// so Subscribe doesn't block waiting for a boot rebuild.
+// so Bind doesn't block waiting for a boot rebuild.
 func readyLeaseTable() *connectors.LeaseTable {
 	lt := connectors.NewLeaseTable()
 	lt.SignalReady()
@@ -147,42 +149,104 @@ func readyLeaseTable() *connectors.LeaseTable {
 }
 
 // emptyChecklistReader returns an empty Checklist for any (page, list).
-// Sufficient for handler tests that exercise Subscribe's seed-id-map
-// path without driving real wiki state.
+// Sufficient for handler tests that exercise Bind's seed paths without
+// driving real wiki state.
 type emptyChecklistReader struct{}
 
 func (emptyChecklistReader) ListItems(_ context.Context, _, _ string) (*apiv1.Checklist, error) {
 	return &apiv1.Checklist{}, nil
 }
 
-// stubTasksFactoryReturning returns a TasksClientFactory that always
-// returns the given client (and no TokenSource — the connector never
-// uses it in these tests).
-func stubTasksFactoryReturning(client taskssync.TasksClient) taskssync.TasksClientFactory {
-	return func(wikipage.PageIdentifier, string) (taskssync.TasksClient, gateway.TokenSource, error) {
-		return client, nil, nil
+// noopMutator satisfies engine.ChecklistMutator without touching state.
+type noopMutator struct{}
+
+func (noopMutator) AddItemForSync(_ context.Context, _, _, _, _ string, _ bool, _ []string, _ string, _ string) (string, error) {
+	return "", nil
+}
+func (noopMutator) UpdateItemForSync(_ context.Context, _, _, _, _, _ string, _ bool, _ []string, _ string) error {
+	return nil
+}
+func (noopMutator) DeleteItemForSync(_ context.Context, _, _, _, _ string) error { return nil }
+func (noopMutator) AppendSyncEvent(_ context.Context, _, _, _, _ string) error    { return nil }
+
+// noopSuppressor satisfies engine.SyncSuppressor without state.
+type noopSuppressor struct{}
+
+func (noopSuppressor) Suppress(_ wikipage.PageIdentifier, _, _ string)   {}
+func (noopSuppressor) Unsuppress(_ wikipage.PageIdentifier, _, _ string) {}
+
+// memoryProfileLister implements engine.ProfileLister against a static
+// list. Tests don't need dynamic discovery.
+type memoryProfileLister struct {
+	profiles []wikipage.PageIdentifier
+}
+
+func (l *memoryProfileLister) ListProfilesWithKey(_ wikipage.DottedKeyPath) []wikipage.PageIdentifier {
+	out := make([]wikipage.PageIdentifier, len(l.profiles))
+	copy(out, l.profiles)
+	return out
+}
+
+// stubTasksClientFactory returns a TasksClientFactory that always
+// returns the given client (the engine path doesn't need TokenSource).
+func stubTasksClientFactory(client googletasks.TasksClient) googletasks.TasksClientFactory {
+	return func(_ context.Context, _ wikipage.PageIdentifier, _ string) (googletasks.TasksClient, error) {
+		return client, nil
 	}
 }
 
-// buildTasksConnector wires a Tasks Connector pointed at the supplied
-// page-store and an optional fake TasksClient. Pass nil for a default
-// no-op fake.
-func buildTasksConnector(mock *MockPageReaderMutator, client taskssync.TasksClient) *taskssync.Connector {
-	store, err := taskssync.NewSubscriptionStore(mock)
-	Expect(err).ToNot(HaveOccurred())
+// tasksTestWiring bundles the engine-path collaborators tests need to
+// drive the gRPC handler layer.
+type tasksTestWiring struct {
+	engine          *engine.Engine
+	adapter         *googletasks.TasksAdapter
+	bindingStore    engine.BindingStore
+	credentialStore *googletasks.FrontmatterCredentialStore
+}
+
+// buildTasksWiring wires the engine path against an in-memory page
+// store, an optional fake TasksClient (pass nil for default no-op),
+// and a fixed test clock.
+func buildTasksWiring(mock *MockPageReaderMutator, client googletasks.TasksClient) *tasksTestWiring {
+	GinkgoHelper()
 	if client == nil {
 		client = &fakeTasksClient{}
 	}
-	c, err := taskssync.NewConnector(
-		store,
-		readyLeaseTable(),
-		stubTasksFactoryReturning(client),
-		silentTasksLogger{},
-		tasksTestClock{},
+	logger := silentTasksLogger{}
+	bindingStore, err := engine.NewFrontmatterBindingStore(mock, &memoryProfileLister{}, logger)
+	Expect(err).ToNot(HaveOccurred())
+	credentialStore, err := googletasks.NewFrontmatterCredentialStore(
+		mock,
+		googletasks.SystemClock{},
+		logger,
+		nil, // pauseAll: no fan-out in handler tests
+		nil, // resumeAll: no fan-out in handler tests
 	)
 	Expect(err).ToNot(HaveOccurred())
-	c.SetChecklistReader(emptyChecklistReader{})
-	return c
+	adapter, err := googletasks.NewTasksAdapter(credentialStore, stubTasksClientFactory(client), logger)
+	Expect(err).ToNot(HaveOccurred())
+	eng, err := engine.NewEngine(
+		adapter,
+		readyLeaseTable(),
+		emptyChecklistReader{},
+		noopMutator{},
+		noopSuppressor{},
+		logger,
+		tasksTestClock{},
+		bindingStore,
+	)
+	Expect(err).ToNot(HaveOccurred())
+	return &tasksTestWiring{
+		engine:          eng,
+		adapter:         adapter,
+		bindingStore:    bindingStore,
+		credentialStore: credentialStore,
+	}
+}
+
+// withTasks chains a tasksTestWiring onto the v1.Server builder.
+func withTasks(s *v1.Server, w *tasksTestWiring) *v1.Server {
+	return s.WithGoogleTasks(w.engine, w.adapter, w.bindingStore, w.credentialStore)
 }
 
 // --- tests ---------------------------------------------------------------
@@ -209,7 +273,7 @@ var _ = Describe("ConnectorService handlers (GOOGLE_TASKS)", func() {
 	// ---------------------------------------------------------- BeginAuth (Tasks)
 
 	Describe("BeginAuth", func() {
-		Describe("when called with GOOGLE_TASKS but no Tasks connector wired", func() {
+		Describe("when called with GOOGLE_TASKS but no Tasks engine wired", func() {
 			var err error
 
 			BeforeEach(func() {
@@ -224,13 +288,13 @@ var _ = Describe("ConnectorService handlers (GOOGLE_TASKS)", func() {
 			})
 		})
 
-		Describe("when called with GOOGLE_TASKS and a connector but no auth-URL builder", func() {
+		Describe("when called with GOOGLE_TASKS and a wired engine but no auth-URL builder", func() {
 			var err error
 
 			BeforeEach(func() {
 				mock := connectedTasksProfileMock(profileID)
-				c := buildTasksConnector(mock, nil)
-				server := mustNewServer(mock, nil, nil).WithGoogleTasksConnector(c)
+				w := buildTasksWiring(mock, nil)
+				server := withTasks(mustNewServer(mock, nil, nil), w)
 				_, err = server.BeginAuth(ctx, &apiv1.BeginAuthRequest{
 					ConnectorKind: apiv1.ConnectorKind_CONNECTOR_KIND_GOOGLE_TASKS,
 				})
@@ -249,9 +313,8 @@ var _ = Describe("ConnectorService handlers (GOOGLE_TASKS)", func() {
 
 			BeforeEach(func() {
 				mock := connectedTasksProfileMock(profileID)
-				c := buildTasksConnector(mock, nil)
-				server := mustNewServer(mock, nil, nil).
-					WithGoogleTasksConnector(c).
+				w := buildTasksWiring(mock, nil)
+				server := withTasks(mustNewServer(mock, nil, nil), w).
 					WithTasksAuthURLBuilder(stubTasksAuthURLBuilder{
 						url:   "https://accounts.google.com/auth?state=abc",
 						state: "abc",
@@ -280,9 +343,8 @@ var _ = Describe("ConnectorService handlers (GOOGLE_TASKS)", func() {
 
 			BeforeEach(func() {
 				mock := connectedTasksProfileMock(profileID)
-				c := buildTasksConnector(mock, nil)
-				server := mustNewServer(mock, nil, nil).
-					WithGoogleTasksConnector(c).
+				w := buildTasksWiring(mock, nil)
+				server := withTasks(mustNewServer(mock, nil, nil), w).
 					WithTasksAuthURLBuilder(stubTasksAuthURLBuilder{url: "x", state: "y"})
 				_, err = server.BeginAuth(context.Background(), &apiv1.BeginAuthRequest{
 					ConnectorKind: apiv1.ConnectorKind_CONNECTOR_KIND_GOOGLE_TASKS,
@@ -303,8 +365,8 @@ var _ = Describe("ConnectorService handlers (GOOGLE_TASKS)", func() {
 
 			BeforeEach(func() {
 				mock := connectedTasksProfileMock(profileID)
-				c := buildTasksConnector(mock, nil)
-				server := mustNewServer(mock, nil, nil).WithGoogleTasksConnector(c)
+				w := buildTasksWiring(mock, nil)
+				server := withTasks(mustNewServer(mock, nil, nil), w)
 				_, err = server.CompleteAuth(ctx, &apiv1.CompleteAuthRequest{
 					ConnectorKind:     apiv1.ConnectorKind_CONNECTOR_KIND_GOOGLE_TASKS,
 					AuthorizationCode: "code",
@@ -321,7 +383,7 @@ var _ = Describe("ConnectorService handlers (GOOGLE_TASKS)", func() {
 	// ---------------------------------------------------------- Disconnect (Tasks)
 
 	Describe("Disconnect", func() {
-		Describe("when no Tasks connector is wired", func() {
+		Describe("when no Tasks engine is wired", func() {
 			var err error
 
 			BeforeEach(func() {
@@ -344,8 +406,8 @@ var _ = Describe("ConnectorService handlers (GOOGLE_TASKS)", func() {
 
 			BeforeEach(func() {
 				mock := connectedTasksProfileMock(profileID)
-				c := buildTasksConnector(mock, nil)
-				server := mustNewServer(mock, nil, nil).WithGoogleTasksConnector(c)
+				w := buildTasksWiring(mock, nil)
+				server := withTasks(mustNewServer(mock, nil, nil), w)
 				resp, err = server.Disconnect(ctx, &apiv1.DisconnectRequest{
 					ConnectorKind: apiv1.ConnectorKind_CONNECTOR_KIND_GOOGLE_TASKS,
 				})
@@ -368,7 +430,7 @@ var _ = Describe("ConnectorService handlers (GOOGLE_TASKS)", func() {
 	// ---------------------------------------------------------- GetState (Tasks)
 
 	Describe("GetState", func() {
-		Describe("when no Tasks connector is wired", func() {
+		Describe("when no Tasks engine is wired", func() {
 			var err error
 
 			BeforeEach(func() {
@@ -391,8 +453,8 @@ var _ = Describe("ConnectorService handlers (GOOGLE_TASKS)", func() {
 
 			BeforeEach(func() {
 				mock := connectedTasksProfileMock(profileID)
-				c := buildTasksConnector(mock, nil)
-				server := mustNewServer(mock, nil, nil).WithGoogleTasksConnector(c)
+				w := buildTasksWiring(mock, nil)
+				server := withTasks(mustNewServer(mock, nil, nil), w)
 				resp, err = server.GetState(ctx, &apiv1.GetStateRequest{
 					ConnectorKind: apiv1.ConnectorKind_CONNECTOR_KIND_GOOGLE_TASKS,
 				})
@@ -419,16 +481,16 @@ var _ = Describe("ConnectorService handlers (GOOGLE_TASKS)", func() {
 	// ---------------------------------------------------------- ListMySubscriptions (Tasks)
 
 	Describe("ListMySubscriptions", func() {
-		Describe("when the user has one subscription", func() {
+		Describe("when the user has one binding", func() {
 			var (
 				resp *apiv1.ListMySubscriptionsResponse
 				err  error
 			)
 
 			BeforeEach(func() {
-				mock := connectedTasksProfileMockWithSubscription(profileID, tasksTestPage, tasksTestListName, tasksTestRemoteID)
-				c := buildTasksConnector(mock, nil)
-				server := mustNewServer(mock, nil, nil).WithGoogleTasksConnector(c)
+				mock := connectedTasksProfileMockWithBinding(profileID, tasksTestPage, tasksTestListName, tasksTestRemoteID)
+				w := buildTasksWiring(mock, nil)
+				server := withTasks(mustNewServer(mock, nil, nil), w)
 				resp, err = server.ListMySubscriptions(ctx, &apiv1.ListMySubscriptionsRequest{
 					ConnectorKind: apiv1.ConnectorKind_CONNECTOR_KIND_GOOGLE_TASKS,
 				})
@@ -475,8 +537,8 @@ var _ = Describe("ConnectorService handlers (GOOGLE_TASKS)", func() {
 						{ID: "list-2", Title: "Errands"},
 					},
 				}
-				c := buildTasksConnector(mock, client)
-				server := mustNewServer(mock, nil, nil).WithGoogleTasksConnector(c)
+				w := buildTasksWiring(mock, client)
+				server := withTasks(mustNewServer(mock, nil, nil), w)
 				resp, err = server.ListRemoteLists(ctx, &apiv1.ListRemoteListsRequest{
 					ConnectorKind: apiv1.ConnectorKind_CONNECTOR_KIND_GOOGLE_TASKS,
 				})
@@ -504,8 +566,8 @@ var _ = Describe("ConnectorService handlers (GOOGLE_TASKS)", func() {
 
 			BeforeEach(func() {
 				mock := &MockPageReaderMutator{}
-				c := buildTasksConnector(mock, nil)
-				server := mustNewServer(mock, nil, nil).WithGoogleTasksConnector(c)
+				w := buildTasksWiring(mock, nil)
+				server := withTasks(mustNewServer(mock, nil, nil), w)
 				_, err = server.ListRemoteLists(ctx, &apiv1.ListRemoteListsRequest{
 					ConnectorKind: apiv1.ConnectorKind_CONNECTOR_KIND_GOOGLE_TASKS,
 				})
@@ -530,8 +592,8 @@ var _ = Describe("ConnectorService handlers (GOOGLE_TASKS)", func() {
 			BeforeEach(func() {
 				mock := connectedTasksProfileMock(profileID)
 				client = &fakeTasksClient{}
-				c := buildTasksConnector(mock, client)
-				server := mustNewServer(mock, nil, nil).WithGoogleTasksConnector(c)
+				w := buildTasksWiring(mock, client)
+				server := withTasks(mustNewServer(mock, nil, nil), w)
 				resp, err = server.Subscribe(ctx, &apiv1.SubscribeRequest{
 					ConnectorKind:    apiv1.ConnectorKind_CONNECTOR_KIND_GOOGLE_TASKS,
 					Page:             tasksTestPage,
@@ -548,7 +610,7 @@ var _ = Describe("ConnectorService handlers (GOOGLE_TASKS)", func() {
 				Expect(client.createdTaskLists).To(ConsistOf(tasksTestListName))
 			})
 
-			It("should bind the subscription to the freshly-created tasklist id", func() {
+			It("should bind to the freshly-created tasklist id", func() {
 				Expect(resp.GetSubscription().GetRemoteListHandle()).To(Equal("created-" + tasksTestListName))
 			})
 		})
@@ -558,8 +620,8 @@ var _ = Describe("ConnectorService handlers (GOOGLE_TASKS)", func() {
 
 			BeforeEach(func() {
 				mock := connectedTasksProfileMock(profileID)
-				c := buildTasksConnector(mock, nil)
-				server := mustNewServer(mock, nil, nil).WithGoogleTasksConnector(c)
+				w := buildTasksWiring(mock, nil)
+				server := withTasks(mustNewServer(mock, nil, nil), w)
 				_, err = server.Subscribe(ctx, &apiv1.SubscribeRequest{
 					ConnectorKind:    apiv1.ConnectorKind_CONNECTOR_KIND_GOOGLE_TASKS,
 					Page:             "",
@@ -584,8 +646,8 @@ var _ = Describe("ConnectorService handlers (GOOGLE_TASKS)", func() {
 				client := &fakeTasksClient{
 					taskListsToReturn: []gateway.TaskList{{ID: tasksTestRemoteID, Title: "Groceries"}},
 				}
-				c := buildTasksConnector(mock, client)
-				server := mustNewServer(mock, nil, nil).WithGoogleTasksConnector(c)
+				w := buildTasksWiring(mock, client)
+				server := withTasks(mustNewServer(mock, nil, nil), w)
 				resp, err = server.Subscribe(ctx, &apiv1.SubscribeRequest{
 					ConnectorKind:    apiv1.ConnectorKind_CONNECTOR_KIND_GOOGLE_TASKS,
 					Page:             tasksTestPage,
@@ -619,13 +681,13 @@ var _ = Describe("ConnectorService handlers (GOOGLE_TASKS)", func() {
 	// ---------------------------------------------------------- Unsubscribe (Tasks)
 
 	Describe("Unsubscribe", func() {
-		Describe("when unsubscribing an existing subscription", func() {
+		Describe("when unsubscribing an existing binding", func() {
 			var err error
 
 			BeforeEach(func() {
-				mock := connectedTasksProfileMockWithSubscription(profileID, tasksTestPage, tasksTestListName, tasksTestRemoteID)
-				c := buildTasksConnector(mock, nil)
-				server := mustNewServer(mock, nil, nil).WithGoogleTasksConnector(c)
+				mock := connectedTasksProfileMockWithBinding(profileID, tasksTestPage, tasksTestListName, tasksTestRemoteID)
+				w := buildTasksWiring(mock, nil)
+				server := withTasks(mustNewServer(mock, nil, nil), w)
 				_, err = server.Unsubscribe(ctx, &apiv1.UnsubscribeRequest{
 					ConnectorKind: apiv1.ConnectorKind_CONNECTOR_KIND_GOOGLE_TASKS,
 					Page:          tasksTestPage,
@@ -638,13 +700,13 @@ var _ = Describe("ConnectorService handlers (GOOGLE_TASKS)", func() {
 			})
 		})
 
-		Describe("when unsubscribing a missing subscription", func() {
+		Describe("when unsubscribing a missing binding", func() {
 			var err error
 
 			BeforeEach(func() {
 				mock := connectedTasksProfileMock(profileID)
-				c := buildTasksConnector(mock, nil)
-				server := mustNewServer(mock, nil, nil).WithGoogleTasksConnector(c)
+				w := buildTasksWiring(mock, nil)
+				server := withTasks(mustNewServer(mock, nil, nil), w)
 				_, err = server.Unsubscribe(ctx, &apiv1.UnsubscribeRequest{
 					ConnectorKind: apiv1.ConnectorKind_CONNECTOR_KIND_GOOGLE_TASKS,
 					Page:          "no-such-page",
@@ -669,8 +731,8 @@ var _ = Describe("ConnectorService handlers (GOOGLE_TASKS)", func() {
 
 			BeforeEach(func() {
 				mock := connectedTasksProfileMock(profileID)
-				c := buildTasksConnector(mock, nil)
-				server := mustNewServer(mock, nil, nil).WithGoogleTasksConnector(c)
+				w := buildTasksWiring(mock, nil)
+				server := withTasks(mustNewServer(mock, nil, nil), w)
 				resp, err = server.ListDeadLetters(ctx, &apiv1.ListDeadLettersRequest{
 					ConnectorKind: apiv1.ConnectorKind_CONNECTOR_KIND_GOOGLE_TASKS,
 					Page:          tasksTestPage,
@@ -678,7 +740,7 @@ var _ = Describe("ConnectorService handlers (GOOGLE_TASKS)", func() {
 				})
 			})
 
-			It("should not error — Tasks has no dead-letter ledger yet", func() {
+			It("should not error — Tasks has no dead-letter ledger surface yet", func() {
 				Expect(err).ToNot(HaveOccurred())
 			})
 
@@ -694,8 +756,8 @@ var _ = Describe("ConnectorService handlers (GOOGLE_TASKS)", func() {
 
 			BeforeEach(func() {
 				mock := connectedTasksProfileMock(profileID)
-				c := buildTasksConnector(mock, nil)
-				server := mustNewServer(mock, nil, nil).WithGoogleTasksConnector(c)
+				w := buildTasksWiring(mock, nil)
+				server := withTasks(mustNewServer(mock, nil, nil), w)
 				_, err = server.ClearDeadLetter(ctx, &apiv1.ClearDeadLetterRequest{
 					ConnectorKind: apiv1.ConnectorKind_CONNECTOR_KIND_GOOGLE_TASKS,
 					Page:          tasksTestPage,
@@ -704,7 +766,7 @@ var _ = Describe("ConnectorService handlers (GOOGLE_TASKS)", func() {
 				})
 			})
 
-			It("should return NotFound — Tasks has no dead-letter ledger yet", func() {
+			It("should return NotFound — Tasks has no dead-letter ledger surface yet", func() {
 				Expect(err).To(HaveGrpcStatusWithSubstr(codes.NotFound, "dead_letter_item_not_found"))
 			})
 		})
@@ -713,16 +775,16 @@ var _ = Describe("ConnectorService handlers (GOOGLE_TASKS)", func() {
 	// ---------------------------------------------------------- GetChecklistSubscriptionState
 
 	Describe("GetChecklistSubscriptionState", func() {
-		Describe("when only the Tasks connector is wired and the user has a Tasks subscription", func() {
+		Describe("when only the Tasks connector is wired and the user has a Tasks binding", func() {
 			var (
 				resp *apiv1.GetChecklistSubscriptionStateResponse
 				err  error
 			)
 
 			BeforeEach(func() {
-				mock := connectedTasksProfileMockWithSubscription(profileID, tasksTestPage, tasksTestListName, tasksTestRemoteID)
-				c := buildTasksConnector(mock, nil)
-				server := mustNewServer(mock, nil, nil).WithGoogleTasksConnector(c)
+				mock := connectedTasksProfileMockWithBinding(profileID, tasksTestPage, tasksTestListName, tasksTestRemoteID)
+				w := buildTasksWiring(mock, nil)
+				server := withTasks(mustNewServer(mock, nil, nil), w)
 				resp, err = server.GetChecklistSubscriptionState(ctx, &apiv1.GetChecklistSubscriptionStateRequest{
 					Page:     tasksTestPage,
 					ListName: tasksTestListName,
@@ -749,14 +811,14 @@ var _ = Describe("ConnectorService handlers (GOOGLE_TASKS)", func() {
 	})
 })
 
-var _ = Describe("Server.WithGoogleTasksConnector", func() {
+var _ = Describe("Server.WithGoogleTasks", func() {
 	Describe("when the builder is invoked", func() {
 		var server *v1.Server
 
 		BeforeEach(func() {
 			mock := &MockPageReaderMutator{}
-			c := buildTasksConnector(mock, nil)
-			server = mustNewServer(nil, nil, nil).WithGoogleTasksConnector(c)
+			w := buildTasksWiring(mock, nil)
+			server = withTasks(mustNewServer(nil, nil, nil), w)
 		})
 
 		It("should return the server for fluent chaining", func() {
@@ -778,4 +840,3 @@ func (s stubTasksAuthURLBuilder) BuildAuthURL(_ context.Context, _, _ string) (a
 	}
 	return s.url, s.state, nil
 }
-

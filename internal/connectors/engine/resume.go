@@ -22,7 +22,7 @@ const resumeFullResyncHorizon = 7 * 24 * time.Hour
 // Per MATRIX.md row 5, this unifies Tasks's explicit PausedReason field
 // with Keep's auth-disconnect implicit pause; both flow through this
 // method now. Tasks already had an explicit field; Keep gains it as
-// part of the engine extraction (the field is set by transitionToPaused
+// part of the engine extraction (the field is set by applyPausedTransition
 // and cleared by Resume / runForceFullResync).
 //
 // Errors from FindBinding return ("", false). This is a status-display
@@ -46,7 +46,21 @@ func (e *Engine) lookupPausedReason(key connectors.SubscriptionKey) (string, boo
 	return binding.PausedReason, true
 }
 
-// transitionToPaused writes the binding into the paused state with the
+// TransitionToPaused is the exported wrapper around applyPausedTransition
+// for callers outside the engine package (Phase 4-3: the
+// FrontmatterCredentialStore.ClearCredentials path needs to mark every
+// active binding as paused on Disconnect). Forwards directly to the
+// internal helper, which holds the per-checklist mutex + per-profile
+// lock and writes the binding's State / PausedReason / PausedAt.
+//
+// kind defaults to e.adapter.Kind() — the per-engine instance dictates
+// which connector kind this method writes for, so callers don't need
+// to thread that through.
+func (e *Engine) TransitionToPaused(profileID wikipage.PageIdentifier, page, listName, reason string) error {
+	return e.applyPausedTransition(profileID, e.adapter.Kind(), page, listName, reason)
+}
+
+// applyPausedTransition writes the binding into the paused state with the
 // supplied reason, preserving cursor (LastSyncedSeq) and AdapterState
 // so a within-horizon Resume can flip it back without losing progress.
 //
@@ -66,7 +80,7 @@ func (e *Engine) lookupPausedReason(key connectors.SubscriptionKey) (string, boo
 //     intentionally preserved — a within-horizon Resume reuses them.
 //  5. SaveBinding.
 //  6. Log a structured event line.
-func (e *Engine) transitionToPaused(
+func (e *Engine) applyPausedTransition(
 	profileID wikipage.PageIdentifier,
 	kind connectors.ConnectorKind,
 	page, listName, reason string,

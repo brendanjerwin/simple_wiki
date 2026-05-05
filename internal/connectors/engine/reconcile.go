@@ -458,7 +458,7 @@ func (e *Engine) advanceLastSyncedSeq(ctx context.Context, binding connectors.Bi
 // steady-state condition (the next user-initiated Resume / Reconnect
 // is the recovery path), not a sync error to bubble up.
 func (e *Engine) handleAuthFailure(profileID wikipage.PageIdentifier, kind connectors.ConnectorKind, page, listName string) error {
-	if err := e.transitionToPaused(profileID, kind, page, listName, pausedReasonAuthFailed); err != nil {
+	if err := e.applyPausedTransition(profileID, kind, page, listName, pausedReasonAuthFailed); err != nil {
 		// If the transition itself fails (e.g., the binding vanished
 		// between FindBinding and SaveBinding), treat ErrBindingNotFound
 		// as a benign race; everything else is a real error.

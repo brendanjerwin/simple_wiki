@@ -24,7 +24,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"time"
 
 	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
@@ -772,63 +771,10 @@ func toTranslatorTasks(in []gateway.Task) []translator.Task {
 	return out
 }
 
-// FrontmatterCredentialReader is the production CredentialReader. It
-// reads wiki.connectors.google_tasks.refresh_token from the profile's
-// frontmatter via the engine's shared FrontmatterReadWriter.
-type FrontmatterCredentialReader struct {
-	pages FrontmatterReader
-}
-
-// FrontmatterReader is the read-only seam the credential reader needs.
-// Mirrors engine.FrontmatterReadWriter's read half; pulled out as its
-// own interface so the adapter package doesn't import the engine.
-type FrontmatterReader interface {
-	ReadFrontMatter(identifier wikipage.PageIdentifier) (wikipage.PageIdentifier, wikipage.FrontMatter, error)
-}
-
-// NewFrontmatterCredentialReader wires a FrontmatterCredentialReader.
-func NewFrontmatterCredentialReader(pages FrontmatterReader) (*FrontmatterCredentialReader, error) {
-	if pages == nil {
-		return nil, errors.New("google_tasks: pages must not be nil")
-	}
-	return &FrontmatterCredentialReader{pages: pages}, nil
-}
-
-// LoadRefreshToken reads wiki.connectors.google_tasks.refresh_token
-// from the profile's frontmatter. Returns ErrCredentialMissing when
-// the profile is unconfigured (page missing, frontmatter missing, or
-// refresh_token field empty).
-func (r *FrontmatterCredentialReader) LoadRefreshToken(_ context.Context, profileID wikipage.PageIdentifier) (string, error) {
-	_, fm, err := r.pages.ReadFrontMatter(profileID)
-	if err != nil {
-		// Page missing / frontmatter missing → not configured.
-		if isNotExistError(err) {
-			return "", ErrCredentialMissing
-		}
-		return "", fmt.Errorf("google_tasks: read frontmatter for %s: %w", profileID, err)
-	}
-	wiki, ok := fm["wiki"].(map[string]any)
-	if !ok {
-		return "", ErrCredentialMissing
-	}
-	conns, ok := wiki["connectors"].(map[string]any)
-	if !ok {
-		return "", ErrCredentialMissing
-	}
-	gt, ok := conns[string(connectors.ConnectorKindGoogleTasks)].(map[string]any)
-	if !ok {
-		return "", ErrCredentialMissing
-	}
-	tok, ok := gt["refresh_token"].(string)
-	if !ok || tok == "" {
-		return "", ErrCredentialMissing
-	}
-	return tok, nil
-}
-
-// isNotExistError checks whether an error chain represents a
-// not-found condition. The wiki's PageReaderMutator wraps os.ErrNotExist
-// for missing pages.
-func isNotExistError(err error) bool {
-	return errors.Is(err, os.ErrNotExist)
-}
+// FrontmatterCredentialStore lives in credentials.go and supersedes
+// the prior FrontmatterCredentialReader on this file. Adapter
+// instantiation in production wiring uses *FrontmatterCredentialStore
+// directly as the CredentialReader (the store satisfies the read
+// interface). Tests in adapter_test.go that previously exercised the
+// reader-only path now exercise the store, with a no-op pause/resume
+// hook pair.

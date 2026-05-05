@@ -8,21 +8,22 @@ import (
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 )
 
-// TransitionToPausedForTest exposes the engine's transitionToPaused
+// TransitionToPausedForTest exposes the engine's applyPausedTransition
 // helper for engine_test package tests. The helper is engine-internal
 // because production callers live in reconcile.go's outbound paths
 // (auth-failed branch); the test seam exists so Phase 3e can drive it
 // in isolation under TDD without first wiring reconcile.go.
 //
-// Safe to remove once reconcile.go's auth-failed branch is wired and
-// transitionToPaused has organic call-site coverage. Until then this
-// keeps the lock dance + binding mutation logic testable on its own.
+// Note: distinct from the exported Engine.TransitionToPaused (which
+// takes only profileID/page/listName/reason and infers kind from the
+// adapter). This test seam takes an explicit kind so legacy multi-
+// adapter test scenarios can drive it.
 func (e *Engine) TransitionToPausedForTest(
 	profileID wikipage.PageIdentifier,
 	kind connectors.ConnectorKind,
 	page, listName, reason string,
 ) error {
-	return e.transitionToPaused(profileID, kind, page, listName, reason)
+	return e.applyPausedTransition(profileID, kind, page, listName, reason)
 }
 
 // RunPreconditionRecoveryForTest exposes the engine's runPrecondition

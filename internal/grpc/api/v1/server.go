@@ -7,8 +7,9 @@ import (
 	"time"
 
 	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
+	"github.com/brendanjerwin/simple_wiki/internal/connectors/engine"
 	keepsync "github.com/brendanjerwin/simple_wiki/internal/connectors/google_keep/sync"
-	taskssync "github.com/brendanjerwin/simple_wiki/internal/connectors/google_tasks/sync"
+	googletasks "github.com/brendanjerwin/simple_wiki/internal/connectors/google_tasks"
 	"github.com/brendanjerwin/simple_wiki/server/checklistmutator"
 	"github.com/brendanjerwin/simple_wiki/filestore"
 	"github.com/brendanjerwin/simple_wiki/index/bleve"
@@ -121,7 +122,14 @@ type Server struct {
 	agentChatContextStore   AgentChatContextStore
 	checklistMutator        *checklistmutator.Mutator
 	keepConnector           *keepsync.Connector
-	tasksConnector          *taskssync.Connector
+
+	// Google Tasks: Phase 4-3 cutover. The legacy *taskssync.Connector
+	// is gone; the engine, adapter, binding store, and credential
+	// store collaborate to satisfy the gRPC ConnectorService surface.
+	tasksEngine             *engine.Engine
+	tasksAdapter            *googletasks.TasksAdapter
+	tasksBindingStore       engine.BindingStore
+	tasksCredentialStore    *googletasks.FrontmatterCredentialStore
 	tasksAuthURLBuilder     TasksAuthURLBuilder
 }
 
@@ -242,13 +250,23 @@ type TasksAuthURLBuilder interface {
 	BuildAuthURL(ctx context.Context, profileID, accountEmail string) (authURL, stateToken string, err error)
 }
 
-// WithGoogleTasksConnector wires the Google Tasks connector orchestrator
-// into the server. Required for ConnectorService handlers (connector_kind
-// = GOOGLE_TASKS) to function. Optional — without it, those branches
-// return a clear "not configured by this wiki's operator" error so
-// frontends can render the "set up Google Tasks on profile" prompt.
-func (s *Server) WithGoogleTasksConnector(c *taskssync.Connector) *Server {
-	s.tasksConnector = c
+// WithGoogleTasks wires the Google Tasks engine path into the server.
+// All four collaborators are required together — the gRPC handlers
+// route Bind/Unbind/ForceFullResync/Resume through engine, list
+// bindings + credentials via the binding store + credential store,
+// and create remote tasklists via the adapter. Optional as a group —
+// without it, the GOOGLE_TASKS branches return a clear
+// "not configured by this wiki's operator" error.
+func (s *Server) WithGoogleTasks(
+	eng *engine.Engine,
+	adapter *googletasks.TasksAdapter,
+	bindingStore engine.BindingStore,
+	credentialStore *googletasks.FrontmatterCredentialStore,
+) *Server {
+	s.tasksEngine = eng
+	s.tasksAdapter = adapter
+	s.tasksBindingStore = bindingStore
+	s.tasksCredentialStore = credentialStore
 	return s
 }
 

@@ -193,21 +193,21 @@ type silentLogger struct{}
 func (silentLogger) Info(string, ...any)  {}
 func (silentLogger) Error(string, ...any) {}
 
-// fakeFrontmatterReader is the in-memory stand-in for the engine's
-// FrontmatterReader. Used for FrontmatterCredentialReader tests.
-type fakeFrontmatterReader struct {
+// fakeFrontmatterReadWriter is the in-memory stand-in for the wiki's
+// page reader/writer. Used for FrontmatterCredentialStore tests.
+type fakeFrontmatterReadWriter struct {
 	pages map[wikipage.PageIdentifier]wikipage.FrontMatter
 	err   map[wikipage.PageIdentifier]error
 }
 
-func newFakeFrontmatterReader() *fakeFrontmatterReader {
-	return &fakeFrontmatterReader{
+func newFakeFrontmatterReadWriter() *fakeFrontmatterReadWriter {
+	return &fakeFrontmatterReadWriter{
 		pages: map[wikipage.PageIdentifier]wikipage.FrontMatter{},
 		err:   map[wikipage.PageIdentifier]error{},
 	}
 }
 
-func (f *fakeFrontmatterReader) ReadFrontMatter(id wikipage.PageIdentifier) (wikipage.PageIdentifier, wikipage.FrontMatter, error) {
+func (f *fakeFrontmatterReadWriter) ReadFrontMatter(id wikipage.PageIdentifier) (wikipage.PageIdentifier, wikipage.FrontMatter, error) {
 	if e, ok := f.err[id]; ok {
 		return id, nil, e
 	}
@@ -216,6 +216,11 @@ func (f *fakeFrontmatterReader) ReadFrontMatter(id wikipage.PageIdentifier) (wik
 		return id, nil, os.ErrNotExist
 	}
 	return id, fm, nil
+}
+
+func (f *fakeFrontmatterReadWriter) WriteFrontMatter(id wikipage.PageIdentifier, fm wikipage.FrontMatter) error {
+	f.pages[id] = fm
+	return nil
 }
 
 // --- specs -----------------------------------------------------------
@@ -972,26 +977,32 @@ var _ = Describe("TasksAdapter", func() {
 	})
 })
 
-var _ = Describe("FrontmatterCredentialReader", func() {
+var _ = Describe("FrontmatterCredentialStore.LoadRefreshToken", func() {
 	var (
 		ctx    context.Context
-		fmRead *fakeFrontmatterReader
-		reader *googletasks.FrontmatterCredentialReader
+		fmRead *fakeFrontmatterReadWriter
+		store  *googletasks.FrontmatterCredentialStore
 		pid    wikipage.PageIdentifier
 	)
 
 	BeforeEach(func() {
 		ctx = context.Background()
-		fmRead = newFakeFrontmatterReader()
+		fmRead = newFakeFrontmatterReadWriter()
 		var err error
-		reader, err = googletasks.NewFrontmatterCredentialReader(fmRead)
+		store, err = googletasks.NewFrontmatterCredentialStore(
+			fmRead,
+			googletasks.SystemClock{},
+			silentLogger{},
+			nil, // pauseAll: nil for read-only test path
+			nil, // resumeAll: nil for read-only test path
+		)
 		Expect(err).NotTo(HaveOccurred())
 		pid = wikipage.PageIdentifier("profile_alice")
 	})
 
 	When("the profile page does not exist", func() {
 		It("should return ErrCredentialMissing", func() {
-			_, err := reader.LoadRefreshToken(ctx, pid)
+			_, err := store.LoadRefreshToken(ctx, pid)
 			Expect(err).To(MatchError(googletasks.ErrCredentialMissing))
 		})
 	})
@@ -1002,7 +1013,7 @@ var _ = Describe("FrontmatterCredentialReader", func() {
 		})
 
 		It("should return ErrCredentialMissing", func() {
-			_, err := reader.LoadRefreshToken(ctx, pid)
+			_, err := store.LoadRefreshToken(ctx, pid)
 			Expect(err).To(MatchError(googletasks.ErrCredentialMissing))
 		})
 	})
@@ -1021,7 +1032,7 @@ var _ = Describe("FrontmatterCredentialReader", func() {
 		})
 
 		It("should return the token", func() {
-			tok, err := reader.LoadRefreshToken(ctx, pid)
+			tok, err := store.LoadRefreshToken(ctx, pid)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(tok).To(Equal("rt-real"))
 		})
