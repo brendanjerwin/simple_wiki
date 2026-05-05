@@ -2,11 +2,11 @@
 
 ## Status
 
-Accepted (2026-05-02); revised 2026-05-04 (per-connector floor reduced to `gateway/ + translator/ + adapter.go`; engine owns the entire lifecycle).
+Accepted (2026-05-02); revised 2026-05-04 (per-connector floor reduced to `gateway/ + translator/ + adapter.go + credentials.go`; engine owns the entire lifecycle); implementation landed 2026-05-04 on branch `extract-sync-engine-bind-rename`.
 
 ## Date
 
-2026-05-02 (original); 2026-05-04 (engine-ownership refinement)
+2026-05-02 (original); 2026-05-04 (engine-ownership refinement + extraction implementation)
 
 ## Context
 
@@ -36,6 +36,7 @@ Each connector splits into:
 - **`gateway/`** — Gateway pattern (PoEAA). Wire-protocol client only. OAuth, REST, types matching the remote API's vocabulary. No domain logic. (For Keep: gpsoauth + REST + Keep node types. For Tasks: OAuth refresh + Tasks REST CRUD. For iCloud: app-specific-password Basic Auth + CalDAV verbs.)
 - **`translator/`** — Anti-Corruption Layer (DDD). Named transformations between remote vocabulary and the wiki's `ChecklistItem` shape: `KeepNodeToChecklistItem`, `ChecklistItemToKeepNode`, `TaskToChecklistItem`, `ChecklistItemToTaskFields`, `TitleAndTagsFromText`, etc. Each transformation is a named function with its own round-trip property test.
 - **`adapter.go`** — implements `BackendAdapter`. Calls into `gateway/` for wire I/O and `translator/` for shape conversion. Holds nothing about the merge algorithm, the cursor advance logic, the bind ceremony, the precondition recovery, or the dead-letter retry — all of those are in the engine. Per-adapter-internal state (Tasks's `wiki:uid` marker handling; Keep's `LabelIDs` cache) lives wholly inside the adapter's `EncodeAdapterState` / `DecodeAdapterState` codec, so the engine never inspects it.
+- **`credentials.go`** — per-connector `CredentialReadWriter` that reads and writes the connector's auth material on the user's profile page (Tasks: refresh token; Keep: master token). Plus the Resume helper that bootstraps existing bindings on startup. Engine-agnostic; the engine never touches credentials directly — it asks the adapter, which asks credentials.
 
 There is **no** `sync/` subpackage anymore. The original ADR-0012 (2026-05-02) had each connector own a `sync/` package with the per-tick algorithm; the 2026-05-04 audit determined that approach left enough algorithmic surface per-adapter to keep growing parallel bug classes (PR #999 shipped a third critical correctness incident before this extraction). Engine-owned lifecycle ELIMINATES the per-connector algorithmic surface.
 

@@ -2,15 +2,15 @@
 
 ## Status
 
-Accepted (2026-05-03); revised 2026-05-04 with audited `BackendAdapter` interface (see "Audited refinement" below).
+Accepted (2026-05-03); revised 2026-05-04 with audited `BackendAdapter` interface (see "Audited refinement" below); implementation landed 2026-05-04 on branch `extract-sync-engine-bind-rename`.
 
 ## Date
 
-2026-05-03 (original); 2026-05-04 (audited refinement, [`internal/connectors/MATRIX.md`](../../internal/connectors/MATRIX.md))
+2026-05-03 (original); 2026-05-04 (audited refinement + extraction implementation, [`internal/connectors/MATRIX.md`](../../internal/connectors/MATRIX.md))
 
 ## Context
 
-ADR-0011 established the `ChecklistSubscription` aggregate. ADR-0012 split each connector into `gateway/translator/sync/` and lifted the cross-cutting types (`Connector`, `LeaseTable`, `SyncScheduler`, event constants) into `internal/connectors/`. Both Keep and Google Tasks were implemented against that shape.
+ADR-0011 established the `ChecklistBinding` aggregate (originally named `ChecklistSubscription` until the 2026-05-04 verb-rename revision). ADR-0012 split each connector into `gateway/translator/sync/` and lifted the cross-cutting types (`Connector`, `LeaseTable`, `SyncScheduler`, event constants) into `internal/connectors/`. Both Keep and Google Tasks were implemented against that shape.
 
 ADR-0012 explicitly stopped at *interface* lifting. The actual sync algorithm — the per-item three-way merge that decides "push wiki / apply remote / no-op / conflict" — was left in each connector's `sync/connector.go`. Two near-identical implementations.
 
@@ -244,7 +244,7 @@ Per item, on each tick, the engine looks at events with `seq > binding.LastSynce
 - Latest event is `src=connector:<other>:…` → `wiki_diverged` (cross-connector — defer to that connector's authority).
 - Latest event is `src=migration:…` → `¬wiki_diverged`.
 
-Combined with `remote_diverged` (computed from the adapter's pull result vs the previous remote snapshot), the merge produces the same 4-cell decision Keep already documents in `connector.go:1527-1554` — but driven by causality instead of by value compare.
+Combined with `remote_diverged` (computed from the adapter's pull result vs the previous remote snapshot), the merge produces the same 4-cell decision the pre-extraction Keep `sync/connector.go` documented in its merge classifier — but driven by causality instead of by value compare. The post-extraction equivalent lives in [`internal/connectors/engine/reconcile.go`](../../internal/connectors/engine/reconcile.go).
 
 ### Compaction
 

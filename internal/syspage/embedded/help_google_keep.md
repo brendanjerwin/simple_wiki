@@ -131,17 +131,17 @@ Errors branch on typed codes only — never on the human-readable banner text.
 
 ## For agents
 
-The bridge is exposed through the unified per-user gRPC service `api.v1.ConnectorService`. All RPCs accept a `connector_kind` enum to disambiguate; pass `CONNECTOR_KIND_GOOGLE_KEEP` for Keep flows. Every method scopes to the calling user via Tailscale identity → ProfileIdentifierFor; no method ever leaks another user's master token or subscriptions.
+The bridge is exposed through the unified per-user gRPC service `api.v1.ConnectorService`. All RPCs accept a `connector_kind` enum to disambiguate; pass `CONNECTOR_KIND_GOOGLE_KEEP` for Keep flows. Every method scopes to the calling user via Tailscale identity → ProfileIdentifierFor; no method ever leaks another user's master token or bindings.
 
 - `BeginAuth(connector_kind=GOOGLE_KEEP) → BeginAuthResponse` — no-op for Keep (its flow is single-shot via `CompleteAuth`); documented for symmetry with other connectors.
 - `CompleteAuth(connector_kind=GOOGLE_KEEP, email, oauth_token) → ConnectorState` — exchanges the oauth_token for a master token and persists `wiki.connectors.google_keep.*`.
-- `Disconnect(connector_kind=GOOGLE_KEEP) → ConnectorState` — pauses subscriptions.
-- `GetState(connector_kind=GOOGLE_KEEP) → ConnectorState` — reads connector + subscriptions.
+- `Disconnect(connector_kind=GOOGLE_KEEP) → ConnectorState` — pauses bindings.
+- `GetState(connector_kind=GOOGLE_KEEP) → ConnectorState` — reads connector + bindings.
 - `ListRemoteLists(connector_kind=GOOGLE_KEEP) → RemoteListSummary[]` — proxies to the user's Keep account.
-- `ListMySubscriptions(connector_kind=GOOGLE_KEEP) → SubscriptionState[]`
-- `Subscribe(connector_kind=GOOGLE_KEEP, page, list_name, remote_list_handle?) → SubscriptionState`
-- `Unsubscribe(connector_kind=GOOGLE_KEEP, page, list_name) → ()`
-- `GetChecklistSubscriptionState(page, list_name) → ChecklistSubscriptionState` — small surface used by the Checklist component on render. **Does not take connector_kind**; returns whichever connector owns the checklist.
+- `ListMyBindings(connector_kind=GOOGLE_KEEP) → BindingState[]`
+- `Bind(connector_kind=GOOGLE_KEEP, page, list_name, remote_list_handle?) → BindingState`
+- `Unbind(connector_kind=GOOGLE_KEEP, page, list_name) → ()`
+- `GetChecklistBindingState(page, list_name) → ChecklistBindingState` — small surface used by the Checklist component on render. **Does not take connector_kind**; returns whichever connector owns the checklist.
 - `ListDeadLetters(connector_kind=GOOGLE_KEEP, page, list_name) → DeadLetterItem[]`
 - `ClearDeadLetter(connector_kind=GOOGLE_KEEP, page, list_name, item_uid) → ()`
 

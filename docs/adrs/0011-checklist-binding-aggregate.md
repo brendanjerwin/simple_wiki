@@ -2,11 +2,11 @@
 
 ## Status
 
-Accepted (2026-05-02); revised 2026-05-04 (terminology: `Subscription` → `Binding`; `Subscribe`/`Unsubscribe` → `Bind`/`Unbind`).
+Accepted (2026-05-02); revised 2026-05-04 (terminology: `Subscription` → `Binding`; `Subscribe`/`Unsubscribe` → `Bind`/`Unbind`); implementation landed 2026-05-04 on branch `extract-sync-engine-bind-rename`.
 
 ## Date
 
-2026-05-02 (original); 2026-05-04 (terminology unification)
+2026-05-02 (original); 2026-05-04 (terminology unification + extraction implementation)
 
 ## Context
 
