@@ -252,68 +252,87 @@ func (e *Engine) applyInbound(
 	}
 
 	for _, remoteItem := range items {
-		if remoteItem.Deleted {
-			uid, hasUID := refToUID[string(remoteItem.Ref)]
-			if !hasUID {
-				continue
-			}
-			if delErr := e.mutator.DeleteItemForSync(ctx, binding.Page, binding.ListName, "", uid); delErr != nil {
-				return fmt.Errorf("delete wiki item %s on profile %s: %w",
-					uid, binding.ProfileID, delErr)
-			}
-			delete(idMap, uid)
-			delete(refToUID, string(remoteItem.Ref))
-			continue
+		if err := e.applyInboundOneItem(ctx, binding, remoteItem, classification, idMap, refToUID); err != nil {
+			return err
 		}
+	}
+	return nil
+}
 
-		wikiItem, txErr := e.adapter.RemoteToWiki(remoteItem)
-		if txErr != nil {
-			return fmt.Errorf("translate remote %s on profile %s: %w",
-				remoteItem.Ref, binding.ProfileID, txErr)
+// applyInboundOneItem handles a single remote item's inbound apply,
+// dispatching to the delete / merge-update / new-add branch per the
+// ADR-0015 4-cell rule. Extracted from applyInbound to keep the outer
+// function under revive's function-length cap; the per-branch logic is
+// the same case table the caller's docstring enumerates.
+func (e *Engine) applyInboundOneItem(
+	ctx context.Context,
+	binding connectors.Binding,
+	remoteItem connectors.RemoteItem,
+	classification map[string]EventClassification,
+	idMap map[string]string,
+	refToUID map[string]string,
+) error {
+	if remoteItem.Deleted {
+		uid, hasUID := refToUID[string(remoteItem.Ref)]
+		if !hasUID {
+			return nil
 		}
+		if delErr := e.mutator.DeleteItemForSync(ctx, binding.Page, binding.ListName, "", uid); delErr != nil {
+			return fmt.Errorf("delete wiki item %s on profile %s: %w",
+				uid, binding.ProfileID, delErr)
+		}
+		delete(idMap, uid)
+		delete(refToUID, string(remoteItem.Ref))
+		return nil
+	}
 
-		uid := wikiItem.UID
-		if uid == "" {
-			uid = refToUID[string(remoteItem.Ref)]
-		}
+	wikiItem, txErr := e.adapter.RemoteToWiki(remoteItem)
+	if txErr != nil {
+		return fmt.Errorf("translate remote %s on profile %s: %w",
+			remoteItem.Ref, binding.ProfileID, txErr)
+	}
 
-		if uid != "" {
-			if cls, has := classification[uid]; has && cls.WikiDiverged && !remoteItem.RemoteDiverged {
-				// ADR-0015 4-cell merge: wd ∧ ¬rd → push-wiki.
-				// The wiki has local edits but the remote item is unchanged
-				// (stale re-delivery via cursor safety buffer). Preserve the
-				// wiki edit; the outbound push will carry it to remote.
-				e.logger.Info("connectors/engine: wiki_diverged_skipped_inbound kind=%s profile=%s page=%s list=%s uid=%s ref=%s latest_src=%s",
-					e.adapter.Kind(), string(binding.ProfileID), binding.Page, binding.ListName, uid, string(remoteItem.Ref), cls.LatestEventSource)
-				continue
-			}
-			if cls, has := classification[uid]; has && cls.WikiDiverged && remoteItem.RemoteDiverged {
-				// ADR-0015 4-cell merge: wd ∧ rd → conflict-remote-wins.
-				// Both wiki and remote have changed; the engine applies the
-				// remote authoritative version per the merge policy.
-				e.logger.Info("connectors/engine: conflict_remote_wins kind=%s profile=%s page=%s list=%s uid=%s ref=%s latest_src=%s",
-					e.adapter.Kind(), string(binding.ProfileID), binding.Page, binding.ListName, uid, string(remoteItem.Ref), cls.LatestEventSource)
-			}
-			if updErr := e.mutator.UpdateItemForSync(ctx, binding.Page, binding.ListName, "", uid,
-				wikiItem.Text, wikiItem.Checked, wikiItem.Tags, wikiItem.Description); updErr != nil {
-				return fmt.Errorf("update wiki item %s on profile %s: %w",
-					uid, binding.ProfileID, updErr)
-			}
-			idMap[uid] = string(remoteItem.Ref)
-			refToUID[string(remoteItem.Ref)] = uid
-			continue
-		}
+	uid := wikiItem.UID
+	if uid == "" {
+		uid = refToUID[string(remoteItem.Ref)]
+	}
 
-		newUID, addErr := e.mutator.AddItemForSync(ctx, binding.Page, binding.ListName, "",
-			wikiItem.Text, wikiItem.Checked, wikiItem.Tags, wikiItem.Description, remoteItem.Position)
-		if addErr != nil {
-			return fmt.Errorf("add wiki item from remote %s on profile %s: %w",
-				remoteItem.Ref, binding.ProfileID, addErr)
+	if uid != "" {
+		if cls, has := classification[uid]; has && cls.WikiDiverged && !remoteItem.RemoteDiverged {
+			// ADR-0015 4-cell merge: wd ∧ ¬rd → push-wiki.
+			// The wiki has local edits but the remote item is unchanged
+			// (stale re-delivery via cursor safety buffer). Preserve the
+			// wiki edit; the outbound push will carry it to remote.
+			e.logger.Info("connectors/engine: wiki_diverged_skipped_inbound kind=%s profile=%s page=%s list=%s uid=%s ref=%s latest_src=%s",
+				e.adapter.Kind(), string(binding.ProfileID), binding.Page, binding.ListName, uid, string(remoteItem.Ref), cls.LatestEventSource)
+			return nil
 		}
-		if newUID != "" {
-			idMap[newUID] = string(remoteItem.Ref)
-			refToUID[string(remoteItem.Ref)] = newUID
+		if cls, has := classification[uid]; has && cls.WikiDiverged && remoteItem.RemoteDiverged {
+			// ADR-0015 4-cell merge: wd ∧ rd → conflict-remote-wins.
+			// Both wiki and remote have changed; the engine applies the
+			// remote authoritative version per the merge policy.
+			e.logger.Info("connectors/engine: conflict_remote_wins kind=%s profile=%s page=%s list=%s uid=%s ref=%s latest_src=%s",
+				e.adapter.Kind(), string(binding.ProfileID), binding.Page, binding.ListName, uid, string(remoteItem.Ref), cls.LatestEventSource)
 		}
+		if updErr := e.mutator.UpdateItemForSync(ctx, binding.Page, binding.ListName, "", uid,
+			wikiItem.Text, wikiItem.Checked, wikiItem.Tags, wikiItem.Description); updErr != nil {
+			return fmt.Errorf("update wiki item %s on profile %s: %w",
+				uid, binding.ProfileID, updErr)
+		}
+		idMap[uid] = string(remoteItem.Ref)
+		refToUID[string(remoteItem.Ref)] = uid
+		return nil
+	}
+
+	newUID, addErr := e.mutator.AddItemForSync(ctx, binding.Page, binding.ListName, "",
+		wikiItem.Text, wikiItem.Checked, wikiItem.Tags, wikiItem.Description, remoteItem.Position)
+	if addErr != nil {
+		return fmt.Errorf("add wiki item from remote %s on profile %s: %w",
+			remoteItem.Ref, binding.ProfileID, addErr)
+	}
+	if newUID != "" {
+		idMap[newUID] = string(remoteItem.Ref)
+		refToUID[string(remoteItem.Ref)] = newUID
 	}
 	return nil
 }
