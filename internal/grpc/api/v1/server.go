@@ -8,7 +8,7 @@ import (
 
 	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
 	"github.com/brendanjerwin/simple_wiki/internal/connectors/engine"
-	keepsync "github.com/brendanjerwin/simple_wiki/internal/connectors/google_keep/sync"
+	googlekeep "github.com/brendanjerwin/simple_wiki/internal/connectors/google_keep"
 	googletasks "github.com/brendanjerwin/simple_wiki/internal/connectors/google_tasks"
 	"github.com/brendanjerwin/simple_wiki/server/checklistmutator"
 	"github.com/brendanjerwin/simple_wiki/filestore"
@@ -121,7 +121,18 @@ type Server struct {
 	agentScheduleStore      AgentScheduleStore
 	agentChatContextStore   AgentChatContextStore
 	checklistMutator        *checklistmutator.Mutator
-	keepConnector           *keepsync.Connector
+
+	// Google Keep: Phase 5-A cutover. The legacy *keepsync.Connector
+	// is no longer wired through the gRPC service; the engine,
+	// adapter, binding store, and credential store collaborate to
+	// satisfy the gRPC ConnectorService surface. The legacy package
+	// remains compiled as a sibling for cron + listers during Phase
+	// 5-A (deletion lands in 5-B).
+	keepEngine          *engine.Engine
+	keepAdapter         *googlekeep.KeepAdapter
+	keepBindingStore    engine.BindingStore
+	keepCredentialStore *googlekeep.FrontmatterCredentialStore
+	keepAuthVerifier    googlekeep.AuthVerifier
 
 	// Google Tasks: Phase 4-3 cutover. The legacy *taskssync.Connector
 	// is gone; the engine, adapter, binding store, and credential
@@ -227,12 +238,33 @@ func (s *Server) WithChecklistMutator(m *checklistmutator.Mutator) *Server {
 	return s
 }
 
-// WithKeepConnector wires the Keep connector orchestrator into the server.
-// Required for ConnectorService handlers (connector_kind = GOOGLE_KEEP)
-// to function. Optional — without it, those branches return a clear
-// "not configured" error.
-func (s *Server) WithKeepConnector(c *keepsync.Connector) *Server {
-	s.keepConnector = c
+// WithKeepAuthVerifier wires the gpsoauth verifier used by
+// CompleteAuth(GOOGLE_KEEP) to exchange the captured oauth_token for
+// a master token + verify against the Keep API. Optional — without
+// it, CompleteAuth(GOOGLE_KEEP) returns FailedPrecondition explaining
+// the connector is not fully configured.
+func (s *Server) WithKeepAuthVerifier(v googlekeep.AuthVerifier) *Server {
+	s.keepAuthVerifier = v
+	return s
+}
+
+// WithGoogleKeep wires the Google Keep engine path into the server.
+// All four collaborators are required together — the gRPC handlers
+// route Bind/Unbind/ForceFullResync/Resume through engine, list
+// bindings + credentials via the binding store + credential store,
+// and create remote Keep notes via the adapter. Optional as a group —
+// without it, the GOOGLE_KEEP branches return a clear
+// "not configured by this wiki's operator" error.
+func (s *Server) WithGoogleKeep(
+	eng *engine.Engine,
+	adapter *googlekeep.KeepAdapter,
+	bindingStore engine.BindingStore,
+	credentialStore *googlekeep.FrontmatterCredentialStore,
+) *Server {
+	s.keepEngine = eng
+	s.keepAdapter = adapter
+	s.keepBindingStore = bindingStore
+	s.keepCredentialStore = credentialStore
 	return s
 }
 

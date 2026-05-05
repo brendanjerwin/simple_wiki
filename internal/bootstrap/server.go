@@ -19,13 +19,11 @@ import (
 	"github.com/brendanjerwin/simple_wiki/internal/caldav"
 	"github.com/brendanjerwin/simple_wiki/internal/connectors"
 	"github.com/brendanjerwin/simple_wiki/internal/connectors/engine"
-	keepsync "github.com/brendanjerwin/simple_wiki/internal/connectors/google_keep/sync"
 	googletasks "github.com/brendanjerwin/simple_wiki/internal/connectors/google_tasks"
 	tasksgateway "github.com/brendanjerwin/simple_wiki/internal/connectors/google_tasks/gateway"
 	grpcapi "github.com/brendanjerwin/simple_wiki/internal/grpc/api/v1"
 	wikimcp "github.com/brendanjerwin/simple_wiki/internal/mcp"
 	"github.com/brendanjerwin/simple_wiki/internal/observability"
-	"github.com/brendanjerwin/simple_wiki/migrations/eager"
 	"github.com/brendanjerwin/simple_wiki/pkg/chatbuffer"
 	"github.com/brendanjerwin/simple_wiki/pkg/jobs"
 	"github.com/brendanjerwin/simple_wiki/pkg/ulid"
@@ -504,113 +502,6 @@ func setupGRPCServer(
 	// fan-out scan below.
 	leaseTable := connectors.NewLeaseTable()
 
-	// Keep store — instantiated once and shared between the connector,
-	// the cron lister, and the boot-rebuild fan-out below.
-	keepBindingStore := keepsync.NewSubscriptionStore(site)
-
-	// Keep connector — Google Keep bridge orchestrator. Per-user state on
-	// profile pages (wiki.connectors.google_keep.*) plus a sync scheduler
-	// (added separately). Optional — without it ConnectorService's
-	// GOOGLE_KEEP branches return a clear "not configured" error.
-	keepConnector, err := keepsync.NewConnector(
-		keepBindingStore,
-		leaseTable,
-		http.DefaultClient,
-		keepsync.SystemClock{},
-	)
-	if err != nil {
-		return nil, nil, fmt.Errorf("create Keep connector: %w", err)
-	}
-	// TEMP: route Keep API responses through the wiki logger so we can
-	// see Changes() response shapes in journalctl while diagnosing the
-	// "ListNotes returns empty / CreateList silently fails" report.
-	// Strip this once the response-shape question is resolved.
-	keepConnector.SetDebugLogger(logger)
-	// Outbound sync needs read access to wiki checklists; the mutator
-	// satisfies keepsync.ChecklistReader's ListItems signature directly.
-	keepConnector.SetChecklistReader(checklistMutator)
-	// Register the single-worker outbound-sync queue. One worker per
-	// account is the right answer because Keep's targetVersion is
-	// global; concurrent pushes on the same account would race the
-	// version cursor and force resyncs.
-	if err := site.GetJobQueueCoordinator().RegisterQueue(
-		keepsync.KeepOutboundSyncJobName, 1, keepOutboundSyncQueueDepth,
-	); err != nil {
-		return nil, nil, fmt.Errorf("register Keep outbound sync queue: %w", err)
-	}
-	// Mutator hook: every checklist edit fires a debounced enqueue
-	// of a sync job for that (page, listName). Debounce coalesces
-	// burst edits (toggling 50 items rapidly) into a single push.
-	keepSyncDebouncer := keepsync.NewSyncDebouncer(
-		site.GetJobQueueCoordinator(),
-		keepConnector,
-		site,
-		logger,
-		1500*time.Millisecond,
-	)
-	checklistMutator.AddSubscriber(keepSyncDebouncer)
-	// Inbound apply: SyncToKeep also pulls Keep state into the wiki.
-	// Mutator writes during apply must NOT loop back as fresh sync
-	// triggers, so the suppressor wraps the apply window. Mutator
-	// satisfies keepsync.ChecklistMutator's For-Sync helpers directly.
-	keepConnector.SetChecklistMutator(checklistMutator)
-	keepConnector.SetSyncSuppressor(keepSyncDebouncer)
-	// Bind enqueues a sync job through the same queue cron + debouncer
-	// use, unifying every sync trigger behind Connector.SyncToKeep.
-	keepConnector.SetJobEnqueuer(site.GetJobQueueCoordinator())
-	// Cron tick fires every 30s: enumerate active bindings via a
-	// fresh index scan + profile decode each tick (handles pre-existing
-	// bindings that weren't bound during this process's lifetime),
-	// then enqueue one sync job per binding. Closes the inbound-latency
-	// gap so phone-side edits flow back to wiki without a wiki trigger.
-	keepBindingsLister := func() []keepsync.BindingKey {
-		var out []keepsync.BindingKey
-		// Query "...email" (a leaf string) instead of "...bindings"
-		// (an array of maps). The frontmatter index doesn't save key
-		// entries for non-empty arrays of maps — see index.indexArray
-		// "Skip complex types" — so a profile with bindings would be
-		// invisible to a query keyed on bindings. email is set on
-		// every connected profile alongside bindings, so it's the
-		// reliable signal here.
-		for _, p := range site.FrontmatterIndexQueryer.QueryKeyExistence("wiki.connectors.google_keep.email") {
-			state, err := keepBindingStore.LoadState(p)
-			if err != nil || !state.IsConfigured() {
-				continue
-			}
-			for _, b := range state.Subscriptions {
-				out = append(out, keepsync.BindingKey{
-					ProfileID: p,
-					Page:      b.Page,
-					ListName:  b.ListName,
-				})
-			}
-		}
-		return out
-	}
-	// Eager fingerprint migration: enqueue ONE scan job that walks
-	// the data dir, finds every legacy Keep-bridge binding (those
-	// whose MigratedFingerprints flag is unset), and enqueues a
-	// per-binding migration job that pulls Keep once and rebases
-	// synced_fp using the agreement-or-Keep-wins rule. Must be
-	// enqueued BEFORE the cron registration below so the job
-	// queue drains migration jobs before the first cron tick can
-	// run SyncToKeep against an un-migrated binding (the gate at
-	// the top of SyncToKeep would skip those anyway, but the
-	// eager job is what flips the flag so they stop being skipped).
-	// Source: plan §"Migration".
-	keepBridgeMigrationScanner := eager.NewFileSystemDataDirScanner(site.PathToData)
-	keepBridgeFingerprintMigration := eager.NewKeepBridgeFingerprintMigrationScanJob(
-		keepBridgeMigrationScanner,
-		site.GetJobQueueCoordinator(),
-		keepConnector,
-		keepBindingStore,
-	)
-	if eerr := site.GetJobQueueCoordinator().EnqueueJob(keepBridgeFingerprintMigration); eerr != nil {
-		logger.Error("Failed to enqueue Keep-bridge fingerprint migration scan job: %v", eerr)
-	} else {
-		logger.Info("Keep-bridge fingerprint migration scan started.")
-	}
-
 	// Unified per-30s connector tick. The SyncScheduler walks every
 	// registered connector's SubscriptionLister on each fire and
 	// enqueues a per-subscription sync job through that connector's
@@ -621,35 +512,16 @@ func setupGRPCServer(
 	if err != nil {
 		return nil, nil, fmt.Errorf("create connector sync scheduler: %w", err)
 	}
-	keepSubscriptionLister := func() []connectors.SubscriptionKey {
-		out := make([]connectors.SubscriptionKey, 0, 16)
-		for _, k := range keepBindingsLister() {
-			out = append(out, connectors.SubscriptionKey{
-				ProfileID: string(k.ProfileID),
-				Page:      k.Page,
-				ListName:  k.ListName,
-			})
-		}
-		return out
-	}
-	if regErr := syncScheduler.Register(
-		keepConnector,
-		keepSubscriptionLister,
-		func(_ connectors.Connector, key connectors.SubscriptionKey) jobs.Job {
-			// The Keep outbound-sync queue still serializes per-account
-			// pushes against Keep's global targetVersion, so the sync
-			// job stays Keep-typed at the queue level. The dispatch
-			// shape across connectors lives in SyncScheduler; the work
-			// inside the queue stays connector-private.
-			return keepsync.NewKeepOutboundSyncJob(
-				keepConnector,
-				wikipage.PageIdentifier(key.ProfileID),
-				key.Page,
-				key.ListName,
-			)
-		},
-	); regErr != nil {
-		return nil, nil, fmt.Errorf("register Keep with sync scheduler: %w", regErr)
+
+	// Google Keep engine path — Phase 5-A cutover. Same shape as the
+	// Tasks engine path: credential store + adapter + binding store +
+	// engine + debouncer + scheduler registration. The legacy Keep
+	// connector orchestrator (internal/connectors/google_keep/sync) is
+	// no longer wired into the dispatch shape; Phase 5-B deletes the
+	// legacy package entirely.
+	keepWiring, err := setupGoogleKeep(site, syncScheduler, checklistMutator, leaseTable, logger)
+	if err != nil {
+		return nil, nil, err
 	}
 
 	// Google Tasks engine path — env-var-conditional. The OAuth client id +
@@ -669,7 +541,7 @@ func setupGRPCServer(
 	// boot rebuild reconstitutes it after a process restart so cross-
 	// connector existence checks see a consistent picture before any
 	// RPC unblocks.
-	if err := rebuildLeaseTable(leaseTable, site, keepBindingStore, tasksWiring, logger); err != nil {
+	if err := rebuildLeaseTable(leaseTable, site, keepWiring, tasksWiring, logger); err != nil {
 		return nil, nil, fmt.Errorf("rebuild lease table: %w", err)
 	}
 	leaseTable.SignalReady()
@@ -696,8 +568,18 @@ func setupGRPCServer(
 		WithScheduledTurnDispatcher(site.ScheduledTurnDispatcher).
 		WithAgentScheduleStore(site.AgentScheduleStore).
 		WithAgentChatContextStore(site.AgentChatContextStore).
-		WithChecklistMutator(checklistMutator).
-		WithKeepConnector(keepConnector)
+		WithChecklistMutator(checklistMutator)
+
+	if keepWiring != nil {
+		grpcAPIServer = grpcAPIServer.
+			WithGoogleKeep(
+				keepWiring.engine,
+				keepWiring.adapter,
+				keepWiring.bindingStore,
+				keepWiring.credentialStore,
+			).
+			WithKeepAuthVerifier(keepWiring.authVerifier)
+	}
 
 	if tasksWiring != nil {
 		grpcAPIServer = grpcAPIServer.
@@ -1139,18 +1021,22 @@ func safeTail(s string, n int) string {
 // data corruption that an operator must inspect before the wiki keeps
 // running with a partially-consistent in-memory view.
 //
-// tasksWiring may be nil when the operator hasn't configured the Tasks
-// connector — that branch is skipped silently.
+// keepWiring / tasksWiring may be nil when the operator hasn't
+// configured that connector — those branches are skipped silently.
 func rebuildLeaseTable(
 	leaseTable *connectors.LeaseTable,
 	site *server.Site,
-	keepStore *keepsync.SubscriptionStore,
+	keepWiring *keepWiring,
 	tasksWiring *tasksWiring,
 	logger *lumber.ConsoleLogger,
 ) error {
-	keepCount, err := rebuildLeaseTableKeep(leaseTable, site, keepStore)
-	if err != nil {
-		return err
+	keepCount := 0
+	var err error
+	if keepWiring != nil {
+		keepCount, err = rebuildLeaseTableKeepFromBindings(leaseTable, site, keepWiring.bindingStore)
+		if err != nil {
+			return err
+		}
 	}
 	tasksCount := 0
 	if tasksWiring != nil {
@@ -1164,21 +1050,23 @@ func rebuildLeaseTable(
 	return nil
 }
 
-// rebuildLeaseTableKeep walks every profile with a configured Keep
-// connector and Takes a lease for each persisted Subscription. Returns the
-// count of leases taken.
-func rebuildLeaseTableKeep(
+// rebuildLeaseTableKeepFromBindings walks every profile with a
+// configured Keep connector and Takes a lease for each persisted
+// Binding. Returns the count of leases taken.
+func rebuildLeaseTableKeepFromBindings(
 	leaseTable *connectors.LeaseTable,
 	site *server.Site,
-	keepStore *keepsync.SubscriptionStore,
+	bindings engine.BindingStore,
 ) (int, error) {
 	count := 0
-	for _, profileID := range site.FrontmatterIndexQueryer.QueryKeyExistence("wiki.connectors.google_keep.email") {
-		state, err := keepStore.LoadState(profileID)
+	// Probe by master_token (the canonical "is connected?" leaf for
+	// Keep). Mirrors the Tasks rebuild's refresh_token probe.
+	for _, profileID := range site.FrontmatterIndexQueryer.QueryKeyExistence("wiki.connectors.google_keep.master_token") {
+		profileBindings, err := bindings.LoadBindings(profileID, connectors.ConnectorKindGoogleKeep)
 		if err != nil {
-			return count, fmt.Errorf("decode Keep state for %s: %w", profileID, err)
+			return count, fmt.Errorf("decode Keep bindings for %s: %w", profileID, err)
 		}
-		for _, b := range state.Subscriptions {
+		for _, b := range profileBindings {
 			key := connectors.ChecklistKey{Page: b.Page, ListName: b.ListName}
 			owner := connectors.LeaseOwner{
 				Kind:      connectors.ConnectorKindGoogleKeep,
