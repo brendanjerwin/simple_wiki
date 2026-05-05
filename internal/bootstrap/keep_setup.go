@@ -42,10 +42,10 @@ type keepWiring struct {
 }
 
 // keepOutboundSyncJobName is the queue name for the Keep outbound
-// sync job. Distinct from the legacy keepsync.KeepOutboundSyncJobName
-// constant — that legacy queue is no longer registered. The engine
-// path's queue uses this dedicated name so on-disk job state from a
-// prior process can't leak across the cutover.
+// sync job. Distinct from the legacy Keep sync package's queue name —
+// that legacy queue is no longer registered. The engine path's queue
+// uses this dedicated name so on-disk job state from a prior process
+// can't leak across the cutover.
 const keepOutboundSyncJobName = "GoogleKeepOutboundSync"
 
 // keepHTTPTimeoutSeconds is the timeout the Keep HTTP client uses for

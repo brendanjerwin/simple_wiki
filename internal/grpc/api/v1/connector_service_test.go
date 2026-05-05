@@ -133,10 +133,10 @@ var _ = Describe("ConnectorService dead-letter handlers (GOOGLE_KEEP, engine pat
 	})
 
 	// NOTE: Detailed dead-letter listing + clearing tests against the
-	// legacy *keepsync.Connector lived here pre-Phase-5-A. The engine
-	// path's per-binding dead-letter ledger is not yet exposed via the
-	// gRPC layer (the listDeadLettersKeep / clearDeadLetterKeep
-	// handlers are no-op stubs returning empty / NotFound, mirroring
-	// the Tasks engine path). When the engine grows a ledger query,
-	// the tests for that surface land here.
+	// legacy Keep connector lived here before the SyncEngine cutover.
+	// The engine path's per-binding dead-letter ledger is not yet
+	// exposed via the gRPC layer (the listDeadLettersKeep /
+	// clearDeadLetterKeep handlers are no-op stubs returning empty /
+	// NotFound, mirroring the Tasks engine path). When the engine
+	// grows a ledger query, the tests for that surface land here.
 })

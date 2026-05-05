@@ -38,17 +38,17 @@ import (
 // failures the item is dead-lettered: skipped on subsequent ticks
 // until the user clears it (via a wiki-side re-edit that resets the
 // failure count, or an admin RPC). Inbound apply still operates on
-// dead-lettered items; only the outbound push is gated. Mirrors
-// google_keep/sync's existing default — the strictest-behavior-wins
-// promotion makes this engine policy.
+// dead-lettered items; only the outbound push is gated. Mirrors the
+// legacy Keep connector's existing default — the strictest-behavior-
+// wins promotion makes this engine policy.
 const deadLetterThreshold = 10
 
 // pushFailureBackoffBase and pushFailureBackoffMax bound the
 // exponential per-item retry schedule. After the n-th consecutive
 // failure, the engine waits min(60s * 2^(n-1), 1h) before the next
 // push attempt for that item. The shouldSkipPush gate consults
-// NextAttemptAt; only failures populate it. Mirrors
-// google_keep/sync's existing pushFailureBackoffBaseSeconds /
+// NextAttemptAt; only failures populate it. Mirrors the legacy Keep
+// connector's pushFailureBackoffBaseSeconds /
 // pushFailureBackoffMaxSeconds.
 const (
 	pushFailureBackoffBase = 60 * time.Second

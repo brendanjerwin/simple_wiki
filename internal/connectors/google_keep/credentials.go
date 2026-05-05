@@ -3,11 +3,11 @@
 // master_token, android_id, connected_at, last_verified_at) on the
 // user's profile page.
 //
-// Per Phase 5-A of the SyncEngine extraction, the gpsoauth handling
-// that used to live in internal/connectors/google_keep/sync/{connector.go,
-// subscriptions.go} now lives here. Bind/Unbind/Resume/Sync algorithms
-// belong to internal/connectors/engine; this file only reads, writes,
-// and clears the per-profile credential bundle.
+// Per the SyncEngine extraction (Phase 5), the gpsoauth handling
+// that previously lived in the legacy Keep sync package now lives
+// here. Bind/Unbind/Resume/Sync algorithms belong to
+// internal/connectors/engine; this file only reads, writes, and
+// clears the per-profile credential bundle.
 //
 //revive:disable:var-naming // package name google_keep mirrors ConnectorKindGoogleKeep
 package google_keep

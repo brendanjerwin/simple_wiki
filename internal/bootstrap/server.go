@@ -513,12 +513,10 @@ func setupGRPCServer(
 		return nil, nil, fmt.Errorf("create connector sync scheduler: %w", err)
 	}
 
-	// Google Keep engine path — Phase 5-A cutover. Same shape as the
-	// Tasks engine path: credential store + adapter + binding store +
-	// engine + debouncer + scheduler registration. The legacy Keep
-	// connector orchestrator (internal/connectors/google_keep/sync) is
-	// no longer wired into the dispatch shape; Phase 5-B deletes the
-	// legacy package entirely.
+	// Google Keep engine path. Same shape as the Tasks engine path:
+	// credential store + adapter + binding store + engine + debouncer
+	// + scheduler registration. The legacy Keep connector orchestrator
+	// has been deleted (Phase 5-B); only the engine path remains.
 	keepWiring, err := setupGoogleKeep(site, syncScheduler, checklistMutator, leaseTable, logger)
 	if err != nil {
 		return nil, nil, err

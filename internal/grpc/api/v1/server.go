@@ -122,12 +122,10 @@ type Server struct {
 	agentChatContextStore   AgentChatContextStore
 	checklistMutator        *checklistmutator.Mutator
 
-	// Google Keep: Phase 5-A cutover. The legacy *keepsync.Connector
-	// is no longer wired through the gRPC service; the engine,
-	// adapter, binding store, and credential store collaborate to
-	// satisfy the gRPC ConnectorService surface. The legacy package
-	// remains compiled as a sibling for cron + listers during Phase
-	// 5-A (deletion lands in 5-B).
+	// Google Keep: engine path. The legacy Keep sync package has
+	// been deleted (Phase 5-B); the engine, adapter, binding store,
+	// and credential store collaborate to satisfy the gRPC
+	// ConnectorService surface.
 	keepEngine          *engine.Engine
 	keepAdapter         *googlekeep.KeepAdapter
 	keepBindingStore    engine.BindingStore

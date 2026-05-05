@@ -15,17 +15,18 @@ import (
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 )
 
-// Phase 5-A cuts the gRPC ConnectorService Keep branches over to the
-// engine path. Detailed handler tests against the legacy
-// *keepsync.Connector + gpsoauth fakes lived in this file pre-cutover;
+// The gRPC ConnectorService Keep branches go through the engine path.
+// Detailed handler tests against the legacy Keep sync connector +
+// gpsoauth fakes lived in this file before the SyncEngine cutover;
 // they're replaced here by the smaller "engine-path-not-wired ⇒
 // FailedPrecondition" surface tests that mirror the Tasks shape.
 //
 // The full engine-path handler test suite (BeginAuth / CompleteAuth /
 // Subscribe / Unsubscribe etc. driven through buildKeepWiring with an
 // in-memory page store + fake gateway client + real engine + adapter +
-// binding store + credential store) lands in Phase 5-B alongside the
-// legacy package deletion, mirroring Tasks's Phase 4-3 commit shape.
+// binding store + credential store) lives in
+// connector_service_keep_test.go (mirroring Tasks's
+// connector_service_tasks_test.go).
 
 var _ = Describe("ConnectorService handlers (GOOGLE_KEEP, engine path)", func() {
 	var (
