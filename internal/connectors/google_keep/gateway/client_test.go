@@ -700,6 +700,27 @@ var _ = Describe("KeepClient.Changes HTTP error classification", func() {
 			Expect(err).ToNot(MatchError(gateway.ErrProtocolDrift))
 		})
 	})
+
+	// Keep's stage3 protocol returns HTTP 500 "Unknown Error" when the
+	// caller's baseVersion is stale or missing — there's no 412 in the
+	// stage3 wire protocol, so 500 is the conventional marker. The
+	// gateway must wrap this in ErrProtocolDrift so the adapter routes
+	// it to the engine's precondition_recovery path (MATRIX row 6 +
+	// strictest-behavior-wins per ADR-0015). Production bug 2026-05-05:
+	// every Insert dead-lettered because 500s were classified as
+	// Retryable rather than PreconditionFailed.
+	When("the server returns a stage3 HTTP 500 Unknown Error", func() {
+		var err error
+
+		BeforeEach(func() {
+			responseCode = http.StatusInternalServerError
+			_, err = client.Changes(ctx, gateway.ChangesRequest{})
+		})
+
+		It("should return ErrProtocolDrift", func() {
+			Expect(err).To(MatchError(gateway.ErrProtocolDrift))
+		})
+	})
 })
 
 // Label decode tests verify that the userInfo.Labels field is decoded

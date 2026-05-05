@@ -354,6 +354,18 @@ func classifyKeepHTTPResponse(code int, body []byte) error {
 		return classifyKeepForbidden(body)
 	case http.StatusNotFound:
 		return fmt.Errorf("%w: stage3 HTTP %d: %s", ErrBoundNoteDeleted, code, bodyTxt)
+	case http.StatusInternalServerError:
+		// Keep's stage3 protocol returns HTTP 500 "Unknown Error" when
+		// the caller's baseVersion is stale or absent (or, on Insert,
+		// when the requested change can't be reconciled with the
+		// server's current view). There's no 412 in the wire protocol;
+		// 500 is the conventional marker. Wrap in ErrProtocolDrift so
+		// KeepAdapter.ClassifyError routes it to ErrorClassPreconditionFailed,
+		// which the engine's reconcile path uses to trigger Insert-recovery
+		// (RebuildAdapterState + skip this tick) and Patch-recovery
+		// (3-branch precondition_recovery). MATRIX row 6 +
+		// strictest-behavior-wins per ADR-0015.
+		return fmt.Errorf("%w: stage3 HTTP %d: %s", ErrProtocolDrift, code, bodyTxt)
 	default:
 		return fmt.Errorf("keep: unexpected status %d: %s", code, bodyTxt)
 	}
