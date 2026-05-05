@@ -71,9 +71,9 @@ func goldmarkSlugify(text string) string {
 			if 'A' <= c && c <= 'Z' {
 				c += 'a' - 'A'
 			}
-			b.WriteByte(c) //nolint:errcheck // strings.Builder.WriteByte never returns an error
+			b.WriteByte(c)
 		} else if c == ' ' || c == '-' || c == '_' {
-			b.WriteByte('-') //nolint:errcheck // strings.Builder.WriteByte never returns an error
+			b.WriteByte('-')
 		}
 		// All other single-byte characters are dropped.
 	}
