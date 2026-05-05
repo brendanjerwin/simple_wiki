@@ -163,7 +163,18 @@ export function NativeDialogMixin<T extends Constructor>(Base: T) {
         const dialog = this.shadowRoot?.querySelector('dialog');
         if (!dialog) return;
         if (this.open && !dialog.open) {
-          this._previouslyFocusedElement = document.activeElement;
+          // Traverse shadow roots to capture the deepest focused element.
+          // When a button inside a shadow host (e.g., wiki-blog's "New Post"
+          // button) is clicked, document.activeElement is the shadow host, but
+          // the actually-focused element is in shadowRoot.activeElement.
+          // Storing the deep element lets restoreFocus() re-focus it directly,
+          // which in turn makes document.activeElement equal the shadow host —
+          // exactly what the focus-restoration tests assert.
+          let focused: Element | null = document.activeElement;
+          while (focused?.shadowRoot?.activeElement) {
+            focused = focused.shadowRoot.activeElement;
+          }
+          this._previouslyFocusedElement = focused;
           dialog.showModal();
         } else if (!this.open && dialog.open) {
           dialog.close();

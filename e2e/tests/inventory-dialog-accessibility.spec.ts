@@ -207,9 +207,13 @@ E2E accessibility test container.`);
       await dialog.locator('button.button-secondary').click();
       await expect(dialog).not.toHaveAttribute('open', { timeout: DIALOG_APPEAR_TIMEOUT_MS });
 
-      // #inventory-add-item is display:none (submenu is closed), so restoreFocus()
-      // falls back to the nearest visible focusable ancestor — the submenu trigger.
-      await expect(page.locator('#inventory-submenu-trigger')).toBeFocused({ timeout: DIALOG_APPEAR_TIMEOUT_MS });
+      // #inventory-add-item is display:none (submenu is closed after dialog opens).
+      // restoreFocus() walks up the DOM; the entire inventory submenu lives inside
+      // the CSS hover-dropdown of .tools-menu, which is also hidden once the dialog
+      // backdrop prevents CSS :hover. The nearest rendered ancestor is li.tools-menu,
+      // and its first rendered focusable descendant is #tools-menu (the hamburger
+      // trigger). This is the same fallback the confirmation-dialog uses.
+      await expect(page.locator('#tools-menu')).toBeFocused({ timeout: DIALOG_APPEAR_TIMEOUT_MS });
     });
 
     test('Tab key stays within dialog (focus trap)', async ({ page }) => {
@@ -353,8 +357,10 @@ E2E accessibility test container.`);
       await dialog.locator('button.button-secondary').click();
       await expect(dialog).not.toHaveAttribute('open', { timeout: DIALOG_APPEAR_TIMEOUT_MS });
 
-      // Focus should have returned to the element that triggered the dialog open
-      await expect(page.locator('#inventory-move-item')).toBeFocused({ timeout: DIALOG_APPEAR_TIMEOUT_MS });
+      // #inventory-move-item is display:none (submenu is closed after dialog opens).
+      // restoreFocus() walks up past the hidden hover-dropdown and lands on
+      // #tools-menu — the same accessible fallback used by confirmation-dialog.
+      await expect(page.locator('#tools-menu')).toBeFocused({ timeout: DIALOG_APPEAR_TIMEOUT_MS });
     });
 
     test('Tab key stays within dialog (focus trap)', async ({ page }) => {
