@@ -329,13 +329,18 @@ func (e *Engine) pushOutbound(
 
 		ref, alreadyBound := idMap[uid]
 		if !alreadyBound {
+			if skip, reason := e.shouldSkipPush(binding, uid); skip {
+				e.logger.Info("connectors/engine: outbound_push_skipped kind=%s profile=%s page=%s list=%s uid=%s op=outbound_inserted reason=%s",
+					e.adapter.Kind(), string(binding.ProfileID), binding.Page, binding.ListName, uid, reason)
+				continue
+			}
 			newRef, insErr := e.adapter.InsertRemote(ctx, binding, wikiItem)
 			if insErr != nil {
 				switch e.adapter.ClassifyError(insErr) {
 				case connectors.ErrorClassAuthFailed:
 					return binding, true, nil
 				case connectors.ErrorClassRetryable:
-					e.recordPushFailure(binding, uid, "outbound_inserted", insErr)
+					binding = e.recordPushFailure(binding, uid, "outbound_inserted", insErr)
 					continue
 				case connectors.ErrorClassNone, connectors.ErrorClassTransient,
 					connectors.ErrorClassFatal, connectors.ErrorClassPreconditionFailed,
@@ -347,6 +352,7 @@ func (e *Engine) pushOutbound(
 				}
 			}
 			idMap[uid] = string(newRef)
+			binding = e.recordPushSuccess(binding, uid)
 			if appendErr := e.mutator.AppendSyncEvent(ctx, binding.Page, binding.ListName, uid, "outbound_inserted"); appendErr != nil {
 				e.logger.Info("connectors/engine: append_sync_event_failed page=%s list=%s uid=%s op=outbound_inserted err=%v",
 					binding.Page, binding.ListName, uid, appendErr)
@@ -354,6 +360,11 @@ func (e *Engine) pushOutbound(
 			continue
 		}
 
+		if skip, reason := e.shouldSkipPush(binding, uid); skip {
+			e.logger.Info("connectors/engine: outbound_push_skipped kind=%s profile=%s page=%s list=%s uid=%s op=outbound_patched reason=%s",
+				e.adapter.Kind(), string(binding.ProfileID), binding.Page, binding.ListName, uid, reason)
+			continue
+		}
 		_, patchErr := e.adapter.PatchRemote(ctx, binding, connectors.RemoteRef(ref), wikiItem)
 		if patchErr != nil {
 			switch e.adapter.ClassifyError(patchErr) {
@@ -365,7 +376,7 @@ func (e *Engine) pushOutbound(
 				}
 				continue
 			case connectors.ErrorClassRetryable:
-				e.recordPushFailure(binding, uid, "outbound_patched", patchErr)
+				binding = e.recordPushFailure(binding, uid, "outbound_patched", patchErr)
 				continue
 			case connectors.ErrorClassNone, connectors.ErrorClassTransient,
 				connectors.ErrorClassFatal, connectors.ErrorClassRateLimited,
@@ -376,6 +387,7 @@ func (e *Engine) pushOutbound(
 					uid, binding.ProfileID, patchErr)
 			}
 		}
+		binding = e.recordPushSuccess(binding, uid)
 		if appendErr := e.mutator.AppendSyncEvent(ctx, binding.Page, binding.ListName, uid, "outbound_patched"); appendErr != nil {
 			e.logger.Info("connectors/engine: append_sync_event_failed page=%s list=%s uid=%s op=outbound_patched err=%v",
 				binding.Page, binding.ListName, uid, appendErr)
@@ -387,12 +399,17 @@ func (e *Engine) pushOutbound(
 		if _, stillThere := currentUIDs[uid]; stillThere {
 			continue
 		}
+		if skip, reason := e.shouldSkipPush(binding, uid); skip {
+			e.logger.Info("connectors/engine: outbound_push_skipped kind=%s profile=%s page=%s list=%s uid=%s op=outbound_deleted reason=%s",
+				e.adapter.Kind(), string(binding.ProfileID), binding.Page, binding.ListName, uid, reason)
+			continue
+		}
 		if delErr := e.adapter.DeleteRemote(ctx, binding, connectors.RemoteRef(ref)); delErr != nil {
 			switch e.adapter.ClassifyError(delErr) {
 			case connectors.ErrorClassAuthFailed:
 				return binding, true, nil
 			case connectors.ErrorClassRetryable:
-				e.recordPushFailure(binding, uid, "outbound_deleted", delErr)
+				binding = e.recordPushFailure(binding, uid, "outbound_deleted", delErr)
 				continue
 			case connectors.ErrorClassNone, connectors.ErrorClassTransient,
 				connectors.ErrorClassFatal, connectors.ErrorClassPreconditionFailed,
@@ -404,6 +421,7 @@ func (e *Engine) pushOutbound(
 			}
 		}
 		delete(idMap, uid)
+		binding = e.recordPushSuccess(binding, uid)
 		if appendErr := e.mutator.AppendSyncEvent(ctx, binding.Page, binding.ListName, uid, "outbound_deleted"); appendErr != nil {
 			e.logger.Info("connectors/engine: append_sync_event_failed page=%s list=%s uid=%s op=outbound_deleted err=%v",
 				binding.Page, binding.ListName, uid, appendErr)
