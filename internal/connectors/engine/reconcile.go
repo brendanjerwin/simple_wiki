@@ -360,7 +360,7 @@ func (e *Engine) pushOutbound(
 			case connectors.ErrorClassAuthFailed:
 				return binding, true, nil
 			case connectors.ErrorClassPreconditionFailed:
-				if recErr := e.runPreconditionRecovery(ctx, binding, connectors.RemoteRef(ref), uid, patchErr); recErr != nil {
+				if recErr := e.runPreconditionRecovery(ctx, binding, connectors.RemoteRef(ref), uid, wikiItem, idMap, patchErr); recErr != nil {
 					return binding, false, recErr
 				}
 				continue

@@ -827,6 +827,13 @@ var _ = Describe("Engine.reconcile", func() {
 			fa.SetPullRemoteResponse(connectors.RemotePullResult{}, nil)
 			fa.SetPatchRemoteResponse("", errReconcileProgrammed)
 			fa.SetClassifyErrorResponse(connectors.ErrorClassPreconditionFailed)
+			// Recovery's ReadRemoteByRef returns a default
+			// RemoteItem{Ref: "task-1"} (not deleted; fields differ from
+			// wiki) → branch C (authoritative apply). Default mutator
+			// returns nil; recovery completes and sync continues to the
+			// happy path. The detailed branch behavior is exercised in
+			// precondition_recovery_test.go; this test verifies only the
+			// integration (recovery is invoked and the sync succeeds).
 			reader.checklist = &apiv1.Checklist{
 				Items: []*apiv1.ChecklistItem{{Uid: knownUID, Text: "milk-updated"}},
 			}
@@ -834,8 +841,12 @@ var _ = Describe("Engine.reconcile", func() {
 			syncErr = eng.Sync(ctx, key)
 		})
 
-		It("should invoke runPreconditionRecovery (Phase 3a stub returns wrapped err)", func() {
-			Expect(syncErr).To(MatchError(errReconcileProgrammed))
+		It("should invoke runPreconditionRecovery (ReadRemoteByRef called)", func() {
+			Expect(fa.RecordedReadRemoteByRef).To(HaveLen(1))
+		})
+
+		It("should not abort the sync (recovery handled the precondition)", func() {
+			Expect(syncErr).NotTo(HaveOccurred())
 		})
 	})
 
