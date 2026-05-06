@@ -470,6 +470,16 @@ func keepTrashedNodeForRef(ref string) keepgw.Node {
 	return out
 }
 
+// keepNodeForRefAtVersion builds a LIST_ITEM with an explicit
+// BaseVersion (overrides the default "bv-<ref>"). Used by user-scenario
+// regression tests that need to simulate Keep returning a new
+// BaseVersion (RemoteDiverged=true) without changing content.
+func keepNodeForRefAtVersion(ref, text string, checked bool, baseVersion string) keepgw.Node {
+	out := keepNodeForRef(ref, text, checked)
+	out.BaseVersion = baseVersion
+	return out
+}
+
 var _ = Describe("Parity scenarios across real adapters", func() {
 	var ctx context.Context
 
@@ -1204,6 +1214,136 @@ var _ = Describe("Parity scenarios across real adapters", func() {
 
 			It("should apply the remote value (conflict-remote-wins)", func() {
 				assertConflictRemoteWins(p, "milk-remote-wins")
+			})
+		})
+	})
+
+	// --- User-scenario regression tests (operator-visible contract) -------
+	//
+	// These tests pin the workflow-level contract that the algorithm-level
+	// 4-cell-merge tests missed: when an operator does a thing in the wiki,
+	// the wiki keeps reflecting that thing after the next reconcile,
+	// regardless of remote etag bumps that don't represent real content
+	// changes.
+	//
+	// The previous algorithm-level tests (line ~1118) explicitly tested
+	// `Src: "user:..." + RemoteDiverged=true → conflict-remote-wins applies
+	// remote and clobbers the wiki`. They were green when the PR shipped,
+	// pinning the wrong contract. The operator's first check-off was
+	// reverted in production within seconds because the algorithm matched
+	// the test, and the test matched a flawed cell of ADR-0015's 4-cell
+	// merge.
+	//
+	// Lesson: TDD doesn't help when the contract is wrong. Pin the
+	// user-visible contract here so future refactors can't quietly
+	// re-introduce the same regression.
+
+	Describe("USER SCENARIO: operator checks off an item in the wiki", func() {
+		// Setup mirrors what production looked like the moment the bug
+		// was demonstrated: wiki has the item, idMap binds it to a
+		// remote ref, the user has just appended a `user:` toggle event
+		// to the op-log (chk=true), AND the remote returns the item with
+		// a stale-content + new-etag (RemoteDiverged=true via etag
+		// comparison, but Status hasn't actually changed remotely).
+		const knownUID = "uid-user-checkoff-1"
+		const ref = "task-user-checkoff-1"
+		const refKeep = "keep-srv-user-checkoff-1"
+
+		assertWikiCheckSurvives := func(p *parityContext) {
+			// The mutator must NOT have been called to UpdateItem with
+			// the stale remote value. The wiki keeps its `chk=true`
+			// state; pushOutbound takes care of getting it to remote.
+			Expect(p.mutator.recordingChecklistMutator.updateCalls).To(BeEmpty(),
+				"engine reverted the user's wiki check-off — same regression as production 2026-05-06")
+		}
+
+		When("the adapter is TasksAdapter and Tasks bumps etag without changing content", func() {
+			var p *parityContext
+			BeforeEach(func() {
+				p = newTasksParityContext()
+				adapterState := connectors.AdapterState{
+					googletasks.AdapterStateKeyItemIDMap:      map[string]string{knownUID: ref},
+					googletasks.AdapterStateKeyItemEtags:      map[string]any{ref: "old-etag"},
+					googletasks.AdapterStateKeyLastUpdatedMin: parityFixedNow.Add(-1 * time.Hour).Format(time.RFC3339),
+				}
+				// Wiki has the user's check-off (chk=true) — they just
+				// clicked the checkbox. Op-log carries the user event.
+				p.reader.checklist = &apiv1.Checklist{
+					Items: []*apiv1.ChecklistItem{{Uid: knownUID, Text: "milk", Checked: true}},
+					Events: []*apiv1.ChecklistEvent{
+						{Seq: 11, Src: "user:operator@example.com", Op: "toggle", Uid: knownUID},
+					},
+					MaxSeq: 11,
+				}
+				p.store.SeedBinding(connectors.Binding{
+					ProfileID: p.profileID, Page: p.page, ListName: p.listName,
+					RemoteHandle:         p.remoteHandle,
+					State:                connectors.BindingStateActive,
+					LastSuccessfulSyncAt: parityPastChoke,
+					LastSyncedSeq:        10,
+					AdapterState:         adapterState,
+				}, p.kind)
+				// Tasks returns the item with a NEW etag (so RemoteDiverged
+				// fires) but with the OLD content (Status=needsAction, i.e.
+				// chk=false on remote). This is the production scenario:
+				// Tasks bumped etag for a non-content reason, content
+				// didn't actually change remotely.
+				p.tasksClient.listTasks = []tasksgw.Task{
+					{ID: ref, Etag: "new-etag", Title: "milk", Status: tasksgw.TaskStatusNeedsAction, Updated: parityFixedNow},
+				}
+
+				Expect(p.engine.Sync(ctx, connectors.BindingKey{
+					ProfileID: string(p.profileID),
+					Page:      p.page,
+					ListName:  p.listName,
+				})).To(Succeed())
+			})
+
+			It("should NOT revert the wiki check (user-wins; the regression)", func() {
+				assertWikiCheckSurvives(p)
+			})
+		})
+
+		When("the adapter is KeepAdapter and Keep returns a new BaseVersion", func() {
+			var p *parityContext
+			BeforeEach(func() {
+				p = newKeepParityContext()
+				adapterState := p.seedItemIDMap(map[string]string{knownUID: refKeep})
+				p.reader.checklist = &apiv1.Checklist{
+					Items: []*apiv1.ChecklistItem{{Uid: knownUID, Text: "milk", Checked: true}},
+					Events: []*apiv1.ChecklistEvent{
+						{Seq: 11, Src: "user:operator@example.com", Op: "toggle", Uid: knownUID},
+					},
+					MaxSeq: 11,
+				}
+				p.store.SeedBinding(connectors.Binding{
+					ProfileID: p.profileID, Page: p.page, ListName: p.listName,
+					RemoteHandle:         p.remoteHandle,
+					State:                connectors.BindingStateActive,
+					LastSuccessfulSyncAt: parityPastChoke,
+					LastSyncedSeq:        10,
+					AdapterState:         adapterState,
+				}, p.kind)
+				// Keep pull returns the item with a different BaseVersion
+				// (RemoteDiverged=true) but with the same content
+				// (still chk=false / unchecked on Keep's side because
+				// the wiki's check-off hasn't been pushed yet).
+				p.keepClient.changesDefault = keepgw.ChangesResponse{
+					ToVersion: "v500",
+					Nodes: []keepgw.Node{
+						keepNodeForRefAtVersion(refKeep, "milk", false, "bv-v2-"+refKeep),
+					},
+				}
+
+				Expect(p.engine.Sync(ctx, connectors.BindingKey{
+					ProfileID: string(p.profileID),
+					Page:      p.page,
+					ListName:  p.listName,
+				})).To(Succeed())
+			})
+
+			It("should NOT revert the wiki check (user-wins; the regression)", func() {
+				assertWikiCheckSurvives(p)
 			})
 		})
 	})
