@@ -1324,12 +1324,17 @@ var _ = Describe("Parity scenarios across real adapters", func() {
 				Expect(p.tasksClient.patchCalls).NotTo(BeEmpty())
 			})
 
-			It("should retry the patch with the refreshed etag in the recovery path", func() {
-				// First call uses stale "old-etag" → 412.
-				// Recovery refreshes baseline → second call uses "new-etag" → success.
-				Expect(len(p.tasksClient.patchCalls)).To(BeNumerically(">=", 2))
-				Expect(p.tasksClient.patchCalls[0].Etag).To(Equal("old-etag"))
-				Expect(p.tasksClient.patchCalls[len(p.tasksClient.patchCalls)-1].Etag).To(Equal("new-etag"))
+			It("should send the patch with the freshly-pulled etag on the first try", func() {
+				// applyInbound refreshes the per-item baseline from
+				// every PullRemote response BEFORE pushOutbound runs,
+				// so the patch sees the current "new-etag" on its
+				// FIRST try — no 412 → recovery loop required. Without
+				// this refresh-on-pull, we'd see TWO patch calls: one
+				// with stale "old-etag" → 412, then a recovery repatch
+				// with "new-etag".
+				Expect(p.tasksClient.patchCalls).To(HaveLen(1),
+					"refresh-on-pull should let the FIRST patch succeed; second call would mean recovery repatch fired")
+				Expect(p.tasksClient.patchCalls[0].Etag).To(Equal("new-etag"))
 			})
 		})
 

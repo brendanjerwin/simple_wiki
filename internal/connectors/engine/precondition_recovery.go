@@ -155,6 +155,20 @@ func (e *Engine) precondWikiWinsRepatch(
 	}
 
 	idMap[uid] = string(freshRef)
+
+	// Tag the recovery's repatch as a self-write so advanceLastSyncedSeq
+	// can advance past it AND past any user/cross-connector events
+	// covered by this push. Without this AppendSyncEvent the cursor
+	// stays pinned at the user event forever — every subsequent tick
+	// re-classifies the user event as WikiDiverged and re-attempts the
+	// patch. Production observation 2026-05-06: cursor stuck at
+	// last_synced_seq=45 across 8 ticks while etag drifted between
+	// adapter_state and the remote.
+	if appendErr := e.mutator.AppendSyncEvent(ctx, binding.Page, binding.ListName, uid, "outbound_patched"); appendErr != nil {
+		e.logger.Info("connectors/engine: append_sync_event_failed page=%s list=%s uid=%s op=outbound_patched err=%v",
+			binding.Page, binding.ListName, uid, appendErr)
+	}
+
 	e.logger.Info("connectors/engine: precondition_recovery_wiki_wins_repatch kind=%s profile=%s page=%s list=%s uid=%s ref=%s",
 		kind, string(binding.ProfileID), binding.Page, binding.ListName, uid, string(freshRef))
 	return nil

@@ -252,6 +252,16 @@ func (e *Engine) applyInbound(
 	}
 
 	for _, remoteItem := range items {
+		// Refresh the per-item concurrency baseline (Tasks: item_etags;
+		// Keep: item_mapping.base_version) from the just-pulled remote
+		// regardless of which 4-cell-merge branch we take below. The
+		// baseline reflects what the remote said NOW; that's the value
+		// any subsequent push in this tick (and future ticks) needs.
+		// Without this, the next PatchRemote uses the stale baseline
+		// that triggered the previous 412, looping forever.
+		if !remoteItem.Deleted {
+			binding = e.adapter.RefreshItemBaseline(binding, remoteItem)
+		}
 		if err := e.applyInboundOneItem(ctx, binding, remoteItem, classification, idMap, refToUID); err != nil {
 			return err
 		}
