@@ -433,6 +433,45 @@ func (*KeepAdapter) WikiToRemote(wiki connectors.WikiItem) (connectors.RemoteIte
 // the binding's AdapterState. Per MATRIX.md row 16, Keep's cursor is
 // server-issued and opaque — no safety buffer is needed (unlike
 // Tasks's timestamp-based cursor).
+// RefreshItemBaseline updates the stored item_mapping entry for ref's
+// BaseVersion (and ClientID) from the freshly-read remote item's
+// Vendor map. Used by the engine's precondition_recovery path: after
+// ReadRemoteByRef returns, the stored BaseVersion is stale (that's
+// why the patch hit stage3-500), and the recovery's re-PATCH would
+// loop forever without this refresh. Production fix 2026-05-06.
+func (*KeepAdapter) RefreshItemBaseline(binding connectors.Binding, remote connectors.RemoteItem) connectors.Binding {
+	serverID := string(remote.Ref)
+	if serverID == "" {
+		return binding
+	}
+	baseVersion, _ := remote.Vendor["base_version"].(string)
+	clientID, _ := remote.Vendor["client_id"].(string)
+	if baseVersion == "" && clientID == "" {
+		return binding
+	}
+	if binding.AdapterState == nil {
+		binding.AdapterState = connectors.AdapterState{}
+	}
+	mappingRaw, ok := binding.AdapterState[AdapterStateKeyItemMapping].(map[string]any)
+	if !ok {
+		mappingRaw = map[string]any{}
+	}
+	existing, _ := mappingRaw[serverID].(map[string]any)
+	if existing == nil {
+		existing = map[string]any{}
+	}
+	existing[itemMappingFieldServerID] = serverID
+	if baseVersion != "" {
+		existing[itemMappingFieldBaseVersion] = baseVersion
+	}
+	if clientID != "" {
+		existing[itemMappingFieldClientID] = clientID
+	}
+	mappingRaw[serverID] = existing
+	binding.AdapterState[AdapterStateKeyItemMapping] = mappingRaw
+	return binding
+}
+
 func (*KeepAdapter) AdvanceCursor(binding connectors.Binding, result connectors.RemotePullResult) connectors.Binding {
 	cursor, ok := result.NewCursor.(string)
 	if !ok || cursor == "" {

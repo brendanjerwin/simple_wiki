@@ -79,6 +79,7 @@ type FakeAdapter struct {
 	RecordedDecodeAdapterState    []map[string]any
 	RecordedReadRemoteByRef       []recordedReadRemoteByRef
 	RecordedClassifyError         []error
+	RecordedRefreshItemBaseline   []recordedRefreshItemBaseline
 }
 
 type pullRemoteResponse struct {
@@ -322,6 +323,23 @@ func (f *FakeAdapter) SetAdvanceCursorResponse(binding connectors.Binding) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.advanceCursorResponses = append(f.advanceCursorResponses, binding)
+}
+
+// recordedRefreshItemBaseline captures one RefreshItemBaseline call.
+type recordedRefreshItemBaseline struct {
+	Binding connectors.Binding
+	Remote  connectors.RemoteItem
+}
+
+// RefreshItemBaseline implements connectors.BackendAdapter. Default
+// behavior: pass binding through untouched while recording the call.
+// Tests that care about the baseline-refresh side-effect can inspect
+// RecordedRefreshItemBaseline.
+func (f *FakeAdapter) RefreshItemBaseline(binding connectors.Binding, remote connectors.RemoteItem) connectors.Binding {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.RecordedRefreshItemBaseline = append(f.RecordedRefreshItemBaseline, recordedRefreshItemBaseline{Binding: binding, Remote: remote})
+	return binding
 }
 
 // SeedBindingState implements connectors.BackendAdapter.

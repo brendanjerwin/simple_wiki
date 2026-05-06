@@ -95,6 +95,14 @@ func (e *Engine) runPreconditionRecovery(
 		return e.precondRemoteDeleted(ctx, binding, ref, uid, idMap)
 	}
 
+	// Refresh the per-item baseline (Tasks: item_etags; Keep:
+	// item_mapping.base_version) from the freshly-read remote BEFORE
+	// repatching. Without this, the re-PATCH carries the same stale
+	// baseline that triggered the original 412/stage3-500, looping
+	// forever (production regression 2026-05-06: Tasks tick froze for
+	// 8h while every recovery repatch hit 412 on the same etag).
+	binding = e.adapter.RefreshItemBaseline(binding, remote)
+
 	// Wiki-wins on every non-deleted recovery. Two reasons per ADR-0015:
 	//
 	//   1. The patch path is gated on classification[uid].WikiDiverged

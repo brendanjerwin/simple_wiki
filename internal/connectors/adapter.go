@@ -86,6 +86,18 @@ type BackendAdapter interface {
 	// updated binding; the engine persists.
 	AdvanceCursor(binding Binding, result RemotePullResult) Binding
 
+	// RefreshItemBaseline updates the adapter's stored per-item
+	// concurrency baseline (Tasks: item_etags[ref]; Keep:
+	// item_mapping[ref].base_version) from a freshly-read RemoteItem.
+	// Called by the engine's precondition_recovery path after a
+	// successful ReadRemoteByRef so the subsequent re-PATCH carries the
+	// fresh baseline instead of the stale one that triggered the 412 in
+	// the first place. Without this refresh the recovery loops on 412
+	// forever (production regression 2026-05-06: Tasks tick froze for
+	// 8h while every recovery repatch hit 412 on the same stale etag).
+	// Returns the updated binding; the engine persists.
+	RefreshItemBaseline(binding Binding, remote RemoteItem) Binding
+
 	// Bind ceremony (MATRIX row 2).
 
 	// SeedBindingState produces the initial AdapterState for a fresh

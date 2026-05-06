@@ -84,6 +84,13 @@ type parityTasksClient struct {
 	listTaskListsErr  error
 	taskLists         []tasksgw.TaskList
 
+	// patchEtagGate, when non-empty, makes PatchTask return
+	// patchEtagGateErr unless the inbound etag matches. Used to model
+	// Tasks's optimistic concurrency in regression tests where the
+	// recovery path's etag refresh is being verified.
+	patchEtagGate    string
+	patchEtagGateErr error
+
 	// Recorded calls.
 	listTasksCalls    int
 	insertCalls       []parityTasksInsertCall
@@ -160,6 +167,9 @@ func (f *parityTasksClient) PatchTask(_ context.Context, tasklistID, taskID stri
 	})
 	if f.patchErr != nil {
 		return tasksgw.Task{}, f.patchErr
+	}
+	if f.patchEtagGate != "" && etag != f.patchEtagGate {
+		return tasksgw.Task{}, f.patchEtagGateErr
 	}
 	return tasksgw.Task{ID: taskID, Title: fields.Title, Notes: fields.Notes, Status: fields.Status}, nil
 }
@@ -1291,6 +1301,13 @@ var _ = Describe("Parity scenarios across real adapters", func() {
 				p.tasksClient.listTasks = []tasksgw.Task{
 					{ID: ref, Etag: "new-etag", Title: "milk", Status: tasksgw.TaskStatusNeedsAction, Updated: parityFixedNow},
 				}
+				// Tasks rejects PATCH unless the inbound etag matches the
+				// current "new-etag". The first patch (with stored
+				// "old-etag") returns 412; the recovery's repatch must
+				// send "new-etag" (refreshed from ReadRemoteByRef) to
+				// succeed.
+				p.tasksClient.patchEtagGate = "new-etag"
+				p.tasksClient.patchEtagGateErr = tasksgw.ErrPreconditionFailed
 
 				Expect(p.engine.Sync(ctx, connectors.BindingKey{
 					ProfileID: string(p.profileID),
@@ -1301,6 +1318,18 @@ var _ = Describe("Parity scenarios across real adapters", func() {
 
 			It("should NOT revert the wiki check (user-wins; the regression)", func() {
 				assertWikiCheckSurvives(p)
+			})
+
+			It("should attempt the patch", func() {
+				Expect(p.tasksClient.patchCalls).NotTo(BeEmpty())
+			})
+
+			It("should retry the patch with the refreshed etag in the recovery path", func() {
+				// First call uses stale "old-etag" → 412.
+				// Recovery refreshes baseline → second call uses "new-etag" → success.
+				Expect(len(p.tasksClient.patchCalls)).To(BeNumerically(">=", 2))
+				Expect(p.tasksClient.patchCalls[0].Etag).To(Equal("old-etag"))
+				Expect(p.tasksClient.patchCalls[len(p.tasksClient.patchCalls)-1].Etag).To(Equal("new-etag"))
 			})
 		})
 

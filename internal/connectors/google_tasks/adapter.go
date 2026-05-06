@@ -283,6 +283,28 @@ func (*TasksAdapter) WikiToRemote(wiki connectors.WikiItem) (connectors.RemoteIt
 	}, nil
 }
 
+// RefreshItemBaseline updates the stored item_etags entry for ref to
+// the etag from the freshly-read remote item. Used by the engine's
+// precondition_recovery path: after ReadRemoteByRef returns, the
+// stored etag is stale (that's why the patch hit 412), and the
+// recovery's re-PATCH would loop on 412 forever without this refresh.
+// Production fix 2026-05-06.
+func (*TasksAdapter) RefreshItemBaseline(binding connectors.Binding, remote connectors.RemoteItem) connectors.Binding {
+	if remote.Etag == "" {
+		return binding
+	}
+	if binding.AdapterState == nil {
+		binding.AdapterState = connectors.AdapterState{}
+	}
+	etagsRaw, ok := binding.AdapterState[AdapterStateKeyItemEtags].(map[string]any)
+	if !ok {
+		etagsRaw = map[string]any{}
+	}
+	etagsRaw[string(remote.Ref)] = remote.Etag
+	binding.AdapterState[AdapterStateKeyItemEtags] = etagsRaw
+	return binding
+}
+
 // AdvanceCursor stores max(Task.updated) - 1s in the binding's
 // AdapterState[last_updated_min]. Tasks's documented behavior leaves
 // the inclusive/exclusive boundary unspecified, so the safety buffer
