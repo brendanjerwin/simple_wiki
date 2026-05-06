@@ -284,25 +284,38 @@ var _ = Describe("Engine.runPreconditionRecovery", func() {
 		})
 	})
 
-	When("ReadRemoteByRef returns a remote item whose fields differ from the wiki translation (authoritative apply)", func() {
+	When("ReadRemoteByRef returns a remote item whose fields differ from the wiki translation", func() {
+		// PRE-ADR-0015: legacy Tasks v2 had a third branch
+		// (remote-authoritative-apply) that overwrote the wiki with the
+		// remote's value when wiki-now and remote-now differed. That
+		// behavior REVERTED user wiki edits when the etag bumped on the
+		// remote without a real content change (production regression
+		// 2026-05-06).
+		//
+		// Post-fix: the patch path is gated on WikiDiverged, so any
+		// recovery-call site has unsynced wiki user/cross-connector
+		// intent for this uid. Per ADR-0015's 4-cell merge:
+		//   WikiDiverged=T && RemoteDiverged=T → conflict, remote wins
+		//   WikiDiverged=T && RemoteDiverged=F → push wiki
+		// The recovery cannot distinguish these cleanly without tracking
+		// last-known-remote, so it always re-patches (preserves user
+		// intent). True conflicts surface on the next tick via
+		// PullRemote → applyInbound's RemoteDiverged path, which
+		// honors ADR-0015's conflict-remote-wins.
 		var recoveryErr error
 
 		BeforeEach(func() {
 			fa.SetWikiToRemoteResponse(connectors.RemoteItem{
 				Title: "milk", Notes: "", Status: "needsAction",
 			}, nil)
-			// Remote moved under us: a different Title.
+			// Remote diverges from wiki-now (e.g., older content the
+			// user has since updated, OR a real concurrent third-party
+			// edit — recovery can't tell, defaults to wiki-wins).
 			fa.SetReadRemoteByRefResponse(connectors.RemoteItem{
 				Ref:    ref,
 				Title:  "milk-from-phone",
 				Notes:  "",
 				Status: "needsAction",
-			}, nil)
-			// RemoteToWiki returns the matching wiki translation; the uid
-			// matches what is already in idMap, so the apply must take the
-			// Update path (not Add).
-			fa.SetRemoteToWikiResponse(connectors.WikiItem{
-				UID: uid, Text: "milk-from-phone",
 			}, nil)
 
 			recoveryErr = eng.RunPreconditionRecoveryForTest(
@@ -314,93 +327,32 @@ var _ = Describe("Engine.runPreconditionRecovery", func() {
 			Expect(recoveryErr).NotTo(HaveOccurred())
 		})
 
-		It("should call RemoteToWiki to translate the read remote", func() {
-			Expect(fa.RecordedRemoteToWiki).NotTo(BeEmpty())
+		It("should re-patch (wiki-wins) instead of applying remote", func() {
+			Expect(fa.RecordedPatchRemote).To(HaveLen(1))
 		})
 
-		It("should call UpdateItemForSync once", func() {
-			Expect(mutator.recordingChecklistMutator.updateCalls).To(HaveLen(1))
+		It("should pass the freshly-read ref to the re-PATCH", func() {
+			Expect(fa.RecordedPatchRemote[0].Ref).To(Equal(ref))
 		})
 
-		It("should pass the resolved uid to UpdateItemForSync", func() {
-			Expect(mutator.recordingChecklistMutator.updateCalls[0].UID).To(Equal(uid))
+		It("should pass the wiki item to the re-PATCH", func() {
+			Expect(fa.RecordedPatchRemote[0].Item).To(Equal(wikiItem))
 		})
 
-		It("should pass the remote-derived text to UpdateItemForSync", func() {
-			Expect(mutator.recordingChecklistMutator.updateCalls[0].Text).To(Equal("milk-from-phone"))
+		It("should not call UpdateItemForSync (no remote-wins apply)", func() {
+			Expect(mutator.recordingChecklistMutator.updateCalls).To(BeEmpty())
 		})
 
-		It("should call Suppress before the mutator update", func() {
-			seq := tracker.snapshot()
-			suppressIdx := indexOfFirst(seq, "Suppress")
-			updateIdx := indexOfFirst(seq, "Mutator.Update")
-			Expect(suppressIdx).To(BeNumerically(">=", 0))
-			Expect(updateIdx).To(BeNumerically(">=", 0))
-			Expect(suppressIdx).To(BeNumerically("<", updateIdx))
-		})
-
-		It("should call Unsuppress after the mutator update", func() {
-			seq := tracker.snapshot()
-			updateIdx := indexOfFirst(seq, "Mutator.Update")
-			unsuppressIdx := indexOfFirst(seq, "Unsuppress")
-			Expect(updateIdx).To(BeNumerically(">=", 0))
-			Expect(unsuppressIdx).To(BeNumerically(">", updateIdx))
-		})
-
-		It("should preserve the uid → ref mapping in idMap", func() {
-			Expect(idMap[uid]).To(Equal(string(ref)))
-		})
-
-		It("should not call PatchRemote (no re-PATCH on authoritative branch)", func() {
-			Expect(fa.RecordedPatchRemote).To(BeEmpty())
+		It("should not call AddItemForSync", func() {
+			Expect(mutator.recordingChecklistMutator.addCalls).To(BeEmpty())
 		})
 
 		It("should not call DeleteItemForSync", func() {
 			Expect(mutator.recordingChecklistMutator.deleteCalls).To(BeEmpty())
 		})
-	})
 
-	When("the authoritative-apply branch fires for a uid the wiki does not yet track", func() {
-		const novelUID = "uid-not-in-idmap"
-		var recoveryErr error
-
-		BeforeEach(func() {
-			// Idmap intentionally has the trigger uid mapping but NOT the
-			// resolved uid the read remote translates to. Recovery should
-			// take the AddItemForSync path.
-			fa.SetWikiToRemoteResponse(connectors.RemoteItem{
-				Title: "milk", Notes: "", Status: "needsAction",
-			}, nil)
-			fa.SetReadRemoteByRefResponse(connectors.RemoteItem{
-				Ref:    ref,
-				Title:  "milk-from-phone",
-				Notes:  "",
-				Status: "needsAction",
-			}, nil)
-			fa.SetRemoteToWikiResponse(connectors.WikiItem{
-				UID: novelUID, Text: "milk-from-phone",
-			}, nil)
-			mutator.recordingChecklistMutator.addUIDToReturn = novelUID
-
-			recoveryErr = eng.RunPreconditionRecoveryForTest(
-				ctx, binding, ref, uid, wikiItem, idMap, errPrecondPatchTrigger,
-			)
-		})
-
-		It("should not return an error", func() {
-			Expect(recoveryErr).NotTo(HaveOccurred())
-		})
-
-		It("should call AddItemForSync once", func() {
-			Expect(mutator.recordingChecklistMutator.addCalls).To(HaveLen(1))
-		})
-
-		It("should record the new uid → ref mapping in idMap", func() {
-			Expect(idMap[novelUID]).To(Equal(string(ref)))
-		})
-
-		It("should not call UpdateItemForSync", func() {
-			Expect(mutator.recordingChecklistMutator.updateCalls).To(BeEmpty())
+		It("should preserve the uid → ref mapping in idMap", func() {
+			Expect(idMap[uid]).To(Equal(string(ref)))
 		})
 	})
 

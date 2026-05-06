@@ -763,7 +763,15 @@ var _ = Describe("Parity scenarios across real adapters", func() {
 		})
 	})
 
-	Describe("precondition recovery: remote-authoritative-apply branch", func() {
+	Describe("precondition recovery: wiki-wins re-patch (remote != wiki)", func() {
+		// Per ADR-0015 + 2026-05-06 production fix: when the recovery
+		// reads a remote that differs from the wiki, the engine
+		// re-PATCHes (wiki-wins) instead of applying remote. The
+		// patch path is gated on classification[uid].WikiDiverged, so
+		// any recovery call site already implies user/cross-connector
+		// wiki intent — clobbering it with remote was the regression.
+		// True conflicts surface on the next tick via PullRemote +
+		// applyInbound's RemoteDiverged path.
 		const knownUID = "uid-precond-apply-1"
 		const tasksRef = "task-precond-apply-1"
 		const keepRef = "keep-srv-precond-apply-1"
@@ -780,12 +788,10 @@ var _ = Describe("Parity scenarios across real adapters", func() {
 			return p.engine.RunPreconditionRecoveryForTest(ctx, binding, ref, knownUID, wikiItem, idMap, errParityProgrammed)
 		}
 
-		assertAuthoritativeApply := func(p *parityContext, expectedText string) {
-			// Remote-authoritative-apply: engine calls UpdateItemForSync
-			// with the remote-derived text. No re-PATCH, no delete.
-			Expect(p.mutator.recordingChecklistMutator.updateCalls).To(HaveLen(1))
-			Expect(p.mutator.recordingChecklistMutator.updateCalls[0].UID).To(Equal(knownUID))
-			Expect(p.mutator.recordingChecklistMutator.updateCalls[0].Text).To(Equal(expectedText))
+		assertWikiWinsRepatch := func(p *parityContext) {
+			// No mutator writes to the wiki (no remote-wins apply).
+			Expect(p.mutator.recordingChecklistMutator.updateCalls).To(BeEmpty())
+			Expect(p.mutator.recordingChecklistMutator.addCalls).To(BeEmpty())
 			Expect(p.mutator.recordingChecklistMutator.deleteCalls).To(BeEmpty())
 		}
 
@@ -805,12 +811,12 @@ var _ = Describe("Parity scenarios across real adapters", func() {
 				Expect(recoveryErr).NotTo(HaveOccurred())
 			})
 
-			It("should call UpdateItemForSync with the remote-derived text", func() {
-				assertAuthoritativeApply(p, "milk-from-phone")
+			It("should not apply the remote to the wiki (no remote-wins)", func() {
+				assertWikiWinsRepatch(p)
 			})
 
-			It("should not call PatchTask (no re-PATCH on authoritative branch)", func() {
-				Expect(p.tasksClient.patchCalls).To(BeEmpty())
+			It("should re-patch via the Tasks gateway", func() {
+				Expect(p.tasksClient.patchCalls).NotTo(BeEmpty())
 			})
 		})
 
@@ -832,8 +838,8 @@ var _ = Describe("Parity scenarios across real adapters", func() {
 				Expect(recoveryErr).NotTo(HaveOccurred())
 			})
 
-			It("should call UpdateItemForSync with the remote-derived text", func() {
-				assertAuthoritativeApply(p, "milk-from-phone")
+			It("should not apply the remote to the wiki (no remote-wins)", func() {
+				assertWikiWinsRepatch(p)
 			})
 		})
 	})
