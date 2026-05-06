@@ -1673,6 +1673,70 @@ var _ = Describe("Parity scenarios across real adapters", func() {
 		})
 	})
 
+	Describe("USER SCENARIO: operator checks off a task; Tasks hides it; wiki must keep the item", func() {
+		// Production data loss 2026-05-06: operator checked off a wiki
+		// task. Engine pushed status=completed to Tasks. Tasks responded
+		// by setting hidden=true on the task (its standard behavior for
+		// completed items). Next pull: legacy taskToRemoteItem mapped
+		// hidden+completed → RemoteItem.Deleted=true. applyInbound's
+		// deleted branch called DeleteItemForSync on the wiki. Operator
+		// LOST the item from the wiki even though they only checked it
+		// off.
+		//
+		// Contract: hidden+completed is NOT a delete. The wiki keeps
+		// showing the completed item; only an explicit t.Deleted==true
+		// from Tasks counts as a remote delete.
+		const knownUID = "uid-checkoff-keeps-wiki-1"
+		const ref = "task-checkoff-keeps-wiki-1"
+
+		When("the adapter is TasksAdapter and Tasks returns hidden+completed (the post-checkoff state)", func() {
+			var p *parityContext
+			BeforeEach(func() {
+				p = newTasksParityContext()
+				adapterState := connectors.AdapterState{
+					googletasks.AdapterStateKeyItemIDMap:      map[string]string{knownUID: ref},
+					googletasks.AdapterStateKeyItemEtags:      map[string]any{ref: "etag-completed"},
+					googletasks.AdapterStateKeyLastUpdatedMin: parityFixedNow.Add(-1 * time.Hour).Format(time.RFC3339),
+				}
+				p.reader.checklist = &apiv1.Checklist{
+					Items: []*apiv1.ChecklistItem{{Uid: knownUID, Text: "make dinner", Checked: true}},
+				}
+				p.store.SeedBinding(connectors.Binding{
+					ProfileID: p.profileID, Page: p.page, ListName: p.listName,
+					RemoteHandle:         p.remoteHandle,
+					State:                connectors.BindingStateActive,
+					LastSuccessfulSyncAt: parityPastChoke,
+					AdapterState:         adapterState,
+				}, p.kind)
+				// Tasks returns the task as hidden + completed (its
+				// usual post-completion archived state).
+				p.tasksClient.listTasks = []tasksgw.Task{
+					{ID: ref, Etag: "etag-completed", Title: "make dinner", Status: tasksgw.TaskStatusCompleted, Hidden: true, Updated: parityFixedNow},
+				}
+
+				Expect(p.engine.Sync(ctx, connectors.BindingKey{
+					ProfileID: string(p.profileID),
+					Page:      p.page,
+					ListName:  p.listName,
+				})).To(Succeed())
+			})
+
+			It("should NOT call DeleteItemForSync on the wiki (hidden != deleted)", func() {
+				Expect(p.mutator.recordingChecklistMutator.deleteCalls).To(BeEmpty(),
+					"engine deleted the item from the wiki when Tasks merely hid the completed task — same regression as production 2026-05-06")
+			})
+
+			It("should keep the uid in idMap (binding still bound)", func() {
+				if len(p.store.RecordedSaveBinding) > 0 {
+					saved := p.store.RecordedSaveBinding[len(p.store.RecordedSaveBinding)-1].Binding
+					idMap, _ := saved.AdapterState["item_id_map"].(map[string]string)
+					Expect(idMap).To(HaveKey(knownUID),
+						"engine removed the uid from idMap when the item was just hidden in Tasks")
+				}
+			})
+		})
+	})
+
 	Describe("USER SCENARIO: remote item is deleted while operator was editing in wiki", func() {
 		// Operator edits item in wiki. Engine tries to PATCH. Tasks
 		// returns 404 (or Keep returns ErrBoundNoteDeleted). Recovery

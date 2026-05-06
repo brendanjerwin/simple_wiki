@@ -656,15 +656,24 @@ func listAllTasks(ctx context.Context, client TasksClient, tasklistID string, up
 // RemoteItem shape. The Vendor map carries adapter-internal extras
 // (etag for the engine's per-binding etag bookkeeping; updated for
 // AdvanceCursor).
+//
+// Production fix 2026-05-06: the legacy connector treated
+// `Hidden && Status==completed` as a remote deletion — Tasks hides
+// completed tasks from its UI, so the legacy reasoning was "if it's
+// hidden in Tasks's UI it's effectively gone, mirror that to the
+// wiki." But the user's intent when they check off a task is
+// completion, not deletion. Treating hidden-completed as deleted
+// caused the wiki to LOSE the item the moment the user checked it,
+// in either direction (wiki check → engine pushes → Tasks hides →
+// engine pulls → engine deletes from wiki). Operator data loss.
+//
+// New rule: only `t.Deleted == true` (an explicit Tasks delete)
+// maps to RemoteItem.Deleted. Hidden+completed maps to a regular
+// non-deleted item with Status="completed" (chk=true on the wiki).
+// The wiki keeps showing the completed item; the user clears it via
+// the wiki UI when they want.
 func taskToRemoteItem(t gateway.Task) connectors.RemoteItem {
 	deleted := t.Deleted
-	// Hidden completed tasks behave like deletions for the wiki:
-	// they're invisible in the Tasks UI, and surfacing them as
-	// non-deleted would re-add them to the wiki on every tick.
-	// Mirrors the legacy connector's tombstone handling.
-	if t.Hidden && t.Status == gateway.TaskStatusCompleted {
-		deleted = true
-	}
 	return connectors.RemoteItem{
 		Ref:      connectors.RemoteRef(t.ID),
 		Etag:     t.Etag,
