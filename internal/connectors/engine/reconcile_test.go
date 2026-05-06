@@ -1204,10 +1204,23 @@ var _ = Describe("Engine.reconcile", func() {
 		})
 	})
 
-	// Fix #1: 4-cell merge — when wiki diverged AND remote also diverged
-	// (RemoteDiverged=true), the engine must apply remote (conflict-remote-wins).
-	When("inbound item has wiki diverged AND RemoteDiverged=true (conflict-remote-wins)", func() {
-		const knownUID = "uid-conflict-1"
+	// 4-cell merge refinement (production fix 2026-05-06): when the
+	// wiki's latest event is a USER write and the remote's etag has
+	// diverged, the engine must NOT apply remote — that reverts user
+	// intent. The user just expressed their will; wiki wins.
+	//
+	// Tasks's RemoteDiverged is etag-based, and Tasks bumps etags for
+	// non-content reasons (position, metadata, server-side denorm), so
+	// "etag differs" doesn't reliably mean "content differs." Relying on
+	// it for ADR-0015's conflict-remote-wins clobbered user check-offs
+	// in production.
+	//
+	// Cross-connector divergence (LatestEventSource starts with
+	// "connector:") still applies the remote per ADR-0015 — the wiki's
+	// state was previously written by another connector, so a fresh
+	// remote change from THIS connector is authoritative.
+	When("inbound item has wiki diverged from a USER write AND RemoteDiverged=true", func() {
+		const knownUID = "uid-user-conflict-1"
 
 		BeforeEach(func() {
 			fbs.SeedBinding(connectors.Binding{
@@ -1221,18 +1234,19 @@ var _ = Describe("Engine.reconcile", func() {
 				},
 			}, ownerKind)
 
-			// RemoteDiverged=true signals the remote item genuinely changed.
+			// RemoteDiverged=true via etag bump (e.g., Tasks bumped etag
+			// for a non-content metadata change).
 			fa.SetPullRemoteResponse(connectors.RemotePullResult{
 				Items: []connectors.RemoteItem{{
 					Ref:            "task-1",
-					Title:          "milk-remote-wins",
+					Title:          "milk-remote-stale-content",
 					RemoteDiverged: true,
 				}},
 			}, nil)
-			fa.SetRemoteToWikiResponse(connectors.WikiItem{UID: knownUID, Text: "milk-remote-wins"}, nil)
-			// Wiki diverged: user also edited this item.
+			fa.SetRemoteToWikiResponse(connectors.WikiItem{UID: knownUID, Text: "milk-remote-stale-content"}, nil)
+			// Wiki diverged: USER edited this item (latest src = user:).
 			reader.checklist = &apiv1.Checklist{
-				Items: []*apiv1.ChecklistItem{{Uid: knownUID, Text: "milk-wiki-edit"}},
+				Items: []*apiv1.ChecklistItem{{Uid: knownUID, Text: "milk-user-edit"}},
 				Events: []*apiv1.ChecklistEvent{
 					{Seq: 11, Src: "user:alice@example.com", Op: "set_text", Uid: knownUID},
 				},
@@ -1242,11 +1256,56 @@ var _ = Describe("Engine.reconcile", func() {
 			Expect(eng.Sync(ctx, key)).To(Succeed())
 		})
 
-		It("should call UpdateItemForSync (remote wins in conflict — wd ∧ rd)", func() {
+		It("should NOT call UpdateItemForSync (user-wins; preserve user edit)", func() {
+			Expect(mutator.recordingChecklistMutator.updateCalls).To(BeEmpty())
+		})
+	})
+
+	// Cross-connector conflict still follows ADR-0015's
+	// conflict-remote-wins. The wiki's latest event was an apply from
+	// ANOTHER connector (not this connector), so the remote is the
+	// authoritative recent write from this side.
+	When("inbound item has wiki diverged from a CROSS-CONNECTOR apply AND RemoteDiverged=true", func() {
+		const knownUID = "uid-cross-conflict-1"
+
+		BeforeEach(func() {
+			fbs.SeedBinding(connectors.Binding{
+				ProfileID: profileID, Page: page, ListName: listName,
+				RemoteHandle:         "tasklist-1",
+				State:                connectors.BindingStateActive,
+				LastSuccessfulSyncAt: reconcilePastChokePausedAt,
+				LastSyncedSeq:        10,
+				AdapterState: connectors.AdapterState{
+					"item_id_map": map[string]string{knownUID: "task-1"},
+				},
+			}, ownerKind)
+
+			fa.SetPullRemoteResponse(connectors.RemotePullResult{
+				Items: []connectors.RemoteItem{{
+					Ref:            "task-1",
+					Title:          "milk-remote-wins",
+					RemoteDiverged: true,
+				}},
+			}, nil)
+			fa.SetRemoteToWikiResponse(connectors.WikiItem{UID: knownUID, Text: "milk-remote-wins"}, nil)
+			// Wiki diverged from a different connector's apply (not this
+			// connector — Tasks here, the diverging event is from Keep).
+			reader.checklist = &apiv1.Checklist{
+				Items: []*apiv1.ChecklistItem{{Uid: knownUID, Text: "milk-keep-applied"}},
+				Events: []*apiv1.ChecklistEvent{
+					{Seq: 11, Src: "connector:google_keep:apply", Op: "toggle", Uid: knownUID},
+				},
+				MaxSeq: 11,
+			}
+
+			Expect(eng.Sync(ctx, key)).To(Succeed())
+		})
+
+		It("should call UpdateItemForSync (cross-connector → conflict-remote-wins)", func() {
 			Expect(mutator.recordingChecklistMutator.updateCalls).To(HaveLen(1))
 		})
 
-		It("should apply the remote text, not the wiki text", func() {
+		It("should apply the remote text", func() {
 			Expect(mutator.recordingChecklistMutator.updateCalls[0].Text).To(Equal("milk-remote-wins"))
 		})
 	})

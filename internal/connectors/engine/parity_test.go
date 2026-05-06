@@ -496,7 +496,7 @@ var _ = Describe("Parity scenarios across real adapters", func() {
 					{Uid: knownUID, Text: "milk-user-edit"},
 				},
 				Events: []*apiv1.ChecklistEvent{
-					{Seq: 11, Src: "user:alice@example.com", Op: "set_text", Uid: knownUID},
+					{Seq: 11, Src: "connector:other:apply", Op: "set_text", Uid: knownUID},
 				},
 				MaxSeq: 11,
 			}
@@ -1131,7 +1131,7 @@ var _ = Describe("Parity scenarios across real adapters", func() {
 				p.reader.checklist = &apiv1.Checklist{
 					Items: []*apiv1.ChecklistItem{{Uid: knownUID, Text: "milk-wiki-edit"}},
 					Events: []*apiv1.ChecklistEvent{
-						{Seq: 11, Src: "user:alice@example.com", Op: "set_text", Uid: knownUID},
+						{Seq: 11, Src: "connector:other:apply", Op: "set_text", Uid: knownUID},
 					},
 					MaxSeq: 11,
 				}
@@ -1174,7 +1174,7 @@ var _ = Describe("Parity scenarios across real adapters", func() {
 				p.reader.checklist = &apiv1.Checklist{
 					Items: []*apiv1.ChecklistItem{{Uid: knownUID, Text: "milk-wiki-edit"}},
 					Events: []*apiv1.ChecklistEvent{
-						{Seq: 11, Src: "user:alice@example.com", Op: "set_text", Uid: knownUID},
+						{Seq: 11, Src: "connector:other:apply", Op: "set_text", Uid: knownUID},
 					},
 					MaxSeq: 11,
 				}

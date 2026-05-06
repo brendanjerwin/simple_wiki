@@ -307,10 +307,32 @@ func (e *Engine) applyInboundOneItem(
 				e.adapter.Kind(), string(binding.ProfileID), binding.Page, binding.ListName, uid, string(remoteItem.Ref), cls.LatestEventSource)
 			return nil
 		}
+		if cls, has := classification[uid]; has && cls.WikiDiverged && remoteItem.RemoteDiverged && isUserSource(cls.LatestEventSource) {
+			// 4-cell merge refinement (production fix 2026-05-06): wd ∧ rd
+			// where the wiki's latest event is a USER write — wiki-wins.
+			//
+			// The remote's RemoteDiverged signal is etag-based and Tasks
+			// bumps etags for non-content reasons (position, server-side
+			// metadata bumps). When the user's wiki write is the recent
+			// divergence, applying the remote's "newer-etag" value reverts
+			// user intent — exactly what bit the operator the day this
+			// branch was added (their wiki check-off was clobbered with
+			// chk=false by a stale-etag remote).
+			//
+			// User intent wins. Push-wiki path. Cross-connector divergence
+			// (LatestEventSource starts with "connector:") still follows
+			// ADR-0015's conflict-remote-wins below — the wiki's recent
+			// write was another connector's apply, so the remote's fresh
+			// state is authoritative.
+			e.logger.Info("connectors/engine: user_wins_skipped_inbound kind=%s profile=%s page=%s list=%s uid=%s ref=%s latest_src=%s",
+				e.adapter.Kind(), string(binding.ProfileID), binding.Page, binding.ListName, uid, string(remoteItem.Ref), cls.LatestEventSource)
+			return nil
+		}
 		if cls, has := classification[uid]; has && cls.WikiDiverged && remoteItem.RemoteDiverged {
-			// ADR-0015 4-cell merge: wd ∧ rd → conflict-remote-wins.
-			// Both wiki and remote have changed; the engine applies the
-			// remote authoritative version per the merge policy.
+			// ADR-0015 4-cell merge: wd ∧ rd ∧ ¬user → conflict-remote-wins.
+			// The wiki's recent change came from a cross-connector apply;
+			// the remote's fresh state is the authoritative recent write
+			// from this side.
 			e.logger.Info("connectors/engine: conflict_remote_wins kind=%s profile=%s page=%s list=%s uid=%s ref=%s latest_src=%s",
 				e.adapter.Kind(), string(binding.ProfileID), binding.Page, binding.ListName, uid, string(remoteItem.Ref), cls.LatestEventSource)
 		}
@@ -591,6 +613,15 @@ func (e *Engine) handleAuthFailure(profileID wikipage.PageIdentifier, kind conne
 // `map[string]any` even though every value is a string (TOML decodes
 // don't preserve the originally-typed inner map). The defensive
 // conversion handles both shapes.
+
+// isUserSource reports whether the supplied event source string
+// identifies a user-driven write (rather than a connector apply or
+// system source). Used by the inbound apply path's wiki-wins refinement
+// of ADR-0015's wd ∧ rd cell.
+func isUserSource(src string) bool {
+	return strings.HasPrefix(src, "user:")
+}
+
 func readItemIDMap(state connectors.AdapterState) map[string]string {
 	out := map[string]string{}
 	if state == nil {
