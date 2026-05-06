@@ -1376,4 +1376,354 @@ var _ = Describe("Parity scenarios across real adapters", func() {
 			})
 		})
 	})
+
+	// --- Operator workflow coverage (matrix-wide) -------------------------
+	//
+	// These scenarios pin the daily-use operator contracts that the
+	// algorithm-level tests above don't make explicit. Each scenario
+	// describes what the operator does, then asserts the operator-
+	// visible outcome (wiki state, remote primitive calls) regardless
+	// of how the engine routes through its 4-cell merge / recovery /
+	// classify code paths.
+
+	Describe("USER SCENARIO: operator deletes an item in the wiki", func() {
+		// Wiki has an item the adapter knows about (idMap entry). The
+		// item is GONE from the current wiki state (user deleted it).
+		// Engine must call DeleteRemote on the adapter; idMap entry
+		// removed; AppendSyncEvent("outbound_deleted").
+		const knownUID = "uid-user-delete-1"
+		const ref = "task-user-delete-1"
+		const refKeep = "keep-srv-user-delete-1"
+
+		assertOperatorDeletePropagated := func(p *parityContext) {
+			// AppendSyncEvent with op=outbound_deleted.
+			gotDelete := false
+			for _, c := range p.mutator.recordingChecklistMutator.appendCalls {
+				if c.UID == knownUID && c.Op == "outbound_deleted" {
+					gotDelete = true
+					break
+				}
+			}
+			Expect(gotDelete).To(BeTrue(),
+				"engine must AppendSyncEvent(outbound_deleted) for the deleted uid")
+		}
+
+		When("the adapter is TasksAdapter", func() {
+			var p *parityContext
+			BeforeEach(func() {
+				p = newTasksParityContext()
+				adapterState := connectors.AdapterState{
+					googletasks.AdapterStateKeyItemIDMap:      map[string]string{knownUID: ref},
+					googletasks.AdapterStateKeyItemEtags:      map[string]any{ref: "etag-1"},
+					googletasks.AdapterStateKeyLastUpdatedMin: parityFixedNow.Add(-1 * time.Hour).Format(time.RFC3339),
+				}
+				// Wiki checklist no longer carries the item.
+				p.reader.checklist = &apiv1.Checklist{Items: []*apiv1.ChecklistItem{}}
+				p.store.SeedBinding(connectors.Binding{
+					ProfileID: p.profileID, Page: p.page, ListName: p.listName,
+					RemoteHandle:         p.remoteHandle,
+					State:                connectors.BindingStateActive,
+					LastSuccessfulSyncAt: parityPastChoke,
+					AdapterState:         adapterState,
+				}, p.kind)
+
+				Expect(p.engine.Sync(ctx, connectors.BindingKey{
+					ProfileID: string(p.profileID),
+					Page:      p.page,
+					ListName:  p.listName,
+				})).To(Succeed())
+			})
+
+			It("should call the gateway's DeleteTask for the missing uid", func() {
+				Expect(p.tasksClient.deleteCalls).NotTo(BeEmpty())
+				Expect(p.tasksClient.deleteCalls[0].TaskID).To(Equal(ref))
+			})
+
+			It("should emit outbound_deleted on the op-log", func() {
+				assertOperatorDeletePropagated(p)
+			})
+		})
+
+		When("the adapter is KeepAdapter", func() {
+			var p *parityContext
+			BeforeEach(func() {
+				p = newKeepParityContext()
+				adapterState := p.seedItemIDMap(map[string]string{knownUID: refKeep})
+				p.reader.checklist = &apiv1.Checklist{Items: []*apiv1.ChecklistItem{}}
+				p.store.SeedBinding(connectors.Binding{
+					ProfileID: p.profileID, Page: p.page, ListName: p.listName,
+					RemoteHandle:         p.remoteHandle,
+					State:                connectors.BindingStateActive,
+					LastSuccessfulSyncAt: parityPastChoke,
+					AdapterState:         adapterState,
+				}, p.kind)
+
+				Expect(p.engine.Sync(ctx, connectors.BindingKey{
+					ProfileID: string(p.profileID),
+					Page:      p.page,
+					ListName:  p.listName,
+				})).To(Succeed())
+			})
+
+			It("should emit outbound_deleted on the op-log", func() {
+				assertOperatorDeletePropagated(p)
+			})
+		})
+	})
+
+	Describe("USER SCENARIO: operator edits an item's text in the wiki", func() {
+		const knownUID = "uid-user-textedit-1"
+		const ref = "task-user-textedit-1"
+		const refKeep = "keep-srv-user-textedit-1"
+
+		assertWikiEditNotReverted := func(p *parityContext) {
+			Expect(p.mutator.recordingChecklistMutator.updateCalls).To(BeEmpty(),
+				"engine reverted the user's wiki edit — same regression class as 2026-05-06")
+		}
+
+		When("the adapter is TasksAdapter", func() {
+			var p *parityContext
+			BeforeEach(func() {
+				p = newTasksParityContext()
+				adapterState := connectors.AdapterState{
+					googletasks.AdapterStateKeyItemIDMap:      map[string]string{knownUID: ref},
+					googletasks.AdapterStateKeyItemEtags:      map[string]any{ref: "old-etag"},
+					googletasks.AdapterStateKeyLastUpdatedMin: parityFixedNow.Add(-1 * time.Hour).Format(time.RFC3339),
+				}
+				// Wiki has the user's new title.
+				p.reader.checklist = &apiv1.Checklist{
+					Items: []*apiv1.ChecklistItem{{Uid: knownUID, Text: "milk-renamed-by-user"}},
+					Events: []*apiv1.ChecklistEvent{
+						{Seq: 11, Src: "user:operator@example.com", Op: "set_text", Uid: knownUID},
+					},
+					MaxSeq: 11,
+				}
+				p.store.SeedBinding(connectors.Binding{
+					ProfileID: p.profileID, Page: p.page, ListName: p.listName,
+					RemoteHandle:         p.remoteHandle,
+					State:                connectors.BindingStateActive,
+					LastSuccessfulSyncAt: parityPastChoke,
+					LastSyncedSeq:        10,
+					AdapterState:         adapterState,
+				}, p.kind)
+				// Tasks returns the item with new etag but stale content.
+				p.tasksClient.listTasks = []tasksgw.Task{
+					{ID: ref, Etag: "new-etag", Title: "milk", Status: tasksgw.TaskStatusNeedsAction, Updated: parityFixedNow},
+				}
+				p.tasksClient.patchEtagGate = "new-etag"
+				p.tasksClient.patchEtagGateErr = tasksgw.ErrPreconditionFailed
+
+				Expect(p.engine.Sync(ctx, connectors.BindingKey{
+					ProfileID: string(p.profileID),
+					Page:      p.page,
+					ListName:  p.listName,
+				})).To(Succeed())
+			})
+
+			It("should NOT revert the wiki edit", func() {
+				assertWikiEditNotReverted(p)
+			})
+
+			It("should patch the remote with the new title via the recovery path", func() {
+				gotPatchWithNewTitle := false
+				for _, call := range p.tasksClient.patchCalls {
+					if call.Fields.Title == "milk-renamed-by-user" && call.Etag == "new-etag" {
+						gotPatchWithNewTitle = true
+						break
+					}
+				}
+				Expect(gotPatchWithNewTitle).To(BeTrue(),
+					"recovery's repatch must carry the user's new title with the refreshed etag")
+			})
+		})
+
+		When("the adapter is KeepAdapter", func() {
+			var p *parityContext
+			BeforeEach(func() {
+				p = newKeepParityContext()
+				adapterState := p.seedItemIDMap(map[string]string{knownUID: refKeep})
+				p.reader.checklist = &apiv1.Checklist{
+					Items: []*apiv1.ChecklistItem{{Uid: knownUID, Text: "milk-renamed-by-user"}},
+					Events: []*apiv1.ChecklistEvent{
+						{Seq: 11, Src: "user:operator@example.com", Op: "set_text", Uid: knownUID},
+					},
+					MaxSeq: 11,
+				}
+				p.store.SeedBinding(connectors.Binding{
+					ProfileID: p.profileID, Page: p.page, ListName: p.listName,
+					RemoteHandle:         p.remoteHandle,
+					State:                connectors.BindingStateActive,
+					LastSuccessfulSyncAt: parityPastChoke,
+					LastSyncedSeq:        10,
+					AdapterState:         adapterState,
+				}, p.kind)
+				p.keepClient.changesDefault = keepgw.ChangesResponse{
+					ToVersion: "v600",
+					Nodes: []keepgw.Node{
+						keepNodeForRefAtVersion(refKeep, "milk", false, "bv-v2-"+refKeep),
+					},
+				}
+
+				Expect(p.engine.Sync(ctx, connectors.BindingKey{
+					ProfileID: string(p.profileID),
+					Page:      p.page,
+					ListName:  p.listName,
+				})).To(Succeed())
+			})
+
+			It("should NOT revert the wiki edit", func() {
+				assertWikiEditNotReverted(p)
+			})
+		})
+	})
+
+	Describe("USER SCENARIO: operator adds a fresh item directly in Tasks (mobile app)", func() {
+		// Inbound side: a remote item the wiki has never seen lands via
+		// PullRemote → engine calls AddItemForSync to mirror it into the
+		// wiki. idMap gets the new uid → ref mapping. Tasks-only here
+		// because the parity Keep client doesn't easily simulate a
+		// novel remote node without more setup; equivalent inbound
+		// add for Keep is covered in the keep adapter unit tests.
+		const ref = "task-mobile-add-1"
+
+		When("the adapter is TasksAdapter", func() {
+			var p *parityContext
+			BeforeEach(func() {
+				p = newTasksParityContext()
+				adapterState := connectors.AdapterState{
+					googletasks.AdapterStateKeyItemIDMap:      map[string]string{},
+					googletasks.AdapterStateKeyItemEtags:      map[string]any{},
+					googletasks.AdapterStateKeyLastUpdatedMin: parityFixedNow.Add(-1 * time.Hour).Format(time.RFC3339),
+				}
+				p.reader.checklist = &apiv1.Checklist{}
+				p.store.SeedBinding(connectors.Binding{
+					ProfileID: p.profileID, Page: p.page, ListName: p.listName,
+					RemoteHandle:         p.remoteHandle,
+					State:                connectors.BindingStateActive,
+					LastSuccessfulSyncAt: parityPastChoke,
+					AdapterState:         adapterState,
+				}, p.kind)
+				// Tasks returns a fresh task the wiki has never seen.
+				p.tasksClient.listTasks = []tasksgw.Task{
+					{ID: ref, Etag: "etag-mobile", Title: "bread", Status: tasksgw.TaskStatusNeedsAction, Updated: parityFixedNow},
+				}
+				p.mutator.recordingChecklistMutator.addUIDToReturn = "uid-mobile-add-1"
+
+				Expect(p.engine.Sync(ctx, connectors.BindingKey{
+					ProfileID: string(p.profileID),
+					Page:      p.page,
+					ListName:  p.listName,
+				})).To(Succeed())
+			})
+
+			It("should call AddItemForSync with the remote title", func() {
+				Expect(p.mutator.recordingChecklistMutator.addCalls).To(HaveLen(1))
+				Expect(p.mutator.recordingChecklistMutator.addCalls[0].Text).To(Equal("bread"))
+			})
+		})
+	})
+
+	Describe("USER SCENARIO: operator checks off an item directly in Tasks (mobile app)", func() {
+		const knownUID = "uid-mobile-check-1"
+		const ref = "task-mobile-check-1"
+
+		When("the adapter is TasksAdapter", func() {
+			var p *parityContext
+			BeforeEach(func() {
+				p = newTasksParityContext()
+				adapterState := connectors.AdapterState{
+					googletasks.AdapterStateKeyItemIDMap:      map[string]string{knownUID: ref},
+					googletasks.AdapterStateKeyItemEtags:      map[string]any{ref: "old-etag"},
+					googletasks.AdapterStateKeyLastUpdatedMin: parityFixedNow.Add(-1 * time.Hour).Format(time.RFC3339),
+				}
+				// Wiki currently has the item unchecked. No user events
+				// (wiki not diverged).
+				p.reader.checklist = &apiv1.Checklist{
+					Items: []*apiv1.ChecklistItem{{Uid: knownUID, Text: "milk", Checked: false}},
+				}
+				p.store.SeedBinding(connectors.Binding{
+					ProfileID: p.profileID, Page: p.page, ListName: p.listName,
+					RemoteHandle:         p.remoteHandle,
+					State:                connectors.BindingStateActive,
+					LastSuccessfulSyncAt: parityPastChoke,
+					AdapterState:         adapterState,
+				}, p.kind)
+				// Mobile checked the item: new etag + Status=completed.
+				p.tasksClient.listTasks = []tasksgw.Task{
+					{ID: ref, Etag: "etag-mobile-checked", Title: "milk", Status: tasksgw.TaskStatusCompleted, Updated: parityFixedNow},
+				}
+
+				Expect(p.engine.Sync(ctx, connectors.BindingKey{
+					ProfileID: string(p.profileID),
+					Page:      p.page,
+					ListName:  p.listName,
+				})).To(Succeed())
+			})
+
+			It("should mirror the mobile check into the wiki via UpdateItemForSync", func() {
+				Expect(p.mutator.recordingChecklistMutator.updateCalls).To(HaveLen(1))
+				Expect(p.mutator.recordingChecklistMutator.updateCalls[0].UID).To(Equal(knownUID))
+				Expect(p.mutator.recordingChecklistMutator.updateCalls[0].Checked).To(BeTrue())
+			})
+		})
+	})
+
+	Describe("USER SCENARIO: remote item is deleted while operator was editing in wiki", func() {
+		// Operator edits item in wiki. Engine tries to PATCH. Tasks
+		// returns 404 (or Keep returns ErrBoundNoteDeleted). Recovery
+		// reads remote → Deleted=true → mirror delete into wiki +
+		// remove from idMap. The user's wiki edit is acknowledged as
+		// orphaned (the remote item is gone) and the wiki cleans up.
+		const knownUID = "uid-remote-deleted-during-edit-1"
+		const ref = "task-remote-deleted-1"
+
+		When("the adapter is TasksAdapter", func() {
+			var p *parityContext
+			BeforeEach(func() {
+				p = newTasksParityContext()
+				adapterState := connectors.AdapterState{
+					googletasks.AdapterStateKeyItemIDMap:      map[string]string{knownUID: ref},
+					googletasks.AdapterStateKeyItemEtags:      map[string]any{ref: "old-etag"},
+					googletasks.AdapterStateKeyLastUpdatedMin: parityFixedNow.Add(-1 * time.Hour).Format(time.RFC3339),
+				}
+				p.reader.checklist = &apiv1.Checklist{
+					Items: []*apiv1.ChecklistItem{{Uid: knownUID, Text: "milk-renamed"}},
+					Events: []*apiv1.ChecklistEvent{
+						{Seq: 11, Src: "user:operator@example.com", Op: "set_text", Uid: knownUID},
+					},
+					MaxSeq: 11,
+				}
+				p.store.SeedBinding(connectors.Binding{
+					ProfileID: p.profileID, Page: p.page, ListName: p.listName,
+					RemoteHandle:         p.remoteHandle,
+					State:                connectors.BindingStateActive,
+					LastSuccessfulSyncAt: parityPastChoke,
+					LastSyncedSeq:        10,
+					AdapterState:         adapterState,
+				}, p.kind)
+				// Tasks returns this task as Deleted=true (mobile app
+				// removed it).
+				p.tasksClient.listTasks = []tasksgw.Task{
+					{ID: ref, Etag: "etag-x", Title: "milk", Deleted: true, Updated: parityFixedNow},
+				}
+
+				Expect(p.engine.Sync(ctx, connectors.BindingKey{
+					ProfileID: string(p.profileID),
+					Page:      p.page,
+					ListName:  p.listName,
+				})).To(Succeed())
+			})
+
+			It("should call DeleteItemForSync on the wiki to mirror the remote delete", func() {
+				gotDelete := false
+				for _, c := range p.mutator.recordingChecklistMutator.deleteCalls {
+					if c.UID == knownUID {
+						gotDelete = true
+						break
+					}
+				}
+				Expect(gotDelete).To(BeTrue())
+			})
+		})
+	})
 })
