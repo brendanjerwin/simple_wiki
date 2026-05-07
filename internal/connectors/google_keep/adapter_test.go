@@ -537,12 +537,19 @@ var _ = Describe("KeepAdapter", func() {
 			Expect(err).NotTo(HaveOccurred())
 		})
 
-		It("should send a tombstone (Trashed timestamp) for the item", func() {
+		It("should send a tombstone (Deleted timestamp) for the item", func() {
+			// Production bug 2026-05-07: setting only Trashed caused
+			// Keep to apply other fields (checked=false via omitempty)
+			// WITHOUT actually deleting — items appeared unchecked in
+			// Keep instead of being removed. The legacy connector used
+			// Deleted timestamp, with the explicit note: "only `deleted`
+			// makes it through Keep's Changes API on incremental updates."
 			Expect(fakeClient.changes).To(HaveLen(1))
 			Expect(fakeClient.changes[0].Nodes).To(HaveLen(1))
 			node := fakeClient.changes[0].Nodes[0]
 			Expect(node.ServerID).To(Equal("srv-7"))
-			Expect(node.Timestamps.Trashed.IsZero()).To(BeFalse())
+			Expect(node.Timestamps.Deleted.IsZero()).To(BeFalse(),
+				"Keep's Changes API requires Deleted timestamp (not just Trashed) for incremental updates")
 		})
 	})
 

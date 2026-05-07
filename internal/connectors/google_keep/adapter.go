@@ -336,7 +336,15 @@ func (a *KeepAdapter) PatchRemote(ctx context.Context, binding connectors.Bindin
 }
 
 // DeleteRemote removes a Keep LIST_ITEM by setting the soft-delete
-// flag (`Trashed` timestamp). Keep's standard tombstone pattern.
+// flag (`Deleted` timestamp). Keep's gkeepapi reference exposes both
+// trash() and delete() as separate operations, but only `deleted`
+// actually propagates through Keep's Changes API on incremental
+// updates — `trashed` alone causes Keep to apply other fields (e.g.
+// the omitempty-forced `checked: false`) WITHOUT removing the item.
+// Production observation 2026-05-07: items the user deleted in the
+// wiki appeared as unchecked-but-present in Keep when the adapter
+// only set Trashed.
+//
 // Idempotent: repeated deletes are no-ops.
 func (a *KeepAdapter) DeleteRemote(ctx context.Context, binding connectors.Binding, ref connectors.RemoteRef) error {
 	client, err := a.buildClientForProfile(ctx, binding.ProfileID)
@@ -355,7 +363,7 @@ func (a *KeepAdapter) DeleteRemote(ctx context.Context, binding connectors.Bindi
 		BaseVersion:    mapping.BaseVersion,
 		Timestamps: gateway.Timestamps{
 			Updated: now,
-			Trashed: now,
+			Deleted: now,
 		},
 	}
 	if node.ID == "" {
