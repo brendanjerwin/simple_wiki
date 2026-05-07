@@ -46,23 +46,31 @@ SENTINEL="/tmp/claude-halt-verified-${SESSION_ID}"
 # leave the next session permanently unblocked.
 WINDOW_SECONDS=1800
 
-# Self-quieting bypass: if the model's most recent assistant message in
-# the transcript already begins with "Halt reason:" (case-insensitive,
-# stripping leading whitespace/quotes), the verification text the hook
-# would inject is redundant. Pass through silently.
+# Self-quieting bypass: if the model's most recent assistant message
+# anywhere contains a line that begins with "Halt reason:"
+# (case-insensitive, ignoring leading markdown noise like bullets,
+# quotes, asterisks), the verification has visibly happened — the
+# reminder text the hook would inject is redundant. Pass through
+# silently. The match anchors to a line start so casual prose
+# mentioning "halt reason" mid-sentence doesn't trigger a false bypass.
 if [[ -n "$TRANSCRIPT_PATH" && -f "$TRANSCRIPT_PATH" ]]; then
-  # Each line in the transcript is a JSON event. Walk backwards to find
-  # the most recent assistant `text` content, then check its prefix.
-  LAST_ASSISTANT_TEXT=$(tac "$TRANSCRIPT_PATH" 2>/dev/null \
-    | jq -r 'select(.type == "assistant") | .message.content[]? | select(.type == "text") | .text' 2>/dev/null \
-    | head -n 1 || true)
+  # Walk backwards to find the most recent assistant turn, then emit
+  # ALL of its text content (joined with newlines). `--slurp` lets the
+  # filter see every event line at once so `last` correctly picks the
+  # final assistant message (NOT just the first text line of it, which
+  # the previous `| head -n 1` was wrongly doing).
+  LAST_ASSISTANT_TEXT=$(jq -r --slurp '
+    map(select(.type == "assistant")) | last
+    | (.message.content // []) | map(select(.type == "text") | .text) | join("\n")
+  ' "$TRANSCRIPT_PATH" 2>/dev/null || true)
   if [[ -n "$LAST_ASSISTANT_TEXT" ]]; then
-    # Strip leading whitespace + ASCII / smart quotes that wrap quoted prefixes.
-    STRIPPED=$(echo "$LAST_ASSISTANT_TEXT" | sed -E 's/^[[:space:]"'"'"'`*_]*//')
-    PREFIX=$(echo "$STRIPPED" | head -c 200)
-    if echo "$PREFIX" | grep -qiE '^(same valid )?halt reason:'; then
-      # Model has already justified the halt. No need to inject the
-      # reminder. Refresh sentinel so subsequent quiet stops also pass.
+    # Match any line whose content (after stripping leading list /
+    # quote / markdown markers) starts with "halt reason:" or "same
+    # valid halt reason:". Anchored to a line start so casual mid-prose
+    # mentions of "halt reason" don't trigger a false bypass.
+    if echo "$LAST_ASSISTANT_TEXT" | grep -qiE '^[[:space:]>*_`"'"'"'-]*(same valid )?halt reason:'; then
+      # Model has already justified the halt. Refresh sentinel so
+      # subsequent quiet stops also pass within the sliding window.
       touch "$SENTINEL"
       exit 0
     fi
