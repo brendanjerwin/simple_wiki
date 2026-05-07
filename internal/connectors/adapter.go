@@ -65,6 +65,24 @@ type BackendAdapter interface {
 	// semantics (Tasks: 404 is a no-op; Keep: Trashed flag).
 	DeleteRemote(ctx context.Context, binding Binding, ref RemoteRef) error
 
+	// SyncCollectionState reconciles per-collection (per-binding)
+	// remote state from the supplied wiki items, after the engine has
+	// pushed all per-item changes for the tick. Adapter-specific:
+	//
+	//   - Keep: extract hashtags from items, mint Keep labels for any
+	//     unmapped names, update the LIST node's labelIDs assignment
+	//     in a single Changes request (legacy keepsync's
+	//     SyncToKeep label push, restored from the Phase 5-A port).
+	//
+	//   - Tasks: no-op (Tasks lacks user-defined labels at the list
+	//     level; tags live in the title and round-trip per-item).
+	//
+	// Called once per reconcile tick by the engine after the per-item
+	// outbound loop. Returns the (possibly updated) binding; the engine
+	// persists. Errors are treated like a per-item Retryable failure —
+	// they don't abort the rest of the tick's progress.
+	SyncCollectionState(ctx context.Context, binding Binding, items []WikiItem) (Binding, error)
+
 	// Translation (MATRIX rows 1, 13).
 
 	// RemoteToWiki converts the normalized RemoteItem shape into a

@@ -283,6 +283,14 @@ func (*TasksAdapter) WikiToRemote(wiki connectors.WikiItem) (connectors.RemoteIt
 	}, nil
 }
 
+// SyncCollectionState is a no-op for Tasks. Tasks lacks user-defined
+// labels at the list level, and per-item tags round-trip via the title
+// field (handled by RemoteToWiki / WikiToRemote). The Keep adapter
+// uses this hook to push hashtag-derived labels to the LIST node.
+func (*TasksAdapter) SyncCollectionState(_ context.Context, binding connectors.Binding, _ []connectors.WikiItem) (connectors.Binding, error) {
+	return binding, nil
+}
+
 // RefreshItemBaseline updates the stored item_etags entry for ref to
 // the etag from the freshly-read remote item. Used by the engine's
 // precondition_recovery path: after ReadRemoteByRef returns, the

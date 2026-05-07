@@ -568,6 +568,31 @@ func (e *Engine) pushOutbound(
 				binding.Page, binding.ListName, uid, appendErr)
 		}
 	}
+
+	// Per-binding collection-level sync (Keep: hashtag → label CRUD;
+	// Tasks: no-op). Called once per tick after per-item ops so the
+	// label set reflects the post-tick wiki state. Errors are logged
+	// and do NOT abort the tick — the per-item progress is already
+	// persisted via recordPushSuccess.
+	wikiItemsForCollection := make([]connectors.WikiItem, 0, len(currentUIDs))
+	for uid, item := range currentUIDs {
+		wikiItemsForCollection = append(wikiItemsForCollection, connectors.WikiItem{
+			UID:         uid,
+			Text:        item.GetText(),
+			Checked:     item.GetChecked(),
+			Tags:        item.GetTags(),
+			Description: item.GetDescription(),
+			SortOrder:   item.GetSortOrder(),
+		})
+	}
+	updated, syncErr := e.adapter.SyncCollectionState(ctx, binding, wikiItemsForCollection)
+	if syncErr != nil {
+		e.logger.Info("connectors/engine: sync_collection_state_failed kind=%s profile=%s page=%s list=%s err=%v",
+			e.adapter.Kind(), string(binding.ProfileID), binding.Page, binding.ListName, syncErr)
+	} else {
+		binding = updated
+	}
+
 	return binding, false, nil
 }
 

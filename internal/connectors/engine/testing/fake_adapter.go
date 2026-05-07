@@ -52,6 +52,7 @@ type FakeAdapter struct {
 	remoteToWikiResponses         []wikiItemResponse
 	wikiToRemoteResponses         []remoteItemResponse
 	advanceCursorResponses        []connectors.Binding
+	syncCollectionStateResponses  []syncCollectionStateResponse
 	seedBindingStateResponses     []adapterStateResponse
 	validateRemoteBindingResponses []errResponse
 	rebuildAdapterStateResponses  []adapterStateResponse
@@ -80,6 +81,7 @@ type FakeAdapter struct {
 	RecordedReadRemoteByRef       []recordedReadRemoteByRef
 	RecordedClassifyError         []error
 	RecordedRefreshItemBaseline   []recordedRefreshItemBaseline
+	RecordedSyncCollectionState   []recordedSyncCollectionState
 }
 
 type pullRemoteResponse struct {
@@ -329,6 +331,42 @@ func (f *FakeAdapter) SetAdvanceCursorResponse(binding connectors.Binding) {
 type recordedRefreshItemBaseline struct {
 	Binding connectors.Binding
 	Remote  connectors.RemoteItem
+}
+
+// recordedSyncCollectionState captures one SyncCollectionState call.
+type recordedSyncCollectionState struct {
+	Binding connectors.Binding
+	Items   []connectors.WikiItem
+}
+
+// SyncCollectionState implements connectors.BackendAdapter. Default
+// behavior: pass binding through untouched while recording the call.
+func (f *FakeAdapter) SyncCollectionState(_ context.Context, binding connectors.Binding, items []connectors.WikiItem) (connectors.Binding, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.RecordedSyncCollectionState = append(f.RecordedSyncCollectionState, recordedSyncCollectionState{
+		Binding: binding,
+		Items:   append([]connectors.WikiItem(nil), items...),
+	})
+	if len(f.syncCollectionStateResponses) > 0 {
+		r := f.syncCollectionStateResponses[0]
+		f.syncCollectionStateResponses = f.syncCollectionStateResponses[1:]
+		return r.Binding, r.Err
+	}
+	return binding, nil
+}
+
+type syncCollectionStateResponse struct {
+	Binding connectors.Binding
+	Err     error
+}
+
+// SetSyncCollectionStateResponse queues a response for the next
+// SyncCollectionState call.
+func (f *FakeAdapter) SetSyncCollectionStateResponse(binding connectors.Binding, err error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.syncCollectionStateResponses = append(f.syncCollectionStateResponses, syncCollectionStateResponse{Binding: binding, Err: err})
 }
 
 // RefreshItemBaseline implements connectors.BackendAdapter. Default

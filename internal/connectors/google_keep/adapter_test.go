@@ -642,6 +642,132 @@ var _ = Describe("KeepAdapter", func() {
 		})
 	})
 
+	Describe("SyncCollectionState", func() {
+		// Restored from legacy keepsync (Phase 5-A port regression
+		// 2026-05-07): hashtag-derived label sync to Keep.
+		var (
+			binding connectors.Binding
+			err     error
+		)
+
+		When("wiki items carry hashtags not yet mapped to Keep label MainIDs", func() {
+			BeforeEach(func() {
+				binding = connectors.Binding{
+					ProfileID: profile, RemoteHandle: remoteHandle,
+					AdapterState: connectors.AdapterState{
+						googlekeep.AdapterStateKeyKeepNoteClientID: "list-cli",
+						googlekeep.AdapterStateKeyLabelIDs:         map[string]any{},
+					},
+				}
+				fakeClient.changesDefault = gateway.ChangesResponse{
+					ToVersion: "v200",
+				}
+				items := []connectors.WikiItem{
+					{UID: "uid-1", Tags: []string{"household"}},
+					{UID: "uid-2", Tags: []string{"household", "chores"}},
+				}
+				binding, err = adapter.SyncCollectionState(ctx, binding, items)
+			})
+
+			It("should not error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should send exactly one Changes request with the new labels", func() {
+				Expect(fakeClient.changes).To(HaveLen(1))
+				Expect(fakeClient.changes[0].Labels).To(HaveLen(2))
+			})
+
+			It("should include the LIST node carrying the new label IDs", func() {
+				Expect(fakeClient.changes[0].Nodes).To(HaveLen(1))
+				Expect(fakeClient.changes[0].Nodes[0].Type).To(Equal(gateway.NodeTypeList))
+				Expect(fakeClient.changes[0].Nodes[0].LabelIDs).To(HaveLen(2))
+			})
+
+			It("should persist the new label MainIDs in adapter_state.label_ids", func() {
+				labelIDs, ok := binding.AdapterState[googlekeep.AdapterStateKeyLabelIDs].(map[string]any)
+				Expect(ok).To(BeTrue())
+				Expect(labelIDs).To(HaveKey("household"))
+				Expect(labelIDs).To(HaveKey("chores"))
+			})
+		})
+
+		When("all wiki tags already map to existing Keep labels", func() {
+			BeforeEach(func() {
+				binding = connectors.Binding{
+					ProfileID: profile, RemoteHandle: remoteHandle,
+					AdapterState: connectors.AdapterState{
+						googlekeep.AdapterStateKeyKeepNoteClientID: "list-cli",
+						googlekeep.AdapterStateKeyLabelIDs: map[string]any{
+							"household": "main-household",
+							"chores":    "main-chores",
+						},
+					},
+				}
+				items := []connectors.WikiItem{
+					{UID: "uid-1", Tags: []string{"household", "chores"}},
+				}
+				binding, err = adapter.SyncCollectionState(ctx, binding, items)
+			})
+
+			It("should not error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should not send any Changes request (idempotent no-op)", func() {
+				Expect(fakeClient.changes).To(BeEmpty())
+			})
+		})
+
+		When("the binding has no keep_note_client_id yet (pre-self-heal)", func() {
+			BeforeEach(func() {
+				binding = connectors.Binding{
+					ProfileID: profile, RemoteHandle: remoteHandle,
+					AdapterState: connectors.AdapterState{
+						googlekeep.AdapterStateKeyKeepNoteClientID: "",
+						googlekeep.AdapterStateKeyLabelIDs:         map[string]any{},
+					},
+				}
+				items := []connectors.WikiItem{
+					{UID: "uid-1", Tags: []string{"household"}},
+				}
+				binding, err = adapter.SyncCollectionState(ctx, binding, items)
+			})
+
+			It("should not error (defer the push until self-heal lands)", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should not send any Changes request (would 500 on stage3 invariant)", func() {
+				Expect(fakeClient.changes).To(BeEmpty())
+			})
+		})
+
+		When("wiki items have no tags", func() {
+			BeforeEach(func() {
+				binding = connectors.Binding{
+					ProfileID: profile, RemoteHandle: remoteHandle,
+					AdapterState: connectors.AdapterState{
+						googlekeep.AdapterStateKeyKeepNoteClientID: "list-cli",
+						googlekeep.AdapterStateKeyLabelIDs:         map[string]any{},
+					},
+				}
+				items := []connectors.WikiItem{
+					{UID: "uid-1", Tags: []string{}},
+				}
+				binding, err = adapter.SyncCollectionState(ctx, binding, items)
+			})
+
+			It("should not error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should not send any Changes request", func() {
+				Expect(fakeClient.changes).To(BeEmpty())
+			})
+		})
+	})
+
 	Describe("RemoteToWiki", func() {
 		var (
 			remote connectors.RemoteItem

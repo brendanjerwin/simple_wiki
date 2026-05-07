@@ -27,6 +27,7 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
@@ -483,6 +484,182 @@ func (*KeepAdapter) WikiToRemote(wiki connectors.WikiItem) (connectors.RemoteIte
 // the binding's AdapterState. Per MATRIX.md row 16, Keep's cursor is
 // server-issued and opaque — no safety buffer is needed (unlike
 // Tasks's timestamp-based cursor).
+// SyncCollectionState reconciles per-binding label state. Walks every
+// wiki item's tags to compute the union of hashtags, mints Keep labels
+// for any tag not yet mapped (via translator.MergeKeepLabels), and
+// pushes label CRUD entries plus a LIST-node update with the merged
+// labelIDs in a single Changes request. Restores the legacy keepsync
+// SyncToKeep label sync block (lost in the Phase 5-A port — production
+// regression 2026-05-07: hashtag changes in wiki items didn't propagate
+// to Keep labels).
+//
+// Idempotent: when MergeKeepLabels returns no labelPush AND the LIST
+// node's existing labelIDs already match the desired set, this is a
+// no-op (no Changes request, no AdapterState mutation).
+func (a *KeepAdapter) SyncCollectionState(ctx context.Context, binding connectors.Binding, items []connectors.WikiItem) (connectors.Binding, error) {
+	tags := uniqueTagsFromItems(items)
+	persisted := readLabelIDs(binding.AdapterState)
+
+	now := a.clock.Now().UTC()
+	labelPush, listLabelIDs, err := translator.MergeKeepLabels(tags, persisted, nil, now)
+	if err != nil {
+		return binding, fmt.Errorf("sync collection state: merge keep labels for profile %s: %w",
+			string(binding.ProfileID), err)
+	}
+
+	// Decide whether the LIST node needs an update. Treat the persisted
+	// set of MainIDs as the desired post-tick state on Keep; if every
+	// listLabelID is already in the persisted map AND there are no new
+	// labels to mint, skip the request.
+	persistedSet := make(map[string]struct{}, len(persisted))
+	for _, id := range persisted {
+		persistedSet[id] = struct{}{}
+	}
+	allListIDsPersisted := true
+	for _, id := range listLabelIDs {
+		if _, ok := persistedSet[id]; !ok {
+			allListIDsPersisted = false
+			break
+		}
+	}
+	if len(labelPush) == 0 && allListIDsPersisted && len(listLabelIDs) == labelCountInPersisted(persistedSet, listLabelIDs) {
+		return binding, nil
+	}
+
+	client, clientErr := a.buildClientForProfile(ctx, binding.ProfileID)
+	if clientErr != nil {
+		return binding, clientErr
+	}
+
+	listClientID, _ := binding.AdapterState[AdapterStateKeyKeepNoteClientID].(string)
+	if listClientID == "" {
+		// Without the LIST node's client id we can't emit a valid
+		// labelIDs assignment — Keep's stage3 invariant requires
+		// id != serverId on outbound LIST nodes. Self-heal via
+		// PullRemote handles this on the next tick; defer the label
+		// push until then.
+		return binding, nil
+	}
+
+	listNode := gateway.Node{
+		Kind:           "notes#node",
+		ID:             listClientID,
+		ServerID:       binding.RemoteHandle,
+		Type:           gateway.NodeTypeList,
+		ParentID:       "",
+		ParentServerID: "",
+		Timestamps:     gateway.Timestamps{Updated: now},
+		LabelIDs:       listLabelIDs,
+	}
+
+	resp, changesErr := client.Changes(ctx, gateway.ChangesRequest{
+		Nodes:           []gateway.Node{listNode},
+		Labels:          labelPush,
+		TargetVersion:   readKeepCursor(binding.AdapterState),
+		SessionID:       fmt.Sprintf("s--%d--labels", now.UnixMilli()),
+		ClientTimestamp: now.Format("2006-01-02T15:04:05.000000Z"),
+	})
+	if changesErr != nil {
+		return binding, changesErr
+	}
+
+	updated := persisted
+	if updated == nil {
+		updated = map[string]string{}
+	}
+	for i, l := range labelPush {
+		if i < len(tags) {
+			// Persist using the user-supplied tag name (canonical case
+			// is whatever the wiki had); MergeKeepLabels emits in the
+			// same order as the input tags for any not previously
+			// matched. Match by MainID to be safe.
+		}
+		updated[l.Name] = l.MainID
+	}
+	for _, l := range resp.Labels {
+		if l.MainID != "" && l.Name != "" {
+			updated[l.Name] = l.MainID
+		}
+	}
+
+	out := persistLabelIDs(binding, updated)
+	return out, nil
+}
+
+// uniqueTagsFromItems returns the deduplicated, order-preserving set
+// of tags across all wiki items.
+func uniqueTagsFromItems(items []connectors.WikiItem) []string {
+	seen := map[string]struct{}{}
+	out := make([]string, 0)
+	for _, it := range items {
+		for _, tag := range it.Tags {
+			if tag == "" {
+				continue
+			}
+			lc := strings.ToLower(tag)
+			if _, ok := seen[lc]; ok {
+				continue
+			}
+			seen[lc] = struct{}{}
+			out = append(out, tag)
+		}
+	}
+	return out
+}
+
+// readLabelIDs pulls the persisted name → MainID map out of the
+// binding's AdapterState[label_ids] subtree. Returns a non-nil map.
+func readLabelIDs(state connectors.AdapterState) map[string]string {
+	out := map[string]string{}
+	if state == nil {
+		return out
+	}
+	raw, ok := state[AdapterStateKeyLabelIDs]
+	if !ok {
+		return out
+	}
+	switch m := raw.(type) {
+	case map[string]string:
+		for k, v := range m {
+			out[k] = v
+		}
+	case map[string]any:
+		for k, v := range m {
+			if s, isStr := v.(string); isStr {
+				out[k] = s
+			}
+		}
+	}
+	return out
+}
+
+// persistLabelIDs writes the supplied name → MainID map back into the
+// binding's AdapterState[label_ids] subtree.
+func persistLabelIDs(binding connectors.Binding, labels map[string]string) connectors.Binding {
+	if binding.AdapterState == nil {
+		binding.AdapterState = connectors.AdapterState{}
+	}
+	out := make(map[string]any, len(labels))
+	for k, v := range labels {
+		out[k] = v
+	}
+	binding.AdapterState[AdapterStateKeyLabelIDs] = out
+	return binding
+}
+
+// labelCountInPersisted reports how many of listLabelIDs are present
+// in persistedSet. Used to detect that the LIST node's desired
+// labelIDs assignment is already a no-op against persisted state.
+func labelCountInPersisted(persistedSet map[string]struct{}, listLabelIDs []string) int {
+	count := 0
+	for _, id := range listLabelIDs {
+		if _, ok := persistedSet[id]; ok {
+			count++
+		}
+	}
+	return count
+}
+
 // RefreshItemBaseline updates the stored item_mapping entry for ref's
 // BaseVersion (and ClientID) from the freshly-read remote item's
 // Vendor map. Used by the engine's precondition_recovery path: after
