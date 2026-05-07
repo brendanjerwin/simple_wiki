@@ -253,11 +253,51 @@ func (a *KeepAdapter) PullRemote(ctx context.Context, binding connectors.Binding
 		}
 		items = append(items, item)
 	}
+
+	// keep_note_client_id self-heal (legacy keepsync had this in
+	// connector.go's SyncToKeep; lost in the Phase 5-A port). Outbound
+	// pushes that include the LIST node (notably label CRUD) require
+	// the LIST node to carry id != serverId per Keep's stage3
+	// invariant. When that field is empty, the push 500s. Two-stage
+	// recovery:
+	//
+	//   1. If the LIST node is in the current pull, capture its
+	//      client id directly. AdapterState is a map, so the mutation
+	//      propagates back to the engine's binding via reference.
+	//
+	//   2. If the LIST node is NOT in this incremental pull (LIST
+	//      didn't change since last cursor), signal Truncated=true so
+	//      the engine triggers a ForceFullResync — full pulls always
+	//      include the LIST node, so the next reconcile after the
+	//      resync will land in step 1.
+	truncated := resp.Truncated
+	if needsClientIDSelfHeal(binding) {
+		if captured := translator.FindListClientID(resp.Nodes, binding.RemoteHandle); captured != "" {
+			if binding.AdapterState == nil {
+				binding.AdapterState = connectors.AdapterState{}
+			}
+			binding.AdapterState[AdapterStateKeyKeepNoteClientID] = captured
+		} else {
+			truncated = true
+		}
+	}
+
 	return connectors.RemotePullResult{
 		Items:     items,
 		NewCursor: resp.ToVersion,
-		Truncated: resp.Truncated,
+		Truncated: truncated,
 	}, nil
+}
+
+// needsClientIDSelfHeal reports whether the binding's stored
+// keep_note_client_id is missing or empty. See PullRemote's self-heal
+// block for the production scenario.
+func needsClientIDSelfHeal(binding connectors.Binding) bool {
+	if binding.AdapterState == nil {
+		return true
+	}
+	v, ok := binding.AdapterState[AdapterStateKeyKeepNoteClientID].(string)
+	return !ok || v == ""
 }
 
 // InsertRemote pushes a fresh wiki item to the bound Keep list as a
@@ -368,8 +408,10 @@ func (a *KeepAdapter) DeleteRemote(ctx context.Context, binding connectors.Bindi
 	}
 	if node.ID == "" {
 		// Brand-new tombstone for a never-pushed-back item: synthesize
-		// a client id so the wire shape is well-formed; Keep treats
-		// the node as a tombstone via the trashed timestamp regardless.
+		// a client id so the wire shape is well-formed. The node is
+		// recognized as a tombstone via the Deleted timestamp set
+		// above (NOT Trashed — see the docstring for why; production
+		// regression 2026-05-07).
 		idb, idErr := buildKeepItemID(now, string(ref))
 		if idErr != nil {
 			return fmt.Errorf("build client id for delete: %w", idErr)

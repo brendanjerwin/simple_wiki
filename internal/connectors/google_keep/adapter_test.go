@@ -351,6 +351,95 @@ var _ = Describe("KeepAdapter", func() {
 				Expect(result.Truncated).To(BeTrue())
 			})
 		})
+
+		// keep_note_client_id self-heal — legacy keepsync had this and
+		// it was lost in the Phase 5-A port. Bindings with empty
+		// keep_note_client_id permanently fail label CRUD pushes
+		// (Keep stage3-500 because the LIST node violates the
+		// id != serverId invariant on outbound push). Self-heal: when
+		// the LIST node is in the pull response and our stored
+		// keep_note_client_id is empty, capture the LIST node's client
+		// id and write it back into binding.AdapterState.
+		When("the binding has an empty keep_note_client_id and the LIST node appears in the pull", func() {
+			BeforeEach(func() {
+				binding.AdapterState = connectors.AdapterState{
+					googlekeep.AdapterStateKeyKeepNoteClientID: "",
+				}
+				fakeClient.changesDefault = gateway.ChangesResponse{
+					ToVersion: "v10",
+					Nodes: []gateway.Node{
+						{
+							ID:       "list-client-id-from-pull",
+							ServerID: remoteHandle,
+							Type:     gateway.NodeTypeList,
+							Title:    "Groceries",
+						},
+					},
+				}
+				_, pullErr = adapter.PullRemote(ctx, binding)
+			})
+
+			It("should not error", func() {
+				Expect(pullErr).NotTo(HaveOccurred())
+			})
+
+			It("should self-heal keep_note_client_id from the LIST node", func() {
+				Expect(binding.AdapterState[googlekeep.AdapterStateKeyKeepNoteClientID]).
+					To(Equal("list-client-id-from-pull"))
+			})
+		})
+
+		When("the binding has an empty keep_note_client_id but the LIST node is absent from the incremental pull", func() {
+			BeforeEach(func() {
+				binding.AdapterState = connectors.AdapterState{
+					googlekeep.AdapterStateKeyKeepNoteClientID: "",
+				}
+				// Pull response carries no LIST node (incremental pulls
+				// only return changed nodes; LIST node hasn't changed).
+				fakeClient.changesDefault = gateway.ChangesResponse{
+					ToVersion: "v11",
+					Nodes:     []gateway.Node{},
+				}
+				result, pullErr = adapter.PullRemote(ctx, binding)
+			})
+
+			It("should not error", func() {
+				Expect(pullErr).NotTo(HaveOccurred())
+			})
+
+			It("should signal Truncated=true to force a full resync (which will include the LIST node)", func() {
+				Expect(result.Truncated).To(BeTrue(),
+					"adapter should request a full resync when keep_note_client_id is empty and the LIST node didn't appear in the incremental pull")
+			})
+		})
+
+		When("the binding already has a populated keep_note_client_id", func() {
+			BeforeEach(func() {
+				binding.AdapterState = connectors.AdapterState{
+					googlekeep.AdapterStateKeyKeepNoteClientID: "preexisting-client-id",
+				}
+				fakeClient.changesDefault = gateway.ChangesResponse{
+					ToVersion: "v12",
+					// LIST node appears with a different client id (would
+					// be unusual in practice, but tests the no-clobber
+					// semantic).
+					Nodes: []gateway.Node{
+						{
+							ID:       "different-client-id",
+							ServerID: remoteHandle,
+							Type:     gateway.NodeTypeList,
+							Title:    "Groceries",
+						},
+					},
+				}
+				_, pullErr = adapter.PullRemote(ctx, binding)
+			})
+
+			It("should NOT clobber the existing keep_note_client_id", func() {
+				Expect(binding.AdapterState[googlekeep.AdapterStateKeyKeepNoteClientID]).
+					To(Equal("preexisting-client-id"))
+			})
+		})
 	})
 
 	Describe("InsertRemote", func() {
