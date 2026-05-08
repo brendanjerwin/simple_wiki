@@ -52,10 +52,23 @@ type BindingCursor struct {
 // would clobber any subsequent user edit. The engine treats them as
 // "already applied; nothing new on the wiki side."
 type EventClassification struct {
-	UID                string
-	WikiDiverged       bool
-	LatestEventSeq     int64
-	LatestEventSource  string // diagnostic; the src string of the deciding event.
+	UID               string
+	WikiDiverged      bool
+	LatestEventSeq    int64
+	LatestEventSource string // diagnostic; the src string of the deciding event.
+
+	// UncoveredUserEvent reports whether ANY event in the uncovered
+	// window (seq > cursor) for this uid has `src` starting `user:`.
+	// Sticky-user precedence per the panel-revised v2 sync rules: if
+	// a user event exists for the uid in the uncovered window, the
+	// engine MUST NOT apply remote state to wiki for that uid until a
+	// self-event covers the user event. This closes the "sandwich"
+	// hole where the op-log carries [connector:OTHER:apply, user:bren,
+	// connector:OTHER:apply] — under a "latest-event-only" rule the
+	// engine would treat the trailing cross-connector event as
+	// authoritative and revert the user's click; under sticky-user
+	// the user click prevents the apply.
+	UncoveredUserEvent bool
 }
 
 // SourcePrefixForKind builds the prefix `connector:<kind>:` used to
@@ -119,10 +132,17 @@ func Classify(checklist *apiv1.Checklist, cursor BindingCursor, myKind string) m
 		}
 		uid := ev.GetUid()
 		divergent := isDivergentSource(ev.GetSrc(), selfPrefix)
+		isUserEvt := strings.HasPrefix(ev.GetSrc(), "user:")
 		prev, exists := out[uid]
 		// Divergence is sticky: once any divergent event lands since
 		// the cursor, subsequent self-writes don't clear the bit.
 		newDiverged := prev.WikiDiverged || divergent
+		// UncoveredUserEvent is also sticky: once any user-source
+		// event lands since the cursor, the bit persists across
+		// later cross-connector applies for the same uid in the
+		// same window. See EventClassification's docstring for the
+		// "sandwich" rationale.
+		newUncoveredUser := prev.UncoveredUserEvent || isUserEvt
 		latestSeq := prev.LatestEventSeq
 		latestSrc := prev.LatestEventSource
 		if !exists || ev.GetSeq() > latestSeq {
@@ -130,10 +150,11 @@ func Classify(checklist *apiv1.Checklist, cursor BindingCursor, myKind string) m
 			latestSrc = ev.GetSrc()
 		}
 		out[uid] = EventClassification{
-			UID:               uid,
-			WikiDiverged:      newDiverged,
-			LatestEventSeq:    latestSeq,
-			LatestEventSource: latestSrc,
+			UID:                uid,
+			WikiDiverged:       newDiverged,
+			LatestEventSeq:     latestSeq,
+			LatestEventSource:  latestSrc,
+			UncoveredUserEvent: newUncoveredUser,
 		}
 	}
 	return out

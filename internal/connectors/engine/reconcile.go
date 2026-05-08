@@ -317,23 +317,23 @@ func (e *Engine) applyInboundOneItem(
 				e.adapter.Kind(), string(binding.ProfileID), binding.Page, binding.ListName, uid, string(remoteItem.Ref), cls.LatestEventSource)
 			return nil
 		}
-		if cls, has := classification[uid]; has && cls.WikiDiverged && remoteItem.RemoteDiverged && isUserSource(cls.LatestEventSource) {
-			// 4-cell merge refinement (production fix 2026-05-06): wd ∧ rd
-			// where the wiki's latest event is a USER write — wiki-wins.
+		if cls, has := classification[uid]; has && cls.WikiDiverged && remoteItem.RemoteDiverged && cls.UncoveredUserEvent {
+			// 4-cell merge refinement (sticky user-wins, panel review v2):
+			// wd ∧ rd where ANY uncovered user event exists for this uid
+			// — wiki-wins. The user click expresses ground-truth operator
+			// intent at the wiki replica; the remote's RemoteDiverged
+			// signal is etag-based and may be a non-content bump. Skip
+			// inbound apply; pushOutbound carries the wiki edit.
 			//
-			// The remote's RemoteDiverged signal is etag-based and Tasks
-			// bumps etags for non-content reasons (position, server-side
-			// metadata bumps). When the user's wiki write is the recent
-			// divergence, applying the remote's "newer-etag" value reverts
-			// user intent — exactly what bit the operator the day this
-			// branch was added (their wiki check-off was clobbered with
-			// chk=false by a stale-etag remote).
+			// Sticky-user (vs. v1's latest-event-only check) closes the
+			// "sandwich" hole: op-log [connector:OTHER:apply, user:bren,
+			// connector:OTHER:apply] — under v1 the engine would treat
+			// the trailing cross-connector event as authoritative and
+			// revert the user's click; under v2 the user click prevents
+			// the apply.
 			//
-			// User intent wins. Push-wiki path. Cross-connector divergence
-			// (LatestEventSource starts with "connector:") still follows
-			// ADR-0015's conflict-remote-wins below — the wiki's recent
-			// write was another connector's apply, so the remote's fresh
-			// state is authoritative.
+			// Cross-connector divergence (no user event in the uncovered
+			// window) still follows ADR-0015's conflict-remote-wins below.
 			e.logger.Info("connectors/engine: user_wins_skipped_inbound kind=%s profile=%s page=%s list=%s uid=%s ref=%s latest_src=%s",
 				e.adapter.Kind(), string(binding.ProfileID), binding.Page, binding.ListName, uid, string(remoteItem.Ref), cls.LatestEventSource)
 			return nil
@@ -648,14 +648,6 @@ func (e *Engine) handleAuthFailure(profileID wikipage.PageIdentifier, kind conne
 // `map[string]any` even though every value is a string (TOML decodes
 // don't preserve the originally-typed inner map). The defensive
 // conversion handles both shapes.
-
-// isUserSource reports whether the supplied event source string
-// identifies a user-driven write (rather than a connector apply or
-// system source). Used by the inbound apply path's wiki-wins refinement
-// of ADR-0015's wd ∧ rd cell.
-func isUserSource(src string) bool {
-	return strings.HasPrefix(src, "user:")
-}
 
 func readItemIDMap(state connectors.AdapterState) map[string]string {
 	out := map[string]string{}

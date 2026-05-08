@@ -1310,6 +1310,58 @@ var _ = Describe("Engine.reconcile", func() {
 		})
 	})
 
+	// Sticky user-wins (panel review v2): when the op-log carries
+	// [connector:OTHER:apply, user:bren, connector:OTHER:apply] for
+	// the same uid in the uncovered window, the engine MUST treat
+	// this as user-wins even though the LATEST event is a cross-
+	// connector apply (the "sandwich" case Lamport flagged in the
+	// 2026-05-07 panel review).
+	When("inbound item has wiki diverged with a USER event sandwiched between cross-connector applies AND RemoteDiverged=true", func() {
+		const knownUID = "uid-sandwich-1"
+
+		BeforeEach(func() {
+			fbs.SeedBinding(connectors.Binding{
+				ProfileID: profileID, Page: page, ListName: listName,
+				RemoteHandle:         "tasklist-1",
+				State:                connectors.BindingStateActive,
+				LastSuccessfulSyncAt: reconcilePastChokePausedAt,
+				LastSyncedSeq:        10,
+				AdapterState: connectors.AdapterState{
+					"item_id_map": map[string]string{knownUID: "task-1"},
+				},
+			}, ownerKind)
+
+			fa.SetPullRemoteResponse(connectors.RemotePullResult{
+				Items: []connectors.RemoteItem{{
+					Ref:            "task-1",
+					Title:          "milk-from-other-connector",
+					RemoteDiverged: true,
+				}},
+			}, nil)
+			fa.SetRemoteToWikiResponse(connectors.WikiItem{UID: knownUID, Text: "milk-from-other-connector"}, nil)
+			// Op-log sandwich: cross-connector apply, then user click,
+			// then another cross-connector apply. Latest event is
+			// cross-connector, but the user click is in the uncovered
+			// window — sticky user-wins must fire.
+			reader.checklist = &apiv1.Checklist{
+				Items: []*apiv1.ChecklistItem{{Uid: knownUID, Text: "milk-user-wants"}},
+				Events: []*apiv1.ChecklistEvent{
+					{Seq: 11, Src: "connector:google_keep:apply", Op: "toggle", Uid: knownUID},
+					{Seq: 12, Src: "user:bren@example.com", Op: "set_text", Uid: knownUID},
+					{Seq: 13, Src: "connector:google_keep:apply", Op: "toggle", Uid: knownUID},
+				},
+				MaxSeq: 13,
+			}
+
+			Expect(eng.Sync(ctx, key)).To(Succeed())
+		})
+
+		It("should NOT apply remote (sticky user-wins; the user click in the middle wins despite latest being cross-connector)", func() {
+			Expect(mutator.recordingChecklistMutator.updateCalls).To(BeEmpty(),
+				"engine reverted the user's wiki edit despite a user event in the sandwich — Lamport panel finding 2026-05-07")
+		})
+	})
+
 	// Fix #1 complement: when wiki diverged AND RemoteDiverged=false
 	// (remote is stale/re-delivered), engine must skip inbound apply.
 	When("inbound item has wiki diverged AND RemoteDiverged=false (push-wiki path)", func() {
