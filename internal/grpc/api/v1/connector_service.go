@@ -692,6 +692,90 @@ func (s *Server) unbindKeep(ctx context.Context, req *apiv1.UnbindRequest) (*api
 	return &apiv1.UnbindResponse{}, nil
 }
 
+// SyncNow triggers an immediate sync for the calling user's binding
+// on (page, list_name). Routes through the same Engine.Sync method the
+// scheduler / debouncer / adaptive ticker use, so concurrent calls
+// serialize on the per-checklist lease (§16.6). NOT a force-full-
+// resync — adapter state is preserved.
+func (s *Server) SyncNow(ctx context.Context, req *apiv1.SyncNowRequest) (*apiv1.SyncNowResponse, error) {
+	switch req.GetConnectorKind() {
+	case apiv1.ConnectorKind_CONNECTOR_KIND_UNSPECIFIED:
+		return nil, errConnectorKindRequired
+	case apiv1.ConnectorKind_CONNECTOR_KIND_GOOGLE_KEEP:
+		return s.syncNowKeep(ctx, req)
+	case apiv1.ConnectorKind_CONNECTOR_KIND_GOOGLE_TASKS:
+		return s.syncNowTasks(ctx, req)
+	default:
+		return nil, errUnsupportedConnectorKind(req.GetConnectorKind())
+	}
+}
+
+func (s *Server) syncNowTasks(ctx context.Context, req *apiv1.SyncNowRequest) (*apiv1.SyncNowResponse, error) {
+	if !s.tasksWired() {
+		return nil, errTasksConnectorNotConfigured
+	}
+	_, profileID, err := requireRealUser(ctx)
+	if err != nil {
+		return nil, err
+	}
+	_, found, findErr := s.tasksBindingStore.FindBinding(profileID, connectors.ConnectorKindGoogleTasks, req.GetPage(), req.GetListName())
+	if findErr != nil {
+		if s.logger != nil {
+			s.logger.Error("ConnectorService.SyncNow(GOOGLE_TASKS) find binding for profile=%s page=%s list=%s: %v",
+				string(profileID), req.GetPage(), req.GetListName(), findErr)
+		}
+		return nil, mapTasksConnectorErr(findErr)
+	}
+	if !found {
+		return nil, status.Error(codes.NotFound, errMsgBindingNotFound)
+	}
+	if err := s.tasksEngine.Sync(ctx, connectors.BindingKey{
+		ProfileID: string(profileID),
+		Page:      req.GetPage(),
+		ListName:  req.GetListName(),
+	}); err != nil {
+		if s.logger != nil {
+			s.logger.Error("ConnectorService.SyncNow(GOOGLE_TASKS) failed for profile=%s page=%s list=%s: %v",
+				string(profileID), req.GetPage(), req.GetListName(), err)
+		}
+		return nil, mapTasksConnectorErr(err)
+	}
+	return &apiv1.SyncNowResponse{}, nil
+}
+
+func (s *Server) syncNowKeep(ctx context.Context, req *apiv1.SyncNowRequest) (*apiv1.SyncNowResponse, error) {
+	if !s.keepWired() {
+		return nil, errKeepConnectorNotConfigured
+	}
+	_, profileID, err := requireRealUser(ctx)
+	if err != nil {
+		return nil, err
+	}
+	_, found, findErr := s.keepBindingStore.FindBinding(profileID, connectors.ConnectorKindGoogleKeep, req.GetPage(), req.GetListName())
+	if findErr != nil {
+		if s.logger != nil {
+			s.logger.Error("ConnectorService.SyncNow(GOOGLE_KEEP) find binding for profile=%s page=%s list=%s: %v",
+				string(profileID), req.GetPage(), req.GetListName(), findErr)
+		}
+		return nil, mapKeepConnectorErr(findErr)
+	}
+	if !found {
+		return nil, status.Error(codes.NotFound, errMsgBindingNotFound)
+	}
+	if err := s.keepEngine.Sync(ctx, connectors.BindingKey{
+		ProfileID: string(profileID),
+		Page:      req.GetPage(),
+		ListName:  req.GetListName(),
+	}); err != nil {
+		if s.logger != nil {
+			s.logger.Error("ConnectorService.SyncNow(GOOGLE_KEEP) failed for profile=%s page=%s list=%s: %v",
+				string(profileID), req.GetPage(), req.GetListName(), err)
+		}
+		return nil, mapKeepConnectorErr(err)
+	}
+	return &apiv1.SyncNowResponse{}, nil
+}
+
 // GetChecklistBindingState implements the GetChecklistBindingState
 // RPC. This RPC does NOT take connector_kind: at most one connector
 // owns a given (page, list_name) per user, so the server walks every

@@ -113,6 +113,17 @@ service ConnectorService {
         "binding existed or not.";
   }
 
+  rpc SyncNow(SyncNowRequest) returns (SyncNowResponse) {
+    option (api.v1.description) =
+        "Trigger an immediate sync for the calling user's binding on "
+        "(page, list_name). Equivalent to one cron tick — pulls remote, "
+        "applies divergent items inbound, pushes wiki-side changes "
+        "outbound. Lightweight: does NOT wipe adapter state (use "
+        "ForceFullResync for that). The kick is best-effort and "
+        "synchronous through the engine's lease, so concurrent calls "
+        "serialize. Used by the UI's manual 'sync now' affordance.";
+  }
+
   // GetChecklistBindingState does NOT take connector_kind: at most
   // one connector owns a given (page, list_name) for a given user, so
   // the response identifies which connector (if any) is authoritative.
@@ -313,6 +324,13 @@ message UnbindRequest {
   string list_name = 3;
 }
 message UnbindResponse {}
+
+message SyncNowRequest {
+  ConnectorKind connector_kind = 1;
+  string page = 2;
+  string list_name = 3;
+}
+message SyncNowResponse {}
 
 message GetChecklistBindingStateRequest {
   string page = 1;

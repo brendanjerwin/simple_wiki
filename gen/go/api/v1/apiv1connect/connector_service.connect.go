@@ -56,6 +56,9 @@ const (
 	ConnectorServiceBindProcedure = "/api.v1.ConnectorService/Bind"
 	// ConnectorServiceUnbindProcedure is the fully-qualified name of the ConnectorService's Unbind RPC.
 	ConnectorServiceUnbindProcedure = "/api.v1.ConnectorService/Unbind"
+	// ConnectorServiceSyncNowProcedure is the fully-qualified name of the ConnectorService's SyncNow
+	// RPC.
+	ConnectorServiceSyncNowProcedure = "/api.v1.ConnectorService/SyncNow"
 	// ConnectorServiceGetChecklistBindingStateProcedure is the fully-qualified name of the
 	// ConnectorService's GetChecklistBindingState RPC.
 	ConnectorServiceGetChecklistBindingStateProcedure = "/api.v1.ConnectorService/GetChecklistBindingState"
@@ -78,6 +81,7 @@ var (
 	connectorServiceListMyBindingsMethodDescriptor           = connectorServiceServiceDescriptor.Methods().ByName("ListMyBindings")
 	connectorServiceBindMethodDescriptor                     = connectorServiceServiceDescriptor.Methods().ByName("Bind")
 	connectorServiceUnbindMethodDescriptor                   = connectorServiceServiceDescriptor.Methods().ByName("Unbind")
+	connectorServiceSyncNowMethodDescriptor                  = connectorServiceServiceDescriptor.Methods().ByName("SyncNow")
 	connectorServiceGetChecklistBindingStateMethodDescriptor = connectorServiceServiceDescriptor.Methods().ByName("GetChecklistBindingState")
 	connectorServiceListDeadLettersMethodDescriptor          = connectorServiceServiceDescriptor.Methods().ByName("ListDeadLetters")
 	connectorServiceClearDeadLetterMethodDescriptor          = connectorServiceServiceDescriptor.Methods().ByName("ClearDeadLetter")
@@ -108,6 +112,7 @@ type ConnectorServiceClient interface {
 	ListMyBindings(context.Context, *connect.Request[v1.ListMyBindingsRequest]) (*connect.Response[v1.ListMyBindingsResponse], error)
 	Bind(context.Context, *connect.Request[v1.BindRequest]) (*connect.Response[v1.BindResponse], error)
 	Unbind(context.Context, *connect.Request[v1.UnbindRequest]) (*connect.Response[v1.UnbindResponse], error)
+	SyncNow(context.Context, *connect.Request[v1.SyncNowRequest]) (*connect.Response[v1.SyncNowResponse], error)
 	// GetChecklistBindingState does NOT take connector_kind: at most
 	// one connector owns a given (page, list_name) for a given user, so
 	// the response identifies which connector (if any) is authoritative.
@@ -174,6 +179,12 @@ func NewConnectorServiceClient(httpClient connect.HTTPClient, baseURL string, op
 			connect.WithSchema(connectorServiceUnbindMethodDescriptor),
 			connect.WithClientOptions(opts...),
 		),
+		syncNow: connect.NewClient[v1.SyncNowRequest, v1.SyncNowResponse](
+			httpClient,
+			baseURL+ConnectorServiceSyncNowProcedure,
+			connect.WithSchema(connectorServiceSyncNowMethodDescriptor),
+			connect.WithClientOptions(opts...),
+		),
 		getChecklistBindingState: connect.NewClient[v1.GetChecklistBindingStateRequest, v1.GetChecklistBindingStateResponse](
 			httpClient,
 			baseURL+ConnectorServiceGetChecklistBindingStateProcedure,
@@ -205,6 +216,7 @@ type connectorServiceClient struct {
 	listMyBindings           *connect.Client[v1.ListMyBindingsRequest, v1.ListMyBindingsResponse]
 	bind                     *connect.Client[v1.BindRequest, v1.BindResponse]
 	unbind                   *connect.Client[v1.UnbindRequest, v1.UnbindResponse]
+	syncNow                  *connect.Client[v1.SyncNowRequest, v1.SyncNowResponse]
 	getChecklistBindingState *connect.Client[v1.GetChecklistBindingStateRequest, v1.GetChecklistBindingStateResponse]
 	listDeadLetters          *connect.Client[v1.ListDeadLettersRequest, v1.ListDeadLettersResponse]
 	clearDeadLetter          *connect.Client[v1.ClearDeadLetterRequest, emptypb.Empty]
@@ -250,6 +262,11 @@ func (c *connectorServiceClient) Unbind(ctx context.Context, req *connect.Reques
 	return c.unbind.CallUnary(ctx, req)
 }
 
+// SyncNow calls api.v1.ConnectorService.SyncNow.
+func (c *connectorServiceClient) SyncNow(ctx context.Context, req *connect.Request[v1.SyncNowRequest]) (*connect.Response[v1.SyncNowResponse], error) {
+	return c.syncNow.CallUnary(ctx, req)
+}
+
 // GetChecklistBindingState calls api.v1.ConnectorService.GetChecklistBindingState.
 func (c *connectorServiceClient) GetChecklistBindingState(ctx context.Context, req *connect.Request[v1.GetChecklistBindingStateRequest]) (*connect.Response[v1.GetChecklistBindingStateResponse], error) {
 	return c.getChecklistBindingState.CallUnary(ctx, req)
@@ -290,6 +307,7 @@ type ConnectorServiceHandler interface {
 	ListMyBindings(context.Context, *connect.Request[v1.ListMyBindingsRequest]) (*connect.Response[v1.ListMyBindingsResponse], error)
 	Bind(context.Context, *connect.Request[v1.BindRequest]) (*connect.Response[v1.BindResponse], error)
 	Unbind(context.Context, *connect.Request[v1.UnbindRequest]) (*connect.Response[v1.UnbindResponse], error)
+	SyncNow(context.Context, *connect.Request[v1.SyncNowRequest]) (*connect.Response[v1.SyncNowResponse], error)
 	// GetChecklistBindingState does NOT take connector_kind: at most
 	// one connector owns a given (page, list_name) for a given user, so
 	// the response identifies which connector (if any) is authoritative.
@@ -352,6 +370,12 @@ func NewConnectorServiceHandler(svc ConnectorServiceHandler, opts ...connect.Han
 		connect.WithSchema(connectorServiceUnbindMethodDescriptor),
 		connect.WithHandlerOptions(opts...),
 	)
+	connectorServiceSyncNowHandler := connect.NewUnaryHandler(
+		ConnectorServiceSyncNowProcedure,
+		svc.SyncNow,
+		connect.WithSchema(connectorServiceSyncNowMethodDescriptor),
+		connect.WithHandlerOptions(opts...),
+	)
 	connectorServiceGetChecklistBindingStateHandler := connect.NewUnaryHandler(
 		ConnectorServiceGetChecklistBindingStateProcedure,
 		svc.GetChecklistBindingState,
@@ -388,6 +412,8 @@ func NewConnectorServiceHandler(svc ConnectorServiceHandler, opts ...connect.Han
 			connectorServiceBindHandler.ServeHTTP(w, r)
 		case ConnectorServiceUnbindProcedure:
 			connectorServiceUnbindHandler.ServeHTTP(w, r)
+		case ConnectorServiceSyncNowProcedure:
+			connectorServiceSyncNowHandler.ServeHTTP(w, r)
 		case ConnectorServiceGetChecklistBindingStateProcedure:
 			connectorServiceGetChecklistBindingStateHandler.ServeHTTP(w, r)
 		case ConnectorServiceListDeadLettersProcedure:
@@ -433,6 +459,10 @@ func (UnimplementedConnectorServiceHandler) Bind(context.Context, *connect.Reque
 
 func (UnimplementedConnectorServiceHandler) Unbind(context.Context, *connect.Request[v1.UnbindRequest]) (*connect.Response[v1.UnbindResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("api.v1.ConnectorService.Unbind is not implemented"))
+}
+
+func (UnimplementedConnectorServiceHandler) SyncNow(context.Context, *connect.Request[v1.SyncNowRequest]) (*connect.Response[v1.SyncNowResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("api.v1.ConnectorService.SyncNow is not implemented"))
 }
 
 func (UnimplementedConnectorServiceHandler) GetChecklistBindingState(context.Context, *connect.Request[v1.GetChecklistBindingStateRequest]) (*connect.Response[v1.GetChecklistBindingStateResponse], error) {

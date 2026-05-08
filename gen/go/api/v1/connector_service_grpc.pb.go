@@ -28,6 +28,7 @@ const (
 	ConnectorService_ListMyBindings_FullMethodName           = "/api.v1.ConnectorService/ListMyBindings"
 	ConnectorService_Bind_FullMethodName                     = "/api.v1.ConnectorService/Bind"
 	ConnectorService_Unbind_FullMethodName                   = "/api.v1.ConnectorService/Unbind"
+	ConnectorService_SyncNow_FullMethodName                  = "/api.v1.ConnectorService/SyncNow"
 	ConnectorService_GetChecklistBindingState_FullMethodName = "/api.v1.ConnectorService/GetChecklistBindingState"
 	ConnectorService_ListDeadLetters_FullMethodName          = "/api.v1.ConnectorService/ListDeadLetters"
 	ConnectorService_ClearDeadLetter_FullMethodName          = "/api.v1.ConnectorService/ClearDeadLetter"
@@ -66,6 +67,7 @@ type ConnectorServiceClient interface {
 	ListMyBindings(ctx context.Context, in *ListMyBindingsRequest, opts ...grpc.CallOption) (*ListMyBindingsResponse, error)
 	Bind(ctx context.Context, in *BindRequest, opts ...grpc.CallOption) (*BindResponse, error)
 	Unbind(ctx context.Context, in *UnbindRequest, opts ...grpc.CallOption) (*UnbindResponse, error)
+	SyncNow(ctx context.Context, in *SyncNowRequest, opts ...grpc.CallOption) (*SyncNowResponse, error)
 	// GetChecklistBindingState does NOT take connector_kind: at most
 	// one connector owns a given (page, list_name) for a given user, so
 	// the response identifies which connector (if any) is authoritative.
@@ -162,6 +164,16 @@ func (c *connectorServiceClient) Unbind(ctx context.Context, in *UnbindRequest, 
 	return out, nil
 }
 
+func (c *connectorServiceClient) SyncNow(ctx context.Context, in *SyncNowRequest, opts ...grpc.CallOption) (*SyncNowResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SyncNowResponse)
+	err := c.cc.Invoke(ctx, ConnectorService_SyncNow_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *connectorServiceClient) GetChecklistBindingState(ctx context.Context, in *GetChecklistBindingStateRequest, opts ...grpc.CallOption) (*GetChecklistBindingStateResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(GetChecklistBindingStateResponse)
@@ -225,6 +237,7 @@ type ConnectorServiceServer interface {
 	ListMyBindings(context.Context, *ListMyBindingsRequest) (*ListMyBindingsResponse, error)
 	Bind(context.Context, *BindRequest) (*BindResponse, error)
 	Unbind(context.Context, *UnbindRequest) (*UnbindResponse, error)
+	SyncNow(context.Context, *SyncNowRequest) (*SyncNowResponse, error)
 	// GetChecklistBindingState does NOT take connector_kind: at most
 	// one connector owns a given (page, list_name) for a given user, so
 	// the response identifies which connector (if any) is authoritative.
@@ -261,6 +274,9 @@ func (UnimplementedConnectorServiceServer) Bind(context.Context, *BindRequest) (
 }
 func (UnimplementedConnectorServiceServer) Unbind(context.Context, *UnbindRequest) (*UnbindResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Unbind not implemented")
+}
+func (UnimplementedConnectorServiceServer) SyncNow(context.Context, *SyncNowRequest) (*SyncNowResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method SyncNow not implemented")
 }
 func (UnimplementedConnectorServiceServer) GetChecklistBindingState(context.Context, *GetChecklistBindingStateRequest) (*GetChecklistBindingStateResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetChecklistBindingState not implemented")
@@ -428,6 +444,24 @@ func _ConnectorService_Unbind_Handler(srv interface{}, ctx context.Context, dec 
 	return interceptor(ctx, in, info, handler)
 }
 
+func _ConnectorService_SyncNow_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SyncNowRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ConnectorServiceServer).SyncNow(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ConnectorService_SyncNow_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ConnectorServiceServer).SyncNow(ctx, req.(*SyncNowRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _ConnectorService_GetChecklistBindingState_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(GetChecklistBindingStateRequest)
 	if err := dec(in); err != nil {
@@ -520,6 +554,10 @@ var ConnectorService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Unbind",
 			Handler:    _ConnectorService_Unbind_Handler,
+		},
+		{
+			MethodName: "SyncNow",
+			Handler:    _ConnectorService_SyncNow_Handler,
 		},
 		{
 			MethodName: "GetChecklistBindingState",

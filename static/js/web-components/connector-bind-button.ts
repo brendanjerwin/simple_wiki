@@ -27,6 +27,7 @@ import {
   ListRemoteListsRequestSchema,
   BindRequestSchema,
   UnbindRequestSchema,
+  SyncNowRequestSchema,
 } from '../gen/api/v1/connector_service_pb.js';
 import type {
   ChecklistBindingState,
@@ -125,6 +126,45 @@ const localCSS = css`
     color: var(--color-text-primary, inherit);
     text-decoration-style: solid;
   }
+  /* Sync-now affordance — sits between the synced pill and the
+     unbind interlock. Visual gap (margin-left auto + extra padding)
+     and a separator pip make it noticeably distinct from the
+     destructive Unbind so a stray click on the wrong target is
+     unlikely. */
+  .sync-now-button {
+    background: transparent;
+    border: 1px solid var(--color-border-default, rgba(0, 0, 0, 0.12));
+    color: var(--color-text-secondary, #6c757d);
+    font-size: 11px;
+    font-weight: 500;
+    padding: 3px 8px;
+    margin-left: 8px;
+    border-radius: 4px;
+    cursor: pointer;
+    line-height: 1.2;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .sync-now-button:hover:not(:disabled) {
+    color: var(--color-text-primary, inherit);
+    border-color: var(--color-border-strong, rgba(0, 0, 0, 0.24));
+  }
+  .sync-now-button:disabled {
+    opacity: 0.5;
+    cursor: progress;
+  }
+  /* Visual separator between Sync Now and Unbind — a small dot plus
+     extra horizontal margin discourages accidental Unbind clicks. */
+  .action-separator {
+    display: inline-block;
+    width: 4px;
+    height: 4px;
+    margin: 0 12px;
+    background: var(--color-border-default, rgba(0, 0, 0, 0.16));
+    border-radius: 50%;
+    vertical-align: middle;
+  }
   .picker {
     display: flex;
     align-items: center;
@@ -199,6 +239,7 @@ export class ConnectorBindButton extends LitElement {
   @state() declare private remoteLists: RemoteListSummary[];
   @state() declare private selectedRemoteListHandle: string;
   @state() declare private error: AugmentedError | null;
+  @state() declare private syncing: boolean;
 
   private client = createClient(ConnectorService, getGrpcWebTransport());
 
@@ -213,6 +254,7 @@ export class ConnectorBindButton extends LitElement {
     this.remoteLists = [];
     this.selectedRemoteListHandle = '';
     this.error = null;
+    this.syncing = false;
   }
 
   override connectedCallback(): void {
@@ -335,6 +377,33 @@ export class ConnectorBindButton extends LitElement {
         `subscribe checklist to ${PRODUCT_NAME[this.chosenKind]}`,
       );
       this.phase = 'list-pick';
+    }
+  }
+
+  // handleSyncNow triggers an immediate sync via the SyncNow RPC.
+  // Lightweight: reuses the engine's standard reconcile path, so the
+  // per-checklist lease serializes against any concurrent cron /
+  // debouncer / adaptive-ticker tick. Disabled while a previous click
+  // is still in flight.
+  private async handleSyncNow(): Promise<void> {
+    const sub = this.subscriptionState?.currentBinding;
+    if (!sub || this.syncing) return;
+    this.syncing = true;
+    try {
+      await this.client.syncNow(
+        create(SyncNowRequestSchema, {
+          connectorKind: sub.connectorKind,
+          page: this.page,
+          listName: this.listName,
+        }),
+      );
+      // Refresh the binding state so freshness signals
+      // (last_pull_at / last_successful_sync_at) re-render.
+      await this.refresh();
+    } catch (err: unknown) {
+      this.error = AugmentErrorService.augmentError(err, 'sync now');
+    } finally {
+      this.syncing = false;
     }
   }
 
@@ -480,8 +549,23 @@ export class ConnectorBindButton extends LitElement {
     // comes from the .sync-badge::before rule. Verb in the user-facing copy
     // is "Bound" (the binding state); the underlying activity is still
     // "syncing", which is why the unbind confirm reads "Stop syncing?".
+    //
+    // Layout: synced pill | Sync Now | • | Unbind. The bullet
+    // separator + extra horizontal margin keep Sync Now visually
+    // distinct from the destructive Unbind so a stray click on the
+    // wrong target is unlikely.
     return html`
       <span class="sync-badge">Bound to ${productName} ${noun}${titleSuffix}</span>
+      <button
+        class="sync-now-button"
+        type="button"
+        ?disabled=${this.syncing}
+        title="Trigger an immediate sync (pulls remote, pushes pending wiki edits)"
+        @click=${this.handleSyncNow}
+      >
+        ${this.syncing ? '⟳ Syncing…' : '⟳ Sync now'}
+      </button>
+      <span class="action-separator" aria-hidden="true"></span>
       <confirmation-interlock-button
         label="Unbind"
         confirmLabel="Stop syncing?"
