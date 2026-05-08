@@ -817,6 +817,21 @@ adapter; engine integrates via `Sync()`'s pre/post `LastSyncedSeq`
 comparison (the activity signal). Tested at
 `engine/adaptive_ticker_test.go`.
 
+**Wiki-edit immediate kick:** the wiki-side mutator bridge
+(both `tasksMutatorBridge` and `keepMutatorBridge`) calls
+`AdaptiveTicker.RecordTick(key, activity=true)` at edit time —
+before the 1.5s debouncer fires the actual outbound push. Effect:
+the reactive cycle starts from the moment of the wiki edit, not
+1.5s later. The debouncer continues to coalesce rapid keystrokes
+into one push; the ticker just makes the cycle start earlier. The
+post-debouncer Sync's own `RecordTick` (cursor advance from the
+push self-event) re-anchors the cycle from the push side, so the
+sequence is: edit → schedule 5s → push at 1.5s → reschedule 5s
+from t=1.5s → next adaptive at t=6.5s. Suppressed mutations (e.g.,
+inbound apply) do NOT kick the ticker — the suppression refcount
+applies uniformly to both the debouncer and the ticker. Tested at
+`internal/bootstrap/mutator_bridge_test.go`.
+
 ### 11.6 ForceFullResync rate limit
 
 ForceFullResync triggered by truncation, pause-resume horizon,

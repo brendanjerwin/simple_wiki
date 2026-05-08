@@ -3,12 +3,14 @@ package bootstrap
 
 import (
 	"context"
+	"sync"
 	"time"
 
 	"github.com/jcelliott/lumber"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	"github.com/brendanjerwin/simple_wiki/internal/connectors"
 	"github.com/brendanjerwin/simple_wiki/internal/connectors/engine"
 	enginetesting "github.com/brendanjerwin/simple_wiki/internal/connectors/engine/testing"
 	"github.com/brendanjerwin/simple_wiki/tailscale"
@@ -51,6 +53,67 @@ func buildDebouncerWithCapture(out *engine.SyncDebouncerKey) (*engine.SyncDeboun
 // so any outstanding debounce timer fires synchronously.
 func advanceToFireDebounce(fc *enginetesting.FakeClock) {
 	fc.Advance(2 * time.Second)
+}
+
+// fakeBridgeTimerScheduler is a minimal engine.TimerScheduler that
+// records AfterFunc calls without firing the timer. Used by the
+// bridge tests to assert "the ticker was kicked" without driving the
+// adaptive ticker's syncFn (which would re-enter the engine).
+type fakeBridgeTimerScheduler struct {
+	mu        sync.Mutex
+	scheduled []fakeBridgeScheduled
+}
+
+type fakeBridgeScheduled struct {
+	delay time.Duration
+	fn    func()
+}
+
+func (f *fakeBridgeTimerScheduler) AfterFunc(d time.Duration, fn func()) engine.Timer {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.scheduled = append(f.scheduled, fakeBridgeScheduled{delay: d, fn: fn})
+	return &fakeBridgeTimer{}
+}
+
+func (f *fakeBridgeTimerScheduler) scheduledCount() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return len(f.scheduled)
+}
+
+func (f *fakeBridgeTimerScheduler) lastScheduledDelay() time.Duration {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if len(f.scheduled) == 0 {
+		return 0
+	}
+	return f.scheduled[len(f.scheduled)-1].delay
+}
+
+type fakeBridgeTimer struct{}
+
+func (*fakeBridgeTimer) Stop() bool { return true }
+
+// fakeBridgeLogger satisfies engine.Logger with no output.
+type fakeBridgeLogger struct{}
+
+func (fakeBridgeLogger) Info(_ string, _ ...any)  {}
+func (fakeBridgeLogger) Error(_ string, _ ...any) {}
+func (fakeBridgeLogger) Warn(_ string, _ ...any)  {}
+
+// buildAdaptiveTickerWithFakeScheduler returns an AdaptiveTicker bound
+// to a fake TimerScheduler. Tests assert against the scheduler's
+// recorded AfterFunc calls to verify the bridge kicked the ticker
+// without actually re-entering the engine.
+func buildAdaptiveTickerWithFakeScheduler() (*engine.AdaptiveTicker, *fakeBridgeTimerScheduler) {
+	sched := &fakeBridgeTimerScheduler{}
+	noopSync := func(_ context.Context, _ connectors.BindingKey) {}
+	t, err := engine.NewAdaptiveTicker(sched, noopSync, fakeBridgeLogger{})
+	if err != nil {
+		panic(err)
+	}
+	return t, sched
 }
 
 // zeroDebouncerKey is an empty SyncDebouncerKey used to verify no sync fired.
@@ -203,6 +266,38 @@ var _ = Describe("tasksMutatorBridge", func() {
 				Expect(capturedKey.Page).To(Equal("groceries"))
 			})
 		})
+
+		// User ask 2026-05-08: a wiki edit should immediately kick the
+		// adaptive cycle, not wait for the 1.5s debouncer to fire. The
+		// bridge calls ticker.RecordTick(activity=true) on every wiki
+		// mutation that passes the suppression filter; the debouncer
+		// continues to drive the actual outbound push 1.5s later.
+		When("an adaptive ticker is attached and a real user edits", func() {
+			It("should immediately schedule a follow-up at the base delay (5s)", func() {
+				ticker, sched := buildAdaptiveTickerWithFakeScheduler()
+				bridge.attachAdaptiveTicker(ticker)
+
+				bridge.OnChecklistMutated("groceries", "Shopping", &stubIdentity{login: "alice@example.com"})
+
+				Expect(sched.scheduledCount()).To(Equal(1),
+					"bridge did not kick the adaptive ticker on wiki edit — user-reported regression 2026-05-08")
+				Expect(sched.lastScheduledDelay()).To(Equal(engine.AdaptiveTickerBaseDelay),
+					"bridge kicked the ticker but at the wrong delay; should be base (5s)")
+			})
+
+			It("should NOT kick the ticker if the edit is suppressed", func() {
+				ticker, sched := buildAdaptiveTickerWithFakeScheduler()
+				bridge.attachAdaptiveTicker(ticker)
+
+				profileID, _ := wikipage.ProfileIdentifierFor("alice@example.com")
+				bridge.Suppress(profileID, "groceries", "Shopping")
+
+				bridge.OnChecklistMutated("groceries", "Shopping", &stubIdentity{login: "alice@example.com"})
+
+				Expect(sched.scheduledCount()).To(Equal(0),
+					"bridge kicked the ticker for a suppressed mutation; should respect suppression refcount")
+			})
+		})
 	})
 })
 
@@ -339,6 +434,35 @@ var _ = Describe("keepMutatorBridge", func() {
 
 				advanceToFireDebounce(fc)
 				Expect(capturedKey).To(Equal(zeroDebouncerKey))
+			})
+		})
+
+		// User ask 2026-05-08: wiki edit kicks the adaptive cycle at
+		// edit time, not 1.5s later when the debouncer fires. Same
+		// logic as the tasks bridge; mirrored here for parity.
+		When("an adaptive ticker is attached and a real user edits", func() {
+			It("should immediately schedule a follow-up at the base delay (5s)", func() {
+				ticker, sched := buildAdaptiveTickerWithFakeScheduler()
+				bridge.attachAdaptiveTicker(ticker)
+
+				bridge.OnChecklistMutated("groceries", "Shopping", &stubIdentity{login: "alice@example.com"})
+
+				Expect(sched.scheduledCount()).To(Equal(1),
+					"keep bridge did not kick the adaptive ticker on wiki edit — user-reported regression 2026-05-08")
+				Expect(sched.lastScheduledDelay()).To(Equal(engine.AdaptiveTickerBaseDelay))
+			})
+
+			It("should NOT kick the ticker if the edit is suppressed", func() {
+				ticker, sched := buildAdaptiveTickerWithFakeScheduler()
+				bridge.attachAdaptiveTicker(ticker)
+
+				profileID, _ := wikipage.ProfileIdentifierFor("alice@example.com")
+				bridge.Suppress(profileID, "groceries", "Shopping")
+
+				bridge.OnChecklistMutated("groceries", "Shopping", &stubIdentity{login: "alice@example.com"})
+
+				Expect(sched.scheduledCount()).To(Equal(0),
+					"keep bridge kicked the ticker for a suppressed mutation; should respect suppression refcount")
 			})
 		})
 	})

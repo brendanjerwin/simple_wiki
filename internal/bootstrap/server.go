@@ -863,6 +863,7 @@ func setupGoogleTasks(
 		return nil, fmt.Errorf("build tasks adaptive ticker: %w", taerr)
 	}
 	tasksEngine.SetAdaptiveTicker(tasksAdaptive)
+	bridge.attachAdaptiveTicker(tasksAdaptive)
 
 	tasksSubscriptionLister := func() []connectors.BindingKey {
 		out := make([]connectors.BindingKey, 0, 8)
@@ -1224,6 +1225,7 @@ func (realTimerScheduler) AfterFunc(d time.Duration, fn func()) engine.Timer {
 type tasksMutatorBridge struct {
 	logger    *lumber.ConsoleLogger
 	debouncer *engine.SyncDebouncer
+	ticker    *engine.AdaptiveTicker
 
 	mu         sync.Mutex
 	suppressed map[string]int // refcount per "<profile>|<page>|<list>"
@@ -1248,6 +1250,18 @@ func (b *tasksMutatorBridge) attachDebouncer(d *engine.SyncDebouncer) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.debouncer = d
+}
+
+// attachAdaptiveTicker connects the bridge to the engine's adaptive
+// ticker. Mirrors keepMutatorBridge.attachAdaptiveTicker — every
+// wiki-side mutation immediately resets the per-binding adaptive cycle
+// via RecordTick(activity=true), scheduling a follow-up at the base
+// delay (5s). The 1.5s debouncer continues to drive the actual outbound
+// push.
+func (b *tasksMutatorBridge) attachAdaptiveTicker(t *engine.AdaptiveTicker) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.ticker = t
 }
 
 // Suppress implements engine.SyncSuppressor. Refcounts under a per-key
@@ -1310,7 +1324,18 @@ func (b *tasksMutatorBridge) OnChecklistMutated(page, listName string, identity 
 		return
 	}
 	debouncer := b.debouncer
+	ticker := b.ticker
 	b.mu.Unlock()
+
+	// Kick the adaptive cycle immediately at edit time. See
+	// keepMutatorBridge.OnChecklistMutated for the rationale.
+	if ticker != nil {
+		ticker.RecordTick(connectors.BindingKey{
+			ProfileID: string(profileID),
+			Page:      page,
+			ListName:  listName,
+		}, true)
+	}
 
 	if debouncer == nil {
 		return

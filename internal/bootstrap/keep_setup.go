@@ -193,6 +193,7 @@ func setupGoogleKeep(
 		return nil, fmt.Errorf("build keep adaptive ticker: %w", kaerr)
 	}
 	keepEngine.SetAdaptiveTicker(keepAdaptive)
+	bridge.attachAdaptiveTicker(keepAdaptive)
 
 	keepSubscriptionLister := func() []connectors.BindingKey {
 		out := make([]connectors.BindingKey, 0, 8)
@@ -356,6 +357,7 @@ func (c *keepFannedOutPausedChecker) IsAnyChecklistBindingPaused(page, listName 
 type keepMutatorBridge struct {
 	logger    *lumber.ConsoleLogger
 	debouncer *engine.SyncDebouncer
+	ticker    *engine.AdaptiveTicker
 
 	mu         sync.Mutex
 	suppressed map[string]int // refcount per "<profile>|<page>|<list>"
@@ -374,6 +376,20 @@ func (b *keepMutatorBridge) attachDebouncer(d *engine.SyncDebouncer) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.debouncer = d
+}
+
+// attachAdaptiveTicker connects the bridge to the engine's adaptive
+// ticker. When set, every wiki-side mutation that passes the bridge's
+// identity / suppression filters immediately resets the per-binding
+// adaptive cycle via RecordTick(key, activity=true) — schedules a
+// follow-up sync at the base delay (5s). The 1.5s debouncer continues
+// to drive the actual outbound push; the immediate ticker kick just
+// ensures the reactive cycle starts from the moment of the wiki edit
+// rather than 1.5s later.
+func (b *keepMutatorBridge) attachAdaptiveTicker(t *engine.AdaptiveTicker) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.ticker = t
 }
 
 // Suppress implements engine.SyncSuppressor.
@@ -429,7 +445,23 @@ func (b *keepMutatorBridge) OnChecklistMutated(page, listName string, identity t
 		return
 	}
 	debouncer := b.debouncer
+	ticker := b.ticker
 	b.mu.Unlock()
+
+	// Kick the adaptive cycle immediately at edit time. Activity=true
+	// resets the quiet counter and schedules a follow-up sync at the
+	// base delay (5s). The 1.5s debouncer below continues to drive the
+	// actual outbound push; the post-debouncer Sync's own RecordTick
+	// (engine.go:Sync's pre/post cursor compare) will re-anchor the
+	// cycle from the push side. Net effect: reactive cycle starts at
+	// t=0 of the edit, not at t=1.5s when the debouncer fires.
+	if ticker != nil {
+		ticker.RecordTick(connectors.BindingKey{
+			ProfileID: string(profileID),
+			Page:      page,
+			ListName:  listName,
+		}, true)
+	}
 
 	if debouncer == nil {
 		return
