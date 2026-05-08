@@ -36,7 +36,9 @@ func (e *Engine) runInsertRecovery(
 	uid string,
 	idMap map[string]string,
 ) (connectors.Binding, error) {
-	rebuilt, err := e.adapter.RebuildAdapterState(ctx, binding)
+	rebuildCtx, rebuildCancel := e.withRPCDeadline(ctx)
+	rebuilt, err := e.adapter.RebuildAdapterState(rebuildCtx, binding)
+	rebuildCancel()
 	if err != nil {
 		return binding, fmt.Errorf("insert_recovery: rebuild adapter state for %s on profile %s: %w",
 			uid, string(binding.ProfileID), err)

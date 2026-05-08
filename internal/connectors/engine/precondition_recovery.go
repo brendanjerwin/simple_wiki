@@ -78,7 +78,9 @@ func (e *Engine) runPreconditionRecovery(
 	ctx = checklistmutator.WithSource(ctx,
 		checklistmutator.ConnectorSource(string(kind), "push_recovery"))
 
-	remote, readErr := e.adapter.ReadRemoteByRef(ctx, binding, ref)
+	readCtx, readCancel := e.withRPCDeadline(ctx)
+	remote, readErr := e.adapter.ReadRemoteByRef(readCtx, binding, ref)
+	readCancel()
 	if readErr != nil {
 		// Branch A is also reachable when ReadRemoteByRef itself
 		// surfaces NotFound (e.g., Tasks's GET returns 404). Treat
@@ -146,7 +148,9 @@ func (e *Engine) precondWikiWinsRepatch(
 ) error {
 	kind := e.adapter.Kind()
 
-	_, repatchErr := e.adapter.PatchRemote(ctx, binding, freshRef, wikiItem)
+	repatchCtx, repatchCancel := e.withRPCDeadline(ctx)
+	_, repatchErr := e.adapter.PatchRemote(repatchCtx, binding, freshRef, wikiItem)
+	repatchCancel()
 	if repatchErr != nil {
 		e.logger.Info("connectors/engine: precondition_recovery_wiki_wins_repatch_failed kind=%s profile=%s page=%s list=%s uid=%s ref=%s err=%v original_err=%v",
 			kind, string(binding.ProfileID), binding.Page, binding.ListName, uid, string(freshRef), repatchErr, patchErr)

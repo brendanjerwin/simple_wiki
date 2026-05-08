@@ -71,7 +71,9 @@ func (e *Engine) runForceFullResync(ctx context.Context, key connectors.BindingK
 	checklistKey := connectors.ChecklistKey{Page: key.Page, ListName: key.ListName}
 
 	resyncErr := e.lease.WithChecklistLock(checklistKey, func() error {
-		newState, rebuildErr := e.adapter.RebuildAdapterState(ctx, binding)
+		rebuildCtx, rebuildCancel := e.withRPCDeadline(ctx)
+		newState, rebuildErr := e.adapter.RebuildAdapterState(rebuildCtx, binding)
+		rebuildCancel()
 		if rebuildErr != nil {
 			return fmt.Errorf("rebuild adapter state for %s/%s on profile %s: %w",
 				key.Page, key.ListName, profileID, rebuildErr)

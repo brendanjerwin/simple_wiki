@@ -115,7 +115,9 @@ func (e *Engine) reconcile(ctx context.Context, key connectors.BindingKey) error
 
 	classification := e.classifyDivergence(ctx, binding)
 
-	pullResult, pullErr := e.adapter.PullRemote(ctx, binding)
+	pullCtx, pullCancel := e.withRPCDeadline(ctx)
+	pullResult, pullErr := e.adapter.PullRemote(pullCtx, binding)
+	pullCancel()
 	if pullErr != nil {
 		switch e.adapter.ClassifyError(pullErr) {
 		case connectors.ErrorClassAuthFailed:
@@ -287,6 +289,21 @@ func (e *Engine) applyInboundOneItem(
 		if !hasUID {
 			return nil
 		}
+		// Sticky user-wins for the Deleted cell (panel round 3,
+		// Lamport §10.13). If a user click is uncovered for this
+		// uid, do NOT mirror the remote delete to the wiki — the
+		// user's intent at the wiki replica is privileged. Clear
+		// idMap so the next pushOutbound INSERTs a fresh remote ref
+		// carrying the wiki state, rather than PATCHing a deleted
+		// remote and falling into precondition_recovery's wipe-wiki
+		// branch.
+		if cls, has := classification[uid]; has && cls.UncoveredUserEvent {
+			e.logger.Info("connectors/engine: user_wins_skipped_inbound_delete kind=%s profile=%s page=%s list=%s uid=%s ref=%s",
+				e.adapter.Kind(), string(binding.ProfileID), binding.Page, binding.ListName, uid, string(remoteItem.Ref))
+			delete(idMap, uid)
+			delete(refToUID, string(remoteItem.Ref))
+			return nil
+		}
 		if delErr := e.mutator.DeleteItemForSync(ctx, binding.Page, binding.ListName, "", uid); delErr != nil {
 			return fmt.Errorf("delete wiki item %s on profile %s: %w",
 				uid, binding.ProfileID, delErr)
@@ -452,7 +469,9 @@ func (e *Engine) pushOutbound(
 					e.adapter.Kind(), string(binding.ProfileID), binding.Page, binding.ListName, uid, reason)
 				continue
 			}
-			newRef, insErr := e.adapter.InsertRemote(ctx, binding, wikiItem)
+			insCtx, insCancel := e.withRPCDeadline(ctx)
+			newRef, insErr := e.adapter.InsertRemote(insCtx, binding, wikiItem)
+			insCancel()
 			if insErr != nil {
 				switch e.adapter.ClassifyError(insErr) {
 				case connectors.ErrorClassAuthFailed:
@@ -506,7 +525,9 @@ func (e *Engine) pushOutbound(
 				e.adapter.Kind(), string(binding.ProfileID), binding.Page, binding.ListName, uid, reason)
 			continue
 		}
-		_, patchErr := e.adapter.PatchRemote(ctx, binding, connectors.RemoteRef(ref), wikiItem)
+		patchCtx, patchCancel := e.withRPCDeadline(ctx)
+		_, patchErr := e.adapter.PatchRemote(patchCtx, binding, connectors.RemoteRef(ref), wikiItem)
+		patchCancel()
 		if patchErr != nil {
 			switch e.adapter.ClassifyError(patchErr) {
 			case connectors.ErrorClassAuthFailed:
@@ -545,7 +566,10 @@ func (e *Engine) pushOutbound(
 				e.adapter.Kind(), string(binding.ProfileID), binding.Page, binding.ListName, uid, reason)
 			continue
 		}
-		if delErr := e.adapter.DeleteRemote(ctx, binding, connectors.RemoteRef(ref)); delErr != nil {
+		delCtx, delCancel := e.withRPCDeadline(ctx)
+		delErr := e.adapter.DeleteRemote(delCtx, binding, connectors.RemoteRef(ref))
+		delCancel()
+		if delErr != nil {
 			switch e.adapter.ClassifyError(delErr) {
 			case connectors.ErrorClassAuthFailed:
 				return binding, true, nil
@@ -585,7 +609,9 @@ func (e *Engine) pushOutbound(
 			SortOrder:   item.GetSortOrder(),
 		})
 	}
-	updated, syncErr := e.adapter.SyncCollectionState(ctx, binding, wikiItemsForCollection)
+	syncCtx, syncCancel := e.withRPCDeadline(ctx)
+	updated, syncErr := e.adapter.SyncCollectionState(syncCtx, binding, wikiItemsForCollection)
+	syncCancel()
 	if syncErr != nil {
 		e.logger.Info("connectors/engine: sync_collection_state_failed kind=%s profile=%s page=%s list=%s err=%v",
 			e.adapter.Kind(), string(binding.ProfileID), binding.Page, binding.ListName, syncErr)

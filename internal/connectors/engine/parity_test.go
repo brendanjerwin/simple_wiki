@@ -1738,11 +1738,17 @@ var _ = Describe("Parity scenarios across real adapters", func() {
 	})
 
 	Describe("USER SCENARIO: remote item is deleted while operator was editing in wiki", func() {
-		// Operator edits item in wiki. Engine tries to PATCH. Tasks
-		// returns 404 (or Keep returns ErrBoundNoteDeleted). Recovery
-		// reads remote → Deleted=true → mirror delete into wiki +
-		// remove from idMap. The user's wiki edit is acknowledged as
-		// orphaned (the remote item is gone) and the wiki cleans up.
+		// Round-3 panel finding (Lamport §10.13): sticky user-wins
+		// applies to the Deleted cell too. The operator edited the
+		// item in the wiki (the op-log carries an uncovered user
+		// event) AND the remote independently deleted the same item.
+		// Earlier behavior mirrored the remote delete to the wiki,
+		// destroying the user's edit silently. v3.1 reorders the
+		// merge: the user's intent at the wiki replica is privileged.
+		// The engine clears idMap so the next pushOutbound INSERTs a
+		// fresh remote ref carrying the wiki state, rather than
+		// PATCHing a deleted ref and falling into precondition-
+		// recovery's wipe-wiki branch.
 		const knownUID = "uid-remote-deleted-during-edit-1"
 		const ref = "task-remote-deleted-1"
 
@@ -1783,7 +1789,7 @@ var _ = Describe("Parity scenarios across real adapters", func() {
 				})).To(Succeed())
 			})
 
-			It("should call DeleteItemForSync on the wiki to mirror the remote delete", func() {
+			It("should NOT call DeleteItemForSync (sticky user-wins protects the wiki edit from the remote delete)", func() {
 				gotDelete := false
 				for _, c := range p.mutator.recordingChecklistMutator.deleteCalls {
 					if c.UID == knownUID {
@@ -1791,7 +1797,13 @@ var _ = Describe("Parity scenarios across real adapters", func() {
 						break
 					}
 				}
-				Expect(gotDelete).To(BeTrue())
+				Expect(gotDelete).To(BeFalse(),
+					"engine mirrored a remote delete despite an uncovered user event — Lamport round 3, §10.13")
+			})
+
+			It("should INSERT a fresh remote ref via the adapter (carrying the wiki's user-edited state)", func() {
+				Expect(p.tasksClient.insertCalls).ToNot(BeEmpty(),
+					"engine did not INSERT to push the user's wiki edit forward after the remote delete")
 			})
 		})
 	})

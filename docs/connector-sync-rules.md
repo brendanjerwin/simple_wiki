@@ -108,9 +108,14 @@ discipline (§7).
      tick (step 10), not before the network call. On crash between
      pull and save, the next tick re-pulls and re-refreshes — safe.
    - **Apply the 4-cell merge** per uid:
-     - **Deleted=true** → mirror delete to wiki via
-       `DeleteItemForSync`, remove from `idMap`. (The "if uid known
-       to us" lookup uses `refToUID` built from `idMap`.)
+     - **Deleted=true ∧ UncoveredUserEvent=true** → sticky user-
+       wins for the deleted cell (v3.1, Lamport §10.13). Skip the
+       wiki delete; clear `idMap` so pushOutbound INSERTs a fresh
+       remote ref carrying the wiki's user-edited state.
+     - **Deleted=true ∧ UncoveredUserEvent=false** → mirror delete
+       to wiki via `DeleteItemForSync`, remove from `idMap`. (The
+       "if uid known to us" lookup uses `refToUID` built from
+       `idMap`.)
      - **WikiDiverged=false ∧ RemoteDiverged=false** → no-op.
      - **WikiDiverged=false ∧ RemoteDiverged=true** → apply remote
        to wiki via `UpdateItemForSync` (or `AddItemForSync` if uid
@@ -257,12 +262,15 @@ under v2 the user click prevents the apply.
   carries the wiki's `text` value and overwrites the third
   party's edit. The third party's edit is silently destroyed.
   See §10.
-- **Multi-replica convergence is not guaranteed.** With N≥2
-  connectors active on the same checklist, two connectors
-  reading the same wiki op-log at slightly different moments can
-  make conflicting "user-wins" decisions because `seq` is not
-  happens-before. Push-pull oscillation is possible until one
-  connector's PATCH wins the etag race. See §10.
+- **Multi-connector binding is refused at bind time.** Per §16.9
+  the aggregate-root key is `(Page, ListName)` with no `Kind`
+  component; the bind ceremony refuses any second binding to a
+  checklist already bound by any kind, any profile. The runtime
+  multi-connector race that an earlier draft described is moot:
+  the configuration that would produce it is rejected before
+  either connector starts ticking. Multi-process operation
+  (separate concern, §10.8) can violate this if two engine
+  processes compete on the same data dir.
 - **In-flight user clicks may be silently lost.** If a user
   click lands in the op-log AFTER classify (step 3) but BEFORE
   apply (step 5) within the same tick, classify did not see it;
@@ -551,13 +559,23 @@ engine does NOT detect that only `checked` was user-touched and
 limit the repatch to that field. This is the "lost update under
 concurrent field edits" non-guarantee.
 
-### 10.4 No multi-connector convergence
+### 10.4 No multi-connector binding (configuration refused at bind time)
 
-With N ≥ 2 connectors bound to the same checklist (e.g., Tasks
-*and* Keep both syncing the Grocery list), two connectors
-reading the wiki op-log at slightly different moments can make
-conflicting `UncoveredUserEvent` decisions because `seq` is not
-happens-before. Push-pull oscillation is possible.
+Multi-connector binding to the same checklist is **not a runtime
+non-guarantee — it is refused at bind time**. The aggregate-root
+key per ADR-0011 is `(Page, ListName)` with no `Kind` component,
+and the engine's bind ceremony (§12) checks
+`LeaseTable.LookupOwner` inside the per-checklist mutex (see
+`internal/connectors/engine/bind.go:69`). Any second bind to a
+checklist already bound — by any kind, any profile — returns
+`ErrAlreadyBoundForChecklist`. Tested at
+`internal/connectors/engine/bind_test.go:244` with explicit
+cross-kind setup. See strict invariant §16.9.
+
+This means push-pull oscillation between two connectors over the
+same checklist cannot occur in practice; the configuration that
+would produce it is rejected before either connector starts
+ticking.
 
 ### 10.5 No exactly-once Insert under network ambiguity
 
@@ -617,23 +635,27 @@ sticky-user-wins rule, but the operator should not interpret
 
 The reviewers' formal analysis (Shapiro, Lamport) shows the
 engine is convergent for the single-connector + single-replica
-case under the schedule arrival assumptions in §3, and is NOT
-convergent under multi-connector adversarial schedules. A formal
-TLA+ proof is not in scope.
+case under the schedule arrival assumptions in §3. Multi-
+connector configurations are refused at bind time (§16.9), so
+multi-connector convergence is moot rather than unguaranteed. A
+formal TLA+ proof is not in scope.
 
-### 10.13 Remote-delete clobbers concurrent uncovered user click
+### 10.13 (resolved — sticky user-wins applies to the Deleted cell)
 
-The 4-cell merge in §2 step 5 checks the `Deleted=true` cell
-*before* the `UncoveredUserEvent` predicate. If the remote
-deletes a uid while a user click for the same uid sits uncovered
-in the wiki op-log, the engine mirrors the delete to wiki and
-the user's click is destroyed silently. The op-log retains the
-user event for forensics but no `outbound_*` event is ever
-emitted for it. Sticky user-wins (§16.3) is enforced for
-non-deleted cells only. Tracked as known limitation; the fix is
-either to reorder the merge so `Deleted ∧ UncoveredUserEvent ⇒
-push wiki re-insert`, or to treat the remote delete as
-suspicious and require a second tick of confirmation.
+This entry described the engine mirroring a remote delete to the
+wiki even when an uncovered user event existed for the same uid.
+v3.1 reorders `applyInboundOneItem`'s `Deleted=true` branch in
+`internal/connectors/engine/reconcile.go`: when
+`UncoveredUserEvent=true` for the uid, the engine clears `idMap`
+and skips `DeleteItemForSync`. The next `pushOutbound` sees no
+`idMap` entry → INSERTs a fresh remote ref carrying the wiki's
+user-edited state. Tested at
+`internal/connectors/engine/reconcile_test.go` (the "Deleted=true
+AND uid has UncoveredUserEvent" When-block) and reflected in the
+parity test under "USER SCENARIO: remote item is deleted while
+operator was editing in wiki." Sticky user-wins is now enforced
+for both deleted and non-deleted cells; strict invariant §16.3
+holds without the v3 carve-out.
 
 ### 10.14 In-flight user clicks during apply may be silently lost
 
@@ -652,15 +674,13 @@ user event of equal-or-lesser seq for the same uid) or running
 classify under the same lock that gates user writes. Tracked as
 known limitation.
 
-### 10.15 No bind-time refusal of multi-connector bindings
+### 10.15 (resolved — see §16.9)
 
-When the operator binds Connector B to a checklist that already
-has Connector A bound, the engine accepts the second binding
-silently. Both connectors then race per §10.4. The operator
-receives no warning. Tracked: the bind ceremony (§12) should
-either refuse or surface `degraded_reason="multi_connector_unsafe"`
-on both bindings. Until that lands, multi-binding-per-checklist
-is a known-unsafe configuration that the engine will not detect.
+This entry described "engine accepts second connector binding
+silently." The disclosure was factually incorrect: the bind
+ceremony already refuses, see §10.4 above and §16.9. Retained as
+a numbered entry for stable cross-references; the actual
+contract is the strict invariant §16.9.
 
 ### 10.16 No mechanical defense against multi-process operation
 
@@ -701,7 +721,7 @@ indicate specific conditions:
 | `last_successful_sync_at` advancing AND op-log shows `user:*` events with no subsequent `outbound_*` events for ≥2 minutes for the same uid | Push side is failing without dead-lettering yet (vendor 5xx storm or transient gateway error). PullRemote still works so `last_successful_sync_at` is misleading. | Check journalctl for `recordPushFailure` log lines; check vendor status page; wait for backoff to elapse. |
 | Op-log has `outbound_patched` AND `last_synced_seq` did not advance to that seq on the next tick | Mid-pushOutbound crash window per §7 row 5 (push succeeded, AppendSyncEvent landed, SaveBinding did not). Recovery is the cursor-advance-from-op-log rule. | Wait one tick. If multiple ticks elapse without advancement, escalate. |
 | `bound_at` very recent (≤30s ago) AND `last_synced_seq` already equals `max(op-log seq)` AND user reports pre-bind clicks didn't sync | Bind-time replay limitation per §10.10. Pre-bind user clicks are silently considered synced; first tick won't re-push them. | Re-touch each affected item to re-emit a user event; engine will push on next tick. |
-| Op-log shows alternating `connector:<A>:apply` / `connector:<B>:apply` for the same uid across multiple ticks with no `outbound_*` between | Multi-connector oscillation per §10.4. Two connectors are racing on the same uid. | Mitigation: unbind one connector for the affected checklist; or accept the oscillation. Long-term fix tracked as bind-time refusal (§10.15). |
+| Op-log shows alternating `connector:<A>:apply` / `connector:<B>:apply` for the same uid across multiple ticks with no `outbound_*` between | **Should be impossible** per §16.9 (at most one Binding per checklist; bind ceremony refuses cross-kind). If observed, the bind-time refusal was bypassed (e.g., direct frontmatter edit, restored backup with a stale binding from a different kind). | Inspect profile pages for two simultaneous `bindings[]` entries on the same `(page, list_name)`. Remove one. The lease table will rebuild from disk on next boot. |
 | `last_synced_seq` observed to *decrease* between two reads of the same binding | Two engine processes are racing on the binding (§10.8, §10.16). Data integrity at risk. | Stop one process immediately. Check `ps`, deployment systemd units. Restore binding from git if cursor went into invalid state. |
 | `truncated_pull` log line appears on consecutive ticks | ForceFullResync loop per §11.6 (rate limit not enforced). | Pause the binding to break the loop until rate-limit fix lands. Investigate why each pull is being truncated (vendor cursor expired? state size?). |
 | `item_etags.<task-id>` value missing for a uid present in `idMap` | Stale/incomplete adapter_state — likely from a partial rebuild, migration drop, or an item that was never RefreshItemBaseline'd. | Force-resync the binding to repopulate adapter_state. |
@@ -814,23 +834,46 @@ within vendor quotas; multi-binding scale-out will require
 revisiting the contract to add `BatchPatchRemote` /
 `BatchInsertRemote`.
 
-### 11.9 Per-RPC deadlines
+### 11.9 Per-RPC deadlines (engine-enforced)
 
-**Required:** every adapter primitive MUST enforce a per-RPC
-deadline (≤15s recommended) via `context.WithTimeout` wrapping
-the inbound `ctx`. Tick budget is the 30s scheduler interval;
-this leaves headroom for one retry within the same tick.
+**Enforced by the engine** (round-3 panel, Bailis Option A
+"invariant by construction"). Every engine→adapter I/O primitive
+call site wraps the inbound `ctx` with
+`context.WithTimeout(ctx, PerRPCDeadline)` via the engine helper
+`Engine.withRPCDeadline` defined in
+`internal/connectors/engine/rpc_deadline.go`. The default
+deadline is 15s; the variable is overridable for tests but the
+production code path always reads the same shared value.
 
-**Failure mode if absent:** a vendor-side hang on a single RPC
-holds the per-checklist lease (§11.3) for the duration of the
-hang, starves the next debouncer firing, and can wedge a binding
-indefinitely on a hung TCP connection. Without deadlines, a
-single vendor-side incident can convert into a "engine wedged,
-restart required" outage.
+**Wrapped call sites (12, audited):**
 
-**Known limitation:** as of v3, deadlines are NOT enforced by
-the adapter contract or by a lint rule. Each adapter is
-individually responsible. Tracked as engine-level work.
+- `reconcile.go`: PullRemote, InsertRemote (in pushOutbound
+  loop), PatchRemote (in pushOutbound loop), DeleteRemote (in
+  pushOutbound loop), SyncCollectionState
+- `precondition_recovery.go`: ReadRemoteByRef, PatchRemote
+  (re-PATCH branch)
+- `bind.go`: ValidateRemoteBinding, SeedBindingState
+- `force_resync.go`: RebuildAdapterState
+- `insert_recovery.go`: RebuildAdapterState
+- `title_sync.go`: FetchRemoteListTitle, ListRemoteCollections
+
+**Why every site is wrapped:** the deadline is the engine's
+responsibility, not the adapter's. Adapters are not trusted to
+honor deadlines on their own — and need not be, because the
+engine binds the deadline to the ctx before the call. A future
+adapter (e.g., iCloud Reminders) inherits the deadline guarantee
+without having to implement it.
+
+**Failure mode prevented:** a vendor-side hang on a single RPC
+no longer holds the per-checklist lease (§11.3) indefinitely.
+After 15s the primitive returns with `context.DeadlineExceeded`;
+the engine's error-classification path (typically
+`ErrorClassRetryable`) bumps `push_failures.<uid>.count` and the
+backoff schedule (§11.7) takes over.
+
+**Tested:** unit-tested at
+`internal/connectors/engine/rpc_deadline_test.go` (deadline is
+applied; cancel propagates; tight-deadline override fires).
 
 ---
 
@@ -941,6 +984,25 @@ with the rule(s) that enforce it.
    different external effect than running the tick from scratch
    (§7).
 
+9. **At most one Binding per `(Page, ListName)`.** The aggregate-
+   root key per ADR-0011 is `(Page, ListName)` with no `Kind`
+   component. A second bind to a checklist already bound — by
+   any kind, any profile — is refused with
+   `ErrAlreadyBoundForChecklist`. Enforced by
+   `LeaseTable.LookupOwner` against `ChecklistKey` inside the
+   per-checklist mutex of the bind ceremony (§12 step 3),
+   tested at `engine/bind_test.go:244` with cross-kind setup.
+   This invariant is what makes multi-connector convergence
+   (§10.4) a moot question rather than a runtime race.
+
+10. **Per-RPC deadlines applied at engine→adapter boundary.**
+    Every I/O-bearing adapter primitive call goes through
+    `Engine.withRPCDeadline(ctx)` before invocation. Deadline
+    is `PerRPCDeadline` (default 15s, overridable for tests).
+    Enforced by code organization: 12 call sites audited (§11.9),
+    no engine code path invokes an adapter I/O primitive on a
+    deadline-less ctx. Tested at `engine/rpc_deadline_test.go`.
+
 ---
 
 ## 17. References
@@ -959,6 +1021,19 @@ with the rule(s) that enforce it.
   availability stance preface to §10, mid-SyncCollectionState
   crash row in §7, seven additional forensic catalog rows in
   §11.1, cost model §11.8, per-RPC deadline contract §11.9.
-  Strict invariants in §16 are unchanged from v2; the round-2
-  additions are scope-of-non-guarantees and operability
-  surface, not safety-property strengthening.
+  v3.1 (same date) corrects a factual error: §10.4 originally
+  described multi-connector binding as a runtime non-guarantee,
+  but the bind ceremony already refuses the configuration via
+  the kindless aggregate-root key per ADR-0011. §10.4 rewritten
+  to describe the bind-time refusal; §10.15 retained as a
+  resolved cross-reference; new strict invariant §16.9 added.
+  v4 (round-3 final, same date) lands two engine fixes the
+  panel called blocking: (a) Lamport §10.13 — `applyInboundOneItem`
+  reorders so `Deleted ∧ UncoveredUserEvent` clears `idMap` and
+  preserves the wiki state for re-INSERT via pushOutbound,
+  rather than mirroring the remote delete; (b) Bailis Option A
+  — every engine→adapter I/O primitive call site wraps `ctx`
+  with `Engine.withRPCDeadline` so per-RPC deadlines are
+  invariant by construction, not adapter-responsibility. New
+  strict invariant §16.10. §10.13 and §10.15 retained as
+  resolved cross-references.

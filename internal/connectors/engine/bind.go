@@ -61,9 +61,12 @@ func (e *Engine) Bind(
 
 	var result connectors.Binding
 	bindErr := e.lease.WithChecklistLock(checklistKey, func() error {
-		if err := e.adapter.ValidateRemoteBinding(ctx, profileID, remoteHandle); err != nil {
+		validCtx, validCancel := e.withRPCDeadline(ctx)
+		validErr := e.adapter.ValidateRemoteBinding(validCtx, profileID, remoteHandle)
+		validCancel()
+		if validErr != nil {
 			return fmt.Errorf("validate remote binding %s for profile %s: %w",
-				remoteHandle, profileID, err)
+				remoteHandle, profileID, validErr)
 		}
 
 		if existing, ok := e.lease.LookupOwner(checklistKey); ok {
@@ -72,7 +75,9 @@ func (e *Engine) Bind(
 				existing.Kind, existing.ProfileID)
 		}
 
-		adapterState, err := e.adapter.SeedBindingState(ctx, profileID, remoteHandle)
+		seedCtx, seedCancel := e.withRPCDeadline(ctx)
+		adapterState, err := e.adapter.SeedBindingState(seedCtx, profileID, remoteHandle)
+		seedCancel()
 		if err != nil {
 			return fmt.Errorf("seed adapter state for %s on profile %s: %w",
 				remoteHandle, profileID, err)

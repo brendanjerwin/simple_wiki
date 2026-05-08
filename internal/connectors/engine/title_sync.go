@@ -14,7 +14,9 @@ import (
 // observe the result and update binding.RemoteListTitle on the next
 // SaveBinding (via reconcile.go's tail).
 func (e *Engine) FetchRemoteListTitle(ctx context.Context, profileID wikipage.PageIdentifier, remoteHandle string) (string, bool, error) {
-	return e.adapter.FetchRemoteListTitle(ctx, profileID, remoteHandle)
+	rpcCtx, cancel := e.withRPCDeadline(ctx)
+	defer cancel()
+	return e.adapter.FetchRemoteListTitle(rpcCtx, profileID, remoteHandle)
 }
 
 // ListRemoteCollections enumerates every candidate remote list/note the
@@ -27,7 +29,9 @@ func (e *Engine) FetchRemoteListTitle(ctx context.Context, profileID wikipage.Pa
 // Tasks lists with subtasks). The engine does not filter — the UI
 // decides.
 func (e *Engine) ListRemoteCollections(ctx context.Context, profileID wikipage.PageIdentifier) ([]connectors.RemoteCollection, error) {
-	cols, err := e.adapter.ListRemoteCollections(ctx, profileID)
+	rpcCtx, cancel := e.withRPCDeadline(ctx)
+	defer cancel()
+	cols, err := e.adapter.ListRemoteCollections(rpcCtx, profileID)
 	if err != nil {
 		return nil, fmt.Errorf("list remote collections for kind=%s profile=%s: %w",
 			e.adapter.Kind(), profileID, err)

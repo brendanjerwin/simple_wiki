@@ -691,6 +691,47 @@ var _ = Describe("Engine.reconcile", func() {
 		})
 	})
 
+	// Sticky user-wins applies to the Deleted cell too (round-3
+	// panel review, Lamport finding §10.13). When the remote
+	// deletes a uid AND the wiki op-log carries an uncovered user
+	// event for the same uid, the engine MUST NOT mirror the
+	// remote delete to the wiki — the user click expresses ground-
+	// truth intent at the wiki replica.
+	When("inbound item has Deleted=true AND uid has UncoveredUserEvent", func() {
+		const knownUID = "uid-deleted-user-wins-1"
+
+		BeforeEach(func() {
+			fbs.SeedBinding(connectors.Binding{
+				ProfileID: profileID, Page: page, ListName: listName,
+				RemoteHandle:         "tasklist-1",
+				State:                connectors.BindingStateActive,
+				LastSuccessfulSyncAt: reconcilePastChokePausedAt,
+				LastSyncedSeq:        10,
+				AdapterState: connectors.AdapterState{
+					"item_id_map": map[string]string{knownUID: "task-1"},
+				},
+			}, ownerKind)
+
+			fa.SetPullRemoteResponse(connectors.RemotePullResult{
+				Items: []connectors.RemoteItem{{Ref: "task-1", Deleted: true}},
+			}, nil)
+			reader.checklist = &apiv1.Checklist{
+				Items: []*apiv1.ChecklistItem{{Uid: knownUID, Text: "milk-user-wants"}},
+				Events: []*apiv1.ChecklistEvent{
+					{Seq: 11, Src: "user:bren@example.com", Op: "set_text", Uid: knownUID},
+				},
+				MaxSeq: 11,
+			}
+
+			Expect(eng.Sync(ctx, key)).To(Succeed())
+		})
+
+		It("should NOT call DeleteItemForSync (sticky user-wins protects the wiki state from remote delete)", func() {
+			Expect(mutator.recordingChecklistMutator.deleteCalls).To(BeEmpty(),
+				"engine mirrored a remote delete despite an uncovered user event — Lamport round 3, §10.13")
+		})
+	})
+
 	When("outbound has a new wiki item not in AdapterState mapping", func() {
 		const newUID = "uid-new-wiki-1"
 		var savedBinding connectors.Binding
