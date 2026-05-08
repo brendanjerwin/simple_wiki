@@ -775,15 +775,47 @@ Defense-in-depth proposal (not yet implemented): tag with
 self-events as `migration:foreign-replica` (treat as divergent).
 Tracked as known limitation.
 
-### 11.5 The 5-second `rateLimitChoke`
+### 11.5 The 5-second `rateLimitChoke` (legacy debouncer choke)
 
-Post-success choke: a tick within 5s of the previous successful
-tick is a no-op. **Unjustified historical constant.** Original
-intent: defend against tight loops where the debouncer might
-re-fire on a self-event. With `cursor advances only past
-self-writes` + suppressor, this defense is redundant. Retained
-for now; replacement by token-bucket against vendor quota is
-tracked as known limitation.
+Post-success choke: a debouncer-driven sync within 5s of the
+previous successful sync is suppressed. Originally a defense
+against tight loops where the debouncer might re-fire on a
+self-event. With `cursor advances only past self-writes` +
+suppressor, this defense is redundant for correctness. Retained
+because it provides a useful floor (no more than ~1 sync / 5s
+from the wiki-edit path) that pairs cleanly with §11.10's
+adaptive follow-ups.
+
+### 11.10 Adaptive follow-up ticker
+
+After every successful Sync, the engine asks an `AdaptiveTicker`
+to schedule a follow-up. Decay policy:
+
+- **Activity observed** (cursor advanced — i.e., an inbound apply,
+  outbound push, or precondition recovery emitted a self-event):
+  reset the per-binding quiet counter; schedule next sync at
+  `AdaptiveTickerBaseDelay` (5s).
+- **Quiet run** (cursor unchanged): increment the quiet counter;
+  schedule next sync at `base × 2^quietRuns`. Sequence: 10s, 20s.
+- **Beyond cap** (computed delay > `AdaptiveTickerCapDelay = 20s`):
+  no follow-up is scheduled. The 30s scheduler cron is the
+  steady-state for quiet bindings.
+
+The effective ladder is **5s → 10s → 20s → cron**. A single
+new change re-arms the most-reactive 5s schedule.
+
+This replaces the former "30s cron is the only driver of
+remote-pull syncs" pattern. Remote-side edits (e.g., a phone-app
+change) appear in the wiki within 5s after the next observed
+activity, decaying back to 30s steady-state when the binding
+goes quiet. Costs are bounded: a noisy binding incurs ~12 RPCs/
+minute (1 per 5s) sustained, well under vendor quotas (§11.8).
+
+**Source:** `internal/connectors/engine/adaptive_ticker.go`.
+Wired in `internal/bootstrap/{server.go,keep_setup.go}` per
+adapter; engine integrates via `Sync()`'s pre/post `LastSyncedSeq`
+comparison (the activity signal). Tested at
+`engine/adaptive_ticker_test.go`.
 
 ### 11.6 ForceFullResync rate limit
 

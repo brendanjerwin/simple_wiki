@@ -178,6 +178,22 @@ func setupGoogleKeep(
 	bridge.attachDebouncer(debouncer)
 	checklistMutator.AddSubscriber(bridge)
 
+	// Adaptive ticker: after every successful Sync, schedule a reactive
+	// follow-up (5s after activity; decays 10s, 20s, then yields to
+	// cron). Closes the "30s polling feels slow" gap when remote-side
+	// edits land between cron ticks. See engine/adaptive_ticker.go.
+	keepAdaptiveSyncFn := func(ctx context.Context, key connectors.BindingKey) {
+		if err := keepEngine.Sync(ctx, key); err != nil {
+			logger.Error("connectors/engine: adaptive_follow_up_sync_failed kind=google_keep key=%s|%s|%s err=%v",
+				key.ProfileID, key.Page, key.ListName, err)
+		}
+	}
+	keepAdaptive, kaerr := engine.NewAdaptiveTicker(realTimerScheduler{}, keepAdaptiveSyncFn, logger)
+	if kaerr != nil {
+		return nil, fmt.Errorf("build keep adaptive ticker: %w", kaerr)
+	}
+	keepEngine.SetAdaptiveTicker(keepAdaptive)
+
 	keepSubscriptionLister := func() []connectors.BindingKey {
 		out := make([]connectors.BindingKey, 0, 8)
 		// Probe by master_token (the canonical "is connected?" leaf).

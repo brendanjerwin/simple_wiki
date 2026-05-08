@@ -35,6 +35,7 @@ import (
 	"errors"
 
 	"github.com/brendanjerwin/simple_wiki/internal/connectors"
+	"github.com/brendanjerwin/simple_wiki/wikipage"
 )
 
 // ErrNotYetImplemented is the sentinel an engine method returns when
@@ -65,6 +66,12 @@ type Engine struct {
 	logger    Logger
 	clock     Clock
 	store     BindingStore
+
+	// adaptiveTicker, when set, drives activity-driven follow-up syncs
+	// after each successful Sync. Optional: nil in tests by default; the
+	// production bootstrap wires this so the engine reacts to observed
+	// activity faster than the 30s cron alone. See adaptive_ticker.go.
+	adaptiveTicker *AdaptiveTicker
 }
 
 // NewEngine wires the production dependencies for one connector kind.
@@ -128,8 +135,52 @@ func (e *Engine) Kind() connectors.ConnectorKind {
 
 // Sync runs one reconcile pass for the given binding. Implements
 // connectors.Connector.Sync. Body lives in reconcile.go.
+//
+// When an AdaptiveTicker is wired (production), Sync compares
+// LastSyncedSeq before and after the reconcile. A cursor advance is
+// the activity signal: it means an inbound apply, an outbound push,
+// or a precondition recovery emitted a self-event. The ticker uses
+// this to schedule a reactive follow-up; see adaptive_ticker.go.
+//
+// Errors short-circuit the activity recording — a failed reconcile
+// shouldn't trigger an immediate retry beyond the standard backoff.
+// The next cron tick (or debouncer fire) will handle retry.
 func (e *Engine) Sync(ctx context.Context, key connectors.BindingKey) error {
-	return e.reconcile(ctx, key)
+	var preSeq int64
+	if e.adaptiveTicker != nil {
+		preSeq = e.peekLastSyncedSeq(key)
+	}
+	err := e.reconcile(ctx, key)
+	if err == nil && e.adaptiveTicker != nil {
+		postSeq := e.peekLastSyncedSeq(key)
+		e.adaptiveTicker.RecordTick(key, postSeq > preSeq)
+	}
+	return err
+}
+
+// SetAdaptiveTicker wires the activity-driven follow-up scheduler.
+// Optional: tests typically leave it unset; the production bootstrap
+// constructs an AdaptiveTicker bound to the engine's Sync method and
+// calls this. Once set, every successful Sync records its activity
+// signal with the ticker, which schedules adaptive follow-ups.
+func (e *Engine) SetAdaptiveTicker(t *AdaptiveTicker) {
+	e.adaptiveTicker = t
+}
+
+// peekLastSyncedSeq reads the binding's current cursor without locks
+// beyond what the store imposes. Returns 0 if the binding is not
+// found (e.g., just unbound) — the activity signal degrades safely:
+// a missing binding will report no activity and the ticker will
+// decay/yield as if nothing happened.
+func (e *Engine) peekLastSyncedSeq(key connectors.BindingKey) int64 {
+	b, ok, err := e.store.FindBinding(
+		wikipage.PageIdentifier(key.ProfileID), e.adapter.Kind(),
+		key.Page, key.ListName,
+	)
+	if err != nil || !ok {
+		return 0
+	}
+	return b.LastSyncedSeq
 }
 
 // PausedReason reports the binding's pause state. Implements

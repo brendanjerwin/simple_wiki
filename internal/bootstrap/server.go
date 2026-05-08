@@ -848,6 +848,22 @@ func setupGoogleTasks(
 	bridge.attachDebouncer(debouncer)
 	checklistMutator.AddSubscriber(bridge)
 
+	// Adaptive ticker: after every successful Sync, schedule a reactive
+	// follow-up (5s after activity; decays 10s, 20s, then yields to
+	// cron). Closes the "30s polling feels slow" gap when remote-side
+	// edits land between cron ticks. See engine/adaptive_ticker.go.
+	tasksAdaptiveSyncFn := func(ctx context.Context, key connectors.BindingKey) {
+		if err := tasksEngine.Sync(ctx, key); err != nil {
+			logger.Error("connectors/engine: adaptive_follow_up_sync_failed kind=google_tasks key=%s|%s|%s err=%v",
+				key.ProfileID, key.Page, key.ListName, err)
+		}
+	}
+	tasksAdaptive, taerr := engine.NewAdaptiveTicker(realTimerScheduler{}, tasksAdaptiveSyncFn, logger)
+	if taerr != nil {
+		return nil, fmt.Errorf("build tasks adaptive ticker: %w", taerr)
+	}
+	tasksEngine.SetAdaptiveTicker(tasksAdaptive)
+
 	tasksSubscriptionLister := func() []connectors.BindingKey {
 		out := make([]connectors.BindingKey, 0, 8)
 		// Probe by refresh_token (the canonical "is connected?" leaf).
