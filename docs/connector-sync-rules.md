@@ -845,17 +845,22 @@ call site wraps the inbound `ctx` with
 deadline is 15s; the variable is overridable for tests but the
 production code path always reads the same shared value.
 
-**Wrapped call sites (12, audited):**
+**Wrapped call sites (13, audited; opengrep-enforced):**
 
-- `reconcile.go`: PullRemote, InsertRemote (in pushOutbound
+- `reconcile.go` (5): PullRemote, InsertRemote (in pushOutbound
   loop), PatchRemote (in pushOutbound loop), DeleteRemote (in
   pushOutbound loop), SyncCollectionState
-- `precondition_recovery.go`: ReadRemoteByRef, PatchRemote
+- `precondition_recovery.go` (2): ReadRemoteByRef, PatchRemote
   (re-PATCH branch)
-- `bind.go`: ValidateRemoteBinding, SeedBindingState
-- `force_resync.go`: RebuildAdapterState
-- `insert_recovery.go`: RebuildAdapterState
-- `title_sync.go`: FetchRemoteListTitle, ListRemoteCollections
+- `bind.go` (2): ValidateRemoteBinding, SeedBindingState
+- `force_resync.go` (1): RebuildAdapterState
+- `insert_recovery.go` (1): RebuildAdapterState
+- `title_sync.go` (2): FetchRemoteListTitle, ListRemoteCollections
+
+The `.semgrep/rules.yml` rule
+`go.engine-adapter-call-needs-deadline` flags any direct
+`e.adapter.<I/O primitive>(ctx, ...)` call inside the engine
+package as ERROR, blocking new bypasses at edit time.
 
 **Why every site is wrapped:** the deadline is the engine's
 responsibility, not the adapter's. Adapters are not trusted to
@@ -999,7 +1004,7 @@ with the rule(s) that enforce it.
     Every I/O-bearing adapter primitive call goes through
     `Engine.withRPCDeadline(ctx)` before invocation. Deadline
     is `PerRPCDeadline` (default 15s, overridable for tests).
-    Enforced by code organization: 12 call sites audited (§11.9),
+    Enforced by code organization: 13 call sites audited (§11.9),
     no engine code path invokes an adapter I/O primitive on a
     deadline-less ctx. Tested at `engine/rpc_deadline_test.go`.
 
