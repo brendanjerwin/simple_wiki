@@ -204,3 +204,84 @@ func (e *Engine) precondRemoteDeleted(
 	return nil
 }
 
+// runDeletePreconditionRecovery handles a `PreconditionFailed` error
+// returned by DeleteRemote. The wiki side has already removed the item;
+// the engine is trying to mirror that delete to the remote but the
+// vendor rejected the call (e.g., Keep stage3 HTTP 500 from a stale
+// baseline). Strategy:
+//
+//   - ReadRemoteByRef. If the remote returns NotFound or Deleted=true,
+//     the delete is already complete on the vendor side. Idempotent
+//     success: clear idMap, emit outbound_deleted, advance cursor next
+//     tick.
+//   - If the remote is still alive, refresh the per-item baseline (so
+//     the next tick's DELETE has a fresh BaseVersion / etag), record
+//     a push failure (Retryable backoff per §11.7), and continue. The
+//     next tick will retry; the failed retry will dead-letter at
+//     count >= 10 if the remote keeps refusing.
+//
+// Production motivation (round-3 deploy 2026-05-08): user reported
+// "wiki side delete didn't propagate to keep side." Root cause: the
+// DELETE branch in pushOutbound had no PreconditionFailed handler;
+// stage3-500 protocol-drift errors fell into `default:` and aborted
+// the entire tick, blocking every other item in the binding. This
+// helper restores per-item handling parity with the PATCH branch.
+func (e *Engine) runDeletePreconditionRecovery(
+	ctx context.Context,
+	binding connectors.Binding,
+	ref connectors.RemoteRef,
+	uid string,
+	idMap map[string]string,
+	originalErr error,
+) (connectors.Binding, error) {
+	kind := e.adapter.Kind()
+	e.logger.Info("connectors/engine: delete_precondition_recovery_start kind=%s profile=%s page=%s list=%s uid=%s ref=%s err=%v",
+		kind, string(binding.ProfileID), binding.Page, binding.ListName, uid, string(ref), originalErr)
+
+	readCtx, readCancel := e.withRPCDeadline(ctx)
+	remote, readErr := e.adapter.ReadRemoteByRef(readCtx, binding, ref)
+	readCancel()
+
+	switch {
+	case readErr != nil && e.adapter.ClassifyError(readErr) == connectors.ErrorClassNotFound:
+		// Remote already gone. Vendor returned 404. Idempotent success.
+		return e.deletePrecondRemoteAlreadyGone(ctx, binding, ref, uid, idMap), nil
+	case readErr != nil:
+		return binding, fmt.Errorf("delete_precondition_recovery: read remote ref %s for uid %s on profile %s: %w",
+			ref, uid, binding.ProfileID, readErr)
+	case remote.Deleted:
+		// Remote returns the item as a tombstone (Keep pattern).
+		// Idempotent success.
+		return e.deletePrecondRemoteAlreadyGone(ctx, binding, ref, uid, idMap), nil
+	default:
+		// Remote is still alive. Refresh baseline; defer the retry to
+		// the next tick via the Retryable backoff path.
+		binding = e.adapter.RefreshItemBaseline(binding, remote)
+		binding = e.recordPushFailure(binding, uid, "outbound_deleted", originalErr)
+		e.logger.Info("connectors/engine: delete_precondition_recovery_deferred kind=%s profile=%s page=%s list=%s uid=%s ref=%s",
+			kind, string(binding.ProfileID), binding.Page, binding.ListName, uid, string(ref))
+		return binding, nil
+	}
+}
+
+// deletePrecondRemoteAlreadyGone records the idempotent-success path
+// of runDeletePreconditionRecovery: the remote already has no item to
+// delete, so we clear idMap, mark the push as successful, and emit
+// `outbound_deleted` so the cursor advances on the next tick.
+func (e *Engine) deletePrecondRemoteAlreadyGone(
+	ctx context.Context,
+	binding connectors.Binding,
+	ref connectors.RemoteRef,
+	uid string,
+	idMap map[string]string,
+) connectors.Binding {
+	delete(idMap, uid)
+	binding = e.recordPushSuccess(binding, uid)
+	if appendErr := e.mutator.AppendSyncEvent(ctx, binding.Page, binding.ListName, uid, "outbound_deleted"); appendErr != nil {
+		e.logger.Info("connectors/engine: append_sync_event_failed page=%s list=%s uid=%s op=outbound_deleted err=%v",
+			binding.Page, binding.ListName, uid, appendErr)
+	}
+	e.logger.Info("connectors/engine: delete_precondition_recovery_remote_gone kind=%s profile=%s page=%s list=%s uid=%s ref=%s",
+		e.adapter.Kind(), string(binding.ProfileID), binding.Page, binding.ListName, uid, string(ref))
+	return binding
+}

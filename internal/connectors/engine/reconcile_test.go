@@ -934,6 +934,67 @@ var _ = Describe("Engine.reconcile", func() {
 		})
 	})
 
+	// Production regression 2026-05-08: user reported "wiki side delete
+	// didn't propagate to keep side." Logs showed Keep DeleteRemote
+	// returning ErrProtocolDrift (stage3 HTTP 500) which the adapter
+	// classifies as ErrorClassPreconditionFailed. The DELETE branch in
+	// pushOutbound had no PreconditionFailed handler — fell into
+	// `default:` and aborted the entire tick on every retry, blocking
+	// every other item in the binding from syncing. Fix: route through
+	// runDeletePreconditionRecovery (mirrors PATCH's recovery shape).
+	When("DeleteRemote returns precondition_failed AND remote is already gone", func() {
+		const knownUID = "uid-delete-precond-1"
+		var syncErr error
+
+		BeforeEach(func() {
+			fbs.SeedBinding(connectors.Binding{
+				ProfileID: profileID, Page: page, ListName: listName,
+				RemoteHandle:         "tasklist-1",
+				State:                connectors.BindingStateActive,
+				LastSuccessfulSyncAt: reconcilePastChokePausedAt,
+				LastSyncedSeq:        10,
+				AdapterState: connectors.AdapterState{
+					"item_id_map": map[string]string{knownUID: "ref-1"},
+				},
+			}, ownerKind)
+
+			fa.SetPullRemoteResponse(connectors.RemotePullResult{}, nil)
+			fa.SetDeleteRemoteResponse(errReconcileProgrammed)
+			fa.SetClassifyErrorResponse(connectors.ErrorClassPreconditionFailed)
+			// Recovery's ReadRemoteByRef returns a Deleted=true tombstone
+			// (the remote already removed the item; our DELETE was
+			// redundant). Should be idempotent success path: emit
+			// outbound_deleted, clear idMap, do not abort.
+			fa.SetReadRemoteByRefResponse(connectors.RemoteItem{Ref: "ref-1", Deleted: true}, nil)
+			// Wiki has no items — uid-1 is a pending DELETE because
+			// idMap still references it.
+			reader.checklist = &apiv1.Checklist{
+				Items: []*apiv1.ChecklistItem{},
+				Events: []*apiv1.ChecklistEvent{
+					{Seq: 11, Src: "user:bren@example.com", Op: "delete", Uid: knownUID},
+				},
+				MaxSeq: 11,
+			}
+
+			syncErr = eng.Sync(ctx, key)
+		})
+
+		It("should NOT abort the tick (recovery handled the precondition)", func() {
+			Expect(syncErr).NotTo(HaveOccurred(),
+				"engine aborted tick on DELETE precondition_failed instead of routing through recovery — production regression 2026-05-08")
+		})
+
+		It("should invoke ReadRemoteByRef (recovery was called)", func() {
+			Expect(fa.RecordedReadRemoteByRef).To(HaveLen(1))
+		})
+
+		It("should append outbound_deleted (idempotent success)", func() {
+			Expect(mutator.recordingChecklistMutator.appendCalls).To(ContainElement(
+				appendCall{Page: page, ListName: listName, UID: knownUID, Op: "outbound_deleted"},
+			))
+		})
+	})
+
 	When("InsertRemote returns a retryable error", func() {
 		const newUID = "uid-retryable-1"
 		var syncErr error

@@ -573,11 +573,25 @@ func (e *Engine) pushOutbound(
 			switch e.adapter.ClassifyError(delErr) {
 			case connectors.ErrorClassAuthFailed:
 				return binding, true, nil
+			case connectors.ErrorClassPreconditionFailed:
+				// Production regression 2026-05-08: previously this fell
+				// into `default:` and aborted the tick. Stage3 HTTP 500
+				// from Keep classifies as PreconditionFailed and would
+				// crash every retry, blocking other items in the binding.
+				// Recovery mirrors PATCH's: read remote, idempotent
+				// success on NotFound/Deleted, refresh + Retryable
+				// backoff otherwise.
+				recovered, recErr := e.runDeletePreconditionRecovery(ctx, binding, connectors.RemoteRef(ref), uid, idMap, delErr)
+				if recErr != nil {
+					return binding, false, recErr
+				}
+				binding = recovered
+				continue
 			case connectors.ErrorClassRetryable:
 				binding = e.recordPushFailure(binding, uid, "outbound_deleted", delErr)
 				continue
 			case connectors.ErrorClassNone, connectors.ErrorClassTransient,
-				connectors.ErrorClassFatal, connectors.ErrorClassPreconditionFailed,
+				connectors.ErrorClassFatal,
 				connectors.ErrorClassRateLimited, connectors.ErrorClassNotFound:
 				fallthrough
 			default:
