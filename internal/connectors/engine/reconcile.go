@@ -5,26 +5,12 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"time"
 
 	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
 	"github.com/brendanjerwin/simple_wiki/internal/connectors"
 	"github.com/brendanjerwin/simple_wiki/server/checklistmutator"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 )
-
-// rateLimitChoke is the per-binding cooldown between successful
-// reconciles. Mirrors Tasks's existing 5s post-success choke (see
-// google_tasks/sync/connector.go's rateLimitChokeSeconds). The
-// strictest-behavior-wins rule promotes the choke to engine policy so
-// every adapter inherits it on collapse: the unified scheduler tick
-// reaches every binding, and back-to-back wiki edits within the
-// debouncer's 1.5s window collapse into one sync — but human-paced
-// edits arriving 1.6s–4.9s apart would each trigger their own sync
-// without the choke. The name drops Tasks's "Seconds" suffix because
-// the engine's value is a time.Duration, and ST1011 (Go style) bans
-// unit suffixes on duration constants.
-const rateLimitChoke = 5 * time.Second
 
 // pausedReasonAuthFailed is the canonical PausedReason the engine
 // stamps when ClassifyError returns ErrorClassAuthFailed. Both Tasks
@@ -109,9 +95,6 @@ func (e *Engine) reconcile(ctx context.Context, key connectors.BindingKey) error
 	}
 
 	now := e.clock.Now()
-	if !binding.LastSuccessfulSyncAt.IsZero() && now.Sub(binding.LastSuccessfulSyncAt) < rateLimitChoke {
-		return nil
-	}
 
 	classification := e.classifyDivergence(ctx, binding)
 

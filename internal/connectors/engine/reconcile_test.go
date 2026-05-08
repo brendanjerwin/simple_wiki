@@ -336,7 +336,16 @@ var _ = Describe("Engine.reconcile", func() {
 		})
 	})
 
-	When("the rate-limit choke is active (LastSuccessfulSyncAt < 5s ago)", func() {
+	// Production regression 2026-05-08: user reported "Sync Now
+	// doesn't seem to be polling Keep/Tasks." Root cause: the engine
+	// had a 5s post-success rate-limit choke that returned nil before
+	// any RPC when LastSuccessfulSyncAt was recent. SyncNow goes
+	// through Engine.Sync → choke fired → manual click was a no-op.
+	// Removed the choke (rules §11.5 already called it "unjustified
+	// historical constant"). The AdaptiveTicker base delay (5s) and
+	// SyncDebouncer's own 5s post-success choke provide the rate
+	// floor; the engine choke was redundant.
+	When("LastSuccessfulSyncAt is recent (former rate-limit-choke window)", func() {
 		var syncErr error
 
 		BeforeEach(func() {
@@ -354,12 +363,13 @@ var _ = Describe("Engine.reconcile", func() {
 			Expect(syncErr).NotTo(HaveOccurred())
 		})
 
-		It("should not call PullRemote", func() {
-			Expect(fa.RecordedPullRemote).To(BeEmpty())
+		It("should still call PullRemote (no engine-level choke)", func() {
+			Expect(fa.RecordedPullRemote).NotTo(BeEmpty(),
+				"engine skipped PullRemote on a recent-success binding — production regression 2026-05-08, SyncNow not polling")
 		})
 
-		It("should not call SaveBinding", func() {
-			Expect(fbs.RecordedSaveBinding).To(BeEmpty())
+		It("should still call SaveBinding (cursor and timestamps update)", func() {
+			Expect(fbs.RecordedSaveBinding).NotTo(BeEmpty())
 		})
 	})
 

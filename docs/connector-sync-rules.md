@@ -775,16 +775,24 @@ Defense-in-depth proposal (not yet implemented): tag with
 self-events as `migration:foreign-replica` (treat as divergent).
 Tracked as known limitation.
 
-### 11.5 The 5-second `rateLimitChoke` (legacy debouncer choke)
+### 11.5 Engine rate-limit choke (removed 2026-05-08)
 
-Post-success choke: a debouncer-driven sync within 5s of the
-previous successful sync is suppressed. Originally a defense
-against tight loops where the debouncer might re-fire on a
-self-event. With `cursor advances only past self-writes` +
-suppressor, this defense is redundant for correctness. Retained
-because it provides a useful floor (no more than ~1 sync / 5s
-from the wiki-edit path) that pairs cleanly with §11.10's
-adaptive follow-ups.
+Historically the engine carried a 5s post-success choke at the top
+of `reconcile()`: if `LastSuccessfulSyncAt < 5s ago`, return early
+without touching the network. **Removed in production fix
+2026-05-08:** the choke was suppressing user-triggered SyncNow
+RPCs when an automatic tick had run within the prior 5s — the
+manual click was a no-op and the user perceived "Sync Now isn't
+polling." The rate floor is now provided by the AdaptiveTicker's
+base delay (§11.10) and the SyncDebouncer's own 5s post-success
+choke (§11.4 / sync_debouncer.go); the engine choke was
+double-counting.
+
+The SyncDebouncer choke remains in place — it gates wiki-edit-
+driven syncs against tight loops, which the engine's own choke
+was originally added to defend against. Cron ticks (30s) and
+AdaptiveTicker ticks (5s/10s/20s) are timer-driven and cannot
+tight-loop, so neither needs the engine-level choke.
 
 ### 11.10 Adaptive follow-up ticker
 
