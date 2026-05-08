@@ -263,12 +263,16 @@ under v2 the user click prevents the apply.
   make conflicting "user-wins" decisions because `seq` is not
   happens-before. Push-pull oscillation is possible until one
   connector's PATCH wins the etag race. See §10.
-- **In-flight user clicks may be reverted.** If a user click
-  lands in the op-log AFTER classify (step 3) but BEFORE apply
-  (step 5) within the same tick, classify did not see it; the
-  apply may revert it. The next tick will re-push. The strict
+- **In-flight user clicks may be silently lost.** If a user
+  click lands in the op-log AFTER classify (step 3) but BEFORE
+  apply (step 5) within the same tick, classify did not see it;
+  the apply may revert it AND the cursor advance at step 9 can
+  cover the user event without it ever being pushed (because
+  cursor advance reads `max self-event seq`, and the apply's
+  self-event has a higher seq than the user event). The strict
   invariant above is a *per-tick* property at classify time, not
-  an *instantaneous* property.
+  an *instantaneous* property. See §10.14 for the full
+  description and the proposed mitigations.
 
 ---
 
@@ -411,6 +415,7 @@ vendor API) within a single tick. Crash points and recovery:
 | Between applyInbound and pushOutbound | Wiki has applied changes; adapter_state baselines in-memory only. | Re-pull will re-fetch with stored (stale) baseline; if the wiki side's diff against current wiki state still triggers WikiDiverged, push proceeds. Push uses the freshly-refreshed baseline (not the stale on-disk one). |
 | Mid-pushOutbound (after PatchRemote success, before AppendSyncEvent) | Vendor has the patch; wiki op-log has no `outbound_patched` event. | Next tick's classify still sees the user-source event (cursor unchanged). It re-pushes. Vendor accepts (idempotent). Spurious self-event is appended this time. Cursor advances. |
 | Mid-pushOutbound (after AppendSyncEvent, before SaveBinding) | Op-log has self-event; binding cursor on disk still old. | Next tick's classify reads op-log, sees self-event, advances cursor (`max self-event seq from op-log`). The advanceLastSyncedSeq rule is recovery-correct: it reads from op-log, not from prior tick's in-memory state. |
+| Mid-SyncCollectionState (Keep label CRUD; multi-call sequence: label create → LIST node update) | Vendor may have a half-committed label set: the label exists server-side but `label_ids[name]` was never persisted, OR `label_ids[name]` persisted but the LIST node's tag-set on the server was never updated. | Next tick's `SyncCollectionState` is invoked again. The vendor's label-create primitive is name-keyed and idempotent (re-creating a same-name label returns the existing ID). The LIST-node tag-set update is also idempotent on the desired set. **Footgun:** if the local `label_ids` map gained an entry for a label that is no longer wanted (rare, but possible if state mutated between crash and recovery), the orphan entry persists until ForceFullResync. Tracked as known limitation. |
 | Mid-SaveBinding | Partial write; binding row may be invalid. | The frontmatter persistence layer is single-write atomic (TOML round-trip). Either the new binding lands or it doesn't. On corruption: binding load fails, engine logs and skips the tick; operator restores from git. |
 
 **Required invariant:** every step's effect must be replayable
@@ -511,6 +516,18 @@ Each non-guarantee below is named so an operator reading the
 rules at 2am knows what classes of bugs are out-of-scope vs.
 in-scope.
 
+### Availability stance
+
+The wiki replica is a single writer and a single reader. The
+engine prioritizes wiki availability over remote consistency: a
+vendor partition does not block wiki writes (the op-log accepts
+unconditionally; sync resumes when the partition heals). The
+engine does not implement read-your-writes or monotonic-read
+guarantees across the wiki/remote boundary; it implements
+eventual convergence to wiki-wins-on-conflict (§4) modulo the
+non-guarantees enumerated below. No formal HAT-tier
+classification is claimed.
+
 ### 10.1 No happens-before across replicas
 
 `seq` is wiki-local. The engine cannot determine whether a wiki
@@ -604,6 +621,58 @@ case under the schedule arrival assumptions in §3, and is NOT
 convergent under multi-connector adversarial schedules. A formal
 TLA+ proof is not in scope.
 
+### 10.13 Remote-delete clobbers concurrent uncovered user click
+
+The 4-cell merge in §2 step 5 checks the `Deleted=true` cell
+*before* the `UncoveredUserEvent` predicate. If the remote
+deletes a uid while a user click for the same uid sits uncovered
+in the wiki op-log, the engine mirrors the delete to wiki and
+the user's click is destroyed silently. The op-log retains the
+user event for forensics but no `outbound_*` event is ever
+emitted for it. Sticky user-wins (§16.3) is enforced for
+non-deleted cells only. Tracked as known limitation; the fix is
+either to reorder the merge so `Deleted ∧ UncoveredUserEvent ⇒
+push wiki re-insert`, or to treat the remote delete as
+suspicious and require a second tick of confirmation.
+
+### 10.14 In-flight user clicks during apply may be silently lost
+
+The strict user-wins invariant (§16.3) is a per-tick property at
+classify time, not an instantaneous property. If a user click
+lands in the op-log AFTER classify (step 3) but BEFORE
+applyInbound (step 5) within the same tick, classify did not see
+it; the apply may revert it. The cursor then advances to
+`max(self-event seq)` at step 9, which can exceed the user
+event's `seq`, marking the user event as covered without it
+having been pushed. The next tick's classify treats the user
+event as already-synced and never re-pushes it. The user's click
+is silently lost. Mitigation requires either a stricter cursor
+advance rule (advance only past self-events that succeed every
+user event of equal-or-lesser seq for the same uid) or running
+classify under the same lock that gates user writes. Tracked as
+known limitation.
+
+### 10.15 No bind-time refusal of multi-connector bindings
+
+When the operator binds Connector B to a checklist that already
+has Connector A bound, the engine accepts the second binding
+silently. Both connectors then race per §10.4. The operator
+receives no warning. Tracked: the bind ceremony (§12) should
+either refuse or surface `degraded_reason="multi_connector_unsafe"`
+on both bindings. Until that lands, multi-binding-per-checklist
+is a known-unsafe configuration that the engine will not detect.
+
+### 10.16 No mechanical defense against multi-process operation
+
+The engine does not acquire a process-exclusive lock at startup.
+A second wiki process pointed at the same data directory will
+boot, contend on the binding TOML, and corrupt op-log seq
+allocation. Operator MUST ensure singleton via deployment
+discipline (§10.8, §11.4). Tracked: a `flock(2)` on a pidfile
+inside the data directory would close this with ~20 LOC of Go
+and would also defeat the most common cause (two dev shells run
+against the same dir).
+
 ---
 
 ## 11. Operational sections
@@ -628,6 +697,14 @@ indicate specific conditions:
 | `keep_cursor` invalid (engine logs `truncated_pull`) | ForceFullResync triggered next tick. | Wait one tick. |
 | Op-log has `outbound_patched` immediately after `user:` event with same uid AND tick advanced to that seq | Healthy: push round-tripped. | None. |
 | Op-log has `connector:<other-kind>:apply` and stays without subsequent `connector:<this-kind>:*` event for the same uid | This connector's tick hasn't run yet, OR `wd ∧ rd ∧ ¬user` fired and remote-wins applied. | If unexpected, check classify behavior. |
+| `push_failures.<uid>.count = N` where `1 ≤ N < 10` | In exponential backoff per §11.7; not yet dead-lettered. Next attempt at `next_attempt_at`. | Wait for backoff to elapse, or force-resync to clear. |
+| `last_successful_sync_at` advancing AND op-log shows `user:*` events with no subsequent `outbound_*` events for ≥2 minutes for the same uid | Push side is failing without dead-lettering yet (vendor 5xx storm or transient gateway error). PullRemote still works so `last_successful_sync_at` is misleading. | Check journalctl for `recordPushFailure` log lines; check vendor status page; wait for backoff to elapse. |
+| Op-log has `outbound_patched` AND `last_synced_seq` did not advance to that seq on the next tick | Mid-pushOutbound crash window per §7 row 5 (push succeeded, AppendSyncEvent landed, SaveBinding did not). Recovery is the cursor-advance-from-op-log rule. | Wait one tick. If multiple ticks elapse without advancement, escalate. |
+| `bound_at` very recent (≤30s ago) AND `last_synced_seq` already equals `max(op-log seq)` AND user reports pre-bind clicks didn't sync | Bind-time replay limitation per §10.10. Pre-bind user clicks are silently considered synced; first tick won't re-push them. | Re-touch each affected item to re-emit a user event; engine will push on next tick. |
+| Op-log shows alternating `connector:<A>:apply` / `connector:<B>:apply` for the same uid across multiple ticks with no `outbound_*` between | Multi-connector oscillation per §10.4. Two connectors are racing on the same uid. | Mitigation: unbind one connector for the affected checklist; or accept the oscillation. Long-term fix tracked as bind-time refusal (§10.15). |
+| `last_synced_seq` observed to *decrease* between two reads of the same binding | Two engine processes are racing on the binding (§10.8, §10.16). Data integrity at risk. | Stop one process immediately. Check `ps`, deployment systemd units. Restore binding from git if cursor went into invalid state. |
+| `truncated_pull` log line appears on consecutive ticks | ForceFullResync loop per §11.6 (rate limit not enforced). | Pause the binding to break the loop until rate-limit fix lands. Investigate why each pull is being truncated (vendor cursor expired? state size?). |
+| `item_etags.<task-id>` value missing for a uid present in `idMap` | Stale/incomplete adapter_state — likely from a partial rebuild, migration drop, or an item that was never RefreshItemBaseline'd. | Force-resync the binding to repopulate adapter_state. |
 
 ### 11.2 Self-heal hooks
 
@@ -702,6 +779,59 @@ limitation.
 Ten failures span: 60s + 120s + 240s + ... + 30720s (capped),
 total ~17 minutes of attempts before dead-letter.
 
+**Known limitation:** retry backoff is per-uid, not per-binding
+or per-(profile, kind). During a vendor-wide outage, all uids on
+all bindings of that kind enter independent backoff schedules
+simultaneously, producing thundering-herd retry against an
+already-unhealthy vendor. Per-(profile, kind) circuit-breaker
+tracking consecutive 5xx + auto-pause is tracked as future work.
+
+### 11.8 Cost model (informational)
+
+Per binding per tick at steady state, in vendor RPCs:
+
+- **PullRemote:** 1 (incremental; may paginate at very large
+  lists).
+- **applyInbound:** 0 (engine-internal; wiki writes only).
+- **pushOutbound:** 1 per uid with `WikiDiverged=true` (no
+  batching primitive yet — see known limitation below).
+- **SyncCollectionState:** Keep — 0 if no new tags this tick,
+  else 1 Changes request to update LIST node tag-set and 1
+  per new label create. Tasks — 0.
+- **AdvanceCursor / SaveBinding:** 0 (wiki-internal).
+
+Worst-case sustained: `(1 + |changed_items|) RPC / tick` per
+binding. With 30s tick interval, Tasks at 600 RPC/min/user
+quota allows ≈ 300 changed items per 30s before quota pressure
+on a single binding. Multi-binding deployments must sum across
+bindings; multi-connector deployments multiply by the number of
+connectors per checklist.
+
+**Known limitation:** the BackendAdapter contract does not
+declare a batch primitive. Per-tick cost scales O(items
+requiring push) in RPCs. At current single-binding usage this is
+within vendor quotas; multi-binding scale-out will require
+revisiting the contract to add `BatchPatchRemote` /
+`BatchInsertRemote`.
+
+### 11.9 Per-RPC deadlines
+
+**Required:** every adapter primitive MUST enforce a per-RPC
+deadline (≤15s recommended) via `context.WithTimeout` wrapping
+the inbound `ctx`. Tick budget is the 30s scheduler interval;
+this leaves headroom for one retry within the same tick.
+
+**Failure mode if absent:** a vendor-side hang on a single RPC
+holds the per-checklist lease (§11.3) for the duration of the
+hang, starves the next debouncer firing, and can wedge a binding
+indefinitely on a hung TCP connection. Without deadlines, a
+single vendor-side incident can convert into a "engine wedged,
+restart required" outage.
+
+**Known limitation:** as of v3, deadlines are NOT enforced by
+the adapter contract or by a lint rule. Each adapter is
+individually responsible. Tracked as engine-level work.
+
 ---
 
 ## 12. Bind ceremony
@@ -750,8 +880,8 @@ total ~17 minutes of attempts before dead-letter.
 
 - `subscriptions[]` → `bindings[]` (Phase 7, idempotent eager).
 - Legacy adapter state translated:
-  - Tasks: `synced_items` dropped (causal divergence replaces
-    fingerprint comparison).
+  - Tasks: `synced_items` dropped (observed-divergence
+    classification replaces fingerprint comparison).
   - Keep: `item_id_map[uid] = ItemMapping{…}` → flat
     `item_id_map[uid] = serverID` (engine) AND structured
     `item_mapping[serverID] = {server_id, base_version,
@@ -822,5 +952,13 @@ with the rule(s) that enforce it.
 - MATRIX.md: per-row audit of which behaviors are engine-owned
   vs. adapter-specific.
 - This document: authoritative single source of truth for the
-  sync contract. v2 incorporates the 2026-05-07 panel review
-  (Kleppmann, Helland, Shapiro, Bailis, Lamport).
+  sync contract. v3 incorporates round-2 panel findings from
+  Kleppmann, Helland, Shapiro, Bailis, and Lamport (2026-05-07):
+  added §10.13–§10.16 (Deleted+UCE hole, in-flight click loss,
+  multi-connector bind warning, multi-process defense),
+  availability stance preface to §10, mid-SyncCollectionState
+  crash row in §7, seven additional forensic catalog rows in
+  §11.1, cost model §11.8, per-RPC deadline contract §11.9.
+  Strict invariants in §16 are unchanged from v2; the round-2
+  additions are scope-of-non-guarantees and operability
+  surface, not safety-property strengthening.
