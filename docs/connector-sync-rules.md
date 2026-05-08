@@ -712,7 +712,8 @@ indicate specific conditions:
 | `state=paused` AND `paused_reason=auth_failed` | Token expired or revoked. | Reconnect via UI. |
 | `state=paused` AND `paused_at` > 7 days ago AND user resumes | Resume triggers ForceFullResync. | Wait for one tick after resume. |
 | `idMap` empty AND `remote_handle` non-empty | Insert-recovery will trigger on next push. | Wait one tick; or force-resync. |
-| `remote_handle` empty | Migration gap; binding fundamentally broken. | Operator must unbind + rebind. |
+| `remote_handle` empty AND `state=paused` AND `paused_reason=remote_handle_empty` | Migration gap; binding fundamentally broken. Engine paused it on first reconcile after the fix landed (2026-05-08) so it stops hammering Keep with orphan inserts. | Operator must unbind + rebind. |
+| `remote_handle` empty AND `state=active` (legacy data, pre-2026-05-08) | Same migration gap, observed before the auto-pause fix. May appear briefly after the binary upgrades; reconciles after upgrade auto-transition to paused. | Wait one tick (auto-pause), then unbind + rebind. |
 | `keep_note_client_id` empty AND `remote_handle` non-empty | Self-heal will capture from LIST node on next pull (or trigger ForceFullResync). | Wait one tick. |
 | `keep_cursor` invalid (engine logs `truncated_pull`) | ForceFullResync triggered next tick. | Wait one tick. |
 | Op-log has `outbound_patched` immediately after `user:` event with same uid AND tick advanced to that seq | Healthy: push round-tripped. | None. |

@@ -12,6 +12,18 @@ import (
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 )
 
+// pausedReasonRemoteHandleEmpty is the PausedReason the engine stamps
+// when reconcile observes an active binding whose RemoteHandle is the
+// empty string. This is documented in rules §11.1 as a
+// "fundamentally broken; operator must unbind + rebind" forensic
+// state — usually the residue of a legacy migration gap (e.g.,
+// keep_note_id → remote_handle alias not translated). Without this
+// transition, every tick attempts InsertRemote with an empty
+// parentId, Keep silently drops the orphan LIST_ITEM, the response
+// fails to echo our clientItemID, and the engine spins on
+// runInsertRecovery indefinitely (production observation 2026-05-08).
+const pausedReasonRemoteHandleEmpty = "remote_handle_empty"
+
 // pausedReasonAuthFailed is the canonical PausedReason the engine
 // stamps when ClassifyError returns ErrorClassAuthFailed. Both Tasks
 // and Keep currently surface the same string in the UI's paused-badge
@@ -92,6 +104,18 @@ func (e *Engine) reconcile(ctx context.Context, key connectors.BindingKey) error
 
 	if binding.IsPaused() {
 		return nil
+	}
+
+	// Empty RemoteHandle = legacy migration gap (rules §11.1). The
+	// adapter cannot construct a valid push payload (parentId would be
+	// empty and Keep silently drops orphan LIST_ITEMs), so every tick
+	// would loop on insert-recovery without progress. Pause the binding
+	// so the operator sees a clear surface and re-binds. Logged at
+	// INFO so an operator following journalctl can find the trigger.
+	if binding.RemoteHandle == "" {
+		e.logger.Info("connectors/engine: paused_remote_handle_empty kind=%s profile=%s page=%s list=%s",
+			kind, string(profileID), key.Page, key.ListName)
+		return e.applyPausedTransitionIgnoringRace(profileID, kind, key.Page, key.ListName, pausedReasonRemoteHandleEmpty)
 	}
 
 	now := e.clock.Now()
@@ -647,10 +671,17 @@ func (e *Engine) advanceLastSyncedSeq(ctx context.Context, binding connectors.Bi
 // steady-state condition (the next user-initiated Resume / Reconnect
 // is the recovery path), not a sync error to bubble up.
 func (e *Engine) handleAuthFailure(profileID wikipage.PageIdentifier, kind connectors.ConnectorKind, page, listName string) error {
-	if err := e.applyPausedTransition(profileID, kind, page, listName, pausedReasonAuthFailed); err != nil {
-		// If the transition itself fails (e.g., the binding vanished
-		// between FindBinding and SaveBinding), treat ErrBindingNotFound
-		// as a benign race; everything else is a real error.
+	return e.applyPausedTransitionIgnoringRace(profileID, kind, page, listName, pausedReasonAuthFailed)
+}
+
+// applyPausedTransitionIgnoringRace wraps applyPausedTransition with
+// the engine's standard "ErrBindingNotFound is benign" handling. The
+// binding can vanish between the FindBinding read at top of reconcile
+// and the SaveBinding write inside applyPausedTransition (e.g., a
+// concurrent Unbind), so a NotFound here is a race, not an error.
+// Other errors propagate.
+func (e *Engine) applyPausedTransitionIgnoringRace(profileID wikipage.PageIdentifier, kind connectors.ConnectorKind, page, listName, reason string) error {
+	if err := e.applyPausedTransition(profileID, kind, page, listName, reason); err != nil {
 		if errors.Is(err, ErrBindingNotFound) {
 			return nil
 		}

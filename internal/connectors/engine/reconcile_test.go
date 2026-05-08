@@ -336,6 +336,58 @@ var _ = Describe("Engine.reconcile", func() {
 		})
 	})
 
+	// Production regression 2026-05-08: user observed an
+	// insert-recovery loop on a Keep binding whose RemoteHandle was
+	// empty (legacy migration gap). Every 30s tick: InsertRemote
+	// sent a payload with empty parentId/parentServerId (Go's
+	// json:omitempty strips the zero string), Keep silently dropped
+	// the orphan LIST_ITEM, response didn't echo our clientItemID,
+	// adapter returned ErrProtocolDrift → PreconditionFailed →
+	// runInsertRecovery → RebuildAdapterState (full pull every 30s).
+	// Documented in §11.1 as "Operator must unbind + rebind" but
+	// the engine kept hammering Keep forever instead of pausing.
+	// Fix: at reconcile entry, if binding.RemoteHandle is empty,
+	// transition to paused with reason "remote_handle_empty" so
+	// the operator sees a clear paused-binding badge and can
+	// re-bind without consuming RPC quota.
+	When("the binding has an empty RemoteHandle (migration gap)", func() {
+		var (
+			syncErr      error
+			savedBinding connectors.Binding
+		)
+
+		BeforeEach(func() {
+			fbs.SeedBinding(connectors.Binding{
+				ProfileID: profileID, Page: page, ListName: listName,
+				RemoteHandle:         "",
+				State:                connectors.BindingStateActive,
+				LastSuccessfulSyncAt: reconcilePastChokePausedAt,
+			}, ownerKind)
+
+			syncErr = eng.Sync(ctx, key)
+			if len(fbs.RecordedSaveBinding) > 0 {
+				savedBinding = fbs.RecordedSaveBinding[len(fbs.RecordedSaveBinding)-1].Binding
+			}
+		})
+
+		It("should not return an error (paused is a steady-state)", func() {
+			Expect(syncErr).NotTo(HaveOccurred())
+		})
+
+		It("should NOT call PullRemote (the binding is fundamentally broken)", func() {
+			Expect(fa.RecordedPullRemote).To(BeEmpty(),
+				"engine called PullRemote with empty RemoteHandle — production regression 2026-05-08, insert-recovery loop")
+		})
+
+		It("should transition the binding to paused", func() {
+			Expect(savedBinding.State).To(Equal(connectors.BindingStatePaused))
+		})
+
+		It("should set PausedReason to 'remote_handle_empty'", func() {
+			Expect(savedBinding.PausedReason).To(Equal("remote_handle_empty"))
+		})
+	})
+
 	// Production regression 2026-05-08: user reported "Sync Now
 	// doesn't seem to be polling Keep/Tasks." Root cause: the engine
 	// had a 5s post-success rate-limit choke that returned nil before
