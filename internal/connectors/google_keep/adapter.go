@@ -229,6 +229,7 @@ func (a *KeepAdapter) PullRemote(ctx context.Context, binding connectors.Binding
 		return connectors.RemotePullResult{}, err
 	}
 
+	knownRefs := readItemIDMapServerIDSet(binding.AdapterState)
 	items := make([]connectors.RemoteItem, 0)
 	for _, n := range resp.Nodes {
 		if n.Type != gateway.NodeTypeListItem {
@@ -237,7 +238,21 @@ func (a *KeepAdapter) PullRemote(ctx context.Context, binding connectors.Binding
 		// Only items whose parent is the bound LIST node are visible
 		// to this binding. Keep's pull response is the user's whole
 		// account; filter to our list.
-		if n.ParentID != binding.RemoteHandle && n.ParentServerID != binding.RemoteHandle {
+		//
+		// Exception (production fix 2026-05-07): tombstones can arrive
+		// with cleared parent linkage when the node was removed from a
+		// list (Keep clears ParentID/ParentServerID on user-driven
+		// deletes via the app). Without this exception, the engine
+		// never observes the deletion and the wiki keeps the stale
+		// item. Allow the tombstone through if its ServerID is in our
+		// item_id_map — we know about it, the deletion is in scope.
+		inOurList := n.ParentID == binding.RemoteHandle || n.ParentServerID == binding.RemoteHandle
+		isKnownTombstone := !n.Timestamps.Trashed.IsZero() || !n.Timestamps.Deleted.IsZero()
+		if isKnownTombstone {
+			_, known := knownRefs[n.ServerID]
+			isKnownTombstone = known
+		}
+		if !inOurList && !isKnownTombstone {
 			continue
 		}
 		item := listItemNodeToRemoteItem(n)
@@ -272,7 +287,13 @@ func (a *KeepAdapter) PullRemote(ctx context.Context, binding connectors.Binding
 	//      include the LIST node, so the next reconcile after the
 	//      resync will land in step 1.
 	truncated := resp.Truncated
-	if needsClientIDSelfHeal(binding) {
+	// Self-heal only applies when remote_handle is set. Bindings with
+	// empty remote_handle are fundamentally broken (legacy migration
+	// gap on `keep_note_id` → `remote_handle`) and re-binding is the
+	// only recovery — triggering ForceFullResync hammers the API
+	// without making progress (perpetual loop observed in production
+	// 2026-05-07 on a binding migrated without the alias translation).
+	if binding.RemoteHandle != "" && needsClientIDSelfHeal(binding) {
 		if captured := translator.FindListClientID(resp.Nodes, binding.RemoteHandle); captured != "" {
 			if binding.AdapterState == nil {
 				binding.AdapterState = connectors.AdapterState{}
@@ -288,6 +309,35 @@ func (a *KeepAdapter) PullRemote(ctx context.Context, binding connectors.Binding
 		NewCursor: resp.ToVersion,
 		Truncated: truncated,
 	}, nil
+}
+
+// readItemIDMapServerIDSet returns the set of ServerIDs (values) in
+// the engine's item_id_map subtree. PullRemote uses this to identify
+// known-by-us items for tombstone-with-cleared-parent recovery.
+func readItemIDMapServerIDSet(state connectors.AdapterState) map[string]struct{} {
+	out := map[string]struct{}{}
+	if state == nil {
+		return out
+	}
+	raw, ok := state["item_id_map"]
+	if !ok {
+		return out
+	}
+	switch m := raw.(type) {
+	case map[string]string:
+		for _, v := range m {
+			if v != "" {
+				out[v] = struct{}{}
+			}
+		}
+	case map[string]any:
+		for _, v := range m {
+			if s, isStr := v.(string); isStr && s != "" {
+				out[s] = struct{}{}
+			}
+		}
+	}
+	return out
 }
 
 // needsClientIDSelfHeal reports whether the binding's stored

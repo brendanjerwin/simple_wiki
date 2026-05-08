@@ -352,6 +352,83 @@ var _ = Describe("KeepAdapter", func() {
 			})
 		})
 
+		// Production bug 2026-05-07: user deletes item in Keep app →
+		// engine doesn't mirror to wiki. Keep tombstones can arrive
+		// with cleared parent linkage (ParentID/ParentServerID empty
+		// when the node is removed from a list). The strict parent
+		// filter dropped these tombstones, so the engine never
+		// observed the deletion and the wiki kept the stale item.
+		// Fix: also accept items whose ServerID is in our
+		// item_id_map — we know about them, a tombstone for them is
+		// in scope regardless of parent.
+		When("a deleted node arrives with cleared parent linkage but its ServerID is in our item_id_map", func() {
+			BeforeEach(func() {
+				binding.AdapterState = connectors.AdapterState{
+					"item_id_map": map[string]any{
+						"uid-tomb-1": "srv-deleted-by-user",
+					},
+				}
+				fakeClient.changesDefault = gateway.ChangesResponse{
+					ToVersion: "v100",
+					Nodes: []gateway.Node{
+						{
+							// Tombstone: parent linkage cleared by Keep.
+							ID:       "client-deleted",
+							ServerID: "srv-deleted-by-user",
+							Type:     gateway.NodeTypeListItem,
+							// ParentID + ParentServerID intentionally empty
+							Timestamps: gateway.Timestamps{
+								Deleted: time.Date(2026, 5, 7, 23, 55, 0, 0, time.UTC),
+							},
+						},
+					},
+				}
+				result, pullErr = adapter.PullRemote(ctx, binding)
+			})
+
+			It("should not error", func() {
+				Expect(pullErr).NotTo(HaveOccurred())
+			})
+
+			It("should include the tombstone in the pulled items so the engine can mirror the delete", func() {
+				Expect(result.Items).To(HaveLen(1))
+				Expect(result.Items[0].Ref).To(Equal(connectors.RemoteRef("srv-deleted-by-user")))
+				Expect(result.Items[0].Deleted).To(BeTrue())
+			})
+		})
+
+		When("a deleted node arrives with cleared parent linkage AND its ServerID is NOT in our item_id_map", func() {
+			// Negative case: Keep account-wide pulls return tombstones
+			// for items in OTHER lists that we don't track. The
+			// item_id_map lookup keeps us from accidentally adopting
+			// those.
+			BeforeEach(func() {
+				binding.AdapterState = connectors.AdapterState{
+					"item_id_map": map[string]any{
+						"uid-known": "srv-in-our-list",
+					},
+				}
+				fakeClient.changesDefault = gateway.ChangesResponse{
+					ToVersion: "v101",
+					Nodes: []gateway.Node{
+						{
+							ID:       "client-foreign",
+							ServerID: "srv-in-other-list",
+							Type:     gateway.NodeTypeListItem,
+							Timestamps: gateway.Timestamps{
+								Deleted: time.Date(2026, 5, 7, 23, 55, 0, 0, time.UTC),
+							},
+						},
+					},
+				}
+				result, pullErr = adapter.PullRemote(ctx, binding)
+			})
+
+			It("should NOT include the foreign tombstone", func() {
+				Expect(result.Items).To(BeEmpty())
+			})
+		})
+
 		// keep_note_client_id self-heal — legacy keepsync had this and
 		// it was lost in the Phase 5-A port. Bindings with empty
 		// keep_note_client_id permanently fail label CRUD pushes
@@ -410,6 +487,34 @@ var _ = Describe("KeepAdapter", func() {
 			It("should signal Truncated=true to force a full resync (which will include the LIST node)", func() {
 				Expect(result.Truncated).To(BeTrue(),
 					"adapter should request a full resync when keep_note_client_id is empty and the LIST node didn't appear in the incremental pull")
+			})
+		})
+
+		When("the binding has an empty remote_handle (broken-migration case)", func() {
+			// Self-heal must NOT trigger Truncated=true when remote_handle
+			// is empty — the binding is fundamentally broken (legacy
+			// keep_note_id alias was never translated to remote_handle by
+			// the buggy Phase 7 migration). Production 2026-05-07: the
+			// ingredients-on-hand binding had remote_handle="" and the
+			// initial self-heal added Truncated=true on every tick,
+			// causing a perpetual ForceFullResync loop that hammered
+			// Keep's API without making progress.
+			BeforeEach(func() {
+				binding.RemoteHandle = ""
+				binding.AdapterState = connectors.AdapterState{
+					googlekeep.AdapterStateKeyKeepNoteClientID: "",
+				}
+				fakeClient.changesDefault = gateway.ChangesResponse{ToVersion: "v13"}
+				result, pullErr = adapter.PullRemote(ctx, binding)
+			})
+
+			It("should not error", func() {
+				Expect(pullErr).NotTo(HaveOccurred())
+			})
+
+			It("should NOT set Truncated=true (self-heal can't help; need re-bind)", func() {
+				Expect(result.Truncated).To(BeFalse(),
+					"self-heal must bail on empty remote_handle to avoid perpetual ForceFullResync loop")
 			})
 		})
 
