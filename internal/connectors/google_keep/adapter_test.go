@@ -1088,7 +1088,7 @@ var _ = Describe("KeepAdapter", func() {
 					{MainID: "label-x", Name: "shopping"},
 				},
 			}
-			state, err = adapter.SeedBindingState(ctx, profile, remoteHandle)
+			state, err = adapter.SeedBindingState(ctx, profile, remoteHandle, nil)
 		})
 
 		It("should not error", func() {
@@ -1110,6 +1110,54 @@ var _ = Describe("KeepAdapter", func() {
 			labels, ok := state[googlekeep.AdapterStateKeyLabelIDs].(map[string]any)
 			Expect(ok).To(BeTrue())
 			Expect(labels).To(HaveKeyWithValue("shopping", "label-x"))
+		})
+
+		// Architectural fix 2026-05-08: bind-time alignment populates
+		// item_id_map by matching wiki uids to pulled Keep items via
+		// text. Without this, the first reconcile after Bind treated
+		// every Keep item as "unknown" (Keep has no wiki-uid marker)
+		// and either created duplicates (legacy) or relied on the
+		// engine's applyInbound dedup-by-text (downstream).
+		When("wikiItems are supplied with text matching some pulled items", func() {
+			var (
+				richState connectors.AdapterState
+				richErr   error
+			)
+
+			BeforeEach(func() {
+				fakeClient.changesDefault = gateway.ChangesResponse{
+					ToVersion: "v-rich",
+					Nodes: []gateway.Node{
+						{ServerID: remoteHandle, Type: gateway.NodeTypeList},
+						{ID: "cli-A", ServerID: "srv-A", Type: gateway.NodeTypeListItem, ParentID: remoteHandle, Text: "milk"},
+						{ID: "cli-B", ServerID: "srv-B", Type: gateway.NodeTypeListItem, ParentID: remoteHandle, Text: "eggs"},
+						{ID: "cli-C", ServerID: "srv-C", Type: gateway.NodeTypeListItem, ParentID: remoteHandle, Text: "orphan-no-wiki-match"},
+					},
+				}
+				richErr = nil
+				richState, richErr = adapter.SeedBindingState(ctx, profile, remoteHandle, []connectors.WikiItem{
+					{UID: "uid-A", Text: "milk"},
+					{UID: "uid-B", Text: "eggs"},
+					{UID: "uid-C", Text: "no-keep-match"},
+				})
+			})
+
+			It("should not error", func() {
+				Expect(richErr).NotTo(HaveOccurred())
+			})
+
+			It("should populate item_id_map for wiki uids that text-match a pulled item", func() {
+				idMap, ok := richState["item_id_map"].(map[string]any)
+				Expect(ok).To(BeTrue(),
+					"SeedBindingState did not populate item_id_map for bind-time alignment — production regression 2026-05-08")
+				Expect(idMap).To(HaveKeyWithValue("uid-A", "srv-A"))
+				Expect(idMap).To(HaveKeyWithValue("uid-B", "srv-B"))
+			})
+
+			It("should NOT invent idMap entries for wiki uids without a Keep match", func() {
+				idMap, _ := richState["item_id_map"].(map[string]any)
+				Expect(idMap).NotTo(HaveKey("uid-C"))
+			})
 		})
 
 		It("should record the to_version cursor", func() {
@@ -1247,6 +1295,50 @@ var _ = Describe("KeepAdapter", func() {
 			mapping, ok := state[googlekeep.AdapterStateKeyItemMapping].(map[string]any)
 			Expect(ok).To(BeTrue())
 			Expect(mapping).To(HaveKey("srv-x"))
+		})
+
+		// Architectural fix 2026-05-08 (user-approved): the legacy
+		// rebuild call wiped item_id_map (the wiki-uid → server-id
+		// map). On the next reconcile the engine treated every wiki
+		// item as new and re-Inserted them — duplicates at Keep.
+		// Fix: preserve idMap entries whose refs still appear in the
+		// rebuilt item_mapping.
+		When("the binding has an existing item_id_map", func() {
+			var (
+				preservedState connectors.AdapterState
+				preservedErr   error
+			)
+
+			BeforeEach(func() {
+				preservedBinding := connectors.Binding{
+					ProfileID: profile, RemoteHandle: remoteHandle,
+					AdapterState: connectors.AdapterState{
+						googlekeep.AdapterStateKeyKeepCursor: "v-stale",
+						"item_id_map": map[string]string{
+							"uid-still-here": "srv-x",       // ref still in rebuilt mapping → preserved
+							"uid-gone":       "srv-deleted", // ref no longer in remote → dropped
+						},
+					},
+				}
+				preservedState, preservedErr = adapter.RebuildAdapterState(ctx, preservedBinding)
+			})
+
+			It("should not error", func() {
+				Expect(preservedErr).NotTo(HaveOccurred())
+			})
+
+			It("should preserve item_id_map entries whose refs still exist in the rebuilt mapping", func() {
+				idMap, ok := preservedState["item_id_map"].(map[string]any)
+				Expect(ok).To(BeTrue(),
+					"engine wiped item_id_map on rebuild — duplicate-Insert hazard, production regression 2026-05-08")
+				Expect(idMap).To(HaveKeyWithValue("uid-still-here", "srv-x"))
+			})
+
+			It("should drop item_id_map entries whose refs are no longer in the remote", func() {
+				idMap, _ := preservedState["item_id_map"].(map[string]any)
+				Expect(idMap).NotTo(HaveKey("uid-gone"),
+					"rebuild kept stale uid → server-id mapping; would route through PATCH against a deleted ref")
+			})
 		})
 	})
 

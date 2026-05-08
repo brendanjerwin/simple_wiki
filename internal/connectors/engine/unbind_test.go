@@ -16,13 +16,16 @@ import (
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 )
 
-// stubChecklistReader is the no-op ChecklistReader the unbind tests
-// use. Unbind never consults the reader, so any call fails the test.
+// stubChecklistReader is the no-op ChecklistReader shared by the
+// bind / unbind / force_resync / resume tests. Returns an empty
+// checklist (no items) so callers that consult it (e.g., Bind's
+// bind-time alignment in #182) get a defined empty list instead of
+// nil. Unbind / force_resync / resume don't read the checklist;
+// their behavior is asserted via saved binding state.
 type stubChecklistReader struct{}
 
 func (stubChecklistReader) ListItems(_ context.Context, _, _ string) (*apiv1.Checklist, error) {
-	Fail("Unbind must not call ChecklistReader.ListItems")
-	return nil, nil
+	return &apiv1.Checklist{}, nil
 }
 
 // stubChecklistMutator is the no-op ChecklistMutator the unbind tests

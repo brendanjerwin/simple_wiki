@@ -777,7 +777,7 @@ func (*KeepAdapter) AdvanceCursor(binding connectors.Binding, result connectors.
 // On a fresh (empty) Keep note the returned AdapterState carries
 // empty maps so EncodeAdapterState / DecodeAdapterState can round-trip
 // uniformly.
-func (a *KeepAdapter) SeedBindingState(ctx context.Context, profileID wikipage.PageIdentifier, remoteHandle string) (connectors.AdapterState, error) {
+func (a *KeepAdapter) SeedBindingState(ctx context.Context, profileID wikipage.PageIdentifier, remoteHandle string, wikiItems []connectors.WikiItem) (connectors.AdapterState, error) {
 	client, err := a.buildClientForProfile(ctx, profileID)
 	if err != nil {
 		return nil, err
@@ -792,10 +792,9 @@ func (a *KeepAdapter) SeedBindingState(ctx context.Context, profileID wikipage.P
 	}
 	itemMapping := map[string]any{}
 	// Build a per-server-id mapping from the live LIST_ITEMs under
-	// our list. The engine's first reconcile tick text-matches wiki
-	// items against pulled LIST_ITEMs and mints uid mappings; here we
-	// pre-populate per-server-id so subsequent pushes have the
-	// (ClientID, BaseVersion) pair Keep requires.
+	// our list AND a text → server-id index for the bind-time
+	// alignment pass below.
+	textToServerID := map[string]string{}
 	for _, n := range pull.Nodes {
 		if n.Type != gateway.NodeTypeListItem {
 			continue
@@ -810,7 +809,48 @@ func (a *KeepAdapter) SeedBindingState(ctx context.Context, profileID wikipage.P
 			continue
 		}
 		itemMapping[n.ServerID] = encodeItemMappingFields(n.ServerID, n.BaseVersion, n.ID)
+		// First-write-wins on duplicate text in the pulled set
+		// (rare; the operator may already have duplicates from
+		// pre-fix sync bugs). Subsequent same-text Keep items remain
+		// unmapped here; the engine's applyInbound dedup-by-text is
+		// the safety net for any unmapped items the next reconcile
+		// processes.
+		if n.Text != "" {
+			if _, taken := textToServerID[n.Text]; !taken {
+				textToServerID[n.Text] = n.ServerID
+			}
+		}
 	}
+
+	// Bind-time alignment (architectural fix 2026-05-08): Keep has
+	// no native wiki-uid marker (unlike Tasks's `wiki:<uid>` Notes),
+	// so item_id_map cannot be derived from the pull alone. Match
+	// wiki items against the pulled set by text (the same canonical
+	// form WikiToRemote produces), pre-populating item_id_map at
+	// the seed step so the first reconcile after Bind doesn't
+	// duplicate. Without this, the first applyInbound saw every
+	// Keep item as "unknown" (RemoteToWiki returns wikiItem.UID="")
+	// and either took AddItemForSync (creating wiki duplicates) or
+	// — with the dedup pass also added today — at least did the
+	// matching there. Doing it at seed is earlier and authoritative.
+	itemIDMap := map[string]any{}
+	for _, w := range wikiItems {
+		if w.UID == "" {
+			continue
+		}
+		// Reuse the adapter's WikiToRemote canonicalization so the
+		// comparison key is exactly what the pulled Keep item's
+		// Text contains.
+		remoteForm, txErr := a.WikiToRemote(w)
+		if txErr != nil {
+			continue
+		}
+		if ref, ok := textToServerID[remoteForm.Title]; ok {
+			itemIDMap[w.UID] = ref
+			delete(textToServerID, remoteForm.Title)
+		}
+	}
+
 	labelIDs := map[string]any{}
 	for k, v := range translator.IndexLabelsByName(pull.Labels) {
 		labelIDs[k] = v
@@ -821,6 +861,7 @@ func (a *KeepAdapter) SeedBindingState(ctx context.Context, profileID wikipage.P
 		AdapterStateKeyKeepCursor:       pull.ToVersion,
 		AdapterStateKeyLabelIDs:         labelIDs,
 		AdapterStateKeyKeepNoteClientID: keepNoteClientID,
+		"item_id_map":                   itemIDMap,
 	}, nil
 }
 
@@ -868,8 +909,20 @@ func (a *KeepAdapter) ValidateRemoteBinding(ctx context.Context, profileID wikip
 // RebuildAdapterState pulls the full remote state and rebuilds
 // AdapterState from scratch. Resets the Keep cursor so the next
 // reconcile re-processes the world.
+//
+// Preserves the existing item_id_map (wiki-uid → server-id mapping)
+// for entries whose refs still appear in the rebuilt item_mapping.
+// Without this, every rebuild wiped uid → ref mappings and the next
+// reconcile re-Inserted every wiki item — creating duplicates at
+// Keep (production regression 2026-05-08, "shopping list is
+// doubled"). Entries pointing to refs that no longer exist remote-
+// side are dropped (the item was deleted/trashed).
 func (a *KeepAdapter) RebuildAdapterState(ctx context.Context, binding connectors.Binding) (connectors.AdapterState, error) {
-	state, err := a.SeedBindingState(ctx, binding.ProfileID, binding.RemoteHandle)
+	// Rebuild does not have ambient access to the wiki checklist's
+	// items; pass nil. The engine's applyInbound dedup-by-text and
+	// the preserveItemIDMap pass below handle the alignment role
+	// that wikiItems would otherwise play at bind time.
+	state, err := a.SeedBindingState(ctx, binding.ProfileID, binding.RemoteHandle, nil)
 	if err != nil {
 		return nil, fmt.Errorf("rebuild: %w", err)
 	}
@@ -878,7 +931,52 @@ func (a *KeepAdapter) RebuildAdapterState(ctx context.Context, binding connector
 	// for a fresh bind but wrong for a force-resync — the engine
 	// expects that rebuild restarts the cursor.
 	state[AdapterStateKeyKeepCursor] = ""
+
+	// Preserve item_id_map entries whose refs are still present in
+	// the rebuilt item_mapping. Drop entries pointing to refs that
+	// no longer exist on the remote.
+	state["item_id_map"] = preserveItemIDMap(binding.AdapterState, state)
+
 	return state, nil
+}
+
+// preserveItemIDMap walks the binding's existing item_id_map and
+// returns a new map containing only the entries whose ref is present
+// in the rebuilt state's item_mapping (i.e., the remote item still
+// exists). Used by RebuildAdapterState to avoid the legacy data-loss
+// behavior that produced duplicate Inserts after rebuild.
+func preserveItemIDMap(prevState, rebuiltState connectors.AdapterState) map[string]any {
+	out := map[string]any{}
+	if prevState == nil || rebuiltState == nil {
+		return out
+	}
+	mapping, ok := rebuiltState[AdapterStateKeyItemMapping].(map[string]any)
+	if !ok {
+		return out
+	}
+	rawIDMap, ok := prevState["item_id_map"]
+	if !ok {
+		return out
+	}
+	switch m := rawIDMap.(type) {
+	case map[string]string:
+		for uid, ref := range m {
+			if _, exists := mapping[ref]; exists {
+				out[uid] = ref
+			}
+		}
+	case map[string]any:
+		for uid, refRaw := range m {
+			ref, isStr := refRaw.(string)
+			if !isStr {
+				continue
+			}
+			if _, exists := mapping[ref]; exists {
+				out[uid] = ref
+			}
+		}
+	}
+	return out
 }
 
 // FetchRemoteListTitle returns the friendly title of the bound LIST

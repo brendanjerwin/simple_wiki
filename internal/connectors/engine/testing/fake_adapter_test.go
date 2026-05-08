@@ -127,7 +127,7 @@ var _ = Describe("FakeAdapter", func() {
 
 	Describe("SeedBindingState recording", func() {
 		BeforeEach(func() {
-			_, _ = fa.SeedBindingState(context.Background(), wikipage.PageIdentifier("profile_x"), "remote_handle_42")
+			_, _ = fa.SeedBindingState(context.Background(), wikipage.PageIdentifier("profile_x"), "remote_handle_42", nil)
 		})
 
 		It("should record the profile and remote handle", func() {

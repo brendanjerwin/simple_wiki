@@ -344,7 +344,7 @@ func (*TasksAdapter) AdvanceCursor(binding connectors.Binding, result connectors
 // On a fresh tasklist the returned AdapterState carries empty maps so
 // downstream consumers (RebuildAdapterState, EncodeAdapterState) can
 // treat presence/absence uniformly.
-func (a *TasksAdapter) SeedBindingState(ctx context.Context, profileID wikipage.PageIdentifier, remoteHandle string) (connectors.AdapterState, error) {
+func (a *TasksAdapter) SeedBindingState(ctx context.Context, profileID wikipage.PageIdentifier, remoteHandle string, _ []connectors.WikiItem) (connectors.AdapterState, error) {
 	client, err := a.buildClientForProfile(ctx, profileID)
 	if err != nil {
 		return nil, err

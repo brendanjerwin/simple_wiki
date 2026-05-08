@@ -381,7 +381,7 @@ func (f *FakeAdapter) RefreshItemBaseline(binding connectors.Binding, remote con
 }
 
 // SeedBindingState implements connectors.BackendAdapter.
-func (f *FakeAdapter) SeedBindingState(_ context.Context, profileID wikipage.PageIdentifier, remoteHandle string) (connectors.AdapterState, error) {
+func (f *FakeAdapter) SeedBindingState(_ context.Context, profileID wikipage.PageIdentifier, remoteHandle string, _ []connectors.WikiItem) (connectors.AdapterState, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.RecordedSeedBindingState = append(f.RecordedSeedBindingState, recordedSeedBindingState{ProfileID: profileID, RemoteHandle: remoteHandle})

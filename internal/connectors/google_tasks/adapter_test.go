@@ -652,7 +652,7 @@ var _ = Describe("TasksAdapter", func() {
 					{ID: "t-1", Etag: "e-1", Title: "milk", Notes: translator.WikiUIDMarker("U1")},
 					{ID: "t-2", Etag: "e-2", Title: "eggs"},
 				}
-				state, err = adapter.SeedBindingState(ctx, profile, remoteHandle)
+				state, err = adapter.SeedBindingState(ctx, profile, remoteHandle, nil)
 			})
 
 			It("should not error", func() {

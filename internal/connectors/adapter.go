@@ -119,11 +119,17 @@ type BackendAdapter interface {
 	// Bind ceremony (MATRIX row 2).
 
 	// SeedBindingState produces the initial AdapterState for a fresh
-	// binding. Tasks does a full-list scan + text-match seed for the
-	// existing list's items; Keep clones the wiki list onto a new
-	// Keep note and records the per-item ServerIDs. The engine calls
-	// this inside the bind mutex AFTER ValidateRemoteBinding passes.
-	SeedBindingState(ctx context.Context, profileID wikipage.PageIdentifier, remoteHandle string) (AdapterState, error)
+	// binding. The engine calls this inside the bind mutex AFTER
+	// ValidateRemoteBinding passes; the wikiItems argument is the
+	// current wiki checklist's items so the adapter can pre-populate
+	// item_id_map by matching wiki uids to remote items. Adapters
+	// with native wiki-uid markers (Tasks: `wiki:<uid>` Notes) ignore
+	// wikiItems — the marker drives alignment. Adapters without a
+	// marker (Keep) text-match wikiItems against the pulled remote
+	// items to populate item_id_map at bind time, closing the
+	// duplicate-Insert hazard observed 2026-05-08 (production
+	// regression).
+	SeedBindingState(ctx context.Context, profileID wikipage.PageIdentifier, remoteHandle string, wikiItems []WikiItem) (AdapterState, error)
 
 	// ValidateRemoteBinding checks per-adapter pre-conditions before
 	// the engine writes a new binding to the profile. Tasks rejects

@@ -75,8 +75,18 @@ func (e *Engine) Bind(
 				existing.Kind, existing.ProfileID)
 		}
 
+		// Read the wiki checklist's current items so the adapter can
+		// pre-populate item_id_map by matching wiki uids to remote
+		// items at the seed step. Architectural fix 2026-05-08: Keep
+		// has no native wiki-uid marker, so without this the first
+		// reconcile after Bind would see every Keep item as
+		// "unknown" and either duplicate the wiki state (legacy) or
+        // fall through to the engine's applyInbound dedup-by-text
+        // (which works but is downstream of the gap).
+		wikiItems := readWikiItemsForBindSeed(ctx, e.checklist, page, listName)
+
 		seedCtx, seedCancel := e.withRPCDeadline(ctx)
-		adapterState, err := e.adapter.SeedBindingState(seedCtx, profileID, remoteHandle)
+		adapterState, err := e.adapter.SeedBindingState(seedCtx, profileID, remoteHandle, wikiItems)
 		seedCancel()
 		if err != nil {
 			return fmt.Errorf("seed adapter state for %s on profile %s: %w",
@@ -125,4 +135,35 @@ func (e *Engine) Bind(
 	e.logger.Info("connectors/engine: bind kind=%s profile=%s page=%s list=%s remote=%s",
 		kind, string(profileID), page, listName, remoteHandle)
 	return result, nil
+}
+
+// readWikiItemsForBindSeed reads the wiki checklist's current items
+// and returns them as []connectors.WikiItem for the adapter's
+// SeedBindingState pass. Errors are silenced — a missing item list
+// at bind time just disables bind-time alignment; the engine's
+// applyInbound dedup-by-text remains as the safety net.
+func readWikiItemsForBindSeed(ctx context.Context, reader ChecklistReader, page, listName string) []connectors.WikiItem {
+	if reader == nil {
+		return nil
+	}
+	cl, err := reader.ListItems(ctx, page, listName)
+	if err != nil || cl == nil {
+		return nil
+	}
+	out := make([]connectors.WikiItem, 0, len(cl.GetItems()))
+	for _, it := range cl.GetItems() {
+		uid := it.GetUid()
+		if uid == "" {
+			continue
+		}
+		out = append(out, connectors.WikiItem{
+			UID:         uid,
+			Text:        it.GetText(),
+			Checked:     it.GetChecked(),
+			Tags:        it.GetTags(),
+			Description: it.GetDescription(),
+			SortOrder:   it.GetSortOrder(),
+		})
+	}
+	return out
 }
