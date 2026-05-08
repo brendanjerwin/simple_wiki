@@ -232,28 +232,31 @@ func (a *KeepAdapter) PullRemote(ctx context.Context, binding connectors.Binding
 	knownRefs := readItemIDMapServerIDSet(binding.AdapterState)
 	items := make([]connectors.RemoteItem, 0)
 	for _, n := range resp.Nodes {
-		if n.Type != gateway.NodeTypeListItem {
-			continue
-		}
-		// Only items whose parent is the bound LIST node are visible
-		// to this binding. Keep's pull response is the user's whole
-		// account; filter to our list.
-		//
-		// Exception (production fix 2026-05-07): tombstones can arrive
-		// with cleared parent linkage when the node was removed from a
-		// list (Keep clears ParentID/ParentServerID on user-driven
-		// deletes via the app). Without this exception, the engine
-		// never observes the deletion and the wiki keeps the stale
-		// item. Allow the tombstone through if its ServerID is in our
-		// item_id_map — we know about it, the deletion is in scope.
-		inOurList := n.ParentID == binding.RemoteHandle || n.ParentServerID == binding.RemoteHandle
-		isKnownTombstone := !n.Timestamps.Trashed.IsZero() || !n.Timestamps.Deleted.IsZero()
-		if isKnownTombstone {
-			_, known := knownRefs[n.ServerID]
-			isKnownTombstone = known
-		}
-		if !inOurList && !isKnownTombstone {
-			continue
+		// Production fix 2026-05-08: a tombstone for a known item must
+		// be accepted regardless of node Type and parent linkage. Keep
+		// strips both fields when a user deletes the item via the app
+		// — the only stable identity left is ServerID, and we recognize
+		// it as ours via item_id_map. This check has to run BEFORE the
+		// type filter; the legacy ordering (type filter first) dropped
+		// typeless tombstones silently. (User-reported 2026-05-08:
+		// "deletes from keep side didn't sync"; logs showed barebones
+		// tombstones with no Type, no parent, just id+serverId+deleted
+		// timestamp.)
+		isTombstone := !n.Timestamps.Trashed.IsZero() || !n.Timestamps.Deleted.IsZero()
+		_, knownRef := knownRefs[n.ServerID]
+		isKnownTombstone := isTombstone && knownRef
+
+		if !isKnownTombstone {
+			// Non-tombstone (or tombstone we don't know about): apply
+			// the standard structural filters. Items must be of type
+			// LIST_ITEM and parented to our LIST node.
+			if n.Type != gateway.NodeTypeListItem {
+				continue
+			}
+			inOurList := n.ParentID == binding.RemoteHandle || n.ParentServerID == binding.RemoteHandle
+			if !inOurList {
+				continue
+			}
 		}
 		item := listItemNodeToRemoteItem(n)
 		// ADR-0015 Fix #1: populate RemoteDiverged by comparing the

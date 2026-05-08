@@ -397,6 +397,55 @@ var _ = Describe("KeepAdapter", func() {
 			})
 		})
 
+		// Production regression 2026-05-08: deeper variant of the
+		// cleared-parent tombstone case above. Real Keep tombstones
+		// for user-deleted items can arrive with NO `type` field at
+		// all (not even `LIST_ITEM`) — just an id, serverId, and a
+		// `deleted` timestamp. The earlier filter at the top of
+		// PullRemote (`if n.Type != NodeTypeListItem { continue }`)
+		// dropped these BEFORE the cleared-parent exception could
+		// catch them. Result: engine never observed the deletion;
+		// wiki kept the stale item; the same stale item appeared in
+		// every subsequent pull. Fix: the known-ref tombstone
+		// exception must also override the type check, not just the
+		// parent check. See ServerID lookup against item_id_map.
+		When("a deleted node arrives with NO type field but its ServerID is in our item_id_map", func() {
+			BeforeEach(func() {
+				binding.AdapterState = connectors.AdapterState{
+					"item_id_map": map[string]any{
+						"uid-tomb-no-type-1": "srv-deleted-no-type",
+					},
+				}
+				fakeClient.changesDefault = gateway.ChangesResponse{
+					ToVersion: "v200",
+					Nodes: []gateway.Node{
+						{
+							// Production-shape barebones tombstone:
+							// no Type, no parent linkage, just id +
+							// serverId + a deleted timestamp.
+							ID:       "cbx.z39p6v77cl6t",
+							ServerID: "srv-deleted-no-type",
+							Timestamps: gateway.Timestamps{
+								Deleted: time.Date(2026, 5, 8, 10, 36, 50, 1_000_000, time.UTC),
+							},
+						},
+					},
+				}
+				result, pullErr = adapter.PullRemote(ctx, binding)
+			})
+
+			It("should not error", func() {
+				Expect(pullErr).NotTo(HaveOccurred())
+			})
+
+			It("should include the typeless tombstone so the engine can mirror the delete to wiki", func() {
+				Expect(result.Items).To(HaveLen(1),
+					"engine dropped a typeless tombstone for a known item — production regression 2026-05-08, Keep deletes not propagating to wiki")
+				Expect(result.Items[0].Ref).To(Equal(connectors.RemoteRef("srv-deleted-no-type")))
+				Expect(result.Items[0].Deleted).To(BeTrue())
+			})
+		})
+
 		When("a deleted node arrives with cleared parent linkage AND its ServerID is NOT in our item_id_map", func() {
 			// Negative case: Keep account-wide pulls return tombstones
 			// for items in OTHER lists that we don't track. The
