@@ -260,6 +260,16 @@ func (e *Engine) applyInbound(
 		refToUID[ref] = uid
 	}
 
+	// Text → wiki uid index of items currently in the wiki that are
+	// NOT in idMap. Used to dedup an inbound remote item against an
+	// unbound wiki item with matching text — closes the duplicate-
+	// Insert hazard observed 2026-05-08 when Keep's RemoteToWiki
+	// returns wikiItem.UID="" (Keep has no wiki-uid marker, unlike
+	// Tasks's `wiki:<uid>` Notes), and the engine would otherwise
+	// AddItemForSync a fresh duplicate every reconcile that ran
+	// after a state rebuild. See applyInboundOneItem for usage.
+	wikiByText := e.indexUnboundWikiItemsByText(ctx, binding, idMap)
+
 	for _, remoteItem := range items {
 		// Refresh the per-item concurrency baseline (Tasks: item_etags;
 		// Keep: item_mapping.base_version) from the just-pulled remote
@@ -271,11 +281,48 @@ func (e *Engine) applyInbound(
 		if !remoteItem.Deleted {
 			binding = e.adapter.RefreshItemBaseline(binding, remoteItem)
 		}
-		if err := e.applyInboundOneItem(ctx, binding, remoteItem, classification, idMap, refToUID); err != nil {
+		if err := e.applyInboundOneItem(ctx, binding, remoteItem, classification, idMap, refToUID, wikiByText); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+// indexUnboundWikiItemsByText reads the wiki checklist and returns a
+// text → wiki uid map of items NOT currently in idMap. Used by
+// applyInboundOneItem to adopt an unbound wiki item that text-matches
+// a pulled remote item rather than creating a fresh duplicate via
+// AddItemForSync. Errors are silenced — a missing index just disables
+// dedup; the engine still functions correctly (with the pre-existing
+// duplicate hazard) if the read fails.
+func (e *Engine) indexUnboundWikiItemsByText(ctx context.Context, binding connectors.Binding, idMap map[string]string) map[string]string {
+	cl, err := e.checklist.ListItems(ctx, binding.Page, binding.ListName)
+	if err != nil || cl == nil {
+		return map[string]string{}
+	}
+	out := map[string]string{}
+	for _, it := range cl.GetItems() {
+		uid := it.GetUid()
+		if uid == "" {
+			continue
+		}
+		if _, bound := idMap[uid]; bound {
+			continue
+		}
+		text := it.GetText()
+		if text == "" {
+			continue
+		}
+		// First-write-wins: if multiple unbound wiki items share a
+		// text (rare but possible), the first one in iteration order
+		// wins the index slot. Subsequent duplicates remain unbound;
+		// they'll match later pull items if available.
+		if _, taken := out[text]; taken {
+			continue
+		}
+		out[text] = uid
+	}
+	return out
 }
 
 // applyInboundOneItem handles a single remote item's inbound apply,
@@ -290,6 +337,7 @@ func (e *Engine) applyInboundOneItem(
 	classification map[string]EventClassification,
 	idMap map[string]string,
 	refToUID map[string]string,
+	wikiByText map[string]string,
 ) error {
 	if remoteItem.Deleted {
 		uid, hasUID := refToUID[string(remoteItem.Ref)]
@@ -377,6 +425,27 @@ func (e *Engine) applyInboundOneItem(
 		}
 		idMap[uid] = string(remoteItem.Ref)
 		refToUID[string(remoteItem.Ref)] = uid
+		return nil
+	}
+
+	// Dedup-by-text: before creating a fresh wiki item, look for an
+	// existing unbound wiki item whose text equals the inbound
+	// remoteItem's translated text. Closes the duplicate-Insert
+	// hazard observed 2026-05-08 (Keep returns no wiki-uid marker,
+	// so RemoteToWiki always yields wikiItem.UID="" — without this
+	// dedup, every reconcile after a state rebuild would
+	// AddItemForSync a duplicate). See indexUnboundWikiItemsByText.
+	if matchUID, found := wikiByText[wikiItem.Text]; found {
+		e.logger.Info("connectors/engine: applyInbound_dedup_adopted_existing kind=%s profile=%s page=%s list=%s uid=%s ref=%s",
+			e.adapter.Kind(), string(binding.ProfileID), binding.Page, binding.ListName, matchUID, string(remoteItem.Ref))
+		if updErr := e.mutator.UpdateItemForSync(ctx, binding.Page, binding.ListName, "", matchUID,
+			wikiItem.Text, wikiItem.Checked, wikiItem.Tags, wikiItem.Description); updErr != nil {
+			return fmt.Errorf("update adopted wiki item %s on profile %s: %w",
+				matchUID, binding.ProfileID, updErr)
+		}
+		idMap[matchUID] = string(remoteItem.Ref)
+		refToUID[string(remoteItem.Ref)] = matchUID
+		delete(wikiByText, wikiItem.Text)
 		return nil
 	}
 

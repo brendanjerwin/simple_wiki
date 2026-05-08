@@ -996,6 +996,72 @@ var _ = Describe("Engine.reconcile", func() {
 		})
 	})
 
+	// Production regression 2026-05-08: user reported "shopping list is
+	// doubled (tripled actually)." Root cause: Keep's InsertRemote
+	// can return ErrProtocolDrift (response doesn't echo our
+	// clientItemID) even when the insert actually succeeded server-
+	// side. Without dedup, the next reconcile sees the wiki uid as
+	// still-not-in-idMap and re-Inserts — creating a duplicate. Fix:
+	// before InsertRemote, scan the latest pull for a content-match
+	// (Title) and adopt the existing ref into idMap if found. The
+	// adapter's WikiToRemote produces the canonical Title that pulled
+	// items also carry.
+	When("a remote pull item content-matches an unbound wiki item (Keep-style empty wikiItem.UID)", func() {
+		const wikiUID = "uid-dedup-1"
+		var (
+			syncErr      error
+			savedBinding connectors.Binding
+		)
+
+		BeforeEach(func() {
+			fbs.SeedBinding(connectors.Binding{
+				ProfileID: profileID, Page: page, ListName: listName,
+				RemoteHandle:         "tasklist-1",
+				State:                connectors.BindingStateActive,
+				LastSuccessfulSyncAt: reconcilePastChokePausedAt,
+				AdapterState:         connectors.AdapterState{"item_id_map": map[string]string{}},
+			}, ownerKind)
+
+			// Realistic Keep scenario: RemoteToWiki returns wikiItem
+			// with UID="" because Keep has no wiki-uid marker. Without
+			// dedup, applyInbound takes the AddItemForSync path and
+			// duplicates the wiki item. With the dedup-by-text fix,
+			// the engine matches against the existing wiki uid and
+			// adopts the remote ref via UpdateItemForSync.
+			fa.SetPullRemoteResponse(connectors.RemotePullResult{
+				Items: []connectors.RemoteItem{{Ref: "ref-existing", Title: "milk"}},
+			}, nil)
+			fa.SetRemoteToWikiResponse(connectors.WikiItem{UID: "", Text: "milk"}, nil)
+
+			reader.checklist = &apiv1.Checklist{
+				Items: []*apiv1.ChecklistItem{{Uid: wikiUID, Text: "milk"}},
+			}
+
+			syncErr = eng.Sync(ctx, key)
+			if len(fbs.RecordedSaveBinding) > 0 {
+				savedBinding = fbs.RecordedSaveBinding[len(fbs.RecordedSaveBinding)-1].Binding
+			}
+		})
+
+		It("should not return an error", func() {
+			Expect(syncErr).NotTo(HaveOccurred())
+		})
+
+		It("should NOT call AddItemForSync (no duplicate wiki item)", func() {
+			Expect(mutator.recordingChecklistMutator.addCalls).To(BeEmpty(),
+				"engine duplicated a wiki item that text-matched an unbound pulled item — production regression 2026-05-08, shopping list duplicates")
+		})
+
+		It("should record the existing ref into idMap under the original wiki uid", func() {
+			idMap, _ := savedBinding.AdapterState["item_id_map"].(map[string]string)
+			Expect(idMap).To(HaveKeyWithValue(wikiUID, "ref-existing"))
+		})
+
+		It("should NOT call InsertRemote (the wiki uid now routes through Patch)", func() {
+			Expect(fa.RecordedInsertRemote).To(BeEmpty())
+		})
+	})
+
 	// Production regression 2026-05-08: user reported "wiki side delete
 	// didn't propagate to keep side." Logs showed Keep DeleteRemote
 	// returning ErrProtocolDrift (stage3 HTTP 500) which the adapter
