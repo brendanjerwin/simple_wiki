@@ -585,12 +585,34 @@ export class ConnectorBindButton extends LitElement {
     const pausedAt = timestampToDate(
       sub.lastPullAt ?? sub.lastVerifiedAt ?? sub.boundAt,
     );
+    // For paused_reason="remote_handle_empty" the user must unbind
+    // and re-bind to recover (rules §11.1; no OAuth reconnect can
+    // restore an empty RemoteHandle). Render the Unbind interlock
+    // alongside the badge so the action is one click + confirm
+    // away. For other paused reasons (auth_failed, empty), the
+    // badge's own click → /profile is the intended path.
+    const unbindAffordance =
+      sub.pausedReason === 'remote_handle_empty'
+        ? html`
+            <span class="action-separator" aria-hidden="true"></span>
+            <confirmation-interlock-button
+              label="Unbind"
+              confirmLabel="Unbind broken binding?"
+              yesLabel="Unbind"
+              noLabel="Cancel"
+              class="bind-trigger"
+              @confirmed=${this.handleUnbind}
+            ></confirmation-interlock-button>
+          `
+        : nothing;
     return html`
       <connector-paused-badge
         .connectorKind=${kindToSlug(sub.connectorKind)}
         .pausedAt=${pausedAt}
         .subscriptionTitle=${sub.remoteListTitle}
+        .pausedReason=${sub.pausedReason}
       ></connector-paused-badge>
+      ${unbindAffordance}
     `;
   }
 }

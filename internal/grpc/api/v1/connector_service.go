@@ -1015,6 +1015,7 @@ func keepBindingToProto(b connectors.Binding) *apiv1.BindingState {
 		RemoteListHandle: b.RemoteHandle,
 		RemoteListTitle:  b.RemoteListTitle,
 		Paused:           b.IsPaused(),
+		PausedReason:     b.PausedReason,
 		ConnectorKind:    apiv1.ConnectorKind_CONNECTOR_KIND_GOOGLE_KEEP,
 	}
 	if !b.BoundAt.IsZero() {
@@ -1060,6 +1061,7 @@ func tasksBindingToProto(b connectors.Binding) *apiv1.BindingState {
 		RemoteListHandle: b.RemoteHandle,
 		RemoteListTitle:  b.RemoteListTitle,
 		Paused:           b.IsPaused(),
+		PausedReason:     b.PausedReason,
 		ConnectorKind:    apiv1.ConnectorKind_CONNECTOR_KIND_GOOGLE_TASKS,
 	}
 	if !b.BoundAt.IsZero() {

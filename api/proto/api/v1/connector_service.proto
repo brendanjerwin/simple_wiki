@@ -195,6 +195,13 @@ message BindingState {
   // registered.
   bool paused = 10;
   ConnectorKind connector_kind = 11;
+  // paused_reason names why the engine paused this binding when
+  // paused=true. Stable values: "auth_failed" (token expired or
+  // revoked; recovery = reconnect on /profile),
+  // "remote_handle_empty" (legacy migration gap; recovery =
+  // unbind+rebind). Empty when paused=false. Used by the UI to
+  // route the paused-badge's copy and click action.
+  string paused_reason = 12;
 }
 
 // RemoteListSummary describes one of the user's remote lists for the

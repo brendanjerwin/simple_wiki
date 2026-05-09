@@ -96,6 +96,18 @@ export class ConnectorPausedBadge extends LitElement {
   declare subscriptionTitle: string;
 
   /**
+   * The engine-reported paused_reason. Drives copy + click action:
+   *   "remote_handle_empty" → "binding broken; unbind to recover"
+   *      copy; click is a no-op (the bind-button renders a separate
+   *      Unbind interlock alongside the badge).
+   *   any other value (incl. "auth_failed", empty) → "click to
+   *      reconnect" copy; click navigates to /profile.
+   * Empty when not paused.
+   */
+  @property({ type: String, attribute: 'paused-reason' })
+  declare pausedReason: string;
+
+  /**
    * Navigation seam — tests stub this to assert routing behavior
    * without invoking window.location.assign. Production builds use the
    * default which calls window.location.assign('/profile').
@@ -109,6 +121,7 @@ export class ConnectorPausedBadge extends LitElement {
     this.connectorKind = 'google_keep';
     this.pausedAt = new Date(0);
     this.subscriptionTitle = '';
+    this.pausedReason = '';
   }
 
   override willUpdate(): void {
@@ -135,16 +148,21 @@ export class ConnectorPausedBadge extends LitElement {
   }
 
   private handleClick(): void {
+    // For paused_reason="remote_handle_empty" the click is a no-op
+    // — the bind-button parent renders an Unbind interlock alongside
+    // the badge as the actual affordance, and reconnecting OAuth
+    // wouldn't fix this case anyway. We still render the badge as a
+    // <button> so the urgency-tier styling stays consistent and a
+    // future "show details" UX can hook in here.
+    if (this.pausedReason === 'remote_handle_empty') {
+      return;
+    }
     // Cancellable event: in-page listeners (e.g. <profile-paused-banner>
     // when the user is on /profile) handle the click by scrolling to the
     // connect component and call preventDefault to stop the fallback
     // navigation. From any other page no listener is mounted, the event
     // bubbles up unhandled, dispatchEvent returns true, and we navigate
     // to /profile so the user reaches the reconnect surface.
-    //
-    // Production fix 2026-05-09: previously the click silently dispatched
-    // the event with no fallback — clicking from a checklist page (where
-    // <profile-paused-banner> is not rendered) was a no-op.
     const event = new CustomEvent<RequestReconnectEventDetail>('request-reconnect', {
       detail: { connectorKind: this.connectorKind },
       bubbles: true,
@@ -158,13 +176,25 @@ export class ConnectorPausedBadge extends LitElement {
   }
 
   override render() {
-    const since = this.formatPauseTime();
+    const copy = this.renderCopy();
     return html`
       ${sharedStyles}
       <button type="button" @click=${this.handleClick}>
-        <span class="icon" aria-hidden="true">⚠️</span>Sync paused — changes since ${since} not yet sent. Click to reconnect.
+        <span class="icon" aria-hidden="true">⚠️</span>${copy}
       </button>
     `;
+  }
+
+  private renderCopy(): string {
+    if (this.pausedReason === 'remote_handle_empty') {
+      // Migration-gap broken-binding state: reconnecting OAuth
+      // doesn't help. The user must unbind and re-bind. The
+      // bind-button parent renders an Unbind interlock next to
+      // this badge so the action is one click away.
+      return 'Sync paused — binding is broken (legacy state). Use the Unbind button to recover.';
+    }
+    const since = this.formatPauseTime();
+    return `Sync paused — changes since ${since} not yet sent. Click to reconnect.`;
   }
 }
 
