@@ -8,8 +8,8 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"github.com/brendanjerwin/simple_wiki/internal/connectors/google_keep/gateway"
-	"github.com/brendanjerwin/simple_wiki/internal/connectors/google_keep/translator"
+	"github.com/brendanjerwin/simple_wiki/internal/connectors/googlekeep/gateway"
+	"github.com/brendanjerwin/simple_wiki/internal/connectors/googlekeep/translator"
 )
 
 var _ = Describe("MergeKeepLabels", func() {

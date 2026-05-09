@@ -12,8 +12,8 @@ import (
 
 	"github.com/brendanjerwin/simple_wiki/internal/connectors"
 	"github.com/brendanjerwin/simple_wiki/internal/connectors/engine"
-	googlekeep "github.com/brendanjerwin/simple_wiki/internal/connectors/google_keep"
-	keepgateway "github.com/brendanjerwin/simple_wiki/internal/connectors/google_keep/gateway"
+	"github.com/brendanjerwin/simple_wiki/internal/connectors/googlekeep"
+	keepgateway "github.com/brendanjerwin/simple_wiki/internal/connectors/googlekeep/gateway"
 	"github.com/brendanjerwin/simple_wiki/pkg/jobs"
 	"github.com/brendanjerwin/simple_wiki/server"
 	"github.com/brendanjerwin/simple_wiki/server/checklistmutator"

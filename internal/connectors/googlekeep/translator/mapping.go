@@ -19,7 +19,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
-	"github.com/brendanjerwin/simple_wiki/internal/connectors/google_keep/gateway"
+	"github.com/brendanjerwin/simple_wiki/internal/connectors/googlekeep/gateway"
 	"github.com/brendanjerwin/simple_wiki/internal/hashtags"
 )
 

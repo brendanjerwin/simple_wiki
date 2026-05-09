@@ -1,4 +1,4 @@
-// Package google_tasks: this file owns the Google Tasks OAuth credential
+// Package googletasks: this file owns the Google Tasks OAuth credential
 // state machine — the per-profile bundle (email, refresh_token,
 // connected_at, last_verified_at) on the user's profile page.
 //
@@ -8,8 +8,7 @@
 // belong to internal/connectors/engine; this file only reads, writes,
 // and clears the per-profile credential bundle.
 //
-//revive:disable:var-naming // package name google_tasks mirrors ConnectorKindGoogleTasks
-package google_tasks
+package googletasks
 
 import (
 	"context"

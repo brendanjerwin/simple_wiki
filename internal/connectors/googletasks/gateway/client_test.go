@@ -13,7 +13,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"github.com/brendanjerwin/simple_wiki/internal/connectors/google_tasks/gateway"
+	"github.com/brendanjerwin/simple_wiki/internal/connectors/googletasks/gateway"
 )
 
 // staticTokenSource is a TokenSource for the client tests. Records

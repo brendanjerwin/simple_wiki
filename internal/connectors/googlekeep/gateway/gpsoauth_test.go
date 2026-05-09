@@ -12,7 +12,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"github.com/brendanjerwin/simple_wiki/internal/connectors/google_keep/gateway"
+	"github.com/brendanjerwin/simple_wiki/internal/connectors/googlekeep/gateway"
 )
 
 func TestGateway(t *testing.T) {

@@ -1,5 +1,5 @@
 //revive:disable:dot-imports
-package google_tasks_test
+package googletasks_test
 
 import (
 	"context"
@@ -14,9 +14,9 @@ import (
 	. "github.com/onsi/gomega"
 
 	"github.com/brendanjerwin/simple_wiki/internal/connectors"
-	googletasks "github.com/brendanjerwin/simple_wiki/internal/connectors/google_tasks"
-	"github.com/brendanjerwin/simple_wiki/internal/connectors/google_tasks/gateway"
-	"github.com/brendanjerwin/simple_wiki/internal/connectors/google_tasks/translator"
+	"github.com/brendanjerwin/simple_wiki/internal/connectors/googletasks"
+	"github.com/brendanjerwin/simple_wiki/internal/connectors/googletasks/gateway"
+	"github.com/brendanjerwin/simple_wiki/internal/connectors/googletasks/translator"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 )
 

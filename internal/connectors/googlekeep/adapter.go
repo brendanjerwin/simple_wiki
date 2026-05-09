@@ -1,4 +1,4 @@
-// Package google_keep owns the per-connector floor of the Google Keep
+// Package googlekeep owns the per-connector floor of the Google Keep
 // bridge: the wire-protocol Gateway (sub-package gateway/), the
 // Anti-Corruption Layer translator (sub-package translator/), and the
 // BackendAdapter implementation in this file.
@@ -17,8 +17,7 @@
 // injected collaborators; it is safe for concurrent use across
 // scheduler ticks, debouncer fires, and gRPC handler calls.
 //
-//revive:disable:var-naming // package name google_keep mirrors ConnectorKindGoogleKeep
-package google_keep
+package googlekeep
 
 import (
 	"context"
@@ -32,8 +31,8 @@ import (
 
 	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
 	"github.com/brendanjerwin/simple_wiki/internal/connectors"
-	"github.com/brendanjerwin/simple_wiki/internal/connectors/google_keep/gateway"
-	"github.com/brendanjerwin/simple_wiki/internal/connectors/google_keep/translator"
+	"github.com/brendanjerwin/simple_wiki/internal/connectors/googlekeep/gateway"
+	"github.com/brendanjerwin/simple_wiki/internal/connectors/googlekeep/translator"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 )
 
