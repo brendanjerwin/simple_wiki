@@ -95,6 +95,15 @@ export class ConnectorPausedBadge extends LitElement {
   @property({ type: String, attribute: 'subscription-title' })
   declare subscriptionTitle: string;
 
+  /**
+   * Navigation seam — tests stub this to assert routing behavior
+   * without invoking window.location.assign. Production builds use the
+   * default which calls window.location.assign('/profile').
+   */
+  navigate: (url: string) => void = (url: string) => {
+    window.location.assign(url);
+  };
+
   constructor() {
     super();
     this.connectorKind = 'google_keep';
@@ -126,13 +135,26 @@ export class ConnectorPausedBadge extends LitElement {
   }
 
   private handleClick(): void {
-    this.dispatchEvent(
-      new CustomEvent<RequestReconnectEventDetail>('request-reconnect', {
-        detail: { connectorKind: this.connectorKind },
-        bubbles: true,
-        composed: true,
-      }),
-    );
+    // Cancellable event: in-page listeners (e.g. <profile-paused-banner>
+    // when the user is on /profile) handle the click by scrolling to the
+    // connect component and call preventDefault to stop the fallback
+    // navigation. From any other page no listener is mounted, the event
+    // bubbles up unhandled, dispatchEvent returns true, and we navigate
+    // to /profile so the user reaches the reconnect surface.
+    //
+    // Production fix 2026-05-09: previously the click silently dispatched
+    // the event with no fallback — clicking from a checklist page (where
+    // <profile-paused-banner> is not rendered) was a no-op.
+    const event = new CustomEvent<RequestReconnectEventDetail>('request-reconnect', {
+      detail: { connectorKind: this.connectorKind },
+      bubbles: true,
+      composed: true,
+      cancelable: true,
+    });
+    const notDefaultPrevented = this.dispatchEvent(event);
+    if (notDefaultPrevented) {
+      this.navigate('/profile');
+    }
   }
 
   override render() {

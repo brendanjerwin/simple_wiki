@@ -237,9 +237,16 @@ export class ProfilePausedBanner extends LitElement {
     const tag = slug === 'google_keep' ? 'keep-connect' : 'google-tasks-connect';
     const target = document.querySelector(tag);
     if (target instanceof HTMLElement) {
+      // In-page handle: scroll the user to the connect component
+      // instead of navigating. Stop the badge's fallback navigate
+      // (the badge is cancellable since 2026-05-09; without
+      // preventDefault here the page would reload to /profile and
+      // the scroll would be lost).
+      e.preventDefault();
       this.scrollAndFocus(target);
       return;
     }
+    e.preventDefault();
     this.navigate(PROFILE_PATH);
   }
 
