@@ -15,8 +15,8 @@ import (
 	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
 	"github.com/brendanjerwin/simple_wiki/internal/connectors"
 	"github.com/brendanjerwin/simple_wiki/internal/connectors/engine"
-	googlekeep "github.com/brendanjerwin/simple_wiki/internal/connectors/google_keep"
-	"github.com/brendanjerwin/simple_wiki/internal/connectors/google_keep/gateway"
+	"github.com/brendanjerwin/simple_wiki/internal/connectors/googlekeep"
+	"github.com/brendanjerwin/simple_wiki/internal/connectors/googlekeep/gateway"
 	v1 "github.com/brendanjerwin/simple_wiki/internal/grpc/api/v1"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 )

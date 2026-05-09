@@ -14,7 +14,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/brendanjerwin/simple_wiki/internal/connectors/google_keep/gateway"
+	"github.com/brendanjerwin/simple_wiki/internal/connectors/googlekeep/gateway"
 )
 
 // MergeKeepLabels reconciles the host page's tags against the user's

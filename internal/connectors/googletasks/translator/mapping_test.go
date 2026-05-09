@@ -9,7 +9,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
-	"github.com/brendanjerwin/simple_wiki/internal/connectors/google_tasks/translator"
+	"github.com/brendanjerwin/simple_wiki/internal/connectors/googletasks/translator"
 )
 
 var _ = Describe("TaskToChecklistItem", func() {

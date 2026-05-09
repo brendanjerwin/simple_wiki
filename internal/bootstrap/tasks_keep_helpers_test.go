@@ -15,7 +15,7 @@ import (
 	"github.com/brendanjerwin/simple_wiki/internal/connectors"
 	"github.com/brendanjerwin/simple_wiki/internal/connectors/engine"
 	enginetesting "github.com/brendanjerwin/simple_wiki/internal/connectors/engine/testing"
-	googletasks "github.com/brendanjerwin/simple_wiki/internal/connectors/google_tasks"
+	"github.com/brendanjerwin/simple_wiki/internal/connectors/googletasks"
 	"github.com/brendanjerwin/simple_wiki/server"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 )

@@ -10,7 +10,7 @@ package translator
 import (
 	"strings"
 
-	"github.com/brendanjerwin/simple_wiki/internal/connectors/google_keep/gateway"
+	"github.com/brendanjerwin/simple_wiki/internal/connectors/googlekeep/gateway"
 )
 
 // NormalizeForSeedMatch reduces a LIST_ITEM text to its bare item-name

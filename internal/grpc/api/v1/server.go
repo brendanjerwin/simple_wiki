@@ -8,8 +8,8 @@ import (
 
 	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
 	"github.com/brendanjerwin/simple_wiki/internal/connectors/engine"
-	googlekeep "github.com/brendanjerwin/simple_wiki/internal/connectors/google_keep"
-	googletasks "github.com/brendanjerwin/simple_wiki/internal/connectors/google_tasks"
+	"github.com/brendanjerwin/simple_wiki/internal/connectors/googlekeep"
+	"github.com/brendanjerwin/simple_wiki/internal/connectors/googletasks"
 	"github.com/brendanjerwin/simple_wiki/server/checklistmutator"
 	"github.com/brendanjerwin/simple_wiki/filestore"
 	"github.com/brendanjerwin/simple_wiki/index/bleve"

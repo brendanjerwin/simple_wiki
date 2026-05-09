@@ -1,5 +1,5 @@
 //revive:disable:dot-imports
-package google_keep_test
+package googlekeep_test
 
 import (
 	"context"
@@ -16,8 +16,8 @@ import (
 	. "github.com/onsi/gomega"
 
 	"github.com/brendanjerwin/simple_wiki/internal/connectors"
-	googlekeep "github.com/brendanjerwin/simple_wiki/internal/connectors/google_keep"
-	"github.com/brendanjerwin/simple_wiki/internal/connectors/google_keep/gateway"
+	"github.com/brendanjerwin/simple_wiki/internal/connectors/googlekeep"
+	"github.com/brendanjerwin/simple_wiki/internal/connectors/googlekeep/gateway"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 )
 

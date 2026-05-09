@@ -17,10 +17,10 @@ import (
 	"github.com/brendanjerwin/simple_wiki/internal/connectors"
 	"github.com/brendanjerwin/simple_wiki/internal/connectors/engine"
 	enginetesting "github.com/brendanjerwin/simple_wiki/internal/connectors/engine/testing"
-	googlekeep "github.com/brendanjerwin/simple_wiki/internal/connectors/google_keep"
-	keepgw "github.com/brendanjerwin/simple_wiki/internal/connectors/google_keep/gateway"
-	googletasks "github.com/brendanjerwin/simple_wiki/internal/connectors/google_tasks"
-	tasksgw "github.com/brendanjerwin/simple_wiki/internal/connectors/google_tasks/gateway"
+	"github.com/brendanjerwin/simple_wiki/internal/connectors/googlekeep"
+	keepgw "github.com/brendanjerwin/simple_wiki/internal/connectors/googlekeep/gateway"
+	"github.com/brendanjerwin/simple_wiki/internal/connectors/googletasks"
+	tasksgw "github.com/brendanjerwin/simple_wiki/internal/connectors/googletasks/gateway"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 )
 
