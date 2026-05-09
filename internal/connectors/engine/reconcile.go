@@ -149,6 +149,24 @@ func (e *Engine) reconcile(ctx context.Context, key connectors.BindingKey) error
 		return e.runForceFullResync(ctx, key)
 	}
 
+	// Lazy title self-heal (production fix 2026-05-09): legacy
+	// bindings created before bind-time FetchRemoteListTitle landed
+	// have RemoteListTitle="" and the UI falls back to the opaque
+	// RemoteHandle UID. Fetch lazily here, AFTER the pull succeeds
+	// but BEFORE applyInbound/pushOutbound — that way the in-memory
+	// binding carries the title regardless of which (if any) push
+	// errors follow. Errors silenced — best-effort; next tick
+	// retries. The savePartial branch on outboundErr and the normal
+	// end-of-tick save both pick up the populated field.
+	if binding.RemoteListTitle == "" {
+		titleCtx, titleCancel := e.withRPCDeadline(ctx)
+		title, titleOK, _ := e.adapter.FetchRemoteListTitle(titleCtx, profileID, binding.RemoteHandle)
+		titleCancel()
+		if titleOK && title != "" {
+			binding.RemoteListTitle = title
+		}
+	}
+
 	idMap := readItemIDMap(binding.AdapterState)
 
 	if applyErr := e.applyInbound(ctx, binding, pullResult.Items, classification, idMap); applyErr != nil {

@@ -461,6 +461,64 @@ var _ = Describe("Engine.reconcile", func() {
 		})
 	})
 
+	// Production fix 2026-05-09: legacy bindings created before the
+	// bind-time FetchRemoteListTitle fix have RemoteListTitle="";
+	// the UI falls back to the opaque RemoteHandle UID. Reconcile
+	// self-heals: when the saved binding has empty title and the
+	// reconcile completes successfully, fetch the title and store it.
+	When("the binding has an empty RemoteListTitle on a successful reconcile", func() {
+		var savedBinding connectors.Binding
+
+		BeforeEach(func() {
+			fbs.SeedBinding(connectors.Binding{
+				ProfileID: profileID, Page: page, ListName: listName,
+				RemoteHandle:         "tasklist-1",
+				RemoteListTitle:      "",
+				State:                connectors.BindingStateActive,
+				LastSuccessfulSyncAt: reconcilePastChokePausedAt,
+			}, ownerKind)
+
+			fa.SetPullRemoteResponse(connectors.RemotePullResult{}, nil)
+			fa.SetFetchRemoteListTitleResponse("Grocery Shopping", true, nil)
+			reader.checklist = &apiv1.Checklist{}
+
+			Expect(eng.Sync(ctx, key)).To(Succeed())
+			if len(fbs.RecordedSaveBinding) > 0 {
+				savedBinding = fbs.RecordedSaveBinding[len(fbs.RecordedSaveBinding)-1].Binding
+			}
+		})
+
+		It("should call FetchRemoteListTitle (self-heal for legacy bindings)", func() {
+			Expect(fa.RecordedFetchRemoteListTitle).To(HaveLen(1))
+		})
+
+		It("should populate RemoteListTitle on the saved binding", func() {
+			Expect(savedBinding.RemoteListTitle).To(Equal("Grocery Shopping"))
+		})
+	})
+
+	When("the binding already has a RemoteListTitle on a successful reconcile", func() {
+		BeforeEach(func() {
+			fbs.SeedBinding(connectors.Binding{
+				ProfileID: profileID, Page: page, ListName: listName,
+				RemoteHandle:         "tasklist-1",
+				RemoteListTitle:      "Existing Title",
+				State:                connectors.BindingStateActive,
+				LastSuccessfulSyncAt: reconcilePastChokePausedAt,
+			}, ownerKind)
+
+			fa.SetPullRemoteResponse(connectors.RemotePullResult{}, nil)
+			reader.checklist = &apiv1.Checklist{}
+
+			Expect(eng.Sync(ctx, key)).To(Succeed())
+		})
+
+		It("should NOT call FetchRemoteListTitle (self-heal only fires when title is empty)", func() {
+			Expect(fa.RecordedFetchRemoteListTitle).To(BeEmpty(),
+				"engine refetched the title every tick; self-heal should be lazy and one-shot")
+		})
+	})
+
 	When("PullRemote returns a rate-limited error", func() {
 		var syncErr error
 

@@ -523,6 +523,7 @@ var _ = Describe("Parity scenarios across real adapters", func() {
 			p.store.SeedBinding(connectors.Binding{
 				ProfileID: p.profileID, Page: p.page, ListName: p.listName,
 				RemoteHandle:         p.remoteHandle,
+				RemoteListTitle:      "Parity Test List",
 				State:                connectors.BindingStateActive,
 				LastSuccessfulSyncAt: parityPastChoke,
 				LastSyncedSeq:        10,
@@ -606,6 +607,7 @@ var _ = Describe("Parity scenarios across real adapters", func() {
 			p.store.SeedBinding(connectors.Binding{
 				ProfileID: p.profileID, Page: p.page, ListName: p.listName,
 				RemoteHandle:         p.remoteHandle,
+				RemoteListTitle:      "Parity Test List",
 				State:                connectors.BindingStateActive,
 				LastSuccessfulSyncAt: parityPastChoke,
 				AdapterState:         p.seedItemIDMap(map[string]string{}),
@@ -1045,6 +1047,7 @@ var _ = Describe("Parity scenarios across real adapters", func() {
 			p.store.SeedBinding(connectors.Binding{
 				ProfileID: p.profileID, Page: p.page, ListName: p.listName,
 				RemoteHandle:         p.remoteHandle,
+				RemoteListTitle:      "Parity Test List",
 				State:                connectors.BindingStateActive,
 				LastSuccessfulSyncAt: parityPastChoke,
 				LastSyncedSeq:        10,
