@@ -77,6 +77,7 @@ var _ = Describe("Engine.Bind", func() {
 		BeforeEach(func() {
 			seededState = connectors.AdapterState{"item_id_map": map[string]string{"u1": "t1"}}
 			fa.SetSeedBindingStateResponse(seededState, nil)
+			fa.SetFetchRemoteListTitleResponse("Grocery Shopping", true, nil)
 			checklistKey = connectors.ChecklistKey{Page: page, ListName: listName}
 
 			result, bindErr = eng.Bind(ctx, profileID, page, listName, remoteHandle)
@@ -132,6 +133,18 @@ var _ = Describe("Engine.Bind", func() {
 
 		It("should call SeedBindingState once", func() {
 			Expect(fa.RecordedSeedBindingState).To(HaveLen(1))
+		})
+
+		// Production fix 2026-05-09: KeepConnect was rendering a UID
+		// for the list because Binding.RemoteListTitle was never
+		// populated and the UI fell back to remote_list_handle.
+		// Bind now calls FetchRemoteListTitle right after seed.
+		It("should call FetchRemoteListTitle to populate the user-visible title", func() {
+			Expect(fa.RecordedFetchRemoteListTitle).To(HaveLen(1))
+		})
+
+		It("should store the fetched remote list title on the Binding", func() {
+			Expect(result.RemoteListTitle).To(Equal("Grocery Shopping"))
 		})
 
 		It("should pass the profile ID to SeedBindingState", func() {

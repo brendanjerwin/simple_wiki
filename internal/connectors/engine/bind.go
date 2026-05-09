@@ -93,15 +93,31 @@ func (e *Engine) Bind(
 				remoteHandle, profileID, err)
 		}
 
+		// Populate RemoteListTitle at bind time so the UI shows a
+		// human-readable name instead of the opaque RemoteHandle
+		// (Keep ServerID, Tasks tasklist ID). User-reported
+		// 2026-05-09: KeepConnect was rendering the ServerID UID
+		// because RemoteListTitle was never populated. Errors are
+		// silenced — title is best-effort, the binding still works
+		// and the next refresh will retry.
+		titleCtx, titleCancel := e.withRPCDeadline(ctx)
+		title, titleOK, _ := e.adapter.FetchRemoteListTitle(titleCtx, profileID, remoteHandle)
+		titleCancel()
+		var remoteListTitle string
+		if titleOK {
+			remoteListTitle = title
+		}
+
 		newBinding := connectors.Binding{
-			ProfileID:     profileID,
-			Page:          page,
-			ListName:      listName,
-			RemoteHandle:  remoteHandle,
-			LastSyncedSeq: 0,
-			State:         connectors.BindingStateActive,
-			BoundAt:       e.clock.Now(),
-			AdapterState:  adapterState,
+			ProfileID:       profileID,
+			Page:            page,
+			ListName:        listName,
+			RemoteHandle:    remoteHandle,
+			RemoteListTitle: remoteListTitle,
+			LastSyncedSeq:   0,
+			State:           connectors.BindingStateActive,
+			BoundAt:         e.clock.Now(),
+			AdapterState:    adapterState,
 		}
 
 		profileLockErr := e.store.WithProfileLock(profileID, func() error {

@@ -44,6 +44,25 @@ function pausedSub(
   });
 }
 
+// brokenSub is a paused subscription whose paused_reason is the
+// engine's "remote_handle_empty" — the legacy migration gap that
+// requires unbind+rebind to recover. Exercised by the "split banner"
+// fix added 2026-05-09.
+function brokenSub(
+  kind: ConnectorKind,
+  page = 'weekly_menu',
+  listName = 'ingredients-on-hand',
+) {
+  return create(BindingStateSchema, {
+    page,
+    listName,
+    paused: true,
+    pausedReason: 'remote_handle_empty',
+    connectorKind: kind,
+    remoteListTitle: '',
+  });
+}
+
 function activeSub(
   kind: ConnectorKind,
   page = 'shopping_lists.this_week',
@@ -505,6 +524,109 @@ describe('ProfilePausedBanner', () => {
 
     it('should remove its request-reconnect listener', () => {
       expect(removeSpy.calledWith('request-reconnect')).to.equal(true);
+    });
+  });
+
+  // ------------------------------------------------------------------ paused_reason partition (2026-05-09)
+  // User-reported: "profile says 'Google Keep needs reconnection.' I
+  // did, and it still says it." Root: a binding paused with
+  // paused_reason="remote_handle_empty" (today's earlier engine fix)
+  // can't be recovered by reconnecting OAuth — the engine
+  // auto-resumes it on reconnect, but the next reconcile re-pauses
+  // it with the same reason. The banner conflated all paused reasons
+  // into "needs reconnection." Fix: partition by paused_reason and
+  // render a separate "binding broken" banner with a page link list.
+
+  describe('when a kind has only auth-paused subscriptions', () => {
+    beforeEach(async () => {
+      el = document.createElement('profile-paused-banner') as ProfilePausedBanner;
+      stubBoth(
+        el,
+        stateResponse(ConnectorKind.GOOGLE_KEEP, [pausedSub(ConnectorKind.GOOGLE_KEEP)]),
+        stateResponse(ConnectorKind.GOOGLE_TASKS, []),
+      );
+      document.body.appendChild(el);
+      await Promise.race([el.updateComplete, timeout(3000, 'updateComplete timed out')]);
+      await el.updateComplete;
+    });
+
+    it('should render the auth banner with the existing reconnect copy', () => {
+      const banner = el.shadowRoot?.querySelector('[data-banner="auth"]');
+      expect(banner, 'auth banner present').to.not.equal(null);
+      expect(banner?.textContent ?? '').to.contain('needs reconnection');
+    });
+
+    it('should NOT render the broken banner', () => {
+      const broken = el.shadowRoot?.querySelector('[data-banner="broken"]');
+      expect(broken).to.equal(null);
+    });
+  });
+
+  describe('when a kind has only binding-broken subscriptions (paused_reason=remote_handle_empty)', () => {
+    beforeEach(async () => {
+      el = document.createElement('profile-paused-banner') as ProfilePausedBanner;
+      stubBoth(
+        el,
+        stateResponse(ConnectorKind.GOOGLE_KEEP, [
+          brokenSub(ConnectorKind.GOOGLE_KEEP, 'weekly_menu', 'ingredients-on-hand'),
+        ]),
+        stateResponse(ConnectorKind.GOOGLE_TASKS, []),
+      );
+      document.body.appendChild(el);
+      await Promise.race([el.updateComplete, timeout(3000, 'updateComplete timed out')]);
+      await el.updateComplete;
+    });
+
+    it('should NOT render the misleading "needs reconnection" banner', () => {
+      const auth = el.shadowRoot?.querySelector('[data-banner="auth"]');
+      expect(auth).to.equal(null);
+    });
+
+    it('should render the broken-binding banner', () => {
+      const broken = el.shadowRoot?.querySelector('[data-banner="broken"]');
+      expect(broken, 'broken banner present').to.not.equal(null);
+    });
+
+    it('should describe the broken state and direct the user to unbind/rebind', () => {
+      const broken = el.shadowRoot?.querySelector('[data-banner="broken"]');
+      const text = broken?.textContent?.replace(/\s+/g, ' ').trim() ?? '';
+      expect(text).to.contain('broken');
+      expect(text).to.contain('unbind and re-bind');
+    });
+
+    it('should link to each broken binding\'s page', () => {
+      const links = el.shadowRoot?.querySelectorAll('[data-banner="broken"] a') ?? [];
+      const hrefs = Array.from(links).map((a) => (a as HTMLAnchorElement).getAttribute('href'));
+      expect(hrefs).to.contain('/weekly_menu/view');
+    });
+
+    it('should NOT render a Reconnect button (reconnecting OAuth would not help)', () => {
+      const buttons = el.shadowRoot?.querySelectorAll('[data-banner="broken"] button') ?? [];
+      expect(buttons.length).to.equal(0);
+    });
+  });
+
+  describe('when a kind has BOTH auth-paused AND binding-broken subscriptions', () => {
+    beforeEach(async () => {
+      el = document.createElement('profile-paused-banner') as ProfilePausedBanner;
+      stubBoth(
+        el,
+        stateResponse(ConnectorKind.GOOGLE_KEEP, [
+          pausedSub(ConnectorKind.GOOGLE_KEEP, 'page_a', 'list_a'),
+          brokenSub(ConnectorKind.GOOGLE_KEEP, 'page_b', 'list_b'),
+        ]),
+        stateResponse(ConnectorKind.GOOGLE_TASKS, []),
+      );
+      document.body.appendChild(el);
+      await Promise.race([el.updateComplete, timeout(3000, 'updateComplete timed out')]);
+      await el.updateComplete;
+    });
+
+    it('should render BOTH banners', () => {
+      const auth = el.shadowRoot?.querySelector('[data-banner="auth"]');
+      const broken = el.shadowRoot?.querySelector('[data-banner="broken"]');
+      expect(auth, 'auth banner present').to.not.equal(null);
+      expect(broken, 'broken banner present').to.not.equal(null);
     });
   });
 });
