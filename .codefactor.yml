@@ -32,3 +32,8 @@ tools:
     excluded_paths:
       - "internal/connectors/google_keep/**"
       - "internal/connectors/google_tasks/**"
+
+  - name: revive
+    excluded_paths:
+      - "internal/connectors/google_keep/**"
+      - "internal/connectors/google_tasks/**"
