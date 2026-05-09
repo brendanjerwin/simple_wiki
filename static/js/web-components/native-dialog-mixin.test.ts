@@ -8,10 +8,10 @@ import { handleKeydownFocusTrap, restoreFocus, NativeDialogMixin } from './nativ
 class TestNativeDialog extends NativeDialogMixin(LitElement) {
   /** Expose protected field as public for test assertions. */
   get previouslyFocusedElement(): Element | null {
-    return this._previouslyFocusedElement;
+    return (this as unknown as { _previouslyFocusedElement: Element | null })._previouslyFocusedElement;
   }
 
-  public override _closeDialog(): void {
+  protected _closeDialog(): void {
     this.open = false;
   }
 
@@ -564,14 +564,12 @@ describe('NativeDialogMixin', () => {
   describe('_handleDialogClick', () => {
     describe('when click target matches currentTarget (backdrop click)', () => {
       let el: TestNativeDialog;
-      let closeDialogSpy: sinon.SinonSpy;
 
       beforeEach(async () => {
         el = await fixture<TestNativeDialog>(html`<test-native-dialog></test-native-dialog>`);
         el.open = true;
         await el.updateComplete;
 
-        closeDialogSpy = sinon.spy(el, '_closeDialog');
         const dialog = el.shadowRoot!.querySelector('dialog')!;
         const event = new MouseEvent('click', { bubbles: true, composed: true });
         Object.defineProperty(event, 'target', { value: dialog });
@@ -580,25 +578,19 @@ describe('NativeDialogMixin', () => {
         await el.updateComplete;
       });
 
-      afterEach(() => {
-        el.open = false;
-      });
-
       it('should close the dialog', () => {
-        expect(closeDialogSpy).to.have.been.calledOnce;
+        expect(el.open).to.be.false;
       });
     });
 
     describe('when click target does not match currentTarget (content click)', () => {
       let el: TestNativeDialog;
-      let closeDialogSpy: sinon.SinonSpy;
 
       beforeEach(async () => {
         el = await fixture<TestNativeDialog>(html`<test-native-dialog></test-native-dialog>`);
         el.open = true;
         await el.updateComplete;
 
-        closeDialogSpy = sinon.spy(el, '_closeDialog');
         const dialog = el.shadowRoot!.querySelector('dialog')!;
         const innerDiv = document.createElement('div');
         const event = new MouseEvent('click', { bubbles: true, composed: true });
@@ -608,12 +600,8 @@ describe('NativeDialogMixin', () => {
         await el.updateComplete;
       });
 
-      afterEach(() => {
-        el.open = false;
-      });
-
       it('should not close the dialog', () => {
-        expect(closeDialogSpy).to.not.have.been.called;
+        expect(el.open).to.be.true;
       });
     });
   });
