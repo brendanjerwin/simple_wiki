@@ -8,24 +8,24 @@ package connectors
 // the constant value, so renaming an existing one is a dashboard-
 // visible change.
 const (
-	// EventSubscriptionEstablished fires when a subscription is
-	// successfully created (Subscribe call completed end-to-end:
+	// EventBindingEstablished fires when a binding is
+	// successfully created (Bind call completed end-to-end:
 	// profile written, lease taken).
-	EventSubscriptionEstablished = "subscription_established"
+	EventBindingEstablished = "binding_established"
 
-	// EventSubscriptionPaused fires when a subscription transitions
+	// EventBindingPaused fires when a binding transitions
 	// to the paused state (typically auth_failed → invalid_grant
 	// after retry-once, or operator action).
-	EventSubscriptionPaused = "subscription_paused"
+	EventBindingPaused = "binding_paused"
 
-	// EventSubscriptionResumed fires when a paused subscription
+	// EventBindingResumed fires when a paused binding
 	// resumes (reconnect completes, OAuth refresh succeeds, or
 	// operator clears the paused flag).
-	EventSubscriptionResumed = "subscription_resumed"
+	EventBindingResumed = "binding_resumed"
 
-	// EventSubscriptionRevoked fires when a subscription is removed
-	// (Unsubscribe call completed: profile updated, lease released).
-	EventSubscriptionRevoked = "subscription_revoked"
+	// EventBindingRevoked fires when a binding is removed
+	// (Unbind call completed: profile updated, lease released).
+	EventBindingRevoked = "binding_revoked"
 
 	// EventRemoteItemArrived fires when an inbound apply observed
 	// a new item from the remote backend that wasn't previously in

@@ -138,9 +138,8 @@ func KeepToWiki(node gateway.Node) (*apiv1.ChecklistItem, error) {
 // Fingerprint is the per-item content fingerprint used by the
 // divergence-rule sync engine. Two of these are equal iff the wiki
 // item and Keep node have the same canonical text, the same checked
-// flag, and the same SortValue. Used as the "merge-base" — see
-// internal/connectors/google_keep/sync/MATRIX.md for the full
-// divergence rule.
+// flag, and the same SortValue. Used as the "merge-base" by the
+// engine's causal divergence classifier (ADR-0015 op-log semantics).
 //
 // The text component is canonicalized via the same encoder
 // `WikiToKeep` uses on the way out, so a wiki item and the Keep node

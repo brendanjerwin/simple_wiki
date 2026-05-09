@@ -321,6 +321,39 @@ rules:
         - gen/
         - node_modules/
 
+  - id: go.engine-adapter-call-needs-deadline
+    languages: [go]
+    message: >-
+      Engine→adapter I/O primitive calls MUST wrap ctx via
+      e.withRPCDeadline before invocation (panel review round 3,
+      Bailis Option A; rules §11.9 and §16.10). Use a derived
+      ctx variable (e.g., pullCtx, insCtx, patchCtx, delCtx,
+      readCtx, syncCtx, validCtx, seedCtx, rebuildCtx, repatchCtx,
+      rpcCtx) and call cancel() before the next iteration or
+      return. Calling e.adapter.<Primitive>(ctx, ...) directly
+      bypasses the per-RPC deadline and can wedge the engine
+      indefinitely on a vendor-side hang. See
+      internal/connectors/engine/rpc_deadline.go.
+    severity: ERROR
+    patterns:
+      - pattern-either:
+          - pattern: e.adapter.PullRemote(ctx, ...)
+          - pattern: e.adapter.InsertRemote(ctx, ...)
+          - pattern: e.adapter.PatchRemote(ctx, ...)
+          - pattern: e.adapter.DeleteRemote(ctx, ...)
+          - pattern: e.adapter.ReadRemoteByRef(ctx, ...)
+          - pattern: e.adapter.SyncCollectionState(ctx, ...)
+          - pattern: e.adapter.RebuildAdapterState(ctx, ...)
+          - pattern: e.adapter.SeedBindingState(ctx, ...)
+          - pattern: e.adapter.ValidateRemoteBinding(ctx, ...)
+          - pattern: e.adapter.FetchRemoteListTitle(ctx, ...)
+          - pattern: e.adapter.ListRemoteCollections(ctx, ...)
+    paths:
+      include:
+        - "internal/connectors/engine/*.go"
+      exclude:
+        - "*_test.go"
+
   - id: ts.no-actions-in-it-blocks
     languages: [typescript, javascript]
     message: >-

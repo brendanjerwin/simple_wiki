@@ -337,6 +337,12 @@ var masterTokenLikeRE = regexp.MustCompile(`oauth2(?:rt)?_[0-9]+/[A-Za-z0-9_/+=-
 // "Stage 2 succeeded but the bearer doesn't pass the Keep API
 // auth check" — distinct from any of the auth-stage rejections.
 //
+// stage3WireFormat is the canonical error format for stage3 HTTP
+// responses Keep wraps via classifyKeepHTTPResponse. Extracted so
+// the four stage3 error branches share one format string (each
+// branch just substitutes its own typed sentinel as %w).
+const stage3WireFormat = "%w: stage3 HTTP %d: %s"
+
 // Mirrors the Tasks gateway's classifyTasksHTTPResponse — the response
 // envelope shape is identical across Google REST APIs, but the
 // per-package sentinels keep callers branching against the right
@@ -347,13 +353,25 @@ func classifyKeepHTTPResponse(code int, body []byte) error {
 	case http.StatusOK:
 		return nil
 	case http.StatusUnauthorized:
-		return fmt.Errorf("%w: stage3 HTTP %d: %s", ErrAuthRevoked, code, bodyTxt)
+		return fmt.Errorf(stage3WireFormat, ErrAuthRevoked, code, bodyTxt)
 	case http.StatusTooManyRequests:
-		return fmt.Errorf("%w: stage3 HTTP %d: %s", ErrRateLimited, code, bodyTxt)
+		return fmt.Errorf(stage3WireFormat, ErrRateLimited, code, bodyTxt)
 	case http.StatusForbidden:
 		return classifyKeepForbidden(body)
 	case http.StatusNotFound:
-		return fmt.Errorf("%w: stage3 HTTP %d: %s", ErrBoundNoteDeleted, code, bodyTxt)
+		return fmt.Errorf(stage3WireFormat, ErrBoundNoteDeleted, code, bodyTxt)
+	case http.StatusInternalServerError:
+		// Keep's stage3 protocol returns HTTP 500 "Unknown Error" when
+		// the caller's baseVersion is stale or absent (or, on Insert,
+		// when the requested change can't be reconciled with the
+		// server's current view). There's no 412 in the wire protocol;
+		// 500 is the conventional marker. Wrap in ErrProtocolDrift so
+		// KeepAdapter.ClassifyError routes it to ErrorClassPreconditionFailed,
+		// which the engine's reconcile path uses to trigger Insert-recovery
+		// (RebuildAdapterState + skip this tick) and Patch-recovery
+		// (3-branch precondition_recovery). MATRIX row 6 +
+		// strictest-behavior-wins per ADR-0015.
+		return fmt.Errorf(stage3WireFormat, ErrProtocolDrift, code, bodyTxt)
 	default:
 		return fmt.Errorf("keep: unexpected status %d: %s", code, bodyTxt)
 	}
