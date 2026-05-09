@@ -21,6 +21,15 @@ exclude_patterns:
   - "static/js/gen/**"
   - "gen/**"
   - "vendor/**"
+  # Connector packages keep underscores in their names because the package
+  # slugs mirror the proto enum (ConnectorKindGoogleKeep / GoogleTasks).
+  # The local revive config disables var-naming/package-naming on the
+  # connector packages explicitly via inline directives; CodeFactor doesn't
+  # honor those, so we exclude the paths from CodeFactor entirely. Local
+  # `devbox run lint:everything` still runs revive over these files for
+  # everything except naming rules.
+  - "internal/connectors/google_keep/**"
+  - "internal/connectors/google_tasks/**"
 
 tools:
   - name: eslint
