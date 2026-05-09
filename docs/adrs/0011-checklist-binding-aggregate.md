@@ -2,11 +2,11 @@
 
 ## Status
 
-Accepted (2026-05-02); revised 2026-05-04 (terminology: `Subscription` → `Binding`; `Subscribe`/`Unsubscribe` → `Bind`/`Unbind`); implementation landed 2026-05-04 on branch `extract-sync-engine-bind-rename`.
+Accepted (2026-05-02); revised 2026-05-04 (terminology: `Subscription` → `Binding`; `Subscribe`/`Unsubscribe` → `Bind`/`Unbind`); implementation landed 2026-05-04 on branch `extract-sync-engine-bind-rename`; revised again 2026-05-09 to record post-extraction additions to the binding state machine surface (`SyncNow` RPC + adaptive ticker + paused-reason field).
 
 ## Date
 
-2026-05-02 (original); 2026-05-04 (terminology unification + extraction implementation)
+2026-05-02 (original); 2026-05-04 (terminology unification + extraction implementation); 2026-05-09 (state-machine surface revision)
 
 ## Context
 
@@ -80,6 +80,86 @@ The original (2026-05-02) ADR used **Subscription** as the aggregate name and **
 The Phase 6/7 work in plan `to-build-issue-998-warm-glacier.md` performs the sweep across types, proto, frontend, event constants, and frontmatter (with an eager migration that renames `wiki.connectors.<kind>.subscriptions[]` → `bindings[]` in existing profiles).
 
 **Op-log self-source markers** (`connector:<kind>:apply`, `connector:<kind>:push_recovery`) are NOT renamed — they are causal-source identifiers per ADR-0015, and renaming them would invalidate cursor advance for in-flight bindings on existing checklists. The `<kind>` slug stays as `google_keep` / `google_tasks` / `icloud_reminders`.
+
+## Note on state-machine surface (2026-05-09 revision)
+
+The post-extraction smoke campaign (2026-05-05 → 2026-05-09) added
+operator-visible surface to the binding state machine that wasn't in
+the original ADR. Recording the additions here so the aggregate's
+state contract stays self-consistent.
+
+### Pause reason taxonomy
+
+`Binding.PausedReason` is a stable string the engine stamps when
+transitioning a binding to `BindingStatePaused`. The set is closed
+and the UI branches on it explicitly:
+
+| Reason | Cause | Recovery |
+|---|---|---|
+| `auth_failed` | `ClassifyError(err) == ErrorClassAuthFailed` (token expired or revoked) | User reconnects on `/profile`. The credential-store hook `resumeAllBindings` then auto-resumes every paused binding for the profile (Resume sets `state=active`, `paused_reason=""`). |
+| `remote_handle_empty` | Migration gap: `Binding.RemoteHandle` is empty (legacy `keep_note_id` alias not translated). The engine detects this at the top of `reconcile()` before any RPC and pauses to stop the insert-recovery loop that would otherwise hammer the vendor. | Operator must `Unbind` and re-bind. Reconnecting OAuth doesn't help; the binding's identity is broken. |
+
+The empty string is the active-state value; consumers (UI, external
+introspection) MUST treat unknown reasons as auth-recoverable
+(conservative default → reconnect path). Adding new reasons is a
+contract change to this ADR.
+
+### Triggers that resume the engine on a binding
+
+Five mechanisms can drive `Engine.Sync(key)` for an active binding:
+
+1. **Cron tick (`SyncScheduler`).** Fires every 30s for every active
+   binding the lister returns. Steady-state safety net; cannot
+   tight-loop.
+2. **Mutator-driven debouncer (`SyncDebouncer`).** A wiki write
+   notifies the per-connector bridge, which forwards to the
+   debouncer; the timer fires Sync after a 1.5s debounce window
+   (with a 5s post-success choke against tight wiki-edit loops).
+3. **Adaptive ticker (`AdaptiveTicker`).** After every successful
+   `Sync`, schedules a follow-up at `5s × 2^quietRuns` (capped at
+   20s), then yields to cron once the binding goes quiet for ~35s.
+   The ticker also fires on every wiki edit (the bridge calls
+   `RecordTick(key, activity=true)` at edit time, in parallel with
+   the debouncer kick), so the reactive cycle starts at t=0 of the
+   edit rather than at t=1.5s when the debouncer fires.
+4. **Operator-triggered `SyncNow` RPC.** New gRPC method
+   `ConnectorService.SyncNow(connector_kind, page, list_name)`
+   dispatches directly to `Engine.Sync` (same path as cron /
+   debouncer / ticker). Lightweight — does NOT wipe adapter state
+   (use `ForceFullResync` for that). Concurrent calls serialize on
+   the per-checklist lease (§16.6 of the rules doc). Surfaced in
+   the UI by the `<connector-bind-button>`'s "⟳ Sync now" affordance
+   alongside the bound pill.
+5. **Operator-triggered `ForceFullResync` RPC.** Wipes adapter
+   state and re-pulls. Heavy-weight; escape hatch for state
+   corruption / drift.
+
+All five drivers share the per-checklist lease — at most one tick
+runs per binding at any moment. The lease is the only mutual-
+exclusion mechanism this aggregate needs (single-process assumption,
+above).
+
+### Engine-side recovery surface
+
+Beyond the original "412 / stale concurrency token" recovery (per
+ADR-0015), the engine now owns three named recovery paths that
+preserve the binding aggregate's invariants:
+
+- **`runPreconditionRecovery`** — 3-branch (remote-deleted /
+  remote-unchanged-repatch / remote-authoritative-apply) for PATCH
+  failures. ADR-0015 documents this in detail.
+- **`runDeletePreconditionRecovery`** — DELETE-side analogue:
+  ReadRemoteByRef; idempotent-success on already-gone, refresh +
+  Retryable-backoff otherwise. Production fix 2026-05-08.
+- **`runInsertRecovery`** — Insert-side recovery: stage3-500 on
+  `InsertRemote` triggers `RebuildAdapterState` and exits the
+  outbound loop. `RebuildAdapterState` preserves existing `idMap`
+  entries whose refs still appear in the rebuilt `item_mapping`
+  (instead of wiping the whole map). Production fix 2026-05-08.
+
+Each of the three is a stateless engine-internal helper that
+operates on the aggregate's `Binding` value; none of them violates
+the at-most-one-binding-per-checklist invariant.
 
 ## References
 

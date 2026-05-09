@@ -2,11 +2,11 @@
 
 ## Status
 
-Accepted (2026-05-03); revised 2026-05-04 with audited `BackendAdapter` interface (see "Audited refinement" below); implementation landed 2026-05-04 on branch `extract-sync-engine-bind-rename`.
+Accepted (2026-05-03); revised 2026-05-04 with audited `BackendAdapter` interface (see "Audited refinement" below); implementation landed 2026-05-04 on branch `extract-sync-engine-bind-rename`; revised 2026-05-09 to record the cadence contract (cron + adaptive-decay), the engine-side recovery surface (insert + delete paths), and the panel-curated [`docs/connector-sync-rules.md`](../connector-sync-rules.md) as the operational reference.
 
 ## Date
 
-2026-05-03 (original); 2026-05-04 (audited refinement + extraction implementation, [`internal/connectors/MATRIX.md`](../../internal/connectors/MATRIX.md))
+2026-05-03 (original); 2026-05-04 (audited refinement + extraction implementation, [`internal/connectors/MATRIX.md`](../../internal/connectors/MATRIX.md)); 2026-05-09 (cadence + recovery + sync-rules link)
 
 ## Context
 
@@ -303,10 +303,93 @@ So this ADR is in-scope for #999. The implementation is staged into discrete TDD
 - The fingerprint-baseline approach in Tasks (`SyncedTitle/Notes/Status/Due`).
 - The `wiki_diverged_skipped_inbound` and `inbound_skipped_same_etag` band-aid guards added to Tasks in commit `dcda37e2`. The engine's causal rule subsumes both.
 
+## Cadence contract (2026-05-09 revision)
+
+The original ADR sketch and Phase-2 plan listed a single 30s cron
+fan-out as the engine's reconcile driver. The implementation landed
+with a more nuanced cadence after smoke-campaign findings:
+
+```text
+                    ┌──────────────────────────────────┐
+                    │ 30s SyncScheduler cron tick      │  steady state
+                    └──────────────────────────────────┘
+                              │
+   wiki edit ───────►─────────┼─────►── 1.5s SyncDebouncer ──► Sync
+                              │                                  │
+   SyncNow click ──►──────────┤                                  │
+                              │                                  ▼
+                              │   ┌──────────────────────────────────┐
+                              │   │ AdaptiveTicker after each Sync:  │
+                              └─►─┤  activity → schedule 5s          │
+                                  │  +1 quiet → 10s                  │
+                                  │  +2 quiet → 20s                  │
+                                  │  +3 quiet → yield to cron        │
+                                  └──────────────────────────────────┘
+```
+
+Three driving primitives, all sharing the per-checklist lease:
+
+1. **`SyncScheduler` cron** — fixed 30s fan-out across every active
+   binding. Steady-state safety net. Cannot tight-loop.
+2. **`SyncDebouncer`** — wiki-edit driven; debounces with a 1.5s
+   window and chokes for 5s after each successful sync against
+   tight wiki-edit loops.
+3. **`AdaptiveTicker`** — activity-driven decay. After each
+   successful Sync, schedules a follow-up at `5s × 2^quietRuns`
+   (capped at 20s); past that, yields to cron. Activity is detected
+   by comparing the binding's `LastSyncedSeq` before and after the
+   reconcile (a non-zero advance means the engine emitted a
+   self-event during the tick). The mutator bridge ALSO calls
+   `RecordTick(key, activity=true)` at edit time, in parallel with
+   the debouncer kick, so the reactive cycle starts at t=0 of the
+   edit rather than at t=1.5s when the debouncer fires.
+
+Operator-triggered drivers (`SyncNow`, `ForceFullResync`) route
+through the same `Engine.Sync` entrypoint and serialize on the lease.
+
+Cost model: a noisy binding incurs ~12 RPCs/min sustained (cap one
+RPC per 5s). Vendor quotas (Tasks 600/min/user) accommodate this
+comfortably. Quiet bindings pay only the 30s cron RPC. See rules
+doc §11.10 + §11.5 for the full cadence specification.
+
+## Engine-side recovery surface (2026-05-09 revision)
+
+The original ADR specified a 3-branch precondition recovery for
+PATCH failures (412 / stale concurrency token). The implementation
+expanded the recovery surface during the smoke campaign:
+
+| Path | When it fires | Behavior |
+|---|---|---|
+| `runPreconditionRecovery` | `PatchRemote` returns `ErrorClassPreconditionFailed` (Tasks 412 / Keep stage3-500). | 3-branch as originally specified: ReadRemoteByRef → branch A (remote-deleted, mirror), B (remote-unchanged, refresh + repatch), C (remote-authoritative, apply). |
+| `runDeletePreconditionRecovery` | `DeleteRemote` returns `ErrorClassPreconditionFailed`. New 2026-05-08; previously the DELETE branch had no PreconditionFailed handler and aborted the entire reconcile. | ReadRemoteByRef → idempotent-success on NotFound or `Deleted=true` (clear idMap, emit `outbound_deleted`); refresh baseline + Retryable-backoff otherwise. |
+| `runInsertRecovery` | `InsertRemote` returns `ErrorClassPreconditionFailed` (Keep stage3-500 or Tasks duplicate). | `RebuildAdapterState` (full pull) + bail out of outbound loop. The rebuild preserves existing `idMap` entries whose refs still appear in the rebuilt `item_mapping` (not a clean wipe). Next tick routes through Patch via the rebuilt mapping. |
+
+Adjacent to the precondition family, two more engine-internal
+self-heal paths land binding metadata that the original ADR didn't
+specify:
+
+- **Empty `RemoteHandle` pause.** At the top of `reconcile()` (after
+  the IsPaused check, before any RPC), if `binding.RemoteHandle`
+  is empty (legacy migration gap), the engine transitions the
+  binding to `BindingStatePaused` with `paused_reason="remote_handle_empty"`
+  and returns. Replaces the silent insert-recovery loop the
+  binding would otherwise enter.
+- **Lazy `RemoteListTitle` refresh.** After a successful pull but
+  before `applyInbound`, if `binding.RemoteListTitle` is empty,
+  the engine calls `FetchRemoteListTitle` and stamps the result.
+  Self-heals legacy bindings (created before the bind-time fetch
+  landed) on the next reconcile.
+
+Per-RPC deadlines — every engine→adapter I/O primitive call wraps
+the inbound `ctx` with `Engine.withRPCDeadline` (default 15s) so
+vendor-side hangs can't hold the per-checklist lease indefinitely.
+Audited at every call site. See rules doc §11.9.
+
 ## See also
 
 - ADR-0011 (`ChecklistBinding` aggregate)
 - ADR-0012 (`internal/connectors/` abstraction)
+- [`docs/connector-sync-rules.md`](../connector-sync-rules.md) — operational reference for the engine's sync semantics, authored under a 4-round panel review (Kleppmann, Helland, Shapiro, Bailis, Lamport). Covers the 4-cell merge, sticky user-wins, per-primitive contracts, mid-tick crash recovery, dead-letter lifecycle, 17 strict invariants, and 16 named non-guarantees.
 - [`internal/connectors/MATRIX.md`](../../internal/connectors/MATRIX.md) — the audited per-row provenance for the `BackendAdapter` interface in `internal/connectors/adapter.go`.
 - `feedback_extract_engine_when_n2.md` (the meta-rule this ADR operationalizes)
 - `feedback_function_contract_purity.md` (functions do their job or error — the engine's primitive contract)
