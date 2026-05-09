@@ -819,6 +819,10 @@ func readItemIDMap(state connectors.AdapterState) map[string]string {
 				out[k] = s
 			}
 		}
+	default:
+		// Unknown shape — round-trip through TOML can produce
+		// other types. Silently skip; the engine treats a
+		// missing/unrecognized item_id_map the same as empty.
 	}
 	return out
 }

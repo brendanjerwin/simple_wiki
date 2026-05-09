@@ -792,6 +792,8 @@ func readEtagForTask(state connectors.AdapterState, taskID string) string {
 		if v, ok := m[taskID].(string); ok {
 			return v
 		}
+	default:
+		// Unknown shape — silently fall through to "".
 	}
 	return ""
 }

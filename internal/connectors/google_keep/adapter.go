@@ -355,6 +355,9 @@ func readItemIDMapServerIDSet(state connectors.AdapterState) map[string]struct{}
 				out[s] = struct{}{}
 			}
 		}
+	default:
+		// Unknown shape — silently skip. Matches the engine's
+		// readItemIDMap fallback semantics.
 	}
 	return out
 }
@@ -702,6 +705,8 @@ func readLabelIDs(state connectors.AdapterState) map[string]string {
 				out[k] = s
 			}
 		}
+	default:
+		// Unknown shape — silently skip; matches readItemIDMap semantics.
 	}
 	return out
 }
@@ -1003,6 +1008,8 @@ func preserveItemIDMap(prevState, rebuiltState connectors.AdapterState) map[stri
 				out[uid] = ref
 			}
 		}
+	default:
+		// Unknown shape — silently skip; matches readItemIDMap semantics.
 	}
 	return out
 }

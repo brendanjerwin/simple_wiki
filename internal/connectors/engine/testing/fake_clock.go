@@ -1,7 +1,7 @@
 package testing
 
 import (
-	"sort"
+	"slices"
 	"sync"
 	"time"
 
@@ -107,8 +107,15 @@ func (c *FakeClock) AfterFunc(d time.Duration, fn func()) engine.Timer {
 		clock:    c,
 	}
 	c.timers = append(c.timers, t)
-	sort.SliceStable(c.timers, func(i, j int) bool {
-		return c.timers[i].deadline.Before(c.timers[j].deadline)
+	slices.SortStableFunc(c.timers, func(a, b *fakeTimer) int {
+		switch {
+		case a.deadline.Before(b.deadline):
+			return -1
+		case a.deadline.After(b.deadline):
+			return 1
+		default:
+			return 0
+		}
 	})
 	immediate := !c.now.Before(t.deadline) // d <= 0
 	if immediate {
