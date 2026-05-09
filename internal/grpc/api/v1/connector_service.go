@@ -83,6 +83,59 @@ func errUnsupportedConnectorKind(kind apiv1.ConnectorKind) error {
 	return status.Error(codes.Unimplemented, fmt.Sprintf("unsupported connector_kind: %v", kind))
 }
 
+// collectInitialItems pulls the wiki checklist's items into the engine
+// boundary's WikiItem shape, used by Bind's "create a new remote
+// collection" pre-step. Pre-seed-capable adapters (Keep) consume the
+// slice; the others (Tasks) discard it. The mutator is optional: tests
+// without it get a nil slice, which the adapters tolerate.
+func (s *Server) collectInitialItems(ctx context.Context, page, listName string) []connectors.WikiItem {
+	if s.checklistMutator == nil {
+		return nil
+	}
+	checklist, err := s.checklistMutator.ListItems(ctx, page, listName)
+	if err != nil {
+		return nil
+	}
+	items := checklist.GetItems()
+	out := make([]connectors.WikiItem, 0, len(items))
+	for _, it := range items {
+		out = append(out, connectors.WikiItem{
+			UID:         it.GetUid(),
+			Text:        it.GetText(),
+			Tags:        it.GetTags(),
+			Description: it.GetDescription(),
+			Checked:     it.GetChecked(),
+		})
+	}
+	return out
+}
+
+// adapterFor resolves a connector kind to its BackendAdapter. Lets the
+// shared Bind path call adapter.CreateRemoteCollection without a
+// kind-switch on the concrete adapter field — adding a new connector
+// only adds a case here, and forgetting to wire CreateRemoteCollection
+// is a compile-time error on the adapter (per the BackendAdapter
+// var-underscore assertion in each adapter file) rather than a runtime
+// kind-switch leak.
+func (s *Server) adapterFor(kind apiv1.ConnectorKind) (connectors.BackendAdapter, error) {
+	switch kind {
+	case apiv1.ConnectorKind_CONNECTOR_KIND_UNSPECIFIED:
+		return nil, errConnectorKindRequired
+	case apiv1.ConnectorKind_CONNECTOR_KIND_GOOGLE_KEEP:
+		if !s.keepWired() {
+			return nil, errKeepConnectorNotConfigured
+		}
+		return s.keepAdapter, nil
+	case apiv1.ConnectorKind_CONNECTOR_KIND_GOOGLE_TASKS:
+		if !s.tasksWired() {
+			return nil, errTasksConnectorNotConfigured
+		}
+		return s.tasksAdapter, nil
+	default:
+		return nil, errUnsupportedConnectorKind(kind)
+	}
+}
+
 // tasksWired reports whether the Tasks engine collaborators are all
 // wired. The handlers branch on this aggregate flag so the per-RPC
 // "not configured" error reads consistently.
@@ -526,7 +579,16 @@ func (s *Server) bindTasks(ctx context.Context, req *apiv1.BindRequest) (*apiv1.
 
 	remoteHandle := req.GetRemoteListHandle()
 	if remoteHandle == "" {
-		newHandle, _, createErr := s.tasksAdapter.CreateRemoteCollection(ctx, profileID, req.GetListName())
+		adapter, adapterErr := s.adapterFor(apiv1.ConnectorKind_CONNECTOR_KIND_GOOGLE_TASKS)
+		if adapterErr != nil {
+			return nil, adapterErr
+		}
+		// Tasks discards initialItems by contract (see
+		// google_tasks.(*TasksAdapter).CreateRemoteCollection); we
+		// still gather them via the shared collectInitialItems helper
+		// so the call site reads identically across adapters.
+		initialItems := s.collectInitialItems(ctx, req.GetPage(), req.GetListName())
+		newHandle, _, createErr := adapter.CreateRemoteCollection(ctx, profileID, req.GetListName(), initialItems)
 		if createErr != nil {
 			if s.logger != nil {
 				s.logger.Error("ConnectorService.Bind(GOOGLE_TASKS) create new tasklist for profile=%s list=%s: %v",
@@ -577,21 +639,12 @@ func (s *Server) bindKeep(ctx context.Context, req *apiv1.BindRequest) (*apiv1.B
 		// the LIST node first, then engine.Bind takes the resulting
 		// ServerID. Mirrors the Tasks path's CreateRemoteCollection
 		// pre-step.
-		var initialItems []connectors.WikiItem
-		if s.checklistMutator != nil {
-			if checklist, listErr := s.checklistMutator.ListItems(ctx, req.GetPage(), req.GetListName()); listErr == nil {
-				for _, it := range checklist.GetItems() {
-					initialItems = append(initialItems, connectors.WikiItem{
-						UID:         it.GetUid(),
-						Text:        it.GetText(),
-						Tags:        it.GetTags(),
-						Description: it.GetDescription(),
-						Checked:     it.GetChecked(),
-					})
-				}
-			}
+		adapter, adapterErr := s.adapterFor(apiv1.ConnectorKind_CONNECTOR_KIND_GOOGLE_KEEP)
+		if adapterErr != nil {
+			return nil, adapterErr
 		}
-		newHandle, _, createErr := s.keepAdapter.CreateRemoteCollection(ctx, profileID, req.GetListName(), initialItems)
+		initialItems := s.collectInitialItems(ctx, req.GetPage(), req.GetListName())
+		newHandle, _, createErr := adapter.CreateRemoteCollection(ctx, profileID, req.GetListName(), initialItems)
 		if createErr != nil {
 			if s.logger != nil {
 				s.logger.Error("ConnectorService.Bind(GOOGLE_KEEP) create new note for profile=%s list=%s: %v",

@@ -18,6 +18,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/brendanjerwin/simple_wiki/internal/connectors"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 )
 
@@ -314,7 +315,16 @@ func (s *FrontmatterCredentialStore) writeCredentials(profileID wikipage.PageIde
 // the bind ceremony itself takes a non-empty remote_handle (the engine
 // doesn't manage remote-list creation). Mirrors the legacy
 // Connector.subscribeWithLock empty-remoteListID branch.
-func (a *TasksAdapter) CreateRemoteCollection(ctx context.Context, profileID wikipage.PageIdentifier, listName string) (handle, title string, err error) {
+//
+// initialItems is intentionally ignored: Tasks creates an empty
+// tasklist, and the engine's first reconcile tick will Insert each
+// wiki item via the per-item primitives. Pre-seeding via the Tasks API
+// would require N+1 RPCs (one CreateList + N Insert), which is exactly
+// what the engine does anyway — so we accept the parameter for
+// connectors.BackendAdapter conformance and discard it. Keep, by
+// contrast, can stage initial items in the same Changes call that
+// mints the LIST node (see (*KeepAdapter).CreateRemoteCollection).
+func (a *TasksAdapter) CreateRemoteCollection(ctx context.Context, profileID wikipage.PageIdentifier, listName string, _ []connectors.WikiItem) (handle, title string, err error) {
 	client, err := a.buildClientForProfile(ctx, profileID)
 	if err != nil {
 		return "", "", fmt.Errorf("build client for profile %s: %w", profileID, err)

@@ -167,6 +167,29 @@ type BackendAdapter interface {
 	// adapter constraints (e.g., Tasks lists with subtasks).
 	ListRemoteCollections(ctx context.Context, profileID wikipage.PageIdentifier) ([]RemoteCollection, error)
 
+	// CreateRemoteCollection creates a fresh remote list/note titled
+	// after listName and returns its handle (= the binding's
+	// RemoteHandle) and friendly title. Called by the gRPC Bind handler
+	// when remote_handle is empty (the user picked "create a new list").
+	//
+	// Adapters that can pre-seed in a single round trip (Keep can stage
+	// items in the same Changes call that mints the LIST node) consume
+	// initialItems. Adapters that can't (Tasks creates an empty
+	// tasklist; the engine's first reconcile tick will Insert each wiki
+	// item via the per-item primitives) accept the parameter for
+	// interface conformance and discard it.
+	//
+	// Pre-seeding via the Tasks API would require N+1 RPCs (one
+	// CreateList + N Insert) which is exactly what the engine does on
+	// the first tick anyway, so the Tasks adapter intentionally ignores
+	// initialItems rather than duplicating the engine's outbound loop.
+	//
+	// The bind ceremony itself takes a non-empty remote_handle (the
+	// engine doesn't manage remote-list creation); this primitive sits
+	// outside the engine boundary and is invoked by the gRPC layer
+	// before engine.Bind.
+	CreateRemoteCollection(ctx context.Context, profileID wikipage.PageIdentifier, listName string, initialItems []WikiItem) (handle, title string, err error)
+
 	// Adapter-state codec (MATRIX row 10). Engine treats AdapterState
 	// as an opaque map[string]any sealed envelope: the engine moves
 	// it through the binding's TOML row but never inspects fields.

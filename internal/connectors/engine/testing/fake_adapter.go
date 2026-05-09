@@ -56,8 +56,9 @@ type FakeAdapter struct {
 	seedBindingStateResponses     []adapterStateResponse
 	validateRemoteBindingResponses []errResponse
 	rebuildAdapterStateResponses  []adapterStateResponse
-	listRemoteCollectionsResponses []listCollectionsResponse
-	titleSyncResponses            []titleResponse
+	listRemoteCollectionsResponses  []listCollectionsResponse
+	createRemoteCollectionResponses []createRemoteCollectionResponse
+	titleSyncResponses              []titleResponse
 	encodeAdapterStateResponses   []encodeResponse
 	decodeAdapterStateResponses   []adapterStateResponse
 	readRemoteByRefResponses      []remoteItemResponse
@@ -74,8 +75,9 @@ type FakeAdapter struct {
 	RecordedSeedBindingState      []recordedSeedBindingState
 	RecordedValidateRemoteBinding []recordedValidateRemoteBinding
 	RecordedRebuildAdapterState   []connectors.Binding
-	RecordedListRemoteCollections []wikipage.PageIdentifier
-	RecordedFetchRemoteListTitle  []recordedTitleSync
+	RecordedListRemoteCollections  []wikipage.PageIdentifier
+	RecordedCreateRemoteCollection []recordedCreateRemoteCollection
+	RecordedFetchRemoteListTitle   []recordedTitleSync
 	RecordedEncodeAdapterState    []connectors.AdapterState
 	RecordedDecodeAdapterState    []map[string]any
 	RecordedReadRemoteByRef       []recordedReadRemoteByRef
@@ -116,6 +118,18 @@ type adapterStateResponse struct {
 type listCollectionsResponse struct {
 	Collections []connectors.RemoteCollection
 	Err         error
+}
+
+type createRemoteCollectionResponse struct {
+	Handle string
+	Title  string
+	Err    error
+}
+
+type recordedCreateRemoteCollection struct {
+	ProfileID    wikipage.PageIdentifier
+	ListName     string
+	InitialItems []connectors.WikiItem
 }
 
 type titleResponse struct {
@@ -458,6 +472,32 @@ func (f *FakeAdapter) SetListRemoteCollectionsResponse(cols []connectors.RemoteC
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.listRemoteCollectionsResponses = append(f.listRemoteCollectionsResponses, listCollectionsResponse{Collections: cols, Err: err})
+}
+
+// CreateRemoteCollection implements connectors.BackendAdapter.
+func (f *FakeAdapter) CreateRemoteCollection(_ context.Context, profileID wikipage.PageIdentifier, listName string, initialItems []connectors.WikiItem) (handle, title string, err error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.RecordedCreateRemoteCollection = append(f.RecordedCreateRemoteCollection, recordedCreateRemoteCollection{
+		ProfileID:    profileID,
+		ListName:     listName,
+		InitialItems: initialItems,
+	})
+	if len(f.createRemoteCollectionResponses) == 0 {
+		// Default: synthesize a deterministic handle so tests that
+		// don't pre-program a response still get a non-empty value.
+		return "fake-handle-" + listName, listName, nil
+	}
+	r := f.createRemoteCollectionResponses[0]
+	f.createRemoteCollectionResponses = f.createRemoteCollectionResponses[1:]
+	return r.Handle, r.Title, r.Err
+}
+
+// SetCreateRemoteCollectionResponse queues a response for the next call.
+func (f *FakeAdapter) SetCreateRemoteCollectionResponse(handle, title string, err error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.createRemoteCollectionResponses = append(f.createRemoteCollectionResponses, createRemoteCollectionResponse{Handle: handle, Title: title, Err: err})
 }
 
 // FetchRemoteListTitle implements connectors.BackendAdapter.
