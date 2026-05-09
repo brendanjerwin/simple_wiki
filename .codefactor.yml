@@ -29,7 +29,10 @@ exclude_patterns:
   # `devbox run lint:everything` still runs revive over these files for
   # everything except naming rules.
   - "internal/connectors/google_keep/**"
+  - "internal/connectors/google_keep/*"
   - "internal/connectors/google_tasks/**"
+  - "internal/connectors/google_tasks/*"
+  - "internal/connectors/google_tasks/credentials.go"
 
 tools:
   - name: eslint
