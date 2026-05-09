@@ -288,6 +288,11 @@ func hasLegacyAdapterStateBloat(kindName string, bindingsRaw any) bool {
 			if topLevelRemoteHandleIsEmpty(m) && hasAny(adapterState, connectorsLegacyKeyKeepNoteID, connectorsLegacyKeyKeepNoteTitle) {
 				return true
 			}
+		default:
+			// Unknown connector kind. Migration is conservative: if we
+			// don't recognize the kind, assume no legacy fields need
+			// translation (a future kind would have its own migration
+			// row). Continue scanning the rest of the bindings.
 		}
 	}
 	return false
@@ -574,6 +579,9 @@ func cleanAdapterStateForKind(kindName string, adapterState map[string]any) {
 		cleanKeepAdapterState(adapterState)
 	case "google_tasks":
 		cleanTasksAdapterState(adapterState)
+	default:
+		// Unknown kind — no cleanup. A future migration row would
+		// register its own cleanup function alongside.
 	}
 }
 
@@ -685,6 +693,8 @@ func dropLegacyAdapterStateBloat(kindName string, bindingsRaw any) bool {
 			if hoistKeepLegacyAliases(m, adapterState) {
 				dropped = true
 			}
+		default:
+			// Unknown kind — no per-kind drops to apply.
 		}
 	}
 	return dropped

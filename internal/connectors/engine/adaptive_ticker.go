@@ -90,6 +90,14 @@ func NewAdaptiveTicker(
 //
 // Cancels any prior pending follow-up for the binding before
 // scheduling the new one — the most recent RecordTick wins.
+//
+// `hadActivity` is the activity signal (cursor advanced during the
+// caller's reconcile). It's not control-flag coupling — splitting
+// into RecordActiveTick/RecordQuietTick would just duplicate the
+// supersede-and-schedule logic that's identical apart from one
+// counter increment.
+//
+//revive:disable-next-line:flag-parameter
 func (a *AdaptiveTicker) RecordTick(key connectors.BindingKey, hadActivity bool) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -146,6 +154,14 @@ func (a *AdaptiveTicker) fire(key connectors.BindingKey) {
 	a.syncFn(context.Background(), key)
 }
 
+// maxQuietRunsBeforeShiftOverflow is the largest quietRuns value
+// computeFollowUpDelay will shift base by before bailing. Past this
+// the left-shift would overflow on 64-bit ints (treating
+// AdaptiveTickerBaseDelay as a small positive duration) — but we'd
+// have yielded to cron well before reaching it via the cap check
+// anyway. Defensive cap keeps the math safe.
+const maxQuietRunsBeforeShiftOverflow = 8
+
 // computeFollowUpDelay returns the next follow-up interval given the
 // quiet-run counter, or 0 to signal "no follow-up; yield to cron."
 //
@@ -156,8 +172,7 @@ func computeFollowUpDelay(quietRuns int) time.Duration {
 	if quietRuns < 0 {
 		quietRuns = 0
 	}
-	if quietRuns > 8 {
-		// Safeguard against integer overflow on the shift below.
+	if quietRuns > maxQuietRunsBeforeShiftOverflow {
 		return 0
 	}
 	delay := AdaptiveTickerBaseDelay << quietRuns

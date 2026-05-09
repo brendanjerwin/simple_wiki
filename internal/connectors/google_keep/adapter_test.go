@@ -426,7 +426,7 @@ var _ = Describe("KeepAdapter", func() {
 							ID:       "cbx.z39p6v77cl6t",
 							ServerID: "srv-deleted-no-type",
 							Timestamps: gateway.Timestamps{
-								Deleted: time.Date(2026, 5, 8, 10, 36, 50, 1_000_000, time.UTC),
+								Deleted: time.Date(2026, 5, 8, 10, 36, 50, 1000000, time.UTC),
 							},
 						},
 					},

@@ -47,6 +47,14 @@ var ErrAlreadyBoundForChecklist = errors.New("connectors/engine: checklist alrea
 //     cache now matches the durable record. On store failure, leave
 //     the lease untouched: the binding was never persisted.
 //  8. Release locks (defers).
+//
+// Function-length suppression: the bind ceremony's contract IS the
+// 8-step sequence above (mutex → validate → fan-out re-read → seed
+// → title-fetch → save → lease take → log). Splitting it into
+// helpers fragments the contract across files; the linear shape is
+// the operational reading order per ADR-0011 + MATRIX row 2.
+//
+//revive:disable-next-line:function-length
 func (e *Engine) Bind(
 	ctx context.Context,
 	profileID wikipage.PageIdentifier,

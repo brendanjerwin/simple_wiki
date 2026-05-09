@@ -44,6 +44,13 @@ import (
 // EncodeAdapterState / DecodeAdapterState.
 const AdapterStateKeyItemMapping = "item_mapping"
 
+// AdapterStateKeyItemIDMap is the engine's wiki-uid → server-id map
+// (the rebuild-vs-bind contract). Mirrors the engine's
+// adapterStateItemIDMapKey but kept locally so the Keep adapter's
+// SeedBindingState/RebuildAdapterState can pre-populate the field
+// without a circular import.
+const AdapterStateKeyItemIDMap = "item_id_map"
+
 // AdapterStateKeyKeepCursor is the AdapterState subtree key under which
 // the adapter persists Keep's `to_version` cursor token. Sent as
 // `target_version` on the next pull so Keep returns only the delta
@@ -213,6 +220,15 @@ func (*KeepAdapter) SupportsSubtasks() bool {
 // node that changed since the last successful sync. NewCursor is the
 // Keep `to_version` token (string) so AdvanceCursor can store it
 // verbatim. Truncated propagates from the gateway response.
+//
+// Function-length suppression: this primitive owns Keep's pull
+// contract — the per-node filter (type / parent / typeless-tombstone),
+// the keep_note_client_id self-heal, the truncation handling, and the
+// RemoteDiverged comparison. Each of those is a small block but the
+// whole flow is one operational unit; splitting it fragments the
+// contract.
+//
+//revive:disable-next-line:function-length
 func (a *KeepAdapter) PullRemote(ctx context.Context, binding connectors.Binding) (connectors.RemotePullResult, error) {
 	client, err := a.buildClientForProfile(ctx, binding.ProfileID)
 	if err != nil {
@@ -322,7 +338,7 @@ func readItemIDMapServerIDSet(state connectors.AdapterState) map[string]struct{}
 	if state == nil {
 		return out
 	}
-	raw, ok := state["item_id_map"]
+	raw, ok := state[AdapterStateKeyItemIDMap]
 	if !ok {
 		return out
 	}
@@ -549,6 +565,13 @@ func (*KeepAdapter) WikiToRemote(wiki connectors.WikiItem) (connectors.RemoteIte
 // Idempotent: when MergeKeepLabels returns no labelPush AND the LIST
 // node's existing labelIDs already match the desired set, this is a
 // no-op (no Changes request, no AdapterState mutation).
+//
+// Function-length suppression: the label CRUD sequence (compute
+// merge → check no-op → build LIST node update → push Changes →
+// merge response labels into AdapterState) is one atomic operational
+// unit per the legacy SyncToKeep block.
+//
+//revive:disable-next-line:function-length
 func (a *KeepAdapter) SyncCollectionState(ctx context.Context, binding connectors.Binding, items []connectors.WikiItem) (connectors.Binding, error) {
 	tags := uniqueTagsFromItems(items)
 	persisted := readLabelIDs(binding.AdapterState)
@@ -620,13 +643,10 @@ func (a *KeepAdapter) SyncCollectionState(ctx context.Context, binding connector
 	if updated == nil {
 		updated = map[string]string{}
 	}
-	for i, l := range labelPush {
-		if i < len(tags) {
-			// Persist using the user-supplied tag name (canonical case
-			// is whatever the wiki had); MergeKeepLabels emits in the
-			// same order as the input tags for any not previously
-			// matched. Match by MainID to be safe.
-		}
+	// MergeKeepLabels emits in the same order as the input tags for any
+	// not previously matched, so we persist using the canonical Name
+	// directly.
+	for _, l := range labelPush {
 		updated[l.Name] = l.MainID
 	}
 	for _, l := range resp.Labels {
@@ -777,6 +797,14 @@ func (*KeepAdapter) AdvanceCursor(binding connectors.Binding, result connectors.
 // On a fresh (empty) Keep note the returned AdapterState carries
 // empty maps so EncodeAdapterState / DecodeAdapterState can round-trip
 // uniformly.
+//
+// Function-length suppression: the seed pass owns the bind-time
+// alignment contract (pull → build itemMapping + textIndex → text-
+// match wikiItems into item_id_map → index labels → capture LIST
+// client_id). The sequence is one atomic operational unit and
+// matches MATRIX row 2.
+//
+//revive:disable-next-line:function-length
 func (a *KeepAdapter) SeedBindingState(ctx context.Context, profileID wikipage.PageIdentifier, remoteHandle string, wikiItems []connectors.WikiItem) (connectors.AdapterState, error) {
 	client, err := a.buildClientForProfile(ctx, profileID)
 	if err != nil {
@@ -861,7 +889,7 @@ func (a *KeepAdapter) SeedBindingState(ctx context.Context, profileID wikipage.P
 		AdapterStateKeyKeepCursor:       pull.ToVersion,
 		AdapterStateKeyLabelIDs:         labelIDs,
 		AdapterStateKeyKeepNoteClientID: keepNoteClientID,
-		"item_id_map":                   itemIDMap,
+		AdapterStateKeyItemIDMap:        itemIDMap,
 	}, nil
 }
 
@@ -935,7 +963,7 @@ func (a *KeepAdapter) RebuildAdapterState(ctx context.Context, binding connector
 	// Preserve item_id_map entries whose refs are still present in
 	// the rebuilt item_mapping. Drop entries pointing to refs that
 	// no longer exist on the remote.
-	state["item_id_map"] = preserveItemIDMap(binding.AdapterState, state)
+	state[AdapterStateKeyItemIDMap] = preserveItemIDMap(binding.AdapterState, state)
 
 	return state, nil
 }
@@ -954,7 +982,7 @@ func preserveItemIDMap(prevState, rebuiltState connectors.AdapterState) map[stri
 	if !ok {
 		return out
 	}
-	rawIDMap, ok := prevState["item_id_map"]
+	rawIDMap, ok := prevState[AdapterStateKeyItemIDMap]
 	if !ok {
 		return out
 	}

@@ -348,6 +348,15 @@ func (e *Engine) indexUnboundWikiItemsByText(ctx context.Context, binding connec
 // ADR-0015 4-cell rule. Extracted from applyInbound to keep the outer
 // function under revive's function-length cap; the per-branch logic is
 // the same case table the caller's docstring enumerates.
+//
+// Function-length suppression: this function IS the per-uid case
+// table from ADR-0015's 4-cell merge plus the 2026-05-08 sticky-
+// user-wins-on-Deleted carve-out (Lamport §10.13) and the
+// 2026-05-08 dedup-by-text branch. Splitting branches out into
+// helpers obscures the case-by-case rule that matches the ADR; the
+// shape here mirrors the documented contract directly.
+//
+//revive:disable-next-line:function-length
 func (e *Engine) applyInboundOneItem(
 	ctx context.Context,
 	binding connectors.Binding,

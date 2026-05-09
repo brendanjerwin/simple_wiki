@@ -33,6 +33,6 @@ var PerRPCDeadline = 15 * time.Second
 // invariant-by-construction Bailis specified in the round-3 review:
 // the deadline is a property of the engine→adapter boundary, not a
 // per-adapter responsibility.
-func (e *Engine) withRPCDeadline(ctx context.Context) (context.Context, context.CancelFunc) {
+func (*Engine) withRPCDeadline(ctx context.Context) (context.Context, context.CancelFunc) {
 	return context.WithTimeout(ctx, PerRPCDeadline)
 }
