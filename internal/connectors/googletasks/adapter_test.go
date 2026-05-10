@@ -429,6 +429,35 @@ var _ = Describe("TasksAdapter", func() {
 		})
 	})
 
+	// Adapter-level companion to the engine reconcile Due test: drives
+	// `(*TasksAdapter).InsertRemote` end-to-end with a Due-bearing
+	// WikiItem and asserts the gateway's InsertTask call received the
+	// expected timestamp. Covers the wikiItemToProto Due branch which
+	// the FakeAdapter-based engine tests don't exercise.
+	Describe("InsertRemote with a due date", func() {
+		var (
+			binding connectors.Binding
+			err     error
+			dueAt   time.Time
+		)
+
+		BeforeEach(func() {
+			dueAt = time.Date(2026, 6, 15, 0, 0, 0, 0, time.UTC)
+			binding = connectors.Binding{ProfileID: profile, RemoteHandle: remoteHandle}
+			item := connectors.WikiItem{UID: "u-due", Text: "buy plane tickets", Due: dueAt}
+			_, err = adapter.InsertRemote(ctx, binding, item)
+		})
+
+		It("should not error", func() {
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should pass the Due timestamp to gateway InsertTask", func() {
+			Expect(fakeClient.inserted).To(HaveLen(1))
+			Expect(fakeClient.inserted[0].Due).To(Equal(dueAt))
+		})
+	})
+
 	Describe("PatchRemote", func() {
 		var (
 			binding connectors.Binding

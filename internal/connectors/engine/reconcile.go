@@ -17,12 +17,14 @@ import (
 
 // timestampToTime returns the time.Time that the protobuf Timestamp
 // represents, or the zero time if ts is nil. Used at every WikiItem-
-// from-ChecklistItem construction site to forward time-typed fields
-// (Due, CompletedAt) into the adapter boundary. Without this helper —
-// or equivalent inline GetDue().AsTime() — the engine silently drops
-// the proto Timestamp and the adapter sees a zero time, which the
-// remote backend stores as "no due date." Regression fix; see the
-// "outbound has a new wiki item with a due date" reconcile test.
+// from-ChecklistItem construction site to forward `Due` into the
+// adapter boundary. The connectors.WikiItem struct does not currently
+// carry CompletedAt — when an adapter wants it, the same helper will
+// be used at the same call sites. Calling `ts.AsTime()` directly
+// without this nil-guard panics on a missing-field proto, which is
+// why every WikiItem builder must go through this helper rather than
+// inlining the conversion. Regression fix; see the "outbound has a
+// new wiki item with a due date" reconcile test.
 func timestampToTime(ts *timestamppb.Timestamp) time.Time {
 	if ts == nil {
 		return time.Time{}

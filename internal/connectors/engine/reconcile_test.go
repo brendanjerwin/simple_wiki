@@ -1002,6 +1002,59 @@ var _ = Describe("Engine.reconcile", func() {
 			Expect(fa.RecordedInsertRemote).To(HaveLen(1))
 			Expect(fa.RecordedInsertRemote[0].Item.Due).To(Equal(dueAt))
 		})
+
+		It("should pass the Due field through to SyncCollectionState's wikiItems", func() {
+			Expect(fa.RecordedSyncCollectionState).To(HaveLen(1))
+			items := fa.RecordedSyncCollectionState[0].Items
+			Expect(items).To(HaveLen(1))
+			Expect(items[0].UID).To(Equal(newUID))
+			Expect(items[0].Due).To(Equal(dueAt))
+		})
+	})
+
+	// Companion to the InsertRemote/SyncCollectionState Due test: verifies
+	// the Patch path also forwards Due. The wiki item is already bound
+	// (uid present in AdapterState's item_id_map) and divergence is
+	// asserted via an UncoveredUserEvent in the op-log so pushOutbound
+	// gates the Patch on WikiDiverged.
+	When("outbound has an existing wiki item with a due date and wiki has diverged", func() {
+		const knownUID = "uid-due-patch-1"
+		var dueAt time.Time
+
+		BeforeEach(func() {
+			dueAt = time.Date(2026, 6, 16, 0, 0, 0, 0, time.UTC)
+			fbs.SeedBinding(connectors.Binding{
+				ProfileID: profileID, Page: page, ListName: listName,
+				RemoteHandle:         "tasklist-1",
+				State:                connectors.BindingStateActive,
+				LastSuccessfulSyncAt: reconcilePastChokePausedAt,
+				LastSyncedSeq:        10,
+				AdapterState: connectors.AdapterState{
+					"item_id_map": map[string]string{knownUID: "task-due-existing"},
+				},
+			}, ownerKind)
+
+			fa.SetPullRemoteResponse(connectors.RemotePullResult{}, nil)
+			fa.SetPatchRemoteResponse("task-due-existing", nil)
+			reader.checklist = &apiv1.Checklist{
+				Items: []*apiv1.ChecklistItem{{
+					Uid:  knownUID,
+					Text: "renew passport",
+					Due:  timestamppb.New(dueAt),
+				}},
+				Events: []*apiv1.ChecklistEvent{
+					{Seq: 11, Src: "user:bren@example.com", Op: "set_due", Uid: knownUID},
+				},
+				MaxSeq: 11,
+			}
+
+			Expect(eng.Sync(ctx, key)).To(Succeed())
+		})
+
+		It("should pass the Due field through to PatchRemote", func() {
+			Expect(fa.RecordedPatchRemote).To(HaveLen(1))
+			Expect(fa.RecordedPatchRemote[0].Item.Due).To(Equal(dueAt))
+		})
 	})
 
 	When("outbound has an updated wiki item already in AdapterState mapping and wiki has diverged", func() {
