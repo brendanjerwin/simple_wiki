@@ -44,7 +44,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/brendanjerwin/simple_wiki/internal/connectors/google_tasks/gateway"
+	"github.com/brendanjerwin/simple_wiki/internal/connectors/googletasks/gateway"
 )
 
 func main() {

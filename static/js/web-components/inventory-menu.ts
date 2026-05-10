@@ -118,20 +118,25 @@ function buildInventoryMenu(currentPage: string, frontmatter: unknown): void {
   if (isContainer && addItemEl) {
     addItemEl.addEventListener('click', (e) => {
       e.preventDefault();
-      submenu.classList.remove('submenu-open');
+      // Capture focus before removing submenu-open: classList.remove makes the
+      // menu item display:none, which causes Chromium to immediately move focus
+      // to <body> before openDialog() can record document.activeElement.
       // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- inventory-add-item-dialog is registered in HTMLElementTagNameMap
       const dialog = document.getElementById('inventory-add-dialog') as InventoryAddItemDialog | null;
       dialog?.openDialog(currentPage);
+      submenu.classList.remove('submenu-open');
     });
   }
 
   if (isItem && moveItemEl) {
     moveItemEl.addEventListener('click', (e) => {
       e.preventDefault();
-      submenu.classList.remove('submenu-open');
+      // Same ordering fix as above — openDialog() must capture activeElement
+      // before the submenu hides the trigger.
       // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- inventory-move-item-dialog is registered in HTMLElementTagNameMap
       const dialog = document.getElementById('inventory-move-dialog') as InventoryMoveItemDialog | null;
       dialog?.openDialog(currentPage, currentContainer);
+      submenu.classList.remove('submenu-open');
     });
   }
 }

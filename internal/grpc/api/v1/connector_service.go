@@ -12,19 +12,25 @@ import (
 
 	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
 	"github.com/brendanjerwin/simple_wiki/internal/connectors"
-	"github.com/brendanjerwin/simple_wiki/internal/connectors/google_keep/gateway"
-	keepsync "github.com/brendanjerwin/simple_wiki/internal/connectors/google_keep/sync"
-	tasksgateway "github.com/brendanjerwin/simple_wiki/internal/connectors/google_tasks/gateway"
-	taskssync "github.com/brendanjerwin/simple_wiki/internal/connectors/google_tasks/sync"
+	"github.com/brendanjerwin/simple_wiki/internal/connectors/engine"
+	"github.com/brendanjerwin/simple_wiki/internal/connectors/googlekeep"
+	"github.com/brendanjerwin/simple_wiki/internal/connectors/googlekeep/gateway"
+	"github.com/brendanjerwin/simple_wiki/internal/connectors/googletasks"
+	tasksgateway "github.com/brendanjerwin/simple_wiki/internal/connectors/googletasks/gateway"
 	"github.com/brendanjerwin/simple_wiki/tailscale"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 )
 
-const errKeepConnectorNotConfiguredMsg = "keep_connector orchestrator not configured on this server"
+// errKeepConnectorNotConfigured is returned when the Keep engine path
+// hasn't been wired by this wiki's operator. The frontend renders this
+// as "set up Google Keep on profile" so the user understands the
+// action required.
+var errKeepConnectorNotConfigured = status.Error(
+	codes.FailedPrecondition,
+	"Google Keep connector not configured by this wiki's operator",
+)
 
-var errKeepConnectorNotConfigured = status.Error(codes.Internal, errKeepConnectorNotConfiguredMsg)
-
-// errTasksConnectorNotConfigured is returned when the Tasks connector
+// errTasksConnectorNotConfigured is returned when the Tasks engine path
 // hasn't been wired by this wiki's operator (env vars unset). The
 // frontend renders this as "set up Google Tasks on profile" so the
 // user understands the action required.
@@ -51,6 +57,10 @@ var errConnectorKindRequired = status.Error(codes.InvalidArgument, "connector_ki
 // an RPC requires both page and list_name but one or both are empty.
 const errMsgPageAndListRequired = "page and list_name are required"
 
+// errMsgBindingNotFound is the shared NotFound message returned
+// by Unbind handlers when no binding matches (page, list_name).
+const errMsgBindingNotFound = "binding_not_found"
+
 // requireRealUser rejects anonymous and agent identities. Mirrors the
 // /profile route's posture: connector flows are for human users only.
 func requireRealUser(ctx context.Context) (tailscale.IdentityValue, wikipage.PageIdentifier, error) {
@@ -73,6 +83,78 @@ func errUnsupportedConnectorKind(kind apiv1.ConnectorKind) error {
 	return status.Error(codes.Unimplemented, fmt.Sprintf("unsupported connector_kind: %v", kind))
 }
 
+// collectInitialItems pulls the wiki checklist's items into the engine
+// boundary's WikiItem shape, used by Bind's "create a new remote
+// collection" pre-step. Pre-seed-capable adapters (Keep) consume the
+// slice; the others (Tasks) discard it. The mutator is optional: tests
+// without it get a nil slice, which the adapters tolerate.
+func (s *Server) collectInitialItems(ctx context.Context, page, listName string) []connectors.WikiItem {
+	if s.checklistMutator == nil {
+		return nil
+	}
+	checklist, err := s.checklistMutator.ListItems(ctx, page, listName)
+	if err != nil {
+		return nil
+	}
+	items := checklist.GetItems()
+	out := make([]connectors.WikiItem, 0, len(items))
+	for _, it := range items {
+		out = append(out, connectors.WikiItem{
+			UID:         it.GetUid(),
+			Text:        it.GetText(),
+			Tags:        it.GetTags(),
+			Description: it.GetDescription(),
+			Checked:     it.GetChecked(),
+		})
+	}
+	return out
+}
+
+// adapterFor resolves a connector kind to its BackendAdapter. Lets the
+// shared Bind path call adapter.CreateRemoteCollection without a
+// kind-switch on the concrete adapter field — adding a new connector
+// only adds a case here, and forgetting to wire CreateRemoteCollection
+// is a compile-time error on the adapter (per the BackendAdapter
+// var-underscore assertion in each adapter file) rather than a runtime
+// kind-switch leak.
+func (s *Server) adapterFor(kind apiv1.ConnectorKind) (connectors.BackendAdapter, error) {
+	switch kind {
+	case apiv1.ConnectorKind_CONNECTOR_KIND_UNSPECIFIED:
+		return nil, errConnectorKindRequired
+	case apiv1.ConnectorKind_CONNECTOR_KIND_GOOGLE_KEEP:
+		if !s.keepWired() {
+			return nil, errKeepConnectorNotConfigured
+		}
+		return s.keepAdapter, nil
+	case apiv1.ConnectorKind_CONNECTOR_KIND_GOOGLE_TASKS:
+		if !s.tasksWired() {
+			return nil, errTasksConnectorNotConfigured
+		}
+		return s.tasksAdapter, nil
+	default:
+		return nil, errUnsupportedConnectorKind(kind)
+	}
+}
+
+// tasksWired reports whether the Tasks engine collaborators are all
+// wired. The handlers branch on this aggregate flag so the per-RPC
+// "not configured" error reads consistently.
+func (s *Server) tasksWired() bool {
+	return s.tasksEngine != nil &&
+		s.tasksAdapter != nil &&
+		s.tasksBindingStore != nil &&
+		s.tasksCredentialStore != nil
+}
+
+// keepWired reports whether the Keep engine collaborators are all
+// wired. Mirrors tasksWired's shape for Phase 5-A's cutover.
+func (s *Server) keepWired() bool {
+	return s.keepEngine != nil &&
+		s.keepAdapter != nil &&
+		s.keepBindingStore != nil &&
+		s.keepCredentialStore != nil
+}
+
 // BeginAuth implements the BeginAuth RPC. For Keep, this is a no-op —
 // Keep's flow is single-shot via CompleteAuth. For Tasks, the handler
 // returns the Google authorization URL (with PKCE + state baked in)
@@ -93,7 +175,7 @@ func (s *Server) BeginAuth(ctx context.Context, req *apiv1.BeginAuthRequest) (*a
 }
 
 func (s *Server) beginAuthTasks(ctx context.Context, req *apiv1.BeginAuthRequest) (*apiv1.BeginAuthResponse, error) {
-	if s.tasksConnector == nil {
+	if !s.tasksWired() {
 		return nil, errTasksConnectorNotConfigured
 	}
 	if s.tasksAuthURLBuilder == nil {
@@ -122,8 +204,7 @@ func (s *Server) beginAuthTasks(ctx context.Context, req *apiv1.BeginAuthRequest
 // at /oauth/google/callback owns the code-for-token exchange (it must,
 // to honor RFC 9700 §2.1.2 "validate state before exchanging code"
 // and to capture the redirect-supplied state token). The Tasks branch
-// here returns FailedPrecondition with a pointer to the right flow,
-// so a frontend that mistakenly uses it gets a clear signal.
+// here returns FailedPrecondition with a pointer to the right flow.
 func (s *Server) CompleteAuth(ctx context.Context, req *apiv1.CompleteAuthRequest) (*apiv1.CompleteAuthResponse, error) {
 	switch req.GetConnectorKind() {
 	case apiv1.ConnectorKind_CONNECTOR_KIND_UNSPECIFIED:
@@ -141,25 +222,33 @@ func (s *Server) CompleteAuth(ctx context.Context, req *apiv1.CompleteAuthReques
 }
 
 func (s *Server) completeAuthKeep(ctx context.Context, req *apiv1.CompleteAuthRequest) (*apiv1.CompleteAuthResponse, error) {
-	if s.keepConnector == nil {
+	if !s.keepWired() {
 		return nil, errKeepConnectorNotConfigured
+	}
+	if s.keepAuthVerifier == nil {
+		return nil, status.Error(codes.FailedPrecondition,
+			"Google Keep auth verifier not configured by this wiki's operator")
 	}
 	_, profileID, err := requireRealUser(ctx)
 	if err != nil {
 		return nil, err
 	}
-	state, err := s.keepConnector.Connect(ctx, profileID, req.GetEmail(), req.GetOauthToken())
+	bundle, err := s.keepCredentialStore.Connect(ctx, profileID, req.GetEmail(), req.GetOauthToken(), s.keepAuthVerifier)
 	if err != nil {
-		// Log the full error chain server-side so journalctl shows
-		// Google's exact rejection (memento/reminders scope, ErrorDetail,
-		// etc.) without exposing the captured oauth_token. The mapped
-		// gRPC error sent back to the client still redacts.
 		if s.logger != nil {
 			s.logger.Error("ConnectorService.CompleteAuth(GOOGLE_KEEP) failed for profile=%s: %v", string(profileID), err)
 		}
 		return nil, mapKeepConnectorErr(err)
 	}
-	return &apiv1.CompleteAuthResponse{State: connectorStateToProto(state, apiv1.ConnectorKind_CONNECTOR_KIND_GOOGLE_KEEP)}, nil
+	bindings, err := s.keepBindingStore.LoadBindings(profileID, connectors.ConnectorKindGoogleKeep)
+	if err != nil {
+		if s.logger != nil {
+			s.logger.Error("ConnectorService.CompleteAuth(GOOGLE_KEEP) load bindings for profile=%s: %v",
+				string(profileID), err)
+		}
+		return nil, mapKeepConnectorErr(err)
+	}
+	return &apiv1.CompleteAuthResponse{State: keepStateToProto(bundle, bindings)}, nil
 }
 
 // Disconnect implements the Disconnect RPC.
@@ -177,45 +266,57 @@ func (s *Server) Disconnect(ctx context.Context, req *apiv1.DisconnectRequest) (
 }
 
 func (s *Server) disconnectTasks(ctx context.Context) (*apiv1.DisconnectResponse, error) {
-	if s.tasksConnector == nil {
+	if !s.tasksWired() {
 		return nil, errTasksConnectorNotConfigured
 	}
 	_, profileID, err := requireRealUser(ctx)
 	if err != nil {
 		return nil, err
 	}
-	state, err := s.tasksConnector.Disconnect(ctx, profileID)
+	bundle, err := s.tasksCredentialStore.ClearCredentials(ctx, profileID)
 	if err != nil {
-		// Log the full error chain server-side before mapping to a
-		// gRPC code. See feedback_never_obscure_errors_at_boundaries.
 		if s.logger != nil {
 			s.logger.Error("ConnectorService.Disconnect(GOOGLE_TASKS) failed for profile=%s: %v",
 				string(profileID), err)
 		}
 		return nil, mapTasksConnectorErr(err)
 	}
-	return &apiv1.DisconnectResponse{State: tasksStateToProto(state)}, nil
+	bindings, err := s.tasksBindingStore.LoadBindings(profileID, connectors.ConnectorKindGoogleTasks)
+	if err != nil {
+		if s.logger != nil {
+			s.logger.Error("ConnectorService.Disconnect(GOOGLE_TASKS) load bindings for profile=%s: %v",
+				string(profileID), err)
+		}
+		return nil, mapTasksConnectorErr(err)
+	}
+	return &apiv1.DisconnectResponse{State: tasksStateToProto(bundle, bindings)}, nil
 }
 
 func (s *Server) disconnectKeep(ctx context.Context) (*apiv1.DisconnectResponse, error) {
-	if s.keepConnector == nil {
+	if !s.keepWired() {
 		return nil, errKeepConnectorNotConfigured
 	}
 	_, profileID, err := requireRealUser(ctx)
 	if err != nil {
 		return nil, err
 	}
-	state, err := s.keepConnector.Disconnect(ctx, profileID)
+	bundle, err := s.keepCredentialStore.ClearCredentials(ctx, profileID)
 	if err != nil {
-		// Log the full error chain server-side before mapping to a
-		// gRPC code. See feedback_never_obscure_errors_at_boundaries.
 		if s.logger != nil {
 			s.logger.Error("ConnectorService.Disconnect(GOOGLE_KEEP) failed for profile=%s: %v",
 				string(profileID), err)
 		}
 		return nil, mapKeepConnectorErr(err)
 	}
-	return &apiv1.DisconnectResponse{State: connectorStateToProto(state, apiv1.ConnectorKind_CONNECTOR_KIND_GOOGLE_KEEP)}, nil
+	bindings, err := s.keepBindingStore.LoadBindings(profileID, connectors.ConnectorKindGoogleKeep)
+	if err != nil {
+		if s.logger != nil {
+			s.logger.Error("ConnectorService.Disconnect(GOOGLE_KEEP) load bindings for profile=%s: %v",
+				string(profileID), err)
+		}
+		return nil, mapKeepConnectorErr(err)
+	}
+	return &apiv1.DisconnectResponse{State: keepStateToProto(bundle, bindings)}, nil
 }
 
 // GetState implements the GetState RPC.
@@ -233,109 +334,117 @@ func (s *Server) GetState(ctx context.Context, req *apiv1.GetStateRequest) (*api
 }
 
 func (s *Server) getStateTasks(ctx context.Context) (*apiv1.GetStateResponse, error) {
-	if s.tasksConnector == nil {
+	if !s.tasksWired() {
 		return nil, errTasksConnectorNotConfigured
 	}
 	_, profileID, err := requireRealUser(ctx)
 	if err != nil {
 		return nil, err
 	}
-	state, err := s.tasksConnector.GetState(ctx, profileID)
+	bundle, err := s.tasksCredentialStore.LoadCredentials(ctx, profileID)
 	if err != nil {
-		// Log the full error chain server-side before mapping to a
-		// gRPC code. See feedback_never_obscure_errors_at_boundaries.
 		if s.logger != nil {
-			s.logger.Error("ConnectorService.GetState(GOOGLE_TASKS) failed for profile=%s: %v",
+			s.logger.Error("ConnectorService.GetState(GOOGLE_TASKS) load credentials for profile=%s: %v",
 				string(profileID), err)
 		}
 		return nil, mapTasksConnectorErr(err)
 	}
-	return &apiv1.GetStateResponse{State: tasksStateToProto(state)}, nil
+	bindings, err := s.tasksBindingStore.LoadBindings(profileID, connectors.ConnectorKindGoogleTasks)
+	if err != nil {
+		if s.logger != nil {
+			s.logger.Error("ConnectorService.GetState(GOOGLE_TASKS) load bindings for profile=%s: %v",
+				string(profileID), err)
+		}
+		return nil, mapTasksConnectorErr(err)
+	}
+	return &apiv1.GetStateResponse{State: tasksStateToProto(bundle, bindings)}, nil
 }
 
 func (s *Server) getStateKeep(ctx context.Context) (*apiv1.GetStateResponse, error) {
-	if s.keepConnector == nil {
+	if !s.keepWired() {
 		return nil, errKeepConnectorNotConfigured
 	}
 	_, profileID, err := requireRealUser(ctx)
 	if err != nil {
 		return nil, err
 	}
-	state, err := s.keepConnector.GetState(ctx, profileID)
+	bundle, err := s.keepCredentialStore.LoadCredentials(ctx, profileID)
 	if err != nil {
-		// Log the full error chain server-side before mapping to a
-		// gRPC code. See feedback_never_obscure_errors_at_boundaries.
 		if s.logger != nil {
-			s.logger.Error("ConnectorService.GetState(GOOGLE_KEEP) failed for profile=%s: %v",
+			s.logger.Error("ConnectorService.GetState(GOOGLE_KEEP) load credentials for profile=%s: %v",
 				string(profileID), err)
 		}
 		return nil, mapKeepConnectorErr(err)
 	}
-	return &apiv1.GetStateResponse{State: connectorStateToProto(state, apiv1.ConnectorKind_CONNECTOR_KIND_GOOGLE_KEEP)}, nil
+	bindings, err := s.keepBindingStore.LoadBindings(profileID, connectors.ConnectorKindGoogleKeep)
+	if err != nil {
+		if s.logger != nil {
+			s.logger.Error("ConnectorService.GetState(GOOGLE_KEEP) load bindings for profile=%s: %v",
+				string(profileID), err)
+		}
+		return nil, mapKeepConnectorErr(err)
+	}
+	return &apiv1.GetStateResponse{State: keepStateToProto(bundle, bindings)}, nil
 }
 
-// ListMySubscriptions implements the ListMySubscriptions RPC.
-func (s *Server) ListMySubscriptions(ctx context.Context, req *apiv1.ListMySubscriptionsRequest) (*apiv1.ListMySubscriptionsResponse, error) {
+// ListMyBindings implements the ListMyBindings RPC.
+func (s *Server) ListMyBindings(ctx context.Context, req *apiv1.ListMyBindingsRequest) (*apiv1.ListMyBindingsResponse, error) {
 	switch req.GetConnectorKind() {
 	case apiv1.ConnectorKind_CONNECTOR_KIND_UNSPECIFIED:
 		return nil, errConnectorKindRequired
 	case apiv1.ConnectorKind_CONNECTOR_KIND_GOOGLE_KEEP:
-		return s.listMySubscriptionsKeep(ctx)
+		return s.listMyBindingsKeep(ctx)
 	case apiv1.ConnectorKind_CONNECTOR_KIND_GOOGLE_TASKS:
-		return s.listMySubscriptionsTasks(ctx)
+		return s.listMyBindingsTasks(ctx)
 	default:
 		return nil, errUnsupportedConnectorKind(req.GetConnectorKind())
 	}
 }
 
-func (s *Server) listMySubscriptionsTasks(ctx context.Context) (*apiv1.ListMySubscriptionsResponse, error) {
-	if s.tasksConnector == nil {
+func (s *Server) listMyBindingsTasks(ctx context.Context) (*apiv1.ListMyBindingsResponse, error) {
+	if !s.tasksWired() {
 		return nil, errTasksConnectorNotConfigured
 	}
 	_, profileID, err := requireRealUser(ctx)
 	if err != nil {
 		return nil, err
 	}
-	state, err := s.tasksConnector.GetState(ctx, profileID)
+	bindings, err := s.tasksBindingStore.LoadBindings(profileID, connectors.ConnectorKindGoogleTasks)
 	if err != nil {
-		// Log the full error chain server-side before mapping to a
-		// gRPC code. See feedback_never_obscure_errors_at_boundaries.
 		if s.logger != nil {
-			s.logger.Error("ConnectorService.ListMySubscriptions(GOOGLE_TASKS) failed for profile=%s: %v",
+			s.logger.Error("ConnectorService.ListMyBindings(GOOGLE_TASKS) failed for profile=%s: %v",
 				string(profileID), err)
 		}
 		return nil, mapTasksConnectorErr(err)
 	}
-	out := make([]*apiv1.SubscriptionState, 0, len(state.Subscriptions))
-	for _, sub := range state.Subscriptions {
-		out = append(out, tasksSubscriptionToProto(sub))
+	out := make([]*apiv1.BindingState, 0, len(bindings))
+	for _, b := range bindings {
+		out = append(out, tasksBindingToProto(b))
 	}
-	return &apiv1.ListMySubscriptionsResponse{Subscriptions: out}, nil
+	return &apiv1.ListMyBindingsResponse{Bindings: out}, nil
 }
 
-func (s *Server) listMySubscriptionsKeep(ctx context.Context) (*apiv1.ListMySubscriptionsResponse, error) {
-	if s.keepConnector == nil {
+func (s *Server) listMyBindingsKeep(ctx context.Context) (*apiv1.ListMyBindingsResponse, error) {
+	if !s.keepWired() {
 		return nil, errKeepConnectorNotConfigured
 	}
 	_, profileID, err := requireRealUser(ctx)
 	if err != nil {
 		return nil, err
 	}
-	state, err := s.keepConnector.GetState(ctx, profileID)
+	bindings, err := s.keepBindingStore.LoadBindings(profileID, connectors.ConnectorKindGoogleKeep)
 	if err != nil {
-		// Log the full error chain server-side before mapping to a
-		// gRPC code. See feedback_never_obscure_errors_at_boundaries.
 		if s.logger != nil {
-			s.logger.Error("ConnectorService.ListMySubscriptions(GOOGLE_KEEP) failed for profile=%s: %v",
+			s.logger.Error("ConnectorService.ListMyBindings(GOOGLE_KEEP) failed for profile=%s: %v",
 				string(profileID), err)
 		}
 		return nil, mapKeepConnectorErr(err)
 	}
-	out := make([]*apiv1.SubscriptionState, 0, len(state.Subscriptions))
-	for _, b := range state.Subscriptions {
-		out = append(out, keepSubscriptionToProto(b, !state.IsConfigured()))
+	out := make([]*apiv1.BindingState, 0, len(bindings))
+	for _, b := range bindings {
+		out = append(out, keepBindingToProto(b))
 	}
-	return &apiv1.ListMySubscriptionsResponse{Subscriptions: out}, nil
+	return &apiv1.ListMyBindingsResponse{Bindings: out}, nil
 }
 
 // ListRemoteLists implements the ListRemoteLists RPC.
@@ -353,207 +462,374 @@ func (s *Server) ListRemoteLists(ctx context.Context, req *apiv1.ListRemoteLists
 }
 
 func (s *Server) listRemoteListsTasks(ctx context.Context) (*apiv1.ListRemoteListsResponse, error) {
-	if s.tasksConnector == nil {
+	if !s.tasksWired() {
 		return nil, errTasksConnectorNotConfigured
 	}
 	_, profileID, err := requireRealUser(ctx)
 	if err != nil {
 		return nil, err
 	}
-	lists, err := s.tasksConnector.ListRemoteLists(ctx, profileID)
+	// Engine path: ensure the profile is configured. The credential
+	// store is the authoritative "is connected?" signal.
+	bundle, credErr := s.tasksCredentialStore.LoadCredentials(ctx, profileID)
+	if credErr != nil {
+		if s.logger != nil {
+			s.logger.Error("ConnectorService.ListRemoteLists(GOOGLE_TASKS) load credentials for profile=%s: %v",
+				string(profileID), credErr)
+		}
+		return nil, mapTasksConnectorErr(credErr)
+	}
+	if !bundle.IsConfigured() {
+		return nil, mapTasksConnectorErr(googletasks.ErrCredentialMissing)
+	}
+	collections, err := s.tasksEngine.ListRemoteCollections(ctx, profileID)
 	if err != nil {
-		// Log the full error chain server-side before mapping to a
-		// gRPC code. See feedback_never_obscure_errors_at_boundaries.
 		if s.logger != nil {
 			s.logger.Error("ConnectorService.ListRemoteLists(GOOGLE_TASKS) failed for profile=%s: %v",
 				string(profileID), err)
 		}
 		return nil, mapTasksConnectorErr(err)
 	}
-	out := make([]*apiv1.RemoteListSummary, 0, len(lists))
-	for _, l := range lists {
+	out := make([]*apiv1.RemoteListSummary, 0, len(collections))
+	for _, c := range collections {
 		out = append(out, &apiv1.RemoteListSummary{
-			RemoteListHandle: l.ID,
-			Title:            l.Title,
+			RemoteListHandle: c.Handle,
+			Title:            c.Title,
 		})
 	}
 	return &apiv1.ListRemoteListsResponse{Lists: out}, nil
 }
 
 func (s *Server) listRemoteListsKeep(ctx context.Context) (*apiv1.ListRemoteListsResponse, error) {
-	if s.keepConnector == nil {
+	if !s.keepWired() {
 		return nil, errKeepConnectorNotConfigured
 	}
 	_, profileID, err := requireRealUser(ctx)
 	if err != nil {
 		return nil, err
 	}
-	notes, err := s.keepConnector.ListNotes(ctx, profileID)
+	bundle, credErr := s.keepCredentialStore.LoadCredentials(ctx, profileID)
+	if credErr != nil {
+		if s.logger != nil {
+			s.logger.Error("ConnectorService.ListRemoteLists(GOOGLE_KEEP) load credentials for profile=%s: %v",
+				string(profileID), credErr)
+		}
+		return nil, mapKeepConnectorErr(credErr)
+	}
+	if !bundle.IsConfigured() {
+		return nil, mapKeepConnectorErr(googlekeep.ErrCredentialMissing)
+	}
+	collections, err := s.keepEngine.ListRemoteCollections(ctx, profileID)
 	if err != nil {
-		// Log the full error chain server-side before mapping to a
-		// gRPC code. See feedback_never_obscure_errors_at_boundaries.
 		if s.logger != nil {
 			s.logger.Error("ConnectorService.ListRemoteLists(GOOGLE_KEEP) failed for profile=%s: %v",
 				string(profileID), err)
 		}
 		return nil, mapKeepConnectorErr(err)
 	}
-	out := make([]*apiv1.RemoteListSummary, 0, len(notes))
-	for _, n := range notes {
+	out := make([]*apiv1.RemoteListSummary, 0, len(collections))
+	for _, c := range collections {
 		out = append(out, &apiv1.RemoteListSummary{
-			RemoteListHandle: n.KeepNoteID,
-			Title:            n.Title,
-			ItemCount:        int32(n.ItemCount),
+			RemoteListHandle: c.Handle,
+			Title:            c.Title,
 		})
 	}
 	return &apiv1.ListRemoteListsResponse{Lists: out}, nil
 }
 
-// Subscribe implements the Subscribe RPC.
-func (s *Server) Subscribe(ctx context.Context, req *apiv1.SubscribeRequest) (*apiv1.SubscribeResponse, error) {
+// Bind implements the Bind RPC.
+func (s *Server) Bind(ctx context.Context, req *apiv1.BindRequest) (*apiv1.BindResponse, error) {
 	switch req.GetConnectorKind() {
 	case apiv1.ConnectorKind_CONNECTOR_KIND_UNSPECIFIED:
 		return nil, errConnectorKindRequired
 	case apiv1.ConnectorKind_CONNECTOR_KIND_GOOGLE_KEEP:
-		return s.subscribeKeep(ctx, req)
+		return s.bindKeep(ctx, req)
 	case apiv1.ConnectorKind_CONNECTOR_KIND_GOOGLE_TASKS:
-		return s.subscribeTasks(ctx, req)
+		return s.bindTasks(ctx, req)
 	default:
 		return nil, errUnsupportedConnectorKind(req.GetConnectorKind())
 	}
 }
 
-func (s *Server) subscribeTasks(ctx context.Context, req *apiv1.SubscribeRequest) (*apiv1.SubscribeResponse, error) {
-	if s.tasksConnector == nil {
+func (s *Server) bindTasks(ctx context.Context, req *apiv1.BindRequest) (*apiv1.BindResponse, error) {
+	if !s.tasksWired() {
 		return nil, errTasksConnectorNotConfigured
 	}
 	if req.GetPage() == "" || req.GetListName() == "" {
 		return nil, status.Error(codes.InvalidArgument, errMsgPageAndListRequired)
 	}
-	// remote_list_handle == "" is the "Bind to a new Tasks list" signal
-	// — the connector creates a fresh tasklist named after listName and
-	// binds to it. Mirrors the Keep bridge's empty-keepNoteID semantics.
 	_, profileID, err := requireRealUser(ctx)
 	if err != nil {
 		return nil, err
 	}
-	sub, err := s.tasksConnector.Subscribe(ctx, profileID, req.GetPage(), req.GetListName(), req.GetRemoteListHandle())
-	if err != nil {
-		// Log the full error chain server-side before mapping to a
-		// gRPC code. The boundary mapping in mapTasksConnectorErr
-		// collapses unknown causes to Internal with a generic
-		// message; without this log the journal showed only
-		// "[GRPC] Internal" with no signal about which list, which
-		// step, or what the upstream said. See
-		// feedback_never_obscure_errors_at_boundaries.
+	// Engine path requires a non-empty remote_handle. Empty signals
+	// "create a new tasklist named after listName" — the adapter
+	// (not the engine) owns remote-list creation.
+	bundle, credErr := s.tasksCredentialStore.LoadCredentials(ctx, profileID)
+	if credErr != nil {
 		if s.logger != nil {
-			s.logger.Error("ConnectorService.Subscribe(GOOGLE_TASKS) failed for profile=%s page=%s list=%s remote=%q: %v",
-				string(profileID), req.GetPage(), req.GetListName(), req.GetRemoteListHandle(), err)
+			s.logger.Error("ConnectorService.Bind(GOOGLE_TASKS) load credentials for profile=%s: %v",
+				string(profileID), credErr)
 		}
-		return nil, mapTasksConnectorErr(err)
+		return nil, mapTasksConnectorErr(credErr)
 	}
-	return &apiv1.SubscribeResponse{Subscription: tasksSubscriptionToProto(sub)}, nil
-}
+	if !bundle.IsConfigured() {
+		return nil, mapTasksConnectorErr(googletasks.ErrCredentialMissing)
+	}
 
-func (s *Server) subscribeKeep(ctx context.Context, req *apiv1.SubscribeRequest) (*apiv1.SubscribeResponse, error) {
-	if s.keepConnector == nil {
-		return nil, errKeepConnectorNotConfigured
-	}
-	if req.GetPage() == "" || req.GetListName() == "" {
-		return nil, status.Error(codes.InvalidArgument, errMsgPageAndListRequired)
-	}
-	_, profileID, err := requireRealUser(ctx)
-	if err != nil {
-		return nil, err
-	}
-	// Read existing wiki checklist items so they can ride along with
-	// the Keep list creation in the same Changes request. We ignore
-	// errors here: a missing-checklist or empty-checklist case should
-	// still allow Subscribe to create an empty Keep note, then the
-	// user can add items on either side and the sync engine
-	// reconciles.
-	var initialItems []keepsync.InitialItem
-	if req.GetRemoteListHandle() == "" && s.checklistMutator != nil {
-		if checklist, listErr := s.checklistMutator.ListItems(ctx, req.GetPage(), req.GetListName()); listErr == nil {
-			for _, it := range checklist.GetItems() {
-				initialItems = append(initialItems, keepsync.InitialItem{
-					UID:         it.GetUid(),
-					Text:        it.GetText(),
-					Tags:        it.GetTags(),
-					Description: it.GetDescription(),
-					Checked:     it.GetChecked(),
-				})
+	remoteHandle := req.GetRemoteListHandle()
+	if remoteHandle == "" {
+		adapter, adapterErr := s.adapterFor(apiv1.ConnectorKind_CONNECTOR_KIND_GOOGLE_TASKS)
+		if adapterErr != nil {
+			return nil, adapterErr
+		}
+		// Tasks discards initialItems by contract (see
+		// google_tasks.(*TasksAdapter).CreateRemoteCollection); we
+		// still gather them via the shared collectInitialItems helper
+		// so the call site reads identically across adapters.
+		initialItems := s.collectInitialItems(ctx, req.GetPage(), req.GetListName())
+		newHandle, _, createErr := adapter.CreateRemoteCollection(ctx, profileID, req.GetListName(), initialItems)
+		if createErr != nil {
+			if s.logger != nil {
+				s.logger.Error("ConnectorService.Bind(GOOGLE_TASKS) create new tasklist for profile=%s list=%s: %v",
+					string(profileID), req.GetListName(), createErr)
 			}
+			return nil, mapTasksConnectorErr(createErr)
 		}
+		remoteHandle = newHandle
 	}
-	subscription, err := s.keepConnector.Bind(ctx, profileID, req.GetPage(), req.GetListName(), req.GetRemoteListHandle(), initialItems)
+
+	binding, err := s.tasksEngine.Bind(ctx, profileID, req.GetPage(), req.GetListName(), remoteHandle)
 	if err != nil {
-		// Log the full error chain server-side before mapping to a
-		// gRPC code. See feedback_never_obscure_errors_at_boundaries.
 		if s.logger != nil {
-			s.logger.Error("ConnectorService.Subscribe(GOOGLE_KEEP) failed for profile=%s page=%s list=%s remote=%q: %v",
-				string(profileID), req.GetPage(), req.GetListName(), req.GetRemoteListHandle(), err)
+			s.logger.Error("ConnectorService.Bind(GOOGLE_TASKS) bind failed for profile=%s page=%s list=%s remote=%q: %v",
+				string(profileID), req.GetPage(), req.GetListName(), remoteHandle, err)
+		}
+		return nil, mapTasksConnectorErr(err)
+	}
+	return &apiv1.BindResponse{Binding: tasksBindingToProto(binding)}, nil
+}
+
+func (s *Server) bindKeep(ctx context.Context, req *apiv1.BindRequest) (*apiv1.BindResponse, error) {
+	if !s.keepWired() {
+		return nil, errKeepConnectorNotConfigured
+	}
+	if req.GetPage() == "" || req.GetListName() == "" {
+		return nil, status.Error(codes.InvalidArgument, errMsgPageAndListRequired)
+	}
+	_, profileID, err := requireRealUser(ctx)
+	if err != nil {
+		return nil, err
+	}
+	bundle, credErr := s.keepCredentialStore.LoadCredentials(ctx, profileID)
+	if credErr != nil {
+		if s.logger != nil {
+			s.logger.Error("ConnectorService.Bind(GOOGLE_KEEP) load credentials for profile=%s: %v",
+				string(profileID), credErr)
+		}
+		return nil, mapKeepConnectorErr(credErr)
+	}
+	if !bundle.IsConfigured() {
+		return nil, mapKeepConnectorErr(googlekeep.ErrCredentialMissing)
+	}
+
+	remoteHandle := req.GetRemoteListHandle()
+	if remoteHandle == "" {
+		// "Bind to a new Keep note" path: ask the adapter to create
+		// the LIST node first, then engine.Bind takes the resulting
+		// ServerID. Mirrors the Tasks path's CreateRemoteCollection
+		// pre-step.
+		adapter, adapterErr := s.adapterFor(apiv1.ConnectorKind_CONNECTOR_KIND_GOOGLE_KEEP)
+		if adapterErr != nil {
+			return nil, adapterErr
+		}
+		initialItems := s.collectInitialItems(ctx, req.GetPage(), req.GetListName())
+		newHandle, _, createErr := adapter.CreateRemoteCollection(ctx, profileID, req.GetListName(), initialItems)
+		if createErr != nil {
+			if s.logger != nil {
+				s.logger.Error("ConnectorService.Bind(GOOGLE_KEEP) create new note for profile=%s list=%s: %v",
+					string(profileID), req.GetListName(), createErr)
+			}
+			return nil, mapKeepConnectorErr(createErr)
+		}
+		remoteHandle = newHandle
+	}
+
+	binding, err := s.keepEngine.Bind(ctx, profileID, req.GetPage(), req.GetListName(), remoteHandle)
+	if err != nil {
+		if s.logger != nil {
+			s.logger.Error("ConnectorService.Bind(GOOGLE_KEEP) bind failed for profile=%s page=%s list=%s remote=%q: %v",
+				string(profileID), req.GetPage(), req.GetListName(), remoteHandle, err)
 		}
 		return nil, mapKeepConnectorErr(err)
 	}
-	return &apiv1.SubscribeResponse{Subscription: keepSubscriptionToProto(subscription, false)}, nil
+	return &apiv1.BindResponse{Binding: keepBindingToProto(binding)}, nil
 }
 
-// Unsubscribe implements the Unsubscribe RPC.
-func (s *Server) Unsubscribe(ctx context.Context, req *apiv1.UnsubscribeRequest) (*apiv1.UnsubscribeResponse, error) {
+// Unbind implements the Unbind RPC.
+func (s *Server) Unbind(ctx context.Context, req *apiv1.UnbindRequest) (*apiv1.UnbindResponse, error) {
 	switch req.GetConnectorKind() {
 	case apiv1.ConnectorKind_CONNECTOR_KIND_UNSPECIFIED:
 		return nil, errConnectorKindRequired
 	case apiv1.ConnectorKind_CONNECTOR_KIND_GOOGLE_KEEP:
-		return s.unsubscribeKeep(ctx, req)
+		return s.unbindKeep(ctx, req)
 	case apiv1.ConnectorKind_CONNECTOR_KIND_GOOGLE_TASKS:
-		return s.unsubscribeTasks(ctx, req)
+		return s.unbindTasks(ctx, req)
 	default:
 		return nil, errUnsupportedConnectorKind(req.GetConnectorKind())
 	}
 }
 
-func (s *Server) unsubscribeTasks(ctx context.Context, req *apiv1.UnsubscribeRequest) (*apiv1.UnsubscribeResponse, error) {
-	if s.tasksConnector == nil {
+func (s *Server) unbindTasks(ctx context.Context, req *apiv1.UnbindRequest) (*apiv1.UnbindResponse, error) {
+	if !s.tasksWired() {
 		return nil, errTasksConnectorNotConfigured
 	}
 	_, profileID, err := requireRealUser(ctx)
 	if err != nil {
 		return nil, err
 	}
-	if err := s.tasksConnector.Unsubscribe(ctx, profileID, req.GetPage(), req.GetListName()); err != nil {
-		// Log the full error chain server-side before mapping to a
-		// gRPC code. See feedback_never_obscure_errors_at_boundaries.
+	// engine.Unbind is idempotent (no error on missing binding) per
+	// ADR-0011's "Unbind operation contract." The gRPC contract,
+	// however, returns NotFound to a caller asking to unbind a
+	// binding that doesn't exist — surface that distinction here so
+	// the frontend can render the error appropriately.
+	_, found, findErr := s.tasksBindingStore.FindBinding(profileID, connectors.ConnectorKindGoogleTasks, req.GetPage(), req.GetListName())
+	if findErr != nil {
 		if s.logger != nil {
-			s.logger.Error("ConnectorService.Unsubscribe(GOOGLE_TASKS) failed for profile=%s page=%s list=%s: %v",
+			s.logger.Error("ConnectorService.Unbind(GOOGLE_TASKS) find binding for profile=%s page=%s list=%s: %v",
+				string(profileID), req.GetPage(), req.GetListName(), findErr)
+		}
+		return nil, mapTasksConnectorErr(findErr)
+	}
+	if !found {
+		return nil, status.Error(codes.NotFound, errMsgBindingNotFound)
+	}
+	if err := s.tasksEngine.Unbind(ctx, profileID, req.GetPage(), req.GetListName()); err != nil {
+		if s.logger != nil {
+			s.logger.Error("ConnectorService.Unbind(GOOGLE_TASKS) failed for profile=%s page=%s list=%s: %v",
 				string(profileID), req.GetPage(), req.GetListName(), err)
 		}
 		return nil, mapTasksConnectorErr(err)
 	}
-	return &apiv1.UnsubscribeResponse{}, nil
+	return &apiv1.UnbindResponse{}, nil
 }
 
-func (s *Server) unsubscribeKeep(ctx context.Context, req *apiv1.UnsubscribeRequest) (*apiv1.UnsubscribeResponse, error) {
-	if s.keepConnector == nil {
+func (s *Server) unbindKeep(ctx context.Context, req *apiv1.UnbindRequest) (*apiv1.UnbindResponse, error) {
+	if !s.keepWired() {
 		return nil, errKeepConnectorNotConfigured
 	}
 	_, profileID, err := requireRealUser(ctx)
 	if err != nil {
 		return nil, err
 	}
-	if err := s.keepConnector.Unbind(ctx, profileID, req.GetPage(), req.GetListName()); err != nil {
-		// Log the full error chain server-side before mapping to a
-		// gRPC code. See feedback_never_obscure_errors_at_boundaries.
+	// engine.Unbind is idempotent; preserve the legacy "NotFound on
+	// unknown binding" gRPC contract by checking existence first.
+	_, found, findErr := s.keepBindingStore.FindBinding(profileID, connectors.ConnectorKindGoogleKeep, req.GetPage(), req.GetListName())
+	if findErr != nil {
 		if s.logger != nil {
-			s.logger.Error("ConnectorService.Unsubscribe(GOOGLE_KEEP) failed for profile=%s page=%s list=%s: %v",
+			s.logger.Error("ConnectorService.Unbind(GOOGLE_KEEP) find binding for profile=%s page=%s list=%s: %v",
+				string(profileID), req.GetPage(), req.GetListName(), findErr)
+		}
+		return nil, mapKeepConnectorErr(findErr)
+	}
+	if !found {
+		return nil, status.Error(codes.NotFound, errMsgBindingNotFound)
+	}
+	if err := s.keepEngine.Unbind(ctx, profileID, req.GetPage(), req.GetListName()); err != nil {
+		if s.logger != nil {
+			s.logger.Error("ConnectorService.Unbind(GOOGLE_KEEP) failed for profile=%s page=%s list=%s: %v",
 				string(profileID), req.GetPage(), req.GetListName(), err)
 		}
 		return nil, mapKeepConnectorErr(err)
 	}
-	return &apiv1.UnsubscribeResponse{}, nil
+	return &apiv1.UnbindResponse{}, nil
 }
 
-// GetChecklistSubscriptionState implements the GetChecklistSubscriptionState
+// SyncNow triggers an immediate sync for the calling user's binding
+// on (page, list_name). Routes through the same Engine.Sync method the
+// scheduler / debouncer / adaptive ticker use, so concurrent calls
+// serialize on the per-checklist lease (§16.6). NOT a force-full-
+// resync — adapter state is preserved.
+func (s *Server) SyncNow(ctx context.Context, req *apiv1.SyncNowRequest) (*apiv1.SyncNowResponse, error) {
+	switch req.GetConnectorKind() {
+	case apiv1.ConnectorKind_CONNECTOR_KIND_UNSPECIFIED:
+		return nil, errConnectorKindRequired
+	case apiv1.ConnectorKind_CONNECTOR_KIND_GOOGLE_KEEP:
+		return s.syncNowKeep(ctx, req)
+	case apiv1.ConnectorKind_CONNECTOR_KIND_GOOGLE_TASKS:
+		return s.syncNowTasks(ctx, req)
+	default:
+		return nil, errUnsupportedConnectorKind(req.GetConnectorKind())
+	}
+}
+
+func (s *Server) syncNowTasks(ctx context.Context, req *apiv1.SyncNowRequest) (*apiv1.SyncNowResponse, error) {
+	if !s.tasksWired() {
+		return nil, errTasksConnectorNotConfigured
+	}
+	_, profileID, err := requireRealUser(ctx)
+	if err != nil {
+		return nil, err
+	}
+	_, found, findErr := s.tasksBindingStore.FindBinding(profileID, connectors.ConnectorKindGoogleTasks, req.GetPage(), req.GetListName())
+	if findErr != nil {
+		if s.logger != nil {
+			s.logger.Error("ConnectorService.SyncNow(GOOGLE_TASKS) find binding for profile=%s page=%s list=%s: %v",
+				string(profileID), req.GetPage(), req.GetListName(), findErr)
+		}
+		return nil, mapTasksConnectorErr(findErr)
+	}
+	if !found {
+		return nil, status.Error(codes.NotFound, errMsgBindingNotFound)
+	}
+	if err := s.tasksEngine.Sync(ctx, connectors.BindingKey{
+		ProfileID: string(profileID),
+		Page:      req.GetPage(),
+		ListName:  req.GetListName(),
+	}); err != nil {
+		if s.logger != nil {
+			s.logger.Error("ConnectorService.SyncNow(GOOGLE_TASKS) failed for profile=%s page=%s list=%s: %v",
+				string(profileID), req.GetPage(), req.GetListName(), err)
+		}
+		return nil, mapTasksConnectorErr(err)
+	}
+	return &apiv1.SyncNowResponse{}, nil
+}
+
+func (s *Server) syncNowKeep(ctx context.Context, req *apiv1.SyncNowRequest) (*apiv1.SyncNowResponse, error) {
+	if !s.keepWired() {
+		return nil, errKeepConnectorNotConfigured
+	}
+	_, profileID, err := requireRealUser(ctx)
+	if err != nil {
+		return nil, err
+	}
+	_, found, findErr := s.keepBindingStore.FindBinding(profileID, connectors.ConnectorKindGoogleKeep, req.GetPage(), req.GetListName())
+	if findErr != nil {
+		if s.logger != nil {
+			s.logger.Error("ConnectorService.SyncNow(GOOGLE_KEEP) find binding for profile=%s page=%s list=%s: %v",
+				string(profileID), req.GetPage(), req.GetListName(), findErr)
+		}
+		return nil, mapKeepConnectorErr(findErr)
+	}
+	if !found {
+		return nil, status.Error(codes.NotFound, errMsgBindingNotFound)
+	}
+	if err := s.keepEngine.Sync(ctx, connectors.BindingKey{
+		ProfileID: string(profileID),
+		Page:      req.GetPage(),
+		ListName:  req.GetListName(),
+	}); err != nil {
+		if s.logger != nil {
+			s.logger.Error("ConnectorService.SyncNow(GOOGLE_KEEP) failed for profile=%s page=%s list=%s: %v",
+				string(profileID), req.GetPage(), req.GetListName(), err)
+		}
+		return nil, mapKeepConnectorErr(err)
+	}
+	return &apiv1.SyncNowResponse{}, nil
+}
+
+// GetChecklistBindingState implements the GetChecklistBindingState
 // RPC. This RPC does NOT take connector_kind: at most one connector
 // owns a given (page, list_name) per user, so the server walks every
 // configured connector to find the owner.
@@ -563,86 +839,98 @@ func (s *Server) unsubscribeKeep(ctx context.Context, req *apiv1.UnsubscribeRequ
 // is configured, the UI should not show the "set up a connector" prompt.
 //
 // At most one connector owns a (page, list_name) per profile (the
-// LeaseTable enforces this at subscribe time), so the first match wins
+// LeaseTable enforces this at bind time), so the first match wins
 // and short-circuits the walk.
-func (s *Server) GetChecklistSubscriptionState(ctx context.Context, req *apiv1.GetChecklistSubscriptionStateRequest) (*apiv1.GetChecklistSubscriptionStateResponse, error) {
-	if s.keepConnector == nil && s.tasksConnector == nil {
+func (s *Server) GetChecklistBindingState(ctx context.Context, req *apiv1.GetChecklistBindingStateRequest) (*apiv1.GetChecklistBindingStateResponse, error) {
+	if !s.keepWired() && !s.tasksWired() {
 		return nil, status.Error(codes.Internal, "connector orchestrators not configured on this server")
 	}
 	_, profileID, err := requireRealUser(ctx)
 	if err != nil {
 		return nil, err
 	}
-	out := &apiv1.ChecklistSubscriptionState{}
+	out := &apiv1.ChecklistBindingState{}
 
-	if hit, err := s.checklistSubscriptionFromTasks(ctx, profileID, req, out); err != nil {
+	if hit, err := s.checklistBindingFromTasks(ctx, profileID, req, out); err != nil {
 		return nil, err
 	} else if hit {
-		return &apiv1.GetChecklistSubscriptionStateResponse{State: out}, nil
+		return &apiv1.GetChecklistBindingStateResponse{State: out}, nil
 	}
 
-	if hit, err := s.checklistSubscriptionFromKeep(ctx, profileID, req, out); err != nil {
+	if hit, err := s.checklistBindingFromKeep(ctx, profileID, req, out); err != nil {
 		return nil, err
 	} else if hit {
-		return &apiv1.GetChecklistSubscriptionStateResponse{State: out}, nil
+		return &apiv1.GetChecklistBindingStateResponse{State: out}, nil
 	}
 
-	return &apiv1.GetChecklistSubscriptionStateResponse{State: out}, nil
+	return &apiv1.GetChecklistBindingStateResponse{State: out}, nil
 }
 
-// checklistSubscriptionFromTasks fills out's CurrentSubscription if
-// the Tasks connector owns (page, list_name) for this profile.
+// checklistBindingFromTasks fills out's CurrentBinding if
+// the Tasks engine path owns (page, list_name) for this profile.
 // Returns hit=true when a match was written; hit=false on no match
 // (caller falls through to Keep). ConnectorConfigured is set
-// regardless when Tasks is configured for this profile.
-func (s *Server) checklistSubscriptionFromTasks(ctx context.Context, profileID wikipage.PageIdentifier, req *apiv1.GetChecklistSubscriptionStateRequest, out *apiv1.ChecklistSubscriptionState) (bool, error) {
-	if s.tasksConnector == nil {
+// whenever Tasks is configured for this profile.
+func (s *Server) checklistBindingFromTasks(ctx context.Context, profileID wikipage.PageIdentifier, req *apiv1.GetChecklistBindingStateRequest, out *apiv1.ChecklistBindingState) (bool, error) {
+	if !s.tasksWired() {
 		return false, nil
 	}
-	tasksState, err := s.tasksConnector.GetState(ctx, profileID)
+	bundle, err := s.tasksCredentialStore.LoadCredentials(ctx, profileID)
 	if err != nil {
 		if s.logger != nil {
-			s.logger.Error("ConnectorService.GetChecklistSubscriptionState(GOOGLE_TASKS) failed for profile=%s page=%s list=%s: %v",
+			s.logger.Error("ConnectorService.GetChecklistBindingState(GOOGLE_TASKS) load credentials profile=%s page=%s list=%s: %v",
 				string(profileID), req.GetPage(), req.GetListName(), err)
 		}
 		return false, mapTasksConnectorErr(err)
 	}
-	if tasksState.IsConfigured() {
+	if bundle.IsConfigured() {
 		out.ConnectorConfigured = true
 	}
-	for _, sub := range tasksState.Subscriptions {
-		if sub.Page == req.GetPage() && sub.ListName == req.GetListName() {
-			out.CurrentSubscription = tasksSubscriptionToProto(sub)
-			return true, nil
-		}
-	}
-	return false, nil
-}
-
-// checklistSubscriptionFromKeep is the Keep counterpart of
-// checklistSubscriptionFromTasks; same semantics.
-func (s *Server) checklistSubscriptionFromKeep(ctx context.Context, profileID wikipage.PageIdentifier, req *apiv1.GetChecklistSubscriptionStateRequest, out *apiv1.ChecklistSubscriptionState) (bool, error) {
-	if s.keepConnector == nil {
-		return false, nil
-	}
-	keepState, err := s.keepConnector.GetState(ctx, profileID)
+	binding, found, err := s.tasksBindingStore.FindBinding(profileID, connectors.ConnectorKindGoogleTasks, req.GetPage(), req.GetListName())
 	if err != nil {
 		if s.logger != nil {
-			s.logger.Error("ConnectorService.GetChecklistSubscriptionState(GOOGLE_KEEP) failed for profile=%s page=%s list=%s: %v",
+			s.logger.Error("ConnectorService.GetChecklistBindingState(GOOGLE_TASKS) find binding profile=%s page=%s list=%s: %v",
+				string(profileID), req.GetPage(), req.GetListName(), err)
+		}
+		return false, mapTasksConnectorErr(err)
+	}
+	if !found {
+		return false, nil
+	}
+	out.CurrentBinding = tasksBindingToProto(binding)
+	return true, nil
+}
+
+// checklistBindingFromKeep is the Keep counterpart of
+// checklistBindingFromTasks; same semantics.
+func (s *Server) checklistBindingFromKeep(ctx context.Context, profileID wikipage.PageIdentifier, req *apiv1.GetChecklistBindingStateRequest, out *apiv1.ChecklistBindingState) (bool, error) {
+	if !s.keepWired() {
+		return false, nil
+	}
+	bundle, err := s.keepCredentialStore.LoadCredentials(ctx, profileID)
+	if err != nil {
+		if s.logger != nil {
+			s.logger.Error("ConnectorService.GetChecklistBindingState(GOOGLE_KEEP) load credentials profile=%s page=%s list=%s: %v",
 				string(profileID), req.GetPage(), req.GetListName(), err)
 		}
 		return false, mapKeepConnectorErr(err)
 	}
-	if keepState.IsConfigured() {
+	if bundle.IsConfigured() {
 		out.ConnectorConfigured = true
 	}
-	for _, b := range keepState.Subscriptions {
-		if b.Page == req.GetPage() && b.ListName == req.GetListName() {
-			out.CurrentSubscription = keepSubscriptionToProto(b, false)
-			return true, nil
+	binding, found, err := s.keepBindingStore.FindBinding(profileID, connectors.ConnectorKindGoogleKeep, req.GetPage(), req.GetListName())
+	if err != nil {
+		if s.logger != nil {
+			s.logger.Error("ConnectorService.GetChecklistBindingState(GOOGLE_KEEP) find binding profile=%s page=%s list=%s: %v",
+				string(profileID), req.GetPage(), req.GetListName(), err)
 		}
+		return false, mapKeepConnectorErr(err)
 	}
-	return false, nil
+	if !found {
+		return false, nil
+	}
+	out.CurrentBinding = keepBindingToProto(binding)
+	return true, nil
 }
 
 // ListDeadLetters implements the ListDeadLetters RPC.
@@ -659,13 +947,13 @@ func (s *Server) ListDeadLetters(ctx context.Context, req *apiv1.ListDeadLetters
 	}
 }
 
-// listDeadLettersTasks returns an empty list. The Tasks connector does
-// not yet implement push-failure dead-lettering — Tasks's API is
-// idempotent enough that we haven't needed a per-item failure ledger
-// (unlike Keep, where stale targetVersion races land in the dead-letter
-// pile). When/if we add it, replace this stub with real delegation.
+// listDeadLettersTasks returns an empty list. The Tasks engine path
+// inherits the dead-letter semantics from MATRIX row 8 (engine-owned),
+// but the BindingStore does not yet expose a per-binding ledger query
+// for the gRPC layer. When/if that lands, replace this stub with real
+// delegation through engine.ListDeadLetters or similar.
 func (s *Server) listDeadLettersTasks(ctx context.Context, req *apiv1.ListDeadLettersRequest) (*apiv1.ListDeadLettersResponse, error) {
-	if s.tasksConnector == nil {
+	if !s.tasksWired() {
 		return nil, errTasksConnectorNotConfigured
 	}
 	if req.GetPage() == "" || req.GetListName() == "" {
@@ -677,37 +965,23 @@ func (s *Server) listDeadLettersTasks(ctx context.Context, req *apiv1.ListDeadLe
 	return &apiv1.ListDeadLettersResponse{}, nil
 }
 
+// listDeadLettersKeep is the engine-path Keep counterpart of
+// listDeadLettersTasks. The engine owns dead-letter semantics
+// (MATRIX row 8); the BindingStore does not yet expose a per-binding
+// ledger query for the gRPC layer. Returns an empty list — when the
+// engine grows a ledger query, replace this stub with delegation
+// through engine.ListDeadLetters or similar.
 func (s *Server) listDeadLettersKeep(ctx context.Context, req *apiv1.ListDeadLettersRequest) (*apiv1.ListDeadLettersResponse, error) {
-	if s.keepConnector == nil {
+	if !s.keepWired() {
 		return nil, errKeepConnectorNotConfigured
 	}
 	if req.GetPage() == "" || req.GetListName() == "" {
 		return nil, status.Error(codes.InvalidArgument, errMsgPageAndListRequired)
 	}
-	_, profileID, err := requireRealUser(ctx)
-	if err != nil {
+	if _, _, err := requireRealUser(ctx); err != nil {
 		return nil, err
 	}
-	entries, err := s.keepConnector.ListDeadLetters(ctx, profileID, req.GetPage(), req.GetListName())
-	if err != nil {
-		// Log the full error chain server-side before mapping to a
-		// gRPC code. See feedback_never_obscure_errors_at_boundaries.
-		if s.logger != nil {
-			s.logger.Error("ConnectorService.ListDeadLetters(GOOGLE_KEEP) failed for profile=%s page=%s list=%s: %v",
-				string(profileID), req.GetPage(), req.GetListName(), err)
-		}
-		return nil, mapKeepConnectorErr(err)
-	}
-	out := make([]*apiv1.DeadLetterItem, 0, len(entries))
-	for _, e := range entries {
-		out = append(out, &apiv1.DeadLetterItem{
-			ItemUid:          e.ItemUID,
-			Text:             e.Text,
-			PushFailureCount: int32(e.PushFailureCount),
-			LastFailureCode:  e.LastFailureCode,
-		})
-	}
-	return &apiv1.ListDeadLettersResponse{Items: out}, nil
+	return &apiv1.ListDeadLettersResponse{}, nil
 }
 
 // ClearDeadLetter implements the ClearDeadLetter RPC.
@@ -726,9 +1000,10 @@ func (s *Server) ClearDeadLetter(ctx context.Context, req *apiv1.ClearDeadLetter
 
 // clearDeadLetterTasks is a no-op — see listDeadLettersTasks for why.
 // Returns NotFound for any item_uid the caller provides because the
-// Tasks connector keeps no dead-letter state to clear.
+// Tasks engine path keeps no per-binding dead-letter state to clear
+// at this surface yet.
 func (s *Server) clearDeadLetterTasks(ctx context.Context, req *apiv1.ClearDeadLetterRequest) (*emptypb.Empty, error) {
-	if s.tasksConnector == nil {
+	if !s.tasksWired() {
 		return nil, errTasksConnectorNotConfigured
 	}
 	if req.GetPage() == "" || req.GetListName() == "" || req.GetItemUid() == "" {
@@ -740,122 +1015,131 @@ func (s *Server) clearDeadLetterTasks(ctx context.Context, req *apiv1.ClearDeadL
 	return nil, status.Error(codes.NotFound, "dead_letter_item_not_found")
 }
 
+// clearDeadLetterKeep is a no-op for now — see listDeadLettersKeep
+// for why. Returns NotFound for any item_uid the caller provides
+// because the Keep engine path keeps no per-binding dead-letter state
+// to clear at this surface yet.
 func (s *Server) clearDeadLetterKeep(ctx context.Context, req *apiv1.ClearDeadLetterRequest) (*emptypb.Empty, error) {
-	if s.keepConnector == nil {
+	if !s.keepWired() {
 		return nil, errKeepConnectorNotConfigured
 	}
 	if req.GetPage() == "" || req.GetListName() == "" || req.GetItemUid() == "" {
 		return nil, status.Error(codes.InvalidArgument, "page, list_name, and item_uid are required")
 	}
-	_, profileID, err := requireRealUser(ctx)
-	if err != nil {
+	if _, _, err := requireRealUser(ctx); err != nil {
 		return nil, err
 	}
-	if err := s.keepConnector.ClearDeadLetter(ctx, profileID, req.GetPage(), req.GetListName(), req.GetItemUid()); err != nil {
-		// Log the full error chain server-side before mapping to a
-		// gRPC code. See feedback_never_obscure_errors_at_boundaries.
-		if s.logger != nil {
-			s.logger.Error("ConnectorService.ClearDeadLetter(GOOGLE_KEEP) failed for profile=%s page=%s list=%s item_uid=%s: %v",
-				string(profileID), req.GetPage(), req.GetListName(), req.GetItemUid(), err)
-		}
-		return nil, mapKeepConnectorErr(err)
-	}
-	return &emptypb.Empty{}, nil
+	return nil, status.Error(codes.NotFound, "dead_letter_item_not_found")
 }
 
 // --- helpers --------------------------------------------------------------
 
-func connectorStateToProto(state keepsync.ConnectorState, kind apiv1.ConnectorKind) *apiv1.ConnectorState {
+// keepStateToProto builds the gRPC ConnectorState response from the
+// engine-path collaborators (CredentialStore + BindingStore). Mirrors
+// tasksStateToProto: connected_at, last_verified_at land verbatim;
+// bindings are projected through keepBindingToProto.
+//
+// Keep does not expose a per-connector poll cadence (uses the unified
+// 30s scheduler tick), so PollIntervalSeconds stays zero.
+func keepStateToProto(bundle googlekeep.CredentialBundle, bindings []connectors.Binding) *apiv1.ConnectorState {
 	out := &apiv1.ConnectorState{
-		Configured:          state.IsConfigured(),
-		Email:               state.Email,
-		PollIntervalSeconds: state.PollIntervalSeconds,
-		ConnectorKind:       kind,
+		Configured:    bundle.IsConfigured(),
+		Email:         bundle.Email,
+		ConnectorKind: apiv1.ConnectorKind_CONNECTOR_KIND_GOOGLE_KEEP,
 	}
-	if !state.ConnectedAt.IsZero() {
-		out.ConnectedAt = timestamppb.New(state.ConnectedAt)
+	if !bundle.ConnectedAt.IsZero() {
+		out.ConnectedAt = timestamppb.New(bundle.ConnectedAt)
 	}
-	if !state.LastVerifiedAt.IsZero() {
-		out.LastVerifiedAt = timestamppb.New(state.LastVerifiedAt)
+	if !bundle.LastVerifiedAt.IsZero() {
+		out.LastVerifiedAt = timestamppb.New(bundle.LastVerifiedAt)
 	}
-	for _, b := range state.Subscriptions {
-		out.Subscriptions = append(out.Subscriptions, keepSubscriptionToProto(b, !state.IsConfigured()))
+	for _, b := range bindings {
+		out.Bindings = append(out.Bindings, keepBindingToProto(b))
 	}
 	return out
 }
 
-func keepSubscriptionToProto(b keepsync.Subscription, paused bool) *apiv1.SubscriptionState {
-	out := &apiv1.SubscriptionState{
+// keepBindingToProto converts an engine Binding into the proto-shaped
+// BindingState. Mirrors tasksBindingToProto.
+func keepBindingToProto(b connectors.Binding) *apiv1.BindingState {
+	out := &apiv1.BindingState{
 		Page:             b.Page,
 		ListName:         b.ListName,
-		RemoteListHandle: b.KeepNoteID,
-		RemoteListTitle:  b.KeepNoteTitle,
-		Paused:           paused,
+		RemoteListHandle: b.RemoteHandle,
+		RemoteListTitle:  b.RemoteListTitle,
+		Paused:           b.IsPaused(),
+		PausedReason:     b.PausedReason,
 		ConnectorKind:    apiv1.ConnectorKind_CONNECTOR_KIND_GOOGLE_KEEP,
 	}
-	if !b.SubscribedAt.IsZero() {
-		out.SubscribedAt = timestamppb.New(b.SubscribedAt)
+	if !b.BoundAt.IsZero() {
+		out.BoundAt = timestamppb.New(b.BoundAt)
+	}
+	if !b.LastSuccessfulSyncAt.IsZero() {
+		out.LastVerifiedAt = timestamppb.New(b.LastSuccessfulSyncAt)
 	}
 	return out
 }
 
-// tasksStateToProto converts the Tasks connector's per-user state into
-// the proto-shaped ConnectorState the gRPC layer returns. Mirrors
-// connectorStateToProto for Keep but reads from the Tasks-typed
-// ConnectorState (no PollIntervalSeconds — Tasks uses the unified 30s
-// scheduler tick rather than a per-connector poll cadence).
-func tasksStateToProto(state taskssync.ConnectorState) *apiv1.ConnectorState {
+// tasksStateToProto builds the gRPC ConnectorState response from the
+// engine-path collaborators (CredentialStore + BindingStore). Mirrors
+// the legacy connector's tasksStateToProto: connected_at, last_verified_at
+// land verbatim; bindings are projected through tasksBindingToProto.
+//
+// Tasks does not expose a per-connector poll cadence (uses the unified
+// 30s scheduler tick), so PollIntervalSeconds stays zero.
+func tasksStateToProto(bundle googletasks.CredentialBundle, bindings []connectors.Binding) *apiv1.ConnectorState {
 	out := &apiv1.ConnectorState{
-		Configured:    state.IsConfigured(),
-		Email:         state.Email,
+		Configured:    bundle.IsConfigured(),
+		Email:         bundle.Email,
 		ConnectorKind: apiv1.ConnectorKind_CONNECTOR_KIND_GOOGLE_TASKS,
 	}
-	if !state.ConnectedAt.IsZero() {
-		out.ConnectedAt = timestamppb.New(state.ConnectedAt)
+	if !bundle.ConnectedAt.IsZero() {
+		out.ConnectedAt = timestamppb.New(bundle.ConnectedAt)
 	}
-	if !state.LastVerifiedAt.IsZero() {
-		out.LastVerifiedAt = timestamppb.New(state.LastVerifiedAt)
+	if !bundle.LastVerifiedAt.IsZero() {
+		out.LastVerifiedAt = timestamppb.New(bundle.LastVerifiedAt)
 	}
-	for _, sub := range state.Subscriptions {
-		out.Subscriptions = append(out.Subscriptions, tasksSubscriptionToProto(sub))
+	for _, b := range bindings {
+		out.Bindings = append(out.Bindings, tasksBindingToProto(b))
 	}
 	return out
 }
 
-// tasksSubscriptionToProto converts the Tasks connector's per-binding
-// state into the proto-shaped SubscriptionState. Paused state and
-// remote_list_handle (Tasks tasklist id) ride through unchanged.
-func tasksSubscriptionToProto(sub taskssync.Subscription) *apiv1.SubscriptionState {
-	out := &apiv1.SubscriptionState{
-		Page:             sub.Page,
-		ListName:         sub.ListName,
-		RemoteListHandle: sub.RemoteListID,
-		RemoteListTitle:  sub.RemoteListTitle,
-		Paused:           sub.IsPaused(),
+// tasksBindingToProto converts an engine Binding into the proto-shaped
+// BindingState. Mirrors keepBindingToProto.
+func tasksBindingToProto(b connectors.Binding) *apiv1.BindingState {
+	out := &apiv1.BindingState{
+		Page:             b.Page,
+		ListName:         b.ListName,
+		RemoteListHandle: b.RemoteHandle,
+		RemoteListTitle:  b.RemoteListTitle,
+		Paused:           b.IsPaused(),
+		PausedReason:     b.PausedReason,
 		ConnectorKind:    apiv1.ConnectorKind_CONNECTOR_KIND_GOOGLE_TASKS,
 	}
-	if !sub.SubscribedAt.IsZero() {
-		out.SubscribedAt = timestamppb.New(sub.SubscribedAt)
+	if !b.BoundAt.IsZero() {
+		out.BoundAt = timestamppb.New(b.BoundAt)
 	}
-	if !sub.LastSuccessfulSyncAt.IsZero() {
-		out.LastVerifiedAt = timestamppb.New(sub.LastSuccessfulSyncAt)
+	if !b.LastSuccessfulSyncAt.IsZero() {
+		out.LastVerifiedAt = timestamppb.New(b.LastSuccessfulSyncAt)
 	}
 	return out
 }
 
-// mapTasksConnectorErr maps Tasks bridge/protocol errors to typed gRPC
+// mapTasksConnectorErr maps Tasks engine + adapter errors to typed gRPC
 // codes. Branches only on errors.Is — never on string contents.
 func mapTasksConnectorErr(err error) error {
 	switch {
 	case err == nil:
 		return nil
-	case errors.Is(err, taskssync.ErrConnectorNotConfigured):
+	case errors.Is(err, googletasks.ErrCredentialMissing):
 		return status.Error(codes.FailedPrecondition, "tasks_connector_not_configured: connect Google Tasks on your profile first")
-	case errors.Is(err, taskssync.ErrAlreadySubscribedForChecklist):
-		return status.Error(codes.AlreadyExists, "already_subscribed_for_checklist: this checklist is already subscribed by you")
-	case errors.Is(err, taskssync.ErrSubscriptionNotFound):
-		return status.Error(codes.NotFound, "subscription_not_found")
-	case errors.Is(err, taskssync.ErrTasksListHasSubtasks):
+	case errors.Is(err, engine.ErrAlreadyBoundForChecklist),
+		errors.Is(err, connectors.ErrChecklistAlreadyLeased):
+		return status.Error(codes.AlreadyExists, "already_bound_for_checklist: this checklist is already bound by you")
+	case errors.Is(err, engine.ErrBindingNotFound):
+		return status.Error(codes.NotFound, errMsgBindingNotFound)
+	case errors.Is(err, googletasks.ErrTasksListHasSubtasks):
 		return status.Error(codes.FailedPrecondition, "tasks_list_has_subtasks: pick a flat tasks list (subtasks are not supported by the wiki's checklist model)")
 	case errors.Is(err, tasksgateway.ErrAuthRevoked), errors.Is(err, tasksgateway.ErrInvalidGrant):
 		return status.Error(codes.Unauthenticated, "auth_revoked: re-connect Google Tasks on your profile")
@@ -863,7 +1147,7 @@ func mapTasksConnectorErr(err error) error {
 		// Operator setup error: the Tasks API is not enabled on the
 		// GCP project. The activation URL (when present) is already
 		// embedded in the gateway error's message — surface it
-		// verbatim so the user can click through to enable the API.
+		// verbatim so the user can click through.
 		return status.Errorf(codes.FailedPrecondition, "tasks_api_not_enabled: %v", err)
 	case errors.Is(err, tasksgateway.ErrPermissionDenied):
 		return status.Errorf(codes.PermissionDenied, "permission_denied: %v", err)
@@ -874,24 +1158,21 @@ func mapTasksConnectorErr(err error) error {
 	}
 }
 
-// mapKeepConnectorErr maps bridge/protocol errors to typed gRPC codes.
-// Branches only on errors.Is — never on string contents.
+// mapKeepConnectorErr maps Keep engine + adapter errors to typed gRPC
+// codes. Branches only on errors.Is — never on string contents.
 func mapKeepConnectorErr(err error) error {
 	switch {
 	case err == nil:
 		return nil
-	case errors.Is(err, keepsync.ErrConnectorNotConfigured):
+	case errors.Is(err, googlekeep.ErrCredentialMissing):
 		return status.Error(codes.FailedPrecondition, "keep_connector_not_configured: connect Google Keep on your profile first")
-	case errors.Is(err, keepsync.ErrAlreadySubscribedForChecklist):
-		return status.Error(codes.AlreadyExists, "already_subscribed_for_checklist: this checklist is already subscribed by you")
-	case errors.Is(err, keepsync.ErrKeepNoteAlreadyClaimed):
-		return status.Error(codes.AlreadyExists, "remote_list_already_subscribed_by_you: pick a different remote list or unsubscribe first")
-	case errors.Is(err, connectors.ErrChecklistAlreadyLeased):
-		return status.Error(codes.AlreadyExists, "already_subscribed_for_checklist: this checklist is already subscribed (cross-connector)")
-	case errors.Is(err, keepsync.ErrSubscriptionNotFound):
-		return status.Error(codes.NotFound, "subscription_not_found")
-	case errors.Is(err, keepsync.ErrDeadLetterItemNotFound):
-		return status.Error(codes.NotFound, "dead_letter_item_not_found")
+	case errors.Is(err, engine.ErrAlreadyBoundForChecklist),
+		errors.Is(err, connectors.ErrChecklistAlreadyLeased):
+		return status.Error(codes.AlreadyExists, "already_bound_for_checklist: this checklist is already bound by you")
+	case errors.Is(err, engine.ErrBindingNotFound):
+		return status.Error(codes.NotFound, errMsgBindingNotFound)
+	case errors.Is(err, googlekeep.ErrKeepNoteNotAList):
+		return status.Error(codes.FailedPrecondition, "remote_list_not_a_checklist: pick a Keep checklist note (LIST node)")
 	case errors.Is(err, gateway.ErrInvalidCredentials):
 		return status.Errorf(codes.Unauthenticated, "invalid_credentials: Google rejected the oauth_token (it may have expired — capture a fresh one): %v", err)
 	case errors.Is(err, gateway.ErrAuthRevoked):
@@ -899,11 +1180,6 @@ func mapKeepConnectorErr(err error) error {
 	case errors.Is(err, gateway.ErrProtocolDrift):
 		return status.Error(codes.Internal, "protocol_drift: Google Keep API has changed; update simple_wiki")
 	case errors.Is(err, gateway.ErrServiceDisabled):
-		// Operator setup error: the Keep API is not enabled on the
-		// GCP project. The activation URL (when present) is already
-		// embedded in the gateway error's message — surface it
-		// verbatim so the user can click through to enable the API.
-		// Mirrors the Tasks branch of the same name.
 		return status.Errorf(codes.FailedPrecondition, "keep_api_not_enabled: %v", err)
 	case errors.Is(err, gateway.ErrPermissionDenied):
 		return status.Errorf(codes.PermissionDenied, "permission_denied: %v", err)
