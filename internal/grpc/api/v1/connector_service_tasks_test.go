@@ -14,8 +14,8 @@ import (
 	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
 	"github.com/brendanjerwin/simple_wiki/internal/connectors"
 	"github.com/brendanjerwin/simple_wiki/internal/connectors/engine"
-	"github.com/brendanjerwin/simple_wiki/internal/connectors/google_tasks/gateway"
-	googletasks "github.com/brendanjerwin/simple_wiki/internal/connectors/google_tasks"
+	"github.com/brendanjerwin/simple_wiki/internal/connectors/googletasks/gateway"
+	"github.com/brendanjerwin/simple_wiki/internal/connectors/googletasks"
 	v1 "github.com/brendanjerwin/simple_wiki/internal/grpc/api/v1"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 )

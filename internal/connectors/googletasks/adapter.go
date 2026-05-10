@@ -1,4 +1,4 @@
-// Package google_tasks owns the per-connector floor of the Google Tasks
+// Package googletasks owns the per-connector floor of the Google Tasks
 // bridge: the wire-protocol Gateway (sub-package gateway/), the
 // Anti-Corruption Layer translator (sub-package translator/), and the
 // BackendAdapter implementation in this file.
@@ -17,8 +17,7 @@
 // injected collaborators; it is safe for concurrent use across
 // scheduler ticks, debouncer fires, and gRPC handler calls.
 //
-//revive:disable:var-naming // package name google_tasks mirrors ConnectorKindGoogleTasks
-package google_tasks
+package googletasks
 
 import (
 	"context"
@@ -28,8 +27,8 @@ import (
 
 	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
 	"github.com/brendanjerwin/simple_wiki/internal/connectors"
-	"github.com/brendanjerwin/simple_wiki/internal/connectors/google_tasks/gateway"
-	"github.com/brendanjerwin/simple_wiki/internal/connectors/google_tasks/translator"
+	"github.com/brendanjerwin/simple_wiki/internal/connectors/googletasks/gateway"
+	"github.com/brendanjerwin/simple_wiki/internal/connectors/googletasks/translator"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 )
 

@@ -5,7 +5,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"github.com/brendanjerwin/simple_wiki/internal/connectors/google_tasks/translator"
+	"github.com/brendanjerwin/simple_wiki/internal/connectors/googletasks/translator"
 )
 
 var _ = Describe("PositionToSortOrder", func() {

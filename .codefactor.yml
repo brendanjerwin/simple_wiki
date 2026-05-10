@@ -9,43 +9,14 @@
 #   files (chai's expect(x).to.exist; idiom triggers it). CodeFactor
 #   doesn't pick up the override, so we exclude tests from this rule
 #   here.
-#
-# - golint(package-name underscore) for google_keep / google_tasks:
-#   these package names are intentional and mirror the
-#   ConnectorKindGoogleKeep / ConnectorKindGoogleTasks proto enum
-#   slugs. The codebase already suppresses revive's var-naming via
-#   //revive:disable:var-naming. Excluding the golint package-name
-#   path here keeps the two linters aligned.
 
 exclude_patterns:
   - "static/js/gen/**"
   - "gen/**"
   - "vendor/**"
-  # Connector packages keep underscores in their names because the package
-  # slugs mirror the proto enum (ConnectorKindGoogleKeep / GoogleTasks).
-  # The local revive config disables var-naming/package-naming on the
-  # connector packages explicitly via inline directives; CodeFactor doesn't
-  # honor those, so we exclude the paths from CodeFactor entirely. Local
-  # `devbox run lint:everything` still runs revive over these files for
-  # everything except naming rules.
-  - "internal/connectors/google_keep/**"
-  - "internal/connectors/google_keep/*"
-  - "internal/connectors/google_tasks/**"
-  - "internal/connectors/google_tasks/*"
-  - "internal/connectors/google_tasks/credentials.go"
 
 tools:
   - name: eslint
     excluded_paths:
       - "static/js/**/*.test.ts"
       - "static/js/**/*.stories.ts"
-
-  - name: golint
-    excluded_paths:
-      - "internal/connectors/google_keep/**"
-      - "internal/connectors/google_tasks/**"
-
-  - name: revive
-    excluded_paths:
-      - "internal/connectors/google_keep/**"
-      - "internal/connectors/google_tasks/**"

@@ -1,5 +1,5 @@
 //revive:disable:dot-imports
-package google_tasks_test
+package googletasks_test
 
 import (
 	"context"
@@ -11,7 +11,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	googletasks "github.com/brendanjerwin/simple_wiki/internal/connectors/google_tasks"
+	"github.com/brendanjerwin/simple_wiki/internal/connectors/googletasks"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 )
 

@@ -1,4 +1,4 @@
-// Package google_keep: this file owns the Google Keep gpsoauth
+// Package googlekeep: this file owns the Google Keep gpsoauth
 // credential state machine — the per-profile bundle (email,
 // master_token, android_id, connected_at, last_verified_at) on the
 // user's profile page.
@@ -9,8 +9,7 @@
 // internal/connectors/engine; this file only reads, writes, and
 // clears the per-profile credential bundle.
 //
-//revive:disable:var-naming // package name google_keep mirrors ConnectorKindGoogleKeep
-package google_keep
+package googlekeep
 
 import (
 	"context"

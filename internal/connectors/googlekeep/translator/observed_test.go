@@ -6,7 +6,7 @@ import (
 	. "github.com/onsi/gomega"
 
 	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
-	"github.com/brendanjerwin/simple_wiki/internal/connectors/google_keep/translator"
+	"github.com/brendanjerwin/simple_wiki/internal/connectors/googlekeep/translator"
 )
 
 var _ = Describe("LastObservedWikiFingerprints", func() {

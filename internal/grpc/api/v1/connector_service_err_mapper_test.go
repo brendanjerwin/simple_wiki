@@ -12,8 +12,8 @@ import (
 	"google.golang.org/grpc/codes"
 
 	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
-	tasksgateway "github.com/brendanjerwin/simple_wiki/internal/connectors/google_tasks/gateway"
-	googletasks "github.com/brendanjerwin/simple_wiki/internal/connectors/google_tasks"
+	tasksgateway "github.com/brendanjerwin/simple_wiki/internal/connectors/googletasks/gateway"
+	"github.com/brendanjerwin/simple_wiki/internal/connectors/googletasks"
 	"github.com/brendanjerwin/simple_wiki/internal/grpc/api/v1"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 )
