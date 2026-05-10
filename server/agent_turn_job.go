@@ -117,6 +117,9 @@ func (j *AgentTurnJob) Execute() error {
 		Page:      j.page,
 		Prompt:    snapshot.GetPrompt(),
 		MaxTurns:  maxTurns,
+		// Protobuf repeated fields share backing arrays; pass a copy so any
+		// downstream mutation in dispatch handling cannot alias store-owned data.
+		AllowedTools: append([]string(nil), snapshot.GetAllowedTools()...),
 	})
 	if dispatchErr != nil {
 		// Record terminal ERROR via the FROM-current-state transition. The

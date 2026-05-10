@@ -56,11 +56,12 @@ var _ = Describe("AgentTurnJob", func() {
 		store = server.NewAgentScheduleStore(pages)
 		dispatcher = &fakeDispatcher{}
 		Expect(store.Upsert("p", &apiv1.AgentSchedule{
-			Id:       "s1",
-			Cron:     "0 * * * * *",
-			Prompt:   "do thing",
-			MaxTurns: 10,
-			Enabled:  true,
+			Id:           "s1",
+			Cron:         "0 * * * * *",
+			Prompt:       "do thing",
+			MaxTurns:     10,
+			Enabled:      true,
+			AllowedTools: []string{"Bash(mkdir:*)"},
 		})).To(Succeed())
 	})
 
@@ -93,6 +94,7 @@ var _ = Describe("AgentTurnJob", func() {
 			Expect(req.GetPage()).To(Equal("p"))
 			Expect(req.GetPrompt()).To(Equal("do thing"))
 			Expect(req.GetMaxTurns()).To(Equal(int32(10)))
+			Expect(req.GetAllowedTools()).To(ConsistOf("Bash(mkdir:*)"))
 		})
 
 		It("should record terminal OK status on the schedule", func() {

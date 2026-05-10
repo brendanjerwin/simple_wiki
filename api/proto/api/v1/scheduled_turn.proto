@@ -38,6 +38,8 @@ message ScheduledTurnRequest {
   string prompt = 3;
   // Maximum number of agent message chunks before the turn is cancelled.
   int32 max_turns = 4;
+  // Per-schedule permission allowlist for RequestPermission tool calls.
+  repeated string allowed_tools = 5;
 }
 
 // CompleteScheduledTurnRequest reports the terminal outcome of one turn.

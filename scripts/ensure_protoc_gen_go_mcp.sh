@@ -12,7 +12,8 @@ BINARY="$GOBIN_DIR/protoc-gen-go-mcp"
 
 if [ ! -x "$BINARY" ]; then
     mkdir -p "$GOBIN_DIR"
+    VERSION="$(go list -m -f '{{.Version}}' github.com/redpanda-data/protoc-gen-go-mcp)"
     echo "Installing protoc-gen-go-mcp..."
-    GOBIN="$GOBIN_DIR" go install github.com/redpanda-data/protoc-gen-go-mcp/cmd/protoc-gen-go-mcp@latest
+    GOBIN="$GOBIN_DIR" go install github.com/redpanda-data/protoc-gen-go-mcp/cmd/protoc-gen-go-mcp@"$VERSION"
     echo "protoc-gen-go-mcp installed in $GOBIN_DIR"
 fi
