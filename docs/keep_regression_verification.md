@@ -4,7 +4,7 @@ This runbook is the live-API smoke test for the Google Keep bridge after the
 Tasks-bridge PR substantially restructured the Keep code:
 
 - Phase 1a lifted `internal/keep/{bridge,protocol}` into
-  `internal/connectors/google_keep/{gateway,translator,sync}`.
+  `internal/connectors/googlekeep/{gateway,translator}`.
 - Phase 1a-extract pulled translation functions into the `translator` package.
 - Phase 1b renamed `KeepConnectorService` → `ConnectorService` (with
   `connector_kind` enum) and remapped checklist-collision errors from
@@ -80,7 +80,7 @@ google_keep/gateway` lift.
 **What failure would mean:**
 
 - `Stage 2 failed` → master token bad/expired or device ID malformed (gateway
-  authenticator is in `internal/connectors/google_keep/gateway/gpsoauth.go`).
+  authenticator is in `internal/connectors/googlekeep/gateway/gpsoauth.go`).
   Not a regression — the credential just needs refreshing.
 - `Changes failed: …` with HTTP 4xx → token-to-bearer flow regressed in the
   lift; investigate `gateway.NewKeepClient` wiring.
@@ -184,7 +184,7 @@ go run ./cmd/keep-debug -cmd=push-item-to-existing \
   reproduces the original bug that motivated `verify-listitem-update-shape`.
 - `item NOT echoed back` → translator's request shape doesn't match Keep's
   expectations after the Phase 1a-extract; check `translator/mapping.go`
-  against `internal/connectors/google_keep/sync/MATRIX.md`.
+  against `internal/connectors/MATRIX.md`.
 
 ### Step 5 — `verify-cursor-monotonic`: pagination invariant
 
