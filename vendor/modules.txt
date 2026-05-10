@@ -284,7 +284,7 @@ github.com/google/go-cmp/cmp/internal/value
 # github.com/google/jsonschema-go v0.4.2
 ## explicit; go 1.23.0
 github.com/google/jsonschema-go/jsonschema
-# github.com/google/pprof v0.0.0-20260115054156-294ebfa9ad83
+# github.com/google/pprof v0.0.0-20260402051712-545e8a4df936
 ## explicit; go 1.24.0
 github.com/google/pprof/profile
 # github.com/google/uuid v1.6.0
@@ -378,8 +378,8 @@ github.com/mschoch/smat
 # github.com/oklog/ulid/v2 v2.1.1
 ## explicit; go 1.15
 github.com/oklog/ulid/v2
-# github.com/onsi/ginkgo/v2 v2.28.2
-## explicit; go 1.24.0
+# github.com/onsi/ginkgo/v2 v2.28.3
+## explicit; go 1.25.0
 github.com/onsi/ginkgo/v2
 github.com/onsi/ginkgo/v2/config
 github.com/onsi/ginkgo/v2/formatter
@@ -659,7 +659,7 @@ golang.org/x/crypto/sha3
 ## explicit; go 1.23.0
 golang.org/x/exp/constraints
 golang.org/x/exp/maps
-# golang.org/x/mod v0.34.0
+# golang.org/x/mod v0.35.0
 ## explicit; go 1.25.0
 golang.org/x/mod/semver
 # golang.org/x/net v0.53.0
@@ -717,7 +717,7 @@ golang.org/x/text/secure/bidirule
 golang.org/x/text/transform
 golang.org/x/text/unicode/bidi
 golang.org/x/text/unicode/norm
-# golang.org/x/tools v0.43.0
+# golang.org/x/tools v0.44.0
 ## explicit; go 1.25.0
 golang.org/x/tools/cover
 golang.org/x/tools/go/ast/edge
