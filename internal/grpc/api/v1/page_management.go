@@ -744,3 +744,24 @@ func (s *Server) WatchPage(req *apiv1.WatchPageRequest, stream apiv1.PageManagem
 		}
 	}
 }
+
+// ReadPageOutline implements the ReadPageOutline RPC.
+func (s *Server) ReadPageOutline(ctx context.Context, req *apiv1.ReadPageOutlineRequest) (*apiv1.ReadPageOutlineResponse, error) {
+	if authErr := requireAuthorized(ctx, s.pageReaderMutator, wikipage.PageIdentifier(req.PageName)); authErr != nil {
+		return nil, authErr
+	}
+
+	_, markdown, err := s.pageReaderMutator.ReadMarkdown(wikipage.PageIdentifier(req.PageName))
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, status.Errorf(codes.NotFound, pageNotFoundErrFmt, req.PageName)
+		}
+		return nil, status.Errorf(codes.Internal, "failed to read page: %v", err)
+	}
+
+	return &apiv1.ReadPageOutlineResponse{
+		Headings:    parseHeadings(string(markdown)),
+		TotalBytes:  int64(len(markdown)),
+		VersionHash: computeContentHash(markdown),
+	}, nil
+}

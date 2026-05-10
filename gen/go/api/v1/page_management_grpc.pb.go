@@ -31,6 +31,7 @@ const (
 	PageManagementService_ListTemplates_FullMethodName      = "/api.v1.PageManagementService/ListTemplates"
 	PageManagementService_WatchPage_FullMethodName          = "/api.v1.PageManagementService/WatchPage"
 	PageManagementService_RenderMarkdown_FullMethodName     = "/api.v1.PageManagementService/RenderMarkdown"
+	PageManagementService_ReadPageOutline_FullMethodName    = "/api.v1.PageManagementService/ReadPageOutline"
 )
 
 // PageManagementServiceClient is the client API for PageManagementService service.
@@ -63,6 +64,8 @@ type PageManagementServiceClient interface {
 	WatchPage(ctx context.Context, in *WatchPageRequest, opts ...grpc.CallOption) (PageManagementService_WatchPageClient, error)
 	// RenderMarkdown — see (api.v1.description).
 	RenderMarkdown(ctx context.Context, in *RenderMarkdownRequest, opts ...grpc.CallOption) (*RenderMarkdownResponse, error)
+	// ReadPageOutline — see (api.v1.description).
+	ReadPageOutline(ctx context.Context, in *ReadPageOutlineRequest, opts ...grpc.CallOption) (*ReadPageOutlineResponse, error)
 }
 
 type pageManagementServiceClient struct {
@@ -216,6 +219,16 @@ func (c *pageManagementServiceClient) RenderMarkdown(ctx context.Context, in *Re
 	return out, nil
 }
 
+func (c *pageManagementServiceClient) ReadPageOutline(ctx context.Context, in *ReadPageOutlineRequest, opts ...grpc.CallOption) (*ReadPageOutlineResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ReadPageOutlineResponse)
+	err := c.cc.Invoke(ctx, PageManagementService_ReadPageOutline_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // PageManagementServiceServer is the server API for PageManagementService service.
 // All implementations must embed UnimplementedPageManagementServiceServer
 // for forward compatibility
@@ -246,6 +259,8 @@ type PageManagementServiceServer interface {
 	WatchPage(*WatchPageRequest, PageManagementService_WatchPageServer) error
 	// RenderMarkdown — see (api.v1.description).
 	RenderMarkdown(context.Context, *RenderMarkdownRequest) (*RenderMarkdownResponse, error)
+	// ReadPageOutline — see (api.v1.description).
+	ReadPageOutline(context.Context, *ReadPageOutlineRequest) (*ReadPageOutlineResponse, error)
 	mustEmbedUnimplementedPageManagementServiceServer()
 }
 
@@ -288,6 +303,9 @@ func (UnimplementedPageManagementServiceServer) WatchPage(*WatchPageRequest, Pag
 }
 func (UnimplementedPageManagementServiceServer) RenderMarkdown(context.Context, *RenderMarkdownRequest) (*RenderMarkdownResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RenderMarkdown not implemented")
+}
+func (UnimplementedPageManagementServiceServer) ReadPageOutline(context.Context, *ReadPageOutlineRequest) (*ReadPageOutlineResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ReadPageOutline not implemented")
 }
 func (UnimplementedPageManagementServiceServer) mustEmbedUnimplementedPageManagementServiceServer() {}
 
@@ -521,6 +539,24 @@ func _PageManagementService_RenderMarkdown_Handler(srv interface{}, ctx context.
 	return interceptor(ctx, in, info, handler)
 }
 
+func _PageManagementService_ReadPageOutline_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ReadPageOutlineRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PageManagementServiceServer).ReadPageOutline(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: PageManagementService_ReadPageOutline_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PageManagementServiceServer).ReadPageOutline(ctx, req.(*ReadPageOutlineRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // PageManagementService_ServiceDesc is the grpc.ServiceDesc for PageManagementService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -571,6 +607,10 @@ var PageManagementService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "RenderMarkdown",
 			Handler:    _PageManagementService_RenderMarkdown_Handler,
+		},
+		{
+			MethodName: "ReadPageOutline",
+			Handler:    _PageManagementService_ReadPageOutline_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{
