@@ -26,7 +26,7 @@ export async function readPage(
   pageName: string
 ): Promise<{ contentMarkdown: string; versionHash: string }> {
   const client = getWikiClient(wikiUrl);
-  const request = create(ReadPageRequestSchema, { pageName });
+  const request = create(ReadPageRequestSchema, { pageIdentifier: { case: "pageName", value: pageName } });
   const response = await client.readPage(request);
   return {
     contentMarkdown: response.contentMarkdown,
