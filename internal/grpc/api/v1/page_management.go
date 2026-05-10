@@ -278,19 +278,25 @@ func (s *Server) DeletePage(ctx context.Context, req *apiv1.DeletePageRequest) (
 
 // ReadPage implements the ReadPage RPC.
 func (s *Server) ReadPage(ctx context.Context, req *apiv1.ReadPageRequest) (*apiv1.ReadPageResponse, error) {
-	if authErr := requireAuthorized(ctx, s.pageReaderMutator, wikipage.PageIdentifier(req.PageName)); authErr != nil {
+	// page_name and identifier are mutually exclusive via oneof; exactly one must be set.
+	pageName := req.GetPageName()
+	if pageName == "" {
+		pageName = req.GetIdentifier()
+	}
+
+	if authErr := requireAuthorized(ctx, s.pageReaderMutator, wikipage.PageIdentifier(pageName)); authErr != nil {
 		return nil, authErr
 	}
 	// Read the page markdown and frontmatter
-	_, markdown, err := s.pageReaderMutator.ReadMarkdown(wikipage.PageIdentifier(req.PageName))
+	_, markdown, err := s.pageReaderMutator.ReadMarkdown(wikipage.PageIdentifier(pageName))
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil, status.Errorf(codes.NotFound, pageNotFoundErrFmt, req.PageName)
+			return nil, status.Errorf(codes.NotFound, pageNotFoundErrFmt, pageName)
 		}
 		return nil, status.Errorf(codes.Internal, "failed to read page: %v", err)
 	}
 
-	_, frontmatter, err := s.pageReaderMutator.ReadFrontMatter(wikipage.PageIdentifier(req.PageName))
+	_, frontmatter, err := s.pageReaderMutator.ReadFrontMatter(wikipage.PageIdentifier(pageName))
 	if err != nil && !os.IsNotExist(err) {
 		return nil, status.Errorf(codes.Internal, failedToReadFrontmatterErrFmt, err)
 	}
@@ -305,7 +311,7 @@ func (s *Server) ReadPage(ctx context.Context, req *apiv1.ReadPageRequest) (*api
 
 	// Create a Page object and render it
 	page := &wikipage.Page{
-		Identifier: req.PageName,
+		Identifier: pageName,
 		Text:       pageText,
 	}
 
