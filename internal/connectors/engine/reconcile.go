@@ -30,6 +30,31 @@ func timestampToTime(ts *timestamppb.Timestamp) time.Time {
 	return ts.AsTime()
 }
 
+// dueFromWikiItem returns a `*time.Time` suitable for the mutator's
+// `due` parameter. The mutator uses pointer semantics: nil = "remote
+// did not surface a Due field" (leave wiki value alone, e.g. Keep),
+// zero-pointer = "remote cleared the field" (clear wiki value),
+// non-zero pointer = "remote set this Due" (apply).
+//
+// We treat a zero `wikiItem.Due` as "no Due known on this remote" (nil)
+// to match the legacy behavior — neither pre-extraction connector
+// passed Due to the mutator. Adapters whose remote backend supports
+// Due (Tasks) populate `wikiItem.Due` with a non-zero value when the
+// remote has one and a zero value when the remote has cleared it; we
+// can't distinguish those two cases at this layer without an
+// adapter-supplied "supports-due" capability bit. For the outbound
+// regression this fixes (Tasks Due not flowing wiki→remote) the
+// distinction does not matter; for the broader "remote cleared Due,
+// reflect on wiki" case, we'll add the capability bit when an adapter
+// needs it.
+func dueFromWikiItem(item connectors.WikiItem) *time.Time {
+	if item.Due.IsZero() {
+		return nil
+	}
+	due := item.Due
+	return &due
+}
+
 // pausedReasonRemoteHandleEmpty is the PausedReason the engine stamps
 // when reconcile observes an active binding whose RemoteHandle is the
 // empty string. This is documented in rules §11.1 as a
@@ -464,7 +489,7 @@ func (e *Engine) applyInboundOneItem(
 				e.adapter.Kind(), string(binding.ProfileID), binding.Page, binding.ListName, uid, string(remoteItem.Ref), cls.LatestEventSource)
 		}
 		if updErr := e.mutator.UpdateItemForSync(ctx, binding.Page, binding.ListName, "", uid,
-			wikiItem.Text, wikiItem.Checked, wikiItem.Tags, wikiItem.Description); updErr != nil {
+			wikiItem.Text, wikiItem.Checked, wikiItem.Tags, wikiItem.Description, dueFromWikiItem(wikiItem)); updErr != nil {
 			return fmt.Errorf("update wiki item %s on profile %s: %w",
 				uid, binding.ProfileID, updErr)
 		}
@@ -484,7 +509,7 @@ func (e *Engine) applyInboundOneItem(
 		e.logger.Info("connectors/engine: applyInbound_dedup_adopted_existing kind=%s profile=%s page=%s list=%s uid=%s ref=%s",
 			e.adapter.Kind(), string(binding.ProfileID), binding.Page, binding.ListName, matchUID, string(remoteItem.Ref))
 		if updErr := e.mutator.UpdateItemForSync(ctx, binding.Page, binding.ListName, "", matchUID,
-			wikiItem.Text, wikiItem.Checked, wikiItem.Tags, wikiItem.Description); updErr != nil {
+			wikiItem.Text, wikiItem.Checked, wikiItem.Tags, wikiItem.Description, dueFromWikiItem(wikiItem)); updErr != nil {
 			return fmt.Errorf("update adopted wiki item %s on profile %s: %w",
 				matchUID, binding.ProfileID, updErr)
 		}
@@ -495,7 +520,7 @@ func (e *Engine) applyInboundOneItem(
 	}
 
 	newUID, addErr := e.mutator.AddItemForSync(ctx, binding.Page, binding.ListName, "",
-		wikiItem.Text, wikiItem.Checked, wikiItem.Tags, wikiItem.Description, remoteItem.Position)
+		wikiItem.Text, wikiItem.Checked, wikiItem.Tags, wikiItem.Description, remoteItem.Position, dueFromWikiItem(wikiItem))
 	if addErr != nil {
 		return fmt.Errorf("add wiki item from remote %s on profile %s: %w",
 			remoteItem.Ref, binding.ProfileID, addErr)

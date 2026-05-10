@@ -85,6 +85,7 @@ type addCall struct {
 	Tags                       []string
 	Description                string
 	Position                   string
+	Due                        *time.Time
 }
 
 type updateCall struct {
@@ -93,6 +94,7 @@ type updateCall struct {
 	Checked                         bool
 	Tags                            []string
 	Description                     string
+	Due                             *time.Time
 }
 
 type deleteCall struct {
@@ -103,18 +105,18 @@ type appendCall struct {
 	Page, ListName, UID, Op string
 }
 
-func (m *recordingChecklistMutator) AddItemForSync(_ context.Context, page, listName, ownerEmail, text string, checked bool, tags []string, description, position string) (string, error) {
+func (m *recordingChecklistMutator) AddItemForSync(_ context.Context, page, listName, ownerEmail, text string, checked bool, tags []string, description, position string, due *time.Time) (string, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.addCalls = append(m.addCalls, addCall{Page: page, ListName: listName, OwnerEmail: ownerEmail, Text: text, Checked: checked, Tags: tags, Description: description, Position: position})
+	m.addCalls = append(m.addCalls, addCall{Page: page, ListName: listName, OwnerEmail: ownerEmail, Text: text, Checked: checked, Tags: tags, Description: description, Position: position, Due: due})
 	m.callOrder = append(m.callOrder, "Add")
 	return m.addUIDToReturn, m.addErr
 }
 
-func (m *recordingChecklistMutator) UpdateItemForSync(_ context.Context, page, listName, ownerEmail, uid, text string, checked bool, tags []string, description string) error {
+func (m *recordingChecklistMutator) UpdateItemForSync(_ context.Context, page, listName, ownerEmail, uid, text string, checked bool, tags []string, description string, due *time.Time) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.updateCalls = append(m.updateCalls, updateCall{Page: page, ListName: listName, OwnerEmail: ownerEmail, UID: uid, Text: text, Checked: checked, Tags: tags, Description: description})
+	m.updateCalls = append(m.updateCalls, updateCall{Page: page, ListName: listName, OwnerEmail: ownerEmail, UID: uid, Text: text, Checked: checked, Tags: tags, Description: description, Due: due})
 	m.callOrder = append(m.callOrder, "Update")
 	return m.updateErr
 }
@@ -199,18 +201,18 @@ type trackingChecklistMutator struct {
 	tracker *orderTracker
 }
 
-func (m *trackingChecklistMutator) AddItemForSync(ctx context.Context, page, listName, ownerEmail, text string, checked bool, tags []string, description, position string) (string, error) {
+func (m *trackingChecklistMutator) AddItemForSync(ctx context.Context, page, listName, ownerEmail, text string, checked bool, tags []string, description, position string, due *time.Time) (string, error) {
 	if m.tracker != nil {
 		m.tracker.record("Mutator.Add")
 	}
-	return m.recordingChecklistMutator.AddItemForSync(ctx, page, listName, ownerEmail, text, checked, tags, description, position)
+	return m.recordingChecklistMutator.AddItemForSync(ctx, page, listName, ownerEmail, text, checked, tags, description, position, due)
 }
 
-func (m *trackingChecklistMutator) UpdateItemForSync(ctx context.Context, page, listName, ownerEmail, uid, text string, checked bool, tags []string, description string) error {
+func (m *trackingChecklistMutator) UpdateItemForSync(ctx context.Context, page, listName, ownerEmail, uid, text string, checked bool, tags []string, description string, due *time.Time) error {
 	if m.tracker != nil {
 		m.tracker.record("Mutator.Update")
 	}
-	return m.recordingChecklistMutator.UpdateItemForSync(ctx, page, listName, ownerEmail, uid, text, checked, tags, description)
+	return m.recordingChecklistMutator.UpdateItemForSync(ctx, page, listName, ownerEmail, uid, text, checked, tags, description, due)
 }
 
 func (m *trackingChecklistMutator) DeleteItemForSync(ctx context.Context, page, listName, ownerEmail, uid string) error {
@@ -716,6 +718,75 @@ var _ = Describe("Engine.reconcile", func() {
 
 		It("should pass the known uid to UpdateItemForSync", func() {
 			Expect(mutator.recordingChecklistMutator.updateCalls[0].UID).To(Equal(knownUID))
+		})
+	})
+
+	// Regression: Due dropped between adapter.RemoteToWiki and the mutator.
+	// Previously the engine called UpdateItemForSync without a Due param so
+	// the wiki couldn't reflect a remote-side Due change. The mutator now
+	// takes `due *time.Time` and the engine passes wikiItem.Due through.
+	When("inbound has an existing remote item with a due date", func() {
+		const knownUID = "uid-existing-due-1"
+		var dueAt time.Time
+
+		BeforeEach(func() {
+			dueAt = time.Date(2026, 7, 4, 0, 0, 0, 0, time.UTC)
+			fbs.SeedBinding(connectors.Binding{
+				ProfileID: profileID, Page: page, ListName: listName,
+				RemoteHandle:         "tasklist-1",
+				State:                connectors.BindingStateActive,
+				LastSuccessfulSyncAt: reconcilePastChokePausedAt,
+				LastSyncedSeq:        10,
+				AdapterState: connectors.AdapterState{
+					"item_id_map": map[string]string{knownUID: "task-due"},
+				},
+			}, ownerKind)
+
+			fa.SetPullRemoteResponse(connectors.RemotePullResult{
+				Items: []connectors.RemoteItem{{Ref: "task-due", Title: "fireworks", Due: dueAt}},
+			}, nil)
+			fa.SetRemoteToWikiResponse(connectors.WikiItem{UID: knownUID, Text: "fireworks", Due: dueAt}, nil)
+			reader.checklist = &apiv1.Checklist{
+				Items: []*apiv1.ChecklistItem{{Uid: knownUID, Text: "fireworks"}},
+			}
+
+			Expect(eng.Sync(ctx, key)).To(Succeed())
+		})
+
+		It("should pass the Due field through to UpdateItemForSync", func() {
+			Expect(mutator.recordingChecklistMutator.updateCalls).To(HaveLen(1))
+			Expect(mutator.recordingChecklistMutator.updateCalls[0].Due).NotTo(BeNil())
+			Expect(*mutator.recordingChecklistMutator.updateCalls[0].Due).To(Equal(dueAt))
+		})
+	})
+
+	// Regression: same shape as above but for newly-added items via
+	// AddItemForSync. Closes the inbound Due gap end-to-end.
+	When("inbound has a new remote item with a due date", func() {
+		var dueAt time.Time
+
+		BeforeEach(func() {
+			dueAt = time.Date(2026, 8, 12, 0, 0, 0, 0, time.UTC)
+			fbs.SeedBinding(connectors.Binding{
+				ProfileID: profileID, Page: page, ListName: listName,
+				RemoteHandle:         "tasklist-1",
+				State:                connectors.BindingStateActive,
+				LastSuccessfulSyncAt: reconcilePastChokePausedAt,
+				AdapterState:         connectors.AdapterState{"item_id_map": map[string]string{}},
+			}, ownerKind)
+
+			fa.SetPullRemoteResponse(connectors.RemotePullResult{
+				Items: []connectors.RemoteItem{{Ref: "task-new-due", Title: "vacation", Due: dueAt}},
+			}, nil)
+			fa.SetRemoteToWikiResponse(connectors.WikiItem{UID: "", Text: "vacation", Due: dueAt}, nil)
+
+			Expect(eng.Sync(ctx, key)).To(Succeed())
+		})
+
+		It("should pass the Due field through to AddItemForSync", func() {
+			Expect(mutator.recordingChecklistMutator.addCalls).To(HaveLen(1))
+			Expect(mutator.recordingChecklistMutator.addCalls[0].Due).NotTo(BeNil())
+			Expect(*mutator.recordingChecklistMutator.addCalls[0].Due).To(Equal(dueAt))
 		})
 	})
 

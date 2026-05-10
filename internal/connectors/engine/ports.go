@@ -40,8 +40,8 @@ type ChecklistReader interface {
 // op-log events directly — it calls the mutator and trusts the
 // mutator to log.
 type ChecklistMutator interface {
-	AddItemForSync(ctx context.Context, page, listName, ownerEmail, text string, checked bool, tags []string, description string, position string) (string, error)
-	UpdateItemForSync(ctx context.Context, page, listName, ownerEmail, uid, text string, checked bool, tags []string, description string) error
+	AddItemForSync(ctx context.Context, page, listName, ownerEmail, text string, checked bool, tags []string, description string, position string, due *time.Time) (string, error)
+	UpdateItemForSync(ctx context.Context, page, listName, ownerEmail, uid, text string, checked bool, tags []string, description string, due *time.Time) error
 	DeleteItemForSync(ctx context.Context, page, listName, ownerEmail, uid string) error
 
 	// AppendSyncEvent writes a self-source op-log event after a

@@ -30,11 +30,11 @@ func (noopChecklistReader) ListItems(_ context.Context, _, _ string) (*apiv1.Che
 
 type noopChecklistMutator struct{}
 
-func (noopChecklistMutator) AddItemForSync(_ context.Context, _, _, _, _ string, _ bool, _ []string, _, _ string) (string, error) {
+func (noopChecklistMutator) AddItemForSync(_ context.Context, _, _, _, _ string, _ bool, _ []string, _, _ string, _ *time.Time) (string, error) {
 	return "", nil
 }
 
-func (noopChecklistMutator) UpdateItemForSync(_ context.Context, _, _, _, _, _ string, _ bool, _ []string, _ string) error {
+func (noopChecklistMutator) UpdateItemForSync(_ context.Context, _, _, _, _, _ string, _ bool, _ []string, _ string, _ *time.Time) error {
 	return nil
 }
 

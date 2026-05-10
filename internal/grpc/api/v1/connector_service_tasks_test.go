@@ -160,10 +160,10 @@ func (emptyChecklistReader) ListItems(_ context.Context, _, _ string) (*apiv1.Ch
 // noopMutator satisfies engine.ChecklistMutator without touching state.
 type noopMutator struct{}
 
-func (noopMutator) AddItemForSync(_ context.Context, _, _, _, _ string, _ bool, _ []string, _ string, _ string) (string, error) {
+func (noopMutator) AddItemForSync(_ context.Context, _, _, _, _ string, _ bool, _ []string, _ string, _ string, _ *time.Time) (string, error) {
 	return "", nil
 }
-func (noopMutator) UpdateItemForSync(_ context.Context, _, _, _, _, _ string, _ bool, _ []string, _ string) error {
+func (noopMutator) UpdateItemForSync(_ context.Context, _, _, _, _, _ string, _ bool, _ []string, _ string, _ *time.Time) error {
 	return nil
 }
 func (noopMutator) DeleteItemForSync(_ context.Context, _, _, _, _ string) error { return nil }
