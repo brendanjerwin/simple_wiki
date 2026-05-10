@@ -36,11 +36,11 @@ import {
   GetStateRequestSchema,
   CompleteAuthRequestSchema,
   DisconnectRequestSchema,
-  UnsubscribeRequestSchema,
+  UnbindRequestSchema,
 } from '../gen/api/v1/connector_service_pb.js';
 import type {
   ConnectorState,
-  SubscriptionState,
+  BindingState,
 } from '../gen/api/v1/connector_service_pb.js';
 import {
   foundationCSS,
@@ -143,10 +143,10 @@ export class KeepConnect extends LitElement {
     }
   }
 
-  private async handleUnbind(subscription: SubscriptionState): Promise<void> {
+  private async handleUnbind(subscription: BindingState): Promise<void> {
     try {
-      await this.client.unsubscribe(
-        create(UnsubscribeRequestSchema, {
+      await this.client.unbind(
+        create(UnbindRequestSchema, {
           connectorKind: ConnectorKind.GOOGLE_KEEP,
           page: subscription.page,
           listName: subscription.listName,
@@ -257,7 +257,7 @@ export class KeepConnect extends LitElement {
         <span class="muted">Last verified: ${verified}.</span>
       </p>
       <h4>Bindings</h4>
-      ${this.renderSubscriptions()}
+      ${this.renderBindings()}
       <p>
         <confirmation-interlock-button
           label="Disconnect Google Keep"
@@ -270,8 +270,8 @@ export class KeepConnect extends LitElement {
     `;
   }
 
-  private renderSubscriptions() {
-    const subscriptions = this.state?.subscriptions ?? [];
+  private renderBindings() {
+    const subscriptions = this.state?.bindings ?? [];
     if (subscriptions.length === 0) {
       return html`<p class="muted">
         No checklists bound yet. Open a checklist page and click

@@ -49,18 +49,19 @@ const (
 	// ConnectorServiceListRemoteListsProcedure is the fully-qualified name of the ConnectorService's
 	// ListRemoteLists RPC.
 	ConnectorServiceListRemoteListsProcedure = "/api.v1.ConnectorService/ListRemoteLists"
-	// ConnectorServiceListMySubscriptionsProcedure is the fully-qualified name of the
-	// ConnectorService's ListMySubscriptions RPC.
-	ConnectorServiceListMySubscriptionsProcedure = "/api.v1.ConnectorService/ListMySubscriptions"
-	// ConnectorServiceSubscribeProcedure is the fully-qualified name of the ConnectorService's
-	// Subscribe RPC.
-	ConnectorServiceSubscribeProcedure = "/api.v1.ConnectorService/Subscribe"
-	// ConnectorServiceUnsubscribeProcedure is the fully-qualified name of the ConnectorService's
-	// Unsubscribe RPC.
-	ConnectorServiceUnsubscribeProcedure = "/api.v1.ConnectorService/Unsubscribe"
-	// ConnectorServiceGetChecklistSubscriptionStateProcedure is the fully-qualified name of the
-	// ConnectorService's GetChecklistSubscriptionState RPC.
-	ConnectorServiceGetChecklistSubscriptionStateProcedure = "/api.v1.ConnectorService/GetChecklistSubscriptionState"
+	// ConnectorServiceListMyBindingsProcedure is the fully-qualified name of the ConnectorService's
+	// ListMyBindings RPC.
+	ConnectorServiceListMyBindingsProcedure = "/api.v1.ConnectorService/ListMyBindings"
+	// ConnectorServiceBindProcedure is the fully-qualified name of the ConnectorService's Bind RPC.
+	ConnectorServiceBindProcedure = "/api.v1.ConnectorService/Bind"
+	// ConnectorServiceUnbindProcedure is the fully-qualified name of the ConnectorService's Unbind RPC.
+	ConnectorServiceUnbindProcedure = "/api.v1.ConnectorService/Unbind"
+	// ConnectorServiceSyncNowProcedure is the fully-qualified name of the ConnectorService's SyncNow
+	// RPC.
+	ConnectorServiceSyncNowProcedure = "/api.v1.ConnectorService/SyncNow"
+	// ConnectorServiceGetChecklistBindingStateProcedure is the fully-qualified name of the
+	// ConnectorService's GetChecklistBindingState RPC.
+	ConnectorServiceGetChecklistBindingStateProcedure = "/api.v1.ConnectorService/GetChecklistBindingState"
 	// ConnectorServiceListDeadLettersProcedure is the fully-qualified name of the ConnectorService's
 	// ListDeadLetters RPC.
 	ConnectorServiceListDeadLettersProcedure = "/api.v1.ConnectorService/ListDeadLetters"
@@ -71,18 +72,19 @@ const (
 
 // These variables are the protoreflect.Descriptor objects for the RPCs defined in this package.
 var (
-	connectorServiceServiceDescriptor                             = v1.File_api_v1_connector_service_proto.Services().ByName("ConnectorService")
-	connectorServiceBeginAuthMethodDescriptor                     = connectorServiceServiceDescriptor.Methods().ByName("BeginAuth")
-	connectorServiceCompleteAuthMethodDescriptor                  = connectorServiceServiceDescriptor.Methods().ByName("CompleteAuth")
-	connectorServiceDisconnectMethodDescriptor                    = connectorServiceServiceDescriptor.Methods().ByName("Disconnect")
-	connectorServiceGetStateMethodDescriptor                      = connectorServiceServiceDescriptor.Methods().ByName("GetState")
-	connectorServiceListRemoteListsMethodDescriptor               = connectorServiceServiceDescriptor.Methods().ByName("ListRemoteLists")
-	connectorServiceListMySubscriptionsMethodDescriptor           = connectorServiceServiceDescriptor.Methods().ByName("ListMySubscriptions")
-	connectorServiceSubscribeMethodDescriptor                     = connectorServiceServiceDescriptor.Methods().ByName("Subscribe")
-	connectorServiceUnsubscribeMethodDescriptor                   = connectorServiceServiceDescriptor.Methods().ByName("Unsubscribe")
-	connectorServiceGetChecklistSubscriptionStateMethodDescriptor = connectorServiceServiceDescriptor.Methods().ByName("GetChecklistSubscriptionState")
-	connectorServiceListDeadLettersMethodDescriptor               = connectorServiceServiceDescriptor.Methods().ByName("ListDeadLetters")
-	connectorServiceClearDeadLetterMethodDescriptor               = connectorServiceServiceDescriptor.Methods().ByName("ClearDeadLetter")
+	connectorServiceServiceDescriptor                        = v1.File_api_v1_connector_service_proto.Services().ByName("ConnectorService")
+	connectorServiceBeginAuthMethodDescriptor                = connectorServiceServiceDescriptor.Methods().ByName("BeginAuth")
+	connectorServiceCompleteAuthMethodDescriptor             = connectorServiceServiceDescriptor.Methods().ByName("CompleteAuth")
+	connectorServiceDisconnectMethodDescriptor               = connectorServiceServiceDescriptor.Methods().ByName("Disconnect")
+	connectorServiceGetStateMethodDescriptor                 = connectorServiceServiceDescriptor.Methods().ByName("GetState")
+	connectorServiceListRemoteListsMethodDescriptor          = connectorServiceServiceDescriptor.Methods().ByName("ListRemoteLists")
+	connectorServiceListMyBindingsMethodDescriptor           = connectorServiceServiceDescriptor.Methods().ByName("ListMyBindings")
+	connectorServiceBindMethodDescriptor                     = connectorServiceServiceDescriptor.Methods().ByName("Bind")
+	connectorServiceUnbindMethodDescriptor                   = connectorServiceServiceDescriptor.Methods().ByName("Unbind")
+	connectorServiceSyncNowMethodDescriptor                  = connectorServiceServiceDescriptor.Methods().ByName("SyncNow")
+	connectorServiceGetChecklistBindingStateMethodDescriptor = connectorServiceServiceDescriptor.Methods().ByName("GetChecklistBindingState")
+	connectorServiceListDeadLettersMethodDescriptor          = connectorServiceServiceDescriptor.Methods().ByName("ListDeadLetters")
+	connectorServiceClearDeadLetterMethodDescriptor          = connectorServiceServiceDescriptor.Methods().ByName("ClearDeadLetter")
 )
 
 // ConnectorServiceClient is a client for the api.v1.ConnectorService service.
@@ -104,16 +106,17 @@ type ConnectorServiceClient interface {
 	GetState(context.Context, *connect.Request[v1.GetStateRequest]) (*connect.Response[v1.GetStateResponse], error)
 	// ListRemoteLists enumerates the lists the calling user owns on the
 	// remote side (Keep notes, Tasks tasklists, etc.). Used to populate
-	// the subscribe picker in the Checklist component. Returns an
+	// the bind picker in the Checklist component. Returns an
 	// auth-revoked error if credentials no longer work.
 	ListRemoteLists(context.Context, *connect.Request[v1.ListRemoteListsRequest]) (*connect.Response[v1.ListRemoteListsResponse], error)
-	ListMySubscriptions(context.Context, *connect.Request[v1.ListMySubscriptionsRequest]) (*connect.Response[v1.ListMySubscriptionsResponse], error)
-	Subscribe(context.Context, *connect.Request[v1.SubscribeRequest]) (*connect.Response[v1.SubscribeResponse], error)
-	Unsubscribe(context.Context, *connect.Request[v1.UnsubscribeRequest]) (*connect.Response[v1.UnsubscribeResponse], error)
-	// GetChecklistSubscriptionState does NOT take connector_kind: at most
+	ListMyBindings(context.Context, *connect.Request[v1.ListMyBindingsRequest]) (*connect.Response[v1.ListMyBindingsResponse], error)
+	Bind(context.Context, *connect.Request[v1.BindRequest]) (*connect.Response[v1.BindResponse], error)
+	Unbind(context.Context, *connect.Request[v1.UnbindRequest]) (*connect.Response[v1.UnbindResponse], error)
+	SyncNow(context.Context, *connect.Request[v1.SyncNowRequest]) (*connect.Response[v1.SyncNowResponse], error)
+	// GetChecklistBindingState does NOT take connector_kind: at most
 	// one connector owns a given (page, list_name) for a given user, so
 	// the response identifies which connector (if any) is authoritative.
-	GetChecklistSubscriptionState(context.Context, *connect.Request[v1.GetChecklistSubscriptionStateRequest]) (*connect.Response[v1.GetChecklistSubscriptionStateResponse], error)
+	GetChecklistBindingState(context.Context, *connect.Request[v1.GetChecklistBindingStateRequest]) (*connect.Response[v1.GetChecklistBindingStateResponse], error)
 	ListDeadLetters(context.Context, *connect.Request[v1.ListDeadLettersRequest]) (*connect.Response[v1.ListDeadLettersResponse], error)
 	ClearDeadLetter(context.Context, *connect.Request[v1.ClearDeadLetterRequest]) (*connect.Response[emptypb.Empty], error)
 }
@@ -158,28 +161,34 @@ func NewConnectorServiceClient(httpClient connect.HTTPClient, baseURL string, op
 			connect.WithSchema(connectorServiceListRemoteListsMethodDescriptor),
 			connect.WithClientOptions(opts...),
 		),
-		listMySubscriptions: connect.NewClient[v1.ListMySubscriptionsRequest, v1.ListMySubscriptionsResponse](
+		listMyBindings: connect.NewClient[v1.ListMyBindingsRequest, v1.ListMyBindingsResponse](
 			httpClient,
-			baseURL+ConnectorServiceListMySubscriptionsProcedure,
-			connect.WithSchema(connectorServiceListMySubscriptionsMethodDescriptor),
+			baseURL+ConnectorServiceListMyBindingsProcedure,
+			connect.WithSchema(connectorServiceListMyBindingsMethodDescriptor),
 			connect.WithClientOptions(opts...),
 		),
-		subscribe: connect.NewClient[v1.SubscribeRequest, v1.SubscribeResponse](
+		bind: connect.NewClient[v1.BindRequest, v1.BindResponse](
 			httpClient,
-			baseURL+ConnectorServiceSubscribeProcedure,
-			connect.WithSchema(connectorServiceSubscribeMethodDescriptor),
+			baseURL+ConnectorServiceBindProcedure,
+			connect.WithSchema(connectorServiceBindMethodDescriptor),
 			connect.WithClientOptions(opts...),
 		),
-		unsubscribe: connect.NewClient[v1.UnsubscribeRequest, v1.UnsubscribeResponse](
+		unbind: connect.NewClient[v1.UnbindRequest, v1.UnbindResponse](
 			httpClient,
-			baseURL+ConnectorServiceUnsubscribeProcedure,
-			connect.WithSchema(connectorServiceUnsubscribeMethodDescriptor),
+			baseURL+ConnectorServiceUnbindProcedure,
+			connect.WithSchema(connectorServiceUnbindMethodDescriptor),
 			connect.WithClientOptions(opts...),
 		),
-		getChecklistSubscriptionState: connect.NewClient[v1.GetChecklistSubscriptionStateRequest, v1.GetChecklistSubscriptionStateResponse](
+		syncNow: connect.NewClient[v1.SyncNowRequest, v1.SyncNowResponse](
 			httpClient,
-			baseURL+ConnectorServiceGetChecklistSubscriptionStateProcedure,
-			connect.WithSchema(connectorServiceGetChecklistSubscriptionStateMethodDescriptor),
+			baseURL+ConnectorServiceSyncNowProcedure,
+			connect.WithSchema(connectorServiceSyncNowMethodDescriptor),
+			connect.WithClientOptions(opts...),
+		),
+		getChecklistBindingState: connect.NewClient[v1.GetChecklistBindingStateRequest, v1.GetChecklistBindingStateResponse](
+			httpClient,
+			baseURL+ConnectorServiceGetChecklistBindingStateProcedure,
+			connect.WithSchema(connectorServiceGetChecklistBindingStateMethodDescriptor),
 			connect.WithClientOptions(opts...),
 		),
 		listDeadLetters: connect.NewClient[v1.ListDeadLettersRequest, v1.ListDeadLettersResponse](
@@ -199,17 +208,18 @@ func NewConnectorServiceClient(httpClient connect.HTTPClient, baseURL string, op
 
 // connectorServiceClient implements ConnectorServiceClient.
 type connectorServiceClient struct {
-	beginAuth                     *connect.Client[v1.BeginAuthRequest, v1.BeginAuthResponse]
-	completeAuth                  *connect.Client[v1.CompleteAuthRequest, v1.CompleteAuthResponse]
-	disconnect                    *connect.Client[v1.DisconnectRequest, v1.DisconnectResponse]
-	getState                      *connect.Client[v1.GetStateRequest, v1.GetStateResponse]
-	listRemoteLists               *connect.Client[v1.ListRemoteListsRequest, v1.ListRemoteListsResponse]
-	listMySubscriptions           *connect.Client[v1.ListMySubscriptionsRequest, v1.ListMySubscriptionsResponse]
-	subscribe                     *connect.Client[v1.SubscribeRequest, v1.SubscribeResponse]
-	unsubscribe                   *connect.Client[v1.UnsubscribeRequest, v1.UnsubscribeResponse]
-	getChecklistSubscriptionState *connect.Client[v1.GetChecklistSubscriptionStateRequest, v1.GetChecklistSubscriptionStateResponse]
-	listDeadLetters               *connect.Client[v1.ListDeadLettersRequest, v1.ListDeadLettersResponse]
-	clearDeadLetter               *connect.Client[v1.ClearDeadLetterRequest, emptypb.Empty]
+	beginAuth                *connect.Client[v1.BeginAuthRequest, v1.BeginAuthResponse]
+	completeAuth             *connect.Client[v1.CompleteAuthRequest, v1.CompleteAuthResponse]
+	disconnect               *connect.Client[v1.DisconnectRequest, v1.DisconnectResponse]
+	getState                 *connect.Client[v1.GetStateRequest, v1.GetStateResponse]
+	listRemoteLists          *connect.Client[v1.ListRemoteListsRequest, v1.ListRemoteListsResponse]
+	listMyBindings           *connect.Client[v1.ListMyBindingsRequest, v1.ListMyBindingsResponse]
+	bind                     *connect.Client[v1.BindRequest, v1.BindResponse]
+	unbind                   *connect.Client[v1.UnbindRequest, v1.UnbindResponse]
+	syncNow                  *connect.Client[v1.SyncNowRequest, v1.SyncNowResponse]
+	getChecklistBindingState *connect.Client[v1.GetChecklistBindingStateRequest, v1.GetChecklistBindingStateResponse]
+	listDeadLetters          *connect.Client[v1.ListDeadLettersRequest, v1.ListDeadLettersResponse]
+	clearDeadLetter          *connect.Client[v1.ClearDeadLetterRequest, emptypb.Empty]
 }
 
 // BeginAuth calls api.v1.ConnectorService.BeginAuth.
@@ -237,24 +247,29 @@ func (c *connectorServiceClient) ListRemoteLists(ctx context.Context, req *conne
 	return c.listRemoteLists.CallUnary(ctx, req)
 }
 
-// ListMySubscriptions calls api.v1.ConnectorService.ListMySubscriptions.
-func (c *connectorServiceClient) ListMySubscriptions(ctx context.Context, req *connect.Request[v1.ListMySubscriptionsRequest]) (*connect.Response[v1.ListMySubscriptionsResponse], error) {
-	return c.listMySubscriptions.CallUnary(ctx, req)
+// ListMyBindings calls api.v1.ConnectorService.ListMyBindings.
+func (c *connectorServiceClient) ListMyBindings(ctx context.Context, req *connect.Request[v1.ListMyBindingsRequest]) (*connect.Response[v1.ListMyBindingsResponse], error) {
+	return c.listMyBindings.CallUnary(ctx, req)
 }
 
-// Subscribe calls api.v1.ConnectorService.Subscribe.
-func (c *connectorServiceClient) Subscribe(ctx context.Context, req *connect.Request[v1.SubscribeRequest]) (*connect.Response[v1.SubscribeResponse], error) {
-	return c.subscribe.CallUnary(ctx, req)
+// Bind calls api.v1.ConnectorService.Bind.
+func (c *connectorServiceClient) Bind(ctx context.Context, req *connect.Request[v1.BindRequest]) (*connect.Response[v1.BindResponse], error) {
+	return c.bind.CallUnary(ctx, req)
 }
 
-// Unsubscribe calls api.v1.ConnectorService.Unsubscribe.
-func (c *connectorServiceClient) Unsubscribe(ctx context.Context, req *connect.Request[v1.UnsubscribeRequest]) (*connect.Response[v1.UnsubscribeResponse], error) {
-	return c.unsubscribe.CallUnary(ctx, req)
+// Unbind calls api.v1.ConnectorService.Unbind.
+func (c *connectorServiceClient) Unbind(ctx context.Context, req *connect.Request[v1.UnbindRequest]) (*connect.Response[v1.UnbindResponse], error) {
+	return c.unbind.CallUnary(ctx, req)
 }
 
-// GetChecklistSubscriptionState calls api.v1.ConnectorService.GetChecklistSubscriptionState.
-func (c *connectorServiceClient) GetChecklistSubscriptionState(ctx context.Context, req *connect.Request[v1.GetChecklistSubscriptionStateRequest]) (*connect.Response[v1.GetChecklistSubscriptionStateResponse], error) {
-	return c.getChecklistSubscriptionState.CallUnary(ctx, req)
+// SyncNow calls api.v1.ConnectorService.SyncNow.
+func (c *connectorServiceClient) SyncNow(ctx context.Context, req *connect.Request[v1.SyncNowRequest]) (*connect.Response[v1.SyncNowResponse], error) {
+	return c.syncNow.CallUnary(ctx, req)
+}
+
+// GetChecklistBindingState calls api.v1.ConnectorService.GetChecklistBindingState.
+func (c *connectorServiceClient) GetChecklistBindingState(ctx context.Context, req *connect.Request[v1.GetChecklistBindingStateRequest]) (*connect.Response[v1.GetChecklistBindingStateResponse], error) {
+	return c.getChecklistBindingState.CallUnary(ctx, req)
 }
 
 // ListDeadLetters calls api.v1.ConnectorService.ListDeadLetters.
@@ -286,16 +301,17 @@ type ConnectorServiceHandler interface {
 	GetState(context.Context, *connect.Request[v1.GetStateRequest]) (*connect.Response[v1.GetStateResponse], error)
 	// ListRemoteLists enumerates the lists the calling user owns on the
 	// remote side (Keep notes, Tasks tasklists, etc.). Used to populate
-	// the subscribe picker in the Checklist component. Returns an
+	// the bind picker in the Checklist component. Returns an
 	// auth-revoked error if credentials no longer work.
 	ListRemoteLists(context.Context, *connect.Request[v1.ListRemoteListsRequest]) (*connect.Response[v1.ListRemoteListsResponse], error)
-	ListMySubscriptions(context.Context, *connect.Request[v1.ListMySubscriptionsRequest]) (*connect.Response[v1.ListMySubscriptionsResponse], error)
-	Subscribe(context.Context, *connect.Request[v1.SubscribeRequest]) (*connect.Response[v1.SubscribeResponse], error)
-	Unsubscribe(context.Context, *connect.Request[v1.UnsubscribeRequest]) (*connect.Response[v1.UnsubscribeResponse], error)
-	// GetChecklistSubscriptionState does NOT take connector_kind: at most
+	ListMyBindings(context.Context, *connect.Request[v1.ListMyBindingsRequest]) (*connect.Response[v1.ListMyBindingsResponse], error)
+	Bind(context.Context, *connect.Request[v1.BindRequest]) (*connect.Response[v1.BindResponse], error)
+	Unbind(context.Context, *connect.Request[v1.UnbindRequest]) (*connect.Response[v1.UnbindResponse], error)
+	SyncNow(context.Context, *connect.Request[v1.SyncNowRequest]) (*connect.Response[v1.SyncNowResponse], error)
+	// GetChecklistBindingState does NOT take connector_kind: at most
 	// one connector owns a given (page, list_name) for a given user, so
 	// the response identifies which connector (if any) is authoritative.
-	GetChecklistSubscriptionState(context.Context, *connect.Request[v1.GetChecklistSubscriptionStateRequest]) (*connect.Response[v1.GetChecklistSubscriptionStateResponse], error)
+	GetChecklistBindingState(context.Context, *connect.Request[v1.GetChecklistBindingStateRequest]) (*connect.Response[v1.GetChecklistBindingStateResponse], error)
 	ListDeadLetters(context.Context, *connect.Request[v1.ListDeadLettersRequest]) (*connect.Response[v1.ListDeadLettersResponse], error)
 	ClearDeadLetter(context.Context, *connect.Request[v1.ClearDeadLetterRequest]) (*connect.Response[emptypb.Empty], error)
 }
@@ -336,28 +352,34 @@ func NewConnectorServiceHandler(svc ConnectorServiceHandler, opts ...connect.Han
 		connect.WithSchema(connectorServiceListRemoteListsMethodDescriptor),
 		connect.WithHandlerOptions(opts...),
 	)
-	connectorServiceListMySubscriptionsHandler := connect.NewUnaryHandler(
-		ConnectorServiceListMySubscriptionsProcedure,
-		svc.ListMySubscriptions,
-		connect.WithSchema(connectorServiceListMySubscriptionsMethodDescriptor),
+	connectorServiceListMyBindingsHandler := connect.NewUnaryHandler(
+		ConnectorServiceListMyBindingsProcedure,
+		svc.ListMyBindings,
+		connect.WithSchema(connectorServiceListMyBindingsMethodDescriptor),
 		connect.WithHandlerOptions(opts...),
 	)
-	connectorServiceSubscribeHandler := connect.NewUnaryHandler(
-		ConnectorServiceSubscribeProcedure,
-		svc.Subscribe,
-		connect.WithSchema(connectorServiceSubscribeMethodDescriptor),
+	connectorServiceBindHandler := connect.NewUnaryHandler(
+		ConnectorServiceBindProcedure,
+		svc.Bind,
+		connect.WithSchema(connectorServiceBindMethodDescriptor),
 		connect.WithHandlerOptions(opts...),
 	)
-	connectorServiceUnsubscribeHandler := connect.NewUnaryHandler(
-		ConnectorServiceUnsubscribeProcedure,
-		svc.Unsubscribe,
-		connect.WithSchema(connectorServiceUnsubscribeMethodDescriptor),
+	connectorServiceUnbindHandler := connect.NewUnaryHandler(
+		ConnectorServiceUnbindProcedure,
+		svc.Unbind,
+		connect.WithSchema(connectorServiceUnbindMethodDescriptor),
 		connect.WithHandlerOptions(opts...),
 	)
-	connectorServiceGetChecklistSubscriptionStateHandler := connect.NewUnaryHandler(
-		ConnectorServiceGetChecklistSubscriptionStateProcedure,
-		svc.GetChecklistSubscriptionState,
-		connect.WithSchema(connectorServiceGetChecklistSubscriptionStateMethodDescriptor),
+	connectorServiceSyncNowHandler := connect.NewUnaryHandler(
+		ConnectorServiceSyncNowProcedure,
+		svc.SyncNow,
+		connect.WithSchema(connectorServiceSyncNowMethodDescriptor),
+		connect.WithHandlerOptions(opts...),
+	)
+	connectorServiceGetChecklistBindingStateHandler := connect.NewUnaryHandler(
+		ConnectorServiceGetChecklistBindingStateProcedure,
+		svc.GetChecklistBindingState,
+		connect.WithSchema(connectorServiceGetChecklistBindingStateMethodDescriptor),
 		connect.WithHandlerOptions(opts...),
 	)
 	connectorServiceListDeadLettersHandler := connect.NewUnaryHandler(
@@ -384,14 +406,16 @@ func NewConnectorServiceHandler(svc ConnectorServiceHandler, opts ...connect.Han
 			connectorServiceGetStateHandler.ServeHTTP(w, r)
 		case ConnectorServiceListRemoteListsProcedure:
 			connectorServiceListRemoteListsHandler.ServeHTTP(w, r)
-		case ConnectorServiceListMySubscriptionsProcedure:
-			connectorServiceListMySubscriptionsHandler.ServeHTTP(w, r)
-		case ConnectorServiceSubscribeProcedure:
-			connectorServiceSubscribeHandler.ServeHTTP(w, r)
-		case ConnectorServiceUnsubscribeProcedure:
-			connectorServiceUnsubscribeHandler.ServeHTTP(w, r)
-		case ConnectorServiceGetChecklistSubscriptionStateProcedure:
-			connectorServiceGetChecklistSubscriptionStateHandler.ServeHTTP(w, r)
+		case ConnectorServiceListMyBindingsProcedure:
+			connectorServiceListMyBindingsHandler.ServeHTTP(w, r)
+		case ConnectorServiceBindProcedure:
+			connectorServiceBindHandler.ServeHTTP(w, r)
+		case ConnectorServiceUnbindProcedure:
+			connectorServiceUnbindHandler.ServeHTTP(w, r)
+		case ConnectorServiceSyncNowProcedure:
+			connectorServiceSyncNowHandler.ServeHTTP(w, r)
+		case ConnectorServiceGetChecklistBindingStateProcedure:
+			connectorServiceGetChecklistBindingStateHandler.ServeHTTP(w, r)
 		case ConnectorServiceListDeadLettersProcedure:
 			connectorServiceListDeadLettersHandler.ServeHTTP(w, r)
 		case ConnectorServiceClearDeadLetterProcedure:
@@ -425,20 +449,24 @@ func (UnimplementedConnectorServiceHandler) ListRemoteLists(context.Context, *co
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("api.v1.ConnectorService.ListRemoteLists is not implemented"))
 }
 
-func (UnimplementedConnectorServiceHandler) ListMySubscriptions(context.Context, *connect.Request[v1.ListMySubscriptionsRequest]) (*connect.Response[v1.ListMySubscriptionsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("api.v1.ConnectorService.ListMySubscriptions is not implemented"))
+func (UnimplementedConnectorServiceHandler) ListMyBindings(context.Context, *connect.Request[v1.ListMyBindingsRequest]) (*connect.Response[v1.ListMyBindingsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("api.v1.ConnectorService.ListMyBindings is not implemented"))
 }
 
-func (UnimplementedConnectorServiceHandler) Subscribe(context.Context, *connect.Request[v1.SubscribeRequest]) (*connect.Response[v1.SubscribeResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("api.v1.ConnectorService.Subscribe is not implemented"))
+func (UnimplementedConnectorServiceHandler) Bind(context.Context, *connect.Request[v1.BindRequest]) (*connect.Response[v1.BindResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("api.v1.ConnectorService.Bind is not implemented"))
 }
 
-func (UnimplementedConnectorServiceHandler) Unsubscribe(context.Context, *connect.Request[v1.UnsubscribeRequest]) (*connect.Response[v1.UnsubscribeResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("api.v1.ConnectorService.Unsubscribe is not implemented"))
+func (UnimplementedConnectorServiceHandler) Unbind(context.Context, *connect.Request[v1.UnbindRequest]) (*connect.Response[v1.UnbindResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("api.v1.ConnectorService.Unbind is not implemented"))
 }
 
-func (UnimplementedConnectorServiceHandler) GetChecklistSubscriptionState(context.Context, *connect.Request[v1.GetChecklistSubscriptionStateRequest]) (*connect.Response[v1.GetChecklistSubscriptionStateResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("api.v1.ConnectorService.GetChecklistSubscriptionState is not implemented"))
+func (UnimplementedConnectorServiceHandler) SyncNow(context.Context, *connect.Request[v1.SyncNowRequest]) (*connect.Response[v1.SyncNowResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("api.v1.ConnectorService.SyncNow is not implemented"))
+}
+
+func (UnimplementedConnectorServiceHandler) GetChecklistBindingState(context.Context, *connect.Request[v1.GetChecklistBindingStateRequest]) (*connect.Response[v1.GetChecklistBindingStateResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("api.v1.ConnectorService.GetChecklistBindingState is not implemented"))
 }
 
 func (UnimplementedConnectorServiceHandler) ListDeadLetters(context.Context, *connect.Request[v1.ListDeadLettersRequest]) (*connect.Response[v1.ListDeadLettersResponse], error) {

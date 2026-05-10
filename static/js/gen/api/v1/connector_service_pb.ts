@@ -13,7 +13,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file api/v1/connector_service.proto.
  */
 export const file_api_v1_connector_service: GenFile = /*@__PURE__*/
-  fileDesc("Ch5hcGkvdjEvY29ubmVjdG9yX3NlcnZpY2UucHJvdG8SBmFwaS52MSLHAgoOQ29ubmVjdG9yU3RhdGUSEgoKY29uZmlndXJlZBgBIAEoCBINCgVlbWFpbBgCIAEoCRIwCgxjb25uZWN0ZWRfYXQYAyABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEjQKEGxhc3RfdmVyaWZpZWRfYXQYBCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEh0KFXBvbGxfaW50ZXJ2YWxfc2Vjb25kcxgFIAEoAxIwCg1zdWJzY3JpcHRpb25zGAYgAygLMhkuYXBpLnYxLlN1YnNjcmlwdGlvblN0YXRlEioKCmxhc3RfZXJyb3IYByABKAsyFi5hcGkudjEuQ29ubmVjdG9yRXJyb3ISLQoOY29ubmVjdG9yX2tpbmQYCCABKA4yFS5hcGkudjEuQ29ubmVjdG9yS2luZCKjAwoRU3Vic2NyaXB0aW9uU3RhdGUSDAoEcGFnZRgBIAEoCRIRCglsaXN0X25hbWUYAiABKAkSGgoScmVtb3RlX2xpc3RfaGFuZGxlGAMgASgJEhkKEXJlbW90ZV9saXN0X3RpdGxlGAQgASgJEjEKDXN1YnNjcmliZWRfYXQYBSABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEjAKDGxhc3RfcHVsbF9hdBgGIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASMAoMbGFzdF9wdXNoX2F0GAcgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBI0ChBsYXN0X3ZlcmlmaWVkX2F0GAggASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIqCgpsYXN0X2Vycm9yGAkgASgLMhYuYXBpLnYxLkNvbm5lY3RvckVycm9yEg4KBnBhdXNlZBgKIAEoCBItCg5jb25uZWN0b3Jfa2luZBgLIAEoDjIVLmFwaS52MS5Db25uZWN0b3JLaW5kIlIKEVJlbW90ZUxpc3RTdW1tYXJ5EhoKEnJlbW90ZV9saXN0X2hhbmRsZRgBIAEoCRINCgV0aXRsZRgCIAEoCRISCgppdGVtX2NvdW50GAMgASgFIrICCg5Db25uZWN0b3JFcnJvchIpCgRjb2RlGAEgASgOMhsuYXBpLnYxLkNvbm5lY3RvckVycm9yLkNvZGUSDwoHbWVzc2FnZRgCIAEoCRIvCgtvY2N1cnJlZF9hdBgDIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAisgEKBENvZGUSFAoQQ09ERV9VTlNQRUNJRklFRBAAEhwKGENPREVfSU5WQUxJRF9DUkVERU5USUFMUxABEhUKEUNPREVfQVVUSF9SRVZPS0VEEAISFwoTQ09ERV9QUk9UT0NPTF9EUklGVBADEhUKEUNPREVfUkFURV9MSU1JVEVEEAQSHAoYQ09ERV9SRU1PVEVfTElTVF9ERUxFVEVEEAUSEQoNQ09ERV9JTlRFUk5BTBBjIp8BChpDaGVja2xpc3RTdWJzY3JpcHRpb25TdGF0ZRIcChRjb25uZWN0b3JfY29uZmlndXJlZBgBIAEoCBI3ChRjdXJyZW50X3N1YnNjcmlwdGlvbhgCIAEoCzIZLmFwaS52MS5TdWJzY3JpcHRpb25TdGF0ZRIqCgpsYXN0X2Vycm9yGAMgASgLMhYuYXBpLnYxLkNvbm5lY3RvckVycm9yIlgKEEJlZ2luQXV0aFJlcXVlc3QSLQoOY29ubmVjdG9yX2tpbmQYASABKA4yFS5hcGkudjEuQ29ubmVjdG9yS2luZBIVCg1hY2NvdW50X2VtYWlsGAIgASgJIj0KEUJlZ2luQXV0aFJlc3BvbnNlEhkKEWF1dGhvcml6YXRpb25fdXJsGAEgASgJEg0KBXN0YXRlGAIgASgJIpMBChNDb21wbGV0ZUF1dGhSZXF1ZXN0Ei0KDmNvbm5lY3Rvcl9raW5kGAEgASgOMhUuYXBpLnYxLkNvbm5lY3RvcktpbmQSDQoFZW1haWwYAiABKAkSEwoLb2F1dGhfdG9rZW4YAyABKAkSGgoSYXV0aG9yaXphdGlvbl9jb2RlGAQgASgJEg0KBXN0YXRlGAUgASgJIj0KFENvbXBsZXRlQXV0aFJlc3BvbnNlEiUKBXN0YXRlGAEgASgLMhYuYXBpLnYxLkNvbm5lY3RvclN0YXRlIkIKEURpc2Nvbm5lY3RSZXF1ZXN0Ei0KDmNvbm5lY3Rvcl9raW5kGAEgASgOMhUuYXBpLnYxLkNvbm5lY3RvcktpbmQiOwoSRGlzY29ubmVjdFJlc3BvbnNlEiUKBXN0YXRlGAEgASgLMhYuYXBpLnYxLkNvbm5lY3RvclN0YXRlIkAKD0dldFN0YXRlUmVxdWVzdBItCg5jb25uZWN0b3Jfa2luZBgBIAEoDjIVLmFwaS52MS5Db25uZWN0b3JLaW5kIjkKEEdldFN0YXRlUmVzcG9uc2USJQoFc3RhdGUYASABKAsyFi5hcGkudjEuQ29ubmVjdG9yU3RhdGUiRwoWTGlzdFJlbW90ZUxpc3RzUmVxdWVzdBItCg5jb25uZWN0b3Jfa2luZBgBIAEoDjIVLmFwaS52MS5Db25uZWN0b3JLaW5kIkMKF0xpc3RSZW1vdGVMaXN0c1Jlc3BvbnNlEigKBWxpc3RzGAEgAygLMhkuYXBpLnYxLlJlbW90ZUxpc3RTdW1tYXJ5IksKGkxpc3RNeVN1YnNjcmlwdGlvbnNSZXF1ZXN0Ei0KDmNvbm5lY3Rvcl9raW5kGAEgASgOMhUuYXBpLnYxLkNvbm5lY3RvcktpbmQiTwobTGlzdE15U3Vic2NyaXB0aW9uc1Jlc3BvbnNlEjAKDXN1YnNjcmlwdGlvbnMYASADKAsyGS5hcGkudjEuU3Vic2NyaXB0aW9uU3RhdGUifgoQU3Vic2NyaWJlUmVxdWVzdBItCg5jb25uZWN0b3Jfa2luZBgBIAEoDjIVLmFwaS52MS5Db25uZWN0b3JLaW5kEgwKBHBhZ2UYAiABKAkSEQoJbGlzdF9uYW1lGAMgASgJEhoKEnJlbW90ZV9saXN0X2hhbmRsZRgEIAEoCSJEChFTdWJzY3JpYmVSZXNwb25zZRIvCgxzdWJzY3JpcHRpb24YASABKAsyGS5hcGkudjEuU3Vic2NyaXB0aW9uU3RhdGUiZAoSVW5zdWJzY3JpYmVSZXF1ZXN0Ei0KDmNvbm5lY3Rvcl9raW5kGAEgASgOMhUuYXBpLnYxLkNvbm5lY3RvcktpbmQSDAoEcGFnZRgCIAEoCRIRCglsaXN0X25hbWUYAyABKAkiFQoTVW5zdWJzY3JpYmVSZXNwb25zZSJHCiRHZXRDaGVja2xpc3RTdWJzY3JpcHRpb25TdGF0ZVJlcXVlc3QSDAoEcGFnZRgBIAEoCRIRCglsaXN0X25hbWUYAiABKAkiWgolR2V0Q2hlY2tsaXN0U3Vic2NyaXB0aW9uU3RhdGVSZXNwb25zZRIxCgVzdGF0ZRgBIAEoCzIiLmFwaS52MS5DaGVja2xpc3RTdWJzY3JpcHRpb25TdGF0ZSJnCg5EZWFkTGV0dGVySXRlbRIQCghpdGVtX3VpZBgBIAEoCRIMCgR0ZXh0GAIgASgJEhoKEnB1c2hfZmFpbHVyZV9jb3VudBgDIAEoBRIZChFsYXN0X2ZhaWx1cmVfY29kZRgEIAEoCSJoChZMaXN0RGVhZExldHRlcnNSZXF1ZXN0Ei0KDmNvbm5lY3Rvcl9raW5kGAEgASgOMhUuYXBpLnYxLkNvbm5lY3RvcktpbmQSDAoEcGFnZRgCIAEoCRIRCglsaXN0X25hbWUYAyABKAkiQAoXTGlzdERlYWRMZXR0ZXJzUmVzcG9uc2USJQoFaXRlbXMYASADKAsyFi5hcGkudjEuRGVhZExldHRlckl0ZW0iegoWQ2xlYXJEZWFkTGV0dGVyUmVxdWVzdBItCg5jb25uZWN0b3Jfa2luZBgBIAEoDjIVLmFwaS52MS5Db25uZWN0b3JLaW5kEgwKBHBhZ2UYAiABKAkSEQoJbGlzdF9uYW1lGAMgASgJEhAKCGl0ZW1fdWlkGAQgASgJKpUBCg1Db25uZWN0b3JLaW5kEh4KGkNPTk5FQ1RPUl9LSU5EX1VOU1BFQ0lGSUVEEAASHgoaQ09OTkVDVE9SX0tJTkRfR09PR0xFX0tFRVAQARIfChtDT05ORUNUT1JfS0lORF9HT09HTEVfVEFTS1MQAhIjCh9DT05ORUNUT1JfS0lORF9JQ0xPVURfUkVNSU5ERVJTEAMyqBwKEENvbm5lY3RvclNlcnZpY2USlQIKCUJlZ2luQXV0aBIYLmFwaS52MS5CZWdpbkF1dGhSZXF1ZXN0GhkuYXBpLnYxLkJlZ2luQXV0aFJlc3BvbnNlItIBirUYzQFTdGFydCBhbiBPQXV0aCBmbG93IGZvciB0aGUgbmFtZWQgY29ubmVjdG9yLiBSZXF1aXJlZCBmb3IgR29vZ2xlIFRhc2tzIChyZXR1cm5zIHRoZSBhdXRob3JpemF0aW9uIFVSTCB0aGUgdXNlciBvcGVucyBpbiB0aGVpciBicm93c2VyKTsgYSBuby1vcCBmb3IgR29vZ2xlIEtlZXAgKHdob3NlIGZsb3cgaXMgc2luZ2xlLXNob3QgdmlhIENvbXBsZXRlQXV0aCkuEsMBCgxDb21wbGV0ZUF1dGgSGy5hcGkudjEuQ29tcGxldGVBdXRoUmVxdWVzdBocLmFwaS52MS5Db21wbGV0ZUF1dGhSZXNwb25zZSJ4irUYdENvbXBsZXRlIHRoZSBPQXV0aCBmbG93IGFuZCBwZXJzaXN0IGNyZWRlbnRpYWxzIG9uIHRoZSBjYWxsaW5nIHVzZXIncyBwcm9maWxlLiBJZGVtcG90ZW50OiByZXBsYWNlcyBhbnkgcHJpb3Igc3RhdGUuErwCCgpEaXNjb25uZWN0EhkuYXBpLnYxLkRpc2Nvbm5lY3RSZXF1ZXN0GhouYXBpLnYxLkRpc2Nvbm5lY3RSZXNwb25zZSL2AYq1GPEBV2lwZSBjcmVkZW50aWFscyBmcm9tIHRoZSBjYWxsaW5nIHVzZXIncyBwcm9maWxlIGFuZCBwYXVzZSBhbGwgc3Vic2NyaXB0aW9ucyBmb3IgdGhlIG5hbWVkIGNvbm5lY3Rvci4gU3Vic2NyaXB0aW9ucyByZW1haW4gb24gdGhlIHByb2ZpbGUgKHBhdXNlZCkgc28gcmVjb25uZWN0IGNhbiByZXN1bWUgdGhlbSB3aXRoIGN1cnNvcnMgcHJlc2VydmVkLiBPdGhlciB1c2Vycycgc3Vic2NyaXB0aW9ucyBhcmUgdW50b3VjaGVkLhLlAQoIR2V0U3RhdGUSFy5hcGkudjEuR2V0U3RhdGVSZXF1ZXN0GhguYXBpLnYxLkdldFN0YXRlUmVzcG9uc2UipQGKtRicAVJldHVybiB0aGUgY2FsbGluZyB1c2VyJ3MgY29ubmVjdG9yIHN0YXRlIOKAlCBjb25uZWN0ZWQvbm90LCBlbWFpbCwgbGFzdCB2ZXJpZmllZCBhdCwgYW5kIHRoZSBzdWJzY3JpcHRpb25zIGxpc3QuIFVzZWQgYnkgdGhlIHByb2ZpbGUgcGFnZSBjb25uZWN0b3IgbWFjcm9zLpi1GAESjAIKD0xpc3RSZW1vdGVMaXN0cxIeLmFwaS52MS5MaXN0UmVtb3RlTGlzdHNSZXF1ZXN0Gh8uYXBpLnYxLkxpc3RSZW1vdGVMaXN0c1Jlc3BvbnNlIrcBirUYrgFFbnVtZXJhdGUgdGhlIGxpc3RzIHRoZSBjYWxsaW5nIHVzZXIgb3ducyBvbiB0aGUgcmVtb3RlIHNpZGUgKEdvb2dsZSBLZWVwIGxpc3QtdHlwZWQgbm90ZXMsIEdvb2dsZSBUYXNrcyB0YXNrbGlzdHMsIGV0Yy4pLiBSZXR1cm5zIGF1dGgtcmV2b2tlZCBpZiBjcmVkZW50aWFscyBubyBsb25nZXIgd29yay6YtRgBEo8CChNMaXN0TXlTdWJzY3JpcHRpb25zEiIuYXBpLnYxLkxpc3RNeVN1YnNjcmlwdGlvbnNSZXF1ZXN0GiMuYXBpLnYxLkxpc3RNeVN1YnNjcmlwdGlvbnNSZXNwb25zZSKuAYq1GKUBUmV0dXJuIGFsbCBvZiB0aGUgY2FsbGluZyB1c2VyJ3Mgc3Vic2NyaXB0aW9ucyBmb3IgdGhlIG5hbWVkIGNvbm5lY3RvciB3aXRoIHN5bmMgc3RhdHVzLiBVc2VkIGJ5IHRoZSBwcm9maWxlLXBhZ2UgY29ubmVjdG9yIG1hY3JvcyB0byByZW5kZXIgcGVyLXJvdyByZW1vdmUgY29udHJvbHMumLUYARKSAwoJU3Vic2NyaWJlEhguYXBpLnYxLlN1YnNjcmliZVJlcXVlc3QaGS5hcGkudjEuU3Vic2NyaWJlUmVzcG9uc2UizwKKtRjKAlN1YnNjcmliZSBhIHdpa2kgY2hlY2tsaXN0IHRvIGEgcmVtb3RlIGxpc3QgZm9yIHRoZSBjYWxsaW5nIHVzZXIuIElmIHJlbW90ZV9saXN0X2hhbmRsZSBpcyBlbXB0eSwgdGhlIGNvbm5lY3RvciBjcmVhdGVzIGEgbmV3IHJlbW90ZSBsaXN0IG5hbWVkIGxpc3RfbmFtZS4gUGVyLXVzZXIgY29sbGlzaW9uIHJ1bGVzOiBhIHVzZXIgY2Fubm90IHN1YnNjcmliZSB0aGUgc2FtZSAocGFnZSwgbGlzdF9uYW1lKSB0d2ljZSBvciBzdWJzY3JpYmUgdHdvIGRpZmZlcmVudCBjaGVja2xpc3RzIHRvIHRoZSBzYW1lIHJlbW90ZSBsaXN0IChyZXR1cm5zIEZBSUxFRF9QUkVDT05ESVRJT04pLhKVAgoLVW5zdWJzY3JpYmUSGi5hcGkudjEuVW5zdWJzY3JpYmVSZXF1ZXN0GhsuYXBpLnYxLlVuc3Vic2NyaWJlUmVzcG9uc2UizAGKtRjHAVJlbW92ZSB0aGUgY2FsbGluZyB1c2VyJ3Mgc3Vic2NyaXB0aW9uIGZvciAocGFnZSwgbGlzdF9uYW1lKSBvbiB0aGUgbmFtZWQgY29ubmVjdG9yLiBXaWtpIGRhdGEgYW5kIHRoZSByZW1vdGUgbGlzdCBhcmUgYm90aCBsZWZ0IGFzLWlzLiBJZGVtcG90ZW50OiByZXR1cm5zIE9LIHdoZXRoZXIgdGhlIHN1YnNjcmlwdGlvbiBleGlzdGVkIG9yIG5vdC4SggMKHUdldENoZWNrbGlzdFN1YnNjcmlwdGlvblN0YXRlEiwuYXBpLnYxLkdldENoZWNrbGlzdFN1YnNjcmlwdGlvblN0YXRlUmVxdWVzdBotLmFwaS52MS5HZXRDaGVja2xpc3RTdWJzY3JpcHRpb25TdGF0ZVJlc3BvbnNlIoMCirUY+gFQZXItKHBhZ2UsIGxpc3RfbmFtZSkgc3Vic2NyaXB0aW9uIHN0YXRlIGZvciB0aGUgY2FsbGluZyB1c2VyLCByZXR1cm5pbmcgd2hpY2hldmVyIGNvbm5lY3RvciAoaWYgYW55KSBvd25zIHRoZSBjaGVja2xpc3QuIFVzZWQgYnkgdGhlIENoZWNrbGlzdCBjb21wb25lbnQgb24gcmVuZGVyIHRvIGRlY2lkZSB3aGV0aGVyIHRvIHNob3cgdGhlIHN1YnNjcmliZSBidXR0b24sIGFuIHVuc3Vic2NyaWJlIGFmZm9yZGFuY2UsIG9yIG5vdGhpbmcumLUYARK8AgoPTGlzdERlYWRMZXR0ZXJzEh4uYXBpLnYxLkxpc3REZWFkTGV0dGVyc1JlcXVlc3QaHy5hcGkudjEuTGlzdERlYWRMZXR0ZXJzUmVzcG9uc2Ui5wGKtRjeAVJldHVybiB0aGUgcGVyLXN1YnNjcmlwdGlvbiBkZWFkLWxldHRlciBzZXQ6IGl0ZW1zIHdob3NlIFB1c2hGYWlsdXJlQ291bnQgaGFzIHJlYWNoZWQgdGhlIGRlYWQtbGV0dGVyIHRocmVzaG9sZCBhbmQgYXJlIG5vIGxvbmdlciBiZWluZyBhdHRlbXB0ZWQgb24gY3JvbiB0aWNrcy4gU2NvcGVkIHRvIHRoZSBjYWxsaW5nIHVzZXIncyBwcm9maWxlIGFuZCB0aGUgbmFtZWQgY29ubmVjdG9yLpi1GAESkwIKD0NsZWFyRGVhZExldHRlchIeLmFwaS52MS5DbGVhckRlYWRMZXR0ZXJSZXF1ZXN0GhYuZ29vZ2xlLnByb3RvYnVmLkVtcHR5IscBirUYwgFSZXNldCBhIGRlYWQtbGV0dGVyZWQgaXRlbSdzIFB1c2hGYWlsdXJlQ291bnQgdG8gemVybyBzbyB0aGUgbmV4dCBjcm9uIHRpY2sgcmUtYXR0ZW1wdHMgdGhlIHB1c2guIFByZXNlcnZlcyBzeW5jZWRfZnAgKHRoZSBtZXJnZS1iYXNlIGJhc2VsaW5lKSBzbyB0aGUgZGl2ZXJnZW5jZSBydWxlIHN0aWxsIHJlY29tcHV0ZXMgY29ycmVjdGx5LhrmAqq1GOECVW5pZmllZCBjb25uZWN0b3Igb3JjaGVzdHJhdGlvbjogc3Vic2NyaWJlIHdpa2kgY2hlY2tsaXN0cyB0byByZW1vdGUgbGlzdHMgYWNyb3NzIEdvb2dsZSBLZWVwLCBHb29nbGUgVGFza3MsIGV0Yy4gUlBDcyBhY2NlcHQgY29ubmVjdG9yX2tpbmQgdG8gZGlzYW1iaWd1YXRlOyBwZXIta2luZCB2YWxpZGF0aW9uIGhhcHBlbnMgaW4gdGhlIGhhbmRsZXIuIFRoZSB3aWtpLmNvbm5lY3RvcnMuKiBuYW1lc3BhY2UgaXMgcmVzZXJ2ZWQgcGVyIEFEUi0wMDA5LiBQZXItdXNlciBvbmx5IOKAlCBldmVyeSBtZXRob2Qgc2NvcGVzIHRvIHRoZSAqY2FsbGluZyogdXNlcidzIHByb2ZpbGUgdmlhIFRhaWxzY2FsZSBpZGVudGl0eS5COlo4Z2l0aHViLmNvbS9icmVuZGFuamVyd2luL3NpbXBsZV93aWtpL2dlbi9nby9hcGkvdjE7YXBpdjFiBnByb3RvMw", [file_api_v1_mcp_options, file_google_protobuf_empty, file_google_protobuf_timestamp]);
+  fileDesc("Ch5hcGkvdjEvY29ubmVjdG9yX3NlcnZpY2UucHJvdG8SBmFwaS52MSK9AgoOQ29ubmVjdG9yU3RhdGUSEgoKY29uZmlndXJlZBgBIAEoCBINCgVlbWFpbBgCIAEoCRIwCgxjb25uZWN0ZWRfYXQYAyABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEjQKEGxhc3RfdmVyaWZpZWRfYXQYBCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEh0KFXBvbGxfaW50ZXJ2YWxfc2Vjb25kcxgFIAEoAxImCghiaW5kaW5ncxgGIAMoCzIULmFwaS52MS5CaW5kaW5nU3RhdGUSKgoKbGFzdF9lcnJvchgHIAEoCzIWLmFwaS52MS5Db25uZWN0b3JFcnJvchItCg5jb25uZWN0b3Jfa2luZBgIIAEoDjIVLmFwaS52MS5Db25uZWN0b3JLaW5kIrADCgxCaW5kaW5nU3RhdGUSDAoEcGFnZRgBIAEoCRIRCglsaXN0X25hbWUYAiABKAkSGgoScmVtb3RlX2xpc3RfaGFuZGxlGAMgASgJEhkKEXJlbW90ZV9saXN0X3RpdGxlGAQgASgJEiwKCGJvdW5kX2F0GAUgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIwCgxsYXN0X3B1bGxfYXQYBiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEjAKDGxhc3RfcHVzaF9hdBgHIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASNAoQbGFzdF92ZXJpZmllZF9hdBgIIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASKgoKbGFzdF9lcnJvchgJIAEoCzIWLmFwaS52MS5Db25uZWN0b3JFcnJvchIOCgZwYXVzZWQYCiABKAgSLQoOY29ubmVjdG9yX2tpbmQYCyABKA4yFS5hcGkudjEuQ29ubmVjdG9yS2luZBIVCg1wYXVzZWRfcmVhc29uGAwgASgJIlIKEVJlbW90ZUxpc3RTdW1tYXJ5EhoKEnJlbW90ZV9saXN0X2hhbmRsZRgBIAEoCRINCgV0aXRsZRgCIAEoCRISCgppdGVtX2NvdW50GAMgASgFIrICCg5Db25uZWN0b3JFcnJvchIpCgRjb2RlGAEgASgOMhsuYXBpLnYxLkNvbm5lY3RvckVycm9yLkNvZGUSDwoHbWVzc2FnZRgCIAEoCRIvCgtvY2N1cnJlZF9hdBgDIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAisgEKBENvZGUSFAoQQ09ERV9VTlNQRUNJRklFRBAAEhwKGENPREVfSU5WQUxJRF9DUkVERU5USUFMUxABEhUKEUNPREVfQVVUSF9SRVZPS0VEEAISFwoTQ09ERV9QUk9UT0NPTF9EUklGVBADEhUKEUNPREVfUkFURV9MSU1JVEVEEAQSHAoYQ09ERV9SRU1PVEVfTElTVF9ERUxFVEVEEAUSEQoNQ09ERV9JTlRFUk5BTBBjIpABChVDaGVja2xpc3RCaW5kaW5nU3RhdGUSHAoUY29ubmVjdG9yX2NvbmZpZ3VyZWQYASABKAgSLQoPY3VycmVudF9iaW5kaW5nGAIgASgLMhQuYXBpLnYxLkJpbmRpbmdTdGF0ZRIqCgpsYXN0X2Vycm9yGAMgASgLMhYuYXBpLnYxLkNvbm5lY3RvckVycm9yIlgKEEJlZ2luQXV0aFJlcXVlc3QSLQoOY29ubmVjdG9yX2tpbmQYASABKA4yFS5hcGkudjEuQ29ubmVjdG9yS2luZBIVCg1hY2NvdW50X2VtYWlsGAIgASgJIj0KEUJlZ2luQXV0aFJlc3BvbnNlEhkKEWF1dGhvcml6YXRpb25fdXJsGAEgASgJEg0KBXN0YXRlGAIgASgJIpMBChNDb21wbGV0ZUF1dGhSZXF1ZXN0Ei0KDmNvbm5lY3Rvcl9raW5kGAEgASgOMhUuYXBpLnYxLkNvbm5lY3RvcktpbmQSDQoFZW1haWwYAiABKAkSEwoLb2F1dGhfdG9rZW4YAyABKAkSGgoSYXV0aG9yaXphdGlvbl9jb2RlGAQgASgJEg0KBXN0YXRlGAUgASgJIj0KFENvbXBsZXRlQXV0aFJlc3BvbnNlEiUKBXN0YXRlGAEgASgLMhYuYXBpLnYxLkNvbm5lY3RvclN0YXRlIkIKEURpc2Nvbm5lY3RSZXF1ZXN0Ei0KDmNvbm5lY3Rvcl9raW5kGAEgASgOMhUuYXBpLnYxLkNvbm5lY3RvcktpbmQiOwoSRGlzY29ubmVjdFJlc3BvbnNlEiUKBXN0YXRlGAEgASgLMhYuYXBpLnYxLkNvbm5lY3RvclN0YXRlIkAKD0dldFN0YXRlUmVxdWVzdBItCg5jb25uZWN0b3Jfa2luZBgBIAEoDjIVLmFwaS52MS5Db25uZWN0b3JLaW5kIjkKEEdldFN0YXRlUmVzcG9uc2USJQoFc3RhdGUYASABKAsyFi5hcGkudjEuQ29ubmVjdG9yU3RhdGUiRwoWTGlzdFJlbW90ZUxpc3RzUmVxdWVzdBItCg5jb25uZWN0b3Jfa2luZBgBIAEoDjIVLmFwaS52MS5Db25uZWN0b3JLaW5kIkMKF0xpc3RSZW1vdGVMaXN0c1Jlc3BvbnNlEigKBWxpc3RzGAEgAygLMhkuYXBpLnYxLlJlbW90ZUxpc3RTdW1tYXJ5IkYKFUxpc3RNeUJpbmRpbmdzUmVxdWVzdBItCg5jb25uZWN0b3Jfa2luZBgBIAEoDjIVLmFwaS52MS5Db25uZWN0b3JLaW5kIkAKFkxpc3RNeUJpbmRpbmdzUmVzcG9uc2USJgoIYmluZGluZ3MYASADKAsyFC5hcGkudjEuQmluZGluZ1N0YXRlInkKC0JpbmRSZXF1ZXN0Ei0KDmNvbm5lY3Rvcl9raW5kGAEgASgOMhUuYXBpLnYxLkNvbm5lY3RvcktpbmQSDAoEcGFnZRgCIAEoCRIRCglsaXN0X25hbWUYAyABKAkSGgoScmVtb3RlX2xpc3RfaGFuZGxlGAQgASgJIjUKDEJpbmRSZXNwb25zZRIlCgdiaW5kaW5nGAEgASgLMhQuYXBpLnYxLkJpbmRpbmdTdGF0ZSJfCg1VbmJpbmRSZXF1ZXN0Ei0KDmNvbm5lY3Rvcl9raW5kGAEgASgOMhUuYXBpLnYxLkNvbm5lY3RvcktpbmQSDAoEcGFnZRgCIAEoCRIRCglsaXN0X25hbWUYAyABKAkiEAoOVW5iaW5kUmVzcG9uc2UiYAoOU3luY05vd1JlcXVlc3QSLQoOY29ubmVjdG9yX2tpbmQYASABKA4yFS5hcGkudjEuQ29ubmVjdG9yS2luZBIMCgRwYWdlGAIgASgJEhEKCWxpc3RfbmFtZRgDIAEoCSIRCg9TeW5jTm93UmVzcG9uc2UiQgofR2V0Q2hlY2tsaXN0QmluZGluZ1N0YXRlUmVxdWVzdBIMCgRwYWdlGAEgASgJEhEKCWxpc3RfbmFtZRgCIAEoCSJQCiBHZXRDaGVja2xpc3RCaW5kaW5nU3RhdGVSZXNwb25zZRIsCgVzdGF0ZRgBIAEoCzIdLmFwaS52MS5DaGVja2xpc3RCaW5kaW5nU3RhdGUiZwoORGVhZExldHRlckl0ZW0SEAoIaXRlbV91aWQYASABKAkSDAoEdGV4dBgCIAEoCRIaChJwdXNoX2ZhaWx1cmVfY291bnQYAyABKAUSGQoRbGFzdF9mYWlsdXJlX2NvZGUYBCABKAkiaAoWTGlzdERlYWRMZXR0ZXJzUmVxdWVzdBItCg5jb25uZWN0b3Jfa2luZBgBIAEoDjIVLmFwaS52MS5Db25uZWN0b3JLaW5kEgwKBHBhZ2UYAiABKAkSEQoJbGlzdF9uYW1lGAMgASgJIkAKF0xpc3REZWFkTGV0dGVyc1Jlc3BvbnNlEiUKBWl0ZW1zGAEgAygLMhYuYXBpLnYxLkRlYWRMZXR0ZXJJdGVtInoKFkNsZWFyRGVhZExldHRlclJlcXVlc3QSLQoOY29ubmVjdG9yX2tpbmQYASABKA4yFS5hcGkudjEuQ29ubmVjdG9yS2luZBIMCgRwYWdlGAIgASgJEhEKCWxpc3RfbmFtZRgDIAEoCRIQCghpdGVtX3VpZBgEIAEoCSqVAQoNQ29ubmVjdG9yS2luZBIeChpDT05ORUNUT1JfS0lORF9VTlNQRUNJRklFRBAAEh4KGkNPTk5FQ1RPUl9LSU5EX0dPT0dMRV9LRUVQEAESHwobQ09OTkVDVE9SX0tJTkRfR09PR0xFX1RBU0tTEAISIwofQ09OTkVDVE9SX0tJTkRfSUNMT1VEX1JFTUlOREVSUxADMoEfChBDb25uZWN0b3JTZXJ2aWNlEpUCCglCZWdpbkF1dGgSGC5hcGkudjEuQmVnaW5BdXRoUmVxdWVzdBoZLmFwaS52MS5CZWdpbkF1dGhSZXNwb25zZSLSAYq1GM0BU3RhcnQgYW4gT0F1dGggZmxvdyBmb3IgdGhlIG5hbWVkIGNvbm5lY3Rvci4gUmVxdWlyZWQgZm9yIEdvb2dsZSBUYXNrcyAocmV0dXJucyB0aGUgYXV0aG9yaXphdGlvbiBVUkwgdGhlIHVzZXIgb3BlbnMgaW4gdGhlaXIgYnJvd3Nlcik7IGEgbm8tb3AgZm9yIEdvb2dsZSBLZWVwICh3aG9zZSBmbG93IGlzIHNpbmdsZS1zaG90IHZpYSBDb21wbGV0ZUF1dGgpLhLDAQoMQ29tcGxldGVBdXRoEhsuYXBpLnYxLkNvbXBsZXRlQXV0aFJlcXVlc3QaHC5hcGkudjEuQ29tcGxldGVBdXRoUmVzcG9uc2UieIq1GHRDb21wbGV0ZSB0aGUgT0F1dGggZmxvdyBhbmQgcGVyc2lzdCBjcmVkZW50aWFscyBvbiB0aGUgY2FsbGluZyB1c2VyJ3MgcHJvZmlsZS4gSWRlbXBvdGVudDogcmVwbGFjZXMgYW55IHByaW9yIHN0YXRlLhKtAgoKRGlzY29ubmVjdBIZLmFwaS52MS5EaXNjb25uZWN0UmVxdWVzdBoaLmFwaS52MS5EaXNjb25uZWN0UmVzcG9uc2Ui5wGKtRjiAVdpcGUgY3JlZGVudGlhbHMgZnJvbSB0aGUgY2FsbGluZyB1c2VyJ3MgcHJvZmlsZSBhbmQgcGF1c2UgYWxsIGJpbmRpbmdzIGZvciB0aGUgbmFtZWQgY29ubmVjdG9yLiBCaW5kaW5ncyByZW1haW4gb24gdGhlIHByb2ZpbGUgKHBhdXNlZCkgc28gcmVjb25uZWN0IGNhbiByZXN1bWUgdGhlbSB3aXRoIGN1cnNvcnMgcHJlc2VydmVkLiBPdGhlciB1c2VycycgYmluZGluZ3MgYXJlIHVudG91Y2hlZC4S4AEKCEdldFN0YXRlEhcuYXBpLnYxLkdldFN0YXRlUmVxdWVzdBoYLmFwaS52MS5HZXRTdGF0ZVJlc3BvbnNlIqABirUYlwFSZXR1cm4gdGhlIGNhbGxpbmcgdXNlcidzIGNvbm5lY3RvciBzdGF0ZSDigJQgY29ubmVjdGVkL25vdCwgZW1haWwsIGxhc3QgdmVyaWZpZWQgYXQsIGFuZCB0aGUgYmluZGluZ3MgbGlzdC4gVXNlZCBieSB0aGUgcHJvZmlsZSBwYWdlIGNvbm5lY3RvciBtYWNyb3MumLUYARKMAgoPTGlzdFJlbW90ZUxpc3RzEh4uYXBpLnYxLkxpc3RSZW1vdGVMaXN0c1JlcXVlc3QaHy5hcGkudjEuTGlzdFJlbW90ZUxpc3RzUmVzcG9uc2UitwGKtRiuAUVudW1lcmF0ZSB0aGUgbGlzdHMgdGhlIGNhbGxpbmcgdXNlciBvd25zIG9uIHRoZSByZW1vdGUgc2lkZSAoR29vZ2xlIEtlZXAgbGlzdC10eXBlZCBub3RlcywgR29vZ2xlIFRhc2tzIHRhc2tsaXN0cywgZXRjLikuIFJldHVybnMgYXV0aC1yZXZva2VkIGlmIGNyZWRlbnRpYWxzIG5vIGxvbmdlciB3b3JrLpi1GAES+wEKDkxpc3RNeUJpbmRpbmdzEh0uYXBpLnYxLkxpc3RNeUJpbmRpbmdzUmVxdWVzdBoeLmFwaS52MS5MaXN0TXlCaW5kaW5nc1Jlc3BvbnNlIqkBirUYoAFSZXR1cm4gYWxsIG9mIHRoZSBjYWxsaW5nIHVzZXIncyBiaW5kaW5ncyBmb3IgdGhlIG5hbWVkIGNvbm5lY3RvciB3aXRoIHN5bmMgc3RhdHVzLiBVc2VkIGJ5IHRoZSBwcm9maWxlLXBhZ2UgY29ubmVjdG9yIG1hY3JvcyB0byByZW5kZXIgcGVyLXJvdyByZW1vdmUgY29udHJvbHMumLUYARL0AgoEQmluZBITLmFwaS52MS5CaW5kUmVxdWVzdBoULmFwaS52MS5CaW5kUmVzcG9uc2UiwAKKtRi7AkJpbmQgYSB3aWtpIGNoZWNrbGlzdCB0byBhIHJlbW90ZSBsaXN0IGZvciB0aGUgY2FsbGluZyB1c2VyLiBJZiByZW1vdGVfbGlzdF9oYW5kbGUgaXMgZW1wdHksIHRoZSBjb25uZWN0b3IgY3JlYXRlcyBhIG5ldyByZW1vdGUgbGlzdCBuYW1lZCBsaXN0X25hbWUuIFBlci11c2VyIGNvbGxpc2lvbiBydWxlczogYSB1c2VyIGNhbm5vdCBiaW5kIHRoZSBzYW1lIChwYWdlLCBsaXN0X25hbWUpIHR3aWNlIG9yIGJpbmQgdHdvIGRpZmZlcmVudCBjaGVja2xpc3RzIHRvIHRoZSBzYW1lIHJlbW90ZSBsaXN0IChyZXR1cm5zIEZBSUxFRF9QUkVDT05ESVRJT04pLhL8AQoGVW5iaW5kEhUuYXBpLnYxLlVuYmluZFJlcXVlc3QaFi5hcGkudjEuVW5iaW5kUmVzcG9uc2UiwgGKtRi9AVJlbW92ZSB0aGUgY2FsbGluZyB1c2VyJ3MgYmluZGluZyBmb3IgKHBhZ2UsIGxpc3RfbmFtZSkgb24gdGhlIG5hbWVkIGNvbm5lY3Rvci4gV2lraSBkYXRhIGFuZCB0aGUgcmVtb3RlIGxpc3QgYXJlIGJvdGggbGVmdCBhcy1pcy4gSWRlbXBvdGVudDogcmV0dXJucyBPSyB3aGV0aGVyIHRoZSBiaW5kaW5nIGV4aXN0ZWQgb3Igbm90LhLdAwoHU3luY05vdxIWLmFwaS52MS5TeW5jTm93UmVxdWVzdBoXLmFwaS52MS5TeW5jTm93UmVzcG9uc2UioAOKtRibA1RyaWdnZXIgYW4gaW1tZWRpYXRlIHN5bmMgZm9yIHRoZSBjYWxsaW5nIHVzZXIncyBiaW5kaW5nIG9uIChwYWdlLCBsaXN0X25hbWUpLiBFcXVpdmFsZW50IHRvIG9uZSBjcm9uIHRpY2sg4oCUIHB1bGxzIHJlbW90ZSwgYXBwbGllcyBkaXZlcmdlbnQgaXRlbXMgaW5ib3VuZCwgcHVzaGVzIHdpa2ktc2lkZSBjaGFuZ2VzIG91dGJvdW5kLiBMaWdodHdlaWdodDogZG9lcyBOT1Qgd2lwZSBhZGFwdGVyIHN0YXRlICh1c2UgRm9yY2VGdWxsUmVzeW5jIGZvciB0aGF0KS4gVGhlIGtpY2sgaXMgYmVzdC1lZmZvcnQgYW5kIHN5bmNocm9ub3VzIHRocm91Z2ggdGhlIGVuZ2luZSdzIGxlYXNlLCBzbyBjb25jdXJyZW50IGNhbGxzIHNlcmlhbGl6ZS4gVXNlZCBieSB0aGUgVUkncyBtYW51YWwgJ3N5bmMgbm93JyBhZmZvcmRhbmNlLhLkAgoYR2V0Q2hlY2tsaXN0QmluZGluZ1N0YXRlEicuYXBpLnYxLkdldENoZWNrbGlzdEJpbmRpbmdTdGF0ZVJlcXVlc3QaKC5hcGkudjEuR2V0Q2hlY2tsaXN0QmluZGluZ1N0YXRlUmVzcG9uc2Ui9AGKtRjrAVBlci0ocGFnZSwgbGlzdF9uYW1lKSBiaW5kaW5nIHN0YXRlIGZvciB0aGUgY2FsbGluZyB1c2VyLCByZXR1cm5pbmcgd2hpY2hldmVyIGNvbm5lY3RvciAoaWYgYW55KSBvd25zIHRoZSBjaGVja2xpc3QuIFVzZWQgYnkgdGhlIENoZWNrbGlzdCBjb21wb25lbnQgb24gcmVuZGVyIHRvIGRlY2lkZSB3aGV0aGVyIHRvIHNob3cgdGhlIGJpbmQgYnV0dG9uLCBhbiB1bmJpbmQgYWZmb3JkYW5jZSwgb3Igbm90aGluZy6YtRgBErcCCg9MaXN0RGVhZExldHRlcnMSHi5hcGkudjEuTGlzdERlYWRMZXR0ZXJzUmVxdWVzdBofLmFwaS52MS5MaXN0RGVhZExldHRlcnNSZXNwb25zZSLiAYq1GNkBUmV0dXJuIHRoZSBwZXItYmluZGluZyBkZWFkLWxldHRlciBzZXQ6IGl0ZW1zIHdob3NlIFB1c2hGYWlsdXJlQ291bnQgaGFzIHJlYWNoZWQgdGhlIGRlYWQtbGV0dGVyIHRocmVzaG9sZCBhbmQgYXJlIG5vIGxvbmdlciBiZWluZyBhdHRlbXB0ZWQgb24gY3JvbiB0aWNrcy4gU2NvcGVkIHRvIHRoZSBjYWxsaW5nIHVzZXIncyBwcm9maWxlIGFuZCB0aGUgbmFtZWQgY29ubmVjdG9yLpi1GAESkwIKD0NsZWFyRGVhZExldHRlchIeLmFwaS52MS5DbGVhckRlYWRMZXR0ZXJSZXF1ZXN0GhYuZ29vZ2xlLnByb3RvYnVmLkVtcHR5IscBirUYwgFSZXNldCBhIGRlYWQtbGV0dGVyZWQgaXRlbSdzIFB1c2hGYWlsdXJlQ291bnQgdG8gemVybyBzbyB0aGUgbmV4dCBjcm9uIHRpY2sgcmUtYXR0ZW1wdHMgdGhlIHB1c2guIFByZXNlcnZlcyBzeW5jZWRfZnAgKHRoZSBtZXJnZS1iYXNlIGJhc2VsaW5lKSBzbyB0aGUgZGl2ZXJnZW5jZSBydWxlIHN0aWxsIHJlY29tcHV0ZXMgY29ycmVjdGx5LhrhAqq1GNwCVW5pZmllZCBjb25uZWN0b3Igb3JjaGVzdHJhdGlvbjogYmluZCB3aWtpIGNoZWNrbGlzdHMgdG8gcmVtb3RlIGxpc3RzIGFjcm9zcyBHb29nbGUgS2VlcCwgR29vZ2xlIFRhc2tzLCBldGMuIFJQQ3MgYWNjZXB0IGNvbm5lY3Rvcl9raW5kIHRvIGRpc2FtYmlndWF0ZTsgcGVyLWtpbmQgdmFsaWRhdGlvbiBoYXBwZW5zIGluIHRoZSBoYW5kbGVyLiBUaGUgd2lraS5jb25uZWN0b3JzLiogbmFtZXNwYWNlIGlzIHJlc2VydmVkIHBlciBBRFItMDAwOS4gUGVyLXVzZXIgb25seSDigJQgZXZlcnkgbWV0aG9kIHNjb3BlcyB0byB0aGUgKmNhbGxpbmcqIHVzZXIncyBwcm9maWxlIHZpYSBUYWlsc2NhbGUgaWRlbnRpdHkuQjpaOGdpdGh1Yi5jb20vYnJlbmRhbmplcndpbi9zaW1wbGVfd2lraS9nZW4vZ28vYXBpL3YxO2FwaXYxYgZwcm90bzM", [file_api_v1_mcp_options, file_google_protobuf_empty, file_google_protobuf_timestamp]);
 
 /**
  * ConnectorState is the full per-user connector configuration as visible
@@ -48,9 +48,9 @@ export type ConnectorState = Message<"api.v1.ConnectorState"> & {
   pollIntervalSeconds: bigint;
 
   /**
-   * @generated from field: repeated api.v1.SubscriptionState subscriptions = 6;
+   * @generated from field: repeated api.v1.BindingState bindings = 6;
    */
-  subscriptions: SubscriptionState[];
+  bindings: BindingState[];
 
   /**
    * last_error is populated when the most recent verification call failed.
@@ -76,11 +76,11 @@ export const ConnectorStateSchema: GenMessage<ConnectorState> = /*@__PURE__*/
   messageDesc(file_api_v1_connector_service, 0);
 
 /**
- * SubscriptionState is a single subscription plus its sync health.
+ * BindingState is a single binding plus its sync health.
  *
- * @generated from message api.v1.SubscriptionState
+ * @generated from message api.v1.BindingState
  */
-export type SubscriptionState = Message<"api.v1.SubscriptionState"> & {
+export type BindingState = Message<"api.v1.BindingState"> & {
   /**
    * @generated from field: string page = 1;
    */
@@ -103,16 +103,16 @@ export type SubscriptionState = Message<"api.v1.SubscriptionState"> & {
 
   /**
    * remote_list_title is the human-readable name of the remote list,
-   * used by the UI to render a recognizable subscription row.
+   * used by the UI to render a recognizable binding row.
    *
    * @generated from field: string remote_list_title = 4;
    */
   remoteListTitle: string;
 
   /**
-   * @generated from field: google.protobuf.Timestamp subscribed_at = 5;
+   * @generated from field: google.protobuf.Timestamp bound_at = 5;
    */
-  subscribedAt?: Timestamp;
+  boundAt?: Timestamp;
 
   /**
    * @generated from field: google.protobuf.Timestamp last_pull_at = 6;
@@ -136,7 +136,7 @@ export type SubscriptionState = Message<"api.v1.SubscriptionState"> & {
 
   /**
    * paused is true when the user disconnected the connector —
-   * subscriptions remain on the profile but no cron entries are
+   * bindings remain on the profile but no cron entries are
    * registered.
    *
    * @generated from field: bool paused = 10;
@@ -147,18 +147,30 @@ export type SubscriptionState = Message<"api.v1.SubscriptionState"> & {
    * @generated from field: api.v1.ConnectorKind connector_kind = 11;
    */
   connectorKind: ConnectorKind;
+
+  /**
+   * paused_reason names why the engine paused this binding when
+   * paused=true. Stable values: "auth_failed" (token expired or
+   * revoked; recovery = reconnect on /profile),
+   * "remote_handle_empty" (legacy migration gap; recovery =
+   * unbind+rebind). Empty when paused=false. Used by the UI to
+   * route the paused-badge's copy and click action.
+   *
+   * @generated from field: string paused_reason = 12;
+   */
+  pausedReason: string;
 };
 
 /**
- * Describes the message api.v1.SubscriptionState.
- * Use `create(SubscriptionStateSchema)` to create a new message.
+ * Describes the message api.v1.BindingState.
+ * Use `create(BindingStateSchema)` to create a new message.
  */
-export const SubscriptionStateSchema: GenMessage<SubscriptionState> = /*@__PURE__*/
+export const BindingStateSchema: GenMessage<BindingState> = /*@__PURE__*/
   messageDesc(file_api_v1_connector_service, 1);
 
 /**
  * RemoteListSummary describes one of the user's remote lists for the
- * subscribe picker (Keep list-typed note, Tasks tasklist, etc.).
+ * bind picker (Keep list-typed note, Tasks tasklist, etc.).
  *
  * @generated from message api.v1.RemoteListSummary
  */
@@ -266,26 +278,26 @@ export const ConnectorError_CodeSchema: GenEnum<ConnectorError_Code> = /*@__PURE
   enumDesc(file_api_v1_connector_service, 3, 0);
 
 /**
- * ChecklistSubscriptionState is the response shape the Checklist
+ * ChecklistBindingState is the response shape the Checklist
  * component queries on render — small surface intentionally so we
  * don't leak more than the component needs.
  *
- * @generated from message api.v1.ChecklistSubscriptionState
+ * @generated from message api.v1.ChecklistBindingState
  */
-export type ChecklistSubscriptionState = Message<"api.v1.ChecklistSubscriptionState"> & {
+export type ChecklistBindingState = Message<"api.v1.ChecklistBindingState"> & {
   /**
    * @generated from field: bool connector_configured = 1;
    */
   connectorConfigured: boolean;
 
   /**
-   * current_subscription is null when the user has no subscription
+   * current_binding is null when the user has no binding
    * for this checklist (button shows the connector-agnostic
-   * "Subscribe" affordance).
+   * "Bind" affordance).
    *
-   * @generated from field: api.v1.SubscriptionState current_subscription = 2;
+   * @generated from field: api.v1.BindingState current_binding = 2;
    */
-  currentSubscription?: SubscriptionState;
+  currentBinding?: BindingState;
 
   /**
    * @generated from field: api.v1.ConnectorError last_error = 3;
@@ -294,10 +306,10 @@ export type ChecklistSubscriptionState = Message<"api.v1.ChecklistSubscriptionSt
 };
 
 /**
- * Describes the message api.v1.ChecklistSubscriptionState.
- * Use `create(ChecklistSubscriptionStateSchema)` to create a new message.
+ * Describes the message api.v1.ChecklistBindingState.
+ * Use `create(ChecklistBindingStateSchema)` to create a new message.
  */
-export const ChecklistSubscriptionStateSchema: GenMessage<ChecklistSubscriptionState> = /*@__PURE__*/
+export const ChecklistBindingStateSchema: GenMessage<ChecklistBindingState> = /*@__PURE__*/
   messageDesc(file_api_v1_connector_service, 4);
 
 /**
@@ -523,9 +535,9 @@ export const ListRemoteListsResponseSchema: GenMessage<ListRemoteListsResponse> 
   messageDesc(file_api_v1_connector_service, 14);
 
 /**
- * @generated from message api.v1.ListMySubscriptionsRequest
+ * @generated from message api.v1.ListMyBindingsRequest
  */
-export type ListMySubscriptionsRequest = Message<"api.v1.ListMySubscriptionsRequest"> & {
+export type ListMyBindingsRequest = Message<"api.v1.ListMyBindingsRequest"> & {
   /**
    * @generated from field: api.v1.ConnectorKind connector_kind = 1;
    */
@@ -533,33 +545,33 @@ export type ListMySubscriptionsRequest = Message<"api.v1.ListMySubscriptionsRequ
 };
 
 /**
- * Describes the message api.v1.ListMySubscriptionsRequest.
- * Use `create(ListMySubscriptionsRequestSchema)` to create a new message.
+ * Describes the message api.v1.ListMyBindingsRequest.
+ * Use `create(ListMyBindingsRequestSchema)` to create a new message.
  */
-export const ListMySubscriptionsRequestSchema: GenMessage<ListMySubscriptionsRequest> = /*@__PURE__*/
+export const ListMyBindingsRequestSchema: GenMessage<ListMyBindingsRequest> = /*@__PURE__*/
   messageDesc(file_api_v1_connector_service, 15);
 
 /**
- * @generated from message api.v1.ListMySubscriptionsResponse
+ * @generated from message api.v1.ListMyBindingsResponse
  */
-export type ListMySubscriptionsResponse = Message<"api.v1.ListMySubscriptionsResponse"> & {
+export type ListMyBindingsResponse = Message<"api.v1.ListMyBindingsResponse"> & {
   /**
-   * @generated from field: repeated api.v1.SubscriptionState subscriptions = 1;
+   * @generated from field: repeated api.v1.BindingState bindings = 1;
    */
-  subscriptions: SubscriptionState[];
+  bindings: BindingState[];
 };
 
 /**
- * Describes the message api.v1.ListMySubscriptionsResponse.
- * Use `create(ListMySubscriptionsResponseSchema)` to create a new message.
+ * Describes the message api.v1.ListMyBindingsResponse.
+ * Use `create(ListMyBindingsResponseSchema)` to create a new message.
  */
-export const ListMySubscriptionsResponseSchema: GenMessage<ListMySubscriptionsResponse> = /*@__PURE__*/
+export const ListMyBindingsResponseSchema: GenMessage<ListMyBindingsResponse> = /*@__PURE__*/
   messageDesc(file_api_v1_connector_service, 16);
 
 /**
- * @generated from message api.v1.SubscribeRequest
+ * @generated from message api.v1.BindRequest
  */
-export type SubscribeRequest = Message<"api.v1.SubscribeRequest"> & {
+export type BindRequest = Message<"api.v1.BindRequest"> & {
   /**
    * @generated from field: api.v1.ConnectorKind connector_kind = 1;
    */
@@ -576,7 +588,7 @@ export type SubscribeRequest = Message<"api.v1.SubscribeRequest"> & {
   listName: string;
 
   /**
-   * remote_list_handle subscribes to an existing remote list. If
+   * remote_list_handle binds to an existing remote list. If
    * empty, the connector creates a new remote list with title =
    * list_name.
    *
@@ -586,33 +598,33 @@ export type SubscribeRequest = Message<"api.v1.SubscribeRequest"> & {
 };
 
 /**
- * Describes the message api.v1.SubscribeRequest.
- * Use `create(SubscribeRequestSchema)` to create a new message.
+ * Describes the message api.v1.BindRequest.
+ * Use `create(BindRequestSchema)` to create a new message.
  */
-export const SubscribeRequestSchema: GenMessage<SubscribeRequest> = /*@__PURE__*/
+export const BindRequestSchema: GenMessage<BindRequest> = /*@__PURE__*/
   messageDesc(file_api_v1_connector_service, 17);
 
 /**
- * @generated from message api.v1.SubscribeResponse
+ * @generated from message api.v1.BindResponse
  */
-export type SubscribeResponse = Message<"api.v1.SubscribeResponse"> & {
+export type BindResponse = Message<"api.v1.BindResponse"> & {
   /**
-   * @generated from field: api.v1.SubscriptionState subscription = 1;
+   * @generated from field: api.v1.BindingState binding = 1;
    */
-  subscription?: SubscriptionState;
+  binding?: BindingState;
 };
 
 /**
- * Describes the message api.v1.SubscribeResponse.
- * Use `create(SubscribeResponseSchema)` to create a new message.
+ * Describes the message api.v1.BindResponse.
+ * Use `create(BindResponseSchema)` to create a new message.
  */
-export const SubscribeResponseSchema: GenMessage<SubscribeResponse> = /*@__PURE__*/
+export const BindResponseSchema: GenMessage<BindResponse> = /*@__PURE__*/
   messageDesc(file_api_v1_connector_service, 18);
 
 /**
- * @generated from message api.v1.UnsubscribeRequest
+ * @generated from message api.v1.UnbindRequest
  */
-export type UnsubscribeRequest = Message<"api.v1.UnsubscribeRequest"> & {
+export type UnbindRequest = Message<"api.v1.UnbindRequest"> & {
   /**
    * @generated from field: api.v1.ConnectorKind connector_kind = 1;
    */
@@ -630,29 +642,69 @@ export type UnsubscribeRequest = Message<"api.v1.UnsubscribeRequest"> & {
 };
 
 /**
- * Describes the message api.v1.UnsubscribeRequest.
- * Use `create(UnsubscribeRequestSchema)` to create a new message.
+ * Describes the message api.v1.UnbindRequest.
+ * Use `create(UnbindRequestSchema)` to create a new message.
  */
-export const UnsubscribeRequestSchema: GenMessage<UnsubscribeRequest> = /*@__PURE__*/
+export const UnbindRequestSchema: GenMessage<UnbindRequest> = /*@__PURE__*/
   messageDesc(file_api_v1_connector_service, 19);
 
 /**
- * @generated from message api.v1.UnsubscribeResponse
+ * @generated from message api.v1.UnbindResponse
  */
-export type UnsubscribeResponse = Message<"api.v1.UnsubscribeResponse"> & {
+export type UnbindResponse = Message<"api.v1.UnbindResponse"> & {
 };
 
 /**
- * Describes the message api.v1.UnsubscribeResponse.
- * Use `create(UnsubscribeResponseSchema)` to create a new message.
+ * Describes the message api.v1.UnbindResponse.
+ * Use `create(UnbindResponseSchema)` to create a new message.
  */
-export const UnsubscribeResponseSchema: GenMessage<UnsubscribeResponse> = /*@__PURE__*/
+export const UnbindResponseSchema: GenMessage<UnbindResponse> = /*@__PURE__*/
   messageDesc(file_api_v1_connector_service, 20);
 
 /**
- * @generated from message api.v1.GetChecklistSubscriptionStateRequest
+ * @generated from message api.v1.SyncNowRequest
  */
-export type GetChecklistSubscriptionStateRequest = Message<"api.v1.GetChecklistSubscriptionStateRequest"> & {
+export type SyncNowRequest = Message<"api.v1.SyncNowRequest"> & {
+  /**
+   * @generated from field: api.v1.ConnectorKind connector_kind = 1;
+   */
+  connectorKind: ConnectorKind;
+
+  /**
+   * @generated from field: string page = 2;
+   */
+  page: string;
+
+  /**
+   * @generated from field: string list_name = 3;
+   */
+  listName: string;
+};
+
+/**
+ * Describes the message api.v1.SyncNowRequest.
+ * Use `create(SyncNowRequestSchema)` to create a new message.
+ */
+export const SyncNowRequestSchema: GenMessage<SyncNowRequest> = /*@__PURE__*/
+  messageDesc(file_api_v1_connector_service, 21);
+
+/**
+ * @generated from message api.v1.SyncNowResponse
+ */
+export type SyncNowResponse = Message<"api.v1.SyncNowResponse"> & {
+};
+
+/**
+ * Describes the message api.v1.SyncNowResponse.
+ * Use `create(SyncNowResponseSchema)` to create a new message.
+ */
+export const SyncNowResponseSchema: GenMessage<SyncNowResponse> = /*@__PURE__*/
+  messageDesc(file_api_v1_connector_service, 22);
+
+/**
+ * @generated from message api.v1.GetChecklistBindingStateRequest
+ */
+export type GetChecklistBindingStateRequest = Message<"api.v1.GetChecklistBindingStateRequest"> & {
   /**
    * @generated from field: string page = 1;
    */
@@ -665,28 +717,28 @@ export type GetChecklistSubscriptionStateRequest = Message<"api.v1.GetChecklistS
 };
 
 /**
- * Describes the message api.v1.GetChecklistSubscriptionStateRequest.
- * Use `create(GetChecklistSubscriptionStateRequestSchema)` to create a new message.
+ * Describes the message api.v1.GetChecklistBindingStateRequest.
+ * Use `create(GetChecklistBindingStateRequestSchema)` to create a new message.
  */
-export const GetChecklistSubscriptionStateRequestSchema: GenMessage<GetChecklistSubscriptionStateRequest> = /*@__PURE__*/
-  messageDesc(file_api_v1_connector_service, 21);
+export const GetChecklistBindingStateRequestSchema: GenMessage<GetChecklistBindingStateRequest> = /*@__PURE__*/
+  messageDesc(file_api_v1_connector_service, 23);
 
 /**
- * @generated from message api.v1.GetChecklistSubscriptionStateResponse
+ * @generated from message api.v1.GetChecklistBindingStateResponse
  */
-export type GetChecklistSubscriptionStateResponse = Message<"api.v1.GetChecklistSubscriptionStateResponse"> & {
+export type GetChecklistBindingStateResponse = Message<"api.v1.GetChecklistBindingStateResponse"> & {
   /**
-   * @generated from field: api.v1.ChecklistSubscriptionState state = 1;
+   * @generated from field: api.v1.ChecklistBindingState state = 1;
    */
-  state?: ChecklistSubscriptionState;
+  state?: ChecklistBindingState;
 };
 
 /**
- * Describes the message api.v1.GetChecklistSubscriptionStateResponse.
- * Use `create(GetChecklistSubscriptionStateResponseSchema)` to create a new message.
+ * Describes the message api.v1.GetChecklistBindingStateResponse.
+ * Use `create(GetChecklistBindingStateResponseSchema)` to create a new message.
  */
-export const GetChecklistSubscriptionStateResponseSchema: GenMessage<GetChecklistSubscriptionStateResponse> = /*@__PURE__*/
-  messageDesc(file_api_v1_connector_service, 22);
+export const GetChecklistBindingStateResponseSchema: GenMessage<GetChecklistBindingStateResponse> = /*@__PURE__*/
+  messageDesc(file_api_v1_connector_service, 24);
 
 /**
  * DeadLetterItem describes one wiki item whose push has reached the
@@ -733,7 +785,7 @@ export type DeadLetterItem = Message<"api.v1.DeadLetterItem"> & {
  * Use `create(DeadLetterItemSchema)` to create a new message.
  */
 export const DeadLetterItemSchema: GenMessage<DeadLetterItem> = /*@__PURE__*/
-  messageDesc(file_api_v1_connector_service, 23);
+  messageDesc(file_api_v1_connector_service, 25);
 
 /**
  * @generated from message api.v1.ListDeadLettersRequest
@@ -760,7 +812,7 @@ export type ListDeadLettersRequest = Message<"api.v1.ListDeadLettersRequest"> & 
  * Use `create(ListDeadLettersRequestSchema)` to create a new message.
  */
 export const ListDeadLettersRequestSchema: GenMessage<ListDeadLettersRequest> = /*@__PURE__*/
-  messageDesc(file_api_v1_connector_service, 24);
+  messageDesc(file_api_v1_connector_service, 26);
 
 /**
  * @generated from message api.v1.ListDeadLettersResponse
@@ -777,7 +829,7 @@ export type ListDeadLettersResponse = Message<"api.v1.ListDeadLettersResponse"> 
  * Use `create(ListDeadLettersResponseSchema)` to create a new message.
  */
 export const ListDeadLettersResponseSchema: GenMessage<ListDeadLettersResponse> = /*@__PURE__*/
-  messageDesc(file_api_v1_connector_service, 25);
+  messageDesc(file_api_v1_connector_service, 27);
 
 /**
  * @generated from message api.v1.ClearDeadLetterRequest
@@ -809,7 +861,7 @@ export type ClearDeadLetterRequest = Message<"api.v1.ClearDeadLetterRequest"> & 
  * Use `create(ClearDeadLetterRequestSchema)` to create a new message.
  */
 export const ClearDeadLetterRequestSchema: GenMessage<ClearDeadLetterRequest> = /*@__PURE__*/
-  messageDesc(file_api_v1_connector_service, 26);
+  messageDesc(file_api_v1_connector_service, 28);
 
 /**
  * ConnectorKind disambiguates which remote backend an RPC targets. The
@@ -907,7 +959,7 @@ export const ConnectorService: GenService<{
   /**
    * ListRemoteLists enumerates the lists the calling user owns on the
    * remote side (Keep notes, Tasks tasklists, etc.). Used to populate
-   * the subscribe picker in the Checklist component. Returns an
+   * the bind picker in the Checklist component. Returns an
    * auth-revoked error if credentials no longer work.
    *
    * @generated from rpc api.v1.ConnectorService.ListRemoteLists
@@ -918,40 +970,48 @@ export const ConnectorService: GenService<{
     output: typeof ListRemoteListsResponseSchema;
   },
   /**
-   * @generated from rpc api.v1.ConnectorService.ListMySubscriptions
+   * @generated from rpc api.v1.ConnectorService.ListMyBindings
    */
-  listMySubscriptions: {
+  listMyBindings: {
     methodKind: "unary";
-    input: typeof ListMySubscriptionsRequestSchema;
-    output: typeof ListMySubscriptionsResponseSchema;
+    input: typeof ListMyBindingsRequestSchema;
+    output: typeof ListMyBindingsResponseSchema;
   },
   /**
-   * @generated from rpc api.v1.ConnectorService.Subscribe
+   * @generated from rpc api.v1.ConnectorService.Bind
    */
-  subscribe: {
+  bind: {
     methodKind: "unary";
-    input: typeof SubscribeRequestSchema;
-    output: typeof SubscribeResponseSchema;
+    input: typeof BindRequestSchema;
+    output: typeof BindResponseSchema;
   },
   /**
-   * @generated from rpc api.v1.ConnectorService.Unsubscribe
+   * @generated from rpc api.v1.ConnectorService.Unbind
    */
-  unsubscribe: {
+  unbind: {
     methodKind: "unary";
-    input: typeof UnsubscribeRequestSchema;
-    output: typeof UnsubscribeResponseSchema;
+    input: typeof UnbindRequestSchema;
+    output: typeof UnbindResponseSchema;
   },
   /**
-   * GetChecklistSubscriptionState does NOT take connector_kind: at most
+   * @generated from rpc api.v1.ConnectorService.SyncNow
+   */
+  syncNow: {
+    methodKind: "unary";
+    input: typeof SyncNowRequestSchema;
+    output: typeof SyncNowResponseSchema;
+  },
+  /**
+   * GetChecklistBindingState does NOT take connector_kind: at most
    * one connector owns a given (page, list_name) for a given user, so
    * the response identifies which connector (if any) is authoritative.
    *
-   * @generated from rpc api.v1.ConnectorService.GetChecklistSubscriptionState
+   * @generated from rpc api.v1.ConnectorService.GetChecklistBindingState
    */
-  getChecklistSubscriptionState: {
+  getChecklistBindingState: {
     methodKind: "unary";
-    input: typeof GetChecklistSubscriptionStateRequestSchema;
-    output: typeof GetChecklistSubscriptionStateResponseSchema;
+    input: typeof GetChecklistBindingStateRequestSchema;
+    output: typeof GetChecklistBindingStateResponseSchema;
   },
   /**
    * @generated from rpc api.v1.ConnectorService.ListDeadLetters

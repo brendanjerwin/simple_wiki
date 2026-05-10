@@ -104,7 +104,7 @@ Mirrors the [[help-google-keep]] bridge's behavior — empty `remote_list_handle
 | Banner | What it means | What to do |
 | --- | --- | --- |
 | `auth_failed` | OAuth token rejected (revoked, expired beyond refresh, or rotated and lost) | Click the paused badge on profile or checklist; reauthorize via Google |
-| `subscription_collision` | Someone else already bound this checklist to a different cloud service or list | Use a different checklist or have them unbind first |
+| `binding_collision` | Someone else already bound this checklist to a different cloud service or list | Use a different checklist or have them unbind first |
 | `subtasks_present` | Tried to bind to a Tasks list that has subtasks | Open the Tasks app, flatten the list (move subtasks to top level), then retry |
 | `tasks_api_not_enabled` | The Google Tasks API is not enabled on the GCP project that issued the OAuth client | Click the activation URL in the error message (or visit the [Google Cloud Console](https://console.developers.google.com/apis/api/tasks.googleapis.com/overview) for the project that owns your OAuth client) and enable the Tasks API, then retry |
 | `permission_denied` | Google rejected the request with a generic 403 (token valid, but the resource is off-limits) | Check the OAuth scope grant on your profile; if you recently changed scopes, reauthorize |
@@ -116,21 +116,21 @@ Your bindings are invisible to CalDAV. If you also bind a checklist to Apple Rem
 
 ## For agents
 
-The bridge is exposed through the unified per-user gRPC service `api.v1.ConnectorService`. All RPCs accept a `connector_kind` enum to disambiguate; pass `CONNECTOR_KIND_GOOGLE_TASKS` for Tasks flows. Every method scopes to the calling user via Tailscale identity → ProfileIdentifierFor; no method ever leaks another user's tokens or subscriptions.
+The bridge is exposed through the unified per-user gRPC service `api.v1.ConnectorService`. All RPCs accept a `connector_kind` enum to disambiguate; pass `CONNECTOR_KIND_GOOGLE_TASKS` for Tasks flows. Every method scopes to the calling user via Tailscale identity → ProfileIdentifierFor; no method ever leaks another user's tokens or bindings.
 
 - `BeginAuth(connector_kind=GOOGLE_TASKS) → BeginAuthResponse` — returns the Google authorization URL with PKCE `code_challenge` (S256) and a single-use server-side state token.
 - `CompleteAuth(connector_kind=GOOGLE_TASKS, code, state) → ConnectorState` — exchanges the authorization code for refresh + access tokens; persists `wiki.connectors.google_tasks.*`.
-- `Disconnect(connector_kind=GOOGLE_TASKS) → ConnectorState` — pauses subscriptions; preserves `item_id_map` and cursor for clean resume.
-- `GetState(connector_kind=GOOGLE_TASKS) → ConnectorState` — reads connector + subscriptions.
+- `Disconnect(connector_kind=GOOGLE_TASKS) → ConnectorState` — pauses bindings; preserves `item_id_map` and cursor for clean resume.
+- `GetState(connector_kind=GOOGLE_TASKS) → ConnectorState` — reads connector + bindings.
 - `ListRemoteLists(connector_kind=GOOGLE_TASKS) → RemoteListSummary[]` — proxies to the user's Tasks account (`tasklists.list`).
-- `ListMySubscriptions(connector_kind=GOOGLE_TASKS) → SubscriptionState[]`
-- `Subscribe(connector_kind=GOOGLE_TASKS, page, list_name, remote_list_handle) → SubscriptionState` — `remote_list_handle` is the Google `tasklist.id`, or empty string to bind to a new Tasks list (the wiki calls `tasklists.insert` with `title=list_name` and binds to the freshly-created list). Refuses with `FailedPrecondition` if a non-empty target list already contains subtasks.
-- `Unsubscribe(connector_kind=GOOGLE_TASKS, page, list_name) → ()`
-- `GetChecklistSubscriptionState(page, list_name) → ChecklistSubscriptionState` — small surface used by the Checklist component on render. **Does not take connector_kind**; returns whichever connector owns the checklist.
+- `ListMyBindings(connector_kind=GOOGLE_TASKS) → BindingState[]`
+- `Bind(connector_kind=GOOGLE_TASKS, page, list_name, remote_list_handle) → BindingState` — `remote_list_handle` is the Google `tasklist.id`, or empty string to bind to a new Tasks list (the wiki calls `tasklists.insert` with `title=list_name` and binds to the freshly-created list). Refuses with `FailedPrecondition` if a non-empty target list already contains subtasks.
+- `Unbind(connector_kind=GOOGLE_TASKS, page, list_name) → ()`
+- `GetChecklistBindingState(page, list_name) → ChecklistBindingState` — small surface used by the Checklist component on render. **Does not take connector_kind**; returns whichever connector owns the checklist.
 - `ListDeadLetters(connector_kind=GOOGLE_TASKS, page, list_name) → DeadLetterItem[]`
 - `ClearDeadLetter(connector_kind=GOOGLE_TASKS, page, list_name, item_uid) → ()`
 
-Errors branch on typed connect codes, never on banner text. `auth_failed` → `Unauthenticated`; subscription collision → `AlreadyExists`; subtask refuse-to-subscribe → `FailedPrecondition`; `tasks_api_not_enabled` → `FailedPrecondition` (with the Google activation URL embedded in the message); `permission_denied` → `PermissionDenied`; `rate_limited` → `ResourceExhausted`.
+Errors branch on typed connect codes, never on banner text. `auth_failed` → `Unauthenticated`; binding collision → `AlreadyExists`; subtask refuse-to-bind → `FailedPrecondition`; `tasks_api_not_enabled` → `FailedPrecondition` (with the Google activation URL embedded in the message); `permission_denied` → `PermissionDenied`; `rate_limited` → `ResourceExhausted`.
 
 ## Why OAuth instead of paste-token
 

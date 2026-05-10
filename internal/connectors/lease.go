@@ -14,8 +14,8 @@ import (
 var ErrChecklistAlreadyLeased = errors.New("connectors: checklist already leased")
 
 // ChecklistKey identifies a checklist independently of which user
-// owns its subscription. The (Page, ListName) tuple is the aggregate
-// root per ADR-0011 — the at-most-one-Subscription invariant is keyed
+// owns its binding. The (Page, ListName) tuple is the aggregate
+// root per ADR-0011 — the at-most-one-Binding invariant is keyed
 // on this tuple, not on (ProfileID, Page, ListName).
 type ChecklistKey struct {
 	Page     string
@@ -24,7 +24,7 @@ type ChecklistKey struct {
 
 // LeaseOwner records which connector + profile currently owns a
 // checklist's lease. Returned by LookupOwner so callers can render
-// "this checklist is currently subscribed to <Kind> by <ProfileID>"
+// "this checklist is currently bound to <Kind> by <ProfileID>"
 // in the UI without needing to resolve the lease themselves.
 type LeaseOwner struct {
 	Kind      ConnectorKind
@@ -33,14 +33,14 @@ type LeaseOwner struct {
 
 // LeaseTable is the in-memory registry of which (page, list_name) is
 // currently leased by which connector + profile. Per ADR-0011, the
-// authoritative source is the per-profile Subscription record on the
+// authoritative source is the per-profile Binding record on the
 // user profile page; this table is a derived view rebuilt at boot
 // from a fan-out scan of all profile pages.
 //
 // All lease mutations go through per-checklist mutexes so that the
-// "subscribe ceremony" — fan-out re-read inside the mutex, then
+// "bind ceremony" — fan-out re-read inside the mutex, then
 // write profile + take lease — is atomic with respect to concurrent
-// Subscribe calls on the same checklist.
+// Bind calls on the same checklist.
 //
 // LeaseTable does NOT own multi-process coordination. Single-process
 // deployment is assumed (ADR-0011); deploying multiple wiki processes
@@ -90,7 +90,7 @@ func (lt *LeaseTable) SignalReady() {
 // WaitReady blocks until SignalReady has been called or ctx is
 // cancelled. Returns ctx.Err() on cancellation, nil on success.
 //
-// gRPC handlers and the subscribe-button frontend gate their reads
+// gRPC handlers and the bind-button frontend gate their reads
 // through WaitReady so the boot-rebuild window doesn't surface as
 // false-negative LookupOwner results.
 func (lt *LeaseTable) WaitReady(ctx context.Context) error {
@@ -107,9 +107,9 @@ func (lt *LeaseTable) WaitReady(ctx context.Context) error {
 // the lease. Same-owner re-takes are idempotent (no error).
 //
 // Take does NOT acquire the per-checklist mutex — callers wrap Take
-// in WithChecklistLock when they need the subscribe-ceremony's atomic
+// in WithChecklistLock when they need the bind-ceremony's atomic
 // fan-out re-read + lease take. Standalone Take calls are valid for
-// the boot-rebuild path (single-threaded; no concurrent subscribe).
+// the boot-rebuild path (single-threaded; no concurrent Bind).
 func (lt *LeaseTable) Take(key ChecklistKey, owner LeaseOwner) error {
 	lt.mu.Lock()
 	defer lt.mu.Unlock()
@@ -127,7 +127,7 @@ func (lt *LeaseTable) Take(key ChecklistKey, owner LeaseOwner) error {
 
 // Release drops the lease for the given checklist. No-op if the
 // lease is unowned. Returns no error on owner-mismatch — release is
-// "release-if-mine-or-already-released"; the subscribe ceremony is
+// "release-if-mine-or-already-released"; the bind ceremony is
 // where the strong invariant lives.
 func (lt *LeaseTable) Release(key ChecklistKey) {
 	lt.mu.Lock()
@@ -136,9 +136,9 @@ func (lt *LeaseTable) Release(key ChecklistKey) {
 }
 
 // LookupOwner returns the current lease owner for the given checklist
-// and a bool indicating presence. Used by the subscribe-button picker
+// and a bool indicating presence. Used by the bind-button picker
 // to filter out checklists already owned by another connector and by
-// the tombstone GC walker to extend retention for paused subscriptions.
+// the tombstone GC walker to extend retention for paused bindings.
 func (lt *LeaseTable) LookupOwner(key ChecklistKey) (LeaseOwner, bool) {
 	lt.mu.Lock()
 	defer lt.mu.Unlock()
@@ -148,9 +148,9 @@ func (lt *LeaseTable) LookupOwner(key ChecklistKey) (LeaseOwner, bool) {
 
 // WithChecklistLock acquires the per-checklist mutex for key, runs fn
 // while holding it, and releases the mutex before returning fn's
-// error. Used by the subscribe ceremony to make the fan-out re-read +
+// error. Used by the bind ceremony to make the fan-out re-read +
 // profile-write + lease-take sequence atomic against concurrent
-// subscribers on the same checklist.
+// binders on the same checklist.
 //
 // The mutex is created lazily on first reference to that checklist
 // and retained for the lifetime of the table — a household-scale
