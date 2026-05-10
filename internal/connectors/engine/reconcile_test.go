@@ -9,6 +9,7 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
 	"github.com/brendanjerwin/simple_wiki/internal/connectors"
@@ -890,6 +891,45 @@ var _ = Describe("Engine.reconcile", func() {
 			Expect(mutator.recordingChecklistMutator.appendCalls).To(ContainElement(
 				appendCall{Page: page, ListName: listName, UID: newUID, Op: "outbound_inserted"},
 			))
+		})
+	})
+
+	// Regression: the engine's WikiItem-from-ChecklistItem construction sites
+	// (push loop in reconcile.go, SyncCollectionState items, SeedBindingState
+	// items) silently dropped the Due field, so Tasks/Keep/iCloud adapters
+	// received a zero time and the remote backend stored "no due date." The
+	// translator unit tests cover Due correctly — the regression was at the
+	// engine→adapter boundary.
+	When("outbound has a new wiki item with a due date", func() {
+		const newUID = "uid-due-1"
+		var dueAt time.Time
+
+		BeforeEach(func() {
+			dueAt = time.Date(2026, 6, 15, 0, 0, 0, 0, time.UTC)
+			fbs.SeedBinding(connectors.Binding{
+				ProfileID: profileID, Page: page, ListName: listName,
+				RemoteHandle:         "tasklist-1",
+				State:                connectors.BindingStateActive,
+				LastSuccessfulSyncAt: reconcilePastChokePausedAt,
+				AdapterState:         connectors.AdapterState{"item_id_map": map[string]string{}},
+			}, ownerKind)
+
+			fa.SetPullRemoteResponse(connectors.RemotePullResult{}, nil)
+			fa.SetInsertRemoteResponse("task-due", nil)
+			reader.checklist = &apiv1.Checklist{
+				Items: []*apiv1.ChecklistItem{{
+					Uid:  newUID,
+					Text: "buy plane tickets",
+					Due:  timestamppb.New(dueAt),
+				}},
+			}
+
+			Expect(eng.Sync(ctx, key)).To(Succeed())
+		})
+
+		It("should pass the Due field through to the adapter on InsertRemote", func() {
+			Expect(fa.RecordedInsertRemote).To(HaveLen(1))
+			Expect(fa.RecordedInsertRemote[0].Item.Due).To(Equal(dueAt))
 		})
 	})
 

@@ -186,6 +186,7 @@ func readWikiItemsForBindSeed(ctx context.Context, reader ChecklistReader, page,
 			Checked:     it.GetChecked(),
 			Tags:        it.GetTags(),
 			Description: it.GetDescription(),
+			Due:         timestampToTime(it.GetDue()),
 			SortOrder:   it.GetSortOrder(),
 		})
 	}

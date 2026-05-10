@@ -25,6 +25,8 @@ import (
 	"fmt"
 	"time"
 
+	"google.golang.org/protobuf/types/known/timestamppb"
+
 	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
 	"github.com/brendanjerwin/simple_wiki/internal/connectors"
 	"github.com/brendanjerwin/simple_wiki/internal/connectors/googletasks/gateway"
@@ -715,7 +717,11 @@ func wikiItemToTaskFieldsBare(item connectors.WikiItem) translator.TaskFields {
 }
 
 // wikiItemToProto adapts the engine's flat WikiItem to the proto type
-// the translator consumes.
+// the translator consumes. The translator's outbound mapping reads Due
+// from the proto's GetDue() — drop it here and the gateway sends the
+// task with no due date even though the wiki item has one. Regression
+// fix; see the engine reconcile test "outbound has a new wiki item
+// with a due date" and the translator's ChecklistItemToTaskFields.
 func wikiItemToProto(item connectors.WikiItem) *apiv1.ChecklistItem {
 	cl := &apiv1.ChecklistItem{
 		Uid:       item.UID,
@@ -727,6 +733,9 @@ func wikiItemToProto(item connectors.WikiItem) *apiv1.ChecklistItem {
 	if item.Description != "" {
 		d := item.Description
 		cl.Description = &d
+	}
+	if !item.Due.IsZero() {
+		cl.Due = timestamppb.New(item.Due)
 	}
 	return cl
 }

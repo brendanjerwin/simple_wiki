@@ -5,12 +5,30 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
+
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
 	"github.com/brendanjerwin/simple_wiki/internal/connectors"
 	"github.com/brendanjerwin/simple_wiki/server/checklistmutator"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 )
+
+// timestampToTime returns the time.Time that the protobuf Timestamp
+// represents, or the zero time if ts is nil. Used at every WikiItem-
+// from-ChecklistItem construction site to forward time-typed fields
+// (Due, CompletedAt) into the adapter boundary. Without this helper —
+// or equivalent inline GetDue().AsTime() — the engine silently drops
+// the proto Timestamp and the adapter sees a zero time, which the
+// remote backend stores as "no due date." Regression fix; see the
+// "outbound has a new wiki item with a due date" reconcile test.
+func timestampToTime(ts *timestamppb.Timestamp) time.Time {
+	if ts == nil {
+		return time.Time{}
+	}
+	return ts.AsTime()
+}
 
 // pausedReasonRemoteHandleEmpty is the PausedReason the engine stamps
 // when reconcile observes an active binding whose RemoteHandle is the
@@ -557,6 +575,7 @@ func (e *Engine) pushOutbound(
 			Checked:     item.GetChecked(),
 			Tags:        item.GetTags(),
 			Description: item.GetDescription(),
+			Due:         timestampToTime(item.GetDue()),
 			SortOrder:   item.GetSortOrder(),
 		}
 		_, txErr := e.adapter.WikiToRemote(wikiItem)
@@ -723,6 +742,7 @@ func (e *Engine) pushOutbound(
 			Checked:     item.GetChecked(),
 			Tags:        item.GetTags(),
 			Description: item.GetDescription(),
+			Due:         timestampToTime(item.GetDue()),
 			SortOrder:   item.GetSortOrder(),
 		})
 	}
