@@ -90,7 +90,7 @@ describe('readPage', () => {
     it('should create request with pageName', () => {
       expect(mockCreate).toHaveBeenCalledWith(
         { _schema: 'ReadPageRequest' },
-        { pageName: 'test_page' }
+        { pageIdentifier: { case: 'pageName', value: 'test_page' } }
       );
     });
 

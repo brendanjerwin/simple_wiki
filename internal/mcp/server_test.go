@@ -409,6 +409,48 @@ var _ = Describe("NewStreamableHTTPHandler", func() {
 			})
 		})
 
+		When("invoking the api_v1_PageManagementService_ReadPage tool with the identifier parameter", func() {
+			var callResp *httptest.ResponseRecorder
+			var callResult map[string]any
+
+			BeforeEach(func() {
+				// Initialize to get a session
+				initBody := `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"0.0.1"}}}`
+				initReq := httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(initBody))
+				initReq.Header.Set("Content-Type", "application/json")
+				initResp := httptest.NewRecorder()
+				handler.ServeHTTP(initResp, initReq)
+				sessionID := initResp.Header().Get("Mcp-Session-Id")
+
+				// Call the tool using "identifier" instead of "page_name" (MCP compatibility alias)
+				callBody := `{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"api_v1_PageManagementService_ReadPage","arguments":{"identifier":"nonexistent-test-page"}}}`
+				callReq := httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(callBody))
+				callReq.Header.Set("Content-Type", "application/json")
+				if sessionID != "" {
+					callReq.Header.Set("Mcp-Session-Id", sessionID)
+				}
+				callResp = httptest.NewRecorder()
+				handler.ServeHTTP(callResp, callReq)
+
+				Expect(json.Unmarshal(callResp.Body.Bytes(), &callResult)).To(Succeed())
+			})
+
+			It("returns HTTP 200", func() {
+				Expect(callResp.Code).To(Equal(http.StatusOK))
+			})
+
+			It("returns a JSON-RPC result (not a JSON-RPC error)", func() {
+				Expect(callResult).NotTo(HaveKey("error"), "should not produce a JSON-RPC error (which would indicate the identifier was silently dropped): %v", callResult["error"])
+				Expect(callResult).To(HaveKey("result"))
+			})
+
+			It("returns an isError tool result for the nonexistent page (not empty content)", func() {
+				resultMap, ok := callResult["result"].(map[string]any)
+				Expect(ok).To(BeTrue(), "result should be a map, got: %T", callResult["result"])
+				Expect(resultMap["isError"]).To(Equal(true), "tool should return isError=true (page not found), not silent empty content; content: %v", resultMap["content"])
+			})
+		})
+
 		When("receiving an MCP tools/list request", func() {
 			var toolNames []string
 
