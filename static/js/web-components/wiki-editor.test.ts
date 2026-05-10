@@ -46,7 +46,6 @@ function stubReadPage(
         contentMarkdown,
         frontMatterToml,
         versionHash,
-        renderedContentHtml: '',
         renderedContentMarkdown: '',
       })
     );
@@ -239,7 +238,6 @@ describe('WikiEditor', () => {
           contentMarkdown: '# Second Page',
           frontMatterToml: '',
           versionHash: 'hash2',
-          renderedContentHtml: '',
           renderedContentMarkdown: '',
         })
       );

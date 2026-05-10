@@ -309,14 +309,15 @@ func (s *Server) ReadPage(ctx context.Context, req *apiv1.ReadPageRequest) (*api
 
 	pageText := buildPageText(frontmatter, frontmatterToml, markdown)
 
-	// Create a Page object and render it
+	// Create a Page object to execute template macros (for template-expanded markdown).
+	// HTML rendering is intentionally excluded from this response; use RenderPage for HTML.
 	page := &wikipage.Page{
 		Identifier: pageName,
 		Text:       pageText,
 	}
 
-	// Render the page if rendering dependencies are available
-	var renderedHTML string
+	// Render the page if rendering dependencies are available (for template-expanded markdown).
+	// HTML output is intentionally not captured; use RenderPage for HTML.
 	var renderedMarkdown string
 
 	if s.markdownRenderer != nil && s.templateExecutor != nil {
@@ -324,14 +325,12 @@ func (s *Server) ReadPage(ctx context.Context, req *apiv1.ReadPageRequest) (*api
 		if renderErr != nil {
 			return nil, status.Errorf(codes.Internal, "failed to render page: %v", renderErr)
 		}
-		renderedHTML = string(page.RenderedPage)
 		renderedMarkdown = string(page.RenderedMarkdown)
 	}
 
 	return &apiv1.ReadPageResponse{
 		ContentMarkdown:         string(markdown),
 		FrontMatterToml:         string(frontmatterToml),
-		RenderedContentHtml:     renderedHTML,
 		RenderedContentMarkdown: renderedMarkdown,
 		VersionHash:             computeContentHash(markdown),
 	}, nil

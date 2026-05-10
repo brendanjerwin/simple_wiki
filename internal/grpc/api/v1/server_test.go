@@ -4113,10 +4113,6 @@ var _ = Describe("Server", func() {
 				Expect(resp.FrontMatterToml).To(ContainSubstring("title = 'Test Page'"))
 			})
 
-			It("should return the rendered HTML", func() {
-				Expect(resp.RenderedContentHtml).To(Equal("<h1>Test Page</h1>\n<p>This is test content.</p>"))
-			})
-
 			It("should return the rendered markdown", func() {
 				Expect(resp.RenderedContentMarkdown).To(Equal("# Test Page\n\nThis is test content."))
 			})
