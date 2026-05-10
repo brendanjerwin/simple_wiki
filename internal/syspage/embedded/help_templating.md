@@ -119,3 +119,15 @@ When creating a page from a template, the template's frontmatter is merged as a 
 ## For Agents
 
 Use `api_v1_PageManagementService_ListTemplates` to discover templates and `api_v1_PageManagementService_CreatePage` (with the `template` field set) to instantiate one.
+
+### Navigating large pages efficiently
+
+Before reading or editing a large page (>30 KB), call `api_v1_PageManagementService_ReadPageOutline` first. It returns:
+
+- **headings** — every heading in document order with its anchor `slug`, `byte_offset` (where the section body begins), and `byte_length` (how many bytes the section spans).
+- **total_bytes** — total size of the page markdown.
+- **version_hash** — the same SHA-256 hash that `ReadPage` and `UpdatePageContent` use for optimistic concurrency.
+
+Use `byte_offset` + `byte_length` together with `UpdatePageContent`'s `old_content_markdown` / `new_content_markdown` to rewrite a specific section without touching the rest of the page.
+
+Slugs returned by `ReadPageOutline` match the anchor IDs that `RenderPage` generates, so they are safe to use as URL fragments (`#slug`) in rendered links.

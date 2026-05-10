@@ -44,6 +44,14 @@ arguments = [
   ] },
 ]
 
+[rule.unhandled-error]
+# strings.Builder write methods never return errors by design (documented in Go stdlib).
+arguments = [
+  "strings\\.Builder\\.WriteByte",
+  "strings\\.Builder\\.WriteRune",
+  "strings\\.Builder\\.WriteString",
+]
+
 [rule.unused-parameter]
 exclude = ["**/*_test.go"]
 
