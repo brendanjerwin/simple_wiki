@@ -125,9 +125,10 @@ The wiki derives `automated` from your authentication context — Tailscale tags
 Checklists can be bound to ecosystem-native task apps so items round-trip with your phone:
 
 - **CalDAV (Apple Reminders, DAVx5)** — works automatically; subscribe from the device. See [[help-caldav]].
-- **Google Keep** — per-user, opt-in. Configure your Google account on **/profile**, then click **Bind to Keep List** inside any checklist. See [[help-google-keep]].
+- **Google Keep** — per-user, opt-in. Configure your Google account on **/profile**, then click **Bind to a cloud service** inside any checklist. See [[help-google-keep]].
+- **Google Tasks** — per-user, opt-in (per-deployment OAuth setup by the operator). Same bind affordance on the checklist. See [[help-google-tasks]].
 
-Bindings to Keep are stored on the calling user's profile page so two household members can each bind the same wiki checklist to their own Keep note.
+Bindings live on the calling user's profile page under `wiki.connectors.<kind>.bindings[]` so two household members can each bind the same wiki checklist to their own remote list. See [[help-connectors]] for the cross-bridge index.
 
 ## Tag Grammar
 

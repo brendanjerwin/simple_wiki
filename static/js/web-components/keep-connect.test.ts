@@ -7,7 +7,7 @@ import type { KeepConnect } from './keep-connect.js';
 import {
   GetStateResponseSchema,
   ConnectorStateSchema,
-  SubscriptionStateSchema,
+  BindingStateSchema,
 } from '../gen/api/v1/connector_service_pb.js';
 
 // Access private client fields via type cast.
@@ -141,7 +141,7 @@ describe('KeepConnect', () => {
   describe('when getState returns configured=true with one subscription', () => {
     beforeEach(async () => {
       el = document.createElement('keep-connect') as KeepConnect;
-      const subscription = create(SubscriptionStateSchema, {
+      const subscription = create(BindingStateSchema, {
         page: 'Board',
         listName: 'todo',
         remoteListHandle: 'note-abc',
@@ -150,7 +150,7 @@ describe('KeepConnect', () => {
       const state = create(ConnectorStateSchema, {
         configured: true,
         email: 'bob@example.com',
-        subscriptions: [subscription],
+        bindings: [subscription],
       });
       sinon
         .stub(clientOf(el), 'getState')

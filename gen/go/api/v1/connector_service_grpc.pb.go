@@ -20,17 +20,18 @@ import (
 const _ = grpc.SupportPackageIsVersion8
 
 const (
-	ConnectorService_BeginAuth_FullMethodName                     = "/api.v1.ConnectorService/BeginAuth"
-	ConnectorService_CompleteAuth_FullMethodName                  = "/api.v1.ConnectorService/CompleteAuth"
-	ConnectorService_Disconnect_FullMethodName                    = "/api.v1.ConnectorService/Disconnect"
-	ConnectorService_GetState_FullMethodName                      = "/api.v1.ConnectorService/GetState"
-	ConnectorService_ListRemoteLists_FullMethodName               = "/api.v1.ConnectorService/ListRemoteLists"
-	ConnectorService_ListMySubscriptions_FullMethodName           = "/api.v1.ConnectorService/ListMySubscriptions"
-	ConnectorService_Subscribe_FullMethodName                     = "/api.v1.ConnectorService/Subscribe"
-	ConnectorService_Unsubscribe_FullMethodName                   = "/api.v1.ConnectorService/Unsubscribe"
-	ConnectorService_GetChecklistSubscriptionState_FullMethodName = "/api.v1.ConnectorService/GetChecklistSubscriptionState"
-	ConnectorService_ListDeadLetters_FullMethodName               = "/api.v1.ConnectorService/ListDeadLetters"
-	ConnectorService_ClearDeadLetter_FullMethodName               = "/api.v1.ConnectorService/ClearDeadLetter"
+	ConnectorService_BeginAuth_FullMethodName                = "/api.v1.ConnectorService/BeginAuth"
+	ConnectorService_CompleteAuth_FullMethodName             = "/api.v1.ConnectorService/CompleteAuth"
+	ConnectorService_Disconnect_FullMethodName               = "/api.v1.ConnectorService/Disconnect"
+	ConnectorService_GetState_FullMethodName                 = "/api.v1.ConnectorService/GetState"
+	ConnectorService_ListRemoteLists_FullMethodName          = "/api.v1.ConnectorService/ListRemoteLists"
+	ConnectorService_ListMyBindings_FullMethodName           = "/api.v1.ConnectorService/ListMyBindings"
+	ConnectorService_Bind_FullMethodName                     = "/api.v1.ConnectorService/Bind"
+	ConnectorService_Unbind_FullMethodName                   = "/api.v1.ConnectorService/Unbind"
+	ConnectorService_SyncNow_FullMethodName                  = "/api.v1.ConnectorService/SyncNow"
+	ConnectorService_GetChecklistBindingState_FullMethodName = "/api.v1.ConnectorService/GetChecklistBindingState"
+	ConnectorService_ListDeadLetters_FullMethodName          = "/api.v1.ConnectorService/ListDeadLetters"
+	ConnectorService_ClearDeadLetter_FullMethodName          = "/api.v1.ConnectorService/ClearDeadLetter"
 )
 
 // ConnectorServiceClient is the client API for ConnectorService service.
@@ -60,16 +61,17 @@ type ConnectorServiceClient interface {
 	GetState(ctx context.Context, in *GetStateRequest, opts ...grpc.CallOption) (*GetStateResponse, error)
 	// ListRemoteLists enumerates the lists the calling user owns on the
 	// remote side (Keep notes, Tasks tasklists, etc.). Used to populate
-	// the subscribe picker in the Checklist component. Returns an
+	// the bind picker in the Checklist component. Returns an
 	// auth-revoked error if credentials no longer work.
 	ListRemoteLists(ctx context.Context, in *ListRemoteListsRequest, opts ...grpc.CallOption) (*ListRemoteListsResponse, error)
-	ListMySubscriptions(ctx context.Context, in *ListMySubscriptionsRequest, opts ...grpc.CallOption) (*ListMySubscriptionsResponse, error)
-	Subscribe(ctx context.Context, in *SubscribeRequest, opts ...grpc.CallOption) (*SubscribeResponse, error)
-	Unsubscribe(ctx context.Context, in *UnsubscribeRequest, opts ...grpc.CallOption) (*UnsubscribeResponse, error)
-	// GetChecklistSubscriptionState does NOT take connector_kind: at most
+	ListMyBindings(ctx context.Context, in *ListMyBindingsRequest, opts ...grpc.CallOption) (*ListMyBindingsResponse, error)
+	Bind(ctx context.Context, in *BindRequest, opts ...grpc.CallOption) (*BindResponse, error)
+	Unbind(ctx context.Context, in *UnbindRequest, opts ...grpc.CallOption) (*UnbindResponse, error)
+	SyncNow(ctx context.Context, in *SyncNowRequest, opts ...grpc.CallOption) (*SyncNowResponse, error)
+	// GetChecklistBindingState does NOT take connector_kind: at most
 	// one connector owns a given (page, list_name) for a given user, so
 	// the response identifies which connector (if any) is authoritative.
-	GetChecklistSubscriptionState(ctx context.Context, in *GetChecklistSubscriptionStateRequest, opts ...grpc.CallOption) (*GetChecklistSubscriptionStateResponse, error)
+	GetChecklistBindingState(ctx context.Context, in *GetChecklistBindingStateRequest, opts ...grpc.CallOption) (*GetChecklistBindingStateResponse, error)
 	ListDeadLetters(ctx context.Context, in *ListDeadLettersRequest, opts ...grpc.CallOption) (*ListDeadLettersResponse, error)
 	ClearDeadLetter(ctx context.Context, in *ClearDeadLetterRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 }
@@ -132,40 +134,50 @@ func (c *connectorServiceClient) ListRemoteLists(ctx context.Context, in *ListRe
 	return out, nil
 }
 
-func (c *connectorServiceClient) ListMySubscriptions(ctx context.Context, in *ListMySubscriptionsRequest, opts ...grpc.CallOption) (*ListMySubscriptionsResponse, error) {
+func (c *connectorServiceClient) ListMyBindings(ctx context.Context, in *ListMyBindingsRequest, opts ...grpc.CallOption) (*ListMyBindingsResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(ListMySubscriptionsResponse)
-	err := c.cc.Invoke(ctx, ConnectorService_ListMySubscriptions_FullMethodName, in, out, cOpts...)
+	out := new(ListMyBindingsResponse)
+	err := c.cc.Invoke(ctx, ConnectorService_ListMyBindings_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *connectorServiceClient) Subscribe(ctx context.Context, in *SubscribeRequest, opts ...grpc.CallOption) (*SubscribeResponse, error) {
+func (c *connectorServiceClient) Bind(ctx context.Context, in *BindRequest, opts ...grpc.CallOption) (*BindResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(SubscribeResponse)
-	err := c.cc.Invoke(ctx, ConnectorService_Subscribe_FullMethodName, in, out, cOpts...)
+	out := new(BindResponse)
+	err := c.cc.Invoke(ctx, ConnectorService_Bind_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *connectorServiceClient) Unsubscribe(ctx context.Context, in *UnsubscribeRequest, opts ...grpc.CallOption) (*UnsubscribeResponse, error) {
+func (c *connectorServiceClient) Unbind(ctx context.Context, in *UnbindRequest, opts ...grpc.CallOption) (*UnbindResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(UnsubscribeResponse)
-	err := c.cc.Invoke(ctx, ConnectorService_Unsubscribe_FullMethodName, in, out, cOpts...)
+	out := new(UnbindResponse)
+	err := c.cc.Invoke(ctx, ConnectorService_Unbind_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *connectorServiceClient) GetChecklistSubscriptionState(ctx context.Context, in *GetChecklistSubscriptionStateRequest, opts ...grpc.CallOption) (*GetChecklistSubscriptionStateResponse, error) {
+func (c *connectorServiceClient) SyncNow(ctx context.Context, in *SyncNowRequest, opts ...grpc.CallOption) (*SyncNowResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(GetChecklistSubscriptionStateResponse)
-	err := c.cc.Invoke(ctx, ConnectorService_GetChecklistSubscriptionState_FullMethodName, in, out, cOpts...)
+	out := new(SyncNowResponse)
+	err := c.cc.Invoke(ctx, ConnectorService_SyncNow_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *connectorServiceClient) GetChecklistBindingState(ctx context.Context, in *GetChecklistBindingStateRequest, opts ...grpc.CallOption) (*GetChecklistBindingStateResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetChecklistBindingStateResponse)
+	err := c.cc.Invoke(ctx, ConnectorService_GetChecklistBindingState_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -219,16 +231,17 @@ type ConnectorServiceServer interface {
 	GetState(context.Context, *GetStateRequest) (*GetStateResponse, error)
 	// ListRemoteLists enumerates the lists the calling user owns on the
 	// remote side (Keep notes, Tasks tasklists, etc.). Used to populate
-	// the subscribe picker in the Checklist component. Returns an
+	// the bind picker in the Checklist component. Returns an
 	// auth-revoked error if credentials no longer work.
 	ListRemoteLists(context.Context, *ListRemoteListsRequest) (*ListRemoteListsResponse, error)
-	ListMySubscriptions(context.Context, *ListMySubscriptionsRequest) (*ListMySubscriptionsResponse, error)
-	Subscribe(context.Context, *SubscribeRequest) (*SubscribeResponse, error)
-	Unsubscribe(context.Context, *UnsubscribeRequest) (*UnsubscribeResponse, error)
-	// GetChecklistSubscriptionState does NOT take connector_kind: at most
+	ListMyBindings(context.Context, *ListMyBindingsRequest) (*ListMyBindingsResponse, error)
+	Bind(context.Context, *BindRequest) (*BindResponse, error)
+	Unbind(context.Context, *UnbindRequest) (*UnbindResponse, error)
+	SyncNow(context.Context, *SyncNowRequest) (*SyncNowResponse, error)
+	// GetChecklistBindingState does NOT take connector_kind: at most
 	// one connector owns a given (page, list_name) for a given user, so
 	// the response identifies which connector (if any) is authoritative.
-	GetChecklistSubscriptionState(context.Context, *GetChecklistSubscriptionStateRequest) (*GetChecklistSubscriptionStateResponse, error)
+	GetChecklistBindingState(context.Context, *GetChecklistBindingStateRequest) (*GetChecklistBindingStateResponse, error)
 	ListDeadLetters(context.Context, *ListDeadLettersRequest) (*ListDeadLettersResponse, error)
 	ClearDeadLetter(context.Context, *ClearDeadLetterRequest) (*emptypb.Empty, error)
 	mustEmbedUnimplementedConnectorServiceServer()
@@ -253,17 +266,20 @@ func (UnimplementedConnectorServiceServer) GetState(context.Context, *GetStateRe
 func (UnimplementedConnectorServiceServer) ListRemoteLists(context.Context, *ListRemoteListsRequest) (*ListRemoteListsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ListRemoteLists not implemented")
 }
-func (UnimplementedConnectorServiceServer) ListMySubscriptions(context.Context, *ListMySubscriptionsRequest) (*ListMySubscriptionsResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method ListMySubscriptions not implemented")
+func (UnimplementedConnectorServiceServer) ListMyBindings(context.Context, *ListMyBindingsRequest) (*ListMyBindingsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListMyBindings not implemented")
 }
-func (UnimplementedConnectorServiceServer) Subscribe(context.Context, *SubscribeRequest) (*SubscribeResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method Subscribe not implemented")
+func (UnimplementedConnectorServiceServer) Bind(context.Context, *BindRequest) (*BindResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Bind not implemented")
 }
-func (UnimplementedConnectorServiceServer) Unsubscribe(context.Context, *UnsubscribeRequest) (*UnsubscribeResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method Unsubscribe not implemented")
+func (UnimplementedConnectorServiceServer) Unbind(context.Context, *UnbindRequest) (*UnbindResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Unbind not implemented")
 }
-func (UnimplementedConnectorServiceServer) GetChecklistSubscriptionState(context.Context, *GetChecklistSubscriptionStateRequest) (*GetChecklistSubscriptionStateResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method GetChecklistSubscriptionState not implemented")
+func (UnimplementedConnectorServiceServer) SyncNow(context.Context, *SyncNowRequest) (*SyncNowResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method SyncNow not implemented")
+}
+func (UnimplementedConnectorServiceServer) GetChecklistBindingState(context.Context, *GetChecklistBindingStateRequest) (*GetChecklistBindingStateResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetChecklistBindingState not implemented")
 }
 func (UnimplementedConnectorServiceServer) ListDeadLetters(context.Context, *ListDeadLettersRequest) (*ListDeadLettersResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ListDeadLetters not implemented")
@@ -374,74 +390,92 @@ func _ConnectorService_ListRemoteLists_Handler(srv interface{}, ctx context.Cont
 	return interceptor(ctx, in, info, handler)
 }
 
-func _ConnectorService_ListMySubscriptions_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(ListMySubscriptionsRequest)
+func _ConnectorService_ListMyBindings_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListMyBindingsRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(ConnectorServiceServer).ListMySubscriptions(ctx, in)
+		return srv.(ConnectorServiceServer).ListMyBindings(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: ConnectorService_ListMySubscriptions_FullMethodName,
+		FullMethod: ConnectorService_ListMyBindings_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ConnectorServiceServer).ListMySubscriptions(ctx, req.(*ListMySubscriptionsRequest))
+		return srv.(ConnectorServiceServer).ListMyBindings(ctx, req.(*ListMyBindingsRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _ConnectorService_Subscribe_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(SubscribeRequest)
+func _ConnectorService_Bind_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(BindRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(ConnectorServiceServer).Subscribe(ctx, in)
+		return srv.(ConnectorServiceServer).Bind(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: ConnectorService_Subscribe_FullMethodName,
+		FullMethod: ConnectorService_Bind_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ConnectorServiceServer).Subscribe(ctx, req.(*SubscribeRequest))
+		return srv.(ConnectorServiceServer).Bind(ctx, req.(*BindRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _ConnectorService_Unsubscribe_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(UnsubscribeRequest)
+func _ConnectorService_Unbind_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UnbindRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(ConnectorServiceServer).Unsubscribe(ctx, in)
+		return srv.(ConnectorServiceServer).Unbind(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: ConnectorService_Unsubscribe_FullMethodName,
+		FullMethod: ConnectorService_Unbind_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ConnectorServiceServer).Unsubscribe(ctx, req.(*UnsubscribeRequest))
+		return srv.(ConnectorServiceServer).Unbind(ctx, req.(*UnbindRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _ConnectorService_GetChecklistSubscriptionState_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(GetChecklistSubscriptionStateRequest)
+func _ConnectorService_SyncNow_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SyncNowRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(ConnectorServiceServer).GetChecklistSubscriptionState(ctx, in)
+		return srv.(ConnectorServiceServer).SyncNow(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: ConnectorService_GetChecklistSubscriptionState_FullMethodName,
+		FullMethod: ConnectorService_SyncNow_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ConnectorServiceServer).GetChecklistSubscriptionState(ctx, req.(*GetChecklistSubscriptionStateRequest))
+		return srv.(ConnectorServiceServer).SyncNow(ctx, req.(*SyncNowRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _ConnectorService_GetChecklistBindingState_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetChecklistBindingStateRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ConnectorServiceServer).GetChecklistBindingState(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ConnectorService_GetChecklistBindingState_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ConnectorServiceServer).GetChecklistBindingState(ctx, req.(*GetChecklistBindingStateRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -510,20 +544,24 @@ var ConnectorService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _ConnectorService_ListRemoteLists_Handler,
 		},
 		{
-			MethodName: "ListMySubscriptions",
-			Handler:    _ConnectorService_ListMySubscriptions_Handler,
+			MethodName: "ListMyBindings",
+			Handler:    _ConnectorService_ListMyBindings_Handler,
 		},
 		{
-			MethodName: "Subscribe",
-			Handler:    _ConnectorService_Subscribe_Handler,
+			MethodName: "Bind",
+			Handler:    _ConnectorService_Bind_Handler,
 		},
 		{
-			MethodName: "Unsubscribe",
-			Handler:    _ConnectorService_Unsubscribe_Handler,
+			MethodName: "Unbind",
+			Handler:    _ConnectorService_Unbind_Handler,
 		},
 		{
-			MethodName: "GetChecklistSubscriptionState",
-			Handler:    _ConnectorService_GetChecklistSubscriptionState_Handler,
+			MethodName: "SyncNow",
+			Handler:    _ConnectorService_SyncNow_Handler,
+		},
+		{
+			MethodName: "GetChecklistBindingState",
+			Handler:    _ConnectorService_GetChecklistBindingState_Handler,
 		},
 		{
 			MethodName: "ListDeadLetters",
