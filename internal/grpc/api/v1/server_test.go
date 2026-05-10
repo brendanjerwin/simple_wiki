@@ -5729,6 +5729,105 @@ var _ = Describe("Server", func() {
 			})
 		})
 	})
+
+	Describe("ReadPageOutline", func() {
+		var (
+			req                   *apiv1.ReadPageOutlineRequest
+			resp                  *apiv1.ReadPageOutlineResponse
+			err                   error
+			mockPageReaderMutator *MockPageReaderMutator
+		)
+
+		BeforeEach(func() {
+			req = &apiv1.ReadPageOutlineRequest{
+				PageName: "test-page",
+			}
+			mockPageReaderMutator = &MockPageReaderMutator{}
+		})
+
+		JustBeforeEach(func() {
+			server = mustNewServer(mockPageReaderMutator, nil, nil)
+			resp, err = server.ReadPageOutline(ctx, req)
+		})
+
+		When("the page does not exist", func() {
+			BeforeEach(func() {
+				mockPageReaderMutator.MarkdownReadErr = os.ErrNotExist
+			})
+
+			It("should return a not found error", func() {
+				Expect(err).To(HaveGrpcStatus(codes.NotFound, "page not found: test-page"))
+			})
+
+			It("should return no response", func() {
+				Expect(resp).To(BeNil())
+			})
+		})
+
+		When("reading the page fails with a generic error", func() {
+			BeforeEach(func() {
+				mockPageReaderMutator.MarkdownReadErr = errors.New("disk error")
+			})
+
+			It("should return an internal error", func() {
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.Internal, "failed to read page"))
+			})
+
+			It("should return no response", func() {
+				Expect(resp).To(BeNil())
+			})
+		})
+
+		When("the page has no headings", func() {
+			BeforeEach(func() {
+				mockPageReaderMutator.Markdown = "Just some prose.\n\nNo headings here.\n"
+			})
+
+			It("should not error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should return an empty headings list", func() {
+				Expect(resp.Headings).To(BeEmpty())
+			})
+
+			It("should return the correct total_bytes", func() {
+				Expect(resp.TotalBytes).To(Equal(int64(len("Just some prose.\n\nNo headings here.\n"))))
+			})
+
+			It("should return a non-empty version_hash", func() {
+				Expect(resp.VersionHash).NotTo(BeEmpty())
+			})
+		})
+
+		When("the page has headings", func() {
+			const markdown = "# Hello\n\nbody text\n"
+
+			BeforeEach(func() {
+				mockPageReaderMutator.Markdown = wikipage.Markdown(markdown)
+			})
+
+			It("should not error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should return the heading", func() {
+				Expect(resp.Headings).To(HaveLen(1))
+				Expect(resp.Headings[0].Level).To(Equal(int32(1)))
+				Expect(resp.Headings[0].Text).To(Equal("Hello"))
+				Expect(resp.Headings[0].Slug).To(Equal("hello"))
+			})
+
+			It("should return the correct total_bytes", func() {
+				Expect(resp.TotalBytes).To(Equal(int64(len(markdown))))
+			})
+
+			It("should return the correct version_hash", func() {
+				h := sha256.Sum256([]byte(markdown))
+				Expect(resp.VersionHash).To(Equal(hex.EncodeToString(h[:])))
+			})
+		})
+	})
 })
 
 var _ = Describe("Checklist gRPC round-trip", func() {
