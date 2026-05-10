@@ -134,10 +134,14 @@ func (m *Mutator) UpdateItemForSync(ctx context.Context, page, listName, ownerEm
 		args.Description = &d
 	}
 	if due != nil {
-		// Pointer present means "remote surfaces a Due field."
-		// Non-zero → set; zero → clear.
-		args.Due = due
+		// Pointer present means "remote surfaces a Due field." A non-zero
+		// time stamps args.Due so the upsert applies it; a zero time
+		// translates to args.Due=nil with args.DueSet=true so the upsert's
+		// "set Due to nil" branch clears the wiki value.
 		args.DueSet = true
+		if !due.IsZero() {
+			args.Due = due
+		}
 	}
 	identity := syncIdentityFor(ownerEmail)
 	source := resolveSyncSource(ctx)

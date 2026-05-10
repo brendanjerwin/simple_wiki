@@ -307,6 +307,106 @@ var _ = Describe("UpdateItemForSync", func() {
 			Expect(err).NotTo(HaveOccurred())
 		})
 	})
+
+	When("updating an item with a non-nil due date", func() {
+		var err error
+		var dueAt time.Time
+
+		BeforeEach(func() {
+			dueAt = time.Date(2026, 9, 15, 0, 0, 0, 0, time.UTC)
+			err = mutator.UpdateItemForSync(ctx, "p", "list", "alice@example.com", uid, "text", false, nil, "", &dueAt)
+		})
+
+		It("should not error", func() {
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should persist the due date on the item", func() {
+			list, listErr := mutator.ListItems(ctx, "p", "list")
+			Expect(listErr).NotTo(HaveOccurred())
+			var found bool
+			for _, it := range list.GetItems() {
+				if it.GetUid() == uid {
+					Expect(it.GetDue()).NotTo(BeNil())
+					Expect(it.GetDue().AsTime()).To(Equal(dueAt))
+					found = true
+				}
+			}
+			Expect(found).To(BeTrue())
+		})
+	})
+
+	When("updating an item with a non-nil zero due (remote cleared the field)", func() {
+		var err error
+
+		BeforeEach(func() {
+			// Pre-set a due date so we can prove the clear happens.
+			initial := time.Date(2026, 9, 15, 0, 0, 0, 0, time.UTC)
+			Expect(mutator.UpdateItemForSync(ctx, "p", "list", "alice@example.com", uid, "text", false, nil, "", &initial)).To(Succeed())
+			zero := time.Time{}
+			err = mutator.UpdateItemForSync(ctx, "p", "list", "alice@example.com", uid, "text", false, nil, "", &zero)
+		})
+
+		It("should not error", func() {
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should clear the due date on the item", func() {
+			list, listErr := mutator.ListItems(ctx, "p", "list")
+			Expect(listErr).NotTo(HaveOccurred())
+			var found bool
+			for _, it := range list.GetItems() {
+				if it.GetUid() == uid {
+					Expect(it.GetDue()).To(BeNil())
+					found = true
+				}
+			}
+			Expect(found).To(BeTrue())
+		})
+	})
+})
+
+var _ = Describe("AddItemForSync with a due date", func() {
+	var (
+		mutator *checklistmutator.Mutator
+		ctx     context.Context
+	)
+
+	BeforeEach(func() {
+		mutator, _ = newSyncMutator("01HXAAAAAAAAAAAAAAAAAAAAAA")
+		ctx = context.Background()
+	})
+
+	When("a non-nil due is supplied", func() {
+		var (
+			uid   string
+			err   error
+			dueAt time.Time
+		)
+
+		BeforeEach(func() {
+			dueAt = time.Date(2026, 11, 30, 0, 0, 0, 0, time.UTC)
+			uid, err = mutator.AddItemForSync(ctx, "p", "list", "alice@example.com", "buy turkey", false, nil, "", "", &dueAt)
+		})
+
+		It("should not error", func() {
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should persist the due date on the new item", func() {
+			list, listErr := mutator.ListItems(ctx, "p", "list")
+			Expect(listErr).NotTo(HaveOccurred())
+			var found bool
+			for _, it := range list.GetItems() {
+				if it.GetUid() == uid {
+					Expect(it.GetDue()).NotTo(BeNil())
+					Expect(it.GetDue().AsTime()).To(Equal(dueAt))
+					found = true
+				}
+			}
+			Expect(found).To(BeTrue())
+		})
+	})
 })
 
 var _ = Describe("DeleteItemForSync", func() {

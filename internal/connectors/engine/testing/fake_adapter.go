@@ -171,6 +171,7 @@ type recordedAdvanceCursor struct {
 type recordedSeedBindingState struct {
 	ProfileID    wikipage.PageIdentifier
 	RemoteHandle string
+	WikiItems    []connectors.WikiItem
 }
 
 type recordedValidateRemoteBinding struct {
@@ -395,10 +396,10 @@ func (f *FakeAdapter) RefreshItemBaseline(binding connectors.Binding, remote con
 }
 
 // SeedBindingState implements connectors.BackendAdapter.
-func (f *FakeAdapter) SeedBindingState(_ context.Context, profileID wikipage.PageIdentifier, remoteHandle string, _ []connectors.WikiItem) (connectors.AdapterState, error) {
+func (f *FakeAdapter) SeedBindingState(_ context.Context, profileID wikipage.PageIdentifier, remoteHandle string, wikiItems []connectors.WikiItem) (connectors.AdapterState, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	f.RecordedSeedBindingState = append(f.RecordedSeedBindingState, recordedSeedBindingState{ProfileID: profileID, RemoteHandle: remoteHandle})
+	f.RecordedSeedBindingState = append(f.RecordedSeedBindingState, recordedSeedBindingState{ProfileID: profileID, RemoteHandle: remoteHandle, WikiItems: wikiItems})
 	if len(f.seedBindingStateResponses) == 0 {
 		return connectors.AdapterState{}, nil
 	}
