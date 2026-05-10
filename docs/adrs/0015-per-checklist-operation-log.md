@@ -2,15 +2,15 @@
 
 ## Status
 
-Accepted
+Accepted (2026-05-03); revised 2026-05-04 with audited `BackendAdapter` interface (see "Audited refinement" below); implementation landed 2026-05-04 on branch `extract-sync-engine-bind-rename`; revised 2026-05-09 to record the cadence contract (cron + adaptive-decay), the engine-side recovery surface (insert + delete paths), and the panel-curated [`docs/connector-sync-rules.md`](../connector-sync-rules.md) as the operational reference.
 
 ## Date
 
-2026-05-03
+2026-05-03 (original); 2026-05-04 (audited refinement + extraction implementation, [`internal/connectors/MATRIX.md`](../../internal/connectors/MATRIX.md)); 2026-05-09 (cadence + recovery + sync-rules link)
 
 ## Context
 
-ADR-0011 established the `ChecklistSubscription` aggregate. ADR-0012 split each connector into `gateway/translator/sync/` and lifted the cross-cutting types (`Connector`, `LeaseTable`, `SyncScheduler`, event constants) into `internal/connectors/`. Both Keep and Google Tasks were implemented against that shape.
+ADR-0011 established the `ChecklistBinding` aggregate (originally named `ChecklistSubscription` until the 2026-05-04 verb-rename revision). ADR-0012 split each connector into `gateway/translator/sync/` and lifted the cross-cutting types (`Connector`, `LeaseTable`, `SyncScheduler`, event constants) into `internal/connectors/`. Both Keep and Google Tasks were implemented against that shape.
 
 ADR-0012 explicitly stopped at *interface* lifting. The actual sync algorithm — the per-item three-way merge that decides "push wiki / apply remote / no-op / conflict" — was left in each connector's `sync/connector.go`. Two near-identical implementations.
 
@@ -78,50 +78,117 @@ The log is **a checklist concept, not a binding concept** — see "Why checklist
 - **`uid`** (string): The item's wiki ULID. Empty only for whole-list ops if any are added later.
 - **field deltas** (typed): Just the fields the op mutates (`checked`, `text`, `due`, etc.). Old values are reconstructible from the previous event for the same uid.
 
-### Engine-owned merge rule
+### Engine-owned lifecycle (audited 2026-05-04)
 
-A new `internal/connectors/engine` package owns the per-item merge classification. Each backend provides a thin `BackendAdapter`:
-
-```go
-type BackendAdapter interface {
-    Kind() ConnectorKind
-
-    // Pull remote items since the cursor. Engine consumes the result
-    // and decides per-item what to do.
-    PullRemote(ctx context.Context, sub Subscription) (RemotePullResult, error)
-
-    // Push primitives. Engine calls these after deciding direction.
-    InsertRemote(ctx context.Context, sub Subscription, item WikiItem) (RemoteRef, error)
-    PatchRemote(ctx context.Context, sub Subscription, ref RemoteRef, item WikiItem) (RemoteRef, error)
-    DeleteRemote(ctx context.Context, sub Subscription, ref RemoteRef) error
-
-    // Translate.
-    RemoteToWiki(remote RemoteItem) (WikiItem, error)
-    WikiToRemote(wiki WikiItem) (RemoteItem, error)
-
-    // Capability bits.
-    SupportsSubtasks() bool
-
-    // Classification of adapter-specific errors into the engine's
-    // generic vocabulary. Crucially, lets the engine handle
-    // precondition-failed (Tasks 412, Keep stage3-500) the same way.
-    ClassifyError(err error) ErrorClass
-}
-```
+The `internal/connectors/engine` package owns the **entire** connector lifecycle, not just the per-item merge classification. The original (2026-05-03) sketch limited the engine to "merge rule"; the audit (2026-05-04, see [`MATRIX.md`](../../internal/connectors/MATRIX.md)) determined that lifting only the merge rule leaves bind/unbind, force-resync, pause/resume, precondition recovery, dead-letter retry, scheduler tick, debouncer, and binding store as parallel per-connector implementations — exactly the divergence the user's directive *"I do not want to re-litigate sync edge conditions"* is meant to retire.
 
 The engine owns:
 
 - Op-log read against `LastSyncedSeq`.
 - Per-item divergence classification using the log (causal, not value-based).
 - The 4-cell merge: no-op / push-wiki / apply-remote / conflict-remote-wins.
-- Etag/precondition handling generically (delegated to adapter via `ClassifyError`).
+- **Bind / Unbind ceremony** (mutex + fan-out re-read + profile write + lease take, per ADR-0011).
+- **ForceFullResync** — driven by adapter's `RebuildAdapterState` primitive.
+- **Pause/Resume** (auth-failed transition + 7-day horizon → reseed). Adapter signals auth failure via `ClassifyError(err) == ErrorClassAuthFailed`.
+- **Precondition recovery** (3-branch: remote-deleted / remote-unchanged-repatch / remote-authoritative-apply). Triggered by `ErrorClassPreconditionFailed`. Tasks's existing 3-branch path becomes engine policy; Keep's stage3-500-on-stale-baseVersion adopts it.
+- **Dead-letter retry** (per-item PushFailureCount / NextAttemptAt with `deadLetterThreshold=10` + exponential backoff). Keep's existing implementation becomes engine policy; Tasks adopts it.
+- Etag / precondition handling generically (delegated to adapter via `ClassifyError`).
 - Suppressor wiring around the apply pass.
-- Cursor advance with safety buffer.
+- Cursor advance with adapter-specific safety buffer (delegated via `AdvanceCursor`).
+- Scheduler tick (the unified 30s fan-out via `connectors.SyncScheduler`).
+- Sync debouncer (1.5s window + 5s post-success choke; both backends adopt the choke).
+- Binding store (per-profile mutex + TOML serialization with adapter-opaque AdapterState subtree).
 - Tombstone GC interaction.
+
+Each backend provides a `BackendAdapter` whose contract is the **audited 2026-05-04 interface** in [`internal/connectors/adapter.go`](../../internal/connectors/adapter.go). Per-row provenance for every method on that interface is in [`MATRIX.md`](../../internal/connectors/MATRIX.md). Adopting the audited interface as the source-of-truth means a single edit to `adapter.go` keeps all four documents (this ADR, the matrix, the interface, the test parity scenarios) in sync.
+
+#### Audited interface (2026-05-04, summary)
+
+```go
+type BackendAdapter interface {
+    Kind() ConnectorKind
+
+    // Per-tick reconcile primitives.
+    PullRemote(ctx, binding) (RemotePullResult, error)
+    InsertRemote(ctx, binding, item) (RemoteRef, error)
+    PatchRemote(ctx, binding, ref, item) (RemoteRef, error)
+    DeleteRemote(ctx, binding, ref) error
+
+    // Translate.
+    RemoteToWiki(remote) (WikiItem, error)
+    WikiToRemote(wiki) (RemoteItem, error)
+
+    // Cursor advance (opaque body per-adapter).
+    AdvanceCursor(binding, result) Binding
+
+    // Bind ceremony.
+    SeedBindingState(ctx, profileID, remoteHandle) (AdapterState, error)
+    ValidateRemoteBinding(ctx, profileID, remoteHandle) error
+
+    // Force full resync.
+    RebuildAdapterState(ctx, binding) (AdapterState, error)
+
+    // Title sync (kept from v1).
+    FetchRemoteListTitle(ctx, profileID, remoteHandle) (string, bool, error)
+
+    // Bind UI picker support.
+    ListRemoteCollections(ctx, profileID) ([]RemoteCollection, error)
+
+    // Adapter-state codec (engine treats AdapterState as opaque).
+    EncodeAdapterState(state) (map[string]any, error)
+    DecodeAdapterState(raw) (AdapterState, error)
+
+    // Capability bits.
+    SupportsSubtasks() bool
+
+    // Read-by-ref (for the post-412 precondition-recovery pull).
+    ReadRemoteByRef(ctx, binding, ref) (RemoteItem, error)
+
+    // Error classification — routes engine recovery by class.
+    ClassifyError(err) ErrorClass
+}
+```
+
+The audited interface ADDS to the original 2026-05-03 sketch: `AdvanceCursor`, `SeedBindingState`, `ValidateRemoteBinding`, `RebuildAdapterState`, `FetchRemoteListTitle` (existed pre-engine), `ListRemoteCollections`, `EncodeAdapterState`/`DecodeAdapterState`, `ReadRemoteByRef`. Each addition has a row in [`MATRIX.md`](../../internal/connectors/MATRIX.md) with the audit-time justification.
+
+#### Historical: original 2026-05-03 sketch
+
+```go
+// Original sketch — superseded by the audited 2026-05-04 contract above.
+type BackendAdapter interface {
+    Kind() ConnectorKind
+    PullRemote(ctx context.Context, sub Subscription) (RemotePullResult, error)
+    InsertRemote(ctx context.Context, sub Subscription, item WikiItem) (RemoteRef, error)
+    PatchRemote(ctx context.Context, sub Subscription, ref RemoteRef, item WikiItem) (RemoteRef, error)
+    DeleteRemote(ctx context.Context, sub Subscription, ref RemoteRef) error
+    RemoteToWiki(remote RemoteItem) (WikiItem, error)
+    WikiToRemote(wiki RemoteItem) (RemoteItem, error)
+    SupportsSubtasks() bool
+    ClassifyError(err error) ErrorClass
+}
+```
+
+The original sketch limited the engine to the merge rule. The 2026-05-04 audit determined that approach left too much per-connector lifecycle code as parallel implementations. The audited interface lets the engine own the *entire* lifecycle.
+
+### Strictest-behavior-wins resolution rule (2026-05-04)
+
+When the audit surfaces edge-case behaviors that one connector handles and the other doesn't, the engine adopts the *better* implementation as policy. The laggard adapter is uplifted in the same PR. **No capability bits to opt out** — that's the half-shared-engine trap.
+
+Documented per-row exceptions in `MATRIX.md` are the only escape hatch, with explicit justification. The matrix has two such exceptions in v1: subtask handling (Tasks supports parent-child; Keep doesn't have the concept — true capability difference) and UID-marker insertion (translator-internal; engine doesn't see markers — adapter-internal concern).
+
+The strictest-behavior-wins rule, applied to MATRIX.md's row dispositions, produces these PR-15 uplifts:
+
+- **Keep gains the 3-branch precondition recovery** (originally Tasks-only). Keep's stage3-500 on stale baseVersion maps to `ErrorClassPreconditionFailed`; the engine runs the same recovery.
+- **Tasks gains dead-letter retry** (originally Keep-only). Per-item `PushFailureCount` / `NextAttemptAt` enter the engine's bookkeeping for every adapter.
+- **Keep gains explicit Pause/Resume state** with `PausedReason` (originally Tasks-only at the field level; Keep had it implicitly via "is master token empty?").
+- **Keep gains the post-success debounce choke** (originally Tasks-only).
+- **Keep gains self-event op-log emission** after every successful push primitive (originally Tasks-only).
 
 ### Per-binding state shrinks
 
-Before:
+The 2026-05-04 audit also resolved the verb drift between Keep (which used `Bind/BindingKey`) and Tasks (which used `Subscribe/Subscription`): the engine extraction unifies on **`Binding`** because the data is genuinely a binding between a wiki checklist and a remote list, not a subscription (which implies passive consumption). The post-extraction shape:
+
+Before (per-connector `Subscription`, parallel implementations):
 
 ```go
 type Subscription struct {
@@ -135,23 +202,41 @@ type Subscription struct {
 }
 ```
 
-After:
+After (engine-owned `connectors.Binding`, one type, used by every adapter):
 
 ```go
-type Subscription struct {
-    Page, ListName, RemoteListID string
-    AdapterState  map[string]any                      // opaque per-adapter blob
-    LastSyncedSeq int64                               // engine state
-    State         SubscriptionState
-    // …
+type Binding struct {
+    // Identity (the aggregate root per ADR-0011).
+    ProfileID    wikipage.PageIdentifier
+    Page         string
+    ListName     string
+    RemoteHandle string
+
+    // Display.
+    RemoteListTitle string
+
+    // Engine-owned cursor (causal, not value-based).
+    LastSyncedSeq int64
+
+    // Engine-owned lifecycle state.
+    State        BindingState
+    PausedReason string
+    PausedAt     time.Time
+    BoundAt      time.Time
+
+    // Engine-owned per-binding scheduling.
+    LastSuccessfulSyncAt time.Time
+
+    // Adapter-opaque state subtree.
+    AdapterState AdapterState
 }
 ```
 
-`AdapterState` holds whatever the adapter needs (Tasks: `ItemIDMap`, `ItemEtags`, `LastUpdatedMin`; Keep: `ItemMapping{ServerID, BaseVersion, ClientID, …}`). `SyncedItems` is gone — replaced by the op-log scan.
+`AdapterState` is `map[string]any` — opaque to the engine, encoded/decoded by the adapter via `EncodeAdapterState`/`DecodeAdapterState`. It holds whatever the adapter needs (Tasks: `item_id_map`, `item_etags`, `last_updated_min`; Keep: `item_mapping` with per-item `ServerID`, `BaseVersion`, `ClientID`, `PushFailureCount`, `NextAttemptAt`). `SyncedItems` is gone — replaced by the op-log scan.
 
 ### Causal divergence rule
 
-Per item, on each tick, the engine looks at events with `seq > sub.LastSyncedSeq`:
+Per item, on each tick, the engine looks at events with `seq > binding.LastSyncedSeq`:
 
 - No events for this uid → `¬wiki_diverged`.
 - Latest event is `src=user:…` → `wiki_diverged`.
@@ -159,7 +244,7 @@ Per item, on each tick, the engine looks at events with `seq > sub.LastSyncedSeq
 - Latest event is `src=connector:<other>:…` → `wiki_diverged` (cross-connector — defer to that connector's authority).
 - Latest event is `src=migration:…` → `¬wiki_diverged`.
 
-Combined with `remote_diverged` (computed from the adapter's pull result vs the previous remote snapshot), the merge produces the same 4-cell decision Keep already documents in `connector.go:1527-1554` — but driven by causality instead of by value compare.
+Combined with `remote_diverged` (computed from the adapter's pull result vs the previous remote snapshot), the merge produces the same 4-cell decision the pre-extraction Keep `sync/connector.go` documented in its merge classifier — but driven by causality instead of by value compare. The post-extraction equivalent lives in [`internal/connectors/engine/reconcile.go`](../../internal/connectors/engine/reconcile.go).
 
 ### Compaction
 
@@ -169,7 +254,7 @@ Events with `seq < min(LastSyncedSeq across all bindings on this checklist)` AND
 
 On first read after deploy, a checklist with `events` absent and `items` non-empty gets a synthesized `seq=0, src=migration:initial_baseline, op=baseline` event per existing item. Subsequent edits start logging from `seq=1`.
 
-Existing subscriptions migrate at first tick after deploy: `LastSyncedSeq = max(seq) at read time`, treating the current wiki state as the synced baseline. `SyncedItems` is dropped from the persisted state in the same write.
+Existing bindings migrate at first tick after deploy: `LastSyncedSeq = max(seq) at read time`, treating the current wiki state as the synced baseline. `SyncedItems` is dropped from the persisted state in the same write. The Phase 7 eager frontmatter migration (cf. plan `to-build-issue-998-warm-glacier.md`) handles the simultaneous `subscriptions[]` → `bindings[]` key rename and the legacy fingerprint-field collapse into the new `adapter_state` subtree.
 
 ## Consequences
 
@@ -183,7 +268,7 @@ Existing subscriptions migrate at first tick after deploy: `LastSyncedSeq = max(
 
 ### Negative
 
-- **Substantial PR-15 surface change**. ChecklistMutator gains an emit-event step on every mutation path. Both connector packages collapse into adapters. Both subscription schemas change. Migrations land in the same release.
+- **Substantial surface change**. ChecklistMutator gains an emit-event step on every mutation path. Both connector packages collapse into adapters. Both binding schemas change. Migrations land in the same release.
 - Frontmatter grows by one row per mutation. Compaction handles steady-state size, but a busy household chore chart could see ~50 events/day = ~30KB/month uncompacted. Acceptable for a household-scale wiki; revisit if ever multi-tenant.
 - `LastObservedWiki*` and the dead-letter-retry rule on Keep get re-expressed against the log (they currently key off field-fingerprint). Mechanical port; no semantic change.
 
@@ -218,9 +303,93 @@ So this ADR is in-scope for #999. The implementation is staged into discrete TDD
 - The fingerprint-baseline approach in Tasks (`SyncedTitle/Notes/Status/Due`).
 - The `wiki_diverged_skipped_inbound` and `inbound_skipped_same_etag` band-aid guards added to Tasks in commit `dcda37e2`. The engine's causal rule subsumes both.
 
+## Cadence contract (2026-05-09 revision)
+
+The original ADR sketch and Phase-2 plan listed a single 30s cron
+fan-out as the engine's reconcile driver. The implementation landed
+with a more nuanced cadence after smoke-campaign findings:
+
+```text
+                    ┌──────────────────────────────────┐
+                    │ 30s SyncScheduler cron tick      │  steady state
+                    └──────────────────────────────────┘
+                              │
+   wiki edit ───────►─────────┼─────►── 1.5s SyncDebouncer ──► Sync
+                              │                                  │
+   SyncNow click ──►──────────┤                                  │
+                              │                                  ▼
+                              │   ┌──────────────────────────────────┐
+                              │   │ AdaptiveTicker after each Sync:  │
+                              └─►─┤  activity → schedule 5s          │
+                                  │  +1 quiet → 10s                  │
+                                  │  +2 quiet → 20s                  │
+                                  │  +3 quiet → yield to cron        │
+                                  └──────────────────────────────────┘
+```
+
+Three driving primitives, all sharing the per-checklist lease:
+
+1. **`SyncScheduler` cron** — fixed 30s fan-out across every active
+   binding. Steady-state safety net. Cannot tight-loop.
+2. **`SyncDebouncer`** — wiki-edit driven; debounces with a 1.5s
+   window and chokes for 5s after each successful sync against
+   tight wiki-edit loops.
+3. **`AdaptiveTicker`** — activity-driven decay. After each
+   successful Sync, schedules a follow-up at `5s × 2^quietRuns`
+   (capped at 20s); past that, yields to cron. Activity is detected
+   by comparing the binding's `LastSyncedSeq` before and after the
+   reconcile (a non-zero advance means the engine emitted a
+   self-event during the tick). The mutator bridge ALSO calls
+   `RecordTick(key, activity=true)` at edit time, in parallel with
+   the debouncer kick, so the reactive cycle starts at t=0 of the
+   edit rather than at t=1.5s when the debouncer fires.
+
+Operator-triggered drivers (`SyncNow`, `ForceFullResync`) route
+through the same `Engine.Sync` entrypoint and serialize on the lease.
+
+Cost model: a noisy binding incurs ~12 RPCs/min sustained (cap one
+RPC per 5s). Vendor quotas (Tasks 600/min/user) accommodate this
+comfortably. Quiet bindings pay only the 30s cron RPC. See rules
+doc §11.10 + §11.5 for the full cadence specification.
+
+## Engine-side recovery surface (2026-05-09 revision)
+
+The original ADR specified a 3-branch precondition recovery for
+PATCH failures (412 / stale concurrency token). The implementation
+expanded the recovery surface during the smoke campaign:
+
+| Path | When it fires | Behavior |
+|---|---|---|
+| `runPreconditionRecovery` | `PatchRemote` returns `ErrorClassPreconditionFailed` (Tasks 412 / Keep stage3-500). | 3-branch as originally specified: ReadRemoteByRef → branch A (remote-deleted, mirror), B (remote-unchanged, refresh + repatch), C (remote-authoritative, apply). |
+| `runDeletePreconditionRecovery` | `DeleteRemote` returns `ErrorClassPreconditionFailed`. New 2026-05-08; previously the DELETE branch had no PreconditionFailed handler and aborted the entire reconcile. | ReadRemoteByRef → idempotent-success on NotFound or `Deleted=true` (clear idMap, emit `outbound_deleted`); refresh baseline + Retryable-backoff otherwise. |
+| `runInsertRecovery` | `InsertRemote` returns `ErrorClassPreconditionFailed` (Keep stage3-500 or Tasks duplicate). | `RebuildAdapterState` (full pull) + bail out of outbound loop. The rebuild preserves existing `idMap` entries whose refs still appear in the rebuilt `item_mapping` (not a clean wipe). Next tick routes through Patch via the rebuilt mapping. |
+
+Adjacent to the precondition family, two more engine-internal
+self-heal paths land binding metadata that the original ADR didn't
+specify:
+
+- **Empty `RemoteHandle` pause.** At the top of `reconcile()` (after
+  the IsPaused check, before any RPC), if `binding.RemoteHandle`
+  is empty (legacy migration gap), the engine transitions the
+  binding to `BindingStatePaused` with `paused_reason="remote_handle_empty"`
+  and returns. Replaces the silent insert-recovery loop the
+  binding would otherwise enter.
+- **Lazy `RemoteListTitle` refresh.** After a successful pull but
+  before `applyInbound`, if `binding.RemoteListTitle` is empty,
+  the engine calls `FetchRemoteListTitle` and stamps the result.
+  Self-heals legacy bindings (created before the bind-time fetch
+  landed) on the next reconcile.
+
+Per-RPC deadlines — every engine→adapter I/O primitive call wraps
+the inbound `ctx` with `Engine.withRPCDeadline` (default 15s) so
+vendor-side hangs can't hold the per-checklist lease indefinitely.
+Audited at every call site. See rules doc §11.9.
+
 ## See also
 
-- ADR-0011 (`ChecklistSubscription` aggregate)
+- ADR-0011 (`ChecklistBinding` aggregate)
 - ADR-0012 (`internal/connectors/` abstraction)
+- [`docs/connector-sync-rules.md`](../connector-sync-rules.md) — operational reference for the engine's sync semantics, authored under a 4-round panel review (Kleppmann, Helland, Shapiro, Bailis, Lamport). Covers the 4-cell merge, sticky user-wins, per-primitive contracts, mid-tick crash recovery, dead-letter lifecycle, 17 strict invariants, and 16 named non-guarantees.
+- [`internal/connectors/MATRIX.md`](../../internal/connectors/MATRIX.md) — the audited per-row provenance for the `BackendAdapter` interface in `internal/connectors/adapter.go`.
 - `feedback_extract_engine_when_n2.md` (the meta-rule this ADR operationalizes)
 - `feedback_function_contract_purity.md` (functions do their job or error — the engine's primitive contract)

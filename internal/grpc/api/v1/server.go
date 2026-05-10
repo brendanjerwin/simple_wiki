@@ -7,8 +7,9 @@ import (
 	"time"
 
 	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
-	keepsync "github.com/brendanjerwin/simple_wiki/internal/connectors/google_keep/sync"
-	taskssync "github.com/brendanjerwin/simple_wiki/internal/connectors/google_tasks/sync"
+	"github.com/brendanjerwin/simple_wiki/internal/connectors/engine"
+	"github.com/brendanjerwin/simple_wiki/internal/connectors/googlekeep"
+	"github.com/brendanjerwin/simple_wiki/internal/connectors/googletasks"
 	"github.com/brendanjerwin/simple_wiki/server/checklistmutator"
 	"github.com/brendanjerwin/simple_wiki/filestore"
 	"github.com/brendanjerwin/simple_wiki/index/bleve"
@@ -120,8 +121,24 @@ type Server struct {
 	agentScheduleStore      AgentScheduleStore
 	agentChatContextStore   AgentChatContextStore
 	checklistMutator        *checklistmutator.Mutator
-	keepConnector           *keepsync.Connector
-	tasksConnector          *taskssync.Connector
+
+	// Google Keep: engine path. The legacy Keep sync package has
+	// been deleted (Phase 5-B); the engine, adapter, binding store,
+	// and credential store collaborate to satisfy the gRPC
+	// ConnectorService surface.
+	keepEngine          *engine.Engine
+	keepAdapter         *googlekeep.KeepAdapter
+	keepBindingStore    engine.BindingStore
+	keepCredentialStore *googlekeep.FrontmatterCredentialStore
+	keepAuthVerifier    googlekeep.AuthVerifier
+
+	// Google Tasks: Phase 4-3 cutover. The legacy *taskssync.Connector
+	// is gone; the engine, adapter, binding store, and credential
+	// store collaborate to satisfy the gRPC ConnectorService surface.
+	tasksEngine             *engine.Engine
+	tasksAdapter            *googletasks.TasksAdapter
+	tasksBindingStore       engine.BindingStore
+	tasksCredentialStore    *googletasks.FrontmatterCredentialStore
 	tasksAuthURLBuilder     TasksAuthURLBuilder
 }
 
@@ -219,12 +236,33 @@ func (s *Server) WithChecklistMutator(m *checklistmutator.Mutator) *Server {
 	return s
 }
 
-// WithKeepConnector wires the Keep connector orchestrator into the server.
-// Required for ConnectorService handlers (connector_kind = GOOGLE_KEEP)
-// to function. Optional — without it, those branches return a clear
-// "not configured" error.
-func (s *Server) WithKeepConnector(c *keepsync.Connector) *Server {
-	s.keepConnector = c
+// WithKeepAuthVerifier wires the gpsoauth verifier used by
+// CompleteAuth(GOOGLE_KEEP) to exchange the captured oauth_token for
+// a master token + verify against the Keep API. Optional — without
+// it, CompleteAuth(GOOGLE_KEEP) returns FailedPrecondition explaining
+// the connector is not fully configured.
+func (s *Server) WithKeepAuthVerifier(v googlekeep.AuthVerifier) *Server {
+	s.keepAuthVerifier = v
+	return s
+}
+
+// WithGoogleKeep wires the Google Keep engine path into the server.
+// All four collaborators are required together — the gRPC handlers
+// route Bind/Unbind/ForceFullResync/Resume through engine, list
+// bindings + credentials via the binding store + credential store,
+// and create remote Keep notes via the adapter. Optional as a group —
+// without it, the GOOGLE_KEEP branches return a clear
+// "not configured by this wiki's operator" error.
+func (s *Server) WithGoogleKeep(
+	eng *engine.Engine,
+	adapter *googlekeep.KeepAdapter,
+	bindingStore engine.BindingStore,
+	credentialStore *googlekeep.FrontmatterCredentialStore,
+) *Server {
+	s.keepEngine = eng
+	s.keepAdapter = adapter
+	s.keepBindingStore = bindingStore
+	s.keepCredentialStore = credentialStore
 	return s
 }
 
@@ -242,13 +280,23 @@ type TasksAuthURLBuilder interface {
 	BuildAuthURL(ctx context.Context, profileID, accountEmail string) (authURL, stateToken string, err error)
 }
 
-// WithGoogleTasksConnector wires the Google Tasks connector orchestrator
-// into the server. Required for ConnectorService handlers (connector_kind
-// = GOOGLE_TASKS) to function. Optional — without it, those branches
-// return a clear "not configured by this wiki's operator" error so
-// frontends can render the "set up Google Tasks on profile" prompt.
-func (s *Server) WithGoogleTasksConnector(c *taskssync.Connector) *Server {
-	s.tasksConnector = c
+// WithGoogleTasks wires the Google Tasks engine path into the server.
+// All four collaborators are required together — the gRPC handlers
+// route Bind/Unbind/ForceFullResync/Resume through engine, list
+// bindings + credentials via the binding store + credential store,
+// and create remote tasklists via the adapter. Optional as a group —
+// without it, the GOOGLE_TASKS branches return a clear
+// "not configured by this wiki's operator" error.
+func (s *Server) WithGoogleTasks(
+	eng *engine.Engine,
+	adapter *googletasks.TasksAdapter,
+	bindingStore engine.BindingStore,
+	credentialStore *googletasks.FrontmatterCredentialStore,
+) *Server {
+	s.tasksEngine = eng
+	s.tasksAdapter = adapter
+	s.tasksBindingStore = bindingStore
+	s.tasksCredentialStore = credentialStore
 	return s
 }
 

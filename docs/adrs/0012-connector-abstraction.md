@@ -2,74 +2,86 @@
 
 ## Status
 
-Accepted
+Accepted (2026-05-02); revised 2026-05-04 (per-connector floor reduced to `gateway/ + translator/ + adapter.go + credentials.go`; engine owns the entire lifecycle); implementation landed 2026-05-04 on branch `extract-sync-engine-bind-rename`.
 
 ## Date
 
-2026-05-02
+2026-05-02 (original); 2026-05-04 (engine-ownership refinement + extraction implementation)
 
 ## Context
 
 Google Keep landed first (#982) as a one-off integration: `internal/keep/protocol/` (wire client), `internal/keep/bridge/` (sync logic + schema mapping), `internal/grpc/api/v1/keep_connector.go`, `<keep-bind-button>`. The shape worked for one integration.
 
-Google Tasks is being added now (this plan). iCloud Reminders is planned. Without a shared abstraction, each integration would copy the Keep shape with its own naming conventions, its own gRPC service, and its own frontend components — three near-duplicate stacks diverging on cosmetics. Worse, the cross-cutting concerns (the `ChecklistSubscription` aggregate from ADR-0011, the `LeaseTable`, the `SyncScheduler`, event constants) would each be implemented three times with subtle variations.
+Google Tasks was added next (#999). iCloud Reminders is planned (#998). Without a shared abstraction, each integration would copy the Keep shape with its own naming conventions, its own gRPC service, and its own frontend components — three near-duplicate stacks diverging on cosmetics. Worse, the cross-cutting concerns (the `ChecklistBinding` aggregate from ADR-0011, the `LeaseTable`, the `SyncScheduler`, event constants, *and the per-tick reconcile algorithm itself*) would each be implemented three times with subtle variations — a divergence that the user's directive *"I do not want to re-litigate sync edge conditions"* (2026-05-04) was issued to retire.
 
-A shared abstraction is needed. The question is *when* and *what shape*.
+A shared abstraction is needed. The 2026-05-02 ADR limited it to interface lifting; the 2026-05-04 revision (driven by the audit in [`internal/connectors/MATRIX.md`](../../internal/connectors/MATRIX.md)) extends it to the entire connector lifecycle.
 
 ## Decision
 
 ### Shared package: `internal/connectors/`
 
-Hold the cross-cutting types only:
+Hold the cross-cutting types AND the algorithm:
 
-- **`Connector` interface** — `Kind() ConnectorKind`, `Sync(ctx, key) error`, `PausedReason(profile_id) string`, `ForceFullResync(ctx, profile_id) error`. The contract every connector implements. *This is the actual abstraction*; everything else in the shared package serves it.
+- **`Connector` interface** — `Kind() ConnectorKind`, `Sync(ctx, key) error`, `PausedReason(key) (string, bool)`, `ForceFullResync(ctx, key) error`. The dispatch shape every connector exposes for the scheduler / RPC service / lease table. Implementations are produced by the engine wrapping a `BackendAdapter`.
+- **`BackendAdapter` interface** — every primitive a backend must implement: pull / push / translate / cursor advance / bind seed + validate / rebuild / list collections / title sync / state codec / error classification / read-by-ref / capability bits. The audited contract lives in [`internal/connectors/adapter.go`](../../internal/connectors/adapter.go), and per-row provenance for every method is in [`MATRIX.md`](../../internal/connectors/MATRIX.md).
+- **`internal/connectors/engine/`** — the SyncEngine. Owns the entire lifecycle: per-tick reconcile (pull → classify → decide → push → cursor advance), Bind, Unbind, ForceFullResync, Pause/Resume (with the 7-day horizon), precondition recovery (3-branch path), dead-letter retry (per-item PushFailureCount + NextAttemptAt + threshold), scheduler tick fan-out, sync debouncer (1.5s window + 5s post-success choke), binding store. Per ADR-0015, the engine reads the per-checklist op-log to drive causal divergence classification.
 - **`LeaseTable`** — in-memory cache of `(page, list_name) → (connector_kind, profile_id)`, with `WaitReady(ctx)` for the boot-rebuild gate. Per ADR-0011, derived state.
-- **`SyncScheduler`** — single cron-driven scheduler that fans out `Sync(ctx, key)` calls to registered `Connector` impls. One scheduler instance, registered with `pkg/jobs/CronScheduler`, dispatches to N connectors.
-- **Event constants** — typed string constants for structured-log event names (`connector.subscribe`, `connector.sync_start`, etc.), so log-grep is uniform across connectors.
+- **`SyncScheduler`** — single cron-driven scheduler that fires the unified 30s tick. Engine's tick-handler dispatches to every registered `Connector`.
+- **Event constants** — typed string constants for structured-log event names (`connector.bind`, `connector.unbind`, `connector.sync_start`, etc.), so log-grep is uniform across connectors. (Op-log self-source markers like `connector:<kind>:apply` keep their slug-form per ADR-0015.)
 
 ### Per-connector packages: `internal/connectors/<vendor>/`
 
-Each connector splits into three sub-packages, named for the layer they occupy (Fowler, *PoEAA*; Evans, *DDD*):
+Each connector splits into:
 
-- **`gateway/`** — Gateway pattern (PoEAA). Wire-protocol client only. OAuth, REST, types matching the remote API's vocabulary. No domain logic. (For Keep: gpsoauth + REST + Keep node types. For Tasks: OAuth refresh + Tasks REST CRUD.)
-- **`translator/`** — Anti-Corruption Layer (DDD). Named transformations between remote vocabulary and the wiki's `ChecklistItem` shape: `KeepNodeToChecklistItem`, `ChecklistItemToKeepNode`, `TitleAndTagsFromText`, etc. Each transformation is a named function with its own round-trip property test.
-- **`sync/`** — orchestrator. Implements the `Connector` interface, holds `SubscriptionStore`, owns cursor handling, idempotence (uid-marker insertion), pause/resume horizon, tombstone-retention hook. Per-connector rate-limit choke (e.g. Tasks' per-user QPS) lives here, not in the shared `SyncScheduler`.
+- **`gateway/`** — Gateway pattern (PoEAA). Wire-protocol client only. OAuth, REST, types matching the remote API's vocabulary. No domain logic. (For Keep: gpsoauth + REST + Keep node types. For Tasks: OAuth refresh + Tasks REST CRUD. For iCloud: app-specific-password Basic Auth + CalDAV verbs.)
+- **`translator/`** — Anti-Corruption Layer (DDD). Named transformations between remote vocabulary and the wiki's `ChecklistItem` shape: `KeepNodeToChecklistItem`, `ChecklistItemToKeepNode`, `TaskToChecklistItem`, `ChecklistItemToTaskFields`, `TitleAndTagsFromText`, etc. Each transformation is a named function with its own round-trip property test.
+- **`adapter.go`** — implements `BackendAdapter`. Calls into `gateway/` for wire I/O and `translator/` for shape conversion. Holds nothing about the merge algorithm, the cursor advance logic, the bind ceremony, the precondition recovery, or the dead-letter retry — all of those are in the engine. Per-adapter-internal state (Tasks's `wiki:uid` marker handling; Keep's `LabelIDs` cache) lives wholly inside the adapter's `EncodeAdapterState` / `DecodeAdapterState` codec, so the engine never inspects it.
+- **`credentials.go`** — per-connector `CredentialReadWriter` that reads and writes the connector's auth material on the user's profile page (Tasks: refresh token; Keep: master token). Plus the Resume helper that bootstraps existing bindings on startup. Engine-agnostic; the engine never touches credentials directly — it asks the adapter, which asks credentials.
+
+There is **no** `sync/` subpackage anymore. The original ADR-0012 (2026-05-02) had each connector own a `sync/` package with the per-tick algorithm; the 2026-05-04 audit determined that approach left enough algorithmic surface per-adapter to keep growing parallel bug classes (PR #999 shipped a third critical correctness incident before this extraction). Engine-owned lifecycle ELIMINATES the per-connector algorithmic surface.
 
 ### Wiki-side ports stay consumer-defined
 
-`ChecklistReader`, `ChecklistMutator`, `SyncSuppressor`, `JobEnqueuer` — these are the wiki-side dependencies a connector needs. Each connector package declares its own minimal interface for what it consumes. They are **not** lifted to `internal/connectors/`. This follows the Go idiom (interfaces are defined where they are consumed, not where they are implemented) and keeps the shared package small.
+`ChecklistReader`, `ChecklistMutator`, `SyncSuppressor`, `JobEnqueuer` — these are the wiki-side dependencies the engine needs. The engine package declares the minimal interface for what it consumes. They are **not** lifted to per-connector packages. This follows the Go idiom (interfaces are defined where they are consumed, not where they are implemented).
 
 ### Refactor-first sequencing
 
-Keep is **lifted into the new shape before Tasks lands**, not after. Per Kent Beck: "Make the change easy, then make the easy change." Both Keep and Tasks were known going in; shaping the abstraction with Tasks already on the roadmap is more honest than building Tasks alongside an unrefactored Keep and extracting later.
+Keep was lifted into the new shape (`gateway/translator/sync/` triplet) before Tasks landed, per Kent Beck: "Make the change easy, then make the easy change." The 2026-05-04 SyncEngine extraction lifts Keep + Tasks together onto `BackendAdapter` BEFORE iCloud Reminders is added. Both backends collapse onto the same engine; iCloud is then a single `adapter.go` against the audited contract — not a third 1300-line connector replicating the same merge algorithm.
+
+The strictest-behavior-wins resolution rule (ADR-0015, *audited refinement*) means uplifts surfaced by the audit are applied to laggard adapters in the same PR: Keep gains the 3-branch precondition recovery; Tasks gains dead-letter retry; both gain the engine's debounce post-success choke.
 
 ## Consequences
 
 ### Positive
 
-- Adding iCloud Reminders is mechanical: mirror the `gateway/translator/sync/` triplet, register with `SyncScheduler`, register with `ConnectorService`. No new shared-package surface needed.
-- The split between gateway, translator, and sync gives each layer a single responsibility and a natural test boundary.
-- The shared package stays small and stable. The fragile, fast-moving code lives in the per-connector packages.
+- Adding iCloud Reminders is mechanical: one `adapter.go` against the audited `BackendAdapter` contract. No new shared-package surface needed; no new sync-algorithm code; no new bind-ceremony code.
+- The split between gateway, translator, and the engine gives each layer a single responsibility and a natural test boundary.
+- The shared package owns the algorithm. The fragile parts (precondition recovery, dead-letter retry, cursor advance, bind ceremony's mutex+fan-out invariants) are written once and tested at engine level with an in-memory FakeAdapter, plus a parity test that runs canonical scenarios through every real adapter.
+- Adapter-specific edge cases that *should* be shared can no longer drift apart silently — adding a new method to `BackendAdapter` is a compile error for every backend that doesn't implement it.
 
 ### Negative
 
-- Refactoring Keep before adding Tasks adds one phase of behavior-preserving churn before any new feature lands. (Mitigation: tests pass green throughout; the refactor is mechanical.)
+- Refactoring Keep + Tasks before adding iCloud adds a phase of behavior-preserving churn before any new feature lands. (Mitigation: tests stay green throughout via parity tests; the refactor is mechanical.)
+- The 2026-05-04 extraction is a large diff (engine package + collapse of two connectors + verb rename + frontmatter migration). Reviewable by phase boundary.
 - The "translator" naming is non-obvious for contributors not familiar with DDD. (Mitigation: directory README and ADR cross-link.)
 
 ### Neutral
 
-- The `Connector` interface is intentionally narrow. If a fourth integration needs something the interface doesn't expose, the interface grows; that's fine.
+- The `BackendAdapter` interface is intentionally narrow. If a fourth integration needs something the interface doesn't expose, the interface grows — that's the whole point of the compile-time enforcement.
 
 ## Alternatives considered
 
-- **Build Tasks alongside Keep first, extract abstraction in a third PR once two implementations exist (Fowler's "rule of three").** Rejected. Theoretically cleaner, but the user explicitly preferred the change-easy-first pattern, and both Keep and Tasks were known going in. Waiting for a third concrete implementation to discover an obvious abstraction is ceremony, not discovery.
+- **Keep `sync/` per connector; engine just owns the merge classifier.** This was the 2026-05-03 ADR-0015 sketch. Rejected on 2026-05-04 because shipping iCloud as a third per-connector `sync/` re-implementation would re-introduce the bug-class the user's directive is meant to retire.
+- **Build Tasks alongside Keep first, extract abstraction in a third PR once two implementations exist (Fowler's "rule of three").** Rejected (2026-05-02). Theoretically cleaner, but the user explicitly preferred the change-easy-first pattern, and both Keep and Tasks were known going in.
 - **Lift wiki-side ports (`ChecklistReader`, etc.) to `internal/connectors/`.** Rejected. Violates the Go consumer-defined-interface idiom; would couple the shared package to wiki-internal types it doesn't otherwise need.
-- **One package per connector, no sub-packages — flat layout.** Rejected. The gateway/translator/sync split is the design; flattening it loses the layer boundaries that make each piece independently testable.
+- **Capability bits to let an adapter opt out of an engine behavior.** Rejected (2026-05-04, see ADR-0015 strictest-behavior-wins rule). Capability bits perpetuate the per-adapter divergence the engine extraction is meant to retire. True capability differences (parent-child task hierarchies on Tasks but not Keep) are documented per-row in MATRIX.md, not enabled by general escape hatches.
 
 ## References
 
-- ADR-0011: The `ChecklistSubscription` aggregate.
-- Plan: `now-that-we-landed-groovy-pizza.md` (Critical files, Phasing).
+- ADR-0011: The `ChecklistBinding` aggregate.
+- ADR-0015: Per-checklist operation log + engine-owned merge rule (audited 2026-05-04).
+- Plan: `to-build-issue-998-warm-glacier.md` (the 2026-05-04 extraction's phasing).
+- [`internal/connectors/MATRIX.md`](../../internal/connectors/MATRIX.md) — audited per-row provenance for the `BackendAdapter` interface.
 - Fowler, *Patterns of Enterprise Application Architecture* — Gateway.
 - Evans, *Domain-Driven Design* — Anti-Corruption Layer.
 - Beck, *Tidy First?* — "Make the change easy, then make the easy change."

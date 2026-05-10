@@ -8,7 +8,7 @@
 //
 // On mount, the component fans out two GetState RPCs (one per connector
 // kind) and renders banners for each kind whose ConnectorState contains
-// any paused SubscriptionState. The component is connector-agnostic in
+// any paused BindingState. The component is connector-agnostic in
 // shape: adding a third connector (iCloud Reminders) means adding one
 // entry to the kinds[] table below; no behavioral changes required.
 //
@@ -17,7 +17,7 @@
 // subscriptions atomically (the auth credential is per-connector, not
 // per-subscription). Per-subscription banners would imply per-sub
 // reconnects, which isn't the underlying model. The badge inside
-// <connector-subscribe-button> on individual checklist pages is the
+// <connector-bind-button> on individual checklist pages is the
 // per-sub surface; this banner is the cross-cutting profile-page
 // surface.
 //
@@ -40,7 +40,7 @@ import {
   ConnectorKind,
   GetStateRequestSchema,
 } from '../gen/api/v1/connector_service_pb.js';
-import type { SubscriptionState } from '../gen/api/v1/connector_service_pb.js';
+import type { BindingState } from '../gen/api/v1/connector_service_pb.js';
 import type { RequestReconnectEventDetail } from './connector-paused-badge.js';
 import { foundationCSS, sharedStyles } from './shared-styles.js';
 
@@ -58,6 +58,20 @@ export type ConnectorKindSlug = 'google_keep' | 'google_tasks';
 // PausedKindRow describes everything the banner needs to render an
 // entry plus route a reconnect click. Adding iCloud Reminders later =
 // one row.
+//
+// Paused subscriptions are partitioned by paused_reason so the banner
+// can route them to the right copy + action:
+//
+//   - authPaused: paused_reason="auth_failed" or empty/unknown.
+//     Recovery = reconnect OAuth (Tasks) / paste-token (Keep). Banner
+//     shows the existing "needs reconnection" copy + Reconnect button.
+//
+//   - bindingBroken: paused_reason="remote_handle_empty" (legacy
+//     migration gap; rules §11.1). Recovery = unbind + rebind on the
+//     specific page. Reconnecting OAuth doesn't help (the engine
+//     auto-resumes the binding on reconnect, but the next reconcile
+//     re-pauses it with the same reason — flap state). Banner lists
+//     the broken bindings with links to their pages.
 interface PausedKindRow {
   kind: ConnectorKind;
   slug: ConnectorKindSlug;
@@ -68,10 +82,16 @@ interface PausedKindRow {
   // Tag of the profile-page connect component we scroll-to / focus
   // when the reconnect button is clicked.
   connectComponentTag: string;
-  // Latest paused subscription on this kind, used both to decide
-  // whether to render a banner and to surface the count.
-  pausedSubscriptions: SubscriptionState[];
+  // Auth-recoverable paused bindings.
+  authPaused: BindingState[];
+  // Binding-level broken state — auth reconnect won't fix.
+  bindingBroken: BindingState[];
 }
+
+// PAUSED_REASON_REMOTE_HANDLE_EMPTY mirrors the engine's stable
+// pausedReasonRemoteHandleEmpty constant (rules §11.1). Update both
+// sides together if the wire value ever changes.
+const PAUSED_REASON_REMOTE_HANDLE_EMPTY = 'remote_handle_empty';
 
 // Theme tokens used here are defined in static/css/default.css for both
 // :root (light) and the prefers-color-scheme: dark media query:
@@ -122,6 +142,17 @@ const localCSS = css`
   }
   button.reconnect:hover {
     filter: brightness(0.9);
+  }
+  .broken-list {
+    margin: 6px 0 0;
+    padding-left: 20px;
+  }
+  .broken-list li {
+    margin: 2px 0;
+  }
+  .broken-list a {
+    color: var(--color-warning-text);
+    text-decoration: underline;
   }
 `;
 
@@ -207,15 +238,28 @@ export class ProfilePausedBanner extends LitElement {
       if (!row) continue;
       const result = responses[i];
       if (!result || result.status !== 'fulfilled') continue;
-      const subscriptions = result.value.state?.subscriptions ?? [];
-      const paused = subscriptions.filter((s) => s.paused);
-      if (paused.length === 0) continue;
+      const subscriptions = result.value.state?.bindings ?? [];
+      const authPaused: BindingState[] = [];
+      const bindingBroken: BindingState[] = [];
+      for (const s of subscriptions) {
+        if (!s.paused) continue;
+        if (s.pausedReason === PAUSED_REASON_REMOTE_HANDLE_EMPTY) {
+          bindingBroken.push(s);
+        } else {
+          // auth_failed OR empty/unknown reason — both route to the
+          // reconnect UX. An unknown reason defaults conservatively
+          // to auth-recoverable.
+          authPaused.push(s);
+        }
+      }
+      if (authPaused.length === 0 && bindingBroken.length === 0) continue;
       next.push({
         kind: row.kind,
         slug: row.slug,
         productName: row.productName,
         connectComponentTag: row.connectComponentTag,
-        pausedSubscriptions: paused,
+        authPaused,
+        bindingBroken,
       });
     }
     this.pausedKinds = next;
@@ -237,9 +281,16 @@ export class ProfilePausedBanner extends LitElement {
     const tag = slug === 'google_keep' ? 'keep-connect' : 'google-tasks-connect';
     const target = document.querySelector(tag);
     if (target instanceof HTMLElement) {
+      // In-page handle: scroll the user to the connect component
+      // instead of navigating. Stop the badge's fallback navigate
+      // (the badge is cancellable since 2026-05-09; without
+      // preventDefault here the page would reload to /profile and
+      // the scroll would be lost).
+      e.preventDefault();
       this.scrollAndFocus(target);
       return;
     }
+    e.preventDefault();
     this.navigate(PROFILE_PATH);
   }
 
@@ -261,13 +312,20 @@ export class ProfilePausedBanner extends LitElement {
     }
     return html`
       ${sharedStyles}
-      ${this.pausedKinds.map((row) => this.renderBanner(row))}
+      ${this.pausedKinds.map((row) => this.renderKind(row))}
     `;
   }
 
-  private renderBanner(row: PausedKindRow) {
+  private renderKind(row: PausedKindRow) {
     return html`
-      <div class="banner" role="status" data-connector-kind=${row.slug}>
+      ${row.authPaused.length > 0 ? this.renderAuthBanner(row) : nothing}
+      ${row.bindingBroken.length > 0 ? this.renderBrokenBanner(row) : nothing}
+    `;
+  }
+
+  private renderAuthBanner(row: PausedKindRow) {
+    return html`
+      <div class="banner" role="status" data-connector-kind=${row.slug} data-banner="auth">
         <span class="icon" aria-hidden="true">⚠️</span>
         <span class="copy"
           >${row.productName} sync needs reconnection.</span
@@ -279,6 +337,35 @@ export class ProfilePausedBanner extends LitElement {
         >
           Reconnect
         </button>
+      </div>
+    `;
+  }
+
+  private renderBrokenBanner(row: PausedKindRow) {
+    // Binding-level broken state: reconnect won't fix it. Show the
+    // affected pages with links so the user can navigate to each and
+    // use the on-page Unbind affordance (see connector-bind-button's
+    // renderPausedBadge for paused_reason="remote_handle_empty").
+    const count = row.bindingBroken.length;
+    const label = count === 1 ? 'binding is' : 'bindings are';
+    return html`
+      <div class="banner" role="status" data-connector-kind=${row.slug} data-banner="broken">
+        <span class="icon" aria-hidden="true">⚠️</span>
+        <span class="copy">
+          ${count} ${row.productName} ${label} broken (legacy state).
+          Visit ${count === 1 ? 'this page' : 'these pages'} to unbind and re-bind:
+          <ul class="broken-list">
+            ${row.bindingBroken.map(
+              (b) => html`
+                <li>
+                  <a href="/${b.page}/view"
+                    >${b.page}${b.listName ? ` · ${b.listName}` : ''}</a
+                  >
+                </li>
+              `,
+            )}
+          </ul>
+        </span>
       </div>
     `;
   }
