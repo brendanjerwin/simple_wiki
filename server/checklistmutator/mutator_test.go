@@ -107,7 +107,7 @@ type stubPausedChecker struct {
 	paused bool
 }
 
-func (s stubPausedChecker) IsAnyChecklistSubscriptionPaused(_, _ string) bool {
+func (s stubPausedChecker) IsAnyChecklistBindingPaused(_, _ string) bool {
 	return s.paused
 }
 

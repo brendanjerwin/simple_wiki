@@ -1,6 +1,7 @@
 import { html, css, LitElement, nothing } from 'lit';
 import { property, state } from 'lit/decorators.js';
 import { sharedStyles, dialogStyles } from './shared-styles.js';
+import { restoreFocus } from './native-dialog-mixin.js';
 import { InventoryItemCreatorMover } from './inventory-item-creator-mover.js';
 import { createClient } from '@connectrpc/connect';
 import { create } from '@bufbuild/protobuf';
@@ -288,13 +289,10 @@ export class InventoryMoveItemDialog extends LitElement {
       const dialog = this.shadowRoot?.querySelector('dialog');
       if (!dialog) return;
       if (this.open && !dialog.open && this.isConnected) {
-        this._previouslyFocusedElement = document.activeElement;
         dialog.showModal();
       } else if (!this.open && dialog.open) {
         dialog.close();
-        if (this._previouslyFocusedElement instanceof HTMLElement) {
-          this._previouslyFocusedElement.focus();
-        }
+        restoreFocus(this._previouslyFocusedElement);
         this._previouslyFocusedElement = null;
       }
     }
@@ -328,6 +326,7 @@ export class InventoryMoveItemDialog extends LitElement {
   };
 
   public openDialog(itemIdentifier: string, currentContainer: string): void {
+    this._previouslyFocusedElement = document.activeElement;
     this.itemIdentifier = itemIdentifier;
     this.currentContainer = currentContainer;
     this.searchQuery = '';

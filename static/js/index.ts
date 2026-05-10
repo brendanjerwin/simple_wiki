@@ -14,7 +14,7 @@ import './web-components/insert-new-page-dialog.js';
 import './web-components/wiki-checklist.js';
 import './web-components/keep-connect.js';
 import './web-components/google-tasks-connect.js';
-import './web-components/connector-subscribe-button.js';
+import './web-components/connector-bind-button.js';
 import './web-components/profile-paused-banner.js';
 import './web-components/wiki-survey.js';
 import './web-components/wiki-blog.js';
