@@ -29,13 +29,13 @@ func event(seq int64, uid, src string) *apiv1.ChecklistEvent {
 var _ = Describe("Classify", func() {
 	When("the checklist is nil", func() {
 		It("should return an empty map", func() {
-			Expect(engine.Classify(nil, engine.SubscriptionCursor{}, "google_tasks")).To(BeEmpty())
+			Expect(engine.Classify(nil, engine.BindingCursor{}, "google_tasks")).To(BeEmpty())
 		})
 	})
 
 	When("no events exist", func() {
 		It("should return an empty map", func() {
-			Expect(engine.Classify(makeChecklist(), engine.SubscriptionCursor{}, "google_tasks")).To(BeEmpty())
+			Expect(engine.Classify(makeChecklist(), engine.BindingCursor{}, "google_tasks")).To(BeEmpty())
 		})
 	})
 
@@ -45,7 +45,7 @@ var _ = Describe("Classify", func() {
 				event(1, "u1", "user:alice@example.com"),
 				event(2, "u2", "connector:google_tasks:apply"),
 			)
-			cursor := engine.SubscriptionCursor{LastSyncedSeq: 5}
+			cursor := engine.BindingCursor{LastSyncedSeq: 5}
 			Expect(engine.Classify(cl, cursor, "google_tasks")).To(BeEmpty())
 		})
 	})
@@ -55,7 +55,7 @@ var _ = Describe("Classify", func() {
 
 		BeforeEach(func() {
 			cl := makeChecklist(event(7, "u1", "user:alice@example.com"))
-			result = engine.Classify(cl, engine.SubscriptionCursor{LastSyncedSeq: 5}, "google_tasks")
+			result = engine.Classify(cl, engine.BindingCursor{LastSyncedSeq: 5}, "google_tasks")
 		})
 
 		It("should report WikiDiverged=true for the uid", func() {
@@ -74,7 +74,7 @@ var _ = Describe("Classify", func() {
 				event(7, "u1", "connector:google_tasks:apply"),
 				event(8, "u1", "connector:google_tasks:apply"),
 			)
-			result := engine.Classify(cl, engine.SubscriptionCursor{LastSyncedSeq: 5}, "google_tasks")
+			result := engine.Classify(cl, engine.BindingCursor{LastSyncedSeq: 5}, "google_tasks")
 			Expect(result).To(HaveKey("u1"))
 			Expect(result["u1"].WikiDiverged).To(BeFalse())
 		})
@@ -83,7 +83,7 @@ var _ = Describe("Classify", func() {
 	When("a different connector's apply event exists since the cursor", func() {
 		It("should report WikiDiverged=true (cross-connector — defer to the other connector's authority)", func() {
 			cl := makeChecklist(event(7, "u1", "connector:google_keep:apply"))
-			result := engine.Classify(cl, engine.SubscriptionCursor{LastSyncedSeq: 5}, "google_tasks")
+			result := engine.Classify(cl, engine.BindingCursor{LastSyncedSeq: 5}, "google_tasks")
 			Expect(result).To(HaveKey("u1"))
 			Expect(result["u1"].WikiDiverged).To(BeTrue())
 		})
@@ -92,7 +92,7 @@ var _ = Describe("Classify", func() {
 	When("a migration baseline event exists since the cursor", func() {
 		It("should report WikiDiverged=false (synthesized baseline IS the synced state)", func() {
 			cl := makeChecklist(event(7, "u1", "migration:initial_baseline"))
-			result := engine.Classify(cl, engine.SubscriptionCursor{LastSyncedSeq: 5}, "google_tasks")
+			result := engine.Classify(cl, engine.BindingCursor{LastSyncedSeq: 5}, "google_tasks")
 			Expect(result["u1"].WikiDiverged).To(BeFalse())
 		})
 	})
@@ -100,7 +100,7 @@ var _ = Describe("Classify", func() {
 	When("an unknown source prefix appears", func() {
 		It("should fail-safe: treat as divergent (preserve potential user edits)", func() {
 			cl := makeChecklist(event(7, "u1", "future_origin:something"))
-			result := engine.Classify(cl, engine.SubscriptionCursor{LastSyncedSeq: 5}, "google_tasks")
+			result := engine.Classify(cl, engine.BindingCursor{LastSyncedSeq: 5}, "google_tasks")
 			Expect(result["u1"].WikiDiverged).To(BeTrue())
 		})
 	})
@@ -119,7 +119,7 @@ var _ = Describe("Classify", func() {
 				event(11, "u1", "connector:google_tasks:push_recovery"),
 				event(12, "u1", "connector:google_tasks:apply"),
 			)
-			result = engine.Classify(cl, engine.SubscriptionCursor{LastSyncedSeq: 9}, "google_tasks")
+			result = engine.Classify(cl, engine.BindingCursor{LastSyncedSeq: 9}, "google_tasks")
 		})
 
 		It("should report WikiDiverged=true (a non-self event existed since cursor)", func() {
@@ -138,7 +138,7 @@ var _ = Describe("Classify", func() {
 				event(8, "u2", "connector:google_tasks:apply"),
 				event(9, "u3", "connector:google_keep:apply"),
 			)
-			result := engine.Classify(cl, engine.SubscriptionCursor{LastSyncedSeq: 5}, "google_tasks")
+			result := engine.Classify(cl, engine.BindingCursor{LastSyncedSeq: 5}, "google_tasks")
 			Expect(result["u1"].WikiDiverged).To(BeTrue())
 			Expect(result["u2"].WikiDiverged).To(BeFalse())
 			Expect(result["u3"].WikiDiverged).To(BeTrue())
@@ -148,7 +148,7 @@ var _ = Describe("Classify", func() {
 	When("an event has empty uid", func() {
 		It("should be skipped", func() {
 			cl := makeChecklist(&apiv1.ChecklistEvent{Seq: 7, Uid: "", Src: "user:a@b"})
-			Expect(engine.Classify(cl, engine.SubscriptionCursor{}, "google_tasks")).To(BeEmpty())
+			Expect(engine.Classify(cl, engine.BindingCursor{}, "google_tasks")).To(BeEmpty())
 		})
 	})
 })

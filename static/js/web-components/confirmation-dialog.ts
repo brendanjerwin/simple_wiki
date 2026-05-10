@@ -3,7 +3,7 @@ import { state } from 'lit/decorators.js';
 import { colorCSS, typographyCSS, themeCSS, foundationCSS, dialogCSS, responsiveCSS, buttonCSS, zIndexCSS } from './shared-styles.js';
 import './error-display.js';
 import { type AugmentedError, AugmentErrorService } from './augment-error-service.js';
-import { handleKeydownFocusTrap } from './native-dialog-mixin.js';
+import { handleKeydownFocusTrap, restoreFocus } from './native-dialog-mixin.js';
 
 /**
  * Configuration for the confirmation dialog
@@ -285,6 +285,7 @@ export class ConfirmationDialog extends LitElement {
    * Opens the confirmation dialog with the specified configuration
    */
   openDialog(config: ConfirmationConfig) {
+    this._previouslyFocusedElement = document.activeElement;
     this.config = config;
     this.augmentedError = undefined;
     this.loading = false;
@@ -293,7 +294,6 @@ export class ConfirmationDialog extends LitElement {
     void this.updateComplete.then(() => {
       const dialog = this.shadowRoot?.querySelector('dialog');
       if (dialog && !dialog.open && this.isConnected) {
-        this._previouslyFocusedElement = document.activeElement;
         dialog.showModal();
       }
     });
@@ -312,9 +312,7 @@ export class ConfirmationDialog extends LitElement {
     this.loading = false;
     this.augmentedError = undefined;
     this.config = null;
-    if (this._previouslyFocusedElement instanceof HTMLElement) {
-      this._previouslyFocusedElement.focus();
-    }
+    restoreFocus(this._previouslyFocusedElement);
     this._previouslyFocusedElement = null;
   }
 

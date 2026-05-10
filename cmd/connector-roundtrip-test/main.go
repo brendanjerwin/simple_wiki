@@ -46,7 +46,7 @@ import (
 
 	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
 	"github.com/brendanjerwin/simple_wiki/gen/go/api/v1/apiv1connect"
-	"github.com/brendanjerwin/simple_wiki/internal/connectors/google_tasks/gateway"
+	"github.com/brendanjerwin/simple_wiki/internal/connectors/googletasks/gateway"
 )
 
 const (

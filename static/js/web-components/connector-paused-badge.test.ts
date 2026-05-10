@@ -153,6 +153,9 @@ describe('ConnectorPausedBadge', () => {
       await Promise.race([el.updateComplete, timeout(3000, 'updateComplete timed out')]);
 
       dispatched = null;
+      // Stub navigate so the fallback (added 2026-05-09) doesn't
+      // actually move the test runner's page.
+      el.navigate = () => {};
       el.addEventListener('request-reconnect', (e: Event) => {
         dispatched = e as CustomEvent;
       });
@@ -176,6 +179,122 @@ describe('ConnectorPausedBadge', () => {
 
     it('should make the event composed so it crosses shadow boundaries', () => {
       expect((dispatched as unknown as CustomEvent).composed).to.equal(true);
+    });
+
+    // Production fix 2026-05-09: clicking the paused badge from a
+    // checklist page (where <profile-paused-banner> is not mounted)
+    // previously did nothing — the request-reconnect event bubbled
+    // up unhandled. Fix: cancellable event + navigate to /profile
+    // when no listener calls preventDefault.
+    it('should make the event cancelable so listeners can opt out of the navigate fallback', () => {
+      expect((dispatched as unknown as CustomEvent).cancelable).to.equal(true);
+    });
+  });
+
+  describe('when the badge is clicked AND no listener calls preventDefault', () => {
+    let navigatedTo: string | null;
+
+    beforeEach(async () => {
+      el = (await fixture(
+        html`<connector-paused-badge
+          .connectorKind=${'google_tasks' as const}
+          .pausedAt=${new Date(now.getTime() - 30 * 60 * 1000)}
+          .subscriptionTitle=${'shopping'}
+        ></connector-paused-badge>`,
+      )) as ConnectorPausedBadge;
+      await Promise.race([el.updateComplete, timeout(3000, 'updateComplete timed out')]);
+
+      navigatedTo = null;
+      el.navigate = (url: string) => {
+        navigatedTo = url;
+      };
+
+      const btn = el.shadowRoot?.querySelector('button') as HTMLButtonElement;
+      btn.click();
+    });
+
+    it('should navigate to /profile (fallback for pages without profile-paused-banner)', () => {
+      expect(navigatedTo).to.equal('/profile');
+    });
+  });
+
+  // Production fix 2026-05-09 (paused_reason follow-up): for
+  // remote_handle_empty bindings, "Click to reconnect" is misleading
+  // — reconnecting OAuth doesn't restore an empty RemoteHandle. The
+  // badge surfaces a different copy and the click is a no-op (the
+  // bind-button parent renders an Unbind interlock alongside as the
+  // real recovery affordance).
+  describe('when pausedReason is "remote_handle_empty"', () => {
+    let navigatedTo: string | null;
+    let dispatched: CustomEvent | null;
+    let copy: string;
+
+    beforeEach(async () => {
+      el = (await fixture(
+        html`<connector-paused-badge
+          .connectorKind=${'google_keep' as const}
+          .pausedAt=${new Date(now.getTime() - 30 * 60 * 1000)}
+          .subscriptionTitle=${'Grocery'}
+          .pausedReason=${'remote_handle_empty'}
+        ></connector-paused-badge>`,
+      )) as ConnectorPausedBadge;
+      await Promise.race([el.updateComplete, timeout(3000, 'updateComplete timed out')]);
+
+      navigatedTo = null;
+      dispatched = null;
+      el.navigate = (url: string) => {
+        navigatedTo = url;
+      };
+      el.addEventListener('request-reconnect', (e: Event) => {
+        dispatched = e as CustomEvent;
+      });
+      const btn = el.shadowRoot?.querySelector('button') as HTMLButtonElement;
+      copy = btn.textContent?.replace(/\s+/g, ' ').trim() ?? '';
+      btn.click();
+    });
+
+    it('should render unbind-recovery copy (not the misleading "click to reconnect")', () => {
+      expect(copy).to.contain('binding is broken');
+      expect(copy).to.contain('Unbind');
+      expect(copy).to.not.contain('Click to reconnect');
+    });
+
+    it('should NOT navigate (the bind-button renders the recovery affordance instead)', () => {
+      expect(navigatedTo).to.equal(null);
+    });
+
+    it('should NOT dispatch request-reconnect (reconnecting OAuth would not help)', () => {
+      expect(dispatched).to.equal(null);
+    });
+  });
+
+  describe('when the badge is clicked AND a listener calls preventDefault', () => {
+    let navigatedTo: string | null;
+
+    beforeEach(async () => {
+      el = (await fixture(
+        html`<connector-paused-badge
+          .connectorKind=${'google_tasks' as const}
+          .pausedAt=${new Date(now.getTime() - 30 * 60 * 1000)}
+          .subscriptionTitle=${'shopping'}
+        ></connector-paused-badge>`,
+      )) as ConnectorPausedBadge;
+      await Promise.race([el.updateComplete, timeout(3000, 'updateComplete timed out')]);
+
+      navigatedTo = null;
+      el.navigate = (url: string) => {
+        navigatedTo = url;
+      };
+      el.addEventListener('request-reconnect', (e: Event) => {
+        e.preventDefault();
+      });
+
+      const btn = el.shadowRoot?.querySelector('button') as HTMLButtonElement;
+      btn.click();
+    });
+
+    it('should NOT navigate (the in-page listener handled it)', () => {
+      expect(navigatedTo).to.equal(null);
     });
   });
 });

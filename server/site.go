@@ -238,6 +238,23 @@ func (s *Site) startMigrationJobs() {
 	} else {
 		s.Logger.Info("System/template namespace migration started.")
 	}
+
+	// One-shot migration (Phase 7 of the SyncEngine extraction): rewrite
+	// pre-engine `wiki.connectors.<kind>.subscriptions[]` frontmatter into
+	// the new `wiki.connectors.<kind>.bindings[]` shape, with adapter-
+	// specific fields collapsed into a per-entry `adapter_state` subtree.
+	// The engine's FrontmatterBindingStore reads ONLY the new shape after
+	// this migration ships; once every wiki has been booted at least once
+	// with the migration enabled, the scan/job pair becomes a no-op and
+	// the code can be deleted.
+	connectorsMigration := eager.NewConnectorsSubscriptionsToBindingsMigrationScanJob(
+		dataDirScanner, s.JobQueueCoordinator, s,
+	)
+	if err := s.JobQueueCoordinator.EnqueueJob(connectorsMigration); err != nil {
+		s.Logger.Error("Failed to enqueue connectors subscriptions->bindings migration job: %v", err)
+	} else {
+		s.Logger.Info("Connectors subscriptions->bindings migration started.")
+	}
 }
 
 // Defaults for the agent-schedule machinery when CLI flags do not override

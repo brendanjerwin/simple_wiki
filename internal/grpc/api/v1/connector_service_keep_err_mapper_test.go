@@ -10,7 +10,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	keepgateway "github.com/brendanjerwin/simple_wiki/internal/connectors/google_keep/gateway"
+	keepgateway "github.com/brendanjerwin/simple_wiki/internal/connectors/googlekeep/gateway"
 )
 
 // These tests pin mapKeepConnectorErr's branch coverage for the new

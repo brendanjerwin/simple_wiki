@@ -9,15 +9,15 @@ import {
   ConnectorStateSchema,
   BeginAuthResponseSchema,
   DisconnectResponseSchema,
-  SubscriptionStateSchema,
-  UnsubscribeResponseSchema,
+  BindingStateSchema,
+  UnbindResponseSchema,
 } from '../gen/api/v1/connector_service_pb.js';
 
 interface GoogleTasksConnectClient {
   getState: sinon.SinonStub;
   beginAuth: sinon.SinonStub;
   disconnect: sinon.SinonStub;
-  unsubscribe: sinon.SinonStub;
+  unbind: sinon.SinonStub;
 }
 
 function clientOf(el: GoogleTasksConnect): GoogleTasksConnectClient {
@@ -180,7 +180,7 @@ describe('GoogleTasksConnect', () => {
   describe('when getState returns configured=true with one subscription', () => {
     beforeEach(async () => {
       el = document.createElement('google-tasks-connect') as GoogleTasksConnect;
-      const subscription = create(SubscriptionStateSchema, {
+      const subscription = create(BindingStateSchema, {
         page: 'Board',
         listName: 'todo',
         remoteListHandle: 'tasklist-abc',
@@ -189,7 +189,7 @@ describe('GoogleTasksConnect', () => {
       const state = create(ConnectorStateSchema, {
         configured: true,
         email: 'bob@example.com',
-        subscriptions: [subscription],
+        bindings: [subscription],
       });
       sinon
         .stub(clientOf(el), 'getState')
@@ -230,7 +230,7 @@ describe('GoogleTasksConnect', () => {
   describe('when getState returns configured=true with a paused subscription', () => {
     beforeEach(async () => {
       el = document.createElement('google-tasks-connect') as GoogleTasksConnect;
-      const subscription = create(SubscriptionStateSchema, {
+      const subscription = create(BindingStateSchema, {
         page: 'shopping',
         listName: 'this_week',
         remoteListHandle: 'tasklist-xyz',
@@ -240,7 +240,7 @@ describe('GoogleTasksConnect', () => {
       const state = create(ConnectorStateSchema, {
         configured: true,
         email: 'paused@example.com',
-        subscriptions: [subscription],
+        bindings: [subscription],
       });
       sinon
         .stub(clientOf(el), 'getState')
@@ -273,7 +273,7 @@ describe('GoogleTasksConnect', () => {
   describe('when getState returns configured=true with no paused subscriptions', () => {
     beforeEach(async () => {
       el = document.createElement('google-tasks-connect') as GoogleTasksConnect;
-      const subscription = create(SubscriptionStateSchema, {
+      const subscription = create(BindingStateSchema, {
         page: 'shopping',
         listName: 'weekly',
         remoteListHandle: 'tasklist-abc',
@@ -283,7 +283,7 @@ describe('GoogleTasksConnect', () => {
       const state = create(ConnectorStateSchema, {
         configured: true,
         email: 'healthy@example.com',
-        subscriptions: [subscription],
+        bindings: [subscription],
       });
       sinon
         .stub(clientOf(el), 'getState')
@@ -304,7 +304,7 @@ describe('GoogleTasksConnect', () => {
 
     beforeEach(async () => {
       el = document.createElement('google-tasks-connect') as GoogleTasksConnect;
-      const subscription = create(SubscriptionStateSchema, {
+      const subscription = create(BindingStateSchema, {
         page: 'shopping',
         listName: 'this_week',
         remoteListHandle: 'tasklist-xyz',
@@ -314,7 +314,7 @@ describe('GoogleTasksConnect', () => {
       const state = create(ConnectorStateSchema, {
         configured: true,
         email: 'paused@example.com',
-        subscriptions: [subscription],
+        bindings: [subscription],
       });
       sinon
         .stub(clientOf(el), 'getState')
@@ -357,12 +357,12 @@ describe('GoogleTasksConnect', () => {
   // ------------------------------------------------------------------ unsubscribe
 
   describe('when handleUnbind is invoked for a subscription', () => {
-    let unsubscribeStub: sinon.SinonStub;
+    let unbindStub: sinon.SinonStub;
     let getStateStub: sinon.SinonStub;
 
     beforeEach(async () => {
       el = document.createElement('google-tasks-connect') as GoogleTasksConnect;
-      const subscription = create(SubscriptionStateSchema, {
+      const subscription = create(BindingStateSchema, {
         page: 'Board',
         listName: 'todo',
         remoteListHandle: 'tasklist-abc',
@@ -371,7 +371,7 @@ describe('GoogleTasksConnect', () => {
       const state = create(ConnectorStateSchema, {
         configured: true,
         email: 'bob@example.com',
-        subscriptions: [subscription],
+        bindings: [subscription],
       });
       getStateStub = sinon
         .stub(clientOf(el), 'getState')
@@ -379,9 +379,9 @@ describe('GoogleTasksConnect', () => {
       document.body.appendChild(el);
       await Promise.race([el.updateComplete, timeout(3000, 'updateComplete timed out')]);
 
-      unsubscribeStub = sinon
-        .stub(clientOf(el), 'unsubscribe')
-        .resolves(create(UnsubscribeResponseSchema, {}));
+      unbindStub = sinon
+        .stub(clientOf(el), 'unbind')
+        .resolves(create(UnbindResponseSchema, {}));
 
       // Call private handleUnbind directly to bypass the interlock.
       // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-type-assertion
@@ -390,11 +390,11 @@ describe('GoogleTasksConnect', () => {
     });
 
     it('should call unsubscribe once', () => {
-      expect(unsubscribeStub.calledOnce).to.be.true;
+      expect(unbindStub.calledOnce).to.be.true;
     });
 
     it('should call unsubscribe with the page and listName', () => {
-      const arg = unsubscribeStub.firstCall.args[0] as { page: string; listName: string };
+      const arg = unbindStub.firstCall.args[0] as { page: string; listName: string };
       expect(arg.page).to.equal('Board');
       expect(arg.listName).to.equal('todo');
     });

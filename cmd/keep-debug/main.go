@@ -29,7 +29,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/brendanjerwin/simple_wiki/internal/connectors/google_keep/gateway"
+	"github.com/brendanjerwin/simple_wiki/internal/connectors/googlekeep/gateway"
 )
 
 func main() {
