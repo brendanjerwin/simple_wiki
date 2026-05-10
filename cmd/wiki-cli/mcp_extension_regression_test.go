@@ -2,6 +2,7 @@
 package main
 
 import (
+	"encoding/json"
 	"errors"
 	"net/http"
 	"strings"
@@ -44,6 +45,42 @@ var _ = Describe("MCP extension regression (Phase 1E.0)", func() {
 
 		BeforeEach(func() {
 			tools = server.ListTools()
+		})
+
+		// Regression guard for #985: the MCP generator must be re-run whenever
+		// the AgentSchedule proto message gains new fields. This test pins the
+		// presence of the timezone field so a stale generated file is caught
+		// immediately rather than silently defaulting agents to UTC.
+		Describe("UpsertSchedule schema", func() {
+			var schema map[string]any
+			var scheduleProperties map[string]any
+
+			BeforeEach(func() {
+				tool, ok := tools["api_v1_AgentMetadataService_UpsertSchedule"]
+				Expect(ok).To(BeTrue(), "UpsertSchedule tool must be registered")
+
+				err := json.Unmarshal(tool.Tool.RawInputSchema, &schema)
+				Expect(err).NotTo(HaveOccurred())
+
+				props, ok := schema["properties"].(map[string]any)
+				Expect(ok).To(BeTrue(), "schema must have properties")
+
+				schedule, ok := props["schedule"].(map[string]any)
+				Expect(ok).To(BeTrue(), "schedule must be a property")
+
+				scheduleProperties, ok = schedule["properties"].(map[string]any)
+				Expect(ok).To(BeTrue(), "schedule must have properties")
+			})
+
+			It("should include the timezone field", func() {
+				Expect(scheduleProperties).To(HaveKey("timezone"))
+			})
+
+			It("should declare timezone as a string type", func() {
+				tz, ok := scheduleProperties["timezone"].(map[string]any)
+				Expect(ok).To(BeTrue())
+				Expect(tz["type"]).To(Equal("string"))
+			})
 		})
 
 		It("should register at least the AgentMetadataService tools", func() {
