@@ -2,6 +2,7 @@ package checklistmutator
 
 import (
 	"context"
+	"time"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -61,8 +62,15 @@ func resolveSyncSource(ctx context.Context) Source {
 // `checked` is a value, not a control flag — it's the remote's
 // reported checkbox state for the new item.
 //
+// `due` is optional: nil means "remote did not provide one" (leave the
+// wiki item with no due date); a non-nil pointer to a non-zero time
+// stamps args.Due so the upsert path applies it. Callers that observe
+// a remote-side clear (Due flipped from set to absent) pass nil — at
+// add time the item is being created fresh, so "no due" and "due
+// cleared" are indistinguishable.
+//
 //revive:disable-next-line:flag-parameter
-func (m *Mutator) AddItemForSync(ctx context.Context, page, listName, ownerEmail, text string, checked bool, tags []string, description, sortValueHint string) (string, error) {
+func (m *Mutator) AddItemForSync(ctx context.Context, page, listName, ownerEmail, text string, checked bool, tags []string, description, sortValueHint string, due *time.Time) (string, error) {
 	args := AddItemArgs{
 		Text: text,
 		Tags: tags,
@@ -77,6 +85,9 @@ func (m *Mutator) AddItemForSync(ctx context.Context, page, listName, ownerEmail
 		if n := parseSortHint(sortValueHint); n != 0 {
 			args.SortOrder = &n
 		}
+	}
+	if due != nil && !due.IsZero() {
+		args.Due = due
 	}
 	identity := syncIdentityFor(ownerEmail)
 	source := resolveSyncSource(ctx)
@@ -103,8 +114,15 @@ func (m *Mutator) AddItemForSync(ctx context.Context, page, listName, ownerEmail
 // checkbox state from the remote. The connector passes whatever the
 // remote reports (checked or unchecked) and this function applies it.
 //
+// `due` is the remote's currently-reported due date. The Update path
+// always reflects what the remote says: a non-nil pointer with a
+// non-zero time sets args.Due (with DueSet=true so the upsert applies);
+// a non-nil pointer with a zero time clears the wiki's Due (the remote
+// removed it); nil means "the remote does not surface a Due field at
+// all" (e.g., Keep — leaves the wiki value alone).
+//
 //revive:disable-next-line:flag-parameter
-func (m *Mutator) UpdateItemForSync(ctx context.Context, page, listName, ownerEmail, uid, text string, checked bool, tags []string, description string) error {
+func (m *Mutator) UpdateItemForSync(ctx context.Context, page, listName, ownerEmail, uid, text string, checked bool, tags []string, description string, due *time.Time) error {
 	args := UpdateItemArgs{
 		Text:           &text,
 		Tags:           tags,
@@ -114,6 +132,16 @@ func (m *Mutator) UpdateItemForSync(ctx context.Context, page, listName, ownerEm
 	if description != "" {
 		d := description
 		args.Description = &d
+	}
+	if due != nil {
+		// Pointer present means "remote surfaces a Due field." A non-zero
+		// time stamps args.Due so the upsert applies it; a zero time
+		// translates to args.Due=nil with args.DueSet=true so the upsert's
+		// "set Due to nil" branch clears the wiki value.
+		args.DueSet = true
+		if !due.IsZero() {
+			args.Due = due
+		}
 	}
 	identity := syncIdentityFor(ownerEmail)
 	source := resolveSyncSource(ctx)

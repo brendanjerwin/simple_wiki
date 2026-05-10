@@ -252,7 +252,7 @@ var _ = Describe("Mutator", func() {
 				connectorCtx := checklistmutator.WithSource(ctx,
 					checklistmutator.ConnectorSource("google_tasks", "apply"))
 				_, _ = mutator.AddItemForSync(connectorCtx, "p", "list", "alice@example.com",
-					"From Tasks", false, nil, "", "")
+					"From Tasks", false, nil, "", "", nil)
 				checklist, _ = mutator.ListItems(ctx, "p", "list")
 			})
 

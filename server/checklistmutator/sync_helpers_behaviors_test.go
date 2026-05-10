@@ -46,7 +46,7 @@ var _ = Describe("parseSortHint (covered via AddItemForSync)", func() {
 		)
 
 		BeforeEach(func() {
-			uid, err = mutator.AddItemForSync(ctx, "p", "list", "alice@example.com", "text", false, nil, "", "3000")
+			uid, err = mutator.AddItemForSync(ctx, "p", "list", "alice@example.com", "text", false, nil, "", "3000", nil)
 		})
 
 		It("should not error", func() {
@@ -72,7 +72,7 @@ var _ = Describe("parseSortHint (covered via AddItemForSync)", func() {
 		)
 
 		BeforeEach(func() {
-			uid, err = mutator.AddItemForSync(ctx, "p", "list", "alice@example.com", "text", false, nil, "", "99000")
+			uid, err = mutator.AddItemForSync(ctx, "p", "list", "alice@example.com", "text", false, nil, "", "99000", nil)
 		})
 
 		It("should not error", func() {
@@ -96,7 +96,7 @@ var _ = Describe("parseSortHint (covered via AddItemForSync)", func() {
 
 		BeforeEach(func() {
 			var err error
-			uid, err = mutator.AddItemForSync(ctx, "p", "list", "alice@example.com", "text", false, nil, "", "3.14")
+			uid, err = mutator.AddItemForSync(ctx, "p", "list", "alice@example.com", "text", false, nil, "", "3.14", nil)
 			Expect(err).NotTo(HaveOccurred())
 		})
 
@@ -115,7 +115,7 @@ var _ = Describe("parseSortHint (covered via AddItemForSync)", func() {
 
 	When("an alphabetic sort hint is provided", func() {
 		BeforeEach(func() {
-			_, err := mutator.AddItemForSync(ctx, "p", "list", "alice@example.com", "text", false, nil, "", "abc")
+			_, err := mutator.AddItemForSync(ctx, "p", "list", "alice@example.com", "text", false, nil, "", "abc", nil)
 			Expect(err).NotTo(HaveOccurred())
 		})
 
@@ -129,7 +129,7 @@ var _ = Describe("parseSortHint (covered via AddItemForSync)", func() {
 
 	When("an empty sort hint is provided", func() {
 		BeforeEach(func() {
-			_, err := mutator.AddItemForSync(ctx, "p", "list", "alice@example.com", "text", false, nil, "", "")
+			_, err := mutator.AddItemForSync(ctx, "p", "list", "alice@example.com", "text", false, nil, "", "", nil)
 			Expect(err).NotTo(HaveOccurred())
 		})
 
@@ -164,7 +164,7 @@ var _ = Describe("AddItemForSync", func() {
 		)
 
 		BeforeEach(func() {
-			uid, err = mutator.AddItemForSync(ctx, "p", "list", "alice@example.com", "buy milk", false, []string{"#food"}, "a note", "")
+			uid, err = mutator.AddItemForSync(ctx, "p", "list", "alice@example.com", "buy milk", false, []string{"#food"}, "a note", "", nil)
 		})
 
 		It("should not error", func() {
@@ -196,7 +196,7 @@ var _ = Describe("AddItemForSync", func() {
 		)
 
 		BeforeEach(func() {
-			uid, err = mutator.AddItemForSync(ctx, "p", "list", "alice@example.com", "buy milk", true, nil, "", "")
+			uid, err = mutator.AddItemForSync(ctx, "p", "list", "alice@example.com", "buy milk", true, nil, "", "", nil)
 		})
 
 		It("should not error", func() {
@@ -219,7 +219,7 @@ var _ = Describe("AddItemForSync", func() {
 		var err error
 
 		BeforeEach(func() {
-			_, err = mutator.AddItemForSync(ctx, "p", "list", "", "text", false, nil, "", "")
+			_, err = mutator.AddItemForSync(ctx, "p", "list", "", "text", false, nil, "", "", nil)
 		})
 
 		It("should not error (system identity is used as fallback)", func() {
@@ -242,7 +242,7 @@ var _ = Describe("UpdateItemForSync", func() {
 		)
 		ctx = context.Background()
 		var addErr error
-		uid, addErr = mutator.AddItemForSync(ctx, "p", "list", "alice@example.com", "original text", false, nil, "", "")
+		uid, addErr = mutator.AddItemForSync(ctx, "p", "list", "alice@example.com", "original text", false, nil, "", "", nil)
 		Expect(addErr).NotTo(HaveOccurred())
 	})
 
@@ -250,7 +250,7 @@ var _ = Describe("UpdateItemForSync", func() {
 		var err error
 
 		BeforeEach(func() {
-			err = mutator.UpdateItemForSync(ctx, "p", "list", "alice@example.com", uid, "updated text", false, []string{"#newtag"}, "")
+			err = mutator.UpdateItemForSync(ctx, "p", "list", "alice@example.com", uid, "updated text", false, []string{"#newtag"}, "", nil)
 		})
 
 		It("should not error", func() {
@@ -275,7 +275,7 @@ var _ = Describe("UpdateItemForSync", func() {
 		var err error
 
 		BeforeEach(func() {
-			err = mutator.UpdateItemForSync(ctx, "p", "list", "alice@example.com", uid, "original text", true, nil, "")
+			err = mutator.UpdateItemForSync(ctx, "p", "list", "alice@example.com", uid, "original text", true, nil, "", nil)
 		})
 
 		It("should not error", func() {
@@ -300,11 +300,111 @@ var _ = Describe("UpdateItemForSync", func() {
 		var err error
 
 		BeforeEach(func() {
-			err = mutator.UpdateItemForSync(ctx, "p", "list", "alice@example.com", uid, "text", false, nil, "my description")
+			err = mutator.UpdateItemForSync(ctx, "p", "list", "alice@example.com", uid, "text", false, nil, "my description", nil)
 		})
 
 		It("should not error", func() {
 			Expect(err).NotTo(HaveOccurred())
+		})
+	})
+
+	When("updating an item with a non-nil due date", func() {
+		var err error
+		var dueAt time.Time
+
+		BeforeEach(func() {
+			dueAt = time.Date(2026, 9, 15, 0, 0, 0, 0, time.UTC)
+			err = mutator.UpdateItemForSync(ctx, "p", "list", "alice@example.com", uid, "text", false, nil, "", &dueAt)
+		})
+
+		It("should not error", func() {
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should persist the due date on the item", func() {
+			list, listErr := mutator.ListItems(ctx, "p", "list")
+			Expect(listErr).NotTo(HaveOccurred())
+			var found bool
+			for _, it := range list.GetItems() {
+				if it.GetUid() == uid {
+					Expect(it.GetDue()).NotTo(BeNil())
+					Expect(it.GetDue().AsTime()).To(Equal(dueAt))
+					found = true
+				}
+			}
+			Expect(found).To(BeTrue())
+		})
+	})
+
+	When("updating an item with a non-nil zero due (remote cleared the field)", func() {
+		var err error
+
+		BeforeEach(func() {
+			// Pre-set a due date so we can prove the clear happens.
+			initial := time.Date(2026, 9, 15, 0, 0, 0, 0, time.UTC)
+			Expect(mutator.UpdateItemForSync(ctx, "p", "list", "alice@example.com", uid, "text", false, nil, "", &initial)).To(Succeed())
+			zero := time.Time{}
+			err = mutator.UpdateItemForSync(ctx, "p", "list", "alice@example.com", uid, "text", false, nil, "", &zero)
+		})
+
+		It("should not error", func() {
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should clear the due date on the item", func() {
+			list, listErr := mutator.ListItems(ctx, "p", "list")
+			Expect(listErr).NotTo(HaveOccurred())
+			var found bool
+			for _, it := range list.GetItems() {
+				if it.GetUid() == uid {
+					Expect(it.GetDue()).To(BeNil())
+					found = true
+				}
+			}
+			Expect(found).To(BeTrue())
+		})
+	})
+})
+
+var _ = Describe("AddItemForSync with a due date", func() {
+	var (
+		mutator *checklistmutator.Mutator
+		ctx     context.Context
+	)
+
+	BeforeEach(func() {
+		mutator, _ = newSyncMutator("01HXAAAAAAAAAAAAAAAAAAAAAA")
+		ctx = context.Background()
+	})
+
+	When("a non-nil due is supplied", func() {
+		var (
+			uid   string
+			err   error
+			dueAt time.Time
+		)
+
+		BeforeEach(func() {
+			dueAt = time.Date(2026, 11, 30, 0, 0, 0, 0, time.UTC)
+			uid, err = mutator.AddItemForSync(ctx, "p", "list", "alice@example.com", "buy turkey", false, nil, "", "", &dueAt)
+		})
+
+		It("should not error", func() {
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should persist the due date on the new item", func() {
+			list, listErr := mutator.ListItems(ctx, "p", "list")
+			Expect(listErr).NotTo(HaveOccurred())
+			var found bool
+			for _, it := range list.GetItems() {
+				if it.GetUid() == uid {
+					Expect(it.GetDue()).NotTo(BeNil())
+					Expect(it.GetDue().AsTime()).To(Equal(dueAt))
+					found = true
+				}
+			}
+			Expect(found).To(BeTrue())
 		})
 	})
 })
@@ -320,7 +420,7 @@ var _ = Describe("DeleteItemForSync", func() {
 		mutator, _ = newSyncMutator("01HXAAAAAAAAAAAAAAAAAAAAAA")
 		ctx = context.Background()
 		var addErr error
-		uid, addErr = mutator.AddItemForSync(ctx, "p", "list", "alice@example.com", "text", false, nil, "", "")
+		uid, addErr = mutator.AddItemForSync(ctx, "p", "list", "alice@example.com", "text", false, nil, "", "", nil)
 		Expect(addErr).NotTo(HaveOccurred())
 	})
 

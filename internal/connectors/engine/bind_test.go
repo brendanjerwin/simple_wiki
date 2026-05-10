@@ -8,7 +8,9 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
+	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
 	"github.com/brendanjerwin/simple_wiki/internal/connectors"
 	"github.com/brendanjerwin/simple_wiki/internal/connectors/engine"
 	enginetesting "github.com/brendanjerwin/simple_wiki/internal/connectors/engine/testing"
@@ -373,4 +375,67 @@ var _ = Describe("Engine.Bind", func() {
 			Expect(fbs.RecordedWithProfileLock).To(ContainElement(profileID))
 		})
 	})
+
+	// Regression: SeedBindingState items dropped Due. The wiki checklist
+	// items collected for the bind seed are passed to the adapter so it
+	// can pre-align item_id_map by text or marker; without Due forwarded
+	// here, an adapter that consults Due during alignment (or any future
+	// adapter that reflects Due into its initial AdapterState) would see
+	// a zero time. Drives bind through a reader that has a Due-bearing
+	// item and asserts the FakeAdapter received it on SeedBindingState.
+	When("the wiki checklist has an item with a due date", func() {
+		var (
+			localFa    *enginetesting.FakeAdapter
+			localEng   *engine.Engine
+			boundDueAt time.Time
+		)
+
+		BeforeEach(func() {
+			boundDueAt = time.Date(2026, 12, 24, 0, 0, 0, 0, time.UTC)
+			reader := bindDueReaderStub{
+				items: []*apiv1.ChecklistItem{{
+					Uid:  "uid-bind-due",
+					Text: "wrap presents",
+					Due:  timestamppb.New(boundDueAt),
+				}},
+			}
+			localFa = &enginetesting.FakeAdapter{ConnectorKind: connectors.ConnectorKindGoogleTasks}
+			localFa.SetSeedBindingStateResponse(connectors.AdapterState{"k": "v"}, nil)
+			localFa.SetFetchRemoteListTitleResponse("Holiday", true, nil)
+
+			localLease := connectors.NewLeaseTable()
+			localLease.SignalReady()
+			localFbs := enginetesting.NewFakeBindingStore()
+			localClock := enginetesting.NewFakeClock(fixedBoundAt)
+			var err error
+			localEng, err = engine.NewEngine(
+				localFa, localLease,
+				reader, stubChecklistMutator{}, stubSuppressor{},
+				stubLogger{}, localClock, localFbs,
+			)
+			Expect(err).NotTo(HaveOccurred())
+
+			_, err = localEng.Bind(ctx, profileID, page, listName, remoteHandle)
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should pass the Due-bearing wiki item to SeedBindingState", func() {
+			Expect(localFa.RecordedSeedBindingState).To(HaveLen(1))
+			items := localFa.RecordedSeedBindingState[0].WikiItems
+			Expect(items).To(HaveLen(1))
+			Expect(items[0].UID).To(Equal("uid-bind-due"))
+			Expect(items[0].Due).To(Equal(boundDueAt))
+		})
+	})
 })
+
+// bindDueReaderStub returns a fixed checklist for any (page, listName)
+// query — used by the bind-with-due test to drive readWikiItemsForBindSeed
+// through a non-empty items loop.
+type bindDueReaderStub struct {
+	items []*apiv1.ChecklistItem
+}
+
+func (b bindDueReaderStub) ListItems(_ context.Context, _, _ string) (*apiv1.Checklist, error) {
+	return &apiv1.Checklist{Items: b.items}, nil
+}
