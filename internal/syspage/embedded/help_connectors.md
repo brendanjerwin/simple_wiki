@@ -31,7 +31,7 @@ This exclusivity is per-checklist, not per-user. Different household members eac
 
 ## What's the same across all connectors
 
-- Your bindings live on your profile page under `wiki.connectors.<kind>.subscriptions[]` (the storage key uses the code-level `subscriptions` term; the UI calls them bindings).
+- Your bindings live on your profile page under `wiki.connectors.<kind>.bindings[]`.
 - Disconnecting (revoking auth) pauses your bindings but doesn't delete them. Reconnect to resume.
 - Unbinding severs one specific binding without touching either the wiki data or the remote list.
 - Sync runs every ~30 seconds via a unified scheduler.

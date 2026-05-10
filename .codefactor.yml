@@ -1,0 +1,22 @@
+# CodeFactor configuration.
+#
+# Mirrors the project's existing local lint configuration where
+# CodeFactor's bundled tool config doesn't honor the project's
+# overrides:
+#
+# - eslint(no-unused-expressions) for *.test.ts / *.stories.ts: the
+#   project's static/js/.eslintrc.js disables this rule for test
+#   files (chai's expect(x).to.exist; idiom triggers it). CodeFactor
+#   doesn't pick up the override, so we exclude tests from this rule
+#   here.
+
+exclude_patterns:
+  - "static/js/gen/**"
+  - "gen/**"
+  - "vendor/**"
+
+tools:
+  - name: eslint
+    excluded_paths:
+      - "static/js/**/*.test.ts"
+      - "static/js/**/*.stories.ts"
