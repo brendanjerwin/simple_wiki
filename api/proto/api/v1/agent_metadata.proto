@@ -109,6 +109,10 @@ message AgentSchedule {
   // "CRON_TZ=<timezone>" to the cron expression at registration time, so any
   // change here takes effect on the next refresh / save-hook.
   string timezone = 10;
+  // Per-schedule permission allowlist for RequestPermission tool calls in
+  // headless scheduled turns (for example "Bash(mkdir:*)"). Empty means deny
+  // all permission requests.
+  repeated string allowed_tools = 11;
 }
 
 // BackgroundActivityEntry records one terminal scheduled-turn outcome on a page.

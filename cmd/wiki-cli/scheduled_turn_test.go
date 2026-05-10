@@ -29,7 +29,7 @@ var _ = Describe("scheduledTurnClient SessionUpdate max_turns enforcement", func
 			recordCancel = func() {
 				cancelCalls.Add(1)
 			}
-			client = newScheduledTurnClient("test-page", 3, recordCancel)
+			client = newScheduledTurnClient("test-page", 3, nil, recordCancel)
 
 			chunkNotification := acp.SessionNotification{
 				SessionId: "session-1",
@@ -83,7 +83,7 @@ var _ = Describe("scheduledTurnClient SessionUpdate with non-message updates", f
 			recordCancel = func() {
 				cancelCalls.Add(1)
 			}
-			client = newScheduledTurnClient("test-page", 3, recordCancel)
+			client = newScheduledTurnClient("test-page", 3, nil, recordCancel)
 
 			toolCallNotification := acp.SessionNotification{
 				SessionId: "session-1",
@@ -107,7 +107,7 @@ var _ = Describe("scheduledTurnClient SessionUpdate with non-message updates", f
 })
 
 var _ = Describe("scheduledTurnClient RequestPermission", func() {
-	When("called", func() {
+	When("called without an allowlist", func() {
 		var (
 			client *scheduledTurnClient
 			resp   acp.RequestPermissionResponse
@@ -115,9 +115,15 @@ var _ = Describe("scheduledTurnClient RequestPermission", func() {
 		)
 
 		BeforeEach(func() {
-			client = newScheduledTurnClient("test-page", 3, func() {})
+			client = newScheduledTurnClient("test-page", 3, nil, func() {})
 			resp, err = client.RequestPermission(context.Background(), acp.RequestPermissionRequest{
 				SessionId: "session-1",
+				ToolCall: acp.ToolCallUpdate{
+					ToolCallId: "tc-1",
+				},
+				Options: []acp.PermissionOption{
+					{OptionId: "allow", Name: "Allow"},
+				},
 			})
 		})
 
@@ -135,6 +141,124 @@ var _ = Describe("scheduledTurnClient RequestPermission", func() {
 
 		It("should return a Cancelled outcome", func() {
 			Expect(resp.Outcome.Cancelled).NotTo(BeNil())
+		})
+	})
+
+	When("the tool title matches an allowed_tools pattern", func() {
+		var (
+			client *scheduledTurnClient
+			resp   acp.RequestPermissionResponse
+			err    error
+		)
+
+		BeforeEach(func() {
+			title := "Bash(mkdir:/tmp/menu)"
+			client = newScheduledTurnClient("test-page", 3, []string{"Bash(mkdir:*)"}, func() {})
+			resp, err = client.RequestPermission(context.Background(), acp.RequestPermissionRequest{
+				SessionId: "session-1",
+				ToolCall: acp.ToolCallUpdate{
+					ToolCallId: "tc-allow",
+					Title:      &title,
+				},
+				Options: []acp.PermissionOption{
+					{OptionId: "opt-allow", Name: "Allow"},
+					{OptionId: "opt-deny", Name: "Deny"},
+				},
+			})
+		})
+
+		It("should not return an error", func() {
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should return a Selected outcome", func() {
+			Expect(resp.Outcome.Selected).NotTo(BeNil())
+		})
+
+		It("should select the first option", func() {
+			Expect(resp.Outcome.Selected.OptionId).To(Equal(acp.PermissionOptionId("opt-allow")))
+		})
+	})
+
+	When("the tool title does not match an allowed_tools pattern", func() {
+		var (
+			client *scheduledTurnClient
+			resp   acp.RequestPermissionResponse
+			err    error
+		)
+
+		BeforeEach(func() {
+			title := "Bash(rm:/tmp/menu)"
+			client = newScheduledTurnClient("test-page", 3, []string{"Bash(mkdir:*)"}, func() {})
+			resp, err = client.RequestPermission(context.Background(), acp.RequestPermissionRequest{
+				SessionId: "session-1",
+				ToolCall: acp.ToolCallUpdate{
+					ToolCallId: "tc-deny",
+					Title:      &title,
+				},
+				Options: []acp.PermissionOption{
+					{OptionId: "opt-allow", Name: "Allow"},
+					{OptionId: "opt-deny", Name: "Deny"},
+				},
+			})
+		})
+
+		It("should not return an error", func() {
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should return a Cancelled outcome", func() {
+			Expect(resp.Outcome.Cancelled).NotTo(BeNil())
+		})
+	})
+})
+
+var _ = Describe("wildcardMatch", func() {
+	When("pattern has no wildcard", func() {
+		var matched bool
+
+		BeforeEach(func() {
+			matched = wildcardMatch("Bash(date:now)", "Bash(date:now)")
+		})
+
+		It("should require an exact match", func() {
+			Expect(matched).To(BeTrue())
+		})
+	})
+
+	When("pattern has a wildcard suffix", func() {
+		var matched bool
+
+		BeforeEach(func() {
+			matched = wildcardMatch("Bash(mkdir:*)", "Bash(mkdir:/tmp/menu)")
+		})
+
+		It("should match command arguments containing slashes", func() {
+			Expect(matched).To(BeTrue())
+		})
+	})
+
+	When("pattern has multiple wildcard segments", func() {
+		var matched bool
+
+		BeforeEach(func() {
+			matched = wildcardMatch("Bash(*mkdir*menu*)", "Bash(mkdir:/tmp/menu)")
+		})
+
+		It("should match segments in order", func() {
+			Expect(matched).To(BeTrue())
+		})
+	})
+
+	When("pattern does not match target", func() {
+		var matched bool
+
+		BeforeEach(func() {
+			matched = wildcardMatch("Bash(mkdir:*)", "Bash(rm:/tmp/menu)")
+		})
+
+		It("should return false", func() {
+			Expect(matched).To(BeFalse())
 		})
 	})
 })
@@ -295,7 +419,7 @@ var _ = Describe("scheduledTurnClient unsupported acp.Client methods", func() {
 	var client *scheduledTurnClient
 
 	BeforeEach(func() {
-		client = newScheduledTurnClient("test-page", 3, func() {})
+		client = newScheduledTurnClient("test-page", 3, nil, func() {})
 	})
 
 	Describe("ReadTextFile", func() {

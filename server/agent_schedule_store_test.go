@@ -161,11 +161,12 @@ var _ = Describe("AgentScheduleStore", func() {
 
 			BeforeEach(func() {
 				err = store.Upsert("page1", &apiv1.AgentSchedule{
-					Id:       "first",
-					Cron:     "*/30 * * * * *",
-					Prompt:   "do the thing",
-					MaxTurns: 20,
-					Enabled:  true,
+					Id:           "first",
+					Cron:         "*/30 * * * * *",
+					Prompt:       "do the thing",
+					MaxTurns:     20,
+					Enabled:      true,
+					AllowedTools: []string{"Bash(mkdir:*)"},
 				})
 			})
 
@@ -178,6 +179,7 @@ var _ = Describe("AgentScheduleStore", func() {
 				Expect(listErr).NotTo(HaveOccurred())
 				Expect(schedules).To(HaveLen(1))
 				Expect(schedules[0].GetId()).To(Equal("first"))
+				Expect(schedules[0].GetAllowedTools()).To(ConsistOf("Bash(mkdir:*)"))
 			})
 		})
 
