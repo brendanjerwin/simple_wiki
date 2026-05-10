@@ -1061,10 +1061,10 @@ export class WikiChecklist extends LitElement implements DragReorderHandler {
         ${this._renderListDebugBadge()}
         ${checklistItemsContent}
         ${this._renderOccToast()}
-        <connector-subscribe-button
+        <connector-bind-button
           page="${this.page}"
           list-name="${this.listName}"
-        ></connector-subscribe-button>
+        ></connector-bind-button>
       </div>
     `;
   }
