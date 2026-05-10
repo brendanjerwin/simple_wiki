@@ -91,10 +91,10 @@ type Subscriber interface {
 // behavior, which is the right answer for systems without paused-
 // subscription support.
 type PausedChecker interface {
-	// IsAnyChecklistSubscriptionPaused returns true if at least one
+	// IsAnyChecklistBindingPaused returns true if at least one
 	// active subscription on (page, listName) is in the paused state
 	// across all configured connectors.
-	IsAnyChecklistSubscriptionPaused(page, listName string) bool
+	IsAnyChecklistBindingPaused(page, listName string) bool
 }
 
 // Mutator is the single funnel for checklist mutations. Construct one per
@@ -851,7 +851,7 @@ func (m *Mutator) isChecklistSubscriptionPaused(page, listName string) bool {
 	if c == nil {
 		return false
 	}
-	return c.IsAnyChecklistSubscriptionPaused(page, listName)
+	return c.IsAnyChecklistBindingPaused(page, listName)
 }
 
 func slicesEqual(a, b []string) bool {
