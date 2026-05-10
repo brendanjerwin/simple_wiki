@@ -110,7 +110,6 @@ rules:
         - "*_test.go"
         # Parallel error-classification work in flight; re-include after merge.
         - internal/connectors/googletasks/gateway/
-        - internal/connectors/googletasks/sync/
         - internal/connectors/googlekeep/gateway/
 
   - id: go.error-classified-by-status-code-only
@@ -149,7 +148,6 @@ rules:
         - cmd/
         # Parallel error-classification work in flight; re-include after merge.
         - internal/connectors/googletasks/gateway/
-        - internal/connectors/googletasks/sync/
         - internal/connectors/googlekeep/gateway/
 
   - id: go.handler-returns-nil-after-error-logged
@@ -192,7 +190,6 @@ rules:
         - main.go
         # Parallel error-classification work in flight; re-include after merge.
         - internal/connectors/googletasks/gateway/
-        - internal/connectors/googletasks/sync/
         - internal/connectors/googlekeep/gateway/
 
   - id: go.errors-As-without-target-pointer
@@ -248,7 +245,6 @@ rules:
         # re-included once that work merges and existing discards have been
         # given justifications inline.
         - internal/connectors/googletasks/gateway/
-        - internal/connectors/googletasks/sync/
         - internal/connectors/googlekeep/gateway/
 
   # ============================================================
