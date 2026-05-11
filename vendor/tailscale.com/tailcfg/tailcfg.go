@@ -180,7 +180,12 @@ type CapabilityVersion int
 //   - 131: 2025-11-25: client respects [NodeAttrDefaultAutoUpdate]
 //   - 132: 2026-02-13: client respects [NodeAttrDisableHostsFileUpdates]
 //   - 133: 2026-02-17: client understands [NodeAttrForceRegisterMagicDNSIPv4Only]; MagicDNS IPv6 registered w/ OS by default
-const CurrentCapabilityVersion CapabilityVersion = 133
+//   - 134: 2026-03-09: Client understands [NodeAttrDisableAndroidBindToActiveNetwork]
+//   - 135: 2026-03-30: Client understands [NodeAttrCacheNetworkMaps]
+//   - 136: 2026-04-09: Client understands [NodeAttrDisableLinuxCGNATDropRule]
+//   - 137: 2026-04-15: Client handles 429 responses to /machine/register.
+//   - 138: 2026-03-31: can handle C2N /debug/tka.
+const CurrentCapabilityVersion CapabilityVersion = 138
 
 // ID is an integer ID for a user, node, or login allocated by the
 // control plane.
@@ -282,6 +287,13 @@ type UserProfile struct {
 	LoginName     string // "alice@smith.com"; for display purposes only (provider is not listed)
 	DisplayName   string // "Alice Smith"
 	ProfilePicURL string `json:",omitzero"`
+
+	// Groups is a subset of SCIM groups (e.g. "engineering@example.com")
+	// or group names in the tailnet policy document (e.g. "group:eng")
+	// that contain this user and that the coordination server was
+	// configured to report to this node.
+	// The list is always sorted when loaded from storage.
+	Groups []string `json:",omitempty"`
 }
 
 func (p *UserProfile) Equal(p2 *UserProfile) bool {
@@ -294,7 +306,8 @@ func (p *UserProfile) Equal(p2 *UserProfile) bool {
 	return p.ID == p2.ID &&
 		p.LoginName == p2.LoginName &&
 		p.DisplayName == p2.DisplayName &&
-		p.ProfilePicURL == p2.ProfilePicURL
+		p.ProfilePicURL == p2.ProfilePicURL &&
+		slices.Equal(p.Groups, p2.Groups)
 }
 
 // RawMessage is a raw encoded JSON value. It implements Marshaler and
@@ -2260,7 +2273,7 @@ type ClientVersion struct {
 
 	// UrgentSecurityUpdate is set when the client is missing an important
 	// security update. That update may be in LatestVersion or earlier.
-	// UrgentSecurityUpdate should not be set if RunningLatest is false.
+	// UrgentSecurityUpdate should not be set if RunningLatest is true.
 	UrgentSecurityUpdate bool `json:",omitempty"`
 
 	// Notify is whether the client should do an OS-specific notification about
@@ -2437,6 +2450,18 @@ type Oauth2Token struct {
 // These are also referred to as "Node Attributes" in the ACL policy file.
 type NodeCapability string
 
+// NodeCapabilityPrefix is a prefix for [NodeCapMap] keys that share a common
+// namespace, where each entry represents a distinct named instance (e.g. one
+// per service). The full key is formed by concatenating the prefix with the
+// instance name.
+type NodeCapabilityPrefix string
+
+// ToAttribute returns the full [NodeCapability] key for the given value under
+// this prefix, of the form prefix+value.
+func (p NodeCapabilityPrefix) ToAttribute(value string) NodeCapability {
+	return NodeCapability(string(p) + value)
+}
+
 const (
 	CapabilityFileSharing        NodeCapability = "https://tailscale.com/cap/file-sharing"
 	CapabilityAdmin              NodeCapability = "https://tailscale.com/cap/is-admin"
@@ -2450,10 +2475,20 @@ const (
 	// CapabilityMacUIV2 makes the macOS GUI enable its v2 mode.
 	CapabilityMacUIV2 NodeCapability = "https://tailscale.com/cap/mac-ui-v2"
 
+	// CapabilityServicesInDesktopClients enables services list/menu/section in desktop clients.
+	// If this capability is not present, desktop clients should not show services.
+	CapabilityServicesInDesktopClients NodeCapability = "https://tailscale.com/cap/services-in-desktop-clients"
+
 	// CapabilityBindToInterfaceByRoute changes how Darwin nodes create
 	// sockets (in the net/netns package). See that package for more
 	// details on the behaviour of this capability.
 	CapabilityBindToInterfaceByRoute NodeCapability = "https://tailscale.com/cap/bind-to-interface-by-route"
+
+	// NodeAttrDisableAndroidBindToActiveNetwork disables binding sockets to the
+	// currently active network on Android, which is enabled by default.
+	// This allows the control plane to turn off the behavior if it causes
+	// problems.
+	NodeAttrDisableAndroidBindToActiveNetwork NodeCapability = "disable-android-bind-to-active-network"
 
 	// CapabilityDebugDisableAlternateDefaultRouteInterface changes how Darwin
 	// nodes get the default interface. There is an optional hook (used by the
@@ -2568,21 +2603,6 @@ const (
 	// netfilter management.
 	// This cannot be set simultaneously with NodeAttrLinuxMustUseIPTables.
 	NodeAttrLinuxMustUseNfTables NodeCapability = "linux-netfilter?v=nftables"
-
-	// NodeAttrDisableSeamlessKeyRenewal disables seamless key renewal, which is
-	// enabled by default in clients as of 2025-09-17 (1.90 and later).
-	//
-	// We will use this attribute to manage the rollout, and disable seamless in
-	// clients with known bugs.
-	// http://go/seamless-key-renewal
-	NodeAttrDisableSeamlessKeyRenewal NodeCapability = "disable-seamless-key-renewal"
-
-	// NodeAttrSeamlessKeyRenewal was used to opt-in to seamless key renewal
-	// during its private alpha.
-	//
-	// Deprecated: NodeAttrSeamlessKeyRenewal is deprecated as of CapabilityVersion 126,
-	// because seamless key renewal is now enabled by default.
-	NodeAttrSeamlessKeyRenewal NodeCapability = "seamless-key-renewal"
 
 	// NodeAttrProbeUDPLifetime makes the client probe UDP path lifetime at the
 	// tail end of an active direct connection in magicsock.
@@ -2755,6 +2775,29 @@ const (
 	// See https://github.com/tailscale/tailscale/issues/15404.
 	// TODO(bradfitz): remove this a few releases after 2026-02-16.
 	NodeAttrForceRegisterMagicDNSIPv4Only NodeCapability = "force-register-magicdns-ipv4-only"
+
+	// NodeAttrCacheNetworkMaps instructs the node to persistently cache network
+	// maps and use them to establish peer connectivity on start, if doing so is
+	// supported by the client and storage is available. When this attribute is
+	// absent (or removed), a node that supports netmap caching will ignore and
+	// discard existing cached maps, and will not store any.
+	NodeAttrCacheNetworkMaps NodeCapability = "cache-network-maps"
+
+	// NodeAttrDisableLinuxCGNATDropRule tells Linux clients to not insert a
+	// blanket firewall DROP rule for inbound traffic from the CGNAT IP range
+	// that does not originate from the Tailscale network interface.
+	// This enables access to off-tailnet endpoints within that IP range.
+	NodeAttrDisableLinuxCGNATDropRule NodeCapability = "disable-linux-cgnat-drop-rule"
+)
+
+const (
+	// NodeAttrPrefixServices is the prefix for per-service [NodeCapMap]
+	// entries describing Services visible (accessible) to this node.
+	// Each value under such a key is of type [ServiceDetails].
+	// The suffix after the prefix is an opaque server-chosen identifier;
+	// consumers must use [ServiceDetails.Name] as the canonical service name
+	// rather than parsing it from the map key.
+	NodeAttrPrefixServices NodeCapabilityPrefix = "services/"
 )
 
 // SetDNSRequest is a request to add a DNS record.
@@ -3294,6 +3337,51 @@ const LBHeader = "Ts-Lb"
 // correspond to those IPs. Any services that don't correspond to a service
 // this client is hosting can be ignored.
 type ServiceIPMappings map[ServiceName][]netip.Addr
+
+// ServiceAction describes an action that a Tailscale
+// client can invoke for a [ServiceDetails].
+type ServiceAction struct {
+	// Type is the action's identifier i.e. a unique slug corresponding to a well
+	// known action. It drives icon selection and client application matching.
+	Type string
+
+	// Port is the target TCP port for this action. It must match one of
+	// the specific (non-range) TCP ports listed in the enclosing
+	// [ServiceDetails.Ports].
+	Port uint16
+
+	// DisplayName is an optional human-readable label which may be shown
+	// in client menus when there are multiple actions to select from.
+	// If empty, a display name may be inferred from the Type field.
+	DisplayName string `json:",omitzero"`
+}
+
+// ServiceDetails describes a Service visible to this node.
+// It is the value type stored under [NodeAttrPrefixServices]+serviceName keys in [NodeCapMap].
+type ServiceDetails struct {
+	// Name is the name of the Service, of the form "svc:dns-label".
+	Name ServiceName
+
+	// DisplayName is an optional human-readable label for the service.
+	// If empty, Name is used as a fallback by clients.
+	DisplayName string `json:",omitzero"`
+
+	// Addrs are the IP addresses (IPv4 and IPv6) assigned to this Service.
+	Addrs []netip.Addr `json:",omitempty"`
+
+	// Ports are the protocol/port combinations the Service accepts.
+	Ports []ProtoPortRange `json:",omitempty"`
+
+	// Actions is an optional list of actions describing how a client may
+	// interact with this service. Each action maps a [ServiceAction.Type] to a
+	// specific TCP port; the port must match one of the concrete (non-range)
+	// ports listed in Ports.
+	//
+	// Multiple actions may reference the same port. Not every port requires
+	// a corresponding action. When Actions has length zero, clients may infer
+	// default interactions from Ports.
+	Actions []ServiceAction `json:",omitzero"`
+}
 
 // ClientAuditAction represents an auditable action that a client can report to the
 // control plane.  These actions must correspond to the supported actions

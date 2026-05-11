@@ -869,8 +869,8 @@ gopkg.in/urfave/cli.v1
 # gopkg.in/yaml.v2 v2.4.0
 ## explicit; go 1.15
 gopkg.in/yaml.v2
-# tailscale.com v1.96.5
-## explicit; go 1.26.1
+# tailscale.com v1.98.1
+## explicit; go 1.26.2
 tailscale.com
 tailscale.com/atomicfile
 tailscale.com/client/local
@@ -910,11 +910,11 @@ tailscale.com/types/netmap
 tailscale.com/types/opt
 tailscale.com/types/persist
 tailscale.com/types/preftype
-tailscale.com/types/ptr
 tailscale.com/types/result
 tailscale.com/types/structs
 tailscale.com/types/tkatype
 tailscale.com/types/views
+tailscale.com/util/bufiox
 tailscale.com/util/cibuild
 tailscale.com/util/clientmetric
 tailscale.com/util/cloudenv
