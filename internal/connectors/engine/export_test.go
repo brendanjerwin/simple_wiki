@@ -101,3 +101,18 @@ const DeadLetterThresholdForTest = deadLetterThreshold
 func PushFailureBackoffForTest(n int) time.Duration {
 	return pushFailureBackoff(n)
 }
+
+// WikiItemFingerprintForTest exposes the engine's wikiItemFingerprint
+// helper so engine_test package tests can pre-seed AdapterState with a
+// matching fingerprint (proves the optimization fires) or a deliberately
+// non-matching one (proves the regression fix fires). Test seam only —
+// production callers live inside pushOutbound and have no reason to
+// expose the digest format.
+func WikiItemFingerprintForTest(item connectors.WikiItem) string {
+	return wikiItemFingerprint(item)
+}
+
+// AdapterStateKeyItemFingerprintsForTest exposes the AdapterState key
+// the engine stores per-item fingerprints under, so tests can pre-seed
+// or assert that subtree without hardcoding the string literal.
+const AdapterStateKeyItemFingerprintsForTest = adapterStateItemFingerprintsKey

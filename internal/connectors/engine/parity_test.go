@@ -1038,12 +1038,18 @@ var _ = Describe("Parity scenarios across real adapters", func() {
 		const refKeep = "keep-srv-no-div-1"
 
 		setupNoDivergence := func(p *parityContext, mappedRef string) {
-			// No user events → WikiDiverged=false.
+			// No user events → WikiDiverged=false. Also pre-seed a
+			// fingerprint matching the wiki item so the fingerprint-
+			// divergence gate (added after the engine extraction's Due
+			// regression) ALSO sees no change and the Patch is skipped.
 			p.reader.checklist = &apiv1.Checklist{
 				Items: []*apiv1.ChecklistItem{
 					{Uid: knownUID, Text: "milk"},
 				},
 			}
+			state := p.seedItemIDMap(map[string]string{knownUID: mappedRef})
+			matchingFP := engine.WikiItemFingerprintForTest(connectors.WikiItem{UID: knownUID, Text: "milk"})
+			state[engine.AdapterStateKeyItemFingerprintsForTest] = map[string]string{knownUID: matchingFP}
 			p.store.SeedBinding(connectors.Binding{
 				ProfileID: p.profileID, Page: p.page, ListName: p.listName,
 				RemoteHandle:         p.remoteHandle,
@@ -1051,7 +1057,7 @@ var _ = Describe("Parity scenarios across real adapters", func() {
 				State:                connectors.BindingStateActive,
 				LastSuccessfulSyncAt: parityPastChoke,
 				LastSyncedSeq:        10,
-				AdapterState:         p.seedItemIDMap(map[string]string{knownUID: mappedRef}),
+				AdapterState:         state,
 			}, p.kind)
 		}
 
