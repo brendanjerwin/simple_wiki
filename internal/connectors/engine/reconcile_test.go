@@ -1097,11 +1097,16 @@ var _ = Describe("Engine.reconcile", func() {
 		})
 	})
 
-	// Fix #2: push gate — only patch when WikiDiverged = true.
-	When("outbound has a wiki item in AdapterState mapping but wiki has NOT diverged", func() {
+	// Fix #2: push gate — only patch when WikiDiverged = true AND the
+	// fingerprint matches the last-pushed state.
+	When("outbound has a wiki item in AdapterState mapping but wiki has NOT diverged and the fingerprint matches", func() {
 		const knownUID = "uid-nodiv-1"
 
 		BeforeEach(func() {
+			// Pre-seed a fingerprint matching the wiki item below. With both
+			// gates clean (no fresh user event AND fingerprint unchanged),
+			// pushOutbound must skip the Patch entirely.
+			matchingFP := engine.WikiItemFingerprintForTest(connectors.WikiItem{UID: knownUID, Text: "milk"})
 			fbs.SeedBinding(connectors.Binding{
 				ProfileID: profileID, Page: page, ListName: listName,
 				RemoteHandle:         "tasklist-1",
@@ -1109,7 +1114,8 @@ var _ = Describe("Engine.reconcile", func() {
 				LastSuccessfulSyncAt: reconcilePastChokePausedAt,
 				LastSyncedSeq:        10,
 				AdapterState: connectors.AdapterState{
-					"item_id_map": map[string]string{knownUID: "task-1"},
+					"item_id_map":                                            map[string]string{knownUID: "task-1"},
+					engine.AdapterStateKeyItemFingerprintsForTest: map[string]string{knownUID: matchingFP},
 				},
 			}, ownerKind)
 
@@ -1124,6 +1130,117 @@ var _ = Describe("Engine.reconcile", func() {
 
 		It("should NOT call PatchRemote (wiki not diverged — no outbound push needed)", func() {
 			Expect(fa.RecordedPatchRemote).To(BeEmpty())
+		})
+	})
+
+	// Regression: fingerprint-divergence gate. An existing binding whose
+	// item state diverges from what was last pushed (e.g., Due set after
+	// the cursor caught up via inbound) MUST be patched even when the
+	// op-log shows no fresh user event for the uid. This catches the
+	// engine-extraction gap where the legacy SyncedItems fingerprint
+	// behavior was lost. A binding with no stored fingerprint at all
+	// (first reconcile after this code shipped) hits the same path.
+	When("outbound has an existing wiki item with no stored fingerprint", func() {
+		const knownUID = "uid-fp-missing-1"
+		var dueAt time.Time
+
+		BeforeEach(func() {
+			dueAt = time.Date(2026, 6, 15, 0, 0, 0, 0, time.UTC)
+			fbs.SeedBinding(connectors.Binding{
+				ProfileID: profileID, Page: page, ListName: listName,
+				RemoteHandle:         "tasklist-1",
+				State:                connectors.BindingStateActive,
+				LastSuccessfulSyncAt: reconcilePastChokePausedAt,
+				LastSyncedSeq:        100,
+				AdapterState: connectors.AdapterState{
+					"item_id_map": map[string]string{knownUID: "task-existing"},
+					// No item_fingerprints — simulates a binding from
+					// before fingerprinting shipped.
+				},
+			}, ownerKind)
+
+			fa.SetPullRemoteResponse(connectors.RemotePullResult{}, nil)
+			fa.SetPatchRemoteResponse("task-existing", nil)
+			// MaxSeq matches LastSyncedSeq → WikiDiverged = false. The
+			// fingerprint gate is the only thing that can fire the Patch.
+			reader.checklist = &apiv1.Checklist{
+				Items: []*apiv1.ChecklistItem{{
+					Uid:  knownUID,
+					Text: "renew passport",
+					Due:  timestamppb.New(dueAt),
+				}},
+				MaxSeq: 100,
+			}
+
+			Expect(eng.Sync(ctx, key)).To(Succeed())
+		})
+
+		It("should call PatchRemote (fingerprint divergence — missing fingerprint counts)", func() {
+			Expect(fa.RecordedPatchRemote).To(HaveLen(1))
+			Expect(fa.RecordedPatchRemote[0].Item.Due).To(Equal(dueAt))
+		})
+
+		It("should store the new fingerprint on the binding", func() {
+			saved := fbs.RecordedSaveBinding[len(fbs.RecordedSaveBinding)-1].Binding
+			fps, ok := saved.AdapterState[engine.AdapterStateKeyItemFingerprintsForTest].(map[string]string)
+			Expect(ok).To(BeTrue())
+			expected := engine.WikiItemFingerprintForTest(connectors.WikiItem{
+				UID: knownUID, Text: "renew passport", Due: dueAt,
+			})
+			Expect(fps[knownUID]).To(Equal(expected))
+		})
+	})
+
+	When("outbound has an existing wiki item whose fingerprint diverges from the stored value", func() {
+		const knownUID = "uid-fp-diverged-1"
+		var dueAt time.Time
+
+		BeforeEach(func() {
+			dueAt = time.Date(2026, 7, 4, 0, 0, 0, 0, time.UTC)
+			// Pre-seed a fingerprint for the OLD state (no Due). The wiki
+			// item below has Due set; the fingerprints must diverge.
+			oldFP := engine.WikiItemFingerprintForTest(connectors.WikiItem{
+				UID: knownUID, Text: "fireworks",
+			})
+			fbs.SeedBinding(connectors.Binding{
+				ProfileID: profileID, Page: page, ListName: listName,
+				RemoteHandle:         "tasklist-1",
+				State:                connectors.BindingStateActive,
+				LastSuccessfulSyncAt: reconcilePastChokePausedAt,
+				LastSyncedSeq:        100,
+				AdapterState: connectors.AdapterState{
+					"item_id_map":                                            map[string]string{knownUID: "task-fp"},
+					engine.AdapterStateKeyItemFingerprintsForTest: map[string]string{knownUID: oldFP},
+				},
+			}, ownerKind)
+
+			fa.SetPullRemoteResponse(connectors.RemotePullResult{}, nil)
+			fa.SetPatchRemoteResponse("task-fp", nil)
+			reader.checklist = &apiv1.Checklist{
+				Items: []*apiv1.ChecklistItem{{
+					Uid:  knownUID,
+					Text: "fireworks",
+					Due:  timestamppb.New(dueAt),
+				}},
+				MaxSeq: 100,
+			}
+
+			Expect(eng.Sync(ctx, key)).To(Succeed())
+		})
+
+		It("should call PatchRemote (fingerprint divergence — stored vs current differ)", func() {
+			Expect(fa.RecordedPatchRemote).To(HaveLen(1))
+			Expect(fa.RecordedPatchRemote[0].Item.Due).To(Equal(dueAt))
+		})
+
+		It("should update the stored fingerprint to the new state", func() {
+			saved := fbs.RecordedSaveBinding[len(fbs.RecordedSaveBinding)-1].Binding
+			fps, ok := saved.AdapterState[engine.AdapterStateKeyItemFingerprintsForTest].(map[string]string)
+			Expect(ok).To(BeTrue())
+			expected := engine.WikiItemFingerprintForTest(connectors.WikiItem{
+				UID: knownUID, Text: "fireworks", Due: dueAt,
+			})
+			Expect(fps[knownUID]).To(Equal(expected))
 		})
 	})
 

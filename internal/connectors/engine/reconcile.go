@@ -2,8 +2,11 @@ package engine
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -84,6 +87,19 @@ const pausedReasonAuthFailed = "auth_failed"
 // engine's diff logic to work. Documented in ADR-0015's "AdapterState
 // schema" section.
 const adapterStateItemIDMapKey = "item_id_map"
+
+// adapterStateItemFingerprintsKey is the AdapterState subtree where the
+// engine stores a per-item fingerprint of the user-mutable fields it
+// most recently pushed to the remote. The map shape is
+// map[string]string (wiki uid → opaque hex digest). Used by
+// pushOutbound to detect divergence in items whose op-log events fell
+// below LastSyncedSeq — the WikiDiverged signal misses those, which is
+// how the engine extraction lost the legacy SyncedItems fingerprint
+// behavior and silently stopped pushing Due (and any other field set
+// before the cursor caught up). The fingerprint is written after every
+// successful Insert/Patch and consulted before deciding to skip a
+// Patch.
+const adapterStateItemFingerprintsKey = "item_fingerprints"
 
 // reconcile runs one inbound-then-outbound reconcile pass for the
 // binding identified by key. The algorithm (per MATRIX.md row 1 +
@@ -594,6 +610,18 @@ func (e *Engine) pushOutbound(
 		}
 	}
 
+	// Per-item fingerprints from the last successful Insert/Patch. Used
+	// to detect a wiki-side change that the op-log's WikiDiverged signal
+	// missed (items whose user-event seq fell below LastSyncedSeq).
+	// Stored back into AdapterState as the same map reference so every
+	// mutation in the loop below is visible to the caller even on the
+	// partial-progress error path (mirrors how idMap progress survives).
+	if binding.AdapterState == nil {
+		binding.AdapterState = connectors.AdapterState{}
+	}
+	fingerprints := readItemFingerprints(binding.AdapterState)
+	binding.AdapterState[adapterStateItemFingerprintsKey] = fingerprints
+
 	// Inserts / patches.
 	for uid, item := range currentUIDs {
 		wikiItem := connectors.WikiItem{
@@ -653,6 +681,7 @@ func (e *Engine) pushOutbound(
 				}
 			}
 			idMap[uid] = string(newRef)
+			fingerprints[uid] = wikiItemFingerprint(wikiItem)
 			binding = e.recordPushSuccess(binding, uid)
 			if appendErr := e.mutator.AppendSyncEvent(ctx, binding.Page, binding.ListName, uid, "outbound_inserted"); appendErr != nil {
 				e.logger.Info("connectors/engine: append_sync_event_failed page=%s list=%s uid=%s op=outbound_inserted err=%v",
@@ -661,11 +690,20 @@ func (e *Engine) pushOutbound(
 			continue
 		}
 
-		// ADR-0015 Fix #2: only patch when the wiki has diverged since last
-		// sync (i.e., there are user/cross-connector events for this uid
-		// with seq > LastSyncedSeq). If the wiki hasn't changed, remote
-		// already has the authoritative content — patching is pure churn.
-		if cls := classification[uid]; !cls.WikiDiverged {
+		// ADR-0015 Fix #2 + fingerprint divergence: skip Patch only when
+		// BOTH gates agree the wiki hasn't changed since the last push.
+		// WikiDiverged catches items with fresh user events above the
+		// cursor (cheap, op-log-driven); the fingerprint comparison
+		// catches items whose wiki state diverges from what we last
+		// pushed but whose op-log events fell below LastSyncedSeq —
+		// the case where pre-existing items silently lose field changes
+		// (Due regression). A missing stored fingerprint (e.g., legacy
+		// items from before this code shipped, or anything not yet
+		// successfully Patched) compares unequal to the current
+		// fingerprint and triggers a Patch on the next reconcile.
+		currentFP := wikiItemFingerprint(wikiItem)
+		fingerprintDiverged := currentFP != fingerprints[uid]
+		if cls := classification[uid]; !cls.WikiDiverged && !fingerprintDiverged {
 			continue
 		}
 
@@ -698,6 +736,7 @@ func (e *Engine) pushOutbound(
 					uid, binding.ProfileID, patchErr)
 			}
 		}
+		fingerprints[uid] = currentFP
 		binding = e.recordPushSuccess(binding, uid)
 		if appendErr := e.mutator.AppendSyncEvent(ctx, binding.Page, binding.ListName, uid, "outbound_patched"); appendErr != nil {
 			e.logger.Info("connectors/engine: append_sync_event_failed page=%s list=%s uid=%s op=outbound_patched err=%v",
@@ -749,6 +788,7 @@ func (e *Engine) pushOutbound(
 			}
 		}
 		delete(idMap, uid)
+		delete(fingerprints, uid)
 		binding = e.recordPushSuccess(binding, uid)
 		if appendErr := e.mutator.AppendSyncEvent(ctx, binding.Page, binding.ListName, uid, "outbound_deleted"); appendErr != nil {
 			e.logger.Info("connectors/engine: append_sync_event_failed page=%s list=%s uid=%s op=outbound_deleted err=%v",
@@ -890,4 +930,88 @@ func writeItemIDMap(binding connectors.Binding, idMap map[string]string) connect
 	}
 	binding.AdapterState[adapterStateItemIDMapKey] = out
 	return binding
+}
+
+// readItemFingerprints pulls the item_fingerprints subtree from an
+// AdapterState. Returns a fresh non-nil map. Same defensive
+// type-handling as readItemIDMap because TOML round-trips can surface
+// the inner map as map[string]any.
+func readItemFingerprints(state connectors.AdapterState) map[string]string {
+	out := map[string]string{}
+	if state == nil {
+		return out
+	}
+	raw, ok := state[adapterStateItemFingerprintsKey]
+	if !ok || raw == nil {
+		return out
+	}
+	switch m := raw.(type) {
+	case map[string]string:
+		for k, v := range m {
+			out[k] = v
+		}
+	case map[string]any:
+		for k, v := range m {
+			if s, isString := v.(string); isString {
+				out[k] = s
+			}
+		}
+	default:
+		// Unknown shape — treat as empty (next push will repopulate).
+	}
+	return out
+}
+
+// fingerprintFieldSep separates fields inside the canonical encoding of
+// a WikiItem fingerprint. ASCII Record Separator (U+001E) — unlikely to
+// appear in user-entered text.
+const fingerprintFieldSep = "\x1e"
+
+// fingerprintListSep separates entries inside a list-valued field (e.g.,
+// Tags) within the canonical encoding. ASCII Unit Separator (U+001F).
+const fingerprintListSep = "\x1f"
+
+// fingerprintSortOrderBase is the numeric base used to render
+// WikiItem.SortOrder in the fingerprint's canonical encoding. Base 10
+// (decimal) keeps the digest stable and human-debuggable.
+const fingerprintSortOrderBase = 10
+
+// wikiItemFingerprint returns an opaque, deterministic digest over the
+// user-mutable fields of a WikiItem. Stored after each successful
+// Insert/Patch and consulted on the next reconcile to detect a wiki-side
+// change for items whose op-log events fell below LastSyncedSeq. Any
+// adapter-relevant field on connectors.WikiItem MUST be included here —
+// missing a field means the engine will silently fail to push it (see
+// the Due regression that motivated this).
+//
+// The canonical encoding uses ASCII Record Separator between fields and
+// ASCII Unit Separator inside list-valued fields. The Tags slice is
+// encoded in original order (the wiki preserves tag order). Time fields
+// use RFC3339Nano UTC for stability across timezones.
+func wikiItemFingerprint(item connectors.WikiItem) string {
+	var b strings.Builder
+	b.WriteString(item.Text)
+	b.WriteString(fingerprintFieldSep)
+	if item.Checked {
+		b.WriteString("1")
+	} else {
+		b.WriteString("0")
+	}
+	b.WriteString(fingerprintFieldSep)
+	for i, t := range item.Tags {
+		if i > 0 {
+			b.WriteString(fingerprintListSep)
+		}
+		b.WriteString(t)
+	}
+	b.WriteString(fingerprintFieldSep)
+	b.WriteString(item.Description)
+	b.WriteString(fingerprintFieldSep)
+	if !item.Due.IsZero() {
+		b.WriteString(item.Due.UTC().Format(time.RFC3339Nano))
+	}
+	b.WriteString(fingerprintFieldSep)
+	b.WriteString(strconv.FormatInt(item.SortOrder, fingerprintSortOrderBase))
+	sum := sha256.Sum256([]byte(b.String()))
+	return hex.EncodeToString(sum[:])
 }
