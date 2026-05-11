@@ -723,6 +723,16 @@ func (e *Engine) pushOutbound(
 				if recErr := e.runPreconditionRecovery(ctx, binding, connectors.RemoteRef(ref), uid, wikiItem, idMap, patchErr); recErr != nil {
 					return binding, false, recErr
 				}
+				// Recovery either re-PATCHed (uid still bound),
+				// applied remote authoritatively (uid still bound,
+				// wiki changed via mutator so wikiItem here is
+				// stale), or marked the remote deleted (uid removed
+				// from idMap). Clear the fingerprint for this uid in
+				// every branch so the next reconcile recomputes
+				// against the actual post-recovery wiki state. If
+				// uid was removed, this also prevents an orphaned
+				// fingerprint from growing the map unbounded.
+				delete(fingerprints, uid)
 				continue
 			case connectors.ErrorClassRetryable:
 				binding = e.recordPushFailure(binding, uid, "outbound_patched", patchErr)
@@ -774,6 +784,13 @@ func (e *Engine) pushOutbound(
 					return binding, false, recErr
 				}
 				binding = recovered
+				// If recovery treated NotFound/Deleted as idempotent
+				// success and removed the uid from idMap, drop its
+				// fingerprint too — otherwise the entry grows the
+				// map unbounded over the lifetime of the binding.
+				if _, stillBound := idMap[uid]; !stillBound {
+					delete(fingerprints, uid)
+				}
 				continue
 			case connectors.ErrorClassRetryable:
 				binding = e.recordPushFailure(binding, uid, "outbound_deleted", delErr)
@@ -977,17 +994,29 @@ const fingerprintListSep = "\x1f"
 const fingerprintSortOrderBase = 10
 
 // wikiItemFingerprint returns an opaque, deterministic digest over the
-// user-mutable fields of a WikiItem. Stored after each successful
-// Insert/Patch and consulted on the next reconcile to detect a wiki-side
-// change for items whose op-log events fell below LastSyncedSeq. Any
-// adapter-relevant field on connectors.WikiItem MUST be included here —
-// missing a field means the engine will silently fail to push it (see
-// the Due regression that motivated this).
+// user-mutable fields of a WikiItem.
 //
-// The canonical encoding uses ASCII Record Separator between fields and
-// ASCII Unit Separator inside list-valued fields. The Tags slice is
-// encoded in original order (the wiki preserves tag order). Time fields
-// use RFC3339Nano UTC for stability across timezones.
+// Fingerprinted fields (each must be encoded into the digest in the
+// order below; any future engine-pushed field on connectors.WikiItem
+// MUST be added):
+//
+//	Text, Checked, Tags (each prefixed with its byte length so
+//	`["a\x1fb"]` doesn't collide with `["a","b"]`), Description, Due
+//	(RFC3339Nano UTC), SortOrder.
+//
+// UID is intentionally excluded: it's the map key, not a pushed value,
+// so including it would make every fingerprint trivially unique and
+// destroy the comparison this function exists to enable.
+//
+// Stored after each successful Insert/Patch and consulted on the next
+// reconcile to detect a wiki-side change for items whose op-log events
+// fell below LastSyncedSeq — the case that the engine extraction's
+// op-log-only WikiDiverged signal silently missed (Due regression).
+//
+// The canonical encoding uses ASCII Record Separator between fields,
+// ASCII Unit Separator inside list-valued fields, and `<len>:<value>`
+// length-prefixing per list element to prevent collision via separator
+// injection in user-entered text.
 func wikiItemFingerprint(item connectors.WikiItem) string {
 	var b strings.Builder
 	b.WriteString(item.Text)
@@ -1002,6 +1031,8 @@ func wikiItemFingerprint(item connectors.WikiItem) string {
 		if i > 0 {
 			b.WriteString(fingerprintListSep)
 		}
+		b.WriteString(strconv.Itoa(len(t)))
+		b.WriteString(":")
 		b.WriteString(t)
 	}
 	b.WriteString(fingerprintFieldSep)
