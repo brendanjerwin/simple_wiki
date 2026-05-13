@@ -1,6 +1,8 @@
 package main
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"math"
@@ -11,10 +13,14 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
+	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
 	"github.com/brendanjerwin/simple_wiki/gen/go/api/v1/apiv1connect"
 	"github.com/brendanjerwin/simple_wiki/gen/go/api/v1/apiv1mcp"
 	"github.com/brendanjerwin/simple_wiki/pkg/mcpdocs"
+	"github.com/mark3labs/mcp-go/mcp"
 	mcpserver "github.com/mark3labs/mcp-go/server"
+	"github.com/redpanda-data/protoc-gen-go-mcp/pkg/runtime"
+	"google.golang.org/protobuf/reflect/protoreflect"
 	cli "gopkg.in/urfave/cli.v1"
 )
 
@@ -153,10 +159,122 @@ func registerToolHandlers(s *mcpserver.MCPServer, clients *apiClients) {
 	apiv1mcp.ForwardToConnectSearchServiceClient(s, clients.search)
 	apiv1mcp.ForwardToConnectSystemInfoServiceClient(s, clients.systemInfo)
 
+	// Replace input schemas that Anthropic's API rejects (top-level
+	// anyOf/oneOf/allOf, emitted by the generator for any request message
+	// containing a proto `oneof` block) with the *ToolOpenAI variants the
+	// generator also produces. Those variants use a flat nullable-string
+	// representation Anthropic accepts. See #1054.
+	swapBrokenSchemasForAnthropic(s)
+
 	// Override descriptions and annotations for any service whose proto
 	// methods declare the api.v1.* MCP doc extensions. Services that haven't
 	// been ported still surface their proto comments unchanged.
 	_ = mcpdocs.Decorate(s)
+}
+
+// anthropicSchemaOverride pairs an OpenAI-variant input schema with the
+// proto request descriptor it was generated for. Both pieces are needed at
+// swap time: the schema overrides the registered tool's RawInputSchema, and
+// the descriptor lets the wrapped handler run runtime.FixOpenAI to translate
+// the OpenAI-flavored argument map back to standard protojson before
+// delegating to the original handler.
+type anthropicSchemaOverride struct {
+	schema     json.RawMessage
+	descriptor protoreflect.MessageDescriptor
+}
+
+// anthropicCompatibleSchemas returns the OpenAI-variant input schemas for
+// tools whose default (non-OpenAI) generated schema is rejected by
+// Anthropic's API, paired with the proto request descriptor for each tool.
+//
+// The OpenAI schema represents:
+//   - oneof scalars as `type: ["string","null"]`
+//   - proto maps as arrays of {key,value} objects
+//   - google.protobuf.Struct / Value / ListValue as JSON-encoded strings
+//
+// runtime.FixOpenAI (called by the wrapped handler) reverses the second and
+// third transformations so protojson can decode the result.
+//
+// Tools currently affected (request message contains a proto `oneof`):
+//   - api_v1_PageManagementService_ReadPage (ReadPageRequest.page_identifier)
+//   - api_v1_Frontmatter_RemoveKeyAtPath    (PathComponent.component, nested
+//     in RemoveKeyAtPathRequest.key_path)
+//
+// If a new tool starts emitting top-level anyOf/oneOf/allOf the regression
+// test in mcp_anthropic_schema_test.go will fail and surface that the map
+// here needs another entry.
+func anthropicCompatibleSchemas() map[string]anthropicSchemaOverride {
+	return map[string]anthropicSchemaOverride{
+		apiv1mcp.PageManagementService_ReadPageToolOpenAI.Name: {
+			schema:     apiv1mcp.PageManagementService_ReadPageToolOpenAI.RawInputSchema,
+			descriptor: (&apiv1.ReadPageRequest{}).ProtoReflect().Descriptor(),
+		},
+		apiv1mcp.Frontmatter_RemoveKeyAtPathToolOpenAI.Name: {
+			schema:     apiv1mcp.Frontmatter_RemoveKeyAtPathToolOpenAI.RawInputSchema,
+			descriptor: (&apiv1.RemoveKeyAtPathRequest{}).ProtoReflect().Descriptor(),
+		},
+	}
+}
+
+// wrapHandlerForOpenAISchema wraps an existing tool handler so that it
+// normalizes incoming arguments using runtime.FixOpenAI before delegating.
+// This matches the behavior of the generator-emitted *HandlerOpenAI variants,
+// which run FixOpenAI between request.GetArguments() and protojson.Unmarshal.
+//
+// Without this normalization the OpenAI-variant schema and the default
+// (non-OpenAI) handler are mismatched: the schema instructs the model to
+// represent google.protobuf.Struct fields as JSON strings and proto maps as
+// arrays of {key,value} objects, but the default handler's protojson decode
+// expects the standard wire format. FixOpenAI converts the OpenAI shape back
+// to the standard shape in-place on the args map so the original handler
+// then sees a payload protojson can decode.
+//
+// For arguments whose type is plain scalars/oneofs (the two tools currently
+// in the override map: ReadPageRequest and RemoveKeyAtPathRequest),
+// FixOpenAI is a no-op and the wrapper is transparent. The wrapping is
+// nonetheless applied so that any future override entry covering a request
+// with a Struct/Value/Map field is correctly handled without further
+// changes here.
+func wrapHandlerForOpenAISchema(originalHandler mcpserver.ToolHandlerFunc, requestDescriptor protoreflect.MessageDescriptor) mcpserver.ToolHandlerFunc {
+	if originalHandler == nil {
+		return nil
+	}
+	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		// GetArguments returns the underlying map directly when Arguments
+		// is already a map[string]any (the common path for stdio MCP).
+		// Mutating it in place propagates the normalization to the inner
+		// handler's view of the request.
+		args := req.GetArguments()
+		if args != nil {
+			runtime.FixOpenAI(requestDescriptor, args)
+		}
+		return originalHandler(ctx, req)
+	}
+}
+
+// swapBrokenSchemasForAnthropic rewrites the RawInputSchema of any
+// already-registered tool listed in anthropicCompatibleSchemas and wraps the
+// original handler with runtime.FixOpenAI normalization so the schema and
+// handler stay a matched pair (mirroring the generator-emitted
+// *HandlerOpenAI variants). It is a no-op for tools that are not in the
+// override map.
+func swapBrokenSchemasForAnthropic(s *mcpserver.MCPServer) {
+	overrides := anthropicCompatibleSchemas()
+	for name, override := range overrides {
+		existing := s.GetTool(name)
+		if existing == nil {
+			// Forwarder did not register this tool (e.g. service not wired);
+			// nothing to swap.
+			continue
+		}
+		swapped := existing.Tool
+		swapped.RawInputSchema = override.schema
+		// Defensive: clear the parsed form so the new RawInputSchema is the
+		// sole source of truth on serialization.
+		swapped.InputSchema = mcp.ToolInputSchema{}
+		wrapped := wrapHandlerForOpenAISchema(existing.Handler, override.descriptor)
+		s.AddTool(swapped, wrapped)
+	}
 }
 
 // computeBackoffAfterFailure returns the delay to wait before the next reconnect attempt
