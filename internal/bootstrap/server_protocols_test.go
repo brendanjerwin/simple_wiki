@@ -45,6 +45,64 @@ var _ = Describe("cleartextHTTP2Protocols", func() {
 	})
 })
 
+// identifiableHandler is a struct-backed http.Handler used to verify that
+// newCleartextHTTP2Server stores the caller's handler verbatim. Comparing
+// http.HandlerFunc by pointer identity in Gomega is unreliable because
+// func values aren't ==-comparable; using a *struct gives us a stable
+// identity to assert against.
+type identifiableHandler struct{}
+
+func (*identifiableHandler) ServeHTTP(w http.ResponseWriter, _ *http.Request) {
+	w.WriteHeader(http.StatusOK)
+}
+
+var _ = Describe("newCleartextHTTP2Server", func() {
+	// Constructor helper that the per-mode bootstrap functions (SetupPlainHTTP,
+	// SetupTailscaleServe, SetupFullTLS) use to build their *http.Server. The
+	// SonarCloud new-code-coverage gate flagged the per-site `Protocols:
+	// cleartextHTTP2Protocols()` literals because the enclosing bootstrap
+	// functions aren't unit-tested; collapsing them through this constructor
+	// gives them a single tested seam.
+	var (
+		handler *identifiableHandler
+		srv     *http.Server
+	)
+
+	BeforeEach(func() {
+		handler = &identifiableHandler{}
+		srv = newCleartextHTTP2Server(handler)
+	})
+
+	It("should return a non-nil *http.Server", func() {
+		Expect(srv).NotTo(BeNil())
+	})
+
+	It("should set Handler to the passed handler (identity)", func() {
+		// Pointer-identity check: the constructor must not wrap or
+		// substitute the handler — its only job is to compose the
+		// HTTP/1 + h2c Protocols shape.
+		Expect(srv.Handler).To(BeIdenticalTo(handler))
+	})
+
+	When("the returned server's Protocols field is inspected", func() {
+		It("should be non-nil", func() {
+			Expect(srv.Protocols).NotTo(BeNil())
+		})
+
+		It("should have UnencryptedHTTP2 enabled", func() {
+			Expect(srv.Protocols.UnencryptedHTTP2()).To(BeTrue())
+		})
+
+		It("should have HTTP/1 enabled", func() {
+			Expect(srv.Protocols.HTTP1()).To(BeTrue())
+		})
+
+		It("should not have TLS-side HTTP/2 enabled (cleartext-only)", func() {
+			Expect(srv.Protocols.HTTP2()).To(BeFalse())
+		})
+	})
+})
+
 var _ = Describe("http.Server configured with cleartextHTTP2Protocols", func() {
 	// This is the strongest assertion: a real *http.Server with
 	// Protocols set to cleartextHTTP2Protocols() must serve both HTTP/1.1

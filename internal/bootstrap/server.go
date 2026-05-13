@@ -48,6 +48,20 @@ func cleartextHTTP2Protocols() *http.Protocols {
 	return p
 }
 
+// newCleartextHTTP2Server constructs an *http.Server pre-wired for the
+// HTTP/1 + cleartext HTTP/2 (h2c) shape used by every non-TLS listener in
+// the bootstrap. Centralizing the literal keeps the migration off the
+// deprecated h2c.NewHandler wrap consistent across call sites and gives
+// the wiring a single unit-tested seam. Callers that need additional
+// *http.Server fields (e.g. Addr on the FullTLS redirect server) set them
+// on the returned value.
+func newCleartextHTTP2Server(handler http.Handler) *http.Server {
+	return &http.Server{
+		Handler:   handler,
+		Protocols: cleartextHTTP2Protocols(),
+	}
+}
+
 const (
 	networkTCP = "tcp"
 
@@ -128,10 +142,7 @@ func SetupPlainHTTP(
 	}
 
 	return &ServerResult{
-		MainServer: &http.Server{
-			Handler:   handler,
-			Protocols: cleartextHTTP2Protocols(),
-		},
+		MainServer:   newCleartextHTTP2Server(handler),
 		MainListener: httpListener,
 		Cleanup:      composeCleanup(metricsCleanup, stopSiteCron(site)),
 	}, nil
@@ -176,10 +187,7 @@ func SetupTailscaleServe(
 	}
 
 	return &ServerResult{
-		MainServer: &http.Server{
-			Handler:   finalHandler,
-			Protocols: cleartextHTTP2Protocols(),
-		},
+		MainServer:   newCleartextHTTP2Server(finalHandler),
 		MainListener: httpListener,
 		Cleanup:      composeCleanup(metricsCleanup, stopSiteCron(site)),
 	}, nil
@@ -244,17 +252,16 @@ func SetupFullTLS(
 
 	logger.Info("HTTP server listening on %s (redirects tailnet, serves others)", httpAddr)
 
+	redirectServer := newCleartextHTTP2Server(redirector)
+	redirectServer.Addr = httpAddr
+
 	result := &ServerResult{
 		MainServer: &http.Server{
 			Handler: handler,
 		},
-		MainListener: tlsListener,
-		Cleanup:      composeCleanup(metricsCleanup, stopSiteCron(site)),
-		RedirectServer: &http.Server{
-			Addr:      httpAddr,
-			Handler:   redirector,
-			Protocols: cleartextHTTP2Protocols(),
-		},
+		MainListener:   tlsListener,
+		Cleanup:        composeCleanup(metricsCleanup, stopSiteCron(site)),
+		RedirectServer: redirectServer,
 	}
 
 	// Start redirect server in background
