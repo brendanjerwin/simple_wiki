@@ -33,10 +33,20 @@ import (
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 	"github.com/gin-gonic/gin"
 	"github.com/jcelliott/lumber"
-	"golang.org/x/net/http2"
-	"golang.org/x/net/http2/h2c"
 	"google.golang.org/grpc"
 )
+
+// cleartextHTTP2Protocols returns the set of protocols that allow a server
+// to accept both HTTP/1.x and unencrypted HTTP/2 (h2c) on the same listener.
+// Replaces the deprecated golang.org/x/net/http2/h2c.NewHandler wrap; the
+// stdlib server now handles cleartext HTTP/2 negotiation natively when
+// http.Server.Protocols includes UnencryptedHTTP2.
+func cleartextHTTP2Protocols() *http.Protocols {
+	p := new(http.Protocols)
+	p.SetHTTP1(true)
+	p.SetUnencryptedHTTP2(true)
+	return p
+}
 
 const (
 	networkTCP = "tcp"
@@ -119,7 +129,8 @@ func SetupPlainHTTP(
 
 	return &ServerResult{
 		MainServer: &http.Server{
-			Handler: h2c.NewHandler(handler, &http2.Server{}),
+			Handler:   handler,
+			Protocols: cleartextHTTP2Protocols(),
 		},
 		MainListener: httpListener,
 		Cleanup:      composeCleanup(metricsCleanup, stopSiteCron(site)),
@@ -154,7 +165,7 @@ func SetupTailscaleServe(
 		return nil, fmt.Errorf(errCreateListenerFmt, err)
 	}
 
-	finalHandler := h2c.NewHandler(handler, &http2.Server{})
+	var finalHandler http.Handler = handler
 	if forceRedirectToHTTPS {
 		logger.Info("Tailnet clients will be redirected to HTTPS")
 		redirector, err := tailscale.NewTailnetRedirector(tsDNSName, tailscale.DefaultHTTPSPort, identityResolver, finalHandler, true, logger)
@@ -166,7 +177,8 @@ func SetupTailscaleServe(
 
 	return &ServerResult{
 		MainServer: &http.Server{
-			Handler: finalHandler,
+			Handler:   finalHandler,
+			Protocols: cleartextHTTP2Protocols(),
 		},
 		MainListener: httpListener,
 		Cleanup:      composeCleanup(metricsCleanup, stopSiteCron(site)),
@@ -210,8 +222,12 @@ func SetupFullTLS(
 
 	logger.Info("HTTPS server listening on %s", httpsAddr)
 
-	// Create HTTP redirect server
-	redirector, err := tailscale.NewTailnetRedirector(tsDNSName, tlsPort, identityResolver, h2c.NewHandler(handler, &http2.Server{}), false, logger)
+	// Create HTTP redirect server. The fallback handler is the bare app
+	// handler; the redirect server itself enables cleartext HTTP/2 via
+	// http.Server.Protocols below so non-tailnet HTTP callers that speak
+	// h2c still get HTTP/2 service (replaces the deprecated h2c.NewHandler
+	// wrap).
+	redirector, err := tailscale.NewTailnetRedirector(tsDNSName, tlsPort, identityResolver, handler, false, logger)
 	if err != nil {
 		if closeErr := tlsListener.Close(); closeErr != nil {
 			logger.Error("failed to close TLS listener: %v", closeErr)
@@ -232,11 +248,12 @@ func SetupFullTLS(
 		MainServer: &http.Server{
 			Handler: handler,
 		},
-		MainListener:  tlsListener,
-		Cleanup:       composeCleanup(metricsCleanup, stopSiteCron(site)),
+		MainListener: tlsListener,
+		Cleanup:      composeCleanup(metricsCleanup, stopSiteCron(site)),
 		RedirectServer: &http.Server{
-			Addr:    httpAddr,
-			Handler: redirector,
+			Addr:      httpAddr,
+			Handler:   redirector,
+			Protocols: cleartextHTTP2Protocols(),
 		},
 	}
 
