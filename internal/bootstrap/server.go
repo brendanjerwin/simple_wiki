@@ -165,7 +165,7 @@ func SetupTailscaleServe(
 		return nil, fmt.Errorf(errCreateListenerFmt, err)
 	}
 
-	var finalHandler http.Handler = handler
+	finalHandler := handler
 	if forceRedirectToHTTPS {
 		logger.Info("Tailnet clients will be redirected to HTTPS")
 		redirector, err := tailscale.NewTailnetRedirector(tsDNSName, tailscale.DefaultHTTPSPort, identityResolver, finalHandler, true, logger)
