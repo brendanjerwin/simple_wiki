@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 	"math"
@@ -14,6 +15,7 @@ import (
 	"github.com/brendanjerwin/simple_wiki/gen/go/api/v1/apiv1connect"
 	"github.com/brendanjerwin/simple_wiki/gen/go/api/v1/apiv1mcp"
 	"github.com/brendanjerwin/simple_wiki/pkg/mcpdocs"
+	"github.com/mark3labs/mcp-go/mcp"
 	mcpserver "github.com/mark3labs/mcp-go/server"
 	cli "gopkg.in/urfave/cli.v1"
 )
@@ -153,10 +155,60 @@ func registerToolHandlers(s *mcpserver.MCPServer, clients *apiClients) {
 	apiv1mcp.ForwardToConnectSearchServiceClient(s, clients.search)
 	apiv1mcp.ForwardToConnectSystemInfoServiceClient(s, clients.systemInfo)
 
+	// Replace input schemas that Anthropic's API rejects (top-level
+	// anyOf/oneOf/allOf, emitted by the generator for any request message
+	// containing a proto `oneof` block) with the *ToolOpenAI variants the
+	// generator also produces. Those variants use a flat nullable-string
+	// representation Anthropic accepts. See #1054.
+	swapBrokenSchemasForAnthropic(s)
+
 	// Override descriptions and annotations for any service whose proto
 	// methods declare the api.v1.* MCP doc extensions. Services that haven't
 	// been ported still surface their proto comments unchanged.
 	_ = mcpdocs.Decorate(s)
+}
+
+// anthropicCompatibleSchemas returns the OpenAI-variant input schemas for
+// tools whose default (non-OpenAI) generated schema is rejected by
+// Anthropic's API. Both variants share the same tool name and the same
+// underlying protojson decode path, so the handler registered by the
+// default forwarder works unchanged with the OpenAI schema.
+//
+// Tools currently affected (request message contains a proto `oneof`):
+//   - api_v1_PageManagementService_ReadPage (ReadPageRequest.page_identifier)
+//   - api_v1_Frontmatter_RemoveKeyAtPath    (PathComponent.component, nested
+//     in RemoveKeyAtPathRequest.key_path)
+//
+// If a new tool starts emitting top-level anyOf/oneOf/allOf the regression
+// test in mcp_anthropic_schema_test.go will fail and surface that the map
+// here needs another entry.
+func anthropicCompatibleSchemas() map[string]json.RawMessage {
+	return map[string]json.RawMessage{
+		apiv1mcp.PageManagementService_ReadPageToolOpenAI.Name:  apiv1mcp.PageManagementService_ReadPageToolOpenAI.RawInputSchema,
+		apiv1mcp.Frontmatter_RemoveKeyAtPathToolOpenAI.Name:     apiv1mcp.Frontmatter_RemoveKeyAtPathToolOpenAI.RawInputSchema,
+	}
+}
+
+// swapBrokenSchemasForAnthropic rewrites the RawInputSchema of any
+// already-registered tool listed in anthropicCompatibleSchemas, preserving
+// the original handler. It is a no-op for tools that are not in the
+// override map.
+func swapBrokenSchemasForAnthropic(s *mcpserver.MCPServer) {
+	overrides := anthropicCompatibleSchemas()
+	for name, openAISchema := range overrides {
+		existing := s.GetTool(name)
+		if existing == nil {
+			// Forwarder did not register this tool (e.g. service not wired);
+			// nothing to swap.
+			continue
+		}
+		swapped := existing.Tool
+		swapped.RawInputSchema = openAISchema
+		// Defensive: clear the parsed form so the new RawInputSchema is the
+		// sole source of truth on serialization.
+		swapped.InputSchema = mcp.ToolInputSchema{}
+		s.AddTool(swapped, existing.Handler)
+	}
 }
 
 // computeBackoffAfterFailure returns the delay to wait before the next reconnect attempt
