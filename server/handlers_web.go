@@ -1,7 +1,9 @@
 package server
 
 import (
+	"bytes"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -15,6 +17,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/brendanjerwin/simple_wiki/static"
@@ -260,7 +263,11 @@ func (s *Site) registerRoutes(router *gin.Engine) {
 	router.GET("/PROFILE", redirectToCanonicalProfile)
 
 	router.POST("/uploads", s.handleUpload)
+	// Register GET and HEAD so conditional GETs (If-Modified-Since /
+	// If-None-Match) and cheap HEAD probes both work — see
+	// serveCLIBinary for the validator logic.
 	router.GET("/cli/:binary", serveCLIBinary)
+	router.HEAD("/cli/:binary", serveCLIBinary)
 	router.GET("/extensions/:file", serveExtensionFile)
 	router.GET("/oauth/google/callback", s.handleOAuthGoogleCallback)
 
@@ -280,9 +287,53 @@ func (s *Site) registerRoutes(router *gin.Engine) {
 	router.GET("/api/find_by_key_existence", s.handleFindByKeyExistence)
 }
 
+// cliBinaryStartTime is the Last-Modified timestamp reported for embedded
+// wiki-cli binaries. The binaries are baked into the running server, so they
+// cannot change without a restart — capturing process start at package init
+// gives clients a stable validator with second-level precision (the precision
+// HTTP-date headers carry on the wire).
+var cliBinaryStartTime = time.Now().UTC().Truncate(time.Second)
+
+// cliBinaryETagCache memoizes the SHA256-based strong ETag for each embedded
+// wiki-cli binary. Hashing a ~45 MB binary takes a noticeable fraction of a
+// second; doing it once per binary on first request (rather than for every
+// caller) keeps conditional GETs cheap.
+var cliBinaryETagCache sync.Map // map[string]string
+
+// computeCLIBinaryETag returns the cached strong ETag for the given binary
+// content, computing it on first call. The ETag is a hex-encoded SHA256 of
+// the bytes wrapped in quotes per RFC 7232.
+func computeCLIBinaryETag(binary string, data []byte) string {
+	if cached, ok := cliBinaryETagCache.Load(binary); ok {
+		if etag, isString := cached.(string); isString {
+			return etag
+		}
+	}
+	sum := sha256.Sum256(data)
+	etag := `"` + hex.EncodeToString(sum[:]) + `"`
+	// LoadOrStore so concurrent first-time requests still converge on a
+	// single cached value rather than racing to overwrite each other.
+	actual, _ := cliBinaryETagCache.LoadOrStore(binary, etag)
+	if cachedETag, isString := actual.(string); isString {
+		return cachedETag
+	}
+	// Unreachable under normal use: only computeCLIBinaryETag writes the
+	// cache and it only ever stores strings. Return the freshly computed
+	// value if the cache somehow contains a non-string sentinel.
+	return etag
+}
+
 // serveCLIBinary serves pre-built wiki-cli binaries so consumers always
 // download the version that matches the running wiki. Binaries are embedded
 // in static.StaticContent at build time (see cmd/wiki-cli/generate.go).
+//
+// The handler emits Last-Modified and strong ETag validators and delegates
+// to http.ServeContent, which honors If-Modified-Since / If-None-Match
+// (returning 304 Not Modified when the client already has the current
+// version) and serves HEAD requests with headers only. This keeps the
+// agent-toolbox freshness check (see brendanjerwin/agent-toolbox issue
+// referenced from simple_wiki #1056) from re-downloading ~45 MB on every
+// invocation.
 func serveCLIBinary(c *gin.Context) {
 	// path.Base prevents directory traversal; the pattern check guards against
 	// requests for arbitrary files in the embedded FS.
@@ -296,8 +347,16 @@ func serveCLIBinary(c *gin.Context) {
 		c.Status(http.StatusNotFound)
 		return
 	}
+
+	etag := computeCLIBinaryETag(binary, data)
+	c.Header("ETag", etag)
 	c.Header(contentDispositionHeader, fmt.Sprintf(`attachment; filename="%s"`, binary))
-	c.Data(http.StatusOK, "application/octet-stream", data)
+	c.Header("Content-Type", "application/octet-stream")
+
+	// http.ServeContent handles If-Modified-Since, If-None-Match, HEAD, and
+	// Range requests. It sets Last-Modified from the modTime argument and
+	// respects any ETag we have already written to the header.
+	http.ServeContent(c.Writer, c.Request, binary, cliBinaryStartTime, bytes.NewReader(data))
 }
 
 // serveExtensionFile serves browser extension files (XPI packages and update

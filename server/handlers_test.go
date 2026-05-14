@@ -3,6 +3,8 @@ package server_test
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"mime/multipart"
@@ -14,6 +16,7 @@ import (
 	"time"
 
 	"github.com/brendanjerwin/simple_wiki/server"
+	"github.com/brendanjerwin/simple_wiki/static"
 	"github.com/brendanjerwin/simple_wiki/tailscale"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 	"github.com/gin-contrib/sessions"
@@ -1117,6 +1120,214 @@ var _ = Describe("contentTypeFromName", func() {
 		Entry("for paths with no extension", "img/favicon/no-ext", "text/plain"),
 		Entry("for unknown extensions", "file.xyz123unknown", "text/plain"),
 	)
+})
+
+var _ = Describe("serveCLIBinary", func() {
+	const binaryName = "wiki-cli-linux-amd64"
+
+	var (
+		router       *gin.Engine
+		expectedETag string
+		expectedSize int
+	)
+
+	BeforeEach(func() {
+		tmpDir, err := os.MkdirTemp("", "simple_wiki_cli_test")
+		Expect(err).NotTo(HaveOccurred())
+		DeferCleanup(func() { _ = os.RemoveAll(tmpDir) })
+
+		logger := lumber.NewConsoleLogger(lumber.WARN)
+		site, err := server.NewSite(tmpDir, "testpage", 0, "secret", logger)
+		Expect(err).NotTo(HaveOccurred())
+		router = site.GinRouter()
+
+		// Compute the expected validator values directly from the embedded
+		// content so the assertions don't tautologically mirror handler code.
+		data, err := static.StaticContent.ReadFile("cli/" + binaryName)
+		Expect(err).NotTo(HaveOccurred())
+		sum := sha256.Sum256(data)
+		expectedETag = `"` + hex.EncodeToString(sum[:]) + `"`
+		expectedSize = len(data)
+	})
+
+	When("a plain GET is made for a valid binary", func() {
+		var resp *httptest.ResponseRecorder
+
+		BeforeEach(func() {
+			resp = httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodGet, "/cli/"+binaryName, nil)
+			router.ServeHTTP(resp, req)
+		})
+
+		It("should return 200 OK", func() {
+			Expect(resp.Code).To(Equal(http.StatusOK))
+		})
+
+		It("should set the ETag header", func() {
+			Expect(resp.Header().Get("ETag")).To(Equal(expectedETag))
+		})
+
+		It("should set the Last-Modified header", func() {
+			Expect(resp.Header().Get("Last-Modified")).NotTo(BeEmpty())
+		})
+
+		It("should set the Content-Disposition header", func() {
+			Expect(resp.Header().Get("Content-Disposition")).To(Equal(`attachment; filename="` + binaryName + `"`))
+		})
+
+		It("should set Content-Type to application/octet-stream", func() {
+			Expect(resp.Header().Get("Content-Type")).To(Equal("application/octet-stream"))
+		})
+
+		It("should serve the full binary body", func() {
+			Expect(resp.Body.Len()).To(Equal(expectedSize))
+		})
+	})
+
+	When("the requested binary does not exist", func() {
+		var resp *httptest.ResponseRecorder
+
+		BeforeEach(func() {
+			resp = httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodGet, "/cli/wiki-cli-bogus-platform", nil)
+			router.ServeHTTP(resp, req)
+		})
+
+		It("should return 404 Not Found", func() {
+			Expect(resp.Code).To(Equal(http.StatusNotFound))
+		})
+	})
+
+	When("the requested file does not have the wiki-cli- prefix", func() {
+		var resp *httptest.ResponseRecorder
+
+		BeforeEach(func() {
+			resp = httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodGet, "/cli/manifest.json", nil)
+			router.ServeHTTP(resp, req)
+		})
+
+		It("should return 404 Not Found", func() {
+			Expect(resp.Code).To(Equal(http.StatusNotFound))
+		})
+	})
+
+	When("a conditional GET sends a matching If-None-Match", func() {
+		var resp *httptest.ResponseRecorder
+
+		BeforeEach(func() {
+			resp = httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodGet, "/cli/"+binaryName, nil)
+			req.Header.Set("If-None-Match", expectedETag)
+			router.ServeHTTP(resp, req)
+		})
+
+		It("should return 304 Not Modified", func() {
+			Expect(resp.Code).To(Equal(http.StatusNotModified))
+		})
+
+		It("should still expose the ETag header so clients can re-verify", func() {
+			Expect(resp.Header().Get("ETag")).To(Equal(expectedETag))
+		})
+
+		It("should not send a body", func() {
+			Expect(resp.Body.Len()).To(Equal(0))
+		})
+	})
+
+	When("a conditional GET sends a non-matching If-None-Match", func() {
+		var resp *httptest.ResponseRecorder
+
+		BeforeEach(func() {
+			resp = httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodGet, "/cli/"+binaryName, nil)
+			req.Header.Set("If-None-Match", `"stale-etag-value"`)
+			router.ServeHTTP(resp, req)
+		})
+
+		It("should return 200 OK with the new ETag", func() {
+			Expect(resp.Code).To(Equal(http.StatusOK))
+			Expect(resp.Header().Get("ETag")).To(Equal(expectedETag))
+		})
+
+		It("should serve the full binary body", func() {
+			Expect(resp.Body.Len()).To(Equal(expectedSize))
+		})
+	})
+
+	When("a conditional GET sends If-Modified-Since at or after the server start", func() {
+		var resp *httptest.ResponseRecorder
+
+		BeforeEach(func() {
+			// Use a time guaranteed to be after server start. The handler
+			// captures its baseline at package init, so "now + 1 hour" is
+			// always safely in the future.
+			future := time.Now().UTC().Add(time.Hour).Format(http.TimeFormat)
+			resp = httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodGet, "/cli/"+binaryName, nil)
+			req.Header.Set("If-Modified-Since", future)
+			router.ServeHTTP(resp, req)
+		})
+
+		It("should return 304 Not Modified", func() {
+			Expect(resp.Code).To(Equal(http.StatusNotModified))
+		})
+
+		It("should not send a body", func() {
+			Expect(resp.Body.Len()).To(Equal(0))
+		})
+	})
+
+	When("a conditional GET sends If-Modified-Since well before the server start", func() {
+		var resp *httptest.ResponseRecorder
+
+		BeforeEach(func() {
+			// Year 2000 is comfortably before any plausible server start time.
+			old := time.Date(2000, time.January, 1, 0, 0, 0, 0, time.UTC).Format(http.TimeFormat)
+			resp = httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodGet, "/cli/"+binaryName, nil)
+			req.Header.Set("If-Modified-Since", old)
+			router.ServeHTTP(resp, req)
+		})
+
+		It("should return 200 OK", func() {
+			Expect(resp.Code).To(Equal(http.StatusOK))
+		})
+
+		It("should serve the full binary body", func() {
+			Expect(resp.Body.Len()).To(Equal(expectedSize))
+		})
+	})
+
+	When("a HEAD request is made for a valid binary", func() {
+		var resp *httptest.ResponseRecorder
+
+		BeforeEach(func() {
+			resp = httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodHead, "/cli/"+binaryName, nil)
+			router.ServeHTTP(resp, req)
+		})
+
+		It("should return 200 OK", func() {
+			Expect(resp.Code).To(Equal(http.StatusOK))
+		})
+
+		It("should set the ETag header", func() {
+			Expect(resp.Header().Get("ETag")).To(Equal(expectedETag))
+		})
+
+		It("should set the Last-Modified header", func() {
+			Expect(resp.Header().Get("Last-Modified")).NotTo(BeEmpty())
+		})
+
+		It("should set the Content-Disposition header", func() {
+			Expect(resp.Header().Get("Content-Disposition")).To(Equal(`attachment; filename="` + binaryName + `"`))
+		})
+
+		It("should send an empty body", func() {
+			Expect(resp.Body.Len()).To(Equal(0))
+		})
+	})
 })
 // handlerTestWriteCloser wraps a buffer to implement io.WriteCloser for logger testing
 type handlerTestWriteCloser struct {
