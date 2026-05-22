@@ -12,7 +12,6 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/brendanjerwin/simple_wiki/filestore"
@@ -21,12 +20,12 @@ import (
 	"github.com/brendanjerwin/simple_wiki/index/frontmatter"
 	"github.com/brendanjerwin/simple_wiki/migrations/eager"
 	"github.com/brendanjerwin/simple_wiki/migrations/lazy"
+	"github.com/brendanjerwin/simple_wiki/server/pagestore"
 	"github.com/brendanjerwin/simple_wiki/pkg/ulid"
 	"github.com/brendanjerwin/simple_wiki/pkg/jobs"
 	"github.com/brendanjerwin/simple_wiki/templating"
 	"github.com/brendanjerwin/simple_wiki/utils/base32tools"
 	"github.com/brendanjerwin/simple_wiki/utils/goldmarkrenderer"
-	"github.com/brendanjerwin/simple_wiki/wikiidentifiers"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 	"github.com/gabriel-vasile/mimetype"
 	"github.com/gin-contrib/sessions/cookie"
@@ -89,11 +88,11 @@ type Site struct {
 	// tests that don't need the CalDAV surface.
 	caldavServer http.Handler
 
-	// pageLocks holds one *sync.Mutex per page, keyed by canonicalLockKey(id).
-	// Replaces the old global saveMut: writes serialize per-page rather than
-	// across the whole wiki, so unrelated traffic does not queue. Mirrors the
-	// pattern at checklistmutator/mutator.go:709.
-	pageLocks sync.Map
+	// store is the disk-backed storage primitive. All page I/O and per-page
+	// locking lives in *pagestore.Store; Site delegates here and adds the
+	// indexing / scheduling side effects that don't belong on the storage
+	// primitive itself.
+	store *pagestore.Store
 }
 
 // SetCalDAVServer installs the CalDAV HTTP handler the caldavGateway
@@ -142,6 +141,7 @@ func NewSite(
 		Logger:              logger,
 		MigrationApplicator: applicator,
 		MarkdownRenderer:    &goldmarkrenderer.GoldmarkRenderer{},
+		store:               pagestore.NewStore(filepathToData),
 	}
 
 	logger.Info("Initializing site indexing...")
@@ -453,129 +453,45 @@ func (s *Site) InitializeIndexingAndWait(timeout time.Duration) error {
 
 // --- Site methods moved from page.go ---
 
-// canonicalLockKey returns the canonical lock key for a page identifier.
-// All callers of Site.lockPage funnel through this so the same logical page
-// resolves to the same *sync.Mutex regardless of id spelling (raw vs.
-// munged, mixed case). Without this, a user write and an eager backfill
-// write to the same page would key on different mutex values and a
-// torn-write window would open.
+// ensureStore lazy-initializes the pagestore.Store on first use so tests
+// that construct Site directly (without going through NewSite) don't need
+// to wire the store manually. Also re-creates the store if PathToData has
+// been mutated (some tests reassign it to point at a read-only directory to
+// exercise save-error paths) — without this check, the store would keep
+// writing to the original path.
 //
-// MungeIdentifier is documented as idempotent and produces a URL-safe form;
-// we additionally lowercase to match the on-disk path computation in
-// getFilePathsForIdentifier (which lowercases before base32-encoding).
-//
-// If MungeIdentifier returns an error (malformed input), we fall back to
-// the raw lowercased identifier. The fallback is safe because every caller
-// passing the same malformed input will resolve to the same key — drift
-// only happens across spellings of the same page, not across error paths.
-func canonicalLockKey(id string) string {
-	munged, err := wikiidentifiers.MungeIdentifier(id)
-	if err != nil {
-		return strings.ToLower(id)
+// Production code path is initialized in NewSite and PathToData is never
+// mutated, so the re-creation branch is test-only.
+func (s *Site) ensureStore() *pagestore.Store {
+	if s.store == nil || s.store.PathToData() != s.PathToData {
+		s.store = pagestore.NewStore(s.PathToData)
 	}
-	return strings.ToLower(munged)
+	return s.store
 }
 
-// lockPage acquires the per-page mutex for the given identifier and returns
-// the release function. Uses sync.Map.LoadOrStore so concurrent first-touches
-// of the same page share one mutex without a global lock. Same pattern as
-// checklistmutator/mutator.go:709.
-//
-// Records two observability instruments: the wait-to-acquire duration as
-// a histogram (wiki_page_lock_wait_seconds), and the current holder count
-// as an UpDownCounter (wiki_page_lock_holders). See page_lock_metrics.go.
-func (s *Site) lockPage(id string) func() {
-	key := canonicalLockKey(id)
-	v, _ := s.pageLocks.LoadOrStore(key, &sync.Mutex{})
-	mu, ok := v.(*sync.Mutex)
-	if !ok {
-		// Defensive: every value in pageLocks is set as *sync.Mutex. A
-		// wrong-type entry would be a programming bug; fall back to a
-		// fresh local mutex so the caller still gets serialized access
-		// rather than a panic.
-		mu = &sync.Mutex{}
-	}
-	start := time.Now()
-	mu.Lock()
-	recordPageLockAcquired(time.Since(start))
-	return func() {
-		mu.Unlock()
-		recordPageLockReleased()
-	}
-}
-
-// getFilePathsForIdentifier returns the munged and original file paths for an identifier
-func (s *Site) getFilePathsForIdentifier(identifier, extension string) (mungedPath, originalPath, actualIdentifier string) {
-	mungedIdentifier, err := wikiidentifiers.MungeIdentifier(identifier)
-	if err != nil {
-		// Fall back to using the original identifier if munging fails
-		mungedIdentifier = identifier
-	}
-	mungedPath = path.Join(s.PathToData, base32tools.EncodeToBase32(strings.ToLower(mungedIdentifier))+"."+extension)
-	originalPath = path.Join(s.PathToData, base32tools.EncodeToBase32(strings.ToLower(identifier))+"."+extension)
-	actualIdentifier = mungedIdentifier
-	return mungedPath, originalPath, actualIdentifier
-}
-
-func (s *Site) readFileByIdentifier(identifier, extension string) (string, []byte, error) {
-	unlock := s.lockPage(identifier)
-	defer unlock()
-
-	mungedPath, originalPath, mungedIdentifier := s.getFilePathsForIdentifier(identifier, extension)
-
-	// First try with the munged identifier
-	b, err := os.ReadFile(mungedPath)
-	if err == nil {
-		return mungedIdentifier, b, nil
-	}
-
-	// Then try with the original identifier if that didn't work (older files)
-	b, err = os.ReadFile(originalPath)
-	if err == nil {
-		return identifier, b, nil
-	}
-
-	return mungedIdentifier, nil, fmt.Errorf("failed to read file for identifier %s: %w", identifier, err)
-}
-
-// ReadPage opens a page by its identifier.
+// ReadPage opens a page by its identifier. Delegates the raw read to
+// `*pagestore.Store.ReadPage` (which is pure — no migration side effect),
+// then applies the lazy applicator's canonicalization and saves back if
+// the bytes changed. The save-on-read side effect is the bug the surrounding
+// refactor is removing; Phase 5 deletes the `applyMigrationsForPage` call
+// after Phase 4's CanonicalReader decorator takes over the in-memory
+// canonicalization.
 func (s *Site) ReadPage(requestedIdentifier wikipage.PageIdentifier) (*wikipage.Page, error) {
-	identifierStr := string(requestedIdentifier)
-	// Create a new page object to be returned if no file is found.
-	p := new(wikipage.Page)
-	p.Identifier = identifierStr
-	p.Text = ""
-	p.WasLoadedFromDisk = false
-
-	// Load from .md file
-	identifier, mdBytes, err := s.readFileByIdentifier(identifierStr, mdExtension)
+	p, err := s.ensureStore().ReadPage(requestedIdentifier)
 	if err != nil {
-		// File not found - return empty page (this is normal for new pages)
+		return nil, fmt.Errorf("failed to read page %s: %w", requestedIdentifier, err)
+	}
+	if p.IsNew() {
+		// File didn't exist; return empty page (consistent with prior behavior).
 		return p, nil
 	}
 
-	p.Identifier = identifier
-
-	// Get the file modification time for conflict detection
-	mungedPath, originalPath, _ := s.getFilePathsForIdentifier(identifier, mdExtension)
-	if stat, statErr := os.Stat(mungedPath); statErr == nil {
-		p.ModTime = stat.ModTime()
-	} else if stat, statErr := os.Stat(originalPath); statErr == nil {
-		p.ModTime = stat.ModTime()
-	} else {
-		// Both stat attempts failed, but this is not critical for page loading
-		// Just log and continue with zero ModTime
-		s.Logger.Trace("Could not get modification time for page %s: %v", identifier, statErr)
-	}
-
-	// Apply migrations to the loaded content
-	migratedContent, migrationErr := s.applyMigrationsForPage(p, mdBytes)
+	// Apply migrations to the loaded content (today: may also save on diff).
+	migratedContent, migrationErr := s.applyMigrationsForPage(p, []byte(p.Text))
 	if migrationErr != nil {
-		return nil, fmt.Errorf("migration failed for page %s: %w", identifier, migrationErr)
+		return nil, fmt.Errorf("migration failed for page %s: %w", p.Identifier, migrationErr)
 	}
-
 	p.Text = string(migratedContent)
-	p.WasLoadedFromDisk = true
 	return p, nil
 }
 
@@ -797,6 +713,9 @@ func (s *Site) UploadList() ([]os.FileInfo, error) {
 
 // --- PageReaderMutator implementation ---
 
+// writeFrontmatterToBuffer writes the TOML frontmatter delimiters around fmBytes.
+// Kept in server/ alongside its tests; wikipage has its own copy for the
+// pagestore package's use (small duplication, scoped to a transitional state).
 func writeFrontmatterToBuffer(content io.Writer, fmBytes []byte) error {
 	if _, err := io.WriteString(content, tomlDelimiter); err != nil {
 		return err
@@ -838,58 +757,16 @@ func combineFrontmatterAndMarkdown(fm wikipage.FrontMatter, md wikipage.Markdown
 	return content.String(), nil
 }
 
-// readRawTextLocked reads the raw .md file content for the given identifier without acquiring
-// saveMut. The caller must hold at least a read lock (or write lock) on s.saveMut.
-func (s *Site) readRawTextLocked(identifierStr string) (string, error) {
-	mungedPath, originalPath, _ := s.getFilePathsForIdentifier(identifierStr, mdExtension)
-	if b, err := os.ReadFile(mungedPath); err == nil {
-		return string(b), nil
-	}
-	b, err := os.ReadFile(originalPath)
-	if err != nil {
-		return "", err
-	}
-	return string(b), nil
-}
-
-// writeRawTextLocked writes text to the .md file for the given identifier without acquiring
-// saveMut. The caller must hold the write lock on s.saveMut.
-func (s *Site) writeRawTextLocked(identifierStr, text string) error {
-	filePath := path.Join(s.PathToData, base32tools.EncodeToBase32(strings.ToLower(identifierStr))+".md")
-	if err := os.WriteFile(filePath, []byte(text), 0644); err != nil {
-		return fmt.Errorf("failed to save page %s: %w", identifierStr, err)
-	}
-	return nil
-}
-
-// modifyOrCreatePage atomically reads, modifies, and writes a page's full raw text.
-// The write lock is held for the entire read-modify-write cycle, preventing TOCTOU races.
-// If the page does not exist on disk, modifier is called with an empty string (creating the page).
-// Async indexing jobs are enqueued after the lock is released.
+// modifyOrCreatePage atomically reads, modifies, and writes a page's full raw text
+// through `*pagestore.Store.ModifyOrCreatePage`. The page-lock is held for the
+// entire read-modify-write cycle; async indexing jobs are enqueued only after
+// the lock has been released.
 func (s *Site) modifyOrCreatePage(identifierStr string, modifier func(currentText string) (string, error)) error {
-	unlock := s.lockPage(identifierStr)
-
-	currentText, readErr := s.readRawTextLocked(identifierStr)
-	if readErr != nil && !os.IsNotExist(readErr) {
-		unlock()
-		return fmt.Errorf("failed to read page %s for modification: %w", identifierStr, readErr)
-	}
-	// If readErr is os.ErrNotExist, currentText is "" — modifier creates from scratch.
-
-	newText, modErr := modifier(currentText)
-	if modErr != nil {
-		unlock()
-		return modErr
+	if err := s.ensureStore().ModifyOrCreatePage(identifierStr, modifier); err != nil {
+		return err
 	}
 
-	writeErr := s.writeRawTextLocked(identifierStr, newText)
-	unlock()
-
-	if writeErr != nil {
-		return writeErr
-	}
-
-	// Enqueue async indexing jobs after releasing the lock.
+	// Enqueue async indexing jobs after the lock has been released by the store.
 	identifier := wikipage.PageIdentifier(identifierStr)
 	if s.IndexCoordinator != nil {
 		if err := s.IndexCoordinator.EnqueueIndexJob(identifier, index.Add); err != nil {
@@ -997,11 +874,11 @@ func (s *Site) ReadMarkdown(identifier wikipage.PageIdentifier) (wikipage.PageId
 	return identifier, markdown, nil
 }
 
-// DeletePage deletes a page from disk.
+// DeletePage deletes a page from disk via the pagestore's soft-delete (move
+// to __deleted__/<timestamp>/). Cron registrations and index entries are
+// cleaned up here on Site; the disk operation itself is the store's
+// responsibility.
 func (s *Site) DeletePage(identifier wikipage.PageIdentifier) error {
-	unlock := s.lockPage(string(identifier))
-	defer unlock()
-
 	s.Logger.Trace("Deleting page %s", identifier)
 
 	// Drop any agent.schedules cron registrations for this page BEFORE the
@@ -1021,30 +898,7 @@ func (s *Site) DeletePage(identifier wikipage.PageIdentifier) error {
 		}
 	}
 
-	// Soft delete: move files to __deleted__/<timestamp>/ directory
-	timestamp := time.Now().Unix()
-	deletedDir := path.Join(s.PathToData, "__deleted__", fmt.Sprintf("%d", timestamp))
-
-	// Create the timestamped deleted directory
-	if err := os.MkdirAll(deletedDir, 0755); err != nil {
-		return fmt.Errorf("failed to create deleted directory: %w", err)
-	}
-
-	// Move Markdown file if it exists
-	mdPath := path.Join(s.PathToData, base32tools.EncodeToBase32(strings.ToLower(string(identifier)))+".md")
-	deletedMdPath := path.Join(deletedDir, base32tools.EncodeToBase32(strings.ToLower(string(identifier)))+".md")
-	mdErr := os.Rename(mdPath, deletedMdPath)
-	mdExists := mdErr == nil
-	if mdErr != nil && !os.IsNotExist(mdErr) {
-		return fmt.Errorf("failed to move Markdown file for page %s: %w", identifier, mdErr)
-	}
-
-	// If file didn't exist, return not found error
-	if !mdExists {
-		return os.ErrNotExist
-	}
-
-	return nil
+	return s.ensureStore().SoftDeletePage(identifier)
 }
 
 // UpdatePageContent updates a page's full content, applying migrations, rendering, and saving.
@@ -1105,16 +959,19 @@ func (s *Site) savePageAndIndex(p *wikipage.Page) error {
 
 // savePage saves a page to disk without triggering indexing.
 // This is used by migrations to avoid circular references during read operations.
+//
+// Delegates the disk write to `*pagestore.Store.ModifyOrCreatePage` so the
+// page-lock is shared with all other I/O. Bypassing the store here would
+// re-introduce the dual-lock race the refactor exists to eliminate.
 func (s *Site) savePage(p *wikipage.Page) error {
-	unlock := s.lockPage(p.Identifier)
-	defer unlock()
-
-	// Write the current Markdown
-	err := os.WriteFile(path.Join(s.PathToData, base32tools.EncodeToBase32(strings.ToLower(p.Identifier))+".md"), []byte(p.Text), 0644)
-	if err != nil {
+	// Use store's ModifyOrCreatePage with a constant-returning modifier so the
+	// store's per-page lock protects the write; the read side of the
+	// read-modify-write is wasted work but tiny compared to the write IO.
+	if err := s.ensureStore().ModifyOrCreatePage(p.Identifier, func(_ string) (string, error) {
+		return p.Text, nil
+	}); err != nil {
 		return fmt.Errorf("failed to save page %s: %w", p.Identifier, err)
 	}
-
 	return nil
 }
 
