@@ -2,6 +2,7 @@ package pagestore
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 )
@@ -58,9 +59,10 @@ func (r *CanonicalReader) ReadFrontMatter(id wikipage.PageIdentifier) (wikipage.
 		return id, nil, err
 	}
 	if p.IsNew() {
-		// File didn't exist; the contract is to return os.ErrNotExist —
-		// match *Store.ReadFrontMatter's shape exactly.
-		return r.inner.ReadFrontMatter(id)
+		// File didn't exist. Return the os.ErrNotExist contract directly
+		// rather than re-calling inner.ReadFrontMatter (which would re-issue
+		// the same read against the store under the same lock).
+		return id, nil, os.ErrNotExist
 	}
 	fm, fmErr := p.GetFrontMatter()
 	if fmErr != nil {

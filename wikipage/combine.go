@@ -27,21 +27,23 @@ const (
 // pages without circular dependencies. The combine logic is page-shape
 // knowledge, not server knowledge.
 func CombineFrontMatterAndMarkdown(fm FrontMatter, md Markdown) (string, error) {
+	// Fast paths avoid the toml.Marshal cost when there's nothing to serialize.
+	if len(fm) == 0 && len(md) == 0 {
+		return "", nil
+	}
+	if len(fm) == 0 {
+		// No frontmatter to marshal — return just the body.
+		return string(md), nil
+	}
+
 	fmBytes, err := toml.Marshal(fm)
 	if err != nil {
 		return "", fmt.Errorf("failed to marshal frontmatter: %w", err)
 	}
 
-	// If there's no content, no need to write anything.
-	if len(fm) == 0 && len(md) == 0 {
-		return "", nil
-	}
-
 	var content bytes.Buffer
-	if len(fm) > 0 {
-		if err := writeFrontmatterToBuffer(&content, fmBytes); err != nil {
-			return "", err
-		}
+	if err := writeFrontmatterToBuffer(&content, fmBytes); err != nil {
+		return "", err
 	}
 	if _, err := content.WriteString(string(md)); err != nil {
 		return "", err

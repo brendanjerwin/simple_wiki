@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/brendanjerwin/simple_wiki/filestore"
@@ -93,13 +94,19 @@ type Site struct {
 	// primitive itself.
 	store *pagestore.Store
 
-	// reader wraps store with the read-side canonicalization decorator. By
-	// default (Phase 3 wiring) the canonicalizer is a noop; Phase 4 swaps in
-	// the real format canonicalizer so reads always return canonical bytes
-	// regardless of on-disk state. Tracked separately from `store` because
-	// pure-storage tests (eager-backfill ScanJob, etc.) want the bare *Store,
-	// while user-facing reads want canonicalized output.
+	// reader wraps store with the read-side canonicalization decorator so
+	// reads always return canonical bytes regardless of on-disk state.
+	// Tracked separately from `store` because pure-storage tests
+	// (eager-backfill ScanJob, etc.) want the bare *Store, while
+	// user-facing reads want canonicalized output.
 	reader pagestore.Reader
+
+	// storeInitMu guards lazy initialization of `store` and `reader` in
+	// ensureStore so parallel goroutines (and parallel Ginkgo specs) don't
+	// race on the field mutation. Production-path Site is initialized
+	// completely in NewSite before any handler runs; this mutex protects
+	// only the test-time lazy-init path.
+	storeInitMu sync.Mutex
 }
 
 // SetCalDAVServer installs the CalDAV HTTP handler the caldavGateway
@@ -472,6 +479,9 @@ func (s *Site) InitializeIndexingAndWait(timeout time.Duration) error {
 // Production code path is initialized in NewSite and PathToData is never
 // mutated, so the re-creation branch is test-only.
 func (s *Site) ensureStore() *pagestore.Store {
+	s.storeInitMu.Lock()
+	defer s.storeInitMu.Unlock()
+
 	if s.store == nil || s.store.PathToData() != s.PathToData {
 		s.store = pagestore.NewStore(s.PathToData)
 		canon := canonicalize.NewFormatCanonicalizer()
@@ -486,13 +496,6 @@ func (s *Site) ensureStore() *pagestore.Store {
 	return s.store
 }
 
-// ReadPage opens a page by its identifier. Delegates the raw read to
-// `*pagestore.Store.ReadPage` (which is pure — no migration side effect),
-// then applies the lazy applicator's canonicalization and saves back if
-// the bytes changed. The save-on-read side effect is the bug the surrounding
-// refactor is removing; Phase 5 deletes the `applyMigrationsForPage` call
-// after Phase 4's CanonicalReader decorator takes over the in-memory
-// canonicalization.
 // ReadPage opens a page by its identifier. Delegates entirely to the
 // CanonicalReader decorator (which wraps *pagestore.Store), so callers
 // always receive canonical bytes regardless of on-disk state. No

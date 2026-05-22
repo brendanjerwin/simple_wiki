@@ -1,12 +1,14 @@
-// Characterization tests pinning Site.ReadPage's observable behavior across
-// the lazy-migration call chain. The full byte-level goldens are captured
-// from today's behavior so Phase 2's mechanical PageStore extraction can
-// verify byte-identical output.
+// Characterization tests pinning Site.ReadPage's observable behavior under
+// the new CanonicalReader-based read path. Each test exercises Site.ReadPage
+// for a specific frontmatter shape and asserts that the bytes returned to
+// the caller are in canonical form — without the on-disk file being
+// modified by the read (the bug class this refactor removed).
 //
-// Scope: ReadPage through `applyMigrationsForPage`. The migrations
-// themselves are unit-tested in migrations/lazy/*_test.go; what these tests
-// pin is the *integration* — that ReadPage routes through the applicator
-// and returns the canonicalized form.
+// Scope: Site.ReadPage → s.reader.ReadPage (CanonicalReader decorator) →
+// *pagestore.Store.ReadPage. The migrations themselves are unit-tested in
+// migrations/canonicalize and migrations/lazy/*_test.go; what these tests
+// pin is the *integration* — that ReadPage applies the format
+// canonicalizer in memory and returns the canonical view.
 
 package server
 
