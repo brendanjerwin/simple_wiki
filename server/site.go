@@ -480,6 +480,10 @@ func canonicalLockKey(id string) string {
 // the release function. Uses sync.Map.LoadOrStore so concurrent first-touches
 // of the same page share one mutex without a global lock. Same pattern as
 // checklistmutator/mutator.go:709.
+//
+// Records two observability instruments: the wait-to-acquire duration as
+// a histogram (wiki_page_lock_wait_seconds), and the current holder count
+// as an UpDownCounter (wiki_page_lock_holders). See page_lock_metrics.go.
 func (s *Site) lockPage(id string) func() {
 	key := canonicalLockKey(id)
 	v, _ := s.pageLocks.LoadOrStore(key, &sync.Mutex{})
@@ -491,8 +495,13 @@ func (s *Site) lockPage(id string) func() {
 		// rather than a panic.
 		mu = &sync.Mutex{}
 	}
+	start := time.Now()
 	mu.Lock()
-	return mu.Unlock
+	recordPageLockAcquired(time.Since(start))
+	return func() {
+		mu.Unlock()
+		recordPageLockReleased()
+	}
 }
 
 // getFilePathsForIdentifier returns the munged and original file paths for an identifier
