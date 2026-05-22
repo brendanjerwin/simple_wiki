@@ -93,6 +93,14 @@ type Site struct {
 	// indexing / scheduling side effects that don't belong on the storage
 	// primitive itself.
 	store *pagestore.Store
+
+	// reader wraps store with the read-side canonicalization decorator. By
+	// default (Phase 3 wiring) the canonicalizer is a noop; Phase 4 swaps in
+	// the real format canonicalizer so reads always return canonical bytes
+	// regardless of on-disk state. Tracked separately from `store` because
+	// pure-storage tests (eager-backfill ScanJob, etc.) want the bare *Store,
+	// while user-facing reads want canonicalized output.
+	reader pagestore.Reader
 }
 
 // SetCalDAVServer installs the CalDAV HTTP handler the caldavGateway
@@ -141,8 +149,9 @@ func NewSite(
 		Logger:              logger,
 		MigrationApplicator: applicator,
 		MarkdownRenderer:    &goldmarkrenderer.GoldmarkRenderer{},
-		store:               pagestore.NewStore(filepathToData),
 	}
+	site.store = pagestore.NewStore(filepathToData)
+	site.reader = pagestore.NewCanonicalReader(pagestore.NoopCanonicalizer{}, site.store)
 
 	logger.Info("Initializing site indexing...")
 	err := site.InitializeIndexing()
@@ -453,18 +462,22 @@ func (s *Site) InitializeIndexingAndWait(timeout time.Duration) error {
 
 // --- Site methods moved from page.go ---
 
-// ensureStore lazy-initializes the pagestore.Store on first use so tests
-// that construct Site directly (without going through NewSite) don't need
-// to wire the store manually. Also re-creates the store if PathToData has
-// been mutated (some tests reassign it to point at a read-only directory to
-// exercise save-error paths) — without this check, the store would keep
-// writing to the original path.
+// ensureStore lazy-initializes the pagestore.Store (and matching reader
+// decorator) on first use so tests that construct Site directly (without
+// going through NewSite) don't need to wire the store manually. Also
+// re-creates the store if PathToData has been mutated (some tests reassign
+// it to point at a read-only directory to exercise save-error paths) —
+// without this check, the store would keep writing to the original path.
 //
 // Production code path is initialized in NewSite and PathToData is never
 // mutated, so the re-creation branch is test-only.
 func (s *Site) ensureStore() *pagestore.Store {
 	if s.store == nil || s.store.PathToData() != s.PathToData {
 		s.store = pagestore.NewStore(s.PathToData)
+		s.reader = pagestore.NewCanonicalReader(pagestore.NoopCanonicalizer{}, s.store)
+	}
+	if s.reader == nil {
+		s.reader = pagestore.NewCanonicalReader(pagestore.NoopCanonicalizer{}, s.store)
 	}
 	return s.store
 }
@@ -477,7 +490,8 @@ func (s *Site) ensureStore() *pagestore.Store {
 // after Phase 4's CanonicalReader decorator takes over the in-memory
 // canonicalization.
 func (s *Site) ReadPage(requestedIdentifier wikipage.PageIdentifier) (*wikipage.Page, error) {
-	p, err := s.ensureStore().ReadPage(requestedIdentifier)
+	s.ensureStore()
+	p, err := s.reader.ReadPage(requestedIdentifier)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read page %s: %w", requestedIdentifier, err)
 	}
@@ -487,6 +501,8 @@ func (s *Site) ReadPage(requestedIdentifier wikipage.PageIdentifier) (*wikipage.
 	}
 
 	// Apply migrations to the loaded content (today: may also save on diff).
+	// Phase 5 deletes this call once the canonicalizer (currently noop) is
+	// flipped to the real format canonicalizer in Phase 4.
 	migratedContent, migrationErr := s.applyMigrationsForPage(p, []byte(p.Text))
 	if migrationErr != nil {
 		return nil, fmt.Errorf("migration failed for page %s: %w", p.Identifier, migrationErr)
@@ -506,10 +522,13 @@ func (s *Site) applyMigrationsForPage(page *wikipage.Page, content []byte) ([]by
 		return nil, fmt.Errorf("failed to apply content migrations: %w", err)
 	}
 
-	// If migration was applied, save the migrated content
+	// If migration was applied, save the migrated content.
+	// This is the save-on-read bug class — Phase 5 deletes this branch
+	// once Phase 4's canonicalizer makes it dead code.
 	if !bytes.Equal(content, migratedContent) {
 		// Update the page's text with migrated content and save
 		page.Text = string(migratedContent)
+		recordReadPathWrite()
 		if saveErr := s.savePage(page); saveErr != nil {
 			s.Logger.Warn("Failed to save migrated content for %s: %v", page.Identifier, saveErr)
 		} else {

@@ -16,21 +16,40 @@ import (
 	"go.opentelemetry.io/otel/metric"
 )
 
-// Store is the disk-backed storage primitive for wiki pages. Owns raw I/O
-// and per-page locks; owns nothing else. Decorators in this package
-// (CanonicalReader, CanonicalizingWriter) add the migration/normalization
-// policy without entangling Store with it.
+// Store is the disk-backed storage primitive for wiki pages. Owns raw I/O,
+// per-page locks, and the write-side canonicalization step. Reads stay
+// pure (the CanonicalReader decorator wraps Store to add canonicalize-on-
+// return for the read path).
+//
+// The write-side canonicalizer is injected as a dependency so the same
+// Store type works with the noop default (Phase 3 wiring) or the real
+// frontmatter canonicalizer (Phase 4 wiring) without behavior leaking
+// out of pagestore.
 type Store struct {
-	pathToData string
+	pathToData    string
+	canonicalizer FrontmatterCanonicalizer
 
 	// pageLocks holds one *sync.Mutex per page, keyed by CanonicalLockKey(id).
 	pageLocks sync.Map
 }
 
 // NewStore constructs a Store rooted at pathToData. The directory must
-// already exist; Store does not create it.
+// already exist; Store does not create it. The store uses NoopCanonicalizer
+// by default; call SetCanonicalizer (or use the Phase 4 wiring) to swap
+// in the real frontmatter canonicalizer.
 func NewStore(pathToData string) *Store {
-	return &Store{pathToData: pathToData}
+	return &Store{pathToData: pathToData, canonicalizer: NoopCanonicalizer{}}
+}
+
+// SetCanonicalizer swaps the canonicalizer used on the write path. Safe to
+// call at Site-construction time before any concurrent writes. If c is nil,
+// the canonicalizer reverts to NoopCanonicalizer so the store is always in
+// a callable state.
+func (s *Store) SetCanonicalizer(c FrontmatterCanonicalizer) {
+	if c == nil {
+		c = NoopCanonicalizer{}
+	}
+	s.canonicalizer = c
 }
 
 // PathToData returns the data directory the Store is reading from / writing
@@ -120,9 +139,19 @@ func (s *Store) readRawTextLocked(identifier string) (string, error) {
 
 // writeRawTextLocked writes the .md file content for the given identifier
 // without acquiring the lock. The caller must hold the page lock.
+//
+// The canonicalizer runs over `text` before the bytes hit disk so every
+// successful write produces canonical on-disk content. With the noop
+// canonicalizer (Phase 3 default), input is unchanged; with the format
+// canonicalizer (Phase 4 wiring), YAML→TOML conversion etc. happens here.
+// A canonicalizer error fails the write — it's never silently dropped.
 func (s *Store) writeRawTextLocked(identifier, text string) error {
+	canonical, err := s.canonicalizer.Canonicalize([]byte(text))
+	if err != nil {
+		return fmt.Errorf("canonicalize page %s before write: %w", identifier, err)
+	}
 	filePath := path.Join(s.pathToData, base32tools.EncodeToBase32(strings.ToLower(identifier))+".md")
-	if err := os.WriteFile(filePath, []byte(text), 0644); err != nil {
+	if err := os.WriteFile(filePath, canonical, 0644); err != nil {
 		return fmt.Errorf("failed to save page %s: %w", identifier, err)
 	}
 	return nil
