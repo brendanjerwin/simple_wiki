@@ -225,18 +225,24 @@ var (
 func initLockMetrics() {
 	lockMetricsInitOnce.Do(func() {
 		meter := otel.Meter("simple_wiki/pagestore")
-		if hist, err := meter.Float64Histogram(
+		// Attempt each instrument independently: a failure in one must not
+		// prevent the other from being available. Failure is rare (only
+		// possible on malformed instrument names — ours are constants), but
+		// observability shouldn't propagate brittleness.
+		hist, histErr := meter.Float64Histogram(
 			"wiki_page_lock_wait_seconds",
 			metric.WithDescription("How long a caller waited to acquire a page lock"),
 			metric.WithUnit("s"),
-		); err == nil {
+		)
+		if histErr == nil {
 			lockWaitSeconds = hist
 		}
-		if gauge, err := meter.Int64UpDownCounter(
+		gauge, gaugeErr := meter.Int64UpDownCounter(
 			"wiki_page_lock_holders",
 			metric.WithDescription("Number of page locks currently held"),
 			metric.WithUnit("{lock}"),
-		); err == nil {
+		)
+		if gaugeErr == nil {
 			lockHolders = gauge
 		}
 	})

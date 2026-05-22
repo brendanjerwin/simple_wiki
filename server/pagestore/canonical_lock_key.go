@@ -24,9 +24,11 @@ import (
 // backfill write to the same page would key on different mutex values
 // and a torn-write window would open.
 //
-// MungeIdentifier is documented as idempotent and produces a URL-safe
-// form; we additionally lowercase to match the on-disk path computation
-// in getFilePathsForIdentifier (which lowercases before base32-encoding).
+// MungeIdentifier already lowercases its output as the final step of
+// strcase.SnakeCase / UUID handling (see wikiidentifiers/identifiers.go),
+// so the success-path result is already in the form that matches the
+// on-disk path computation in getFilePaths (which lowercases before
+// base32-encoding).
 //
 // If MungeIdentifier returns an error (malformed input), we fall back to
 // the raw lowercased identifier. The fallback is safe because every
@@ -42,5 +44,5 @@ func CanonicalLockKey(id string) string {
 	if err != nil {
 		return strings.ToLower(id)
 	}
-	return strings.ToLower(munged)
+	return munged
 }

@@ -700,50 +700,6 @@ func (s *Site) UploadList() ([]os.FileInfo, error) {
 
 // --- PageReaderMutator implementation ---
 
-// writeFrontmatterToBuffer writes the TOML frontmatter delimiters around fmBytes.
-// Kept in server/ alongside its tests; wikipage has its own copy for the
-// pagestore package's use (small duplication, scoped to a transitional state).
-func writeFrontmatterToBuffer(content io.Writer, fmBytes []byte) error {
-	if _, err := io.WriteString(content, tomlDelimiter); err != nil {
-		return err
-	}
-	if _, err := content.Write(fmBytes); err != nil {
-		return err
-	}
-	if !bytes.HasSuffix(fmBytes, []byte(newline)) {
-		if _, err := io.WriteString(content, newline); err != nil {
-			return err
-		}
-	}
-	if _, err := io.WriteString(content, tomlDelimiter); err != nil {
-		return err
-	}
-	return nil
-}
-
-func combineFrontmatterAndMarkdown(fm wikipage.FrontMatter, md wikipage.Markdown) (string, error) {
-	fmBytes, err := toml.Marshal(fm)
-	if err != nil {
-		return "", fmt.Errorf("failed to marshal frontmatter: %w", err)
-	}
-
-	// If there's no content, no need to write anything.
-	if len(fm) == 0 && len(md) == 0 {
-		return "", nil
-	}
-
-	var content bytes.Buffer
-	if len(fm) > 0 {
-		if err := writeFrontmatterToBuffer(&content, fmBytes); err != nil {
-			return "", err
-		}
-	}
-	if _, err := content.WriteString(string(md)); err != nil {
-		return "", err
-	}
-	return content.String(), nil
-}
-
 // modifyOrCreatePage atomically reads, modifies, and writes a page's full raw text
 // through `*pagestore.Store.ModifyOrCreatePage`. The page-lock is held for the
 // entire read-modify-write cycle; async indexing jobs are enqueued only after
@@ -802,7 +758,7 @@ func (s *Site) ModifyMarkdown(identifier wikipage.PageIdentifier, modifier func(
 			return "", fmt.Errorf("failed to parse frontmatter during markdown modification: %w", err)
 		}
 
-		return combineFrontmatterAndMarkdown(currentFM, newMD)
+		return wikipage.CombineFrontMatterAndMarkdown(currentFM, newMD)
 	})
 }
 
@@ -817,7 +773,7 @@ func (s *Site) WriteFrontMatter(identifier wikipage.PageIdentifier, fm wikipage.
 			return "", fmt.Errorf("failed to parse markdown for frontmatter write: %w", err)
 		}
 
-		return combineFrontmatterAndMarkdown(fm, md)
+		return wikipage.CombineFrontMatterAndMarkdown(fm, md)
 	})
 }
 
