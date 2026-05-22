@@ -118,22 +118,28 @@ inventory.container = 'GarageInventory'
 				var diskContent string
 
 				BeforeEach(func() {
-					// Read the file from disk to see if it was updated
+					// Read the file from disk to see if it was updated by ReadPage.
 					diskBytes, readErr := os.ReadFile(filePath)
 					Expect(readErr).NotTo(HaveOccurred())
 					diskContent = string(diskBytes)
 				})
 
-				It("should remove dotted notation from disk file", func() {
-					Expect(diskContent).NotTo(ContainSubstring("inventory.container"))
+				// These three tests previously pinned the save-on-read bug
+				// (disk file updated to canonical form as a ReadPage side
+				// effect). Post-Phase 4, the read path canonicalizes in
+				// memory only — disk stays in pre-canonical form until a
+				// write touches the page. Inverting the assertions:
+
+				It("should keep the pre-canonical content on disk (no save-on-read)", func() {
+					Expect(diskContent).To(Equal(fileContent))
 				})
 
-				It("should create [inventory] section in disk file", func() {
-					Expect(diskContent).To(ContainSubstring("[inventory]"))
+				It("should still have inventory.container on disk in dot-notation form", func() {
+					Expect(diskContent).To(ContainSubstring("inventory.container"))
 				})
 
-				It("should match content returned by Open()", func() {
-					Expect(diskContent).To(Equal(openedContent))
+				It("should NOT match the canonical content returned by ReadPage", func() {
+					Expect(diskContent).NotTo(Equal(openedContent))
 				})
 			})
 		})

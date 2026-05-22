@@ -18,6 +18,7 @@ import (
 	"github.com/brendanjerwin/simple_wiki/index"
 	"github.com/brendanjerwin/simple_wiki/index/bleve"
 	"github.com/brendanjerwin/simple_wiki/index/frontmatter"
+	"github.com/brendanjerwin/simple_wiki/migrations/canonicalize"
 	"github.com/brendanjerwin/simple_wiki/migrations/eager"
 	"github.com/brendanjerwin/simple_wiki/migrations/lazy"
 	"github.com/brendanjerwin/simple_wiki/server/pagestore"
@@ -150,8 +151,14 @@ func NewSite(
 		MigrationApplicator: applicator,
 		MarkdownRenderer:    &goldmarkrenderer.GoldmarkRenderer{},
 	}
+	// Phase 4 flip: real format canonicalizer on both read and write paths.
+	// CanonicalReader returns canonical bytes from every read; Store's
+	// writeRawTextLocked canonicalizes before every write. The combination
+	// closes the save-on-read window without depending on disk-form state.
+	canonicalizer := canonicalize.NewFormatCanonicalizer()
 	site.store = pagestore.NewStore(filepathToData)
-	site.reader = pagestore.NewCanonicalReader(pagestore.NoopCanonicalizer{}, site.store)
+	site.store.SetCanonicalizer(canonicalizer)
+	site.reader = pagestore.NewCanonicalReader(canonicalizer, site.store)
 
 	logger.Info("Initializing site indexing...")
 	err := site.InitializeIndexing()
@@ -474,10 +481,14 @@ func (s *Site) InitializeIndexingAndWait(timeout time.Duration) error {
 func (s *Site) ensureStore() *pagestore.Store {
 	if s.store == nil || s.store.PathToData() != s.PathToData {
 		s.store = pagestore.NewStore(s.PathToData)
-		s.reader = pagestore.NewCanonicalReader(pagestore.NoopCanonicalizer{}, s.store)
+		canon := canonicalize.NewFormatCanonicalizer()
+		s.store.SetCanonicalizer(canon)
+		s.reader = pagestore.NewCanonicalReader(canon, s.store)
 	}
 	if s.reader == nil {
-		s.reader = pagestore.NewCanonicalReader(pagestore.NoopCanonicalizer{}, s.store)
+		canon := canonicalize.NewFormatCanonicalizer()
+		s.store.SetCanonicalizer(canon)
+		s.reader = pagestore.NewCanonicalReader(canon, s.store)
 	}
 	return s.store
 }
