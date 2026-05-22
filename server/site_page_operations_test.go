@@ -11,8 +11,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/brendanjerwin/simple_wiki/migrations/lazy"
-	"github.com/brendanjerwin/simple_wiki/utils/base32tools"
+		"github.com/brendanjerwin/simple_wiki/utils/base32tools"
 	"github.com/brendanjerwin/simple_wiki/utils/goldmarkrenderer"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 
@@ -20,20 +19,6 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
-
-// mockMigrationApplicatorForCircularTest simulates a migration that modifies content
-type mockMigrationApplicatorForCircularTest struct {
-	shouldModifyContent bool
-}
-
-func (m *mockMigrationApplicatorForCircularTest) ApplyMigrations(content []byte) ([]byte, error) {
-	if m.shouldModifyContent {
-		// Simulate a migration that would modify content, requiring a save
-		modifiedContent := append(content, []byte("\n# Migration applied")...)
-		return modifiedContent, nil
-	}
-	return content, nil
-}
 
 var _ = Describe("Site Page Operations", func() {
 	var (
@@ -49,7 +34,6 @@ var _ = Describe("Site Page Operations", func() {
 			PathToData:          pathToData,
 			MarkdownRenderer:    &goldmarkrenderer.GoldmarkRenderer{},
 			Logger:              lumber.NewConsoleLogger(lumber.INFO),
-			MigrationApplicator: lazy.NewEmptyApplicator(),
 		}
 		err = s.InitializeIndexing()
 		Expect(err).NotTo(HaveOccurred())
@@ -183,72 +167,15 @@ var _ = Describe("Site Page Operations", func() {
 	})
 
 
-	Describe("Site.Open migration integration", func() {
-		var (
-			pageIdentifier string
-			pagePath       string
-		)
-
-		BeforeEach(func() {
-			pageIdentifier = "test_migration_page"
-			pagePath = filepath.Join(s.PathToData, base32tools.EncodeToBase32(strings.ToLower(pageIdentifier))+".md")
-			
-			// Create initial page content on disk
-			initialContent := "+++\nidentifier = \"test_migration_page\"\n+++\n# Test Page"
-			writeErr := os.WriteFile(pagePath, []byte(initialContent), 0644)
-			Expect(writeErr).NotTo(HaveOccurred())
-		})
-
-		When("Open is called with migrations that modify content", func() {
-			var (
-				p              *wikipage.Page
-				err            error
-				originalDiskContent string
-				finalContent   string
-			)
-
-			BeforeEach(func() {
-				// Record original disk content
-				diskBytes, _ := os.ReadFile(pagePath)
-				originalDiskContent = string(diskBytes)
-				
-				// Set up a mock migration that modifies content
-				mockApplicator := &mockMigrationApplicatorForCircularTest{
-					shouldModifyContent: true,
-				}
-				s.MigrationApplicator = mockApplicator
-				
-				// This call should complete without hanging and apply migrations
-				p, err = s.ReadPage(wikipage.PageIdentifier(pageIdentifier))
-				Expect(err).NotTo(HaveOccurred())
-				
-				// Wait for any background indexing operations triggered by the save
-				if s.IndexCoordinator != nil {
-					completed, _ := s.IndexCoordinator.WaitForCompletionWithTimeout(context.Background(), 1*time.Second)
-					Expect(completed).To(BeTrue())
-				}
-				
-				// Check final content after open
-				finalContent = p.Text
-			})
-
-			It("should complete without hanging", func() {
-				// If we get here, the operation completed successfully without infinite recursion
-				Expect(p).NotTo(BeNil())
-				Expect(p.WasLoadedFromDisk).To(BeTrue())
-			})
-
-			It("should load page successfully", func() {
-				Expect(p.Identifier).To(Equal(pageIdentifier))
-			})
-
-			It("should persist migrated content", func() {
-				// The migration should have been applied and saved during Open()
-				Expect(finalContent).To(ContainSubstring("# Migration applied"))
-				Expect(finalContent).NotTo(Equal(originalDiskContent))
-			})
-		})
-	})
+	// Site.Open migration integration tests previously injected a mock
+	// MigrationApplicator into Site to verify the save-on-read chain
+	// triggered the mock and persisted the modified content. Phase 5 deleted
+	// that injection point; canonicalization is now wired automatically by
+	// Site.ensureStore() and runs in memory only. The "persist migrated
+	// content" assertion no longer holds (and was the bug class itself).
+	// Coverage of the new behavior lives in
+	// server/site_characterization_test.go (read returns canonical bytes)
+	// and server/pagestore/canonical_reader_test.go (decorator semantics).
 
 	Describe("Site.WriteFrontMatter", func() {
 		When("the page does not exist on disk", func() {

@@ -16,7 +16,6 @@ import (
 	"strings"
 
 	"github.com/brendanjerwin/simple_wiki/index"
-	"github.com/brendanjerwin/simple_wiki/migrations/lazy"
 	"github.com/brendanjerwin/simple_wiki/pkg/jobs"
 	"github.com/brendanjerwin/simple_wiki/utils/base32tools"
 	"github.com/brendanjerwin/simple_wiki/utils/goldmarkrenderer"
@@ -45,17 +44,12 @@ var _ = Describe("Site.ReadPage characterization", func() {
 		mockBleve := &MockIndexOperator{}
 		indexCoord := index.NewIndexCoordinator(coordinator, mockFm, mockBleve)
 
-		// Real applicator — these tests pin today's full canonicalization
-		// behavior, not the no-op behavior other tests use.
-		applicator := lazy.NewApplicator()
-
 		s = &Site{
 			Logger:                  lumber.NewConsoleLogger(lumber.WARN),
 			PathToData:              tempDir,
 			IndexCoordinator:        indexCoord,
 			MarkdownRenderer:        &goldmarkrenderer.GoldmarkRenderer{},
 			FrontmatterIndexQueryer: &mockFrontmatterIndexQueryer{},
-			MigrationApplicator:     applicator,
 		}
 
 		writePageFile = func(id, contents string) {

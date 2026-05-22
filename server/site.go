@@ -20,7 +20,6 @@ import (
 	"github.com/brendanjerwin/simple_wiki/index/frontmatter"
 	"github.com/brendanjerwin/simple_wiki/migrations/canonicalize"
 	"github.com/brendanjerwin/simple_wiki/migrations/eager"
-	"github.com/brendanjerwin/simple_wiki/migrations/lazy"
 	"github.com/brendanjerwin/simple_wiki/server/pagestore"
 	"github.com/brendanjerwin/simple_wiki/pkg/ulid"
 	"github.com/brendanjerwin/simple_wiki/pkg/jobs"
@@ -74,7 +73,6 @@ type Site struct {
 	CronScheduler           *jobs.CronScheduler
 	FrontmatterIndexQueryer frontmatter.IQueryFrontmatterIndex
 	BleveIndexQueryer       bleve.BleveIndexQueryer
-	MigrationApplicator      lazy.FrontmatterMigrationApplicator
 	AgentScheduleStore       *AgentScheduleStore
 	AgentChatContextStore    *AgentChatContextStore
 	AgentScheduler           *AgentScheduler
@@ -138,23 +136,18 @@ func NewSite(
 ) (*Site, error) {
 	logger.Info("Initializing simple_wiki site...")
 
-	// Set up migration applicator with default migrations
-	logger.Info("Setting up rolling migrations system")
-	applicator := lazy.NewApplicator()
-
 	site := &Site{
-		PathToData:          filepathToData,
-		DefaultPage:         defaultPage,
-		Debounce:            debounce,
-		SessionStore:        cookie.NewStore([]byte(secret)),
-		Logger:              logger,
-		MigrationApplicator: applicator,
-		MarkdownRenderer:    &goldmarkrenderer.GoldmarkRenderer{},
+		PathToData:       filepathToData,
+		DefaultPage:      defaultPage,
+		Debounce:         debounce,
+		SessionStore:     cookie.NewStore([]byte(secret)),
+		Logger:           logger,
+		MarkdownRenderer: &goldmarkrenderer.GoldmarkRenderer{},
 	}
-	// Phase 4 flip: real format canonicalizer on both read and write paths.
+	// Real format canonicalizer wired into both read and write paths.
 	// CanonicalReader returns canonical bytes from every read; Store's
-	// writeRawTextLocked canonicalizes before every write. The combination
-	// closes the save-on-read window without depending on disk-form state.
+	// writeRawTextLocked canonicalizes before every write. Replaces the
+	// lazy save-on-read chain that previously lived in applyMigrationsForPage.
 	canonicalizer := canonicalize.NewFormatCanonicalizer()
 	site.store = pagestore.NewStore(filepathToData)
 	site.store.SetCanonicalizer(canonicalizer)
@@ -500,54 +493,18 @@ func (s *Site) ensureStore() *pagestore.Store {
 // refactor is removing; Phase 5 deletes the `applyMigrationsForPage` call
 // after Phase 4's CanonicalReader decorator takes over the in-memory
 // canonicalization.
+// ReadPage opens a page by its identifier. Delegates entirely to the
+// CanonicalReader decorator (which wraps *pagestore.Store), so callers
+// always receive canonical bytes regardless of on-disk state. No
+// save-on-read side effect — the bug class this refactor eliminates is
+// gone from the call graph.
 func (s *Site) ReadPage(requestedIdentifier wikipage.PageIdentifier) (*wikipage.Page, error) {
 	s.ensureStore()
 	p, err := s.reader.ReadPage(requestedIdentifier)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read page %s: %w", requestedIdentifier, err)
 	}
-	if p.IsNew() {
-		// File didn't exist; return empty page (consistent with prior behavior).
-		return p, nil
-	}
-
-	// Apply migrations to the loaded content (today: may also save on diff).
-	// Phase 5 deletes this call once the canonicalizer (currently noop) is
-	// flipped to the real format canonicalizer in Phase 4.
-	migratedContent, migrationErr := s.applyMigrationsForPage(p, []byte(p.Text))
-	if migrationErr != nil {
-		return nil, fmt.Errorf("migration failed for page %s: %w", p.Identifier, migrationErr)
-	}
-	p.Text = string(migratedContent)
 	return p, nil
-}
-
-// applyMigrationsForPage applies migrations to page content during ReadPage() and UpdatePageContent()
-func (s *Site) applyMigrationsForPage(page *wikipage.Page, content []byte) ([]byte, error) {
-	if s.MigrationApplicator == nil {
-		return nil, errors.New("migration applicator not configured: this is an application setup mistake")
-	}
-
-	migratedContent, err := s.MigrationApplicator.ApplyMigrations(content)
-	if err != nil {
-		return nil, fmt.Errorf("failed to apply content migrations: %w", err)
-	}
-
-	// If migration was applied, save the migrated content.
-	// This is the save-on-read bug class — Phase 5 deletes this branch
-	// once Phase 4's canonicalizer makes it dead code.
-	if !bytes.Equal(content, migratedContent) {
-		// Update the page's text with migrated content and save
-		page.Text = string(migratedContent)
-		recordReadPathWrite()
-		if saveErr := s.savePage(page); saveErr != nil {
-			s.Logger.Warn("Failed to save migrated content for %s: %v", page.Identifier, saveErr)
-		} else {
-			s.Logger.Info("Successfully migrated and saved content for page: %s", page.Identifier)
-		}
-	}
-
-	return migratedContent, nil
 }
 
 // readOrInitPage opens a page or initializes a new one if it doesn't exist.
@@ -931,23 +888,14 @@ func (s *Site) DeletePage(identifier wikipage.PageIdentifier) error {
 	return s.ensureStore().SoftDeletePage(identifier)
 }
 
-// UpdatePageContent updates a page's full content, applying migrations, rendering, and saving.
-// This replaces the functionality of Page.Update() but at the Site interface level.
+// UpdatePageContent updates a page's full content, rendering and saving.
+// Canonicalization of `newText` happens inside the pagestore.Store on the
+// write path (see Store.writeRawTextLocked) — UpdatePageContent no longer
+// runs the migration applicator itself.
 func (s *Site) UpdatePageContent(identifier wikipage.PageIdentifier, newText string) error {
 	p, err := s.ReadPage(identifier)
 	if err != nil {
 		return fmt.Errorf("failed to open page %s for update: %w", identifier, err)
-	}
-
-	// Apply migrations to fix user mistakes in real-time
-	migratedContent, err := s.applyMigrationsForPage(p, []byte(newText))
-	if err != nil {
-		return fmt.Errorf("failed to apply migrations during update: %w", err)
-	}
-
-	// If migration changed the content, use the migrated version
-	if string(migratedContent) != newText {
-		newText = string(migratedContent)
 	}
 
 	// Update the text content
@@ -958,7 +906,7 @@ func (s *Site) UpdatePageContent(identifier wikipage.PageIdentifier, newText str
 		s.Logger.Error("Error rendering page: %v", renderErr)
 	}
 
-	// Save to disk with proper locking
+	// Save to disk; the store canonicalizes on the write path.
 	return s.savePageAndIndex(p)
 }
 
