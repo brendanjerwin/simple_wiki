@@ -88,7 +88,12 @@ type Site struct {
 	// to the regular Gin routes. nil disables CalDAV routing — used in
 	// tests that don't need the CalDAV surface.
 	caldavServer http.Handler
-	saveMut      sync.RWMutex
+
+	// pageLocks holds one *sync.Mutex per page, keyed by canonicalLockKey(id).
+	// Replaces the old global saveMut: writes serialize per-page rather than
+	// across the whole wiki, so unrelated traffic does not queue. Mirrors the
+	// pattern at checklistmutator/mutator.go:709.
+	pageLocks sync.Map
 }
 
 // SetCalDAVServer installs the CalDAV HTTP handler the caldavGateway
@@ -448,6 +453,48 @@ func (s *Site) InitializeIndexingAndWait(timeout time.Duration) error {
 
 // --- Site methods moved from page.go ---
 
+// canonicalLockKey returns the canonical lock key for a page identifier.
+// All callers of Site.lockPage funnel through this so the same logical page
+// resolves to the same *sync.Mutex regardless of id spelling (raw vs.
+// munged, mixed case). Without this, a user write and an eager backfill
+// write to the same page would key on different mutex values and a
+// torn-write window would open.
+//
+// MungeIdentifier is documented as idempotent and produces a URL-safe form;
+// we additionally lowercase to match the on-disk path computation in
+// getFilePathsForIdentifier (which lowercases before base32-encoding).
+//
+// If MungeIdentifier returns an error (malformed input), we fall back to
+// the raw lowercased identifier. The fallback is safe because every caller
+// passing the same malformed input will resolve to the same key — drift
+// only happens across spellings of the same page, not across error paths.
+func canonicalLockKey(id string) string {
+	munged, err := wikiidentifiers.MungeIdentifier(id)
+	if err != nil {
+		return strings.ToLower(id)
+	}
+	return strings.ToLower(munged)
+}
+
+// lockPage acquires the per-page mutex for the given identifier and returns
+// the release function. Uses sync.Map.LoadOrStore so concurrent first-touches
+// of the same page share one mutex without a global lock. Same pattern as
+// checklistmutator/mutator.go:709.
+func (s *Site) lockPage(id string) func() {
+	key := canonicalLockKey(id)
+	v, _ := s.pageLocks.LoadOrStore(key, &sync.Mutex{})
+	mu, ok := v.(*sync.Mutex)
+	if !ok {
+		// Defensive: every value in pageLocks is set as *sync.Mutex. A
+		// wrong-type entry would be a programming bug; fall back to a
+		// fresh local mutex so the caller still gets serialized access
+		// rather than a panic.
+		mu = &sync.Mutex{}
+	}
+	mu.Lock()
+	return mu.Unlock
+}
+
 // getFilePathsForIdentifier returns the munged and original file paths for an identifier
 func (s *Site) getFilePathsForIdentifier(identifier, extension string) (mungedPath, originalPath, actualIdentifier string) {
 	mungedIdentifier, err := wikiidentifiers.MungeIdentifier(identifier)
@@ -462,8 +509,8 @@ func (s *Site) getFilePathsForIdentifier(identifier, extension string) (mungedPa
 }
 
 func (s *Site) readFileByIdentifier(identifier, extension string) (string, []byte, error) {
-	s.saveMut.RLock()
-	defer s.saveMut.RUnlock()
+	unlock := s.lockPage(identifier)
+	defer unlock()
 
 	mungedPath, originalPath, mungedIdentifier := s.getFilePathsForIdentifier(identifier, extension)
 
@@ -811,23 +858,23 @@ func (s *Site) writeRawTextLocked(identifierStr, text string) error {
 // If the page does not exist on disk, modifier is called with an empty string (creating the page).
 // Async indexing jobs are enqueued after the lock is released.
 func (s *Site) modifyOrCreatePage(identifierStr string, modifier func(currentText string) (string, error)) error {
-	s.saveMut.Lock()
+	unlock := s.lockPage(identifierStr)
 
 	currentText, readErr := s.readRawTextLocked(identifierStr)
 	if readErr != nil && !os.IsNotExist(readErr) {
-		s.saveMut.Unlock()
+		unlock()
 		return fmt.Errorf("failed to read page %s for modification: %w", identifierStr, readErr)
 	}
 	// If readErr is os.ErrNotExist, currentText is "" — modifier creates from scratch.
 
 	newText, modErr := modifier(currentText)
 	if modErr != nil {
-		s.saveMut.Unlock()
+		unlock()
 		return modErr
 	}
 
 	writeErr := s.writeRawTextLocked(identifierStr, newText)
-	s.saveMut.Unlock()
+	unlock()
 
 	if writeErr != nil {
 		return writeErr
@@ -943,8 +990,8 @@ func (s *Site) ReadMarkdown(identifier wikipage.PageIdentifier) (wikipage.PageId
 
 // DeletePage deletes a page from disk.
 func (s *Site) DeletePage(identifier wikipage.PageIdentifier) error {
-	s.saveMut.Lock()
-	defer s.saveMut.Unlock()
+	unlock := s.lockPage(string(identifier))
+	defer unlock()
 
 	s.Logger.Trace("Deleting page %s", identifier)
 
@@ -1050,8 +1097,8 @@ func (s *Site) savePageAndIndex(p *wikipage.Page) error {
 // savePage saves a page to disk without triggering indexing.
 // This is used by migrations to avoid circular references during read operations.
 func (s *Site) savePage(p *wikipage.Page) error {
-	s.saveMut.Lock()
-	defer s.saveMut.Unlock()
+	unlock := s.lockPage(p.Identifier)
+	defer unlock()
 
 	// Write the current Markdown
 	err := os.WriteFile(path.Join(s.PathToData, base32tools.EncodeToBase32(strings.ToLower(p.Identifier))+".md"), []byte(p.Text), 0644)
