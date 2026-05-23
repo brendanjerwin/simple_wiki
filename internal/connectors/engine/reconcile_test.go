@@ -1404,15 +1404,16 @@ var _ = Describe("Engine.reconcile", func() {
 	// Production regression 2026-05-22: user reported "shopping_lists
 	// duplicated thousands of times in Google Keep." Root cause: when
 	// Keep returned a fresh ref for an item the wiki already had bound
-	// to a DIFFERENT ref (Keep-side duplicate, possibly from a prior
-	// bug cycle), applyInboundOneItem's dedup-by-text only consulted
-	// UNBOUND wiki items. The bound match was missed, so engine fell
-	// through to AddItemForSync — creating a wiki duplicate. The new
-	// duplicate then drove a fresh outbound push, multiplying the Keep
-	// side too. Fix: indexWikiItemsByText covers all items; when the
-	// match is bound to a DIFFERENT ref, skip the inbound apply (no
-	// wiki duplicate created). Operator cleans the remote-side duplicate
-	// in the source UI.
+	// to a DIFFERENT ref (Keep-side duplicate, possibly seeded by a
+	// prior reconcile failure that lost the idMap update),
+	// applyInboundOneItem's dedup-by-text only consulted UNBOUND wiki
+	// items. The bound match was missed, so engine fell through to
+	// AddItemForSync — creating a wiki duplicate. The new duplicate
+	// then drove a fresh outbound push, multiplying the Keep side too.
+	// Fix: indexWikiItemsByText covers all items; when the match is
+	// bound to a DIFFERENT ref, skip the inbound apply (no wiki
+	// duplicate created). Operator cleans the remote-side duplicate in
+	// the source UI.
 	When("a remote pull item content-matches a BOUND wiki item under a different ref", func() {
 		const wikiUID = "uid-bound-dedup"
 		const existingRef = "ref-original"
@@ -1480,9 +1481,9 @@ var _ = Describe("Engine.reconcile", func() {
 	})
 
 	// Production regression 2026-05-22 (outbound side): with thousands
-	// of wiki duplicates already accumulated by the inbound bug, the
-	// engine's outbound push would Insert every unbound duplicate to
-	// the remote, multiplying the remote side too. Fix: pushOutbound
+	// of wiki duplicates already accumulated by the inbound regression,
+	// the engine's outbound push would Insert every unbound duplicate
+	// to the remote, multiplying the remote side too. Fix: pushOutbound
 	// builds a boundUIDByText index; when a wiki item awaiting Insert
 	// has text matching an already-bound wiki item, skip the insert.
 	When("the wiki has a bound item and an unbound duplicate with the same text", func() {
@@ -1508,8 +1509,8 @@ var _ = Describe("Engine.reconcile", func() {
 
 			// Wiki has BOTH the bound item AND a second unbound item
 			// with identical text (the accumulated wiki-side duplicate
-			// from the prior bug). The outbound push should refuse to
-			// Insert the second one.
+			// from the prior regression). The outbound push should
+			// refuse to Insert the second one.
 			reader.checklist = &apiv1.Checklist{
 				Items: []*apiv1.ChecklistItem{
 					{Uid: boundUID, Text: "30 corn tortillas"},
