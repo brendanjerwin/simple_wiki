@@ -607,6 +607,52 @@ var _ = Describe("AgentChatContextStore", func() {
 				Expect(ctx.GetBackgroundActivity()[1].GetStatus()).To(Equal(apiv1.ScheduleStatus_SCHEDULE_STATUS_ERROR))
 			})
 		})
+
+		Describe("when appending a terminal completion exceeds the activity cap", func() {
+			var (
+				finalStatus apiv1.ScheduleStatus
+				ctx         *apiv1.ChatContext
+			)
+
+			BeforeEach(func() {
+				for i := 0; i < server.BackgroundActivityMax; i++ {
+					summary := "retained run"
+					if i == 0 {
+						summary = "oldest run"
+					}
+					Expect(store.AppendBackgroundActivityAutomatic("p", &apiv1.BackgroundActivityEntry{
+						Timestamp:  timestamppb.New(time.Now().Add(time.Duration(i) * time.Minute)),
+						ScheduleId: "old",
+						Status:     apiv1.ScheduleStatus_SCHEDULE_STATUS_OK,
+						Summary:    summary,
+					})).To(Succeed())
+				}
+
+				var err error
+				finalStatus, err = store.CompleteBackgroundActivity("p", "new", apiv1.ScheduleStatus_SCHEDULE_STATUS_ERROR)
+				Expect(err).NotTo(HaveOccurred())
+				ctx, err = store.Read("p")
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should keep the requested terminal status", func() {
+				Expect(finalStatus).To(Equal(apiv1.ScheduleStatus_SCHEDULE_STATUS_ERROR))
+			})
+
+			It("should keep background activity capped", func() {
+				Expect(ctx.GetBackgroundActivity()).To(HaveLen(server.BackgroundActivityMax))
+			})
+
+			It("should drop the oldest entry", func() {
+				Expect(ctx.GetBackgroundActivity()[0].GetSummary()).To(Equal("retained run"))
+			})
+
+			It("should retain the appended terminal entry", func() {
+				last := ctx.GetBackgroundActivity()[len(ctx.GetBackgroundActivity())-1]
+				Expect(last.GetScheduleId()).To(Equal("new"))
+				Expect(last.GetStatus()).To(Equal(apiv1.ScheduleStatus_SCHEDULE_STATUS_ERROR))
+			})
+		})
 	})
 
 	// Issue #973: a single fat-fingered last_updated value (e.g. a date-only
