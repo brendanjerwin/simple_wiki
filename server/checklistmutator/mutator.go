@@ -554,9 +554,11 @@ func (m *Mutator) deleteItemImpl(_ context.Context, page, listName, uid string, 
 	if item == nil {
 		return nil, ErrItemNotFound
 	}
-	_ = item
 
 	now := m.clock.Now()
+	if deadlineTag, ok := futureDeadlineTag(item.Tags, now); ok {
+		return nil, status.Errorf(codes.FailedPrecondition, "Item has a future deadline tag (%s). Cannot delete before that date.", deadlineTag)
+	}
 	checklist.Items = append(checklist.Items[:idx], checklist.Items[idx+1:]...)
 	bumpSyncToken(checklist, now)
 	checklist.Tombstones = append(checklist.Tombstones, &apiv1.Tombstone{
@@ -757,6 +759,29 @@ func checkExpectedUpdatedAt(checklist *apiv1.Checklist, expected *time.Time) err
 		return status.Errorf(codes.FailedPrecondition, "expected_updated_at mismatch: server has %s", checklist.UpdatedAt.AsTime().Format(time.RFC3339Nano))
 	}
 	return nil
+}
+
+func futureDeadlineTag(tags []string, now time.Time) (string, bool) {
+	today := truncateUTCDate(now)
+	for _, tag := range tags {
+		dateText, ok := strings.CutPrefix(tag, "deadline:")
+		if !ok {
+			continue
+		}
+		deadline, err := time.Parse(time.DateOnly, dateText)
+		if err != nil {
+			continue
+		}
+		if deadline.After(today) {
+			return tag, true
+		}
+	}
+	return "", false
+}
+
+func truncateUTCDate(t time.Time) time.Time {
+	utc := t.UTC()
+	return time.Date(utc.Year(), utc.Month(), utc.Day(), 0, 0, 0, 0, time.UTC)
 }
 
 // findItem returns (index, item) or (-1, nil) when uid is not found.
