@@ -39,12 +39,12 @@ const (
 	maxContentLength  = 3
 
 	// String constants
-	rootPath                  = "/"
-	uploadFailureMessage      = "Failed to upload: %s"
-	uploadsPage               = "uploads"
-	mimeTextPlain             = "text/plain"
-	contentDispositionHeader  = "Content-Disposition"
-	indexTemplateName         = "index.tmpl"
+	rootPath                 = "/"
+	uploadFailureMessage     = "Failed to upload: %s"
+	uploadsPage              = "uploads"
+	mimeTextPlain            = "text/plain"
+	contentDispositionHeader = "Content-Disposition"
+	indexTemplateName        = "index.tmpl"
 )
 
 var (
@@ -299,6 +299,20 @@ var cliBinaryStartTime = time.Now().UTC().Truncate(time.Second)
 // second; doing it once per binary on first request (rather than for every
 // caller) keeps conditional GETs cheap.
 var cliBinaryETagCache sync.Map // map[string]string
+var cliBinaryReadFile = static.StaticContent.ReadFile
+
+// SetCLIBinaryReadFileForTesting swaps the embedded CLI binary reader and
+// returns a restore function. It lets handler tests cover validator behavior
+// without requiring generated release binaries to be present in CI checkouts.
+func SetCLIBinaryReadFileForTesting(readFile func(string) ([]byte, error)) func() {
+	previous := cliBinaryReadFile
+	cliBinaryReadFile = readFile
+	cliBinaryETagCache.Clear()
+	return func() {
+		cliBinaryReadFile = previous
+		cliBinaryETagCache.Clear()
+	}
+}
 
 // computeCLIBinaryETag returns the cached strong ETag for the given binary
 // content, computing it on first call. The ETag is a hex-encoded SHA256 of
@@ -342,7 +356,7 @@ func serveCLIBinary(c *gin.Context) {
 		c.Status(http.StatusNotFound)
 		return
 	}
-	data, err := static.StaticContent.ReadFile("cli/" + binary)
+	data, err := cliBinaryReadFile("cli/" + binary)
 	if err != nil {
 		c.Status(http.StatusNotFound)
 		return
@@ -719,7 +733,6 @@ func (s *Site) handlePageUpdate(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, gin.H{"success": true, "message": "Saved", "unix_time": unixTime})
 }
-
 
 func (s *Site) handleUpload(c *gin.Context) {
 	if !s.Fileuploads {

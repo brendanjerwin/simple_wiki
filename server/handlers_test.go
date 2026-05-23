@@ -16,7 +16,6 @@ import (
 	"time"
 
 	"github.com/brendanjerwin/simple_wiki/server"
-	"github.com/brendanjerwin/simple_wiki/static"
 	"github.com/brendanjerwin/simple_wiki/tailscale"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 	"github.com/gin-contrib/sessions"
@@ -320,7 +319,7 @@ var _ = Describe("Handlers", func() {
 			BeforeEach(func() {
 				pageName = "test-save-fail"
 				newText = "new content that should fail to save"
-				
+
 				// Create the page first
 				p, err := site.ReadPage(wikipage.PageIdentifier(pageName))
 				Expect(err).NotTo(HaveOccurred())
@@ -891,10 +890,10 @@ var _ = Describe("Session Logging Functions", func() {
 			It("should not add duplicate pages", func() {
 				// First call adds the page
 				server.GetRecentlyEditedForTesting("page1", c, logger)
-				
+
 				// Second call should not duplicate it
 				_ = server.GetRecentlyEditedForTesting("different-page", c, logger)
-				
+
 				// Count occurrences of "page1" in the session
 				session := sessions.Default(c)
 				recentStrVal := session.Get("recentlyEdited")
@@ -1141,10 +1140,18 @@ var _ = Describe("serveCLIBinary", func() {
 		Expect(err).NotTo(HaveOccurred())
 		router = site.GinRouter()
 
-		// Compute the expected validator values directly from the embedded
-		// content so the assertions don't tautologically mirror handler code.
-		data, err := static.StaticContent.ReadFile("cli/" + binaryName)
-		Expect(err).NotTo(HaveOccurred())
+		// Use deterministic test content so CI does not need generated
+		// release binaries in static/cli just to verify HTTP validator
+		// behavior.
+		data := []byte("test wiki-cli binary")
+		restoreCLIBinaryReadFile := server.SetCLIBinaryReadFileForTesting(func(name string) ([]byte, error) {
+			if name != "cli/"+binaryName {
+				return nil, os.ErrNotExist
+			}
+			return append([]byte(nil), data...), nil
+		})
+		DeferCleanup(restoreCLIBinaryReadFile)
+
 		sum := sha256.Sum256(data)
 		expectedETag = `"` + hex.EncodeToString(sum[:]) + `"`
 		expectedSize = len(data)
@@ -1329,6 +1336,7 @@ var _ = Describe("serveCLIBinary", func() {
 		})
 	})
 })
+
 // handlerTestWriteCloser wraps a buffer to implement io.WriteCloser for logger testing
 type handlerTestWriteCloser struct {
 	*bytes.Buffer
