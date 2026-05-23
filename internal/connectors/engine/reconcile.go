@@ -339,15 +339,20 @@ func (e *Engine) applyInbound(
 		refToUID[ref] = uid
 	}
 
-	// Text → wiki uid index of items currently in the wiki that are
-	// NOT in idMap. Used to dedup an inbound remote item against an
-	// unbound wiki item with matching text — closes the duplicate-
-	// Insert hazard observed 2026-05-08 when Keep's RemoteToWiki
-	// returns wikiItem.UID="" (Keep has no wiki-uid marker, unlike
-	// Tasks's `wiki:<uid>` Notes), and the engine would otherwise
-	// AddItemForSync a fresh duplicate every reconcile that ran
-	// after a state rebuild. See applyInboundOneItem for usage.
-	wikiByText := e.indexUnboundWikiItemsByText(ctx, binding, idMap)
+	// Text → wiki uid index of ALL items currently in the wiki, bound
+	// or unbound. Used by applyInboundOneItem to dedup an inbound
+	// remote item against any existing wiki item with matching text —
+	// the unbound case adopts the wiki uid (closes the 2026-05-08 hazard
+	// where Keep's RemoteToWiki returns wikiItem.UID="" and the engine
+	// would otherwise AddItemForSync a fresh duplicate every reconcile
+	// after a state rebuild); the bound case (text matches a wiki item
+	// already mapped to a different remote ref) skips the inbound apply
+	// outright. Skipping is the correct response to a remote-side
+	// duplicate (e.g., Keep returning the same logical item under a
+	// second ref): adopting would orphan the original ref in idMap and
+	// the next pull would still see the orphan, perpetuating the loop.
+	// The operator cleans up the remote-side duplicate in the source UI.
+	wikiByText := e.indexWikiItemsByText(ctx, binding)
 
 	for _, remoteItem := range items {
 		// Refresh the per-item concurrency baseline (Tasks: item_etags;
@@ -367,14 +372,19 @@ func (e *Engine) applyInbound(
 	return nil
 }
 
-// indexUnboundWikiItemsByText reads the wiki checklist and returns a
-// text → wiki uid map of items NOT currently in idMap. Used by
-// applyInboundOneItem to adopt an unbound wiki item that text-matches
-// a pulled remote item rather than creating a fresh duplicate via
-// AddItemForSync. Errors are silenced — a missing index just disables
-// dedup; the engine still functions correctly (with the pre-existing
-// duplicate hazard) if the read fails.
-func (e *Engine) indexUnboundWikiItemsByText(ctx context.Context, binding connectors.Binding, idMap map[string]string) map[string]string {
+// indexWikiItemsByText reads the wiki checklist and returns a text → wiki
+// uid map covering ALL items (bound and unbound). applyInboundOneItem
+// consults this map to dedup inbound remote items against any matching
+// wiki item: unbound matches are adopted (their uid becomes the binding
+// for the inbound ref), bound matches signal a remote-side duplicate
+// (two refs for the same logical item) and the inbound is skipped to
+// avoid creating a wiki duplicate.
+//
+// Errors are silenced — a missing index just disables dedup; the engine
+// still functions correctly (with the pre-existing duplicate hazard) if
+// the read fails. First-write-wins on collisions: if multiple wiki items
+// share a text, the first one in iteration order wins the index slot.
+func (e *Engine) indexWikiItemsByText(ctx context.Context, binding connectors.Binding) map[string]string {
 	cl, err := e.checklist.ListItems(ctx, binding.Page, binding.ListName)
 	if err != nil || cl == nil {
 		return map[string]string{}
@@ -385,17 +395,10 @@ func (e *Engine) indexUnboundWikiItemsByText(ctx context.Context, binding connec
 		if uid == "" {
 			continue
 		}
-		if _, bound := idMap[uid]; bound {
-			continue
-		}
 		text := it.GetText()
 		if text == "" {
 			continue
 		}
-		// First-write-wins: if multiple unbound wiki items share a
-		// text (rare but possible), the first one in iteration order
-		// wins the index slot. Subsequent duplicates remain unbound;
-		// they'll match later pull items if available.
 		if _, taken := out[text]; taken {
 			continue
 		}
@@ -516,25 +519,11 @@ func (e *Engine) applyInboundOneItem(
 		return nil
 	}
 
-	// Dedup-by-text: before creating a fresh wiki item, look for an
-	// existing unbound wiki item whose text equals the inbound
-	// remoteItem's translated text. Closes the duplicate-Insert
-	// hazard observed 2026-05-08 (Keep returns no wiki-uid marker,
-	// so RemoteToWiki always yields wikiItem.UID="" — without this
-	// dedup, every reconcile after a state rebuild would
-	// AddItemForSync a duplicate). See indexUnboundWikiItemsByText.
-	if matchUID, found := wikiByText[wikiItem.Text]; found {
-		e.logger.Info("connectors/engine: applyInbound_dedup_adopted_existing kind=%s profile=%s page=%s list=%s uid=%s ref=%s",
-			e.adapter.Kind(), string(binding.ProfileID), binding.Page, binding.ListName, matchUID, string(remoteItem.Ref))
-		if updErr := e.mutator.UpdateItemForSync(ctx, binding.Page, binding.ListName, "", matchUID,
-			wikiItem.Text, wikiItem.Checked, wikiItem.Tags, wikiItem.Description, dueFromWikiItem(wikiItem)); updErr != nil {
-			return fmt.Errorf("update adopted wiki item %s on profile %s: %w",
-				matchUID, binding.ProfileID, updErr)
-		}
-		idMap[matchUID] = string(remoteItem.Ref)
-		refToUID[string(remoteItem.Ref)] = matchUID
-		delete(wikiByText, wikiItem.Text)
-		return nil
+	// Dedup-by-text path. Extracted so applyInboundOneItem stays under
+	// revive's cyclomatic cap; the branch table itself is documented on
+	// the helper.
+	if handled, dedupErr := e.applyInboundDedupByText(ctx, binding, wikiItem, remoteItem, idMap, refToUID, wikiByText); handled {
+		return dedupErr
 	}
 
 	newUID, addErr := e.mutator.AddItemForSync(ctx, binding.Page, binding.ListName, "",
@@ -548,6 +537,61 @@ func (e *Engine) applyInboundOneItem(
 		refToUID[string(remoteItem.Ref)] = newUID
 	}
 	return nil
+}
+
+// applyInboundDedupByText handles the text-match dedup table for an
+// inbound remote item that hasn't been matched by ref. Returns
+// (handled, err): handled=true means the caller should return err
+// (which may be nil for a successful adopt or skip); handled=false
+// means the caller should fall through to AddItemForSync.
+//
+// Two cases, distinguished by whether the text-match is in idMap:
+//
+//   - Unbound match (matchUID NOT in idMap): adopt — close the
+//     2026-05-08 hazard where Keep's RemoteToWiki always yields
+//     wikiItem.UID="" and would otherwise AddItemForSync a duplicate
+//     on every reconcile after a state rebuild.
+//
+//   - Bound match (matchUID IS in idMap, to a DIFFERENT ref): this is
+//     a remote-side duplicate (2026-05-22 production regression). The
+//     wiki is already bound to one remote ref and the remote returned
+//     a second ref with the same text. Skip without adding a wiki
+//     duplicate. Rebinding to the new ref would orphan the original
+//     (no wiki uid → ref cleanup path), so the next pull would still
+//     surface the orphan ref and the loop would continue. Operator
+//     cleans the remote-side duplicate in the source UI. Adding the
+//     inbound ref to refToUID prevents this branch from being re-
+//     entered for the same ref within the same reconcile pass.
+func (e *Engine) applyInboundDedupByText(
+	ctx context.Context,
+	binding connectors.Binding,
+	wikiItem connectors.WikiItem,
+	remoteItem connectors.RemoteItem,
+	idMap map[string]string,
+	refToUID map[string]string,
+	wikiByText map[string]string,
+) (bool, error) {
+	matchUID, found := wikiByText[wikiItem.Text]
+	if !found {
+		return false, nil
+	}
+	if boundRef, isBound := idMap[matchUID]; isBound && boundRef != string(remoteItem.Ref) {
+		e.logger.Info("connectors/engine: applyInbound_skipped_remote_duplicate kind=%s profile=%s page=%s list=%s wiki_uid=%s existing_ref=%s inbound_ref=%s text=%q",
+			e.adapter.Kind(), string(binding.ProfileID), binding.Page, binding.ListName, matchUID, boundRef, string(remoteItem.Ref), wikiItem.Text)
+		refToUID[string(remoteItem.Ref)] = matchUID
+		return true, nil
+	}
+	e.logger.Info("connectors/engine: applyInbound_dedup_adopted_existing kind=%s profile=%s page=%s list=%s uid=%s ref=%s",
+		e.adapter.Kind(), string(binding.ProfileID), binding.Page, binding.ListName, matchUID, string(remoteItem.Ref))
+	if updErr := e.mutator.UpdateItemForSync(ctx, binding.Page, binding.ListName, "", matchUID,
+		wikiItem.Text, wikiItem.Checked, wikiItem.Tags, wikiItem.Description, dueFromWikiItem(wikiItem)); updErr != nil {
+		return true, fmt.Errorf("update adopted wiki item %s on profile %s: %w",
+			matchUID, binding.ProfileID, updErr)
+	}
+	idMap[matchUID] = string(remoteItem.Ref)
+	refToUID[string(remoteItem.Ref)] = matchUID
+	delete(wikiByText, wikiItem.Text)
+	return true, nil
 }
 
 // pushOutbound diffs the wiki checklist against the AdapterState's
@@ -610,6 +654,33 @@ func (e *Engine) pushOutbound(
 		}
 	}
 
+	// Bound-text index: text → bound uid. Used to dedup OUTBOUND inserts
+	// the same way wikiByText dedups inbound applies. If the wiki has a
+	// bound item with text "X" and a SECOND wiki item with text "X" is
+	// not yet bound, the second is a wiki-side duplicate (typically
+	// created by an earlier remote-duplicate apply hazard) — pushing it
+	// to the remote would create a remote-side duplicate. Skip the
+	// insert; operator cleans the wiki-side duplicate. Intentional
+	// duplicates the user adds via wiki UI in the same tick will be
+	// dropped here too — by design; the safe path is "one remote ref per
+	// text" until ADR-N defines a richer identity for intentional
+	// repeats.
+	boundUIDByText := map[string]string{}
+	for boundUID := range idMap {
+		item, present := currentUIDs[boundUID]
+		if !present {
+			continue
+		}
+		text := item.GetText()
+		if text == "" {
+			continue
+		}
+		if _, taken := boundUIDByText[text]; taken {
+			continue
+		}
+		boundUIDByText[text] = boundUID
+	}
+
 	// Per-item fingerprints from the last successful Insert/Patch. Used
 	// to detect a wiki-side change that the op-log's WikiDiverged signal
 	// missed (items whose user-event seq fell below LastSyncedSeq).
@@ -644,6 +715,11 @@ func (e *Engine) pushOutbound(
 			if skip, reason := e.shouldSkipPush(binding, uid); skip {
 				e.logger.Info("connectors/engine: outbound_push_skipped kind=%s profile=%s page=%s list=%s uid=%s op=outbound_inserted reason=%s",
 					e.adapter.Kind(), string(binding.ProfileID), binding.Page, binding.ListName, uid, reason)
+				continue
+			}
+			if dupTextOwner, dup := boundUIDByText[wikiItem.Text]; dup && dupTextOwner != uid {
+				e.logger.Info("connectors/engine: outbound_push_skipped kind=%s profile=%s page=%s list=%s uid=%s op=outbound_inserted reason=wiki_text_duplicate_of=%s text=%q",
+					e.adapter.Kind(), string(binding.ProfileID), binding.Page, binding.ListName, uid, dupTextOwner, wikiItem.Text)
 				continue
 			}
 			insCtx, insCancel := e.withRPCDeadline(ctx)

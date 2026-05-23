@@ -1401,6 +1401,137 @@ var _ = Describe("Engine.reconcile", func() {
 		})
 	})
 
+	// Production regression 2026-05-22: user reported "shopping_lists
+	// duplicated thousands of times in Google Keep." Root cause: when
+	// Keep returned a fresh ref for an item the wiki already had bound
+	// to a DIFFERENT ref (Keep-side duplicate, possibly from a prior
+	// bug cycle), applyInboundOneItem's dedup-by-text only consulted
+	// UNBOUND wiki items. The bound match was missed, so engine fell
+	// through to AddItemForSync — creating a wiki duplicate. The new
+	// duplicate then drove a fresh outbound push, multiplying the Keep
+	// side too. Fix: indexWikiItemsByText covers all items; when the
+	// match is bound to a DIFFERENT ref, skip the inbound apply (no
+	// wiki duplicate created). Operator cleans the remote-side duplicate
+	// in the source UI.
+	When("a remote pull item content-matches a BOUND wiki item under a different ref", func() {
+		const wikiUID = "uid-bound-dedup"
+		const existingRef = "ref-original"
+		const duplicateRef = "ref-duplicate-from-remote"
+		var (
+			syncErr      error
+			savedBinding connectors.Binding
+		)
+
+		BeforeEach(func() {
+			fbs.SeedBinding(connectors.Binding{
+				ProfileID: profileID, Page: page, ListName: listName,
+				RemoteHandle:         "tasklist-1",
+				State:                connectors.BindingStateActive,
+				LastSuccessfulSyncAt: reconcilePastChokePausedAt,
+				AdapterState: connectors.AdapterState{
+					"item_id_map": map[string]string{wikiUID: existingRef},
+				},
+			}, ownerKind)
+
+			// Remote returns the EXISTING ref (already bound) plus a
+			// DUPLICATE ref (Keep-side duplicate, same text). Without the
+			// fix, the duplicate would be applied as a new wiki item.
+			fa.SetPullRemoteResponse(connectors.RemotePullResult{
+				Items: []connectors.RemoteItem{
+					{Ref: existingRef, Title: "30 corn tortillas"},
+					{Ref: duplicateRef, Title: "30 corn tortillas"},
+				},
+			}, nil)
+			fa.SetRemoteToWikiResponse(connectors.WikiItem{UID: "", Text: "30 corn tortillas"}, nil)
+
+			reader.checklist = &apiv1.Checklist{
+				Items: []*apiv1.ChecklistItem{{Uid: wikiUID, Text: "30 corn tortillas"}},
+			}
+
+			syncErr = eng.Sync(ctx, key)
+			if len(fbs.RecordedSaveBinding) > 0 {
+				savedBinding = fbs.RecordedSaveBinding[len(fbs.RecordedSaveBinding)-1].Binding
+			}
+		})
+
+		It("should not return an error", func() {
+			Expect(syncErr).NotTo(HaveOccurred())
+		})
+
+		It("should NOT call AddItemForSync for the remote-side duplicate", func() {
+			Expect(mutator.recordingChecklistMutator.addCalls).To(BeEmpty(),
+				"engine duplicated a wiki item that text-matched a bound pulled item — 2026-05-22 production regression, shopping_lists Keep duplicates")
+		})
+
+		It("should leave the original wiki uid bound to its original ref", func() {
+			idMap, _ := savedBinding.AdapterState["item_id_map"].(map[string]string)
+			Expect(idMap).To(HaveKeyWithValue(wikiUID, existingRef),
+				"original binding lost when remote returned a duplicate ref for the same text")
+		})
+
+		It("should NOT have added an entry mapping a new wiki uid to the duplicate ref", func() {
+			idMap, _ := savedBinding.AdapterState["item_id_map"].(map[string]string)
+			for uid, ref := range idMap {
+				if uid != wikiUID && ref == duplicateRef {
+					Fail("engine bound a fresh wiki uid to the duplicate remote ref — should have skipped the inbound dedup-skip path")
+				}
+			}
+		})
+	})
+
+	// Production regression 2026-05-22 (outbound side): with thousands
+	// of wiki duplicates already accumulated by the inbound bug, the
+	// engine's outbound push would Insert every unbound duplicate to
+	// the remote, multiplying the remote side too. Fix: pushOutbound
+	// builds a boundUIDByText index; when a wiki item awaiting Insert
+	// has text matching an already-bound wiki item, skip the insert.
+	When("the wiki has a bound item and an unbound duplicate with the same text", func() {
+		const boundUID = "uid-bound-correct"
+		const dupUID = "uid-wiki-duplicate"
+		var syncErr error
+
+		BeforeEach(func() {
+			fbs.SeedBinding(connectors.Binding{
+				ProfileID: profileID, Page: page, ListName: listName,
+				RemoteHandle:         "tasklist-1",
+				State:                connectors.BindingStateActive,
+				LastSuccessfulSyncAt: reconcilePastChokePausedAt,
+				AdapterState: connectors.AdapterState{
+					"item_id_map": map[string]string{boundUID: "ref-bound"},
+				},
+			}, ownerKind)
+
+			fa.SetPullRemoteResponse(connectors.RemotePullResult{
+				Items: []connectors.RemoteItem{{Ref: "ref-bound", Title: "30 corn tortillas"}},
+			}, nil)
+			fa.SetRemoteToWikiResponse(connectors.WikiItem{UID: boundUID, Text: "30 corn tortillas"}, nil)
+
+			// Wiki has BOTH the bound item AND a second unbound item
+			// with identical text (the accumulated wiki-side duplicate
+			// from the prior bug). The outbound push should refuse to
+			// Insert the second one.
+			reader.checklist = &apiv1.Checklist{
+				Items: []*apiv1.ChecklistItem{
+					{Uid: boundUID, Text: "30 corn tortillas"},
+					{Uid: dupUID, Text: "30 corn tortillas"},
+				},
+			}
+
+			syncErr = eng.Sync(ctx, key)
+		})
+
+		It("should not return an error", func() {
+			Expect(syncErr).NotTo(HaveOccurred())
+		})
+
+		It("should NOT InsertRemote the unbound wiki duplicate", func() {
+			for _, call := range fa.RecordedInsertRemote {
+				Expect(call.Item.UID).NotTo(Equal(dupUID),
+					"engine pushed a wiki-side duplicate to the remote — would multiply the remote-side duplicates")
+			}
+		})
+	})
+
 	// Production regression 2026-05-08: user reported "wiki side delete
 	// didn't propagate to keep side." Logs showed Keep DeleteRemote
 	// returning ErrProtocolDrift (stage3 HTTP 500) which the adapter
