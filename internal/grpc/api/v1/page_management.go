@@ -37,7 +37,7 @@ func buildPageText(frontmatter map[string]any, frontmatterToml []byte, markdown 
 	var b strings.Builder
 
 	if len(frontmatter) > 0 {
-		_, _ = b.WriteString("+++\n") // WriteString on strings.Builder never fails
+		_, _ = b.WriteString("+++\n")   // WriteString on strings.Builder never fails
 		_, _ = b.Write(frontmatterToml) // Write on strings.Builder never fails
 		if !bytes.HasSuffix(frontmatterToml, []byte("\n")) {
 			_, _ = b.WriteString("\n") // WriteString on strings.Builder never fails
@@ -282,6 +282,9 @@ func (s *Server) ReadPage(ctx context.Context, req *apiv1.ReadPageRequest) (*api
 	pageName := req.GetPageName()
 	if pageName == "" {
 		pageName = req.GetIdentifier()
+	}
+	if pageName == "" {
+		return nil, status.Error(codes.InvalidArgument, "page_name or identifier is required")
 	}
 
 	if authErr := requireAuthorized(ctx, s.pageReaderMutator, wikipage.PageIdentifier(pageName)); authErr != nil {

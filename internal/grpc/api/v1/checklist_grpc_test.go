@@ -13,6 +13,8 @@ import (
 	"github.com/brendanjerwin/simple_wiki/internal/grpc/api/v1"
 	"github.com/brendanjerwin/simple_wiki/pkg/ulid"
 	"github.com/brendanjerwin/simple_wiki/server/checklistmutator"
+	"github.com/brendanjerwin/simple_wiki/tailscale"
+	"github.com/brendanjerwin/simple_wiki/wikipage"
 )
 
 // checklistSteadyClock implements checklistmutator.Clock for tests.
@@ -259,6 +261,94 @@ var _ = Describe("ChecklistService handlers — page required validation", func(
 				err := server.WatchList(&apiv1.WatchListRequest{Page: "p", ListName: ""}, &fakeWatchListStream{ctx: ctx})
 				Expect(err).To(HaveGrpcStatusWithSubstr(codes.InvalidArgument, "list_name"))
 			})
+		})
+	})
+})
+
+var _ = Describe("ChecklistService handlers — public checklist response shape", func() {
+	var (
+		ctx      context.Context
+		server   *v1.Server
+		listResp *apiv1.ListItemsResponse
+		getResp  *apiv1.GetChecklistsResponse
+		listErr  error
+		getErr   error
+	)
+
+	BeforeEach(func() {
+		ctx = context.Background()
+		mock := &MockPageReaderMutator{Frontmatter: wikipage.FrontMatter{}}
+		cl := &checklistSteadyClock{}
+		ug := ulid.NewSequenceGenerator("01HXBBBBBBBBBBBBBBBBBBBBBB")
+		mutator := checklistmutator.New(mock, cl, ug)
+		server = mustNewServer(mock, nil, nil).WithChecklistMutator(mutator)
+
+		firstItem, _, err := mutator.AddItem(ctx, "weekly_menu", "ingredients-on-hand", checklistmutator.AddItemArgs{Text: "milk"}, tailscale.Anonymous)
+		Expect(err).NotTo(HaveOccurred())
+
+		_, _, err = mutator.AddItem(ctx, "weekly_menu", "ingredients-on-hand", checklistmutator.AddItemArgs{Text: "eggs"}, tailscale.Anonymous)
+		Expect(err).NotTo(HaveOccurred())
+
+		_, err = mutator.DeleteItem(ctx, "weekly_menu", "ingredients-on-hand", firstItem.GetUid(), nil, tailscale.Anonymous)
+		Expect(err).NotTo(HaveOccurred())
+	})
+
+	JustBeforeEach(func() {
+		listResp, listErr = server.ListItems(ctx, &apiv1.ListItemsRequest{Page: "weekly_menu", ListName: "ingredients-on-hand"})
+		getResp, getErr = server.GetChecklists(ctx, &apiv1.GetChecklistsRequest{Page: "weekly_menu"})
+	})
+
+	Describe("ListItems", func() {
+		It("should return no error", func() {
+			Expect(listErr).NotTo(HaveOccurred())
+		})
+
+		It("should preserve live items", func() {
+			Expect(listResp.GetChecklist().GetItems()).To(HaveLen(1))
+			Expect(listResp.GetChecklist().GetItems()[0].GetText()).To(Equal("eggs"))
+		})
+
+		It("should preserve the sync token", func() {
+			Expect(listResp.GetChecklist().GetSyncToken()).To(BeNumerically(">", 0))
+		})
+
+		It("should omit the internal event log", func() {
+			Expect(listResp.GetChecklist().GetEvents()).To(BeEmpty())
+		})
+
+		It("should omit tombstones", func() {
+			Expect(listResp.GetChecklist().GetTombstones()).To(BeEmpty())
+		})
+
+		It("should omit max_seq", func() {
+			Expect(listResp.GetChecklist().GetMaxSeq()).To(BeZero())
+		})
+	})
+
+	Describe("GetChecklists", func() {
+		It("should return no error", func() {
+			Expect(getErr).NotTo(HaveOccurred())
+		})
+
+		It("should preserve the checklist", func() {
+			Expect(getResp.GetChecklists()).To(HaveLen(1))
+			Expect(getResp.GetChecklists()[0].GetName()).To(Equal("ingredients-on-hand"))
+		})
+
+		It("should preserve the sync token", func() {
+			Expect(getResp.GetChecklists()[0].GetSyncToken()).To(BeNumerically(">", 0))
+		})
+
+		It("should omit the internal event log", func() {
+			Expect(getResp.GetChecklists()[0].GetEvents()).To(BeEmpty())
+		})
+
+		It("should omit tombstones", func() {
+			Expect(getResp.GetChecklists()[0].GetTombstones()).To(BeEmpty())
+		})
+
+		It("should omit max_seq", func() {
+			Expect(getResp.GetChecklists()[0].GetMaxSeq()).To(BeZero())
 		})
 	})
 })

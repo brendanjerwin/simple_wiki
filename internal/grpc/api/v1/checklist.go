@@ -7,6 +7,7 @@ import (
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
@@ -55,7 +56,7 @@ func (s *Server) AddItem(ctx context.Context, req *apiv1.AddItemRequest) (*apiv1
 	if err != nil {
 		return nil, mapChecklistMutatorErr(err)
 	}
-	return &apiv1.AddItemResponse{Item: item, Checklist: list}, nil
+	return &apiv1.AddItemResponse{Item: item, Checklist: checklistForPublicResponse(list)}, nil
 }
 
 // UpdateItem implements the UpdateItem RPC.
@@ -74,14 +75,14 @@ func (s *Server) UpdateItem(ctx context.Context, req *apiv1.UpdateItemRequest) (
 	}
 
 	args := checklistmutator.UpdateItemArgs{
-		Text:        req.Text,
-		Tags:        req.GetTags(),
-		TagsSet:     req.Tags != nil,
-		Description: req.Description,
-		DescriptionSet: req.Description != nil,
-		AlarmPayload: req.AlarmPayload,
+		Text:            req.Text,
+		Tags:            req.GetTags(),
+		TagsSet:         req.Tags != nil,
+		Description:     req.Description,
+		DescriptionSet:  req.Description != nil,
+		AlarmPayload:    req.AlarmPayload,
 		AlarmPayloadSet: req.AlarmPayload != nil,
-		DueSet:      req.Due != nil,
+		DueSet:          req.Due != nil,
 	}
 	if req.Due != nil {
 		due := req.Due.AsTime()
@@ -94,7 +95,7 @@ func (s *Server) UpdateItem(ctx context.Context, req *apiv1.UpdateItemRequest) (
 	if err != nil {
 		return nil, mapChecklistMutatorErr(err)
 	}
-	return &apiv1.UpdateItemResponse{Item: item, Checklist: list}, nil
+	return &apiv1.UpdateItemResponse{Item: item, Checklist: checklistForPublicResponse(list)}, nil
 }
 
 // ToggleItem implements the ToggleItem RPC.
@@ -118,7 +119,7 @@ func (s *Server) ToggleItem(ctx context.Context, req *apiv1.ToggleItemRequest) (
 	if err != nil {
 		return nil, mapChecklistMutatorErr(err)
 	}
-	return &apiv1.ToggleItemResponse{Item: item, Checklist: list}, nil
+	return &apiv1.ToggleItemResponse{Item: item, Checklist: checklistForPublicResponse(list)}, nil
 }
 
 // DeleteItem implements the DeleteItem RPC.
@@ -142,7 +143,7 @@ func (s *Server) DeleteItem(ctx context.Context, req *apiv1.DeleteItemRequest) (
 	if err != nil {
 		return nil, mapChecklistMutatorErr(err)
 	}
-	return &apiv1.DeleteItemResponse{Checklist: list}, nil
+	return &apiv1.DeleteItemResponse{Checklist: checklistForPublicResponse(list)}, nil
 }
 
 // ReorderItem implements the ReorderItem RPC.
@@ -166,7 +167,7 @@ func (s *Server) ReorderItem(ctx context.Context, req *apiv1.ReorderItemRequest)
 	if err != nil {
 		return nil, mapChecklistMutatorErr(err)
 	}
-	return &apiv1.ReorderItemResponse{Checklist: list}, nil
+	return &apiv1.ReorderItemResponse{Checklist: checklistForPublicResponse(list)}, nil
 }
 
 // ListItems implements the ListItems RPC.
@@ -185,7 +186,7 @@ func (s *Server) ListItems(ctx context.Context, req *apiv1.ListItemsRequest) (*a
 	if err != nil {
 		return nil, mapChecklistMutatorErr(err)
 	}
-	return &apiv1.ListItemsResponse{Checklist: list}, nil
+	return &apiv1.ListItemsResponse{Checklist: checklistForPublicResponse(list)}, nil
 }
 
 // watchListMinIntervalMs and watchListMaxIntervalMs bound the
@@ -296,7 +297,29 @@ func (s *Server) GetChecklists(ctx context.Context, req *apiv1.GetChecklistsRequ
 	if err != nil {
 		return nil, mapChecklistMutatorErr(err)
 	}
-	return &apiv1.GetChecklistsResponse{Checklists: lists}, nil
+	return &apiv1.GetChecklistsResponse{Checklists: checklistsForPublicResponse(lists)}, nil
+}
+
+func checklistsForPublicResponse(lists []*apiv1.Checklist) []*apiv1.Checklist {
+	out := make([]*apiv1.Checklist, 0, len(lists))
+	for _, list := range lists {
+		out = append(out, checklistForPublicResponse(list))
+	}
+	return out
+}
+
+func checklistForPublicResponse(list *apiv1.Checklist) *apiv1.Checklist {
+	if list == nil {
+		return nil
+	}
+	out, ok := proto.Clone(list).(*apiv1.Checklist)
+	if !ok {
+		return nil
+	}
+	out.Events = nil
+	out.Tombstones = nil
+	out.MaxSeq = 0
+	return out
 }
 
 // timestampPtr converts an optional timestamppb to a *time.Time.
@@ -322,6 +345,8 @@ func mapChecklistMutatorErr(err error) error {
 		return status.Error(codes.NotFound, err.Error())
 	case errors.Is(err, checklistmutator.ErrPageNotFound):
 		return status.Errorf(codes.NotFound, "page not found")
+	case errors.Is(err, checklistmutator.ErrDuplicateOpenItem):
+		return status.Error(codes.AlreadyExists, err.Error())
 	default:
 		// Fall through; status.FromError handling and Internal default below.
 	}

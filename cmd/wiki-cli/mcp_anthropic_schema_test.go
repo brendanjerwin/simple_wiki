@@ -59,4 +59,24 @@ var _ = Describe("MCP tool input schemas (Anthropic API compatibility, #1054)", 
 			}
 		}
 	})
+
+	When("inspecting the ReadPage tool schema", func() {
+		var schema map[string]any
+
+		BeforeEach(func() {
+			tool := tools["api_v1_PageManagementService_ReadPage"]
+			Expect(tool).NotTo(BeNil())
+
+			err := json.Unmarshal(tool.Tool.RawInputSchema, &schema)
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should not require both oneof members", func() {
+			Expect(schema).NotTo(HaveKeyWithValue("required", ConsistOf("page_name", "identifier")))
+		})
+
+		It("should require at least one identifier property", func() {
+			Expect(schema).To(HaveKeyWithValue("minProperties", BeNumerically("==", 1)))
+		})
+	})
 })

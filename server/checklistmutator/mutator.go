@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"os"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -215,14 +216,14 @@ type AddItemArgs struct {
 // updating an item. Nil-pointer fields mean "leave unchanged"; an empty-
 // string pointer means "clear" only for the optional fields.
 type UpdateItemArgs struct {
-	Text         *string
-	Tags         []string // when non-nil, replaces; nil means "leave unchanged"
-	TagsSet      bool     // explicit "tags were provided" flag, since nil and empty-slice are distinguishable
-	Description  *string
-	DescriptionSet bool
-	Due          *time.Time
-	DueSet       bool
-	AlarmPayload *string
+	Text            *string
+	Tags            []string // when non-nil, replaces; nil means "leave unchanged"
+	TagsSet         bool     // explicit "tags were provided" flag, since nil and empty-slice are distinguishable
+	Description     *string
+	DescriptionSet  bool
+	Due             *time.Time
+	DueSet          bool
+	AlarmPayload    *string
 	AlarmPayloadSet bool
 }
 
@@ -236,6 +237,9 @@ var (
 	ErrListNotFound = errors.New("checklist not found")
 	// ErrPageNotFound is returned when the requested page does not exist.
 	ErrPageNotFound = errors.New("page not found")
+	// ErrDuplicateOpenItem is returned when an add would create a second
+	// unchecked item with the same user-visible text in the same checklist.
+	ErrDuplicateOpenItem = errors.New("duplicate open checklist item")
 )
 
 // AddItem appends a new item to the named checklist on page. The wiki
@@ -273,6 +277,9 @@ func (m *Mutator) addItemImpl(_ context.Context, page, listName string, args Add
 	}
 
 	checklist := m.readChecklistForMutation(fm, listName)
+	if hasOpenItemWithText(checklist, args.Text) {
+		return nil, nil, fmt.Errorf("%w: %q", ErrDuplicateOpenItem, args.Text)
+	}
 
 	now := m.clock.Now()
 	uid := m.ulids.NewULID()
@@ -304,6 +311,16 @@ func (m *Mutator) addItemImpl(_ context.Context, page, listName string, args Add
 	// Emit event AFTER mutation, BEFORE persist, while we still hold
 	// the lock. Per ADR-0015: seq monotonicity is the engine's causal
 	// authority and must not race.
+	appendEvent(checklist, addEventForItem(item, source), now)
+
+	if err := m.persist(page, fm, listName, checklist); err != nil {
+		return nil, nil, err
+	}
+	m.notify(page, listName, identity)
+	return item, checklist, nil
+}
+
+func addEventForItem(item *apiv1.ChecklistItem, source Source) *apiv1.ChecklistEvent {
 	textCopy := item.Text
 	checkedCopy := item.Checked
 	sortOrderCopy := item.SortOrder
@@ -324,13 +341,20 @@ func (m *Mutator) addItemImpl(_ context.Context, page, listName string, args Add
 	if item.Due != nil {
 		ev.Due = item.Due
 	}
-	appendEvent(checklist, ev, now)
+	return ev
+}
 
-	if err := m.persist(page, fm, listName, checklist); err != nil {
-		return nil, nil, err
+func hasOpenItemWithText(checklist *apiv1.Checklist, text string) bool {
+	normalizedText := strings.TrimSpace(text)
+	for _, item := range checklist.GetItems() {
+		if item.GetChecked() {
+			continue
+		}
+		if strings.TrimSpace(item.GetText()) == normalizedText {
+			return true
+		}
 	}
-	m.notify(page, listName, identity)
-	return item, checklist, nil
+	return false
 }
 
 // applyUserMutableFields applies the user-mutable fields from args to item,
