@@ -101,6 +101,8 @@ const ERROR_KIND_TO_ICON: Record<ErrorKind, StandardErrorIcon> = {
  * An Error augmented with additional error handling metadata
  */
 export class AugmentedError extends Error {
+  public readonly copyableDetails: string;
+
   constructor(
     public readonly originalError: Error,
     public readonly errorKind: ErrorKind,
@@ -112,6 +114,8 @@ export class AugmentedError extends Error {
 
     // Remove the auto-generated stack property so our getter can work
     delete (this as Error).stack;
+
+    this.copyableDetails = buildCopyableDetails(this);
   }
 
   // Delegate message to original error
@@ -137,6 +141,141 @@ export class AugmentedError extends Error {
     }
     return undefined;
   }
+}
+
+function buildCopyableDetails(error: AugmentedError): string {
+  const connectError = error.originalError instanceof ConnectError
+    ? error.originalError
+    : undefined;
+  const metadata = connectError ? formatMetadata(connectError.metadata) : '(none)';
+  const stack = error.stack.trim() || '(none)';
+
+  return [
+    '# Error Details',
+    '',
+    `**Message:** ${fallback(error.message)}`,
+    `**Failed goal:** ${fallback(error.failedGoalDescription)}`,
+    `**Error kind:** ${error.errorKind}`,
+    `**Error name:** ${fallback(error.name)}`,
+    `**Connect code:** ${connectError ? Code[connectError.code] : '(none)'}`,
+    `**gRPC code:** ${connectError ? connectError.code.toString() : '(none)'}`,
+    `**Metadata:** ${metadata === '(none)' ? '(none)' : 'see Metadata section'}`,
+    `**User-Agent:** ${readUserAgent()}`,
+    `**Current URL:** ${readCurrentURL()}`,
+    `**Timestamp:** ${new Date().toISOString()}`,
+    `**Wiki version:** ${readWikiVersion()}`,
+    '',
+    '## Error Chain',
+    '',
+    formatErrorChain(error.originalError),
+    '',
+    '## Metadata',
+    '',
+    metadata,
+    '',
+    '## Stack Trace',
+    '',
+    '```',
+    stack,
+    '```',
+    '',
+  ].join('\n');
+}
+
+function fallback(value: string | undefined): string {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : '(none)';
+}
+
+function formatErrorChain(error: Error): string {
+  const chain: string[] = [];
+  let current: unknown = error;
+
+  while (current !== undefined) {
+    chain.push(`${chain.length + 1}. ${describeError(current)}`);
+
+    if (current && typeof current === 'object' && 'cause' in current) {
+      current = (current as { cause?: unknown }).cause;
+    } else {
+      current = undefined;
+    }
+  }
+
+  return chain.length > 0 ? chain.join('\n') : '(none)';
+}
+
+function describeError(error: unknown): string {
+  if (error instanceof Error) {
+    return `${fallback(error.name)}: ${fallback(error.message)}`;
+  }
+
+  if (typeof error === 'string') {
+    return error.trim() || '(none)';
+  }
+
+  if (error === null || error === undefined) {
+    return '(none)';
+  }
+
+  try {
+    return JSON.stringify(error);
+  } catch {
+    return Object.prototype.toString.call(error);
+  }
+}
+
+function formatMetadata(metadata: Headers): string {
+  const entries = Array.from(metadata.entries());
+  if (entries.length === 0) {
+    return '(none)';
+  }
+
+  return entries.map(([name, value]) => `- ${name}: ${value}`).join('\n');
+}
+
+function readUserAgent(): string {
+  if (typeof navigator === 'undefined') {
+    return '(none)';
+  }
+
+  return fallback(navigator.userAgent);
+}
+
+function readCurrentURL(): string {
+  if (typeof window === 'undefined') {
+    return '(none)';
+  }
+
+  return fallback(window.location.href);
+}
+
+function readWikiVersion(): string {
+  if (typeof document === 'undefined') {
+    return '(none)';
+  }
+
+  const systemInfo = document.querySelector('system-info');
+  const version = systemInfo ? Reflect.get(systemInfo, 'version') : undefined;
+  if (!version || typeof version !== 'object') {
+    return '(none)';
+  }
+
+  const commit = stringProperty(version, 'commit');
+  if (!commit) {
+    return '(none)';
+  }
+
+  const buildTime = stringProperty(version, 'buildTime');
+  if (!buildTime) {
+    return commit;
+  }
+
+  return `${commit} (built ${buildTime})`;
+}
+
+function stringProperty(source: object, propertyName: string): string {
+  const value = Reflect.get(source, propertyName);
+  return typeof value === 'string' ? value.trim() : '';
 }
 
 /**

@@ -1,7 +1,8 @@
 import { html, fixture, expect, assert } from '@open-wc/testing';
-import { stub, type SinonStub } from 'sinon';
+import { stub, useFakeTimers, type SinonFakeTimers, type SinonStub } from 'sinon';
+import { ConnectError, Code } from '@connectrpc/connect';
 import { ErrorDisplay, type ErrorAction } from './error-display.js';
-import { AugmentedError, ErrorKind } from './augment-error-service.js';
+import { AugmentErrorService, AugmentedError, ErrorKind } from './augment-error-service.js';
 
 function timeout(ms: number, message: string): Promise<never> {
   return new Promise((_, reject) =>
@@ -12,11 +13,13 @@ function timeout(ms: number, message: string): Promise<never> {
 describe('ErrorDisplay', () => {
   let el: ErrorDisplay;
   let fetchStub: ReturnType<typeof stub>;
+  let originalClipboard: PropertyDescriptor | undefined;
 
   beforeEach(async () => {
     // Prevent any potential network calls that could cause hanging
     fetchStub = stub(window, 'fetch');
     fetchStub.resolves(new Response('{}'));
+    originalClipboard = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
     
     el = await Promise.race([
       fixture<ErrorDisplay>(html`<error-display></error-display>`),
@@ -27,6 +30,12 @@ describe('ErrorDisplay', () => {
   afterEach(() => {
     if (fetchStub) {
       fetchStub.restore();
+    }
+
+    if (originalClipboard) {
+      Object.defineProperty(navigator, 'clipboard', originalClipboard);
+    } else {
+      Reflect.deleteProperty(navigator, 'clipboard');
     }
   });
 
@@ -353,6 +362,208 @@ describe('ErrorDisplay', () => {
           const detailsSection = el.shadowRoot?.querySelector('.error-details');
           expect(detailsSection?.getAttribute('aria-hidden')).to.equal('false');
         });
+      });
+    });
+  });
+
+  describe('copy details button', () => {
+    let writeTextStub: SinonStub;
+    let copiedMarkdown: string;
+    let clock: SinonFakeTimers;
+
+    beforeEach(() => {
+      writeTextStub = stub().resolves();
+      Object.defineProperty(navigator, 'clipboard', {
+        configurable: true,
+        value: {
+          writeText: writeTextStub,
+        },
+      });
+    });
+
+    afterEach(() => {
+      clock?.restore();
+    });
+
+    describe('when the error is a bare Error', () => {
+      beforeEach(async () => {
+        clock = useFakeTimers({
+          now: new Date('2026-05-23T12:34:56.000Z'),
+          toFake: ['Date', 'setTimeout', 'clearTimeout'],
+        });
+        const error = new Error('Bare failure');
+        error.stack = 'Error: Bare failure\n    at test.ts:1:1';
+        el.augmentedError = AugmentErrorService.augmentError(error, 'load dashboard');
+
+        await Promise.race([
+          el.updateComplete,
+          timeout(5000, "Component update timed out"),
+        ]);
+
+        const copyButton = el.shadowRoot?.querySelector<HTMLButtonElement>('.copy-details-button');
+        copyButton?.click();
+
+        await Promise.race([
+          el.updateComplete,
+          timeout(5000, "Component update timed out"),
+        ]);
+        copiedMarkdown = writeTextStub.firstCall.args[0] as string;
+      });
+
+      it('should write markdown details to the clipboard', () => {
+        expect(writeTextStub.calledOnce).to.equal(true);
+        expect(copiedMarkdown).to.include('# Error Details');
+      });
+
+      it('should include the visible message', () => {
+        expect(copiedMarkdown).to.include('**Message:** Bare failure');
+      });
+
+      it('should include the failed goal', () => {
+        expect(copiedMarkdown).to.include('**Failed goal:** load dashboard');
+      });
+
+      it('should include the stack trace', () => {
+        expect(copiedMarkdown).to.include('Error: Bare failure');
+      });
+
+      it('should include browser context', () => {
+        expect(copiedMarkdown).to.include('**Timestamp:** 2026-05-23T12:34:56.000Z');
+        expect(copiedMarkdown).to.include(`**Current URL:** ${window.location.href}`);
+        expect(copiedMarkdown).to.include(`**User-Agent:** ${navigator.userAgent}`);
+      });
+
+      it('should show a copied confirmation', () => {
+        const copyButton = el.shadowRoot?.querySelector<HTMLButtonElement>('.copy-details-button');
+        expect(copyButton?.textContent?.trim()).to.equal('Copied!');
+      });
+
+      describe('when the confirmation timeout completes', () => {
+        beforeEach(async () => {
+          await clock.tickAsync(1500);
+          await Promise.race([
+            el.updateComplete,
+            timeout(5000, "Component update timed out"),
+          ]);
+        });
+
+        it('should restore the button label', () => {
+          const copyButton = el.shadowRoot?.querySelector<HTMLButtonElement>('.copy-details-button');
+          expect(copyButton?.textContent?.trim()).to.equal('Copy details');
+        });
+      });
+    });
+
+    describe('when the error is a ConnectError with metadata', () => {
+      beforeEach(async () => {
+        const error = new ConnectError(
+          'Permission denied',
+          Code.PermissionDenied,
+          {
+            'x-request-id': 'request-123',
+            'x-attempt-number': '2',
+          }
+        );
+        error.stack = 'ConnectError: Permission denied\n    at rpc.ts:2:1';
+        el.augmentedError = AugmentErrorService.augmentError(error, 'sync tasks');
+
+        await Promise.race([
+          el.updateComplete,
+          timeout(5000, "Component update timed out"),
+        ]);
+
+        const copyButton = el.shadowRoot?.querySelector<HTMLButtonElement>('.copy-details-button');
+        copyButton?.click();
+
+        await Promise.race([
+          el.updateComplete,
+          timeout(5000, "Component update timed out"),
+        ]);
+        copiedMarkdown = writeTextStub.firstCall.args[0] as string;
+      });
+
+      it('should include the Connect code', () => {
+        expect(copiedMarkdown).to.include('**Connect code:** PermissionDenied');
+      });
+
+      it('should include the gRPC code', () => {
+        expect(copiedMarkdown).to.include('**gRPC code:** 7');
+      });
+
+      it('should include metadata', () => {
+        expect(copiedMarkdown).to.include('- x-request-id: request-123');
+        expect(copiedMarkdown).to.include('- x-attempt-number: 2');
+      });
+    });
+
+    describe('when the error has a multi-link cause chain', () => {
+      beforeEach(async () => {
+        const root = new Error('socket closed');
+        const middle = new Error('transport failed', { cause: root });
+        const error = new Error('request failed', { cause: middle });
+        el.augmentedError = AugmentErrorService.augmentError(error);
+
+        await Promise.race([
+          el.updateComplete,
+          timeout(5000, "Component update timed out"),
+        ]);
+
+        const copyButton = el.shadowRoot?.querySelector<HTMLButtonElement>('.copy-details-button');
+        copyButton?.click();
+
+        await Promise.race([
+          el.updateComplete,
+          timeout(5000, "Component update timed out"),
+        ]);
+        copiedMarkdown = writeTextStub.firstCall.args[0] as string;
+      });
+
+      it('should include each cause chain link', () => {
+        expect(copiedMarkdown).to.include('1. Error: request failed');
+        expect(copiedMarkdown).to.include('2. Error: transport failed');
+        expect(copiedMarkdown).to.include('3. Error: socket closed');
+      });
+
+      it('should include empty diagnostic fields', () => {
+        expect(copiedMarkdown).to.include('**Failed goal:** (none)');
+        expect(copiedMarkdown).to.include('**Metadata:** (none)');
+        expect(copiedMarkdown).to.include('**Wiki version:** (none)');
+      });
+    });
+
+    describe('when the clipboard API is unavailable', () => {
+      beforeEach(async () => {
+        Object.defineProperty(navigator, 'clipboard', {
+          configurable: true,
+          value: undefined,
+        });
+        el.augmentedError = AugmentErrorService.augmentError(new Error('Clipboard unavailable'));
+
+        await Promise.race([
+          el.updateComplete,
+          timeout(5000, "Component update timed out"),
+        ]);
+
+        const copyButton = el.shadowRoot?.querySelector<HTMLButtonElement>('.copy-details-button');
+        copyButton?.click();
+
+        await Promise.race([
+          el.updateComplete,
+          timeout(5000, "Component update timed out"),
+        ]);
+      });
+
+      it('should render the fallback textarea', () => {
+        const textarea = el.shadowRoot?.querySelector<HTMLTextAreaElement>('.copy-details-fallback');
+        expect(textarea).not.to.equal(null);
+        expect(textarea?.value).to.include('Clipboard unavailable');
+      });
+
+      it('should auto-select the fallback details', () => {
+        const textarea = el.shadowRoot?.querySelector<HTMLTextAreaElement>('.copy-details-fallback');
+        expect(el.shadowRoot?.activeElement).to.equal(textarea);
+        expect(textarea?.selectionStart).to.equal(0);
+        expect(textarea?.selectionEnd).to.equal(textarea?.value.length);
       });
     });
   });
