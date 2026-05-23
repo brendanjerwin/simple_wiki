@@ -122,7 +122,7 @@ Use `api_v1_PageManagementService_ListTemplates` to discover templates and `api_
 
 ### Navigating large pages efficiently
 
-Before reading or editing a large page (>30 KB), call `api_v1_PageManagementService_ReadPageOutline` first. It returns:
+Before reading or editing a large page (>30 KB), call `api_v1_PageManagementService_ReadPageOutline` first. See [[help-handling-large-pages]] for the full workflow. It returns:
 
 - **headings** — every heading in document order with its anchor `slug`, `byte_offset` (where the section body begins), and `byte_length` (how many bytes the section spans).
 - **total_bytes** — total size of the page markdown.

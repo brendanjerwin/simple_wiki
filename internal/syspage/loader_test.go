@@ -140,6 +140,32 @@ var _ = Describe("LoadEmbedded", func() {
 				"profile_template should have wiki.system = true")
 		})
 	})
+
+	Describe("the handling large pages help page", func() {
+		var helpPage *Page
+
+		BeforeEach(func() {
+			for i := range pages {
+				if pages[i].Identifier == "help_handling_large_pages" {
+					helpPage = &pages[i]
+					break
+				}
+			}
+		})
+
+		It("should be present in the embedded corpus", func() {
+			Expect(helpPage).NotTo(BeNil(), "help_handling_large_pages.md should ship in internal/syspage/embedded/")
+		})
+
+		It("should cover outline-first navigation", func() {
+			Expect(helpPage.Markdown).To(ContainSubstring("ReadPageOutline"))
+		})
+
+		It("should cover splitting and trimming", func() {
+			Expect(helpPage.Markdown).To(ContainSubstring("Trim Strategies"))
+			Expect(helpPage.Markdown).To(ContainSubstring("Splitting Strategies"))
+		})
+	})
 })
 
 var _ = Describe("Sync", func() {
@@ -285,4 +311,3 @@ func (*explodingStore) DeletePage(_ wikipage.PageIdentifier) error { return nil 
 func (*explodingStore) ModifyMarkdown(_ wikipage.PageIdentifier, _ func(wikipage.Markdown) (wikipage.Markdown, error)) error {
 	return nil
 }
-

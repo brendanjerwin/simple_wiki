@@ -1299,7 +1299,7 @@ collapsible headers, checklists, blog macros, or any other wiki-specific feature
 1. Search the wiki itself for help pages using the SearchPages tool with terms like "help"
    combined with the feature name (e.g., "help collapsible", "help checklist").
 2. Read the relevant help page using the ReadPage tool (e.g., "help/collapsible-headers",
-   "help/checklists", "help/alerts").
+   "help/checklists", "help/alerts", "help/handling-large-pages").
 3. Answer based on the wiki's own help pages — they are the authoritative source for
    user-facing features and syntax.
 

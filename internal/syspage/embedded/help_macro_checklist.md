@@ -147,4 +147,5 @@ Pages created before #984 land may have items without `uid` and without per-item
 
 - [[help-caldav]] — sync these checklists to Apple Reminders / DAVx5.
 - [[help-hashtags]] — full grammar and normalization rules for `#tag` syntax used in item text.
+- [[help-handling-large-pages]] — when to move inline lists into checklists or split large pages.
 - [[help-search]] — `#tag` query syntax for finding checklist items across pages.
