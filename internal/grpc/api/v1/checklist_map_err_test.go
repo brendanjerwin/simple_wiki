@@ -73,6 +73,18 @@ var _ = Describe("mapChecklistMutatorErr", func() {
 		})
 	})
 
+	When("err is ErrDuplicateOpenItem", func() {
+		var result error
+
+		BeforeEach(func() {
+			result = mapChecklistMutatorErr(checklistmutator.ErrDuplicateOpenItem)
+		})
+
+		It("should return AlreadyExists", func() {
+			Expect(status.Code(result)).To(Equal(codes.AlreadyExists))
+		})
+	})
+
 	When("err is already a gRPC status error", func() {
 		var (
 			original error

@@ -206,7 +206,7 @@ type anthropicSchemaOverride struct {
 func anthropicCompatibleSchemas() map[string]anthropicSchemaOverride {
 	return map[string]anthropicSchemaOverride{
 		apiv1mcp.PageManagementService_ReadPageToolOpenAI.Name: {
-			schema:     apiv1mcp.PageManagementService_ReadPageToolOpenAI.RawInputSchema,
+			schema:     readPageAnthropicInputSchema,
 			descriptor: (&apiv1.ReadPageRequest{}).ProtoReflect().Descriptor(),
 		},
 		apiv1mcp.Frontmatter_RemoveKeyAtPathToolOpenAI.Name: {
@@ -215,6 +215,24 @@ func anthropicCompatibleSchemas() map[string]anthropicSchemaOverride {
 		},
 	}
 }
+
+var readPageAnthropicInputSchema = json.RawMessage(`{
+  "additionalProperties": false,
+  "maxProperties": 1,
+  "minProperties": 1,
+  "properties": {
+    "identifier": {
+      "description": "Page identifier. Set either identifier or page_name, not both.",
+      "type": "string"
+    },
+    "page_name": {
+      "description": "Page name. Set either page_name or identifier, not both.",
+      "type": "string"
+    }
+  },
+  "required": [],
+  "type": "object"
+}`)
 
 // wrapHandlerForOpenAISchema wraps an existing tool handler so that it
 // normalizes incoming arguments using runtime.FixOpenAI before delegating.
