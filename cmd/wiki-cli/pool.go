@@ -10,9 +10,11 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"os/signal"
 	"regexp"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"connectrpc.com/connect"
@@ -24,9 +26,9 @@ import (
 )
 
 const (
-	defaultMaxInstances                   = 5
-	defaultIdleTimeoutMinutes             = 30
-	defaultMaxInstanceAgeHours            = 2
+	defaultMaxInstances                    = 5
+	defaultIdleTimeoutMinutes              = 30
+	defaultMaxInstanceAgeHours             = 2
 	defaultPermissionPendingTimeoutMinutes = 5
 
 	errTerminalAccessUnavailable = "terminal access not available"
@@ -53,13 +55,13 @@ type InstanceState int
 
 const (
 	StateSpawning          InstanceState = iota
-	StateInitializing      // handshake done, session being created
-	StateBridgeConnecting  // subscribing to page messages
-	StateIdle              // bridge connected, waiting for user messages
-	StatePrompting         // Prompt call in progress
-	StatePermissionPending // waiting for user permission response
-	StateStopping          // being shut down
-	StateDead              // terminated
+	StateInitializing                    // handshake done, session being created
+	StateBridgeConnecting                // subscribing to page messages
+	StateIdle                            // bridge connected, waiting for user messages
+	StatePrompting                       // Prompt call in progress
+	StatePermissionPending               // waiting for user permission response
+	StateStopping                        // being shut down
+	StateDead                            // terminated
 )
 
 func (s InstanceState) String() string {
@@ -183,6 +185,9 @@ type poolDaemon struct {
 
 	instances map[string]*instanceEntry
 	mu        sync.Mutex
+
+	scheduledTurns      sync.WaitGroup
+	scheduledTurnRunner func(context.Context, *apiv1.ScheduledTurnRequest) (apiv1.ScheduleStatus, string)
 }
 
 // sanitizeUnitName converts a page identifier into a valid systemd unit name suffix.
@@ -283,7 +288,10 @@ func runPoolAction(c *cli.Context) error {
 		instances:                make(map[string]*instanceEntry),
 	}
 
-	return d.run(context.Background())
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	return d.run(ctx)
 }
 
 // run starts the pool daemon's main loop.
@@ -310,6 +318,7 @@ func (d *poolDaemon) run(ctx context.Context) error {
 		select {
 		case <-ctx.Done():
 			d.stopAll()
+			d.waitForScheduledTurns()
 			return nil
 		default:
 		}
@@ -318,6 +327,7 @@ func (d *poolDaemon) run(ctx context.Context) error {
 		err := d.subscribeAndHandle(ctx)
 		if err == nil {
 			d.stopAll()
+			d.waitForScheduledTurns()
 			return nil
 		}
 
@@ -327,6 +337,7 @@ func (d *poolDaemon) run(ctx context.Context) error {
 		select {
 		case <-ctx.Done():
 			d.stopAll()
+			d.waitForScheduledTurns()
 			return nil
 		case <-time.After(time.Duration(delayMs) * time.Millisecond):
 		}
@@ -446,8 +457,8 @@ type acpAgent interface {
 // creates a new chat reply, subsequent chunks edit it in place. Tool calls
 // are shown as emoji reactions on the message.
 type wikiChatClient struct {
-	page       string
-	wikiURL    string
+	page            string
+	wikiURL         string
 	mu              sync.Mutex
 	textBuf         strings.Builder
 	thoughtBuf      strings.Builder
