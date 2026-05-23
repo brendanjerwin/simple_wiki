@@ -23,9 +23,9 @@ Treat a page as large when one or more of these are true:
 
 ## First Move: Read the Outline
 
-For agent or API work, call `api_v1_PageManagementService_ReadPageOutline` before `ReadPage` on large pages. It returns headings, byte offsets, byte lengths, total bytes, and the version hash. Use the outline to pick the section you actually need instead of loading the full page.
+For agent or API work, call `api_v1_PageManagementService_ReadPageOutline` before `api_v1_PageManagementService_ReadPage` on large pages. It returns headings, byte offsets, byte lengths, total bytes, and the version hash. Use the outline to pick the section you actually need before deciding whether to load the full page. The current `api_v1_PageManagementService_ReadPage` request reads the whole page; it does not accept byte offset or length fields.
 
-When editing one section, prefer `UpdatePageContent` with `old_content_markdown` and `new_content_markdown`. That keeps the edit small and avoids rewriting unrelated content.
+When editing one section, prefer `api_v1_PageManagementService_UpdatePageContent` with `old_content_markdown`, `new_content_markdown`, and `expected_version_hash`. That keeps the edit small and avoids rewriting unrelated content.
 
 ## Trim Strategies
 
@@ -115,7 +115,7 @@ If you need another page's content, link to it and summarize why it matters. Cop
 
 Act before the page becomes painful:
 
-- Around 30 KB: agents should use `ReadPageOutline` first.
+- Around 30 KB: agents should use `api_v1_PageManagementService_ReadPageOutline` first.
 - Around 15k tokens: trim or split during the same work session.
 - When a section is mostly old status: summarize it.
 - When a list gets repeated updates: make it a checklist, child page, or blog stream.
@@ -136,7 +136,7 @@ Avoid these:
 
 When asked to work on a large page:
 
-1. Search for the relevant page and call `ReadPageOutline` first.
+1. Search for the relevant page and call `api_v1_PageManagementService_ReadPageOutline` first.
 2. Read only the relevant section when possible.
 3. If editing, update the smallest stable section.
 4. If the page is too large because of stale bulk, summarize or split as part of the task.
