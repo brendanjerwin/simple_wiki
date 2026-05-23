@@ -426,7 +426,7 @@ var _ = Describe("AgentScheduleStore", func() {
 			})
 		})
 
-		Describe("when a sink is wired and returns an error on a terminal transition", func() {
+		Describe("when a sink is wired and fails an OK terminal transition", func() {
 			var sink *erroringActivitySink
 			var transitionErr error
 
@@ -445,9 +445,9 @@ var _ = Describe("AgentScheduleStore", func() {
 				Expect(sink.calls).To(Equal(1))
 			})
 
-			It("should still record the terminal status on the schedule", func() {
+			It("should conservatively record WARN on the schedule", func() {
 				schedules, _ := store.List("p")
-				Expect(schedules[0].GetLastStatus()).To(Equal(apiv1.ScheduleStatus_SCHEDULE_STATUS_OK))
+				Expect(schedules[0].GetLastStatus()).To(Equal(apiv1.ScheduleStatus_SCHEDULE_STATUS_WARN))
 			})
 		})
 

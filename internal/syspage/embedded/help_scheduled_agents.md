@@ -73,16 +73,19 @@ Each fire walks the schedule through these states:
 ```
 UNSPECIFIED ─┐
              ├─→ RUNNING ─┬─→ OK ──────┐
-OK ──────────┤            ├─→ ERROR ───┼─→ RUNNING (next fire)
-ERROR ───────┤            └─→ TIMEOUT ─┘
-TIMEOUT ─────┘
+OK ──────────┤            ├─→ ERROR ───┤
+ERROR ───────┤            ├─→ TIMEOUT ─┼─→ RUNNING (next fire)
+TIMEOUT ─────┤            └─→ WARN ────┘
+WARN ────────┘
 ```
 
 `RUNNING → RUNNING` is illegal — if a previous fire is still in flight, the next cron fire is **skipped** rather than dispatched. A stuck `RUNNING` (e.g. the pool died mid-turn) clears via the per-turn hard timeout (default 10 minutes), after which the next fire proceeds normally.
 
+`WARN` is a terminal status for work that may have completed but did not produce the required audit record, usually because the scheduled agent finished without a background activity summary or the audit write failed.
+
 ## Background activity log
 
-Every terminal transition (`OK`, `ERROR`, `TIMEOUT`) appends an entry to `agent.chat_context.background_activity` — a 50-entry rolling log on the page. Interactive chat preambles include this log so users see what background agents have been doing.
+Every `RUNNING` transition appends an entry to `agent.chat_context.background_activity` — a 50-entry rolling log on the page. Interactive chat preambles include this log so users see what background agents have been doing.
 
 Scheduled agents are encouraged to call `api_v1_AgentMetadataService_AppendBackgroundActivitySummary` before they finish:
 
@@ -94,7 +97,9 @@ Scheduled agents are encouraged to call `api_v1_AgentMetadataService_AppendBackg
 }
 ```
 
-The summary attaches to the most recent matching entry in the log. Without it, interactive chat users will know a turn ran but not what it did.
+The summary attaches to the newest matching `RUNNING` entry in the log. When the turn reaches a terminal status (`OK`, `ERROR`, `TIMEOUT`, or `WARN`), the wiki updates that same entry with the final status and completion timestamp. If the turn reports `OK` without a summary, the wiki records `WARN` instead so operators can see that the audit trail is incomplete.
+
+If the initial `RUNNING` entry could not be written, the terminal transition appends a new terminal entry rather than rewriting older history. Audit write failures are logged by the server.
 
 ## Listing & deleting schedules
 

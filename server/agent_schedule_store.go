@@ -3,6 +3,7 @@ package server
 import (
 	"errors"
 	"fmt"
+	"log/slog"
 	"sync"
 	"time"
 
@@ -70,11 +71,10 @@ func NewAgentScheduleStore(pages agentSchedulePagesStore) *AgentScheduleStore {
 	return &AgentScheduleStore{pages: pages}
 }
 
-// SetBackgroundActivitySink wires a sink that receives one
-// BackgroundActivityEntry every time TransitionStatus records a terminal
-// status. Optional — when unset, terminal transitions just update the
-// schedule's status fields without touching agent.chat_context. Site wiring
-// calls this once with the AgentChatContextStore.
+// SetBackgroundActivitySink wires a sink that records schedule audit entries.
+// Optional — when unset, transitions just update the schedule's status fields
+// without touching agent.chat_context. Site wiring calls this once with the
+// AgentChatContextStore.
 func (s *AgentScheduleStore) SetBackgroundActivitySink(sink BackgroundActivitySink) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -209,10 +209,7 @@ func (s *AgentScheduleStore) TransitionStatus(page, scheduleID string, to apiv1.
 	now := time.Now().UTC()
 	finalStatus := to
 	if isTerminalScheduleStatus(to) && s.backgroundActivitySink != nil {
-		completedStatus, appendErr := s.backgroundActivitySink.CompleteBackgroundActivity(page, scheduleID, to)
-		if appendErr == nil {
-			finalStatus = completedStatus
-		}
+		finalStatus = s.completeBackgroundActivityStatus(page, scheduleID, to)
 	}
 
 	target.LastStatus = finalStatus
@@ -230,24 +227,46 @@ func (s *AgentScheduleStore) TransitionStatus(page, scheduleID string, to apiv1.
 	// Log a background-activity entry for RUNNING transitions so the scheduled
 	// agent can attach a summary before the terminal transition arrives.
 	if to == apiv1.ScheduleStatus_SCHEDULE_STATUS_RUNNING && s.backgroundActivitySink != nil {
-		entry := &apiv1.BackgroundActivityEntry{
-			Timestamp:  timestamppb.New(now),
-			ScheduleId: scheduleID,
-			Status:     to,
-		}
-		if appendErr := s.backgroundActivitySink.AppendBackgroundActivityAutomatic(page, entry); appendErr != nil {
-			// Best-effort; log via the schedule store's caller (which already
-			// handles slog) by returning a wrapped error wouldn't make sense
-			// because the transition itself succeeded. Swallow + would-be
-			// logged via a logger if we had one; for now the loss is silent.
-			_ = appendErr
-		}
+		s.appendRunningBackgroundActivity(page, scheduleID, now)
 	}
 	return nil
 }
 
-// isTerminalScheduleStatus returns true for OK, ERROR, and TIMEOUT — the
-// statuses that warrant a background-activity log entry.
+func (s *AgentScheduleStore) completeBackgroundActivityStatus(page, scheduleID string, status apiv1.ScheduleStatus) apiv1.ScheduleStatus {
+	completedStatus, err := s.backgroundActivitySink.CompleteBackgroundActivity(page, scheduleID, status)
+	if err == nil {
+		return completedStatus
+	}
+	slog.Warn("agent schedule: background activity completion failed",
+		logFieldPage, page,
+		"schedule_id", scheduleID,
+		"status", status.String(),
+		"error", err,
+	)
+	if status == apiv1.ScheduleStatus_SCHEDULE_STATUS_OK {
+		return apiv1.ScheduleStatus_SCHEDULE_STATUS_WARN
+	}
+	return status
+}
+
+func (s *AgentScheduleStore) appendRunningBackgroundActivity(page, scheduleID string, now time.Time) {
+	entry := &apiv1.BackgroundActivityEntry{
+		Timestamp:  timestamppb.New(now),
+		ScheduleId: scheduleID,
+		Status:     apiv1.ScheduleStatus_SCHEDULE_STATUS_RUNNING,
+	}
+	if err := s.backgroundActivitySink.AppendBackgroundActivityAutomatic(page, entry); err != nil {
+		slog.Warn("agent schedule: background activity append failed",
+			logFieldPage, page,
+			"schedule_id", scheduleID,
+			"status", apiv1.ScheduleStatus_SCHEDULE_STATUS_RUNNING.String(),
+			"error", err,
+		)
+	}
+}
+
+// isTerminalScheduleStatus returns true for statuses that finish a schedule
+// run and need a background-activity completion.
 func isTerminalScheduleStatus(s apiv1.ScheduleStatus) bool {
 	switch s {
 	case apiv1.ScheduleStatus_SCHEDULE_STATUS_OK,
