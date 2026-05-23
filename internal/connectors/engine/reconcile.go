@@ -352,7 +352,7 @@ func (e *Engine) applyInbound(
 	// second ref): adopting would orphan the original ref in idMap and
 	// the next pull would still see the orphan, perpetuating the loop.
 	// The operator cleans up the remote-side duplicate in the source UI.
-	wikiByText := e.indexWikiItemsByText(ctx, binding)
+	wikiByText := e.indexWikiItemsByText(ctx, binding, idMap)
 
 	for _, remoteItem := range items {
 		// Refresh the per-item concurrency baseline (Tasks: item_etags;
@@ -382,9 +382,16 @@ func (e *Engine) applyInbound(
 //
 // Errors are silenced — a missing index just disables dedup; the engine
 // still functions correctly (with the pre-existing duplicate hazard) if
-// the read fails. First-write-wins on collisions: if multiple wiki items
-// share a text, the first one in iteration order wins the index slot.
-func (e *Engine) indexWikiItemsByText(ctx context.Context, binding connectors.Binding) map[string]string {
+// the read fails.
+//
+// Collision policy: when multiple wiki items share a text, BOUND items
+// win over unbound. This matters in the post-regression state where the
+// wiki has one correctly-bound item plus accumulated unbound duplicates
+// of the same text — the bound uid must be the one the inbound dedup
+// consults so the bound-vs-different-ref skip branch fires (rather than
+// the adopt branch, which would orphan the original binding). Among
+// equally-bound (or equally-unbound) items, first-write-wins.
+func (e *Engine) indexWikiItemsByText(ctx context.Context, binding connectors.Binding, idMap map[string]string) map[string]string {
 	cl, err := e.checklist.ListItems(ctx, binding.Page, binding.ListName)
 	if err != nil || cl == nil {
 		return map[string]string{}
@@ -399,10 +406,19 @@ func (e *Engine) indexWikiItemsByText(ctx context.Context, binding connectors.Bi
 		if text == "" {
 			continue
 		}
-		if _, taken := out[text]; taken {
+		existingUID, taken := out[text]
+		if !taken {
+			out[text] = uid
 			continue
 		}
-		out[text] = uid
+		// Collision: prefer bound over unbound.
+		_, existingBound := idMap[existingUID]
+		_, candidateBound := idMap[uid]
+		if candidateBound && !existingBound {
+			out[text] = uid
+		}
+		// All other cases keep the existing slot (first-write-wins when
+		// boundness is equal; bound-already-wins blocks unbound).
 	}
 	return out
 }
@@ -590,7 +606,10 @@ func (e *Engine) applyInboundDedupByText(
 	}
 	idMap[matchUID] = string(remoteItem.Ref)
 	refToUID[string(remoteItem.Ref)] = matchUID
-	delete(wikiByText, wikiItem.Text)
+	// Intentionally do NOT delete the wikiByText entry. matchUID is now
+	// bound, so a subsequent remote item with the same text in this same
+	// pass will correctly hit the bound-vs-different-ref skip branch
+	// above (preventing wiki duplicates within a single reconcile).
 	return true, nil
 }
 
@@ -662,9 +681,8 @@ func (e *Engine) pushOutbound(
 	// to the remote would create a remote-side duplicate. Skip the
 	// insert; operator cleans the wiki-side duplicate. Intentional
 	// duplicates the user adds via wiki UI in the same tick will be
-	// dropped here too — by design; the safe path is "one remote ref per
-	// text" until ADR-N defines a richer identity for intentional
-	// repeats.
+	// dropped here too — by design; one remote ref per text is the safe
+	// floor for the current data model.
 	boundUIDByText := map[string]string{}
 	for boundUID := range idMap {
 		item, present := currentUIDs[boundUID]
