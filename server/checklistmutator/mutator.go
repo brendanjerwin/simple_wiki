@@ -227,6 +227,15 @@ type UpdateItemArgs struct {
 	AlarmPayloadSet bool
 }
 
+// DeduplicateScope names which item states are eligible for bulk duplicate
+// compaction.
+type DeduplicateScope int
+
+const (
+	DeduplicateOpenItems DeduplicateScope = iota
+	DeduplicateAllItems
+)
+
 // Errors returned by the mutator. RPC handlers map these to gRPC codes.
 var (
 	// ErrItemNotFound is returned when the requested uid does not exist on
@@ -577,6 +586,64 @@ func (m *Mutator) deleteItemImpl(_ context.Context, page, listName, uid string, 
 	}
 	m.notify(page, listName, identity)
 	return checklist, nil
+}
+
+// DeduplicateItems removes duplicate checklist items by trimmed text. The
+// earliest item in the current sort order is kept for each text value.
+func (m *Mutator) DeduplicateItems(_ context.Context, page, listName string, scope DeduplicateScope, expectedUpdatedAt *time.Time, identity tailscale.IdentityValue) (int, *apiv1.Checklist, error) {
+	listName = wikipage.NormalizeListName(listName)
+
+	unlock := m.lockPage(page)
+	defer unlock()
+
+	fm, err := m.readFrontMatter(page)
+	if err != nil {
+		return 0, nil, err
+	}
+
+	checklist := m.readChecklistForMutation(fm, listName)
+	if err := checkExpectedUpdatedAt(checklist, expectedUpdatedAt); err != nil {
+		return 0, nil, err
+	}
+
+	removedCount := deduplicateChecklistItems(checklist, scope)
+	if removedCount == 0 {
+		return 0, checklist, nil
+	}
+
+	now := m.clock.Now()
+	bumpSyncToken(checklist, now)
+	appendEvent(checklist, &apiv1.ChecklistEvent{
+		Src: UserSource(identity.LoginName()).String(),
+		Op:  "bulk_dedupe",
+	}, now)
+	m.pruneTombstones(page, listName, checklist, now)
+
+	if err := m.persist(page, fm, listName, checklist); err != nil {
+		return 0, nil, err
+	}
+	m.notify(page, listName, identity)
+	return removedCount, checklist, nil
+}
+
+func deduplicateChecklistItems(checklist *apiv1.Checklist, scope DeduplicateScope) int {
+	seen := map[string]struct{}{}
+	deduped := make([]*apiv1.ChecklistItem, 0, len(checklist.GetItems()))
+	for _, item := range checklist.GetItems() {
+		key := strings.TrimSpace(item.GetText())
+		if key == "" || item.GetChecked() && scope != DeduplicateAllItems {
+			deduped = append(deduped, item)
+			continue
+		}
+		if _, exists := seen[key]; exists {
+			continue
+		}
+		seen[key] = struct{}{}
+		deduped = append(deduped, item)
+	}
+	removedCount := len(checklist.GetItems()) - len(deduped)
+	checklist.Items = deduped
+	return removedCount
 }
 
 // ReorderItem updates an item's sort_order. When the requested value

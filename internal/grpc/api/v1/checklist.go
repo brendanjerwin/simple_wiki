@@ -3,6 +3,7 @@ package v1
 import (
 	"context"
 	"errors"
+	"strconv"
 	"time"
 
 	"google.golang.org/grpc/codes"
@@ -145,6 +146,37 @@ func (s *Server) DeleteItem(ctx context.Context, req *apiv1.DeleteItemRequest) (
 	return &apiv1.DeleteItemResponse{Checklist: checklistForPublicResponse(list)}, nil
 }
 
+// DeduplicateItems implements the DeduplicateItems RPC.
+func (s *Server) DeduplicateItems(ctx context.Context, req *apiv1.DeduplicateItemsRequest) (*apiv1.DeduplicateItemsResponse, error) {
+	if s.checklistMutator == nil {
+		return nil, errChecklistMutatorNotConfigured
+	}
+	if req.GetPage() == "" {
+		return nil, status.Error(codes.InvalidArgument, errPageRequired)
+	}
+	if guardErr := requireUserMutable(s.pageReaderMutator, wikipage.PageIdentifier(req.GetPage())); guardErr != nil {
+		return nil, guardErr
+	}
+	if authErr := requireAuthorized(ctx, s.pageReaderMutator, wikipage.PageIdentifier(req.GetPage())); authErr != nil {
+		return nil, authErr
+	}
+
+	identity := tailscale.IdentityFromContext(ctx)
+	expected := timestampPtr(req.ExpectedUpdatedAt)
+	scope := checklistmutator.DeduplicateOpenItems
+	if req.GetIncludeChecked() {
+		scope = checklistmutator.DeduplicateAllItems
+	}
+	removedCount, list, err := s.checklistMutator.DeduplicateItems(ctx, req.GetPage(), req.GetListName(), scope, expected, identity)
+	if err != nil {
+		return nil, mapChecklistMutatorErr(err)
+	}
+	return &apiv1.DeduplicateItemsResponse{
+		Checklist:    checklistForPublicResponse(list),
+		RemovedCount: int32(removedCount),
+	}, nil
+}
+
 // ReorderItem implements the ReorderItem RPC.
 func (s *Server) ReorderItem(ctx context.Context, req *apiv1.ReorderItemRequest) (*apiv1.ReorderItemResponse, error) {
 	if s.checklistMutator == nil {
@@ -185,7 +217,12 @@ func (s *Server) ListItems(ctx context.Context, req *apiv1.ListItemsRequest) (*a
 	if err != nil {
 		return nil, mapChecklistMutatorErr(err)
 	}
-	return &apiv1.ListItemsResponse{Checklist: checklistForPublicResponse(list)}, nil
+	publicList := checklistForPublicResponse(list)
+	nextPageToken, err := paginateChecklistItems(publicList, req.GetPageSize(), req.GetPageToken())
+	if err != nil {
+		return nil, err
+	}
+	return &apiv1.ListItemsResponse{Checklist: publicList, NextPageToken: nextPageToken}, nil
 }
 
 // watchListMinIntervalMs and watchListMaxIntervalMs bound the
@@ -314,6 +351,50 @@ func checklistForPublicResponse(list *apiv1.Checklist) *apiv1.Checklist {
 	list.Tombstones = nil
 	list.MaxSeq = 0
 	return list
+}
+
+const (
+	listItemsDefaultPageSize = 500
+	listItemsMaxPageSize     = 500
+)
+
+func paginateChecklistItems(list *apiv1.Checklist, requestedPageSize int32, pageToken string) (string, error) {
+	if list == nil {
+		return "", nil
+	}
+
+	startIndex := 0
+	if pageToken != "" {
+		parsed, err := strconv.Atoi(pageToken)
+		if err != nil || parsed < 0 {
+			return "", status.Error(codes.InvalidArgument, "page_token must be a non-negative item offset")
+		}
+		startIndex = parsed
+	}
+
+	pageSize := listItemsDefaultPageSize
+	if requestedPageSize > 0 {
+		pageSize = int(requestedPageSize)
+	}
+	if pageSize > listItemsMaxPageSize {
+		pageSize = listItemsMaxPageSize
+	}
+
+	items := list.GetItems()
+	if startIndex >= len(items) {
+		list.Items = nil
+		return "", nil
+	}
+
+	endIndex := startIndex + pageSize
+	nextPageToken := ""
+	if endIndex < len(items) {
+		nextPageToken = strconv.Itoa(endIndex)
+	} else {
+		endIndex = len(items)
+	}
+	list.Items = items[startIndex:endIndex]
+	return nextPageToken, nil
 }
 
 // timestampPtr converts an optional timestamppb to a *time.Time.

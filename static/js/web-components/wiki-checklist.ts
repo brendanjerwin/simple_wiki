@@ -405,6 +405,7 @@ export class WikiChecklist extends LitElement implements DragReorderHandler {
       const request = create(ListItemsRequestSchema, {
         page: this.page,
         listName: this.listName,
+        pageSize: 500,
       });
       const response = await this.client.listItems(request);
       const checklist = response.checklist;
@@ -424,7 +425,21 @@ export class WikiChecklist extends LitElement implements DragReorderHandler {
         this.loading = false;
         return;
       } else {
-        this.items = [...checklist.items];
+        const items = [...checklist.items];
+        let pageToken = response.nextPageToken;
+        while (pageToken) {
+          const nextRequest = create(ListItemsRequestSchema, {
+            page: this.page,
+            listName: this.listName,
+            pageSize: 500,
+            pageToken,
+          });
+          const nextResponse = await this.client.listItems(nextRequest);
+          items.push(...(nextResponse.checklist?.items ?? []));
+          pageToken = nextResponse.nextPageToken;
+        }
+
+        this.items = items;
         this._listUpdatedAt = checklist.updatedAt;
         this._syncToken = checklist.syncToken;
       }

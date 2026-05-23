@@ -899,6 +899,7 @@ describe('WikiChecklist', () => {
     let listItemsStub: SinonStub;
     let requestedPage: string;
     let requestedListName: string;
+    let requestedPageSize: number;
 
     beforeEach(async () => {
       sinon.restore();
@@ -914,6 +915,7 @@ describe('WikiChecklist', () => {
       items = el.items;
       requestedPage = (listItemsStub.getCall(0).args[0] as { page: string }).page;
       requestedListName = (listItemsStub.getCall(0).args[0] as { listName: string }).listName;
+      requestedPageSize = (listItemsStub.getCall(0).args[0] as { pageSize: number }).pageSize;
     });
 
     it('should call listItems', () => {
@@ -926,6 +928,10 @@ describe('WikiChecklist', () => {
 
     it('should request the configured listName', () => {
       expect(requestedListName).to.equal('grocery_list');
+    });
+
+    it('should request a bounded page size', () => {
+      expect(requestedPageSize).to.equal(500);
     });
 
     it('should populate items from response', () => {
@@ -942,6 +948,59 @@ describe('WikiChecklist', () => {
 
     it('should clear loading state', () => {
       expect(el.loading).to.be.false;
+    });
+  });
+
+  describe('when ListItems returns multiple pages', () => {
+    let listItemsStub: SinonStub;
+    let items: ChecklistItem[];
+    let secondPageToken: string;
+
+    beforeEach(async () => {
+      sinon.restore();
+      el.remove();
+      el = buildElement();
+      stubWatchList(el);
+
+      const firstChecklist = makeChecklist({
+        name: 'grocery_list',
+        items: [makeChecklistItem({ text: 'Milk' })],
+      });
+      const secondChecklist = makeChecklist({
+        name: 'grocery_list',
+        items: [makeChecklistItem({ text: 'Eggs' })],
+      });
+      listItemsStub = sinon.stub(el.client, 'listItems');
+      listItemsStub.onCall(0).resolves(create(ListItemsResponseSchema, {
+        checklist: firstChecklist,
+        nextPageToken: '1',
+      }));
+      listItemsStub.onCall(1).resolves(create(ListItemsResponseSchema, {
+        checklist: secondChecklist,
+      }));
+
+      document.body.appendChild(el);
+      await waitUntil(
+        () => el.items.length === 2,
+        'all checklist pages should be loaded',
+        { timeout: 2000 },
+      );
+      await el.updateComplete;
+
+      items = el.items;
+      secondPageToken = (listItemsStub.getCall(1).args[0] as { pageToken: string }).pageToken;
+    });
+
+    it('should request the second page', () => {
+      expect(listItemsStub).to.have.been.calledTwice;
+    });
+
+    it('should pass the continuation token', () => {
+      expect(secondPageToken).to.equal('1');
+    });
+
+    it('should render items from all pages', () => {
+      expect(items.map(item => item.text)).to.deep.equal(['Milk', 'Eggs']);
     });
   });
 
