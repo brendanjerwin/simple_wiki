@@ -7,8 +7,7 @@ import (
 	"net/http/httptest"
 	"strings"
 
-	"github.com/brendanjerwin/simple_wiki/migrations/lazy"
-	"github.com/brendanjerwin/simple_wiki/wikipage"
+		"github.com/brendanjerwin/simple_wiki/wikipage"
 	"github.com/gin-gonic/gin"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -339,7 +338,6 @@ var _ = Describe("API Handlers", func() {
 			BeforeEach(func() {
 				gin.SetMode(gin.TestMode)
 				s = &Site{
-					MigrationApplicator: lazy.NewEmptyApplicator(),
 				}
 				w = httptest.NewRecorder()
 				router = gin.Default()

@@ -13,8 +13,7 @@ import (
 	"github.com/jcelliott/lumber"
 	"github.com/pelletier/go-toml/v2"
 
-	"github.com/brendanjerwin/simple_wiki/migrations/lazy"
-	"github.com/brendanjerwin/simple_wiki/utils/base32tools"
+		"github.com/brendanjerwin/simple_wiki/utils/base32tools"
 	"github.com/brendanjerwin/simple_wiki/utils/goldmarkrenderer"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 )
@@ -35,14 +34,11 @@ var _ = Describe("Site.ReadOrInit with URL parameters", func() {
 
 
 		// Set up empty migration applicator for unit testing
-		applicator := lazy.NewEmptyApplicator()
-
 		s = &Site{
 			PathToData:              tmpDir,
 			Logger:                  lumber.NewConsoleLogger(lumber.INFO),
 			MarkdownRenderer:        &goldmarkrenderer.GoldmarkRenderer{},
 			FrontmatterIndexQueryer: &mockFrontmatterIndexQueryer{},
-			MigrationApplicator:     applicator,
 		}
 
 		reqURL = &url.URL{
