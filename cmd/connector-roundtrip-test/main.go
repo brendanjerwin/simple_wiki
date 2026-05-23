@@ -182,11 +182,10 @@ func scenarioWikiTogglePropagatesToTasks(ctx context.Context, w apiv1connect.Che
 	scenario := "wiki ToggleItem → Tasks"
 
 	// Find an existing task on the wiki side. Pick the first.
-	listResp, err := w.ListItems(ctx, connect.NewRequest(&apiv1.ListItemsRequest{Page: page, ListName: listName}))
+	items, err := listAllWikiItems(ctx, w, page, listName)
 	if err != nil {
 		return result{scenario: scenario, passed: false, detail: fmt.Sprintf("ListItems failed: %v", err), duration: time.Since(start)}
 	}
-	items := listResp.Msg.GetChecklist().GetItems()
 	if len(items) == 0 {
 		return result{scenario: scenario, passed: false, detail: "no items on wiki list", duration: time.Since(start)}
 	}
@@ -263,9 +262,9 @@ func scenarioTasksPatchPropagatesToWiki(ctx context.Context, w apiv1connect.Chec
 
 	deadline := time.Now().Add(scenarioTimeoutLong)
 	for time.Now().Before(deadline) {
-		listResp, listErr := w.ListItems(ctx, connect.NewRequest(&apiv1.ListItemsRequest{Page: page, ListName: listName}))
+		items, listErr := listAllWikiItems(ctx, w, page, listName)
 		if listErr == nil {
-			for _, item := range listResp.Msg.GetChecklist().GetItems() {
+			for _, item := range items {
 				if item.GetUid() == uid && item.GetChecked() == wantWikiChecked {
 					return result{
 						scenario: scenario,
@@ -339,6 +338,27 @@ func scenarioWikiDeletePropagatesToTasks(ctx context.Context, w apiv1connect.Che
 		time.Sleep(pollInterval)
 	}
 	return result{scenario: scenario, passed: false, detail: fmt.Sprintf("uid=%s task=%s still alive on Tasks after %s", uid, taskID, scenarioTimeoutShort), duration: time.Since(start)}
+}
+
+func listAllWikiItems(ctx context.Context, w apiv1connect.ChecklistServiceClient, page, listName string) ([]*apiv1.ChecklistItem, error) {
+	var out []*apiv1.ChecklistItem
+	pageToken := ""
+	for {
+		resp, err := w.ListItems(ctx, connect.NewRequest(&apiv1.ListItemsRequest{
+			Page:      page,
+			ListName:  listName,
+			PageSize:  500,
+			PageToken: pageToken,
+		}))
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, resp.Msg.GetChecklist().GetItems()...)
+		pageToken = resp.Msg.GetNextPageToken()
+		if pageToken == "" {
+			return out, nil
+		}
+	}
 }
 
 // listAllTasks paginates through all tasks in the tasklist. The

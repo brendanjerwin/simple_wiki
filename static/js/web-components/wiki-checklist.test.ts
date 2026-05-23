@@ -18,6 +18,7 @@ import type { ChecklistItem } from '../gen/api/v1/checklist_pb.js';
 import { makeChecklist, makeChecklistItem } from './checklist-test-fixtures.js';
 
 interface WikiChecklistInternal {
+  fetchData(): Promise<void>;
   _handleItemDragStart(e: DragEvent, index: number): void;
   _handleItemDragOver(e: DragEvent, index: number): void;
   _handleItemDragLeave(e: DragEvent): void;
@@ -1001,6 +1002,51 @@ describe('WikiChecklist', () => {
 
     it('should render items from all pages', () => {
       expect(items.map(item => item.text)).to.deep.equal(['Milk', 'Eggs']);
+    });
+  });
+
+  describe('when an older ListItems request finishes after a newer request', () => {
+    let listItemsStub: SinonStub;
+    let firstResolve: (response: unknown) => void;
+    let items: ChecklistItem[];
+
+    beforeEach(async () => {
+      sinon.restore();
+      el.remove();
+      el = buildElement();
+      stubWatchList(el);
+
+      const firstResponse = create(ListItemsResponseSchema, {
+        checklist: makeChecklist({
+          name: 'grocery_list',
+          items: [makeChecklistItem({ text: 'Old milk' })],
+          updatedAtMs: 1700_000_000_000,
+        }),
+      });
+      const secondResponse = create(ListItemsResponseSchema, {
+        checklist: makeChecklist({
+          name: 'grocery_list',
+          items: [makeChecklistItem({ text: 'Fresh eggs' })],
+          updatedAtMs: 1700_000_001_000,
+        }),
+      });
+      const firstPromise = new Promise(resolve => { firstResolve = resolve; });
+      listItemsStub = sinon.stub(el.client, 'listItems');
+      listItemsStub.onCall(0).returns(firstPromise);
+      listItemsStub.onCall(1).resolves(secondResponse);
+
+      document.body.appendChild(el);
+      await waitUntil(() => listItemsStub.calledOnce, 'initial fetch should start');
+      await (el as unknown as WikiChecklistInternal).fetchData();
+      firstResolve(firstResponse);
+      await new Promise(resolve => setTimeout(resolve, 0));
+      await el.updateComplete;
+
+      items = el.items;
+    });
+
+    it('should keep the newer items', () => {
+      expect(items.map(item => item.text)).to.deep.equal(['Fresh eggs']);
     });
   });
 

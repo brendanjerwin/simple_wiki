@@ -146,6 +146,7 @@ export class WikiChecklist extends LitElement implements DragReorderHandler {
   // remains as a fallback for transient stream drops.
   private watchAbort: AbortController | null = null;
   private _lastSeenSyncToken: bigint | null = null;
+  private _fetchDataSequence = 0;
 
   readonly client = createClient(ChecklistService, getGrpcWebTransport());
 
@@ -397,6 +398,7 @@ export class WikiChecklist extends LitElement implements DragReorderHandler {
    * unchanged, avoiding unnecessary work and preserving cursor/edit state.
    */
   private async fetchData(): Promise<void> {
+    const fetchSequence = ++this._fetchDataSequence;
     if (!this.page) {
       throw new Error('wiki-checklist: page attribute is required but not set');
     }
@@ -408,6 +410,7 @@ export class WikiChecklist extends LitElement implements DragReorderHandler {
         pageSize: 500,
       });
       const response = await this.client.listItems(request);
+      if (fetchSequence !== this._fetchDataSequence) return;
       const checklist = response.checklist;
       if (!checklist) {
         this.items = [];
@@ -435,6 +438,7 @@ export class WikiChecklist extends LitElement implements DragReorderHandler {
             pageToken,
           });
           const nextResponse = await this.client.listItems(nextRequest);
+          if (fetchSequence !== this._fetchDataSequence) return;
           items.push(...(nextResponse.checklist?.items ?? []));
           pageToken = nextResponse.nextPageToken;
         }
@@ -445,9 +449,12 @@ export class WikiChecklist extends LitElement implements DragReorderHandler {
       }
       this.error = null;
     } catch (err) {
+      if (fetchSequence !== this._fetchDataSequence) return;
       this.error = AugmentErrorService.augmentError(err, 'loading checklist');
     } finally {
-      this.loading = false;
+      if (fetchSequence === this._fetchDataSequence) {
+        this.loading = false;
+      }
     }
   }
 

@@ -8,6 +8,7 @@ import (
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
@@ -337,20 +338,22 @@ func (s *Server) GetChecklists(ctx context.Context, req *apiv1.GetChecklistsRequ
 }
 
 func checklistsForPublicResponse(lists []*apiv1.Checklist) []*apiv1.Checklist {
+	out := make([]*apiv1.Checklist, 0, len(lists))
 	for _, list := range lists {
-		checklistForPublicResponse(list)
+		out = append(out, checklistForPublicResponse(list))
 	}
-	return lists
+	return out
 }
 
 func checklistForPublicResponse(list *apiv1.Checklist) *apiv1.Checklist {
 	if list == nil {
 		return nil
 	}
-	list.Events = nil
-	list.Tombstones = nil
-	list.MaxSeq = 0
-	return list
+	publicList := proto.CloneOf(list)
+	publicList.Events = nil
+	publicList.Tombstones = nil
+	publicList.MaxSeq = 0
+	return publicList
 }
 
 const (

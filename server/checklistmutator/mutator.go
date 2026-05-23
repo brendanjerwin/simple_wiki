@@ -542,6 +542,9 @@ func (m *Mutator) DeleteItem(ctx context.Context, page, listName, uid string, ex
 // deleteItemImpl is the source-aware internal entry point.
 func (m *Mutator) deleteItemImpl(_ context.Context, page, listName, uid string, expectedUpdatedAt *time.Time, identity tailscale.IdentityValue, source Source) (*apiv1.Checklist, error) {
 	listName = wikipage.NormalizeListName(listName)
+	if listName == "" {
+		return nil, status.Error(codes.InvalidArgument, "list_name is required")
+	}
 	if uid == "" {
 		return nil, status.Error(codes.InvalidArgument, errUIDRequiredMsg)
 	}
@@ -568,17 +571,7 @@ func (m *Mutator) deleteItemImpl(_ context.Context, page, listName, uid string, 
 	now := m.clock.Now()
 	checklist.Items = append(checklist.Items[:idx], checklist.Items[idx+1:]...)
 	bumpSyncToken(checklist, now)
-	checklist.Tombstones = append(checklist.Tombstones, &apiv1.Tombstone{
-		Uid:       uid,
-		DeletedAt: timestamppb.New(now),
-		GcAfter:   timestamppb.New(now.Add(TombstoneTTL)),
-		SyncToken: checklist.SyncToken,
-	})
-	appendEvent(checklist, &apiv1.ChecklistEvent{
-		Src: source.String(),
-		Op:  "delete",
-		Uid: uid,
-	}, now)
+	recordDeletedChecklistItem(checklist, uid, now, source)
 	m.pruneTombstones(page, listName, checklist, now)
 
 	if err := m.persist(page, fm, listName, checklist); err != nil {
@@ -592,6 +585,9 @@ func (m *Mutator) deleteItemImpl(_ context.Context, page, listName, uid string, 
 // earliest item in the current sort order is kept for each text value.
 func (m *Mutator) DeduplicateItems(_ context.Context, page, listName string, scope DeduplicateScope, expectedUpdatedAt *time.Time, identity tailscale.IdentityValue) (int, *apiv1.Checklist, error) {
 	listName = wikipage.NormalizeListName(listName)
+	if listName == "" {
+		return 0, nil, status.Error(codes.InvalidArgument, "list_name is required")
+	}
 
 	unlock := m.lockPage(page)
 	defer unlock()
@@ -606,15 +602,19 @@ func (m *Mutator) DeduplicateItems(_ context.Context, page, listName string, sco
 		return 0, nil, err
 	}
 
-	removedCount := deduplicateChecklistItems(checklist, scope)
-	if removedCount == 0 {
+	removedItems := deduplicateChecklistItems(checklist, scope)
+	if len(removedItems) == 0 {
 		return 0, checklist, nil
 	}
 
 	now := m.clock.Now()
 	bumpSyncToken(checklist, now)
+	source := UserSource(identity.LoginName())
+	for _, item := range removedItems {
+		recordDeletedChecklistItem(checklist, item.GetUid(), now, source)
+	}
 	appendEvent(checklist, &apiv1.ChecklistEvent{
-		Src: UserSource(identity.LoginName()).String(),
+		Src: source.String(),
 		Op:  "bulk_dedupe",
 	}, now)
 	m.pruneTombstones(page, listName, checklist, now)
@@ -623,27 +623,42 @@ func (m *Mutator) DeduplicateItems(_ context.Context, page, listName string, sco
 		return 0, nil, err
 	}
 	m.notify(page, listName, identity)
-	return removedCount, checklist, nil
+	return len(removedItems), checklist, nil
 }
 
-func deduplicateChecklistItems(checklist *apiv1.Checklist, scope DeduplicateScope) int {
+func deduplicateChecklistItems(checklist *apiv1.Checklist, scope DeduplicateScope) []*apiv1.ChecklistItem {
 	seen := map[string]struct{}{}
 	deduped := make([]*apiv1.ChecklistItem, 0, len(checklist.GetItems()))
+	removed := make([]*apiv1.ChecklistItem, 0)
 	for _, item := range checklist.GetItems() {
 		key := strings.TrimSpace(item.GetText())
-		if key == "" || item.GetChecked() && scope != DeduplicateAllItems {
+		if item.GetChecked() && scope != DeduplicateAllItems {
 			deduped = append(deduped, item)
 			continue
 		}
 		if _, exists := seen[key]; exists {
+			removed = append(removed, item)
 			continue
 		}
 		seen[key] = struct{}{}
 		deduped = append(deduped, item)
 	}
-	removedCount := len(checklist.GetItems()) - len(deduped)
 	checklist.Items = deduped
-	return removedCount
+	return removed
+}
+
+func recordDeletedChecklistItem(checklist *apiv1.Checklist, uid string, now time.Time, source Source) {
+	checklist.Tombstones = append(checklist.Tombstones, &apiv1.Tombstone{
+		Uid:       uid,
+		DeletedAt: timestamppb.New(now),
+		GcAfter:   timestamppb.New(now.Add(TombstoneTTL)),
+		SyncToken: checklist.SyncToken,
+	})
+	appendEvent(checklist, &apiv1.ChecklistEvent{
+		Src: source.String(),
+		Op:  "delete",
+		Uid: uid,
+	}, now)
 }
 
 // ReorderItem updates an item's sort_order. When the requested value

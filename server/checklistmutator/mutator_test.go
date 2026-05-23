@@ -485,6 +485,7 @@ var _ = Describe("Mutator", func() {
 				list         *apiv1.Checklist
 				removedCount int
 				err          error
+				removedUID   string
 			)
 
 			BeforeEach(func() {
@@ -501,6 +502,9 @@ var _ = Describe("Mutator", func() {
 				}
 
 				removedCount, list, err = mutator.DeduplicateItems(ctx, "p", "list", checklistmutator.DeduplicateOpenItems, nil, human)
+				if len(list.GetTombstones()) > 0 {
+					removedUID = list.GetTombstones()[0].GetUid()
+				}
 			})
 
 			It("should not return an error", func() {
@@ -528,6 +532,90 @@ var _ = Describe("Mutator", func() {
 			It("should record a bulk_dedupe event", func() {
 				events := list.GetEvents()
 				Expect(events[len(events)-1].GetOp()).To(Equal("bulk_dedupe"))
+			})
+
+			It("should record a tombstone for the removed duplicate", func() {
+				Expect(list.GetTombstones()).To(HaveLen(1))
+				Expect(removedUID).NotTo(BeEmpty())
+			})
+
+			It("should stamp the post-bump sync token on the tombstone", func() {
+				Expect(list.GetTombstones()[0].GetSyncToken()).To(Equal(list.GetSyncToken()))
+			})
+
+			It("should record a delete event for the removed duplicate", func() {
+				var deleteEvent *apiv1.ChecklistEvent
+				for _, event := range list.GetEvents() {
+					if event.GetOp() == "delete" {
+						deleteEvent = event
+						break
+					}
+				}
+				Expect(deleteEvent).NotTo(BeNil())
+				Expect(deleteEvent.GetUid()).To(Equal(removedUID))
+			})
+		})
+
+		When("list_name is empty after normalization", func() {
+			var (
+				list         *apiv1.Checklist
+				removedCount int
+				err          error
+			)
+
+			BeforeEach(func() {
+				removedCount, list, err = mutator.DeduplicateItems(ctx, "p", "   ", checklistmutator.DeduplicateOpenItems, nil, human)
+			})
+
+			It("should return InvalidArgument", func() {
+				Expect(status.Code(err)).To(Equal(codes.InvalidArgument))
+			})
+
+			It("should describe the missing list name", func() {
+				Expect(err).To(MatchError(ContainSubstring("list_name is required")))
+			})
+
+			It("should not return a checklist", func() {
+				Expect(list).To(BeNil())
+			})
+
+			It("should not report removals", func() {
+				Expect(removedCount).To(BeZero())
+			})
+		})
+
+		When("the list has duplicate open items with blank trimmed text", func() {
+			var (
+				list         *apiv1.Checklist
+				removedCount int
+				err          error
+			)
+
+			BeforeEach(func() {
+				store.pages["p"] = wikipage.FrontMatter{
+					"checklists": map[string]any{
+						"list": map[string]any{
+							"items": []any{
+								map[string]any{"text": "   ", "checked": false},
+								map[string]any{"text": "\t", "checked": false},
+							},
+						},
+					},
+				}
+
+				removedCount, list, err = mutator.DeduplicateItems(ctx, "p", "list", checklistmutator.DeduplicateOpenItems, nil, human)
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should keep one blank item", func() {
+				Expect(list.GetItems()).To(HaveLen(1))
+			})
+
+			It("should report the removed duplicate count", func() {
+				Expect(removedCount).To(Equal(1))
 			})
 		})
 

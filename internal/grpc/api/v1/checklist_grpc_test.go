@@ -247,6 +247,18 @@ var _ = Describe("ChecklistService handlers — page required validation", func(
 				Expect(err).To(HaveGrpcStatusWithSubstr(codes.InvalidArgument, "page"))
 			})
 		})
+
+		When("list_name is empty", func() {
+			var err error
+
+			BeforeEach(func() {
+				_, err = server.DeduplicateItems(ctx, &apiv1.DeduplicateItemsRequest{Page: "p", ListName: "   "})
+			})
+
+			It("should return InvalidArgument", func() {
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.InvalidArgument, "list_name"))
+			})
+		})
 	})
 
 	Describe("ReorderItem", func() {
@@ -359,8 +371,10 @@ var _ = Describe("ChecklistService handlers — public checklist response shape"
 			var (
 				firstPageResp  *apiv1.ListItemsResponse
 				secondPageResp *apiv1.ListItemsResponse
+				unpagedResp    *apiv1.Checklist
 				firstPageErr   error
 				secondPageErr  error
+				unpagedErr     error
 				addErr         error
 			)
 
@@ -374,6 +388,7 @@ var _ = Describe("ChecklistService handlers — public checklist response shape"
 					PageSize:  1,
 					PageToken: firstPageResp.GetNextPageToken(),
 				})
+				unpagedResp, unpagedErr = mutator.ListItems(ctx, "weekly_menu", "ingredients-on-hand")
 			})
 
 			It("should add the second item", func() {
@@ -393,6 +408,11 @@ var _ = Describe("ChecklistService handlers — public checklist response shape"
 				Expect(secondPageErr).NotTo(HaveOccurred())
 				Expect(secondPageResp.GetChecklist().GetItems()).To(HaveLen(1))
 				Expect(secondPageResp.GetChecklist().GetItems()[0].GetText()).To(Equal("flour"))
+			})
+
+			It("should not truncate the stored checklist", func() {
+				Expect(unpagedErr).NotTo(HaveOccurred())
+				Expect(unpagedResp.GetItems()).To(HaveLen(2))
 			})
 		})
 

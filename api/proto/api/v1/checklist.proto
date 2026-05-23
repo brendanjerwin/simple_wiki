@@ -80,7 +80,7 @@ service ChecklistService {
   // DeduplicateItems — see (api.v1.description).
   rpc DeduplicateItems(DeduplicateItemsRequest) returns (DeduplicateItemsResponse) {
     option (api.v1.description) =
-        "Compact duplicate checklist items by normalized text, keeping "
+        "Compact duplicate checklist items by trimmed text, keeping "
         "the earliest remaining item for each text value and removing the "
         "rest in one mutation. By default only unchecked duplicates are "
         "deduped; set include_checked to also compact completed items. "
@@ -105,9 +105,9 @@ service ChecklistService {
         "very large checklists do not produce multi-megabyte tool "
         "responses; pass next_page_token to continue. The "
         "Checklist.updated_at field is the value to pass back as "
-        "expected_updated_at on subsequent mutations. Tombstones are "
-        "returned in a separate field for CalDAV sync-collection "
-        "consumption.";
+        "expected_updated_at on subsequent mutations. Internal sync "
+        "events, tombstones, and max_seq are omitted from this public "
+        "response.";
     option (api.v1.read_only) = true;
   }
 
