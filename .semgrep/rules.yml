@@ -350,6 +350,32 @@ rules:
       exclude:
         - "*_test.go"
 
+  - id: go.no-md-write-outside-pagestore
+    languages: [go]
+    message: >-
+      Wiki page .md files must be written through *pagestore.Store so the
+      per-page lock and write-side canonicalizer both run. Direct
+      os.WriteFile/os.Rename of an .md path inside server/ bypasses the
+      storage primitive and re-introduces the save-on-read bug class that
+      the pagestore extraction was designed to eliminate. See
+      server/pagestore/store.go.
+    severity: ERROR
+    patterns:
+      - pattern-either:
+          - pattern: os.WriteFile(filepath.Join(..., "$X.md"), ...)
+          - pattern: os.WriteFile(path.Join(..., "$X.md"), ...)
+          - pattern: os.Rename($SRC, filepath.Join(..., "$X.md"))
+          - pattern: os.Rename($SRC, path.Join(..., "$X.md"))
+          - pattern: os.WriteFile(filepath.Join(..., "$X.md"), $C, $M)
+          - pattern: os.WriteFile(path.Join(..., $X+".md"), $C, $M)
+          - pattern: os.WriteFile(path.Join(..., $PREFIX+".md"), ...)
+    paths:
+      include:
+        - "server/**/*.go"
+      exclude:
+        - "server/pagestore/**"
+        - "*_test.go"
+
   - id: ts.no-actions-in-it-blocks
     languages: [typescript, javascript]
     message: >-
