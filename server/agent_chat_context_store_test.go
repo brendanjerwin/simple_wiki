@@ -186,7 +186,7 @@ var _ = Describe("AgentChatContextStore", func() {
 								"background_activity": []any{
 									map[string]any{
 										"schedule_id": "weekly",
-										"status":      "SCHEDULE_STATUS_OK",
+										"status":      "SCHEDULE_STATUS_RUNNING",
 									},
 								},
 							},
@@ -194,7 +194,7 @@ var _ = Describe("AgentChatContextStore", func() {
 					},
 				}
 				bad := server.NewAgentChatContextStore(errStore)
-				err = bad.AppendBackgroundActivitySummary("p", "weekly", "drafted weekend order")
+				_, err = bad.AppendBackgroundActivitySummary("p", "weekly", "drafted weekend order")
 			})
 
 			It("should return an error", func() {
@@ -357,14 +357,23 @@ var _ = Describe("AgentChatContextStore", func() {
 
 	Describe("AppendBackgroundActivitySummary", func() {
 		Describe("when a matching recent entry exists", func() {
+			var (
+				entry *apiv1.BackgroundActivityEntry
+				err   error
+			)
+
 			BeforeEach(func() {
 				Expect(store.AppendBackgroundActivityAutomatic("p", &apiv1.BackgroundActivityEntry{
 					Timestamp:  timestamppb.New(time.Now()),
 					ScheduleId: "weekly",
-					Status:     apiv1.ScheduleStatus_SCHEDULE_STATUS_OK,
+					Status:     apiv1.ScheduleStatus_SCHEDULE_STATUS_RUNNING,
 				})).To(Succeed())
 
-				Expect(store.AppendBackgroundActivitySummary("p", "weekly", "drafted weekend order")).To(Succeed())
+				entry, err = store.AppendBackgroundActivitySummary("p", "weekly", "drafted weekend order")
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
 			})
 
 			It("should attach the summary to the most recent matching entry", func() {
@@ -372,13 +381,18 @@ var _ = Describe("AgentChatContextStore", func() {
 				Expect(ctx.GetBackgroundActivity()).To(HaveLen(1))
 				Expect(ctx.GetBackgroundActivity()[0].GetSummary()).To(Equal("drafted weekend order"))
 			})
+
+			It("should return the updated background activity", func() {
+				Expect(entry.GetScheduleId()).To(Equal("weekly"))
+				Expect(entry.GetSummary()).To(Equal("drafted weekend order"))
+			})
 		})
 
 		Describe("when no matching entry exists", func() {
 			var err error
 
 			BeforeEach(func() {
-				err = store.AppendBackgroundActivitySummary("p", "missing", "...")
+				_, err = store.AppendBackgroundActivitySummary("p", "missing", "...")
 			})
 
 			It("should return an error", func() {
@@ -400,12 +414,35 @@ var _ = Describe("AgentChatContextStore", func() {
 					ScheduleId: "alpha",
 					Status:     apiv1.ScheduleStatus_SCHEDULE_STATUS_OK,
 				})).To(Succeed())
-				err = store.AppendBackgroundActivitySummary("p", "beta", "...")
+				_, err = store.AppendBackgroundActivitySummary("p", "beta", "...")
 			})
 
 			It("should return a SummaryTargetNotFoundError", func() {
 				var typed *server.SummaryTargetNotFoundError
 				Expect(errors.As(err, &typed)).To(BeTrue())
+			})
+		})
+
+		Describe("when only completed entries match the schedule_id", func() {
+			var err error
+
+			BeforeEach(func() {
+				Expect(store.AppendBackgroundActivityAutomatic("p", &apiv1.BackgroundActivityEntry{
+					Timestamp:  timestamppb.New(time.Now()),
+					ScheduleId: "alpha",
+					Status:     apiv1.ScheduleStatus_SCHEDULE_STATUS_OK,
+				})).To(Succeed())
+				_, err = store.AppendBackgroundActivitySummary("p", "alpha", "late summary")
+			})
+
+			It("should return a SummaryTargetNotFoundError", func() {
+				var typed *server.SummaryTargetNotFoundError
+				Expect(errors.As(err, &typed)).To(BeTrue())
+			})
+
+			It("should leave the completed entry unchanged", func() {
+				ctx, _ := store.Read("p")
+				Expect(ctx.GetBackgroundActivity()[0].GetSummary()).To(Equal(""))
 			})
 		})
 
@@ -424,10 +461,11 @@ var _ = Describe("AgentChatContextStore", func() {
 				Expect(store.AppendBackgroundActivityAutomatic("p", &apiv1.BackgroundActivityEntry{
 					Timestamp:  timestamppb.New(time.Now()),
 					ScheduleId: "alpha",
-					Status:     apiv1.ScheduleStatus_SCHEDULE_STATUS_OK,
+					Status:     apiv1.ScheduleStatus_SCHEDULE_STATUS_RUNNING,
 				})).To(Succeed())
 
-				Expect(store.AppendBackgroundActivitySummary("p", "alpha", "newest alpha")).To(Succeed())
+				_, err := store.AppendBackgroundActivitySummary("p", "alpha", "newest alpha")
+				Expect(err).NotTo(HaveOccurred())
 			})
 
 			It("should attach the summary to the newest alpha entry", func() {
@@ -459,6 +497,52 @@ var _ = Describe("AgentChatContextStore", func() {
 						Expect(entry.GetSummary()).To(Equal(""))
 					}
 				}
+			})
+		})
+	})
+
+	Describe("CompleteBackgroundActivity", func() {
+		Describe("when an OK run has a summary", func() {
+			var finalStatus apiv1.ScheduleStatus
+
+			BeforeEach(func() {
+				Expect(store.AppendBackgroundActivityAutomatic("p", &apiv1.BackgroundActivityEntry{
+					Timestamp:  timestamppb.New(time.Now()),
+					ScheduleId: "weekly",
+					Status:     apiv1.ScheduleStatus_SCHEDULE_STATUS_RUNNING,
+				})).To(Succeed())
+				_, err := store.AppendBackgroundActivitySummary("p", "weekly", "drafted weekend order")
+				Expect(err).NotTo(HaveOccurred())
+				finalStatus, err = store.CompleteBackgroundActivity("p", "weekly", apiv1.ScheduleStatus_SCHEDULE_STATUS_OK)
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should keep the status OK", func() {
+				Expect(finalStatus).To(Equal(apiv1.ScheduleStatus_SCHEDULE_STATUS_OK))
+			})
+		})
+
+		Describe("when an OK run has no summary", func() {
+			var finalStatus apiv1.ScheduleStatus
+
+			BeforeEach(func() {
+				Expect(store.AppendBackgroundActivityAutomatic("p", &apiv1.BackgroundActivityEntry{
+					Timestamp:  timestamppb.New(time.Now()),
+					ScheduleId: "weekly",
+					Status:     apiv1.ScheduleStatus_SCHEDULE_STATUS_RUNNING,
+				})).To(Succeed())
+				var err error
+				finalStatus, err = store.CompleteBackgroundActivity("p", "weekly", apiv1.ScheduleStatus_SCHEDULE_STATUS_OK)
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should return WARN", func() {
+				Expect(finalStatus).To(Equal(apiv1.ScheduleStatus_SCHEDULE_STATUS_WARN))
+			})
+
+			It("should record WARN in background activity", func() {
+				ctx, _ := store.Read("p")
+				Expect(ctx.GetBackgroundActivity()[0].GetStatus()).To(Equal(apiv1.ScheduleStatus_SCHEDULE_STATUS_WARN))
 			})
 		})
 	})

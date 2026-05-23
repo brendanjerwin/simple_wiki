@@ -277,7 +277,9 @@ func (d *poolDaemon) runScheduledTurn(ctx context.Context, completer apiv1connec
 		ErrorMessage:    errMsg,
 		DurationSeconds: int32(duration / time.Second),
 	}
-	if _, completeErr := completer.CompleteScheduledTurn(ctx, connect.NewRequest(completeReq)); completeErr != nil {
+	completeCtx, cancelComplete := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancelComplete()
+	if _, completeErr := completer.CompleteScheduledTurn(completeCtx, connect.NewRequest(completeReq)); completeErr != nil {
 		slog.Error("scheduled turn: complete failed",
 			logKeyPage, req.GetPage(),
 			"request_id", req.GetRequestId(),

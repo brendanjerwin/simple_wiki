@@ -363,6 +363,34 @@ var _ = Describe("AgentMetadataService handlers", func() {
 	})
 
 	Describe("AppendBackgroundActivitySummary", func() {
+		Describe("when a matching running entry exists", func() {
+			var (
+				resp *apiv1.AppendBackgroundActivitySummaryResponse
+				err  error
+			)
+
+			BeforeEach(func() {
+				Expect(contexts.AppendBackgroundActivityAutomatic("p", &apiv1.BackgroundActivityEntry{
+					ScheduleId: "weekly",
+					Status:     apiv1.ScheduleStatus_SCHEDULE_STATUS_RUNNING,
+				})).To(Succeed())
+				resp, err = srv.AppendBackgroundActivitySummary(ctx, &apiv1.AppendBackgroundActivitySummaryRequest{
+					Page:       "p",
+					ScheduleId: "weekly",
+					Summary:    "drafted weekend order",
+				})
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should return the updated background activity", func() {
+				Expect(resp.GetBackgroundActivity().GetScheduleId()).To(Equal("weekly"))
+				Expect(resp.GetBackgroundActivity().GetSummary()).To(Equal("drafted weekend order"))
+			})
+		})
+
 		Describe("when there is no matching recent entry", func() {
 			var err error
 
@@ -407,8 +435,11 @@ func (*stubAgentChatContextStore) UpdateMerge(string, *apiv1.ChatContext) (*apiv
 	return &apiv1.ChatContext{}, nil
 }
 
-func (s *stubAgentChatContextStore) AppendBackgroundActivitySummary(string, string, string) error {
-	return s.appendErr
+func (s *stubAgentChatContextStore) AppendBackgroundActivitySummary(string, string, string) (*apiv1.BackgroundActivityEntry, error) {
+	if s.appendErr != nil {
+		return nil, s.appendErr
+	}
+	return &apiv1.BackgroundActivityEntry{ScheduleId: "x", Summary: "s"}, nil
 }
 
 var _ = Describe("AgentMetadataService handler guards", func() {

@@ -79,6 +79,9 @@ enum ScheduleStatus {
   SCHEDULE_STATUS_OK = 2;
   SCHEDULE_STATUS_ERROR = 3;
   SCHEDULE_STATUS_TIMEOUT = 4;
+  // The turn finished but missed a required audit invariant, such as
+  // recording a non-empty background activity summary.
+  SCHEDULE_STATUS_WARN = 5;
 }
 
 // AgentSchedule describes one cron-driven scheduled agent turn on a page.
@@ -207,4 +210,6 @@ message AppendBackgroundActivitySummaryRequest {
   string summary = 3;
 }
 
-message AppendBackgroundActivitySummaryResponse {}
+message AppendBackgroundActivitySummaryResponse {
+  BackgroundActivityEntry background_activity = 1;
+}

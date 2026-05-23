@@ -50,6 +50,7 @@ type agentSchedulePagesStore interface {
 // dependency on the chat-context store and tests don't need to wire one up.
 type BackgroundActivitySink interface {
 	AppendBackgroundActivityAutomatic(page string, entry *apiv1.BackgroundActivityEntry) error
+	CompleteBackgroundActivity(page, scheduleID string, status apiv1.ScheduleStatus) (apiv1.ScheduleStatus, error)
 }
 
 // AgentScheduleStore owns reads and writes of the agent.schedules subtree on
@@ -206,7 +207,15 @@ func (s *AgentScheduleStore) TransitionStatus(page, scheduleID string, to apiv1.
 	}
 
 	now := time.Now().UTC()
-	target.LastStatus = to
+	finalStatus := to
+	if isTerminalScheduleStatus(to) && s.backgroundActivitySink != nil {
+		completedStatus, appendErr := s.backgroundActivitySink.CompleteBackgroundActivity(page, scheduleID, to)
+		if appendErr == nil {
+			finalStatus = completedStatus
+		}
+	}
+
+	target.LastStatus = finalStatus
 	target.LastRun = timestamppb.New(now)
 	target.LastErrorMessage = errMessage
 	target.LastDurationSeconds = durationSeconds
@@ -218,13 +227,9 @@ func (s *AgentScheduleStore) TransitionStatus(page, scheduleID string, to apiv1.
 		return fmt.Errorf(errWriteFrontmatterFmt, page, err)
 	}
 
-	// Log a background-activity entry for terminal transitions so the
-	// interactive chat preamble can later show what background workers have
-	// been doing on this page. RUNNING is not a terminal state and is not
-	// logged. Errors from the sink are logged but do not fail the transition
-	// (the schedule status is the source of truth; the activity log is a
-	// best-effort surfacing layer).
-	if isTerminalScheduleStatus(to) && s.backgroundActivitySink != nil {
+	// Log a background-activity entry for RUNNING transitions so the scheduled
+	// agent can attach a summary before the terminal transition arrives.
+	if to == apiv1.ScheduleStatus_SCHEDULE_STATUS_RUNNING && s.backgroundActivitySink != nil {
 		entry := &apiv1.BackgroundActivityEntry{
 			Timestamp:  timestamppb.New(now),
 			ScheduleId: scheduleID,
@@ -247,7 +252,8 @@ func isTerminalScheduleStatus(s apiv1.ScheduleStatus) bool {
 	switch s {
 	case apiv1.ScheduleStatus_SCHEDULE_STATUS_OK,
 		apiv1.ScheduleStatus_SCHEDULE_STATUS_ERROR,
-		apiv1.ScheduleStatus_SCHEDULE_STATUS_TIMEOUT:
+		apiv1.ScheduleStatus_SCHEDULE_STATUS_TIMEOUT,
+		apiv1.ScheduleStatus_SCHEDULE_STATUS_WARN:
 		return true
 	default:
 		return false

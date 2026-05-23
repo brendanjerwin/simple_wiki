@@ -19,6 +19,7 @@ var _ = Describe("ScheduleStateMachine", func() {
 			ok          = apiv1.ScheduleStatus_SCHEDULE_STATUS_OK
 			errored     = apiv1.ScheduleStatus_SCHEDULE_STATUS_ERROR
 			timeout     = apiv1.ScheduleStatus_SCHEDULE_STATUS_TIMEOUT
+			warn        = apiv1.ScheduleStatus_SCHEDULE_STATUS_WARN
 		)
 
 		legalCases := []struct {
@@ -30,9 +31,11 @@ var _ = Describe("ScheduleStateMachine", func() {
 			{"RUNNING -> OK (success)", running, ok},
 			{"RUNNING -> ERROR (failed)", running, errored},
 			{"RUNNING -> TIMEOUT (max_turns hit)", running, timeout},
+			{"RUNNING -> WARN (missing audit summary)", running, warn},
 			{"OK -> RUNNING (next fire)", ok, running},
 			{"ERROR -> RUNNING (next fire)", errored, running},
 			{"TIMEOUT -> RUNNING (next fire)", timeout, running},
+			{"WARN -> RUNNING (next fire)", warn, running},
 		}
 
 		for _, tc := range legalCases {
@@ -51,7 +54,7 @@ var _ = Describe("ScheduleStateMachine", func() {
 		}
 
 		// Build the full set of states for the illegal sweep.
-		allStates := []apiv1.ScheduleStatus{unspecified, running, ok, errored, timeout}
+		allStates := []apiv1.ScheduleStatus{unspecified, running, ok, errored, timeout, warn}
 
 		legal := map[[2]apiv1.ScheduleStatus]bool{}
 		for _, c := range legalCases {
