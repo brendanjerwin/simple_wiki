@@ -9,7 +9,6 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/jcelliott/lumber"
 
-	"github.com/brendanjerwin/simple_wiki/migrations/lazy"
 	"github.com/brendanjerwin/simple_wiki/server"
 	"github.com/brendanjerwin/simple_wiki/utils/base32tools"
 	"github.com/brendanjerwin/simple_wiki/wikiidentifiers"
@@ -27,13 +26,12 @@ var _ = Describe("Rolling Migrations during Open()", func() {
 		testDataDir, err = os.MkdirTemp("", "wiki_open_migration_test_*")
 		Expect(err).NotTo(HaveOccurred())
 
-		// Initialize a minimal site with rolling migrations
-		migrationApplicator := lazy.NewApplicator()
+		// Site auto-wires the format canonicalizer via ensureStore() — no
+		// per-test applicator setup needed.
 		logger := lumber.NewConsoleLogger(lumber.WARN) // Quiet logger for tests
 		site = &server.Site{
-			PathToData:          testDataDir,
-			MigrationApplicator: migrationApplicator,
-			Logger:              logger,
+			PathToData: testDataDir,
+			Logger:     logger,
 		}
 	})
 
@@ -118,42 +116,37 @@ inventory.container = 'GarageInventory'
 				var diskContent string
 
 				BeforeEach(func() {
-					// Read the file from disk to see if it was updated
+					// Read the file from disk to see if it was updated by ReadPage.
 					diskBytes, readErr := os.ReadFile(filePath)
 					Expect(readErr).NotTo(HaveOccurred())
 					diskContent = string(diskBytes)
 				})
 
-				It("should remove dotted notation from disk file", func() {
-					Expect(diskContent).NotTo(ContainSubstring("inventory.container"))
+				// These three tests previously pinned the save-on-read bug
+				// (disk file updated to canonical form as a ReadPage side
+				// effect). Post-Phase 4, the read path canonicalizes in
+				// memory only — disk stays in pre-canonical form until a
+				// write touches the page. Inverting the assertions:
+
+				It("should keep the pre-canonical content on disk (no save-on-read)", func() {
+					Expect(diskContent).To(Equal(fileContent))
 				})
 
-				It("should create [inventory] section in disk file", func() {
-					Expect(diskContent).To(ContainSubstring("[inventory]"))
+				It("should still have inventory.container on disk in dot-notation form", func() {
+					Expect(diskContent).To(ContainSubstring("inventory.container"))
 				})
 
-				It("should match content returned by Open()", func() {
-					Expect(diskContent).To(Equal(openedContent))
+				It("should NOT match the canonical content returned by ReadPage", func() {
+					Expect(diskContent).NotTo(Equal(openedContent))
 				})
 			})
 		})
 
-		Describe("when migration applicator is nil", func() {
-			BeforeEach(func() {
-				// Test with no migration applicator
-				site.MigrationApplicator = nil
-				_, openErr := site.ReadPage(wikipage.PageIdentifier(identifier))
-				err = openErr // Capture the error for testing
-			})
-
-			It("should return an error", func() {
-				Expect(err).To(HaveOccurred())
-			})
-
-			It("should include migration applicator message", func() {
-				Expect(err.Error()).To(ContainSubstring("migration applicator not configured"))
-			})
-		})
+		// The "when migration applicator is nil" subgroup that previously lived
+		// here tested an error path that no longer exists: applyMigrationsForPage
+		// returned an error if MigrationApplicator was nil. After Phase 5,
+		// the field is gone and canonicalization is wired automatically by
+		// Site.ensureStore(); there is no nil-applicator failure mode to pin.
 	})
 
 	Describe("when opening a file that doesn't need migration", func() {

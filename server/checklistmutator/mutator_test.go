@@ -3,6 +3,8 @@ package checklistmutator_test
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -49,10 +51,10 @@ func (c *fakeClock) advance(d time.Duration) {
 // map. It records the count of read/write calls so tests can assert
 // "single round-trip per mutation."
 type fakeStore struct {
-	mu          sync.Mutex
-	pages       map[string]wikipage.FrontMatter
-	readCalls   int
-	writeCalls  int
+	mu         sync.Mutex
+	pages      map[string]wikipage.FrontMatter
+	readCalls  int
+	writeCalls int
 }
 
 func newFakeStore() *fakeStore {
@@ -83,7 +85,7 @@ func (*fakeStore) ReadMarkdown(_ wikipage.PageIdentifier) (wikipage.PageIdentifi
 }
 
 func (*fakeStore) WriteMarkdown(_ wikipage.PageIdentifier, _ wikipage.Markdown) error { return nil }
-func (*fakeStore) DeletePage(_ wikipage.PageIdentifier) error                          { return nil }
+func (*fakeStore) DeletePage(_ wikipage.PageIdentifier) error                         { return nil }
 func (*fakeStore) ModifyMarkdown(_ wikipage.PageIdentifier, _ func(wikipage.Markdown) (wikipage.Markdown, error)) error {
 	return nil
 }
@@ -132,13 +134,13 @@ func deepCopyValue(v any) any {
 
 var _ = Describe("Mutator", func() {
 	var (
-		store    *fakeStore
-		clock    *fakeClock
-		ulids    *ulid.SequenceGenerator
-		mutator  *checklistmutator.Mutator
-		ctx      context.Context
-		human    tailscale.IdentityValue
-		agent    tailscale.IdentityValue
+		store   *fakeStore
+		clock   *fakeClock
+		ulids   *ulid.SequenceGenerator
+		mutator *checklistmutator.Mutator
+		ctx     context.Context
+		human   tailscale.IdentityValue
+		agent   tailscale.IdentityValue
 	)
 
 	BeforeEach(func() {
@@ -159,9 +161,9 @@ var _ = Describe("Mutator", func() {
 	Describe("AddItem", func() {
 		When("adding to an empty page (no existing checklist)", func() {
 			var (
-				item        *apiv1.ChecklistItem
-				err         error
-				readsBefore int
+				item         *apiv1.ChecklistItem
+				err          error
+				readsBefore  int
 				writesBefore int
 			)
 
@@ -217,6 +219,75 @@ var _ = Describe("Mutator", func() {
 				_, _, _ = mutator.AddItem(ctx, "p", "list", checklistmutator.AddItemArgs{Text: "first"}, human)
 				added, _, _ := mutator.AddItem(ctx, "p", "list", checklistmutator.AddItemArgs{Text: "second"}, human)
 				Expect(added.SortOrder).To(Equal(int64(2000)))
+			})
+		})
+
+		When("an open item already has the same text", func() {
+			var (
+				item *apiv1.ChecklistItem
+				err  error
+			)
+
+			BeforeEach(func() {
+				_, _, err = mutator.AddItem(ctx, "p", "list", checklistmutator.AddItemArgs{Text: "30 corn tortillas"}, human)
+				Expect(err).NotTo(HaveOccurred())
+
+				item, _, err = mutator.AddItem(ctx, "p", "list", checklistmutator.AddItemArgs{Text: "30 corn tortillas"}, human)
+			})
+
+			It("should return a duplicate-open-item error", func() {
+				Expect(errors.Is(err, checklistmutator.ErrDuplicateOpenItem)).To(BeTrue())
+			})
+
+			It("should not return a new item", func() {
+				Expect(item).To(BeNil())
+			})
+		})
+
+		When("text is blank after trimming whitespace", func() {
+			var (
+				item *apiv1.ChecklistItem
+				err  error
+			)
+
+			BeforeEach(func() {
+				item, _, err = mutator.AddItem(ctx, "p", "list", checklistmutator.AddItemArgs{Text: "   "}, human)
+			})
+
+			It("should return a validation error", func() {
+				Expect(status.Code(err)).To(Equal(codes.InvalidArgument))
+			})
+
+			It("should describe the missing text", func() {
+				Expect(err).To(MatchError(ContainSubstring("text is required")))
+			})
+
+			It("should not return a new item", func() {
+				Expect(item).To(BeNil())
+			})
+		})
+
+		When("a checked item already has the same text", func() {
+			var (
+				item *apiv1.ChecklistItem
+				err  error
+			)
+
+			BeforeEach(func() {
+				first, _, addErr := mutator.AddItem(ctx, "p", "list", checklistmutator.AddItemArgs{Text: "30 corn tortillas"}, human)
+				Expect(addErr).NotTo(HaveOccurred())
+				_, _, toggleErr := mutator.ToggleItem(ctx, "p", "list", first.GetUid(), nil, human)
+				Expect(toggleErr).NotTo(HaveOccurred())
+
+				item, _, err = mutator.AddItem(ctx, "p", "list", checklistmutator.AddItemArgs{Text: "30 corn tortillas"}, human)
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should return a new item", func() {
+				Expect(item).NotTo(BeNil())
 			})
 		})
 
@@ -514,10 +585,10 @@ var _ = Describe("Mutator", func() {
 			var wg sync.WaitGroup
 			wg.Add(concurrency)
 			for i := 0; i < concurrency; i++ {
-				go func() {
+				go func(itemNumber int) {
 					defer wg.Done()
-					_, _, _ = mutator.AddItem(ctx, "p", "list", checklistmutator.AddItemArgs{Text: "concurrent"}, human)
-				}()
+					_, _, _ = mutator.AddItem(ctx, "p", "list", checklistmutator.AddItemArgs{Text: fmt.Sprintf("concurrent-%02d", itemNumber)}, human)
+				}(i)
 			}
 			wg.Wait()
 
