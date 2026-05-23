@@ -4056,6 +4056,20 @@ var _ = Describe("Server", func() {
 			})
 		})
 
+		When("the page identifier is missing", func() {
+			BeforeEach(func() {
+				req = &apiv1.ReadPageRequest{}
+			})
+
+			It("should return an invalid argument error", func() {
+				Expect(err).To(HaveGrpcStatus(codes.InvalidArgument, "page_name or identifier is required"))
+			})
+
+			It("should return no response", func() {
+				Expect(resp).To(BeNil())
+			})
+		})
+
 		When("reading markdown fails with a generic error", func() {
 			BeforeEach(func() {
 				mockPageReaderMutator.Err = errors.New("disk read error")
