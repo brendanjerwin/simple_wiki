@@ -1,13 +1,14 @@
 package server
 
 import (
-	"bytes"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 	"fmt"
 	"html/template"
+	"io"
+	"io/fs"
 	"log"
 	"mime"
 	"net/http"
@@ -299,42 +300,94 @@ var cliBinaryStartTime = time.Now().UTC().Truncate(time.Second)
 // second; doing it once per binary on first request (rather than for every
 // caller) keeps conditional GETs cheap.
 var cliBinaryETagCache sync.Map // map[string]string
-var cliBinaryReadFile = static.StaticContent.ReadFile
+var cliBinaryETagMu sync.Mutex
+var cliBinaryOpenFile = static.StaticContent.Open
 
-// SetCLIBinaryReadFileForTesting swaps the embedded CLI binary reader and
+// SetCLIBinaryOpenFileForTesting swaps the embedded CLI binary opener and
 // returns a restore function. It lets handler tests cover validator behavior
 // without requiring generated release binaries to be present in CI checkouts.
-func SetCLIBinaryReadFileForTesting(readFile func(string) ([]byte, error)) func() {
-	previous := cliBinaryReadFile
-	cliBinaryReadFile = readFile
+func SetCLIBinaryOpenFileForTesting(openFile func(string) (fs.File, error)) func() {
+	previous := cliBinaryOpenFile
+	cliBinaryOpenFile = openFile
 	cliBinaryETagCache.Clear()
 	return func() {
-		cliBinaryReadFile = previous
+		cliBinaryOpenFile = previous
 		cliBinaryETagCache.Clear()
 	}
 }
 
 // computeCLIBinaryETag returns the cached strong ETag for the given binary
-// content, computing it on first call. The ETag is a hex-encoded SHA256 of
-// the bytes wrapped in quotes per RFC 7232.
-func computeCLIBinaryETag(binary string, data []byte) string {
+// content, computing it on first call by streaming from the embedded file. The
+// ETag is a hex-encoded SHA256 of the bytes wrapped in quotes per RFC 7232.
+func computeCLIBinaryETag(binary string) (string, error) {
 	if cached, ok := cliBinaryETagCache.Load(binary); ok {
 		if etag, isString := cached.(string); isString {
-			return etag
+			return etag, nil
 		}
 	}
-	sum := sha256.Sum256(data)
-	etag := `"` + hex.EncodeToString(sum[:]) + `"`
-	// LoadOrStore so concurrent first-time requests still converge on a
-	// single cached value rather than racing to overwrite each other.
+
+	cliBinaryETagMu.Lock()
+	defer cliBinaryETagMu.Unlock()
+
+	if cached, ok := cliBinaryETagCache.Load(binary); ok {
+		if etag, isString := cached.(string); isString {
+			return etag, nil
+		}
+	}
+
+	file, err := cliBinaryOpenFile("cli/" + binary)
+	if err != nil {
+		return "", err
+	}
+	defer func() {
+		// nosemgrep: go.error-discarded-with-blank-identifier -- best-effort cleanup after streaming the file into the hash.
+		_ = file.Close()
+	}()
+
+	hash := sha256.New()
+	if _, err := io.Copy(hash, file); err != nil {
+		return "", err
+	}
+	etag := `"` + hex.EncodeToString(hash.Sum(nil)) + `"`
 	actual, _ := cliBinaryETagCache.LoadOrStore(binary, etag)
 	if cachedETag, isString := actual.(string); isString {
-		return cachedETag
+		return cachedETag, nil
 	}
 	// Unreachable under normal use: only computeCLIBinaryETag writes the
 	// cache and it only ever stores strings. Return the freshly computed
 	// value if the cache somehow contains a non-string sentinel.
-	return etag
+	return etag, nil
+}
+
+func cliBinaryNotModified(r *http.Request, etag string, modTime time.Time) bool {
+	if r.Header.Get("If-None-Match") == etag {
+		return true
+	}
+	if r.Header.Get("If-None-Match") != "" {
+		return false
+	}
+	ifModifiedSince := r.Header.Get("If-Modified-Since")
+	if ifModifiedSince == "" {
+		return false
+	}
+	clientTime, err := http.ParseTime(ifModifiedSince)
+	if err != nil {
+		return false
+	}
+	return !modTime.After(clientTime)
+}
+
+func openCLIBinaryReadSeeker(binary string) (io.ReadSeeker, func() error, error) {
+	file, err := cliBinaryOpenFile("cli/" + binary)
+	if err != nil {
+		return nil, nil, err
+	}
+	readSeeker, ok := file.(io.ReadSeeker)
+	if !ok {
+		_ = file.Close()
+		return nil, nil, fmt.Errorf("embedded cli binary %q is not seekable", binary)
+	}
+	return readSeeker, file.Close, nil
 }
 
 // serveCLIBinary serves pre-built wiki-cli binaries so consumers always
@@ -356,21 +409,36 @@ func serveCLIBinary(c *gin.Context) {
 		c.Status(http.StatusNotFound)
 		return
 	}
-	data, err := cliBinaryReadFile("cli/" + binary)
+	etag, err := computeCLIBinaryETag(binary)
 	if err != nil {
 		c.Status(http.StatusNotFound)
 		return
 	}
 
-	etag := computeCLIBinaryETag(binary, data)
 	c.Header("ETag", etag)
+	c.Header("Last-Modified", cliBinaryStartTime.Format(http.TimeFormat))
 	c.Header(contentDispositionHeader, fmt.Sprintf(`attachment; filename="%s"`, binary))
 	c.Header("Content-Type", "application/octet-stream")
+
+	if cliBinaryNotModified(c.Request, etag, cliBinaryStartTime) {
+		c.Status(http.StatusNotModified)
+		return
+	}
+
+	content, closeContent, err := openCLIBinaryReadSeeker(binary)
+	if err != nil {
+		c.Status(http.StatusNotFound)
+		return
+	}
+	defer func() {
+		// nosemgrep: go.error-discarded-with-blank-identifier -- response cleanup happens after ServeContent has taken ownership of reporting errors.
+		_ = closeContent()
+	}()
 
 	// http.ServeContent handles If-Modified-Since, If-None-Match, HEAD, and
 	// Range requests. It sets Last-Modified from the modTime argument and
 	// respects any ETag we have already written to the header.
-	http.ServeContent(c.Writer, c.Request, binary, cliBinaryStartTime, bytes.NewReader(data))
+	http.ServeContent(c.Writer, c.Request, binary, cliBinaryStartTime, content)
 }
 
 // serveExtensionFile serves browser extension files (XPI packages and update

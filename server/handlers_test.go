@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"io/fs"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
@@ -33,6 +34,55 @@ type writeCloserBuffer struct {
 }
 
 func (*writeCloserBuffer) Close() error {
+	return nil
+}
+
+type cliBinaryTestFile struct {
+	name string
+	size int64
+	*bytes.Reader
+}
+
+func newCLIBinaryTestFile(name string, data []byte) *cliBinaryTestFile {
+	return &cliBinaryTestFile{name: name, size: int64(len(data)), Reader: bytes.NewReader(data)}
+}
+
+func (*cliBinaryTestFile) Close() error {
+	return nil
+}
+
+func (f *cliBinaryTestFile) Stat() (fs.FileInfo, error) {
+	return cliBinaryTestFileInfo{name: f.name, size: f.size}, nil
+}
+
+type cliBinaryTestFileInfo struct {
+	name string
+	size int64
+}
+
+const cliBinaryTestFileMode fs.FileMode = 0o444
+
+func (f cliBinaryTestFileInfo) Name() string {
+	return f.name
+}
+
+func (f cliBinaryTestFileInfo) Size() int64 {
+	return f.size
+}
+
+func (cliBinaryTestFileInfo) Mode() fs.FileMode {
+	return cliBinaryTestFileMode
+}
+
+func (cliBinaryTestFileInfo) ModTime() time.Time {
+	return time.Time{}
+}
+
+func (cliBinaryTestFileInfo) IsDir() bool {
+	return false
+}
+
+func (cliBinaryTestFileInfo) Sys() any {
 	return nil
 }
 
@@ -1144,13 +1194,13 @@ var _ = Describe("serveCLIBinary", func() {
 		// release binaries in static/cli just to verify HTTP validator
 		// behavior.
 		data := []byte("test wiki-cli binary")
-		restoreCLIBinaryReadFile := server.SetCLIBinaryReadFileForTesting(func(name string) ([]byte, error) {
+		restoreCLIBinaryOpenFile := server.SetCLIBinaryOpenFileForTesting(func(name string) (fs.File, error) {
 			if name != "cli/"+binaryName {
 				return nil, os.ErrNotExist
 			}
-			return append([]byte(nil), data...), nil
+			return newCLIBinaryTestFile(binaryName, append([]byte(nil), data...)), nil
 		})
-		DeferCleanup(restoreCLIBinaryReadFile)
+		DeferCleanup(restoreCLIBinaryOpenFile)
 
 		sum := sha256.Sum256(data)
 		expectedETag = `"` + hex.EncodeToString(sum[:]) + `"`
