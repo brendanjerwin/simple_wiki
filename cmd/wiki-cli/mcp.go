@@ -218,6 +218,7 @@ func anthropicCompatibleSchemas() map[string]anthropicSchemaOverride {
 
 var readPageAnthropicInputSchema = json.RawMessage(`{
   "additionalProperties": false,
+  "maxProperties": 1,
   "minProperties": 1,
   "properties": {
     "identifier": {

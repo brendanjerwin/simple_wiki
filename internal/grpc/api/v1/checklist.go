@@ -7,7 +7,6 @@ import (
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
@@ -301,25 +300,20 @@ func (s *Server) GetChecklists(ctx context.Context, req *apiv1.GetChecklistsRequ
 }
 
 func checklistsForPublicResponse(lists []*apiv1.Checklist) []*apiv1.Checklist {
-	out := make([]*apiv1.Checklist, 0, len(lists))
 	for _, list := range lists {
-		out = append(out, checklistForPublicResponse(list))
+		checklistForPublicResponse(list)
 	}
-	return out
+	return lists
 }
 
 func checklistForPublicResponse(list *apiv1.Checklist) *apiv1.Checklist {
 	if list == nil {
 		return nil
 	}
-	out, ok := proto.Clone(list).(*apiv1.Checklist)
-	if !ok {
-		return nil
-	}
-	out.Events = nil
-	out.Tombstones = nil
-	out.MaxSeq = 0
-	return out
+	list.Events = nil
+	list.Tombstones = nil
+	list.MaxSeq = 0
+	return list
 }
 
 // timestampPtr converts an optional timestamppb to a *time.Time.

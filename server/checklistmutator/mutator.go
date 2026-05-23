@@ -264,7 +264,7 @@ func (m *Mutator) addItemImpl(_ context.Context, page, listName string, args Add
 	if listName == "" {
 		return nil, nil, status.Error(codes.InvalidArgument, "list_name is required")
 	}
-	if args.Text == "" {
+	if strings.TrimSpace(args.Text) == "" {
 		return nil, nil, status.Error(codes.InvalidArgument, "text is required")
 	}
 

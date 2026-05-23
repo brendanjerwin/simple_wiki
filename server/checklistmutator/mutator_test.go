@@ -244,6 +244,29 @@ var _ = Describe("Mutator", func() {
 			})
 		})
 
+		When("text is blank after trimming whitespace", func() {
+			var (
+				item *apiv1.ChecklistItem
+				err  error
+			)
+
+			BeforeEach(func() {
+				item, _, err = mutator.AddItem(ctx, "p", "list", checklistmutator.AddItemArgs{Text: "   "}, human)
+			})
+
+			It("should return a validation error", func() {
+				Expect(status.Code(err)).To(Equal(codes.InvalidArgument))
+			})
+
+			It("should describe the missing text", func() {
+				Expect(err).To(MatchError(ContainSubstring("text is required")))
+			})
+
+			It("should not return a new item", func() {
+				Expect(item).To(BeNil())
+			})
+		})
+
 		When("a checked item already has the same text", func() {
 			var (
 				item *apiv1.ChecklistItem

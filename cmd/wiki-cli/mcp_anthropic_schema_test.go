@@ -78,5 +78,9 @@ var _ = Describe("MCP tool input schemas (Anthropic API compatibility, #1054)", 
 		It("should require at least one identifier property", func() {
 			Expect(schema).To(HaveKeyWithValue("minProperties", BeNumerically("==", 1)))
 		})
+
+		It("should allow at most one identifier property", func() {
+			Expect(schema).To(HaveKeyWithValue("maxProperties", BeNumerically("==", 1)))
+		})
 	})
 })
