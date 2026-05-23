@@ -13,8 +13,7 @@ import (
 
 	"github.com/brendanjerwin/simple_wiki/index"
 	"github.com/brendanjerwin/simple_wiki/index/frontmatter"
-	"github.com/brendanjerwin/simple_wiki/migrations/lazy"
-	"github.com/brendanjerwin/simple_wiki/pkg/jobs"
+		"github.com/brendanjerwin/simple_wiki/pkg/jobs"
 	"github.com/brendanjerwin/simple_wiki/utils/base32tools"
 	"github.com/brendanjerwin/simple_wiki/utils/goldmarkrenderer"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
@@ -52,7 +51,6 @@ var _ = Describe("Site error handling", func() {
 			Logger:              testLogger,
 			PathToData:          tempDir,
 			MarkdownRenderer:    &goldmarkrenderer.GoldmarkRenderer{},
-			MigrationApplicator: lazy.NewEmptyApplicator(),
 		}
 	})
 
