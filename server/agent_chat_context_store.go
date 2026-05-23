@@ -191,9 +191,6 @@ func (s *AgentChatContextStore) CompleteBackgroundActivity(page, scheduleID stri
 
 	target := findNewestRunningBackgroundActivity(existing.BackgroundActivity, scheduleID)
 	if target == -1 {
-		target = findNewestBackgroundActivity(existing.BackgroundActivity, scheduleID)
-	}
-	if target == -1 {
 		entry := &apiv1.BackgroundActivityEntry{
 			Timestamp:  timestamppb.New(time.Now().UTC()),
 			ScheduleId: scheduleID,
@@ -226,15 +223,6 @@ func (s *AgentChatContextStore) CompleteBackgroundActivity(page, scheduleID stri
 func findNewestRunningBackgroundActivity(entries []*apiv1.BackgroundActivityEntry, scheduleID string) int {
 	for i := len(entries) - 1; i >= 0; i-- {
 		if entries[i].GetScheduleId() == scheduleID && entries[i].GetStatus() == apiv1.ScheduleStatus_SCHEDULE_STATUS_RUNNING {
-			return i
-		}
-	}
-	return -1
-}
-
-func findNewestBackgroundActivity(entries []*apiv1.BackgroundActivityEntry, scheduleID string) int {
-	for i := len(entries) - 1; i >= 0; i-- {
-		if entries[i].GetScheduleId() == scheduleID {
 			return i
 		}
 	}

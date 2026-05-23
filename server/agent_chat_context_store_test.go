@@ -545,6 +545,68 @@ var _ = Describe("AgentChatContextStore", func() {
 				Expect(ctx.GetBackgroundActivity()[0].GetStatus()).To(Equal(apiv1.ScheduleStatus_SCHEDULE_STATUS_WARN))
 			})
 		})
+
+		Describe("when a terminal completion arrives without a running entry", func() {
+			var finalStatus apiv1.ScheduleStatus
+
+			BeforeEach(func() {
+				var err error
+				finalStatus, err = store.CompleteBackgroundActivity("p", "weekly", apiv1.ScheduleStatus_SCHEDULE_STATUS_ERROR)
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should keep the terminal status", func() {
+				Expect(finalStatus).To(Equal(apiv1.ScheduleStatus_SCHEDULE_STATUS_ERROR))
+			})
+
+			It("should append a new background activity entry", func() {
+				ctx, _ := store.Read("p")
+				Expect(ctx.GetBackgroundActivity()).To(HaveLen(1))
+			})
+
+			It("should record the schedule id", func() {
+				ctx, _ := store.Read("p")
+				Expect(ctx.GetBackgroundActivity()[0].GetScheduleId()).To(Equal("weekly"))
+			})
+
+			It("should record the terminal status", func() {
+				ctx, _ := store.Read("p")
+				Expect(ctx.GetBackgroundActivity()[0].GetStatus()).To(Equal(apiv1.ScheduleStatus_SCHEDULE_STATUS_ERROR))
+			})
+		})
+
+		Describe("when only historical completed entries match the schedule_id", func() {
+			var finalStatus apiv1.ScheduleStatus
+
+			BeforeEach(func() {
+				Expect(store.AppendBackgroundActivityAutomatic("p", &apiv1.BackgroundActivityEntry{
+					Timestamp:  timestamppb.New(time.Now().Add(-2 * time.Hour)),
+					ScheduleId: "weekly",
+					Status:     apiv1.ScheduleStatus_SCHEDULE_STATUS_OK,
+					Summary:    "old run",
+				})).To(Succeed())
+
+				var err error
+				finalStatus, err = store.CompleteBackgroundActivity("p", "weekly", apiv1.ScheduleStatus_SCHEDULE_STATUS_ERROR)
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should keep the terminal status", func() {
+				Expect(finalStatus).To(Equal(apiv1.ScheduleStatus_SCHEDULE_STATUS_ERROR))
+			})
+
+			It("should preserve the historical entry", func() {
+				ctx, _ := store.Read("p")
+				Expect(ctx.GetBackgroundActivity()[0].GetSummary()).To(Equal("old run"))
+				Expect(ctx.GetBackgroundActivity()[0].GetStatus()).To(Equal(apiv1.ScheduleStatus_SCHEDULE_STATUS_OK))
+			})
+
+			It("should append the new completion entry", func() {
+				ctx, _ := store.Read("p")
+				Expect(ctx.GetBackgroundActivity()).To(HaveLen(2))
+				Expect(ctx.GetBackgroundActivity()[1].GetStatus()).To(Equal(apiv1.ScheduleStatus_SCHEDULE_STATUS_ERROR))
+			})
+		})
 	})
 
 	// Issue #973: a single fat-fingered last_updated value (e.g. a date-only

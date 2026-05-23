@@ -277,7 +277,7 @@ func (d *poolDaemon) runScheduledTurn(ctx context.Context, completer apiv1connec
 		ErrorMessage:    errMsg,
 		DurationSeconds: int32(duration / time.Second),
 	}
-	completeCtx, cancelComplete := context.WithTimeout(context.Background(), 10*time.Second)
+	completeCtx, cancelComplete := scheduledTurnCompletionContext(ctx)
 	defer cancelComplete()
 	if _, completeErr := completer.CompleteScheduledTurn(completeCtx, connect.NewRequest(completeReq)); completeErr != nil {
 		slog.Error("scheduled turn: complete failed",
@@ -290,6 +290,10 @@ func (d *poolDaemon) runScheduledTurn(ctx context.Context, completer apiv1connec
 		"request_id", req.GetRequestId(),
 		"terminal", terminalStatus.String(),
 		"duration_seconds", completeReq.DurationSeconds)
+}
+
+func scheduledTurnCompletionContext(ctx context.Context) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
 }
 
 // executeScheduledTurn does the real work: spawn a fresh ephemeral ACP

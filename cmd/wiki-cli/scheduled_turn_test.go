@@ -4,12 +4,15 @@ import (
 	"context"
 	"strings"
 	"sync/atomic"
+	"time"
 
 	acp "github.com/coder/acp-go-sdk"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
+
+type scheduledTurnContextKey string
 
 // NOTE: Phase 4B end-to-end coverage (full ephemeral-instance spawn + teardown
 // verification) is NOT testable as a unit because it shells out to the real
@@ -259,6 +262,44 @@ var _ = Describe("wildcardMatch", func() {
 
 		It("should return false", func() {
 			Expect(matched).To(BeFalse())
+		})
+	})
+})
+
+var _ = Describe("scheduledTurnCompletionContext", func() {
+	When("the parent context has values and is canceled", func() {
+		var (
+			parentCtx   context.Context
+			parentDone  context.CancelFunc
+			completeCtx context.Context
+			cancel      context.CancelFunc
+		)
+
+		BeforeEach(func() {
+			parentCtx = context.WithValue(context.Background(), scheduledTurnContextKey("trace-id"), "trace-123")
+			parentCtx, parentDone = context.WithCancel(parentCtx)
+			parentDone()
+
+			completeCtx, cancel = scheduledTurnCompletionContext(parentCtx)
+		})
+
+		AfterEach(func() {
+			cancel()
+		})
+
+		It("should preserve context values", func() {
+			Expect(completeCtx.Value(scheduledTurnContextKey("trace-id"))).To(Equal("trace-123"))
+		})
+
+		It("should ignore parent cancellation", func() {
+			Expect(completeCtx.Err()).NotTo(HaveOccurred())
+		})
+
+		It("should have a bounded deadline", func() {
+			deadline, ok := completeCtx.Deadline()
+			Expect(ok).To(BeTrue())
+			Expect(time.Until(deadline)).To(BeNumerically(">", 9*time.Second))
+			Expect(time.Until(deadline)).To(BeNumerically("<=", 10*time.Second))
 		})
 	})
 })
