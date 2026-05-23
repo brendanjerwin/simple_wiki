@@ -99,6 +99,18 @@ Scheduled agents are encouraged to call `api_v1_AgentMetadataService_AppendBackg
 
 The summary attaches to the newest matching `RUNNING` entry in the log. When the turn reaches a terminal status (`OK`, `ERROR`, `TIMEOUT`, or `WARN`), the wiki updates that same entry with the final status and completion timestamp. If the turn reports `OK` without a summary, the wiki records `WARN` instead so operators can see that the audit trail is incomplete.
 
+The response includes the updated entry so callers can verify the audit write landed:
+
+```json
+{
+  "background_activity": {
+    "schedule_id": "friday_draft",
+    "status": "SCHEDULE_STATUS_RUNNING",
+    "summary": "Drafted weekend update covering 3 milestones and 2 blockers."
+  }
+}
+```
+
 If the initial `RUNNING` entry could not be written, the terminal transition appends a new terminal entry rather than rewriting older history. Audit write failures are logged by the server.
 
 ## Listing & deleting schedules
