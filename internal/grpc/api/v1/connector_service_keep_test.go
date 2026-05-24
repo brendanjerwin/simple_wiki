@@ -826,6 +826,25 @@ var _ = Describe("ConnectorService handlers (GOOGLE_KEEP)", func() {
 	// ---------------------------------------------------------- ListDeadLetters / ClearDeadLetter (Keep)
 
 	Describe("ListDeadLetters", func() {
+		Describe("when page is empty", func() {
+			var err error
+
+			BeforeEach(func() {
+				mock := connectedKeepProfileMock(profileID)
+				w := buildKeepWiring(mock, nil)
+				server := withKeep(mustNewServer(mock, nil, nil), w)
+				_, err = server.ListDeadLetters(ctx, &apiv1.ListDeadLettersRequest{
+					ConnectorKind: apiv1.ConnectorKind_CONNECTOR_KIND_GOOGLE_KEEP,
+					Page:          "",
+					ListName:      keepTestListName,
+				})
+			})
+
+			It("should return InvalidArgument", func() {
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.InvalidArgument, "page and list_name are required"))
+			})
+		})
+
 		Describe("when called for Keep with a wired engine", func() {
 			var (
 				resp *apiv1.ListDeadLettersResponse
@@ -854,6 +873,26 @@ var _ = Describe("ConnectorService handlers (GOOGLE_KEEP)", func() {
 	})
 
 	Describe("ClearDeadLetter", func() {
+		Describe("when item_uid is empty", func() {
+			var err error
+
+			BeforeEach(func() {
+				mock := connectedKeepProfileMock(profileID)
+				w := buildKeepWiring(mock, nil)
+				server := withKeep(mustNewServer(mock, nil, nil), w)
+				_, err = server.ClearDeadLetter(ctx, &apiv1.ClearDeadLetterRequest{
+					ConnectorKind: apiv1.ConnectorKind_CONNECTOR_KIND_GOOGLE_KEEP,
+					Page:          keepTestPage,
+					ListName:      keepTestListName,
+					ItemUid:       "",
+				})
+			})
+
+			It("should return InvalidArgument", func() {
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.InvalidArgument, "page, list_name, and item_uid are required"))
+			})
+		})
+
 		Describe("when called for Keep with a wired engine", func() {
 			var err error
 
@@ -878,6 +917,24 @@ var _ = Describe("ConnectorService handlers (GOOGLE_KEEP)", func() {
 	// ---------------------------------------------------------- GetChecklistBindingState (Keep)
 
 	Describe("GetChecklistBindingState", func() {
+		Describe("when page is empty", func() {
+			var err error
+
+			BeforeEach(func() {
+				mock := connectedKeepProfileMock(profileID)
+				w := buildKeepWiring(mock, nil)
+				server := withKeep(mustNewServer(mock, nil, nil), w)
+				_, err = server.GetChecklistBindingState(ctx, &apiv1.GetChecklistBindingStateRequest{
+					Page:     "",
+					ListName: keepTestListName,
+				})
+			})
+
+			It("should return InvalidArgument", func() {
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.InvalidArgument, "page and list_name are required"))
+			})
+		})
+
 		Describe("when only the Keep connector is wired and the user has a Keep binding", func() {
 			var (
 				resp *apiv1.GetChecklistBindingStateResponse
@@ -911,6 +968,96 @@ var _ = Describe("ConnectorService handlers (GOOGLE_KEEP)", func() {
 				Expect(resp.GetState().GetCurrentBinding().GetConnectorKind()).To(Equal(apiv1.ConnectorKind_CONNECTOR_KIND_GOOGLE_KEEP))
 			})
 		})
+
+		Describe("when Keep is configured but the requested binding is absent", func() {
+			var (
+				resp *apiv1.GetChecklistBindingStateResponse
+				err  error
+			)
+
+			BeforeEach(func() {
+				mock := connectedKeepProfileMock(profileID)
+				w := buildKeepWiring(mock, nil)
+				server := withKeep(mustNewServer(mock, nil, nil), w)
+				resp, err = server.GetChecklistBindingState(ctx, &apiv1.GetChecklistBindingStateRequest{
+					Page:     "no-such-page",
+					ListName: "no-such-list",
+				})
+			})
+
+			It("should not error", func() {
+				Expect(err).ToNot(HaveOccurred())
+			})
+
+			It("should report the connector as configured", func() {
+				Expect(resp.GetState().GetConnectorConfigured()).To(BeTrue())
+			})
+
+			It("should leave current_subscription empty", func() {
+				Expect(resp.GetState().GetCurrentBinding()).To(BeNil())
+			})
+		})
+	})
+
+	// ---------------------------------------------------------- SyncNow (Keep)
+
+	Describe("SyncNow", func() {
+		Describe("when syncing an existing binding", func() {
+			var err error
+
+			BeforeEach(func() {
+				mock := connectedKeepProfileMockWithBinding(profileID, keepTestPage, keepTestListName, keepTestRemoteHandle)
+				w := buildKeepWiring(mock, nil)
+				server := withKeep(mustNewServer(mock, nil, nil), w)
+				_, err = server.SyncNow(ctx, &apiv1.SyncNowRequest{
+					ConnectorKind: apiv1.ConnectorKind_CONNECTOR_KIND_GOOGLE_KEEP,
+					Page:          keepTestPage,
+					ListName:      keepTestListName,
+				})
+			})
+
+			It("should not error", func() {
+				Expect(err).ToNot(HaveOccurred())
+			})
+		})
+
+		Describe("when the binding does not exist", func() {
+			var err error
+
+			BeforeEach(func() {
+				mock := connectedKeepProfileMock(profileID)
+				w := buildKeepWiring(mock, nil)
+				server := withKeep(mustNewServer(mock, nil, nil), w)
+				_, err = server.SyncNow(ctx, &apiv1.SyncNowRequest{
+					ConnectorKind: apiv1.ConnectorKind_CONNECTOR_KIND_GOOGLE_KEEP,
+					Page:          "no-such-page",
+					ListName:      "no-such-list",
+				})
+			})
+
+			It("should return NotFound", func() {
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.NotFound, "binding_not_found"))
+			})
+		})
+
+		Describe("when list_name is empty", func() {
+			var err error
+
+			BeforeEach(func() {
+				mock := connectedKeepProfileMockWithBinding(profileID, keepTestPage, keepTestListName, keepTestRemoteHandle)
+				w := buildKeepWiring(mock, nil)
+				server := withKeep(mustNewServer(mock, nil, nil), w)
+				_, err = server.SyncNow(ctx, &apiv1.SyncNowRequest{
+					ConnectorKind: apiv1.ConnectorKind_CONNECTOR_KIND_GOOGLE_KEEP,
+					Page:          keepTestPage,
+					ListName:      "",
+				})
+			})
+
+			It("should return InvalidArgument", func() {
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.InvalidArgument, "page and list_name are required"))
+			})
+		})
 	})
 })
 
@@ -926,6 +1073,24 @@ var _ = Describe("Server.WithGoogleKeep", func() {
 
 		It("should return the server for fluent chaining", func() {
 			Expect(server).ToNot(BeNil())
+		})
+	})
+
+	Describe("when the credential store is nil", func() {
+		var err error
+
+		BeforeEach(func() {
+			mock := &MockPageReaderMutator{}
+			w := buildKeepWiring(mock, nil)
+			server := mustNewServer(mock, nil, nil).WithGoogleKeep(w.engine, w.adapter, w.bindingStore, nil)
+			ctx := withCallerIdentity(context.Background(), keepTestProfileEmail)
+			_, err = server.GetState(ctx, &apiv1.GetStateRequest{
+				ConnectorKind: apiv1.ConnectorKind_CONNECTOR_KIND_GOOGLE_KEEP,
+			})
+		})
+
+		It("should report Keep as not configured", func() {
+			Expect(err).To(HaveGrpcStatusWithSubstr(codes.FailedPrecondition, "not configured"))
 		})
 	})
 

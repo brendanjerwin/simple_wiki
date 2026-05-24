@@ -87,3 +87,9 @@ rules:
       - metavariable-regex:
           metavariable: $ERR
           regex: '^Err[A-Z]'
+
+  - id: go.connector-service-no-request-kind-switch
+    languages: [generic]
+    message: "centralize connector kind dispatch"
+    severity: ERROR
+    pattern-regex: '(?s)(switch\s+\w+\.GetConnectorKind\(\)\s*\{|(?:\w+\s*:=\s*\w+\.GetConnectorKind\(\)|var\s+\w+\s*=\s*\w+\.GetConnectorKind\(\))(?:(?!func\s+\().)*?switch\s+\w+\s*\{)'

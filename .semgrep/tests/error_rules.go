@@ -4,6 +4,8 @@
 // Lines marked "RULEID" annotate matches for the named rule;
 // "OK" lines should not match. This file intentionally contains
 // anti-pattern code; nothing here is imported or compiled by the application.
+//
+//revive:disable:add-constant,unused-receiver
 package tests
 
 import (
@@ -105,3 +107,40 @@ func goodClassify(resp *http.Response, body []byte) error {
 }
 
 func classifyByBody(_ []byte) error { return nil }
+
+// ----- connector-service-no-request-kind-switch ---------------------------
+
+type connectorRequest struct{}
+
+func (*connectorRequest) GetConnectorKind() int { return 0 }
+
+func badDirectConnectorKindSwitch(req *connectorRequest) int {
+	// ruleid: go.connector-service-no-request-kind-switch
+	switch req.GetConnectorKind() {
+	case 1:
+		return 1
+	default:
+		return 0
+	}
+}
+
+func badLocalConnectorKindSwitch(req *connectorRequest) int {
+	// ruleid: go.connector-service-no-request-kind-switch
+	kind := req.GetConnectorKind()
+	switch kind {
+	case 1:
+		return 1
+	default:
+		return 0
+	}
+}
+
+func goodConnectorKindDispatch(kind int) int {
+	// ok: go.connector-service-no-request-kind-switch
+	switch kind {
+	case 1:
+		return 1
+	default:
+		return 0
+	}
+}
