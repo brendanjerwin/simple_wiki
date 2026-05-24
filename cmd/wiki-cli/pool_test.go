@@ -26,9 +26,9 @@ import (
 // that tracks which RPCs were called and returns predefined responses.
 type stubChatServiceHandler struct {
 	apiv1connect.UnimplementedChatServiceHandler
-	sendReplyID    string
-	sendReplyErr   error
-	editErr        error
+	sendReplyID     string
+	sendReplyErr    error
+	editErr         error
 	sendReplyCalled bool
 	editCalled      bool
 }
@@ -54,24 +54,24 @@ func (h *stubChatServiceHandler) EditChatMessage(_ context.Context, _ *connect.R
 // mockChatReplier is a mock implementation of the chatReplier interface
 // for unit testing without HTTP servers.
 type mockChatReplier struct {
-	sendReplyReq     *apiv1.SendChatReplyRequest
-	sendReplyResp    *apiv1.SendChatReplyResponse
-	sendReplyErr     error
-	sendReplyCalled  bool
+	sendReplyReq    *apiv1.SendChatReplyRequest
+	sendReplyResp   *apiv1.SendChatReplyResponse
+	sendReplyErr    error
+	sendReplyCalled bool
 
-	editReq          *apiv1.EditChatMessageRequest
-	editResp         *apiv1.EditChatMessageResponse
-	editErr          error
-	editCalled       bool
+	editReq    *apiv1.EditChatMessageRequest
+	editResp   *apiv1.EditChatMessageResponse
+	editErr    error
+	editCalled bool
 
 	toolNotifyReq    *apiv1.SendToolCallNotificationRequest
 	toolNotifyCalled bool
 	toolNotifyErr    error
 
-	permReq          *apiv1.RequestPermissionFromUserRequest
-	permResp         *apiv1.RequestPermissionFromUserResponse
-	permErr          error
-	permCalled       bool
+	permReq    *apiv1.RequestPermissionFromUserRequest
+	permResp   *apiv1.RequestPermissionFromUserResponse
+	permErr    error
+	permCalled bool
 }
 
 func (m *mockChatReplier) SendChatReply(_ context.Context, req *connect.Request[apiv1.SendChatReplyRequest]) (*connect.Response[apiv1.SendChatReplyResponse], error) {
@@ -136,16 +136,16 @@ func (blockingPermissionReplier) RequestPermissionFromUser(ctx context.Context, 
 
 // mockACPAgent is a mock implementation of the acpAgent interface.
 type mockACPAgent struct {
-	initResp    acp.InitializeResponse
-	initErr     error
-	initCalled  bool
+	initResp   acp.InitializeResponse
+	initErr    error
+	initCalled bool
 
-	sessionResp acp.NewSessionResponse
-	sessionErr  error
+	sessionResp   acp.NewSessionResponse
+	sessionErr    error
 	sessionCalled bool
 
-	promptResp  acp.PromptResponse
-	promptErr   error
+	promptResp   acp.PromptResponse
+	promptErr    error
 	promptCalled bool
 	promptReq    *acp.PromptRequest
 }
@@ -3615,7 +3615,7 @@ var _ = Describe("poolDaemon runMessageBridge", func() {
 				DeferCleanup(server.Close)
 
 				daemon := &poolDaemon{
-					wikiURL:  server.URL,
+					wikiURL:   server.URL,
 					instances: make(map[string]*instanceEntry),
 				}
 
@@ -3759,6 +3759,55 @@ var _ = Describe("poolDaemon subscribeAndHandle", func() {
 })
 
 var _ = Describe("poolDaemon run reconnect path", func() {
+	When("subscribeAndHandle exits nil after the subscription context is cancelled", func() {
+		var (
+			err     error
+			drained chan struct{}
+		)
+
+		BeforeEach(func() {
+			drained = make(chan struct{})
+			handler := &blockingInstanceRequestStreamer{
+				started: make(chan struct{}),
+			}
+			mux := http.NewServeMux()
+			path, h := apiv1connect.NewChatServiceHandler(handler)
+			mux.Handle(path, h)
+			server := httptest.NewServer(mux)
+			DeferCleanup(server.Close)
+
+			daemon := &poolDaemon{
+				wikiURL:      server.URL,
+				maxInstances: 5,
+				idleTimeout:  30 * time.Minute,
+				instances:    make(map[string]*instanceEntry),
+			}
+			daemon.scheduledTurns.Add(1)
+
+			ctx, cancel := context.WithCancel(context.Background())
+			done := make(chan struct{})
+			go func() {
+				err = daemon.run(ctx)
+				close(done)
+			}()
+
+			Eventually(handler.started).Should(BeClosed())
+			cancel()
+			Consistently(done).ShouldNot(BeClosed())
+			close(drained)
+			daemon.scheduledTurns.Done()
+			Eventually(done).Should(BeClosed())
+		})
+
+		It("should return nil", func() {
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should wait for scheduled turns before returning", func() {
+			Expect(drained).To(BeClosed())
+		})
+	})
+
 	When("subscribeAndHandle fails immediately and context expires during backoff wait", func() {
 		var err error
 
@@ -3781,6 +3830,17 @@ var _ = Describe("poolDaemon run reconnect path", func() {
 		})
 	})
 })
+
+type blockingInstanceRequestStreamer struct {
+	apiv1connect.UnimplementedChatServiceHandler
+	started chan struct{}
+}
+
+func (h *blockingInstanceRequestStreamer) SubscribeInstanceRequests(ctx context.Context, _ *connect.Request[apiv1.SubscribeInstanceRequestsRequest], _ *connect.ServerStream[apiv1.InstanceRequest]) error {
+	close(h.started)
+	<-ctx.Done()
+	return nil
+}
 
 var _ = Describe("handleAgentMessage error paths (mock-based)", func() {
 	Describe("SendChatReply failure on the first chunk", func() {
