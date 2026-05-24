@@ -105,13 +105,39 @@ func runChecklistList(c *cli.Context) error {
 	if err != nil {
 		return err
 	}
-	resp, err := client.ListItems(context.Background(), connect.NewRequest(&apiv1.ListItemsRequest{
-		Page: page, ListName: listName,
-	}))
+	checklist, err := fetchAllChecklistItems(context.Background(), client, page, listName)
 	if err != nil {
 		return fmt.Errorf("ListItems: %w", err)
 	}
-	return printJSON(resp.Msg.GetChecklist())
+	return printJSON(checklist)
+}
+
+func fetchAllChecklistItems(ctx context.Context, client apiv1connect.ChecklistServiceClient, page, listName string) (*apiv1.Checklist, error) {
+	var fullChecklist *apiv1.Checklist
+	pageToken := ""
+	for {
+		resp, err := client.ListItems(ctx, connect.NewRequest(&apiv1.ListItemsRequest{
+			Page:      page,
+			ListName:  listName,
+			PageSize:  500,
+			PageToken: pageToken,
+		}))
+		if err != nil {
+			return nil, err
+		}
+
+		checklist := resp.Msg.GetChecklist()
+		if fullChecklist == nil {
+			fullChecklist = checklist
+		} else {
+			fullChecklist.Items = append(fullChecklist.Items, checklist.GetItems()...)
+		}
+
+		pageToken = resp.Msg.GetNextPageToken()
+		if pageToken == "" {
+			return fullChecklist, nil
+		}
+	}
 }
 
 func runChecklistAdd(c *cli.Context) error {

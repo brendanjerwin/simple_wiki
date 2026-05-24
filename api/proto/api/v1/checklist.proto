@@ -77,6 +77,16 @@ service ChecklistService {
         "via expected_updated_at.";
   }
 
+  // DeduplicateItems — see (api.v1.description).
+  rpc DeduplicateItems(DeduplicateItemsRequest) returns (DeduplicateItemsResponse) {
+    option (api.v1.description) =
+        "Compact duplicate checklist items by trimmed text, keeping "
+        "the earliest remaining item for each text value and removing the "
+        "rest in one mutation. By default only unchecked duplicates are "
+        "deduped; set include_checked to also compact completed items. "
+        "Intended for operator cleanup after sync-loop duplication incidents.";
+  }
+
   // ReorderItem — see (api.v1.description).
   rpc ReorderItem(ReorderItemRequest) returns (ReorderItemResponse) {
     option (api.v1.description) =
@@ -90,11 +100,14 @@ service ChecklistService {
   // ListItems — see (api.v1.description).
   rpc ListItems(ListItemsRequest) returns (ListItemsResponse) {
     option (api.v1.description) =
-        "Return all items in a checklist with both user-mutable and "
-        "wiki-managed metadata. The Checklist.updated_at field is the "
-        "value to pass back as expected_updated_at on subsequent "
-        "mutations. Tombstones are returned in a separate field for "
-        "CalDAV sync-collection consumption.";
+        "Return a page of checklist items with both user-mutable and "
+        "wiki-managed metadata. Responses default to a bounded page so "
+        "very large checklists do not produce multi-megabyte tool "
+        "responses; pass next_page_token to continue. The "
+        "Checklist.updated_at field is the value to pass back as "
+        "expected_updated_at on subsequent mutations. Internal sync "
+        "events, tombstones, and max_seq are omitted from this public "
+        "response.";
     option (api.v1.read_only) = true;
   }
 
@@ -312,6 +325,20 @@ message DeleteItemResponse {
   Checklist checklist = 1;
 }
 
+// DeduplicateItems
+
+message DeduplicateItemsRequest {
+  string page = 1;
+  string list_name = 2;
+  bool include_checked = 3;
+  optional google.protobuf.Timestamp expected_updated_at = 4;
+}
+
+message DeduplicateItemsResponse {
+  Checklist checklist = 1;
+  int32 removed_count = 2;
+}
+
 // ReorderItem
 
 message ReorderItemRequest {
@@ -331,10 +358,13 @@ message ReorderItemResponse {
 message ListItemsRequest {
   string page = 1;
   string list_name = 2;
+  int32 page_size = 3;
+  string page_token = 4;
 }
 
 message ListItemsResponse {
   Checklist checklist = 1;
+  string next_page_token = 2;
 }
 
 // GetChecklists

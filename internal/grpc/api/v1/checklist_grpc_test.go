@@ -99,6 +99,20 @@ var _ = Describe("ChecklistService handlers — errChecklistMutatorNotConfigured
 		})
 	})
 
+	Describe("DeduplicateItems", func() {
+		When("checklistMutator is not configured", func() {
+			var err error
+
+			BeforeEach(func() {
+				_, err = server.DeduplicateItems(ctx, &apiv1.DeduplicateItemsRequest{Page: "p", ListName: "l"})
+			})
+
+			It("should return FailedPrecondition", func() {
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.FailedPrecondition, "checklist mutator not configured"))
+			})
+		})
+	})
+
 	Describe("ReorderItem", func() {
 		When("checklistMutator is not configured", func() {
 			var err error
@@ -221,6 +235,32 @@ var _ = Describe("ChecklistService handlers — page required validation", func(
 		})
 	})
 
+	Describe("DeduplicateItems", func() {
+		When("page is empty", func() {
+			var err error
+
+			BeforeEach(func() {
+				_, err = server.DeduplicateItems(ctx, &apiv1.DeduplicateItemsRequest{Page: "", ListName: "l"})
+			})
+
+			It("should return InvalidArgument", func() {
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.InvalidArgument, "page"))
+			})
+		})
+
+		When("list_name is empty", func() {
+			var err error
+
+			BeforeEach(func() {
+				_, err = server.DeduplicateItems(ctx, &apiv1.DeduplicateItemsRequest{Page: "p", ListName: "   "})
+			})
+
+			It("should return InvalidArgument", func() {
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.InvalidArgument, "list_name"))
+			})
+		})
+	})
+
 	Describe("ReorderItem", func() {
 		When("page is empty", func() {
 			It("should return InvalidArgument", func() {
@@ -269,6 +309,7 @@ var _ = Describe("ChecklistService handlers — public checklist response shape"
 	var (
 		ctx      context.Context
 		server   *v1.Server
+		mutator  *checklistmutator.Mutator
 		eggsUID  string
 		listResp *apiv1.ListItemsResponse
 		getResp  *apiv1.GetChecklistsResponse
@@ -281,7 +322,7 @@ var _ = Describe("ChecklistService handlers — public checklist response shape"
 		mock := &MockPageReaderMutator{Frontmatter: wikipage.FrontMatter{}}
 		cl := &checklistSteadyClock{}
 		ug := ulid.NewSequenceGenerator("01HXBBBBBBBBBBBBBBBBBBBBBB")
-		mutator := checklistmutator.New(mock, cl, ug)
+		mutator = checklistmutator.New(mock, cl, ug)
 		server = mustNewServer(mock, nil, nil).WithChecklistMutator(mutator)
 
 		firstItem, _, err := mutator.AddItem(ctx, "weekly_menu", "ingredients-on-hand", checklistmutator.AddItemArgs{Text: "milk"}, tailscale.Anonymous)
@@ -324,6 +365,67 @@ var _ = Describe("ChecklistService handlers — public checklist response shape"
 
 		It("should omit max_seq", func() {
 			Expect(listResp.GetChecklist().GetMaxSeq()).To(BeZero())
+		})
+
+		When("a page size is requested", func() {
+			var (
+				firstPageResp  *apiv1.ListItemsResponse
+				secondPageResp *apiv1.ListItemsResponse
+				unpagedResp    *apiv1.Checklist
+				firstPageErr   error
+				secondPageErr  error
+				unpagedErr     error
+				addErr         error
+			)
+
+			BeforeEach(func() {
+				_, _, addErr = mutator.AddItem(ctx, "weekly_menu", "ingredients-on-hand", checklistmutator.AddItemArgs{Text: "flour"}, tailscale.Anonymous)
+
+				firstPageResp, firstPageErr = server.ListItems(ctx, &apiv1.ListItemsRequest{Page: "weekly_menu", ListName: "ingredients-on-hand", PageSize: 1})
+				secondPageResp, secondPageErr = server.ListItems(ctx, &apiv1.ListItemsRequest{
+					Page:      "weekly_menu",
+					ListName:  "ingredients-on-hand",
+					PageSize:  1,
+					PageToken: firstPageResp.GetNextPageToken(),
+				})
+				unpagedResp, unpagedErr = mutator.ListItems(ctx, "weekly_menu", "ingredients-on-hand")
+			})
+
+			It("should add the second item", func() {
+				Expect(addErr).NotTo(HaveOccurred())
+			})
+
+			It("should return the first page", func() {
+				Expect(firstPageErr).NotTo(HaveOccurred())
+				Expect(firstPageResp.GetChecklist().GetItems()).To(HaveLen(1))
+			})
+
+			It("should return a continuation token", func() {
+				Expect(firstPageResp.GetNextPageToken()).To(Equal("1"))
+			})
+
+			It("should return the next page", func() {
+				Expect(secondPageErr).NotTo(HaveOccurred())
+				Expect(secondPageResp.GetChecklist().GetItems()).To(HaveLen(1))
+				Expect(secondPageResp.GetChecklist().GetItems()[0].GetText()).To(Equal("flour"))
+			})
+
+			It("should not truncate the stored checklist", func() {
+				Expect(unpagedErr).NotTo(HaveOccurred())
+				Expect(unpagedResp.GetItems()).To(HaveLen(2))
+			})
+		})
+
+		When("the page token is invalid", func() {
+			var err error
+
+			BeforeEach(func() {
+				_, err = server.ListItems(ctx, &apiv1.ListItemsRequest{Page: "weekly_menu", ListName: "ingredients-on-hand", PageToken: "not-a-number"})
+			})
+
+			It("should return InvalidArgument", func() {
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.InvalidArgument, "page_token"))
+			})
 		})
 	})
 

@@ -19,14 +19,15 @@ import (
 const _ = grpc.SupportPackageIsVersion8
 
 const (
-	ChecklistService_AddItem_FullMethodName       = "/api.v1.ChecklistService/AddItem"
-	ChecklistService_UpdateItem_FullMethodName    = "/api.v1.ChecklistService/UpdateItem"
-	ChecklistService_ToggleItem_FullMethodName    = "/api.v1.ChecklistService/ToggleItem"
-	ChecklistService_DeleteItem_FullMethodName    = "/api.v1.ChecklistService/DeleteItem"
-	ChecklistService_ReorderItem_FullMethodName   = "/api.v1.ChecklistService/ReorderItem"
-	ChecklistService_ListItems_FullMethodName     = "/api.v1.ChecklistService/ListItems"
-	ChecklistService_GetChecklists_FullMethodName = "/api.v1.ChecklistService/GetChecklists"
-	ChecklistService_WatchList_FullMethodName     = "/api.v1.ChecklistService/WatchList"
+	ChecklistService_AddItem_FullMethodName          = "/api.v1.ChecklistService/AddItem"
+	ChecklistService_UpdateItem_FullMethodName       = "/api.v1.ChecklistService/UpdateItem"
+	ChecklistService_ToggleItem_FullMethodName       = "/api.v1.ChecklistService/ToggleItem"
+	ChecklistService_DeleteItem_FullMethodName       = "/api.v1.ChecklistService/DeleteItem"
+	ChecklistService_DeduplicateItems_FullMethodName = "/api.v1.ChecklistService/DeduplicateItems"
+	ChecklistService_ReorderItem_FullMethodName      = "/api.v1.ChecklistService/ReorderItem"
+	ChecklistService_ListItems_FullMethodName        = "/api.v1.ChecklistService/ListItems"
+	ChecklistService_GetChecklists_FullMethodName    = "/api.v1.ChecklistService/GetChecklists"
+	ChecklistService_WatchList_FullMethodName        = "/api.v1.ChecklistService/WatchList"
 )
 
 // ChecklistServiceClient is the client API for ChecklistService service.
@@ -43,6 +44,8 @@ type ChecklistServiceClient interface {
 	ToggleItem(ctx context.Context, in *ToggleItemRequest, opts ...grpc.CallOption) (*ToggleItemResponse, error)
 	// DeleteItem — see (api.v1.description).
 	DeleteItem(ctx context.Context, in *DeleteItemRequest, opts ...grpc.CallOption) (*DeleteItemResponse, error)
+	// DeduplicateItems — see (api.v1.description).
+	DeduplicateItems(ctx context.Context, in *DeduplicateItemsRequest, opts ...grpc.CallOption) (*DeduplicateItemsResponse, error)
 	// ReorderItem — see (api.v1.description).
 	ReorderItem(ctx context.Context, in *ReorderItemRequest, opts ...grpc.CallOption) (*ReorderItemResponse, error)
 	// ListItems — see (api.v1.description).
@@ -95,6 +98,16 @@ func (c *checklistServiceClient) DeleteItem(ctx context.Context, in *DeleteItemR
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(DeleteItemResponse)
 	err := c.cc.Invoke(ctx, ChecklistService_DeleteItem_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *checklistServiceClient) DeduplicateItems(ctx context.Context, in *DeduplicateItemsRequest, opts ...grpc.CallOption) (*DeduplicateItemsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(DeduplicateItemsResponse)
+	err := c.cc.Invoke(ctx, ChecklistService_DeduplicateItems_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -178,6 +191,8 @@ type ChecklistServiceServer interface {
 	ToggleItem(context.Context, *ToggleItemRequest) (*ToggleItemResponse, error)
 	// DeleteItem — see (api.v1.description).
 	DeleteItem(context.Context, *DeleteItemRequest) (*DeleteItemResponse, error)
+	// DeduplicateItems — see (api.v1.description).
+	DeduplicateItems(context.Context, *DeduplicateItemsRequest) (*DeduplicateItemsResponse, error)
 	// ReorderItem — see (api.v1.description).
 	ReorderItem(context.Context, *ReorderItemRequest) (*ReorderItemResponse, error)
 	// ListItems — see (api.v1.description).
@@ -204,6 +219,9 @@ func (UnimplementedChecklistServiceServer) ToggleItem(context.Context, *ToggleIt
 }
 func (UnimplementedChecklistServiceServer) DeleteItem(context.Context, *DeleteItemRequest) (*DeleteItemResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method DeleteItem not implemented")
+}
+func (UnimplementedChecklistServiceServer) DeduplicateItems(context.Context, *DeduplicateItemsRequest) (*DeduplicateItemsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method DeduplicateItems not implemented")
 }
 func (UnimplementedChecklistServiceServer) ReorderItem(context.Context, *ReorderItemRequest) (*ReorderItemResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ReorderItem not implemented")
@@ -298,6 +316,24 @@ func _ChecklistService_DeleteItem_Handler(srv interface{}, ctx context.Context, 
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(ChecklistServiceServer).DeleteItem(ctx, req.(*DeleteItemRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _ChecklistService_DeduplicateItems_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeduplicateItemsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ChecklistServiceServer).DeduplicateItems(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ChecklistService_DeduplicateItems_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ChecklistServiceServer).DeduplicateItems(ctx, req.(*DeduplicateItemsRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -399,6 +435,10 @@ var ChecklistService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "DeleteItem",
 			Handler:    _ChecklistService_DeleteItem_Handler,
+		},
+		{
+			MethodName: "DeduplicateItems",
+			Handler:    _ChecklistService_DeduplicateItems_Handler,
 		},
 		{
 			MethodName: "ReorderItem",
