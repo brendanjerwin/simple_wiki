@@ -139,45 +139,94 @@ func (s *AgentChatContextStore) AppendBackgroundActivityAutomatic(page string, e
 	return nil
 }
 
-// AppendBackgroundActivitySummary attaches summary to the most recent
+// AppendBackgroundActivitySummary attaches summary to the running
 // background-activity entry whose schedule_id matches scheduleID. Returns a
-// SummaryTargetNotFoundError when no matching entry exists (e.g. the agent
+// SummaryTargetNotFoundError when no running entry exists (e.g. the agent
 // called the summary tool out of order or after the entry rolled out of the
 // ring buffer).
-func (s *AgentChatContextStore) AppendBackgroundActivitySummary(page, scheduleID, summary string) error {
+func (s *AgentChatContextStore) AppendBackgroundActivitySummary(page, scheduleID, summary string) (*apiv1.BackgroundActivityEntry, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	id, fm, err := s.pages.ReadFrontMatter(wikipage.PageIdentifier(page))
 	if err != nil {
-		return fmt.Errorf(errReadFrontmatterFmt, page, err)
+		return nil, fmt.Errorf(errReadFrontmatterFmt, page, err)
 	}
 	existing, err := decodeChatContext(fm)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	// Walk newest-first (i.e. from the back of the slice) and stop at the
-	// first matching schedule_id.
-	target := -1
-	for i := len(existing.BackgroundActivity) - 1; i >= 0; i-- {
-		if existing.BackgroundActivity[i].GetScheduleId() == scheduleID {
-			target = i
-			break
-		}
-	}
+	target := findNewestRunningBackgroundActivity(existing.BackgroundActivity, scheduleID)
 	if target == -1 {
-		return &SummaryTargetNotFoundError{Page: page, ScheduleID: scheduleID}
+		return nil, &SummaryTargetNotFoundError{Page: page, ScheduleID: scheduleID}
 	}
 
 	existing.BackgroundActivity[target].Summary = summary
 	if err := writeChatContext(fm, existing); err != nil {
-		return err
+		return nil, err
 	}
 	if err := s.pages.WriteFrontMatter(id, fm); err != nil {
-		return fmt.Errorf(errWriteFrontmatterFmt, page, err)
+		return nil, fmt.Errorf(errWriteFrontmatterFmt, page, err)
 	}
-	return nil
+	return existing.BackgroundActivity[target], nil
+}
+
+// CompleteBackgroundActivity updates the most recent entry for scheduleID with
+// the terminal status. If an OK turn did not attach a summary first, it is
+// recorded as WARN so operators can distinguish "work may have happened, but
+// the audit trail is missing" from a clean success.
+func (s *AgentChatContextStore) CompleteBackgroundActivity(page, scheduleID string, status apiv1.ScheduleStatus) (apiv1.ScheduleStatus, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	id, fm, err := s.pages.ReadFrontMatter(wikipage.PageIdentifier(page))
+	if err != nil {
+		return status, fmt.Errorf(errReadFrontmatterFmt, page, err)
+	}
+	existing, err := decodeChatContext(fm)
+	if err != nil {
+		return status, err
+	}
+
+	target := findNewestRunningBackgroundActivity(existing.BackgroundActivity, scheduleID)
+	if target == -1 {
+		entry := &apiv1.BackgroundActivityEntry{
+			Timestamp:  timestamppb.New(time.Now().UTC()),
+			ScheduleId: scheduleID,
+			Status:     status,
+		}
+		existing.BackgroundActivity = append(existing.BackgroundActivity, entry)
+		target = len(existing.BackgroundActivity) - 1
+	}
+
+	finalStatus := status
+	if status == apiv1.ScheduleStatus_SCHEDULE_STATUS_OK && existing.BackgroundActivity[target].GetSummary() == "" {
+		finalStatus = apiv1.ScheduleStatus_SCHEDULE_STATUS_WARN
+	}
+	existing.BackgroundActivity[target].Status = finalStatus
+	existing.BackgroundActivity[target].Timestamp = timestamppb.New(time.Now().UTC())
+	if len(existing.BackgroundActivity) > BackgroundActivityMax {
+		drop := len(existing.BackgroundActivity) - BackgroundActivityMax
+		existing.BackgroundActivity = existing.BackgroundActivity[drop:]
+	}
+
+	if err := writeChatContext(fm, existing); err != nil {
+		return status, err
+	}
+	if err := s.pages.WriteFrontMatter(id, fm); err != nil {
+		return status, fmt.Errorf(errWriteFrontmatterFmt, page, err)
+	}
+	return finalStatus, nil
+}
+
+func findNewestRunningBackgroundActivity(entries []*apiv1.BackgroundActivityEntry, scheduleID string) int {
+	for i := len(entries) - 1; i >= 0; i-- {
+		if entries[i].GetScheduleId() == scheduleID && entries[i].GetStatus() == apiv1.ScheduleStatus_SCHEDULE_STATUS_RUNNING {
+			return i
+		}
+	}
+	return -1
 }
 
 // decodeChatContext extracts agent.chat_context out of a frontmatter map and

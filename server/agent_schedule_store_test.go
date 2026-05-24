@@ -376,7 +376,7 @@ var _ = Describe("AgentScheduleStore", func() {
 			})
 		})
 
-		Describe("when a BackgroundActivitySink is wired and the transition is terminal", func() {
+		Describe("when a BackgroundActivitySink is wired and the schedule completes cleanly", func() {
 			var sink *recordingActivitySink
 
 			BeforeEach(func() {
@@ -386,7 +386,7 @@ var _ = Describe("AgentScheduleStore", func() {
 				Expect(store.TransitionStatus("p", "s1", apiv1.ScheduleStatus_SCHEDULE_STATUS_OK, "", 5)).To(Succeed())
 			})
 
-			It("should call the sink exactly once (the terminal transition)", func() {
+			It("should append activity on RUNNING", func() {
 				Expect(sink.calls).To(HaveLen(1))
 			})
 
@@ -394,16 +394,21 @@ var _ = Describe("AgentScheduleStore", func() {
 				Expect(sink.calls[0].entry.GetScheduleId()).To(Equal("s1"))
 			})
 
-			It("should pass the terminal status", func() {
-				Expect(sink.calls[0].entry.GetStatus()).To(Equal(apiv1.ScheduleStatus_SCHEDULE_STATUS_OK))
+			It("should pass the running status", func() {
+				Expect(sink.calls[0].entry.GetStatus()).To(Equal(apiv1.ScheduleStatus_SCHEDULE_STATUS_RUNNING))
 			})
 
 			It("should pass the page identifier", func() {
 				Expect(sink.calls[0].page).To(Equal("p"))
 			})
+
+			It("should complete the activity with OK", func() {
+				Expect(sink.completeCalls).To(HaveLen(1))
+				Expect(sink.completeCalls[0].status).To(Equal(apiv1.ScheduleStatus_SCHEDULE_STATUS_OK))
+			})
 		})
 
-		Describe("when a sink is wired and the transition is RUNNING (non-terminal)", func() {
+		Describe("when a sink is wired and the transition is RUNNING", func() {
 			var sink *recordingActivitySink
 
 			BeforeEach(func() {
@@ -412,12 +417,16 @@ var _ = Describe("AgentScheduleStore", func() {
 				Expect(store.TransitionStatus("p", "s1", apiv1.ScheduleStatus_SCHEDULE_STATUS_RUNNING, "", 0)).To(Succeed())
 			})
 
-			It("should not call the sink", func() {
-				Expect(sink.calls).To(BeEmpty())
+			It("should append a background activity entry", func() {
+				Expect(sink.calls).To(HaveLen(1))
+			})
+
+			It("should not complete the background activity", func() {
+				Expect(sink.completeCalls).To(BeEmpty())
 			})
 		})
 
-		Describe("when a sink is wired and returns an error on a terminal transition", func() {
+		Describe("when a sink is wired and fails an OK terminal transition", func() {
 			var sink *erroringActivitySink
 			var transitionErr error
 
@@ -432,13 +441,13 @@ var _ = Describe("AgentScheduleStore", func() {
 				Expect(transitionErr).NotTo(HaveOccurred())
 			})
 
-			It("should still have called the sink", func() {
+			It("should still have called the append sink", func() {
 				Expect(sink.calls).To(Equal(1))
 			})
 
-			It("should still record the terminal status on the schedule", func() {
+			It("should conservatively record WARN on the schedule", func() {
 				schedules, _ := store.List("p")
-				Expect(schedules[0].GetLastStatus()).To(Equal(apiv1.ScheduleStatus_SCHEDULE_STATUS_OK))
+				Expect(schedules[0].GetLastStatus()).To(Equal(apiv1.ScheduleStatus_SCHEDULE_STATUS_WARN))
 			})
 		})
 
@@ -642,7 +651,8 @@ var _ = Describe("AgentScheduleStore", func() {
 // recordingActivitySink captures every AppendBackgroundActivityAutomatic call
 // for assertions.
 type recordingActivitySink struct {
-	calls []recordedActivityCall
+	calls         []recordedActivityCall
+	completeCalls []recordedActivityCompletion
 }
 
 type recordedActivityCall struct {
@@ -650,9 +660,20 @@ type recordedActivityCall struct {
 	entry *apiv1.BackgroundActivityEntry
 }
 
+type recordedActivityCompletion struct {
+	page       string
+	scheduleID string
+	status     apiv1.ScheduleStatus
+}
+
 func (r *recordingActivitySink) AppendBackgroundActivityAutomatic(page string, entry *apiv1.BackgroundActivityEntry) error {
 	r.calls = append(r.calls, recordedActivityCall{page: page, entry: entry})
 	return nil
+}
+
+func (r *recordingActivitySink) CompleteBackgroundActivity(page, scheduleID string, status apiv1.ScheduleStatus) (apiv1.ScheduleStatus, error) {
+	r.completeCalls = append(r.completeCalls, recordedActivityCompletion{page: page, scheduleID: scheduleID, status: status})
+	return status, nil
 }
 
 // erroringActivitySink always returns an error from
@@ -666,6 +687,10 @@ type erroringActivitySink struct {
 func (e *erroringActivitySink) AppendBackgroundActivityAutomatic(_ string, _ *apiv1.BackgroundActivityEntry) error {
 	e.calls++
 	return e.err
+}
+
+func (e *erroringActivitySink) CompleteBackgroundActivity(string, string, apiv1.ScheduleStatus) (apiv1.ScheduleStatus, error) {
+	return apiv1.ScheduleStatus_SCHEDULE_STATUS_UNSPECIFIED, e.err
 }
 
 // errorPageStore is a fake page store with configurable read/write errors. It

@@ -196,9 +196,9 @@ func (s *Server) AppendBackgroundActivitySummary(_ context.Context, req *apiv1.A
 		return nil, status.Error(codes.InvalidArgument, "summary is required")
 	}
 
-	err := s.agentChatContextStore.AppendBackgroundActivitySummary(req.GetPage(), req.GetScheduleId(), req.GetSummary())
+	entry, err := s.agentChatContextStore.AppendBackgroundActivitySummary(req.GetPage(), req.GetScheduleId(), req.GetSummary())
 	if err == nil {
-		return &apiv1.AppendBackgroundActivitySummaryResponse{}, nil
+		return &apiv1.AppendBackgroundActivitySummaryResponse{BackgroundActivity: entry}, nil
 	}
 	// Map the typed not-found error to the gRPC NotFound code so the agent
 	// can distinguish "no recent entry to attach to" from infrastructure
