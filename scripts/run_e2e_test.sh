@@ -16,7 +16,7 @@ echo "Logging to: $LOG_FILE"
   export CHROMIUM_BIN=$(which chromium)
   cd e2e || exit 1
   bun install || exit 1
-  bunx playwright test
+  bunx playwright test "$@"
 } 2>&1 | tee "$LOG_FILE"
 
 exit_code=${PIPESTATUS[0]}

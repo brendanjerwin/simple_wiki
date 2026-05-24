@@ -578,6 +578,9 @@ type Tool struct {
 	Meta *Meta `json:"_meta,omitempty"`
 	// The name of the tool.
 	Name string `json:"name"`
+	// Title is an optional human-readable, UI-friendly display name for the tool.
+	// If not provided, clients should use Annotations.Title (if set) and fall back to Name.
+	Title string `json:"title,omitempty"`
 	// A human-readable description of the tool.
 	Description string `json:"description,omitempty"`
 	// A JSON Schema object defining the expected parameters for the tool.
@@ -611,6 +614,9 @@ func (t Tool) MarshalJSON() ([]byte, error) {
 
 	// Add the name and description
 	m["name"] = t.Name
+	if t.Title != "" {
+		m["title"] = t.Title
+	}
 	if t.Description != "" {
 		m["description"] = t.Description
 	}
@@ -667,17 +673,20 @@ type ToolArgumentsSchema struct {
 	AdditionalProperties any            `json:"additionalProperties,omitempty"`
 }
 
-type ToolInputSchema ToolArgumentsSchema // For retro-compatibility
+// ToolInputSchema remains a named type for retro-compatibility, so its JSON
+// methods explicitly forward to ToolArgumentsSchema.
+type ToolInputSchema ToolArgumentsSchema
+
 type ToolOutputSchema ToolArgumentsSchema
 
 // MarshalJSON implements the json.Marshaler interface for ToolInputSchema.
 func (tis ToolInputSchema) MarshalJSON() ([]byte, error) {
-	return toolArgumentsSchemaMarshalJSON(ToolArgumentsSchema(tis))
+	return ToolArgumentsSchema(tis).MarshalJSON()
 }
 
 // MarshalJSON implements the json.Marshaler interface for ToolOutputSchema.
 func (tis ToolOutputSchema) MarshalJSON() ([]byte, error) {
-	return toolArgumentsSchemaMarshalJSON(ToolArgumentsSchema(tis))
+	return ToolArgumentsSchema(tis).MarshalJSON()
 }
 
 // MarshalJSON implements the json.Marshaler interface for ToolArgumentsSchema.
@@ -687,12 +696,12 @@ func (tis ToolArgumentsSchema) MarshalJSON() ([]byte, error) {
 
 // UnmarshalJSON implements the json.Unmarshaler interface for ToolInputSchema.
 func (tis *ToolInputSchema) UnmarshalJSON(data []byte) error {
-	return toolArgumentsSchemaUnmarshalJSON(data, (*ToolArgumentsSchema)(tis))
+	return (*ToolArgumentsSchema)(tis).UnmarshalJSON(data)
 }
 
 // UnmarshalJSON implements the json.Unmarshaler interface for ToolOutputSchema.
 func (tis *ToolOutputSchema) UnmarshalJSON(data []byte) error {
-	return toolArgumentsSchemaUnmarshalJSON(data, (*ToolArgumentsSchema)(tis))
+	return (*ToolArgumentsSchema)(tis).UnmarshalJSON(data)
 }
 
 // UnmarshalJSON implements the json.Unmarshaler interface for ToolArgumentsSchema.
@@ -828,6 +837,14 @@ func NewToolWithRawSchema(name, description string, schema json.RawMessage) Tool
 func WithDescription(description string) ToolOption {
 	return func(t *Tool) {
 		t.Description = description
+	}
+}
+
+// WithToolTitle sets the optional human-readable display title for the Tool.
+// Per the MCP spec, clients should prefer Title over Annotations.Title and Name for display.
+func WithToolTitle(title string) ToolOption {
+	return func(t *Tool) {
+		t.Title = title
 	}
 }
 

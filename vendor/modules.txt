@@ -162,7 +162,7 @@ github.com/cloudwego/base64x/internal/native
 github.com/cloudwego/base64x/internal/native/avx2
 github.com/cloudwego/base64x/internal/native/sse
 github.com/cloudwego/base64x/internal/rt
-# github.com/coder/acp-go-sdk v0.12.2
+# github.com/coder/acp-go-sdk v0.13.0
 ## explicit; go 1.21
 github.com/coder/acp-go-sdk
 # github.com/coder/websocket v1.8.12
@@ -341,10 +341,11 @@ github.com/klauspost/cpuid/v2
 ## explicit; go 1.18
 github.com/leodido/go-urn
 github.com/leodido/go-urn/scim/schema
-# github.com/mark3labs/mcp-go v0.52.0
+# github.com/mark3labs/mcp-go v0.54.0
 ## explicit; go 1.25.5
 github.com/mark3labs/mcp-go/mcp
 github.com/mark3labs/mcp-go/server
+github.com/mark3labs/mcp-go/tracing
 github.com/mark3labs/mcp-go/util
 # github.com/mattn/go-isatty v0.0.20
 ## explicit; go 1.15
@@ -378,7 +379,7 @@ github.com/mschoch/smat
 # github.com/oklog/ulid/v2 v2.1.1
 ## explicit; go 1.15
 github.com/oklog/ulid/v2
-# github.com/onsi/ginkgo/v2 v2.28.3
+# github.com/onsi/ginkgo/v2 v2.29.0
 ## explicit; go 1.25.0
 github.com/onsi/ginkgo/v2
 github.com/onsi/ginkgo/v2/config
@@ -763,7 +764,7 @@ google.golang.org/genproto/googleapis/api/httpbody
 google.golang.org/genproto/googleapis/rpc/code
 google.golang.org/genproto/googleapis/rpc/errdetails
 google.golang.org/genproto/googleapis/rpc/status
-# google.golang.org/grpc v1.81.0
+# google.golang.org/grpc v1.81.1
 ## explicit; go 1.25.0
 google.golang.org/grpc
 google.golang.org/grpc/attributes
@@ -880,8 +881,8 @@ gopkg.in/urfave/cli.v1
 # gopkg.in/yaml.v2 v2.4.0
 ## explicit; go 1.15
 gopkg.in/yaml.v2
-# tailscale.com v1.98.1
-## explicit; go 1.26.2
+# tailscale.com v1.98.2
+## explicit; go 1.26.3
 tailscale.com
 tailscale.com/atomicfile
 tailscale.com/client/local

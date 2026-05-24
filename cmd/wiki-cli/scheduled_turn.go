@@ -241,7 +241,7 @@ func (d *poolDaemon) subscribeScheduledTurns(ctx context.Context) error {
 
 	for stream.Receive() {
 		req := stream.Msg()
-		go d.runScheduledTurn(ctx, client, req)
+		d.startScheduledTurn(ctx, client, req)
 	}
 
 	if streamErr := stream.Err(); streamErr != nil {
@@ -256,6 +256,21 @@ func (d *poolDaemon) subscribeScheduledTurns(ctx context.Context) error {
 	return errors.New("scheduled-turn stream closed by server")
 }
 
+func (d *poolDaemon) startScheduledTurn(ctx context.Context, completer apiv1connect.ScheduledTurnServiceClient, req *apiv1.ScheduledTurnRequest) {
+	d.scheduledTurns.Add(1)
+	go func() {
+		defer d.scheduledTurns.Done()
+		// The subscription context is canceled during pool shutdown or
+		// reconnects. In-flight scheduled turns must drain and report their
+		// terminal outcome instead of being converted into shutdown errors.
+		d.runScheduledTurn(context.WithoutCancel(ctx), completer, req)
+	}()
+}
+
+func (d *poolDaemon) waitForScheduledTurns() {
+	d.scheduledTurns.Wait()
+}
+
 // runScheduledTurn handles one scheduled-turn request end-to-end: spawn an
 // ephemeral ACP instance outside the d.instances pool, send a single Prompt
 // with the scheduled-turn preamble, count AgentMessageChunk callbacks for
@@ -268,7 +283,12 @@ func (d *poolDaemon) runScheduledTurn(ctx context.Context, completer apiv1connec
 		"request_id", req.GetRequestId(),
 		"max_turns", req.GetMaxTurns())
 
-	terminalStatus, errMsg := d.executeScheduledTurn(ctx, req)
+	executeScheduledTurn := d.executeScheduledTurn
+	if d.scheduledTurnRunner != nil {
+		executeScheduledTurn = d.scheduledTurnRunner
+	}
+
+	terminalStatus, errMsg := executeScheduledTurn(ctx, req)
 
 	duration := time.Since(start)
 	completeReq := &apiv1.CompleteScheduledTurnRequest{
@@ -277,7 +297,9 @@ func (d *poolDaemon) runScheduledTurn(ctx context.Context, completer apiv1connec
 		ErrorMessage:    errMsg,
 		DurationSeconds: int32(duration / time.Second),
 	}
-	if _, completeErr := completer.CompleteScheduledTurn(ctx, connect.NewRequest(completeReq)); completeErr != nil {
+	completeCtx, cancelComplete := scheduledTurnCompletionContext(ctx)
+	defer cancelComplete()
+	if _, completeErr := completer.CompleteScheduledTurn(completeCtx, connect.NewRequest(completeReq)); completeErr != nil {
 		slog.Error("scheduled turn: complete failed",
 			logKeyPage, req.GetPage(),
 			"request_id", req.GetRequestId(),
@@ -288,6 +310,10 @@ func (d *poolDaemon) runScheduledTurn(ctx context.Context, completer apiv1connec
 		"request_id", req.GetRequestId(),
 		"terminal", terminalStatus.String(),
 		"duration_seconds", completeReq.DurationSeconds)
+}
+
+func scheduledTurnCompletionContext(ctx context.Context) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
 }
 
 // executeScheduledTurn does the real work: spawn a fresh ephemeral ACP

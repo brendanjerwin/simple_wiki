@@ -89,7 +89,7 @@
         "./scripts/run_storybook_build.sh"
       ],
       "e2e:test": [
-        "./scripts/run_e2e_test.sh"
+        "./scripts/run_e2e_test.sh $@"
       ],
       "e2e:test:headed": [
         "./scripts/run_e2e_test_headed.sh"

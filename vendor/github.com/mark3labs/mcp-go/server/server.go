@@ -15,7 +15,9 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
 	"github.com/mark3labs/mcp-go/mcp"
+	"github.com/mark3labs/mcp-go/tracing"
 )
 
 // resourceEntry holds both a resource and its handler
@@ -216,6 +218,9 @@ type MCPServer struct {
 	inflightCancels            sync.Map             // Maps request ID -> context.CancelFunc for in-flight requests
 	inputValidator             *inputSchemaValidator
 	outputValidator            *outputSchemaValidator
+	strictInputSchemaDefault   bool
+	tracer                     tracing.Tracer
+	propagator                 tracing.Propagator
 }
 
 // WithPaginationLimit sets the pagination limit for the server.
@@ -410,6 +415,28 @@ func WithInputSchemaValidation() ServerOption {
 		if s.inputValidator == nil {
 			s.inputValidator = newInputSchemaValidator()
 		}
+	}
+}
+
+// WithStrictInputSchemaDefault sets additionalProperties:false on every
+// registered tool's input schema when the tool author has not configured the
+// field explicitly. Tools published by such a server reject unknown property
+// names — at the client (which sees the strict schema in tools/list) and at
+// the server when [WithInputSchemaValidation] is also enabled.
+//
+// Tools that supply [mcp.Tool.RawInputSchema] are not modified: those authors
+// have opted out of the structured-schema helpers and own additionalProperties
+// themselves. Tools that explicitly call
+// [mcp.WithSchemaAdditionalProperties] are left untouched, so a single tool
+// can opt back into permissive behaviour while the server default stays
+// strict.
+//
+// The option is independent of [WithInputSchemaValidation]: setting strict
+// schemas without server-side enforcement still steers schema-aware clients
+// and language models away from unknown arguments.
+func WithStrictInputSchemaDefault() ServerOption {
+	return func(s *MCPServer) {
+		s.strictInputSchemaDefault = true
 	}
 }
 
@@ -621,6 +648,8 @@ func NewMCPServer(
 			tasks:       nil,
 			completions: nil,
 		},
+		tracer:     tracing.NoopTracer(),
+		propagator: tracing.NoopPropagator(),
 	}
 
 	for _, opt := range opts {
@@ -690,15 +719,15 @@ func (s *MCPServer) DeleteResources(uris ...string) {
 }
 
 // ListResources returns a copy of the registered resources map.
-func (s *MCPServer) ListResources() map[string]ServerResource {
+func (s *MCPServer) ListResources() map[string]*ServerResource {
 	s.resourcesMu.RLock()
 	defer s.resourcesMu.RUnlock()
 	if len(s.resources) == 0 {
 		return nil
 	}
-	resourcesCopy := make(map[string]ServerResource, len(s.resources))
+	resourcesCopy := make(map[string]*ServerResource, len(s.resources))
 	for uri, entry := range s.resources {
-		resourcesCopy[uri] = ServerResource{
+		resourcesCopy[uri] = &ServerResource{
 			Resource: entry.resource,
 			Handler:  entry.handler,
 		}
@@ -810,20 +839,38 @@ func (s *MCPServer) DeletePrompts(names ...string) {
 }
 
 // ListPrompts returns a copy of the registered prompts map.
-func (s *MCPServer) ListPrompts() map[string]ServerPrompt {
+func (s *MCPServer) ListPrompts() map[string]*ServerPrompt {
 	s.promptsMu.RLock()
 	defer s.promptsMu.RUnlock()
 	if len(s.prompts) == 0 {
 		return nil
 	}
-	promptsCopy := make(map[string]ServerPrompt, len(s.prompts))
+	promptsCopy := make(map[string]*ServerPrompt, len(s.prompts))
 	for name, prompt := range s.prompts {
-		promptsCopy[name] = ServerPrompt{
+		promptsCopy[name] = &ServerPrompt{
 			Prompt:  prompt,
 			Handler: s.promptHandlers[name],
 		}
 	}
 	return promptsCopy
+}
+
+// applyStrictInputSchemaDefault fills in additionalProperties:false on a
+// registered tool's structured input schema when WithStrictInputSchemaDefault
+// is set and the author has not configured the field. Tools that ship a
+// RawInputSchema are skipped — those bypass the structured-schema helpers
+// and own additionalProperties themselves.
+func (s *MCPServer) applyStrictInputSchemaDefault(tool *mcp.Tool) {
+	if !s.strictInputSchemaDefault {
+		return
+	}
+	if len(tool.RawInputSchema) > 0 {
+		return
+	}
+	if tool.InputSchema.AdditionalProperties != nil {
+		return
+	}
+	tool.InputSchema.AdditionalProperties = false
 }
 
 // AddTool registers a new tool and its handler
@@ -887,6 +934,7 @@ func (s *MCPServer) AddTools(tools ...ServerTool) {
 			s.toolsMu.Unlock()
 			panic(fmt.Sprintf("tool name '%s' already registered as task tool", name))
 		}
+		s.applyStrictInputSchemaDefault(&entry.Tool)
 		s.tools[name] = entry
 	}
 	s.toolsMu.Unlock()
@@ -910,6 +958,7 @@ func (s *MCPServer) AddTaskTools(taskTools ...ServerTaskTool) {
 			s.toolsMu.Unlock()
 			panic(fmt.Sprintf("task tool name '%s' already registered as regular tool", name))
 		}
+		s.applyStrictInputSchemaDefault(&entry.Tool)
 		s.taskTools[name] = entry
 	}
 	s.toolsMu.Unlock()
@@ -934,6 +983,7 @@ func (s *MCPServer) SetTools(tools ...ServerTool) {
 			s.toolsMu.Unlock()
 			panic(fmt.Sprintf("tool name '%s' already registered as task tool", name))
 		}
+		s.applyStrictInputSchemaDefault(&entry.Tool)
 		newTools[name] = entry
 	}
 	s.tools = newTools
@@ -967,7 +1017,10 @@ func (s *MCPServer) ListTools() map[string]*ServerTool {
 	// Create a copy to prevent external modification
 	toolsCopy := make(map[string]*ServerTool, len(s.tools))
 	for name, tool := range s.tools {
-		toolsCopy[name] = &tool
+		toolsCopy[name] = &ServerTool{
+			Tool:    tool.Tool,
+			Handler: tool.Handler,
+		}
 	}
 	return toolsCopy
 }
@@ -1048,7 +1101,7 @@ func (s *MCPServer) handleInitialize(
 	}
 
 	if s.capabilities.sampling != nil && *s.capabilities.sampling {
-		capabilities.Sampling = &struct{}{}
+		capabilities.Sampling = &mcp.SamplingCapability{}
 	}
 
 	if s.capabilities.elicitation != nil && *s.capabilities.elicitation {
@@ -1140,6 +1193,77 @@ func (s *MCPServer) handlePing(
 	_ any,
 	_ mcp.PingRequest,
 ) (*mcp.EmptyResult, *requestError) {
+	return &mcp.EmptyResult{}, nil
+}
+
+// handleSubscribe processes a resources/subscribe request. Servers that opt in
+// to the resources.subscribe capability via WithResourceCapabilities must
+// accept this request; otherwise it is rejected as unsupported. The default
+// implementation only validates input and acknowledges the request. Users that
+// need to react to subscriptions (for example to track which sessions should
+// receive notifications/resources/updated) should register Hooks.AddBeforeSubscribe
+// or Hooks.AddAfterSubscribe, or implement an optional SessionWithResourceSubscriptions
+// interface on their ClientSession.
+func (s *MCPServer) handleSubscribe(
+	ctx context.Context,
+	id any,
+	request mcp.SubscribeRequest,
+) (*mcp.EmptyResult, *requestError) {
+	if s.capabilities.resources == nil || !s.capabilities.resources.subscribe {
+		return nil, &requestError{
+			id:   id,
+			code: mcp.METHOD_NOT_FOUND,
+			err:  fmt.Errorf("resources subscribe %w", ErrUnsupported),
+		}
+	}
+	if request.Params.URI == "" {
+		return nil, &requestError{
+			id:   id,
+			code: mcp.INVALID_PARAMS,
+			err:  errors.New("uri is required"),
+		}
+	}
+
+	if session := ClientSessionFromContext(ctx); session != nil {
+		if subs, ok := session.(SessionWithResourceSubscriptions); ok {
+			subs.SubscribeToResource(request.Params.URI)
+		}
+	}
+
+	return &mcp.EmptyResult{}, nil
+}
+
+// handleUnsubscribe processes a resources/unsubscribe request. The default
+// implementation validates input, removes any tracked subscription on the
+// current session if it implements SessionWithResourceSubscriptions, and
+// acknowledges the request. Unsubscribing a URI that was never subscribed to
+// is treated as a no-op for spec compatibility.
+func (s *MCPServer) handleUnsubscribe(
+	ctx context.Context,
+	id any,
+	request mcp.UnsubscribeRequest,
+) (*mcp.EmptyResult, *requestError) {
+	if s.capabilities.resources == nil || !s.capabilities.resources.subscribe {
+		return nil, &requestError{
+			id:   id,
+			code: mcp.METHOD_NOT_FOUND,
+			err:  fmt.Errorf("resources unsubscribe %w", ErrUnsupported),
+		}
+	}
+	if request.Params.URI == "" {
+		return nil, &requestError{
+			id:   id,
+			code: mcp.INVALID_PARAMS,
+			err:  errors.New("uri is required"),
+		}
+	}
+
+	if session := ClientSessionFromContext(ctx); session != nil {
+		if subs, ok := session.(SessionWithResourceSubscriptions); ok {
+			subs.UnsubscribeFromResource(request.Params.URI)
+		}
+	}
+
 	return &mcp.EmptyResult{}, nil
 }
 
@@ -1890,6 +2014,12 @@ func (s *MCPServer) executeTaskTool(
 	taskTool ServerTaskTool,
 	request mcp.CallToolRequest,
 ) {
+	defer func() {
+		if r := recover(); r != nil {
+			s.completeTask(entry, nil, fmt.Errorf("panic in task tool handler %s: %v", request.Params.Name, r))
+		}
+	}()
+
 	// Create cancellable context for this task execution
 	taskCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -2079,7 +2209,7 @@ func (s *MCPServer) handleNotification(
 	notification mcp.JSONRPCNotification,
 ) mcp.JSONRPCMessage {
 	// Handle cancellation notifications per MCP spec
-	if notification.Method == "notifications/cancelled" {
+	if notification.Method == string(mcp.MethodNotificationCancelled) {
 		if reqID, ok := notification.Params.AdditionalFields["requestId"]; ok {
 			key := inflightKey(ctx, reqID)
 			if cancel, loaded := s.inflightCancels.LoadAndDelete(key); loaded {
@@ -2603,25 +2733,22 @@ func (s *MCPServer) cancelTask(ctx context.Context, taskID string) error {
 	return nil
 }
 
-// scheduleTaskCleanup schedules a task for cleanup after its TTL expires.
+// scheduleTaskCleanup removes the task from storage after its TTL expires so
+// clients have the full TTL window to retrieve results.
 func (s *MCPServer) scheduleTaskCleanup(taskID string, ttlMs int64) {
 	time.Sleep(time.Duration(ttlMs) * time.Millisecond)
 
 	s.tasksMu.Lock()
 	delete(s.tasks, taskID)
-	// Record that this task expired for better error messages
-	// Keep the tombstone for 5 minutes to allow clients to distinguish
-	// between "not found" and "expired"
 	s.expiredTasks[taskID] = time.Now()
 	s.tasksMu.Unlock()
 
-	// Clean up the tombstone after 5 minutes
-	go func() {
-		time.Sleep(5 * time.Minute)
+	// Remove tombstone after 5 minutes.
+	time.AfterFunc(5*time.Minute, func() {
 		s.tasksMu.Lock()
 		delete(s.expiredTasks, taskID)
 		s.tasksMu.Unlock()
-	}()
+	})
 }
 
 // sendTaskStatusNotification sends a notification when a task's status changes.

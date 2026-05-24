@@ -49,6 +49,7 @@ See [[help-hashtags]] and [[help-search]] for the full grammar.
 - [[help-caldav]] — Bidirectional checklist sync with native task apps (Apple Reminders, DAVx5)
 - [[help-google-keep]] — Per-user Google Keep bridge (unofficial — read trust model)
 - [[help-hashtags]] — Page-level hashtag tagging
+- [[help-handling-large-pages]] — Strategies for trimming, splitting, and navigating large pages
 - [[help-macro-blog]] — Blog macro for publishing articles
 - [[help-macro-checklist]] — Checklist macro for interactive task lists
 - [[help-macro-survey]] — Survey macro for collecting per-user responses

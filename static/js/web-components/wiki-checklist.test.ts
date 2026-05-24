@@ -18,6 +18,7 @@ import type { ChecklistItem } from '../gen/api/v1/checklist_pb.js';
 import { makeChecklist, makeChecklistItem } from './checklist-test-fixtures.js';
 
 interface WikiChecklistInternal {
+  fetchData(): Promise<void>;
   _handleItemDragStart(e: DragEvent, index: number): void;
   _handleItemDragOver(e: DragEvent, index: number): void;
   _handleItemDragLeave(e: DragEvent): void;
@@ -899,6 +900,7 @@ describe('WikiChecklist', () => {
     let listItemsStub: SinonStub;
     let requestedPage: string;
     let requestedListName: string;
+    let requestedPageSize: number;
 
     beforeEach(async () => {
       sinon.restore();
@@ -914,6 +916,7 @@ describe('WikiChecklist', () => {
       items = el.items;
       requestedPage = (listItemsStub.getCall(0).args[0] as { page: string }).page;
       requestedListName = (listItemsStub.getCall(0).args[0] as { listName: string }).listName;
+      requestedPageSize = (listItemsStub.getCall(0).args[0] as { pageSize: number }).pageSize;
     });
 
     it('should call listItems', () => {
@@ -926,6 +929,10 @@ describe('WikiChecklist', () => {
 
     it('should request the configured listName', () => {
       expect(requestedListName).to.equal('grocery_list');
+    });
+
+    it('should request a bounded page size', () => {
+      expect(requestedPageSize).to.equal(500);
     });
 
     it('should populate items from response', () => {
@@ -942,6 +949,104 @@ describe('WikiChecklist', () => {
 
     it('should clear loading state', () => {
       expect(el.loading).to.be.false;
+    });
+  });
+
+  describe('when ListItems returns multiple pages', () => {
+    let listItemsStub: SinonStub;
+    let items: ChecklistItem[];
+    let secondPageToken: string;
+
+    beforeEach(async () => {
+      sinon.restore();
+      el.remove();
+      el = buildElement();
+      stubWatchList(el);
+
+      const firstChecklist = makeChecklist({
+        name: 'grocery_list',
+        items: [makeChecklistItem({ text: 'Milk' })],
+      });
+      const secondChecklist = makeChecklist({
+        name: 'grocery_list',
+        items: [makeChecklistItem({ text: 'Eggs' })],
+      });
+      listItemsStub = sinon.stub(el.client, 'listItems');
+      listItemsStub.onCall(0).resolves(create(ListItemsResponseSchema, {
+        checklist: firstChecklist,
+        nextPageToken: '1',
+      }));
+      listItemsStub.onCall(1).resolves(create(ListItemsResponseSchema, {
+        checklist: secondChecklist,
+      }));
+
+      document.body.appendChild(el);
+      await waitUntil(
+        () => el.items.length === 2,
+        'all checklist pages should be loaded',
+        { timeout: 2000 },
+      );
+      await el.updateComplete;
+
+      items = el.items;
+      secondPageToken = (listItemsStub.getCall(1).args[0] as { pageToken: string }).pageToken;
+    });
+
+    it('should request the second page', () => {
+      expect(listItemsStub).to.have.been.calledTwice;
+    });
+
+    it('should pass the continuation token', () => {
+      expect(secondPageToken).to.equal('1');
+    });
+
+    it('should render items from all pages', () => {
+      expect(items.map(item => item.text)).to.deep.equal(['Milk', 'Eggs']);
+    });
+  });
+
+  describe('when an older ListItems request finishes after a newer request', () => {
+    let listItemsStub: SinonStub;
+    let firstResolve: (response: unknown) => void;
+    let items: ChecklistItem[];
+
+    beforeEach(async () => {
+      sinon.restore();
+      el.remove();
+      el = buildElement();
+      stubWatchList(el);
+
+      const firstResponse = create(ListItemsResponseSchema, {
+        checklist: makeChecklist({
+          name: 'grocery_list',
+          items: [makeChecklistItem({ text: 'Old milk' })],
+          updatedAtMs: 1700_000_000_000,
+        }),
+      });
+      const secondResponse = create(ListItemsResponseSchema, {
+        checklist: makeChecklist({
+          name: 'grocery_list',
+          items: [makeChecklistItem({ text: 'Fresh eggs' })],
+          updatedAtMs: 1700_000_001_000,
+        }),
+      });
+      const firstPromise = new Promise(resolve => { firstResolve = resolve; });
+      listItemsStub = sinon.stub(el.client, 'listItems');
+      listItemsStub.onCall(0).returns(firstPromise);
+      listItemsStub.onCall(1).resolves(secondResponse);
+
+      document.body.appendChild(el);
+      await waitUntil(() => listItemsStub.calledOnce, 'initial fetch should start');
+      await (el as unknown as WikiChecklistInternal).fetchData();
+      firstResolve(firstResponse);
+      await new Promise(resolve => setTimeout(resolve, 0));
+      await el.updateComplete;
+
+      items = el.items;
+    });
+
+    it('should keep the newer items', () => {
+      expect(items.map(item => item.text)).to.deep.equal(['Fresh eggs']);
     });
   });
 

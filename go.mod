@@ -1,6 +1,6 @@
 module github.com/brendanjerwin/simple_wiki
 
-go 1.26.2
+go 1.26.3
 
 require (
 	connectrpc.com/connect v1.19.2
@@ -8,7 +8,7 @@ require (
 	connectrpc.com/vanguard v0.4.0
 	github.com/adrg/frontmatter v0.2.0
 	github.com/blevesearch/bleve v1.0.14
-	github.com/coder/acp-go-sdk v0.12.2
+	github.com/coder/acp-go-sdk v0.13.0
 	github.com/emersion/go-ical v0.0.0-20250609112844-439c63cef608
 	github.com/gabriel-vasile/mimetype v1.4.13
 	github.com/gin-contrib/multitemplate v1.1.1
@@ -19,11 +19,11 @@ require (
 	github.com/jcelliott/lumber v0.0.0-20160324203708-dd349441af25
 	github.com/k3a/html2text v1.4.0
 	github.com/karalabe/usb v0.0.2
-	github.com/mark3labs/mcp-go v0.52.0
+	github.com/mark3labs/mcp-go v0.54.0
 	github.com/mborders/artifex v0.5.1
 	github.com/microcosm-cc/bluemonday v1.0.27
 	github.com/oklog/ulid/v2 v2.1.1
-	github.com/onsi/ginkgo/v2 v2.28.3
+	github.com/onsi/ginkgo/v2 v2.29.0
 	github.com/onsi/gomega v1.40.0
 	github.com/pelletier/go-toml/v2 v2.3.1
 	github.com/redpanda-data/protoc-gen-go-mcp v0.0.0-20250930092048-a98b94b5957a
@@ -42,11 +42,11 @@ require (
 	go.opentelemetry.io/otel/sdk/metric v1.43.0
 	go.opentelemetry.io/otel/trace v1.43.0
 	golang.org/x/text v0.37.0
-	google.golang.org/grpc v1.81.0
+	google.golang.org/grpc v1.81.1
 	google.golang.org/protobuf v1.36.11
 	gopkg.in/urfave/cli.v1 v1.20.0
 	gopkg.in/yaml.v2 v2.4.0
-	tailscale.com v1.98.1
+	tailscale.com v1.98.2
 )
 
 require (

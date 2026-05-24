@@ -66,7 +66,14 @@ jobs:
       - name: Check out code
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
+      - name: Set up Go for pull request build
+        if: github.event_name == 'pull_request'
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+        with:
+          go-version-file: go.mod
+
       - uses: jetify-com/devbox-install-action@a0d2d53632934ae004f878c840055956d9f741b0 # v0.14.0
+        if: github.event_name != 'pull_request'
 
       - name: Download signed XPI
         if: needs.sign-extension.result == 'success'
@@ -79,7 +86,11 @@ jobs:
         env:
           SIGNED_XPI_PATH: ${{ github.workspace }}/signed-xpi-artifact/simple-wiki-companion.xpi
         run: |
-          devbox run build ${{ matrix.goos }} ${{ matrix.goarch }}
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            ./scripts/build.sh ${{ matrix.goos }} ${{ matrix.goarch }} true
+          else
+            devbox run build ${{ matrix.goos }} ${{ matrix.goarch }}
+          fi
 
       - name: Upload Action Artifact
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2

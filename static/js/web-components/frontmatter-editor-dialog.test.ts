@@ -136,6 +136,39 @@ describe('FrontmatterEditorDialog', () => {
     });
   });
 
+  describe('when Tab is pressed from the cancel button', () => {
+    let tabEvent: KeyboardEvent;
+    let saveButton: HTMLButtonElement | null | undefined;
+
+    beforeEach(async () => {
+      el.openDialog('test-page');
+      await Promise.race([
+        el.updateComplete,
+        timeout(5000, 'Component update timed out'),
+      ]);
+
+      const cancelButton = el.shadowRoot?.querySelector<HTMLButtonElement>('button.button-secondary');
+      saveButton = el.shadowRoot?.querySelector<HTMLButtonElement>('button.button-primary');
+
+      cancelButton?.focus();
+      tabEvent = new KeyboardEvent('keydown', {
+        key: 'Tab',
+        bubbles: true,
+        composed: true,
+        cancelable: true,
+      });
+      cancelButton?.dispatchEvent(tabEvent);
+    });
+
+    it('should prevent native focus from escaping the dialog', () => {
+      expect(tabEvent.defaultPrevented).to.equal(true);
+    });
+
+    it('should move focus to the save button', () => {
+      expect(el.shadowRoot?.activeElement).to.equal(saveButton);
+    });
+  });
+
   describe('when Escape key is pressed while dialog is open', () => {
     let closeDialogSpy: sinon.SinonSpy;
 

@@ -119,6 +119,33 @@ export class ErrorDisplay extends LitElement {
       border-radius: 2px;
     }
 
+    .error-tools {
+      margin-top: 6px;
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+
+    .copy-details-button {
+      background: none;
+      border: none;
+      cursor: pointer;
+      padding: 2px 0;
+      text-decoration: underline;
+      transition: color 0.2s ease;
+    }
+
+    .copy-details-button:hover {
+      color: var(--color-hover-error);
+    }
+
+    .copy-details-button:focus {
+      outline: 2px solid var(--color-error);
+      outline-offset: 1px;
+      border-radius: 2px;
+    }
+
     .expand-icon {
       font-size: 10px;
       transition: transform 0.2s ease;
@@ -132,6 +159,18 @@ export class ErrorDisplay extends LitElement {
       margin-top: 12px;
       display: flex;
       gap: 8px;
+    }
+
+    .copy-details-fallback {
+      width: 100%;
+      min-height: 120px;
+      margin-top: 12px;
+      padding: 8px;
+      border: 1px solid rgba(220, 53, 69, 0.3);
+      border-radius: 4px;
+      background: rgba(220, 53, 69, 0.1);
+      resize: vertical;
+      white-space: pre;
     }
 
     .action-button {
@@ -178,9 +217,23 @@ export class ErrorDisplay extends LitElement {
   @state()
   declare private expanded: boolean;
 
+  @state()
+  declare private copied: boolean;
+
+  @state()
+  declare private fallbackCopyDetails: string | undefined;
+
+  private copyConfirmationTimer: ReturnType<typeof setTimeout> | undefined;
+
   constructor() {
     super();
     this.expanded = false;
+    this.copied = false;
+  }
+
+  override disconnectedCallback(): void {
+    super.disconnectedCallback();
+    this.clearCopyConfirmationTimer();
   }
 
   private _handleExpandToggle(): void {
@@ -200,25 +253,75 @@ export class ErrorDisplay extends LitElement {
     }
   }
 
+  private async _handleCopyDetailsClick(): Promise<void> {
+    const details = this.augmentedError?.copyableDetails;
+    if (!details) {
+      return;
+    }
+
+    const clipboard = navigator.clipboard;
+    if (clipboard && 'writeText' in clipboard) {
+      try {
+        await clipboard.writeText(details);
+        this.showCopyConfirmation();
+        return;
+      } catch {
+        this.showFallbackCopyDetails(details);
+        return;
+      }
+    }
+
+    this.showFallbackCopyDetails(details);
+  }
+
+  private showCopyConfirmation(): void {
+    this.fallbackCopyDetails = undefined;
+    this.copied = true;
+    this.clearCopyConfirmationTimer();
+    this.copyConfirmationTimer = setTimeout(() => {
+      this.copied = false;
+    }, 1500);
+  }
+
+  private clearCopyConfirmationTimer(): void {
+    if (this.copyConfirmationTimer) {
+      clearTimeout(this.copyConfirmationTimer);
+      this.copyConfirmationTimer = undefined;
+    }
+  }
+
+  private showFallbackCopyDetails(details: string): void {
+    this.fallbackCopyDetails = details;
+    void this.updateComplete.then(() => {
+      const textarea = this.shadowRoot?.querySelector<HTMLTextAreaElement>('.copy-details-fallback');
+      textarea?.focus();
+      textarea?.select();
+    });
+  }
+
   private _renderDetails(hasDetails: boolean) {
     if (!hasDetails) {
-      return nothing;
+      return this._renderCopyDetailsButton();
     }
 
     const expandLabel = this.expanded ? 'Hide' : 'Show';
     const expandIconClass = this.expanded ? 'expand-icon expanded' : 'expand-icon';
 
     return html`
-      <button
-        class="expand-button text-error font-mono text-xs"
-        @click="${this._handleExpandToggle}"
-        @keydown="${this._handleKeydown}"
-        aria-expanded="${this.expanded}"
-        aria-controls="error-details"
-      >
-        ${expandLabel} details
-        <span class="${expandIconClass}" aria-hidden="true">▼</span>
-      </button>
+      <div class="error-tools">
+        <button
+          class="expand-button text-error font-mono text-xs"
+          @click="${this._handleExpandToggle}"
+          @keydown="${this._handleKeydown}"
+          aria-expanded="${this.expanded}"
+          aria-controls="error-details"
+        >
+          ${expandLabel} details
+          <span class="${expandIconClass}" aria-hidden="true">▼</span>
+        </button>
+
+        ${this._renderCopyDetailsButton()}
+      </div>
 
       <div
         id="error-details"
@@ -227,6 +330,32 @@ export class ErrorDisplay extends LitElement {
       >
         <div class="error-details-content text-muted font-mono text-xs">${this.augmentedError?.stack}</div>
       </div>
+    `;
+  }
+
+  private _renderCopyDetailsButton() {
+    return html`
+      <button
+        type="button"
+        class="copy-details-button text-error font-mono text-xs"
+        @click="${this._handleCopyDetailsClick}"
+      >
+        ${this.copied ? 'Copied!' : 'Copy details'}
+      </button>
+    `;
+  }
+
+  private _renderFallbackCopyDetails() {
+    if (!this.fallbackCopyDetails) {
+      return nothing;
+    }
+
+    return html`
+      <textarea
+        class="copy-details-fallback text-muted font-mono text-xs"
+        readonly
+        .value="${this.fallbackCopyDetails}"
+      ></textarea>
     `;
   }
 
@@ -273,6 +402,8 @@ export class ErrorDisplay extends LitElement {
             ${this._renderDetails(hasDetails)}
 
             ${this._renderAction()}
+
+            ${this._renderFallbackCopyDetails()}
           </div>
         </div>
       </div>

@@ -477,6 +477,270 @@ var _ = Describe("Mutator", func() {
 				Expect(list.Tombstones[0].SyncToken).To(Equal(list.SyncToken))
 			})
 		})
+
+		When("the item has a future deadline tag", func() {
+			var (
+				deleteErr error
+				list      *apiv1.Checklist
+				futureUID string
+			)
+
+			BeforeEach(func() {
+				futureItem, _, err := mutator.AddItem(ctx, "p", "list", checklistmutator.AddItemArgs{
+					Text: "Do not delete yet",
+					Tags: []string{"deadline:2026-04-30"},
+				}, agent)
+				Expect(err).NotTo(HaveOccurred())
+				futureUID = futureItem.Uid
+
+				_, deleteErr = mutator.DeleteItem(ctx, "p", "list", futureItem.Uid, nil, agent)
+				list, err = mutator.ListItems(ctx, "p", "list")
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should reject the deletion", func() {
+				Expect(status.Code(deleteErr)).To(Equal(codes.FailedPrecondition))
+			})
+
+			It("should describe the blocking deadline tag", func() {
+				Expect(deleteErr).To(MatchError(ContainSubstring("deadline:2026-04-30")))
+			})
+
+			It("should keep the item", func() {
+				Expect(list.Items).To(ContainElement(HaveField("Uid", futureUID)))
+			})
+		})
+
+		When("the item has today's deadline tag", func() {
+			var (
+				list      *apiv1.Checklist
+				deleteErr error
+			)
+
+			BeforeEach(func() {
+				todayItem, _, err := mutator.AddItem(ctx, "p", "list", checklistmutator.AddItemArgs{
+					Text: "Due today",
+					Tags: []string{"deadline:2026-04-25"},
+				}, agent)
+				Expect(err).NotTo(HaveOccurred())
+
+				list, deleteErr = mutator.DeleteItem(ctx, "p", "list", todayItem.Uid, nil, agent)
+			})
+
+			It("should allow the deletion", func() {
+				Expect(deleteErr).NotTo(HaveOccurred())
+			})
+
+			It("should tombstone the deleted item", func() {
+				Expect(list.Tombstones).NotTo(BeEmpty())
+			})
+		})
+	})
+
+	Describe("DeduplicateItems", func() {
+		When("the list has duplicate open items with matching trimmed text", func() {
+			var (
+				list         *apiv1.Checklist
+				removedCount int
+				err          error
+				removedUID   string
+			)
+
+			BeforeEach(func() {
+				store.pages["p"] = wikipage.FrontMatter{
+					"checklists": map[string]any{
+						"list": map[string]any{
+							"items": []any{
+								map[string]any{"text": "30 corn tortillas", "checked": false},
+								map[string]any{"text": "apples", "checked": false},
+								map[string]any{"text": " 30 corn tortillas ", "checked": false},
+							},
+						},
+					},
+				}
+
+				removedCount, list, err = mutator.DeduplicateItems(ctx, "p", "list", checklistmutator.DeduplicateOpenItems, nil, human)
+				if len(list.GetTombstones()) > 0 {
+					removedUID = list.GetTombstones()[0].GetUid()
+				}
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should report the removed duplicate count", func() {
+				Expect(removedCount).To(Equal(1))
+			})
+
+			It("should keep one item for the duplicated text", func() {
+				var matches int
+				for _, item := range list.GetItems() {
+					if item.GetText() == "30 corn tortillas" {
+						matches++
+					}
+				}
+				Expect(matches).To(Equal(1))
+			})
+
+			It("should preserve unrelated items", func() {
+				Expect(list.GetItems()).To(HaveLen(2))
+			})
+
+			It("should record a bulk_dedupe event", func() {
+				events := list.GetEvents()
+				Expect(events[len(events)-1].GetOp()).To(Equal("bulk_dedupe"))
+			})
+
+			It("should record a tombstone for the removed duplicate", func() {
+				Expect(list.GetTombstones()).To(HaveLen(1))
+				Expect(removedUID).NotTo(BeEmpty())
+			})
+
+			It("should stamp the post-bump sync token on the tombstone", func() {
+				Expect(list.GetTombstones()[0].GetSyncToken()).To(Equal(list.GetSyncToken()))
+			})
+
+			It("should record a delete event for the removed duplicate", func() {
+				var deleteEvent *apiv1.ChecklistEvent
+				for _, event := range list.GetEvents() {
+					if event.GetOp() == "delete" {
+						deleteEvent = event
+						break
+					}
+				}
+				Expect(deleteEvent).NotTo(BeNil())
+				Expect(deleteEvent.GetUid()).To(Equal(removedUID))
+			})
+		})
+
+		When("list_name is empty after normalization", func() {
+			var (
+				list         *apiv1.Checklist
+				removedCount int
+				err          error
+			)
+
+			BeforeEach(func() {
+				removedCount, list, err = mutator.DeduplicateItems(ctx, "p", "   ", checklistmutator.DeduplicateOpenItems, nil, human)
+			})
+
+			It("should return InvalidArgument", func() {
+				Expect(status.Code(err)).To(Equal(codes.InvalidArgument))
+			})
+
+			It("should describe the missing list name", func() {
+				Expect(err).To(MatchError(ContainSubstring("list_name is required")))
+			})
+
+			It("should not return a checklist", func() {
+				Expect(list).To(BeNil())
+			})
+
+			It("should not report removals", func() {
+				Expect(removedCount).To(BeZero())
+			})
+		})
+
+		When("the list has duplicate open items with blank trimmed text", func() {
+			var (
+				list         *apiv1.Checklist
+				removedCount int
+				err          error
+			)
+
+			BeforeEach(func() {
+				store.pages["p"] = wikipage.FrontMatter{
+					"checklists": map[string]any{
+						"list": map[string]any{
+							"items": []any{
+								map[string]any{"text": "   ", "checked": false},
+								map[string]any{"text": "\t", "checked": false},
+							},
+						},
+					},
+				}
+
+				removedCount, list, err = mutator.DeduplicateItems(ctx, "p", "list", checklistmutator.DeduplicateOpenItems, nil, human)
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should keep one blank item", func() {
+				Expect(list.GetItems()).To(HaveLen(1))
+			})
+
+			It("should report the removed duplicate count", func() {
+				Expect(removedCount).To(Equal(1))
+			})
+		})
+
+		When("duplicate items are checked and includeChecked is false", func() {
+			var (
+				list         *apiv1.Checklist
+				removedCount int
+				err          error
+			)
+
+			BeforeEach(func() {
+				store.pages["p"] = wikipage.FrontMatter{
+					"checklists": map[string]any{
+						"list": map[string]any{
+							"items": []any{
+								map[string]any{"text": "milk", "checked": true},
+								map[string]any{"text": "milk", "checked": true},
+							},
+						},
+					},
+				}
+
+				removedCount, list, err = mutator.DeduplicateItems(ctx, "p", "list", checklistmutator.DeduplicateOpenItems, nil, human)
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should not remove checked duplicates", func() {
+				Expect(removedCount).To(Equal(0))
+			})
+
+			It("should keep both checked items", func() {
+				Expect(list.GetItems()).To(HaveLen(2))
+			})
+		})
+
+		When("duplicate items are checked and includeChecked is true", func() {
+			var (
+				removedCount int
+				err          error
+			)
+
+			BeforeEach(func() {
+				store.pages["p"] = wikipage.FrontMatter{
+					"checklists": map[string]any{
+						"list": map[string]any{
+							"items": []any{
+								map[string]any{"text": "milk", "checked": true},
+								map[string]any{"text": "milk", "checked": true},
+							},
+						},
+					},
+				}
+
+				removedCount, _, err = mutator.DeduplicateItems(ctx, "p", "list", checklistmutator.DeduplicateAllItems, nil, human)
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should remove checked duplicates", func() {
+				Expect(removedCount).To(Equal(1))
+			})
+		})
 	})
 
 	Describe("sync_token", func() {

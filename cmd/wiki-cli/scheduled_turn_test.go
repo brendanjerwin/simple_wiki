@@ -2,14 +2,24 @@ package main
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
 	"strings"
+	"sync"
 	"sync/atomic"
+	"time"
 
+	"connectrpc.com/connect"
 	acp "github.com/coder/acp-go-sdk"
+
+	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
+	"github.com/brendanjerwin/simple_wiki/gen/go/api/v1/apiv1connect"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
+
+type scheduledTurnContextKey string
 
 // NOTE: Phase 4B end-to-end coverage (full ephemeral-instance spawn + teardown
 // verification) is NOT testable as a unit because it shells out to the real
@@ -259,6 +269,44 @@ var _ = Describe("wildcardMatch", func() {
 
 		It("should return false", func() {
 			Expect(matched).To(BeFalse())
+		})
+	})
+})
+
+var _ = Describe("scheduledTurnCompletionContext", func() {
+	When("the parent context has values and is canceled", func() {
+		var (
+			parentCtx   context.Context
+			parentDone  context.CancelFunc
+			completeCtx context.Context
+			cancel      context.CancelFunc
+		)
+
+		BeforeEach(func() {
+			parentCtx = context.WithValue(context.Background(), scheduledTurnContextKey("trace-id"), "trace-123")
+			parentCtx, parentDone = context.WithCancel(parentCtx)
+			parentDone()
+
+			completeCtx, cancel = scheduledTurnCompletionContext(parentCtx)
+		})
+
+		AfterEach(func() {
+			cancel()
+		})
+
+		It("should preserve context values", func() {
+			Expect(completeCtx.Value(scheduledTurnContextKey("trace-id"))).To(Equal("trace-123"))
+		})
+
+		It("should ignore parent cancellation", func() {
+			Expect(completeCtx.Err()).NotTo(HaveOccurred())
+		})
+
+		It("should have a bounded deadline", func() {
+			deadline, ok := completeCtx.Deadline()
+			Expect(ok).To(BeTrue())
+			Expect(time.Until(deadline)).To(BeNumerically(">", 9*time.Second))
+			Expect(time.Until(deadline)).To(BeNumerically("<=", 10*time.Second))
 		})
 	})
 })
@@ -583,3 +631,165 @@ var _ = Describe("scheduledTurnClient unsupported acp.Client methods", func() {
 		})
 	})
 })
+
+var _ = Describe("poolDaemon scheduled turn shutdown drain", func() {
+	When("the scheduled-turn stream sends one request and closes", func() {
+		var (
+			result    error
+			completed *apiv1.CompleteScheduledTurnRequest
+		)
+
+		BeforeEach(func() {
+			handler := &scheduledTurnStreamer{
+				requests: []*apiv1.ScheduledTurnRequest{
+					{
+						RequestId: "streamed-request",
+						Page:      "heartbeat",
+						Prompt:    "heartbeat",
+					},
+				},
+			}
+			mux := http.NewServeMux()
+			path, h := apiv1connect.NewScheduledTurnServiceHandler(handler)
+			mux.Handle(path, h)
+			server := httptest.NewServer(mux)
+			DeferCleanup(server.Close)
+
+			daemon := &poolDaemon{
+				wikiURL: server.URL,
+				scheduledTurnRunner: func(context.Context, *apiv1.ScheduledTurnRequest) (apiv1.ScheduleStatus, string) {
+					return apiv1.ScheduleStatus_SCHEDULE_STATUS_OK, ""
+				},
+			}
+
+			result = daemon.subscribeScheduledTurns(context.Background())
+			daemon.waitForScheduledTurns()
+			completed = handler.completed
+		})
+
+		It("should return a stream-closed error", func() {
+			Expect(result).To(MatchError(ContainSubstring("stream closed by server")))
+		})
+
+		It("should complete the streamed request", func() {
+			Expect(completed.GetRequestId()).To(Equal("streamed-request"))
+		})
+	})
+
+	When("a scheduled turn is in flight while the subscription context is cancelled", func() {
+		var (
+			daemon       *poolDaemon
+			ctx          context.Context
+			cancel       context.CancelFunc
+			completer    *recordingScheduledTurnCompleter
+			started      chan struct{}
+			release      chan struct{}
+			releaseOnce  sync.Once
+			drained      chan struct{}
+			requestID    string
+			terminalText string
+		)
+
+		BeforeEach(func() {
+			ctx, cancel = context.WithCancel(context.Background())
+			completer = &recordingScheduledTurnCompleter{}
+			started = make(chan struct{})
+			release = make(chan struct{})
+			releaseOnce = sync.Once{}
+			drained = make(chan struct{})
+			requestID = "req-1058"
+			terminalText = ""
+
+			daemon = &poolDaemon{
+				scheduledTurnRunner: func(ctx context.Context, _ *apiv1.ScheduledTurnRequest) (apiv1.ScheduleStatus, string) {
+					close(started)
+					<-release
+					if ctx.Err() != nil {
+						terminalText = ctx.Err().Error()
+						return apiv1.ScheduleStatus_SCHEDULE_STATUS_ERROR, "context was cancelled"
+					}
+					terminalText = "completed"
+					return apiv1.ScheduleStatus_SCHEDULE_STATUS_OK, ""
+				},
+			}
+
+			daemon.startScheduledTurn(ctx, completer, &apiv1.ScheduledTurnRequest{
+				RequestId: requestID,
+				Page:      "heartbeat",
+				Prompt:    "heartbeat",
+			})
+			Eventually(started).Should(BeClosed())
+
+			cancel()
+			go func() {
+				daemon.waitForScheduledTurns()
+				close(drained)
+			}()
+		})
+
+		AfterEach(func() {
+			releaseOnce.Do(func() {
+				close(release)
+			})
+			Eventually(drained).Should(BeClosed())
+		})
+
+		It("should keep waiting for the scheduled turn instead of dropping it", func() {
+			Consistently(drained).ShouldNot(BeClosed())
+		})
+
+		When("the in-flight scheduled turn finishes after shutdown starts", func() {
+			BeforeEach(func() {
+				releaseOnce.Do(func() {
+					close(release)
+				})
+				Eventually(drained).Should(BeClosed())
+			})
+
+			It("should complete with OK instead of a cancellation error", func() {
+				Expect(completer.completed.GetTerminalStatus()).To(Equal(apiv1.ScheduleStatus_SCHEDULE_STATUS_OK))
+			})
+
+			It("should preserve the original request id", func() {
+				Expect(completer.completed.GetRequestId()).To(Equal(requestID))
+			})
+
+			It("should run without a cancelled context", func() {
+				Expect(terminalText).To(Equal("completed"))
+			})
+		})
+	})
+})
+
+type recordingScheduledTurnCompleter struct {
+	completed *apiv1.CompleteScheduledTurnRequest
+}
+
+func (*recordingScheduledTurnCompleter) SubscribeScheduledTurns(context.Context, *connect.Request[apiv1.SubscribeScheduledTurnsRequest]) (*connect.ServerStreamForClient[apiv1.ScheduledTurnRequest], error) {
+	return nil, nil
+}
+
+func (c *recordingScheduledTurnCompleter) CompleteScheduledTurn(_ context.Context, req *connect.Request[apiv1.CompleteScheduledTurnRequest]) (*connect.Response[apiv1.CompleteScheduledTurnResponse], error) {
+	c.completed = req.Msg
+	return connect.NewResponse(&apiv1.CompleteScheduledTurnResponse{}), nil
+}
+
+type scheduledTurnStreamer struct {
+	apiv1connect.UnimplementedScheduledTurnServiceHandler
+	requests  []*apiv1.ScheduledTurnRequest
+	completed *apiv1.CompleteScheduledTurnRequest
+}
+
+func (h *scheduledTurnStreamer) SubscribeScheduledTurns(_ context.Context, _ *connect.Request[apiv1.SubscribeScheduledTurnsRequest], stream *connect.ServerStream[apiv1.ScheduledTurnRequest]) error {
+	for _, req := range h.requests {
+		if err := stream.Send(req); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (h *scheduledTurnStreamer) CompleteScheduledTurn(_ context.Context, req *connect.Request[apiv1.CompleteScheduledTurnRequest]) (*connect.Response[apiv1.CompleteScheduledTurnResponse], error) {
+	h.completed = req.Msg
+	return connect.NewResponse(&apiv1.CompleteScheduledTurnResponse{}), nil
+}
