@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
@@ -169,7 +170,7 @@ func (s *AgentChatContextStore) AppendBackgroundActivitySummary(page, scheduleID
 	if err := s.pages.WriteFrontMatter(id, fm); err != nil {
 		return nil, fmt.Errorf(errWriteFrontmatterFmt, page, err)
 	}
-	return existing.BackgroundActivity[target], nil
+	return proto.CloneOf(existing.BackgroundActivity[target]), nil
 }
 
 // CompleteBackgroundActivity updates the most recent entry for scheduleID with

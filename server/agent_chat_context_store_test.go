@@ -171,6 +171,50 @@ var _ = Describe("AgentChatContextStore", func() {
 	})
 
 	Describe("AppendBackgroundActivitySummary error handling", func() {
+		Describe("when ReadFrontMatter returns an error", func() {
+			var err error
+
+			BeforeEach(func() {
+				errStore := &errorPageStore{readErr: errors.New("disk on fire")}
+				bad := server.NewAgentChatContextStore(errStore)
+				_, err = bad.AppendBackgroundActivitySummary("p", "weekly", "drafted weekend order")
+			})
+
+			It("should return an error", func() {
+				Expect(err).To(HaveOccurred())
+			})
+
+			It("should wrap the error with read frontmatter context", func() {
+				Expect(err.Error()).To(ContainSubstring("read frontmatter"))
+			})
+		})
+
+		Describe("when frontmatter contains an invalid chat context", func() {
+			var err error
+
+			BeforeEach(func() {
+				errStore := &errorPageStore{
+					fm: wikipage.FrontMatter{
+						"agent": map[string]any{
+							"chat_context": map[string]any{
+								"user_goals": map[string]any{"unexpected": "shape"},
+							},
+						},
+					},
+				}
+				bad := server.NewAgentChatContextStore(errStore)
+				_, err = bad.AppendBackgroundActivitySummary("p", "weekly", "drafted weekend order")
+			})
+
+			It("should return an error", func() {
+				Expect(err).To(HaveOccurred())
+			})
+
+			It("should describe the malformed JSON", func() {
+				Expect(err.Error()).To(ContainSubstring("syntax error"))
+			})
+		})
+
 		Describe("when WriteFrontMatter returns an error after a matching entry is found", func() {
 			var err error
 
