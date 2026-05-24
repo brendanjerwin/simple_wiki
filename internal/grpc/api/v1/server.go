@@ -9,6 +9,7 @@ import (
 	"github.com/brendanjerwin/simple_wiki/filestore"
 	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
 	"github.com/brendanjerwin/simple_wiki/index/bleve"
+	"github.com/brendanjerwin/simple_wiki/internal/connectors"
 	"github.com/brendanjerwin/simple_wiki/internal/connectors/engine"
 	"github.com/brendanjerwin/simple_wiki/internal/connectors/googlekeep"
 	"github.com/brendanjerwin/simple_wiki/internal/connectors/googletasks"
@@ -122,24 +123,13 @@ type Server struct {
 	agentChatContextStore   AgentChatContextStore
 	checklistMutator        *checklistmutator.Mutator
 
-	// Google Keep: engine path. The legacy Keep sync package has
-	// been deleted (Phase 5-B); the engine, adapter, binding store,
-	// and credential store collaborate to satisfy the gRPC
-	// ConnectorService surface.
-	keepEngine          *engine.Engine
-	keepAdapter         *googlekeep.KeepAdapter
-	keepBindingStore    engine.BindingStore
-	keepCredentialStore *googlekeep.FrontmatterCredentialStore
+	// Connector runtimes contain the polymorphic engine-path wiring
+	// used by ConnectorService. Per-kind auth collaborators remain
+	// separate because the auth flows have different shapes.
+	keepConnector       *connectorRuntime
 	keepAuthVerifier    googlekeep.AuthVerifier
-
-	// Google Tasks: Phase 4-3 cutover. The legacy *taskssync.Connector
-	// is gone; the engine, adapter, binding store, and credential
-	// store collaborate to satisfy the gRPC ConnectorService surface.
-	tasksEngine          *engine.Engine
-	tasksAdapter         *googletasks.TasksAdapter
-	tasksBindingStore    engine.BindingStore
-	tasksCredentialStore *googletasks.FrontmatterCredentialStore
-	tasksAuthURLBuilder  TasksAuthURLBuilder
+	tasksConnector      *connectorRuntime
+	tasksAuthURLBuilder TasksAuthURLBuilder
 }
 
 // NewServer creates a new gRPC server with the given dependencies.
@@ -259,10 +249,20 @@ func (s *Server) WithGoogleKeep(
 	bindingStore engine.BindingStore,
 	credentialStore *googlekeep.FrontmatterCredentialStore,
 ) *Server {
-	s.keepEngine = eng
-	s.keepAdapter = adapter
-	s.keepBindingStore = bindingStore
-	s.keepCredentialStore = credentialStore
+	var credentials connectorCredentials
+	if credentialStore != nil {
+		credentials = &keepConnectorCredentials{store: credentialStore}
+	}
+	s.keepConnector = &connectorRuntime{
+		protoKind:      apiv1.ConnectorKind_CONNECTOR_KIND_GOOGLE_KEEP,
+		kind:           connectors.ConnectorKindGoogleKeep,
+		engine:         eng,
+		adapter:        adapter,
+		bindingStore:   bindingStore,
+		credentials:    credentials,
+		mapErr:         mapKeepConnectorErr,
+		bindingToProto: keepBindingToProto,
+	}
 	return s
 }
 
@@ -293,10 +293,20 @@ func (s *Server) WithGoogleTasks(
 	bindingStore engine.BindingStore,
 	credentialStore *googletasks.FrontmatterCredentialStore,
 ) *Server {
-	s.tasksEngine = eng
-	s.tasksAdapter = adapter
-	s.tasksBindingStore = bindingStore
-	s.tasksCredentialStore = credentialStore
+	var credentials connectorCredentials
+	if credentialStore != nil {
+		credentials = &tasksConnectorCredentials{store: credentialStore}
+	}
+	s.tasksConnector = &connectorRuntime{
+		protoKind:      apiv1.ConnectorKind_CONNECTOR_KIND_GOOGLE_TASKS,
+		kind:           connectors.ConnectorKindGoogleTasks,
+		engine:         eng,
+		adapter:        adapter,
+		bindingStore:   bindingStore,
+		credentials:    credentials,
+		mapErr:         mapTasksConnectorErr,
+		bindingToProto: tasksBindingToProto,
+	}
 	return s
 }
 

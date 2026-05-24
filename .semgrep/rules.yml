@@ -60,6 +60,18 @@ rules:
       include:
         - "*_test.go"
 
+  - id: go.connector-service-no-request-kind-switch
+    languages: [generic]
+    message: >-
+      ConnectorService handlers must not switch on request connector_kind, either
+      directly or through a local variable. Route through connectorFor so new
+      connector kinds are added in one place.
+    severity: ERROR
+    pattern-regex: '(?s)(switch\s+\w+\.GetConnectorKind\(\)\s*\{|(?:\w+\s*:=\s*\w+\.GetConnectorKind\(\)|var\s+\w+\s*=\s*\w+\.GetConnectorKind\(\))(?:(?!func\s+\().)*?switch\s+\w+\s*\{)'
+    paths:
+      include:
+        - "internal/grpc/api/v1/connector_service.go"
+
   - id: go.no-actions-in-ginkgo-it
     languages: [go]
     message: >-
