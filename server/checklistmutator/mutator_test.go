@@ -477,6 +477,64 @@ var _ = Describe("Mutator", func() {
 				Expect(list.Tombstones[0].SyncToken).To(Equal(list.SyncToken))
 			})
 		})
+
+		When("the item has a future deadline tag", func() {
+			var (
+				deleteErr error
+				list      *apiv1.Checklist
+				futureUID string
+			)
+
+			BeforeEach(func() {
+				futureItem, _, err := mutator.AddItem(ctx, "p", "list", checklistmutator.AddItemArgs{
+					Text: "Do not delete yet",
+					Tags: []string{"deadline:2026-04-30"},
+				}, agent)
+				Expect(err).NotTo(HaveOccurred())
+				futureUID = futureItem.Uid
+
+				_, deleteErr = mutator.DeleteItem(ctx, "p", "list", futureItem.Uid, nil, agent)
+				list, err = mutator.ListItems(ctx, "p", "list")
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should reject the deletion", func() {
+				Expect(status.Code(deleteErr)).To(Equal(codes.FailedPrecondition))
+			})
+
+			It("should describe the blocking deadline tag", func() {
+				Expect(deleteErr).To(MatchError(ContainSubstring("deadline:2026-04-30")))
+			})
+
+			It("should keep the item", func() {
+				Expect(list.Items).To(ContainElement(HaveField("Uid", futureUID)))
+			})
+		})
+
+		When("the item has today's deadline tag", func() {
+			var (
+				list      *apiv1.Checklist
+				deleteErr error
+			)
+
+			BeforeEach(func() {
+				todayItem, _, err := mutator.AddItem(ctx, "p", "list", checklistmutator.AddItemArgs{
+					Text: "Due today",
+					Tags: []string{"deadline:2026-04-25"},
+				}, agent)
+				Expect(err).NotTo(HaveOccurred())
+
+				list, deleteErr = mutator.DeleteItem(ctx, "p", "list", todayItem.Uid, nil, agent)
+			})
+
+			It("should allow the deletion", func() {
+				Expect(deleteErr).NotTo(HaveOccurred())
+			})
+
+			It("should tombstone the deleted item", func() {
+				Expect(list.Tombstones).NotTo(BeEmpty())
+			})
+		})
 	})
 
 	Describe("DeduplicateItems", func() {
