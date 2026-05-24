@@ -162,7 +162,7 @@ github.com/cloudwego/base64x/internal/native
 github.com/cloudwego/base64x/internal/native/avx2
 github.com/cloudwego/base64x/internal/native/sse
 github.com/cloudwego/base64x/internal/rt
-# github.com/coder/acp-go-sdk v0.12.2
+# github.com/coder/acp-go-sdk v0.13.0
 ## explicit; go 1.21
 github.com/coder/acp-go-sdk
 # github.com/coder/websocket v1.8.12
