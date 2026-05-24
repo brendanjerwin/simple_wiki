@@ -150,3 +150,7 @@ wiki-cli list                                    # See all services
 wiki-cli methods PageManagementService           # See methods in a service
 wiki-cli describe api.v1.CreatePageRequest       # Inspect request fields
 ```
+
+## See Also
+
+- [[help-handling-large-pages]] — use the blog macro to keep dated streams out of giant single pages.

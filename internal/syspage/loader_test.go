@@ -140,6 +140,36 @@ var _ = Describe("LoadEmbedded", func() {
 				"profile_template should have wiki.system = true")
 		})
 	})
+
+	Describe("the handling large pages help page", func() {
+		var helpPage *Page
+
+		BeforeEach(func() {
+			helpPage = nil
+			for i := range pages {
+				if pages[i].Identifier == "help_handling_large_pages" {
+					helpPage = &pages[i]
+					break
+				}
+			}
+			Expect(helpPage).NotTo(BeNil(), "help_handling_large_pages.md should ship in internal/syspage/embedded/")
+		})
+
+		It("should be present in the embedded corpus", func() {
+			Expect(helpPage.Identifier).To(Equal("help_handling_large_pages"))
+		})
+
+		It("should cover outline-first navigation", func() {
+			Expect(helpPage.Markdown).To(ContainSubstring("api_v1_PageManagementService_ReadPageOutline"))
+			Expect(helpPage.Markdown).To(ContainSubstring("api_v1_PageManagementService_ReadPage"))
+			Expect(helpPage.Markdown).To(ContainSubstring("does not accept byte offset or length fields"))
+		})
+
+		It("should cover splitting and trimming", func() {
+			Expect(helpPage.Markdown).To(ContainSubstring("Trim Strategies"))
+			Expect(helpPage.Markdown).To(ContainSubstring("Splitting Strategies"))
+		})
+	})
 })
 
 var _ = Describe("Sync", func() {
@@ -173,12 +203,12 @@ var _ = Describe("Sync", func() {
 
 	Describe("when on-disk content has drifted", func() {
 		var (
-			store           *fakeStore
-			pages           []Page
-			driftedID       wikipage.PageIdentifier
-			driftedWrites   int
-			otherIDs        []wikipage.PageIdentifier
-			otherIDWrites   map[wikipage.PageIdentifier]int
+			store         *fakeStore
+			pages         []Page
+			driftedID     wikipage.PageIdentifier
+			driftedWrites int
+			otherIDs      []wikipage.PageIdentifier
+			otherIDWrites map[wikipage.PageIdentifier]int
 		)
 
 		BeforeEach(func() {
@@ -285,4 +315,3 @@ func (*explodingStore) DeletePage(_ wikipage.PageIdentifier) error { return nil 
 func (*explodingStore) ModifyMarkdown(_ wikipage.PageIdentifier, _ func(wikipage.Markdown) (wikipage.Markdown, error)) error {
 	return nil
 }
-
