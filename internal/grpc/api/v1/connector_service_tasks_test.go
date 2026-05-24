@@ -14,8 +14,8 @@ import (
 	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
 	"github.com/brendanjerwin/simple_wiki/internal/connectors"
 	"github.com/brendanjerwin/simple_wiki/internal/connectors/engine"
-	"github.com/brendanjerwin/simple_wiki/internal/connectors/googletasks/gateway"
 	"github.com/brendanjerwin/simple_wiki/internal/connectors/googletasks"
+	"github.com/brendanjerwin/simple_wiki/internal/connectors/googletasks/gateway"
 	v1 "github.com/brendanjerwin/simple_wiki/internal/grpc/api/v1"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 )
@@ -167,7 +167,7 @@ func (noopMutator) UpdateItemForSync(_ context.Context, _, _, _, _, _ string, _ 
 	return nil
 }
 func (noopMutator) DeleteItemForSync(_ context.Context, _, _, _, _ string) error { return nil }
-func (noopMutator) AppendSyncEvent(_ context.Context, _, _, _, _ string) error    { return nil }
+func (noopMutator) AppendSyncEvent(_ context.Context, _, _, _, _ string) error   { return nil }
 
 // noopSuppressor satisfies engine.SyncSuppressor without state.
 type noopSuppressor struct{}
@@ -775,6 +775,24 @@ var _ = Describe("ConnectorService handlers (GOOGLE_TASKS)", func() {
 	// ---------------------------------------------------------- GetChecklistBindingState
 
 	Describe("GetChecklistBindingState", func() {
+		Describe("when list_name is empty", func() {
+			var err error
+
+			BeforeEach(func() {
+				mock := connectedTasksProfileMock(profileID)
+				w := buildTasksWiring(mock, nil)
+				server := withTasks(mustNewServer(mock, nil, nil), w)
+				_, err = server.GetChecklistBindingState(ctx, &apiv1.GetChecklistBindingStateRequest{
+					Page:     tasksTestPage,
+					ListName: "",
+				})
+			})
+
+			It("should return InvalidArgument", func() {
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.InvalidArgument, "page and list_name are required"))
+			})
+		})
+
 		Describe("when only the Tasks connector is wired and the user has a Tasks binding", func() {
 			var (
 				resp *apiv1.GetChecklistBindingStateResponse
@@ -809,6 +827,73 @@ var _ = Describe("ConnectorService handlers (GOOGLE_TASKS)", func() {
 			})
 		})
 	})
+
+	// ---------------------------------------------------------- SyncNow (Tasks)
+
+	Describe("SyncNow", func() {
+		Describe("when syncing an existing binding", func() {
+			var err error
+
+			BeforeEach(func() {
+				client := &fakeTasksClient{
+					taskListsToReturn: []gateway.TaskList{{
+						ID:    tasksTestRemoteID,
+						Title: "Tasks list",
+					}},
+				}
+				mock := connectedTasksProfileMockWithBinding(profileID, tasksTestPage, tasksTestListName, tasksTestRemoteID)
+				w := buildTasksWiring(mock, client)
+				server := withTasks(mustNewServer(mock, nil, nil), w)
+				_, err = server.SyncNow(ctx, &apiv1.SyncNowRequest{
+					ConnectorKind: apiv1.ConnectorKind_CONNECTOR_KIND_GOOGLE_TASKS,
+					Page:          tasksTestPage,
+					ListName:      tasksTestListName,
+				})
+			})
+
+			It("should not error", func() {
+				Expect(err).ToNot(HaveOccurred())
+			})
+		})
+
+		Describe("when the binding does not exist", func() {
+			var err error
+
+			BeforeEach(func() {
+				mock := connectedTasksProfileMock(profileID)
+				w := buildTasksWiring(mock, nil)
+				server := withTasks(mustNewServer(mock, nil, nil), w)
+				_, err = server.SyncNow(ctx, &apiv1.SyncNowRequest{
+					ConnectorKind: apiv1.ConnectorKind_CONNECTOR_KIND_GOOGLE_TASKS,
+					Page:          "no-such-page",
+					ListName:      "no-such-list",
+				})
+			})
+
+			It("should return NotFound", func() {
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.NotFound, "binding_not_found"))
+			})
+		})
+
+		Describe("when page is empty", func() {
+			var err error
+
+			BeforeEach(func() {
+				mock := connectedTasksProfileMockWithBinding(profileID, tasksTestPage, tasksTestListName, tasksTestRemoteID)
+				w := buildTasksWiring(mock, nil)
+				server := withTasks(mustNewServer(mock, nil, nil), w)
+				_, err = server.SyncNow(ctx, &apiv1.SyncNowRequest{
+					ConnectorKind: apiv1.ConnectorKind_CONNECTOR_KIND_GOOGLE_TASKS,
+					Page:          "",
+					ListName:      tasksTestListName,
+				})
+			})
+
+			It("should return InvalidArgument", func() {
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.InvalidArgument, "page and list_name are required"))
+			})
+		})
+	})
 })
 
 var _ = Describe("Server.WithGoogleTasks", func() {
@@ -823,6 +908,24 @@ var _ = Describe("Server.WithGoogleTasks", func() {
 
 		It("should return the server for fluent chaining", func() {
 			Expect(server).ToNot(BeNil())
+		})
+	})
+
+	Describe("when the credential store is nil", func() {
+		var err error
+
+		BeforeEach(func() {
+			mock := &MockPageReaderMutator{}
+			w := buildTasksWiring(mock, nil)
+			server := mustNewServer(mock, nil, nil).WithGoogleTasks(w.engine, w.adapter, w.bindingStore, nil)
+			ctx := withCallerIdentity(context.Background(), tasksTestProfileEmail)
+			_, err = server.GetState(ctx, &apiv1.GetStateRequest{
+				ConnectorKind: apiv1.ConnectorKind_CONNECTOR_KIND_GOOGLE_TASKS,
+			})
+		})
+
+		It("should report Tasks as not configured", func() {
+			Expect(err).To(HaveGrpcStatusWithSubstr(codes.FailedPrecondition, "not configured"))
 		})
 	})
 })
