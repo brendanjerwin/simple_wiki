@@ -161,8 +161,14 @@ var _ = Describe("LoadEmbedded", func() {
 
 		It("should cover outline-first navigation", func() {
 			Expect(helpPage.Markdown).To(ContainSubstring("api_v1_PageManagementService_ReadPageOutline"))
+			Expect(helpPage.Markdown).To(ContainSubstring("api_v1_PageManagementService_ReadPageSection"))
 			Expect(helpPage.Markdown).To(ContainSubstring("api_v1_PageManagementService_ReadPage"))
 			Expect(helpPage.Markdown).To(ContainSubstring("does not accept byte offset or length fields"))
+		})
+
+		It("should cover stale tool recovery", func() {
+			Expect(helpPage.Markdown).To(ContainSubstring("MCP tools are negotiated when the agent session starts"))
+			Expect(helpPage.Markdown).To(ContainSubstring("restart the wiki process that launches page agents"))
 		})
 
 		It("should cover splitting and trimming", func() {

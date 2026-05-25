@@ -25,7 +25,25 @@ Treat a page as large when one or more of these are true:
 
 For agent or API work, call `api_v1_PageManagementService_ReadPageOutline` before `api_v1_PageManagementService_ReadPage` on large pages. It returns headings, byte offsets, byte lengths, total bytes, and the version hash. Use the outline to pick the section you actually need before deciding whether to load the full page. The current `api_v1_PageManagementService_ReadPage` request reads the whole page; it does not accept byte offset or length fields.
 
-When editing one section, prefer `api_v1_PageManagementService_UpdatePageContent` with `old_content_markdown`, `new_content_markdown`, and `expected_version_hash`. That keeps the edit small and avoids rewriting unrelated content.
+## Reading One Section
+
+After `api_v1_PageManagementService_ReadPageOutline` identifies the relevant heading, call `api_v1_PageManagementService_ReadPageSection` with that heading's `byte_offset`, `byte_length`, and `version_hash` as `expected_version_hash`. This reads only that section body from the raw markdown and avoids sending the whole page through the agent context.
+
+Use `api_v1_PageManagementService_ReadPage` only when you truly need the whole markdown body, frontmatter TOML, or template-expanded markdown.
+
+When editing one section, prefer `api_v1_PageManagementService_UpdatePageContent` with `old_content_markdown`, `new_content_markdown`, and `expected_version_hash`. The `old_content_markdown` should come from `ReadPageSection` when possible. That keeps the edit small and avoids rewriting unrelated content.
+
+## If the Tools Are Missing
+
+MCP tools are negotiated when the agent session starts. If `api_v1_PageManagementService_ReadPageOutline` or `api_v1_PageManagementService_ReadPageSection` is missing from a page agent's tool list, the agent is probably running with a stale MCP session or an old `wiki-cli` binary.
+
+Fix that before attempting large-page work:
+
+1. Start a fresh page-agent session.
+2. If the tool is still missing, restart the wiki process that launches page agents so the stdio MCP server uses the newly deployed `wiki-cli`.
+3. List tools again and verify both `api_v1_PageManagementService_ReadPageOutline` and `api_v1_PageManagementService_ReadPageSection` are present.
+
+Do not pretend section reads exist when the tool is missing. Fall back to `api_v1_SearchService_SearchContent` snippets or ask for a split/trim pass before reading the full page.
 
 ## Trim Strategies
 
@@ -137,7 +155,9 @@ Avoid these:
 When asked to work on a large page:
 
 1. Search for the relevant page and call `api_v1_PageManagementService_ReadPageOutline` first.
-2. Read only the relevant section when possible.
-3. If editing, update the smallest stable section.
-4. If the page is too large because of stale bulk, summarize or split as part of the task.
-5. Leave a short current-state summary and links to any child pages.
+2. Pick the relevant heading from the outline.
+3. Call `api_v1_PageManagementService_ReadPageSection` with the heading's byte span and outline `version_hash`.
+4. If editing, update the smallest stable section with `api_v1_PageManagementService_UpdatePageContent` and `expected_version_hash`.
+5. If the section-read tools are missing, restart the page-agent session or wiki agent-launching process before continuing.
+6. If the page is too large because of stale bulk, summarize or split as part of the task.
+7. Leave a short current-state summary and links to any child pages.

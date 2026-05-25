@@ -83,4 +83,24 @@ var _ = Describe("MCP tool input schemas (Anthropic API compatibility, #1054)", 
 			Expect(schema).To(HaveKeyWithValue("maxProperties", BeNumerically("==", 1)))
 		})
 	})
+
+	When("inspecting the ReadPageSection tool schema", func() {
+		var schema map[string]any
+
+		BeforeEach(func() {
+			tool := tools["api_v1_PageManagementService_ReadPageSection"]
+			Expect(tool).NotTo(BeNil())
+
+			err := json.Unmarshal(tool.Tool.RawInputSchema, &schema)
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should require the range inputs", func() {
+			Expect(schema).To(HaveKeyWithValue("required", ConsistOf("page_name", "byte_offset", "byte_length")))
+		})
+
+		It("should not require the version hash", func() {
+			Expect(schema).NotTo(HaveKeyWithValue("required", ContainElement("expected_version_hash")))
+		})
+	})
 })

@@ -502,6 +502,8 @@ var _ = Describe("NewStreamableHTTPHandler", func() {
 					"api_v1_PageImportService_StartPageImportJob",
 					"api_v1_PageManagementService_CreatePage",
 					"api_v1_PageManagementService_ReadPage",
+					"api_v1_PageManagementService_ReadPageOutline",
+					"api_v1_PageManagementService_ReadPageSection",
 					"api_v1_PageManagementService_DeletePage",
 					"api_v1_PageManagementService_UpdatePageContent",
 					"api_v1_PageManagementService_UpdateWholePage",

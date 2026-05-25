@@ -2009,6 +2009,11 @@ var _ = Describe("chatPreamble", func() {
 		Expect(chatPreamble).To(ContainSubstring("wiki MCP tools"))
 	})
 
+	It("should mention the large-page section read workflow", func() {
+		Expect(chatPreamble).To(ContainSubstring("ReadPageOutline"))
+		Expect(chatPreamble).To(ContainSubstring("ReadPageSection"))
+	})
+
 	It("should mention UpdateChatContext for memory updates", func() {
 		Expect(chatPreamble).To(ContainSubstring("UpdateChatContext"))
 	})
