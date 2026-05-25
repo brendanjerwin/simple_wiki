@@ -46,7 +46,7 @@ require (
 	google.golang.org/protobuf v1.36.11
 	gopkg.in/urfave/cli.v1 v1.20.0
 	gopkg.in/yaml.v2 v2.4.0
-	tailscale.com v1.98.2
+	tailscale.com v1.98.3
 )
 
 require (
