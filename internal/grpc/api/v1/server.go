@@ -27,6 +27,7 @@ import (
 const (
 	identifierKey                  = "identifier"
 	pageNotFoundErrFmt             = "page not found: %s"
+	failedToReadPageErrFmt         = "failed to read page: %v"
 	failedToReadFrontmatterErrFmt  = "failed to read frontmatter: %v"
 	failedToWriteFrontmatterErrFmt = "failed to write frontmatter: %v"
 	failedToWriteMarkdownErrFmt    = "failed to write markdown: %v"

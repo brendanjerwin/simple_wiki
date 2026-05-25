@@ -200,6 +200,10 @@ type anthropicSchemaOverride struct {
 //   - api_v1_Frontmatter_RemoveKeyAtPath    (PathComponent.component, nested
 //     in RemoveKeyAtPathRequest.key_path)
 //
+// Tools with generated schemas that over-constrain optional caller inputs:
+//   - api_v1_PageManagementService_ReadPageSection keeps expected_version_hash
+//     optional so callers can read a section without a prior outline hash.
+//
 // If a new tool starts emitting top-level anyOf/oneOf/allOf the regression
 // test in mcp_anthropic_schema_test.go will fail and surface that the map
 // here needs another entry.
@@ -208,6 +212,10 @@ func anthropicCompatibleSchemas() map[string]anthropicSchemaOverride {
 		apiv1mcp.PageManagementService_ReadPageToolOpenAI.Name: {
 			schema:     readPageAnthropicInputSchema,
 			descriptor: (&apiv1.ReadPageRequest{}).ProtoReflect().Descriptor(),
+		},
+		apiv1mcp.PageManagementService_ReadPageSectionToolOpenAI.Name: {
+			schema:     readPageSectionAnthropicInputSchema,
+			descriptor: (&apiv1.ReadPageSectionRequest{}).ProtoReflect().Descriptor(),
 		},
 		apiv1mcp.Frontmatter_RemoveKeyAtPathToolOpenAI.Name: {
 			schema:     apiv1mcp.Frontmatter_RemoveKeyAtPathToolOpenAI.RawInputSchema,
@@ -231,6 +239,30 @@ var readPageAnthropicInputSchema = json.RawMessage(`{
     }
   },
   "required": [],
+  "type": "object"
+}`)
+
+var readPageSectionAnthropicInputSchema = json.RawMessage(`{
+  "additionalProperties": false,
+  "properties": {
+    "byte_length": {
+      "description": "Number of bytes to read from the markdown body.",
+      "type": "string"
+    },
+    "byte_offset": {
+      "description": "Zero-based byte offset into the markdown body.",
+      "type": "string"
+    },
+    "expected_version_hash": {
+      "description": "Optional version_hash from ReadPageOutline; omit when no pre-check is needed.",
+      "type": "string"
+    },
+    "page_name": {
+      "description": "Page name to read.",
+      "type": "string"
+    }
+  },
+  "required": ["page_name", "byte_offset", "byte_length"],
   "type": "object"
 }`)
 

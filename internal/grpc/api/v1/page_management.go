@@ -10,6 +10,7 @@ import (
 	"os"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
 	"github.com/brendanjerwin/simple_wiki/server"
@@ -58,6 +59,14 @@ func checkContentVersionHash(currentMarkdown wikipage.Markdown, expectedHash *st
 	}
 
 	currentHash := computeContentHash(currentMarkdown)
+	return checkContentVersionHashString(currentHash, expectedHash)
+}
+
+func checkContentVersionHashString(currentHash string, expectedHash *string) error {
+	if expectedHash == nil {
+		return nil
+	}
+
 	if subtle.ConstantTimeCompare([]byte(currentHash), []byte(*expectedHash)) != 1 {
 		return status.Error(codes.Aborted, "content version mismatch: page was modified since last read; re-read the page and retry")
 	}
@@ -296,7 +305,7 @@ func (s *Server) ReadPage(ctx context.Context, req *apiv1.ReadPageRequest) (*api
 		if os.IsNotExist(err) {
 			return nil, status.Errorf(codes.NotFound, pageNotFoundErrFmt, pageName)
 		}
-		return nil, status.Errorf(codes.Internal, "failed to read page: %v", err)
+		return nil, status.Errorf(codes.Internal, failedToReadPageErrFmt, err)
 	}
 
 	_, frontmatter, err := s.pageReaderMutator.ReadFrontMatter(wikipage.PageIdentifier(pageName))
@@ -722,7 +731,7 @@ func (s *Server) WatchPage(req *apiv1.WatchPageRequest, stream apiv1.PageManagem
 		if os.IsNotExist(err) {
 			return status.Errorf(codes.NotFound, pageNotFoundErrFmt, req.PageName)
 		}
-		return status.Errorf(codes.Internal, "failed to read page: %v", err)
+		return status.Errorf(codes.Internal, failedToReadPageErrFmt, err)
 	}
 
 	lastHash := hash
@@ -765,7 +774,7 @@ func (s *Server) ReadPageOutline(ctx context.Context, req *apiv1.ReadPageOutline
 		if os.IsNotExist(err) {
 			return nil, status.Errorf(codes.NotFound, pageNotFoundErrFmt, req.PageName)
 		}
-		return nil, status.Errorf(codes.Internal, "failed to read page: %v", err)
+		return nil, status.Errorf(codes.Internal, failedToReadPageErrFmt, err)
 	}
 
 	return &apiv1.ReadPageOutlineResponse{
@@ -773,4 +782,68 @@ func (s *Server) ReadPageOutline(ctx context.Context, req *apiv1.ReadPageOutline
 		TotalBytes:  int64(len(markdown)),
 		VersionHash: computeContentHash(markdown),
 	}, nil
+}
+
+// ReadPageSection implements the ReadPageSection RPC.
+func (s *Server) ReadPageSection(ctx context.Context, req *apiv1.ReadPageSectionRequest) (*apiv1.ReadPageSectionResponse, error) {
+	if req.PageName == "" {
+		return nil, status.Error(codes.InvalidArgument, "page_name is required")
+	}
+
+	if req.ByteOffset < 0 {
+		return nil, status.Error(codes.InvalidArgument, "byte_offset must be non-negative")
+	}
+
+	if req.ByteLength < 0 {
+		return nil, status.Error(codes.InvalidArgument, "byte_length must be non-negative")
+	}
+
+	if authErr := requireAuthorized(ctx, s.pageReaderMutator, wikipage.PageIdentifier(req.PageName)); authErr != nil {
+		return nil, authErr
+	}
+
+	_, markdown, err := s.pageReaderMutator.ReadMarkdown(wikipage.PageIdentifier(req.PageName))
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, status.Errorf(codes.NotFound, pageNotFoundErrFmt, req.PageName)
+		}
+		return nil, status.Errorf(codes.Internal, failedToReadPageErrFmt, err)
+	}
+
+	versionHash := computeContentHash(markdown)
+	if err := checkContentVersionHashString(versionHash, req.ExpectedVersionHash); err != nil {
+		return nil, err
+	}
+
+	totalBytes := int64(len(markdown))
+	if req.ByteOffset > totalBytes || req.ByteLength > totalBytes-req.ByteOffset {
+		return nil, status.Errorf(codes.InvalidArgument, "byte range exceeds page length: offset %d length %d total %d", req.ByteOffset, req.ByteLength, totalBytes)
+	}
+
+	start := int(req.ByteOffset)
+	end := int(req.ByteOffset + req.ByteLength)
+	if !isUTF8Boundary(string(markdown), start) || !isUTF8Boundary(string(markdown), end) {
+		return nil, status.Error(codes.InvalidArgument, "byte range must align to UTF-8 character boundaries")
+	}
+
+	section := string(markdown)[start:end]
+	if !utf8.ValidString(section) {
+		return nil, status.Error(codes.Internal, "page section is not valid UTF-8")
+	}
+
+	return &apiv1.ReadPageSectionResponse{
+		ContentMarkdown: section,
+		ByteOffset:      req.ByteOffset,
+		ByteLength:      req.ByteLength,
+		TotalBytes:      totalBytes,
+		VersionHash:     versionHash,
+	}, nil
+}
+
+func isUTF8Boundary(content string, index int) bool {
+	if index == 0 || index == len(content) {
+		return true
+	}
+
+	return index > 0 && index < len(content) && utf8.RuneStart(content[index])
 }

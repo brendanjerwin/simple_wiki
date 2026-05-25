@@ -5838,6 +5838,143 @@ var _ = Describe("Server", func() {
 			})
 		})
 	})
+
+	Describe("ReadPageSection", func() {
+		var (
+			req                   *apiv1.ReadPageSectionRequest
+			resp                  *apiv1.ReadPageSectionResponse
+			err                   error
+			mockPageReaderMutator *MockPageReaderMutator
+		)
+
+		BeforeEach(func() {
+			req = &apiv1.ReadPageSectionRequest{
+				PageName:   "test-page",
+				ByteOffset: int64(len("# Intro\n\n")),
+				ByteLength: int64(len("intro body\n\n")),
+			}
+			mockPageReaderMutator = &MockPageReaderMutator{
+				Markdown: "# Intro\n\nintro body\n\n# Next\n\nnext body\n",
+			}
+		})
+
+		JustBeforeEach(func() {
+			server = mustNewServer(mockPageReaderMutator, nil, nil)
+			resp, err = server.ReadPageSection(ctx, req)
+		})
+
+		When("the byte range matches an outline section body", func() {
+			It("should not error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should return only that markdown section", func() {
+				Expect(resp.ContentMarkdown).To(Equal("intro body\n\n"))
+			})
+
+			It("should echo the selected byte range", func() {
+				Expect(resp.ByteOffset).To(Equal(req.ByteOffset))
+				Expect(resp.ByteLength).To(Equal(req.ByteLength))
+			})
+
+			It("should return the total page size", func() {
+				Expect(resp.TotalBytes).To(Equal(int64(len(mockPageReaderMutator.Markdown))))
+			})
+
+			It("should return the full page version hash", func() {
+				h := sha256.Sum256([]byte(mockPageReaderMutator.Markdown))
+				Expect(resp.VersionHash).To(Equal(hex.EncodeToString(h[:])))
+			})
+		})
+
+		When("the expected version hash is stale", func() {
+			BeforeEach(func() {
+				staleHash := "stale"
+				req.ExpectedVersionHash = &staleHash
+			})
+
+			It("should return an aborted error", func() {
+				Expect(err).To(HaveGrpcStatus(codes.Aborted, "content version mismatch: page was modified since last read; re-read the page and retry"))
+			})
+
+			It("should return no response", func() {
+				Expect(resp).To(BeNil())
+			})
+		})
+
+		When("the byte offset is negative", func() {
+			BeforeEach(func() {
+				req.ByteOffset = -1
+			})
+
+			It("should return an invalid argument error", func() {
+				Expect(err).To(HaveGrpcStatus(codes.InvalidArgument, "byte_offset must be non-negative"))
+			})
+
+			It("should return no response", func() {
+				Expect(resp).To(BeNil())
+			})
+		})
+
+		When("the byte length is negative", func() {
+			BeforeEach(func() {
+				req.ByteLength = -1
+			})
+
+			It("should return an invalid argument error", func() {
+				Expect(err).To(HaveGrpcStatus(codes.InvalidArgument, "byte_length must be non-negative"))
+			})
+
+			It("should return no response", func() {
+				Expect(resp).To(BeNil())
+			})
+		})
+
+		When("the byte range exceeds the page length", func() {
+			BeforeEach(func() {
+				req.ByteOffset = int64(len(mockPageReaderMutator.Markdown))
+				req.ByteLength = 1
+			})
+
+			It("should return an invalid argument error", func() {
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.InvalidArgument, "byte range exceeds page length"))
+			})
+
+			It("should return no response", func() {
+				Expect(resp).To(BeNil())
+			})
+		})
+
+		When("the byte range splits a UTF-8 character", func() {
+			BeforeEach(func() {
+				mockPageReaderMutator.Markdown = "prefix caf\u00e9 suffix"
+				req.ByteOffset = int64(len("prefix caf"))
+				req.ByteLength = 1
+			})
+
+			It("should return an invalid argument error", func() {
+				Expect(err).To(HaveGrpcStatus(codes.InvalidArgument, "byte range must align to UTF-8 character boundaries"))
+			})
+
+			It("should return no response", func() {
+				Expect(resp).To(BeNil())
+			})
+		})
+
+		When("the page does not exist", func() {
+			BeforeEach(func() {
+				mockPageReaderMutator.MarkdownReadErr = os.ErrNotExist
+			})
+
+			It("should return a not found error", func() {
+				Expect(err).To(HaveGrpcStatus(codes.NotFound, "page not found: test-page"))
+			})
+
+			It("should return no response", func() {
+				Expect(resp).To(BeNil())
+			})
+		})
+	})
 })
 
 var _ = Describe("Checklist gRPC round-trip", func() {

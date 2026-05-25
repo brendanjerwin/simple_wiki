@@ -72,6 +72,9 @@ const (
 	// PageManagementServiceReadPageOutlineProcedure is the fully-qualified name of the
 	// PageManagementService's ReadPageOutline RPC.
 	PageManagementServiceReadPageOutlineProcedure = "/api.v1.PageManagementService/ReadPageOutline"
+	// PageManagementServiceReadPageSectionProcedure is the fully-qualified name of the
+	// PageManagementService's ReadPageSection RPC.
+	PageManagementServiceReadPageSectionProcedure = "/api.v1.PageManagementService/ReadPageSection"
 )
 
 // These variables are the protoreflect.Descriptor objects for the RPCs defined in this package.
@@ -90,6 +93,7 @@ var (
 	pageManagementServiceWatchPageMethodDescriptor          = pageManagementServiceServiceDescriptor.Methods().ByName("WatchPage")
 	pageManagementServiceRenderMarkdownMethodDescriptor     = pageManagementServiceServiceDescriptor.Methods().ByName("RenderMarkdown")
 	pageManagementServiceReadPageOutlineMethodDescriptor    = pageManagementServiceServiceDescriptor.Methods().ByName("ReadPageOutline")
+	pageManagementServiceReadPageSectionMethodDescriptor    = pageManagementServiceServiceDescriptor.Methods().ByName("ReadPageSection")
 )
 
 // PageManagementServiceClient is a client for the api.v1.PageManagementService service.
@@ -120,6 +124,8 @@ type PageManagementServiceClient interface {
 	RenderMarkdown(context.Context, *connect.Request[v1.RenderMarkdownRequest]) (*connect.Response[v1.RenderMarkdownResponse], error)
 	// ReadPageOutline — see (api.v1.description).
 	ReadPageOutline(context.Context, *connect.Request[v1.ReadPageOutlineRequest]) (*connect.Response[v1.ReadPageOutlineResponse], error)
+	// ReadPageSection — see (api.v1.description).
+	ReadPageSection(context.Context, *connect.Request[v1.ReadPageSectionRequest]) (*connect.Response[v1.ReadPageSectionResponse], error)
 }
 
 // NewPageManagementServiceClient constructs a client for the api.v1.PageManagementService service.
@@ -210,6 +216,12 @@ func NewPageManagementServiceClient(httpClient connect.HTTPClient, baseURL strin
 			connect.WithSchema(pageManagementServiceReadPageOutlineMethodDescriptor),
 			connect.WithClientOptions(opts...),
 		),
+		readPageSection: connect.NewClient[v1.ReadPageSectionRequest, v1.ReadPageSectionResponse](
+			httpClient,
+			baseURL+PageManagementServiceReadPageSectionProcedure,
+			connect.WithSchema(pageManagementServiceReadPageSectionMethodDescriptor),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -228,6 +240,7 @@ type pageManagementServiceClient struct {
 	watchPage          *connect.Client[v1.WatchPageRequest, v1.WatchPageResponse]
 	renderMarkdown     *connect.Client[v1.RenderMarkdownRequest, v1.RenderMarkdownResponse]
 	readPageOutline    *connect.Client[v1.ReadPageOutlineRequest, v1.ReadPageOutlineResponse]
+	readPageSection    *connect.Client[v1.ReadPageSectionRequest, v1.ReadPageSectionResponse]
 }
 
 // CreatePage calls api.v1.PageManagementService.CreatePage.
@@ -295,6 +308,11 @@ func (c *pageManagementServiceClient) ReadPageOutline(ctx context.Context, req *
 	return c.readPageOutline.CallUnary(ctx, req)
 }
 
+// ReadPageSection calls api.v1.PageManagementService.ReadPageSection.
+func (c *pageManagementServiceClient) ReadPageSection(ctx context.Context, req *connect.Request[v1.ReadPageSectionRequest]) (*connect.Response[v1.ReadPageSectionResponse], error) {
+	return c.readPageSection.CallUnary(ctx, req)
+}
+
 // PageManagementServiceHandler is an implementation of the api.v1.PageManagementService service.
 type PageManagementServiceHandler interface {
 	// CreatePage — see (api.v1.description).
@@ -323,6 +341,8 @@ type PageManagementServiceHandler interface {
 	RenderMarkdown(context.Context, *connect.Request[v1.RenderMarkdownRequest]) (*connect.Response[v1.RenderMarkdownResponse], error)
 	// ReadPageOutline — see (api.v1.description).
 	ReadPageOutline(context.Context, *connect.Request[v1.ReadPageOutlineRequest]) (*connect.Response[v1.ReadPageOutlineResponse], error)
+	// ReadPageSection — see (api.v1.description).
+	ReadPageSection(context.Context, *connect.Request[v1.ReadPageSectionRequest]) (*connect.Response[v1.ReadPageSectionResponse], error)
 }
 
 // NewPageManagementServiceHandler builds an HTTP handler from the service implementation. It
@@ -409,6 +429,12 @@ func NewPageManagementServiceHandler(svc PageManagementServiceHandler, opts ...c
 		connect.WithSchema(pageManagementServiceReadPageOutlineMethodDescriptor),
 		connect.WithHandlerOptions(opts...),
 	)
+	pageManagementServiceReadPageSectionHandler := connect.NewUnaryHandler(
+		PageManagementServiceReadPageSectionProcedure,
+		svc.ReadPageSection,
+		connect.WithSchema(pageManagementServiceReadPageSectionMethodDescriptor),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/api.v1.PageManagementService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case PageManagementServiceCreatePageProcedure:
@@ -437,6 +463,8 @@ func NewPageManagementServiceHandler(svc PageManagementServiceHandler, opts ...c
 			pageManagementServiceRenderMarkdownHandler.ServeHTTP(w, r)
 		case PageManagementServiceReadPageOutlineProcedure:
 			pageManagementServiceReadPageOutlineHandler.ServeHTTP(w, r)
+		case PageManagementServiceReadPageSectionProcedure:
+			pageManagementServiceReadPageSectionHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -496,4 +524,8 @@ func (UnimplementedPageManagementServiceHandler) RenderMarkdown(context.Context,
 
 func (UnimplementedPageManagementServiceHandler) ReadPageOutline(context.Context, *connect.Request[v1.ReadPageOutlineRequest]) (*connect.Response[v1.ReadPageOutlineResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("api.v1.PageManagementService.ReadPageOutline is not implemented"))
+}
+
+func (UnimplementedPageManagementServiceHandler) ReadPageSection(context.Context, *connect.Request[v1.ReadPageSectionRequest]) (*connect.Response[v1.ReadPageSectionResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("api.v1.PageManagementService.ReadPageSection is not implemented"))
 }

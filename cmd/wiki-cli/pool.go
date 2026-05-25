@@ -1302,6 +1302,15 @@ Instead:
 
 Default to "let me look that up" rather than "I can't" when uncertain.
 
+## Large pages
+
+When reading a large page, call api_v1_PageManagementService_ReadPageOutline
+before api_v1_PageManagementService_ReadPage. If the outline identifies a
+specific heading, call api_v1_PageManagementService_ReadPageSection with that
+heading's byte_offset, byte_length, and version_hash as expected_version_hash.
+Use the full ReadPage tool only when you need the whole markdown body,
+frontmatter TOML, or template-expanded markdown.
+
 ## Wiki Syntax Help
 
 When users ask about wiki features, formatting, or syntax (e.g., macros, special markdown,
