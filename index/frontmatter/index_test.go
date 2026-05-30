@@ -58,7 +58,6 @@ var _ = Describe("Index", func() {
 		Expect(index).NotTo(BeNil())
 	})
 
-
 	Describe("AddPageToIndex", func() {
 		Describe("when adding a page with simple string frontmatter", func() {
 			var err error
@@ -285,6 +284,101 @@ var _ = Describe("Index", func() {
 			It("should return empty value for removed page", func() {
 				value := index.GetValue("temp-page", "title")
 				Expect(value).To(Equal(""))
+			})
+		})
+
+		Describe("when a page is reindexed with changed values", func() {
+			var err error
+
+			BeforeEach(func() {
+				mockReader.AddPage("observability-metrics", wikipage.FrontMatter{
+					"identifier": "observability-metrics",
+					"observability": map[string]any{
+						"last_updated": "2026-05-30T14:00:00Z",
+						"http": map[string]any{
+							"requests_total": 1,
+						},
+					},
+				})
+				Expect(index.AddPageToIndex("observability-metrics")).To(Succeed())
+
+				mockReader.AddPage("observability-metrics", wikipage.FrontMatter{
+					"identifier": "observability-metrics",
+					"observability": map[string]any{
+						"last_updated": "2026-05-30T14:00:05Z",
+						"http": map[string]any{
+							"requests_total": 2,
+						},
+					},
+				})
+				err = index.AddPageToIndex("observability-metrics")
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should discard stale string value buckets", func() {
+				Expect(index.InvertedIndex["observability.last_updated"]).To(HaveLen(1))
+				Expect(index.InvertedIndex["observability.last_updated"]).To(HaveKey(frontmatter.Value("2026-05-30T14:00:05Z")))
+			})
+
+			It("should discard stale numeric value buckets", func() {
+				Expect(index.InvertedIndex["observability.http.requests_total"]).To(HaveLen(1))
+				Expect(index.InvertedIndex["observability.http.requests_total"]).To(HaveKey(frontmatter.Value("2")))
+			})
+		})
+
+		Describe("when removing a page from a shared value bucket", func() {
+			var err error
+
+			BeforeEach(func() {
+				mockReader.AddPage("first-page", wikipage.FrontMatter{
+					"identifier": "first-page",
+					"category":   "shared",
+				})
+				mockReader.AddPage("second-page", wikipage.FrontMatter{
+					"identifier": "second-page",
+					"category":   "shared",
+				})
+				Expect(index.AddPageToIndex("first-page")).To(Succeed())
+				Expect(index.AddPageToIndex("second-page")).To(Succeed())
+
+				err = index.RemovePageFromIndex("first-page")
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should keep the non-empty shared value bucket", func() {
+				Expect(index.InvertedIndex["category"]).To(HaveKey(frontmatter.Value("shared")))
+			})
+
+			It("should keep the remaining page in the shared bucket", func() {
+				Expect(index.QueryExactMatch("category", "shared")).To(Equal([]wikipage.PageIdentifier{"second_page"}))
+			})
+		})
+
+		Describe("when page metadata references a missing inverted-index key", func() {
+			var err error
+
+			BeforeEach(func() {
+				index.PageKeyMap["partial_page"] = map[frontmatter.DottedKeyPath]map[frontmatter.Value]bool{
+					"missing": {
+						"stale": true,
+					},
+				}
+
+				err = index.RemovePageFromIndex("partial-page")
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should remove the page metadata", func() {
+				Expect(index.PageKeyMap).NotTo(HaveKey(wikipage.PageIdentifier("partial_page")))
 			})
 		})
 	})
@@ -747,7 +841,7 @@ var _ = Describe("Index", func() {
 				// Use a struct type which is not handled by recursiveAddFrontmatter
 				type unsupportedType struct{ X int }
 				mockReader.AddPage("bad-type-page", wikipage.FrontMatter{
-					"identifier":   "bad-type-page",
+					"identifier": "bad-type-page",
 					"bad_field": map[string]any{
 						"nested": unsupportedType{X: 1},
 					},
@@ -762,4 +856,3 @@ var _ = Describe("Index", func() {
 		})
 	})
 })
-
