@@ -881,7 +881,7 @@ gopkg.in/urfave/cli.v1
 # gopkg.in/yaml.v2 v2.4.0
 ## explicit; go 1.15
 gopkg.in/yaml.v2
-# tailscale.com v1.98.2
+# tailscale.com v1.98.5
 ## explicit; go 1.26.3
 tailscale.com
 tailscale.com/atomicfile
