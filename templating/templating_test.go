@@ -2034,3 +2034,69 @@ var _ = Describe("BuildGoogleTasksConnect", func() {
 		})
 	})
 })
+
+var _ = Describe("BuildMapEmbed", func() {
+	const validMapsURL = "https://www.google.com/maps/embed?pb=!1m18!1m12!1m3"
+
+	var fn func(string) string
+
+	BeforeEach(func() {
+		fn = templating.BuildMapEmbed(templating.TemplateContext{Identifier: "test_page"})
+	})
+
+	When("called with a valid Google Maps embed URL", func() {
+		var rendered string
+
+		BeforeEach(func() {
+			rendered = fn(validMapsURL)
+		})
+
+		It("should render an iframe element", func() {
+			Expect(rendered).To(ContainSubstring("<iframe"))
+		})
+
+		It("should include the src attribute with the provided URL", func() {
+			Expect(rendered).To(ContainSubstring(`src="` + validMapsURL))
+		})
+
+		It("should include allowfullscreen", func() {
+			Expect(rendered).To(ContainSubstring("allowfullscreen"))
+		})
+
+		It("should include loading=lazy", func() {
+			Expect(rendered).To(ContainSubstring(`loading="lazy"`))
+		})
+
+		It("should include referrerpolicy", func() {
+			Expect(rendered).To(ContainSubstring("referrerpolicy="))
+		})
+
+		It("should wrap the iframe in a map-embed div", func() {
+			Expect(rendered).To(ContainSubstring(`class="map-embed"`))
+		})
+	})
+
+	When("called with an empty string", func() {
+		It("should render an error placeholder", func() {
+			rendered := fn("")
+			Expect(rendered).NotTo(ContainSubstring("<iframe"))
+			Expect(rendered).To(ContainSubstring("map-embed-error"))
+		})
+	})
+
+	When("called with a non-Google-Maps URL", func() {
+		It("should render an error placeholder instead of an iframe", func() {
+			rendered := fn("https://evil.example.com/embed?foo=bar")
+			Expect(rendered).NotTo(ContainSubstring("<iframe"))
+			Expect(rendered).To(ContainSubstring("map-embed-error"))
+		})
+	})
+
+	When("called with a URL that has the correct prefix but extra path components", func() {
+		It("should render an iframe (prefix check passes)", func() {
+			rendered := fn("https://www.google.com/maps/embed?pb=abc&zoom=12")
+			Expect(rendered).To(ContainSubstring("<iframe"))
+			Expect(rendered).To(ContainSubstring("https://www.google.com/maps/embed"))
+		})
+	})
+})
