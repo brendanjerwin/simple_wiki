@@ -1,7 +1,6 @@
 package v1
 
 import (
-	"bytes"
 	"context"
 	"crypto/sha256"
 	"crypto/subtle"
@@ -30,25 +29,6 @@ import (
 func computeContentHash(markdown wikipage.Markdown) string {
 	h := sha256.Sum256([]byte(markdown))
 	return hex.EncodeToString(h[:])
-}
-
-// buildPageText assembles the full wiki page text by prepending TOML frontmatter
-// (enclosed in +++ delimiters) to the markdown body.
-func buildPageText(frontmatter map[string]any, frontmatterToml []byte, markdown wikipage.Markdown) string {
-	var b strings.Builder
-
-	if len(frontmatter) > 0 {
-		_, _ = b.WriteString("+++\n")   // WriteString on strings.Builder never fails
-		_, _ = b.Write(frontmatterToml) // Write on strings.Builder never fails
-		if !bytes.HasSuffix(frontmatterToml, []byte("\n")) {
-			_, _ = b.WriteString("\n") // WriteString on strings.Builder never fails
-		}
-		_, _ = b.WriteString("+++\n") // WriteString on strings.Builder never fails
-	}
-
-	_, _ = b.WriteString(string(markdown)) // WriteString on strings.Builder never fails
-
-	return b.String()
 }
 
 // checkContentVersionHash verifies that the current page content matches the expected version hash.
@@ -319,31 +299,10 @@ func (s *Server) ReadPage(ctx context.Context, req *apiv1.ReadPageRequest) (*api
 		return nil, status.Errorf(codes.Internal, "failed to marshal frontmatter: %v", err)
 	}
 
-	pageText := buildPageText(frontmatter, frontmatterToml, markdown)
-
-	// Create a Page object to execute template macros (for template-expanded markdown).
-	// HTML rendering is intentionally excluded from this response; use RenderPage for HTML.
-	page := &wikipage.Page{
-		Identifier: pageName,
-		Text:       pageText,
-	}
-
-	// Render the page if rendering dependencies are available (for template-expanded markdown).
-	// HTML output is intentionally not captured; use RenderPage for HTML.
-	var renderedMarkdown string
-
-	if s.markdownRenderer != nil && s.templateExecutor != nil {
-		renderErr := page.Render(s.pageReaderMutator, s.markdownRenderer, s.templateExecutor, s.frontmatterIndexQueryer)
-		if renderErr != nil {
-			return nil, status.Errorf(codes.Internal, "failed to render page: %v", renderErr)
-		}
-		renderedMarkdown = string(page.RenderedMarkdown)
-	}
-
 	return &apiv1.ReadPageResponse{
 		ContentMarkdown:         string(markdown),
 		FrontMatterToml:         string(frontmatterToml),
-		RenderedContentMarkdown: renderedMarkdown,
+		RenderedContentMarkdown: "",
 		VersionHash:             computeContentHash(markdown),
 	}, nil
 }
