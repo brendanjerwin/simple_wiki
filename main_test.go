@@ -9,7 +9,9 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
+	wikiserver "github.com/brendanjerwin/simple_wiki/server"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	cli "gopkg.in/urfave/cli.v1"
@@ -92,6 +94,7 @@ var _ = Describe("getFlags", func() {
 		var (
 			concurrency   int
 			queueCapacity int
+			hardTimeout   time.Duration
 		)
 
 		BeforeEach(func() {
@@ -100,6 +103,7 @@ var _ = Describe("getFlags", func() {
 			app.Action = func(c *cli.Context) error {
 				concurrency = c.GlobalInt("agent-schedule-concurrency")
 				queueCapacity = c.GlobalInt("agent-schedule-queue-capacity")
+				hardTimeout = c.GlobalDuration("agent-turn-hard-timeout")
 				return nil
 			}
 
@@ -112,6 +116,10 @@ var _ = Describe("getFlags", func() {
 
 		It("should default agent-schedule-queue-capacity to defaultAgentScheduleQueueCapacity", func() {
 			Expect(queueCapacity).To(Equal(defaultAgentScheduleQueueCapacity))
+		})
+
+		It("should default agent-turn-hard-timeout to defaultAgentTurnHardTimeout", func() {
+			Expect(hardTimeout).To(Equal(wikiserver.DefaultAgentTurnHardTimeout))
 		})
 	})
 })
@@ -140,6 +148,7 @@ var _ = Describe("createSite", func() {
 		flagSet.Bool("block-file-uploads", false, "")
 		flagSet.Uint("max-upload-mb", 10, "")
 		flagSet.Uint("max-document-length", 10000, "")
+		flagSet.Duration("agent-turn-hard-timeout", 25*time.Minute, "")
 		return cli.NewContext(nil, flagSet, nil)
 	}
 

@@ -4084,19 +4084,44 @@ var _ = Describe("Server", func() {
 			})
 		})
 
-		When("rendering fails", func() {
+		When("rendering dependencies fail", func() {
 			BeforeEach(func() {
 				mockPageReaderMutator.Markdown = "# Test Page"
 				mockPageReaderMutator.Frontmatter = map[string]any{"title": "Test"}
 				mockMarkdownRenderer.Err = errors.New("rendering error")
+				mockTemplateExecutor.Err = errors.New("template error")
 			})
 
-			It("should return an internal error", func() {
-				Expect(err).To(HaveGrpcStatusWithSubstr(codes.Internal, "failed to render page"))
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
 			})
 
-			It("should return no response", func() {
-				Expect(resp).To(BeNil())
+			It("should return raw markdown", func() {
+				Expect(resp.ContentMarkdown).To(Equal("# Test Page"))
+			})
+
+			It("should not return rendered markdown", func() {
+				Expect(resp.RenderedContentMarkdown).To(BeEmpty())
+			})
+		})
+
+		When("the page contains template macros", func() {
+			BeforeEach(func() {
+				mockPageReaderMutator.Markdown = "# Test Page\n\n{{ Checklist \"ingredients-on-hand\" }}"
+				mockPageReaderMutator.Frontmatter = map[string]any{"title": "Test"}
+				mockTemplateExecutor.Err = errors.New("template executor should not be called")
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should return the raw markdown", func() {
+				Expect(resp.ContentMarkdown).To(Equal("# Test Page\n\n{{ Checklist \"ingredients-on-hand\" }}"))
+			})
+
+			It("should not expand templates", func() {
+				Expect(resp.RenderedContentMarkdown).To(BeEmpty())
 			})
 		})
 
@@ -4127,8 +4152,8 @@ var _ = Describe("Server", func() {
 				Expect(resp.FrontMatterToml).To(ContainSubstring("title = 'Test Page'"))
 			})
 
-			It("should return the rendered markdown", func() {
-				Expect(resp.RenderedContentMarkdown).To(Equal("# Test Page\n\nThis is test content."))
+			It("should not return rendered markdown", func() {
+				Expect(resp.RenderedContentMarkdown).To(BeEmpty())
 			})
 
 			It("should return a non-empty version_hash", func() {
