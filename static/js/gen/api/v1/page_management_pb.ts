@@ -125,9 +125,8 @@ export type ReadPageResponse = Message<"api.v1.ReadPageResponse"> & {
   frontMatterToml: string;
 
   /**
-   * rendered_content_markdown contains the markdown content after template expansion
-   * but before HTML conversion. This is useful for LLM consumption as it includes
-   * all template-expanded content like inventory lists from ShowInventoryContentsOf.
+   * rendered_content_markdown is intentionally empty. ReadPage returns raw page
+   * content only; use RenderPage or RenderMarkdown for template-expanded content.
    *
    * @generated from field: string rendered_content_markdown = 4;
    */

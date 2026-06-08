@@ -46,7 +46,6 @@ func NewIndex(pageReader wikipage.PageReader) *Index {
 	}
 }
 
-
 // AddPageToIndex adds a page's frontmatter to the index.
 func (f *Index) AddPageToIndex(requestedIdentifier wikipage.PageIdentifier) error {
 	mungedIdentifierStr, err := wikiidentifiers.MungeIdentifier(string(requestedIdentifier))
@@ -164,9 +163,20 @@ func (f *Index) removePageFromIndexInternal(identifier wikipage.PageIdentifier) 
 	}
 	for dottedKeyPath := range f.PageKeyMap[identifier] {
 		for value := range f.PageKeyMap[identifier][dottedKeyPath] {
-			identifiers := f.InvertedIndex[dottedKeyPath][value]
+			valuesByKey, ok := f.InvertedIndex[dottedKeyPath]
+			if !ok {
+				continue
+			}
+			identifiers := valuesByKey[value]
 			identifiers = slices.DeleteFunc(identifiers, func(v wikipage.PageIdentifier) bool { return v == identifier })
-			f.InvertedIndex[dottedKeyPath][value] = identifiers
+			if len(identifiers) == 0 {
+				delete(valuesByKey, value)
+			} else {
+				valuesByKey[value] = identifiers
+			}
+			if len(valuesByKey) == 0 {
+				delete(f.InvertedIndex, dottedKeyPath)
+			}
 		}
 	}
 	delete(f.PageKeyMap, identifier)
