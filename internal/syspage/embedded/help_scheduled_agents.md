@@ -125,5 +125,6 @@ Delete is idempotent — removing an unknown id returns success. Deleting the en
 ## Operational notes
 
 - Concurrency is shared across all schedules: by default 2 turns can run simultaneously across the whole wiki (`--agent-schedule-concurrency`). Backlog capacity is 256 (`--agent-schedule-queue-capacity`).
+- Wall-clock hard timeout defaults to 10m and is configurable with `--agent-turn-hard-timeout`; when it elapses the wiki records `SCHEDULE_STATUS_TIMEOUT` for that run.
 - The pool spawns a new short-lived ACP agent per fire, in a unique systemd unit. Per-turn journal logs are available there.
 - If the pool is not running when a cron fires, the schedule transitions straight to `ERROR` with a "dispatch failed" message. Restart the pool and the next fire will proceed.
