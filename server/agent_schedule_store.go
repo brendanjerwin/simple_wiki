@@ -210,6 +210,24 @@ func (s *AgentScheduleStore) TransitionStatus(page, scheduleID string, to apiv1.
 	finalStatus := to
 	if isTerminalScheduleStatus(to) && s.backgroundActivitySink != nil {
 		finalStatus = s.completeBackgroundActivityStatus(page, scheduleID, to)
+		id, fm, err = s.pages.ReadFrontMatter(wikipage.PageIdentifier(page))
+		if err != nil {
+			return fmt.Errorf(errReadFrontmatterFmt, page, err)
+		}
+		existing, err = decodeSchedules(fm)
+		if err != nil {
+			return err
+		}
+		target = nil
+		for _, sc := range existing {
+			if sc.GetId() == scheduleID {
+				target = sc
+				break
+			}
+		}
+		if target == nil {
+			return &ScheduleNotFoundError{Page: page, ScheduleID: scheduleID}
+		}
 	}
 
 	target.LastStatus = finalStatus

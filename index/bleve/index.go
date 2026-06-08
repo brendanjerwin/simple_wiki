@@ -29,7 +29,7 @@ type Index struct {
 	index              bleve.Index
 	pageReader         wikipage.PageReader
 	frontmatterQueryer frontmatter.IQueryFrontmatterIndex
-	mu                 sync.RWMutex // Protects concurrent access to bleve operations
+	mu                 sync.Mutex // Serializes multi-step delete/reindex mutations
 }
 
 // BleveIndexQueryer defines the interface for querying the Bleve index.
@@ -70,7 +70,6 @@ func NewIndex(pageReader wikipage.PageReader, frontmatterQueryer frontmatter.IQu
 		frontmatterQueryer: frontmatterQueryer,
 	}, nil
 }
-
 
 var (
 	linkRemoval          = regexp.MustCompile(`<.*?>`)
@@ -165,7 +164,7 @@ func (b *Index) extractFragmentFromLocations(contentText string, locations searc
 	}
 
 	contentLocations := locations[contentField]
-	
+
 	// Collect all term locations and sort by position
 	var allLocations []*search.Location
 	for _, termLocations := range contentLocations {
@@ -173,7 +172,7 @@ func (b *Index) extractFragmentFromLocations(contentText string, locations searc
 			allLocations = append(allLocations, location)
 		}
 	}
-	
+
 	if len(allLocations) == 0 {
 		return "", nil
 	}
@@ -262,7 +261,6 @@ func (*Index) calculateFragmentWindow(contentText string, locations []*search.Lo
 	return fragmentStart, fragmentEnd
 }
 
-
 // titleBoost is the multiplier applied to title matches in the existing
 // search scoring. Title matches outrank content matches by this factor.
 const titleBoost = 2.0
@@ -286,9 +284,6 @@ func (b *Index) Query(queryText string) ([]SearchResult, error) {
 // every entry in requiredTags to be present on the result page, and applying
 // a should-clause tag boost for each token in boostTokens.
 func (b *Index) QueryWithTags(text string, requiredTags []string, boostTokens []string) ([]SearchResult, error) {
-	b.mu.RLock()
-	defer b.mu.RUnlock()
-
 	q := buildSearchQuery(text, requiredTags, boostTokens)
 
 	searchReq := bleve.NewSearchRequest(q)

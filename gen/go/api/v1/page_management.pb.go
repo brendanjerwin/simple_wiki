@@ -244,9 +244,8 @@ type ReadPageResponse struct {
 
 	ContentMarkdown string `protobuf:"bytes,1,opt,name=content_markdown,json=contentMarkdown,proto3" json:"content_markdown,omitempty"`
 	FrontMatterToml string `protobuf:"bytes,2,opt,name=front_matter_toml,json=frontMatterToml,proto3" json:"front_matter_toml,omitempty"`
-	// rendered_content_markdown contains the markdown content after template expansion
-	// but before HTML conversion. This is useful for LLM consumption as it includes
-	// all template-expanded content like inventory lists from ShowInventoryContentsOf.
+	// rendered_content_markdown is intentionally empty. ReadPage returns raw page
+	// content only; use RenderPage or RenderMarkdown for template-expanded content.
 	RenderedContentMarkdown string `protobuf:"bytes,4,opt,name=rendered_content_markdown,json=renderedContentMarkdown,proto3" json:"rendered_content_markdown,omitempty"`
 	// version_hash is a SHA256 hash of the content_markdown, used for optimistic concurrency control.
 	// Pass this value as expected_version_hash in UpdatePageContentRequest to detect concurrent modifications.

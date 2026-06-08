@@ -60,6 +60,14 @@ Renders a per-user response form. See [[help-macro-survey]].
 {{ Survey "team-preferences" }}
 ```
 
+### MapEmbed
+
+Renders a responsive Google Maps embed. See [[help-macro-map-embed]].
+
+```
+{{ MapEmbed "https://www.google.com/maps/embed?pb=..." }}
+```
+
 ### LinkTo
 
 Renders a markdown link to another wiki page, using its title if available.
