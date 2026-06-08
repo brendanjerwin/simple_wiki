@@ -8,20 +8,20 @@ import (
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 )
 
-type concurrencyTestPageReader struct{}
+type noOpPageReader struct{}
 
-func (concurrencyTestPageReader) ReadFrontMatter(identifier wikipage.PageIdentifier) (wikipage.PageIdentifier, wikipage.FrontMatter, error) {
+func (noOpPageReader) ReadFrontMatter(identifier wikipage.PageIdentifier) (wikipage.PageIdentifier, wikipage.FrontMatter, error) {
 	return identifier, wikipage.FrontMatter{}, nil
 }
 
-func (concurrencyTestPageReader) ReadMarkdown(identifier wikipage.PageIdentifier) (wikipage.PageIdentifier, wikipage.Markdown, error) {
+func (noOpPageReader) ReadMarkdown(identifier wikipage.PageIdentifier) (wikipage.PageIdentifier, wikipage.Markdown, error) {
 	return identifier, "", nil
 }
 
 func TestQueryDoesNotWaitForIndexerMutationLock(t *testing.T) {
 	t.Parallel()
 
-	reader := concurrencyTestPageReader{}
+	reader := noOpPageReader{}
 	index, err := NewIndex(reader, frontmatter.NewIndex(reader))
 	if err != nil {
 		t.Fatalf("NewIndex() error = %v", err)
