@@ -169,8 +169,12 @@ const (
 	funcNameSurvey             = "Survey"
 	funcNameKeepConnect        = "KeepConnect"
 	funcNameGoogleTasksConnect = "GoogleTasksConnect"
+	funcNameMapEmbed           = "MapEmbed"
 
 	templateTimeoutErrFmt = "template execution timed out after %v"
+
+	// googleMapsEmbedPrefix is the only allowed URL prefix for MapEmbed iframes.
+	googleMapsEmbedPrefix = "https://www.google.com/maps/embed"
 )
 
 func BuildShowInventoryContentsOf(site wikipage.PageReader, query wikipage.IQueryFrontmatterIndex, indent int) func(string) string {
@@ -450,6 +454,30 @@ func BuildGoogleTasksConnect(_ TemplateContext) func() string {
 	}
 }
 
+// BuildMapEmbed returns a template function that renders a responsive Google
+// Maps embed iframe inside a <div class="map-embed"> wrapper.
+//
+// Only URLs with the prefix https://www.google.com/maps/embed are accepted;
+// any other value renders a safe error placeholder instead of an iframe.
+// This prevents the macro from being used as an arbitrary iframe injector.
+func BuildMapEmbed(_ TemplateContext) func(string) string {
+	return func(embedURL string) string {
+		if !strings.HasPrefix(embedURL, googleMapsEmbedPrefix) {
+			return fmt.Sprintf(`<p class="map-embed-error">MapEmbed: URL must start with %s</p>`,
+				html.EscapeString(googleMapsEmbedPrefix))
+		}
+		parsedURL, err := url.Parse(embedURL)
+		if err != nil {
+			return `<p class="map-embed-error">MapEmbed: invalid URL</p>`
+		}
+		safeURL := parsedURL.String()
+		return fmt.Sprintf(
+			`<div class="map-embed"><iframe src="%s" allowfullscreen="" loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe></div>`,
+			html.EscapeString(safeURL),
+		)
+	}
+}
+
 // BuildSurvey returns a template function that renders a wiki-survey custom element
 // with a server-rendered fallback inside it.
 func BuildSurvey(templateContext TemplateContext) func(string) string {
@@ -720,6 +748,7 @@ func buildChatTemplateWithFunctions(ctx context.Context, templateString string, 
 		funcNameSurvey:             func(string) string { return "" },
 		funcNameKeepConnect:        func() string { return "" },
 		funcNameGoogleTasksConnect: func() string { return "" },
+		funcNameMapEmbed:           func(string) string { return "" },
 	}
 
 	return template.New("page").Funcs(funcs).Parse(templateString)
@@ -786,6 +815,7 @@ func buildTemplateWithFunctions(ctx context.Context, templateString string, site
 		funcNameSurvey:             BuildSurvey(templateContext),
 		funcNameKeepConnect:        BuildKeepConnect(templateContext),
 		funcNameGoogleTasksConnect: BuildGoogleTasksConnect(templateContext),
+		funcNameMapEmbed:           BuildMapEmbed(templateContext),
 	}
 
 	return template.New("page").Funcs(funcs).Parse(templateString)
@@ -826,6 +856,7 @@ func validationFuncMap() template.FuncMap {
 		funcNameSurvey:             func(string) string { return "" },
 		funcNameKeepConnect:        func() string { return "" },
 		funcNameGoogleTasksConnect: func() string { return "" },
+		funcNameMapEmbed:           func(string) string { return "" },
 	}
 }
 
