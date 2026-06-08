@@ -139,6 +139,7 @@ func createSite(c *cli.Context) (*server.Site, error) {
 	site.ChatPersona = c.GlobalString("chat-persona")
 	site.AgentScheduleConcurrency = c.GlobalInt("agent-schedule-concurrency")
 	site.AgentScheduleQueueCap = c.GlobalInt("agent-schedule-queue-capacity")
+	site.AgentTurnHardTimeout = c.GlobalDuration("agent-turn-hard-timeout")
 
 	// Now that the CLI-supplied agent-schedule sizing is on the site, register
 	// the AgentTurn queue and construct the AgentScheduler. LoadAll() runs
@@ -314,11 +315,11 @@ func main() {
 }
 
 const (
-	defaultHTTPPort                  = 8050
-	defaultDebounce                  = 500
-	defaultMaxUploadMB               = 100
-	defaultMaxDocumentLength         = 100000000
-	defaultAgentScheduleConcurrency  = 2
+	defaultHTTPPort                   = 8050
+	defaultDebounce                   = 500
+	defaultMaxUploadMB                = 100
+	defaultMaxDocumentLength          = 100000000
+	defaultAgentScheduleConcurrency   = 2
 	defaultAgentScheduleQueueCapacity = 256
 )
 
@@ -435,6 +436,11 @@ func agentScheduleFlags() []cli.Flag {
 			Name:  "agent-schedule-queue-capacity",
 			Value: defaultAgentScheduleQueueCapacity,
 			Usage: "backlog capacity for scheduled-agent turns (queue is backpressure, not skip trigger)",
+		},
+		cli.DurationFlag{
+			Name:  "agent-turn-hard-timeout",
+			Value: server.DefaultAgentTurnHardTimeout,
+			Usage: "wall-clock timeout for a scheduled-agent turn before the wiki records TIMEOUT",
 		},
 	}
 }

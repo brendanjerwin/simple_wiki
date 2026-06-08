@@ -139,8 +139,7 @@ func (j *AgentTurnJob) Execute() error {
 
 	outcome, terminalErr := j.awaitOutcome(completion)
 	if terminalErr != nil {
-		// Best-effort terminal-ERROR transition; awaitOutcome's hard timeout recovers a stuck RUNNING.
-		_ = j.store.TransitionStatus(j.page, j.scheduleID, apiv1.ScheduleStatus_SCHEDULE_STATUS_ERROR, terminalErr.Error(), 0) // nosemgrep: go.error-discarded-with-blank-identifier
+		j.recordHardTimeout(terminalErr, j.hardTimeout)
 		return nil
 	}
 
@@ -148,6 +147,29 @@ func (j *AgentTurnJob) Execute() error {
 		slog.Error("agent turn: terminal transition failed", logKeyPage, j.page, logKeyScheduleID, j.scheduleID, logKeyError, err)
 	}
 	return nil
+}
+
+func (j *AgentTurnJob) recordHardTimeout(terminalErr error, waited time.Duration) {
+	// Best-effort terminal-TIMEOUT transition; awaitOutcome's hard timeout
+	// recovers a stuck RUNNING and late completions for this request no longer
+	// change the authoritative schedule status.
+	if err := j.store.TransitionStatus(j.page, j.scheduleID, apiv1.ScheduleStatus_SCHEDULE_STATUS_TIMEOUT, terminalErr.Error(), timeoutDurationSeconds(waited)); err != nil {
+		slog.Error("agent turn: TIMEOUT transition after hard timeout failed", logKeyPage, j.page, logKeyScheduleID, j.scheduleID, logKeyError, err)
+	}
+}
+
+func timeoutDurationSeconds(duration time.Duration) int32 {
+	if duration <= 0 {
+		return 0
+	}
+	seconds := int32(duration / time.Second)
+	if duration%time.Second != 0 {
+		seconds++
+	}
+	if seconds == 0 {
+		return 1
+	}
+	return seconds
 }
 
 // recordDispatchFailure records a terminal ERROR status when the pool is not

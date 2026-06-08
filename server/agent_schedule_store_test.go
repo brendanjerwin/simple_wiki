@@ -31,20 +31,60 @@ func (f *fakePageStore) ReadFrontMatter(id wikipage.PageIdentifier) (wikipage.Pa
 	if !ok {
 		return id, wikipage.FrontMatter{}, nil
 	}
-	// Return a deep-ish copy by re-creating the top-level map; tests should not
-	// mutate inner structures across calls anyway.
-	out := wikipage.FrontMatter{}
-	for k, v := range fm {
-		out[k] = v
-	}
-	return id, out, nil
+	return id, cloneFrontMatter(fm), nil
 }
 
 func (f *fakePageStore) WriteFrontMatter(id wikipage.PageIdentifier, fm wikipage.FrontMatter) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	f.pages[id] = fm
+	f.pages[id] = cloneFrontMatter(fm)
 	return nil
+}
+
+func cloneFrontMatter(fm wikipage.FrontMatter) wikipage.FrontMatter {
+	cloned := wikipage.FrontMatter{}
+	for key, value := range fm {
+		cloned[key] = cloneFrontMatterValue(value)
+	}
+	return cloned
+}
+
+func cloneFrontMatterValue(value any) any {
+	switch typed := value.(type) {
+	case map[string]any:
+		cloned := map[string]any{}
+		for key, nested := range typed {
+			cloned[key] = cloneFrontMatterValue(nested)
+		}
+		return cloned
+	case []any:
+		cloned := make([]any, len(typed))
+		for i, nested := range typed {
+			cloned[i] = cloneFrontMatterValue(nested)
+		}
+		return cloned
+	default:
+		return typed
+	}
+}
+
+type readCountingPageStore struct {
+	delegate   *fakePageStore
+	readCount  int
+	failReadAt int
+	readErr    error
+}
+
+func (s *readCountingPageStore) ReadFrontMatter(id wikipage.PageIdentifier) (wikipage.PageIdentifier, wikipage.FrontMatter, error) {
+	s.readCount++
+	if s.readCount == s.failReadAt {
+		return "", nil, s.readErr
+	}
+	return s.delegate.ReadFrontMatter(id)
+}
+
+func (s *readCountingPageStore) WriteFrontMatter(id wikipage.PageIdentifier, fm wikipage.FrontMatter) error {
+	return s.delegate.WriteFrontMatter(id, fm)
 }
 
 var _ = Describe("AgentScheduleStore", func() {
@@ -405,6 +445,70 @@ var _ = Describe("AgentScheduleStore", func() {
 			It("should complete the activity with OK", func() {
 				Expect(sink.completeCalls).To(HaveLen(1))
 				Expect(sink.completeCalls[0].status).To(Equal(apiv1.ScheduleStatus_SCHEDULE_STATUS_OK))
+			})
+		})
+
+		Describe("when the real background activity sink completes a summarized run", func() {
+			var chatStore *server.AgentChatContextStore
+
+			BeforeEach(func() {
+				chatStore = server.NewAgentChatContextStore(pages)
+				store.SetBackgroundActivitySink(chatStore)
+
+				Expect(store.TransitionStatus("p", "s1", apiv1.ScheduleStatus_SCHEDULE_STATUS_RUNNING, "", 0)).To(Succeed())
+				_, err := chatStore.AppendBackgroundActivitySummary("p", "s1", "heartbeat completed useful work")
+				Expect(err).NotTo(HaveOccurred())
+				Expect(store.TransitionStatus("p", "s1", apiv1.ScheduleStatus_SCHEDULE_STATUS_OK, "", 5)).To(Succeed())
+			})
+
+			It("should persist the final schedule status", func() {
+				schedules, err := store.List("p")
+				Expect(err).NotTo(HaveOccurred())
+				Expect(schedules[0].GetLastStatus()).To(Equal(apiv1.ScheduleStatus_SCHEDULE_STATUS_OK))
+			})
+
+			It("should persist the background activity summary", func() {
+				ctx, err := chatStore.Read("p")
+				Expect(err).NotTo(HaveOccurred())
+				Expect(ctx.GetBackgroundActivity()[0].GetSummary()).To(Equal("heartbeat completed useful work"))
+			})
+
+			It("should persist the terminal background activity status", func() {
+				ctx, err := chatStore.Read("p")
+				Expect(err).NotTo(HaveOccurred())
+				Expect(ctx.GetBackgroundActivity()[0].GetStatus()).To(Equal(apiv1.ScheduleStatus_SCHEDULE_STATUS_OK))
+			})
+		})
+
+		Describe("when the frontmatter re-read after background activity completion fails", func() {
+			var transitionErr error
+
+			BeforeEach(func() {
+				basePages := newFakePageStore()
+				countingPages := &readCountingPageStore{
+					delegate:   basePages,
+					failReadAt: 6,
+					readErr:    errors.New("disk disappeared"),
+				}
+				scheduleStore := server.NewAgentScheduleStore(countingPages)
+				chatStore := server.NewAgentChatContextStore(countingPages)
+				scheduleStore.SetBackgroundActivitySink(chatStore)
+
+				Expect(scheduleStore.Upsert("p", &apiv1.AgentSchedule{
+					Id: "s1", Cron: "0 * * * * *", Enabled: true,
+				})).To(Succeed())
+				countingPages.readCount = 0
+
+				Expect(scheduleStore.TransitionStatus("p", "s1", apiv1.ScheduleStatus_SCHEDULE_STATUS_RUNNING, "", 0)).To(Succeed())
+				_, err := chatStore.AppendBackgroundActivitySummary("p", "s1", "heartbeat completed useful work")
+				Expect(err).NotTo(HaveOccurred())
+				transitionErr = scheduleStore.TransitionStatus("p", "s1", apiv1.ScheduleStatus_SCHEDULE_STATUS_OK, "", 5)
+			})
+
+			It("should return the re-read error", func() {
+				Expect(transitionErr).To(HaveOccurred())
+				Expect(transitionErr.Error()).To(ContainSubstring("read frontmatter"))
+				Expect(transitionErr.Error()).To(ContainSubstring("disk disappeared"))
 			})
 		})
 
