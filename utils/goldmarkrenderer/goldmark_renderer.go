@@ -44,6 +44,11 @@ const alertTransformerPriority = 100
 // alertRendererPriority for the custom alert node renderer.
 const alertRendererPriority = 500
 
+const (
+	divElement    = "div"
+	iframeElement = "iframe"
+)
+
 // hashtagInlineParserPriority must run after the link parser so `(#anchor)`
 // inside markdown link syntax `[text](#anchor)` is consumed as part of the
 // link before the hashtag parser sees it. The default link parser is at
@@ -148,11 +153,21 @@ func sanitizeWikiHTML(rawHTML []byte) []byte {
 	p.AllowElements("wiki-hashtag")
 	p.AllowAttrs("tag").Matching(regexp.MustCompile(`^[\p{L}\p{N}\-_]+$`)).OnElements("wiki-hashtag")
 	// Allow GitHub-style alert/admonition blocks rendered by the alert transformer.
-	p.AllowElements("div")
-	p.AllowAttrs("class").Matching(regexp.MustCompile(`^markdown-alert(?: markdown-alert-(?:note|tip|important|warning|caution))?$`)).OnElements("div")
-	p.AllowAttrs("role").Matching(regexp.MustCompile(`^note$`)).OnElements("div")
+	p.AllowElements(divElement)
+	p.AllowAttrs("class").Matching(regexp.MustCompile(`^markdown-alert(?: markdown-alert-(?:note|tip|important|warning|caution))?$`)).OnElements(divElement)
+	p.AllowAttrs("role").Matching(regexp.MustCompile(`^note$`)).OnElements(divElement)
 	p.AllowAttrs("class").Matching(regexp.MustCompile(`^markdown-alert-title$`)).OnElements("p")
 	p.AllowAttrs("aria-hidden").Matching(regexp.MustCompile(`^true$`)).OnElements("span")
+	// Allow Google Maps embed iframes emitted by the MapEmbed macro.
+	// Only src values that begin with the Google Maps embed prefix are
+	// permitted; all other origins are stripped by the regex match.
+	p.AllowElements(iframeElement)
+	p.AllowAttrs("src").Matching(regexp.MustCompile(`^https://www\.google\.com/maps/embed`)).OnElements(iframeElement)
+	p.AllowAttrs("allowfullscreen").OnElements(iframeElement)
+	p.AllowAttrs("loading").Matching(regexp.MustCompile(`^(?:lazy|eager|auto)$`)).OnElements(iframeElement)
+	p.AllowAttrs("referrerpolicy").Matching(regexp.MustCompile(`^(?:no-referrer|no-referrer-when-downgrade|origin|origin-when-cross-origin|same-origin|strict-origin|strict-origin-when-cross-origin|unsafe-url)$`)).OnElements(iframeElement)
+	// Allow the map-embed wrapper div emitted by the MapEmbed macro.
+	p.AllowAttrs("class").Matching(regexp.MustCompile(`^map-embed$`)).OnElements(divElement)
 	return p.SanitizeBytes(rawHTML)
 }
 

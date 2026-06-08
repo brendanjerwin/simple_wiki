@@ -21,9 +21,9 @@ import (
 	"github.com/brendanjerwin/simple_wiki/index/frontmatter"
 	"github.com/brendanjerwin/simple_wiki/migrations/canonicalize"
 	"github.com/brendanjerwin/simple_wiki/migrations/eager"
-	"github.com/brendanjerwin/simple_wiki/server/pagestore"
-	"github.com/brendanjerwin/simple_wiki/pkg/ulid"
 	"github.com/brendanjerwin/simple_wiki/pkg/jobs"
+	"github.com/brendanjerwin/simple_wiki/pkg/ulid"
+	"github.com/brendanjerwin/simple_wiki/server/pagestore"
 	"github.com/brendanjerwin/simple_wiki/templating"
 	"github.com/brendanjerwin/simple_wiki/utils/base32tools"
 	"github.com/brendanjerwin/simple_wiki/utils/goldmarkrenderer"
@@ -57,23 +57,23 @@ func (ChatTemplateExecutor) ExecuteTemplate(templateString string, fm wikipage.F
 
 // Site represents the wiki site.
 type Site struct {
-	PathToData              string
-	CSS                     []byte
-	DefaultPage             string
-	Debounce                int
-	ChatPersona             string
-	SessionStore            cookie.Store
-	Fileuploads             bool
-	MaxUploadSize           uint
-	MaxDocumentSize         uint // in runes; about a 10mb limit by default
-	FileStorer              filestore.FileStorer
-	Logger                  *lumber.ConsoleLogger
-	MarkdownRenderer        MarkdownToHTMLRenderer
-	IndexCoordinator        *index.IndexCoordinator
-	JobQueueCoordinator     *jobs.JobQueueCoordinator
-	CronScheduler           *jobs.CronScheduler
-	FrontmatterIndexQueryer frontmatter.IQueryFrontmatterIndex
-	BleveIndexQueryer       bleve.BleveIndexQueryer
+	PathToData               string
+	CSS                      []byte
+	DefaultPage              string
+	Debounce                 int
+	ChatPersona              string
+	SessionStore             cookie.Store
+	Fileuploads              bool
+	MaxUploadSize            uint
+	MaxDocumentSize          uint // in runes; about a 10mb limit by default
+	FileStorer               filestore.FileStorer
+	Logger                   *lumber.ConsoleLogger
+	MarkdownRenderer         MarkdownToHTMLRenderer
+	IndexCoordinator         *index.IndexCoordinator
+	JobQueueCoordinator      *jobs.JobQueueCoordinator
+	CronScheduler            *jobs.CronScheduler
+	FrontmatterIndexQueryer  frontmatter.IQueryFrontmatterIndex
+	BleveIndexQueryer        bleve.BleveIndexQueryer
 	AgentScheduleStore       *AgentScheduleStore
 	AgentChatContextStore    *AgentChatContextStore
 	AgentScheduler           *AgentScheduler
@@ -284,7 +284,9 @@ func (s *Site) startMigrationJobs() {
 const (
 	defaultAgentScheduleConcurrencyValue = 2
 	defaultAgentScheduleQueueCapValue    = 256
-	defaultAgentTurnHardTimeoutMinutes   = 10
+	// DefaultAgentTurnHardTimeout is the wall-clock timeout for one scheduled
+	// agent turn when no CLI override is supplied.
+	DefaultAgentTurnHardTimeout = 10 * time.Minute
 
 	// agentScheduleRefreshConcurrency forces single-worker execution so
 	// per-page refreshes run in submission order and never race the cron
@@ -313,7 +315,7 @@ func (s *Site) InitializeAgentScheduling() {
 		s.AgentScheduleQueueCap = defaultAgentScheduleQueueCapValue
 	}
 	if s.AgentTurnHardTimeout <= 0 {
-		s.AgentTurnHardTimeout = defaultAgentTurnHardTimeoutMinutes * time.Minute
+		s.AgentTurnHardTimeout = DefaultAgentTurnHardTimeout
 	}
 	if err := s.JobQueueCoordinator.RegisterQueue(AgentTurnJobName, s.AgentScheduleConcurrency, s.AgentScheduleQueueCap); err != nil {
 		s.Logger.Warn("AgentTurn queue pre-registration failed: %v", err)
