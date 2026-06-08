@@ -720,6 +720,63 @@ var _ = Describe("GoldmarkRenderer", func() {
 			})
 		}
 	})
+
+	// MapEmbed iframe sanitizer coverage
+	Describe("MapEmbed iframe sanitization", func() {
+		const validMapsIframe = `<div class="map-embed"><iframe src="https://www.google.com/maps/embed?pb=abc" allowfullscreen="" loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe></div>`
+
+		When("rendering a valid Google Maps iframe emitted by MapEmbed", func() {
+			var rendered string
+			var renderErr error
+
+			BeforeEach(func() {
+				out, e := renderer.Render([]byte(validMapsIframe))
+				rendered = string(out)
+				renderErr = e
+			})
+
+			It("should not error", func() {
+				Expect(renderErr).NotTo(HaveOccurred())
+			})
+
+			It("should preserve the iframe element", func() {
+				Expect(rendered).To(ContainSubstring("<iframe"))
+			})
+
+			It("should preserve the Google Maps src", func() {
+				Expect(rendered).To(ContainSubstring("https://www.google.com/maps/embed"))
+			})
+
+			It("should preserve allowfullscreen", func() {
+				Expect(rendered).To(ContainSubstring("allowfullscreen"))
+			})
+
+			It("should preserve loading=lazy", func() {
+				Expect(rendered).To(ContainSubstring(`loading="lazy"`))
+			})
+
+			It("should preserve referrerpolicy", func() {
+				Expect(rendered).To(ContainSubstring("referrerpolicy="))
+			})
+
+			It("should preserve the map-embed wrapper div", func() {
+				Expect(rendered).To(ContainSubstring(`class="map-embed"`))
+			})
+		})
+
+		When("rendering an iframe with a non-Google-Maps src", func() {
+			var rendered string
+
+			BeforeEach(func() {
+				out, _ := renderer.Render([]byte(`<iframe src="https://evil.example.com/embed"></iframe>`))
+				rendered = string(out)
+			})
+
+			It("should strip the iframe element", func() {
+				Expect(rendered).NotTo(ContainSubstring("<iframe"))
+			})
+		})
+	})
 })
 
 // buildElementSample produces a sample HTML fragment with every declared
