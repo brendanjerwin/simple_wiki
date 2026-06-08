@@ -20,18 +20,22 @@ type fakeDispatcher struct {
 	dispatched       []*apiv1.ScheduledTurnRequest
 	dispatchErr      error
 	completionToSend *server.ScheduledTurnOutcome
+	dispatchFn       func(*apiv1.ScheduledTurnRequest) (<-chan *server.ScheduledTurnOutcome, error)
 	// neverComplete, when true, returns a channel that never receives and is
 	// never closed — used to exercise the hard-timeout path in awaitOutcome.
 	neverComplete bool
 }
 
 func (f *fakeDispatcher) Dispatch(req *apiv1.ScheduledTurnRequest) (<-chan *server.ScheduledTurnOutcome, error) {
+	if f.dispatchFn != nil {
+		return f.dispatchFn(req)
+	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.dispatchErr != nil {
 		return nil, f.dispatchErr
 	}
-	f.dispatched = append(f.dispatched, req)
+	f.recordLocked(req)
 	ch := make(chan *server.ScheduledTurnOutcome, 1)
 	if f.neverComplete {
 		return ch, nil
@@ -41,6 +45,16 @@ func (f *fakeDispatcher) Dispatch(req *apiv1.ScheduledTurnRequest) (<-chan *serv
 		close(ch)
 	}
 	return ch, nil
+}
+
+func (f *fakeDispatcher) record(req *apiv1.ScheduledTurnRequest) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.recordLocked(req)
+}
+
+func (f *fakeDispatcher) recordLocked(req *apiv1.ScheduledTurnRequest) {
+	f.dispatched = append(f.dispatched, req)
 }
 
 var _ = Describe("AgentTurnJob", func() {
@@ -237,14 +251,64 @@ var _ = Describe("AgentTurnJob", func() {
 			Expect(executeErr).NotTo(HaveOccurred())
 		})
 
-		It("should record terminal ERROR status", func() {
+		It("should record terminal TIMEOUT status", func() {
 			schedules, _ := store.List("p")
-			Expect(schedules[0].GetLastStatus()).To(Equal(apiv1.ScheduleStatus_SCHEDULE_STATUS_ERROR))
+			Expect(schedules[0].GetLastStatus()).To(Equal(apiv1.ScheduleStatus_SCHEDULE_STATUS_TIMEOUT))
 		})
 
 		It("should mention 'scheduled turn timed out' in last_error_message", func() {
 			schedules, _ := store.List("p")
 			Expect(schedules[0].GetLastErrorMessage()).To(ContainSubstring("scheduled turn timed out"))
+		})
+
+		It("should record the timeout wait duration", func() {
+			schedules, _ := store.List("p")
+			Expect(schedules[0].GetLastDurationSeconds()).To(Equal(int32(1)))
+		})
+	})
+
+	Describe("Execute when the hard timeout wins before a late OK completion", func() {
+		var (
+			completion chan *server.ScheduledTurnOutcome
+			executeErr error
+		)
+
+		BeforeEach(func() {
+			completion = make(chan *server.ScheduledTurnOutcome, 1)
+			dispatcher.dispatchFn = func(req *apiv1.ScheduledTurnRequest) (<-chan *server.ScheduledTurnOutcome, error) {
+				dispatcher.record(req)
+				return completion, nil
+			}
+			job = server.NewAgentTurnJob(store, dispatcher, "p", "s1", 50*time.Millisecond)
+
+			done := make(chan error, 1)
+			go func() {
+				done <- job.Execute()
+			}()
+			select {
+			case executeErr = <-done:
+			case <-time.After(time.Second):
+				Fail("Execute did not return within 1s; awaitOutcome timeout branch is likely broken")
+			}
+
+			completion <- &server.ScheduledTurnOutcome{
+				TerminalStatus:  apiv1.ScheduleStatus_SCHEDULE_STATUS_OK,
+				DurationSeconds: 900,
+			}
+		})
+
+		It("should still return nil from Execute", func() {
+			Expect(executeErr).NotTo(HaveOccurred())
+		})
+
+		It("should keep the timed-out run authoritative", func() {
+			schedules, _ := store.List("p")
+			Expect(schedules[0].GetLastStatus()).To(Equal(apiv1.ScheduleStatus_SCHEDULE_STATUS_TIMEOUT))
+		})
+
+		It("should record the timeout duration instead of the late completion duration", func() {
+			schedules, _ := store.List("p")
+			Expect(schedules[0].GetLastDurationSeconds()).To(Equal(int32(1)))
 		})
 	})
 
