@@ -71,11 +71,11 @@ type recordingChecklistMutator struct {
 	deleteErr      error
 	appendErr      error
 
-	addCalls          []addCall
-	updateCalls       []updateCall
-	deleteCalls       []deleteCall
-	appendCalls       []appendCall
-	callOrder         []string
+	addCalls    []addCall
+	updateCalls []updateCall
+	deleteCalls []deleteCall
+	appendCalls []appendCall
+	callOrder   []string
 }
 
 type addCall struct {
@@ -248,17 +248,17 @@ var _ = Describe("Engine.reconcile", func() {
 	)
 
 	var (
-		fa       *enginetesting.FakeAdapter
-		fbs      *enginetesting.FakeBindingStore
-		lease    *connectors.LeaseTable
-		clock    *enginetesting.FakeClock
-		reader   *recordingChecklistReader
-		mutator  *trackingChecklistMutator
-		supr     *recordingSuppressor
-		tracker  *orderTracker
-		eng      *engine.Engine
-		ctx      context.Context
-		key      connectors.BindingKey
+		fa      *enginetesting.FakeAdapter
+		fbs     *enginetesting.FakeBindingStore
+		lease   *connectors.LeaseTable
+		clock   *enginetesting.FakeClock
+		reader  *recordingChecklistReader
+		mutator *trackingChecklistMutator
+		supr    *recordingSuppressor
+		tracker *orderTracker
+		eng     *engine.Engine
+		ctx     context.Context
+		key     connectors.BindingKey
 	)
 
 	BeforeEach(func() {
@@ -965,6 +965,80 @@ var _ = Describe("Engine.reconcile", func() {
 		})
 	})
 
+	When("outbound has two new wiki items", func() {
+		const firstTaskRef = "task-write-through-1"
+		const secondTaskRef = "task-write-through-2"
+
+		BeforeEach(func() {
+			fbs.SeedBinding(connectors.Binding{
+				ProfileID: profileID, Page: page, ListName: listName,
+				RemoteHandle:         "tasklist-1",
+				State:                connectors.BindingStateActive,
+				LastSuccessfulSyncAt: reconcilePastChokePausedAt,
+				AdapterState:         connectors.AdapterState{"item_id_map": map[string]string{}},
+			}, ownerKind)
+
+			fa.SetPullRemoteResponse(connectors.RemotePullResult{}, nil)
+			fa.SetInsertRemoteResponse(firstTaskRef, nil)
+			fa.SetInsertRemoteResponse(secondTaskRef, nil)
+			reader.checklist = &apiv1.Checklist{
+				Items: []*apiv1.ChecklistItem{
+					{Uid: "uid-write-through-1", Text: "eggs"},
+					{Uid: "uid-write-through-2", Text: "milk"},
+				},
+			}
+
+			Expect(eng.Sync(ctx, key)).To(Succeed())
+		})
+
+		It("should call InsertRemote twice", func() {
+			Expect(fa.RecordedInsertRemote).To(HaveLen(2))
+		})
+
+		It("should persist the first inserted ref before the second insert", func() {
+			secondInsertBinding := fa.RecordedInsertRemote[1].Binding
+			idMap, ok := secondInsertBinding.AdapterState["item_id_map"].(map[string]string)
+			Expect(ok).To(BeTrue())
+			Expect(idMap).To(ContainElement(firstTaskRef))
+		})
+
+		It("should save once for each successful insert plus the final reconcile save", func() {
+			Expect(fbs.RecordedSaveBinding).To(HaveLen(3))
+		})
+	})
+
+	When("outbound insert succeeds but progress persistence fails", func() {
+		var syncErr error
+
+		BeforeEach(func() {
+			fbs.SeedBinding(connectors.Binding{
+				ProfileID: profileID, Page: page, ListName: listName,
+				RemoteHandle:         "tasklist-1",
+				State:                connectors.BindingStateActive,
+				LastSuccessfulSyncAt: reconcilePastChokePausedAt,
+				AdapterState:         connectors.AdapterState{"item_id_map": map[string]string{}},
+			}, ownerKind)
+
+			fa.SetPullRemoteResponse(connectors.RemotePullResult{}, nil)
+			fa.SetInsertRemoteResponse("task-not-persisted", nil)
+			fbs.SetSaveBindingError(errReconcileProgrammed)
+			reader.checklist = &apiv1.Checklist{
+				Items: []*apiv1.ChecklistItem{{Uid: "uid-save-fails", Text: "bread"}},
+			}
+
+			syncErr = eng.Sync(ctx, key)
+		})
+
+		It("should return the persistence error", func() {
+			Expect(syncErr).To(MatchError(ContainSubstring("save outbound insert progress")))
+			Expect(syncErr).To(MatchError(ContainSubstring(errReconcileProgrammed.Error())))
+		})
+
+		It("should not append an outbound_inserted event", func() {
+			Expect(mutator.recordingChecklistMutator.appendCalls).To(BeEmpty())
+		})
+	})
+
 	// Regression: the engine's WikiItem-from-ChecklistItem construction sites
 	// (push loop in reconcile.go, SyncCollectionState items, SeedBindingState
 	// items) silently dropped the Due field, so Tasks/Keep/iCloud adapters
@@ -1114,7 +1188,7 @@ var _ = Describe("Engine.reconcile", func() {
 				LastSuccessfulSyncAt: reconcilePastChokePausedAt,
 				LastSyncedSeq:        10,
 				AdapterState: connectors.AdapterState{
-					"item_id_map":                                            map[string]string{knownUID: "task-1"},
+					"item_id_map": map[string]string{knownUID: "task-1"},
 					engine.AdapterStateKeyItemFingerprintsForTest: map[string]string{knownUID: matchingFP},
 				},
 			}, ownerKind)
@@ -1209,7 +1283,7 @@ var _ = Describe("Engine.reconcile", func() {
 				LastSuccessfulSyncAt: reconcilePastChokePausedAt,
 				LastSyncedSeq:        100,
 				AdapterState: connectors.AdapterState{
-					"item_id_map":                                            map[string]string{knownUID: "task-fp"},
+					"item_id_map": map[string]string{knownUID: "task-fp"},
 					engine.AdapterStateKeyItemFingerprintsForTest: map[string]string{knownUID: oldFP},
 				},
 			}, ownerKind)
