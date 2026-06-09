@@ -777,6 +777,10 @@ func (e *Engine) pushOutbound(
 			idMap[uid] = string(newRef)
 			fingerprints[uid] = wikiItemFingerprint(wikiItem)
 			binding = e.recordPushSuccess(binding, uid)
+			binding = writeItemIDMap(binding, idMap)
+			if saveErr := e.saveOutboundInsertProgress(binding); saveErr != nil {
+				return binding, false, saveErr
+			}
 			if appendErr := e.mutator.AppendSyncEvent(ctx, binding.Page, binding.ListName, uid, "outbound_inserted"); appendErr != nil {
 				e.logger.Info("connectors/engine: append_sync_event_failed page=%s list=%s uid=%s op=outbound_inserted err=%v",
 					binding.Page, binding.ListName, uid, appendErr)
@@ -935,6 +939,18 @@ func (e *Engine) pushOutbound(
 	}
 
 	return binding, false, nil
+}
+
+func (e *Engine) saveOutboundInsertProgress(binding connectors.Binding) error {
+	profileID := binding.ProfileID
+	kind := e.adapter.Kind()
+	return e.store.WithProfileLock(profileID, func() error {
+		if err := e.store.SaveBinding(profileID, kind, binding); err != nil {
+			return fmt.Errorf("save outbound insert progress %s/%s for profile %s: %w",
+				binding.Page, binding.ListName, profileID, err)
+		}
+		return nil
+	})
 }
 
 // advanceLastSyncedSeq returns the new cursor value for binding. Per
