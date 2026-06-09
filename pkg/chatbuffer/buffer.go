@@ -75,6 +75,7 @@ type Event struct {
 	Reaction          *ReactionEvent
 	ToolCall          *ToolCallEvent
 	PermissionRequest *PermissionRequestEvent
+	Cleared           *ClearedEvent
 }
 
 // EventType identifies the type of chat event.
@@ -86,6 +87,7 @@ const (
 	EventTypeReaction
 	EventTypeToolCall
 	EventTypePermissionRequest
+	EventTypeCleared
 )
 
 // EditEvent represents a message edit.
@@ -111,6 +113,11 @@ type ReactionEvent struct {
 	Reactor   string
 }
 
+// ClearedEvent represents a page chat clear.
+type ClearedEvent struct {
+	Page string
+}
+
 // pageBuffer stores messages for a single page.
 type pageBuffer struct {
 	messages       []*Message
@@ -129,7 +136,7 @@ type Manager struct {
 	pageChannelSubscribersMu sync.RWMutex
 
 	instanceRequests     map[string]time.Time // page → request timestamp
-	instanceRequestChans []chan string         // pool daemon subscribers
+	instanceRequestChans []chan string        // pool daemon subscribers
 	instanceMu           sync.RWMutex
 
 	cancelFuncs   map[string][]chan struct{} // page → cancellation signal subscribers
@@ -322,6 +329,22 @@ func (m *Manager) AddAssistantMessage(page, content, replyToID string) (string, 
 	return messageID, nil
 }
 
+// ClearPage clears the visible chat history for a page and notifies subscribers.
+func (m *Manager) ClearPage(page string) {
+	buf := m.getOrCreateBuffer(page)
+	buf.mu.Lock()
+	buf.messages = make([]*Message, 0, MaxMessagesPerPage)
+	buf.nextSequence = 1
+	buf.lastAccess = time.Now()
+
+	buf.unlockAndNotify(Event{
+		Type: EventTypeCleared,
+		Cleared: &ClearedEvent{
+			Page: page,
+		},
+	})
+}
+
 // notifyEventListeners sends an event to all listeners without blocking.
 func notifyEventListeners(listeners []chan Event, event Event) {
 	for _, listener := range listeners {
@@ -362,7 +385,7 @@ func (buf *pageBuffer) makeUnsubscribeFn(eventChan chan Event) func() {
 func (buf *pageBuffer) appendToRingBuffer(msg *Message) {
 	buf.messages = append(buf.messages, msg)
 	if len(buf.messages) > MaxMessagesPerPage {
-		buf.messages[0] = nil          // Allow GC of evicted message
+		buf.messages[0] = nil           // Allow GC of evicted message
 		buf.messages = buf.messages[1:] // Evict oldest
 	}
 }

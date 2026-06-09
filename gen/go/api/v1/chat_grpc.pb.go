@@ -24,6 +24,7 @@ const (
 	ChatService_SendChatReply_FullMethodName              = "/api.v1.ChatService/SendChatReply"
 	ChatService_EditChatMessage_FullMethodName            = "/api.v1.ChatService/EditChatMessage"
 	ChatService_ReactToMessage_FullMethodName             = "/api.v1.ChatService/ReactToMessage"
+	ChatService_ClearChat_FullMethodName                  = "/api.v1.ChatService/ClearChat"
 	ChatService_GetChatStatus_FullMethodName              = "/api.v1.ChatService/GetChatStatus"
 	ChatService_SubscribePageChatMessages_FullMethodName  = "/api.v1.ChatService/SubscribePageChatMessages"
 	ChatService_SubscribeInstanceRequests_FullMethodName  = "/api.v1.ChatService/SubscribeInstanceRequests"
@@ -57,6 +58,8 @@ type ChatServiceClient interface {
 	// ReactToMessage is called by the pool daemon when the agent uses the react tool.
 	// Adds an emoji reaction to a message.
 	ReactToMessage(ctx context.Context, in *ReactToMessageRequest, opts ...grpc.CallOption) (*ReactToMessageResponse, error)
+	// ClearChat clears the visible chat history for a page.
+	ClearChat(ctx context.Context, in *ClearChatRequest, opts ...grpc.CallOption) (*ClearChatResponse, error)
 	// GetChatStatus returns whether an agent is currently connected for a page.
 	// Used by the chat panel to disable the UI when no agent is available.
 	GetChatStatus(ctx context.Context, in *GetChatStatusRequest, opts ...grpc.CallOption) (*GetChatStatusResponse, error)
@@ -157,6 +160,16 @@ func (c *chatServiceClient) ReactToMessage(ctx context.Context, in *ReactToMessa
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ReactToMessageResponse)
 	err := c.cc.Invoke(ctx, ChatService_ReactToMessage_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *chatServiceClient) ClearChat(ctx context.Context, in *ClearChatRequest, opts ...grpc.CallOption) (*ClearChatResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ClearChatResponse)
+	err := c.cc.Invoke(ctx, ChatService_ClearChat_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -335,6 +348,8 @@ type ChatServiceServer interface {
 	// ReactToMessage is called by the pool daemon when the agent uses the react tool.
 	// Adds an emoji reaction to a message.
 	ReactToMessage(context.Context, *ReactToMessageRequest) (*ReactToMessageResponse, error)
+	// ClearChat clears the visible chat history for a page.
+	ClearChat(context.Context, *ClearChatRequest) (*ClearChatResponse, error)
 	// GetChatStatus returns whether an agent is currently connected for a page.
 	// Used by the chat panel to disable the UI when no agent is available.
 	GetChatStatus(context.Context, *GetChatStatusRequest) (*GetChatStatusResponse, error)
@@ -379,6 +394,9 @@ func (UnimplementedChatServiceServer) EditChatMessage(context.Context, *EditChat
 }
 func (UnimplementedChatServiceServer) ReactToMessage(context.Context, *ReactToMessageRequest) (*ReactToMessageResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ReactToMessage not implemented")
+}
+func (UnimplementedChatServiceServer) ClearChat(context.Context, *ClearChatRequest) (*ClearChatResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ClearChat not implemented")
 }
 func (UnimplementedChatServiceServer) GetChatStatus(context.Context, *GetChatStatusRequest) (*GetChatStatusResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetChatStatus not implemented")
@@ -506,6 +524,24 @@ func _ChatService_ReactToMessage_Handler(srv interface{}, ctx context.Context, d
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(ChatServiceServer).ReactToMessage(ctx, req.(*ReactToMessageRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _ChatService_ClearChat_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ClearChatRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ChatServiceServer).ClearChat(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ChatService_ClearChat_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ChatServiceServer).ClearChat(ctx, req.(*ClearChatRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -685,6 +721,10 @@ var ChatService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ReactToMessage",
 			Handler:    _ChatService_ReactToMessage_Handler,
+		},
+		{
+			MethodName: "ClearChat",
+			Handler:    _ChatService_ClearChat_Handler,
 		},
 		{
 			MethodName: "GetChatStatus",

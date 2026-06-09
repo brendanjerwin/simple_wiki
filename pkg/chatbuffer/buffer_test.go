@@ -444,6 +444,74 @@ var _ = Describe("Manager", func() {
 		})
 	})
 
+	Describe("ClearPage", func() {
+		When("the page has buffered messages", func() {
+			var (
+				eventChan <-chan chatbuffer.Event
+				messages  []*chatbuffer.Message
+			)
+
+			BeforeEach(func() {
+				_, unsubChannel := manager.SubscribeToPageChannel("test-page")
+				DeferCleanup(unsubChannel)
+
+				_, _ = manager.AddUserMessage("test-page", "First", "user")
+				_, _ = manager.AddAssistantMessage("test-page", "Second", "")
+
+				var unsubscribe func()
+				eventChan, unsubscribe = manager.SubscribeToPage("test-page")
+				DeferCleanup(unsubscribe)
+
+				manager.ClearPage("test-page")
+				messages = manager.GetMessages("test-page")
+			})
+
+			It("should remove buffered messages", func() {
+				Expect(messages).To(BeEmpty())
+			})
+
+			It("should notify page subscribers", func() {
+				Eventually(eventChan).Should(Receive(And(
+					HaveField("Type", chatbuffer.EventTypeCleared),
+					HaveField("Cleared.Page", "test-page"),
+				)))
+			})
+		})
+
+		When("subscribing with replay after clearing", func() {
+			var replayedMessages []*chatbuffer.Message
+
+			BeforeEach(func() {
+				_, _ = manager.AddAssistantMessage("test-page", "Old message", "")
+				manager.ClearPage("test-page")
+
+				var unsubscribe func()
+				replayedMessages, _, unsubscribe = manager.SubscribeToPageWithReplay("test-page")
+				DeferCleanup(unsubscribe)
+			})
+
+			It("should not replay cleared messages", func() {
+				Expect(replayedMessages).To(BeEmpty())
+			})
+		})
+
+		When("adding a message after clearing", func() {
+			var messages []*chatbuffer.Message
+
+			BeforeEach(func() {
+				_, _ = manager.AddAssistantMessage("test-page", "Old message", "")
+				manager.ClearPage("test-page")
+				_, _ = manager.AddAssistantMessage("test-page", "New message", "")
+				messages = manager.GetMessages("test-page")
+			})
+
+			It("should start sequence numbering from one", func() {
+				Expect(messages).To(HaveLen(1))
+				Expect(messages[0].Sequence).To(Equal(int64(1)))
+			})
+		})
+	})
+
 	Describe("GetMessages", func() {
 		When("getting messages from an empty page", func() {
 			var messages []*chatbuffer.Message
@@ -568,7 +636,7 @@ var _ = Describe("Manager", func() {
 	Describe("SubscribeToPage", func() {
 		When("subscribing to a page", func() {
 			var (
-				eventChan  <-chan chatbuffer.Event
+				eventChan   <-chan chatbuffer.Event
 				unsubscribe func()
 			)
 

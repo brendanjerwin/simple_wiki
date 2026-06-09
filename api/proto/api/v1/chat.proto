@@ -30,6 +30,9 @@ service ChatService {
   // Adds an emoji reaction to a message.
   rpc ReactToMessage(ReactToMessageRequest) returns (ReactToMessageResponse) {}
 
+  // ClearChat clears the visible chat history for a page.
+  rpc ClearChat(ClearChatRequest) returns (ClearChatResponse) {}
+
   // GetChatStatus returns whether an agent is currently connected for a page.
   // Used by the chat panel to disable the UI when no agent is available.
   rpc GetChatStatus(GetChatStatusRequest) returns (GetChatStatusResponse) {}
@@ -96,7 +99,13 @@ message ChatEvent {
     ChatReaction reaction = 3;
     ChatToolCall tool_call = 4;
     ChatPermissionRequest permission_request = 5;
+    ChatCleared chat_cleared = 6;
   }
+}
+
+// ChatCleared is streamed when a page's visible chat history is cleared.
+message ChatCleared {
+  string page = 1;
 }
 
 // ChatPermissionRequest is sent to the browser when the agent needs user authorization.
@@ -188,6 +197,14 @@ message ReactToMessageRequest {
 
 // ReactToMessageResponse is the response for ReactToMessage.
 message ReactToMessageResponse {}
+
+// ClearChatRequest is the request for ClearChat.
+message ClearChatRequest {
+  string page = 1;  // page identifier whose visible chat should be cleared
+}
+
+// ClearChatResponse is the response for ClearChat.
+message ClearChatResponse {}
 
 // GetChatStatusRequest is the request for GetChatStatus.
 message GetChatStatusRequest {

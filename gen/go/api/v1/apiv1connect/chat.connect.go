@@ -47,6 +47,8 @@ const (
 	// ChatServiceReactToMessageProcedure is the fully-qualified name of the ChatService's
 	// ReactToMessage RPC.
 	ChatServiceReactToMessageProcedure = "/api.v1.ChatService/ReactToMessage"
+	// ChatServiceClearChatProcedure is the fully-qualified name of the ChatService's ClearChat RPC.
+	ChatServiceClearChatProcedure = "/api.v1.ChatService/ClearChat"
 	// ChatServiceGetChatStatusProcedure is the fully-qualified name of the ChatService's GetChatStatus
 	// RPC.
 	ChatServiceGetChatStatusProcedure = "/api.v1.ChatService/GetChatStatus"
@@ -81,6 +83,7 @@ var (
 	chatServiceSendChatReplyMethodDescriptor              = chatServiceServiceDescriptor.Methods().ByName("SendChatReply")
 	chatServiceEditChatMessageMethodDescriptor            = chatServiceServiceDescriptor.Methods().ByName("EditChatMessage")
 	chatServiceReactToMessageMethodDescriptor             = chatServiceServiceDescriptor.Methods().ByName("ReactToMessage")
+	chatServiceClearChatMethodDescriptor                  = chatServiceServiceDescriptor.Methods().ByName("ClearChat")
 	chatServiceGetChatStatusMethodDescriptor              = chatServiceServiceDescriptor.Methods().ByName("GetChatStatus")
 	chatServiceSubscribePageChatMessagesMethodDescriptor  = chatServiceServiceDescriptor.Methods().ByName("SubscribePageChatMessages")
 	chatServiceSubscribeInstanceRequestsMethodDescriptor  = chatServiceServiceDescriptor.Methods().ByName("SubscribeInstanceRequests")
@@ -108,6 +111,8 @@ type ChatServiceClient interface {
 	// ReactToMessage is called by the pool daemon when the agent uses the react tool.
 	// Adds an emoji reaction to a message.
 	ReactToMessage(context.Context, *connect.Request[v1.ReactToMessageRequest]) (*connect.Response[v1.ReactToMessageResponse], error)
+	// ClearChat clears the visible chat history for a page.
+	ClearChat(context.Context, *connect.Request[v1.ClearChatRequest]) (*connect.Response[v1.ClearChatResponse], error)
 	// GetChatStatus returns whether an agent is currently connected for a page.
 	// Used by the chat panel to disable the UI when no agent is available.
 	GetChatStatus(context.Context, *connect.Request[v1.GetChatStatusRequest]) (*connect.Response[v1.GetChatStatusResponse], error)
@@ -173,6 +178,12 @@ func NewChatServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 			connect.WithSchema(chatServiceReactToMessageMethodDescriptor),
 			connect.WithClientOptions(opts...),
 		),
+		clearChat: connect.NewClient[v1.ClearChatRequest, v1.ClearChatResponse](
+			httpClient,
+			baseURL+ChatServiceClearChatProcedure,
+			connect.WithSchema(chatServiceClearChatMethodDescriptor),
+			connect.WithClientOptions(opts...),
+		),
 		getChatStatus: connect.NewClient[v1.GetChatStatusRequest, v1.GetChatStatusResponse](
 			httpClient,
 			baseURL+ChatServiceGetChatStatusProcedure,
@@ -231,6 +242,7 @@ type chatServiceClient struct {
 	sendChatReply              *connect.Client[v1.SendChatReplyRequest, v1.SendChatReplyResponse]
 	editChatMessage            *connect.Client[v1.EditChatMessageRequest, v1.EditChatMessageResponse]
 	reactToMessage             *connect.Client[v1.ReactToMessageRequest, v1.ReactToMessageResponse]
+	clearChat                  *connect.Client[v1.ClearChatRequest, v1.ClearChatResponse]
 	getChatStatus              *connect.Client[v1.GetChatStatusRequest, v1.GetChatStatusResponse]
 	subscribePageChatMessages  *connect.Client[v1.SubscribePageChatMessagesRequest, v1.ChatMessage]
 	subscribeInstanceRequests  *connect.Client[v1.SubscribeInstanceRequestsRequest, v1.InstanceRequest]
@@ -264,6 +276,11 @@ func (c *chatServiceClient) EditChatMessage(ctx context.Context, req *connect.Re
 // ReactToMessage calls api.v1.ChatService.ReactToMessage.
 func (c *chatServiceClient) ReactToMessage(ctx context.Context, req *connect.Request[v1.ReactToMessageRequest]) (*connect.Response[v1.ReactToMessageResponse], error) {
 	return c.reactToMessage.CallUnary(ctx, req)
+}
+
+// ClearChat calls api.v1.ChatService.ClearChat.
+func (c *chatServiceClient) ClearChat(ctx context.Context, req *connect.Request[v1.ClearChatRequest]) (*connect.Response[v1.ClearChatResponse], error) {
+	return c.clearChat.CallUnary(ctx, req)
 }
 
 // GetChatStatus calls api.v1.ChatService.GetChatStatus.
@@ -323,6 +340,8 @@ type ChatServiceHandler interface {
 	// ReactToMessage is called by the pool daemon when the agent uses the react tool.
 	// Adds an emoji reaction to a message.
 	ReactToMessage(context.Context, *connect.Request[v1.ReactToMessageRequest]) (*connect.Response[v1.ReactToMessageResponse], error)
+	// ClearChat clears the visible chat history for a page.
+	ClearChat(context.Context, *connect.Request[v1.ClearChatRequest]) (*connect.Response[v1.ClearChatResponse], error)
 	// GetChatStatus returns whether an agent is currently connected for a page.
 	// Used by the chat panel to disable the UI when no agent is available.
 	GetChatStatus(context.Context, *connect.Request[v1.GetChatStatusRequest]) (*connect.Response[v1.GetChatStatusResponse], error)
@@ -382,6 +401,12 @@ func NewChatServiceHandler(svc ChatServiceHandler, opts ...connect.HandlerOption
 		ChatServiceReactToMessageProcedure,
 		svc.ReactToMessage,
 		connect.WithSchema(chatServiceReactToMessageMethodDescriptor),
+		connect.WithHandlerOptions(opts...),
+	)
+	chatServiceClearChatHandler := connect.NewUnaryHandler(
+		ChatServiceClearChatProcedure,
+		svc.ClearChat,
+		connect.WithSchema(chatServiceClearChatMethodDescriptor),
 		connect.WithHandlerOptions(opts...),
 	)
 	chatServiceGetChatStatusHandler := connect.NewUnaryHandler(
@@ -444,6 +469,8 @@ func NewChatServiceHandler(svc ChatServiceHandler, opts ...connect.HandlerOption
 			chatServiceEditChatMessageHandler.ServeHTTP(w, r)
 		case ChatServiceReactToMessageProcedure:
 			chatServiceReactToMessageHandler.ServeHTTP(w, r)
+		case ChatServiceClearChatProcedure:
+			chatServiceClearChatHandler.ServeHTTP(w, r)
 		case ChatServiceGetChatStatusProcedure:
 			chatServiceGetChatStatusHandler.ServeHTTP(w, r)
 		case ChatServiceSubscribePageChatMessagesProcedure:
@@ -487,6 +514,10 @@ func (UnimplementedChatServiceHandler) EditChatMessage(context.Context, *connect
 
 func (UnimplementedChatServiceHandler) ReactToMessage(context.Context, *connect.Request[v1.ReactToMessageRequest]) (*connect.Response[v1.ReactToMessageResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("api.v1.ChatService.ReactToMessage is not implemented"))
+}
+
+func (UnimplementedChatServiceHandler) ClearChat(context.Context, *connect.Request[v1.ClearChatRequest]) (*connect.Response[v1.ClearChatResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("api.v1.ChatService.ClearChat is not implemented"))
 }
 
 func (UnimplementedChatServiceHandler) GetChatStatus(context.Context, *connect.Request[v1.GetChatStatusRequest]) (*connect.Response[v1.GetChatStatusResponse], error) {

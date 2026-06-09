@@ -164,6 +164,62 @@ describe('PageChatPanel', () => {
     });
   });
 
+  describe('when clear chat button is clicked', () => {
+    let el: PageChatPanel;
+    let clearChatStub: SinonStub;
+
+    beforeEach(async () => {
+      localStorageStub.getItem.returns(null);
+      clearChatStub = stub().resolves();
+      el = await fixture(html`<page-chat-panel page="test-page" persona="TestPersona"></page-chat-panel>`);
+      const msgState: ChatMessageState = {
+        id: 'clear-msg',
+        sender: Sender.USER,
+        content: 'Clear me',
+        renderedHtml: '',
+        timestamp: new Date(),
+        senderName: 'User',
+        replyToId: '',
+        reactions: [],
+        edited: false,
+        toolCalls: [],
+        sequence: 0n,
+      };
+      el.messages = [msgState];
+      (el as unknown as { messagesById: Map<string, ChatMessageState> }).messagesById.set('clear-msg', msgState);
+      el.waitingForAssistant = true;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- replacing private chatClient for testing
+      (el as any).chatClient = { clearChat: clearChatStub };
+      await el.updateComplete;
+
+      const clearBtn = el.shadowRoot!.querySelector('.clear-button') as HTMLElement;
+      clearBtn.click();
+      await Promise.resolve();
+      await el.updateComplete;
+    });
+
+    it('should call chatClient.clearChat', () => {
+      expect(clearChatStub.callCount).to.equal(1);
+    });
+
+    it('should pass the page to clearChat', () => {
+      expect(clearChatStub.firstCall.args[0].page).to.equal('test-page');
+    });
+
+    it('should clear messages', () => {
+      expect(el.messages).to.have.length(0);
+    });
+
+    it('should clear message lookup state', () => {
+      const messagesById = (el as unknown as { messagesById: Map<string, ChatMessageState> }).messagesById;
+      expect(messagesById.size).to.equal(0);
+    });
+
+    it('should clear waiting state', () => {
+      expect(el.waitingForAssistant).to.equal(false);
+    });
+  });
+
   describe('when localStorage has panel open', () => {
     let el: PageChatPanel;
 
@@ -2044,6 +2100,61 @@ describe('PageChatPanel stream methods', () => {
       it('should map options from the event', () => {
         expect(el.pendingPermission!.options).to.have.length(1);
         expect(el.pendingPermission!.options[0]!.optionId).to.equal('allow');
+      });
+    });
+
+    describe('when event is chatCleared', () => {
+
+      beforeEach(async () => {
+        const msgState: ChatMessageState = {
+          id: 'cleared-evt-msg',
+          sender: Sender.USER,
+          content: 'Existing message',
+          renderedHtml: '',
+          timestamp: new Date(),
+          senderName: 'User',
+          replyToId: '',
+          reactions: [],
+          edited: false,
+          toolCalls: [],
+          sequence: 0n,
+        };
+        el.messages = [msgState];
+        el.waitingForAssistant = true;
+        el.pendingPermission = {
+          requestId: 'perm-clear',
+          title: 'Permission',
+          description: 'Existing request',
+          options: [],
+        };
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- accessing private field for testing
+        (el as any).messagesById.set('cleared-evt-msg', msgState);
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- calling private method for testing
+        await (el as any).handleChatEvent({
+          event: {
+            case: 'chatCleared',
+            value: { page: 'test-page' },
+          },
+        });
+        await el.updateComplete;
+      });
+
+      it('should clear messages', () => {
+        expect(el.messages).to.have.length(0);
+      });
+
+      it('should clear message lookup state', () => {
+        const messagesById = (el as unknown as { messagesById: Map<string, ChatMessageState> }).messagesById;
+        expect(messagesById.size).to.equal(0);
+      });
+
+      it('should clear waiting state', () => {
+        expect(el.waitingForAssistant).to.equal(false);
+      });
+
+      it('should clear pending permission', () => {
+        expect(el.pendingPermission).to.equal(null);
       });
     });
 

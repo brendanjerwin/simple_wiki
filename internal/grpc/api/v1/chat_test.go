@@ -21,25 +21,26 @@ import (
 
 // mockChatBufferManager is a test implementation of ChatBufferManager.
 type mockChatBufferManager struct {
-	mu              sync.Mutex
-	messages        map[string][]*chatbuffer.Message
-	pageSubscribers map[string][]chan chatbuffer.Event
-	addUserMessageError  error
-	addAssistantError    error
-	editMessageError     error
-	addReactionError     error
+	mu                  sync.Mutex
+	messages            map[string][]*chatbuffer.Message
+	pageSubscribers     map[string][]chan chatbuffer.Event
+	addUserMessageError error
+	addAssistantError   error
+	editMessageError    error
+	addReactionError    error
 
 	// Tracking fields for new handler tests
 	notifyToolCallCalls       []notifyToolCallArgs
+	clearPageCalls            []string
 	cancelPageCalls           []string
 	respondToPermissionCalls  []respondToPermissionArgs
 	requestPermissionCalls    []requestPermissionArgs
 	requestPermissionResponse string
 
 	// Configurable return values for status methods
-	hasPageChannelSubscriberVal    bool
+	hasPageChannelSubscriberVal     bool
 	hasInstanceRequestSubscriberVal bool
-	isInstanceRequestedVal         bool
+	isInstanceRequestedVal          bool
 
 	// Configurable replay messages for SubscribeToPageChannelWithReplay
 	pageChannelReplayMessages []*chatbuffer.Message
@@ -84,6 +85,10 @@ func (m *mockChatBufferManager) sendEventToPage(page string, event chatbuffer.Ev
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
+	m.sendEventToPageLocked(page, event)
+}
+
+func (m *mockChatBufferManager) sendEventToPageLocked(page string, event chatbuffer.Event) {
 	for _, ch := range m.pageSubscribers[page] {
 		select {
 		case ch <- event:
@@ -175,6 +180,20 @@ func (m *mockChatBufferManager) AddReaction(messageID, emoji, reactor string) er
 		return m.addReactionError
 	}
 	return nil
+}
+
+func (m *mockChatBufferManager) ClearPage(page string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.clearPageCalls = append(m.clearPageCalls, page)
+	m.messages[page] = nil
+	m.sendEventToPageLocked(page, chatbuffer.Event{
+		Type: chatbuffer.EventTypeCleared,
+		Cleared: &chatbuffer.ClearedEvent{
+			Page: page,
+		},
+	})
 }
 
 func (m *mockChatBufferManager) GetMessages(page string) []*chatbuffer.Message {
@@ -373,13 +392,13 @@ func (m *mockChatStreamServer) Context() context.Context {
 	return context.Background()
 }
 
-func (*mockChatStreamServer) SetHeader(metadata.MD) error   { return nil }
-func (*mockChatStreamServer) SendHeader(metadata.MD) error  { return nil }
+func (*mockChatStreamServer) SetHeader(metadata.MD) error  { return nil }
+func (*mockChatStreamServer) SendHeader(metadata.MD) error { return nil }
 func (*mockChatStreamServer) SetTrailer(metadata.MD) {
 	// No-op test stub — not needed for this test scenario
 }
-func (*mockChatStreamServer) SendMsg(any) error             { return nil }
-func (*mockChatStreamServer) RecvMsg(any) error             { return nil }
+func (*mockChatStreamServer) SendMsg(any) error { return nil }
+func (*mockChatStreamServer) RecvMsg(any) error { return nil }
 
 // mockChatMessagesStreamServer is a mock for testing SubscribePageChatMessages.
 type mockChatMessagesStreamServer struct {
@@ -414,13 +433,13 @@ func (m *mockChatMessagesStreamServer) Context() context.Context {
 	return context.Background()
 }
 
-func (*mockChatMessagesStreamServer) SetHeader(metadata.MD) error   { return nil }
-func (*mockChatMessagesStreamServer) SendHeader(metadata.MD) error  { return nil }
+func (*mockChatMessagesStreamServer) SetHeader(metadata.MD) error  { return nil }
+func (*mockChatMessagesStreamServer) SendHeader(metadata.MD) error { return nil }
 func (*mockChatMessagesStreamServer) SetTrailer(metadata.MD) {
 	// No-op test stub — not needed for this test scenario
 }
-func (*mockChatMessagesStreamServer) SendMsg(any) error             { return nil }
-func (*mockChatMessagesStreamServer) RecvMsg(any) error             { return nil }
+func (*mockChatMessagesStreamServer) SendMsg(any) error { return nil }
+func (*mockChatMessagesStreamServer) RecvMsg(any) error { return nil }
 
 // mockInstanceRequestStreamServer mocks the SubscribeInstanceRequests stream server.
 type mockInstanceRequestStreamServer struct {
@@ -449,21 +468,21 @@ func (m *mockInstanceRequestStreamServer) Context() context.Context {
 	return context.Background()
 }
 
-func (*mockInstanceRequestStreamServer) SetHeader(metadata.MD) error   { return nil }
-func (*mockInstanceRequestStreamServer) SendHeader(metadata.MD) error  { return nil }
+func (*mockInstanceRequestStreamServer) SetHeader(metadata.MD) error  { return nil }
+func (*mockInstanceRequestStreamServer) SendHeader(metadata.MD) error { return nil }
 func (*mockInstanceRequestStreamServer) SetTrailer(metadata.MD) {
 	// No-op test stub — not needed for this test scenario
 }
-func (*mockInstanceRequestStreamServer) SendMsg(any) error             { return nil }
-func (*mockInstanceRequestStreamServer) RecvMsg(any) error             { return nil }
+func (*mockInstanceRequestStreamServer) SendMsg(any) error { return nil }
+func (*mockInstanceRequestStreamServer) RecvMsg(any) error { return nil }
 
 // mockCancellationStreamServer mocks the SubscribePageCancellations stream server.
 type mockCancellationStreamServer struct {
-	mu           sync.Mutex
+	mu            sync.Mutex
 	cancellations []*apiv1.PageCancellation
-	sendErr      error
-	ctx          context.Context
-	ctxCancel    context.CancelFunc
+	sendErr       error
+	ctx           context.Context
+	ctxCancel     context.CancelFunc
 }
 
 func newMockCancellationStreamServer() *mockCancellationStreamServer {
@@ -1217,6 +1236,46 @@ var _ = Describe("ChatService", func() {
 			})
 		})
 
+		When("subscribing and receiving clear events", func() {
+			var (
+				streamServer *mockChatStreamServer
+				events       []*apiv1.ChatEvent
+			)
+
+			BeforeEach(func() {
+				streamServer = &mockChatStreamServer{}
+
+				go func() {
+					_ = server.SubscribeChat(&apiv1.SubscribeChatRequest{Page: "test-page"}, streamServer)
+				}()
+
+				Eventually(func() int { return chatManager.pageSubscriberCount("test-page") }, "1s", "10ms").Should(BeNumerically(">=", 1))
+
+				chatManager.sendEventToPage("test-page", chatbuffer.Event{
+					Type: chatbuffer.EventTypeCleared,
+					Cleared: &chatbuffer.ClearedEvent{
+						Page: "test-page",
+					},
+				})
+
+				Eventually(streamServer.GetEventCount, "1s", "10ms").Should(BeNumerically(">=", 1))
+				events = streamServer.GetEvents()
+				streamServer.contextDone = true
+			})
+
+			It("should stream chat_cleared events", func() {
+				Expect(events).To(ContainElement(WithTransform(
+					func(event *apiv1.ChatEvent) string {
+						if event.GetChatCleared() == nil {
+							return ""
+						}
+						return event.GetChatCleared().GetPage()
+					},
+					Equal("test-page"),
+				)))
+			})
+		})
+
 		When("send fails on replay", func() {
 			var (
 				req          *apiv1.SubscribeChatRequest
@@ -1803,6 +1862,50 @@ var _ = Describe("ChatService", func() {
 			It("should call CancelPage with the correct page", func() {
 				Expect(chatManager.cancelPageCalls).To(HaveLen(1))
 				Expect(chatManager.cancelPageCalls[0]).To(Equal("test-page"))
+			})
+		})
+	})
+
+	Describe("ClearChat", func() {
+		When("page is empty", func() {
+			var err error
+
+			BeforeEach(func() {
+				_, err = server.ClearChat(ctx, &apiv1.ClearChatRequest{
+					Page: "",
+				})
+			})
+
+			It("should return InvalidArgument error", func() {
+				st, ok := status.FromError(err)
+				Expect(ok).To(BeTrue())
+				Expect(st.Code()).To(Equal(codes.InvalidArgument))
+				Expect(st.Message()).To(ContainSubstring("page is required"))
+			})
+		})
+
+		When("request is valid", func() {
+			var (
+				resp *apiv1.ClearChatResponse
+				err  error
+			)
+
+			BeforeEach(func() {
+				resp, err = server.ClearChat(ctx, &apiv1.ClearChatRequest{
+					Page: "test-page",
+				})
+			})
+
+			It("should not error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should return a response", func() {
+				Expect(resp).NotTo(BeNil())
+			})
+
+			It("should call ClearPage with the correct page", func() {
+				Expect(chatManager.clearPageCalls).To(Equal([]string{"test-page"}))
 			})
 		})
 	})
@@ -2600,9 +2703,9 @@ var _ = Describe("ChatService", func() {
 				go func() {
 					defer close(doneCh)
 					resp, err = server.RequestPermissionFromUser(ctx, &apiv1.RequestPermissionFromUserRequest{
-						Page:      "test-page",
-						RequestId: "perm-req-1",
-						Title:     "Execute dangerous command",
+						Page:        "test-page",
+						RequestId:   "perm-req-1",
+						Title:       "Execute dangerous command",
 						Description: "rm -rf /tmp/test",
 						Options: []*apiv1.ChatPermissionOption{
 							{OptionId: "allow", Label: "Allow", Description: "Allow this action"},
