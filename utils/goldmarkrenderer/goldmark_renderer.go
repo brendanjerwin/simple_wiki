@@ -116,6 +116,8 @@ func newGoldmark() goldmark.Markdown {
 // policy plus every custom element/attribute the wiki's renderers emit.
 func sanitizeWikiHTML(rawHTML []byte) []byte {
 	p := bluemonday.UGCPolicy()
+	p.AddTargetBlankToFullyQualifiedLinks(true)
+	p.RequireNoReferrerOnFullyQualifiedLinks(true)
 	// Allow GFM task list checkboxes
 	p.AllowElements("input")
 	p.AllowAttrs("type").Matching(regexp.MustCompile(`^checkbox$`)).OnElements("input")

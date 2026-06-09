@@ -11,6 +11,10 @@ system = true
 
 Click the `Edit` button to edit. The pages are in [Markdown](https://www.markdownguide.org/). Your changes are saved automatically.
 
+## Links
+
+Use normal Markdown links like `[Open route](https://maps.app.goo.gl/wo54t5YMTyhz6rqH7)`. Fully qualified external links open in a new browser tab with `noopener noreferrer` protections. Internal wiki links like `[[help-search]]` and relative links stay in the current tab.
+
 ## Frontmatter
 
 If you see something like this at the top of the document:
