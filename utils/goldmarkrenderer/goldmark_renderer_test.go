@@ -19,7 +19,6 @@ var _ = Describe("GoldmarkRenderer", func() {
 		renderer = &goldmarkrenderer.GoldmarkRenderer{}
 	})
 
-
 	Describe("Render", func() {
 		var (
 			source []byte
@@ -115,8 +114,40 @@ var _ = Describe("GoldmarkRenderer", func() {
 			})
 
 			It("should render an <a> tag", func() {
-				expected := "<p><a href=\"https://www.google.com\" rel=\"nofollow\">https://www.google.com</a></p>\n"
+				expected := "<p><a href=\"https://www.google.com\" rel=\"nofollow noreferrer noopener\" target=\"_blank\">https://www.google.com</a></p>\n"
 				Expect(string(output)).To(Equal(expected))
+			})
+		})
+
+		When("rendering markdown with an external link", func() {
+			BeforeEach(func() {
+				source = []byte("[Google Maps](https://maps.app.goo.gl/wo54t5YMTyhz6rqH7)")
+			})
+
+			It("should not return an error", func() {
+				Expect(err).ToNot(HaveOccurred())
+			})
+
+			It("should open the link in a new tab", func() {
+				Expect(string(output)).To(ContainSubstring(`target="_blank"`))
+			})
+
+			It("should add no-referrer protections", func() {
+				Expect(string(output)).To(ContainSubstring(`rel="nofollow noreferrer noopener"`))
+			})
+		})
+
+		When("rendering markdown with a relative link", func() {
+			BeforeEach(func() {
+				source = []byte("[Local](/local_page/view)")
+			})
+
+			It("should not return an error", func() {
+				Expect(err).ToNot(HaveOccurred())
+			})
+
+			It("should keep the link in the current tab", func() {
+				Expect(string(output)).NotTo(ContainSubstring(`target="_blank"`))
 			})
 		})
 
@@ -284,7 +315,6 @@ var _ = Describe("GoldmarkRenderer", func() {
 			})
 		})
 
-
 		When("rendering markdown with wikilinks", func() {
 			BeforeEach(func() {
 				source = []byte("This is a [[wikilink]] in text")
@@ -297,6 +327,10 @@ var _ = Describe("GoldmarkRenderer", func() {
 			It("should render wikilink as an anchor tag", func() {
 				Expect(string(output)).To(ContainSubstring("href=\"/wikilink?title=wikilink\""))
 				Expect(string(output)).To(ContainSubstring(">wikilink</a>"))
+			})
+
+			It("should keep the wikilink in the current tab", func() {
+				Expect(string(output)).NotTo(ContainSubstring(`target="_blank"`))
 			})
 		})
 
