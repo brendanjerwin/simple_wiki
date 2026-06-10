@@ -415,4 +415,114 @@ var _ = Describe("codec", func() {
 			Expect(survey.GetResponses()[0].GetValues().AsMap()).To(HaveKeyWithValue("choice", "pasta"))
 		})
 	})
+
+	Describe("decodeField", func() {
+		var field *apiv1.SurveyField
+
+		BeforeEach(func() {
+			field = decodeField(map[string]any{
+				nameKey:     "rating",
+				typeKey:     "number",
+				labelKey:    "Rating",
+				requiredKey: true,
+				optionsKey:  []any{"one", "two", 3},
+				minKey:      int64(1),
+				maxKey:      float32(5),
+			})
+		})
+
+		It("should decode scalar fields", func() {
+			Expect(field.GetName()).To(Equal("rating"))
+			Expect(field.GetType()).To(Equal("number"))
+			Expect(field.GetLabel()).To(Equal("Rating"))
+			Expect(field.GetRequired()).To(BeTrue())
+		})
+
+		It("should decode string options", func() {
+			Expect(field.GetOptions()).To(Equal([]string{"one", "two"}))
+		})
+
+		It("should decode numeric bounds", func() {
+			Expect(field.GetMin()).To(BeNumerically("==", 1))
+			Expect(field.GetMax()).To(BeNumerically("==", 5))
+		})
+	})
+
+	Describe("encodeFields", func() {
+		var encoded []any
+
+		BeforeEach(func() {
+			label := "Rating"
+			required := true
+			minimum := 1.0
+			maximum := 5.0
+			encoded = encodeFields([]*apiv1.SurveyField{
+				nil,
+				{
+					Name:     "rating",
+					Type:     "number",
+					Label:    &label,
+					Required: &required,
+					Options:  []string{"one", "two"},
+					Min:      &minimum,
+					Max:      &maximum,
+				},
+			})
+		})
+
+		It("should skip nil fields", func() {
+			Expect(encoded).To(HaveLen(1))
+		})
+
+		It("should encode optional field attributes", func() {
+			raw, ok := encoded[0].(map[string]any)
+			Expect(ok).To(BeTrue())
+			Expect(raw).To(HaveKeyWithValue(labelKey, "Rating"))
+			Expect(raw).To(HaveKeyWithValue(requiredKey, true))
+			Expect(raw).To(HaveKeyWithValue(optionsKey, []string{"one", "two"}))
+			Expect(raw).To(HaveKeyWithValue(minKey, 1.0))
+			Expect(raw).To(HaveKeyWithValue(maxKey, 5.0))
+		})
+	})
+
+	Describe("readSlice", func() {
+		var values []any
+
+		BeforeEach(func() {
+			values = readSlice(map[string]any{
+				fieldsKey: []map[string]any{
+					{nameKey: "choice"},
+					{nameKey: "notes"},
+				},
+			}, fieldsKey)
+		})
+
+		It("should coerce slices of maps", func() {
+			Expect(values).To(HaveLen(2))
+		})
+	})
+
+	Describe("sortResponses", func() {
+		var responses []*apiv1.SurveyResponse
+
+		BeforeEach(func() {
+			responses = []*apiv1.SurveyResponse{
+				{User: "z@example.com"},
+				{User: "a@example.com"},
+				{
+					User:        "time@example.com",
+					SubmittedAt: timestamppb.New(time.Date(2026, 6, 9, 18, 0, 0, 0, time.UTC)),
+				},
+			}
+			sortResponses(responses)
+		})
+
+		It("should sort nil timestamps by user", func() {
+			Expect(responses[0].GetUser()).To(Equal("a@example.com"))
+		})
+
+		It("should place timestamped responses after earlier nil-timestamp user entries when compared by user", func() {
+			Expect(responses[2].GetUser()).To(Equal("z@example.com"))
+		})
+	})
 })

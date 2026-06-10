@@ -286,9 +286,59 @@ var _ = Describe("SurveyService handler validation", func() {
 		})
 	})
 
+	Describe("when survey name is missing for GetSurvey", func() {
+		BeforeEach(func() {
+			_, err = server.GetSurvey(ctx, &apiv1.GetSurveyRequest{Page: "weekly_menu"})
+		})
+
+		It("should return InvalidArgument", func() {
+			Expect(err).To(HaveGrpcStatusWithSubstr(codes.InvalidArgument, "name is required"))
+		})
+	})
+
+	Describe("when survey name is missing for mutations", func() {
+		BeforeEach(func() {
+			_, err = server.UpsertSurvey(ctx, &apiv1.UpsertSurveyRequest{Page: "weekly_menu"})
+		})
+
+		It("should return InvalidArgument", func() {
+			Expect(err).To(HaveGrpcStatusWithSubstr(codes.InvalidArgument, "survey_name is required"))
+		})
+	})
+
+	Describe("when survey name is missing for ListResponses", func() {
+		BeforeEach(func() {
+			_, err = server.ListResponses(ctx, &apiv1.ListSurveyResponsesRequest{Page: "weekly_menu"})
+		})
+
+		It("should return InvalidArgument", func() {
+			Expect(err).To(HaveGrpcStatusWithSubstr(codes.InvalidArgument, "survey_name is required"))
+		})
+	})
+
 	Describe("when field_name is missing for update", func() {
 		BeforeEach(func() {
 			_, err = server.UpdateField(ctx, &apiv1.UpdateSurveyFieldRequest{Page: "weekly_menu", SurveyName: "meal", Field: &apiv1.SurveyField{Name: "x", Type: "text"}})
+		})
+
+		It("should return InvalidArgument", func() {
+			Expect(err).To(HaveGrpcStatusWithSubstr(codes.InvalidArgument, "field_name is required"))
+		})
+	})
+
+	Describe("when field_name is missing for remove", func() {
+		BeforeEach(func() {
+			_, err = server.RemoveField(ctx, &apiv1.RemoveSurveyFieldRequest{Page: "weekly_menu", SurveyName: "meal"})
+		})
+
+		It("should return InvalidArgument", func() {
+			Expect(err).To(HaveGrpcStatusWithSubstr(codes.InvalidArgument, "field_name is required"))
+		})
+	})
+
+	Describe("when field_name is missing for reorder", func() {
+		BeforeEach(func() {
+			_, err = server.ReorderField(ctx, &apiv1.ReorderSurveyFieldRequest{Page: "weekly_menu", SurveyName: "meal"})
 		})
 
 		It("should return InvalidArgument", func() {
@@ -303,6 +353,31 @@ var _ = Describe("SurveyService handler validation", func() {
 
 		It("should return NotFound", func() {
 			Expect(err).To(HaveGrpcStatusWithSubstr(codes.NotFound, "survey not found"))
+		})
+	})
+
+	Describe("when adding a nil field", func() {
+		BeforeEach(func() {
+			_, err = server.AddField(ctx, &apiv1.AddSurveyFieldRequest{Page: "weekly_menu", SurveyName: "meal"})
+		})
+
+		It("should return InvalidArgument", func() {
+			Expect(err).To(HaveGrpcStatusWithSubstr(codes.InvalidArgument, "field.name is required"))
+		})
+	})
+
+	Describe("when updating a missing field", func() {
+		BeforeEach(func() {
+			_, err = server.UpdateField(ctx, &apiv1.UpdateSurveyFieldRequest{
+				Page:       "weekly_menu",
+				SurveyName: "meal",
+				FieldName:  "missing",
+				Field:      &apiv1.SurveyField{Name: "missing", Type: "text"},
+			})
+		})
+
+		It("should return NotFound", func() {
+			Expect(err).To(HaveGrpcStatusWithSubstr(codes.NotFound, "survey field not found"))
 		})
 	})
 
