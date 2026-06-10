@@ -188,6 +188,110 @@ var _ = Describe("Mutator", func() {
 		})
 	})
 
+	Describe("UpsertSurvey", func() {
+		var closed bool
+
+		BeforeEach(func() {
+			closed = true
+			result, err = mutator.UpsertSurvey(context.Background(), "weekly_menu", "snacks", "Snack preference?", &closed, nil)
+		})
+
+		It("should not return an error", func() {
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should create the survey shell", func() {
+			Expect(result.GetName()).To(Equal("snacks"))
+			Expect(result.GetQuestion()).To(Equal("Snack preference?"))
+			Expect(result.GetClosed()).To(BeTrue())
+		})
+
+		It("should stamp updated_at", func() {
+			Expect(result.GetUpdatedAt().AsTime()).To(Equal(now))
+		})
+	})
+
+	Describe("AddField", func() {
+		BeforeEach(func() {
+			result, err = mutator.AddField(
+				context.Background(),
+				"weekly_menu",
+				"meal",
+				&apiv1.SurveyField{Name: "side", Type: "choice", Options: []string{"salad", "bread"}},
+				nil,
+			)
+		})
+
+		It("should not return an error", func() {
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should append the field", func() {
+			Expect(result.GetFields()).To(HaveLen(2))
+			Expect(result.GetFields()[1].GetName()).To(Equal("side"))
+		})
+	})
+
+	Describe("RemoveField", func() {
+		BeforeEach(func() {
+			result, err = mutator.RemoveField(context.Background(), "weekly_menu", "meal", "choice", nil)
+		})
+
+		It("should not return an error", func() {
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should remove the requested field", func() {
+			Expect(result.GetFields()).To(BeEmpty())
+		})
+	})
+
+	Describe("ReorderField", func() {
+		BeforeEach(func() {
+			_, addErr := mutator.AddField(context.Background(), "weekly_menu", "meal", &apiv1.SurveyField{Name: "side", Type: "text"}, nil)
+			Expect(addErr).NotTo(HaveOccurred())
+			result, err = mutator.ReorderField(context.Background(), "weekly_menu", "meal", "side", 0, nil)
+		})
+
+		It("should not return an error", func() {
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should move the field to the requested index", func() {
+			Expect(result.GetFields()[0].GetName()).To(Equal("side"))
+		})
+	})
+
+	Describe("DeleteResponse", func() {
+		BeforeEach(func() {
+			result, err = mutator.DeleteResponse(context.Background(), "weekly_menu", "meal", "a@example.com", nil, nil)
+		})
+
+		It("should not return an error", func() {
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should remove the matching response", func() {
+			Expect(result.GetResponses()).To(BeEmpty())
+		})
+	})
+
+	Describe("ListResponses", func() {
+		var responses []*apiv1.SurveyResponse
+
+		BeforeEach(func() {
+			responses, err = mutator.ListResponses(context.Background(), "weekly_menu", "meal")
+		})
+
+		It("should not return an error", func() {
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should return the existing responses", func() {
+			Expect(responses).To(HaveLen(1))
+		})
+	})
+
 	Describe("when the expected updated_at is stale", func() {
 		BeforeEach(func() {
 			stale := time.Date(2026, 6, 9, 18, 0, 0, 0, time.UTC)
@@ -200,6 +304,62 @@ var _ = Describe("Mutator", func() {
 
 		It("should not write frontmatter", func() {
 			Expect(store.writes).To(Equal(0))
+		})
+	})
+
+	Describe("when a response is submitted without an authenticated user", func() {
+		BeforeEach(func() {
+			result, err = mutator.SubmitResponse(context.Background(), "weekly_menu", "meal", nil, false, tailscale.Anonymous)
+		})
+
+		It("should return PermissionDenied", func() {
+			Expect(err).To(MatchError(ContainSubstring("authenticated user is required")))
+		})
+
+		It("should not return a survey", func() {
+			Expect(result).To(BeNil())
+		})
+	})
+
+	Describe("when adding a duplicate field", func() {
+		BeforeEach(func() {
+			result, err = mutator.AddField(context.Background(), "weekly_menu", "meal", &apiv1.SurveyField{Name: "choice", Type: "text"}, nil)
+		})
+
+		It("should return ErrFieldExists", func() {
+			Expect(err).To(MatchError(ErrFieldExists))
+		})
+
+		It("should not return a survey", func() {
+			Expect(result).To(BeNil())
+		})
+	})
+
+	Describe("when reordering outside the field range", func() {
+		BeforeEach(func() {
+			result, err = mutator.ReorderField(context.Background(), "weekly_menu", "meal", "choice", 99, nil)
+		})
+
+		It("should return InvalidArgument", func() {
+			Expect(err).To(MatchError(ContainSubstring("new_index is out of range")))
+		})
+
+		It("should not return a survey", func() {
+			Expect(result).To(BeNil())
+		})
+	})
+
+	Describe("when deleting a missing response", func() {
+		BeforeEach(func() {
+			result, err = mutator.DeleteResponse(context.Background(), "weekly_menu", "meal", "missing@example.com", nil, nil)
+		})
+
+		It("should return ErrResponseNotFound", func() {
+			Expect(err).To(MatchError(ErrResponseNotFound))
+		})
+
+		It("should not return a survey", func() {
+			Expect(result).To(BeNil())
 		})
 	})
 
