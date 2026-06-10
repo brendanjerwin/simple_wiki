@@ -236,9 +236,9 @@ test.describe('wiki-survey E2E Tests', () => {
   });
 
   test('loading state should have role="status" and aria-live="polite"', async ({ page }) => {
-    // Delay gRPC responses so the loading state is visible long enough to assert.
-    await page.route('**/*GetFrontmatter*', async (route) => {
-      await new Promise<void>((resolve) => setTimeout(resolve, 600));
+    // Delay the survey gRPC response so the loading state is visible long enough to assert.
+    await page.route('**/api.v1.SurveyService/GetSurvey', async (route) => {
+      await new Promise<void>((resolve) => setTimeout(resolve, 1000));
       await route.continue();
     });
 
