@@ -11,6 +11,7 @@ import (
 )
 
 const (
+	wikiKey        = "wiki"
 	surveysKey     = "surveys"
 	questionKey    = "question"
 	fieldsKey      = "fields"
@@ -31,11 +32,11 @@ const (
 )
 
 func surveyExists(fm wikipage.FrontMatter, name string) bool {
-	return readMap(readMap(fm, surveysKey), name) != nil
+	return readMap(readSurveyRoot(fm), name) != nil
 }
 
 func decodeSurvey(fm wikipage.FrontMatter, name string) *apiv1.Survey {
-	raw := readMap(readMap(fm, surveysKey), name)
+	raw := readMap(readSurveyRoot(fm), name)
 	out := &apiv1.Survey{
 		Name:     name,
 		Question: stringValue(raw, questionKey),
@@ -63,7 +64,8 @@ func decodeSurvey(fm wikipage.FrontMatter, name string) *apiv1.Survey {
 }
 
 func encodeSurvey(fm wikipage.FrontMatter, name string, survey *apiv1.Survey) {
-	surveys := ensureMap(fm, surveysKey)
+	wiki := ensureMap(fm, wikiKey)
+	surveys := ensureMap(wiki, surveysKey)
 	out := map[string]any{
 		questionKey:  survey.GetQuestion(),
 		fieldsKey:    encodeFields(survey.GetFields()),
@@ -74,6 +76,13 @@ func encodeSurvey(fm wikipage.FrontMatter, name string, survey *apiv1.Survey) {
 		out[updatedAtKey] = survey.GetUpdatedAt().AsTime().Format(time.RFC3339Nano)
 	}
 	surveys[name] = out
+}
+
+func readSurveyRoot(fm wikipage.FrontMatter) map[string]any {
+	if wikiSurveys := readMap(readMap(fm, wikiKey), surveysKey); wikiSurveys != nil {
+		return wikiSurveys
+	}
+	return readMap(fm, surveysKey)
 }
 
 func decodeField(raw map[string]any) *apiv1.SurveyField {

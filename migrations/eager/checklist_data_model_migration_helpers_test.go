@@ -4,9 +4,9 @@ package eager
 import (
 	"errors"
 
+	"github.com/jcelliott/lumber"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"github.com/jcelliott/lumber"
 
 	"github.com/brendanjerwin/simple_wiki/pkg/jobs"
 	"github.com/brendanjerwin/simple_wiki/pkg/ulid"
@@ -35,6 +35,10 @@ func (*scanFakeReaderMutator) WriteMarkdown(_ wikipage.PageIdentifier, _ wikipag
 func (*scanFakeReaderMutator) DeletePage(_ wikipage.PageIdentifier) error { return nil }
 
 func (*scanFakeReaderMutator) ModifyMarkdown(_ wikipage.PageIdentifier, _ func(wikipage.Markdown) (wikipage.Markdown, error)) error {
+	return nil
+}
+
+func (*scanFakeReaderMutator) ModifyFrontMatterAndMarkdown(_ wikipage.PageIdentifier, _ func(wikipage.FrontMatter, wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error)) error {
 	return nil
 }
 
@@ -202,8 +206,8 @@ var _ = Describe("ChecklistDataModelMigrationScanJob", func() {
 
 			It("should only enqueue one migration job for the duplicated identifier", func() {
 				// QueueStats persists in coordinator.stats across worker drain;
-// GetActiveQueues races the worker and flakes between 0 and 1.
-Expect(coordinator.GetJobProgress().QueueStats).To(HaveLen(1))
+				// GetActiveQueues races the worker and flakes between 0 and 1.
+				Expect(coordinator.GetJobProgress().QueueStats).To(HaveLen(1))
 			})
 		})
 	})

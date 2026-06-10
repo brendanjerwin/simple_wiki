@@ -1,4 +1,4 @@
-// Package surveymutator owns mutations to surveys.<name> frontmatter data.
+// Package surveymutator owns mutations to wiki.surveys.<name> frontmatter data.
 package surveymutator
 
 import (

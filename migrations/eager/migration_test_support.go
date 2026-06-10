@@ -22,13 +22,13 @@ const (
 
 // MockMigrationDeps provides a simple mock implementation for testing migrations
 type MockMigrationDeps struct {
-	dataDir              string
-	pages                map[string]*wikipage.Page
-	mu                   sync.RWMutex
-	readPageErr          error // injectable error for ReadPage
-	deletePageErr        error // injectable error for DeletePage
-	writeFrontMatterErr  error // injectable error for WriteFrontMatter
-	writeMarkdownErr     error // injectable error for WriteMarkdown
+	dataDir             string
+	pages               map[string]*wikipage.Page
+	mu                  sync.RWMutex
+	readPageErr         error // injectable error for ReadPage
+	deletePageErr       error // injectable error for DeletePage
+	writeFrontMatterErr error // injectable error for WriteFrontMatter
+	writeMarkdownErr    error // injectable error for WriteMarkdown
 }
 
 func NewMockMigrationDeps(dataDir string) *MockMigrationDeps {
@@ -83,11 +83,11 @@ func (m *MockMigrationDeps) ReadFrontMatter(identifier wikipage.PageIdentifier) 
 	if err != nil {
 		return identifier, nil, err
 	}
-	
+
 	if page.IsNew() {
 		return identifier, nil, os.ErrNotExist
 	}
-	
+
 	fm, err := page.GetFrontMatter()
 	return identifier, fm, err
 }
@@ -97,11 +97,11 @@ func (m *MockMigrationDeps) ReadMarkdown(identifier wikipage.PageIdentifier) (wi
 	if err != nil {
 		return identifier, "", err
 	}
-	
+
 	if page.IsNew() {
 		return identifier, "", os.ErrNotExist
 	}
-	
+
 	md, err := page.GetMarkdown()
 	return identifier, md, err
 }
@@ -124,13 +124,13 @@ func (m *MockMigrationDeps) WriteMarkdown(identifier wikipage.PageIdentifier, md
 func (m *MockMigrationDeps) UpdatePageContent(identifier wikipage.PageIdentifier, newText string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	
+
 	page := &wikipage.Page{
 		Identifier:        string(identifier),
 		Text:              newText,
 		WasLoadedFromDisk: true,
 	}
-	
+
 	m.pages[string(identifier)] = page
 	return nil
 }
@@ -147,6 +147,28 @@ func (m *MockMigrationDeps) ModifyMarkdown(identifier wikipage.PageIdentifier, m
 	}
 
 	return m.WriteMarkdown(identifier, newMD)
+}
+
+func (m *MockMigrationDeps) ModifyFrontMatterAndMarkdown(identifier wikipage.PageIdentifier, modifier func(wikipage.FrontMatter, wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error)) error {
+	_, currentFM, err := m.ReadFrontMatter(identifier)
+	if err != nil {
+		return err
+	}
+	_, currentMD, err := m.ReadMarkdown(identifier)
+	if err != nil {
+		return err
+	}
+
+	newFM, newMD, err := modifier(currentFM, currentMD)
+	if err != nil {
+		return err
+	}
+
+	combined, err := wikipage.CombineFrontMatterAndMarkdown(newFM, newMD)
+	if err != nil {
+		return err
+	}
+	return m.UpdatePageContent(identifier, combined)
 }
 
 func (m *MockMigrationDeps) DeletePage(identifier wikipage.PageIdentifier) error {

@@ -10,7 +10,7 @@ system = true
 
 # {{.Title}}
 
-The Survey macro renders an interactive form for collecting per-user responses. Survey data is stored under the reserved `surveys.<name>` frontmatter namespace and mutated through `SurveyService`. Responses are attributed to the logged-in user (identifier provided by the configured authentication provider) and can be edited after submission (upsert pattern).
+The Survey macro renders an interactive form for collecting per-user responses. Survey data is stored under the reserved `wiki.surveys.<name>` frontmatter namespace and mutated through `SurveyService`. Responses are attributed to the logged-in user (identifier provided by the configured authentication provider) and can be edited after submission (upsert pattern).
 
 ## Syntax
 
@@ -41,32 +41,32 @@ A single page can have multiple surveys with different names.
 
 ## Stored Data Structure
 
-Survey config and responses live under `surveys.<survey-name>`, but generic Frontmatter writes to `surveys` are rejected. Use `SurveyService` to read or mutate this data:
+Survey config and responses live under `wiki.surveys.<survey-name>`, and generic Frontmatter writes to `wiki` are rejected. Use `SurveyService` to read or mutate this data:
 
 ```toml
 +++
 title = "My Page"
 
-[surveys.team-preferences]
+[wiki.surveys.team-preferences]
 question = "How would you like to work this week?"
 
-[[surveys.team-preferences.fields]]
+[[wiki.surveys.team-preferences.fields]]
 name = "location"
 type = "choice"
 label = "Where will you be?"
 options = ["office", "home", "hybrid"]
 
-[[surveys.team-preferences.fields]]
+[[wiki.surveys.team-preferences.fields]]
 name = "notes"
 type = "text"
 label = "Anything else?"
 
-[[surveys.team-preferences.responses]]
+[[wiki.surveys.team-preferences.responses]]
 user = "alice@example.com"
 anonymous = false
 submitted_at = "2026-04-17T12:00:00Z"
 
-[surveys.team-preferences.responses.values]
+[wiki.surveys.team-preferences.responses.values]
 location = "home"
 notes = "Heads-down sprint."
 +++
@@ -89,12 +89,12 @@ notes = "Heads-down sprint."
 Example:
 
 ```toml
-[[surveys.team-preferences.fields]]
+[[wiki.surveys.team-preferences.fields]]
 name = "protein_preference"
 type = "text"
 # Renders as "Protein Preference" if label is omitted
 
-[[surveys.team-preferences.fields]]
+[[wiki.surveys.team-preferences.fields]]
 name = "protein_notes"
 type = "text"
 label = "What's your preferred protein?"
@@ -129,7 +129,7 @@ Use `api_v1_SurveyService_SubmitResponse`. The wiki derives `user` from the call
 
 ### Important Notes
 
-- Generic Frontmatter APIs reject the reserved `surveys` namespace.
+- Generic Frontmatter APIs reject the reserved `wiki` namespace.
 - Only one response per user: resubmissions update `submitted_at` and `values` in place.
 - Authentication is required to submit; read access follows standard page visibility.
 - `anonymous` is reserved for future use — in v1, all responses are attributed.
