@@ -12,7 +12,7 @@ import (
 
 	"github.com/brendanjerwin/simple_wiki/index"
 	"github.com/brendanjerwin/simple_wiki/pkg/jobs"
-		"github.com/brendanjerwin/simple_wiki/utils/base32tools"
+	"github.com/brendanjerwin/simple_wiki/utils/base32tools"
 	"github.com/brendanjerwin/simple_wiki/utils/goldmarkrenderer"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 	"github.com/jcelliott/lumber"
@@ -22,10 +22,10 @@ import (
 
 // MockIndexOperator is a test implementation of index.IndexOperator.
 type MockIndexOperator struct {
-	AddPageToIndexFunc    func(identifier wikipage.PageIdentifier) error
+	AddPageToIndexFunc      func(identifier wikipage.PageIdentifier) error
 	RemovePageFromIndexFunc func(identifier wikipage.PageIdentifier) error
-	addCalled             []wikipage.PageIdentifier
-	removeCalled          []wikipage.PageIdentifier
+	addCalled               []wikipage.PageIdentifier
+	removeCalled            []wikipage.PageIdentifier
 }
 
 func (m *MockIndexOperator) AddPageToIndex(identifier wikipage.PageIdentifier) error {
@@ -608,7 +608,7 @@ test content to be soft deleted`
 					Expect(fileErr).NotTo(HaveOccurred())
 
 					// Capture current time before deletion
-					currentTime = time.Now().Unix()
+					currentTime = time.Now().UnixNano()
 
 					err = s.DeletePage(pageIdentifier)
 					waitForIndexing()
@@ -642,7 +642,7 @@ test content to be soft deleted`
 							var parseErr error
 							timestamp, parseErr = strconv.ParseInt(timestampDir.Name(), 10, 64)
 							Expect(parseErr).NotTo(HaveOccurred())
-							
+
 							// Read the moved file
 							timestampPath = filepath.Join(deletedDir, timestampDir.Name())
 							deletedMdPath = filepath.Join(timestampPath, base32tools.EncodeToBase32(strings.ToLower(string(pageIdentifier)))+".md")
@@ -667,7 +667,7 @@ test content to be soft deleted`
 
 					It("should use reasonable timestamp within 5 seconds", func() {
 						Expect(timestamp).To(BeNumerically(">=", currentTime))
-						Expect(timestamp).To(BeNumerically("<=", currentTime+5))
+						Expect(timestamp).To(BeNumerically("<=", currentTime+int64(5*time.Second)))
 					})
 
 					It("should move md file to timestamped directory", func() {
@@ -810,4 +810,3 @@ identifier = "test"
 		})
 	})
 })
-

@@ -110,13 +110,13 @@ describe('PageDeleter', () => {
 
       it('should open dialog with correct configuration', () => {
         expect(mockDialog.openDialog).to.have.been.calledWith({
-          message: 'Are you sure you want to delete this page?',
-          description: 'Page: test-page',
-          confirmText: 'Delete Page',
+          message: 'Move this page to trash?',
+          description: 'Page: test-page. You can restore it from Trash for 30 days.',
+          confirmText: 'Move to Trash',
           cancelText: 'Cancel',
           confirmVariant: 'danger',
           icon: 'warning',
-          irreversible: true
+          irreversible: false
         });
       });
 

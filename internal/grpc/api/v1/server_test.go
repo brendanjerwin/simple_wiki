@@ -142,7 +142,17 @@ type MockPageReaderMutator struct {
 	WriteErr           error
 	MarkdownWriteErr   error // Separate error for WriteMarkdown
 	DeletedIdentifier  wikipage.PageIdentifier
+	DeleteByIdentifier wikipage.PageIdentifier
+	DeletedBy          string
 	DeleteErr          error
+	TrashEntries       []wikipage.TrashEntry
+	TrashListErr       error
+	RestoreTrashID     string
+	RestoreErr         error
+	PurgeTrashID       string
+	PurgeErr           error
+	EmptyTrashCount    int
+	EmptyTrashErr      error
 	// WrittenFrontmatterByID tracks all writes per identifier for multi-page scenarios
 	WrittenFrontmatterByID map[string]map[string]any
 	// PostWriteMarkdownReadErr is returned by ReadMarkdown after a successful WriteMarkdown call.
@@ -233,6 +243,33 @@ func (m *MockPageReaderMutator) ReadMarkdown(identifier wikipage.PageIdentifier)
 func (m *MockPageReaderMutator) DeletePage(identifier wikipage.PageIdentifier) error {
 	m.DeletedIdentifier = identifier
 	return m.DeleteErr
+}
+
+func (m *MockPageReaderMutator) DeletePageBy(identifier wikipage.PageIdentifier, deletedBy string) error {
+	m.DeleteByIdentifier = identifier
+	m.DeletedBy = deletedBy
+	return m.DeleteErr
+}
+
+func (m *MockPageReaderMutator) ListTrash() ([]wikipage.TrashEntry, error) {
+	if m.TrashListErr != nil {
+		return nil, m.TrashListErr
+	}
+	return m.TrashEntries, nil
+}
+
+func (m *MockPageReaderMutator) RestorePage(trashID string) error {
+	m.RestoreTrashID = trashID
+	return m.RestoreErr
+}
+
+func (m *MockPageReaderMutator) PurgePage(trashID string) error {
+	m.PurgeTrashID = trashID
+	return m.PurgeErr
+}
+
+func (m *MockPageReaderMutator) EmptyTrash() (int, error) {
+	return m.EmptyTrashCount, m.EmptyTrashErr
 }
 
 // ModifyMarkdown atomically reads the markdown, calls modifier, and writes the result.
@@ -2068,7 +2105,183 @@ var _ = Describe("Server", func() {
 			})
 
 			It("should call delete on the PageReaderMutator", func() {
-				Expect(mockPageReaderMutator.DeletedIdentifier).To(Equal(wikipage.PageIdentifier("test-page")))
+				Expect(mockPageReaderMutator.DeleteByIdentifier).To(Equal(wikipage.PageIdentifier("test-page")))
+			})
+		})
+	})
+
+	Describe("trash RPCs", func() {
+		var mockPageReaderMutator *MockPageReaderMutator
+
+		BeforeEach(func() {
+			mockPageReaderMutator = &MockPageReaderMutator{
+				Frontmatter:     wikipage.FrontMatter{"title": "Trash Test"},
+				EmptyTrashCount: 2,
+				TrashEntries: []wikipage.TrashEntry{
+					{
+						TrashID:    "trash-1",
+						Identifier: "trash_page",
+						Title:      "Trash Page",
+						DeletedAt:  time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC),
+						DeletedBy:  "user@example.com",
+						PurgesAt:   time.Now().UTC().Add(48 * time.Hour),
+					},
+				},
+			}
+			server = mustNewServer(mockPageReaderMutator, nil, nil)
+		})
+
+		Describe("ListTrash", func() {
+			var (
+				resp *apiv1.ListTrashResponse
+				err  error
+			)
+
+			BeforeEach(func() {
+				resp, err = server.ListTrash(ctx, &apiv1.ListTrashRequest{})
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should return trash entries", func() {
+				Expect(resp.Pages).To(HaveLen(1))
+				Expect(resp.Pages[0].TrashId).To(Equal("trash-1"))
+				Expect(resp.Pages[0].Identifier).To(Equal("trash_page"))
+			})
+		})
+
+		Describe("RestorePage", func() {
+			var (
+				resp *apiv1.RestorePageResponse
+				err  error
+			)
+
+			BeforeEach(func() {
+				resp, err = server.RestorePage(ctx, &apiv1.RestorePageRequest{TrashId: "trash-1"})
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should restore the requested trash entry", func() {
+				Expect(mockPageReaderMutator.RestoreTrashID).To(Equal("trash-1"))
+				Expect(resp.RestoredIdentifier).To(Equal("trash_page"))
+			})
+		})
+
+		Describe("PurgePage", func() {
+			var err error
+
+			When("the trash entry exists", func() {
+				BeforeEach(func() {
+					_, err = server.PurgePage(ctx, &apiv1.PurgePageRequest{TrashId: "trash-1"})
+				})
+
+				It("should not return an error", func() {
+					Expect(err).NotTo(HaveOccurred())
+				})
+
+				It("should purge the requested trash entry", func() {
+					Expect(mockPageReaderMutator.PurgeTrashID).To(Equal("trash-1"))
+				})
+			})
+
+			When("the trash entry does not exist", func() {
+				BeforeEach(func() {
+					mockPageReaderMutator.PurgeErr = os.ErrNotExist
+					_, err = server.PurgePage(ctx, &apiv1.PurgePageRequest{TrashId: "missing-trash-id"})
+				})
+
+				It("should return not found", func() {
+					Expect(status.Code(err)).To(Equal(codes.NotFound))
+				})
+			})
+
+			When("the caller is not authorized for the trashed page", func() {
+				BeforeEach(func() {
+					mockPageReaderMutator.FrontmatterByID = map[string]map[string]any{
+						"trash_page": {
+							"wiki": map[string]any{
+								"authorization": map[string]any{
+									"acl": map[string]any{
+										"owner": "alice@example.com",
+									},
+								},
+							},
+						},
+					}
+					identity := tailscale.NewIdentity("bob@example.com", "Bob", "bob-device")
+					identCtx := tailscale.ContextWithIdentity(ctx, identity)
+					_, err = server.PurgePage(identCtx, &apiv1.PurgePageRequest{TrashId: "trash-1"})
+				})
+
+				It("should return permission denied", func() {
+					Expect(status.Code(err)).To(Equal(codes.PermissionDenied))
+				})
+
+				It("should not purge the trash entry", func() {
+					Expect(mockPageReaderMutator.PurgeTrashID).To(BeEmpty())
+				})
+			})
+
+			When("trash cannot be listed before purge", func() {
+				BeforeEach(func() {
+					mockPageReaderMutator.TrashListErr = errors.New("trash index failed")
+					_, err = server.PurgePage(ctx, &apiv1.PurgePageRequest{TrashId: "trash-1"})
+				})
+
+				It("should return an internal error", func() {
+					Expect(status.Code(err)).To(Equal(codes.Internal))
+				})
+			})
+		})
+
+		Describe("EmptyTrash", func() {
+			var (
+				resp *apiv1.EmptyTrashResponse
+				err  error
+			)
+
+			BeforeEach(func() {
+				resp, err = server.EmptyTrash(ctx, &apiv1.EmptyTrashRequest{})
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should return the purged count", func() {
+				Expect(resp.PurgedCount).To(Equal(int32(2)))
+			})
+
+			When("the caller is not authorized for one trashed page", func() {
+				BeforeEach(func() {
+					mockPageReaderMutator.FrontmatterByID = map[string]map[string]any{
+						"trash_page": {
+							"wiki": map[string]any{
+								"authorization": map[string]any{
+									"acl": map[string]any{
+										"owner": "alice@example.com",
+									},
+								},
+							},
+						},
+					}
+					identity := tailscale.NewIdentity("bob@example.com", "Bob", "bob-device")
+					identCtx := tailscale.ContextWithIdentity(ctx, identity)
+					resp, err = server.EmptyTrash(identCtx, &apiv1.EmptyTrashRequest{})
+				})
+
+				It("should return permission denied", func() {
+					Expect(status.Code(err)).To(Equal(codes.PermissionDenied))
+				})
+
+				It("should not report a successful purge", func() {
+					Expect(resp).To(BeNil())
+				})
 			})
 		})
 	})

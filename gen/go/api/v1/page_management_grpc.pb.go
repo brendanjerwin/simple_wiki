@@ -26,6 +26,10 @@ const (
 	PageManagementService_UpdatePageContent_FullMethodName  = "/api.v1.PageManagementService/UpdatePageContent"
 	PageManagementService_UpdateWholePage_FullMethodName    = "/api.v1.PageManagementService/UpdateWholePage"
 	PageManagementService_DeletePage_FullMethodName         = "/api.v1.PageManagementService/DeletePage"
+	PageManagementService_ListTrash_FullMethodName          = "/api.v1.PageManagementService/ListTrash"
+	PageManagementService_RestorePage_FullMethodName        = "/api.v1.PageManagementService/RestorePage"
+	PageManagementService_PurgePage_FullMethodName          = "/api.v1.PageManagementService/PurgePage"
+	PageManagementService_EmptyTrash_FullMethodName         = "/api.v1.PageManagementService/EmptyTrash"
 	PageManagementService_ClearPageContent_FullMethodName   = "/api.v1.PageManagementService/ClearPageContent"
 	PageManagementService_GenerateIdentifier_FullMethodName = "/api.v1.PageManagementService/GenerateIdentifier"
 	PageManagementService_ListTemplates_FullMethodName      = "/api.v1.PageManagementService/ListTemplates"
@@ -55,6 +59,14 @@ type PageManagementServiceClient interface {
 	UpdateWholePage(ctx context.Context, in *UpdateWholePageRequest, opts ...grpc.CallOption) (*UpdateWholePageResponse, error)
 	// DeletePage — see (api.v1.description).
 	DeletePage(ctx context.Context, in *DeletePageRequest, opts ...grpc.CallOption) (*DeletePageResponse, error)
+	// ListTrash — see (api.v1.description).
+	ListTrash(ctx context.Context, in *ListTrashRequest, opts ...grpc.CallOption) (*ListTrashResponse, error)
+	// RestorePage — see (api.v1.description).
+	RestorePage(ctx context.Context, in *RestorePageRequest, opts ...grpc.CallOption) (*RestorePageResponse, error)
+	// PurgePage — see (api.v1.description).
+	PurgePage(ctx context.Context, in *PurgePageRequest, opts ...grpc.CallOption) (*PurgePageResponse, error)
+	// EmptyTrash — see (api.v1.description).
+	EmptyTrash(ctx context.Context, in *EmptyTrashRequest, opts ...grpc.CallOption) (*EmptyTrashResponse, error)
 	// ClearPageContent — see (api.v1.description).
 	ClearPageContent(ctx context.Context, in *ClearPageContentRequest, opts ...grpc.CallOption) (*ClearPageContentResponse, error)
 	// GenerateIdentifier — see (api.v1.description).
@@ -143,6 +155,46 @@ func (c *pageManagementServiceClient) DeletePage(ctx context.Context, in *Delete
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(DeletePageResponse)
 	err := c.cc.Invoke(ctx, PageManagementService_DeletePage_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *pageManagementServiceClient) ListTrash(ctx context.Context, in *ListTrashRequest, opts ...grpc.CallOption) (*ListTrashResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListTrashResponse)
+	err := c.cc.Invoke(ctx, PageManagementService_ListTrash_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *pageManagementServiceClient) RestorePage(ctx context.Context, in *RestorePageRequest, opts ...grpc.CallOption) (*RestorePageResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RestorePageResponse)
+	err := c.cc.Invoke(ctx, PageManagementService_RestorePage_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *pageManagementServiceClient) PurgePage(ctx context.Context, in *PurgePageRequest, opts ...grpc.CallOption) (*PurgePageResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(PurgePageResponse)
+	err := c.cc.Invoke(ctx, PageManagementService_PurgePage_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *pageManagementServiceClient) EmptyTrash(ctx context.Context, in *EmptyTrashRequest, opts ...grpc.CallOption) (*EmptyTrashResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(EmptyTrashResponse)
+	err := c.cc.Invoke(ctx, PageManagementService_EmptyTrash_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -262,6 +314,14 @@ type PageManagementServiceServer interface {
 	UpdateWholePage(context.Context, *UpdateWholePageRequest) (*UpdateWholePageResponse, error)
 	// DeletePage — see (api.v1.description).
 	DeletePage(context.Context, *DeletePageRequest) (*DeletePageResponse, error)
+	// ListTrash — see (api.v1.description).
+	ListTrash(context.Context, *ListTrashRequest) (*ListTrashResponse, error)
+	// RestorePage — see (api.v1.description).
+	RestorePage(context.Context, *RestorePageRequest) (*RestorePageResponse, error)
+	// PurgePage — see (api.v1.description).
+	PurgePage(context.Context, *PurgePageRequest) (*PurgePageResponse, error)
+	// EmptyTrash — see (api.v1.description).
+	EmptyTrash(context.Context, *EmptyTrashRequest) (*EmptyTrashResponse, error)
 	// ClearPageContent — see (api.v1.description).
 	ClearPageContent(context.Context, *ClearPageContentRequest) (*ClearPageContentResponse, error)
 	// GenerateIdentifier — see (api.v1.description).
@@ -303,6 +363,18 @@ func (UnimplementedPageManagementServiceServer) UpdateWholePage(context.Context,
 }
 func (UnimplementedPageManagementServiceServer) DeletePage(context.Context, *DeletePageRequest) (*DeletePageResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method DeletePage not implemented")
+}
+func (UnimplementedPageManagementServiceServer) ListTrash(context.Context, *ListTrashRequest) (*ListTrashResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListTrash not implemented")
+}
+func (UnimplementedPageManagementServiceServer) RestorePage(context.Context, *RestorePageRequest) (*RestorePageResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method RestorePage not implemented")
+}
+func (UnimplementedPageManagementServiceServer) PurgePage(context.Context, *PurgePageRequest) (*PurgePageResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method PurgePage not implemented")
+}
+func (UnimplementedPageManagementServiceServer) EmptyTrash(context.Context, *EmptyTrashRequest) (*EmptyTrashResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method EmptyTrash not implemented")
 }
 func (UnimplementedPageManagementServiceServer) ClearPageContent(context.Context, *ClearPageContentRequest) (*ClearPageContentResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ClearPageContent not implemented")
@@ -460,6 +532,78 @@ func _PageManagementService_DeletePage_Handler(srv interface{}, ctx context.Cont
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(PageManagementServiceServer).DeletePage(ctx, req.(*DeletePageRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _PageManagementService_ListTrash_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListTrashRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PageManagementServiceServer).ListTrash(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: PageManagementService_ListTrash_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PageManagementServiceServer).ListTrash(ctx, req.(*ListTrashRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _PageManagementService_RestorePage_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RestorePageRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PageManagementServiceServer).RestorePage(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: PageManagementService_RestorePage_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PageManagementServiceServer).RestorePage(ctx, req.(*RestorePageRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _PageManagementService_PurgePage_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PurgePageRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PageManagementServiceServer).PurgePage(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: PageManagementService_PurgePage_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PageManagementServiceServer).PurgePage(ctx, req.(*PurgePageRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _PageManagementService_EmptyTrash_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(EmptyTrashRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PageManagementServiceServer).EmptyTrash(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: PageManagementService_EmptyTrash_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PageManagementServiceServer).EmptyTrash(ctx, req.(*EmptyTrashRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -627,6 +771,22 @@ var PageManagementService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "DeletePage",
 			Handler:    _PageManagementService_DeletePage_Handler,
+		},
+		{
+			MethodName: "ListTrash",
+			Handler:    _PageManagementService_ListTrash_Handler,
+		},
+		{
+			MethodName: "RestorePage",
+			Handler:    _PageManagementService_RestorePage_Handler,
+		},
+		{
+			MethodName: "PurgePage",
+			Handler:    _PageManagementService_PurgePage_Handler,
+		},
+		{
+			MethodName: "EmptyTrash",
+			Handler:    _PageManagementService_EmptyTrash_Handler,
 		},
 		{
 			MethodName: "ClearPageContent",

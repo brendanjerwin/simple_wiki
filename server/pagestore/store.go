@@ -11,7 +11,6 @@ import (
 
 	"github.com/brendanjerwin/simple_wiki/utils/base32tools"
 	"github.com/brendanjerwin/simple_wiki/wikiidentifiers"
-	"github.com/brendanjerwin/simple_wiki/wikipage"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/metric"
 )
@@ -181,35 +180,6 @@ func (s *Store) ModifyOrCreatePage(identifier string, modifier func(currentText 
 	}
 
 	return s.writeRawTextLocked(identifier, newText)
-}
-
-// SoftDeletePage moves the .md file for identifier into a timestamped
-// __deleted__/ subdirectory. Returns os.ErrNotExist if the file did not
-// exist; other errors propagate as-is. Caller is responsible for any
-// post-deletion indexing / scheduling cleanup.
-func (s *Store) SoftDeletePage(id wikipage.PageIdentifier) error {
-	identifier := string(id)
-	unlock := s.lockPage(identifier)
-	defer unlock()
-
-	timestamp := time.Now().Unix()
-	deletedDir := path.Join(s.pathToData, "__deleted__", fmt.Sprintf("%d", timestamp))
-
-	if err := os.MkdirAll(deletedDir, 0755); err != nil {
-		return fmt.Errorf("failed to create deleted directory: %w", err)
-	}
-
-	mdPath := path.Join(s.pathToData, base32tools.EncodeToBase32(strings.ToLower(identifier))+".md")
-	deletedMdPath := path.Join(deletedDir, base32tools.EncodeToBase32(strings.ToLower(identifier))+".md")
-	mdErr := os.Rename(mdPath, deletedMdPath)
-	if mdErr != nil {
-		if os.IsNotExist(mdErr) {
-			return os.ErrNotExist
-		}
-		return fmt.Errorf("failed to move Markdown file for page %s: %w", identifier, mdErr)
-	}
-
-	return nil
 }
 
 // --- Page-lock metrics. Lazy-initialized via sync.Once so the package can

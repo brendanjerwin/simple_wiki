@@ -65,7 +65,7 @@ This page is used by E2E tests for the page erase menu confirmation flow.`);
     });
 
     await expect(page.locator('#page-deletion-dialog .dialog-message')).toContainText(
-      'Are you sure you want to delete this page?',
+      'Move this page to trash?',
     );
     await expect(page.locator('#page-deletion-dialog .dialog-description')).toContainText(
       TEST_PAGE,

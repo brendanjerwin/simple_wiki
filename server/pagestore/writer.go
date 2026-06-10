@@ -23,7 +23,12 @@ type Writer interface {
 	// The full read-modify-write is held under the page's lock.
 	ModifyMarkdown(id wikipage.PageIdentifier, fn func(wikipage.Markdown) (wikipage.Markdown, error)) error
 
-	// SoftDeletePage moves the page's .md file to __deleted__/<timestamp>/.
+	// SoftDeletePage moves the page's .md file to trash.
 	// Returns os.ErrNotExist if the file did not exist.
 	SoftDeletePage(id wikipage.PageIdentifier) error
+	SoftDeletePageBy(id wikipage.PageIdentifier, deletedBy string) error
+	ListTrash() ([]wikipage.TrashEntry, error)
+	RestorePage(trashID string) error
+	PurgePage(trashID string) error
+	EmptyTrash() (int, error)
 }

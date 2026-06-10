@@ -1,5 +1,14 @@
 package wikipage
 
+import (
+	"errors"
+	"time"
+)
+
+// ErrPageRestoreConflict means a trashed page cannot be restored because a
+// live page already exists at the target identifier.
+var ErrPageRestoreConflict = errors.New("page restore conflict")
+
 // PageIdentifier is the unique identifier for a page.
 type PageIdentifier string
 
@@ -30,6 +39,38 @@ type PageWriter interface {
 // PageDeleter is an interface for deleting pages.
 type PageDeleter interface {
 	DeletePage(identifier PageIdentifier) error
+}
+
+// PageTrashDeleter records the actor responsible for moving a page to trash.
+type PageTrashDeleter interface {
+	DeletePageBy(identifier PageIdentifier, deletedBy string) error
+}
+
+// TrashEntry describes a page that has been moved out of normal wiki storage
+// and can still be restored or purged.
+type TrashEntry struct {
+	TrashID    string
+	Identifier PageIdentifier
+	Title      string
+	DeletedAt  time.Time
+	DeletedBy  string
+	PurgesAt   time.Time
+}
+
+// PageTrashReader lists pages currently held in trash.
+type PageTrashReader interface {
+	ListTrash() ([]TrashEntry, error)
+}
+
+// PageTrashRestorer restores a trashed page to normal wiki storage.
+type PageTrashRestorer interface {
+	RestorePage(trashID string) error
+}
+
+// PageTrashPurger permanently removes trashed pages.
+type PageTrashPurger interface {
+	PurgePage(trashID string) error
+	EmptyTrash() (int, error)
 }
 
 // PageOpener is an interface for opening pages as full Page objects.

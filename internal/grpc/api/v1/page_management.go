@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -23,6 +24,8 @@ import (
 	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
+
+const trashEntryNotFoundErrFmt = "trash entry not found: %s"
 
 // computeContentHash computes a SHA256 hash of the given markdown content,
 // returned as a lowercase hex string. Used for optimistic concurrency control.
@@ -248,7 +251,14 @@ func (s *Server) DeletePage(ctx context.Context, req *apiv1.DeletePageRequest) (
 	if authErr := requireAuthorized(ctx, s.pageReaderMutator, wikipage.PageIdentifier(req.PageName)); authErr != nil {
 		return nil, authErr
 	}
-	err := s.pageReaderMutator.DeletePage(wikipage.PageIdentifier(req.PageName))
+	identity := tailscale.IdentityFromContext(ctx)
+	deletedBy := identity.ForLog()
+	var err error
+	if trashDeleter, ok := s.pageReaderMutator.(wikipage.PageTrashDeleter); ok {
+		err = trashDeleter.DeletePageBy(wikipage.PageIdentifier(req.PageName), deletedBy)
+	} else {
+		err = s.pageReaderMutator.DeletePage(wikipage.PageIdentifier(req.PageName))
+	}
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, status.Errorf(codes.NotFound, "page not found: %s", req.PageName)
@@ -256,13 +266,215 @@ func (s *Server) DeletePage(ctx context.Context, req *apiv1.DeletePageRequest) (
 		return nil, status.Errorf(codes.Internal, "failed to delete page: %v", err)
 	}
 
-	identity := tailscale.IdentityFromContext(ctx)
 	s.logger.Info("[AUDIT] delete | page: %q | user: %q", req.PageName, identity.ForLog())
 
 	return &apiv1.DeletePageResponse{
 		Success: true,
 		Error:   "",
 	}, nil
+}
+
+func requireTrashReader(pageReaderMutator wikipage.PageReaderMutator) (wikipage.PageTrashReader, error) {
+	trashReader, ok := pageReaderMutator.(wikipage.PageTrashReader)
+	if !ok {
+		return nil, status.Error(codes.FailedPrecondition, "trash listing is not available")
+	}
+	return trashReader, nil
+}
+
+func requireTrashRestorer(pageReaderMutator wikipage.PageReaderMutator) (wikipage.PageTrashRestorer, error) {
+	trashRestorer, ok := pageReaderMutator.(wikipage.PageTrashRestorer)
+	if !ok {
+		return nil, status.Error(codes.FailedPrecondition, "trash restore is not available")
+	}
+	return trashRestorer, nil
+}
+
+func requireTrashPurger(pageReaderMutator wikipage.PageReaderMutator) (wikipage.PageTrashPurger, error) {
+	trashPurger, ok := pageReaderMutator.(wikipage.PageTrashPurger)
+	if !ok {
+		return nil, status.Error(codes.FailedPrecondition, "trash purge is not available")
+	}
+	return trashPurger, nil
+}
+
+const hoursPerDay = 24
+
+func trashDaysRemaining(purgesAt time.Time) int32 {
+	remaining := time.Until(purgesAt)
+	if remaining <= 0 {
+		return 0
+	}
+	days := remaining / (hoursPerDay * time.Hour)
+	if remaining%(hoursPerDay*time.Hour) != 0 {
+		days++
+	}
+	return int32(days)
+}
+
+func toAPITrashEntry(entry wikipage.TrashEntry) *apiv1.TrashPageEntry {
+	return &apiv1.TrashPageEntry{
+		TrashId:       entry.TrashID,
+		Identifier:    string(entry.Identifier),
+		Title:         entry.Title,
+		DeletedAt:     timestamppb.New(entry.DeletedAt),
+		DeletedBy:     entry.DeletedBy,
+		PurgesAt:      timestamppb.New(entry.PurgesAt),
+		DaysRemaining: trashDaysRemaining(entry.PurgesAt),
+	}
+}
+
+// ListTrash implements the ListTrash RPC.
+func (s *Server) ListTrash(_ context.Context, _ *apiv1.ListTrashRequest) (*apiv1.ListTrashResponse, error) {
+	trashReader, err := requireTrashReader(s.pageReaderMutator)
+	if err != nil {
+		return nil, err
+	}
+	entries, err := trashReader.ListTrash()
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to list trash: %v", err)
+	}
+
+	pages := make([]*apiv1.TrashPageEntry, 0, len(entries))
+	for _, entry := range entries {
+		pages = append(pages, toAPITrashEntry(entry))
+	}
+
+	return &apiv1.ListTrashResponse{Pages: pages}, nil
+}
+
+func restoredIdentifierFromTrash(entries []wikipage.TrashEntry, trashID string) string {
+	for _, entry := range entries {
+		if entry.TrashID == trashID {
+			return string(entry.Identifier)
+		}
+	}
+	return ""
+}
+
+func trashEntriesByID(trashReader wikipage.PageTrashReader) (map[string]wikipage.TrashEntry, error) {
+	entries, err := trashReader.ListTrash()
+	if err != nil {
+		return nil, err
+	}
+	byID := make(map[string]wikipage.TrashEntry, len(entries))
+	for _, entry := range entries {
+		byID[entry.TrashID] = entry
+	}
+	return byID, nil
+}
+
+func requireAuthorizedTrashEntry(ctx context.Context, reader wikipage.PageReader, trashEntry wikipage.TrashEntry) error {
+	return requireAuthorized(ctx, reader, trashEntry.Identifier)
+}
+
+// RestorePage implements the RestorePage RPC.
+func (s *Server) RestorePage(ctx context.Context, req *apiv1.RestorePageRequest) (*apiv1.RestorePageResponse, error) {
+	if req.TrashId == "" {
+		return nil, status.Error(codes.InvalidArgument, "trash_id is required")
+	}
+
+	trashReader, err := requireTrashReader(s.pageReaderMutator)
+	if err != nil {
+		return nil, err
+	}
+	trashRestorer, err := requireTrashRestorer(s.pageReaderMutator)
+	if err != nil {
+		return nil, err
+	}
+	entries, err := trashReader.ListTrash()
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to read trash before restore: %v", err)
+	}
+	restoredIdentifier := restoredIdentifierFromTrash(entries, req.TrashId)
+	if restoredIdentifier == "" {
+		return nil, status.Errorf(codes.NotFound, trashEntryNotFoundErrFmt, req.TrashId)
+	}
+	if authErr := requireAuthorized(ctx, s.pageReaderMutator, wikipage.PageIdentifier(restoredIdentifier)); authErr != nil {
+		return nil, authErr
+	}
+
+	if err := trashRestorer.RestorePage(req.TrashId); err != nil {
+		if os.IsNotExist(err) {
+			return nil, status.Errorf(codes.NotFound, trashEntryNotFoundErrFmt, req.TrashId)
+		}
+		if errors.Is(err, wikipage.ErrPageRestoreConflict) {
+			return nil, status.Errorf(codes.AlreadyExists, "cannot restore page: %v", err)
+		}
+		return nil, status.Errorf(codes.Internal, "failed to restore page: %v", err)
+	}
+
+	identity := tailscale.IdentityFromContext(ctx)
+	s.logger.Info("[AUDIT] restore | trash: %q | page: %q | user: %q", req.TrashId, restoredIdentifier, identity.ForLog())
+	return &apiv1.RestorePageResponse{
+		Success:            true,
+		RestoredIdentifier: restoredIdentifier,
+	}, nil
+}
+
+// PurgePage implements the PurgePage RPC.
+func (s *Server) PurgePage(ctx context.Context, req *apiv1.PurgePageRequest) (*apiv1.PurgePageResponse, error) {
+	if req.TrashId == "" {
+		return nil, status.Error(codes.InvalidArgument, "trash_id is required")
+	}
+	trashReader, err := requireTrashReader(s.pageReaderMutator)
+	if err != nil {
+		return nil, err
+	}
+	trashPurger, err := requireTrashPurger(s.pageReaderMutator)
+	if err != nil {
+		return nil, err
+	}
+	entriesByID, err := trashEntriesByID(trashReader)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to read trash before purge: %v", err)
+	}
+	trashEntry, ok := entriesByID[req.TrashId]
+	if !ok {
+		return nil, status.Errorf(codes.NotFound, trashEntryNotFoundErrFmt, req.TrashId)
+	}
+	if authErr := requireAuthorizedTrashEntry(ctx, s.pageReaderMutator, trashEntry); authErr != nil {
+		return nil, authErr
+	}
+	if err := trashPurger.PurgePage(req.TrashId); err != nil {
+		if os.IsNotExist(err) {
+			return nil, status.Errorf(codes.NotFound, trashEntryNotFoundErrFmt, req.TrashId)
+		}
+		return nil, status.Errorf(codes.Internal, "failed to purge page: %v", err)
+	}
+
+	identity := tailscale.IdentityFromContext(ctx)
+	s.logger.Info("[AUDIT] purge | trash: %q | user: %q", req.TrashId, identity.ForLog())
+	return &apiv1.PurgePageResponse{Success: true}, nil
+}
+
+// EmptyTrash implements the EmptyTrash RPC.
+func (s *Server) EmptyTrash(ctx context.Context, _ *apiv1.EmptyTrashRequest) (*apiv1.EmptyTrashResponse, error) {
+	trashReader, err := requireTrashReader(s.pageReaderMutator)
+	if err != nil {
+		return nil, err
+	}
+	trashPurger, err := requireTrashPurger(s.pageReaderMutator)
+	if err != nil {
+		return nil, err
+	}
+	entries, err := trashReader.ListTrash()
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to read trash before emptying: %v", err)
+	}
+	for _, entry := range entries {
+		if authErr := requireAuthorizedTrashEntry(ctx, s.pageReaderMutator, entry); authErr != nil {
+			return nil, authErr
+		}
+	}
+	purgedCount, err := trashPurger.EmptyTrash()
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to empty trash: %v", err)
+	}
+
+	identity := tailscale.IdentityFromContext(ctx)
+	s.logger.Info("[AUDIT] empty-trash | count: %d | user: %q", purgedCount, identity.ForLog())
+	return &apiv1.EmptyTrashResponse{Success: true, PurgedCount: int32(purgedCount)}, nil
 }
 
 // ReadPage implements the ReadPage RPC.

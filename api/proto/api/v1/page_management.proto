@@ -70,7 +70,34 @@ service PageManagementService {
   // DeletePage — see (api.v1.description).
   rpc DeletePage(DeletePageRequest) returns (DeletePageResponse) {
     option (api.v1.description) =
-        "Permanently delete a wiki page by identifier.";
+        "Move a wiki page to trash by identifier. The page is hidden from "
+        "normal reads, search, and links until restored or purged.";
+  }
+
+  // ListTrash — see (api.v1.description).
+  rpc ListTrash(ListTrashRequest) returns (ListTrashResponse) {
+    option (api.v1.description) =
+        "List pages currently held in trash with restore/purge metadata.";
+    option (api.v1.read_only) = true;
+  }
+
+  // RestorePage — see (api.v1.description).
+  rpc RestorePage(RestorePageRequest) returns (RestorePageResponse) {
+    option (api.v1.description) =
+        "Restore a page from trash to its original identifier. Fails if a "
+        "live page already exists at that identifier.";
+  }
+
+  // PurgePage — see (api.v1.description).
+  rpc PurgePage(PurgePageRequest) returns (PurgePageResponse) {
+    option (api.v1.description) =
+        "Permanently remove one page from trash.";
+  }
+
+  // EmptyTrash — see (api.v1.description).
+  rpc EmptyTrash(EmptyTrashRequest) returns (EmptyTrashResponse) {
+    option (api.v1.description) =
+        "Permanently remove every page from trash.";
   }
 
   // ClearPageContent — see (api.v1.description).
@@ -258,6 +285,50 @@ message DeletePageRequest {
 message DeletePageResponse {
   bool success = 1;
   string error = 2;
+}
+
+// Trash
+message TrashPageEntry {
+  string trash_id = 1;
+  string identifier = 2;
+  string title = 3;
+  google.protobuf.Timestamp deleted_at = 4;
+  string deleted_by = 5;
+  google.protobuf.Timestamp purges_at = 6;
+  int32 days_remaining = 7;
+}
+
+message ListTrashRequest {}
+
+message ListTrashResponse {
+  repeated TrashPageEntry pages = 1;
+}
+
+message RestorePageRequest {
+  string trash_id = 1;
+}
+
+message RestorePageResponse {
+  bool success = 1;
+  string error = 2;
+  string restored_identifier = 3;
+}
+
+message PurgePageRequest {
+  string trash_id = 1;
+}
+
+message PurgePageResponse {
+  bool success = 1;
+  string error = 2;
+}
+
+message EmptyTrashRequest {}
+
+message EmptyTrashResponse {
+  bool success = 1;
+  string error = 2;
+  int32 purged_count = 3;
 }
 
 // Generate Identifier
