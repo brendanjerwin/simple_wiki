@@ -29,6 +29,7 @@ import (
 	"github.com/brendanjerwin/simple_wiki/pkg/ulid"
 	"github.com/brendanjerwin/simple_wiki/server"
 	"github.com/brendanjerwin/simple_wiki/server/checklistmutator"
+	"github.com/brendanjerwin/simple_wiki/server/surveymutator"
 	"github.com/brendanjerwin/simple_wiki/tailscale"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 	"github.com/gin-gonic/gin"
@@ -444,6 +445,7 @@ func BuildVanguardTranscoder(grpcServer *grpc.Server, ginRouter http.Handler) (h
 		"api.v1.PageManagementService",
 		"api.v1.ScheduledTurnService",
 		"api.v1.SearchService",
+		"api.v1.SurveyService",
 		"api.v1.SystemInfoService",
 	}
 
@@ -517,6 +519,7 @@ func setupGRPCServer(
 		return nil, nil, fmt.Errorf("failed to create gRPC server: %w", err)
 	}
 	checklistMutator := checklistmutator.New(site, checklistmutator.SystemClock{}, ulid.NewSystemGenerator())
+	surveyMutator := surveymutator.New(site, surveymutator.SystemClock{})
 
 	// Cross-connector LeaseTable — the in-memory derived view of which
 	// (page, list_name) is currently subscribed and by which connector.
@@ -590,7 +593,8 @@ func setupGRPCServer(
 		WithScheduledTurnDispatcher(site.ScheduledTurnDispatcher).
 		WithAgentScheduleStore(site.AgentScheduleStore).
 		WithAgentChatContextStore(site.AgentChatContextStore).
-		WithChecklistMutator(checklistMutator)
+		WithChecklistMutator(checklistMutator).
+		WithSurveyMutator(surveyMutator)
 
 	if keepWiring != nil {
 		grpcAPIServer = grpcAPIServer.
@@ -691,10 +695,10 @@ func (t *tasksProfileTokenStore) SaveRefreshToken(ctx context.Context, token str
 // scope set (openid + email + tasks read/write — see
 // tasksgateway.RequestedScopes for why we ask for openid/email).
 type tasksAuthURLBuilder struct {
-	stateStore   server.OAuthStateStore
-	authURL      string
-	clientID     string
-	redirectURI  string
+	stateStore    server.OAuthStateStore
+	authURL       string
+	clientID      string
+	redirectURI   string
 	requiredScope string
 }
 
@@ -1312,9 +1316,9 @@ func (b *tasksMutatorBridge) Unsuppress(profileID wikipage.PageIdentifier, page,
 // writes; without filtering, every inbound apply would re-trigger the
 // same connector's outbound debounce loop.
 const (
-	tasksSyncIdentityLogin       = "system:tasks-sync"
-	connectorSyncIdentityLogin   = "system:connector-sync"
-	legacyKeepSyncIdentityLogin  = "system:keep-sync"
+	tasksSyncIdentityLogin      = "system:tasks-sync"
+	connectorSyncIdentityLogin  = "system:connector-sync"
+	legacyKeepSyncIdentityLogin = "system:keep-sync"
 )
 
 // OnChecklistMutated implements checklistmutator.Subscriber. The wiki
@@ -1374,4 +1378,3 @@ func (b *tasksMutatorBridge) OnChecklistMutated(page, listName string, identity 
 func bridgeKey(profileID wikipage.PageIdentifier, page, listName string) string {
 	return fmt.Sprintf("%s|%s|%s", profileID, page, listName)
 }
-

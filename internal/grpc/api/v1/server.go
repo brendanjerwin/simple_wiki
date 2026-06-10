@@ -16,6 +16,7 @@ import (
 	"github.com/brendanjerwin/simple_wiki/pkg/chatbuffer"
 	"github.com/brendanjerwin/simple_wiki/pkg/jobs"
 	"github.com/brendanjerwin/simple_wiki/server/checklistmutator"
+	"github.com/brendanjerwin/simple_wiki/server/surveymutator"
 	"github.com/brendanjerwin/simple_wiki/tailscale"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 	"github.com/jcelliott/lumber"
@@ -107,6 +108,7 @@ type Server struct {
 	apiv1.UnimplementedScheduledTurnServiceServer
 	apiv1.UnimplementedAgentMetadataServiceServer
 	apiv1.UnimplementedChecklistServiceServer
+	apiv1.UnimplementedSurveyServiceServer
 	apiv1.UnimplementedConnectorServiceServer
 	commit                  string
 	buildTime               time.Time
@@ -124,6 +126,7 @@ type Server struct {
 	agentScheduleStore      AgentScheduleStore
 	agentChatContextStore   AgentChatContextStore
 	checklistMutator        *checklistmutator.Mutator
+	surveyMutator           *surveymutator.Mutator
 
 	// Connector runtimes contain the polymorphic engine-path wiring
 	// used by ConnectorService. Per-kind auth collaborators remain
@@ -225,6 +228,13 @@ func (s *Server) WithAgentChatContextStore(store AgentChatContextStore) *Server 
 // Required for ChecklistService handlers to function.
 func (s *Server) WithChecklistMutator(m *checklistmutator.Mutator) *Server {
 	s.checklistMutator = m
+	return s
+}
+
+// WithSurveyMutator wires the surveymutator funnel into the server.
+// Required for SurveyService handlers to function.
+func (s *Server) WithSurveyMutator(m *surveymutator.Mutator) *Server {
+	s.surveyMutator = m
 	return s
 }
 
@@ -333,6 +343,7 @@ func (s *Server) RegisterWithServer(grpcServer *grpc.Server) {
 	apiv1.RegisterScheduledTurnServiceServer(grpcServer, s)
 	apiv1.RegisterAgentMetadataServiceServer(grpcServer, s)
 	apiv1.RegisterChecklistServiceServer(grpcServer, s)
+	apiv1.RegisterSurveyServiceServer(grpcServer, s)
 	apiv1.RegisterConnectorServiceServer(grpcServer, s)
 }
 

@@ -1,0 +1,163 @@
+syntax = "proto3";
+
+package api.v1;
+
+import "api/v1/mcp_options.proto";
+import "google/protobuf/struct.proto";
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/brendanjerwin/simple_wiki/gen/go/api/v1;apiv1";
+
+// SurveyService owns the surveys.<name> frontmatter namespace.
+//
+// Generic Frontmatter writes to surveys.* are rejected so response arrays are
+// not clobbered by stale read/replace cycles. Use this service for survey
+// configuration and user response writes.
+service SurveyService {
+  rpc GetSurvey(GetSurveyRequest) returns (GetSurveyResponse) {
+    option (api.v1.read_only) = true;
+  }
+
+  rpc UpsertSurvey(UpsertSurveyRequest) returns (UpsertSurveyResponse);
+
+  rpc AddField(AddSurveyFieldRequest) returns (AddSurveyFieldResponse);
+
+  rpc UpdateField(UpdateSurveyFieldRequest) returns (UpdateSurveyFieldResponse);
+
+  rpc RemoveField(RemoveSurveyFieldRequest) returns (RemoveSurveyFieldResponse);
+
+  rpc ReorderField(ReorderSurveyFieldRequest) returns (ReorderSurveyFieldResponse);
+
+  rpc SubmitResponse(SubmitSurveyResponseRequest) returns (SubmitSurveyResponseResponse);
+
+  rpc ListResponses(ListSurveyResponsesRequest) returns (ListSurveyResponsesResponse) {
+    option (api.v1.read_only) = true;
+  }
+
+  rpc DeleteResponse(DeleteSurveyResponseRequest) returns (DeleteSurveyResponseResponse);
+}
+
+message Survey {
+  string name = 1;
+  string question = 2;
+  repeated SurveyField fields = 3;
+  repeated SurveyResponse responses = 4;
+  bool closed = 5;
+  google.protobuf.Timestamp updated_at = 6;
+}
+
+message SurveyField {
+  string name = 1;
+  string type = 2;
+  optional string label = 3;
+  optional bool required = 4;
+  repeated string options = 5;
+  optional double min = 6;
+  optional double max = 7;
+}
+
+message SurveyResponse {
+  string user = 1;
+  bool anonymous = 2;
+  google.protobuf.Timestamp submitted_at = 3;
+  google.protobuf.Struct values = 4;
+}
+
+message GetSurveyRequest {
+  string page = 1;
+  string name = 2;
+}
+
+message GetSurveyResponse {
+  Survey survey = 1;
+}
+
+message UpsertSurveyRequest {
+  string page = 1;
+  string name = 2;
+  string question = 3;
+  optional bool closed = 4;
+  google.protobuf.Timestamp expected_updated_at = 5;
+}
+
+message UpsertSurveyResponse {
+  Survey survey = 1;
+}
+
+message AddSurveyFieldRequest {
+  string page = 1;
+  string survey_name = 2;
+  SurveyField field = 3;
+  google.protobuf.Timestamp expected_updated_at = 4;
+}
+
+message AddSurveyFieldResponse {
+  Survey survey = 1;
+}
+
+message UpdateSurveyFieldRequest {
+  string page = 1;
+  string survey_name = 2;
+  string field_name = 3;
+  SurveyField field = 4;
+  google.protobuf.Timestamp expected_updated_at = 5;
+}
+
+message UpdateSurveyFieldResponse {
+  Survey survey = 1;
+}
+
+message RemoveSurveyFieldRequest {
+  string page = 1;
+  string survey_name = 2;
+  string field_name = 3;
+  google.protobuf.Timestamp expected_updated_at = 4;
+}
+
+message RemoveSurveyFieldResponse {
+  Survey survey = 1;
+}
+
+message ReorderSurveyFieldRequest {
+  string page = 1;
+  string survey_name = 2;
+  string field_name = 3;
+  int32 new_index = 4;
+  google.protobuf.Timestamp expected_updated_at = 5;
+}
+
+message ReorderSurveyFieldResponse {
+  Survey survey = 1;
+}
+
+message SubmitSurveyResponseRequest {
+  string page = 1;
+  string survey_name = 2;
+  google.protobuf.Struct values = 3;
+  bool anonymous = 4;
+}
+
+message SubmitSurveyResponseResponse {
+  Survey survey = 1;
+}
+
+message ListSurveyResponsesRequest {
+  string page = 1;
+  string survey_name = 2;
+}
+
+message ListSurveyResponsesResponse {
+  repeated SurveyResponse responses = 1;
+}
+
+message DeleteSurveyResponseRequest {
+  string page = 1;
+  string survey_name = 2;
+  string user = 3;
+  google.protobuf.Timestamp submitted_at = 4;
+  google.protobuf.Timestamp expected_updated_at = 5;
+}
+
+message DeleteSurveyResponseResponse {
+  Survey survey = 1;
+}

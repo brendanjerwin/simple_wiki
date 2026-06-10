@@ -1,13 +1,15 @@
 import { html, LitElement, nothing } from 'lit';
 import { property, state } from 'lit/decorators.js';
 import { createClient } from '@connectrpc/connect';
-import { create, type JsonObject } from '@bufbuild/protobuf';
+import { create, type JsonObject, type JsonValue } from '@bufbuild/protobuf';
+import type { Timestamp } from '@bufbuild/protobuf/wkt';
 import { getGrpcWebTransport } from './grpc-transport.js';
 import {
-  Frontmatter,
-  GetFrontmatterRequestSchema,
-  MergeFrontmatterRequestSchema,
-} from '../gen/api/v1/frontmatter_pb.js';
+  SurveyService,
+  GetSurveyRequestSchema,
+  SubmitSurveyResponseRequestSchema,
+  type Survey as SurveyMessage,
+} from '../gen/api/v1/survey_pb.js';
 import {
   foundationCSS,
   buttonCSS,
@@ -17,10 +19,7 @@ import {
 import { AugmentErrorService, type AugmentedError } from './augment-error-service.js';
 import './error-display.js';
 import {
-  extractSurveyData,
   findUserResponse,
-  upsertResponse,
-  asRecord,
   type SurveyData,
   type SurveyField,
   type SurveyResponse,
@@ -28,11 +27,83 @@ import {
 export type { SurveyData, SurveyField, SurveyResponse } from './survey-data-service.js';
 import { wikiSurveyStyles } from './wiki-survey-styles.js';
 
+function timestampToIso(timestamp: Timestamp | undefined): string {
+  if (!timestamp) return '';
+  const milliseconds = Number(timestamp.seconds) * 1000 + Math.floor(timestamp.nanos / 1_000_000);
+  if (!Number.isFinite(milliseconds)) return '';
+  return new Date(milliseconds).toISOString();
+}
+
+function surveyMessageFieldToData(field: SurveyMessage['fields'][number]): SurveyField {
+  const rawType = field.type;
+  const type: SurveyField['type'] =
+    rawType === 'number' || rawType === 'text' || rawType === 'choice' || rawType === 'boolean'
+      ? rawType
+      : rawType === 'select'
+        ? 'choice'
+        : 'text';
+
+  const dataField: SurveyField = { name: field.name, type };
+  if (field.label?.trim()) dataField.label = field.label.trim();
+  if (field.required === true) dataField.required = true;
+  if (field.min !== undefined) dataField.min = field.min;
+  if (field.max !== undefined) dataField.max = field.max;
+  if (field.options.length > 0) dataField.options = field.options;
+  return dataField;
+}
+
+function surveyMessageResponseToData(response: SurveyMessage['responses'][number]): SurveyResponse {
+  return {
+    user: response.user,
+    anonymous: response.anonymous,
+    submitted_at: timestampToIso(response.submittedAt),
+    values: response.values ?? {},
+  };
+}
+
+function isSurveyJsonValue(value: unknown): value is JsonValue {
+  if (typeof value === 'number') {
+    return Number.isFinite(value);
+  }
+  return value === null || typeof value === 'string' || typeof value === 'boolean';
+}
+
+function fieldValuesToJsonObject(values: Record<string, unknown>): JsonObject {
+  const out: JsonObject = {};
+  for (const [key, value] of Object.entries(values)) {
+    if (isSurveyJsonValue(value)) {
+      out[key] = value;
+    }
+  }
+  return out;
+}
+
+function surveyMessageToData(survey: SurveyMessage | undefined): SurveyData {
+  if (!survey) {
+    return {
+      question: '',
+      fields: [],
+      closed: false,
+      responses: [],
+    };
+  }
+  return {
+    question: survey.question,
+    fields: survey.fields
+      .filter(field => field.name)
+      .map(surveyMessageFieldToData),
+    closed: survey.closed,
+    responses: survey.responses
+      .filter(response => response.user)
+      .map(surveyMessageResponseToData),
+  };
+}
+
 /**
- * WikiSurvey - An interactive survey component that persists responses to frontmatter.
+ * WikiSurvey - An interactive survey component that persists responses through SurveyService.
  *
- * Survey configuration (question, fields) lives in frontmatter under `surveys.<name>`.
- * Responses are stored as an array in `surveys.<name>.responses`, keyed by username.
+ * Survey configuration (question, fields) lives in the survey API under `surveys.<name>`.
+ * Responses are stored by SurveyService, keyed by username.
  * Each user's response is editable (resubmit replaces their existing entry).
  *
  * @property {string} name - Survey name in frontmatter (matches frontmatter key)
@@ -68,7 +139,7 @@ export class WikiSurvey extends LitElement {
   @state()
   private declare fieldValues: Record<string, unknown>;
 
-  readonly client = createClient(Frontmatter, getGrpcWebTransport());
+  readonly client = createClient(SurveyService, getGrpcWebTransport());
 
   constructor() {
     super();
@@ -105,9 +176,9 @@ export class WikiSurvey extends LitElement {
       throw new Error('wiki-survey: page attribute is required but not set');
     }
     try {
-      const request = create(GetFrontmatterRequestSchema, { page: this.page });
-      const response = await this.client.getFrontmatter(request);
-      const data = extractSurveyData(response.frontmatter ?? {}, this.name);
+      const request = create(GetSurveyRequestSchema, { page: this.page, name: this.name });
+      const response = await this.client.getSurvey(request);
+      const data = surveyMessageToData(response.survey);
       this.surveyData = data;
       this._prefillCurrentUserValues(data);
       this.error = null;
@@ -138,50 +209,17 @@ export class WikiSurvey extends LitElement {
       this.saving = true;
       this.saved = false;
 
-      // Read-modify-write: get current frontmatter, update survey responses, merge back.
-      const getRequest = create(GetFrontmatterRequestSchema, { page: this.page });
-      const currentResponse = await this.client.getFrontmatter(getRequest);
-      const currentFrontmatter: JsonObject = { ...currentResponse.frontmatter };
-
-      // Get current surveys object
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- asRecord narrows to non-null object; values originate from parsed JSON and are valid JsonValues
-      const existingSurveys = (asRecord(currentFrontmatter['surveys']) ?? {}) as JsonObject;
-
-      // Get current survey data (to preserve question, fields, etc.)
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- same as above
-      const currentSurveyObj = (asRecord(existingSurveys[this.name]) ?? {}) as JsonObject;
-
-      // Get existing responses and upsert the current user's response
-      const existingData = extractSurveyData(currentFrontmatter, this.name);
-      const updatedResponses = upsertResponse(existingData.responses, username, this.fieldValues);
-
-      // Build updated survey object (preserve all existing keys, update responses)
-      const updatedSurveyObj: JsonObject = {
-        ...currentSurveyObj,
-        responses: updatedResponses.map(r => ({
-          user: r.user,
-          anonymous: r.anonymous,
-          submitted_at: r.submitted_at,
-          // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- r.values is Record<string, unknown>; values are form inputs (strings/primitives) so JsonObject is safe here
-          values: r.values as unknown as JsonObject,
-        })),
-      };
-
-      const updatedSurveys: JsonObject = {
-        ...existingSurveys,
-        [this.name]: updatedSurveyObj,
-      };
-
-      const mergeRequest = create(MergeFrontmatterRequestSchema, {
+      const submitRequest = create(SubmitSurveyResponseRequestSchema, {
         page: this.page,
-        frontmatter: { surveys: updatedSurveys },
+        surveyName: this.name,
+        values: fieldValuesToJsonObject(this.fieldValues),
+        anonymous: false,
       });
-      const mergeResponse = await this.client.mergeFrontmatter(mergeRequest);
+      const submitResponse = await this.client.submitResponse(submitRequest);
 
       // Update local state from the response
-      if (mergeResponse.frontmatter) {
-        const data = extractSurveyData(mergeResponse.frontmatter, this.name);
-        this.surveyData = data;
+      if (submitResponse.survey) {
+        this.surveyData = surveyMessageToData(submitResponse.survey);
       }
 
       this.saved = true;

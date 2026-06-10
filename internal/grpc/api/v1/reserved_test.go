@@ -100,6 +100,22 @@ var _ = Describe("reserved namespace registry", func() {
 			})
 		})
 
+		When("called with the registered 'surveys' key", func() {
+			var err error
+
+			BeforeEach(func() {
+				err = reservedNamespaceError("surveys")
+			})
+
+			It("should return InvalidArgument", func() {
+				Expect(status.Code(err)).To(Equal(codes.InvalidArgument))
+			})
+
+			It("should direct callers to SurveyService", func() {
+				Expect(err.Error()).To(ContainSubstring("SurveyService"))
+			})
+		})
+
 		When("called with an unregistered key", func() {
 			var err error
 
