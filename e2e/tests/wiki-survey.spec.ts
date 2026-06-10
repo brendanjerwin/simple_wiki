@@ -26,6 +26,11 @@ async function waitForSurveyLoaded(page: Page): Promise<void> {
  * server-rendered template script overwrites window.simple_wiki.
  */
 async function injectUsername(page: Page, username: string): Promise<void> {
+  await page.setExtraHTTPHeaders({
+    'Tailscale-User-Login': username,
+    'Tailscale-User-Name': username,
+  });
+
   await page.addInitScript((user: string) => {
     let stored: Record<string, unknown> = {};
     Object.defineProperty(window, 'simple_wiki', {
