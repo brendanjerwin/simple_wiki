@@ -1010,6 +1010,32 @@ var _ = Describe("Mutator", func() {
 			})
 		})
 
+		When("markdown references use single-quoted names", func() {
+			BeforeEach(func() {
+				seedRenamePage()
+				store.markdown["shopping_lists"] = `{{ Checklist 'Groceries/Household' }}
+<wiki-checklist list-name='Groceries/Household'></wiki-checklist>`
+
+				renamed, renameErr = mutator.RenameChecklist(ctx, "shopping_lists", "Groceries/Household", "Grocery", &expectedUpdate, human)
+			})
+
+			It("should not return an error", func() {
+				Expect(renameErr).NotTo(HaveOccurred())
+			})
+
+			It("should return the renamed checklist", func() {
+				Expect(renamed.GetName()).To(Equal("Grocery"))
+			})
+
+			It("should preserve single-quoted macro references", func() {
+				Expect(store.markdown["shopping_lists"]).To(ContainSubstring(`{{ Checklist 'Grocery' }}`))
+			})
+
+			It("should preserve single-quoted element references", func() {
+				Expect(store.markdown["shopping_lists"]).To(ContainSubstring(`list-name='Grocery'`))
+			})
+		})
+
 		When("the old checklist is missing", func() {
 			var (
 				beforeFM wikipage.FrontMatter

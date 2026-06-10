@@ -97,6 +97,41 @@ var _ = Describe("Store", func() {
 		})
 	})
 
+	Describe("ModifyFrontMatterAndMarkdown", func() {
+		var (
+			page      *wikipage.Page
+			modifyErr error
+		)
+
+		BeforeEach(func() {
+			Expect(store.WriteMarkdown("modify-both", "old body\n")).To(Succeed())
+			Expect(store.WriteFrontMatter("modify-both", wikipage.FrontMatter{"title": "Old"})).To(Succeed())
+
+			modifyErr = store.ModifyFrontMatterAndMarkdown(
+				"modify-both",
+				func(fm wikipage.FrontMatter, md wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error) {
+					fm["title"] = "New"
+					return fm, md + "new body\n", nil
+				},
+			)
+			var readErr error
+			page, readErr = store.ReadPage("modify-both")
+			Expect(readErr).NotTo(HaveOccurred())
+		})
+
+		It("should not return an error", func() {
+			Expect(modifyErr).NotTo(HaveOccurred())
+		})
+
+		It("should write the modified frontmatter", func() {
+			Expect(page.Text).To(ContainSubstring("New"))
+		})
+
+		It("should write the modified markdown", func() {
+			Expect(page.Text).To(ContainSubstring("old body\nnew body"))
+		})
+	})
+
 	Describe("SoftDeletePage", func() {
 		When("the page does not exist", func() {
 			It("should return os.ErrNotExist", func() {
