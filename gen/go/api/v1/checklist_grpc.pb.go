@@ -25,6 +25,7 @@ const (
 	ChecklistService_DeleteItem_FullMethodName       = "/api.v1.ChecklistService/DeleteItem"
 	ChecklistService_DeduplicateItems_FullMethodName = "/api.v1.ChecklistService/DeduplicateItems"
 	ChecklistService_ReorderItem_FullMethodName      = "/api.v1.ChecklistService/ReorderItem"
+	ChecklistService_RenameChecklist_FullMethodName  = "/api.v1.ChecklistService/RenameChecklist"
 	ChecklistService_ListItems_FullMethodName        = "/api.v1.ChecklistService/ListItems"
 	ChecklistService_GetChecklists_FullMethodName    = "/api.v1.ChecklistService/GetChecklists"
 	ChecklistService_WatchList_FullMethodName        = "/api.v1.ChecklistService/WatchList"
@@ -48,6 +49,8 @@ type ChecklistServiceClient interface {
 	DeduplicateItems(ctx context.Context, in *DeduplicateItemsRequest, opts ...grpc.CallOption) (*DeduplicateItemsResponse, error)
 	// ReorderItem — see (api.v1.description).
 	ReorderItem(ctx context.Context, in *ReorderItemRequest, opts ...grpc.CallOption) (*ReorderItemResponse, error)
+	// RenameChecklist — see (api.v1.description).
+	RenameChecklist(ctx context.Context, in *RenameChecklistRequest, opts ...grpc.CallOption) (*RenameChecklistResponse, error)
 	// ListItems — see (api.v1.description).
 	ListItems(ctx context.Context, in *ListItemsRequest, opts ...grpc.CallOption) (*ListItemsResponse, error)
 	// GetChecklists — see (api.v1.description).
@@ -118,6 +121,16 @@ func (c *checklistServiceClient) ReorderItem(ctx context.Context, in *ReorderIte
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ReorderItemResponse)
 	err := c.cc.Invoke(ctx, ChecklistService_ReorderItem_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *checklistServiceClient) RenameChecklist(ctx context.Context, in *RenameChecklistRequest, opts ...grpc.CallOption) (*RenameChecklistResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RenameChecklistResponse)
+	err := c.cc.Invoke(ctx, ChecklistService_RenameChecklist_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -195,6 +208,8 @@ type ChecklistServiceServer interface {
 	DeduplicateItems(context.Context, *DeduplicateItemsRequest) (*DeduplicateItemsResponse, error)
 	// ReorderItem — see (api.v1.description).
 	ReorderItem(context.Context, *ReorderItemRequest) (*ReorderItemResponse, error)
+	// RenameChecklist — see (api.v1.description).
+	RenameChecklist(context.Context, *RenameChecklistRequest) (*RenameChecklistResponse, error)
 	// ListItems — see (api.v1.description).
 	ListItems(context.Context, *ListItemsRequest) (*ListItemsResponse, error)
 	// GetChecklists — see (api.v1.description).
@@ -225,6 +240,9 @@ func (UnimplementedChecklistServiceServer) DeduplicateItems(context.Context, *De
 }
 func (UnimplementedChecklistServiceServer) ReorderItem(context.Context, *ReorderItemRequest) (*ReorderItemResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ReorderItem not implemented")
+}
+func (UnimplementedChecklistServiceServer) RenameChecklist(context.Context, *RenameChecklistRequest) (*RenameChecklistResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method RenameChecklist not implemented")
 }
 func (UnimplementedChecklistServiceServer) ListItems(context.Context, *ListItemsRequest) (*ListItemsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ListItems not implemented")
@@ -356,6 +374,24 @@ func _ChecklistService_ReorderItem_Handler(srv interface{}, ctx context.Context,
 	return interceptor(ctx, in, info, handler)
 }
 
+func _ChecklistService_RenameChecklist_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RenameChecklistRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ChecklistServiceServer).RenameChecklist(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ChecklistService_RenameChecklist_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ChecklistServiceServer).RenameChecklist(ctx, req.(*RenameChecklistRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _ChecklistService_ListItems_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(ListItemsRequest)
 	if err := dec(in); err != nil {
@@ -443,6 +479,10 @@ var ChecklistService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ReorderItem",
 			Handler:    _ChecklistService_ReorderItem_Handler,
+		},
+		{
+			MethodName: "RenameChecklist",
+			Handler:    _ChecklistService_RenameChecklist_Handler,
 		},
 		{
 			MethodName: "ListItems",

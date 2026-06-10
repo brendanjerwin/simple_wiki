@@ -1,9 +1,10 @@
-//revive:disable:dot-imports
 // Internal tests for unexported codec functions. These run inside the
 // checklistmutator package so they can exercise every private helper
 // without exporting it.  The TestMutator suite runner in mutator_test.go
 // (package checklistmutator_test) picks up these Describe blocks via
 // Ginkgo's shared global suite.
+//
+//revive:disable:dot-imports
 package checklistmutator
 
 import (
@@ -148,6 +149,44 @@ var _ = Describe("readInt64", func() {
 			v, ok := readInt64(map[string]any{"k": "string"}, "k")
 			Expect(ok).To(BeFalse())
 			Expect(v).To(Equal(int64(0)))
+		})
+	})
+})
+
+var _ = Describe("checklist name deletion helpers", func() {
+	Describe("deleteChecklistName", func() {
+		var fm wikipage.FrontMatter
+
+		BeforeEach(func() {
+			fm = wikipage.FrontMatter{
+				checklistsKey: map[string]any{
+					"old": map[string]any{itemsKey: []any{}},
+				},
+			}
+			deleteChecklistName(fm, "old")
+		})
+
+		It("should remove the empty legacy checklists namespace", func() {
+			Expect(fm).NotTo(HaveKey(checklistsKey))
+		})
+	})
+
+	Describe("deleteNestedChecklistName", func() {
+		var fm wikipage.FrontMatter
+
+		BeforeEach(func() {
+			fm = wikipage.FrontMatter{
+				wikiKey: map[string]any{
+					checklistsKey: map[string]any{
+						"old": map[string]any{itemsKey: []any{}},
+					},
+				},
+			}
+			deleteNestedChecklistName(fm, wikiKey, "old")
+		})
+
+		It("should remove the empty parent namespace", func() {
+			Expect(fm).NotTo(HaveKey(wikiKey))
 		})
 	})
 })
@@ -430,19 +469,19 @@ var _ = Describe("decodeItem", func() {
 			alarm := "cal:payload"
 
 			m := map[string]any{
-				"uid":          "abc123",
-				"text":         "Buy milk",
-				"checked":      true,
-				"tags":         []any{"grocery"},
-				"sort_order":   int64(1000),
-				"automated":    true,
-				"description":  desc,
-				"due":          codecNow.Format(time.RFC3339Nano),
+				"uid":           "abc123",
+				"text":          "Buy milk",
+				"checked":       true,
+				"tags":          []any{"grocery"},
+				"sort_order":    int64(1000),
+				"automated":     true,
+				"description":   desc,
+				"due":           codecNow.Format(time.RFC3339Nano),
 				"alarm_payload": alarm,
-				"created_at":   createdAt.Format(time.RFC3339Nano),
-				"updated_at":   updatedAt.Format(time.RFC3339Nano),
-				"completed_at": completedAt.Format(time.RFC3339Nano),
-				"completed_by": completedBy,
+				"created_at":    createdAt.Format(time.RFC3339Nano),
+				"updated_at":    updatedAt.Format(time.RFC3339Nano),
+				"completed_at":  completedAt.Format(time.RFC3339Nano),
+				"completed_by":  completedBy,
 			}
 			item = decodeItem(m, codecNow)
 		})
@@ -796,11 +835,11 @@ var _ = Describe("encodeEvents", func() {
 		BeforeEach(func() {
 			checked := true
 			ev := &apiv1.ChecklistEvent{
-				Seq: 42,
-				Ts:  timestamppb.New(codecNow),
-				Src: "connector:google_tasks:apply",
-				Op:  "toggle",
-				Uid: "01KQ",
+				Seq:     42,
+				Ts:      timestamppb.New(codecNow),
+				Src:     "connector:google_tasks:apply",
+				Op:      "toggle",
+				Uid:     "01KQ",
 				Checked: &checked,
 			}
 			encoded = encodeEvents([]*apiv1.ChecklistEvent{ev})
@@ -914,9 +953,9 @@ var _ = Describe("appendEvent", func() {
 
 		BeforeEach(func() {
 			checklist = &apiv1.Checklist{
-				Name:    "dad",
-				MaxSeq:  5,
-				Events:  []*apiv1.ChecklistEvent{{Seq: 5}},
+				Name:   "dad",
+				MaxSeq: 5,
+				Events: []*apiv1.ChecklistEvent{{Seq: 5}},
 			}
 			appendEvent(checklist, &apiv1.ChecklistEvent{
 				Src: "user:a@b", Op: "toggle", Uid: "u1",

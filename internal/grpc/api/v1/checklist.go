@@ -202,6 +202,36 @@ func (s *Server) ReorderItem(ctx context.Context, req *apiv1.ReorderItemRequest)
 	return &apiv1.ReorderItemResponse{Checklist: checklistForPublicResponse(list)}, nil
 }
 
+// RenameChecklist implements the RenameChecklist RPC.
+func (s *Server) RenameChecklist(ctx context.Context, req *apiv1.RenameChecklistRequest) (*apiv1.RenameChecklistResponse, error) {
+	if s.checklistMutator == nil {
+		return nil, errChecklistMutatorNotConfigured
+	}
+	if req.GetPage() == "" {
+		return nil, status.Error(codes.InvalidArgument, errPageRequired)
+	}
+	if req.GetOldName() == "" {
+		return nil, status.Error(codes.InvalidArgument, "old_name is required")
+	}
+	if req.GetNewName() == "" {
+		return nil, status.Error(codes.InvalidArgument, "new_name is required")
+	}
+	if guardErr := requireUserMutable(s.pageReaderMutator, wikipage.PageIdentifier(req.GetPage())); guardErr != nil {
+		return nil, guardErr
+	}
+	if authErr := requireAuthorized(ctx, s.pageReaderMutator, wikipage.PageIdentifier(req.GetPage())); authErr != nil {
+		return nil, authErr
+	}
+
+	identity := tailscale.IdentityFromContext(ctx)
+	expected := timestampPtr(req.ExpectedUpdatedAt)
+	list, err := s.checklistMutator.RenameChecklist(ctx, req.GetPage(), req.GetOldName(), req.GetNewName(), expected, identity)
+	if err != nil {
+		return nil, mapChecklistMutatorErr(err)
+	}
+	return &apiv1.RenameChecklistResponse{Checklist: checklistForPublicResponse(list)}, nil
+}
+
 // ListItems implements the ListItems RPC.
 func (s *Server) ListItems(ctx context.Context, req *apiv1.ListItemsRequest) (*apiv1.ListItemsResponse, error) {
 	if s.checklistMutator == nil {
@@ -424,6 +454,8 @@ func mapChecklistMutatorErr(err error) error {
 	case errors.Is(err, checklistmutator.ErrPageNotFound):
 		return status.Errorf(codes.NotFound, "page not found")
 	case errors.Is(err, checklistmutator.ErrDuplicateOpenItem):
+		return status.Error(codes.AlreadyExists, err.Error())
+	case errors.Is(err, checklistmutator.ErrListAlreadyExists):
 		return status.Error(codes.AlreadyExists, err.Error())
 	default:
 		// Fall through; status.FromError handling and Internal default below.

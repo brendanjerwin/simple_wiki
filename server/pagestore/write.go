@@ -54,3 +54,26 @@ func (s *Store) ModifyMarkdown(id wikipage.PageIdentifier, fn func(wikipage.Mark
 		return wikipage.CombineFrontMatterAndMarkdown(currentFM, newMD)
 	})
 }
+
+// ModifyFrontMatterAndMarkdown atomically reads both page sections, calls fn,
+// and writes both returned sections under the page lock.
+func (s *Store) ModifyFrontMatterAndMarkdown(id wikipage.PageIdentifier, fn func(wikipage.FrontMatter, wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error)) error {
+	return s.ModifyOrCreatePage(string(id), func(currentText string) (string, error) {
+		p := &wikipage.Page{Text: currentText}
+
+		currentFM, err := p.GetFrontMatter()
+		if err != nil {
+			return "", fmt.Errorf("failed to parse frontmatter for page modification: %w", err)
+		}
+		currentMD, err := p.GetMarkdown()
+		if err != nil {
+			return "", fmt.Errorf("failed to parse markdown for page modification: %w", err)
+		}
+
+		newFM, newMD, err := fn(currentFM, currentMD)
+		if err != nil {
+			return "", err
+		}
+		return wikipage.CombineFrontMatterAndMarkdown(newFM, newMD)
+	})
+}

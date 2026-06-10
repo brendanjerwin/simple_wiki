@@ -97,6 +97,18 @@ service ChecklistService {
         "are conventional but not required).";
   }
 
+  // RenameChecklist — see (api.v1.description).
+  rpc RenameChecklist(RenameChecklistRequest) returns (RenameChecklistResponse) {
+    option (api.v1.description) =
+        "Rename a checklist while preserving item uids, timestamps, "
+        "completion metadata, tombstones, and event history. The mutation "
+        "moves wiki.checklists.<old_name> to <new_name>, rewrites supported "
+        "Checklist macro/custom-element references in markdown, and bumps "
+        "the list sync_token so sync clients observe the collection change. "
+        "new_name must already be URL-safe per NormalizeListName; unsafe "
+        "names are rejected rather than silently normalized.";
+  }
+
   // ListItems — see (api.v1.description).
   rpc ListItems(ListItemsRequest) returns (ListItemsResponse) {
     option (api.v1.description) =
@@ -350,6 +362,19 @@ message ReorderItemRequest {
 }
 
 message ReorderItemResponse {
+  Checklist checklist = 1;
+}
+
+// RenameChecklist
+
+message RenameChecklistRequest {
+  string page = 1;
+  string old_name = 2;
+  string new_name = 3;
+  optional google.protobuf.Timestamp expected_updated_at = 4;
+}
+
+message RenameChecklistResponse {
   Checklist checklist = 1;
 }
 

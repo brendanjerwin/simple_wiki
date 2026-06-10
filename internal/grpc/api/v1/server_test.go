@@ -271,6 +271,50 @@ func (m *MockPageReaderMutator) ModifyMarkdown(identifier wikipage.PageIdentifie
 	return nil
 }
 
+func (m *MockPageReaderMutator) ModifyFrontMatterAndMarkdown(identifier wikipage.PageIdentifier, modifier func(wikipage.FrontMatter, wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error)) error {
+	if m.MarkdownReadErr != nil {
+		return m.MarkdownReadErr
+	}
+	if m.Err != nil {
+		return m.Err
+	}
+
+	currentFM := m.Frontmatter
+	if m.WrittenFrontmatterByID != nil {
+		if fm, ok := m.WrittenFrontmatterByID[string(identifier)]; ok {
+			currentFM = fm
+		}
+	}
+	if m.FrontmatterByID != nil {
+		if fm, ok := m.FrontmatterByID[string(identifier)]; ok {
+			currentFM = fm
+		}
+	}
+
+	newFM, newMD, err := modifier(currentFM, m.Markdown)
+	if err != nil {
+		return err
+	}
+	if m.WriteErr != nil {
+		return m.WriteErr
+	}
+	if m.MarkdownWriteErr != nil {
+		return m.MarkdownWriteErr
+	}
+
+	m.WrittenIdentifier = identifier
+	m.WrittenFrontmatter = newFM
+	if m.WrittenFrontmatterByID == nil {
+		m.WrittenFrontmatterByID = make(map[string]map[string]any)
+	}
+	m.WrittenFrontmatterByID[string(identifier)] = maps.Clone(newFM)
+	m.Frontmatter = newFM
+	m.WrittenMarkdown = newMD
+	m.Markdown = newMD
+	m.markdownWritten = true
+	return nil
+}
+
 // ReadPage satisfies wikipage.PageOpener, returning a Page built from the mock's Markdown and error fields.
 func (m *MockPageReaderMutator) ReadPage(identifier wikipage.PageIdentifier) (*wikipage.Page, error) {
 	readErr := m.MarkdownReadErr

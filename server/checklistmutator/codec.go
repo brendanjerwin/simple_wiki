@@ -29,34 +29,34 @@ import (
 // `checklists.*`.
 
 const (
-	wikiKey            = "wiki"
-	checklistsKey      = "checklists"
-	itemsKey           = "items"
-	tombstonesKey      = "tombstones"
-	eventsKey          = "events"
-	maxSeqKey          = "max_seq"
-	syncTokenKey       = "sync_token"
-	updatedAtKey       = "updated_at"
-	uidKey             = "uid"
-	textKey            = "text"
-	checkedKey         = "checked"
-	tagsKey            = "tags"
-	sortOrderKey       = "sort_order"
-	descriptionKey     = "description"
-	dueKey             = "due"
-	alarmPayloadKey    = "alarm_payload"
-	createdAtKey       = "created_at"
-	completedAtKey     = "completed_at"
-	completedByKey     = "completed_by"
-	automatedKey       = "automated"
+	wikiKey         = "wiki"
+	checklistsKey   = "checklists"
+	itemsKey        = "items"
+	tombstonesKey   = "tombstones"
+	eventsKey       = "events"
+	maxSeqKey       = "max_seq"
+	syncTokenKey    = "sync_token"
+	updatedAtKey    = "updated_at"
+	uidKey          = "uid"
+	textKey         = "text"
+	checkedKey      = "checked"
+	tagsKey         = "tags"
+	sortOrderKey    = "sort_order"
+	descriptionKey  = "description"
+	dueKey          = "due"
+	alarmPayloadKey = "alarm_payload"
+	createdAtKey    = "created_at"
+	completedAtKey  = "completed_at"
+	completedByKey  = "completed_by"
+	automatedKey    = "automated"
 
 	// Per ADR-0015: per-checklist event-log fields. Living next to
 	// items + tombstones in the wiki-managed subtree.
-	eventSeqKey         = "seq"
-	eventTimestampKey   = "ts"
-	eventSourceKey      = "src"
-	eventOpKey          = "op"
-	eventTagsSetKey     = "tags_set"
+	eventSeqKey       = "seq"
+	eventTimestampKey = "ts"
+	eventSourceKey    = "src"
+	eventOpKey        = "op"
+	eventTagsSetKey   = "tags_set"
 )
 
 // decodeChecklist reads the named checklist out of fm. Reads from
@@ -412,6 +412,52 @@ func encodeChecklist(fm wikipage.FrontMatter, listName string, checklist *apiv1.
 		if len(legacy) == 0 {
 			delete(fm, checklistsKey)
 		}
+	}
+}
+
+func resolveExistingChecklistName(fm wikipage.FrontMatter, requestedName string) (string, bool) {
+	if checklistNameExists(fm, requestedName) {
+		return requestedName, true
+	}
+	normalizedName := wikipage.NormalizeListName(requestedName)
+	if normalizedName != requestedName && checklistNameExists(fm, normalizedName) {
+		return normalizedName, true
+	}
+	return "", false
+}
+
+func checklistNameExists(fm wikipage.FrontMatter, listName string) bool {
+	wikiLists := readMap(readMap(fm, wikiKey), checklistsKey)
+	if _, ok := wikiLists[listName]; ok {
+		return true
+	}
+	legacyLists := readMap(fm, checklistsKey)
+	_, ok := legacyLists[listName]
+	return ok
+}
+
+func deleteChecklistName(fm wikipage.FrontMatter, listName string) {
+	deleteNestedChecklistName(fm, wikiKey, listName)
+	if legacyLists := readMap(fm, checklistsKey); legacyLists != nil {
+		delete(legacyLists, listName)
+		if len(legacyLists) == 0 {
+			delete(fm, checklistsKey)
+		}
+	}
+}
+
+func deleteNestedChecklistName(fm wikipage.FrontMatter, parentKey, listName string) {
+	parent := readMap(fm, parentKey)
+	lists := readMap(parent, checklistsKey)
+	if lists == nil {
+		return
+	}
+	delete(lists, listName)
+	if len(lists) == 0 {
+		delete(parent, checklistsKey)
+	}
+	if len(parent) == 0 {
+		delete(fm, parentKey)
 	}
 }
 

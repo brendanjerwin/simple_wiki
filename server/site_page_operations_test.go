@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-		"github.com/brendanjerwin/simple_wiki/utils/base32tools"
+	"github.com/brendanjerwin/simple_wiki/utils/base32tools"
 	"github.com/brendanjerwin/simple_wiki/utils/goldmarkrenderer"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 
@@ -31,9 +31,9 @@ var _ = Describe("Site Page Operations", func() {
 		err := os.MkdirAll(pathToData, 0755)
 		Expect(err).NotTo(HaveOccurred())
 		s = &Site{
-			PathToData:          pathToData,
-			MarkdownRenderer:    &goldmarkrenderer.GoldmarkRenderer{},
-			Logger:              lumber.NewConsoleLogger(lumber.INFO),
+			PathToData:       pathToData,
+			MarkdownRenderer: &goldmarkrenderer.GoldmarkRenderer{},
+			Logger:           lumber.NewConsoleLogger(lumber.INFO),
 		}
 		err = s.InitializeIndexing()
 		Expect(err).NotTo(HaveOccurred())
@@ -111,7 +111,7 @@ var _ = Describe("Site Page Operations", func() {
 			BeforeEach(func() {
 				err := s.UpdatePageContent(wikipage.PageIdentifier(p.Identifier), "**bold**")
 				Expect(err).ToNot(HaveOccurred())
-				
+
 				// Re-fetch the page to get the updated content
 				p, err = s.ReadPage(wikipage.PageIdentifier(p.Identifier))
 				Expect(err).ToNot(HaveOccurred())
@@ -126,7 +126,7 @@ var _ = Describe("Site Page Operations", func() {
 				BeforeEach(func() {
 					err := s.UpdatePageContent(wikipage.PageIdentifier(p.Identifier), "**bold** and *italic*")
 					Expect(err).ToNot(HaveOccurred())
-					
+
 					// Re-fetch the page to get the updated content
 					p, err = s.ReadPage(wikipage.PageIdentifier(p.Identifier))
 					Expect(err).ToNot(HaveOccurred())
@@ -165,7 +165,6 @@ var _ = Describe("Site Page Operations", func() {
 			})
 		})
 	})
-
 
 	// Site.Open migration integration tests previously injected a mock
 	// MigrationApplicator into Site to verify the save-on-read chain
@@ -302,6 +301,91 @@ var _ = Describe("Site Page Operations", func() {
 				It("should contain the written markdown", func() {
 					Expect(page.Text).To(ContainSubstring("# New Content"))
 				})
+			})
+		})
+	})
+
+	Describe("Site.ModifyFrontMatterAndMarkdown", func() {
+		When("the modifier succeeds", func() {
+			var (
+				page      *wikipage.Page
+				modifyErr error
+			)
+
+			BeforeEach(func() {
+				Expect(s.WriteMarkdown("modify-both-page", "old body\n")).To(Succeed())
+				Expect(s.WriteFrontMatter("modify-both-page", wikipage.FrontMatter{"title": "Old"})).To(Succeed())
+
+				modifyErr = s.ModifyFrontMatterAndMarkdown(
+					"modify-both-page",
+					func(fm wikipage.FrontMatter, md wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error) {
+						fm["title"] = "New"
+						return fm, md + "new body\n", nil
+					},
+				)
+				var readErr error
+				page, readErr = s.ReadPage("modify-both-page")
+				Expect(readErr).NotTo(HaveOccurred())
+			})
+
+			It("should not return an error", func() {
+				Expect(modifyErr).NotTo(HaveOccurred())
+			})
+
+			It("should write the modified frontmatter", func() {
+				Expect(page.Text).To(ContainSubstring("New"))
+			})
+
+			It("should write the modified markdown", func() {
+				Expect(page.Text).To(ContainSubstring("old body\nnew body"))
+			})
+		})
+
+		When("the modifier returns an error", func() {
+			var (
+				modifyErr   error
+				modifierErr = errors.New("modifier refused full page change")
+			)
+
+			BeforeEach(func() {
+				modifyErr = s.ModifyFrontMatterAndMarkdown(
+					"modify-both-error-page",
+					func(wikipage.FrontMatter, wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error) {
+						return nil, "", modifierErr
+					},
+				)
+			})
+
+			It("should propagate the modifier error", func() {
+				Expect(modifyErr).To(MatchError(modifierErr))
+			})
+
+			It("should not create any page file", func() {
+				page, readErr := s.ReadPage("modify-both-error-page")
+				Expect(readErr).NotTo(HaveOccurred())
+				Expect(page.IsNew()).To(BeTrue())
+			})
+		})
+
+		When("the page has malformed TOML frontmatter", func() {
+			var modifyErr error
+
+			BeforeEach(func() {
+				pageIdentifier := "malformed-fm-modify-both"
+				malformedContent := "+++\ntitle = [invalid\n+++\n# Content"
+				filePath := filepath.Join(pathToData, base32tools.EncodeToBase32(strings.ToLower(pageIdentifier))+".md")
+				Expect(os.WriteFile(filePath, []byte(malformedContent), 0644)).To(Succeed())
+
+				modifyErr = s.ModifyFrontMatterAndMarkdown(
+					wikipage.PageIdentifier(pageIdentifier),
+					func(fm wikipage.FrontMatter, md wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error) {
+						return fm, md, nil
+					},
+				)
+			})
+
+			It("should return a parse error", func() {
+				Expect(modifyErr).To(MatchError(ContainSubstring("failed to parse frontmatter for page modification")))
 			})
 		})
 	})
