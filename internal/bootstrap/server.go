@@ -83,6 +83,14 @@ type ServerResult struct {
 	Cleanup        func()       // Cleanup function to call on shutdown (e.g., persist final metrics)
 }
 
+type PlainHTTPOptions struct {
+	TrustTestIdentityHeaders bool
+}
+
+type identityMetadataOptions struct {
+	TrustMetadata bool
+}
+
 // DetermineServerMode determines the appropriate server mode based on Tailscale status.
 //
 //revive:disable-next-line:flag-parameter useTailscaleServe is a CLI configuration flag
@@ -128,11 +136,18 @@ func SetupPlainHTTP(
 	logger *lumber.ConsoleLogger,
 	commit string,
 	buildTime time.Time,
+	options PlainHTTPOptions,
 ) (*ServerResult, error) {
 	logger.Info("Tailscale not available. Running as plain HTTP on %s", httpAddr)
 	logger.Info("For secure access with user identity, install Tailscale: https://tailscale.com/download")
+	if options.TrustTestIdentityHeaders {
+		logger.Warn("Trusting Tailscale identity headers in plain HTTP mode. This should only be used for tests.")
+	}
 
-	handler, metricsCleanup, err := createMultiplexedHandler(site, logger, commit, buildTime, nil)
+	handler, metricsCleanup, err := createMultiplexedHandler(
+		site, logger, commit, buildTime, nil,
+		identityMetadataOptions{TrustMetadata: options.TrustTestIdentityHeaders},
+	)
 	if err != nil {
 		return nil, fmt.Errorf(errCreateHandlerFmt, err)
 	}
@@ -167,7 +182,9 @@ func SetupTailscaleServe(
 	logger.Info("Tailscale Serve mode. Running HTTP on %s with identity support", httpAddr)
 
 	identityResolver := tailscale.NewIdentityResolver(agentTags)
-	handler, metricsCleanup, err := createMultiplexedHandler(site, logger, commit, buildTime, identityResolver)
+	handler, metricsCleanup, err := createMultiplexedHandler(
+		site, logger, commit, buildTime, identityResolver, identityMetadataOptions{},
+	)
 	if err != nil {
 		return nil, fmt.Errorf(errCreateHandlerFmt, err)
 	}
@@ -209,7 +226,9 @@ func SetupFullTLS(
 	logger.Info("Tailscale detected: %s", tsDNSName)
 
 	identityResolver := tailscale.NewIdentityResolver(agentTags)
-	handler, metricsCleanup, err := createMultiplexedHandler(site, logger, commit, buildTime, identityResolver)
+	handler, metricsCleanup, err := createMultiplexedHandler(
+		site, logger, commit, buildTime, identityResolver, identityMetadataOptions{},
+	)
 	if err != nil {
 		return nil, fmt.Errorf(errCreateHandlerFmt, err)
 	}
@@ -288,6 +307,7 @@ func createHTTPObservabilityMiddleware(counters observability.RequestCounter, lo
 // buildGRPCInterceptors creates the gRPC interceptor chains for observability and identity.
 func buildGRPCInterceptors(
 	identityResolver tailscale.IdentityResolver,
+	identityOptions identityMetadataOptions,
 	loggingInterceptor grpc.UnaryServerInterceptor,
 	counters observability.RequestCounter,
 	logger *lumber.ConsoleLogger,
@@ -303,7 +323,7 @@ func buildGRPCInterceptors(
 	unaryInterceptors = append(unaryInterceptors, grpcInstrumentation.UnaryServerInterceptor())
 	streamInterceptors = append(streamInterceptors, grpcInstrumentation.StreamServerInterceptor())
 
-	if identityResolver != nil {
+	if identityResolver != nil || identityOptions.TrustMetadata {
 		unaryIdentity, err := tailscale.IdentityInterceptor(identityResolver, logger)
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to create unary identity interceptor: %w", err)
@@ -327,6 +347,7 @@ func createMultiplexedHandler(
 	commit string,
 	buildTime time.Time,
 	identityResolver tailscale.IdentityResolver,
+	identityOptions identityMetadataOptions,
 ) (http.Handler, func(), error) {
 	// Create counters first so middleware can use them
 	counters, metricsCleanup := setupWikiMetrics(site, logger)
@@ -347,7 +368,9 @@ func createMultiplexedHandler(
 	// Create router with middleware already attached (before routes)
 	ginRouter := site.GinRouter(middleware...)
 
-	grpcServer, grpcAPIServer, err := setupGRPCServer(site, commit, buildTime, identityResolver, counters, logger)
+	grpcServer, grpcAPIServer, err := setupGRPCServer(
+		site, commit, buildTime, identityResolver, identityOptions, counters, logger,
+	)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -504,6 +527,7 @@ func setupGRPCServer(
 	commit string,
 	buildTime time.Time,
 	identityResolver tailscale.IdentityResolver,
+	identityOptions identityMetadataOptions,
 	counters observability.RequestCounter,
 	logger *lumber.ConsoleLogger,
 ) (*grpc.Server, *grpcapi.Server, error) {
@@ -619,7 +643,7 @@ func setupGRPCServer(
 	}
 
 	unaryInterceptors, streamInterceptors, err := buildGRPCInterceptors(
-		identityResolver, grpcAPIServer.LoggingInterceptor(), counters, logger,
+		identityResolver, identityOptions, grpcAPIServer.LoggingInterceptor(), counters, logger,
 	)
 	if err != nil {
 		return nil, nil, err

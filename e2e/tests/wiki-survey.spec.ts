@@ -32,6 +32,28 @@ async function injectUsername(page: Page, username: string): Promise<void> {
   });
 
   await page.addInitScript((user: string) => {
+    const originalFetch = window.fetch.bind(window);
+    window.fetch = (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+      const requestUrl =
+        typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+      const isSameOriginGrpcRequest =
+        requestUrl.startsWith('/api.v1.') ||
+        requestUrl.startsWith(`${window.location.origin}/api.v1.`);
+
+      if (!isSameOriginGrpcRequest) {
+        return originalFetch(input, init);
+      }
+
+      const requestInit = init ?? {};
+      const headers = new Headers(
+        requestInit.headers ?? (input instanceof Request ? input.headers : undefined),
+      );
+      headers.set('Tailscale-User-Login', user);
+      headers.set('Tailscale-User-Name', user);
+
+      return originalFetch(input, { ...requestInit, headers });
+    };
+
     let stored: Record<string, unknown> = {};
     Object.defineProperty(window, 'simple_wiki', {
       get() {
