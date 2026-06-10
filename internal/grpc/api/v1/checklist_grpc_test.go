@@ -31,6 +31,14 @@ func (*checklistSteadyClock) Now() time.Time {
 	return time.Date(checklistTestYear, time.Month(checklistTestMonth), checklistTestDay, checklistTestHour, 0, 0, 0, time.UTC)
 }
 
+func checklistFrontmatterMap(fm wikipage.FrontMatter) map[string]any {
+	wikiRaw, ok := fm["wiki"].(map[string]any)
+	ExpectWithOffset(1, ok).To(BeTrue())
+	checklistsRaw, ok := wikiRaw["checklists"].(map[string]any)
+	ExpectWithOffset(1, ok).To(BeTrue())
+	return checklistsRaw
+}
+
 var _ = Describe("ChecklistService handlers — errChecklistMutatorNotConfigured", func() {
 	var (
 		ctx    context.Context
@@ -119,6 +127,20 @@ var _ = Describe("ChecklistService handlers — errChecklistMutatorNotConfigured
 
 			BeforeEach(func() {
 				_, err = server.ReorderItem(ctx, &apiv1.ReorderItemRequest{Page: "p", ListName: "l", Uid: "u"})
+			})
+
+			It("should return FailedPrecondition", func() {
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.FailedPrecondition, "checklist mutator not configured"))
+			})
+		})
+	})
+
+	Describe("RenameChecklist", func() {
+		When("checklistMutator is not configured", func() {
+			var err error
+
+			BeforeEach(func() {
+				_, err = server.RenameChecklist(ctx, &apiv1.RenameChecklistRequest{Page: "p", OldName: "old", NewName: "new"})
 			})
 
 			It("should return FailedPrecondition", func() {
@@ -270,6 +292,29 @@ var _ = Describe("ChecklistService handlers — page required validation", func(
 		})
 	})
 
+	Describe("RenameChecklist", func() {
+		When("page is empty", func() {
+			It("should return InvalidArgument", func() {
+				_, err := server.RenameChecklist(ctx, &apiv1.RenameChecklistRequest{Page: "", OldName: "old", NewName: "new"})
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.InvalidArgument, "page"))
+			})
+		})
+
+		When("old_name is empty", func() {
+			It("should return InvalidArgument", func() {
+				_, err := server.RenameChecklist(ctx, &apiv1.RenameChecklistRequest{Page: "p", OldName: "", NewName: "new"})
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.InvalidArgument, "old_name"))
+			})
+		})
+
+		When("new_name is empty", func() {
+			It("should return InvalidArgument", func() {
+				_, err := server.RenameChecklist(ctx, &apiv1.RenameChecklistRequest{Page: "p", OldName: "old", NewName: ""})
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.InvalidArgument, "new_name"))
+			})
+		})
+	})
+
 	Describe("ListItems", func() {
 		When("page is empty", func() {
 			It("should return InvalidArgument", func() {
@@ -310,6 +355,7 @@ var _ = Describe("ChecklistService handlers — public checklist response shape"
 		ctx      context.Context
 		server   *v1.Server
 		mutator  *checklistmutator.Mutator
+		mock     *MockPageReaderMutator
 		eggsUID  string
 		listResp *apiv1.ListItemsResponse
 		getResp  *apiv1.GetChecklistsResponse
@@ -319,7 +365,7 @@ var _ = Describe("ChecklistService handlers — public checklist response shape"
 
 	BeforeEach(func() {
 		ctx = context.Background()
-		mock := &MockPageReaderMutator{Frontmatter: wikipage.FrontMatter{}}
+		mock = &MockPageReaderMutator{Frontmatter: wikipage.FrontMatter{}}
 		cl := &checklistSteadyClock{}
 		ug := ulid.NewSequenceGenerator("01HXBBBBBBBBBBBBBBBBBBBBBB")
 		mutator = checklistmutator.New(mock, cl, ug)
@@ -453,6 +499,70 @@ var _ = Describe("ChecklistService handlers — public checklist response shape"
 
 		It("should omit max_seq", func() {
 			Expect(getResp.GetChecklists()[0].GetMaxSeq()).To(BeZero())
+		})
+	})
+
+	Describe("RenameChecklist", func() {
+		When("the request is valid", func() {
+			var (
+				resp *apiv1.RenameChecklistResponse
+				err  error
+			)
+
+			BeforeEach(func() {
+				resp, err = server.RenameChecklist(ctx, &apiv1.RenameChecklistRequest{
+					Page:    "weekly_menu",
+					OldName: "ingredients-on-hand",
+					NewName: "ingredients",
+				})
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should return the renamed checklist", func() {
+				Expect(resp.GetChecklist().GetName()).To(Equal("ingredients"))
+			})
+
+			It("should omit sync internals from the response", func() {
+				Expect(resp.GetChecklist().GetEvents()).To(BeEmpty())
+				Expect(resp.GetChecklist().GetTombstones()).To(BeEmpty())
+				Expect(resp.GetChecklist().GetMaxSeq()).To(BeZero())
+			})
+
+			It("should remove the old frontmatter key", func() {
+				wikiLists := checklistFrontmatterMap(mock.WrittenFrontmatter)
+				Expect(wikiLists).NotTo(HaveKey("ingredients-on-hand"))
+			})
+
+			It("should write the new frontmatter key", func() {
+				wikiLists := checklistFrontmatterMap(mock.WrittenFrontmatter)
+				Expect(wikiLists).To(HaveKey("ingredients"))
+			})
+		})
+
+		When("the new checklist already exists", func() {
+			var err error
+
+			BeforeEach(func() {
+				_, addErr := server.AddItem(ctx, &apiv1.AddItemRequest{
+					Page:     "weekly_menu",
+					ListName: "ingredients",
+					Text:     "existing item",
+				})
+				Expect(addErr).NotTo(HaveOccurred())
+
+				_, err = server.RenameChecklist(ctx, &apiv1.RenameChecklistRequest{
+					Page:    "weekly_menu",
+					OldName: "ingredients-on-hand",
+					NewName: "ingredients",
+				})
+			})
+
+			It("should return AlreadyExists", func() {
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.AlreadyExists, "checklist already exists"))
+			})
 		})
 	})
 

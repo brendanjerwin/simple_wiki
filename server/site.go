@@ -767,6 +767,29 @@ func (s *Site) ModifyMarkdown(identifier wikipage.PageIdentifier, modifier func(
 	})
 }
 
+// ModifyFrontMatterAndMarkdown atomically reads both page sections, calls modifier,
+// and writes both returned sections under a single page lock.
+func (s *Site) ModifyFrontMatterAndMarkdown(identifier wikipage.PageIdentifier, modifier func(wikipage.FrontMatter, wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error)) error {
+	return s.modifyOrCreatePage(string(identifier), func(currentText string) (string, error) {
+		p := &wikipage.Page{Text: currentText}
+
+		currentFM, err := p.GetFrontMatter()
+		if err != nil {
+			return "", fmt.Errorf("failed to parse frontmatter for page modification: %w", err)
+		}
+		currentMD, err := p.GetMarkdown()
+		if err != nil {
+			return "", fmt.Errorf("failed to parse markdown for page modification: %w", err)
+		}
+
+		newFM, newMD, err := modifier(currentFM, currentMD)
+		if err != nil {
+			return "", err
+		}
+		return wikipage.CombineFrontMatterAndMarkdown(newFM, newMD)
+	})
+}
+
 // WriteFrontMatter atomically reads the current markdown, combines it with the new frontmatter,
 // and writes the result — all under a single write lock to prevent concurrent write races.
 func (s *Site) WriteFrontMatter(identifier wikipage.PageIdentifier, fm wikipage.FrontMatter) error {

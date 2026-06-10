@@ -18,6 +18,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -62,6 +63,8 @@ const SortOrderStep int64 = 1000
 // repeated literal doesn't trip the "string literal appears N times"
 // linter and so the wording stays consistent.
 const errUIDRequiredMsg = "uid is required"
+
+const doubleQuoteString = `"`
 
 // Subscriber receives a notification after every successful checklist
 // mutation. Optional — set via Mutator.SetSubscriber. The Keep bridge's
@@ -249,7 +252,17 @@ var (
 	// ErrDuplicateOpenItem is returned when an add would create a second
 	// unchecked item with the same user-visible text in the same checklist.
 	ErrDuplicateOpenItem = errors.New("duplicate open checklist item")
+	// ErrListAlreadyExists is returned when a rename would overwrite an
+	// existing checklist on the page.
+	ErrListAlreadyExists = errors.New("checklist already exists")
 )
+
+type frontMatterAndMarkdownModifier interface {
+	ModifyFrontMatterAndMarkdown(
+		wikipage.PageIdentifier,
+		func(wikipage.FrontMatter, wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error),
+	) error
+}
 
 // AddItem appends a new item to the named checklist on page. The wiki
 // generates the uid and stamps created_at = updated_at = clock.Now().
@@ -713,6 +726,146 @@ func (m *Mutator) ReorderItem(_ context.Context, page, listName, uid string, new
 	}
 	m.notify(page, listName, identity)
 	return checklist, nil
+}
+
+// RenameChecklist renames a checklist, preserving items and wiki-managed
+// metadata while rewriting supported markdown references in the same page write.
+func (m *Mutator) RenameChecklist(_ context.Context, page, oldName, newName string, expectedUpdatedAt *time.Time, identity tailscale.IdentityValue) (*apiv1.Checklist, error) {
+	oldName = strings.TrimSpace(oldName)
+	newName = strings.TrimSpace(newName)
+	if oldName == "" {
+		return nil, status.Error(codes.InvalidArgument, "old_name is required")
+	}
+	if newName == "" {
+		return nil, status.Error(codes.InvalidArgument, "new_name is required")
+	}
+	if normalized := wikipage.NormalizeListName(newName); normalized != newName {
+		return nil, status.Errorf(codes.InvalidArgument, "new_name must be URL-safe: use %q", normalized)
+	}
+
+	modifier, ok := m.pages.(frontMatterAndMarkdownModifier)
+	if !ok {
+		return nil, status.Error(codes.FailedPrecondition, "page store does not support atomic frontmatter and markdown modification")
+	}
+
+	unlock := m.lockPage(page)
+	defer unlock()
+
+	var renamed *apiv1.Checklist
+	var actualOldName string
+	err := modifier.ModifyFrontMatterAndMarkdown(wikipage.PageIdentifier(page), func(fm wikipage.FrontMatter, md wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error) {
+		if fm == nil {
+			fm = make(wikipage.FrontMatter)
+		}
+
+		var exists bool
+		actualOldName, exists = resolveExistingChecklistName(fm, oldName)
+		if !exists {
+			return nil, "", ErrListNotFound
+		}
+		if actualOldName == newName {
+			return nil, "", status.Error(codes.InvalidArgument, "old_name and new_name must differ")
+		}
+		if checklistNameExists(fm, newName) {
+			return nil, "", ErrListAlreadyExists
+		}
+
+		checklist := m.readChecklistForMutation(fm, actualOldName)
+		if err := checkExpectedUpdatedAt(checklist, expectedUpdatedAt); err != nil {
+			return nil, "", err
+		}
+
+		now := m.clock.Now()
+		checklist.Name = newName
+		bumpSyncToken(checklist, now)
+		appendEvent(checklist, &apiv1.ChecklistEvent{
+			Src: UserSource(identity.LoginName()).String(),
+			Op:  "rename",
+		}, now)
+		m.pruneTombstones(page, newName, checklist, now)
+
+		encodeChecklist(fm, newName, checklist)
+		deleteChecklistName(fm, actualOldName)
+		newMarkdown := rewriteChecklistReferences(md, oldName, actualOldName, newName)
+		renamed = checklist
+		return fm, newMarkdown, nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	m.notify(page, actualOldName, identity)
+	m.notify(page, newName, identity)
+	return renamed, nil
+}
+
+func rewriteChecklistReferences(markdown wikipage.Markdown, requestedOldName, storedOldName, newName string) wikipage.Markdown {
+	result := string(markdown)
+	for _, oldName := range uniqueNonEmptyStrings(requestedOldName, storedOldName) {
+		result = rewriteChecklistMacroReferences(result, oldName, newName)
+		result = rewriteChecklistElementReferences(result, oldName, newName)
+	}
+	return wikipage.Markdown(result)
+}
+
+func uniqueNonEmptyStrings(values ...string) []string {
+	seen := make(map[string]struct{}, len(values))
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		if value == "" {
+			continue
+		}
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		out = append(out, value)
+	}
+	return out
+}
+
+func rewriteChecklistMacroReferences(markdown, oldName, newName string) string {
+	pattern := regexp.MustCompile(`\{\{\s*Checklist\s+("([^"\\]|\\.)*"|'([^'\\]|\\.)*')\s*\}\}`)
+	return pattern.ReplaceAllStringFunc(markdown, func(match string) string {
+		quoted := regexp.MustCompile(`("([^"\\]|\\.)*"|'([^'\\]|\\.)*')`).FindString(match)
+		if quoted == "" || unquoteChecklistAttributeValue(quoted) != oldName {
+			return match
+		}
+		return strings.Replace(match, quoted, quoteChecklistMacroName(newName, quoted[0]), 1)
+	})
+}
+
+func rewriteChecklistElementReferences(markdown, oldName, newName string) string {
+	pattern := regexp.MustCompile(`list-name\s*=\s*("([^"\\]|\\.)*"|'([^'\\]|\\.)*')`)
+	return pattern.ReplaceAllStringFunc(markdown, func(match string) string {
+		quoted := regexp.MustCompile(`("([^"\\]|\\.)*"|'([^'\\]|\\.)*')`).FindString(match)
+		if quoted == "" || unquoteChecklistAttributeValue(quoted) != oldName {
+			return match
+		}
+		return strings.Replace(match, quoted, quoteChecklistMacroName(newName, quoted[0]), 1)
+	})
+}
+
+func quoteChecklistMacroName(name string, quote byte) string {
+	escaped := strings.ReplaceAll(name, `\`, `\\`)
+	if quote == '\'' {
+		escaped = strings.ReplaceAll(escaped, `'`, `\'`)
+		return "'" + escaped + "'"
+	}
+	escaped = strings.ReplaceAll(escaped, doubleQuoteString, `\"`)
+	return doubleQuoteString + escaped + doubleQuoteString
+}
+
+func unquoteChecklistAttributeValue(quoted string) string {
+	if len(quoted) < 2 {
+		return quoted
+	}
+	body := quoted[1 : len(quoted)-1]
+	body = strings.ReplaceAll(body, `\\`, `\`)
+	if quoted[0] == '\'' {
+		return strings.ReplaceAll(body, `\'`, `'`)
+	}
+	return strings.ReplaceAll(body, `\"`, doubleQuoteString)
 }
 
 // ListItems returns the named checklist with all items and any

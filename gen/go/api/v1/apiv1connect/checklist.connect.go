@@ -51,6 +51,9 @@ const (
 	// ChecklistServiceReorderItemProcedure is the fully-qualified name of the ChecklistService's
 	// ReorderItem RPC.
 	ChecklistServiceReorderItemProcedure = "/api.v1.ChecklistService/ReorderItem"
+	// ChecklistServiceRenameChecklistProcedure is the fully-qualified name of the ChecklistService's
+	// RenameChecklist RPC.
+	ChecklistServiceRenameChecklistProcedure = "/api.v1.ChecklistService/RenameChecklist"
 	// ChecklistServiceListItemsProcedure is the fully-qualified name of the ChecklistService's
 	// ListItems RPC.
 	ChecklistServiceListItemsProcedure = "/api.v1.ChecklistService/ListItems"
@@ -71,6 +74,7 @@ var (
 	checklistServiceDeleteItemMethodDescriptor       = checklistServiceServiceDescriptor.Methods().ByName("DeleteItem")
 	checklistServiceDeduplicateItemsMethodDescriptor = checklistServiceServiceDescriptor.Methods().ByName("DeduplicateItems")
 	checklistServiceReorderItemMethodDescriptor      = checklistServiceServiceDescriptor.Methods().ByName("ReorderItem")
+	checklistServiceRenameChecklistMethodDescriptor  = checklistServiceServiceDescriptor.Methods().ByName("RenameChecklist")
 	checklistServiceListItemsMethodDescriptor        = checklistServiceServiceDescriptor.Methods().ByName("ListItems")
 	checklistServiceGetChecklistsMethodDescriptor    = checklistServiceServiceDescriptor.Methods().ByName("GetChecklists")
 	checklistServiceWatchListMethodDescriptor        = checklistServiceServiceDescriptor.Methods().ByName("WatchList")
@@ -90,6 +94,8 @@ type ChecklistServiceClient interface {
 	DeduplicateItems(context.Context, *connect.Request[v1.DeduplicateItemsRequest]) (*connect.Response[v1.DeduplicateItemsResponse], error)
 	// ReorderItem — see (api.v1.description).
 	ReorderItem(context.Context, *connect.Request[v1.ReorderItemRequest]) (*connect.Response[v1.ReorderItemResponse], error)
+	// RenameChecklist — see (api.v1.description).
+	RenameChecklist(context.Context, *connect.Request[v1.RenameChecklistRequest]) (*connect.Response[v1.RenameChecklistResponse], error)
 	// ListItems — see (api.v1.description).
 	ListItems(context.Context, *connect.Request[v1.ListItemsRequest]) (*connect.Response[v1.ListItemsResponse], error)
 	// GetChecklists — see (api.v1.description).
@@ -144,6 +150,12 @@ func NewChecklistServiceClient(httpClient connect.HTTPClient, baseURL string, op
 			connect.WithSchema(checklistServiceReorderItemMethodDescriptor),
 			connect.WithClientOptions(opts...),
 		),
+		renameChecklist: connect.NewClient[v1.RenameChecklistRequest, v1.RenameChecklistResponse](
+			httpClient,
+			baseURL+ChecklistServiceRenameChecklistProcedure,
+			connect.WithSchema(checklistServiceRenameChecklistMethodDescriptor),
+			connect.WithClientOptions(opts...),
+		),
 		listItems: connect.NewClient[v1.ListItemsRequest, v1.ListItemsResponse](
 			httpClient,
 			baseURL+ChecklistServiceListItemsProcedure,
@@ -173,6 +185,7 @@ type checklistServiceClient struct {
 	deleteItem       *connect.Client[v1.DeleteItemRequest, v1.DeleteItemResponse]
 	deduplicateItems *connect.Client[v1.DeduplicateItemsRequest, v1.DeduplicateItemsResponse]
 	reorderItem      *connect.Client[v1.ReorderItemRequest, v1.ReorderItemResponse]
+	renameChecklist  *connect.Client[v1.RenameChecklistRequest, v1.RenameChecklistResponse]
 	listItems        *connect.Client[v1.ListItemsRequest, v1.ListItemsResponse]
 	getChecklists    *connect.Client[v1.GetChecklistsRequest, v1.GetChecklistsResponse]
 	watchList        *connect.Client[v1.WatchListRequest, v1.WatchListResponse]
@@ -208,6 +221,11 @@ func (c *checklistServiceClient) ReorderItem(ctx context.Context, req *connect.R
 	return c.reorderItem.CallUnary(ctx, req)
 }
 
+// RenameChecklist calls api.v1.ChecklistService.RenameChecklist.
+func (c *checklistServiceClient) RenameChecklist(ctx context.Context, req *connect.Request[v1.RenameChecklistRequest]) (*connect.Response[v1.RenameChecklistResponse], error) {
+	return c.renameChecklist.CallUnary(ctx, req)
+}
+
 // ListItems calls api.v1.ChecklistService.ListItems.
 func (c *checklistServiceClient) ListItems(ctx context.Context, req *connect.Request[v1.ListItemsRequest]) (*connect.Response[v1.ListItemsResponse], error) {
 	return c.listItems.CallUnary(ctx, req)
@@ -237,6 +255,8 @@ type ChecklistServiceHandler interface {
 	DeduplicateItems(context.Context, *connect.Request[v1.DeduplicateItemsRequest]) (*connect.Response[v1.DeduplicateItemsResponse], error)
 	// ReorderItem — see (api.v1.description).
 	ReorderItem(context.Context, *connect.Request[v1.ReorderItemRequest]) (*connect.Response[v1.ReorderItemResponse], error)
+	// RenameChecklist — see (api.v1.description).
+	RenameChecklist(context.Context, *connect.Request[v1.RenameChecklistRequest]) (*connect.Response[v1.RenameChecklistResponse], error)
 	// ListItems — see (api.v1.description).
 	ListItems(context.Context, *connect.Request[v1.ListItemsRequest]) (*connect.Response[v1.ListItemsResponse], error)
 	// GetChecklists — see (api.v1.description).
@@ -287,6 +307,12 @@ func NewChecklistServiceHandler(svc ChecklistServiceHandler, opts ...connect.Han
 		connect.WithSchema(checklistServiceReorderItemMethodDescriptor),
 		connect.WithHandlerOptions(opts...),
 	)
+	checklistServiceRenameChecklistHandler := connect.NewUnaryHandler(
+		ChecklistServiceRenameChecklistProcedure,
+		svc.RenameChecklist,
+		connect.WithSchema(checklistServiceRenameChecklistMethodDescriptor),
+		connect.WithHandlerOptions(opts...),
+	)
 	checklistServiceListItemsHandler := connect.NewUnaryHandler(
 		ChecklistServiceListItemsProcedure,
 		svc.ListItems,
@@ -319,6 +345,8 @@ func NewChecklistServiceHandler(svc ChecklistServiceHandler, opts ...connect.Han
 			checklistServiceDeduplicateItemsHandler.ServeHTTP(w, r)
 		case ChecklistServiceReorderItemProcedure:
 			checklistServiceReorderItemHandler.ServeHTTP(w, r)
+		case ChecklistServiceRenameChecklistProcedure:
+			checklistServiceRenameChecklistHandler.ServeHTTP(w, r)
 		case ChecklistServiceListItemsProcedure:
 			checklistServiceListItemsHandler.ServeHTTP(w, r)
 		case ChecklistServiceGetChecklistsProcedure:
@@ -356,6 +384,10 @@ func (UnimplementedChecklistServiceHandler) DeduplicateItems(context.Context, *c
 
 func (UnimplementedChecklistServiceHandler) ReorderItem(context.Context, *connect.Request[v1.ReorderItemRequest]) (*connect.Response[v1.ReorderItemResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("api.v1.ChecklistService.ReorderItem is not implemented"))
+}
+
+func (UnimplementedChecklistServiceHandler) RenameChecklist(context.Context, *connect.Request[v1.RenameChecklistRequest]) (*connect.Response[v1.RenameChecklistResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("api.v1.ChecklistService.RenameChecklist is not implemented"))
 }
 
 func (UnimplementedChecklistServiceHandler) ListItems(context.Context, *connect.Request[v1.ListItemsRequest]) (*connect.Response[v1.ListItemsResponse], error) {

@@ -51,14 +51,20 @@ func (c *fakeClock) advance(d time.Duration) {
 // map. It records the count of read/write calls so tests can assert
 // "single round-trip per mutation."
 type fakeStore struct {
-	mu         sync.Mutex
-	pages      map[string]wikipage.FrontMatter
-	readCalls  int
-	writeCalls int
+	mu              sync.Mutex
+	pages           map[string]wikipage.FrontMatter
+	markdown        map[string]wikipage.Markdown
+	readCalls       int
+	writeCalls      int
+	markdownWrites  int
+	modifyPageCalls int
 }
 
 func newFakeStore() *fakeStore {
-	return &fakeStore{pages: make(map[string]wikipage.FrontMatter)}
+	return &fakeStore{
+		pages:    make(map[string]wikipage.FrontMatter),
+		markdown: make(map[string]wikipage.Markdown),
+	}
 }
 
 func (s *fakeStore) ReadFrontMatter(id wikipage.PageIdentifier) (wikipage.PageIdentifier, wikipage.FrontMatter, error) {
@@ -80,13 +86,52 @@ func (s *fakeStore) WriteFrontMatter(id wikipage.PageIdentifier, fm wikipage.Fro
 	return nil
 }
 
-func (*fakeStore) ReadMarkdown(_ wikipage.PageIdentifier) (wikipage.PageIdentifier, wikipage.Markdown, error) {
-	return "", "", nil
+func (s *fakeStore) ReadMarkdown(id wikipage.PageIdentifier) (wikipage.PageIdentifier, wikipage.Markdown, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return id, s.markdown[string(id)], nil
 }
 
-func (*fakeStore) WriteMarkdown(_ wikipage.PageIdentifier, _ wikipage.Markdown) error { return nil }
-func (*fakeStore) DeletePage(_ wikipage.PageIdentifier) error                         { return nil }
-func (*fakeStore) ModifyMarkdown(_ wikipage.PageIdentifier, _ func(wikipage.Markdown) (wikipage.Markdown, error)) error {
+func (s *fakeStore) WriteMarkdown(id wikipage.PageIdentifier, md wikipage.Markdown) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.markdownWrites++
+	s.markdown[string(id)] = md
+	return nil
+}
+
+func (*fakeStore) DeletePage(_ wikipage.PageIdentifier) error { return nil }
+
+func (s *fakeStore) ModifyMarkdown(id wikipage.PageIdentifier, fn func(wikipage.Markdown) (wikipage.Markdown, error)) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	current := s.markdown[string(id)]
+	next, err := fn(current)
+	if err != nil {
+		return err
+	}
+	s.markdownWrites++
+	s.markdown[string(id)] = next
+	return nil
+}
+
+func (s *fakeStore) ModifyFrontMatterAndMarkdown(id wikipage.PageIdentifier, fn func(wikipage.FrontMatter, wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error)) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.modifyPageCalls++
+
+	page := string(id)
+	currentFM := deepCopyFM(s.pages[page])
+	if currentFM == nil {
+		currentFM = wikipage.FrontMatter{}
+	}
+	currentMD := s.markdown[page]
+	nextFM, nextMD, err := fn(currentFM, currentMD)
+	if err != nil {
+		return err
+	}
+	s.pages[page] = deepCopyFM(nextFM)
+	s.markdown[page] = nextMD
 	return nil
 }
 
@@ -130,6 +175,14 @@ func deepCopyValue(v any) any {
 	default:
 		return v
 	}
+}
+
+func wikiChecklistMap(fm wikipage.FrontMatter) map[string]any {
+	wikiRaw, ok := fm["wiki"].(map[string]any)
+	ExpectWithOffset(1, ok).To(BeTrue())
+	checklistsRaw, ok := wikiRaw["checklists"].(map[string]any)
+	ExpectWithOffset(1, ok).To(BeTrue())
+	return checklistsRaw
 }
 
 var _ = Describe("Mutator", func() {
@@ -801,6 +854,242 @@ var _ = Describe("Mutator", func() {
 				_, list, _ := mutator.AddItem(ctx, "p", "list", checklistmutator.AddItemArgs{Text: "fresh-while-paused"}, human)
 				Expect(list.Tombstones).To(HaveLen(1))
 				Expect(list.Tombstones[0].Uid).To(Equal(deletedUID))
+			})
+		})
+	})
+
+	Describe("RenameChecklist", func() {
+		var (
+			renamed        *apiv1.Checklist
+			renameErr      error
+			expectedUpdate time.Time
+		)
+
+		seedRenamePage := func() {
+			expectedUpdate = time.Date(2026, 4, 25, 12, 0, 0, 0, time.UTC)
+			store.pages["shopping_lists"] = wikipage.FrontMatter{
+				"wiki": map[string]any{
+					"checklists": map[string]any{
+						"Groceries/Household": map[string]any{
+							"sync_token": int64(7),
+							"updated_at": expectedUpdate.Format(time.RFC3339Nano),
+							"max_seq":    int64(1),
+							"items": []any{
+								map[string]any{
+									"uid":          "item-1",
+									"text":         "milk",
+									"checked":      true,
+									"tags":         []any{"cold"},
+									"sort_order":   int64(1000),
+									"created_at":   "2026-04-20T10:00:00Z",
+									"updated_at":   "2026-04-21T10:00:00Z",
+									"completed_at": "2026-04-22T10:00:00Z",
+									"completed_by": "alice@example.com",
+								},
+							},
+							"tombstones": []any{
+								map[string]any{
+									"uid":        "old-item",
+									"deleted_at": "2026-04-23T10:00:00Z",
+									"gc_after":   "2026-05-01T10:00:00Z",
+									"sync_token": int64(6),
+								},
+							},
+							"events": []any{
+								map[string]any{
+									"seq": int64(1),
+									"ts":  "2026-04-20T10:00:00Z",
+									"src": "user:alice@example.com",
+									"op":  "baseline",
+									"uid": "item-1",
+								},
+							},
+						},
+						"Pharmacy": map[string]any{
+							"sync_token": int64(2),
+							"updated_at": "2026-04-24T10:00:00Z",
+							"items": []any{
+								map[string]any{"uid": "rx-1", "text": "vitamins"},
+							},
+						},
+					},
+				},
+			}
+			store.markdown["shopping_lists"] = `# Shopping
+
+{{ Checklist "Groceries/Household" }}
+<wiki-checklist list-name="Groceries/Household"></wiki-checklist>
+{{ Checklist "Pharmacy" }}
+`
+		}
+
+		When("the old checklist exists and the new name is available", func() {
+			BeforeEach(func() {
+				seedRenamePage()
+				renamed, renameErr = mutator.RenameChecklist(ctx, "shopping_lists", "Groceries/Household", "Grocery", &expectedUpdate, human)
+			})
+
+			It("should not return an error", func() {
+				Expect(renameErr).NotTo(HaveOccurred())
+			})
+
+			It("should return the renamed checklist", func() {
+				Expect(renamed.GetName()).To(Equal("Grocery"))
+			})
+
+			It("should remove the old frontmatter key", func() {
+				wikiLists := wikiChecklistMap(store.pages["shopping_lists"])
+				Expect(wikiLists).NotTo(HaveKey("Groceries/Household"))
+			})
+
+			It("should write the checklist under the new frontmatter key", func() {
+				wikiLists := wikiChecklistMap(store.pages["shopping_lists"])
+				Expect(wikiLists).To(HaveKey("Grocery"))
+			})
+
+			It("should preserve item metadata", func() {
+				Expect(renamed.GetItems()).To(HaveLen(1))
+				item := renamed.GetItems()[0]
+				Expect(item.GetUid()).To(Equal("item-1"))
+				Expect(item.GetCompletedBy()).To(Equal("alice@example.com"))
+				Expect(item.GetCompletedAt()).NotTo(BeNil())
+				Expect(item.GetCreatedAt().AsTime()).To(Equal(time.Date(2026, 4, 20, 10, 0, 0, 0, time.UTC)))
+			})
+
+			It("should preserve tombstones", func() {
+				Expect(renamed.GetTombstones()).To(HaveLen(1))
+				Expect(renamed.GetTombstones()[0].GetUid()).To(Equal("old-item"))
+			})
+
+			It("should bump sync token and updated_at", func() {
+				Expect(renamed.GetSyncToken()).To(Equal(int64(8)))
+				Expect(renamed.GetUpdatedAt().AsTime()).To(Equal(clock.now))
+			})
+
+			It("should append a rename event", func() {
+				events := renamed.GetEvents()
+				Expect(events).To(HaveLen(2))
+				Expect(events[1].GetOp()).To(Equal("rename"))
+				Expect(events[1].GetSeq()).To(Equal(int64(2)))
+			})
+
+			It("should rewrite checklist references in markdown", func() {
+				Expect(store.markdown["shopping_lists"]).To(ContainSubstring(`{{ Checklist "Grocery" }}`))
+				Expect(store.markdown["shopping_lists"]).To(ContainSubstring(`<wiki-checklist list-name="Grocery"></wiki-checklist>`))
+			})
+
+			It("should leave unrelated markdown references alone", func() {
+				Expect(store.markdown["shopping_lists"]).To(ContainSubstring(`{{ Checklist "Pharmacy" }}`))
+			})
+
+			It("should leave unrelated checklist frontmatter alone", func() {
+				wikiLists := wikiChecklistMap(store.pages["shopping_lists"])
+				Expect(wikiLists).To(HaveKey("Pharmacy"))
+			})
+
+			It("should use one atomic full-page mutation", func() {
+				Expect(store.modifyPageCalls).To(Equal(1))
+				Expect(store.writeCalls).To(Equal(0))
+				Expect(store.markdownWrites).To(Equal(0))
+			})
+		})
+
+		When("the old checklist is only found by normalized fallback", func() {
+			BeforeEach(func() {
+				seedRenamePage()
+				wikiLists := wikiChecklistMap(store.pages["shopping_lists"])
+				wikiLists["Groceries-Household"] = wikiLists["Groceries/Household"]
+				delete(wikiLists, "Groceries/Household")
+
+				renamed, renameErr = mutator.RenameChecklist(ctx, "shopping_lists", "Groceries/Household", "Grocery", &expectedUpdate, human)
+			})
+
+			It("should rename the normalized stored checklist", func() {
+				Expect(renameErr).NotTo(HaveOccurred())
+				Expect(renamed.GetName()).To(Equal("Grocery"))
+			})
+		})
+
+		When("the old checklist is missing", func() {
+			var (
+				beforeFM wikipage.FrontMatter
+				beforeMD wikipage.Markdown
+			)
+
+			BeforeEach(func() {
+				seedRenamePage()
+				beforeFM = deepCopyFM(store.pages["shopping_lists"])
+				beforeMD = store.markdown["shopping_lists"]
+				renamed, renameErr = mutator.RenameChecklist(ctx, "shopping_lists", "Missing", "Grocery", nil, human)
+			})
+
+			It("should return ErrListNotFound", func() {
+				Expect(renameErr).To(MatchError(checklistmutator.ErrListNotFound))
+			})
+
+			It("should not return a checklist", func() {
+				Expect(renamed).To(BeNil())
+			})
+
+			It("should leave frontmatter unchanged", func() {
+				Expect(store.pages["shopping_lists"]).To(Equal(beforeFM))
+			})
+
+			It("should leave markdown unchanged", func() {
+				Expect(store.markdown["shopping_lists"]).To(Equal(beforeMD))
+			})
+		})
+
+		When("the new checklist already exists", func() {
+			BeforeEach(func() {
+				seedRenamePage()
+				renamed, renameErr = mutator.RenameChecklist(ctx, "shopping_lists", "Groceries/Household", "Pharmacy", nil, human)
+			})
+
+			It("should return ErrListAlreadyExists", func() {
+				Expect(renameErr).To(MatchError(checklistmutator.ErrListAlreadyExists))
+			})
+
+			It("should not return a checklist", func() {
+				Expect(renamed).To(BeNil())
+			})
+		})
+
+		When("expected_updated_at is stale", func() {
+			var beforeMD wikipage.Markdown
+
+			BeforeEach(func() {
+				seedRenamePage()
+				beforeMD = store.markdown["shopping_lists"]
+				stale := expectedUpdate.Add(-time.Minute)
+				renamed, renameErr = mutator.RenameChecklist(ctx, "shopping_lists", "Groceries/Household", "Grocery", &stale, human)
+			})
+
+			It("should return FailedPrecondition", func() {
+				Expect(status.Code(renameErr)).To(Equal(codes.FailedPrecondition))
+			})
+
+			It("should not return a checklist", func() {
+				Expect(renamed).To(BeNil())
+			})
+
+			It("should leave markdown unchanged", func() {
+				Expect(store.markdown["shopping_lists"]).To(Equal(beforeMD))
+			})
+		})
+
+		When("new_name is not URL-safe", func() {
+			BeforeEach(func() {
+				seedRenamePage()
+				renamed, renameErr = mutator.RenameChecklist(ctx, "shopping_lists", "Groceries/Household", "Grocery/Household", nil, human)
+			})
+
+			It("should return InvalidArgument", func() {
+				Expect(status.Code(renameErr)).To(Equal(codes.InvalidArgument))
+			})
+
+			It("should not return a checklist", func() {
+				Expect(renamed).To(BeNil())
 			})
 		})
 	})
