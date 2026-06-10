@@ -198,6 +198,17 @@ func (s *Server) ReactToMessage(_ context.Context, req *apiv1.ReactToMessageRequ
 	return &apiv1.ReactToMessageResponse{}, nil
 }
 
+// ClearChat implements the ClearChat RPC.
+// Clears the visible buffered chat history for a page and notifies active subscribers.
+func (s *Server) ClearChat(_ context.Context, req *apiv1.ClearChatRequest) (*apiv1.ClearChatResponse, error) {
+	if req.Page == "" {
+		return nil, status.Error(codes.InvalidArgument, errPageRequired)
+	}
+
+	s.chatBufferManager.ClearPage(req.Page)
+	return &apiv1.ClearChatResponse{}, nil
+}
+
 // bufferMessageToProto converts a chatbuffer.Message to a protobuf ChatMessage.
 // bufferEventToProto converts a chatbuffer.Event to a protobuf ChatEvent.
 func bufferEventToProto(event chatbuffer.Event) *apiv1.ChatEvent {
@@ -257,6 +268,14 @@ func bufferEventToProto(event chatbuffer.Event) *apiv1.ChatEvent {
 					Title:       event.PermissionRequest.Title,
 					Description: event.PermissionRequest.Description,
 					Options:     options,
+				},
+			},
+		}
+	case chatbuffer.EventTypeCleared:
+		return &apiv1.ChatEvent{
+			Event: &apiv1.ChatEvent_ChatCleared{
+				ChatCleared: &apiv1.ChatCleared{
+					Page: event.Cleared.Page,
 				},
 			},
 		}

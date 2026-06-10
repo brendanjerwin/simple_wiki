@@ -487,6 +487,11 @@ func (noOpChatBufferManager) EditMessage(string, string, bool) error {
 func (noOpChatBufferManager) AddReaction(string, string, string) error {
 	return nil
 }
+
+func (noOpChatBufferManager) ClearPage(string) {
+	// no-op: satisfies interface; this implementation ignores chat clear requests
+}
+
 func (noOpChatBufferManager) GetMessages(string) []*chatbuffer.Message {
 	return nil
 }

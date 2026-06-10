@@ -5,6 +5,7 @@ import { create } from '@bufbuild/protobuf';
 import { getGrpcWebTransport } from './grpc-transport.js';
 import {
   ChatService,
+  ClearChatRequestSchema,
   GetChatStatusRequestSchema,
   SendChatMessageRequestSchema,
   SubscribeChatRequestSchema,
@@ -144,6 +145,13 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
         color: var(--color-text-primary);
       }
 
+      .panel-actions {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+
+      .clear-button,
       .close-button {
         background: none;
         border: none;
@@ -153,6 +161,7 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
         padding: 4px;
       }
 
+      .clear-button:hover,
       .close-button:hover {
         color: var(--color-text-primary);
       }
@@ -563,9 +572,19 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
       <div id="chat-panel" class="panel force-dark ${this.drawerOpen ? 'open' : ''}" ?inert=${!this.drawerOpen}>
         <div class="panel-header">
           <span class="panel-title">${this.persona}</span>
-          <button class="close-button" @click=${this.closeDrawer} aria-label="Close chat">
-            <i class="fa-solid fa-xmark"></i>
-          </button>
+          <div class="panel-actions">
+            <button
+              class="clear-button"
+              @click=${this._handleClearClick}
+              aria-label="Clear chat"
+              title="Clear chat"
+            >
+              <i class="fa-solid fa-trash-can"></i>
+            </button>
+            <button class="close-button" @click=${this.closeDrawer} aria-label="Close chat">
+              <i class="fa-solid fa-xmark"></i>
+            </button>
+          </div>
         </div>
 
         ${this.streamState === 'reconnecting'
@@ -692,6 +711,18 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
       });
       await this.chatClient.cancelAgentPrompt(request);
       this.waitingForAssistant = false;
+    } catch (err) {
+      this.error = err instanceof Error ? err : new Error(String(err));
+    }
+  }
+
+  private async _handleClearClick() {
+    try {
+      const request = create(ClearChatRequestSchema, {
+        page: this.page,
+      });
+      await this.chatClient.clearChat(request);
+      this.clearVisibleChat();
     } catch (err) {
       this.error = err instanceof Error ? err : new Error(String(err));
     }
@@ -1000,7 +1031,18 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
       case 'permissionRequest':
         this.setPermissionRequest(event.event.value);
         break;
+      case 'chatCleared':
+        this.clearVisibleChat();
+        break;
     }
+  }
+
+  private clearVisibleChat(): void {
+    this.messages = [];
+    this.messagesById.clear();
+    this.waitingForAssistant = false;
+    this.pendingPermission = null;
+    this.pendingMessage = null;
   }
 
   private async addMessage(msg: ChatMessage): Promise<void> {

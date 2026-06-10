@@ -42,6 +42,7 @@ type ChatBufferManager interface {
 	AddAssistantMessage(page, content, replyToID string) (string, error)
 	EditMessage(messageID, newContent string, streaming bool) error
 	AddReaction(messageID, emoji, reactor string) error
+	ClearPage(page string)
 	GetMessages(page string) []*chatbuffer.Message
 	SubscribeToPage(page string) (<-chan chatbuffer.Event, func())
 	SubscribeToPageWithReplay(page string) ([]*chatbuffer.Message, <-chan chatbuffer.Event, func())

@@ -88,8 +88,8 @@ func (*noopPageImportServer) StartPageImportJob(_ context.Context, _ *connect.Re
 
 var _ = Describe("Decorate", func() {
 	var (
-		server               *mcpserver.MCPServer
-		serviceDescriptions  []mcpdocs.ServiceDescription
+		server              *mcpserver.MCPServer
+		serviceDescriptions []mcpdocs.ServiceDescription
 	)
 
 	BeforeEach(func() {
@@ -288,6 +288,10 @@ type noopChatServer struct{}
 var errChatNoop = errors.New("noopChatServer: not used in this test")
 
 func (*noopChatServer) CancelAgentPrompt(_ context.Context, _ *connect.Request[apiv1.CancelAgentPromptRequest]) (*connect.Response[apiv1.CancelAgentPromptResponse], error) {
+	return nil, errChatNoop
+}
+
+func (*noopChatServer) ClearChat(_ context.Context, _ *connect.Request[apiv1.ClearChatRequest]) (*connect.Response[apiv1.ClearChatResponse], error) {
 	return nil, errChatNoop
 }
 
