@@ -224,7 +224,12 @@ func setupServer(c *cli.Context) (*bootstrap.ServerResult, func(), error) {
 	var result *bootstrap.ServerResult
 	switch mode {
 	case bootstrap.ModePlainHTTP:
-		result, err = bootstrap.SetupPlainHTTP(httpAddr, site, logger, actualCommit, buildTime)
+		result, err = bootstrap.SetupPlainHTTP(
+			httpAddr, site, logger, actualCommit, buildTime,
+			bootstrap.PlainHTTPOptions{
+				TrustTestIdentityHeaders: c.GlobalBool("trust-test-identity-headers"),
+			},
+		)
 	case bootstrap.ModeTailscaleServe:
 		result, err = bootstrap.SetupTailscaleServe(
 			httpAddr, tsStatus.DNSName, c.GlobalBool("force-redirect-tailnet-https"),
@@ -382,6 +387,10 @@ func getFlags() []cli.Flag {
 			Name:  "cookie-secret",
 			Value: "",
 			Usage: "random data to use for cookies; changing it will invalidate all sessions (if empty, a random secret is generated per startup)",
+		},
+		cli.BoolFlag{
+			Name:  "trust-test-identity-headers",
+			Usage: "trust Tailscale identity headers while running plain HTTP tests",
 		},
 	}
 	flags = append(flags, uploadLimitFlags()...)

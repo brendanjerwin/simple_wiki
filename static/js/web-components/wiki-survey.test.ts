@@ -4,10 +4,15 @@ import './wiki-survey.js';
 import type { WikiSurvey } from './wiki-survey.js';
 import { create } from '@bufbuild/protobuf';
 import {
-  GetFrontmatterResponseSchema,
-  MergeFrontmatterResponseSchema,
-} from '../gen/api/v1/frontmatter_pb.js';
-import type { JsonObject } from '@bufbuild/protobuf';
+  GetSurveyResponseSchema,
+  SubmitSurveyResponseResponseSchema,
+  SurveyFieldSchema,
+  SurveyResponseSchema,
+  SurveySchema,
+} from '../gen/api/v1/survey_pb.js';
+import { TimestampSchema, type Timestamp } from '@bufbuild/protobuf/wkt';
+import type { JsonObject, JsonValue } from '@bufbuild/protobuf';
+import { asRecord } from './survey-data-service.js';
 
 describe('WikiSurvey', () => {
   let el: WikiSurvey;
@@ -19,16 +24,96 @@ describe('WikiSurvey', () => {
     return freshEl;
   }
 
-  function stubGetFrontmatter(target: WikiSurvey, frontmatter: JsonObject = {}): SinonStub {
-    return sinon
-      .stub(target.client, 'getFrontmatter')
-      .resolves(create(GetFrontmatterResponseSchema, { frontmatter }));
+  function timestampFromIso(isoValue: string) {
+    const date = new Date(isoValue);
+    if (Number.isNaN(date.getTime())) return undefined;
+    return create(TimestampSchema, {
+      seconds: BigInt(Math.floor(date.getTime() / 1000)),
+      nanos: (date.getTime() % 1000) * 1_000_000,
+    });
   }
 
-  function stubMergeFrontmatter(target: WikiSurvey, frontmatter: JsonObject = {}): SinonStub {
+  function isPrimitiveJsonValue(value: unknown): value is JsonValue {
+    if (typeof value === 'number') {
+      return Number.isFinite(value);
+    }
+    return value === null || typeof value === 'string' || typeof value === 'boolean';
+  }
+
+  function jsonObjectFromRecord(record: Record<string, unknown> | null): JsonObject {
+    const out: JsonObject = {};
+    if (!record) return out;
+    for (const [key, value] of Object.entries(record)) {
+      if (isPrimitiveJsonValue(value)) {
+        out[key] = value;
+      }
+    }
+    return out;
+  }
+
+  function surveyFromFrontmatter(frontmatter: JsonObject, surveyName = 'my_survey') {
+    const surveyObj = asRecord(asRecord(frontmatter['surveys'])?.[surveyName]) ?? {};
+    const rawFields = Array.isArray(surveyObj['fields']) ? surveyObj['fields'] : [];
+    const rawResponses = Array.isArray(surveyObj['responses']) ? surveyObj['responses'] : [];
+
+    return create(SurveySchema, {
+      name: surveyName,
+      question: typeof surveyObj['question'] === 'string' ? surveyObj['question'] : '',
+      closed: surveyObj['closed'] === true,
+      fields: rawFields
+        .map(asRecord)
+        .filter((field): field is Record<string, unknown> => field !== null)
+        .map(field => {
+          const init: {
+            name: string;
+            type: string;
+            options: string[];
+            label?: string;
+            required?: boolean;
+            min?: number;
+            max?: number;
+          } = {
+            name: typeof field['name'] === 'string' ? field['name'] : '',
+            type: typeof field['type'] === 'string' ? field['type'] : 'text',
+            options: Array.isArray(field['options']) ? field['options'].filter((option): option is string => typeof option === 'string') : [],
+          };
+          if (typeof field['label'] === 'string') init.label = field['label'];
+          if (field['required'] === true) init.required = true;
+          if (typeof field['min'] === 'number') init.min = field['min'];
+          if (typeof field['max'] === 'number') init.max = field['max'];
+          return create(SurveyFieldSchema, init);
+        }),
+      responses: rawResponses
+        .map(asRecord)
+        .filter((response): response is Record<string, unknown> => response !== null)
+        .map(response => {
+          const init: {
+            user: string;
+            anonymous: boolean;
+            values: JsonObject;
+            submittedAt?: Timestamp;
+          } = {
+            user: typeof response['user'] === 'string' ? response['user'] : '',
+            anonymous: response['anonymous'] === true,
+            values: jsonObjectFromRecord(asRecord(response['values'])),
+          };
+          const submittedAt: Timestamp | undefined = typeof response['submitted_at'] === 'string' ? timestampFromIso(response['submitted_at']) : undefined;
+          if (submittedAt) init.submittedAt = submittedAt;
+          return create(SurveyResponseSchema, init);
+        }),
+    });
+  }
+
+  function stubGetSurvey(target: WikiSurvey, frontmatter: JsonObject = {}, surveyName = 'my_survey'): SinonStub {
     return sinon
-      .stub(target.client, 'mergeFrontmatter')
-      .resolves(create(MergeFrontmatterResponseSchema, { frontmatter }));
+      .stub(target.client, 'getSurvey')
+      .resolves(create(GetSurveyResponseSchema, { survey: surveyFromFrontmatter(frontmatter, surveyName) }));
+  }
+
+  function stubSubmitResponse(target: WikiSurvey, frontmatter: JsonObject = {}, surveyName = 'my_survey'): SinonStub {
+    return sinon
+      .stub(target.client, 'submitResponse')
+      .resolves(create(SubmitSurveyResponseResponseSchema, { survey: surveyFromFrontmatter(frontmatter, surveyName) }));
   }
 
   afterEach(() => {
@@ -43,36 +128,41 @@ describe('WikiSurvey', () => {
 
   it('should exist', async () => {
     el = buildElement();
-    stubGetFrontmatter(el);
+    stubGetSurvey(el);
     document.body.appendChild(el);
     await waitUntil(() => !el.loading, 'fetch should complete', { timeout: 3000 });
     expect(el).to.exist;
   });
 
   describe('when connected with a page attribute', () => {
-    let getFrontmatterStub: SinonStub;
+    let getSurveyStub: SinonStub;
 
     beforeEach(async () => {
       el = buildElement();
-      getFrontmatterStub = stubGetFrontmatter(el);
+      getSurveyStub = stubGetSurvey(el);
       document.body.appendChild(el);
       await waitUntil(() => !el.loading, 'fetch should complete', { timeout: 3000 });
     });
 
-    it('should call getFrontmatter', () => {
-      expect(getFrontmatterStub).to.have.been.calledOnce;
+    it('should call getSurvey', () => {
+      expect(getSurveyStub).to.have.been.calledOnce;
     });
 
-    it('should call getFrontmatter with the correct page', () => {
-      const args = getFrontmatterStub.getCall(0).args[0] as { page: string };
+    it('should call getSurvey with the correct page', () => {
+      const args = getSurveyStub.getCall(0).args[0] as { page: string };
       expect(args.page).to.equal('test-page');
+    });
+
+    it('should call getSurvey with the correct survey name', () => {
+      const args = getSurveyStub.getCall(0).args[0] as { name: string };
+      expect(args.name).to.equal('my_survey');
     });
   });
 
   describe('when survey has no config in frontmatter', () => {
     beforeEach(async () => {
       el = buildElement();
-      stubGetFrontmatter(el, {});
+      stubGetSurvey(el, {});
       document.body.appendChild(el);
       await waitUntil(() => !el.loading, 'fetch should complete', { timeout: 3000 });
     });
@@ -99,7 +189,7 @@ describe('WikiSurvey', () => {
     beforeEach(async () => {
       globalThis.simple_wiki = { ...(globalThis.simple_wiki ?? {}), username: 'alice' };
       el = buildElement();
-      stubGetFrontmatter(el, surveyFrontmatter);
+      stubGetSurvey(el, surveyFrontmatter);
       document.body.appendChild(el);
       await waitUntil(() => !el.loading, 'fetch should complete', { timeout: 3000 });
     });
@@ -140,7 +230,7 @@ describe('WikiSurvey', () => {
     beforeEach(async () => {
       globalThis.simple_wiki = { ...(globalThis.simple_wiki ?? {}), username: 'alice' };
       el = buildElement();
-      stubGetFrontmatter(el, surveyFrontmatter);
+      stubGetSurvey(el, surveyFrontmatter);
       document.body.appendChild(el);
       await waitUntil(() => !el.loading, 'fetch should complete', { timeout: 3000 });
     });
@@ -179,7 +269,7 @@ describe('WikiSurvey', () => {
     beforeEach(async () => {
       globalThis.simple_wiki = { ...(globalThis.simple_wiki ?? {}), username: 'alice' };
       el = buildElement();
-      stubGetFrontmatter(el, surveyFrontmatter);
+      stubGetSurvey(el, surveyFrontmatter);
       document.body.appendChild(el);
       await waitUntil(() => !el.loading, 'fetch should complete', { timeout: 3000 });
     });
@@ -204,7 +294,7 @@ describe('WikiSurvey', () => {
     beforeEach(async () => {
       globalThis.simple_wiki = { ...(globalThis.simple_wiki ?? {}), username: '' };
       el = buildElement();
-      stubGetFrontmatter(el, surveyFrontmatter);
+      stubGetSurvey(el, surveyFrontmatter);
       document.body.appendChild(el);
       await waitUntil(() => !el.loading, 'fetch should complete', { timeout: 3000 });
     });
@@ -234,7 +324,7 @@ describe('WikiSurvey', () => {
     beforeEach(async () => {
       globalThis.simple_wiki = { ...(globalThis.simple_wiki ?? {}), username: 'alice' };
       el = buildElement();
-      stubGetFrontmatter(el, surveyFrontmatter);
+      stubGetSurvey(el, surveyFrontmatter);
       document.body.appendChild(el);
       await waitUntil(() => !el.loading, 'fetch should complete', { timeout: 3000 });
     });
@@ -271,7 +361,7 @@ describe('WikiSurvey', () => {
     beforeEach(async () => {
       globalThis.simple_wiki = { ...(globalThis.simple_wiki ?? {}), username: 'alice' };
       el = buildElement();
-      stubGetFrontmatter(el, surveyFrontmatter);
+      stubGetSurvey(el, surveyFrontmatter);
       document.body.appendChild(el);
       await waitUntil(() => !el.loading, 'fetch should complete', { timeout: 3000 });
     });
@@ -287,10 +377,10 @@ describe('WikiSurvey', () => {
     });
   });
 
-  describe('when getFrontmatter fails', () => {
+  describe('when getSurvey fails', () => {
     beforeEach(async () => {
       el = buildElement();
-      sinon.stub(el.client, 'getFrontmatter').rejects(new Error('network error'));
+      sinon.stub(el.client, 'getSurvey').rejects(new Error('network error'));
       document.body.appendChild(el);
       await waitUntil(
         () => el.error !== null,
@@ -326,7 +416,7 @@ describe('WikiSurvey', () => {
       beforeEach(async () => {
         globalThis.simple_wiki = { ...(globalThis.simple_wiki ?? {}), username: 'alice' };
         el = buildElement();
-        stubGetFrontmatter(el, surveyFrontmatter);
+        stubGetSurvey(el, surveyFrontmatter);
         document.body.appendChild(el);
         await waitUntil(() => !el.loading, 'fetch should complete', { timeout: 3000 });
       });
@@ -419,10 +509,10 @@ describe('WikiSurvey', () => {
       });
     });
 
-    describe('when getFrontmatter fails', () => {
+    describe('when getSurvey fails', () => {
       beforeEach(async () => {
         el = buildElement();
-        sinon.stub(el.client, 'getFrontmatter').rejects(new Error('network error'));
+        sinon.stub(el.client, 'getSurvey').rejects(new Error('network error'));
         document.body.appendChild(el);
         await waitUntil(
           () => el.error !== null,
@@ -456,7 +546,7 @@ describe('WikiSurvey', () => {
       beforeEach(async () => {
         globalThis.simple_wiki = { ...(globalThis.simple_wiki ?? {}), username: 'alice' };
         el = buildElement();
-        stubGetFrontmatter(el, requiredFrontmatter);
+        stubGetSurvey(el, requiredFrontmatter);
         document.body.appendChild(el);
         await waitUntil(() => !el.loading, 'fetch should complete', { timeout: 3000 });
       });
@@ -526,7 +616,7 @@ describe('WikiSurvey', () => {
       beforeEach(async () => {
         globalThis.simple_wiki = { ...(globalThis.simple_wiki ?? {}), username: 'alice' };
         el = buildElement();
-        stubGetFrontmatter(el, optionalFrontmatter);
+        stubGetSurvey(el, optionalFrontmatter);
         document.body.appendChild(el);
         await waitUntil(() => !el.loading, 'fetch should complete', { timeout: 3000 });
       });
@@ -553,14 +643,14 @@ describe('WikiSurvey', () => {
         },
       },
     } as unknown as JsonObject;
-    let getFrontmatterStub: SinonStub;
-    let mergeFrontmatterStub: SinonStub;
+    let getSurveyStub: SinonStub;
+    let submitResponseStub: SinonStub;
 
     beforeEach(async () => {
       globalThis.simple_wiki = { ...(globalThis.simple_wiki ?? {}), username: 'alice' };
       el = buildElement();
-      getFrontmatterStub = stubGetFrontmatter(el, surveyFrontmatter);
-      mergeFrontmatterStub = stubMergeFrontmatter(el, surveyFrontmatter);
+      getSurveyStub = stubGetSurvey(el, surveyFrontmatter);
+      submitResponseStub = stubSubmitResponse(el, surveyFrontmatter);
       document.body.appendChild(el);
       await waitUntil(() => !el.loading, 'fetch should complete', { timeout: 3000 });
 
@@ -568,27 +658,39 @@ describe('WikiSurvey', () => {
       btn?.click();
 
       await waitUntil(
-        () => mergeFrontmatterStub.callCount > 0,
-        'mergeFrontmatter should be called',
+        () => submitResponseStub.callCount > 0,
+        'submitResponse should be called',
         { timeout: 3000 }
       );
       await el.updateComplete;
     });
 
-    it('should call getFrontmatter a second time for read-modify-write', () => {
-      expect(getFrontmatterStub.callCount).to.be.greaterThan(1);
+    it('should not fetch the survey again', () => {
+      expect(getSurveyStub).to.have.been.calledOnce;
     });
 
-    it('should call mergeFrontmatter', () => {
-      expect(mergeFrontmatterStub).to.have.been.calledOnce;
+    it('should call submitResponse', () => {
+      expect(submitResponseStub).to.have.been.calledOnce;
     });
 
-    it('should include the username in the merged payload', () => {
-      const args = mergeFrontmatterStub.getCall(0).args[0] as { frontmatter: JsonObject };
-      const surveys = args.frontmatter['surveys'] as JsonObject;
-      const survey = surveys['my_survey'] as JsonObject;
-      const responses = survey['responses'] as JsonObject[];
-      expect(responses[0]?.['user']).to.equal('alice');
+    it('should submit to the correct page', () => {
+      const args = submitResponseStub.getCall(0).args[0] as { page: string };
+      expect(args.page).to.equal('test-page');
+    });
+
+    it('should submit to the correct survey name', () => {
+      const args = submitResponseStub.getCall(0).args[0] as { surveyName: string };
+      expect(args.surveyName).to.equal('my_survey');
+    });
+
+    it('should submit the field values', () => {
+      const args = submitResponseStub.getCall(0).args[0] as { values?: JsonObject };
+      expect(args.values).to.deep.equal({});
+    });
+
+    it('should submit a non-anonymous response', () => {
+      const args = submitResponseStub.getCall(0).args[0] as { anonymous: boolean };
+      expect(args.anonymous).to.equal(false);
     });
   });
 });

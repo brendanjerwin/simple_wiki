@@ -26,7 +26,34 @@ async function waitForSurveyLoaded(page: Page): Promise<void> {
  * server-rendered template script overwrites window.simple_wiki.
  */
 async function injectUsername(page: Page, username: string): Promise<void> {
+  await page.setExtraHTTPHeaders({
+    'Tailscale-User-Login': username,
+    'Tailscale-User-Name': username,
+  });
+
   await page.addInitScript((user: string) => {
+    const originalFetch = window.fetch.bind(window);
+    window.fetch = (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+      const requestUrl =
+        typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+      const isSameOriginGrpcRequest =
+        requestUrl.startsWith('/api.v1.') ||
+        requestUrl.startsWith(`${window.location.origin}/api.v1.`);
+
+      if (!isSameOriginGrpcRequest) {
+        return originalFetch(input, init);
+      }
+
+      const requestInit = init ?? {};
+      const headers = new Headers(
+        requestInit.headers ?? (input instanceof Request ? input.headers : undefined),
+      );
+      headers.set('Tailscale-User-Login', user);
+      headers.set('Tailscale-User-Name', user);
+
+      return originalFetch(input, { ...requestInit, headers });
+    };
+
     let stored: Record<string, unknown> = {};
     Object.defineProperty(window, 'simple_wiki', {
       get() {
@@ -209,9 +236,9 @@ test.describe('wiki-survey E2E Tests', () => {
   });
 
   test('loading state should have role="status" and aria-live="polite"', async ({ page }) => {
-    // Delay gRPC responses so the loading state is visible long enough to assert.
-    await page.route('**/*GetFrontmatter*', async (route) => {
-      await new Promise<void>((resolve) => setTimeout(resolve, 600));
+    // Delay the survey gRPC response so the loading state is visible long enough to assert.
+    await page.route('**/api.v1.SurveyService/GetSurvey', async (route) => {
+      await new Promise<void>((resolve) => setTimeout(resolve, 1000));
       await route.continue();
     });
 

@@ -29,6 +29,7 @@ import (
 	"github.com/brendanjerwin/simple_wiki/pkg/ulid"
 	"github.com/brendanjerwin/simple_wiki/server"
 	"github.com/brendanjerwin/simple_wiki/server/checklistmutator"
+	"github.com/brendanjerwin/simple_wiki/server/surveymutator"
 	"github.com/brendanjerwin/simple_wiki/tailscale"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 	"github.com/gin-gonic/gin"
@@ -82,6 +83,14 @@ type ServerResult struct {
 	Cleanup        func()       // Cleanup function to call on shutdown (e.g., persist final metrics)
 }
 
+type PlainHTTPOptions struct {
+	TrustTestIdentityHeaders bool
+}
+
+type identityMetadataOptions struct {
+	TrustMetadata bool
+}
+
 // DetermineServerMode determines the appropriate server mode based on Tailscale status.
 //
 //revive:disable-next-line:flag-parameter useTailscaleServe is a CLI configuration flag
@@ -127,11 +136,18 @@ func SetupPlainHTTP(
 	logger *lumber.ConsoleLogger,
 	commit string,
 	buildTime time.Time,
+	options PlainHTTPOptions,
 ) (*ServerResult, error) {
 	logger.Info("Tailscale not available. Running as plain HTTP on %s", httpAddr)
 	logger.Info("For secure access with user identity, install Tailscale: https://tailscale.com/download")
+	if options.TrustTestIdentityHeaders {
+		logger.Warn("Trusting Tailscale identity headers in plain HTTP mode. This should only be used for tests.")
+	}
 
-	handler, metricsCleanup, err := createMultiplexedHandler(site, logger, commit, buildTime, nil)
+	handler, metricsCleanup, err := createMultiplexedHandler(
+		site, logger, commit, buildTime, nil,
+		identityMetadataOptions{TrustMetadata: options.TrustTestIdentityHeaders},
+	)
 	if err != nil {
 		return nil, fmt.Errorf(errCreateHandlerFmt, err)
 	}
@@ -166,7 +182,9 @@ func SetupTailscaleServe(
 	logger.Info("Tailscale Serve mode. Running HTTP on %s with identity support", httpAddr)
 
 	identityResolver := tailscale.NewIdentityResolver(agentTags)
-	handler, metricsCleanup, err := createMultiplexedHandler(site, logger, commit, buildTime, identityResolver)
+	handler, metricsCleanup, err := createMultiplexedHandler(
+		site, logger, commit, buildTime, identityResolver, identityMetadataOptions{},
+	)
 	if err != nil {
 		return nil, fmt.Errorf(errCreateHandlerFmt, err)
 	}
@@ -208,7 +226,9 @@ func SetupFullTLS(
 	logger.Info("Tailscale detected: %s", tsDNSName)
 
 	identityResolver := tailscale.NewIdentityResolver(agentTags)
-	handler, metricsCleanup, err := createMultiplexedHandler(site, logger, commit, buildTime, identityResolver)
+	handler, metricsCleanup, err := createMultiplexedHandler(
+		site, logger, commit, buildTime, identityResolver, identityMetadataOptions{},
+	)
 	if err != nil {
 		return nil, fmt.Errorf(errCreateHandlerFmt, err)
 	}
@@ -287,6 +307,7 @@ func createHTTPObservabilityMiddleware(counters observability.RequestCounter, lo
 // buildGRPCInterceptors creates the gRPC interceptor chains for observability and identity.
 func buildGRPCInterceptors(
 	identityResolver tailscale.IdentityResolver,
+	identityOptions identityMetadataOptions,
 	loggingInterceptor grpc.UnaryServerInterceptor,
 	counters observability.RequestCounter,
 	logger *lumber.ConsoleLogger,
@@ -302,7 +323,7 @@ func buildGRPCInterceptors(
 	unaryInterceptors = append(unaryInterceptors, grpcInstrumentation.UnaryServerInterceptor())
 	streamInterceptors = append(streamInterceptors, grpcInstrumentation.StreamServerInterceptor())
 
-	if identityResolver != nil {
+	if identityResolver != nil || identityOptions.TrustMetadata {
 		unaryIdentity, err := tailscale.IdentityInterceptor(identityResolver, logger)
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to create unary identity interceptor: %w", err)
@@ -326,6 +347,7 @@ func createMultiplexedHandler(
 	commit string,
 	buildTime time.Time,
 	identityResolver tailscale.IdentityResolver,
+	identityOptions identityMetadataOptions,
 ) (http.Handler, func(), error) {
 	// Create counters first so middleware can use them
 	counters, metricsCleanup := setupWikiMetrics(site, logger)
@@ -346,7 +368,9 @@ func createMultiplexedHandler(
 	// Create router with middleware already attached (before routes)
 	ginRouter := site.GinRouter(middleware...)
 
-	grpcServer, grpcAPIServer, err := setupGRPCServer(site, commit, buildTime, identityResolver, counters, logger)
+	grpcServer, grpcAPIServer, err := setupGRPCServer(
+		site, commit, buildTime, identityResolver, identityOptions, counters, logger,
+	)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -444,6 +468,7 @@ func BuildVanguardTranscoder(grpcServer *grpc.Server, ginRouter http.Handler) (h
 		"api.v1.PageManagementService",
 		"api.v1.ScheduledTurnService",
 		"api.v1.SearchService",
+		"api.v1.SurveyService",
 		"api.v1.SystemInfoService",
 	}
 
@@ -502,6 +527,7 @@ func setupGRPCServer(
 	commit string,
 	buildTime time.Time,
 	identityResolver tailscale.IdentityResolver,
+	identityOptions identityMetadataOptions,
 	counters observability.RequestCounter,
 	logger *lumber.ConsoleLogger,
 ) (*grpc.Server, *grpcapi.Server, error) {
@@ -517,6 +543,7 @@ func setupGRPCServer(
 		return nil, nil, fmt.Errorf("failed to create gRPC server: %w", err)
 	}
 	checklistMutator := checklistmutator.New(site, checklistmutator.SystemClock{}, ulid.NewSystemGenerator())
+	surveyMutator := surveymutator.New(site, surveymutator.SystemClock{})
 
 	// Cross-connector LeaseTable — the in-memory derived view of which
 	// (page, list_name) is currently subscribed and by which connector.
@@ -590,7 +617,8 @@ func setupGRPCServer(
 		WithScheduledTurnDispatcher(site.ScheduledTurnDispatcher).
 		WithAgentScheduleStore(site.AgentScheduleStore).
 		WithAgentChatContextStore(site.AgentChatContextStore).
-		WithChecklistMutator(checklistMutator)
+		WithChecklistMutator(checklistMutator).
+		WithSurveyMutator(surveyMutator)
 
 	if keepWiring != nil {
 		grpcAPIServer = grpcAPIServer.
@@ -615,7 +643,7 @@ func setupGRPCServer(
 	}
 
 	unaryInterceptors, streamInterceptors, err := buildGRPCInterceptors(
-		identityResolver, grpcAPIServer.LoggingInterceptor(), counters, logger,
+		identityResolver, identityOptions, grpcAPIServer.LoggingInterceptor(), counters, logger,
 	)
 	if err != nil {
 		return nil, nil, err
@@ -691,10 +719,10 @@ func (t *tasksProfileTokenStore) SaveRefreshToken(ctx context.Context, token str
 // scope set (openid + email + tasks read/write — see
 // tasksgateway.RequestedScopes for why we ask for openid/email).
 type tasksAuthURLBuilder struct {
-	stateStore   server.OAuthStateStore
-	authURL      string
-	clientID     string
-	redirectURI  string
+	stateStore    server.OAuthStateStore
+	authURL       string
+	clientID      string
+	redirectURI   string
 	requiredScope string
 }
 
@@ -1312,9 +1340,9 @@ func (b *tasksMutatorBridge) Unsuppress(profileID wikipage.PageIdentifier, page,
 // writes; without filtering, every inbound apply would re-trigger the
 // same connector's outbound debounce loop.
 const (
-	tasksSyncIdentityLogin       = "system:tasks-sync"
-	connectorSyncIdentityLogin   = "system:connector-sync"
-	legacyKeepSyncIdentityLogin  = "system:keep-sync"
+	tasksSyncIdentityLogin      = "system:tasks-sync"
+	connectorSyncIdentityLogin  = "system:connector-sync"
+	legacyKeepSyncIdentityLogin = "system:keep-sync"
 )
 
 // OnChecklistMutated implements checklistmutator.Subscriber. The wiki
@@ -1374,4 +1402,3 @@ func (b *tasksMutatorBridge) OnChecklistMutated(page, listName string, identity 
 func bridgeKey(profileID wikipage.PageIdentifier, page, listName string) string {
 	return fmt.Sprintf("%s|%s|%s", profileID, page, listName)
 }
-

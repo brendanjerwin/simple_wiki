@@ -10,7 +10,7 @@ system = true
 
 # {{.Title}}
 
-The Survey macro renders an interactive form for collecting per-user responses, stored in the page's frontmatter. Responses are attributed to the logged-in user (identifier provided by the configured authentication provider) and can be edited after submission (upsert pattern).
+The Survey macro renders an interactive form for collecting per-user responses. Survey data is stored under the reserved `surveys.<name>` frontmatter namespace and mutated through `SurveyService`. Responses are attributed to the logged-in user (identifier provided by the configured authentication provider) and can be edited after submission (upsert pattern).
 
 ## Syntax
 
@@ -39,9 +39,9 @@ A single page can have multiple surveys with different names.
 - **Upsert on resubmit**: Submitting again replaces the user's previous response (no duplicates)
 - **Authentication required**: Unauthenticated visitors see a "please log in" message — the macro relies on the configured authentication provider's user identity (any string user identifier works)
 
-## Frontmatter Data Structure
+## Stored Data Structure
 
-Survey config and responses live under `surveys.<survey-name>`:
+Survey config and responses live under `surveys.<survey-name>`, but generic Frontmatter writes to `surveys` are rejected. Use `SurveyService` to read or mutate this data:
 
 ```toml
 +++
@@ -113,21 +113,23 @@ label = "What's your preferred protein?"
 
 ### Reading Survey Responses
 
-Use `api_v1_Frontmatter_GetFrontmatter`:
+Use `api_v1_SurveyService_GetSurvey` or `api_v1_SurveyService_ListResponses`:
 
 ```json
-{ "page_name": "my-page" }
+{ "page": "my-page", "name": "team-preferences" }
 ```
-
-Then extract `surveys.<name>.responses` from the response.
 
 ### Defining a New Survey
 
-Write the full `surveys.<name>` subtree via `MergeFrontmatter`. The subtree is replaced wholesale, so include `question`, `fields`, and `responses` (even if empty) in the same call.
+Use `api_v1_SurveyService_UpsertSurvey` to create/update the survey shell, then `AddField`, `UpdateField`, `RemoveField`, or `ReorderField` for field edits. These operations do not overwrite existing responses.
+
+### Submitting a Response
+
+Use `api_v1_SurveyService_SubmitResponse`. The wiki derives `user` from the caller identity and `submitted_at` from server time.
 
 ### Important Notes
 
-- `MergeFrontmatter` replaces the entire `surveys.<name>` subtree — include existing responses when editing config, or they'll be wiped.
+- Generic Frontmatter APIs reject the reserved `surveys` namespace.
 - Only one response per user: resubmissions update `submitted_at` and `values` in place.
 - Authentication is required to submit; read access follows standard page visibility.
 - `anonymous` is reserved for future use — in v1, all responses are attributed.

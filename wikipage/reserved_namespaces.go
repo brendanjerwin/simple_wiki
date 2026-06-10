@@ -33,6 +33,7 @@ func ReservedTopLevelKeys() []string {
 // callers (e.g. the gRPC frontmatter handlers, the template-cloning logic)
 // pick the new entry up automatically.
 var reservedTopLevelKeys = map[string]struct{}{
-	"agent": {},
-	"wiki":  {},
+	"agent":   {},
+	"surveys": {},
+	"wiki":    {},
 }

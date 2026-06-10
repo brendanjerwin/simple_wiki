@@ -28,15 +28,15 @@ import (
 //
 // The guard has two parts:
 //
-//   1. A routing test that takes "what's Register'd on grpcServer" as ground
-//      truth and asserts every one of those services is reachable through
-//      the transcoder.
+//  1. A routing test that takes "what's Register'd on grpcServer" as ground
+//     truth and asserts every one of those services is reachable through
+//     the transcoder.
 //
-//   2. A parity test that asserts the fixture's manual Unimplemented-stub
-//      registrations match what production's v1.Server.RegisterWithServer
-//      registers — so a new service in production cannot drift away from
-//      the fixture. (The routing test alone wouldn't catch this: if both
-//      lists are missing the same service, both stay quietly green.)
+//  2. A parity test that asserts the fixture's manual Unimplemented-stub
+//     registrations match what production's v1.Server.RegisterWithServer
+//     registers — so a new service in production cannot drift away from
+//     the fixture. (The routing test alone wouldn't catch this: if both
+//     lists are missing the same service, both stay quietly green.)
 //
 // Why two registrations instead of using production wiring directly: the
 // real Server overrides Unimplemented* methods on every embedded service,
@@ -66,6 +66,7 @@ var _ = Describe("BuildVanguardTranscoder service coverage", func() {
 		apiv1.RegisterPageManagementServiceServer(grpcServer, apiv1.UnimplementedPageManagementServiceServer{})
 		apiv1.RegisterScheduledTurnServiceServer(grpcServer, apiv1.UnimplementedScheduledTurnServiceServer{})
 		apiv1.RegisterSearchServiceServer(grpcServer, apiv1.UnimplementedSearchServiceServer{})
+		apiv1.RegisterSurveyServiceServer(grpcServer, apiv1.UnimplementedSurveyServiceServer{})
 		apiv1.RegisterSystemInfoServiceServer(grpcServer, apiv1.UnimplementedSystemInfoServiceServer{})
 
 		// Fall-through handler returns 404 — our marker for "transcoder
