@@ -27,15 +27,13 @@ var _ = Describe("Site Page Operations", func() {
 	)
 
 	BeforeEach(func() {
-		pathToData = "testdata_page"
-		err := os.MkdirAll(pathToData, 0755)
-		Expect(err).NotTo(HaveOccurred())
+		pathToData = GinkgoT().TempDir()
 		s = &Site{
 			PathToData:       pathToData,
 			MarkdownRenderer: &goldmarkrenderer.GoldmarkRenderer{},
 			Logger:           lumber.NewConsoleLogger(lumber.INFO),
 		}
-		err = s.InitializeIndexing()
+		err := s.InitializeIndexing()
 		Expect(err).NotTo(HaveOccurred())
 	})
 
