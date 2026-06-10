@@ -1010,6 +1010,44 @@ var _ = Describe("Mutator", func() {
 			})
 		})
 
+		When("the old checklist exists only in legacy frontmatter", func() {
+			BeforeEach(func() {
+				store.pages["shopping_lists"] = wikipage.FrontMatter{
+					"checklists": map[string]any{
+						"Groceries-Household": map[string]any{
+							"items": []any{
+								map[string]any{"text": "milk", "checked": false},
+							},
+						},
+					},
+				}
+				store.markdown["shopping_lists"] = `{{ Checklist "Groceries-Household" }}`
+
+				renamed, renameErr = mutator.RenameChecklist(ctx, "shopping_lists", "Groceries-Household", "Grocery", nil, human)
+			})
+
+			It("should not return an error", func() {
+				Expect(renameErr).NotTo(HaveOccurred())
+			})
+
+			It("should persist the renamed checklist in the wiki namespace", func() {
+				wikiLists := wikiChecklistMap(store.pages["shopping_lists"])
+				Expect(wikiLists).To(HaveKey("Grocery"))
+			})
+
+			It("should remove the legacy namespace", func() {
+				Expect(store.pages["shopping_lists"]).NotTo(HaveKey("checklists"))
+			})
+
+			It("should rewrite markdown references", func() {
+				Expect(store.markdown["shopping_lists"]).To(ContainSubstring(`{{ Checklist "Grocery" }}`))
+			})
+
+			It("should return the renamed checklist", func() {
+				Expect(renamed.GetName()).To(Equal("Grocery"))
+			})
+		})
+
 		When("markdown references use single-quoted names", func() {
 			BeforeEach(func() {
 				seedRenamePage()
@@ -1033,6 +1071,36 @@ var _ = Describe("Mutator", func() {
 
 			It("should preserve single-quoted element references", func() {
 				Expect(store.markdown["shopping_lists"]).To(ContainSubstring(`list-name='Grocery'`))
+			})
+		})
+
+		When("the page store cannot atomically modify frontmatter and markdown", func() {
+			BeforeEach(func() {
+				mutator = checklistmutator.New(&errorStore{}, clock, ulids)
+				renamed, renameErr = mutator.RenameChecklist(ctx, "shopping_lists", "Groceries/Household", "Grocery", nil, human)
+			})
+
+			It("should return FailedPrecondition", func() {
+				Expect(status.Code(renameErr)).To(Equal(codes.FailedPrecondition))
+			})
+
+			It("should not return a checklist", func() {
+				Expect(renamed).To(BeNil())
+			})
+		})
+
+		When("the old and new names are the same", func() {
+			BeforeEach(func() {
+				seedRenamePage()
+				renamed, renameErr = mutator.RenameChecklist(ctx, "shopping_lists", "Pharmacy", "Pharmacy", nil, human)
+			})
+
+			It("should return InvalidArgument", func() {
+				Expect(status.Code(renameErr)).To(Equal(codes.InvalidArgument))
+			})
+
+			It("should not return a checklist", func() {
+				Expect(renamed).To(BeNil())
 			})
 		})
 

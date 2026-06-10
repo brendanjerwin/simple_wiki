@@ -366,6 +366,28 @@ var _ = Describe("Site Page Operations", func() {
 				Expect(page.IsNew()).To(BeTrue())
 			})
 		})
+
+		When("the page has malformed TOML frontmatter", func() {
+			var modifyErr error
+
+			BeforeEach(func() {
+				pageIdentifier := "malformed-fm-modify-both"
+				malformedContent := "+++\ntitle = [invalid\n+++\n# Content"
+				filePath := filepath.Join(pathToData, base32tools.EncodeToBase32(strings.ToLower(pageIdentifier))+".md")
+				Expect(os.WriteFile(filePath, []byte(malformedContent), 0644)).To(Succeed())
+
+				modifyErr = s.ModifyFrontMatterAndMarkdown(
+					wikipage.PageIdentifier(pageIdentifier),
+					func(fm wikipage.FrontMatter, md wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error) {
+						return fm, md, nil
+					},
+				)
+			})
+
+			It("should return a parse error", func() {
+				Expect(modifyErr).To(MatchError(ContainSubstring("failed to parse frontmatter for page modification")))
+			})
+		})
 	})
 
 	Describe("Atomic write safety", func() {

@@ -1,6 +1,7 @@
 package pagestore
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -98,37 +99,90 @@ var _ = Describe("Store", func() {
 	})
 
 	Describe("ModifyFrontMatterAndMarkdown", func() {
-		var (
-			page      *wikipage.Page
-			modifyErr error
-		)
-
-		BeforeEach(func() {
-			Expect(store.WriteMarkdown("modify-both", "old body\n")).To(Succeed())
-			Expect(store.WriteFrontMatter("modify-both", wikipage.FrontMatter{"title": "Old"})).To(Succeed())
-
-			modifyErr = store.ModifyFrontMatterAndMarkdown(
-				"modify-both",
-				func(fm wikipage.FrontMatter, md wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error) {
-					fm["title"] = "New"
-					return fm, md + "new body\n", nil
-				},
+		When("the modifier succeeds", func() {
+			var (
+				page      *wikipage.Page
+				modifyErr error
 			)
-			var readErr error
-			page, readErr = store.ReadPage("modify-both")
-			Expect(readErr).NotTo(HaveOccurred())
+
+			BeforeEach(func() {
+				Expect(store.WriteMarkdown("modify-both", "old body\n")).To(Succeed())
+				Expect(store.WriteFrontMatter("modify-both", wikipage.FrontMatter{"title": "Old"})).To(Succeed())
+
+				modifyErr = store.ModifyFrontMatterAndMarkdown(
+					"modify-both",
+					func(fm wikipage.FrontMatter, md wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error) {
+						fm["title"] = "New"
+						return fm, md + "new body\n", nil
+					},
+				)
+				var readErr error
+				page, readErr = store.ReadPage("modify-both")
+				Expect(readErr).NotTo(HaveOccurred())
+			})
+
+			It("should not return an error", func() {
+				Expect(modifyErr).NotTo(HaveOccurred())
+			})
+
+			It("should write the modified frontmatter", func() {
+				Expect(page.Text).To(ContainSubstring("New"))
+			})
+
+			It("should write the modified markdown", func() {
+				Expect(page.Text).To(ContainSubstring("old body\nnew body"))
+			})
 		})
 
-		It("should not return an error", func() {
-			Expect(modifyErr).NotTo(HaveOccurred())
+		When("the modifier returns an error", func() {
+			var (
+				modifyErr   error
+				page        *wikipage.Page
+				modifierErr = errors.New("modifier refused")
+			)
+
+			BeforeEach(func() {
+				Expect(store.WriteMarkdown("modify-both-error", "old body\n")).To(Succeed())
+				Expect(store.WriteFrontMatter("modify-both-error", wikipage.FrontMatter{"title": "Old"})).To(Succeed())
+
+				modifyErr = store.ModifyFrontMatterAndMarkdown(
+					"modify-both-error",
+					func(wikipage.FrontMatter, wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error) {
+						return nil, "", modifierErr
+					},
+				)
+				var readErr error
+				page, readErr = store.ReadPage("modify-both-error")
+				Expect(readErr).NotTo(HaveOccurred())
+			})
+
+			It("should return the modifier error", func() {
+				Expect(modifyErr).To(MatchError(modifierErr))
+			})
+
+			It("should not write partial changes", func() {
+				Expect(page.Text).To(ContainSubstring("Old"))
+				Expect(page.Text).To(ContainSubstring("old body"))
+			})
 		})
 
-		It("should write the modified frontmatter", func() {
-			Expect(page.Text).To(ContainSubstring("New"))
-		})
+		When("frontmatter cannot be parsed", func() {
+			var modifyErr error
 
-		It("should write the modified markdown", func() {
-			Expect(page.Text).To(ContainSubstring("old body\nnew body"))
+			BeforeEach(func() {
+				fp := filepath.Join(tempDir, base32tools.EncodeToBase32("broken-fm")+".md")
+				Expect(os.WriteFile(fp, []byte("+++\ntitle = [invalid\n+++\nbody\n"), 0644)).To(Succeed())
+				modifyErr = store.ModifyFrontMatterAndMarkdown(
+					"broken-fm",
+					func(fm wikipage.FrontMatter, md wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error) {
+						return fm, md, nil
+					},
+				)
+			})
+
+			It("should return a frontmatter parse error", func() {
+				Expect(modifyErr).To(MatchError(ContainSubstring("failed to parse frontmatter for page modification")))
+			})
 		})
 	})
 
