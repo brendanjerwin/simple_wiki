@@ -67,7 +67,7 @@ test.describe('ConfirmationDialog accessibility (via erasePage flow)', () => {
           const shadowRoot = document.getElementById('page-deletion-dialog')?.shadowRoot;
           return shadowRoot?.getElementById('confirmation-dialog-title')?.textContent?.trim();
         });
-        expect(labelText).toContain('Are you sure you want to delete this page?');
+        expect(labelText).toContain('Move this page to trash?');
       });
 
     });

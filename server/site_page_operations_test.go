@@ -26,6 +26,14 @@ var _ = Describe("Site Page Operations", func() {
 		s          *Site
 	)
 
+	waitForIndexing := func() {
+		if s.IndexCoordinator == nil {
+			return
+		}
+		completed, _ := s.IndexCoordinator.WaitForCompletionWithTimeout(context.Background(), 2*time.Second)
+		Expect(completed).To(BeTrue())
+	}
+
 	BeforeEach(func() {
 		pathToData = GinkgoT().TempDir()
 		s = &Site{
@@ -38,6 +46,7 @@ var _ = Describe("Site Page Operations", func() {
 	})
 
 	AfterEach(func() {
+		waitForIndexing()
 		_ = os.RemoveAll(pathToData)
 	})
 
@@ -402,6 +411,7 @@ var _ = Describe("Site Page Operations", func() {
 				initialText := "+++\ntitle = \"old title\"\n+++\n\nold content\n"
 				err := s.UpdatePageContent("atomic_test_page", initialText)
 				Expect(err).NotTo(HaveOccurred())
+				waitForIndexing()
 			})
 
 			It("should preserve both writes — neither update should be lost", func() {
@@ -409,6 +419,7 @@ var _ = Describe("Site Page Operations", func() {
 					// Reset to known state before each iteration.
 					initialText := "+++\ntitle = \"old title\"\n+++\n\nold content\n"
 					Expect(s.UpdatePageContent("atomic_test_page", initialText)).To(Succeed())
+					waitForIndexing()
 
 					var wg sync.WaitGroup
 					wg.Add(2)
@@ -436,6 +447,7 @@ var _ = Describe("Site Page Operations", func() {
 						"iteration %d: frontmatter title update was lost", i)
 					Expect(string(md)).To(ContainSubstring("new content"),
 						"iteration %d: markdown update was lost", i)
+					waitForIndexing()
 				}
 			})
 		})

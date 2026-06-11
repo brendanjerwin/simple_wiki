@@ -262,6 +262,7 @@ func (s *Site) registerRoutes(router *gin.Engine) {
 	router.GET("/profile", s.handleProfile)
 	router.GET("/Profile", redirectToCanonicalProfile)
 	router.GET("/PROFILE", redirectToCanonicalProfile)
+	router.GET("/trash", s.handleTrashPage)
 
 	router.POST("/uploads", s.handleUpload)
 	// Register GET and HEAD so conditional GETs (If-Modified-Since /
@@ -572,6 +573,14 @@ func (s *Site) handlePageRequest(c *gin.Context) {
 
 	// Render the page content
 	s.renderPageContent(c, page, command, p)
+}
+
+func (s *Site) handleTrashPage(c *gin.Context) {
+	templateData := s.buildTemplateData("trash", "/view", DirectoryListing{}, nil, "", c)
+	templateData["TrashPage"] = true
+	templateData["ViewPage"] = false
+	templateData["IsSystemPage"] = true
+	c.HTML(http.StatusOK, indexTemplateName, templateData)
 }
 
 // handleSpecialPages handles special page routes (favicon, static, uploads)
