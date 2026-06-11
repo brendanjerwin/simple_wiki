@@ -48,6 +48,7 @@
         {{ if .EditPage }} EditPage {{ end }}
         {{ if .ViewPage }} ViewPage {{ end }}
         {{ if .ReadPage }} ReadPage {{ end }}
+        {{ if .TrashPage }} TrashPage {{ end }}
         {{ if .DontKnowPage }} DontKnowPage {{ end }}
         {{ if .DirectoryPage }} DirectoryPage {{ end }}
         {{ if .HasDotInName }} HasDotInName {{ end }}
@@ -63,6 +64,7 @@
                             <a href="#" id="tools-menu" class="pure-menu-link"><i class="fa-solid fa-bars"></i></a>
                             <ul class="pure-menu-children">
                                 <li class="pure-menu-item"><a href="/" class="pure-menu-link"><i class="fa-solid fa-home"></i> Home</a></li>
+                                <li class="pure-menu-item"><a href="/trash" class="pure-menu-link"><i class="fas fa-trash-can"></i> Trash</a></li>
                                 <hr>
                                 {{ if and .ViewPage (not .IsSystemPage) }}
                                 <li class="pure-menu-item"><a href="/{{ .Page }}/edit" class="pure-menu-link"><i class="fas fa-pen-to-square"></i> Edit</a></li>
@@ -77,7 +79,7 @@
                                 <hr>
                                 {{ end }}
                                 {{ if not .IsSystemPage }}
-                                <li class="pure-menu-item"><a href="#" class="pure-menu-link" id="erasePage"><i class="fas fa-recycle"></i> Erase</a></li>
+                                <li class="pure-menu-item"><a href="#" class="pure-menu-link" id="erasePage"><i class="fas fa-trash-can"></i> Move to Trash</a></li>
                                 {{ end }}
                             </ul>
                         </li>
@@ -123,6 +125,9 @@
                         {{ .RenderedPage }}
                     {{ end }}
 
+                    {{ if .TrashPage }}
+                        <page-trash></page-trash>
+                    {{ end }}
 
                     {{ if .DirectoryPage }}
                         {{ if .DirectoryErrors }}

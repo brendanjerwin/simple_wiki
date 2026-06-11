@@ -49,13 +49,13 @@ export class PageDeleter {
     }
 
     this.dialog.openDialog({
-      message: 'Are you sure you want to delete this page?',
-      description: `Page: ${pageName}`,
-      confirmText: 'Delete Page',
+      message: 'Move this page to trash?',
+      description: `Page: ${pageName}. You can restore it from Trash for 30 days.`,
+      confirmText: 'Move to Trash',
       cancelText: 'Cancel',
       confirmVariant: 'danger',
       icon: 'warning',
-      irreversible: true
+      irreversible: false
     });
 
     // Store the page name for the deletion operation
@@ -116,7 +116,7 @@ export class PageDeleter {
         this.dialog.closeDialog();
         
         // Use showToastAfter to handle the toast display after redirect
-        showToastAfter('Page deleted successfully', 'success', 5, () => {
+        showToastAfter('Page moved to trash', 'success', 5, () => {
           globalThis.location.href = '/';
         });
       } else {
