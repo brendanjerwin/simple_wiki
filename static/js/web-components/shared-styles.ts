@@ -699,6 +699,26 @@ export const responsiveCSS = css`
       flex-direction: column;
     }
 
+    dialog {
+      width: 100%;
+      max-width: none;
+      height: 100vh;
+      height: -webkit-fill-available;
+      height: 100dvh;
+      max-height: 100vh;
+      max-height: -webkit-fill-available;
+      max-height: 100dvh;
+      margin: 0;
+      inset: 0;
+      border-radius: 0;
+    }
+
+    dialog[open] {
+      display: flex;
+      flex-direction: column;
+      animation: none;
+    }
+
     .header,
     .dialog-header {
       padding: 12px 16px;
@@ -720,6 +740,7 @@ export const responsiveCSS = css`
     .footer {
       padding: 12px 16px;
       flex-shrink: 0;
+      padding-bottom: max(12px, env(safe-area-inset-bottom));
     }
   }
 `;
@@ -829,6 +850,7 @@ export const nativeDialogCSS = css`
       max-height: none;
       border-radius: 0;
       margin: 0;
+      animation: none;
     }
   }
 
@@ -865,4 +887,3 @@ export const nativeDialogCSS = css`
 export function dialogStyles(...componentStyles: CSSResult[]): CSSResult[] {
   return [foundationCSS, colorCSS, zIndexCSS, dialogCSS, buttonCSS, animationCSS, nativeDialogCSS, ...componentStyles, responsiveCSS];
 }
-
