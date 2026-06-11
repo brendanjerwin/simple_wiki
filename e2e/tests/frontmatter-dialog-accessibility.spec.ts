@@ -236,4 +236,31 @@ test.describe('FrontmatterEditorDialog accessibility', () => {
       });
     });
   });
+
+  test.describe('mobile viewport layout', () => {
+    test.use({ viewport: { width: 390, height: 844 } });
+
+    test.describe('when the dialog is open', () => {
+      test('should fit the native dialog within the visual viewport', async ({ page }) => {
+        const dialogBox = await page.locator('frontmatter-editor-dialog dialog').boundingBox();
+        expect(dialogBox).not.toBeNull();
+        expect(dialogBox!.x).toBeGreaterThanOrEqual(0);
+        expect(dialogBox!.y).toBeGreaterThanOrEqual(0);
+        expect(dialogBox!.width).toBeLessThanOrEqual(390);
+        expect(dialogBox!.height).toBeLessThanOrEqual(844);
+        expect(dialogBox!.height).toBeGreaterThan(760);
+      });
+
+      test('should keep content scrollable', async ({ page }) => {
+        const overflowY = await page.locator('frontmatter-editor-dialog .content').evaluate((element) =>
+          getComputedStyle(element).overflowY
+        );
+        expect(overflowY).toBe('auto');
+      });
+
+      test('should keep footer actions visible', async ({ page }) => {
+        await expect(page.locator('frontmatter-editor-dialog .footer')).toBeVisible();
+      });
+    });
+  });
 });

@@ -37,5 +37,20 @@ describe('shared-styles', () => {
     it('should include slideIn keyframe animation', () => {
       expect(cssText).to.contain('@keyframes slideIn');
     });
+
+    it('should include mobile native dialog fullscreen rules', () => {
+      expect(cssText).to.contain('@media (max-width: 768px)');
+      expect(cssText).to.contain('width: 100%');
+      expect(cssText).to.contain('height: 100dvh');
+      expect(cssText).to.contain('max-height: 100dvh');
+      expect(cssText).to.contain('inset: 0');
+      expect(cssText).to.contain('dialog[open]');
+      expect(cssText).to.contain('animation: none');
+    });
+
+    it('should keep mobile dialog content scrollable', () => {
+      expect(cssText).to.contain('overflow-y: auto');
+      expect(cssText).to.contain('min-height: 0');
+    });
   });
 });
