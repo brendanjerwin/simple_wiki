@@ -208,29 +208,17 @@ func (s *Site) startMigrationJobs() {
 	// Start file shadowing scan
 	dataDirScanner := eager.NewFileSystemDataDirScanner(s.PathToData)
 	scanJob := eager.NewFileShadowingMigrationScanJob(dataDirScanner, s.JobQueueCoordinator, s, s)
-	if err := s.JobQueueCoordinator.EnqueueJob(scanJob); err != nil {
-		s.Logger.Error("Failed to enqueue file shadowing scan job: %v", err)
-	} else {
-		s.Logger.Info("File shadowing scan started.")
-	}
+	s.enqueueMigrationJob(scanJob, "file shadowing scan", "File shadowing scan")
 
 	// Start JSON archive migration to move .json files to __deleted__
 	jsonArchiveJob := eager.NewJSONArchiveMigrationScanJob(s.PathToData, s.JobQueueCoordinator)
-	if err := s.JobQueueCoordinator.EnqueueJob(jsonArchiveJob); err != nil {
-		s.Logger.Error("Failed to enqueue JSON archive migration job: %v", err)
-	} else {
-		s.Logger.Info("JSON archive migration started.")
-	}
+	s.enqueueMigrationJob(jsonArchiveJob, "JSON archive migration", "JSON archive migration")
 
 	// One-shot migration: rewrite legacy `:tag` checklist items to `#tag` and
 	// stamp `migrated_tags_syntax = true`. Once we're confident no pages have
 	// the old syntax in the wild, the scan/job pair can be deleted entirely.
 	checklistTagMigration := eager.NewChecklistTagSyntaxMigrationScanJob(dataDirScanner, s.JobQueueCoordinator, s)
-	if err := s.JobQueueCoordinator.EnqueueJob(checklistTagMigration); err != nil {
-		s.Logger.Error("Failed to enqueue checklist tag-syntax migration job: %v", err)
-	} else {
-		s.Logger.Info("Checklist tag-syntax migration started.")
-	}
+	s.enqueueMigrationJob(checklistTagMigration, "checklist tag-syntax migration", "Checklist tag-syntax migration")
 
 	// One-shot migration: promote legacy checklist items to the #984 shape
 	// (ULIDs, per-item created_at/updated_at, per-list sync_token under
@@ -240,11 +228,14 @@ func (s *Site) startMigrationJobs() {
 	checklistDataModelMigration := eager.NewChecklistDataModelMigrationScanJob(
 		dataDirScanner, s.JobQueueCoordinator, s, ulid.NewSystemGenerator(),
 	)
-	if err := s.JobQueueCoordinator.EnqueueJob(checklistDataModelMigration); err != nil {
-		s.Logger.Error("Failed to enqueue checklist data-model migration job: %v", err)
-	} else {
-		s.Logger.Info("Checklist data-model migration started.")
-	}
+	s.enqueueMigrationJob(checklistDataModelMigration, "checklist data-model migration", "Checklist data-model migration")
+
+	// One-shot migration: move legacy survey data into the reserved
+	// wiki.surveys.* namespace so SurveyService is the only mutation path.
+	surveyDataModelMigration := eager.NewSurveyDataModelMigrationScanJob(
+		dataDirScanner, s.JobQueueCoordinator, s,
+	)
+	s.enqueueMigrationJob(surveyDataModelMigration, "survey data-model migration", "Survey data-model migration")
 
 	// One-shot migration: move legacy top-level `system` and `template`
 	// frontmatter keys under the reserved `wiki.*` namespace (per #997 and
@@ -254,11 +245,7 @@ func (s *Site) startMigrationJobs() {
 	namespaceMigration := eager.NewSystemTemplateNamespaceMigrationScanJob(
 		dataDirScanner, s.JobQueueCoordinator, s,
 	)
-	if err := s.JobQueueCoordinator.EnqueueJob(namespaceMigration); err != nil {
-		s.Logger.Error("Failed to enqueue system/template namespace migration job: %v", err)
-	} else {
-		s.Logger.Info("System/template namespace migration started.")
-	}
+	s.enqueueMigrationJob(namespaceMigration, "system/template namespace migration", "System/template namespace migration")
 
 	// One-shot migration (Phase 7 of the SyncEngine extraction): rewrite
 	// pre-engine `wiki.connectors.<kind>.subscriptions[]` frontmatter into
@@ -271,11 +258,15 @@ func (s *Site) startMigrationJobs() {
 	connectorsMigration := eager.NewConnectorsSubscriptionsToBindingsMigrationScanJob(
 		dataDirScanner, s.JobQueueCoordinator, s,
 	)
-	if err := s.JobQueueCoordinator.EnqueueJob(connectorsMigration); err != nil {
-		s.Logger.Error("Failed to enqueue connectors subscriptions->bindings migration job: %v", err)
-	} else {
-		s.Logger.Info("Connectors subscriptions->bindings migration started.")
+	s.enqueueMigrationJob(connectorsMigration, "connectors subscriptions->bindings migration", "Connectors subscriptions->bindings migration")
+}
+
+func (s *Site) enqueueMigrationJob(job jobs.Job, failureDescription, successDescription string) {
+	if err := s.JobQueueCoordinator.EnqueueJob(job); err != nil {
+		s.Logger.Error("Failed to enqueue %s job: %v", failureDescription, err)
+		return
 	}
+	s.Logger.Info("%s started.", successDescription)
 }
 
 // Defaults for the agent-schedule machinery when CLI flags do not override

@@ -578,9 +578,9 @@ export const DeleteSurveyResponseResponseSchema: GenMessage<DeleteSurveyResponse
   messageDesc(file_api_v1_survey, 20);
 
 /**
- * SurveyService owns the surveys.<name> frontmatter namespace.
+ * SurveyService owns the wiki.surveys.<name> frontmatter namespace.
  *
- * Generic Frontmatter writes to surveys.* are rejected so response arrays are
+ * Generic Frontmatter writes to wiki.* are rejected so response arrays are
  * not clobbered by stale read/replace cycles. Use this service for survey
  * configuration and user response writes.
  *

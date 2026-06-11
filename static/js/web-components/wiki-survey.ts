@@ -102,11 +102,11 @@ function surveyMessageToData(survey: SurveyMessage | undefined): SurveyData {
 /**
  * WikiSurvey - An interactive survey component that persists responses through SurveyService.
  *
- * Survey configuration (question, fields) lives in the survey API under `surveys.<name>`.
+ * Survey configuration (question, fields) lives in the survey API under `wiki.surveys.<name>`.
  * Responses are stored by SurveyService, keyed by username.
  * Each user's response is editable (resubmit replaces their existing entry).
  *
- * @property {string} name - Survey name in frontmatter (matches frontmatter key)
+ * @property {string} name - Survey name in frontmatter (matches wiki.surveys key)
  * @property {string} page - Page identifier for gRPC calls
  *
  * @example
@@ -455,7 +455,7 @@ export class WikiSurvey extends LitElement {
       return html`
         ${sharedStyles}
         <div class="survey-container system-font">
-          <p class="not-configured">Survey not configured. Add question and fields to frontmatter under <code>surveys.${this.name}</code>.</p>
+          <p class="not-configured">Survey not configured. Add question and fields through SurveyService.</p>
         </div>
       `;
     }

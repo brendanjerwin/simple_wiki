@@ -107,25 +107,27 @@ var _ = Describe("Mutator", func() {
 		now = time.Date(2026, 6, 9, 20, 20, 0, 0, time.UTC)
 		store = newFakeStore()
 		store.pages["weekly_menu"] = wikipage.FrontMatter{
-			"surveys": map[string]any{
-				"meal": map[string]any{
-					"question": "Dinner?",
-					"fields": []any{
-						map[string]any{"name": "choice", "type": "text"},
-					},
-					"responses": []any{
-						map[string]any{
-							"user":         "a@example.com",
-							"submitted_at": "2026-06-09T19:00:00Z",
-							"values": map[string]any{
-								"choice": "pasta",
+			"wiki": map[string]any{
+				"surveys": map[string]any{
+					"meal": map[string]any{
+						"question": "Dinner?",
+						"fields": []any{
+							map[string]any{"name": "choice", "type": "text"},
+						},
+						"responses": []any{
+							map[string]any{
+								"user":         "a@example.com",
+								"submitted_at": "2026-06-09T19:00:00Z",
+								"values": map[string]any{
+									"choice": "pasta",
+								},
 							},
 						},
+						"updated_at": "2026-06-09T19:00:00Z",
 					},
-					"updated_at": "2026-06-09T19:00:00Z",
-				},
-				"other": map[string]any{
-					"question": "Untouched?",
+					"other": map[string]any{
+						"question": "Untouched?",
+					},
 				},
 			},
 		}
@@ -158,8 +160,14 @@ var _ = Describe("Mutator", func() {
 		})
 
 		It("should update only the named survey", func() {
-			other := readMap(readMap(writtenFrontmatter, surveysKey), "other")
+			other := readMap(readMap(readMap(writtenFrontmatter, wikiKey), surveysKey), "other")
 			Expect(other).To(HaveKeyWithValue(questionKey, "Untouched?"))
+		})
+
+		It("should write surveys under the reserved wiki namespace", func() {
+			Expect(readMap(writtenFrontmatter, surveysKey)).To(BeNil())
+			meal := readMap(readMap(readMap(writtenFrontmatter, wikiKey), surveysKey), "meal")
+			Expect(meal).To(HaveKeyWithValue(updatedAtKey, now.Format(time.RFC3339Nano)))
 		})
 	})
 
@@ -377,6 +385,27 @@ var _ = Describe("Mutator", func() {
 
 		It("should replace the response values", func() {
 			Expect(result.GetResponses()[0].GetValues().AsMap()).To(HaveKeyWithValue("choice", "salad"))
+		})
+	})
+
+	Describe("when reading legacy survey frontmatter", func() {
+		BeforeEach(func() {
+			store.pages["legacy_menu"] = wikipage.FrontMatter{
+				"surveys": map[string]any{
+					"meal": map[string]any{
+						"question": "Legacy dinner?",
+						"fields": []any{
+							map[string]any{"name": "choice", "type": "text"},
+						},
+					},
+				},
+			}
+			result, err = mutator.GetSurvey(context.Background(), "legacy_menu", "meal")
+		})
+
+		It("should return the legacy survey", func() {
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result.GetQuestion()).To(Equal("Legacy dinner?"))
 		})
 	})
 })

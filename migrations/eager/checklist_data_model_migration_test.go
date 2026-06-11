@@ -15,8 +15,10 @@ import (
 // fakeReaderMutator is the smallest possible PageReaderMutator — only
 // ReadFrontMatter and WriteFrontMatter are exercised by the migration.
 type fakeReaderMutator struct {
-	pages map[string]wikipage.FrontMatter
+	pages      map[string]wikipage.FrontMatter
 	writeCount int
+	readErr    error
+	modifyErr  error
 }
 
 func newFakeReaderMutator(initial map[string]wikipage.FrontMatter) *fakeReaderMutator {
@@ -24,6 +26,9 @@ func newFakeReaderMutator(initial map[string]wikipage.FrontMatter) *fakeReaderMu
 }
 
 func (f *fakeReaderMutator) ReadFrontMatter(id wikipage.PageIdentifier) (wikipage.PageIdentifier, wikipage.FrontMatter, error) {
+	if f.readErr != nil {
+		return id, nil, f.readErr
+	}
 	fm, ok := f.pages[string(id)]
 	if !ok {
 		return id, nil, errors.New("not found")
@@ -34,6 +39,23 @@ func (f *fakeReaderMutator) ReadFrontMatter(id wikipage.PageIdentifier) (wikipag
 func (f *fakeReaderMutator) WriteFrontMatter(id wikipage.PageIdentifier, fm wikipage.FrontMatter) error {
 	f.writeCount++
 	f.pages[string(id)] = fm
+	return nil
+}
+
+func (f *fakeReaderMutator) ModifyFrontMatterAndMarkdown(id wikipage.PageIdentifier, modifier func(wikipage.FrontMatter, wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error)) error {
+	if f.modifyErr != nil {
+		return f.modifyErr
+	}
+	fm, ok := f.pages[string(id)]
+	if !ok {
+		return errors.New("not found")
+	}
+	newFM, _, err := modifier(fm, "")
+	if err != nil {
+		return err
+	}
+	f.writeCount++
+	f.pages[string(id)] = newFM
 	return nil
 }
 

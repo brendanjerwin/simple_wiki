@@ -34,9 +34,9 @@ const (
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 //
-// SurveyService owns the surveys.<name> frontmatter namespace.
+// SurveyService owns the wiki.surveys.<name> frontmatter namespace.
 //
-// Generic Frontmatter writes to surveys.* are rejected so response arrays are
+// Generic Frontmatter writes to wiki.* are rejected so response arrays are
 // not clobbered by stale read/replace cycles. Use this service for survey
 // configuration and user response writes.
 type SurveyServiceClient interface {
@@ -153,9 +153,9 @@ func (c *surveyServiceClient) DeleteResponse(ctx context.Context, in *DeleteSurv
 // All implementations must embed UnimplementedSurveyServiceServer
 // for forward compatibility
 //
-// SurveyService owns the surveys.<name> frontmatter namespace.
+// SurveyService owns the wiki.surveys.<name> frontmatter namespace.
 //
-// Generic Frontmatter writes to surveys.* are rejected so response arrays are
+// Generic Frontmatter writes to wiki.* are rejected so response arrays are
 // not clobbered by stale read/replace cycles. Use this service for survey
 // configuration and user response writes.
 type SurveyServiceServer interface {

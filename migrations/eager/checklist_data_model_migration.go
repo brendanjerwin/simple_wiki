@@ -46,22 +46,22 @@ const dataModelSortOrderStep int64 = 1000
 // linter doesn't trip on "string appears N times" and so any rename is
 // a single-edit change.
 const (
-	checklistsFMKey = "checklists"
-	updatedAtFMKey  = "updated_at"
-	wikiFMKey       = "wiki"
-	itemsFMKey      = "items"
-	uidFMKey        = "uid"
-	textFMKey       = "text"
-	checkedFMKey    = "checked"
-	tagsFMKey       = "tags"
-	sortOrderFMKey  = "sort_order"
+	checklistsFMKey  = "checklists"
+	updatedAtFMKey   = "updated_at"
+	wikiFMKey        = "wiki"
+	itemsFMKey       = "items"
+	uidFMKey         = "uid"
+	textFMKey        = "text"
+	checkedFMKey     = "checked"
+	tagsFMKey        = "tags"
+	sortOrderFMKey   = "sort_order"
 	descriptionFMKey = "description"
-	dueFMKey        = "due"
-	createdAtFMKey  = "created_at"
+	dueFMKey         = "due"
+	createdAtFMKey   = "created_at"
 	completedAtFMKey = "completed_at"
 	completedByFMKey = "completed_by"
-	automatedFMKey  = "automated"
-	syncTokenFMKey  = "sync_token"
+	automatedFMKey   = "automated"
+	syncTokenFMKey   = "sync_token"
 )
 
 // ChecklistDataModelMigrationScanJob walks the data dir and enqueues a
@@ -96,18 +96,36 @@ func (*ChecklistDataModelMigrationScanJob) GetName() string {
 
 // Execute scans .md files and enqueues per-page migration jobs.
 func (j *ChecklistDataModelMigrationScanJob) Execute() error {
-	if !j.scanner.DataDirExists() {
+	return enqueueDataModelMigrationJobs(
+		j.scanner,
+		j.coordinator,
+		pageNeedsDataModelMigration,
+		func(identifier string) jobs.Job {
+			return NewChecklistDataModelMigrationJob(j.readerMutator, j.ulids, identifier)
+		},
+		"checklist data-model",
+	)
+}
+
+func enqueueDataModelMigrationJobs(
+	scanner DataDirScanner,
+	coordinator *jobs.JobQueueCoordinator,
+	pageNeedsMigration func(map[string]any) bool,
+	newMigrationJob func(string) jobs.Job,
+	migrationName string,
+) error {
+	if !scanner.DataDirExists() {
 		return nil
 	}
 
-	files, err := j.scanner.ListMDFiles()
+	files, err := scanner.ListMDFiles()
 	if err != nil {
 		return fmt.Errorf("list .md files: %w", err)
 	}
 
 	seen := make(map[string]struct{})
 	for _, filename := range files {
-		identifier, fm, ok := extractDataModelMigrationFrontmatter(j.scanner, filename)
+		identifier, fm, ok := extractDataModelMigrationFrontmatter(scanner, filename)
 		if !ok {
 			continue
 		}
@@ -116,13 +134,12 @@ func (j *ChecklistDataModelMigrationScanJob) Execute() error {
 		}
 		seen[identifier] = struct{}{}
 
-		if !pageNeedsDataModelMigration(fm) {
+		if !pageNeedsMigration(fm) {
 			continue
 		}
 
-		migrationJob := NewChecklistDataModelMigrationJob(j.readerMutator, j.ulids, identifier)
-		if err := j.coordinator.EnqueueJob(migrationJob); err != nil {
-			return fmt.Errorf("enqueue checklist data-model migration for %s: %w", identifier, err)
+		if err := coordinator.EnqueueJob(newMigrationJob(identifier)); err != nil {
+			return fmt.Errorf("enqueue %s migration for %s: %w", migrationName, identifier, err)
 		}
 	}
 	return nil
