@@ -25,6 +25,7 @@ import './web-components/wiki-table.js';
 import './web-components/collapsible-heading.js';
 import './web-components/page-auto-refresh.js';
 import './web-components/page-chat-panel.js';
+import './web-components/page-trash.js';
 import { showStoredToast } from './web-components/toast-message.js';
 import { setupGlobalErrorHandler } from './web-components/global-error-handler.js';
 import { pageDeleteService } from './web-components/page-deletion-service.js';

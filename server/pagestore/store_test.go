@@ -4,7 +4,9 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strconv"
 	"testing"
+	"time"
 
 	"github.com/brendanjerwin/simple_wiki/utils/base32tools"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
@@ -188,18 +190,32 @@ var _ = Describe("Store", func() {
 
 	Describe("SoftDeletePage", func() {
 		When("the page does not exist", func() {
-			It("should return os.ErrNotExist", func() {
-				err := store.SoftDeletePage("ghost")
-				Expect(err).To(MatchError(os.ErrNotExist))
+			var trashEntries []wikipage.TrashEntry
+
+			BeforeEach(func() {
+				deleteErr := store.SoftDeletePage("ghost")
+				Expect(deleteErr).To(MatchError(os.ErrNotExist))
+				var listErr error
+				trashEntries, listErr = store.ListTrash()
+				Expect(listErr).NotTo(HaveOccurred())
+			})
+
+			It("should leave trash empty", func() {
+				Expect(trashEntries).To(BeEmpty())
 			})
 		})
 
 		When("the page exists", func() {
-			var err error
+			var (
+				err          error
+				trashEntries []wikipage.TrashEntry
+			)
 
 			BeforeEach(func() {
+				Expect(store.WriteFrontMatter("doomed", wikipage.FrontMatter{"title": "Doomed Page"})).To(Succeed())
 				Expect(store.WriteMarkdown("doomed", "body\n")).To(Succeed())
 				err = store.SoftDeletePage("doomed")
+				trashEntries, err = store.ListTrash()
 			})
 
 			It("should not return an error", func() {
@@ -210,6 +226,280 @@ var _ = Describe("Store", func() {
 				fp := filepath.Join(tempDir, base32tools.EncodeToBase32("doomed")+".md")
 				_, statErr := os.Stat(fp)
 				Expect(os.IsNotExist(statErr)).To(BeTrue())
+			})
+
+			It("should list the page in trash", func() {
+				Expect(trashEntries).To(HaveLen(1))
+				Expect(trashEntries[0].Identifier).To(Equal(wikipage.PageIdentifier("doomed")))
+				Expect(trashEntries[0].Title).To(Equal("Doomed Page"))
+				Expect(trashEntries[0].PurgesAt.Sub(trashEntries[0].DeletedAt)).To(Equal(30 * 24 * time.Hour))
+			})
+		})
+
+		When("the page title cannot be read", func() {
+			var trashEntries []wikipage.TrashEntry
+
+			BeforeEach(func() {
+				mdPath := filepath.Join(tempDir, base32tools.EncodeToBase32("untitled")+".md")
+				Expect(os.WriteFile(mdPath, []byte("body without frontmatter\n"), 0644)).To(Succeed())
+				Expect(store.SoftDeletePage("untitled")).To(Succeed())
+				var err error
+				trashEntries, err = store.ListTrash()
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should leave the title empty", func() {
+				Expect(trashEntries).To(HaveLen(1))
+				Expect(trashEntries[0].Title).To(BeEmpty())
+			})
+		})
+	})
+
+	Describe("ListTrash", func() {
+		When("one trash entry has corrupted metadata", func() {
+			var trashEntries []wikipage.TrashEntry
+
+			BeforeEach(func() {
+				Expect(store.WriteMarkdown("visible-trash", "body\n")).To(Succeed())
+				Expect(store.SoftDeletePage("visible-trash")).To(Succeed())
+				brokenDir := filepath.Join(tempDir, deletedDirName, "broken")
+				Expect(os.MkdirAll(brokenDir, 0755)).To(Succeed())
+				Expect(os.WriteFile(filepath.Join(brokenDir, trashMetadataName), []byte("identifier = [broken\n"), 0644)).To(Succeed())
+
+				var err error
+				trashEntries, err = store.ListTrash()
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should return the readable entries", func() {
+				Expect(trashEntries).To(HaveLen(1))
+				Expect(trashEntries[0].Identifier).To(Equal(wikipage.PageIdentifier("visible-trash")))
+			})
+		})
+
+		When("a legacy trash entry has no metadata", func() {
+			var trashEntries []wikipage.TrashEntry
+
+			BeforeEach(func() {
+				legacyTrashID := strconv.FormatInt(time.Now().UTC().Add(24*time.Hour).Unix(), decimalBase)
+				legacyDir := filepath.Join(tempDir, deletedDirName, legacyTrashID)
+				Expect(os.MkdirAll(legacyDir, 0755)).To(Succeed())
+				mdPath := filepath.Join(legacyDir, base32tools.EncodeToBase32("legacy-trash")+".md")
+				Expect(os.WriteFile(mdPath, []byte("legacy body\n"), 0644)).To(Succeed())
+
+				var err error
+				trashEntries, err = store.ListTrash()
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should derive metadata from the markdown filename", func() {
+				Expect(trashEntries).To(HaveLen(1))
+				Expect(trashEntries[0].Identifier).To(Equal(wikipage.PageIdentifier("legacy-trash")))
+			})
+		})
+	})
+
+	Describe("RestorePage", func() {
+		When("the trash entry exists", func() {
+			var (
+				restoreErr error
+				readErr    error
+				markdown   wikipage.Markdown
+			)
+
+			BeforeEach(func() {
+				Expect(store.WriteMarkdown("restore-me", "restored body\n")).To(Succeed())
+				Expect(store.SoftDeletePage("restore-me")).To(Succeed())
+				trashEntries, err := store.ListTrash()
+				Expect(err).NotTo(HaveOccurred())
+				Expect(trashEntries).To(HaveLen(1))
+
+				restoreErr = store.RestorePage(trashEntries[0].TrashID)
+				page, pageErr := store.ReadPage("restore-me")
+				Expect(pageErr).NotTo(HaveOccurred())
+				markdown, readErr = page.GetMarkdown()
+			})
+
+			It("should not return an error", func() {
+				Expect(restoreErr).NotTo(HaveOccurred())
+			})
+
+			It("should restore the page content", func() {
+				Expect(readErr).NotTo(HaveOccurred())
+				Expect(markdown).To(Equal(wikipage.Markdown("restored body\n")))
+			})
+		})
+
+		When("the page already exists", func() {
+			var restoreErr error
+
+			BeforeEach(func() {
+				Expect(store.WriteMarkdown("conflict-page", "old body\n")).To(Succeed())
+				Expect(store.SoftDeletePage("conflict-page")).To(Succeed())
+				trashEntries, err := store.ListTrash()
+				Expect(err).NotTo(HaveOccurred())
+				Expect(trashEntries).To(HaveLen(1))
+				Expect(store.WriteMarkdown("conflict-page", "new body\n")).To(Succeed())
+
+				restoreErr = store.RestorePage(trashEntries[0].TrashID)
+			})
+
+			It("should return a conflict error", func() {
+				Expect(restoreErr).To(MatchError(MatchRegexp("page restore conflict: conflict-page already exists")))
+				Expect(errors.Is(restoreErr, wikipage.ErrPageRestoreConflict)).To(BeTrue())
+			})
+		})
+
+		When("the trash id is invalid", func() {
+			var restoreErr error
+
+			BeforeEach(func() {
+				restoreErr = store.RestorePage("../bad")
+			})
+
+			It("should return an invalid trash id error", func() {
+				Expect(restoreErr).To(MatchError(ContainSubstring("invalid trash id")))
+			})
+		})
+	})
+
+	Describe("PurgePage", func() {
+		When("the trash entry exists", func() {
+			var (
+				purgeErr     error
+				trashEntries []wikipage.TrashEntry
+			)
+
+			BeforeEach(func() {
+				Expect(store.WriteMarkdown("purge-me", "body\n")).To(Succeed())
+				Expect(store.SoftDeletePage("purge-me")).To(Succeed())
+				initialEntries, err := store.ListTrash()
+				Expect(err).NotTo(HaveOccurred())
+				Expect(initialEntries).To(HaveLen(1))
+
+				purgeErr = store.PurgePage(initialEntries[0].TrashID)
+				trashEntries, err = store.ListTrash()
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should not return an error", func() {
+				Expect(purgeErr).NotTo(HaveOccurred())
+			})
+
+			It("should remove the trash entry", func() {
+				Expect(trashEntries).To(BeEmpty())
+			})
+		})
+
+		When("the trash entry does not exist", func() {
+			var purgeErr error
+
+			BeforeEach(func() {
+				purgeErr = store.PurgePage("missing-trash-id")
+			})
+
+			It("should return not found", func() {
+				Expect(purgeErr).To(MatchError(os.ErrNotExist))
+			})
+		})
+
+		When("the trash id is invalid", func() {
+			var purgeErr error
+
+			BeforeEach(func() {
+				purgeErr = store.PurgePage("../bad")
+			})
+
+			It("should return an invalid trash id error", func() {
+				Expect(purgeErr).To(MatchError(ContainSubstring("invalid trash id")))
+			})
+		})
+	})
+
+	Describe("EmptyTrash", func() {
+		When("trash is empty", func() {
+			var (
+				count    int
+				emptyErr error
+			)
+
+			BeforeEach(func() {
+				count, emptyErr = store.EmptyTrash()
+			})
+
+			It("should not return an error", func() {
+				Expect(emptyErr).NotTo(HaveOccurred())
+			})
+
+			It("should report zero purged entries", func() {
+				Expect(count).To(Equal(0))
+			})
+		})
+
+		When("trash contains entries", func() {
+			var (
+				count        int
+				emptyErr     error
+				trashEntries []wikipage.TrashEntry
+			)
+
+			BeforeEach(func() {
+				Expect(store.WriteMarkdown("first-trash", "body\n")).To(Succeed())
+				Expect(store.SoftDeletePage("first-trash")).To(Succeed())
+				Expect(store.WriteMarkdown("second-trash", "body\n")).To(Succeed())
+				Expect(store.SoftDeletePage("second-trash")).To(Succeed())
+
+				count, emptyErr = store.EmptyTrash()
+				var err error
+				trashEntries, err = store.ListTrash()
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should not return an error", func() {
+				Expect(emptyErr).NotTo(HaveOccurred())
+			})
+
+			It("should report the purged entries", func() {
+				Expect(count).To(Equal(2))
+			})
+
+			It("should remove all trash entries", func() {
+				Expect(trashEntries).To(BeEmpty())
+			})
+		})
+	})
+
+	Describe("PurgeExpiredTrash", func() {
+		When("a trash entry is past retention", func() {
+			var trashEntries []wikipage.TrashEntry
+
+			BeforeEach(func() {
+				Expect(store.WriteMarkdown("expired-page", "body\n")).To(Succeed())
+				Expect(store.SoftDeletePage("expired-page")).To(Succeed())
+
+				err := store.PurgeExpiredTrash(time.Now().UTC().Add(31 * 24 * time.Hour))
+				Expect(err).NotTo(HaveOccurred())
+				trashEntries, err = store.ListTrash()
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should remove the trash entry", func() {
+				Expect(trashEntries).To(BeEmpty())
+			})
+		})
+
+		When("one expired trash entry has corrupted metadata", func() {
+			var purgeErr error
+
+			BeforeEach(func() {
+				brokenDir := filepath.Join(tempDir, deletedDirName, "broken")
+				Expect(os.MkdirAll(brokenDir, 0755)).To(Succeed())
+				Expect(os.WriteFile(filepath.Join(brokenDir, trashMetadataName), []byte("identifier = [broken\n"), 0644)).To(Succeed())
+				purgeErr = store.PurgeExpiredTrash(time.Now().UTC().Add(31 * 24 * time.Hour))
+			})
+
+			It("should not return an error", func() {
+				Expect(purgeErr).NotTo(HaveOccurred())
 			})
 		})
 	})

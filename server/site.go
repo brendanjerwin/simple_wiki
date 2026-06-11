@@ -845,11 +845,15 @@ func (s *Site) ReadMarkdown(identifier wikipage.PageIdentifier) (wikipage.PageId
 	return identifier, markdown, nil
 }
 
-// DeletePage deletes a page from disk via the pagestore's soft-delete (move
-// to __deleted__/<timestamp>/). Cron registrations and index entries are
-// cleaned up here on Site; the disk operation itself is the store's
-// responsibility.
+// DeletePage deletes a page from disk via the pagestore's soft-delete. Cron
+// registrations and index entries are cleaned up here on Site; the disk
+// operation itself is the store's responsibility.
 func (s *Site) DeletePage(identifier wikipage.PageIdentifier) error {
+	return s.DeletePageBy(identifier, "")
+}
+
+// DeletePageBy soft-deletes a page and records the actor in trash metadata.
+func (s *Site) DeletePageBy(identifier wikipage.PageIdentifier, deletedBy string) error {
 	s.Logger.Trace("Deleting page %s", identifier)
 
 	// Drop any agent.schedules cron registrations for this page BEFORE the
@@ -869,7 +873,58 @@ func (s *Site) DeletePage(identifier wikipage.PageIdentifier) error {
 		}
 	}
 
-	return s.ensureStore().SoftDeletePage(identifier)
+	return s.ensureStore().SoftDeletePageBy(identifier, deletedBy)
+}
+
+// ListTrash returns pages currently available for restore.
+func (s *Site) ListTrash() ([]wikipage.TrashEntry, error) {
+	return s.ensureStore().ListTrash()
+}
+
+// RestorePage restores a page from trash and re-adds live-page side effects.
+func (s *Site) RestorePage(trashID string) error {
+	trashEntries, err := s.ensureStore().ListTrash()
+	if err != nil {
+		return err
+	}
+	var restoredIdentifier wikipage.PageIdentifier
+	for _, entry := range trashEntries {
+		if entry.TrashID == trashID {
+			restoredIdentifier = entry.Identifier
+			break
+		}
+	}
+	if restoredIdentifier == "" {
+		return os.ErrNotExist
+	}
+
+	if err := s.ensureStore().RestorePage(trashID); err != nil {
+		return err
+	}
+
+	if s.IndexCoordinator != nil {
+		if err := s.IndexCoordinator.EnqueueIndexJob(restoredIdentifier, index.Add); err != nil {
+			s.Logger.Error("Failed to enqueue index restore job for %s: %v", restoredIdentifier, err)
+		}
+	}
+	if s.AgentScheduler != nil && s.JobQueueCoordinator != nil {
+		refreshJob := NewAgentScheduleRefreshJob(s.AgentScheduler, string(restoredIdentifier))
+		if err := s.JobQueueCoordinator.EnqueueJob(refreshJob); err != nil {
+			s.Logger.Error("Failed to enqueue agent schedule refresh for restored page %s: %v", restoredIdentifier, err)
+		}
+	}
+
+	return nil
+}
+
+// PurgePage permanently removes a trash entry.
+func (s *Site) PurgePage(trashID string) error {
+	return s.ensureStore().PurgePage(trashID)
+}
+
+// EmptyTrash permanently removes all trash entries.
+func (s *Site) EmptyTrash() (int, error) {
+	return s.ensureStore().EmptyTrash()
 }
 
 // UpdatePageContent updates a page's full content, rendering and saving.

@@ -54,6 +54,18 @@ const (
 	// PageManagementServiceDeletePageProcedure is the fully-qualified name of the
 	// PageManagementService's DeletePage RPC.
 	PageManagementServiceDeletePageProcedure = "/api.v1.PageManagementService/DeletePage"
+	// PageManagementServiceListTrashProcedure is the fully-qualified name of the
+	// PageManagementService's ListTrash RPC.
+	PageManagementServiceListTrashProcedure = "/api.v1.PageManagementService/ListTrash"
+	// PageManagementServiceRestorePageProcedure is the fully-qualified name of the
+	// PageManagementService's RestorePage RPC.
+	PageManagementServiceRestorePageProcedure = "/api.v1.PageManagementService/RestorePage"
+	// PageManagementServicePurgePageProcedure is the fully-qualified name of the
+	// PageManagementService's PurgePage RPC.
+	PageManagementServicePurgePageProcedure = "/api.v1.PageManagementService/PurgePage"
+	// PageManagementServiceEmptyTrashProcedure is the fully-qualified name of the
+	// PageManagementService's EmptyTrash RPC.
+	PageManagementServiceEmptyTrashProcedure = "/api.v1.PageManagementService/EmptyTrash"
 	// PageManagementServiceClearPageContentProcedure is the fully-qualified name of the
 	// PageManagementService's ClearPageContent RPC.
 	PageManagementServiceClearPageContentProcedure = "/api.v1.PageManagementService/ClearPageContent"
@@ -87,6 +99,10 @@ var (
 	pageManagementServiceUpdatePageContentMethodDescriptor  = pageManagementServiceServiceDescriptor.Methods().ByName("UpdatePageContent")
 	pageManagementServiceUpdateWholePageMethodDescriptor    = pageManagementServiceServiceDescriptor.Methods().ByName("UpdateWholePage")
 	pageManagementServiceDeletePageMethodDescriptor         = pageManagementServiceServiceDescriptor.Methods().ByName("DeletePage")
+	pageManagementServiceListTrashMethodDescriptor          = pageManagementServiceServiceDescriptor.Methods().ByName("ListTrash")
+	pageManagementServiceRestorePageMethodDescriptor        = pageManagementServiceServiceDescriptor.Methods().ByName("RestorePage")
+	pageManagementServicePurgePageMethodDescriptor          = pageManagementServiceServiceDescriptor.Methods().ByName("PurgePage")
+	pageManagementServiceEmptyTrashMethodDescriptor         = pageManagementServiceServiceDescriptor.Methods().ByName("EmptyTrash")
 	pageManagementServiceClearPageContentMethodDescriptor   = pageManagementServiceServiceDescriptor.Methods().ByName("ClearPageContent")
 	pageManagementServiceGenerateIdentifierMethodDescriptor = pageManagementServiceServiceDescriptor.Methods().ByName("GenerateIdentifier")
 	pageManagementServiceListTemplatesMethodDescriptor      = pageManagementServiceServiceDescriptor.Methods().ByName("ListTemplates")
@@ -112,6 +128,14 @@ type PageManagementServiceClient interface {
 	UpdateWholePage(context.Context, *connect.Request[v1.UpdateWholePageRequest]) (*connect.Response[v1.UpdateWholePageResponse], error)
 	// DeletePage — see (api.v1.description).
 	DeletePage(context.Context, *connect.Request[v1.DeletePageRequest]) (*connect.Response[v1.DeletePageResponse], error)
+	// ListTrash — see (api.v1.description).
+	ListTrash(context.Context, *connect.Request[v1.ListTrashRequest]) (*connect.Response[v1.ListTrashResponse], error)
+	// RestorePage — see (api.v1.description).
+	RestorePage(context.Context, *connect.Request[v1.RestorePageRequest]) (*connect.Response[v1.RestorePageResponse], error)
+	// PurgePage — see (api.v1.description).
+	PurgePage(context.Context, *connect.Request[v1.PurgePageRequest]) (*connect.Response[v1.PurgePageResponse], error)
+	// EmptyTrash — see (api.v1.description).
+	EmptyTrash(context.Context, *connect.Request[v1.EmptyTrashRequest]) (*connect.Response[v1.EmptyTrashResponse], error)
 	// ClearPageContent — see (api.v1.description).
 	ClearPageContent(context.Context, *connect.Request[v1.ClearPageContentRequest]) (*connect.Response[v1.ClearPageContentResponse], error)
 	// GenerateIdentifier — see (api.v1.description).
@@ -180,6 +204,30 @@ func NewPageManagementServiceClient(httpClient connect.HTTPClient, baseURL strin
 			connect.WithSchema(pageManagementServiceDeletePageMethodDescriptor),
 			connect.WithClientOptions(opts...),
 		),
+		listTrash: connect.NewClient[v1.ListTrashRequest, v1.ListTrashResponse](
+			httpClient,
+			baseURL+PageManagementServiceListTrashProcedure,
+			connect.WithSchema(pageManagementServiceListTrashMethodDescriptor),
+			connect.WithClientOptions(opts...),
+		),
+		restorePage: connect.NewClient[v1.RestorePageRequest, v1.RestorePageResponse](
+			httpClient,
+			baseURL+PageManagementServiceRestorePageProcedure,
+			connect.WithSchema(pageManagementServiceRestorePageMethodDescriptor),
+			connect.WithClientOptions(opts...),
+		),
+		purgePage: connect.NewClient[v1.PurgePageRequest, v1.PurgePageResponse](
+			httpClient,
+			baseURL+PageManagementServicePurgePageProcedure,
+			connect.WithSchema(pageManagementServicePurgePageMethodDescriptor),
+			connect.WithClientOptions(opts...),
+		),
+		emptyTrash: connect.NewClient[v1.EmptyTrashRequest, v1.EmptyTrashResponse](
+			httpClient,
+			baseURL+PageManagementServiceEmptyTrashProcedure,
+			connect.WithSchema(pageManagementServiceEmptyTrashMethodDescriptor),
+			connect.WithClientOptions(opts...),
+		),
 		clearPageContent: connect.NewClient[v1.ClearPageContentRequest, v1.ClearPageContentResponse](
 			httpClient,
 			baseURL+PageManagementServiceClearPageContentProcedure,
@@ -234,6 +282,10 @@ type pageManagementServiceClient struct {
 	updatePageContent  *connect.Client[v1.UpdatePageContentRequest, v1.UpdatePageContentResponse]
 	updateWholePage    *connect.Client[v1.UpdateWholePageRequest, v1.UpdateWholePageResponse]
 	deletePage         *connect.Client[v1.DeletePageRequest, v1.DeletePageResponse]
+	listTrash          *connect.Client[v1.ListTrashRequest, v1.ListTrashResponse]
+	restorePage        *connect.Client[v1.RestorePageRequest, v1.RestorePageResponse]
+	purgePage          *connect.Client[v1.PurgePageRequest, v1.PurgePageResponse]
+	emptyTrash         *connect.Client[v1.EmptyTrashRequest, v1.EmptyTrashResponse]
 	clearPageContent   *connect.Client[v1.ClearPageContentRequest, v1.ClearPageContentResponse]
 	generateIdentifier *connect.Client[v1.GenerateIdentifierRequest, v1.GenerateIdentifierResponse]
 	listTemplates      *connect.Client[v1.ListTemplatesRequest, v1.ListTemplatesResponse]
@@ -276,6 +328,26 @@ func (c *pageManagementServiceClient) UpdateWholePage(ctx context.Context, req *
 // DeletePage calls api.v1.PageManagementService.DeletePage.
 func (c *pageManagementServiceClient) DeletePage(ctx context.Context, req *connect.Request[v1.DeletePageRequest]) (*connect.Response[v1.DeletePageResponse], error) {
 	return c.deletePage.CallUnary(ctx, req)
+}
+
+// ListTrash calls api.v1.PageManagementService.ListTrash.
+func (c *pageManagementServiceClient) ListTrash(ctx context.Context, req *connect.Request[v1.ListTrashRequest]) (*connect.Response[v1.ListTrashResponse], error) {
+	return c.listTrash.CallUnary(ctx, req)
+}
+
+// RestorePage calls api.v1.PageManagementService.RestorePage.
+func (c *pageManagementServiceClient) RestorePage(ctx context.Context, req *connect.Request[v1.RestorePageRequest]) (*connect.Response[v1.RestorePageResponse], error) {
+	return c.restorePage.CallUnary(ctx, req)
+}
+
+// PurgePage calls api.v1.PageManagementService.PurgePage.
+func (c *pageManagementServiceClient) PurgePage(ctx context.Context, req *connect.Request[v1.PurgePageRequest]) (*connect.Response[v1.PurgePageResponse], error) {
+	return c.purgePage.CallUnary(ctx, req)
+}
+
+// EmptyTrash calls api.v1.PageManagementService.EmptyTrash.
+func (c *pageManagementServiceClient) EmptyTrash(ctx context.Context, req *connect.Request[v1.EmptyTrashRequest]) (*connect.Response[v1.EmptyTrashResponse], error) {
+	return c.emptyTrash.CallUnary(ctx, req)
 }
 
 // ClearPageContent calls api.v1.PageManagementService.ClearPageContent.
@@ -329,6 +401,14 @@ type PageManagementServiceHandler interface {
 	UpdateWholePage(context.Context, *connect.Request[v1.UpdateWholePageRequest]) (*connect.Response[v1.UpdateWholePageResponse], error)
 	// DeletePage — see (api.v1.description).
 	DeletePage(context.Context, *connect.Request[v1.DeletePageRequest]) (*connect.Response[v1.DeletePageResponse], error)
+	// ListTrash — see (api.v1.description).
+	ListTrash(context.Context, *connect.Request[v1.ListTrashRequest]) (*connect.Response[v1.ListTrashResponse], error)
+	// RestorePage — see (api.v1.description).
+	RestorePage(context.Context, *connect.Request[v1.RestorePageRequest]) (*connect.Response[v1.RestorePageResponse], error)
+	// PurgePage — see (api.v1.description).
+	PurgePage(context.Context, *connect.Request[v1.PurgePageRequest]) (*connect.Response[v1.PurgePageResponse], error)
+	// EmptyTrash — see (api.v1.description).
+	EmptyTrash(context.Context, *connect.Request[v1.EmptyTrashRequest]) (*connect.Response[v1.EmptyTrashResponse], error)
 	// ClearPageContent — see (api.v1.description).
 	ClearPageContent(context.Context, *connect.Request[v1.ClearPageContentRequest]) (*connect.Response[v1.ClearPageContentResponse], error)
 	// GenerateIdentifier — see (api.v1.description).
@@ -393,6 +473,30 @@ func NewPageManagementServiceHandler(svc PageManagementServiceHandler, opts ...c
 		connect.WithSchema(pageManagementServiceDeletePageMethodDescriptor),
 		connect.WithHandlerOptions(opts...),
 	)
+	pageManagementServiceListTrashHandler := connect.NewUnaryHandler(
+		PageManagementServiceListTrashProcedure,
+		svc.ListTrash,
+		connect.WithSchema(pageManagementServiceListTrashMethodDescriptor),
+		connect.WithHandlerOptions(opts...),
+	)
+	pageManagementServiceRestorePageHandler := connect.NewUnaryHandler(
+		PageManagementServiceRestorePageProcedure,
+		svc.RestorePage,
+		connect.WithSchema(pageManagementServiceRestorePageMethodDescriptor),
+		connect.WithHandlerOptions(opts...),
+	)
+	pageManagementServicePurgePageHandler := connect.NewUnaryHandler(
+		PageManagementServicePurgePageProcedure,
+		svc.PurgePage,
+		connect.WithSchema(pageManagementServicePurgePageMethodDescriptor),
+		connect.WithHandlerOptions(opts...),
+	)
+	pageManagementServiceEmptyTrashHandler := connect.NewUnaryHandler(
+		PageManagementServiceEmptyTrashProcedure,
+		svc.EmptyTrash,
+		connect.WithSchema(pageManagementServiceEmptyTrashMethodDescriptor),
+		connect.WithHandlerOptions(opts...),
+	)
 	pageManagementServiceClearPageContentHandler := connect.NewUnaryHandler(
 		PageManagementServiceClearPageContentProcedure,
 		svc.ClearPageContent,
@@ -451,6 +555,14 @@ func NewPageManagementServiceHandler(svc PageManagementServiceHandler, opts ...c
 			pageManagementServiceUpdateWholePageHandler.ServeHTTP(w, r)
 		case PageManagementServiceDeletePageProcedure:
 			pageManagementServiceDeletePageHandler.ServeHTTP(w, r)
+		case PageManagementServiceListTrashProcedure:
+			pageManagementServiceListTrashHandler.ServeHTTP(w, r)
+		case PageManagementServiceRestorePageProcedure:
+			pageManagementServiceRestorePageHandler.ServeHTTP(w, r)
+		case PageManagementServicePurgePageProcedure:
+			pageManagementServicePurgePageHandler.ServeHTTP(w, r)
+		case PageManagementServiceEmptyTrashProcedure:
+			pageManagementServiceEmptyTrashHandler.ServeHTTP(w, r)
 		case PageManagementServiceClearPageContentProcedure:
 			pageManagementServiceClearPageContentHandler.ServeHTTP(w, r)
 		case PageManagementServiceGenerateIdentifierProcedure:
@@ -500,6 +612,22 @@ func (UnimplementedPageManagementServiceHandler) UpdateWholePage(context.Context
 
 func (UnimplementedPageManagementServiceHandler) DeletePage(context.Context, *connect.Request[v1.DeletePageRequest]) (*connect.Response[v1.DeletePageResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("api.v1.PageManagementService.DeletePage is not implemented"))
+}
+
+func (UnimplementedPageManagementServiceHandler) ListTrash(context.Context, *connect.Request[v1.ListTrashRequest]) (*connect.Response[v1.ListTrashResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("api.v1.PageManagementService.ListTrash is not implemented"))
+}
+
+func (UnimplementedPageManagementServiceHandler) RestorePage(context.Context, *connect.Request[v1.RestorePageRequest]) (*connect.Response[v1.RestorePageResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("api.v1.PageManagementService.RestorePage is not implemented"))
+}
+
+func (UnimplementedPageManagementServiceHandler) PurgePage(context.Context, *connect.Request[v1.PurgePageRequest]) (*connect.Response[v1.PurgePageResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("api.v1.PageManagementService.PurgePage is not implemented"))
+}
+
+func (UnimplementedPageManagementServiceHandler) EmptyTrash(context.Context, *connect.Request[v1.EmptyTrashRequest]) (*connect.Response[v1.EmptyTrashResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("api.v1.PageManagementService.EmptyTrash is not implemented"))
 }
 
 func (UnimplementedPageManagementServiceHandler) ClearPageContent(context.Context, *connect.Request[v1.ClearPageContentRequest]) (*connect.Response[v1.ClearPageContentResponse], error) {
