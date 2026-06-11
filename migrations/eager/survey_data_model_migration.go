@@ -35,36 +35,15 @@ func (*SurveyDataModelMigrationScanJob) GetName() string {
 }
 
 func (j *SurveyDataModelMigrationScanJob) Execute() error {
-	if !j.scanner.DataDirExists() {
-		return nil
-	}
-
-	files, err := j.scanner.ListMDFiles()
-	if err != nil {
-		return fmt.Errorf("list .md files: %w", err)
-	}
-
-	seen := make(map[string]struct{})
-	for _, filename := range files {
-		identifier, fm, ok := extractDataModelMigrationFrontmatter(j.scanner, filename)
-		if !ok {
-			continue
-		}
-		if _, dup := seen[identifier]; dup {
-			continue
-		}
-		seen[identifier] = struct{}{}
-
-		if !pageNeedsSurveyDataModelMigration(fm) {
-			continue
-		}
-
-		migrationJob := NewSurveyDataModelMigrationJob(j.readerMutator, identifier)
-		if err := j.coordinator.EnqueueJob(migrationJob); err != nil {
-			return fmt.Errorf("enqueue survey data-model migration for %s: %w", identifier, err)
-		}
-	}
-	return nil
+	return enqueueDataModelMigrationJobs(
+		j.scanner,
+		j.coordinator,
+		pageNeedsSurveyDataModelMigration,
+		func(identifier string) jobs.Job {
+			return NewSurveyDataModelMigrationJob(j.readerMutator, identifier)
+		},
+		"survey data-model",
+	)
 }
 
 func pageNeedsSurveyDataModelMigration(fm map[string]any) bool {
