@@ -60,6 +60,9 @@
       "go:deadcode": [
         "./scripts/run_go_deadcode.sh"
       ],
+      "go:mutation": [
+        "./scripts/run_go_mutation.sh $@"
+      ],
       "opengrep:lint": [
         "./scripts/run_opengrep_lint.sh"
       ],

@@ -122,6 +122,19 @@ api_v1_AgentMetadataService_DeleteSchedule    {"page":"my_project","schedule_id"
 
 Delete is idempotent — removing an unknown id returns success. Deleting the entire page also unregisters all of its scheduled agents from cron.
 
+## Post-deploy verification
+
+After a scheduler migration or schedule-specific fix deploys, verify the schedule fired after the deployment instead of relying on the issue being closed. Use the deployment completion timestamp as `--since`:
+
+```bash
+wiki-cli verify-schedule-fired \
+  --page my_project \
+  --schedule friday_draft \
+  --since 2026-06-11T14:00:00Z
+```
+
+The command reads `AgentMetadataService/ListSchedules` and fails when the schedule is missing, has never run, last ran before `--since`, is still `RUNNING`, or ended in `ERROR`/`TIMEOUT`. `OK` and `WARN` pass because both prove the cron fired after the deploy; investigate `WARN` separately if the audit summary is required for the migration.
+
 ## Operational notes
 
 - Concurrency is shared across all schedules: by default 2 turns can run simultaneously across the whole wiki (`--agent-schedule-concurrency`). Backlog capacity is 256 (`--agent-schedule-queue-capacity`).
