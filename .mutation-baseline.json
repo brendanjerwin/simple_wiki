@@ -1,0 +1,6 @@
+{
+  "version": 1,
+  "tool": "github.com/go-gremlins/gremlins",
+  "scope": "pull request diff against origin/main",
+  "minimum_patch_efficacy": 85.0
+}

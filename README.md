@@ -56,6 +56,22 @@ You can easily see previous versions of your documents.
 
 Use `devbox services start` to run the application locally with all required dependencies.
 
+### Mutation testing
+
+Go pull requests run a gremlins mutation-testing ratchet against the diff from `origin/main`:
+
+```shell
+devbox run go:mutation
+```
+
+The minimum patch efficacy lives in `.mutation-baseline.json`. To test against a different base locally, set `MUTATION_BASE_REF`, for example:
+
+```shell
+MUTATION_BASE_REF=origin/main devbox run go:mutation
+```
+
+If a PR lowers the patch efficacy below the baseline, add or improve tests for the survived mutants before raising the ratchet.
+
 ### Deployment
 
 To deploy to production, always deploy tagged releases, not branches:
