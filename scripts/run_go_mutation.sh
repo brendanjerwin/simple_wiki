@@ -20,7 +20,7 @@ echo "Running gremlins mutation testing against $BASE_REF"
 echo "Minimum patch efficacy: $THRESHOLD%"
 echo "Gremlins output: $OUTPUT_FILE"
 
-go run github.com/go-gremlins/gremlins/cmd/gremlins@latest --silent unleash . \
+go run github.com/go-gremlins/gremlins/cmd/gremlins@v0.6.0 --silent unleash . \
   --diff "$BASE_REF" \
   --threshold-efficacy "$THRESHOLD" \
   --workers "$WORKERS" \

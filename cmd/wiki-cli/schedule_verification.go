@@ -22,7 +22,7 @@ type scheduleLister interface {
 func buildVerifyScheduleFiredCommand(urlFlag cli.StringFlag) cli.Command {
 	return cli.Command{
 		Name:      "verify-schedule-fired",
-		Usage:     "Verify an agent schedule fired successfully after a deployment timestamp",
+		Usage:     "Verify an agent schedule fired after a deployment timestamp",
 		ArgsUsage: "--page <page> --schedule <id> --since <RFC3339 timestamp>",
 		Description: `Checks AgentMetadataService/ListSchedules for a schedule's wiki-managed
 last_run and last_status fields. Intended for post-deploy verification after
@@ -75,6 +75,9 @@ func runVerifyScheduleFired(ctx context.Context, client scheduleLister, page, sc
 	resp, err := client.ListSchedules(ctx, connect.NewRequest(&apiv1.ListSchedulesRequest{Page: page}))
 	if err != nil {
 		return fmt.Errorf("list schedules: %w", err)
+	}
+	if resp == nil || resp.Msg == nil {
+		return errors.New("list schedules: received nil response from server")
 	}
 	schedule, err := findSchedule(resp.Msg.GetSchedules(), scheduleID)
 	if err != nil {

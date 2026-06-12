@@ -67,7 +67,7 @@ devbox run go:mutation
 The minimum patch efficacy lives in `.mutation-baseline.json`. To test against a different base locally, set `MUTATION_BASE_REF`, for example:
 
 ```shell
-MUTATION_BASE_REF=origin/main devbox run go:mutation
+MUTATION_BASE_REF=origin/release-candidate devbox run go:mutation
 ```
 
 If a PR lowers the patch efficacy below the baseline, add or improve tests for the survived mutants before raising the ratchet.

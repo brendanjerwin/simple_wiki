@@ -95,6 +95,28 @@ var _ = Describe("verifyScheduleFired", func() {
 			Expect(err).To(MatchError(`schedule "daily_light_check" last status is SCHEDULE_STATUS_ERROR: pool unavailable`))
 		})
 	})
+
+	When("the schedule is nil", func() {
+		BeforeEach(func() {
+			schedule = nil
+			err = verifyScheduleFired(schedule, since)
+		})
+
+		It("should return a validation error", func() {
+			Expect(err).To(MatchError("schedule is required"))
+		})
+	})
+
+	When("the last status is unspecified", func() {
+		BeforeEach(func() {
+			schedule.LastStatus = apiv1.ScheduleStatus_SCHEDULE_STATUS_UNSPECIFIED
+			err = verifyScheduleFired(schedule, since)
+		})
+
+		It("should explain the missing terminal state", func() {
+			Expect(err).To(MatchError(`schedule "daily_light_check" has no terminal status`))
+		})
+	})
 })
 
 var _ = Describe("runVerifyScheduleFired", func() {
@@ -153,6 +175,28 @@ var _ = Describe("runVerifyScheduleFired", func() {
 			Expect(err).To(MatchError(ContainSubstring("list schedules: connect unavailable")))
 		})
 	})
+
+	When("listing schedules returns nil", func() {
+		BeforeEach(func() {
+			client.returnNilResponse = true
+			err = runVerifyScheduleFired(context.Background(), client, "ai_assistant", "daily_light_check", since)
+		})
+
+		It("should explain the invalid response", func() {
+			Expect(err).To(MatchError("list schedules: received nil response from server"))
+		})
+	})
+
+	When("listing schedules returns a nil message", func() {
+		BeforeEach(func() {
+			client.response = nil
+			err = runVerifyScheduleFired(context.Background(), client, "ai_assistant", "daily_light_check", since)
+		})
+
+		It("should explain the invalid response", func() {
+			Expect(err).To(MatchError("list schedules: received nil response from server"))
+		})
+	})
 })
 
 var _ = Describe("buildVerifyScheduleFiredCommand", func() {
@@ -200,15 +244,19 @@ var _ = Describe("buildVerifyScheduleFiredCommand", func() {
 })
 
 type stubScheduleLister struct {
-	page     string
-	response *apiv1.ListSchedulesResponse
-	err      error
+	page              string
+	response          *apiv1.ListSchedulesResponse
+	err               error
+	returnNilResponse bool
 }
 
 func (s *stubScheduleLister) ListSchedules(_ context.Context, req *connect.Request[apiv1.ListSchedulesRequest]) (*connect.Response[apiv1.ListSchedulesResponse], error) {
 	s.page = req.Msg.GetPage()
 	if s.err != nil {
 		return nil, s.err
+	}
+	if s.returnNilResponse {
+		return nil, nil
 	}
 	return connect.NewResponse(s.response), nil
 }
