@@ -1,7 +1,7 @@
 package mapmutator
 
 import (
-	"sort"
+	"slices"
 	"time"
 
 	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
@@ -55,7 +55,7 @@ func mapNames(fm wikipage.FrontMatter) []string {
 	for name := range maps {
 		names = append(names, name)
 	}
-	sort.Strings(names)
+	slices.Sort(names)
 	return names
 }
 

@@ -93,7 +93,7 @@ describe('WikiMap', () => {
     });
 
     it('should request the named map from MapService', () => {
-      expect(clientOf(el).getMap).to.have.been.calledOnce;
+      expect(clientOf(el).getMap.calledOnce).to.equal(true);
       const request = client.getMap.firstCall.args[0] as GetMapRequest;
       expect(request.page).to.equal('garden_plan');
       expect(request.mapName).to.equal('yard');
@@ -135,11 +135,11 @@ describe('WikiMap', () => {
     });
 
     it('should render an error state', () => {
-      expect(el.shadowRoot?.querySelector('error-display')).to.exist;
+      expect(el.shadowRoot?.querySelector('error-display')).not.to.equal(null);
     });
 
     it('should not render Leaflet', () => {
-      expect(renderer.renderStub).not.to.have.been.called;
+      expect(renderer.renderStub.called).to.equal(false);
     });
 
     afterEach(() => {

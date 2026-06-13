@@ -3,7 +3,7 @@ package v1
 import (
 	"context"
 	"errors"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -16,6 +16,14 @@ import (
 )
 
 var errMapMutatorNotConfigured = status.Error(codes.FailedPrecondition, "map mutator not configured on server")
+
+const defaultMapPageSize = 100
+
+type mapElementIncludes struct {
+	markers  bool
+	polygons bool
+	circles  bool
+}
 
 // SetMapView implements the SetMapView RPC.
 func (s *Server) SetMapView(ctx context.Context, req *apiv1.SetMapViewRequest) (*apiv1.SetMapViewResponse, error) {
@@ -248,7 +256,7 @@ func (s *Server) GetMap(ctx context.Context, req *apiv1.GetMapRequest) (*apiv1.G
 	if err != nil {
 		return nil, err
 	}
-	filterMapResponse(mapState, req.GetIncludeMarkers(), req.GetIncludePolygons(), req.GetIncludeCircles(), req.GetBbox())
+	filterMapResponse(mapState, requestedMapElementIncludes(req), req.GetBbox())
 	return &apiv1.GetMapResponse{Map: mapState}, nil
 }
 
@@ -282,8 +290,8 @@ func (s *Server) ListMapElements(ctx context.Context, req *apiv1.ListMapElements
 		return nil, err
 	}
 	limit := int(req.GetLimit())
-	if limit <= 0 || limit > 100 {
-		limit = 100
+	if limit <= 0 || limit > defaultMapPageSize {
+		limit = defaultMapPageSize
 	}
 	if start > len(outlines) {
 		start = len(outlines)
@@ -340,8 +348,8 @@ func (s *Server) FindMarkers(ctx context.Context, req *apiv1.FindMarkersRequest)
 	}
 	query := strings.ToLower(strings.TrimSpace(req.GetQuery()))
 	limit := int(req.GetLimit())
-	if limit <= 0 || limit > 100 {
-		limit = 100
+	if limit <= 0 || limit > defaultMapPageSize {
+		limit = defaultMapPageSize
 	}
 	markers := make([]*apiv1.MapMarker, 0)
 	for _, marker := range mapState.GetMarkers() {
@@ -390,25 +398,30 @@ func (s *Server) requireMapMutation(ctx context.Context, page, mapName string) e
 	if guardErr := requireUserMutable(s.pageReaderMutator, wikipage.PageIdentifier(page)); guardErr != nil {
 		return guardErr
 	}
-	if authErr := requireAuthorized(ctx, s.pageReaderMutator, wikipage.PageIdentifier(page)); authErr != nil {
-		return authErr
-	}
-	return nil
+	return requireAuthorized(ctx, s.pageReaderMutator, wikipage.PageIdentifier(page))
 }
 
-func filterMapResponse(mapState *apiv1.Map, includeMarkers, includePolygons, includeCircles bool, bbox *apiv1.BoundingBox) {
-	includeAll := !includeMarkers && !includePolygons && !includeCircles
-	if includeAll || includeMarkers {
+func requestedMapElementIncludes(req *apiv1.GetMapRequest) mapElementIncludes {
+	includeAll := !req.GetIncludeMarkers() && !req.GetIncludePolygons() && !req.GetIncludeCircles()
+	return mapElementIncludes{
+		markers:  includeAll || req.GetIncludeMarkers(),
+		polygons: includeAll || req.GetIncludePolygons(),
+		circles:  includeAll || req.GetIncludeCircles(),
+	}
+}
+
+func filterMapResponse(mapState *apiv1.Map, includes mapElementIncludes, bbox *apiv1.BoundingBox) {
+	if includes.markers {
 		mapState.Markers = filterMarkersByBBox(mapState.GetMarkers(), bbox)
 	} else {
 		mapState.Markers = nil
 	}
-	if includeAll || includePolygons {
+	if includes.polygons {
 		mapState.Polygons = filterPolygonsByBBox(mapState.GetPolygons(), bbox)
 	} else {
 		mapState.Polygons = nil
 	}
-	if includeAll || includeCircles {
+	if includes.circles {
 		mapState.Circles = filterCirclesByBBox(mapState.GetCircles(), bbox)
 	} else {
 		mapState.Circles = nil
@@ -460,10 +473,21 @@ func elementOutlines(mapState *apiv1.Map, types []apiv1.MapElementType, bbox *ap
 			})
 		}
 	}
-	sort.SliceStable(out, func(i, j int) bool {
-		return out[i].GetSortOrder() < out[j].GetSortOrder()
+	slices.SortStableFunc(out, func(a, b *apiv1.MapElementOutline) int {
+		return compareMapSortOrder(a.GetSortOrder(), b.GetSortOrder())
 	})
 	return out
+}
+
+func compareMapSortOrder(a, b int64) int {
+	switch {
+	case a < b:
+		return -1
+	case a > b:
+		return 1
+	default:
+		return 0
+	}
 }
 
 func parseMapPageToken(pageToken string) (int, error) {

@@ -16,10 +16,18 @@ import (
 	"google.golang.org/grpc/codes"
 )
 
+const (
+	mapClockYear   = 2026
+	mapClockMonth  = time.June
+	mapClockDay    = 12
+	mapClockHour   = 20
+	mapClockMinute = 45
+)
+
 type mapSteadyClock struct{}
 
 func (mapSteadyClock) Now() time.Time {
-	return time.Date(2026, 6, 12, 20, 45, 0, 0, time.UTC)
+	return time.Date(mapClockYear, mapClockMonth, mapClockDay, mapClockHour, mapClockMinute, 0, 0, time.UTC)
 }
 
 func newMapTestServer(store *MockPageReaderMutator) *v1.Server {

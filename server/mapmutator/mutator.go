@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"math"
 	"os"
-	"sort"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -35,6 +35,17 @@ func (SystemClock) Now() time.Time { return time.Now() }
 
 // SortOrderStep is the conventional spacing between adjacent map elements.
 const SortOrderStep int64 = 1000
+
+const (
+	positionFieldName     = "position"
+	uidRequiredMessage    = "uid is required"
+	minLatitudeDegrees    = -90
+	maxLatitudeDegrees    = 90
+	minLongitudeDegrees   = -180
+	maxLongitudeDegrees   = 180
+	minPolygonPoints      = 3
+	coordinateRoundFactor = 1_000_000
+)
 
 // Errors returned by the map mutator.
 var (
@@ -84,7 +95,7 @@ func (m *Mutator) AddMarker(ctx context.Context, page, mapName string, marker *a
 	if marker == nil {
 		return nil, nil, status.Error(codes.InvalidArgument, "marker is required")
 	}
-	if err := validatePoint(marker.GetPosition(), "position"); err != nil {
+	if err := validatePoint(marker.GetPosition(), positionFieldName); err != nil {
 		return nil, nil, err
 	}
 	var created *apiv1.MapMarker
@@ -100,12 +111,12 @@ func (m *Mutator) AddMarker(ctx context.Context, page, mapName string, marker *a
 // UpdateMarker updates user-mutable fields on an existing marker.
 func (m *Mutator) UpdateMarker(ctx context.Context, page, mapName, uid string, marker *apiv1.MapMarker, expected *time.Time) (*apiv1.MapMarker, *apiv1.Map, error) {
 	if uid == "" {
-		return nil, nil, status.Error(codes.InvalidArgument, "uid is required")
+		return nil, nil, status.Error(codes.InvalidArgument, uidRequiredMessage)
 	}
 	if marker == nil {
 		return nil, nil, status.Error(codes.InvalidArgument, "marker is required")
 	}
-	if err := validatePoint(marker.GetPosition(), "position"); err != nil {
+	if err := validatePoint(marker.GetPosition(), positionFieldName); err != nil {
 		return nil, nil, err
 	}
 	var updated *apiv1.MapMarker
@@ -118,7 +129,7 @@ func (m *Mutator) UpdateMarker(ctx context.Context, page, mapName, uid string, m
 		metadata.UpdatedAt = timestamppb.New(m.clock.Now())
 		updated = cloneMarker(marker)
 		updated.Metadata = metadata
-		*existing = *updated
+		overwriteMarker(existing, updated)
 		return nil
 	})
 	return updated, mapState, err
@@ -127,9 +138,9 @@ func (m *Mutator) UpdateMarker(ctx context.Context, page, mapName, uid string, m
 // MoveMarker updates only a marker position.
 func (m *Mutator) MoveMarker(ctx context.Context, page, mapName, uid string, position *apiv1.GeoPoint, expected *time.Time) (*apiv1.MapMarker, *apiv1.Map, error) {
 	if uid == "" {
-		return nil, nil, status.Error(codes.InvalidArgument, "uid is required")
+		return nil, nil, status.Error(codes.InvalidArgument, uidRequiredMessage)
 	}
-	if err := validatePoint(position, "position"); err != nil {
+	if err := validatePoint(position, positionFieldName); err != nil {
 		return nil, nil, err
 	}
 	var moved *apiv1.MapMarker
@@ -150,7 +161,7 @@ func (m *Mutator) MoveMarker(ctx context.Context, page, mapName, uid string, pos
 // DeleteMarker removes one marker.
 func (m *Mutator) DeleteMarker(ctx context.Context, page, mapName, uid string, expected *time.Time) (*apiv1.Map, error) {
 	if uid == "" {
-		return nil, status.Error(codes.InvalidArgument, "uid is required")
+		return nil, status.Error(codes.InvalidArgument, uidRequiredMessage)
 	}
 	return m.mutateMap(ctx, page, mapName, expected, requireExistingMap, func(mapState *apiv1.Map) error {
 		markers, removed := removeMarker(mapState.Markers, uid)
@@ -183,7 +194,7 @@ func (m *Mutator) AddPolygon(ctx context.Context, page, mapName string, polygon 
 // UpdatePolygon updates an existing polygon.
 func (m *Mutator) UpdatePolygon(ctx context.Context, page, mapName, uid string, polygon *apiv1.MapPolygon, expected *time.Time) (*apiv1.MapPolygon, *apiv1.Map, error) {
 	if uid == "" {
-		return nil, nil, status.Error(codes.InvalidArgument, "uid is required")
+		return nil, nil, status.Error(codes.InvalidArgument, uidRequiredMessage)
 	}
 	if polygon == nil {
 		return nil, nil, status.Error(codes.InvalidArgument, "polygon is required")
@@ -201,7 +212,7 @@ func (m *Mutator) UpdatePolygon(ctx context.Context, page, mapName, uid string, 
 		metadata.UpdatedAt = timestamppb.New(m.clock.Now())
 		updated = clonePolygon(polygon)
 		updated.Metadata = metadata
-		*existing = *updated
+		overwritePolygon(existing, updated)
 		return nil
 	})
 	return updated, mapState, err
@@ -210,7 +221,7 @@ func (m *Mutator) UpdatePolygon(ctx context.Context, page, mapName, uid string, 
 // DeletePolygon removes one polygon.
 func (m *Mutator) DeletePolygon(ctx context.Context, page, mapName, uid string, expected *time.Time) (*apiv1.Map, error) {
 	if uid == "" {
-		return nil, status.Error(codes.InvalidArgument, "uid is required")
+		return nil, status.Error(codes.InvalidArgument, uidRequiredMessage)
 	}
 	return m.mutateMap(ctx, page, mapName, expected, requireExistingMap, func(mapState *apiv1.Map) error {
 		polygons, removed := removePolygon(mapState.Polygons, uid)
@@ -243,7 +254,7 @@ func (m *Mutator) AddCircle(ctx context.Context, page, mapName string, circle *a
 // UpdateCircle updates an existing circle.
 func (m *Mutator) UpdateCircle(ctx context.Context, page, mapName, uid string, circle *apiv1.MapCircle, expected *time.Time) (*apiv1.MapCircle, *apiv1.Map, error) {
 	if uid == "" {
-		return nil, nil, status.Error(codes.InvalidArgument, "uid is required")
+		return nil, nil, status.Error(codes.InvalidArgument, uidRequiredMessage)
 	}
 	if circle == nil {
 		return nil, nil, status.Error(codes.InvalidArgument, "circle is required")
@@ -261,7 +272,7 @@ func (m *Mutator) UpdateCircle(ctx context.Context, page, mapName, uid string, c
 		metadata.UpdatedAt = timestamppb.New(m.clock.Now())
 		updated = cloneCircle(circle)
 		updated.Metadata = metadata
-		*existing = *updated
+		overwriteCircle(existing, updated)
 		return nil
 	})
 	return updated, mapState, err
@@ -270,7 +281,7 @@ func (m *Mutator) UpdateCircle(ctx context.Context, page, mapName, uid string, c
 // DeleteCircle removes one circle.
 func (m *Mutator) DeleteCircle(ctx context.Context, page, mapName, uid string, expected *time.Time) (*apiv1.Map, error) {
 	if uid == "" {
-		return nil, status.Error(codes.InvalidArgument, "uid is required")
+		return nil, status.Error(codes.InvalidArgument, uidRequiredMessage)
 	}
 	return m.mutateMap(ctx, page, mapName, expected, requireExistingMap, func(mapState *apiv1.Map) error {
 		circles, removed := removeCircle(mapState.Circles, uid)
@@ -285,7 +296,7 @@ func (m *Mutator) DeleteCircle(ctx context.Context, page, mapName, uid string, e
 // ReorderElement updates sparse sort order for one element.
 func (m *Mutator) ReorderElement(ctx context.Context, page, mapName string, elementType apiv1.MapElementType, uid string, sortOrder int64, expected *time.Time) (*apiv1.Map, error) {
 	if uid == "" {
-		return nil, status.Error(codes.InvalidArgument, "uid is required")
+		return nil, status.Error(codes.InvalidArgument, uidRequiredMessage)
 	}
 	if elementType == apiv1.MapElementType_MAP_ELEMENT_TYPE_UNSPECIFIED {
 		return nil, status.Error(codes.InvalidArgument, "type is required")
@@ -308,7 +319,7 @@ func (m *Mutator) ReplaceMarkers(ctx context.Context, page, mapName string, mark
 		if marker == nil {
 			return nil, status.Error(codes.InvalidArgument, "markers must not contain nil entries")
 		}
-		if err := validatePoint(marker.GetPosition(), "position"); err != nil {
+		if err := validatePoint(marker.GetPosition(), positionFieldName); err != nil {
 			return nil, err
 		}
 	}
@@ -513,17 +524,17 @@ func validatePoint(point *apiv1.GeoPoint, fieldName string) error {
 	if point == nil {
 		return status.Errorf(codes.InvalidArgument, "%s is required", fieldName)
 	}
-	if point.GetLat() < -90 || point.GetLat() > 90 {
+	if point.GetLat() < minLatitudeDegrees || point.GetLat() > maxLatitudeDegrees {
 		return status.Error(codes.InvalidArgument, "latitude must be between -90 and 90")
 	}
-	if point.GetLon() < -180 || point.GetLon() > 180 {
+	if point.GetLon() < minLongitudeDegrees || point.GetLon() > maxLongitudeDegrees {
 		return status.Error(codes.InvalidArgument, "longitude must be between -180 and 180")
 	}
 	return nil
 }
 
 func validatePolygonPoints(points []*apiv1.GeoPoint) error {
-	if len(points) < 3 {
+	if len(points) < minPolygonPoints {
 		return status.Error(codes.InvalidArgument, "polygon requires at least three points")
 	}
 	for _, point := range points {
@@ -611,15 +622,26 @@ func supportedTileLayers() []*apiv1.TileLayer {
 }
 
 func sortMapElements(mapState *apiv1.Map) {
-	sort.SliceStable(mapState.Markers, func(i, j int) bool {
-		return mapState.Markers[i].GetMetadata().GetSortOrder() < mapState.Markers[j].GetMetadata().GetSortOrder()
+	slices.SortStableFunc(mapState.Markers, func(a, b *apiv1.MapMarker) int {
+		return compareSortOrder(a.GetMetadata().GetSortOrder(), b.GetMetadata().GetSortOrder())
 	})
-	sort.SliceStable(mapState.Polygons, func(i, j int) bool {
-		return mapState.Polygons[i].GetMetadata().GetSortOrder() < mapState.Polygons[j].GetMetadata().GetSortOrder()
+	slices.SortStableFunc(mapState.Polygons, func(a, b *apiv1.MapPolygon) int {
+		return compareSortOrder(a.GetMetadata().GetSortOrder(), b.GetMetadata().GetSortOrder())
 	})
-	sort.SliceStable(mapState.Circles, func(i, j int) bool {
-		return mapState.Circles[i].GetMetadata().GetSortOrder() < mapState.Circles[j].GetMetadata().GetSortOrder()
+	slices.SortStableFunc(mapState.Circles, func(a, b *apiv1.MapCircle) int {
+		return compareSortOrder(a.GetMetadata().GetSortOrder(), b.GetMetadata().GetSortOrder())
 	})
+}
+
+func compareSortOrder(a, b int64) int {
+	switch {
+	case a < b:
+		return -1
+	case a > b:
+		return 1
+	default:
+		return 0
+	}
 }
 
 func markerKey(marker *apiv1.MapMarker) string {
@@ -627,7 +649,7 @@ func markerKey(marker *apiv1.MapMarker) string {
 }
 
 func round6(value float64) float64 {
-	return math.Round(value*1_000_000) / 1_000_000
+	return math.Round(value*coordinateRoundFactor) / coordinateRoundFactor
 }
 
 func findMarker(markers []*apiv1.MapMarker, uid string) *apiv1.MapMarker {
@@ -671,6 +693,8 @@ func metadataForElement(mapState *apiv1.Map, elementType apiv1.MapElementType, u
 		if circle := findCircle(mapState.Circles, uid); circle != nil {
 			return circle.Metadata
 		}
+	default:
+		return nil
 	}
 	return nil
 }
@@ -726,6 +750,14 @@ func cloneMarker(marker *apiv1.MapMarker) *apiv1.MapMarker {
 	}
 }
 
+func overwriteMarker(existing, updated *apiv1.MapMarker) {
+	existing.Label = updated.GetLabel()
+	existing.Position = updated.GetPosition()
+	existing.PopupMarkdown = updated.GetPopupMarkdown()
+	existing.Color = updated.GetColor()
+	existing.Metadata = updated.GetMetadata()
+}
+
 func cloneMarkerWithMetadata(marker *apiv1.MapMarker) *apiv1.MapMarker {
 	cloned := cloneMarker(marker)
 	cloned.Metadata = cloneMetadata(marker.GetMetadata())
@@ -745,6 +777,15 @@ func clonePolygon(polygon *apiv1.MapPolygon) *apiv1.MapPolygon {
 	}
 }
 
+func overwritePolygon(existing, updated *apiv1.MapPolygon) {
+	existing.Label = updated.GetLabel()
+	existing.Points = updated.GetPoints()
+	existing.PopupMarkdown = updated.GetPopupMarkdown()
+	existing.StrokeColor = updated.GetStrokeColor()
+	existing.FillColor = updated.GetFillColor()
+	existing.Metadata = updated.GetMetadata()
+}
+
 func cloneCircle(circle *apiv1.MapCircle) *apiv1.MapCircle {
 	if circle == nil {
 		return nil
@@ -757,6 +798,16 @@ func cloneCircle(circle *apiv1.MapCircle) *apiv1.MapCircle {
 		StrokeColor:   circle.GetStrokeColor(),
 		FillColor:     circle.GetFillColor(),
 	}
+}
+
+func overwriteCircle(existing, updated *apiv1.MapCircle) {
+	existing.Label = updated.GetLabel()
+	existing.Center = updated.GetCenter()
+	existing.RadiusMeters = updated.GetRadiusMeters()
+	existing.PopupMarkdown = updated.GetPopupMarkdown()
+	existing.StrokeColor = updated.GetStrokeColor()
+	existing.FillColor = updated.GetFillColor()
+	existing.Metadata = updated.GetMetadata()
 }
 
 func cloneView(view *apiv1.MapView) *apiv1.MapView {
