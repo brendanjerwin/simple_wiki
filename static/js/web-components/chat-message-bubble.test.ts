@@ -383,7 +383,7 @@ describe('ChatMessageBubble', () => {
             message-id="msg-tc-unknown"
             .sender=${Sender.ASSISTANT}
             content="Unknown status"
-            .toolCalls=${[{ toolCallId: 'tc-x', title: 'Mystery', status: 'pending' }]}
+            .toolCalls=${[{ toolCallId: 'tc-x', title: 'Mystery', status: 'mystery' }]}
           ></chat-message-bubble>
         `);
       });

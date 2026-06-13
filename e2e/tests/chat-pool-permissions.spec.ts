@@ -54,7 +54,7 @@ async function setChatPanelMessages(
     replyToId: string;
     edited: boolean;
     sequence: number;
-    toolCalls: Array<{ toolCallId: string; title: string; status: string }>;
+    toolCalls: Array<{ toolCallId: string; title: string; status: string; startedAtMs?: number }>;
   }>,
 ): Promise<void> {
   await page.evaluate(
@@ -381,7 +381,7 @@ test.describe('chat-pool: Chat Pool and Permissions', () => {
       await openChatPanel(page);
     });
 
-    test('should render tool call pills on a message with tool calls', async ({ page }) => {
+    test('should collapse completed tool calls while keeping running progress visible', async ({ page }) => {
       await setChatPanelProperty(page, 'agentConnected', true);
       await setChatPanelMessages(page, [
         {
@@ -394,7 +394,7 @@ test.describe('chat-pool: Chat Pool and Permissions', () => {
           edited: false,
           sequence: 1,
           toolCalls: [
-            { toolCallId: 'tc-1', title: 'read_file', status: 'running' },
+            { toolCallId: 'tc-1', title: 'read_file', status: 'running', startedAtMs: Date.now() - 1_000 },
             { toolCallId: 'tc-2', title: 'write_file', status: 'complete' },
           ],
         },
@@ -402,7 +402,9 @@ test.describe('chat-pool: Chat Pool and Permissions', () => {
       await waitForUpdate(page);
 
       const pills = page.locator('page-chat-panel chat-message-bubble .tool-call-pill');
-      await expect(pills).toHaveCount(2, { timeout: PANEL_INTERACTION_TIMEOUT_MS });
+      const liveTools = page.locator('page-chat-panel chat-message-bubble .live-tool-call');
+      await expect(pills).toHaveCount(1, { timeout: PANEL_INTERACTION_TIMEOUT_MS });
+      await expect(liveTools).toHaveCount(1, { timeout: PANEL_INTERACTION_TIMEOUT_MS });
     });
 
     test('should show hourglass icon for running tool calls', async ({ page }) => {
@@ -418,13 +420,13 @@ test.describe('chat-pool: Chat Pool and Permissions', () => {
           edited: false,
           sequence: 1,
           toolCalls: [
-            { toolCallId: 'tc-1', title: 'read_file', status: 'running' },
+            { toolCallId: 'tc-1', title: 'read_file', status: 'running', startedAtMs: Date.now() - 1_000 },
           ],
         },
       ]);
       await waitForUpdate(page);
 
-      const statusIcon = page.locator('page-chat-panel chat-message-bubble .tool-call-pill .status-icon');
+      const statusIcon = page.locator('page-chat-panel chat-message-bubble .live-tool-call .status-icon');
       await expect(statusIcon).toContainText('\u23F3', { timeout: PANEL_INTERACTION_TIMEOUT_MS });
     });
 
@@ -474,7 +476,7 @@ test.describe('chat-pool: Chat Pool and Permissions', () => {
       await expect(statusIcon).toContainText('\u274C', { timeout: PANEL_INTERACTION_TIMEOUT_MS });
     });
 
-    test('should display tool call title in the pill', async ({ page }) => {
+    test('should display running tool call title in the live progress area', async ({ page }) => {
       await setChatPanelProperty(page, 'agentConnected', true);
       await setChatPanelMessages(page, [
         {
@@ -487,14 +489,43 @@ test.describe('chat-pool: Chat Pool and Permissions', () => {
           edited: false,
           sequence: 1,
           toolCalls: [
-            { toolCallId: 'tc-1', title: 'search_code', status: 'running' },
+            { toolCallId: 'tc-1', title: 'search_code', status: 'running', startedAtMs: Date.now() - 1_000 },
           ],
         },
       ]);
       await waitForUpdate(page);
 
-      const pill = page.locator('page-chat-panel chat-message-bubble .tool-call-pill');
-      await expect(pill).toContainText('search_code', { timeout: PANEL_INTERACTION_TIMEOUT_MS });
+      const liveTool = page.locator('page-chat-panel chat-message-bubble .live-tool-call');
+      await expect(liveTool).toContainText('search_code', { timeout: PANEL_INTERACTION_TIMEOUT_MS });
+    });
+
+    test('should render running sub-agents in a distinct card', async ({ page }) => {
+      await setChatPanelProperty(page, 'agentConnected', true);
+      await setChatPanelMessages(page, [
+        {
+          id: 'msg-6',
+          sender: 1,
+          content: 'Dispatching...',
+          renderedHtml: '<p>Dispatching...</p>',
+          senderName: 'Bot',
+          replyToId: '',
+          edited: false,
+          sequence: 1,
+          toolCalls: [
+            {
+              toolCallId: 'tc-1',
+              title: 'Launch research agent: daily reflection audit',
+              status: 'running',
+              startedAtMs: Date.now() - 2_000,
+            },
+          ],
+        },
+      ]);
+      await waitForUpdate(page);
+
+      const subagentCard = page.locator('page-chat-panel chat-message-bubble .subagent-card');
+      await expect(subagentCard).toContainText('Research agent', { timeout: PANEL_INTERACTION_TIMEOUT_MS });
+      await expect(subagentCard).toContainText('daily reflection audit', { timeout: PANEL_INTERACTION_TIMEOUT_MS });
     });
   });
 

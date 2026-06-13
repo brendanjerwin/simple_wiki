@@ -516,7 +516,7 @@ export class ChatMessageBubble extends LitElement {
     const agentTypeMatch = trimmedTitle.match(/\b(explore|research|code-review|general-purpose|task|background)\s+agent\b/i);
     if (agentTypeMatch) {
       return {
-        label: this._capitalizeWords(agentTypeMatch[0]),
+        label: this._formatAgentLabel(agentTypeMatch[0]),
         preview: trimmedTitle,
       };
     }
@@ -530,17 +530,20 @@ export class ChatMessageBubble extends LitElement {
   private _normalizeSubagentLabel(titlePrefix: string): string | null {
     const cleanedPrefix = titlePrefix.replace(/\b(launch|dispatch|spawn|start|run)\b/gi, '').trim();
     if (/\bagent\b/i.test(cleanedPrefix)) {
-      return this._capitalizeWords(cleanedPrefix.replace(/\bsubagent\b/i, 'sub-agent'));
+      return this._formatAgentLabel(cleanedPrefix.replace(/\bsubagent\b/i, 'sub-agent'));
     }
     const agentTypeMatch = cleanedPrefix.match(/\b(explore|research|code-review|general-purpose|task|background)\b/i);
     if (!agentTypeMatch) {
       return null;
     }
-    return this._capitalizeWords(`${agentTypeMatch[1]} agent`);
+    return this._formatAgentLabel(`${agentTypeMatch[1]} agent`);
   }
 
-  private _capitalizeWords(value: string): string {
-    return value.replace(/\b\w/g, (letter) => letter.toUpperCase());
+  private _formatAgentLabel(value: string): string {
+    if (value === '') {
+      return value;
+    }
+    return value[0]!.toUpperCase() + value.slice(1).toLowerCase();
   }
 
   private _toolCallTooltip(toolCall: ToolCallState): string {

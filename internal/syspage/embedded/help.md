@@ -34,6 +34,16 @@ Your content is saved automagically. You'll see `Edit` turn into `saved` or `err
 > [!TIP]
 > If you messed with the frontmatter, it might have caused an error. Try putting it back.
 
+## Chat panel
+
+When you open the chat panel, long-running agent work now shows **live progress** instead of a blank thinking state:
+
+- Running tool calls stay expanded with a short status line and scroll if there are many of them.
+- Running sub-agents show up as distinct cards with their agent type and elapsed time.
+- Completed tool calls collapse back down into compact pills so the transcript stays readable.
+
+If you are debugging a slow turn, watch the newest assistant message while it is still running — that is where tool and sub-agent progress appears.
+
 ## Files and Images
 
 You can drag and drop files and images right into the page. You'll see a special block of text like this: `![Web+capture_13-7-2021_0429_www.pinclipart.com.jpeg](/uploads/sha256-CU7VONBJPNC6XSXU2I3QT2WDP2ASRMHSEKJZPQEV4DI2ML6IXJBA====?filename=Web+capture_13-7-2021_0429_www.pinclipart.com.jpeg)` and you can put it wherever you want in your document.
