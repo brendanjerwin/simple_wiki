@@ -35,8 +35,10 @@ export class LeafletWikiMapRenderer implements WikiMapRenderer {
   render(container: HTMLElement, mapMessage: WikiMapMessage, popupRenderer: PopupRenderer): void {
     this.destroy();
     this.map = L.map(container, {
+      dragging: true,
       zoomControl: true,
-      scrollWheelZoom: false,
+      scrollWheelZoom: true,
+      touchZoom: true,
       preferCanvas: true,
     });
 
@@ -177,10 +179,58 @@ export class WikiMap extends LitElement {
         position: relative;
       }
 
+      .map-toolbar {
+        align-items: center;
+        background: rgb(255 255 255 / 0.92);
+        border: 1px solid rgb(0 0 0 / 0.18);
+        border-radius: 4px;
+        box-shadow: 0 1px 4px rgb(0 0 0 / 0.2);
+        display: flex;
+        gap: 0.35rem;
+        padding: 0.3rem;
+        position: absolute;
+        right: 10px;
+        top: 10px;
+        z-index: 1100;
+      }
+
+      .map-toolbar select {
+        background: #fff;
+        border: 1px solid #b6bec8;
+        border-radius: 3px;
+        color: #24292f;
+        font: 13px/1.4 system-ui, sans-serif;
+        max-width: min(16rem, 42vw);
+        min-height: 1.9rem;
+      }
+
       .map-canvas {
-        height: min(62vh, 520px);
+        aspect-ratio: 1 / 1;
+        height: auto;
         min-height: 340px;
         width: 100%;
+      }
+
+      .scroll-hint {
+        background: rgb(36 41 47 / 0.88);
+        border-radius: 4px;
+        color: #fff;
+        font: 14px/1.4 system-ui, sans-serif;
+        left: 50%;
+        max-width: min(24rem, calc(100% - 2rem));
+        opacity: 0;
+        padding: 0.65rem 0.85rem;
+        pointer-events: none;
+        position: absolute;
+        text-align: center;
+        top: 50%;
+        transform: translate(-50%, -50%);
+        transition: opacity 160ms ease;
+        z-index: 1200;
+      }
+
+      .scroll-hint[visible] {
+        opacity: 1;
       }
 
       .leaflet-container {
@@ -404,12 +454,16 @@ export class WikiMap extends LitElement {
   @state()
   private declare mapData: WikiMapMessage | null;
 
+  @state()
+  private declare showScrollHint: boolean;
+
   readonly client: Client<typeof MapService> = createClient(MapService, getGrpcWebTransport());
   markdownRenderer: PopupRenderer = {
     render: (markdown: string) => new ChatMarkdownRenderer().renderMarkdown(markdown, this.page),
   };
   rendererFactory: WikiMapRendererFactory = () => new LeafletWikiMapRenderer();
   private renderer: WikiMapRenderer | null = null;
+  private scrollHintTimeoutId: number | undefined;
 
   constructor() {
     super();
@@ -418,9 +472,14 @@ export class WikiMap extends LitElement {
     this.loading = false;
     this.error = null;
     this.mapData = null;
+    this.showScrollHint = false;
   }
 
   override disconnectedCallback(): void {
+    if (this.scrollHintTimeoutId !== undefined) {
+      window.clearTimeout(this.scrollHintTimeoutId);
+      this.scrollHintTimeoutId = undefined;
+    }
     this.renderer?.destroy();
     this.renderer = null;
     super.disconnectedCallback();
@@ -449,7 +508,14 @@ export class WikiMap extends LitElement {
     }
     return html`
       <div class="map-shell">
-        <div id="map-canvas" class="map-canvas" aria-label=${this.name}></div>
+        ${this.renderTilesetSelector()}
+        <div
+          id="map-canvas"
+          class="map-canvas"
+          aria-label=${this.name}
+          @wheel=${this.handleMapWheel}
+        ></div>
+        <div class="scroll-hint" ?visible=${this.showScrollHint}>Use Ctrl + scroll to zoom the map</div>
       </div>
     `;
   }
@@ -484,6 +550,44 @@ export class WikiMap extends LitElement {
     if (!container || !this.mapData) return;
     this.renderer ??= this.rendererFactory();
     this.renderer.render(container, this.mapData, this.markdownRenderer);
+  }
+
+  private renderTilesetSelector() {
+    const tileLayers = this.mapData?.style?.availableTileLayers ?? [];
+    if (tileLayers.length <= 1) return null;
+    const selectedId = selectedTileLayer(tileLayers, this.mapData?.style?.tileLayerId)?.id;
+    return html`
+      <div class="map-toolbar">
+        <select aria-label="Tileset" @change=${this.handleTilesetChange}>
+          ${tileLayers.map(layer => html`
+            <option value=${String(layer.id)} ?selected=${layer.id === selectedId}>${layer.label}</option>
+          `)}
+        </select>
+      </div>
+    `;
+  }
+
+  private handleTilesetChange(event: Event): void {
+    if (!(event.currentTarget instanceof HTMLSelectElement)) return;
+    const select = event.currentTarget;
+    const nextTileLayerId = Number(select.value);
+    if (!this.mapData?.style || Number.isNaN(nextTileLayerId)) return;
+    this.mapData.style.tileLayerId = nextTileLayerId;
+    this.renderLeafletMap();
+    this.requestUpdate();
+  }
+
+  private handleMapWheel(event: WheelEvent): void {
+    if (event.ctrlKey || event.metaKey) return;
+    event.stopImmediatePropagation();
+    this.showScrollHint = true;
+    if (this.scrollHintTimeoutId !== undefined) {
+      window.clearTimeout(this.scrollHintTimeoutId);
+    }
+    this.scrollHintTimeoutId = window.setTimeout(() => {
+      this.showScrollHint = false;
+      this.scrollHintTimeoutId = undefined;
+    }, 1600);
   }
 }
 

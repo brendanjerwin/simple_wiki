@@ -56,13 +56,25 @@ function sampleMap(): WikiMapMessage {
     page: 'garden_plan',
     name: 'yard',
     style: create(MapStyleSchema, {
-      tileLayerId: TileLayerId.OPENSTREETMAP,
+      tileLayerId: TileLayerId.OPENTOPOMAP,
       availableTileLayers: [
         create(TileLayerSchema, {
           id: TileLayerId.OPENSTREETMAP,
           label: 'OpenStreetMap',
           urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
           attributionHtml: 'OpenStreetMap contributors',
+        }),
+        create(TileLayerSchema, {
+          id: TileLayerId.OPENTOPOMAP,
+          label: 'OpenTopoMap',
+          urlTemplate: 'https://tile.opentopomap.org/{z}/{x}/{y}.png',
+          attributionHtml: 'OpenTopoMap contributors',
+        }),
+        create(TileLayerSchema, {
+          id: TileLayerId.ESRI_WORLD_IMAGERY,
+          label: 'Esri World Imagery',
+          urlTemplate: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+          attributionHtml: 'Esri contributors',
         }),
       ],
     }),
@@ -119,6 +131,74 @@ describe('WikiMap', () => {
 
     it('should render the returned map through the renderer', () => {
       expect(renderer.renderStub.firstCall.args[1]).to.equal(renderedMap);
+    });
+
+    it('should render a tileset selector', () => {
+      const selector = el.shadowRoot?.querySelector<HTMLSelectElement>('select[aria-label="Tileset"]');
+      expect(selector).not.to.equal(null);
+    });
+
+    it('should select the default tileset from map style', () => {
+      const selector = el.shadowRoot?.querySelector<HTMLSelectElement>('select[aria-label="Tileset"]');
+      expect(selector?.value).to.equal(String(TileLayerId.OPENTOPOMAP));
+    });
+
+    it('should list available tilesets', () => {
+      const options = [...(el.shadowRoot?.querySelectorAll<HTMLOptionElement>('select[aria-label="Tileset"] option') ?? [])];
+      expect(options.map(option => option.textContent)).to.deep.equal([
+        'OpenStreetMap',
+        'OpenTopoMap',
+        'Esri World Imagery',
+      ]);
+    });
+
+    it('should render the map canvas as a square', () => {
+      const canvas = el.shadowRoot?.querySelector<HTMLElement>('#map-canvas');
+      expect(getComputedStyle(canvas!).aspectRatio).to.equal('1 / 1');
+    });
+
+    describe('when scrolling the map without a zoom modifier', () => {
+      beforeEach(async () => {
+        const canvas = el.shadowRoot?.querySelector<HTMLElement>('#map-canvas');
+        canvas!.dispatchEvent(new WheelEvent('wheel', { bubbles: true, deltaY: 120 }));
+        await el.updateComplete;
+      });
+
+      it('should show the control-scroll zoom hint', () => {
+        const hint = el.shadowRoot?.querySelector<HTMLElement>('.scroll-hint');
+        expect(hint?.hasAttribute('visible')).to.equal(true);
+      });
+    });
+
+    describe('when control-scrolling the map', () => {
+      beforeEach(async () => {
+        const canvas = el.shadowRoot?.querySelector<HTMLElement>('#map-canvas');
+        canvas!.dispatchEvent(new WheelEvent('wheel', { bubbles: true, deltaY: 120, ctrlKey: true }));
+        await el.updateComplete;
+      });
+
+      it('should leave the zoom hint hidden', () => {
+        const hint = el.shadowRoot?.querySelector<HTMLElement>('.scroll-hint');
+        expect(hint?.hasAttribute('visible')).to.equal(false);
+      });
+    });
+
+    describe('when choosing another tileset', () => {
+      beforeEach(async () => {
+        const selector = el.shadowRoot?.querySelector<HTMLSelectElement>('select[aria-label="Tileset"]');
+        selector!.value = String(TileLayerId.ESRI_WORLD_IMAGERY);
+        selector!.dispatchEvent(new Event('change', { bubbles: true }));
+        await el.updateComplete;
+      });
+
+      it('should render the map again', () => {
+        expect(renderer.renderStub.callCount).to.equal(2);
+      });
+
+      it('should use the selected tileset for the current view', () => {
+        const mapMessage = renderer.renderStub.secondCall.args[1] as WikiMapMessage;
+        expect(mapMessage.style?.tileLayerId).to.equal(TileLayerId.ESRI_WORLD_IMAGERY);
+      });
     });
 
     it('should provide a popup markdown renderer', async () => {

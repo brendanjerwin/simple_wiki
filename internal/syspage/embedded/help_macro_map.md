@@ -88,11 +88,28 @@ Generic Frontmatter writes to `maps.*` and `agent.*` are rejected. Use `MapServi
 
 OpenStreetMap is the default raster tile layer. Supported free layers include:
 
-- OpenStreetMap
-- OpenTopoMap
-- Esri World Imagery
+- `tile_layer_id = 1` — OpenStreetMap
+- `tile_layer_id = 2` — OpenTopoMap
+- `tile_layer_id = 3` — Esri World Imagery
 
 The map response includes the required attribution HTML for the selected tile layer, and the frontend renders that attribution automatically.
+
+Set the default tileset in frontmatter:
+
+```toml
+[maps.yard.style]
+tile_layer_id = 2
+```
+
+The rendered map also includes a tileset selector when more than one supported layer is available. Switching the selector changes the current view immediately; it does not rewrite frontmatter. Use `MapService.SetMapStyle` when the page's saved default should change.
+
+## Map controls
+
+The map fills the page content width and uses a square aspect ratio so route and area context have enough vertical room.
+
+- Drag or swipe to pan.
+- Pinch on touch devices to zoom.
+- Use Ctrl + scroll on desktop to zoom. Plain scroll over the map shows a short hint instead of unexpectedly zooming the map while reading the page.
 
 Paid or keyed providers such as Mapbox, MapTiler, and Google Maps are intentionally not supported by this macro. Use [[help-macro-google-maps-embed]] only when you need a Google Maps embed iframe.
 
