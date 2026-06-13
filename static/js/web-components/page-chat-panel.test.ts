@@ -1170,8 +1170,10 @@ describe('PageChatPanel', () => {
 
   describe('updateToolCall()', () => {
     let el: PageChatPanel;
+    let clock: SinonFakeTimers;
 
     beforeEach(async () => {
+      clock = useFakeTimers(new Date('2024-01-01T12:00:00Z').getTime());
       localStorageStub.getItem.returns(null);
       el = await fixture(html`<page-chat-panel page="test-page" persona="TestPersona"></page-chat-panel>`);
 
@@ -1191,6 +1193,10 @@ describe('PageChatPanel', () => {
       (el as unknown as { messagesById: Map<string, ChatMessageState> }).messagesById.set('tc-msg', msgState);
       el.messages = [msgState];
       await el.updateComplete;
+    });
+
+    afterEach(() => {
+      clock.restore();
     });
 
     describe('when adding a new tool call to a message', () => {
@@ -1216,15 +1222,20 @@ describe('PageChatPanel', () => {
       it('should set the correct status', () => {
         expect(el.messages[0]!.toolCalls[0]!.status).to.equal('running');
       });
+
+      it('should stamp the start time for a running tool call', () => {
+        expect(el.messages[0]!.toolCalls[0]!.startedAtMs).to.equal(Date.now());
+      });
     });
 
     describe('when updating an existing tool call', () => {
 
       beforeEach(async () => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any -- calling private method for testing
-        (el as any).updateToolCall('tc-msg', 'tc-1', 'Read File', 'running');
+        await (el as any).updateToolCall('tc-msg', 'tc-1', 'Read File', 'running');
+        await clock.tickAsync(5_000);
         // eslint-disable-next-line @typescript-eslint/no-explicit-any -- calling private method for testing
-        (el as any).updateToolCall('tc-msg', 'tc-1', 'Read File', 'complete');
+        await (el as any).updateToolCall('tc-msg', 'tc-1', 'Read File', 'complete');
         await el.updateComplete;
       });
 
@@ -1234,6 +1245,30 @@ describe('PageChatPanel', () => {
 
       it('should update the status', () => {
         expect(el.messages[0]!.toolCalls[0]!.status).to.equal('complete');
+      });
+
+      it('should preserve the original start time', () => {
+        expect(el.messages[0]!.toolCalls[0]!.startedAtMs).to.equal(Date.now() - 5_000);
+      });
+
+      it('should stamp the completion time', () => {
+        expect(el.messages[0]!.toolCalls[0]!.completedAtMs).to.equal(Date.now());
+      });
+    });
+
+    describe('when a tool call update omits the latest title', () => {
+
+      beforeEach(async () => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- calling private method for testing
+        await (el as any).updateToolCall('tc-msg', 'tc-1', 'Read File', 'running');
+        await clock.tickAsync(5_000);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- calling private method for testing
+        await (el as any).updateToolCall('tc-msg', 'tc-1', '', 'complete');
+        await el.updateComplete;
+      });
+
+      it('should preserve the previous title', () => {
+        expect(el.messages[0]!.toolCalls[0]!.title).to.equal('Read File');
       });
     });
 

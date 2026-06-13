@@ -1,4 +1,5 @@
 import { expect, fixture, html } from '@open-wc/testing';
+import { useFakeTimers, type SinonFakeTimers } from 'sinon';
 import { Sender } from '../gen/api/v1/chat_pb.js';
 import './chat-message-bubble.js';
 import type { ChatMessageBubble, ReactionGroup, ScrollToMessageEventDetail } from './chat-message-bubble.js';
@@ -264,21 +265,20 @@ describe('ChatMessageBubble', () => {
         `);
       });
 
-      it('should render the tool-calls container', () => {
+      it('should render the compact completed tool-calls container', () => {
         const container = el.shadowRoot!.querySelector('.tool-calls');
         expect(container).to.not.be.null;
       });
 
-      it('should render one pill per tool call', () => {
+      it('should render one compact pill per completed tool call', () => {
         const pills = el.shadowRoot!.querySelectorAll('.tool-call-pill');
-        expect(pills.length).to.equal(3);
+        expect(pills.length).to.equal(2);
       });
 
-      it('should display the tool call title', () => {
+      it('should display the completed tool call titles', () => {
         const pills = el.shadowRoot!.querySelectorAll('.tool-call-pill');
         expect(pills[0]!.textContent).to.contain('Read File');
-        expect(pills[1]!.textContent).to.contain('Execute Shell');
-        expect(pills[2]!.textContent).to.contain('Failed Op');
+        expect(pills[1]!.textContent).to.contain('Failed Op');
       });
 
       it('should show check mark icon for complete status', () => {
@@ -287,16 +287,90 @@ describe('ChatMessageBubble', () => {
         expect(icon!.textContent).to.equal('\u2705');
       });
 
-      it('should show hourglass icon for running status', () => {
-        const pills = el.shadowRoot!.querySelectorAll('.tool-call-pill');
-        const icon = pills[1]!.querySelector('.status-icon');
+      it('should show hourglass icon for running live tool calls', () => {
+        const liveTool = el.shadowRoot!.querySelector('.live-tool-call');
+        const icon = liveTool!.querySelector('.status-icon');
         expect(icon!.textContent).to.equal('\u23F3');
       });
 
       it('should show cross mark icon for error status', () => {
         const pills = el.shadowRoot!.querySelectorAll('.tool-call-pill');
-        const icon = pills[2]!.querySelector('.status-icon');
+        const icon = pills[1]!.querySelector('.status-icon');
         expect(icon!.textContent).to.equal('\u274C');
+      });
+
+      it('should render the running tool in the live progress container', () => {
+        const liveTool = el.shadowRoot!.querySelector('.live-tool-call');
+        expect(liveTool).to.not.be.null;
+        expect(liveTool!.textContent).to.contain('Execute Shell');
+      });
+    });
+
+    describe('when toolCalls include live progress entries', () => {
+      let clock: SinonFakeTimers;
+      let el: ChatMessageBubble;
+
+      beforeEach(async () => {
+        clock = useFakeTimers(new Date('2024-01-01T12:00:00Z').getTime());
+        el = await fixture(html`
+          <chat-message-bubble
+            message-id="msg-tc-live"
+            .sender=${Sender.ASSISTANT}
+            content="Working"
+            .toolCalls=${[
+              {
+                toolCallId: 'tc-tool',
+                title: 'Bash: journalctl --since today',
+                status: 'running',
+                startedAtMs: Date.now() - 65_000,
+              },
+              {
+                toolCallId: 'tc-agent',
+                title: 'Launch research agent: daily reflection audit',
+                status: 'running',
+                startedAtMs: Date.now() - 2_000,
+              },
+              {
+                toolCallId: 'tc-complete',
+                title: 'Read wiki page: ai_assistant',
+                status: 'complete',
+              },
+            ]}
+          ></chat-message-bubble>
+        `);
+      });
+
+      afterEach(() => {
+        clock.restore();
+      });
+
+      it('should render a scrolling live tool progress list for non-agent tool calls', () => {
+        const liveTools = el.shadowRoot!.querySelectorAll('.live-tool-call');
+        expect(liveTools.length).to.equal(1);
+        expect(liveTools[0]!.textContent).to.contain('Bash: journalctl --since today');
+      });
+
+      it('should render a distinct sub-agent card for running agent dispatches', () => {
+        const subagentCards = el.shadowRoot!.querySelectorAll('.subagent-card');
+        expect(subagentCards.length).to.equal(1);
+        expect(subagentCards[0]!.textContent).to.contain('Research agent');
+        expect(subagentCards[0]!.textContent).to.contain('daily reflection audit');
+      });
+
+      it('should collapse completed tool calls into compact pills', () => {
+        const pills = el.shadowRoot!.querySelectorAll('.tool-call-pill');
+        expect(pills.length).to.equal(1);
+        expect(pills[0]!.textContent).to.contain('Read wiki page');
+      });
+
+      it('should update elapsed time while a sub-agent is still running', async () => {
+        const elapsed = () => el.shadowRoot!.querySelector('.subagent-elapsed')?.textContent?.trim();
+        expect(elapsed()).to.equal('2s');
+
+        await clock.tickAsync(1_000);
+        await el.updateComplete;
+
+        expect(elapsed()).to.equal('3s');
       });
     });
 

@@ -35,6 +35,21 @@ export interface ToolCallState {
   toolCallId: string;
   title: string;
   status: string;
+  startedAtMs?: number;
+  completedAtMs?: number;
+}
+
+function normalizeToolCallStatus(status: string): string {
+  return status.trim().toLowerCase().replace(/[\s-]+/g, '_');
+}
+
+function isLiveToolCallStatus(status: string): boolean {
+  const normalizedStatus = normalizeToolCallStatus(status);
+  return normalizedStatus === 'running'
+    || normalizedStatus === 'in_progress'
+    || normalizedStatus === 'waiting'
+    || normalizedStatus === 'queued'
+    || normalizedStatus === 'pending';
 }
 
 export interface PermissionRequestState {
@@ -1014,7 +1029,7 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
         await this.editMessage(event.event.value.messageId, event.event.value.newContent, event.event.value.streaming);
         break;
       case 'toolCall':
-        this.updateToolCall(
+        await this.updateToolCall(
           event.event.value.messageId,
           event.event.value.toolCallId,
           event.event.value.title,
@@ -1123,11 +1138,27 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
 
     const existing = msg.toolCalls.find((tc) => tc.toolCallId === toolCallId);
     if (existing) {
-      existing.title = title;
-      existing.status = status;
+      if (title !== '') {
+        existing.title = title;
+      }
+      if (status !== '') {
+        existing.status = status;
+        if (isLiveToolCallStatus(status)) {
+          existing.startedAtMs ??= Date.now();
+          delete existing.completedAtMs;
+        } else {
+          existing.completedAtMs = Date.now();
+        }
+      }
       msg.toolCalls = [...msg.toolCalls];
     } else {
-      msg.toolCalls = [...msg.toolCalls, { toolCallId, title, status }];
+      const toolCall: ToolCallState = { toolCallId, title, status };
+      if (isLiveToolCallStatus(status)) {
+        toolCall.startedAtMs = Date.now();
+      } else if (status !== '') {
+        toolCall.completedAtMs = Date.now();
+      }
+      msg.toolCalls = [...msg.toolCalls, toolCall];
     }
     this.messages = [...this.messages];
 
