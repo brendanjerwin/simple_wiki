@@ -28,6 +28,17 @@ class StubRenderer implements WikiMapRenderer {
   }
 }
 
+class StylingProbeRenderer implements WikiMapRenderer {
+  render(container: HTMLElement): void {
+    container.innerHTML = `
+      <div class="leaflet-pane"></div>
+      <div class="leaflet-marker-icon wiki-map-marker"><span></span></div>
+    `;
+  }
+
+  destroy(): void {}
+}
+
 interface StubMapClient {
   getMap: SinonStub;
 }
@@ -114,6 +125,34 @@ describe('WikiMap', () => {
       const popupRenderer = renderer.renderStub.firstCall.args[2] as PopupRenderer;
       const htmlResult = await popupRenderer.render('[Shed](shed)');
       expect(htmlResult).to.equal('<a href="/shed">Shed</a>');
+    });
+
+    afterEach(() => {
+      el.remove();
+    });
+  });
+
+  describe('when using the default Leaflet renderer', () => {
+    beforeEach(async () => {
+      el = document.createElement('wiki-map') as WikiMap;
+      el.page = 'garden_plan';
+      el.name = 'yard';
+      setClient(el, client);
+      el.markdownRenderer = { render: sinon.stub().resolves('<a href="/shed">Shed</a>') };
+      el.rendererFactory = () => new StylingProbeRenderer();
+      document.body.appendChild(el);
+      await el.updateComplete;
+      await waitUntil(() => el.shadowRoot?.querySelector('.wiki-map-marker') !== null);
+    });
+
+    it('should position Leaflet panes within the map canvas', () => {
+      const pane = el.shadowRoot?.querySelector<HTMLElement>('.leaflet-pane');
+      expect(getComputedStyle(pane!).position).to.equal('absolute');
+    });
+
+    it('should position marker icons within the map canvas', () => {
+      const marker = el.shadowRoot?.querySelector<HTMLElement>('.wiki-map-marker');
+      expect(getComputedStyle(marker!).position).to.equal('absolute');
     });
 
     afterEach(() => {

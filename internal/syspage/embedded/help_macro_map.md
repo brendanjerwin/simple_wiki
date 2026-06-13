@@ -3,6 +3,48 @@ identifier = "help_macro_map"
 
 [wiki]
 system = true
+
+[maps.demo.view]
+lat = 40.7812
+lon = -73.9665
+zoom = 15
+
+[maps.demo.style]
+tile_layer_id = 1
+
+[[maps.demo.markers]]
+uid = "marker-belvedere"
+label = "Belvedere Castle"
+lat = 40.7794
+lon = -73.9691
+popup_markdown = "Belvedere Castle marker rendered by the first-class `Map` macro."
+color = "#2563eb"
+
+[[maps.demo.markers]]
+uid = "marker-met"
+label = "The Met"
+lat = 40.7794
+lon = -73.9632
+popup_markdown = "A second marker loaded from `MapService.GetMap`."
+color = "#dc2626"
+
+[agent.maps.demo]
+updated_at = "2026-06-12T20:00:00Z"
+sync_token = 1
+
+[agent.maps.demo.markers.marker-belvedere]
+created_at = "2026-06-12T20:00:00Z"
+updated_at = "2026-06-12T20:00:00Z"
+created_by = "system"
+automated = true
+sort_order = 1000
+
+[agent.maps.demo.markers.marker-met]
+created_at = "2026-06-12T20:00:00Z"
+updated_at = "2026-06-12T20:00:00Z"
+created_by = "system"
+automated = true
+sort_order = 2000
 +++
 
 #help #templating #maps
@@ -28,6 +70,10 @@ The rendered page contains:
 ```
 
 The component reads data through `MapService.GetMap` and renders markers, polygons, and circles with Leaflet.
+
+## Live demo
+
+{{ Map "demo" }}
 
 ## Data model
 
