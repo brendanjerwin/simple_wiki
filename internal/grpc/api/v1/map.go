@@ -19,6 +19,13 @@ var errMapMutatorNotConfigured = status.Error(codes.FailedPrecondition, "map mut
 
 const defaultMapPageSize = 100
 
+func requireMapRequest[T any](req *T) error {
+	if req == nil {
+		return status.Error(codes.InvalidArgument, "request is required")
+	}
+	return nil
+}
+
 type mapElementIncludes struct {
 	markers  bool
 	polygons bool
@@ -27,6 +34,9 @@ type mapElementIncludes struct {
 
 // SetMapView implements the SetMapView RPC.
 func (s *Server) SetMapView(ctx context.Context, req *apiv1.SetMapViewRequest) (*apiv1.SetMapViewResponse, error) {
+	if err := requireMapRequest(req); err != nil {
+		return nil, err
+	}
 	if s.mapMutator == nil {
 		return nil, errMapMutatorNotConfigured
 	}
@@ -42,6 +52,9 @@ func (s *Server) SetMapView(ctx context.Context, req *apiv1.SetMapViewRequest) (
 
 // SetMapStyle implements the SetMapStyle RPC.
 func (s *Server) SetMapStyle(ctx context.Context, req *apiv1.SetMapStyleRequest) (*apiv1.SetMapStyleResponse, error) {
+	if err := requireMapRequest(req); err != nil {
+		return nil, err
+	}
 	if s.mapMutator == nil {
 		return nil, errMapMutatorNotConfigured
 	}
@@ -57,6 +70,9 @@ func (s *Server) SetMapStyle(ctx context.Context, req *apiv1.SetMapStyleRequest)
 
 // AddMarker implements the AddMarker RPC.
 func (s *Server) AddMarker(ctx context.Context, req *apiv1.AddMarkerRequest) (*apiv1.AddMarkerResponse, error) {
+	if err := requireMapRequest(req); err != nil {
+		return nil, err
+	}
 	if s.mapMutator == nil {
 		return nil, errMapMutatorNotConfigured
 	}
@@ -73,6 +89,9 @@ func (s *Server) AddMarker(ctx context.Context, req *apiv1.AddMarkerRequest) (*a
 
 // UpdateMarker implements the UpdateMarker RPC.
 func (s *Server) UpdateMarker(ctx context.Context, req *apiv1.UpdateMarkerRequest) (*apiv1.UpdateMarkerResponse, error) {
+	if err := requireMapRequest(req); err != nil {
+		return nil, err
+	}
 	if s.mapMutator == nil {
 		return nil, errMapMutatorNotConfigured
 	}
@@ -88,6 +107,9 @@ func (s *Server) UpdateMarker(ctx context.Context, req *apiv1.UpdateMarkerReques
 
 // MoveMarker implements the MoveMarker RPC.
 func (s *Server) MoveMarker(ctx context.Context, req *apiv1.MoveMarkerRequest) (*apiv1.MoveMarkerResponse, error) {
+	if err := requireMapRequest(req); err != nil {
+		return nil, err
+	}
 	if s.mapMutator == nil {
 		return nil, errMapMutatorNotConfigured
 	}
@@ -103,6 +125,9 @@ func (s *Server) MoveMarker(ctx context.Context, req *apiv1.MoveMarkerRequest) (
 
 // DeleteMarker implements the DeleteMarker RPC.
 func (s *Server) DeleteMarker(ctx context.Context, req *apiv1.DeleteMarkerRequest) (*apiv1.DeleteMarkerResponse, error) {
+	if err := requireMapRequest(req); err != nil {
+		return nil, err
+	}
 	if s.mapMutator == nil {
 		return nil, errMapMutatorNotConfigured
 	}
@@ -118,6 +143,9 @@ func (s *Server) DeleteMarker(ctx context.Context, req *apiv1.DeleteMarkerReques
 
 // AddPolygon implements the AddPolygon RPC.
 func (s *Server) AddPolygon(ctx context.Context, req *apiv1.AddPolygonRequest) (*apiv1.AddPolygonResponse, error) {
+	if err := requireMapRequest(req); err != nil {
+		return nil, err
+	}
 	if s.mapMutator == nil {
 		return nil, errMapMutatorNotConfigured
 	}
@@ -133,6 +161,9 @@ func (s *Server) AddPolygon(ctx context.Context, req *apiv1.AddPolygonRequest) (
 
 // UpdatePolygon implements the UpdatePolygon RPC.
 func (s *Server) UpdatePolygon(ctx context.Context, req *apiv1.UpdatePolygonRequest) (*apiv1.UpdatePolygonResponse, error) {
+	if err := requireMapRequest(req); err != nil {
+		return nil, err
+	}
 	if s.mapMutator == nil {
 		return nil, errMapMutatorNotConfigured
 	}
@@ -148,6 +179,9 @@ func (s *Server) UpdatePolygon(ctx context.Context, req *apiv1.UpdatePolygonRequ
 
 // DeletePolygon implements the DeletePolygon RPC.
 func (s *Server) DeletePolygon(ctx context.Context, req *apiv1.DeletePolygonRequest) (*apiv1.DeletePolygonResponse, error) {
+	if err := requireMapRequest(req); err != nil {
+		return nil, err
+	}
 	if s.mapMutator == nil {
 		return nil, errMapMutatorNotConfigured
 	}
@@ -163,6 +197,9 @@ func (s *Server) DeletePolygon(ctx context.Context, req *apiv1.DeletePolygonRequ
 
 // AddCircle implements the AddCircle RPC.
 func (s *Server) AddCircle(ctx context.Context, req *apiv1.AddCircleRequest) (*apiv1.AddCircleResponse, error) {
+	if err := requireMapRequest(req); err != nil {
+		return nil, err
+	}
 	if s.mapMutator == nil {
 		return nil, errMapMutatorNotConfigured
 	}
@@ -178,6 +215,9 @@ func (s *Server) AddCircle(ctx context.Context, req *apiv1.AddCircleRequest) (*a
 
 // UpdateCircle implements the UpdateCircle RPC.
 func (s *Server) UpdateCircle(ctx context.Context, req *apiv1.UpdateCircleRequest) (*apiv1.UpdateCircleResponse, error) {
+	if err := requireMapRequest(req); err != nil {
+		return nil, err
+	}
 	if s.mapMutator == nil {
 		return nil, errMapMutatorNotConfigured
 	}
@@ -193,6 +233,9 @@ func (s *Server) UpdateCircle(ctx context.Context, req *apiv1.UpdateCircleReques
 
 // DeleteCircle implements the DeleteCircle RPC.
 func (s *Server) DeleteCircle(ctx context.Context, req *apiv1.DeleteCircleRequest) (*apiv1.DeleteCircleResponse, error) {
+	if err := requireMapRequest(req); err != nil {
+		return nil, err
+	}
 	if s.mapMutator == nil {
 		return nil, errMapMutatorNotConfigured
 	}
@@ -208,6 +251,9 @@ func (s *Server) DeleteCircle(ctx context.Context, req *apiv1.DeleteCircleReques
 
 // ReorderElement implements the ReorderElement RPC.
 func (s *Server) ReorderElement(ctx context.Context, req *apiv1.ReorderElementRequest) (*apiv1.ReorderElementResponse, error) {
+	if err := requireMapRequest(req); err != nil {
+		return nil, err
+	}
 	if s.mapMutator == nil {
 		return nil, errMapMutatorNotConfigured
 	}
@@ -223,6 +269,9 @@ func (s *Server) ReorderElement(ctx context.Context, req *apiv1.ReorderElementRe
 
 // ReplaceMarkers implements the ReplaceMarkers RPC.
 func (s *Server) ReplaceMarkers(ctx context.Context, req *apiv1.ReplaceMarkersRequest) (*apiv1.ReplaceMarkersResponse, error) {
+	if err := requireMapRequest(req); err != nil {
+		return nil, err
+	}
 	if s.mapMutator == nil {
 		return nil, errMapMutatorNotConfigured
 	}
@@ -238,6 +287,9 @@ func (s *Server) ReplaceMarkers(ctx context.Context, req *apiv1.ReplaceMarkersRe
 
 // DeleteMap implements the DeleteMap RPC.
 func (s *Server) DeleteMap(ctx context.Context, req *apiv1.DeleteMapRequest) (*apiv1.DeleteMapResponse, error) {
+	if err := requireMapRequest(req); err != nil {
+		return nil, err
+	}
 	if s.mapMutator == nil {
 		return nil, errMapMutatorNotConfigured
 	}
@@ -252,6 +304,9 @@ func (s *Server) DeleteMap(ctx context.Context, req *apiv1.DeleteMapRequest) (*a
 
 // GetMap implements the GetMap RPC.
 func (s *Server) GetMap(ctx context.Context, req *apiv1.GetMapRequest) (*apiv1.GetMapResponse, error) {
+	if err := requireMapRequest(req); err != nil {
+		return nil, err
+	}
 	mapState, err := s.readAuthorizedMap(ctx, req.GetPage(), req.GetMapName())
 	if err != nil {
 		return nil, err
@@ -262,6 +317,9 @@ func (s *Server) GetMap(ctx context.Context, req *apiv1.GetMapRequest) (*apiv1.G
 
 // ListMaps implements the ListMaps RPC.
 func (s *Server) ListMaps(ctx context.Context, req *apiv1.ListMapsRequest) (*apiv1.ListMapsResponse, error) {
+	if err := requireMapRequest(req); err != nil {
+		return nil, err
+	}
 	if s.mapMutator == nil {
 		return nil, errMapMutatorNotConfigured
 	}
@@ -280,6 +338,9 @@ func (s *Server) ListMaps(ctx context.Context, req *apiv1.ListMapsRequest) (*api
 
 // ListMapElements implements the ListMapElements RPC.
 func (s *Server) ListMapElements(ctx context.Context, req *apiv1.ListMapElementsRequest) (*apiv1.ListMapElementsResponse, error) {
+	if err := requireMapRequest(req); err != nil {
+		return nil, err
+	}
 	mapState, err := s.readAuthorizedMap(ctx, req.GetPage(), req.GetMapName())
 	if err != nil {
 		return nil, err
@@ -308,6 +369,9 @@ func (s *Server) ListMapElements(ctx context.Context, req *apiv1.ListMapElements
 
 // GetElement implements the GetElement RPC.
 func (s *Server) GetElement(ctx context.Context, req *apiv1.GetElementRequest) (*apiv1.GetElementResponse, error) {
+	if err := requireMapRequest(req); err != nil {
+		return nil, err
+	}
 	if req.GetUid() == "" {
 		return nil, status.Error(codes.InvalidArgument, "uid is required")
 	}
@@ -342,6 +406,9 @@ func (s *Server) GetElement(ctx context.Context, req *apiv1.GetElementRequest) (
 
 // FindMarkers implements the FindMarkers RPC.
 func (s *Server) FindMarkers(ctx context.Context, req *apiv1.FindMarkersRequest) (*apiv1.FindMarkersResponse, error) {
+	if err := requireMapRequest(req); err != nil {
+		return nil, err
+	}
 	mapState, err := s.readAuthorizedMap(ctx, req.GetPage(), req.GetMapName())
 	if err != nil {
 		return nil, err
@@ -567,7 +634,10 @@ func mapMapMutatorErr(err error) error {
 	if err == nil {
 		return nil
 	}
-	if status.Code(err) != codes.Unknown {
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return status.FromContextError(err).Err()
+	}
+	if _, ok := status.FromError(err); ok {
 		return err
 	}
 	switch {

@@ -103,6 +103,83 @@ var _ = Describe("MapService handlers", func() {
 			Expect(resp.GetMap().GetMarkers()).To(HaveLen(1))
 		})
 	})
+
+	Describe("when a request is nil", func() {
+		var errs []error
+
+		BeforeEach(func() {
+			errs = nil
+			_, err = server.SetMapView(ctx, nil)
+			errs = append(errs, err)
+			_, err = server.SetMapStyle(ctx, nil)
+			errs = append(errs, err)
+			_, err = server.AddMarker(ctx, nil)
+			errs = append(errs, err)
+			_, err = server.UpdateMarker(ctx, nil)
+			errs = append(errs, err)
+			_, err = server.MoveMarker(ctx, nil)
+			errs = append(errs, err)
+			_, err = server.DeleteMarker(ctx, nil)
+			errs = append(errs, err)
+			_, err = server.AddPolygon(ctx, nil)
+			errs = append(errs, err)
+			_, err = server.UpdatePolygon(ctx, nil)
+			errs = append(errs, err)
+			_, err = server.DeletePolygon(ctx, nil)
+			errs = append(errs, err)
+			_, err = server.AddCircle(ctx, nil)
+			errs = append(errs, err)
+			_, err = server.UpdateCircle(ctx, nil)
+			errs = append(errs, err)
+			_, err = server.DeleteCircle(ctx, nil)
+			errs = append(errs, err)
+			_, err = server.ReorderElement(ctx, nil)
+			errs = append(errs, err)
+			_, err = server.ReplaceMarkers(ctx, nil)
+			errs = append(errs, err)
+			_, err = server.DeleteMap(ctx, nil)
+			errs = append(errs, err)
+			_, err = server.GetMap(ctx, nil)
+			errs = append(errs, err)
+			_, err = server.ListMaps(ctx, nil)
+			errs = append(errs, err)
+			_, err = server.ListMapElements(ctx, nil)
+			errs = append(errs, err)
+			_, err = server.GetElement(ctx, nil)
+			errs = append(errs, err)
+			_, err = server.FindMarkers(ctx, nil)
+			errs = append(errs, err)
+		})
+
+		It("should return InvalidArgument for each handler", func() {
+			Expect(errs).To(HaveLen(20))
+			for _, handlerErr := range errs {
+				Expect(handlerErr).To(HaveGrpcStatusWithSubstr(codes.InvalidArgument, "request is required"))
+			}
+		})
+	})
+
+	Describe("when the request context is canceled before mutation", func() {
+		BeforeEach(func() {
+			_, err = server.AddMarker(ctx, &apiv1.AddMarkerRequest{
+				Page:    "garden_plan",
+				MapName: "yard",
+				Marker: &apiv1.MapMarker{
+					Label:    "Shed",
+					Position: &apiv1.GeoPoint{Lat: 41.1, Lon: -72.2},
+				},
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			canceledCtx, cancel := context.WithCancel(ctx)
+			cancel()
+			_, err = server.DeleteMap(canceledCtx, &apiv1.DeleteMapRequest{Page: "garden_plan", MapName: "yard"})
+		})
+
+		It("should preserve the canceled status code", func() {
+			Expect(err).To(HaveGrpcStatusWithSubstr(codes.Canceled, "context canceled"))
+		})
+	})
 })
 
 var _ = Describe("MapService handlers - map mutator not configured", func() {

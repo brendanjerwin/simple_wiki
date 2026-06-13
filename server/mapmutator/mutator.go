@@ -333,11 +333,13 @@ func (m *Mutator) ReplaceMarkers(ctx context.Context, page, mapName string, mark
 			existingByKey[markerKey(marker)] = marker
 		}
 		reconciled := make([]*apiv1.MapMarker, 0, len(markers))
+		matchedUIDs := make(map[string]bool)
 		for i, marker := range markers {
 			next := cloneMarker(marker)
-			if existing := existingByKey[markerKey(marker)]; existing != nil {
+			if existing := existingByKey[markerKey(marker)]; existing != nil && !matchedUIDs[existing.GetMetadata().GetUid()] {
 				next.Metadata = cloneMetadata(existing.GetMetadata())
 				next.Metadata.UpdatedAt = timestamppb.New(m.clock.Now())
+				matchedUIDs[existing.GetMetadata().GetUid()] = true
 			} else {
 				next.Metadata = m.newMetadata(identity, nextSortOrder(i))
 			}
@@ -508,7 +510,7 @@ func validateView(view *apiv1.MapView) error {
 	if err := validatePoint(view.GetCenter(), "center"); err != nil {
 		return err
 	}
-	if view.GetZoom() < 0 {
+	if math.IsNaN(view.GetZoom()) || view.GetZoom() < 0 {
 		return status.Error(codes.InvalidArgument, "zoom must be non-negative")
 	}
 	return nil
@@ -531,10 +533,10 @@ func validatePoint(point *apiv1.GeoPoint, fieldName string) error {
 	if point == nil {
 		return status.Errorf(codes.InvalidArgument, "%s is required", fieldName)
 	}
-	if point.GetLat() < minLatitudeDegrees || point.GetLat() > maxLatitudeDegrees {
+	if math.IsNaN(point.GetLat()) || point.GetLat() < minLatitudeDegrees || point.GetLat() > maxLatitudeDegrees {
 		return status.Error(codes.InvalidArgument, "latitude must be between -90 and 90")
 	}
-	if point.GetLon() < minLongitudeDegrees || point.GetLon() > maxLongitudeDegrees {
+	if math.IsNaN(point.GetLon()) || point.GetLon() < minLongitudeDegrees || point.GetLon() > maxLongitudeDegrees {
 		return status.Error(codes.InvalidArgument, "longitude must be between -180 and 180")
 	}
 	return nil

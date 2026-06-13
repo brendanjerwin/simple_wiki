@@ -43,6 +43,19 @@ interface StubMapClient {
   getMap: SinonStub;
 }
 
+interface Deferred<T> {
+  promise: Promise<T>;
+  resolve: (value: T) => void;
+}
+
+function deferred<T>(): Deferred<T> {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>(innerResolve => {
+    resolve = innerResolve;
+  });
+  return { promise, resolve };
+}
+
 function clientOf(el: WikiMap): StubMapClient {
   return (el as unknown as { client: StubMapClient }).client;
 }
@@ -248,6 +261,69 @@ describe('WikiMap', () => {
     });
   });
 
+  describe('when reloading after a rendered map', () => {
+    beforeEach(async () => {
+      el = document.createElement('wiki-map') as WikiMap;
+      el.page = 'garden_plan';
+      el.name = 'yard';
+      setClient(el, client);
+      el.rendererFactory = () => renderer;
+      document.body.appendChild(el);
+      await waitUntil(() => renderer.renderStub.calledOnce);
+
+      el.name = 'front_yard';
+      await waitUntil(() => renderer.destroyStub.calledOnce);
+    });
+
+    it('should destroy the old renderer', () => {
+      expect(renderer.destroyStub.calledOnce).to.equal(true);
+    });
+
+    afterEach(() => {
+      el.remove();
+    });
+  });
+
+  describe('when an older map request resolves after a newer request', () => {
+    let firstLoad: Deferred<unknown>;
+    let secondLoad: Deferred<unknown>;
+    let newerMap: WikiMapMessage;
+
+    beforeEach(async () => {
+      firstLoad = deferred<unknown>();
+      secondLoad = deferred<unknown>();
+      newerMap = sampleMap();
+      newerMap.name = 'front_yard';
+      client.getMap.onFirstCall().returns(firstLoad.promise);
+      client.getMap.onSecondCall().returns(secondLoad.promise);
+
+      el = document.createElement('wiki-map') as WikiMap;
+      el.page = 'garden_plan';
+      el.name = 'yard';
+      setClient(el, client);
+      el.rendererFactory = () => renderer;
+      document.body.appendChild(el);
+      await waitUntil(() => client.getMap.calledOnce);
+
+      el.name = 'front_yard';
+      await waitUntil(() => client.getMap.calledTwice);
+      secondLoad.resolve(create(GetMapResponseSchema, { map: newerMap }));
+      await waitUntil(() => renderer.renderStub.calledOnce);
+      firstLoad.resolve(create(GetMapResponseSchema, { map: renderedMap }));
+      await Promise.resolve();
+      await el.updateComplete;
+    });
+
+    it('should render only the newer response', () => {
+      expect(renderer.renderStub.calledOnce).to.equal(true);
+      expect((renderer.renderStub.firstCall.args[1] as WikiMapMessage).name).to.equal('front_yard');
+    });
+
+    afterEach(() => {
+      el.remove();
+    });
+  });
+
   describe('when MapService rejects the request', () => {
     beforeEach(async () => {
       client.getMap.rejects(new Error('map missing'));
@@ -257,8 +333,7 @@ describe('WikiMap', () => {
       setClient(el, client);
       el.rendererFactory = () => renderer;
       document.body.appendChild(el);
-      await waitUntil(() => client.getMap.calledOnce);
-      await el.updateComplete;
+      await waitUntil(() => el.shadowRoot?.querySelector('error-display') !== null);
     });
 
     it('should render an error state', () => {

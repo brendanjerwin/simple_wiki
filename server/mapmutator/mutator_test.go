@@ -3,6 +3,7 @@ package mapmutator
 import (
 	"context"
 	"errors"
+	"math"
 	"sync"
 	"time"
 
@@ -186,6 +187,169 @@ var _ = Describe("Mutator", func() {
 		})
 	})
 
+	Describe("map element lifecycle", func() {
+		var (
+			fetched           *apiv1.Map
+			outlines          []*apiv1.MapOutline
+			deletedLookupErr  error
+			createdMarkerUID  string
+			createdPolygonUID string
+			createdCircleUID  string
+		)
+
+		BeforeEach(func() {
+			mutator = New(store, fixedClock{now: now}, ulid.NewSequenceGenerator(
+				"01JMAPMARKER0000000000001",
+				"01JMAPMARKER0000000000002",
+				"01JMAPMARKER0000000000003",
+			))
+
+			mapState, err = mutator.SetMapView(ctx, "garden_plan", "yard", &apiv1.MapView{
+				Center: &apiv1.GeoPoint{Lat: 41.1, Lon: -72.2},
+				Zoom:   12,
+			}, nil)
+			Expect(err).NotTo(HaveOccurred())
+
+			mapState, err = mutator.SetMapStyle(ctx, "garden_plan", "yard", &apiv1.MapStyle{
+				TileLayerId: apiv1.TileLayerId_TILE_LAYER_ID_OPENTOPOMAP,
+				AspectRatio: "4:3",
+			}, nil)
+			Expect(err).NotTo(HaveOccurred())
+
+			marker, mapState, err = mutator.AddMarker(ctx, "garden_plan", "yard", &apiv1.MapMarker{
+				Label:         "Shed",
+				Position:      &apiv1.GeoPoint{Lat: 41.1, Lon: -72.2},
+				PopupMarkdown: "Old shed",
+				Color:         "red",
+			}, nil, human)
+			Expect(err).NotTo(HaveOccurred())
+			createdMarkerUID = marker.GetMetadata().GetUid()
+
+			marker, mapState, err = mutator.UpdateMarker(ctx, "garden_plan", "yard", createdMarkerUID, &apiv1.MapMarker{
+				Label:         "Greenhouse",
+				Position:      &apiv1.GeoPoint{Lat: 41.2, Lon: -72.3},
+				PopupMarkdown: "Updated shed",
+				Color:         "green",
+			}, nil)
+			Expect(err).NotTo(HaveOccurred())
+
+			marker, mapState, err = mutator.MoveMarker(ctx, "garden_plan", "yard", createdMarkerUID, &apiv1.GeoPoint{Lat: 41.3, Lon: -72.4}, nil)
+			Expect(err).NotTo(HaveOccurred())
+
+			polygon, _, err := mutator.AddPolygon(ctx, "garden_plan", "yard", &apiv1.MapPolygon{
+				Label: "Fence",
+				Points: []*apiv1.GeoPoint{
+					{Lat: 41.0, Lon: -72.0},
+					{Lat: 41.0, Lon: -72.1},
+					{Lat: 41.1, Lon: -72.1},
+				},
+				PopupMarkdown: "Fence line",
+				StrokeColor:   "#2563eb",
+				FillColor:     "#60a5fa",
+			}, nil, human)
+			Expect(err).NotTo(HaveOccurred())
+			createdPolygonUID = polygon.GetMetadata().GetUid()
+
+			_, _, err = mutator.UpdatePolygon(ctx, "garden_plan", "yard", createdPolygonUID, &apiv1.MapPolygon{
+				Label: "Garden",
+				Points: []*apiv1.GeoPoint{
+					{Lat: 41.2, Lon: -72.2},
+					{Lat: 41.2, Lon: -72.3},
+					{Lat: 41.3, Lon: -72.3},
+				},
+				PopupMarkdown: "Garden bed",
+				StrokeColor:   "#166534",
+				FillColor:     "#86efac",
+			}, nil)
+			Expect(err).NotTo(HaveOccurred())
+
+			circle, _, err := mutator.AddCircle(ctx, "garden_plan", "yard", &apiv1.MapCircle{
+				Label:         "Sprinkler",
+				Center:        &apiv1.GeoPoint{Lat: 41.4, Lon: -72.5},
+				RadiusMeters:  25,
+				PopupMarkdown: "Watering zone",
+				StrokeColor:   "#0369a1",
+				FillColor:     "#7dd3fc",
+			}, nil, human)
+			Expect(err).NotTo(HaveOccurred())
+			createdCircleUID = circle.GetMetadata().GetUid()
+
+			_, _, err = mutator.UpdateCircle(ctx, "garden_plan", "yard", createdCircleUID, &apiv1.MapCircle{
+				Label:         "Pump range",
+				Center:        &apiv1.GeoPoint{Lat: 41.5, Lon: -72.6},
+				RadiusMeters:  40,
+				PopupMarkdown: "Updated range",
+				StrokeColor:   "#7c2d12",
+				FillColor:     "#fdba74",
+			}, nil)
+			Expect(err).NotTo(HaveOccurred())
+
+			mapState, err = mutator.ReorderElement(ctx, "garden_plan", "yard", apiv1.MapElementType_MAP_ELEMENT_TYPE_MARKER, createdMarkerUID, 5000, nil)
+			Expect(err).NotTo(HaveOccurred())
+
+			fetched, err = mutator.GetMap(ctx, "garden_plan", "yard")
+			Expect(err).NotTo(HaveOccurred())
+
+			outlines, err = mutator.ListMaps(ctx, "garden_plan")
+			Expect(err).NotTo(HaveOccurred())
+
+			mapState, err = mutator.DeleteMarker(ctx, "garden_plan", "yard", createdMarkerUID, nil)
+			Expect(err).NotTo(HaveOccurred())
+			mapState, err = mutator.DeletePolygon(ctx, "garden_plan", "yard", createdPolygonUID, nil)
+			Expect(err).NotTo(HaveOccurred())
+			mapState, err = mutator.DeleteCircle(ctx, "garden_plan", "yard", createdCircleUID, nil)
+			Expect(err).NotTo(HaveOccurred())
+			err = mutator.DeleteMap(ctx, "garden_plan", "yard", nil)
+			Expect(err).NotTo(HaveOccurred())
+			_, deletedLookupErr = mutator.GetMap(ctx, "garden_plan", "yard")
+		})
+
+		It("should persist and decode the map view", func() {
+			Expect(fetched.GetView().GetCenter().GetLat()).To(Equal(41.1))
+			Expect(fetched.GetView().GetCenter().GetLon()).To(Equal(-72.2))
+			Expect(fetched.GetView().GetZoom()).To(Equal(float64(12)))
+		})
+
+		It("should persist and decode the map style", func() {
+			Expect(fetched.GetStyle().GetTileLayerId()).To(Equal(apiv1.TileLayerId_TILE_LAYER_ID_OPENTOPOMAP))
+			Expect(fetched.GetStyle().GetAspectRatio()).To(Equal("4:3"))
+			Expect(fetched.GetStyle().GetAvailableTileLayers()).NotTo(BeEmpty())
+		})
+
+		It("should persist and decode updated marker data", func() {
+			Expect(fetched.GetMarkers()).To(HaveLen(1))
+			Expect(fetched.GetMarkers()[0].GetLabel()).To(Equal("Greenhouse"))
+			Expect(fetched.GetMarkers()[0].GetPosition().GetLat()).To(Equal(41.3))
+			Expect(fetched.GetMarkers()[0].GetMetadata().GetSortOrder()).To(Equal(int64(5000)))
+		})
+
+		It("should persist and decode updated polygon data", func() {
+			Expect(fetched.GetPolygons()).To(HaveLen(1))
+			Expect(fetched.GetPolygons()[0].GetLabel()).To(Equal("Garden"))
+			Expect(fetched.GetPolygons()[0].GetPoints()).To(HaveLen(3))
+			Expect(fetched.GetPolygons()[0].GetStrokeColor()).To(Equal("#166534"))
+		})
+
+		It("should persist and decode updated circle data", func() {
+			Expect(fetched.GetCircles()).To(HaveLen(1))
+			Expect(fetched.GetCircles()[0].GetLabel()).To(Equal("Pump range"))
+			Expect(fetched.GetCircles()[0].GetRadiusMeters()).To(Equal(float64(40)))
+			Expect(fetched.GetCircles()[0].GetFillColor()).To(Equal("#fdba74"))
+		})
+
+		It("should list the map outline counts", func() {
+			Expect(outlines).To(HaveLen(1))
+			Expect(outlines[0].GetName()).To(Equal("yard"))
+			Expect(outlines[0].GetMarkerCount()).To(Equal(int32(1)))
+			Expect(outlines[0].GetPolygonCount()).To(Equal(int32(1)))
+			Expect(outlines[0].GetCircleCount()).To(Equal(int32(1)))
+		})
+
+		It("should delete the map", func() {
+			Expect(deletedLookupErr).To(MatchError(ErrMapNotFound))
+		})
+	})
+
 	Describe("when adding a marker with invalid latitude", func() {
 		BeforeEach(func() {
 			marker, mapState, err = mutator.AddMarker(ctx, "garden_plan", "yard", &apiv1.MapMarker{
@@ -209,6 +373,83 @@ var _ = Describe("Mutator", func() {
 
 		It("should not write", func() {
 			Expect(store.writes).To(Equal(0))
+		})
+	})
+
+	Describe("when adding a marker with NaN latitude", func() {
+		BeforeEach(func() {
+			marker, mapState, err = mutator.AddMarker(ctx, "garden_plan", "yard", &apiv1.MapMarker{
+				Label:    "Bad",
+				Position: &apiv1.GeoPoint{Lat: math.NaN(), Lon: -72.2},
+			}, nil, human)
+		})
+
+		It("should return InvalidArgument", func() {
+			Expect(status.Code(err)).To(Equal(codes.InvalidArgument))
+			Expect(err.Error()).To(ContainSubstring("latitude"))
+		})
+
+		It("should not return a marker", func() {
+			Expect(marker).To(BeNil())
+		})
+
+		It("should not return a map", func() {
+			Expect(mapState).To(BeNil())
+		})
+
+		It("should not write", func() {
+			Expect(store.writes).To(Equal(0))
+		})
+	})
+
+	Describe("when setting a view with NaN zoom", func() {
+		BeforeEach(func() {
+			mapState, err = mutator.SetMapView(ctx, "garden_plan", "yard", &apiv1.MapView{
+				Center: &apiv1.GeoPoint{Lat: 41.1, Lon: -72.2},
+				Zoom:   math.NaN(),
+			}, nil)
+		})
+
+		It("should return InvalidArgument", func() {
+			Expect(status.Code(err)).To(Equal(codes.InvalidArgument))
+			Expect(err.Error()).To(ContainSubstring("zoom"))
+		})
+
+		It("should not return a map", func() {
+			Expect(mapState).To(BeNil())
+		})
+
+		It("should not write", func() {
+			Expect(store.writes).To(Equal(0))
+		})
+	})
+
+	Describe("ReplaceMarkers", func() {
+		BeforeEach(func() {
+			mutator = New(store, fixedClock{now: now}, ulid.NewSequenceGenerator(
+				"01JMAPMARKER0000000000001",
+				"01JMAPMARKER0000000000002",
+			))
+			marker, mapState, err = mutator.AddMarker(ctx, "garden_plan", "yard", &apiv1.MapMarker{
+				Label:    "Shed",
+				Position: &apiv1.GeoPoint{Lat: 41.1, Lon: -72.2},
+			}, nil, human)
+			Expect(err).NotTo(HaveOccurred())
+
+			mapState, err = mutator.ReplaceMarkers(ctx, "garden_plan", "yard", []*apiv1.MapMarker{
+				{Label: "Shed", Position: &apiv1.GeoPoint{Lat: 41.1, Lon: -72.2}},
+				{Label: "Shed", Position: &apiv1.GeoPoint{Lat: 41.1, Lon: -72.2}},
+			}, nil, human)
+		})
+
+		It("should not return an error", func() {
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should preserve the existing uid for only one duplicate marker", func() {
+			Expect(mapState.GetMarkers()).To(HaveLen(2))
+			Expect(mapState.GetMarkers()[0].GetMetadata().GetUid()).To(Equal(marker.GetMetadata().GetUid()))
+			Expect(mapState.GetMarkers()[1].GetMetadata().GetUid()).NotTo(Equal(marker.GetMetadata().GetUid()))
 		})
 	})
 

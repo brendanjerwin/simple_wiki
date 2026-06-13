@@ -44,7 +44,7 @@ export class LeafletWikiMapRenderer implements WikiMapRenderer {
     });
 
     const view = mapMessage.view;
-    const markerPoints = mapMessage.markers.map(marker => marker.position).filter(point => point !== undefined);
+    const markerPoints = mapMessage.markers.map(marker => marker.position).filter(point => point != null);
     const firstPoint = markerPoints[0];
     const center: L.LatLngExpression = view?.center
       ? [view.center.lat, view.center.lon]
@@ -141,8 +141,8 @@ function selectedTileLayer(tileLayers: TileLayer[], selectedId: number | undefin
   return tileLayers.find(layer => layer.id === selectedId) ?? tileLayers[0];
 }
 
-function markerIcon(color: string): L.DivIcon {
-  const fill = color.trim() || '#dc2626';
+function markerIcon(color: string | undefined | null): L.DivIcon {
+  const fill = (color || '').trim() || '#dc2626';
   return L.divIcon({
     className: 'wiki-map-marker',
     html: `<span style="--wiki-map-marker-color:${escapeCssColor(fill)}"></span>`,
@@ -459,8 +459,9 @@ export class WikiMap extends LitElement {
   private declare showScrollHint: boolean;
 
   readonly client: Client<typeof MapService> = createClient(MapService, getGrpcWebTransport());
+  private readonly popupMarkdownRenderer = new ChatMarkdownRenderer();
   markdownRenderer: PopupRenderer = {
-    render: (markdown: string) => new ChatMarkdownRenderer().renderMarkdown(markdown, this.page),
+    render: (markdown: string) => this.popupMarkdownRenderer.renderMarkdown(markdown, this.page),
   };
   rendererFactory: WikiMapRendererFactory = () => new LeafletWikiMapRenderer();
   private renderer: WikiMapRenderer | null = null;
@@ -524,26 +525,34 @@ export class WikiMap extends LitElement {
 
   private async loadMap(): Promise<void> {
     if (!this.isConnected) return;
+    this.renderer?.destroy();
+    this.renderer = null;
+    this.mapData = null;
     if (!this.page || !this.name) {
-      this.mapData = null;
       return;
     }
+    const expectedPage = this.page;
+    const expectedName = this.name;
     this.loading = true;
     this.error = null;
     try {
       const response = await this.client.getMap(create(GetMapRequestSchema, {
-        page: this.page,
-        mapName: this.name,
+        page: expectedPage,
+        mapName: expectedName,
         includeMarkers: true,
         includePolygons: true,
         includeCircles: true,
       }));
+      if (this.page !== expectedPage || this.name !== expectedName) return;
       this.mapData = response.map ?? null;
     } catch (err: unknown) {
+      if (this.page !== expectedPage || this.name !== expectedName) return;
       this.mapData = null;
       this.error = AugmentErrorService.augmentError(err, 'load map');
     } finally {
-      this.loading = false;
+      if (this.page === expectedPage && this.name === expectedName) {
+        this.loading = false;
+      }
     }
   }
 
