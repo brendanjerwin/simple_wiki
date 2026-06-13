@@ -1,5 +1,5 @@
 import { LitElement, html, css, nothing } from 'lit';
-import { property, state } from 'lit/decorators.js';
+import { property } from 'lit/decorators.js';
 import { unsafeHTML } from 'lit/directives/unsafe-html.js';
 import { colorCSS, typographyCSS } from './shared-styles.js';
 import { Sender } from '../gen/api/v1/chat_pb.js';
@@ -254,9 +254,6 @@ export class ChatMessageBubble extends LitElement {
   @property({ attribute: false })
   declare toolCalls: ToolCallState[];
 
-  @state()
-  declare elapsedNowMs: number;
-
   private elapsedTimer: ReturnType<typeof setInterval> | undefined;
 
   constructor() {
@@ -270,7 +267,6 @@ export class ChatMessageBubble extends LitElement {
     this.replyToId = '';
     this.reactions = [];
     this.toolCalls = [];
-    this.elapsedNowMs = Date.now();
   }
 
   override connectedCallback() {
@@ -551,8 +547,9 @@ export class ChatMessageBubble extends LitElement {
   }
 
   private _toolCallElapsed(toolCall: ToolCallState): string {
-    const startedAtMs = toolCall.startedAtMs ?? this.elapsedNowMs;
-    return this._formatElapsed(this.elapsedNowMs - startedAtMs);
+    const currentTimeMs = Date.now();
+    const startedAtMs = toolCall.startedAtMs ?? currentTimeMs;
+    return this._formatElapsed(currentTimeMs - startedAtMs);
   }
 
   private _formatElapsed(elapsedMs: number): string {
@@ -570,7 +567,6 @@ export class ChatMessageBubble extends LitElement {
   }
 
   private syncElapsedTimer() {
-    this.elapsedNowMs = Date.now();
     if (!this.toolCalls.some((toolCall) => this._isLiveToolCall(toolCall))) {
       this.clearElapsedTimer();
       return;
@@ -579,7 +575,7 @@ export class ChatMessageBubble extends LitElement {
       return;
     }
     this.elapsedTimer = setInterval(() => {
-      this.elapsedNowMs = Date.now();
+      this.requestUpdate();
     }, 1000);
   }
 
