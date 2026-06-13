@@ -60,12 +60,20 @@ Renders a per-user response form. See [[help-macro-survey]].
 {{ Survey "team-preferences" }}
 ```
 
-### MapEmbed
+### Map
 
-Renders a responsive Google Maps embed. See [[help-macro-map-embed]].
+Renders a first-class wiki map from `MapService` data. See [[help-macro-map]].
 
 ```
-{{ MapEmbed "https://www.google.com/maps/embed?pb=..." }}
+{{"{{ Map \"yard\" }}"}}
+```
+
+### GoogleMapsEmbed
+
+Renders a responsive Google Maps embed. See [[help-macro-google-maps-embed]].
+
+```
+{{"{{ GoogleMapsEmbed \"https://www.google.com/maps/embed?pb=...\" }}"}}
 ```
 
 ### LinkTo

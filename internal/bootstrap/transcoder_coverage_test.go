@@ -62,6 +62,7 @@ var _ = Describe("BuildVanguardTranscoder service coverage", func() {
 		apiv1.RegisterFileStorageServiceServer(grpcServer, apiv1.UnimplementedFileStorageServiceServer{})
 		apiv1.RegisterFrontmatterServer(grpcServer, apiv1.UnimplementedFrontmatterServer{})
 		apiv1.RegisterInventoryManagementServiceServer(grpcServer, apiv1.UnimplementedInventoryManagementServiceServer{})
+		apiv1.RegisterMapServiceServer(grpcServer, apiv1.UnimplementedMapServiceServer{})
 		apiv1.RegisterPageImportServiceServer(grpcServer, apiv1.UnimplementedPageImportServiceServer{})
 		apiv1.RegisterPageManagementServiceServer(grpcServer, apiv1.UnimplementedPageManagementServiceServer{})
 		apiv1.RegisterScheduledTurnServiceServer(grpcServer, apiv1.UnimplementedScheduledTurnServiceServer{})

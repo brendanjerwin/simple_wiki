@@ -755,11 +755,11 @@ var _ = Describe("GoldmarkRenderer", func() {
 		}
 	})
 
-	// MapEmbed iframe sanitizer coverage
-	Describe("MapEmbed iframe sanitization", func() {
+	// GoogleMapsEmbed iframe sanitizer coverage
+	Describe("GoogleMapsEmbed iframe sanitization", func() {
 		const validMapsIframe = `<div class="map-embed"><iframe src="https://www.google.com/maps/embed?pb=abc" allowfullscreen="" loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe></div>`
 
-		When("rendering a valid Google Maps iframe emitted by MapEmbed", func() {
+		When("rendering a valid Google Maps iframe emitted by GoogleMapsEmbed", func() {
 			var rendered string
 			var renderErr error
 

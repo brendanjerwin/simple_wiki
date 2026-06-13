@@ -1,0 +1,172 @@
+{
+  "stage": "interview",
+  "title": "Issue 989 Map macro with MapService MCP surface",
+  "goalSlug": "issue-989-map-macro-mapservice",
+  "questions": [
+    {
+      "id": "slice_scope",
+      "prompt": "What should the first implementation goal include?",
+      "description": "Issue #989 describes a large end-to-end feature. The recommended scope keeps one coherent vertical slice while preserving the architecture that matters most.",
+      "answerMode": "single-custom",
+      "recommendedAnswer": "Implement the full issue acceptance criteria as one vertical slice, but sequence the work so backend data model, reserved namespaces, MapService, and macro rendering land before optional polish.",
+      "recommendedOptionIds": ["full_vertical_slice"],
+      "options": [
+        {
+          "id": "full_vertical_slice",
+          "label": "Full vertical slice"
+        },
+        {
+          "id": "backend_first",
+          "label": "Backend first"
+        },
+        {
+          "id": "rendering_first",
+          "label": "Rendering first"
+        }
+      ],
+      "required": true
+    },
+    {
+      "id": "must_not_defer",
+      "prompt": "Which parts must not be deferred from this goal?",
+      "description": "These are the pieces most likely to affect the architecture if postponed.",
+      "answerMode": "multi-custom",
+      "recommendedAnswer": "Do not defer reserved namespace rejection, the central map mutator funnel, principal-derived attribution, MapService reads/writes, the Map macro, Leaflet rendering, and tests for the service and rendered macro behavior.",
+      "recommendedOptionIds": [
+        "reserved_namespaces",
+        "mutator_funnel",
+        "principal_attribution",
+        "mapservice_api",
+        "macro_rendering",
+        "core_tests"
+      ],
+      "options": [
+        {
+          "id": "reserved_namespaces",
+          "label": "Reserved namespaces"
+        },
+        {
+          "id": "mutator_funnel",
+          "label": "Mutator funnel"
+        },
+        {
+          "id": "principal_attribution",
+          "label": "Principal attribution"
+        },
+        {
+          "id": "mapservice_api",
+          "label": "MapService API"
+        },
+        {
+          "id": "macro_rendering",
+          "label": "Macro rendering"
+        },
+        {
+          "id": "core_tests",
+          "label": "Core tests"
+        }
+      ],
+      "required": true
+    },
+    {
+      "id": "acceptable_deferrals",
+      "prompt": "What can be deferred only if the implementation gets too large?",
+      "description": "The issue marks several capabilities as v1, so the recommended answer is conservative and treats these as fallback deferrals, not planned omissions.",
+      "answerMode": "multi-custom",
+      "recommendedAnswer": "Prefer to include all acceptance criteria. If needed, defer only non-contract polish such as Esri imagery, OpenTopoMap, Storybook breadth, or fit-to-bounds button polish after the core MapService contract, OSM rendering, and tests work.",
+      "recommendedOptionIds": [
+        "extra_tile_layers",
+        "storybook_breadth",
+        "fit_button_polish"
+      ],
+      "options": [
+        {
+          "id": "extra_tile_layers",
+          "label": "Extra tile layers"
+        },
+        {
+          "id": "storybook_breadth",
+          "label": "Storybook breadth"
+        },
+        {
+          "id": "fit_button_polish",
+          "label": "Fit button polish"
+        },
+        {
+          "id": "none",
+          "label": "Nothing"
+        }
+      ],
+      "required": true
+    },
+    {
+      "id": "verification_standard",
+      "prompt": "What verification standard should the executing agent meet before calling this done?",
+      "description": "The repo convention expects devbox scripts and user-facing behavior coverage.",
+      "answerMode": "multi-custom",
+      "recommendedAnswer": "Run focused Go and frontend tests while developing, then finish with devbox run go:test, devbox run fe:test, generated files checked in, and any relevant e2e or Storybook build checks if touched.",
+      "recommendedOptionIds": [
+        "go_tests",
+        "frontend_tests",
+        "generated_files",
+        "e2e_relevant"
+      ],
+      "options": [
+        {
+          "id": "go_tests",
+          "label": "Go tests"
+        },
+        {
+          "id": "frontend_tests",
+          "label": "Frontend tests"
+        },
+        {
+          "id": "generated_files",
+          "label": "Generated files"
+        },
+        {
+          "id": "e2e_relevant",
+          "label": "Relevant e2e"
+        }
+      ],
+      "required": true
+    },
+    {
+      "id": "out_of_scope",
+      "prompt": "What must stay out of scope?",
+      "description": "Issue #989 already names several exclusions. This question confirms no hidden work should be pulled in.",
+      "answerMode": "multi-custom",
+      "recommendedAnswer": "Keep interactive map editing, routing, directions, geocoding, GeoJSON import, marker clustering, server-side tile rendering, and external paid/keyed map services out of scope.",
+      "recommendedOptionIds": [
+        "interactive_editing",
+        "routing_geocoding",
+        "geojson_clustering",
+        "server_tiles",
+        "paid_services"
+      ],
+      "options": [
+        {
+          "id": "interactive_editing",
+          "label": "Interactive editing"
+        },
+        {
+          "id": "routing_geocoding",
+          "label": "Routing/geocoding"
+        },
+        {
+          "id": "geojson_clustering",
+          "label": "GeoJSON/clustering"
+        },
+        {
+          "id": "server_tiles",
+          "label": "Server tiles"
+        },
+        {
+          "id": "paid_services",
+          "label": "Paid map services"
+        }
+      ],
+      "required": true
+    }
+  ]
+}

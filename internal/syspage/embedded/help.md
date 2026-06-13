@@ -56,6 +56,7 @@ See [[help-hashtags]] and [[help-search]] for the full grammar.
 - [[help-handling-large-pages]] — Strategies for trimming, splitting, and navigating large pages
 - [[help-macro-blog]] — Blog macro for publishing articles
 - [[help-macro-checklist]] — Checklist macro for interactive task lists
+- [[help-macro-map]] — First-class wiki maps backed by MapService
 - [[help-macro-survey]] — Survey macro for collecting per-user responses
 - [[help-profile]] — Per-user profile pages auto-resolved at `/profile`
 - [[help-profile-features]] — Catalog of profile-page widgets and macros, with copy-paste snippets to upgrade existing profiles

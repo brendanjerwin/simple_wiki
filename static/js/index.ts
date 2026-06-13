@@ -17,6 +17,7 @@ import './web-components/google-tasks-connect.js';
 import './web-components/connector-bind-button.js';
 import './web-components/profile-paused-banner.js';
 import './web-components/wiki-survey.js';
+import './web-components/wiki-map.js';
 import './web-components/wiki-blog.js';
 import './web-components/blog-new-post-dialog.js';
 import './web-components/file-drop-zone.js';

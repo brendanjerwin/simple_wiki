@@ -169,11 +169,13 @@ const (
 	funcNameSurvey             = "Survey"
 	funcNameKeepConnect        = "KeepConnect"
 	funcNameGoogleTasksConnect = "GoogleTasksConnect"
-	funcNameMapEmbed           = "MapEmbed"
+	funcNameMap                = "Map"
+	funcNameDeprecatedMapEmbed = "MapEmbed"
+	funcNameGoogleMapsEmbed    = "GoogleMapsEmbed"
 
 	templateTimeoutErrFmt = "template execution timed out after %v"
 
-	// googleMapsEmbedPrefix is the only allowed URL prefix for MapEmbed iframes.
+	// googleMapsEmbedPrefix is the only allowed URL prefix for GoogleMapsEmbed iframes.
 	googleMapsEmbedPrefix = "https://www.google.com/maps/embed"
 )
 
@@ -454,26 +456,36 @@ func BuildGoogleTasksConnect(_ TemplateContext) func() string {
 	}
 }
 
-// BuildMapEmbed returns a template function that renders a responsive Google
+// BuildGoogleMapsEmbed returns a template function that renders a responsive Google
 // Maps embed iframe inside a <div class="map-embed"> wrapper.
 //
 // Only URLs with the prefix https://www.google.com/maps/embed are accepted;
 // any other value renders a safe error placeholder instead of an iframe.
 // This prevents the macro from being used as an arbitrary iframe injector.
-func BuildMapEmbed(_ TemplateContext) func(string) string {
+func BuildGoogleMapsEmbed(_ TemplateContext) func(string) string {
 	return func(embedURL string) string {
 		if !strings.HasPrefix(embedURL, googleMapsEmbedPrefix) {
-			return fmt.Sprintf(`<p class="map-embed-error">MapEmbed: URL must start with %s</p>`,
+			return fmt.Sprintf(`<p class="map-embed-error">GoogleMapsEmbed: URL must start with %s</p>`,
 				html.EscapeString(googleMapsEmbedPrefix))
 		}
 		parsedURL, err := url.Parse(embedURL)
 		if err != nil {
-			return `<p class="map-embed-error">MapEmbed: invalid URL</p>`
+			return `<p class="map-embed-error">GoogleMapsEmbed: invalid URL</p>`
 		}
 		safeURL := parsedURL.String()
 		return fmt.Sprintf(
 			`<div class="map-embed"><iframe src="%s" allowfullscreen="" loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe></div>`,
 			html.EscapeString(safeURL),
+		)
+	}
+}
+
+// BuildMap returns a template function that renders a wiki-map custom element.
+func BuildMap(templateContext TemplateContext) func(string) string {
+	return func(mapName string) string {
+		return fmt.Sprintf(`<wiki-map name="%s" page="%s"></wiki-map>`,
+			html.EscapeString(mapName),
+			html.EscapeString(templateContext.Identifier),
 		)
 	}
 }
@@ -748,7 +760,9 @@ func buildChatTemplateWithFunctions(ctx context.Context, templateString string, 
 		funcNameSurvey:             func(string) string { return "" },
 		funcNameKeepConnect:        func() string { return "" },
 		funcNameGoogleTasksConnect: func() string { return "" },
-		funcNameMapEmbed:           func(string) string { return "" },
+		funcNameMap:                func(string) string { return "" },
+		funcNameDeprecatedMapEmbed: func(string) string { return "" },
+		funcNameGoogleMapsEmbed:    func(string) string { return "" },
 	}
 
 	return template.New("page").Funcs(funcs).Parse(templateString)
@@ -815,7 +829,9 @@ func buildTemplateWithFunctions(ctx context.Context, templateString string, site
 		funcNameSurvey:             BuildSurvey(templateContext),
 		funcNameKeepConnect:        BuildKeepConnect(templateContext),
 		funcNameGoogleTasksConnect: BuildGoogleTasksConnect(templateContext),
-		funcNameMapEmbed:           BuildMapEmbed(templateContext),
+		funcNameMap:                BuildMap(templateContext),
+		funcNameDeprecatedMapEmbed: BuildGoogleMapsEmbed(templateContext),
+		funcNameGoogleMapsEmbed:    BuildGoogleMapsEmbed(templateContext),
 	}
 
 	return template.New("page").Funcs(funcs).Parse(templateString)
@@ -856,7 +872,9 @@ func validationFuncMap() template.FuncMap {
 		funcNameSurvey:             func(string) string { return "" },
 		funcNameKeepConnect:        func() string { return "" },
 		funcNameGoogleTasksConnect: func() string { return "" },
-		funcNameMapEmbed:           func(string) string { return "" },
+		funcNameMap:                func(string) string { return "" },
+		funcNameDeprecatedMapEmbed: func(string) string { return "" },
+		funcNameGoogleMapsEmbed:    func(string) string { return "" },
 	}
 }
 

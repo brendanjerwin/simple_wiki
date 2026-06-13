@@ -88,6 +88,7 @@ func emittedCustomElementsByMacros() []string {
 
 	builders := []macroBuilder{
 		{name: "Checklist", factory: templating.BuildChecklist, args: []reflect.Value{tcontextArg}},
+		{name: "Map", factory: templating.BuildMap, args: []reflect.Value{tcontextArg}},
 		{name: "Survey", factory: templating.BuildSurvey, args: []reflect.Value{tcontextArg}},
 		// BuildBlog needs query+site — skipped here (the registry test in
 		// goldmarkrenderer covers wiki-blog passthrough). If a Blog

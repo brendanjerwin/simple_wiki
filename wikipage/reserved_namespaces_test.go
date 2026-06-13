@@ -44,6 +44,18 @@ var _ = Describe("IsReservedTopLevelKey", func() {
 		})
 	})
 
+	When("the key names the maps namespace", func() {
+		var result bool
+
+		BeforeEach(func() {
+			result = wikipage.IsReservedTopLevelKey("maps")
+		})
+
+		It("should be reserved", func() {
+			Expect(result).To(BeTrue())
+		})
+	})
+
 	When("the key is an unrelated namespace", func() {
 		var result bool
 

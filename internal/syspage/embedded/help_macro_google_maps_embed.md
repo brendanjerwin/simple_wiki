@@ -1,5 +1,5 @@
 +++
-identifier = "help_macro_map_embed"
+identifier = "help_macro_google_maps_embed"
 
 [wiki]
 system = true
@@ -9,12 +9,12 @@ system = true
 
 # {{.Title}}
 
-The MapEmbed macro renders a responsive Google Maps embed iframe from a Google Maps embed URL.
+The GoogleMapsEmbed macro renders a responsive Google Maps embed iframe from a Google Maps embed URL.
 
 ## Syntax
 
 ```
-{{ MapEmbed "https://www.google.com/maps/embed?pb=..." }}
+{{"{{ GoogleMapsEmbed \"https://www.google.com/maps/embed?pb=...\" }}"}}
 ```
 
 ### Parameters
@@ -26,7 +26,7 @@ The MapEmbed macro renders a responsive Google Maps embed iframe from a Google M
 ### Example
 
 ```
-{{ MapEmbed "https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d..." }}
+{{"{{ GoogleMapsEmbed \"https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d...\" }}"}}
 ```
 
 ## How to Get a Google Maps Embed URL
@@ -34,7 +34,7 @@ The MapEmbed macro renders a responsive Google Maps embed iframe from a Google M
 1. Open [Google Maps](https://maps.google.com) and navigate to the location, route, or map you want to embed.
 2. Click **Share** → **Embed a map**.
 3. Copy the URL from the `src="..."` attribute of the iframe code Google provides.
-4. Paste the URL as the argument to `MapEmbed`.
+4. Paste the URL as the argument to `GoogleMapsEmbed`.
 
 > [!NOTE]
 > Copy only the URL itself (the value of `src="..."`), not the full `<iframe>` HTML tag.
