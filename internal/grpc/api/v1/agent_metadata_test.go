@@ -86,12 +86,13 @@ var _ = Describe("AgentMetadataService handlers", func() {
 				resp, err = srv.UpsertSchedule(ctx, &apiv1.UpsertScheduleRequest{
 					Page: "p",
 					Schedule: &apiv1.AgentSchedule{
-						Id:           "weekly",
-						Cron:         "0 0 9 * * 1",
-						Prompt:       "do thing",
-						MaxTurns:     15,
-						Enabled:      true,
-						AllowedTools: []string{"Bash(mkdir:*)", "Bash(rm:*)"},
+						Id:             "weekly",
+						Cron:           "0 0 9 * * 1",
+						Prompt:         "do thing",
+						MaxTurns:       15,
+						Enabled:        true,
+						AllowedTools:   []string{"Bash(mkdir:*)", "Bash(rm:*)"},
+						TimeoutSeconds: 45,
 					},
 				})
 			})
@@ -113,6 +114,12 @@ var _ = Describe("AgentMetadataService handlers", func() {
 				list, _ := schedules.List("p")
 				Expect(list).To(HaveLen(1))
 				Expect(list[0].GetAllowedTools()).To(ConsistOf("Bash(mkdir:*)", "Bash(rm:*)"))
+			})
+
+			It("should persist timeout_seconds", func() {
+				list, _ := schedules.List("p")
+				Expect(list).To(HaveLen(1))
+				Expect(list[0].GetTimeoutSeconds()).To(Equal(int32(45)))
 			})
 		})
 
@@ -253,6 +260,25 @@ var _ = Describe("AgentMetadataService handlers", func() {
 				list, _ := schedules.List("p")
 				Expect(list).To(HaveLen(1))
 				Expect(list[0].GetTimezone()).To(Equal(""))
+			})
+		})
+
+		Describe("when timeout_seconds is negative", func() {
+			var err error
+
+			BeforeEach(func() {
+				_, err = srv.UpsertSchedule(ctx, &apiv1.UpsertScheduleRequest{
+					Page: "p",
+					Schedule: &apiv1.AgentSchedule{
+						Id:             "bad_timeout",
+						Cron:           "0 0 9 * * 1",
+						TimeoutSeconds: -1,
+					},
+				})
+			})
+
+			It("should return InvalidArgument", func() {
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.InvalidArgument, "timeout_seconds"))
 			})
 		})
 	})

@@ -51,6 +51,44 @@ var _ = Describe("scheduledTurnClient SessionUpdate max_turns enforcement", func
 			Expect(client.SessionUpdate(context.Background(), chunkNotification)).To(Succeed())
 		})
 
+		var _ = Describe("scheduledTurnHardTimeout", func() {
+			When("hard_timeout_seconds is positive", func() {
+				var timeout time.Duration
+
+				BeforeEach(func() {
+					timeout = scheduledTurnHardTimeout(&apiv1.ScheduledTurnRequest{HardTimeoutSeconds: 30})
+				})
+
+				It("should convert the request field to a duration", func() {
+					Expect(timeout).To(Equal(30 * time.Second))
+				})
+			})
+
+			When("hard_timeout_seconds is zero", func() {
+				var timeout time.Duration
+
+				BeforeEach(func() {
+					timeout = scheduledTurnHardTimeout(&apiv1.ScheduledTurnRequest{})
+				})
+
+				It("should disable the wall-clock timeout", func() {
+					Expect(timeout).To(BeZero())
+				})
+			})
+
+			When("the request is nil", func() {
+				var timeout time.Duration
+
+				BeforeEach(func() {
+					timeout = scheduledTurnHardTimeout(nil)
+				})
+
+				It("should disable the wall-clock timeout", func() {
+					Expect(timeout).To(BeZero())
+				})
+			})
+		})
+
 		It("should call cancel exactly once after the third chunk", func() {
 			Expect(cancelCalls.Load()).To(Equal(int32(1)))
 		})

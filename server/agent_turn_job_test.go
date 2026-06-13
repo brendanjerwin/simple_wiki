@@ -18,6 +18,7 @@ import (
 type fakeDispatcher struct {
 	mu               sync.Mutex
 	dispatched       []*apiv1.ScheduledTurnRequest
+	abandoned        []string
 	dispatchErr      error
 	completionToSend *server.ScheduledTurnOutcome
 	dispatchFn       func(*apiv1.ScheduledTurnRequest) (<-chan *server.ScheduledTurnOutcome, error)
@@ -55,6 +56,12 @@ func (f *fakeDispatcher) record(req *apiv1.ScheduledTurnRequest) {
 
 func (f *fakeDispatcher) recordLocked(req *apiv1.ScheduledTurnRequest) {
 	f.dispatched = append(f.dispatched, req)
+}
+
+func (f *fakeDispatcher) Abandon(requestID string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.abandoned = append(f.abandoned, requestID)
 }
 
 var _ = Describe("AgentTurnJob", func() {
@@ -109,6 +116,10 @@ var _ = Describe("AgentTurnJob", func() {
 			Expect(req.GetPrompt()).To(Equal("do thing"))
 			Expect(req.GetMaxTurns()).To(Equal(int32(10)))
 			Expect(req.GetAllowedTools()).To(ConsistOf("Bash(mkdir:*)"))
+		})
+
+		It("should send the global hard timeout to the pool request", func() {
+			Expect(dispatcher.dispatched[0].GetHardTimeoutSeconds()).To(Equal(int32(5)))
 		})
 
 		It("should record terminal OK status on the schedule", func() {
@@ -265,6 +276,11 @@ var _ = Describe("AgentTurnJob", func() {
 			schedules, _ := store.List("p")
 			Expect(schedules[0].GetLastDurationSeconds()).To(Equal(int32(1)))
 		})
+
+		It("should abandon the timed-out dispatcher request", func() {
+			Expect(dispatcher.abandoned).To(HaveLen(1))
+			Expect(dispatcher.abandoned[0]).To(Equal(dispatcher.dispatched[0].GetRequestId()))
+		})
 	})
 
 	Describe("Execute when the hard timeout wins before a late OK completion", func() {
@@ -309,6 +325,113 @@ var _ = Describe("AgentTurnJob", func() {
 		It("should record the timeout duration instead of the late completion duration", func() {
 			schedules, _ := store.List("p")
 			Expect(schedules[0].GetLastDurationSeconds()).To(Equal(int32(1)))
+		})
+	})
+
+	Describe("Execute when the schedule timeout_seconds is below the server hard cap", func() {
+		BeforeEach(func() {
+			Expect(store.Upsert("p", &apiv1.AgentSchedule{
+				Id:             "s1",
+				Cron:           "0 * * * * *",
+				Prompt:         "do thing",
+				MaxTurns:       10,
+				Enabled:        true,
+				TimeoutSeconds: 2,
+			})).To(Succeed())
+			dispatcher.completionToSend = &server.ScheduledTurnOutcome{
+				TerminalStatus: apiv1.ScheduleStatus_SCHEDULE_STATUS_OK,
+			}
+			job = server.NewAgentTurnJob(store, dispatcher, "p", "s1", 5*time.Second)
+			Expect(job.Execute()).To(Succeed())
+		})
+
+		It("should clamp the dispatched timeout to the schedule value", func() {
+			Expect(dispatcher.dispatched[0].GetHardTimeoutSeconds()).To(Equal(int32(2)))
+		})
+	})
+
+	Describe("Execute when the schedule timeout_seconds exceeds the server hard cap", func() {
+		BeforeEach(func() {
+			Expect(store.Upsert("p", &apiv1.AgentSchedule{
+				Id:             "s1",
+				Cron:           "0 * * * * *",
+				Prompt:         "do thing",
+				MaxTurns:       10,
+				Enabled:        true,
+				TimeoutSeconds: 600,
+			})).To(Succeed())
+			dispatcher.completionToSend = &server.ScheduledTurnOutcome{
+				TerminalStatus: apiv1.ScheduleStatus_SCHEDULE_STATUS_OK,
+			}
+			job = server.NewAgentTurnJob(store, dispatcher, "p", "s1", 5*time.Second)
+			Expect(job.Execute()).To(Succeed())
+		})
+
+		It("should clamp the dispatched timeout to the server cap", func() {
+			Expect(dispatcher.dispatched[0].GetHardTimeoutSeconds()).To(Equal(int32(5)))
+		})
+	})
+
+	Describe("Execute when a previous run timed out", func() {
+		BeforeEach(func() {
+			dispatcher.neverComplete = true
+			job = server.NewAgentTurnJob(store, dispatcher, "p", "s1", 50*time.Millisecond)
+
+			done := make(chan error, 1)
+			go func() {
+				done <- job.Execute()
+			}()
+			select {
+			case err := <-done:
+				Expect(err).NotTo(HaveOccurred())
+			case <-time.After(time.Second):
+				Fail("first Execute did not return within 1s")
+			}
+
+			dispatcher.neverComplete = false
+			dispatcher.completionToSend = &server.ScheduledTurnOutcome{
+				TerminalStatus: apiv1.ScheduleStatus_SCHEDULE_STATUS_OK,
+			}
+			job = server.NewAgentTurnJob(store, dispatcher, "p", "s1", 50*time.Millisecond)
+			Expect(job.Execute()).To(Succeed())
+		})
+
+		It("should dispatch the next cron fire after the timeout", func() {
+			Expect(dispatcher.dispatched).To(HaveLen(2))
+		})
+
+		It("should allow the next run to record a terminal status", func() {
+			schedules, _ := store.List("p")
+			Expect(schedules[0].GetLastStatus()).To(Equal(apiv1.ScheduleStatus_SCHEDULE_STATUS_OK))
+		})
+	})
+
+	Describe("Execute when the hard timeout elapses with background activity tracking enabled", func() {
+		var chatStore *server.AgentChatContextStore
+
+		BeforeEach(func() {
+			chatStore = server.NewAgentChatContextStore(pages)
+			store.SetBackgroundActivitySink(chatStore)
+			dispatcher.neverComplete = true
+			job = server.NewAgentTurnJob(store, dispatcher, "p", "s1", 50*time.Millisecond)
+
+			done := make(chan error, 1)
+			go func() {
+				done <- job.Execute()
+			}()
+			select {
+			case err := <-done:
+				Expect(err).NotTo(HaveOccurred())
+			case <-time.After(time.Second):
+				Fail("Execute did not return within 1s; awaitOutcome timeout branch is likely broken")
+			}
+		})
+
+		It("should mark the background activity entry as TIMEOUT", func() {
+			ctx, err := chatStore.Read("p")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(ctx.GetBackgroundActivity()).To(HaveLen(1))
+			Expect(ctx.GetBackgroundActivity()[0].GetStatus()).To(Equal(apiv1.ScheduleStatus_SCHEDULE_STATUS_TIMEOUT))
 		})
 	})
 

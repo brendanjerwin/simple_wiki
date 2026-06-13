@@ -128,3 +128,21 @@ func (d *ScheduledTurnDispatcher) Complete(req *apiv1.CompleteScheduledTurnReque
 	close(completion)
 	return nil
 }
+
+// Abandon removes a pending request that the server has timed out locally.
+// Late completions for an abandoned request are rejected as orphaned.
+func (d *ScheduledTurnDispatcher) Abandon(requestID string) {
+	if requestID == "" {
+		return
+	}
+
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	completion, ok := d.pending[requestID]
+	if !ok {
+		return
+	}
+	delete(d.pending, requestID)
+	close(completion)
+}

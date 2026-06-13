@@ -316,11 +316,25 @@ func scheduledTurnCompletionContext(ctx context.Context) (context.Context, conte
 	return context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
 }
 
+func scheduledTurnHardTimeout(req *apiv1.ScheduledTurnRequest) time.Duration {
+	if req == nil || req.GetHardTimeoutSeconds() <= 0 {
+		return 0
+	}
+	return time.Duration(req.GetHardTimeoutSeconds()) * time.Second
+}
+
 // executeScheduledTurn does the real work: spawn a fresh ephemeral ACP
 // instance (NOT registered in d.instances), send the preamble + prompt, watch
 // for max_turns, tear down. Returns the terminal status to report.
 func (d *poolDaemon) executeScheduledTurn(ctx context.Context, req *apiv1.ScheduledTurnRequest) (apiv1.ScheduleStatus, string) {
-	turnCtx, cancelTurn := context.WithCancel(ctx)
+	hardTimeout := scheduledTurnHardTimeout(req)
+	turnCtx := ctx
+	cancelTurn := func() {}
+	if hardTimeout > 0 {
+		turnCtx, cancelTurn = context.WithTimeout(ctx, hardTimeout)
+	} else {
+		turnCtx, cancelTurn = context.WithCancel(ctx)
+	}
 	defer cancelTurn()
 
 	conn, cleanup, spawnErr := d.spawnEphemeralForScheduledTurn(turnCtx, req.GetPage(), req.GetRequestId(), req.GetMaxTurns(), req.GetAllowedTools(), cancelTurn)
@@ -339,6 +353,9 @@ func (d *poolDaemon) executeScheduledTurn(ctx context.Context, req *apiv1.Schedu
 		return apiv1.ScheduleStatus_SCHEDULE_STATUS_TIMEOUT, fmt.Sprintf("max_turns (%d) reached", req.GetMaxTurns())
 	}
 	if promptErr != nil {
+		if hardTimeout > 0 && errors.Is(turnCtx.Err(), context.DeadlineExceeded) {
+			return apiv1.ScheduleStatus_SCHEDULE_STATUS_TIMEOUT, fmt.Sprintf("scheduled turn timed out after %s", hardTimeout)
+		}
 		// If we cancelled because the parent context was done (process
 		// shutdown, etc.), report that as ERROR with a clear message.
 		if ctx.Err() != nil {

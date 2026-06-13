@@ -183,6 +183,42 @@ var _ = Describe("ScheduledTurnDispatcher", func() {
 			})
 		})
 
+		Describe("when the server abandons a timed-out request", func() {
+			var (
+				requests     <-chan *apiv1.ScheduledTurnRequest
+				unsubscribe  func()
+				completion   <-chan *server.ScheduledTurnOutcome
+				completeErr  error
+			)
+
+			BeforeEach(func() {
+				requests, unsubscribe = dispatcher.Subscribe()
+				var dispatchErr error
+				completion, dispatchErr = dispatcher.Dispatch(&apiv1.ScheduledTurnRequest{
+					RequestId: "abandoned", Page: "p", Prompt: "do",
+				})
+				Expect(dispatchErr).NotTo(HaveOccurred())
+				Eventually(requests).Should(Receive())
+				dispatcher.Abandon("abandoned")
+				completeErr = dispatcher.Complete(&apiv1.CompleteScheduledTurnRequest{
+					RequestId:      "abandoned",
+					TerminalStatus: apiv1.ScheduleStatus_SCHEDULE_STATUS_OK,
+				})
+			})
+
+			AfterEach(func() {
+				unsubscribe()
+			})
+
+			It("should close the completion channel", func() {
+				Eventually(completion).Should(BeClosed())
+			})
+
+			It("should reject the late completion as orphaned", func() {
+				Expect(completeErr).To(MatchError(ContainSubstring("no pending scheduled turn")))
+			})
+		})
+
 		Describe("when Complete is called with a nil request", func() {
 			var completeErr error
 

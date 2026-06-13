@@ -372,13 +372,14 @@ func mergeSchedule(existing []*apiv1.AgentSchedule, sc *apiv1.AgentSchedule) []*
 // cloneScheduleClient returns a copy of sc with the wiki-managed fields cleared.
 func cloneScheduleClient(sc *apiv1.AgentSchedule) *apiv1.AgentSchedule {
 	return &apiv1.AgentSchedule{
-		Id:           sc.GetId(),
-		Cron:         sc.GetCron(),
-		Prompt:       sc.GetPrompt(),
-		MaxTurns:     sc.GetMaxTurns(),
-		Enabled:      sc.GetEnabled(),
-		Timezone:     sc.GetTimezone(),
-		AllowedTools: append([]string(nil), sc.GetAllowedTools()...),
+		Id:             sc.GetId(),
+		Cron:           sc.GetCron(),
+		Prompt:         sc.GetPrompt(),
+		MaxTurns:       sc.GetMaxTurns(),
+		Enabled:        sc.GetEnabled(),
+		Timezone:       sc.GetTimezone(),
+		AllowedTools:   append([]string(nil), sc.GetAllowedTools()...),
+		TimeoutSeconds: sc.GetTimeoutSeconds(),
 	}
 }
 

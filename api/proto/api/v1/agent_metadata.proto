@@ -116,6 +116,10 @@ message AgentSchedule {
   // headless scheduled turns (for example "Bash(mkdir:*)"). Empty means deny
   // all permission requests.
   repeated string allowed_tools = 11;
+  // Optional per-schedule wall-clock timeout in seconds. Zero/unset means use
+  // the server default. Values above the server hard cap are clamped to that
+  // cap at dispatch time.
+  int32 timeout_seconds = 12;
 }
 
 // BackgroundActivityEntry records one terminal scheduled-turn outcome on a page.

@@ -78,18 +78,22 @@ func (s *Server) UpsertSchedule(_ context.Context, req *apiv1.UpsertScheduleRequ
 			return nil, status.Errorf(codes.InvalidArgument, "invalid timezone %q: %v", tz, tzErr)
 		}
 	}
+	if schedule.GetTimeoutSeconds() < 0 {
+		return nil, status.Error(codes.InvalidArgument, "schedule.timeout_seconds must be >= 0")
+	}
 
 	// Strip wiki-managed fields so callers cannot forge status. The store
 	// layer also strips them; we belt-and-suspenders here so the response
 	// reflects the truth.
 	clean := &apiv1.AgentSchedule{
-		Id:           schedule.GetId(),
-		Cron:         schedule.GetCron(),
-		Prompt:       schedule.GetPrompt(),
-		MaxTurns:     schedule.GetMaxTurns(),
-		Enabled:      schedule.GetEnabled(),
-		Timezone:     schedule.GetTimezone(),
-		AllowedTools: append([]string(nil), schedule.GetAllowedTools()...),
+		Id:             schedule.GetId(),
+		Cron:           schedule.GetCron(),
+		Prompt:         schedule.GetPrompt(),
+		MaxTurns:       schedule.GetMaxTurns(),
+		Enabled:        schedule.GetEnabled(),
+		Timezone:       schedule.GetTimezone(),
+		AllowedTools:   append([]string(nil), schedule.GetAllowedTools()...),
+		TimeoutSeconds: schedule.GetTimeoutSeconds(),
 	}
 	if err := s.agentScheduleStore.Upsert(req.GetPage(), clean); err != nil {
 		return nil, status.Errorf(codes.Internal, "upsert schedule: %v", err)

@@ -28,6 +28,7 @@ const (
 // that AgentTurnJob needs. Defined as an interface so tests can supply a fake.
 type agentTurnDispatcher interface {
 	Dispatch(req *apiv1.ScheduledTurnRequest) (<-chan *ScheduledTurnOutcome, error)
+	Abandon(requestID string)
 }
 
 // AgentTurnJob drives one fire of one schedule on one page. It is a Job
@@ -112,11 +113,13 @@ func (j *AgentTurnJob) Execute() error {
 		const defaultMaxTurns = 20
 		maxTurns = defaultMaxTurns
 	}
+	hardTimeout := effectiveHardTimeout(j.hardTimeout, snapshot)
 	completion, dispatchErr := j.dispatcher.Dispatch(&apiv1.ScheduledTurnRequest{
-		RequestId: requestID,
-		Page:      j.page,
-		Prompt:    snapshot.GetPrompt(),
-		MaxTurns:  maxTurns,
+		RequestId:          requestID,
+		Page:               j.page,
+		Prompt:             snapshot.GetPrompt(),
+		MaxTurns:           maxTurns,
+		HardTimeoutSeconds: timeoutDurationSeconds(hardTimeout),
 		// Protobuf repeated fields share backing arrays; pass a copy so any
 		// downstream mutation in dispatch handling cannot alias store-owned data.
 		AllowedTools: append([]string(nil), snapshot.GetAllowedTools()...),
@@ -137,9 +140,9 @@ func (j *AgentTurnJob) Execute() error {
 		return nil
 	}
 
-	outcome, terminalErr := j.awaitOutcome(completion)
+	outcome, terminalErr := j.awaitOutcome(completion, hardTimeout)
 	if terminalErr != nil {
-		j.recordHardTimeout(terminalErr, j.hardTimeout)
+		j.recordHardTimeout(requestID, terminalErr, hardTimeout)
 		return nil
 	}
 
@@ -149,13 +152,30 @@ func (j *AgentTurnJob) Execute() error {
 	return nil
 }
 
-func (j *AgentTurnJob) recordHardTimeout(terminalErr error, waited time.Duration) {
+func (j *AgentTurnJob) recordHardTimeout(requestID string, terminalErr error, waited time.Duration) {
+	j.dispatcher.Abandon(requestID)
 	// Best-effort terminal-TIMEOUT transition; awaitOutcome's hard timeout
 	// recovers a stuck RUNNING and late completions for this request no longer
 	// change the authoritative schedule status.
 	if err := j.store.TransitionStatus(j.page, j.scheduleID, apiv1.ScheduleStatus_SCHEDULE_STATUS_TIMEOUT, terminalErr.Error(), timeoutDurationSeconds(waited)); err != nil {
 		slog.Error("agent turn: TIMEOUT transition after hard timeout failed", logKeyPage, j.page, logKeyScheduleID, j.scheduleID, logKeyError, err)
 	}
+}
+
+func effectiveHardTimeout(hardTimeoutCap time.Duration, snapshot *apiv1.AgentSchedule) time.Duration {
+	if snapshot == nil {
+		return hardTimeoutCap
+	}
+
+	if snapshot.GetTimeoutSeconds() <= 0 {
+		return hardTimeoutCap
+	}
+
+	scheduleTimeout := time.Duration(snapshot.GetTimeoutSeconds()) * time.Second
+	if hardTimeoutCap <= 0 || scheduleTimeout < hardTimeoutCap {
+		return scheduleTimeout
+	}
+	return hardTimeoutCap
 }
 
 func timeoutDurationSeconds(duration time.Duration) int32 {
@@ -198,15 +218,15 @@ func (j *AgentTurnJob) recordDispatchFailure(dispatchErr error) {
 
 // awaitOutcome blocks on the completion channel up to hardTimeout. A nil
 // outcome with a returned error means the timeout fired.
-func (j *AgentTurnJob) awaitOutcome(completion <-chan *ScheduledTurnOutcome) (*ScheduledTurnOutcome, error) {
-	if j.hardTimeout <= 0 {
+func (j *AgentTurnJob) awaitOutcome(completion <-chan *ScheduledTurnOutcome, hardTimeout time.Duration) (*ScheduledTurnOutcome, error) {
+	if hardTimeout <= 0 {
 		// Without a positive timeout, just wait indefinitely.
 		return <-completion, nil
 	}
 	select {
 	case outcome := <-completion:
 		return outcome, nil
-	case <-time.After(j.hardTimeout):
-		return nil, fmt.Errorf("scheduled turn timed out after %s", j.hardTimeout)
+	case <-time.After(hardTimeout):
+		return nil, fmt.Errorf("scheduled turn timed out after %s", hardTimeout)
 	}
 }
