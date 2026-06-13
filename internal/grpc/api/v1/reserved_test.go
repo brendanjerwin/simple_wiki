@@ -116,6 +116,22 @@ var _ = Describe("reserved namespace registry", func() {
 			})
 		})
 
+		When("called with the registered 'maps' key", func() {
+			var err error
+
+			BeforeEach(func() {
+				err = reservedNamespaceError("maps")
+			})
+
+			It("should return InvalidArgument", func() {
+				Expect(status.Code(err)).To(Equal(codes.InvalidArgument))
+			})
+
+			It("should direct callers to MapService", func() {
+				Expect(err.Error()).To(ContainSubstring("MapService"))
+			})
+		})
+
 		When("called with an unregistered key", func() {
 			var err error
 

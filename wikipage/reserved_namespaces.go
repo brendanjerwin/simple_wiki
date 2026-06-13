@@ -34,6 +34,7 @@ func ReservedTopLevelKeys() []string {
 // pick the new entry up automatically.
 var reservedTopLevelKeys = map[string]struct{}{
 	"agent":   {},
+	"maps":    {},
 	"surveys": {},
 	"wiki":    {},
 }

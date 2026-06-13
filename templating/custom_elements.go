@@ -35,6 +35,7 @@ const pageAttr = "page"
 func MacroCustomElements() []CustomElement {
 	return []CustomElement{
 		{Name: "wiki-checklist", Attrs: []string{"list-name", pageAttr}},
+		{Name: "wiki-map", Attrs: []string{"name", pageAttr}},
 		{Name: "wiki-survey", Attrs: []string{"name", pageAttr}},
 		{Name: "wiki-blog", Attrs: []string{"blog-id", "max-articles", pageAttr, "hide-new-post"}},
 		{Name: "keep-connect"},

@@ -93,6 +93,12 @@ var _ = Describe("MCP extension regression (Phase 1E.0)", func() {
 			Expect(tools).To(HaveKey("api_v1_ChecklistService_ListItems"))
 		})
 
+		It("should register the MapService tools", func() {
+			Expect(tools).To(HaveKey("api_v1_MapService_GetMap"))
+			Expect(tools).To(HaveKey("api_v1_MapService_AddMarker"))
+			Expect(tools).To(HaveKey("api_v1_MapService_ReplaceMarkers"))
+		})
+
 		It("should leave no tool with an empty description", func() {
 			for name, tool := range tools {
 				Expect(strings.TrimSpace(tool.Tool.Description)).

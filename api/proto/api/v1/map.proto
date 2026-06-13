@@ -1,0 +1,515 @@
+syntax = "proto3";
+
+package api.v1;
+
+import "api/v1/mcp_options.proto";
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/brendanjerwin/simple_wiki/gen/go/api/v1;apiv1";
+
+// MapService — see (api.v1.service_description).
+service MapService {
+  option (api.v1.service_description) =
+      "First-class wiki map reads and mutations. MapService is the only "
+      "mutation entry point for maps.<name> and agent.maps.<name>; generic "
+      "Frontmatter writes targeting those namespaces are rejected. The service "
+      "stamps stable element uids, timestamps, creator attribution, automated "
+      "caller attribution, map updated_at, and sync_token metadata.";
+
+  // SetMapView — see (api.v1.description).
+  rpc SetMapView(SetMapViewRequest) returns (SetMapViewResponse) {
+    option (api.v1.description) =
+        "Create or update a map's initial viewport. Latitude must be between "
+        "-90 and 90, longitude between -180 and 180, and zoom non-negative. "
+        "Pass expected_updated_at from GetMap/ListMaps for optimistic "
+        "concurrency.";
+    option (api.v1.example_request) =
+        "{\"page\":\"garden_plan\",\"map_name\":\"yard\",\"view\":{\"center\":{\"lat\":41.1,\"lon\":-72.2},\"zoom\":17}}";
+  }
+
+  // SetMapStyle — see (api.v1.description).
+  rpc SetMapStyle(SetMapStyleRequest) returns (SetMapStyleResponse) {
+    option (api.v1.description) =
+        "Create or update tile/style configuration for a map. Unknown tile "
+        "layer IDs are rejected; supported free layers include attribution in "
+        "MapService.GetMap responses for the frontend to render automatically.";
+  }
+
+  // AddMarker — see (api.v1.description).
+  rpc AddMarker(AddMarkerRequest) returns (AddMarkerResponse) {
+    option (api.v1.description) =
+        "Add a marker to a map. The wiki assigns uid, created_at, updated_at, "
+        "created_by, automated, sparse sort_order, and map sync metadata. "
+        "Latitude and longitude are validated before writing.";
+  }
+
+  // UpdateMarker — see (api.v1.description).
+  rpc UpdateMarker(UpdateMarkerRequest) returns (UpdateMarkerResponse) {
+    option (api.v1.description) =
+        "Update user-mutable fields on an existing marker. The uid and "
+        "wiki-managed metadata are immutable on input and are re-derived by "
+        "the map mutator funnel.";
+  }
+
+  // MoveMarker — see (api.v1.description).
+  rpc MoveMarker(MoveMarkerRequest) returns (MoveMarkerResponse) {
+    option (api.v1.description) =
+        "Move an existing marker to a new latitude/longitude. Pass "
+        "expected_updated_at for optimistic concurrency when applying edits "
+        "from a prior read.";
+  }
+
+  // DeleteMarker — see (api.v1.description).
+  rpc DeleteMarker(DeleteMarkerRequest) returns (DeleteMarkerResponse) {
+    option (api.v1.description) =
+        "Delete one marker by stable uid and advance the map sync token.";
+  }
+
+  // AddPolygon — see (api.v1.description).
+  rpc AddPolygon(AddPolygonRequest) returns (AddPolygonResponse) {
+    option (api.v1.description) =
+        "Add a polygon to a map. Polygons require at least three points; all "
+        "point coordinates are validated before the atomic frontmatter write.";
+  }
+
+  // UpdatePolygon — see (api.v1.description).
+  rpc UpdatePolygon(UpdatePolygonRequest) returns (UpdatePolygonResponse) {
+    option (api.v1.description) =
+        "Update user-mutable fields on an existing polygon while preserving "
+        "stable uid and created metadata.";
+  }
+
+  // DeletePolygon — see (api.v1.description).
+  rpc DeletePolygon(DeletePolygonRequest) returns (DeletePolygonResponse) {
+    option (api.v1.description) =
+        "Delete one polygon by stable uid and advance the map sync token.";
+  }
+
+  // AddCircle — see (api.v1.description).
+  rpc AddCircle(AddCircleRequest) returns (AddCircleResponse) {
+    option (api.v1.description) =
+        "Add a circle to a map. The center latitude/longitude and positive "
+        "radius_meters value are validated by the mutator funnel.";
+  }
+
+  // UpdateCircle — see (api.v1.description).
+  rpc UpdateCircle(UpdateCircleRequest) returns (UpdateCircleResponse) {
+    option (api.v1.description) =
+        "Update user-mutable fields on an existing circle while preserving "
+        "stable uid and created metadata.";
+  }
+
+  // DeleteCircle — see (api.v1.description).
+  rpc DeleteCircle(DeleteCircleRequest) returns (DeleteCircleResponse) {
+    option (api.v1.description) =
+        "Delete one circle by stable uid and advance the map sync token.";
+  }
+
+  // ReorderElement — see (api.v1.description).
+  rpc ReorderElement(ReorderElementRequest) returns (ReorderElementResponse) {
+    option (api.v1.description) =
+        "Set sparse sort_order for a marker, polygon, or circle. The funnel "
+        "keeps unaffected elements stable and only resolves ordering "
+        "collisions when needed.";
+  }
+
+  // ReplaceMarkers — see (api.v1.description).
+  rpc ReplaceMarkers(ReplaceMarkersRequest) returns (ReplaceMarkersResponse) {
+    option (api.v1.description) =
+        "Reconcile the marker set in one operation, matching existing markers "
+        "by label plus latitude/longitude rounded to six decimals so agents "
+        "can refresh imported marker lists without losing stable uids.";
+  }
+
+  // DeleteMap — see (api.v1.description).
+  rpc DeleteMap(DeleteMapRequest) returns (DeleteMapResponse) {
+    option (api.v1.description) =
+        "Delete a whole named map, including user-mutable maps.<name> data "
+        "and wiki-managed agent.maps.<name> metadata in one atomic mutation.";
+  }
+
+  // GetMap — see (api.v1.description).
+  rpc GetMap(GetMapRequest) returns (GetMapResponse) {
+    option (api.v1.description) =
+        "Read a named map with selectable element detail. Use include_markers, "
+        "include_polygons, include_circles, and bbox to keep responses small; "
+        "when no include flags are set the service may return all element "
+        "types for user-facing rendering.";
+    option (api.v1.read_only) = true;
+  }
+
+  // ListMaps — see (api.v1.description).
+  rpc ListMaps(ListMapsRequest) returns (ListMapsResponse) {
+    option (api.v1.description) =
+        "List maps on a page with outline metadata and element counts, without "
+        "returning every marker, polygon, or circle.";
+    option (api.v1.read_only) = true;
+  }
+
+  // ListMapElements — see (api.v1.description).
+  rpc ListMapElements(ListMapElementsRequest) returns (ListMapElementsResponse) {
+    option (api.v1.description) =
+        "List context-efficient element outlines for a map, optionally "
+        "filtered by element type and bounding box.";
+    option (api.v1.read_only) = true;
+  }
+
+  // GetElement — see (api.v1.description).
+  rpc GetElement(GetElementRequest) returns (GetElementResponse) {
+    option (api.v1.description) =
+        "Read a single marker, polygon, or circle by stable uid for drill-down "
+        "after ListMapElements.";
+    option (api.v1.read_only) = true;
+  }
+
+  // FindMarkers — see (api.v1.description).
+  rpc FindMarkers(FindMarkersRequest) returns (FindMarkersResponse) {
+    option (api.v1.description) =
+        "Search marker labels and popup markdown within one map, optionally "
+        "bounded by a viewport and limited for compact agent responses.";
+    option (api.v1.read_only) = true;
+  }
+}
+
+enum TileLayerId {
+  TILE_LAYER_ID_UNSPECIFIED = 0;
+  TILE_LAYER_ID_OPENSTREETMAP = 1;
+  TILE_LAYER_ID_OPENTOPOMAP = 2;
+  TILE_LAYER_ID_ESRI_WORLD_IMAGERY = 3;
+}
+
+enum MapElementType {
+  MAP_ELEMENT_TYPE_UNSPECIFIED = 0;
+  MAP_ELEMENT_TYPE_MARKER = 1;
+  MAP_ELEMENT_TYPE_POLYGON = 2;
+  MAP_ELEMENT_TYPE_CIRCLE = 3;
+}
+
+message GeoPoint {
+  double lat = 1;
+  double lon = 2;
+}
+
+message BoundingBox {
+  GeoPoint south_west = 1;
+  GeoPoint north_east = 2;
+}
+
+message MapView {
+  GeoPoint center = 1;
+  double zoom = 2;
+}
+
+message TileLayer {
+  TileLayerId id = 1;
+  string label = 2;
+  string url_template = 3;
+  string attribution_html = 4;
+}
+
+message MapStyle {
+  TileLayerId tile_layer_id = 1;
+  repeated TileLayer available_tile_layers = 2;
+}
+
+message MapElementMetadata {
+  string uid = 1;
+  google.protobuf.Timestamp created_at = 2;
+  google.protobuf.Timestamp updated_at = 3;
+  string created_by = 4;
+  bool automated = 5;
+  int64 sort_order = 6;
+}
+
+message MapMarker {
+  MapElementMetadata metadata = 1;
+  string label = 2;
+  GeoPoint position = 3;
+  string popup_markdown = 4;
+  string color = 5;
+}
+
+message MapPolygon {
+  MapElementMetadata metadata = 1;
+  string label = 2;
+  repeated GeoPoint points = 3;
+  string popup_markdown = 4;
+  string stroke_color = 5;
+  string fill_color = 6;
+}
+
+message MapCircle {
+  MapElementMetadata metadata = 1;
+  string label = 2;
+  GeoPoint center = 3;
+  double radius_meters = 4;
+  string popup_markdown = 5;
+  string stroke_color = 6;
+  string fill_color = 7;
+}
+
+message Map {
+  string page = 1;
+  string name = 2;
+  MapView view = 3;
+  MapStyle style = 4;
+  repeated MapMarker markers = 5;
+  repeated MapPolygon polygons = 6;
+  repeated MapCircle circles = 7;
+  google.protobuf.Timestamp updated_at = 8;
+  int64 sync_token = 9;
+}
+
+message MapOutline {
+  string page = 1;
+  string name = 2;
+  google.protobuf.Timestamp updated_at = 3;
+  int64 sync_token = 4;
+  int32 marker_count = 5;
+  int32 polygon_count = 6;
+  int32 circle_count = 7;
+}
+
+message MapElementOutline {
+  string uid = 1;
+  MapElementType type = 2;
+  string label = 3;
+  GeoPoint representative_point = 4;
+  google.protobuf.Timestamp updated_at = 5;
+  int64 sort_order = 6;
+}
+
+message SetMapViewRequest {
+  string page = 1;
+  string map_name = 2;
+  MapView view = 3;
+  google.protobuf.Timestamp expected_updated_at = 4;
+}
+
+message SetMapViewResponse {
+  Map map = 1;
+}
+
+message SetMapStyleRequest {
+  string page = 1;
+  string map_name = 2;
+  MapStyle style = 3;
+  google.protobuf.Timestamp expected_updated_at = 4;
+}
+
+message SetMapStyleResponse {
+  Map map = 1;
+}
+
+message AddMarkerRequest {
+  string page = 1;
+  string map_name = 2;
+  MapMarker marker = 3;
+  google.protobuf.Timestamp expected_updated_at = 4;
+}
+
+message AddMarkerResponse {
+  MapMarker marker = 1;
+  Map map = 2;
+}
+
+message UpdateMarkerRequest {
+  string page = 1;
+  string map_name = 2;
+  string uid = 3;
+  MapMarker marker = 4;
+  google.protobuf.Timestamp expected_updated_at = 5;
+}
+
+message UpdateMarkerResponse {
+  MapMarker marker = 1;
+  Map map = 2;
+}
+
+message MoveMarkerRequest {
+  string page = 1;
+  string map_name = 2;
+  string uid = 3;
+  GeoPoint position = 4;
+  google.protobuf.Timestamp expected_updated_at = 5;
+}
+
+message MoveMarkerResponse {
+  MapMarker marker = 1;
+  Map map = 2;
+}
+
+message DeleteMarkerRequest {
+  string page = 1;
+  string map_name = 2;
+  string uid = 3;
+  google.protobuf.Timestamp expected_updated_at = 4;
+}
+
+message DeleteMarkerResponse {
+  Map map = 1;
+}
+
+message AddPolygonRequest {
+  string page = 1;
+  string map_name = 2;
+  MapPolygon polygon = 3;
+  google.protobuf.Timestamp expected_updated_at = 4;
+}
+
+message AddPolygonResponse {
+  MapPolygon polygon = 1;
+  Map map = 2;
+}
+
+message UpdatePolygonRequest {
+  string page = 1;
+  string map_name = 2;
+  string uid = 3;
+  MapPolygon polygon = 4;
+  google.protobuf.Timestamp expected_updated_at = 5;
+}
+
+message UpdatePolygonResponse {
+  MapPolygon polygon = 1;
+  Map map = 2;
+}
+
+message DeletePolygonRequest {
+  string page = 1;
+  string map_name = 2;
+  string uid = 3;
+  google.protobuf.Timestamp expected_updated_at = 4;
+}
+
+message DeletePolygonResponse {
+  Map map = 1;
+}
+
+message AddCircleRequest {
+  string page = 1;
+  string map_name = 2;
+  MapCircle circle = 3;
+  google.protobuf.Timestamp expected_updated_at = 4;
+}
+
+message AddCircleResponse {
+  MapCircle circle = 1;
+  Map map = 2;
+}
+
+message UpdateCircleRequest {
+  string page = 1;
+  string map_name = 2;
+  string uid = 3;
+  MapCircle circle = 4;
+  google.protobuf.Timestamp expected_updated_at = 5;
+}
+
+message UpdateCircleResponse {
+  MapCircle circle = 1;
+  Map map = 2;
+}
+
+message DeleteCircleRequest {
+  string page = 1;
+  string map_name = 2;
+  string uid = 3;
+  google.protobuf.Timestamp expected_updated_at = 4;
+}
+
+message DeleteCircleResponse {
+  Map map = 1;
+}
+
+message ReorderElementRequest {
+  string page = 1;
+  string map_name = 2;
+  MapElementType type = 3;
+  string uid = 4;
+  int64 sort_order = 5;
+  google.protobuf.Timestamp expected_updated_at = 6;
+}
+
+message ReorderElementResponse {
+  Map map = 1;
+}
+
+message ReplaceMarkersRequest {
+  string page = 1;
+  string map_name = 2;
+  repeated MapMarker markers = 3;
+  google.protobuf.Timestamp expected_updated_at = 4;
+}
+
+message ReplaceMarkersResponse {
+  Map map = 1;
+}
+
+message DeleteMapRequest {
+  string page = 1;
+  string map_name = 2;
+  google.protobuf.Timestamp expected_updated_at = 3;
+}
+
+message DeleteMapResponse {}
+
+message GetMapRequest {
+  string page = 1;
+  string map_name = 2;
+  bool include_markers = 3;
+  bool include_polygons = 4;
+  bool include_circles = 5;
+  BoundingBox bbox = 6;
+}
+
+message GetMapResponse {
+  Map map = 1;
+}
+
+message ListMapsRequest {
+  string page = 1;
+}
+
+message ListMapsResponse {
+  repeated MapOutline maps = 1;
+}
+
+message ListMapElementsRequest {
+  string page = 1;
+  string map_name = 2;
+  repeated MapElementType types = 3;
+  BoundingBox bbox = 4;
+  int32 limit = 5;
+  string page_token = 6;
+}
+
+message ListMapElementsResponse {
+  repeated MapElementOutline elements = 1;
+  string next_page_token = 2;
+}
+
+message GetElementRequest {
+  string page = 1;
+  string map_name = 2;
+  MapElementType type = 3;
+  string uid = 4;
+}
+
+message GetElementResponse {
+  MapMarker marker = 1;
+  MapPolygon polygon = 2;
+  MapCircle circle = 3;
+}
+
+message FindMarkersRequest {
+  string page = 1;
+  string map_name = 2;
+  string query = 3;
+  BoundingBox bbox = 4;
+  int32 limit = 5;
+}
+
+message FindMarkersResponse {
+  repeated MapMarker markers = 1;
+}

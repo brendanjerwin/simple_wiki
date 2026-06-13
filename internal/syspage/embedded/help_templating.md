@@ -60,6 +60,14 @@ Renders a per-user response form. See [[help-macro-survey]].
 {{ Survey "team-preferences" }}
 ```
 
+### Map
+
+Renders a first-class wiki map from `MapService` data. See [[help-macro-map]].
+
+```
+{{ Map "yard" }}
+```
+
 ### MapEmbed
 
 Renders a responsive Google Maps embed. See [[help-macro-map-embed]].

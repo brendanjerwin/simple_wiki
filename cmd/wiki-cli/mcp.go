@@ -124,6 +124,7 @@ type apiClients struct {
 	checklist      apiv1connect.ChecklistServiceClient
 	frontmatter    apiv1connect.FrontmatterClient
 	inventory      apiv1connect.InventoryManagementServiceClient
+	mapService     apiv1connect.MapServiceClient
 	pageImport     apiv1connect.PageImportServiceClient
 	pageManagement apiv1connect.PageManagementServiceClient
 	search         apiv1connect.SearchServiceClient
@@ -138,6 +139,7 @@ func createAPIClients(httpClient connect.HTTPClient, baseURL string) *apiClients
 		checklist:      apiv1connect.NewChecklistServiceClient(httpClient, baseURL),
 		frontmatter:    apiv1connect.NewFrontmatterClient(httpClient, baseURL),
 		inventory:      apiv1connect.NewInventoryManagementServiceClient(httpClient, baseURL),
+		mapService:     apiv1connect.NewMapServiceClient(httpClient, baseURL),
 		pageImport:     apiv1connect.NewPageImportServiceClient(httpClient, baseURL),
 		pageManagement: apiv1connect.NewPageManagementServiceClient(httpClient, baseURL),
 		search:         apiv1connect.NewSearchServiceClient(httpClient, baseURL),
@@ -154,6 +156,7 @@ func registerToolHandlers(s *mcpserver.MCPServer, clients *apiClients) {
 	apiv1mcp.ForwardToConnectChecklistServiceClient(s, clients.checklist)
 	apiv1mcp.ForwardToConnectFrontmatterClient(s, clients.frontmatter)
 	apiv1mcp.ForwardToConnectInventoryManagementServiceClient(s, clients.inventory)
+	apiv1mcp.ForwardToConnectMapServiceClient(s, clients.mapService)
 	apiv1mcp.ForwardToConnectPageImportServiceClient(s, clients.pageImport)
 	apiv1mcp.ForwardToConnectPageManagementServiceClient(s, clients.pageManagement)
 	apiv1mcp.ForwardToConnectSearchServiceClient(s, clients.search)

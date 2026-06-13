@@ -29,6 +29,7 @@ import (
 	"github.com/brendanjerwin/simple_wiki/pkg/ulid"
 	"github.com/brendanjerwin/simple_wiki/server"
 	"github.com/brendanjerwin/simple_wiki/server/checklistmutator"
+	"github.com/brendanjerwin/simple_wiki/server/mapmutator"
 	"github.com/brendanjerwin/simple_wiki/server/surveymutator"
 	"github.com/brendanjerwin/simple_wiki/tailscale"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
@@ -464,6 +465,7 @@ func BuildVanguardTranscoder(grpcServer *grpc.Server, ginRouter http.Handler) (h
 		"api.v1.FileStorageService",
 		"api.v1.Frontmatter",
 		"api.v1.InventoryManagementService",
+		"api.v1.MapService",
 		"api.v1.PageImportService",
 		"api.v1.PageManagementService",
 		"api.v1.ScheduledTurnService",
@@ -543,6 +545,7 @@ func setupGRPCServer(
 		return nil, nil, fmt.Errorf("failed to create gRPC server: %w", err)
 	}
 	checklistMutator := checklistmutator.New(site, checklistmutator.SystemClock{}, ulid.NewSystemGenerator())
+	mapMutator := mapmutator.New(site, mapmutator.SystemClock{}, ulid.NewSystemGenerator())
 	surveyMutator := surveymutator.New(site, surveymutator.SystemClock{})
 
 	// Cross-connector LeaseTable — the in-memory derived view of which
@@ -618,6 +621,7 @@ func setupGRPCServer(
 		WithAgentScheduleStore(site.AgentScheduleStore).
 		WithAgentChatContextStore(site.AgentChatContextStore).
 		WithChecklistMutator(checklistMutator).
+		WithMapMutator(mapMutator).
 		WithSurveyMutator(surveyMutator)
 
 	if keepWiring != nil {

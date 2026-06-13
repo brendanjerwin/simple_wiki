@@ -169,6 +169,7 @@ const (
 	funcNameSurvey             = "Survey"
 	funcNameKeepConnect        = "KeepConnect"
 	funcNameGoogleTasksConnect = "GoogleTasksConnect"
+	funcNameMap                = "Map"
 	funcNameMapEmbed           = "MapEmbed"
 
 	templateTimeoutErrFmt = "template execution timed out after %v"
@@ -478,6 +479,16 @@ func BuildMapEmbed(_ TemplateContext) func(string) string {
 	}
 }
 
+// BuildMap returns a template function that renders a wiki-map custom element.
+func BuildMap(templateContext TemplateContext) func(string) string {
+	return func(mapName string) string {
+		return fmt.Sprintf(`<wiki-map name="%s" page="%s"></wiki-map>`,
+			html.EscapeString(mapName),
+			html.EscapeString(templateContext.Identifier),
+		)
+	}
+}
+
 // BuildSurvey returns a template function that renders a wiki-survey custom element
 // with a server-rendered fallback inside it.
 func BuildSurvey(templateContext TemplateContext) func(string) string {
@@ -748,6 +759,7 @@ func buildChatTemplateWithFunctions(ctx context.Context, templateString string, 
 		funcNameSurvey:             func(string) string { return "" },
 		funcNameKeepConnect:        func() string { return "" },
 		funcNameGoogleTasksConnect: func() string { return "" },
+		funcNameMap:                func(string) string { return "" },
 		funcNameMapEmbed:           func(string) string { return "" },
 	}
 
@@ -815,6 +827,7 @@ func buildTemplateWithFunctions(ctx context.Context, templateString string, site
 		funcNameSurvey:             BuildSurvey(templateContext),
 		funcNameKeepConnect:        BuildKeepConnect(templateContext),
 		funcNameGoogleTasksConnect: BuildGoogleTasksConnect(templateContext),
+		funcNameMap:                BuildMap(templateContext),
 		funcNameMapEmbed:           BuildMapEmbed(templateContext),
 	}
 
@@ -856,6 +869,7 @@ func validationFuncMap() template.FuncMap {
 		funcNameSurvey:             func(string) string { return "" },
 		funcNameKeepConnect:        func() string { return "" },
 		funcNameGoogleTasksConnect: func() string { return "" },
+		funcNameMap:                func(string) string { return "" },
 		funcNameMapEmbed:           func(string) string { return "" },
 	}
 }
