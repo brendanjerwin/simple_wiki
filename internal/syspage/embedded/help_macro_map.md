@@ -54,13 +54,13 @@ sort_order = 2000
 The Map macro renders a first-class interactive wiki map from map data on the current page.
 
 ```
-{{ Map "map-name" }}
+{{"{{ Map \"map-name\" }}"}}
 ```
 
 Example:
 
 ```
-{{ Map "yard" }}
+{{"{{ Map \"yard\" }}"}}
 ```
 
 The rendered page contains:
@@ -94,7 +94,7 @@ OpenStreetMap is the default raster tile layer. Supported free layers include:
 
 The map response includes the required attribution HTML for the selected tile layer, and the frontend renders that attribution automatically.
 
-Paid or keyed providers such as Mapbox, MapTiler, and Google Maps are intentionally not supported by this macro. Use [[help-macro-map-embed]] only when you need a Google Maps embed iframe.
+Paid or keyed providers such as Mapbox, MapTiler, and Google Maps are intentionally not supported by this macro. Use [[help-macro-google-maps-embed]] only when you need a Google Maps embed iframe.
 
 ## Agent API
 

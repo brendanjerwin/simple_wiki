@@ -165,7 +165,10 @@ export class WikiMap extends LitElement {
     css`
       :host {
         display: block;
+        isolation: isolate;
         margin: 1rem 0;
+        position: relative;
+        z-index: 0;
       }
 
       .map-shell {

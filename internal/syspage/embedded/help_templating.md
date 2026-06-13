@@ -65,15 +65,15 @@ Renders a per-user response form. See [[help-macro-survey]].
 Renders a first-class wiki map from `MapService` data. See [[help-macro-map]].
 
 ```
-{{ Map "yard" }}
+{{"{{ Map \"yard\" }}"}}
 ```
 
-### MapEmbed
+### GoogleMapsEmbed
 
-Renders a responsive Google Maps embed. See [[help-macro-map-embed]].
+Renders a responsive Google Maps embed. See [[help-macro-google-maps-embed]].
 
 ```
-{{ MapEmbed "https://www.google.com/maps/embed?pb=..." }}
+{{"{{ GoogleMapsEmbed \"https://www.google.com/maps/embed?pb=...\" }}"}}
 ```
 
 ### LinkTo

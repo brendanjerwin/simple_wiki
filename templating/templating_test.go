@@ -2035,13 +2035,13 @@ var _ = Describe("BuildGoogleTasksConnect", func() {
 	})
 })
 
-var _ = Describe("BuildMapEmbed", func() {
+var _ = Describe("BuildGoogleMapsEmbed", func() {
 	const validMapsURL = "https://www.google.com/maps/embed?pb=!1m18!1m12!1m3"
 
 	var fn func(string) string
 
 	BeforeEach(func() {
-		fn = templating.BuildMapEmbed(templating.TemplateContext{Identifier: "test_page"})
+		fn = templating.BuildGoogleMapsEmbed(templating.TemplateContext{Identifier: "test_page"})
 	})
 
 	When("called with a valid Google Maps embed URL", func() {

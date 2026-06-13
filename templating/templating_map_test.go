@@ -120,8 +120,15 @@ var _ = Describe("ValidateTemplate with Map", func() {
 		})
 	})
 
-	Describe("when template uses the legacy MapEmbed macro", func() {
+	Describe("when template uses the GoogleMapsEmbed macro", func() {
 		It("should not return an error", func() {
+			err := templating.ValidateTemplate(`{{ GoogleMapsEmbed "https://www.google.com/maps/embed?pb=abc" }}`)
+			Expect(err).NotTo(HaveOccurred())
+		})
+	})
+
+	Describe("when template still uses the deprecated MapEmbed macro", func() {
+		It("should not return an error during rollout", func() {
 			err := templating.ValidateTemplate(`{{ MapEmbed "https://www.google.com/maps/embed?pb=abc" }}`)
 			Expect(err).NotTo(HaveOccurred())
 		})

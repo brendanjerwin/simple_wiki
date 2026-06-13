@@ -5,8 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 	"testing"
 
+	"github.com/brendanjerwin/simple_wiki/templating"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -82,6 +84,34 @@ type nullLogger struct{}
 
 func (nullLogger) Info(_ string, _ ...any)  {}
 func (nullLogger) Debug(_ string, _ ...any) {}
+
+type emptyFrontmatterIndex struct{}
+
+func (emptyFrontmatterIndex) QueryExactMatch(wikipage.DottedKeyPath, wikipage.Value) []wikipage.PageIdentifier {
+	return nil
+}
+
+func (emptyFrontmatterIndex) QueryKeyExistence(wikipage.DottedKeyPath) []wikipage.PageIdentifier {
+	return nil
+}
+
+func (emptyFrontmatterIndex) QueryPrefixMatch(wikipage.DottedKeyPath, string) []wikipage.PageIdentifier {
+	return nil
+}
+
+func (emptyFrontmatterIndex) QueryExactMatchSortedBy(
+	wikipage.DottedKeyPath,
+	wikipage.Value,
+	wikipage.DottedKeyPath,
+	bool,
+	int,
+) []wikipage.PageIdentifier {
+	return nil
+}
+
+func (emptyFrontmatterIndex) GetValue(wikipage.PageIdentifier, wikipage.DottedKeyPath) wikipage.Value {
+	return ""
+}
 
 var _ = Describe("LoadEmbedded", func() {
 	var (
@@ -174,6 +204,48 @@ var _ = Describe("LoadEmbedded", func() {
 		It("should cover splitting and trimming", func() {
 			Expect(helpPage.Markdown).To(ContainSubstring("Trim Strategies"))
 			Expect(helpPage.Markdown).To(ContainSubstring("Splitting Strategies"))
+		})
+	})
+
+	Describe("the map macro help page", func() {
+		var (
+			helpPage         *Page
+			renderedMarkdown string
+			renderErr        error
+		)
+
+		BeforeEach(func() {
+			helpPage = nil
+			for i := range pages {
+				if pages[i].Identifier == "help_macro_map" {
+					helpPage = &pages[i]
+					break
+				}
+			}
+			Expect(helpPage).NotTo(BeNil(), "help_macro_map.md should ship in internal/syspage/embedded/")
+
+			var renderedBytes []byte
+			renderedBytes, renderErr = templating.ExecuteTemplate(
+				helpPage.Markdown,
+				helpPage.Frontmatter,
+				newFakeStore(),
+				emptyFrontmatterIndex{},
+			)
+			renderedMarkdown = string(renderedBytes)
+		})
+
+		It("should render without template errors", func() {
+			Expect(renderErr).NotTo(HaveOccurred())
+		})
+
+		It("should show the Map macro syntax in Go template format", func() {
+			Expect(renderedMarkdown).To(ContainSubstring(`{{ Map "map-name" }}`))
+			Expect(renderedMarkdown).To(ContainSubstring(`{{ Map "yard" }}`))
+		})
+
+		It("should only execute the live demo map macro", func() {
+			Expect(strings.Count(renderedMarkdown, `page="help_macro_map"`)).To(Equal(1))
+			Expect(renderedMarkdown).To(ContainSubstring(`<wiki-map name="demo" page="help_macro_map"></wiki-map>`))
 		})
 	})
 })

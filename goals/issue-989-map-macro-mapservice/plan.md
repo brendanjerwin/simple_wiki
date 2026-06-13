@@ -49,7 +49,7 @@ Use the existing checklist and survey implementations as local patterns:
 5. Add the `Map` macro.
    - Add a `funcNameMap = "Map"` constant, `BuildMap`, runtime FuncMap registration, validation stub, and typo suggestions in `templating/templating.go`.
    - Render `<wiki-map name="..." page="..."></wiki-map>` with escaped attributes.
-   - Add tests beside checklist/survey macro tests for escaped name/page, validation, unknown function suggestions, and coexistence with `MapEmbed`.
+   - Add tests beside checklist/survey macro tests for escaped name/page, validation, unknown function suggestions, and coexistence with `GoogleMapsEmbed`.
    - Verification: focused templating tests, then `devbox run go:test`.
 
 6. Build the frontend map component with Leaflet.
@@ -71,7 +71,7 @@ Use the existing checklist and survey implementations as local patterns:
 
 8. Add help and user documentation.
    - Add `internal/syspage/embedded/help_macro_map.md` with syntax, data shape, supported tile layers, UI behavior, agent guidance, and MapService-only mutation guidance.
-   - Update `internal/syspage/embedded/help.md` and `help_templating.md` to list the new `Map` macro separately from `MapEmbed`.
+   - Update `internal/syspage/embedded/help.md` and `help_templating.md` to list the new `Map` macro separately from `GoogleMapsEmbed`.
    - Include OSM attribution/privacy notes and paid/keyed service exclusion.
    - Verification: system page loader tests and `devbox run go:test`.
 

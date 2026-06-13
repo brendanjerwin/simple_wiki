@@ -155,6 +155,13 @@ describe('WikiMap', () => {
       expect(getComputedStyle(marker!).position).to.equal('absolute');
     });
 
+    it('should keep Leaflet layers inside the page content stacking level', () => {
+      const styles = getComputedStyle(el);
+      expect(styles.isolation).to.equal('isolate');
+      expect(styles.position).to.equal('relative');
+      expect(styles.zIndex).to.equal('0');
+    });
+
     afterEach(() => {
       el.remove();
     });

@@ -687,7 +687,7 @@ wiki-hashtag:defined {
   }
 }
 
-/* Responsive wrapper for the MapEmbed macro. The iframe fills the
+/* Responsive wrapper for the GoogleMapsEmbed macro. The iframe fills the
    container at a 16:9 aspect ratio on all screen sizes. */
 .map-embed {
   position: relative;
