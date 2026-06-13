@@ -211,4 +211,54 @@ var _ = Describe("Mutator", func() {
 			Expect(store.writes).To(Equal(0))
 		})
 	})
+
+	Describe("SetMapStyle", func() {
+		BeforeEach(func() {
+			mapState, err = mutator.SetMapStyle(ctx, "garden_plan", "yard", &apiv1.MapStyle{
+				TileLayerId: apiv1.TileLayerId_TILE_LAYER_ID_OPENTOPOMAP,
+				AspectRatio: "3:2",
+			}, nil)
+		})
+
+		It("should not return an error", func() {
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should return the configured aspect ratio", func() {
+			Expect(mapState.GetStyle().GetAspectRatio()).To(Equal("3:2"))
+		})
+
+		It("should write the aspect ratio to frontmatter", func() {
+			written := store.pages["garden_plan"]
+			maps, ok := written["maps"].(map[string]any)
+			Expect(ok).To(BeTrue())
+			yard, ok := maps["yard"].(map[string]any)
+			Expect(ok).To(BeTrue())
+			style, ok := yard["style"].(map[string]any)
+			Expect(ok).To(BeTrue())
+			Expect(style["aspect_ratio"]).To(Equal("3:2"))
+		})
+	})
+
+	Describe("when setting an invalid aspect ratio", func() {
+		BeforeEach(func() {
+			mapState, err = mutator.SetMapStyle(ctx, "garden_plan", "yard", &apiv1.MapStyle{
+				TileLayerId: apiv1.TileLayerId_TILE_LAYER_ID_OPENTOPOMAP,
+				AspectRatio: "wide",
+			}, nil)
+		})
+
+		It("should return InvalidArgument", func() {
+			Expect(status.Code(err)).To(Equal(codes.InvalidArgument))
+			Expect(err.Error()).To(ContainSubstring("aspect_ratio"))
+		})
+
+		It("should not return a map", func() {
+			Expect(mapState).To(BeNil())
+		})
+
+		It("should not write", func() {
+			Expect(store.writes).To(Equal(0))
+		})
+	})
 })

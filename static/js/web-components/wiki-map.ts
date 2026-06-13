@@ -1,5 +1,6 @@
 import { css, html, LitElement } from 'lit';
 import { property, state } from 'lit/decorators.js';
+import { styleMap } from 'lit/directives/style-map.js';
 import { createClient, type Client } from '@connectrpc/connect';
 import { create } from '@bufbuild/protobuf';
 import * as L from 'leaflet';
@@ -205,7 +206,7 @@ export class WikiMap extends LitElement {
       }
 
       .map-canvas {
-        aspect-ratio: 1 / 1;
+        aspect-ratio: var(--wiki-map-aspect-ratio, 16 / 9);
         height: auto;
         min-height: 340px;
         width: 100%;
@@ -513,6 +514,7 @@ export class WikiMap extends LitElement {
           id="map-canvas"
           class="map-canvas"
           aria-label=${this.name}
+          style=${styleMap({ '--wiki-map-aspect-ratio': aspectRatioCssValue(this.mapData.style?.aspectRatio) })}
           @wheel=${this.handleMapWheel}
         ></div>
         <div class="scroll-hint" ?visible=${this.showScrollHint}>Use Ctrl + scroll to zoom the map</div>
@@ -592,6 +594,13 @@ export class WikiMap extends LitElement {
 }
 
 customElements.define('wiki-map', WikiMap);
+
+function aspectRatioCssValue(value: string | undefined): string {
+  if (!value) return '16 / 9';
+  const match = /^([1-9][0-9]{0,2}):([1-9][0-9]{0,2})$/.exec(value);
+  if (!match) return '16 / 9';
+  return `${match[1]} / ${match[2]}`;
+}
 
 declare global {
   interface HTMLElementTagNameMap {

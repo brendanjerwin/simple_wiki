@@ -57,6 +57,7 @@ function sampleMap(): WikiMapMessage {
     name: 'yard',
     style: create(MapStyleSchema, {
       tileLayerId: TileLayerId.OPENTOPOMAP,
+      aspectRatio: '3:2',
       availableTileLayers: [
         create(TileLayerSchema, {
           id: TileLayerId.OPENSTREETMAP,
@@ -152,9 +153,9 @@ describe('WikiMap', () => {
       ]);
     });
 
-    it('should render the map canvas as a square', () => {
+    it('should use the configured map aspect ratio', () => {
       const canvas = el.shadowRoot?.querySelector<HTMLElement>('#map-canvas');
-      expect(getComputedStyle(canvas!).aspectRatio).to.equal('1 / 1');
+      expect(canvas?.style.getPropertyValue('--wiki-map-aspect-ratio')).to.equal('3 / 2');
     });
 
     describe('when scrolling the map without a zoom modifier', () => {

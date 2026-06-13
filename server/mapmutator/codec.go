@@ -10,31 +10,32 @@ import (
 )
 
 const (
-	mapsKey      = "maps"
-	agentKey     = "agent"
-	viewKey      = "view"
-	styleKey     = "style"
-	updatedAtKey = "updated_at"
-	syncTokenKey = "sync_token"
-	markersKey   = "markers"
-	polygonsKey  = "polygons"
-	circlesKey   = "circles"
-	uidKey       = "uid"
-	labelKey     = "label"
-	latKey       = "lat"
-	lonKey       = "lon"
-	zoomKey      = "zoom"
-	pointsKey    = "points"
-	radiusKey    = "radius_meters"
-	popupKey     = "popup_markdown"
-	colorKey     = "color"
-	strokeKey    = "stroke_color"
-	fillKey      = "fill_color"
-	tileLayerKey = "tile_layer_id"
-	createdAtKey = "created_at"
-	createdByKey = "created_by"
-	automatedKey = "automated"
-	sortOrderKey = "sort_order"
+	mapsKey        = "maps"
+	agentKey       = "agent"
+	viewKey        = "view"
+	styleKey       = "style"
+	updatedAtKey   = "updated_at"
+	syncTokenKey   = "sync_token"
+	markersKey     = "markers"
+	polygonsKey    = "polygons"
+	circlesKey     = "circles"
+	uidKey         = "uid"
+	labelKey       = "label"
+	latKey         = "lat"
+	lonKey         = "lon"
+	zoomKey        = "zoom"
+	pointsKey      = "points"
+	radiusKey      = "radius_meters"
+	popupKey       = "popup_markdown"
+	colorKey       = "color"
+	strokeKey      = "stroke_color"
+	fillKey        = "fill_color"
+	tileLayerKey   = "tile_layer_id"
+	aspectRatioKey = "aspect_ratio"
+	createdAtKey   = "created_at"
+	createdByKey   = "created_by"
+	automatedKey   = "automated"
+	sortOrderKey   = "sort_order"
 )
 
 func mapExists(fm wikipage.FrontMatter, mapName string) bool {
@@ -176,7 +177,10 @@ func decodeView(raw any) *apiv1.MapView {
 }
 
 func encodeStyle(style *apiv1.MapStyle) map[string]any {
-	return map[string]any{tileLayerKey: int32(style.GetTileLayerId())}
+	return map[string]any{
+		tileLayerKey:   int32(style.GetTileLayerId()),
+		aspectRatioKey: style.GetAspectRatio(),
+	}
 }
 
 func decodeStyle(raw any) *apiv1.MapStyle {
@@ -184,7 +188,10 @@ func decodeStyle(raw any) *apiv1.MapStyle {
 	if !ok {
 		return defaultStyle()
 	}
-	return styleWithTileLayer(apiv1.TileLayerId(decodeInt32(rawMap[tileLayerKey])))
+	return styleWithTileLayerAndAspectRatio(
+		apiv1.TileLayerId(decodeInt32(rawMap[tileLayerKey])),
+		decodeString(rawMap[aspectRatioKey]),
+	)
 }
 
 func encodeMarkersUserData(markers []*apiv1.MapMarker) []any {

@@ -210,6 +210,7 @@ message TileLayer {
 message MapStyle {
   TileLayerId tile_layer_id = 1;
   repeated TileLayer available_tile_layers = 2;
+  string aspect_ratio = 3;
 }
 
 message MapElementMetadata {

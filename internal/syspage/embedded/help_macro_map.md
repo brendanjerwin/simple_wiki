@@ -99,13 +99,14 @@ Set the default tileset in frontmatter:
 ```toml
 [maps.yard.style]
 tile_layer_id = 2
+aspect_ratio = "16:9"
 ```
 
 The rendered map also includes a tileset selector when more than one supported layer is available. Switching the selector changes the current view immediately; it does not rewrite frontmatter. Use `MapService.SetMapStyle` when the page's saved default should change.
 
 ## Map controls
 
-The map fills the page content width and uses a square aspect ratio so route and area context have enough vertical room.
+The map fills the page content width and uses a `16:9` aspect ratio by default so it fits well on laptop screens. Set `maps.<name>.style.aspect_ratio` to another `width:height` value, such as `"3:2"` or `"4:3"`, when a page needs more vertical route context.
 
 - Drag or swipe to pan.
 - Pinch on touch devices to zoom.

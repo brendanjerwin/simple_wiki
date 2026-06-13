@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"math"
 	"os"
+	"regexp"
 	"slices"
 	"strings"
 	"sync"
@@ -45,7 +46,10 @@ const (
 	maxLongitudeDegrees   = 180
 	minPolygonPoints      = 3
 	coordinateRoundFactor = 1_000_000
+	defaultAspectRatio    = "16:9"
 )
+
+var aspectRatioPattern = regexp.MustCompile(`^[1-9][0-9]{0,2}:[1-9][0-9]{0,2}$`)
 
 // Errors returned by the map mutator.
 var (
@@ -85,7 +89,7 @@ func (m *Mutator) SetMapStyle(ctx context.Context, page, mapName string, style *
 		return nil, err
 	}
 	return m.mutateMap(ctx, page, mapName, expected, allowMissingMap, func(mapState *apiv1.Map) error {
-		mapState.Style = styleWithTileLayer(style.GetTileLayerId())
+		mapState.Style = styleWithTileLayerAndAspectRatio(style.GetTileLayerId(), style.GetAspectRatio())
 		return nil
 	})
 }
@@ -517,6 +521,9 @@ func validateStyle(style *apiv1.MapStyle) error {
 	if !isKnownTileLayer(style.GetTileLayerId()) {
 		return status.Error(codes.InvalidArgument, "tile_layer_id is not supported")
 	}
+	if !isValidAspectRatio(style.GetAspectRatio()) {
+		return status.Error(codes.InvalidArgument, "aspect_ratio must use width:height format")
+	}
 	return nil
 }
 
@@ -592,10 +599,21 @@ func defaultStyle() *apiv1.MapStyle {
 }
 
 func styleWithTileLayer(id apiv1.TileLayerId) *apiv1.MapStyle {
+	return styleWithTileLayerAndAspectRatio(id, defaultAspectRatio)
+}
+
+func styleWithTileLayerAndAspectRatio(id apiv1.TileLayerId, aspectRatio string) *apiv1.MapStyle {
 	if !isKnownTileLayer(id) {
 		id = apiv1.TileLayerId_TILE_LAYER_ID_OPENSTREETMAP
 	}
-	return &apiv1.MapStyle{TileLayerId: id, AvailableTileLayers: supportedTileLayers()}
+	if !isValidAspectRatio(aspectRatio) {
+		aspectRatio = defaultAspectRatio
+	}
+	return &apiv1.MapStyle{TileLayerId: id, AvailableTileLayers: supportedTileLayers(), AspectRatio: aspectRatio}
+}
+
+func isValidAspectRatio(aspectRatio string) bool {
+	return aspectRatioPattern.MatchString(aspectRatio)
 }
 
 func supportedTileLayers() []*apiv1.TileLayer {
