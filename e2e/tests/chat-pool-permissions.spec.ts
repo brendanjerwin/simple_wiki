@@ -526,7 +526,7 @@ test.describe('chat-pool: Chat Pool and Permissions', () => {
       await expect(detail).toContainText('searching internal/', { timeout: PANEL_INTERACTION_TIMEOUT_MS });
     });
 
-    test('should display the tool call title in the completed pill', async ({ page }) => {
+    test('should expose the tool call title on the completed pill hover (title attr)', async ({ page }) => {
       await setChatPanelProperty(page, 'agentConnected', true);
       await setChatPanelMessages(page, [
         {
@@ -546,7 +546,8 @@ test.describe('chat-pool: Chat Pool and Permissions', () => {
       await waitForUpdate(page);
 
       const pill = page.locator('page-chat-panel chat-message-bubble .tool-call-pill');
-      await expect(pill).toContainText('search_code', { timeout: PANEL_INTERACTION_TIMEOUT_MS });
+      // Collapsed to just the status icon; the title is on the hover title attribute.
+      await expect(pill).toHaveAttribute('title', /search_code/, { timeout: PANEL_INTERACTION_TIMEOUT_MS });
     });
   });
 

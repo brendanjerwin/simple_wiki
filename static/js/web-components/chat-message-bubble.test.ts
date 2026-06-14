@@ -368,14 +368,19 @@ describe('ChatMessageBubble', () => {
         expect(icon!.textContent).to.equal('✅');
       });
 
-      it('should display the title in the pill', () => {
+      it('should collapse to just the status icon (no label text)', () => {
         const pill = el.shadowRoot!.querySelector('.tool-call-pill');
-        expect(pill!.textContent).to.contain('Read File');
+        expect(pill!.textContent!.trim()).to.equal('✅');
       });
 
-      it('should display the detail in the pill (specifics, not just the category)', () => {
+      it('should expose the title in the hover title attribute', () => {
         const pill = el.shadowRoot!.querySelector('.tool-call-pill');
-        expect(pill!.textContent).to.contain('/path/file.ts');
+        expect(pill!.getAttribute('title')).to.contain('Read File');
+      });
+
+      it('should expose the detail in the hover title attribute', () => {
+        const pill = el.shadowRoot!.querySelector('.tool-call-pill');
+        expect(pill!.getAttribute('title')).to.contain('/path/file.ts');
       });
 
       it('should NOT render the expanded live row', () => {

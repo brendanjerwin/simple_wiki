@@ -127,30 +127,22 @@ export class ChatMessageBubble extends LitElement {
         gap: 4px;
       }
 
-      /* Compact completed/failed tool call pill */
+      /* Finished tool call: collapsed to just the status icon (full label on
+         hover via the title attribute) to save space. */
       .tool-call-pill {
         display: inline-flex;
         align-items: center;
-        gap: 4px;
-        padding: 2px 8px;
+        padding: 2px 5px;
         border-radius: 10px;
         background: rgba(255, 255, 255, 0.08);
         border: 1px solid var(--color-border-subtle);
         font-size: 0.75rem;
         color: var(--color-text-muted);
-        align-self: flex-start;
+        cursor: default;
       }
 
       .tool-call-pill .status-icon {
         font-size: 0.7rem;
-      }
-
-      /* Keep finished pills compact: truncate the label, full text on hover. */
-      .tool-call-pill-label {
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-        max-width: 40ch;
       }
 
       /* Live expanded tool call row — takes its own full-width line */
@@ -455,17 +447,13 @@ export class ChatMessageBubble extends LitElement {
       `;
     }
 
-    // Completed or failed: compact pill. Include the detail (the specifics —
-    // e.g. the command/query/path) since the title alone is often a generic
-    // category like "mcp". The pill label is ellipsis-truncated; the full label
-    // is preserved in the title attribute for hover/accessibility.
-    const kindGlyph = this._kindGlyph(tc.kind);
+    // Completed or failed: collapse to just the status icon to save vertical
+    // space. The full label (tool name + args) is preserved in the title
+    // attribute so it shows on hover.
     const label = tc.detail ? `${tc.title}: ${tc.detail}` : tc.title;
     return html`
       <span class="tool-call-pill" title="${label}">
         <span class="status-icon">${this._toolCallStatusIcon(tc.status)}</span>
-        ${kindGlyph ? html`<span class="kind-glyph">${kindGlyph}</span>` : nothing}
-        <span class="tool-call-pill-label">${label}</span>
       </span>
     `;
   }
