@@ -646,6 +646,14 @@ func (c *wikiChatClient) handleToolCall(tc *acp.SessionUpdateToolCall) {
 	msgID := c.currentMsg
 	c.mu.Unlock()
 
+	// Diagnostic: dump the full ACP tool-call payload so we can see exactly what
+	// the agent reports. The agent's title is often a generic category ("mcp",
+	// "read"); the identifying data lives in rawInput/content/rawOutput. Bounded
+	// so log lines stay reasonable.
+	if raw, mErr := json.Marshal(tc); mErr == nil {
+		slog.Info("acp tool call payload", logKeyPage, c.page, "payload", truncate(string(raw), 1500))
+	}
+
 	detail := toolCallDetail(tc.Locations, tc.RawInput, tc.Content, tc.RawOutput)
 	if msgID != "" {
 		_, _ = c.chatClient.SendToolCallNotification(context.Background(), connect.NewRequest(&apiv1.SendToolCallNotificationRequest{
@@ -683,6 +691,10 @@ func (c *wikiChatClient) handleToolCallUpdate(tcu *acp.SessionToolCallUpdate) {
 	if tcu.Kind != nil {
 		kind = string(*tcu.Kind)
 	}
+	if raw, mErr := json.Marshal(tcu); mErr == nil {
+		slog.Info("acp tool call update payload", logKeyPage, c.page, "payload", truncate(string(raw), 1500))
+	}
+
 	detail := toolCallDetail(tcu.Locations, tcu.RawInput, tcu.Content, tcu.RawOutput)
 	_, _ = c.chatClient.SendToolCallNotification(context.Background(), connect.NewRequest(&apiv1.SendToolCallNotificationRequest{
 		Page:       c.page,
