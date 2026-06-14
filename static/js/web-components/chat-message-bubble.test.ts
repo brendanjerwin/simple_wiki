@@ -546,6 +546,38 @@ describe('ChatMessageBubble', () => {
       });
     });
 
+    describe('when a live tool call has no startedAtMs (historical, not replayed with a timestamp)', () => {
+      let el: ChatMessageBubble;
+
+      beforeEach(async () => {
+        const toolCallWithoutStart = {
+          toolCallId: 'tc-no-start',
+          title: 'Running',
+          status: 'in_progress',
+          kind: 'execute',
+          detail: 'working...',
+          startedAtMs: undefined as unknown as number,
+        };
+        el = await fixture(html`
+          <chat-message-bubble
+            message-id="msg-no-start"
+            .sender=${Sender.ASSISTANT}
+            content="Tool running"
+            .toolCalls=${[toolCallWithoutStart]}
+          ></chat-message-bubble>
+        `);
+        await el.updateComplete;
+      });
+
+      it('should still render the live row', () => {
+        expect(el.shadowRoot!.querySelector('.tool-call-live')).to.not.be.null;
+      });
+
+      it('should not render an elapsed indicator (avoids "NaNs")', () => {
+        expect(el.shadowRoot!.querySelector('.tool-call-elapsed')).to.be.null;
+      });
+    });
+
     describe('when connected with only completed tool calls', () => {
       let el: ChatMessageBubble;
       const completedToolCall: ToolCallState = {

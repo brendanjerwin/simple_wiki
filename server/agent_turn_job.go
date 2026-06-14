@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"math"
 	"time"
 
 	"github.com/google/uuid"
@@ -196,14 +197,19 @@ func timeoutDurationSeconds(duration time.Duration) int32 {
 	if duration <= 0 {
 		return 0
 	}
-	seconds := int32(duration / time.Second)
+	// Compute in int64 and clamp: a reclaimed zombie with a nil/zero last_run
+	// yields an age of ~2000 years, which would overflow a direct int32 cast.
+	seconds := int64(duration / time.Second)
 	if duration%time.Second != 0 {
 		seconds++
 	}
 	if seconds == 0 {
 		return 1
 	}
-	return seconds
+	if seconds > math.MaxInt32 {
+		return math.MaxInt32
+	}
+	return int32(seconds)
 }
 
 // recordDispatchFailure records a terminal ERROR status when the pool is not

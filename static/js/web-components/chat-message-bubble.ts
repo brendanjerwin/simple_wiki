@@ -422,8 +422,11 @@ export class ChatMessageBubble extends LitElement {
     const isLive = tc.status === 'pending' || tc.status === 'in_progress';
 
     if (isLive) {
+      // startedAtMs is absent for historical tool calls (not replayed with a
+      // timestamp); only show elapsed when we have a sane, finite value so we
+      // never render "NaNs".
       const elapsedMs = this._nowMs - tc.startedAtMs;
-      const elapsedText = this._formatElapsedMs(elapsedMs);
+      const showElapsed = Number.isFinite(elapsedMs) && elapsedMs >= 0;
       const kindGlyph = this._kindGlyph(tc.kind);
       return html`
         <div class="tool-call-live">
@@ -431,7 +434,9 @@ export class ChatMessageBubble extends LitElement {
             <span class="status-icon">${this._toolCallStatusIcon(tc.status)}</span>
             ${kindGlyph ? html`<span class="kind-glyph">${kindGlyph}</span>` : nothing}
             <span class="tool-call-live-title">${tc.title}</span>
-            <span class="tool-call-elapsed">${elapsedText}</span>
+            ${showElapsed
+              ? html`<span class="tool-call-elapsed">${this._formatElapsedMs(elapsedMs)}</span>`
+              : nothing}
           </div>
           ${tc.detail
             ? html`<div class="tool-call-detail">${tc.detail}</div>`
