@@ -552,17 +552,55 @@ func (c *wikiChatClient) handleAgentMessage(chunk *acp.SessionUpdateAgentMessage
 // toolCallDetail builds a concise one-line detail from ACP tool-call locations:
 // the first affected path, with ":<line>" when a line number is present. Returns
 // "" when there are no locations (the UI then falls back to the title).
-func toolCallDetail(locations []acp.ToolCallLocation) string {
-	if len(locations) == 0 {
+// toolDetailMaxLen bounds the live detail line so a chatty tool input cannot
+// blow out the chat layout.
+const toolDetailMaxLen = 140
+
+// toolCallDetail builds a concise one-line "what's happening" detail for a tool
+// call. It prefers the first affected file location; when there are none (the
+// common case for Bash, search, and MCP tools) it summarizes the tool input so
+// the user can see what the agent is actually doing.
+func toolCallDetail(locations []acp.ToolCallLocation, rawInput any) string {
+	if len(locations) > 0 {
+		loc := locations[0]
+		if loc.Line != nil {
+			return fmt.Sprintf("%s:%d", loc.Path, *loc.Line)
+		}
+		return loc.Path
+	}
+
+	return rawInputSummary(rawInput)
+}
+
+// rawInputSummary renders a compact, single-line summary of an ACP tool call's
+// raw input: a well-known identifying field when present (the command, query,
+// path, etc.), otherwise the compact JSON of the whole input. The result is
+// flattened to one line and truncated.
+func rawInputSummary(rawInput any) string {
+	if rawInput == nil {
 		return ""
 	}
 
-	loc := locations[0]
-	if loc.Line != nil {
-		return fmt.Sprintf("%s:%d", loc.Path, *loc.Line)
+	encoded, err := json.Marshal(rawInput)
+	if err != nil {
+		return ""
 	}
 
-	return loc.Path
+	var fields map[string]any
+	if err := json.Unmarshal(encoded, &fields); err == nil {
+		for _, key := range []string{"command", "file_path", "path", "query", "pattern", "url", "prompt", "description", "name", "page", "title"} {
+			if value, ok := fields[key].(string); ok && strings.TrimSpace(value) != "" {
+				return truncate(collapseWhitespace(value), toolDetailMaxLen)
+			}
+		}
+	}
+
+	return truncate(collapseWhitespace(string(encoded)), toolDetailMaxLen)
+}
+
+// collapseWhitespace flattens a value to a single line for the detail row.
+func collapseWhitespace(s string) string {
+	return strings.Join(strings.Fields(s), " ")
 }
 
 // handleToolCall sends a tool call notification to the wiki chat.
@@ -579,7 +617,7 @@ func (c *wikiChatClient) handleToolCall(tc *acp.SessionUpdateToolCall) {
 			Title:      tc.Title,
 			Status:     string(tc.Status),
 			Kind:       string(tc.Kind),
-			Detail:     toolCallDetail(tc.Locations),
+			Detail:     toolCallDetail(tc.Locations, tc.RawInput),
 		}))
 	}
 	slog.Info("tool call", logKeyPage, c.page, logKeyTool, tc.Title, "status", string(tc.Status))
@@ -614,7 +652,7 @@ func (c *wikiChatClient) handleToolCallUpdate(tcu *acp.SessionToolCallUpdate) {
 		Title:      title,
 		Status:     status,
 		Kind:       kind,
-		Detail:     toolCallDetail(tcu.Locations),
+		Detail:     toolCallDetail(tcu.Locations, tcu.RawInput),
 	}))
 }
 

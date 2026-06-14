@@ -122,7 +122,8 @@ export class ChatMessageBubble extends LitElement {
       .tool-calls {
         margin-top: 6px;
         display: flex;
-        flex-direction: column;
+        flex-wrap: wrap;
+        align-items: flex-start;
         gap: 4px;
       }
 
@@ -144,8 +145,9 @@ export class ChatMessageBubble extends LitElement {
         font-size: 0.7rem;
       }
 
-      /* Live expanded tool call row */
+      /* Live expanded tool call row — takes its own full-width line */
       .tool-call-live {
+        flex: 1 1 100%;
         display: flex;
         flex-direction: column;
         gap: 2px;

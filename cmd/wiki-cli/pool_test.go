@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"os/exec"
+	"strings"
 	"time"
 
 	"connectrpc.com/connect"
@@ -4303,11 +4304,11 @@ var _ = Describe("subscribeCancellations error path", func() {
 })
 
 var _ = Describe("toolCallDetail", func() {
-	When("there are no locations", func() {
+	When("there are no locations and no raw input", func() {
 		var result string
 
 		BeforeEach(func() {
-			result = toolCallDetail([]acp.ToolCallLocation{})
+			result = toolCallDetail([]acp.ToolCallLocation{}, nil)
 		})
 
 		It("should return an empty string", func() {
@@ -4321,7 +4322,7 @@ var _ = Describe("toolCallDetail", func() {
 		BeforeEach(func() {
 			result = toolCallDetail([]acp.ToolCallLocation{
 				{Path: "cmd/wiki-cli/pool.go"},
-			})
+			}, nil)
 		})
 
 		It("should return just the path", func() {
@@ -4336,7 +4337,7 @@ var _ = Describe("toolCallDetail", func() {
 			line := 42
 			result = toolCallDetail([]acp.ToolCallLocation{
 				{Path: "cmd/wiki-cli/pool.go", Line: &line},
-			})
+			}, nil)
 		})
 
 		It("should return path:line", func() {
@@ -4352,11 +4353,72 @@ var _ = Describe("toolCallDetail", func() {
 			result = toolCallDetail([]acp.ToolCallLocation{
 				{Path: "first.go", Line: &line},
 				{Path: "second.go"},
-			})
+			}, nil)
 		})
 
 		It("should use only the first location", func() {
 			Expect(result).To(Equal("first.go:10"))
+		})
+	})
+
+	When("there are no locations but the raw input has a command", func() {
+		var result string
+
+		BeforeEach(func() {
+			result = toolCallDetail(nil, map[string]any{"command": "journalctl --since today"})
+		})
+
+		It("should summarize the command", func() {
+			Expect(result).To(Equal("journalctl --since today"))
+		})
+	})
+
+	When("the raw input has a multi-line value", func() {
+		var result string
+
+		BeforeEach(func() {
+			result = toolCallDetail(nil, map[string]any{"query": "line one\nline two"})
+		})
+
+		It("should flatten it to a single line", func() {
+			Expect(result).To(Equal("line one line two"))
+		})
+	})
+
+	When("the raw input has no well-known key", func() {
+		var result string
+
+		BeforeEach(func() {
+			result = toolCallDetail(nil, map[string]any{"limit": float64(5)})
+		})
+
+		It("should fall back to the compact JSON of the input", func() {
+			Expect(result).To(Equal(`{"limit":5}`))
+		})
+	})
+
+	When("a long raw-input value is provided", func() {
+		var result string
+
+		BeforeEach(func() {
+			long := strings.Repeat("x", 500)
+			result = toolCallDetail(nil, map[string]any{"command": long})
+		})
+
+		It("should truncate to the detail length cap", func() {
+			Expect(len(result)).To(BeNumerically("<=", toolDetailMaxLen+len("...")))
+		})
+	})
+
+	When("locations are present, they take priority over raw input", func() {
+		var result string
+
+		BeforeEach(func() {
+			result = toolCallDetail([]acp.ToolCallLocation{{Path: "a.go"}}, map[string]any{"command": "ignored"})
+		})
+
+		It("should use the location, not the raw input", func() {
+			Expect(result).To(Equal("a.go"))
 		})
 	})
 })

@@ -1147,10 +1147,13 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
 
     const existing = msg.toolCalls.find((tc) => tc.toolCallId === toolCallId);
     if (existing) {
-      existing.title = title;
-      existing.status = status;
-      existing.kind = kind;
-      existing.detail = detail;
+      // ACP tool-call updates are partial: a status-only update carries empty
+      // title/kind/detail. Preserve the last non-empty values so the detail the
+      // initial notification provided doesn't vanish when the call completes.
+      existing.title = title || existing.title;
+      existing.status = status || existing.status;
+      existing.kind = kind || existing.kind;
+      existing.detail = detail || existing.detail;
       // Preserve the original startedAtMs — do not overwrite it
       msg.toolCalls = [...msg.toolCalls];
     } else {

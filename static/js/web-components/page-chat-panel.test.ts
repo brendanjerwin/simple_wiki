@@ -1241,6 +1241,34 @@ describe('PageChatPanel', () => {
       });
     });
 
+    describe('when a partial update carries empty detail/kind (status-only update)', () => {
+
+      beforeEach(async () => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- calling private method for testing
+        (el as any).updateToolCall('tc-msg', 'tc-1', 'Run command', 'in_progress', 'execute', 'journalctl --since today');
+        // Subsequent status-only update with empty kind/detail.
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- calling private method for testing
+        (el as any).updateToolCall('tc-msg', 'tc-1', '', 'completed', '', '');
+        await el.updateComplete;
+      });
+
+      it('should apply the new status', () => {
+        expect(el.messages[0]!.toolCalls[0]!.status).to.equal('completed');
+      });
+
+      it('should preserve the detail from the initial notification', () => {
+        expect(el.messages[0]!.toolCalls[0]!.detail).to.equal('journalctl --since today');
+      });
+
+      it('should preserve the kind from the initial notification', () => {
+        expect(el.messages[0]!.toolCalls[0]!.kind).to.equal('execute');
+      });
+
+      it('should preserve the title from the initial notification', () => {
+        expect(el.messages[0]!.toolCalls[0]!.title).to.equal('Run command');
+      });
+    });
+
     describe('when adding multiple different tool calls', () => {
 
       beforeEach(async () => {
