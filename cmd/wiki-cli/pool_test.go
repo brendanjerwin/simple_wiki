@@ -68,6 +68,10 @@ type mockChatReplier struct {
 	toolNotifyCalled bool
 	toolNotifyErr    error
 
+	planNotifyReq    *apiv1.SendPlanNotificationRequest
+	planNotifyCalled bool
+	planNotifyErr    error
+
 	permReq    *apiv1.RequestPermissionFromUserRequest
 	permResp   *apiv1.RequestPermissionFromUserResponse
 	permErr    error
@@ -107,6 +111,15 @@ func (m *mockChatReplier) SendToolCallNotification(_ context.Context, req *conne
 		return nil, m.toolNotifyErr
 	}
 	return connect.NewResponse(&apiv1.SendToolCallNotificationResponse{}), nil
+}
+
+func (m *mockChatReplier) SendPlanNotification(_ context.Context, req *connect.Request[apiv1.SendPlanNotificationRequest]) (*connect.Response[apiv1.SendPlanNotificationResponse], error) {
+	m.planNotifyCalled = true
+	m.planNotifyReq = req.Msg
+	if m.planNotifyErr != nil {
+		return nil, m.planNotifyErr
+	}
+	return connect.NewResponse(&apiv1.SendPlanNotificationResponse{}), nil
 }
 
 func (m *mockChatReplier) RequestPermissionFromUser(_ context.Context, req *connect.Request[apiv1.RequestPermissionFromUserRequest]) (*connect.Response[apiv1.RequestPermissionFromUserResponse], error) {
@@ -1276,36 +1289,23 @@ var _ = Describe("wikiChatClient buildFullText", func() {
 		})
 	})
 
-	When("plan entries are present", func() {
+	When("only text is present (plan is now a separate structured notification)", func() {
 		var result string
 
 		BeforeEach(func() {
 			client := &wikiChatClient{}
 			client.textBuf.WriteString("Working on it")
-			client.planEntries = []acp.PlanEntry{
-				{Content: "Step 1", Status: acp.PlanEntryStatusCompleted},
-				{Content: "Step 2", Status: acp.PlanEntryStatusInProgress},
-				{Content: "Step 3", Status: acp.PlanEntryStatusPending},
-			}
 			client.mu.Lock()
 			result = client.buildFullText()
 			client.mu.Unlock()
 		})
 
-		It("should include the plan section", func() {
-			Expect(result).To(ContainSubstring("**Plan:**"))
+		It("should return just the text without any plan markdown", func() {
+			Expect(result).To(Equal("Working on it"))
 		})
 
-		It("should show completed entries with checkmarks", func() {
-			Expect(result).To(ContainSubstring("- [x] Step 1"))
-		})
-
-		It("should show in-progress entries with spinner emoji", func() {
-			Expect(result).To(ContainSubstring("- 🔄 Step 2"))
-		})
-
-		It("should show pending entries with empty checkboxes", func() {
-			Expect(result).To(ContainSubstring("- [ ] Step 3"))
+		It("should not include a Plan section", func() {
+			Expect(result).NotTo(ContainSubstring("**Plan:**"))
 		})
 	})
 
@@ -1326,16 +1326,13 @@ var _ = Describe("wikiChatClient buildFullText", func() {
 		})
 	})
 
-	When("all sections are present", func() {
+	When("thought, text, and permission notes are all present", func() {
 		var result string
 
 		BeforeEach(func() {
 			client := &wikiChatClient{}
 			client.thoughtBuf.WriteString("Thinking hard")
 			client.textBuf.WriteString("Final answer")
-			client.planEntries = []acp.PlanEntry{
-				{Content: "Do the thing", Status: acp.PlanEntryStatusCompleted},
-			}
 			client.permissionNotes.WriteString("> 🔐 **Permission granted:** x\n")
 			client.mu.Lock()
 			result = client.buildFullText()
@@ -1350,8 +1347,8 @@ var _ = Describe("wikiChatClient buildFullText", func() {
 			Expect(result).To(ContainSubstring("Final answer"))
 		})
 
-		It("should include the plan", func() {
-			Expect(result).To(ContainSubstring("**Plan:**"))
+		It("should not include any plan markdown (plan is a separate structured notification)", func() {
+			Expect(result).NotTo(ContainSubstring("**Plan:**"))
 		})
 
 		It("should include the permission notes", func() {
@@ -1376,22 +1373,21 @@ var _ = Describe("wikiChatClient buildFullText", func() {
 })
 
 var _ = Describe("wikiChatClient SessionUpdate with Plan", func() {
-	When("receiving a plan update", func() {
+	When("receiving a plan update when a message already exists", func() {
 		var (
-			client *wikiChatClient
-			err    error
+			mock *mockChatReplier
+			err  error
 		)
 
 		BeforeEach(func() {
-			mux := http.NewServeMux()
-			mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-				w.Header().Set("Content-Type", "application/json")
-				_, _ = w.Write([]byte(`{"messageId":"msg-1"}`))
-			})
-			server := httptest.NewServer(mux)
-			DeferCleanup(server.Close)
-
-			client = newWikiChatClient("test-page", server.URL)
+			mock = &mockChatReplier{
+				sendReplyResp: &apiv1.SendChatReplyResponse{MessageId: "msg-1"},
+			}
+			client := &wikiChatClient{
+				page:       "test-page",
+				chatClient: mock,
+				currentMsg: "msg-1",
+			}
 
 			planNotification := acp.SessionNotification{
 				SessionId: "session-1",
@@ -1408,20 +1404,28 @@ var _ = Describe("wikiChatClient SessionUpdate with Plan", func() {
 			Expect(err).NotTo(HaveOccurred())
 		})
 
-		It("should store the plan entries", func() {
-			Expect(client.planEntries).To(HaveLen(3))
+		It("should call SendPlanNotification", func() {
+			Expect(mock.planNotifyCalled).To(BeTrue())
 		})
 
-		It("should preserve the entry content", func() {
-			Expect(client.planEntries[0].Content).To(Equal("Analyze code"))
-			Expect(client.planEntries[1].Content).To(Equal("Write tests"))
-			Expect(client.planEntries[2].Content).To(Equal("Submit PR"))
+		It("should send the correct message ID", func() {
+			Expect(mock.planNotifyReq.MessageId).To(Equal("msg-1"))
 		})
 
-		It("should preserve the entry statuses", func() {
-			Expect(client.planEntries[0].Status).To(Equal(acp.PlanEntryStatusCompleted))
-			Expect(client.planEntries[1].Status).To(Equal(acp.PlanEntryStatusInProgress))
-			Expect(client.planEntries[2].Status).To(Equal(acp.PlanEntryStatusPending))
+		It("should include all plan entries", func() {
+			Expect(mock.planNotifyReq.Entries).To(HaveLen(3))
+		})
+
+		It("should preserve entry content", func() {
+			Expect(mock.planNotifyReq.Entries[0].Content).To(Equal("Analyze code"))
+			Expect(mock.planNotifyReq.Entries[1].Content).To(Equal("Write tests"))
+			Expect(mock.planNotifyReq.Entries[2].Content).To(Equal("Submit PR"))
+		})
+
+		It("should preserve entry statuses as strings", func() {
+			Expect(mock.planNotifyReq.Entries[0].Status).To(Equal(string(acp.PlanEntryStatusCompleted)))
+			Expect(mock.planNotifyReq.Entries[1].Status).To(Equal(string(acp.PlanEntryStatusInProgress)))
+			Expect(mock.planNotifyReq.Entries[2].Status).To(Equal(string(acp.PlanEntryStatusPending)))
 		})
 	})
 })
@@ -1496,9 +1500,6 @@ var _ = Describe("wikiChatClient beginTurn", func() {
 			client.textBuf.WriteString("leftover text")
 			client.thoughtBuf.WriteString("leftover thought")
 			client.permissionNotes.WriteString("leftover permissions")
-			client.planEntries = []acp.PlanEntry{
-				{Content: "old step", Status: acp.PlanEntryStatusCompleted},
-			}
 			client.currentMsg = "old-msg"
 			client.beginTurn("reply-456")
 		})
@@ -1513,10 +1514,6 @@ var _ = Describe("wikiChatClient beginTurn", func() {
 
 		It("should reset the permission notes", func() {
 			Expect(client.permissionNotes.String()).To(BeEmpty())
-		})
-
-		It("should clear the plan entries", func() {
-			Expect(client.planEntries).To(BeNil())
 		})
 
 		It("should set the replyToID", func() {
@@ -4301,6 +4298,356 @@ var _ = Describe("subscribeCancellations error path", func() {
 
 		It("should return a channel that never receives a cancellation signal", func() {
 			Expect(cancelChan).NotTo(Receive())
+		})
+	})
+})
+
+var _ = Describe("toolCallDetail", func() {
+	When("there are no locations", func() {
+		var result string
+
+		BeforeEach(func() {
+			result = toolCallDetail([]acp.ToolCallLocation{})
+		})
+
+		It("should return an empty string", func() {
+			Expect(result).To(BeEmpty())
+		})
+	})
+
+	When("the location has no line number", func() {
+		var result string
+
+		BeforeEach(func() {
+			result = toolCallDetail([]acp.ToolCallLocation{
+				{Path: "cmd/wiki-cli/pool.go"},
+			})
+		})
+
+		It("should return just the path", func() {
+			Expect(result).To(Equal("cmd/wiki-cli/pool.go"))
+		})
+	})
+
+	When("the location has a line number", func() {
+		var result string
+
+		BeforeEach(func() {
+			line := 42
+			result = toolCallDetail([]acp.ToolCallLocation{
+				{Path: "cmd/wiki-cli/pool.go", Line: &line},
+			})
+		})
+
+		It("should return path:line", func() {
+			Expect(result).To(Equal("cmd/wiki-cli/pool.go:42"))
+		})
+	})
+
+	When("multiple locations are provided", func() {
+		var result string
+
+		BeforeEach(func() {
+			line := 10
+			result = toolCallDetail([]acp.ToolCallLocation{
+				{Path: "first.go", Line: &line},
+				{Path: "second.go"},
+			})
+		})
+
+		It("should use only the first location", func() {
+			Expect(result).To(Equal("first.go:10"))
+		})
+	})
+})
+
+var _ = Describe("handleToolCall with Kind and Detail (mock-based)", func() {
+	When("a tool call has a Kind and a Location with path and line", func() {
+		var mock *mockChatReplier
+
+		BeforeEach(func() {
+			mock = &mockChatReplier{}
+			client := &wikiChatClient{
+				page:       "test-page",
+				chatClient: mock,
+				currentMsg: "msg-111",
+			}
+
+			line := 55
+			tc := &acp.SessionUpdateToolCall{
+				ToolCallId: "tc-kind-1",
+				Title:      "Read file",
+				Status:     acp.ToolCallStatusInProgress,
+				Kind:       acp.ToolKindRead,
+				Locations: []acp.ToolCallLocation{
+					{Path: "internal/pool.go", Line: &line},
+				},
+			}
+			client.handleToolCall(tc)
+		})
+
+		It("should forward the Kind field", func() {
+			Expect(mock.toolNotifyReq.Kind).To(Equal(string(acp.ToolKindRead)))
+		})
+
+		It("should forward the Detail as path:line", func() {
+			Expect(mock.toolNotifyReq.Detail).To(Equal("internal/pool.go:55"))
+		})
+	})
+
+	When("a tool call has no locations", func() {
+		var mock *mockChatReplier
+
+		BeforeEach(func() {
+			mock = &mockChatReplier{}
+			client := &wikiChatClient{
+				page:       "test-page",
+				chatClient: mock,
+				currentMsg: "msg-222",
+			}
+
+			tc := &acp.SessionUpdateToolCall{
+				ToolCallId: "tc-no-loc",
+				Title:      "Think",
+				Status:     acp.ToolCallStatusPending,
+				Kind:       acp.ToolKindThink,
+			}
+			client.handleToolCall(tc)
+		})
+
+		It("should forward the Kind field", func() {
+			Expect(mock.toolNotifyReq.Kind).To(Equal(string(acp.ToolKindThink)))
+		})
+
+		It("should send an empty Detail", func() {
+			Expect(mock.toolNotifyReq.Detail).To(BeEmpty())
+		})
+	})
+})
+
+var _ = Describe("handleToolCallUpdate with Kind and Detail (mock-based)", func() {
+	When("an update has a Kind pointer and a Location with path and line", func() {
+		var mock *mockChatReplier
+
+		BeforeEach(func() {
+			mock = &mockChatReplier{}
+			client := &wikiChatClient{
+				page:       "test-page",
+				chatClient: mock,
+				currentMsg: "msg-333",
+			}
+
+			kind := acp.ToolKindEdit
+			status := acp.ToolCallStatusCompleted
+			title := "Edit pool.go"
+			line := 100
+			tcu := &acp.SessionToolCallUpdate{
+				ToolCallId: "tc-update-1",
+				Kind:       &kind,
+				Status:     &status,
+				Title:      &title,
+				Locations: []acp.ToolCallLocation{
+					{Path: "cmd/wiki-cli/pool.go", Line: &line},
+				},
+			}
+			client.handleToolCallUpdate(tcu)
+		})
+
+		It("should forward the Kind field", func() {
+			Expect(mock.toolNotifyReq.Kind).To(Equal(string(acp.ToolKindEdit)))
+		})
+
+		It("should forward the Detail as path:line", func() {
+			Expect(mock.toolNotifyReq.Detail).To(Equal("cmd/wiki-cli/pool.go:100"))
+		})
+	})
+
+	When("an update has a nil Kind pointer", func() {
+		var mock *mockChatReplier
+
+		BeforeEach(func() {
+			mock = &mockChatReplier{}
+			client := &wikiChatClient{
+				page:       "test-page",
+				chatClient: mock,
+				currentMsg: "msg-444",
+			}
+
+			tcu := &acp.SessionToolCallUpdate{
+				ToolCallId: "tc-update-nil-kind",
+			}
+			client.handleToolCallUpdate(tcu)
+		})
+
+		It("should send an empty Kind", func() {
+			Expect(mock.toolNotifyReq.Kind).To(BeEmpty())
+		})
+
+		It("should send an empty Detail", func() {
+			Expect(mock.toolNotifyReq.Detail).To(BeEmpty())
+		})
+	})
+})
+
+var _ = Describe("handlePlan (mock-based)", func() {
+	When("a plan arrives and no message exists yet", func() {
+		var (
+			mock   *mockChatReplier
+			client *wikiChatClient
+		)
+
+		BeforeEach(func() {
+			mock = &mockChatReplier{
+				sendReplyResp: &apiv1.SendChatReplyResponse{MessageId: "plan-msg-1"},
+			}
+			client = &wikiChatClient{
+				page:       "test-page",
+				chatClient: mock,
+				replyToID:  "parent-1",
+			}
+
+			plan := &acp.SessionUpdatePlan{
+				Entries: []acp.PlanEntry{
+					{Content: "Analyze code", Status: acp.PlanEntryStatusCompleted, Priority: acp.PlanEntryPriorityHigh},
+					{Content: "Write tests", Status: acp.PlanEntryStatusInProgress, Priority: acp.PlanEntryPriorityMedium},
+					{Content: "Submit PR", Status: acp.PlanEntryStatusPending, Priority: acp.PlanEntryPriorityLow},
+				},
+			}
+			client.handlePlan(plan)
+		})
+
+		It("should create a message first", func() {
+			Expect(mock.sendReplyCalled).To(BeTrue())
+		})
+
+		It("should call SendPlanNotification", func() {
+			Expect(mock.planNotifyCalled).To(BeTrue())
+		})
+
+		It("should use the created message ID", func() {
+			Expect(mock.planNotifyReq.MessageId).To(Equal("plan-msg-1"))
+		})
+
+		It("should send the page name", func() {
+			Expect(mock.planNotifyReq.Page).To(Equal("test-page"))
+		})
+
+		It("should send all entries", func() {
+			Expect(mock.planNotifyReq.Entries).To(HaveLen(3))
+		})
+
+		It("should map entry content correctly", func() {
+			Expect(mock.planNotifyReq.Entries[0].Content).To(Equal("Analyze code"))
+			Expect(mock.planNotifyReq.Entries[1].Content).To(Equal("Write tests"))
+			Expect(mock.planNotifyReq.Entries[2].Content).To(Equal("Submit PR"))
+		})
+
+		It("should map entry statuses as strings", func() {
+			Expect(mock.planNotifyReq.Entries[0].Status).To(Equal(string(acp.PlanEntryStatusCompleted)))
+			Expect(mock.planNotifyReq.Entries[1].Status).To(Equal(string(acp.PlanEntryStatusInProgress)))
+			Expect(mock.planNotifyReq.Entries[2].Status).To(Equal(string(acp.PlanEntryStatusPending)))
+		})
+
+		It("should map entry priorities as strings", func() {
+			Expect(mock.planNotifyReq.Entries[0].Priority).To(Equal(string(acp.PlanEntryPriorityHigh)))
+			Expect(mock.planNotifyReq.Entries[1].Priority).To(Equal(string(acp.PlanEntryPriorityMedium)))
+			Expect(mock.planNotifyReq.Entries[2].Priority).To(Equal(string(acp.PlanEntryPriorityLow)))
+		})
+
+		It("should not include plan markdown in the message content", func() {
+			Expect(mock.sendReplyReq.Content).NotTo(ContainSubstring("**Plan:**"))
+		})
+	})
+
+	When("a plan arrives and a message already exists", func() {
+		var mock *mockChatReplier
+
+		BeforeEach(func() {
+			mock = &mockChatReplier{}
+			client := &wikiChatClient{
+				page:       "test-page",
+				chatClient: mock,
+				currentMsg: "existing-msg-77",
+			}
+
+			plan := &acp.SessionUpdatePlan{
+				Entries: []acp.PlanEntry{
+					{Content: "Only step", Status: acp.PlanEntryStatusPending},
+				},
+			}
+			client.handlePlan(plan)
+		})
+
+		It("should not call SendChatReply (message already exists)", func() {
+			Expect(mock.sendReplyCalled).To(BeFalse())
+		})
+
+		It("should call SendPlanNotification", func() {
+			Expect(mock.planNotifyCalled).To(BeTrue())
+		})
+
+		It("should use the existing message ID", func() {
+			Expect(mock.planNotifyReq.MessageId).To(Equal("existing-msg-77"))
+		})
+	})
+
+	When("SendPlanNotification returns an error", func() {
+		var (
+			mock      *mockChatReplier
+			runHandle func()
+		)
+
+		BeforeEach(func() {
+			mock = &mockChatReplier{
+				planNotifyErr: errors.New("wiki unavailable"),
+			}
+			client := &wikiChatClient{
+				page:       "test-page",
+				chatClient: mock,
+				currentMsg: "existing-msg-88",
+			}
+
+			plan := &acp.SessionUpdatePlan{
+				Entries: []acp.PlanEntry{
+					{Content: "Only step", Status: acp.PlanEntryStatusPending},
+				},
+			}
+			runHandle = func() { client.handlePlan(plan) }
+		})
+
+		It("should still attempt the notification", func() {
+			runHandle()
+			Expect(mock.planNotifyCalled).To(BeTrue())
+		})
+
+		It("should swallow the error without panicking", func() {
+			Expect(runHandle).NotTo(Panic())
+		})
+	})
+
+	When("a plan arrives but message creation fails", func() {
+		var mock *mockChatReplier
+
+		BeforeEach(func() {
+			mock = &mockChatReplier{
+				sendReplyErr: errors.New("wiki unavailable"),
+			}
+			client := &wikiChatClient{
+				page:       "test-page",
+				chatClient: mock,
+				replyToID:  "parent-1",
+			}
+
+			plan := &acp.SessionUpdatePlan{
+				Entries: []acp.PlanEntry{
+					{Content: "Step", Status: acp.PlanEntryStatusPending},
+				},
+			}
+			client.handlePlan(plan)
+		})
+
+		It("should not call SendPlanNotification when no message ID is available", func() {
+			Expect(mock.planNotifyCalled).To(BeFalse())
 		})
 	})
 })

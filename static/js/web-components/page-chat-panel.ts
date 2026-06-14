@@ -35,6 +35,15 @@ export interface ToolCallState {
   toolCallId: string;
   title: string;
   status: string;
+  kind: string;
+  detail: string;
+  startedAtMs: number;
+}
+
+export interface PlanEntryState {
+  content: string;
+  status: string;
+  priority: string;
 }
 
 export interface PermissionRequestState {
@@ -56,6 +65,7 @@ export interface ChatMessageState {
   edited: boolean;
   sequence: bigint;
   toolCalls: ToolCallState[];
+  plan: PlanEntryState[];
 }
 
 declare global {
@@ -615,6 +625,7 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
                     reply-to-id=${msg.replyToId}
                     .reactions=${msg.reactions}
                     .toolCalls=${msg.toolCalls}
+                    .plan=${msg.plan}
                     @scroll-to-message=${this._handleScrollToMessage}
                   ></chat-message-bubble>
                 `,
@@ -1014,11 +1025,23 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
         await this.editMessage(event.event.value.messageId, event.event.value.newContent, event.event.value.streaming);
         break;
       case 'toolCall':
-        this.updateToolCall(
+        await this.updateToolCall(
           event.event.value.messageId,
           event.event.value.toolCallId,
           event.event.value.title,
           event.event.value.status,
+          event.event.value.kind,
+          event.event.value.detail,
+        );
+        break;
+      case 'plan':
+        this.updatePlan(
+          event.event.value.messageId,
+          event.event.value.entries.map((e) => ({
+            content: e.content,
+            status: e.status,
+            priority: e.priority,
+          })),
         );
         break;
       case 'reaction':
@@ -1072,6 +1095,7 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
       edited: false,
       sequence: msg.sequence,
       toolCalls: [],
+      plan: [],
     };
 
     const existing = this.messagesById.get(msg.id);
@@ -1117,7 +1141,7 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
     }
   }
 
-  private async updateToolCall(messageId: string, toolCallId: string, title: string, status: string): Promise<void> {
+  private async updateToolCall(messageId: string, toolCallId: string, title: string, status: string, kind = '', detail = ''): Promise<void> {
     const msg = this.messagesById.get(messageId);
     if (!msg) return;
 
@@ -1125,9 +1149,12 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
     if (existing) {
       existing.title = title;
       existing.status = status;
+      existing.kind = kind;
+      existing.detail = detail;
+      // Preserve the original startedAtMs — do not overwrite it
       msg.toolCalls = [...msg.toolCalls];
     } else {
-      msg.toolCalls = [...msg.toolCalls, { toolCallId, title, status }];
+      msg.toolCalls = [...msg.toolCalls, { toolCallId, title, status, kind, detail, startedAtMs: Date.now() }];
     }
     this.messages = [...this.messages];
 
@@ -1135,6 +1162,14 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
       await this.updateComplete;
       this.scrollToBottom();
     }
+  }
+
+  private updatePlan(messageId: string, entries: PlanEntryState[]): void {
+    const msg = this.messagesById.get(messageId);
+    if (!msg) return;
+
+    msg.plan = entries;
+    this.messages = [...this.messages];
   }
 
   private addReaction(messageId: string, emoji: string, reactor: string): void {

@@ -626,8 +626,12 @@ func (noOpChatBufferManager) IsInstanceRequested(string) bool {
 	return false
 }
 
-func (noOpChatBufferManager) NotifyToolCall(string, string, string, string, string) {
+func (noOpChatBufferManager) NotifyToolCall(string, chatbuffer.ToolCallEvent) {
 	// no-op: satisfies interface; this implementation ignores tool call notifications
+}
+
+func (noOpChatBufferManager) NotifyPlan(string, chatbuffer.PlanEvent) {
+	// no-op: satisfies interface; this implementation ignores plan notifications
 }
 
 func (noOpChatBufferManager) CancelPage(string) bool {

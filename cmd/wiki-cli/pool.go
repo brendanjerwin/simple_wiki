@@ -434,6 +434,7 @@ type chatReplier interface {
 	SendChatReply(context.Context, *connect.Request[apiv1.SendChatReplyRequest]) (*connect.Response[apiv1.SendChatReplyResponse], error)
 	EditChatMessage(context.Context, *connect.Request[apiv1.EditChatMessageRequest]) (*connect.Response[apiv1.EditChatMessageResponse], error)
 	SendToolCallNotification(context.Context, *connect.Request[apiv1.SendToolCallNotificationRequest]) (*connect.Response[apiv1.SendToolCallNotificationResponse], error)
+	SendPlanNotification(context.Context, *connect.Request[apiv1.SendPlanNotificationRequest]) (*connect.Response[apiv1.SendPlanNotificationResponse], error)
 	RequestPermissionFromUser(context.Context, *connect.Request[apiv1.RequestPermissionFromUserRequest]) (*connect.Response[apiv1.RequestPermissionFromUserResponse], error)
 }
 
@@ -463,7 +464,6 @@ type wikiChatClient struct {
 	textBuf         strings.Builder
 	thoughtBuf      strings.Builder
 	permissionNotes strings.Builder
-	planEntries     []acp.PlanEntry
 	replyToID       string // set before each prompt to thread responses
 	currentMsg      string // message ID of the in-progress streaming reply
 	pageContext     string // context to prepend to the first user message
@@ -549,6 +549,22 @@ func (c *wikiChatClient) handleAgentMessage(chunk *acp.SessionUpdateAgentMessage
 	return nil
 }
 
+// toolCallDetail builds a concise one-line detail from ACP tool-call locations:
+// the first affected path, with ":<line>" when a line number is present. Returns
+// "" when there are no locations (the UI then falls back to the title).
+func toolCallDetail(locations []acp.ToolCallLocation) string {
+	if len(locations) == 0 {
+		return ""
+	}
+
+	loc := locations[0]
+	if loc.Line != nil {
+		return fmt.Sprintf("%s:%d", loc.Path, *loc.Line)
+	}
+
+	return loc.Path
+}
+
 // handleToolCall sends a tool call notification to the wiki chat.
 func (c *wikiChatClient) handleToolCall(tc *acp.SessionUpdateToolCall) {
 	c.mu.Lock()
@@ -562,6 +578,8 @@ func (c *wikiChatClient) handleToolCall(tc *acp.SessionUpdateToolCall) {
 			ToolCallId: string(tc.ToolCallId),
 			Title:      tc.Title,
 			Status:     string(tc.Status),
+			Kind:       string(tc.Kind),
+			Detail:     toolCallDetail(tc.Locations),
 		}))
 	}
 	slog.Info("tool call", logKeyPage, c.page, logKeyTool, tc.Title, "status", string(tc.Status))
@@ -585,12 +603,18 @@ func (c *wikiChatClient) handleToolCallUpdate(tcu *acp.SessionToolCallUpdate) {
 	if tcu.Title != nil {
 		title = *tcu.Title
 	}
+	kind := ""
+	if tcu.Kind != nil {
+		kind = string(*tcu.Kind)
+	}
 	_, _ = c.chatClient.SendToolCallNotification(context.Background(), connect.NewRequest(&apiv1.SendToolCallNotificationRequest{
 		Page:       c.page,
 		MessageId:  msgID,
 		ToolCallId: string(tcu.ToolCallId),
 		Title:      title,
 		Status:     status,
+		Kind:       kind,
+		Detail:     toolCallDetail(tcu.Locations),
 	}))
 }
 
@@ -616,18 +640,48 @@ func (c *wikiChatClient) handleThought(chunk *acp.SessionUpdateAgentThoughtChunk
 	c.streamOrCreateReply(msgID, replyTo, thoughtText)
 }
 
-// handlePlan updates the plan entries and streams the updated text to the chat.
+// handlePlan sends a structured plan notification keyed to the current assistant message.
+// If no message exists yet, one is created first so the notification has a message ID to attach to.
 func (c *wikiChatClient) handlePlan(plan *acp.SessionUpdatePlan) {
 	c.mu.Lock()
-	c.planEntries = plan.Entries
-	fullText := c.buildFullText()
 	msgID := c.currentMsg
 	replyTo := c.replyToID
+	fullText := c.buildFullText()
 	c.mu.Unlock()
 
 	slog.Info("plan update", logKeyPage, c.page, "entry_count", len(plan.Entries))
 
-	c.streamOrCreateReply(msgID, replyTo, fullText)
+	// Ensure a message bubble exists before attaching the plan notification.
+	if msgID == "" {
+		c.streamOrCreateReply(msgID, replyTo, fullText)
+
+		c.mu.Lock()
+		msgID = c.currentMsg
+		c.mu.Unlock()
+	}
+
+	if msgID == "" {
+		slog.Error("plan update: no message ID available after create attempt, skipping plan notification", logKeyPage, c.page)
+		return
+	}
+
+	entries := make([]*apiv1.ChatPlanEntry, 0, len(plan.Entries))
+	for _, e := range plan.Entries {
+		entries = append(entries, &apiv1.ChatPlanEntry{
+			Content:  e.Content,
+			Status:   string(e.Status),
+			Priority: string(e.Priority),
+		})
+	}
+
+	// nosemgrep: go.handler-returns-nil-after-error-logged
+	if _, err := c.chatClient.SendPlanNotification(context.Background(), connect.NewRequest(&apiv1.SendPlanNotificationRequest{
+		Page:      c.page,
+		MessageId: msgID,
+		Entries:   entries,
+	})); err != nil {
+		slog.Error("failed to send plan notification", logKeyPage, c.page, logKeyError, err)
+	}
 }
 
 // streamOrCreateReply either creates a new streaming reply or edits the existing one.
@@ -673,10 +727,6 @@ func (c *wikiChatClient) buildFullText() string {
 		result = "<details><summary>Thinking...</summary>\n\n" + thought + "\n\n</details>\n\n" + response
 	}
 
-	if len(c.planEntries) > 0 {
-		result += "\n\n" + c.buildPlanSection()
-	}
-
 	if permissions != "" {
 		result += "\n\n" + permissions
 	}
@@ -684,32 +734,11 @@ func (c *wikiChatClient) buildFullText() string {
 	return result
 }
 
-// buildPlanSection renders plan entries as a markdown checklist.
-// Must be called with c.mu held.
-func (c *wikiChatClient) buildPlanSection() string {
-	var sb strings.Builder
-	_, _ = sb.WriteString("**Plan:**\n")
-
-	for _, entry := range c.planEntries {
-		switch entry.Status {
-		case acp.PlanEntryStatusCompleted:
-			_, _ = sb.WriteString("- [x] " + entry.Content + "\n")
-		case acp.PlanEntryStatusInProgress:
-			_, _ = sb.WriteString("- 🔄 " + entry.Content + "\n")
-		default: // pending
-			_, _ = sb.WriteString("- [ ] " + entry.Content + "\n")
-		}
-	}
-
-	return sb.String()
-}
-
 func (c *wikiChatClient) beginTurn(replyToID string) {
 	c.mu.Lock()
 	c.textBuf.Reset()
 	c.thoughtBuf.Reset()
 	c.permissionNotes.Reset()
-	c.planEntries = nil
 	c.replyToID = replyToID
 	c.currentMsg = ""
 	c.mu.Unlock()

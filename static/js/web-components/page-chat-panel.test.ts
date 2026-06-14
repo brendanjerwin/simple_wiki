@@ -183,6 +183,7 @@ describe('PageChatPanel', () => {
         reactions: [],
         edited: false,
         toolCalls: [],
+        plan: [],
         sequence: 0n,
       };
       el.messages = [msgState];
@@ -589,6 +590,7 @@ describe('PageChatPanel', () => {
         reactions: [{ emoji: '👍', reactors: ['alice'], count: 1 }],
         edited: false,
         toolCalls: [],
+        plan: [],
         sequence: 0n,
       };
       (el as unknown as { messagesById: Map<string, ChatMessageState> }).messagesById.set('msg-1', msgState);
@@ -774,6 +776,7 @@ describe('PageChatPanel', () => {
         reactions: [],
         edited: false,
         toolCalls: [],
+        plan: [],
         sequence: 0n,
       };
       (el as unknown as { messagesById: Map<string, ChatMessageState> }).messagesById.set('edit-msg', msgState);
@@ -1186,6 +1189,7 @@ describe('PageChatPanel', () => {
         reactions: [],
         edited: false,
         toolCalls: [],
+        plan: [],
         sequence: 0n,
       };
       (el as unknown as { messagesById: Map<string, ChatMessageState> }).messagesById.set('tc-msg', msgState);
@@ -1305,6 +1309,53 @@ describe('PageChatPanel', () => {
         expect(scrollToBottomSpy.callCount).to.equal(0);
       });
     });
+
+    describe('when adding a new tool call with kind and detail', () => {
+      let startedAtMsBefore: number;
+
+      beforeEach(async () => {
+        startedAtMsBefore = Date.now();
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- calling private method for testing
+        await (el as any).updateToolCall('tc-msg', 'tc-kind', 'Read File', 'in_progress', 'read', '/path/to/file.ts');
+        await el.updateComplete;
+      });
+
+      it('should set the kind field', () => {
+        expect(el.messages[0]!.toolCalls[0]!.kind).to.equal('read');
+      });
+
+      it('should set the detail field', () => {
+        expect(el.messages[0]!.toolCalls[0]!.detail).to.equal('/path/to/file.ts');
+      });
+
+      it('should set startedAtMs to approximately now', () => {
+        const startedAtMs = el.messages[0]!.toolCalls[0]!.startedAtMs;
+        expect(startedAtMs).to.be.greaterThanOrEqual(startedAtMsBefore);
+        expect(startedAtMs).to.be.lessThanOrEqual(Date.now());
+      });
+    });
+
+    describe('when updating an existing tool call', () => {
+      let originalStartedAtMs: number;
+
+      beforeEach(async () => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- calling private method for testing
+        await (el as any).updateToolCall('tc-msg', 'tc-preserve', 'Read File', 'in_progress', 'read', 'old detail');
+        originalStartedAtMs = el.messages[0]!.toolCalls[0]!.startedAtMs;
+        // Update the same tool call
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- calling private method for testing
+        await (el as any).updateToolCall('tc-msg', 'tc-preserve', 'Read File', 'completed', 'read', 'new detail');
+        await el.updateComplete;
+      });
+
+      it('should preserve the original startedAtMs', () => {
+        expect(el.messages[0]!.toolCalls[0]!.startedAtMs).to.equal(originalStartedAtMs);
+      });
+
+      it('should update the kind and detail', () => {
+        expect(el.messages[0]!.toolCalls[0]!.detail).to.equal('new detail');
+      });
+    });
   });
 
   describe('toolCalls passed to chat-message-bubble', () => {
@@ -1325,9 +1376,10 @@ describe('PageChatPanel', () => {
         reactions: [],
         edited: false,
         toolCalls: [
-          { toolCallId: 'tc-a', title: 'Search', status: 'complete' },
-          { toolCallId: 'tc-b', title: 'Execute', status: 'running' },
+          { toolCallId: 'tc-a', title: 'Search', status: 'completed', kind: 'search', detail: '', startedAtMs: 0 },
+          { toolCallId: 'tc-b', title: 'Execute', status: 'in_progress', kind: 'execute', detail: '', startedAtMs: 0 },
         ],
+        plan: [],
         sequence: 0n,
       };
       (el as unknown as { messagesById: Map<string, ChatMessageState> }).messagesById.set('tc-render-msg', msgState);
@@ -1360,6 +1412,7 @@ describe('PageChatPanel', () => {
         reactions: [],
         edited: false,
         toolCalls: [],
+        plan: [],
         sequence: 0n,
       };
       (el as unknown as { messagesById: Map<string, ChatMessageState> }).messagesById.set('stream-msg', msgState);
@@ -2006,6 +2059,7 @@ describe('PageChatPanel stream methods', () => {
           reactions: [],
           edited: false,
           toolCalls: [],
+          plan: [],
           sequence: 0n,
         };
         // eslint-disable-next-line @typescript-eslint/no-explicit-any -- accessing private field for testing
@@ -2045,6 +2099,7 @@ describe('PageChatPanel stream methods', () => {
           reactions: [],
           edited: false,
           toolCalls: [],
+          plan: [],
           sequence: 0n,
         };
         // eslint-disable-next-line @typescript-eslint/no-explicit-any -- accessing private field for testing
@@ -2117,6 +2172,7 @@ describe('PageChatPanel stream methods', () => {
           reactions: [],
           edited: false,
           toolCalls: [],
+          plan: [],
           sequence: 0n,
         };
         el.messages = [msgState];
@@ -2155,6 +2211,119 @@ describe('PageChatPanel stream methods', () => {
 
       it('should clear pending permission', () => {
         expect(el.pendingPermission).to.equal(null);
+      });
+    });
+
+    describe('when event is toolCall with kind and detail', () => {
+
+      beforeEach(async () => {
+        const msgState: ChatMessageState = {
+          id: 'tc-evt-msg',
+          sender: Sender.ASSISTANT,
+          content: 'Using tools',
+          renderedHtml: '',
+          timestamp: new Date(),
+          senderName: 'TestPersona',
+          replyToId: '',
+          reactions: [],
+          edited: false,
+          toolCalls: [],
+          plan: [],
+          sequence: 0n,
+        };
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- accessing private field for testing
+        (el as any).messagesById.set('tc-evt-msg', msgState);
+        el.messages = [msgState];
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- calling private method for testing
+        await (el as any).handleChatEvent({
+          event: {
+            case: 'toolCall',
+            value: {
+              messageId: 'tc-evt-msg',
+              toolCallId: 'tc-evt-1',
+              title: 'Reading page',
+              status: 'in_progress',
+              kind: 'read',
+              detail: '/wiki/SomePage',
+            },
+          },
+        });
+        await el.updateComplete;
+      });
+
+      it('should add the tool call to the message', () => {
+        expect(el.messages[0]!.toolCalls).to.have.length(1);
+      });
+
+      it('should carry the kind field', () => {
+        expect(el.messages[0]!.toolCalls[0]!.kind).to.equal('read');
+      });
+
+      it('should carry the detail field', () => {
+        expect(el.messages[0]!.toolCalls[0]!.detail).to.equal('/wiki/SomePage');
+      });
+
+      it('should set the status from the event', () => {
+        expect(el.messages[0]!.toolCalls[0]!.status).to.equal('in_progress');
+      });
+    });
+
+    describe('when event is plan', () => {
+
+      beforeEach(async () => {
+        const msgState: ChatMessageState = {
+          id: 'plan-evt-msg',
+          sender: Sender.ASSISTANT,
+          content: 'Planning',
+          renderedHtml: '',
+          timestamp: new Date(),
+          senderName: 'TestPersona',
+          replyToId: '',
+          reactions: [],
+          edited: false,
+          toolCalls: [],
+          plan: [],
+          sequence: 0n,
+        };
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- accessing private field for testing
+        (el as any).messagesById.set('plan-evt-msg', msgState);
+        el.messages = [msgState];
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- calling private method for testing
+        await (el as any).handleChatEvent({
+          event: {
+            case: 'plan',
+            value: {
+              messageId: 'plan-evt-msg',
+              entries: [
+                { content: 'Search wiki', status: 'completed', priority: 'high' },
+                { content: 'Read page', status: 'in_progress', priority: 'high' },
+                { content: 'Update content', status: 'pending', priority: 'medium' },
+              ],
+            },
+          },
+        });
+        await el.updateComplete;
+      });
+
+      it('should populate the message plan', () => {
+        expect(el.messages[0]!.plan).to.have.length(3);
+      });
+
+      it('should map content from the plan entries', () => {
+        expect(el.messages[0]!.plan[0]!.content).to.equal('Search wiki');
+      });
+
+      it('should map status from the plan entries', () => {
+        expect(el.messages[0]!.plan[0]!.status).to.equal('completed');
+        expect(el.messages[0]!.plan[1]!.status).to.equal('in_progress');
+        expect(el.messages[0]!.plan[2]!.status).to.equal('pending');
+      });
+
+      it('should map priority from the plan entries', () => {
+        expect(el.messages[0]!.plan[0]!.priority).to.equal('high');
+        expect(el.messages[0]!.plan[2]!.priority).to.equal('medium');
       });
     });
 

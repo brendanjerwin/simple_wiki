@@ -1,8 +1,9 @@
 import { expect, fixture, html } from '@open-wc/testing';
+import { useFakeTimers, type SinonFakeTimers } from 'sinon';
 import { Sender } from '../gen/api/v1/chat_pb.js';
 import './chat-message-bubble.js';
 import type { ChatMessageBubble, ReactionGroup, ScrollToMessageEventDetail } from './chat-message-bubble.js';
-import type { ToolCallState } from './page-chat-panel.js';
+import type { ToolCallState, PlanEntryState } from './page-chat-panel.js';
 
 describe('ChatMessageBubble', () => {
   describe('when rendering a user message', () => {
@@ -245,12 +246,188 @@ describe('ChatMessageBubble', () => {
       });
     });
 
-    describe('when toolCalls has entries', () => {
+    describe('when a tool call has in_progress status (live)', () => {
+      let el: ChatMessageBubble;
+      const startedAtMs = Date.now() - 3500;
+      const inProgressToolCall: ToolCallState = {
+        toolCallId: 'tc-live',
+        title: 'Reading a file',
+        status: 'in_progress',
+        kind: 'read',
+        detail: '/some/path/to/file.ts',
+        startedAtMs,
+      };
+
+      beforeEach(async () => {
+        el = await fixture(html`
+          <chat-message-bubble
+            message-id="msg-tc-live"
+            .sender=${Sender.ASSISTANT}
+            content="Using tools"
+            .toolCalls=${[inProgressToolCall]}
+          ></chat-message-bubble>
+        `);
+      });
+
+      it('should render the live tool-call row', () => {
+        const live = el.shadowRoot!.querySelector('.tool-call-live');
+        expect(live).to.not.be.null;
+      });
+
+      it('should display the tool call title in the live row', () => {
+        const title = el.shadowRoot!.querySelector('.tool-call-live-title');
+        expect(title).to.not.be.null;
+        expect(title!.textContent).to.equal('Reading a file');
+      });
+
+      it('should display the detail text', () => {
+        const detail = el.shadowRoot!.querySelector('.tool-call-detail');
+        expect(detail).to.not.be.null;
+        expect(detail!.textContent).to.contain('/some/path/to/file.ts');
+      });
+
+      it('should display an elapsed time', () => {
+        const elapsed = el.shadowRoot!.querySelector('.tool-call-elapsed');
+        expect(elapsed).to.not.be.null;
+        expect(elapsed!.textContent!.trim().length).to.be.greaterThan(0);
+      });
+
+      it('should show the hourglass icon for in_progress', () => {
+        const icon = el.shadowRoot!.querySelector('.tool-call-live .status-icon');
+        expect(icon!.textContent).to.equal('⏳');
+      });
+
+      it('should NOT render as a compact pill', () => {
+        const pill = el.shadowRoot!.querySelector('.tool-call-pill');
+        expect(pill).to.be.null;
+      });
+    });
+
+    describe('when a tool call has pending status (live)', () => {
+      let el: ChatMessageBubble;
+      const pendingToolCall: ToolCallState = {
+        toolCallId: 'tc-pending',
+        title: 'Searching',
+        status: 'pending',
+        kind: 'search',
+        detail: '',
+        startedAtMs: Date.now(),
+      };
+
+      beforeEach(async () => {
+        el = await fixture(html`
+          <chat-message-bubble
+            message-id="msg-tc-pending"
+            .sender=${Sender.ASSISTANT}
+            content="Using tools"
+            .toolCalls=${[pendingToolCall]}
+          ></chat-message-bubble>
+        `);
+      });
+
+      it('should render the live tool-call row', () => {
+        const live = el.shadowRoot!.querySelector('.tool-call-live');
+        expect(live).to.not.be.null;
+      });
+
+      it('should show the bullet dot icon for pending', () => {
+        const icon = el.shadowRoot!.querySelector('.tool-call-live .status-icon');
+        expect(icon!.textContent).to.equal('•');
+      });
+    });
+
+    describe('when a tool call has completed status', () => {
+      let el: ChatMessageBubble;
+      const completedToolCall: ToolCallState = {
+        toolCallId: 'tc-done',
+        title: 'Read File',
+        status: 'completed',
+        kind: 'read',
+        detail: '/path/file.ts',
+        startedAtMs: Date.now() - 2000,
+      };
+
+      beforeEach(async () => {
+        el = await fixture(html`
+          <chat-message-bubble
+            message-id="msg-tc-done"
+            .sender=${Sender.ASSISTANT}
+            content="Done"
+            .toolCalls=${[completedToolCall]}
+          ></chat-message-bubble>
+        `);
+      });
+
+      it('should render as a compact pill', () => {
+        const pill = el.shadowRoot!.querySelector('.tool-call-pill');
+        expect(pill).to.not.be.null;
+      });
+
+      it('should show the check mark icon for completed', () => {
+        const icon = el.shadowRoot!.querySelector('.tool-call-pill .status-icon');
+        expect(icon!.textContent).to.equal('✅');
+      });
+
+      it('should display the title in the pill', () => {
+        const pill = el.shadowRoot!.querySelector('.tool-call-pill');
+        expect(pill!.textContent).to.contain('Read File');
+      });
+
+      it('should NOT render the expanded live row', () => {
+        const live = el.shadowRoot!.querySelector('.tool-call-live');
+        expect(live).to.be.null;
+      });
+
+      it('should NOT render the detail element', () => {
+        const detail = el.shadowRoot!.querySelector('.tool-call-detail');
+        expect(detail).to.be.null;
+      });
+    });
+
+    describe('when a tool call has failed status', () => {
+      let el: ChatMessageBubble;
+      const failedToolCall: ToolCallState = {
+        toolCallId: 'tc-fail',
+        title: 'Execute Shell',
+        status: 'failed',
+        kind: 'execute',
+        detail: 'Exit code 1',
+        startedAtMs: Date.now() - 1000,
+      };
+
+      beforeEach(async () => {
+        el = await fixture(html`
+          <chat-message-bubble
+            message-id="msg-tc-fail"
+            .sender=${Sender.ASSISTANT}
+            content="Failed"
+            .toolCalls=${[failedToolCall]}
+          ></chat-message-bubble>
+        `);
+      });
+
+      it('should render as a compact pill', () => {
+        const pill = el.shadowRoot!.querySelector('.tool-call-pill');
+        expect(pill).to.not.be.null;
+      });
+
+      it('should show the cross mark icon for failed', () => {
+        const icon = el.shadowRoot!.querySelector('.tool-call-pill .status-icon');
+        expect(icon!.textContent).to.equal('❌');
+      });
+
+      it('should NOT render the expanded live row', () => {
+        const live = el.shadowRoot!.querySelector('.tool-call-live');
+        expect(live).to.be.null;
+      });
+    });
+
+    describe('when toolCalls has entries with mixed statuses', () => {
       let el: ChatMessageBubble;
       const toolCalls: ToolCallState[] = [
-        { toolCallId: 'tc-1', title: 'Read File', status: 'complete' },
-        { toolCallId: 'tc-2', title: 'Execute Shell', status: 'running' },
-        { toolCallId: 'tc-3', title: 'Failed Op', status: 'error' },
+        { toolCallId: 'tc-1', title: 'Read File', status: 'completed', kind: 'read', detail: '', startedAtMs: Date.now() - 5000 },
+        { toolCallId: 'tc-2', title: 'Execute Shell', status: 'in_progress', kind: 'execute', detail: 'running...', startedAtMs: Date.now() - 1000 },
+        { toolCallId: 'tc-3', title: 'Failed Op', status: 'failed', kind: 'other', detail: '', startedAtMs: Date.now() - 500 },
       ];
 
       beforeEach(async () => {
@@ -269,34 +446,14 @@ describe('ChatMessageBubble', () => {
         expect(container).to.not.be.null;
       });
 
-      it('should render one pill per tool call', () => {
+      it('should render one pill for the completed tool call', () => {
         const pills = el.shadowRoot!.querySelectorAll('.tool-call-pill');
-        expect(pills.length).to.equal(3);
+        expect(pills.length).to.equal(2);
       });
 
-      it('should display the tool call title', () => {
-        const pills = el.shadowRoot!.querySelectorAll('.tool-call-pill');
-        expect(pills[0]!.textContent).to.contain('Read File');
-        expect(pills[1]!.textContent).to.contain('Execute Shell');
-        expect(pills[2]!.textContent).to.contain('Failed Op');
-      });
-
-      it('should show check mark icon for complete status', () => {
-        const pills = el.shadowRoot!.querySelectorAll('.tool-call-pill');
-        const icon = pills[0]!.querySelector('.status-icon');
-        expect(icon!.textContent).to.equal('\u2705');
-      });
-
-      it('should show hourglass icon for running status', () => {
-        const pills = el.shadowRoot!.querySelectorAll('.tool-call-pill');
-        const icon = pills[1]!.querySelector('.status-icon');
-        expect(icon!.textContent).to.equal('\u23F3');
-      });
-
-      it('should show cross mark icon for error status', () => {
-        const pills = el.shadowRoot!.querySelectorAll('.tool-call-pill');
-        const icon = pills[2]!.querySelector('.status-icon');
-        expect(icon!.textContent).to.equal('\u274C');
+      it('should render one live row for the in_progress tool call', () => {
+        const liveRows = el.shadowRoot!.querySelectorAll('.tool-call-live');
+        expect(liveRows.length).to.equal(1);
       });
     });
 
@@ -309,14 +466,190 @@ describe('ChatMessageBubble', () => {
             message-id="msg-tc-unknown"
             .sender=${Sender.ASSISTANT}
             content="Unknown status"
-            .toolCalls=${[{ toolCallId: 'tc-x', title: 'Mystery', status: 'pending' }]}
+            .toolCalls=${[{ toolCallId: 'tc-x', title: 'Mystery', status: 'unknown_status', kind: '', detail: '', startedAtMs: Date.now() }]}
           ></chat-message-bubble>
         `);
       });
 
+      it('should render as a compact pill (not live) for unknown status', () => {
+        // Unknown status is not pending/in_progress, so it renders as a compact pill
+        const pill = el.shadowRoot!.querySelector('.tool-call-pill');
+        expect(pill).to.not.be.null;
+      });
+
       it('should show bullet icon for unknown status', () => {
         const icon = el.shadowRoot!.querySelector('.tool-call-pill .status-icon');
-        expect(icon!.textContent).to.equal('\u2022');
+        expect(icon!.textContent).to.equal('•');
+      });
+    });
+  });
+
+  describe('elapsed timer lifecycle', () => {
+    let clock: SinonFakeTimers;
+
+    beforeEach(() => {
+      clock = useFakeTimers();
+    });
+
+    afterEach(() => {
+      clock.restore();
+    });
+
+    describe('when connected with a live tool call', () => {
+      let el: ChatMessageBubble;
+      const liveToolCall: ToolCallState = {
+        toolCallId: 'tc-timer',
+        title: 'Running',
+        status: 'in_progress',
+        kind: 'execute',
+        detail: 'working...',
+        startedAtMs: 0,
+      };
+
+      let elapsedBefore: string | null;
+      let elapsedAfter: string | null;
+
+      beforeEach(async () => {
+        el = await fixture(html`
+          <chat-message-bubble
+            message-id="msg-timer"
+            .sender=${Sender.ASSISTANT}
+            content="Tool running"
+            .toolCalls=${[liveToolCall]}
+          ></chat-message-bubble>
+        `);
+        await el.updateComplete;
+        elapsedBefore = el.shadowRoot!.querySelector('.tool-call-elapsed')!.textContent;
+        clock.tick(1000);
+        await el.updateComplete;
+        elapsedAfter = el.shadowRoot!.querySelector('.tool-call-elapsed')!.textContent;
+      });
+
+      it('should render an elapsed indicator for the live tool call', () => {
+        expect(elapsedBefore).to.not.be.null;
+      });
+
+      it('should advance the elapsed time when the timer ticks', () => {
+        expect(elapsedAfter).to.not.equal(elapsedBefore);
+      });
+
+      describe('when the tool call completes (status changes)', () => {
+        beforeEach(async () => {
+          el.toolCalls = [{ ...liveToolCall, status: 'completed' }];
+          await el.updateComplete;
+        });
+
+        it('should not render the live row anymore', () => {
+          const live = el.shadowRoot!.querySelector('.tool-call-live');
+          expect(live).to.be.null;
+        });
+      });
+    });
+
+    describe('when connected with only completed tool calls', () => {
+      let el: ChatMessageBubble;
+      const completedToolCall: ToolCallState = {
+        toolCallId: 'tc-done',
+        title: 'Done',
+        status: 'completed',
+        kind: 'read',
+        detail: '',
+        startedAtMs: 0,
+      };
+
+      beforeEach(async () => {
+        el = await fixture(html`
+          <chat-message-bubble
+            message-id="msg-timer-done"
+            .sender=${Sender.ASSISTANT}
+            content="Tool done"
+            .toolCalls=${[completedToolCall]}
+          ></chat-message-bubble>
+        `);
+        await el.updateComplete;
+      });
+
+      it('should not show a live row', () => {
+        const live = el.shadowRoot!.querySelector('.tool-call-live');
+        expect(live).to.be.null;
+      });
+    });
+  });
+
+  describe('plan rendering', () => {
+
+    describe('when plan is empty', () => {
+      let el: ChatMessageBubble;
+
+      beforeEach(async () => {
+        el = await fixture(html`
+          <chat-message-bubble
+            message-id="msg-plan-empty"
+            .sender=${Sender.ASSISTANT}
+            content="No plan"
+            .plan=${[]}
+          ></chat-message-bubble>
+        `);
+      });
+
+      it('should not render the plan block', () => {
+        const planBlock = el.shadowRoot!.querySelector('.plan-block');
+        expect(planBlock).to.be.null;
+      });
+    });
+
+    describe('when plan has entries', () => {
+      let el: ChatMessageBubble;
+      const plan: PlanEntryState[] = [
+        { content: 'Search for the page', status: 'completed', priority: 'high' },
+        { content: 'Read the content', status: 'in_progress', priority: 'high' },
+        { content: 'Update the page', status: 'pending', priority: 'medium' },
+      ];
+
+      beforeEach(async () => {
+        el = await fixture(html`
+          <chat-message-bubble
+            message-id="msg-plan"
+            .sender=${Sender.ASSISTANT}
+            content="Working..."
+            .plan=${plan}
+          ></chat-message-bubble>
+        `);
+      });
+
+      it('should render the plan block', () => {
+        const planBlock = el.shadowRoot!.querySelector('.plan-block');
+        expect(planBlock).to.not.be.null;
+      });
+
+      it('should render three plan entries', () => {
+        const entries = el.shadowRoot!.querySelectorAll('.plan-entry');
+        expect(entries.length).to.equal(3);
+      });
+
+      it('should show the check glyph for completed entries', () => {
+        const entries = el.shadowRoot!.querySelectorAll('.plan-entry');
+        const icon = entries[0]!.querySelector('.plan-entry-icon');
+        expect(icon!.textContent).to.equal('☑');
+      });
+
+      it('should show the spinning glyph for in_progress entries', () => {
+        const entries = el.shadowRoot!.querySelectorAll('.plan-entry');
+        const icon = entries[1]!.querySelector('.plan-entry-icon');
+        expect(icon!.textContent).to.equal('🔄');
+      });
+
+      it('should show the empty checkbox glyph for pending entries', () => {
+        const entries = el.shadowRoot!.querySelectorAll('.plan-entry');
+        const icon = entries[2]!.querySelector('.plan-entry-icon');
+        expect(icon!.textContent).to.equal('☐');
+      });
+
+      it('should display the content of each entry', () => {
+        const entries = el.shadowRoot!.querySelectorAll('.plan-entry');
+        expect(entries[0]!.textContent).to.contain('Search for the page');
+        expect(entries[1]!.textContent).to.contain('Read the content');
+        expect(entries[2]!.textContent).to.contain('Update the page');
       });
     });
   });

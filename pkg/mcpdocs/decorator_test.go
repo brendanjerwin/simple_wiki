@@ -327,6 +327,10 @@ func (*noopChatServer) SendToolCallNotification(_ context.Context, _ *connect.Re
 	return nil, errChatNoop
 }
 
+func (*noopChatServer) SendPlanNotification(_ context.Context, _ *connect.Request[apiv1.SendPlanNotificationRequest]) (*connect.Response[apiv1.SendPlanNotificationResponse], error) {
+	return nil, errChatNoop
+}
+
 var _ = Describe("Decorate for a service that declares no service_description", func() {
 	var (
 		server              *mcpserver.MCPServer

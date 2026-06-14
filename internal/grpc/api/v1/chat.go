@@ -248,29 +248,15 @@ func bufferEventToProto(event chatbuffer.Event) *apiv1.ChatEvent {
 					ToolCallId: event.ToolCall.ToolCallID,
 					Title:      event.ToolCall.Title,
 					Status:     event.ToolCall.Status,
+					Kind:       event.ToolCall.Kind,
+					Detail:     event.ToolCall.Detail,
 				},
 			},
 		}
+	case chatbuffer.EventTypePlan:
+		return planEventToProto(event.Plan)
 	case chatbuffer.EventTypePermissionRequest:
-		options := make([]*apiv1.ChatPermissionOption, len(event.PermissionRequest.Options))
-		for i, opt := range event.PermissionRequest.Options {
-			options[i] = &apiv1.ChatPermissionOption{
-				OptionId:    opt.OptionID,
-				Label:       opt.Label,
-				Description: opt.Description,
-			}
-		}
-		return &apiv1.ChatEvent{
-			Event: &apiv1.ChatEvent_PermissionRequest{
-				PermissionRequest: &apiv1.ChatPermissionRequest{
-					RequestId:   event.PermissionRequest.RequestID,
-					Page:        event.PermissionRequest.Page,
-					Title:       event.PermissionRequest.Title,
-					Description: event.PermissionRequest.Description,
-					Options:     options,
-				},
-			},
-		}
+		return permissionRequestEventToProto(event.PermissionRequest)
 	case chatbuffer.EventTypeCleared:
 		return &apiv1.ChatEvent{
 			Event: &apiv1.ChatEvent_ChatCleared{
@@ -281,6 +267,52 @@ func bufferEventToProto(event chatbuffer.Event) *apiv1.ChatEvent {
 		}
 	default:
 		return nil
+	}
+}
+
+// planEventToProto converts a chatbuffer plan event to a ChatEvent.
+func planEventToProto(plan *chatbuffer.PlanEvent) *apiv1.ChatEvent {
+	if plan == nil {
+		return nil
+	}
+	entries := make([]*apiv1.ChatPlanEntry, len(plan.Entries))
+	for i, e := range plan.Entries {
+		entries[i] = &apiv1.ChatPlanEntry{
+			Content:  e.Content,
+			Status:   e.Status,
+			Priority: e.Priority,
+		}
+	}
+	return &apiv1.ChatEvent{
+		Event: &apiv1.ChatEvent_Plan{
+			Plan: &apiv1.ChatPlan{
+				MessageId: plan.MessageID,
+				Entries:   entries,
+			},
+		},
+	}
+}
+
+// permissionRequestEventToProto converts a chatbuffer permission-request event to a ChatEvent.
+func permissionRequestEventToProto(req *chatbuffer.PermissionRequestEvent) *apiv1.ChatEvent {
+	options := make([]*apiv1.ChatPermissionOption, len(req.Options))
+	for i, opt := range req.Options {
+		options[i] = &apiv1.ChatPermissionOption{
+			OptionId:    opt.OptionID,
+			Label:       opt.Label,
+			Description: opt.Description,
+		}
+	}
+	return &apiv1.ChatEvent{
+		Event: &apiv1.ChatEvent_PermissionRequest{
+			PermissionRequest: &apiv1.ChatPermissionRequest{
+				RequestId:   req.RequestID,
+				Page:        req.Page,
+				Title:       req.Title,
+				Description: req.Description,
+				Options:     options,
+			},
+		},
 	}
 }
 
@@ -453,8 +485,40 @@ func (s *Server) SendToolCallNotification(_ context.Context, req *apiv1.SendTool
 		return nil, status.Error(codes.InvalidArgument, errMessageIDRequired)
 	}
 
-	s.chatBufferManager.NotifyToolCall(req.Page, req.MessageId, req.ToolCallId, req.Title, req.Status)
+	s.chatBufferManager.NotifyToolCall(req.Page, chatbuffer.ToolCallEvent{
+		MessageID:  req.MessageId,
+		ToolCallID: req.ToolCallId,
+		Title:      req.Title,
+		Status:     req.Status,
+		Kind:       req.Kind,
+		Detail:     req.Detail,
+	})
 	return &apiv1.SendToolCallNotificationResponse{}, nil
+}
+
+// SendPlanNotification implements the SendPlanNotification RPC.
+// Broadcasts an execution-plan update to all page subscribers.
+func (s *Server) SendPlanNotification(_ context.Context, req *apiv1.SendPlanNotificationRequest) (*apiv1.SendPlanNotificationResponse, error) {
+	if req.Page == "" {
+		return nil, status.Error(codes.InvalidArgument, errPageRequired)
+	}
+	if req.MessageId == "" {
+		return nil, status.Error(codes.InvalidArgument, errMessageIDRequired)
+	}
+
+	entries := make([]chatbuffer.PlanEntry, len(req.Entries))
+	for i, e := range req.Entries {
+		entries[i] = chatbuffer.PlanEntry{
+			Content:  e.GetContent(),
+			Status:   e.GetStatus(),
+			Priority: e.GetPriority(),
+		}
+	}
+	s.chatBufferManager.NotifyPlan(req.Page, chatbuffer.PlanEvent{
+		MessageID: req.MessageId,
+		Entries:   entries,
+	})
+	return &apiv1.SendPlanNotificationResponse{}, nil
 }
 
 // RespondToPermission implements the RespondToPermission RPC.

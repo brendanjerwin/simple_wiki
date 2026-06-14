@@ -1106,7 +1106,12 @@ var _ = Describe("Manager", func() {
 				eventChan, unsub = manager.SubscribeToPage("test-page")
 				DeferCleanup(unsub)
 
-				manager.NotifyToolCall("test-page", "msg-1", "tc-1", "Read File", "running")
+				manager.NotifyToolCall("test-page", chatbuffer.ToolCallEvent{
+					MessageID:  "msg-1",
+					ToolCallID: "tc-1",
+					Title:      "Read File",
+					Status:     "in_progress",
+				})
 			})
 
 			It("should emit a tool call event", func() {
@@ -1115,8 +1120,39 @@ var _ = Describe("Manager", func() {
 					HaveField("ToolCall.MessageID", "msg-1"),
 					HaveField("ToolCall.ToolCallID", "tc-1"),
 					HaveField("ToolCall.Title", "Read File"),
-					HaveField("ToolCall.Status", "running"),
+					HaveField("ToolCall.Status", "in_progress"),
 				)))
+			})
+		})
+
+		When("the tool call carries ACP kind and detail", func() {
+			var eventChan <-chan chatbuffer.Event
+
+			BeforeEach(func() {
+				var unsub func()
+				eventChan, unsub = manager.SubscribeToPage("test-page")
+				DeferCleanup(unsub)
+
+				manager.NotifyToolCall("test-page", chatbuffer.ToolCallEvent{
+					MessageID:  "msg-1",
+					ToolCallID: "tc-1",
+					Title:      "Edit File",
+					Status:     "completed",
+					Kind:       "edit",
+					Detail:     "server/site.go:42",
+				})
+			})
+
+			It("should emit the kind", func() {
+				Eventually(eventChan).Should(Receive(
+					HaveField("ToolCall.Kind", "edit"),
+				))
+			})
+
+			It("should emit the detail", func() {
+				Eventually(eventChan).Should(Receive(
+					HaveField("ToolCall.Detail", "server/site.go:42"),
+				))
 			})
 		})
 
@@ -1130,7 +1166,12 @@ var _ = Describe("Manager", func() {
 				otherChan, unsub = manager.SubscribeToPage("other-page")
 				DeferCleanup(unsub)
 
-				manager.NotifyToolCall("test-page", "msg-1", "tc-1", "Read File", "running")
+				manager.NotifyToolCall("test-page", chatbuffer.ToolCallEvent{
+					MessageID:  "msg-1",
+					ToolCallID: "tc-1",
+					Title:      "Read File",
+					Status:     "in_progress",
+				})
 			})
 
 			It("should not deliver to subscribers on other pages", func() {
@@ -1141,7 +1182,12 @@ var _ = Describe("Manager", func() {
 		When("no page subscribers exist", func() {
 			It("should not panic", func() {
 				Expect(func() {
-					manager.NotifyToolCall("test-page", "msg-1", "tc-1", "Read File", "running")
+					manager.NotifyToolCall("test-page", chatbuffer.ToolCallEvent{
+						MessageID:  "msg-1",
+						ToolCallID: "tc-1",
+						Title:      "Read File",
+						Status:     "in_progress",
+					})
 				}).NotTo(Panic())
 			})
 		})
@@ -1150,11 +1196,88 @@ var _ = Describe("Manager", func() {
 			var messages []*chatbuffer.Message
 
 			BeforeEach(func() {
-				manager.NotifyToolCall("test-page", "msg-1", "tc-1", "Read File", "running")
+				manager.NotifyToolCall("test-page", chatbuffer.ToolCallEvent{
+					MessageID:  "msg-1",
+					ToolCallID: "tc-1",
+					Title:      "Read File",
+					Status:     "in_progress",
+				})
 				messages = manager.GetMessages("test-page")
 			})
 
 			It("should not store tool call events in the buffer", func() {
+				Expect(messages).To(BeEmpty())
+			})
+		})
+	})
+
+	Describe("NotifyPlan", func() {
+		When("a page subscriber is listening", func() {
+			var eventChan <-chan chatbuffer.Event
+
+			BeforeEach(func() {
+				var unsub func()
+				eventChan, unsub = manager.SubscribeToPage("test-page")
+				DeferCleanup(unsub)
+
+				manager.NotifyPlan("test-page", chatbuffer.PlanEvent{
+					MessageID: "msg-1",
+					Entries: []chatbuffer.PlanEntry{
+						{Content: "Investigate", Status: "completed", Priority: "high"},
+						{Content: "Fix", Status: "in_progress", Priority: "high"},
+					},
+				})
+			})
+
+			It("should emit a plan event", func() {
+				Eventually(eventChan).Should(Receive(And(
+					HaveField("Type", chatbuffer.EventTypePlan),
+					HaveField("Plan.MessageID", "msg-1"),
+				)))
+			})
+
+			It("should emit the plan entries", func() {
+				var event chatbuffer.Event
+				Eventually(eventChan).Should(Receive(&event))
+				Expect(event.Plan.Entries).To(HaveLen(2))
+				Expect(event.Plan.Entries[1].Content).To(Equal("Fix"))
+				Expect(event.Plan.Entries[1].Status).To(Equal("in_progress"))
+			})
+		})
+
+		When("subscribers exist on different pages", func() {
+			var otherChan <-chan chatbuffer.Event
+
+			BeforeEach(func() {
+				var unsub func()
+				otherChan, unsub = manager.SubscribeToPage("other-page")
+				DeferCleanup(unsub)
+
+				manager.NotifyPlan("test-page", chatbuffer.PlanEvent{MessageID: "msg-1"})
+			})
+
+			It("should not deliver to subscribers on other pages", func() {
+				Consistently(otherChan).ShouldNot(Receive())
+			})
+		})
+
+		When("no page subscribers exist", func() {
+			It("should not panic", func() {
+				Expect(func() {
+					manager.NotifyPlan("test-page", chatbuffer.PlanEvent{MessageID: "msg-1"})
+				}).NotTo(Panic())
+			})
+		})
+
+		When("checking stored messages after notification", func() {
+			var messages []*chatbuffer.Message
+
+			BeforeEach(func() {
+				manager.NotifyPlan("test-page", chatbuffer.PlanEvent{MessageID: "msg-1"})
+				messages = manager.GetMessages("test-page")
+			})
+
+			It("should not store plan events in the buffer", func() {
 				Expect(messages).To(BeEmpty())
 			})
 		})

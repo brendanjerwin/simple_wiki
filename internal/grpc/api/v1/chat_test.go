@@ -31,6 +31,7 @@ type mockChatBufferManager struct {
 
 	// Tracking fields for new handler tests
 	notifyToolCallCalls       []notifyToolCallArgs
+	notifyPlanCalls           []notifyPlanArgs
 	clearPageCalls            []string
 	cancelPageCalls           []string
 	respondToPermissionCalls  []respondToPermissionArgs
@@ -60,7 +61,12 @@ type mockChatBufferManager struct {
 }
 
 type notifyToolCallArgs struct {
-	page, messageID, toolCallID, title, toolStatus string
+	page, messageID, toolCallID, title, toolStatus, kind, detail string
+}
+
+type notifyPlanArgs struct {
+	page string
+	plan chatbuffer.PlanEvent
 }
 
 type respondToPermissionArgs struct {
@@ -298,10 +304,16 @@ func (m *mockChatBufferManager) IsInstanceRequested(string) bool {
 	return m.isInstanceRequestedVal
 }
 
-func (m *mockChatBufferManager) NotifyToolCall(page, messageID, toolCallID, title, toolStatus string) {
+func (m *mockChatBufferManager) NotifyToolCall(page string, tc chatbuffer.ToolCallEvent) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.notifyToolCallCalls = append(m.notifyToolCallCalls, notifyToolCallArgs{page, messageID, toolCallID, title, toolStatus})
+	m.notifyToolCallCalls = append(m.notifyToolCallCalls, notifyToolCallArgs{page, tc.MessageID, tc.ToolCallID, tc.Title, tc.Status, tc.Kind, tc.Detail})
+}
+
+func (m *mockChatBufferManager) NotifyPlan(page string, plan chatbuffer.PlanEvent) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.notifyPlanCalls = append(m.notifyPlanCalls, notifyPlanArgs{page, plan})
 }
 
 func (m *mockChatBufferManager) CancelPage(page string) bool {
@@ -1797,7 +1809,9 @@ var _ = Describe("ChatService", func() {
 					MessageId:  "msg-1",
 					ToolCallId: "tc-1",
 					Title:      "Reading file",
-					Status:     "running",
+					Status:     "in_progress",
+					Kind:       "read",
+					Detail:     "server/site.go:42",
 				})
 			})
 
@@ -1816,7 +1830,93 @@ var _ = Describe("ChatService", func() {
 				Expect(call.messageID).To(Equal("msg-1"))
 				Expect(call.toolCallID).To(Equal("tc-1"))
 				Expect(call.title).To(Equal("Reading file"))
-				Expect(call.toolStatus).To(Equal("running"))
+				Expect(call.toolStatus).To(Equal("in_progress"))
+			})
+
+			It("should forward the ACP kind", func() {
+				Expect(chatManager.notifyToolCallCalls[0].kind).To(Equal("read"))
+			})
+
+			It("should forward the detail line", func() {
+				Expect(chatManager.notifyToolCallCalls[0].detail).To(Equal("server/site.go:42"))
+			})
+		})
+	})
+
+	Describe("SendPlanNotification", func() {
+		When("page is empty", func() {
+			var err error
+
+			BeforeEach(func() {
+				_, err = server.SendPlanNotification(ctx, &apiv1.SendPlanNotificationRequest{
+					Page:      "",
+					MessageId: "msg-1",
+				})
+			})
+
+			It("should return InvalidArgument error", func() {
+				st, ok := status.FromError(err)
+				Expect(ok).To(BeTrue())
+				Expect(st.Code()).To(Equal(codes.InvalidArgument))
+				Expect(st.Message()).To(ContainSubstring("page is required"))
+			})
+		})
+
+		When("message_id is empty", func() {
+			var err error
+
+			BeforeEach(func() {
+				_, err = server.SendPlanNotification(ctx, &apiv1.SendPlanNotificationRequest{
+					Page:      "test-page",
+					MessageId: "",
+				})
+			})
+
+			It("should return InvalidArgument error", func() {
+				st, ok := status.FromError(err)
+				Expect(ok).To(BeTrue())
+				Expect(st.Code()).To(Equal(codes.InvalidArgument))
+				Expect(st.Message()).To(ContainSubstring("message_id is required"))
+			})
+		})
+
+		When("request is valid", func() {
+			var (
+				resp *apiv1.SendPlanNotificationResponse
+				err  error
+			)
+
+			BeforeEach(func() {
+				resp, err = server.SendPlanNotification(ctx, &apiv1.SendPlanNotificationRequest{
+					Page:      "test-page",
+					MessageId: "msg-1",
+					Entries: []*apiv1.ChatPlanEntry{
+						{Content: "Investigate", Status: "completed", Priority: "high"},
+						{Content: "Fix", Status: "in_progress", Priority: "high"},
+					},
+				})
+			})
+
+			It("should not error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should return a response", func() {
+				Expect(resp).NotTo(BeNil())
+			})
+
+			It("should call NotifyPlan with the page and message_id", func() {
+				Expect(chatManager.notifyPlanCalls).To(HaveLen(1))
+				Expect(chatManager.notifyPlanCalls[0].page).To(Equal("test-page"))
+				Expect(chatManager.notifyPlanCalls[0].plan.MessageID).To(Equal("msg-1"))
+			})
+
+			It("should forward the plan entries", func() {
+				entries := chatManager.notifyPlanCalls[0].plan.Entries
+				Expect(entries).To(HaveLen(2))
+				Expect(entries[1].Content).To(Equal("Fix"))
+				Expect(entries[1].Status).To(Equal("in_progress"))
+				Expect(entries[1].Priority).To(Equal("high"))
 			})
 		})
 	})

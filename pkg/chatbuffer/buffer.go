@@ -76,6 +76,7 @@ type Event struct {
 	ToolCall          *ToolCallEvent
 	PermissionRequest *PermissionRequestEvent
 	Cleared           *ClearedEvent
+	Plan              *PlanEvent
 }
 
 // EventType identifies the type of chat event.
@@ -88,6 +89,7 @@ const (
 	EventTypeToolCall
 	EventTypePermissionRequest
 	EventTypeCleared
+	EventTypePlan
 )
 
 // EditEvent represents a message edit.
@@ -98,12 +100,28 @@ type EditEvent struct {
 	Streaming  bool // true for ACP streaming updates, false for user edits
 }
 
-// ToolCallEvent represents an agent tool invocation notification.
+// ToolCallEvent represents an agent tool invocation notification. Fields mirror
+// the ACP (Agent Client Protocol) tool-call model.
 type ToolCallEvent struct {
 	MessageID  string
 	ToolCallID string
 	Title      string
-	Status     string // "pending", "running", "complete", "error"
+	Status     string // ACP status: "pending", "in_progress", "completed", "failed"
+	Kind       string // ACP tool kind: read/edit/delete/move/search/execute/think/fetch/switch_mode/other
+	Detail     string // concise live detail line (e.g. affected "path:line" or latest output)
+}
+
+// PlanEntry is one item in an agent execution plan, mirroring an ACP plan entry.
+type PlanEntry struct {
+	Content  string
+	Status   string // ACP plan status: "pending", "in_progress", "completed"
+	Priority string // ACP plan priority: "high", "medium", "low"
+}
+
+// PlanEvent represents an agent execution-plan update notification.
+type PlanEvent struct {
+	MessageID string
+	Entries   []PlanEntry
 }
 
 // ReactionEvent represents a reaction added to a message.
@@ -483,19 +501,34 @@ func (m *Manager) AddReaction(messageID, emoji, reactor string) error {
 
 // NotifyToolCall sends a tool call notification to page subscribers.
 // This is ephemeral — not stored in the buffer, only streamed to active subscribers.
-func (m *Manager) NotifyToolCall(page, messageID, toolCallID, title, toolStatus string) {
+func (m *Manager) NotifyToolCall(page string, toolCall ToolCallEvent) {
 	buf := m.getOrCreateBuffer(page)
 	buf.mu.Lock()
 	buf.lastAccess = time.Now()
 
+	// Copy so the caller's value cannot be aliased by the streamed event.
+	tc := toolCall
 	buf.unlockAndNotify(Event{
-		Type: EventTypeToolCall,
-		ToolCall: &ToolCallEvent{
-			MessageID:  messageID,
-			ToolCallID: toolCallID,
-			Title:      title,
-			Status:     toolStatus,
-		},
+		Type:     EventTypeToolCall,
+		ToolCall: &tc,
+	})
+}
+
+// NotifyPlan sends an execution-plan update to page subscribers.
+// This is ephemeral — not stored in the buffer, only streamed to active subscribers.
+func (m *Manager) NotifyPlan(page string, plan PlanEvent) {
+	buf := m.getOrCreateBuffer(page)
+	buf.mu.Lock()
+	buf.lastAccess = time.Now()
+
+	// Deep-copy so the caller cannot mutate the streamed event's entries after
+	// the call (copying the struct alone would still share the Entries backing
+	// array).
+	p := plan
+	p.Entries = append([]PlanEntry(nil), plan.Entries...)
+	buf.unlockAndNotify(Event{
+		Type: EventTypePlan,
+		Plan: &p,
 	})
 }
 
