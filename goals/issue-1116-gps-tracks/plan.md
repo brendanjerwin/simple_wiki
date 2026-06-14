@@ -49,10 +49,10 @@ de-risk the library choice. Steps 1–2 are independent and parallelizable; step
 first codegen) unblocks the Go layers (4–5) and the TS layer (8).
 
 ### 0. De-risking spikes (do first, throwaway code) — de-risks: f-gpx, f-geojson, f-simplify
-Validate the library choice against **real** exports before building on it. Drop a real
-Rever-exported `.gpx` and a real Garmin-exported `.gpx` into `internal/trackgeom/testdata/`
-(if the user can't supply them, synthesize GPX 1.1 with Garmin `gpxx` TrackExtension +
-Rever-style `trk`/`rte` so the spike still exercises namespaced extensions).
+Validate the library choice against **real** exports before building on it. Two anonymized
+real Rever exports are provided in [`fixtures/`](fixtures/) — `rever-turn-by-turn-route.gpx`
+(`rte` + Garmin `gpxx:RoutePointExtension`) and `rever-track.gpx` (`trk/trkseg`) — both with
+`creator="REVER"` and namespaced extensions intact. Use them directly.
 - Spike A — `go get github.com/twpayne/go-gpx@v1.5.0`; tiny `main` (or throwaway test) that
   `gpx.Read`s each file and prints segment + point counts for `Trk`/`TrkSeg` and `Rte`.
   Confirms both track and route extraction and that extensions don't break parsing.
@@ -172,8 +172,12 @@ Rever-style `trk`/`rte` so the spike still exercises namespaced extensions).
   mutation (upload); it mirrors the existing `wiki-image` `tools-open` tap pattern, so it is
   consistent with established component behavior.
 
-## Remaining open question
-- **Real-export fixtures:** the strongest de-risking uses genuine Rever- and Garmin-exported `.gpx`
-  files. If the user can provide them they go in `internal/trackgeom/testdata/`; otherwise Step 0
-  synthesizes GPX 1.1 with Garmin `gpxx` + Rever-style `trk`/`rte`. This only affects fixture realism,
-  not the design.
+## Real-export fixtures (provided)
+Two genuine Rever exports (anonymized for the public repo — coordinates offset, timestamps
+stripped, name removed; structure/`creator`/Garmin extensions intact) ship with this goal in
+[`fixtures/`](fixtures/):
+- `fixtures/rever-turn-by-turn-route.gpx` — `<rte>/<rtept>` + Garmin `gpxx:RoutePointExtension` + `<wpt>`.
+- `fixtures/rever-track.gpx` — `<trk>/<trkseg>/<trkpt>` + `<wpt>`.
+
+Step 0 uses these directly; Step 2 moves/copies them into `internal/trackgeom/testdata/`. No
+open question remains — synthesis is no longer needed.
