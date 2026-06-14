@@ -4365,6 +4365,45 @@ var _ = Describe("toolCallDetail", func() {
 		})
 	})
 
+	When("the raw input is a pi-acp MCP envelope with tool and args", func() {
+		var result string
+
+		BeforeEach(func() {
+			result = toolCallDetail(nil, map[string]any{
+				"tool": "api_v1_PageManagementService_ReadPage",
+				"args": `{"page_name": "home"}`,
+			}, nil, nil)
+		})
+
+		It("should name the tool and its arguments", func() {
+			Expect(result).To(Equal(`api_v1_PageManagementService_ReadPage {"page_name": "home"}`))
+		})
+	})
+
+	When("the raw input is a pi-acp MCP envelope with only the tool", func() {
+		var result string
+
+		BeforeEach(func() {
+			result = toolCallDetail(nil, map[string]any{"tool": "api_v1_SearchService_SearchContent"}, nil, nil)
+		})
+
+		It("should name the tool", func() {
+			Expect(result).To(Equal("api_v1_SearchService_SearchContent"))
+		})
+	})
+
+	When("the raw input is a pi-acp MCP tool search", func() {
+		var result string
+
+		BeforeEach(func() {
+			result = toolCallDetail(nil, map[string]any{"search": "ReadPage"}, nil, nil)
+		})
+
+		It("should show the search query", func() {
+			Expect(result).To(Equal("search ReadPage"))
+		})
+	})
+
 	When("the raw input has a multi-line value", func() {
 		var result string
 
@@ -4459,6 +4498,157 @@ var _ = Describe("toolCallDetail", func() {
 
 		It("should use the location, not the raw input", func() {
 			Expect(result).To(Equal("a.go"))
+		})
+	})
+})
+
+var _ = Describe("serverVersionMismatch", func() {
+	var (
+		server      *httptest.Server
+		savedCommit string
+		result      bool
+	)
+
+	BeforeEach(func() {
+		savedCommit = commit
+	})
+
+	AfterEach(func() {
+		commit = savedCommit
+		if server != nil {
+			server.Close()
+			server = nil
+		}
+	})
+
+	When("the server reports the same commit", func() {
+		BeforeEach(func() {
+			commit = "abc123def456abc123def456"
+			server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				_, _ = w.Write([]byte(`{"commit":"abc123def456abc123def456"}`))
+			}))
+			result = serverVersionMismatch(server.URL)
+		})
+
+		It("should report no mismatch", func() {
+			Expect(result).To(BeFalse())
+		})
+	})
+
+	When("the server reports a different commit", func() {
+		BeforeEach(func() {
+			commit = "abc123def456abc123def456"
+			server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				_, _ = w.Write([]byte(`{"commit":"ffffffffffffffffffffffff"}`))
+			}))
+			result = serverVersionMismatch(server.URL)
+		})
+
+		It("should report a mismatch", func() {
+			Expect(result).To(BeTrue())
+		})
+	})
+
+	When("this is a dev build", func() {
+		BeforeEach(func() {
+			commit = "dev"
+			server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				_, _ = w.Write([]byte(`{"commit":"ffffffffffffffffffffffff"}`))
+			}))
+			result = serverVersionMismatch(server.URL)
+		})
+
+		It("should never report a mismatch", func() {
+			Expect(result).To(BeFalse())
+		})
+	})
+
+	When("the server is unreachable", func() {
+		BeforeEach(func() {
+			commit = "abc123def456abc123def456"
+			// Closed server: an address that refuses connections.
+			result = serverVersionMismatch("http://127.0.0.1:0")
+		})
+
+		It("should not report a mismatch (no spurious restart)", func() {
+			Expect(result).To(BeFalse())
+		})
+	})
+})
+
+var _ = Describe("poolDaemon.watchVersion", func() {
+	When("the version check reports a mismatch", func() {
+		var (
+			d         *poolDaemon
+			cancelled bool
+		)
+
+		BeforeEach(func() {
+			d = &poolDaemon{
+				versionCheckInterval: time.Millisecond,
+				versionMismatch:      func() bool { return true },
+			}
+			ctx, cancel := context.WithCancel(context.Background())
+			recordingCancel := func() {
+				cancelled = true
+				cancel()
+			}
+			d.watchVersion(ctx, recordingCancel)
+		})
+
+		It("should request a restart", func() {
+			Expect(d.restartRequested.Load()).To(BeTrue())
+		})
+
+		It("should cancel the daemon context", func() {
+			Expect(cancelled).To(BeTrue())
+		})
+	})
+
+	When("the context is cancelled before any mismatch", func() {
+		var d *poolDaemon
+
+		BeforeEach(func() {
+			d = &poolDaemon{
+				versionCheckInterval: time.Hour,
+				versionMismatch:      func() bool { return false },
+			}
+			ctx, cancel := context.WithCancel(context.Background())
+			cancel()
+			d.watchVersion(ctx, cancel)
+		})
+
+		It("should not request a restart", func() {
+			Expect(d.restartRequested.Load()).To(BeFalse())
+		})
+	})
+})
+
+var _ = Describe("poolDaemon.finishShutdown", func() {
+	When("a restart was requested by the version watcher", func() {
+		var err error
+
+		BeforeEach(func() {
+			d := &poolDaemon{instances: map[string]*instanceEntry{}}
+			d.restartRequested.Store(true)
+			err = d.finishShutdown()
+		})
+
+		It("should return an error containing 'version mismatch' for the bootstrapper", func() {
+			Expect(err).To(MatchError(ContainSubstring("version mismatch")))
+		})
+	})
+
+	When("no restart was requested", func() {
+		var err error
+
+		BeforeEach(func() {
+			d := &poolDaemon{instances: map[string]*instanceEntry{}}
+			err = d.finishShutdown()
+		})
+
+		It("should return nil", func() {
+			Expect(err).NotTo(HaveOccurred())
 		})
 	})
 })

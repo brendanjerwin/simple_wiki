@@ -14,6 +14,7 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -30,6 +31,7 @@ const (
 	defaultIdleTimeoutMinutes              = 30
 	defaultMaxInstanceAgeHours             = 2
 	defaultPermissionPendingTimeoutMinutes = 5
+	defaultVersionCheckIntervalMinutes     = 5
 
 	errTerminalAccessUnavailable = "terminal access not available"
 	truncateLimitForLog          = 100
@@ -188,6 +190,14 @@ type poolDaemon struct {
 
 	scheduledTurns      sync.WaitGroup
 	scheduledTurnRunner func(context.Context, *apiv1.ScheduledTurnRequest) (apiv1.ScheduleStatus, string)
+
+	// Self-repair: the long-running pool periodically checks whether the wiki
+	// server is running a different commit and, if so, drains and exits so the
+	// bootstrapper self-updates wiki-cli. versionCheckInterval defaults when
+	// zero; versionMismatch is injectable for tests (defaults to a live check).
+	versionCheckInterval time.Duration
+	versionMismatch      func() bool
+	restartRequested     atomic.Bool
 }
 
 // sanitizeUnitName converts a page identifier into a valid systemd unit name suffix.
@@ -286,6 +296,7 @@ func runPoolAction(c *cli.Context) error {
 		maxInstanceAge:           c.Duration("max-instance-age"),
 		permissionPendingTimeout: c.Duration("permission-pending-timeout"),
 		instances:                make(map[string]*instanceEntry),
+		versionCheckInterval:     defaultVersionCheckIntervalMinutes * time.Minute,
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -304,6 +315,11 @@ func (d *poolDaemon) run(ctx context.Context) error {
 		"wiki", d.wikiURL,
 		logKeyAction, "startup")
 
+	// Derive a cancellable context so the version watcher can trigger a graceful
+	// shutdown (for self-update) the same way an OS signal would.
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
 	// Start the idle reaper
 	go d.reapIdleInstances(ctx)
 
@@ -311,24 +327,23 @@ func (d *poolDaemon) run(ctx context.Context) error {
 	// instance-request subscriber and handles its own reconnects.
 	go d.runScheduledTurnLoop(ctx)
 
+	// Watch for a server version change and self-restart for self-update.
+	go d.watchVersion(ctx, cancel)
+
 	// Maintain subscription to instance requests with reconnect loop
 	backoffMs := initialBackoffMs
 
 	for {
 		select {
 		case <-ctx.Done():
-			d.stopAll()
-			d.waitForScheduledTurns()
-			return nil
+			return d.finishShutdown()
 		default:
 		}
 
 		start := time.Now()
 		err := d.subscribeAndHandle(ctx)
 		if err == nil {
-			d.stopAll()
-			d.waitForScheduledTurns()
-			return nil
+			return d.finishShutdown()
 		}
 
 		delayMs, nextMs := computeBackoffAfterFailure(backoffMs, time.Since(start))
@@ -336,13 +351,58 @@ func (d *poolDaemon) run(ctx context.Context) error {
 
 		select {
 		case <-ctx.Done():
-			d.stopAll()
-			d.waitForScheduledTurns()
-			return nil
+			return d.finishShutdown()
 		case <-time.After(time.Duration(delayMs) * time.Millisecond):
 		}
 
 		backoffMs = nextMs
+	}
+}
+
+// finishShutdown stops instances and drains scheduled turns. It returns a
+// version-mismatch error when watchVersion requested a restart, so the process
+// exits non-zero and the bootstrapper self-updates wiki-cli; otherwise nil.
+func (d *poolDaemon) finishShutdown() error {
+	d.stopAll()
+	d.waitForScheduledTurns()
+	if d.restartRequested.Load() {
+		// Text contains "version mismatch" so the wiki-cli bootstrapper's
+		// self-update path re-downloads the latest binary on exit.
+		return errors.New("version mismatch: wiki server updated; exiting for self-update")
+	}
+	return nil
+}
+
+// watchVersion periodically checks whether the wiki server reports a different
+// commit than this binary. On a confirmed mismatch it records a restart request
+// and cancels the daemon context so run() drains and exits for self-update.
+func (d *poolDaemon) watchVersion(ctx context.Context, cancel context.CancelFunc) {
+	interval := d.versionCheckInterval
+	if interval <= 0 {
+		interval = defaultVersionCheckIntervalMinutes * time.Minute
+	}
+
+	check := d.versionMismatch
+	if check == nil {
+		check = func() bool { return serverVersionMismatch(d.wikiURL) }
+	}
+
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			if check() {
+				slog.Warn("pool: wiki server version changed; draining and exiting for self-update (version mismatch)",
+					logKeyAction, "version_restart")
+				d.restartRequested.Store(true)
+				cancel()
+				return
+			}
+		}
 	}
 }
 
@@ -556,6 +616,9 @@ func (c *wikiChatClient) handleAgentMessage(chunk *acp.SessionUpdateAgentMessage
 // blow out the chat layout.
 const toolDetailMaxLen = 140
 
+// toolPayloadLogMaxLen bounds the verbose WIKI_ACP_DEBUG payload log lines.
+const toolPayloadLogMaxLen = 1500
+
 // toolCallDetail builds a concise one-line "what's happening" detail for a tool
 // call, drawing on whatever ACP provides. The agent's title is often a generic
 // category (e.g. "mcp"), so the detail surfaces the specifics: the affected file
@@ -581,8 +644,11 @@ func toolCallDetail(locations []acp.ToolCallLocation, rawInput any, content []ac
 }
 
 // rawInputSummary renders a compact, single-line summary of an ACP tool call's
-// raw input: a well-known identifying field when present (the command, query,
-// path, etc.), otherwise the compact JSON of the whole input.
+// raw input. pi-acp wraps MCP calls in an envelope — {"tool": "<name>", "args":
+// "<json>"} for a call and {"search": "<query>"} for a tool search — so those
+// are surfaced specifically (naming the actual tool + its arguments). Otherwise
+// a well-known identifying field (command, query, path, …) is used, falling back
+// to the compact JSON of the whole input.
 func rawInputSummary(rawInput any) string {
 	encoded, err := json.Marshal(rawInput)
 	if err != nil || rawInput == nil {
@@ -590,15 +656,41 @@ func rawInputSummary(rawInput any) string {
 	}
 
 	var fields map[string]any
-	if err := json.Unmarshal(encoded, &fields); err == nil {
-		for _, key := range []string{"command", "file_path", "path", "query", "pattern", "url", "prompt", "description", "identifier", "name", "page", "title"} {
-			if value, ok := fields[key].(string); ok && strings.TrimSpace(value) != "" {
-				return truncate(collapseWhitespace(value), toolDetailMaxLen)
-			}
+	if err := json.Unmarshal(encoded, &fields); err != nil {
+		return compactValue(rawInput)
+	}
+
+	// pi-acp MCP envelope: the real tool name + args live under nested keys.
+	if tool, ok := stringField(fields, "tool"); ok {
+		if args, ok := stringField(fields, "args"); ok {
+			return truncate(collapseWhitespace(tool+" "+args), toolDetailMaxLen)
+		}
+		return truncate(collapseWhitespace(tool), toolDetailMaxLen)
+	}
+	if search, ok := stringField(fields, "search"); ok {
+		return truncate(collapseWhitespace("search "+search), toolDetailMaxLen)
+	}
+
+	for _, key := range []string{"command", "file_path", "path", "query", "pattern", "url", "prompt", "description", "identifier", "name", "page", "title"} {
+		if value, ok := stringField(fields, key); ok {
+			return truncate(collapseWhitespace(value), toolDetailMaxLen)
 		}
 	}
 
 	return compactValue(rawInput)
+}
+
+// stringField returns a trimmed non-empty string value for key, or ("", false).
+func stringField(fields map[string]any, key string) (string, bool) {
+	value, ok := fields[key].(string)
+	if !ok {
+		return "", false
+	}
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return "", false
+	}
+	return value, true
 }
 
 // contentSummary returns a one-line summary of the first meaningful tool-output
@@ -631,8 +723,9 @@ func compactValue(value any) string {
 	switch flattened {
 	case "", "{}", "[]", "null", `""`:
 		return ""
+	default:
+		return truncate(flattened, toolDetailMaxLen)
 	}
-	return truncate(flattened, toolDetailMaxLen)
 }
 
 // collapseWhitespace flattens a value to a single line for the detail row.
@@ -646,12 +739,13 @@ func (c *wikiChatClient) handleToolCall(tc *acp.SessionUpdateToolCall) {
 	msgID := c.currentMsg
 	c.mu.Unlock()
 
-	// Diagnostic: dump the full ACP tool-call payload so we can see exactly what
-	// the agent reports. The agent's title is often a generic category ("mcp",
-	// "read"); the identifying data lives in rawInput/content/rawOutput. Bounded
-	// so log lines stay reasonable.
-	if raw, mErr := json.Marshal(tc); mErr == nil {
-		slog.Info("acp tool call payload", logKeyPage, c.page, "payload", truncate(string(raw), 1500))
+	// Verbose per-notification payload dump, opt-in via WIKI_ACP_DEBUG (pi-acp
+	// streams many partial updates, so this is noisy). The identifying data
+	// lives in rawInput/content/rawOutput, not the generic title.
+	if acpDebugEnabled() {
+		if raw, mErr := json.Marshal(tc); mErr == nil {
+			slog.Info("acp tool call payload", logKeyPage, c.page, "payload", truncate(string(raw), toolPayloadLogMaxLen))
+		}
 	}
 
 	detail := toolCallDetail(tc.Locations, tc.RawInput, tc.Content, tc.RawOutput)
@@ -691,8 +785,10 @@ func (c *wikiChatClient) handleToolCallUpdate(tcu *acp.SessionToolCallUpdate) {
 	if tcu.Kind != nil {
 		kind = string(*tcu.Kind)
 	}
-	if raw, mErr := json.Marshal(tcu); mErr == nil {
-		slog.Info("acp tool call update payload", logKeyPage, c.page, "payload", truncate(string(raw), 1500))
+	if acpDebugEnabled() {
+		if raw, mErr := json.Marshal(tcu); mErr == nil {
+			slog.Info("acp tool call update payload", logKeyPage, c.page, "payload", truncate(string(raw), toolPayloadLogMaxLen))
+		}
 	}
 
 	detail := toolCallDetail(tcu.Locations, tcu.RawInput, tcu.Content, tcu.RawOutput)
@@ -705,6 +801,18 @@ func (c *wikiChatClient) handleToolCallUpdate(tcu *acp.SessionToolCallUpdate) {
 		Kind:       kind,
 		Detail:     detail,
 	}))
+
+	// One concise summary line per finished tool call (skipping the many partial
+	// streaming updates) so tool usage is greppable for optimization analysis.
+	if status == string(acp.ToolCallStatusCompleted) || status == string(acp.ToolCallStatusFailed) {
+		slog.Info("tool call finished", logKeyPage, c.page, "status", status, "detail", detail)
+	}
+}
+
+// acpDebugEnabled reports whether verbose per-notification ACP payload logging
+// is turned on via the WIKI_ACP_DEBUG environment variable.
+func acpDebugEnabled() bool {
+	return os.Getenv("WIKI_ACP_DEBUG") != ""
 }
 
 // handleThought accumulates thinking text and streams it as a collapsible section.

@@ -41,15 +41,25 @@ These indicators are bound to the [Agent Client Protocol
 page. Any agent driven through the wiki pool surfaces them automatically:
 
 - ACP `tool_call` / `tool_call_update` notifications carry `kind`, `status`
-  (`pending` / `in_progress` / `completed` / `failed`), and `locations`. The pool
-  bridge forwards `kind` and a concise `detail` (first affected `path:line`) to
-  the chat stream; richer ACP fields beyond that are not yet surfaced.
+  (`pending` / `in_progress` / `completed` / `failed`), `rawInput`, `content`,
+  `rawOutput`, and `locations`. The pool bridge forwards `kind` and a concise
+  `detail` describing what the tool is doing — the affected `path:line`, else the
+  tool input (for pi-acp MCP calls, the actual nested tool name + args), else the
+  output. The agent's `title` is often a generic category (e.g. `mcp`), so the
+  `detail` is where the specifics show up.
 - ACP `plan` notifications are forwarded as a structured plan attached to the
   current assistant message — not flattened into the message text — so the UI can
   render the live checklist above.
 
 ACP has no concept of sub-agents; an agent's own delegated work appears in the
 stream as ordinary tool calls, rendered like any other.
+
+The pool daemon self-updates: it periodically checks the wiki server's build
+commit and, on a mismatch, drains in-flight work and exits so its bootstrapper
+downloads the matching `wiki-cli` and restarts. A server deploy therefore
+propagates to the pool within a few minutes without manual intervention. Set
+`WIKI_ACP_DEBUG=1` on the pool to log the full ACP tool-call payloads for
+debugging.
 
 See also [[help-scheduled-agents]] for headless, cron-driven agent turns (which
 record their activity to page history rather than the live chat panel).
