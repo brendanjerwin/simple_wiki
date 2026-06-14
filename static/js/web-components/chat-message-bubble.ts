@@ -145,6 +145,14 @@ export class ChatMessageBubble extends LitElement {
         font-size: 0.7rem;
       }
 
+      /* Keep finished pills compact: truncate the label, full text on hover. */
+      .tool-call-pill-label {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        max-width: 40ch;
+      }
+
       /* Live expanded tool call row — takes its own full-width line */
       .tool-call-live {
         flex: 1 1 100%;
@@ -447,11 +455,17 @@ export class ChatMessageBubble extends LitElement {
       `;
     }
 
-    // Completed or failed: compact pill. title attribute preserves full title for accessibility.
+    // Completed or failed: compact pill. Include the detail (the specifics —
+    // e.g. the command/query/path) since the title alone is often a generic
+    // category like "mcp". The pill label is ellipsis-truncated; the full label
+    // is preserved in the title attribute for hover/accessibility.
+    const kindGlyph = this._kindGlyph(tc.kind);
+    const label = tc.detail ? `${tc.title}: ${tc.detail}` : tc.title;
     return html`
-      <span class="tool-call-pill" title="${tc.title}">
+      <span class="tool-call-pill" title="${label}">
         <span class="status-icon">${this._toolCallStatusIcon(tc.status)}</span>
-        ${tc.title}
+        ${kindGlyph ? html`<span class="kind-glyph">${kindGlyph}</span>` : nothing}
+        <span class="tool-call-pill-label">${label}</span>
       </span>
     `;
   }

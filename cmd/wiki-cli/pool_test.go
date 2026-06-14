@@ -4303,12 +4303,20 @@ var _ = Describe("subscribeCancellations error path", func() {
 	})
 })
 
+func textContent(text string) acp.ToolCallContent {
+	return acp.ToolCallContent{
+		Content: &acp.ToolCallContentContent{
+			Content: acp.ContentBlock{Text: &acp.ContentBlockText{Text: text}},
+		},
+	}
+}
+
 var _ = Describe("toolCallDetail", func() {
-	When("there are no locations and no raw input", func() {
+	When("there is no location, input, content, or output", func() {
 		var result string
 
 		BeforeEach(func() {
-			result = toolCallDetail([]acp.ToolCallLocation{}, nil)
+			result = toolCallDetail(nil, nil, nil, nil)
 		})
 
 		It("should return an empty string", func() {
@@ -4322,7 +4330,7 @@ var _ = Describe("toolCallDetail", func() {
 		BeforeEach(func() {
 			result = toolCallDetail([]acp.ToolCallLocation{
 				{Path: "cmd/wiki-cli/pool.go"},
-			}, nil)
+			}, nil, nil, nil)
 		})
 
 		It("should return just the path", func() {
@@ -4337,7 +4345,7 @@ var _ = Describe("toolCallDetail", func() {
 			line := 42
 			result = toolCallDetail([]acp.ToolCallLocation{
 				{Path: "cmd/wiki-cli/pool.go", Line: &line},
-			}, nil)
+			}, nil, nil, nil)
 		})
 
 		It("should return path:line", func() {
@@ -4345,27 +4353,11 @@ var _ = Describe("toolCallDetail", func() {
 		})
 	})
 
-	When("multiple locations are provided", func() {
-		var result string
-
-		BeforeEach(func() {
-			line := 10
-			result = toolCallDetail([]acp.ToolCallLocation{
-				{Path: "first.go", Line: &line},
-				{Path: "second.go"},
-			}, nil)
-		})
-
-		It("should use only the first location", func() {
-			Expect(result).To(Equal("first.go:10"))
-		})
-	})
-
 	When("there are no locations but the raw input has a command", func() {
 		var result string
 
 		BeforeEach(func() {
-			result = toolCallDetail(nil, map[string]any{"command": "journalctl --since today"})
+			result = toolCallDetail(nil, map[string]any{"command": "journalctl --since today"}, nil, nil)
 		})
 
 		It("should summarize the command", func() {
@@ -4377,7 +4369,7 @@ var _ = Describe("toolCallDetail", func() {
 		var result string
 
 		BeforeEach(func() {
-			result = toolCallDetail(nil, map[string]any{"query": "line one\nline two"})
+			result = toolCallDetail(nil, map[string]any{"query": "line one\nline two"}, nil, nil)
 		})
 
 		It("should flatten it to a single line", func() {
@@ -4389,11 +4381,47 @@ var _ = Describe("toolCallDetail", func() {
 		var result string
 
 		BeforeEach(func() {
-			result = toolCallDetail(nil, map[string]any{"limit": float64(5)})
+			result = toolCallDetail(nil, map[string]any{"limit": float64(5)}, nil, nil)
 		})
 
 		It("should fall back to the compact JSON of the input", func() {
 			Expect(result).To(Equal(`{"limit":5}`))
+		})
+	})
+
+	When("the raw input is an empty object", func() {
+		var result string
+
+		BeforeEach(func() {
+			result = toolCallDetail(nil, map[string]any{}, nil, nil)
+		})
+
+		It("should not surface noise like {}", func() {
+			Expect(result).To(BeEmpty())
+		})
+	})
+
+	When("there is no input but the content has output text", func() {
+		var result string
+
+		BeforeEach(func() {
+			result = toolCallDetail(nil, nil, []acp.ToolCallContent{textContent("found 3 results")}, nil)
+		})
+
+		It("should summarize the output content", func() {
+			Expect(result).To(Equal("found 3 results"))
+		})
+	})
+
+	When("there is no input or content but there is raw output", func() {
+		var result string
+
+		BeforeEach(func() {
+			result = toolCallDetail(nil, nil, nil, map[string]any{"matches": float64(2)})
+		})
+
+		It("should fall back to the compact raw output", func() {
+			Expect(result).To(Equal(`{"matches":2}`))
 		})
 	})
 
@@ -4402,7 +4430,7 @@ var _ = Describe("toolCallDetail", func() {
 
 		BeforeEach(func() {
 			long := strings.Repeat("x", 500)
-			result = toolCallDetail(nil, map[string]any{"command": long})
+			result = toolCallDetail(nil, map[string]any{"command": long}, nil, nil)
 		})
 
 		It("should truncate to the detail length cap", func() {
@@ -4410,11 +4438,23 @@ var _ = Describe("toolCallDetail", func() {
 		})
 	})
 
-	When("locations are present, they take priority over raw input", func() {
+	When("input is present, it takes priority over content and output", func() {
 		var result string
 
 		BeforeEach(func() {
-			result = toolCallDetail([]acp.ToolCallLocation{{Path: "a.go"}}, map[string]any{"command": "ignored"})
+			result = toolCallDetail(nil, map[string]any{"command": "ls"}, []acp.ToolCallContent{textContent("ignored output")}, map[string]any{"x": float64(1)})
+		})
+
+		It("should use the input, not the content or output", func() {
+			Expect(result).To(Equal("ls"))
+		})
+	})
+
+	When("locations are present, they take priority over input", func() {
+		var result string
+
+		BeforeEach(func() {
+			result = toolCallDetail([]acp.ToolCallLocation{{Path: "a.go"}}, map[string]any{"command": "ignored"}, nil, nil)
 		})
 
 		It("should use the location, not the raw input", func() {

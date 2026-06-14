@@ -373,6 +373,11 @@ describe('ChatMessageBubble', () => {
         expect(pill!.textContent).to.contain('Read File');
       });
 
+      it('should display the detail in the pill (specifics, not just the category)', () => {
+        const pill = el.shadowRoot!.querySelector('.tool-call-pill');
+        expect(pill!.textContent).to.contain('/path/file.ts');
+      });
+
       it('should NOT render the expanded live row', () => {
         const live = el.shadowRoot!.querySelector('.tool-call-live');
         expect(live).to.be.null;

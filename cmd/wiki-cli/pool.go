@@ -557,10 +557,10 @@ func (c *wikiChatClient) handleAgentMessage(chunk *acp.SessionUpdateAgentMessage
 const toolDetailMaxLen = 140
 
 // toolCallDetail builds a concise one-line "what's happening" detail for a tool
-// call. It prefers the first affected file location; when there are none (the
-// common case for Bash, search, and MCP tools) it summarizes the tool input so
-// the user can see what the agent is actually doing.
-func toolCallDetail(locations []acp.ToolCallLocation, rawInput any) string {
+// call, drawing on whatever ACP provides. The agent's title is often a generic
+// category (e.g. "mcp"), so the detail surfaces the specifics: the affected file
+// location, else the tool input (command/query/args), else the tool output.
+func toolCallDetail(locations []acp.ToolCallLocation, rawInput any, content []acp.ToolCallContent, rawOutput any) string {
 	if len(locations) > 0 {
 		loc := locations[0]
 		if loc.Line != nil {
@@ -569,33 +569,70 @@ func toolCallDetail(locations []acp.ToolCallLocation, rawInput any) string {
 		return loc.Path
 	}
 
-	return rawInputSummary(rawInput)
+	if summary := rawInputSummary(rawInput); summary != "" {
+		return summary
+	}
+
+	if summary := contentSummary(content); summary != "" {
+		return summary
+	}
+
+	return compactValue(rawOutput)
 }
 
 // rawInputSummary renders a compact, single-line summary of an ACP tool call's
 // raw input: a well-known identifying field when present (the command, query,
-// path, etc.), otherwise the compact JSON of the whole input. The result is
-// flattened to one line and truncated.
+// path, etc.), otherwise the compact JSON of the whole input.
 func rawInputSummary(rawInput any) string {
-	if rawInput == nil {
-		return ""
-	}
-
 	encoded, err := json.Marshal(rawInput)
-	if err != nil {
+	if err != nil || rawInput == nil {
 		return ""
 	}
 
 	var fields map[string]any
 	if err := json.Unmarshal(encoded, &fields); err == nil {
-		for _, key := range []string{"command", "file_path", "path", "query", "pattern", "url", "prompt", "description", "name", "page", "title"} {
+		for _, key := range []string{"command", "file_path", "path", "query", "pattern", "url", "prompt", "description", "identifier", "name", "page", "title"} {
 			if value, ok := fields[key].(string); ok && strings.TrimSpace(value) != "" {
 				return truncate(collapseWhitespace(value), toolDetailMaxLen)
 			}
 		}
 	}
 
-	return truncate(collapseWhitespace(string(encoded)), toolDetailMaxLen)
+	return compactValue(rawInput)
+}
+
+// contentSummary returns a one-line summary of the first meaningful tool-output
+// content block (text or a diff's path).
+func contentSummary(content []acp.ToolCallContent) string {
+	for _, block := range content {
+		if block.Content != nil && block.Content.Content.Text != nil {
+			if text := strings.TrimSpace(block.Content.Content.Text.Text); text != "" {
+				return truncate(collapseWhitespace(text), toolDetailMaxLen)
+			}
+		}
+		if block.Diff != nil && strings.TrimSpace(block.Diff.Path) != "" {
+			return block.Diff.Path
+		}
+	}
+	return ""
+}
+
+// compactValue renders any value as a single-line, truncated JSON string,
+// returning "" for nil/empty values so it doesn't surface noise like "{}".
+func compactValue(value any) string {
+	if value == nil {
+		return ""
+	}
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		return ""
+	}
+	flattened := collapseWhitespace(string(encoded))
+	switch flattened {
+	case "", "{}", "[]", "null", `""`:
+		return ""
+	}
+	return truncate(flattened, toolDetailMaxLen)
 }
 
 // collapseWhitespace flattens a value to a single line for the detail row.
@@ -609,6 +646,7 @@ func (c *wikiChatClient) handleToolCall(tc *acp.SessionUpdateToolCall) {
 	msgID := c.currentMsg
 	c.mu.Unlock()
 
+	detail := toolCallDetail(tc.Locations, tc.RawInput, tc.Content, tc.RawOutput)
 	if msgID != "" {
 		_, _ = c.chatClient.SendToolCallNotification(context.Background(), connect.NewRequest(&apiv1.SendToolCallNotificationRequest{
 			Page:       c.page,
@@ -617,10 +655,10 @@ func (c *wikiChatClient) handleToolCall(tc *acp.SessionUpdateToolCall) {
 			Title:      tc.Title,
 			Status:     string(tc.Status),
 			Kind:       string(tc.Kind),
-			Detail:     toolCallDetail(tc.Locations, tc.RawInput),
+			Detail:     detail,
 		}))
 	}
-	slog.Info("tool call", logKeyPage, c.page, logKeyTool, tc.Title, "status", string(tc.Status))
+	slog.Info("tool call", logKeyPage, c.page, logKeyTool, tc.Title, "kind", string(tc.Kind), "status", string(tc.Status), "detail", detail)
 }
 
 // handleToolCallUpdate sends an updated tool call notification to the wiki chat.
@@ -645,6 +683,7 @@ func (c *wikiChatClient) handleToolCallUpdate(tcu *acp.SessionToolCallUpdate) {
 	if tcu.Kind != nil {
 		kind = string(*tcu.Kind)
 	}
+	detail := toolCallDetail(tcu.Locations, tcu.RawInput, tcu.Content, tcu.RawOutput)
 	_, _ = c.chatClient.SendToolCallNotification(context.Background(), connect.NewRequest(&apiv1.SendToolCallNotificationRequest{
 		Page:       c.page,
 		MessageId:  msgID,
@@ -652,7 +691,7 @@ func (c *wikiChatClient) handleToolCallUpdate(tcu *acp.SessionToolCallUpdate) {
 		Title:      title,
 		Status:     status,
 		Kind:       kind,
-		Detail:     toolCallDetail(tcu.Locations, tcu.RawInput),
+		Detail:     detail,
 	}))
 }
 
