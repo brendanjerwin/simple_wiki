@@ -630,6 +630,30 @@ describe('ChatMessageBubble', () => {
       });
     });
 
+    describe('when plan is set to undefined (message state without a plan field)', () => {
+      let el: ChatMessageBubble;
+
+      beforeEach(async () => {
+        el = await fixture(html`
+          <chat-message-bubble
+            message-id="msg-plan-undefined"
+            .sender=${Sender.ASSISTANT}
+            content="No plan field"
+            .plan=${undefined as unknown as PlanEntryState[]}
+          ></chat-message-bubble>
+        `);
+      });
+
+      it('should render without throwing', () => {
+        expect(el).to.exist;
+      });
+
+      it('should not render the plan block', () => {
+        const planBlock = el.shadowRoot!.querySelector('.plan-block');
+        expect(planBlock).to.be.null;
+      });
+    });
+
     describe('when plan has entries', () => {
       let el: ChatMessageBubble;
       const plan: PlanEntryState[] = [

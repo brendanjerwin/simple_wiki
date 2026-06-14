@@ -463,7 +463,9 @@ export class ChatMessageBubble extends LitElement {
   }
 
   private _renderPlan() {
-    if (this.plan.length === 0) return nothing;
+    // A message legitimately may have no plan; tolerate an absent value rather
+    // than dereferencing undefined (e.g. message state set without a plan field).
+    if (!this.plan || this.plan.length === 0) return nothing;
 
     return html`
       <div class="plan-block">
