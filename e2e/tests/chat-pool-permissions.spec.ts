@@ -54,7 +54,8 @@ async function setChatPanelMessages(
     replyToId: string;
     edited: boolean;
     sequence: number;
-    toolCalls: Array<{ toolCallId: string; title: string; status: string }>;
+    toolCalls: Array<{ toolCallId: string; title: string; status: string; kind?: string; detail?: string; startedAtMs?: number }>;
+    plan?: Array<{ content: string; status: string; priority: string }>;
   }>,
 ): Promise<void> {
   await page.evaluate(
@@ -63,12 +64,15 @@ async function setChatPanelMessages(
         const el = document.querySelector('page-chat-panel');
         if (!el) return;
         const typedEl = el as HTMLElement & Record<string, unknown>;
-        // Convert sequence numbers to BigInt inside the browser context
+        // Convert sequence numbers to BigInt inside the browser context, and
+        // fill the optional ToolCallState/plan fields the bubble expects.
         typedEl['messages'] = msgs.map((m) => ({
           ...m,
           timestamp: new Date(),
           reactions: [],
           sequence: BigInt(m.sequence),
+          toolCalls: (m.toolCalls ?? []).map((tc) => ({ kind: '', detail: '', startedAtMs: 0, ...tc })),
+          plan: m.plan ?? [],
         }));
       });
     },
@@ -375,27 +379,27 @@ test.describe('chat-pool: Chat Pool and Permissions', () => {
     });
   });
 
-  test.describe('Tool call pills', () => {
+  test.describe('Tool call rendering', () => {
     test.beforeEach(async ({ page }) => {
       await navigateAndWait(page);
       await openChatPanel(page);
     });
 
-    test('should render tool call pills on a message with tool calls', async ({ page }) => {
+    test('should render completed/failed tool calls as compact pills', async ({ page }) => {
       await setChatPanelProperty(page, 'agentConnected', true);
       await setChatPanelMessages(page, [
         {
           id: 'msg-1',
           sender: 1, // Sender.ASSISTANT
-          content: 'Running a tool...',
-          renderedHtml: '<p>Running a tool...</p>',
+          content: 'Ran some tools...',
+          renderedHtml: '<p>Ran some tools...</p>',
           senderName: 'Bot',
           replyToId: '',
           edited: false,
           sequence: 1,
           toolCalls: [
-            { toolCallId: 'tc-1', title: 'read_file', status: 'running' },
-            { toolCallId: 'tc-2', title: 'write_file', status: 'complete' },
+            { toolCallId: 'tc-1', title: 'read_file', status: 'completed' },
+            { toolCallId: 'tc-2', title: 'write_file', status: 'failed' },
           ],
         },
       ]);
@@ -405,7 +409,7 @@ test.describe('chat-pool: Chat Pool and Permissions', () => {
       await expect(pills).toHaveCount(2, { timeout: PANEL_INTERACTION_TIMEOUT_MS });
     });
 
-    test('should show hourglass icon for running tool calls', async ({ page }) => {
+    test('should render an in-progress tool call as a live row, not a pill', async ({ page }) => {
       await setChatPanelProperty(page, 'agentConnected', true);
       await setChatPanelMessages(page, [
         {
@@ -418,21 +422,46 @@ test.describe('chat-pool: Chat Pool and Permissions', () => {
           edited: false,
           sequence: 1,
           toolCalls: [
-            { toolCallId: 'tc-1', title: 'read_file', status: 'running' },
+            { toolCallId: 'tc-1', title: 'read_file', status: 'in_progress', kind: 'read', detail: 'server/site.go:42' },
           ],
         },
       ]);
       await waitForUpdate(page);
 
-      const statusIcon = page.locator('page-chat-panel chat-message-bubble .tool-call-pill .status-icon');
-      await expect(statusIcon).toContainText('\u23F3', { timeout: PANEL_INTERACTION_TIMEOUT_MS });
+      await expect(page.locator('page-chat-panel chat-message-bubble .tool-call-live'))
+        .toHaveCount(1, { timeout: PANEL_INTERACTION_TIMEOUT_MS });
+      await expect(page.locator('page-chat-panel chat-message-bubble .tool-call-pill'))
+        .toHaveCount(0, { timeout: PANEL_INTERACTION_TIMEOUT_MS });
     });
 
-    test('should show check mark icon for complete tool calls', async ({ page }) => {
+    test('should show the hourglass icon for in_progress tool calls', async ({ page }) => {
       await setChatPanelProperty(page, 'agentConnected', true);
       await setChatPanelMessages(page, [
         {
           id: 'msg-3',
+          sender: 1,
+          content: 'Running...',
+          renderedHtml: '<p>Running...</p>',
+          senderName: 'Bot',
+          replyToId: '',
+          edited: false,
+          sequence: 1,
+          toolCalls: [
+            { toolCallId: 'tc-1', title: 'read_file', status: 'in_progress' },
+          ],
+        },
+      ]);
+      await waitForUpdate(page);
+
+      const statusIcon = page.locator('page-chat-panel chat-message-bubble .tool-call-live .status-icon');
+      await expect(statusIcon).toContainText('\u23F3', { timeout: PANEL_INTERACTION_TIMEOUT_MS });
+    });
+
+    test('should show the check mark icon for completed tool calls', async ({ page }) => {
+      await setChatPanelProperty(page, 'agentConnected', true);
+      await setChatPanelMessages(page, [
+        {
+          id: 'msg-4',
           sender: 1,
           content: 'Done.',
           renderedHtml: '<p>Done.</p>',
@@ -441,7 +470,7 @@ test.describe('chat-pool: Chat Pool and Permissions', () => {
           edited: false,
           sequence: 1,
           toolCalls: [
-            { toolCallId: 'tc-1', title: 'read_file', status: 'complete' },
+            { toolCallId: 'tc-1', title: 'read_file', status: 'completed' },
           ],
         },
       ]);
@@ -451,11 +480,11 @@ test.describe('chat-pool: Chat Pool and Permissions', () => {
       await expect(statusIcon).toContainText('\u2705', { timeout: PANEL_INTERACTION_TIMEOUT_MS });
     });
 
-    test('should show cross mark icon for error tool calls', async ({ page }) => {
+    test('should show the cross mark icon for failed tool calls', async ({ page }) => {
       await setChatPanelProperty(page, 'agentConnected', true);
       await setChatPanelMessages(page, [
         {
-          id: 'msg-4',
+          id: 'msg-5',
           sender: 1,
           content: 'Error occurred.',
           renderedHtml: '<p>Error occurred.</p>',
@@ -464,7 +493,7 @@ test.describe('chat-pool: Chat Pool and Permissions', () => {
           edited: false,
           sequence: 1,
           toolCalls: [
-            { toolCallId: 'tc-1', title: 'write_file', status: 'error' },
+            { toolCallId: 'tc-1', title: 'write_file', status: 'failed' },
           ],
         },
       ]);
@@ -474,11 +503,11 @@ test.describe('chat-pool: Chat Pool and Permissions', () => {
       await expect(statusIcon).toContainText('\u274C', { timeout: PANEL_INTERACTION_TIMEOUT_MS });
     });
 
-    test('should display tool call title in the pill', async ({ page }) => {
+    test('should show the detail line for a live tool call', async ({ page }) => {
       await setChatPanelProperty(page, 'agentConnected', true);
       await setChatPanelMessages(page, [
         {
-          id: 'msg-5',
+          id: 'msg-6',
           sender: 1,
           content: 'Working...',
           renderedHtml: '<p>Working...</p>',
@@ -487,7 +516,30 @@ test.describe('chat-pool: Chat Pool and Permissions', () => {
           edited: false,
           sequence: 1,
           toolCalls: [
-            { toolCallId: 'tc-1', title: 'search_code', status: 'running' },
+            { toolCallId: 'tc-1', title: 'search_code', status: 'in_progress', kind: 'search', detail: 'searching internal/...' },
+          ],
+        },
+      ]);
+      await waitForUpdate(page);
+
+      const detail = page.locator('page-chat-panel chat-message-bubble .tool-call-detail');
+      await expect(detail).toContainText('searching internal/', { timeout: PANEL_INTERACTION_TIMEOUT_MS });
+    });
+
+    test('should display the tool call title in the completed pill', async ({ page }) => {
+      await setChatPanelProperty(page, 'agentConnected', true);
+      await setChatPanelMessages(page, [
+        {
+          id: 'msg-7',
+          sender: 1,
+          content: 'Done.',
+          renderedHtml: '<p>Done.</p>',
+          senderName: 'Bot',
+          replyToId: '',
+          edited: false,
+          sequence: 1,
+          toolCalls: [
+            { toolCallId: 'tc-1', title: 'search_code', status: 'completed' },
           ],
         },
       ]);
@@ -495,6 +547,41 @@ test.describe('chat-pool: Chat Pool and Permissions', () => {
 
       const pill = page.locator('page-chat-panel chat-message-bubble .tool-call-pill');
       await expect(pill).toContainText('search_code', { timeout: PANEL_INTERACTION_TIMEOUT_MS });
+    });
+  });
+
+  test.describe('Plan progress', () => {
+    test.beforeEach(async ({ page }) => {
+      await navigateAndWait(page);
+      await openChatPanel(page);
+    });
+
+    test('should render the plan block with an entry per plan item', async ({ page }) => {
+      await setChatPanelProperty(page, 'agentConnected', true);
+      await setChatPanelMessages(page, [
+        {
+          id: 'msg-plan-1',
+          sender: 1,
+          content: 'Working the plan...',
+          renderedHtml: '<p>Working the plan...</p>',
+          senderName: 'Bot',
+          replyToId: '',
+          edited: false,
+          sequence: 1,
+          toolCalls: [],
+          plan: [
+            { content: 'Investigate', status: 'completed', priority: 'high' },
+            { content: 'Implement', status: 'in_progress', priority: 'high' },
+            { content: 'Verify', status: 'pending', priority: 'medium' },
+          ],
+        },
+      ]);
+      await waitForUpdate(page);
+
+      await expect(page.locator('page-chat-panel chat-message-bubble .plan-block'))
+        .toBeAttached({ timeout: PANEL_INTERACTION_TIMEOUT_MS });
+      await expect(page.locator('page-chat-panel chat-message-bubble .plan-entry'))
+        .toHaveCount(3, { timeout: PANEL_INTERACTION_TIMEOUT_MS });
     });
   });
 
