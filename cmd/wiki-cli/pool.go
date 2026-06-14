@@ -529,6 +529,12 @@ type wikiChatClient struct {
 	pageContext     string // context to prepend to the first user message
 	chatClient      chatReplier
 	entry           *instanceEntry // back-reference for state transitions
+
+	// toolDetails remembers the best input-derived detail (tool name + args, or
+	// file location) per tool-call id. pi-acp drops rawInput on the completion
+	// update, so without this the detail would flip from the call to its output;
+	// keeping the call detail is what shows "what the agent is using".
+	toolDetails map[string]string
 }
 
 func newWikiChatClient(page, wikiURL string) *wikiChatClient {
@@ -748,7 +754,7 @@ func (c *wikiChatClient) handleToolCall(tc *acp.SessionUpdateToolCall) {
 		}
 	}
 
-	detail := toolCallDetail(tc.Locations, tc.RawInput, tc.Content, tc.RawOutput)
+	detail := c.bestToolDetail(string(tc.ToolCallId), tc.Locations, tc.RawInput, tc.Content, tc.RawOutput)
 	if msgID != "" {
 		_, _ = c.chatClient.SendToolCallNotification(context.Background(), connect.NewRequest(&apiv1.SendToolCallNotificationRequest{
 			Page:       c.page,
@@ -791,7 +797,7 @@ func (c *wikiChatClient) handleToolCallUpdate(tcu *acp.SessionToolCallUpdate) {
 		}
 	}
 
-	detail := toolCallDetail(tcu.Locations, tcu.RawInput, tcu.Content, tcu.RawOutput)
+	detail := c.bestToolDetail(string(tcu.ToolCallId), tcu.Locations, tcu.RawInput, tcu.Content, tcu.RawOutput)
 	_, _ = c.chatClient.SendToolCallNotification(context.Background(), connect.NewRequest(&apiv1.SendToolCallNotificationRequest{
 		Page:       c.page,
 		MessageId:  msgID,
@@ -938,7 +944,30 @@ func (c *wikiChatClient) beginTurn(replyToID string) {
 	c.permissionNotes.Reset()
 	c.replyToID = replyToID
 	c.currentMsg = ""
+	c.toolDetails = make(map[string]string)
 	c.mu.Unlock()
+}
+
+// bestToolDetail returns the most useful detail for a tool call, preferring the
+// input-derived detail (file location, or pi-acp tool name + args) and
+// remembering it per tool-call id so it survives the completion update — where
+// pi-acp drops rawInput. Only when no input detail is ever seen does it fall
+// back to the tool's output content.
+func (c *wikiChatClient) bestToolDetail(id string, locations []acp.ToolCallLocation, rawInput any, content []acp.ToolCallContent, rawOutput any) string {
+	inputDetail := toolCallDetail(locations, rawInput, nil, nil)
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.toolDetails == nil {
+		c.toolDetails = make(map[string]string)
+	}
+	if inputDetail != "" {
+		c.toolDetails[id] = inputDetail
+	}
+	if stored := c.toolDetails[id]; stored != "" {
+		return stored
+	}
+	return toolCallDetail(nil, nil, content, rawOutput)
 }
 
 // endTurn cleans up after a prompt turn completes.

@@ -4502,6 +4502,49 @@ var _ = Describe("toolCallDetail", func() {
 	})
 })
 
+var _ = Describe("wikiChatClient.bestToolDetail", func() {
+	When("an input detail is seen and a later update drops rawInput", func() {
+		var (
+			c         *wikiChatClient
+			first     string
+			afterDrop string
+		)
+
+		BeforeEach(func() {
+			c = &wikiChatClient{}
+			first = c.bestToolDetail("call-1", nil, map[string]any{
+				"tool": "api_v1_PageManagementService_ReadPage",
+				"args": `{"page_name": "home"}`,
+			}, nil, nil)
+			// Completion update: pi-acp drops rawInput and sends only content.
+			afterDrop = c.bestToolDetail("call-1", nil, nil,
+				[]acp.ToolCallContent{textContent("page content...")}, nil)
+		})
+
+		It("should derive the tool name + args from rawInput", func() {
+			Expect(first).To(Equal(`api_v1_PageManagementService_ReadPage {"page_name": "home"}`))
+		})
+
+		It("should keep the tool detail after rawInput is dropped", func() {
+			Expect(afterDrop).To(Equal(`api_v1_PageManagementService_ReadPage {"page_name": "home"}`))
+		})
+	})
+
+	When("no input detail is ever seen, only output content", func() {
+		var detail string
+
+		BeforeEach(func() {
+			c := &wikiChatClient{}
+			detail = c.bestToolDetail("call-2", nil, nil,
+				[]acp.ToolCallContent{textContent("just output")}, nil)
+		})
+
+		It("should fall back to the output content", func() {
+			Expect(detail).To(Equal("just output"))
+		})
+	})
+})
+
 var _ = Describe("serverVersionMismatch", func() {
 	var (
 		server      *httptest.Server
