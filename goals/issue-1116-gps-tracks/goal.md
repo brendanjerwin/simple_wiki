@@ -9,16 +9,36 @@ native Leaflet layer control (with a virtual `untagged` group; all tags visible 
 default, OR semantics for multi-tag overlays), and let tracks be attached both from the
 widget (a tap-revealed tools panel mirroring `wiki-image`) and by agents via new MCP tools.
 
-The shared understanding (acceptance) is the accepted fact sheet in [facts.md](facts.md).
+## Assets and how they bind
 
-The approved execution plan — including the version-pinned parser library decision
-(`twpayne/go-gpx` v1.5.0 + `paulmach/orb` v0.13.0) and the up-front de-risking spikes — is
-in [plan.md](plan.md).
+- **[facts.md](facts.md)** — the acceptance contract. Every line is a fact that must be
+  satisfied and **verified**. Per-fact verification mode is recorded in
+  **[facts.meta.json](facts.meta.json)**: the 25 facts with `automatedVerification: true`
+  must each be backed by a concrete automated check (Go test, `devbox run fe:test`, or
+  equivalent); the remaining facts are verified manually per the plan's Verification section.
+- **[plan.md](plan.md)** — the approved, gated execution plan: the version-pinned parser
+  library decision (`twpayne/go-gpx` v1.5.0 + `paulmach/orb` v0.13.0), the up-front
+  de-risking spikes (Step 0), the Skeleton→Red→Green→Refactor steps, and the mandatory
+  end-of-work reviews (Step 9). The plan is to be executed **in full** — every step, not a
+  subset.
 
-**Done** means: every accepted fact in `facts.md` is satisfied; the new GPX/GeoJSON track
-overlay, server-side `GetTrackGeometry`, tags + native tag layer control (incl. virtual
-`untagged`), widget tap-reveal upload + download, and agent MCP track tools all work
-end-to-end; help docs are updated; generated proto/MCP/TS is regenerated and committed; and
-verification passes — `devbox run go:test`, `devbox run fe:test`, and
-`devbox run lint:everything` all green, plus a manual smoke uploading a real Rever/Garmin
-`.gpx` and confirming render, download, and tag toggling.
+## Done condition
+
+Done requires **both** of the following, with no partial credit:
+
+1. **Every fact in `facts.md` is satisfied and verified.** Each
+   `automatedVerification: true` fact (per `facts.meta.json`) has a passing automated test
+   that exercises it; each manual fact is confirmed via the plan's Verification section.
+   Map each fact to the check that proves it — a fact with no backing verification is not done.
+
+2. **The entire `plan.md` is executed**, including:
+   - Step 0 de-risking spikes (with the chosen Douglas–Peucker threshold recorded);
+   - all capability steps (filestore `Open`, `internal/trackgeom`, proto + regenerated
+     committed code, mapmutator/codec, gRPC handlers, help docs, frontend widget);
+   - Step 9 reviews — the **plan-vs-code** and **plan-vs-transcript** review subagents — run
+     and their findings resolved.
+
+Plus the gates: `devbox run go:test`, `devbox run fe:test`, and
+`devbox run lint:everything` all green; generated proto/MCP/TS regenerated and committed;
+and a manual end-to-end smoke uploading a real Rever/Garmin `.gpx` and confirming render,
+download, and tag toggling (incl. the virtual `untagged` group).
