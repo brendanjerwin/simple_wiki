@@ -1,0 +1,33 @@
+# Facts
+
+- Issue #1116 is implemented as a full vertical slice — proto/service, mutator+codec, a track-parsing package, file-storage read support, the Leaflet widget, and help docs — not a backend-only or frontend-only partial.
+- KML import is explicitly out of scope and deferred to a later change.
+- A GPS track overlay references its payload as a content-addressed wiki file (file_hash + filename + format); track coordinates are never stored in frontmatter.
+- Track user data lives under maps.<name>.tracks and wiki-managed metadata under agent.maps.<name>.tracks.<uid>, mirroring the marker/polygon/circle storage split.
+- Each track has a stable ULID uid assigned by the mutator, independent of its file_hash, so the attached file can be replaced and two tracks referencing identical bytes remain distinct addressable overlays.
+- MapService can create, update, and delete track overlay metadata (AddTrack/UpdateTrack/DeleteTrack), each going through the same atomic mutator funnel that updates user data and agent metadata together.
+- Track overlays can be reordered through the existing ReorderElement RPC using a track element type.
+- AddTrack and UpdateTrack reject a track whose referenced file is missing or cannot be parsed, failing at attach time rather than storing a broken reference.
+- Track overlays appear in map reads: GetMap honors an include_tracks selector, GetElement returns a track by uid, and ListMapElements/ListMaps include tracks and track counts.
+- A read-only GetTrackGeometry RPC parses the referenced GPX or GeoJSON file server-side and returns normalized track segments (ordered lists of geo points).
+- GPX parsing handles track data (trk/trkseg/trkpt) and route data (rte/rtept), tolerating Rever/Garmin namespaced extensions, and errors on invalid XML.
+- GeoJSON parsing handles LineString, MultiLineString, and Feature/FeatureCollection geometries, and errors on invalid JSON.
+- Very large tracks are simplified server-side down to a point ceiling so the returned geometry stays renderable without blocking the map.
+- GetTrackGeometry returns NotFound for an unknown track uid or a missing referenced file, and a clear parse error when a stored file cannot be parsed.
+- Markers, polygons, circles, and tracks can all carry tags, and tags are preserved verbatim through create/update/read round-trips.
+- Overlays with no real tags are treated as carrying a virtual 'untagged' tag that appears in the layer control; all tags including 'untagged' are visible by default, and assigning any real tag to an overlay removes its virtual 'untagged' tag.
+- The rendered map shows a native Leaflet layer control listing the distinct real tags across all overlays plus a virtual 'untagged' entry, each toggle-able.
+- Toggling a tag in the control shows or hides every overlay (marker/polygon/circle/track) carrying that tag, without editing the page.
+- An overlay carrying multiple tags is visible if ANY of its tags is currently enabled (OR semantics).
+- Attached tracks render on the Leaflet map as polylines alongside markers, polygons, and circles.
+- Track geometry is fetched lazily after the initial map paint, so a large track does not block the first render.
+- The widget's track-upload affordance is revealed by tapping/activating the map component (mirroring how image controls are revealed) and is not shown during passive reading.
+- The widget upload popover provides a file picker, a label field defaulting to the chosen filename, and an optional comma-separated tags field; submitting uploads the file, attaches it as a track, and reloads the map.
+- The widget upload infers track format from the file extension and surfaces upload/attach errors in the UI rather than failing silently.
+- The widget provides a download link for an attached track file via /uploads/<file_hash>?filename=<filename>.
+- Agents can upload and fully configure tracks (color, popup, tags, order, file replacement) via the existing FileStorageService.UploadFile tool and the new MapService track MCP tools.
+- The FileStorer gains an Open-by-hash content-read capability used by server-side geometry parsing, with path-traversal protection and not-found handling.
+- The map aspect ratio remains configurable (default 16:9, with taller ratios such as 3:2 or 4:3 allowed) and this is documented for track-heavy pages.
+- help_macro_map documentation covers tracks, tags, the layer control, both upload paths (widget and agent), track download, lazy loading, and the new MCP tools.
+- Generated proto, MCP, and TypeScript client code is regenerated and committed.
+- Verification includes devbox run go:test, devbox run fe:test, and devbox run lint:everything all passing.

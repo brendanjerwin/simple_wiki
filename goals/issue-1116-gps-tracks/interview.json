@@ -1,0 +1,81 @@
+{
+  "stage": "interview",
+  "title": "Issue 1116 — GPS track overlays & tag-based map layer controls",
+  "goalSlug": "issue-1116-gps-tracks",
+  "questions": [
+    {
+      "id": "scope",
+      "prompt": "What is in scope for this goal?",
+      "description": "Everything below is recommended IN. Deselect anything you want to defer. KML import is explicitly deferred.",
+      "answerMode": "multi-custom",
+      "recommendedAnswer": "All of: track overlay type, tags on all four overlay types, native Leaflet layer control, server-side GetTrackGeometry RPC, lazy track loading, widget upload affordance, agent-mediated upload via MCP, track download link, help docs.",
+      "recommendedOptionIds": ["track-type", "tags-all", "layer-control", "geometry-rpc", "lazy-load", "widget-upload", "agent-upload", "download", "help"],
+      "options": [
+        { "id": "track-type", "label": "New GPS track overlay type (file-referenced, not in frontmatter)" },
+        { "id": "tags-all", "label": "Tags on markers, polygons, circles, AND tracks" },
+        { "id": "layer-control", "label": "Native Leaflet layer control to show/hide by tag" },
+        { "id": "geometry-rpc", "label": "Server-side GetTrackGeometry RPC (parse + normalize)" },
+        { "id": "lazy-load", "label": "Lazy/progressive track geometry loading in the widget" },
+        { "id": "widget-upload", "label": "Hover-revealed track upload in the widget (first FE mutation surface)" },
+        { "id": "agent-upload", "label": "Agent-mediated upload/config via MCP tools" },
+        { "id": "download", "label": "Track download link from the widget" },
+        { "id": "help", "label": "Help documentation for all of the above" }
+      ],
+      "required": true
+    },
+    {
+      "id": "formats",
+      "prompt": "Which track file formats should the first implementation accept?",
+      "description": "Rever and Garmin both export GPX (track trk/trkseg and route rte variants). GeoJSON is trivial to parse server-side. KML is deferred per the issue.",
+      "answerMode": "multi-custom",
+      "recommendedAnswer": "GPX (primary, Rever/Garmin) and GeoJSON. KML deferred.",
+      "recommendedOptionIds": ["gpx", "geojson"],
+      "options": [
+        { "id": "gpx", "label": "GPX (tracks + routes) — Rever & Garmin exports" },
+        { "id": "geojson", "label": "GeoJSON (LineString / MultiLineString / Feature)" },
+        { "id": "kml", "label": "KML now (NOT recommended — issue defers it)" }
+      ],
+      "required": true
+    },
+    {
+      "id": "upload-fields",
+      "prompt": "What fields should the widget's quick-upload popover expose?",
+      "description": "The agent path always exposes full config (color, popup, tags, sort order). This is about the in-widget quick path only.",
+      "answerMode": "single-custom",
+      "recommendedAnswer": "File + label (defaults to filename) + optional comma-separated tags.",
+      "recommendedOptionIds": ["file-label-tags"],
+      "options": [
+        { "id": "file-label-tags", "label": "File + label + optional tags (recommended)" },
+        { "id": "file-label", "label": "File + label only (tag later via agent)" },
+        { "id": "file-only", "label": "File only (label = filename, no tags)" }
+      ],
+      "required": true
+    },
+    {
+      "id": "large-tracks",
+      "prompt": "How should very large tracks be handled so they stay renderable?",
+      "description": "A long ADV GPX can have tens of thousands of points. Simplifying server-side keeps the initial render fast.",
+      "answerMode": "single-custom",
+      "recommendedAnswer": "Simplify server-side (Douglas–Peucker) down to a point ceiling (e.g. ~5000) before returning geometry.",
+      "recommendedOptionIds": ["simplify"],
+      "options": [
+        { "id": "simplify", "label": "Simplify server-side to a point ceiling (recommended)" },
+        { "id": "full-fidelity", "label": "Always return full fidelity (no simplification)" }
+      ],
+      "required": true
+    },
+    {
+      "id": "multi-tag-semantics",
+      "prompt": "When an overlay carries multiple tags, when is it visible?",
+      "description": "Drives how the layer control filters overlays that belong to more than one tag group.",
+      "answerMode": "single-custom",
+      "recommendedAnswer": "Visible if ANY of its tags is enabled (OR). Untagged overlays are always visible.",
+      "recommendedOptionIds": ["any"],
+      "options": [
+        { "id": "any", "label": "Visible if ANY enabled tag matches (OR) — recommended" },
+        { "id": "all", "label": "Visible only if ALL its tags are enabled (AND)" }
+      ],
+      "required": true
+    }
+  ]
+}
