@@ -54,6 +54,10 @@ service ChatService {
   // subscribers so the UI can show live task progress.
   rpc SendPlanNotification(SendPlanNotificationRequest) returns (SendPlanNotificationResponse) {}
 
+  // SendTurnStatus is called by the pool daemon when an agent turn starts and
+  // completes, so the UI can show the Stop button for the whole turn.
+  rpc SendTurnStatus(SendTurnStatusRequest) returns (SendTurnStatusResponse) {}
+
   // CancelAgentPrompt cancels an in-progress agent prompt for a page.
   // Called by the frontend "Stop" button.
   rpc CancelAgentPrompt(CancelAgentPromptRequest) returns (CancelAgentPromptResponse) {}
@@ -106,6 +110,7 @@ message ChatEvent {
     ChatPermissionRequest permission_request = 5;
     ChatCleared chat_cleared = 6;
     ChatPlan plan = 7;
+    ChatTurnStatus turn_status = 8;
   }
 }
 
@@ -154,6 +159,15 @@ message ChatPlanEntry {
 message ChatPlan {
   string message_id = 1;              // the assistant message this plan belongs to
   repeated ChatPlanEntry entries = 2; // ordered plan entries
+}
+
+// ChatTurnStatus reports whether the agent is actively working a turn on a page
+// (from prompt start until the turn completes), so the UI can show the Stop
+// button for the whole turn — thinking, tool use, and streaming — not just while
+// waiting for the first token.
+message ChatTurnStatus {
+  string page = 1;
+  bool active = 2;
 }
 
 // ChatMessageEdit represents an edit to an existing message.
@@ -282,6 +296,15 @@ message SendPlanNotificationRequest {
 
 // SendPlanNotificationResponse is the response for SendPlanNotification.
 message SendPlanNotificationResponse {}
+
+// SendTurnStatusRequest is the request for SendTurnStatus.
+message SendTurnStatusRequest {
+  string page = 1;
+  bool active = 2;  // true when a turn starts, false when it completes
+}
+
+// SendTurnStatusResponse is the response for SendTurnStatus.
+message SendTurnStatusResponse {}
 
 // CancelAgentPromptRequest is the request for CancelAgentPrompt.
 message CancelAgentPromptRequest {

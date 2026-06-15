@@ -255,6 +255,15 @@ func bufferEventToProto(event chatbuffer.Event) *apiv1.ChatEvent {
 		}
 	case chatbuffer.EventTypePlan:
 		return planEventToProto(event.Plan)
+	case chatbuffer.EventTypeTurnStatus:
+		return &apiv1.ChatEvent{
+			Event: &apiv1.ChatEvent_TurnStatus{
+				TurnStatus: &apiv1.ChatTurnStatus{
+					Page:   event.TurnStatus.Page,
+					Active: event.TurnStatus.Active,
+				},
+			},
+		}
 	case chatbuffer.EventTypePermissionRequest:
 		return permissionRequestEventToProto(event.PermissionRequest)
 	case chatbuffer.EventTypeCleared:
@@ -519,6 +528,17 @@ func (s *Server) SendPlanNotification(_ context.Context, req *apiv1.SendPlanNoti
 		Entries:   entries,
 	})
 	return &apiv1.SendPlanNotificationResponse{}, nil
+}
+
+// SendTurnStatus implements the SendTurnStatus RPC.
+// Broadcasts whether an agent turn is active on a page to all page subscribers.
+func (s *Server) SendTurnStatus(_ context.Context, req *apiv1.SendTurnStatusRequest) (*apiv1.SendTurnStatusResponse, error) {
+	if req.Page == "" {
+		return nil, status.Error(codes.InvalidArgument, errPageRequired)
+	}
+
+	s.chatBufferManager.NotifyTurnStatus(req.Page, req.Active)
+	return &apiv1.SendTurnStatusResponse{}, nil
 }
 
 // RespondToPermission implements the RespondToPermission RPC.

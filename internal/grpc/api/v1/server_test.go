@@ -634,6 +634,10 @@ func (noOpChatBufferManager) NotifyPlan(string, chatbuffer.PlanEvent) {
 	// no-op: satisfies interface; this implementation ignores plan notifications
 }
 
+func (noOpChatBufferManager) NotifyTurnStatus(string, bool) {
+	// no-op: satisfies interface; this implementation ignores turn status
+}
+
 func (noOpChatBufferManager) CancelPage(string) bool {
 	return false
 }

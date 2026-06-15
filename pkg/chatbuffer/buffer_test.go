@@ -1211,6 +1211,36 @@ var _ = Describe("Manager", func() {
 		})
 	})
 
+	Describe("NotifyTurnStatus", func() {
+		When("a page subscriber is listening", func() {
+			var eventChan <-chan chatbuffer.Event
+
+			BeforeEach(func() {
+				var unsub func()
+				eventChan, unsub = manager.SubscribeToPage("test-page")
+				DeferCleanup(unsub)
+
+				manager.NotifyTurnStatus("test-page", true)
+			})
+
+			It("should emit a turn status event with active true", func() {
+				Eventually(eventChan).Should(Receive(And(
+					HaveField("Type", chatbuffer.EventTypeTurnStatus),
+					HaveField("TurnStatus.Page", "test-page"),
+					HaveField("TurnStatus.Active", true),
+				)))
+			})
+		})
+
+		When("no page subscribers exist", func() {
+			It("should not panic", func() {
+				Expect(func() {
+					manager.NotifyTurnStatus("test-page", false)
+				}).NotTo(Panic())
+			})
+		})
+	})
+
 	Describe("NotifyPlan", func() {
 		When("a page subscriber is listening", func() {
 			var eventChan <-chan chatbuffer.Event

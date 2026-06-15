@@ -495,6 +495,7 @@ type chatReplier interface {
 	EditChatMessage(context.Context, *connect.Request[apiv1.EditChatMessageRequest]) (*connect.Response[apiv1.EditChatMessageResponse], error)
 	SendToolCallNotification(context.Context, *connect.Request[apiv1.SendToolCallNotificationRequest]) (*connect.Response[apiv1.SendToolCallNotificationResponse], error)
 	SendPlanNotification(context.Context, *connect.Request[apiv1.SendPlanNotificationRequest]) (*connect.Response[apiv1.SendPlanNotificationResponse], error)
+	SendTurnStatus(context.Context, *connect.Request[apiv1.SendTurnStatusRequest]) (*connect.Response[apiv1.SendTurnStatusResponse], error)
 	RequestPermissionFromUser(context.Context, *connect.Request[apiv1.RequestPermissionFromUserRequest]) (*connect.Response[apiv1.RequestPermissionFromUserResponse], error)
 }
 
@@ -948,6 +949,20 @@ func (c *wikiChatClient) beginTurn(replyToID string) {
 	c.mu.Unlock()
 }
 
+// notifyTurnStatus reports to the wiki whether an agent turn is actively in
+// progress on this page, so the UI can show the Stop button for the whole turn.
+func (c *wikiChatClient) notifyTurnStatus(active bool) {
+	_, err := c.chatClient.SendTurnStatus(context.Background(), connect.NewRequest(&apiv1.SendTurnStatusRequest{
+		Page:   c.page,
+		Active: active,
+	}))
+	// Best-effort: a missed turn-status update only affects the Stop button.
+	// nosemgrep: go.handler-returns-nil-after-error-logged
+	if err != nil {
+		slog.Error("failed to send turn status", logKeyPage, c.page, "active", active, logKeyError, err)
+	}
+}
+
 // bestToolDetail returns the most useful detail for a tool call, preferring the
 // input-derived detail (file location, or pi-acp tool name + args) and
 // remembering it per tool-call id so it survives the completion update — where
@@ -1382,6 +1397,11 @@ func forwardUserMessage(ctx context.Context, entry *instanceEntry, chatClient *w
 
 	chatClient.beginTurn(msg.Id)
 	defer chatClient.endTurn()
+
+	// Mark the turn active for the whole prompt so the UI shows the Stop button
+	// during thinking and tool use, not just while awaiting the first token.
+	chatClient.notifyTurnStatus(true)
+	defer chatClient.notifyTurnStatus(false)
 
 	promptCtx, promptCancel := context.WithCancel(ctx)
 	defer promptCancel()

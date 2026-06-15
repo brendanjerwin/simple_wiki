@@ -73,6 +73,8 @@ type mockChatReplier struct {
 	planNotifyCalled bool
 	planNotifyErr    error
 
+	turnStatusCalls []bool
+
 	permReq    *apiv1.RequestPermissionFromUserRequest
 	permResp   *apiv1.RequestPermissionFromUserResponse
 	permErr    error
@@ -121,6 +123,11 @@ func (m *mockChatReplier) SendPlanNotification(_ context.Context, req *connect.R
 		return nil, m.planNotifyErr
 	}
 	return connect.NewResponse(&apiv1.SendPlanNotificationResponse{}), nil
+}
+
+func (m *mockChatReplier) SendTurnStatus(_ context.Context, req *connect.Request[apiv1.SendTurnStatusRequest]) (*connect.Response[apiv1.SendTurnStatusResponse], error) {
+	m.turnStatusCalls = append(m.turnStatusCalls, req.Msg.Active)
+	return connect.NewResponse(&apiv1.SendTurnStatusResponse{}), nil
 }
 
 func (m *mockChatReplier) RequestPermissionFromUser(_ context.Context, req *connect.Request[apiv1.RequestPermissionFromUserRequest]) (*connect.Response[apiv1.RequestPermissionFromUserResponse], error) {
@@ -3392,6 +3399,10 @@ var _ = Describe("forwardUserMessage (mock-based)", func() {
 
 		It("should clear the current message after the turn ends", func() {
 			Expect(client.currentMsg).To(BeEmpty())
+		})
+
+		It("should mark the turn active then inactive around the prompt", func() {
+			Expect(mockChat.turnStatusCalls).To(Equal([]bool{true, false}))
 		})
 
 		It("should transition back to Idle after prompting", func() {

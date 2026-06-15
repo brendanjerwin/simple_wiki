@@ -416,6 +416,12 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
   @state()
   declare waitingForAssistant: boolean;
 
+  // True for the whole active turn (prompt start until completion), driven by the
+  // backend turn-status event. Gates the Stop button so it stays available during
+  // thinking and tool use, not just while awaiting the first token.
+  @state()
+  declare turnActive: boolean;
+
   @state()
   declare error: Error | null;
 
@@ -453,6 +459,7 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
     this.messages = [];
     this.streamState = 'disconnected';
     this.waitingForAssistant = false;
+    this.turnActive = false;
     this.error = null;
     this.agentConnected = false;
     this.poolConnected = false;
@@ -632,12 +639,14 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
               )}
         </div>
 
-        ${this.waitingForAssistant
+        ${this.turnActive
           ? html`<div class="thinking-indicator">
-              <span class="thinking-dots">
-                <span></span><span></span><span></span>
-              </span>
-              ${this._thinkingText}
+              ${this.waitingForAssistant
+                ? html`<span class="thinking-dots">
+                      <span></span><span></span><span></span>
+                    </span>
+                    ${this._thinkingText}`
+                : html`<span class="working-label">Working…</span>`}
               <button class="stop-button" @click=${this._handleStopClick} aria-label="Stop">
                 Stop
               </button>
@@ -722,6 +731,7 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
       });
       await this.chatClient.cancelAgentPrompt(request);
       this.waitingForAssistant = false;
+      this.turnActive = false;
     } catch (err) {
       this.error = err instanceof Error ? err : new Error(String(err));
     }
@@ -821,6 +831,7 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
 
     textarea.value = '';
     this.waitingForAssistant = true;
+    this.turnActive = true;
 
     try {
       const request = create(SendChatMessageRequestSchema, {
@@ -838,6 +849,7 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
         this.error = err instanceof Error ? err : new Error(String(err));
       }
       this.waitingForAssistant = false;
+      this.turnActive = false;
     }
 
     this.focusInput();
@@ -870,6 +882,7 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
         const content = this.pendingMessage;
         this.pendingMessage = null;
         this.waitingForAssistant = true;
+        this.turnActive = true;
         try {
           const sendRequest = create(SendChatMessageRequestSchema, {
             page: this.page,
@@ -880,6 +893,7 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
           this.pendingMessage = content;
           this.error = err instanceof Error ? err : new Error(String(err));
           this.waitingForAssistant = false;
+          this.turnActive = false;
         }
       }
 
@@ -1054,6 +1068,13 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
       case 'permissionRequest':
         this.setPermissionRequest(event.event.value);
         break;
+      case 'turnStatus':
+        this.turnActive = event.event.value.active;
+        if (!event.event.value.active) {
+          // Turn finished: also clear the first-token "thinking" indicator.
+          this.waitingForAssistant = false;
+        }
+        break;
       case 'chatCleared':
         this.clearVisibleChat();
         break;
@@ -1064,6 +1085,7 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
     this.messages = [];
     this.messagesById.clear();
     this.waitingForAssistant = false;
+    this.turnActive = false;
     this.pendingPermission = null;
     this.pendingMessage = null;
   }

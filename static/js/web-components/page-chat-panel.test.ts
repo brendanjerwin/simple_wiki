@@ -451,12 +451,13 @@ describe('PageChatPanel', () => {
   });
 
   describe('thinking indicator', () => {
-    describe('when waiting for assistant', () => {
+    describe('when a turn is active and awaiting the first token', () => {
       let el: PageChatPanel;
 
       beforeEach(async () => {
         localStorageStub.getItem.returns('true');
         el = await fixture(html`<page-chat-panel page="test-page" persona="TestPersona"></page-chat-panel>`);
+        el.turnActive = true;
         el.waitingForAssistant = true;
         await el.updateComplete;
       });
@@ -470,21 +471,58 @@ describe('PageChatPanel', () => {
         const indicator = el.shadowRoot!.querySelector('.thinking-indicator');
         expect(indicator!.textContent).to.contain('TestPersona is thinking');
       });
+
+      it('should show the Stop button', () => {
+        const stop = el.shadowRoot!.querySelector('.stop-button');
+        expect(stop).to.exist;
+      });
     });
 
-    describe('when not waiting for assistant', () => {
+    describe('when a turn is active after the first token (tool use / streaming)', () => {
       let el: PageChatPanel;
 
       beforeEach(async () => {
         localStorageStub.getItem.returns('true');
         el = await fixture(html`<page-chat-panel page="test-page" persona="TestPersona"></page-chat-panel>`);
+        el.turnActive = true;
         el.waitingForAssistant = false;
+        await el.updateComplete;
+      });
+
+      it('should still show the indicator (turn is active)', () => {
+        const indicator = el.shadowRoot!.querySelector('.thinking-indicator');
+        expect(indicator).to.exist;
+      });
+
+      it('should still show the Stop button so the user can stop tool use', () => {
+        const stop = el.shadowRoot!.querySelector('.stop-button');
+        expect(stop).to.exist;
+      });
+
+      it('should not show the thinking text once the first token arrived', () => {
+        const indicator = el.shadowRoot!.querySelector('.thinking-indicator');
+        expect(indicator!.textContent).to.not.contain('is thinking');
+      });
+    });
+
+    describe('when no turn is active', () => {
+      let el: PageChatPanel;
+
+      beforeEach(async () => {
+        localStorageStub.getItem.returns('true');
+        el = await fixture(html`<page-chat-panel page="test-page" persona="TestPersona"></page-chat-panel>`);
+        el.turnActive = false;
         await el.updateComplete;
       });
 
       it('should not show the thinking indicator', () => {
         const indicator = el.shadowRoot!.querySelector('.thinking-indicator');
         expect(indicator).to.equal(null);
+      });
+
+      it('should not show the Stop button', () => {
+        const stop = el.shadowRoot!.querySelector('.stop-button');
+        expect(stop).to.equal(null);
       });
     });
   });

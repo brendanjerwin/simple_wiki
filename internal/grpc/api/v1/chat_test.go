@@ -32,6 +32,7 @@ type mockChatBufferManager struct {
 	// Tracking fields for new handler tests
 	notifyToolCallCalls       []notifyToolCallArgs
 	notifyPlanCalls           []notifyPlanArgs
+	notifyTurnStatusCalls     []turnStatusArgs
 	clearPageCalls            []string
 	cancelPageCalls           []string
 	respondToPermissionCalls  []respondToPermissionArgs
@@ -67,6 +68,11 @@ type notifyToolCallArgs struct {
 type notifyPlanArgs struct {
 	page string
 	plan chatbuffer.PlanEvent
+}
+
+type turnStatusArgs struct {
+	page   string
+	active bool
 }
 
 type respondToPermissionArgs struct {
@@ -314,6 +320,12 @@ func (m *mockChatBufferManager) NotifyPlan(page string, plan chatbuffer.PlanEven
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.notifyPlanCalls = append(m.notifyPlanCalls, notifyPlanArgs{page, plan})
+}
+
+func (m *mockChatBufferManager) NotifyTurnStatus(page string, active bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.notifyTurnStatusCalls = append(m.notifyTurnStatusCalls, turnStatusArgs{page, active})
 }
 
 func (m *mockChatBufferManager) CancelPage(page string) bool {
@@ -1917,6 +1929,59 @@ var _ = Describe("ChatService", func() {
 				Expect(entries[1].Content).To(Equal("Fix"))
 				Expect(entries[1].Status).To(Equal("in_progress"))
 				Expect(entries[1].Priority).To(Equal("high"))
+			})
+		})
+	})
+
+	Describe("SendTurnStatus", func() {
+		When("page is empty", func() {
+			var err error
+
+			BeforeEach(func() {
+				_, err = server.SendTurnStatus(ctx, &apiv1.SendTurnStatusRequest{Page: "", Active: true})
+			})
+
+			It("should return InvalidArgument error", func() {
+				st, ok := status.FromError(err)
+				Expect(ok).To(BeTrue())
+				Expect(st.Code()).To(Equal(codes.InvalidArgument))
+				Expect(st.Message()).To(ContainSubstring("page is required"))
+			})
+		})
+
+		When("a turn becomes active", func() {
+			var (
+				resp *apiv1.SendTurnStatusResponse
+				err  error
+			)
+
+			BeforeEach(func() {
+				resp, err = server.SendTurnStatus(ctx, &apiv1.SendTurnStatusRequest{Page: "test-page", Active: true})
+			})
+
+			It("should not error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should return a response", func() {
+				Expect(resp).NotTo(BeNil())
+			})
+
+			It("should call NotifyTurnStatus with page and active=true", func() {
+				Expect(chatManager.notifyTurnStatusCalls).To(HaveLen(1))
+				Expect(chatManager.notifyTurnStatusCalls[0].page).To(Equal("test-page"))
+				Expect(chatManager.notifyTurnStatusCalls[0].active).To(BeTrue())
+			})
+		})
+
+		When("a turn completes", func() {
+			BeforeEach(func() {
+				_, _ = server.SendTurnStatus(ctx, &apiv1.SendTurnStatusRequest{Page: "test-page", Active: false})
+			})
+
+			It("should forward active=false", func() {
+				Expect(chatManager.notifyTurnStatusCalls).To(HaveLen(1))
+				Expect(chatManager.notifyTurnStatusCalls[0].active).To(BeFalse())
 			})
 		})
 	})

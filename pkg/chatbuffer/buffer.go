@@ -77,6 +77,7 @@ type Event struct {
 	PermissionRequest *PermissionRequestEvent
 	Cleared           *ClearedEvent
 	Plan              *PlanEvent
+	TurnStatus        *TurnStatusEvent
 }
 
 // EventType identifies the type of chat event.
@@ -90,6 +91,7 @@ const (
 	EventTypePermissionRequest
 	EventTypeCleared
 	EventTypePlan
+	EventTypeTurnStatus
 )
 
 // EditEvent represents a message edit.
@@ -122,6 +124,12 @@ type PlanEntry struct {
 type PlanEvent struct {
 	MessageID string
 	Entries   []PlanEntry
+}
+
+// TurnStatusEvent reports whether an agent turn is actively in progress on a page.
+type TurnStatusEvent struct {
+	Page   string
+	Active bool
 }
 
 // ReactionEvent represents a reaction added to a message.
@@ -529,6 +537,19 @@ func (m *Manager) NotifyPlan(page string, plan PlanEvent) {
 	buf.unlockAndNotify(Event{
 		Type: EventTypePlan,
 		Plan: &p,
+	})
+}
+
+// NotifyTurnStatus reports whether an agent turn is active on a page to its
+// subscribers. Ephemeral — not stored in the buffer.
+func (m *Manager) NotifyTurnStatus(page string, active bool) {
+	buf := m.getOrCreateBuffer(page)
+	buf.mu.Lock()
+	buf.lastAccess = time.Now()
+
+	buf.unlockAndNotify(Event{
+		Type:       EventTypeTurnStatus,
+		TurnStatus: &TurnStatusEvent{Page: page, Active: active},
 	})
 }
 

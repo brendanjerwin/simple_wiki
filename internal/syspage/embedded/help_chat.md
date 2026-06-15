@@ -14,6 +14,10 @@ panel shows **live activity** so you can see what it is actually doing instead o
 staring at a blank "thinking" state — which matters most during long-running turns
 like a daily reflection or a dinner plan.
 
+A **Stop** button is shown for the whole active turn — while thinking, using
+tools, and streaming — not just while waiting for the first token. It cancels the
+turn via the ACP `session/cancel` path.
+
 ## Live tool-use progress
 
 As the assistant invokes tools, each one appears in the message it belongs to:
