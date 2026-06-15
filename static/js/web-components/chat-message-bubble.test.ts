@@ -368,9 +368,14 @@ describe('ChatMessageBubble', () => {
         expect(icon!.textContent).to.equal('✅');
       });
 
-      it('should collapse to just the status icon (no label text)', () => {
+      it('should render the kind glyph as the primary mark', () => {
+        const glyph = el.shadowRoot!.querySelector('.tool-call-pill .kind-glyph');
+        expect(glyph!.textContent).to.equal('📄');
+      });
+
+      it('should collapse to icons only (no label text)', () => {
         const pill = el.shadowRoot!.querySelector('.tool-call-pill');
-        expect(pill!.textContent!.trim()).to.equal('✅');
+        expect(pill!.textContent).to.not.contain('Read File');
       });
 
       it('should expose the title in the hover title attribute', () => {

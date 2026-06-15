@@ -127,22 +127,26 @@ export class ChatMessageBubble extends LitElement {
         gap: 4px;
       }
 
-      /* Finished tool call: collapsed to just the status icon (full label on
-         hover via the title attribute) to save space. */
+      /* Finished tool call: collapsed to the kind glyph (primary) with the
+         status as small subtext (full label on hover via the title attribute). */
       .tool-call-pill {
         display: inline-flex;
-        align-items: center;
+        align-items: flex-end;
+        gap: 1px;
         padding: 2px 5px;
         border-radius: 10px;
         background: rgba(255, 255, 255, 0.08);
         border: 1px solid var(--color-border-subtle);
-        font-size: 0.75rem;
         color: var(--color-text-muted);
         cursor: default;
       }
 
+      .tool-call-pill .kind-glyph {
+        font-size: 0.9rem;
+      }
+
       .tool-call-pill .status-icon {
-        font-size: 0.7rem;
+        font-size: 0.6rem;
       }
 
       /* Live expanded tool call row — takes its own full-width line */
@@ -396,7 +400,9 @@ export class ChatMessageBubble extends LitElement {
       case 'think': return '💭';
       case 'fetch': return '🌐';
       case 'switch_mode': return '🔀';
-      default: return '';
+      // ACP "other" (e.g. MCP tool calls) and unknown kinds get a generic glyph
+      // so the collapsed pill always has a primary icon.
+      default: return '🔧';
     }
   }
 
@@ -447,12 +453,13 @@ export class ChatMessageBubble extends LitElement {
       `;
     }
 
-    // Completed or failed: collapse to just the status icon to save vertical
-    // space. The full label (tool name + args) is preserved in the title
-    // attribute so it shows on hover.
+    // Completed or failed: collapse to icons to save space — the tool kind glyph
+    // as the primary mark with the status as small subtext. The full label (tool
+    // name + args) is preserved in the title attribute so it shows on hover.
     const label = tc.detail ? `${tc.title}: ${tc.detail}` : tc.title;
     return html`
       <span class="tool-call-pill" title="${label}">
+        <span class="kind-glyph">${this._kindGlyph(tc.kind)}</span>
         <span class="status-icon">${this._toolCallStatusIcon(tc.status)}</span>
       </span>
     `;
