@@ -218,14 +218,15 @@ github.com/gin-gonic/gin/render
 # github.com/glycerine/go-unsnap-stream v0.0.0-20181221182339-f9677308dec2
 ## explicit
 github.com/glycerine/go-unsnap-stream
-# github.com/go-json-experiment/json v0.0.0-20250813024750-ebf49471dced
-## explicit; go 1.24
+# github.com/go-json-experiment/json v0.0.0-20260214004413-d219187c3433
+## explicit; go 1.26
 github.com/go-json-experiment/json
 github.com/go-json-experiment/json/internal
 github.com/go-json-experiment/json/internal/jsonflags
 github.com/go-json-experiment/json/internal/jsonopts
 github.com/go-json-experiment/json/internal/jsonwire
 github.com/go-json-experiment/json/jsontext
+github.com/go-json-experiment/json/v1
 # github.com/go-logr/logr v1.4.3
 ## explicit; go 1.18
 github.com/go-logr/logr
@@ -651,7 +652,7 @@ go4.org/netipx
 # golang.org/x/arch v0.22.0
 ## explicit; go 1.24.0
 golang.org/x/arch/x86/x86asm
-# golang.org/x/crypto v0.51.0
+# golang.org/x/crypto v0.52.0
 ## explicit; go 1.25.0
 golang.org/x/crypto/argon2
 golang.org/x/crypto/blake2b
@@ -887,8 +888,8 @@ gopkg.in/urfave/cli.v1
 # gopkg.in/yaml.v2 v2.4.0
 ## explicit; go 1.15
 gopkg.in/yaml.v2
-# tailscale.com v1.98.5
-## explicit; go 1.26.3
+# tailscale.com v1.100.0
+## explicit; go 1.26.4
 tailscale.com
 tailscale.com/atomicfile
 tailscale.com/client/local
@@ -906,6 +907,8 @@ tailscale.com/metrics
 tailscale.com/net/netaddr
 tailscale.com/net/netmon
 tailscale.com/net/netutil
+tailscale.com/net/routecheck
+tailscale.com/net/traffic
 tailscale.com/net/tsaddr
 tailscale.com/net/udprelay/status
 tailscale.com/paths
