@@ -14,6 +14,7 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -30,6 +31,7 @@ const (
 	defaultIdleTimeoutMinutes              = 30
 	defaultMaxInstanceAgeHours             = 2
 	defaultPermissionPendingTimeoutMinutes = 5
+	defaultVersionCheckIntervalMinutes     = 5
 
 	errTerminalAccessUnavailable = "terminal access not available"
 	truncateLimitForLog          = 100
@@ -188,6 +190,14 @@ type poolDaemon struct {
 
 	scheduledTurns      sync.WaitGroup
 	scheduledTurnRunner func(context.Context, *apiv1.ScheduledTurnRequest) (apiv1.ScheduleStatus, string)
+
+	// Self-repair: the long-running pool periodically checks whether the wiki
+	// server is running a different commit and, if so, drains and exits so the
+	// bootstrapper self-updates wiki-cli. versionCheckInterval defaults when
+	// zero; versionMismatch is injectable for tests (defaults to a live check).
+	versionCheckInterval time.Duration
+	versionMismatch      func() bool
+	restartRequested     atomic.Bool
 }
 
 // sanitizeUnitName converts a page identifier into a valid systemd unit name suffix.
@@ -286,6 +296,7 @@ func runPoolAction(c *cli.Context) error {
 		maxInstanceAge:           c.Duration("max-instance-age"),
 		permissionPendingTimeout: c.Duration("permission-pending-timeout"),
 		instances:                make(map[string]*instanceEntry),
+		versionCheckInterval:     defaultVersionCheckIntervalMinutes * time.Minute,
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -304,6 +315,11 @@ func (d *poolDaemon) run(ctx context.Context) error {
 		"wiki", d.wikiURL,
 		logKeyAction, "startup")
 
+	// Derive a cancellable context so the version watcher can trigger a graceful
+	// shutdown (for self-update) the same way an OS signal would.
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
 	// Start the idle reaper
 	go d.reapIdleInstances(ctx)
 
@@ -311,24 +327,23 @@ func (d *poolDaemon) run(ctx context.Context) error {
 	// instance-request subscriber and handles its own reconnects.
 	go d.runScheduledTurnLoop(ctx)
 
+	// Watch for a server version change and self-restart for self-update.
+	go d.watchVersion(ctx, cancel)
+
 	// Maintain subscription to instance requests with reconnect loop
 	backoffMs := initialBackoffMs
 
 	for {
 		select {
 		case <-ctx.Done():
-			d.stopAll()
-			d.waitForScheduledTurns()
-			return nil
+			return d.finishShutdown()
 		default:
 		}
 
 		start := time.Now()
 		err := d.subscribeAndHandle(ctx)
 		if err == nil {
-			d.stopAll()
-			d.waitForScheduledTurns()
-			return nil
+			return d.finishShutdown()
 		}
 
 		delayMs, nextMs := computeBackoffAfterFailure(backoffMs, time.Since(start))
@@ -336,13 +351,58 @@ func (d *poolDaemon) run(ctx context.Context) error {
 
 		select {
 		case <-ctx.Done():
-			d.stopAll()
-			d.waitForScheduledTurns()
-			return nil
+			return d.finishShutdown()
 		case <-time.After(time.Duration(delayMs) * time.Millisecond):
 		}
 
 		backoffMs = nextMs
+	}
+}
+
+// finishShutdown stops instances and drains scheduled turns. It returns a
+// version-mismatch error when watchVersion requested a restart, so the process
+// exits non-zero and the bootstrapper self-updates wiki-cli; otherwise nil.
+func (d *poolDaemon) finishShutdown() error {
+	d.stopAll()
+	d.waitForScheduledTurns()
+	if d.restartRequested.Load() {
+		// Text contains "version mismatch" so the wiki-cli bootstrapper's
+		// self-update path re-downloads the latest binary on exit.
+		return errors.New("version mismatch: wiki server updated; exiting for self-update")
+	}
+	return nil
+}
+
+// watchVersion periodically checks whether the wiki server reports a different
+// commit than this binary. On a confirmed mismatch it records a restart request
+// and cancels the daemon context so run() drains and exits for self-update.
+func (d *poolDaemon) watchVersion(ctx context.Context, cancel context.CancelFunc) {
+	interval := d.versionCheckInterval
+	if interval <= 0 {
+		interval = defaultVersionCheckIntervalMinutes * time.Minute
+	}
+
+	check := d.versionMismatch
+	if check == nil {
+		check = func() bool { return serverVersionMismatch(d.wikiURL) }
+	}
+
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			if check() {
+				slog.Warn("pool: wiki server version changed; draining and exiting for self-update (version mismatch)",
+					logKeyAction, "version_restart")
+				d.restartRequested.Store(true)
+				cancel()
+				return
+			}
+		}
 	}
 }
 
@@ -434,6 +494,8 @@ type chatReplier interface {
 	SendChatReply(context.Context, *connect.Request[apiv1.SendChatReplyRequest]) (*connect.Response[apiv1.SendChatReplyResponse], error)
 	EditChatMessage(context.Context, *connect.Request[apiv1.EditChatMessageRequest]) (*connect.Response[apiv1.EditChatMessageResponse], error)
 	SendToolCallNotification(context.Context, *connect.Request[apiv1.SendToolCallNotificationRequest]) (*connect.Response[apiv1.SendToolCallNotificationResponse], error)
+	SendPlanNotification(context.Context, *connect.Request[apiv1.SendPlanNotificationRequest]) (*connect.Response[apiv1.SendPlanNotificationResponse], error)
+	SendTurnStatus(context.Context, *connect.Request[apiv1.SendTurnStatusRequest]) (*connect.Response[apiv1.SendTurnStatusResponse], error)
 	RequestPermissionFromUser(context.Context, *connect.Request[apiv1.RequestPermissionFromUserRequest]) (*connect.Response[apiv1.RequestPermissionFromUserResponse], error)
 }
 
@@ -463,12 +525,17 @@ type wikiChatClient struct {
 	textBuf         strings.Builder
 	thoughtBuf      strings.Builder
 	permissionNotes strings.Builder
-	planEntries     []acp.PlanEntry
 	replyToID       string // set before each prompt to thread responses
 	currentMsg      string // message ID of the in-progress streaming reply
 	pageContext     string // context to prepend to the first user message
 	chatClient      chatReplier
 	entry           *instanceEntry // back-reference for state transitions
+
+	// toolDetails remembers the best input-derived detail (tool name + args, or
+	// file location) per tool-call id. pi-acp drops rawInput on the completion
+	// update, so without this the detail would flip from the call to its output;
+	// keeping the call detail is what shows "what the agent is using".
+	toolDetails map[string]string
 }
 
 func newWikiChatClient(page, wikiURL string) *wikiChatClient {
@@ -549,12 +616,146 @@ func (c *wikiChatClient) handleAgentMessage(chunk *acp.SessionUpdateAgentMessage
 	return nil
 }
 
+// toolCallDetail builds a concise one-line detail from ACP tool-call locations:
+// the first affected path, with ":<line>" when a line number is present. Returns
+// "" when there are no locations (the UI then falls back to the title).
+// toolDetailMaxLen bounds the live detail line so a chatty tool input cannot
+// blow out the chat layout.
+const toolDetailMaxLen = 140
+
+// toolPayloadLogMaxLen bounds the verbose WIKI_ACP_DEBUG payload log lines.
+const toolPayloadLogMaxLen = 1500
+
+// toolCallDetail builds a concise one-line "what's happening" detail for a tool
+// call, drawing on whatever ACP provides. The agent's title is often a generic
+// category (e.g. "mcp"), so the detail surfaces the specifics: the affected file
+// location, else the tool input (command/query/args), else the tool output.
+func toolCallDetail(locations []acp.ToolCallLocation, rawInput any, content []acp.ToolCallContent, rawOutput any) string {
+	if len(locations) > 0 {
+		loc := locations[0]
+		if loc.Line != nil {
+			return fmt.Sprintf("%s:%d", loc.Path, *loc.Line)
+		}
+		return loc.Path
+	}
+
+	if summary := rawInputSummary(rawInput); summary != "" {
+		return summary
+	}
+
+	if summary := contentSummary(content); summary != "" {
+		return summary
+	}
+
+	return compactValue(rawOutput)
+}
+
+// rawInputSummary renders a compact, single-line summary of an ACP tool call's
+// raw input. pi-acp wraps MCP calls in an envelope — {"tool": "<name>", "args":
+// "<json>"} for a call and {"search": "<query>"} for a tool search — so those
+// are surfaced specifically (naming the actual tool + its arguments). Otherwise
+// a well-known identifying field (command, query, path, …) is used, falling back
+// to the compact JSON of the whole input.
+func rawInputSummary(rawInput any) string {
+	encoded, err := json.Marshal(rawInput)
+	if err != nil || rawInput == nil {
+		return ""
+	}
+
+	var fields map[string]any
+	if err := json.Unmarshal(encoded, &fields); err != nil {
+		return compactValue(rawInput)
+	}
+
+	// pi-acp MCP envelope: the real tool name + args live under nested keys.
+	if tool, ok := stringField(fields, "tool"); ok {
+		if args, ok := stringField(fields, "args"); ok {
+			return truncate(collapseWhitespace(tool+" "+args), toolDetailMaxLen)
+		}
+		return truncate(collapseWhitespace(tool), toolDetailMaxLen)
+	}
+	if search, ok := stringField(fields, "search"); ok {
+		return truncate(collapseWhitespace("search "+search), toolDetailMaxLen)
+	}
+
+	for _, key := range []string{"command", "file_path", "path", "query", "pattern", "url", "prompt", "description", "identifier", "name", "page", "title"} {
+		if value, ok := stringField(fields, key); ok {
+			return truncate(collapseWhitespace(value), toolDetailMaxLen)
+		}
+	}
+
+	return compactValue(rawInput)
+}
+
+// stringField returns a trimmed non-empty string value for key, or ("", false).
+func stringField(fields map[string]any, key string) (string, bool) {
+	value, ok := fields[key].(string)
+	if !ok {
+		return "", false
+	}
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return "", false
+	}
+	return value, true
+}
+
+// contentSummary returns a one-line summary of the first meaningful tool-output
+// content block (text or a diff's path).
+func contentSummary(content []acp.ToolCallContent) string {
+	for _, block := range content {
+		if block.Content != nil && block.Content.Content.Text != nil {
+			if text := strings.TrimSpace(block.Content.Content.Text.Text); text != "" {
+				return truncate(collapseWhitespace(text), toolDetailMaxLen)
+			}
+		}
+		if block.Diff != nil && strings.TrimSpace(block.Diff.Path) != "" {
+			return block.Diff.Path
+		}
+	}
+	return ""
+}
+
+// compactValue renders any value as a single-line, truncated JSON string,
+// returning "" for nil/empty values so it doesn't surface noise like "{}".
+func compactValue(value any) string {
+	if value == nil {
+		return ""
+	}
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		return ""
+	}
+	flattened := collapseWhitespace(string(encoded))
+	switch flattened {
+	case "", "{}", "[]", "null", `""`:
+		return ""
+	default:
+		return truncate(flattened, toolDetailMaxLen)
+	}
+}
+
+// collapseWhitespace flattens a value to a single line for the detail row.
+func collapseWhitespace(s string) string {
+	return strings.Join(strings.Fields(s), " ")
+}
+
 // handleToolCall sends a tool call notification to the wiki chat.
 func (c *wikiChatClient) handleToolCall(tc *acp.SessionUpdateToolCall) {
 	c.mu.Lock()
 	msgID := c.currentMsg
 	c.mu.Unlock()
 
+	// Verbose per-notification payload dump, opt-in via WIKI_ACP_DEBUG (pi-acp
+	// streams many partial updates, so this is noisy). The identifying data
+	// lives in rawInput/content/rawOutput, not the generic title.
+	if acpDebugEnabled() {
+		if raw, mErr := json.Marshal(tc); mErr == nil {
+			slog.Info("acp tool call payload", logKeyPage, c.page, "payload", truncate(string(raw), toolPayloadLogMaxLen))
+		}
+	}
+
+	detail := c.bestToolDetail(string(tc.ToolCallId), tc.Locations, tc.RawInput, tc.Content, tc.RawOutput)
 	if msgID != "" {
 		_, _ = c.chatClient.SendToolCallNotification(context.Background(), connect.NewRequest(&apiv1.SendToolCallNotificationRequest{
 			Page:       c.page,
@@ -562,9 +763,11 @@ func (c *wikiChatClient) handleToolCall(tc *acp.SessionUpdateToolCall) {
 			ToolCallId: string(tc.ToolCallId),
 			Title:      tc.Title,
 			Status:     string(tc.Status),
+			Kind:       string(tc.Kind),
+			Detail:     detail,
 		}))
 	}
-	slog.Info("tool call", logKeyPage, c.page, logKeyTool, tc.Title, "status", string(tc.Status))
+	slog.Info("tool call", logKeyPage, c.page, logKeyTool, tc.Title, "kind", string(tc.Kind), "status", string(tc.Status), "detail", detail)
 }
 
 // handleToolCallUpdate sends an updated tool call notification to the wiki chat.
@@ -585,13 +788,38 @@ func (c *wikiChatClient) handleToolCallUpdate(tcu *acp.SessionToolCallUpdate) {
 	if tcu.Title != nil {
 		title = *tcu.Title
 	}
+	kind := ""
+	if tcu.Kind != nil {
+		kind = string(*tcu.Kind)
+	}
+	if acpDebugEnabled() {
+		if raw, mErr := json.Marshal(tcu); mErr == nil {
+			slog.Info("acp tool call update payload", logKeyPage, c.page, "payload", truncate(string(raw), toolPayloadLogMaxLen))
+		}
+	}
+
+	detail := c.bestToolDetail(string(tcu.ToolCallId), tcu.Locations, tcu.RawInput, tcu.Content, tcu.RawOutput)
 	_, _ = c.chatClient.SendToolCallNotification(context.Background(), connect.NewRequest(&apiv1.SendToolCallNotificationRequest{
 		Page:       c.page,
 		MessageId:  msgID,
 		ToolCallId: string(tcu.ToolCallId),
 		Title:      title,
 		Status:     status,
+		Kind:       kind,
+		Detail:     detail,
 	}))
+
+	// One concise summary line per finished tool call (skipping the many partial
+	// streaming updates) so tool usage is greppable for optimization analysis.
+	if status == string(acp.ToolCallStatusCompleted) || status == string(acp.ToolCallStatusFailed) {
+		slog.Info("tool call finished", logKeyPage, c.page, "status", status, "detail", detail)
+	}
+}
+
+// acpDebugEnabled reports whether verbose per-notification ACP payload logging
+// is turned on via the WIKI_ACP_DEBUG environment variable.
+func acpDebugEnabled() bool {
+	return os.Getenv("WIKI_ACP_DEBUG") != ""
 }
 
 // handleThought accumulates thinking text and streams it as a collapsible section.
@@ -616,18 +844,48 @@ func (c *wikiChatClient) handleThought(chunk *acp.SessionUpdateAgentThoughtChunk
 	c.streamOrCreateReply(msgID, replyTo, thoughtText)
 }
 
-// handlePlan updates the plan entries and streams the updated text to the chat.
+// handlePlan sends a structured plan notification keyed to the current assistant message.
+// If no message exists yet, one is created first so the notification has a message ID to attach to.
 func (c *wikiChatClient) handlePlan(plan *acp.SessionUpdatePlan) {
 	c.mu.Lock()
-	c.planEntries = plan.Entries
-	fullText := c.buildFullText()
 	msgID := c.currentMsg
 	replyTo := c.replyToID
+	fullText := c.buildFullText()
 	c.mu.Unlock()
 
 	slog.Info("plan update", logKeyPage, c.page, "entry_count", len(plan.Entries))
 
-	c.streamOrCreateReply(msgID, replyTo, fullText)
+	// Ensure a message bubble exists before attaching the plan notification.
+	if msgID == "" {
+		c.streamOrCreateReply(msgID, replyTo, fullText)
+
+		c.mu.Lock()
+		msgID = c.currentMsg
+		c.mu.Unlock()
+	}
+
+	if msgID == "" {
+		slog.Error("plan update: no message ID available after create attempt, skipping plan notification", logKeyPage, c.page)
+		return
+	}
+
+	entries := make([]*apiv1.ChatPlanEntry, 0, len(plan.Entries))
+	for _, e := range plan.Entries {
+		entries = append(entries, &apiv1.ChatPlanEntry{
+			Content:  e.Content,
+			Status:   string(e.Status),
+			Priority: string(e.Priority),
+		})
+	}
+
+	// nosemgrep: go.handler-returns-nil-after-error-logged
+	if _, err := c.chatClient.SendPlanNotification(context.Background(), connect.NewRequest(&apiv1.SendPlanNotificationRequest{
+		Page:      c.page,
+		MessageId: msgID,
+		Entries:   entries,
+	})); err != nil {
+		slog.Error("failed to send plan notification", logKeyPage, c.page, logKeyError, err)
+	}
 }
 
 // streamOrCreateReply either creates a new streaming reply or edits the existing one.
@@ -673,10 +931,6 @@ func (c *wikiChatClient) buildFullText() string {
 		result = "<details><summary>Thinking...</summary>\n\n" + thought + "\n\n</details>\n\n" + response
 	}
 
-	if len(c.planEntries) > 0 {
-		result += "\n\n" + c.buildPlanSection()
-	}
-
 	if permissions != "" {
 		result += "\n\n" + permissions
 	}
@@ -684,35 +938,51 @@ func (c *wikiChatClient) buildFullText() string {
 	return result
 }
 
-// buildPlanSection renders plan entries as a markdown checklist.
-// Must be called with c.mu held.
-func (c *wikiChatClient) buildPlanSection() string {
-	var sb strings.Builder
-	_, _ = sb.WriteString("**Plan:**\n")
-
-	for _, entry := range c.planEntries {
-		switch entry.Status {
-		case acp.PlanEntryStatusCompleted:
-			_, _ = sb.WriteString("- [x] " + entry.Content + "\n")
-		case acp.PlanEntryStatusInProgress:
-			_, _ = sb.WriteString("- 🔄 " + entry.Content + "\n")
-		default: // pending
-			_, _ = sb.WriteString("- [ ] " + entry.Content + "\n")
-		}
-	}
-
-	return sb.String()
-}
-
 func (c *wikiChatClient) beginTurn(replyToID string) {
 	c.mu.Lock()
 	c.textBuf.Reset()
 	c.thoughtBuf.Reset()
 	c.permissionNotes.Reset()
-	c.planEntries = nil
 	c.replyToID = replyToID
 	c.currentMsg = ""
+	c.toolDetails = make(map[string]string)
 	c.mu.Unlock()
+}
+
+// notifyTurnStatus reports to the wiki whether an agent turn is actively in
+// progress on this page, so the UI can show the Stop button for the whole turn.
+func (c *wikiChatClient) notifyTurnStatus(active bool) {
+	_, err := c.chatClient.SendTurnStatus(context.Background(), connect.NewRequest(&apiv1.SendTurnStatusRequest{
+		Page:   c.page,
+		Active: active,
+	}))
+	// Best-effort: a missed turn-status update only affects the Stop button.
+	// nosemgrep: go.handler-returns-nil-after-error-logged
+	if err != nil {
+		slog.Error("failed to send turn status", logKeyPage, c.page, "active", active, logKeyError, err)
+	}
+}
+
+// bestToolDetail returns the most useful detail for a tool call, preferring the
+// input-derived detail (file location, or pi-acp tool name + args) and
+// remembering it per tool-call id so it survives the completion update — where
+// pi-acp drops rawInput. Only when no input detail is ever seen does it fall
+// back to the tool's output content.
+func (c *wikiChatClient) bestToolDetail(id string, locations []acp.ToolCallLocation, rawInput any, content []acp.ToolCallContent, rawOutput any) string {
+	inputDetail := toolCallDetail(locations, rawInput, nil, nil)
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.toolDetails == nil {
+		c.toolDetails = make(map[string]string)
+	}
+	if inputDetail != "" {
+		c.toolDetails[id] = inputDetail
+	}
+	if stored := c.toolDetails[id]; stored != "" {
+		return stored
+	}
+	return toolCallDetail(nil, nil, content, rawOutput)
 }
 
 // endTurn cleans up after a prompt turn completes.
@@ -1127,6 +1397,11 @@ func forwardUserMessage(ctx context.Context, entry *instanceEntry, chatClient *w
 
 	chatClient.beginTurn(msg.Id)
 	defer chatClient.endTurn()
+
+	// Mark the turn active for the whole prompt so the UI shows the Stop button
+	// during thinking and tool use, not just while awaiting the first token.
+	chatClient.notifyTurnStatus(true)
+	defer chatClient.notifyTurnStatus(false)
 
 	promptCtx, promptCancel := context.WithCancel(ctx)
 	defer promptCancel()
