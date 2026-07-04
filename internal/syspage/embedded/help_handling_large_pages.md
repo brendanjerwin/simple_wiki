@@ -33,6 +33,12 @@ Use `api_v1_PageManagementService_ReadPage` only when you truly need the whole m
 
 When editing one section, prefer `api_v1_PageManagementService_UpdatePageContent` with `old_content_markdown`, `new_content_markdown`, and `expected_version_hash`. The `old_content_markdown` should come from `ReadPageSection` when possible. That keeps the edit small and avoids rewriting unrelated content.
 
+## UpdateWholePage circuit breaker
+
+`api_v1_PageManagementService_UpdateWholePage` replaces the entire page (frontmatter + markdown). It now rejects writes where the new content is less than 50% of the existing page size, returning `FailedPrecondition` with the sizes and a pointer to safer tools. This prevents accidental page wipes when a partial payload is sent (e.g., just the header).
+
+For partial edits, use `UpdatePageContent` with `expected_version_hash`. For frontmatter-only changes, use `MergeFrontmatter` or `RemoveKeyAtPath`. To clear the body explicitly, use `ClearPageContent` with `confirm_clear=true`. Reserve `UpdateWholePage` for genuine full rewrites — and when you do, send the complete content.
+
 ## If the Tools Are Missing
 
 MCP tools are negotiated when the agent session starts. If `api_v1_PageManagementService_ReadPageOutline` or `api_v1_PageManagementService_ReadPageSection` is missing from a page agent's tool list, the agent is probably running with a stale MCP session or an old `wiki-cli` binary.

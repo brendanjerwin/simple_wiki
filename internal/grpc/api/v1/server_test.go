@@ -3033,6 +3033,87 @@ var _ = Describe("Server", func() {
 				Expect(mockPageReaderMutator.WrittenMarkdown).To(BeEmpty())
 			})
 		})
+
+		When("new content is less than 10% of a large existing page", func() {
+			BeforeEach(func() {
+				// Existing page is 9KB of content — well above the 1KB floor
+				large := strings.Repeat("This is a line of meaningful content.\n", 270)
+				mockPageReaderMutator.Markdown = wikipage.Markdown(large)
+				// New payload is only ~50 bytes — a clear partial-payload wipe
+				req.NewWholeMarkdown = "# household #chores\n\n# Title only"
+			})
+
+			It("should return a failed precondition error", func() {
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.FailedPrecondition, "would silently wipe"))
+			})
+
+			It("should name the safer alternative tools in the error", func() {
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.FailedPrecondition, "UpdatePageContent"))
+			})
+
+			It("should not return a response", func() {
+				Expect(resp).To(BeNil())
+			})
+
+			It("should not write any content", func() {
+				Expect(mockPageReaderMutator.WrittenMarkdown).To(BeEmpty())
+			})
+		})
+
+		When("new content is small but existing page is under 1KB", func() {
+			BeforeEach(func() {
+				// Existing page is ~170 bytes — below the 1KB floor
+				existing := strings.Repeat("Old content line.\n", 10)
+				mockPageReaderMutator.Markdown = wikipage.Markdown(existing)
+				req.NewWholeMarkdown = "+++\ntitle = \"Rewrite\"\n+++\n# Tiny"
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should write the new content", func() {
+				Expect(mockPageReaderMutator.WrittenMarkdown).To(ContainSubstring("Tiny"))
+			})
+		})
+
+		When("new content is a full rewrite exceeding 10% of large existing size", func() {
+			BeforeEach(func() {
+				// 2KB existing page, new content is ~1KB (50% — well above 10%)
+				existing := strings.Repeat("Old content line.\n", 120)
+				mockPageReaderMutator.Markdown = wikipage.Markdown(existing)
+				req.NewWholeMarkdown = "+++\ntitle = \"Rewrite\"\n+++\n" + strings.Repeat("New content line.\n", 60)
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should write the new content", func() {
+				Expect(mockPageReaderMutator.WrittenMarkdown).To(ContainSubstring("New content line"))
+			})
+		})
+
+		When("the existing page is empty and new content is provided", func() {
+			BeforeEach(func() {
+				mockPageReaderMutator.Markdown = wikipage.Markdown("")
+				req.NewWholeMarkdown = "# Fresh page"
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+		})
+
+		When("reading the existing markdown fails", func() {
+			BeforeEach(func() {
+				mockPageReaderMutator.MarkdownReadErr = errors.New("disk read failure")
+			})
+
+			It("should return an internal error", func() {
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.Internal, "failed to read existing page"))
+			})
+		})
 	})
 
 	Describe("GetJobStatus", func() {
