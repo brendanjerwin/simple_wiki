@@ -794,6 +794,10 @@ func (s *Server) UpdateWholePage(ctx context.Context, req *apiv1.UpdateWholePage
 		return nil, status.Errorf(codes.Internal, failedToReadFrontmatterErrFmt, err)
 	}
 
+	if guardErr := s.checkWholePageWipeGuard(wikipage.PageIdentifier(req.PageName), req.NewWholeMarkdown); guardErr != nil {
+		return nil, guardErr
+	}
+
 	// Parse frontmatter and markdown from the combined content
 	page := &wikipage.Page{
 		Identifier: req.PageName,
@@ -829,6 +833,39 @@ func (s *Server) UpdateWholePage(ctx context.Context, req *apiv1.UpdateWholePage
 	}
 
 	return &apiv1.UpdateWholePageResponse{Success: true}, nil
+}
+
+// checkWholePageWipeGuard prevents accidental page wipes from partial payloads.
+// If the new content is less than 10% of the existing page size AND the existing
+// page is at least 1KB, it returns a FailedPrecondition error naming safer tools.
+// The 1KB floor avoids blocking legitimate small-page deletions and editor saves
+// on short pages; the 10% threshold catches the dangerous case (e.g., a 50-byte
+// header wiping a 9KB page). See issue #1126.
+func (s *Server) checkWholePageWipeGuard(pageID wikipage.PageIdentifier, newContent string) error {
+	const (
+		minExistingSizeBytes = 1024
+		wipeThresholdPercent = 10
+	)
+
+	_, existingMarkdown, readErr := s.pageReaderMutator.ReadMarkdown(pageID)
+	if readErr != nil {
+		return status.Errorf(codes.Internal, "failed to read existing page content: %v", readErr)
+	}
+
+	existingSize := len(existingMarkdown)
+	newSize := len(newContent)
+	if existingSize >= minExistingSizeBytes && newSize > 0 && newSize*wipeThresholdPercent < existingSize {
+		return status.Errorf(codes.FailedPrecondition,
+			"new content (%d bytes) is only %.1f%% of current page size (%d bytes); "+
+				"this would silently wipe most of the page. "+
+				"For partial edits, use UpdatePageContent (surgical body patches with version hash), "+
+				"MergeFrontmatter (merge specific frontmatter keys), or "+
+				"ClearPageContent (explicit body clear with confirm_clear). "+
+				"For a full page rewrite, re-send with the complete content.",
+			newSize, float64(newSize)/float64(existingSize)*100, existingSize)
+	}
+
+	return nil
 }
 
 // ListTemplates implements the ListTemplates RPC.
