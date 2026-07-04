@@ -327,6 +327,35 @@ func (lc *Client) WhoIs(ctx context.Context, remoteAddr string) (*apitype.WhoIsR
 	return decodeJSON[*apitype.WhoIsResponse](body)
 }
 
+// WhoIsForService is like [Client.WhoIs] but scopes the returned CapMap to
+// capabilities that apply to the named VIP service. This enables per-service
+// capability resolution on hosts that advertise multiple VIP services.
+func (lc *Client) WhoIsForService(ctx context.Context, remoteAddr string, svcName tailcfg.ServiceName) (*apitype.WhoIsResponse, error) {
+	body, err := lc.get200(ctx, "/localapi/v0/whois?addr="+url.QueryEscape(remoteAddr)+"&svc_name="+url.QueryEscape(string(svcName)))
+	if err != nil {
+		if hs, ok := err.(httpStatusError); ok && hs.HTTPStatus == http.StatusNotFound {
+			return nil, ErrPeerNotFound
+		}
+		return nil, err
+	}
+	return decodeJSON[*apitype.WhoIsResponse](body)
+}
+
+// WhoIsForIP is like [Client.WhoIs] but scopes the returned CapMap to
+// capabilities that apply to the given destination IP. The IP may be a
+// VIP service address, the node's own tailnet address, or any other
+// routable IP the node handles.
+func (lc *Client) WhoIsForIP(ctx context.Context, remoteAddr string, dst netip.Addr) (*apitype.WhoIsResponse, error) {
+	body, err := lc.get200(ctx, "/localapi/v0/whois?addr="+url.QueryEscape(remoteAddr)+"&dst_ip="+url.QueryEscape(dst.String()))
+	if err != nil {
+		if hs, ok := err.(httpStatusError); ok && hs.HTTPStatus == http.StatusNotFound {
+			return nil, ErrPeerNotFound
+		}
+		return nil, err
+	}
+	return decodeJSON[*apitype.WhoIsResponse](body)
+}
+
 // ErrPeerNotFound is returned by [Client.WhoIs], [Client.WhoIsNodeKey] and
 // [Client.WhoIsProto] when a peer is not found.
 var ErrPeerNotFound = errors.New("peer not found")
@@ -1065,17 +1094,35 @@ func (lc *Client) DNSConfig(ctx context.Context) (*tailcfg.DNSConfig, error) {
 }
 
 // PeerByID returns a peer's current full [tailcfg.Node] looked up by its
-// [tailcfg.NodeID], in O(1) time on the daemon side. It returns an error
-// if no peer with that NodeID is in the current netmap.
+// [tailcfg.NodeID]. It returns an error if no peer with that NodeID is in the
+// current netmap.
 //
-// It is intended for callers that need the latest state of a single peer
-// without fetching the entire netmap.
+// It is intended for callers that observed a peer-mutation signal (e.g.
+// [ipn.Notify.PeerChangedPatch] or [ipn.Notify.PeersChanged]) and want the
+// latest state of the affected node without having to apply the patch
+// themselves.
 func (lc *Client) PeerByID(ctx context.Context, id tailcfg.NodeID) (*tailcfg.Node, error) {
 	body, err := lc.get200(ctx, "/localapi/v0/peer-by-id?id="+strconv.FormatInt(int64(id), 10))
 	if err != nil {
 		return nil, err
 	}
 	return decodeJSON[*tailcfg.Node](body)
+}
+
+// UserProfile returns the current [tailcfg.UserProfile] for the given
+// [tailcfg.UserID]. It returns an error if no user with that UserID is in the
+// current netmap.
+//
+// It is the LocalAPI fallback for IPN-bus consumers that see a UserID
+// referenced by a peer Node and want to resolve it to a UserProfile. Sessions
+// opted in to [ipn.NotifyPeerChanges] / [ipn.NotifyPeerPatches] also receive
+// UserProfiles automatically via [ipn.Notify.UserProfiles].
+func (lc *Client) UserProfile(ctx context.Context, id tailcfg.UserID) (*tailcfg.UserProfile, error) {
+	body, err := lc.get200(ctx, "/localapi/v0/user-profile?id="+strconv.FormatInt(int64(id), 10))
+	if err != nil {
+		return nil, err
+	}
+	return decodeJSON[*tailcfg.UserProfile](body)
 }
 
 // PingOpts contains options for the ping request.
