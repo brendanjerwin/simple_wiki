@@ -103,6 +103,7 @@ var _ = Describe("Mutator", func() {
 		now      time.Time
 		human    tailscale.IdentityValue
 		marker   *apiv1.MapMarker
+		track    *apiv1.MapTrack
 		mapState *apiv1.Map
 		err      error
 	)
@@ -126,6 +127,7 @@ var _ = Describe("Mutator", func() {
 				},
 				PopupMarkdown: "[Shed](shed)",
 				Color:         "green",
+				Tags:          []string{"tag1", "tag2"},
 			}, nil, human)
 		})
 
@@ -140,6 +142,7 @@ var _ = Describe("Mutator", func() {
 			Expect(marker.GetMetadata().GetCreatedBy()).To(Equal("alice@example.com"))
 			Expect(marker.GetMetadata().GetAutomated()).To(BeFalse())
 			Expect(marker.GetMetadata().GetSortOrder()).To(Equal(int64(1000)))
+			Expect(marker.GetTags()).To(Equal([]string{"tag1", "tag2"}))
 		})
 
 		It("should return the updated map", func() {
@@ -169,6 +172,7 @@ var _ = Describe("Mutator", func() {
 			Expect(first["lon"]).To(Equal(-72.2))
 			Expect(first["popup_markdown"]).To(Equal("[Shed](shed)"))
 			Expect(first["color"]).To(Equal("green"))
+			Expect(first["tags"]).To(Equal([]any{"tag1", "tag2"}))
 		})
 
 		It("should write wiki-managed metadata under agent.maps", func() {
@@ -187,6 +191,48 @@ var _ = Describe("Mutator", func() {
 		})
 	})
 
+	Describe("AddTrack", func() {
+		var (
+			addedMap *apiv1.Map
+			addErr   error
+		)
+
+		BeforeEach(func() {
+			track, addedMap, addErr = mutator.AddTrack(ctx, "garden_plan", "yard", &apiv1.MapTrack{
+				Label:    "Hiking Route",
+				FileHash: "abc123hash",
+				Format:   "GPX",
+				Color:    "blue",
+				Tags:     []string{"hiking", "forest"},
+				Filename: "route.gpx",
+			}, nil, human)
+		})
+
+		It("should not return an error", func() {
+			Expect(addErr).NotTo(HaveOccurred())
+		})
+
+		It("should assign correct metadata", func() {
+			Expect(track.GetMetadata().GetUid()).To(Equal("01JMAPMARKER0000000000001"))
+			Expect(track.GetMetadata().GetCreatedAt().AsTime()).To(Equal(now))
+			Expect(track.GetMetadata().GetCreatedBy()).To(Equal("alice@example.com"))
+		})
+
+		It("should return the track with correct fields", func() {
+			Expect(track.GetLabel()).To(Equal("Hiking Route"))
+			Expect(track.GetFileHash()).To(Equal("abc123hash"))
+			Expect(track.GetFormat()).To(Equal("GPX"))
+			Expect(track.GetColor()).To(Equal("blue"))
+			Expect(track.GetTags()).To(Equal([]string{"hiking", "forest"}))
+			Expect(track.GetFilename()).To(Equal("route.gpx"))
+		})
+
+		It("should update the map element counts and track list", func() {
+			Expect(addedMap.GetTracks()).To(HaveLen(1))
+			Expect(addedMap.GetTracks()[0].GetLabel()).To(Equal("Hiking Route"))
+		})
+	})
+
 	Describe("map element lifecycle", func() {
 		var (
 			fetched           *apiv1.Map
@@ -195,6 +241,7 @@ var _ = Describe("Mutator", func() {
 			createdMarkerUID  string
 			createdPolygonUID string
 			createdCircleUID  string
+			createdTrackUID   string
 		)
 
 		BeforeEach(func() {
@@ -202,6 +249,7 @@ var _ = Describe("Mutator", func() {
 				"01JMAPMARKER0000000000001",
 				"01JMAPMARKER0000000000002",
 				"01JMAPMARKER0000000000003",
+				"01JMAPMARKER0000000000004",
 			))
 
 			mapState, err = mutator.SetMapView(ctx, "garden_plan", "yard", &apiv1.MapView{
@@ -221,6 +269,7 @@ var _ = Describe("Mutator", func() {
 				Position:      &apiv1.GeoPoint{Lat: 41.1, Lon: -72.2},
 				PopupMarkdown: "Old shed",
 				Color:         "red",
+				Tags:          []string{"storage", "wooden"},
 			}, nil, human)
 			Expect(err).NotTo(HaveOccurred())
 			createdMarkerUID = marker.GetMetadata().GetUid()
@@ -230,6 +279,7 @@ var _ = Describe("Mutator", func() {
 				Position:      &apiv1.GeoPoint{Lat: 41.2, Lon: -72.3},
 				PopupMarkdown: "Updated shed",
 				Color:         "green",
+				Tags:          []string{"plants", "glass"},
 			}, nil)
 			Expect(err).NotTo(HaveOccurred())
 
@@ -246,6 +296,7 @@ var _ = Describe("Mutator", func() {
 				PopupMarkdown: "Fence line",
 				StrokeColor:   "#2563eb",
 				FillColor:     "#60a5fa",
+				Tags:          []string{"barrier", "perimeter"},
 			}, nil, human)
 			Expect(err).NotTo(HaveOccurred())
 			createdPolygonUID = polygon.GetMetadata().GetUid()
@@ -260,6 +311,7 @@ var _ = Describe("Mutator", func() {
 				PopupMarkdown: "Garden bed",
 				StrokeColor:   "#166534",
 				FillColor:     "#86efac",
+				Tags:          []string{"agriculture", "vegetables"},
 			}, nil)
 			Expect(err).NotTo(HaveOccurred())
 
@@ -270,6 +322,7 @@ var _ = Describe("Mutator", func() {
 				PopupMarkdown: "Watering zone",
 				StrokeColor:   "#0369a1",
 				FillColor:     "#7dd3fc",
+				Tags:          []string{"utility", "water"},
 			}, nil, human)
 			Expect(err).NotTo(HaveOccurred())
 			createdCircleUID = circle.GetMetadata().GetUid()
@@ -281,6 +334,26 @@ var _ = Describe("Mutator", func() {
 				PopupMarkdown: "Updated range",
 				StrokeColor:   "#7c2d12",
 				FillColor:     "#fdba74",
+				Tags:          []string{"utility", "fuel"},
+			}, nil)
+			Expect(err).NotTo(HaveOccurred())
+
+			track, _, err = mutator.AddTrack(ctx, "garden_plan", "yard", &apiv1.MapTrack{
+				Label:    "Trail",
+				FileHash: "initialhash",
+				Format:   "GeoJSON",
+				Color:    "red",
+				Tags:     []string{"easy"},
+			}, nil, human)
+			Expect(err).NotTo(HaveOccurred())
+			createdTrackUID = track.GetMetadata().GetUid()
+
+			_, _, err = mutator.UpdateTrack(ctx, "garden_plan", "yard", createdTrackUID, &apiv1.MapTrack{
+				Label:    "New Trail",
+				FileHash: "newhash",
+				Format:   "GeoJSON",
+				Color:    "blue",
+				Tags:     []string{"moderate"},
 			}, nil)
 			Expect(err).NotTo(HaveOccurred())
 
@@ -298,6 +371,8 @@ var _ = Describe("Mutator", func() {
 			mapState, err = mutator.DeletePolygon(ctx, "garden_plan", "yard", createdPolygonUID, nil)
 			Expect(err).NotTo(HaveOccurred())
 			mapState, err = mutator.DeleteCircle(ctx, "garden_plan", "yard", createdCircleUID, nil)
+			Expect(err).NotTo(HaveOccurred())
+			mapState, err = mutator.DeleteTrack(ctx, "garden_plan", "yard", createdTrackUID, nil)
 			Expect(err).NotTo(HaveOccurred())
 			err = mutator.DeleteMap(ctx, "garden_plan", "yard", nil)
 			Expect(err).NotTo(HaveOccurred())
@@ -321,6 +396,7 @@ var _ = Describe("Mutator", func() {
 			Expect(fetched.GetMarkers()[0].GetLabel()).To(Equal("Greenhouse"))
 			Expect(fetched.GetMarkers()[0].GetPosition().GetLat()).To(Equal(41.3))
 			Expect(fetched.GetMarkers()[0].GetMetadata().GetSortOrder()).To(Equal(int64(5000)))
+			Expect(fetched.GetMarkers()[0].GetTags()).To(Equal([]string{"plants", "glass"}))
 		})
 
 		It("should persist and decode updated polygon data", func() {
@@ -328,6 +404,7 @@ var _ = Describe("Mutator", func() {
 			Expect(fetched.GetPolygons()[0].GetLabel()).To(Equal("Garden"))
 			Expect(fetched.GetPolygons()[0].GetPoints()).To(HaveLen(3))
 			Expect(fetched.GetPolygons()[0].GetStrokeColor()).To(Equal("#166534"))
+			Expect(fetched.GetPolygons()[0].GetTags()).To(Equal([]string{"agriculture", "vegetables"}))
 		})
 
 		It("should persist and decode updated circle data", func() {
@@ -335,6 +412,14 @@ var _ = Describe("Mutator", func() {
 			Expect(fetched.GetCircles()[0].GetLabel()).To(Equal("Pump range"))
 			Expect(fetched.GetCircles()[0].GetRadiusMeters()).To(Equal(float64(40)))
 			Expect(fetched.GetCircles()[0].GetFillColor()).To(Equal("#fdba74"))
+			Expect(fetched.GetCircles()[0].GetTags()).To(Equal([]string{"utility", "fuel"}))
+		})
+
+		It("should persist and decode updated track data", func() {
+			Expect(fetched.GetTracks()).To(HaveLen(1))
+			Expect(fetched.GetTracks()[0].GetLabel()).To(Equal("New Trail"))
+			Expect(fetched.GetTracks()[0].GetFileHash()).To(Equal("newhash"))
+			Expect(fetched.GetTracks()[0].GetTags()).To(Equal([]string{"moderate"}))
 		})
 
 		It("should list the map outline counts", func() {
@@ -343,6 +428,7 @@ var _ = Describe("Mutator", func() {
 			Expect(outlines[0].GetMarkerCount()).To(Equal(int32(1)))
 			Expect(outlines[0].GetPolygonCount()).To(Equal(int32(1)))
 			Expect(outlines[0].GetCircleCount()).To(Equal(int32(1)))
+			Expect(outlines[0].GetTrackCount()).To(Equal(int32(1)))
 		})
 
 		It("should delete the map", func() {
@@ -399,6 +485,61 @@ var _ = Describe("Mutator", func() {
 
 		It("should not write", func() {
 			Expect(store.writes).To(Equal(0))
+		})
+	})
+
+	Describe("when adding a track with missing file hash", func() {
+		var (
+			trackErr error
+		)
+
+		BeforeEach(func() {
+			_, _, trackErr = mutator.AddTrack(ctx, "garden_plan", "yard", &apiv1.MapTrack{
+				Label:  "Bad Track",
+				Format: "GPX",
+			}, nil, human)
+		})
+
+		It("should return InvalidArgument error", func() {
+			Expect(status.Code(trackErr)).To(Equal(codes.InvalidArgument))
+			Expect(trackErr.Error()).To(ContainSubstring("file_hash is required"))
+		})
+	})
+
+	Describe("when adding a track with missing format", func() {
+		var (
+			trackErr error
+		)
+
+		BeforeEach(func() {
+			_, _, trackErr = mutator.AddTrack(ctx, "garden_plan", "yard", &apiv1.MapTrack{
+				Label:    "Bad Track",
+				FileHash: "hash123",
+			}, nil, human)
+		})
+
+		It("should return InvalidArgument error", func() {
+			Expect(status.Code(trackErr)).To(Equal(codes.InvalidArgument))
+			Expect(trackErr.Error()).To(ContainSubstring("format is required"))
+		})
+	})
+
+	Describe("when adding a track with invalid format", func() {
+		var (
+			trackErr error
+		)
+
+		BeforeEach(func() {
+			_, _, trackErr = mutator.AddTrack(ctx, "garden_plan", "yard", &apiv1.MapTrack{
+				Label:    "Bad Track",
+				FileHash: "hash123",
+				Format:   "KML",
+			}, nil, human)
+		})
+
+		It("should return InvalidArgument error", func() {
+			Expect(status.Code(trackErr)).To(Equal(codes.InvalidArgument))
+			Expect(trackErr.Error()).To(ContainSubstring("format must be GPX or GeoJSON"))
 		})
 	})
 
@@ -502,4 +643,146 @@ var _ = Describe("Mutator", func() {
 			Expect(store.writes).To(Equal(0))
 		})
 	})
+
+	Describe("Tag Isolation", func() {
+		var (
+			markerUID  string
+			polygonUID string
+			circleUID  string
+			trackUID   string
+		)
+
+		BeforeEach(func() {
+			mutator = New(store, fixedClock{now: now}, ulid.NewSequenceGenerator(
+				"01JMAPMARKER0000000000001",
+				"01JMAPMARKER0000000000002",
+				"01JMAPMARKER0000000000003",
+				"01JMAPMARKER0000000000004",
+			))
+
+			// Setup original elements
+			m, _, err := mutator.AddMarker(ctx, "garden_plan", "yard", &apiv1.MapMarker{
+				Label:    "OrigMarker",
+				Position: &apiv1.GeoPoint{Lat: 41.1, Lon: -72.2},
+				Tags:     []string{"tag-a"},
+			}, nil, human)
+			Expect(err).NotTo(HaveOccurred())
+			markerUID = m.GetMetadata().GetUid()
+
+			p, _, err := mutator.AddPolygon(ctx, "garden_plan", "yard", &apiv1.MapPolygon{
+				Label: "OrigPolygon",
+				Points: []*apiv1.GeoPoint{
+					{Lat: 41.0, Lon: -72.0},
+					{Lat: 41.0, Lon: -72.1},
+					{Lat: 41.1, Lon: -72.1},
+				},
+				Tags: []string{"tag-b"},
+			}, nil, human)
+			Expect(err).NotTo(HaveOccurred())
+			polygonUID = p.GetMetadata().GetUid()
+
+			c, _, err := mutator.AddCircle(ctx, "garden_plan", "yard", &apiv1.MapCircle{
+				Label:        "OrigCircle",
+				Center:       &apiv1.GeoPoint{Lat: 41.4, Lon: -72.5},
+				RadiusMeters: 25,
+				Tags:         []string{"tag-c"},
+			}, nil, human)
+			Expect(err).NotTo(HaveOccurred())
+			circleUID = c.GetMetadata().GetUid()
+
+			t, _, err := mutator.AddTrack(ctx, "garden_plan", "yard", &apiv1.MapTrack{
+				Label:    "OrigTrack",
+				FileHash: "hash123",
+				Format:   "GPX",
+				Tags:     []string{"tag-d"},
+			}, nil, human)
+			Expect(err).NotTo(HaveOccurred())
+			trackUID = t.GetMetadata().GetUid()
+		})
+
+		It("should clone tags slice during Marker updates to prevent shared reference mutations", func() {
+			updateTags := []string{"updated-tag-1"}
+			updatedMarker, _, err := mutator.UpdateMarker(ctx, "garden_plan", "yard", markerUID, &apiv1.MapMarker{
+				Label:    "OrigMarker",
+				Position: &apiv1.GeoPoint{Lat: 41.1, Lon: -72.2},
+				Tags:     updateTags,
+			}, nil)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Mutate slice in updatedMarker or local slice
+			updateTags[0] = "mutated-tag"
+			updatedMarker.Tags[0] = "another-mutated-tag"
+
+			// GetMap to read current persisted state
+			fetchedMap, err := mutator.GetMap(ctx, "garden_plan", "yard")
+			Expect(err).NotTo(HaveOccurred())
+
+			storedMarker := findMarker(fetchedMap.GetMarkers(), markerUID)
+			Expect(storedMarker.GetTags()[0]).To(Equal("updated-tag-1"))
+		})
+
+		It("should clone tags slice during Polygon updates to prevent shared reference mutations", func() {
+			updateTags := []string{"updated-tag-2"}
+			updatedPolygon, _, err := mutator.UpdatePolygon(ctx, "garden_plan", "yard", polygonUID, &apiv1.MapPolygon{
+				Label: "OrigPolygon",
+				Points: []*apiv1.GeoPoint{
+					{Lat: 41.0, Lon: -72.0},
+					{Lat: 41.0, Lon: -72.1},
+					{Lat: 41.1, Lon: -72.1},
+				},
+				Tags: updateTags,
+			}, nil)
+			Expect(err).NotTo(HaveOccurred())
+
+			updateTags[0] = "mutated-tag"
+			updatedPolygon.Tags[0] = "another-mutated-tag"
+
+			fetchedMap, err := mutator.GetMap(ctx, "garden_plan", "yard")
+			Expect(err).NotTo(HaveOccurred())
+
+			storedPolygon := findPolygon(fetchedMap.GetPolygons(), polygonUID)
+			Expect(storedPolygon.GetTags()[0]).To(Equal("updated-tag-2"))
+		})
+
+		It("should clone tags slice during Circle updates to prevent shared reference mutations", func() {
+			updateTags := []string{"updated-tag-3"}
+			updatedCircle, _, err := mutator.UpdateCircle(ctx, "garden_plan", "yard", circleUID, &apiv1.MapCircle{
+				Label:        "OrigCircle",
+				Center:       &apiv1.GeoPoint{Lat: 41.4, Lon: -72.5},
+				RadiusMeters: 25,
+				Tags:         updateTags,
+			}, nil)
+			Expect(err).NotTo(HaveOccurred())
+
+			updateTags[0] = "mutated-tag"
+			updatedCircle.Tags[0] = "another-mutated-tag"
+
+			fetchedMap, err := mutator.GetMap(ctx, "garden_plan", "yard")
+			Expect(err).NotTo(HaveOccurred())
+
+			storedCircle := findCircle(fetchedMap.GetCircles(), circleUID)
+			Expect(storedCircle.GetTags()[0]).To(Equal("updated-tag-3"))
+		})
+
+		It("should clone tags slice during Track updates to prevent shared reference mutations", func() {
+			updateTags := []string{"updated-tag-4"}
+			updatedTrack, _, err := mutator.UpdateTrack(ctx, "garden_plan", "yard", trackUID, &apiv1.MapTrack{
+				Label:    "OrigTrack",
+				FileHash: "hash123",
+				Format:   "GPX",
+				Tags:     updateTags,
+			}, nil)
+			Expect(err).NotTo(HaveOccurred())
+
+			updateTags[0] = "mutated-tag"
+			updatedTrack.Tags[0] = "another-mutated-tag"
+
+			fetchedMap, err := mutator.GetMap(ctx, "garden_plan", "yard")
+			Expect(err).NotTo(HaveOccurred())
+
+			storedTrack := findTrack(fetchedMap.GetTracks(), trackUID)
+			Expect(storedTrack.GetTags()[0]).To(Equal("updated-tag-4"))
+		})
+	})
 })
+

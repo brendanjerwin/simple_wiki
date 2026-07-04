@@ -105,6 +105,32 @@ service MapService {
         "Delete one circle by stable uid and advance the map sync token.";
   }
 
+  // AddTrack — see (api.v1.description).
+  rpc AddTrack(AddTrackRequest) returns (AddTrackResponse) {
+    option (api.v1.description) =
+        "Add a track to a map. The wiki assigns uid, created_at, updated_at, "
+        "created_by, automated, sparse sort_order, and map sync metadata.";
+  }
+
+  // UpdateTrack — see (api.v1.description).
+  rpc UpdateTrack(UpdateTrackRequest) returns (UpdateTrackResponse) {
+    option (api.v1.description) =
+        "Update user-mutable fields on an existing track while preserving "
+        "stable uid and created metadata.";
+  }
+
+  // DeleteTrack — see (api.v1.description).
+  rpc DeleteTrack(DeleteTrackRequest) returns (DeleteTrackResponse) {
+    option (api.v1.description) =
+        "Delete one track by stable uid and advance the map sync token.";
+  }
+
+  // GetTrackGeometry — see (api.v1.description).
+  rpc GetTrackGeometry(GetTrackGeometryRequest) returns (GetTrackGeometryResponse) {
+    option (api.v1.description) = "Get track geometry segments for a track element.";
+    option (api.v1.read_only) = true;
+  }
+
   // ReorderElement — see (api.v1.description).
   rpc ReorderElement(ReorderElementRequest) returns (ReorderElementResponse) {
     option (api.v1.description) =
@@ -183,6 +209,7 @@ enum MapElementType {
   MAP_ELEMENT_TYPE_MARKER = 1;
   MAP_ELEMENT_TYPE_POLYGON = 2;
   MAP_ELEMENT_TYPE_CIRCLE = 3;
+  MAP_ELEMENT_TYPE_TRACK = 4;
 }
 
 message GeoPoint {
@@ -228,6 +255,7 @@ message MapMarker {
   GeoPoint position = 3;
   string popup_markdown = 4;
   string color = 5;
+  repeated string tags = 6;
 }
 
 message MapPolygon {
@@ -237,6 +265,7 @@ message MapPolygon {
   string popup_markdown = 4;
   string stroke_color = 5;
   string fill_color = 6;
+  repeated string tags = 7;
 }
 
 message MapCircle {
@@ -247,6 +276,17 @@ message MapCircle {
   string popup_markdown = 5;
   string stroke_color = 6;
   string fill_color = 7;
+  repeated string tags = 8;
+}
+
+message MapTrack {
+  MapElementMetadata metadata = 1;
+  string label = 2;
+  string file_hash = 3;
+  string format = 4; // GPX or GeoJSON
+  string color = 5;
+  repeated string tags = 6;
+  string filename = 7;
 }
 
 message Map {
@@ -259,6 +299,7 @@ message Map {
   repeated MapCircle circles = 7;
   google.protobuf.Timestamp updated_at = 8;
   int64 sync_token = 9;
+  repeated MapTrack tracks = 10;
 }
 
 message MapOutline {
@@ -269,6 +310,7 @@ message MapOutline {
   int32 marker_count = 5;
   int32 polygon_count = 6;
   int32 circle_count = 7;
+  int32 track_count = 8;
 }
 
 message MapElementOutline {
@@ -423,6 +465,56 @@ message DeleteCircleResponse {
   Map map = 1;
 }
 
+message AddTrackRequest {
+  string page = 1;
+  string map_name = 2;
+  MapTrack track = 3;
+  google.protobuf.Timestamp expected_updated_at = 4;
+}
+
+message AddTrackResponse {
+  MapTrack track = 1;
+  Map map = 2;
+}
+
+message UpdateTrackRequest {
+  string page = 1;
+  string map_name = 2;
+  string uid = 3;
+  MapTrack track = 4;
+  google.protobuf.Timestamp expected_updated_at = 5;
+}
+
+message UpdateTrackResponse {
+  MapTrack track = 1;
+  Map map = 2;
+}
+
+message DeleteTrackRequest {
+  string page = 1;
+  string map_name = 2;
+  string uid = 3;
+  google.protobuf.Timestamp expected_updated_at = 4;
+}
+
+message DeleteTrackResponse {
+  Map map = 1;
+}
+
+message GetTrackGeometryRequest {
+  string page = 1;
+  string map_name = 2;
+  string uid = 3;
+}
+
+message TrackSegment {
+  repeated GeoPoint points = 1;
+}
+
+message GetTrackGeometryResponse {
+  repeated TrackSegment segments = 1;
+}
+
 message ReorderElementRequest {
   string page = 1;
   string map_name = 2;
@@ -501,6 +593,7 @@ message GetElementResponse {
   MapMarker marker = 1;
   MapPolygon polygon = 2;
   MapCircle circle = 3;
+  MapTrack track = 4;
 }
 
 message FindMarkersRequest {

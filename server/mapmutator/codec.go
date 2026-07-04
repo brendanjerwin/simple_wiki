@@ -36,6 +36,11 @@ const (
 	createdByKey   = "created_by"
 	automatedKey   = "automated"
 	sortOrderKey   = "sort_order"
+	tracksKey      = "tracks"
+	fileHashKey    = "file_hash"
+	formatKey      = "format"
+	tagsKey        = "tags"
+	filenameKey    = "filename"
 )
 
 func mapExists(fm wikipage.FrontMatter, mapName string) bool {
@@ -82,6 +87,7 @@ func decodeMap(fm wikipage.FrontMatter, page, mapName string) *apiv1.Map {
 			Position:      decodePoint(rawMarker),
 			PopupMarkdown: decodeString(rawMarker[popupKey]),
 			Color:         decodeString(rawMarker[colorKey]),
+			Tags:          decodeStringSlice(rawMarker[tagsKey]),
 		})
 	}
 
@@ -99,6 +105,7 @@ func decodeMap(fm wikipage.FrontMatter, page, mapName string) *apiv1.Map {
 			PopupMarkdown: decodeString(rawPolygon[popupKey]),
 			StrokeColor:   decodeString(rawPolygon[strokeKey]),
 			FillColor:     decodeString(rawPolygon[fillKey]),
+			Tags:          decodeStringSlice(rawPolygon[tagsKey]),
 		})
 	}
 
@@ -117,6 +124,25 @@ func decodeMap(fm wikipage.FrontMatter, page, mapName string) *apiv1.Map {
 			PopupMarkdown: decodeString(rawCircle[popupKey]),
 			StrokeColor:   decodeString(rawCircle[strokeKey]),
 			FillColor:     decodeString(rawCircle[fillKey]),
+			Tags:          decodeStringSlice(rawCircle[tagsKey]),
+		})
+	}
+
+	trackMetadataByUID := nestedMap(agentMap, tracksKey)
+	for _, raw := range decodeSlice(userMap[tracksKey]) {
+		rawTrack, ok := raw.(map[string]any)
+		if !ok {
+			continue
+		}
+		uid := decodeString(rawTrack[uidKey])
+		out.Tracks = append(out.Tracks, &apiv1.MapTrack{
+			Metadata: decodeMetadata(nestedMap(trackMetadataByUID, uid), uid),
+			Label:    decodeString(rawTrack[labelKey]),
+			FileHash: decodeString(rawTrack[fileHashKey]),
+			Format:   decodeString(rawTrack[formatKey]),
+			Color:    decodeString(rawTrack[colorKey]),
+			Tags:     decodeStringSlice(rawTrack[tagsKey]),
+			Filename: decodeString(rawTrack[filenameKey]),
 		})
 	}
 
@@ -136,6 +162,7 @@ func encodeMap(fm wikipage.FrontMatter, mapState *apiv1.Map) {
 	userMap[markersKey] = encodeMarkersUserData(mapState.GetMarkers())
 	userMap[polygonsKey] = encodePolygonsUserData(mapState.GetPolygons())
 	userMap[circlesKey] = encodeCirclesUserData(mapState.GetCircles())
+	userMap[tracksKey] = encodeTracksUserData(mapState.GetTracks())
 
 	agent := ensureNestedMap(fm, agentKey)
 	agentMaps := ensureNestedMap(agent, mapsKey)
@@ -147,6 +174,7 @@ func encodeMap(fm wikipage.FrontMatter, mapState *apiv1.Map) {
 	agentMap[markersKey] = encodeMarkerMetadata(mapState.GetMarkers())
 	agentMap[polygonsKey] = encodePolygonMetadata(mapState.GetPolygons())
 	agentMap[circlesKey] = encodeCircleMetadata(mapState.GetCircles())
+	agentMap[tracksKey] = encodeTrackMetadata(mapState.GetTracks())
 }
 
 func deleteMapData(fm wikipage.FrontMatter, mapName string) {
@@ -207,6 +235,9 @@ func encodeMarkersUserData(markers []*apiv1.MapMarker) []any {
 			lonKey:   marker.GetPosition().GetLon(),
 		}
 		addOptionalCommonFields(row, marker.GetPopupMarkdown(), marker.GetColor(), "", "")
+		if len(marker.GetTags()) > 0 {
+			row[tagsKey] = encodeStringSlice(marker.GetTags())
+		}
 		out = append(out, row)
 	}
 	return out
@@ -224,6 +255,9 @@ func encodePolygonsUserData(polygons []*apiv1.MapPolygon) []any {
 			pointsKey: encodePoints(polygon.GetPoints()),
 		}
 		addOptionalCommonFields(row, polygon.GetPopupMarkdown(), "", polygon.GetStrokeColor(), polygon.GetFillColor())
+		if len(polygon.GetTags()) > 0 {
+			row[tagsKey] = encodeStringSlice(polygon.GetTags())
+		}
 		out = append(out, row)
 	}
 	return out
@@ -243,7 +277,44 @@ func encodeCirclesUserData(circles []*apiv1.MapCircle) []any {
 			radiusKey: circle.GetRadiusMeters(),
 		}
 		addOptionalCommonFields(row, circle.GetPopupMarkdown(), "", circle.GetStrokeColor(), circle.GetFillColor())
+		if len(circle.GetTags()) > 0 {
+			row[tagsKey] = encodeStringSlice(circle.GetTags())
+		}
 		out = append(out, row)
+	}
+	return out
+}
+
+func encodeTracksUserData(tracks []*apiv1.MapTrack) []any {
+	out := make([]any, 0, len(tracks))
+	for _, track := range tracks {
+		if track == nil {
+			continue
+		}
+		row := map[string]any{
+			uidKey:      track.GetMetadata().GetUid(),
+			labelKey:    track.GetLabel(),
+			fileHashKey: track.GetFileHash(),
+			formatKey:   track.GetFormat(),
+		}
+		if track.GetFilename() != "" {
+			row[filenameKey] = track.GetFilename()
+		}
+		if track.GetColor() != "" {
+			row[colorKey] = track.GetColor()
+		}
+		if len(track.GetTags()) > 0 {
+			row[tagsKey] = encodeStringSlice(track.GetTags())
+		}
+		out = append(out, row)
+	}
+	return out
+}
+
+func encodeStringSlice(slice []string) []any {
+	out := make([]any, 0, len(slice))
+	for _, s := range slice {
+		out = append(out, s)
 	}
 	return out
 }
@@ -288,6 +359,16 @@ func encodeCircleMetadata(circles []*apiv1.MapCircle) map[string]any {
 	for _, circle := range circles {
 		if circle != nil {
 			encodeMetadata(out, circle.GetMetadata())
+		}
+	}
+	return out
+}
+
+func encodeTrackMetadata(tracks []*apiv1.MapTrack) map[string]any {
+	out := map[string]any{}
+	for _, track := range tracks {
+		if track != nil {
+			encodeMetadata(out, track.GetMetadata())
 		}
 	}
 	return out
@@ -378,6 +459,20 @@ func decodeString(raw any) string {
 		return typed
 	}
 	return ""
+}
+
+func decodeStringSlice(raw any) []string {
+	slice := decodeSlice(raw)
+	if slice == nil {
+		return nil
+	}
+	out := make([]string, 0, len(slice))
+	for _, item := range slice {
+		if str, ok := item.(string); ok {
+			out = append(out, str)
+		}
+	}
+	return out
 }
 
 func decodeBool(raw any) bool {

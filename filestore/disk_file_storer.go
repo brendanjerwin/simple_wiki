@@ -82,6 +82,24 @@ func (s *DiskFileStorer) Delete(hash string) error {
 	return nil
 }
 
+// Open opens the file identified by its hash for reading.
+func (s *DiskFileStorer) Open(hash string) (io.ReadCloser, error) {
+	if err := validateHashPath(hash); err != nil {
+		return nil, err
+	}
+
+	filePath := filepath.Join(s.dataDir, hash+uploadFileExt)
+	f, err := os.Open(filePath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, os.ErrNotExist
+		}
+		return nil, fmt.Errorf("failed to open file: %w", err)
+	}
+	return f, nil
+}
+
+
 // validateHashPath validates that the hash does not contain path traversal characters or null bytes.
 func validateHashPath(hash string) error {
 	if strings.Contains(hash, "/") || strings.Contains(hash, "..") ||

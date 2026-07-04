@@ -22,6 +22,7 @@ type mockFileStorer struct {
 	StoreFunc   func(content io.Reader) (filestore.FileInfo, error)
 	GetInfoFunc func(hash string) (filestore.FileInfo, error)
 	DeleteFunc  func(hash string) error
+	OpenFunc    func(hash string) (io.ReadCloser, error)
 }
 
 func (m *mockFileStorer) Store(content io.Reader) (filestore.FileInfo, error) {
@@ -34,6 +35,13 @@ func (m *mockFileStorer) GetInfo(hash string) (filestore.FileInfo, error) {
 
 func (m *mockFileStorer) Delete(hash string) error {
 	return m.DeleteFunc(hash)
+}
+
+func (m *mockFileStorer) Open(hash string) (io.ReadCloser, error) {
+	if m.OpenFunc != nil {
+		return m.OpenFunc(hash)
+	}
+	return nil, os.ErrNotExist
 }
 
 func mustNewServerWithFileStorer(
