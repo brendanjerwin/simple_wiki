@@ -109,6 +109,28 @@ func checkVersionCompatibility(baseURL string) error {
 		return nil // dev build, skip check
 	}
 
+	serverCommit, err := fetchServerCommit(baseURL)
+	if err != nil {
+		return err
+	}
+
+	if serverCommit != "" && !commitsMatch(commit, serverCommit) {
+		return fmt.Errorf(
+			"VERSION MISMATCH: this wiki-cli was built from commit %.8s but the wiki server is running %s\n\n"+
+				"Download the latest version:\n"+
+				"  curl -o wiki-cli %s/cli/wiki-cli-$(uname -s | tr '[:upper:]' '[:lower:]')-$(uname -m | sed 's/x86_64/amd64/' | sed 's/aarch64/arm64/') && chmod +x wiki-cli\n\n"+
+				"Or manually from: %s/cli/",
+			commit, serverCommit, baseURL, baseURL,
+		)
+	}
+
+	return nil
+}
+
+// fetchServerCommit calls the wiki's GetVersion endpoint and returns the
+// server's reported commit. Connectivity/protocol failures return an
+// "UNREACHABLE:"-prefixed error.
+func fetchServerCommit(baseURL string) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), versionCheckTimeoutMs*time.Millisecond)
 	defer cancel()
 
@@ -118,14 +140,14 @@ func checkVersionCompatibility(baseURL string) error {
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, reqURL, bytes.NewReader([]byte("{}")))
 	if err != nil {
-		return fmt.Errorf("UNREACHABLE: could not build version check request for %s: %w", baseURL, err)
+		return "", fmt.Errorf("UNREACHABLE: could not build version check request for %s: %w", baseURL, err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Connect-Protocol-Version", "1")
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return fmt.Errorf("UNREACHABLE: cannot connect to wiki server at %s\n\n"+
+		return "", fmt.Errorf("UNREACHABLE: cannot connect to wiki server at %s\n\n"+
 			"Ensure the wiki is running and the URL is correct.\n"+
 			"Set WIKI_URL or pass --url to override (default: %s)",
 			baseURL, defaultWikiURL)
@@ -133,30 +155,34 @@ func checkVersionCompatibility(baseURL string) error {
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("UNREACHABLE: wiki server at %s returned HTTP %d during version check", baseURL, resp.StatusCode)
+		return "", fmt.Errorf("UNREACHABLE: wiki server at %s returned HTTP %d during version check", baseURL, resp.StatusCode)
 	}
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return fmt.Errorf("UNREACHABLE: failed to read version response from %s: %w", baseURL, err)
+		return "", fmt.Errorf("UNREACHABLE: failed to read version response from %s: %w", baseURL, err)
 	}
 
 	var ver versionResponse
 	if err := json.Unmarshal(body, &ver); err != nil {
-		return fmt.Errorf("UNREACHABLE: wiki server at %s returned invalid version response", baseURL)
+		return "", fmt.Errorf("UNREACHABLE: wiki server at %s returned invalid version response", baseURL)
 	}
 
-	if ver.Commit != "" && !commitsMatch(commit, ver.Commit) {
-		return fmt.Errorf(
-			"VERSION MISMATCH: this wiki-cli was built from commit %.8s but the wiki server is running %s\n\n"+
-				"Download the latest version:\n"+
-				"  curl -o wiki-cli %s/cli/wiki-cli-$(uname -s | tr '[:upper:]' '[:lower:]')-$(uname -m | sed 's/x86_64/amd64/' | sed 's/aarch64/arm64/') && chmod +x wiki-cli\n\n"+
-				"Or manually from: %s/cli/",
-			commit, ver.Commit, baseURL, baseURL,
-		)
-	}
+	return ver.Commit, nil
+}
 
-	return nil
+// serverVersionMismatch reports whether the wiki server is reachable AND running
+// a different commit than this binary. Dev builds, unreachable servers, and
+// empty responses return false so the pool never self-restarts spuriously.
+func serverVersionMismatch(baseURL string) bool {
+	if commit == "dev" {
+		return false
+	}
+	serverCommit, err := fetchServerCommit(baseURL)
+	if err != nil || serverCommit == "" {
+		return false
+	}
+	return !commitsMatch(commit, serverCommit)
 }
 
 // commitsMatch checks whether the CLI's embedded commit matches the server's
