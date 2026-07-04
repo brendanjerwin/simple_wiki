@@ -51,6 +51,7 @@ See [[help-hashtags]] and [[help-search]] for the full grammar.
 
 - [[help-alerts]] — Styled callout boxes (note, tip, warning, caution)
 - [[help-caldav]] — Bidirectional checklist sync with native task apps (Apple Reminders, DAVx5)
+- [[help-chat]] — AI assistant chat panel with live tool-use and plan progress
 - [[help-google-keep]] — Per-user Google Keep bridge (unofficial — read trust model)
 - [[help-hashtags]] — Page-level hashtag tagging
 - [[help-handling-large-pages]] — Strategies for trimming, splitting, and navigating large pages
