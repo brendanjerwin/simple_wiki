@@ -32,6 +32,7 @@ const sampleMessages: ChatMessageState[] = [
     reactions: [],
     edited: false,
     toolCalls: [],
+    plan: [],
     sequence: 1n,
   },
   {
@@ -45,6 +46,7 @@ const sampleMessages: ChatMessageState[] = [
     reactions: [{ emoji: '👍', reactors: ['Brendan'], count: 1 }],
     edited: false,
     toolCalls: [],
+    plan: [],
     sequence: 2n,
   },
   {
@@ -58,6 +60,7 @@ const sampleMessages: ChatMessageState[] = [
     reactions: [],
     edited: false,
     toolCalls: [],
+    plan: [],
     sequence: 3n,
   },
   {
@@ -71,6 +74,7 @@ const sampleMessages: ChatMessageState[] = [
     reactions: [],
     edited: true,
     toolCalls: [],
+    plan: [],
     sequence: 4n,
   },
 ];

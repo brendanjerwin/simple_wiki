@@ -29,16 +29,6 @@
           }
         ]
       }
-    ],
-    "Stop": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "./.claude/hooks/halt-verification-reminder.sh"
-          }
-        ]
-      }
     ]
   }
 }

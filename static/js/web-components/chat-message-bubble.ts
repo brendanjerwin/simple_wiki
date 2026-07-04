@@ -1,9 +1,9 @@
 import { LitElement, html, css, nothing } from 'lit';
-import { property } from 'lit/decorators.js';
+import { property, state } from 'lit/decorators.js';
 import { unsafeHTML } from 'lit/directives/unsafe-html.js';
 import { colorCSS, typographyCSS } from './shared-styles.js';
 import { Sender } from '../gen/api/v1/chat_pb.js';
-import type { ToolCallState } from './page-chat-panel.js';
+import type { ToolCallState, PlanEntryState } from './page-chat-panel.js';
 
 export interface ReactionGroup {
   emoji: string;
@@ -120,26 +120,122 @@ export class ChatMessageBubble extends LitElement {
       }
 
       .tool-calls {
+        margin-top: 6px;
         display: flex;
         flex-wrap: wrap;
+        align-items: flex-start;
         gap: 4px;
-        margin-top: 6px;
       }
 
+      /* Finished tool call: collapsed to the kind glyph (primary) with the
+         status as small subtext (full label on hover via the title attribute). */
       .tool-call-pill {
         display: inline-flex;
-        align-items: center;
-        gap: 4px;
-        padding: 2px 8px;
+        align-items: flex-end;
+        gap: 1px;
+        padding: 2px 5px;
         border-radius: 10px;
         background: rgba(255, 255, 255, 0.08);
+        border: 1px solid var(--color-border-subtle);
+        color: var(--color-text-muted);
+        cursor: default;
+      }
+
+      .tool-call-pill .kind-glyph {
+        font-size: 0.9rem;
+      }
+
+      .tool-call-pill .status-icon {
+        font-size: 0.6rem;
+      }
+
+      /* Live expanded tool call row — takes its own full-width line */
+      .tool-call-live {
+        flex: 1 1 100%;
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        padding: 4px 8px;
+        border-radius: 6px;
+        background: rgba(255, 255, 255, 0.06);
         border: 1px solid var(--color-border-subtle);
         font-size: 0.75rem;
         color: var(--color-text-muted);
       }
 
-      .tool-call-pill .status-icon {
+      .tool-call-live-header {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+
+      .tool-call-live-header .status-icon {
+        font-size: 0.8rem;
+      }
+
+      .tool-call-live-title {
+        flex: 1;
+        font-weight: 500;
+        color: var(--color-text-primary);
+      }
+
+      .tool-call-elapsed {
         font-size: 0.7rem;
+        color: var(--color-text-muted);
+        font-variant-numeric: tabular-nums;
+      }
+
+      .tool-call-detail {
+        font-size: 0.7rem;
+        color: var(--color-text-muted);
+        max-height: 4.2em;
+        overflow: auto;
+        white-space: pre-wrap;
+        word-break: break-all;
+        font-family: monospace;
+        line-height: 1.4;
+      }
+
+      /* Plan block */
+      .plan-block {
+        margin-top: 6px;
+        padding: 6px 10px;
+        border-radius: 6px;
+        background: rgba(255, 255, 255, 0.04);
+        border: 1px solid var(--color-border-subtle);
+        font-size: 0.75rem;
+      }
+
+      .plan-header {
+        font-size: 0.7rem;
+        font-weight: 600;
+        color: var(--color-text-muted);
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        margin-bottom: 4px;
+      }
+
+      .plan-entry {
+        display: flex;
+        align-items: flex-start;
+        gap: 6px;
+        padding: 2px 0;
+        color: var(--color-text-muted);
+        line-height: 1.4;
+      }
+
+      .plan-entry.in-progress {
+        color: var(--color-text-primary);
+        font-weight: 500;
+      }
+
+      .plan-entry.completed {
+        opacity: 0.6;
+      }
+
+      .plan-entry-icon {
+        flex-shrink: 0;
+        margin-top: 1px;
       }
     `,
   ];
@@ -171,6 +267,14 @@ export class ChatMessageBubble extends LitElement {
   @property({ attribute: false })
   declare toolCalls: ToolCallState[];
 
+  @property({ attribute: false })
+  declare plan: PlanEntryState[];
+
+  @state()
+  private declare _nowMs: number;
+
+  private _elapsedTimerId: ReturnType<typeof setInterval> | null = null;
+
   constructor() {
     super();
     this.messageId = '';
@@ -182,6 +286,49 @@ export class ChatMessageBubble extends LitElement {
     this.replyToId = '';
     this.reactions = [];
     this.toolCalls = [];
+    this.plan = [];
+    this._nowMs = Date.now();
+  }
+
+  private _hasLiveToolCall(): boolean {
+    return this.toolCalls.some((tc) => tc.status === 'pending' || tc.status === 'in_progress');
+  }
+
+  override connectedCallback() {
+    super.connectedCallback();
+    // Restart the timer if we are re-attached to the DOM with live tool calls
+    // already set (a reconnect may not trigger updated()). _startElapsedTimer is
+    // a no-op when there are no live tool calls or the timer is already running.
+    this._startElapsedTimer();
+  }
+
+  override disconnectedCallback() {
+    super.disconnectedCallback();
+    this._stopElapsedTimer();
+  }
+
+  private _startElapsedTimer() {
+    if (this._elapsedTimerId !== null) return;
+    if (!this._hasLiveToolCall()) return;
+    this._elapsedTimerId = setInterval(() => {
+      this._nowMs = Date.now();
+    }, 1000);
+  }
+
+  private _stopElapsedTimer() {
+    if (this._elapsedTimerId !== null) {
+      clearInterval(this._elapsedTimerId);
+      this._elapsedTimerId = null;
+    }
+  }
+
+  override updated() {
+    // Start or stop the timer based on whether there are live tool calls
+    if (this._hasLiveToolCall()) {
+      this._startElapsedTimer();
+    } else {
+      this._stopElapsedTimer();
+    }
   }
 
   override render() {
@@ -210,6 +357,7 @@ export class ChatMessageBubble extends LitElement {
             : html`${this.content}`}
         </div>
         ${this._renderToolCalls()}
+        ${this._renderPlan()}
         ${this.edited
           ? html`<div class="edited-indicator">(edited)</div>`
           : nothing}
@@ -233,11 +381,39 @@ export class ChatMessageBubble extends LitElement {
 
   private _toolCallStatusIcon(status: string): string {
     switch (status) {
-      case 'running': return '\u23F3';  // hourglass
-      case 'complete': return '\u2705'; // check mark
-      case 'error': return '\u274C';    // cross mark
-      default: return '\u2022';         // bullet
+      case 'pending': return '•';   // bullet — neutral dot
+      case 'in_progress': return '⏳'; // hourglass
+      case 'completed': return '✅';  // check mark
+      case 'failed': return '❌';     // cross mark
+      default: return '•';           // bullet
     }
+  }
+
+  private _kindGlyph(kind: string): string {
+    switch (kind) {
+      case 'read': return '📄';
+      case 'edit': return '✏️';
+      case 'delete': return '🗑️';
+      case 'move': return '↔️';
+      case 'search': return '🔍';
+      case 'execute': return '⚡';
+      case 'think': return '💭';
+      case 'fetch': return '🌐';
+      case 'switch_mode': return '🔀';
+      // ACP "other" (e.g. MCP tool calls) and unknown kinds get a generic glyph
+      // so the collapsed pill always has a primary icon.
+      default: return '🔧';
+    }
+  }
+
+  private _formatElapsedMs(elapsedMs: number): string {
+    const elapsedSec = Math.floor(elapsedMs / 1000);
+    if (elapsedSec < 60) {
+      return `${elapsedSec}s`;
+    }
+    const elapsedMin = Math.floor(elapsedSec / 60);
+    const remainingSec = elapsedSec % 60;
+    return `${elapsedMin}m${remainingSec}s`;
   }
 
   private _renderToolCalls() {
@@ -245,12 +421,72 @@ export class ChatMessageBubble extends LitElement {
 
     return html`
       <div class="tool-calls">
-        ${this.toolCalls.map(
-          (tc) => html`
-            <span class="tool-call-pill">
-              <span class="status-icon">${this._toolCallStatusIcon(tc.status)}</span>
-              ${tc.title}
-            </span>
+        ${this.toolCalls.map((tc) => this._renderToolCall(tc))}
+      </div>
+    `;
+  }
+
+  private _renderToolCall(tc: ToolCallState) {
+    const isLive = tc.status === 'pending' || tc.status === 'in_progress';
+
+    if (isLive) {
+      // startedAtMs is absent for historical tool calls (not replayed with a
+      // timestamp); only show elapsed when we have a sane, finite value so we
+      // never render "NaNs".
+      const elapsedMs = this._nowMs - tc.startedAtMs;
+      const showElapsed = Number.isFinite(elapsedMs) && elapsedMs >= 0;
+      const kindGlyph = this._kindGlyph(tc.kind);
+      return html`
+        <div class="tool-call-live">
+          <div class="tool-call-live-header">
+            <span class="status-icon">${this._toolCallStatusIcon(tc.status)}</span>
+            ${kindGlyph ? html`<span class="kind-glyph">${kindGlyph}</span>` : nothing}
+            <span class="tool-call-live-title">${tc.title}</span>
+            ${showElapsed
+              ? html`<span class="tool-call-elapsed">${this._formatElapsedMs(elapsedMs)}</span>`
+              : nothing}
+          </div>
+          ${tc.detail
+            ? html`<div class="tool-call-detail">${tc.detail}</div>`
+            : nothing}
+        </div>
+      `;
+    }
+
+    // Completed or failed: collapse to icons to save space — the tool kind glyph
+    // as the primary mark with the status as small subtext. The full label (tool
+    // name + args) is preserved in the title attribute so it shows on hover.
+    const label = tc.detail ? `${tc.title}: ${tc.detail}` : tc.title;
+    return html`
+      <span class="tool-call-pill" title="${label}">
+        <span class="kind-glyph">${this._kindGlyph(tc.kind)}</span>
+        <span class="status-icon">${this._toolCallStatusIcon(tc.status)}</span>
+      </span>
+    `;
+  }
+
+  private _planEntryIcon(status: string): string {
+    switch (status) {
+      case 'completed': return '☑';
+      case 'in_progress': return '🔄';
+      default: return '☐';
+    }
+  }
+
+  private _renderPlan() {
+    // A message legitimately may have no plan; tolerate an absent value rather
+    // than dereferencing undefined (e.g. message state set without a plan field).
+    if (!this.plan || this.plan.length === 0) return nothing;
+
+    return html`
+      <div class="plan-block">
+        <div class="plan-header">Plan</div>
+        ${this.plan.map(
+          (entry) => html`
+            <div class="plan-entry ${entry.status}">
+              <span class="plan-entry-icon">${this._planEntryIcon(entry.status)}</span>
+              <span class="plan-entry-content">${entry.content}</span>
+            </div>
           `,
         )}
       </div>
