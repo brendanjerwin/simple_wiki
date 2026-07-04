@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"math"
 	"time"
 
 	"github.com/google/uuid"
@@ -91,16 +92,9 @@ func (j *AgentTurnJob) Execute() error {
 		return nil
 	}
 
-	// Single-in-flight: skip this fire when the schedule is already RUNNING. A
-	// stuck RUNNING (e.g. the pool died mid-turn) eventually clears via
-	// awaitOutcome's hard timeout, after which the next cron fire proceeds.
-	// Without this guard, overlapping fires dispatch a new turn but then fail
-	// the RUNNING -> RUNNING state-machine transition, leaving the new
-	// dispatch's completion channel orphaned and the schedule status frozen
-	// at the original RUNNING.
-	if snapshot.GetLastStatus() == apiv1.ScheduleStatus_SCHEDULE_STATUS_RUNNING {
-		slog.Info("agent turn: skipping fire — previous run still in flight",
-			logKeyPage, j.page, logKeyScheduleID, j.scheduleID)
+	// Staleness-aware single-in-flight guard (see guardRunning). Skips genuinely
+	// in-flight runs and reclaims zombie RUNNING schedules before dispatching.
+	if j.guardRunning(snapshot) {
 		return nil
 	}
 
@@ -149,6 +143,47 @@ func (j *AgentTurnJob) Execute() error {
 	return nil
 }
 
+// guardRunning implements the staleness-aware single-in-flight guard. It returns
+// true when this fire should be skipped.
+//
+// last_run is server-stamped on every status transition (including the RUNNING
+// transition), so for a RUNNING schedule it reflects when the current run
+// started.
+//
+//   - FRESH run (age < reclaimThreshold): the turn is genuinely in flight; skip
+//     this fire to prevent overlapping dispatches. A RUNNING → RUNNING transition
+//     would be illegal and would orphan the completion channel.
+//   - STALE run (age >= reclaimThreshold): the previous run is a zombie (e.g. the
+//     pool process died before recording a terminal status). Reclaim it by writing
+//     TIMEOUT for the stuck run and return false so the caller dispatches a fresh
+//     turn. If the reclaim transition itself fails, skip rather than corrupt state.
+//
+// GetLastRun() may be nil on a brand-new schedule; nil.AsTime() returns the zero
+// time, making time.Since huge → treated as stale, which is safe (a nil last_run
+// should never appear on a RUNNING schedule).
+func (j *AgentTurnJob) guardRunning(snapshot *apiv1.AgentSchedule) bool {
+	if snapshot.GetLastStatus() != apiv1.ScheduleStatus_SCHEDULE_STATUS_RUNNING {
+		return false
+	}
+
+	age := time.Since(snapshot.GetLastRun().AsTime())
+	if age < j.reclaimThreshold() {
+		slog.Info("agent turn: skipping fire — previous run still in flight",
+			logKeyPage, j.page, logKeyScheduleID, j.scheduleID)
+		return true
+	}
+
+	msg := fmt.Sprintf("reclaimed stale RUNNING after %s", age.Round(time.Second))
+	slog.Warn("agent turn: reclaiming zombie RUNNING schedule",
+		logKeyPage, j.page, logKeyScheduleID, j.scheduleID, "age", age.Round(time.Second))
+	if err := j.store.TransitionStatus(j.page, j.scheduleID, apiv1.ScheduleStatus_SCHEDULE_STATUS_TIMEOUT, msg, timeoutDurationSeconds(age)); err != nil { // nosemgrep: go.handler-returns-nil-after-error-logged
+		slog.Error("agent turn: reclaim TIMEOUT transition failed; skipping fire",
+			logKeyPage, j.page, logKeyScheduleID, j.scheduleID, logKeyError, err)
+		return true
+	}
+	return false
+}
+
 func (j *AgentTurnJob) recordHardTimeout(terminalErr error, waited time.Duration) {
 	// Best-effort terminal-TIMEOUT transition; awaitOutcome's hard timeout
 	// recovers a stuck RUNNING and late completions for this request no longer
@@ -162,14 +197,19 @@ func timeoutDurationSeconds(duration time.Duration) int32 {
 	if duration <= 0 {
 		return 0
 	}
-	seconds := int32(duration / time.Second)
+	// Compute in int64 and clamp: a reclaimed zombie with a nil/zero last_run
+	// yields an age of ~2000 years, which would overflow a direct int32 cast.
+	seconds := int64(duration / time.Second)
 	if duration%time.Second != 0 {
 		seconds++
 	}
 	if seconds == 0 {
 		return 1
 	}
-	return seconds
+	if seconds > math.MaxInt32 {
+		return math.MaxInt32
+	}
+	return int32(seconds)
 }
 
 // recordDispatchFailure records a terminal ERROR status when the pool is not
@@ -194,6 +234,17 @@ func (j *AgentTurnJob) recordDispatchFailure(dispatchErr error) {
 	if err := j.store.TransitionStatus(j.page, j.scheduleID, apiv1.ScheduleStatus_SCHEDULE_STATUS_ERROR, msg, 0); err != nil {
 		slog.Error("agent turn: ERROR transition after dispatch failure failed", logKeyPage, j.page, logKeyScheduleID, j.scheduleID, logKeyError, err)
 	}
+}
+
+// reclaimThreshold is how long a RUNNING schedule may sit before the next fire
+// treats it as a zombie and reclaims it. 2x the hard timeout guarantees the
+// prior run's own awaitOutcome has long since returned, so a genuinely
+// in-flight turn is never reclaimed.
+func (j *AgentTurnJob) reclaimThreshold() time.Duration {
+	if j.hardTimeout > 0 {
+		return 2 * j.hardTimeout
+	}
+	return 2 * DefaultAgentTurnHardTimeout
 }
 
 // awaitOutcome blocks on the completion channel up to hardTimeout. A nil

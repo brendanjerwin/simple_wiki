@@ -29,6 +29,8 @@ const (
 	ChatService_SubscribePageChatMessages_FullMethodName  = "/api.v1.ChatService/SubscribePageChatMessages"
 	ChatService_SubscribeInstanceRequests_FullMethodName  = "/api.v1.ChatService/SubscribeInstanceRequests"
 	ChatService_SendToolCallNotification_FullMethodName   = "/api.v1.ChatService/SendToolCallNotification"
+	ChatService_SendPlanNotification_FullMethodName       = "/api.v1.ChatService/SendPlanNotification"
+	ChatService_SendTurnStatus_FullMethodName             = "/api.v1.ChatService/SendTurnStatus"
 	ChatService_CancelAgentPrompt_FullMethodName          = "/api.v1.ChatService/CancelAgentPrompt"
 	ChatService_SubscribePageCancellations_FullMethodName = "/api.v1.ChatService/SubscribePageCancellations"
 	ChatService_RespondToPermission_FullMethodName        = "/api.v1.ChatService/RespondToPermission"
@@ -72,6 +74,13 @@ type ChatServiceClient interface {
 	// SendToolCallNotification is called by the pool daemon or ACP client
 	// when the agent invokes a tool. The notification is broadcast to page subscribers.
 	SendToolCallNotification(ctx context.Context, in *SendToolCallNotificationRequest, opts ...grpc.CallOption) (*SendToolCallNotificationResponse, error)
+	// SendPlanNotification is called by the pool daemon or ACP client when the
+	// agent reports or updates its execution plan. The plan is broadcast to page
+	// subscribers so the UI can show live task progress.
+	SendPlanNotification(ctx context.Context, in *SendPlanNotificationRequest, opts ...grpc.CallOption) (*SendPlanNotificationResponse, error)
+	// SendTurnStatus is called by the pool daemon when an agent turn starts and
+	// completes, so the UI can show the Stop button for the whole turn.
+	SendTurnStatus(ctx context.Context, in *SendTurnStatusRequest, opts ...grpc.CallOption) (*SendTurnStatusResponse, error)
 	// CancelAgentPrompt cancels an in-progress agent prompt for a page.
 	// Called by the frontend "Stop" button.
 	CancelAgentPrompt(ctx context.Context, in *CancelAgentPromptRequest, opts ...grpc.CallOption) (*CancelAgentPromptResponse, error)
@@ -262,6 +271,26 @@ func (c *chatServiceClient) SendToolCallNotification(ctx context.Context, in *Se
 	return out, nil
 }
 
+func (c *chatServiceClient) SendPlanNotification(ctx context.Context, in *SendPlanNotificationRequest, opts ...grpc.CallOption) (*SendPlanNotificationResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SendPlanNotificationResponse)
+	err := c.cc.Invoke(ctx, ChatService_SendPlanNotification_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *chatServiceClient) SendTurnStatus(ctx context.Context, in *SendTurnStatusRequest, opts ...grpc.CallOption) (*SendTurnStatusResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SendTurnStatusResponse)
+	err := c.cc.Invoke(ctx, ChatService_SendTurnStatus_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *chatServiceClient) CancelAgentPrompt(ctx context.Context, in *CancelAgentPromptRequest, opts ...grpc.CallOption) (*CancelAgentPromptResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(CancelAgentPromptResponse)
@@ -362,6 +391,13 @@ type ChatServiceServer interface {
 	// SendToolCallNotification is called by the pool daemon or ACP client
 	// when the agent invokes a tool. The notification is broadcast to page subscribers.
 	SendToolCallNotification(context.Context, *SendToolCallNotificationRequest) (*SendToolCallNotificationResponse, error)
+	// SendPlanNotification is called by the pool daemon or ACP client when the
+	// agent reports or updates its execution plan. The plan is broadcast to page
+	// subscribers so the UI can show live task progress.
+	SendPlanNotification(context.Context, *SendPlanNotificationRequest) (*SendPlanNotificationResponse, error)
+	// SendTurnStatus is called by the pool daemon when an agent turn starts and
+	// completes, so the UI can show the Stop button for the whole turn.
+	SendTurnStatus(context.Context, *SendTurnStatusRequest) (*SendTurnStatusResponse, error)
 	// CancelAgentPrompt cancels an in-progress agent prompt for a page.
 	// Called by the frontend "Stop" button.
 	CancelAgentPrompt(context.Context, *CancelAgentPromptRequest) (*CancelAgentPromptResponse, error)
@@ -409,6 +445,12 @@ func (UnimplementedChatServiceServer) SubscribeInstanceRequests(*SubscribeInstan
 }
 func (UnimplementedChatServiceServer) SendToolCallNotification(context.Context, *SendToolCallNotificationRequest) (*SendToolCallNotificationResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method SendToolCallNotification not implemented")
+}
+func (UnimplementedChatServiceServer) SendPlanNotification(context.Context, *SendPlanNotificationRequest) (*SendPlanNotificationResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method SendPlanNotification not implemented")
+}
+func (UnimplementedChatServiceServer) SendTurnStatus(context.Context, *SendTurnStatusRequest) (*SendTurnStatusResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method SendTurnStatus not implemented")
 }
 func (UnimplementedChatServiceServer) CancelAgentPrompt(context.Context, *CancelAgentPromptRequest) (*CancelAgentPromptResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method CancelAgentPrompt not implemented")
@@ -624,6 +666,42 @@ func _ChatService_SendToolCallNotification_Handler(srv interface{}, ctx context.
 	return interceptor(ctx, in, info, handler)
 }
 
+func _ChatService_SendPlanNotification_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SendPlanNotificationRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ChatServiceServer).SendPlanNotification(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ChatService_SendPlanNotification_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ChatServiceServer).SendPlanNotification(ctx, req.(*SendPlanNotificationRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _ChatService_SendTurnStatus_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SendTurnStatusRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ChatServiceServer).SendTurnStatus(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ChatService_SendTurnStatus_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ChatServiceServer).SendTurnStatus(ctx, req.(*SendTurnStatusRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _ChatService_CancelAgentPrompt_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(CancelAgentPromptRequest)
 	if err := dec(in); err != nil {
@@ -733,6 +811,14 @@ var ChatService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "SendToolCallNotification",
 			Handler:    _ChatService_SendToolCallNotification_Handler,
+		},
+		{
+			MethodName: "SendPlanNotification",
+			Handler:    _ChatService_SendPlanNotification_Handler,
+		},
+		{
+			MethodName: "SendTurnStatus",
+			Handler:    _ChatService_SendTurnStatus_Handler,
 		},
 		{
 			MethodName: "CancelAgentPrompt",

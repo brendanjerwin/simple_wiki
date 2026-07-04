@@ -61,6 +61,12 @@ const (
 	// ChatServiceSendToolCallNotificationProcedure is the fully-qualified name of the ChatService's
 	// SendToolCallNotification RPC.
 	ChatServiceSendToolCallNotificationProcedure = "/api.v1.ChatService/SendToolCallNotification"
+	// ChatServiceSendPlanNotificationProcedure is the fully-qualified name of the ChatService's
+	// SendPlanNotification RPC.
+	ChatServiceSendPlanNotificationProcedure = "/api.v1.ChatService/SendPlanNotification"
+	// ChatServiceSendTurnStatusProcedure is the fully-qualified name of the ChatService's
+	// SendTurnStatus RPC.
+	ChatServiceSendTurnStatusProcedure = "/api.v1.ChatService/SendTurnStatus"
 	// ChatServiceCancelAgentPromptProcedure is the fully-qualified name of the ChatService's
 	// CancelAgentPrompt RPC.
 	ChatServiceCancelAgentPromptProcedure = "/api.v1.ChatService/CancelAgentPrompt"
@@ -88,6 +94,8 @@ var (
 	chatServiceSubscribePageChatMessagesMethodDescriptor  = chatServiceServiceDescriptor.Methods().ByName("SubscribePageChatMessages")
 	chatServiceSubscribeInstanceRequestsMethodDescriptor  = chatServiceServiceDescriptor.Methods().ByName("SubscribeInstanceRequests")
 	chatServiceSendToolCallNotificationMethodDescriptor   = chatServiceServiceDescriptor.Methods().ByName("SendToolCallNotification")
+	chatServiceSendPlanNotificationMethodDescriptor       = chatServiceServiceDescriptor.Methods().ByName("SendPlanNotification")
+	chatServiceSendTurnStatusMethodDescriptor             = chatServiceServiceDescriptor.Methods().ByName("SendTurnStatus")
 	chatServiceCancelAgentPromptMethodDescriptor          = chatServiceServiceDescriptor.Methods().ByName("CancelAgentPrompt")
 	chatServiceSubscribePageCancellationsMethodDescriptor = chatServiceServiceDescriptor.Methods().ByName("SubscribePageCancellations")
 	chatServiceRespondToPermissionMethodDescriptor        = chatServiceServiceDescriptor.Methods().ByName("RespondToPermission")
@@ -125,6 +133,13 @@ type ChatServiceClient interface {
 	// SendToolCallNotification is called by the pool daemon or ACP client
 	// when the agent invokes a tool. The notification is broadcast to page subscribers.
 	SendToolCallNotification(context.Context, *connect.Request[v1.SendToolCallNotificationRequest]) (*connect.Response[v1.SendToolCallNotificationResponse], error)
+	// SendPlanNotification is called by the pool daemon or ACP client when the
+	// agent reports or updates its execution plan. The plan is broadcast to page
+	// subscribers so the UI can show live task progress.
+	SendPlanNotification(context.Context, *connect.Request[v1.SendPlanNotificationRequest]) (*connect.Response[v1.SendPlanNotificationResponse], error)
+	// SendTurnStatus is called by the pool daemon when an agent turn starts and
+	// completes, so the UI can show the Stop button for the whole turn.
+	SendTurnStatus(context.Context, *connect.Request[v1.SendTurnStatusRequest]) (*connect.Response[v1.SendTurnStatusResponse], error)
 	// CancelAgentPrompt cancels an in-progress agent prompt for a page.
 	// Called by the frontend "Stop" button.
 	CancelAgentPrompt(context.Context, *connect.Request[v1.CancelAgentPromptRequest]) (*connect.Response[v1.CancelAgentPromptResponse], error)
@@ -208,6 +223,18 @@ func NewChatServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 			connect.WithSchema(chatServiceSendToolCallNotificationMethodDescriptor),
 			connect.WithClientOptions(opts...),
 		),
+		sendPlanNotification: connect.NewClient[v1.SendPlanNotificationRequest, v1.SendPlanNotificationResponse](
+			httpClient,
+			baseURL+ChatServiceSendPlanNotificationProcedure,
+			connect.WithSchema(chatServiceSendPlanNotificationMethodDescriptor),
+			connect.WithClientOptions(opts...),
+		),
+		sendTurnStatus: connect.NewClient[v1.SendTurnStatusRequest, v1.SendTurnStatusResponse](
+			httpClient,
+			baseURL+ChatServiceSendTurnStatusProcedure,
+			connect.WithSchema(chatServiceSendTurnStatusMethodDescriptor),
+			connect.WithClientOptions(opts...),
+		),
 		cancelAgentPrompt: connect.NewClient[v1.CancelAgentPromptRequest, v1.CancelAgentPromptResponse](
 			httpClient,
 			baseURL+ChatServiceCancelAgentPromptProcedure,
@@ -247,6 +274,8 @@ type chatServiceClient struct {
 	subscribePageChatMessages  *connect.Client[v1.SubscribePageChatMessagesRequest, v1.ChatMessage]
 	subscribeInstanceRequests  *connect.Client[v1.SubscribeInstanceRequestsRequest, v1.InstanceRequest]
 	sendToolCallNotification   *connect.Client[v1.SendToolCallNotificationRequest, v1.SendToolCallNotificationResponse]
+	sendPlanNotification       *connect.Client[v1.SendPlanNotificationRequest, v1.SendPlanNotificationResponse]
+	sendTurnStatus             *connect.Client[v1.SendTurnStatusRequest, v1.SendTurnStatusResponse]
 	cancelAgentPrompt          *connect.Client[v1.CancelAgentPromptRequest, v1.CancelAgentPromptResponse]
 	subscribePageCancellations *connect.Client[v1.SubscribePageCancellationsRequest, v1.PageCancellation]
 	respondToPermission        *connect.Client[v1.RespondToPermissionRequest, v1.RespondToPermissionResponse]
@@ -303,6 +332,16 @@ func (c *chatServiceClient) SendToolCallNotification(ctx context.Context, req *c
 	return c.sendToolCallNotification.CallUnary(ctx, req)
 }
 
+// SendPlanNotification calls api.v1.ChatService.SendPlanNotification.
+func (c *chatServiceClient) SendPlanNotification(ctx context.Context, req *connect.Request[v1.SendPlanNotificationRequest]) (*connect.Response[v1.SendPlanNotificationResponse], error) {
+	return c.sendPlanNotification.CallUnary(ctx, req)
+}
+
+// SendTurnStatus calls api.v1.ChatService.SendTurnStatus.
+func (c *chatServiceClient) SendTurnStatus(ctx context.Context, req *connect.Request[v1.SendTurnStatusRequest]) (*connect.Response[v1.SendTurnStatusResponse], error) {
+	return c.sendTurnStatus.CallUnary(ctx, req)
+}
+
 // CancelAgentPrompt calls api.v1.ChatService.CancelAgentPrompt.
 func (c *chatServiceClient) CancelAgentPrompt(ctx context.Context, req *connect.Request[v1.CancelAgentPromptRequest]) (*connect.Response[v1.CancelAgentPromptResponse], error) {
 	return c.cancelAgentPrompt.CallUnary(ctx, req)
@@ -354,6 +393,13 @@ type ChatServiceHandler interface {
 	// SendToolCallNotification is called by the pool daemon or ACP client
 	// when the agent invokes a tool. The notification is broadcast to page subscribers.
 	SendToolCallNotification(context.Context, *connect.Request[v1.SendToolCallNotificationRequest]) (*connect.Response[v1.SendToolCallNotificationResponse], error)
+	// SendPlanNotification is called by the pool daemon or ACP client when the
+	// agent reports or updates its execution plan. The plan is broadcast to page
+	// subscribers so the UI can show live task progress.
+	SendPlanNotification(context.Context, *connect.Request[v1.SendPlanNotificationRequest]) (*connect.Response[v1.SendPlanNotificationResponse], error)
+	// SendTurnStatus is called by the pool daemon when an agent turn starts and
+	// completes, so the UI can show the Stop button for the whole turn.
+	SendTurnStatus(context.Context, *connect.Request[v1.SendTurnStatusRequest]) (*connect.Response[v1.SendTurnStatusResponse], error)
 	// CancelAgentPrompt cancels an in-progress agent prompt for a page.
 	// Called by the frontend "Stop" button.
 	CancelAgentPrompt(context.Context, *connect.Request[v1.CancelAgentPromptRequest]) (*connect.Response[v1.CancelAgentPromptResponse], error)
@@ -433,6 +479,18 @@ func NewChatServiceHandler(svc ChatServiceHandler, opts ...connect.HandlerOption
 		connect.WithSchema(chatServiceSendToolCallNotificationMethodDescriptor),
 		connect.WithHandlerOptions(opts...),
 	)
+	chatServiceSendPlanNotificationHandler := connect.NewUnaryHandler(
+		ChatServiceSendPlanNotificationProcedure,
+		svc.SendPlanNotification,
+		connect.WithSchema(chatServiceSendPlanNotificationMethodDescriptor),
+		connect.WithHandlerOptions(opts...),
+	)
+	chatServiceSendTurnStatusHandler := connect.NewUnaryHandler(
+		ChatServiceSendTurnStatusProcedure,
+		svc.SendTurnStatus,
+		connect.WithSchema(chatServiceSendTurnStatusMethodDescriptor),
+		connect.WithHandlerOptions(opts...),
+	)
 	chatServiceCancelAgentPromptHandler := connect.NewUnaryHandler(
 		ChatServiceCancelAgentPromptProcedure,
 		svc.CancelAgentPrompt,
@@ -479,6 +537,10 @@ func NewChatServiceHandler(svc ChatServiceHandler, opts ...connect.HandlerOption
 			chatServiceSubscribeInstanceRequestsHandler.ServeHTTP(w, r)
 		case ChatServiceSendToolCallNotificationProcedure:
 			chatServiceSendToolCallNotificationHandler.ServeHTTP(w, r)
+		case ChatServiceSendPlanNotificationProcedure:
+			chatServiceSendPlanNotificationHandler.ServeHTTP(w, r)
+		case ChatServiceSendTurnStatusProcedure:
+			chatServiceSendTurnStatusHandler.ServeHTTP(w, r)
 		case ChatServiceCancelAgentPromptProcedure:
 			chatServiceCancelAgentPromptHandler.ServeHTTP(w, r)
 		case ChatServiceSubscribePageCancellationsProcedure:
@@ -534,6 +596,14 @@ func (UnimplementedChatServiceHandler) SubscribeInstanceRequests(context.Context
 
 func (UnimplementedChatServiceHandler) SendToolCallNotification(context.Context, *connect.Request[v1.SendToolCallNotificationRequest]) (*connect.Response[v1.SendToolCallNotificationResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("api.v1.ChatService.SendToolCallNotification is not implemented"))
+}
+
+func (UnimplementedChatServiceHandler) SendPlanNotification(context.Context, *connect.Request[v1.SendPlanNotificationRequest]) (*connect.Response[v1.SendPlanNotificationResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("api.v1.ChatService.SendPlanNotification is not implemented"))
+}
+
+func (UnimplementedChatServiceHandler) SendTurnStatus(context.Context, *connect.Request[v1.SendTurnStatusRequest]) (*connect.Response[v1.SendTurnStatusResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("api.v1.ChatService.SendTurnStatus is not implemented"))
 }
 
 func (UnimplementedChatServiceHandler) CancelAgentPrompt(context.Context, *connect.Request[v1.CancelAgentPromptRequest]) (*connect.Response[v1.CancelAgentPromptResponse], error) {

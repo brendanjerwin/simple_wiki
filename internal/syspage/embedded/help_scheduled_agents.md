@@ -79,7 +79,7 @@ TIMEOUT ─────┤            └─→ WARN ────┘
 WARN ────────┘
 ```
 
-`RUNNING → RUNNING` is illegal — if a previous fire is still in flight, the next cron fire is **skipped** rather than dispatched. A stuck `RUNNING` (e.g. the pool died mid-turn) clears via the per-turn hard timeout (default 10 minutes), after which the next fire proceeds normally.
+`RUNNING → RUNNING` is illegal — if a previous fire is still in flight, the next cron fire is **skipped** rather than dispatched. A stuck `RUNNING` (e.g. the pool process died before recording a terminal status) is reclaimed automatically: once the schedule has been in `RUNNING` longer than the reclaim threshold (twice the hard timeout, so 20 minutes by default), the next cron fire records `TIMEOUT` for the zombie run — closing its background-activity entry — and then dispatches a fresh turn as normal.
 
 `WARN` is a terminal status for work that may have completed but did not produce the required audit record, usually because the scheduled agent finished without a background activity summary or the audit write failed.
 
@@ -139,5 +139,6 @@ The command reads `AgentMetadataService/ListSchedules` and fails when the schedu
 
 - Concurrency is shared across all schedules: by default 2 turns can run simultaneously across the whole wiki (`--agent-schedule-concurrency`). Backlog capacity is 256 (`--agent-schedule-queue-capacity`).
 - Wall-clock hard timeout defaults to 10m and is configurable with `--agent-turn-hard-timeout`; when it elapses the wiki records `SCHEDULE_STATUS_TIMEOUT` for that run.
+- Zombie reclaim threshold is twice the hard timeout (20m by default). A schedule stuck in `RUNNING` longer than this is automatically reclaimed on the next cron fire: the wiki records `TIMEOUT` for the zombie run and dispatches a fresh one.
 - The pool spawns a new short-lived ACP agent per fire, in a unique systemd unit. Per-turn journal logs are available there.
 - If the pool is not running when a cron fires, the schedule transitions straight to `ERROR` with a "dispatch failed" message. Restart the pool and the next fire will proceed.

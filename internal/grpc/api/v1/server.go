@@ -55,7 +55,9 @@ type ChatBufferManager interface {
 	SubscribeToInstanceRequests() (<-chan string, func())
 	HasInstanceRequestSubscribers() bool
 	IsInstanceRequested(page string) bool
-	NotifyToolCall(page, messageID, toolCallID, title, toolStatus string)
+	NotifyToolCall(page string, toolCall chatbuffer.ToolCallEvent)
+	NotifyPlan(page string, plan chatbuffer.PlanEvent)
+	NotifyTurnStatus(page string, active bool)
 	CancelPage(page string) bool
 	SubscribeToCancellation(page string) (<-chan struct{}, func())
 	RequestPermission(ctx context.Context, page, requestID, title, description string, options []chatbuffer.PermissionOption) string
