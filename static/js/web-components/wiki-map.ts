@@ -73,27 +73,41 @@ function getLeafletTagControlCtor(): (new (renderer: LeafletWikiMapRenderer, opt
     private _renderer: LeafletWikiMapRenderer;
 
     constructor(renderer: LeafletWikiMapRenderer, options?: L.ControlOptions) {
-      super(options || { position: 'topright' });
+      super(options || { position: 'bottomright' });
       this._renderer = renderer;
     }
 
     override onAdd(_map: L.Map): HTMLElement {  // eslint-disable-line @typescript-eslint/no-unused-vars -- Leaflet Control API requires this signature
-      const container = L.DomUtil.create('div', 'leaflet-control-layers leaflet-control-layers-collapsed');
+      const container = L.DomUtil.create('div', 'wiki-map-tag-control leaflet-control leaflet-bar');
 
-      const toggle = L.DomUtil.create('a', 'leaflet-control-layers-toggle', container);
+      const toggle = L.DomUtil.create('a', 'wiki-map-tag-control-toggle', container);
       toggle.href = '#';
       toggle.title = 'Tags';
+      toggle.setAttribute('aria-label', 'Toggle tag layer control');
+      toggle.innerHTML = '<span class="wiki-map-tag-control-icon" aria-hidden="true">#</span>';
 
-      const section = L.DomUtil.create('section', 'leaflet-control-layers-list', container);
-      this._listSection = section;
+      const panel = L.DomUtil.create('div', 'wiki-map-tag-control-panel', container);
+      this._listSection = panel;
 
-      L.DomEvent.on(container, 'mouseenter', () => {
-        L.DomUtil.removeClass(container, 'leaflet-control-layers-collapsed');
-        L.DomUtil.addClass(container, 'leaflet-control-layers-expanded');
+      L.DomEvent.on(toggle, 'click', (e: Event) => {
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- Leaflet DomEvent passes a mouse event here
+        const clickEvent = e as unknown as MouseEvent;
+        L.DomEvent.stopPropagation(clickEvent);
+        clickEvent.preventDefault();
+        if (L.DomUtil.hasClass(container, 'wiki-map-tag-control-open')) {
+          L.DomUtil.removeClass(container, 'wiki-map-tag-control-open');
+        } else {
+          L.DomUtil.addClass(container, 'wiki-map-tag-control-open');
+        }
       });
-      L.DomEvent.on(container, 'mouseleave', () => {
-        L.DomUtil.removeClass(container, 'leaflet-control-layers-expanded');
-        L.DomUtil.addClass(container, 'leaflet-control-layers-collapsed');
+      // Close on outside click
+      L.DomEvent.on(document as unknown as HTMLElement, 'click', (e: Event) => {
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- Leaflet DomEvent passes a mouse event here
+        const mouseEvent = e as unknown as MouseEvent;
+        const target = mouseEvent.target as Node | null;
+        if (target && !container.contains(target)) {
+          L.DomUtil.removeClass(container, 'wiki-map-tag-control-open');
+        }
       });
 
       L.DomEvent.disableClickPropagation(container);
@@ -114,25 +128,15 @@ function getLeafletTagControlCtor(): (new (renderer: LeafletWikiMapRenderer, opt
         sortedTags.push('untagged');
       }
 
-      const form = L.DomUtil.create('form', '', this._listSection);
-      const title = L.DomUtil.create('div', '', form);
-      title.style.fontWeight = 'bold';
-      title.style.marginBottom = '4px';
-      title.innerText = 'Tags';
+      const form = L.DomUtil.create('form', 'wiki-map-tag-control-form', this._listSection);
 
       for (const tag of sortedTags) {
-        const label = L.DomUtil.create('label', '', form);
-        label.style.display = 'flex';
-        label.style.alignItems = 'center';
-        label.style.gap = '6px';
-        label.style.cursor = 'pointer';
-        label.style.wordBreak = 'break-word';
-        label.style.marginBottom = '4px';
+        const label = L.DomUtil.create('label', 'wiki-map-tag-control-row', form);
 
-        const checkbox = L.DomUtil.create('input', '', label) as HTMLInputElement;
+        const checkbox = L.DomUtil.create('input', 'wiki-map-tag-control-checkbox', label) as HTMLInputElement;
         checkbox.type = 'checkbox';
         checkbox.value = tag;
-
+        checkbox.id = `wiki-map-tag-${tag.replace(/[^a-z0-9]/gi, '-')}`;
         checkbox.checked = this._renderer.checkedTags.has(tag);
 
         L.DomEvent.on(checkbox, 'change', () => {
@@ -144,28 +148,17 @@ function getLeafletTagControlCtor(): (new (renderer: LeafletWikiMapRenderer, opt
           this._renderer.filterLayers();
         });
 
-        const span = L.DomUtil.create('span', '', label);
-        span.innerText = ' ' + tag;
+        const span = L.DomUtil.create('span', 'wiki-map-tag-control-label', label);
+        span.setAttribute('for', checkbox.id);
+        span.innerText = tag;
       }
 
       if (this._renderer.failedTracks.size > 0) {
-        const errorDiv = L.DomUtil.create('div', '', form);
-        errorDiv.style.borderTop = '1px solid #d0d7de';
-        errorDiv.style.marginTop = '6px';
-        errorDiv.style.paddingTop = '6px';
-        errorDiv.style.color = '#cf222e';
-        errorDiv.style.fontSize = '0.85rem';
-
-        const errorTitle = L.DomUtil.create('div', '', errorDiv);
-        errorTitle.style.fontWeight = 'bold';
-        errorTitle.style.marginBottom = '2px';
+        const errorDiv = L.DomUtil.create('div', 'wiki-map-tag-control-errors', form);
+        const errorTitle = L.DomUtil.create('div', 'wiki-map-tag-control-errors-title', errorDiv);
         errorTitle.innerText = 'Errors';
-
         for (const trackLabel of this._renderer.failedTracks) {
-          const item = L.DomUtil.create('div', '', errorDiv);
-          item.style.display = 'flex';
-          item.style.alignItems = 'center';
-          item.style.gap = '4px';
+          const item = L.DomUtil.create('div', 'wiki-map-tag-control-error-item', errorDiv);
           item.innerText = `⚠️ ${trackLabel} failed`;
         }
       }
@@ -429,36 +422,26 @@ export class LeafletWikiMapRenderer implements WikiMapRenderer {
 
       const polyline = L.polyline(latLngsList, {
         color: track.color || '#3b82f6',
-        weight: 4,
-        opacity: 0.8,
+        weight: 5,
+        opacity: 0.85,
       }).addTo(this.map);
 
-      const totalMeters = calculateTrackDistanceMeters(latLngsList);
-      let distanceHtml = '';
-      if (totalMeters > 0) {
-        const km = (totalMeters / 1000).toFixed(2);
-        const miles = (totalMeters * 0.000621371).toFixed(2);
-        distanceHtml = `<div style="margin-top: 4px; font-size: 0.85rem; color: #57606a;">Distance: ${km} km (${miles} miles)</div>`;
-      }
-
-      const downloadUrl = `/uploads/${encodeURIComponent(track.fileHash)}?filename=${encodeURIComponent(track.filename)}`;
-      const popupHtml = `
-        <div>
-          <strong>${escapeHtml(track.label)}</strong>
-          ${distanceHtml}
-          <div style="margin-top: 5px;">
-            <a class="download-track-link" href="${downloadUrl}" download="${escapeHtml(track.filename)}">Download Track</a>
-          </div>
-        </div>
-      `;
-      polyline.bindPopup(popupHtml);
-
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- Leaflet returns Element but it is always an SVG/HTMLElement here
+      // Widen the hit target and show a pointer cursor + hover highlight so the
+      // track is discoverable as a clickable element (the default 4px polyline is
+      // a hard click target, especially on touchpads).
       const pathElement = polyline.getElement() as unknown as HTMLElement | null;
       if (pathElement) {
+        pathElement.style.cursor = 'pointer';
+        pathElement.style.pointerEvents = 'visiblePainted';
         pathElement.setAttribute('tabindex', '0');
         pathElement.setAttribute('role', 'button');
         pathElement.setAttribute('aria-label', `GPS Track: ${track.label}`);
+        polyline.on('mouseover', () => {
+          polyline.setStyle({ weight: 7, opacity: 1.0 });
+        });
+        polyline.on('mouseout', () => {
+          polyline.setStyle({ weight: 5, opacity: 0.85 });
+        });
         L.DomEvent.on(pathElement, 'keydown', (e: Event) => {
           // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- Leaflet DomEvent passes a keyboard event here
           const keyboardEvent = e as unknown as KeyboardEvent;
@@ -467,6 +450,25 @@ export class LeafletWikiMapRenderer implements WikiMapRenderer {
           }
         });
       }
+
+      const totalMeters = calculateTrackDistanceMeters(latLngsList);
+      let distanceHtml = '';
+      if (totalMeters > 0) {
+        const km = (totalMeters / 1000).toFixed(2);
+        const miles = (totalMeters * 0.000621371).toFixed(2);
+        distanceHtml = `<div class="wiki-map-track-popup-distance">Distance: ${km} km (${miles} miles)</div>`;
+      }
+
+      const downloadUrl = `/uploads/${encodeURIComponent(track.fileHash)}?filename=${encodeURIComponent(track.filename)}`;
+      const popupHtml = `
+        <div class="wiki-map-track-popup">
+          <div class="wiki-map-track-popup-name">${escapeHtml(track.label)}</div>
+          ${distanceHtml}
+          <a class="download-track-link" href="${downloadUrl}" download="${escapeHtml(track.filename)}">⤓ Download Track</a>
+        </div>
+      `;
+      polyline.bindPopup(popupHtml);
+
 
       this.overlays.push({ layer: polyline, tags: track.tags ?? [] });
       
@@ -800,6 +802,155 @@ export class WikiMap extends LitElement {
         margin-right: 10px;
       }
 
+      /* Tag layer control (bottom-right; click to expand) */
+      .wiki-map-tag-control {
+        background: #fff;
+        border: 1px solid #d0d7de;
+        border-radius: 6px;
+        box-shadow: 0 1px 4px rgb(0 0 0 / 0.15);
+        margin-right: 0;
+        overflow: hidden;
+        width: 32px;
+      }
+      .wiki-map-tag-control-open {
+        width: auto;
+        margin-bottom: 4px;
+      }
+
+      /* Add-track icon button (bottom-left; opens upload popover) */
+      .add-track-button {
+        align-items: center;
+        background: #fff;
+        border: 1px solid #d0d7de;
+        border-radius: 6px;
+        bottom: 10px;
+        box-shadow: 0 1px 4px rgb(0 0 0 / 0.15);
+        cursor: pointer;
+        display: flex;
+        height: 32px;
+        justify-content: center;
+        left: 10px;
+        padding: 0;
+        position: absolute;
+        width: 32px;
+        z-index: 1100;
+      }
+
+      .add-track-button:hover {
+        background: #f6f8fa;
+      }
+
+      .add-track-button-icon {
+        color: #24292f;
+        font: 16px/1 system-ui, sans-serif;
+      }
+
+      .download-track-link {
+        color: #2563eb;
+        display: inline-flex;
+        font: 500 12px/1.4 system-ui, sans-serif;
+        gap: 4px;
+        text-decoration: none;
+      }
+
+      .download-track-link:hover {
+        text-decoration: underline;
+      }
+
+      .wiki-map-tag-control-toggle {
+        align-items: center;
+        display: flex;
+        height: 30px;
+        justify-content: center;
+        text-decoration: none;
+        width: 30px;
+      }
+
+      .wiki-map-track-popup {
+        font: 13px/1.4 system-ui, sans-serif;
+        min-width: 180px;
+      }
+
+      .wiki-map-track-popup-name {
+        color: #24292f;
+        font-size: 15px;
+        font-weight: 600;
+        margin-bottom: 4px;
+      }
+
+      .wiki-map-track-popup-distance {
+        color: #57606a;
+        font-size: 0.85rem;
+        margin-bottom: 8px;
+      }
+
+      .wiki-map-tag-control-toggle:hover {
+        background: #f6f8fa;
+      }
+
+      .wiki-map-tag-control-icon {
+        color: #24292f;
+        font: bold 15px/1 system-ui, sans-serif;
+      }
+
+      .wiki-map-tag-control-panel {
+        display: none;
+        padding: 10px 12px;
+        width: 180px;
+      }
+
+      .wiki-map-tag-control-open .wiki-map-tag-control-panel {
+        display: block;
+      }
+
+      .wiki-map-tag-control-form {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        margin: 0;
+      }
+
+      .wiki-map-tag-control-row {
+        align-items: center;
+        cursor: pointer;
+        display: flex;
+        gap: 8px;
+        margin: 0;
+      }
+
+      .wiki-map-tag-control-checkbox {
+        accent-color: #2563eb;
+        cursor: pointer;
+        height: 14px;
+        margin: 0;
+        width: 14px;
+      }
+
+      .wiki-map-tag-control-label {
+        color: #24292f;
+        font: 13px/1.4 system-ui, sans-serif;
+        user-select: none;
+        word-break: break-word;
+      }
+
+      .wiki-map-tag-control-errors {
+        border-top: 1px solid #d0d7de;
+        color: #cf222e;
+        font: 0.85rem/1.4 system-ui, sans-serif;
+        margin-top: 8px;
+        padding-top: 8px;
+      }
+
+      .wiki-map-tag-control-errors-title {
+        font-weight: 600;
+        margin-bottom: 4px;
+      }
+
+      .wiki-map-tag-control-error-item {
+        display: flex;
+        gap: 4px;
+      }
+
       .leaflet-popup {
         margin-bottom: 20px;
         position: absolute;
@@ -1041,7 +1192,6 @@ export class WikiMap extends LitElement {
     const expectedPage = this.page;
     const expectedName = this.name;
     this.loading = true;
-    this.error = null;
     try {
       const response = await this.client.getMap(create(GetMapRequestSchema, {
         page: expectedPage,
@@ -1092,15 +1242,13 @@ export class WikiMap extends LitElement {
   private renderToolsPanel() {
     if (!this.toolsOpen) return null;
     return html`
-      <div class="tools-panel" style="position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%); background: rgba(255, 255, 255, 0.95); border: 1px solid #d0d7de; border-radius: 6px; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15); padding: 6px 12px; display: flex; gap: 8px; z-index: 1100;">
-        <button
-          class="btn btn-sm"
-          aria-label="Add GPS track"
-          @click=${this.handleAddTrackClick}
-        >
-          Add GPS track
-        </button>
-      </div>
+      <button
+        class="add-track-button"
+        aria-label="Add GPS track"
+        title="Add GPS track"
+        @click=${this.handleAddTrackClick}
+      >
+        <span class="add-track-button-icon" aria-hidden="true">⤒</span>
       ${this.renderUploadPopover()}
     `;
   }
@@ -1108,7 +1256,7 @@ export class WikiMap extends LitElement {
   private renderUploadPopover() {
     if (!this.showUploadPopover) return null;
     return html`
-      <div class="upload-popover" style="position: absolute; bottom: 50px; left: 50%; transform: translateX(-50%); background: white; border: 1px solid #d0d7de; padding: 1rem; border-radius: 4px; box-shadow: 0 2px 8px rgba(0,0,0,0.15); z-index: 1200; min-width: 250px;">
+      <div class="upload-popover" style="position: absolute; bottom: 50px; left: 10px; background: white; border: 1px solid #d0d7de; padding: 1rem; border-radius: 6px; box-shadow: 0 2px 8px rgba(0,0,0,0.15); z-index: 1200; min-width: min(250px, calc(100vw - 20px));">
         <h4 style="margin: 0 0 0.5rem 0; font-size: 1rem;">Upload GPS Track</h4>
         
         ${this.uploadError

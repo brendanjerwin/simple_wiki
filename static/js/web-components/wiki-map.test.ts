@@ -745,7 +745,7 @@ describe('WikiMap', () => {
       });
     });
 
-    describe('WikiMap tools panel tap-reveal affordance', () => {
+    describe('WikiMap add-track button tap-reveal affordance', () => {
       let el: WikiMap;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any -- test stub for MapService client
       let mockMapClient: any;
@@ -770,8 +770,8 @@ describe('WikiMap', () => {
         el.remove();
       });
 
-      it('should not show the tools panel at rest', () => {
-        expect(el.shadowRoot?.querySelector('.tools-panel')).to.equal(null);
+      it('should not show the add-track button at rest', () => {
+        expect(el.shadowRoot?.querySelector('.add-track-button')).to.equal(null);
       });
 
       describe('when the map is clicked', () => {
@@ -781,10 +781,8 @@ describe('WikiMap', () => {
           mapCanvas?.dispatchEvent(new Event('click', { bubbles: true }));
           await el.updateComplete;
         });
-        it('should reveal the tools panel with the Add GPS track button', () => {
-          const toolsPanel = el.shadowRoot?.querySelector('.tools-panel');
-          expect(toolsPanel).to.not.equal(null);
-          const addTrackButton = el.shadowRoot?.querySelector('.tools-panel button[aria-label="Add GPS track"]');
+        it('should reveal the add-track button', () => {
+          const addTrackButton = el.shadowRoot?.querySelector('.add-track-button');
           expect(addTrackButton).to.not.equal(null);
         });
       });
