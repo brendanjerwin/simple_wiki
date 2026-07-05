@@ -576,15 +576,15 @@ type mapMockFileStorer struct {
 	OpenFunc func(hash string) (io.ReadCloser, error)
 }
 
-func (m *mapMockFileStorer) Store(content io.Reader) (filestore.FileInfo, error) {
+func (*mapMockFileStorer) Store(content io.Reader) (filestore.FileInfo, error) {
 	return filestore.FileInfo{}, nil
 }
 
-func (m *mapMockFileStorer) GetInfo(hash string) (filestore.FileInfo, error) {
+func (*mapMockFileStorer) GetInfo(hash string) (filestore.FileInfo, error) {
 	return filestore.FileInfo{}, nil
 }
 
-func (m *mapMockFileStorer) Delete(hash string) error {
+func (*mapMockFileStorer) Delete(hash string) error {
 	return nil
 }
 
@@ -909,6 +909,114 @@ var _ = Describe("MapService handlers - track management", func() {
 				},
 			})
 			Expect(err).To(HaveGrpcStatusWithSubstr(codes.InvalidArgument, "track exceeds maximum safety limit of 50,000 points"))
+		})
+
+		It("should honor include_tracks selector in GetMap", func() {
+			// Add a track so the map has one.
+			_, err = server.AddTrack(ctx, &apiv1.AddTrackRequest{
+				Page:    "garden_plan",
+				MapName: "yard",
+				Track: &apiv1.MapTrack{
+					Label:    "Hiking Trail",
+					FileHash: "validhash",
+					Format:   "GPX",
+					Filename: "trail.gpx",
+				},
+			})
+			Expect(err).NotTo(HaveOccurred())
+			By("returning tracks when include_tracks is true")
+			withTracks, err := server.GetMap(ctx, &apiv1.GetMapRequest{
+				Page:           "garden_plan",
+				MapName:        "yard",
+				IncludeMarkers: true,
+				IncludeTracks:  true,
+			})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(withTracks.GetMap().GetTracks()).To(HaveLen(1))
+
+			By("omitting tracks when include_tracks is false (with another include set so include-all is false)")
+			withoutTracks, err := server.GetMap(ctx, &apiv1.GetMapRequest{
+				Page:           "garden_plan",
+				MapName:        "yard",
+				IncludeMarkers: true,
+				IncludeTracks:  false,
+			})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(withoutTracks.GetMap().GetTracks()).To(BeEmpty())
+		})
+
+		It("should return NotFound for GetTrackGeometry with an unknown uid", func() {
+			// Add a track so the map exists, then query a different (nonexistent) uid.
+			_, err = server.AddTrack(ctx, &apiv1.AddTrackRequest{
+				Page:    "garden_plan",
+				MapName: "yard",
+				Track: &apiv1.MapTrack{
+					Label:    "Hiking Trail",
+					FileHash: "validhash",
+					Format:   "GPX",
+					Filename: "trail.gpx",
+				},
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			_, err = server.GetTrackGeometry(ctx, &apiv1.GetTrackGeometryRequest{
+				Page:    "garden_plan",
+				MapName: "yard",
+				Uid:     "nonexistent-track-uid",
+			})
+			Expect(err).To(HaveGrpcStatusWithSubstr(codes.NotFound, "track element not found"))
+		})
+
+		It("should return NotFound for GetTrackGeometry when the referenced file is missing", func() {
+			// Add a track with a valid file, then make the file disappear.
+			_, err = server.AddTrack(ctx, &apiv1.AddTrackRequest{
+				Page:    "garden_plan",
+				MapName: "yard",
+				Track: &apiv1.MapTrack{
+					Label:    "Hiking Trail",
+					FileHash: "validhash",
+					Format:   "GPX",
+					Filename: "trail.gpx",
+				},
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			fileStorer.OpenFunc = func(hash string) (io.ReadCloser, error) {
+				return nil, os.ErrNotExist
+			}
+
+			_, err = server.GetTrackGeometry(ctx, &apiv1.GetTrackGeometryRequest{
+				Page:    "garden_plan",
+				MapName: "yard",
+				Uid:     "01JMAPTRACK0000000000001",
+			})
+			Expect(err).To(HaveGrpcStatusWithSubstr(codes.NotFound, "track file not found"))
+		})
+
+		It("should return a parse error for GetTrackGeometry when the stored file is corrupt", func() {
+			_, err = server.AddTrack(ctx, &apiv1.AddTrackRequest{
+				Page:    "garden_plan",
+				MapName: "yard",
+				Track: &apiv1.MapTrack{
+					Label:    "Hiking Trail",
+					FileHash: "validhash",
+					Format:   "GPX",
+					Filename: "trail.gpx",
+				},
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			fileStorer.OpenFunc = func(hash string) (io.ReadCloser, error) {
+				return io.NopCloser(strings.NewReader("not valid xml or json at all")), nil
+			}
+
+			_, err = server.GetTrackGeometry(ctx, &apiv1.GetTrackGeometryRequest{
+				Page:    "garden_plan",
+				MapName: "yard",
+				Uid:     "01JMAPTRACK0000000000001",
+			})
+			Expect(err).To(HaveOccurred())
+			Expect(err).To(HaveGrpcStatusWithSubstr(codes.InvalidArgument, ""))
 		})
 	})
 })

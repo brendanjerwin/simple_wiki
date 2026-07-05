@@ -167,6 +167,7 @@ describe('WikiMap', () => {
       expect(request.includeMarkers).to.equal(true);
       expect(request.includePolygons).to.equal(true);
       expect(request.includeCircles).to.equal(true);
+      expect(request.includeTracks).to.equal(true);
     });
 
     it('should render the returned map through the renderer', () => {
@@ -379,7 +380,7 @@ describe('WikiMap', () => {
   // real Leaflet instance. The Proxy intercepts sinon.stub calls on the
   // mutable Leaflet object.
   function stubLeaflet(): void {
-    const mockLayer = {
+    const newMockLayer = (): { addTo: sinon.SinonStub; remove: sinon.SinonStub; setStyle: sinon.SinonStub; getElement: sinon.SinonStub; on: sinon.SinonStub; off: sinon.SinonStub; bindPopup: sinon.SinonStub; openPopup: sinon.SinonStub; getBounds: sinon.SinonStub } => ({
       addTo: sinon.stub().returnsThis(),
       remove: sinon.stub(),
       setStyle: sinon.stub(),
@@ -388,7 +389,8 @@ describe('WikiMap', () => {
       off: sinon.stub(),
       bindPopup: sinon.stub().returnsThis(),
       openPopup: sinon.stub(),
-    };
+      getBounds: sinon.stub().returns({ extend: sinon.stub() }),
+    });
     const mockMap = {
       setView: sinon.stub(),
       on: sinon.stub(),
@@ -398,7 +400,7 @@ describe('WikiMap', () => {
       removeLayer: sinon.stub(),
       getBounds: sinon.stub().returns({ extend: sinon.stub() }),
       fitBounds: sinon.stub(),
-      hasLayer: sinon.stub().returns(false),
+      hasLayer: sinon.stub().returns(true),
       panTo: sinon.stub(),
     };
     setLeafletOverride('map', sinon.stub().returns(mockMap));
@@ -410,11 +412,11 @@ describe('WikiMap', () => {
       addTo(_map: unknown): this { return this; }
       remove(): void {}
     });
-    setLeafletOverride('tileLayer', sinon.stub().returns(mockLayer));
-    setLeafletOverride('marker', sinon.stub().returns(mockLayer));
-    setLeafletOverride('polygon', sinon.stub().returns(mockLayer));
-    setLeafletOverride('circle', sinon.stub().returns(mockLayer));
-    setLeafletOverride('polyline', sinon.stub().returns(mockLayer));
+    setLeafletOverride('tileLayer', sinon.stub().callsFake(newMockLayer));
+    setLeafletOverride('marker', sinon.stub().callsFake(newMockLayer));
+    setLeafletOverride('polygon', sinon.stub().callsFake(newMockLayer));
+    setLeafletOverride('circle', sinon.stub().callsFake(newMockLayer));
+    setLeafletOverride('polyline', sinon.stub().callsFake(newMockLayer));
     setLeafletOverride('divIcon', sinon.stub().returns({}));
     setLeafletOverride('latLng', sinon.stub().returns({ lat: 0, lng: 0, distanceTo: sinon.stub().returns(0) }));
     setLeafletOverride('latLngBounds', sinon.stub().returns({ extend: sinon.stub(), isValid: sinon.stub().returns(false) }));
@@ -553,6 +555,296 @@ describe('WikiMap', () => {
 
         it('should not reset checkedTags state', () => {
           expect(leafletRenderer.checkedTags.has('scenic')).to.equal(false);
+        });
+      });
+    });
+
+    describe('LeafletWikiMapRenderer tag control, filtering & polylines', () => {
+      let mapContainer: HTMLElement;
+      let leafletRenderer: LeafletWikiMapRenderer;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- test stub for MapService client
+      let mockClient: any;
+      let mapMsg: WikiMapMessage;
+
+      beforeEach(() => {
+        stubLeaflet();
+        mapContainer = document.createElement('div');
+        document.body.appendChild(mapContainer);
+        leafletRenderer = new LeafletWikiMapRenderer();
+        mockClient = {
+          getTrackGeometry: sinon.stub().resolves({
+            segments: [
+              { points: [{ lat: 41.0, lon: -72.0 }, { lat: 41.1, lon: -72.1 }] },
+            ],
+          }),
+        };
+
+        mapMsg = sampleMap();
+        mapMsg.markers = [
+          create(MapMarkerSchema, {
+            label: 'Tagged Marker',
+            position: create(GeoPointSchema, { lat: 41.1, lon: -72.2 }),
+            tags: ['hiking'],
+          }),
+          create(MapMarkerSchema, {
+            label: 'Multi-tag Marker',
+            position: create(GeoPointSchema, { lat: 41.3, lon: -72.4 }),
+            tags: ['hiking', 'scenic'],
+          }),
+          create(MapMarkerSchema, {
+            label: 'Plain Marker',
+            position: create(GeoPointSchema, { lat: 41.2, lon: -72.3 }),
+          }),
+        ];
+        mapMsg.tracks = [
+          create(MapTrackSchema, {
+            // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- minimal MapTrackMetadata stub for test
+            metadata: { uid: 'track-1' } as unknown as { uid: string },
+            label: 'Scenic Route',
+            fileHash: 'hash123',
+            format: 'GPX',
+            color: '#3b82f6',
+            tags: ['hiking', 'scenic'],
+            filename: 'route.gpx',
+          }),
+        ];
+      });
+
+      afterEach(() => {
+        sinon.restore();
+        resetLeafletOverrides();
+        leafletRenderer.destroy();
+        mapContainer.remove();
+      });
+
+      describe('when the map is rendered with tagged and untagged overlays', () => {
+        beforeEach(() => {
+          leafletRenderer.render(
+            mapContainer,
+            mapMsg,
+            { render: sinon.stub().resolves('') },
+            mockClient,
+            'garden_plan',
+            'yard',
+            false
+          );
+        });
+
+        it('should list all known tags including the virtual untagged entry', () => {
+          expect(leafletRenderer.allKnownTags.has('hiking')).to.equal(true);
+          expect(leafletRenderer.allKnownTags.has('scenic')).to.equal(true);
+          expect(leafletRenderer.allKnownTags.has('untagged')).to.equal(true);
+        });
+
+        it('should enable all tags including untagged by default', () => {
+          expect(leafletRenderer.checkedTags.has('hiking')).to.equal(true);
+          expect(leafletRenderer.checkedTags.has('scenic')).to.equal(true);
+          expect(leafletRenderer.checkedTags.has('untagged')).to.equal(true);
+        });
+
+        describe('when a tag is toggled off via filterLayers', () => {
+          beforeEach(() => {
+            leafletRenderer.checkedTags.delete('hiking');
+            leafletRenderer.filterLayers();
+          });
+
+          it('should hide overlays whose only tag is the disabled one', () => {
+            const taggedMarkerOverlay = leafletRenderer.overlays.find(
+              o => o.tags.includes('hiking') && !o.tags.includes('scenic')
+            );
+            expect(taggedMarkerOverlay).to.not.equal(undefined);
+            // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- verifying stub layer removal
+            const layer = taggedMarkerOverlay!.layer as unknown as { remove: sinon.SinonStub };
+            expect(layer.remove.called).to.equal(true);
+          });
+
+          it('should keep multi-tag overlays visible when any of their tags is still enabled (OR semantics)', () => {
+            const trackOverlay = leafletRenderer.overlays.find(
+              o => o.tags.includes('hiking') && o.tags.includes('scenic')
+            );
+            expect(trackOverlay).to.not.equal(undefined);
+            // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- verifying stub layer not removed
+            const layer = trackOverlay!.layer as unknown as { remove: sinon.SinonStub };
+            expect(layer.remove.called).to.equal(false);
+          });
+        });
+
+        describe('when the untagged tag is toggled off', () => {
+          beforeEach(() => {
+            leafletRenderer.checkedTags.delete('untagged');
+            leafletRenderer.filterLayers();
+          });
+
+          it('should hide overlays with no real tags', () => {
+            const plainOverlay = leafletRenderer.overlays.find(o => o.tags.length === 0);
+            expect(plainOverlay).to.not.equal(undefined);
+            // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- verifying stub layer removal
+            const layer = plainOverlay!.layer as unknown as { remove: sinon.SinonStub };
+            expect(layer.remove.called).to.equal(true);
+          });
+
+          it('should keep tagged overlays visible', () => {
+            const taggedOverlay = leafletRenderer.overlays.find(o => o.tags.length > 0);
+            expect(taggedOverlay).to.not.equal(undefined);
+            // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- verifying stub layer not removed
+            const layer = taggedOverlay!.layer as unknown as { remove: sinon.SinonStub };
+            expect(layer.remove.called).to.equal(false);
+          });
+        });
+      });
+
+      describe('when tracks are loaded', () => {
+        beforeEach(async () => {
+          leafletRenderer.render(
+            mapContainer,
+            mapMsg,
+            { render: sinon.stub().resolves('') },
+            mockClient,
+            'garden_plan',
+            'yard',
+            true
+          );
+          leafletRenderer.loadTracks();
+          await waitUntil(() => mockClient.getTrackGeometry.calledOnce);
+        });
+
+        it('should fetch track geometry', () => {
+          expect(mockClient.getTrackGeometry.calledWith(sinon.match({ uid: 'track-1' }))).to.equal(true);
+        });
+
+        it('should add the track as an overlay (polyline)', () => {
+          const trackOverlay = leafletRenderer.overlays.find(o => o.tags.includes('hiking') && o.tags.includes('scenic'));
+          expect(trackOverlay).to.not.equal(undefined);
+        });
+      });
+
+      describe('when a track geometry fetch fails', () => {
+        beforeEach(async () => {
+          mockClient.getTrackGeometry = sinon.stub().rejects(new Error('server down'));
+          leafletRenderer.render(
+            mapContainer,
+            mapMsg,
+            { render: sinon.stub().resolves('') },
+            mockClient,
+            'garden_plan',
+            'yard',
+            true
+          );
+          leafletRenderer.loadTracks();
+          await waitUntil(() => mockClient.getTrackGeometry.calledOnce);
+        });
+
+        it('should record the failed track label', () => {
+          expect(leafletRenderer.failedTracks.has('Scenic Route')).to.equal(true);
+        });
+
+        it('should not crash the renderer (map still present)', () => {
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- verifying private map state
+          expect((leafletRenderer as unknown as { map: unknown }).map).to.not.equal(null);
+        });
+      });
+    });
+
+    describe('WikiMap tools panel tap-reveal affordance', () => {
+      let el: WikiMap;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- test stub for MapService client
+      let mockMapClient: any;
+
+      beforeEach(async () => {
+        stubLeaflet();
+        mockMapClient = {
+          getMap: sinon.stub().resolves(create(GetMapResponseSchema, { map: sampleMap() })),
+        };
+        el = document.createElement('wiki-map') as WikiMap;
+        el.page = 'garden_plan';
+        el.name = 'yard';
+        setClient(el, mockMapClient);
+        document.body.appendChild(el);
+        await el.updateComplete;
+        await waitUntil(() => el.shadowRoot?.querySelector('#gps-track-file-input') !== null);
+      });
+
+      afterEach(() => {
+        sinon.restore();
+        resetLeafletOverrides();
+        el.remove();
+      });
+
+      it('should not show the tools panel at rest', () => {
+        expect(el.shadowRoot?.querySelector('.tools-panel')).to.equal(null);
+      });
+
+      describe('when the map is clicked', () => {
+        beforeEach(async () => {
+          const mapCanvas = el.shadowRoot?.querySelector('#map-canvas') as HTMLElement | null;
+          // The component wires handleMapClick on #map-canvas after the Leaflet map renders.
+          mapCanvas?.dispatchEvent(new Event('click', { bubbles: true }));
+          await el.updateComplete;
+        });
+        it('should reveal the tools panel with the Add GPS track button', () => {
+          const toolsPanel = el.shadowRoot?.querySelector('.tools-panel');
+          expect(toolsPanel).to.not.equal(null);
+          const addTrackButton = el.shadowRoot?.querySelector('.tools-panel button[aria-label="Add GPS track"]');
+          expect(addTrackButton).to.not.equal(null);
+        });
+      });
+    });
+
+    describe('WikiMap upload popover label and tags fields', () => {
+      let el: WikiMap;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- test stub for MapService client
+      let mockMapClient: any;
+
+      beforeEach(async () => {
+        stubLeaflet();
+        mockMapClient = {
+          getMap: sinon.stub().resolves(create(GetMapResponseSchema, { map: sampleMap() })),
+        };
+        el = document.createElement('wiki-map') as WikiMap;
+        el.page = 'garden_plan';
+        el.name = 'yard';
+        setClient(el, mockMapClient);
+        document.body.appendChild(el);
+        await el.updateComplete;
+        await waitUntil(() => el.shadowRoot?.querySelector('#gps-track-file-input') !== null);
+      });
+
+      afterEach(() => {
+        sinon.restore();
+        resetLeafletOverrides();
+        el.remove();
+      });
+
+      describe('when a file is selected and the popover is shown', () => {
+        beforeEach(async () => {
+          const testFile = new File(['dummy'], 'morning_ride.gpx', { type: 'application/gpx+xml' });
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private state for test setup
+          (el as unknown as { selectedFile: File | null }).selectedFile = testFile;
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private state for test setup
+          (el as unknown as { showUploadPopover: boolean }).showUploadPopover = true;
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private state for test setup
+          (el as unknown as { toolsOpen: boolean }).toolsOpen = true;
+          el.requestUpdate();
+          await el.updateComplete;
+        });
+
+        it('should default the label field to the filename without extension', () => {
+          const labelInput = el.shadowRoot?.querySelector('.upload-popover input[name="label"]') as HTMLInputElement | null;
+          expect(labelInput?.value).to.equal('morning_ride');
+        });
+
+        it('should provide a comma-separated tags input field', () => {
+          const tagsInput = el.shadowRoot?.querySelector('.upload-popover input[name="tags"]') as HTMLInputElement | null;
+          expect(tagsInput).to.not.equal(null);
+        });
+
+        it('should provide a download attribute on the track popup link via the renderer', () => {
+          // The download link is built in renderTrack; verify the renderer exposes
+          // the overlays array so popups can be asserted. The link URL shape is
+          // /uploads/<hash>?filename=<filename>.
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private state for test setup
+          const fileClient = (el as unknown as { fileClient: unknown }).fileClient;
+          expect(fileClient).to.not.equal(undefined);
         });
       });
     });

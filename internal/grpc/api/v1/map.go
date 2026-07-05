@@ -19,7 +19,10 @@ import (
 
 var errMapMutatorNotConfigured = status.Error(codes.FailedPrecondition, "map mutator not configured on server")
 
-const defaultMapPageSize = 100
+const (
+	defaultMapPageSize            = 100
+	defaultTrackSimplificationCeiling = 1000 // max points returned by GetTrackGeometry
+)
 
 func requireMapRequest[T any](req *T) error {
 	if req == nil {
@@ -32,6 +35,7 @@ type mapElementIncludes struct {
 	markers  bool
 	polygons bool
 	circles  bool
+	tracks   bool
 }
 
 // SetMapView implements the SetMapView RPC.
@@ -324,7 +328,7 @@ func (s *Server) validateTrackFile(track *apiv1.MapTrack) error {
 		}
 		return status.Errorf(codes.InvalidArgument, "failed to open track file: %v", err)
 	}
-	defer reader.Close()
+	defer func() { _ = reader.Close() }()
 
 	if _, err := trackgeom.Parse(normalizedFormat, reader); err != nil {
 		return status.Errorf(codes.InvalidArgument, "invalid or corrupt track file format: %v", err)
@@ -379,14 +383,14 @@ func (s *Server) GetTrackGeometry(ctx context.Context, req *apiv1.GetTrackGeomet
 		}
 		return nil, status.Errorf(codes.Internal, "failed to open track file: %v", err)
 	}
-	defer reader.Close()
+	defer func() { _ = reader.Close() }()
 
 	parsedSegments, err := trackgeom.Parse(trackgeom.TrackFormat(targetTrack.GetFormat()), reader)
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, "failed to parse track geometry: %v", err)
 	}
 
-	simplified := (&trackgeom.Track{Segments: parsedSegments}).Simplify(1000)
+	simplified := (&trackgeom.Track{Segments: parsedSegments}).Simplify(defaultTrackSimplificationCeiling)
 
 	segments := make([]*apiv1.TrackSegment, 0, len(simplified.Segments))
 	for _, seg := range simplified.Segments {
@@ -629,13 +633,13 @@ func (s *Server) requireMapMutation(ctx context.Context, page, mapName string) e
 	}
 	return requireAuthorized(ctx, s.pageReaderMutator, wikipage.PageIdentifier(page))
 }
-
 func requestedMapElementIncludes(req *apiv1.GetMapRequest) mapElementIncludes {
-	includeAll := !req.GetIncludeMarkers() && !req.GetIncludePolygons() && !req.GetIncludeCircles()
+	includeAll := !req.GetIncludeMarkers() && !req.GetIncludePolygons() && !req.GetIncludeCircles() && !req.GetIncludeTracks()
 	return mapElementIncludes{
 		markers:  includeAll || req.GetIncludeMarkers(),
 		polygons: includeAll || req.GetIncludePolygons(),
 		circles:  includeAll || req.GetIncludeCircles(),
+		tracks:   includeAll || req.GetIncludeTracks(),
 	}
 }
 
@@ -654,6 +658,9 @@ func filterMapResponse(mapState *apiv1.Map, includes mapElementIncludes, bbox *a
 		mapState.Circles = filterCirclesByBBox(mapState.GetCircles(), bbox)
 	} else {
 		mapState.Circles = nil
+	}
+	if !includes.tracks {
+		mapState.Tracks = nil
 	}
 }
 

@@ -158,9 +158,9 @@ service MapService {
   rpc GetMap(GetMapRequest) returns (GetMapResponse) {
     option (api.v1.description) =
         "Read a named map with selectable element detail. Use include_markers, "
-        "include_polygons, include_circles, and bbox to keep responses small; "
-        "when no include flags are set the service may return all element "
-        "types for user-facing rendering.";
+        "include_polygons, include_circles, include_tracks, and bbox to keep "
+        "responses small; when no include flags are set the service may return "
+        "all element types for user-facing rendering.";
     option (api.v1.read_only) = true;
   }
 
@@ -553,6 +553,7 @@ message GetMapRequest {
   bool include_markers = 3;
   bool include_polygons = 4;
   bool include_circles = 5;
+  bool include_tracks = 7;
   BoundingBox bbox = 6;
 }
 

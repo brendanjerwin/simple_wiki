@@ -74,15 +74,27 @@ func decodeMap(fm wikipage.FrontMatter, page, mapName string) *apiv1.Map {
 	out.View = decodeView(userMap[viewKey])
 	out.Style = decodeStyle(userMap[styleKey])
 
-	markerMetadataByUID := nestedMap(agentMap, markersKey)
+	out.Markers = decodeMarkers(userMap, agentMap)
+	out.Polygons = decodePolygons(userMap, agentMap)
+	out.Circles = decodeCircles(userMap, agentMap)
+	out.Tracks = decodeTracks(userMap, agentMap)
+
+	sortMapElements(out)
+	return out
+}
+
+// decodeMarkers decodes marker user-data and agent metadata for a map.
+func decodeMarkers(userMap, agentMap map[string]any) []*apiv1.MapMarker {
+	metadataByUID := nestedMap(agentMap, markersKey)
+	out := make([]*apiv1.MapMarker, 0)
 	for _, raw := range decodeSlice(userMap[markersKey]) {
 		rawMarker, ok := raw.(map[string]any)
 		if !ok {
 			continue
 		}
 		uid := decodeString(rawMarker[uidKey])
-		out.Markers = append(out.Markers, &apiv1.MapMarker{
-			Metadata:      decodeMetadata(nestedMap(markerMetadataByUID, uid), uid),
+		out = append(out, &apiv1.MapMarker{
+			Metadata:      decodeMetadata(nestedMap(metadataByUID, uid), uid),
 			Label:         decodeString(rawMarker[labelKey]),
 			Position:      decodePoint(rawMarker),
 			PopupMarkdown: decodeString(rawMarker[popupKey]),
@@ -90,16 +102,21 @@ func decodeMap(fm wikipage.FrontMatter, page, mapName string) *apiv1.Map {
 			Tags:          decodeStringSlice(rawMarker[tagsKey]),
 		})
 	}
+	return out
+}
 
-	polygonMetadataByUID := nestedMap(agentMap, polygonsKey)
+// decodePolygons decodes polygon user-data and agent metadata for a map.
+func decodePolygons(userMap, agentMap map[string]any) []*apiv1.MapPolygon {
+	metadataByUID := nestedMap(agentMap, polygonsKey)
+	out := make([]*apiv1.MapPolygon, 0)
 	for _, raw := range decodeSlice(userMap[polygonsKey]) {
 		rawPolygon, ok := raw.(map[string]any)
 		if !ok {
 			continue
 		}
 		uid := decodeString(rawPolygon[uidKey])
-		out.Polygons = append(out.Polygons, &apiv1.MapPolygon{
-			Metadata:      decodeMetadata(nestedMap(polygonMetadataByUID, uid), uid),
+		out = append(out, &apiv1.MapPolygon{
+			Metadata:      decodeMetadata(nestedMap(metadataByUID, uid), uid),
 			Label:         decodeString(rawPolygon[labelKey]),
 			Points:        decodePoints(rawPolygon[pointsKey]),
 			PopupMarkdown: decodeString(rawPolygon[popupKey]),
@@ -108,16 +125,21 @@ func decodeMap(fm wikipage.FrontMatter, page, mapName string) *apiv1.Map {
 			Tags:          decodeStringSlice(rawPolygon[tagsKey]),
 		})
 	}
+	return out
+}
 
-	circleMetadataByUID := nestedMap(agentMap, circlesKey)
+// decodeCircles decodes circle user-data and agent metadata for a map.
+func decodeCircles(userMap, agentMap map[string]any) []*apiv1.MapCircle {
+	metadataByUID := nestedMap(agentMap, circlesKey)
+	out := make([]*apiv1.MapCircle, 0)
 	for _, raw := range decodeSlice(userMap[circlesKey]) {
 		rawCircle, ok := raw.(map[string]any)
 		if !ok {
 			continue
 		}
 		uid := decodeString(rawCircle[uidKey])
-		out.Circles = append(out.Circles, &apiv1.MapCircle{
-			Metadata:      decodeMetadata(nestedMap(circleMetadataByUID, uid), uid),
+		out = append(out, &apiv1.MapCircle{
+			Metadata:      decodeMetadata(nestedMap(metadataByUID, uid), uid),
 			Label:         decodeString(rawCircle[labelKey]),
 			Center:        decodePoint(rawCircle),
 			RadiusMeters:  decodeFloat64(rawCircle[radiusKey]),
@@ -127,16 +149,21 @@ func decodeMap(fm wikipage.FrontMatter, page, mapName string) *apiv1.Map {
 			Tags:          decodeStringSlice(rawCircle[tagsKey]),
 		})
 	}
+	return out
+}
 
-	trackMetadataByUID := nestedMap(agentMap, tracksKey)
+// decodeTracks decodes track user-data and agent metadata for a map.
+func decodeTracks(userMap, agentMap map[string]any) []*apiv1.MapTrack {
+	metadataByUID := nestedMap(agentMap, tracksKey)
+	out := make([]*apiv1.MapTrack, 0)
 	for _, raw := range decodeSlice(userMap[tracksKey]) {
 		rawTrack, ok := raw.(map[string]any)
 		if !ok {
 			continue
 		}
 		uid := decodeString(rawTrack[uidKey])
-		out.Tracks = append(out.Tracks, &apiv1.MapTrack{
-			Metadata: decodeMetadata(nestedMap(trackMetadataByUID, uid), uid),
+		out = append(out, &apiv1.MapTrack{
+			Metadata: decodeMetadata(nestedMap(metadataByUID, uid), uid),
 			Label:    decodeString(rawTrack[labelKey]),
 			FileHash: decodeString(rawTrack[fileHashKey]),
 			Format:   decodeString(rawTrack[formatKey]),
@@ -145,8 +172,6 @@ func decodeMap(fm wikipage.FrontMatter, page, mapName string) *apiv1.Map {
 			Filename: decodeString(rawTrack[filenameKey]),
 		})
 	}
-
-	sortMapElements(out)
 	return out
 }
 

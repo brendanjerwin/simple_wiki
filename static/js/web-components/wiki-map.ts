@@ -484,8 +484,8 @@ export class LeafletWikiMapRenderer implements WikiMapRenderer {
 
       this.fitMapBounds();
 
-    } catch (err) {
-      console.error('Failed to load track geometry', err);
+    } catch {
+      // Error surfaced via failedTracks set → tag control UI (lines 151-180).
       this.failedTracks.add(track.label);
       this.tagControl?.updateTags();
     }
@@ -1020,7 +1020,7 @@ export class WikiMap extends LitElement {
           type="file"
           id="gps-track-file-input"
           style="display: none;"
-          accept=".gpx,.kml,.geojson"
+          accept=".gpx,.geojson"
           @change=${this.handleFileChange}
         />
 
@@ -1049,6 +1049,7 @@ export class WikiMap extends LitElement {
         includeMarkers: true,
         includePolygons: true,
         includeCircles: true,
+        includeTracks: true,
       }));
       if (this.page !== expectedPage || this.name !== expectedName) return;
       this.mapData = response.map ?? null;
@@ -1230,8 +1231,8 @@ export class WikiMap extends LitElement {
     this.showUploadPopover = true;
 
     const ext = file.name.split('.').pop()?.toLowerCase();
-    if (!ext || !['gpx', 'kml', 'geojson'].includes(ext)) {
-      this.uploadError = 'Unsupported file type. Please select a .gpx, .kml, or .geojson file.';
+    if (!ext || !['gpx', 'geojson'].includes(ext)) {
+      this.uploadError = 'Unsupported file type. Please select a .gpx or .geojson file.';
       this.isFileInvalid = true;
       return;
     }
