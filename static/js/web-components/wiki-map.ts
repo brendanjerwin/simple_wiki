@@ -799,6 +799,7 @@ export class WikiMap extends LitElement {
       }
 
       .leaflet-right .leaflet-control {
+        float: right;
         margin-right: 10px;
       }
 
