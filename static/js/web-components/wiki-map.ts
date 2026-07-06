@@ -809,7 +809,7 @@ export class WikiMap extends LitElement {
         border: 1px solid #d0d7de;
         border-radius: 6px;
         box-shadow: 0 1px 4px rgb(0 0 0 / 0.15);
-        margin-bottom: 4px !important;
+        margin-bottom: 48px !important;
         margin-right: 10px !important;
         position: relative;
         width: 32px;
