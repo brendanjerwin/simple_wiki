@@ -802,19 +802,33 @@ export class WikiMap extends LitElement {
         margin-right: 10px;
       }
 
-      /* Tag layer control (bottom-right; click to expand) */
+      /* Tag layer control (bottom-right; click to expand leftward) */
       .wiki-map-tag-control {
         background: #fff;
         border: 1px solid #d0d7de;
         border-radius: 6px;
         box-shadow: 0 1px 4px rgb(0 0 0 / 0.15);
-        margin-right: 0 !important;
-        overflow: hidden;
+        margin-bottom: 4px !important;
+        margin-right: 10px !important;
+        position: relative;
         width: 32px;
       }
-      .wiki-map-tag-control-open {
-        width: auto;
-        margin-bottom: 4px;
+
+      .wiki-map-tag-control-panel {
+        background: #fff;
+        border: 1px solid #d0d7de;
+        border-radius: 6px;
+        bottom: 0;
+        box-shadow: 0 1px 4px rgb(0 0 0 / 0.15);
+        display: none;
+        padding: 10px 12px;
+        position: absolute;
+        right: 42px;
+        width: 180px;
+      }
+
+      .wiki-map-tag-control-open .wiki-map-tag-control-panel {
+        display: block;
       }
 
       /* Add-track icon button (bottom-left; opens upload popover) */
@@ -891,16 +905,6 @@ export class WikiMap extends LitElement {
       .wiki-map-tag-control-icon {
         color: #24292f;
         font: bold 15px/1 system-ui, sans-serif;
-      }
-
-      .wiki-map-tag-control-panel {
-        display: none;
-        padding: 10px 12px;
-        width: 180px;
-      }
-
-      .wiki-map-tag-control-open .wiki-map-tag-control-panel {
-        display: block;
       }
 
       .wiki-map-tag-control-form {
