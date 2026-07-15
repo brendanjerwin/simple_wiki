@@ -246,7 +246,7 @@ tag visibility, type the format) while choosing a more reliable concrete approac
   UI, not logging). The relaxation is project-wide but only affects `_`-prefixed names, preserving
   the rule's intent for all other unused vars.
 - **Stress-test duration threshold:** AMENDED — `internal/trackgeom/trackgeom_stress_test.go`
-  relaxed the "reduce 50,000 points below a ceiling of 1000" duration assertion from `<2s` to
+  relaxed the "reduce 50,000 points below a ceiling of 1000" duration assertion <`5s` to
   `<5s`. Rationale: the original 2s bound was a guess that flaked on loaded CI machines (observed
   2.026s overshoot by 26ms); 5s preserves the guard's intent (catch pathological quadratic blowup)
   while removing CI flakiness. The actual measured time is ~2s, well under the new bound.

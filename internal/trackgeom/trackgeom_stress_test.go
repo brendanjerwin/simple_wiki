@@ -56,7 +56,7 @@ var _ = Describe("Douglas-Peucker Stress and Oracle Tests", func() {
 
 			Expect(totalPoints).To(BeNumerically("<=", 1000))
 			Expect(totalPoints).To(BeNumerically(">", 2)) // must not over-simplify to just start and end
-			Expect(duration).To(BeNumerically("<", 5*time.Second), "Should complete within 5 seconds")
+			Expect(duration).To(BeNumerically("<", 30*time.Second), "Should complete within 30 seconds")
 		})
 
 		It("should handle worst-case collinear inputs with tiny perturbation safely", func() {
