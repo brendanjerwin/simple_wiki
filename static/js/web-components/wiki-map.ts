@@ -101,9 +101,11 @@ function getLeafletTagControlCtor(): (new (renderer: LeafletWikiMapRenderer, opt
         }
       });
       // Close on outside click
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- Leaflet DomEvent.on types element as HTMLElement; document is the click root
       L.DomEvent.on(document as unknown as HTMLElement, 'click', (e: Event) => {
         // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- Leaflet DomEvent passes a mouse event here
         const mouseEvent = e as unknown as MouseEvent;
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- mouseEvent.target is EventTarget; narrow to Node
         const target = mouseEvent.target as Node | null;
         if (target && !container.contains(target)) {
           L.DomUtil.removeClass(container, 'wiki-map-tag-control-open');
@@ -429,6 +431,7 @@ export class LeafletWikiMapRenderer implements WikiMapRenderer {
       // Widen the hit target and show a pointer cursor + hover highlight so the
       // track is discoverable as a clickable element (the default 4px polyline is
       // a hard click target, especially on touchpads).
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- Leaflet getElement returns Element; cast to HTMLElement for style/setAttribute
       const pathElement = polyline.getElement() as unknown as HTMLElement | null;
       if (pathElement) {
         pathElement.style.cursor = 'pointer';
