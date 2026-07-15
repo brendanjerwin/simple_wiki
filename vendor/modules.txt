@@ -421,10 +421,10 @@ github.com/onsi/gomega/types
 ## explicit; go 1.18
 github.com/paulmach/orb
 github.com/paulmach/orb/geojson
-# github.com/pelletier/go-toml/v2 v2.3.1
+# github.com/pelletier/go-toml/v2 v2.4.3
 ## explicit; go 1.21.0
 github.com/pelletier/go-toml/v2
-github.com/pelletier/go-toml/v2/internal/characters
+github.com/pelletier/go-toml/v2/internal/parserbridge
 github.com/pelletier/go-toml/v2/internal/tracker
 github.com/pelletier/go-toml/v2/unstable
 # github.com/philhofer/fwd v1.0.0
