@@ -10,7 +10,7 @@
 - All map mutations go through a central map mutator funnel that atomically updates user-mutable maps.<name> data and wiki-managed agent.maps.<name> metadata.
 - The mutator funnel validates latitude, longitude, polygon point count, circle radius, and tile layer IDs.
 - Map element metadata is derived by the service layer, including timestamps, stable UIDs, sync tokens, creator attribution, and automated-agent attribution where the current identity subsystem supports it.
-- Generic frontmatter mutation paths reject external writes touching maps.* or agent.maps.* with InvalidArgument guidance naming MapService.
+- Generic frontmatter mutation paths reject external writes touching maps.*or agent.maps.* with InvalidArgument guidance naming MapService.
 - MapService read methods support context-efficient reads, including outline element lists, bbox filtering, single-element drill-down, marker search, and GetMap selectivity flags.
 - Marker popups render markdown, including wiki links, in the user-facing map experience.
 - The implementation includes Storybook coverage for the wiki-map component using the real component, not mock HTML.

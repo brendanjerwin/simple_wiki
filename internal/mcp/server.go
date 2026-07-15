@@ -42,6 +42,7 @@ func NewStreamableHTTPHandler(apiServer *grpcapi.Server, version string) (http.H
 	apiv1mcp.RegisterSearchServiceHandler(s, apiServer)
 	apiv1mcp.RegisterSystemInfoServiceHandler(s, apiServer)
 	apiv1mcp.RegisterSurveyServiceHandler(s, apiServer)
+	apiv1mcp.RegisterMapServiceHandler(s, apiServer)
 
 	return mcpserver.NewStreamableHTTPServer(s), nil
 }

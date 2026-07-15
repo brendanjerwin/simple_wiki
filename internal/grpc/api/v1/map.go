@@ -3,11 +3,13 @@ package v1
 import (
 	"context"
 	"errors"
+	"os"
 	"slices"
 	"strconv"
 	"strings"
 
 	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
+	"github.com/brendanjerwin/simple_wiki/internal/trackgeom"
 	"github.com/brendanjerwin/simple_wiki/server/mapmutator"
 	"github.com/brendanjerwin/simple_wiki/tailscale"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
@@ -17,7 +19,10 @@ import (
 
 var errMapMutatorNotConfigured = status.Error(codes.FailedPrecondition, "map mutator not configured on server")
 
-const defaultMapPageSize = 100
+const (
+	defaultMapPageSize            = 100
+	defaultTrackSimplificationCeiling = 1000 // max points returned by GetTrackGeometry
+)
 
 func requireMapRequest[T any](req *T) error {
 	if req == nil {
@@ -30,6 +35,7 @@ type mapElementIncludes struct {
 	markers  bool
 	polygons bool
 	circles  bool
+	tracks   bool
 }
 
 // SetMapView implements the SetMapView RPC.
@@ -249,6 +255,160 @@ func (s *Server) DeleteCircle(ctx context.Context, req *apiv1.DeleteCircleReques
 	return &apiv1.DeleteCircleResponse{Map: mapState}, nil
 }
 
+// AddTrack implements the AddTrack RPC.
+func (s *Server) AddTrack(ctx context.Context, req *apiv1.AddTrackRequest) (*apiv1.AddTrackResponse, error) {
+	if err := requireMapRequest(req); err != nil {
+		return nil, err
+	}
+	if s.mapMutator == nil {
+		return nil, errMapMutatorNotConfigured
+	}
+	if err := s.requireMapMutation(ctx, req.GetPage(), req.GetMapName()); err != nil {
+		return nil, err
+	}
+	if err := s.validateTrackFile(req.GetTrack()); err != nil {
+		return nil, err
+	}
+	identity := tailscale.IdentityFromContext(ctx)
+	track, mapState, err := s.mapMutator.AddTrack(ctx, req.GetPage(), req.GetMapName(), req.GetTrack(), timestampPtr(req.ExpectedUpdatedAt), identity)
+	if err != nil {
+		return nil, mapMapMutatorErr(err)
+	}
+	return &apiv1.AddTrackResponse{Track: track, Map: mapState}, nil
+}
+
+// UpdateTrack implements the UpdateTrack RPC.
+func (s *Server) UpdateTrack(ctx context.Context, req *apiv1.UpdateTrackRequest) (*apiv1.UpdateTrackResponse, error) {
+	if err := requireMapRequest(req); err != nil {
+		return nil, err
+	}
+	if s.mapMutator == nil {
+		return nil, errMapMutatorNotConfigured
+	}
+	if err := s.requireMapMutation(ctx, req.GetPage(), req.GetMapName()); err != nil {
+		return nil, err
+	}
+	if err := s.validateTrackFile(req.GetTrack()); err != nil {
+		return nil, err
+	}
+	track, mapState, err := s.mapMutator.UpdateTrack(ctx, req.GetPage(), req.GetMapName(), req.GetUid(), req.GetTrack(), timestampPtr(req.ExpectedUpdatedAt))
+	if err != nil {
+		return nil, mapMapMutatorErr(err)
+	}
+	return &apiv1.UpdateTrackResponse{Track: track, Map: mapState}, nil
+}
+
+func (s *Server) validateTrackFile(track *apiv1.MapTrack) error {
+	if track == nil {
+		return status.Error(codes.InvalidArgument, "track is required")
+	}
+	if s.fileStorer == nil {
+		return status.Error(codes.FailedPrecondition, "file storage is not configured")
+	}
+	fileHash := track.GetFileHash()
+	format := track.GetFormat()
+
+	if format == "" {
+		return status.Error(codes.InvalidArgument, "format is required")
+	}
+	if fileHash == "" {
+		return status.Error(codes.InvalidArgument, "file_hash is required")
+	}
+	normalizedFormat := trackgeom.TrackFormat(format)
+	switch normalizedFormat {
+	case trackgeom.TrackFormatGPX, trackgeom.TrackFormatGeoJSON:
+	default:
+		return status.Errorf(codes.InvalidArgument, "format must be GPX or GeoJSON, got: %s", format)
+	}
+
+	reader, err := s.fileStorer.Open(fileHash)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) || os.IsNotExist(err) {
+			return status.Error(codes.NotFound, "track file not found")
+		}
+		return status.Errorf(codes.InvalidArgument, "failed to open track file: %v", err)
+	}
+	defer func() { _ = reader.Close() }()
+
+	if _, err := trackgeom.Parse(normalizedFormat, reader); err != nil {
+		return status.Errorf(codes.InvalidArgument, "invalid or corrupt track file format: %v", err)
+	}
+	return nil
+}
+
+// DeleteTrack implements the DeleteTrack RPC.
+func (s *Server) DeleteTrack(ctx context.Context, req *apiv1.DeleteTrackRequest) (*apiv1.DeleteTrackResponse, error) {
+	if err := requireMapRequest(req); err != nil {
+		return nil, err
+	}
+	if s.mapMutator == nil {
+		return nil, errMapMutatorNotConfigured
+	}
+	if err := s.requireMapMutation(ctx, req.GetPage(), req.GetMapName()); err != nil {
+		return nil, err
+	}
+	mapState, err := s.mapMutator.DeleteTrack(ctx, req.GetPage(), req.GetMapName(), req.GetUid(), timestampPtr(req.ExpectedUpdatedAt))
+	if err != nil {
+		return nil, mapMapMutatorErr(err)
+	}
+	return &apiv1.DeleteTrackResponse{Map: mapState}, nil
+}
+
+// GetTrackGeometry implements the GetTrackGeometry RPC.
+func (s *Server) GetTrackGeometry(ctx context.Context, req *apiv1.GetTrackGeometryRequest) (*apiv1.GetTrackGeometryResponse, error) {
+	if err := requireMapRequest(req); err != nil {
+		return nil, err
+	}
+	mapState, err := s.readAuthorizedMap(ctx, req.GetPage(), req.GetMapName())
+	if err != nil {
+		return nil, err
+	}
+	var targetTrack *apiv1.MapTrack
+	for _, track := range mapState.GetTracks() {
+		if track.GetMetadata().GetUid() == req.GetUid() {
+			targetTrack = track
+			break
+		}
+	}
+	if targetTrack == nil {
+		return nil, status.Error(codes.NotFound, "track element not found")
+	}
+	if s.fileStorer == nil {
+		return nil, status.Error(codes.FailedPrecondition, "file storage is not configured")
+	}
+	reader, err := s.fileStorer.Open(targetTrack.GetFileHash())
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, status.Error(codes.NotFound, "track file not found")
+		}
+		return nil, status.Errorf(codes.Internal, "failed to open track file: %v", err)
+	}
+	defer func() { _ = reader.Close() }()
+
+	parsedSegments, err := trackgeom.Parse(trackgeom.TrackFormat(targetTrack.GetFormat()), reader)
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "failed to parse track geometry: %v", err)
+	}
+
+	simplified := (&trackgeom.Track{Segments: parsedSegments}).Simplify(defaultTrackSimplificationCeiling)
+
+	segments := make([]*apiv1.TrackSegment, 0, len(simplified.Segments))
+	for _, seg := range simplified.Segments {
+		points := make([]*apiv1.GeoPoint, 0, len(seg))
+		for _, pt := range seg {
+			points = append(points, &apiv1.GeoPoint{
+				Lat: pt.Lat,
+				Lon: pt.Lon,
+			})
+		}
+		segments = append(segments, &apiv1.TrackSegment{
+			Points: points,
+		})
+	}
+
+	return &apiv1.GetTrackGeometryResponse{Segments: segments}, nil
+}
+
 // ReorderElement implements the ReorderElement RPC.
 func (s *Server) ReorderElement(ctx context.Context, req *apiv1.ReorderElementRequest) (*apiv1.ReorderElementResponse, error) {
 	if err := requireMapRequest(req); err != nil {
@@ -398,6 +558,12 @@ func (s *Server) GetElement(ctx context.Context, req *apiv1.GetElementRequest) (
 				return &apiv1.GetElementResponse{Circle: circle}, nil
 			}
 		}
+	case apiv1.MapElementType_MAP_ELEMENT_TYPE_TRACK:
+		for _, track := range mapState.GetTracks() {
+			if track.GetMetadata().GetUid() == req.GetUid() {
+				return &apiv1.GetElementResponse{Track: track}, nil
+			}
+		}
 	default:
 		return nil, status.Error(codes.InvalidArgument, "type is required")
 	}
@@ -467,13 +633,13 @@ func (s *Server) requireMapMutation(ctx context.Context, page, mapName string) e
 	}
 	return requireAuthorized(ctx, s.pageReaderMutator, wikipage.PageIdentifier(page))
 }
-
 func requestedMapElementIncludes(req *apiv1.GetMapRequest) mapElementIncludes {
-	includeAll := !req.GetIncludeMarkers() && !req.GetIncludePolygons() && !req.GetIncludeCircles()
+	includeAll := !req.GetIncludeMarkers() && !req.GetIncludePolygons() && !req.GetIncludeCircles() && !req.GetIncludeTracks()
 	return mapElementIncludes{
 		markers:  includeAll || req.GetIncludeMarkers(),
 		polygons: includeAll || req.GetIncludePolygons(),
 		circles:  includeAll || req.GetIncludeCircles(),
+		tracks:   includeAll || req.GetIncludeTracks(),
 	}
 }
 
@@ -492,6 +658,9 @@ func filterMapResponse(mapState *apiv1.Map, includes mapElementIncludes, bbox *a
 		mapState.Circles = filterCirclesByBBox(mapState.GetCircles(), bbox)
 	} else {
 		mapState.Circles = nil
+	}
+	if !includes.tracks {
+		mapState.Tracks = nil
 	}
 }
 
@@ -537,6 +706,18 @@ func elementOutlines(mapState *apiv1.Map, types []apiv1.MapElementType, bbox *ap
 				RepresentativePoint: circle.GetCenter(),
 				UpdatedAt:           circle.GetMetadata().GetUpdatedAt(),
 				SortOrder:           circle.GetMetadata().GetSortOrder(),
+			})
+		}
+	}
+	if includeType(apiv1.MapElementType_MAP_ELEMENT_TYPE_TRACK) {
+		for _, track := range mapState.GetTracks() {
+			out = append(out, &apiv1.MapElementOutline{
+				Uid:                 track.GetMetadata().GetUid(),
+				Type:                apiv1.MapElementType_MAP_ELEMENT_TYPE_TRACK,
+				Label:               track.GetLabel(),
+				RepresentativePoint: nil,
+				UpdatedAt:           track.GetMetadata().GetUpdatedAt(),
+				SortOrder:           track.GetMetadata().GetSortOrder(),
 			})
 		}
 	}

@@ -36,6 +36,11 @@ const (
 	createdByKey   = "created_by"
 	automatedKey   = "automated"
 	sortOrderKey   = "sort_order"
+	tracksKey      = "tracks"
+	fileHashKey    = "file_hash"
+	formatKey      = "format"
+	tagsKey        = "tags"
+	filenameKey    = "filename"
 )
 
 func mapExists(fm wikipage.FrontMatter, mapName string) bool {
@@ -69,58 +74,104 @@ func decodeMap(fm wikipage.FrontMatter, page, mapName string) *apiv1.Map {
 	out.View = decodeView(userMap[viewKey])
 	out.Style = decodeStyle(userMap[styleKey])
 
-	markerMetadataByUID := nestedMap(agentMap, markersKey)
+	out.Markers = decodeMarkers(userMap, agentMap)
+	out.Polygons = decodePolygons(userMap, agentMap)
+	out.Circles = decodeCircles(userMap, agentMap)
+	out.Tracks = decodeTracks(userMap, agentMap)
+
+	sortMapElements(out)
+	return out
+}
+
+// decodeMarkers decodes marker user-data and agent metadata for a map.
+func decodeMarkers(userMap, agentMap map[string]any) []*apiv1.MapMarker {
+	metadataByUID := nestedMap(agentMap, markersKey)
+	out := make([]*apiv1.MapMarker, 0)
 	for _, raw := range decodeSlice(userMap[markersKey]) {
 		rawMarker, ok := raw.(map[string]any)
 		if !ok {
 			continue
 		}
 		uid := decodeString(rawMarker[uidKey])
-		out.Markers = append(out.Markers, &apiv1.MapMarker{
-			Metadata:      decodeMetadata(nestedMap(markerMetadataByUID, uid), uid),
+		out = append(out, &apiv1.MapMarker{
+			Metadata:      decodeMetadata(nestedMap(metadataByUID, uid), uid),
 			Label:         decodeString(rawMarker[labelKey]),
 			Position:      decodePoint(rawMarker),
 			PopupMarkdown: decodeString(rawMarker[popupKey]),
 			Color:         decodeString(rawMarker[colorKey]),
+			Tags:          decodeStringSlice(rawMarker[tagsKey]),
 		})
 	}
+	return out
+}
 
-	polygonMetadataByUID := nestedMap(agentMap, polygonsKey)
+// decodePolygons decodes polygon user-data and agent metadata for a map.
+func decodePolygons(userMap, agentMap map[string]any) []*apiv1.MapPolygon {
+	metadataByUID := nestedMap(agentMap, polygonsKey)
+	out := make([]*apiv1.MapPolygon, 0)
 	for _, raw := range decodeSlice(userMap[polygonsKey]) {
 		rawPolygon, ok := raw.(map[string]any)
 		if !ok {
 			continue
 		}
 		uid := decodeString(rawPolygon[uidKey])
-		out.Polygons = append(out.Polygons, &apiv1.MapPolygon{
-			Metadata:      decodeMetadata(nestedMap(polygonMetadataByUID, uid), uid),
+		out = append(out, &apiv1.MapPolygon{
+			Metadata:      decodeMetadata(nestedMap(metadataByUID, uid), uid),
 			Label:         decodeString(rawPolygon[labelKey]),
 			Points:        decodePoints(rawPolygon[pointsKey]),
 			PopupMarkdown: decodeString(rawPolygon[popupKey]),
 			StrokeColor:   decodeString(rawPolygon[strokeKey]),
 			FillColor:     decodeString(rawPolygon[fillKey]),
+			Tags:          decodeStringSlice(rawPolygon[tagsKey]),
 		})
 	}
+	return out
+}
 
-	circleMetadataByUID := nestedMap(agentMap, circlesKey)
+// decodeCircles decodes circle user-data and agent metadata for a map.
+func decodeCircles(userMap, agentMap map[string]any) []*apiv1.MapCircle {
+	metadataByUID := nestedMap(agentMap, circlesKey)
+	out := make([]*apiv1.MapCircle, 0)
 	for _, raw := range decodeSlice(userMap[circlesKey]) {
 		rawCircle, ok := raw.(map[string]any)
 		if !ok {
 			continue
 		}
 		uid := decodeString(rawCircle[uidKey])
-		out.Circles = append(out.Circles, &apiv1.MapCircle{
-			Metadata:      decodeMetadata(nestedMap(circleMetadataByUID, uid), uid),
+		out = append(out, &apiv1.MapCircle{
+			Metadata:      decodeMetadata(nestedMap(metadataByUID, uid), uid),
 			Label:         decodeString(rawCircle[labelKey]),
 			Center:        decodePoint(rawCircle),
 			RadiusMeters:  decodeFloat64(rawCircle[radiusKey]),
 			PopupMarkdown: decodeString(rawCircle[popupKey]),
 			StrokeColor:   decodeString(rawCircle[strokeKey]),
 			FillColor:     decodeString(rawCircle[fillKey]),
+			Tags:          decodeStringSlice(rawCircle[tagsKey]),
 		})
 	}
+	return out
+}
 
-	sortMapElements(out)
+// decodeTracks decodes track user-data and agent metadata for a map.
+func decodeTracks(userMap, agentMap map[string]any) []*apiv1.MapTrack {
+	metadataByUID := nestedMap(agentMap, tracksKey)
+	out := make([]*apiv1.MapTrack, 0)
+	for _, raw := range decodeSlice(userMap[tracksKey]) {
+		rawTrack, ok := raw.(map[string]any)
+		if !ok {
+			continue
+		}
+		uid := decodeString(rawTrack[uidKey])
+		out = append(out, &apiv1.MapTrack{
+			Metadata: decodeMetadata(nestedMap(metadataByUID, uid), uid),
+			Label:    decodeString(rawTrack[labelKey]),
+			FileHash: decodeString(rawTrack[fileHashKey]),
+			Format:   decodeString(rawTrack[formatKey]),
+			Color:    decodeString(rawTrack[colorKey]),
+			Tags:     decodeStringSlice(rawTrack[tagsKey]),
+			Filename: decodeString(rawTrack[filenameKey]),
+		})
+	}
 	return out
 }
 
@@ -136,6 +187,7 @@ func encodeMap(fm wikipage.FrontMatter, mapState *apiv1.Map) {
 	userMap[markersKey] = encodeMarkersUserData(mapState.GetMarkers())
 	userMap[polygonsKey] = encodePolygonsUserData(mapState.GetPolygons())
 	userMap[circlesKey] = encodeCirclesUserData(mapState.GetCircles())
+	userMap[tracksKey] = encodeTracksUserData(mapState.GetTracks())
 
 	agent := ensureNestedMap(fm, agentKey)
 	agentMaps := ensureNestedMap(agent, mapsKey)
@@ -147,6 +199,7 @@ func encodeMap(fm wikipage.FrontMatter, mapState *apiv1.Map) {
 	agentMap[markersKey] = encodeMarkerMetadata(mapState.GetMarkers())
 	agentMap[polygonsKey] = encodePolygonMetadata(mapState.GetPolygons())
 	agentMap[circlesKey] = encodeCircleMetadata(mapState.GetCircles())
+	agentMap[tracksKey] = encodeTrackMetadata(mapState.GetTracks())
 }
 
 func deleteMapData(fm wikipage.FrontMatter, mapName string) {
@@ -207,6 +260,9 @@ func encodeMarkersUserData(markers []*apiv1.MapMarker) []any {
 			lonKey:   marker.GetPosition().GetLon(),
 		}
 		addOptionalCommonFields(row, marker.GetPopupMarkdown(), marker.GetColor(), "", "")
+		if len(marker.GetTags()) > 0 {
+			row[tagsKey] = encodeStringSlice(marker.GetTags())
+		}
 		out = append(out, row)
 	}
 	return out
@@ -224,6 +280,9 @@ func encodePolygonsUserData(polygons []*apiv1.MapPolygon) []any {
 			pointsKey: encodePoints(polygon.GetPoints()),
 		}
 		addOptionalCommonFields(row, polygon.GetPopupMarkdown(), "", polygon.GetStrokeColor(), polygon.GetFillColor())
+		if len(polygon.GetTags()) > 0 {
+			row[tagsKey] = encodeStringSlice(polygon.GetTags())
+		}
 		out = append(out, row)
 	}
 	return out
@@ -243,7 +302,44 @@ func encodeCirclesUserData(circles []*apiv1.MapCircle) []any {
 			radiusKey: circle.GetRadiusMeters(),
 		}
 		addOptionalCommonFields(row, circle.GetPopupMarkdown(), "", circle.GetStrokeColor(), circle.GetFillColor())
+		if len(circle.GetTags()) > 0 {
+			row[tagsKey] = encodeStringSlice(circle.GetTags())
+		}
 		out = append(out, row)
+	}
+	return out
+}
+
+func encodeTracksUserData(tracks []*apiv1.MapTrack) []any {
+	out := make([]any, 0, len(tracks))
+	for _, track := range tracks {
+		if track == nil {
+			continue
+		}
+		row := map[string]any{
+			uidKey:      track.GetMetadata().GetUid(),
+			labelKey:    track.GetLabel(),
+			fileHashKey: track.GetFileHash(),
+			formatKey:   track.GetFormat(),
+		}
+		if track.GetFilename() != "" {
+			row[filenameKey] = track.GetFilename()
+		}
+		if track.GetColor() != "" {
+			row[colorKey] = track.GetColor()
+		}
+		if len(track.GetTags()) > 0 {
+			row[tagsKey] = encodeStringSlice(track.GetTags())
+		}
+		out = append(out, row)
+	}
+	return out
+}
+
+func encodeStringSlice(slice []string) []any {
+	out := make([]any, 0, len(slice))
+	for _, s := range slice {
+		out = append(out, s)
 	}
 	return out
 }
@@ -288,6 +384,16 @@ func encodeCircleMetadata(circles []*apiv1.MapCircle) map[string]any {
 	for _, circle := range circles {
 		if circle != nil {
 			encodeMetadata(out, circle.GetMetadata())
+		}
+	}
+	return out
+}
+
+func encodeTrackMetadata(tracks []*apiv1.MapTrack) map[string]any {
+	out := map[string]any{}
+	for _, track := range tracks {
+		if track != nil {
+			encodeMetadata(out, track.GetMetadata())
 		}
 	}
 	return out
@@ -378,6 +484,20 @@ func decodeString(raw any) string {
 		return typed
 	}
 	return ""
+}
+
+func decodeStringSlice(raw any) []string {
+	slice := decodeSlice(raw)
+	if slice == nil {
+		return nil
+	}
+	out := make([]string, 0, len(slice))
+	for _, item := range slice {
+		if str, ok := item.(string); ok {
+			out = append(out, str)
+		}
+	}
+	return out
 }
 
 func decodeBool(raw any) bool {

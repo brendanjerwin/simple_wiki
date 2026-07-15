@@ -2,9 +2,11 @@
   "default": true,
   "MD013": false,
   "MD024": false,
+  "MD033": false,
   "MD060": false,
   "ignore": [
     "node_modules",
-    "vendor"
+    "vendor",
+    "goals"
   ]
 }

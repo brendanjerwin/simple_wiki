@@ -59,6 +59,15 @@ const (
 	MapServiceUpdateCircleProcedure = "/api.v1.MapService/UpdateCircle"
 	// MapServiceDeleteCircleProcedure is the fully-qualified name of the MapService's DeleteCircle RPC.
 	MapServiceDeleteCircleProcedure = "/api.v1.MapService/DeleteCircle"
+	// MapServiceAddTrackProcedure is the fully-qualified name of the MapService's AddTrack RPC.
+	MapServiceAddTrackProcedure = "/api.v1.MapService/AddTrack"
+	// MapServiceUpdateTrackProcedure is the fully-qualified name of the MapService's UpdateTrack RPC.
+	MapServiceUpdateTrackProcedure = "/api.v1.MapService/UpdateTrack"
+	// MapServiceDeleteTrackProcedure is the fully-qualified name of the MapService's DeleteTrack RPC.
+	MapServiceDeleteTrackProcedure = "/api.v1.MapService/DeleteTrack"
+	// MapServiceGetTrackGeometryProcedure is the fully-qualified name of the MapService's
+	// GetTrackGeometry RPC.
+	MapServiceGetTrackGeometryProcedure = "/api.v1.MapService/GetTrackGeometry"
 	// MapServiceReorderElementProcedure is the fully-qualified name of the MapService's ReorderElement
 	// RPC.
 	MapServiceReorderElementProcedure = "/api.v1.MapService/ReorderElement"
@@ -82,27 +91,31 @@ const (
 
 // These variables are the protoreflect.Descriptor objects for the RPCs defined in this package.
 var (
-	mapServiceServiceDescriptor               = v1.File_api_v1_map_proto.Services().ByName("MapService")
-	mapServiceSetMapViewMethodDescriptor      = mapServiceServiceDescriptor.Methods().ByName("SetMapView")
-	mapServiceSetMapStyleMethodDescriptor     = mapServiceServiceDescriptor.Methods().ByName("SetMapStyle")
-	mapServiceAddMarkerMethodDescriptor       = mapServiceServiceDescriptor.Methods().ByName("AddMarker")
-	mapServiceUpdateMarkerMethodDescriptor    = mapServiceServiceDescriptor.Methods().ByName("UpdateMarker")
-	mapServiceMoveMarkerMethodDescriptor      = mapServiceServiceDescriptor.Methods().ByName("MoveMarker")
-	mapServiceDeleteMarkerMethodDescriptor    = mapServiceServiceDescriptor.Methods().ByName("DeleteMarker")
-	mapServiceAddPolygonMethodDescriptor      = mapServiceServiceDescriptor.Methods().ByName("AddPolygon")
-	mapServiceUpdatePolygonMethodDescriptor   = mapServiceServiceDescriptor.Methods().ByName("UpdatePolygon")
-	mapServiceDeletePolygonMethodDescriptor   = mapServiceServiceDescriptor.Methods().ByName("DeletePolygon")
-	mapServiceAddCircleMethodDescriptor       = mapServiceServiceDescriptor.Methods().ByName("AddCircle")
-	mapServiceUpdateCircleMethodDescriptor    = mapServiceServiceDescriptor.Methods().ByName("UpdateCircle")
-	mapServiceDeleteCircleMethodDescriptor    = mapServiceServiceDescriptor.Methods().ByName("DeleteCircle")
-	mapServiceReorderElementMethodDescriptor  = mapServiceServiceDescriptor.Methods().ByName("ReorderElement")
-	mapServiceReplaceMarkersMethodDescriptor  = mapServiceServiceDescriptor.Methods().ByName("ReplaceMarkers")
-	mapServiceDeleteMapMethodDescriptor       = mapServiceServiceDescriptor.Methods().ByName("DeleteMap")
-	mapServiceGetMapMethodDescriptor          = mapServiceServiceDescriptor.Methods().ByName("GetMap")
-	mapServiceListMapsMethodDescriptor        = mapServiceServiceDescriptor.Methods().ByName("ListMaps")
-	mapServiceListMapElementsMethodDescriptor = mapServiceServiceDescriptor.Methods().ByName("ListMapElements")
-	mapServiceGetElementMethodDescriptor      = mapServiceServiceDescriptor.Methods().ByName("GetElement")
-	mapServiceFindMarkersMethodDescriptor     = mapServiceServiceDescriptor.Methods().ByName("FindMarkers")
+	mapServiceServiceDescriptor                = v1.File_api_v1_map_proto.Services().ByName("MapService")
+	mapServiceSetMapViewMethodDescriptor       = mapServiceServiceDescriptor.Methods().ByName("SetMapView")
+	mapServiceSetMapStyleMethodDescriptor      = mapServiceServiceDescriptor.Methods().ByName("SetMapStyle")
+	mapServiceAddMarkerMethodDescriptor        = mapServiceServiceDescriptor.Methods().ByName("AddMarker")
+	mapServiceUpdateMarkerMethodDescriptor     = mapServiceServiceDescriptor.Methods().ByName("UpdateMarker")
+	mapServiceMoveMarkerMethodDescriptor       = mapServiceServiceDescriptor.Methods().ByName("MoveMarker")
+	mapServiceDeleteMarkerMethodDescriptor     = mapServiceServiceDescriptor.Methods().ByName("DeleteMarker")
+	mapServiceAddPolygonMethodDescriptor       = mapServiceServiceDescriptor.Methods().ByName("AddPolygon")
+	mapServiceUpdatePolygonMethodDescriptor    = mapServiceServiceDescriptor.Methods().ByName("UpdatePolygon")
+	mapServiceDeletePolygonMethodDescriptor    = mapServiceServiceDescriptor.Methods().ByName("DeletePolygon")
+	mapServiceAddCircleMethodDescriptor        = mapServiceServiceDescriptor.Methods().ByName("AddCircle")
+	mapServiceUpdateCircleMethodDescriptor     = mapServiceServiceDescriptor.Methods().ByName("UpdateCircle")
+	mapServiceDeleteCircleMethodDescriptor     = mapServiceServiceDescriptor.Methods().ByName("DeleteCircle")
+	mapServiceAddTrackMethodDescriptor         = mapServiceServiceDescriptor.Methods().ByName("AddTrack")
+	mapServiceUpdateTrackMethodDescriptor      = mapServiceServiceDescriptor.Methods().ByName("UpdateTrack")
+	mapServiceDeleteTrackMethodDescriptor      = mapServiceServiceDescriptor.Methods().ByName("DeleteTrack")
+	mapServiceGetTrackGeometryMethodDescriptor = mapServiceServiceDescriptor.Methods().ByName("GetTrackGeometry")
+	mapServiceReorderElementMethodDescriptor   = mapServiceServiceDescriptor.Methods().ByName("ReorderElement")
+	mapServiceReplaceMarkersMethodDescriptor   = mapServiceServiceDescriptor.Methods().ByName("ReplaceMarkers")
+	mapServiceDeleteMapMethodDescriptor        = mapServiceServiceDescriptor.Methods().ByName("DeleteMap")
+	mapServiceGetMapMethodDescriptor           = mapServiceServiceDescriptor.Methods().ByName("GetMap")
+	mapServiceListMapsMethodDescriptor         = mapServiceServiceDescriptor.Methods().ByName("ListMaps")
+	mapServiceListMapElementsMethodDescriptor  = mapServiceServiceDescriptor.Methods().ByName("ListMapElements")
+	mapServiceGetElementMethodDescriptor       = mapServiceServiceDescriptor.Methods().ByName("GetElement")
+	mapServiceFindMarkersMethodDescriptor      = mapServiceServiceDescriptor.Methods().ByName("FindMarkers")
 )
 
 // MapServiceClient is a client for the api.v1.MapService service.
@@ -131,6 +144,14 @@ type MapServiceClient interface {
 	UpdateCircle(context.Context, *connect.Request[v1.UpdateCircleRequest]) (*connect.Response[v1.UpdateCircleResponse], error)
 	// DeleteCircle — see (api.v1.description).
 	DeleteCircle(context.Context, *connect.Request[v1.DeleteCircleRequest]) (*connect.Response[v1.DeleteCircleResponse], error)
+	// AddTrack — see (api.v1.description).
+	AddTrack(context.Context, *connect.Request[v1.AddTrackRequest]) (*connect.Response[v1.AddTrackResponse], error)
+	// UpdateTrack — see (api.v1.description).
+	UpdateTrack(context.Context, *connect.Request[v1.UpdateTrackRequest]) (*connect.Response[v1.UpdateTrackResponse], error)
+	// DeleteTrack — see (api.v1.description).
+	DeleteTrack(context.Context, *connect.Request[v1.DeleteTrackRequest]) (*connect.Response[v1.DeleteTrackResponse], error)
+	// GetTrackGeometry — see (api.v1.description).
+	GetTrackGeometry(context.Context, *connect.Request[v1.GetTrackGeometryRequest]) (*connect.Response[v1.GetTrackGeometryResponse], error)
 	// ReorderElement — see (api.v1.description).
 	ReorderElement(context.Context, *connect.Request[v1.ReorderElementRequest]) (*connect.Response[v1.ReorderElementResponse], error)
 	// ReplaceMarkers — see (api.v1.description).
@@ -231,6 +252,30 @@ func NewMapServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...
 			connect.WithSchema(mapServiceDeleteCircleMethodDescriptor),
 			connect.WithClientOptions(opts...),
 		),
+		addTrack: connect.NewClient[v1.AddTrackRequest, v1.AddTrackResponse](
+			httpClient,
+			baseURL+MapServiceAddTrackProcedure,
+			connect.WithSchema(mapServiceAddTrackMethodDescriptor),
+			connect.WithClientOptions(opts...),
+		),
+		updateTrack: connect.NewClient[v1.UpdateTrackRequest, v1.UpdateTrackResponse](
+			httpClient,
+			baseURL+MapServiceUpdateTrackProcedure,
+			connect.WithSchema(mapServiceUpdateTrackMethodDescriptor),
+			connect.WithClientOptions(opts...),
+		),
+		deleteTrack: connect.NewClient[v1.DeleteTrackRequest, v1.DeleteTrackResponse](
+			httpClient,
+			baseURL+MapServiceDeleteTrackProcedure,
+			connect.WithSchema(mapServiceDeleteTrackMethodDescriptor),
+			connect.WithClientOptions(opts...),
+		),
+		getTrackGeometry: connect.NewClient[v1.GetTrackGeometryRequest, v1.GetTrackGeometryResponse](
+			httpClient,
+			baseURL+MapServiceGetTrackGeometryProcedure,
+			connect.WithSchema(mapServiceGetTrackGeometryMethodDescriptor),
+			connect.WithClientOptions(opts...),
+		),
 		reorderElement: connect.NewClient[v1.ReorderElementRequest, v1.ReorderElementResponse](
 			httpClient,
 			baseURL+MapServiceReorderElementProcedure,
@@ -284,26 +329,30 @@ func NewMapServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...
 
 // mapServiceClient implements MapServiceClient.
 type mapServiceClient struct {
-	setMapView      *connect.Client[v1.SetMapViewRequest, v1.SetMapViewResponse]
-	setMapStyle     *connect.Client[v1.SetMapStyleRequest, v1.SetMapStyleResponse]
-	addMarker       *connect.Client[v1.AddMarkerRequest, v1.AddMarkerResponse]
-	updateMarker    *connect.Client[v1.UpdateMarkerRequest, v1.UpdateMarkerResponse]
-	moveMarker      *connect.Client[v1.MoveMarkerRequest, v1.MoveMarkerResponse]
-	deleteMarker    *connect.Client[v1.DeleteMarkerRequest, v1.DeleteMarkerResponse]
-	addPolygon      *connect.Client[v1.AddPolygonRequest, v1.AddPolygonResponse]
-	updatePolygon   *connect.Client[v1.UpdatePolygonRequest, v1.UpdatePolygonResponse]
-	deletePolygon   *connect.Client[v1.DeletePolygonRequest, v1.DeletePolygonResponse]
-	addCircle       *connect.Client[v1.AddCircleRequest, v1.AddCircleResponse]
-	updateCircle    *connect.Client[v1.UpdateCircleRequest, v1.UpdateCircleResponse]
-	deleteCircle    *connect.Client[v1.DeleteCircleRequest, v1.DeleteCircleResponse]
-	reorderElement  *connect.Client[v1.ReorderElementRequest, v1.ReorderElementResponse]
-	replaceMarkers  *connect.Client[v1.ReplaceMarkersRequest, v1.ReplaceMarkersResponse]
-	deleteMap       *connect.Client[v1.DeleteMapRequest, v1.DeleteMapResponse]
-	getMap          *connect.Client[v1.GetMapRequest, v1.GetMapResponse]
-	listMaps        *connect.Client[v1.ListMapsRequest, v1.ListMapsResponse]
-	listMapElements *connect.Client[v1.ListMapElementsRequest, v1.ListMapElementsResponse]
-	getElement      *connect.Client[v1.GetElementRequest, v1.GetElementResponse]
-	findMarkers     *connect.Client[v1.FindMarkersRequest, v1.FindMarkersResponse]
+	setMapView       *connect.Client[v1.SetMapViewRequest, v1.SetMapViewResponse]
+	setMapStyle      *connect.Client[v1.SetMapStyleRequest, v1.SetMapStyleResponse]
+	addMarker        *connect.Client[v1.AddMarkerRequest, v1.AddMarkerResponse]
+	updateMarker     *connect.Client[v1.UpdateMarkerRequest, v1.UpdateMarkerResponse]
+	moveMarker       *connect.Client[v1.MoveMarkerRequest, v1.MoveMarkerResponse]
+	deleteMarker     *connect.Client[v1.DeleteMarkerRequest, v1.DeleteMarkerResponse]
+	addPolygon       *connect.Client[v1.AddPolygonRequest, v1.AddPolygonResponse]
+	updatePolygon    *connect.Client[v1.UpdatePolygonRequest, v1.UpdatePolygonResponse]
+	deletePolygon    *connect.Client[v1.DeletePolygonRequest, v1.DeletePolygonResponse]
+	addCircle        *connect.Client[v1.AddCircleRequest, v1.AddCircleResponse]
+	updateCircle     *connect.Client[v1.UpdateCircleRequest, v1.UpdateCircleResponse]
+	deleteCircle     *connect.Client[v1.DeleteCircleRequest, v1.DeleteCircleResponse]
+	addTrack         *connect.Client[v1.AddTrackRequest, v1.AddTrackResponse]
+	updateTrack      *connect.Client[v1.UpdateTrackRequest, v1.UpdateTrackResponse]
+	deleteTrack      *connect.Client[v1.DeleteTrackRequest, v1.DeleteTrackResponse]
+	getTrackGeometry *connect.Client[v1.GetTrackGeometryRequest, v1.GetTrackGeometryResponse]
+	reorderElement   *connect.Client[v1.ReorderElementRequest, v1.ReorderElementResponse]
+	replaceMarkers   *connect.Client[v1.ReplaceMarkersRequest, v1.ReplaceMarkersResponse]
+	deleteMap        *connect.Client[v1.DeleteMapRequest, v1.DeleteMapResponse]
+	getMap           *connect.Client[v1.GetMapRequest, v1.GetMapResponse]
+	listMaps         *connect.Client[v1.ListMapsRequest, v1.ListMapsResponse]
+	listMapElements  *connect.Client[v1.ListMapElementsRequest, v1.ListMapElementsResponse]
+	getElement       *connect.Client[v1.GetElementRequest, v1.GetElementResponse]
+	findMarkers      *connect.Client[v1.FindMarkersRequest, v1.FindMarkersResponse]
 }
 
 // SetMapView calls api.v1.MapService.SetMapView.
@@ -364,6 +413,26 @@ func (c *mapServiceClient) UpdateCircle(ctx context.Context, req *connect.Reques
 // DeleteCircle calls api.v1.MapService.DeleteCircle.
 func (c *mapServiceClient) DeleteCircle(ctx context.Context, req *connect.Request[v1.DeleteCircleRequest]) (*connect.Response[v1.DeleteCircleResponse], error) {
 	return c.deleteCircle.CallUnary(ctx, req)
+}
+
+// AddTrack calls api.v1.MapService.AddTrack.
+func (c *mapServiceClient) AddTrack(ctx context.Context, req *connect.Request[v1.AddTrackRequest]) (*connect.Response[v1.AddTrackResponse], error) {
+	return c.addTrack.CallUnary(ctx, req)
+}
+
+// UpdateTrack calls api.v1.MapService.UpdateTrack.
+func (c *mapServiceClient) UpdateTrack(ctx context.Context, req *connect.Request[v1.UpdateTrackRequest]) (*connect.Response[v1.UpdateTrackResponse], error) {
+	return c.updateTrack.CallUnary(ctx, req)
+}
+
+// DeleteTrack calls api.v1.MapService.DeleteTrack.
+func (c *mapServiceClient) DeleteTrack(ctx context.Context, req *connect.Request[v1.DeleteTrackRequest]) (*connect.Response[v1.DeleteTrackResponse], error) {
+	return c.deleteTrack.CallUnary(ctx, req)
+}
+
+// GetTrackGeometry calls api.v1.MapService.GetTrackGeometry.
+func (c *mapServiceClient) GetTrackGeometry(ctx context.Context, req *connect.Request[v1.GetTrackGeometryRequest]) (*connect.Response[v1.GetTrackGeometryResponse], error) {
+	return c.getTrackGeometry.CallUnary(ctx, req)
 }
 
 // ReorderElement calls api.v1.MapService.ReorderElement.
@@ -432,6 +501,14 @@ type MapServiceHandler interface {
 	UpdateCircle(context.Context, *connect.Request[v1.UpdateCircleRequest]) (*connect.Response[v1.UpdateCircleResponse], error)
 	// DeleteCircle — see (api.v1.description).
 	DeleteCircle(context.Context, *connect.Request[v1.DeleteCircleRequest]) (*connect.Response[v1.DeleteCircleResponse], error)
+	// AddTrack — see (api.v1.description).
+	AddTrack(context.Context, *connect.Request[v1.AddTrackRequest]) (*connect.Response[v1.AddTrackResponse], error)
+	// UpdateTrack — see (api.v1.description).
+	UpdateTrack(context.Context, *connect.Request[v1.UpdateTrackRequest]) (*connect.Response[v1.UpdateTrackResponse], error)
+	// DeleteTrack — see (api.v1.description).
+	DeleteTrack(context.Context, *connect.Request[v1.DeleteTrackRequest]) (*connect.Response[v1.DeleteTrackResponse], error)
+	// GetTrackGeometry — see (api.v1.description).
+	GetTrackGeometry(context.Context, *connect.Request[v1.GetTrackGeometryRequest]) (*connect.Response[v1.GetTrackGeometryResponse], error)
 	// ReorderElement — see (api.v1.description).
 	ReorderElement(context.Context, *connect.Request[v1.ReorderElementRequest]) (*connect.Response[v1.ReorderElementResponse], error)
 	// ReplaceMarkers — see (api.v1.description).
@@ -528,6 +605,30 @@ func NewMapServiceHandler(svc MapServiceHandler, opts ...connect.HandlerOption) 
 		connect.WithSchema(mapServiceDeleteCircleMethodDescriptor),
 		connect.WithHandlerOptions(opts...),
 	)
+	mapServiceAddTrackHandler := connect.NewUnaryHandler(
+		MapServiceAddTrackProcedure,
+		svc.AddTrack,
+		connect.WithSchema(mapServiceAddTrackMethodDescriptor),
+		connect.WithHandlerOptions(opts...),
+	)
+	mapServiceUpdateTrackHandler := connect.NewUnaryHandler(
+		MapServiceUpdateTrackProcedure,
+		svc.UpdateTrack,
+		connect.WithSchema(mapServiceUpdateTrackMethodDescriptor),
+		connect.WithHandlerOptions(opts...),
+	)
+	mapServiceDeleteTrackHandler := connect.NewUnaryHandler(
+		MapServiceDeleteTrackProcedure,
+		svc.DeleteTrack,
+		connect.WithSchema(mapServiceDeleteTrackMethodDescriptor),
+		connect.WithHandlerOptions(opts...),
+	)
+	mapServiceGetTrackGeometryHandler := connect.NewUnaryHandler(
+		MapServiceGetTrackGeometryProcedure,
+		svc.GetTrackGeometry,
+		connect.WithSchema(mapServiceGetTrackGeometryMethodDescriptor),
+		connect.WithHandlerOptions(opts...),
+	)
 	mapServiceReorderElementHandler := connect.NewUnaryHandler(
 		MapServiceReorderElementProcedure,
 		svc.ReorderElement,
@@ -602,6 +703,14 @@ func NewMapServiceHandler(svc MapServiceHandler, opts ...connect.HandlerOption) 
 			mapServiceUpdateCircleHandler.ServeHTTP(w, r)
 		case MapServiceDeleteCircleProcedure:
 			mapServiceDeleteCircleHandler.ServeHTTP(w, r)
+		case MapServiceAddTrackProcedure:
+			mapServiceAddTrackHandler.ServeHTTP(w, r)
+		case MapServiceUpdateTrackProcedure:
+			mapServiceUpdateTrackHandler.ServeHTTP(w, r)
+		case MapServiceDeleteTrackProcedure:
+			mapServiceDeleteTrackHandler.ServeHTTP(w, r)
+		case MapServiceGetTrackGeometryProcedure:
+			mapServiceGetTrackGeometryHandler.ServeHTTP(w, r)
 		case MapServiceReorderElementProcedure:
 			mapServiceReorderElementHandler.ServeHTTP(w, r)
 		case MapServiceReplaceMarkersProcedure:
@@ -673,6 +782,22 @@ func (UnimplementedMapServiceHandler) UpdateCircle(context.Context, *connect.Req
 
 func (UnimplementedMapServiceHandler) DeleteCircle(context.Context, *connect.Request[v1.DeleteCircleRequest]) (*connect.Response[v1.DeleteCircleResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("api.v1.MapService.DeleteCircle is not implemented"))
+}
+
+func (UnimplementedMapServiceHandler) AddTrack(context.Context, *connect.Request[v1.AddTrackRequest]) (*connect.Response[v1.AddTrackResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("api.v1.MapService.AddTrack is not implemented"))
+}
+
+func (UnimplementedMapServiceHandler) UpdateTrack(context.Context, *connect.Request[v1.UpdateTrackRequest]) (*connect.Response[v1.UpdateTrackResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("api.v1.MapService.UpdateTrack is not implemented"))
+}
+
+func (UnimplementedMapServiceHandler) DeleteTrack(context.Context, *connect.Request[v1.DeleteTrackRequest]) (*connect.Response[v1.DeleteTrackResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("api.v1.MapService.DeleteTrack is not implemented"))
+}
+
+func (UnimplementedMapServiceHandler) GetTrackGeometry(context.Context, *connect.Request[v1.GetTrackGeometryRequest]) (*connect.Response[v1.GetTrackGeometryResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("api.v1.MapService.GetTrackGeometry is not implemented"))
 }
 
 func (UnimplementedMapServiceHandler) ReorderElement(context.Context, *connect.Request[v1.ReorderElementRequest]) (*connect.Response[v1.ReorderElementResponse], error) {

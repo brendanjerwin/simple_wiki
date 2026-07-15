@@ -4,7 +4,7 @@ import { html } from 'lit';
 import { ref } from 'lit/directives/ref.js';
 import { action } from 'storybook/actions';
 import './wiki-map.js';
-import type { WikiMap, WikiMapRenderer } from './wiki-map.js';
+import type { WikiMap, WikiMapRenderer, PopupRenderer } from './wiki-map.js';
 import {
   GeoPointSchema,
   GetMapResponseSchema,
@@ -35,7 +35,16 @@ export default meta;
 type Story = StoryObj;
 
 class StoryRenderer implements WikiMapRenderer {
-  render(container: HTMLElement, map: WikiMapMessage): void {
+  render(
+    container: HTMLElement,
+    map: WikiMapMessage,
+    _popupRenderer: PopupRenderer,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- storybook stub for MapService client
+    _client: any,
+    _page: string,
+    _mapName: string,
+    _isIntersected: boolean
+  ): void {
     container.innerHTML = `
       <div style="height:100%;display:grid;place-items:center;background:#eef6f1;color:#1f2937;">
         <div>
@@ -47,6 +56,7 @@ class StoryRenderer implements WikiMapRenderer {
     action('map-rendered')({ name: map.name, markers: map.markers.length });
   }
 
+  loadTracks(): void {}
   destroy(): void {}
 }
 

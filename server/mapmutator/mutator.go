@@ -297,6 +297,66 @@ func (m *Mutator) DeleteCircle(ctx context.Context, page, mapName, uid string, e
 	})
 }
 
+// AddTrack adds a track to a named map.
+func (m *Mutator) AddTrack(ctx context.Context, page, mapName string, track *apiv1.MapTrack, expected *time.Time, identity tailscale.IdentityValue) (*apiv1.MapTrack, *apiv1.Map, error) {
+	if track == nil {
+		return nil, nil, status.Error(codes.InvalidArgument, "track is required")
+	}
+	if err := validateTrack(track); err != nil {
+		return nil, nil, err
+	}
+	var created *apiv1.MapTrack
+	mapState, err := m.mutateMap(ctx, page, mapName, expected, allowMissingMap, func(mapState *apiv1.Map) error {
+		created = cloneTrack(track)
+		created.Metadata = m.newMetadata(identity, nextSortOrder(totalElementCount(mapState)))
+		mapState.Tracks = append(mapState.Tracks, created)
+		return nil
+	})
+	return created, mapState, err
+}
+
+// UpdateTrack updates an existing track.
+func (m *Mutator) UpdateTrack(ctx context.Context, page, mapName, uid string, track *apiv1.MapTrack, expected *time.Time) (*apiv1.MapTrack, *apiv1.Map, error) {
+	if uid == "" {
+		return nil, nil, status.Error(codes.InvalidArgument, uidRequiredMessage)
+	}
+	if track == nil {
+		return nil, nil, status.Error(codes.InvalidArgument, "track is required")
+	}
+	if err := validateTrack(track); err != nil {
+		return nil, nil, err
+	}
+	var updated *apiv1.MapTrack
+	mapState, err := m.mutateMap(ctx, page, mapName, expected, requireExistingMap, func(mapState *apiv1.Map) error {
+		existing := findTrack(mapState.Tracks, uid)
+		if existing == nil {
+			return ErrElementNotFound
+		}
+		metadata := cloneMetadata(existing.GetMetadata())
+		metadata.UpdatedAt = timestamppb.New(m.clock.Now())
+		updated = cloneTrack(track)
+		updated.Metadata = metadata
+		overwriteTrack(existing, updated)
+		return nil
+	})
+	return updated, mapState, err
+}
+
+// DeleteTrack removes one track.
+func (m *Mutator) DeleteTrack(ctx context.Context, page, mapName, uid string, expected *time.Time) (*apiv1.Map, error) {
+	if uid == "" {
+		return nil, status.Error(codes.InvalidArgument, uidRequiredMessage)
+	}
+	return m.mutateMap(ctx, page, mapName, expected, requireExistingMap, func(mapState *apiv1.Map) error {
+		tracks, removed := removeTrack(mapState.Tracks, uid)
+		if !removed {
+			return ErrElementNotFound
+		}
+		mapState.Tracks = tracks
+		return nil
+	})
+}
+
 // ReorderElement updates sparse sort order for one element.
 func (m *Mutator) ReorderElement(ctx context.Context, page, mapName string, elementType apiv1.MapElementType, uid string, sortOrder int64, expected *time.Time) (*apiv1.Map, error) {
 	if uid == "" {
@@ -412,6 +472,7 @@ func (m *Mutator) ListMaps(_ context.Context, page string) ([]*apiv1.MapOutline,
 			MarkerCount:  int32(len(mapState.GetMarkers())),
 			PolygonCount: int32(len(mapState.GetPolygons())),
 			CircleCount:  int32(len(mapState.GetCircles())),
+			TrackCount:   int32(len(mapState.GetTracks())),
 		})
 	}
 	return out, nil
@@ -564,6 +625,20 @@ func validateCircle(circle *apiv1.MapCircle) error {
 	return nil
 }
 
+func validateTrack(track *apiv1.MapTrack) error {
+	if track.GetFileHash() == "" {
+		return status.Error(codes.InvalidArgument, "file_hash is required")
+	}
+	if track.GetFormat() == "" {
+		return status.Error(codes.InvalidArgument, "format is required")
+	}
+	fmtLower := strings.ToLower(track.GetFormat())
+	if fmtLower != "gpx" && fmtLower != "geojson" {
+		return status.Error(codes.InvalidArgument, "format must be GPX or GeoJSON")
+	}
+	return nil
+}
+
 func checkExpectedUpdatedAt(mapState *apiv1.Map, expected *time.Time) error {
 	if expected == nil {
 		return nil
@@ -582,7 +657,7 @@ func nextSortOrder(existingCount int) int64 {
 }
 
 func totalElementCount(mapState *apiv1.Map) int {
-	return len(mapState.GetMarkers()) + len(mapState.GetPolygons()) + len(mapState.GetCircles())
+	return len(mapState.GetMarkers()) + len(mapState.GetPolygons()) + len(mapState.GetCircles()) + len(mapState.GetTracks())
 }
 
 func isKnownTileLayer(id apiv1.TileLayerId) bool {
@@ -651,6 +726,9 @@ func sortMapElements(mapState *apiv1.Map) {
 	slices.SortStableFunc(mapState.Circles, func(a, b *apiv1.MapCircle) int {
 		return compareSortOrder(a.GetMetadata().GetSortOrder(), b.GetMetadata().GetSortOrder())
 	})
+	slices.SortStableFunc(mapState.Tracks, func(a, b *apiv1.MapTrack) int {
+		return compareSortOrder(a.GetMetadata().GetSortOrder(), b.GetMetadata().GetSortOrder())
+	})
 }
 
 func compareSortOrder(a, b int64) int {
@@ -699,6 +777,15 @@ func findCircle(circles []*apiv1.MapCircle, uid string) *apiv1.MapCircle {
 	return nil
 }
 
+func findTrack(tracks []*apiv1.MapTrack, uid string) *apiv1.MapTrack {
+	for _, track := range tracks {
+		if track.GetMetadata().GetUid() == uid {
+			return track
+		}
+	}
+	return nil
+}
+
 func metadataForElement(mapState *apiv1.Map, elementType apiv1.MapElementType, uid string) *apiv1.MapElementMetadata {
 	switch elementType {
 	case apiv1.MapElementType_MAP_ELEMENT_TYPE_MARKER:
@@ -712,6 +799,10 @@ func metadataForElement(mapState *apiv1.Map, elementType apiv1.MapElementType, u
 	case apiv1.MapElementType_MAP_ELEMENT_TYPE_CIRCLE:
 		if circle := findCircle(mapState.Circles, uid); circle != nil {
 			return circle.Metadata
+		}
+	case apiv1.MapElementType_MAP_ELEMENT_TYPE_TRACK:
+		if track := findTrack(mapState.Tracks, uid); track != nil {
+			return track.Metadata
 		}
 	default:
 		return nil
@@ -758,6 +849,19 @@ func removeCircle(circles []*apiv1.MapCircle, uid string) ([]*apiv1.MapCircle, b
 	return out, removed
 }
 
+func removeTrack(tracks []*apiv1.MapTrack, uid string) ([]*apiv1.MapTrack, bool) {
+	out := make([]*apiv1.MapTrack, 0, len(tracks))
+	removed := false
+	for _, track := range tracks {
+		if track.GetMetadata().GetUid() == uid {
+			removed = true
+			continue
+		}
+		out = append(out, track)
+	}
+	return out, removed
+}
+
 func cloneMarker(marker *apiv1.MapMarker) *apiv1.MapMarker {
 	if marker == nil {
 		return nil
@@ -767,6 +871,7 @@ func cloneMarker(marker *apiv1.MapMarker) *apiv1.MapMarker {
 		Position:      clonePoint(marker.GetPosition()),
 		PopupMarkdown: marker.GetPopupMarkdown(),
 		Color:         marker.GetColor(),
+		Tags:          slices.Clone(marker.GetTags()),
 	}
 }
 
@@ -775,6 +880,7 @@ func overwriteMarker(existing, updated *apiv1.MapMarker) {
 	existing.Position = updated.GetPosition()
 	existing.PopupMarkdown = updated.GetPopupMarkdown()
 	existing.Color = updated.GetColor()
+	existing.Tags = slices.Clone(updated.GetTags())
 	existing.Metadata = updated.GetMetadata()
 }
 
@@ -794,6 +900,7 @@ func clonePolygon(polygon *apiv1.MapPolygon) *apiv1.MapPolygon {
 		PopupMarkdown: polygon.GetPopupMarkdown(),
 		StrokeColor:   polygon.GetStrokeColor(),
 		FillColor:     polygon.GetFillColor(),
+		Tags:          slices.Clone(polygon.GetTags()),
 	}
 }
 
@@ -803,6 +910,7 @@ func overwritePolygon(existing, updated *apiv1.MapPolygon) {
 	existing.PopupMarkdown = updated.GetPopupMarkdown()
 	existing.StrokeColor = updated.GetStrokeColor()
 	existing.FillColor = updated.GetFillColor()
+	existing.Tags = slices.Clone(updated.GetTags())
 	existing.Metadata = updated.GetMetadata()
 }
 
@@ -817,6 +925,7 @@ func cloneCircle(circle *apiv1.MapCircle) *apiv1.MapCircle {
 		PopupMarkdown: circle.GetPopupMarkdown(),
 		StrokeColor:   circle.GetStrokeColor(),
 		FillColor:     circle.GetFillColor(),
+		Tags:          slices.Clone(circle.GetTags()),
 	}
 }
 
@@ -827,7 +936,32 @@ func overwriteCircle(existing, updated *apiv1.MapCircle) {
 	existing.PopupMarkdown = updated.GetPopupMarkdown()
 	existing.StrokeColor = updated.GetStrokeColor()
 	existing.FillColor = updated.GetFillColor()
+	existing.Tags = slices.Clone(updated.GetTags())
 	existing.Metadata = updated.GetMetadata()
+}
+
+func cloneTrack(track *apiv1.MapTrack) *apiv1.MapTrack {
+	if track == nil {
+		return nil
+	}
+	return &apiv1.MapTrack{
+		Label:    track.GetLabel(),
+		FileHash: track.GetFileHash(),
+		Format:   track.GetFormat(),
+		Color:    track.GetColor(),
+		Tags:     slices.Clone(track.GetTags()),
+		Filename: track.GetFilename(),
+	}
+}
+
+func overwriteTrack(existing, updated *apiv1.MapTrack) {
+	existing.Label = updated.GetLabel()
+	existing.FileHash = updated.GetFileHash()
+	existing.Format = updated.GetFormat()
+	existing.Color = updated.GetColor()
+	existing.Tags = slices.Clone(updated.GetTags())
+	existing.Metadata = updated.GetMetadata()
+	existing.Filename = updated.GetFilename()
 }
 
 func cloneView(view *apiv1.MapView) *apiv1.MapView {

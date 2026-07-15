@@ -1,6 +1,7 @@
 package filestore_test
 
 import (
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -231,6 +232,77 @@ var _ = Describe("DiskFileStorer", func() {
 
 			BeforeEach(func() {
 				err = storer.Delete("sha256-evil\x00file")
+			})
+
+			It("should return ErrInvalidHash", func() {
+				Expect(err).To(MatchError(ContainSubstring("invalid hash")))
+			})
+		})
+	})
+
+	Describe("Open", func() {
+		When("file exists", func() {
+			var (
+				stored  filestore.FileInfo
+				reader  io.ReadCloser
+				err     error
+				content []byte
+			)
+
+			BeforeEach(func() {
+				var storeErr error
+				stored, storeErr = storer.Store(strings.NewReader("hello world"))
+				Expect(storeErr).NotTo(HaveOccurred())
+
+				reader, err = storer.Open(stored.Hash)
+			})
+
+			AfterEach(func() {
+				if reader != nil {
+					_ = reader.Close()
+				}
+			})
+
+			It("should not error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should return a reader containing the correct content", func() {
+				content, err = io.ReadAll(reader)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(string(content)).To(Equal("hello world"))
+			})
+		})
+
+		When("file does not exist", func() {
+			var err error
+
+			BeforeEach(func() {
+				_, err = storer.Open("sha256-NONEXISTENT")
+			})
+
+			It("should return os.ErrNotExist", func() {
+				Expect(err).To(MatchError(os.ErrNotExist))
+			})
+		})
+
+		When("hash contains path traversal", func() {
+			var err error
+
+			BeforeEach(func() {
+				_, err = storer.Open("../../../etc/passwd")
+			})
+
+			It("should return ErrInvalidHash", func() {
+				Expect(err).To(MatchError(ContainSubstring("invalid hash")))
+			})
+		})
+
+		When("hash contains null bytes", func() {
+			var err error
+
+			BeforeEach(func() {
+				_, err = storer.Open("sha256-evil\x00file")
 			})
 
 			It("should return ErrInvalidHash", func() {

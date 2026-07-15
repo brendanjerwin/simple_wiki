@@ -19,26 +19,30 @@ import (
 const _ = grpc.SupportPackageIsVersion8
 
 const (
-	MapService_SetMapView_FullMethodName      = "/api.v1.MapService/SetMapView"
-	MapService_SetMapStyle_FullMethodName     = "/api.v1.MapService/SetMapStyle"
-	MapService_AddMarker_FullMethodName       = "/api.v1.MapService/AddMarker"
-	MapService_UpdateMarker_FullMethodName    = "/api.v1.MapService/UpdateMarker"
-	MapService_MoveMarker_FullMethodName      = "/api.v1.MapService/MoveMarker"
-	MapService_DeleteMarker_FullMethodName    = "/api.v1.MapService/DeleteMarker"
-	MapService_AddPolygon_FullMethodName      = "/api.v1.MapService/AddPolygon"
-	MapService_UpdatePolygon_FullMethodName   = "/api.v1.MapService/UpdatePolygon"
-	MapService_DeletePolygon_FullMethodName   = "/api.v1.MapService/DeletePolygon"
-	MapService_AddCircle_FullMethodName       = "/api.v1.MapService/AddCircle"
-	MapService_UpdateCircle_FullMethodName    = "/api.v1.MapService/UpdateCircle"
-	MapService_DeleteCircle_FullMethodName    = "/api.v1.MapService/DeleteCircle"
-	MapService_ReorderElement_FullMethodName  = "/api.v1.MapService/ReorderElement"
-	MapService_ReplaceMarkers_FullMethodName  = "/api.v1.MapService/ReplaceMarkers"
-	MapService_DeleteMap_FullMethodName       = "/api.v1.MapService/DeleteMap"
-	MapService_GetMap_FullMethodName          = "/api.v1.MapService/GetMap"
-	MapService_ListMaps_FullMethodName        = "/api.v1.MapService/ListMaps"
-	MapService_ListMapElements_FullMethodName = "/api.v1.MapService/ListMapElements"
-	MapService_GetElement_FullMethodName      = "/api.v1.MapService/GetElement"
-	MapService_FindMarkers_FullMethodName     = "/api.v1.MapService/FindMarkers"
+	MapService_SetMapView_FullMethodName       = "/api.v1.MapService/SetMapView"
+	MapService_SetMapStyle_FullMethodName      = "/api.v1.MapService/SetMapStyle"
+	MapService_AddMarker_FullMethodName        = "/api.v1.MapService/AddMarker"
+	MapService_UpdateMarker_FullMethodName     = "/api.v1.MapService/UpdateMarker"
+	MapService_MoveMarker_FullMethodName       = "/api.v1.MapService/MoveMarker"
+	MapService_DeleteMarker_FullMethodName     = "/api.v1.MapService/DeleteMarker"
+	MapService_AddPolygon_FullMethodName       = "/api.v1.MapService/AddPolygon"
+	MapService_UpdatePolygon_FullMethodName    = "/api.v1.MapService/UpdatePolygon"
+	MapService_DeletePolygon_FullMethodName    = "/api.v1.MapService/DeletePolygon"
+	MapService_AddCircle_FullMethodName        = "/api.v1.MapService/AddCircle"
+	MapService_UpdateCircle_FullMethodName     = "/api.v1.MapService/UpdateCircle"
+	MapService_DeleteCircle_FullMethodName     = "/api.v1.MapService/DeleteCircle"
+	MapService_AddTrack_FullMethodName         = "/api.v1.MapService/AddTrack"
+	MapService_UpdateTrack_FullMethodName      = "/api.v1.MapService/UpdateTrack"
+	MapService_DeleteTrack_FullMethodName      = "/api.v1.MapService/DeleteTrack"
+	MapService_GetTrackGeometry_FullMethodName = "/api.v1.MapService/GetTrackGeometry"
+	MapService_ReorderElement_FullMethodName   = "/api.v1.MapService/ReorderElement"
+	MapService_ReplaceMarkers_FullMethodName   = "/api.v1.MapService/ReplaceMarkers"
+	MapService_DeleteMap_FullMethodName        = "/api.v1.MapService/DeleteMap"
+	MapService_GetMap_FullMethodName           = "/api.v1.MapService/GetMap"
+	MapService_ListMaps_FullMethodName         = "/api.v1.MapService/ListMaps"
+	MapService_ListMapElements_FullMethodName  = "/api.v1.MapService/ListMapElements"
+	MapService_GetElement_FullMethodName       = "/api.v1.MapService/GetElement"
+	MapService_FindMarkers_FullMethodName      = "/api.v1.MapService/FindMarkers"
 )
 
 // MapServiceClient is the client API for MapService service.
@@ -71,6 +75,14 @@ type MapServiceClient interface {
 	UpdateCircle(ctx context.Context, in *UpdateCircleRequest, opts ...grpc.CallOption) (*UpdateCircleResponse, error)
 	// DeleteCircle — see (api.v1.description).
 	DeleteCircle(ctx context.Context, in *DeleteCircleRequest, opts ...grpc.CallOption) (*DeleteCircleResponse, error)
+	// AddTrack — see (api.v1.description).
+	AddTrack(ctx context.Context, in *AddTrackRequest, opts ...grpc.CallOption) (*AddTrackResponse, error)
+	// UpdateTrack — see (api.v1.description).
+	UpdateTrack(ctx context.Context, in *UpdateTrackRequest, opts ...grpc.CallOption) (*UpdateTrackResponse, error)
+	// DeleteTrack — see (api.v1.description).
+	DeleteTrack(ctx context.Context, in *DeleteTrackRequest, opts ...grpc.CallOption) (*DeleteTrackResponse, error)
+	// GetTrackGeometry — see (api.v1.description).
+	GetTrackGeometry(ctx context.Context, in *GetTrackGeometryRequest, opts ...grpc.CallOption) (*GetTrackGeometryResponse, error)
 	// ReorderElement — see (api.v1.description).
 	ReorderElement(ctx context.Context, in *ReorderElementRequest, opts ...grpc.CallOption) (*ReorderElementResponse, error)
 	// ReplaceMarkers — see (api.v1.description).
@@ -217,6 +229,46 @@ func (c *mapServiceClient) DeleteCircle(ctx context.Context, in *DeleteCircleReq
 	return out, nil
 }
 
+func (c *mapServiceClient) AddTrack(ctx context.Context, in *AddTrackRequest, opts ...grpc.CallOption) (*AddTrackResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(AddTrackResponse)
+	err := c.cc.Invoke(ctx, MapService_AddTrack_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *mapServiceClient) UpdateTrack(ctx context.Context, in *UpdateTrackRequest, opts ...grpc.CallOption) (*UpdateTrackResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(UpdateTrackResponse)
+	err := c.cc.Invoke(ctx, MapService_UpdateTrack_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *mapServiceClient) DeleteTrack(ctx context.Context, in *DeleteTrackRequest, opts ...grpc.CallOption) (*DeleteTrackResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(DeleteTrackResponse)
+	err := c.cc.Invoke(ctx, MapService_DeleteTrack_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *mapServiceClient) GetTrackGeometry(ctx context.Context, in *GetTrackGeometryRequest, opts ...grpc.CallOption) (*GetTrackGeometryResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetTrackGeometryResponse)
+	err := c.cc.Invoke(ctx, MapService_GetTrackGeometry_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *mapServiceClient) ReorderElement(ctx context.Context, in *ReorderElementRequest, opts ...grpc.CallOption) (*ReorderElementResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ReorderElementResponse)
@@ -327,6 +379,14 @@ type MapServiceServer interface {
 	UpdateCircle(context.Context, *UpdateCircleRequest) (*UpdateCircleResponse, error)
 	// DeleteCircle — see (api.v1.description).
 	DeleteCircle(context.Context, *DeleteCircleRequest) (*DeleteCircleResponse, error)
+	// AddTrack — see (api.v1.description).
+	AddTrack(context.Context, *AddTrackRequest) (*AddTrackResponse, error)
+	// UpdateTrack — see (api.v1.description).
+	UpdateTrack(context.Context, *UpdateTrackRequest) (*UpdateTrackResponse, error)
+	// DeleteTrack — see (api.v1.description).
+	DeleteTrack(context.Context, *DeleteTrackRequest) (*DeleteTrackResponse, error)
+	// GetTrackGeometry — see (api.v1.description).
+	GetTrackGeometry(context.Context, *GetTrackGeometryRequest) (*GetTrackGeometryResponse, error)
 	// ReorderElement — see (api.v1.description).
 	ReorderElement(context.Context, *ReorderElementRequest) (*ReorderElementResponse, error)
 	// ReplaceMarkers — see (api.v1.description).
@@ -385,6 +445,18 @@ func (UnimplementedMapServiceServer) UpdateCircle(context.Context, *UpdateCircle
 }
 func (UnimplementedMapServiceServer) DeleteCircle(context.Context, *DeleteCircleRequest) (*DeleteCircleResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method DeleteCircle not implemented")
+}
+func (UnimplementedMapServiceServer) AddTrack(context.Context, *AddTrackRequest) (*AddTrackResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method AddTrack not implemented")
+}
+func (UnimplementedMapServiceServer) UpdateTrack(context.Context, *UpdateTrackRequest) (*UpdateTrackResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method UpdateTrack not implemented")
+}
+func (UnimplementedMapServiceServer) DeleteTrack(context.Context, *DeleteTrackRequest) (*DeleteTrackResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method DeleteTrack not implemented")
+}
+func (UnimplementedMapServiceServer) GetTrackGeometry(context.Context, *GetTrackGeometryRequest) (*GetTrackGeometryResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetTrackGeometry not implemented")
 }
 func (UnimplementedMapServiceServer) ReorderElement(context.Context, *ReorderElementRequest) (*ReorderElementResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ReorderElement not implemented")
@@ -639,6 +711,78 @@ func _MapService_DeleteCircle_Handler(srv interface{}, ctx context.Context, dec 
 	return interceptor(ctx, in, info, handler)
 }
 
+func _MapService_AddTrack_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AddTrackRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MapServiceServer).AddTrack(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MapService_AddTrack_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MapServiceServer).AddTrack(ctx, req.(*AddTrackRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MapService_UpdateTrack_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UpdateTrackRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MapServiceServer).UpdateTrack(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MapService_UpdateTrack_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MapServiceServer).UpdateTrack(ctx, req.(*UpdateTrackRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MapService_DeleteTrack_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeleteTrackRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MapServiceServer).DeleteTrack(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MapService_DeleteTrack_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MapServiceServer).DeleteTrack(ctx, req.(*DeleteTrackRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MapService_GetTrackGeometry_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetTrackGeometryRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MapServiceServer).GetTrackGeometry(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MapService_GetTrackGeometry_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MapServiceServer).GetTrackGeometry(ctx, req.(*GetTrackGeometryRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _MapService_ReorderElement_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(ReorderElementRequest)
 	if err := dec(in); err != nil {
@@ -837,6 +981,22 @@ var MapService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "DeleteCircle",
 			Handler:    _MapService_DeleteCircle_Handler,
+		},
+		{
+			MethodName: "AddTrack",
+			Handler:    _MapService_AddTrack_Handler,
+		},
+		{
+			MethodName: "UpdateTrack",
+			Handler:    _MapService_UpdateTrack_Handler,
+		},
+		{
+			MethodName: "DeleteTrack",
+			Handler:    _MapService_DeleteTrack_Handler,
+		},
+		{
+			MethodName: "GetTrackGeometry",
+			Handler:    _MapService_GetTrackGeometry_Handler,
 		},
 		{
 			MethodName: "ReorderElement",

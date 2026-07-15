@@ -28,4 +28,11 @@ type FileStorer interface {
 	// Returns os.ErrNotExist if the file is not found.
 	// Returns ErrInvalidHash if the hash fails validation.
 	Delete(hash string) error
+
+	// Open opens the file identified by its hash for reading.
+	// Returns os.ErrNotExist if the file is not found.
+	// Returns ErrInvalidHash if the hash fails validation.
+	// Caller must close the returned ReadCloser when done.
+	Open(hash string) (io.ReadCloser, error)
 }
+

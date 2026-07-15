@@ -862,6 +862,11 @@ func (s *Site) handleStatic(c *gin.Context, command string) {
 			return
 		}
 	}
+	// JS modules are cached aggressively by browsers; bust the cache so new
+	// builds load on refresh instead of serving a stale bundle.
+	if strings.HasSuffix(filename, ".js") {
+		c.Header("Cache-Control", "no-cache, must-revalidate")
+	}
 	c.Data(http.StatusOK, contentTypeFromName(filename), data)
 }
 
