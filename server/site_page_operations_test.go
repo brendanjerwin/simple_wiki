@@ -188,7 +188,7 @@ var _ = Describe("Site Page Operations", func() {
 			var err error
 
 			BeforeEach(func() {
-				err = s.WriteFrontMatter("brand-new-page", wikipage.FrontMatter{"title": "Created"})
+				err = s.WriteFrontMatter("brand-new-page", wikipage.FrontMatter{"title": "Created"}, wikipage.AnonymousIdentity)
 			})
 
 			It("should succeed", func() {
@@ -227,7 +227,7 @@ var _ = Describe("Site Page Operations", func() {
 				filePath := filepath.Join(pathToData, base32tools.EncodeToBase32(strings.ToLower(pageIdentifier))+".md")
 				Expect(os.WriteFile(filePath, []byte(malformedContent), 0644)).To(Succeed())
 
-				err = s.WriteFrontMatter(wikipage.PageIdentifier(pageIdentifier), wikipage.FrontMatter{"title": "new title"})
+				err = s.WriteFrontMatter(wikipage.PageIdentifier(pageIdentifier), wikipage.FrontMatter{"title": "new title"}, wikipage.AnonymousIdentity)
 			})
 
 			It("should return a parse error", func() {
@@ -247,7 +247,7 @@ var _ = Describe("Site Page Operations", func() {
 			BeforeEach(func() {
 				modifyErr = s.ModifyMarkdown("some-modify-page", func(_ wikipage.Markdown) (wikipage.Markdown, error) {
 					return "", modifierErr
-				})
+				}, wikipage.AnonymousIdentity)
 			})
 
 			It("should propagate the modifier error", func() {
@@ -272,7 +272,7 @@ var _ = Describe("Site Page Operations", func() {
 
 				err = s.ModifyMarkdown(wikipage.PageIdentifier(pageIdentifier), func(md wikipage.Markdown) (wikipage.Markdown, error) {
 					return md + " extra", nil
-				})
+				}, wikipage.AnonymousIdentity)
 			})
 
 			It("should return a parse error", func() {
@@ -287,7 +287,7 @@ var _ = Describe("Site Page Operations", func() {
 			BeforeEach(func() {
 				err = s.ModifyMarkdown("nonexistent-modify-page", func(_ wikipage.Markdown) (wikipage.Markdown, error) {
 					return "# New Content", nil
-				})
+				}, wikipage.AnonymousIdentity)
 			})
 
 			It("should succeed and create the page", func() {
@@ -320,16 +320,13 @@ var _ = Describe("Site Page Operations", func() {
 			)
 
 			BeforeEach(func() {
-				Expect(s.WriteMarkdown("modify-both-page", "old body\n")).To(Succeed())
-				Expect(s.WriteFrontMatter("modify-both-page", wikipage.FrontMatter{"title": "Old"})).To(Succeed())
+				Expect(s.WriteMarkdown("modify-both-page", "old body\n", wikipage.AnonymousIdentity)).To(Succeed())
+				Expect(s.WriteFrontMatter("modify-both-page", wikipage.FrontMatter{"title": "Old"}, wikipage.AnonymousIdentity)).To(Succeed())
 
-				modifyErr = s.ModifyFrontMatterAndMarkdown(
-					"modify-both-page",
-					func(fm wikipage.FrontMatter, md wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error) {
+				modifyErr = s.ModifyFrontMatterAndMarkdown("modify-both-page", func(fm wikipage.FrontMatter, md wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error) {
 						fm["title"] = "New"
 						return fm, md + "new body\n", nil
-					},
-				)
+					}, wikipage.AnonymousIdentity)
 				var readErr error
 				page, readErr = s.ReadPage("modify-both-page")
 				Expect(readErr).NotTo(HaveOccurred())
@@ -355,12 +352,9 @@ var _ = Describe("Site Page Operations", func() {
 			)
 
 			BeforeEach(func() {
-				modifyErr = s.ModifyFrontMatterAndMarkdown(
-					"modify-both-error-page",
-					func(wikipage.FrontMatter, wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error) {
+				modifyErr = s.ModifyFrontMatterAndMarkdown("modify-both-error-page", func(wikipage.FrontMatter, wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error) {
 						return nil, "", modifierErr
-					},
-				)
+					}, wikipage.AnonymousIdentity)
 			})
 
 			It("should propagate the modifier error", func() {
@@ -383,12 +377,9 @@ var _ = Describe("Site Page Operations", func() {
 				filePath := filepath.Join(pathToData, base32tools.EncodeToBase32(strings.ToLower(pageIdentifier))+".md")
 				Expect(os.WriteFile(filePath, []byte(malformedContent), 0644)).To(Succeed())
 
-				modifyErr = s.ModifyFrontMatterAndMarkdown(
-					wikipage.PageIdentifier(pageIdentifier),
-					func(fm wikipage.FrontMatter, md wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error) {
+				modifyErr = s.ModifyFrontMatterAndMarkdown(wikipage.PageIdentifier(pageIdentifier), func(fm wikipage.FrontMatter, md wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error) {
 						return fm, md, nil
-					},
-				)
+					}, wikipage.AnonymousIdentity)
 			})
 
 			It("should return a parse error", func() {
@@ -426,12 +417,12 @@ var _ = Describe("Site Page Operations", func() {
 
 					go func() {
 						defer wg.Done()
-						_ = s.WriteFrontMatter("atomic_test_page", wikipage.FrontMatter{"title": "new title"})
+						_ = s.WriteFrontMatter("atomic_test_page", wikipage.FrontMatter{"title": "new title"}, wikipage.AnonymousIdentity)
 					}()
 
 					go func() {
 						defer wg.Done()
-						_ = s.WriteMarkdown("atomic_test_page", "\nnew content\n")
+						_ = s.WriteMarkdown("atomic_test_page", "\nnew content\n", wikipage.AnonymousIdentity)
 					}()
 
 					wg.Wait()

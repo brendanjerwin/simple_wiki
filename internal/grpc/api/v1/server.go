@@ -114,6 +114,7 @@ type Server struct {
 	apiv1.UnimplementedMapServiceServer
 	apiv1.UnimplementedSurveyServiceServer
 	apiv1.UnimplementedConnectorServiceServer
+	apiv1.UnimplementedPageHistoryServiceServer
 	commit                  string
 	buildTime               time.Time
 	pageReaderMutator       wikipage.PageReaderMutator
@@ -140,6 +141,8 @@ type Server struct {
 	keepAuthVerifier    googlekeep.AuthVerifier
 	tasksConnector      *connectorRuntime
 	tasksAuthURLBuilder TasksAuthURLBuilder
+	historyReader       PageHistoryReader
+	historySearcher     HistorySearcher
 }
 
 // NewServer creates a new gRPC server with the given dependencies.
@@ -358,6 +361,7 @@ func (s *Server) RegisterWithServer(grpcServer *grpc.Server) {
 	apiv1.RegisterMapServiceServer(grpcServer, s)
 	apiv1.RegisterSurveyServiceServer(grpcServer, s)
 	apiv1.RegisterConnectorServiceServer(grpcServer, s)
+	apiv1.RegisterPageHistoryServiceServer(grpcServer, s)
 }
 
 // LoggingInterceptor returns a gRPC unary interceptor for logging method calls.

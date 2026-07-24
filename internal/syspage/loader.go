@@ -112,10 +112,10 @@ func Sync(rw wikipage.PageReaderMutator, log Logger) error {
 			continue
 		}
 
-		if err := rw.WriteFrontMatter(id, p.Frontmatter); err != nil {
+		if err := rw.WriteFrontMatter(id, p.Frontmatter, wikipage.AnonymousIdentity); err != nil {
 			return fmt.Errorf("write frontmatter for system page %s: %w", p.Identifier, err)
 		}
-		if err := rw.WriteMarkdown(id, wikipage.Markdown(p.Markdown)); err != nil {
+		if err := rw.WriteMarkdown(id, wikipage.Markdown(p.Markdown), wikipage.AnonymousIdentity); err != nil {
 			return fmt.Errorf("write markdown for system page %s: %w", p.Identifier, err)
 		}
 		log.Info("System page synced (%s): %s", reason, p.Identifier)

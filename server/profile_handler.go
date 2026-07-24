@@ -112,10 +112,10 @@ func createProfileFromTemplate(
 		return fmt.Errorf("render profile_template body: %w", err)
 	}
 
-	if err := mutator.WriteFrontMatter(id, newFm); err != nil {
+	if err := mutator.WriteFrontMatter(id, newFm, wikipage.AnonymousIdentity); err != nil {
 		return fmt.Errorf("write new profile frontmatter: %w", err)
 	}
-	if err := mutator.WriteMarkdown(id, wikipage.Markdown(rendered)); err != nil {
+	if err := mutator.WriteMarkdown(id, wikipage.Markdown(rendered), wikipage.AnonymousIdentity); err != nil {
 		// Roll back the partial write so the next /profile visit sees a
 		// clean missing-page state and re-tries from scratch instead of
 		// redirecting the user to a frontmatter-only stub with no body.

@@ -49,8 +49,8 @@ var _ = Describe("System page rendering", func() {
 				"wiki": map[string]any{
 					"system": true,
 				},
-			})).To(Succeed())
-			Expect(site.WriteMarkdown(pageID, wikipage.Markdown("# Help body"))).To(Succeed())
+			}, wikipage.AnonymousIdentity)).To(Succeed())
+			Expect(site.WriteMarkdown(pageID, wikipage.Markdown("# Help body"), wikipage.AnonymousIdentity)).To(Succeed())
 
 			recorder = httptest.NewRecorder()
 			req, err := http.NewRequest(http.MethodGet, "/help-test-page/view", nil)
@@ -91,8 +91,8 @@ var _ = Describe("System page rendering", func() {
 			Expect(site.WriteFrontMatter(pageID, wikipage.FrontMatter{
 				"identifier": "regular-page",
 				"title":      "Regular Page",
-			})).To(Succeed())
-			Expect(site.WriteMarkdown(pageID, wikipage.Markdown("# Regular body"))).To(Succeed())
+			}, wikipage.AnonymousIdentity)).To(Succeed())
+			Expect(site.WriteMarkdown(pageID, wikipage.Markdown("# Regular body"), wikipage.AnonymousIdentity)).To(Succeed())
 
 			recorder = httptest.NewRecorder()
 			req, err := http.NewRequest(http.MethodGet, "/regular-page/view", nil)

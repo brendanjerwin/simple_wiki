@@ -49,7 +49,7 @@ func (f *fakeFrontmatterReadWriter) ReadFrontMatter(id wikipage.PageIdentifier) 
 	return id, deepCopyFrontMatter(fm), nil
 }
 
-func (f *fakeFrontmatterReadWriter) WriteFrontMatter(id wikipage.PageIdentifier, fm wikipage.FrontMatter) error {
+func (f *fakeFrontmatterReadWriter) WriteFrontMatter(id wikipage.PageIdentifier, fm wikipage.FrontMatter, _ wikipage.Identity) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if err, ok := f.writeErr[id]; ok && err != nil {
@@ -929,10 +929,10 @@ var _ = Describe("FrontmatterBindingStore", func() {
 
 		When("two concurrent callers target the same profile", func() {
 			var (
-				maxConcurrent  int32
-				active         atomic.Int32
-				doneA, doneB   chan struct{}
-				errA, errB     error
+				maxConcurrent int32
+				active        atomic.Int32
+				doneA, doneB  chan struct{}
+				errA, errB    error
 			)
 
 			BeforeEach(func() {

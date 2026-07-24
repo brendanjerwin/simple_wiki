@@ -106,7 +106,7 @@ func (m *MockMigrationDeps) ReadMarkdown(identifier wikipage.PageIdentifier) (wi
 	return identifier, md, err
 }
 
-func (m *MockMigrationDeps) WriteFrontMatter(identifier wikipage.PageIdentifier, _ wikipage.FrontMatter) error {
+func (m *MockMigrationDeps) WriteFrontMatter(identifier wikipage.PageIdentifier, _ wikipage.FrontMatter, _ wikipage.Identity) error {
 	if m.writeFrontMatterErr != nil {
 		return m.writeFrontMatterErr
 	}
@@ -114,7 +114,7 @@ func (m *MockMigrationDeps) WriteFrontMatter(identifier wikipage.PageIdentifier,
 	return m.UpdatePageContent(identifier, "# Mock content")
 }
 
-func (m *MockMigrationDeps) WriteMarkdown(identifier wikipage.PageIdentifier, md wikipage.Markdown) error {
+func (m *MockMigrationDeps) WriteMarkdown(identifier wikipage.PageIdentifier, md wikipage.Markdown, _ wikipage.Identity) error {
 	if m.writeMarkdownErr != nil {
 		return m.writeMarkdownErr
 	}
@@ -135,7 +135,7 @@ func (m *MockMigrationDeps) UpdatePageContent(identifier wikipage.PageIdentifier
 	return nil
 }
 
-func (m *MockMigrationDeps) ModifyMarkdown(identifier wikipage.PageIdentifier, modifier func(wikipage.Markdown) (wikipage.Markdown, error)) error {
+func (m *MockMigrationDeps) ModifyMarkdown(identifier wikipage.PageIdentifier, modifier func(wikipage.Markdown) (wikipage.Markdown, error), _ wikipage.Identity) error {
 	_, currentMD, err := m.ReadMarkdown(identifier)
 	if err != nil {
 		return err
@@ -146,10 +146,10 @@ func (m *MockMigrationDeps) ModifyMarkdown(identifier wikipage.PageIdentifier, m
 		return err
 	}
 
-	return m.WriteMarkdown(identifier, newMD)
+	return m.WriteMarkdown(identifier, newMD, wikipage.AnonymousIdentity)
 }
 
-func (m *MockMigrationDeps) ModifyFrontMatterAndMarkdown(identifier wikipage.PageIdentifier, modifier func(wikipage.FrontMatter, wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error)) error {
+func (m *MockMigrationDeps) ModifyFrontMatterAndMarkdown(identifier wikipage.PageIdentifier, modifier func(wikipage.FrontMatter, wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error), _ wikipage.Identity) error {
 	_, currentFM, err := m.ReadFrontMatter(identifier)
 	if err != nil {
 		return err
@@ -198,14 +198,14 @@ func CreatePascalCasePage(dir, identifier, content string) {
 
 	// Build page with frontmatter containing the identifier
 	fullContent := tomlFrontmatterIdentifierOpen + identifier + tomlFrontmatterIdentifierClose + content
-	_ = os.WriteFile(mdPath, []byte(fullContent), 0644)
+	_ = os.WriteFile(mdPath, []byte(fullContent), 0o644)
 }
 
 // CreateTestFile creates test files with consistent timestamps for migration testing.
 // Must be called from within a Ginkgo test context.
 func CreateTestFile(dir, filename, content string) {
 	filePath := filepath.Join(dir, filename)
-	err := os.WriteFile(filePath, []byte(content), 0644)
+	err := os.WriteFile(filePath, []byte(content), 0o644)
 	Expect(err).NotTo(HaveOccurred(), "failed to create test file: %s", filePath)
 
 	// Set a consistent timestamp for testing
@@ -219,7 +219,7 @@ func CreateTestFile(dir, filename, content string) {
 // Must be called from within a Ginkgo test context.
 func CreateMDFileWithoutFrontmatter(dir, identifier, content string) {
 	mdPath := filepath.Join(dir, base32tools.EncodeToBase32(strings.ToLower(identifier))+".md")
-	err := os.WriteFile(mdPath, []byte(content), 0644)
+	err := os.WriteFile(mdPath, []byte(content), 0o644)
 	Expect(err).NotTo(HaveOccurred(), "failed to create MD file without frontmatter: %s", mdPath)
 }
 
@@ -228,7 +228,7 @@ func CreateMDFileWithoutFrontmatter(dir, identifier, content string) {
 func CreateMDFileWithFrontmatterNoIdentifier(dir, identifier, frontmatter, content string) {
 	mdPath := filepath.Join(dir, base32tools.EncodeToBase32(strings.ToLower(identifier))+".md")
 	fullContent := frontmatterDelimiter + "\n" + frontmatter + "\n" + frontmatterDelimiter + "\n\n" + content
-	err := os.WriteFile(mdPath, []byte(fullContent), 0644)
+	err := os.WriteFile(mdPath, []byte(fullContent), 0o644)
 	Expect(err).NotTo(HaveOccurred(), "failed to create MD file with frontmatter: %s", mdPath)
 }
 
@@ -237,7 +237,7 @@ func CreateMDFileWithFrontmatterNoIdentifier(dir, identifier, frontmatter, conte
 func CreateMDFileWithInvalidIdentifier(dir, filename, identifier string) {
 	mdPath := filepath.Join(dir, base32tools.EncodeToBase32(strings.ToLower(filename))+".md")
 	fullContent := tomlFrontmatterIdentifierOpen + identifier + tomlFrontmatterIdentifierClose + "# Content"
-	err := os.WriteFile(mdPath, []byte(fullContent), 0644)
+	err := os.WriteFile(mdPath, []byte(fullContent), 0o644)
 	Expect(err).NotTo(HaveOccurred(), "failed to create MD file with invalid identifier: %s", mdPath)
 }
 
@@ -248,7 +248,7 @@ func CreateMDFileWithMalformedFrontmatter(dir, filename string) {
 	mdPath := filepath.Join(dir, base32tools.EncodeToBase32(strings.ToLower(filename))+".md")
 	// Malformed: has +++ but not properly closed (only 2 parts when split)
 	fullContent := "+++\nidentifier = 'test'\n# Content without closing +++"
-	err := os.WriteFile(mdPath, []byte(fullContent), 0644)
+	err := os.WriteFile(mdPath, []byte(fullContent), 0o644)
 	Expect(err).NotTo(HaveOccurred(), "failed to create MD file with malformed frontmatter: %s", mdPath)
 }
 
@@ -258,7 +258,7 @@ func CreateMDFileWithUnparseableTOML(dir, filename string) {
 	mdPath := filepath.Join(dir, base32tools.EncodeToBase32(strings.ToLower(filename))+".md")
 	// Invalid TOML: unclosed string
 	fullContent := "+++\nidentifier = 'unclosed\n+++\n\n# Content"
-	err := os.WriteFile(mdPath, []byte(fullContent), 0644)
+	err := os.WriteFile(mdPath, []byte(fullContent), 0o644)
 	Expect(err).NotTo(HaveOccurred(), "failed to create MD file with unparseable TOML: %s", mdPath)
 }
 

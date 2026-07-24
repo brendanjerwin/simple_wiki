@@ -67,7 +67,7 @@ func (s *memoryFakePages) ReadFrontMatter(id wikipage.PageIdentifier) (wikipage.
 	return id, fm, nil
 }
 
-func (s *memoryFakePages) WriteFrontMatter(id wikipage.PageIdentifier, fm wikipage.FrontMatter) error {
+func (s *memoryFakePages) WriteFrontMatter(id wikipage.PageIdentifier, fm wikipage.FrontMatter, _ wikipage.Identity) error {
 	s.pages[id] = fm
 	return nil
 }
@@ -76,7 +76,7 @@ func (*memoryFakePages) ReadMarkdown(id wikipage.PageIdentifier) (wikipage.PageI
 	return id, "", nil
 }
 
-func (*memoryFakePages) WriteMarkdown(_ wikipage.PageIdentifier, _ wikipage.Markdown) error {
+func (*memoryFakePages) WriteMarkdown(_ wikipage.PageIdentifier, _ wikipage.Markdown, _ wikipage.Identity) error {
 	return nil
 }
 
@@ -84,7 +84,7 @@ func (*memoryFakePages) DeletePage(_ wikipage.PageIdentifier) error {
 	return nil
 }
 
-func (*memoryFakePages) ModifyMarkdown(_ wikipage.PageIdentifier, _ func(wikipage.Markdown) (wikipage.Markdown, error)) error {
+func (*memoryFakePages) ModifyMarkdown(_ wikipage.PageIdentifier, _ func(wikipage.Markdown) (wikipage.Markdown, error), _ wikipage.Identity) error {
 	return nil
 }
 

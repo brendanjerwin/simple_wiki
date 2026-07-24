@@ -151,15 +151,15 @@ func (r *WikiMetricsRecorder) RecordHeaderExtraction() {
 // GetStats returns a snapshot of the current statistics.
 func (r *WikiMetricsRecorder) GetStats() WikiMetricsStats {
 	return WikiMetricsStats{
-		HTTPRequestsTotal:      r.httpRequestsTotal.Load(),
-		HTTPErrorsTotal:        r.httpErrorsTotal.Load(),
-		GRPCRequestsTotal:      r.grpcRequestsTotal.Load(),
-		GRPCErrorsTotal:        r.grpcErrorsTotal.Load(),
-		TailscaleLookups:       r.tailscaleLookups.Load(),
-		TailscaleSuccesses:     r.tailscaleSuccesses.Load(),
-		TailscaleFailures:      r.tailscaleFailures.Load(),
-		TailscaleNotTailnet:    r.tailscaleNotTailnet.Load(),
-		HeaderExtractions:      r.headerExtractions.Load(),
+		HTTPRequestsTotal:   r.httpRequestsTotal.Load(),
+		HTTPErrorsTotal:     r.httpErrorsTotal.Load(),
+		GRPCRequestsTotal:   r.grpcRequestsTotal.Load(),
+		GRPCErrorsTotal:     r.grpcErrorsTotal.Load(),
+		TailscaleLookups:    r.tailscaleLookups.Load(),
+		TailscaleSuccesses:  r.tailscaleSuccesses.Load(),
+		TailscaleFailures:   r.tailscaleFailures.Load(),
+		TailscaleNotTailnet: r.tailscaleNotTailnet.Load(),
+		HeaderExtractions:   r.headerExtractions.Load(),
 	}
 }
 
@@ -270,7 +270,7 @@ func (r *WikiMetricsRecorder) buildFrontmatter(fm map[string]any) {
 
 // writeTemplate writes the markdown template for the metrics page.
 func (r *WikiMetricsRecorder) writeTemplate() error {
-	if err := r.pageWriter.WriteMarkdown(ObservabilityMetricsPage, wikipage.Markdown(r.buildMarkdownTemplate())); err != nil {
+	if err := r.pageWriter.WriteMarkdown(ObservabilityMetricsPage, wikipage.Markdown(r.buildMarkdownTemplate()), wikipage.AnonymousIdentity); err != nil {
 		if r.logger != nil {
 			r.logger.Error("Failed to write metrics page template: %v", err)
 		}
@@ -284,7 +284,7 @@ func (r *WikiMetricsRecorder) writeTemplate() error {
 
 // writeFrontmatter writes the frontmatter to the wiki page.
 func (r *WikiMetricsRecorder) writeFrontmatter(fm map[string]any) error {
-	if err := r.pageWriter.WriteFrontMatter(ObservabilityMetricsPage, fm); err != nil {
+	if err := r.pageWriter.WriteFrontMatter(ObservabilityMetricsPage, wikipage.FrontMatter(fm), wikipage.AnonymousIdentity); err != nil {
 		if r.logger != nil {
 			r.logger.Error("Failed to persist wiki metrics: %v", err)
 		}

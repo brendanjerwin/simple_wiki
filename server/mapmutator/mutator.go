@@ -431,7 +431,7 @@ func (m *Mutator) DeleteMap(ctx context.Context, page, mapName string, expected 
 		return err
 	}
 	deleteMapData(fm, mapName)
-	if err := m.pages.WriteFrontMatter(wikipage.PageIdentifier(page), fm); err != nil {
+	if err := m.pages.WriteFrontMatter(wikipage.PageIdentifier(page), fm, wikipage.AnonymousIdentity); err != nil {
 		return fmt.Errorf("write frontmatter: %w", err)
 	}
 	return nil
@@ -512,7 +512,7 @@ func (m *Mutator) mutateMap(ctx context.Context, page, mapName string, expected 
 	mapState.UpdatedAt = timestamppb.New(m.clock.Now())
 	mapState.SyncToken++
 	encodeMap(fm, mapState)
-	if err := m.pages.WriteFrontMatter(wikipage.PageIdentifier(page), fm); err != nil {
+	if err := m.pages.WriteFrontMatter(wikipage.PageIdentifier(page), fm, wikipage.AnonymousIdentity); err != nil {
 		return nil, fmt.Errorf("write frontmatter: %w", err)
 	}
 	return mapState, nil

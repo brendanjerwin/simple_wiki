@@ -231,7 +231,7 @@ func (m *Mutator) mutateSurveyData(ctx context.Context, page, name string, expec
 	}
 	survey.UpdatedAt = timestamppb.New(m.clock.Now())
 	encodeSurvey(fm, name, survey)
-	if err := m.pages.WriteFrontMatter(wikipage.PageIdentifier(page), fm); err != nil {
+	if err := m.pages.WriteFrontMatter(wikipage.PageIdentifier(page), fm, wikipage.AnonymousIdentity); err != nil {
 		return nil, fmt.Errorf("write frontmatter: %w", err)
 	}
 	return survey, nil

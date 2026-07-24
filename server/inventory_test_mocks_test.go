@@ -95,8 +95,7 @@ func (m *mockPageReaderMutator) ReadMarkdown(id wikipage.PageIdentifier) (wikipa
 	return id, wikipage.Markdown(page.markdown), nil
 }
 
-func (m *mockPageReaderMutator) WriteFrontMatter(id wikipage.PageIdentifier, fm wikipage.FrontMatter) error {
-	m.writeFrontMatterCalls = append(m.writeFrontMatterCalls, string(id))
+func (m *mockPageReaderMutator) WriteFrontMatter(id wikipage.PageIdentifier, fm wikipage.FrontMatter, _ wikipage.Identity) error { m.writeFrontMatterCalls = append(m.writeFrontMatterCalls, string(id))
 
 	if m.writeFrontMatterErr != nil {
 		return m.writeFrontMatterErr
@@ -107,10 +106,9 @@ func (m *mockPageReaderMutator) WriteFrontMatter(id wikipage.PageIdentifier, fm 
 	}
 	m.pages[string(id)].frontmatter = fm
 	return nil
-}
+ }
 
-func (m *mockPageReaderMutator) WriteMarkdown(id wikipage.PageIdentifier, md wikipage.Markdown) error {
-	m.writeMarkdownCalls = append(m.writeMarkdownCalls, string(id))
+func (m *mockPageReaderMutator) WriteMarkdown(id wikipage.PageIdentifier, md wikipage.Markdown, _ wikipage.Identity) error { m.writeMarkdownCalls = append(m.writeMarkdownCalls, string(id))
 
 	if m.writeMarkdownErr != nil {
 		return m.writeMarkdownErr
@@ -121,7 +119,7 @@ func (m *mockPageReaderMutator) WriteMarkdown(id wikipage.PageIdentifier, md wik
 	}
 	m.pages[string(id)].markdown = string(md)
 	return nil
-}
+ }
 
 func (m *mockPageReaderMutator) DeletePage(id wikipage.PageIdentifier) error {
 	m.deletedPages = append(m.deletedPages, string(id))
@@ -134,8 +132,7 @@ func (m *mockPageReaderMutator) DeletePage(id wikipage.PageIdentifier) error {
 	return nil
 }
 
-func (m *mockPageReaderMutator) ModifyMarkdown(id wikipage.PageIdentifier, modifier func(wikipage.Markdown) (wikipage.Markdown, error)) error {
-	var currentMD wikipage.Markdown
+func (m *mockPageReaderMutator) ModifyMarkdown(id wikipage.PageIdentifier, modifier func(wikipage.Markdown) (wikipage.Markdown, error), _ wikipage.Identity) error { var currentMD wikipage.Markdown
 	if page, ok := m.pages[string(id)]; ok {
 		currentMD = wikipage.Markdown(page.markdown)
 	}
@@ -154,7 +151,7 @@ func (m *mockPageReaderMutator) ModifyMarkdown(id wikipage.PageIdentifier, modif
 	}
 	m.pages[string(id)].markdown = string(newMD)
 	return nil
-}
+ }
 
 // getFrontmatter returns the frontmatter for a page (for test assertions).
 func (m *mockPageReaderMutator) getFrontmatter(id string) map[string]any {

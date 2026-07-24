@@ -55,6 +55,7 @@ See [[help-hashtags]] and [[help-search]] for the full grammar.
 - [[help-google-keep]] — Per-user Google Keep bridge (unofficial — read trust model)
 - [[help-hashtags]] — Page-level hashtag tagging
 - [[help-handling-large-pages]] — Strategies for trimming, splitting, and navigating large pages
+- [[help-page-history]] — Version history for every page: list, read, restore, diff, and search past versions
 - [[help-macro-blog]] — Blog macro for publishing articles
 - [[help-macro-checklist]] — Checklist macro for interactive task lists
 - [[help-macro-map]] — First-class wiki maps backed by MapService
