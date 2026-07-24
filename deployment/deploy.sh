@@ -61,23 +61,28 @@ sudo chmod 777 /srv/wiki
 echo "Starting simple_wiki service"
 sudo systemctl start simple_wiki
 
-# Wait a moment for service to start
-sleep 5
-
-# Health check
-echo "Performing health check"
-if sudo systemctl is-active --quiet simple_wiki; then
-  echo "✅ Service is running"
-  # Test HTTP response (wiki runs on port 80) - checked locally on server
-  if curl -s -f -L -k http://localhost:80/ >/dev/null; then
-    echo "✅ HTTP health check passed"
-    echo "🎉 Deployment of $VERSION completed successfully!"
-  else
-    echo "❌ HTTP health check failed" >&2
-    exit 1
+# Wait for service to become ready (with retry loop)
+echo "Waiting for service to become ready..."
+HEALTH_CHECK_PASSED=false
+for i in $(seq 1 30); do
+  sleep 2
+  if sudo systemctl is-active --quiet simple_wiki && curl -s -f -L -k http://localhost:80/ >/dev/null 2>&1; then
+    HEALTH_CHECK_PASSED=true
+    break
   fi
+  echo "  attempt $i/30: service not ready yet..."
+done
+
+if $HEALTH_CHECK_PASSED; then
+  echo "✅ Service is running"
+  echo "✅ HTTP health check passed"
+  echo "🎉 Deployment of $VERSION completed successfully!"
 else
-  echo "❌ Service failed to start" >&2
+  if ! sudo systemctl is-active --quiet simple_wiki; then
+    echo "❌ Service failed to start" >&2
+  else
+    echo "❌ HTTP health check failed after 30 attempts" >&2
+  fi
   echo "Service status:" >&2
   sudo systemctl status simple_wiki --no-pager >&2 || true
 
