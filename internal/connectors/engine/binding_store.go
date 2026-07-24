@@ -28,7 +28,7 @@ type FrontmatterReadWriter interface {
 	// The store always reads-modify-writes the entire frontmatter map
 	// to preserve fields the engine doesn't own (other connectors,
 	// non-connector wiki.* state, user fields).
-	WriteFrontMatter(identifier wikipage.PageIdentifier, fm wikipage.FrontMatter) error
+	WriteFrontMatter(identifier wikipage.PageIdentifier, fm wikipage.FrontMatter, identity wikipage.Identity) error
 }
 
 // ProfileLister enumerates every profile page that has at least one
@@ -175,7 +175,7 @@ func (s *FrontmatterBindingStore) SaveBinding(profileID wikipage.PageIdentifier,
 	rawList := getAnySlice(connector, fmKeyBindings)
 	updated := upsertBinding(rawList, binding)
 	connector[fmKeyBindings] = updated
-	if err := s.pages.WriteFrontMatter(profileID, fm); err != nil {
+	if err := s.pages.WriteFrontMatter(profileID, fm, wikipage.AnonymousIdentity); err != nil {
 		return fmt.Errorf("connectors/engine: write frontmatter for %s: %w", profileID, err)
 	}
 	return nil
@@ -224,7 +224,7 @@ func (s *FrontmatterBindingStore) DeleteBinding(profileID wikipage.PageIdentifie
 	} else {
 		connector[fmKeyBindings] = filtered
 	}
-	if err := s.pages.WriteFrontMatter(profileID, fm); err != nil {
+	if err := s.pages.WriteFrontMatter(profileID, fm, wikipage.AnonymousIdentity); err != nil {
 		return fmt.Errorf("connectors/engine: write frontmatter for %s: %w", profileID, err)
 	}
 	return nil

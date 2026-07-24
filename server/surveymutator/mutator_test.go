@@ -42,7 +42,7 @@ func (s *fakeStore) ReadFrontMatter(id wikipage.PageIdentifier) (wikipage.PageId
 	return id, cloneFrontMatter(fm), nil
 }
 
-func (s *fakeStore) WriteFrontMatter(id wikipage.PageIdentifier, fm wikipage.FrontMatter) error {
+func (s *fakeStore) WriteFrontMatter(id wikipage.PageIdentifier, fm wikipage.FrontMatter, _ wikipage.Identity) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.pages[id] = cloneFrontMatter(fm)
@@ -54,7 +54,7 @@ func (*fakeStore) ReadMarkdown(id wikipage.PageIdentifier) (wikipage.PageIdentif
 	return id, "", nil
 }
 
-func (*fakeStore) WriteMarkdown(wikipage.PageIdentifier, wikipage.Markdown) error {
+func (*fakeStore) WriteMarkdown(_ wikipage.PageIdentifier, _ wikipage.Markdown, _ wikipage.Identity) error {
 	return nil
 }
 
@@ -62,7 +62,7 @@ func (*fakeStore) DeletePage(wikipage.PageIdentifier) error {
 	return nil
 }
 
-func (*fakeStore) ModifyMarkdown(id wikipage.PageIdentifier, modifier func(wikipage.Markdown) (wikipage.Markdown, error)) error {
+func (*fakeStore) ModifyMarkdown(_ wikipage.PageIdentifier, modifier func(wikipage.Markdown) (wikipage.Markdown, error), _ wikipage.Identity) error {
 	_, err := modifier("")
 	return err
 }

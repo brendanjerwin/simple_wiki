@@ -45,8 +45,8 @@ type fakeKeepClient struct {
 	createListWithItemsErr error
 	createListWithItems    []createListWithItemsCall
 
-	nextCreatedListID    int
-	nextCreatedItemID    int
+	nextCreatedListID int
+	nextCreatedItemID int
 }
 
 type createListWithItemsCall struct {
@@ -150,7 +150,7 @@ func (f *fakeFrontmatterReadWriter) ReadFrontMatter(id wikipage.PageIdentifier) 
 	return id, fm, nil
 }
 
-func (f *fakeFrontmatterReadWriter) WriteFrontMatter(id wikipage.PageIdentifier, fm wikipage.FrontMatter) error {
+func (f *fakeFrontmatterReadWriter) WriteFrontMatter(id wikipage.PageIdentifier, fm wikipage.FrontMatter, _ wikipage.Identity) error {
 	f.pages[id] = fm
 	return nil
 }
@@ -257,12 +257,12 @@ var _ = Describe("KeepAdapter", func() {
 							Text:     "milk",
 						},
 						{
-							ID:       "client-2",
-							ServerID: "srv-2",
-							Type:     gateway.NodeTypeListItem,
+							ID:             "client-2",
+							ServerID:       "srv-2",
+							Type:           gateway.NodeTypeListItem,
 							ParentServerID: remoteHandle,
-							Text:     "eggs",
-							Checked:  true,
+							Text:           "eggs",
+							Checked:        true,
 						},
 						{
 							ID:       "client-3",
@@ -324,7 +324,7 @@ var _ = Describe("KeepAdapter", func() {
 					googlekeep.AdapterStateKeyKeepCursor: "v100",
 				}
 				fakeClient.changesDefault = gateway.ChangesResponse{
-					ToVersion: "v200",
+					ToVersion:   "v200",
 					Incremental: true,
 				}
 				_, pullErr = adapter.PullRemote(ctx, binding)
@@ -936,8 +936,8 @@ var _ = Describe("KeepAdapter", func() {
 				Status:   "completed",
 				Position: "1000",
 				Vendor: map[string]any{
-					"checked":   true,
-					"node_text": "milk #shopping",
+					"checked":    true,
+					"node_text":  "milk #shopping",
 					"sort_value": "1000",
 				},
 			}
@@ -1076,12 +1076,12 @@ var _ = Describe("KeepAdapter", func() {
 						Text:        "milk",
 					},
 					{
-						ID:          "cli-2",
-						ServerID:    "srv-2",
-						Type:        gateway.NodeTypeListItem,
+						ID:             "cli-2",
+						ServerID:       "srv-2",
+						Type:           gateway.NodeTypeListItem,
 						ParentServerID: remoteHandle,
-						BaseVersion: "bv-2",
-						Text:        "eggs",
+						BaseVersion:    "bv-2",
+						Text:           "eggs",
 					},
 				},
 				Labels: []gateway.LabelEntry{

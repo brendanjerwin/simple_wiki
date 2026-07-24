@@ -316,7 +316,7 @@ markdown content`
 
 			When("the page does not exist", func() {
 				BeforeEach(func() {
-					err = s.WriteFrontMatter(pageIdentifier, newFm)
+					err = s.WriteFrontMatter(pageIdentifier, newFm, wikipage.AnonymousIdentity)
 					waitForIndexing()
 				})
 
@@ -344,7 +344,7 @@ markdown content`
 				BeforeEach(func() {
 					fileErr := os.WriteFile(pagePath, []byte("existing markdown"), 0644)
 					Expect(fileErr).NotTo(HaveOccurred())
-					err = s.WriteFrontMatter(pageIdentifier, newFm)
+					err = s.WriteFrontMatter(pageIdentifier, newFm, wikipage.AnonymousIdentity)
 				})
 
 				It("should not return an error", func() {
@@ -370,7 +370,7 @@ title: Old Title
 old markdown`
 					fileErr := os.WriteFile(pagePath, []byte(content), 0644)
 					Expect(fileErr).NotTo(HaveOccurred())
-					err = s.WriteFrontMatter(pageIdentifier, newFm)
+					err = s.WriteFrontMatter(pageIdentifier, newFm, wikipage.AnonymousIdentity)
 				})
 
 				It("should not return an error", func() {
@@ -396,7 +396,7 @@ title: Old Title
 old markdown`
 					fileErr := os.WriteFile(pagePath, []byte(content), 0644)
 					Expect(fileErr).NotTo(HaveOccurred())
-					err = s.WriteFrontMatter(pageIdentifier, newFm)
+					err = s.WriteFrontMatter(pageIdentifier, newFm, wikipage.AnonymousIdentity)
 				})
 
 				It("should not return an error", func() {
@@ -433,7 +433,7 @@ old markdown`
 
 			When("the page does not exist", func() {
 				BeforeEach(func() {
-					err = s.WriteMarkdown(pageIdentifier, newMd)
+					err = s.WriteMarkdown(pageIdentifier, newMd, wikipage.AnonymousIdentity)
 					waitForIndexing()
 				})
 
@@ -465,7 +465,7 @@ title: Existing Title
 `
 					fileErr := os.WriteFile(pagePath, []byte(content), 0644)
 					Expect(fileErr).NotTo(HaveOccurred())
-					err = s.WriteMarkdown(pageIdentifier, newMd)
+					err = s.WriteMarkdown(pageIdentifier, newMd, wikipage.AnonymousIdentity)
 				})
 
 				It("should not return an error", func() {
@@ -491,7 +491,7 @@ title: Existing Title
 old markdown`
 					fileErr := os.WriteFile(pagePath, []byte(content), 0644)
 					Expect(fileErr).NotTo(HaveOccurred())
-					err = s.WriteMarkdown(pageIdentifier, newMd)
+					err = s.WriteMarkdown(pageIdentifier, newMd, wikipage.AnonymousIdentity)
 				})
 
 				It("should not return an error", func() {

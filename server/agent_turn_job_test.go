@@ -59,7 +59,7 @@ func seedRunningWithAge(store *server.AgentScheduleStore, pages *fakePageStore, 
 	backdatedTime := time.Now().UTC().Add(-age)
 	targetSchedule["last_run"] = backdatedTime.Format(time.RFC3339Nano)
 
-	writeErr := pages.WriteFrontMatter(wikipage.PageIdentifier(page), fm)
+	writeErr := pages.WriteFrontMatter(wikipage.PageIdentifier(page), fm, wikipage.AnonymousIdentity)
 	ExpectWithOffset(1, writeErr).To(Succeed())
 }
 

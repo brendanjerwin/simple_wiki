@@ -42,7 +42,7 @@ func (e *ScheduleNotFoundError) Error() string {
 // Only frontmatter read/write is needed; markdown access is not.
 type agentSchedulePagesStore interface {
 	ReadFrontMatter(id wikipage.PageIdentifier) (wikipage.PageIdentifier, wikipage.FrontMatter, error)
-	WriteFrontMatter(id wikipage.PageIdentifier, fm wikipage.FrontMatter) error
+	WriteFrontMatter(id wikipage.PageIdentifier, fm wikipage.FrontMatter, identity wikipage.Identity) error
 }
 
 // BackgroundActivitySink is the subset of AgentChatContextStore that the
@@ -133,7 +133,7 @@ func (s *AgentScheduleStore) Upsert(page string, schedule *apiv1.AgentSchedule) 
 	if err := writeSchedules(fm, merged); err != nil {
 		return err
 	}
-	if err := s.pages.WriteFrontMatter(id, fm); err != nil {
+	if err := s.pages.WriteFrontMatter(id, fm, wikipage.AnonymousIdentity); err != nil {
 		return fmt.Errorf(errWriteFrontmatterFmt, page, err)
 	}
 	return nil
@@ -168,7 +168,7 @@ func (s *AgentScheduleStore) Delete(page, scheduleID string) error {
 	if err := writeSchedules(fm, filtered); err != nil {
 		return err
 	}
-	if err := s.pages.WriteFrontMatter(id, fm); err != nil {
+	if err := s.pages.WriteFrontMatter(id, fm, wikipage.AnonymousIdentity); err != nil {
 		return fmt.Errorf(errWriteFrontmatterFmt, page, err)
 	}
 	return nil
@@ -238,7 +238,7 @@ func (s *AgentScheduleStore) TransitionStatus(page, scheduleID string, to apiv1.
 	if err := writeSchedules(fm, existing); err != nil {
 		return err
 	}
-	if err := s.pages.WriteFrontMatter(id, fm); err != nil {
+	if err := s.pages.WriteFrontMatter(id, fm, wikipage.AnonymousIdentity); err != nil {
 		return fmt.Errorf(errWriteFrontmatterFmt, page, err)
 	}
 

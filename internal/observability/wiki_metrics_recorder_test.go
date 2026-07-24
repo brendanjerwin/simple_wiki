@@ -40,12 +40,12 @@ func (m *mockPageReaderWriter) ReadMarkdown(identifier wikipage.PageIdentifier) 
 	return identifier, "", nil
 }
 
-func (m *mockPageReaderWriter) WriteFrontMatter(identifier wikipage.PageIdentifier, fm wikipage.FrontMatter) error {
+func (m *mockPageReaderWriter) WriteFrontMatter(identifier wikipage.PageIdentifier, fm wikipage.FrontMatter, _ wikipage.Identity) error {
 	m.frontmatter[string(identifier)] = fm
 	return nil
 }
 
-func (m *mockPageReaderWriter) WriteMarkdown(identifier wikipage.PageIdentifier, md wikipage.Markdown) error {
+func (m *mockPageReaderWriter) WriteMarkdown(identifier wikipage.PageIdentifier, md wikipage.Markdown, _ wikipage.Identity) error {
 	m.markdown[string(identifier)] = string(md)
 	return nil
 }
@@ -73,24 +73,26 @@ func (f *failingPageReaderWriter) ReadMarkdown(identifier wikipage.PageIdentifie
 	return f.mockPageReaderWriter.ReadMarkdown(identifier)
 }
 
-func (f *failingPageReaderWriter) WriteFrontMatter(identifier wikipage.PageIdentifier, fm wikipage.FrontMatter) error {
+func (f *failingPageReaderWriter) WriteFrontMatter(identifier wikipage.PageIdentifier, fm wikipage.FrontMatter, _ wikipage.Identity) error {
 	if f.failFrontmatterWrite {
 		return errFrontmatterWriteFailed
 	}
-	return f.mockPageReaderWriter.WriteFrontMatter(identifier, fm)
+	return f.mockPageReaderWriter.WriteFrontMatter(identifier, fm, wikipage.AnonymousIdentity)
 }
 
-func (f *failingPageReaderWriter) WriteMarkdown(identifier wikipage.PageIdentifier, md wikipage.Markdown) error {
+func (f *failingPageReaderWriter) WriteMarkdown(identifier wikipage.PageIdentifier, md wikipage.Markdown, _ wikipage.Identity) error {
 	if f.failMarkdownWrite {
 		return errMarkdownWriteFailed
 	}
-	return f.mockPageReaderWriter.WriteMarkdown(identifier, md)
+	return f.mockPageReaderWriter.WriteMarkdown(identifier, md, wikipage.AnonymousIdentity)
 }
 
-var errFrontmatterWriteFailed = &testError{msg: "frontmatter write failed"}
-var errMarkdownWriteFailed = &testError{msg: "markdown write failed"}
-var errFrontmatterReadFailed = &testError{msg: "frontmatter read failed"}
-var errMarkdownReadFailed = &testError{msg: "markdown read failed"}
+var (
+	errFrontmatterWriteFailed = &testError{msg: "frontmatter write failed"}
+	errMarkdownWriteFailed    = &testError{msg: "markdown write failed"}
+	errFrontmatterReadFailed  = &testError{msg: "frontmatter read failed"}
+	errMarkdownReadFailed     = &testError{msg: "markdown read failed"}
+)
 
 type testError struct {
 	msg string

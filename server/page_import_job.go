@@ -224,7 +224,7 @@ func (j *SinglePageImportJob) readOrInitFrontmatter(identifier string) (map[stri
 
 // writeFrontmatter persists the frontmatter for a page.
 func (j *SinglePageImportJob) writeFrontmatter(identifier string, fm map[string]any) error {
-	if err := j.pageReaderMutator.WriteFrontMatter(wikipage.PageIdentifier(identifier), fm); err != nil {
+	if err := j.pageReaderMutator.WriteFrontMatter(wikipage.PageIdentifier(identifier), fm, wikipage.AnonymousIdentity); err != nil {
 		return fmt.Errorf("failed to write frontmatter: %w", err)
 	}
 
@@ -235,7 +235,7 @@ func (j *SinglePageImportJob) writeFrontmatter(identifier string, fm map[string]
 func (j *SinglePageImportJob) finalizeNewPage(identifier, template string) error {
 	if template == pageimport.InvItemTemplate {
 		markdown := inventory.BuildItemMarkdown()
-		if err := j.pageReaderMutator.WriteMarkdown(wikipage.PageIdentifier(identifier), wikipage.Markdown(markdown)); err != nil {
+		if err := j.pageReaderMutator.WriteMarkdown(wikipage.PageIdentifier(identifier), wikipage.Markdown(markdown), wikipage.AnonymousIdentity); err != nil {
 			return fmt.Errorf("failed to write markdown: %w", err)
 		}
 	}
@@ -490,10 +490,10 @@ func (j *PageImportReportJob) generateReport(result PageImportResult) error {
 	}
 
 	// Write frontmatter and markdown
-	if err := j.pageReaderMutator.WriteFrontMatter(wikipage.PageIdentifier(PageImportReportPage), fm); err != nil {
+	if err := j.pageReaderMutator.WriteFrontMatter(wikipage.PageIdentifier(PageImportReportPage), fm, wikipage.AnonymousIdentity); err != nil {
 		return fmt.Errorf("failed to write import report frontmatter: %w", err)
 	}
-	if err := j.pageReaderMutator.WriteMarkdown(wikipage.PageIdentifier(PageImportReportPage), wikipage.Markdown(report.String())); err != nil {
+	if err := j.pageReaderMutator.WriteMarkdown(wikipage.PageIdentifier(PageImportReportPage), wikipage.Markdown(report.String()), wikipage.AnonymousIdentity); err != nil {
 		return fmt.Errorf("failed to write import report markdown: %w", err)
 	}
 

@@ -74,12 +74,12 @@ func resolveMarkdownContent(originalMarkdown wikipage.Markdown, oldContentMarkdo
 
 // verifyStoredContent reads back the page after a write to confirm the content is non-empty.
 // If the stored content is empty or unreadable, it attempts to restore the original content.
-func (s *Server) verifyStoredContent(pageID wikipage.PageIdentifier, originalMarkdown wikipage.Markdown) (wikipage.Markdown, error) {
+func (s *Server) verifyStoredContent(ctx context.Context, pageID wikipage.PageIdentifier, originalMarkdown wikipage.Markdown) (wikipage.Markdown, error) {
 	_, storedMarkdown, readBackErr := s.pageReaderMutator.ReadMarkdown(pageID)
 	if readBackErr != nil || strings.TrimSpace(string(storedMarkdown)) == "" {
 		// Best-effort restore of the original content; the verification error is what we surface.
 		// nosemgrep: go.error-discarded-with-blank-identifier
-		_ = s.pageReaderMutator.WriteMarkdown(pageID, originalMarkdown)
+		_ = s.pageReaderMutator.WriteMarkdown(pageID, originalMarkdown, tailscale.IdentityFromContext(ctx))
 		if readBackErr != nil {
 			return "", status.Errorf(codes.Internal, "failed to verify stored content after write: %v", readBackErr)
 		}
@@ -604,7 +604,7 @@ func (s *Server) GenerateIdentifier(_ context.Context, req *apiv1.GenerateIdenti
 // itself — the page does not yet exist, so there is no acl to enforce.
 // The first creator effectively becomes the owner via whatever authorization
 // they choose to stamp into req.Frontmatter.
-func (s *Server) CreatePage(_ context.Context, req *apiv1.CreatePageRequest) (*apiv1.CreatePageResponse, error) {
+func (s *Server) CreatePage(ctx context.Context, req *apiv1.CreatePageRequest) (*apiv1.CreatePageResponse, error) {
 	if req.PageName == "" {
 		return nil, status.Error(codes.InvalidArgument, pageNameRequiredErr)
 	}
@@ -645,11 +645,11 @@ func (s *Server) CreatePage(_ context.Context, req *apiv1.CreatePageRequest) (*a
 		}, nil
 	}
 
-	if err := s.pageReaderMutator.WriteFrontMatter(wikipage.PageIdentifier(identifier), wikipage.FrontMatter(fm)); err != nil {
+	if err := s.pageReaderMutator.WriteFrontMatter(wikipage.PageIdentifier(identifier), wikipage.FrontMatter(fm), tailscale.IdentityFromContext(ctx)); err != nil {
 		return nil, status.Errorf(codes.Internal, failedToWriteFrontmatterErrFmt, err)
 	}
 
-	if err := s.pageReaderMutator.WriteMarkdown(wikipage.PageIdentifier(identifier), wikipage.Markdown(markdown)); err != nil {
+	if err := s.pageReaderMutator.WriteMarkdown(wikipage.PageIdentifier(identifier), wikipage.Markdown(markdown), tailscale.IdentityFromContext(ctx)); err != nil {
 		return nil, status.Errorf(codes.Internal, failedToWriteMarkdownErrFmt, err)
 	}
 
@@ -713,6 +713,7 @@ func (s *Server) UpdatePageContent(ctx context.Context, req *apiv1.UpdatePageCon
 			// otherwise replace the entire page content.
 			return resolveMarkdownContent(currentMarkdown, req.OldContentMarkdown, req.NewContentMarkdown)
 		},
+		tailscale.IdentityFromContext(ctx),
 	)
 	if modifyErr != nil {
 		if _, ok := status.FromError(modifyErr); ok {
@@ -724,7 +725,7 @@ func (s *Server) UpdatePageContent(ctx context.Context, req *apiv1.UpdatePageCon
 	// Invariant check: read back the stored content to ensure the write did not blank the page.
 	// If the content is missing or empty after a successful write, attempt to restore the
 	// original content to prevent data loss.
-	storedMarkdown, err := s.verifyStoredContent(wikipage.PageIdentifier(req.PageName), originalMarkdown)
+	storedMarkdown, err := s.verifyStoredContent(ctx, wikipage.PageIdentifier(req.PageName), originalMarkdown)
 	if err != nil {
 		return nil, err
 	}
@@ -763,7 +764,7 @@ func (s *Server) ClearPageContent(ctx context.Context, req *apiv1.ClearPageConte
 		return nil, status.Errorf(codes.Internal, failedToReadFrontmatterErrFmt, err)
 	}
 
-	if err := s.pageReaderMutator.WriteMarkdown(wikipage.PageIdentifier(req.PageName), ""); err != nil {
+	if err := s.pageReaderMutator.WriteMarkdown(wikipage.PageIdentifier(req.PageName), wikipage.Markdown(""), tailscale.IdentityFromContext(ctx)); err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to clear markdown: %v", err)
 	}
 
@@ -824,11 +825,11 @@ func (s *Server) UpdateWholePage(ctx context.Context, req *apiv1.UpdateWholePage
 	}
 	fm[identifierKey] = req.PageName
 
-	if err := s.pageReaderMutator.WriteMarkdown(wikipage.PageIdentifier(req.PageName), md); err != nil {
+	if err := s.pageReaderMutator.WriteMarkdown(wikipage.PageIdentifier(req.PageName), md, tailscale.IdentityFromContext(ctx)); err != nil {
 		return nil, status.Errorf(codes.Internal, failedToWriteMarkdownErrFmt, err)
 	}
 
-	if err := s.pageReaderMutator.WriteFrontMatter(wikipage.PageIdentifier(req.PageName), fm); err != nil {
+	if err := s.pageReaderMutator.WriteFrontMatter(wikipage.PageIdentifier(req.PageName), wikipage.FrontMatter(fm), tailscale.IdentityFromContext(ctx)); err != nil {
 		return nil, status.Errorf(codes.Internal, failedToWriteFrontmatterErrFmt, err)
 	}
 

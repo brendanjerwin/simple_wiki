@@ -74,7 +74,7 @@ func (j *ChatContextMigrationJob) migrateOne(page string) (bool, error) {
 
 	moveLegacyChatContextLocked(fm, legacy)
 
-	if err := j.pages.WriteFrontMatter(id, fm); err != nil {
+	if err := j.pages.WriteFrontMatter(id, fm, wikipage.AnonymousIdentity); err != nil {
 		return false, fmt.Errorf("write %q: %w", page, err)
 	}
 	return true, nil

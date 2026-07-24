@@ -58,7 +58,7 @@ var _ = Describe("AgentChatContextStore", func() {
 							"key_context":               "Friday 6pm",
 						},
 					},
-				})
+				}, wikipage.AnonymousIdentity)
 				var err error
 				ctx, err = store.Read("p")
 				Expect(err).NotTo(HaveOccurred())
@@ -331,7 +331,7 @@ var _ = Describe("AgentChatContextStore", func() {
 			BeforeEach(func() {
 				_ = pages.WriteFrontMatter("p", wikipage.FrontMatter{
 					"title": "My Page",
-				})
+				}, wikipage.AnonymousIdentity)
 				_, err := store.UpdateMerge("p", &apiv1.ChatContext{
 					LastConversationSummary: "hello",
 				})
@@ -716,7 +716,7 @@ var _ = Describe("AgentChatContextStore", func() {
 						"last_updated":              "2026-04-23", // date-only — invalid RFC3339
 					},
 				},
-			})
+			}, wikipage.AnonymousIdentity)
 			ctx, err = store.Read("brick_attempt")
 		})
 
@@ -757,7 +757,7 @@ var _ = Describe("AgentChatContextStore", func() {
 						},
 					},
 				},
-			})
+			}, wikipage.AnonymousIdentity)
 			ctx, err = store.Read("partial_log")
 		})
 

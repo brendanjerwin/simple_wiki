@@ -27,17 +27,20 @@ type noOpPageReaderMutator struct{}
 func (noOpPageReaderMutator) ReadFrontMatter(wikipage.PageIdentifier) (wikipage.PageIdentifier, wikipage.FrontMatter, error) {
 	return "", nil, os.ErrNotExist
 }
-func (noOpPageReaderMutator) WriteFrontMatter(wikipage.PageIdentifier, wikipage.FrontMatter) error {
+
+func (noOpPageReaderMutator) WriteFrontMatter(wikipage.PageIdentifier, wikipage.FrontMatter, wikipage.Identity) error {
 	return nil
 }
+
 func (noOpPageReaderMutator) ReadMarkdown(wikipage.PageIdentifier) (wikipage.PageIdentifier, wikipage.Markdown, error) {
 	return "", "", os.ErrNotExist
 }
-func (noOpPageReaderMutator) WriteMarkdown(wikipage.PageIdentifier, wikipage.Markdown) error {
+
+func (noOpPageReaderMutator) WriteMarkdown(wikipage.PageIdentifier, wikipage.Markdown, wikipage.Identity) error {
 	return nil
 }
 func (noOpPageReaderMutator) DeletePage(wikipage.PageIdentifier) error { return nil }
-func (noOpPageReaderMutator) ModifyMarkdown(_ wikipage.PageIdentifier, modifier func(wikipage.Markdown) (wikipage.Markdown, error)) error {
+func (noOpPageReaderMutator) ModifyMarkdown(_ wikipage.PageIdentifier, modifier func(wikipage.Markdown) (wikipage.Markdown, error), _ wikipage.Identity) error {
 	_, err := modifier("")
 	return err
 }
@@ -63,15 +66,19 @@ type noOpFrontmatterIndexQueryer struct{}
 func (noOpFrontmatterIndexQueryer) QueryExactMatch(wikipage.DottedKeyPath, wikipage.Value) []wikipage.PageIdentifier {
 	return nil
 }
+
 func (noOpFrontmatterIndexQueryer) QueryKeyExistence(wikipage.DottedKeyPath) []wikipage.PageIdentifier {
 	return nil
 }
+
 func (noOpFrontmatterIndexQueryer) QueryPrefixMatch(wikipage.DottedKeyPath, string) []wikipage.PageIdentifier {
 	return nil
 }
+
 func (noOpFrontmatterIndexQueryer) GetValue(wikipage.PageIdentifier, wikipage.DottedKeyPath) wikipage.Value {
 	return ""
 }
+
 func (noOpFrontmatterIndexQueryer) QueryExactMatchSortedBy(wikipage.DottedKeyPath, wikipage.Value, wikipage.DottedKeyPath, bool, int) []wikipage.PageIdentifier {
 	return nil
 }
@@ -87,12 +94,15 @@ func noopUnsubscribe() {
 func (noOpChatBufferManager) AddUserMessage(string, string, string) (string, error) {
 	return "", nil
 }
+
 func (noOpChatBufferManager) AddAssistantMessage(string, string, string) (string, error) {
 	return "", nil
 }
+
 func (noOpChatBufferManager) EditMessage(string, string, bool) error {
 	return nil
 }
+
 func (noOpChatBufferManager) AddReaction(string, string, string) error {
 	return nil
 }
@@ -104,16 +114,19 @@ func (noOpChatBufferManager) ClearPage(string) {
 func (noOpChatBufferManager) GetMessages(string) []*chatbuffer.Message {
 	return nil
 }
+
 func (noOpChatBufferManager) SubscribeToPage(string) (<-chan chatbuffer.Event, func()) {
 	ch := make(chan chatbuffer.Event)
 	close(ch)
 	return ch, noopUnsubscribe
 }
+
 func (noOpChatBufferManager) SubscribeToPageWithReplay(string) ([]*chatbuffer.Message, <-chan chatbuffer.Event, func()) {
 	ch := make(chan chatbuffer.Event)
 	close(ch)
 	return nil, ch, noopUnsubscribe
 }
+
 func (noOpChatBufferManager) SubscribeToPageChannelWithReplay(string) ([]*chatbuffer.Message, <-chan *chatbuffer.Message, func()) {
 	ch := make(chan *chatbuffer.Message)
 	close(ch)

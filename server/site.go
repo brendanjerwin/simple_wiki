@@ -57,23 +57,28 @@ func (ChatTemplateExecutor) ExecuteTemplate(templateString string, fm wikipage.F
 
 // Site represents the wiki site.
 type Site struct {
-	PathToData               string
-	CSS                      []byte
-	DefaultPage              string
-	Debounce                 int
-	ChatPersona              string
-	SessionStore             cookie.Store
-	Fileuploads              bool
-	MaxUploadSize            uint
-	MaxDocumentSize          uint // in runes; about a 10mb limit by default
-	FileStorer               filestore.FileStorer
-	Logger                   *lumber.ConsoleLogger
-	MarkdownRenderer         MarkdownToHTMLRenderer
-	IndexCoordinator         *index.IndexCoordinator
-	JobQueueCoordinator      *jobs.JobQueueCoordinator
-	CronScheduler            *jobs.CronScheduler
-	FrontmatterIndexQueryer  frontmatter.IQueryFrontmatterIndex
-	BleveIndexQueryer        bleve.BleveIndexQueryer
+	PathToData              string
+	CSS                     []byte
+	DefaultPage             string
+	Debounce                int
+	ChatPersona             string
+	SessionStore            cookie.Store
+	Fileuploads             bool
+	MaxUploadSize           uint
+	MaxDocumentSize         uint // in runes; about a 10mb limit by default
+	FileStorer              filestore.FileStorer
+	Logger                  *lumber.ConsoleLogger
+	MarkdownRenderer        MarkdownToHTMLRenderer
+	IndexCoordinator        *index.IndexCoordinator
+	JobQueueCoordinator     *jobs.JobQueueCoordinator
+	CronScheduler           *jobs.CronScheduler
+	FrontmatterIndexQueryer frontmatter.IQueryFrontmatterIndex
+	BleveIndexQueryer       bleve.BleveIndexQueryer
+	// HistoryIndexQueryer is the placeholder for the Bleve-backed history
+	// index that will be implemented in index/history/. It is intentionally
+	// nil until that subagent lands; the gRPC handlers treat a nil history
+	// searcher as "not configured" and return Unavailable.
+	HistoryIndexQueryer      bleve.BleveIndexQueryer
 	AgentScheduleStore       *AgentScheduleStore
 	AgentChatContextStore    *AgentChatContextStore
 	AgentScheduler           *AgentScheduler
@@ -374,6 +379,10 @@ func (s *Site) InitializeIndexing() error {
 
 	s.FrontmatterIndexQueryer = frontmatterIndex
 	s.BleveIndexQueryer = bleveIndex
+	// History search index placeholder. The real Bleve-backed implementation
+	// will live in index/history/ and be assigned here when ready. Nil is safe:
+	// the gRPC handlers check for a nil searcher and return Unavailable.
+	s.HistoryIndexQueryer = nil
 
 	// Create new job queue coordinator and index coordinator
 	s.JobQueueCoordinator = jobs.NewJobQueueCoordinator(s.Logger)
@@ -407,6 +416,15 @@ func (s *Site) InitializeIndexing() error {
 		s.Logger.Info("Inventory normalization job scheduled to run hourly")
 	}
 
+	// Schedule history decimation job to run daily at 3am. It thins old page
+	// versions per a GFS-style retention schedule.
+	decimationJob := pagestore.NewHistoryDecimationJob(s.ensureStore(), time.Time{})
+	if _, err := s.CronScheduler.Schedule("0 0 3 * * *", decimationJob); err != nil {
+		s.Logger.Warn("Failed to schedule history decimation job: %v", err)
+	} else {
+		s.Logger.Info("History decimation job scheduled to run daily at 3am")
+	}
+
 	s.startMigrationJobs()
 
 	// Get all files that need to be indexed
@@ -436,6 +454,23 @@ func (s *Site) InitializeIndexing() error {
 		s.Logger.Error("Failed to enqueue bulk indexing jobs: %v", err)
 	}
 	s.Logger.Info("Background indexing started for %d pages. Application is ready.", len(listing.Entries))
+
+	// Initial history index build placeholder. Walk __history__/ and log the
+	// directories that would be scanned once the Bleve-backed history index
+	// (index/history/) is wired in.
+	historyRoot := filepath.Join(s.PathToData, "__history__")
+	if entries, err := os.ReadDir(historyRoot); err == nil {
+		s.Logger.Info("Initial history index build would scan %d page history directories under %s", len(entries), historyRoot)
+		for _, entry := range entries {
+			if !entry.IsDir() {
+				continue
+			}
+			pageHistoryDir := filepath.Join(historyRoot, entry.Name())
+			s.Logger.Info("Would enqueue history index jobs for %s", pageHistoryDir)
+		}
+	} else if !os.IsNotExist(err) {
+		s.Logger.Warn("Failed to read history directory %s: %v", historyRoot, err)
+	}
 
 	return nil
 }
@@ -487,6 +522,13 @@ func (s *Site) ensureStore() *pagestore.Store {
 		s.reader = pagestore.NewCanonicalReader(canon, s.store)
 	}
 	return s.store
+}
+
+// HistoryReader returns the read-only history surface backed by the page
+// store. This is wired into the gRPC handlers as the concrete
+// PageHistoryReader implementation.
+func (s *Site) HistoryReader() pagestore.HistoryReader {
+	return s.ensureStore()
 }
 
 // ReadPage opens a page by its identifier. Delegates entirely to the
@@ -700,8 +742,8 @@ func (s *Site) UploadList() ([]os.FileInfo, error) {
 // through `*pagestore.Store.ModifyOrCreatePage`. The page-lock is held for the
 // entire read-modify-write cycle; async indexing jobs are enqueued only after
 // the lock has been released.
-func (s *Site) modifyOrCreatePage(identifierStr string, modifier func(currentText string) (string, error)) error {
-	if err := s.ensureStore().ModifyOrCreatePage(identifierStr, modifier); err != nil {
+func (s *Site) modifyOrCreatePage(identifierStr string, identity wikipage.Identity, source string, modifier func(currentText string) (string, error)) error {
+	if err := s.ensureStore().ModifyOrCreatePage(identifierStr, identity, source, modifier); err != nil {
 		return err
 	}
 
@@ -735,8 +777,9 @@ func (s *Site) modifyOrCreatePage(identifierStr string, modifier func(currentTex
 
 // ModifyMarkdown atomically reads the markdown section, calls modifier, and writes the result
 // back while preserving the existing frontmatter. The entire cycle is held under the write lock.
-func (s *Site) ModifyMarkdown(identifier wikipage.PageIdentifier, modifier func(wikipage.Markdown) (wikipage.Markdown, error)) error {
-	return s.modifyOrCreatePage(string(identifier), func(currentText string) (string, error) {
+// The identity parameter is used for history attribution.
+func (s *Site) ModifyMarkdown(identifier wikipage.PageIdentifier, modifier func(wikipage.Markdown) (wikipage.Markdown, error), identity wikipage.Identity) error {
+	return s.modifyOrCreatePage(string(identifier), identity, "modify_markdown", func(currentText string) (string, error) {
 		p := &wikipage.Page{Text: currentText}
 
 		currentMD, err := p.GetMarkdown()
@@ -760,8 +803,9 @@ func (s *Site) ModifyMarkdown(identifier wikipage.PageIdentifier, modifier func(
 
 // ModifyFrontMatterAndMarkdown atomically reads both page sections, calls modifier,
 // and writes both returned sections under a single page lock.
-func (s *Site) ModifyFrontMatterAndMarkdown(identifier wikipage.PageIdentifier, modifier func(wikipage.FrontMatter, wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error)) error {
-	return s.modifyOrCreatePage(string(identifier), func(currentText string) (string, error) {
+// The identity parameter is used for history attribution.
+func (s *Site) ModifyFrontMatterAndMarkdown(identifier wikipage.PageIdentifier, modifier func(wikipage.FrontMatter, wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error), identity wikipage.Identity) error {
+	return s.modifyOrCreatePage(string(identifier), identity, "modify_fm_md", func(currentText string) (string, error) {
 		p := &wikipage.Page{Text: currentText}
 
 		currentFM, err := p.GetFrontMatter()
@@ -783,8 +827,9 @@ func (s *Site) ModifyFrontMatterAndMarkdown(identifier wikipage.PageIdentifier, 
 
 // WriteFrontMatter atomically reads the current markdown, combines it with the new frontmatter,
 // and writes the result — all under a single write lock to prevent concurrent write races.
-func (s *Site) WriteFrontMatter(identifier wikipage.PageIdentifier, fm wikipage.FrontMatter) error {
-	return s.modifyOrCreatePage(string(identifier), func(currentText string) (string, error) {
+// The identity parameter is used for history attribution.
+func (s *Site) WriteFrontMatter(identifier wikipage.PageIdentifier, fm wikipage.FrontMatter, identity wikipage.Identity) error {
+	return s.modifyOrCreatePage(string(identifier), identity, "write_frontmatter", func(currentText string) (string, error) {
 		p := &wikipage.Page{Text: currentText}
 
 		md, err := p.GetMarkdown()
@@ -798,10 +843,11 @@ func (s *Site) WriteFrontMatter(identifier wikipage.PageIdentifier, fm wikipage.
 
 // WriteMarkdown atomically reads the current frontmatter, combines it with the new markdown,
 // and writes the result — all under a single write lock to prevent concurrent write races.
-func (s *Site) WriteMarkdown(identifier wikipage.PageIdentifier, md wikipage.Markdown) error {
+// The identity parameter is used for history attribution.
+func (s *Site) WriteMarkdown(identifier wikipage.PageIdentifier, md wikipage.Markdown, identity wikipage.Identity) error {
 	return s.ModifyMarkdown(identifier, func(_ wikipage.Markdown) (wikipage.Markdown, error) {
 		return md, nil
-	})
+	}, identity)
 }
 
 // ReadFrontMatter reads the frontmatter for a page.
@@ -864,7 +910,7 @@ func (s *Site) DeletePageBy(identifier wikipage.PageIdentifier, deletedBy string
 		}
 	}
 
-	return s.ensureStore().SoftDeletePageBy(identifier, deletedBy)
+	return s.ensureStore().SoftDeletePageBy(identifier, deletedBy, wikipage.AnonymousIdentity)
 }
 
 // ListTrash returns pages currently available for restore.
@@ -974,8 +1020,7 @@ func (s *Site) savePageAndIndex(p *wikipage.Page) error {
 func (s *Site) savePage(p *wikipage.Page) error {
 	// Use store's ModifyOrCreatePage with a constant-returning modifier so the
 	// store's per-page lock protects the write; the read side of the
-	// read-modify-write is wasted work but tiny compared to the write IO.
-	if err := s.ensureStore().ModifyOrCreatePage(p.Identifier, func(_ string) (string, error) {
+	if err := s.ensureStore().ModifyOrCreatePage(p.Identifier, wikipage.AnonymousIdentity, "migration", func(_ string) (string, error) {
 		return p.Text, nil
 	}); err != nil {
 		return fmt.Errorf("failed to save page %s: %w", p.Identifier, err)

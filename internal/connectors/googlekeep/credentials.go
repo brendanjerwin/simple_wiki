@@ -8,7 +8,6 @@
 // here. Bind/Unbind/Resume/Sync algorithms belong to
 // internal/connectors/engine; this file only reads, writes, and
 // clears the per-profile credential bundle.
-//
 package googlekeep
 
 import (
@@ -99,7 +98,7 @@ type ResumeAllBindingsHook func(ctx context.Context, profileID wikipage.PageIden
 // doesn't import the engine package.
 type FrontmatterReadWriter interface {
 	ReadFrontMatter(identifier wikipage.PageIdentifier) (wikipage.PageIdentifier, wikipage.FrontMatter, error)
-	WriteFrontMatter(identifier wikipage.PageIdentifier, fm wikipage.FrontMatter) error
+	WriteFrontMatter(identifier wikipage.PageIdentifier, fm wikipage.FrontMatter, identity wikipage.Identity) error
 }
 
 // FrontmatterCredentialStore reads and writes the per-profile Keep
@@ -325,7 +324,7 @@ func (s *FrontmatterCredentialStore) writeCredentials(profileID wikipage.PageIde
 	} else {
 		delete(connector, credentialKeyLastVerifiedAt)
 	}
-	if err := s.pages.WriteFrontMatter(profileID, fm); err != nil {
+	if err := s.pages.WriteFrontMatter(profileID, fm, wikipage.AnonymousIdentity); err != nil {
 		return fmt.Errorf("write frontmatter: %w", err)
 	}
 	return nil

@@ -50,13 +50,13 @@ func (f *fakeStore) ReadMarkdown(id wikipage.PageIdentifier) (wikipage.PageIdent
 	return id, md, nil
 }
 
-func (f *fakeStore) WriteFrontMatter(id wikipage.PageIdentifier, fm wikipage.FrontMatter) error {
+func (f *fakeStore) WriteFrontMatter(id wikipage.PageIdentifier, fm wikipage.FrontMatter, _ wikipage.Identity) error {
 	f.frontmatter[id] = fm
 	f.writes[id]++
 	return nil
 }
 
-func (f *fakeStore) WriteMarkdown(id wikipage.PageIdentifier, md wikipage.Markdown) error {
+func (f *fakeStore) WriteMarkdown(id wikipage.PageIdentifier, md wikipage.Markdown, _ wikipage.Identity) error {
 	f.markdown[id] = md
 	f.writes[id]++
 	return nil
@@ -68,7 +68,7 @@ func (f *fakeStore) DeletePage(id wikipage.PageIdentifier) error {
 	return nil
 }
 
-func (f *fakeStore) ModifyMarkdown(id wikipage.PageIdentifier, modifier func(wikipage.Markdown) (wikipage.Markdown, error)) error {
+func (f *fakeStore) ModifyMarkdown(id wikipage.PageIdentifier, modifier func(wikipage.Markdown) (wikipage.Markdown, error), _ wikipage.Identity) error {
 	current := f.markdown[id]
 	next, err := modifier(current)
 	if err != nil {
@@ -380,16 +380,16 @@ func (*explodingStore) ReadMarkdown(id wikipage.PageIdentifier) (wikipage.PageId
 	return id, "", os.ErrNotExist
 }
 
-func (*explodingStore) WriteFrontMatter(_ wikipage.PageIdentifier, _ wikipage.FrontMatter) error {
+func (*explodingStore) WriteFrontMatter(_ wikipage.PageIdentifier, _ wikipage.FrontMatter, _ wikipage.Identity) error {
 	return nil
 }
 
-func (*explodingStore) WriteMarkdown(_ wikipage.PageIdentifier, _ wikipage.Markdown) error {
+func (*explodingStore) WriteMarkdown(_ wikipage.PageIdentifier, _ wikipage.Markdown, _ wikipage.Identity) error {
 	return nil
 }
 
 func (*explodingStore) DeletePage(_ wikipage.PageIdentifier) error { return nil }
 
-func (*explodingStore) ModifyMarkdown(_ wikipage.PageIdentifier, _ func(wikipage.Markdown) (wikipage.Markdown, error)) error {
+func (*explodingStore) ModifyMarkdown(_ wikipage.PageIdentifier, _ func(wikipage.Markdown) (wikipage.Markdown, error), _ wikipage.Identity) error {
 	return nil
 }

@@ -62,7 +62,7 @@ func (s *stubStore) ReadFrontMatter(id wikipage.PageIdentifier) (wikipage.PageId
 	return id, deepCopyFM(fm), nil
 }
 
-func (s *stubStore) WriteFrontMatter(id wikipage.PageIdentifier, fm wikipage.FrontMatter) error {
+func (s *stubStore) WriteFrontMatter(id wikipage.PageIdentifier, fm wikipage.FrontMatter, _ wikipage.Identity) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.pages[string(id)] = deepCopyFM(fm)
@@ -73,13 +73,13 @@ func (*stubStore) ReadMarkdown(_ wikipage.PageIdentifier) (wikipage.PageIdentifi
 	return "", "", nil
 }
 
-func (*stubStore) WriteMarkdown(_ wikipage.PageIdentifier, _ wikipage.Markdown) error {
+func (*stubStore) WriteMarkdown(_ wikipage.PageIdentifier, _ wikipage.Markdown, _ wikipage.Identity) error {
 	return nil
 }
 
 func (*stubStore) DeletePage(_ wikipage.PageIdentifier) error { return nil }
 
-func (*stubStore) ModifyMarkdown(_ wikipage.PageIdentifier, _ func(wikipage.Markdown) (wikipage.Markdown, error)) error {
+func (*stubStore) ModifyMarkdown(_ wikipage.PageIdentifier, _ func(wikipage.Markdown) (wikipage.Markdown, error), _ wikipage.Identity) error {
 	return nil
 }
 

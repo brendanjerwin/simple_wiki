@@ -57,7 +57,7 @@ func (s *Store) trashDir(trashID string) (string, error) {
 }
 
 func (s *Store) createTrashDir(now time.Time) (trashID string, deletedDir string, err error) {
-	if err := os.MkdirAll(s.deletedRoot(), 0755); err != nil {
+	if err := os.MkdirAll(s.deletedRoot(), 0o755); err != nil {
 		return "", "", fmt.Errorf("create deleted root: %w", err)
 	}
 	for offset := int64(0); ; offset++ {
@@ -66,7 +66,7 @@ func (s *Store) createTrashDir(now time.Time) (trashID string, deletedDir string
 		if err != nil {
 			return "", "", err
 		}
-		if err := os.Mkdir(deletedDir, 0755); err != nil {
+		if err := os.Mkdir(deletedDir, 0o755); err != nil {
 			if os.IsExist(err) {
 				continue
 			}
@@ -105,7 +105,7 @@ func writeTrashMetadata(trashDir string, metadata trashMetadata) error {
 	if err != nil {
 		return fmt.Errorf("marshal trash metadata: %w", err)
 	}
-	if err := os.WriteFile(filepath.Join(trashDir, trashMetadataName), b, 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(trashDir, trashMetadataName), b, 0o644); err != nil {
 		return fmt.Errorf("write trash metadata: %w", err)
 	}
 	return nil
@@ -171,15 +171,17 @@ func loadTrashMetadata(trashID, trashDir string) (trashMetadata, error) {
 }
 
 // SoftDeletePage moves the .md file for identifier into trash using a blank
-// deleted-by actor.
-func (s *Store) SoftDeletePage(id wikipage.PageIdentifier) error {
-	return s.SoftDeletePageBy(id, "")
+// deleted-by actor. The identity is used for history attribution of the
+// final live content before deletion.
+func (s *Store) SoftDeletePage(id wikipage.PageIdentifier, identity wikipage.Identity) error {
+	return s.SoftDeletePageBy(id, "", identity)
 }
 
 // SoftDeletePageBy moves the .md file for identifier into trash with restore
 // metadata. The page is hidden from normal reads because only root .md files
-// are considered live pages.
-func (s *Store) SoftDeletePageBy(id wikipage.PageIdentifier, deletedBy string) error {
+// are considered live pages. The identity is used for history attribution
+// of the final live content before deletion.
+func (s *Store) SoftDeletePageBy(id wikipage.PageIdentifier, deletedBy string, identity wikipage.Identity) error {
 	identifier := string(id)
 	unlock := s.lockPage(identifier)
 	defer unlock()
@@ -192,6 +194,11 @@ func (s *Store) SoftDeletePageBy(id wikipage.PageIdentifier, deletedBy string) e
 			return os.ErrNotExist
 		}
 		return fmt.Errorf("failed to read Markdown file for page %s before trashing: %w", identifier, readErr)
+	}
+
+	if captureErr := s.captureVersionLockedWithSource(identifier, string(rawText), identity, "soft_delete"); captureErr != nil {
+		// History capture failure must not block the delete.
+		// TODO: log the capture failure once we have a logger on Store.
 	}
 
 	_, deletedDir, err := s.createTrashDir(now)

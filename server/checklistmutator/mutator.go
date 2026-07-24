@@ -261,6 +261,7 @@ type frontMatterAndMarkdownModifier interface {
 	ModifyFrontMatterAndMarkdown(
 		wikipage.PageIdentifier,
 		func(wikipage.FrontMatter, wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error),
+		wikipage.Identity,
 	) error
 }
 
@@ -789,7 +790,7 @@ func (m *Mutator) RenameChecklist(_ context.Context, page, oldName, newName stri
 		newMarkdown := rewriteChecklistReferences(md, oldName, actualOldName, newName)
 		renamed = checklist
 		return fm, newMarkdown, nil
-	})
+	}, identity)
 	if err != nil {
 		return nil, err
 	}
@@ -958,7 +959,7 @@ func (m *Mutator) readFrontMatter(page string) (wikipage.FrontMatter, error) {
 func (m *Mutator) persist(page string, fm wikipage.FrontMatter, listName string, checklist *apiv1.Checklist) error {
 	encodeChecklist(fm, listName, checklist)
 	id := wikipage.PageIdentifier(page)
-	if err := m.pages.WriteFrontMatter(id, fm); err != nil {
+	if err := m.pages.WriteFrontMatter(id, fm, wikipage.AnonymousIdentity); err != nil {
 		return fmt.Errorf("write frontmatter: %w", err)
 	}
 	return nil

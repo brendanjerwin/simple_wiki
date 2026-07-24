@@ -8,6 +8,7 @@ import (
 
 	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
 	"github.com/brendanjerwin/simple_wiki/inventory"
+	"github.com/brendanjerwin/simple_wiki/tailscale"
 	"github.com/brendanjerwin/simple_wiki/wikiidentifiers"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 	"github.com/stoewer/go-strcase"
@@ -50,7 +51,7 @@ func (e *InvalidItemTypeError) Error() string {
 // CreateInventoryItem implements the CreateInventoryItem RPC.
 //
 //revive:disable:function-length
-func (s *Server) CreateInventoryItem(_ context.Context, req *apiv1.CreateInventoryItemRequest) (*apiv1.CreateInventoryItemResponse, error) {
+func (s *Server) CreateInventoryItem(ctx context.Context, req *apiv1.CreateInventoryItemRequest) (*apiv1.CreateInventoryItemResponse, error) {
 	if req.ItemIdentifier == "" {
 		return nil, status.Error(codes.InvalidArgument, errItemIdentifierRequired)
 	}
@@ -109,13 +110,13 @@ func (s *Server) CreateInventoryItem(_ context.Context, req *apiv1.CreateInvento
 	fm[inventory.FrontmatterKey] = inventoryData
 
 	// Write the frontmatter
-	if err := s.pageReaderMutator.WriteFrontMatter(wikipage.PageIdentifier(identifier), fm); err != nil {
+	if err := s.pageReaderMutator.WriteFrontMatter(wikipage.PageIdentifier(identifier), wikipage.FrontMatter(fm), tailscale.IdentityFromContext(ctx)); err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to write frontmatter: %v", err)
 	}
 
 	// Build and write the markdown content
 	markdown := inventory.BuildItemMarkdown()
-	if err := s.pageReaderMutator.WriteMarkdown(wikipage.PageIdentifier(identifier), wikipage.Markdown(markdown)); err != nil {
+	if err := s.pageReaderMutator.WriteMarkdown(wikipage.PageIdentifier(identifier), wikipage.Markdown(markdown), tailscale.IdentityFromContext(ctx)); err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to write markdown: %v", err)
 	}
 
@@ -134,7 +135,7 @@ func (s *Server) CreateInventoryItem(_ context.Context, req *apiv1.CreateInvento
 // MoveInventoryItem implements the MoveInventoryItem RPC.
 //
 //revive:disable:function-length
-func (s *Server) MoveInventoryItem(_ context.Context, req *apiv1.MoveInventoryItemRequest) (*apiv1.MoveInventoryItemResponse, error) {
+func (s *Server) MoveInventoryItem(ctx context.Context, req *apiv1.MoveInventoryItemRequest) (*apiv1.MoveInventoryItemResponse, error) {
 	if req.ItemIdentifier == "" {
 		return nil, status.Error(codes.InvalidArgument, errItemIdentifierRequired)
 	}
@@ -165,12 +166,12 @@ func (s *Server) MoveInventoryItem(_ context.Context, req *apiv1.MoveInventoryIt
 	updateItemContainer(itemFm, newContainer)
 
 	// Write the updated item frontmatter
-	if err := s.pageReaderMutator.WriteFrontMatter(wikipage.PageIdentifier(identifier), itemFm); err != nil {
+	if err := s.pageReaderMutator.WriteFrontMatter(wikipage.PageIdentifier(identifier), wikipage.FrontMatter(itemFm), tailscale.IdentityFromContext(ctx)); err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to update item frontmatter: %v", err)
 	}
 
 	// Update container item lists
-	s.updateContainerItemLists(previousContainer, newContainer, identifier)
+	s.updateContainerItemLists(ctx, previousContainer, newContainer, identifier)
 
 	// Build and return response
 	title := getItemTitle(itemFm, identifier)
@@ -251,14 +252,14 @@ func updateItemContainer(fm map[string]any, newContainer string) {
 }
 
 // updateContainerItemLists updates the inventory.items lists on containers after a move.
-func (s *Server) updateContainerItemLists(previousContainer, newContainer, identifier string) {
+func (s *Server) updateContainerItemLists(ctx context.Context, previousContainer, newContainer, identifier string) {
 	if previousContainer != "" {
-		if err := s.removeItemFromContainerList(previousContainer, identifier); err != nil {
+		if err := s.removeItemFromContainerList(ctx, previousContainer, identifier); err != nil {
 			s.logger.Warn("failed to remove item from previous container's items list: %v", err)
 		}
 	}
 	if newContainer != "" {
-		if err := s.addItemToContainerList(newContainer, identifier); err != nil {
+		if err := s.addItemToContainerList(ctx, newContainer, identifier); err != nil {
 			s.logger.Warn("failed to add item to new container's items list: %v", err)
 		}
 	}
@@ -555,7 +556,7 @@ func filterItemsExcluding(itemsRaw any, itemID string) ([]any, bool) {
 }
 
 // removeItemFromContainerList removes an item from a container's inventory.items list.
-func (s *Server) removeItemFromContainerList(containerID, itemID string) error {
+func (s *Server) removeItemFromContainerList(ctx context.Context, containerID, itemID string) error {
 	_, containerFm, err := s.pageReaderMutator.ReadFrontMatter(wikipage.PageIdentifier(containerID))
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -580,11 +581,11 @@ func (s *Server) removeItemFromContainerList(containerID, itemID string) error {
 	}
 
 	inv[itemsKey] = newItems
-	return s.pageReaderMutator.WriteFrontMatter(wikipage.PageIdentifier(containerID), containerFm)
+	return s.pageReaderMutator.WriteFrontMatter(wikipage.PageIdentifier(containerID), wikipage.FrontMatter(containerFm), tailscale.IdentityFromContext(ctx))
 }
 
 // addItemToContainerList adds an item to a container's inventory.items list if not already present.
-func (s *Server) addItemToContainerList(containerID, itemID string) error {
+func (s *Server) addItemToContainerList(ctx context.Context, containerID, itemID string) error {
 	_, containerFm, err := s.pageReaderMutator.ReadFrontMatter(wikipage.PageIdentifier(containerID))
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -625,5 +626,5 @@ func (s *Server) addItemToContainerList(containerID, itemID string) error {
 	items = append(items, itemID)
 	inv[itemsKey] = items
 
-	return s.pageReaderMutator.WriteFrontMatter(wikipage.PageIdentifier(containerID), containerFm)
+	return s.pageReaderMutator.WriteFrontMatter(wikipage.PageIdentifier(containerID), wikipage.FrontMatter(containerFm), tailscale.IdentityFromContext(ctx))
 }

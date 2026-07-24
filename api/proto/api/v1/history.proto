@@ -1,0 +1,193 @@
+syntax = "proto3";
+
+package api.v1;
+
+import "api/v1/mcp_options.proto";
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/brendanjerwin/simple_wiki/gen/go/api/v1;apiv1";
+
+// PageHistoryService — see (api.v1.service_description).
+service PageHistoryService {
+  option (api.v1.service_description) =
+      "Version history for wiki pages. Every mutation that changes page "
+      "content captures the prior state as an immutable version snapshot. "
+      "List, read, restore, and diff historical versions. Search within a "
+      "single page's history or across all history. Automatic GFS-style "
+      "decimation retains all versions for 7 days, 1/week for 26 weeks, "
+      "1/month for 5 years, and purges everything older.";
+
+  // ListPageVersions — see (api.v1.description).
+  rpc ListPageVersions(ListPageVersionsRequest) returns (ListPageVersionsResponse) {
+    option (api.v1.description) =
+        "Lists all versions of a page, newest-first. Each entry includes "
+        "metadata (timestamp, author, source, size, sha256) but not the "
+        "content itself. Use ReadPageVersion to fetch content.";
+    option (api.v1.read_only) = true;
+  }
+
+  // ReadPageVersion — see (api.v1.description).
+  rpc ReadPageVersion(ReadPageVersionRequest) returns (ReadPageVersionResponse) {
+    option (api.v1.description) =
+        "Reads the full content of a specific version of a page. Returns "
+        "the raw markdown+frontmatter text as captured at that version.";
+    option (api.v1.read_only) = true;
+  }
+
+  // RestorePageVersion — see (api.v1.description).
+  rpc RestorePageVersion(RestorePageVersionRequest) returns (RestorePageVersionResponse) {
+    option (api.v1.description) =
+        "Restores a historical version as the live page content. The "
+        "current live content is captured as a new version before the "
+        "restore, so no history is lost. The restored content itself "
+        "becomes the new live state.";
+  }
+
+  // DiffPageVersions — see (api.v1.description).
+  rpc DiffPageVersions(DiffPageVersionsRequest) returns (DiffPageVersionsResponse) {
+    option (api.v1.description) =
+        "Returns a unified diff between two versions of a page. The diff "
+        "is line-based, in the standard unified-diff format (+/-/@@) "
+        "compatible with standard diff tooling.";
+    option (api.v1.read_only) = true;
+  }
+
+  // SearchPageHistory — see (api.v1.description).
+  rpc SearchPageHistory(SearchPageHistoryRequest) returns (SearchPageHistoryResponse) {
+    option (api.v1.description) =
+        "Full-text search within a single page's version history. Scans "
+        "all version snapshots for that page and returns matching versions "
+        "with metadata and relevance snippets.";
+    option (api.v1.read_only) = true;
+  }
+
+  // SearchHistory — see (api.v1.description).
+  rpc SearchHistory(SearchHistoryRequest) returns (SearchHistoryResponse) {
+    option (api.v1.description) =
+        "Full-text search across all page history. Searches version bodies "
+        "and metadata across all pages. Supports filtering by page, author, "
+        "and time range. Backed by a persistent Bleve index over all "
+        "version snapshots.";
+    option (api.v1.read_only) = true;
+  }
+}
+
+// Request to list versions of a page.
+message ListPageVersionsRequest {
+  // The page name to list versions for.
+  string page_name = 1;
+  // Maximum number of versions to return. 0 or negative means no limit.
+  int32 limit = 2;
+}
+
+// Response containing page versions, newest-first.
+message ListPageVersionsResponse {
+  repeated PageVersion versions = 1;
+}
+
+// Metadata for a single version of a page.
+message PageVersion {
+  // ULID identifying this version.
+  string version_id = 1;
+  // When this version was captured (the outgoing state was replaced).
+  google.protobuf.Timestamp created_at = 2;
+  // The actor who triggered the change. Empty when unknown (internal jobs, migrations).
+  string author = 3;
+  // Whether the change was triggered by an automated agent.
+  bool is_agent = 4;
+  // What triggered the capture: write_frontmatter, write_markdown, modify_markdown,
+  // modify_fm_md, soft_delete, restore, migration.
+  string source = 5;
+  // SHA-256 content digest of the version snapshot.
+  string sha256 = 6;
+  // Size of the version snapshot in bytes.
+  int64 byte_size = 7;
+}
+
+// Request to read a specific version of a page.
+message ReadPageVersionRequest {
+  // The page name.
+  string page_name = 1;
+  // The version ID to read.
+  string version_id = 2;
+}
+
+// Response containing the content of a version.
+message ReadPageVersionResponse {
+  // The raw page content (frontmatter + markdown) as captured.
+  string content = 1;
+}
+
+// Request to restore a historical version as the live page.
+message RestorePageVersionRequest {
+  // The page name to restore into.
+  string page_name = 1;
+  // The version ID to restore.
+  string version_id = 2;
+  // The actor performing the restore. Used for attribution of the new version.
+  string author = 3;
+}
+
+// Response from a restore operation.
+message RestorePageVersionResponse {
+  // The version ID of the new version created by capturing the prior live state.
+  string prior_version_id = 1;
+}
+
+// Request to diff two versions of a page.
+message DiffPageVersionsRequest {
+  // The page name.
+  string page_name = 1;
+  // The older version ID (the "from" side of the diff).
+  string old_version_id = 2;
+  // The newer version ID (the "to" side of the diff).
+  string new_version_id = 3;
+}
+
+// Response containing a unified diff.
+message DiffPageVersionsResponse {
+  // Unified diff text in standard format.
+  string diff = 1;
+}
+
+// Request to search within a page's history.
+message SearchPageHistoryRequest {
+  // The page name to search within.
+  string page_name = 1;
+  // The search query (full-text).
+  string query = 2;
+}
+
+// Response from a per-page history search.
+message SearchPageHistoryResponse {
+  repeated HistorySearchResult results = 1;
+}
+
+// Request to search across all page history.
+message SearchHistoryRequest {
+  // The search query (full-text).
+  string query = 1;
+  // Filter to a specific page. Empty means search all pages.
+  string page_name_filter = 2;
+  // Filter to a specific author. Empty means any author.
+  string author_filter = 3;
+  // Only return versions created at or after this time.
+  google.protobuf.Timestamp from = 4;
+  // Only return versions created at or before this time.
+  google.protobuf.Timestamp to = 5;
+}
+
+// Response from a global history search.
+message SearchHistoryResponse {
+  repeated HistorySearchResult results = 1;
+}
+
+// A single search result from history search.
+message HistorySearchResult {
+  // The page this version belongs to.
+  string page_name = 1;
+  // The version metadata.
+  PageVersion version = 2;
+  // Relevance snippet from the version content.
+  string snippet = 3;
+}

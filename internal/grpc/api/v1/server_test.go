@@ -196,7 +196,7 @@ func (m *MockPageReaderMutator) ReadFrontMatter(identifier wikipage.PageIdentifi
 	return identifier, m.Frontmatter, nil
 }
 
-func (m *MockPageReaderMutator) WriteFrontMatter(identifier wikipage.PageIdentifier, fm wikipage.FrontMatter) error {
+func (m *MockPageReaderMutator) WriteFrontMatter(identifier wikipage.PageIdentifier, fm wikipage.FrontMatter, _ wikipage.Identity) error {
 	m.WrittenIdentifier = identifier
 	m.WrittenFrontmatter = fm
 	// Track writes per identifier for multi-page scenarios
@@ -209,7 +209,7 @@ func (m *MockPageReaderMutator) WriteFrontMatter(identifier wikipage.PageIdentif
 	return m.WriteErr
 }
 
-func (m *MockPageReaderMutator) WriteMarkdown(identifier wikipage.PageIdentifier, md wikipage.Markdown) error {
+func (m *MockPageReaderMutator) WriteMarkdown(identifier wikipage.PageIdentifier, md wikipage.Markdown, _ wikipage.Identity) error {
 	m.WrittenIdentifier = identifier
 	m.WrittenMarkdown = md
 	if m.MarkdownWriteErr != nil {
@@ -277,7 +277,7 @@ func (m *MockPageReaderMutator) EmptyTrash() (int, error) {
 // If ConcurrentModificationMarkdown is set, the modifier sees that content instead of
 // m.Markdown — simulating a concurrent write that happened between ReadMarkdown and the
 // atomic write, so the hash check inside the modifier can detect the TOCTOU race.
-func (m *MockPageReaderMutator) ModifyMarkdown(identifier wikipage.PageIdentifier, modifier func(wikipage.Markdown) (wikipage.Markdown, error)) error {
+func (m *MockPageReaderMutator) ModifyMarkdown(identifier wikipage.PageIdentifier, modifier func(wikipage.Markdown) (wikipage.Markdown, error), _ wikipage.Identity) error {
 	if m.MarkdownReadErr != nil {
 		return m.MarkdownReadErr
 	}
@@ -308,7 +308,7 @@ func (m *MockPageReaderMutator) ModifyMarkdown(identifier wikipage.PageIdentifie
 	return nil
 }
 
-func (m *MockPageReaderMutator) ModifyFrontMatterAndMarkdown(identifier wikipage.PageIdentifier, modifier func(wikipage.FrontMatter, wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error)) error {
+func (m *MockPageReaderMutator) ModifyFrontMatterAndMarkdown(identifier wikipage.PageIdentifier, modifier func(wikipage.FrontMatter, wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error), _ wikipage.Identity) error {
 	if m.MarkdownReadErr != nil {
 		return m.MarkdownReadErr
 	}
@@ -527,15 +527,19 @@ type noOpFrontmatterIndexQueryer struct{}
 func (noOpFrontmatterIndexQueryer) QueryExactMatch(wikipage.DottedKeyPath, wikipage.Value) []wikipage.PageIdentifier {
 	return nil
 }
+
 func (noOpFrontmatterIndexQueryer) QueryKeyExistence(wikipage.DottedKeyPath) []wikipage.PageIdentifier {
 	return nil
 }
+
 func (noOpFrontmatterIndexQueryer) QueryPrefixMatch(wikipage.DottedKeyPath, string) []wikipage.PageIdentifier {
 	return nil
 }
+
 func (noOpFrontmatterIndexQueryer) GetValue(wikipage.PageIdentifier, wikipage.DottedKeyPath) wikipage.Value {
 	return ""
 }
+
 func (noOpFrontmatterIndexQueryer) QueryExactMatchSortedBy(wikipage.DottedKeyPath, wikipage.Value, wikipage.DottedKeyPath, bool, int) []wikipage.PageIdentifier {
 	return nil
 }
@@ -559,12 +563,15 @@ type noOpChatBufferManager struct{}
 func (noOpChatBufferManager) AddUserMessage(string, string, string) (string, error) {
 	return "", nil
 }
+
 func (noOpChatBufferManager) AddAssistantMessage(string, string, string) (string, error) {
 	return "", nil
 }
+
 func (noOpChatBufferManager) EditMessage(string, string, bool) error {
 	return nil
 }
+
 func (noOpChatBufferManager) AddReaction(string, string, string) error {
 	return nil
 }
@@ -576,16 +583,19 @@ func (noOpChatBufferManager) ClearPage(string) {
 func (noOpChatBufferManager) GetMessages(string) []*chatbuffer.Message {
 	return nil
 }
+
 func (noOpChatBufferManager) SubscribeToPage(string) (<-chan chatbuffer.Event, func()) {
 	ch := make(chan chatbuffer.Event)
 	close(ch)
 	return ch, noopUnsubscribe
 }
+
 func (noOpChatBufferManager) SubscribeToPageWithReplay(string) ([]*chatbuffer.Message, <-chan chatbuffer.Event, func()) {
 	ch := make(chan chatbuffer.Event)
 	close(ch)
 	return nil, ch, noopUnsubscribe
 }
+
 func (noOpChatBufferManager) SubscribeToPageChannelWithReplay(string) ([]*chatbuffer.Message, <-chan *chatbuffer.Message, func()) {
 	ch := make(chan *chatbuffer.Message)
 	close(ch)
@@ -663,17 +673,20 @@ type noOpPageReaderMutator struct{}
 func (noOpPageReaderMutator) ReadFrontMatter(wikipage.PageIdentifier) (wikipage.PageIdentifier, wikipage.FrontMatter, error) {
 	return "", nil, os.ErrNotExist
 }
-func (noOpPageReaderMutator) WriteFrontMatter(wikipage.PageIdentifier, wikipage.FrontMatter) error {
+
+func (noOpPageReaderMutator) WriteFrontMatter(wikipage.PageIdentifier, wikipage.FrontMatter, wikipage.Identity) error {
 	return nil
 }
+
 func (noOpPageReaderMutator) ReadMarkdown(wikipage.PageIdentifier) (wikipage.PageIdentifier, wikipage.Markdown, error) {
 	return "", "", os.ErrNotExist
 }
-func (noOpPageReaderMutator) WriteMarkdown(wikipage.PageIdentifier, wikipage.Markdown) error {
+
+func (noOpPageReaderMutator) WriteMarkdown(wikipage.PageIdentifier, wikipage.Markdown, wikipage.Identity) error {
 	return nil
 }
 func (noOpPageReaderMutator) DeletePage(wikipage.PageIdentifier) error { return nil }
-func (noOpPageReaderMutator) ModifyMarkdown(_ wikipage.PageIdentifier, modifier func(wikipage.Markdown) (wikipage.Markdown, error)) error {
+func (noOpPageReaderMutator) ModifyMarkdown(_ wikipage.PageIdentifier, modifier func(wikipage.Markdown) (wikipage.Markdown, error), _ wikipage.Identity) error {
 	_, err := modifier("")
 	return err
 }
@@ -7427,7 +7440,7 @@ func (*callbackObservingMutator) ReadFrontMatter(id wikipage.PageIdentifier) (wi
 	return id, nil, os.ErrNotExist
 }
 
-func (m *callbackObservingMutator) WriteFrontMatter(id wikipage.PageIdentifier, _ wikipage.FrontMatter) error {
+func (m *callbackObservingMutator) WriteFrontMatter(id wikipage.PageIdentifier, _ wikipage.FrontMatter, _ wikipage.Identity) error {
 	if string(id) == "page_import_report" {
 		m.mu.Lock()
 		m.reportWritten = true
@@ -7436,7 +7449,7 @@ func (m *callbackObservingMutator) WriteFrontMatter(id wikipage.PageIdentifier, 
 	return nil
 }
 
-func (*callbackObservingMutator) WriteMarkdown(_ wikipage.PageIdentifier, _ wikipage.Markdown) error {
+func (*callbackObservingMutator) WriteMarkdown(_ wikipage.PageIdentifier, _ wikipage.Markdown, _ wikipage.Identity) error {
 	return nil
 }
 
@@ -7448,7 +7461,7 @@ func (*callbackObservingMutator) DeletePage(_ wikipage.PageIdentifier) error {
 	return nil
 }
 
-func (*callbackObservingMutator) ModifyMarkdown(_ wikipage.PageIdentifier, modifier func(wikipage.Markdown) (wikipage.Markdown, error)) error {
+func (*callbackObservingMutator) ModifyMarkdown(_ wikipage.PageIdentifier, modifier func(wikipage.Markdown) (wikipage.Markdown, error), _ wikipage.Identity) error {
 	_, err := modifier("")
 	return err
 }
