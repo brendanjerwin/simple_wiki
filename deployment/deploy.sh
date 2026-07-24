@@ -8,17 +8,17 @@ VERSION="$1"
 
 # Validate version argument
 if [[ -z "$VERSION" ]]; then
-    echo "❌ ERROR: Version argument is required" >&2
-    echo "Usage: $0 <version>" >&2
-    exit 1
+  echo "❌ ERROR: Version argument is required" >&2
+  echo "Usage: $0 <version>" >&2
+  exit 1
 fi
 
 echo "=== Starting deployment of $VERSION ==="
 
 # Verify deployment directory exists
 if [[ ! -d "/srv/wiki" ]]; then
-    echo "❌ ERROR: Deployment directory /srv/wiki does not exist" >&2
-    exit 1
+  echo "❌ ERROR: Deployment directory /srv/wiki does not exist" >&2
+  exit 1
 fi
 
 # Clean up old data backups, keeping only the 2 most recent
@@ -69,7 +69,7 @@ echo "Performing health check"
 if sudo systemctl is-active --quiet simple_wiki; then
   echo "✅ Service is running"
   # Test HTTP response (wiki runs on port 80) - checked locally on server
-  if curl -s -f http://localhost:80/ > /dev/null; then
+  if curl -s -f -L -k http://localhost:80/ >/dev/null; then
     echo "✅ HTTP health check passed"
     echo "🎉 Deployment of $VERSION completed successfully!"
   else
