@@ -248,6 +248,13 @@ func (r *WikiMetricsRecorder) buildFrontmatter(fm map[string]any) {
 	stats := r.GetStats()
 	fm["identifier"] = ObservabilityMetricsPage
 	fm["title"] = "Observability Metrics"
+	// Opt out of version history — this page is written every 60 seconds
+	// and version snapshots would create excessive disk usage.
+	fm["wiki"] = map[string]any{
+		"history": map[string]any{
+			"opt_out": true,
+		},
+	}
 	fm[observabilityPrefix] = map[string]any{
 		"http": map[string]any{
 			"requests_total": stats.HTTPRequestsTotal,
