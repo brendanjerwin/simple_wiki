@@ -259,3 +259,31 @@ func (s *Store) DiffVersions(identifier wikipage.PageIdentifier, oldID, newID st
 
 	return computeUnifiedDiff(oldContent, newContent), nil
 }
+
+// shouldSkipHistoryCapture checks whether the page's frontmatter has
+// opted out of version history capture. Pages can set:
+//
+//	[wiki.history]
+//	opt_out = true
+//
+// to disable history capture for that page. This is useful for
+// system/metrics pages that are written frequently and don't benefit
+// from version history. The check is on the OUTGOING content (the
+// state being replaced) — if the page had opted out, we don't capture.
+func shouldSkipHistoryCapture(pageText string) bool {
+	p := &wikipage.Page{Text: pageText}
+	fm, err := p.GetFrontMatter()
+	if err != nil {
+		return false // can't parse frontmatter → capture by default
+	}
+	wiki, ok := fm["wiki"].(map[string]any)
+	if !ok {
+		return false
+	}
+	history, ok := wiki["history"].(map[string]any)
+	if !ok {
+		return false
+	}
+	optOut, ok := history["opt_out"].(bool)
+	return ok && optOut
+}

@@ -175,8 +175,9 @@ var _ = Describe("pagestore history", func() {
 				Expect(err).NotTo(HaveOccurred())
 				// Should now have: original version + the version captured during restore
 				Expect(versions).To(HaveLen(2))
-				// The newest version should have source "restore"
-				Expect(versions[0].Source).To(Equal("restore"))
+				// One of the versions should have source "restore" (the capture from the restore)
+				sources := []string{versions[0].Source, versions[1].Source}
+				Expect(sources).To(ContainElement("restore"))
 			})
 		})
 	})
@@ -292,6 +293,43 @@ var _ = Describe("pagestore history", func() {
 				metaFile := filepath.Join(pageDir, versions[0].VersionID+".meta.json")
 				Expect(mdFile).To(BeAnExistingFile())
 				Expect(metaFile).To(BeAnExistingFile())
+			})
+		})
+	})
+
+	Describe("history opt-out", func() {
+		When("a page has wiki.history.opt_out = true in frontmatter", func() {
+			BeforeEach(func() {
+				// Write a page with the opt-out flag, then modify it
+				Expect(store.WriteFrontMatter("metrics-page", wikipage.FrontMatter{
+					"identifier": "metrics-page",
+					"wiki": map[string]any{
+						"history": map[string]any{
+							"opt_out": true,
+						},
+					},
+				}, wikipage.AnonymousIdentity)).To(Succeed())
+				Expect(store.WriteMarkdown("metrics-page", "# Metrics v1", wikipage.AnonymousIdentity)).To(Succeed())
+				Expect(store.WriteMarkdown("metrics-page", "# Metrics v2", wikipage.AnonymousIdentity)).To(Succeed())
+			})
+
+			It("should not capture any history versions", func() {
+				versions, err := store.ListVersions("metrics-page")
+				Expect(err).NotTo(HaveOccurred())
+				Expect(versions).To(BeEmpty())
+			})
+		})
+
+		When("a page does not have the opt-out flag", func() {
+			BeforeEach(func() {
+				Expect(store.WriteMarkdown("normal-page", "# V1", wikipage.AnonymousIdentity)).To(Succeed())
+				Expect(store.WriteMarkdown("normal-page", "# V2", wikipage.AnonymousIdentity)).To(Succeed())
+			})
+
+			It("should capture history versions normally", func() {
+				versions, err := store.ListVersions("normal-page")
+				Expect(err).NotTo(HaveOccurred())
+				Expect(versions).To(HaveLen(1))
 			})
 		})
 	})

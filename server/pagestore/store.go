@@ -183,10 +183,10 @@ func (s *Store) ModifyOrCreatePage(identifier string, identity wikipage.Identity
 	if modErr != nil {
 		return modErr
 	}
-
 	// Capture history: if the content changed and there was prior content,
-	// save the outgoing state as a version snapshot before overwriting.
-	if currentText != "" && currentText != newText {
+	// and the page hasn't opted out of history via frontmatter, save the
+	// outgoing state as a version snapshot before overwriting.
+	if currentText != "" && currentText != newText && !shouldSkipHistoryCapture(currentText) {
 		if captureErr := s.captureVersionLockedWithSource(identifier, currentText, identity, source); captureErr != nil {
 			// History capture failure must not block the live write.
 			// The write is the source of truth; history is best-effort.
