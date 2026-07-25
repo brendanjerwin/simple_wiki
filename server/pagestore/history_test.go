@@ -207,8 +207,8 @@ var _ = Describe("pagestore history", func() {
 			It("should show removed and added lines", func() {
 				diff, err := store.DiffVersions("test-page", oldID, newID)
 				Expect(err).NotTo(HaveOccurred())
-				Expect(diff).To(ContainSubstring("-"))
-				Expect(diff).To(ContainSubstring("+"))
+				Expect(diff).To(ContainSubstring("-Line 1"))
+				Expect(diff).To(ContainSubstring("+Line 1 modified"))
 			})
 		})
 	})
@@ -248,15 +248,14 @@ var _ = Describe("pagestore history", func() {
 				Expect(versions[0].ByteSize).To(BeNumerically(">", 0))
 			})
 		})
-
-		When("limit is specified", func() {
+		When("many versions are captured", func() {
 			BeforeEach(func() {
 				for i := range 10 {
 					Expect(store.WriteMarkdown("test-page", wikipage.Markdown("# V"+string(rune('0'+i))), wikipage.AnonymousIdentity)).To(Succeed())
 				}
 			})
 
-			It("should return at most the limit", func() {
+			It("should return all captured versions (one less than write count — first write has no prior)", func() {
 				versions, err := store.ListVersions("test-page")
 				Expect(err).NotTo(HaveOccurred())
 				Expect(versions).To(HaveLen(9)) // 10 writes, 9 captures (first write has no prior)
@@ -273,7 +272,9 @@ var _ = Describe("pagestore history", func() {
 
 			It("should create __history__ directory", func() {
 				historyDir := filepath.Join(tmpDir, "__history__")
-				Expect(historyDir).To(BeAnExistingFile())
+				info, err := os.Stat(historyDir)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(info.IsDir()).To(BeTrue())
 			})
 
 			It("should create .md and .meta.json files for each version", func() {
