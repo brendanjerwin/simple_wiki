@@ -71,8 +71,8 @@ const (
 
 	// metricsFlushCronExpression schedules wiki metrics persistence.
 	// Format: second minute hour day-of-month month day-of-week
-	// This runs every 5 seconds.
-	metricsFlushCronExpression = "*/5 * * * * *"
+	// This runs every minute to avoid crowding the page history and indexing queue.
+	metricsFlushCronExpression = "0 * * * * *"
 
 	errCreateHandlerFmt  = "failed to create handler: %w"
 	errCreateListenerFmt = "failed to create HTTP listener: %w"
@@ -434,7 +434,7 @@ func setupWikiMetrics(site *server.Site, logger *lumber.ConsoleLogger) (observab
 	if schedErr != nil {
 		logger.Warn("Failed to schedule metrics persistence: %v", schedErr)
 	} else {
-		logger.Info("Scheduled wiki metrics persistence every 5 seconds")
+		logger.Info("Scheduled wiki metrics persistence every 60 seconds")
 	}
 
 	// Return cleanup function that persists final metrics

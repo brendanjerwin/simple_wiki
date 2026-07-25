@@ -66,7 +66,7 @@ echo "Waiting for service to become ready..."
 HEALTH_CHECK_PASSED=false
 for i in $(seq 1 30); do
   sleep 2
-  if sudo systemctl is-active --quiet simple_wiki && curl -s -f -L -k http://localhost:80/ >/dev/null 2>&1; then
+  if sudo systemctl is-active --quiet simple_wiki && curl -s -f -L -k --connect-timeout 5 --max-time 10 http://localhost:80/ >/dev/null 2>&1; then
     HEALTH_CHECK_PASSED=true
     break
   fi

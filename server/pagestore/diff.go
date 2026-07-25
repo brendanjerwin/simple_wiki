@@ -166,7 +166,7 @@ func computeLCSTable(a, b []string) [][]int {
 
 // formatHunkHeader produces the @@ -oldStart,oldLen +newStart,newLen @@ header.
 func formatHunkHeader(oldStart, oldLen, newStart, newLen int) string {
-	return formatRange('-', oldStart, oldLen) + " " + formatRange('+', newStart, newLen)
+	return "@@ " + formatRange('-', oldStart, oldLen) + " " + formatRange('+', newStart, newLen) + " @@"
 }
 
 func formatRange(prefix byte, start, length int) string {

@@ -118,21 +118,18 @@ message ReadPageVersionResponse {
   string content = 1;
 }
 
-// Request to restore a historical version as the live page.
+// Request to restore a historical version as the live page. Attribution
+// is derived from the authenticated caller identity (Tailscale), not from
+// a request field — there is no author field to prevent spoofable attribution.
 message RestorePageVersionRequest {
   // The page name to restore into.
   string page_name = 1;
   // The version ID to restore.
   string version_id = 2;
-  // The actor performing the restore. Used for attribution of the new version.
-  string author = 3;
 }
 
 // Response from a restore operation.
-message RestorePageVersionResponse {
-  // The version ID of the new version created by capturing the prior live state.
-  string prior_version_id = 1;
-}
+message RestorePageVersionResponse {}
 
 // Request to diff two versions of a page.
 message DiffPageVersionsRequest {
