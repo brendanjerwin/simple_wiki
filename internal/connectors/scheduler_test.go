@@ -4,6 +4,7 @@ package connectors_test
 import (
 	"context"
 	"errors"
+	"strings"
 	"sync"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -72,6 +73,24 @@ type stubJob struct {
 
 func (j *stubJob) GetName() string { return j.name }
 func (*stubJob) Execute() error    { return nil }
+
+// errorJob always returns an error on Execute.
+type errorJob struct {
+	name string
+}
+
+func (j *errorJob) GetName() string { return j.name }
+func (*errorJob) Execute() error    { return errors.New("sync failed") }
+
+// runAll executes every enqueued job in place and discards errors.
+func (f *fakeEnqueuer) RunAll() {
+	f.mu.Lock()
+	jobs := append([]jobs.Job(nil), f.enqueued...)
+	f.mu.Unlock()
+	for _, j := range jobs {
+		_ = j.Execute()
+	}
+}
 
 var _ = Describe("SyncScheduler", func() {
 	When("constructed with a nil enqueuer", func() {
@@ -191,7 +210,9 @@ var _ = Describe("SyncScheduler", func() {
 		})
 
 		It("should pass the subscription key to the job maker", func() {
-			j, ok := enq.enqueued[0].(*stubJob)
+			wrapped, ok := enq.enqueued[0].(*connectors.ReportingJob)
+			Expect(ok).To(BeTrue())
+			j, ok := wrapped.Unwrap().(*stubJob)
 			Expect(ok).To(BeTrue())
 			Expect(j.key).To(Equal(connectors.BindingKey{ProfileID: "p", Page: "pg", ListName: "ln"}))
 		})
@@ -281,6 +302,55 @@ var _ = Describe("SyncScheduler", func() {
 
 		It("should dispatch via the same path as Execute", func() {
 			Expect(enq.enqueued).To(HaveLen(1))
+		})
+	})
+
+	When("a connector kind exceeds the failure threshold", func() {
+		var enq *fakeEnqueuer
+		var rl *recordingLogger
+		var s *connectors.SyncScheduler
+
+		BeforeEach(func() {
+			enq = &fakeEnqueuer{}
+			rl = &recordingLogger{}
+			s, _ = connectors.NewSyncScheduler(enq, rl)
+			Expect(s.Register(
+				&fakeConnector{kind: connectors.ConnectorKindGoogleKeep},
+				func() []connectors.BindingKey {
+					return []connectors.BindingKey{{ProfileID: "p", Page: "pg", ListName: "ln"}}
+				},
+				func(_ connectors.Connector, _ connectors.BindingKey) jobs.Job {
+					return &errorJob{name: "failing-keep"}
+				},
+			)).To(Succeed())
+
+			// Five ticks with one binding each = five failures, opening the breaker.
+			for range 5 {
+				Expect(s.Execute()).To(Succeed())
+			}
+			// Run every enqueued job so its reporting callback updates the breaker.
+			enq.RunAll()
+		})
+
+		It("stops enqueuing jobs once the breaker opens", func() {
+			enq.mu.Lock()
+			count := len(enq.enqueued)
+			enq.mu.Unlock()
+			Expect(count).To(Equal(5))
+
+			// A sixth tick should not enqueue anything because the breaker is open.
+			Expect(s.Execute()).To(Succeed())
+
+			rl.mu.Lock()
+			hasSkipLog := false
+			for _, info := range rl.infos {
+				if strings.Contains(info, "circuit breaker open") {
+					hasSkipLog = true
+					break
+				}
+			}
+			rl.mu.Unlock()
+			Expect(hasSkipLog).To(BeTrue())
 		})
 	})
 
