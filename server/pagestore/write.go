@@ -26,9 +26,14 @@ func (s *Store) WriteFrontMatter(id wikipage.PageIdentifier, fm wikipage.FrontMa
 // it with md, and writes the result back under the page's lock.
 // The identity parameter is used for history attribution.
 func (s *Store) WriteMarkdown(id wikipage.PageIdentifier, md wikipage.Markdown, identity wikipage.Identity) error {
-	return s.ModifyMarkdown(id, func(_ wikipage.Markdown) (wikipage.Markdown, error) {
-		return md, nil
-	}, identity)
+	return s.ModifyOrCreatePage(string(id), identity, "write_markdown", func(currentText string) (string, error) {
+		p := &wikipage.Page{Text: currentText}
+		currentFM, err := p.GetFrontMatter()
+		if err != nil {
+			return "", fmt.Errorf("failed to parse frontmatter for markdown write: %w", err)
+		}
+		return wikipage.CombineFrontMatterAndMarkdown(currentFM, md)
+	})
 }
 
 // ModifyMarkdown atomically reads the markdown section, calls fn, and

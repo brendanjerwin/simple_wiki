@@ -2,6 +2,7 @@ package pagestore
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -36,29 +37,28 @@ func NewHistoryDecimationJob(store *Store, now time.Time) *HistoryDecimationJob 
 func (j *HistoryDecimationJob) Execute() error {
 	if j.now.IsZero() {
 		j.now = time.Now().UTC()
-	} // Refresh for production; tests inject a fixed now.
+	}
 	historyRoot := j.store.historyRoot()
 	entries, err := os.ReadDir(historyRoot)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil // no history directory — nothing to decimate
+			return nil
 		}
 		return fmt.Errorf("failed to read history root: %w", err)
 	}
 
+	var errs []error
 	for _, entry := range entries {
 		if !entry.IsDir() {
 			continue
 		}
 		pageDir := filepath.Join(historyRoot, entry.Name())
 		if err := j.decimatePageHistory(pageDir); err != nil {
-			// Log and continue — one page's failure shouldn't abort the run.
-			// TODO: log when Store has a logger.
-			_ = err
+			errs = append(errs, fmt.Errorf("decimate %s: %w", entry.Name(), err))
 		}
 	}
 
-	return nil
+	return errors.Join(errs...)
 }
 
 // GetName implements the jobs.Job interface.
@@ -69,6 +69,7 @@ func (*HistoryDecimationJob) GetName() string {
 // decimatePageHistory applies the retention schedule to a single page's
 // history directory and deletes versions that fall outside retention.
 func (j *HistoryDecimationJob) decimatePageHistory(pageDir string) error {
+	var errs []error
 	versions, err := j.loadVersionTimestamps(pageDir)
 	if err != nil {
 		return fmt.Errorf("failed to load versions in %s: %w", pageDir, err)
@@ -94,13 +95,12 @@ func (j *HistoryDecimationJob) decimatePageHistory(pageDir string) error {
 	for _, v := range versions {
 		if !survivorSet[v.versionID] {
 			if err := j.deleteVersion(pageDir, v.versionID); err != nil {
-				// Log and continue — best-effort deletion.
-				_ = err
+				errs = append(errs, fmt.Errorf("delete version %s in %s: %w", v.versionID, pageDir, err))
 			}
 		}
 	}
 
-	return nil
+	return errors.Join(errs...)
 }
 
 // versionWithTimestamp pairs a version ID with its creation time.
@@ -149,6 +149,11 @@ func (j *HistoryDecimationJob) selectSurvivors(versions []versionWithTimestamp) 
 		retentionRecentDays   = 7
 		retentionWeeklyWeeks  = 26
 		retentionMonthlyYears = 5
+		// maxVersionsPerPage is the absolute cap on versions kept per page,
+		// even within the "keep all" recent window. This prevents pathological
+		// cases (e.g. a system page written every few seconds) from
+		// accumulating thousands of versions. The newest versions are kept.
+		maxVersionsPerPage = 500
 	)
 
 	var survivors []versionWithTimestamp
@@ -182,6 +187,13 @@ func (j *HistoryDecimationJob) selectSurvivors(versions []versionWithTimestamp) 
 		default:
 			// Older than 5 years — purge (do not add to survivors).
 		}
+	}
+
+	// Absolute cap: if we still have more than maxVersionsPerPage survivors
+	// (e.g. a page written every few seconds within the 7-day window),
+	// keep only the newest maxVersionsPerPage.
+	if len(survivors) > maxVersionsPerPage {
+		survivors = survivors[:maxVersionsPerPage]
 	}
 
 	return survivors
