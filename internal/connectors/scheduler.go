@@ -49,6 +49,11 @@ type SyncScheduler struct {
 	// metric attribution and per-kind queue selection without hardcoding
 	// the set.
 	connectors map[ConnectorKind]connectorEntry
+
+	// breakers holds a per-kind circuit breaker. A breaker opens after
+	// repeated sync failures for a connector kind, preventing new jobs
+	// from being enqueued while the external service is unhealthy.
+	breakers map[ConnectorKind]*CircuitBreaker
 }
 
 type connectorEntry struct {
@@ -71,6 +76,7 @@ func NewSyncScheduler(enqueuer JobEnqueuer, logger SchedulerLogger) (*SyncSchedu
 		enqueuer:   enqueuer,
 		logger:     logger,
 		connectors: map[ConnectorKind]connectorEntry{},
+		breakers:   map[ConnectorKind]*CircuitBreaker{},
 	}, nil
 }
 
@@ -92,10 +98,14 @@ func (s *SyncScheduler) Register(c Connector, lister BindingLister, jobMaker fun
 	if jobMaker == nil {
 		return errors.New("connectors: Register requires a non-nil job maker")
 	}
-	s.connectors[c.Kind()] = connectorEntry{
+	kind := c.Kind()
+	s.connectors[kind] = connectorEntry{
 		connector: c,
 		lister:    lister,
 		jobMaker:  jobMaker,
+	}
+	if _, ok := s.breakers[kind]; !ok {
+		s.breakers[kind] = newCircuitBreaker()
 	}
 	return nil
 }
@@ -103,6 +113,25 @@ func (s *SyncScheduler) Register(c Connector, lister BindingLister, jobMaker fun
 // GetName satisfies jobs.Job — also doubles as the cron schedule's
 // job name in scheduler logs.
 func (*SyncScheduler) GetName() string { return "ConnectorSyncScheduler" }
+
+// ReportingJob wraps a jobs.Job and invokes a callback after execution,
+// allowing the scheduler to feed per-job outcomes back into the circuit
+// breaker without the wrapped job knowing about breaker state.
+type ReportingJob struct {
+	inner    jobs.Job
+	callback func(error)
+}
+
+func (j *ReportingJob) GetName() string { return j.inner.GetName() }
+
+func (j *ReportingJob) Execute() error {
+	err := j.inner.Execute()
+	j.callback(err)
+	return err
+}
+
+// Unwrap returns the inner job. Exported for tests.
+func (j *ReportingJob) Unwrap() jobs.Job { return j.inner }
 
 // Execute fires off one sync job per active binding across every
 // registered connector. Errors from EnqueueJob (queue full, worker
@@ -113,11 +142,27 @@ func (*SyncScheduler) GetName() string { return "ConnectorSyncScheduler" }
 // land in each per-kind queue's per-job log line.
 func (s *SyncScheduler) Execute() error {
 	for kind, entry := range s.connectors {
+		cb, ok := s.breakers[kind]
+		if ok && !cb.Allow() {
+			s.logger.Info("ConnectorSyncScheduler: skipping %s, circuit breaker open", kind)
+			continue
+		}
+
 		keys := entry.lister()
 		s.logger.Info("ConnectorSyncScheduler: tick fired for %s, %d active binding(s)", kind, len(keys))
 		for _, k := range keys {
 			job := entry.jobMaker(entry.connector, k)
-			if err := s.enqueuer.EnqueueJob(job); err != nil {
+			wrapped := &ReportingJob{
+				inner: job,
+				callback: func(err error) {
+					if err != nil {
+						cb.RecordFailure()
+					} else {
+						cb.RecordSuccess()
+					}
+				},
+			}
+			if err := s.enqueuer.EnqueueJob(wrapped); err != nil {
 				s.logger.Error("ConnectorSyncScheduler: enqueue %s for %s/%s/%s failed: %v",
 					kind, k.ProfileID, k.Page, k.ListName, err)
 			}
