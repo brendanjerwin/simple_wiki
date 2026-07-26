@@ -156,9 +156,9 @@ And some more text. But this is not frontmatter.`
 
 	Describe("IsModifiedSince", func() {
 		var (
-			p              *wikipage.Page
-			baseTime       time.Time
-			result         bool
+			p        *wikipage.Page
+			baseTime time.Time
+			result   bool
 		)
 
 		BeforeEach(func() {
@@ -216,10 +216,10 @@ And some more text. But this is not frontmatter.`
 
 	Describe("ParseFrontmatterAndMarkdown", func() {
 		var (
-			content    string
-			markdown   []byte
+			content     string
+			markdown    []byte
 			frontmatter map[string]any
-			err        error
+			err         error
 		)
 
 		JustBeforeEach(func() {
@@ -475,7 +475,7 @@ title: Integration Test
 		})
 
 		JustBeforeEach(func() {
-			result, err = wikipage.RenderPageWithTemplates(content, reader, renderer, templateExecutor, query)
+			result, err = wikipage.RenderPageWithTemplates(content, "test-page", reader, renderer, templateExecutor, query)
 		})
 
 		When("full rendering pipeline succeeds", func() {
@@ -501,6 +501,22 @@ title: Integration Test
 			})
 		})
 
+		When("page identifier is injected into frontmatter without identifier", func() {
+			var capturedFM map[string]any
+
+			BeforeEach(func() {
+				templateExecutor = &frontmatterCapturingExecutor{captured: &capturedFM}
+			})
+
+			It("should inject the page identifier into frontmatter", func() {
+				Expect(capturedFM).To(HaveKey("identifier"))
+				Expect(capturedFM["identifier"]).To(Equal("test-page"))
+			})
+
+			It("should include the identifier in FrontmatterJSON", func() {
+				Expect(string(result.FrontmatterJSON)).To(ContainSubstring("identifier"))
+			})
+		})
 		When("renderer is nil", func() {
 			BeforeEach(func() {
 				renderer = nil
@@ -608,9 +624,9 @@ var _ = Describe("ParseFrontmatterAndMarkdown TOML array-of-tables", func() {
 
 	When("page has TOML with array of tables (checklist items)", func() {
 		var (
-			checklists  map[string]any
-			groceryList map[string]any
-			items       []any
+			checklists    map[string]any
+			groceryList   map[string]any
+			items         []any
 			checklistsOk  bool
 			groceryListOk bool
 			itemsOk       bool
@@ -822,7 +838,7 @@ var _ = Describe("Page.IsNew", func() {
 	Context("when page was not loaded from disk", func() {
 		BeforeEach(func() {
 			page = &wikipage.Page{
-				Identifier:         "new-page",
+				Identifier:        "new-page",
 				WasLoadedFromDisk: false,
 			}
 		})
@@ -835,7 +851,7 @@ var _ = Describe("Page.IsNew", func() {
 	Context("when page was loaded from disk", func() {
 		BeforeEach(func() {
 			page = &wikipage.Page{
-				Identifier:         "existing-page",
+				Identifier:        "existing-page",
 				WasLoadedFromDisk: true,
 			}
 		})
@@ -863,6 +879,15 @@ func (*mockRendererError) Render(input []byte) ([]byte, error) {
 type mockTemplateExecutor struct{}
 
 func (*mockTemplateExecutor) ExecuteTemplate(templateString string, fm wikipage.FrontMatter, reader wikipage.PageReader, query wikipage.IQueryFrontmatterIndex) ([]byte, error) {
+	return []byte("# Expanded Content"), nil
+}
+
+type frontmatterCapturingExecutor struct {
+	captured *map[string]any
+}
+
+func (f *frontmatterCapturingExecutor) ExecuteTemplate(templateString string, fm wikipage.FrontMatter, reader wikipage.PageReader, query wikipage.IQueryFrontmatterIndex) ([]byte, error) {
+	*f.captured = fm
 	return []byte("# Expanded Content"), nil
 }
 

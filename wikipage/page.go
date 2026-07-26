@@ -30,13 +30,13 @@ const DefaultPageTemplate = "# {{or .Title .Identifier}}"
 
 // Page represents a wiki page
 type Page struct {
-	Identifier             string
-	Text                   string
-	RenderedPage           []byte `json:"-"`
-	RenderedMarkdown       []byte `json:"-"` // Template-expanded markdown before HTML conversion
-	FrontmatterJSON        []byte `json:"-"`
-	WasLoadedFromDisk      bool      `json:"-"`
-	ModTime                time.Time `json:"-"`
+	Identifier        string
+	Text              string
+	RenderedPage      []byte    `json:"-"`
+	RenderedMarkdown  []byte    `json:"-"` // Template-expanded markdown before HTML conversion
+	FrontmatterJSON   []byte    `json:"-"`
+	WasLoadedFromDisk bool      `json:"-"`
+	ModTime           time.Time `json:"-"`
 }
 
 // parse parses the page content into frontmatter and markdown
@@ -104,7 +104,6 @@ type IQueryFrontmatterIndex interface {
 	GetValue(identifier PageIdentifier, dottedKeyPath DottedKeyPath) Value
 }
 
-
 // RenderingResult contains the results of rendering a page
 type RenderingResult struct {
 	HTML             []byte
@@ -168,8 +167,10 @@ func RenderMarkdownToHTML(markdown []byte, renderer MarkdownToHTMLRenderer) ([]b
 // RenderPageWithTemplates renders a page by parsing frontmatter, executing templates on markdown,
 // and converting the result to HTML. It composes ParseFrontmatterAndMarkdown, ExecuteTemplatesOnMarkdown,
 // and RenderMarkdownToHTML to create a complete rendering pipeline.
+// The pageIdentifier is injected into the frontmatter (if not already present) so
+// template functions can reference the page's identifier.
 // It returns both the HTML, the template-expanded markdown, and the frontmatter JSON.
-func RenderPageWithTemplates(content string, reader PageReader, renderer MarkdownToHTMLRenderer, templateExecutor TemplateExecutor, query IQueryFrontmatterIndex) (RenderingResult, error) {
+func RenderPageWithTemplates(content string, pageIdentifier string, reader PageReader, renderer MarkdownToHTMLRenderer, templateExecutor TemplateExecutor, query IQueryFrontmatterIndex) (RenderingResult, error) {
 	var result RenderingResult
 
 	// Validate required dependencies
@@ -190,6 +191,12 @@ func RenderPageWithTemplates(content string, reader PageReader, renderer Markdow
 	markdownBytes, frontmatter, err := ParseFrontmatterAndMarkdown(content)
 	if err != nil {
 		return result, err
+	}
+
+	// Inject the page identifier into the frontmatter if not already present,
+	// so template functions (e.g. survey macro) can reference it.
+	if _, ok := frontmatter[IdentifierKey]; !ok && pageIdentifier != "" {
+		frontmatter[IdentifierKey] = pageIdentifier
 	}
 
 	// Serialize frontmatter to JSON
@@ -216,9 +223,12 @@ func RenderPageWithTemplates(content string, reader PageReader, renderer Markdow
 	return result, nil
 }
 
-// Render renders the page content to HTML
+// Render renders the page content to HTML. The page's identifier is injected
+// into the frontmatter before template execution so that template functions
+// (e.g. the survey macro) can reference it even when the frontmatter on disk
+// does not contain an explicit identifier field.
 func (p *Page) Render(reader PageReader, renderer MarkdownToHTMLRenderer, templateExecutor TemplateExecutor, query IQueryFrontmatterIndex) error {
-	result, err := RenderPageWithTemplates(p.Text, reader, renderer, templateExecutor, query)
+	result, err := RenderPageWithTemplates(p.Text, p.Identifier, reader, renderer, templateExecutor, query)
 	if err != nil {
 		return fmt.Errorf("error rendering page: %w", err)
 	}
