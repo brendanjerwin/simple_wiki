@@ -36,14 +36,20 @@ func NewStreamableHTTPHandler(apiServer *grpcapi.Server, version string) (http.H
 	// FixOpenAI silently ignored json.Unmarshal failures, leaving the string as-is and
 	// causing protojson to fail with: "proto: syntax error (line 1:16): unexpected token".
 	apiv1mcp.RegisterFrontmatterHandler(s, apiServer)
+	apiv1mcp.RegisterAgentMetadataServiceHandler(s, apiServer)
+	apiv1mcp.RegisterChecklistServiceHandler(s, apiServer)
+	apiv1mcp.RegisterChatServiceHandler(s, apiServer)
+	apiv1mcp.RegisterConnectorServiceHandler(s, apiServer)
+	apiv1mcp.RegisterFileStorageServiceHandler(s, apiServer)
 	apiv1mcp.RegisterInventoryManagementServiceHandler(s, apiServer)
-	apiv1mcp.RegisterPageImportServiceHandler(s, apiServer)
-	apiv1mcp.RegisterPageManagementServiceHandler(s, apiServer)
-	apiv1mcp.RegisterSearchServiceHandler(s, apiServer)
-	apiv1mcp.RegisterSystemInfoServiceHandler(s, apiServer)
-	apiv1mcp.RegisterSurveyServiceHandler(s, apiServer)
 	apiv1mcp.RegisterMapServiceHandler(s, apiServer)
 	apiv1mcp.RegisterPageHistoryServiceHandler(s, apiServer)
+	apiv1mcp.RegisterPageImportServiceHandler(s, apiServer)
+	apiv1mcp.RegisterPageManagementServiceHandler(s, apiServer)
+	apiv1mcp.RegisterScheduledTurnServiceHandler(s, apiServer)
+	apiv1mcp.RegisterSearchServiceHandler(s, apiServer)
+	apiv1mcp.RegisterSurveyServiceHandler(s, apiServer)
+	apiv1mcp.RegisterSystemInfoServiceHandler(s, apiServer)
 
 	return mcpserver.NewStreamableHTTPServer(s), nil
 }
