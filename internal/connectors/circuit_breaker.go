@@ -116,6 +116,9 @@ func (cb *CircuitBreaker) RecordFailure() {
 }
 
 func (cb *CircuitBreaker) open() {
+	if cb.state == circuitBreakerOpen {
+		return // already open — don't reset openedAt (avoids extending cooldown)
+	}
 	cb.state = circuitBreakerOpen
 	cb.openedAt = time.Now()
 }

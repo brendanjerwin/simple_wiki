@@ -249,12 +249,19 @@ func (r *WikiMetricsRecorder) buildFrontmatter(fm map[string]any) {
 	fm["identifier"] = ObservabilityMetricsPage
 	fm["title"] = "Observability Metrics"
 	// Opt out of version history — this page is written every 60 seconds
-	// and version snapshots would create excessive disk usage.
-	fm["wiki"] = map[string]any{
-		"history": map[string]any{
-			"opt_out": true,
-		},
+	// Merge the history opt-out into any existing wiki subtree rather
+	// than replacing it, so authorization/system flags are preserved.
+	wiki, _ := fm["wiki"].(map[string]any)
+	if wiki == nil {
+		wiki = map[string]any{}
 	}
+	history, _ := wiki["history"].(map[string]any)
+	if history == nil {
+		history = map[string]any{}
+	}
+	history["opt_out"] = true
+	wiki["history"] = history
+	fm["wiki"] = wiki
 	fm[observabilityPrefix] = map[string]any{
 		"http": map[string]any{
 			"requests_total": stats.HTTPRequestsTotal,
