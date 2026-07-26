@@ -80,6 +80,7 @@ var _ = Describe("BuildSurvey", func() {
 			Expect(result).To(ContainSubstring(`page="pastry_project"`))
 		})
 	})
+
 	Describe("when the survey has responses", func() {
 		BeforeEach(func() {
 			surveyFunc = templating.BuildSurvey(templating.TemplateContext{
