@@ -69,10 +69,15 @@ func (m *Mutator) GetSurvey(_ context.Context, page, name string) (*apiv1.Survey
 }
 
 // UpsertSurvey creates or updates survey shell fields without touching responses.
+// When creating a new survey, a non-empty question is required. Existing surveys
+// can be updated with an empty question (e.g. to clear it).
 func (m *Mutator) UpsertSurvey(ctx context.Context, page, name, question string, closed *bool, expected *time.Time) (*apiv1.Survey, error) {
 	isNew := false
 	return m.mutateSurveyShell(ctx, page, name, expected, func(survey *apiv1.Survey) error {
-		if survey.Question == "" && survey.Fields == nil {
+		// A truly new survey has no question, no fields, and no responses.
+		// An existing survey that was cleared would still retain its fields
+		// or responses from prior mutations.
+		if survey.Question == "" && len(survey.Fields) == 0 && len(survey.Responses) == 0 {
 			isNew = true
 		}
 		if isNew && strings.TrimSpace(question) == "" {
@@ -85,6 +90,9 @@ func (m *Mutator) UpsertSurvey(ctx context.Context, page, name, question string,
 		return nil
 	})
 }
+
+// AddField appends a new field to the survey. The field must have a non-empty
+// name and a valid type (text, number, boolean, choice).
 
 func (m *Mutator) AddField(ctx context.Context, page, surveyName string, field *apiv1.SurveyField, expected *time.Time) (*apiv1.Survey, error) {
 	return m.mutateSurvey(ctx, page, surveyName, expected, func(survey *apiv1.Survey) error {
@@ -352,15 +360,12 @@ var validFieldTypes = map[string]bool{
 
 // validateField checks that a survey field has a valid type.
 func validateField(field *apiv1.SurveyField) error {
-	if field == nil || strings.TrimSpace(field.GetName()) == "" {
-		return status.Error(codes.InvalidArgument, "field.name is required")
-	}
-	fieldType := field.GetType()
+	fieldType := strings.TrimSpace(field.GetType())
 	if fieldType == "" {
 		return status.Error(codes.InvalidArgument, "field.type is required")
 	}
 	if !validFieldTypes[fieldType] {
-		return status.Errorf(codes.InvalidArgument, "field.type %q is not valid; must be one of: text, number, boolean", fieldType)
+		return status.Errorf(codes.InvalidArgument, "field.type %q is not valid; must be one of: text, number, boolean, choice", fieldType)
 	}
 	return nil
 }
