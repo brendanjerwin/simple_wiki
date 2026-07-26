@@ -70,7 +70,14 @@ func (m *Mutator) GetSurvey(_ context.Context, page, name string) (*apiv1.Survey
 
 // UpsertSurvey creates or updates survey shell fields without touching responses.
 func (m *Mutator) UpsertSurvey(ctx context.Context, page, name, question string, closed *bool, expected *time.Time) (*apiv1.Survey, error) {
+	isNew := false
 	return m.mutateSurveyShell(ctx, page, name, expected, func(survey *apiv1.Survey) error {
+		if survey.Question == "" && survey.Fields == nil {
+			isNew = true
+		}
+		if isNew && strings.TrimSpace(question) == "" {
+			return status.Error(codes.InvalidArgument, "question is required when creating a new survey")
+		}
 		survey.Question = question
 		if closed != nil {
 			survey.Closed = *closed
@@ -79,11 +86,10 @@ func (m *Mutator) UpsertSurvey(ctx context.Context, page, name, question string,
 	})
 }
 
-// AddField appends a new field.
 func (m *Mutator) AddField(ctx context.Context, page, surveyName string, field *apiv1.SurveyField, expected *time.Time) (*apiv1.Survey, error) {
 	return m.mutateSurvey(ctx, page, surveyName, expected, func(survey *apiv1.Survey) error {
-		if field == nil || strings.TrimSpace(field.GetName()) == "" {
-			return status.Error(codes.InvalidArgument, "field.name is required")
+		if err := validateField(field); err != nil {
+			return err
 		}
 		if findFieldIndex(survey, field.GetName()) >= 0 {
 			return ErrFieldExists
@@ -100,8 +106,8 @@ func (m *Mutator) UpdateField(ctx context.Context, page, surveyName, fieldName s
 		if idx < 0 {
 			return ErrFieldNotFound
 		}
-		if field == nil || strings.TrimSpace(field.GetName()) == "" {
-			return status.Error(codes.InvalidArgument, "field.name is required")
+		if err := validateField(field); err != nil {
+			return err
 		}
 		if otherIdx := findFieldIndex(survey, field.GetName()); otherIdx >= 0 && otherIdx != idx {
 			return ErrFieldExists
@@ -152,6 +158,9 @@ func (m *Mutator) SubmitResponse(ctx context.Context, page, surveyName string, v
 		return nil, status.Error(codes.PermissionDenied, "authenticated user is required")
 	}
 	return m.mutateSurvey(ctx, page, surveyName, nil, func(survey *apiv1.Survey) error {
+		if err := validateResponseValues(survey, values); err != nil {
+			return err
+		}
 		now := timestamppb.New(m.clock.Now())
 		response := &apiv1.SurveyResponse{
 			User:        user,
@@ -331,4 +340,46 @@ func sortResponses(responses []*apiv1.SurveyResponse) {
 		}
 		return left.GetSubmittedAt().AsTime().Before(right.GetSubmittedAt().AsTime())
 	})
+}
+
+// validFieldTypes are the allowed values for SurveyField.type.
+var validFieldTypes = map[string]bool{
+	"text":    true,
+	"number":  true,
+	"boolean": true,
+	"choice":  true,
+}
+
+// validateField checks that a survey field has a valid type.
+func validateField(field *apiv1.SurveyField) error {
+	if field == nil || strings.TrimSpace(field.GetName()) == "" {
+		return status.Error(codes.InvalidArgument, "field.name is required")
+	}
+	fieldType := field.GetType()
+	if fieldType == "" {
+		return status.Error(codes.InvalidArgument, "field.type is required")
+	}
+	if !validFieldTypes[fieldType] {
+		return status.Errorf(codes.InvalidArgument, "field.type %q is not valid; must be one of: text, number, boolean", fieldType)
+	}
+	return nil
+}
+
+// validateResponseValues checks that submitted values only contain keys
+// that match defined survey fields. This prevents agents from submitting
+// values for nonexistent fields.
+func validateResponseValues(survey *apiv1.Survey, values *structpb.Struct) error {
+	if values == nil || len(values.GetFields()) == 0 {
+		return nil // empty response is allowed
+	}
+	definedFields := make(map[string]bool, len(survey.Fields))
+	for _, f := range survey.Fields {
+		definedFields[f.GetName()] = true
+	}
+	for key := range values.GetFields() {
+		if !definedFields[key] {
+			return status.Errorf(codes.InvalidArgument, "response value %q does not match any survey field", key)
+		}
+	}
+	return nil
 }
