@@ -193,10 +193,13 @@ func RenderPageWithTemplates(content string, pageIdentifier string, reader PageR
 		return result, err
 	}
 
-	// Inject the page identifier into the frontmatter if not already present,
-	// so template functions (e.g. survey macro) can reference it.
-	if _, ok := frontmatter[IdentifierKey]; !ok && pageIdentifier != "" {
-		frontmatter[IdentifierKey] = pageIdentifier
+	// Inject the page identifier into the frontmatter if not already present
+	// (or present but empty), so template functions (e.g. survey macro) can
+	// always reference the page's identifier.
+	if existing, ok := frontmatter[IdentifierKey]; !ok || isEmptyValue(existing) {
+		if pageIdentifier != "" {
+			frontmatter[IdentifierKey] = pageIdentifier
+		}
 	}
 
 	// Serialize frontmatter to JSON
@@ -246,4 +249,16 @@ func (p *Page) IsNew() bool {
 // IsModifiedSince returns true if the page has been modified since the given timestamp
 func (p *Page) IsModifiedSince(timestamp int64) bool {
 	return p.ModTime.Unix() > timestamp
+}
+
+// isEmptyValue returns true if the given frontmatter value is an empty string
+// or nil. Used to determine whether to inject the page identifier.
+func isEmptyValue(v any) bool {
+	if v == nil {
+		return true
+	}
+	if s, ok := v.(string); ok {
+		return strings.TrimSpace(s) == ""
+	}
+	return false
 }

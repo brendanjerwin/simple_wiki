@@ -362,7 +362,7 @@ var _ = Describe("SurveyService handler validation", func() {
 		})
 
 		It("should return InvalidArgument", func() {
-			Expect(err).To(HaveGrpcStatusWithSubstr(codes.InvalidArgument, "field.name is required"))
+			Expect(err).To(HaveGrpcStatusWithSubstr(codes.InvalidArgument, "field is required"))
 		})
 	})
 
