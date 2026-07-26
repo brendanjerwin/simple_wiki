@@ -142,14 +142,19 @@ func (j *ReportingJob) Unwrap() jobs.Job { return j.inner }
 // land in each per-kind queue's per-job log line.
 func (s *SyncScheduler) Execute() error {
 	for kind, entry := range s.connectors {
+		keys := entry.lister()
+		s.logger.Info("ConnectorSyncScheduler: tick fired for %s, %d active binding(s)", kind, len(keys))
+
+		if len(keys) == 0 {
+			continue
+		}
+
 		cb, ok := s.breakers[kind]
 		if ok && !cb.Allow() {
 			s.logger.Info("ConnectorSyncScheduler: skipping %s, circuit breaker open", kind)
 			continue
 		}
 
-		keys := entry.lister()
-		s.logger.Info("ConnectorSyncScheduler: tick fired for %s, %d active binding(s)", kind, len(keys))
 		for _, k := range keys {
 			job := entry.jobMaker(entry.connector, k)
 			wrapped := &ReportingJob{

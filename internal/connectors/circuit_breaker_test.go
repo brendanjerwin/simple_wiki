@@ -38,13 +38,13 @@ var _ = Describe("CircuitBreaker", func() {
 	})
 
 	It("transitions to half-open after cooldown", func() {
-		cb.SetCooldown(10 * time.Millisecond)
+		cb.SetCooldown(50 * time.Millisecond)
 		for range 5 {
 			cb.RecordFailure()
 		}
 		Expect(cb.Allow()).To(BeFalse())
 
-		time.Sleep(15 * time.Millisecond)
+		time.Sleep(75 * time.Millisecond)
 		Expect(cb.Allow()).To(BeTrue())
 		// Second half-open probe should still be allowed because the test
 		// harness exposes half-open as allowing a single probe.
@@ -52,11 +52,11 @@ var _ = Describe("CircuitBreaker", func() {
 	})
 
 	It("closes on success after half-open", func() {
-		cb.SetCooldown(10 * time.Millisecond)
+		cb.SetCooldown(50 * time.Millisecond)
 		for range 5 {
 			cb.RecordFailure()
 		}
-		time.Sleep(15 * time.Millisecond)
+		time.Sleep(75 * time.Millisecond)
 		Expect(cb.Allow()).To(BeTrue())
 
 		cb.RecordSuccess()
