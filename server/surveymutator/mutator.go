@@ -358,8 +358,14 @@ var validFieldTypes = map[string]bool{
 	"choice":  true,
 }
 
-// validateField checks that a survey field has a valid type.
+// validateField checks that a survey field has a non-empty name and a valid type.
 func validateField(field *apiv1.SurveyField) error {
+	if field == nil {
+		return status.Error(codes.InvalidArgument, "field is required")
+	}
+	if strings.TrimSpace(field.GetName()) == "" {
+		return status.Error(codes.InvalidArgument, "field.name is required")
+	}
 	fieldType := strings.TrimSpace(field.GetType())
 	if fieldType == "" {
 		return status.Error(codes.InvalidArgument, "field.type is required")
