@@ -52,12 +52,14 @@ var _ = Describe("BuildSurvey", func() {
 			surveyFunc = templating.BuildSurvey(templating.TemplateContext{
 				Identifier: "pastry_project",
 				Map: map[string]any{
-					"surveys": map[string]any{
-						"pastry_2026_w15": map[string]any{
-							"question": "Rate this week's pastries (1-5) and any notes",
-							"fields": []any{
-								map[string]any{"name": "rating", "type": "number", "min": 1, "max": 5},
-								map[string]any{"name": "notes", "type": "text"},
+					"wiki": map[string]any{
+						"surveys": map[string]any{
+							"pastry_2026_w15": map[string]any{
+								"question": "Rate this week's pastries (1-5) and any notes",
+								"fields": []any{
+									map[string]any{"name": "rating", "type": "number", "min": 1, "max": 5},
+									map[string]any{"name": "notes", "type": "text"},
+								},
 							},
 						},
 					},
@@ -78,24 +80,25 @@ var _ = Describe("BuildSurvey", func() {
 			Expect(result).To(ContainSubstring(`page="pastry_project"`))
 		})
 	})
-
 	Describe("when the survey has responses", func() {
 		BeforeEach(func() {
 			surveyFunc = templating.BuildSurvey(templating.TemplateContext{
 				Identifier: "pastry_project",
 				Map: map[string]any{
-					"surveys": map[string]any{
-						"pastry_2026_w15": map[string]any{
-							"question": "Rate this week's pastries",
-							"fields": []any{
-								map[string]any{"name": "rating", "type": "number", "min": 1, "max": 5},
-							},
-							"responses": []any{
-								map[string]any{
-									"user":         "brendan",
-									"anonymous":    false,
-									"submitted_at": "2026-04-18T14:22:00Z",
-									"values":       map[string]any{"rating": 4},
+					"wiki": map[string]any{
+						"surveys": map[string]any{
+							"pastry_2026_w15": map[string]any{
+								"question": "Rate this week's pastries",
+								"fields": []any{
+									map[string]any{"name": "rating", "type": "number", "min": 1, "max": 5},
+								},
+								"responses": []any{
+									map[string]any{
+										"user":         "brendan",
+										"anonymous":    false,
+										"submitted_at": "2026-04-18T14:22:00Z",
+										"values":       map[string]any{"rating": 4},
+									},
 								},
 							},
 						},
@@ -111,6 +114,26 @@ var _ = Describe("BuildSurvey", func() {
 
 		It("should render the response date in the fallback", func() {
 			Expect(result).To(ContainSubstring("2026-04-18"))
+		})
+	})
+
+	Describe("when survey data is in the legacy top-level surveys key", func() {
+		BeforeEach(func() {
+			surveyFunc = templating.BuildSurvey(templating.TemplateContext{
+				Identifier: "legacy_page",
+				Map: map[string]any{
+					"surveys": map[string]any{
+						"old_survey": map[string]any{
+							"question": "Legacy question",
+						},
+					},
+				},
+			})
+			result = surveyFunc("old_survey")
+		})
+
+		It("should still render the question from the legacy key", func() {
+			Expect(result).To(ContainSubstring("Legacy question"))
 		})
 	})
 
