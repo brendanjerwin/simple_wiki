@@ -17,6 +17,7 @@ Every time you save a page, the wiki captures the **prior** content as a version
 - **No-op saves are skipped**: If the content doesn't change (e.g. a migration that re-saves the same text), no version is captured.
 - **Author attribution**: Each version records who made the change (from the Tailscale identity) and whether it was an automated agent.
 - **Soft deletes are captured**: When a page is moved to trash, its final live content is captured as a version first — so even after trash is purged, the page's history survives.
+- **Opt-out**: Pages can disable history capture by setting `[wiki.history]` `opt_out = true` in their frontmatter. Useful for system/metrics pages that are written frequently and don't need version history.
 
 ## Automatic Cleanup (Decimation)
 
