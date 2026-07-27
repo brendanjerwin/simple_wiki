@@ -104,16 +104,21 @@ type CaseResult struct {
 }
 
 // RunConfig runs all cases against one Config and returns the results.
-func RunConfig(ctx context.Context, cases []Case, cfg Config) ([]CaseResult, error) {
+// The optional onProgress callback is called after each case completes,
+// receiving the running results slice and the index of the just-completed case.
+func RunConfig(ctx context.Context, cases []Case, cfg Config, onProgress func(results []CaseResult, completed int)) ([]CaseResult, error) {
 	results := make([]CaseResult, 0, len(cases))
 	configLabel := fmt.Sprintf("%s|%s|%s", cfg.Surface.Label, cfg.Model.Name, cfg.Prompt.Name)
 
-	for _, c := range cases {
+	for i, c := range cases {
 		result, err := runOneCase(ctx, c, cfg, configLabel)
 		if err != nil {
 			return results, fmt.Errorf("case %s: %w", c.ID, err)
 		}
 		results = append(results, result)
+		if onProgress != nil {
+			onProgress(results, i)
+		}
 	}
 	return results, nil
 }

@@ -157,10 +157,25 @@ func main() {
 				label := fmt.Sprintf("%s | %s | %s", surf.Label, m.Name, p.Name)
 				log.Printf("Running %d cases for %s ...", len(cases), label)
 
-				results, err := eval.RunConfig(ctx, cases, cfg)
-				if err != nil {
-					log.Printf("  ERROR: %v", err)
-					continue
+				var results []eval.CaseResult
+				var runErr error
+				results, runErr = eval.RunConfig(ctx, cases, cfg, func(rs []eval.CaseResult, completed int) {
+					if (completed+1)%10 == 0 || completed+1 == len(cases) {
+						hits := 0
+						for _, r := range rs {
+							if r.ToolMatch || (r.ExcludedTool != "" && r.ExclusionOK) {
+								hits++
+							}
+						}
+						log.Printf("  %s: %d/%d done (%d hits, %d errs)",
+							label, completed+1, len(cases), hits, countErrors(rs))
+						if *outFile != "" {
+							writePartialResults(*outFile, rs, cfg, cases)
+						}
+					}
+				})
+				if runErr != nil {
+					log.Printf("  ERROR: %v", runErr)
 				}
 				summary := eval.Score(results, cfg, cases)
 				allSummaries = append(allSummaries, summary)
@@ -246,6 +261,33 @@ func filterByTag(cases []eval.Case, tag string) []eval.Case {
 		}
 	}
 	return out
+}
+
+func countErrors(results []eval.CaseResult) int {
+	count := 0
+	for _, r := range results {
+		if r.Error != "" {
+			count++
+		}
+	}
+	return count
+}
+
+func writePartialResults(path string, results []eval.CaseResult, cfg eval.Config, cases []eval.Case) {
+	summary := eval.Score(results, cfg, cases)
+	data := map[string]any{
+		"summaries": []eval.ScoreSummary{summary},
+		"results":   results,
+		"timestamp": time.Now().Format(time.RFC3339),
+		"partial":   true,
+		"completed": len(results),
+		"total":     len(cases),
+	}
+	b, err := json.MarshalIndent(data, "", "  ")
+	if err != nil {
+		return
+	}
+	_ = os.WriteFile(path, b, 0o644)
 }
 
 func labels(surfaces []eval.ToolSurface) string {
