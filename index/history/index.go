@@ -51,7 +51,7 @@ type HistoryReader interface {
 // HistorySearchFilter holds optional filters for a global history search.
 type HistorySearchFilter struct {
 	Query          string
-	PageNameFilter string
+	PageFilter string
 	AuthorFilter   string
 	From           time.Time
 	To             time.Time
@@ -59,7 +59,7 @@ type HistorySearchFilter struct {
 
 // HistorySearchResult is a single result from a history search.
 type HistorySearchResult struct {
-	PageName string
+	Page string
 	Version  PageVersionMetadata
 	Snippet  string
 }
@@ -190,7 +190,7 @@ func docID(identifier wikipage.PageIdentifier, versionID string) string {
 func (i *Index) SearchPageHistory(identifier wikipage.PageIdentifier, queryText string) ([]HistorySearchResult, error) {
 	return i.SearchHistory(HistorySearchFilter{
 		Query:          queryText,
-		PageNameFilter: string(identifier),
+		PageFilter: string(identifier),
 	})
 }
 
@@ -198,8 +198,8 @@ func (i *Index) SearchPageHistory(identifier wikipage.PageIdentifier, queryText 
 func (i *Index) SearchHistory(filter HistorySearchFilter) ([]HistorySearchResult, error) {
 	var clauses []query.Query
 
-	if filter.PageNameFilter != "" {
-		pq := bleve.NewTermQuery(filter.PageNameFilter)
+	if filter.PageFilter != "" {
+		pq := bleve.NewTermQuery(filter.PageFilter)
 		pq.SetField(fieldPageIdentifier)
 		clauses = append(clauses, pq)
 	}
@@ -267,7 +267,7 @@ func (i *Index) SearchHistory(filter HistorySearchFilter) ([]HistorySearchResult
 		}
 
 		results = append(results, HistorySearchResult{
-			PageName: v.PageIdentifier,
+			Page: v.PageIdentifier,
 			Version:  v,
 			Snippet:  snippet,
 		})

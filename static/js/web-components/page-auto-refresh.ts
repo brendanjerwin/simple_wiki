@@ -92,7 +92,7 @@ export class PageAutoRefresh extends LitElement {
     while (!signal.aborted) {
       try {
         const request = create(WatchPageRequestSchema, {
-          pageName: this.pageName,
+          page: this.pageName,
           checkIntervalMs: 1000, // Check every second
         });
 
@@ -224,7 +224,7 @@ export class PageAutoRefresh extends LitElement {
   private dispatchPageStatusEvent(): void {
     this.dispatchEvent(new CustomEvent('page-status-changed', {
       detail: {
-        pageName: this.pageName,
+        page: this.pageName,
         versionHash: this.currentHash,
         lastRefreshTime: this.lastRefreshTime,
         isWatching: this.isWatching,

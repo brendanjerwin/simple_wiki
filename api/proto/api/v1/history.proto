@@ -75,7 +75,7 @@ service PageHistoryService {
 // Request to list versions of a page.
 message ListPageVersionsRequest {
   // The page name to list versions for.
-  string page_name = 1;
+  string page = 1;
   // Maximum number of versions to return. 0 or negative means no limit.
   int32 limit = 2;
 }
@@ -107,7 +107,7 @@ message PageVersion {
 // Request to read a specific version of a page.
 message ReadPageVersionRequest {
   // The page name.
-  string page_name = 1;
+  string page = 1;
   // The version ID to read.
   string version_id = 2;
 }
@@ -123,7 +123,7 @@ message ReadPageVersionResponse {
 // a request field — there is no author field to prevent spoofable attribution.
 message RestorePageVersionRequest {
   // The page name to restore into.
-  string page_name = 1;
+  string page = 1;
   // The version ID to restore.
   string version_id = 2;
 }
@@ -134,7 +134,7 @@ message RestorePageVersionResponse {}
 // Request to diff two versions of a page.
 message DiffPageVersionsRequest {
   // The page name.
-  string page_name = 1;
+  string page = 1;
   // The older version ID (the "from" side of the diff).
   string old_version_id = 2;
   // The newer version ID (the "to" side of the diff).
@@ -150,7 +150,7 @@ message DiffPageVersionsResponse {
 // Request to search within a page's history.
 message SearchPageHistoryRequest {
   // The page name to search within.
-  string page_name = 1;
+  string page = 1;
   // The search query (full-text).
   string query = 2;
 }
@@ -165,7 +165,7 @@ message SearchHistoryRequest {
   // The search query (full-text).
   string query = 1;
   // Filter to a specific page. Empty means search all pages.
-  string page_name_filter = 2;
+  string page_filter = 2;
   // Filter to a specific author. Empty means any author.
   string author_filter = 3;
   // Only return versions created at or after this time.
@@ -182,7 +182,7 @@ message SearchHistoryResponse {
 // A single search result from history search.
 message HistorySearchResult {
   // The page this version belongs to.
-  string page_name = 1;
+  string page = 1;
   // The version metadata.
   PageVersion version = 2;
   // Relevance snippet from the version content.

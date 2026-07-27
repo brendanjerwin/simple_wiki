@@ -109,9 +109,9 @@ var _ = Describe("SurveyService handlers", func() {
 
 		BeforeEach(func() {
 			resp, err = server.AddField(ctx, &apiv1.AddSurveyFieldRequest{
-				Page:       "weekly_menu",
-				SurveyName: "meal",
-				Field:      &apiv1.SurveyField{Name: "side", Type: "text"},
+				Page:  "weekly_menu",
+				Name:  "meal",
+				Field: &apiv1.SurveyField{Name: "side", Type: "text"},
 			})
 		})
 
@@ -129,10 +129,10 @@ var _ = Describe("SurveyService handlers", func() {
 
 		BeforeEach(func() {
 			resp, err = server.UpdateField(ctx, &apiv1.UpdateSurveyFieldRequest{
-				Page:       "weekly_menu",
-				SurveyName: "meal",
-				FieldName:  "choice",
-				Field:      &apiv1.SurveyField{Name: "entree", Type: "text"},
+				Page:      "weekly_menu",
+				Name:      "meal",
+				FieldName: "choice",
+				Field:     &apiv1.SurveyField{Name: "entree", Type: "text"},
 			})
 		})
 
@@ -149,7 +149,7 @@ var _ = Describe("SurveyService handlers", func() {
 		var resp *apiv1.RemoveSurveyFieldResponse
 
 		BeforeEach(func() {
-			resp, err = server.RemoveField(ctx, &apiv1.RemoveSurveyFieldRequest{Page: "weekly_menu", SurveyName: "meal", FieldName: "notes"})
+			resp, err = server.RemoveField(ctx, &apiv1.RemoveSurveyFieldRequest{Page: "weekly_menu", Name: "meal", FieldName: "notes"})
 		})
 
 		It("should not return an error", func() {
@@ -165,7 +165,7 @@ var _ = Describe("SurveyService handlers", func() {
 		var resp *apiv1.ReorderSurveyFieldResponse
 
 		BeforeEach(func() {
-			resp, err = server.ReorderField(ctx, &apiv1.ReorderSurveyFieldRequest{Page: "weekly_menu", SurveyName: "meal", FieldName: "notes", NewIndex: 0})
+			resp, err = server.ReorderField(ctx, &apiv1.ReorderSurveyFieldRequest{Page: "weekly_menu", Name: "meal", FieldName: "notes", NewIndex: 0})
 		})
 
 		It("should not return an error", func() {
@@ -183,7 +183,7 @@ var _ = Describe("SurveyService handlers", func() {
 		BeforeEach(func() {
 			values, valuesErr := structpb.NewStruct(map[string]any{"choice": "tacos"})
 			Expect(valuesErr).NotTo(HaveOccurred())
-			resp, err = server.SubmitResponse(ctx, &apiv1.SubmitSurveyResponseRequest{Page: "weekly_menu", SurveyName: "meal", Values: values})
+			resp, err = server.SubmitResponse(ctx, &apiv1.SubmitSurveyResponseRequest{Page: "weekly_menu", Name: "meal", Values: values})
 		})
 
 		It("should not return an error", func() {
@@ -199,7 +199,7 @@ var _ = Describe("SurveyService handlers", func() {
 		var resp *apiv1.ListSurveyResponsesResponse
 
 		BeforeEach(func() {
-			resp, err = server.ListResponses(ctx, &apiv1.ListSurveyResponsesRequest{Page: "weekly_menu", SurveyName: "meal"})
+			resp, err = server.ListResponses(ctx, &apiv1.ListSurveyResponsesRequest{Page: "weekly_menu", Name: "meal"})
 		})
 
 		It("should not return an error", func() {
@@ -215,7 +215,7 @@ var _ = Describe("SurveyService handlers", func() {
 		var resp *apiv1.DeleteSurveyResponseResponse
 
 		BeforeEach(func() {
-			resp, err = server.DeleteResponse(ctx, &apiv1.DeleteSurveyResponseRequest{Page: "weekly_menu", SurveyName: "meal", User: "alice@example.com"})
+			resp, err = server.DeleteResponse(ctx, &apiv1.DeleteSurveyResponseRequest{Page: "weekly_menu", Name: "meal", User: "alice@example.com"})
 		})
 
 		It("should not return an error", func() {
@@ -249,13 +249,13 @@ var _ = Describe("SurveyService handler validation", func() {
 			server = mustNewServer(store, nil, nil)
 			_, getSurveyErr := server.GetSurvey(ctx, &apiv1.GetSurveyRequest{Page: "weekly_menu", Name: "meal"})
 			_, upsertSurveyErr := server.UpsertSurvey(ctx, &apiv1.UpsertSurveyRequest{Page: "weekly_menu", Name: "meal"})
-			_, addFieldErr := server.AddField(ctx, &apiv1.AddSurveyFieldRequest{Page: "weekly_menu", SurveyName: "meal"})
-			_, updateFieldErr := server.UpdateField(ctx, &apiv1.UpdateSurveyFieldRequest{Page: "weekly_menu", SurveyName: "meal", FieldName: "choice"})
-			_, removeFieldErr := server.RemoveField(ctx, &apiv1.RemoveSurveyFieldRequest{Page: "weekly_menu", SurveyName: "meal", FieldName: "choice"})
-			_, reorderFieldErr := server.ReorderField(ctx, &apiv1.ReorderSurveyFieldRequest{Page: "weekly_menu", SurveyName: "meal", FieldName: "choice"})
-			_, submitResponseErr := server.SubmitResponse(ctx, &apiv1.SubmitSurveyResponseRequest{Page: "weekly_menu", SurveyName: "meal"})
-			_, listResponsesErr := server.ListResponses(ctx, &apiv1.ListSurveyResponsesRequest{Page: "weekly_menu", SurveyName: "meal"})
-			_, deleteResponseErr := server.DeleteResponse(ctx, &apiv1.DeleteSurveyResponseRequest{Page: "weekly_menu", SurveyName: "meal", User: "alice@example.com"})
+			_, addFieldErr := server.AddField(ctx, &apiv1.AddSurveyFieldRequest{Page: "weekly_menu", Name: "meal"})
+			_, updateFieldErr := server.UpdateField(ctx, &apiv1.UpdateSurveyFieldRequest{Page: "weekly_menu", Name: "meal", FieldName: "choice"})
+			_, removeFieldErr := server.RemoveField(ctx, &apiv1.RemoveSurveyFieldRequest{Page: "weekly_menu", Name: "meal", FieldName: "choice"})
+			_, reorderFieldErr := server.ReorderField(ctx, &apiv1.ReorderSurveyFieldRequest{Page: "weekly_menu", Name: "meal", FieldName: "choice"})
+			_, submitResponseErr := server.SubmitResponse(ctx, &apiv1.SubmitSurveyResponseRequest{Page: "weekly_menu", Name: "meal"})
+			_, listResponsesErr := server.ListResponses(ctx, &apiv1.ListSurveyResponsesRequest{Page: "weekly_menu", Name: "meal"})
+			_, deleteResponseErr := server.DeleteResponse(ctx, &apiv1.DeleteSurveyResponseRequest{Page: "weekly_menu", Name: "meal", User: "alice@example.com"})
 			errorsByRPC = map[string]error{
 				"GetSurvey":      getSurveyErr,
 				"UpsertSurvey":   upsertSurveyErr,
@@ -318,7 +318,7 @@ var _ = Describe("SurveyService handler validation", func() {
 
 	Describe("when field_name is missing for update", func() {
 		BeforeEach(func() {
-			_, err = server.UpdateField(ctx, &apiv1.UpdateSurveyFieldRequest{Page: "weekly_menu", SurveyName: "meal", Field: &apiv1.SurveyField{Name: "x", Type: "text"}})
+			_, err = server.UpdateField(ctx, &apiv1.UpdateSurveyFieldRequest{Page: "weekly_menu", Name: "meal", Field: &apiv1.SurveyField{Name: "x", Type: "text"}})
 		})
 
 		It("should return InvalidArgument", func() {
@@ -328,7 +328,7 @@ var _ = Describe("SurveyService handler validation", func() {
 
 	Describe("when field_name is missing for remove", func() {
 		BeforeEach(func() {
-			_, err = server.RemoveField(ctx, &apiv1.RemoveSurveyFieldRequest{Page: "weekly_menu", SurveyName: "meal"})
+			_, err = server.RemoveField(ctx, &apiv1.RemoveSurveyFieldRequest{Page: "weekly_menu", Name: "meal"})
 		})
 
 		It("should return InvalidArgument", func() {
@@ -338,7 +338,7 @@ var _ = Describe("SurveyService handler validation", func() {
 
 	Describe("when field_name is missing for reorder", func() {
 		BeforeEach(func() {
-			_, err = server.ReorderField(ctx, &apiv1.ReorderSurveyFieldRequest{Page: "weekly_menu", SurveyName: "meal"})
+			_, err = server.ReorderField(ctx, &apiv1.ReorderSurveyFieldRequest{Page: "weekly_menu", Name: "meal"})
 		})
 
 		It("should return InvalidArgument", func() {
@@ -358,7 +358,7 @@ var _ = Describe("SurveyService handler validation", func() {
 
 	Describe("when adding a nil field", func() {
 		BeforeEach(func() {
-			_, err = server.AddField(ctx, &apiv1.AddSurveyFieldRequest{Page: "weekly_menu", SurveyName: "meal"})
+			_, err = server.AddField(ctx, &apiv1.AddSurveyFieldRequest{Page: "weekly_menu", Name: "meal"})
 		})
 
 		It("should return InvalidArgument", func() {
@@ -369,10 +369,10 @@ var _ = Describe("SurveyService handler validation", func() {
 	Describe("when updating a missing field", func() {
 		BeforeEach(func() {
 			_, err = server.UpdateField(ctx, &apiv1.UpdateSurveyFieldRequest{
-				Page:       "weekly_menu",
-				SurveyName: "meal",
-				FieldName:  "missing",
-				Field:      &apiv1.SurveyField{Name: "missing", Type: "text"},
+				Page:      "weekly_menu",
+				Name:      "meal",
+				FieldName: "missing",
+				Field:     &apiv1.SurveyField{Name: "missing", Type: "text"},
 			})
 		})
 
@@ -384,9 +384,9 @@ var _ = Describe("SurveyService handler validation", func() {
 	Describe("when adding a duplicate field", func() {
 		BeforeEach(func() {
 			_, err = server.AddField(ctx, &apiv1.AddSurveyFieldRequest{
-				Page:       "weekly_menu",
-				SurveyName: "meal",
-				Field:      &apiv1.SurveyField{Name: "choice", Type: "text"},
+				Page:  "weekly_menu",
+				Name:  "meal",
+				Field: &apiv1.SurveyField{Name: "choice", Type: "text"},
 			})
 		})
 
@@ -397,7 +397,7 @@ var _ = Describe("SurveyService handler validation", func() {
 
 	Describe("when deleting a missing response", func() {
 		BeforeEach(func() {
-			_, err = server.DeleteResponse(ctx, &apiv1.DeleteSurveyResponseRequest{Page: "weekly_menu", SurveyName: "meal", User: "missing@example.com"})
+			_, err = server.DeleteResponse(ctx, &apiv1.DeleteSurveyResponseRequest{Page: "weekly_menu", Name: "meal", User: "missing@example.com"})
 		})
 
 		It("should return NotFound", func() {

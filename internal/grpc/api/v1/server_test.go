@@ -2082,7 +2082,7 @@ var _ = Describe("Server", func() {
 
 		BeforeEach(func() {
 			req = &apiv1.DeletePageRequest{
-				PageName: "test-page",
+				Page: "test-page",
 			}
 			mockPageReaderMutator = &MockPageReaderMutator{}
 		})
@@ -2324,7 +2324,7 @@ var _ = Describe("Server", func() {
 					srv := mustNewServerWithLogger(&MockPageReaderMutator{}, nil, logger)
 					identity := tailscale.NewIdentity("user@example.com", "User Name", "device-name")
 					identCtx := tailscale.ContextWithIdentity(ctx, identity)
-					_, _ = srv.DeletePage(identCtx, &apiv1.DeletePageRequest{PageName: "audit-page"})
+					_, _ = srv.DeletePage(identCtx, &apiv1.DeletePageRequest{Page: "audit-page"})
 					logOutput = logBuffer.String()
 				})
 
@@ -2345,7 +2345,7 @@ var _ = Describe("Server", func() {
 				BeforeEach(func() {
 					logger := lumber.NewBasicLogger(&logWriteCloser{logBuffer}, lumber.TRACE)
 					srv := mustNewServerWithLogger(&MockPageReaderMutator{}, nil, logger)
-					_, _ = srv.DeletePage(ctx, &apiv1.DeletePageRequest{PageName: "anon-page"})
+					_, _ = srv.DeletePage(ctx, &apiv1.DeletePageRequest{Page: "anon-page"})
 					logOutput = logBuffer.String()
 				})
 
@@ -2406,7 +2406,7 @@ var _ = Describe("Server", func() {
 
 		BeforeEach(func() {
 			req = &apiv1.UpdatePageContentRequest{
-				PageName:           "test-page",
+				Page:           "test-page",
 				NewContentMarkdown: "# New Content",
 			}
 			mockPageReaderMutator = &MockPageReaderMutator{
@@ -2419,13 +2419,13 @@ var _ = Describe("Server", func() {
 			resp, err = server.UpdatePageContent(ctx, req)
 		})
 
-		When("page_name is empty", func() {
+		When("page is empty", func() {
 			BeforeEach(func() {
-				req.PageName = ""
+				req.Page = ""
 			})
 
 			It("should return an invalid argument error", func() {
-				Expect(err).To(HaveGrpcStatus(codes.InvalidArgument, "page_name is required"))
+				Expect(err).To(HaveGrpcStatus(codes.InvalidArgument, "page is required"))
 			})
 
 			It("should not return a response", func() {
@@ -2780,7 +2780,7 @@ var _ = Describe("Server", func() {
 
 		BeforeEach(func() {
 			req = &apiv1.ClearPageContentRequest{
-				PageName:     "test-page",
+				Page:     "test-page",
 				ConfirmClear: true,
 			}
 			mockPageReaderMutator = &MockPageReaderMutator{
@@ -2793,13 +2793,13 @@ var _ = Describe("Server", func() {
 			resp, err = server.ClearPageContent(ctx, req)
 		})
 
-		When("page_name is empty", func() {
+		When("page is empty", func() {
 			BeforeEach(func() {
-				req.PageName = ""
+				req.Page = ""
 			})
 
 			It("should return an invalid argument error", func() {
-				Expect(err).To(HaveGrpcStatus(codes.InvalidArgument, "page_name is required"))
+				Expect(err).To(HaveGrpcStatus(codes.InvalidArgument, "page is required"))
 			})
 
 			It("should not return a response", func() {
@@ -2900,7 +2900,7 @@ var _ = Describe("Server", func() {
 
 		BeforeEach(func() {
 			req = &apiv1.UpdateWholePageRequest{
-				PageName:         "test-page",
+				Page:         "test-page",
 				NewWholeMarkdown: "+++\ntitle = \"New Title\"\n+++\n# New Content",
 			}
 			mockPageReaderMutator = &MockPageReaderMutator{
@@ -2913,13 +2913,13 @@ var _ = Describe("Server", func() {
 			resp, err = server.UpdateWholePage(ctx, req)
 		})
 
-		When("page_name is empty", func() {
+		When("page is empty", func() {
 			BeforeEach(func() {
-				req.PageName = ""
+				req.Page = ""
 			})
 
 			It("should return an invalid argument error and no response", func() {
-				Expect(err).To(HaveGrpcStatus(codes.InvalidArgument, "page_name is required"))
+				Expect(err).To(HaveGrpcStatus(codes.InvalidArgument, "page is required"))
 				Expect(resp).To(BeNil())
 			})
 		})
@@ -3007,7 +3007,7 @@ var _ = Describe("Server", func() {
 			})
 		})
 
-		When("the whole markdown contains an identifier key that differs from page_name", func() {
+		When("the whole markdown contains an identifier key that differs from page", func() {
 			BeforeEach(func() {
 				req.NewWholeMarkdown = "+++\nidentifier = \"malicious-override\"\ntitle = \"Hacked\"\n+++\n# Content"
 			})
@@ -3288,7 +3288,7 @@ var _ = Describe("Server", func() {
 
 		BeforeEach(func() {
 			req = &apiv1.WatchPageRequest{
-				PageName: "test-page",
+				Page: "test-page",
 			}
 			streamServer = &MockPageWatchStreamServer{}
 			mockPageReaderMutator = &MockPageReaderMutator{}
@@ -3356,13 +3356,13 @@ var _ = Describe("Server", func() {
 			var err error
 
 			BeforeEach(func() {
-				req.PageName = ""
+				req.Page = ""
 				server = mustNewServer(nil, nil, nil)
 				err = server.WatchPage(req, streamServer)
 			})
 
 			It("should return InvalidArgument error", func() {
-				Expect(err).To(HaveGrpcStatus(codes.InvalidArgument, "page_name is required"))
+				Expect(err).To(HaveGrpcStatus(codes.InvalidArgument, "page is required"))
 			})
 		})
 
@@ -4382,7 +4382,7 @@ var _ = Describe("Server", func() {
 
 		BeforeEach(func() {
 			req = &apiv1.ReadPageRequest{
-				PageIdentifier: &apiv1.ReadPageRequest_PageName{PageName: "test-page"},
+				PageSelector: &apiv1.ReadPageRequest_Page{Page: "test-page"},
 			}
 			mockPageReaderMutator = &MockPageReaderMutator{}
 			mockMarkdownRenderer = &MockMarkdownRenderer{}
@@ -4426,7 +4426,7 @@ var _ = Describe("Server", func() {
 			})
 
 			It("should return an invalid argument error", func() {
-				Expect(err).To(HaveGrpcStatus(codes.InvalidArgument, "page_name or identifier is required"))
+				Expect(err).To(HaveGrpcStatus(codes.InvalidArgument, "page or identifier is required"))
 			})
 
 			It("should return no response", func() {
@@ -4555,7 +4555,7 @@ var _ = Describe("Server", func() {
 		When("only the identifier field is set (MCP compatibility alias)", func() {
 			BeforeEach(func() {
 				req = &apiv1.ReadPageRequest{
-					PageIdentifier: &apiv1.ReadPageRequest_Identifier{Identifier: "test-page"},
+					PageSelector: &apiv1.ReadPageRequest_Identifier{Identifier: "test-page"},
 				}
 				mockPageReaderMutator.Markdown = "# Identifier Alias Page"
 				mockPageReaderMutator.Frontmatter = nil
@@ -4572,10 +4572,10 @@ var _ = Describe("Server", func() {
 			})
 		})
 
-		When("the page_name oneof variant is used", func() {
+		When("the page oneof variant is used", func() {
 			BeforeEach(func() {
 				req = &apiv1.ReadPageRequest{
-					PageIdentifier: &apiv1.ReadPageRequest_PageName{PageName: "test-page"},
+					PageSelector: &apiv1.ReadPageRequest_Page{Page: "test-page"},
 				}
 				mockPageReaderMutator.Markdown = "# Page Name Variant"
 				mockPageReaderMutator.Frontmatter = nil
@@ -4587,7 +4587,7 @@ var _ = Describe("Server", func() {
 				Expect(err).NotTo(HaveOccurred())
 			})
 
-			It("should return content for the page_name variant", func() {
+			It("should return content for the page variant", func() {
 				Expect(resp.ContentMarkdown).To(Equal("# Page Name Variant"))
 			})
 		})
@@ -5698,7 +5698,7 @@ var _ = Describe("Server", func() {
 
 		BeforeEach(func() {
 			req = &apiv1.CreatePageRequest{
-				PageName: "My New Page",
+				Page: "My New Page",
 			}
 			mockPageReaderMutator = &MockPageReaderMutator{
 				Err: os.ErrNotExist, // Page doesn't exist by default
@@ -5720,13 +5720,13 @@ var _ = Describe("Server", func() {
 			resp, err = server.CreatePage(ctx, req)
 		})
 
-		When("the page_name is empty", func() {
+		When("the page is empty", func() {
 			BeforeEach(func() {
-				req.PageName = ""
+				req.Page = ""
 			})
 
 			It("should return an invalid argument error", func() {
-				Expect(err).To(HaveGrpcStatus(codes.InvalidArgument, "page_name is required"))
+				Expect(err).To(HaveGrpcStatus(codes.InvalidArgument, "page is required"))
 			})
 
 			It("should return no response", func() {
@@ -6139,7 +6139,7 @@ var _ = Describe("Server", func() {
 
 		BeforeEach(func() {
 			req = &apiv1.ReadPageOutlineRequest{
-				PageName: "test-page",
+				Page: "test-page",
 			}
 			mockPageReaderMutator = &MockPageReaderMutator{}
 		})
@@ -6238,7 +6238,7 @@ var _ = Describe("Server", func() {
 
 		BeforeEach(func() {
 			req = &apiv1.ReadPageSectionRequest{
-				PageName:   "test-page",
+				Page:   "test-page",
 				ByteOffset: int64(len("# Intro\n\n")),
 				ByteLength: int64(len("intro body\n\n")),
 			}

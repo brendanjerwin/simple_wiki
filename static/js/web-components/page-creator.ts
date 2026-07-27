@@ -166,7 +166,7 @@ export class PageCreator {
 
     try {
       const request = create(CreatePageRequestSchema, {
-        pageName: identifier,
+        page: identifier,
         contentMarkdown,
         ...(frontmatter && { frontmatter }),
       });

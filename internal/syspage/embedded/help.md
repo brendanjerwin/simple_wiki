@@ -52,17 +52,24 @@ See [[help-hashtags]] and [[help-search]] for the full grammar.
 - [[help-alerts]] — Styled callout boxes (note, tip, warning, caution)
 - [[help-caldav]] — Bidirectional checklist sync with native task apps (Apple Reminders, DAVx5)
 - [[help-chat]] — AI assistant chat panel with live tool-use and plan progress
+- [[help-connectors]] — Checklist connectors: Google Keep, Google Tasks, and CalDAV bridges
+- [[help-file-storage]] — Upload, query, and delete attached files
+- [[help-frontmatter]] — Structured page metadata and the `Frontmatter` MCP tools
 - [[help-google-keep]] — Per-user Google Keep bridge (unofficial — read trust model)
 - [[help-hashtags]] — Page-level hashtag tagging
 - [[help-handling-large-pages]] — Strategies for trimming, splitting, and navigating large pages
-- [[help-page-history]] — Version history for every page: list, read, restore, diff, and search past versions
+- [[help-inventory-management]] — Track physical inventory items and containers
 - [[help-macro-blog]] — Blog macro for publishing articles
 - [[help-macro-checklist]] — Checklist macro for interactive task lists
 - [[help-macro-map]] — First-class wiki maps backed by MapService
 - [[help-macro-survey]] — Survey macro for collecting per-user responses
+- [[help-mcp]] — MCP tool surface catalog: services, transports, and what is not exposed
+- [[help-page-history]] — Version history for every page: list, read, restore, diff, and search past versions
+- [[help-page-import]] — Bulk-import wiki pages from CSV
 - [[help-profile]] — Per-user profile pages auto-resolved at `/profile`
 - [[help-profile-features]] — Catalog of profile-page widgets and macros, with copy-paste snippets to upgrade existing profiles
 - [[help-scheduled-agents]] — Cron-driven background AI agent tasks per page
 - [[help-search]] — Search syntax including `#tag` queries
+- [[help-system-info]] — Runtime info, build version, and background-job queue status
 - [[help-system-pages]] — Pages that ship with the wiki binary
 - [[help-templating]] — Template language reference (macros, variables, conditionals)

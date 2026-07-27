@@ -33,7 +33,7 @@ const (
 	failedToReadFrontmatterErrFmt  = "failed to read frontmatter: %v"
 	failedToWriteFrontmatterErrFmt = "failed to write frontmatter: %v"
 	failedToWriteMarkdownErrFmt    = "failed to write markdown: %v"
-	pageNameRequiredErr            = "page_name is required"
+	pageNameRequiredErr            = "page is required"
 	maxUniqueIdentifierAttempts    = 1000
 	invalidTemplateErrFmt          = "invalid template in page content: %v"
 )

@@ -384,7 +384,7 @@ describe('PageCreator', () => {
       it('should call client with correct request', () => {
         expect(clientStub).to.have.been.calledOnce;
         const request = clientStub.firstCall.args[0];
-        expect(request.pageName).to.equal('my_new_page');
+        expect(request.page).to.equal('my_new_page');
         expect(request.contentMarkdown).to.equal('');
         expect(request.frontmatter).to.be.undefined;
       });
@@ -462,7 +462,7 @@ describe('PageCreator', () => {
 
       it('should pass all parameters to client', () => {
         const request = clientStub.firstCall.args[0];
-        expect(request.pageName).to.equal('my_article');
+        expect(request.page).to.equal('my_article');
         expect(request.contentMarkdown).to.equal('# Content');
         expect(request.template).to.equal('article_template');
         expect(request.frontmatter).to.deep.equal({ author: 'John' });

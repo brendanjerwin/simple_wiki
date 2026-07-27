@@ -92,3 +92,9 @@ static/extensions/
 
 # Local keep-debug binary (built from cmd/keep-debug)
 /keep-debug
+
+
+# Eval results and temp files (may contain API traces)
+eval/results/
+/tmp/wiki-smoke*
+/tmp/wiki-eval*

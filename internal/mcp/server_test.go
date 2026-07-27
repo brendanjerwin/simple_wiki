@@ -220,7 +220,7 @@ var _ = Describe("NewStreamableHTTPHandler", func() {
 	})
 
 	It("returns a non-nil handler without error", func() {
-		handler, err := wikimcp.NewStreamableHTTPHandler(apiServer, "test-version")
+		handler, _, err := wikimcp.NewStreamableHTTPHandler(apiServer, "test-version")
 
 		Expect(err).NotTo(HaveOccurred())
 		Expect(handler).NotTo(BeNil())
@@ -231,7 +231,7 @@ var _ = Describe("NewStreamableHTTPHandler", func() {
 
 		BeforeEach(func() {
 			var err error
-			handler, err = wikimcp.NewStreamableHTTPHandler(apiServer, "test-version")
+			handler, _, err = wikimcp.NewStreamableHTTPHandler(apiServer, "test-version")
 			Expect(err).NotTo(HaveOccurred())
 		})
 
@@ -448,7 +448,7 @@ var _ = Describe("NewStreamableHTTPHandler", func() {
 				handler.ServeHTTP(initResp, initReq)
 				sessionID := initResp.Header().Get("Mcp-Session-Id")
 
-				// Call the tool using "identifier" instead of "page_name" (MCP compatibility alias)
+				// Call the tool using "identifier" instead of "page" (MCP compatibility alias)
 				callBody := `{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"api_v1_PageManagementService_ReadPage","arguments":{"identifier":"nonexistent-test-page"}}}`
 				callReq := httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(callBody))
 				callReq.Header.Set("Content-Type", "application/json")
@@ -539,6 +539,138 @@ var _ = Describe("NewStreamableHTTPHandler", func() {
 					"api_v1_SystemInfoService_GetVersion",
 					"api_v1_SystemInfoService_GetJobStatus",
 				))
+			})
+		})
+
+		When("inspecting tool descriptions from tools/list", func() {
+			var toolDescriptions map[string]string
+
+			BeforeEach(func() {
+				// Initialize to get a session
+				initBody := `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"0.0.1"}}}`
+				initReq := httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(initBody))
+				initReq.Header.Set("Content-Type", "application/json")
+				initResp := httptest.NewRecorder()
+				handler.ServeHTTP(initResp, initReq)
+				sessionID := initResp.Header().Get("Mcp-Session-Id")
+
+				// Send tools/list
+				listBody := `{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}`
+				listReq := httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(listBody))
+				listReq.Header.Set("Content-Type", "application/json")
+				if sessionID != "" {
+					listReq.Header.Set("Mcp-Session-Id", sessionID)
+				}
+				listResp := httptest.NewRecorder()
+				handler.ServeHTTP(listResp, listReq)
+
+				var result map[string]any
+				Expect(json.Unmarshal(listResp.Body.Bytes(), &result)).To(Succeed())
+				resultMap, ok := result["result"].(map[string]any)
+				Expect(ok).To(BeTrue(), "expected result to be a map")
+				toolList, ok := resultMap["tools"].([]any)
+				Expect(ok).To(BeTrue(), "expected tools to be a list")
+				toolDescriptions = make(map[string]string, len(toolList))
+				for _, t := range toolList {
+					toolMap, ok := t.(map[string]any)
+					Expect(ok).To(BeTrue(), "expected tool to be a map")
+					name, _ := toolMap["name"].(string)
+					desc, _ := toolMap["description"].(string)
+					toolDescriptions[name] = desc
+				}
+			})
+
+			It("leaves no tool surfacing the proto-comment stub", func() {
+				for name, desc := range toolDescriptions {
+					Expect(desc).NotTo(ContainSubstring("see (api.v1.description)"),
+						"tool %q surfaces the proto-comment stub — the mcpdocs decorator was not applied", name)
+				}
+			})
+
+			It("leaves no tool with an empty description", func() {
+				for name, desc := range toolDescriptions {
+					Expect(strings.TrimSpace(desc)).NotTo(BeEmpty(),
+						"tool %q has an empty description", name)
+				}
+			})
+
+			It("leaves no tool surfacing the service_description stub", func() {
+				for name, desc := range toolDescriptions {
+					Expect(desc).NotTo(ContainSubstring("see (api.v1.service_description)"),
+						"tool %q surfaces a service_description stub", name)
+				}
+			})
+
+			It("does not expose ScheduledTurnService tools (pool-only bridge)", func() {
+				Expect(toolDescriptions).NotTo(HaveKey("api_v1_ScheduledTurnService_CompleteScheduledTurn"))
+			})
+
+			It("does not expose pool-only or frontend-only ChatService tools", func() {
+				// These RPCs are annotated (api.v1.exclude_from_mcp) because
+				// they are only meaningful to the pool daemon or the browser
+				// frontend; an LLM calling them would be a misuse.
+				excluded := []string{
+					"api_v1_ChatService_SendChatReply",
+					"api_v1_ChatService_EditChatMessage",
+					"api_v1_ChatService_ReactToMessage",
+					"api_v1_ChatService_SendToolCallNotification",
+					"api_v1_ChatService_SendPlanNotification",
+					"api_v1_ChatService_SendTurnStatus",
+					"api_v1_ChatService_RespondToPermission",
+				}
+				for _, name := range excluded {
+					Expect(toolDescriptions).NotTo(HaveKey(name),
+						"pool/frontend-only tool %q should have been excluded from MCP", name)
+				}
+			})
+
+			It("still exposes agent-applicable ChatService tools", func() {
+				Expect(toolDescriptions).To(HaveKey("api_v1_ChatService_SendMessage"))
+				Expect(toolDescriptions).To(HaveKey("api_v1_ChatService_GetChatStatus"))
+				Expect(toolDescriptions).To(HaveKey("api_v1_ChatService_CancelAgentPrompt"))
+			})
+		})
+
+		When("requesting the MCP service catalog", func() {
+			var catalogResp *httptest.ResponseRecorder
+			var catalog []map[string]any
+
+			BeforeEach(func() {
+				_, descs, err := wikimcp.NewStreamableHTTPHandler(apiServer, "test-version")
+				Expect(err).NotTo(HaveOccurred())
+				catalogHandler := wikimcp.NewServiceCatalogHandler(descs)
+				catalogReq := httptest.NewRequest(http.MethodGet, "/mcp/catalog", nil)
+				catalogResp = httptest.NewRecorder()
+				catalogHandler.ServeHTTP(catalogResp, catalogReq)
+				Expect(json.Unmarshal(catalogResp.Body.Bytes(), &catalog)).To(Succeed())
+			})
+
+			It("returns HTTP 200 with JSON content type", func() {
+				Expect(catalogResp.Code).To(Equal(http.StatusOK))
+				Expect(catalogResp.Header().Get("Content-Type")).To(ContainSubstring("application/json"))
+			})
+
+			It("includes services that declare service_description", func() {
+				names := make([]string, 0, len(catalog))
+				for _, entry := range catalog {
+					if s, ok := entry["Service"].(string); ok {
+						names = append(names, s)
+					}
+				}
+				Expect(names).To(ContainElement("api.v1.PageManagementService"))
+				Expect(names).To(ContainElement("api.v1.SearchService"))
+				Expect(names).To(ContainElement("api.v1.SurveyService"))
+			})
+
+			It("does not include services without service_description", func() {
+				names := make([]string, 0, len(catalog))
+				for _, entry := range catalog {
+					if s, ok := entry["Service"].(string); ok {
+						names = append(names, s)
+					}
+				}
+				Expect(names).NotTo(ContainElement("api.v1.ChatService"))
+				Expect(names).NotTo(ContainElement("api.v1.ScheduledTurnService"))
 			})
 		})
 	})

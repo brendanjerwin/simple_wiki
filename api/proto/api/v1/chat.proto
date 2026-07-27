@@ -2,6 +2,7 @@ syntax = "proto3";
 
 package api.v1;
 
+import "api/v1/mcp_options.proto";
 import "google/protobuf/timestamp.proto";
 
 option go_package = "github.com/brendanjerwin/simple_wiki/gen/go/api/v1;apiv1";
@@ -20,15 +21,20 @@ service ChatService {
 
   // SendChatReply is called by the pool daemon when the agent uses the reply tool.
   // Accepts optional reply_to message ID for threading.
-  rpc SendChatReply(SendChatReplyRequest) returns (SendChatReplyResponse) {}
+  rpc SendChatReply(SendChatReplyRequest) returns (SendChatReplyResponse) {
+    option (api.v1.exclude_from_mcp) = true; // pool-daemon-only
+  }
 
   // EditChatMessage is called by the pool daemon when the agent uses the edit_message tool.
-  // Updates an existing message's content.
-  rpc EditChatMessage(EditChatMessageRequest) returns (EditChatMessageResponse) {}
+  rpc EditChatMessage(EditChatMessageRequest) returns (EditChatMessageResponse) {
+    option (api.v1.exclude_from_mcp) = true; // pool-daemon-only
+  }
 
   // ReactToMessage is called by the pool daemon when the agent uses the react tool.
   // Adds an emoji reaction to a message.
-  rpc ReactToMessage(ReactToMessageRequest) returns (ReactToMessageResponse) {}
+  rpc ReactToMessage(ReactToMessageRequest) returns (ReactToMessageResponse) {
+    option (api.v1.exclude_from_mcp) = true; // pool-daemon-only
+  }
 
   // ClearChat clears the visible chat history for a page.
   rpc ClearChat(ClearChatRequest) returns (ClearChatResponse) {}
@@ -47,16 +53,22 @@ service ChatService {
 
   // SendToolCallNotification is called by the pool daemon or ACP client
   // when the agent invokes a tool. The notification is broadcast to page subscribers.
-  rpc SendToolCallNotification(SendToolCallNotificationRequest) returns (SendToolCallNotificationResponse) {}
+  rpc SendToolCallNotification(SendToolCallNotificationRequest) returns (SendToolCallNotificationResponse) {
+    option (api.v1.exclude_from_mcp) = true; // pool-daemon-only
+  }
 
   // SendPlanNotification is called by the pool daemon or ACP client when the
   // agent reports or updates its execution plan. The plan is broadcast to page
   // subscribers so the UI can show live task progress.
-  rpc SendPlanNotification(SendPlanNotificationRequest) returns (SendPlanNotificationResponse) {}
+  rpc SendPlanNotification(SendPlanNotificationRequest) returns (SendPlanNotificationResponse) {
+    option (api.v1.exclude_from_mcp) = true; // pool-daemon-only
+  }
 
   // SendTurnStatus is called by the pool daemon when an agent turn starts and
   // completes, so the UI can show the Stop button for the whole turn.
-  rpc SendTurnStatus(SendTurnStatusRequest) returns (SendTurnStatusResponse) {}
+  rpc SendTurnStatus(SendTurnStatusRequest) returns (SendTurnStatusResponse) {
+    option (api.v1.exclude_from_mcp) = true; // pool-daemon-only
+  }
 
   // CancelAgentPrompt cancels an in-progress agent prompt for a page.
   // Called by the frontend "Stop" button.
@@ -65,9 +77,10 @@ service ChatService {
   // SubscribePageCancellations is called by the pool daemon per page.
   // Streams a signal when CancelAgentPrompt is called for that page.
   rpc SubscribePageCancellations(SubscribePageCancellationsRequest) returns (stream PageCancellation) {}
-
   // RespondToPermission is called by the frontend when the user responds to a permission request.
-  rpc RespondToPermission(RespondToPermissionRequest) returns (RespondToPermissionResponse) {}
+  rpc RespondToPermission(RespondToPermissionRequest) returns (RespondToPermissionResponse) {
+    option (api.v1.exclude_from_mcp) = true; // frontend-only
+  }
 
   // RequestPermissionFromUser is called by the pool daemon to forward a permission request
   // to the user via chat and block until the user responds.

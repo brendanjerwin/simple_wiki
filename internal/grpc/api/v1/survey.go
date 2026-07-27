@@ -59,10 +59,10 @@ func (s *Server) AddField(ctx context.Context, req *apiv1.AddSurveyFieldRequest)
 	if s.surveyMutator == nil {
 		return nil, errSurveyMutatorNotConfigured
 	}
-	if err := s.requireSurveyMutation(ctx, req.GetPage(), req.GetSurveyName()); err != nil {
+	if err := s.requireSurveyMutation(ctx, req.GetPage(), req.GetName()); err != nil {
 		return nil, err
 	}
-	survey, err := s.surveyMutator.AddField(ctx, req.GetPage(), req.GetSurveyName(), req.GetField(), timestampPtr(req.ExpectedUpdatedAt))
+	survey, err := s.surveyMutator.AddField(ctx, req.GetPage(), req.GetName(), req.GetField(), timestampPtr(req.ExpectedUpdatedAt))
 	if err != nil {
 		return nil, mapSurveyMutatorErr(err)
 	}
@@ -74,13 +74,13 @@ func (s *Server) UpdateField(ctx context.Context, req *apiv1.UpdateSurveyFieldRe
 	if s.surveyMutator == nil {
 		return nil, errSurveyMutatorNotConfigured
 	}
-	if err := s.requireSurveyMutation(ctx, req.GetPage(), req.GetSurveyName()); err != nil {
+	if err := s.requireSurveyMutation(ctx, req.GetPage(), req.GetName()); err != nil {
 		return nil, err
 	}
 	if req.GetFieldName() == "" {
 		return nil, status.Error(codes.InvalidArgument, "field_name is required")
 	}
-	survey, err := s.surveyMutator.UpdateField(ctx, req.GetPage(), req.GetSurveyName(), req.GetFieldName(), req.GetField(), timestampPtr(req.ExpectedUpdatedAt))
+	survey, err := s.surveyMutator.UpdateField(ctx, req.GetPage(), req.GetName(), req.GetFieldName(), req.GetField(), timestampPtr(req.ExpectedUpdatedAt))
 	if err != nil {
 		return nil, mapSurveyMutatorErr(err)
 	}
@@ -92,13 +92,13 @@ func (s *Server) RemoveField(ctx context.Context, req *apiv1.RemoveSurveyFieldRe
 	if s.surveyMutator == nil {
 		return nil, errSurveyMutatorNotConfigured
 	}
-	if err := s.requireSurveyMutation(ctx, req.GetPage(), req.GetSurveyName()); err != nil {
+	if err := s.requireSurveyMutation(ctx, req.GetPage(), req.GetName()); err != nil {
 		return nil, err
 	}
 	if req.GetFieldName() == "" {
 		return nil, status.Error(codes.InvalidArgument, "field_name is required")
 	}
-	survey, err := s.surveyMutator.RemoveField(ctx, req.GetPage(), req.GetSurveyName(), req.GetFieldName(), timestampPtr(req.ExpectedUpdatedAt))
+	survey, err := s.surveyMutator.RemoveField(ctx, req.GetPage(), req.GetName(), req.GetFieldName(), timestampPtr(req.ExpectedUpdatedAt))
 	if err != nil {
 		return nil, mapSurveyMutatorErr(err)
 	}
@@ -110,13 +110,13 @@ func (s *Server) ReorderField(ctx context.Context, req *apiv1.ReorderSurveyField
 	if s.surveyMutator == nil {
 		return nil, errSurveyMutatorNotConfigured
 	}
-	if err := s.requireSurveyMutation(ctx, req.GetPage(), req.GetSurveyName()); err != nil {
+	if err := s.requireSurveyMutation(ctx, req.GetPage(), req.GetName()); err != nil {
 		return nil, err
 	}
 	if req.GetFieldName() == "" {
 		return nil, status.Error(codes.InvalidArgument, "field_name is required")
 	}
-	survey, err := s.surveyMutator.ReorderField(ctx, req.GetPage(), req.GetSurveyName(), req.GetFieldName(), int(req.GetNewIndex()), timestampPtr(req.ExpectedUpdatedAt))
+	survey, err := s.surveyMutator.ReorderField(ctx, req.GetPage(), req.GetName(), req.GetFieldName(), int(req.GetNewIndex()), timestampPtr(req.ExpectedUpdatedAt))
 	if err != nil {
 		return nil, mapSurveyMutatorErr(err)
 	}
@@ -128,11 +128,11 @@ func (s *Server) SubmitResponse(ctx context.Context, req *apiv1.SubmitSurveyResp
 	if s.surveyMutator == nil {
 		return nil, errSurveyMutatorNotConfigured
 	}
-	if err := s.requireSurveyMutation(ctx, req.GetPage(), req.GetSurveyName()); err != nil {
+	if err := s.requireSurveyMutation(ctx, req.GetPage(), req.GetName()); err != nil {
 		return nil, err
 	}
 	identity := tailscale.IdentityFromContext(ctx)
-	survey, err := s.surveyMutator.SubmitResponse(ctx, req.GetPage(), req.GetSurveyName(), req.GetValues(), req.GetAnonymous(), identity)
+	survey, err := s.surveyMutator.SubmitResponse(ctx, req.GetPage(), req.GetName(), req.GetValues(), req.GetAnonymous(), identity)
 	if err != nil {
 		return nil, mapSurveyMutatorErr(err)
 	}
@@ -147,13 +147,13 @@ func (s *Server) ListResponses(ctx context.Context, req *apiv1.ListSurveyRespons
 	if req.GetPage() == "" {
 		return nil, status.Error(codes.InvalidArgument, errPageRequired)
 	}
-	if req.GetSurveyName() == "" {
+	if req.GetName() == "" {
 		return nil, status.Error(codes.InvalidArgument, "survey_name is required")
 	}
 	if authErr := requireAuthorized(ctx, s.pageReaderMutator, wikipage.PageIdentifier(req.GetPage())); authErr != nil {
 		return nil, authErr
 	}
-	responses, err := s.surveyMutator.ListResponses(ctx, req.GetPage(), req.GetSurveyName())
+	responses, err := s.surveyMutator.ListResponses(ctx, req.GetPage(), req.GetName())
 	if err != nil {
 		return nil, mapSurveyMutatorErr(err)
 	}
@@ -165,7 +165,7 @@ func (s *Server) DeleteResponse(ctx context.Context, req *apiv1.DeleteSurveyResp
 	if s.surveyMutator == nil {
 		return nil, errSurveyMutatorNotConfigured
 	}
-	if err := s.requireSurveyMutation(ctx, req.GetPage(), req.GetSurveyName()); err != nil {
+	if err := s.requireSurveyMutation(ctx, req.GetPage(), req.GetName()); err != nil {
 		return nil, err
 	}
 	var submittedAt *time.Time
@@ -173,7 +173,7 @@ func (s *Server) DeleteResponse(ctx context.Context, req *apiv1.DeleteSurveyResp
 		t := req.GetSubmittedAt().AsTime()
 		submittedAt = &t
 	}
-	survey, err := s.surveyMutator.DeleteResponse(ctx, req.GetPage(), req.GetSurveyName(), req.GetUser(), submittedAt, timestampPtr(req.ExpectedUpdatedAt))
+	survey, err := s.surveyMutator.DeleteResponse(ctx, req.GetPage(), req.GetName(), req.GetUser(), submittedAt, timestampPtr(req.ExpectedUpdatedAt))
 	if err != nil {
 		return nil, mapSurveyMutatorErr(err)
 	}

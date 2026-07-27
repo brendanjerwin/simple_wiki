@@ -100,7 +100,7 @@ var _ = Describe("wrapHandlerForOpenAISchema", func() {
 		When("the model sends OpenAI-shaped args with null for an unused oneof scalar (the case copilot raised on #1055)", func() {
 			// ReadPageRequest.page_identifier is the only oneof in this
 			// override; under the OpenAI schema both members are marked
-			// nullable, so a model selecting page_name will emit
+			// nullable, so a model selecting page will emit
 			// identifier: null and vice-versa.
 			var descriptor protoreflect.MessageDescriptor
 			var wrapped mcpserver.ToolHandlerFunc
@@ -114,7 +114,7 @@ var _ = Describe("wrapHandlerForOpenAISchema", func() {
 				req = mcp.CallToolRequest{}
 				req.Params.Name = "api_v1_PageManagementService_ReadPage"
 				req.Params.Arguments = map[string]any{
-					"page_name":  "foo",
+					"page":  "foo",
 					"identifier": nil,
 				}
 
@@ -130,7 +130,7 @@ var _ = Describe("wrapHandlerForOpenAISchema", func() {
 			})
 
 			It("should preserve the active oneof member", func() {
-				Expect(capturedArgs).To(HaveKeyWithValue("page_name", "foo"))
+				Expect(capturedArgs).To(HaveKeyWithValue("page", "foo"))
 			})
 		})
 
@@ -147,7 +147,7 @@ var _ = Describe("wrapHandlerForOpenAISchema", func() {
 				req = mcp.CallToolRequest{}
 				req.Params.Name = "api_v1_PageManagementService_ReadPage"
 				req.Params.Arguments = map[string]any{
-					"page_name": "foo",
+					"page": "foo",
 				}
 
 				_, resultErr = wrapped(context.Background(), req)
@@ -158,7 +158,7 @@ var _ = Describe("wrapHandlerForOpenAISchema", func() {
 			})
 
 			It("should pass the active oneof member through unchanged", func() {
-				Expect(capturedArgs).To(HaveKeyWithValue("page_name", "foo"))
+				Expect(capturedArgs).To(HaveKeyWithValue("page", "foo"))
 			})
 
 			It("should not invent extra keys", func() {

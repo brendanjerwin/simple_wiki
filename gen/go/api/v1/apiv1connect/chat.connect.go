@@ -114,7 +114,6 @@ type ChatServiceClient interface {
 	// Accepts optional reply_to message ID for threading.
 	SendChatReply(context.Context, *connect.Request[v1.SendChatReplyRequest]) (*connect.Response[v1.SendChatReplyResponse], error)
 	// EditChatMessage is called by the pool daemon when the agent uses the edit_message tool.
-	// Updates an existing message's content.
 	EditChatMessage(context.Context, *connect.Request[v1.EditChatMessageRequest]) (*connect.Response[v1.EditChatMessageResponse], error)
 	// ReactToMessage is called by the pool daemon when the agent uses the react tool.
 	// Adds an emoji reaction to a message.
@@ -374,7 +373,6 @@ type ChatServiceHandler interface {
 	// Accepts optional reply_to message ID for threading.
 	SendChatReply(context.Context, *connect.Request[v1.SendChatReplyRequest]) (*connect.Response[v1.SendChatReplyResponse], error)
 	// EditChatMessage is called by the pool daemon when the agent uses the edit_message tool.
-	// Updates an existing message's content.
 	EditChatMessage(context.Context, *connect.Request[v1.EditChatMessageRequest]) (*connect.Response[v1.EditChatMessageResponse], error)
 	// ReactToMessage is called by the pool daemon when the agent uses the react tool.
 	// Adds an emoji reaction to a message.
