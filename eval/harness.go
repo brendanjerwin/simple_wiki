@@ -29,6 +29,18 @@ var ModelPresets = []ModelConfig{
 		CompletionCostPer1M: 0.30,
 	},
 	{
+		ID:                  "xiaomi/mimo-v2.5",
+		Name:                "mimo-v2.5",
+		PromptCostPer1M:     0.14,
+		CompletionCostPer1M: 0.28,
+	},
+	{
+		ID:                  "xiaomi/mimo-v2.5-pro",
+		Name:                "mimo-v2.5-pro",
+		PromptCostPer1M:     0.435,
+		CompletionCostPer1M: 0.87,
+	},
+	{
 		ID:                  "anthropic/claude-3.5-sonnet",
 		Name:                "claude-3.5-sonnet",
 		PromptCostPer1M:     3.00,
@@ -269,9 +281,15 @@ func callOpenRouter(ctx context.Context, cfg Config, systemPrompt, userMessage s
 
 	maxTokens := cfg.MaxTokens
 	if maxTokens == 0 {
-		maxTokens = 1024
+		// Reasoning models (MiMo, etc.) consume tokens for chain-of-thought
+		// before producing the final answer. 1024 is too low — the model
+		// runs out of budget mid-reasoning and returns empty content.
+		maxTokens = 8192
 	}
 
+	// Per-case timeout: reasoning models (MiMo) can take 30-60s per call.
+	callCtx, callCancel := context.WithTimeout(ctx, 120*time.Second)
+	defer callCancel()
 	body := map[string]any{
 		"model": cfg.Model.ID,
 		"messages": []map[string]string{
@@ -286,7 +304,7 @@ func callOpenRouter(ctx context.Context, cfg Config, systemPrompt, userMessage s
 		return nil, fmt.Errorf("marshal request: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
+	req, err := http.NewRequestWithContext(callCtx, http.MethodPost,
 		"https://openrouter.ai/api/v1/chat/completions", bytes.NewReader(bodyBytes))
 	if err != nil {
 		return nil, fmt.Errorf("create request: %w", err)
