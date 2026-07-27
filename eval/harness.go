@@ -132,8 +132,12 @@ func runOneCase(ctx context.Context, c Case, cfg Config, configLabel string) (Ca
 		ExcludedTool: c.ExcludedTool,
 	}
 
-	// Build the user message: tool catalog + query
-	userMsg := buildUserMessage(cfg.Surface, c.Query)
+	// Build the user message: tool catalog + user message + context
+	userText := c.UserSays
+	if userText == "" {
+		userText = c.Query // legacy fallback
+	}
+	userMsg := buildUserMessage(cfg.Surface, userText, c.Context)
 
 	start := time.Now()
 	resp, err := callOpenRouter(ctx, cfg, cfg.Prompt.Prompt, userMsg)
@@ -181,8 +185,9 @@ func runOneCase(ctx context.Context, c Case, cfg Config, configLabel string) (Ca
 	return result, nil
 }
 
-// buildUserMessage assembles the tool catalog + user query into one message.
-func buildUserMessage(surface ToolSurface, query string) string {
+// buildUserMessage assembles the tool catalog + user message + page context
+// into the prompt the LLM sees.
+func buildUserMessage(surface ToolSurface, userSays string, context string) string {
 	// Compact the tool catalog: name + description only (drop inputSchema for now
 	// to keep token costs manageable; can be toggled on later).
 	tools := make([]map[string]string, len(surface.Tools))
@@ -193,13 +198,30 @@ func buildUserMessage(surface ToolSurface, query string) string {
 		}
 	}
 	catalog, _ := json.Marshal(tools)
-	return fmt.Sprintf(`Tool catalog:
+
+	var msg string
+	if context != "" {
+		msg = fmt.Sprintf(`Tool catalog:
+%s
+
+You are the assistant for the following wiki page:
+
+%s
+
+User message: %q
+
+Select the single best tool and respond as JSON: {"tool": "<name>", "args": {...}}
+If no tool is appropriate, respond: {"tool": null}`, string(catalog), context, userSays)
+	} else {
+		msg = fmt.Sprintf(`Tool catalog:
 %s
 
 User request: %q
 
 Select the single best tool and respond as JSON: {"tool": "<name>", "args": {...}}
-If no tool is appropriate, respond: {"tool": null}`, string(catalog), query)
+If no tool is appropriate, respond: {"tool": null}`, string(catalog), userSays)
+	}
+	return msg
 }
 
 // toolSelection is the parsed JSON response from the LLM.
