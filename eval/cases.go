@@ -998,8 +998,11 @@ var Cases = []Case{
 		ID:           "cov-page-update",
 		Query:        "Update both the frontmatter and the markdown body of 'meeting_notes' in a single write",
 		ExpectedTool: "api_v1_PageManagementService_UpdatePage",
-		Services:     []string{"PageManagementService"},
-		Tags:         []string{"page", "coverage", "disambiguation"},
+		// UpdateWholePage is also acceptable — the separate-fields vs combined-doc
+		// distinction is invisible at tool-selection time.
+		AcceptableTools: []string{"api_v1_PageManagementService_UpdateWholePage"},
+		Services:        []string{"PageManagementService"},
+		Tags:            []string{"page", "coverage", "disambiguation"},
 	},
 
 	// --- COVERAGE: SurveyService (remaining) ---
@@ -1119,8 +1122,11 @@ var Cases = []Case{
 		ID:           "cov2-pagemanagement-updatepage",
 		Query:        "Overwrite both the frontmatter and body of 'meeting_notes' in one RPC call",
 		ExpectedTool: "api_v1_PageManagementService_UpdatePage",
-		Services:     []string{"PageManagementService"},
-		Tags:         []string{"page", "coverage", "hard"},
+		// UpdateWholePage is also acceptable — the separate-fields vs combined-doc
+		// distinction is invisible at tool-selection time.
+		AcceptableTools: []string{"api_v1_PageManagementService_UpdateWholePage"},
+		Services:        []string{"PageManagementService"},
+		Tags:            []string{"page", "coverage", "hard"},
 	},
 	{
 		ID:           "cov2-frontmatter-removekeyatpath",
