@@ -35,12 +35,6 @@ var ModelPresets = []ModelConfig{
 		CompletionCostPer1M: 0.28,
 	},
 	{
-		ID:                  "xiaomi/mimo-v2.5-pro",
-		Name:                "mimo-v2.5-pro",
-		PromptCostPer1M:     0.435,
-		CompletionCostPer1M: 0.87,
-	},
-	{
 		ID:                  "anthropic/claude-3.5-sonnet",
 		Name:                "claude-3.5-sonnet",
 		PromptCostPer1M:     3.00,

@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"sort"
 	"strings"
 	"time"
 
@@ -190,6 +191,39 @@ func main() {
 		fmt.Printf("Tokens:          %d prompt + %d completion = %d total\n",
 			s.TotalPromptTokens, s.TotalCompletionTokens,
 			s.TotalPromptTokens+s.TotalCompletionTokens)
+
+		// Per-tool breakdown: failures first, sorted by accuracy ascending
+		if len(s.PerTool) > 0 {
+			fmt.Printf("\n=== Per-tool breakdown (failures first) ===\n")
+			type toolEntry struct {
+				Name  string
+				Score eval.ToolScore
+			}
+			entries := make([]toolEntry, 0, len(s.PerTool))
+			for name, ts := range s.PerTool {
+				entries = append(entries, toolEntry{name, ts})
+			}
+			sort.Slice(entries, func(i, j int) bool {
+				return entries[i].Score.Accuracy < entries[j].Score.Accuracy
+			})
+			fmt.Printf("%-55s %8s %8s %8s %s\n", "Tool", "Acc", "Correct", "Cases", "Misselected")
+			fmt.Println(strings.Repeat("-", 100))
+			for _, e := range entries {
+				misselect := ""
+				if e.Score.SelectedTool != "" {
+					misselect = "→ " + e.Score.SelectedTool
+				}
+				if e.Score.IsExclusion {
+					misselect = "(exclusion)"
+				}
+				status := "✓"
+				if e.Score.Accuracy < 1.0 {
+					status = "✗"
+				}
+				fmt.Printf("%s %-53s %7.1f%% %5d/%d  %s\n",
+					status, e.Name, e.Score.Accuracy*100, e.Score.Correct, e.Score.Cases, misselect)
+			}
+		}
 	}
 
 	// Write results file

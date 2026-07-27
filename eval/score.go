@@ -23,6 +23,16 @@ type ScoreSummary struct {
 	TotalPromptTokens     int                     `json:"total_prompt_tokens"`
 	TotalCompletionTokens int                     `json:"total_completion_tokens"`
 	PerService            map[string]ServiceScore `json:"per_service"`
+	PerTool               map[string]ToolScore    `json:"per_tool"`
+}
+
+// ToolScore is the breakdown for one expected tool.
+type ToolScore struct {
+	Cases        int     `json:"cases"`
+	Correct      int     `json:"correct"`
+	Accuracy     float64 `json:"accuracy"`
+	SelectedTool string  `json:"selected_tool,omitempty"` // what the model picked (for failures)
+	IsExclusion  bool    `json:"is_exclusion,omitempty"`
 }
 
 // ServiceScore is the breakdown for one service.
@@ -41,6 +51,7 @@ func Score(results []CaseResult, cfg Config, cases []Case) ScoreSummary {
 		PromptName:   cfg.Prompt.Name,
 		CaseCount:    len(results),
 		PerService:   make(map[string]ServiceScore),
+		PerTool:      make(map[string]ToolScore),
 	}
 
 	caseByID := make(map[string]Case, len(cases))
@@ -68,7 +79,6 @@ func Score(results []CaseResult, cfg Config, cases []Case) ScoreSummary {
 		s.TotalCostUSD += r.CostUSD
 		s.TotalPromptTokens += r.PromptTokens
 		s.TotalCompletionTokens += r.CompletionTokens
-
 		// Per-service breakdown
 		if c, ok := caseByID[r.CaseID]; ok {
 			for _, svc := range c.Services {
@@ -82,6 +92,27 @@ func Score(results []CaseResult, cfg Config, cases []Case) ScoreSummary {
 				}
 				s.PerService[svc] = ss
 			}
+		}
+
+		// Per-tool breakdown (keyed by expected tool, or excluded tool for exclusion cases)
+		toolKey := r.ExpectedTool
+		if toolKey == "" && r.ExcludedTool != "" {
+			toolKey = r.ExcludedTool
+		}
+		if toolKey != "" {
+			ts := s.PerTool[toolKey]
+			ts.Cases++
+			if r.ToolMatch || (r.ExcludedTool != "" && r.ExclusionOK) {
+				ts.Correct++
+			}
+			if !r.ToolMatch && r.SelectedTool != "" {
+				ts.SelectedTool = r.SelectedTool // capture what the model picked instead
+			}
+			ts.IsExclusion = r.ExcludedTool != ""
+			if ts.Cases > 0 {
+				ts.Accuracy = float64(ts.Correct) / float64(ts.Cases)
+			}
+			s.PerTool[toolKey] = ts
 		}
 	}
 
