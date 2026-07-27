@@ -14,27 +14,78 @@ option go_package = "github.com/brendanjerwin/simple_wiki/gen/go/api/v1;apiv1";
 // not clobbered by stale read/replace cycles. Use this service for survey
 // configuration and user response writes.
 service SurveyService {
+  option (api.v1.service_description) =
+      "Owns the wiki.surveys.<name> frontmatter namespace: survey "
+      "configuration (question + fields) and user response writes. Generic "
+      "Frontmatter writes to wiki.* are rejected so response arrays are not "
+      "clobbered by stale read/replace cycles. Use this service for all "
+      "survey configuration and response writes.";
+
   rpc GetSurvey(GetSurveyRequest) returns (GetSurveyResponse) {
+    option (api.v1.description) =
+        "Read a survey's configuration (question, fields, closed flag) and "
+        "its responses. Does not include response values in the summary "
+        "form — use ListResponses for raw response data.";
     option (api.v1.read_only) = true;
   }
 
-  rpc UpsertSurvey(UpsertSurveyRequest) returns (UpsertSurveyResponse);
+  rpc UpsertSurvey(UpsertSurveyRequest) returns (UpsertSurveyResponse) {
+    option (api.v1.description) =
+        "Create or replace a survey's question and closed flag on a page. "
+        "Does not touch fields or responses — use AddField/UpdateField/"
+        "RemoveField for field edits and SubmitResponse/DeleteResponse for "
+        "response writes. Pass expected_updated_at for optimistic "
+        "concurrency.";
+  }
 
-  rpc AddField(AddSurveyFieldRequest) returns (AddSurveyFieldResponse);
+  rpc AddField(AddSurveyFieldRequest) returns (AddSurveyFieldResponse) {
+    option (api.v1.description) =
+        "Append a new SurveyField (name, type, label, options, required, "
+        "min/max) to an existing survey. Field names must be unique within "
+        "the survey.";
+  }
 
-  rpc UpdateField(UpdateSurveyFieldRequest) returns (UpdateSurveyFieldResponse);
+  rpc UpdateField(UpdateSurveyFieldRequest) returns (UpdateSurveyFieldResponse) {
+    option (api.v1.description) =
+        "Replace an existing SurveyField identified by field_name. The "
+        "field's name can be changed by setting a new name in the supplied "
+        "field. Pass expected_updated_at for optimistic concurrency.";
+  }
 
-  rpc RemoveField(RemoveSurveyFieldRequest) returns (RemoveSurveyFieldResponse);
+  rpc RemoveField(RemoveSurveyFieldRequest) returns (RemoveSurveyFieldResponse) {
+    option (api.v1.description) =
+        "Remove a SurveyField by name from a survey. Existing responses "
+        "that supplied a value for the removed field are left as-is. Pass "
+        "expected_updated_at for optimistic concurrency.";
+  }
 
-  rpc ReorderField(ReorderSurveyFieldRequest) returns (ReorderSurveyFieldResponse);
+  rpc ReorderField(ReorderSurveyFieldRequest) returns (ReorderSurveyFieldResponse) {
+    option (api.v1.description) =
+        "Move a SurveyField to new_index (zero-based) within the fields "
+        "array. Other fields shift to fill the gap. Pass "
+        "expected_updated_at for optimistic concurrency.";
+  }
 
-  rpc SubmitResponse(SubmitSurveyResponseRequest) returns (SubmitSurveyResponseResponse);
+  rpc SubmitResponse(SubmitSurveyResponseRequest) returns (SubmitSurveyResponseResponse) {
+    option (api.v1.description) =
+        "Submit one response to a survey. values is a Struct keyed by "
+        "field name. Set anonymous=true to omit the caller's identity from "
+        "the stored response. Has no effect on a closed survey.";
+  }
 
   rpc ListResponses(ListSurveyResponsesRequest) returns (ListSurveyResponsesResponse) {
+    option (api.v1.description) =
+        "List all responses submitted to a survey, each with user, "
+        "anonymous flag, submitted_at, and the Struct of field values.";
     option (api.v1.read_only) = true;
   }
 
-  rpc DeleteResponse(DeleteSurveyResponseRequest) returns (DeleteSurveyResponseResponse);
+  rpc DeleteResponse(DeleteSurveyResponseRequest) returns (DeleteSurveyResponseResponse) {
+    option (api.v1.description) =
+        "Delete one response identified by user + submitted_at. Pass "
+        "expected_updated_at for optimistic concurrency. Use to retract a "
+        "response on a user's behalf.";
+  }
 }
 
 message Survey {

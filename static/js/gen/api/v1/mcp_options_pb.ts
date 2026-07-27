@@ -11,7 +11,7 @@ import { file_google_protobuf_descriptor } from "@bufbuild/protobuf/wkt";
  * Describes the file api/v1/mcp_options.proto.
  */
 export const file_api_v1_mcp_options: GenFile = /*@__PURE__*/
-  fileDesc("ChhhcGkvdjEvbWNwX29wdGlvbnMucHJvdG8SBmFwaS52MTpCCgtkZXNjcmlwdGlvbhIeLmdvb2dsZS5wcm90b2J1Zi5NZXRob2RPcHRpb25zGNGGAyABKAlSC2Rlc2NyaXB0aW9uOkkKD2V4YW1wbGVfcmVxdWVzdBIeLmdvb2dsZS5wcm90b2J1Zi5NZXRob2RPcHRpb25zGNKGAyABKAlSDmV4YW1wbGVSZXF1ZXN0Oj0KCXJlYWRfb25seRIeLmdvb2dsZS5wcm90b2J1Zi5NZXRob2RPcHRpb25zGNOGAyABKAhSCHJlYWRPbmx5OkMKDGxvbmdfcnVubmluZxIeLmdvb2dsZS5wcm90b2J1Zi5NZXRob2RPcHRpb25zGNSGAyABKAhSC2xvbmdSdW5uaW5nOlIKE3NlcnZpY2VfZGVzY3JpcHRpb24SHy5nb29nbGUucHJvdG9idWYuU2VydmljZU9wdGlvbnMY1YYDIAEoCVISc2VydmljZURlc2NyaXB0aW9uQjpaOGdpdGh1Yi5jb20vYnJlbmRhbmplcndpbi9zaW1wbGVfd2lraS9nZW4vZ28vYXBpL3YxO2FwaXYxYgZwcm90bzM", [file_google_protobuf_descriptor]);
+  fileDesc("ChhhcGkvdjEvbWNwX29wdGlvbnMucHJvdG8SBmFwaS52MTpCCgtkZXNjcmlwdGlvbhIeLmdvb2dsZS5wcm90b2J1Zi5NZXRob2RPcHRpb25zGNGGAyABKAlSC2Rlc2NyaXB0aW9uOkkKD2V4YW1wbGVfcmVxdWVzdBIeLmdvb2dsZS5wcm90b2J1Zi5NZXRob2RPcHRpb25zGNKGAyABKAlSDmV4YW1wbGVSZXF1ZXN0Oj0KCXJlYWRfb25seRIeLmdvb2dsZS5wcm90b2J1Zi5NZXRob2RPcHRpb25zGNOGAyABKAhSCHJlYWRPbmx5OkMKDGxvbmdfcnVubmluZxIeLmdvb2dsZS5wcm90b2J1Zi5NZXRob2RPcHRpb25zGNSGAyABKAhSC2xvbmdSdW5uaW5nOkoKEGV4Y2x1ZGVfZnJvbV9tY3ASHi5nb29nbGUucHJvdG9idWYuTWV0aG9kT3B0aW9ucxjWhgMgASgIUg5leGNsdWRlRnJvbU1jcDpSChNzZXJ2aWNlX2Rlc2NyaXB0aW9uEh8uZ29vZ2xlLnByb3RvYnVmLlNlcnZpY2VPcHRpb25zGNWGAyABKAlSEnNlcnZpY2VEZXNjcmlwdGlvbkI6WjhnaXRodWIuY29tL2JyZW5kYW5qZXJ3aW4vc2ltcGxlX3dpa2kvZ2VuL2dvL2FwaS92MTthcGl2MWIGcHJvdG8z", [file_google_protobuf_descriptor]);
 
 /**
  * Human-readable description of the MCP tool. Replaces the proto comment when
@@ -51,11 +51,23 @@ export const long_running: GenExtension<MethodOptions, boolean> = /*@__PURE__*/
   extDesc(file_api_v1_mcp_options, 3);
 
 /**
+ * Exclude this RPC from the MCP tool surface. The mcpdocs decorator removes
+ * the generated tool at runtime so LLM clients never see it. Use for RPCs
+ * that are only meaningful to internal callers (pool daemon, frontend) and
+ * would mislead an agent if advertised. The RPC remains available on the
+ * gRPC and Connect surfaces.
+ *
+ * @generated from extension: bool exclude_from_mcp = 50006;
+ */
+export const exclude_from_mcp: GenExtension<MethodOptions, boolean> = /*@__PURE__*/
+  extDesc(file_api_v1_mcp_options, 4);
+
+/**
  * Human-readable description of the MCP service. Surfaced as part of any
  * service-level catalog or summary the runtime emits.
  *
  * @generated from extension: string service_description = 50005;
  */
 export const service_description: GenExtension<ServiceOptions, string> = /*@__PURE__*/
-  extDesc(file_api_v1_mcp_options, 4);
+  extDesc(file_api_v1_mcp_options, 5);
 

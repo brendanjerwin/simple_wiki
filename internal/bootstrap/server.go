@@ -383,7 +383,7 @@ func createMultiplexedHandler(
 		return nil, nil, fmt.Errorf("failed to create vanguard transcoder: %w", err)
 	}
 
-	mcpHandler, err := wikimcp.NewStreamableHTTPHandler(grpcAPIServer, commit)
+	mcpHandler, serviceDescriptions, err := wikimcp.NewStreamableHTTPHandler(grpcAPIServer, commit)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create MCP handler: %w", err)
 	}
@@ -407,6 +407,7 @@ func createMultiplexedHandler(
 	// authorization beyond identity injection. If Tailscale identity enforcement
 	// is added to gRPC handlers in the future, it should also be applied here.
 	outerMux.Handle("/mcp", mcpHandler)
+	outerMux.Handle("/mcp/catalog", wikimcp.NewServiceCatalogHandler(serviceDescriptions))
 	outerMux.Handle("/", transcoder)
 
 	return outerMux, metricsCleanup, nil
