@@ -23,10 +23,10 @@ function getWikiClient(wikiUrl: string): Client<typeof PageManagementService> {
 
 export async function readPage(
   wikiUrl: string,
-  pageName: string
+  page: string
 ): Promise<{ contentMarkdown: string; versionHash: string }> {
   const client = getWikiClient(wikiUrl);
-  const request = create(ReadPageRequestSchema, { pageIdentifier: { case: "pageName", value: pageName } });
+  const request = create(ReadPageRequestSchema, { pageSelector: { case: "page", value: page } });
   const response = await client.readPage(request);
   return {
     contentMarkdown: response.contentMarkdown,
@@ -36,13 +36,13 @@ export async function readPage(
 
 export async function updatePageContent(
   wikiUrl: string,
-  pageName: string,
+  page: string,
   newContentMarkdown: string,
   expectedVersionHash: string
 ): Promise<void> {
   const client = getWikiClient(wikiUrl);
   const request = create(UpdatePageContentRequestSchema, {
-    pageName,
+    page,
     newContentMarkdown,
     expectedVersionHash,
   });
@@ -51,12 +51,12 @@ export async function updatePageContent(
 
 export async function createPage(
   wikiUrl: string,
-  pageName: string,
+  page: string,
   contentMarkdown: string
 ): Promise<void> {
   const client = getWikiClient(wikiUrl);
   const request = create(CreatePageRequestSchema, {
-    pageName,
+    page,
     contentMarkdown,
   });
   await client.createPage(request);
