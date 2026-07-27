@@ -63,7 +63,15 @@ func Score(results []CaseResult, cfg Config, cases []Case) ScoreSummary {
 	argsCount := 0
 
 	for _, r := range results {
-		if r.ToolMatch {
+		// For exclusion cases: avoiding the excluded tool counts as a hit.
+		// The model can't "decline" in a meaningful way when there are 105
+		// tools — picking a plausible non-excluded alternative is the right
+		// behavior, not a failure.
+		isHit := r.ToolMatch
+		if r.ExcludedTool != "" && r.ExclusionOK && !r.ToolMatch {
+			isHit = true
+		}
+		if isHit {
 			s.ToolMatchCount++
 		}
 		if r.ExcludedTool != "" {
@@ -84,7 +92,7 @@ func Score(results []CaseResult, cfg Config, cases []Case) ScoreSummary {
 			for _, svc := range c.Services {
 				ss := s.PerService[svc]
 				ss.Cases++
-				if r.ToolMatch {
+				if r.ToolMatch || (r.ExcludedTool != "" && r.ExclusionOK) {
 					ss.Correct++
 				}
 				if ss.Cases > 0 {

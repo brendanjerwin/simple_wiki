@@ -46,25 +46,35 @@ service PageManagementService {
   // UpdatePage — see (api.v1.description).
   rpc UpdatePage(UpdatePageRequest) returns (UpdatePageResponse) {
     option (api.v1.description) =
-        "Replace both the markdown content and TOML frontmatter of an "
-        "existing page in a single write.";
+        "Update both frontmatter AND body when you have them as SEPARATE "
+        "fields (new_content_markdown + new_front_matter_toml). Use this "
+        "when you must change both at once and have them as distinct values. "
+        "Prefer UpdatePageContent for body-only edits — it leaves frontmatter "
+        "intact and supports optimistic concurrency.";
   }
 
   // UpdatePageContent — see (api.v1.description).
   rpc UpdatePageContent(UpdatePageContentRequest) returns (UpdatePageContentResponse) {
     option (api.v1.description) =
-        "Update only the markdown body of a page, leaving frontmatter "
-        "intact. Supports optimistic concurrency via expected_version_hash "
-        "and find-and-replace semantics via old_content_markdown (only the "
-        "first occurrence is replaced; missing matches return NOT_FOUND).";
+        "SURGICAL EDIT: update only the markdown body of a page, leaving "
+        "frontmatter intact. This is the PREFERRED tool for body edits on "
+        "large pages — it avoids re-sending the entire page and supports "
+        "optimistic concurrency via expected_version_hash. Also supports "
+        "find-and-replace semantics via old_content_markdown (only the first "
+        "occurrence is replaced; missing matches return NOT_FOUND). For "
+        "reading a specific section before editing, use ReadPageOutline + "
+        "ReadPageSection to avoid loading the full page body.";
   }
 
   // UpdateWholePage — see (api.v1.description).
   rpc UpdateWholePage(UpdateWholePageRequest) returns (UpdateWholePageResponse) {
     option (api.v1.description) =
-        "Replace a page using a single markdown document that includes its "
-        "frontmatter delimiters. Frontmatter and body are split on the "
-        "server.";
+        "LAST RESORT: replace a page using a single markdown document that "
+        "includes its frontmatter delimiters (+++...+++). Frontmatter and "
+        "body are split on the server. Avoid this on large pages — it "
+        "re-sends the entire document and risks clobbering concurrent edits. "
+        "Prefer UpdatePageContent for body-only edits or UpdatePage when you "
+        "must change both frontmatter and body.";
   }
 
   // DeletePage — see (api.v1.description).

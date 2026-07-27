@@ -17,6 +17,11 @@ type ModelConfig struct {
 	Name                string  `json:"name"`                   // short display name, e.g. "claude-3.5-sonnet"
 	PromptCostPer1M     float64 `json:"prompt_cost_per_1m"`     // USD per 1M prompt tokens
 	CompletionCostPer1M float64 `json:"completion_cost_per_1m"` // USD per 1M completion tokens
+	// ReasoningEffort controls the reasoning effort for models that support it
+	// (MiMo, GPT-5, Claude Opus 5, etc.). Values: "low", "medium", "high", "max".
+	// Empty = don't send the param (use the model's default). "low" dramatically
+	// reduces latency and token usage for reasoning models.
+	ReasoningEffort string `json:"reasoning_effort,omitempty"`
 }
 
 // ModelPresets is the catalog of models the harness can use. Costs are
@@ -33,6 +38,7 @@ var ModelPresets = []ModelConfig{
 		Name:                "mimo-v2.5",
 		PromptCostPer1M:     0.14,
 		CompletionCostPer1M: 0.28,
+		ReasoningEffort:     "low", // low effort = ~3s/call instead of ~30s
 	},
 	{
 		ID:                  "anthropic/claude-3.5-sonnet",
@@ -148,6 +154,14 @@ func runOneCase(ctx context.Context, c Case, cfg Config, configLabel string) (Ca
 
 	// Score
 	result.ToolMatch = parsed.Tool == c.ExpectedTool
+	if !result.ToolMatch && len(c.AcceptableTools) > 0 {
+		for _, acceptable := range c.AcceptableTools {
+			if parsed.Tool == acceptable {
+				result.ToolMatch = true
+				break
+			}
+		}
+	}
 
 	if c.ExcludedTool != "" {
 		result.ExclusionOK = parsed.Tool != c.ExcludedTool
@@ -292,6 +306,9 @@ func callOpenRouter(ctx context.Context, cfg Config, systemPrompt, userMessage s
 		},
 		"temperature": 0,
 		"max_tokens":  maxTokens,
+	}
+	if cfg.Model.ReasoningEffort != "" {
+		body["reasoning"] = map[string]string{"effort": cfg.Model.ReasoningEffort}
 	}
 	bodyBytes, err := json.Marshal(body)
 	if err != nil {

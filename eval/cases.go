@@ -3,10 +3,14 @@ package eval
 // Case is one evaluation scenario: a natural-language user request and the
 // expected tool selection.
 type Case struct {
-	ID           string         `json:"id"`
-	Query        string         `json:"query"`
-	ExpectedTool string         `json:"expected_tool"`
-	ExpectedArgs map[string]any `json:"expected_args,omitempty"`
+	ID           string `json:"id"`
+	Query        string `json:"query"`
+	ExpectedTool string `json:"expected_tool"`
+	// AcceptableTools lists additional tool names that count as correct for
+	// this case (besides ExpectedTool). Use when the distinction between two
+	// tools is an API ergonomics choice invisible at tool-selection time.
+	AcceptableTools []string       `json:"acceptable_tools,omitempty"`
+	ExpectedArgs    map[string]any `json:"expected_args,omitempty"`
 	// ExcludedTool is set for exclusion cases: a tool that must NOT be selected.
 	// When set, ExpectedTool may be empty (meaning "select nothing / decline").
 	ExcludedTool string   `json:"excluded_tool,omitempty"`
@@ -1686,5 +1690,95 @@ var Cases = []Case{
 		ExcludedTool: "api_v1_ScheduledTurnService_CompleteScheduledTurn",
 		Services:     []string{"ScheduledTurnService"},
 		Tags:         []string{"exclusion", "coverage", "hard"},
+	},
+
+	// --- SURGICAL EDITING: large-page scenarios (prefer surgical over blunt) ---
+	{
+		ID:           "surgical-fix-typo",
+		Query:        "Fix a typo in the 'Budget' section of the 'roadmap' page — change 'budgit' to 'budget'",
+		ExpectedTool: "api_v1_PageManagementService_UpdatePageContent",
+		Services:     []string{"PageManagementService"},
+		Tags:         []string{"surgical", "page", "hard", "large-pages"},
+	},
+	{
+		ID:           "surgical-add-paragraph",
+		Query:        "Add a new paragraph at the end of the 'meeting_notes' page body without touching the frontmatter",
+		ExpectedTool: "api_v1_PageManagementService_UpdatePageContent",
+		Services:     []string{"PageManagementService"},
+		Tags:         []string{"surgical", "page", "hard"},
+	},
+	{
+		ID:           "surgical-find-replace",
+		Query:        "Replace the old project name 'ProjectX' with 'ProjectAlpha' everywhere it appears in the 'roadmap' page body",
+		ExpectedTool: "api_v1_PageManagementService_UpdatePageContent",
+		Services:     []string{"PageManagementService"},
+		Tags:         []string{"surgical", "page", "hard"},
+	},
+	{
+		ID:           "surgical-read-section-then-edit",
+		Query:        "I need to read just the 'Q3 Milestones' section of the large 'roadmap' page before I edit it",
+		ExpectedTool: "api_v1_PageManagementService_ReadPageSection",
+		Services:     []string{"PageManagementService"},
+		Tags:         []string{"surgical", "page", "hard", "large-pages"},
+	},
+	{
+		ID:           "surgical-read-outline-first",
+		Query:        "Give me the table of contents for the 'roadmap' page — it's 200KB and I don't want to load the whole thing",
+		ExpectedTool: "api_v1_PageManagementService_ReadPageOutline",
+		Services:     []string{"PageManagementService"},
+		Tags:         []string{"surgical", "page", "hard", "large-pages"},
+	},
+	{
+		ID:           "surgical-update-frontmatter-only",
+		Query:        "Change the 'status' field in the frontmatter of 'roadmap' from 'draft' to 'published' — don't touch the body",
+		ExpectedTool: "api_v1_Frontmatter_MergeFrontmatter",
+		Services:     []string{"Frontmatter", "PageManagementService"},
+		Tags:         []string{"surgical", "frontmatter", "hard", "disambiguation"},
+	},
+	{
+		ID:           "surgical-both-fm-and-body",
+		Query:        "I have the new frontmatter TOML and the new markdown body as separate pieces — update both on the 'roadmap' page in one atomic write",
+		ExpectedTool: "api_v1_PageManagementService_UpdatePage",
+		// UpdateWholePage is also acceptable — the distinction between
+		// UpdatePage (separate fields) and UpdateWholePage (combined doc)
+		// is an API ergonomics choice invisible at tool-selection time.
+		AcceptableTools: []string{"api_v1_PageManagementService_UpdateWholePage"},
+		Services:        []string{"PageManagementService"},
+		Tags:            []string{"surgical", "page", "hard", "disambiguation"},
+	},
+	{
+		ID:           "surgical-avoid-wholepage-body-only",
+		Query:        "Rewrite the entire body of the 'roadmap' page but keep all the frontmatter exactly as it is",
+		ExpectedTool: "api_v1_PageManagementService_UpdatePageContent",
+		Services:     []string{"PageManagementService"},
+		Tags:         []string{"surgical", "page", "hard", "disambiguation"},
+	},
+	{
+		ID:           "surgical-clear-body-keep-fm",
+		Query:        "Wipe the markdown body of 'old_notes' clean but preserve its frontmatter tags and identifier",
+		ExpectedTool: "api_v1_PageManagementService_ClearPageContent",
+		Services:     []string{"PageManagementService"},
+		Tags:         []string{"surgical", "page", "hard", "disambiguation"},
+	},
+	{
+		ID:           "surgical-wholepage-import",
+		Query:        "I have a complete markdown file with frontmatter delimiters that I want to write to the 'imported_page' page as-is",
+		ExpectedTool: "api_v1_PageManagementService_UpdateWholePage",
+		Services:     []string{"PageManagementService"},
+		Tags:         []string{"surgical", "page", "hard", "disambiguation"},
+	},
+	{
+		ID:           "surgical-remove-key-from-fm",
+		Query:        "Delete the 'deprecated_tag' key from the frontmatter of 'config_page' without touching the body",
+		ExpectedTool: "api_v1_Frontmatter_RemoveKeyAtPath",
+		Services:     []string{"Frontmatter", "PageManagementService"},
+		Tags:         []string{"surgical", "frontmatter", "hard"},
+	},
+	{
+		ID:           "surgical-replace-fm-only",
+		Query:        "Replace the entire frontmatter of 'config_page' with a new set of metadata — leave the body untouched",
+		ExpectedTool: "api_v1_Frontmatter_ReplaceFrontmatter",
+		Services:     []string{"Frontmatter", "PageManagementService"},
+		Tags:         []string{"surgical", "frontmatter", "hard", "disambiguation"},
 	},
 }
