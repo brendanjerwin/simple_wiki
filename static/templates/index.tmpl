@@ -135,7 +135,7 @@
                             <strong>⚠ Warning: the following pages could not be loaded:</strong>
                             <ul>
                             {{ range .DirectoryErrors }}
-                                <li>{{ .PageName }}: {{ .Err }}</li>
+                                <li>{{ .Page }}: {{ .Err }}</li>
                             {{ end }}
                             </ul>
                         </div>
@@ -162,7 +162,7 @@
                           {{ end }}
                           {{ range .DirectoryErrors }}
                           <tr class="directory-error-row">
-                            <td colspan="3">⚠ <strong>{{ .PageName }}</strong> — could not be loaded: {{ .Err }}</td>
+                            <td colspan="3">⚠ <strong>{{ .Page }}</strong> — could not be loaded: {{ .Err }}</td>
                           </tr>
                           {{ end }}
                         </table>

@@ -433,7 +433,7 @@ func (s *Site) InitializeIndexing() error {
 		return fmt.Errorf("failed to list pages for indexing: %w", err)
 	}
 	for _, re := range listing.ReadErrors {
-		s.Logger.Error("Skipping page %q from indexing due to read error: %v", re.PageName, re.Err)
+		s.Logger.Error("Skipping page %q from indexing due to read error: %v", re.Page, re.Err)
 	}
 	if len(listing.Entries) == 0 {
 		s.Logger.Info("No pages found to index.")
@@ -664,7 +664,7 @@ func (DirectoryEntry) Sys() any {
 
 // PageReadError records a page identifier and the error encountered when reading that page during directory listing.
 type PageReadError struct {
-	PageName string
+	Page string
 	Err      error
 }
 
@@ -693,7 +693,7 @@ func (s *Site) DirectoryList() (DirectoryListing, error) {
 			p, err := s.ReadPage(wikipage.PageIdentifier(name))
 			if err != nil {
 				s.Logger.Error("Failed to read page %q for directory listing: %v", name, err)
-				readErrors = append(readErrors, PageReadError{PageName: name, Err: err})
+				readErrors = append(readErrors, PageReadError{Page: name, Err: err})
 				continue
 			}
 

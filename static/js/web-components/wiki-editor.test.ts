@@ -346,10 +346,10 @@ describe('WikiEditor', () => {
 
         it('should pass the correct page name and content', () => {
           const callArgs = updateStub.firstCall.args[0] as {
-            pageName: string;
+            page: string;
             newWholeMarkdown: string;
           };
-          expect(callArgs.pageName).to.equal('test-page');
+          expect(callArgs.page).to.equal('test-page');
           expect(callArgs.newWholeMarkdown).to.equal('# Hello World');
         });
 

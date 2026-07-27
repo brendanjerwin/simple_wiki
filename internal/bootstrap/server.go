@@ -609,7 +609,7 @@ func (a *historySearcherAdapter) SearchPageHistory(identifier wikipage.PageIdent
 	adapted := make([]grpcapi.HistorySearchResult, len(results))
 	for i, r := range results {
 		adapted[i] = grpcapi.HistorySearchResult{
-			PageName: r.PageName,
+			Page: r.Page,
 			Version: grpcapi.PageVersionMetadata{
 				VersionID: r.Version.VersionID,
 				CreatedAt: r.Version.CreatedAt,
@@ -628,7 +628,7 @@ func (a *historySearcherAdapter) SearchPageHistory(identifier wikipage.PageIdent
 func (a *historySearcherAdapter) SearchHistory(filter grpcapi.HistorySearchFilter) ([]grpcapi.HistorySearchResult, error) {
 	results, err := a.index.SearchHistory(historyindex.HistorySearchFilter{
 		Query:          filter.Query,
-		PageNameFilter: filter.PageNameFilter,
+		PageFilter: filter.PageFilter,
 		AuthorFilter:   filter.AuthorFilter,
 		From:           filter.From,
 		To:             filter.To,
@@ -639,7 +639,7 @@ func (a *historySearcherAdapter) SearchHistory(filter grpcapi.HistorySearchFilte
 	adapted := make([]grpcapi.HistorySearchResult, len(results))
 	for i, r := range results {
 		adapted[i] = grpcapi.HistorySearchResult{
-			PageName: r.PageName,
+			Page: r.Page,
 			Version: grpcapi.PageVersionMetadata{
 				VersionID: r.Version.VersionID,
 				CreatedAt: r.Version.CreatedAt,

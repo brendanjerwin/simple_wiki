@@ -36,7 +36,7 @@ var _ = Describe("Search", func() {
 			results, err := idx.SearchPageHistory("page-a", "fox")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(results).To(HaveLen(1))
-			Expect(results[0].PageName).To(Equal("page-a"))
+			Expect(results[0].Page).To(Equal("page-a"))
 			Expect(results[0].Version.VersionID).To(Equal("a1"))
 			Expect(results[0].Snippet).NotTo(BeEmpty())
 		})
@@ -52,14 +52,14 @@ var _ = Describe("Search", func() {
 			Expect(ids).To(ContainElements("a1", "b1"))
 		})
 
-		It("filters by page_name_filter", func() {
+		It("filters by page_filter", func() {
 			results, err := idx.SearchHistory(history.HistorySearchFilter{
 				Query:          "fox",
-				PageNameFilter: "page-a",
+				PageFilter: "page-a",
 			})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(results).To(HaveLen(1))
-			Expect(results[0].PageName).To(Equal("page-a"))
+			Expect(results[0].Page).To(Equal("page-a"))
 		})
 
 		It("filters by author_filter", func() {
@@ -88,13 +88,13 @@ var _ = Describe("Search", func() {
 		It("returns HistorySearchResult fields", func() {
 			results, err := idx.SearchHistory(history.HistorySearchFilter{
 				Query:          "fox",
-				PageNameFilter: "page-a",
+				PageFilter: "page-a",
 			})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(results).To(HaveLen(1))
 
 			result := results[0]
-			Expect(result.PageName).To(Equal("page-a"))
+			Expect(result.Page).To(Equal("page-a"))
 			Expect(result.Version.VersionID).To(Equal("a1"))
 			Expect(result.Version.Author).To(Equal("alice"))
 			Expect(result.Snippet).NotTo(BeEmpty())

@@ -233,11 +233,11 @@ var readPageAnthropicInputSchema = json.RawMessage(`{
   "minProperties": 1,
   "properties": {
     "identifier": {
-      "description": "Page identifier. Set either identifier or page_name, not both.",
+      "description": "Page identifier. Set either identifier or page, not both.",
       "type": "string"
     },
-    "page_name": {
-      "description": "Page name. Set either page_name or identifier, not both.",
+    "page": {
+      "description": "Page. Set either page or identifier, not both.",
       "type": "string"
     }
   },
@@ -260,12 +260,12 @@ var readPageSectionAnthropicInputSchema = json.RawMessage(`{
       "description": "Optional version_hash from ReadPageOutline; omit when no pre-check is needed.",
       "type": "string"
     },
-    "page_name": {
-      "description": "Page name to read.",
+    "page": {
+      "description": "Page to read.",
       "type": "string"
     }
   },
-  "required": ["page_name", "byte_offset", "byte_length"],
+  "required": ["page", "byte_offset", "byte_length"],
   "type": "object"
 }`)
 

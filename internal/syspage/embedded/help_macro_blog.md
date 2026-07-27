@@ -99,7 +99,7 @@ Use `api_v1_PageManagementService_CreatePage` with blog frontmatter, e.g.:
 
 ```json
 {
-  "page_name": "my-blog-2026-03-15-hello-world",
+  "page": "my-blog-2026-03-15-hello-world",
   "frontmatter_json": "{\"title\":\"Hello World\",\"blog\":{\"identifier\":\"my-blog\",\"published-date\":\"2026-03-15\"}}",
   "content_markdown": "This is my first blog post!"
 }
@@ -127,7 +127,7 @@ Use `api_v1_Frontmatter_MergeFrontmatter`:
 
 ```json
 {
-  "page_name": "my-blog-2026-03-15-hello-world",
+  "page": "my-blog-2026-03-15-hello-world",
   "toml": "[blog]\nsubtitle = \"A new subtitle\"\nsummary_markdown = \"Updated summary for the blog list.\""
 }
 ```
@@ -138,7 +138,7 @@ Remove the entire `blog` key with `api_v1_Frontmatter_RemoveKeyAtPath`:
 
 ```json
 {
-  "page_name": "my-blog-2026-03-15-hello-world",
+  "page": "my-blog-2026-03-15-hello-world",
   "path": [{ "key": "blog" }]
 }
 ```

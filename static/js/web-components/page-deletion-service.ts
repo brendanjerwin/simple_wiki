@@ -106,7 +106,7 @@ export class PageDeleter {
 
     try {
       const request = create(DeletePageRequestSchema, {
-        pageName: pageName,
+        page: pageName,
       });
 
       const response = await this.client.deletePage(request);

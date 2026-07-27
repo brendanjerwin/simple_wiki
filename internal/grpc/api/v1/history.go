@@ -37,7 +37,7 @@ type PageVersionMetadata struct {
 // HistorySearchFilter holds the filter parameters for a global history search.
 type HistorySearchFilter struct {
 	Query          string
-	PageNameFilter string
+	PageFilter string
 	AuthorFilter   string
 	From           time.Time
 	To             time.Time
@@ -45,7 +45,7 @@ type HistorySearchFilter struct {
 
 // HistorySearchResult is a single result from a history search.
 type HistorySearchResult struct {
-	PageName string
+	Page string
 	Version  PageVersionMetadata
 	Snippet  string
 }
@@ -58,17 +58,17 @@ type HistorySearcher interface {
 
 // ListPageVersions implements the PageHistoryService RPC.
 func (s *Server) ListPageVersions(_ context.Context, req *apiv1.ListPageVersionsRequest) (*apiv1.ListPageVersionsResponse, error) {
-	if req.GetPageName() == "" {
-		return nil, status.Error(codes.InvalidArgument, "page_name is required")
+	if req.GetPage() == "" {
+		return nil, status.Error(codes.InvalidArgument, "page is required")
 	}
 
 	if s.historyReader == nil {
 		return nil, status.Error(codes.Unavailable, "history reader not configured")
 	}
 
-	versions, err := s.historyReader.ListVersions(wikipage.PageIdentifier(req.GetPageName()))
+	versions, err := s.historyReader.ListVersions(wikipage.PageIdentifier(req.GetPage()))
 	if err != nil {
-		return nil, status.Errorf(codes.Internal, "failed to list versions for %s: %v", req.GetPageName(), err)
+		return nil, status.Errorf(codes.Internal, "failed to list versions for %s: %v", req.GetPage(), err)
 	}
 
 	limit := int(req.GetLimit())
@@ -85,8 +85,8 @@ func (s *Server) ListPageVersions(_ context.Context, req *apiv1.ListPageVersions
 
 // ReadPageVersion implements the PageHistoryService RPC.
 func (s *Server) ReadPageVersion(_ context.Context, req *apiv1.ReadPageVersionRequest) (*apiv1.ReadPageVersionResponse, error) {
-	if req.GetPageName() == "" {
-		return nil, status.Error(codes.InvalidArgument, "page_name is required")
+	if req.GetPage() == "" {
+		return nil, status.Error(codes.InvalidArgument, "page is required")
 	}
 	if req.GetVersionId() == "" {
 		return nil, status.Error(codes.InvalidArgument, "version_id is required")
@@ -96,9 +96,9 @@ func (s *Server) ReadPageVersion(_ context.Context, req *apiv1.ReadPageVersionRe
 		return nil, status.Error(codes.Unavailable, "history reader not configured")
 	}
 
-	content, err := s.historyReader.ReadVersion(wikipage.PageIdentifier(req.GetPageName()), req.GetVersionId())
+	content, err := s.historyReader.ReadVersion(wikipage.PageIdentifier(req.GetPage()), req.GetVersionId())
 	if err != nil {
-		return nil, status.Errorf(codes.Internal, "failed to read version %s for %s: %v", req.GetVersionId(), req.GetPageName(), err)
+		return nil, status.Errorf(codes.Internal, "failed to read version %s for %s: %v", req.GetVersionId(), req.GetPage(), err)
 	}
 
 	return &apiv1.ReadPageVersionResponse{Content: content}, nil
@@ -106,8 +106,8 @@ func (s *Server) ReadPageVersion(_ context.Context, req *apiv1.ReadPageVersionRe
 
 // RestorePageVersion implements the PageHistoryService RPC.
 func (s *Server) RestorePageVersion(ctx context.Context, req *apiv1.RestorePageVersionRequest) (*apiv1.RestorePageVersionResponse, error) {
-	if req.GetPageName() == "" {
-		return nil, status.Error(codes.InvalidArgument, "page_name is required")
+	if req.GetPage() == "" {
+		return nil, status.Error(codes.InvalidArgument, "page is required")
 	}
 	if req.GetVersionId() == "" {
 		return nil, status.Error(codes.InvalidArgument, "version_id is required")
@@ -118,8 +118,8 @@ func (s *Server) RestorePageVersion(ctx context.Context, req *apiv1.RestorePageV
 	}
 
 	identity := tailscale.IdentityFromContext(ctx)
-	if err := s.historyReader.RestoreVersion(wikipage.PageIdentifier(req.GetPageName()), req.GetVersionId(), identity); err != nil {
-		return nil, status.Errorf(codes.Internal, "failed to restore version %s for %s: %v", req.GetVersionId(), req.GetPageName(), err)
+	if err := s.historyReader.RestoreVersion(wikipage.PageIdentifier(req.GetPage()), req.GetVersionId(), identity); err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to restore version %s for %s: %v", req.GetVersionId(), req.GetPage(), err)
 	}
 
 	return &apiv1.RestorePageVersionResponse{}, nil
@@ -127,8 +127,8 @@ func (s *Server) RestorePageVersion(ctx context.Context, req *apiv1.RestorePageV
 
 // DiffPageVersions implements the PageHistoryService RPC.
 func (s *Server) DiffPageVersions(_ context.Context, req *apiv1.DiffPageVersionsRequest) (*apiv1.DiffPageVersionsResponse, error) {
-	if req.GetPageName() == "" {
-		return nil, status.Error(codes.InvalidArgument, "page_name is required")
+	if req.GetPage() == "" {
+		return nil, status.Error(codes.InvalidArgument, "page is required")
 	}
 	if req.GetOldVersionId() == "" {
 		return nil, status.Error(codes.InvalidArgument, "old_version_id is required")
@@ -141,9 +141,9 @@ func (s *Server) DiffPageVersions(_ context.Context, req *apiv1.DiffPageVersions
 		return nil, status.Error(codes.Unavailable, "history reader not configured")
 	}
 
-	diff, err := s.historyReader.DiffVersions(wikipage.PageIdentifier(req.GetPageName()), req.GetOldVersionId(), req.GetNewVersionId())
+	diff, err := s.historyReader.DiffVersions(wikipage.PageIdentifier(req.GetPage()), req.GetOldVersionId(), req.GetNewVersionId())
 	if err != nil {
-		return nil, status.Errorf(codes.Internal, "failed to diff versions for %s: %v", req.GetPageName(), err)
+		return nil, status.Errorf(codes.Internal, "failed to diff versions for %s: %v", req.GetPage(), err)
 	}
 
 	return &apiv1.DiffPageVersionsResponse{Diff: diff}, nil
@@ -151,8 +151,8 @@ func (s *Server) DiffPageVersions(_ context.Context, req *apiv1.DiffPageVersions
 
 // SearchPageHistory implements the PageHistoryService RPC.
 func (s *Server) SearchPageHistory(_ context.Context, req *apiv1.SearchPageHistoryRequest) (*apiv1.SearchPageHistoryResponse, error) {
-	if req.GetPageName() == "" {
-		return nil, status.Error(codes.InvalidArgument, "page_name is required")
+	if req.GetPage() == "" {
+		return nil, status.Error(codes.InvalidArgument, "page is required")
 	}
 	if req.GetQuery() == "" {
 		return nil, status.Error(codes.InvalidArgument, "query is required")
@@ -162,9 +162,9 @@ func (s *Server) SearchPageHistory(_ context.Context, req *apiv1.SearchPageHisto
 		return nil, status.Error(codes.Unavailable, "history search not configured")
 	}
 
-	results, err := s.historySearcher.SearchPageHistory(wikipage.PageIdentifier(req.GetPageName()), req.GetQuery())
+	results, err := s.historySearcher.SearchPageHistory(wikipage.PageIdentifier(req.GetPage()), req.GetQuery())
 	if err != nil {
-		return nil, status.Errorf(codes.Internal, "failed to search page history for %s: %v", req.GetPageName(), err)
+		return nil, status.Errorf(codes.Internal, "failed to search page history for %s: %v", req.GetPage(), err)
 	}
 
 	resp := &apiv1.SearchPageHistoryResponse{}
@@ -187,7 +187,7 @@ func (s *Server) SearchHistory(_ context.Context, req *apiv1.SearchHistoryReques
 
 	filter := HistorySearchFilter{
 		Query:          req.GetQuery(),
-		PageNameFilter: req.GetPageNameFilter(),
+		PageFilter: req.GetPageFilter(),
 		AuthorFilter:   req.GetAuthorFilter(),
 	}
 
@@ -227,7 +227,7 @@ func convertVersionMetadata(v PageVersionMetadata) *apiv1.PageVersion {
 // convertHistorySearchResult converts the internal HistorySearchResult to the proto type.
 func convertHistorySearchResult(r HistorySearchResult) *apiv1.HistorySearchResult {
 	return &apiv1.HistorySearchResult{
-		PageName: r.PageName,
+		Page: r.Page,
 		Version:  convertVersionMetadata(r.Version),
 		Snippet:  r.Snippet,
 	}

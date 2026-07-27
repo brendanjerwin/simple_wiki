@@ -448,7 +448,7 @@ var _ = Describe("NewStreamableHTTPHandler", func() {
 				handler.ServeHTTP(initResp, initReq)
 				sessionID := initResp.Header().Get("Mcp-Session-Id")
 
-				// Call the tool using "identifier" instead of "page_name" (MCP compatibility alias)
+				// Call the tool using "identifier" instead of "page" (MCP compatibility alias)
 				callBody := `{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"api_v1_PageManagementService_ReadPage","arguments":{"identifier":"nonexistent-test-page"}}}`
 				callReq := httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(callBody))
 				callReq.Header.Set("Content-Type", "application/json")

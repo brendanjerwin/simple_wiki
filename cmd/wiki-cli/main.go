@@ -228,7 +228,7 @@ GETTING STARTED — DISCOVERY WORKFLOW:
        wiki-cli call api.v1.SearchService/SearchContent -d '{"query":"test"}'
 
   Or use TOML for the payload:
-       wiki-cli call api.v1.PageManagementService/ReadPage -d 'page_name = "home"'
+       wiki-cli call api.v1.PageManagementService/ReadPage -d 'page = "home"'
 
 Short service names work too (e.g. "SearchService" instead of "api.v1.SearchService").
 The describe command works on both services (shows methods) and message types (shows fields).
@@ -340,7 +340,7 @@ Short service names work:
   wiki-cli call SearchService/SearchContent -d '{"query":"test"}'
 
 TOML payloads are auto-detected (anything not starting with { or [):
-  wiki-cli call PageManagementService/ReadPage -d 'page_name = "home"'
+  wiki-cli call PageManagementService/ReadPage -d 'page = "home"'
 
 Omitting -d sends an empty JSON object {}:
   wiki-cli call SystemInfoService/GetVersion

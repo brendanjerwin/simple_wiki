@@ -180,7 +180,7 @@ service PageManagementService {
 
 // Create Page
 message CreatePageRequest {
-  string page_name = 1;
+  string page = 1;
   string content_markdown = 2;
   // Structured frontmatter data. TOML serialization happens at file persistence time.
   google.protobuf.Struct frontmatter = 3;
@@ -196,10 +196,10 @@ message CreatePageResponse {
 
 // Read Page
 message ReadPageRequest {
-  // Exactly one of page_name or identifier must be set.
-  // identifier is accepted as an alias for page_name for MCP compatibility.
-  oneof page_identifier {
-    string page_name = 1;
+  // Exactly one of page or identifier must be set.
+  // identifier is accepted as an alias for page for MCP compatibility.
+  oneof page_selector {
+    string page = 1;
     string identifier = 2;
   }
 }
@@ -219,7 +219,7 @@ message ReadPageResponse {
 
 // Render Page
 message RenderPageRequest {
-  string page_name = 1;
+  string page = 1;
 }
 
 message RenderPageResponse {
@@ -228,7 +228,7 @@ message RenderPageResponse {
 
 // Update Page
 message UpdatePageRequest {
-  string page_name = 1;
+  string page = 1;
   string new_content_markdown = 2;
   string new_front_matter_toml = 3;
 }
@@ -240,7 +240,7 @@ message UpdatePageResponse {
 
 // Update Page Content
 message UpdatePageContentRequest {
-  string page_name = 1;
+  string page = 1;
   string new_content_markdown = 2;
   // expected_version_hash is the version_hash from a previous ReadPage call.
   // If provided, the write will fail with ABORTED if the content has changed since the read.
@@ -266,7 +266,7 @@ message UpdatePageContentResponse {
 
 // Clear Page Content
 message ClearPageContentRequest {
-  string page_name = 1;
+  string page = 1;
   // confirm_clear must be true to prevent accidental data loss.
   bool confirm_clear = 2;
 }
@@ -278,7 +278,7 @@ message ClearPageContentResponse {
 
 // Update Whole Page
 message UpdateWholePageRequest {
-  string page_name = 1;
+  string page = 1;
   string new_whole_markdown = 2; // Markdown including front matter
 }
 
@@ -289,7 +289,7 @@ message UpdateWholePageResponse {
 
 // Delete Page
 message DeletePageRequest {
-  string page_name = 1;
+  string page = 1;
 }
 
 message DeletePageResponse {
@@ -399,7 +399,7 @@ message TemplateInfo {
 // Watch Page
 message WatchPageRequest {
   // The page identifier to watch for changes.
-  string page_name = 1;
+  string page = 1;
 
   // Optional: interval in milliseconds for checking updates (default: 1000ms).
   // Minimum 100ms to prevent excessive server load.
@@ -432,7 +432,7 @@ message RenderMarkdownResponse {
 
 // Read Page Outline
 message ReadPageOutlineRequest {
-  string page_name = 1;
+  string page = 1;
 }
 
 // PageHeading represents a single heading found in the page content.
@@ -465,7 +465,7 @@ message ReadPageOutlineResponse {
 
 // Read Page Section
 message ReadPageSectionRequest {
-  string page_name = 1;
+  string page = 1;
   int64 byte_offset = 2;
   int64 byte_length = 3;
   // expected_version_hash optionally asserts that the caller's outline was read

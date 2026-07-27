@@ -72,7 +72,7 @@ var _ = Describe("MCP tool input schemas (Anthropic API compatibility, #1054)", 
 		})
 
 		It("should not require both oneof members", func() {
-			Expect(schema).NotTo(HaveKeyWithValue("required", ConsistOf("page_name", "identifier")))
+			Expect(schema).NotTo(HaveKeyWithValue("required", ConsistOf("page", "identifier")))
 		})
 
 		It("should require at least one identifier property", func() {
@@ -96,7 +96,7 @@ var _ = Describe("MCP tool input schemas (Anthropic API compatibility, #1054)", 
 		})
 
 		It("should require the range inputs", func() {
-			Expect(schema).To(HaveKeyWithValue("required", ConsistOf("page_name", "byte_offset", "byte_length")))
+			Expect(schema).To(HaveKeyWithValue("required", ConsistOf("page", "byte_offset", "byte_length")))
 		})
 
 		It("should not require the version hash", func() {
