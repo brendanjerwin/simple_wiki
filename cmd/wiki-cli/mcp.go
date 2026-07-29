@@ -122,12 +122,16 @@ type apiClients struct {
 	agentMetadata  apiv1connect.AgentMetadataServiceClient
 	chat           apiv1connect.ChatServiceClient
 	checklist      apiv1connect.ChecklistServiceClient
+	connector      apiv1connect.ConnectorServiceClient
+	fileStorage    apiv1connect.FileStorageServiceClient
 	frontmatter    apiv1connect.FrontmatterClient
+	history        apiv1connect.PageHistoryServiceClient
 	inventory      apiv1connect.InventoryManagementServiceClient
 	mapService     apiv1connect.MapServiceClient
 	pageImport     apiv1connect.PageImportServiceClient
 	pageManagement apiv1connect.PageManagementServiceClient
 	search         apiv1connect.SearchServiceClient
+	survey         apiv1connect.SurveyServiceClient
 	systemInfo     apiv1connect.SystemInfoServiceClient
 }
 
@@ -137,29 +141,35 @@ func createAPIClients(httpClient connect.HTTPClient, baseURL string) *apiClients
 		agentMetadata:  apiv1connect.NewAgentMetadataServiceClient(httpClient, baseURL),
 		chat:           apiv1connect.NewChatServiceClient(httpClient, baseURL),
 		checklist:      apiv1connect.NewChecklistServiceClient(httpClient, baseURL),
+		connector:      apiv1connect.NewConnectorServiceClient(httpClient, baseURL),
+		fileStorage:    apiv1connect.NewFileStorageServiceClient(httpClient, baseURL),
 		frontmatter:    apiv1connect.NewFrontmatterClient(httpClient, baseURL),
+		history:        apiv1connect.NewPageHistoryServiceClient(httpClient, baseURL),
 		inventory:      apiv1connect.NewInventoryManagementServiceClient(httpClient, baseURL),
 		mapService:     apiv1connect.NewMapServiceClient(httpClient, baseURL),
 		pageImport:     apiv1connect.NewPageImportServiceClient(httpClient, baseURL),
 		pageManagement: apiv1connect.NewPageManagementServiceClient(httpClient, baseURL),
 		search:         apiv1connect.NewSearchServiceClient(httpClient, baseURL),
+		survey:         apiv1connect.NewSurveyServiceClient(httpClient, baseURL),
 		systemInfo:     apiv1connect.NewSystemInfoServiceClient(httpClient, baseURL),
 	}
 }
 
 // registerToolHandlers registers all wiki API tools as MCP handlers using Connect protocol.
 func registerToolHandlers(s *mcpserver.MCPServer, clients *apiClients) {
-	// Register handlers for each service
-	// These forward MCP tool calls to the Connect protocol services
 	apiv1mcp.ForwardToConnectAgentMetadataServiceClient(s, clients.agentMetadata)
 	apiv1mcp.ForwardToConnectChatServiceClient(s, clients.chat)
 	apiv1mcp.ForwardToConnectChecklistServiceClient(s, clients.checklist)
+	apiv1mcp.ForwardToConnectConnectorServiceClient(s, clients.connector)
+	apiv1mcp.ForwardToConnectFileStorageServiceClient(s, clients.fileStorage)
 	apiv1mcp.ForwardToConnectFrontmatterClient(s, clients.frontmatter)
+	apiv1mcp.ForwardToConnectPageHistoryServiceClient(s, clients.history)
 	apiv1mcp.ForwardToConnectInventoryManagementServiceClient(s, clients.inventory)
 	apiv1mcp.ForwardToConnectMapServiceClient(s, clients.mapService)
 	apiv1mcp.ForwardToConnectPageImportServiceClient(s, clients.pageImport)
 	apiv1mcp.ForwardToConnectPageManagementServiceClient(s, clients.pageManagement)
 	apiv1mcp.ForwardToConnectSearchServiceClient(s, clients.search)
+	apiv1mcp.ForwardToConnectSurveyServiceClient(s, clients.survey)
 	apiv1mcp.ForwardToConnectSystemInfoServiceClient(s, clients.systemInfo)
 
 	// Replace input schemas that Anthropic's API rejects (top-level
