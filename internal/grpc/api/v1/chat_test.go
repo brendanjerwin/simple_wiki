@@ -31,6 +31,7 @@ type mockChatBufferManager struct {
 
 	// Tracking fields for new handler tests
 	notifyToolCallCalls       []notifyToolCallArgs
+	notifyBackgroundTaskCalls []notifyBackgroundTaskArgs
 	notifyPlanCalls           []notifyPlanArgs
 	notifyTurnStatusCalls     []turnStatusArgs
 	clearPageCalls            []string
@@ -63,6 +64,11 @@ type mockChatBufferManager struct {
 
 type notifyToolCallArgs struct {
 	page, messageID, toolCallID, title, toolStatus, kind, detail string
+}
+
+type notifyBackgroundTaskArgs struct {
+	page   string
+	bgTask chatbuffer.BackgroundTaskEvent
 }
 
 type notifyPlanArgs struct {
@@ -317,7 +323,9 @@ func (m *mockChatBufferManager) NotifyToolCall(page string, tc chatbuffer.ToolCa
 }
 
 func (m *mockChatBufferManager) NotifyBackgroundTask(page string, bgTask chatbuffer.BackgroundTaskEvent) {
-	// no-op: test mock
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.notifyBackgroundTaskCalls = append(m.notifyBackgroundTaskCalls, notifyBackgroundTaskArgs{page, bgTask})
 }
 
 func (m *mockChatBufferManager) NotifyPlan(page string, plan chatbuffer.PlanEvent) {

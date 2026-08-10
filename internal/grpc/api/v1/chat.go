@@ -21,7 +21,7 @@ const (
 
 const backgroundTaskPromotionThreshold = 30 * time.Second
 
-type toolCallPromotion struct {
+type ToolCallPromotion struct {
 	mu      sync.Mutex
 	pending map[string]*promotionEntry // keyed by tool_call_id
 }
@@ -37,18 +37,29 @@ type promotionEntry struct {
 	promoted  bool
 }
 
-func newToolCallPromotion() *toolCallPromotion {
-	return &toolCallPromotion{pending: make(map[string]*promotionEntry)}
+func NewToolCallPromotion() *ToolCallPromotion {
+	return &ToolCallPromotion{pending: make(map[string]*promotionEntry)}
 }
 
-// trackStart records a tool call start and schedules promotion after the threshold.
-func (p *toolCallPromotion) trackStart(bufManager ChatBufferManager, toolCallID, messageID, page, title, kind, detail string) {
+// TrackStart records a tool call start and schedules promotion after the threshold.
+// If called again for the same toolCallID (e.g., periodic in_progress updates),
+// it updates the title/detail but does NOT reset the timer or startedAt —
+// the original start time and promotion schedule are preserved.
+func (p *ToolCallPromotion) TrackStart(bufManager ChatBufferManager, toolCallID, messageID, page, title, kind, detail string) {
 	p.mu.Lock()
-	defer p.mu.Unlock()
 
-	// Cancel any existing entry for this tool call ID
+	// If already tracking this tool call, update mutable fields only.
+	// Do not reset the timer or startedAt — that would delay promotion
+	// indefinitely on chatty tool calls.
 	if existing, ok := p.pending[toolCallID]; ok {
-		existing.timer.Stop()
+		if title != "" {
+			existing.title = title
+		}
+		if detail != "" {
+			existing.detail = detail
+		}
+		p.mu.Unlock()
+		return
 	}
 
 	entry := &promotionEntry{
@@ -67,43 +78,51 @@ func (p *toolCallPromotion) trackStart(bufManager ChatBufferManager, toolCallID,
 			return
 		}
 		e.promoted = true
-		startedAtMs := e.startedAt.UnixMilli()
+		// Use values from the entry, not closed-over values, so any
+		// updates via TrackStart are reflected in the promoted event.
+		evt := chatbuffer.BackgroundTaskEvent{
+			MessageID:   e.messageID,
+			ToolCallID:  toolCallID,
+			Title:       e.title,
+			Status:      "promoted",
+			Detail:      e.detail,
+			StartedAtMs: e.startedAt.UnixMilli(),
+		}
 		p.mu.Unlock()
 
-		bufManager.NotifyBackgroundTask(page, chatbuffer.BackgroundTaskEvent{
-			MessageID:   messageID,
-			ToolCallID:  toolCallID,
-			Title:       title,
-			Status:      "promoted",
-			Detail:      detail,
-			StartedAtMs: startedAtMs,
-		})
+		bufManager.NotifyBackgroundTask(e.page, evt)
 	})
 	p.pending[toolCallID] = entry
+	p.mu.Unlock()
 }
 
-// trackComplete handles a tool call completion — cancels the promotion timer
+// TrackComplete handles a tool call completion — cancels the promotion timer
 // and, if the task was already promoted, broadcasts a final background task event.
-func (p *toolCallPromotion) trackComplete(bufManager ChatBufferManager, toolCallID, status, detail string) {
+// The lock is released before calling NotifyBackgroundTask to avoid blocking
+// promotion tracking on slow subscriber notifications.
+func (p *ToolCallPromotion) TrackComplete(bufManager ChatBufferManager, toolCallID, status, detail string) {
 	p.mu.Lock()
-	defer p.mu.Unlock()
-
 	entry, ok := p.pending[toolCallID]
 	if !ok {
+		p.mu.Unlock()
 		return
 	}
 	entry.timer.Stop()
 	delete(p.pending, toolCallID)
+	promoted := entry.promoted
+	evt := chatbuffer.BackgroundTaskEvent{
+		MessageID:   entry.messageID,
+		ToolCallID:  toolCallID,
+		Title:       entry.title,
+		Status:      status,
+		Detail:      detail,
+		StartedAtMs: entry.startedAt.UnixMilli(),
+	}
+	page := entry.page
+	p.mu.Unlock()
 
-	if entry.promoted {
-		bufManager.NotifyBackgroundTask(entry.page, chatbuffer.BackgroundTaskEvent{
-			MessageID:   entry.messageID,
-			ToolCallID:  toolCallID,
-			Title:       entry.title,
-			Status:      status, // "completed" or "failed"
-			Detail:      detail,
-			StartedAtMs: entry.startedAt.UnixMilli(),
-		})
+	if promoted {
+		bufManager.NotifyBackgroundTask(page, evt)
 	}
 }
 
@@ -610,11 +629,11 @@ func (s *Server) SendToolCallNotification(_ context.Context, req *apiv1.SendTool
 	isLive := req.Status == "pending" || req.Status == "in_progress"
 	isTerminal := req.Status == "completed" || req.Status == "failed"
 
-	if isLive && s.toolCallPromoter != nil {
-		s.toolCallPromoter.trackStart(s.chatBufferManager, req.ToolCallId, req.MessageId, req.Page, req.Title, req.Kind, req.Detail)
+	if isLive && s.ToolCallPromoter != nil {
+		s.ToolCallPromoter.TrackStart(s.chatBufferManager, req.ToolCallId, req.MessageId, req.Page, req.Title, req.Kind, req.Detail)
 	}
-	if isTerminal && s.toolCallPromoter != nil {
-		s.toolCallPromoter.trackComplete(s.chatBufferManager, req.ToolCallId, req.Status, req.Detail)
+	if isTerminal && s.ToolCallPromoter != nil {
+		s.ToolCallPromoter.TrackComplete(s.chatBufferManager, req.ToolCallId, req.Status, req.Detail)
 	}
 
 	return &apiv1.SendToolCallNotificationResponse{}, nil

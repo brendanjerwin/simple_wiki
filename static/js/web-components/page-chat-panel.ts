@@ -636,8 +636,8 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
                     .sender=${msg.sender}
                     .senderName=${msg.senderName}
                     .content=${msg.content}
-                    .renderedHtml=${msg.renderedHtml}
-                    ?edited=${msg.edited}
+                    reply-to-id=${msg.replyToId}
+                    .reactions=${msg.reactions}
                     .backgroundTask=${msg.backgroundTask}
                     .toolCalls=${msg.toolCalls}
                     .plan=${msg.plan}

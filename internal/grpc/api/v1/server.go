@@ -129,7 +129,7 @@ type Server struct {
 	pageOpener              wikipage.PageOpener
 	scheduledTurnDispatcher ScheduledTurnDispatcher
 	agentScheduleStore      AgentScheduleStore
-	toolCallPromoter        *toolCallPromotion
+	ToolCallPromoter        *ToolCallPromotion
 	agentChatContextStore   AgentChatContextStore
 	checklistMutator        *checklistmutator.Mutator
 	mapMutator              *mapmutator.Mutator
@@ -185,7 +185,7 @@ func NewServer(
 		logger:                  logger,
 		chatBufferManager:       chatBufferManager,
 		pageOpener:              pageOpener,
-		toolCallPromoter:        newToolCallPromotion(),
+		ToolCallPromoter:        NewToolCallPromotion(),
 	}, nil
 }
 
