@@ -3,6 +3,8 @@ package v1
 import (
 	"context"
 	"errors"
+	"sync"
+	"time"
 
 	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
 	"github.com/brendanjerwin/simple_wiki/pkg/chatbuffer"
@@ -16,6 +18,94 @@ const (
 	errPageRequired      = "page is required"
 	errMessageIDRequired = "message_id is required"
 )
+
+const backgroundTaskPromotionThreshold = 30 * time.Second
+
+type toolCallPromotion struct {
+	mu      sync.Mutex
+	pending map[string]*promotionEntry // keyed by tool_call_id
+}
+
+type promotionEntry struct {
+	messageID string
+	page      string
+	title     string
+	kind      string
+	detail    string
+	startedAt time.Time
+	timer     *time.Timer
+	promoted  bool
+}
+
+func newToolCallPromotion() *toolCallPromotion {
+	return &toolCallPromotion{pending: make(map[string]*promotionEntry)}
+}
+
+// trackStart records a tool call start and schedules promotion after the threshold.
+func (p *toolCallPromotion) trackStart(bufManager ChatBufferManager, toolCallID, messageID, page, title, kind, detail string) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	// Cancel any existing entry for this tool call ID
+	if existing, ok := p.pending[toolCallID]; ok {
+		existing.timer.Stop()
+	}
+
+	entry := &promotionEntry{
+		messageID: messageID,
+		page:      page,
+		title:     title,
+		kind:      kind,
+		detail:    detail,
+		startedAt: time.Now(),
+	}
+	entry.timer = time.AfterFunc(backgroundTaskPromotionThreshold, func() {
+		p.mu.Lock()
+		e, ok := p.pending[toolCallID]
+		if !ok {
+			p.mu.Unlock()
+			return
+		}
+		e.promoted = true
+		startedAtMs := e.startedAt.UnixMilli()
+		p.mu.Unlock()
+
+		bufManager.NotifyBackgroundTask(page, chatbuffer.BackgroundTaskEvent{
+			MessageID:   messageID,
+			ToolCallID:  toolCallID,
+			Title:       title,
+			Status:      "promoted",
+			Detail:      detail,
+			StartedAtMs: startedAtMs,
+		})
+	})
+	p.pending[toolCallID] = entry
+}
+
+// trackComplete handles a tool call completion — cancels the promotion timer
+// and, if the task was already promoted, broadcasts a final background task event.
+func (p *toolCallPromotion) trackComplete(bufManager ChatBufferManager, toolCallID, status, detail string) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	entry, ok := p.pending[toolCallID]
+	if !ok {
+		return
+	}
+	entry.timer.Stop()
+	delete(p.pending, toolCallID)
+
+	if entry.promoted {
+		bufManager.NotifyBackgroundTask(entry.page, chatbuffer.BackgroundTaskEvent{
+			MessageID:   entry.messageID,
+			ToolCallID:  toolCallID,
+			Title:       entry.title,
+			Status:      status, // "completed" or "failed"
+			Detail:      detail,
+			StartedAtMs: entry.startedAt.UnixMilli(),
+		})
+	}
+}
 
 // SendMessage implements the SendMessage RPC.
 // Receives a user message, assigns a UUID, writes it to the buffer, and pushes it to channel subscribers.
@@ -274,6 +364,19 @@ func bufferEventToProto(event chatbuffer.Event) *apiv1.ChatEvent {
 				},
 			},
 		}
+	case chatbuffer.EventTypeBackgroundTask:
+		return &apiv1.ChatEvent{
+			Event: &apiv1.ChatEvent_BackgroundTask{
+				BackgroundTask: &apiv1.ChatBackgroundTask{
+					MessageId:   event.BackgroundTask.MessageID,
+					ToolCallId:  event.BackgroundTask.ToolCallID,
+					Title:       event.BackgroundTask.Title,
+					Status:      event.BackgroundTask.Status,
+					Detail:      event.BackgroundTask.Detail,
+					StartedAtMs: event.BackgroundTask.StartedAtMs,
+				},
+			},
+		}
 	default:
 		return nil
 	}
@@ -502,6 +605,18 @@ func (s *Server) SendToolCallNotification(_ context.Context, req *apiv1.SendTool
 		Kind:       req.Kind,
 		Detail:     req.Detail,
 	})
+
+	// Promotion tracking: auto-promote long-running tool calls to background tasks
+	isLive := req.Status == "pending" || req.Status == "in_progress"
+	isTerminal := req.Status == "completed" || req.Status == "failed"
+
+	if isLive && s.toolCallPromoter != nil {
+		s.toolCallPromoter.trackStart(s.chatBufferManager, req.ToolCallId, req.MessageId, req.Page, req.Title, req.Kind, req.Detail)
+	}
+	if isTerminal && s.toolCallPromoter != nil {
+		s.toolCallPromoter.trackComplete(s.chatBufferManager, req.ToolCallId, req.Status, req.Detail)
+	}
+
 	return &apiv1.SendToolCallNotificationResponse{}, nil
 }
 

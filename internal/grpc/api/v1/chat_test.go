@@ -316,6 +316,10 @@ func (m *mockChatBufferManager) NotifyToolCall(page string, tc chatbuffer.ToolCa
 	m.notifyToolCallCalls = append(m.notifyToolCallCalls, notifyToolCallArgs{page, tc.MessageID, tc.ToolCallID, tc.Title, tc.Status, tc.Kind, tc.Detail})
 }
 
+func (m *mockChatBufferManager) NotifyBackgroundTask(page string, bgTask chatbuffer.BackgroundTaskEvent) {
+	// no-op: test mock
+}
+
 func (m *mockChatBufferManager) NotifyPlan(page string, plan chatbuffer.PlanEvent) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -1537,9 +1541,7 @@ var _ = Describe("ChatService", func() {
 		})
 
 		When("replaying a message with an unknown sender value", func() {
-			var (
-				streamServer *mockChatStreamServer
-			)
+			var streamServer *mockChatStreamServer
 
 			BeforeEach(func() {
 				chatManager.messages["test-page"] = []*chatbuffer.Message{
@@ -2480,9 +2482,7 @@ var _ = Describe("ChatService", func() {
 
 	Describe("SubscribeChat with tool call events", func() {
 		When("receiving a tool call event", func() {
-			var (
-				streamServer *mockChatStreamServer
-			)
+			var streamServer *mockChatStreamServer
 
 			BeforeEach(func() {
 				streamServer = &mockChatStreamServer{}
@@ -2529,9 +2529,7 @@ var _ = Describe("ChatService", func() {
 		})
 
 		When("receiving a permission request event", func() {
-			var (
-				streamServer *mockChatStreamServer
-			)
+			var streamServer *mockChatStreamServer
 
 			BeforeEach(func() {
 				streamServer = &mockChatStreamServer{}
@@ -2585,9 +2583,7 @@ var _ = Describe("ChatService", func() {
 		})
 
 		When("receiving an unknown event type", func() {
-			var (
-				streamServer *mockChatStreamServer
-			)
+			var streamServer *mockChatStreamServer
 
 			BeforeEach(func() {
 				streamServer = &mockChatStreamServer{}
@@ -2724,9 +2720,7 @@ var _ = Describe("ChatService", func() {
 		})
 
 		When("a cancellation signal is sent", func() {
-			var (
-				streamServer *mockCancellationStreamServer
-			)
+			var streamServer *mockCancellationStreamServer
 
 			BeforeEach(func() {
 				// Create two cancellation channels: one for initial subscribe, one for re-subscribe

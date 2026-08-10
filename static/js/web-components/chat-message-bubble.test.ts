@@ -499,6 +499,186 @@ describe('ChatMessageBubble', () => {
     });
   });
 
+  describe('long-running tool call rendering', () => {
+    describe('when a tool call has been in_progress for over 30 seconds', () => {
+      let el: ChatMessageBubble;
+      const startedAtMs = Date.now() - 45_000; // 45s elapsed
+      const longRunningToolCall: ToolCallState = {
+        toolCallId: 'tc-long-live',
+        title: 'A2A Agent Call: Cluster Health Investigation',
+        status: 'in_progress',
+        kind: 'other',
+        detail: 'Queued: position 2 of 3',
+        startedAtMs,
+      };
+
+      beforeEach(async () => {
+        el = await fixture(html`
+          <chat-message-bubble
+            message-id="msg-tc-long-live"
+            .sender=${Sender.ASSISTANT}
+            content="Working on it"
+            .toolCalls=${[longRunningToolCall]}
+          ></chat-message-bubble>
+        `);
+      });
+
+      it('should render the live tool-call row with long-running class', () => {
+        const live = el.shadowRoot!.querySelector('.tool-call-live.long-running');
+        expect(live).to.not.be.null;
+      });
+
+      it('should display the tool call title', () => {
+        const title = el.shadowRoot!.querySelector('.tool-call-live-title');
+        expect(title!.textContent).to.equal('A2A Agent Call: Cluster Health Investigation');
+      });
+
+      it('should display the detail text with queue position', () => {
+        const detail = el.shadowRoot!.querySelector('.tool-call-detail');
+        expect(detail!.textContent).to.contain('Queued: position 2 of 3');
+      });
+
+      it('should display an elapsed time', () => {
+        const elapsed = el.shadowRoot!.querySelector('.tool-call-elapsed');
+        expect(elapsed).to.not.be.null;
+        expect(elapsed!.textContent!.trim().length).to.be.greaterThan(0);
+      });
+
+      it('should NOT render as a compact pill', () => {
+        const pill = el.shadowRoot!.querySelector('.tool-call-pill');
+        expect(pill).to.be.null;
+      });
+    });
+
+    describe('when a long-running tool call has just completed', () => {
+      let el: ChatMessageBubble;
+      const startedAtMs = Date.now() - 185_000; // ~3m5s duration
+      const completedToolCall: ToolCallState = {
+        toolCallId: 'tc-long-done',
+        title: 'A2A Agent Call: Cluster Health Investigation',
+        status: 'completed',
+        kind: 'other',
+        detail: 'All nodes ready. No issues found.',
+        startedAtMs,
+      };
+
+      beforeEach(async () => {
+        el = await fixture(html`
+          <chat-message-bubble
+            message-id="msg-tc-long-done"
+            .sender=${Sender.ASSISTANT}
+            content="Done"
+            .toolCalls=${[completedToolCall]}
+          ></chat-message-bubble>
+        `);
+      });
+
+      it('should render an expanded result card (not a pill)', () => {
+        const result = el.shadowRoot!.querySelector('.tool-call-result');
+        expect(result).to.not.be.null;
+      });
+
+      it('should NOT render as a compact pill', () => {
+        const pill = el.shadowRoot!.querySelector('.tool-call-pill');
+        expect(pill).to.be.null;
+      });
+
+      it('should display the tool call title in the result card', () => {
+        const title = el.shadowRoot!.querySelector('.tool-call-result-title');
+        expect(title!.textContent).to.equal('A2A Agent Call: Cluster Health Investigation');
+      });
+
+      it('should display the duration in the result card', () => {
+        const elapsed = el.shadowRoot!.querySelector('.tool-call-result-elapsed');
+        expect(elapsed).to.not.be.null;
+        expect(elapsed!.textContent!.trim().length).to.be.greaterThan(0);
+      });
+
+      it('should display the detail text in the result card', () => {
+        const detail = el.shadowRoot!.querySelector('.tool-call-result-detail');
+        expect(detail).to.not.be.null;
+        expect(detail!.textContent).to.contain('All nodes ready');
+      });
+
+      it('should show the check mark icon for completed', () => {
+        const icon = el.shadowRoot!.querySelector('.tool-call-result .status-icon');
+        expect(icon!.textContent).to.equal('✅');
+      });
+    });
+
+    describe('when a long-running tool call has failed', () => {
+      let el: ChatMessageBubble;
+      const startedAtMs = Date.now() - 95_000; // ~1m35s duration
+      const failedToolCall: ToolCallState = {
+        toolCallId: 'tc-long-fail',
+        title: 'A2A Agent Call: Host Remediation',
+        status: 'failed',
+        kind: 'other',
+        detail: 'Error: SSH connection timed out',
+        startedAtMs,
+      };
+
+      beforeEach(async () => {
+        el = await fixture(html`
+          <chat-message-bubble
+            message-id="msg-tc-long-fail"
+            .sender=${Sender.ASSISTANT}
+            content="Failed"
+            .toolCalls=${[failedToolCall]}
+          ></chat-message-bubble>
+        `);
+      });
+
+      it('should render an expanded result card with failed class', () => {
+        const result = el.shadowRoot!.querySelector('.tool-call-result.failed');
+        expect(result).to.not.be.null;
+      });
+
+      it('should show the cross mark icon for failed', () => {
+        const icon = el.shadowRoot!.querySelector('.tool-call-result .status-icon');
+        expect(icon!.textContent).to.equal('❌');
+      });
+
+      it('should display the error detail in the result card', () => {
+        const detail = el.shadowRoot!.querySelector('.tool-call-result-detail');
+        expect(detail!.textContent).to.contain('SSH connection timed out');
+      });
+    });
+
+    describe('when a short tool call completes (under 30s)', () => {
+      let el: ChatMessageBubble;
+      const completedToolCall: ToolCallState = {
+        toolCallId: 'tc-short-done',
+        title: 'Read File',
+        status: 'completed',
+        kind: 'read',
+        detail: '/path/file.ts',
+        startedAtMs: Date.now() - 2000,
+      };
+
+      beforeEach(async () => {
+        el = await fixture(html`
+          <chat-message-bubble
+            message-id="msg-tc-short-done"
+            .sender=${Sender.ASSISTANT}
+            content="Done"
+            .toolCalls=${[completedToolCall]}
+          ></chat-message-bubble>
+        `);
+      });
+
+      it('should collapse to a compact pill (not an expanded result card)', () => {
+        const pill = el.shadowRoot!.querySelector('.tool-call-pill');
+        expect(pill).to.not.be.null;
+      });
+
+      it('should NOT render an expanded result card', () => {
+        const result = el.shadowRoot!.querySelector('.tool-call-result');
+        expect(result).to.be.null;
+      });
+    });
+  });
+
   describe('elapsed timer lifecycle', () => {
     let clock: SinonFakeTimers;
 

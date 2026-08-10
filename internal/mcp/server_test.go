@@ -171,6 +171,10 @@ func (noOpChatBufferManager) NotifyToolCall(string, chatbuffer.ToolCallEvent) {
 	// no-op: satisfies interface; this implementation ignores tool call notifications
 }
 
+func (noOpChatBufferManager) NotifyBackgroundTask(string, chatbuffer.BackgroundTaskEvent) {
+	// no-op: satisfies interface
+}
+
 func (noOpChatBufferManager) NotifyPlan(string, chatbuffer.PlanEvent) {
 	// no-op: satisfies interface; this implementation ignores plan notifications
 }

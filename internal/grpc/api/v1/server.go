@@ -57,11 +57,11 @@ type ChatBufferManager interface {
 	IsInstanceRequested(page string) bool
 	NotifyToolCall(page string, toolCall chatbuffer.ToolCallEvent)
 	NotifyPlan(page string, plan chatbuffer.PlanEvent)
+	NotifyBackgroundTask(page string, bgTask chatbuffer.BackgroundTaskEvent)
 	NotifyTurnStatus(page string, active bool)
 	CancelPage(page string) bool
 	SubscribeToCancellation(page string) (<-chan struct{}, func())
 	RequestPermission(ctx context.Context, page, requestID, title, description string, options []chatbuffer.PermissionOption) string
-	EmitPermissionRequest(page string, event *chatbuffer.PermissionRequestEvent)
 	RespondToPermission(requestID, selectedOptionID string)
 	GetPendingPermissionsForPage(page string) []*chatbuffer.PermissionRequestEvent
 }
@@ -129,6 +129,7 @@ type Server struct {
 	pageOpener              wikipage.PageOpener
 	scheduledTurnDispatcher ScheduledTurnDispatcher
 	agentScheduleStore      AgentScheduleStore
+	toolCallPromoter        *toolCallPromotion
 	agentChatContextStore   AgentChatContextStore
 	checklistMutator        *checklistmutator.Mutator
 	mapMutator              *mapmutator.Mutator
@@ -184,6 +185,7 @@ func NewServer(
 		logger:                  logger,
 		chatBufferManager:       chatBufferManager,
 		pageOpener:              pageOpener,
+		toolCallPromoter:        newToolCallPromotion(),
 	}, nil
 }
 
@@ -389,7 +391,8 @@ func (s *Server) LoggingInterceptor() grpc.UnaryServerInterceptor {
 		}
 
 		if s.logger != nil {
-			s.logger.Warn("[GRPC] %s | %s | %v | %s",
+			s.logger.Warn(
+				"[GRPC] %s | %s | %v | %s",
 				statusCode,
 				duration,
 				info.FullMethod,

@@ -124,6 +124,7 @@ message ChatEvent {
     ChatCleared chat_cleared = 6;
     ChatPlan plan = 7;
     ChatTurnStatus turn_status = 8;
+    ChatBackgroundTask background_task = 9;
   }
 }
 
@@ -157,6 +158,22 @@ message ChatToolCall {
   string status = 4;        // ACP status: "pending", "in_progress", "completed", "failed"
   string kind = 5;          // ACP tool kind: read/edit/delete/move/search/execute/think/fetch/switch_mode/other
   string detail = 6;        // concise live detail line (e.g. affected "path:line" or latest output)
+}
+
+// ChatBackgroundTask is broadcast when a tool call is promoted to a background
+// task — either because it has been in_progress for over 30 seconds (auto-
+// promotion by the server) or because the tool call detail indicates queue
+// position info from an A2A server. The UI uses this to swap from the compact
+// tool-call row to an expanded background-task card with prominent status.
+// The tool_call_id links back to the original ChatToolCall so the client can
+// correlate them.
+message ChatBackgroundTask {
+  string message_id = 1;    // the assistant message this task is part of
+  string tool_call_id = 2;  // links to the originating ChatToolCall
+  string title = 3;          // task title (from the tool call)
+  string status = 4;         // "promoted", "working", "completed", "failed"
+  string detail = 5;         // current status detail (e.g. queue position, progress text)
+  int64 started_at_ms = 6;  // when the originating tool call started (for elapsed display)
 }
 
 // ChatPlanEntry is one item in the agent's execution plan, mirroring an ACP
