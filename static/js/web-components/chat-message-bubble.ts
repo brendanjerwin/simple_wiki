@@ -3,29 +3,28 @@ import { property, state } from 'lit/decorators.js';
 import { unsafeHTML } from 'lit/directives/unsafe-html.js';
 import { colorCSS, typographyCSS } from './shared-styles.js';
 import { Sender } from '../gen/api/v1/chat_pb.js';
-import type { ToolCallState, PlanEntryState } from './page-chat-panel.js';
-
+import type { ToolCallState, PlanEntryState, BackgroundTaskState } from './page-chat-panel.js';
 export interface ReactionGroup {
-  emoji: string;
-  reactors: string[];
-  count: number;
+ emoji: string;
+ reactors: string[];
+ count: number;
 }
 
 export interface ScrollToMessageEventDetail {
-  messageId: string;
+ messageId: string;
 }
 
 declare global {
-  interface HTMLElementTagNameMap {
-    'chat-message-bubble': ChatMessageBubble;
-  }
+ interface HTMLElementTagNameMap {
+  'chat-message-bubble': ChatMessageBubble;
+ }
 }
 
 export class ChatMessageBubble extends LitElement {
-  static override readonly styles = [
-    colorCSS,
-    typographyCSS,
-    css`
+ static override readonly styles = [
+  colorCSS,
+  typographyCSS,
+  css`
       :host {
         display: block;
         margin-bottom: 8px;
@@ -196,6 +195,80 @@ export class ChatMessageBubble extends LitElement {
         line-height: 1.4;
       }
 
+      /* Long-running tool call — escalated card when elapsed > 30s */
+      .tool-call-live.long-running {
+        padding: 8px 12px;
+        background: rgba(255, 255, 255, 0.09);
+        border-color: var(--color-border-default);
+        border-left: 3px solid var(--color-accent, #5b9bd5);
+      }
+
+      .tool-call-live.long-running .status-icon {
+        animation: tool-call-pulse 2s ease-in-out infinite;
+      }
+
+      @keyframes tool-call-pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.4; }
+      }
+
+      .tool-call-live.long-running .tool-call-elapsed {
+        font-size: 0.75rem;
+        font-weight: 500;
+        color: var(--color-text-primary);
+      }
+
+      .tool-call-live.long-running .tool-call-detail {
+        max-height: 6em;
+        font-size: 0.72rem;
+      }
+
+      /* Expanded completion card for long-running tasks that just finished */
+      .tool-call-result {
+        flex: 1 1 100%;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        padding: 8px 12px;
+        border-radius: 6px;
+        background: rgba(255, 255, 255, 0.06);
+        border: 1px solid var(--color-border-subtle);
+        font-size: 0.75rem;
+      }
+
+      .tool-call-result.failed {
+        border-color: rgba(255, 100, 100, 0.3);
+      }
+
+      .tool-call-result-header {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+
+      .tool-call-result-title {
+        flex: 1;
+        font-weight: 500;
+        color: var(--color-text-primary);
+      }
+
+      .tool-call-result-elapsed {
+        font-size: 0.7rem;
+        color: var(--color-text-muted);
+        font-variant-numeric: tabular-nums;
+      }
+
+      .tool-call-result-detail {
+        font-size: 0.72rem;
+        color: var(--color-text-muted);
+        white-space: pre-wrap;
+        word-break: break-all;
+        font-family: monospace;
+        line-height: 1.4;
+        max-height: 8em;
+        overflow: auto;
+      }
+
       /* Plan block */
       .plan-block {
         margin-top: 6px;
@@ -238,106 +311,113 @@ export class ChatMessageBubble extends LitElement {
         margin-top: 1px;
       }
     `,
-  ];
+ ];
 
-  @property({ type: String, attribute: 'message-id' })
-  declare messageId: string;
+ @property({ type: String, attribute: 'message-id' })
+ declare messageId: string;
 
-  @property({ type: Number })
-  declare sender: Sender;
+ @property({ type: Number })
+ declare sender: Sender;
 
-  @property({ type: String, attribute: 'sender-name' })
-  declare senderName: string;
+ @property({ type: String, attribute: 'sender-name' })
+ declare senderName: string;
 
-  @property({ type: String, attribute: 'rendered-html' })
-  declare renderedHtml: string;
+ @property({ type: String, attribute: 'rendered-html' })
+ declare renderedHtml: string;
 
-  @property({ type: String })
-  declare content: string;
+ @property({ type: String })
+ declare content: string;
 
-  @property({ type: Boolean })
-  declare edited: boolean;
+ @property({ type: Boolean })
+ declare edited: boolean;
 
-  @property({ type: String, attribute: 'reply-to-id' })
-  declare replyToId: string;
+ @property({ type: String, attribute: 'reply-to-id' })
+ declare replyToId: string;
 
-  @property({ attribute: false })
-  declare reactions: ReactionGroup[];
+ @property({ attribute: false })
+ declare reactions: ReactionGroup[];
 
-  @property({ attribute: false })
-  declare toolCalls: ToolCallState[];
+ @property({ attribute: false })
+ declare toolCalls: ToolCallState[];
 
-  @property({ attribute: false })
-  declare plan: PlanEntryState[];
+ @property({ attribute: false })
+ declare backgroundTask: BackgroundTaskState | null;
+ @property({ attribute: false })
+ declare plan: PlanEntryState[];
+ @state()
+ private declare _nowMs: number;
 
-  @state()
-  private declare _nowMs: number;
+ private _elapsedTimerId: ReturnType<typeof setInterval> | null = null;
+ private readonly _longRunningThresholdMs = 30_000; // 30 seconds
 
-  private _elapsedTimerId: ReturnType<typeof setInterval> | null = null;
-
-  constructor() {
-    super();
-    this.messageId = '';
-    this.sender = Sender.SENDER_UNSPECIFIED;
-    this.senderName = '';
-    this.renderedHtml = '';
-    this.content = '';
-    this.edited = false;
-    this.replyToId = '';
-    this.reactions = [];
-    this.toolCalls = [];
-    this.plan = [];
-    this._nowMs = Date.now();
+ constructor() {
+  super();
+  this.messageId = '';
+  this.sender = Sender.SENDER_UNSPECIFIED;
+  this.senderName = '';
+  this.renderedHtml = '';
+  this.content = '';
+  this.edited = false;
+  this.replyToId = '';
+  this.reactions = [];
+  this.toolCalls = [];
+  this.plan = [];
+  this._nowMs = Date.now();
+  this.backgroundTask = null;
+ }
+ private _hasLiveToolCall(): boolean {
+  if (this.toolCalls.some((tc) => tc.status === 'pending' || tc.status === 'in_progress')) return true;
+  if (this.backgroundTask) {
+   const s = this.backgroundTask.status;
+   if (s === 'promoted' || s === 'working') return true;
   }
+  return false;
+ }
 
-  private _hasLiveToolCall(): boolean {
-    return this.toolCalls.some((tc) => tc.status === 'pending' || tc.status === 'in_progress');
+ override connectedCallback() {
+  super.connectedCallback();
+  // Restart the timer if we are re-attached to the DOM with live tool calls
+  // already set (a reconnect may not trigger updated()). _startElapsedTimer is
+  // a no-op when there are no live tool calls or the timer is already running.
+  this._startElapsedTimer();
+ }
+
+ override disconnectedCallback() {
+  super.disconnectedCallback();
+  this._stopElapsedTimer();
+ }
+
+ private _startElapsedTimer() {
+  if (this._elapsedTimerId !== null) return;
+  if (!this._hasLiveToolCall()) return;
+  this._elapsedTimerId = setInterval(() => {
+   this._nowMs = Date.now();
+  }, 1000);
+ }
+
+ private _stopElapsedTimer() {
+  if (this._elapsedTimerId !== null) {
+   clearInterval(this._elapsedTimerId);
+   this._elapsedTimerId = null;
   }
+ }
 
-  override connectedCallback() {
-    super.connectedCallback();
-    // Restart the timer if we are re-attached to the DOM with live tool calls
-    // already set (a reconnect may not trigger updated()). _startElapsedTimer is
-    // a no-op when there are no live tool calls or the timer is already running.
-    this._startElapsedTimer();
+ override updated() {
+  // Start or stop the timer based on whether there are live tool calls
+  if (this._hasLiveToolCall()) {
+   this._startElapsedTimer();
+  } else {
+   this._stopElapsedTimer();
   }
+ }
 
-  override disconnectedCallback() {
-    super.disconnectedCallback();
-    this._stopElapsedTimer();
-  }
+ override render() {
+  const isUser = this.sender === Sender.USER;
+  const bubbleClass = isUser ? 'user' : 'assistant';
 
-  private _startElapsedTimer() {
-    if (this._elapsedTimerId !== null) return;
-    if (!this._hasLiveToolCall()) return;
-    this._elapsedTimerId = setInterval(() => {
-      this._nowMs = Date.now();
-    }, 1000);
-  }
-
-  private _stopElapsedTimer() {
-    if (this._elapsedTimerId !== null) {
-      clearInterval(this._elapsedTimerId);
-      this._elapsedTimerId = null;
-    }
-  }
-
-  override updated() {
-    // Start or stop the timer based on whether there are live tool calls
-    if (this._hasLiveToolCall()) {
-      this._startElapsedTimer();
-    } else {
-      this._stopElapsedTimer();
-    }
-  }
-
-  override render() {
-    const isUser = this.sender === Sender.USER;
-    const bubbleClass = isUser ? 'user' : 'assistant';
-
-    return html`
+  return html`
       ${this.replyToId
-        ? html`<div
+    ? html`<div
             class="reply-link"
             role="link"
             tabindex="0"
@@ -346,169 +426,248 @@ export class ChatMessageBubble extends LitElement {
           >
             ↩ Replying to a message
           </div>`
-        : nothing}
+    : nothing}
       <div class="bubble ${bubbleClass}" data-message-id=${this.messageId}>
         ${this.senderName
-          ? html`<div class="sender-name">${this.senderName}</div>`
-          : nothing}
+    ? html`<div class="sender-name">${this.senderName}</div>`
+    : nothing}
         <div class="content">
           ${this.renderedHtml
-            ? unsafeHTML(this.renderedHtml)
-            : html`${this.content}`}
+    ? unsafeHTML(this.renderedHtml)
+    : html`${this.content}`}
         </div>
         ${this._renderToolCalls()}
+        ${this._renderBackgroundTask()}
         ${this._renderPlan()}
         ${this.edited
-          ? html`<div class="edited-indicator">(edited)</div>`
-          : nothing}
+    ? html`<div class="edited-indicator">(edited)</div>`
+    : nothing}
       </div>
       ${this.reactions.length > 0
-        ? html`<div class="reactions">
+    ? html`<div class="reactions">
             ${this.reactions.map(
-              (r) => html`
+     (r) => html`
                 <span class="reaction-chip">
                   <span>${r.emoji}</span>
                   ${r.count > 1
-                    ? html`<span class="reaction-count">${r.count}</span>`
-                    : nothing}
+       ? html`<span class="reaction-count">${r.count}</span>`
+       : nothing}
                 </span>
               `,
-            )}
+    )}
           </div>`
-        : nothing}
+    : nothing}
     `;
+ }
+
+ private _toolCallStatusIcon(status: string): string {
+  switch (status) {
+   case 'pending': return '•';   // bullet — neutral dot
+   case 'in_progress': return '⏳'; // hourglass
+   case 'completed': return '✅';  // check mark
+   case 'failed': return '❌';     // cross mark
+   default: return '•';           // bullet
   }
+ }
 
-  private _toolCallStatusIcon(status: string): string {
-    switch (status) {
-      case 'pending': return '•';   // bullet — neutral dot
-      case 'in_progress': return '⏳'; // hourglass
-      case 'completed': return '✅';  // check mark
-      case 'failed': return '❌';     // cross mark
-      default: return '•';           // bullet
-    }
+ private _kindGlyph(kind: string): string {
+  switch (kind) {
+   case 'read': return '📄';
+   case 'edit': return '✏️';
+   case 'delete': return '🗑️';
+   case 'move': return '↔️';
+   case 'search': return '🔍';
+   case 'execute': return '⚡';
+   case 'think': return '💭';
+   case 'fetch': return '🌐';
+   case 'switch_mode': return '🔀';
+   // ACP "other" (e.g. MCP tool calls) and unknown kinds get a generic glyph
+   // so the collapsed pill always has a primary icon.
+   default: return '🔧';
   }
+ }
 
-  private _kindGlyph(kind: string): string {
-    switch (kind) {
-      case 'read': return '📄';
-      case 'edit': return '✏️';
-      case 'delete': return '🗑️';
-      case 'move': return '↔️';
-      case 'search': return '🔍';
-      case 'execute': return '⚡';
-      case 'think': return '💭';
-      case 'fetch': return '🌐';
-      case 'switch_mode': return '🔀';
-      // ACP "other" (e.g. MCP tool calls) and unknown kinds get a generic glyph
-      // so the collapsed pill always has a primary icon.
-      default: return '🔧';
-    }
+ private _formatElapsedMs(elapsedMs: number): string {
+  const elapsedSec = Math.floor(elapsedMs / 1000);
+  if (elapsedSec < 60) {
+   return `${elapsedSec}s`;
   }
+  const elapsedMin = Math.floor(elapsedSec / 60);
+  const remainingSec = elapsedSec % 60;
+  return `${elapsedMin}m${remainingSec}s`;
+ }
 
-  private _formatElapsedMs(elapsedMs: number): string {
-    const elapsedSec = Math.floor(elapsedMs / 1000);
-    if (elapsedSec < 60) {
-      return `${elapsedSec}s`;
-    }
-    const elapsedMin = Math.floor(elapsedSec / 60);
-    const remainingSec = elapsedSec % 60;
-    return `${elapsedMin}m${remainingSec}s`;
-  }
+ private _renderToolCalls() {
+  if (this.toolCalls.length === 0) return nothing;
 
-  private _renderToolCalls() {
-    if (this.toolCalls.length === 0) return nothing;
-
-    return html`
+  return html`
       <div class="tool-calls">
         ${this.toolCalls.map((tc) => this._renderToolCall(tc))}
       </div>
     `;
-  }
+ }
 
-  private _renderToolCall(tc: ToolCallState) {
-    const isLive = tc.status === 'pending' || tc.status === 'in_progress';
+ private _isLongRunning(tc: ToolCallState): boolean {
+  const elapsedMs = this._nowMs - tc.startedAtMs;
+  return Number.isFinite(elapsedMs) && elapsedMs >= this._longRunningThresholdMs;
+ }
 
-    if (isLive) {
-      // startedAtMs is absent for historical tool calls (not replayed with a
-      // timestamp); only show elapsed when we have a sane, finite value so we
-      // never render "NaNs".
-      const elapsedMs = this._nowMs - tc.startedAtMs;
-      const showElapsed = Number.isFinite(elapsedMs) && elapsedMs >= 0;
-      const kindGlyph = this._kindGlyph(tc.kind);
-      return html`
-        <div class="tool-call-live">
+ private _renderToolCall(tc: ToolCallState) {
+  const isLive = tc.status === 'pending' || tc.status === 'in_progress';
+
+  if (isLive) {
+   // startedAtMs is absent for historical tool calls (not replayed with a
+   // timestamp); only show elapsed when we have a sane, finite value so we
+   // never render "NaNs".
+   const elapsedMs = this._nowMs - tc.startedAtMs;
+   const showElapsed = Number.isFinite(elapsedMs) && elapsedMs >= 0;
+   const kindGlyph = this._kindGlyph(tc.kind);
+   const longRunning = this._isLongRunning(tc);
+   const liveClass = longRunning ? 'tool-call-live long-running' : 'tool-call-live';
+   return html`
+        <div class="${liveClass}">
           <div class="tool-call-live-header">
             <span class="status-icon">${this._toolCallStatusIcon(tc.status)}</span>
             ${kindGlyph ? html`<span class="kind-glyph">${kindGlyph}</span>` : nothing}
             <span class="tool-call-live-title">${tc.title}</span>
             ${showElapsed
-              ? html`<span class="tool-call-elapsed">${this._formatElapsedMs(elapsedMs)}</span>`
-              : nothing}
+     ? html`<span class="tool-call-elapsed">${this._formatElapsedMs(elapsedMs)}</span>`
+     : nothing}
           </div>
           ${tc.detail
-            ? html`<div class="tool-call-detail">${tc.detail}</div>`
-            : nothing}
+     ? html`<div class="tool-call-detail">${tc.detail}</div>`
+     : nothing}
         </div>
       `;
-    }
+  }
 
-    // Completed or failed: collapse to icons to save space — the tool kind glyph
-    // as the primary mark with the status as small subtext. The full label (tool
-    // name + args) is preserved in the title attribute so it shows on hover.
-    const label = tc.detail ? `${tc.title}: ${tc.detail}` : tc.title;
-    return html`
+  // Completed or failed: if the task was long-running, show an expanded
+  // result card instead of immediately collapsing to a pill. The card
+  // shows the title, elapsed duration, and detail so the user can see
+  // what happened without hovering.
+  const durationMs = tc.startedAtMs > 0 ? this._nowMs - tc.startedAtMs : 0;
+  if (Number.isFinite(durationMs) && durationMs >= this._longRunningThresholdMs) {
+   const resultClass = tc.status === 'failed' ? 'tool-call-result failed' : 'tool-call-result';
+   const kindGlyph = this._kindGlyph(tc.kind);
+   return html`
+        <div class="${resultClass}">
+          <div class="tool-call-result-header">
+            <span class="status-icon">${this._toolCallStatusIcon(tc.status)}</span>
+            ${kindGlyph ? html`<span class="kind-glyph">${kindGlyph}</span>` : nothing}
+            <span class="tool-call-result-title">${tc.title}</span>
+            <span class="tool-call-result-elapsed">${this._formatElapsedMs(durationMs)}</span>
+          </div>
+          ${tc.detail
+     ? html`<div class="tool-call-result-detail">${tc.detail}</div>`
+     : nothing}
+        </div>
+      `;
+  }
+
+  // Short completed/failed: collapse to icons to save space — the tool kind glyph
+  // as the primary mark with the status as small subtext. The full label (tool
+  // name + args) is preserved in the title attribute so it shows on hover.
+  const label = tc.detail ? `${tc.title}: ${tc.detail}` : tc.title;
+  return html`
       <span class="tool-call-pill" title="${label}">
         <span class="kind-glyph">${this._kindGlyph(tc.kind)}</span>
         <span class="status-icon">${this._toolCallStatusIcon(tc.status)}</span>
       </span>
     `;
+ }
+
+
+ private _renderBackgroundTask() {
+  if (!this.backgroundTask) return nothing;
+
+  const bt = this.backgroundTask;
+  const isLive = bt.status === 'promoted' || bt.status === 'working';
+  const elapsedMs = this._nowMs - bt.startedAtMs;
+  const showElapsed = Number.isFinite(elapsedMs) && elapsedMs >= 0;
+  const kindGlyph = '🔧';
+
+  if (isLive) {
+   return html`
+        <div class="tool-call-live long-running">
+          <div class="tool-call-live-header">
+            <span class="status-icon">⏳</span>
+            <span class="kind-glyph">${kindGlyph}</span>
+            <span class="tool-call-live-title">${bt.title}</span>
+            ${showElapsed
+     ? html`<span class="tool-call-elapsed">${this._formatElapsedMs(elapsedMs)}</span>`
+     : nothing}
+          </div>
+          ${bt.detail
+     ? html`<div class="tool-call-detail">${bt.detail}</div>`
+     : nothing}
+        </div>
+      `;
   }
 
-  private _planEntryIcon(status: string): string {
-    switch (status) {
-      case 'completed': return '☑';
-      case 'in_progress': return '🔄';
-      default: return '☐';
-    }
+  // Completed or failed background task — show expanded result card
+  const resultClass = bt.status === 'failed' ? 'tool-call-result failed' : 'tool-call-result';
+  const statusIcon = bt.status === 'failed' ? '❌' : '✅';
+  const durationMs = showElapsed ? elapsedMs : 0;
+  return html`
+        <div class="${resultClass}">
+          <div class="tool-call-result-header">
+            <span class="status-icon">${statusIcon}</span>
+            <span class="kind-glyph">${kindGlyph}</span>
+            <span class="tool-call-result-title">${bt.title}</span>
+            ${showElapsed
+    ? html`<span class="tool-call-result-elapsed">${this._formatElapsedMs(durationMs)}</span>`
+    : nothing}
+          </div>
+          ${bt.detail
+    ? html`<div class="tool-call-result-detail">${bt.detail}</div>`
+    : nothing}
+        </div>
+      `;
+ }
+ private _planEntryIcon(status: string): string {
+  switch (status) {
+   case 'completed': return '☑';
+   case 'in_progress': return '🔄';
+   default: return '☐';
   }
+ }
 
-  private _renderPlan() {
-    // A message legitimately may have no plan; tolerate an absent value rather
-    // than dereferencing undefined (e.g. message state set without a plan field).
-    if (!this.plan || this.plan.length === 0) return nothing;
+ private _renderPlan() {
+  // A message legitimately may have no plan; tolerate an absent value rather
+  // than dereferencing undefined (e.g. message state set without a plan field).
+  if (!this.plan || this.plan.length === 0) return nothing;
 
-    return html`
+  return html`
       <div class="plan-block">
         <div class="plan-header">Plan</div>
         ${this.plan.map(
-          (entry) => html`
+   (entry) => html`
             <div class="plan-entry ${entry.status}">
               <span class="plan-entry-icon">${this._planEntryIcon(entry.status)}</span>
               <span class="plan-entry-content">${entry.content}</span>
             </div>
           `,
-        )}
+  )}
       </div>
     `;
-  }
+ }
 
-  private _handleReplyClick() {
-    this.dispatchEvent(
-      new CustomEvent('scroll-to-message', {
-        detail: { messageId: this.replyToId },
-        bubbles: true,
-        composed: true,
-      }),
-    );
-  }
+ private _handleReplyClick() {
+  this.dispatchEvent(
+   new CustomEvent('scroll-to-message', {
+    detail: { messageId: this.replyToId },
+    bubbles: true,
+    composed: true,
+   }),
+  );
+ }
 
-  private _handleReplyKeydown(e: KeyboardEvent) {
-    if (e.key === 'Enter' || e.key === ' ') {
-      e.preventDefault();
-      this._handleReplyClick();
-    }
+ private _handleReplyKeydown(e: KeyboardEvent) {
+  if (e.key === 'Enter' || e.key === ' ') {
+   e.preventDefault();
+   this._handleReplyClick();
   }
+ }
 }
 
 customElements.define('chat-message-bubble', ChatMessageBubble);

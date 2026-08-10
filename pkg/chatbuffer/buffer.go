@@ -78,6 +78,7 @@ type Event struct {
 	Cleared           *ClearedEvent
 	Plan              *PlanEvent
 	TurnStatus        *TurnStatusEvent
+	BackgroundTask    *BackgroundTaskEvent
 }
 
 // EventType identifies the type of chat event.
@@ -92,6 +93,7 @@ const (
 	EventTypeCleared
 	EventTypePlan
 	EventTypeTurnStatus
+	EventTypeBackgroundTask
 )
 
 // EditEvent represents a message edit.
@@ -111,6 +113,18 @@ type ToolCallEvent struct {
 	Status     string // ACP status: "pending", "in_progress", "completed", "failed"
 	Kind       string // ACP tool kind: read/edit/delete/move/search/execute/think/fetch/switch_mode/other
 	Detail     string // concise live detail line (e.g. affected "path:line" or latest output)
+}
+
+// BackgroundTaskEvent represents a tool call that has been promoted to a
+// background task because it has been running for an extended period.
+// The server auto-promotes tool calls after 30 seconds of in_progress status.
+type BackgroundTaskEvent struct {
+	MessageID   string
+	ToolCallID  string
+	Title       string
+	Status      string // "promoted", "working", "completed", "failed"
+	Detail      string
+	StartedAtMs int64
 }
 
 // PlanEntry is one item in an agent execution plan, mirroring an ACP plan entry.
@@ -519,6 +533,19 @@ func (m *Manager) NotifyToolCall(page string, toolCall ToolCallEvent) {
 	buf.unlockAndNotify(Event{
 		Type:     EventTypeToolCall,
 		ToolCall: &tc,
+	})
+}
+
+// NotifyBackgroundTask sends a background-task notification to page subscribers.
+// This is ephemeral — not stored in the buffer, only streamed to active subscribers.
+func (m *Manager) NotifyBackgroundTask(page string, bgTask BackgroundTaskEvent) {
+	buf := m.getOrCreateBuffer(page)
+	buf.mu.Lock()
+	buf.lastAccess = time.Now()
+	bt := bgTask
+	buf.unlockAndNotify(Event{
+		Type:           EventTypeBackgroundTask,
+		BackgroundTask: &bt,
 	})
 }
 

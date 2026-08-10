@@ -640,6 +640,10 @@ func (noOpChatBufferManager) NotifyToolCall(string, chatbuffer.ToolCallEvent) {
 	// no-op: satisfies interface; this implementation ignores tool call notifications
 }
 
+func (noOpChatBufferManager) NotifyBackgroundTask(string, chatbuffer.BackgroundTaskEvent) {
+	// no-op: satisfies interface
+}
+
 func (noOpChatBufferManager) NotifyPlan(string, chatbuffer.PlanEvent) {
 	// no-op: satisfies interface; this implementation ignores plan notifications
 }
@@ -2406,7 +2410,7 @@ var _ = Describe("Server", func() {
 
 		BeforeEach(func() {
 			req = &apiv1.UpdatePageContentRequest{
-				Page:           "test-page",
+				Page:               "test-page",
 				NewContentMarkdown: "# New Content",
 			}
 			mockPageReaderMutator = &MockPageReaderMutator{
@@ -2780,7 +2784,7 @@ var _ = Describe("Server", func() {
 
 		BeforeEach(func() {
 			req = &apiv1.ClearPageContentRequest{
-				Page:     "test-page",
+				Page:         "test-page",
 				ConfirmClear: true,
 			}
 			mockPageReaderMutator = &MockPageReaderMutator{
@@ -2900,7 +2904,7 @@ var _ = Describe("Server", func() {
 
 		BeforeEach(func() {
 			req = &apiv1.UpdateWholePageRequest{
-				Page:         "test-page",
+				Page:             "test-page",
 				NewWholeMarkdown: "+++\ntitle = \"New Title\"\n+++\n# New Content",
 			}
 			mockPageReaderMutator = &MockPageReaderMutator{
@@ -6238,7 +6242,7 @@ var _ = Describe("Server", func() {
 
 		BeforeEach(func() {
 			req = &apiv1.ReadPageSectionRequest{
-				Page:   "test-page",
+				Page:       "test-page",
 				ByteOffset: int64(len("# Intro\n\n")),
 				ByteLength: int64(len("intro body\n\n")),
 			}
