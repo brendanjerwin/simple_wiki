@@ -500,9 +500,18 @@ export class ChatMessageBubble extends LitElement {
  private _renderToolCalls() {
   if (this.toolCalls.length === 0) return nothing;
 
+  // Suppress tool calls that have been promoted to background tasks —
+  // the background task card renders instead, so showing both is redundant.
+  const promotedIds = new Set<string>();
+  if (this.backgroundTask) {
+   promotedIds.add(this.backgroundTask.toolCallId);
+  }
+  const visible = this.toolCalls.filter((tc) => !promotedIds.has(tc.toolCallId));
+  if (visible.length === 0) return nothing;
+
   return html`
       <div class="tool-calls">
-        ${this.toolCalls.map((tc) => this._renderToolCall(tc))}
+        ${visible.map((tc) => this._renderToolCall(tc))}
       </div>
     `;
  }
