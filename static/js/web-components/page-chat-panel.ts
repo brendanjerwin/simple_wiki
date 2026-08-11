@@ -38,6 +38,7 @@ export interface ToolCallState {
   kind: string;
   detail: string;
   startedAtMs: number;
+  completedAtMs: number | null;
 }
 
 export interface BackgroundTaskState {
@@ -1190,6 +1191,7 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
     const msg = this.messagesById.get(messageId);
     if (!msg) return;
 
+    const isTerminal = status === 'completed' || status === 'failed';
     const existing = msg.toolCalls.find((tc) => tc.toolCallId === toolCallId);
     if (existing) {
       // ACP tool-call updates are partial: a status-only update carries empty
@@ -1200,9 +1202,17 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
       existing.kind = kind || existing.kind;
       existing.detail = detail || existing.detail;
       // Preserve the original startedAtMs — do not overwrite it
+      // Record completion time when the task reaches a terminal state
+      if (isTerminal && existing.completedAtMs === null) {
+        existing.completedAtMs = Date.now();
+      }
       msg.toolCalls = [...msg.toolCalls];
     } else {
-      msg.toolCalls = [...msg.toolCalls, { toolCallId, title, status, kind, detail, startedAtMs: Date.now() }];
+      msg.toolCalls = [...msg.toolCalls, {
+        toolCallId, title, status, kind, detail,
+        startedAtMs: Date.now(),
+        completedAtMs: isTerminal ? Date.now() : null,
+      }];
     }
     this.messages = [...this.messages];
 

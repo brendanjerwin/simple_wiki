@@ -554,7 +554,11 @@ export class ChatMessageBubble extends LitElement {
   // result card instead of immediately collapsing to a pill. The card
   // shows the title, elapsed duration, and detail so the user can see
   // what happened without hovering.
-  const durationMs = tc.startedAtMs > 0 ? this._nowMs - tc.startedAtMs : 0;
+  // Use the recorded completion time to calculate duration, not the live
+  // _nowMs — otherwise the duration of completed tool calls grows as long
+  // as other live tool calls keep the elapsed timer ticking.
+  const endTime = tc.completedAtMs ?? this._nowMs;
+  const durationMs = tc.startedAtMs > 0 ? endTime - tc.startedAtMs : 0;
   if (Number.isFinite(durationMs) && durationMs >= this._longRunningThresholdMs) {
    const resultClass = tc.status === 'failed' ? 'tool-call-result failed' : 'tool-call-result';
    const kindGlyph = this._kindGlyph(tc.kind);
