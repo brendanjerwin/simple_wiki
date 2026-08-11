@@ -1443,8 +1443,8 @@ describe('PageChatPanel', () => {
         reactions: [],
         edited: false,
         toolCalls: [
-          { toolCallId: 'tc-a', title: 'Search', status: 'completed', kind: 'search', detail: '', startedAtMs: 0 },
-          { toolCallId: 'tc-b', title: 'Execute', status: 'in_progress', kind: 'execute', detail: '', startedAtMs: 0 },
+          { toolCallId: 'tc-a', title: 'Search', status: 'completed', kind: 'search', detail: '', completedAtMs: null, startedAtMs: 0 },
+          { toolCallId: 'tc-b', title: 'Execute', status: 'in_progress', kind: 'execute', detail: '', completedAtMs: null, startedAtMs: 0 },
         ],
         plan: [],
         backgroundTask: null,

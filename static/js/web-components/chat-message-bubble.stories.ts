@@ -119,7 +119,7 @@ export const LiveToolCall: Story = {
         status: 'in_progress',
         kind: 'read',
         detail: '/wiki/InventoryPage',
-        startedAtMs: Date.now() - 4200,
+        completedAtMs: null, startedAtMs: Date.now() - 4200,
       },
     ];
     return html`
@@ -149,7 +149,7 @@ export const PendingToolCall: Story = {
         status: 'pending',
         kind: 'search',
         detail: '',
-        startedAtMs: Date.now(),
+        completedAtMs: null, startedAtMs: Date.now(),
       },
     ];
     return html`
@@ -179,7 +179,7 @@ export const CompletedToolCall: Story = {
         status: 'completed',
         kind: 'read',
         detail: '/wiki/InventoryPage',
-        startedAtMs: Date.now() - 3000,
+        completedAtMs: null, startedAtMs: Date.now() - 3000,
       },
       {
         toolCallId: 'tc-done-2',
@@ -187,7 +187,7 @@ export const CompletedToolCall: Story = {
         status: 'completed',
         kind: 'search',
         detail: 'query: hammer',
-        startedAtMs: Date.now() - 1500,
+        completedAtMs: null, startedAtMs: Date.now() - 1500,
       },
     ];
     return html`
@@ -217,7 +217,7 @@ export const FailedToolCall: Story = {
         status: 'failed',
         kind: 'execute',
         detail: 'Exit code 127: command not found',
-        startedAtMs: Date.now() - 800,
+        completedAtMs: null, startedAtMs: Date.now() - 800,
       },
     ];
     return html`
@@ -247,7 +247,7 @@ export const MixedToolCalls: Story = {
         status: 'completed',
         kind: 'read',
         detail: '/wiki/InventoryPage',
-        startedAtMs: Date.now() - 8000,
+        completedAtMs: null, startedAtMs: Date.now() - 8000,
       },
       {
         toolCallId: 'tc-mix-2',
@@ -255,7 +255,7 @@ export const MixedToolCalls: Story = {
         status: 'completed',
         kind: 'search',
         detail: 'query: hammer',
-        startedAtMs: Date.now() - 6000,
+        completedAtMs: null, startedAtMs: Date.now() - 6000,
       },
       {
         toolCallId: 'tc-mix-3',
@@ -263,7 +263,7 @@ export const MixedToolCalls: Story = {
         status: 'in_progress',
         kind: 'edit',
         detail: 'wiki/InventoryPage — setting quantity: 5',
-        startedAtMs: Date.now() - 1200,
+        completedAtMs: null, startedAtMs: Date.now() - 1200,
       },
     ];
     return html`
@@ -320,7 +320,7 @@ export const LiveToolCallWithPlan: Story = {
         status: 'completed',
         kind: 'read',
         detail: '/wiki/InventoryPage',
-        startedAtMs: Date.now() - 6000,
+        completedAtMs: null, startedAtMs: Date.now() - 6000,
       },
       {
         toolCallId: 'tc-combo-2',
@@ -328,7 +328,7 @@ export const LiveToolCallWithPlan: Story = {
         status: 'in_progress',
         kind: 'edit',
         detail: 'wiki/InventoryPage — quantity: 5',
-        startedAtMs: Date.now() - 900,
+        completedAtMs: null, startedAtMs: Date.now() - 900,
       },
     ];
     const plan: PlanEntryState[] = [
@@ -364,7 +364,7 @@ export const LongRunningToolCall: Story = {
         status: 'in_progress',
         kind: 'other',
         detail: 'Queued: position 2 of 3 (current task: cluster investigation, ~8 min remaining)',
-        startedAtMs: Date.now() - 135_000, // 2m15s elapsed
+        completedAtMs: null, startedAtMs: Date.now() - 135_000, // 2m15s elapsed
       },
     ];
     return html`
@@ -394,7 +394,7 @@ export const LongRunningToolCallCompleted: Story = {
         status: 'completed',
         kind: 'other',
         detail: 'All nodes ready. No issues found. SEVERITY: info',
-        startedAtMs: Date.now() - 185_000, // ~3m5s duration
+        completedAtMs: Date.now(), startedAtMs: Date.now() - 185_000, // ~3m5s duration
       },
     ];
     return html`
@@ -424,7 +424,7 @@ export const LongRunningToolCallFailed: Story = {
         status: 'failed',
         kind: 'other',
         detail: 'Error: SSH connection to gpu-box-2 timed out after 30s',
-        startedAtMs: Date.now() - 95_000, // ~1m35s duration
+        completedAtMs: Date.now(), startedAtMs: Date.now() - 95_000, // ~1m35s duration
       },
     ];
     return html`
