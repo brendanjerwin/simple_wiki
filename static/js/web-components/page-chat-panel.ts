@@ -636,6 +636,8 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
                     .sender=${msg.sender}
                     .senderName=${msg.senderName}
                     .content=${msg.content}
+                    .renderedHtml=${msg.renderedHtml}
+                    ?edited=${msg.edited}
                     reply-to-id=${msg.replyToId}
                     .reactions=${msg.reactions}
                     .backgroundTask=${msg.backgroundTask}
@@ -646,7 +648,6 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
                 `,
         )}
         </div>
-
         ${this.turnActive
         ? html`<div class="thinking-indicator">
               ${this.waitingForAssistant
@@ -1168,6 +1169,9 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
       }
     }
 
+    // Update both content and renderedHtml before triggering re-render
+    // to avoid a race where the template shows raw content (with escaped HTML)
+    // before renderedHtml is ready.
     msg.content = newContent;
     msg.renderedHtml = renderedHtml;
     if (!streaming) {
