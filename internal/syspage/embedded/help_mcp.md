@@ -11,14 +11,15 @@ system = true
 
 The wiki exposes its API as **MCP tools** so AI agents (Claude Code, `wiki-cli mcp`, any MCP client) can read and mutate pages, checklists, maps, surveys, history, and more. This page is the human-readable catalog of what's available. For a machine-readable catalog, fetch `https://<your-wiki>/mcp/catalog`.
 
-## Two MCP transports
+## Three MCP transports
 
 | Transport | Endpoint | Use when |
 |---|---|---|
 | **Streamable HTTP** | `https://<your-wiki>/mcp` | Claude Code or any MCP-over-HTTP client. In-process, no subprocess. |
 | **stdio** | `wiki-cli mcp --url https://<your-wiki>` | Local tooling that speaks MCP over stdin/stdout. |
+| **Streamable HTTP (public)** | `https://<gateway-hostname>/<path>/mcp` | Hosted AI agents (Claude.ai, Gemini, ChatGPT, Gemini Enterprise) running outside the private network. OAuth 2.1-protected; same tool surface; requires the operator to run the public-gateway configuration (see below). |
 
-Both surfaces advertise the same tools with the same curated descriptions. Tool names follow the pattern `api_v1_<ServiceName>_<MethodName>`.
+All surfaces advertise the same tools with the same curated descriptions. Tool names follow the pattern `api_v1_<ServiceName>_<MethodName>`.
 
 ## Service catalog
 
@@ -50,6 +51,10 @@ Each service owns a reserved frontmatter namespace or a distinct concern. The de
 ## Discovering tools at runtime
 
 Agents should call `tools/list` on the MCP endpoint to see the live tool set with descriptions and input schemas. The `/mcp/catalog` URL returns just the service-level descriptions (no schemas) as JSON for lightweight enumeration.
+
+## Connecting hosted agents
+
+Deployments may expose MCP over a public, OAuth-protected gateway for hosted agents that run outside the private network. Registration is automatic for clients that support Dynamic Client Registration or CIMD, and pre-registered for enterprise/custom-connector flows. The browser used for the OAuth consent step must reach the private identity provider (it only serves `/authorize` to private-network connections). See [[hosted_agent_mcp_registration]] for the deployment-specific guide.
 
 ## See Also
 
