@@ -42,7 +42,7 @@ sudo systemctl stop simple_wiki
 echo "Installing systemd service"
 sudo cp /tmp/deployment-package/simple_wiki.service /etc/systemd/system/simple_wiki.service
 sudo chown root:root /etc/systemd/system/simple_wiki.service
-sudo chmod 644 /etc/systemd/system/simple_wiki.service
+sudo chmod 600 /etc/systemd/system/simple_wiki.service
 sudo systemctl daemon-reload
 sudo systemctl enable simple_wiki
 
