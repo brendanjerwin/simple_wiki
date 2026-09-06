@@ -59,7 +59,15 @@ func main() {
 		if shouldSkipVersionCheck(c.Args().First()) {
 			return nil
 		}
-		if err := checkVersionCompatibility(c.GlobalString("url")); err != nil {
+		url := c.GlobalString("url")
+		if err := checkVersionCompatibility(url); err != nil {
+			// The binary is stale relative to the running server. If this is a
+			// committed build, self-update: download the matching binary, swap
+			// it in, and re-exec. Retry once; if self-update is impossible or
+			// fails, surface the mismatch error as before.
+			if attemptSelfUpdateAndReExec(url) {
+				os.Exit(0)
+			}
 			// Print directly and exit to avoid urfave/cli dumping help text on error.
 			if _, writeErr := fmt.Fprintln(os.Stderr, err); writeErr != nil {
 				os.Exit(2)
@@ -83,15 +91,40 @@ func main() {
 //
 // Skip version check for mcp — it speaks stdio and clients expect a
 // near-instant initialize response; a network round-trip on every startup
-// is too slow. The wiki-cli bootstrapper script is expected to handle mcp
-// updates by other means (e.g. periodic deletion of the cached binary).
+// is too slow. The binary instead performs a best-effort background
+// refresh for mcp (see backgroundSelfUpdateIfStale).
 //
 // Pool and other commands DO check: pool is a long-lived daemon and
-// without a version check at startup the bootstrapper's "VERSION MISMATCH"
-// self-update path never fires for it. The cost is one HTTP round-trip at
-// startup which is acceptable for a daemon that runs for hours or days.
+// without a version check at startup the self-update path never fires
+// for it. The cost is one HTTP round-trip at startup which is acceptable
+// for a daemon that runs for hours or days.
 func shouldSkipVersionCheck(firstArg string) bool {
 	return firstArg == "mcp"
+}
+
+// attemptSelfUpdateAndReExec tries to bring this binary up to the running
+// wiki server's version by downloading the matching /cli/ binary, atomically
+// replacing this executable, and re-execing with the original argv. Returns
+// true when the new process image took over (the original process is gone).
+// Dev builds (commit == "dev") have no matching server binary and skip.
+func attemptSelfUpdateAndReExec(wikiURL string) bool {
+	if commit == "dev" {
+		return false
+	}
+	if err := selfUpdate(wikiURL); err != nil {
+		var updateErr *selfUpdateError
+		if !errors.As(err, &updateErr) {
+			fmt.Fprintf(os.Stderr, "self-update failed: %v\nfalling back to version mismatch error\n", err)
+			return false
+		}
+		// *selfUpdateError means the swap succeeded; fall through to re-exec.
+	}
+	fmt.Fprintf(os.Stderr, "wiki-cli updated to match server (%s); re-executing\n", wikiURL)
+	if err := reExecSelf(); err != nil {
+		fmt.Fprintf(os.Stderr, "re-exec failed: %v\nfalling back to version mismatch error\n", err)
+		return false
+	}
+	return true // unreachable: syscall.Exec never returns on success
 }
 
 // versionResponse is the JSON shape returned by SystemInfoService/GetVersion.
