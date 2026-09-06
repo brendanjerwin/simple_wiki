@@ -82,13 +82,19 @@ func runMCPServer(baseURL string) error {
 		return fmt.Errorf("invalid base URL: %w", err)
 	}
 
-	// Create Connect clients and register MCP tool handlers
 	clients := createAPIClients(httpClient, normalizedURL)
 	registerToolHandlers(mcpServer, clients)
 
 	// Redirect Go's default logger to stderr explicitly (it already defaults
 	// to stderr, but being explicit prevents future surprises with stdio MCP).
 	log.SetOutput(os.Stderr)
+
+	// mcp skips the startup version check (stdio clients expect instant
+	// init and cannot tolerate a re-exec), so refresh lazily instead: when
+	// the server has a newer commit, silently swap the on-disk binary in
+	// the background. The next session spawn picks up the fresh binary.
+	// Best-effort only — never touches stdout/stdin, never blocks init.
+	go backgroundSelfUpdateIfStale(normalizedURL)
 
 	// Start stdio MCP server (blocks until stdin closes)
 	return mcpserver.ServeStdio(mcpServer)
