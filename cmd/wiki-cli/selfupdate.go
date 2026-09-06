@@ -20,16 +20,13 @@ import (
 const selfUpdateTimeout = 120 * time.Second
 
 // cliBinaryName returns the platform-specific binary name served by the wiki.
+// Windows binaries carry an .exe suffix (see build-all.sh).
 func cliBinaryName() string {
-	osName := strings.ToLower(runtime.GOOS)
-	arch := runtime.GOARCH
-	switch arch {
-	case "amd64":
-		arch = "amd64"
-	case "arm64":
-		arch = "arm64"
+	name := fmt.Sprintf("wiki-cli-%s-%s", strings.ToLower(runtime.GOOS), runtime.GOARCH)
+	if runtime.GOOS == "windows" {
+		name += ".exe"
 	}
-	return fmt.Sprintf("wiki-cli-%s-%s", osName, arch)
+	return name
 }
 
 // selfUpdateError reports that a new binary was downloaded and the caller
