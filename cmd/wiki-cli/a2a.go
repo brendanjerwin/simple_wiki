@@ -944,6 +944,19 @@ func (s *a2aServer) reapSessionsOnce() {
 	s.mu.Unlock()
 
 	for _, e := range toEvict {
+		// Skip busy sessions: a session holding its promptMu is mid-Prompt;
+		// killing it would fail an in-flight turn. It becomes evictable at
+		// the next reaper tick once its turn completes.
+		if !e.sess.promptMu.TryLock() {
+			slog.Info("a2a session busy, deferring reap",
+				logKeyCtxID, e.id,
+				logKeyAction, "a2a_session_reap_deferred")
+			s.mu.Lock()
+			s.sessions[e.id] = e.sess // put it back
+			s.mu.Unlock()
+			continue
+		}
+		e.sess.promptMu.Unlock()
 		if e.sess.agent != nil && e.sess.agent.cleanup != nil {
 			e.sess.agent.cleanup()
 		}
