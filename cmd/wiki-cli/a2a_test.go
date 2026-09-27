@@ -730,3 +730,46 @@ var _ = Describe("a2aServer session continuation (spec §3.4.3)", func() {
 		Expect(present).To(BeTrue(), "sentinel must survive the reaper")
 	})
 })
+
+var _ = Describe("a2aServer reaper busy-session safety", func() {
+	It("never tears down a busy (mid-Prompt) session's agent", func() {
+		srv, _ := newA2ATestServer("tok", "proxy", 9*time.Minute, 128, nil)
+		cleaned := make(chan string, 8)
+		srv.daemon.a2aEphemeralSpawner = func(_ context.Context, _ acp.Client, _, _ string) (*ephemeralAgent, error) {
+			return &ephemeralAgent{
+				sessionID: acp.SessionId("sess-busy"),
+				cleanup:   func() { cleaned <- "sess-busy" },
+			}, nil
+		}
+
+		t := &a2aTask{ID: "a2a-ggg", ContextID: "ctx-busy", UserText: "x", Caller: a2aCaller{ClientName: a2aCallerTailnet}, State: a2aStateWorking}
+		_, err := srv.acquireSession(context.Background(), t)
+		Expect(err).NotTo(HaveOccurred())
+
+		// Force eviction candidacy and make the session busy (mid-Prompt).
+		srv.mu.Lock()
+		sess := srv.sessions["ctx-busy"]
+		sess.lastUsed = time.Now().Add(-a2aSessionIdleTTL - time.Minute)
+		srv.mu.Unlock()
+		sess.promptMu.Lock()
+
+		srv.reapSessionsOnce()
+
+		// The session must still be registered and NOT cleaned up.
+		srv.mu.Lock()
+		_, present := srv.sessions["ctx-busy"]
+		srv.mu.Unlock()
+		Expect(present).To(BeTrue(), "busy session must stay in the map")
+		Consistently(func() bool { return len(cleaned) == 0 }, 100*time.Millisecond, 10*time.Millisecond).
+			Should(BeTrue(), "busy session's agent must not be torn down")
+
+		// Release the prompt; the NEXT reaper tick evicts it.
+		sess.promptMu.Unlock()
+		srv.reapSessionsOnce()
+		srv.mu.Lock()
+		_, present = srv.sessions["ctx-busy"]
+		srv.mu.Unlock()
+		Expect(present).To(BeFalse())
+		Eventually(func() int { return len(cleaned) }, 1*time.Second, 10*time.Millisecond).Should(Equal(1))
+	})
+})

@@ -938,35 +938,37 @@ func (s *a2aServer) runSessionReaper(ctx context.Context) {
 // next tick, so eviction never races a turn and never lands mid-Prompt.
 func (s *a2aServer) reapSessionsOnce() {
 	s.mu.Lock()
-	var deferred []string
 	now := time.Now()
-	toEvict := s.collectExpiredSessions()
-	// Over-cap: evict the oldest-by-last-used sessions beyond the cap,
-	// excluding those already queued.
-	live := len(s.sessions) - len(toEvict)
+
+	// Phase 1 (under lock): collect candidates.
+	candidates := s.collectExpiredSessions()
+	live := len(s.sessions) - len(candidates)
 	if live > a2aSessionMaxSessions {
-		excluded := make(map[string]bool, len(toEvict))
-		for _, e := range toEvict {
+		excluded := make(map[string]bool, len(candidates))
+		for _, e := range candidates {
 			excluded[e.id] = true
 		}
-		toEvict = append(toEvict, s.collectOverflowSessions(live-a2aSessionMaxSessions, excluded)...)
+		candidates = append(candidates, s.collectOverflowSessions(live-a2aSessionMaxSessions, excluded)...)
 	}
-	for _, e := range toEvict {
-		// Busy check + delete must be atomic with respect to acquireSession:
-		// while holding s.mu, TryLock the promptMu; only evict if not busy.
-		// Lock order here is safe: runTaskInSession holds promptMu and s.mu
-		// sequentially, never nested.
+
+	// Phase 2 (still under lock): TryLock each candidate's promptMu; only
+	// non-busy sessions are deleted from the map and queued for teardown.
+	// Busy sessions simply stay in the map for the next tick.
+	var evicted []a2aEvictEntry
+	var deferred []string
+	for _, e := range candidates {
 		if !e.sess.promptMu.TryLock() {
 			deferred = append(deferred, e.id)
 			continue
 		}
 		e.sess.promptMu.Unlock()
 		delete(s.sessions, e.id)
-		toEvict = append(toEvict, e)
+		evicted = append(evicted, e)
 	}
 	s.mu.Unlock()
 
-	for _, e := range toEvict {
+	// Phase 3 (no locks): tear down the evicted agents.
+	for _, e := range evicted {
 		if e.sess.agent != nil && e.sess.agent.cleanup != nil {
 			e.sess.agent.cleanup()
 		}
