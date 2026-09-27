@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -771,5 +773,112 @@ var _ = Describe("a2aServer reaper busy-session safety", func() {
 		srv.mu.Unlock()
 		Expect(present).To(BeFalse())
 		Eventually(func() int { return len(cleaned) }, 1*time.Second, 10*time.Millisecond).Should(Equal(1))
+	})
+})
+
+var _ = Describe("a2aServer task persistence", func() {
+	var stateFile string
+
+	BeforeEach(func() {
+		stateFile = filepath.Join(os.TempDir(), fmt.Sprintf("a2a-state-%d.json", time.Now().UnixNano()))
+	})
+	AfterEach(func() {
+		_ = os.Remove(stateFile)
+	})
+
+	newPersistTestServer := func(loadOnly bool) *a2aServer {
+		srv, err := newA2AServer(a2aServerConfig{
+			Port:        1,
+			Bind:        "127.0.0.1",
+			PublicURL:   "https://mcp.example.net/agent",
+			BearerToken: "tok",
+			StatePath:   stateFile,
+		}, &poolDaemon{a2aEphemeralSpawner: func(context.Context, acp.Client, string, string) (*ephemeralAgent, error) {
+			return nil, errors.New("no spawn in this test")
+		}})
+		Expect(err).NotTo(HaveOccurred())
+		if loadOnly {
+			Expect(srv.loadPersistedTasks()).To(Succeed())
+		}
+		return srv
+	}
+
+	It("persists a working row at task creation and sweeps it to failed on reload", func() {
+		srv := newPersistTestServer(false)
+		// Simulate a task created and persisted while working (crash mid-flight).
+		srv.tasks["a2a-crash"] = &a2aTask{
+			ID: "a2a-crash", ContextID: "ctx-crash", UserText: "do it",
+			Caller: a2aCaller{ClientName: a2aCallerPIAgent}, State: a2aStateWorking,
+			CreatedAt: time.Now(), cancel: func() {},
+		}
+		srv.persistTaskRecords()
+		// working rows must be persisted (not skipped).
+		data, err := os.ReadFile(stateFile)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(string(data)).To(ContainSubstring(`"working"`))
+
+		// "Restart": fresh server loads the same state file.
+		srv2 := newPersistTestServer(true)
+		t, ok := srv2.tasks["a2a-crash"]
+		Expect(ok).To(BeTrue(), "task must survive restart")
+		Expect(t.State).To(Equal(a2aStateFailed), "in-flight row swept to failed")
+		Expect(t.FinalText).To(ContainSubstring("service restarted"))
+		Expect(t.terminal()).To(BeTrue())
+		// tasks/get on the swept id must NOT be -32001.
+		snap := srv2.snapshot(t)
+		Expect(snap.Status.State).To(Equal(a2aStateFailed))
+	})
+
+	It("persists completed tasks and returns them across restarts unchanged", func() {
+		srv := newPersistTestServer(false)
+		srv.tasks["a2a-done"] = &a2aTask{
+			ID: "a2a-done", ContextID: "ctx-done", UserText: "q",
+			FinalText: "THE-ANSWER", State: a2aStateCompleted,
+			Caller: a2aCaller{Login: "u@x"}, CreatedAt: time.Now(),
+		}
+		srv.persistTaskRecords()
+
+		srv2 := newPersistTestServer(true)
+		t, ok := srv2.tasks["a2a-done"]
+		Expect(ok).To(BeTrue())
+		Expect(t.State).To(Equal(a2aStateCompleted), "terminal state is preserved verbatim")
+		Expect(t.FinalText).To(Equal("THE-ANSWER"))
+		Expect(t.terminal()).To(BeTrue())
+	})
+
+	It("sweeps a persisted canceled-ambiguous row to failed correctly", func() {
+		// A completed record must NOT be swept.
+		records := []persistedTaskRecord{{
+			ID: "a2a-ok", ContextID: "ctx-ok", State: a2aStateCompleted, FinalText: "kept",
+			Caller: a2aCaller{ClientName: a2aCallerPIAgent}, CreatedAt: time.Now(),
+		}}
+		data, err := json.Marshal(records)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(os.WriteFile(stateFile, data, 0o600)).To(Succeed())
+
+		srv := newPersistTestServer(true)
+		t := srv.tasks["a2a-ok"]
+		Expect(t).NotTo(BeNil())
+		Expect(t.State).To(Equal(a2aStateCompleted))
+		Expect(t.FinalText).To(Equal("kept"))
+	})
+
+	It("tasks/get returns the swept task instead of -32001", func() {
+		// Pre-seed a working row, then load it as a "restarted" server would.
+		records := []persistedTaskRecord{{
+			ID: "a2a-lost", ContextID: "ctx-lost", UserText: "q",
+			State: a2aStateWorking, Caller: a2aCaller{ClientName: a2aCallerPIAgent},
+			CreatedAt: time.Now(),
+		}}
+		data, err := json.Marshal(records)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(os.WriteFile(stateFile, data, 0o600)).To(Succeed())
+
+		srv := newPersistTestServer(true)
+		t, ok := srv.tasks["a2a-lost"]
+		Expect(ok).To(BeTrue())
+		Expect(t.State).To(Equal(a2aStateFailed))
+		snap := srv.snapshot(t)
+		Expect(snap.Status.State).To(Equal("failed"))
 	})
 })

@@ -248,6 +248,11 @@ func buildA2AFlags() []cli.Flag {
 			Usage: "Header a trusted reverse proxy sets with the shared secret (must match the proxy CR's identity.secretHeader)",
 		},
 		cli.StringFlag{
+			Name:   "a2a-state-path",
+			EnvVar: "WIKI_CLI_A2A_STATE_PATH",
+			Usage:  "JSON file persisting A2A task results across restarts (e.g. <binary dir>/a2a-tasks.json; empty = memory-only)",
+		},
+		cli.StringFlag{
 			Name:  "a2a-tls-cert",
 			Usage: "TLS certificate for the A2A server (empty = plain HTTP; requires --a2a-tls-key)",
 		},
@@ -364,6 +369,7 @@ func runPoolAction(c *cli.Context) error {
 			BearerToken: os.Getenv("WIKI_CLI_A2A_BEARER_TOKEN"),
 			ProxySecret: os.Getenv("WIKI_CLI_A2A_TRUSTED_PROXY_SECRET"),
 			ProxyHeader: c.String("a2a-trusted-proxy-header"),
+			StatePath:   c.String("a2a-state-path"),
 			TLSCertPath: c.String("a2a-tls-cert"),
 			TLSKeyPath:  c.String("a2a-tls-key"),
 			TaskTimeout: c.Duration("a2a-task-timeout"),

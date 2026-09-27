@@ -12,6 +12,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"os"
 	"sort"
 	"strconv"
 	"strings"
@@ -68,6 +69,7 @@ type a2aServerConfig struct {
 	BearerToken string        // env WIKI_CLI_A2A_BEARER_TOKEN
 	ProxySecret string        // env WIKI_CLI_A2A_TRUSTED_PROXY_SECRET
 	ProxyHeader string        // flag --a2a-trusted-proxy-header, default X-A2A-Trusted-Proxy-Secret
+	StatePath   string        // flag --a2a-state-path: JSON file for persisted task results (empty = memory-only)
 	TLSCertPath string        // flag --a2a-tls-cert (empty = plain HTTP)
 	TLSKeyPath  string        // flag --a2a-tls-key
 	TaskTimeout time.Duration // flag --a2a-task-timeout, default 9m
@@ -234,6 +236,12 @@ type a2aServer struct {
 	mu    sync.Mutex
 	tasks map[string]*a2aTask
 
+	// persistPath, when non-empty, persists terminal task records to a JSON
+	// file so tasks/get keeps returning results across service restarts and
+	// deploys (in-flight tasks are swept to a truthful terminal state at
+	// startup instead of vanishing into -32001). Empty = memory-only (tests).
+	persistPath string
+
 	// sessions persists ACP agent sessions per contextId so a follow-up
 	// message/send with the same contextId (spec §3.4.3 continuation)
 	// continues the same conversation instead of spawning a fresh agent.
@@ -322,7 +330,106 @@ func newA2AServer(cfg a2aServerConfig, d *poolDaemon) (*a2aServer, error) {
 	if cfg.TLSCertPath == "" && cfg.Bind != "127.0.0.1" && cfg.Bind != "localhost" && cfg.Bind != "::1" {
 		slog.Warn("a2a: TLS disabled and bind is not loopback; traffic is unencrypted", "bind", cfg.Bind)
 	}
-	return &a2aServer{cfg: cfg, daemon: d, tasks: make(map[string]*a2aTask), sessions: make(map[string]*a2aSession)}, nil
+	s := &a2aServer{cfg: cfg, daemon: d, tasks: make(map[string]*a2aTask), sessions: make(map[string]*a2aSession)}
+	if cfg.StatePath != "" {
+		s.persistPath = cfg.StatePath
+		if err := s.loadPersistedTasks(); err != nil {
+			slog.Warn("a2a: could not load persisted task records; starting fresh", "path", cfg.StatePath, "error", err)
+		}
+	}
+	return s, nil
+}
+
+// persistedTaskRecord is the on-disk shape of a terminal task.
+type persistedTaskRecord struct {
+	ID        string    `json:"id"`
+	ContextID string    `json:"contextId"`
+	UserText  string    `json:"userText"`
+	FinalText string    `json:"finalText"`
+	State     string    `json:"state"`
+	Caller    a2aCaller `json:"caller"`
+	CreatedAt time.Time `json:"createdAt"`
+}
+
+// loadPersistedTasks reads terminal task records from the state file into
+// memory, and sweeps any persisted non-terminal (i.e. in-flight-at-crash)
+// tasks to failed with a truthful reason — clients polling those ids get a
+// terminal state instead of task-not-found. Malformed state files start
+// fresh (the file is best-effort bookkeeping, not a database).
+func (s *a2aServer) loadPersistedTasks() error {
+	data, err := os.ReadFile(s.cfg.StatePath)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil // first boot with persistence; nothing to load
+	}
+	if err != nil {
+		return err
+	}
+	var records []persistedTaskRecord
+	if err := json.Unmarshal(data, &records); err != nil {
+		return err
+	}
+	for _, r := range records {
+		task := &a2aTask{
+			ID:        r.ID,
+			ContextID: r.ContextID,
+			UserText:  r.UserText,
+			FinalText: r.FinalText,
+			Caller:    r.Caller,
+			State:     r.State,
+			CreatedAt: r.CreatedAt,
+		}
+		if !task.terminal() {
+			// In-flight at shutdown: sweep to a truthful terminal state.
+			task.State = a2aStateFailed
+			task.FinalText = "service restarted while task was in flight"
+			slog.Info("a2a swept in-flight task on startup",
+				logKeyTaskID, task.ID,
+				logKeyAction, "a2a_task_swept")
+		}
+		task.cancel = func() {} // terminal; cancel is a no-op
+		s.tasks[task.ID] = task
+	}
+	slog.Info("a2a loaded persisted task records",
+		"count", len(records),
+		logKeyAction, "a2a_tasks_loaded")
+	return nil
+}
+
+// persistTaskRecords writes every in-memory task record to the state file.
+// Tasks in `working` state are persisted too — a crash mid-flight must
+// leave a durable row so the next startup can sweep it to a truthful
+// terminal state (otherwise clients get -32001 instead of "restarted").
+// Best-effort: persistence failures are logged, not fatal — the in-memory
+// record remains authoritative for the life of the process.
+func (s *a2aServer) persistTaskRecords() {
+	if s.persistPath == "" {
+		return
+	}
+	s.mu.Lock()
+	records := make([]persistedTaskRecord, 0, len(s.tasks))
+	for _, t := range s.tasks {
+		records = append(records, persistedTaskRecord{
+			ID: t.ID, ContextID: t.ContextID, UserText: t.UserText,
+			FinalText: t.FinalText, State: t.State, Caller: t.Caller,
+			CreatedAt: t.CreatedAt,
+		})
+	}
+	s.mu.Unlock()
+
+	data, err := json.MarshalIndent(records, "", "  ")
+	if err != nil {
+		slog.Error("a2a: marshal task records failed", logKeyError, err)
+		return
+	}
+	// Atomic write: temp file + rename.
+	tmp := s.persistPath + ".tmp"
+	if err := os.WriteFile(tmp, data, 0o600); err != nil {
+		slog.Error("a2a: persist task records failed", "path", s.persistPath, logKeyError, err)
+		return
+	}
+	if err := os.Rename(tmp, s.persistPath); err != nil {
+		slog.Error("a2a: persist task records failed", "path", s.persistPath, logKeyError, err)
+	}
 }
 
 // serve runs the HTTP server until ctx is done.
@@ -558,6 +665,11 @@ func (s *a2aServer) handleMessageSend(w http.ResponseWriter, _ *http.Request, re
 		logKeyCaller, caller.describe(),
 		logKeyAction, "a2a_task_start")
 
+	// Persist the `working` row immediately: if the service dies mid-flight,
+	// the next startup sweeps this id to a truthful terminal state instead
+	// of the client polling into -32001.
+	s.persistTaskRecords()
+
 	go s.executeA2ATask(taskCtx, task)
 
 	s.writeResult(w, req.ID, snap)
@@ -725,30 +837,36 @@ func (s *a2aServer) executeA2ATask(taskCtx context.Context, task *a2aTask) {
 	finalText, err := runner(timeoutCtx, task, task.Caller)
 
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	// tasks/cancel may already have flipped the state; never resurrect a task.
-	if task.State == a2aStateCanceled {
-		return
+	if task.State != a2aStateCanceled {
+		switch {
+		case err != nil && errors.Is(err, context.DeadlineExceeded) && taskCtx.Err() == nil:
+			task.State = a2aStateFailed
+			task.FinalText = fmt.Sprintf("task deadline exceeded (%s)", s.cfg.TaskTimeout)
+		case err != nil && taskCtx.Err() != nil:
+			task.State = a2aStateCanceled
+			task.FinalText = "server shutting down"
+		case err != nil:
+			task.State = a2aStateFailed
+			task.FinalText = fmt.Sprintf("prompt failed: %v", err)
+		default:
+			task.State = a2aStateCompleted
+			task.FinalText = finalText
+		}
 	}
-	switch {
-	case err != nil && errors.Is(err, context.DeadlineExceeded) && taskCtx.Err() == nil:
-		task.State = a2aStateFailed
-		task.FinalText = fmt.Sprintf("task deadline exceeded (%s)", s.cfg.TaskTimeout)
-	case err != nil && taskCtx.Err() != nil:
-		task.State = a2aStateCanceled
-		task.FinalText = "server shutting down"
-	case err != nil:
-		task.State = a2aStateFailed
-		task.FinalText = fmt.Sprintf("prompt failed: %v", err)
-	default:
-		task.State = a2aStateCompleted
-		task.FinalText = finalText
-	}
+	s.mu.Unlock()
+
 	slog.Info("a2a task finished",
 		logKeyTaskID, task.ID,
 		"state", task.State,
 		logKeyCaller, task.Caller.describe(),
 		logKeyAction, "a2a_task_finish")
+
+	// Persist AFTER the critical section: persistTerminalTask takes s.mu
+	// itself (persist the record whether canceled, failed, or completed —
+	// and `working` rows were persisted at task creation so a crash
+	// mid-flight sweeps to a truthful terminal state at next startup).
+	s.persistTaskRecords()
 }
 
 // runTaskInSession performs real execution: acquire (or spawn) the agent
