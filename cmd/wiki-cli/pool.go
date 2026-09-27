@@ -191,6 +191,10 @@ type poolDaemon struct {
 	scheduledTurns      sync.WaitGroup
 	scheduledTurnRunner func(context.Context, *apiv1.ScheduledTurnRequest) (apiv1.ScheduleStatus, string)
 
+	// a2a, when non-nil, serves the A2A JSON-RPC one-shot task surface
+	// alongside the wiki chat pool. nil = disabled.
+	a2a *a2aServer
+
 	// Self-repair: the long-running pool periodically checks whether the wiki
 	// server is running a different commit and, if so, drains and exits so the
 	// bootstrapper self-updates wiki-cli. versionCheckInterval defaults when
@@ -262,6 +266,38 @@ The daemon should be run in a directory containing your agent configuration
 				Name:  "no-systemd",
 				Usage: "Disable systemd integration even when available",
 			},
+			cli.IntFlag{
+				Name:  "a2a-port",
+				Value: 0,
+				Usage: "Serve A2A one-shot tasks on this port (0 disables the A2A server)",
+			},
+			cli.StringFlag{
+				Name:  "a2a-bind",
+				Value: "0.0.0.0",
+				Usage: "Bind address for the A2A server",
+			},
+			cli.StringFlag{
+				Name:  "a2a-public-url",
+				Usage: "Public A2A URL advertised in the agent card (e.g. gateway route URL)",
+			},
+			cli.StringFlag{
+				Name:  "a2a-tls-cert",
+				Usage: "TLS certificate for the A2A server (empty = plain HTTP; requires --a2a-tls-key)",
+			},
+			cli.StringFlag{
+				Name:  "a2a-tls-key",
+				Usage: "TLS key for the A2A server (empty = plain HTTP; requires --a2a-tls-cert)",
+			},
+			cli.DurationFlag{
+				Name:  "a2a-task-timeout",
+				Value: 9 * time.Minute,
+				Usage: "Maximum wall-clock time for one A2A task",
+			},
+			cli.IntFlag{
+				Name:  "a2a-max-tasks",
+				Value: 128,
+				Usage: "Maximum in-memory A2A tasks before evicting oldest terminal tasks",
+			},
 		},
 		Action: func(c *cli.Context) error {
 			return runPoolAction(c)
@@ -299,6 +335,25 @@ func runPoolAction(c *cli.Context) error {
 		versionCheckInterval:     defaultVersionCheckIntervalMinutes * time.Minute,
 	}
 
+	if port := c.Int("a2a-port"); port > 0 {
+		cfg := a2aServerConfig{
+			Port:        port,
+			Bind:        c.String("a2a-bind"),
+			PublicURL:   c.String("a2a-public-url"),
+			BearerToken: os.Getenv("DORIUM_A2A_BEARER_TOKEN"),
+			ProxySecret: os.Getenv("DORIUM_TRUSTED_PROXY_SECRET"),
+			TLSCertPath: c.String("a2a-tls-cert"),
+			TLSKeyPath:  c.String("a2a-tls-key"),
+			TaskTimeout: c.Duration("a2a-task-timeout"),
+			MaxTasks:    c.Int("a2a-max-tasks"),
+		}
+		server, err := newA2AServer(cfg, d)
+		if err != nil {
+			return fmt.Errorf("invalid a2a config: %w", err)
+		}
+		d.a2a = server
+	}
+
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
@@ -329,6 +384,18 @@ func (d *poolDaemon) run(ctx context.Context) error {
 
 	// Watch for a server version change and self-restart for self-update.
 	go d.watchVersion(ctx, cancel)
+
+	// A2A is a first-class duty: a failed listener cancels the daemon so
+	// systemd Restart=always restarts the whole service.
+	if d.a2a != nil {
+		go func() {
+			err := d.a2a.serve(ctx)
+			if err != nil && ctx.Err() == nil {
+				slog.Error("a2a server failed", logKeyError, err, logKeyAction, "a2a_serve_failed")
+				cancel()
+			}
+		}()
+	}
 
 	// Maintain subscription to instance requests with reconnect loop
 	backoffMs := initialBackoffMs
@@ -1228,7 +1295,8 @@ func (d *poolDaemon) buildAgentCmd(ctx context.Context, page string) *exec.Cmd {
 	if d.useSystemd {
 		unitName := "wiki-chat-" + sanitizeUnitName(page)
 		_ = exec.Command("systemctl", "--user", "stop", unitName+".scope").Run()
-		return exec.CommandContext(ctx, "systemd-run",
+		return exec.CommandContext(
+			ctx, "systemd-run",
 			"--user",
 			"--unit="+unitName,
 			"--scope",
