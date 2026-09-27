@@ -786,7 +786,7 @@ var _ = Describe("a2aServer task persistence", func() {
 		_ = os.Remove(stateFile)
 	})
 
-	newPersistTestServer := func(loadOnly bool) *a2aServer {
+	newPersistTestServer := func() *a2aServer {
 		srv, err := newA2AServer(a2aServerConfig{
 			Port:        1,
 			Bind:        "127.0.0.1",
@@ -797,14 +797,11 @@ var _ = Describe("a2aServer task persistence", func() {
 			return nil, errors.New("no spawn in this test")
 		}})
 		Expect(err).NotTo(HaveOccurred())
-		if loadOnly {
-			Expect(srv.loadPersistedTasks()).To(Succeed())
-		}
 		return srv
 	}
 
 	It("persists a working row at task creation and sweeps it to failed on reload", func() {
-		srv := newPersistTestServer(false)
+		srv := newPersistTestServer()
 		// Simulate a task created and persisted while working (crash mid-flight).
 		srv.tasks["a2a-crash"] = &a2aTask{
 			ID: "a2a-crash", ContextID: "ctx-crash", UserText: "do it",
@@ -818,7 +815,7 @@ var _ = Describe("a2aServer task persistence", func() {
 		Expect(string(data)).To(ContainSubstring(`"working"`))
 
 		// "Restart": fresh server loads the same state file.
-		srv2 := newPersistTestServer(true)
+		srv2 := newPersistTestServer()
 		t, ok := srv2.tasks["a2a-crash"]
 		Expect(ok).To(BeTrue(), "task must survive restart")
 		Expect(t.State).To(Equal(a2aStateFailed), "in-flight row swept to failed")
@@ -830,7 +827,7 @@ var _ = Describe("a2aServer task persistence", func() {
 	})
 
 	It("persists completed tasks and returns them across restarts unchanged", func() {
-		srv := newPersistTestServer(false)
+		srv := newPersistTestServer()
 		srv.tasks["a2a-done"] = &a2aTask{
 			ID: "a2a-done", ContextID: "ctx-done", UserText: "q",
 			FinalText: "THE-ANSWER", State: a2aStateCompleted,
@@ -838,7 +835,7 @@ var _ = Describe("a2aServer task persistence", func() {
 		}
 		srv.persistTaskRecords()
 
-		srv2 := newPersistTestServer(true)
+		srv2 := newPersistTestServer()
 		t, ok := srv2.tasks["a2a-done"]
 		Expect(ok).To(BeTrue())
 		Expect(t.State).To(Equal(a2aStateCompleted), "terminal state is preserved verbatim")
@@ -856,7 +853,7 @@ var _ = Describe("a2aServer task persistence", func() {
 		Expect(err).NotTo(HaveOccurred())
 		Expect(os.WriteFile(stateFile, data, 0o600)).To(Succeed())
 
-		srv := newPersistTestServer(true)
+		srv := newPersistTestServer()
 		t := srv.tasks["a2a-ok"]
 		Expect(t).NotTo(BeNil())
 		Expect(t.State).To(Equal(a2aStateCompleted))
@@ -874,7 +871,7 @@ var _ = Describe("a2aServer task persistence", func() {
 		Expect(err).NotTo(HaveOccurred())
 		Expect(os.WriteFile(stateFile, data, 0o600)).To(Succeed())
 
-		srv := newPersistTestServer(true)
+		srv := newPersistTestServer()
 		t, ok := srv.tasks["a2a-lost"]
 		Expect(ok).To(BeTrue())
 		Expect(t.State).To(Equal(a2aStateFailed))
