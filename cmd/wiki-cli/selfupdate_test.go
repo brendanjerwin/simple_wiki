@@ -1,7 +1,6 @@
 package main
 
 import (
-	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -146,10 +145,9 @@ var _ = Describe("selfUpdate end-to-end", func() {
 	})
 
 	It("downloads, swaps, and reports re-exec required", func() {
-		err := selfUpdateForPath(server.URL, exePath) // *selfUpdateError on success
-		var updateErr *selfUpdateError
-		Expect(errors.As(err, &updateErr)).To(BeTrue())
-		Expect(updateErr.newPath).To(Equal(exePath))
+		updated, err := selfUpdateForPath(server.URL, exePath)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(updated).To(BeTrue())
 
 		body, readErr := os.ReadFile(exePath)
 		Expect(readErr).NotTo(HaveOccurred())

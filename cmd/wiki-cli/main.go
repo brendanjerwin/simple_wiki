@@ -111,13 +111,14 @@ func attemptSelfUpdateAndReExec(wikiURL string) bool {
 	if commit == "dev" {
 		return false
 	}
-	if err := selfUpdate(wikiURL); err != nil {
-		var updateErr *selfUpdateError
-		if !errors.As(err, &updateErr) {
-			fmt.Fprintf(os.Stderr, "self-update failed: %v\nfalling back to version mismatch error\n", err)
-			return false
-		}
-		// *selfUpdateError means the swap succeeded; fall through to re-exec.
+	updated, err := selfUpdate(wikiURL)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "self-update failed: %v\nfalling back to version mismatch error\n", err)
+		return false
+	}
+	if !updated {
+		fmt.Fprintln(os.Stderr, "self-update did not swap the binary\nfalling back to version mismatch error")
+		return false
 	}
 	fmt.Fprintf(os.Stderr, "wiki-cli updated to match server (%s); re-executing\n", wikiURL)
 	if err := reExecSelf(); err != nil {
@@ -494,7 +495,8 @@ func describeService(svc protoreflect.ServiceDescriptor) error {
 	for i := range svc.Methods().Len() {
 		m := svc.Methods().Get(i)
 		streaming := streamingLabel(m)
-		if _, err := fmt.Printf("  %s(%s) -> %s%s\n",
+		if _, err := fmt.Printf(
+			"  %s(%s) -> %s%s\n",
 			m.Name(),
 			m.Input().FullName(),
 			m.Output().FullName(),

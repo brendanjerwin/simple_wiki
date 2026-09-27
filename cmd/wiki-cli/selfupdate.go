@@ -32,16 +32,6 @@ func cliBinaryName() string {
 	return fmt.Sprintf("wiki-cli-%s-%s", osName, arch)
 }
 
-// selfUpdateError reports that a new binary was downloaded and the caller
-// should re-exec. It is never returned to the user; os.Exit paths consume it.
-type selfUpdateError struct {
-	newPath string
-}
-
-func (e *selfUpdateError) Error() string {
-	return fmt.Sprintf("wiki-cli updated itself at %s; re-exec required", e.newPath)
-}
-
 // downloadMatchingBinary fetches the /cli/ binary matching the running wiki
 // server's platform and writes it to a sibling temp file of exePath. The
 // returned path is executable and atomic-rename ready. It uses a plain GET
@@ -110,24 +100,26 @@ func resolveBinaryPath() (string, error) {
 }
 
 // selfUpdateForPath downloads the matching binary and swaps it in over
-// exePath, reporting success via *selfUpdateError. Injectable for tests.
-func selfUpdateForPath(wikiURL, exePath string) error {
+// exePath. Returns (true, nil) when the swap succeeded and the caller must
+// re-exec, (false, err) on failure. Injectable for tests.
+func selfUpdateForPath(wikiURL, exePath string) (bool, error) {
 	newPath, err := downloadMatchingBinary(wikiURL, exePath)
 	if err != nil {
-		return err
+		return false, err
 	}
 	if err := swapBinary(exePath, newPath); err != nil {
-		return err
+		return false, err
 	}
-	return &selfUpdateError{newPath: exePath}
+	return true, nil
 }
 
-// selfUpdate downloads the matching binary, swaps it over the running
-// executable, and reports success. The caller is responsible for re-exec.
-func selfUpdate(wikiURL string) error {
+// selfUpdate downloads the matching binary and swaps it over the running
+// executable. Returns (true, nil) when the swap succeeded; the caller is
+// responsible for re-exec.
+func selfUpdate(wikiURL string) (bool, error) {
 	exePath, err := resolveBinaryPath()
 	if err != nil {
-		return err
+		return false, err
 	}
 	return selfUpdateForPath(wikiURL, exePath)
 }
@@ -150,21 +142,19 @@ func reExecSelf() error {
 // backgroundSelfUpdateIfStale checks the wiki server's commit and, when it
 // differs from this binary's, silently downloads and swaps the matching
 // binary over the on-disk executable — without re-exec (mcp sessions cannot
-// restart mid-stdio). Best-effort: all failures are swallowed; the next
-// non-mcp invocation's startup check self-heals via re-exec.
+// restart mid-stdio). The next non-mcp invocation's startup check self-heals
+// via re-exec.
+// Best-effort: failures are reported to stderr (never to stdio), and the
+// function only calls code paths that return errors rather than panicking
+// (http client, os file ops); no recover per repo convention.
 func backgroundSelfUpdateIfStale(wikiURL string) {
-	defer func() {
-		// Defensive: this runs concurrently with stdio serving; a panic here
-		// would take down the MCP session. Swallow everything.
-		_ = recover()
-	}()
 	if commit == "dev" {
 		return
 	}
 	if !serverVersionMismatch(wikiURL) {
 		return
 	}
-	if err := selfUpdate(wikiURL); err != nil {
+	if updated, err := selfUpdate(wikiURL); err != nil || !updated {
 		fmt.Fprintf(os.Stderr, "wiki-cli background refresh skipped: %v\n", err)
 	}
 }
