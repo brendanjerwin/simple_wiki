@@ -172,26 +172,67 @@ var _ = Describe("a2aServer auth and caller identity", func() {
 		ts.Close()
 	})
 
-	It("rejects dispatch without credentials", func() {
-		code, resp := dispatchA2A(ts, nil, map[string]any{
+	It("accepts uncredentialed dispatch as an anonymous tailnet caller", func() {
+		var seen a2aCaller
+		var mu sync.Mutex
+		srv.taskRunner = func(_ context.Context, _ *a2aTask, caller a2aCaller) (string, error) {
+			mu.Lock()
+			defer mu.Unlock()
+			seen = caller
+			return "ok", nil
+		}
+		code, resp := dispatchA2A(ts, nil, a2aSendBody("hello there"))
+		Expect(code).To(Equal(http.StatusOK))
+		taskID := a2aStr(a2aMap(resp, "result")["id"])
+		state, text := pollTaskUntil(ts, tok, taskID, 2*time.Second)
+		Expect(state).To(Equal("completed"))
+		Expect(text).To(Equal("ok"))
+		mu.Lock()
+		defer mu.Unlock()
+		Expect(seen.ClientName).To(Equal(a2aCallerTailnet))
+		Expect(seen.describe()).To(ContainSubstring("no credentials"))
+	})
+
+	It("accepts a tailnet caller carrying Tailscale-User-Login without a token", func() {
+		var seen a2aCaller
+		var mu sync.Mutex
+		srv.taskRunner = func(_ context.Context, _ *a2aTask, caller a2aCaller) (string, error) {
+			mu.Lock()
+			defer mu.Unlock()
+			seen = caller
+			return "ok", nil
+		}
+		headers := map[string]string{"Tailscale-User-Login": "someone@ts.net"}
+		code, _ := dispatchA2A(ts, headers, a2aSendBody("hello"))
+		Expect(code).To(Equal(http.StatusOK))
+		mu.Lock()
+		defer mu.Unlock()
+		Expect(seen.Login).To(Equal("someone@ts.net"))
+		Expect(seen.describe()).To(Equal("tailnet caller authorized by someone@ts.net"))
+	})
+
+	It("treats a wrong bearer token as an anonymous tailnet caller (not a rejection)", func() {
+		var seen a2aCaller
+		var mu sync.Mutex
+		srv.taskRunner = func(_ context.Context, _ *a2aTask, caller a2aCaller) (string, error) {
+			mu.Lock()
+			defer mu.Unlock()
+			seen = caller
+			return "ok", nil
+		}
+		code, _ := dispatchA2A(ts, bearerHeaders("wrong"), a2aSendBody("hello"))
+		Expect(code).To(Equal(http.StatusOK))
+		mu.Lock()
+		defer mu.Unlock()
+		Expect(seen.ClientName).To(Equal(a2aCallerTailnet))
+	})
+
+	It("rejects a wrong proxy secret (fail closed)", func() {
+		code, resp := dispatchA2A(ts, map[string]string{trustedProxySecretHeader: "wrong"}, map[string]any{
 			"jsonrpc": "2.0", "id": 1, "method": "tasks/list", "params": map[string]any{},
 		})
 		Expect(code).To(Equal(http.StatusUnauthorized))
 		Expect(resp["error"]).To(Equal("unauthorized"))
-	})
-
-	It("rejects a wrong bearer token", func() {
-		code, _ := dispatchA2A(ts, bearerHeaders("wrong"), map[string]any{
-			"jsonrpc": "2.0", "id": 1, "method": "tasks/list", "params": map[string]any{},
-		})
-		Expect(code).To(Equal(http.StatusUnauthorized))
-	})
-
-	It("rejects a wrong proxy secret (fail closed)", func() {
-		code, _ := dispatchA2A(ts, map[string]string{trustedProxySecretHeader: "wrong"}, map[string]any{
-			"jsonrpc": "2.0", "id": 1, "method": "tasks/list", "params": map[string]any{},
-		})
-		Expect(code).To(Equal(http.StatusUnauthorized))
 	})
 
 	It("accepts the bearer and identifies a pi-agent caller", func() {
@@ -245,11 +286,20 @@ var _ = Describe("a2aServer auth and caller identity", func() {
 		Expect(seen.describe()).To(Equal("Mars (gwmcp-1) authorized by x@y"))
 	})
 
-	It("rejects a non-Bearer Authorization header", func() {
-		code, _ := dispatchA2A(ts, map[string]string{"Authorization": "Basic tok-123"}, map[string]any{
-			"jsonrpc": "2.0", "id": 1, "method": "tasks/list", "params": map[string]any{},
-		})
-		Expect(code).To(Equal(http.StatusUnauthorized))
+	It("treats a non-Bearer Authorization header as an anonymous caller", func() {
+		var seen a2aCaller
+		var mu sync.Mutex
+		srv.taskRunner = func(_ context.Context, _ *a2aTask, caller a2aCaller) (string, error) {
+			mu.Lock()
+			defer mu.Unlock()
+			seen = caller
+			return "ok", nil
+		}
+		code, _ := dispatchA2A(ts, map[string]string{"Authorization": "Basic tok-123"}, a2aSendBody("hello"))
+		Expect(code).To(Equal(http.StatusOK))
+		mu.Lock()
+		defer mu.Unlock()
+		Expect(seen.ClientName).To(Equal(a2aCallerTailnet))
 	})
 })
 
@@ -574,10 +624,11 @@ var _ = Describe("a2aServer task store eviction", func() {
 })
 
 var _ = Describe("newA2AServer validation", func() {
-	It("errors when port>0 and no credentials are set", func() {
-		_, err := newA2AServer(a2aServerConfig{Port: 8091}, &poolDaemon{})
-		Expect(err).To(HaveOccurred())
-		Expect(err.Error()).To(ContainSubstring("refusing to start without credentials"))
+	It("accepts a zero-credential config (tailnet-trust model)", func() {
+		srv, err := newA2AServer(a2aServerConfig{Port: 8091}, &poolDaemon{})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(srv.cfg.ProxyHeader).To(Equal(trustedProxySecretHeader))
+		Expect(srv.cfg.AgentName).To(Equal("wiki-chat-agent"))
 	})
 
 	It("errors when exactly one TLS path is set", func() {
@@ -594,5 +645,11 @@ var _ = Describe("newA2AServer validation", func() {
 	It("accepts a valid proxy-secret-only config", func() {
 		_, err := newA2AServer(a2aServerConfig{Port: 8091, ProxySecret: "s"}, &poolDaemon{})
 		Expect(err).NotTo(HaveOccurred())
+	})
+
+	It("honors a configured trusted-proxy header override", func() {
+		srv, err := newA2AServer(a2aServerConfig{Port: 8091, ProxyHeader: "X-Custom-Secret"}, &poolDaemon{})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(srv.cfg.ProxyHeader).To(Equal("X-Custom-Secret"))
 	})
 })

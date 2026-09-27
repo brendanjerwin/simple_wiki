@@ -103,8 +103,12 @@ func (c a2aCaller) describe() string {
 	if c.Login != "" {
 		return fmt.Sprintf("%s authorized by %s", who, c.Login)
 	}
-	if c.ClientName == "pi-agent" {
+	switch c.ClientName {
+	case a2aCallerPIAgent:
 		return "pi-agent (shared tailnet bearer)"
+	case a2aCallerTailnet:
+		return "tailnet caller (no credentials)"
+	default:
 	}
 	return who
 }
@@ -196,11 +200,11 @@ const (
 	a2aStateCompleted = "completed"
 	a2aStateFailed    = "failed"
 	a2aCallerPIAgent  = "pi-agent"
+	a2aCallerTailnet  = "tailnet caller"
 
-	headerContentType     = "Content-Type"
-	headerAuthorization   = "Authorization"
-	contentTypeJSON       = "application/json"
-	headerWwwAuthenticate = "WWW-Authenticate"
+	headerContentType   = "Content-Type"
+	headerAuthorization = "Authorization"
+	contentTypeJSON     = "application/json"
 )
 
 // a2aPreamble is prepended to every A2A task prompt (with the persona name
@@ -227,8 +231,12 @@ type a2aServer struct {
 	tasks map[string]*a2aTask
 }
 
-// newA2AServer validates config and constructs the server. Fail-closed: A2A
-// never starts unauthenticated.
+// newA2AServer validates config and constructs the server. Trust model
+// (tailnet-trust, 2026-09-27): the listener is reachable only over the
+// tailnet, and anyone on the tailnet can already task the agent via the
+// wiki UI — so credentials are optional refinements of caller identity
+// (see authorize), never a gate. A deployment MAY run with zero
+// credentials configured.
 func newA2AServer(cfg a2aServerConfig, d *poolDaemon) (*a2aServer, error) {
 	if cfg.Bind == "" {
 		cfg.Bind = "0.0.0.0"
@@ -244,9 +252,6 @@ func newA2AServer(cfg a2aServerConfig, d *poolDaemon) (*a2aServer, error) {
 	}
 	if cfg.MaxTasks <= 0 {
 		cfg.MaxTasks = defaultA2AMaxTasks
-	}
-	if cfg.BearerToken == "" && cfg.ProxySecret == "" {
-		return nil, errors.New("a2a: refusing to start without credentials: set WIKI_CLI_A2A_BEARER_TOKEN and/or WIKI_CLI_A2A_TRUSTED_PROXY_SECRET")
 	}
 	if (cfg.TLSCertPath == "") != (cfg.TLSKeyPath == "") {
 		return nil, errors.New("a2a: --a2a-tls-cert and --a2a-tls-key must be set together")
@@ -321,14 +326,9 @@ func (s *a2aServer) agentCard() map[string]any {
 			"streaming":         false,
 			"pushNotifications": false,
 		},
-		"securitySchemes": map[string]any{
-			"bearer": map[string]any{
-				"httpAuthSecurityScheme": map[string]any{
-					"scheme":       "Bearer",
-					"bearerFormat": "string",
-				},
-			},
-		},
+		// No securitySchemes: the listener is tailnet-trust (see authorize);
+		// no token is required to dispatch. Optional credentials refine
+		// caller identity but are not part of the public contract.
 		"defaultInputModes":  []string{a2aModeText},
 		"defaultOutputModes": []string{a2aModeText},
 		"supportedInterfaces": []map[string]any{{
@@ -355,7 +355,18 @@ func (s *a2aServer) handleCard(w http.ResponseWriter, _ *http.Request) {
 }
 
 // authorize resolves the caller identity from the request. Dispatch-only;
-// the card is public. Constant-time compares everywhere.
+// the card is public.
+//
+// Trust model (Brendan's 2026-09-27 decision): this listener is reachable
+// only over the tailnet, and anyone on the tailnet can already task the
+// agent via the wiki UI — so an uncredentialed request is accepted as an
+// anonymous tailnet caller rather than challenged. Optional credentials
+// refine the identity when present:
+//   - The configured trusted-proxy header + secret (constant-time compared)
+//     identifies a gateway-forwarded caller (login + client id/name).
+//   - A matching Bearer token identifies a programmatic pi-adaptor caller.
+//
+// No challenge is emitted; there is no 401 path on dispatch.
 func (s *a2aServer) authorize(r *http.Request) (a2aCaller, bool) {
 	if proxySecret := r.Header.Get(s.cfg.ProxyHeader); proxySecret != "" {
 		expected := s.cfg.ProxySecret
@@ -366,6 +377,8 @@ func (s *a2aServer) authorize(r *http.Request) (a2aCaller, bool) {
 				ClientName: r.Header.Get("X-Gateway-Client-Name"),
 			}, true
 		}
+		// A present-but-wrong proxy secret is a spoofing attempt, not an
+		// anonymous caller: fail closed.
 		return a2aCaller{}, false
 	}
 
@@ -378,13 +391,20 @@ func (s *a2aServer) authorize(r *http.Request) (a2aCaller, bool) {
 			}
 		}
 	}
-	return a2aCaller{}, false
+
+	// No credentials (or a bearer that simply doesn't match): tailnet-trusted
+	// anonymous caller. Identity is best-effort from standard headers.
+	login := r.Header.Get("Tailscale-User-Login")
+	return a2aCaller{Login: login, ClientName: a2aCallerTailnet}, true
 }
 
 func (s *a2aServer) handleDispatch(w http.ResponseWriter, r *http.Request) {
+	// Tailnet-trust: authorize never rejects; it only refines identity. The
+	// only failure path is a present-but-wrong trusted-proxy secret (a
+	// spoofing attempt), which yields a plain 401 without a challenge —
+	// there is no token to authenticate with.
 	caller, ok := s.authorize(r)
 	if !ok {
-		w.Header().Set(headerWwwAuthenticate, "Bearer")
 		w.Header().Set(headerContentType, contentTypeJSON)
 		w.WriteHeader(http.StatusUnauthorized)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "unauthorized"})
