@@ -11,7 +11,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/brendanjerwin/simple_wiki/pkg/ulid"
 	"github.com/brendanjerwin/simple_wiki/utils/base32tools"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 )
@@ -87,7 +86,7 @@ func (s *Store) historyDir(identifier string) string {
 // The source string is recorded in the version metadata for audit/search.
 func (s *Store) captureVersionLockedWithSource(identifier, content string, identity wikipage.Identity, source string) error {
 	now := time.Now().UTC()
-	versionID := ulid.NewSystemGenerator().NewULID()
+	versionID := s.versionIDs.NewULID()
 
 	sha := sha256.Sum256([]byte(content))
 	shaHex := hex.EncodeToString(sha[:])
