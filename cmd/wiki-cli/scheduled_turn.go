@@ -383,6 +383,9 @@ const a2aUnitPrefix = "wiki-a2a-"
 // pipes/start/handshake/session choreography with a unique unit name per
 // spawn.
 func (d *poolDaemon) spawnEphemeralAgent(ctx context.Context, client acp.Client, unitPrefix, label string) (*ephemeralAgent, error) {
+	if d.a2aEphemeralSpawner != nil {
+		return d.a2aEphemeralSpawner(ctx, client, unitPrefix, label)
+	}
 	cmd := d.buildEphemeralAgentCmd(ctx, unitPrefix, label)
 	stdinPipe, err := cmd.StdinPipe()
 	if err != nil {

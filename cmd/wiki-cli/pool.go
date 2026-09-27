@@ -191,6 +191,10 @@ type poolDaemon struct {
 	scheduledTurns      sync.WaitGroup
 	scheduledTurnRunner func(context.Context, *apiv1.ScheduledTurnRequest) (apiv1.ScheduleStatus, string)
 
+	// a2aEphemeralSpawner is the injectable seam for spawning one-shot ACP
+	// agents (tests stub it; nil = real spawn via spawnEphemeralAgent).
+	a2aEphemeralSpawner func(ctx context.Context, client acp.Client, unitPrefix, label string) (*ephemeralAgent, error)
+
 	// a2a, when non-nil, serves the A2A JSON-RPC one-shot task surface
 	// alongside the wiki chat pool. nil = disabled.
 	a2a *a2aServer

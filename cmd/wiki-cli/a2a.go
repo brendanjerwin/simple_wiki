@@ -202,6 +202,10 @@ const (
 	a2aCallerPIAgent  = "pi-agent"
 	a2aCallerTailnet  = "tailnet caller"
 
+	logKeyTaskID = "task_id"
+	logKeyCtxID  = "context_id"
+	logKeyCaller = "caller"
+
 	headerContentType   = "Content-Type"
 	headerAuthorization = "Authorization"
 	contentTypeJSON     = "application/json"
@@ -229,6 +233,64 @@ type a2aServer struct {
 
 	mu    sync.Mutex
 	tasks map[string]*a2aTask
+
+	// sessions persists ACP agent sessions per contextId so a follow-up
+	// message/send with the same contextId (spec §3.4.3 continuation)
+	// continues the same conversation instead of spawning a fresh agent.
+	// Entries are evicted when a newer session takes the contextId or via
+	// pruneLocked when the store exceeds MaxTasks. In-memory: sessions are
+	// lost on service restart (the next message/send respawns).
+	sessions map[string]*a2aSession
+}
+
+// a2aSession is one live ACP conversation bound to a contextId.
+type a2aSession struct {
+	agent     *ephemeralAgent
+	client    *a2aTaskClient
+	createdAt time.Time
+	lastUsed  time.Time
+	turnCount int
+
+	// promptMu serializes Prompt calls on the session's ACP connection
+	// (concurrent message/send on one contextId must not race the conn).
+	promptMu sync.Mutex
+
+	// sessionCtx owns the agent process lifetime — derived from the server,
+	// NOT the task's timeout context, so the agent survives between turns.
+	sessionCtx    context.Context
+	sessionCancel context.CancelFunc
+}
+
+// spawningSession is the placeholder stored while a session is being
+// spawned for a contextId. Waiters poll on it; only a real *a2aSession
+// satisfies type assertions.
+var spawningSession = &a2aSession{}
+
+// isSpawning reports whether the map entry is a spawn-in-progress sentinel.
+func isSpawning(s *a2aSession) bool { return s == spawningSession }
+
+// a2a session lifecycle tunables.
+const (
+	a2aSessionIdleTTL     = 30 * time.Minute // evict idle conversations
+	a2aSessionReapEvery   = 5 * time.Minute
+	a2aSessionTurnCap     = 50 // max turns per conversation
+	a2aSessionMaxSessions = 64 // max concurrent live conversations
+)
+
+// beginTurn swaps in a fresh text collector for one turn and returns the
+// accessor for that turn's agent text (the session client's builder is
+// shared across turns, so each turn must start empty).
+func (sess *a2aSession) beginTurn() func() string {
+	sess.client.mu.Lock()
+	sess.client.text.Reset()
+	sess.client.mu.Unlock()
+	return sess.client.finalText
+}
+
+// turnAccessor returns a bound beginTurn for this session (usable from
+// result structs without re-deriving the session).
+func (sess *a2aSession) turnAccessor() func() string {
+	return sess.client.finalText
 }
 
 // newA2AServer validates config and constructs the server. Trust model
@@ -259,11 +321,15 @@ func newA2AServer(cfg a2aServerConfig, d *poolDaemon) (*a2aServer, error) {
 	if cfg.TLSCertPath == "" && cfg.Bind != "127.0.0.1" && cfg.Bind != "localhost" && cfg.Bind != "::1" {
 		slog.Warn("a2a: TLS disabled and bind is not loopback; traffic is unencrypted", "bind", cfg.Bind)
 	}
-	return &a2aServer{cfg: cfg, daemon: d, tasks: make(map[string]*a2aTask)}, nil
+	return &a2aServer{cfg: cfg, daemon: d, tasks: make(map[string]*a2aTask), sessions: make(map[string]*a2aSession)}, nil
 }
 
 // serve runs the HTTP server until ctx is done.
 func (s *a2aServer) serve(ctx context.Context) error {
+	// Session reaper: evicts idle/over-cap conversations and shuts all
+	// sessions down on ctx.Done.
+	go s.runSessionReaper(ctx)
+
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /.well-known/agent-card.json", s.handleCard)
 	mux.HandleFunc("POST /{$}", s.handleDispatch)
@@ -486,9 +552,9 @@ func (s *a2aServer) handleMessageSend(w http.ResponseWriter, _ *http.Request, re
 	s.mu.Unlock()
 
 	slog.Info("a2a task started",
-		"task_id", task.ID,
-		"context_id", task.ContextID,
-		"caller", caller.describe(),
+		logKeyTaskID, task.ID,
+		logKeyCtxID, task.ContextID,
+		logKeyCaller, caller.describe(),
 		logKeyAction, "a2a_task_start")
 
 	go s.executeA2ATask(taskCtx, task)
@@ -608,7 +674,7 @@ func (s *a2aServer) handleTaskCancel(w http.ResponseWriter, req a2aRequest) {
 	if ok && !task.terminal() {
 		task.cancel()
 		task.State = a2aStateCanceled
-		slog.Info("a2a task canceled", "task_id", task.ID, logKeyAction, "a2a_task_cancel")
+		slog.Info("a2a task canceled", logKeyTaskID, task.ID, logKeyAction, "a2a_task_cancel")
 	}
 	if !ok {
 		s.mu.Unlock()
@@ -649,7 +715,7 @@ func (s *a2aServer) handleTaskList(w http.ResponseWriter, req a2aRequest) {
 func (s *a2aServer) executeA2ATask(taskCtx context.Context, task *a2aTask) {
 	runner := s.taskRunner
 	if runner == nil {
-		runner = s.runTaskWithAgent
+		runner = s.runTaskInSession
 	}
 
 	timeoutCtx, cancelTimeout := context.WithTimeout(taskCtx, s.cfg.TaskTimeout)
@@ -678,36 +744,284 @@ func (s *a2aServer) executeA2ATask(taskCtx context.Context, task *a2aTask) {
 		task.FinalText = finalText
 	}
 	slog.Info("a2a task finished",
-		"task_id", task.ID,
+		logKeyTaskID, task.ID,
 		"state", task.State,
-		"caller", task.Caller.describe(),
+		logKeyCaller, task.Caller.describe(),
 		logKeyAction, "a2a_task_finish")
 }
 
-// runTaskWithAgent performs real execution: spawn an ephemeral pi-acp agent,
-// send the preamble + task text as one Prompt, and return the accumulated
-// agent text.
-func (s *a2aServer) runTaskWithAgent(ctx context.Context, task *a2aTask, caller a2aCaller) (string, error) {
-	client := &a2aTaskClient{task: task}
-	agent, spawnErr := s.daemon.spawnEphemeralAgent(ctx, client, a2aUnitPrefix, a2aTaskIDPrefix+shortIDForUnit(task.ID[len(a2aTaskIDPrefix):]))
-	if spawnErr != nil {
-		return "", fmt.Errorf("spawn failed: %w", spawnErr)
+// runTaskInSession performs real execution: acquire (or spawn) the agent
+// session bound to the task's contextId, send the preamble (first turn) or
+// bare task text (continuation turn) as one Prompt, and return the
+// accumulated agent text. The session stays registered after the task ends
+// so follow-up messages with the same contextId continue the conversation
+// (A2A spec §3.4.3).
+func (s *a2aServer) runTaskInSession(ctx context.Context, task *a2aTask, caller a2aCaller) (string, error) {
+	turn, err := s.acquireSession(ctx, task)
+	if err != nil {
+		return "", fmt.Errorf("spawn failed: %w", err)
 	}
-	defer agent.cleanup()
+	agent := turn.agent
 
-	persona := s.cfg.ChatPersona
-	if persona == "" {
-		persona = s.cfg.AgentName
+	// One Prompt at a time per session (ACP conns aren't safe concurrently).
+	s.mu.Lock()
+	sess := s.sessions[task.ContextID]
+	s.mu.Unlock()
+	if sess == nil {
+		return "", fmt.Errorf("a2a session vanished for context %s", task.ContextID)
 	}
-	promptText := fmt.Sprintf(a2aPreamble, persona, caller.describe(), task.UserText)
+	sess.promptMu.Lock()
+	defer sess.promptMu.Unlock()
+
+	// Fresh text collector for THIS turn (the session client's builder
+	// accumulates across turns otherwise); client.finalText reads it after
+	// the Prompt completes.
+	sess.beginTurn()
+
+	var promptText string
+	if turn.firstTurn {
+		persona := s.cfg.ChatPersona
+		if persona == "" {
+			persona = s.cfg.AgentName
+		}
+		promptText = fmt.Sprintf(a2aPreamble, persona, caller.describe(), task.UserText)
+	} else {
+		// Continuation turn: the persona/context is established; send the
+		// user text bare so the agent treats it as the next conversation turn.
+		promptText = task.UserText
+	}
 	_, promptErr := agent.conn.Prompt(ctx, acp.PromptRequest{
 		SessionId: agent.sessionID,
 		Prompt:    []acp.ContentBlock{acp.TextBlock(promptText)},
 	})
 	if promptErr != nil {
+		// A failed continuation turn may have killed the session's agent;
+		// drop the session so the next message/send spawns fresh. Cancellation
+		// (task timeout, shutdown) is NOT a session failure — the session
+		// stays for the next turn.
+		if ctx.Err() == nil {
+			s.dropSession(task.ContextID)
+		}
 		return "", promptErr
 	}
-	return client.finalText(), nil
+	return sess.client.finalText(), nil
+}
+
+// a2aSessionRef is what a turn needs from acquireSession: the agent
+// connection, the turn-text collector accessor, and whether the session was
+// just created (firstTurn → prepend the preamble).
+type a2aSessionTurn struct {
+	agent     *ephemeralAgent
+	getText   func() string
+	firstTurn bool
+}
+
+// acquireSession returns the live agent session for the task's contextId,
+// spawning and registering a new one when absent. firstTurn is true when the
+// session was just created (callers prepend the preamble). The session's
+// agent lives under a session-lifetime context (server scope), not the
+// task's timeout context, so it survives between turns. Concurrent callers
+// on the same contextId serialize: the first reserves via the spawning
+// sentinel, the rest poll until it resolves.
+func (s *a2aServer) acquireSession(ctx context.Context, task *a2aTask) (*a2aSessionTurn, error) {
+	// Wait for any in-flight spawn on this contextId.
+	for {
+		s.mu.Lock()
+		existing, ok := s.sessions[task.ContextID]
+		if !ok || isSpawning(existing) {
+			// Absent (we will spawn) or someone else is spawning (wait).
+			if !ok {
+				break
+			}
+			s.mu.Unlock()
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-time.After(20 * time.Millisecond):
+			}
+			continue
+		}
+		existing.lastUsed = time.Now()
+		existing.turnCount++
+		s.mu.Unlock()
+		return &a2aSessionTurn{agent: existing.agent, getText: existing.turnAccessor(), firstTurn: false}, nil
+	}
+
+	// Reserve with the sentinel, then spawn outside the lock.
+	s.sessions[task.ContextID] = spawningSession
+	s.mu.Unlock()
+
+	// The session outlives this task's timeout context: bind it to a fresh
+	// context; the reaper and dropSession call sessionCancel on eviction.
+	sessionCtx, sessionCancel := context.WithCancel(context.Background())
+
+	client := &a2aTaskClient{task: task}
+	agent, spawnErr := s.daemon.spawnEphemeralAgent(sessionCtx, client, a2aUnitPrefix, a2aTaskIDPrefix+shortIDForUnit(task.ID[len(a2aTaskIDPrefix):]))
+	if spawnErr != nil {
+		s.mu.Lock()
+		// Only clear the sentinel if it is still ours.
+		if s.sessions[task.ContextID] == spawningSession {
+			delete(s.sessions, task.ContextID)
+		}
+		s.mu.Unlock()
+		sessionCancel()
+		return nil, spawnErr
+	}
+
+	sess := &a2aSession{
+		agent:         agent,
+		client:        client,
+		createdAt:     time.Now(),
+		lastUsed:      time.Now(),
+		turnCount:     1,
+		sessionCtx:    sessionCtx,
+		sessionCancel: sessionCancel,
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.sessions[task.ContextID] != spawningSession {
+		// Someone replaced the sentinel (reaper/shutdown); tear ours down
+		// and fail the turn — the caller retries on a fresh dispatch.
+		agent.cleanup()
+		sessionCancel()
+		return nil, fmt.Errorf("a2a session spawn raced with eviction for context %s", task.ContextID)
+	}
+	s.sessions[task.ContextID] = sess
+	slog.Info("a2a session created",
+		logKeyCtxID, task.ContextID,
+		logKeyTaskID, task.ID,
+		logKeyAction, "a2a_session_create")
+	return &a2aSessionTurn{agent: agent, getText: sess.turnAccessor(), firstTurn: true}, nil
+}
+
+// dropSession tears down and removes the session for a contextId (used when
+// a continuation Prompt fails — the agent process may be dead).
+func (s *a2aServer) dropSession(contextID string) {
+	s.mu.Lock()
+	sess, ok := s.sessions[contextID]
+	if ok {
+		delete(s.sessions, contextID)
+	}
+	s.mu.Unlock()
+	if ok && sess != nil {
+		if sess.agent != nil && sess.agent.cleanup != nil {
+			sess.agent.cleanup()
+		}
+		if sess.sessionCancel != nil {
+			sess.sessionCancel()
+		}
+	}
+}
+
+// runSessionReaper periodically evicts idle and over-cap A2A sessions,
+// tearing down their agent processes. On ctx.Done it shuts down all
+// sessions, so no agent process outlives the server.
+func (s *a2aServer) runSessionReaper(ctx context.Context) {
+	ticker := time.NewTicker(a2aSessionReapEvery)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			s.shutdownSessions()
+			return
+		case <-ticker.C:
+			s.reapSessionsOnce()
+		}
+	}
+}
+
+// reapSessionsOnce evicts conversations past the idle TTL or the turn cap,
+// and the oldest live sessions beyond the cap.
+func (s *a2aServer) reapSessionsOnce() {
+	s.mu.Lock()
+	toEvict := s.collectExpiredSessions()
+	toEvict = append(toEvict, s.collectOverflowSessions(len(toEvict))...)
+	for _, e := range toEvict {
+		delete(s.sessions, e.id)
+	}
+	s.mu.Unlock()
+
+	for _, e := range toEvict {
+		if e.sess.agent != nil && e.sess.agent.cleanup != nil {
+			e.sess.agent.cleanup()
+		}
+		if e.sess.sessionCancel != nil {
+			e.sess.sessionCancel()
+		}
+		slog.Info("a2a session reaped",
+			logKeyCtxID, e.id,
+			"turns", e.sess.turnCount,
+			"idle", time.Since(e.sess.lastUsed).Round(time.Second),
+			logKeyAction, "a2a_session_reap")
+	}
+}
+
+// a2aEvictEntry pairs a contextId with its session for reaping.
+type a2aEvictEntry struct {
+	id   string
+	sess *a2aSession
+}
+
+// collectExpiredSessions (called with s.mu held) returns live sessions past
+// the idle TTL or the turn cap.
+func (s *a2aServer) collectExpiredSessions() []a2aEvictEntry {
+	var out []a2aEvictEntry
+	now := time.Now()
+	for id, sess := range s.sessions {
+		if sess == nil || isSpawning(sess) {
+			continue // spawn-in-progress: the reaper never touches it
+		}
+		if now.Sub(sess.lastUsed) > a2aSessionIdleTTL || sess.turnCount >= a2aSessionTurnCap {
+			out = append(out, a2aEvictEntry{id, sess})
+		}
+	}
+	return out
+}
+
+// collectOverflowSessions (called with s.mu held) evicts the
+// oldest-by-last-used live sessions when the count exceeds the cap.
+// alreadyExpired is the count already queued for eviction.
+func (s *a2aServer) collectOverflowSessions(alreadyEvicted int) []a2aEvictEntry {
+	live := len(s.sessions) - alreadyEvicted
+	if live <= a2aSessionMaxSessions {
+		return nil
+	}
+	var liveSet []a2aEvictEntry
+	for id, sess := range s.sessions {
+		if sess == nil || isSpawning(sess) {
+			continue
+		}
+		liveSet = append(liveSet, a2aEvictEntry{id, sess})
+	}
+	sort.Slice(liveSet, func(i, j int) bool { return liveSet[i].sess.lastUsed.Before(liveSet[j].sess.lastUsed) })
+	var out []a2aEvictEntry
+	for i := 0; i < live-a2aSessionMaxSessions && i < len(liveSet); i++ {
+		out = append(out, liveSet[i])
+	}
+	return out
+}
+
+// shutdownSessions tears down every live session (server shutdown path).
+func (s *a2aServer) shutdownSessions() {
+	s.mu.Lock()
+	sessions := make([]*a2aSession, 0, len(s.sessions))
+	for id, sess := range s.sessions {
+		if sess == nil || isSpawning(sess) {
+			continue
+		}
+		sessions = append(sessions, sess)
+		delete(s.sessions, id)
+	}
+	s.mu.Unlock()
+	for _, sess := range sessions {
+		if sess.agent != nil && sess.agent.cleanup != nil {
+			sess.agent.cleanup()
+		}
+		if sess.sessionCancel != nil {
+			sess.sessionCancel()
+		}
+	}
 }
 
 func (*a2aServer) writeResult(w http.ResponseWriter, id json.RawMessage, result *a2aTaskJSON) {

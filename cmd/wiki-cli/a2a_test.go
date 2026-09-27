@@ -11,6 +11,8 @@ import (
 	"sync"
 	"time"
 
+	acp "github.com/coder/acp-go-sdk"
+
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
@@ -651,5 +653,130 @@ var _ = Describe("newA2AServer validation", func() {
 		srv, err := newA2AServer(a2aServerConfig{Port: 8091, ProxyHeader: "X-Custom-Secret"}, &poolDaemon{})
 		Expect(err).NotTo(HaveOccurred())
 		Expect(srv.cfg.ProxyHeader).To(Equal("X-Custom-Secret"))
+	})
+})
+
+var _ = Describe("a2aServer session continuation (spec §3.4.3)", func() {
+	var (
+		srv      *a2aServer
+		spawns   int
+		cleanups []string
+	)
+
+	BeforeEach(func() {
+		srv, _ = newA2ATestServer("", "", 9*time.Minute, 128, nil)
+		spawns = 0
+		cleanups = nil
+		srv.daemon.a2aEphemeralSpawner = func(_ context.Context, _ acp.Client, _, _ string) (*ephemeralAgent, error) {
+			spawns++
+			n := spawns
+			return &ephemeralAgent{
+				sessionID: acp.SessionId(fmt.Sprintf("sess-%d", n)),
+				cleanup:   func() { cleanups = append(cleanups, fmt.Sprintf("sess-%d", n)) },
+			}, nil
+		}
+	})
+
+	It("reuses the session for a follow-up dispatch on the same contextId", func() {
+		t1 := &a2aTask{ID: "a2a-aaa", ContextID: "ctx-1", UserText: "first", Caller: a2aCaller{ClientName: a2aCallerTailnet}, State: a2aStateWorking}
+		turn1, err := srv.acquireSession(context.Background(), t1)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(turn1.firstTurn).To(BeTrue())
+		Expect(turn1.agent).NotTo(BeNil())
+		Expect(spawns).To(Equal(1))
+		Expect(srv.sessions).To(HaveKey("ctx-1"))
+		client1 := srv.sessions["ctx-1"].client
+
+		t2 := &a2aTask{ID: "a2a-bbb", ContextID: "ctx-1", UserText: "second", Caller: t1.Caller, State: a2aStateWorking}
+		turn2, err := srv.acquireSession(context.Background(), t2)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(turn2.firstTurn).To(BeFalse(), "second dispatch must reuse the session")
+		Expect(turn2.agent).To(BeIdenticalTo(turn1.agent), "same ACP connection reused")
+		Expect(srv.sessions["ctx-1"].client).To(BeIdenticalTo(client1))
+		Expect(spawns).To(Equal(1), "no second spawn for the same contextId")
+		Expect(srv.sessions["ctx-1"].turnCount).To(Equal(2))
+	})
+
+	It("clears the reserved slot when spawn fails", func() {
+		srv.daemon.a2aEphemeralSpawner = func(context.Context, acp.Client, string, string) (*ephemeralAgent, error) {
+			return nil, errors.New("spawn failed in test")
+		}
+		t := &a2aTask{ID: "a2a-ccc", ContextID: "ctx-2", UserText: "x", Caller: a2aCaller{ClientName: a2aCallerTailnet}, State: a2aStateWorking}
+		_, err := srv.acquireSession(context.Background(), t)
+		Expect(err).To(HaveOccurred())
+		srv.mu.Lock()
+		_, present := srv.sessions["ctx-2"]
+		srv.mu.Unlock()
+		Expect(present).To(BeFalse(), "failed spawn must not leave a reserved slot")
+	})
+
+	It("drops a session so the next turn respawns fresh", func() {
+		t := &a2aTask{ID: "a2a-ddd", ContextID: "ctx-3", UserText: "first", Caller: a2aCaller{ClientName: a2aCallerTailnet}, State: a2aStateWorking}
+		_, err := srv.acquireSession(context.Background(), t)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(srv.sessions).To(HaveKey("ctx-3"))
+		Expect(spawns).To(Equal(1))
+
+		srv.dropSession("ctx-3")
+		Expect(srv.sessions).NotTo(HaveKey("ctx-3"))
+		Expect(cleanups).To(ContainElement("sess-1"), "dropped session's agent must be cleaned up")
+
+		// Next dispatch on the same contextId spawns a NEW session.
+		turn, err := srv.acquireSession(context.Background(), t)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(turn.firstTurn).To(BeTrue())
+		Expect(spawns).To(Equal(2))
+	})
+
+	It("beginTurn resets the turn text collector", func() {
+		t := &a2aTask{ID: "a2a-eee", ContextID: "ctx-4", UserText: "x", Caller: a2aCaller{ClientName: a2aCallerTailnet}, State: a2aStateWorking}
+		_, err := srv.acquireSession(context.Background(), t)
+		Expect(err).NotTo(HaveOccurred())
+		client := srv.sessions["ctx-4"].client
+		Expect(client).NotTo(BeNil())
+
+		client.mu.Lock()
+		client.text.WriteString("turn-one-output")
+		client.mu.Unlock()
+		Expect(client.finalText()).To(Equal("turn-one-output"))
+
+		getTurn := srv.sessions["ctx-4"].beginTurn()
+		// beginTurn already reset the builder under its own lock; assert
+		// emptiness WITHOUT holding the lock (finalText re-locks).
+		Expect(client.finalText()).To(Equal(""), "collector must be empty at turn start")
+		client.mu.Lock()
+		client.text.WriteString("turn-two")
+		client.mu.Unlock()
+		Expect(getTurn()).To(Equal("turn-two"))
+	})
+
+	It("reaper evicts idle sessions and cleans up their agents", func() {
+		t := &a2aTask{ID: "a2a-fff", ContextID: "ctx-5", UserText: "x", Caller: a2aCaller{ClientName: a2aCallerTailnet}, State: a2aStateWorking}
+		_, err := srv.acquireSession(context.Background(), t)
+		Expect(err).NotTo(HaveOccurred())
+
+		// Force idle: backdate lastUsed beyond the TTL.
+		srv.mu.Lock()
+		srv.sessions["ctx-5"].lastUsed = time.Now().Add(-a2aSessionIdleTTL - time.Minute)
+		srv.mu.Unlock()
+
+		srv.reapSessionsOnce()
+		srv.mu.Lock()
+		_, present := srv.sessions["ctx-5"]
+		srv.mu.Unlock()
+		Expect(present).To(BeFalse())
+		Expect(cleanups).To(ContainElement("sess-1"), "reaped session's agent must be cleaned up")
+	})
+
+	It("reaper never evicts a spawn-in-progress session", func() {
+		srv.mu.Lock()
+		srv.sessions["ctx-6"] = spawningSession // sentinel
+		srv.mu.Unlock()
+
+		srv.reapSessionsOnce()
+		srv.mu.Lock()
+		_, present := srv.sessions["ctx-6"]
+		srv.mu.Unlock()
+		Expect(present).To(BeTrue(), "sentinel must survive the reaper")
 	})
 })
