@@ -63,17 +63,21 @@ type a2aServerConfig struct {
 	Port        int           // flag --a2a-port, 0 = disabled (default 0)
 	Bind        string        // flag --a2a-bind, default "0.0.0.0"
 	PublicURL   string        // flag --a2a-public-url (card.url; gateway path in prod)
-	BearerToken string        // env DORIUM_A2A_BEARER_TOKEN
-	ProxySecret string        // env DORIUM_TRUSTED_PROXY_SECRET
+	AgentName   string        // flag --a2a-agent-name (agent card name/skill naming)
+	ChatPersona string        // display name of the chat AI persona (preamble identity)
+	BearerToken string        // env WIKI_CLI_A2A_BEARER_TOKEN
+	ProxySecret string        // env WIKI_CLI_A2A_TRUSTED_PROXY_SECRET
+	ProxyHeader string        // flag --a2a-trusted-proxy-header, default X-A2A-Trusted-Proxy-Secret
 	TLSCertPath string        // flag --a2a-tls-cert (empty = plain HTTP)
 	TLSKeyPath  string        // flag --a2a-tls-key
 	TaskTimeout time.Duration // flag --a2a-task-timeout, default 9m
 	MaxTasks    int           // flag --a2a-max-tasks, default 128
 }
 
-// trustedProxySecretHeader is the shared-secret header the mcp-gateway sets
-// when forwarding authenticated A2A traffic to this server.
-const trustedProxySecretHeader = "X-Dorium-Trusted-Proxy-Secret"
+// trustedProxySecretHeader is the default shared-secret header a trusted
+// reverse proxy (e.g. the mcp-gateway) sets when forwarding authenticated
+// A2A traffic to this server. Configurable via --a2a-trusted-proxy-header.
+const trustedProxySecretHeader = "X-A2A-Trusted-Proxy-Secret"
 
 // a2aCaller is the resolved identity of whoever dispatched the task, so the
 // agent (and the journal) know who is delegating.
@@ -199,9 +203,10 @@ const (
 	headerWwwAuthenticate = "WWW-Authenticate"
 )
 
-// a2aPreamble is prepended to every A2A task prompt. Tells the agent it is
-// executing a delegated one-shot task, not an interactive chat.
-const a2aPreamble = `You are Dorium, a household AI assistant, executing a delegated task received via the A2A protocol. This is NOT an interactive wiki chat: no user is watching a chat page, you cannot ask clarifying questions, and permission requests are auto-denied. Use your normal tools to complete the task. Your final message is returned verbatim to the calling agent as the task result, so end with a complete, self-contained answer. Requesting party: %s.
+// a2aPreamble is prepended to every A2A task prompt (with the persona name
+// and caller identity interpolated). Tells the agent it is executing a
+// delegated one-shot task, not an interactive chat.
+const a2aPreamble = `You are %s, a household AI assistant, executing a delegated task received via the A2A protocol. This is NOT an interactive wiki chat: no user is watching a chat page, you cannot ask clarifying questions, and permission requests are auto-denied. Use your normal tools to complete the task. Your final message is returned verbatim to the calling agent as the task result, so end with a complete, self-contained answer. Requesting party: %s.
 
 ## Task
 
@@ -228,6 +233,12 @@ func newA2AServer(cfg a2aServerConfig, d *poolDaemon) (*a2aServer, error) {
 	if cfg.Bind == "" {
 		cfg.Bind = "0.0.0.0"
 	}
+	if cfg.ProxyHeader == "" {
+		cfg.ProxyHeader = trustedProxySecretHeader
+	}
+	if cfg.AgentName == "" {
+		cfg.AgentName = "wiki-chat-agent"
+	}
 	if cfg.TaskTimeout <= 0 {
 		cfg.TaskTimeout = defaultA2ATaskTimeout
 	}
@@ -235,7 +246,7 @@ func newA2AServer(cfg a2aServerConfig, d *poolDaemon) (*a2aServer, error) {
 		cfg.MaxTasks = defaultA2AMaxTasks
 	}
 	if cfg.BearerToken == "" && cfg.ProxySecret == "" {
-		return nil, errors.New("a2a: refusing to start without credentials: set DORIUM_A2A_BEARER_TOKEN and/or DORIUM_TRUSTED_PROXY_SECRET")
+		return nil, errors.New("a2a: refusing to start without credentials: set WIKI_CLI_A2A_BEARER_TOKEN and/or WIKI_CLI_A2A_TRUSTED_PROXY_SECRET")
 	}
 	if (cfg.TLSCertPath == "") != (cfg.TLSKeyPath == "") {
 		return nil, errors.New("a2a: --a2a-tls-cert and --a2a-tls-key must be set together")
@@ -290,12 +301,19 @@ func (s *a2aServer) serve(ctx context.Context) error {
 	}
 }
 
-// agentCard renders the public AgentCard for this server.
+// agentCard renders the public AgentCard for this server. The agent name is
+// deployment config (cfg.AgentName) — this repo ships a generic wiki-chat
+// agent and never hard-codes a personal assistant's name.
 func (s *a2aServer) agentCard() map[string]any {
 	url := s.cfg.PublicURL
+	name := s.cfg.AgentName
+	displayName := s.cfg.ChatPersona
+	if displayName == "" {
+		displayName = name
+	}
 	return map[string]any{
-		"name":        "dorium",
-		"description": "Dorium household AI assistant (wiki-chat agent). Executes delegated one-shot tasks with its normal toolset (wiki MCP tools, file/system access via allowlisted commands) and returns the final answer as task text.",
+		"name":        name,
+		"description": displayName + " household AI assistant (wiki-chat agent). Executes delegated one-shot tasks with its normal toolset (wiki MCP tools, file/system access via allowlisted commands) and returns the final answer as task text.",
 		"version":     version,
 		"url":         url,
 		"provider":    map[string]any{"organization": "home_lab"},
@@ -320,10 +338,10 @@ func (s *a2aServer) agentCard() map[string]any {
 			"tenant":          "",
 		}},
 		"skills": []map[string]any{{
-			"id":          "dorium-delegate",
-			"name":        "Dorium Delegated Task",
-			"description": "Run a one-shot task through Dorium. The agent completes the task non-interactively (permission requests are auto-denied) and its final message is returned verbatim as the task result.",
-			"tags":        []string{"dorium", "delegation", "household", "wiki"},
+			"id":          name + "-delegate",
+			"name":        displayName + " Delegated Task",
+			"description": "Run a one-shot task through " + displayName + ". The agent completes the task non-interactively (permission requests are auto-denied) and its final message is returned verbatim as the task result.",
+			"tags":        []string{name, "delegation", "household", "wiki"},
 			"examples":    []string{"Summarize this week's chore chart", "Check the dinner plan and list missing groceries"},
 			"inputModes":  []string{a2aModeText},
 			"outputModes": []string{a2aModeText},
@@ -339,7 +357,7 @@ func (s *a2aServer) handleCard(w http.ResponseWriter, _ *http.Request) {
 // authorize resolves the caller identity from the request. Dispatch-only;
 // the card is public. Constant-time compares everywhere.
 func (s *a2aServer) authorize(r *http.Request) (a2aCaller, bool) {
-	if proxySecret := r.Header.Get(trustedProxySecretHeader); proxySecret != "" {
+	if proxySecret := r.Header.Get(s.cfg.ProxyHeader); proxySecret != "" {
 		expected := s.cfg.ProxySecret
 		if expected != "" && subtle.ConstantTimeCompare([]byte(proxySecret), []byte(expected)) == 1 {
 			return a2aCaller{
@@ -657,7 +675,11 @@ func (s *a2aServer) runTaskWithAgent(ctx context.Context, task *a2aTask, caller 
 	}
 	defer agent.cleanup()
 
-	promptText := fmt.Sprintf(a2aPreamble, caller.describe(), task.UserText)
+	persona := s.cfg.ChatPersona
+	if persona == "" {
+		persona = s.cfg.AgentName
+	}
+	promptText := fmt.Sprintf(a2aPreamble, persona, caller.describe(), task.UserText)
 	_, promptErr := agent.conn.Prompt(ctx, acp.PromptRequest{
 		SessionId: agent.sessionID,
 		Prompt:    []acp.ContentBlock{acp.TextBlock(promptText)},

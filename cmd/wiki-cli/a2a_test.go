@@ -51,7 +51,7 @@ func newA2ATestServer(bearerToken, proxySecret string, taskTimeout time.Duration
 	srv, err := newA2AServer(a2aServerConfig{
 		Port:        1, // unused; httptest supplies the listener
 		Bind:        "127.0.0.1",
-		PublicURL:   "https://mcp.example.net/dorium",
+		PublicURL:   "https://mcp.example.net/agent",
 		BearerToken: bearerToken,
 		ProxySecret: proxySecret,
 		TaskTimeout: taskTimeout,
@@ -140,8 +140,8 @@ var _ = Describe("a2aServer agent card", func() {
 		Expect(resp.StatusCode).To(Equal(http.StatusOK))
 		var card map[string]any
 		Expect(json.NewDecoder(resp.Body).Decode(&card)).To(Succeed())
-		Expect(card["name"]).To(Equal("dorium"))
-		Expect(card["url"]).To(Equal("https://mcp.example.net/dorium"))
+		Expect(card["name"]).To(Equal("wiki-chat-agent"))
+		Expect(card["url"]).To(Equal("https://mcp.example.net/agent"))
 		Expect(card["version"]).NotTo(BeEmpty())
 		capabilities := a2aMap(card, "capabilities")
 		Expect(capabilities["streaming"]).To(BeFalse())
