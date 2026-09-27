@@ -217,6 +217,44 @@ func isSystemdAvailable() bool {
 	return err == nil
 }
 
+// buildA2AFlags returns the --a2a-* flags for the pool command.
+func buildA2AFlags() []cli.Flag {
+	return []cli.Flag{
+		cli.IntFlag{
+			Name:  "a2a-port",
+			Value: 0,
+			Usage: "Serve A2A one-shot tasks on this port (0 disables the A2A server)",
+		},
+		cli.StringFlag{
+			Name:  "a2a-bind",
+			Value: "0.0.0.0",
+			Usage: "Bind address for the A2A server",
+		},
+		cli.StringFlag{
+			Name:  "a2a-public-url",
+			Usage: "Public A2A URL advertised in the agent card (e.g. gateway route URL)",
+		},
+		cli.StringFlag{
+			Name:  "a2a-tls-cert",
+			Usage: "TLS certificate for the A2A server (empty = plain HTTP; requires --a2a-tls-key)",
+		},
+		cli.StringFlag{
+			Name:  "a2a-tls-key",
+			Usage: "TLS key for the A2A server (empty = plain HTTP; requires --a2a-tls-cert)",
+		},
+		cli.DurationFlag{
+			Name:  "a2a-task-timeout",
+			Value: defaultA2ATaskTimeout,
+			Usage: "Maximum wall-clock time for one A2A task",
+		},
+		cli.IntFlag{
+			Name:  "a2a-max-tasks",
+			Value: defaultA2AMaxTasks,
+			Usage: "Maximum in-memory A2A tasks before evicting oldest terminal tasks",
+		},
+	}
+}
+
 func buildPoolCommand(urlFlag cli.StringFlag) cli.Command {
 	return cli.Command{
 		Name:  "pool",
@@ -236,7 +274,7 @@ Example:
 
 The daemon should be run in a directory containing your agent configuration
 (CLAUDE.md, agent files, etc.) as the agent will use that directory's context.`,
-		Flags: []cli.Flag{
+		Flags: append([]cli.Flag{
 			urlFlag,
 			cli.IntFlag{
 				Name:  "max-instances",
@@ -266,39 +304,7 @@ The daemon should be run in a directory containing your agent configuration
 				Name:  "no-systemd",
 				Usage: "Disable systemd integration even when available",
 			},
-			cli.IntFlag{
-				Name:  "a2a-port",
-				Value: 0,
-				Usage: "Serve A2A one-shot tasks on this port (0 disables the A2A server)",
-			},
-			cli.StringFlag{
-				Name:  "a2a-bind",
-				Value: "0.0.0.0",
-				Usage: "Bind address for the A2A server",
-			},
-			cli.StringFlag{
-				Name:  "a2a-public-url",
-				Usage: "Public A2A URL advertised in the agent card (e.g. gateway route URL)",
-			},
-			cli.StringFlag{
-				Name:  "a2a-tls-cert",
-				Usage: "TLS certificate for the A2A server (empty = plain HTTP; requires --a2a-tls-key)",
-			},
-			cli.StringFlag{
-				Name:  "a2a-tls-key",
-				Usage: "TLS key for the A2A server (empty = plain HTTP; requires --a2a-tls-cert)",
-			},
-			cli.DurationFlag{
-				Name:  "a2a-task-timeout",
-				Value: 9 * time.Minute,
-				Usage: "Maximum wall-clock time for one A2A task",
-			},
-			cli.IntFlag{
-				Name:  "a2a-max-tasks",
-				Value: 128,
-				Usage: "Maximum in-memory A2A tasks before evicting oldest terminal tasks",
-			},
-		},
+		}, buildA2AFlags()...),
 		Action: func(c *cli.Context) error {
 			return runPoolAction(c)
 		},

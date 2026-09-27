@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -13,6 +14,36 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
+
+// a2aMapAny asserts v to map[string]any with a Gomega failure instead of a
+// panic when the shape is wrong.
+func a2aMapAny(v any) map[string]any {
+	m, ok := v.(map[string]any)
+	Expect(ok).To(BeTrue(), "expected object, got %v", v)
+	return m
+}
+
+// a2aMap asserts m["key"] to map[string]any with a Gomega failure instead of
+// a panic when the shape is wrong.
+func a2aMap(m map[string]any, key string) map[string]any {
+	v, ok := m[key].(map[string]any)
+	Expect(ok).To(BeTrue(), "expected %q to be an object in %v", key, m)
+	return v
+}
+
+// a2aList asserts m["key"] to []any with a Gomega failure instead of a panic.
+func a2aList(m map[string]any, key string) []any {
+	v, ok := m[key].([]any)
+	Expect(ok).To(BeTrue(), "expected %q to be a list in %v", key, m)
+	return v
+}
+
+// a2aStr asserts v to string with a Gomega failure instead of a panic.
+func a2aStr(v any) string {
+	s, ok := v.(string)
+	Expect(ok).To(BeTrue(), "expected string, got %v", v)
+	return s
+}
 
 // newA2ATestServer builds an a2aServer with sane test config and serves it on
 // an httptest.Server. taskRunner, when non-nil, is the injected runner seam.
@@ -42,7 +73,7 @@ func newA2ATestServer(bearerToken, proxySecret string, taskTimeout time.Duration
 }
 
 // dispatchA2A posts a JSON-RPC request and decodes the envelope.
-func dispatchA2A(ts *httptest.Server, headers map[string]string, body any) (int, map[string]any) {
+func dispatchA2A(ts *httptest.Server, headers map[string]string, body any) (statusCode int, decoded map[string]any) {
 	payload, err := json.Marshal(body)
 	Expect(err).NotTo(HaveOccurred())
 	req, err := http.NewRequest(http.MethodPost, ts.URL+"/", strings.NewReader(string(payload)))
@@ -54,7 +85,6 @@ func dispatchA2A(ts *httptest.Server, headers map[string]string, body any) (int,
 	resp, err := ts.Client().Do(req)
 	Expect(err).NotTo(HaveOccurred())
 	defer resp.Body.Close()
-	var decoded map[string]any
 	err = json.NewDecoder(resp.Body).Decode(&decoded)
 	Expect(err).NotTo(HaveOccurred())
 	return resp.StatusCode, decoded
@@ -66,7 +96,7 @@ func bearerHeaders(token string) map[string]string {
 
 // pollTaskUntil polls tasks/get until the task leaves non-terminal state or
 // the deadline passes; returns (state, finalText).
-func pollTaskUntil(ts *httptest.Server, token, taskID string, timeout time.Duration) (string, string) {
+func pollTaskUntil(ts *httptest.Server, token, taskID string, timeout time.Duration) (finalState string, resultText string) {
 	deadline := time.Now().Add(timeout)
 	for {
 		_, resp := dispatchA2A(ts, bearerHeaders(token), map[string]any{
@@ -74,14 +104,13 @@ func pollTaskUntil(ts *httptest.Server, token, taskID string, timeout time.Durat
 		})
 		result, _ := resp["result"].(map[string]any)
 		if result != nil {
-			status, _ := result["status"].(map[string]any)
-			state, _ := status["state"].(string)
+			state, _ := a2aMap(result, "status")["state"].(string)
 			if state != "working" {
 				text := ""
 				if artifacts, ok := result["artifacts"].([]any); ok && len(artifacts) > 0 {
-					art := artifacts[0].(map[string]any)
+					art := a2aMapAny(artifacts[0])
 					if parts, ok := art["parts"].([]any); ok && len(parts) > 0 {
-						text = parts[0].(map[string]any)["text"].(string)
+						text = a2aStr(a2aMapAny(parts[0])["text"])
 					}
 				}
 				return state, text
@@ -114,7 +143,7 @@ var _ = Describe("a2aServer agent card", func() {
 		Expect(card["name"]).To(Equal("dorium"))
 		Expect(card["url"]).To(Equal("https://mcp.example.net/dorium"))
 		Expect(card["version"]).NotTo(BeEmpty())
-		capabilities := card["capabilities"].(map[string]any)
+		capabilities := a2aMap(card, "capabilities")
 		Expect(capabilities["streaming"]).To(BeFalse())
 	})
 
@@ -176,7 +205,7 @@ var _ = Describe("a2aServer auth and caller identity", func() {
 		}
 		code, resp := dispatchA2A(ts, bearerHeaders(tok), a2aSendBody("hello there"))
 		Expect(code).To(Equal(http.StatusOK))
-		taskID := resp["result"].(map[string]any)["id"].(string)
+		taskID := a2aStr(a2aMap(resp, "result")["id"])
 		state, text := pollTaskUntil(ts, tok, taskID, 2*time.Second)
 		Expect(state).To(Equal("completed"))
 		Expect(text).To(Equal("ok"))
@@ -205,7 +234,7 @@ var _ = Describe("a2aServer auth and caller identity", func() {
 		}
 		code, resp := dispatchA2A(ts, headers, a2aSendBody("hello"))
 		Expect(code).To(Equal(http.StatusOK))
-		taskID := resp["result"].(map[string]any)["id"].(string)
+		taskID := a2aStr(a2aMap(resp, "result")["id"])
 		state, _ := pollTaskUntil(ts, tok, taskID, 2*time.Second)
 		Expect(state).To(Equal("completed"))
 		mu.Lock()
@@ -256,10 +285,10 @@ var _ = Describe("a2aServer message/send dispatch", func() {
 	It("creates a working task and echoes contextId", func() {
 		code, resp := dispatchA2A(ts, bearerHeaders(tok), a2aSendBody("do a thing"))
 		Expect(code).To(Equal(http.StatusOK))
-		result := resp["result"].(map[string]any)
+		result := a2aMap(resp, "result")
 		Expect(result["id"].(string)).NotTo(BeEmpty())
 		Expect(result["id"].(string)).To(HavePrefix("a2a-"))
-		status := result["status"].(map[string]any)
+		status := a2aMap(result, "status")
 		Expect(status["state"]).To(Equal("working"))
 		Expect(result["contextId"]).To(Equal("ctx-abc"))
 	})
@@ -269,7 +298,7 @@ var _ = Describe("a2aServer message/send dispatch", func() {
 		body["params"].(map[string]any)["message"].(map[string]any)["contextId"] = ""
 		code, resp := dispatchA2A(ts, bearerHeaders(tok), body)
 		Expect(code).To(Equal(http.StatusOK))
-		result := resp["result"].(map[string]any)
+		result := a2aMap(resp, "result")
 		Expect(result["contextId"].(string)).To(HavePrefix("ctx-"))
 	})
 
@@ -277,7 +306,7 @@ var _ = Describe("a2aServer message/send dispatch", func() {
 		body := a2aSendBody("")
 		code, resp := dispatchA2A(ts, bearerHeaders(tok), body)
 		Expect(code).To(Equal(http.StatusOK))
-		errObj := resp["error"].(map[string]any)
+		errObj := a2aMap(resp, "error")
 		Expect(errObj["code"]).To(Equal(float64(a2aErrInvalidParams)))
 	})
 
@@ -286,7 +315,7 @@ var _ = Describe("a2aServer message/send dispatch", func() {
 			"jsonrpc": "2.0", "id": 1, "method": "message/send", "params": map[string]any{},
 		})
 		Expect(code).To(Equal(http.StatusOK))
-		errObj := resp["error"].(map[string]any)
+		errObj := a2aMap(resp, "error")
 		Expect(errObj["code"]).To(Equal(float64(a2aErrInvalidParams)))
 	})
 
@@ -295,7 +324,7 @@ var _ = Describe("a2aServer message/send dispatch", func() {
 			"jsonrpc": "2.0", "id": 1, "method": "foo/bar", "params": map[string]any{},
 		})
 		Expect(code).To(Equal(http.StatusOK))
-		errObj := resp["error"].(map[string]any)
+		errObj := a2aMap(resp, "error")
 		Expect(errObj["code"]).To(Equal(float64(a2aErrMethodNotFound)))
 	})
 
@@ -309,7 +338,7 @@ var _ = Describe("a2aServer message/send dispatch", func() {
 		defer resp.Body.Close()
 		var decoded map[string]any
 		Expect(json.NewDecoder(resp.Body).Decode(&decoded)).To(Succeed())
-		errObj := decoded["error"].(map[string]any)
+		errObj := a2aMap(decoded, "error")
 		Expect(errObj["code"]).To(Equal(float64(a2aErrInvalidRequest)))
 	})
 
@@ -322,7 +351,7 @@ var _ = Describe("a2aServer message/send dispatch", func() {
 		defer resp.Body.Close()
 		var decoded map[string]any
 		Expect(json.NewDecoder(resp.Body).Decode(&decoded)).To(Succeed())
-		errObj := decoded["error"].(map[string]any)
+		errObj := a2aMap(decoded, "error")
 		Expect(errObj["code"]).To(Equal(float64(a2aErrParse)))
 	})
 })
@@ -341,7 +370,7 @@ var _ = Describe("a2aServer task execution via taskRunner seam", func() {
 		})
 		code, resp := dispatchA2A(ts, bearerHeaders(tok), a2aSendBody("run it"))
 		Expect(code).To(Equal(http.StatusOK))
-		taskID := resp["result"].(map[string]any)["id"].(string)
+		taskID := a2aStr(a2aMap(resp, "result")["id"])
 		state, text := pollTaskUntil(ts, tok, taskID, 2*time.Second)
 		Expect(state).To(Equal("completed"))
 		Expect(text).To(Equal("FINAL-ANSWER"))
@@ -349,24 +378,24 @@ var _ = Describe("a2aServer task execution via taskRunner seam", func() {
 		_, resp2 := dispatchA2A(ts, bearerHeaders(tok), map[string]any{
 			"jsonrpc": "2.0", "id": 9, "method": "tasks/get", "params": map[string]any{"id": taskID},
 		})
-		result := resp2["result"].(map[string]any)
-		artifacts := result["artifacts"].([]any)
-		art := artifacts[0].(map[string]any)
-		Expect(art["parts"].([]any)[0].(map[string]any)["text"]).To(Equal("FINAL-ANSWER"))
-		status := result["status"].(map[string]any)
-		msg := status["message"].(map[string]any)
+		result := a2aMap(resp2, "result")
+		artifacts := a2aList(result, "artifacts")
+		art := a2aMapAny(artifacts[0])
+		Expect(a2aMapAny(a2aList(art, "parts")[0])["text"]).To(Equal("FINAL-ANSWER"))
+		status := a2aMap(result, "status")
+		msg := a2aMap(status, "message")
 		Expect(msg["role"]).To(Equal("agent"))
-		Expect(msg["parts"].([]any)[0].(map[string]any)["text"]).To(Equal("FINAL-ANSWER"))
+		Expect(a2aMapAny(a2aList(msg, "parts")[0])["text"]).To(Equal("FINAL-ANSWER"))
 		Expect(msg["taskId"]).To(Equal(taskID))
-		Expect(result["history"].([]any)).To(HaveLen(2))
+		Expect(a2aList(result, "history")).To(HaveLen(2))
 	})
 
 	It("fails the task when the runner errors", func() {
 		_, ts = newA2ATestServer(tok, "", 9*time.Minute, 128, func(_ context.Context, _ *a2aTask, _ a2aCaller) (string, error) {
-			return "", fmt.Errorf("boom")
+			return "", errors.New("boom")
 		})
 		_, resp := dispatchA2A(ts, bearerHeaders(tok), a2aSendBody("run it"))
-		taskID := resp["result"].(map[string]any)["id"].(string)
+		taskID := a2aStr(a2aMap(resp, "result")["id"])
 		state, text := pollTaskUntil(ts, tok, taskID, 2*time.Second)
 		Expect(state).To(Equal("failed"))
 		Expect(text).To(ContainSubstring("prompt failed: boom"))
@@ -378,7 +407,7 @@ var _ = Describe("a2aServer task execution via taskRunner seam", func() {
 			return "", ctx.Err()
 		})
 		_, resp := dispatchA2A(ts, bearerHeaders(tok), a2aSendBody("run it"))
-		taskID := resp["result"].(map[string]any)["id"].(string)
+		taskID := a2aStr(a2aMap(resp, "result")["id"])
 		state, text := pollTaskUntil(ts, tok, taskID, 2*time.Second)
 		Expect(state).To(Equal("failed"))
 		Expect(text).To(ContainSubstring("task deadline exceeded"))
@@ -410,7 +439,7 @@ var _ = Describe("a2aServer tasks/cancel and tasks/list", func() {
 
 	It("cancels a running task", func() {
 		_, resp := dispatchA2A(ts, bearerHeaders(tok), a2aSendBody("long task"))
-		taskID := resp["result"].(map[string]any)["id"].(string)
+		taskID := a2aStr(a2aMap(resp, "result")["id"])
 
 		// Wait until the runner is actually blocked inside the seam.
 		Eventually(func() bool {
@@ -421,7 +450,7 @@ var _ = Describe("a2aServer tasks/cancel and tasks/list", func() {
 			if result == nil {
 				return false
 			}
-			state, _ := result["status"].(map[string]any)["state"].(string)
+			state, _ := a2aMap(result, "status")["state"].(string)
 			return state == "working"
 		}).Within(2 * time.Second).Should(BeTrue())
 
@@ -429,7 +458,7 @@ var _ = Describe("a2aServer tasks/cancel and tasks/list", func() {
 			"jsonrpc": "2.0", "id": 4, "method": "tasks/cancel", "params": map[string]any{"id": taskID},
 		})
 		Expect(ccode).To(Equal(http.StatusOK))
-		result := cresp["result"].(map[string]any)
+		result := a2aMap(cresp, "result")
 		Expect(result["id"]).To(Equal(taskID))
 		Expect(result["status"].(map[string]any)["state"]).To(Equal("canceled"))
 
@@ -450,15 +479,15 @@ var _ = Describe("a2aServer tasks/cancel and tasks/list", func() {
 		_, resp := dispatchA2A(ts, bearerHeaders(tok), map[string]any{
 			"jsonrpc": "2.0", "id": 6, "method": "tasks/list", "params": map[string]any{},
 		})
-		result := resp["result"].(map[string]any)
-		tasks := result["tasks"].([]any)
+		result := a2aMap(resp, "result")
+		tasks := a2aList(result, "tasks")
 		Expect(tasks).To(HaveLen(2))
 
 		_, resp2 := dispatchA2A(ts, bearerHeaders(tok), map[string]any{
 			"jsonrpc": "2.0", "id": 6, "method": "tasks/list", "params": map[string]any{"contextId": "ctx-other"},
 		})
-		result2 := resp2["result"].(map[string]any)
-		tasks2 := result2["tasks"].([]any)
+		result2 := a2aMap(resp2, "result")
+		tasks2 := a2aList(result2, "tasks")
 		Expect(tasks2).To(HaveLen(1))
 		Expect(tasks2[0].(map[string]any)["contextId"]).To(Equal("ctx-other"))
 	})
@@ -467,7 +496,7 @@ var _ = Describe("a2aServer tasks/cancel and tasks/list", func() {
 		_, resp := dispatchA2A(ts, bearerHeaders(tok), map[string]any{
 			"jsonrpc": "2.0", "id": 8, "method": "tasks/get", "params": map[string]any{"id": "a2a-nonexistent"},
 		})
-		errObj := resp["error"].(map[string]any)
+		errObj := a2aMap(resp, "error")
 		Expect(errObj["code"]).To(Equal(float64(a2aErrTaskNotFound)))
 		Expect(errObj["message"]).To(ContainSubstring("task not found: a2a-nonexistent"))
 	})
@@ -493,7 +522,7 @@ var _ = Describe("a2aServer task store eviction", func() {
 				if result == nil {
 					return false
 				}
-				state, _ := result["status"].(map[string]any)["state"].(string)
+				state, _ := a2aMap(result, "status")["state"].(string)
 				return state == "completed"
 			}).Within(2 * time.Second).Should(BeTrue())
 		}
@@ -521,12 +550,12 @@ var _ = Describe("a2aServer task store eviction", func() {
 
 		// Task 1: still running (never completes).
 		_, resp := dispatchA2A(ts, bearerHeaders("tok"), a2aSendBody("running"))
-		runningID := resp["result"].(map[string]any)["id"].(string)
+		runningID := a2aStr(a2aMap(resp, "result")["id"])
 		// Task 2: completes.
 		Eventually(func() string {
 			_, r := dispatchA2A(ts, bearerHeaders("tok"), a2aSendBody("done"))
-			result := r["result"].(map[string]any)
-			id := result["id"].(string)
+			result := a2aMap(r, "result")
+			id := a2aStr(result["id"])
 			srv.mu.Lock()
 			t := srv.tasks[id]
 			srv.mu.Unlock()

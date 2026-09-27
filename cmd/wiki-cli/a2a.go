@@ -121,22 +121,28 @@ func (t *a2aTask) terminal() bool {
 	return t.State == "completed" || t.State == "failed" || t.State == "canceled"
 }
 
+// a2aConfig is the message/send configuration block.
+type a2aConfig struct {
+	AcceptedOutputModes []string `json:"acceptedOutputModes"`
+	Blocking            bool     `json:"blocking"`
+}
+
+// a2aParams is the JSON-RPC params object.
+type a2aParams struct {
+	Message       *a2aMessage    `json:"message"`
+	Configuration a2aConfig      `json:"configuration"`
+	Metadata      map[string]any `json:"metadata"`
+	ID            string         `json:"id"`
+	ContextID     string         `json:"contextId"`
+}
+
 // a2aJSONRPCRequest is an inbound JSON-RPC 2.0 request. The id is echoed
 // verbatim (number or string).
 type a2aRequest struct {
 	JSONRPC string          `json:"jsonrpc"`
 	Method  string          `json:"method"`
 	ID      json.RawMessage `json:"id,omitempty"`
-	Params  struct {
-		Message       *a2aMessage `json:"message"`
-		Configuration struct {
-			AcceptedOutputModes []string `json:"acceptedOutputModes"`
-			Blocking            bool     `json:"blocking"`
-		} `json:"configuration"`
-		Metadata  map[string]any `json:"metadata"`
-		ID        string         `json:"id"`
-		ContextID string         `json:"contextId"`
-	} `json:"params"`
+	Params  a2aParams       `json:"params"`
 }
 
 type a2aResponse struct {
@@ -158,6 +164,39 @@ const (
 	a2aErrMethodNotFound = -32601
 	a2aErrInvalidParams  = -32602
 	a2aErrTaskNotFound   = -32001
+)
+
+// a2a tunables and wire literals.
+const (
+	defaultA2ATaskTimeout = 9 * time.Minute
+	defaultA2AMaxTasks    = 128
+
+	a2aIDRandomBytes = 16 // 128-bit task ids
+	a2aCtxRandomHex  = 8  // context ids: "ctx-" + 8 hex bytes
+
+	a2aHeaderReadTimeout  = 10 * time.Second
+	a2aReadTimeout        = 30 * time.Second
+	a2aWriteTimeout       = 30 * time.Second
+	a2aIdleTimeout        = 120 * time.Second
+	a2aMaxRequestBodyByte = 1 << 20 // 1 MiB JSON-RPC body cap
+
+	a2aTaskIDPrefix = "a2a-"
+	a2aCtxIDPrefix  = "ctx-"
+
+	a2aPartKindText   = "text"
+	a2aModeText       = "text/plain"
+	a2aRoleAgent      = "agent"
+	a2aRoleUser       = "user"
+	a2aStateWorking   = "working"
+	a2aStateCanceled  = "canceled"
+	a2aStateCompleted = "completed"
+	a2aStateFailed    = "failed"
+	a2aCallerPIAgent  = "pi-agent"
+
+	headerContentType     = "Content-Type"
+	headerAuthorization   = "Authorization"
+	contentTypeJSON       = "application/json"
+	headerWwwAuthenticate = "WWW-Authenticate"
 )
 
 // a2aPreamble is prepended to every A2A task prompt. Tells the agent it is
@@ -190,10 +229,10 @@ func newA2AServer(cfg a2aServerConfig, d *poolDaemon) (*a2aServer, error) {
 		cfg.Bind = "0.0.0.0"
 	}
 	if cfg.TaskTimeout <= 0 {
-		cfg.TaskTimeout = 9 * time.Minute
+		cfg.TaskTimeout = defaultA2ATaskTimeout
 	}
 	if cfg.MaxTasks <= 0 {
-		cfg.MaxTasks = 128
+		cfg.MaxTasks = defaultA2AMaxTasks
 	}
 	if cfg.BearerToken == "" && cfg.ProxySecret == "" {
 		return nil, errors.New("a2a: refusing to start without credentials: set DORIUM_A2A_BEARER_TOKEN and/or DORIUM_TRUSTED_PROXY_SECRET")
@@ -219,10 +258,10 @@ func (s *a2aServer) serve(ctx context.Context) error {
 	srv := &http.Server{
 		Addr:              net.JoinHostPort(s.cfg.Bind, strconv.Itoa(s.cfg.Port)),
 		Handler:           mux,
-		ReadHeaderTimeout: 10 * time.Second,
-		ReadTimeout:       30 * time.Second,
-		WriteTimeout:      30 * time.Second,
-		IdleTimeout:       120 * time.Second,
+		ReadHeaderTimeout: a2aHeaderReadTimeout,
+		ReadTimeout:       a2aReadTimeout,
+		WriteTimeout:      a2aWriteTimeout,
+		IdleTimeout:       a2aIdleTimeout,
 	}
 
 	errCh := make(chan error, 1)
@@ -272,8 +311,8 @@ func (s *a2aServer) agentCard() map[string]any {
 				},
 			},
 		},
-		"defaultInputModes":  []string{"text/plain"},
-		"defaultOutputModes": []string{"text/plain"},
+		"defaultInputModes":  []string{a2aModeText},
+		"defaultOutputModes": []string{a2aModeText},
 		"supportedInterfaces": []map[string]any{{
 			"url":             url,
 			"protocolBinding": "JSONRPC",
@@ -286,14 +325,14 @@ func (s *a2aServer) agentCard() map[string]any {
 			"description": "Run a one-shot task through Dorium. The agent completes the task non-interactively (permission requests are auto-denied) and its final message is returned verbatim as the task result.",
 			"tags":        []string{"dorium", "delegation", "household", "wiki"},
 			"examples":    []string{"Summarize this week's chore chart", "Check the dinner plan and list missing groceries"},
-			"inputModes":  []string{"text/plain"},
-			"outputModes": []string{"text/plain"},
+			"inputModes":  []string{a2aModeText},
+			"outputModes": []string{a2aModeText},
 		}},
 	}
 }
 
-func (s *a2aServer) handleCard(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
+func (s *a2aServer) handleCard(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set(headerContentType, contentTypeJSON)
 	_ = json.NewEncoder(w).Encode(s.agentCard())
 }
 
@@ -312,12 +351,12 @@ func (s *a2aServer) authorize(r *http.Request) (a2aCaller, bool) {
 		return a2aCaller{}, false
 	}
 
-	if auth := r.Header.Get("Authorization"); auth != "" {
+	if auth := r.Header.Get(headerAuthorization); auth != "" {
 		const prefix = "Bearer "
 		if strings.HasPrefix(auth, prefix) {
 			token := auth[len(prefix):]
 			if s.cfg.BearerToken != "" && subtle.ConstantTimeCompare([]byte(token), []byte(s.cfg.BearerToken)) == 1 {
-				return a2aCaller{ClientName: "pi-agent"}, true
+				return a2aCaller{ClientName: a2aCallerPIAgent}, true
 			}
 		}
 	}
@@ -327,8 +366,8 @@ func (s *a2aServer) authorize(r *http.Request) (a2aCaller, bool) {
 func (s *a2aServer) handleDispatch(w http.ResponseWriter, r *http.Request) {
 	caller, ok := s.authorize(r)
 	if !ok {
-		w.Header().Set("WWW-Authenticate", "Bearer")
-		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set(headerWwwAuthenticate, "Bearer")
+		w.Header().Set(headerContentType, contentTypeJSON)
 		w.WriteHeader(http.StatusUnauthorized)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "unauthorized"})
 		return
@@ -376,7 +415,7 @@ func (s *a2aServer) handleDispatch(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (s *a2aServer) handleMessageSend(w http.ResponseWriter, r *http.Request, req a2aRequest, caller a2aCaller) {
+func (s *a2aServer) handleMessageSend(w http.ResponseWriter, _ *http.Request, req a2aRequest, caller a2aCaller) {
 	if req.Params.Message == nil {
 		s.writeError(w, req.ID, a2aErrInvalidParams, "params.message is required")
 		return
@@ -388,15 +427,15 @@ func (s *a2aServer) handleMessageSend(w http.ResponseWriter, r *http.Request, re
 	}
 
 	task := &a2aTask{
-		ID:        "a2a-" + randomHex(16),
+		ID:        a2aTaskIDPrefix + randomHex(a2aIDRandomBytes),
 		ContextID: req.Params.Message.ContextID,
 		UserText:  text,
 		Caller:    caller,
-		State:     "working",
+		State:     a2aStateWorking,
 		CreatedAt: time.Now(),
 	}
 	if task.ContextID == "" {
-		task.ContextID = "ctx-" + randomHex(8)
+		task.ContextID = a2aCtxIDPrefix + randomHex(a2aCtxRandomHex)
 	}
 
 	taskCtx, cancel := context.WithCancel(context.Background())
@@ -422,7 +461,7 @@ func (s *a2aServer) handleMessageSend(w http.ResponseWriter, r *http.Request, re
 func extractA2AText(parts []a2aPart) string {
 	var b strings.Builder
 	for _, p := range parts {
-		if p.Kind == "text" {
+		if p.Kind == a2aPartKindText {
 			b.WriteString(p.Text)
 		}
 	}
@@ -478,7 +517,7 @@ func (s *a2aServer) pruneLocked() {
 
 // snapshot renders the wire-shape task object. Must be called with s.mu held
 // OR on a task whose goroutine no longer mutates it.
-func (s *a2aServer) snapshot(t *a2aTask) *a2aTaskJSON {
+func (*a2aServer) snapshot(t *a2aTask) *a2aTaskJSON {
 	status := a2aStatus{
 		State:     t.State,
 		Timestamp: time.Now().UTC().Format(time.RFC3339),
@@ -490,15 +529,15 @@ func (s *a2aServer) snapshot(t *a2aTask) *a2aTaskJSON {
 	}
 	if t.terminal() {
 		msg := &a2aMessage{
-			Role:      "agent",
-			Parts:     []a2aPart{{Kind: "text", Text: t.FinalText}},
+			Role:      a2aRoleAgent,
+			Parts:     []a2aPart{{Kind: a2aPartKindText, Text: t.FinalText}},
 			TaskID:    t.ID,
 			ContextID: t.ContextID,
 		}
 		status.Message = msg
 		out.Status = status
-		out.Artifacts = []a2aArtifact{{Parts: []a2aPart{{Kind: "text", Text: t.FinalText}}}}
-		userMsg := a2aMessage{Role: "user", Parts: []a2aPart{{Kind: "text", Text: t.UserText}}, TaskID: t.ID, ContextID: t.ContextID}
+		out.Artifacts = []a2aArtifact{{Parts: []a2aPart{{Kind: a2aPartKindText, Text: t.FinalText}}}}
+		userMsg := a2aMessage{Role: a2aRoleUser, Parts: []a2aPart{{Kind: a2aPartKindText, Text: t.UserText}}, TaskID: t.ID, ContextID: t.ContextID}
 		out.History = []a2aMessage{userMsg, *msg}
 	}
 	return out
@@ -530,7 +569,7 @@ func (s *a2aServer) handleTaskCancel(w http.ResponseWriter, req a2aRequest) {
 	task, ok := s.tasks[req.Params.ID]
 	if ok && !task.terminal() {
 		task.cancel()
-		task.State = "canceled"
+		task.State = a2aStateCanceled
 		slog.Info("a2a task canceled", "task_id", task.ID, logKeyAction, "a2a_task_cancel")
 	}
 	if !ok {
@@ -559,7 +598,7 @@ func (s *a2aServer) handleTaskList(w http.ResponseWriter, req a2aRequest) {
 		}
 		out = append(out, s.snapshot(t))
 	}
-	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set(headerContentType, contentTypeJSON)
 	_ = json.NewEncoder(w).Encode(map[string]any{
 		"jsonrpc": "2.0",
 		"id":      req.ID,
@@ -583,21 +622,21 @@ func (s *a2aServer) executeA2ATask(taskCtx context.Context, task *a2aTask) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	// tasks/cancel may already have flipped the state; never resurrect a task.
-	if task.State == "canceled" {
+	if task.State == a2aStateCanceled {
 		return
 	}
 	switch {
 	case err != nil && errors.Is(err, context.DeadlineExceeded) && taskCtx.Err() == nil:
-		task.State = "failed"
+		task.State = a2aStateFailed
 		task.FinalText = fmt.Sprintf("task deadline exceeded (%s)", s.cfg.TaskTimeout)
 	case err != nil && taskCtx.Err() != nil:
-		task.State = "canceled"
+		task.State = a2aStateCanceled
 		task.FinalText = "server shutting down"
 	case err != nil:
-		task.State = "failed"
+		task.State = a2aStateFailed
 		task.FinalText = fmt.Sprintf("prompt failed: %v", err)
 	default:
-		task.State = "completed"
+		task.State = a2aStateCompleted
 		task.FinalText = finalText
 	}
 	slog.Info("a2a task finished",
@@ -612,7 +651,7 @@ func (s *a2aServer) executeA2ATask(taskCtx context.Context, task *a2aTask) {
 // agent text.
 func (s *a2aServer) runTaskWithAgent(ctx context.Context, task *a2aTask, caller a2aCaller) (string, error) {
 	client := &a2aTaskClient{task: task}
-	agent, spawnErr := s.daemon.spawnEphemeralAgent(ctx, client, a2aUnitPrefix, "a2a-"+task.ID[len("a2a-"):len("a2a-")+scheduledTurnRequestIDInUnit])
+	agent, spawnErr := s.daemon.spawnEphemeralAgent(ctx, client, a2aUnitPrefix, a2aTaskIDPrefix+shortIDForUnit(task.ID[len(a2aTaskIDPrefix):]))
 	if spawnErr != nil {
 		return "", fmt.Errorf("spawn failed: %w", spawnErr)
 	}
@@ -629,13 +668,13 @@ func (s *a2aServer) runTaskWithAgent(ctx context.Context, task *a2aTask, caller 
 	return client.finalText(), nil
 }
 
-func (s *a2aServer) writeResult(w http.ResponseWriter, id json.RawMessage, result *a2aTaskJSON) {
-	w.Header().Set("Content-Type", "application/json")
+func (*a2aServer) writeResult(w http.ResponseWriter, id json.RawMessage, result *a2aTaskJSON) {
+	w.Header().Set(headerContentType, contentTypeJSON)
 	_ = json.NewEncoder(w).Encode(a2aResponse{JSONRPC: "2.0", ID: id, Result: result})
 }
 
-func (s *a2aServer) writeError(w http.ResponseWriter, id json.RawMessage, code int, message string) {
-	w.Header().Set("Content-Type", "application/json")
+func (*a2aServer) writeError(w http.ResponseWriter, id json.RawMessage, code int, message string) {
+	w.Header().Set(headerContentType, contentTypeJSON)
 	_ = json.NewEncoder(w).Encode(a2aResponse{JSONRPC: "2.0", ID: id, Error: &a2aError{Code: code, Message: message}})
 }
 
@@ -667,7 +706,7 @@ func (c *a2aTaskClient) SessionUpdate(_ context.Context, n acp.SessionNotificati
 
 // RequestPermission implements acp.Client. A2A tasks are non-interactive —
 // auto-deny so the agent finishes deterministically.
-func (c *a2aTaskClient) RequestPermission(_ context.Context, _ acp.RequestPermissionRequest) (acp.RequestPermissionResponse, error) {
+func (*a2aTaskClient) RequestPermission(_ context.Context, _ acp.RequestPermissionRequest) (acp.RequestPermissionResponse, error) {
 	return permissionCancelledResponse(), nil
 }
 

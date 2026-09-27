@@ -24,10 +24,10 @@ func cliBinaryName() string {
 	osName := strings.ToLower(runtime.GOOS)
 	arch := runtime.GOARCH
 	switch arch {
-	case "amd64":
-		arch = "amd64"
-	case "arm64":
-		arch = "arm64"
+	case "amd64", "arm64":
+		// Supported; name matches the server's asset layout as-is.
+	default:
+		panic(fmt.Sprintf("self-update: unsupported GOARCH %s", arch))
 	}
 	return fmt.Sprintf("wiki-cli-%s-%s", osName, arch)
 }
@@ -155,6 +155,8 @@ func backgroundSelfUpdateIfStale(wikiURL string) {
 		return
 	}
 	if updated, err := selfUpdate(wikiURL); err != nil || !updated {
-		fmt.Fprintf(os.Stderr, "wiki-cli background refresh skipped: %v\n", err)
+		if _, wErr := fmt.Fprintf(os.Stderr, "wiki-cli background refresh skipped: %v\n", err); wErr != nil {
+			return
+		}
 	}
 }

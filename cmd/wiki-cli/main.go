@@ -113,16 +113,24 @@ func attemptSelfUpdateAndReExec(wikiURL string) bool {
 	}
 	updated, err := selfUpdate(wikiURL)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "self-update failed: %v\nfalling back to version mismatch error\n", err)
+		if _, wErr := fmt.Fprintf(os.Stderr, "self-update failed: %v\nfalling back to version mismatch error\n", err); wErr != nil {
+			return false
+		}
 		return false
 	}
 	if !updated {
-		fmt.Fprintln(os.Stderr, "self-update did not swap the binary\nfalling back to version mismatch error")
+		if _, wErr := fmt.Fprintln(os.Stderr, "self-update did not swap the binary\nfalling back to version mismatch error"); wErr != nil {
+			return false
+		}
 		return false
 	}
-	fmt.Fprintf(os.Stderr, "wiki-cli updated to match server (%s); re-executing\n", wikiURL)
+	if _, wErr := fmt.Fprintf(os.Stderr, "wiki-cli updated to match server (%s); re-executing\n", wikiURL); wErr != nil {
+		return false
+	}
 	if err := reExecSelf(); err != nil {
-		fmt.Fprintf(os.Stderr, "re-exec failed: %v\nfalling back to version mismatch error\n", err)
+		if _, wErr := fmt.Fprintf(os.Stderr, "re-exec failed: %v\nfalling back to version mismatch error\n", err); wErr != nil {
+			return false
+		}
 		return false
 	}
 	return true // unreachable: syscall.Exec never returns on success
