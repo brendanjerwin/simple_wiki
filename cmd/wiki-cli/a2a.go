@@ -933,30 +933,40 @@ func (s *a2aServer) runSessionReaper(ctx context.Context) {
 }
 
 // reapSessionsOnce evicts conversations past the idle TTL or the turn cap,
-// and the oldest live sessions beyond the cap.
+// and the oldest live sessions beyond the cap. Busy sessions (mid-Prompt)
+// are skipped atomically — they stay in the map and are re-visited on the
+// next tick, so eviction never races a turn and never lands mid-Prompt.
 func (s *a2aServer) reapSessionsOnce() {
 	s.mu.Lock()
+	var deferred []string
+	now := time.Now()
 	toEvict := s.collectExpiredSessions()
-	toEvict = append(toEvict, s.collectOverflowSessions(len(toEvict))...)
+	// Over-cap: evict the oldest-by-last-used sessions beyond the cap,
+	// excluding those already queued.
+	live := len(s.sessions) - len(toEvict)
+	if live > a2aSessionMaxSessions {
+		excluded := make(map[string]bool, len(toEvict))
+		for _, e := range toEvict {
+			excluded[e.id] = true
+		}
+		toEvict = append(toEvict, s.collectOverflowSessions(live-a2aSessionMaxSessions, excluded)...)
+	}
 	for _, e := range toEvict {
+		// Busy check + delete must be atomic with respect to acquireSession:
+		// while holding s.mu, TryLock the promptMu; only evict if not busy.
+		// Lock order here is safe: runTaskInSession holds promptMu and s.mu
+		// sequentially, never nested.
+		if !e.sess.promptMu.TryLock() {
+			deferred = append(deferred, e.id)
+			continue
+		}
+		e.sess.promptMu.Unlock()
 		delete(s.sessions, e.id)
+		toEvict = append(toEvict, e)
 	}
 	s.mu.Unlock()
 
 	for _, e := range toEvict {
-		// Skip busy sessions: a session holding its promptMu is mid-Prompt;
-		// killing it would fail an in-flight turn. It becomes evictable at
-		// the next reaper tick once its turn completes.
-		if !e.sess.promptMu.TryLock() {
-			slog.Info("a2a session busy, deferring reap",
-				logKeyCtxID, e.id,
-				logKeyAction, "a2a_session_reap_deferred")
-			s.mu.Lock()
-			s.sessions[e.id] = e.sess // put it back
-			s.mu.Unlock()
-			continue
-		}
-		e.sess.promptMu.Unlock()
 		if e.sess.agent != nil && e.sess.agent.cleanup != nil {
 			e.sess.agent.cleanup()
 		}
@@ -966,8 +976,13 @@ func (s *a2aServer) reapSessionsOnce() {
 		slog.Info("a2a session reaped",
 			logKeyCtxID, e.id,
 			"turns", e.sess.turnCount,
-			"idle", time.Since(e.sess.lastUsed).Round(time.Second),
+			"idle", now.Sub(e.sess.lastUsed).Round(time.Second),
 			logKeyAction, "a2a_session_reap")
+	}
+	for _, id := range deferred {
+		slog.Info("a2a session busy, deferring reap",
+			logKeyCtxID, id,
+			logKeyAction, "a2a_session_reap_deferred")
 	}
 }
 
@@ -993,17 +1008,18 @@ func (s *a2aServer) collectExpiredSessions() []a2aEvictEntry {
 	return out
 }
 
-// collectOverflowSessions (called with s.mu held) evicts the
-// oldest-by-last-used live sessions when the count exceeds the cap.
-// alreadyExpired is the count already queued for eviction.
-func (s *a2aServer) collectOverflowSessions(alreadyEvicted int) []a2aEvictEntry {
+// collectOverflowSessions (called with s.mu held) returns the
+// oldest-by-last-used live sessions to evict when the count exceeds the
+// cap. alreadyEvicted is the count already queued; excluded holds the ids
+// already queued (skipped by this pass).
+func (s *a2aServer) collectOverflowSessions(alreadyEvicted int, excluded map[string]bool) []a2aEvictEntry {
 	live := len(s.sessions) - alreadyEvicted
 	if live <= a2aSessionMaxSessions {
 		return nil
 	}
 	var liveSet []a2aEvictEntry
 	for id, sess := range s.sessions {
-		if sess == nil || isSpawning(sess) {
+		if sess == nil || isSpawning(sess) || excluded[id] {
 			continue
 		}
 		liveSet = append(liveSet, a2aEvictEntry{id, sess})
