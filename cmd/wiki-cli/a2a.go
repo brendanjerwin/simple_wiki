@@ -941,14 +941,18 @@ func (s *a2aServer) reapSessionsOnce() {
 	now := time.Now()
 
 	// Phase 1 (under lock): collect candidates.
-	candidates := s.collectExpiredSessions()
-	live := len(s.sessions) - len(candidates)
+	expired := s.collectExpiredSessions()
+	live := len(s.sessions) - len(expired)
+	candidates := expired
 	if live > a2aSessionMaxSessions {
 		excluded := make(map[string]bool, len(candidates))
 		for _, e := range candidates {
 			excluded[e.id] = true
 		}
-		candidates = append(candidates, s.collectOverflowSessions(live-a2aSessionMaxSessions, excluded)...)
+		// live-a2aSessionMaxSessions is the overflow COUNT to evict;
+		// collectOverflowSessions receives len(candidates) as the count
+		// already queued so its inner live matches this outer live.
+		candidates = append(candidates, s.collectOverflowSessions(len(candidates), excluded)...)
 	}
 
 	// Phase 2 (still under lock): TryLock each candidate's promptMu; only
