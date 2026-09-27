@@ -114,7 +114,7 @@ rules:
           regex: '^"[^"]*%v[^"]*"$'
       - metavariable-regex:
           metavariable: $ERR
-          regex: '^err$|^.*Err$'
+          regex: "^err$|^.*Err$"
     paths:
       exclude:
         - gen/
@@ -151,7 +151,7 @@ rules:
               }
       - metavariable-regex:
           metavariable: $ERR
-          regex: '^Err[A-Z]'
+          regex: "^Err[A-Z]"
     paths:
       exclude:
         - gen/
@@ -215,7 +215,7 @@ rules:
       - pattern: errors.As($ERR, $TARGET)
       - metavariable-regex:
           metavariable: $TARGET
-          regex: '^[^&]'
+          regex: "^[^&]"
     paths:
       exclude:
         - gen/
@@ -286,7 +286,7 @@ rules:
       Keep errors as objects until the UI edge.
       See CLAUDE.md: Keep Errors as Objects Until the UI Edge.
     severity: WARNING
-    pattern: "this.error = \"...\""
+    pattern: 'this.error = "..."'
     paths:
       exclude:
         - "*.test.ts"
@@ -321,7 +321,7 @@ rules:
           catch ($E) {
             ...
           }
-      - pattern: "this.error = \"...\""
+      - pattern: 'this.error = "..."'
     paths:
       exclude:
         - "*.test.ts"
@@ -411,3 +411,40 @@ rules:
       include:
         - "*.test.ts"
         - "*.test.js"
+
+  # ============================================================
+  # Naming boundary: personal assistant names
+  # ============================================================
+  #
+  # WHY THIS RULE EXISTS:
+  # simple_wiki is a multi-user wiki server. It ships a GENERIC wiki-chat /
+  # A2A agent pool (cmd/wiki-cli pool) whose agent identity — display name,
+  # A2A agent-card name, skill ids — is DEPLOYMENT CONFIG (the
+  # --chat-persona / WIKI_CHAT_PERSONA env var and the --a2a-agent-name
+  # flag), never code. Each operator's assistant has a different name
+  # (Brendan's is a different agent than the next operator's), so any
+  # personal-assistant name hard-coded here would leak one operator's
+  # branding into every other operator's deployment.
+  #
+  # "dorium" is Brendan's personal agent's name. It is allowed to appear in
+  # per-operator deployment repos and config (e.g. home_lab gitops CRs,
+  # systemd unit names, env files) — just never in THIS repository.
+  # If you genuinely need an exception, use `// nosemgrep:<rule-id>` with a
+  # justification comment per the repo convention.
+  - id: naming.no-personal-assistant-names
+    languages: [generic]
+    message: >-
+      Personal assistant names (e.g. "dorium") must not appear in this repo.
+      simple_wiki ships a generic wiki-chat/A2A agent pool; agent identity is
+      deployment config (--chat-persona / WIKI_CHAT_PERSONA env and
+      --a2a-agent-name flag), never hard-coded. See the rule comment in
+      .semgrep/rules.yml.
+    severity: ERROR
+    pattern-regex: "(?i)dorium"
+    paths:
+      exclude:
+        - .semgrep/rules.yml
+        - gen/
+        - vendor/
+        - node_modules/
+        - .devbox/

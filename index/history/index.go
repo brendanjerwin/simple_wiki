@@ -50,18 +50,18 @@ type HistoryReader interface {
 
 // HistorySearchFilter holds optional filters for a global history search.
 type HistorySearchFilter struct {
-	Query          string
-	PageFilter string
-	AuthorFilter   string
-	From           time.Time
-	To             time.Time
+	Query        string
+	PageFilter   string
+	AuthorFilter string
+	From         time.Time
+	To           time.Time
 }
 
 // HistorySearchResult is a single result from a history search.
 type HistorySearchResult struct {
-	Page string
-	Version  PageVersionMetadata
-	Snippet  string
+	Page    string
+	Version PageVersionMetadata
+	Snippet string
 }
 
 // Index is a Bleve-backed index of page version history.
@@ -124,7 +124,7 @@ func (i *Index) AddPageToIndex(identifier wikipage.PageIdentifier) error {
 			return fmt.Errorf("failed to read version %s for %s: %w", v.VersionID, identifier, err)
 		}
 
-		doc := map[string]interface{}{
+		doc := map[string]any{
 			fieldPageIdentifier: string(identifier),
 			fieldVersionID:      v.VersionID,
 			fieldContent:        content,
@@ -189,7 +189,7 @@ func docID(identifier wikipage.PageIdentifier, versionID string) string {
 // SearchPageHistory searches within the history of a single page.
 func (i *Index) SearchPageHistory(identifier wikipage.PageIdentifier, queryText string) ([]HistorySearchResult, error) {
 	return i.SearchHistory(HistorySearchFilter{
-		Query:          queryText,
+		Query:      queryText,
 		PageFilter: string(identifier),
 	})
 }
@@ -267,16 +267,16 @@ func (i *Index) SearchHistory(filter HistorySearchFilter) ([]HistorySearchResult
 		}
 
 		results = append(results, HistorySearchResult{
-			Page: v.PageIdentifier,
-			Version:  v,
-			Snippet:  snippet,
+			Page:    v.PageIdentifier,
+			Version: v,
+			Snippet: snippet,
 		})
 	}
 
 	return results, nil
 }
 
-func fieldString(fields map[string]interface{}, name string) string {
+func fieldString(fields map[string]any, name string) string {
 	if v, ok := fields[name]; ok {
 		if s, ok := v.(string); ok {
 			return s
@@ -285,7 +285,7 @@ func fieldString(fields map[string]interface{}, name string) string {
 	return ""
 }
 
-func fieldTime(fields map[string]interface{}, name string) time.Time {
+func fieldTime(fields map[string]any, name string) time.Time {
 	if v, ok := fields[name]; ok {
 		switch t := v.(type) {
 		case time.Time:
@@ -303,7 +303,7 @@ func fieldTime(fields map[string]interface{}, name string) time.Time {
 	return time.Time{}
 }
 
-func fieldBool(fields map[string]interface{}, name string) bool {
+func fieldBool(fields map[string]any, name string) bool {
 	if v, ok := fields[name]; ok {
 		if b, ok := v.(bool); ok {
 			return b
@@ -312,7 +312,7 @@ func fieldBool(fields map[string]interface{}, name string) bool {
 	return false
 }
 
-func fieldInt64(fields map[string]interface{}, name string) int64 {
+func fieldInt64(fields map[string]any, name string) int64 {
 	if v, ok := fields[name]; ok {
 		switch n := v.(type) {
 		case float64:

@@ -376,8 +376,8 @@ func getFlags() []cli.Flag {
 		cli.StringFlag{
 			Name:   "chat-persona",
 			EnvVar: "WIKI_CHAT_PERSONA",
-			Value:  "Dorium",
-			Usage:  "display name for the chat AI persona",
+			Value:  "Assistant",
+			Usage:  "display name for the chat AI persona (deployment config; instance-specific names come from env, not code)",
 		},
 		cli.BoolFlag{
 			Name:  "debug, d",
