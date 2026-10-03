@@ -879,3 +879,117 @@ var _ = Describe("a2aServer task persistence", func() {
 		Expect(snap.Status.State).To(Equal("failed"))
 	})
 })
+
+var _ = Describe("a2aServer $/cancel_request", func() {
+	var (
+		ts      *httptest.Server
+		release chan struct{}
+	)
+	const tok = "tok-123"
+
+	BeforeEach(func() {
+		release = make(chan struct{})
+		rel := release // capture for runner goroutines that outlive BeforeEach
+		_, ts = newA2ATestServer(tok, "", 9*time.Minute, 128, func(ctx context.Context, _ *a2aTask, _ a2aCaller) (string, error) {
+			select {
+			case <-rel:
+				return "done", nil
+			case <-ctx.Done():
+				return "", ctx.Err()
+			}
+		})
+	})
+
+	AfterEach(func() {
+		close(release)
+		ts.Close()
+	})
+
+	It("returns 200 OK (not -32601) for $/cancel_request with no active task", func() {
+		code, resp := dispatchA2A(ts, bearerHeaders(tok), map[string]any{
+			"jsonrpc": "2.0",
+			"method":  "$/cancel_request",
+			"params":  map[string]any{"requestId": 99},
+		})
+		Expect(code).To(Equal(http.StatusOK))
+		Expect(resp["error"]).To(BeNil())
+	})
+
+	When("a $/cancel_request notification targets an in-flight message/send by request id", func() {
+		var taskID string
+		var cancelCode int
+		var cancelResponse map[string]any
+
+		BeforeEach(func() {
+			// Start a long-running task with JSON-RPC id 3.
+			_, resp := dispatchA2A(ts, bearerHeaders(tok), map[string]any{
+				"jsonrpc": "2.0",
+				"id":      3,
+				"method":  "message/send",
+				"params": map[string]any{
+					"message": map[string]any{
+						"role":      "user",
+						"parts":     []map[string]any{{"kind": "text", "text": "long task"}},
+						"contextId": "ctx-cancel-test",
+					},
+				},
+			})
+			taskID = a2aStr(a2aMap(resp, "result")["id"])
+
+			// Wait until the runner is blocked inside the seam.
+			Eventually(func() bool {
+				_, r := dispatchA2A(ts, bearerHeaders(tok), map[string]any{
+					"jsonrpc": "2.0", "id": 7, "method": "tasks/get",
+					"params": map[string]any{"id": taskID},
+				})
+				result, _ := r["result"].(map[string]any)
+				if result == nil {
+					return false
+				}
+				state, _ := a2aMap(result, "status")["state"].(string)
+				return state == "working"
+			}).Within(2 * time.Second).Should(BeTrue())
+
+			// Send $/cancel_request referencing the original JSON-RPC id 3.
+			cancelCode, cancelResponse = dispatchA2A(ts, bearerHeaders(tok), map[string]any{
+				"jsonrpc": "2.0",
+				"method":  "$/cancel_request",
+				"params":  map[string]any{"requestId": 3},
+			})
+		})
+
+		It("returns 200 OK", func() {
+			Expect(cancelCode).To(Equal(http.StatusOK))
+		})
+
+		It("does not return a JSON-RPC error", func() {
+			Expect(cancelResponse["error"]).To(BeNil())
+		})
+
+		It("finishes the task as canceled, not failed", func() {
+			state, _ := pollTaskUntil(ts, tok, taskID, 2*time.Second)
+			Expect(state).To(Equal(a2aStateCanceled))
+		})
+	})
+
+	When("$/cancel_request targets a request id with no known task", func() {
+		var cancelCode int
+		var cancelResponse map[string]any
+
+		BeforeEach(func() {
+			cancelCode, cancelResponse = dispatchA2A(ts, bearerHeaders(tok), map[string]any{
+				"jsonrpc": "2.0",
+				"method":  "$/cancel_request",
+				"params":  map[string]any{"requestId": 42},
+			})
+		})
+
+		It("returns 200 OK (graceful no-op)", func() {
+			Expect(cancelCode).To(Equal(http.StatusOK))
+		})
+
+		It("does not return a JSON-RPC error", func() {
+			Expect(cancelResponse["error"]).To(BeNil())
+		})
+	})
+})
