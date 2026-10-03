@@ -197,8 +197,7 @@ func (s *Store) SoftDeletePageBy(id wikipage.PageIdentifier, deletedBy string, i
 	}
 
 	// History capture failure must not block the delete.
-	// TODO: log the capture failure once we have a logger on Store.
-	_ = s.captureVersionLockedWithSource(identifier, string(rawText), identity, "soft_delete")
+	_ = s.captureVersionLockedWithSource(identifier, string(rawText), identity, "soft_delete") //nolint:errcheck // nosemgrep: go.error-discarded-with-blank-identifier
 
 	_, deletedDir, err := s.createTrashDir(now)
 	if err != nil {

@@ -3,7 +3,7 @@ import { state } from 'lit/decorators.js';
 import { colorCSS, typographyCSS, themeCSS, foundationCSS, dialogCSS, responsiveCSS, buttonCSS, zIndexCSS } from './shared-styles.js';
 import './error-display.js';
 import { type AugmentedError, AugmentErrorService } from './augment-error-service.js';
-import { handleKeydownFocusTrap, restoreFocus } from './native-dialog-mixin.js';
+import { handleKeydownFocusTrap, findRestoreFocusTarget } from './native-dialog-mixin.js';
 
 /**
  * Configuration for the confirmation dialog
@@ -303,6 +303,14 @@ export class ConfirmationDialog extends LitElement {
    * Closes the dialog and cleans up
    */
   closeDialog() {
+    // Pre-compute the stable restore target BEFORE dialog.close() so that the
+    // check runs while the dialog backdrop is still visible.  The backdrop
+    // suppresses CSS :hover on underlying elements (e.g. hover-menus), which
+    // means hidden menu items correctly appear as not rendered.  After
+    // dialog.close() the backdrop disappears and :hover may re-activate
+    // synchronously, making a menu item appear focusable and causing focus to
+    // land on the wrong element.
+    const restoreTarget = findRestoreFocusTarget(this._previouslyFocusedElement);
     const dialog = this.shadowRoot?.querySelector('dialog');
     if (dialog?.open) {
       dialog.close();
@@ -312,7 +320,7 @@ export class ConfirmationDialog extends LitElement {
     this.loading = false;
     this.augmentedError = undefined;
     this.config = null;
-    restoreFocus(this._previouslyFocusedElement);
+    restoreTarget?.focus();
     this._previouslyFocusedElement = null;
   }
 

@@ -114,7 +114,7 @@ This is an E2E test inventory container.`);
     // so we must check resp.ok() explicitly to detect failures.
     for (const identifier of [CONTAINER_A, CONTAINER_B, API_ITEM, UI_ITEM_IDENTIFIER]) {
       try {
-        const resp = await callPageAPI(request, 'DeletePage', { pageName: identifier });
+        const resp = await callPageAPI(request, 'DeletePage', { page: identifier });
         if (!resp.ok()) {
           // Log but do not fail — cleanup is best-effort
           console.warn(`[afterAll] DeletePage(${identifier}) returned HTTP ${resp.status()}`);

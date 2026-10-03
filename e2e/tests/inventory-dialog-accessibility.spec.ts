@@ -91,7 +91,7 @@ E2E accessibility test container.`);
   test.afterAll(async ({ request }) => {
     for (const identifier of [A11Y_CONTAINER, A11Y_ITEM]) {
       try {
-        const resp = await callPageAPI(request, 'DeletePage', { pageName: identifier });
+        const resp = await callPageAPI(request, 'DeletePage', { page: identifier });
         if (!resp.ok()) {
           console.warn(`[afterAll] DeletePage(${identifier}) returned HTTP ${resp.status()}`);
         }
