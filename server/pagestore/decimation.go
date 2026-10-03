@@ -111,7 +111,7 @@ type versionWithTimestamp struct {
 
 // loadVersionTimestamps reads all .meta.json files in a page history directory
 // and returns their version IDs and creation timestamps.
-func (j *HistoryDecimationJob) loadVersionTimestamps(pageDir string) ([]versionWithTimestamp, error) {
+func (*HistoryDecimationJob) loadVersionTimestamps(pageDir string) ([]versionWithTimestamp, error) {
 	entries, err := os.ReadDir(pageDir)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read page history dir: %w", err)
@@ -154,6 +154,9 @@ func (j *HistoryDecimationJob) selectSurvivors(versions []versionWithTimestamp) 
 		// cases (e.g. a system page written every few seconds) from
 		// accumulating thousands of versions. The newest versions are kept.
 		maxVersionsPerPage = 500
+		hoursPerDay        = 24
+		daysPerWeek        = 7
+		daysPerYear        = 365
 	)
 
 	var survivors []versionWithTimestamp
@@ -164,11 +167,11 @@ func (j *HistoryDecimationJob) selectSurvivors(versions []versionWithTimestamp) 
 		age := j.now.Sub(v.createdAt)
 
 		switch {
-		case age <= retentionRecentDays*24*time.Hour:
+		case age <= retentionRecentDays*hoursPerDay*time.Hour:
 			// Keep all versions within the recent window.
 			survivors = append(survivors, v)
 
-		case age <= retentionWeeklyWeeks*7*24*time.Hour:
+		case age <= retentionWeeklyWeeks*daysPerWeek*hoursPerDay*time.Hour:
 			// Keep 1/week: the newest version in each ISO week.
 			weekKey := isoWeekKey(v.createdAt)
 			if !seenWeeks[weekKey] {
@@ -176,7 +179,7 @@ func (j *HistoryDecimationJob) selectSurvivors(versions []versionWithTimestamp) 
 				survivors = append(survivors, v)
 			}
 
-		case age <= retentionMonthlyYears*365*24*time.Hour:
+		case age <= retentionMonthlyYears*daysPerYear*hoursPerDay*time.Hour:
 			// Keep 1/month: the newest version in each calendar month.
 			monthKey := v.createdAt.Format("2006-01")
 			if seenMonths[monthKey] == "" {
@@ -200,7 +203,7 @@ func (j *HistoryDecimationJob) selectSurvivors(versions []versionWithTimestamp) 
 }
 
 // deleteVersion removes both the .md and .meta.json files for a version.
-func (j *HistoryDecimationJob) deleteVersion(pageDir, versionID string) error {
+func (*HistoryDecimationJob) deleteVersion(pageDir, versionID string) error {
 	contentPath := filepath.Join(pageDir, versionID+versionFileExt)
 	if err := os.Remove(contentPath); err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("failed to delete version content %s: %w", versionID, err)

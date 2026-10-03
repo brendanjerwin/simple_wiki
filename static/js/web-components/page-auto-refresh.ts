@@ -224,7 +224,7 @@ export class PageAutoRefresh extends LitElement {
   private dispatchPageStatusEvent(): void {
     this.dispatchEvent(new CustomEvent('page-status-changed', {
       detail: {
-        page: this.pageName,
+        pageName: this.pageName,
         versionHash: this.currentHash,
         lastRefreshTime: this.lastRefreshTime,
         isWatching: this.isWatching,

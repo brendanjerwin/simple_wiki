@@ -196,10 +196,9 @@ func (s *Store) SoftDeletePageBy(id wikipage.PageIdentifier, deletedBy string, i
 		return fmt.Errorf("failed to read Markdown file for page %s before trashing: %w", identifier, readErr)
 	}
 
-	if captureErr := s.captureVersionLockedWithSource(identifier, string(rawText), identity, "soft_delete"); captureErr != nil {
-		// History capture failure must not block the delete.
-		// TODO: log the capture failure once we have a logger on Store.
-	}
+	// History capture failure must not block the delete.
+	// TODO: log the capture failure once we have a logger on Store.
+	_ = s.captureVersionLockedWithSource(identifier, string(rawText), identity, "soft_delete")
 
 	_, deletedDir, err := s.createTrashDir(now)
 	if err != nil {
