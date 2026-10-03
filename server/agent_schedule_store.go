@@ -290,7 +290,8 @@ func isTerminalScheduleStatus(s apiv1.ScheduleStatus) bool {
 	case apiv1.ScheduleStatus_SCHEDULE_STATUS_OK,
 		apiv1.ScheduleStatus_SCHEDULE_STATUS_ERROR,
 		apiv1.ScheduleStatus_SCHEDULE_STATUS_TIMEOUT,
-		apiv1.ScheduleStatus_SCHEDULE_STATUS_WARN:
+		apiv1.ScheduleStatus_SCHEDULE_STATUS_WARN,
+		apiv1.ScheduleStatus_SCHEDULE_STATUS_MAX_TURNS:
 		return true
 	default:
 		return false
