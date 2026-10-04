@@ -879,3 +879,119 @@ var _ = Describe("a2aServer task persistence", func() {
 		Expect(snap.Status.State).To(Equal("failed"))
 	})
 })
+
+var _ = Describe("a2aServer per-task timeout via metadata", func() {
+	var ts *httptest.Server
+	const tok = "tok-123"
+
+	AfterEach(func() {
+		ts.Close()
+	})
+
+	// sendWithMeta dispatches a message/send with metadata merged in.
+	sendWithMeta := func(meta map[string]any) (int, map[string]any) {
+		body := a2aSendBody("long task")
+		body["id"] = 77
+		body["params"].(map[string]any)["metadata"] = meta
+		return dispatchA2A(ts, bearerHeaders(tok), body)
+	}
+
+	It("completes a task past the default 9m via metadata override", func() {
+		// Default timeout 50ms would kill this; metadata override keeps it alive.
+		_, ts = newA2ATestServer(tok, "", 50*time.Millisecond, 128, func(_ context.Context, _ *a2aTask, _ a2aCaller) (string, error) {
+			time.Sleep(300 * time.Millisecond)
+			return "LONG-DONE", nil
+		})
+		code, resp := sendWithMeta(map[string]any{"a2a_task_timeout_seconds": 10})
+		Expect(code).To(Equal(http.StatusOK))
+		taskID := a2aStr(a2aMap(resp, "result")["id"])
+		state, text := pollTaskUntil(ts, tok, taskID, 2*time.Second)
+		Expect(state).To(Equal("completed"))
+		Expect(text).To(Equal("LONG-DONE"))
+	})
+
+	It("still fails a task that exceeds its own metadata override", func() {
+		_, ts = newA2ATestServer(tok, "", 9*time.Minute, 128, func(ctx context.Context, _ *a2aTask, _ a2aCaller) (string, error) {
+			<-ctx.Done()
+			return "", ctx.Err()
+		})
+		code, resp := sendWithMeta(map[string]any{"a2a_task_timeout_seconds": 1})
+		Expect(code).To(Equal(http.StatusOK))
+		taskID := a2aStr(a2aMap(resp, "result")["id"])
+		state, text := pollTaskUntil(ts, tok, taskID, 3*time.Second)
+		Expect(state).To(Equal("failed"))
+		Expect(text).To(ContainSubstring("task deadline exceeded (1s)"))
+	})
+
+	It("rejects a malformed metadata timeout with -32602", func() {
+		_, ts = newA2ATestServer(tok, "", 9*time.Minute, 128, nil)
+		code, resp := sendWithMeta(map[string]any{"a2a_task_timeout_seconds": "not-a-number"})
+		Expect(code).To(Equal(http.StatusOK))
+		errObj := a2aMap(resp, "error")
+		Expect(errObj["code"]).To(Equal(float64(a2aErrInvalidParams)))
+		Expect(errObj["message"]).To(ContainSubstring("a2a_task_timeout_seconds"))
+	})
+
+	It("clamps an oversized override to MaxTaskTimeout", func() {
+		srv, tsClose := newA2ATestServer(tok, "", 9*time.Minute, 128, func(_ context.Context, _ *a2aTask, _ a2aCaller) (string, error) {
+			return "fast", nil
+		})
+		defer tsClose.Close()
+		// Ask for a week; the server must clamp to MaxTaskTimeout (default 60m).
+		got := srv.taskTimeoutFromMetadata(map[string]any{"a2a_task_timeout_seconds": 604800.0})
+		Expect(got).To(Equal(60 * time.Minute))
+	})
+
+	It("uses the server default when metadata is absent", func() {
+		srv, _ := newA2ATestServer(tok, "", 9*time.Minute, 128, nil)
+		Expect(srv.taskTimeoutFromMetadata(nil)).To(Equal(9 * time.Minute))
+		Expect(srv.taskTimeoutFromMetadata(map[string]any{})).To(Equal(9 * time.Minute))
+	})
+})
+
+var _ = Describe("a2aServer progress mirroring", func() {
+	// No httptest server: this block exercises the collector/sink plumbing
+	// directly inside the server object.
+
+	const tok = "tok-123"
+
+	It("mirrors SessionUpdate chunks into ProgressText by hand", func() {
+		srv, _ := newA2ATestServer(tok, "", 9*time.Minute, 128, nil)
+		t := &a2aTask{ID: "a2a-prog", ContextID: "ctx-p", UserText: "q", Caller: a2aCaller{ClientName: a2aCallerTailnet}, State: a2aStateWorking}
+
+		sink := make(chan string, 4)
+		done := make(chan struct{})
+		go func() {
+			defer close(done)
+			for {
+				select {
+				case text, ok := <-sink:
+					if !ok {
+						return
+					}
+					srv.mu.Lock()
+					t.ProgressText = text
+					srv.mu.Unlock()
+				case <-done:
+					return
+				}
+			}
+		}()
+		client := &a2aTaskClient{task: t, progressSink: sink}
+		chunk := func(s string) acp.SessionNotification {
+			return acp.SessionNotification{Update: acp.SessionUpdate{AgentMessageChunk: &acp.SessionUpdateAgentMessageChunk{
+				Content: acp.ContentBlock{Text: &acp.ContentBlockText{Text: s, Type: "text"}},
+			}}}
+		}
+		Expect(client.SessionUpdate(context.Background(), chunk("first "))).To(Succeed())
+		Expect(client.SessionUpdate(context.Background(), chunk("second"))).To(Succeed())
+		close(sink)
+		Eventually(done, time.Second).Should(BeClosed())
+		srv.mu.Lock()
+		// Sinks carry the ACCUMULATED turn text, so the final mirror is
+		// everything the agent streamed so far — not only the last chunk.
+		Expect(t.ProgressText).To(Equal("first second"))
+		srv.mu.Unlock()
+		Expect(client.finalText()).To(Equal("first second"))
+	})
+})
