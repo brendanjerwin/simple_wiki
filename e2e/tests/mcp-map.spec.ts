@@ -72,7 +72,7 @@ test.describe('MapService MCP Tools E2E Tests', () => {
     
     const map = data.maps.find((m: any) => m.name === TEST_MAP);
     expect(map).toBeDefined();
-    expect(map.markerCount).toBe(1);
+    expect(map.marker_count).toBe(1);
   });
 
   test('F5: should mutate track elements using AddTrack, UpdateTrack, and DeleteTrack tools', async ({ request }) => {

@@ -1250,14 +1250,17 @@ export class WikiMap extends LitElement {
   private renderToolsPanel() {
     if (!this.toolsOpen) return null;
     return html`
-      <button
-        class="add-track-button"
-        aria-label="Add GPS track"
-        title="Add GPS track"
-        @click=${this.handleAddTrackClick}
-      >
-        <span class="add-track-button-icon" aria-hidden="true">⤒</span>
-      ${this.renderUploadPopover()}
+      <div class="tools-panel">
+        <button
+          class="add-track-button"
+          aria-label="Add GPS track"
+          title="Add GPS track"
+          @click=${this.handleAddTrackClick}
+        >
+          <span class="add-track-button-icon" aria-hidden="true">⤒</span>
+        </button>
+        ${this.renderUploadPopover()}
+      </div>
     `;
   }
 
