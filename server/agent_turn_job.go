@@ -291,9 +291,13 @@ func (j *AgentTurnJob) applyLateMaxTurnsCompletion(completion <-chan *ScheduledT
 		if outcome == nil || outcome.TerminalStatus != apiv1.ScheduleStatus_SCHEDULE_STATUS_MAX_TURNS {
 			return
 		}
-		if err := j.store.TransitionStatus(j.page, j.scheduleID,
+		// Require TIMEOUT as the current state so run A's late completion
+		// cannot overwrite run B's RUNNING status if a new fire has started.
+		err := j.store.TransitionStatusFrom(j.page, j.scheduleID,
+			apiv1.ScheduleStatus_SCHEDULE_STATUS_TIMEOUT,
 			apiv1.ScheduleStatus_SCHEDULE_STATUS_MAX_TURNS,
-			outcome.ErrorMessage, outcome.DurationSeconds); err != nil {
+			outcome.ErrorMessage, outcome.DurationSeconds)
+		if err != nil {
 			slog.Warn("agent turn: late MAX_TURNS override failed (new run may have started)",
 				logKeyPage, j.page, logKeyScheduleID, j.scheduleID, logKeyError, err)
 		}

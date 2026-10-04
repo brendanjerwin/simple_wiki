@@ -524,6 +524,57 @@ var _ = Describe("AgentTurnJob", func() {
 		})
 	})
 
+	Describe("Execute when a late MAX_TURNS arrives after a new run has started", func() {
+		// Scenario: run A times out, run B starts (RUNNING), then run A's late
+		// MAX_TURNS completion arrives. The late completion must NOT overwrite
+		// run B's RUNNING status.
+		var (
+			completion chan *server.ScheduledTurnOutcome
+			executeErr error
+		)
+
+		BeforeEach(func() {
+			completion = make(chan *server.ScheduledTurnOutcome, 1)
+			dispatcher.dispatchFn = func(req *apiv1.ScheduledTurnRequest) (<-chan *server.ScheduledTurnOutcome, error) {
+				dispatcher.record(req)
+				return completion, nil
+			}
+			job = server.NewAgentTurnJob(store, dispatcher, "p", "s1", 50*time.Millisecond)
+
+			done := make(chan error, 1)
+			go func() {
+				done <- job.Execute()
+			}()
+			select {
+			case executeErr = <-done:
+			case <-time.After(time.Second):
+				Fail("Execute did not return within 1s")
+			}
+
+			// Simulate run B starting: TIMEOUT→RUNNING is legal.
+			Expect(store.TransitionStatus("p", "s1",
+				apiv1.ScheduleStatus_SCHEDULE_STATUS_RUNNING, "", 0)).To(Succeed())
+
+			// Now send run A's late MAX_TURNS completion.
+			completion <- &server.ScheduledTurnOutcome{
+				TerminalStatus:  apiv1.ScheduleStatus_SCHEDULE_STATUS_MAX_TURNS,
+				ErrorMessage:    "max_turns (10) reached after 1800s",
+				DurationSeconds: 1800,
+			}
+			// Allow the late-completion goroutine to process.
+			time.Sleep(100 * time.Millisecond)
+		})
+
+		It("should return nil from Execute", func() {
+			Expect(executeErr).NotTo(HaveOccurred())
+		})
+
+		It("should not overwrite run B's RUNNING status with stale MAX_TURNS", func() {
+			schedules, _ := store.List("p")
+			Expect(schedules[0].GetLastStatus()).To(Equal(apiv1.ScheduleStatus_SCHEDULE_STATUS_RUNNING))
+		})
+	})
+
 	Describe("Execute when the schedule is RUNNING and fresh", func() {
 		// Seed a RUNNING schedule that just started (last_run ≈ now). With a
 		// hardTimeout of 5s the reclaim threshold is 10s — so a fresh run should

@@ -260,6 +260,41 @@ describe('AgentDetailsDialog', () => {
     });
   });
 
+  describe('when a MAX_TURNS schedule is rendered', () => {
+    let fakeClient: FakeAgentClient;
+
+    beforeEach(async () => {
+      el = await Promise.race([
+        fixture<AgentDetailsDialog>(html`<agent-details-dialog></agent-details-dialog>`),
+        timeout(5000, 'Component fixture timed out'),
+      ]);
+
+      fakeClient = buildFakeClient();
+      fakeClient.listSchedules.resolves(create(ListSchedulesResponseSchema, {
+        schedules: [
+          makeSchedule({ id: 'daily', cron: '0 0 9 * * *', lastStatus: ScheduleStatus.MAX_TURNS }),
+        ],
+      }));
+      fakeClient.getChatContext.resolves(create(GetChatContextResponseSchema, {}));
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- injecting fake client for tests
+      el.client = fakeClient as unknown as AgentDetailsDialog['client'];
+
+      el.openDialog('p');
+      await waitUntil(() => !el.loading, 'still loading', { timeout: 1000 });
+      await el.updateComplete;
+    });
+
+    it('should render the status badge with text Max Turns', () => {
+      const badge = el.shadowRoot?.querySelector('[data-schedule-id="daily"] .status-badge');
+      expect(badge?.textContent?.trim()).to.equal('Max Turns');
+    });
+
+    it('should apply the status-max-turns class to the badge', () => {
+      const badge = el.shadowRoot?.querySelector('[data-schedule-id="daily"] .status-badge');
+      expect(badge?.classList.contains('status-max-turns')).to.be.true;
+    });
+  });
+
   describe('when a schedule has an explicit timezone', () => {
     let fakeClient: FakeAgentClient;
 

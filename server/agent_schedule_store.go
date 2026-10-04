@@ -52,6 +52,11 @@ type agentSchedulePagesStore interface {
 type BackgroundActivitySink interface {
 	AppendBackgroundActivityAutomatic(page string, entry *apiv1.BackgroundActivityEntry) error
 	CompleteBackgroundActivity(page, scheduleID string, status apiv1.ScheduleStatus) (apiv1.ScheduleStatus, error)
+	// AmendBackgroundActivity finds the most recent entry for scheduleID whose
+	// status equals fromStatus and updates it to toStatus. Used for
+	// terminal→terminal corrections (e.g. TIMEOUT→MAX_TURNS) so a late
+	// completion replaces the provisional entry rather than appending a new one.
+	AmendBackgroundActivity(page, scheduleID string, fromStatus, toStatus apiv1.ScheduleStatus) error
 }
 
 // AgentScheduleStore owns reads and writes of the agent.schedules subtree on
@@ -181,7 +186,25 @@ func (s *AgentScheduleStore) Delete(page, scheduleID string) error {
 func (s *AgentScheduleStore) TransitionStatus(page, scheduleID string, to apiv1.ScheduleStatus, errMessage string, durationSeconds int32) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	return s.transitionLocked(page, scheduleID, nil, to, errMessage, durationSeconds)
+}
 
+// TransitionStatusFrom applies the status transition only when the schedule's
+// current status exactly equals expectedFrom. This is the atomic check-and-set
+// needed for background goroutines that must confirm a specific prior state
+// before applying a correction (e.g. a late MAX_TURNS override that should
+// only succeed if the schedule is still TIMEOUT, not if a new run has started).
+func (s *AgentScheduleStore) TransitionStatusFrom(page, scheduleID string, expectedFrom, to apiv1.ScheduleStatus, errMessage string, durationSeconds int32) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.transitionLocked(page, scheduleID, &expectedFrom, to, errMessage, durationSeconds)
+}
+
+// transitionLocked is the shared body of TransitionStatus and
+// TransitionStatusFrom. The caller must hold s.mu before calling. When
+// expectedFrom is non-nil the schedule's current status must equal it or an
+// *IllegalScheduleTransitionError is returned without writing.
+func (s *AgentScheduleStore) transitionLocked(page, scheduleID string, expectedFrom *apiv1.ScheduleStatus, to apiv1.ScheduleStatus, errMessage string, durationSeconds int32) error {
 	id, fm, err := s.pages.ReadFrontMatter(wikipage.PageIdentifier(page))
 	if err != nil {
 		return fmt.Errorf(errReadFrontmatterFmt, page, err)
@@ -190,26 +213,31 @@ func (s *AgentScheduleStore) TransitionStatus(page, scheduleID string, to apiv1.
 	if err != nil {
 		return err
 	}
-
-	var target *apiv1.AgentSchedule
-	for _, sc := range existing {
-		if sc.GetId() == scheduleID {
-			target = sc
-			break
-		}
-	}
+	target := findScheduleByID(existing, scheduleID)
 	if target == nil {
 		return &ScheduleNotFoundError{Page: page, ScheduleID: scheduleID}
 	}
 
+	if expectedFrom != nil && target.GetLastStatus() != *expectedFrom {
+		return &IllegalScheduleTransitionError{From: target.GetLastStatus(), To: to}
+	}
 	if err := ValidateScheduleTransition(target.GetLastStatus(), to); err != nil {
 		return err
 	}
 
+	currentFrom := target.GetLastStatus()
 	now := time.Now().UTC()
 	finalStatus := to
 	if isTerminalScheduleStatus(to) && s.backgroundActivitySink != nil {
-		finalStatus = s.completeBackgroundActivityStatus(page, scheduleID, to)
+		if isTerminalScheduleStatus(currentFrom) {
+			// terminal→terminal: amend the existing entry in place rather than
+			// appending a new one (e.g. late TIMEOUT→MAX_TURNS correction).
+			s.amendBackgroundActivity(page, scheduleID, currentFrom, to)
+		} else {
+			finalStatus = s.completeBackgroundActivityStatus(page, scheduleID, to)
+		}
+		// Re-read FM after any background-activity write so the schedule update
+		// does not overwrite the background-activity changes.
 		id, fm, err = s.pages.ReadFrontMatter(wikipage.PageIdentifier(page))
 		if err != nil {
 			return fmt.Errorf(errReadFrontmatterFmt, page, err)
@@ -218,13 +246,7 @@ func (s *AgentScheduleStore) TransitionStatus(page, scheduleID string, to apiv1.
 		if err != nil {
 			return err
 		}
-		target = nil
-		for _, sc := range existing {
-			if sc.GetId() == scheduleID {
-				target = sc
-				break
-			}
-		}
+		target = findScheduleByID(existing, scheduleID)
 		if target == nil {
 			return &ScheduleNotFoundError{Page: page, ScheduleID: scheduleID}
 		}
@@ -265,6 +287,18 @@ func (s *AgentScheduleStore) completeBackgroundActivityStatus(page, scheduleID s
 		return apiv1.ScheduleStatus_SCHEDULE_STATUS_WARN
 	}
 	return status
+}
+
+func (s *AgentScheduleStore) amendBackgroundActivity(page, scheduleID string, from, to apiv1.ScheduleStatus) {
+	if err := s.backgroundActivitySink.AmendBackgroundActivity(page, scheduleID, from, to); err != nil {
+		slog.Warn("agent schedule: background activity amendment failed",
+			logFieldPage, page,
+			"schedule_id", scheduleID,
+			"from_status", from.String(),
+			"to_status", to.String(),
+			"error", err,
+		)
+	}
 }
 
 func (s *AgentScheduleStore) appendRunningBackgroundActivity(page, scheduleID string, now time.Time) {
@@ -356,6 +390,17 @@ func writeSchedules(fm wikipage.FrontMatter, schedules []*apiv1.AgentSchedule) e
 		return nil
 	}
 	fm[AgentNamespaceKey] = agent
+	return nil
+}
+
+// findScheduleByID returns the first schedule in the list whose id matches, or
+// nil when not found.
+func findScheduleByID(schedules []*apiv1.AgentSchedule, id string) *apiv1.AgentSchedule {
+	for _, sc := range schedules {
+		if sc.GetId() == id {
+			return sc
+		}
+	}
 	return nil
 }
 

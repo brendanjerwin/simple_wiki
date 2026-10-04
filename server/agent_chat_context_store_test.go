@@ -777,4 +777,48 @@ var _ = Describe("AgentChatContextStore", func() {
 			Expect(ctx.GetBackgroundActivity()[0].GetSummary()).To(Equal("had a bad ts"))
 		})
 	})
+
+	Describe("AmendBackgroundActivity", func() {
+		Describe("when an entry with fromStatus exists", func() {
+			BeforeEach(func() {
+				Expect(store.AppendBackgroundActivityAutomatic("p", &apiv1.BackgroundActivityEntry{
+					Timestamp:  timestamppb.New(time.Now()),
+					ScheduleId: "weekly",
+					Status:     apiv1.ScheduleStatus_SCHEDULE_STATUS_TIMEOUT,
+				})).To(Succeed())
+				Expect(store.AmendBackgroundActivity("p", "weekly",
+					apiv1.ScheduleStatus_SCHEDULE_STATUS_TIMEOUT,
+					apiv1.ScheduleStatus_SCHEDULE_STATUS_MAX_TURNS)).To(Succeed())
+			})
+
+			It("should update the entry status to toStatus", func() {
+				ctx, _ := store.Read("p")
+				Expect(ctx.GetBackgroundActivity()[0].GetStatus()).To(Equal(apiv1.ScheduleStatus_SCHEDULE_STATUS_MAX_TURNS))
+			})
+
+			It("should not add a second entry", func() {
+				ctx, _ := store.Read("p")
+				Expect(ctx.GetBackgroundActivity()).To(HaveLen(1))
+			})
+		})
+
+		Describe("when no entry with fromStatus exists", func() {
+			var err error
+
+			BeforeEach(func() {
+				err = store.AmendBackgroundActivity("p", "weekly",
+					apiv1.ScheduleStatus_SCHEDULE_STATUS_TIMEOUT,
+					apiv1.ScheduleStatus_SCHEDULE_STATUS_MAX_TURNS)
+			})
+
+			It("should succeed (amendment is best-effort)", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should not add any entry", func() {
+				ctx, _ := store.Read("p")
+				Expect(ctx.GetBackgroundActivity()).To(BeEmpty())
+			})
+		})
+	})
 })
