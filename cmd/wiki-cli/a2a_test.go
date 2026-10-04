@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -96,6 +97,26 @@ func dispatchA2A(ts *httptest.Server, headers map[string]string, body any) (stat
 
 func bearerHeaders(token string) map[string]string {
 	return map[string]string{"Authorization": "Bearer " + token}
+}
+
+// dispatchNotification posts a JSON-RPC notification and returns the HTTP
+// status code and raw body bytes. Per spec, notifications must not produce
+// a JSON-RPC response body, so callers should assert the body is empty.
+func dispatchNotification(ts *httptest.Server, headers map[string]string, body any) (statusCode int, responseBody []byte) {
+	payload, err := json.Marshal(body)
+	Expect(err).NotTo(HaveOccurred())
+	req, err := http.NewRequest(http.MethodPost, ts.URL+"/", strings.NewReader(string(payload)))
+	Expect(err).NotTo(HaveOccurred())
+	req.Header.Set("Content-Type", "application/json")
+	for k, v := range headers {
+		req.Header.Set(k, v)
+	}
+	resp, err := ts.Client().Do(req)
+	Expect(err).NotTo(HaveOccurred())
+	defer resp.Body.Close()
+	responseBody, err = io.ReadAll(resp.Body)
+	Expect(err).NotTo(HaveOccurred())
+	return resp.StatusCode, responseBody
 }
 
 // pollTaskUntil polls tasks/get until the task leaves non-terminal state or
@@ -905,20 +926,10 @@ var _ = Describe("a2aServer $/cancel_request", func() {
 		ts.Close()
 	})
 
-	It("returns 200 OK (not -32601) for $/cancel_request with no active task", func() {
-		code, resp := dispatchA2A(ts, bearerHeaders(tok), map[string]any{
-			"jsonrpc": "2.0",
-			"method":  "$/cancel_request",
-			"params":  map[string]any{"requestId": 99},
-		})
-		Expect(code).To(Equal(http.StatusOK))
-		Expect(resp["error"]).To(BeNil())
-	})
-
 	When("a $/cancel_request notification targets an in-flight message/send by request id", func() {
 		var taskID string
 		var cancelCode int
-		var cancelResponse map[string]any
+		var cancelBody []byte
 
 		BeforeEach(func() {
 			// Start a long-running task with JSON-RPC id 3.
@@ -951,7 +962,7 @@ var _ = Describe("a2aServer $/cancel_request", func() {
 			}).Within(2 * time.Second).Should(BeTrue())
 
 			// Send $/cancel_request referencing the original JSON-RPC id 3.
-			cancelCode, cancelResponse = dispatchA2A(ts, bearerHeaders(tok), map[string]any{
+			cancelCode, cancelBody = dispatchNotification(ts, bearerHeaders(tok), map[string]any{
 				"jsonrpc": "2.0",
 				"method":  "$/cancel_request",
 				"params":  map[string]any{"requestId": 3},
@@ -962,22 +973,29 @@ var _ = Describe("a2aServer $/cancel_request", func() {
 			Expect(cancelCode).To(Equal(http.StatusOK))
 		})
 
-		It("does not return a JSON-RPC error", func() {
-			Expect(cancelResponse["error"]).To(BeNil())
+		It("returns an empty response body", func() {
+			Expect(cancelBody).To(BeEmpty())
 		})
 
-		It("finishes the task as canceled, not failed", func() {
-			state, _ := pollTaskUntil(ts, tok, taskID, 2*time.Second)
-			Expect(state).To(Equal(a2aStateCanceled))
+		When("the task is polled after cancellation", func() {
+			var finalState string
+
+			BeforeEach(func() {
+				finalState, _ = pollTaskUntil(ts, tok, taskID, 2*time.Second)
+			})
+
+			It("finishes as canceled, not failed", func() {
+				Expect(finalState).To(Equal(a2aStateCanceled))
+			})
 		})
 	})
 
 	When("$/cancel_request targets a request id with no known task", func() {
 		var cancelCode int
-		var cancelResponse map[string]any
+		var cancelBody []byte
 
 		BeforeEach(func() {
-			cancelCode, cancelResponse = dispatchA2A(ts, bearerHeaders(tok), map[string]any{
+			cancelCode, cancelBody = dispatchNotification(ts, bearerHeaders(tok), map[string]any{
 				"jsonrpc": "2.0",
 				"method":  "$/cancel_request",
 				"params":  map[string]any{"requestId": 42},
@@ -988,8 +1006,8 @@ var _ = Describe("a2aServer $/cancel_request", func() {
 			Expect(cancelCode).To(Equal(http.StatusOK))
 		})
 
-		It("does not return a JSON-RPC error", func() {
-			Expect(cancelResponse["error"]).To(BeNil())
+		It("returns an empty response body", func() {
+			Expect(cancelBody).To(BeEmpty())
 		})
 	})
 })

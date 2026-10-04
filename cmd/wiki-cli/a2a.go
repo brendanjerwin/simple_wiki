@@ -634,7 +634,7 @@ func (s *a2aServer) handleDispatch(w http.ResponseWriter, r *http.Request) {
 	case "tasks/list":
 		s.handleTaskList(w, req)
 	case "$/cancel_request":
-		s.handleCancelNotification(w, req)
+		s.handleCancelNotification(w, req, caller)
 	default:
 		s.writeError(w, req.ID, a2aErrMethodNotFound, fmt.Sprintf("unknown method: %s", req.Method))
 	}
@@ -670,7 +670,7 @@ func (s *a2aServer) handleMessageSend(w http.ResponseWriter, _ *http.Request, re
 	s.pruneLocked()
 	s.tasks[task.ID] = task
 	if len(req.ID) > 0 {
-		key := string(req.ID)
+		key := callerReqKey(caller, req.ID)
 		task.reqIDKey = key
 		s.requestToTask[key] = task.ID
 	}
@@ -713,6 +713,14 @@ func randomHex(n int) string {
 	return hex.EncodeToString(b)
 }
 
+// callerReqKey returns the requestToTask map key for a given caller and
+// JSON-RPC request id. The caller identity is included so two authenticated
+// gateway clients using the same numeric request id cannot cancel each
+// other's tasks.
+func callerReqKey(caller a2aCaller, reqID json.RawMessage) string {
+	return caller.ClientID + ":" + caller.Login + ":" + string(reqID)
+}
+
 // tasksCount returns the number of in-memory tasks (test helper).
 func (s *a2aServer) tasksCount() int {
 	s.mu.Lock()
@@ -746,7 +754,7 @@ func (s *a2aServer) pruneLocked() {
 		if !t.terminal() {
 			break
 		}
-		if t.reqIDKey != "" {
+		if t.reqIDKey != "" && s.requestToTask[t.reqIDKey] == t.ID {
 			delete(s.requestToTask, t.reqIDKey)
 		}
 		delete(s.tasks, id)
@@ -823,12 +831,11 @@ func (s *a2aServer) handleTaskCancel(w http.ResponseWriter, req a2aRequest) {
 // handleCancelNotification handles the $/cancel_request JSON-RPC notification
 // sent by A2A callers wishing to cancel an in-flight message/send. The
 // requestId in the params corresponds to the JSON-RPC id of the originating
-// message/send call. This is a notification (no id on the envelope) so no
-// result body is required; we always return 200 OK with a null result.
-func (s *a2aServer) handleCancelNotification(w http.ResponseWriter, req a2aRequest) {
-	// Acknowledge immediately — notifications must not block the caller.
-	w.Header().Set(headerContentType, contentTypeJSON)
-	_, _ = w.Write([]byte(`{"jsonrpc":"2.0","result":null}` + "\n"))
+// message/send call. Per JSON-RPC 2.0 spec, notifications must not produce a
+// response object — the server returns an empty 200 OK body.
+func (s *a2aServer) handleCancelNotification(w http.ResponseWriter, req a2aRequest, caller a2aCaller) {
+	// Notifications must not produce a JSON-RPC response body (spec §4).
+	w.WriteHeader(http.StatusOK)
 
 	requestID := req.Params.RequestID
 	if len(requestID) == 0 {
@@ -837,14 +844,14 @@ func (s *a2aServer) handleCancelNotification(w http.ResponseWriter, req a2aReque
 		return
 	}
 
-	reqKey := string(requestID)
+	reqKey := callerReqKey(caller, requestID)
 
 	s.mu.Lock()
 	taskID, ok := s.requestToTask[reqKey]
 	if !ok {
 		s.mu.Unlock()
 		slog.Debug("a2a $/cancel_request: no task for request id",
-			"requestId", reqKey,
+			"requestId", string(requestID),
 			logKeyAction, "a2a_cancel_notification")
 		return
 	}
@@ -859,7 +866,7 @@ func (s *a2aServer) handleCancelNotification(w http.ResponseWriter, req a2aReque
 
 	slog.Info("a2a task canceled via $/cancel_request",
 		logKeyTaskID, taskID,
-		"requestId", reqKey,
+		"requestId", string(requestID),
 		logKeyAction, "a2a_task_cancel")
 }
 
