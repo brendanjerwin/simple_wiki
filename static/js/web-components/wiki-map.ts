@@ -835,6 +835,17 @@ export class WikiMap extends LitElement {
         display: block;
       }
 
+      /* Tools panel overlay — must be positioned/sized so Playwright sees it as visible */
+      .tools-panel {
+        inset: 0;
+        pointer-events: none;
+        position: absolute;
+      }
+
+      .tools-panel > * {
+        pointer-events: auto;
+      }
+
       /* Add-track icon button (bottom-left; opens upload popover) */
       .add-track-button {
         align-items: center;
