@@ -944,8 +944,13 @@ var _ = Describe("a2aServer per-task timeout via metadata", func() {
 
 	It("uses the server default when metadata is absent", func() {
 		srv, _ := newA2ATestServer(tok, "", 9*time.Minute, 128, nil)
+		// Explicit config passes through unchanged...
 		Expect(srv.taskTimeoutFromMetadata(nil)).To(Equal(9 * time.Minute))
 		Expect(srv.taskTimeoutFromMetadata(map[string]any{})).To(Equal(9 * time.Minute))
+		// ...and the code default is 30m (pool flag Value references it).
+		srv2, _ := newA2ATestServer(tok, "", 0, 128, nil) // 0 → defaultA2ATaskTimeout
+		Expect(srv2.cfg.TaskTimeout).To(Equal(defaultA2ATaskTimeout))
+		Expect(srv2.cfg.TaskTimeout).To(Equal(30 * time.Minute))
 	})
 })
 
@@ -993,5 +998,13 @@ var _ = Describe("a2aServer progress mirroring", func() {
 		Expect(t.ProgressText).To(Equal("first second"))
 		srv.mu.Unlock()
 		Expect(client.finalText()).To(Equal("first second"))
+	})
+
+	It("truncates mirrored progress to a tail window", func() {
+		long := strings.Repeat("ab", a2aProgressMaxRunes) + "TAIL"
+		tr := truncateProgress(long)
+		Expect(tr).To(HaveSuffix("TAIL"))
+		Expect(len([]rune(tr))).To(Equal(a2aProgressMaxRunes)) // tail window only
+		Expect(truncateProgress("short")).To(Equal("short"))
 	})
 })

@@ -186,7 +186,7 @@ const (
 
 // a2a tunables and wire literals.
 const (
-	defaultA2ATaskTimeout    = 9 * time.Minute
+	defaultA2ATaskTimeout    = 30 * time.Minute
 	defaultA2AMaxTaskTimeout = 60 * time.Minute
 	// a2aMetadataTimeoutKey lets callers override the per-task deadline via
 	// message/send metadata (number of seconds). Clamped to [1s, cfg.MaxTaskTimeout].
@@ -754,6 +754,21 @@ func (s *a2aServer) taskTimeoutFromMetadata(metadata map[string]any) time.Durati
 	return d
 }
 
+// a2aProgressMaxRunes caps the mirrored in-flight progress text: long
+// turns stream megabytes of accumulated chunks, and the mirror only needs
+// a tail window for tasks/get liveness. Grows are dropped, not buffered.
+const a2aProgressMaxRunes = 400
+
+// truncateProgress keeps at most a2aProgressMaxRunes runes of s: an
+// ellipsis marker plus the trailing window. Total length is capped.
+func truncateProgress(s string) string {
+	r := []rune(s)
+	if len(r) <= a2aProgressMaxRunes {
+		return s
+	}
+	return "…" + string(r[len(r)-(a2aProgressMaxRunes-1):])
+}
+
 func randomHex(n int) string {
 	b := make([]byte, n)
 	if _, err := rand.Read(b); err != nil {
@@ -991,7 +1006,7 @@ func (s *a2aServer) runTaskInSession(ctx context.Context, task *a2aTask, caller 
 					return
 				}
 				s.mu.Lock()
-				task.ProgressText = text
+				task.ProgressText = truncateProgress(text)
 				s.mu.Unlock()
 			case <-drainDone:
 				return
