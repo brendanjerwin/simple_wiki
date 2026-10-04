@@ -111,13 +111,32 @@ test.describe('GPS Track & Leaflet Tag Control E2E Tests', () => {
 
   test.describe('F2: GPS Track Rendering & F3: GPS Track Download', () => {
     const trackUid = 'track-abc1234';
+    let gpxFileHash = '';
 
-    test.beforeEach(async ({ page }) => {
-      // Seed map with a track element metadata
+    test.beforeEach(async ({ page, request }) => {
+      // Upload the test GPX file to obtain a real file hash.  wiki-map fetches
+      // the file by hash to draw the Leaflet polyline, so a fake hash yields
+      // no rendered track and toBeAttached() times out.
+      const gpxBuffer = fs.readFileSync(testGpxPath);
+      const uploadResponse = await request.post('/uploads', {
+        multipart: {
+          file: {
+            name: 'marcy.gpx',
+            mimeType: 'application/gpx+xml',
+            buffer: gpxBuffer,
+          },
+        },
+      });
+      const location = uploadResponse.headers()['location'] ?? '';
+      const hashMatch = location.match(/\/uploads\/([^?]+)/);
+      gpxFileHash = hashMatch?.[1] ?? '';
+      expect(gpxFileHash).not.toBe('');
+
+      // Seed map with a track element metadata using the real file hash
       const tracksMetadata = `
 [agent.maps.${TEST_MAP}.tracks.${trackUid}]
 label = "Mt Marcy Trail"
-file_hash = "mockhash123"
+file_hash = "${gpxFileHash}"
 filename = "marcy.gpx"
 format = "GPX"
 color = "#10b981"
@@ -150,7 +169,7 @@ automated = true
 
       // Assert download url parameter formats
       const href = await popup.locator('a.download-track-link').getAttribute('href');
-      expect(href).toContain('/uploads/mockhash123');
+      expect(href).toContain(`/uploads/${gpxFileHash}`);
       expect(href).toContain('filename=marcy.gpx');
     });
   });

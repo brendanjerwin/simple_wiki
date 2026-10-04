@@ -320,8 +320,14 @@ export class ConfirmationDialog extends LitElement {
     this.loading = false;
     this.augmentedError = undefined;
     this.config = null;
-    restoreTarget?.focus();
     this._previouslyFocusedElement = null;
+    // Defer focus restoration via queueMicrotask so it runs after any
+    // browser-native focus management triggered by dialog.close().  Chrome
+    // may schedule its own focus restoration (e.g. to the dialog opener) as a
+    // microtask; queuing ours afterward ensures we win the race.
+    if (restoreTarget) {
+      queueMicrotask(() => restoreTarget.focus());
+    }
   }
 
   /**
