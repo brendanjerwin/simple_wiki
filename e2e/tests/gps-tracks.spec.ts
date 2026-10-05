@@ -248,10 +248,14 @@ tags = ["easy"]
       await expect(map.locator('path.leaflet-interactive')).toHaveCount(2);
       await expect(map.locator('.wiki-map-marker')).toHaveCount(1);
 
-      // Open layer/tag control panel
-      const tagControl = map.locator('.leaflet-control-layers');
+      // Open the tag layer control panel. The product ships a custom
+      // control (.wiki-map-tag-control with a click toggle), not Leaflet's
+      // built-in .leaflet-control-layers, and the panel starts display:none
+      // until the toggle is clicked.
+      const tagControl = map.locator('.wiki-map-tag-control');
       await expect(tagControl).toBeVisible();
-      await tagControl.hover(); // expands the control if collapse is on
+      await tagControl.locator('.wiki-map-tag-control-toggle').click();
+      await expect(tagControl.locator('.wiki-map-tag-control-panel')).toBeVisible();
 
       // Uncheck "difficult"
       const difficultCheckbox = tagControl.locator('input[type="checkbox"][value="difficult"]');
