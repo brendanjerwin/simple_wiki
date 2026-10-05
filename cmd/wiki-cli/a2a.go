@@ -712,6 +712,10 @@ func extractA2AText(parts []a2aPart) string {
 // metadata timeout override ("metadata.a2a_task_timeout_seconds").
 const taskTimeoutMetadataErr = "metadata.a2a_task_timeout_seconds must be a positive number of seconds within the server's max task timeout"
 
+// a2aTimeoutParseFloatBits is the bit size for parsing the metadata
+// timeout override as a decimal floating-point number of seconds.
+const a2aTimeoutParseFloatBits = 64
+
 // taskTimeoutFromMetadata resolves the per-task deadline override. Returns
 // s.cfg.TaskTimeout when the key is absent. Returns -1 for a malformed
 // value (caller rejects the dispatch). Valid values are clamped to
@@ -727,7 +731,7 @@ func (s *a2aServer) taskTimeoutFromMetadata(metadata map[string]any) time.Durati
 	case float64:
 		seconds = v
 	case string:
-		f, err := strconv.ParseFloat(strings.TrimSpace(v), 64)
+		f, err := strconv.ParseFloat(strings.TrimSpace(v), a2aTimeoutParseFloatBits)
 		if err != nil {
 			return -1
 		}
@@ -992,34 +996,8 @@ func (s *a2aServer) runTaskInSession(ctx context.Context, task *a2aTask, caller 
 	// both the sink and its drain goroutine when the turn ends.
 	sess.beginTurn()
 	client := sess.client
-	sink := make(chan string, 1)
-	client.mu.Lock()
-	client.progressSink = sink
-	client.mu.Unlock()
-	drainDone := make(chan struct{})
-	go func() {
-		defer close(drainDone)
-		for {
-			select {
-			case text, ok := <-sink:
-				if !ok {
-					return
-				}
-				s.mu.Lock()
-				task.ProgressText = truncateProgress(text)
-				s.mu.Unlock()
-			case <-drainDone:
-				return
-			}
-		}
-	}()
-	defer func() {
-		client.mu.Lock()
-		client.progressSink = nil
-		client.mu.Unlock()
-		close(sink)
-		<-drainDone
-	}()
+	teardown := s.installProgressSink(client, task)
+	defer teardown()
 
 	var promptText string
 	if turn.firstTurn {
@@ -1048,6 +1026,33 @@ func (s *a2aServer) runTaskInSession(ctx context.Context, task *a2aTask, caller 
 		return "", promptErr
 	}
 	return sess.client.finalText(), nil
+}
+
+// installProgressSink attaches a per-turn live-progress mirror: the
+// client's accumulated text is drained onto task.ProgressText (truncated)
+// by a background goroutine until the returned teardown func detaches the
+// sink and closes it. Callers defer the teardown for the turn's duration.
+func (s *a2aServer) installProgressSink(client *a2aTaskClient, task *a2aTask) func() {
+	sink := make(chan string, 1)
+	client.mu.Lock()
+	client.progressSink = sink
+	client.mu.Unlock()
+	drainDone := make(chan struct{})
+	go func() {
+		defer close(drainDone)
+		for text := range sink {
+			s.mu.Lock()
+			task.ProgressText = truncateProgress(text)
+			s.mu.Unlock()
+		}
+	}()
+	return func() {
+		client.mu.Lock()
+		client.progressSink = nil
+		client.mu.Unlock()
+		close(sink)
+		<-drainDone
+	}
 }
 
 // a2aSessionRef is what a turn needs from acquireSession: the agent
