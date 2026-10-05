@@ -174,7 +174,7 @@ automated = true
 
       // Assert download url parameter formats
       const href = await popup.locator('a.download-track-link').getAttribute('href');
-      expect(href).toContain(`/uploads/${gpxFileHash}`);
+      expect(href).toContain(`/uploads/${encodeURIComponent(gpxFileHash)}`);
       expect(href).toContain('filename=marcy.gpx');
     });
   });
