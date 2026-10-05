@@ -132,15 +132,20 @@ test.describe('GPS Track & Leaflet Tag Control E2E Tests', () => {
       gpxFileHash = hashMatch?.[1] ?? '';
       expect(gpxFileHash).not.toBe('');
 
-      // Seed map with a track element metadata using the real file hash
+      // Seed map with a track element using the real file hash.
+      // [[maps.<map>.tracks]] is the user-data section that decodeTracks reads;
+      // [agent.maps.<map>.tracks.<uid>] holds the agent metadata.
       const tracksMetadata = `
-[agent.maps.${TEST_MAP}.tracks.${trackUid}]
+[[maps.${TEST_MAP}.tracks]]
+uid = "${trackUid}"
 label = "Mt Marcy Trail"
 file_hash = "${gpxFileHash}"
-filename = "marcy.gpx"
 format = "GPX"
+filename = "marcy.gpx"
 color = "#10b981"
 tags = ["hiking", "mountain"]
+
+[agent.maps.${TEST_MAP}.tracks.${trackUid}]
 created_at = "2026-06-12T20:00:00Z"
 updated_at = "2026-06-12T20:00:00Z"
 created_by = "e2e"
@@ -175,21 +180,53 @@ automated = true
   });
 
   test.describe('F4: Leaflet Tag Control', () => {
-    test.beforeEach(async ({ page }) => {
+    test.beforeEach(async ({ page, request }) => {
+      // Upload the test GPX file to obtain a real file hash for both tracks.
+      // Both tracks share the same file content; only the uid/label/tags differ.
+      const gpxBuffer = fs.readFileSync(testGpxPath);
+      const uploadResponse = await request.post('/uploads', {
+        multipart: {
+          file: {
+            name: 'test.gpx',
+            mimeType: 'application/gpx+xml',
+            buffer: gpxBuffer,
+          },
+        },
+      });
+      const location = uploadResponse.headers()['location'] ?? '';
+      const hashMatch = location.match(/\/uploads\/([^?]+)/);
+      const gpxFileHash = hashMatch?.[1] ?? '';
+      expect(gpxFileHash).not.toBe('');
+
+      // [[maps.<map>.tracks]] is the user-data section that decodeTracks reads.
       const tracksMetadata = `
-[agent.maps.${TEST_MAP}.tracks.track-t1]
+[[maps.${TEST_MAP}.tracks]]
+uid = "track-t1"
 label = "Scenic Path"
-file_hash = "hash-t1"
-filename = "scenic.gpx"
+file_hash = "${gpxFileHash}"
 format = "GPX"
+filename = "scenic.gpx"
 tags = ["scenic", "easy"]
 
-[agent.maps.${TEST_MAP}.tracks.track-t2]
+[[maps.${TEST_MAP}.tracks]]
+uid = "track-t2"
 label = "Difficult Climb"
-file_hash = "hash-t2"
-filename = "climb.gpx"
+file_hash = "${gpxFileHash}"
 format = "GPX"
+filename = "climb.gpx"
 tags = ["difficult"]
+
+[agent.maps.${TEST_MAP}.tracks.track-t1]
+created_at = "2026-06-12T20:00:00Z"
+updated_at = "2026-06-12T20:00:00Z"
+created_by = "e2e"
+automated = true
+
+[agent.maps.${TEST_MAP}.tracks.track-t2]
+created_at = "2026-06-12T20:00:00Z"
+updated_at = "2026-06-12T20:00:00Z"
+created_by = "e2e"
+automated = true
 `;
       const extraElements = `
 [[maps.${TEST_MAP}.markers]]
