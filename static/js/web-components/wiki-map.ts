@@ -100,14 +100,17 @@ function getLeafletTagControlCtor(): (new (renderer: LeafletWikiMapRenderer, opt
           L.DomUtil.addClass(container, 'wiki-map-tag-control-open');
         }
       });
-      // Close on outside click
+      // Close on outside click.
+      // The tag control lives inside <wiki-map>'s shadow root, so by the time a
+      // click from a shadow descendant reaches `document`, `e.target` has been
+      // retargeted to the <wiki-map> host element. `container.contains(target)`
+      // is therefore always false for in-panel clicks and the panel would close
+      // on the very interaction it exists for. Use composedPath() instead, which
+      // preserves the real event path across the shadow boundary.
       // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- Leaflet DomEvent.on types element as HTMLElement; document is the click root
       L.DomEvent.on(document as unknown as HTMLElement, 'click', (e: Event) => {
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- Leaflet DomEvent passes a mouse event here
-        const mouseEvent = e as unknown as MouseEvent;
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- mouseEvent.target is EventTarget; narrow to Node
-        const target = mouseEvent.target as Node | null;
-        if (target && !container.contains(target)) {
+        const path = typeof e.composedPath === 'function' ? e.composedPath() : [];
+        if (path.length > 0 && !path.includes(container)) {
           L.DomUtil.removeClass(container, 'wiki-map-tag-control-open');
         }
       });
@@ -815,9 +818,13 @@ export class WikiMap extends LitElement {
         margin-bottom: 48px !important;
         margin-right: 10px !important;
         position: relative;
+        /* The expanded panel overlaps Leaflet's attribution bar (also z-index 800
+           via .leaflet-control). Without an explicit higher z-index the
+           attribution wins the hit-test and swallows clicks on the panel's
+           bottom checkbox row. */
+        z-index: 1000;
         width: 32px;
       }
-
       .wiki-map-tag-control-panel {
         background: #fff;
         border: 1px solid #d0d7de;
