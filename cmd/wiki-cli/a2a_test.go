@@ -1008,3 +1008,200 @@ var _ = Describe("a2aServer progress mirroring", func() {
 		Expect(truncateProgress("short")).To(Equal("short"))
 	})
 })
+
+var _ = Describe("taskTimeoutFromMetadata edge cases", func() {
+	var srv *a2aServer
+
+	BeforeEach(func() {
+		srv, _ = newA2ATestServer("tok", "", 9*time.Minute, 128, nil)
+	})
+
+	When("the metadata key is a valid numeric string", func() {
+		var result time.Duration
+
+		BeforeEach(func() {
+			result = srv.taskTimeoutFromMetadata(map[string]any{"a2a_task_timeout_seconds": "10"})
+		})
+
+		It("parses the string as seconds", func() {
+			Expect(result).To(Equal(10 * time.Second))
+		})
+	})
+
+	When("the metadata key is a json.Number", func() {
+		var result time.Duration
+
+		BeforeEach(func() {
+			result = srv.taskTimeoutFromMetadata(map[string]any{"a2a_task_timeout_seconds": json.Number("5")})
+		})
+
+		It("parses the json.Number as seconds", func() {
+			Expect(result).To(Equal(5 * time.Second))
+		})
+	})
+
+	When("the metadata key is an invalid json.Number", func() {
+		var result time.Duration
+
+		BeforeEach(func() {
+			result = srv.taskTimeoutFromMetadata(map[string]any{"a2a_task_timeout_seconds": json.Number("not-a-number")})
+		})
+
+		It("returns -1", func() {
+			Expect(result).To(Equal(time.Duration(-1)))
+		})
+	})
+
+	When("the metadata key is an unknown type", func() {
+		var result time.Duration
+
+		BeforeEach(func() {
+			result = srv.taskTimeoutFromMetadata(map[string]any{"a2a_task_timeout_seconds": true})
+		})
+
+		It("returns -1", func() {
+			Expect(result).To(Equal(time.Duration(-1)))
+		})
+	})
+
+	When("the metadata value is zero seconds", func() {
+		var result time.Duration
+
+		BeforeEach(func() {
+			result = srv.taskTimeoutFromMetadata(map[string]any{"a2a_task_timeout_seconds": 0.0})
+		})
+
+		It("returns -1", func() {
+			Expect(result).To(Equal(time.Duration(-1)))
+		})
+	})
+
+	When("the metadata value is negative seconds", func() {
+		var result time.Duration
+
+		BeforeEach(func() {
+			result = srv.taskTimeoutFromMetadata(map[string]any{"a2a_task_timeout_seconds": -1.0})
+		})
+
+		It("returns -1", func() {
+			Expect(result).To(Equal(time.Duration(-1)))
+		})
+	})
+
+	When("the metadata value is a sub-second positive number", func() {
+		var result time.Duration
+
+		BeforeEach(func() {
+			result = srv.taskTimeoutFromMetadata(map[string]any{"a2a_task_timeout_seconds": 0.001})
+		})
+
+		It("returns -1", func() {
+			Expect(result).To(Equal(time.Duration(-1)))
+		})
+	})
+
+	When("the metadata key exists but is nil", func() {
+		var result time.Duration
+
+		BeforeEach(func() {
+			result = srv.taskTimeoutFromMetadata(map[string]any{"a2a_task_timeout_seconds": nil})
+		})
+
+		It("returns the server default timeout", func() {
+			Expect(result).To(Equal(9 * time.Minute))
+		})
+	})
+})
+
+var _ = Describe("installProgressSink", func() {
+	const tok = "tok-123"
+
+	When("a progress sink is installed on a client", func() {
+		var srv *a2aServer
+		var task *a2aTask
+		var client *a2aTaskClient
+		var teardown func()
+
+		BeforeEach(func() {
+			srv, _ = newA2ATestServer(tok, "", 9*time.Minute, 128, nil)
+			task = &a2aTask{
+				ID: "a2a-sink-test", ContextID: "ctx-sink", UserText: "q",
+				Caller: a2aCaller{ClientName: a2aCallerTailnet}, State: a2aStateWorking,
+			}
+			client = &a2aTaskClient{task: task}
+			teardown = srv.installProgressSink(client, task)
+		})
+
+		It("sets progressSink on the client", func() {
+			client.mu.Lock()
+			defer client.mu.Unlock()
+			Expect(client.progressSink).NotTo(BeNil())
+		})
+
+		When("a chunk arrives and teardown is called", func() {
+			BeforeEach(func() {
+				Expect(client.SessionUpdate(context.Background(), acp.SessionNotification{
+					Update: acp.SessionUpdate{AgentMessageChunk: &acp.SessionUpdateAgentMessageChunk{
+						Content: acp.ContentBlock{Text: &acp.ContentBlockText{Text: "live text", Type: "text"}},
+					}},
+				})).To(Succeed())
+				teardown()
+			})
+
+			It("clears progressSink on the client after teardown", func() {
+				client.mu.Lock()
+				defer client.mu.Unlock()
+				Expect(client.progressSink).To(BeNil())
+			})
+
+			It("mirrors the chunk into task.ProgressText", func() {
+				srv.mu.Lock()
+				defer srv.mu.Unlock()
+				Expect(task.ProgressText).To(Equal("live text"))
+			})
+		})
+	})
+})
+
+var _ = Describe("a2aServer snapshot progress branch", func() {
+	When("a working task has ProgressText set", func() {
+		var snap *a2aTaskJSON
+		var srv *a2aServer
+
+		BeforeEach(func() {
+			srv, _ = newA2ATestServer("tok", "", 9*time.Minute, 128, nil)
+			t := &a2aTask{
+				ID: "a2a-snap", ContextID: "ctx-s", UserText: "q",
+				Caller: a2aCaller{ClientName: a2aCallerTailnet},
+				State: a2aStateWorking, ProgressText: "live output",
+			}
+			snap = srv.snapshot(t)
+		})
+
+		It("exposes ProgressText as status.progress", func() {
+			Expect(snap.Status.Progress).To(Equal("live output"))
+		})
+
+		It("does not set Artifacts", func() {
+			Expect(snap.Artifacts).To(BeNil())
+		})
+	})
+})
+
+var _ = Describe("newA2AServer config validation", func() {
+	When("MaxTaskTimeout is smaller than TaskTimeout", func() {
+		var err error
+
+		BeforeEach(func() {
+			_, err = newA2AServer(a2aServerConfig{
+				BearerToken:    "tok",
+				TaskTimeout:    10 * time.Minute,
+				MaxTaskTimeout: 5 * time.Minute,
+			}, &poolDaemon{})
+		})
+
+		It("returns an error mentioning the constraint", func() {
+			Expect(err).To(MatchError(ContainSubstring("must be >=")))
+		})
+	})
+})
