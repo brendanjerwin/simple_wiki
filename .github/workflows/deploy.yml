@@ -78,12 +78,13 @@ jobs:
           SIMPLE_WIKI_GOOGLE_TASKS_CLIENT_ID: ${{ secrets.SIMPLE_WIKI_GOOGLE_TASKS_CLIENT_ID }}
           SIMPLE_WIKI_GOOGLE_TASKS_CLIENT_SECRET: ${{ secrets.SIMPLE_WIKI_GOOGLE_TASKS_CLIENT_SECRET }}
           SIMPLE_WIKI_GOOGLE_TASKS_REDIRECT_URI: ${{ secrets.SIMPLE_WIKI_GOOGLE_TASKS_REDIRECT_URI }}
+          SIMPLE_WIKI_TRUSTED_PROXY_SECRET: ${{ secrets.SIMPLE_WIKI_TRUSTED_PROXY_SECRET }}
         run: |
           mkdir -p deployment-package
           cp simple_wiki-linux-amd64 deployment-package/
           cp deployment/deploy.sh deployment-package/
           chmod +x deployment-package/deploy.sh
-          envsubst '$SIMPLE_WIKI_GOOGLE_TASKS_CLIENT_ID $SIMPLE_WIKI_GOOGLE_TASKS_CLIENT_SECRET $SIMPLE_WIKI_GOOGLE_TASKS_REDIRECT_URI' \
+          envsubst '$SIMPLE_WIKI_GOOGLE_TASKS_CLIENT_ID $SIMPLE_WIKI_GOOGLE_TASKS_CLIENT_SECRET $SIMPLE_WIKI_GOOGLE_TASKS_REDIRECT_URI $SIMPLE_WIKI_TRUSTED_PROXY_SECRET' \
             < deployment/simple_wiki.service > deployment-package/simple_wiki.service
 
       - name: Deploy to server

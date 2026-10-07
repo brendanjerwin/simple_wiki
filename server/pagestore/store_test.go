@@ -87,8 +87,8 @@ var _ = Describe("Store", func() {
 		var roundTripped wikipage.FrontMatter
 
 		BeforeEach(func() {
-			Expect(store.WriteMarkdown("rt", "body content\n")).To(Succeed())
-			Expect(store.WriteFrontMatter("rt", wikipage.FrontMatter{"title": "Round Trip"})).To(Succeed())
+			Expect(store.WriteMarkdown("rt", "body content\n", wikipage.AnonymousIdentity)).To(Succeed())
+			Expect(store.WriteFrontMatter("rt", wikipage.FrontMatter{"title": "Round Trip"}, wikipage.AnonymousIdentity)).To(Succeed())
 
 			var err error
 			_, roundTripped, err = store.ReadFrontMatter("rt")
@@ -108,16 +108,13 @@ var _ = Describe("Store", func() {
 			)
 
 			BeforeEach(func() {
-				Expect(store.WriteMarkdown("modify-both", "old body\n")).To(Succeed())
-				Expect(store.WriteFrontMatter("modify-both", wikipage.FrontMatter{"title": "Old"})).To(Succeed())
+				Expect(store.WriteMarkdown("modify-both", "old body\n", wikipage.AnonymousIdentity)).To(Succeed())
+				Expect(store.WriteFrontMatter("modify-both", wikipage.FrontMatter{"title": "Old"}, wikipage.AnonymousIdentity)).To(Succeed())
 
-				modifyErr = store.ModifyFrontMatterAndMarkdown(
-					"modify-both",
-					func(fm wikipage.FrontMatter, md wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error) {
+				modifyErr = store.ModifyFrontMatterAndMarkdown("modify-both", func(fm wikipage.FrontMatter, md wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error) {
 						fm["title"] = "New"
 						return fm, md + "new body\n", nil
-					},
-				)
+					}, wikipage.AnonymousIdentity)
 				var readErr error
 				page, readErr = store.ReadPage("modify-both")
 				Expect(readErr).NotTo(HaveOccurred())
@@ -144,15 +141,12 @@ var _ = Describe("Store", func() {
 			)
 
 			BeforeEach(func() {
-				Expect(store.WriteMarkdown("modify-both-error", "old body\n")).To(Succeed())
-				Expect(store.WriteFrontMatter("modify-both-error", wikipage.FrontMatter{"title": "Old"})).To(Succeed())
+				Expect(store.WriteMarkdown("modify-both-error", "old body\n", wikipage.AnonymousIdentity)).To(Succeed())
+				Expect(store.WriteFrontMatter("modify-both-error", wikipage.FrontMatter{"title": "Old"}, wikipage.AnonymousIdentity)).To(Succeed())
 
-				modifyErr = store.ModifyFrontMatterAndMarkdown(
-					"modify-both-error",
-					func(wikipage.FrontMatter, wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error) {
+				modifyErr = store.ModifyFrontMatterAndMarkdown("modify-both-error", func(wikipage.FrontMatter, wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error) {
 						return nil, "", modifierErr
-					},
-				)
+					}, wikipage.AnonymousIdentity)
 				var readErr error
 				page, readErr = store.ReadPage("modify-both-error")
 				Expect(readErr).NotTo(HaveOccurred())
@@ -174,12 +168,9 @@ var _ = Describe("Store", func() {
 			BeforeEach(func() {
 				fp := filepath.Join(tempDir, base32tools.EncodeToBase32("broken-fm")+".md")
 				Expect(os.WriteFile(fp, []byte("+++\ntitle = [invalid\n+++\nbody\n"), 0644)).To(Succeed())
-				modifyErr = store.ModifyFrontMatterAndMarkdown(
-					"broken-fm",
-					func(fm wikipage.FrontMatter, md wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error) {
+				modifyErr = store.ModifyFrontMatterAndMarkdown("broken-fm", func(fm wikipage.FrontMatter, md wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error) {
 						return fm, md, nil
-					},
-				)
+					}, wikipage.AnonymousIdentity)
 			})
 
 			It("should return a frontmatter parse error", func() {
@@ -193,7 +184,7 @@ var _ = Describe("Store", func() {
 			var trashEntries []wikipage.TrashEntry
 
 			BeforeEach(func() {
-				deleteErr := store.SoftDeletePage("ghost")
+				deleteErr := store.SoftDeletePage("ghost", wikipage.AnonymousIdentity)
 				Expect(deleteErr).To(MatchError(os.ErrNotExist))
 				var listErr error
 				trashEntries, listErr = store.ListTrash()
@@ -212,9 +203,9 @@ var _ = Describe("Store", func() {
 			)
 
 			BeforeEach(func() {
-				Expect(store.WriteFrontMatter("doomed", wikipage.FrontMatter{"title": "Doomed Page"})).To(Succeed())
-				Expect(store.WriteMarkdown("doomed", "body\n")).To(Succeed())
-				err = store.SoftDeletePage("doomed")
+				Expect(store.WriteFrontMatter("doomed", wikipage.FrontMatter{"title": "Doomed Page"}, wikipage.AnonymousIdentity)).To(Succeed())
+				Expect(store.WriteMarkdown("doomed", "body\n", wikipage.AnonymousIdentity)).To(Succeed())
+				err = store.SoftDeletePage("doomed", wikipage.AnonymousIdentity)
 				trashEntries, err = store.ListTrash()
 			})
 
@@ -242,7 +233,7 @@ var _ = Describe("Store", func() {
 			BeforeEach(func() {
 				mdPath := filepath.Join(tempDir, base32tools.EncodeToBase32("untitled")+".md")
 				Expect(os.WriteFile(mdPath, []byte("body without frontmatter\n"), 0644)).To(Succeed())
-				Expect(store.SoftDeletePage("untitled")).To(Succeed())
+				Expect(store.SoftDeletePage("untitled", wikipage.AnonymousIdentity)).To(Succeed())
 				var err error
 				trashEntries, err = store.ListTrash()
 				Expect(err).NotTo(HaveOccurred())
@@ -260,8 +251,8 @@ var _ = Describe("Store", func() {
 			var trashEntries []wikipage.TrashEntry
 
 			BeforeEach(func() {
-				Expect(store.WriteMarkdown("visible-trash", "body\n")).To(Succeed())
-				Expect(store.SoftDeletePage("visible-trash")).To(Succeed())
+				Expect(store.WriteMarkdown("visible-trash", "body\n", wikipage.AnonymousIdentity)).To(Succeed())
+				Expect(store.SoftDeletePage("visible-trash", wikipage.AnonymousIdentity)).To(Succeed())
 				brokenDir := filepath.Join(tempDir, deletedDirName, "broken")
 				Expect(os.MkdirAll(brokenDir, 0755)).To(Succeed())
 				Expect(os.WriteFile(filepath.Join(brokenDir, trashMetadataName), []byte("identifier = [broken\n"), 0644)).To(Succeed())
@@ -308,8 +299,8 @@ var _ = Describe("Store", func() {
 			)
 
 			BeforeEach(func() {
-				Expect(store.WriteMarkdown("restore-me", "restored body\n")).To(Succeed())
-				Expect(store.SoftDeletePage("restore-me")).To(Succeed())
+				Expect(store.WriteMarkdown("restore-me", "restored body\n", wikipage.AnonymousIdentity)).To(Succeed())
+				Expect(store.SoftDeletePage("restore-me", wikipage.AnonymousIdentity)).To(Succeed())
 				trashEntries, err := store.ListTrash()
 				Expect(err).NotTo(HaveOccurred())
 				Expect(trashEntries).To(HaveLen(1))
@@ -334,12 +325,12 @@ var _ = Describe("Store", func() {
 			var restoreErr error
 
 			BeforeEach(func() {
-				Expect(store.WriteMarkdown("conflict-page", "old body\n")).To(Succeed())
-				Expect(store.SoftDeletePage("conflict-page")).To(Succeed())
+				Expect(store.WriteMarkdown("conflict-page", "old body\n", wikipage.AnonymousIdentity)).To(Succeed())
+				Expect(store.SoftDeletePage("conflict-page", wikipage.AnonymousIdentity)).To(Succeed())
 				trashEntries, err := store.ListTrash()
 				Expect(err).NotTo(HaveOccurred())
 				Expect(trashEntries).To(HaveLen(1))
-				Expect(store.WriteMarkdown("conflict-page", "new body\n")).To(Succeed())
+				Expect(store.WriteMarkdown("conflict-page", "new body\n", wikipage.AnonymousIdentity)).To(Succeed())
 
 				restoreErr = store.RestorePage(trashEntries[0].TrashID)
 			})
@@ -371,8 +362,8 @@ var _ = Describe("Store", func() {
 			)
 
 			BeforeEach(func() {
-				Expect(store.WriteMarkdown("purge-me", "body\n")).To(Succeed())
-				Expect(store.SoftDeletePage("purge-me")).To(Succeed())
+				Expect(store.WriteMarkdown("purge-me", "body\n", wikipage.AnonymousIdentity)).To(Succeed())
+				Expect(store.SoftDeletePage("purge-me", wikipage.AnonymousIdentity)).To(Succeed())
 				initialEntries, err := store.ListTrash()
 				Expect(err).NotTo(HaveOccurred())
 				Expect(initialEntries).To(HaveLen(1))
@@ -444,10 +435,10 @@ var _ = Describe("Store", func() {
 			)
 
 			BeforeEach(func() {
-				Expect(store.WriteMarkdown("first-trash", "body\n")).To(Succeed())
-				Expect(store.SoftDeletePage("first-trash")).To(Succeed())
-				Expect(store.WriteMarkdown("second-trash", "body\n")).To(Succeed())
-				Expect(store.SoftDeletePage("second-trash")).To(Succeed())
+				Expect(store.WriteMarkdown("first-trash", "body\n", wikipage.AnonymousIdentity)).To(Succeed())
+				Expect(store.SoftDeletePage("first-trash", wikipage.AnonymousIdentity)).To(Succeed())
+				Expect(store.WriteMarkdown("second-trash", "body\n", wikipage.AnonymousIdentity)).To(Succeed())
+				Expect(store.SoftDeletePage("second-trash", wikipage.AnonymousIdentity)).To(Succeed())
 
 				count, emptyErr = store.EmptyTrash()
 				var err error
@@ -474,8 +465,8 @@ var _ = Describe("Store", func() {
 			var trashEntries []wikipage.TrashEntry
 
 			BeforeEach(func() {
-				Expect(store.WriteMarkdown("expired-page", "body\n")).To(Succeed())
-				Expect(store.SoftDeletePage("expired-page")).To(Succeed())
+				Expect(store.WriteMarkdown("expired-page", "body\n", wikipage.AnonymousIdentity)).To(Succeed())
+				Expect(store.SoftDeletePage("expired-page", wikipage.AnonymousIdentity)).To(Succeed())
 
 				err := store.PurgeExpiredTrash(time.Now().UTC().Add(31 * 24 * time.Hour))
 				Expect(err).NotTo(HaveOccurred())

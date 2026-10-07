@@ -184,6 +184,7 @@ describe('PageChatPanel', () => {
         edited: false,
         toolCalls: [],
         plan: [],
+        backgroundTask: null,
         sequence: 0n,
       };
       el.messages = [msgState];
@@ -1442,10 +1443,11 @@ describe('PageChatPanel', () => {
         reactions: [],
         edited: false,
         toolCalls: [
-          { toolCallId: 'tc-a', title: 'Search', status: 'completed', kind: 'search', detail: '', startedAtMs: 0 },
-          { toolCallId: 'tc-b', title: 'Execute', status: 'in_progress', kind: 'execute', detail: '', startedAtMs: 0 },
+          { toolCallId: 'tc-a', title: 'Search', status: 'completed', kind: 'search', detail: '', completedAtMs: null, startedAtMs: 0 },
+          { toolCallId: 'tc-b', title: 'Execute', status: 'in_progress', kind: 'execute', detail: '', completedAtMs: null, startedAtMs: 0 },
         ],
         plan: [],
+        backgroundTask: null,
         sequence: 0n,
       };
       (el as unknown as { messagesById: Map<string, ChatMessageState> }).messagesById.set('tc-render-msg', msgState);
@@ -1783,7 +1785,7 @@ describe('PageChatPanel stream methods', () => {
         el.streamState = 'reconnecting';
         // eslint-disable-next-line @typescript-eslint/no-explicit-any -- replacing private chatClient for testing
         (el as any).chatClient = {
-          subscribeChat: async function* () {
+          subscribeChat: async function*() {
             yield { event: { case: undefined } };
             yield { event: { case: undefined } };
           },
@@ -1815,7 +1817,7 @@ describe('PageChatPanel stream methods', () => {
         el.error = new Error('stale error');
         // eslint-disable-next-line @typescript-eslint/no-explicit-any -- replacing private chatClient for testing
         (el as any).chatClient = {
-          subscribeChat: async function* () { /* empty */ },
+          subscribeChat: async function*() { /* empty */ },
         };
 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any -- calling private method for testing
@@ -1982,7 +1984,7 @@ describe('PageChatPanel stream methods', () => {
       beforeEach(async () => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any -- replacing private chatClient for testing
         (el as any).chatClient = {
-          subscribeChat: async function* () { /* empty — clean end */ },
+          subscribeChat: async function*() { /* empty — clean end */ },
         };
         // eslint-disable-next-line @typescript-eslint/no-explicit-any -- calling private method for testing
         await (el as any).startStream();
@@ -2001,7 +2003,7 @@ describe('PageChatPanel stream methods', () => {
         abortError.name = 'AbortError';
         // eslint-disable-next-line @typescript-eslint/no-explicit-any -- replacing private chatClient for testing
         (el as any).chatClient = {
-          subscribeChat: async function* () {
+          subscribeChat: async function*() {
             yield* [];
             throw abortError;
           },
@@ -2021,7 +2023,7 @@ describe('PageChatPanel stream methods', () => {
       beforeEach(async () => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any -- replacing private chatClient for testing
         (el as any).chatClient = {
-          subscribeChat: async function* () {
+          subscribeChat: async function*() {
             yield* [];
             throw new Error('network error');
           },
@@ -2604,7 +2606,7 @@ describe('PageChatPanel pollChatStatus and sendMessage', () => {
     (el as any).chatClient = {
       getChatStatus: stub().resolves({ connected: false }),
       sendMessage: stub().resolves(),
-      subscribeChat: async function* () { /* empty */ },
+      subscribeChat: async function*() { /* empty */ },
     };
   });
 

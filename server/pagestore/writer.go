@@ -12,21 +12,25 @@ import "github.com/brendanjerwin/simple_wiki/wikipage"
 type Writer interface {
 	// WriteFrontMatter atomically reads the current markdown for the page
 	// and writes back the markdown combined with fm under the page's lock.
-	WriteFrontMatter(id wikipage.PageIdentifier, fm wikipage.FrontMatter) error
+	// The identity parameter is used for history attribution.
+	WriteFrontMatter(id wikipage.PageIdentifier, fm wikipage.FrontMatter, identity wikipage.Identity) error
 
 	// WriteMarkdown atomically reads the current frontmatter and writes
 	// back the frontmatter combined with md under the page's lock.
-	WriteMarkdown(id wikipage.PageIdentifier, md wikipage.Markdown) error
+	// The identity parameter is used for history attribution.
+	WriteMarkdown(id wikipage.PageIdentifier, md wikipage.Markdown, identity wikipage.Identity) error
 
 	// ModifyMarkdown atomically reads the markdown section, calls fn,
 	// and writes the result back while preserving the existing frontmatter.
 	// The full read-modify-write is held under the page's lock.
-	ModifyMarkdown(id wikipage.PageIdentifier, fn func(wikipage.Markdown) (wikipage.Markdown, error)) error
+	// The identity parameter is used for history attribution.
+	ModifyMarkdown(id wikipage.PageIdentifier, fn func(wikipage.Markdown) (wikipage.Markdown, error), identity wikipage.Identity) error
 
 	// SoftDeletePage moves the page's .md file to trash.
 	// Returns os.ErrNotExist if the file did not exist.
-	SoftDeletePage(id wikipage.PageIdentifier) error
-	SoftDeletePageBy(id wikipage.PageIdentifier, deletedBy string) error
+	// The identity parameter is used for history attribution.
+	SoftDeletePage(id wikipage.PageIdentifier, identity wikipage.Identity) error
+	SoftDeletePageBy(id wikipage.PageIdentifier, deletedBy string, identity wikipage.Identity) error
 	ListTrash() ([]wikipage.TrashEntry, error)
 	RestorePage(trashID string) error
 	PurgePage(trashID string) error

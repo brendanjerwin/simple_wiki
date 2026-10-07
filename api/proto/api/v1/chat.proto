@@ -2,6 +2,7 @@ syntax = "proto3";
 
 package api.v1;
 
+import "api/v1/mcp_options.proto";
 import "google/protobuf/timestamp.proto";
 
 option go_package = "github.com/brendanjerwin/simple_wiki/gen/go/api/v1;apiv1";
@@ -20,15 +21,20 @@ service ChatService {
 
   // SendChatReply is called by the pool daemon when the agent uses the reply tool.
   // Accepts optional reply_to message ID for threading.
-  rpc SendChatReply(SendChatReplyRequest) returns (SendChatReplyResponse) {}
+  rpc SendChatReply(SendChatReplyRequest) returns (SendChatReplyResponse) {
+    option (api.v1.exclude_from_mcp) = true; // pool-daemon-only
+  }
 
   // EditChatMessage is called by the pool daemon when the agent uses the edit_message tool.
-  // Updates an existing message's content.
-  rpc EditChatMessage(EditChatMessageRequest) returns (EditChatMessageResponse) {}
+  rpc EditChatMessage(EditChatMessageRequest) returns (EditChatMessageResponse) {
+    option (api.v1.exclude_from_mcp) = true; // pool-daemon-only
+  }
 
   // ReactToMessage is called by the pool daemon when the agent uses the react tool.
   // Adds an emoji reaction to a message.
-  rpc ReactToMessage(ReactToMessageRequest) returns (ReactToMessageResponse) {}
+  rpc ReactToMessage(ReactToMessageRequest) returns (ReactToMessageResponse) {
+    option (api.v1.exclude_from_mcp) = true; // pool-daemon-only
+  }
 
   // ClearChat clears the visible chat history for a page.
   rpc ClearChat(ClearChatRequest) returns (ClearChatResponse) {}
@@ -47,16 +53,22 @@ service ChatService {
 
   // SendToolCallNotification is called by the pool daemon or ACP client
   // when the agent invokes a tool. The notification is broadcast to page subscribers.
-  rpc SendToolCallNotification(SendToolCallNotificationRequest) returns (SendToolCallNotificationResponse) {}
+  rpc SendToolCallNotification(SendToolCallNotificationRequest) returns (SendToolCallNotificationResponse) {
+    option (api.v1.exclude_from_mcp) = true; // pool-daemon-only
+  }
 
   // SendPlanNotification is called by the pool daemon or ACP client when the
   // agent reports or updates its execution plan. The plan is broadcast to page
   // subscribers so the UI can show live task progress.
-  rpc SendPlanNotification(SendPlanNotificationRequest) returns (SendPlanNotificationResponse) {}
+  rpc SendPlanNotification(SendPlanNotificationRequest) returns (SendPlanNotificationResponse) {
+    option (api.v1.exclude_from_mcp) = true; // pool-daemon-only
+  }
 
   // SendTurnStatus is called by the pool daemon when an agent turn starts and
   // completes, so the UI can show the Stop button for the whole turn.
-  rpc SendTurnStatus(SendTurnStatusRequest) returns (SendTurnStatusResponse) {}
+  rpc SendTurnStatus(SendTurnStatusRequest) returns (SendTurnStatusResponse) {
+    option (api.v1.exclude_from_mcp) = true; // pool-daemon-only
+  }
 
   // CancelAgentPrompt cancels an in-progress agent prompt for a page.
   // Called by the frontend "Stop" button.
@@ -65,9 +77,10 @@ service ChatService {
   // SubscribePageCancellations is called by the pool daemon per page.
   // Streams a signal when CancelAgentPrompt is called for that page.
   rpc SubscribePageCancellations(SubscribePageCancellationsRequest) returns (stream PageCancellation) {}
-
   // RespondToPermission is called by the frontend when the user responds to a permission request.
-  rpc RespondToPermission(RespondToPermissionRequest) returns (RespondToPermissionResponse) {}
+  rpc RespondToPermission(RespondToPermissionRequest) returns (RespondToPermissionResponse) {
+    option (api.v1.exclude_from_mcp) = true; // frontend-only
+  }
 
   // RequestPermissionFromUser is called by the pool daemon to forward a permission request
   // to the user via chat and block until the user responds.
@@ -111,6 +124,7 @@ message ChatEvent {
     ChatCleared chat_cleared = 6;
     ChatPlan plan = 7;
     ChatTurnStatus turn_status = 8;
+    ChatBackgroundTask background_task = 9;
   }
 }
 
@@ -144,6 +158,22 @@ message ChatToolCall {
   string status = 4;        // ACP status: "pending", "in_progress", "completed", "failed"
   string kind = 5;          // ACP tool kind: read/edit/delete/move/search/execute/think/fetch/switch_mode/other
   string detail = 6;        // concise live detail line (e.g. affected "path:line" or latest output)
+}
+
+// ChatBackgroundTask is broadcast when a tool call is promoted to a background
+// task — either because it has been in_progress for over 30 seconds (auto-
+// promotion by the server) or because the tool call detail indicates queue
+// position info from an A2A server. The UI uses this to swap from the compact
+// tool-call row to an expanded background-task card with prominent status.
+// The tool_call_id links back to the original ChatToolCall so the client can
+// correlate them.
+message ChatBackgroundTask {
+  string message_id = 1;    // the assistant message this task is part of
+  string tool_call_id = 2;  // links to the originating ChatToolCall
+  string title = 3;          // task title (from the tool call)
+  string status = 4;         // "promoted", "working", "completed", "failed"
+  string detail = 5;         // current status detail (e.g. queue position, progress text)
+  int64 started_at_ms = 6;  // when the originating tool call started (for elapsed display)
 }
 
 // ChatPlanEntry is one item in the agent's execution plan, mirroring an ACP

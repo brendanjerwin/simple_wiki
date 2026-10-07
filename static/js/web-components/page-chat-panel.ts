@@ -38,6 +38,15 @@ export interface ToolCallState {
   kind: string;
   detail: string;
   startedAtMs: number;
+  completedAtMs: number | null;
+}
+
+export interface BackgroundTaskState {
+  toolCallId: string;
+  title: string;
+  status: string;
+  detail: string;
+  startedAtMs: number;
 }
 
 export interface PlanEntryState {
@@ -57,8 +66,9 @@ export interface ChatMessageState {
   id: string;
   sender: Sender;
   content: string;
-  renderedHtml: string;
   timestamp: Date;
+  renderedHtml: string;
+  backgroundTask?: BackgroundTaskState | null;
   senderName: string;
   replyToId: string;
   reactions: ReactionGroup[];
@@ -605,8 +615,8 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
         </div>
 
         ${this.streamState === 'reconnecting'
-          ? html`<div class="status-banner reconnecting">Reconnecting...</div>`
-          : nothing}
+        ? html`<div class="status-banner reconnecting">Reconnecting...</div>`
+        : nothing}
         ${this._renderDisconnectedBanner()}
 
         <div
@@ -617,11 +627,11 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
           @scroll=${this._handleScroll}
         >
           ${this.messages.length === 0
-            ? html`<div class="empty-state">
+        ? html`<div class="empty-state">
                 ${this._emptyStateMessage}
               </div>`
-            : this.messages.map(
-                (msg) => html`
+        : this.messages.map(
+          (msg) => html`
                   <chat-message-bubble
                     message-id=${msg.id}
                     .sender=${msg.sender}
@@ -631,27 +641,27 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
                     ?edited=${msg.edited}
                     reply-to-id=${msg.replyToId}
                     .reactions=${msg.reactions}
+                    .backgroundTask=${msg.backgroundTask}
                     .toolCalls=${msg.toolCalls}
                     .plan=${msg.plan}
                     @scroll-to-message=${this._handleScrollToMessage}
                   ></chat-message-bubble>
                 `,
-              )}
+        )}
         </div>
-
         ${this.turnActive
-          ? html`<div class="thinking-indicator">
+        ? html`<div class="thinking-indicator">
               ${this.waitingForAssistant
-                ? html`<span class="thinking-dots">
+            ? html`<span class="thinking-dots">
                       <span></span><span></span><span></span>
                     </span>
                     ${this._thinkingText}`
-                : html`<span class="working-label">Working…</span>`}
+            : html`<span class="working-label">Working…</span>`}
               <button class="stop-button" @click=${this._handleStopClick} aria-label="Stop">
                 Stop
               </button>
             </div>`
-          : nothing}
+        : nothing}
 
         ${this._renderPermissionPrompt()}
 
@@ -775,7 +785,7 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
         <div class="permission-description">${title}: ${description}</div>
         <div class="permission-options">
           ${options.map(
-            (opt) => html`
+      (opt) => html`
               <button
                 class="permission-btn"
                 @click=${() => this._respondToPermission(opt.optionId)}
@@ -784,7 +794,7 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
                 ${opt.label}
               </button>
             `,
-          )}
+    )}
           <button class="permission-btn cancel" @click=${() => this._respondToPermission('')}>
             Deny
           </button>
@@ -1058,6 +1068,16 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
           })),
         );
         break;
+      case 'backgroundTask':
+        this.updateBackgroundTask(
+          event.event.value.messageId,
+          event.event.value.toolCallId,
+          event.event.value.title,
+          event.event.value.status,
+          event.event.value.detail,
+          Number(event.event.value.startedAtMs),
+        );
+        break;
       case 'reaction':
         this.addReaction(
           event.event.value.messageId,
@@ -1113,6 +1133,7 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
       timestamp,
       senderName,
       replyToId: msg.replyToId,
+      backgroundTask: null,
       reactions: groupReactions(msg.reactions),
       edited: false,
       sequence: msg.sequence,
@@ -1149,6 +1170,9 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
       }
     }
 
+    // Update both content and renderedHtml before triggering re-render
+    // to avoid a race where the template shows raw content (with escaped HTML)
+    // before renderedHtml is ready.
     msg.content = newContent;
     msg.renderedHtml = renderedHtml;
     if (!streaming) {
@@ -1167,6 +1191,7 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
     const msg = this.messagesById.get(messageId);
     if (!msg) return;
 
+    const isTerminal = status === 'completed' || status === 'failed';
     const existing = msg.toolCalls.find((tc) => tc.toolCallId === toolCallId);
     if (existing) {
       // ACP tool-call updates are partial: a status-only update carries empty
@@ -1177,9 +1202,17 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
       existing.kind = kind || existing.kind;
       existing.detail = detail || existing.detail;
       // Preserve the original startedAtMs — do not overwrite it
+      // Record completion time when the task reaches a terminal state
+      if (isTerminal && existing.completedAtMs === null) {
+        existing.completedAtMs = Date.now();
+      }
       msg.toolCalls = [...msg.toolCalls];
     } else {
-      msg.toolCalls = [...msg.toolCalls, { toolCallId, title, status, kind, detail, startedAtMs: Date.now() }];
+      msg.toolCalls = [...msg.toolCalls, {
+        toolCallId, title, status, kind, detail,
+        startedAtMs: Date.now(),
+        completedAtMs: isTerminal ? Date.now() : null,
+      }];
     }
     this.messages = [...this.messages];
 
@@ -1189,10 +1222,17 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
     }
   }
 
-  private updatePlan(messageId: string, entries: PlanEntryState[]): void {
+  private updateBackgroundTask(messageId: string, toolCallId: string, title: string, status: string, detail: string, startedAtMs: number): void {
     const msg = this.messagesById.get(messageId);
     if (!msg) return;
 
+    msg.backgroundTask = { toolCallId, title, status, detail, startedAtMs };
+    this.messages = [...this.messages];
+  }
+
+  private updatePlan(messageId: string, entries: PlanEntryState[]): void {
+    const msg = this.messagesById.get(messageId);
+    if (!msg) return;
     msg.plan = entries;
     this.messages = [...this.messages];
   }

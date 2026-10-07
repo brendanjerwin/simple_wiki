@@ -42,7 +42,7 @@ func (s *fakeStore) ReadFrontMatter(id wikipage.PageIdentifier) (wikipage.PageId
 	return id, cloneFrontMatter(fm), nil
 }
 
-func (s *fakeStore) WriteFrontMatter(id wikipage.PageIdentifier, fm wikipage.FrontMatter) error {
+func (s *fakeStore) WriteFrontMatter(id wikipage.PageIdentifier, fm wikipage.FrontMatter, _ wikipage.Identity) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.pages[id] = cloneFrontMatter(fm)
@@ -54,7 +54,7 @@ func (*fakeStore) ReadMarkdown(id wikipage.PageIdentifier) (wikipage.PageIdentif
 	return id, "", nil
 }
 
-func (*fakeStore) WriteMarkdown(wikipage.PageIdentifier, wikipage.Markdown) error {
+func (*fakeStore) WriteMarkdown(_ wikipage.PageIdentifier, _ wikipage.Markdown, _ wikipage.Identity) error {
 	return nil
 }
 
@@ -62,7 +62,7 @@ func (*fakeStore) DeletePage(wikipage.PageIdentifier) error {
 	return nil
 }
 
-func (*fakeStore) ModifyMarkdown(id wikipage.PageIdentifier, modifier func(wikipage.Markdown) (wikipage.Markdown, error)) error {
+func (*fakeStore) ModifyMarkdown(_ wikipage.PageIdentifier, modifier func(wikipage.Markdown) (wikipage.Markdown, error), _ wikipage.Identity) error {
 	_, err := modifier("")
 	return err
 }
@@ -406,6 +406,72 @@ var _ = Describe("Mutator", func() {
 		It("should return the legacy survey", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(result.GetQuestion()).To(Equal("Legacy dinner?"))
+		})
+	})
+
+	Describe("UpsertSurvey validation", func() {
+		When("creating a new survey with an empty question", func() {
+			BeforeEach(func() {
+				_, err = mutator.UpsertSurvey(context.Background(), "weekly_menu", "new_survey", "", nil, nil)
+			})
+
+			It("should return InvalidArgument", func() {
+				Expect(err).To(HaveOccurred())
+				Expect(err).To(MatchError(ContainSubstring("question is required")))
+			})
+		})
+
+		When("updating an existing survey with an empty question", func() {
+			BeforeEach(func() {
+				_, err = mutator.UpsertSurvey(context.Background(), "weekly_menu", "meal", "", nil, nil)
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+		})
+	})
+
+	Describe("AddField validation", func() {
+		When("field has an invalid type", func() {
+			BeforeEach(func() {
+				_, err = mutator.AddField(context.Background(), "weekly_menu", "meal", &apiv1.SurveyField{Name: "bad", Type: "datetime"}, nil)
+			})
+
+			It("should return InvalidArgument", func() {
+				Expect(err).To(HaveOccurred())
+				Expect(err).To(MatchError(ContainSubstring("field.type")))
+			})
+		})
+
+		When("field has an empty type", func() {
+			BeforeEach(func() {
+				_, err = mutator.AddField(context.Background(), "weekly_menu", "meal", &apiv1.SurveyField{Name: "bad", Type: ""}, nil)
+			})
+
+			It("should return InvalidArgument", func() {
+				Expect(err).To(HaveOccurred())
+				Expect(err).To(MatchError(ContainSubstring("field.type is required")))
+			})
+		})
+	})
+
+	Describe("SubmitResponse validation", func() {
+		When("values contain a key not matching any survey field", func() {
+			BeforeEach(func() {
+				_, err = mutator.SubmitResponse(context.Background(), "weekly_menu", "meal",
+					&structpb.Struct{Fields: map[string]*structpb.Value{
+						"nonexistent_field": structpb.NewStringValue("value"),
+					}},
+					false,
+					tailscale.NewIdentity("user@example.com", "User", "node"),
+				)
+			})
+
+			It("should return InvalidArgument", func() {
+				Expect(err).To(HaveOccurred())
+				Expect(err).To(MatchError(ContainSubstring("does not match any survey field")))
+			})
 		})
 	})
 })

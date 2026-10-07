@@ -1,10 +1,10 @@
-import type { JsonObject } from '@bufbuild/protobuf';
+import type { JsonObject } from "@bufbuild/protobuf";
 
 /**
  * Narrow `value` to a non-null, non-array object, or return null.
  */
 export function asRecord(value: unknown): Record<string, unknown> | null {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- narrowed above: non-null, non-array object
   return value as Record<string, unknown>;
 }
@@ -12,7 +12,7 @@ export function asRecord(value: unknown): Record<string, unknown> | null {
 export interface SurveyField {
   name: string;
   label?: string;
-  type: 'number' | 'text' | 'choice' | 'boolean';
+  type: "number" | "text" | "choice" | "boolean";
   required?: boolean;
   min?: number;
   max?: number;
@@ -36,25 +36,30 @@ export interface SurveyData {
 function parseSurveyField(raw: unknown): SurveyField | null {
   const r = asRecord(raw);
   if (!r) return null;
-  const name = typeof r['name'] === 'string' ? r['name'] : '';
+  const name = typeof r["name"] === "string" ? r["name"] : "";
   if (!name) return null;
-  const rawType = typeof r['type'] === 'string' ? r['type'] : 'text';
-  const type: SurveyField['type'] =
-    rawType === 'number' || rawType === 'text' || rawType === 'choice' || rawType === 'boolean'
+  const rawType = typeof r["type"] === "string" ? r["type"] : "text";
+  const type: SurveyField["type"] =
+    rawType === "number" ||
+    rawType === "text" ||
+    rawType === "choice" ||
+    rawType === "boolean"
       ? rawType
-      : rawType === 'select'
-        ? 'choice'
-        : 'text';
+      : rawType === "select"
+        ? "choice"
+        : "text";
   const field: SurveyField = { name, type };
-  if (typeof r['label'] === 'string') {
-    const trimmedLabel = r['label'].trim();
+  if (typeof r["label"] === "string") {
+    const trimmedLabel = r["label"].trim();
     if (trimmedLabel) field.label = trimmedLabel;
   }
-  if (r['required'] === true) field.required = true;
-  if (typeof r['min'] === 'number') field.min = r['min'];
-  if (typeof r['max'] === 'number') field.max = r['max'];
-  if (Array.isArray(r['options'])) {
-    field.options = r['options'].filter((o): o is string => typeof o === 'string');
+  if (r["required"] === true) field.required = true;
+  if (typeof r["min"] === "number") field.min = r["min"];
+  if (typeof r["max"] === "number") field.max = r["max"];
+  if (Array.isArray(r["options"])) {
+    field.options = r["options"].filter(
+      (o): o is string => typeof o === "string",
+    );
   }
   return field;
 }
@@ -62,13 +67,14 @@ function parseSurveyField(raw: unknown): SurveyField | null {
 function parseSurveyResponse(raw: unknown): SurveyResponse | null {
   const r = asRecord(raw);
   if (!r) return null;
-  const user = typeof r['user'] === 'string' ? r['user'] : '';
+  const user = typeof r["user"] === "string" ? r["user"] : "";
   if (!user) return null;
-  const valuesRaw = asRecord(r['values']) ?? {};
+  const valuesRaw = asRecord(r["values"]) ?? {};
   return {
     user,
-    anonymous: Boolean(r['anonymous']),
-    submitted_at: typeof r['submitted_at'] === 'string' ? r['submitted_at'] : '',
+    anonymous: Boolean(r["anonymous"]),
+    submitted_at:
+      typeof r["submitted_at"] === "string" ? r["submitted_at"] : "",
     values: valuesRaw,
   };
 }
@@ -76,34 +82,42 @@ function parseSurveyResponse(raw: unknown): SurveyResponse | null {
 /**
  * Extract SurveyData from the raw frontmatter object.
  */
-export function extractSurveyData(frontmatter: JsonObject, surveyName: string): SurveyData {
+export function extractSurveyData(
+  frontmatter: JsonObject,
+  surveyName: string,
+): SurveyData {
   const defaultData: SurveyData = {
-    question: '',
+    question: "",
     fields: [],
     closed: false,
     responses: [],
   };
 
-  const surveysObj = asRecord(frontmatter['surveys']);
+  // Read from wiki.surveys (migrated namespace) first, fall back to
+  // legacy top-level surveys key for old pages.
+  const wikiObj = asRecord(frontmatter["wiki"]);
+  const surveysObj =
+    asRecord(wikiObj?.["surveys"]) ?? asRecord(frontmatter["surveys"]);
   if (!surveysObj) return defaultData;
 
   const surveyObj = asRecord(surveysObj[surveyName]);
   if (!surveyObj) return defaultData;
 
-  const question = typeof surveyObj['question'] === 'string' ? surveyObj['question'] : '';
-  const closed = Boolean(surveyObj['closed']);
+  const question =
+    typeof surveyObj["question"] === "string" ? surveyObj["question"] : "";
+  const closed = Boolean(surveyObj["closed"]);
 
   const fields: SurveyField[] = [];
-  if (Array.isArray(surveyObj['fields'])) {
-    for (const raw of surveyObj['fields']) {
+  if (Array.isArray(surveyObj["fields"])) {
+    for (const raw of surveyObj["fields"]) {
       const field = parseSurveyField(raw);
       if (field) fields.push(field);
     }
   }
 
   const responses: SurveyResponse[] = [];
-  if (Array.isArray(surveyObj['responses'])) {
-    for (const raw of surveyObj['responses']) {
+  if (Array.isArray(surveyObj["responses"])) {
+    for (const raw of surveyObj["responses"]) {
       const resp = parseSurveyResponse(raw);
       if (resp) responses.push(resp);
     }
@@ -117,10 +131,10 @@ export function extractSurveyData(frontmatter: JsonObject, surveyName: string): 
  */
 export function findUserResponse(
   responses: SurveyResponse[],
-  username: string
+  username: string,
 ): SurveyResponse | null {
   if (!username) return null;
-  return responses.find(r => r.user === username) ?? null;
+  return responses.find((r) => r.user === username) ?? null;
 }
 
 /**
@@ -129,7 +143,7 @@ export function findUserResponse(
 export function upsertResponse(
   responses: SurveyResponse[],
   username: string,
-  values: Record<string, unknown>
+  values: Record<string, unknown>,
 ): SurveyResponse[] {
   const now = new Date().toISOString();
   const newResponse: SurveyResponse = {
@@ -138,7 +152,7 @@ export function upsertResponse(
     submitted_at: now,
     values,
   };
-  const existingIndex = responses.findIndex(r => r.user === username);
+  const existingIndex = responses.findIndex((r) => r.user === username);
   if (existingIndex >= 0) {
     return responses.map((r, i) => (i === existingIndex ? newResponse : r));
   }

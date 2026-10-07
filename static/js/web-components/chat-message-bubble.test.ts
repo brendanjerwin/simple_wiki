@@ -255,7 +255,7 @@ describe('ChatMessageBubble', () => {
         status: 'in_progress',
         kind: 'read',
         detail: '/some/path/to/file.ts',
-        startedAtMs,
+        startedAtMs, completedAtMs: null,
       };
 
       beforeEach(async () => {
@@ -311,7 +311,7 @@ describe('ChatMessageBubble', () => {
         status: 'pending',
         kind: 'search',
         detail: '',
-        startedAtMs: Date.now(),
+        completedAtMs: null, startedAtMs: Date.now(),
       };
 
       beforeEach(async () => {
@@ -344,7 +344,7 @@ describe('ChatMessageBubble', () => {
         status: 'completed',
         kind: 'read',
         detail: '/path/file.ts',
-        startedAtMs: Date.now() - 2000,
+        completedAtMs: null, startedAtMs: Date.now() - 2000,
       };
 
       beforeEach(async () => {
@@ -407,7 +407,7 @@ describe('ChatMessageBubble', () => {
         status: 'failed',
         kind: 'execute',
         detail: 'Exit code 1',
-        startedAtMs: Date.now() - 1000,
+        completedAtMs: null, startedAtMs: Date.now() - 1000,
       };
 
       beforeEach(async () => {
@@ -440,9 +440,9 @@ describe('ChatMessageBubble', () => {
     describe('when toolCalls has entries with mixed statuses', () => {
       let el: ChatMessageBubble;
       const toolCalls: ToolCallState[] = [
-        { toolCallId: 'tc-1', title: 'Read File', status: 'completed', kind: 'read', detail: '', startedAtMs: Date.now() - 5000 },
-        { toolCallId: 'tc-2', title: 'Execute Shell', status: 'in_progress', kind: 'execute', detail: 'running...', startedAtMs: Date.now() - 1000 },
-        { toolCallId: 'tc-3', title: 'Failed Op', status: 'failed', kind: 'other', detail: '', startedAtMs: Date.now() - 500 },
+        { toolCallId: 'tc-1', title: 'Read File', status: 'completed', kind: 'read', detail: '', completedAtMs: null, startedAtMs: Date.now() - 5000 },
+        { toolCallId: 'tc-2', title: 'Execute Shell', status: 'in_progress', kind: 'execute', detail: 'running...', completedAtMs: null, startedAtMs: Date.now() - 1000 },
+        { toolCallId: 'tc-3', title: 'Failed Op', status: 'failed', kind: 'other', detail: '', completedAtMs: null, startedAtMs: Date.now() - 500 },
       ];
 
       beforeEach(async () => {
@@ -481,7 +481,7 @@ describe('ChatMessageBubble', () => {
             message-id="msg-tc-unknown"
             .sender=${Sender.ASSISTANT}
             content="Unknown status"
-            .toolCalls=${[{ toolCallId: 'tc-x', title: 'Mystery', status: 'unknown_status', kind: '', detail: '', startedAtMs: Date.now() }]}
+            .toolCalls=${[{ toolCallId: 'tc-x', title: 'Mystery', status: 'unknown_status', kind: '', detail: '', completedAtMs: null, startedAtMs: Date.now() }]}
           ></chat-message-bubble>
         `);
       });
@@ -495,6 +495,246 @@ describe('ChatMessageBubble', () => {
       it('should show bullet icon for unknown status', () => {
         const icon = el.shadowRoot!.querySelector('.tool-call-pill .status-icon');
         expect(icon!.textContent).to.equal('•');
+      });
+    });
+  });
+
+  describe('long-running tool call rendering', () => {
+    describe('when a tool call has been in_progress for over 30 seconds', () => {
+      let el: ChatMessageBubble;
+      const startedAtMs = Date.now() - 45_000; // 45s elapsed
+      const longRunningToolCall: ToolCallState = {
+        toolCallId: 'tc-long-live',
+        title: 'A2A Agent Call: Cluster Health Investigation',
+        status: 'in_progress',
+        kind: 'other',
+        detail: 'Queued: position 2 of 3',
+        startedAtMs, completedAtMs: null,
+      };
+
+      beforeEach(async () => {
+        el = await fixture(html`
+          <chat-message-bubble
+            message-id="msg-tc-long-live"
+            .sender=${Sender.ASSISTANT}
+            content="Working on it"
+            .toolCalls=${[longRunningToolCall]}
+          ></chat-message-bubble>
+        `);
+      });
+
+      it('should render the live tool-call row with long-running class', () => {
+        const live = el.shadowRoot!.querySelector('.tool-call-live.long-running');
+        expect(live).to.not.be.null;
+      });
+
+      it('should display the tool call title', () => {
+        const title = el.shadowRoot!.querySelector('.tool-call-live-title');
+        expect(title!.textContent).to.equal('A2A Agent Call: Cluster Health Investigation');
+      });
+
+      it('should display the detail text with queue position', () => {
+        const detail = el.shadowRoot!.querySelector('.tool-call-detail');
+        expect(detail!.textContent).to.contain('Queued: position 2 of 3');
+      });
+
+      it('should display an elapsed time', () => {
+        const elapsed = el.shadowRoot!.querySelector('.tool-call-elapsed');
+        expect(elapsed).to.not.be.null;
+        expect(elapsed!.textContent!.trim().length).to.be.greaterThan(0);
+      });
+
+      it('should NOT render as a compact pill', () => {
+        const pill = el.shadowRoot!.querySelector('.tool-call-pill');
+        expect(pill).to.be.null;
+      });
+    });
+
+    describe('when a long-running tool call has just completed', () => {
+      let el: ChatMessageBubble;
+      const startedAtMs = Date.now() - 185_000;
+      const completedToolCall: ToolCallState = {
+        toolCallId: 'tc-long-done',
+        title: 'A2A Agent Call: Cluster Health Investigation',
+        status: 'completed',
+        kind: 'other',
+        detail: 'All nodes ready. No issues found.',
+        startedAtMs, completedAtMs: null,
+      };
+
+      beforeEach(async () => {
+        el = await fixture(html`
+          <chat-message-bubble
+            message-id="msg-tc-long-done"
+            .sender=${Sender.ASSISTANT}
+            content="Done"
+            .toolCalls=${[completedToolCall]}
+          ></chat-message-bubble>
+        `);
+      });
+
+      it('should render an expanded result card (not a pill)', () => {
+        const result = el.shadowRoot!.querySelector('.tool-call-result');
+        expect(result).to.not.be.null;
+      });
+
+      it('should NOT render as a compact pill', () => {
+        const pill = el.shadowRoot!.querySelector('.tool-call-pill');
+        expect(pill).to.be.null;
+      });
+
+      it('should display the tool call title in the result card', () => {
+        const title = el.shadowRoot!.querySelector('.tool-call-result-title');
+        expect(title!.textContent).to.equal('A2A Agent Call: Cluster Health Investigation');
+      });
+
+      it('should display the duration in the result card', () => {
+        const elapsed = el.shadowRoot!.querySelector('.tool-call-result-elapsed');
+        expect(elapsed).to.not.be.null;
+        expect(elapsed!.textContent!.trim().length).to.be.greaterThan(0);
+      });
+
+      it('should display the detail text in the result card', () => {
+        const detail = el.shadowRoot!.querySelector('.tool-call-result-detail');
+        expect(detail).to.not.be.null;
+        expect(detail!.textContent).to.contain('All nodes ready');
+      });
+
+      it('should show the check mark icon for completed', () => {
+        const icon = el.shadowRoot!.querySelector('.tool-call-result .status-icon');
+        expect(icon!.textContent).to.equal('✅');
+      });
+    });
+
+    describe('when a long-running tool call has failed', () => {
+      let el: ChatMessageBubble;
+      const startedAtMs = Date.now() - 95_000;
+      const failedToolCall: ToolCallState = {
+        toolCallId: 'tc-long-fail',
+        title: 'A2A Agent Call: Host Remediation',
+        status: 'failed',
+        kind: 'other',
+        detail: 'Error: SSH connection timed out',
+        startedAtMs, completedAtMs: null,
+      };
+
+      beforeEach(async () => {
+        el = await fixture(html`
+          <chat-message-bubble
+            message-id="msg-tc-long-fail"
+            .sender=${Sender.ASSISTANT}
+            content="Failed"
+            .toolCalls=${[failedToolCall]}
+          ></chat-message-bubble>
+        `);
+      });
+
+      it('should render an expanded result card with failed class', () => {
+        const result = el.shadowRoot!.querySelector('.tool-call-result.failed');
+        expect(result).to.not.be.null;
+      });
+
+      it('should show the cross mark icon for failed', () => {
+        const icon = el.shadowRoot!.querySelector('.tool-call-result .status-icon');
+        expect(icon!.textContent).to.equal('❌');
+      });
+
+      it('should display the error detail in the result card', () => {
+        const detail = el.shadowRoot!.querySelector('.tool-call-result-detail');
+        expect(detail!.textContent).to.contain('SSH connection timed out');
+      });
+    });
+
+    describe('when a short tool call completes (under 30s)', () => {
+      let el: ChatMessageBubble;
+      const completedToolCall: ToolCallState = {
+        toolCallId: 'tc-short-done',
+        title: 'Read File',
+        status: 'completed',
+        kind: 'read',
+        detail: '/path/file.ts',
+        completedAtMs: null, startedAtMs: Date.now() - 2000,
+      };
+
+      beforeEach(async () => {
+        el = await fixture(html`
+          <chat-message-bubble
+            message-id="msg-tc-short-done"
+            .sender=${Sender.ASSISTANT}
+            content="Done"
+            .toolCalls=${[completedToolCall]}
+          ></chat-message-bubble>
+        `);
+      });
+
+      describe('when a short-completed task has a sibling live tool call keeping the timer ticking', () => {
+        let el: ChatMessageBubble;
+        let clock: SinonFakeTimers;
+
+        beforeEach(() => {
+          clock = useFakeTimers();
+        });
+
+        afterEach(() => {
+          clock.restore();
+        });
+        const shortCompleted: ToolCallState = {
+          toolCallId: 'tc-short',
+          title: 'Quick Read',
+          status: 'completed',
+          kind: 'read',
+          detail: '/path/file.ts',
+          completedAtMs: Date.now() - 2000, startedAtMs: Date.now() - 2000,
+        };
+        const liveInProgress: ToolCallState = {
+          toolCallId: 'tc-live',
+          title: 'Long Search',
+          status: 'in_progress',
+          kind: 'search',
+          detail: 'query: test',
+          completedAtMs: null, startedAtMs: Date.now(),
+        };
+
+        beforeEach(async () => {
+          el = await fixture(html`
+          <chat-message-bubble
+            message-id="msg-tc-sibling"
+            .sender=${Sender.ASSISTANT}
+            content="Working"
+            .toolCalls=${[shortCompleted, liveInProgress]}
+          ></chat-message-bubble>
+        `);
+          // Advance the clock past the 30s threshold — the live tool call keeps
+          // the elapsed timer ticking, which used to cause the short-completed
+          // task's duration to grow and trigger the long-running result card.
+          await clock.tickAsync(35000);
+          await el.updateComplete;
+        });
+
+        it('should NOT render an expanded result card for the short-completed task', () => {
+          const result = el.shadowRoot!.querySelector('.tool-call-result');
+          expect(result).to.be.null;
+        });
+
+        it('should render the short-completed task as a compact pill', () => {
+          const pills = el.shadowRoot!.querySelectorAll('.tool-call-pill');
+          expect(pills.length).to.equal(1);
+        });
+
+        it('should still render the live tool call as a live row', () => {
+          const live = el.shadowRoot!.querySelector('.tool-call-live');
+          expect(live).to.not.be.null;
+        });
+      });
+
+      it('should collapse to a compact pill (not an expanded result card)', () => {
+        const pill = el.shadowRoot!.querySelector('.tool-call-pill');
+        expect(pill).to.not.be.null;
+      });
+
+      it('should NOT render an expanded result card', () => {
+        const result = el.shadowRoot!.querySelector('.tool-call-result');
+        expect(result).to.be.null;
       });
     });
   });
@@ -518,7 +758,7 @@ describe('ChatMessageBubble', () => {
         status: 'in_progress',
         kind: 'execute',
         detail: 'working...',
-        startedAtMs: 0,
+        completedAtMs: null, startedAtMs: 0,
       };
 
       let elapsedBefore: string | null;
@@ -571,7 +811,7 @@ describe('ChatMessageBubble', () => {
           status: 'in_progress',
           kind: 'execute',
           detail: 'working...',
-          startedAtMs: undefined as unknown as number,
+          completedAtMs: null, startedAtMs: undefined as unknown as number,
         };
         el = await fixture(html`
           <chat-message-bubble
@@ -601,7 +841,7 @@ describe('ChatMessageBubble', () => {
         status: 'completed',
         kind: 'read',
         detail: '',
-        startedAtMs: 0,
+        completedAtMs: null, startedAtMs: 0,
       };
 
       beforeEach(async () => {

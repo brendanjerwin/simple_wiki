@@ -115,7 +115,7 @@ func (n *InventoryNormalizer) ensureIsContainerField(pageID wikipage.PageIdentif
 	inventoryData["is_container"] = true
 
 	// Write back frontmatter
-	if err := n.deps.WriteFrontMatter(pageID, fm); err != nil {
+	if err := n.deps.WriteFrontMatter(pageID, fm, wikipage.AnonymousIdentity); err != nil {
 		return fmt.Errorf("failed to write frontmatter: %w", err)
 	}
 
@@ -222,13 +222,13 @@ func (n *InventoryNormalizer) CreateItemPage(itemID, containerID string) error {
 	fm["inventory"] = inventoryData
 
 	// Write frontmatter
-	if err := n.deps.WriteFrontMatter(wikipage.PageIdentifier(identifier), fm); err != nil {
+	if err := n.deps.WriteFrontMatter(wikipage.PageIdentifier(identifier), fm, wikipage.AnonymousIdentity); err != nil {
 		return fmt.Errorf("failed to write frontmatter: %w", err)
 	}
 
 	// Build and write markdown
 	markdown := inventory.BuildItemMarkdown()
-	if err := n.deps.WriteMarkdown(wikipage.PageIdentifier(identifier), wikipage.Markdown(markdown)); err != nil {
+	if err := n.deps.WriteMarkdown(wikipage.PageIdentifier(identifier), wikipage.Markdown(markdown), wikipage.AnonymousIdentity); err != nil {
 		return fmt.Errorf("failed to write markdown: %w", err)
 	}
 

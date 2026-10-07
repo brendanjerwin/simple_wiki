@@ -36,13 +36,13 @@ func (f *fakeReaderMutator) ReadFrontMatter(id wikipage.PageIdentifier) (wikipag
 	return id, fm, nil
 }
 
-func (f *fakeReaderMutator) WriteFrontMatter(id wikipage.PageIdentifier, fm wikipage.FrontMatter) error {
+func (f *fakeReaderMutator) WriteFrontMatter(id wikipage.PageIdentifier, fm wikipage.FrontMatter, _ wikipage.Identity) error {
 	f.writeCount++
 	f.pages[string(id)] = fm
 	return nil
 }
 
-func (f *fakeReaderMutator) ModifyFrontMatterAndMarkdown(id wikipage.PageIdentifier, modifier func(wikipage.FrontMatter, wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error)) error {
+func (f *fakeReaderMutator) ModifyFrontMatterAndMarkdown(id wikipage.PageIdentifier, modifier func(wikipage.FrontMatter, wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error), _ wikipage.Identity) error {
 	if f.modifyErr != nil {
 		return f.modifyErr
 	}
@@ -62,11 +62,12 @@ func (f *fakeReaderMutator) ModifyFrontMatterAndMarkdown(id wikipage.PageIdentif
 func (*fakeReaderMutator) ReadMarkdown(_ wikipage.PageIdentifier) (wikipage.PageIdentifier, wikipage.Markdown, error) {
 	return "", "", nil
 }
-func (*fakeReaderMutator) WriteMarkdown(_ wikipage.PageIdentifier, _ wikipage.Markdown) error {
+
+func (*fakeReaderMutator) WriteMarkdown(_ wikipage.PageIdentifier, _ wikipage.Markdown, _ wikipage.Identity) error {
 	return nil
 }
 func (*fakeReaderMutator) DeletePage(_ wikipage.PageIdentifier) error { return nil }
-func (*fakeReaderMutator) ModifyMarkdown(_ wikipage.PageIdentifier, _ func(wikipage.Markdown) (wikipage.Markdown, error)) error {
+func (*fakeReaderMutator) ModifyMarkdown(_ wikipage.PageIdentifier, _ func(wikipage.Markdown) (wikipage.Markdown, error), _ wikipage.Identity) error {
 	return nil
 }
 

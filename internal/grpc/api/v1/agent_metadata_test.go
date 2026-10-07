@@ -42,7 +42,7 @@ func (f *inMemoryPageStore) ReadFrontMatter(id wikipage.PageIdentifier) (wikipag
 	return id, out, nil
 }
 
-func (f *inMemoryPageStore) WriteFrontMatter(id wikipage.PageIdentifier, fm wikipage.FrontMatter) error {
+func (f *inMemoryPageStore) WriteFrontMatter(id wikipage.PageIdentifier, fm wikipage.FrontMatter, _ wikipage.Identity) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.pages[id] = fm

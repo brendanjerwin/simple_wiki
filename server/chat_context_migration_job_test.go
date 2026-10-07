@@ -79,7 +79,7 @@ var _ = Describe("ChatContextMigrationJob", func() {
 						"last_conversation_summary": "we discussed pastry",
 						"user_goals":                []any{"finish weekend order"},
 					},
-				})
+				}, wikipage.AnonymousIdentity)
 				idx.byKey["ai_agent_chat_context"] = []wikipage.PageIdentifier{"legacy"}
 				Expect(job.Execute()).To(Succeed())
 			})
@@ -113,7 +113,7 @@ var _ = Describe("ChatContextMigrationJob", func() {
 							"last_conversation_summary": "already moved",
 						},
 					},
-				})
+				}, wikipage.AnonymousIdentity)
 				// Index reports no legacy keys (because the migration ran already).
 				Expect(job.Execute()).To(Succeed())
 			})
@@ -137,7 +137,7 @@ var _ = Describe("ChatContextMigrationJob", func() {
 						"last_conversation_summary": "legacy summary (should NOT clobber)",
 						"user_goals":                []any{"legacy goal"},
 					},
-				})
+				}, wikipage.AnonymousIdentity)
 				idx.byKey["ai_agent_chat_context"] = []wikipage.PageIdentifier{"collision"}
 				Expect(job.Execute()).To(Succeed())
 			})

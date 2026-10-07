@@ -135,7 +135,7 @@ export const ErrorState: Story = {
     el.drawerOpen = true;
     el.messages = [];
     el.streamState = 'disconnected';
-    el.error = new Error('Dorium is not connected');
+    el.error = new Error('Assistant is not connected');
     return el;
   },
 };
