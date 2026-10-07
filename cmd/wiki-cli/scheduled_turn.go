@@ -324,7 +324,11 @@ func (d *poolDaemon) executeScheduledTurn(ctx context.Context, req *apiv1.Schedu
 	turnCtx, cancelTurn := context.WithCancel(ctx)
 	defer cancelTurn()
 
-	conn, cleanup, spawnErr := d.spawnEphemeralForScheduledTurn(turnCtx, req.GetPage(), req.GetRequestId(), req.GetMaxTurns(), req.GetAllowedTools(), cancelTurn)
+	spawn := d.spawnEphemeralForScheduledTurn
+	if d.scheduledTurnSpawnFn != nil {
+		spawn = d.scheduledTurnSpawnFn
+	}
+	conn, cleanup, spawnErr := spawn(turnCtx, req.GetPage(), req.GetRequestId(), req.GetMaxTurns(), req.GetAllowedTools(), cancelTurn)
 	if spawnErr != nil {
 		return apiv1.ScheduleStatus_SCHEDULE_STATUS_ERROR, fmt.Sprintf("spawn failed: %v", spawnErr)
 	}
@@ -366,7 +370,7 @@ func (d *poolDaemon) executeScheduledTurn(ctx context.Context, req *apiv1.Schedu
 // ephemeral instance: the ACP connection, the session id, and the
 // scheduledTurnClient (for HitLimit inspection after the prompt returns).
 type scheduledEphemeralConnection struct {
-	connection *acp.ClientSideConnection
+	connection acpScheduledConn
 	sessionID  acp.SessionId
 	client     *scheduledTurnClient
 }

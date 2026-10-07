@@ -216,6 +216,10 @@ type poolDaemon struct {
 	// backgroundTaskDrainer is the injectable seam used by tests to replace the
 	// default drainBackgroundTasks implementation. nil = use the default.
 	backgroundTaskDrainer func(ctx context.Context, done <-chan struct{}) (apiv1.ScheduleStatus, string)
+
+	// scheduledTurnSpawnFn is the injectable seam for spawnEphemeralForScheduledTurn.
+	// nil = call the real spawnEphemeralForScheduledTurn.
+	scheduledTurnSpawnFn func(ctx context.Context, page, requestID string, maxTurns int32, allowedTools []string, cancelTurn context.CancelFunc) (*scheduledEphemeralConnection, func(), error)
 }
 
 // sanitizeUnitName converts a page identifier into a valid systemd unit name suffix.
@@ -623,6 +627,14 @@ type acpAgent interface {
 	Initialize(context.Context, acp.InitializeRequest) (acp.InitializeResponse, error)
 	NewSession(context.Context, acp.NewSessionRequest) (acp.NewSessionResponse, error)
 	Prompt(context.Context, acp.PromptRequest) (acp.PromptResponse, error)
+}
+
+// acpScheduledConn is the minimal ACP connection surface needed by
+// executeScheduledTurn. Defining it as an interface lets tests inject a
+// lightweight fake without standing up a real agent process.
+type acpScheduledConn interface {
+	Prompt(context.Context, acp.PromptRequest) (acp.PromptResponse, error)
+	Done() <-chan struct{}
 }
 
 // wikiChatClient implements acp.Client — handles ACP callbacks from the agent.

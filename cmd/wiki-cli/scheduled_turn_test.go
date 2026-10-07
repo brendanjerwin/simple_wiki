@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -835,6 +836,194 @@ var _ = Describe("poolDaemon scheduled turn shutdown drain", func() {
 			It("should run without a cancelled context", func() {
 				Expect(terminalText).To(Equal("completed"))
 			})
+		})
+	})
+})
+
+// fakeScheduledConn is a test double for acpScheduledConn that lets tests
+// control the Prompt return values and expose a Done channel they close
+// themselves.
+type fakeScheduledConn struct {
+	promptErr error
+	doneCh    chan struct{}
+}
+
+func newFakeScheduledConn() *fakeScheduledConn {
+	return &fakeScheduledConn{doneCh: make(chan struct{})}
+}
+
+func (f *fakeScheduledConn) Prompt(_ context.Context, _ acp.PromptRequest) (acp.PromptResponse, error) {
+	return acp.PromptResponse{}, f.promptErr
+}
+
+func (f *fakeScheduledConn) Done() <-chan struct{} { return f.doneCh }
+
+// fakeScheduledConnSpawn returns a scheduledTurnSpawnFn that uses the provided
+// fakeScheduledConn and calls cleanupFn once — and only once — when cleanup() is
+// invoked. It returns the total number of times cleanup() was externally called
+// via the *int32 pointer.
+func fakeScheduledConnSpawn(conn *fakeScheduledConn, innerCalls *int32) func(ctx context.Context, page, requestID string, maxTurns int32, allowedTools []string, cancelTurn context.CancelFunc) (*scheduledEphemeralConnection, func(), error) {
+	var once sync.Once
+	return func(_ context.Context, page string, _ string, maxTurns int32, allowedTools []string, cancelTurn context.CancelFunc) (*scheduledEphemeralConnection, func(), error) {
+		client := newScheduledTurnClient(page, maxTurns, allowedTools, cancelTurn)
+		sec := &scheduledEphemeralConnection{
+			connection: conn,
+			sessionID:  "fake-session",
+			client:     client,
+		}
+		cleanup := func() {
+			once.Do(func() {
+				atomic.AddInt32(innerCalls, 1)
+			})
+		}
+		return sec, cleanup, nil
+	}
+}
+
+var _ = Describe("poolDaemon drainBackgroundTasks with zero timeout", func() {
+	Describe("when backgroundTaskDrainTimeout is zero and the done channel is already closed", func() {
+		var (
+			status apiv1.ScheduleStatus
+			msg    string
+		)
+
+		BeforeEach(func() {
+			// zero value → falls back to defaultBackgroundTaskDrainTimeout
+			daemon := &poolDaemon{}
+			doneCh := make(chan struct{})
+			close(doneCh)
+			status, msg = daemon.drainBackgroundTasks(context.Background(), doneCh)
+		})
+
+		It("should return SCHEDULE_STATUS_OK", func() {
+			Expect(status).To(Equal(apiv1.ScheduleStatus_SCHEDULE_STATUS_OK))
+		})
+
+		It("should return an empty error message", func() {
+			Expect(msg).To(BeEmpty())
+		})
+	})
+})
+
+var _ = Describe("poolDaemon executeScheduledTurn", func() {
+	Describe("when the ephemeral spawn fails", func() {
+		var (
+			status apiv1.ScheduleStatus
+			msg    string
+		)
+
+		BeforeEach(func() {
+			daemon := &poolDaemon{
+				scheduledTurnSpawnFn: func(_ context.Context, _, _ string, _ int32, _ []string, _ context.CancelFunc) (*scheduledEphemeralConnection, func(), error) {
+					return nil, nil, errors.New("agent binary not found")
+				},
+			}
+			status, msg = daemon.executeScheduledTurn(context.Background(), &apiv1.ScheduledTurnRequest{
+				RequestId: "req-spawn-fail",
+				Page:      "test-page",
+				Prompt:    "do something",
+			})
+		})
+
+		It("should return SCHEDULE_STATUS_ERROR", func() {
+			Expect(status).To(Equal(apiv1.ScheduleStatus_SCHEDULE_STATUS_ERROR))
+		})
+
+		It("should include 'spawn failed' in the error message", func() {
+			Expect(msg).To(ContainSubstring("spawn failed"))
+		})
+	})
+
+	Describe("when spawn and prompt succeed and the done channel closes before the drain window", func() {
+		var (
+			status      apiv1.ScheduleStatus
+			msg         string
+			innerCalls  int32
+			drainerCalled bool
+		)
+
+		BeforeEach(func() {
+			innerCalls = 0
+			drainerCalled = false
+			fakeConn := newFakeScheduledConn()
+			close(fakeConn.doneCh) // agent exits immediately
+
+			daemon := &poolDaemon{
+				scheduledTurnSpawnFn: fakeScheduledConnSpawn(fakeConn, &innerCalls),
+				backgroundTaskDrainer: func(ctx context.Context, done <-chan struct{}) (apiv1.ScheduleStatus, string) {
+					drainerCalled = true
+					// done channel should already be closed
+					select {
+					case <-done:
+						return apiv1.ScheduleStatus_SCHEDULE_STATUS_OK, ""
+					default:
+						return apiv1.ScheduleStatus_SCHEDULE_STATUS_WARN, "done not closed"
+					}
+				},
+			}
+			status, msg = daemon.executeScheduledTurn(context.Background(), &apiv1.ScheduledTurnRequest{
+				RequestId: "req-drain-ok",
+				Page:      "test-page",
+				Prompt:    "background work",
+			})
+		})
+
+		It("should return SCHEDULE_STATUS_OK", func() {
+			Expect(status).To(Equal(apiv1.ScheduleStatus_SCHEDULE_STATUS_OK))
+		})
+
+		It("should return an empty error message", func() {
+			Expect(msg).To(BeEmpty())
+		})
+
+		It("should call the injected backgroundTaskDrainer", func() {
+			Expect(drainerCalled).To(BeTrue())
+		})
+
+		It("should call cleanup inner logic exactly once despite two outer calls", func() {
+			// executeScheduledTurn calls cleanup() explicitly then via defer —
+			// the sync.Once inside fakeScheduledConnSpawn ensures the inner
+			// operation only runs once.
+			Expect(atomic.LoadInt32(&innerCalls)).To(Equal(int32(1)))
+		})
+	})
+
+	Describe("when spawn and prompt succeed and the parent context is cancelled before drain", func() {
+		var (
+			status apiv1.ScheduleStatus
+			msg    string
+		)
+
+		BeforeEach(func() {
+			var innerCalls int32
+			fakeConn := newFakeScheduledConn()
+			// doneCh stays open so the drain sees only the cancelled ctx
+
+			ctx, cancel := context.WithCancel(context.Background())
+			cancel() // pre-cancel so drain immediately detects shutdown
+
+			daemon := &poolDaemon{
+				scheduledTurnSpawnFn: fakeScheduledConnSpawn(fakeConn, &innerCalls),
+				backgroundTaskDrainer: func(ctx context.Context, done <-chan struct{}) (apiv1.ScheduleStatus, string) {
+					if ctx.Err() != nil {
+						return apiv1.ScheduleStatus_SCHEDULE_STATUS_ERROR, "shutting down before background tasks completed"
+					}
+					return apiv1.ScheduleStatus_SCHEDULE_STATUS_OK, ""
+				},
+			}
+			status, msg = daemon.executeScheduledTurn(ctx, &apiv1.ScheduledTurnRequest{
+				RequestId: "req-drain-error",
+				Page:      "test-page",
+				Prompt:    "background work",
+			})
+		})
+
+		It("should return SCHEDULE_STATUS_ERROR", func() {
+			Expect(status).To(Equal(apiv1.ScheduleStatus_SCHEDULE_STATUS_ERROR))
+		})
+
+		It("should mention shutting down in the error message", func() {
+			Expect(msg).To(ContainSubstring("shutting down"))
 		})
 	})
 })
