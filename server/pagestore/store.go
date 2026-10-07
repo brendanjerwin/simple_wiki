@@ -33,9 +33,9 @@ type Store struct {
 	// versionIDs generates history version ULIDs. One shared generator per
 	// Store is REQUIRED: the monotonic entropy that keeps same-millisecond
 	// ULIDs sorted by creation order only works within a single generator
-	// instance. Constructing a fresh generator per capture (the original
-	// bug) produced out-of-order version IDs, which ListVersions then read
-	// back filename-descending — mis-ordering history and flaking the
+	// instance. Constructing a fresh generator per capture produces
+	// out-of-order version IDs, which ListVersions then reads back
+	// filename-descending — mis-ordering history and flaking the
 	// DiffVersions test.
 	versionIDs ulid.Generator
 
@@ -201,11 +201,9 @@ func (s *Store) ModifyOrCreatePage(identifier string, identity wikipage.Identity
 	// and the page hasn't opted out of history via frontmatter, save the
 	// outgoing state as a version snapshot before overwriting.
 	if currentText != "" && currentText != newText && !shouldSkipHistoryCapture(currentText) {
-		if captureErr := s.captureVersionLockedWithSource(identifier, currentText, identity, source); captureErr != nil {
-			// History capture failure must not block the live write.
-			// The write is the source of truth; history is best-effort.
-			// TODO: log the capture failure once we have a logger on Store.
-		}
+		// History capture failure must not block the live write.
+		// The write is the source of truth; history is best-effort.
+		_ = s.captureVersionLockedWithSource(identifier, currentText, identity, source) //nolint:errcheck // nosemgrep: go.error-discarded-with-blank-identifier
 	}
 
 	return s.writeRawTextLocked(identifier, newText)

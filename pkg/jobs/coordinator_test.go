@@ -90,23 +90,31 @@ var _ = Describe("JobQueueCoordinator", func() {
 	})
 
 	Describe("when getting all active queues", func() {
-		It("should return correct number of active queues", func() {
-			// Enqueue jobs - queues are auto-registered
-			Expect(coordinator.EnqueueJob(&jobs.MockJob{Name: "Queue1"})).To(Succeed())
-			Expect(coordinator.EnqueueJob(&jobs.MockJob{Name: "Queue3"})).To(Succeed())
+		var blockingJob1, blockingJob2 *jobs.BlockingMockJob
+		var activeQueues []*jobs.QueueStats
 
-			// Check immediately after enqueueing, before jobs complete
-			activeQueues := coordinator.GetActiveQueues()
+		BeforeEach(func() {
+			blockingJob1 = jobs.NewBlockingMockJob("Queue1")
+			blockingJob2 = jobs.NewBlockingMockJob("Queue3")
+
+			Expect(coordinator.EnqueueJob(blockingJob1)).To(Succeed())
+			Expect(coordinator.EnqueueJob(blockingJob2)).To(Succeed())
+
+			// Capture while jobs are still blocking — IsActive is set synchronously
+			// during EnqueueJob before the worker goroutine runs.
+			activeQueues = coordinator.GetActiveQueues()
+		})
+
+		AfterEach(func() {
+			blockingJob1.Release()
+			blockingJob2.Release()
+		})
+
+		It("should return correct number of active queues", func() {
 			Expect(len(activeQueues)).To(Equal(2))
 		})
 
 		It("should return only active queues", func() {
-			// Enqueue jobs - queues are auto-registered
-			Expect(coordinator.EnqueueJob(&jobs.MockJob{Name: "Queue1"})).To(Succeed())
-			Expect(coordinator.EnqueueJob(&jobs.MockJob{Name: "Queue3"})).To(Succeed())
-
-			// Check immediately after enqueueing, before jobs complete
-			activeQueues := coordinator.GetActiveQueues()
 			queueNames := make([]string, len(activeQueues))
 			for i, stats := range activeQueues {
 				queueNames[i] = stats.QueueName

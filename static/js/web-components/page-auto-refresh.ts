@@ -51,7 +51,7 @@ export class PageAutoRefresh extends LitElement {
 
     // Only start watching if we have a page name
     if (this.pageName) {
-      this.startWatching();
+      void this.startWatching();
     }
   }
 
@@ -67,7 +67,7 @@ export class PageAutoRefresh extends LitElement {
     if (changedProperties.has('pageName')) {
       this.stopWatching();
       if (this.pageName) {
-        this.startWatching();
+        void this.startWatching();
       }
     }
   }
@@ -75,7 +75,7 @@ export class PageAutoRefresh extends LitElement {
   private handleVisibilityChange(): void {
     if (document.visibilityState === 'visible' && this.pageName && !this.isWatching) {
       // Tab woke up and stream is dead — restart
-      this.startWatching();
+      void this.startWatching();
     }
   }
 
@@ -224,7 +224,7 @@ export class PageAutoRefresh extends LitElement {
   private dispatchPageStatusEvent(): void {
     this.dispatchEvent(new CustomEvent('page-status-changed', {
       detail: {
-        page: this.pageName,
+        pageName: this.pageName,
         versionHash: this.currentHash,
         lastRefreshTime: this.lastRefreshTime,
         isWatching: this.isWatching,

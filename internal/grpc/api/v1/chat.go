@@ -100,7 +100,7 @@ func (p *ToolCallPromotion) TrackStart(bufManager ChatBufferManager, toolCallID,
 // and, if the task was already promoted, broadcasts a final background task event.
 // The lock is released before calling NotifyBackgroundTask to avoid blocking
 // promotion tracking on slow subscriber notifications.
-func (p *ToolCallPromotion) TrackComplete(bufManager ChatBufferManager, toolCallID, status, detail string) {
+func (p *ToolCallPromotion) TrackComplete(bufManager ChatBufferManager, toolCallID, toolStatus, detail string) {
 	p.mu.Lock()
 	entry, ok := p.pending[toolCallID]
 	if !ok {
@@ -114,7 +114,7 @@ func (p *ToolCallPromotion) TrackComplete(bufManager ChatBufferManager, toolCall
 		MessageID:   entry.messageID,
 		ToolCallID:  toolCallID,
 		Title:       entry.title,
-		Status:      status,
+		Status:      toolStatus,
 		Detail:      detail,
 		StartedAtMs: entry.startedAt.UnixMilli(),
 	}
@@ -350,54 +350,70 @@ func bufferEventToProto(event chatbuffer.Event) *apiv1.ChatEvent {
 			},
 		}
 	case chatbuffer.EventTypeToolCall:
-		return &apiv1.ChatEvent{
-			Event: &apiv1.ChatEvent_ToolCall{
-				ToolCall: &apiv1.ChatToolCall{
-					MessageId:  event.ToolCall.MessageID,
-					ToolCallId: event.ToolCall.ToolCallID,
-					Title:      event.ToolCall.Title,
-					Status:     event.ToolCall.Status,
-					Kind:       event.ToolCall.Kind,
-					Detail:     event.ToolCall.Detail,
-				},
-			},
-		}
+		return toolCallEventToProto(event.ToolCall)
 	case chatbuffer.EventTypePlan:
 		return planEventToProto(event.Plan)
 	case chatbuffer.EventTypeTurnStatus:
-		return &apiv1.ChatEvent{
-			Event: &apiv1.ChatEvent_TurnStatus{
-				TurnStatus: &apiv1.ChatTurnStatus{
-					Page:   event.TurnStatus.Page,
-					Active: event.TurnStatus.Active,
-				},
-			},
-		}
+		return turnStatusEventToProto(event.TurnStatus)
 	case chatbuffer.EventTypePermissionRequest:
 		return permissionRequestEventToProto(event.PermissionRequest)
 	case chatbuffer.EventTypeCleared:
-		return &apiv1.ChatEvent{
-			Event: &apiv1.ChatEvent_ChatCleared{
-				ChatCleared: &apiv1.ChatCleared{
-					Page: event.Cleared.Page,
-				},
-			},
-		}
+		return clearedEventToProto(event.Cleared)
 	case chatbuffer.EventTypeBackgroundTask:
-		return &apiv1.ChatEvent{
-			Event: &apiv1.ChatEvent_BackgroundTask{
-				BackgroundTask: &apiv1.ChatBackgroundTask{
-					MessageId:   event.BackgroundTask.MessageID,
-					ToolCallId:  event.BackgroundTask.ToolCallID,
-					Title:       event.BackgroundTask.Title,
-					Status:      event.BackgroundTask.Status,
-					Detail:      event.BackgroundTask.Detail,
-					StartedAtMs: event.BackgroundTask.StartedAtMs,
-				},
-			},
-		}
+		return backgroundTaskEventToProto(event.BackgroundTask)
 	default:
 		return nil
+	}
+}
+
+func toolCallEventToProto(tc *chatbuffer.ToolCallEvent) *apiv1.ChatEvent {
+	return &apiv1.ChatEvent{
+		Event: &apiv1.ChatEvent_ToolCall{
+			ToolCall: &apiv1.ChatToolCall{
+				MessageId:  tc.MessageID,
+				ToolCallId: tc.ToolCallID,
+				Title:      tc.Title,
+				Status:     tc.Status,
+				Kind:       tc.Kind,
+				Detail:     tc.Detail,
+			},
+		},
+	}
+}
+
+func turnStatusEventToProto(ts *chatbuffer.TurnStatusEvent) *apiv1.ChatEvent {
+	return &apiv1.ChatEvent{
+		Event: &apiv1.ChatEvent_TurnStatus{
+			TurnStatus: &apiv1.ChatTurnStatus{
+				Page:   ts.Page,
+				Active: ts.Active,
+			},
+		},
+	}
+}
+
+func clearedEventToProto(c *chatbuffer.ClearedEvent) *apiv1.ChatEvent {
+	return &apiv1.ChatEvent{
+		Event: &apiv1.ChatEvent_ChatCleared{
+			ChatCleared: &apiv1.ChatCleared{
+				Page: c.Page,
+			},
+		},
+	}
+}
+
+func backgroundTaskEventToProto(bt *chatbuffer.BackgroundTaskEvent) *apiv1.ChatEvent {
+	return &apiv1.ChatEvent{
+		Event: &apiv1.ChatEvent_BackgroundTask{
+			BackgroundTask: &apiv1.ChatBackgroundTask{
+				MessageId:   bt.MessageID,
+				ToolCallId:  bt.ToolCallID,
+				Title:       bt.Title,
+				Status:      bt.Status,
+				Detail:      bt.Detail,
+				StartedAtMs: bt.StartedAtMs,
+			},
+		},
 	}
 }
 

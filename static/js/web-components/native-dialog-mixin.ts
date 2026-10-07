@@ -29,42 +29,53 @@ function isRendered(el: HTMLElement): boolean {
 }
 
 /**
- * Restores keyboard focus after a dialog closes.
+ * Resolves the element that should receive focus when a dialog closes.
  *
- * If `target` is visible and focusable, it is focused directly.  If the
- * target is hidden — e.g., it lives inside a CSS hover menu or a click-
- * toggled dropdown that uses `display:none` — the function walks up the DOM
- * tree to find the nearest rendered ancestor, then focuses the first
- * focusable element within that ancestor's subtree.
+ * Returns the target itself when it is rendered and keyboard-focusable.
+ * Otherwise walks up the DOM tree to find the nearest rendered ancestor,
+ * then returns the first visible focusable descendant of that ancestor.
  *
- * This correctly handles the pattern where a menu item opens a modal dialog:
- * the menu closes while the dialog is open, so restoring focus to the
- * specific menu item is impossible.  Instead, focus lands on the visible
- * menu trigger (e.g., the top-level menu button), which is the accessible
- * fallback recommended by ARIA practices.
+ * This is intentionally a pure "find" operation — it does not call focus().
+ * Callers should invoke this BEFORE closing the dialog (while the backdrop
+ * still suppresses CSS :hover state) and then call .focus() on the result
+ * after dialog.close().  This prevents a race where removing the backdrop
+ * synchronously re-activates :hover on underlying hover-menus, making a
+ * hidden menu item appear focusable and causing focus to land on the wrong
+ * element.
  */
-export function restoreFocus(target: Element | null): void {
-  if (!(target instanceof HTMLElement)) return;
+export function findRestoreFocusTarget(target: Element | null): HTMLElement | null {
+  if (!(target instanceof HTMLElement)) return null;
 
   if (isRendered(target) && target.matches(FOCUSABLE_SELECTORS)) {
-    target.focus();
-    return;
+    return target;
   }
 
   // Target is hidden or not keyboard-focusable.  Walk up to find the nearest
-  // rendered ancestor, then focus its first visible focusable descendant.
+  // rendered ancestor, then return its first visible focusable descendant.
   let ancestor: HTMLElement | null = target.parentElement;
   while (ancestor) {
     if (isRendered(ancestor)) {
       for (const candidate of ancestor.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTORS)) {
         if (isRendered(candidate)) {
-          candidate.focus();
-          return;
+          return candidate;
         }
       }
     }
     ancestor = ancestor.parentElement;
   }
+  return null;
+}
+
+/**
+ * Convenience wrapper that finds and immediately focuses the restore target.
+ *
+ * NOTE: if the dialog uses a backdrop (e.g., native showModal()), call
+ * findRestoreFocusTarget() BEFORE dialog.close() and focus the result
+ * afterward to avoid a hover-state race condition.  See findRestoreFocusTarget
+ * for details.  Use this wrapper only when no backdrop is involved.
+ */
+export function restoreFocus(target: Element | null): void {
+  findRestoreFocusTarget(target)?.focus();
 }
 
 /**
@@ -177,8 +188,11 @@ export function NativeDialogMixin<T extends Constructor>(Base: T) {
           this._previouslyFocusedElement = focused;
           dialog.showModal();
         } else if (!this.open && dialog.open) {
+          // Pre-compute the stable restore target before the backdrop disappears.
+          // See findRestoreFocusTarget() for why this ordering matters.
+          const restoreTarget = findRestoreFocusTarget(this._previouslyFocusedElement);
           dialog.close();
-          restoreFocus(this._previouslyFocusedElement);
+          restoreTarget?.focus();
           this._previouslyFocusedElement = null;
         }
       }

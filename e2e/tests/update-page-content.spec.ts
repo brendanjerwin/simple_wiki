@@ -26,7 +26,7 @@ async function callPageAPI(
 // UpdatePageContent in full-replacement mode to reset the body — no frontmatter required.
 async function setupTestPage(request: APIRequestContext, markdown: string): Promise<void> {
   const createResp = await callPageAPI(request, 'CreatePage', {
-    pageName: TEST_PAGE,
+    page: TEST_PAGE,
     contentMarkdown: markdown,
   });
   if (createResp.ok()) {
@@ -37,7 +37,7 @@ async function setupTestPage(request: APIRequestContext, markdown: string): Prom
   // Page already exists (CreatePage returns HTTP 200 with success=false for existing pages)
   // or the HTTP request itself failed — reset body with full-replacement UpdatePageContent.
   const resetResp = await callPageAPI(request, 'UpdatePageContent', {
-    pageName: TEST_PAGE,
+    page: TEST_PAGE,
     newContentMarkdown: markdown,
   });
   expect(resetResp.ok()).toBeTruthy();
@@ -47,7 +47,7 @@ async function setupTestPage(request: APIRequestContext, markdown: string): Prom
 async function readTestPage(
   request: APIRequestContext,
 ): Promise<{ contentMarkdown: string; versionHash: string }> {
-  const resp = await callPageAPI(request, 'ReadPage', { pageName: TEST_PAGE });
+  const resp = await callPageAPI(request, 'ReadPage', { page: TEST_PAGE });
   expect(resp.ok()).toBeTruthy();
   const body = await resp.json() as { contentMarkdown: string; versionHash: string };
   return body;
@@ -68,7 +68,7 @@ test.describe('UpdatePageContent find-and-replace behavior', () => {
     const newContent = '# Section One\n\nUpdated content here.';
 
     const resp = await callPageAPI(request, 'UpdatePageContent', {
-      pageName: TEST_PAGE,
+      page: TEST_PAGE,
       oldContentMarkdown: oldContent,
       newContentMarkdown: newContent,
     });
@@ -87,7 +87,7 @@ test.describe('UpdatePageContent find-and-replace behavior', () => {
 
   test('no-match case: returns not_found error when old_content_markdown is absent from the page', async ({ request }) => {
     const resp = await callPageAPI(request, 'UpdatePageContent', {
-      pageName: TEST_PAGE,
+      page: TEST_PAGE,
       oldContentMarkdown: '# Section That Does Not Exist',
       newContentMarkdown: '# Replacement',
     });
@@ -110,7 +110,7 @@ test.describe('UpdatePageContent find-and-replace behavior', () => {
     // Advance the page via find-and-replace so the captured hash is now stale.
     const intermediateContent = '# Intermediate Edit\n\nThis update makes the original hash stale.';
     const intermediateResp = await callPageAPI(request, 'UpdatePageContent', {
-      pageName: TEST_PAGE,
+      page: TEST_PAGE,
       oldContentMarkdown: INITIAL_MARKDOWN,
       newContentMarkdown: intermediateContent,
     });
@@ -118,7 +118,7 @@ test.describe('UpdatePageContent find-and-replace behavior', () => {
 
     // Attempt a find-and-replace with the stale hash — this must be rejected.
     const conflictResp = await callPageAPI(request, 'UpdatePageContent', {
-      pageName: TEST_PAGE,
+      page: TEST_PAGE,
       oldContentMarkdown: intermediateContent,
       expectedVersionHash: versionHash,
       newContentMarkdown: '# Conflicting Edit',
@@ -136,14 +136,14 @@ test.describe('UpdatePageContent find-and-replace behavior', () => {
 
     // Advance the page with a full-replacement so the captured hash is now stale.
     const advanceResp = await callPageAPI(request, 'UpdatePageContent', {
-      pageName: TEST_PAGE,
+      page: TEST_PAGE,
       newContentMarkdown: '# Intermediate Full Replacement\n\nThis makes the original hash stale.',
     });
     expect(advanceResp.ok()).toBeTruthy();
 
     // Attempt a full-replacement with the stale hash — this must be rejected.
     const conflictResp = await callPageAPI(request, 'UpdatePageContent', {
-      pageName: TEST_PAGE,
+      page: TEST_PAGE,
       expectedVersionHash: versionHash,
       newContentMarkdown: '# Conflicting Full Replacement',
     });
@@ -159,7 +159,7 @@ test.describe('UpdatePageContent find-and-replace behavior', () => {
     const { versionHash: originalHash, contentMarkdown } = await readTestPage(request);
 
     const resp = await callPageAPI(request, 'UpdatePageContent', {
-      pageName: TEST_PAGE,
+      page: TEST_PAGE,
       oldContentMarkdown: contentMarkdown,
       expectedVersionHash: originalHash,
       newContentMarkdown: '# Section One\n\nUpdated with correct hash.',
@@ -182,7 +182,7 @@ test.describe('UpdatePageContent find-and-replace behavior', () => {
     const { versionHash: originalHash } = await readTestPage(request);
 
     const resp = await callPageAPI(request, 'UpdatePageContent', {
-      pageName: TEST_PAGE,
+      page: TEST_PAGE,
       expectedVersionHash: originalHash,
       newContentMarkdown: '# Fully replaced with correct hash.',
     });

@@ -371,6 +371,16 @@ func (s *Site) onInitialIndexingComplete() {
 
 // InitializeIndexing initializes the site's indexes.
 func (s *Site) InitializeIndexing() error {
+	if err := s.initIndexesAndCoordinators(); err != nil {
+		return err
+	}
+	s.scheduleBackgroundJobs()
+	s.startMigrationJobs()
+	return s.startInitialIndexing()
+}
+
+// initIndexesAndCoordinators sets up the search indexes, job coordinators, and agent infrastructure.
+func (s *Site) initIndexesAndCoordinators() error {
 	frontmatterIndex := frontmatter.NewIndex(s)
 	bleveIndex, err := bleve.NewIndex(s, frontmatterIndex)
 	if err != nil {
@@ -384,11 +394,9 @@ func (s *Site) InitializeIndexing() error {
 	// the gRPC handlers check for a nil searcher and return Unavailable.
 	s.HistoryIndexQueryer = nil
 
-	// Create new job queue coordinator and index coordinator
 	s.JobQueueCoordinator = jobs.NewJobQueueCoordinator(s.Logger)
 	s.IndexCoordinator = index.NewIndexCoordinator(s.JobQueueCoordinator, frontmatterIndex, bleveIndex)
 
-	// Create and start cron scheduler for periodic jobs
 	s.CronScheduler = jobs.NewCronScheduler(s.Logger)
 	s.CronScheduler.Start()
 
@@ -405,29 +413,27 @@ func (s *Site) InitializeIndexing() error {
 	s.AgentScheduleStore = NewAgentScheduleStore(s)
 	s.AgentChatContextStore = NewAgentChatContextStore(s)
 	s.AgentScheduleStore.SetBackgroundActivitySink(s.AgentChatContextStore)
+	return nil
+}
 
-	// Schedule inventory normalization job to run hourly at minute 0
-	// This creates pages for items listed in inventory.items that don't have their own pages,
-	// and generates an audit report of any inventory anomalies
-	_, err = ScheduleInventoryNormalization(s.CronScheduler, s, "0 0 * * * *")
-	if err != nil {
+// scheduleBackgroundJobs registers periodic maintenance jobs with the cron scheduler.
+func (s *Site) scheduleBackgroundJobs() {
+	if _, err := ScheduleInventoryNormalization(s.CronScheduler, s, "0 0 * * * *"); err != nil {
 		s.Logger.Warn("Failed to schedule inventory normalization job: %v", err)
 	} else {
 		s.Logger.Info("Inventory normalization job scheduled to run hourly")
 	}
 
-	// Schedule history decimation job to run daily at 3am. It thins old page
-	// versions per a GFS-style retention schedule.
 	decimationJob := pagestore.NewHistoryDecimationJob(s.ensureStore(), time.Time{})
 	if _, err := s.CronScheduler.Schedule("0 0 3 * * *", decimationJob); err != nil {
 		s.Logger.Warn("Failed to schedule history decimation job: %v", err)
 	} else {
 		s.Logger.Info("History decimation job scheduled to run daily at 3am")
 	}
+}
 
-	s.startMigrationJobs()
-
-	// Get all files that need to be indexed
+// startInitialIndexing enqueues background jobs to index all existing pages and history.
+func (s *Site) startInitialIndexing() error {
 	listing, err := s.DirectoryList()
 	if err != nil {
 		return fmt.Errorf("failed to list pages for indexing: %w", err)
@@ -440,39 +446,38 @@ func (s *Site) InitializeIndexing() error {
 		return nil
 	}
 
-	// Convert files to page identifiers
 	pageIdentifiers := make([]wikipage.PageIdentifier, len(listing.Entries))
 	for i, file := range listing.Entries {
 		pageIdentifiers[i] = wikipage.PageIdentifier(file.Name())
 	}
 
-	// Start background indexing with completion callback to chain the normalization job.
-	// Note: The callback executes asynchronously when all indexing jobs complete, not when this
-	// function returns. Error handling inside the callback is separate from the outer error check.
 	if err := s.IndexCoordinator.BulkEnqueuePagesWithCompletion(pageIdentifiers, index.Add, s.onInitialIndexingComplete); err != nil {
-		// This error means the bulk enqueue failed immediately - the callback won't run
 		s.Logger.Error("Failed to enqueue bulk indexing jobs: %v", err)
 	}
 	s.Logger.Info("Background indexing started for %d pages. Application is ready.", len(listing.Entries))
 
-	// Initial history index build placeholder. Walk __history__/ and log the
-	// directories that would be scanned once the Bleve-backed history index
-	// (index/history/) is wired in.
-	historyRoot := filepath.Join(s.PathToData, "__history__")
-	if entries, err := os.ReadDir(historyRoot); err == nil {
-		s.Logger.Info("Initial history index build would scan %d page history directories under %s", len(entries), historyRoot)
-		for _, entry := range entries {
-			if !entry.IsDir() {
-				continue
-			}
-			pageHistoryDir := filepath.Join(historyRoot, entry.Name())
-			s.Logger.Info("Would enqueue history index jobs for %s", pageHistoryDir)
-		}
-	} else if !os.IsNotExist(err) {
-		s.Logger.Warn("Failed to read history directory %s: %v", historyRoot, err)
-	}
-
+	s.logHistoryIndexPlaceholder()
 	return nil
+}
+
+// logHistoryIndexPlaceholder logs the page history directories that would be scanned
+// once the Bleve-backed history index is wired in.
+func (s *Site) logHistoryIndexPlaceholder() {
+	historyRoot := filepath.Join(s.PathToData, "__history__")
+	entries, err := os.ReadDir(historyRoot)
+	if err != nil {
+		if !os.IsNotExist(err) {
+			s.Logger.Warn("Failed to read history directory %s: %v", historyRoot, err)
+		}
+		return
+	}
+	s.Logger.Info("Initial history index build would scan %d page history directories under %s", len(entries), historyRoot)
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		s.Logger.Info("Would enqueue history index jobs for %s", filepath.Join(historyRoot, entry.Name()))
+	}
 }
 
 // InitializeIndexingAndWait initializes indexing and waits for initial indexing to complete.
