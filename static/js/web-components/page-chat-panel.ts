@@ -501,7 +501,7 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
       this.openDrawer();
       this._restoreOpen = false;
     }
-    this.pollChatStatus();
+    void this.pollChatStatus();
     this.statusPollTimer = setInterval(() => this.pollChatStatus(), STATUS_POLL_INTERVAL_MS);
   }
 
@@ -534,7 +534,7 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
         this.messages = [];
         this.messagesById.clear();
         if (this.page && this._panelEverOpened) {
-          this.startStream();
+          void this.startStream();
         }
       }
     }
@@ -694,10 +694,10 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
     if (!this._panelEverOpened) {
       this._panelEverOpened = true;
       if (this.page) {
-        this.startStream();
+        void this.startStream();
       }
     }
-    this.updateComplete.then(() => {
+    void this.updateComplete.then(() => {
       this.scrollToBottom();
       this.focusInput();
     });
@@ -706,7 +706,7 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
   override closeDrawer(): void {
     super.closeDrawer();
     try { localStorage.setItem(STORAGE_KEY, 'false'); } catch { /* */ }
-    this.updateComplete.then(() => {
+    void this.updateComplete.then(() => {
       const fab = this.shadowRoot?.querySelector<HTMLElement>('.fab');
       if (fab && !fab.hidden) {
         fab.focus();
@@ -721,7 +721,7 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
   private _handleKeydown(e: KeyboardEvent) {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
-      this.sendMessage();
+      void this.sendMessage();
     }
   }
 
@@ -731,7 +731,7 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
   }
 
   private _handleSendClick() {
-    this.sendMessage();
+    void this.sendMessage();
   }
 
   private async _handleStopClick() {
@@ -963,11 +963,11 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
     if (document.visibilityState !== 'visible') return;
 
     if (this.drawerOpen && !this.userHasScrolled) {
-      this.updateComplete.then(() => this.scrollToBottom());
+      void this.updateComplete.then(() => this.scrollToBottom());
     }
 
     if (this.page && this._panelEverOpened && this.streamState !== 'connected') {
-      this.startStream();
+      void this.startStream();
     }
   }
 
