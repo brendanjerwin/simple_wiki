@@ -347,7 +347,19 @@ func (d *poolDaemon) executeScheduledTurn(ctx context.Context, req *apiv1.Schedu
 		}
 		return apiv1.ScheduleStatus_SCHEDULE_STATUS_ERROR, fmt.Sprintf("prompt failed: %v", promptErr)
 	}
-	return apiv1.ScheduleStatus_SCHEDULE_STATUS_OK, ""
+
+	// Foreground turn completed. Close stdin to signal the agent we are done
+	// sending prompts, then wait for it to exit naturally. Background sub-agents
+	// launched with run_in_background live inside the agent process; giving the
+	// process a bounded drain window lets those tasks finish before the process
+	// is killed by cancelTurn (deferred above).
+	cleanup() // idempotent; deferred call becomes a no-op
+
+	drain := d.drainBackgroundTasks
+	if d.backgroundTaskDrainer != nil {
+		drain = d.backgroundTaskDrainer
+	}
+	return drain(ctx, conn.connection.Done())
 }
 
 // scheduledEphemeralConnection bundles the bits the caller needs to drive one
@@ -400,16 +412,19 @@ func (d *poolDaemon) spawnEphemeralAgent(ctx context.Context, client acp.Client,
 		return nil, fmt.Errorf("start agent: %w", startErr)
 	}
 
+	var cleanupOnce sync.Once
 	cleanup := func() {
-		// Closing stdin is the polite way to ask the agent to exit; if it does
-		// not, the cancelled context will eventually kill it via
-		// CommandContext.
-		_ = stdinPipe.Close()
-		// Best-effort wait so we don't leak zombies. The wait races with the
-		// kill, which is fine.
-		go func() {
-			_ = cmd.Wait()
-		}()
+		cleanupOnce.Do(func() {
+			// Closing stdin is the polite way to ask the agent to exit; if it
+			// does not, the cancelled context will eventually kill it via
+			// CommandContext.
+			_ = stdinPipe.Close()
+			// Best-effort wait so we don't leak zombies. The wait races with
+			// the kill, which is fine.
+			go func() {
+				_ = cmd.Wait()
+			}()
+		})
 	}
 
 	conn := acp.NewClientSideConnection(client, stdinPipe, stdoutPipe)
@@ -462,6 +477,46 @@ func (d *poolDaemon) spawnEphemeralForScheduledTurn(ctx context.Context, page, r
 		sessionID:  agent.sessionID,
 		client:     client,
 	}, agent.cleanup, nil
+}
+
+// defaultBackgroundTaskDrainTimeout is the maximum time executeScheduledTurn
+// waits for the agent process to exit naturally after the foreground turn
+// completes. It gives background sub-agents (launched via run_in_background)
+// a bounded window to finish before the process is force-killed by
+// cancelTurn. Deployments that expect very long background work can override
+// poolDaemon.backgroundTaskDrainTimeout.
+const defaultBackgroundTaskDrainTimeout = 5 * time.Minute
+
+// drainBackgroundTasks closes the implicit drain window opened by
+// executeScheduledTurn after a successful Prompt(). It blocks until either
+// the agent process exits naturally (done closes) or the timeout expires.
+//
+//   - done closes before timeout → SCHEDULE_STATUS_OK (all work finished)
+//   - timeout expires, ctx still valid → SCHEDULE_STATUS_WARN (background
+//     sub-agents may have been torn down while still running)
+//   - timeout expires, ctx cancelled → SCHEDULE_STATUS_ERROR (pool shutdown)
+func (d *poolDaemon) drainBackgroundTasks(ctx context.Context, done <-chan struct{}) (apiv1.ScheduleStatus, string) {
+	timeout := d.backgroundTaskDrainTimeout
+	if timeout <= 0 {
+		timeout = defaultBackgroundTaskDrainTimeout
+	}
+
+	drainCtx, cancelDrain := context.WithTimeout(ctx, timeout)
+	defer cancelDrain()
+
+	select {
+	case <-done:
+		return apiv1.ScheduleStatus_SCHEDULE_STATUS_OK, ""
+	case <-drainCtx.Done():
+		if ctx.Err() != nil {
+			return apiv1.ScheduleStatus_SCHEDULE_STATUS_ERROR, "shutting down before background tasks completed"
+		}
+		return apiv1.ScheduleStatus_SCHEDULE_STATUS_WARN, fmt.Sprintf(
+			"agent process did not exit within the %s background-task drain window after the foreground turn completed; "+
+				"background sub-agents may have been torn down while still running",
+			timeout,
+		)
+	}
 }
 
 // scheduledTurnUnitPrefix is the unit-name prefix for ephemeral

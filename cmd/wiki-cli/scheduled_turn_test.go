@@ -632,6 +632,84 @@ var _ = Describe("scheduledTurnClient unsupported acp.Client methods", func() {
 	})
 })
 
+var _ = Describe("poolDaemon drainBackgroundTasks", func() {
+	Describe("when the agent connection closes before the drain window expires", func() {
+		var (
+			status apiv1.ScheduleStatus
+			msg    string
+		)
+
+		BeforeEach(func() {
+			daemon := &poolDaemon{
+				backgroundTaskDrainTimeout: 5 * time.Second,
+			}
+			doneCh := make(chan struct{})
+			close(doneCh)
+			status, msg = daemon.drainBackgroundTasks(context.Background(), doneCh)
+		})
+
+		It("should return SCHEDULE_STATUS_OK", func() {
+			Expect(status).To(Equal(apiv1.ScheduleStatus_SCHEDULE_STATUS_OK))
+		})
+
+		It("should return an empty error message", func() {
+			Expect(msg).To(BeEmpty())
+		})
+	})
+
+	Describe("when the drain window expires before the agent exits", func() {
+		var (
+			status apiv1.ScheduleStatus
+			msg    string
+		)
+
+		BeforeEach(func() {
+			daemon := &poolDaemon{
+				backgroundTaskDrainTimeout: 10 * time.Millisecond,
+			}
+			neverDone := make(chan struct{}) // never closed
+			status, msg = daemon.drainBackgroundTasks(context.Background(), neverDone)
+		})
+
+		It("should return SCHEDULE_STATUS_WARN", func() {
+			Expect(status).To(Equal(apiv1.ScheduleStatus_SCHEDULE_STATUS_WARN))
+		})
+
+		It("should mention background tasks in the error message", func() {
+			Expect(msg).To(ContainSubstring("background"))
+		})
+
+		It("should mention the drain window duration in the error message", func() {
+			Expect(msg).To(ContainSubstring("10ms"))
+		})
+	})
+
+	Describe("when the parent context is cancelled before the drain window expires", func() {
+		var (
+			status apiv1.ScheduleStatus
+			msg    string
+		)
+
+		BeforeEach(func() {
+			daemon := &poolDaemon{
+				backgroundTaskDrainTimeout: 5 * time.Second,
+			}
+			ctx, cancel := context.WithCancel(context.Background())
+			cancel() // pre-cancel to simulate shutdown
+			neverDone := make(chan struct{})
+			status, msg = daemon.drainBackgroundTasks(ctx, neverDone)
+		})
+
+		It("should return SCHEDULE_STATUS_ERROR", func() {
+			Expect(status).To(Equal(apiv1.ScheduleStatus_SCHEDULE_STATUS_ERROR))
+		})
+
+		It("should mention shutting down in the error message", func() {
+			Expect(msg).To(ContainSubstring("shutting down"))
+		})
+	})
+})
+
 var _ = Describe("poolDaemon scheduled turn shutdown drain", func() {
 	When("the scheduled-turn stream sends one request and closes", func() {
 		var (

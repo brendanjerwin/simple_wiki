@@ -206,6 +206,16 @@ type poolDaemon struct {
 	versionCheckInterval time.Duration
 	versionMismatch      func() bool
 	restartRequested     atomic.Bool
+
+	// backgroundTaskDrainTimeout is how long executeScheduledTurn waits for
+	// the agent process to exit naturally after the foreground turn completes,
+	// giving background sub-agents time to finish. Zero uses
+	// defaultBackgroundTaskDrainTimeout.
+	backgroundTaskDrainTimeout time.Duration
+
+	// backgroundTaskDrainer is the injectable seam used by tests to replace the
+	// default drainBackgroundTasks implementation. nil = use the default.
+	backgroundTaskDrainer func(ctx context.Context, done <-chan struct{}) (apiv1.ScheduleStatus, string)
 }
 
 // sanitizeUnitName converts a page identifier into a valid systemd unit name suffix.
