@@ -1042,7 +1042,8 @@ var _ = Describe("requestBaseURL", func() {
 })
 
 var _ = Describe("sanitizePageName", func() {
-	DescribeTable("strips leading slashes and backslashes to prevent open redirects",
+	DescribeTable(
+		"strips leading slashes and backslashes to prevent open redirects",
 		func(input, expected string) {
 			Expect(server.SanitizePageNameForTesting(input)).To(Equal(expected))
 		},
@@ -1156,7 +1157,8 @@ var _ = Describe("Open redirect prevention", func() {
 })
 
 var _ = Describe("contentTypeFromName", func() {
-	DescribeTable("returns correct MIME type",
+	DescribeTable(
+		"returns correct MIME type",
 		func(filename, expectedType string) {
 			Expect(server.ContentTypeFromNameForTesting(filename)).To(Equal(expectedType))
 		},
@@ -1554,9 +1556,9 @@ var _ = Describe("page-chat-panel template rendering", func() {
 
 			BeforeEach(func() {
 				// site.ChatPersona is the zero value (""), matching the Go struct default.
-				// In production, main.go sets a default of "Dorium" via the CLI flag.
+				// In production, main.go sets a default via the CLI flag.
 				// This test verifies the template correctly passes through whatever ChatPersona is set to.
-				site.ChatPersona = "Dorium"
+				site.ChatPersona = "TestPersona"
 				router = site.GinRouter()
 				req, err := http.NewRequest(http.MethodGet, "/testpage/view", nil)
 				Expect(err).NotTo(HaveOccurred())
@@ -1565,7 +1567,7 @@ var _ = Describe("page-chat-panel template rendering", func() {
 			})
 
 			It("should render page-chat-panel with the default persona attribute", func() {
-				Expect(responseBody).To(ContainSubstring(`persona="Dorium"`))
+				Expect(responseBody).To(ContainSubstring(`persona="TestPersona"`))
 			})
 		})
 	})

@@ -54,76 +54,94 @@ func Score(results []CaseResult, cfg Config, cases []Case) ScoreSummary {
 		PerTool:      make(map[string]ToolScore),
 	}
 
-	caseByID := make(map[string]Case, len(cases))
-	for _, c := range cases {
-		caseByID[c.ID] = c
-	}
-
-	argsSum := 0.0
-	argsCount := 0
+	caseByID := indexCasesByID(cases)
+	argsSum, argsCount := 0.0, 0
 
 	for _, r := range results {
-		// For exclusion cases: avoiding the excluded tool counts as a hit.
-		// The model can't "decline" in a meaningful way when there are 105
-		// tools — picking a plausible non-excluded alternative is the right
-		// behavior, not a failure.
-		isHit := r.ToolMatch
-		if r.ExcludedTool != "" && r.ExclusionOK && !r.ToolMatch {
-			isHit = true
-		}
-		if isHit {
-			s.ToolMatchCount++
-		}
-		if r.ExcludedTool != "" {
-			s.ExclusionCount++
-			if r.ExclusionOK {
-				s.ExclusionOK++
-			}
-		}
-		if r.ArgsMatch > 0 {
-			argsSum += r.ArgsMatch
-			argsCount++
-		}
-		s.TotalCostUSD += r.CostUSD
-		s.TotalPromptTokens += r.PromptTokens
-		s.TotalCompletionTokens += r.CompletionTokens
-		// Per-service breakdown
+		accumulateResultCounts(&s, r, &argsSum, &argsCount)
 		if c, ok := caseByID[r.CaseID]; ok {
-			for _, svc := range c.Services {
-				ss := s.PerService[svc]
-				ss.Cases++
-				if r.ToolMatch || (r.ExcludedTool != "" && r.ExclusionOK) {
-					ss.Correct++
-				}
-				if ss.Cases > 0 {
-					ss.Accuracy = float64(ss.Correct) / float64(ss.Cases)
-				}
-				s.PerService[svc] = ss
-			}
+			accumulateServiceBreakdown(&s, r, c.Services)
 		}
-
-		// Per-tool breakdown (keyed by expected tool, or excluded tool for exclusion cases)
-		toolKey := r.ExpectedTool
-		if toolKey == "" && r.ExcludedTool != "" {
-			toolKey = r.ExcludedTool
-		}
-		if toolKey != "" {
-			ts := s.PerTool[toolKey]
-			ts.Cases++
-			if r.ToolMatch || (r.ExcludedTool != "" && r.ExclusionOK) {
-				ts.Correct++
-			}
-			if !r.ToolMatch && r.SelectedTool != "" {
-				ts.SelectedTool = r.SelectedTool // capture what the model picked instead
-			}
-			ts.IsExclusion = r.ExcludedTool != ""
-			if ts.Cases > 0 {
-				ts.Accuracy = float64(ts.Correct) / float64(ts.Cases)
-			}
-			s.PerTool[toolKey] = ts
-		}
+		accumulateToolBreakdown(&s, r)
 	}
 
+	finalizeRates(&s, argsSum, argsCount)
+	return s
+}
+
+// indexCasesByID builds a lookup map from case ID to Case.
+func indexCasesByID(cases []Case) map[string]Case {
+	m := make(map[string]Case, len(cases))
+	for _, c := range cases {
+		m[c.ID] = c
+	}
+	return m
+}
+
+// accumulateResultCounts updates top-level counters from one result.
+func accumulateResultCounts(s *ScoreSummary, r CaseResult, argsSum *float64, argsCount *int) {
+	// For exclusion cases: avoiding the excluded tool counts as a hit.
+	isHit := r.ToolMatch || (r.ExcludedTool != "" && r.ExclusionOK && !r.ToolMatch)
+	if isHit {
+		s.ToolMatchCount++
+	}
+	if r.ExcludedTool != "" {
+		s.ExclusionCount++
+		if r.ExclusionOK {
+			s.ExclusionOK++
+		}
+	}
+	if r.ArgsMatch > 0 {
+		*argsSum += r.ArgsMatch
+		*argsCount++
+	}
+	s.TotalCostUSD += r.CostUSD
+	s.TotalPromptTokens += r.PromptTokens
+	s.TotalCompletionTokens += r.CompletionTokens
+}
+
+// accumulateServiceBreakdown updates per-service scores for a result.
+func accumulateServiceBreakdown(s *ScoreSummary, r CaseResult, services []string) {
+	isCorrect := r.ToolMatch || (r.ExcludedTool != "" && r.ExclusionOK)
+	for _, svc := range services {
+		ss := s.PerService[svc]
+		ss.Cases++
+		if isCorrect {
+			ss.Correct++
+		}
+		if ss.Cases > 0 {
+			ss.Accuracy = float64(ss.Correct) / float64(ss.Cases)
+		}
+		s.PerService[svc] = ss
+	}
+}
+
+// accumulateToolBreakdown updates per-tool scores for a result.
+func accumulateToolBreakdown(s *ScoreSummary, r CaseResult) {
+	toolKey := r.ExpectedTool
+	if toolKey == "" && r.ExcludedTool != "" {
+		toolKey = r.ExcludedTool
+	}
+	if toolKey == "" {
+		return
+	}
+	ts := s.PerTool[toolKey]
+	ts.Cases++
+	if r.ToolMatch || (r.ExcludedTool != "" && r.ExclusionOK) {
+		ts.Correct++
+	}
+	if !r.ToolMatch && r.SelectedTool != "" {
+		ts.SelectedTool = r.SelectedTool
+	}
+	ts.IsExclusion = r.ExcludedTool != ""
+	if ts.Cases > 0 {
+		ts.Accuracy = float64(ts.Correct) / float64(ts.Cases)
+	}
+	s.PerTool[toolKey] = ts
+}
+
+// finalizeRates computes derived rate fields after all results are accumulated.
+func finalizeRates(s *ScoreSummary, argsSum float64, argsCount int) {
 	if s.CaseCount > 0 {
 		s.PrecisionAt1 = float64(s.ToolMatchCount) / float64(s.CaseCount)
 	}
@@ -133,8 +151,6 @@ func Score(results []CaseResult, cfg Config, cases []Case) ScoreSummary {
 	if argsCount > 0 {
 		s.AvgArgsMatch = argsSum / float64(argsCount)
 	}
-
-	return s
 }
 
 // CompareSummaries produces a markdown table comparing two ScoreSummaries.

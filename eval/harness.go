@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -187,7 +188,7 @@ func runOneCase(ctx context.Context, c Case, cfg Config, configLabel string) (Ca
 
 // buildUserMessage assembles the tool catalog + user message + page context
 // into the prompt the LLM sees.
-func buildUserMessage(surface ToolSurface, userSays string, context string) string {
+func buildUserMessage(surface ToolSurface, userSays string, pageContext string) string {
 	// Compact the tool catalog: name + description only (drop inputSchema for now
 	// to keep token costs manageable; can be toggled on later).
 	tools := make([]map[string]string, len(surface.Tools))
@@ -200,7 +201,7 @@ func buildUserMessage(surface ToolSurface, userSays string, context string) stri
 	catalog, _ := json.Marshal(tools)
 
 	var msg string
-	if context != "" {
+	if pageContext != "" {
 		msg = fmt.Sprintf(`Tool catalog:
 %s
 
@@ -211,7 +212,7 @@ You are the assistant for the following wiki page:
 User message: %q
 
 Select the single best tool and respond as JSON: {"tool": "<name>", "args": {...}}
-If no tool is appropriate, respond: {"tool": null}`, string(catalog), context, userSays)
+If no tool is appropriate, respond: {"tool": null}`, string(catalog), pageContext, userSays)
 	} else {
 		msg = fmt.Sprintf(`Tool catalog:
 %s
@@ -265,6 +266,8 @@ func extractJSON(raw string) string {
 			if depth == 0 {
 				return raw[start : i+1]
 			}
+		default:
+			// other characters are not brace delimiters; skip
 		}
 	}
 	return raw[start:]
@@ -288,38 +291,49 @@ func argsMatchScore(expected, actual map[string]any) float64 {
 
 // computeCost calculates the USD cost of one LLM call.
 func computeCost(model ModelConfig, promptTokens, completionTokens int) float64 {
-	return float64(promptTokens)*model.PromptCostPer1M/1_000_000 +
-		float64(completionTokens)*model.CompletionCostPer1M/1_000_000
+	const tokensPerMillion = 1_000_000
+	return float64(promptTokens)*model.PromptCostPer1M/tokensPerMillion +
+		float64(completionTokens)*model.CompletionCostPer1M/tokensPerMillion
+}
+
+// openRouterMessage is the message content shape within an OpenRouter choice.
+type openRouterMessage struct {
+	Content string `json:"content"`
+}
+
+// openRouterChoice is a single completion choice from OpenRouter.
+type openRouterChoice struct {
+	Message openRouterMessage `json:"message"`
+}
+
+// openRouterUsage holds token usage and cost data from OpenRouter.
+type openRouterUsage struct {
+	PromptTokens     int     `json:"prompt_tokens"`
+	CompletionTokens int     `json:"completion_tokens"`
+	TotalTokens      int     `json:"total_tokens"`
+	Cost             float64 `json:"cost,omitempty"`
 }
 
 // openRouterResponse is the response shape from OpenRouter's chat completions API.
 type openRouterResponse struct {
-	Choices []struct {
-		Message struct {
-			Content string `json:"content"`
-		} `json:"message"`
-	} `json:"choices"`
-	Usage struct {
-		PromptTokens     int     `json:"prompt_tokens"`
-		CompletionTokens int     `json:"completion_tokens"`
-		TotalTokens      int     `json:"total_tokens"`
-		Cost             float64 `json:"cost,omitempty"`
-	} `json:"usage"`
+	Choices []openRouterChoice `json:"choices"`
+	Usage   openRouterUsage    `json:"usage"`
 }
 
 // callOpenRouter sends a chat completion request to OpenRouter.
 func callOpenRouter(ctx context.Context, cfg Config, systemPrompt, userMessage string) (*openRouterResponse, error) {
 	apiKey := os.Getenv("OPENROUTER_API_KEY")
 	if apiKey == "" {
-		return nil, fmt.Errorf("OPENROUTER_API_KEY not set")
+		return nil, errors.New("OPENROUTER_API_KEY not set")
 	}
 
+	const defaultMaxTokens = 8192
 	maxTokens := cfg.MaxTokens
 	if maxTokens == 0 {
 		// Reasoning models (MiMo, etc.) consume tokens for chain-of-thought
 		// before producing the final answer. 1024 is too low — the model
 		// runs out of budget mid-reasoning and returns empty content.
-		maxTokens = 8192
+		maxTokens = defaultMaxTokens
 	}
 
 	// Per-case timeout: reasoning models (MiMo) can take 30-60s per call.
@@ -371,7 +385,7 @@ func callOpenRouter(ctx context.Context, cfg Config, systemPrompt, userMessage s
 		return nil, fmt.Errorf("unmarshal response: %w", err)
 	}
 	if len(orResp.Choices) == 0 {
-		return nil, fmt.Errorf("no choices in response")
+		return nil, errors.New("no choices in response")
 	}
 
 	return &orResp, nil

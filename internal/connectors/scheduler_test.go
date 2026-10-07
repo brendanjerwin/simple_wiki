@@ -85,9 +85,9 @@ func (*errorJob) Execute() error    { return errors.New("sync failed") }
 // runAll executes every enqueued job in place and discards errors.
 func (f *fakeEnqueuer) RunAll() {
 	f.mu.Lock()
-	jobs := append([]jobs.Job(nil), f.enqueued...)
+	snapshot := append([]jobs.Job(nil), f.enqueued...)
 	f.mu.Unlock()
-	for _, j := range jobs {
+	for _, j := range snapshot {
 		_ = j.Execute()
 	}
 }
