@@ -127,7 +127,7 @@ function getLeafletTagControlCtor(): (new (renderer: LeafletWikiMapRenderer, opt
       if (!this._listSection) return;
       this._listSection.innerHTML = '';
 
-      const allTags = Array.from(this._renderer.allKnownTags).sort();
+      const allTags = Array.from(this._renderer.allKnownTags).sort((a, b) => a.localeCompare(b));
       const sortedTags = allTags.filter(t => t !== 'untagged');
       if (allTags.includes('untagged')) {
         sortedTags.push('untagged');
