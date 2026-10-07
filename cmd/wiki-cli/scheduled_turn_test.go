@@ -1169,3 +1169,35 @@ func (h *scheduledTurnStreamer) CompleteScheduledTurn(_ context.Context, req *co
 	h.completed = req.Msg
 	return connect.NewResponse(&apiv1.CompleteScheduledTurnResponse{}), nil
 }
+
+var _ = Describe("spawnEphemeralAgent when the binary exits before the ACP handshake", func() {
+	Describe("when useSystemd is false and the binary exits immediately", func() {
+		var (
+			spawnErr error
+		)
+
+		BeforeEach(func() {
+			// /bin/true exits with status 0 immediately. The ACP
+			// Initialize call will see EOF on stdout and return an error,
+			// causing spawnEphemeralAgent to call cleanup() — which
+			// exercises the sync.Once-wrapped cleanupOnce.Do block.
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			defer cancel()
+
+			client := newScheduledTurnClient("test-page", 3, nil, func() {})
+			daemon := &poolDaemon{
+				agentPath:  "/bin/true",
+				useSystemd: false,
+			}
+			_, spawnErr = daemon.spawnEphemeralAgent(ctx, client, "test-unit-", "cleanuponce-test")
+		})
+
+		It("should return an error", func() {
+			Expect(spawnErr).To(HaveOccurred())
+		})
+
+		It("should mention ACP handshake in the error", func() {
+			Expect(spawnErr).To(MatchError(ContainSubstring("ACP handshake")))
+		})
+	})
+})
