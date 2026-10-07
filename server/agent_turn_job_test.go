@@ -575,6 +575,50 @@ var _ = Describe("AgentTurnJob", func() {
 		})
 	})
 
+	Describe("Execute when the completion channel is closed without a value after hard timeout", func() {
+		// Scenario: hard timeout fires, then the pool closes the completion
+		// channel without sending an outcome (nil receive). The late-completion
+		// goroutine should treat nil as a non-MAX_TURNS signal and leave the
+		// provisional TIMEOUT status intact.
+		var (
+			completion chan *server.ScheduledTurnOutcome
+			executeErr error
+		)
+
+		BeforeEach(func() {
+			completion = make(chan *server.ScheduledTurnOutcome)
+			dispatcher.dispatchFn = func(req *apiv1.ScheduledTurnRequest) (<-chan *server.ScheduledTurnOutcome, error) {
+				dispatcher.record(req)
+				return completion, nil
+			}
+			job = server.NewAgentTurnJob(store, dispatcher, "p", "s1", 50*time.Millisecond)
+
+			done := make(chan error, 1)
+			go func() {
+				done <- job.Execute()
+			}()
+			select {
+			case executeErr = <-done:
+			case <-time.After(time.Second):
+				Fail("Execute did not return within 1s")
+			}
+
+			// Close the channel without sending a value — nil outcome.
+			close(completion)
+			// Allow the late-completion goroutine to process.
+			time.Sleep(100 * time.Millisecond)
+		})
+
+		It("should return nil from Execute", func() {
+			Expect(executeErr).NotTo(HaveOccurred())
+		})
+
+		It("should keep the TIMEOUT status when a nil outcome arrives", func() {
+			schedules, _ := store.List("p")
+			Expect(schedules[0].GetLastStatus()).To(Equal(apiv1.ScheduleStatus_SCHEDULE_STATUS_TIMEOUT))
+		})
+	})
+
 	Describe("Execute when the schedule is RUNNING and fresh", func() {
 		// Seed a RUNNING schedule that just started (last_run ≈ now). With a
 		// hardTimeout of 5s the reclaim threshold is 10s — so a fresh run should

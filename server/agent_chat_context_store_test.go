@@ -820,5 +820,60 @@ var _ = Describe("AgentChatContextStore", func() {
 				Expect(ctx.GetBackgroundActivity()).To(BeEmpty())
 			})
 		})
+
+		Describe("when ReadFrontMatter returns an error", func() {
+			var err error
+
+			BeforeEach(func() {
+				errStore := &errorPageStore{readErr: errors.New("disk on fire")}
+				bad := server.NewAgentChatContextStore(errStore)
+				err = bad.AmendBackgroundActivity("p", "weekly",
+					apiv1.ScheduleStatus_SCHEDULE_STATUS_TIMEOUT,
+					apiv1.ScheduleStatus_SCHEDULE_STATUS_MAX_TURNS)
+			})
+
+			It("should return an error", func() {
+				Expect(err).To(HaveOccurred())
+			})
+
+			It("should wrap the error with read frontmatter context", func() {
+				Expect(err.Error()).To(ContainSubstring("read frontmatter"))
+			})
+		})
+
+		Describe("when WriteFrontMatter returns an error", func() {
+			var err error
+
+			BeforeEach(func() {
+				errStore := &errorPageStore{
+					writeErr: errors.New("disk full"),
+					fm: wikipage.FrontMatter{
+						"agent": map[string]any{
+							"chat_context": map[string]any{
+								"background_activity": []any{
+									map[string]any{
+										"timestamp":   "2026-04-25T00:00:00Z",
+										"schedule_id": "weekly",
+										"status":      "SCHEDULE_STATUS_TIMEOUT",
+									},
+								},
+							},
+						},
+					},
+				}
+				bad := server.NewAgentChatContextStore(errStore)
+				err = bad.AmendBackgroundActivity("p", "weekly",
+					apiv1.ScheduleStatus_SCHEDULE_STATUS_TIMEOUT,
+					apiv1.ScheduleStatus_SCHEDULE_STATUS_MAX_TURNS)
+			})
+
+			It("should return an error", func() {
+				Expect(err).To(HaveOccurred())
+			})
+
+			It("should wrap the error with write frontmatter context", func() {
+				Expect(err.Error()).To(ContainSubstring("write frontmatter"))
+			})
+		})
 	})
 })

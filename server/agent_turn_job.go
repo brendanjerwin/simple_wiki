@@ -282,10 +282,9 @@ const lateCompletionWindowMultiplier = 4
 // RUNNING), the TIMEOUT→MAX_TURNS transition will be rejected by the state
 // machine and we log and move on — the new run's status is preserved.
 func (j *AgentTurnJob) applyLateMaxTurnsCompletion(completion <-chan *ScheduledTurnOutcome) {
+	// applyLateMaxTurnsCompletion is only called after the hard timeout fires,
+	// which requires j.hardTimeout > 0, so window is always positive here.
 	window := j.hardTimeout * lateCompletionWindowMultiplier
-	if window <= 0 {
-		window = lateCompletionWindowMultiplier * DefaultAgentTurnHardTimeout
-	}
 	select {
 	case outcome := <-completion:
 		if outcome == nil || outcome.TerminalStatus != apiv1.ScheduleStatus_SCHEDULE_STATUS_MAX_TURNS {

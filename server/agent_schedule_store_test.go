@@ -696,6 +696,31 @@ var _ = Describe("AgentScheduleStore", func() {
 				Expect(ctx.GetBackgroundActivity()[0].GetStatus()).To(Equal(apiv1.ScheduleStatus_SCHEDULE_STATUS_MAX_TURNS))
 			})
 		})
+
+		Describe("when the background activity sink fails during terminal-to-terminal amendment", func() {
+			var transitionErr error
+
+			BeforeEach(func() {
+				sink := &erroringActivitySink{err: errors.New("sink boom")}
+				store.SetBackgroundActivitySink(sink)
+
+				Expect(store.TransitionStatus("p", "s1", apiv1.ScheduleStatus_SCHEDULE_STATUS_RUNNING, "", 0)).To(Succeed())
+				Expect(store.TransitionStatus("p", "s1", apiv1.ScheduleStatus_SCHEDULE_STATUS_TIMEOUT, "timed out", 10)).To(Succeed())
+				transitionErr = store.TransitionStatusFrom("p", "s1",
+					apiv1.ScheduleStatus_SCHEDULE_STATUS_TIMEOUT,
+					apiv1.ScheduleStatus_SCHEDULE_STATUS_MAX_TURNS,
+					"max_turns (10) reached after 600s", 600)
+			})
+
+			It("should still succeed (amendment errors are best-effort)", func() {
+				Expect(transitionErr).NotTo(HaveOccurred())
+			})
+
+			It("should update the schedule status to MAX_TURNS despite sink failure", func() {
+				schedules, _ := store.List("p")
+				Expect(schedules[0].GetLastStatus()).To(Equal(apiv1.ScheduleStatus_SCHEDULE_STATUS_MAX_TURNS))
+			})
+		})
 	})
 
 	Describe("List error handling", func() {
