@@ -132,6 +132,14 @@ var _ = Describe("resolvePrompts", func() {
 			Expect(prompts).To(HaveLen(2))
 		})
 	})
+
+	When("sweep-prompt contains an unknown prompt name", func() {
+		It("should return an error", func() {
+			_, err := resolvePrompts("minimal,no-such-prompt", "")
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("unknown prompt"))
+		})
+	})
 })
 
 var _ = Describe("filterByTag", func() {
