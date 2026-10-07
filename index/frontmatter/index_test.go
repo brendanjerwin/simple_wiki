@@ -750,6 +750,39 @@ var _ = Describe("Index", func() {
 			})
 		})
 
+		// Regression test: agent.schedules is a TOML array of tables ([]any of map[string]any).
+		// indexArray previously skipped all items that weren't plain strings without saving the
+		// existence sentinel, so QueryKeyExistence("agent.schedules") always returned empty and
+		// LoadAll registered zero schedules at startup.
+		Describe("when frontmatter has a non-empty array of maps (TOML array of tables)", func() {
+			var err error
+
+			BeforeEach(func() {
+				mockReader.AddPage("scheduled-page", wikipage.FrontMatter{
+					"identifier": "scheduled-page",
+					"agent": map[string]any{
+						"schedules": []any{
+							map[string]any{
+								"id":      "daily",
+								"cron":    "0 0 9 * * 1",
+								"enabled": true,
+							},
+						},
+					},
+				})
+				err = index.AddPageToIndex("scheduled-page")
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should allow key existence queries for the array key so LoadAll finds the page", func() {
+				results := index.QueryKeyExistence("agent.schedules")
+				Expect(results).To(ContainElement(wikipage.PageIdentifier("scheduled_page")))
+			})
+		})
+
 		Describe("when frontmatter has boolean true values", func() {
 			var err error
 
