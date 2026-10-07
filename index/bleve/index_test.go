@@ -189,8 +189,9 @@ var _ = Describe("Index", func() {
 
 			BeforeEach(func() {
 				mockReader.AddPage("daily_log_2026_10_04_three_minutes_of_margin", wikipage.FrontMatter{
-					"identifier": "daily_log_2026_10_04_three_minutes_of_margin",
-					"title":      "Three Minutes of Margin",
+					// Legacy page: no explicit identifier key — AddPageToIndex must
+					// synthesize the canonical identifier so identifier search still works.
+					"title": "Three Minutes of Margin",
 				})
 				Expect(frontmatterIndex.AddPageToIndex("daily_log_2026_10_04_three_minutes_of_margin")).To(Succeed())
 				Expect(index.AddPageToIndex("daily_log_2026_10_04_three_minutes_of_margin")).To(Succeed())
@@ -203,11 +204,7 @@ var _ = Describe("Index", func() {
 			})
 
 			It("should find the page by its full identifier", func() {
-				identifiers := make([]wikipage.PageIdentifier, 0, len(results))
-				for _, r := range results {
-					identifiers = append(identifiers, r.Identifier)
-				}
-				Expect(identifiers).To(ContainElement(wikipage.PageIdentifier("daily_log_2026_10_04_three_minutes_of_margin")))
+				Expect(results).To(ContainElement(HaveField("Identifier", wikipage.PageIdentifier("daily_log_2026_10_04_three_minutes_of_margin"))))
 			})
 		})
 
@@ -238,19 +235,11 @@ var _ = Describe("Index", func() {
 			})
 
 			It("should find the page whose identifier starts with the query", func() {
-				identifiers := make([]wikipage.PageIdentifier, 0, len(results))
-				for _, r := range results {
-					identifiers = append(identifiers, r.Identifier)
-				}
-				Expect(identifiers).To(ContainElement(wikipage.PageIdentifier("daily_log_2026_10_04_the_layer_beneath_the_budget")))
+				Expect(results).To(ContainElement(HaveField("Identifier", wikipage.PageIdentifier("daily_log_2026_10_04_the_layer_beneath_the_budget"))))
 			})
 
 			It("should not return unrelated pages", func() {
-				identifiers := make([]wikipage.PageIdentifier, 0, len(results))
-				for _, r := range results {
-					identifiers = append(identifiers, r.Identifier)
-				}
-				Expect(identifiers).NotTo(ContainElement(wikipage.PageIdentifier("unrelated_page")))
+				Expect(results).NotTo(ContainElement(HaveField("Identifier", wikipage.PageIdentifier("unrelated_page"))))
 			})
 		})
 	})
