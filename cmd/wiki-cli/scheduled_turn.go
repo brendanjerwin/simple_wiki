@@ -320,6 +320,7 @@ func scheduledTurnCompletionContext(ctx context.Context) (context.Context, conte
 // instance (NOT registered in d.instances), send the preamble + prompt, watch
 // for max_turns, tear down. Returns the terminal status to report.
 func (d *poolDaemon) executeScheduledTurn(ctx context.Context, req *apiv1.ScheduledTurnRequest) (apiv1.ScheduleStatus, string) {
+	start := time.Now()
 	turnCtx, cancelTurn := context.WithCancel(ctx)
 	defer cancelTurn()
 
@@ -336,7 +337,7 @@ func (d *poolDaemon) executeScheduledTurn(ctx context.Context, req *apiv1.Schedu
 	})
 
 	if conn.client.HitLimit() {
-		return apiv1.ScheduleStatus_SCHEDULE_STATUS_TIMEOUT, fmt.Sprintf("max_turns (%d) reached", req.GetMaxTurns())
+		return apiv1.ScheduleStatus_SCHEDULE_STATUS_MAX_TURNS, fmt.Sprintf("max_turns (%d) reached after %s", req.GetMaxTurns(), time.Since(start).Round(time.Second))
 	}
 	if promptErr != nil {
 		// If we cancelled because the parent context was done (process

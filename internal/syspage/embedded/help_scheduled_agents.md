@@ -72,16 +72,23 @@ Each fire walks the schedule through these states:
 
 ```
 UNSPECIFIED ─┐
-             ├─→ RUNNING ─┬─→ OK ──────┐
-OK ──────────┤            ├─→ ERROR ───┤
-ERROR ───────┤            ├─→ TIMEOUT ─┼─→ RUNNING (next fire)
-TIMEOUT ─────┤            └─→ WARN ────┘
+             ├─→ RUNNING ─┬─→ OK ──────────┐
+OK ──────────┤            ├─→ ERROR ────────┤
+ERROR ───────┤            ├─→ TIMEOUT ──────┼─→ RUNNING (next fire)
+TIMEOUT ─────┤            ├─→ MAX_TURNS ────┤
+MAX_TURNS ───┤            └─→ WARN ─────────┘
 WARN ────────┘
 ```
 
 `RUNNING → RUNNING` is illegal — if a previous fire is still in flight, the next cron fire is **skipped** rather than dispatched. A stuck `RUNNING` (e.g. the pool process died before recording a terminal status) is reclaimed automatically: once the schedule has been in `RUNNING` longer than the reclaim threshold (twice the hard timeout, so 20 minutes by default), the next cron fire records `TIMEOUT` for the zombie run — closing its background-activity entry — and then dispatches a fresh turn as normal.
 
 `WARN` is a terminal status for work that may have completed but did not produce the required audit record, usually because the scheduled agent finished without a background activity summary or the audit write failed.
+
+`TIMEOUT` vs `MAX_TURNS` — two distinct outcomes that both look like "the turn stopped early":
+
+- **`TIMEOUT`** — the server-side hard timeout (default 10 min) elapsed before the pool reported a terminal status. The pool process may still be running; work often lands eventually. `last_duration_seconds` is capped at the hard timeout, not the real run time. Response: keep waiting — follow the workarounds in [[help-heartbeat]] and the SKILL notes.
+
+- **`MAX_TURNS`** — the pool actively cancelled the turn because it hit the per-schedule `max_turns` budget. The agent is definitively stopped. `last_duration_seconds` reflects the actual observed run time. `last_error_message` contains the turn count and duration. Response: the run is dead; schedule a recovery run or increase `max_turns`.
 
 ## Background activity log
 
@@ -97,7 +104,7 @@ Scheduled agents are encouraged to call `api_v1_AgentMetadataService_AppendBackg
 }
 ```
 
-The summary attaches to the newest matching `RUNNING` entry in the log. When the turn reaches a terminal status (`OK`, `ERROR`, `TIMEOUT`, or `WARN`), the wiki updates that same entry with the final status and completion timestamp. If the turn reports `OK` without a summary, the wiki records `WARN` instead so operators can see that the audit trail is incomplete.
+The summary attaches to the newest matching `RUNNING` entry in the log. When the turn reaches a terminal status (`OK`, `ERROR`, `TIMEOUT`, `MAX_TURNS`, or `WARN`), the wiki updates that same entry with the final status and completion timestamp. If the turn reports `OK` without a summary, the wiki records `WARN` instead so operators can see that the audit trail is incomplete.
 
 The response includes the updated entry so callers can verify the audit write landed:
 
@@ -133,12 +140,12 @@ wiki-cli verify-schedule-fired \
   --since 2026-06-11T14:00:00Z
 ```
 
-The command reads `AgentMetadataService/ListSchedules` and fails when the schedule is missing, has never run, last ran before `--since`, is still `RUNNING`, or ended in `ERROR`/`TIMEOUT`. `OK` and `WARN` pass because both prove the cron fired after the deploy; investigate `WARN` separately if the audit summary is required for the migration.
+The command reads `AgentMetadataService/ListSchedules` and fails when the schedule is missing, has never run, last ran before `--since`, is still `RUNNING`, or ended in `ERROR`/`TIMEOUT`. `OK` and `WARN` pass because both prove the cron fired after the deploy; investigate `WARN` separately if the audit summary is required for the migration. `MAX_TURNS` fails the check — the agent stopped without completing its task and needs a recovery run.
 
 ## Operational notes
 
 - Concurrency is shared across all schedules: by default 2 turns can run simultaneously across the whole wiki (`--agent-schedule-concurrency`). Backlog capacity is 256 (`--agent-schedule-queue-capacity`).
-- Wall-clock hard timeout defaults to 10m and is configurable with `--agent-turn-hard-timeout`; when it elapses the wiki records `SCHEDULE_STATUS_TIMEOUT` for that run.
+- Wall-clock hard timeout defaults to 10m and is configurable with `--agent-turn-hard-timeout`; when it elapses the wiki records `SCHEDULE_STATUS_TIMEOUT` for that run. If the pool later reports that the run was cancelled by `max_turns`, the wiki overrides the provisional `TIMEOUT` with `SCHEDULE_STATUS_MAX_TURNS` and the actual duration (within a 4× hard-timeout window).
 - Zombie reclaim threshold is twice the hard timeout (20m by default). A schedule stuck in `RUNNING` longer than this is automatically reclaimed on the next cron fire: the wiki records `TIMEOUT` for the zombie run and dispatches a fresh one.
 - The pool spawns a new short-lived ACP agent per fire, in a unique systemd unit. Per-turn journal logs are available there.
 - If the pool is not running when a cron fires, the schedule transitions straight to `ERROR` with a "dispatch failed" message. Restart the pool and the next fire will proceed.
