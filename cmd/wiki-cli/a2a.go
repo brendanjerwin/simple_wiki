@@ -40,7 +40,8 @@ type a2aMessage struct {
 type a2aStatus struct {
 	State     string      `json:"state"`
 	Message   *a2aMessage `json:"message,omitempty"`
-	Timestamp string      `json:"timestamp"` // RFC3339
+	Progress  string      `json:"progress,omitempty"` // in-flight agent text while state=working
+	Timestamp string      `json:"timestamp"`          // RFC3339
 }
 
 // a2aArtifact is an A2A task artifact.
@@ -61,19 +62,21 @@ type a2aTaskJSON struct {
 // a2aServerConfig configures the A2A server. Secrets are env-only so they
 // never appear in `ps` output.
 type a2aServerConfig struct {
-	Port        int           // flag --a2a-port, 0 = disabled (default 0)
-	Bind        string        // flag --a2a-bind, default "0.0.0.0"
-	PublicURL   string        // flag --a2a-public-url (card.url; gateway path in prod)
-	AgentName   string        // flag --a2a-agent-name (agent card name/skill naming)
-	ChatPersona string        // display name of the chat AI persona (preamble identity)
-	BearerToken string        // env WIKI_CLI_A2A_BEARER_TOKEN
-	ProxySecret string        // env WIKI_CLI_A2A_TRUSTED_PROXY_SECRET
-	ProxyHeader string        // flag --a2a-trusted-proxy-header, default X-A2A-Trusted-Proxy-Secret
-	StatePath   string        // flag --a2a-state-path: JSON file for persisted task results (empty = memory-only)
-	TLSCertPath string        // flag --a2a-tls-cert (empty = plain HTTP)
-	TLSKeyPath  string        // flag --a2a-tls-key
-	TaskTimeout time.Duration // flag --a2a-task-timeout, default 9m
-	MaxTasks    int           // flag --a2a-max-tasks, default 128
+	Port           int           // flag --a2a-port, 0 = disabled (default 0)
+	Bind           string        // flag --a2a-bind, default "0.0.0.0"
+	PublicURL      string        // flag --a2a-public-url (card.url; gateway path in prod)
+	AgentName      string        // flag --a2a-agent-name (agent card name/skill naming)
+	ChatPersona    string        // display name of the chat AI persona (preamble identity)
+	BearerToken    string        // env WIKI_CLI_A2A_BEARER_TOKEN
+	ProxySecret    string        // env WIKI_CLI_A2A_TRUSTED_PROXY_SECRET
+	ProxyHeader    string        // flag --a2a-trusted-proxy-header, default X-A2A-Trusted-Proxy-Secret
+	StatePath      string        // flag --a2a-state-path: JSON file for persisted task results (empty = memory-only)
+	TLSCertPath    string        // flag --a2a-tls-cert (empty = plain HTTP)
+	TLSKeyPath     string        // flag --a2a-tls-key
+	TaskTimeout    time.Duration // flag --a2a-task-timeout, default 30m
+	MaxTaskTimeout time.Duration // flag --a2a-max-task-timeout, default 60m
+
+	MaxTasks int // flag --a2a-max-tasks, default 128
 }
 
 // trustedProxySecretHeader is the default shared-secret header a trusted
@@ -121,10 +124,19 @@ type a2aTask struct {
 	ContextID string
 	UserText  string
 	FinalText string
-	Caller    a2aCaller
-	State     string // "working" | "completed" | "failed" | "canceled"
-	CreatedAt time.Time
-	cancel    context.CancelFunc
+	// ProgressText is the agent's in-flight output for a working task,
+	// mirrored live from the session's message-chunk collector. Empty
+	// until the agent streams its first visible text. Rendered on
+	// tasks/get as status.progress so pollers see liveness mid-run.
+	ProgressText string
+	Caller       a2aCaller
+	State        string // "working" | "completed" | "failed" | "canceled"
+	CreatedAt    time.Time
+	cancel       context.CancelFunc
+	// reqIDKey is the canonical string form of the JSON-RPC request id from the
+	// originating message/send call. Used to clean up the server's requestToTask
+	// map when this task is pruned. Empty when the caller did not supply an id.
+	reqIDKey string
 }
 
 func (t *a2aTask) terminal() bool {
@@ -139,11 +151,12 @@ type a2aConfig struct {
 
 // a2aParams is the JSON-RPC params object.
 type a2aParams struct {
-	Message       *a2aMessage    `json:"message"`
-	Configuration a2aConfig      `json:"configuration"`
-	Metadata      map[string]any `json:"metadata"`
-	ID            string         `json:"id"`
-	ContextID     string         `json:"contextId"`
+	Message       *a2aMessage     `json:"message"`
+	Configuration a2aConfig       `json:"configuration"`
+	Metadata      map[string]any  `json:"metadata"`
+	ID            string          `json:"id"`
+	ContextID     string          `json:"contextId"`
+	RequestID     json.RawMessage `json:"requestId"` // $/cancel_request notification
 }
 
 // a2aJSONRPCRequest is an inbound JSON-RPC 2.0 request. The id is echoed
@@ -178,7 +191,11 @@ const (
 
 // a2a tunables and wire literals.
 const (
-	defaultA2ATaskTimeout = 9 * time.Minute
+	defaultA2ATaskTimeout    = 30 * time.Minute
+	defaultA2AMaxTaskTimeout = 60 * time.Minute
+	// a2aMetadataTimeoutKey lets callers override the per-task deadline via
+	// message/send metadata (number of seconds). Clamped to [1s, cfg.MaxTaskTimeout].
+	a2aMetadataTimeoutKey = "a2a_task_timeout_seconds"
 	defaultA2AMaxTasks    = 128
 
 	a2aIDRandomBytes = 16 // 128-bit task ids
@@ -235,6 +252,12 @@ type a2aServer struct {
 
 	mu    sync.Mutex
 	tasks map[string]*a2aTask
+
+	// requestToTask maps the canonical JSON-RPC request-id string of a
+	// message/send call to the resulting A2A task ID, so that
+	// $/cancel_request notifications (which carry the original request id)
+	// can cancel the right task. Protected by mu.
+	requestToTask map[string]string
 
 	// persistPath, when non-empty, persists terminal task records to a JSON
 	// file so tasks/get keeps returning results across service restarts and
@@ -318,6 +341,12 @@ func newA2AServer(cfg a2aServerConfig, d *poolDaemon) (*a2aServer, error) {
 	if cfg.TaskTimeout <= 0 {
 		cfg.TaskTimeout = defaultA2ATaskTimeout
 	}
+	if cfg.MaxTaskTimeout <= 0 {
+		cfg.MaxTaskTimeout = defaultA2AMaxTaskTimeout
+	}
+	if cfg.MaxTaskTimeout < cfg.TaskTimeout {
+		return nil, fmt.Errorf("a2a: --a2a-max-task-timeout (%s) must be >= --a2a-task-timeout (%s)", cfg.MaxTaskTimeout, cfg.TaskTimeout)
+	}
 	if cfg.MaxTasks <= 0 {
 		cfg.MaxTasks = defaultA2AMaxTasks
 	}
@@ -330,7 +359,7 @@ func newA2AServer(cfg a2aServerConfig, d *poolDaemon) (*a2aServer, error) {
 	if cfg.TLSCertPath == "" && cfg.Bind != "127.0.0.1" && cfg.Bind != "localhost" && cfg.Bind != "::1" {
 		slog.Warn("a2a: TLS disabled and bind is not loopback; traffic is unencrypted", "bind", cfg.Bind)
 	}
-	s := &a2aServer{cfg: cfg, daemon: d, tasks: make(map[string]*a2aTask), sessions: make(map[string]*a2aSession)}
+	s := &a2aServer{cfg: cfg, daemon: d, tasks: make(map[string]*a2aTask), requestToTask: make(map[string]string), sessions: make(map[string]*a2aSession)}
 	if cfg.StatePath != "" {
 		s.persistPath = cfg.StatePath
 		if err := s.loadPersistedTasks(); err != nil {
@@ -622,6 +651,8 @@ func (s *a2aServer) handleDispatch(w http.ResponseWriter, r *http.Request) {
 		s.handleTaskCancel(w, req)
 	case "tasks/list":
 		s.handleTaskList(w, req)
+	case "$/cancel_request":
+		s.handleCancelNotification(w, req, caller)
 	default:
 		s.writeError(w, req.ID, a2aErrMethodNotFound, fmt.Sprintf("unknown method: %s", req.Method))
 	}
@@ -635,6 +666,11 @@ func (s *a2aServer) handleMessageSend(w http.ResponseWriter, _ *http.Request, re
 	text := extractA2AText(req.Params.Message.Parts)
 	if strings.TrimSpace(text) == "" {
 		s.writeError(w, req.ID, a2aErrInvalidParams, "message must contain non-empty text part")
+		return
+	}
+	taskTimeout := s.taskTimeoutFromMetadata(req.Params.Metadata)
+	if taskTimeout < 0 {
+		s.writeError(w, req.ID, a2aErrInvalidParams, taskTimeoutMetadataErr)
 		return
 	}
 
@@ -656,6 +692,11 @@ func (s *a2aServer) handleMessageSend(w http.ResponseWriter, _ *http.Request, re
 	s.mu.Lock()
 	s.pruneLocked()
 	s.tasks[task.ID] = task
+	if len(req.ID) > 0 {
+		key := callerReqKey(caller, req.ID)
+		task.reqIDKey = key
+		s.requestToTask[key] = task.ID
+	}
 	snap := s.snapshot(task)
 	s.mu.Unlock()
 
@@ -670,7 +711,7 @@ func (s *a2aServer) handleMessageSend(w http.ResponseWriter, _ *http.Request, re
 	// of the client polling into -32001.
 	s.persistTaskRecords()
 
-	go s.executeA2ATask(taskCtx, task)
+	go s.executeA2ATask(taskCtx, task, taskTimeout)
 
 	s.writeResult(w, req.ID, snap)
 }
@@ -685,6 +726,71 @@ func extractA2AText(parts []a2aPart) string {
 	return b.String()
 }
 
+// taskTimeoutMetadataErr is the rejection message for a malformed
+// metadata timeout override ("metadata.a2a_task_timeout_seconds").
+const taskTimeoutMetadataErr = "metadata.a2a_task_timeout_seconds must be a positive number of seconds; values above the server's max task timeout are clamped to the max"
+
+// a2aTimeoutParseFloatBits is the bit size for parsing the metadata
+// timeout override as a decimal floating-point number of seconds.
+const a2aTimeoutParseFloatBits = 64
+
+// taskTimeoutFromMetadata resolves the per-task deadline override. Returns
+// s.cfg.TaskTimeout when the key is absent. Returns -1 for a malformed
+// value (caller rejects the dispatch). Valid values are clamped to
+// [1s, cfg.MaxTaskTimeout]; accepted types: number (seconds, JSON decodes
+// as float64), numeric string, or json.Number.
+func (s *a2aServer) taskTimeoutFromMetadata(metadata map[string]any) time.Duration {
+	raw, ok := metadata[a2aMetadataTimeoutKey]
+	if !ok || raw == nil {
+		return s.cfg.TaskTimeout
+	}
+	var seconds float64
+	switch v := raw.(type) {
+	case float64:
+		seconds = v
+	case string:
+		f, err := strconv.ParseFloat(strings.TrimSpace(v), a2aTimeoutParseFloatBits)
+		if err != nil {
+			return -1
+		}
+		seconds = f
+	case json.Number:
+		f, err := v.Float64()
+		if err != nil {
+			return -1
+		}
+		seconds = f
+	default:
+		return -1
+	}
+	if seconds <= 0 {
+		return -1
+	}
+	d := time.Duration(seconds * float64(time.Second))
+	if d < time.Second {
+		return -1
+	}
+	if d > s.cfg.MaxTaskTimeout {
+		d = s.cfg.MaxTaskTimeout
+	}
+	return d
+}
+
+// a2aProgressMaxRunes caps the mirrored in-flight progress text: long
+// turns stream megabytes of accumulated chunks, and the mirror only needs
+// a tail window for tasks/get liveness. Grows are dropped, not buffered.
+const a2aProgressMaxRunes = 400
+
+// truncateProgress keeps at most a2aProgressMaxRunes runes of s: an
+// ellipsis marker plus the trailing window. Total length is capped.
+func truncateProgress(s string) string {
+	r := []rune(s)
+	if len(r) <= a2aProgressMaxRunes {
+		return s
+	}
+	return "…" + string(r[len(r)-(a2aProgressMaxRunes-1):])
+}
+
 func randomHex(n int) string {
 	b := make([]byte, n)
 	if _, err := rand.Read(b); err != nil {
@@ -693,6 +799,14 @@ func randomHex(n int) string {
 		panic(fmt.Sprintf("a2a: crypto/rand read failed: %v", err))
 	}
 	return hex.EncodeToString(b)
+}
+
+// callerReqKey returns the requestToTask map key for a given caller and
+// JSON-RPC request id. The caller identity is included so two authenticated
+// gateway clients using the same numeric request id cannot cancel each
+// other's tasks.
+func callerReqKey(caller a2aCaller, reqID json.RawMessage) string {
+	return caller.ClientID + ":" + caller.Login + ":" + string(reqID)
 }
 
 // tasksCount returns the number of in-memory tasks (test helper).
@@ -728,6 +842,9 @@ func (s *a2aServer) pruneLocked() {
 		if !t.terminal() {
 			break
 		}
+		if t.reqIDKey != "" && s.requestToTask[t.reqIDKey] == t.ID {
+			delete(s.requestToTask, t.reqIDKey)
+		}
 		delete(s.tasks, id)
 	}
 }
@@ -756,6 +873,11 @@ func (*a2aServer) snapshot(t *a2aTask) *a2aTaskJSON {
 		out.Artifacts = []a2aArtifact{{Parts: []a2aPart{{Kind: a2aPartKindText, Text: t.FinalText}}}}
 		userMsg := a2aMessage{Role: a2aRoleUser, Parts: []a2aPart{{Kind: a2aPartKindText, Text: t.UserText}}, TaskID: t.ID, ContextID: t.ContextID}
 		out.History = []a2aMessage{userMsg, *msg}
+	} else if t.ProgressText != "" {
+		// Working task with in-flight agent output: expose it so pollers
+		// can show liveness and sequence while the task runs.
+		status.Progress = t.ProgressText
+		out.Status = status
 	}
 	return out
 }
@@ -799,6 +921,48 @@ func (s *a2aServer) handleTaskCancel(w http.ResponseWriter, req a2aRequest) {
 	s.writeResult(w, req.ID, snap)
 }
 
+// handleCancelNotification handles the $/cancel_request JSON-RPC notification
+// sent by A2A callers wishing to cancel an in-flight message/send. The
+// requestId in the params corresponds to the JSON-RPC id of the originating
+// message/send call. Per JSON-RPC 2.0 spec, notifications must not produce a
+// response object — the server returns an empty 200 OK body.
+func (s *a2aServer) handleCancelNotification(w http.ResponseWriter, req a2aRequest, caller a2aCaller) {
+	// Notifications must not produce a JSON-RPC response body (spec §4).
+	w.WriteHeader(http.StatusOK)
+
+	requestID := req.Params.RequestID
+	if len(requestID) == 0 {
+		slog.Debug("a2a $/cancel_request without requestId; ignoring",
+			logKeyAction, "a2a_cancel_notification")
+		return
+	}
+
+	reqKey := callerReqKey(caller, requestID)
+
+	s.mu.Lock()
+	taskID, ok := s.requestToTask[reqKey]
+	if !ok {
+		s.mu.Unlock()
+		slog.Debug("a2a $/cancel_request: no task for request id",
+			"requestId", string(requestID),
+			logKeyAction, "a2a_cancel_notification")
+		return
+	}
+	task, ok := s.tasks[taskID]
+	if !ok || task.terminal() {
+		s.mu.Unlock()
+		return
+	}
+	task.cancel()
+	task.State = a2aStateCanceled
+	s.mu.Unlock()
+
+	slog.Info("a2a task canceled via $/cancel_request",
+		logKeyTaskID, taskID,
+		"requestId", string(requestID),
+		logKeyAction, "a2a_task_cancel")
+}
+
 func (s *a2aServer) handleTaskList(w http.ResponseWriter, req a2aRequest) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -825,13 +989,13 @@ func (s *a2aServer) handleTaskList(w http.ResponseWriter, req a2aRequest) {
 
 // executeA2ATask runs the task to completion in the background, updating the
 // task record as it goes.
-func (s *a2aServer) executeA2ATask(taskCtx context.Context, task *a2aTask) {
+func (s *a2aServer) executeA2ATask(taskCtx context.Context, task *a2aTask, timeout time.Duration) {
 	runner := s.taskRunner
 	if runner == nil {
 		runner = s.runTaskInSession
 	}
 
-	timeoutCtx, cancelTimeout := context.WithTimeout(taskCtx, s.cfg.TaskTimeout)
+	timeoutCtx, cancelTimeout := context.WithTimeout(taskCtx, timeout)
 	defer cancelTimeout()
 
 	finalText, err := runner(timeoutCtx, task, task.Caller)
@@ -840,9 +1004,13 @@ func (s *a2aServer) executeA2ATask(taskCtx context.Context, task *a2aTask) {
 	// tasks/cancel may already have flipped the state; never resurrect a task.
 	if task.State != a2aStateCanceled {
 		switch {
-		case err != nil && errors.Is(err, context.DeadlineExceeded) && taskCtx.Err() == nil:
+		case err != nil && (errors.Is(err, context.DeadlineExceeded) || timeoutCtx.Err() != nil) && taskCtx.Err() == nil:
+			// Deadline fired (mine, not shutdown). The acp SDK coerces
+			// DeadlineExceeded into a JSON-RPC -32603 RequestError before
+			// it reaches us, so errors.Is alone is not enough — also check
+			// whether OUR timeout context expired.
 			task.State = a2aStateFailed
-			task.FinalText = fmt.Sprintf("task deadline exceeded (%s)", s.cfg.TaskTimeout)
+			task.FinalText = fmt.Sprintf("task deadline exceeded (%s)", timeout)
 		case err != nil && taskCtx.Err() != nil:
 			task.State = a2aStateCanceled
 			task.FinalText = "server shutting down"
@@ -894,8 +1062,13 @@ func (s *a2aServer) runTaskInSession(ctx context.Context, task *a2aTask, caller 
 
 	// Fresh text collector for THIS turn (the session client's builder
 	// accumulates across turns otherwise); client.finalText reads it after
-	// the Prompt completes.
+	// the Prompt completes. The progress sink below mirrors chunks onto
+	// the task record for the duration of this turn; the defer tears down
+	// both the sink and its drain goroutine when the turn ends.
 	sess.beginTurn()
+	client := sess.client
+	teardown := s.installProgressSink(client, task)
+	defer teardown()
 
 	var promptText string
 	if turn.firstTurn {
@@ -924,6 +1097,33 @@ func (s *a2aServer) runTaskInSession(ctx context.Context, task *a2aTask, caller 
 		return "", promptErr
 	}
 	return sess.client.finalText(), nil
+}
+
+// installProgressSink attaches a per-turn live-progress mirror: the
+// client's accumulated text is drained onto task.ProgressText (truncated)
+// by a background goroutine until the returned teardown func detaches the
+// sink and closes it. Callers defer the teardown for the turn's duration.
+func (s *a2aServer) installProgressSink(client *a2aTaskClient, task *a2aTask) func() {
+	sink := make(chan string, 1)
+	client.mu.Lock()
+	client.progressSink = sink
+	client.mu.Unlock()
+	drainDone := make(chan struct{})
+	go func() {
+		defer close(drainDone)
+		for text := range sink {
+			s.mu.Lock()
+			task.ProgressText = truncateProgress(text)
+			s.mu.Unlock()
+		}
+	}()
+	return func() {
+		client.mu.Lock()
+		client.progressSink = nil
+		client.mu.Unlock()
+		close(sink)
+		<-drainDone
+	}
 }
 
 // a2aSessionRef is what a turn needs from acquireSession: the agent
@@ -1194,12 +1394,19 @@ func (*a2aServer) writeError(w http.ResponseWriter, id json.RawMessage, code int
 type a2aTaskClient struct {
 	task *a2aTask
 
+	// progressSink, when non-nil, receives the accumulated text after
+	// each chunk append (buffered chan, 1-deep, non-blocking) so the
+	// server can mirror in-flight output onto the task record for
+	// tasks/get progress. Drained by a server-side goroutine per task.
+	progressSink chan<- string
+
 	mu   sync.Mutex
 	text strings.Builder
 }
 
 // SessionUpdate implements acp.Client. It accumulates agent message chunks;
-// the accumulated text becomes the task's final result.
+// the accumulated text becomes the task's final result. Chunks also feed
+// progressSink (non-blocking) for live progress mirroring.
 func (c *a2aTaskClient) SessionUpdate(_ context.Context, n acp.SessionNotification) error {
 	if n.Update.AgentMessageChunk == nil {
 		return nil
@@ -1211,6 +1418,12 @@ func (c *a2aTaskClient) SessionUpdate(_ context.Context, n acp.SessionNotificati
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.text.WriteString(chunk.Content.Text.Text)
+	if c.progressSink != nil {
+		select {
+		case c.progressSink <- c.text.String():
+		default: // server-side mirror goroutine is behind; it will catch up
+		}
+	}
 	return nil
 }
 

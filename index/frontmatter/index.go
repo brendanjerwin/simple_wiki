@@ -138,12 +138,19 @@ func (f *Index) indexArray(identifier wikipage.PageIdentifier, keyPath string, a
 		f.saveToIndex(identifier, keyPath, "")
 		return
 	}
+	savedAny := false
 	for _, item := range arr {
 		if str, ok := item.(string); ok {
 			f.saveToIndex(identifier, keyPath, str)
+			savedAny = true
 		}
 		// Skip complex types (e.g., maps in arrays from checklists).
 		// These are application data, not indexable strings.
+	}
+	if !savedAny {
+		// Array contains only complex types (e.g., TOML array of tables like [[agent.schedules]]).
+		// Save the existence sentinel so QueryKeyExistence finds this page.
+		f.saveToIndex(identifier, keyPath, "")
 	}
 }
 
