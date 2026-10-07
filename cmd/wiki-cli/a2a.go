@@ -73,7 +73,7 @@ type a2aServerConfig struct {
 	StatePath      string        // flag --a2a-state-path: JSON file for persisted task results (empty = memory-only)
 	TLSCertPath    string        // flag --a2a-tls-cert (empty = plain HTTP)
 	TLSKeyPath     string        // flag --a2a-tls-key
-	TaskTimeout    time.Duration // flag --a2a-task-timeout, default 9m
+	TaskTimeout    time.Duration // flag --a2a-task-timeout, default 30m
 	MaxTaskTimeout time.Duration // flag --a2a-max-task-timeout, default 60m
 
 	MaxTasks int // flag --a2a-max-tasks, default 128
@@ -728,7 +728,7 @@ func extractA2AText(parts []a2aPart) string {
 
 // taskTimeoutMetadataErr is the rejection message for a malformed
 // metadata timeout override ("metadata.a2a_task_timeout_seconds").
-const taskTimeoutMetadataErr = "metadata.a2a_task_timeout_seconds must be a positive number of seconds within the server's max task timeout"
+const taskTimeoutMetadataErr = "metadata.a2a_task_timeout_seconds must be a positive number of seconds; values above the server's max task timeout are clamped to the max"
 
 // a2aTimeoutParseFloatBits is the bit size for parsing the metadata
 // timeout override as a decimal floating-point number of seconds.

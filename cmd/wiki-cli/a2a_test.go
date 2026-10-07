@@ -1017,7 +1017,10 @@ var _ = Describe("a2aServer per-task timeout via metadata", func() {
 	const tok = "tok-123"
 
 	AfterEach(func() {
-		ts.Close()
+		if ts != nil {
+			ts.Close()
+			ts = nil
+		}
 	})
 
 	// sendWithMeta dispatches a message/send with metadata merged in.
