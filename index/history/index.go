@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/blevesearch/bleve"
+	"github.com/blevesearch/bleve/search"
 	"github.com/blevesearch/bleve/search/query"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 
@@ -25,6 +26,11 @@ const (
 	fieldSource         = "source"
 	fieldSHA256         = "sha256"
 	fieldByteSize       = "byte_size"
+
+	// maxSearchResults caps the number of results returned by any Bleve query.
+	// 10,000 is generous; history searches are always filtered by page or query
+	// so this is only a safety cap, not an expected result size.
+	maxSearchResults = 10000
 )
 
 // PageVersionMetadata is the metadata for a single historical page version.
@@ -170,7 +176,7 @@ func (i *Index) docIDsForPageLocked(identifier wikipage.PageIdentifier) ([]strin
 	q.SetField(fieldPageIdentifier)
 	req := bleve.NewSearchRequest(q)
 	req.Fields = []string{}
-	req.Size = 10000
+	req.Size = maxSearchResults
 	res, err := i.index.Search(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to find history versions for %s: %w", identifier, err)
@@ -196,6 +202,16 @@ func (i *Index) SearchPageHistory(identifier wikipage.PageIdentifier, queryText 
 
 // SearchHistory searches across all indexed history with optional filters.
 func (i *Index) SearchHistory(filter HistorySearchFilter) ([]HistorySearchResult, error) {
+	req := buildSearchRequest(filter)
+	res, err := i.index.Search(req)
+	if err != nil {
+		return nil, fmt.Errorf("history search failed: %w", err)
+	}
+	return hitsToResults(res.Hits), nil
+}
+
+// buildSearchRequest constructs a Bleve search request from a HistorySearchFilter.
+func buildSearchRequest(filter HistorySearchFilter) *bleve.SearchRequest {
 	var clauses []query.Query
 
 	if filter.PageFilter != "" {
@@ -226,30 +242,21 @@ func (i *Index) SearchHistory(filter HistorySearchFilter) ([]HistorySearchResult
 		clauses = append(clauses, drq)
 	}
 
-	q := bleve.NewConjunctionQuery(clauses...)
-
-	req := bleve.NewSearchRequest(q)
+	req := bleve.NewSearchRequest(bleve.NewConjunctionQuery(clauses...))
 	req.Fields = []string{
-		fieldPageIdentifier,
-		fieldVersionID,
-		fieldAuthor,
-		fieldCreatedAt,
-		fieldIsAgent,
-		fieldSource,
-		fieldSHA256,
-		fieldByteSize,
+		fieldPageIdentifier, fieldVersionID, fieldAuthor,
+		fieldCreatedAt, fieldIsAgent, fieldSource, fieldSHA256, fieldByteSize,
 	}
 	req.Highlight = bleve.NewHighlightWithStyle("html")
 	req.Highlight.AddField(fieldContent)
-	req.Size = 10000
+	req.Size = maxSearchResults
+	return req
+}
 
-	res, err := i.index.Search(req)
-	if err != nil {
-		return nil, fmt.Errorf("history search failed: %w", err)
-	}
-
-	results := make([]HistorySearchResult, 0, len(res.Hits))
-	for _, hit := range res.Hits {
+// hitsToResults converts Bleve search hits to HistorySearchResult values.
+func hitsToResults(hits []*search.DocumentMatch) []HistorySearchResult {
+	results := make([]HistorySearchResult, 0, len(hits))
+	for _, hit := range hits {
 		v := PageVersionMetadata{
 			VersionID:      fieldString(hit.Fields, fieldVersionID),
 			PageIdentifier: fieldString(hit.Fields, fieldPageIdentifier),
@@ -260,20 +267,17 @@ func (i *Index) SearchHistory(filter HistorySearchFilter) ([]HistorySearchResult
 			IsAgent:        fieldBool(hit.Fields, fieldIsAgent),
 			ByteSize:       fieldInt64(hit.Fields, fieldByteSize),
 		}
-
 		snippet := strings.Join(hit.Fragments[fieldContent], " ... ")
 		if snippet == "" {
 			snippet = fieldString(hit.Fields, fieldContent)
 		}
-
 		results = append(results, HistorySearchResult{
 			Page:    v.PageIdentifier,
 			Version: v,
 			Snippet: snippet,
 		})
 	}
-
-	return results, nil
+	return results
 }
 
 func fieldString(fields map[string]any, name string) string {

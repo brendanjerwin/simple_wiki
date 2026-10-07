@@ -56,14 +56,19 @@ type HistorySearcher interface {
 	SearchHistory(filter HistorySearchFilter) ([]HistorySearchResult, error)
 }
 
+const (
+	errHistoryPageRequired       = "page is required"
+	errHistoryReaderNotConfigured = "history reader not configured"
+)
+
 // ListPageVersions implements the PageHistoryService RPC.
 func (s *Server) ListPageVersions(_ context.Context, req *apiv1.ListPageVersionsRequest) (*apiv1.ListPageVersionsResponse, error) {
 	if req.GetPage() == "" {
-		return nil, status.Error(codes.InvalidArgument, "page is required")
+		return nil, status.Error(codes.InvalidArgument, errHistoryPageRequired)
 	}
 
 	if s.historyReader == nil {
-		return nil, status.Error(codes.Unavailable, "history reader not configured")
+		return nil, status.Error(codes.Unavailable, errHistoryReaderNotConfigured)
 	}
 
 	versions, err := s.historyReader.ListVersions(wikipage.PageIdentifier(req.GetPage()))
@@ -86,14 +91,14 @@ func (s *Server) ListPageVersions(_ context.Context, req *apiv1.ListPageVersions
 // ReadPageVersion implements the PageHistoryService RPC.
 func (s *Server) ReadPageVersion(_ context.Context, req *apiv1.ReadPageVersionRequest) (*apiv1.ReadPageVersionResponse, error) {
 	if req.GetPage() == "" {
-		return nil, status.Error(codes.InvalidArgument, "page is required")
+		return nil, status.Error(codes.InvalidArgument, errHistoryPageRequired)
 	}
 	if req.GetVersionId() == "" {
 		return nil, status.Error(codes.InvalidArgument, "version_id is required")
 	}
 
 	if s.historyReader == nil {
-		return nil, status.Error(codes.Unavailable, "history reader not configured")
+		return nil, status.Error(codes.Unavailable, errHistoryReaderNotConfigured)
 	}
 
 	content, err := s.historyReader.ReadVersion(wikipage.PageIdentifier(req.GetPage()), req.GetVersionId())
@@ -107,14 +112,14 @@ func (s *Server) ReadPageVersion(_ context.Context, req *apiv1.ReadPageVersionRe
 // RestorePageVersion implements the PageHistoryService RPC.
 func (s *Server) RestorePageVersion(ctx context.Context, req *apiv1.RestorePageVersionRequest) (*apiv1.RestorePageVersionResponse, error) {
 	if req.GetPage() == "" {
-		return nil, status.Error(codes.InvalidArgument, "page is required")
+		return nil, status.Error(codes.InvalidArgument, errHistoryPageRequired)
 	}
 	if req.GetVersionId() == "" {
 		return nil, status.Error(codes.InvalidArgument, "version_id is required")
 	}
 
 	if s.historyReader == nil {
-		return nil, status.Error(codes.Unavailable, "history reader not configured")
+		return nil, status.Error(codes.Unavailable, errHistoryReaderNotConfigured)
 	}
 
 	identity := tailscale.IdentityFromContext(ctx)
@@ -128,7 +133,7 @@ func (s *Server) RestorePageVersion(ctx context.Context, req *apiv1.RestorePageV
 // DiffPageVersions implements the PageHistoryService RPC.
 func (s *Server) DiffPageVersions(_ context.Context, req *apiv1.DiffPageVersionsRequest) (*apiv1.DiffPageVersionsResponse, error) {
 	if req.GetPage() == "" {
-		return nil, status.Error(codes.InvalidArgument, "page is required")
+		return nil, status.Error(codes.InvalidArgument, errHistoryPageRequired)
 	}
 	if req.GetOldVersionId() == "" {
 		return nil, status.Error(codes.InvalidArgument, "old_version_id is required")
@@ -138,7 +143,7 @@ func (s *Server) DiffPageVersions(_ context.Context, req *apiv1.DiffPageVersions
 	}
 
 	if s.historyReader == nil {
-		return nil, status.Error(codes.Unavailable, "history reader not configured")
+		return nil, status.Error(codes.Unavailable, errHistoryReaderNotConfigured)
 	}
 
 	diff, err := s.historyReader.DiffVersions(wikipage.PageIdentifier(req.GetPage()), req.GetOldVersionId(), req.GetNewVersionId())
@@ -152,7 +157,7 @@ func (s *Server) DiffPageVersions(_ context.Context, req *apiv1.DiffPageVersions
 // SearchPageHistory implements the PageHistoryService RPC.
 func (s *Server) SearchPageHistory(_ context.Context, req *apiv1.SearchPageHistoryRequest) (*apiv1.SearchPageHistoryResponse, error) {
 	if req.GetPage() == "" {
-		return nil, status.Error(codes.InvalidArgument, "page is required")
+		return nil, status.Error(codes.InvalidArgument, errHistoryPageRequired)
 	}
 	if req.GetQuery() == "" {
 		return nil, status.Error(codes.InvalidArgument, "query is required")

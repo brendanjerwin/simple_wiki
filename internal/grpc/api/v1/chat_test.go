@@ -1863,6 +1863,60 @@ var _ = Describe("ChatService", func() {
 				Expect(chatManager.notifyToolCallCalls[0].detail).To(Equal("server/site.go:42"))
 			})
 		})
+
+		When("called with a terminal status (completed) after a prior pending call", func() {
+			var (
+				resp *apiv1.SendToolCallNotificationResponse
+				err  error
+			)
+
+			BeforeEach(func() {
+				// Start tracking by sending "pending" (isLive path)
+				_, _ = server.SendToolCallNotification(ctx, &apiv1.SendToolCallNotificationRequest{
+					Page:       "test-page",
+					MessageId:  "msg-1",
+					ToolCallId: "tc-term",
+					Title:      "Reading file",
+					Status:     "pending",
+				})
+				// Complete it (isTerminal path)
+				resp, err = server.SendToolCallNotification(ctx, &apiv1.SendToolCallNotificationRequest{
+					Page:       "test-page",
+					MessageId:  "msg-1",
+					ToolCallId: "tc-term",
+					Title:      "Reading file",
+					Status:     "completed",
+					Detail:     "done",
+				})
+			})
+
+			It("should not error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should return a response", func() {
+				Expect(resp).NotTo(BeNil())
+			})
+		})
+
+		When("called with a failed status (terminal without prior tracking)", func() {
+			var err error
+
+			BeforeEach(func() {
+				_, err = server.SendToolCallNotification(ctx, &apiv1.SendToolCallNotificationRequest{
+					Page:       "test-page",
+					MessageId:  "msg-1",
+					ToolCallId: "tc-fail",
+					Title:      "Writing file",
+					Status:     "failed",
+					Detail:     "permission denied",
+				})
+			})
+
+			It("should not error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+		})
 	})
 
 	Describe("SendPlanNotification", func() {
@@ -2905,6 +2959,72 @@ var _ = Describe("ChatService", func() {
 
 			It("should complete quickly since mock returns immediately", func() {
 				Expect(duration).To(BeNumerically("<", time.Second))
+			})
+		})
+	})
+})
+
+var _ = Describe("ToolCallPromotion", func() {
+	var (
+		promoter    *v1.ToolCallPromotion
+		chatManager *mockChatBufferManager
+	)
+
+	BeforeEach(func() {
+		chatManager = newMockChatBufferManager()
+		promoter = v1.NewToolCallPromotion()
+	})
+
+	Describe("TrackStart", func() {
+		When("called twice for the same tool call ID", func() {
+			BeforeEach(func() {
+				promoter.TrackStart(chatManager, "tc-1", "msg-1", "page1", "Title A", "read", "detail A")
+				promoter.TrackStart(chatManager, "tc-1", "msg-1", "page1", "Title B", "read", "detail B")
+			})
+
+			It("should not immediately notify background task", func() {
+				Expect(chatManager.notifyBackgroundTaskCalls).To(BeEmpty())
+			})
+		})
+
+		When("called with empty title and detail on a second call (should not overwrite)", func() {
+			BeforeEach(func() {
+				promoter.TrackStart(chatManager, "tc-2", "msg-2", "page2", "Original Title", "read", "original detail")
+				promoter.TrackStart(chatManager, "tc-2", "msg-2", "page2", "", "read", "")
+			})
+
+			It("should not immediately notify background task", func() {
+				Expect(chatManager.notifyBackgroundTaskCalls).To(BeEmpty())
+			})
+		})
+	})
+
+	Describe("TrackComplete", func() {
+		When("called with an unknown tool call ID", func() {
+			var completedWithoutPanic bool
+
+			BeforeEach(func() {
+				promoter.TrackComplete(chatManager, "no-such-tc", "completed", "done")
+				completedWithoutPanic = true
+			})
+
+			It("should not panic", func() {
+				Expect(completedWithoutPanic).To(BeTrue())
+			})
+
+			It("should not notify background task", func() {
+				Expect(chatManager.notifyBackgroundTaskCalls).To(BeEmpty())
+			})
+		})
+
+		When("completing a tracked tool call that has not been promoted yet", func() {
+			BeforeEach(func() {
+				promoter.TrackStart(chatManager, "tc-1", "msg-1", "page1", "Reading file", "read", "server.go:42")
+				promoter.TrackComplete(chatManager, "tc-1", "completed", "done")
+			})
+
+			It("should not notify background task (no promotion occurred)", func() {
+				Expect(chatManager.notifyBackgroundTaskCalls).To(BeEmpty())
 			})
 		})
 	})

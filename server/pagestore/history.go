@@ -172,7 +172,7 @@ func (s *Store) ListVersions(identifier wikipage.PageIdentifier) ([]VersionMetad
 }
 
 // readVersionMetadata reads and parses a .meta.json file for a version.
-func (s *Store) readVersionMetadata(dir, versionID string) (versionMetadataOnDisk, error) {
+func (*Store) readVersionMetadata(dir, versionID string) (versionMetadataOnDisk, error) {
 	metaPath := filepath.Join(dir, versionID+versionMetaExt)
 	metaBytes, err := os.ReadFile(metaPath)
 	if err != nil {
