@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -96,6 +97,26 @@ func dispatchA2A(ts *httptest.Server, headers map[string]string, body any) (stat
 
 func bearerHeaders(token string) map[string]string {
 	return map[string]string{"Authorization": "Bearer " + token}
+}
+
+// dispatchNotification posts a JSON-RPC notification and returns the HTTP
+// status code and raw body bytes. Per spec, notifications must not produce
+// a JSON-RPC response body, so callers should assert the body is empty.
+func dispatchNotification(ts *httptest.Server, headers map[string]string, body any) (statusCode int, responseBody []byte) {
+	payload, err := json.Marshal(body)
+	Expect(err).NotTo(HaveOccurred())
+	req, err := http.NewRequest(http.MethodPost, ts.URL+"/", strings.NewReader(string(payload)))
+	Expect(err).NotTo(HaveOccurred())
+	req.Header.Set("Content-Type", "application/json")
+	for k, v := range headers {
+		req.Header.Set(k, v)
+	}
+	resp, err := ts.Client().Do(req)
+	Expect(err).NotTo(HaveOccurred())
+	defer resp.Body.Close() //nolint:errcheck
+	responseBody, err = io.ReadAll(resp.Body)
+	Expect(err).NotTo(HaveOccurred())
+	return resp.StatusCode, responseBody
 }
 
 // pollTaskUntil polls tasks/get until the task leaves non-terminal state or
@@ -877,6 +898,117 @@ var _ = Describe("a2aServer task persistence", func() {
 		Expect(t.State).To(Equal(a2aStateFailed))
 		snap := srv.snapshot(t)
 		Expect(snap.Status.State).To(Equal("failed"))
+	})
+})
+
+var _ = Describe("a2aServer $/cancel_request", func() {
+	var (
+		ts      *httptest.Server
+		release chan struct{}
+	)
+	const tok = "tok-123"
+
+	BeforeEach(func() {
+		release = make(chan struct{})
+		rel := release // capture for runner goroutines that outlive BeforeEach
+		_, ts = newA2ATestServer(tok, "", 9*time.Minute, 128, func(ctx context.Context, _ *a2aTask, _ a2aCaller) (string, error) {
+			select {
+			case <-rel:
+				return "done", nil
+			case <-ctx.Done():
+				return "", ctx.Err()
+			}
+		})
+	})
+
+	AfterEach(func() {
+		close(release)
+		ts.Close()
+	})
+
+	When("a $/cancel_request notification targets an in-flight message/send by request id", func() {
+		var taskID string
+		var cancelCode int
+		var cancelBody []byte
+
+		BeforeEach(func() {
+			// Start a long-running task with JSON-RPC id 3.
+			_, resp := dispatchA2A(ts, bearerHeaders(tok), map[string]any{
+				"jsonrpc": "2.0",
+				"id":      3,
+				"method":  "message/send",
+				"params": map[string]any{
+					"message": map[string]any{
+						"role":      "user",
+						"parts":     []map[string]any{{"kind": "text", "text": "long task"}},
+						"contextId": "ctx-cancel-test",
+					},
+				},
+			})
+			taskID = a2aStr(a2aMap(resp, "result")["id"])
+
+			// Wait until the runner is blocked inside the seam.
+			Eventually(func() bool {
+				_, r := dispatchA2A(ts, bearerHeaders(tok), map[string]any{
+					"jsonrpc": "2.0", "id": 7, "method": "tasks/get",
+					"params": map[string]any{"id": taskID},
+				})
+				result, _ := r["result"].(map[string]any)
+				if result == nil {
+					return false
+				}
+				state, _ := a2aMap(result, "status")["state"].(string)
+				return state == "working"
+			}).Within(2 * time.Second).Should(BeTrue())
+
+			// Send $/cancel_request referencing the original JSON-RPC id 3.
+			cancelCode, cancelBody = dispatchNotification(ts, bearerHeaders(tok), map[string]any{
+				"jsonrpc": "2.0",
+				"method":  "$/cancel_request",
+				"params":  map[string]any{"requestId": 3},
+			})
+		})
+
+		It("returns 200 OK", func() {
+			Expect(cancelCode).To(Equal(http.StatusOK))
+		})
+
+		It("returns an empty response body", func() {
+			Expect(cancelBody).To(BeEmpty())
+		})
+
+		When("the task is polled after cancellation", func() {
+			var finalState string
+
+			BeforeEach(func() {
+				finalState, _ = pollTaskUntil(ts, tok, taskID, 2*time.Second)
+			})
+
+			It("finishes as canceled, not failed", func() {
+				Expect(finalState).To(Equal(a2aStateCanceled))
+			})
+		})
+	})
+
+	When("$/cancel_request targets a request id with no known task", func() {
+		var cancelCode int
+		var cancelBody []byte
+
+		BeforeEach(func() {
+			cancelCode, cancelBody = dispatchNotification(ts, bearerHeaders(tok), map[string]any{
+				"jsonrpc": "2.0",
+				"method":  "$/cancel_request",
+				"params":  map[string]any{"requestId": 42},
+			})
+		})
+
+		It("returns 200 OK (graceful no-op)", func() {
+			Expect(cancelCode).To(Equal(http.StatusOK))
+		})
+
+		It("returns an empty response body", func() {
+			Expect(cancelBody).To(BeEmpty())
+		})
 	})
 })
 

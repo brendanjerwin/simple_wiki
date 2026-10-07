@@ -133,6 +133,10 @@ type a2aTask struct {
 	State        string // "working" | "completed" | "failed" | "canceled"
 	CreatedAt    time.Time
 	cancel       context.CancelFunc
+	// reqIDKey is the canonical string form of the JSON-RPC request id from the
+	// originating message/send call. Used to clean up the server's requestToTask
+	// map when this task is pruned. Empty when the caller did not supply an id.
+	reqIDKey string
 }
 
 func (t *a2aTask) terminal() bool {
@@ -147,11 +151,12 @@ type a2aConfig struct {
 
 // a2aParams is the JSON-RPC params object.
 type a2aParams struct {
-	Message       *a2aMessage    `json:"message"`
-	Configuration a2aConfig      `json:"configuration"`
-	Metadata      map[string]any `json:"metadata"`
-	ID            string         `json:"id"`
-	ContextID     string         `json:"contextId"`
+	Message       *a2aMessage     `json:"message"`
+	Configuration a2aConfig       `json:"configuration"`
+	Metadata      map[string]any  `json:"metadata"`
+	ID            string          `json:"id"`
+	ContextID     string          `json:"contextId"`
+	RequestID     json.RawMessage `json:"requestId"` // $/cancel_request notification
 }
 
 // a2aJSONRPCRequest is an inbound JSON-RPC 2.0 request. The id is echoed
@@ -247,6 +252,12 @@ type a2aServer struct {
 
 	mu    sync.Mutex
 	tasks map[string]*a2aTask
+
+	// requestToTask maps the canonical JSON-RPC request-id string of a
+	// message/send call to the resulting A2A task ID, so that
+	// $/cancel_request notifications (which carry the original request id)
+	// can cancel the right task. Protected by mu.
+	requestToTask map[string]string
 
 	// persistPath, when non-empty, persists terminal task records to a JSON
 	// file so tasks/get keeps returning results across service restarts and
@@ -348,7 +359,7 @@ func newA2AServer(cfg a2aServerConfig, d *poolDaemon) (*a2aServer, error) {
 	if cfg.TLSCertPath == "" && cfg.Bind != "127.0.0.1" && cfg.Bind != "localhost" && cfg.Bind != "::1" {
 		slog.Warn("a2a: TLS disabled and bind is not loopback; traffic is unencrypted", "bind", cfg.Bind)
 	}
-	s := &a2aServer{cfg: cfg, daemon: d, tasks: make(map[string]*a2aTask), sessions: make(map[string]*a2aSession)}
+	s := &a2aServer{cfg: cfg, daemon: d, tasks: make(map[string]*a2aTask), requestToTask: make(map[string]string), sessions: make(map[string]*a2aSession)}
 	if cfg.StatePath != "" {
 		s.persistPath = cfg.StatePath
 		if err := s.loadPersistedTasks(); err != nil {
@@ -640,6 +651,8 @@ func (s *a2aServer) handleDispatch(w http.ResponseWriter, r *http.Request) {
 		s.handleTaskCancel(w, req)
 	case "tasks/list":
 		s.handleTaskList(w, req)
+	case "$/cancel_request":
+		s.handleCancelNotification(w, req, caller)
 	default:
 		s.writeError(w, req.ID, a2aErrMethodNotFound, fmt.Sprintf("unknown method: %s", req.Method))
 	}
@@ -679,6 +692,11 @@ func (s *a2aServer) handleMessageSend(w http.ResponseWriter, _ *http.Request, re
 	s.mu.Lock()
 	s.pruneLocked()
 	s.tasks[task.ID] = task
+	if len(req.ID) > 0 {
+		key := callerReqKey(caller, req.ID)
+		task.reqIDKey = key
+		s.requestToTask[key] = task.ID
+	}
 	snap := s.snapshot(task)
 	s.mu.Unlock()
 
@@ -783,6 +801,14 @@ func randomHex(n int) string {
 	return hex.EncodeToString(b)
 }
 
+// callerReqKey returns the requestToTask map key for a given caller and
+// JSON-RPC request id. The caller identity is included so two authenticated
+// gateway clients using the same numeric request id cannot cancel each
+// other's tasks.
+func callerReqKey(caller a2aCaller, reqID json.RawMessage) string {
+	return caller.ClientID + ":" + caller.Login + ":" + string(reqID)
+}
+
 // tasksCount returns the number of in-memory tasks (test helper).
 func (s *a2aServer) tasksCount() int {
 	s.mu.Lock()
@@ -815,6 +841,9 @@ func (s *a2aServer) pruneLocked() {
 		t := s.tasks[id]
 		if !t.terminal() {
 			break
+		}
+		if t.reqIDKey != "" && s.requestToTask[t.reqIDKey] == t.ID {
+			delete(s.requestToTask, t.reqIDKey)
 		}
 		delete(s.tasks, id)
 	}
@@ -890,6 +919,48 @@ func (s *a2aServer) handleTaskCancel(w http.ResponseWriter, req a2aRequest) {
 	snap := s.snapshot(task)
 	s.mu.Unlock()
 	s.writeResult(w, req.ID, snap)
+}
+
+// handleCancelNotification handles the $/cancel_request JSON-RPC notification
+// sent by A2A callers wishing to cancel an in-flight message/send. The
+// requestId in the params corresponds to the JSON-RPC id of the originating
+// message/send call. Per JSON-RPC 2.0 spec, notifications must not produce a
+// response object — the server returns an empty 200 OK body.
+func (s *a2aServer) handleCancelNotification(w http.ResponseWriter, req a2aRequest, caller a2aCaller) {
+	// Notifications must not produce a JSON-RPC response body (spec §4).
+	w.WriteHeader(http.StatusOK)
+
+	requestID := req.Params.RequestID
+	if len(requestID) == 0 {
+		slog.Debug("a2a $/cancel_request without requestId; ignoring",
+			logKeyAction, "a2a_cancel_notification")
+		return
+	}
+
+	reqKey := callerReqKey(caller, requestID)
+
+	s.mu.Lock()
+	taskID, ok := s.requestToTask[reqKey]
+	if !ok {
+		s.mu.Unlock()
+		slog.Debug("a2a $/cancel_request: no task for request id",
+			"requestId", string(requestID),
+			logKeyAction, "a2a_cancel_notification")
+		return
+	}
+	task, ok := s.tasks[taskID]
+	if !ok || task.terminal() {
+		s.mu.Unlock()
+		return
+	}
+	task.cancel()
+	task.State = a2aStateCanceled
+	s.mu.Unlock()
+
+	slog.Info("a2a task canceled via $/cancel_request",
+		logKeyTaskID, taskID,
+		"requestId", string(requestID),
+		logKeyAction, "a2a_task_cancel")
 }
 
 func (s *a2aServer) handleTaskList(w http.ResponseWriter, req a2aRequest) {
