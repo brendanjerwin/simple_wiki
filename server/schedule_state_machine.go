@@ -24,15 +24,18 @@ func (e *IllegalScheduleTransitionError) Error() string {
 // valid destination; terminal-to-terminal transitions are rejected to catch
 // bookkeeping bugs.
 var legalScheduleTransitions = map[[2]apiv1.ScheduleStatus]bool{
-	{apiv1.ScheduleStatus_SCHEDULE_STATUS_UNSPECIFIED, apiv1.ScheduleStatus_SCHEDULE_STATUS_RUNNING}: true,
-	{apiv1.ScheduleStatus_SCHEDULE_STATUS_RUNNING, apiv1.ScheduleStatus_SCHEDULE_STATUS_OK}:          true,
-	{apiv1.ScheduleStatus_SCHEDULE_STATUS_RUNNING, apiv1.ScheduleStatus_SCHEDULE_STATUS_ERROR}:       true,
-	{apiv1.ScheduleStatus_SCHEDULE_STATUS_RUNNING, apiv1.ScheduleStatus_SCHEDULE_STATUS_TIMEOUT}:     true,
-	{apiv1.ScheduleStatus_SCHEDULE_STATUS_RUNNING, apiv1.ScheduleStatus_SCHEDULE_STATUS_WARN}:        true,
-	{apiv1.ScheduleStatus_SCHEDULE_STATUS_OK, apiv1.ScheduleStatus_SCHEDULE_STATUS_RUNNING}:          true,
-	{apiv1.ScheduleStatus_SCHEDULE_STATUS_ERROR, apiv1.ScheduleStatus_SCHEDULE_STATUS_RUNNING}:       true,
-	{apiv1.ScheduleStatus_SCHEDULE_STATUS_TIMEOUT, apiv1.ScheduleStatus_SCHEDULE_STATUS_RUNNING}:     true,
-	{apiv1.ScheduleStatus_SCHEDULE_STATUS_WARN, apiv1.ScheduleStatus_SCHEDULE_STATUS_RUNNING}:        true,
+	{apiv1.ScheduleStatus_SCHEDULE_STATUS_UNSPECIFIED, apiv1.ScheduleStatus_SCHEDULE_STATUS_RUNNING}:  true,
+	{apiv1.ScheduleStatus_SCHEDULE_STATUS_RUNNING, apiv1.ScheduleStatus_SCHEDULE_STATUS_OK}:           true,
+	{apiv1.ScheduleStatus_SCHEDULE_STATUS_RUNNING, apiv1.ScheduleStatus_SCHEDULE_STATUS_ERROR}:        true,
+	{apiv1.ScheduleStatus_SCHEDULE_STATUS_RUNNING, apiv1.ScheduleStatus_SCHEDULE_STATUS_TIMEOUT}:      true,
+	{apiv1.ScheduleStatus_SCHEDULE_STATUS_RUNNING, apiv1.ScheduleStatus_SCHEDULE_STATUS_WARN}:         true,
+	{apiv1.ScheduleStatus_SCHEDULE_STATUS_RUNNING, apiv1.ScheduleStatus_SCHEDULE_STATUS_MAX_TURNS}:    true,
+	{apiv1.ScheduleStatus_SCHEDULE_STATUS_OK, apiv1.ScheduleStatus_SCHEDULE_STATUS_RUNNING}:           true,
+	{apiv1.ScheduleStatus_SCHEDULE_STATUS_ERROR, apiv1.ScheduleStatus_SCHEDULE_STATUS_RUNNING}:        true,
+	{apiv1.ScheduleStatus_SCHEDULE_STATUS_TIMEOUT, apiv1.ScheduleStatus_SCHEDULE_STATUS_RUNNING}:      true,
+	{apiv1.ScheduleStatus_SCHEDULE_STATUS_TIMEOUT, apiv1.ScheduleStatus_SCHEDULE_STATUS_MAX_TURNS}:    true,
+	{apiv1.ScheduleStatus_SCHEDULE_STATUS_WARN, apiv1.ScheduleStatus_SCHEDULE_STATUS_RUNNING}:         true,
+	{apiv1.ScheduleStatus_SCHEDULE_STATUS_MAX_TURNS, apiv1.ScheduleStatus_SCHEDULE_STATUS_RUNNING}:    true,
 }
 
 // ValidateScheduleTransition returns nil if the transition from -> to is legal

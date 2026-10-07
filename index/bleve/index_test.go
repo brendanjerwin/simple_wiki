@@ -182,6 +182,66 @@ var _ = Describe("Index", func() {
 				Expect(results[0].Identifier).To(Equal(wikipage.PageIdentifier("my-page")))
 			})
 		})
+
+		Describe("when searching by exact page identifier", func() {
+			var results []bleve.SearchResult
+			var err error
+
+			BeforeEach(func() {
+				mockReader.AddPage("daily_log_2026_10_04_three_minutes_of_margin", wikipage.FrontMatter{
+					// Legacy page: no explicit identifier key — AddPageToIndex must
+					// synthesize the canonical identifier so identifier search still works.
+					"title": "Three Minutes of Margin",
+				})
+				Expect(frontmatterIndex.AddPageToIndex("daily_log_2026_10_04_three_minutes_of_margin")).To(Succeed())
+				Expect(index.AddPageToIndex("daily_log_2026_10_04_three_minutes_of_margin")).To(Succeed())
+
+				results, err = index.Query("daily_log_2026_10_04_three_minutes_of_margin")
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should find the page by its full identifier", func() {
+				Expect(results).To(ContainElement(HaveField("Identifier", wikipage.PageIdentifier("daily_log_2026_10_04_three_minutes_of_margin"))))
+			})
+		})
+
+		Describe("when searching by identifier prefix", func() {
+			var results []bleve.SearchResult
+			var err error
+
+			BeforeEach(func() {
+				mockReader.AddPage("daily_log_2026_10_04_the_layer_beneath_the_budget", wikipage.FrontMatter{
+					"identifier": "daily_log_2026_10_04_the_layer_beneath_the_budget",
+					"title":      "The Layer Beneath the Budget",
+				})
+				Expect(frontmatterIndex.AddPageToIndex("daily_log_2026_10_04_the_layer_beneath_the_budget")).To(Succeed())
+				Expect(index.AddPageToIndex("daily_log_2026_10_04_the_layer_beneath_the_budget")).To(Succeed())
+
+				mockReader.AddPage("unrelated_page", wikipage.FrontMatter{
+					"identifier": "unrelated_page",
+					"title":      "Unrelated",
+				})
+				Expect(frontmatterIndex.AddPageToIndex("unrelated_page")).To(Succeed())
+				Expect(index.AddPageToIndex("unrelated_page")).To(Succeed())
+
+				results, err = index.Query("daily_log_2026_10_04")
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should find the page whose identifier starts with the query", func() {
+				Expect(results).To(ContainElement(HaveField("Identifier", wikipage.PageIdentifier("daily_log_2026_10_04_the_layer_beneath_the_budget"))))
+			})
+
+			It("should not return unrelated pages", func() {
+				Expect(results).NotTo(ContainElement(HaveField("Identifier", wikipage.PageIdentifier("unrelated_page"))))
+			})
+		})
 	})
 
 	Describe("RemovePageFromIndex", func() {

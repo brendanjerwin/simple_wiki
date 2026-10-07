@@ -48,6 +48,12 @@ type BleveIndexQueryer interface {
 // single token, not split into `home`+`lab`).
 const tagsField = "tags"
 
+// identifierField is the document field used to store the page's canonical
+// identifier. The keyword analyzer preserves the full underscore-delimited
+// string as a single token so prefix queries like "daily_log_2026_10_04"
+// correctly match "daily_log_2026_10_04_the_layer_beneath_the_budget".
+const identifierField = "identifier"
+
 // NewIndex creates a new BleveIndex.
 func NewIndex(pageReader wikipage.PageReader, frontmatterQueryer frontmatter.IQueryFrontmatterIndex) (*Index, error) {
 	mapping := bleve.NewIndexMapping()
@@ -58,6 +64,13 @@ func NewIndex(pageReader wikipage.PageReader, frontmatterQueryer frontmatter.IQu
 	tagsFieldMapping := bleve.NewTextFieldMapping()
 	tagsFieldMapping.Analyzer = "keyword"
 	mapping.DefaultMapping.AddFieldMappingsAt(tagsField, tagsFieldMapping)
+
+	// Treat the `identifier` field as keyword so underscore-delimited page
+	// identifiers are stored as a single token, enabling prefix queries
+	// (e.g. "daily_log_2026_10_04" matches "daily_log_2026_10_04_the_...").
+	identifierFieldMapping := bleve.NewTextFieldMapping()
+	identifierFieldMapping.Analyzer = "keyword"
+	mapping.DefaultMapping.AddFieldMappingsAt(identifierField, identifierFieldMapping)
 
 	index, err := bleve.NewMemOnly(mapping)
 	if err != nil {
@@ -110,6 +123,10 @@ func (b *Index) AddPageToIndex(requestedIdentifier wikipage.PageIdentifier) erro
 
 	pageFrontmatter["content"] = content
 	pageFrontmatter[tagsField] = hashtags.Extract(string(markdown))
+	// Overwrite the identifier field with the canonical munged form so that
+	// pages whose stored frontmatter lacks an explicit identifier key are
+	// still findable by identifier search.
+	pageFrontmatter[identifierField] = mungedIdentifier
 
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -274,6 +291,11 @@ const titlePrefixBoost = 1.5
 // pages tagged `#home` or `#lab` above pages that just mention those words.
 const tagsBoostFloat = 2.0
 
+// identifierPrefixBoost is the multiplier applied to identifier prefix
+// matches. Ranked higher than title so that an exact identifier lookup
+// floats to the top of results.
+const identifierPrefixBoost = 3.0
+
 // Query searches the Bleve index for free-text only (no tag filtering).
 func (b *Index) Query(queryText string) ([]SearchResult, error) {
 	return b.QueryWithTags(queryText, nil, nil)
@@ -355,7 +377,14 @@ func buildTextScoringQuery(text string, boostTokens []string) query.Query {
 		contentQuery := bleve.NewMatchQuery(text)
 		contentQuery.SetField(contentField)
 
-		clauses = append(clauses, titleQuery, titlePrefixQuery, contentQuery)
+		// Prefix-match against the keyword-analyzed identifier field so that
+		// underscore-delimited identifiers like daily_log_2026_10_04_title
+		// are found when the caller searches for "daily_log_2026_10_04".
+		identifierPrefixQuery := bleve.NewPrefixQuery(strings.ToLower(text))
+		identifierPrefixQuery.SetField(identifierField)
+		identifierPrefixQuery.SetBoost(identifierPrefixBoost)
+
+		clauses = append(clauses, titleQuery, titlePrefixQuery, contentQuery, identifierPrefixQuery)
 	}
 
 	for _, token := range boostTokens {
