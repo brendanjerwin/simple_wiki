@@ -605,6 +605,124 @@ var _ = Describe("AgentScheduleStore", func() {
 		})
 	})
 
+	Describe("TransitionStatusFrom", func() {
+		BeforeEach(func() {
+			Expect(store.Upsert("p", &apiv1.AgentSchedule{
+				Id: "s1", Cron: "0 * * * * *", Enabled: true,
+			})).To(Succeed())
+		})
+
+		Describe("when the current status matches expectedFrom", func() {
+			var err error
+
+			BeforeEach(func() {
+				Expect(store.TransitionStatus("p", "s1", apiv1.ScheduleStatus_SCHEDULE_STATUS_RUNNING, "", 0)).To(Succeed())
+				Expect(store.TransitionStatus("p", "s1", apiv1.ScheduleStatus_SCHEDULE_STATUS_TIMEOUT, "timed out", 10)).To(Succeed())
+				err = store.TransitionStatusFrom("p", "s1",
+					apiv1.ScheduleStatus_SCHEDULE_STATUS_TIMEOUT,
+					apiv1.ScheduleStatus_SCHEDULE_STATUS_MAX_TURNS,
+					"max_turns reached", 600)
+			})
+
+			It("should succeed", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should apply the transition", func() {
+				schedules, _ := store.List("p")
+				Expect(schedules[0].GetLastStatus()).To(Equal(apiv1.ScheduleStatus_SCHEDULE_STATUS_MAX_TURNS))
+			})
+
+			It("should record the supplied error message", func() {
+				schedules, _ := store.List("p")
+				Expect(schedules[0].GetLastErrorMessage()).To(Equal("max_turns reached"))
+			})
+		})
+
+		Describe("when the current status does not match expectedFrom", func() {
+			var err error
+
+			BeforeEach(func() {
+				// Schedule is RUNNING (new run started); late completion expects TIMEOUT.
+				Expect(store.TransitionStatus("p", "s1", apiv1.ScheduleStatus_SCHEDULE_STATUS_RUNNING, "", 0)).To(Succeed())
+				err = store.TransitionStatusFrom("p", "s1",
+					apiv1.ScheduleStatus_SCHEDULE_STATUS_TIMEOUT,
+					apiv1.ScheduleStatus_SCHEDULE_STATUS_MAX_TURNS,
+					"late max_turns", 600)
+			})
+
+			It("should return an IllegalScheduleTransitionError", func() {
+				var typed *server.IllegalScheduleTransitionError
+				Expect(errors.As(err, &typed)).To(BeTrue())
+			})
+
+			It("should not modify the schedule status", func() {
+				schedules, _ := store.List("p")
+				Expect(schedules[0].GetLastStatus()).To(Equal(apiv1.ScheduleStatus_SCHEDULE_STATUS_RUNNING))
+			})
+		})
+	})
+
+	Describe("terminal to terminal background activity amendment", func() {
+		var chatStore *server.AgentChatContextStore
+
+		BeforeEach(func() {
+			chatStore = server.NewAgentChatContextStore(pages)
+			store.SetBackgroundActivitySink(chatStore)
+			Expect(store.Upsert("p", &apiv1.AgentSchedule{
+				Id: "s1", Cron: "0 * * * * *", Enabled: true,
+			})).To(Succeed())
+		})
+
+		Describe("when TIMEOUT is amended to MAX_TURNS", func() {
+			BeforeEach(func() {
+				Expect(store.TransitionStatus("p", "s1", apiv1.ScheduleStatus_SCHEDULE_STATUS_RUNNING, "", 0)).To(Succeed())
+				Expect(store.TransitionStatus("p", "s1", apiv1.ScheduleStatus_SCHEDULE_STATUS_TIMEOUT, "timed out", 10)).To(Succeed())
+				Expect(store.TransitionStatusFrom("p", "s1",
+					apiv1.ScheduleStatus_SCHEDULE_STATUS_TIMEOUT,
+					apiv1.ScheduleStatus_SCHEDULE_STATUS_MAX_TURNS,
+					"max_turns (10) reached after 600s", 600)).To(Succeed())
+			})
+
+			It("should record exactly one background activity entry", func() {
+				ctx, err := chatStore.Read("p")
+				Expect(err).NotTo(HaveOccurred())
+				Expect(ctx.GetBackgroundActivity()).To(HaveLen(1))
+			})
+
+			It("should amend the entry status to MAX_TURNS", func() {
+				ctx, err := chatStore.Read("p")
+				Expect(err).NotTo(HaveOccurred())
+				Expect(ctx.GetBackgroundActivity()[0].GetStatus()).To(Equal(apiv1.ScheduleStatus_SCHEDULE_STATUS_MAX_TURNS))
+			})
+		})
+
+		Describe("when the background activity sink fails during terminal-to-terminal amendment", func() {
+			var transitionErr error
+
+			BeforeEach(func() {
+				sink := &erroringActivitySink{err: errors.New("sink boom")}
+				store.SetBackgroundActivitySink(sink)
+
+				Expect(store.TransitionStatus("p", "s1", apiv1.ScheduleStatus_SCHEDULE_STATUS_RUNNING, "", 0)).To(Succeed())
+				Expect(store.TransitionStatus("p", "s1", apiv1.ScheduleStatus_SCHEDULE_STATUS_TIMEOUT, "timed out", 10)).To(Succeed())
+				transitionErr = store.TransitionStatusFrom("p", "s1",
+					apiv1.ScheduleStatus_SCHEDULE_STATUS_TIMEOUT,
+					apiv1.ScheduleStatus_SCHEDULE_STATUS_MAX_TURNS,
+					"max_turns (10) reached after 600s", 600)
+			})
+
+			It("should still succeed (amendment errors are best-effort)", func() {
+				Expect(transitionErr).NotTo(HaveOccurred())
+			})
+
+			It("should update the schedule status to MAX_TURNS despite sink failure", func() {
+				schedules, _ := store.List("p")
+				Expect(schedules[0].GetLastStatus()).To(Equal(apiv1.ScheduleStatus_SCHEDULE_STATUS_MAX_TURNS))
+			})
+		})
+	})
+
 	Describe("List error handling", func() {
 		Describe("when ReadFrontMatter returns an error", func() {
 			var err error
@@ -780,6 +898,10 @@ func (r *recordingActivitySink) CompleteBackgroundActivity(page, scheduleID stri
 	return status, nil
 }
 
+func (*recordingActivitySink) AmendBackgroundActivity(string, string, apiv1.ScheduleStatus, apiv1.ScheduleStatus) error {
+	return nil
+}
+
 // erroringActivitySink always returns an error from
 // AppendBackgroundActivityAutomatic. Used to verify that schedule transitions
 // succeed even when the best-effort sink fails.
@@ -795,6 +917,10 @@ func (e *erroringActivitySink) AppendBackgroundActivityAutomatic(_ string, _ *ap
 
 func (e *erroringActivitySink) CompleteBackgroundActivity(string, string, apiv1.ScheduleStatus) (apiv1.ScheduleStatus, error) {
 	return apiv1.ScheduleStatus_SCHEDULE_STATUS_UNSPECIFIED, e.err
+}
+
+func (e *erroringActivitySink) AmendBackgroundActivity(string, string, apiv1.ScheduleStatus, apiv1.ScheduleStatus) error {
+	return e.err
 }
 
 // errorPageStore is a fake page store with configurable read/write errors. It

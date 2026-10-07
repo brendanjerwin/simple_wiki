@@ -221,9 +221,49 @@ func (s *AgentChatContextStore) CompleteBackgroundActivity(page, scheduleID stri
 	return finalStatus, nil
 }
 
+// AmendBackgroundActivity finds the most recent background-activity entry for
+// scheduleID whose status equals fromStatus and updates it to toStatus. Used
+// for terminal→terminal corrections (e.g. late TIMEOUT→MAX_TURNS) so the
+// existing entry is corrected in place rather than a duplicate being appended.
+// Returns nil without modifying anything when no matching entry is found, since
+// amendment is best-effort (the original entry may have rolled off the ring buffer).
+func (s *AgentChatContextStore) AmendBackgroundActivity(page, scheduleID string, fromStatus, toStatus apiv1.ScheduleStatus) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	id, fm, err := s.pages.ReadFrontMatter(wikipage.PageIdentifier(page))
+	if err != nil {
+		return fmt.Errorf(errReadFrontmatterFmt, page, err)
+	}
+	existing, err := decodeChatContext(fm)
+	if err != nil {
+		return err
+	}
+
+	target := findNewestBackgroundActivityWithStatus(existing.BackgroundActivity, scheduleID, fromStatus)
+	if target == -1 {
+		return nil
+	}
+
+	existing.BackgroundActivity[target].Status = toStatus
+	existing.BackgroundActivity[target].Timestamp = timestamppb.New(time.Now().UTC())
+
+	if err := writeChatContext(fm, existing); err != nil {
+		return err
+	}
+	if err := s.pages.WriteFrontMatter(id, fm, wikipage.AnonymousIdentity); err != nil {
+		return fmt.Errorf(errWriteFrontmatterFmt, page, err)
+	}
+	return nil
+}
+
 func findNewestRunningBackgroundActivity(entries []*apiv1.BackgroundActivityEntry, scheduleID string) int {
+	return findNewestBackgroundActivityWithStatus(entries, scheduleID, apiv1.ScheduleStatus_SCHEDULE_STATUS_RUNNING)
+}
+
+func findNewestBackgroundActivityWithStatus(entries []*apiv1.BackgroundActivityEntry, scheduleID string, status apiv1.ScheduleStatus) int {
 	for i := len(entries) - 1; i >= 0; i-- {
-		if entries[i].GetScheduleId() == scheduleID && entries[i].GetStatus() == apiv1.ScheduleStatus_SCHEDULE_STATUS_RUNNING {
+		if entries[i].GetScheduleId() == scheduleID && entries[i].GetStatus() == status {
 			return i
 		}
 	}
