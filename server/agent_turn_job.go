@@ -134,6 +134,10 @@ func (j *AgentTurnJob) Execute() error {
 	outcome, terminalErr := j.awaitOutcome(completion)
 	if terminalErr != nil {
 		j.recordHardTimeout(terminalErr, j.hardTimeout)
+		// The pool may still be running and could report MAX_TURNS before it
+		// stops. Watch for a late completion so we can override the provisional
+		// TIMEOUT with the accurate status and real duration.
+		go j.applyLateMaxTurnsCompletion(completion)
 		return nil
 	}
 
@@ -259,5 +263,44 @@ func (j *AgentTurnJob) awaitOutcome(completion <-chan *ScheduledTurnOutcome) (*S
 		return outcome, nil
 	case <-time.After(j.hardTimeout):
 		return nil, fmt.Errorf("scheduled turn timed out after %s", j.hardTimeout)
+	}
+}
+
+// lateCompletionWindowMultiplier controls how long applyLateMaxTurnsCompletion
+// waits for a MAX_TURNS completion after the hard timeout fires. 4× the hard
+// timeout covers max_turns=100 runs at ~30s/turn (50 min) when the default
+// 10-min cap is in effect.
+const lateCompletionWindowMultiplier = 4
+
+// applyLateMaxTurnsCompletion waits for a MAX_TURNS outcome on completion
+// after the hard timeout has already recorded a provisional TIMEOUT. If the
+// pool reports MAX_TURNS within the window, we override the provisional TIMEOUT
+// so last_status, last_error_message, and last_duration_seconds reflect the
+// actual outcome rather than the server cap.
+//
+// If a new cron fire has already reclaimed the schedule (transitioning it to
+// RUNNING), the TIMEOUT→MAX_TURNS transition will be rejected by the state
+// machine and we log and move on — the new run's status is preserved.
+func (j *AgentTurnJob) applyLateMaxTurnsCompletion(completion <-chan *ScheduledTurnOutcome) {
+	// applyLateMaxTurnsCompletion is only called after the hard timeout fires,
+	// which requires j.hardTimeout > 0, so window is always positive here.
+	window := j.hardTimeout * lateCompletionWindowMultiplier
+	select {
+	case outcome := <-completion:
+		if outcome == nil || outcome.TerminalStatus != apiv1.ScheduleStatus_SCHEDULE_STATUS_MAX_TURNS {
+			return
+		}
+		// Require TIMEOUT as the current state so run A's late completion
+		// cannot overwrite run B's RUNNING status if a new fire has started.
+		err := j.store.TransitionStatusFrom(j.page, j.scheduleID,
+			apiv1.ScheduleStatus_SCHEDULE_STATUS_TIMEOUT,
+			apiv1.ScheduleStatus_SCHEDULE_STATUS_MAX_TURNS,
+			outcome.ErrorMessage, outcome.DurationSeconds)
+		if err != nil {
+			slog.Warn("agent turn: late MAX_TURNS override failed (new run may have started)",
+				logKeyPage, j.page, logKeyScheduleID, j.scheduleID, logKeyError, err)
+		}
+	case <-time.After(window):
+		// Hard-timeout record stands as the authoritative outcome.
 	}
 }

@@ -15,6 +15,17 @@ The wiki's search box (and the `api_v1_SearchService_SearchContent` MCP tool) ac
 
 Type whatever you're looking for. The wiki searches page titles, rendered content, and other indexed frontmatter fields. Results come back ranked by Bleve's default scoring with title boosts.
 
+## Identifier Search
+
+Page **identifiers** (e.g. `daily_log_2026_10_04`) are indexed as a keyword field — no tokenization — so identifier lookups match directly:
+
+| Query | Means |
+|-------|-------|
+| `daily_log_2026_10_04` | The page whose identifier is exactly that, ranked first. |
+| `daily_log_2026` | Every page whose identifier starts with that prefix, boosted over plain-text matches. |
+
+Draft detection and other identifier-based callers rely on this: searching by identifier (or its prefix) finds the page even when the text never mentions it.
+
 ## `#tag` Queries
 
 Tokens that start with `#` are interpreted as **tag filters**. They never match free-text — they look up the page-level tag index directly.
