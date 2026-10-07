@@ -265,6 +265,11 @@ func buildA2AFlags() []cli.Flag {
 			Value: defaultA2ATaskTimeout,
 			Usage: "Maximum wall-clock time for one A2A task",
 		},
+		cli.DurationFlag{
+			Name:  "a2a-max-task-timeout",
+			Value: defaultA2AMaxTaskTimeout,
+			Usage: "Ceiling for per-task metadata timeout overrides (a2a_task_timeout_seconds)",
+		},
 		cli.IntFlag{
 			Name:  "a2a-max-tasks",
 			Value: defaultA2AMaxTasks,
@@ -361,19 +366,20 @@ func runPoolAction(c *cli.Context) error {
 
 	if port := c.Int("a2a-port"); port > 0 {
 		cfg := a2aServerConfig{
-			Port:        port,
-			Bind:        c.String("a2a-bind"),
-			PublicURL:   c.String("a2a-public-url"),
-			AgentName:   c.String("a2a-agent-name"),
-			ChatPersona: os.Getenv("WIKI_CHAT_PERSONA"),
-			BearerToken: os.Getenv("WIKI_CLI_A2A_BEARER_TOKEN"),
-			ProxySecret: os.Getenv("WIKI_CLI_A2A_TRUSTED_PROXY_SECRET"),
-			ProxyHeader: c.String("a2a-trusted-proxy-header"),
-			StatePath:   c.String("a2a-state-path"),
-			TLSCertPath: c.String("a2a-tls-cert"),
-			TLSKeyPath:  c.String("a2a-tls-key"),
-			TaskTimeout: c.Duration("a2a-task-timeout"),
-			MaxTasks:    c.Int("a2a-max-tasks"),
+			Port:           port,
+			Bind:           c.String("a2a-bind"),
+			PublicURL:      c.String("a2a-public-url"),
+			AgentName:      c.String("a2a-agent-name"),
+			ChatPersona:    os.Getenv("WIKI_CHAT_PERSONA"),
+			BearerToken:    os.Getenv("WIKI_CLI_A2A_BEARER_TOKEN"),
+			ProxySecret:    os.Getenv("WIKI_CLI_A2A_TRUSTED_PROXY_SECRET"),
+			ProxyHeader:    c.String("a2a-trusted-proxy-header"),
+			StatePath:      c.String("a2a-state-path"),
+			TLSCertPath:    c.String("a2a-tls-cert"),
+			TLSKeyPath:     c.String("a2a-tls-key"),
+			TaskTimeout:    c.Duration("a2a-task-timeout"),
+			MaxTaskTimeout: c.Duration("a2a-max-task-timeout"),
+			MaxTasks:       c.Int("a2a-max-tasks"),
 		}
 		server, err := newA2AServer(cfg, d)
 		if err != nil {

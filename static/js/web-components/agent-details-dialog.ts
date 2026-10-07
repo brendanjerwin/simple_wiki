@@ -157,13 +157,15 @@ export class AgentDetailsDialog extends NativeDialogMixin(LitElement) {
       }
 
       .status-badge.status-error,
-      .status-badge.status-timeout {
+      .status-badge.status-timeout,
+      .status-badge.status-max-turns {
         background: var(--color-error-bg);
         color: var(--color-error-text);
         border-color: var(--color-error);
       }
 
-      .status-badge.status-running {
+      .status-badge.status-running,
+      .status-badge.status-warn {
         background: var(--color-warning-bg);
         color: var(--color-warning-text);
         border-color: var(--color-warning);
@@ -465,6 +467,8 @@ export class AgentDetailsDialog extends NativeDialogMixin(LitElement) {
       case ScheduleStatus.OK: return 'OK';
       case ScheduleStatus.ERROR: return 'Error';
       case ScheduleStatus.TIMEOUT: return 'Timeout';
+      case ScheduleStatus.MAX_TURNS: return 'Max Turns';
+      case ScheduleStatus.WARN: return 'Warn';
       case ScheduleStatus.UNSPECIFIED:
       default:
         return 'Unknown';
@@ -476,6 +480,8 @@ export class AgentDetailsDialog extends NativeDialogMixin(LitElement) {
       case ScheduleStatus.OK: return 'status-ok';
       case ScheduleStatus.ERROR: return 'status-error';
       case ScheduleStatus.TIMEOUT: return 'status-timeout';
+      case ScheduleStatus.MAX_TURNS: return 'status-max-turns';
+      case ScheduleStatus.WARN: return 'status-warn';
       case ScheduleStatus.RUNNING: return 'status-running';
       case ScheduleStatus.UNSPECIFIED:
       default:
