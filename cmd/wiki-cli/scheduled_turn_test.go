@@ -1026,6 +1026,115 @@ var _ = Describe("poolDaemon executeScheduledTurn", func() {
 			Expect(msg).To(ContainSubstring("shutting down"))
 		})
 	})
+
+	Describe("when prompt returns an error with a live parent context", func() {
+		var (
+			status apiv1.ScheduleStatus
+			msg    string
+		)
+
+		BeforeEach(func() {
+			var innerCalls int32
+			fakeConn := newFakeScheduledConn()
+			fakeConn.promptErr = errors.New("connection reset by peer")
+
+			daemon := &poolDaemon{
+				scheduledTurnSpawnFn: fakeScheduledConnSpawn(fakeConn, &innerCalls),
+			}
+			status, msg = daemon.executeScheduledTurn(context.Background(), &apiv1.ScheduledTurnRequest{
+				RequestId: "req-prompt-err",
+				Page:      "test-page",
+				Prompt:    "do something",
+			})
+		})
+
+		It("should return SCHEDULE_STATUS_ERROR", func() {
+			Expect(status).To(Equal(apiv1.ScheduleStatus_SCHEDULE_STATUS_ERROR))
+		})
+
+		It("should include 'prompt failed' in the error message", func() {
+			Expect(msg).To(ContainSubstring("prompt failed"))
+		})
+
+		It("should include the underlying error in the message", func() {
+			Expect(msg).To(ContainSubstring("connection reset by peer"))
+		})
+	})
+
+	Describe("when prompt returns an error and parent context is already cancelled", func() {
+		var (
+			status apiv1.ScheduleStatus
+			msg    string
+		)
+
+		BeforeEach(func() {
+			var innerCalls int32
+			fakeConn := newFakeScheduledConn()
+			fakeConn.promptErr = errors.New("context canceled")
+
+			ctx, cancel := context.WithCancel(context.Background())
+			cancel() // pre-cancel to simulate pool shutdown
+
+			daemon := &poolDaemon{
+				scheduledTurnSpawnFn: fakeScheduledConnSpawn(fakeConn, &innerCalls),
+			}
+			status, msg = daemon.executeScheduledTurn(ctx, &apiv1.ScheduledTurnRequest{
+				RequestId: "req-prompt-shutdown",
+				Page:      "test-page",
+				Prompt:    "do something",
+			})
+		})
+
+		It("should return SCHEDULE_STATUS_ERROR", func() {
+			Expect(status).To(Equal(apiv1.ScheduleStatus_SCHEDULE_STATUS_ERROR))
+		})
+
+		It("should report that the turn was interrupted by shutdown", func() {
+			Expect(msg).To(ContainSubstring("shutting down before turn completed"))
+		})
+	})
+
+	Describe("when the client hits max turns during the prompt", func() {
+		var (
+			status apiv1.ScheduleStatus
+			msg    string
+		)
+
+		BeforeEach(func() {
+			fakeConn := newFakeScheduledConn()
+
+			daemon := &poolDaemon{
+				scheduledTurnSpawnFn: func(_ context.Context, page string, _ string, maxTurns int32, allowedTools []string, cancelTurn context.CancelFunc) (*scheduledEphemeralConnection, func(), error) {
+					client := newScheduledTurnClient(page, 1, allowedTools, cancelTurn)
+					// Trigger HitLimit by sending one AgentMessageChunk (maxTurns=1).
+					_ = client.SessionUpdate(context.Background(), acp.SessionNotification{
+						SessionId: "s",
+						Update:    acp.UpdateAgentMessageText("hi"),
+					})
+					sec := &scheduledEphemeralConnection{
+						connection: fakeConn,
+						sessionID:  "fake-session",
+						client:     client,
+					}
+					return sec, func() {}, nil
+				},
+			}
+			status, msg = daemon.executeScheduledTurn(context.Background(), &apiv1.ScheduledTurnRequest{
+				RequestId: "req-max-turns",
+				Page:      "test-page",
+				MaxTurns:  1,
+				Prompt:    "do something",
+			})
+		})
+
+		It("should return SCHEDULE_STATUS_MAX_TURNS", func() {
+			Expect(status).To(Equal(apiv1.ScheduleStatus_SCHEDULE_STATUS_MAX_TURNS))
+		})
+
+		It("should mention max_turns in the message", func() {
+			Expect(msg).To(ContainSubstring("max_turns"))
+		})
+	})
 })
 
 type recordingScheduledTurnCompleter struct {
