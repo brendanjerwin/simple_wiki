@@ -20,6 +20,7 @@ var _ = Describe("ScheduleStateMachine", func() {
 			errored     = apiv1.ScheduleStatus_SCHEDULE_STATUS_ERROR
 			timeout     = apiv1.ScheduleStatus_SCHEDULE_STATUS_TIMEOUT
 			warn        = apiv1.ScheduleStatus_SCHEDULE_STATUS_WARN
+			maxTurns    = apiv1.ScheduleStatus_SCHEDULE_STATUS_MAX_TURNS
 		)
 
 		legalCases := []struct {
@@ -30,12 +31,15 @@ var _ = Describe("ScheduleStateMachine", func() {
 			{"UNSPECIFIED -> RUNNING (initial fire)", unspecified, running},
 			{"RUNNING -> OK (success)", running, ok},
 			{"RUNNING -> ERROR (failed)", running, errored},
-			{"RUNNING -> TIMEOUT (max_turns hit)", running, timeout},
+			{"RUNNING -> TIMEOUT (server hard timeout)", running, timeout},
 			{"RUNNING -> WARN (missing audit summary)", running, warn},
+			{"RUNNING -> MAX_TURNS (turn budget exhausted)", running, maxTurns},
 			{"OK -> RUNNING (next fire)", ok, running},
 			{"ERROR -> RUNNING (next fire)", errored, running},
 			{"TIMEOUT -> RUNNING (next fire)", timeout, running},
+			{"TIMEOUT -> MAX_TURNS (late pool completion overrides provisional timeout)", timeout, maxTurns},
 			{"WARN -> RUNNING (next fire)", warn, running},
+			{"MAX_TURNS -> RUNNING (next fire)", maxTurns, running},
 		}
 
 		for _, tc := range legalCases {
@@ -54,7 +58,7 @@ var _ = Describe("ScheduleStateMachine", func() {
 		}
 
 		// Build the full set of states for the illegal sweep.
-		allStates := []apiv1.ScheduleStatus{unspecified, running, ok, errored, timeout, warn}
+		allStates := []apiv1.ScheduleStatus{unspecified, running, ok, errored, timeout, warn, maxTurns}
 
 		legal := map[[2]apiv1.ScheduleStatus]bool{}
 		for _, c := range legalCases {

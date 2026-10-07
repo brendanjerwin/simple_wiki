@@ -78,10 +78,17 @@ enum ScheduleStatus {
   SCHEDULE_STATUS_RUNNING = 1;
   SCHEDULE_STATUS_OK = 2;
   SCHEDULE_STATUS_ERROR = 3;
+  // The server-side hard timeout (default 10m) elapsed before the pool
+  // reported a terminal status. The turn may still be executing in the pool.
+  // See SCHEDULE_STATUS_MAX_TURNS for the distinct client-side cancellation.
   SCHEDULE_STATUS_TIMEOUT = 4;
   // The turn finished but missed a required audit invariant, such as
   // recording a non-empty background activity summary.
   SCHEDULE_STATUS_WARN = 5;
+  // The turn was actively cancelled by the pool because it hit the per-schedule
+  // max_turns budget. Unlike TIMEOUT, the work is definitively stopped and
+  // last_duration_seconds reflects the actual observed run time.
+  SCHEDULE_STATUS_MAX_TURNS = 6;
 }
 
 // AgentSchedule describes one cron-driven scheduled agent turn on a page.
@@ -102,7 +109,7 @@ message AgentSchedule {
   google.protobuf.Timestamp last_run = 6;
   // Wiki-managed: status of the most recent fire.
   ScheduleStatus last_status = 7;
-  // Wiki-managed: error detail when last_status is ERROR or TIMEOUT.
+  // Wiki-managed: error detail when last_status is ERROR, TIMEOUT, or MAX_TURNS.
   string last_error_message = 8;
   // Wiki-managed: wall-clock duration of the most recent fire.
   int32 last_duration_seconds = 9;
