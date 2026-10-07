@@ -17,7 +17,7 @@ The wiki exposes its API as **MCP tools** so AI agents (Claude Code, `wiki-cli m
 |---|---|---|
 | **Streamable HTTP** | `https://<your-wiki>/mcp` | Claude Code or any MCP-over-HTTP client. In-process, no subprocess. |
 | **stdio** | `wiki-cli mcp --url https://<your-wiki>` | Local tooling that speaks MCP over stdin/stdout. |
-| **Streamable HTTP (public)** | `https://<gateway-hostname>/<path>/mcp` | Hosted AI agents (Claude.ai, Gemini, ChatGPT, Gemini Enterprise) running outside the private network. OAuth 2.1-protected; same tool surface; requires the operator to run the public-gateway configuration (see below). |
+| **Streamable HTTP (public)** | `https://<gateway-hostname>/<path>` | Hosted AI agents (Claude.ai, Gemini, ChatGPT, Gemini Enterprise) running outside the private network. OAuth 2.1-protected; same tool surface; requires the operator to run the public-gateway configuration (see below). The route path IS the public MCP endpoint — no `/mcp` suffix. |
 
 All surfaces advertise the same tools with the same curated descriptions. Tool names follow the pattern `api_v1_<ServiceName>_<MethodName>`.
 

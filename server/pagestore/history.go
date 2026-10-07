@@ -11,7 +11,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/brendanjerwin/simple_wiki/pkg/ulid"
 	"github.com/brendanjerwin/simple_wiki/utils/base32tools"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 )
@@ -83,26 +82,11 @@ func (s *Store) historyDir(identifier string) string {
 	return filepath.Join(s.historyRoot(), munged)
 }
 
-// captureVersionLocked writes a version snapshot (content + metadata) to
-// the page's history directory. The caller MUST hold the page lock.
-//
-// The content is the outgoing page text (the state being replaced).
-// The identity provides author and is_agent for the metadata.
-// The source describes what triggered the capture (write_frontmatter,
-// write_markdown, modify_markdown, modify_fm_md, soft_delete, restore,
-// migration).
-//
-// A capture failure does NOT block the live write — history is best-effort.
-// The caller is responsible for logging the error.
-func (s *Store) captureVersionLocked(identifier, content string, identity wikipage.Identity) error {
-	return s.captureVersionLockedWithSource(identifier, content, identity, "modify")
-}
-
 // captureVersionLockedWithSource is the source-aware capture entry point.
 // The source string is recorded in the version metadata for audit/search.
 func (s *Store) captureVersionLockedWithSource(identifier, content string, identity wikipage.Identity, source string) error {
 	now := time.Now().UTC()
-	versionID := ulid.NewSystemGenerator().NewULID()
+	versionID := s.versionIDs.NewULID()
 
 	sha := sha256.Sum256([]byte(content))
 	shaHex := hex.EncodeToString(sha[:])
@@ -176,16 +160,7 @@ func (s *Store) ListVersions(identifier wikipage.PageIdentifier) ([]VersionMetad
 			return nil, fmt.Errorf("failed to read history metadata for %s/%s: %w", identifier, versionID, err)
 		}
 
-		versions = append(versions, VersionMetadata{
-			VersionID:      meta.VersionID,
-			PageIdentifier: meta.PageIdentifier,
-			CreatedAt:      meta.CreatedAt,
-			Author:         meta.Author,
-			IsAgent:        meta.IsAgent,
-			Source:         meta.Source,
-			SHA256:         meta.SHA256,
-			ByteSize:       meta.ByteSize,
-		})
+		versions = append(versions, VersionMetadata(meta))
 	}
 
 	// Sort newest-first (ULID descending = newest first).
@@ -197,7 +172,7 @@ func (s *Store) ListVersions(identifier wikipage.PageIdentifier) ([]VersionMetad
 }
 
 // readVersionMetadata reads and parses a .meta.json file for a version.
-func (s *Store) readVersionMetadata(dir, versionID string) (versionMetadataOnDisk, error) {
+func (*Store) readVersionMetadata(dir, versionID string) (versionMetadataOnDisk, error) {
 	metaPath := filepath.Join(dir, versionID+versionMetaExt)
 	metaBytes, err := os.ReadFile(metaPath)
 	if err != nil {

@@ -38,7 +38,7 @@ title = "E2E View Toggle A11y Test"
 | Gamma | 3 |`;
 
   const createResp = await callPageAPI(request, 'CreatePage', {
-    pageName: TEST_PAGE,
+    page: TEST_PAGE,
     contentMarkdown: markdown,
   });
   if (createResp.ok()) {
@@ -47,7 +47,7 @@ title = "E2E View Toggle A11y Test"
   }
 
   const resetResp = await callPageAPI(request, 'UpdatePageContent', {
-    pageName: TEST_PAGE,
+    page: TEST_PAGE,
     newContentMarkdown: markdown,
   });
   expect(resetResp.ok()).toBeTruthy();
@@ -62,7 +62,7 @@ test.describe('View Toggle Accessible Radio Buttons', () => {
   });
 
   test.afterAll(async ({ request }) => {
-    await callPageAPI(request, 'DeletePage', { pageName: TEST_PAGE });
+    await callPageAPI(request, 'DeletePage', { page: TEST_PAGE });
   });
 
   test.describe('radio group structure', () => {

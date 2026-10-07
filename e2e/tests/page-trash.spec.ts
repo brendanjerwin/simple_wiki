@@ -31,7 +31,7 @@ async function callPageAPI(
 
 async function createTestPage(request: APIRequestContext): Promise<void> {
   const createResp = await callPageAPI(request, 'CreatePage', {
-    pageName: TEST_PAGE,
+    page: TEST_PAGE,
     contentMarkdown: TEST_MARKDOWN,
   });
   if (createResp.ok()) {
@@ -40,7 +40,7 @@ async function createTestPage(request: APIRequestContext): Promise<void> {
   }
 
   const updateResp = await callPageAPI(request, 'UpdatePageContent', {
-    pageName: TEST_PAGE,
+    page: TEST_PAGE,
     newContentMarkdown: TEST_MARKDOWN,
   });
   expect(updateResp.ok()).toBeTruthy();
@@ -68,12 +68,12 @@ test.describe('Page trash', () => {
   });
 
   test.afterEach(async ({ request }) => {
-    await callPageAPI(request, 'DeletePage', { pageName: TEST_PAGE });
+    await callPageAPI(request, 'DeletePage', { page: TEST_PAGE });
     await purgeTrashEntries(request, TEST_PAGE_PREFIX);
   });
 
   test('restores a deleted page from trash', async ({ page, request }) => {
-    const deleteResp = await callPageAPI(request, 'DeletePage', { pageName: TEST_PAGE });
+    const deleteResp = await callPageAPI(request, 'DeletePage', { page: TEST_PAGE });
     expect(deleteResp.ok()).toBeTruthy();
 
     await page.goto('/trash');
