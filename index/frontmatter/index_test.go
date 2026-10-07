@@ -756,7 +756,7 @@ var _ = Describe("Index", func() {
 		// LoadAll registered zero schedules at startup.
 		Describe("when frontmatter has a non-empty array of maps (TOML array of tables)", func() {
 			var err error
-
+			var results []wikipage.PageIdentifier
 			BeforeEach(func() {
 				mockReader.AddPage("scheduled-page", wikipage.FrontMatter{
 					"identifier": "scheduled-page",
@@ -771,6 +771,7 @@ var _ = Describe("Index", func() {
 					},
 				})
 				err = index.AddPageToIndex("scheduled-page")
+				results = index.QueryKeyExistence("agent.schedules")
 			})
 
 			It("should not return an error", func() {
@@ -778,7 +779,6 @@ var _ = Describe("Index", func() {
 			})
 
 			It("should allow key existence queries for the array key so LoadAll finds the page", func() {
-				results := index.QueryKeyExistence("agent.schedules")
 				Expect(results).To(ContainElement(wikipage.PageIdentifier("scheduled_page")))
 			})
 		})
