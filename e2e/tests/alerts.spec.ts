@@ -23,7 +23,7 @@ async function callPageAPI(
 
 async function setupTestPage(request: APIRequestContext, markdown: string): Promise<void> {
   const createResp = await callPageAPI(request, 'CreatePage', {
-    pageName: TEST_PAGE,
+    page: TEST_PAGE,
     contentMarkdown: markdown,
   });
   if (createResp.ok()) {
@@ -32,7 +32,7 @@ async function setupTestPage(request: APIRequestContext, markdown: string): Prom
   }
 
   const resetResp = await callPageAPI(request, 'UpdatePageContent', {
-    pageName: TEST_PAGE,
+    page: TEST_PAGE,
     newContentMarkdown: markdown,
   });
   expect(resetResp.ok()).toBeTruthy();
@@ -43,7 +43,7 @@ test.describe('GitHub-style Alert Rendering', () => {
   test.setTimeout(60000);
 
   test.afterAll(async ({ request }) => {
-    await callPageAPI(request, 'DeletePage', { pageName: TEST_PAGE });
+    await callPageAPI(request, 'DeletePage', { page: TEST_PAGE });
   });
 
   test.describe('NOTE alert', () => {
@@ -233,7 +233,7 @@ identifier = "${TEST_PAGE}"
     const SAVE_PAGE = 'e2e_alerts_editor_test';
 
     test.afterAll(async ({ request }) => {
-      await callPageAPI(request, 'DeletePage', { pageName: SAVE_PAGE });
+      await callPageAPI(request, 'DeletePage', { page: SAVE_PAGE });
     });
 
     test('should render NOTE alert saved via the editor', async ({ page }) => {

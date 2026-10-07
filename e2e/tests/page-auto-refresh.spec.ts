@@ -21,7 +21,7 @@ async function callPageAPI(
 
 async function setupTestPage(request: APIRequestContext, markdown: string): Promise<void> {
   const createResp = await callPageAPI(request, 'CreatePage', {
-    pageName: TEST_PAGE,
+    page: TEST_PAGE,
     contentMarkdown: markdown,
   });
   if (createResp.ok()) {
@@ -30,7 +30,7 @@ async function setupTestPage(request: APIRequestContext, markdown: string): Prom
   }
 
   const resetResp = await callPageAPI(request, 'UpdatePageContent', {
-    pageName: TEST_PAGE,
+    page: TEST_PAGE,
     newContentMarkdown: markdown,
   });
   expect(resetResp.ok()).toBeTruthy();
@@ -83,7 +83,7 @@ test.describe('Page auto-refresh and system-info page status', () => {
 
     // Update the page content via the API (simulating another user/session)
     const updateResp = await callPageAPI(request, 'UpdatePageContent', {
-      pageName: TEST_PAGE,
+      page: TEST_PAGE,
       newContentMarkdown: '# Auto Refresh Test\n\nContent was updated by another session!',
     });
     expect(updateResp.ok()).toBeTruthy();
@@ -102,7 +102,7 @@ test.describe('Page auto-refresh and system-info page status', () => {
 
     // Trigger a content change so lastRefreshTime gets set
     const updateResp = await callPageAPI(request, 'UpdatePageContent', {
-      pageName: TEST_PAGE,
+      page: TEST_PAGE,
       newContentMarkdown: '# Auto Refresh Test\n\nUpdated for system-info check.',
     });
     expect(updateResp.ok()).toBeTruthy();
@@ -141,7 +141,7 @@ test.describe('Page auto-refresh and system-info page status', () => {
     // Update content via API
     const updatedContent = longContent.replace('Section 1', 'Updated Section 1');
     await callPageAPI(request, 'UpdatePageContent', {
-      pageName: TEST_PAGE,
+      page: TEST_PAGE,
       newContentMarkdown: updatedContent,
     });
 
@@ -180,7 +180,7 @@ test.describe('Page auto-refresh and system-info page status', () => {
     // Immediately simulate an external change via API while the editor is dirty
     const externalContent = '# External Update\n\nThis content was changed externally while editing was active.';
     const updateResp = await callPageAPI(request, 'UpdatePageContent', {
-      pageName: TEST_PAGE,
+      page: TEST_PAGE,
       newContentMarkdown: externalContent,
     });
     expect(updateResp.ok()).toBeTruthy();
@@ -198,6 +198,6 @@ test.describe('Page auto-refresh and system-info page status', () => {
 
   // Cleanup
   test('should clean up test page', async ({ request }) => {
-    await callPageAPI(request, 'DeletePage', { pageName: TEST_PAGE });
+    await callPageAPI(request, 'DeletePage', { page: TEST_PAGE });
   });
 });
