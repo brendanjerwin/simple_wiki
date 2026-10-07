@@ -291,7 +291,7 @@ describe('AgentDetailsDialog', () => {
 
     it('should apply the status-max-turns class to the badge', () => {
       const badge = el.shadowRoot?.querySelector('[data-schedule-id="daily"] .status-badge');
-      expect(badge?.classList.contains('status-max-turns')).to.be.true;
+      expect(badge?.classList.contains('status-max-turns')).to.equal(true);
     });
   });
 
