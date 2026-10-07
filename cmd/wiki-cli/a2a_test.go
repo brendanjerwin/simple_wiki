@@ -113,7 +113,7 @@ func dispatchNotification(ts *httptest.Server, headers map[string]string, body a
 	}
 	resp, err := ts.Client().Do(req)
 	Expect(err).NotTo(HaveOccurred())
-	defer resp.Body.Close()
+	defer resp.Body.Close() //nolint:errcheck
 	responseBody, err = io.ReadAll(resp.Body)
 	Expect(err).NotTo(HaveOccurred())
 	return resp.StatusCode, responseBody
