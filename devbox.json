@@ -45,6 +45,9 @@
       "lint:md": [
         "./scripts/run_lint_md.sh"
       ],
+      "eval": [
+        "./scripts/run_eval.sh"
+      ],
       "go:test": [
         "./scripts/run_go_test.sh"
       ],

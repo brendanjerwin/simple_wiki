@@ -96,7 +96,7 @@ func (s *AgentChatContextStore) UpdateMerge(page string, update *apiv1.ChatConte
 	if err := writeChatContext(fm, merged); err != nil {
 		return nil, err
 	}
-	if err := s.pages.WriteFrontMatter(id, fm); err != nil {
+	if err := s.pages.WriteFrontMatter(id, fm, wikipage.AnonymousIdentity); err != nil {
 		return nil, fmt.Errorf(errWriteFrontmatterFmt, page, err)
 	}
 	return merged, nil
@@ -134,7 +134,7 @@ func (s *AgentChatContextStore) AppendBackgroundActivityAutomatic(page string, e
 	if err := writeChatContext(fm, existing); err != nil {
 		return err
 	}
-	if err := s.pages.WriteFrontMatter(id, fm); err != nil {
+	if err := s.pages.WriteFrontMatter(id, fm, wikipage.AnonymousIdentity); err != nil {
 		return fmt.Errorf(errWriteFrontmatterFmt, page, err)
 	}
 	return nil
@@ -167,7 +167,7 @@ func (s *AgentChatContextStore) AppendBackgroundActivitySummary(page, scheduleID
 	if err := writeChatContext(fm, existing); err != nil {
 		return nil, err
 	}
-	if err := s.pages.WriteFrontMatter(id, fm); err != nil {
+	if err := s.pages.WriteFrontMatter(id, fm, wikipage.AnonymousIdentity); err != nil {
 		return nil, fmt.Errorf(errWriteFrontmatterFmt, page, err)
 	}
 	return proto.CloneOf(existing.BackgroundActivity[target]), nil
@@ -215,7 +215,7 @@ func (s *AgentChatContextStore) CompleteBackgroundActivity(page, scheduleID stri
 	if err := writeChatContext(fm, existing); err != nil {
 		return status, err
 	}
-	if err := s.pages.WriteFrontMatter(id, fm); err != nil {
+	if err := s.pages.WriteFrontMatter(id, fm, wikipage.AnonymousIdentity); err != nil {
 		return status, fmt.Errorf(errWriteFrontmatterFmt, page, err)
 	}
 	return finalStatus, nil

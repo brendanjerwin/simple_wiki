@@ -257,11 +257,11 @@ func (j *FileShadowingMigrationJob) Execute() error {
 	}
 
 	// First write the frontmatter
-	if err := j.readerMutator.WriteFrontMatter(wikipage.PageIdentifier(finalPage.Identifier), fm); err != nil {
+	if err := j.readerMutator.WriteFrontMatter(wikipage.PageIdentifier(finalPage.Identifier), fm, wikipage.AnonymousIdentity); err != nil {
 		return fmt.Errorf("failed to write frontmatter: %w", err)
 	}
 	// Then write the markdown
-	if err := j.readerMutator.WriteMarkdown(wikipage.PageIdentifier(finalPage.Identifier), md); err != nil {
+	if err := j.readerMutator.WriteMarkdown(wikipage.PageIdentifier(finalPage.Identifier), md, wikipage.AnonymousIdentity); err != nil {
 		return fmt.Errorf("failed to write markdown: %w", err)
 	}
 

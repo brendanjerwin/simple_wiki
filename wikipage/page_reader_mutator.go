@@ -30,10 +30,14 @@ type PageReader interface {
 	ReadMarkdown(requestedIdentifier PageIdentifier) (PageIdentifier, Markdown, error)
 }
 
-// PageWriter is an interface for writing page content.
+// PageWriter is an interface for writing page content. The identity parameter
+// is used for history attribution: author = identity.LoginName(), is_agent =
+// identity.IsAgent(). Pass wikipage.AnonymousIdentity (or any implementation
+// returning IsAnonymous()=true) when the caller has no identity (internal
+// jobs, migrations, cron ticks).
 type PageWriter interface {
-	WriteFrontMatter(identifier PageIdentifier, fm FrontMatter) error
-	WriteMarkdown(identifier PageIdentifier, md Markdown) error
+	WriteFrontMatter(identifier PageIdentifier, fm FrontMatter, identity Identity) error
+	WriteMarkdown(identifier PageIdentifier, md Markdown, identity Identity) error
 }
 
 // PageDeleter is an interface for deleting pages.
@@ -86,7 +90,8 @@ type PageModifier interface {
 	// and writes the result back (preserving the existing frontmatter).
 	// The entire read-modify-write cycle is held under a write lock.
 	// If modifier returns an error, the page is not written.
-	ModifyMarkdown(identifier PageIdentifier, modifier func(Markdown) (Markdown, error)) error
+	// The identity parameter is used for history attribution.
+	ModifyMarkdown(identifier PageIdentifier, modifier func(Markdown) (Markdown, error), identity Identity) error
 }
 
 // PageReaderMutator is an interface that combines PageReader, PageWriter, PageDeleter, and PageModifier.

@@ -16,6 +16,7 @@ import (
 	"connectrpc.com/grpcreflect"
 	"connectrpc.com/vanguard"
 
+	historyindex "github.com/brendanjerwin/simple_wiki/index/history"
 	"github.com/brendanjerwin/simple_wiki/internal/caldav"
 	"github.com/brendanjerwin/simple_wiki/internal/connectors"
 	"github.com/brendanjerwin/simple_wiki/internal/connectors/engine"
@@ -30,6 +31,7 @@ import (
 	"github.com/brendanjerwin/simple_wiki/server"
 	"github.com/brendanjerwin/simple_wiki/server/checklistmutator"
 	"github.com/brendanjerwin/simple_wiki/server/mapmutator"
+	"github.com/brendanjerwin/simple_wiki/server/pagestore"
 	"github.com/brendanjerwin/simple_wiki/server/surveymutator"
 	"github.com/brendanjerwin/simple_wiki/tailscale"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
@@ -69,8 +71,8 @@ const (
 
 	// metricsFlushCronExpression schedules wiki metrics persistence.
 	// Format: second minute hour day-of-month month day-of-week
-	// This runs every 5 seconds.
-	metricsFlushCronExpression = "*/5 * * * * *"
+	// This runs every minute to avoid crowding the page history and indexing queue.
+	metricsFlushCronExpression = "0 * * * * *"
 
 	errCreateHandlerFmt  = "failed to create handler: %w"
 	errCreateListenerFmt = "failed to create HTTP listener: %w"
@@ -381,7 +383,7 @@ func createMultiplexedHandler(
 		return nil, nil, fmt.Errorf("failed to create vanguard transcoder: %w", err)
 	}
 
-	mcpHandler, err := wikimcp.NewStreamableHTTPHandler(grpcAPIServer, commit)
+	mcpHandler, serviceDescriptions, err := wikimcp.NewStreamableHTTPHandler(grpcAPIServer, commit)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create MCP handler: %w", err)
 	}
@@ -405,6 +407,7 @@ func createMultiplexedHandler(
 	// authorization beyond identity injection. If Tailscale identity enforcement
 	// is added to gRPC handlers in the future, it should also be applied here.
 	outerMux.Handle("/mcp", mcpHandler)
+	outerMux.Handle("/mcp/catalog", wikimcp.NewServiceCatalogHandler(serviceDescriptions))
 	outerMux.Handle("/", transcoder)
 
 	return outerMux, metricsCleanup, nil
@@ -432,7 +435,7 @@ func setupWikiMetrics(site *server.Site, logger *lumber.ConsoleLogger) (observab
 	if schedErr != nil {
 		logger.Warn("Failed to schedule metrics persistence: %v", schedErr)
 	} else {
-		logger.Info("Scheduled wiki metrics persistence every 5 seconds")
+		logger.Info("Scheduled wiki metrics persistence every 60 seconds")
 	}
 
 	// Return cleanup function that persists final metrics
@@ -464,6 +467,7 @@ func BuildVanguardTranscoder(grpcServer *grpc.Server, ginRouter http.Handler) (h
 		"api.v1.ConnectorService",
 		"api.v1.FileStorageService",
 		"api.v1.Frontmatter",
+		"api.v1.PageHistoryService",
 		"api.v1.InventoryManagementService",
 		"api.v1.MapService",
 		"api.v1.PageImportService",
@@ -520,6 +524,137 @@ const googleTasksOutboundSyncQueueDepth = 256
 // stuck connection wedge a sync worker forever.
 const googleTasksHTTPTimeoutSeconds = 30
 
+// historyReaderAdapter adapts the pagestore HistoryReader to the gRPC
+// PageHistoryReader interface, converting the metadata shape without
+// introducing a dependency from the storage layer to the API layer.
+type historyReaderAdapter struct {
+	reader pagestore.HistoryReader
+}
+
+func (a *historyReaderAdapter) ListVersions(identifier wikipage.PageIdentifier) ([]grpcapi.PageVersionMetadata, error) {
+	versions, err := a.reader.ListVersions(identifier)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]grpcapi.PageVersionMetadata, len(versions))
+	for i, v := range versions {
+		result[i] = grpcapi.PageVersionMetadata{
+			VersionID: v.VersionID,
+			CreatedAt: v.CreatedAt,
+			Author:    v.Author,
+			IsAgent:   v.IsAgent,
+			Source:    v.Source,
+			SHA256:    v.SHA256,
+			ByteSize:  v.ByteSize,
+		}
+	}
+	return result, nil
+}
+
+func (a *historyReaderAdapter) ReadVersion(identifier wikipage.PageIdentifier, versionID string) (string, error) {
+	return a.reader.ReadVersion(identifier, versionID)
+}
+
+func (a *historyReaderAdapter) RestoreVersion(identifier wikipage.PageIdentifier, versionID string, identity wikipage.Identity) error {
+	return a.reader.RestoreVersion(identifier, versionID, identity)
+}
+
+func (a *historyReaderAdapter) DiffVersions(identifier wikipage.PageIdentifier, oldID, newID string) (string, error) {
+	return a.reader.DiffVersions(identifier, oldID, newID)
+}
+
+// historyIndexReaderAdapter bridges pagestore.HistoryReader to the
+// historyindex.HistoryReader interface, converting VersionMetadata types.
+type historyIndexReaderAdapter struct {
+	reader pagestore.HistoryReader
+}
+
+func (a *historyIndexReaderAdapter) ListVersions(identifier wikipage.PageIdentifier) ([]historyindex.PageVersionMetadata, error) {
+	versions, err := a.reader.ListVersions(identifier)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]historyindex.PageVersionMetadata, len(versions))
+	for i, v := range versions {
+		result[i] = historyindex.PageVersionMetadata{
+			VersionID:      v.VersionID,
+			PageIdentifier: v.PageIdentifier,
+			CreatedAt:      v.CreatedAt,
+			Author:         v.Author,
+			IsAgent:        v.IsAgent,
+			Source:         v.Source,
+			SHA256:         v.SHA256,
+			ByteSize:       v.ByteSize,
+		}
+	}
+	return result, nil
+}
+
+func (a *historyIndexReaderAdapter) ReadVersion(identifier wikipage.PageIdentifier, versionID string) (string, error) {
+	return a.reader.ReadVersion(identifier, versionID)
+}
+
+// historySearcherAdapter adapts the index/history.Index to the gRPC
+// HistorySearcher interface, converting types without introducing a
+// dependency from the index layer to the API layer.
+type historySearcherAdapter struct {
+	index *historyindex.Index
+}
+
+func (a *historySearcherAdapter) SearchPageHistory(identifier wikipage.PageIdentifier, query string) ([]grpcapi.HistorySearchResult, error) {
+	results, err := a.index.SearchPageHistory(identifier, query)
+	if err != nil {
+		return nil, err
+	}
+	adapted := make([]grpcapi.HistorySearchResult, len(results))
+	for i, r := range results {
+		adapted[i] = grpcapi.HistorySearchResult{
+			Page: r.Page,
+			Version: grpcapi.PageVersionMetadata{
+				VersionID: r.Version.VersionID,
+				CreatedAt: r.Version.CreatedAt,
+				Author:    r.Version.Author,
+				IsAgent:   r.Version.IsAgent,
+				Source:    r.Version.Source,
+				SHA256:    r.Version.SHA256,
+				ByteSize:  r.Version.ByteSize,
+			},
+			Snippet: r.Snippet,
+		}
+	}
+	return adapted, nil
+}
+
+func (a *historySearcherAdapter) SearchHistory(filter grpcapi.HistorySearchFilter) ([]grpcapi.HistorySearchResult, error) {
+	results, err := a.index.SearchHistory(historyindex.HistorySearchFilter{
+		Query:          filter.Query,
+		PageFilter: filter.PageFilter,
+		AuthorFilter:   filter.AuthorFilter,
+		From:           filter.From,
+		To:             filter.To,
+	})
+	if err != nil {
+		return nil, err
+	}
+	adapted := make([]grpcapi.HistorySearchResult, len(results))
+	for i, r := range results {
+		adapted[i] = grpcapi.HistorySearchResult{
+			Page: r.Page,
+			Version: grpcapi.PageVersionMetadata{
+				VersionID: r.Version.VersionID,
+				CreatedAt: r.Version.CreatedAt,
+				Author:    r.Version.Author,
+				IsAgent:   r.Version.IsAgent,
+				Source:    r.Version.Source,
+				SHA256:    r.Version.SHA256,
+				ByteSize:  r.Version.ByteSize,
+			},
+			Snippet: r.Snippet,
+		}
+	}
+	return adapted, nil
+}
+
 // setupGRPCServer creates and configures the gRPC server with interceptors.
 // It returns both the gRPC transport server and the underlying API server for direct in-process calls.
 //
@@ -543,6 +678,14 @@ func setupGRPCServer(
 	)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create gRPC server: %w", err)
+	}
+	grpcAPIServer = grpcAPIServer.
+		WithHistoryReader(&historyReaderAdapter{reader: site.HistoryReader()})
+	historyIndex, err := historyindex.NewIndex(&historyIndexReaderAdapter{reader: site.HistoryReader()})
+	if err != nil {
+		logger.Warn("Failed to create history search index: %v", err)
+	} else {
+		grpcAPIServer = grpcAPIServer.WithHistorySearcher(&historySearcherAdapter{index: historyIndex})
 	}
 	checklistMutator := checklistmutator.New(site, checklistmutator.SystemClock{}, ulid.NewSystemGenerator())
 	mapMutator := mapmutator.New(site, mapmutator.SystemClock{}, ulid.NewSystemGenerator())

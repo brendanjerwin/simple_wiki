@@ -59,8 +59,9 @@ func Decorate(s *mcpserver.MCPServer) []ServiceDescription {
 // extension-driven overrides to the matching MCP tools.
 func decorateFileServices(s *mcpserver.MCPServer, fd protoreflect.FileDescriptor) []ServiceDescription {
 	var out []ServiceDescription
+	var excludedToolNames []string
 	services := fd.Services()
-	for i := 0; i < services.Len(); i++ {
+	for i := range services.Len() {
 		svc := services.Get(i)
 		if desc := readServiceDescription(svc); desc != "" {
 			out = append(out, ServiceDescription{
@@ -69,7 +70,7 @@ func decorateFileServices(s *mcpserver.MCPServer, fd protoreflect.FileDescriptor
 			})
 		}
 		methods := svc.Methods()
-		for j := 0; j < methods.Len(); j++ {
+		for j := range methods.Len() {
 			method := methods.Get(j)
 			toolName := computeMCPToolName(svc, method)
 			tool := s.GetTool(toolName)
@@ -77,8 +78,15 @@ func decorateFileServices(s *mcpserver.MCPServer, fd protoreflect.FileDescriptor
 				// Service is not exposed as MCP (no apiv1mcp file). Skip.
 				continue
 			}
+			if readBoolExtension(method, apiv1.E_ExcludeFromMcp) {
+				excludedToolNames = append(excludedToolNames, toolName)
+				continue
+			}
 			decorateOne(s, tool, method)
 		}
+	}
+	if len(excludedToolNames) > 0 {
+		s.DeleteTools(excludedToolNames...)
 	}
 	return out
 }

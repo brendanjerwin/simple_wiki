@@ -396,7 +396,7 @@ func (j *InventoryNormalizationJob) migrateContainerIfNeeded(containerID string)
 
 	inv["is_container"] = true
 
-	if err := j.deps.WriteFrontMatter(wikipage.PageIdentifier(containerID), fm); err != nil {
+	if err := j.deps.WriteFrontMatter(wikipage.PageIdentifier(containerID), fm, wikipage.AnonymousIdentity); err != nil {
 		j.logger.Error("Failed to write frontmatter for container %s during migration: %v", containerID, err)
 		return false
 	}
@@ -521,10 +521,10 @@ func (j *InventoryNormalizationJob) generateAuditReport(anomalies []InventoryAno
 		"title":      "Inventory Audit Report",
 	}
 
-	if err := j.deps.WriteFrontMatter(wikipage.PageIdentifier(AuditReportPage), fm); err != nil {
+	if err := j.deps.WriteFrontMatter(wikipage.PageIdentifier(AuditReportPage), fm, wikipage.AnonymousIdentity); err != nil {
 		return fmt.Errorf("failed to write audit report frontmatter: %w", err)
 	}
-	if err := j.deps.WriteMarkdown(wikipage.PageIdentifier(AuditReportPage), wikipage.Markdown(report.String())); err != nil {
+	if err := j.deps.WriteMarkdown(wikipage.PageIdentifier(AuditReportPage), wikipage.Markdown(report.String()), wikipage.AnonymousIdentity); err != nil {
 		return fmt.Errorf("failed to write audit report markdown: %w", err)
 	}
 
@@ -781,7 +781,7 @@ func (j *InventoryNormalizationJob) removeAndWriteItems(containerID string, cont
 
 	// Update and write back
 	inv["items"] = newItems
-	if err := j.deps.WriteFrontMatter(wikipage.PageIdentifier(containerID), containerFm); err != nil {
+	if err := j.deps.WriteFrontMatter(wikipage.PageIdentifier(containerID), containerFm, wikipage.AnonymousIdentity); err != nil {
 		return 0, fmt.Errorf("failed to write frontmatter for container %s: %w", containerID, err)
 	}
 

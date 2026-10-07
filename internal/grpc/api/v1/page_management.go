@@ -74,12 +74,12 @@ func resolveMarkdownContent(originalMarkdown wikipage.Markdown, oldContentMarkdo
 
 // verifyStoredContent reads back the page after a write to confirm the content is non-empty.
 // If the stored content is empty or unreadable, it attempts to restore the original content.
-func (s *Server) verifyStoredContent(pageID wikipage.PageIdentifier, originalMarkdown wikipage.Markdown) (wikipage.Markdown, error) {
+func (s *Server) verifyStoredContent(ctx context.Context, pageID wikipage.PageIdentifier, originalMarkdown wikipage.Markdown) (wikipage.Markdown, error) {
 	_, storedMarkdown, readBackErr := s.pageReaderMutator.ReadMarkdown(pageID)
 	if readBackErr != nil || strings.TrimSpace(string(storedMarkdown)) == "" {
 		// Best-effort restore of the original content; the verification error is what we surface.
 		// nosemgrep: go.error-discarded-with-blank-identifier
-		_ = s.pageReaderMutator.WriteMarkdown(pageID, originalMarkdown)
+		_ = s.pageReaderMutator.WriteMarkdown(pageID, originalMarkdown, tailscale.IdentityFromContext(ctx))
 		if readBackErr != nil {
 			return "", status.Errorf(codes.Internal, "failed to verify stored content after write: %v", readBackErr)
 		}
@@ -245,28 +245,28 @@ func (s *Server) readPageHashAndModTime(pageID wikipage.PageIdentifier) (string,
 
 // DeletePage implements the DeletePage RPC.
 func (s *Server) DeletePage(ctx context.Context, req *apiv1.DeletePageRequest) (*apiv1.DeletePageResponse, error) {
-	if guardErr := requireUserMutable(s.pageReaderMutator, wikipage.PageIdentifier(req.PageName)); guardErr != nil {
+	if guardErr := requireUserMutable(s.pageReaderMutator, wikipage.PageIdentifier(req.Page)); guardErr != nil {
 		return nil, guardErr
 	}
-	if authErr := requireAuthorized(ctx, s.pageReaderMutator, wikipage.PageIdentifier(req.PageName)); authErr != nil {
+	if authErr := requireAuthorized(ctx, s.pageReaderMutator, wikipage.PageIdentifier(req.Page)); authErr != nil {
 		return nil, authErr
 	}
 	identity := tailscale.IdentityFromContext(ctx)
 	deletedBy := identity.ForLog()
 	var err error
 	if trashDeleter, ok := s.pageReaderMutator.(wikipage.PageTrashDeleter); ok {
-		err = trashDeleter.DeletePageBy(wikipage.PageIdentifier(req.PageName), deletedBy)
+		err = trashDeleter.DeletePageBy(wikipage.PageIdentifier(req.Page), deletedBy)
 	} else {
-		err = s.pageReaderMutator.DeletePage(wikipage.PageIdentifier(req.PageName))
+		err = s.pageReaderMutator.DeletePage(wikipage.PageIdentifier(req.Page))
 	}
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil, status.Errorf(codes.NotFound, "page not found: %s", req.PageName)
+			return nil, status.Errorf(codes.NotFound, "page not found: %s", req.Page)
 		}
 		return nil, status.Errorf(codes.Internal, "failed to delete page: %v", err)
 	}
 
-	s.logger.Info("[AUDIT] delete | page: %q | user: %q", req.PageName, identity.ForLog())
+	s.logger.Info("[AUDIT] delete | page: %q | user: %q", req.Page, identity.ForLog())
 
 	return &apiv1.DeletePageResponse{
 		Success: true,
@@ -479,13 +479,13 @@ func (s *Server) EmptyTrash(ctx context.Context, _ *apiv1.EmptyTrashRequest) (*a
 
 // ReadPage implements the ReadPage RPC.
 func (s *Server) ReadPage(ctx context.Context, req *apiv1.ReadPageRequest) (*apiv1.ReadPageResponse, error) {
-	// page_name and identifier are mutually exclusive via oneof; exactly one must be set.
-	pageName := req.GetPageName()
+	// page and identifier are mutually exclusive via oneof; exactly one must be set.
+	pageName := req.GetPage()
 	if pageName == "" {
 		pageName = req.GetIdentifier()
 	}
 	if pageName == "" {
-		return nil, status.Error(codes.InvalidArgument, "page_name or identifier is required")
+		return nil, status.Error(codes.InvalidArgument, "page or identifier is required")
 	}
 
 	if authErr := requireAuthorized(ctx, s.pageReaderMutator, wikipage.PageIdentifier(pageName)); authErr != nil {
@@ -604,12 +604,12 @@ func (s *Server) GenerateIdentifier(_ context.Context, req *apiv1.GenerateIdenti
 // itself — the page does not yet exist, so there is no acl to enforce.
 // The first creator effectively becomes the owner via whatever authorization
 // they choose to stamp into req.Frontmatter.
-func (s *Server) CreatePage(_ context.Context, req *apiv1.CreatePageRequest) (*apiv1.CreatePageResponse, error) {
-	if req.PageName == "" {
+func (s *Server) CreatePage(ctx context.Context, req *apiv1.CreatePageRequest) (*apiv1.CreatePageResponse, error) {
+	if req.Page == "" {
 		return nil, status.Error(codes.InvalidArgument, pageNameRequiredErr)
 	}
 
-	identifier, err := wikiidentifiers.MungeIdentifier(req.PageName)
+	identifier, err := wikiidentifiers.MungeIdentifier(req.Page)
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, "invalid page name: %v", err)
 	}
@@ -645,11 +645,11 @@ func (s *Server) CreatePage(_ context.Context, req *apiv1.CreatePageRequest) (*a
 		}, nil
 	}
 
-	if err := s.pageReaderMutator.WriteFrontMatter(wikipage.PageIdentifier(identifier), wikipage.FrontMatter(fm)); err != nil {
+	if err := s.pageReaderMutator.WriteFrontMatter(wikipage.PageIdentifier(identifier), wikipage.FrontMatter(fm), tailscale.IdentityFromContext(ctx)); err != nil {
 		return nil, status.Errorf(codes.Internal, failedToWriteFrontmatterErrFmt, err)
 	}
 
-	if err := s.pageReaderMutator.WriteMarkdown(wikipage.PageIdentifier(identifier), wikipage.Markdown(markdown)); err != nil {
+	if err := s.pageReaderMutator.WriteMarkdown(wikipage.PageIdentifier(identifier), wikipage.Markdown(markdown), tailscale.IdentityFromContext(ctx)); err != nil {
 		return nil, status.Errorf(codes.Internal, failedToWriteMarkdownErrFmt, err)
 	}
 
@@ -666,7 +666,7 @@ func (s *Server) CreatePage(_ context.Context, req *apiv1.CreatePageRequest) (*a
 // has changed since the hash was computed (optimistic concurrency control).
 // Empty content is rejected; use ClearPageContent to explicitly clear a page's content.
 func (s *Server) UpdatePageContent(ctx context.Context, req *apiv1.UpdatePageContentRequest) (*apiv1.UpdatePageContentResponse, error) {
-	if req.PageName == "" {
+	if req.Page == "" {
 		return nil, status.Error(codes.InvalidArgument, pageNameRequiredErr)
 	}
 
@@ -678,19 +678,19 @@ func (s *Server) UpdatePageContent(ctx context.Context, req *apiv1.UpdatePageCon
 		return nil, status.Error(codes.InvalidArgument, "old_content_markdown cannot be empty when provided")
 	}
 
-	if guardErr := requireUserMutable(s.pageReaderMutator, wikipage.PageIdentifier(req.PageName)); guardErr != nil {
+	if guardErr := requireUserMutable(s.pageReaderMutator, wikipage.PageIdentifier(req.Page)); guardErr != nil {
 		return nil, guardErr
 	}
-	if authErr := requireAuthorized(ctx, s.pageReaderMutator, wikipage.PageIdentifier(req.PageName)); authErr != nil {
+	if authErr := requireAuthorized(ctx, s.pageReaderMutator, wikipage.PageIdentifier(req.Page)); authErr != nil {
 		return nil, authErr
 	}
 
 	// Read current content for: (1) page existence check, and (2) rollback data if the
 	// post-write invariant check fails.
-	_, originalMarkdown, err := s.pageReaderMutator.ReadMarkdown(wikipage.PageIdentifier(req.PageName))
+	_, originalMarkdown, err := s.pageReaderMutator.ReadMarkdown(wikipage.PageIdentifier(req.Page))
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil, status.Errorf(codes.NotFound, pageNotFoundErrFmt, req.PageName)
+			return nil, status.Errorf(codes.NotFound, pageNotFoundErrFmt, req.Page)
 		}
 		return nil, status.Errorf(codes.Internal, "failed to read current content: %v", err)
 	}
@@ -698,7 +698,7 @@ func (s *Server) UpdatePageContent(ctx context.Context, req *apiv1.UpdatePageCon
 	// ModifyMarkdown holds the write lock for the entire hash-check + write cycle,
 	// eliminating the TOCTOU race that existed when these were separate operations.
 	modifyErr := s.pageReaderMutator.ModifyMarkdown(
-		wikipage.PageIdentifier(req.PageName),
+		wikipage.PageIdentifier(req.Page),
 		func(currentMarkdown wikipage.Markdown) (wikipage.Markdown, error) {
 			// Version hash check is now atomic with the write — no TOCTOU window.
 			if err := checkContentVersionHash(currentMarkdown, req.ExpectedVersionHash); err != nil {
@@ -713,6 +713,7 @@ func (s *Server) UpdatePageContent(ctx context.Context, req *apiv1.UpdatePageCon
 			// otherwise replace the entire page content.
 			return resolveMarkdownContent(currentMarkdown, req.OldContentMarkdown, req.NewContentMarkdown)
 		},
+		tailscale.IdentityFromContext(ctx),
 	)
 	if modifyErr != nil {
 		if _, ok := status.FromError(modifyErr); ok {
@@ -724,7 +725,7 @@ func (s *Server) UpdatePageContent(ctx context.Context, req *apiv1.UpdatePageCon
 	// Invariant check: read back the stored content to ensure the write did not blank the page.
 	// If the content is missing or empty after a successful write, attempt to restore the
 	// original content to prevent data loss.
-	storedMarkdown, err := s.verifyStoredContent(wikipage.PageIdentifier(req.PageName), originalMarkdown)
+	storedMarkdown, err := s.verifyStoredContent(ctx, wikipage.PageIdentifier(req.Page), originalMarkdown)
 	if err != nil {
 		return nil, err
 	}
@@ -739,7 +740,7 @@ func (s *Server) UpdatePageContent(ctx context.Context, req *apiv1.UpdatePageCon
 // Explicitly clears the markdown content of a page, preserving its frontmatter.
 // confirm_clear must be true to prevent accidental data loss.
 func (s *Server) ClearPageContent(ctx context.Context, req *apiv1.ClearPageContentRequest) (*apiv1.ClearPageContentResponse, error) {
-	if req.PageName == "" {
+	if req.Page == "" {
 		return nil, status.Error(codes.InvalidArgument, pageNameRequiredErr)
 	}
 
@@ -747,23 +748,23 @@ func (s *Server) ClearPageContent(ctx context.Context, req *apiv1.ClearPageConte
 		return nil, status.Error(codes.InvalidArgument, "confirm_clear must be true to clear page content")
 	}
 
-	if guardErr := requireUserMutable(s.pageReaderMutator, wikipage.PageIdentifier(req.PageName)); guardErr != nil {
+	if guardErr := requireUserMutable(s.pageReaderMutator, wikipage.PageIdentifier(req.Page)); guardErr != nil {
 		return nil, guardErr
 	}
-	if authErr := requireAuthorized(ctx, s.pageReaderMutator, wikipage.PageIdentifier(req.PageName)); authErr != nil {
+	if authErr := requireAuthorized(ctx, s.pageReaderMutator, wikipage.PageIdentifier(req.Page)); authErr != nil {
 		return nil, authErr
 	}
 
 	// Verify the page exists
-	_, _, err := s.pageReaderMutator.ReadFrontMatter(wikipage.PageIdentifier(req.PageName))
+	_, _, err := s.pageReaderMutator.ReadFrontMatter(wikipage.PageIdentifier(req.Page))
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil, status.Errorf(codes.NotFound, pageNotFoundErrFmt, req.PageName)
+			return nil, status.Errorf(codes.NotFound, pageNotFoundErrFmt, req.Page)
 		}
 		return nil, status.Errorf(codes.Internal, failedToReadFrontmatterErrFmt, err)
 	}
 
-	if err := s.pageReaderMutator.WriteMarkdown(wikipage.PageIdentifier(req.PageName), ""); err != nil {
+	if err := s.pageReaderMutator.WriteMarkdown(wikipage.PageIdentifier(req.Page), wikipage.Markdown(""), tailscale.IdentityFromContext(ctx)); err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to clear markdown: %v", err)
 	}
 
@@ -774,33 +775,33 @@ func (s *Server) ClearPageContent(ctx context.Context, req *apiv1.ClearPageConte
 // Replaces the full content of an existing page, including its frontmatter.
 // The new_whole_markdown field must contain the complete page text (frontmatter + markdown).
 func (s *Server) UpdateWholePage(ctx context.Context, req *apiv1.UpdateWholePageRequest) (*apiv1.UpdateWholePageResponse, error) {
-	if req.PageName == "" {
+	if req.Page == "" {
 		return nil, status.Error(codes.InvalidArgument, pageNameRequiredErr)
 	}
 
-	if guardErr := requireUserMutable(s.pageReaderMutator, wikipage.PageIdentifier(req.PageName)); guardErr != nil {
+	if guardErr := requireUserMutable(s.pageReaderMutator, wikipage.PageIdentifier(req.Page)); guardErr != nil {
 		return nil, guardErr
 	}
-	if authErr := requireAuthorized(ctx, s.pageReaderMutator, wikipage.PageIdentifier(req.PageName)); authErr != nil {
+	if authErr := requireAuthorized(ctx, s.pageReaderMutator, wikipage.PageIdentifier(req.Page)); authErr != nil {
 		return nil, authErr
 	}
 
 	// Verify the page exists
-	_, _, err := s.pageReaderMutator.ReadFrontMatter(wikipage.PageIdentifier(req.PageName))
+	_, _, err := s.pageReaderMutator.ReadFrontMatter(wikipage.PageIdentifier(req.Page))
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil, status.Errorf(codes.NotFound, pageNotFoundErrFmt, req.PageName)
+			return nil, status.Errorf(codes.NotFound, pageNotFoundErrFmt, req.Page)
 		}
 		return nil, status.Errorf(codes.Internal, failedToReadFrontmatterErrFmt, err)
 	}
 
-	if guardErr := s.checkWholePageWipeGuard(wikipage.PageIdentifier(req.PageName), req.NewWholeMarkdown); guardErr != nil {
+	if guardErr := s.checkWholePageWipeGuard(wikipage.PageIdentifier(req.Page), req.NewWholeMarkdown); guardErr != nil {
 		return nil, guardErr
 	}
 
 	// Parse frontmatter and markdown from the combined content
 	page := &wikipage.Page{
-		Identifier: req.PageName,
+		Identifier: req.Page,
 		Text:       req.NewWholeMarkdown,
 	}
 
@@ -822,13 +823,13 @@ func (s *Server) UpdateWholePage(ctx context.Context, req *apiv1.UpdateWholePage
 	if fm == nil {
 		fm = make(map[string]any)
 	}
-	fm[identifierKey] = req.PageName
+	fm[identifierKey] = req.Page
 
-	if err := s.pageReaderMutator.WriteMarkdown(wikipage.PageIdentifier(req.PageName), md); err != nil {
+	if err := s.pageReaderMutator.WriteMarkdown(wikipage.PageIdentifier(req.Page), md, tailscale.IdentityFromContext(ctx)); err != nil {
 		return nil, status.Errorf(codes.Internal, failedToWriteMarkdownErrFmt, err)
 	}
 
-	if err := s.pageReaderMutator.WriteFrontMatter(wikipage.PageIdentifier(req.PageName), fm); err != nil {
+	if err := s.pageReaderMutator.WriteFrontMatter(wikipage.PageIdentifier(req.Page), wikipage.FrontMatter(fm), tailscale.IdentityFromContext(ctx)); err != nil {
 		return nil, status.Errorf(codes.Internal, failedToWriteFrontmatterErrFmt, err)
 	}
 
@@ -923,11 +924,11 @@ func (s *Server) ListTemplates(_ context.Context, req *apiv1.ListTemplatesReques
 // WatchPage implements the WatchPage RPC for real-time page content change notifications.
 // It streams the current version_hash of the page content when it changes.
 func (s *Server) WatchPage(req *apiv1.WatchPageRequest, stream apiv1.PageManagementService_WatchPageServer) error {
-	if req.PageName == "" {
+	if req.Page == "" {
 		return status.Error(codes.InvalidArgument, pageNameRequiredErr)
 	}
 
-	pageID := wikipage.PageIdentifier(req.PageName)
+	pageID := wikipage.PageIdentifier(req.Page)
 	if authErr := requireAuthorized(stream.Context(), s.pageReaderMutator, pageID); authErr != nil {
 		return authErr
 	}
@@ -937,7 +938,7 @@ func (s *Server) WatchPage(req *apiv1.WatchPageRequest, stream apiv1.PageManagem
 	hash, modTime, err := s.readPageHashAndModTime(pageID)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return status.Errorf(codes.NotFound, pageNotFoundErrFmt, req.PageName)
+			return status.Errorf(codes.NotFound, pageNotFoundErrFmt, req.Page)
 		}
 		return status.Errorf(codes.Internal, failedToReadPageErrFmt, err)
 	}
@@ -973,14 +974,14 @@ func (s *Server) WatchPage(req *apiv1.WatchPageRequest, stream apiv1.PageManagem
 
 // ReadPageOutline implements the ReadPageOutline RPC.
 func (s *Server) ReadPageOutline(ctx context.Context, req *apiv1.ReadPageOutlineRequest) (*apiv1.ReadPageOutlineResponse, error) {
-	if authErr := requireAuthorized(ctx, s.pageReaderMutator, wikipage.PageIdentifier(req.PageName)); authErr != nil {
+	if authErr := requireAuthorized(ctx, s.pageReaderMutator, wikipage.PageIdentifier(req.Page)); authErr != nil {
 		return nil, authErr
 	}
 
-	_, markdown, err := s.pageReaderMutator.ReadMarkdown(wikipage.PageIdentifier(req.PageName))
+	_, markdown, err := s.pageReaderMutator.ReadMarkdown(wikipage.PageIdentifier(req.Page))
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil, status.Errorf(codes.NotFound, pageNotFoundErrFmt, req.PageName)
+			return nil, status.Errorf(codes.NotFound, pageNotFoundErrFmt, req.Page)
 		}
 		return nil, status.Errorf(codes.Internal, failedToReadPageErrFmt, err)
 	}
@@ -994,8 +995,8 @@ func (s *Server) ReadPageOutline(ctx context.Context, req *apiv1.ReadPageOutline
 
 // ReadPageSection implements the ReadPageSection RPC.
 func (s *Server) ReadPageSection(ctx context.Context, req *apiv1.ReadPageSectionRequest) (*apiv1.ReadPageSectionResponse, error) {
-	if req.PageName == "" {
-		return nil, status.Error(codes.InvalidArgument, "page_name is required")
+	if req.Page == "" {
+		return nil, status.Error(codes.InvalidArgument, "page is required")
 	}
 
 	if req.ByteOffset < 0 {
@@ -1006,14 +1007,14 @@ func (s *Server) ReadPageSection(ctx context.Context, req *apiv1.ReadPageSection
 		return nil, status.Error(codes.InvalidArgument, "byte_length must be non-negative")
 	}
 
-	if authErr := requireAuthorized(ctx, s.pageReaderMutator, wikipage.PageIdentifier(req.PageName)); authErr != nil {
+	if authErr := requireAuthorized(ctx, s.pageReaderMutator, wikipage.PageIdentifier(req.Page)); authErr != nil {
 		return nil, authErr
 	}
 
-	_, markdown, err := s.pageReaderMutator.ReadMarkdown(wikipage.PageIdentifier(req.PageName))
+	_, markdown, err := s.pageReaderMutator.ReadMarkdown(wikipage.PageIdentifier(req.Page))
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil, status.Errorf(codes.NotFound, pageNotFoundErrFmt, req.PageName)
+			return nil, status.Errorf(codes.NotFound, pageNotFoundErrFmt, req.Page)
 		}
 		return nil, status.Errorf(codes.Internal, failedToReadPageErrFmt, err)
 	}

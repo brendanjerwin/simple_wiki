@@ -237,9 +237,7 @@ var _ = Describe("caldavGateway middleware", func() {
 		BeforeEach(func() {
 			// Stamp an owner-only page on disk so the gateway has
 			// frontmatter to authorize against.
-			Expect(site.WriteFrontMatter(
-				"shopping",
-				wikipage.FrontMatter{
+			Expect(site.WriteFrontMatter("shopping", wikipage.FrontMatter{
 					"identifier": "shopping",
 					"wiki": map[string]any{
 						"authorization": map[string]any{
@@ -248,9 +246,8 @@ var _ = Describe("caldavGateway middleware", func() {
 							},
 						},
 					},
-				},
-			)).To(Succeed())
-			Expect(site.WriteMarkdown("shopping", "# body")).To(Succeed())
+				}, wikipage.AnonymousIdentity)).To(Succeed())
+			Expect(site.WriteMarkdown("shopping", "# body", wikipage.AnonymousIdentity)).To(Succeed())
 		})
 
 		When("the caller is not the owner", func() {

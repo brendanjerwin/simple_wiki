@@ -211,7 +211,7 @@ export class WikiSurvey extends LitElement {
 
       const submitRequest = create(SubmitSurveyResponseRequestSchema, {
         page: this.page,
-        surveyName: this.name,
+        name: this.name,
         values: fieldValuesToJsonObject(this.fieldValues),
         anonymous: false,
       });

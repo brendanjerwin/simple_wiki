@@ -151,15 +151,15 @@ func (r *WikiMetricsRecorder) RecordHeaderExtraction() {
 // GetStats returns a snapshot of the current statistics.
 func (r *WikiMetricsRecorder) GetStats() WikiMetricsStats {
 	return WikiMetricsStats{
-		HTTPRequestsTotal:      r.httpRequestsTotal.Load(),
-		HTTPErrorsTotal:        r.httpErrorsTotal.Load(),
-		GRPCRequestsTotal:      r.grpcRequestsTotal.Load(),
-		GRPCErrorsTotal:        r.grpcErrorsTotal.Load(),
-		TailscaleLookups:       r.tailscaleLookups.Load(),
-		TailscaleSuccesses:     r.tailscaleSuccesses.Load(),
-		TailscaleFailures:      r.tailscaleFailures.Load(),
-		TailscaleNotTailnet:    r.tailscaleNotTailnet.Load(),
-		HeaderExtractions:      r.headerExtractions.Load(),
+		HTTPRequestsTotal:   r.httpRequestsTotal.Load(),
+		HTTPErrorsTotal:     r.httpErrorsTotal.Load(),
+		GRPCRequestsTotal:   r.grpcRequestsTotal.Load(),
+		GRPCErrorsTotal:     r.grpcErrorsTotal.Load(),
+		TailscaleLookups:    r.tailscaleLookups.Load(),
+		TailscaleSuccesses:  r.tailscaleSuccesses.Load(),
+		TailscaleFailures:   r.tailscaleFailures.Load(),
+		TailscaleNotTailnet: r.tailscaleNotTailnet.Load(),
+		HeaderExtractions:   r.headerExtractions.Load(),
 	}
 }
 
@@ -248,6 +248,20 @@ func (r *WikiMetricsRecorder) buildFrontmatter(fm map[string]any) {
 	stats := r.GetStats()
 	fm["identifier"] = ObservabilityMetricsPage
 	fm["title"] = "Observability Metrics"
+	// Opt out of version history — this page is written every 60 seconds
+	// Merge the history opt-out into any existing wiki subtree rather
+	// than replacing it, so authorization/system flags are preserved.
+	wiki, _ := fm["wiki"].(map[string]any)
+	if wiki == nil {
+		wiki = map[string]any{}
+	}
+	history, _ := wiki["history"].(map[string]any)
+	if history == nil {
+		history = map[string]any{}
+	}
+	history["opt_out"] = true
+	wiki["history"] = history
+	fm["wiki"] = wiki
 	fm[observabilityPrefix] = map[string]any{
 		"http": map[string]any{
 			"requests_total": stats.HTTPRequestsTotal,
@@ -270,7 +284,7 @@ func (r *WikiMetricsRecorder) buildFrontmatter(fm map[string]any) {
 
 // writeTemplate writes the markdown template for the metrics page.
 func (r *WikiMetricsRecorder) writeTemplate() error {
-	if err := r.pageWriter.WriteMarkdown(ObservabilityMetricsPage, wikipage.Markdown(r.buildMarkdownTemplate())); err != nil {
+	if err := r.pageWriter.WriteMarkdown(ObservabilityMetricsPage, wikipage.Markdown(r.buildMarkdownTemplate()), wikipage.AnonymousIdentity); err != nil {
 		if r.logger != nil {
 			r.logger.Error("Failed to write metrics page template: %v", err)
 		}
@@ -284,7 +298,7 @@ func (r *WikiMetricsRecorder) writeTemplate() error {
 
 // writeFrontmatter writes the frontmatter to the wiki page.
 func (r *WikiMetricsRecorder) writeFrontmatter(fm map[string]any) error {
-	if err := r.pageWriter.WriteFrontMatter(ObservabilityMetricsPage, fm); err != nil {
+	if err := r.pageWriter.WriteFrontMatter(ObservabilityMetricsPage, wikipage.FrontMatter(fm), wikipage.AnonymousIdentity); err != nil {
 		if r.logger != nil {
 			r.logger.Error("Failed to persist wiki metrics: %v", err)
 		}

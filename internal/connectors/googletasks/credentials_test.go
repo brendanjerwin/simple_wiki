@@ -38,7 +38,7 @@ func (f *fakeTasksFrontmatterRW) ReadFrontMatter(id wikipage.PageIdentifier) (wi
 	return id, fm, nil
 }
 
-func (f *fakeTasksFrontmatterRW) WriteFrontMatter(id wikipage.PageIdentifier, fm wikipage.FrontMatter) error {
+func (f *fakeTasksFrontmatterRW) WriteFrontMatter(id wikipage.PageIdentifier, fm wikipage.FrontMatter, _ wikipage.Identity) error {
 	if f.writeErr != nil {
 		return f.writeErr
 	}

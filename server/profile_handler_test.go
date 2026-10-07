@@ -21,14 +21,14 @@ import (
 // tests. Only ReadFrontMatter, ReadMarkdown, WriteFrontMatter, and
 // WriteMarkdown are exercised; the rest are no-ops.
 type fakeProfileMutator struct {
-	mu             sync.Mutex
-	frontmatter    map[wikipage.PageIdentifier]wikipage.FrontMatter
-	markdown       map[wikipage.PageIdentifier]wikipage.Markdown
-	notFoundForFM  map[wikipage.PageIdentifier]bool
-	writtenFM      map[wikipage.PageIdentifier]wikipage.FrontMatter
-	writtenMD      map[wikipage.PageIdentifier]wikipage.Markdown
-	readMDIDs      map[wikipage.PageIdentifier]int
-	readFMIDs      map[wikipage.PageIdentifier]int
+	mu            sync.Mutex
+	frontmatter   map[wikipage.PageIdentifier]wikipage.FrontMatter
+	markdown      map[wikipage.PageIdentifier]wikipage.Markdown
+	notFoundForFM map[wikipage.PageIdentifier]bool
+	writtenFM     map[wikipage.PageIdentifier]wikipage.FrontMatter
+	writtenMD     map[wikipage.PageIdentifier]wikipage.Markdown
+	readMDIDs     map[wikipage.PageIdentifier]int
+	readFMIDs     map[wikipage.PageIdentifier]int
 }
 
 func newFakeProfileMutator() *fakeProfileMutator {
@@ -66,7 +66,7 @@ func (f *fakeProfileMutator) ReadMarkdown(id wikipage.PageIdentifier) (wikipage.
 	return id, "", os.ErrNotExist
 }
 
-func (f *fakeProfileMutator) WriteFrontMatter(id wikipage.PageIdentifier, fm wikipage.FrontMatter) error {
+func (f *fakeProfileMutator) WriteFrontMatter(id wikipage.PageIdentifier, fm wikipage.FrontMatter, _ wikipage.Identity) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.writtenFM[id] = fm
@@ -75,7 +75,7 @@ func (f *fakeProfileMutator) WriteFrontMatter(id wikipage.PageIdentifier, fm wik
 	return nil
 }
 
-func (f *fakeProfileMutator) WriteMarkdown(id wikipage.PageIdentifier, md wikipage.Markdown) error {
+func (f *fakeProfileMutator) WriteMarkdown(id wikipage.PageIdentifier, md wikipage.Markdown, _ wikipage.Identity) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.writtenMD[id] = md
@@ -85,7 +85,7 @@ func (f *fakeProfileMutator) WriteMarkdown(id wikipage.PageIdentifier, md wikipa
 
 func (*fakeProfileMutator) DeletePage(_ wikipage.PageIdentifier) error { return nil }
 
-func (*fakeProfileMutator) ModifyMarkdown(_ wikipage.PageIdentifier, _ func(wikipage.Markdown) (wikipage.Markdown, error)) error {
+func (*fakeProfileMutator) ModifyMarkdown(_ wikipage.PageIdentifier, _ func(wikipage.Markdown) (wikipage.Markdown, error), _ wikipage.Identity) error {
 	return nil
 }
 
@@ -100,8 +100,11 @@ func (fakeProfileFrontmatterIndex) QueryExactMatch(_, _ string) []wikipage.PageI
 func (fakeProfileFrontmatterIndex) QueryExactMatchSortedBy(_, _, _ string, _ bool, _ int) []wikipage.PageIdentifier {
 	return nil
 }
-func (fakeProfileFrontmatterIndex) QueryPrefixMatch(_, _ string) []wikipage.PageIdentifier  { return nil }
-func (fakeProfileFrontmatterIndex) QueryKeyExistence(_ string) []wikipage.PageIdentifier    { return nil }
+
+func (fakeProfileFrontmatterIndex) QueryPrefixMatch(_, _ string) []wikipage.PageIdentifier {
+	return nil
+}
+func (fakeProfileFrontmatterIndex) QueryKeyExistence(_ string) []wikipage.PageIdentifier { return nil }
 func (fakeProfileFrontmatterIndex) GetValue(_ wikipage.PageIdentifier, _ wikipage.DottedKeyPath) wikipage.Value {
 	return ""
 }
@@ -343,9 +346,9 @@ var _ = Describe("resolveAndRedirectToProfile", func() {
 
 var _ = Describe("(*Site).handleProfile via the registered route", func() {
 	var (
-		site    *Site
-		router  *gin.Engine
-		tmpDir  string
+		site   *Site
+		router *gin.Engine
+		tmpDir string
 	)
 
 	BeforeEach(func() {
@@ -386,16 +389,21 @@ type readErrorMutator struct {
 func (m *readErrorMutator) ReadFrontMatter(id wikipage.PageIdentifier) (wikipage.PageIdentifier, wikipage.FrontMatter, error) {
 	return id, nil, m.permissionErr
 }
+
 func (*readErrorMutator) ReadMarkdown(_ wikipage.PageIdentifier) (wikipage.PageIdentifier, wikipage.Markdown, error) {
 	return "", "", nil
 }
-func (*readErrorMutator) WriteFrontMatter(_ wikipage.PageIdentifier, _ wikipage.FrontMatter) error {
+
+func (*readErrorMutator) WriteFrontMatter(_ wikipage.PageIdentifier, _ wikipage.FrontMatter, _ wikipage.Identity) error {
 	return nil
 }
-func (*readErrorMutator) WriteMarkdown(_ wikipage.PageIdentifier, _ wikipage.Markdown) error {
+
+func (*readErrorMutator) WriteMarkdown(_ wikipage.PageIdentifier, _ wikipage.Markdown, _ wikipage.Identity) error {
 	return nil
 }
+
 func (*readErrorMutator) DeletePage(_ wikipage.PageIdentifier) error { return nil }
-func (*readErrorMutator) ModifyMarkdown(_ wikipage.PageIdentifier, _ func(wikipage.Markdown) (wikipage.Markdown, error)) error {
+
+func (*readErrorMutator) ModifyMarkdown(_ wikipage.PageIdentifier, _ func(wikipage.Markdown) (wikipage.Markdown, error), _ wikipage.Identity) error {
 	return nil
 }

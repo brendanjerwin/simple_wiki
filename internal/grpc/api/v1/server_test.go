@@ -196,7 +196,7 @@ func (m *MockPageReaderMutator) ReadFrontMatter(identifier wikipage.PageIdentifi
 	return identifier, m.Frontmatter, nil
 }
 
-func (m *MockPageReaderMutator) WriteFrontMatter(identifier wikipage.PageIdentifier, fm wikipage.FrontMatter) error {
+func (m *MockPageReaderMutator) WriteFrontMatter(identifier wikipage.PageIdentifier, fm wikipage.FrontMatter, _ wikipage.Identity) error {
 	m.WrittenIdentifier = identifier
 	m.WrittenFrontmatter = fm
 	// Track writes per identifier for multi-page scenarios
@@ -209,7 +209,7 @@ func (m *MockPageReaderMutator) WriteFrontMatter(identifier wikipage.PageIdentif
 	return m.WriteErr
 }
 
-func (m *MockPageReaderMutator) WriteMarkdown(identifier wikipage.PageIdentifier, md wikipage.Markdown) error {
+func (m *MockPageReaderMutator) WriteMarkdown(identifier wikipage.PageIdentifier, md wikipage.Markdown, _ wikipage.Identity) error {
 	m.WrittenIdentifier = identifier
 	m.WrittenMarkdown = md
 	if m.MarkdownWriteErr != nil {
@@ -277,7 +277,7 @@ func (m *MockPageReaderMutator) EmptyTrash() (int, error) {
 // If ConcurrentModificationMarkdown is set, the modifier sees that content instead of
 // m.Markdown — simulating a concurrent write that happened between ReadMarkdown and the
 // atomic write, so the hash check inside the modifier can detect the TOCTOU race.
-func (m *MockPageReaderMutator) ModifyMarkdown(identifier wikipage.PageIdentifier, modifier func(wikipage.Markdown) (wikipage.Markdown, error)) error {
+func (m *MockPageReaderMutator) ModifyMarkdown(identifier wikipage.PageIdentifier, modifier func(wikipage.Markdown) (wikipage.Markdown, error), _ wikipage.Identity) error {
 	if m.MarkdownReadErr != nil {
 		return m.MarkdownReadErr
 	}
@@ -308,7 +308,7 @@ func (m *MockPageReaderMutator) ModifyMarkdown(identifier wikipage.PageIdentifie
 	return nil
 }
 
-func (m *MockPageReaderMutator) ModifyFrontMatterAndMarkdown(identifier wikipage.PageIdentifier, modifier func(wikipage.FrontMatter, wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error)) error {
+func (m *MockPageReaderMutator) ModifyFrontMatterAndMarkdown(identifier wikipage.PageIdentifier, modifier func(wikipage.FrontMatter, wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error), _ wikipage.Identity) error {
 	if m.MarkdownReadErr != nil {
 		return m.MarkdownReadErr
 	}
@@ -527,15 +527,19 @@ type noOpFrontmatterIndexQueryer struct{}
 func (noOpFrontmatterIndexQueryer) QueryExactMatch(wikipage.DottedKeyPath, wikipage.Value) []wikipage.PageIdentifier {
 	return nil
 }
+
 func (noOpFrontmatterIndexQueryer) QueryKeyExistence(wikipage.DottedKeyPath) []wikipage.PageIdentifier {
 	return nil
 }
+
 func (noOpFrontmatterIndexQueryer) QueryPrefixMatch(wikipage.DottedKeyPath, string) []wikipage.PageIdentifier {
 	return nil
 }
+
 func (noOpFrontmatterIndexQueryer) GetValue(wikipage.PageIdentifier, wikipage.DottedKeyPath) wikipage.Value {
 	return ""
 }
+
 func (noOpFrontmatterIndexQueryer) QueryExactMatchSortedBy(wikipage.DottedKeyPath, wikipage.Value, wikipage.DottedKeyPath, bool, int) []wikipage.PageIdentifier {
 	return nil
 }
@@ -559,12 +563,15 @@ type noOpChatBufferManager struct{}
 func (noOpChatBufferManager) AddUserMessage(string, string, string) (string, error) {
 	return "", nil
 }
+
 func (noOpChatBufferManager) AddAssistantMessage(string, string, string) (string, error) {
 	return "", nil
 }
+
 func (noOpChatBufferManager) EditMessage(string, string, bool) error {
 	return nil
 }
+
 func (noOpChatBufferManager) AddReaction(string, string, string) error {
 	return nil
 }
@@ -576,16 +583,19 @@ func (noOpChatBufferManager) ClearPage(string) {
 func (noOpChatBufferManager) GetMessages(string) []*chatbuffer.Message {
 	return nil
 }
+
 func (noOpChatBufferManager) SubscribeToPage(string) (<-chan chatbuffer.Event, func()) {
 	ch := make(chan chatbuffer.Event)
 	close(ch)
 	return ch, noopUnsubscribe
 }
+
 func (noOpChatBufferManager) SubscribeToPageWithReplay(string) ([]*chatbuffer.Message, <-chan chatbuffer.Event, func()) {
 	ch := make(chan chatbuffer.Event)
 	close(ch)
 	return nil, ch, noopUnsubscribe
 }
+
 func (noOpChatBufferManager) SubscribeToPageChannelWithReplay(string) ([]*chatbuffer.Message, <-chan *chatbuffer.Message, func()) {
 	ch := make(chan *chatbuffer.Message)
 	close(ch)
@@ -630,6 +640,10 @@ func (noOpChatBufferManager) NotifyToolCall(string, chatbuffer.ToolCallEvent) {
 	// no-op: satisfies interface; this implementation ignores tool call notifications
 }
 
+func (noOpChatBufferManager) NotifyBackgroundTask(string, chatbuffer.BackgroundTaskEvent) {
+	// no-op: satisfies interface
+}
+
 func (noOpChatBufferManager) NotifyPlan(string, chatbuffer.PlanEvent) {
 	// no-op: satisfies interface; this implementation ignores plan notifications
 }
@@ -663,17 +677,20 @@ type noOpPageReaderMutator struct{}
 func (noOpPageReaderMutator) ReadFrontMatter(wikipage.PageIdentifier) (wikipage.PageIdentifier, wikipage.FrontMatter, error) {
 	return "", nil, os.ErrNotExist
 }
-func (noOpPageReaderMutator) WriteFrontMatter(wikipage.PageIdentifier, wikipage.FrontMatter) error {
+
+func (noOpPageReaderMutator) WriteFrontMatter(wikipage.PageIdentifier, wikipage.FrontMatter, wikipage.Identity) error {
 	return nil
 }
+
 func (noOpPageReaderMutator) ReadMarkdown(wikipage.PageIdentifier) (wikipage.PageIdentifier, wikipage.Markdown, error) {
 	return "", "", os.ErrNotExist
 }
-func (noOpPageReaderMutator) WriteMarkdown(wikipage.PageIdentifier, wikipage.Markdown) error {
+
+func (noOpPageReaderMutator) WriteMarkdown(wikipage.PageIdentifier, wikipage.Markdown, wikipage.Identity) error {
 	return nil
 }
 func (noOpPageReaderMutator) DeletePage(wikipage.PageIdentifier) error { return nil }
-func (noOpPageReaderMutator) ModifyMarkdown(_ wikipage.PageIdentifier, modifier func(wikipage.Markdown) (wikipage.Markdown, error)) error {
+func (noOpPageReaderMutator) ModifyMarkdown(_ wikipage.PageIdentifier, modifier func(wikipage.Markdown) (wikipage.Markdown, error), _ wikipage.Identity) error {
 	_, err := modifier("")
 	return err
 }
@@ -2069,7 +2086,7 @@ var _ = Describe("Server", func() {
 
 		BeforeEach(func() {
 			req = &apiv1.DeletePageRequest{
-				PageName: "test-page",
+				Page: "test-page",
 			}
 			mockPageReaderMutator = &MockPageReaderMutator{}
 		})
@@ -2311,7 +2328,7 @@ var _ = Describe("Server", func() {
 					srv := mustNewServerWithLogger(&MockPageReaderMutator{}, nil, logger)
 					identity := tailscale.NewIdentity("user@example.com", "User Name", "device-name")
 					identCtx := tailscale.ContextWithIdentity(ctx, identity)
-					_, _ = srv.DeletePage(identCtx, &apiv1.DeletePageRequest{PageName: "audit-page"})
+					_, _ = srv.DeletePage(identCtx, &apiv1.DeletePageRequest{Page: "audit-page"})
 					logOutput = logBuffer.String()
 				})
 
@@ -2332,7 +2349,7 @@ var _ = Describe("Server", func() {
 				BeforeEach(func() {
 					logger := lumber.NewBasicLogger(&logWriteCloser{logBuffer}, lumber.TRACE)
 					srv := mustNewServerWithLogger(&MockPageReaderMutator{}, nil, logger)
-					_, _ = srv.DeletePage(ctx, &apiv1.DeletePageRequest{PageName: "anon-page"})
+					_, _ = srv.DeletePage(ctx, &apiv1.DeletePageRequest{Page: "anon-page"})
 					logOutput = logBuffer.String()
 				})
 
@@ -2393,7 +2410,7 @@ var _ = Describe("Server", func() {
 
 		BeforeEach(func() {
 			req = &apiv1.UpdatePageContentRequest{
-				PageName:           "test-page",
+				Page:               "test-page",
 				NewContentMarkdown: "# New Content",
 			}
 			mockPageReaderMutator = &MockPageReaderMutator{
@@ -2406,13 +2423,13 @@ var _ = Describe("Server", func() {
 			resp, err = server.UpdatePageContent(ctx, req)
 		})
 
-		When("page_name is empty", func() {
+		When("page is empty", func() {
 			BeforeEach(func() {
-				req.PageName = ""
+				req.Page = ""
 			})
 
 			It("should return an invalid argument error", func() {
-				Expect(err).To(HaveGrpcStatus(codes.InvalidArgument, "page_name is required"))
+				Expect(err).To(HaveGrpcStatus(codes.InvalidArgument, "page is required"))
 			})
 
 			It("should not return a response", func() {
@@ -2767,7 +2784,7 @@ var _ = Describe("Server", func() {
 
 		BeforeEach(func() {
 			req = &apiv1.ClearPageContentRequest{
-				PageName:     "test-page",
+				Page:         "test-page",
 				ConfirmClear: true,
 			}
 			mockPageReaderMutator = &MockPageReaderMutator{
@@ -2780,13 +2797,13 @@ var _ = Describe("Server", func() {
 			resp, err = server.ClearPageContent(ctx, req)
 		})
 
-		When("page_name is empty", func() {
+		When("page is empty", func() {
 			BeforeEach(func() {
-				req.PageName = ""
+				req.Page = ""
 			})
 
 			It("should return an invalid argument error", func() {
-				Expect(err).To(HaveGrpcStatus(codes.InvalidArgument, "page_name is required"))
+				Expect(err).To(HaveGrpcStatus(codes.InvalidArgument, "page is required"))
 			})
 
 			It("should not return a response", func() {
@@ -2887,7 +2904,7 @@ var _ = Describe("Server", func() {
 
 		BeforeEach(func() {
 			req = &apiv1.UpdateWholePageRequest{
-				PageName:         "test-page",
+				Page:             "test-page",
 				NewWholeMarkdown: "+++\ntitle = \"New Title\"\n+++\n# New Content",
 			}
 			mockPageReaderMutator = &MockPageReaderMutator{
@@ -2900,13 +2917,13 @@ var _ = Describe("Server", func() {
 			resp, err = server.UpdateWholePage(ctx, req)
 		})
 
-		When("page_name is empty", func() {
+		When("page is empty", func() {
 			BeforeEach(func() {
-				req.PageName = ""
+				req.Page = ""
 			})
 
 			It("should return an invalid argument error and no response", func() {
-				Expect(err).To(HaveGrpcStatus(codes.InvalidArgument, "page_name is required"))
+				Expect(err).To(HaveGrpcStatus(codes.InvalidArgument, "page is required"))
 				Expect(resp).To(BeNil())
 			})
 		})
@@ -2994,7 +3011,7 @@ var _ = Describe("Server", func() {
 			})
 		})
 
-		When("the whole markdown contains an identifier key that differs from page_name", func() {
+		When("the whole markdown contains an identifier key that differs from page", func() {
 			BeforeEach(func() {
 				req.NewWholeMarkdown = "+++\nidentifier = \"malicious-override\"\ntitle = \"Hacked\"\n+++\n# Content"
 			})
@@ -3275,7 +3292,7 @@ var _ = Describe("Server", func() {
 
 		BeforeEach(func() {
 			req = &apiv1.WatchPageRequest{
-				PageName: "test-page",
+				Page: "test-page",
 			}
 			streamServer = &MockPageWatchStreamServer{}
 			mockPageReaderMutator = &MockPageReaderMutator{}
@@ -3343,13 +3360,13 @@ var _ = Describe("Server", func() {
 			var err error
 
 			BeforeEach(func() {
-				req.PageName = ""
+				req.Page = ""
 				server = mustNewServer(nil, nil, nil)
 				err = server.WatchPage(req, streamServer)
 			})
 
 			It("should return InvalidArgument error", func() {
-				Expect(err).To(HaveGrpcStatus(codes.InvalidArgument, "page_name is required"))
+				Expect(err).To(HaveGrpcStatus(codes.InvalidArgument, "page is required"))
 			})
 		})
 
@@ -4369,7 +4386,7 @@ var _ = Describe("Server", func() {
 
 		BeforeEach(func() {
 			req = &apiv1.ReadPageRequest{
-				PageIdentifier: &apiv1.ReadPageRequest_PageName{PageName: "test-page"},
+				PageSelector: &apiv1.ReadPageRequest_Page{Page: "test-page"},
 			}
 			mockPageReaderMutator = &MockPageReaderMutator{}
 			mockMarkdownRenderer = &MockMarkdownRenderer{}
@@ -4413,7 +4430,7 @@ var _ = Describe("Server", func() {
 			})
 
 			It("should return an invalid argument error", func() {
-				Expect(err).To(HaveGrpcStatus(codes.InvalidArgument, "page_name or identifier is required"))
+				Expect(err).To(HaveGrpcStatus(codes.InvalidArgument, "page or identifier is required"))
 			})
 
 			It("should return no response", func() {
@@ -4542,7 +4559,7 @@ var _ = Describe("Server", func() {
 		When("only the identifier field is set (MCP compatibility alias)", func() {
 			BeforeEach(func() {
 				req = &apiv1.ReadPageRequest{
-					PageIdentifier: &apiv1.ReadPageRequest_Identifier{Identifier: "test-page"},
+					PageSelector: &apiv1.ReadPageRequest_Identifier{Identifier: "test-page"},
 				}
 				mockPageReaderMutator.Markdown = "# Identifier Alias Page"
 				mockPageReaderMutator.Frontmatter = nil
@@ -4559,10 +4576,10 @@ var _ = Describe("Server", func() {
 			})
 		})
 
-		When("the page_name oneof variant is used", func() {
+		When("the page oneof variant is used", func() {
 			BeforeEach(func() {
 				req = &apiv1.ReadPageRequest{
-					PageIdentifier: &apiv1.ReadPageRequest_PageName{PageName: "test-page"},
+					PageSelector: &apiv1.ReadPageRequest_Page{Page: "test-page"},
 				}
 				mockPageReaderMutator.Markdown = "# Page Name Variant"
 				mockPageReaderMutator.Frontmatter = nil
@@ -4574,7 +4591,7 @@ var _ = Describe("Server", func() {
 				Expect(err).NotTo(HaveOccurred())
 			})
 
-			It("should return content for the page_name variant", func() {
+			It("should return content for the page variant", func() {
 				Expect(resp.ContentMarkdown).To(Equal("# Page Name Variant"))
 			})
 		})
@@ -5685,7 +5702,7 @@ var _ = Describe("Server", func() {
 
 		BeforeEach(func() {
 			req = &apiv1.CreatePageRequest{
-				PageName: "My New Page",
+				Page: "My New Page",
 			}
 			mockPageReaderMutator = &MockPageReaderMutator{
 				Err: os.ErrNotExist, // Page doesn't exist by default
@@ -5707,13 +5724,13 @@ var _ = Describe("Server", func() {
 			resp, err = server.CreatePage(ctx, req)
 		})
 
-		When("the page_name is empty", func() {
+		When("the page is empty", func() {
 			BeforeEach(func() {
-				req.PageName = ""
+				req.Page = ""
 			})
 
 			It("should return an invalid argument error", func() {
-				Expect(err).To(HaveGrpcStatus(codes.InvalidArgument, "page_name is required"))
+				Expect(err).To(HaveGrpcStatus(codes.InvalidArgument, "page is required"))
 			})
 
 			It("should return no response", func() {
@@ -6126,7 +6143,7 @@ var _ = Describe("Server", func() {
 
 		BeforeEach(func() {
 			req = &apiv1.ReadPageOutlineRequest{
-				PageName: "test-page",
+				Page: "test-page",
 			}
 			mockPageReaderMutator = &MockPageReaderMutator{}
 		})
@@ -6225,7 +6242,7 @@ var _ = Describe("Server", func() {
 
 		BeforeEach(func() {
 			req = &apiv1.ReadPageSectionRequest{
-				PageName:   "test-page",
+				Page:       "test-page",
 				ByteOffset: int64(len("# Intro\n\n")),
 				ByteLength: int64(len("intro body\n\n")),
 			}
@@ -7427,7 +7444,7 @@ func (*callbackObservingMutator) ReadFrontMatter(id wikipage.PageIdentifier) (wi
 	return id, nil, os.ErrNotExist
 }
 
-func (m *callbackObservingMutator) WriteFrontMatter(id wikipage.PageIdentifier, _ wikipage.FrontMatter) error {
+func (m *callbackObservingMutator) WriteFrontMatter(id wikipage.PageIdentifier, _ wikipage.FrontMatter, _ wikipage.Identity) error {
 	if string(id) == "page_import_report" {
 		m.mu.Lock()
 		m.reportWritten = true
@@ -7436,7 +7453,7 @@ func (m *callbackObservingMutator) WriteFrontMatter(id wikipage.PageIdentifier, 
 	return nil
 }
 
-func (*callbackObservingMutator) WriteMarkdown(_ wikipage.PageIdentifier, _ wikipage.Markdown) error {
+func (*callbackObservingMutator) WriteMarkdown(_ wikipage.PageIdentifier, _ wikipage.Markdown, _ wikipage.Identity) error {
 	return nil
 }
 
@@ -7448,7 +7465,7 @@ func (*callbackObservingMutator) DeletePage(_ wikipage.PageIdentifier) error {
 	return nil
 }
 
-func (*callbackObservingMutator) ModifyMarkdown(_ wikipage.PageIdentifier, modifier func(wikipage.Markdown) (wikipage.Markdown, error)) error {
+func (*callbackObservingMutator) ModifyMarkdown(_ wikipage.PageIdentifier, modifier func(wikipage.Markdown) (wikipage.Markdown, error), _ wikipage.Identity) error {
 	_, err := modifier("")
 	return err
 }

@@ -9,8 +9,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/brendanjerwin/simple_wiki/pkg/ulid"
 	"github.com/brendanjerwin/simple_wiki/utils/base32tools"
 	"github.com/brendanjerwin/simple_wiki/wikiidentifiers"
+	"github.com/brendanjerwin/simple_wiki/wikipage"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/metric"
 )
@@ -28,6 +30,15 @@ type Store struct {
 	pathToData    string
 	canonicalizer FrontmatterCanonicalizer
 
+	// versionIDs generates history version ULIDs. One shared generator per
+	// Store is REQUIRED: the monotonic entropy that keeps same-millisecond
+	// ULIDs sorted by creation order only works within a single generator
+	// instance. Constructing a fresh generator per capture produces
+	// out-of-order version IDs, which ListVersions then reads back
+	// filename-descending — mis-ordering history and flaking the
+	// DiffVersions test.
+	versionIDs ulid.Generator
+
 	// pageLocks holds one *sync.Mutex per page, keyed by CanonicalLockKey(id).
 	pageLocks sync.Map
 }
@@ -37,7 +48,11 @@ type Store struct {
 // by default; call SetCanonicalizer (or use the Phase 4 wiring) to swap
 // in the real frontmatter canonicalizer.
 func NewStore(pathToData string) *Store {
-	return &Store{pathToData: pathToData, canonicalizer: NoopCanonicalizer{}}
+	return &Store{
+		pathToData:    pathToData,
+		canonicalizer: NoopCanonicalizer{},
+		versionIDs:    ulid.NewSystemGenerator(),
+	}
 }
 
 // SetCanonicalizer swaps the canonicalizer used on the write path. Safe to
@@ -150,7 +165,7 @@ func (s *Store) writeRawTextLocked(identifier, text string) error {
 		return fmt.Errorf("canonicalize page %s before write: %w", identifier, err)
 	}
 	filePath := path.Join(s.pathToData, base32tools.EncodeToBase32(strings.ToLower(identifier))+".md")
-	if err := os.WriteFile(filePath, canonical, 0644); err != nil {
+	if err := os.WriteFile(filePath, canonical, 0o644); err != nil {
 		return fmt.Errorf("failed to save page %s: %w", identifier, err)
 	}
 	return nil
@@ -161,10 +176,14 @@ func (s *Store) writeRawTextLocked(identifier, text string) error {
 // modifier is called with an empty string (creating the page from scratch).
 // Returns any error from read, modify, or write.
 //
+// The identity parameter is used for history attribution: when the page
+// content changes, the prior content is captured as a version snapshot
+// with author = identity.LoginName(), is_agent = identity.IsAgent().
+//
 // Indexing and other post-write side effects are the caller's responsibility
 // — Store only owns disk I/O. The lock is released before this function
 // returns.
-func (s *Store) ModifyOrCreatePage(identifier string, modifier func(currentText string) (string, error)) error {
+func (s *Store) ModifyOrCreatePage(identifier string, identity wikipage.Identity, source string, modifier func(currentText string) (string, error)) error {
 	unlock := s.lockPage(identifier)
 	defer unlock()
 
@@ -177,6 +196,14 @@ func (s *Store) ModifyOrCreatePage(identifier string, modifier func(currentText 
 	newText, modErr := modifier(currentText)
 	if modErr != nil {
 		return modErr
+	}
+	// Capture history: if the content changed and there was prior content,
+	// and the page hasn't opted out of history via frontmatter, save the
+	// outgoing state as a version snapshot before overwriting.
+	if currentText != "" && currentText != newText && !shouldSkipHistoryCapture(currentText) {
+		// History capture failure must not block the live write.
+		// The write is the source of truth; history is best-effort.
+		_ = s.captureVersionLockedWithSource(identifier, currentText, identity, source) //nolint:errcheck // nosemgrep: go.error-discarded-with-blank-identifier
 	}
 
 	return s.writeRawTextLocked(identifier, newText)

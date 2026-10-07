@@ -30,7 +30,7 @@ title = "Frontmatter Dialog Accessibility"
 # Frontmatter Dialog Accessibility`;
 
   const createResp = await callPageAPI(request, 'CreatePage', {
-    pageName: TEST_PAGE_IDENTIFIER,
+    page: TEST_PAGE_IDENTIFIER,
     contentMarkdown,
   });
   if (createResp.ok()) {
@@ -39,7 +39,7 @@ title = "Frontmatter Dialog Accessibility"
   }
 
   const resetResp = await callPageAPI(request, 'UpdatePageContent', {
-    pageName: TEST_PAGE_IDENTIFIER,
+    page: TEST_PAGE_IDENTIFIER,
     newContentMarkdown: contentMarkdown,
   });
   expect(resetResp.ok()).toBeTruthy();
@@ -71,7 +71,7 @@ test.describe('FrontmatterEditorDialog accessibility', () => {
 
   test.afterAll(async ({ request }) => {
     try {
-      const resp = await callPageAPI(request, 'DeletePage', { pageName: TEST_PAGE_IDENTIFIER });
+      const resp = await callPageAPI(request, 'DeletePage', { page: TEST_PAGE_IDENTIFIER });
       if (!resp.ok()) {
         console.warn(`[afterAll] DeletePage(${TEST_PAGE_IDENTIFIER}) returned HTTP ${resp.status()}`);
       }

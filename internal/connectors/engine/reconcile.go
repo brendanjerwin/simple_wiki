@@ -527,6 +527,16 @@ func (e *Engine) applyInboundOneItem(
 		}
 		if updErr := e.mutator.UpdateItemForSync(ctx, binding.Page, binding.ListName, "", uid,
 			wikiItem.Text, wikiItem.Checked, wikiItem.Tags, wikiItem.Description, dueFromWikiItem(wikiItem)); updErr != nil {
+			if errors.Is(updErr, checklistmutator.ErrItemNotFound) {
+				// The wiki item was deleted between the remote pull and the
+				// inbound apply. There is nothing to mirror; let the outbound
+				// delete propagate the wiki-side removal to the remote on the
+				// same tick. Preserving the mapping avoids re-adding the item
+				// as an unbound duplicate on the next inbound pull.
+				e.logger.Info("connectors/engine: inbound_update_skipped_item_missing kind=%s profile=%s page=%s list=%s uid=%s ref=%s",
+					e.adapter.Kind(), string(binding.ProfileID), binding.Page, binding.ListName, uid, string(remoteItem.Ref))
+				return nil
+			}
 			return fmt.Errorf("update wiki item %s on profile %s: %w",
 				uid, binding.ProfileID, updErr)
 		}
@@ -601,6 +611,14 @@ func (e *Engine) applyInboundDedupByText(
 		e.adapter.Kind(), string(binding.ProfileID), binding.Page, binding.ListName, matchUID, string(remoteItem.Ref))
 	if updErr := e.mutator.UpdateItemForSync(ctx, binding.Page, binding.ListName, "", matchUID,
 		wikiItem.Text, wikiItem.Checked, wikiItem.Tags, wikiItem.Description, dueFromWikiItem(wikiItem)); updErr != nil {
+		if errors.Is(updErr, checklistmutator.ErrItemNotFound) {
+			// The text-matched wiki item was deleted before we could adopt
+			// the remote ref. Skip the adopt rather than recreating the item
+			// from the remote copy.
+			e.logger.Info("connectors/engine: inbound_dedup_adopt_skipped_item_missing kind=%s profile=%s page=%s list=%s uid=%s ref=%s",
+				e.adapter.Kind(), string(binding.ProfileID), binding.Page, binding.ListName, matchUID, string(remoteItem.Ref))
+			return true, nil
+		}
 		return true, fmt.Errorf("update adopted wiki item %s on profile %s: %w",
 			matchUID, binding.ProfileID, updErr)
 	}

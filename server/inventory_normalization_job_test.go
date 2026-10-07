@@ -54,7 +54,7 @@ func (m *mockNormalizationDeps) ReadMarkdown(id wikipage.PageIdentifier) (wikipa
 	return "", "", os.ErrNotExist
 }
 
-func (m *mockNormalizationDeps) WriteFrontMatter(id wikipage.PageIdentifier, fm wikipage.FrontMatter) error {
+func (m *mockNormalizationDeps) WriteFrontMatter(id wikipage.PageIdentifier, fm wikipage.FrontMatter, _ wikipage.Identity) error {
 	if m.writtenPages[string(id)] == nil {
 		m.writtenPages[string(id)] = &mockPageData{}
 	}
@@ -62,7 +62,7 @@ func (m *mockNormalizationDeps) WriteFrontMatter(id wikipage.PageIdentifier, fm 
 	return nil
 }
 
-func (m *mockNormalizationDeps) WriteMarkdown(id wikipage.PageIdentifier, md wikipage.Markdown) error {
+func (m *mockNormalizationDeps) WriteMarkdown(id wikipage.PageIdentifier, md wikipage.Markdown, _ wikipage.Identity) error {
 	if m.writtenPages[string(id)] == nil {
 		m.writtenPages[string(id)] = &mockPageData{}
 	}
@@ -75,7 +75,7 @@ func (m *mockNormalizationDeps) DeletePage(id wikipage.PageIdentifier) error {
 	return nil
 }
 
-func (m *mockNormalizationDeps) ModifyMarkdown(id wikipage.PageIdentifier, modifier func(wikipage.Markdown) (wikipage.Markdown, error)) error {
+func (m *mockNormalizationDeps) ModifyMarkdown(id wikipage.PageIdentifier, modifier func(wikipage.Markdown) (wikipage.Markdown, error), _ wikipage.Identity) error {
 	var currentMD wikipage.Markdown
 	if page, ok := m.pages[string(id)]; ok {
 		currentMD = wikipage.Markdown(page.markdown)
@@ -95,10 +95,10 @@ func (m *mockNormalizationDeps) ModifyMarkdown(id wikipage.PageIdentifier, modif
 
 var _ = Describe("InventoryNormalizationJob", func() {
 	var (
-		job      *InventoryNormalizationJob
-		mockDeps *mockNormalizationDeps
+		job         *InventoryNormalizationJob
+		mockDeps    *mockNormalizationDeps
 		mockFmIndex *mockFrontmatterIndexQueryer
-		logger   logging.Logger
+		logger      logging.Logger
 	)
 
 	BeforeEach(func() {
@@ -868,9 +868,9 @@ var _ = Describe("InventoryNormalizationJob", func() {
 
 			BeforeEach(func() {
 				result = mapKeysToSortedSlice(map[string]bool{
-					"zebra":    true,
-					"apple":    true,
-					"mango":    true,
+					"zebra": true,
+					"apple": true,
+					"mango": true,
 				})
 			})
 
@@ -1321,7 +1321,7 @@ var _ = Describe("InventoryNormalizationJob", func() {
 					frontmatter: map[string]any{
 						"title": "Tool Box",
 						"inventory": map[string]any{
-							"items": []any{"///"},  // This will fail MungeIdentifier
+							"items": []any{"///"}, // This will fail MungeIdentifier
 						},
 					},
 				}
@@ -1477,7 +1477,7 @@ var _ = Describe("InventoryNormalizationJob", func() {
 				mockDeps.pages["drawer"] = &mockPageData{
 					frontmatter: map[string]any{
 						"inventory": map[string]any{
-							"items": []any{"///"},  // This will fail MungeIdentifier
+							"items": []any{"///"}, // This will fail MungeIdentifier
 						},
 					},
 				}
@@ -1509,7 +1509,7 @@ var _ = Describe("InventoryNormalizationJob", func() {
 				mockDeps.pages["drawer"] = &mockPageData{
 					frontmatter: map[string]any{
 						"inventory": map[string]any{
-							"items": []any{"///"},  // This will fail MungeIdentifier
+							"items": []any{"///"}, // This will fail MungeIdentifier
 						},
 					},
 				}
@@ -2289,18 +2289,18 @@ type mockNormalizationDepsWithFailure struct {
 	markdownError error
 }
 
-func (m *mockNormalizationDepsWithFailure) WriteFrontMatter(id wikipage.PageIdentifier, fm wikipage.FrontMatter) error {
+func (m *mockNormalizationDepsWithFailure) WriteFrontMatter(id wikipage.PageIdentifier, fm wikipage.FrontMatter, identity wikipage.Identity) error {
 	if m.writeError != nil {
 		return m.writeError
 	}
-	return m.mockNormalizationDeps.WriteFrontMatter(id, fm)
+	return m.mockNormalizationDeps.WriteFrontMatter(id, fm, identity)
 }
 
-func (m *mockNormalizationDepsWithFailure) WriteMarkdown(id wikipage.PageIdentifier, md wikipage.Markdown) error {
+func (m *mockNormalizationDepsWithFailure) WriteMarkdown(id wikipage.PageIdentifier, md wikipage.Markdown, identity wikipage.Identity) error {
 	if m.markdownError != nil {
 		return m.markdownError
 	}
-	return m.mockNormalizationDeps.WriteMarkdown(id, md)
+	return m.mockNormalizationDeps.WriteMarkdown(id, md, identity)
 }
 
 var _ = Describe("writeGroupedAnomalies", func() {

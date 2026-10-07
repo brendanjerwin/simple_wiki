@@ -15,6 +15,7 @@ import (
 	"github.com/brendanjerwin/simple_wiki/internal/connectors"
 	"github.com/brendanjerwin/simple_wiki/internal/connectors/engine"
 	enginetesting "github.com/brendanjerwin/simple_wiki/internal/connectors/engine/testing"
+	"github.com/brendanjerwin/simple_wiki/server/checklistmutator"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 )
 
@@ -718,6 +719,63 @@ var _ = Describe("Engine.reconcile", func() {
 
 		It("should pass the known uid to UpdateItemForSync", func() {
 			Expect(mutator.recordingChecklistMutator.updateCalls[0].UID).To(Equal(knownUID))
+		})
+	})
+
+	// Regression: inbound update of a wiki item that was deleted after the
+	// remote pull should skip gracefully instead of failing the whole tick.
+	// The error message in production was:
+	//   "update wiki item <uid> on profile <id>: checklist item not found"
+	// which caused the GoogleTasksOutboundSync job to retry indefinitely.
+	When("inbound has an existing remote item but the wiki item was deleted", func() {
+		const knownUID = "uid-deleted-before-apply-1"
+		var syncErr error
+
+		BeforeEach(func() {
+			fbs.SeedBinding(connectors.Binding{
+				ProfileID: profileID, Page: page, ListName: listName,
+				RemoteHandle:         "tasklist-1",
+				State:                connectors.BindingStateActive,
+				LastSuccessfulSyncAt: reconcilePastChokePausedAt,
+				LastSyncedSeq:        10,
+				AdapterState: connectors.AdapterState{
+					"item_id_map": map[string]string{knownUID: "task-1"},
+				},
+			}, ownerKind)
+
+			fa.SetPullRemoteResponse(connectors.RemotePullResult{
+				Items: []connectors.RemoteItem{{Ref: "task-1", Title: "milk-updated"}},
+			}, nil)
+			fa.SetRemoteToWikiResponse(connectors.WikiItem{UID: knownUID, Text: "milk-updated"}, nil)
+			// The checklist still has no events (no divergence) and the
+			// item is no longer present (deleted out-of-band).
+			reader.checklist = &apiv1.Checklist{Items: []*apiv1.ChecklistItem{}}
+			mutator.updateErr = checklistmutator.ErrItemNotFound
+
+			syncErr = eng.Sync(ctx, key)
+		})
+
+		It("should not return an error", func() {
+			Expect(syncErr).NotTo(HaveOccurred())
+		})
+
+		It("should call UpdateItemForSync once (attempt before skip)", func() {
+			Expect(mutator.recordingChecklistMutator.updateCalls).To(HaveLen(1))
+		})
+
+		It("should preserve the uid mapping so outbound can mirror the deletion", func() {
+			// Because the wiki item is gone, the outbound delete branch sees
+			// uid in idMap but absent from currentUIDs and propagates the
+			// wiki-side deletion to the remote. The mapping is then removed
+			// from AdapterState.
+			Expect(fa.RecordedDeleteRemote).To(HaveLen(1))
+			Expect(fa.RecordedDeleteRemote[0].Ref).To(Equal(connectors.RemoteRef("task-1")))
+
+			Expect(fbs.RecordedSaveBinding).NotTo(BeEmpty())
+			saved := fbs.RecordedSaveBinding[len(fbs.RecordedSaveBinding)-1].Binding
+			idMap, ok := saved.AdapterState["item_id_map"].(map[string]string)
+			Expect(ok).To(BeTrue())
+			Expect(idMap).NotTo(HaveKey(knownUID))
 		})
 	})
 

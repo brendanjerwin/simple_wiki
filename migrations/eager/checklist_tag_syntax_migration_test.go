@@ -40,13 +40,13 @@ func (f *fakeMutator) ReadMarkdown(id wikipage.PageIdentifier) (wikipage.PageIde
 	return id, md, nil
 }
 
-func (f *fakeMutator) WriteFrontMatter(id wikipage.PageIdentifier, fm wikipage.FrontMatter) error {
+func (f *fakeMutator) WriteFrontMatter(id wikipage.PageIdentifier, fm wikipage.FrontMatter, _ wikipage.Identity) error {
 	f.frontmatter[id] = fm
 	f.writes++
 	return nil
 }
 
-func (f *fakeMutator) WriteMarkdown(id wikipage.PageIdentifier, md wikipage.Markdown) error {
+func (f *fakeMutator) WriteMarkdown(id wikipage.PageIdentifier, md wikipage.Markdown, _ wikipage.Identity) error {
 	f.markdown[id] = md
 	f.writes++
 	return nil
@@ -58,7 +58,7 @@ func (f *fakeMutator) DeletePage(id wikipage.PageIdentifier) error {
 	return nil
 }
 
-func (f *fakeMutator) ModifyMarkdown(id wikipage.PageIdentifier, modifier func(wikipage.Markdown) (wikipage.Markdown, error)) error {
+func (f *fakeMutator) ModifyMarkdown(id wikipage.PageIdentifier, modifier func(wikipage.Markdown) (wikipage.Markdown, error), _ wikipage.Identity) error {
 	current := f.markdown[id]
 	next, err := modifier(current)
 	if err != nil {
@@ -292,8 +292,8 @@ var _ = Describe("rewriteChecklistTags", func() {
 var _ = Describe("ChecklistTagSyntaxMigrationJob", func() {
 	Describe("when the page has legacy `:tag` items", func() {
 		var (
-			mut       *fakeMutator
-			pageID    wikipage.PageIdentifier
+			mut        *fakeMutator
+			pageID     wikipage.PageIdentifier
 			executeErr error
 		)
 
@@ -331,7 +331,7 @@ var _ = Describe("ChecklistTagSyntaxMigrationJob", func() {
 
 	Describe("when the page is already flagged migrated", func() {
 		var (
-			mut       *fakeMutator
+			mut        *fakeMutator
 			executeErr error
 		)
 
