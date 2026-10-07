@@ -1,7 +1,7 @@
 import { expect, fixture, html } from '@open-wc/testing';
 import { LitElement } from 'lit';
 import sinon from 'sinon';
-import { handleKeydownFocusTrap, restoreFocus, NativeDialogMixin } from './native-dialog-mixin.js';
+import { handleKeydownFocusTrap, restoreFocus, findRestoreFocusTarget, NativeDialogMixin } from './native-dialog-mixin.js';
 
 // ─── Minimal test component ──────────────────────────────────────────────────
 
@@ -444,6 +444,71 @@ describe('restoreFocus', () => {
 
     it('should walk further up the DOM tree and focus the grandparent-level button', () => {
       expect(focusSpy).to.have.been.calledOnce;
+    });
+  });
+});
+
+describe('findRestoreFocusTarget', () => {
+  it('should exist', () => {
+    expect(findRestoreFocusTarget).to.be.a('function');
+  });
+
+  describe('when target is null', () => {
+    it('should return null', () => {
+      expect(findRestoreFocusTarget(null)).to.be.null;
+    });
+  });
+
+  describe('when target is a visible focusable button', () => {
+    let button: HTMLButtonElement;
+
+    beforeEach(() => {
+      button = document.createElement('button');
+      document.body.appendChild(button);
+    });
+
+    afterEach(() => {
+      button.remove();
+    });
+
+    it('should return the button without focusing it', () => {
+      const focusSpy = sinon.spy(button, 'focus');
+      const result = findRestoreFocusTarget(button);
+      expect(result).to.equal(button);
+      expect(focusSpy).not.to.have.been.called;
+    });
+  });
+
+  describe('when target is hidden (display:none)', () => {
+    let container: HTMLDivElement;
+    let hiddenTarget: HTMLButtonElement;
+    let visibleFallback: HTMLButtonElement;
+
+    beforeEach(() => {
+      container = document.createElement('div');
+      hiddenTarget = document.createElement('button');
+      visibleFallback = document.createElement('button');
+      hiddenTarget.style.display = 'none';
+      container.appendChild(hiddenTarget);
+      container.appendChild(visibleFallback);
+      document.body.appendChild(container);
+    });
+
+    afterEach(() => {
+      container.remove();
+    });
+
+    it('should return the first visible focusable sibling', () => {
+      const result = findRestoreFocusTarget(hiddenTarget);
+      expect(result).to.equal(visibleFallback);
+    });
+
+    it('should not call focus on any element', () => {
+      const hiddenSpy = sinon.spy(hiddenTarget, 'focus');
+      const visibleSpy = sinon.spy(visibleFallback, 'focus');
+      findRestoreFocusTarget(hiddenTarget);
+      expect(hiddenSpy).not.to.have.been.called;
+      expect(visibleSpy).not.to.have.been.called;
     });
   });
 });

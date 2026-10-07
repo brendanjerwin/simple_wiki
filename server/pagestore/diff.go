@@ -4,6 +4,12 @@ import (
 	"strings"
 )
 
+// diffOp represents a single diff operation.
+type diffOp struct {
+	op   byte // ' ', '-', '+'
+	line string
+}
+
 // computeUnifiedDiff produces a unified diff between two text snapshots.
 // The diff is line-based, in the standard unified-diff format:
 //
@@ -18,17 +24,14 @@ import (
 func computeUnifiedDiff(oldText, newText string) string {
 	oldLines := splitLines(oldText)
 	newLines := splitLines(newText)
-
-	// Compute the LCS table.
 	lcs := computeLCSTable(oldLines, newLines)
+	ops := backtrackDiff(lcs, oldLines, newLines)
+	return formatDiffHunks(ops)
+}
 
-	// Backtrack to produce the diff.
-	type diffOp struct {
-		op   byte // ' ', '-', '+'
-		line string
-	}
+// backtrackDiff walks the LCS table backwards to produce a list of diff operations.
+func backtrackDiff(lcs [][]int, oldLines, newLines []string) []diffOp {
 	var ops []diffOp
-
 	i, j := len(oldLines), len(newLines)
 	for i > 0 || j > 0 {
 		if i > 0 && j > 0 && oldLines[i-1] == newLines[j-1] {
@@ -43,88 +46,98 @@ func computeUnifiedDiff(oldText, newText string) string {
 			i--
 		}
 	}
-
 	// Reverse ops (we built them backwards).
 	for left, right := 0, len(ops)-1; left < right; left, right = left+1, right-1 {
 		ops[left], ops[right] = ops[right], ops[left]
 	}
+	return ops
+}
 
-	// Group into hunks with 3 lines of context.
+// formatDiffHunks groups diff operations into hunks with context and formats them.
+func formatDiffHunks(ops []diffOp) string {
 	const contextLines = 3
 	var result strings.Builder
 	idx := 0
 	for idx < len(ops) {
-		// Skip unchanged lines (context only).
 		if ops[idx].op == ' ' {
 			idx++
 			continue
 		}
-
-		// Find the start of the hunk (include context lines before).
-		hunkStart := idx
-		for hunkStart > 0 && ops[hunkStart-1].op == ' ' && idx-hunkStart < contextLines {
-			hunkStart--
-		}
-
-		// Find the end of the hunk.
-		hunkEnd := idx
-		unchangedRun := 0
-		for hunkEnd < len(ops) {
-			if ops[hunkEnd].op == ' ' {
-				unchangedRun++
-				if unchangedRun > contextLines*2 {
-					break
-				}
-			} else {
-				unchangedRun = 0
-			}
-			hunkEnd++
-		}
-
-		// Trim trailing context to contextLines.
-		for hunkEnd > hunkStart && ops[hunkEnd-1].op == ' ' && hunkEnd-1 > idx {
-			hunkEnd--
-		}
-
-		// Count old and new line positions for the hunk header.
-		oldStart, newStart := 1, 1
-		for k := 0; k < hunkStart; k++ {
-			if ops[k].op == ' ' || ops[k].op == '-' {
-				oldStart++
-			}
-			if ops[k].op == ' ' || ops[k].op == '+' {
-				newStart++
-			}
-		}
-
-		oldLen, newLen := 0, 0
-		for k := hunkStart; k < hunkEnd; k++ {
-			switch ops[k].op {
-			case ' ':
-				oldLen++
-				newLen++
-			case '-':
-				oldLen++
-			case '+':
-				newLen++
-			}
-		}
-
-		// Write hunk header.
-		result.WriteString(formatHunkHeader(oldStart, oldLen, newStart, newLen))
+		hunkStart, hunkEnd := findHunkBounds(ops, idx, contextLines)
+		c := countHunkCoords(ops, hunkStart, hunkEnd)
+		result.WriteString(formatHunkHeader(c.oldStart, c.oldLen, c.newStart, c.newLen))
 		result.WriteByte('\n')
-
-		// Write hunk lines.
-		for k := hunkStart; k < hunkEnd; k++ {
-			result.WriteByte(ops[k].op)
-			result.WriteString(ops[k].line)
-			result.WriteByte('\n')
-		}
-
+		writeHunkLines(&result, ops, hunkStart, hunkEnd)
 		idx = hunkEnd
 	}
-
 	return result.String()
+}
+
+// findHunkBounds returns the start and end indices for a hunk, including context lines.
+func findHunkBounds(ops []diffOp, idx, contextLines int) (hunkStart, hunkEnd int) {
+	hunkStart = idx
+	for hunkStart > 0 && ops[hunkStart-1].op == ' ' && idx-hunkStart < contextLines {
+		hunkStart--
+	}
+	hunkEnd = idx
+	unchangedRun := 0
+	for hunkEnd < len(ops) {
+		if ops[hunkEnd].op == ' ' {
+			unchangedRun++
+			if unchangedRun > contextLines*2 {
+				break
+			}
+		} else {
+			unchangedRun = 0
+		}
+		hunkEnd++
+	}
+	for hunkEnd > hunkStart && ops[hunkEnd-1].op == ' ' && hunkEnd-1 > idx {
+		hunkEnd--
+	}
+	return hunkStart, hunkEnd
+}
+
+// hunkCoords holds the position and length data needed for a unified diff hunk header.
+type hunkCoords struct {
+	oldStart, newStart int
+	oldLen, newLen     int
+}
+
+// countHunkCoords computes the old/new line start positions and lengths for a hunk header.
+func countHunkCoords(ops []diffOp, hunkStart, hunkEnd int) hunkCoords {
+	c := hunkCoords{oldStart: 1, newStart: 1}
+	for k := 0; k < hunkStart; k++ {
+		if ops[k].op == ' ' || ops[k].op == '-' {
+			c.oldStart++
+		}
+		if ops[k].op == ' ' || ops[k].op == '+' {
+			c.newStart++
+		}
+	}
+	for k := hunkStart; k < hunkEnd; k++ {
+		switch ops[k].op {
+		case ' ':
+			c.oldLen++
+			c.newLen++
+		case '-':
+			c.oldLen++
+		case '+':
+			c.newLen++
+		default:
+			// unreachable: op is always one of ' ', '-', '+'
+		}
+	}
+	return c
+}
+
+// writeHunkLines writes the diff lines for a hunk to the builder.
+func writeHunkLines(result *strings.Builder, ops []diffOp, hunkStart, hunkEnd int) {
+	for k := hunkStart; k < hunkEnd; k++ {
+		result.WriteByte(ops[k].op)
+		result.WriteString(ops[k].line)
+		result.WriteByte('\n')
+	}
 }
 
 // splitLines splits text into lines, preserving the content without trailing newlines.
@@ -178,6 +191,7 @@ func formatRange(prefix byte, start, length int) string {
 
 // itoa is a minimal int-to-string to avoid importing strconv for one use.
 func itoa(n int) string {
+	const decimalBase = 10
 	if n == 0 {
 		return "0"
 	}
@@ -189,8 +203,8 @@ func itoa(n int) string {
 	pos := len(buf)
 	for n > 0 {
 		pos--
-		buf[pos] = byte('0' + n%10)
-		n /= 10
+		buf[pos] = byte('0' + n%decimalBase)
+		n /= decimalBase
 	}
 	if neg {
 		pos--
