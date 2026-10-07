@@ -64,11 +64,11 @@ func (s ToolSurface) Descriptions() map[string]string {
 // initialize + tools/list handshake, and returns the live ToolSurface.
 // baseURL should not have a trailing slash (e.g. "http://localhost:8050").
 func FetchSurface(baseURL string) (ToolSurface, error) {
-	return fetchSurface(baseURL, http.DefaultClient)
+	return fetchSurfaceWithClient(baseURL, http.DefaultClient)
 }
 
-// fetchSurface is the testable inner form of FetchSurface.
-func fetchSurface(baseURL string, client *http.Client) (ToolSurface, error) {
+// fetchSurfaceWithClient is the testable inner form of FetchSurface.
+func fetchSurfaceWithClient(baseURL string, client *http.Client) (ToolSurface, error) {
 	ctx := context.Background()
 
 	// 1. Initialize to get a session
@@ -105,11 +105,7 @@ func fetchSurface(baseURL string, client *http.Client) (ToolSurface, error) {
 		return ToolSurface{}, fmt.Errorf("list returned %d", listResp.StatusCode)
 	}
 
-	var rpcResp struct {
-		Result struct {
-			Tools []ToolDef `json:"tools"`
-		} `json:"result"`
-	}
+	var rpcResp mcpToolsListResponse
 	if err := json.NewDecoder(listResp.Body).Decode(&rpcResp); err != nil {
 		return ToolSurface{}, fmt.Errorf("decode list response: %w", err)
 	}
@@ -118,4 +114,14 @@ func fetchSurface(baseURL string, client *http.Client) (ToolSurface, error) {
 		Label: "post-PR",
 		Tools: rpcResp.Result.Tools,
 	}, nil
+}
+
+// mcpToolsListResult is the result payload from a MCP tools/list response.
+type mcpToolsListResult struct {
+	Tools []ToolDef `json:"tools"`
+}
+
+// mcpToolsListResponse is the JSON-RPC response shape for a tools/list call.
+type mcpToolsListResponse struct {
+	Result mcpToolsListResult `json:"result"`
 }

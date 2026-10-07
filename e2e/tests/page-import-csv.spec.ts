@@ -120,7 +120,7 @@ test.describe('CSV Page Import', () => {
       await expect
         .poll(
           async () => {
-            const resp = await callPageManagementAPI(request, 'ReadPage', { pageName });
+            const resp = await callPageManagementAPI(request, 'ReadPage', { page: pageName });
             return resp.ok();
           },
           { timeout: IMPORT_COMPLETION_TIMEOUT_MS },
@@ -152,7 +152,7 @@ test.describe('CSV Page Import', () => {
           .poll(
             async () => {
               const resp = await callPageManagementAPI(request, 'ReadPage', {
-                pageName: page.id,
+                page: page.id,
               });
               return resp.ok();
             },

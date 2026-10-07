@@ -88,7 +88,7 @@ func dispatchA2A(ts *httptest.Server, headers map[string]string, body any) (stat
 	}
 	resp, err := ts.Client().Do(req)
 	Expect(err).NotTo(HaveOccurred())
-	defer resp.Body.Close()
+	defer resp.Body.Close() //nolint:errcheck
 	err = json.NewDecoder(resp.Body).Decode(&decoded)
 	Expect(err).NotTo(HaveOccurred())
 	return resp.StatusCode, decoded
@@ -140,7 +140,7 @@ var _ = Describe("a2aServer agent card", func() {
 	It("serves the card without auth", func() {
 		resp, err := ts.Client().Get(ts.URL + "/.well-known/agent-card.json")
 		Expect(err).NotTo(HaveOccurred())
-		defer resp.Body.Close()
+		defer resp.Body.Close() //nolint:errcheck
 		Expect(resp.StatusCode).To(Equal(http.StatusOK))
 		var card map[string]any
 		Expect(json.NewDecoder(resp.Body).Decode(&card)).To(Succeed())
@@ -154,7 +154,7 @@ var _ = Describe("a2aServer agent card", func() {
 	It("404s unknown paths", func() {
 		resp, err := ts.Client().Get(ts.URL + "/nope")
 		Expect(err).NotTo(HaveOccurred())
-		defer resp.Body.Close()
+		defer resp.Body.Close() //nolint:errcheck
 		Expect(resp.StatusCode).To(Equal(http.StatusNotFound))
 	})
 })
@@ -340,7 +340,7 @@ var _ = Describe("a2aServer message/send dispatch", func() {
 		req.Header.Set("Authorization", "Bearer "+tok)
 		resp, err := ts.Client().Do(req)
 		Expect(err).NotTo(HaveOccurred())
-		defer resp.Body.Close()
+		defer resp.Body.Close() //nolint:errcheck
 		var decoded map[string]any
 		Expect(json.NewDecoder(resp.Body).Decode(&decoded)).To(Succeed())
 		errObj := a2aMap(decoded, "error")
@@ -353,7 +353,7 @@ var _ = Describe("a2aServer message/send dispatch", func() {
 		req.Header.Set("Authorization", "Bearer "+tok)
 		resp, err := ts.Client().Do(req)
 		Expect(err).NotTo(HaveOccurred())
-		defer resp.Body.Close()
+		defer resp.Body.Close() //nolint:errcheck
 		var decoded map[string]any
 		Expect(json.NewDecoder(resp.Body).Decode(&decoded)).To(Succeed())
 		errObj := a2aMap(decoded, "error")

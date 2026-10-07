@@ -72,17 +72,38 @@ test.describe('MapService MCP Tools E2E Tests', () => {
     
     const map = data.maps.find((m: any) => m.name === TEST_MAP);
     expect(map).toBeDefined();
-    expect(map.markerCount).toBe(1);
+    expect(map.marker_count).toBe(1);
   });
 
   test('F5: should mutate track elements using AddTrack, UpdateTrack, and DeleteTrack tools', async ({ request }) => {
+    // Upload real GPX files so validateTrackFile passes (AddTrack/UpdateTrack open the file).
+    const minimalGpx = (name: string) => Buffer.from(
+      `<?xml version="1.0"?><gpx version="1.1" xmlns="http://www.topografix.com/GPX/1/1"><trk><name>${name}</name><trkseg><trkpt lat="41.1" lon="-72.2"/></trkseg></trk></gpx>`
+    ).toString('base64');
+
+    const uploadAdd = await callMcpTool(request, 'api_v1_FileStorageService_UploadFile', {
+      content: minimalGpx('MCP Trail Path'),
+      filename: 'mcp-route.gpx',
+    });
+    expect(uploadAdd.error).toBeUndefined();
+    const uploadAddData = JSON.parse(uploadAdd.result.content[0].text);
+    const addFileHash: string = uploadAddData.hash;
+
+    const uploadUpdate = await callMcpTool(request, 'api_v1_FileStorageService_UploadFile', {
+      content: minimalGpx('MCP Trail Path Updated'),
+      filename: 'mcp-route-v2.gpx',
+    });
+    expect(uploadUpdate.error).toBeUndefined();
+    const uploadUpdateData = JSON.parse(uploadUpdate.result.content[0].text);
+    const updateFileHash: string = uploadUpdateData.hash;
+
     // 1. Add track
     const addResult = await callMcpTool(request, 'api_v1_MapService_AddTrack', {
       page: TEST_PAGE,
       mapName: TEST_MAP,
       track: {
         label: 'MCP Trail Path',
-        fileHash: 'mcp-hash-1116',
+        fileHash: addFileHash,
         filename: 'mcp-route.gpx',
         format: 'GPX',
         tags: ['mcp', 'agent'],
@@ -95,20 +116,20 @@ test.describe('MapService MCP Tools E2E Tests', () => {
     expect(addData.track.metadata.uid).toBeDefined();
     const trackUid = addData.track.metadata.uid;
 
-    // 2. Update track
+    // 2. Update track (response uses UseProtoNames:true → snake_case: updated_at)
     const updateResult = await callMcpTool(request, 'api_v1_MapService_UpdateTrack', {
       page: TEST_PAGE,
       mapName: TEST_MAP,
       uid: trackUid,
       track: {
         label: 'MCP Trail Path Updated',
-        fileHash: 'mcp-hash-1116-v2',
+        fileHash: updateFileHash,
         filename: 'mcp-route-v2.gpx',
         format: 'GPX',
         tags: ['mcp', 'agent', 'updated'],
         color: '#f97316',
       },
-      expectedUpdatedAt: addData.map.updatedAt,
+      expectedUpdatedAt: addData.map.updated_at,
     });
 
     expect(updateResult.error).toBeUndefined();
@@ -129,7 +150,7 @@ test.describe('MapService MCP Tools E2E Tests', () => {
       page: TEST_PAGE,
       mapName: TEST_MAP,
       uid: trackUid,
-      expectedUpdatedAt: addData.map.updatedAt, // optimistic concurrency
+      expectedUpdatedAt: addData.map.updated_at, // optimistic concurrency (UseProtoNames:true → snake_case)
     });
 
     expect(deleteResult.error).toBeUndefined();

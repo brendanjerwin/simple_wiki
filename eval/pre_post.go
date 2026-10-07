@@ -77,8 +77,10 @@ var prePRExtraTools = []ToolDef{
 // The codegen bakes "<MethodName> — see (api.v1.description).\n" from the proto comment.
 func prePRStubDesc(toolName string) string {
 	// Extract method name from "api_v1_<Service>_<Method>"
+	// Minimum parts: "api", "v1", "<Service>", "<Method>" = 4 segments.
+	const minToolNameParts = 4
 	parts := strings.Split(toolName, "_")
-	if len(parts) < 4 {
+	if len(parts) < minToolNameParts {
 		return ""
 	}
 	method := parts[len(parts)-1]

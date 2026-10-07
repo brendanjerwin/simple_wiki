@@ -111,17 +111,41 @@ test.describe('GPS Track & Leaflet Tag Control E2E Tests', () => {
 
   test.describe('F2: GPS Track Rendering & F3: GPS Track Download', () => {
     const trackUid = 'track-abc1234';
+    let gpxFileHash = '';
 
-    test.beforeEach(async ({ page }) => {
-      // Seed map with a track element metadata
+    test.beforeEach(async ({ page, request }) => {
+      // Upload the test GPX file to obtain a real file hash.  wiki-map fetches
+      // the file by hash to draw the Leaflet polyline, so a fake hash yields
+      // no rendered track and toBeAttached() times out.
+      const gpxBuffer = fs.readFileSync(testGpxPath);
+      const uploadResponse = await request.post('/uploads', {
+        multipart: {
+          file: {
+            name: 'marcy.gpx',
+            mimeType: 'application/gpx+xml',
+            buffer: gpxBuffer,
+          },
+        },
+      });
+      const location = uploadResponse.headers()['location'] ?? '';
+      const hashMatch = location.match(/\/uploads\/([^?]+)/);
+      gpxFileHash = hashMatch?.[1] ?? '';
+      expect(gpxFileHash).not.toBe('');
+
+      // Seed map with a track element using the real file hash.
+      // [[maps.<map>.tracks]] is the user-data section that decodeTracks reads;
+      // [agent.maps.<map>.tracks.<uid>] holds the agent metadata.
       const tracksMetadata = `
-[agent.maps.${TEST_MAP}.tracks.${trackUid}]
+[[maps.${TEST_MAP}.tracks]]
+uid = "${trackUid}"
 label = "Mt Marcy Trail"
-file_hash = "mockhash123"
-filename = "marcy.gpx"
+file_hash = "${gpxFileHash}"
 format = "GPX"
+filename = "marcy.gpx"
 color = "#10b981"
 tags = ["hiking", "mountain"]
+
+[agent.maps.${TEST_MAP}.tracks.${trackUid}]
 created_at = "2026-06-12T20:00:00Z"
 updated_at = "2026-06-12T20:00:00Z"
 created_by = "e2e"
@@ -150,27 +174,59 @@ automated = true
 
       // Assert download url parameter formats
       const href = await popup.locator('a.download-track-link').getAttribute('href');
-      expect(href).toContain('/uploads/mockhash123');
+      expect(href).toContain(`/uploads/${encodeURIComponent(gpxFileHash)}`);
       expect(href).toContain('filename=marcy.gpx');
     });
   });
 
   test.describe('F4: Leaflet Tag Control', () => {
-    test.beforeEach(async ({ page }) => {
+    test.beforeEach(async ({ page, request }) => {
+      // Upload the test GPX file to obtain a real file hash for both tracks.
+      // Both tracks share the same file content; only the uid/label/tags differ.
+      const gpxBuffer = fs.readFileSync(testGpxPath);
+      const uploadResponse = await request.post('/uploads', {
+        multipart: {
+          file: {
+            name: 'test.gpx',
+            mimeType: 'application/gpx+xml',
+            buffer: gpxBuffer,
+          },
+        },
+      });
+      const location = uploadResponse.headers()['location'] ?? '';
+      const hashMatch = location.match(/\/uploads\/([^?]+)/);
+      const gpxFileHash = hashMatch?.[1] ?? '';
+      expect(gpxFileHash).not.toBe('');
+
+      // [[maps.<map>.tracks]] is the user-data section that decodeTracks reads.
       const tracksMetadata = `
-[agent.maps.${TEST_MAP}.tracks.track-t1]
+[[maps.${TEST_MAP}.tracks]]
+uid = "track-t1"
 label = "Scenic Path"
-file_hash = "hash-t1"
-filename = "scenic.gpx"
+file_hash = "${gpxFileHash}"
 format = "GPX"
+filename = "scenic.gpx"
 tags = ["scenic", "easy"]
 
-[agent.maps.${TEST_MAP}.tracks.track-t2]
+[[maps.${TEST_MAP}.tracks]]
+uid = "track-t2"
 label = "Difficult Climb"
-file_hash = "hash-t2"
-filename = "climb.gpx"
+file_hash = "${gpxFileHash}"
 format = "GPX"
+filename = "climb.gpx"
 tags = ["difficult"]
+
+[agent.maps.${TEST_MAP}.tracks.track-t1]
+created_at = "2026-06-12T20:00:00Z"
+updated_at = "2026-06-12T20:00:00Z"
+created_by = "e2e"
+automated = true
+
+[agent.maps.${TEST_MAP}.tracks.track-t2]
+created_at = "2026-06-12T20:00:00Z"
+updated_at = "2026-06-12T20:00:00Z"
+created_by = "e2e"
+automated = true
 `;
       const extraElements = `
 [[maps.${TEST_MAP}.markers]]
@@ -192,10 +248,14 @@ tags = ["easy"]
       await expect(map.locator('path.leaflet-interactive')).toHaveCount(2);
       await expect(map.locator('.wiki-map-marker')).toHaveCount(1);
 
-      // Open layer/tag control panel
-      const tagControl = map.locator('.leaflet-control-layers');
+      // Open the tag layer control panel. The product ships a custom
+      // control (.wiki-map-tag-control with a click toggle), not Leaflet's
+      // built-in .leaflet-control-layers, and the panel starts display:none
+      // until the toggle is clicked.
+      const tagControl = map.locator('.wiki-map-tag-control');
       await expect(tagControl).toBeVisible();
-      await tagControl.hover(); // expands the control if collapse is on
+      await tagControl.locator('.wiki-map-tag-control-toggle').click();
+      await expect(tagControl.locator('.wiki-map-tag-control-panel')).toBeVisible();
 
       // Uncheck "difficult"
       const difficultCheckbox = tagControl.locator('input[type="checkbox"][value="difficult"]');

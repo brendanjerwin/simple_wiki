@@ -25,7 +25,7 @@ var _ = Describe("pagestore history", func() {
 	})
 
 	AfterEach(func() {
-		os.RemoveAll(tmpDir)
+		Expect(os.RemoveAll(tmpDir)).To(Succeed())
 	})
 
 	Describe("capture via ModifyOrCreatePage", func() {
