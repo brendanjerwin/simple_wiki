@@ -35,7 +35,7 @@ export const UserMessage: Story = {
       message-id="msg-1"
       .sender=${Sender.USER}
       sender-name="Brendan"
-      content="Hey Dorium, can you help me with this page?"
+      content="Hey Assistant, can you help me with this page?"
     ></chat-message-bubble>
   `,
 };
@@ -119,7 +119,7 @@ export const LiveToolCall: Story = {
         status: 'in_progress',
         kind: 'read',
         detail: '/wiki/InventoryPage',
-        startedAtMs: Date.now() - 4200,
+        completedAtMs: null, startedAtMs: Date.now() - 4200,
       },
     ];
     return html`
@@ -149,7 +149,7 @@ export const PendingToolCall: Story = {
         status: 'pending',
         kind: 'search',
         detail: '',
-        startedAtMs: Date.now(),
+        completedAtMs: null, startedAtMs: Date.now(),
       },
     ];
     return html`
@@ -179,7 +179,7 @@ export const CompletedToolCall: Story = {
         status: 'completed',
         kind: 'read',
         detail: '/wiki/InventoryPage',
-        startedAtMs: Date.now() - 3000,
+        completedAtMs: null, startedAtMs: Date.now() - 3000,
       },
       {
         toolCallId: 'tc-done-2',
@@ -187,7 +187,7 @@ export const CompletedToolCall: Story = {
         status: 'completed',
         kind: 'search',
         detail: 'query: hammer',
-        startedAtMs: Date.now() - 1500,
+        completedAtMs: null, startedAtMs: Date.now() - 1500,
       },
     ];
     return html`
@@ -217,7 +217,7 @@ export const FailedToolCall: Story = {
         status: 'failed',
         kind: 'execute',
         detail: 'Exit code 127: command not found',
-        startedAtMs: Date.now() - 800,
+        completedAtMs: null, startedAtMs: Date.now() - 800,
       },
     ];
     return html`
@@ -247,7 +247,7 @@ export const MixedToolCalls: Story = {
         status: 'completed',
         kind: 'read',
         detail: '/wiki/InventoryPage',
-        startedAtMs: Date.now() - 8000,
+        completedAtMs: null, startedAtMs: Date.now() - 8000,
       },
       {
         toolCallId: 'tc-mix-2',
@@ -255,7 +255,7 @@ export const MixedToolCalls: Story = {
         status: 'completed',
         kind: 'search',
         detail: 'query: hammer',
-        startedAtMs: Date.now() - 6000,
+        completedAtMs: null, startedAtMs: Date.now() - 6000,
       },
       {
         toolCallId: 'tc-mix-3',
@@ -263,7 +263,7 @@ export const MixedToolCalls: Story = {
         status: 'in_progress',
         kind: 'edit',
         detail: 'wiki/InventoryPage — setting quantity: 5',
-        startedAtMs: Date.now() - 1200,
+        completedAtMs: null, startedAtMs: Date.now() - 1200,
       },
     ];
     return html`
@@ -320,7 +320,7 @@ export const LiveToolCallWithPlan: Story = {
         status: 'completed',
         kind: 'read',
         detail: '/wiki/InventoryPage',
-        startedAtMs: Date.now() - 6000,
+        completedAtMs: null, startedAtMs: Date.now() - 6000,
       },
       {
         toolCallId: 'tc-combo-2',
@@ -328,7 +328,7 @@ export const LiveToolCallWithPlan: Story = {
         status: 'in_progress',
         kind: 'edit',
         detail: 'wiki/InventoryPage — quantity: 5',
-        startedAtMs: Date.now() - 900,
+        completedAtMs: null, startedAtMs: Date.now() - 900,
       },
     ];
     const plan: PlanEntryState[] = [
@@ -350,6 +350,96 @@ export const LiveToolCallWithPlan: Story = {
     docs: {
       description: {
         story: 'Live tool call progress and a plan block together — the typical view during an active agent turn.',
+      },
+    },
+  },
+};
+
+export const LongRunningToolCall: Story = {
+  render: () => {
+    const toolCalls: ToolCallState[] = [
+      {
+        toolCallId: 'tc-long-1',
+        title: 'A2A Agent Call: Cluster Health Investigation',
+        status: 'in_progress',
+        kind: 'other',
+        detail: 'Queued: position 2 of 3 (current task: cluster investigation, ~8 min remaining)',
+        completedAtMs: null, startedAtMs: Date.now() - 135_000, // 2m15s elapsed
+      },
+    ];
+    return html`
+      <chat-message-bubble
+        message-id="msg-long-tc"
+        .sender=${Sender.ASSISTANT}
+        content=""
+        .toolCalls=${toolCalls}
+      ></chat-message-bubble>
+    `;
+  },
+  parameters: {
+    docs: {
+      description: {
+        story: 'A long-running tool call (elapsed > 30s) escalates to a prominent card with a pulsing status icon, accent border, and more visible elapsed time. The detail line shows queue position from the A2A server.',
+      },
+    },
+  },
+};
+
+export const LongRunningToolCallCompleted: Story = {
+  render: () => {
+    const toolCalls: ToolCallState[] = [
+      {
+        toolCallId: 'tc-long-done-1',
+        title: 'A2A Agent Call: Cluster Health Investigation',
+        status: 'completed',
+        kind: 'other',
+        detail: 'All nodes ready. No issues found. SEVERITY: info',
+        completedAtMs: Date.now(), startedAtMs: Date.now() - 185_000, // ~3m5s duration
+      },
+    ];
+    return html`
+      <chat-message-bubble
+        message-id="msg-long-done"
+        .sender=${Sender.ASSISTANT}
+        .renderedHtml=${'<p>The cluster is healthy. All 6 nodes are ready, 135 pods running, no critical issues detected.</p>'}
+        .toolCalls=${toolCalls}
+      ></chat-message-bubble>
+    `;
+  },
+  parameters: {
+    docs: {
+      description: {
+        story: 'When a long-running tool call completes, it shows an expanded result card with the title, duration, and detail — not a collapsed pill. This gives the user immediate visibility into what happened.',
+      },
+    },
+  },
+};
+
+export const LongRunningToolCallFailed: Story = {
+  render: () => {
+    const toolCalls: ToolCallState[] = [
+      {
+        toolCallId: 'tc-long-fail-1',
+        title: 'A2A Agent Call: Host Remediation',
+        status: 'failed',
+        kind: 'other',
+        detail: 'Error: SSH connection to gpu-box-2 timed out after 30s',
+        completedAtMs: Date.now(), startedAtMs: Date.now() - 95_000, // ~1m35s duration
+      },
+    ];
+    return html`
+      <chat-message-bubble
+        message-id="msg-long-fail"
+        .sender=${Sender.ASSISTANT}
+        .renderedHtml=${'<p>I was unable to remediate gpu-box-2 — the SSH connection timed out. The node may be powered off or network-isolated.</p>'}
+        .toolCalls=${toolCalls}
+      ></chat-message-bubble>
+    `;
+  },
+  parameters: {
+    docs: {
+      description: {
+        story: 'A failed long-running task shows the expanded result card with a red-tinted border, making the failure visible without requiring hover.',
       },
     },
   },

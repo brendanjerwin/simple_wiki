@@ -358,28 +358,45 @@ type scheduledEphemeralConnection struct {
 	client     *scheduledTurnClient
 }
 
-// spawnEphemeralForScheduledTurn spawns a one-shot ACP agent for a scheduled
-// turn. Unlike the chat path, the resulting instance is NOT added to
-// d.instances — it lives only for the duration of one Prompt call.
+// ephemeralAgent bundles the bits a caller needs to drive one ephemeral ACP
+// instance spawned outside the per-page pool: the connection, the session id,
+// and a cleanup function that tears the process down.
+type ephemeralAgent struct {
+	conn      *acp.ClientSideConnection
+	sessionID acp.SessionId
+	cleanup   func()
+}
+
+// a2aUnitPrefix is the unit-name prefix for ephemeral A2A-task systemd scope
+// units. Distinct from the scheduled-turn prefix so A2A spawns don't collide
+// with chat or scheduled-turn units.
+const a2aUnitPrefix = "wiki-a2a-"
+
+// spawnEphemeralAgent spawns a one-shot ACP agent outside d.instances for a
+// unitPrefix + label pair (used for the systemd unit name and stderr prefix).
+// Unlike the chat path, the resulting instance is NOT registered in
+// d.instances — it lives only for the duration of one Prompt call. The caller
+// MUST invoke the returned cleanup (typically via defer) after the prompt
+// completes to avoid leaking the agent process.
 //
-// Each ephemeral spawn uses a UNIQUE systemd unit name
-// ("wiki-scheduled-<page>-<short-request-id>") so concurrent fires and
-// collisions with the per-page interactive chat unit ("wiki-chat-<page>")
-// are avoided. The earlier code reused buildAgentCmd which always
-// stop+restart's wiki-chat-<page>.scope — that killed both interactive
-// chat instances and competing scheduled turns mid-turn.
-func (d *poolDaemon) spawnEphemeralForScheduledTurn(ctx context.Context, page, requestID string, maxTurns int32, allowedTools []string, cancelTurn context.CancelFunc) (*scheduledEphemeralConnection, func(), error) {
-	cmd := d.buildScheduledTurnAgentCmd(ctx, page, requestID)
+// Shared by the scheduled-turn and A2A one-shot paths; both need the same
+// pipes/start/handshake/session choreography with a unique unit name per
+// spawn.
+func (d *poolDaemon) spawnEphemeralAgent(ctx context.Context, client acp.Client, unitPrefix, label string) (*ephemeralAgent, error) {
+	if d.a2aEphemeralSpawner != nil {
+		return d.a2aEphemeralSpawner(ctx, client, unitPrefix, label)
+	}
+	cmd := d.buildEphemeralAgentCmd(ctx, unitPrefix, label)
 	stdinPipe, err := cmd.StdinPipe()
 	if err != nil {
-		return nil, func() {}, fmt.Errorf("stdin pipe: %w", err)
+		return nil, fmt.Errorf("stdin pipe: %w", err)
 	}
 	stdoutPipe, err := cmd.StdoutPipe()
 	if err != nil {
-		return nil, func() {}, fmt.Errorf("stdout pipe: %w", err)
+		return nil, fmt.Errorf("stdout pipe: %w", err)
 	}
 	if startErr := cmd.Start(); startErr != nil {
-		return nil, func() {}, fmt.Errorf("start agent: %w", startErr)
+		return nil, fmt.Errorf("start agent: %w", startErr)
 	}
 
 	cleanup := func() {
@@ -394,7 +411,6 @@ func (d *poolDaemon) spawnEphemeralForScheduledTurn(ctx context.Context, page, r
 		}()
 	}
 
-	client := newScheduledTurnClient(page, maxTurns, allowedTools, cancelTurn)
 	conn := acp.NewClientSideConnection(client, stdinPipe, stdoutPipe)
 
 	if _, initErr := conn.Initialize(ctx, acp.InitializeRequest{
@@ -408,20 +424,43 @@ func (d *poolDaemon) spawnEphemeralForScheduledTurn(ctx context.Context, page, r
 		},
 	}); initErr != nil {
 		cleanup()
-		return nil, func() {}, fmt.Errorf("ACP handshake: %w", initErr)
+		return nil, fmt.Errorf("ACP handshake: %w", initErr)
 	}
 
-	sess, sessionErr := d.initializeACPSession(ctx, conn, page)
+	sess, sessionErr := d.initializeACPSession(ctx, conn, label)
 	if sessionErr != nil {
 		cleanup()
-		return nil, func() {}, sessionErr
+		return nil, sessionErr
 	}
 
+	return &ephemeralAgent{
+		conn:      conn,
+		sessionID: sess.SessionId,
+		cleanup:   cleanup,
+	}, nil
+}
+
+// spawnEphemeralForScheduledTurn spawns a one-shot ACP agent for a scheduled
+// turn. Unlike the chat path, the resulting instance is NOT added to
+// d.instances — it lives only for the duration of one Prompt call.
+//
+// Each ephemeral spawn uses a UNIQUE systemd unit name
+// ("wiki-scheduled-<page>-<short-request-id>") so concurrent fires and
+// collisions with the per-page interactive chat unit ("wiki-chat-<page>")
+// are avoided. The earlier code reused buildAgentCmd which always
+// stop+restart's wiki-chat-<page>.scope — that killed both interactive
+// chat instances and competing scheduled turns mid-turn.
+func (d *poolDaemon) spawnEphemeralForScheduledTurn(ctx context.Context, page, requestID string, maxTurns int32, allowedTools []string, cancelTurn context.CancelFunc) (*scheduledEphemeralConnection, func(), error) {
+	client := newScheduledTurnClient(page, maxTurns, allowedTools, cancelTurn)
+	agent, spawnErr := d.spawnEphemeralAgent(ctx, client, scheduledTurnUnitPrefix, page+"-"+shortIDForUnit(requestID))
+	if spawnErr != nil {
+		return nil, func() {}, spawnErr
+	}
 	return &scheduledEphemeralConnection{
-		connection: conn,
-		sessionID:  sess.SessionId,
+		connection: agent.conn,
+		sessionID:  agent.sessionID,
 		client:     client,
-	}, cleanup, nil
+	}, agent.cleanup, nil
 }
 
 // scheduledTurnUnitPrefix is the unit-name prefix for ephemeral
@@ -435,23 +474,39 @@ const scheduledTurnUnitPrefix = "wiki-scheduled-"
 // the 256-char systemd limit on some pages.
 const scheduledTurnRequestIDInUnit = 8
 
+// shortIDForUnit truncates an id to scheduledTurnRequestIDInUnit characters
+// for embedding in a systemd unit name.
+func shortIDForUnit(id string) string {
+	if len(id) > scheduledTurnRequestIDInUnit {
+		return id[:scheduledTurnRequestIDInUnit]
+	}
+	return id
+}
+
 // buildScheduledTurnAgentCmd constructs the exec.Cmd for one ephemeral
-// scheduled-turn agent. Mirrors buildAgentCmd's systemd vs. plain exec
-// behavior, with two important differences:
-//
-//   - Unit name is "wiki-scheduled-<sanitized-page>-<short-request-id>"
-//     (unique per fire) so concurrent scheduled turns and the per-page
-//     interactive chat unit ("wiki-chat-<page>") cannot collide.
-//   - The working directory is pinned to the daemon's cwd so the
-//     ephemeral agent inherits the same shell env (1Password tokens,
-//     ~/.claude config, etc.) the long-lived interactive instances see.
+// scheduled-turn agent: a thin wrapper over buildEphemeralAgentCmd with the
+// scheduled-turn unit prefix and a "<page>-<short-request-id>" label.
 func (d *poolDaemon) buildScheduledTurnAgentCmd(ctx context.Context, page, requestID string) *exec.Cmd {
 	shortID := requestID
 	if len(shortID) > scheduledTurnRequestIDInUnit {
 		shortID = shortID[:scheduledTurnRequestIDInUnit]
 	}
+	return d.buildEphemeralAgentCmd(ctx, scheduledTurnUnitPrefix, page+"-"+shortID)
+}
+
+// buildEphemeralAgentCmd constructs the exec.Cmd for one ephemeral one-shot
+// agent. Mirrors buildAgentCmd's systemd vs. plain exec behavior, with two
+// important differences:
+//
+//   - Unit name is "<unitPrefix><sanitized-label>" (unique per spawn) so
+//     concurrent one-shot spawns and the per-page interactive chat unit
+//     ("wiki-chat-<page>") cannot collide.
+//   - The working directory is pinned to the daemon's cwd so the
+//     ephemeral agent inherits the same shell env (1Password tokens,
+//     ~/.claude config, etc.) the long-lived interactive instances see.
+func (d *poolDaemon) buildEphemeralAgentCmd(ctx context.Context, unitPrefix, label string) *exec.Cmd {
 	if d.useSystemd {
-		unitName := scheduledTurnUnitPrefix + sanitizeUnitName(page) + "-" + shortID
+		unitName := unitPrefix + sanitizeUnitName(label)
 		// Pin cwd so 1Password / claude config / agent CLAUDE.md are found
 		// the same way the interactive chat instances find them.
 		cwd, _ := os.Getwd()
@@ -467,6 +522,6 @@ func (d *poolDaemon) buildScheduledTurnAgentCmd(ctx context.Context, page, reque
 		return exec.CommandContext(ctx, "systemd-run", args...)
 	}
 	cmd := exec.CommandContext(ctx, d.agentPath)
-	cmd.Stderr = newPrefixWriter(os.Stderr, page)
+	cmd.Stderr = newPrefixWriter(os.Stderr, unitPrefix+label)
 	return cmd
 }

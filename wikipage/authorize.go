@@ -19,6 +19,20 @@ type Identity interface {
 	IsAnonymous() bool
 }
 
+// anonymousIdentity is the wikipage-package equivalent of tailscale.Anonymous.
+// Internal callers (migrations, cron jobs, decimation) that have no user
+// identity pass this to Write*/Modify* methods for history attribution.
+type anonymousIdentity struct{}
+
+func (anonymousIdentity) LoginName() string { return "" }
+func (anonymousIdentity) IsAgent() bool     { return false }
+func (anonymousIdentity) IsAnonymous() bool { return true }
+
+// AnonymousIdentity is the identity to pass when the caller has no user
+// identity (internal jobs, migrations, cron ticks). History records an
+// empty author and is_agent=false for these writes.
+var AnonymousIdentity Identity = anonymousIdentity{}
+
 // Authorize reports whether identity is allowed to read or write a page
 // whose frontmatter is fm.
 //

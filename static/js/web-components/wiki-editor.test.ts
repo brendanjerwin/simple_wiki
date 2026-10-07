@@ -129,9 +129,9 @@ describe('WikiEditor', () => {
 
     it('should call readPage with the page name', () => {
       expect(readPageStub).to.have.been.calledOnce;
-      const callArgs = readPageStub.firstCall.args[0] as { pageIdentifier: { case: string; value: string } };
-      expect(callArgs.pageIdentifier.case).to.equal('pageName');
-      expect(callArgs.pageIdentifier.value).to.equal('test-page');
+      const callArgs = readPageStub.firstCall.args[0] as { pageSelector: { case: string; value: string } };
+      expect(callArgs.pageSelector.case).to.equal('page');
+      expect(callArgs.pageSelector.value).to.equal('test-page');
     });
 
     it('should reconstruct content with frontmatter delimiters', () => {
@@ -346,10 +346,10 @@ describe('WikiEditor', () => {
 
         it('should pass the correct page name and content', () => {
           const callArgs = updateStub.firstCall.args[0] as {
-            pageName: string;
+            page: string;
             newWholeMarkdown: string;
           };
-          expect(callArgs.pageName).to.equal('test-page');
+          expect(callArgs.page).to.equal('test-page');
           expect(callArgs.newWholeMarkdown).to.equal('# Hello World');
         });
 

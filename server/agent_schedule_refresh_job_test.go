@@ -106,7 +106,7 @@ var _ = Describe("AgentScheduleRefreshJob", func() {
 				"agent": map[string]any{
 					"schedules": "not-a-list",
 				},
-			})).To(Succeed())
+			}, wikipage.AnonymousIdentity)).To(Succeed())
 			job = server.NewAgentScheduleRefreshJob(scheduler, "bad-page")
 			err = job.Execute()
 		})

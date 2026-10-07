@@ -3,6 +3,8 @@ package v1
 import (
 	"context"
 	"errors"
+	"sync"
+	"time"
 
 	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
 	"github.com/brendanjerwin/simple_wiki/pkg/chatbuffer"
@@ -16,6 +18,113 @@ const (
 	errPageRequired      = "page is required"
 	errMessageIDRequired = "message_id is required"
 )
+
+const backgroundTaskPromotionThreshold = 30 * time.Second
+
+type ToolCallPromotion struct {
+	mu      sync.Mutex
+	pending map[string]*promotionEntry // keyed by tool_call_id
+}
+
+type promotionEntry struct {
+	messageID string
+	page      string
+	title     string
+	kind      string
+	detail    string
+	startedAt time.Time
+	timer     *time.Timer
+	promoted  bool
+}
+
+func NewToolCallPromotion() *ToolCallPromotion {
+	return &ToolCallPromotion{pending: make(map[string]*promotionEntry)}
+}
+
+// TrackStart records a tool call start and schedules promotion after the threshold.
+// If called again for the same toolCallID (e.g., periodic in_progress updates),
+// it updates the title/detail but does NOT reset the timer or startedAt —
+// the original start time and promotion schedule are preserved.
+func (p *ToolCallPromotion) TrackStart(bufManager ChatBufferManager, toolCallID, messageID, page, title, kind, detail string) {
+	p.mu.Lock()
+
+	// If already tracking this tool call, update mutable fields only.
+	// Do not reset the timer or startedAt — that would delay promotion
+	// indefinitely on chatty tool calls.
+	if existing, ok := p.pending[toolCallID]; ok {
+		if title != "" {
+			existing.title = title
+		}
+		if detail != "" {
+			existing.detail = detail
+		}
+		p.mu.Unlock()
+		return
+	}
+
+	entry := &promotionEntry{
+		messageID: messageID,
+		page:      page,
+		title:     title,
+		kind:      kind,
+		detail:    detail,
+		startedAt: time.Now(),
+	}
+	entry.timer = time.AfterFunc(backgroundTaskPromotionThreshold, func() {
+		p.mu.Lock()
+		e, ok := p.pending[toolCallID]
+		if !ok {
+			p.mu.Unlock()
+			return
+		}
+		e.promoted = true
+		// Use values from the entry, not closed-over values, so any
+		// updates via TrackStart are reflected in the promoted event.
+		evt := chatbuffer.BackgroundTaskEvent{
+			MessageID:   e.messageID,
+			ToolCallID:  toolCallID,
+			Title:       e.title,
+			Status:      "promoted",
+			Detail:      e.detail,
+			StartedAtMs: e.startedAt.UnixMilli(),
+		}
+		p.mu.Unlock()
+
+		bufManager.NotifyBackgroundTask(e.page, evt)
+	})
+	p.pending[toolCallID] = entry
+	p.mu.Unlock()
+}
+
+// TrackComplete handles a tool call completion — cancels the promotion timer
+// and, if the task was already promoted, broadcasts a final background task event.
+// The lock is released before calling NotifyBackgroundTask to avoid blocking
+// promotion tracking on slow subscriber notifications.
+func (p *ToolCallPromotion) TrackComplete(bufManager ChatBufferManager, toolCallID, toolStatus, detail string) {
+	p.mu.Lock()
+	entry, ok := p.pending[toolCallID]
+	if !ok {
+		p.mu.Unlock()
+		return
+	}
+	entry.timer.Stop()
+	delete(p.pending, toolCallID)
+	promoted := entry.promoted
+	evt := chatbuffer.BackgroundTaskEvent{
+		MessageID:   entry.messageID,
+		ToolCallID:  toolCallID,
+		Title:       entry.title,
+		Status:      toolStatus,
+		Detail:      detail,
+		StartedAtMs: entry.startedAt.UnixMilli(),
+	}
+	page := entry.page
+	p.mu.Unlock()
+
+	if promoted {
+		bufManager.NotifyBackgroundTask(page, evt)
+	}
+}
 
 // SendMessage implements the SendMessage RPC.
 // Receives a user message, assigns a UUID, writes it to the buffer, and pushes it to channel subscribers.
@@ -241,41 +350,70 @@ func bufferEventToProto(event chatbuffer.Event) *apiv1.ChatEvent {
 			},
 		}
 	case chatbuffer.EventTypeToolCall:
-		return &apiv1.ChatEvent{
-			Event: &apiv1.ChatEvent_ToolCall{
-				ToolCall: &apiv1.ChatToolCall{
-					MessageId:  event.ToolCall.MessageID,
-					ToolCallId: event.ToolCall.ToolCallID,
-					Title:      event.ToolCall.Title,
-					Status:     event.ToolCall.Status,
-					Kind:       event.ToolCall.Kind,
-					Detail:     event.ToolCall.Detail,
-				},
-			},
-		}
+		return toolCallEventToProto(event.ToolCall)
 	case chatbuffer.EventTypePlan:
 		return planEventToProto(event.Plan)
 	case chatbuffer.EventTypeTurnStatus:
-		return &apiv1.ChatEvent{
-			Event: &apiv1.ChatEvent_TurnStatus{
-				TurnStatus: &apiv1.ChatTurnStatus{
-					Page:   event.TurnStatus.Page,
-					Active: event.TurnStatus.Active,
-				},
-			},
-		}
+		return turnStatusEventToProto(event.TurnStatus)
 	case chatbuffer.EventTypePermissionRequest:
 		return permissionRequestEventToProto(event.PermissionRequest)
 	case chatbuffer.EventTypeCleared:
-		return &apiv1.ChatEvent{
-			Event: &apiv1.ChatEvent_ChatCleared{
-				ChatCleared: &apiv1.ChatCleared{
-					Page: event.Cleared.Page,
-				},
-			},
-		}
+		return clearedEventToProto(event.Cleared)
+	case chatbuffer.EventTypeBackgroundTask:
+		return backgroundTaskEventToProto(event.BackgroundTask)
 	default:
 		return nil
+	}
+}
+
+func toolCallEventToProto(tc *chatbuffer.ToolCallEvent) *apiv1.ChatEvent {
+	return &apiv1.ChatEvent{
+		Event: &apiv1.ChatEvent_ToolCall{
+			ToolCall: &apiv1.ChatToolCall{
+				MessageId:  tc.MessageID,
+				ToolCallId: tc.ToolCallID,
+				Title:      tc.Title,
+				Status:     tc.Status,
+				Kind:       tc.Kind,
+				Detail:     tc.Detail,
+			},
+		},
+	}
+}
+
+func turnStatusEventToProto(ts *chatbuffer.TurnStatusEvent) *apiv1.ChatEvent {
+	return &apiv1.ChatEvent{
+		Event: &apiv1.ChatEvent_TurnStatus{
+			TurnStatus: &apiv1.ChatTurnStatus{
+				Page:   ts.Page,
+				Active: ts.Active,
+			},
+		},
+	}
+}
+
+func clearedEventToProto(c *chatbuffer.ClearedEvent) *apiv1.ChatEvent {
+	return &apiv1.ChatEvent{
+		Event: &apiv1.ChatEvent_ChatCleared{
+			ChatCleared: &apiv1.ChatCleared{
+				Page: c.Page,
+			},
+		},
+	}
+}
+
+func backgroundTaskEventToProto(bt *chatbuffer.BackgroundTaskEvent) *apiv1.ChatEvent {
+	return &apiv1.ChatEvent{
+		Event: &apiv1.ChatEvent_BackgroundTask{
+			BackgroundTask: &apiv1.ChatBackgroundTask{
+				MessageId:   bt.MessageID,
+				ToolCallId:  bt.ToolCallID,
+				Title:       bt.Title,
+				Status:      bt.Status,
+				Detail:      bt.Detail,
+				StartedAtMs: bt.StartedAtMs,
+			},
+		},
 	}
 }
 
@@ -502,6 +640,18 @@ func (s *Server) SendToolCallNotification(_ context.Context, req *apiv1.SendTool
 		Kind:       req.Kind,
 		Detail:     req.Detail,
 	})
+
+	// Promotion tracking: auto-promote long-running tool calls to background tasks
+	isLive := req.Status == "pending" || req.Status == "in_progress"
+	isTerminal := req.Status == "completed" || req.Status == "failed"
+
+	if isLive && s.ToolCallPromoter != nil {
+		s.ToolCallPromoter.TrackStart(s.chatBufferManager, req.ToolCallId, req.MessageId, req.Page, req.Title, req.Kind, req.Detail)
+	}
+	if isTerminal && s.ToolCallPromoter != nil {
+		s.ToolCallPromoter.TrackComplete(s.chatBufferManager, req.ToolCallId, req.Status, req.Detail)
+	}
+
 	return &apiv1.SendToolCallNotificationResponse{}, nil
 }
 

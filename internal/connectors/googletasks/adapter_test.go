@@ -218,7 +218,7 @@ func (f *fakeFrontmatterReadWriter) ReadFrontMatter(id wikipage.PageIdentifier) 
 	return id, fm, nil
 }
 
-func (f *fakeFrontmatterReadWriter) WriteFrontMatter(id wikipage.PageIdentifier, fm wikipage.FrontMatter) error {
+func (f *fakeFrontmatterReadWriter) WriteFrontMatter(id wikipage.PageIdentifier, fm wikipage.FrontMatter, _ wikipage.Identity) error {
 	f.pages[id] = fm
 	return nil
 }
@@ -1067,4 +1067,3 @@ var _ = Describe("FrontmatterCredentialStore.LoadRefreshToken", func() {
 		})
 	})
 })
-

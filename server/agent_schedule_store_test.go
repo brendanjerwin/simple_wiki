@@ -34,7 +34,7 @@ func (f *fakePageStore) ReadFrontMatter(id wikipage.PageIdentifier) (wikipage.Pa
 	return id, cloneFrontMatter(fm), nil
 }
 
-func (f *fakePageStore) WriteFrontMatter(id wikipage.PageIdentifier, fm wikipage.FrontMatter) error {
+func (f *fakePageStore) WriteFrontMatter(id wikipage.PageIdentifier, fm wikipage.FrontMatter, _ wikipage.Identity) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.pages[id] = cloneFrontMatter(fm)
@@ -83,8 +83,8 @@ func (s *readCountingPageStore) ReadFrontMatter(id wikipage.PageIdentifier) (wik
 	return s.delegate.ReadFrontMatter(id)
 }
 
-func (s *readCountingPageStore) WriteFrontMatter(id wikipage.PageIdentifier, fm wikipage.FrontMatter) error {
-	return s.delegate.WriteFrontMatter(id, fm)
+func (s *readCountingPageStore) WriteFrontMatter(id wikipage.PageIdentifier, fm wikipage.FrontMatter, identity wikipage.Identity) error {
+	return s.delegate.WriteFrontMatter(id, fm, identity)
 }
 
 var _ = Describe("AgentScheduleStore", func() {
@@ -133,7 +133,7 @@ var _ = Describe("AgentScheduleStore", func() {
 							},
 						},
 					},
-				})
+				}, wikipage.AnonymousIdentity)
 				schedules, err = store.List("seeded")
 			})
 
@@ -257,7 +257,7 @@ var _ = Describe("AgentScheduleStore", func() {
 				_ = pages.WriteFrontMatter("untouched", wikipage.FrontMatter{
 					"title":    "My Page",
 					"keywords": []any{"a", "b"},
-				})
+				}, wikipage.AnonymousIdentity)
 				Expect(store.Upsert("untouched", &apiv1.AgentSchedule{
 					Id: "x", Cron: "0 0 * * * *", Enabled: true,
 				})).To(Succeed())
@@ -632,7 +632,7 @@ var _ = Describe("AgentScheduleStore", func() {
 					"agent": map[string]any{
 						"schedules": "not-a-list",
 					},
-				})
+				}, wikipage.AnonymousIdentity)
 				_, err = store.List("malformed")
 			})
 
@@ -660,7 +660,7 @@ var _ = Describe("AgentScheduleStore", func() {
 							"not-a-map",
 						},
 					},
-				})
+				}, wikipage.AnonymousIdentity)
 				_, err = store.List("indexed_malformed")
 			})
 
@@ -820,7 +820,7 @@ func (e *errorPageStore) ReadFrontMatter(id wikipage.PageIdentifier) (wikipage.P
 	return id, out, nil
 }
 
-func (e *errorPageStore) WriteFrontMatter(_ wikipage.PageIdentifier, fm wikipage.FrontMatter) error {
+func (e *errorPageStore) WriteFrontMatter(_ wikipage.PageIdentifier, fm wikipage.FrontMatter, _ wikipage.Identity) error {
 	if e.writeErr != nil {
 		return e.writeErr
 	}

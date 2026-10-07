@@ -41,7 +41,7 @@ var _ = Describe("system page guard", func() {
 
 		BeforeEach(func() {
 			_, err = server.UpdatePageContent(ctx, &apiv1.UpdatePageContentRequest{
-				PageName:           "help",
+				Page:           "help",
 				NewContentMarkdown: "# Hijack",
 			})
 		})
@@ -60,7 +60,7 @@ var _ = Describe("system page guard", func() {
 
 		BeforeEach(func() {
 			_, err = server.UpdateWholePage(ctx, &apiv1.UpdateWholePageRequest{
-				PageName:         "help",
+				Page:         "help",
 				NewWholeMarkdown: "+++\ntitle = \"Hijack\"\n+++\nbody",
 			})
 		})
@@ -75,7 +75,7 @@ var _ = Describe("system page guard", func() {
 
 		BeforeEach(func() {
 			_, err = server.ClearPageContent(ctx, &apiv1.ClearPageContentRequest{
-				PageName:     "help",
+				Page:     "help",
 				ConfirmClear: true,
 			})
 		})
@@ -90,7 +90,7 @@ var _ = Describe("system page guard", func() {
 
 		BeforeEach(func() {
 			_, err = server.DeletePage(ctx, &apiv1.DeletePageRequest{
-				PageName: "help",
+				Page: "help",
 			})
 		})
 

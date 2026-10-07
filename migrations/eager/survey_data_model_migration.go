@@ -73,7 +73,7 @@ type SurveyDataModelMigrationJob struct {
 
 type surveyPageModifier interface {
 	wikipage.PageReaderMutator
-	ModifyFrontMatterAndMarkdown(wikipage.PageIdentifier, func(wikipage.FrontMatter, wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error)) error
+	ModifyFrontMatterAndMarkdown(wikipage.PageIdentifier, func(wikipage.FrontMatter, wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error), wikipage.Identity) error
 }
 
 func NewSurveyDataModelMigrationJob(rw surveyPageModifier, id string) *SurveyDataModelMigrationJob {
@@ -104,7 +104,7 @@ func (j *SurveyDataModelMigrationJob) Execute() error {
 		}
 		migrateSurveysIntoWikiNamespace(currentFM)
 		return currentFM, md, nil
-	}); err != nil {
+	}, wikipage.AnonymousIdentity); err != nil {
 		return fmt.Errorf("write migrated frontmatter for %s: %w", j.identifier, err)
 	}
 	return nil

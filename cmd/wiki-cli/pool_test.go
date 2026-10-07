@@ -4382,12 +4382,12 @@ var _ = Describe("toolCallDetail", func() {
 		BeforeEach(func() {
 			result = toolCallDetail(nil, map[string]any{
 				"tool": "api_v1_PageManagementService_ReadPage",
-				"args": `{"page_name": "home"}`,
+				"args": `{"page": "home"}`,
 			}, nil, nil)
 		})
 
 		It("should name the tool and its arguments", func() {
-			Expect(result).To(Equal(`api_v1_PageManagementService_ReadPage {"page_name": "home"}`))
+			Expect(result).To(Equal(`api_v1_PageManagementService_ReadPage {"page": "home"}`))
 		})
 	})
 
@@ -4525,7 +4525,7 @@ var _ = Describe("wikiChatClient.bestToolDetail", func() {
 			c = &wikiChatClient{}
 			first = c.bestToolDetail("call-1", nil, map[string]any{
 				"tool": "api_v1_PageManagementService_ReadPage",
-				"args": `{"page_name": "home"}`,
+				"args": `{"page": "home"}`,
 			}, nil, nil)
 			// Completion update: pi-acp drops rawInput and sends only content.
 			afterDrop = c.bestToolDetail("call-1", nil, nil,
@@ -4533,11 +4533,11 @@ var _ = Describe("wikiChatClient.bestToolDetail", func() {
 		})
 
 		It("should derive the tool name + args from rawInput", func() {
-			Expect(first).To(Equal(`api_v1_PageManagementService_ReadPage {"page_name": "home"}`))
+			Expect(first).To(Equal(`api_v1_PageManagementService_ReadPage {"page": "home"}`))
 		})
 
 		It("should keep the tool detail after rawInput is dropped", func() {
-			Expect(afterDrop).To(Equal(`api_v1_PageManagementService_ReadPage {"page_name": "home"}`))
+			Expect(afterDrop).To(Equal(`api_v1_PageManagementService_ReadPage {"page": "home"}`))
 		})
 	})
 

@@ -5,6 +5,7 @@ import (
 	"os"
 
 	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
+	"github.com/brendanjerwin/simple_wiki/tailscale"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -219,7 +220,7 @@ func (s *Server) MergeFrontmatter(ctx context.Context, req *apiv1.MergeFrontmatt
 		mergeFrontmatterDeep(existingFm, newFm)
 	}
 
-	err = s.pageReaderMutator.WriteFrontMatter(wikipage.PageIdentifier(req.Page), existingFm)
+	err = s.pageReaderMutator.WriteFrontMatter(wikipage.PageIdentifier(req.Page), wikipage.FrontMatter(existingFm), tailscale.IdentityFromContext(ctx))
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, failedToWriteFrontmatterErrFmt, err)
 	}
@@ -266,7 +267,7 @@ func (s *Server) ReplaceFrontmatter(ctx context.Context, req *apiv1.ReplaceFront
 		preserveReservedSubtrees(existingFm, fm)
 	}
 
-	err = s.pageReaderMutator.WriteFrontMatter(wikipage.PageIdentifier(req.Page), fm)
+	err = s.pageReaderMutator.WriteFrontMatter(wikipage.PageIdentifier(req.Page), wikipage.FrontMatter(fm), tailscale.IdentityFromContext(ctx))
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, failedToWriteFrontmatterErrFmt, err)
 	}
@@ -331,7 +332,7 @@ func (s *Server) RemoveKeyAtPath(ctx context.Context, req *apiv1.RemoveKeyAtPath
 		return nil, err
 	}
 
-	err = s.pageReaderMutator.WriteFrontMatter(wikipage.PageIdentifier(req.Page), wikipage.FrontMatter(updatedFm.(map[string]any)))
+	err = s.pageReaderMutator.WriteFrontMatter(wikipage.PageIdentifier(req.Page), wikipage.FrontMatter(updatedFm.(map[string]any)), tailscale.IdentityFromContext(ctx))
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, failedToWriteFrontmatterErrFmt, err)
 	}

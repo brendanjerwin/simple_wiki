@@ -540,8 +540,10 @@ func renderSurveyResponse(resp map[string]any) string {
 }
 
 func renderSurveyFallback(frontmatter map[string]any, surveyName string) string {
-	surveysMap, ok := frontmatter["surveys"].(map[string]any)
-	if !ok {
+	// Read survey data from wiki.surveys (migrated namespace) first,
+	// falling back to the legacy top-level surveys key for old pages.
+	surveysMap := readSurveyRootFromFrontmatter(frontmatter)
+	if surveysMap == nil {
 		return ""
 	}
 	survey, ok := surveysMap[surveyName].(map[string]any)
@@ -569,6 +571,21 @@ func renderSurveyFallback(frontmatter map[string]any, surveyName string) string 
 	}
 
 	return buf.String()
+}
+
+// readSurveyRootFromFrontmatter reads the surveys map from frontmatter,
+// preferring the migrated wiki.surveys namespace and falling back to
+// the legacy top-level surveys key.
+func readSurveyRootFromFrontmatter(fm map[string]any) map[string]any {
+	if wiki, ok := fm["wiki"].(map[string]any); ok {
+		if surveys, ok := wiki["surveys"].(map[string]any); ok {
+			return surveys
+		}
+	}
+	if surveys, ok := fm["surveys"].(map[string]any); ok {
+		return surveys
+	}
+	return nil
 }
 
 const (

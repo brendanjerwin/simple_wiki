@@ -28,7 +28,7 @@ func (s *errorStore) ReadFrontMatter(_ wikipage.PageIdentifier) (wikipage.PageId
 	return "", nil, s.err
 }
 
-func (*errorStore) WriteFrontMatter(_ wikipage.PageIdentifier, _ wikipage.FrontMatter) error {
+func (*errorStore) WriteFrontMatter(_ wikipage.PageIdentifier, _ wikipage.FrontMatter, _ wikipage.Identity) error {
 	return nil
 }
 
@@ -36,18 +36,20 @@ func (*errorStore) ReadMarkdown(_ wikipage.PageIdentifier) (wikipage.PageIdentif
 	return "", "", nil
 }
 
-func (*errorStore) WriteMarkdown(_ wikipage.PageIdentifier, _ wikipage.Markdown) error { return nil }
-func (*errorStore) DeletePage(_ wikipage.PageIdentifier) error                          { return nil }
-func (*errorStore) ModifyMarkdown(_ wikipage.PageIdentifier, _ func(wikipage.Markdown) (wikipage.Markdown, error)) error {
+func (*errorStore) WriteMarkdown(_ wikipage.PageIdentifier, _ wikipage.Markdown, _ wikipage.Identity) error {
+	return nil
+}
+func (*errorStore) DeletePage(_ wikipage.PageIdentifier) error { return nil }
+func (*errorStore) ModifyMarkdown(_ wikipage.PageIdentifier, _ func(wikipage.Markdown) (wikipage.Markdown, error), _ wikipage.Identity) error {
 	return nil
 }
 
 var _ = Describe("Mutator error paths", func() {
 	var (
-		clock   *fakeClock
-		ulids   *ulid.SequenceGenerator
-		ctx     context.Context
-		human   tailscale.IdentityValue
+		clock *fakeClock
+		ulids *ulid.SequenceGenerator
+		ctx   context.Context
+		human tailscale.IdentityValue
 	)
 
 	BeforeEach(func() {
@@ -91,10 +93,10 @@ var _ = Describe("Mutator error paths", func() {
 			})
 
 			// os.IsNotExist does not unwrap fmt.Errorf("%w", os.ErrNotExist) in the
-		// Go version used here, so the wrapped error propagates as a generic
-		// "read frontmatter: ..." error rather than ErrPageNotFound. Direct
-		// os.ErrNotExist (not re-wrapped) is the guaranteed ErrPageNotFound path.
-		It("should return a wrapped read-frontmatter error (not ErrPageNotFound)", func() {
+			// Go version used here, so the wrapped error propagates as a generic
+			// "read frontmatter: ..." error rather than ErrPageNotFound. Direct
+			// os.ErrNotExist (not re-wrapped) is the guaranteed ErrPageNotFound path.
+			It("should return a wrapped read-frontmatter error (not ErrPageNotFound)", func() {
 				Expect(err).To(HaveOccurred())
 				Expect(err).NotTo(MatchError(checklistmutator.ErrPageNotFound))
 				Expect(err.Error()).To(ContainSubstring("read frontmatter"))

@@ -205,7 +205,7 @@ func (j *ChecklistTagSyntaxMigrationJob) Execute() error {
 		return nil
 	}
 
-	if err := j.readerMutator.WriteFrontMatter(id, fm); err != nil {
+	if err := j.readerMutator.WriteFrontMatter(id, fm, wikipage.AnonymousIdentity); err != nil {
 		return fmt.Errorf("write migrated frontmatter for %s: %w", j.identifier, err)
 	}
 	return nil

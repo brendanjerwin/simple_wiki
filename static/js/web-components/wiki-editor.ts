@@ -287,7 +287,7 @@ export class WikiEditor extends LitElement {
     this.error = null;
 
     try {
-      const request = create(ReadPageRequestSchema, { pageIdentifier: { case: 'pageName', value: this.page } });
+      const request = create(ReadPageRequestSchema, { pageSelector: { case: 'page', value: this.page } });
       const response = await this.client.readPage(request);
 
       this.content = reconstructWholePageText(
@@ -307,7 +307,7 @@ export class WikiEditor extends LitElement {
       this.debounceMs,
       async (content: string) => {
         const request = create(UpdateWholePageRequestSchema, {
-          pageName: this.page,
+          page: this.page,
           newWholeMarkdown: content,
         });
         const response = await this.client.updateWholePage(request);

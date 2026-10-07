@@ -87,10 +87,10 @@ describe('readPage', () => {
       );
     });
 
-    it('should create request with pageName', () => {
+    it('should create request with page', () => {
       expect(mockCreate).toHaveBeenCalledWith(
         { _schema: 'ReadPageRequest' },
-        { pageIdentifier: { case: 'pageName', value: 'test_page' } }
+        { pageSelector: { case: 'page', value: 'test_page' } }
       );
     });
 
@@ -190,7 +190,7 @@ describe('updatePageContent', () => {
       expect(mockCreate).toHaveBeenCalledWith(
         { _schema: 'UpdatePageContentRequest' },
         {
-          pageName: 'test_page',
+          page: 'test_page',
           newContentMarkdown: '# Updated',
           expectedVersionHash: 'hash456',
         }
@@ -253,11 +253,11 @@ describe('createPage', () => {
       await createPageFn('https://wiki.example.com', 'new_page', '# New');
     });
 
-    it('should create request with pageName and contentMarkdown', () => {
+    it('should create request with page and contentMarkdown', () => {
       expect(mockCreate).toHaveBeenCalledWith(
         { _schema: 'CreatePageRequest' },
         {
-          pageName: 'new_page',
+          page: 'new_page',
           contentMarkdown: '# New',
         }
       );
@@ -311,13 +311,13 @@ describe('client caching', () => {
 
     const mod = await import('./wiki-client.js');
     readPageFn = mod.readPage;
-    mockReadPage.mockResolvedValue({ contentMarkdown: '', versionHash: '' });
   });
 
   describe('when called twice with the same URL', () => {
     beforeEach(async () => {
-      await readPageFn('https://wiki.example.com', 'page1');
-      await readPageFn('https://wiki.example.com', 'page2');
+      mockReadPage.mockResolvedValue({ contentMarkdown: '', versionHash: '' });
+      await readPageFn('https://wiki.example.com', 'test_page');
+      await readPageFn('https://wiki.example.com', 'test_page');
     });
 
     it('should create transport only once', () => {
@@ -331,8 +331,9 @@ describe('client caching', () => {
 
   describe('when called with different URLs', () => {
     beforeEach(async () => {
-      await readPageFn('https://wiki-a.example.com', 'page1');
-      await readPageFn('https://wiki-b.example.com', 'page2');
+      mockReadPage.mockResolvedValue({ contentMarkdown: '', versionHash: '' });
+      await readPageFn('https://wiki.example.com', 'test_page');
+      await readPageFn('https://other.wiki.com', 'test_page');
     });
 
     it('should create transport twice', () => {

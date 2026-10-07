@@ -679,8 +679,8 @@ describe('WikiSurvey', () => {
     });
 
     it('should submit to the correct survey name', () => {
-      const args = submitResponseStub.getCall(0).args[0] as { surveyName: string };
-      expect(args.surveyName).to.equal('my_survey');
+      const args = submitResponseStub.getCall(0).args[0] as { name: string };
+      expect(args.name).to.equal('my_survey');
     });
 
     it('should submit the field values', () => {

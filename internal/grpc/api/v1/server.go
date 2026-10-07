@@ -33,7 +33,7 @@ const (
 	failedToReadFrontmatterErrFmt  = "failed to read frontmatter: %v"
 	failedToWriteFrontmatterErrFmt = "failed to write frontmatter: %v"
 	failedToWriteMarkdownErrFmt    = "failed to write markdown: %v"
-	pageNameRequiredErr            = "page_name is required"
+	pageNameRequiredErr            = "page is required"
 	maxUniqueIdentifierAttempts    = 1000
 	invalidTemplateErrFmt          = "invalid template in page content: %v"
 )
@@ -57,11 +57,11 @@ type ChatBufferManager interface {
 	IsInstanceRequested(page string) bool
 	NotifyToolCall(page string, toolCall chatbuffer.ToolCallEvent)
 	NotifyPlan(page string, plan chatbuffer.PlanEvent)
+	NotifyBackgroundTask(page string, bgTask chatbuffer.BackgroundTaskEvent)
 	NotifyTurnStatus(page string, active bool)
 	CancelPage(page string) bool
 	SubscribeToCancellation(page string) (<-chan struct{}, func())
 	RequestPermission(ctx context.Context, page, requestID, title, description string, options []chatbuffer.PermissionOption) string
-	EmitPermissionRequest(page string, event *chatbuffer.PermissionRequestEvent)
 	RespondToPermission(requestID, selectedOptionID string)
 	GetPendingPermissionsForPage(page string) []*chatbuffer.PermissionRequestEvent
 }
@@ -114,6 +114,7 @@ type Server struct {
 	apiv1.UnimplementedMapServiceServer
 	apiv1.UnimplementedSurveyServiceServer
 	apiv1.UnimplementedConnectorServiceServer
+	apiv1.UnimplementedPageHistoryServiceServer
 	commit                  string
 	buildTime               time.Time
 	pageReaderMutator       wikipage.PageReaderMutator
@@ -128,6 +129,7 @@ type Server struct {
 	pageOpener              wikipage.PageOpener
 	scheduledTurnDispatcher ScheduledTurnDispatcher
 	agentScheduleStore      AgentScheduleStore
+	ToolCallPromoter        *ToolCallPromotion
 	agentChatContextStore   AgentChatContextStore
 	checklistMutator        *checklistmutator.Mutator
 	mapMutator              *mapmutator.Mutator
@@ -140,6 +142,8 @@ type Server struct {
 	keepAuthVerifier    googlekeep.AuthVerifier
 	tasksConnector      *connectorRuntime
 	tasksAuthURLBuilder TasksAuthURLBuilder
+	historyReader       PageHistoryReader
+	historySearcher     HistorySearcher
 }
 
 // NewServer creates a new gRPC server with the given dependencies.
@@ -181,6 +185,7 @@ func NewServer(
 		logger:                  logger,
 		chatBufferManager:       chatBufferManager,
 		pageOpener:              pageOpener,
+		ToolCallPromoter:        NewToolCallPromotion(),
 	}, nil
 }
 
@@ -358,6 +363,7 @@ func (s *Server) RegisterWithServer(grpcServer *grpc.Server) {
 	apiv1.RegisterMapServiceServer(grpcServer, s)
 	apiv1.RegisterSurveyServiceServer(grpcServer, s)
 	apiv1.RegisterConnectorServiceServer(grpcServer, s)
+	apiv1.RegisterPageHistoryServiceServer(grpcServer, s)
 }
 
 // LoggingInterceptor returns a gRPC unary interceptor for logging method calls.
@@ -385,7 +391,8 @@ func (s *Server) LoggingInterceptor() grpc.UnaryServerInterceptor {
 		}
 
 		if s.logger != nil {
-			s.logger.Warn("[GRPC] %s | %s | %v | %s",
+			s.logger.Warn(
+				"[GRPC] %s | %s | %v | %s",
 				statusCode,
 				duration,
 				info.FullMethod,
