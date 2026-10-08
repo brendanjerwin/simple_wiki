@@ -242,6 +242,40 @@ var _ = Describe("Site.readOrInitPage render error handling", func() {
 		_ = os.RemoveAll(tmpDir)
 	})
 
+	Describe("when a new page fails to render during initialization", func() {
+		var (
+			p   *wikipage.Page
+			err error
+		)
+
+		BeforeEach(func() {
+			// nil FrontmatterIndexQueryer causes p.Render to fail immediately,
+			// exercising the render-error path inside initNewPage (no file on disk →
+			// page is new → initNewPage is called → render fails).
+			s.FrontmatterIndexQueryer = nil
+
+			req := &http.Request{URL: &url.URL{Path: "/new_render_error_page"}}
+			p, err = s.readOrInitPage("new_render_error_page", req)
+		})
+
+		It("should not return an error to the caller", func() {
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should return a page with non-empty RenderedPage", func() {
+			Expect(p).NotTo(BeNil())
+			Expect(string(p.RenderedPage)).NotTo(BeEmpty())
+		})
+
+		It("should show a render-error block instead of blank content", func() {
+			Expect(string(p.RenderedPage)).To(ContainSubstring("render-error"))
+		})
+
+		It("should include the page identifier in the error message", func() {
+			Expect(string(p.RenderedPage)).To(ContainSubstring("new_render_error_page"))
+		})
+	})
+
 	Describe("when an existing page has a broken template macro", func() {
 		var (
 			p   *wikipage.Page
