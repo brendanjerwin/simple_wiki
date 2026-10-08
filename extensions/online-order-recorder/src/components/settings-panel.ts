@@ -91,7 +91,7 @@ export class SettingsPanel extends LitElement {
 
   override connectedCallback(): void {
     super.connectedCallback();
-    this._loadSettings();
+    void this._loadSettings();
     browser.storage.onChanged.addListener(this._storageListener);
   }
 

@@ -239,7 +239,7 @@ export class AutomagicIdentifierInput extends LitElement {
 
     // Debounce the API call
     this._titleDebounceTimer = setTimeout(() => {
-      this._onTitleChanged();
+      void this._onTitleChanged();
     }, this._debounceTimeoutMs);
   };
 
@@ -293,7 +293,7 @@ export class AutomagicIdentifierInput extends LitElement {
 
     // Debounce the API call to check availability
     this._identifierDebounceTimer = setTimeout(() => {
-      this._checkIdentifierAvailability();
+      void this._checkIdentifierAvailability();
     }, this._debounceTimeoutMs);
   };
 
@@ -339,7 +339,7 @@ export class AutomagicIdentifierInput extends LitElement {
 
     // If switching back to automagic, regenerate identifier from title
     if (this.automagicMode && this.title.trim()) {
-      this._onTitleChanged();
+      void this._onTitleChanged();
     }
   };
 

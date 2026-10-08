@@ -62,4 +62,4 @@ document.addEventListener('orders-dismissed', async () => {
   setStatus('Dismissed', '');
 });
 
-loadPendingOrders();
+void loadPendingOrders();

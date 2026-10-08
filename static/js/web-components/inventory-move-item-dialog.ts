@@ -342,7 +342,7 @@ export class InventoryMoveItemDialog extends LitElement {
     this.open = true;
 
     // Focus search field after render
-    this.updateComplete.then(() => {
+    void this.updateComplete.then(() => {
       const searchField = this.shadowRoot?.querySelector<HTMLInputElement>('input[name="searchQuery"]');
       searchField?.focus();
     });
@@ -380,7 +380,7 @@ export class InventoryMoveItemDialog extends LitElement {
 
     // Debounce the search
     this._searchDebounceTimer = setTimeout(() => {
-      this._performSearch();
+      void this._performSearch();
     }, this._searchDebounceTimeoutMs);
   };
 
@@ -484,10 +484,10 @@ export class InventoryMoveItemDialog extends LitElement {
     this.searchQuery = '';
     this.searchResults = [];
     // Wait for DOM update, then expand the scanner
-    this.updateComplete.then(() => {
+    void this.updateComplete.then(() => {
       const scanner = this.shadowRoot?.querySelector<InventoryQrScanner>('inventory-qr-scanner');
       if (scanner) {
-        scanner.expand();
+        return scanner.expand();
       }
     });
   };
