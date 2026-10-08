@@ -14,6 +14,7 @@ import (
 	"github.com/brendanjerwin/simple_wiki/pkg/jobs"
 	"github.com/brendanjerwin/simple_wiki/utils/base32tools"
 	"github.com/brendanjerwin/simple_wiki/utils/goldmarkrenderer"
+	"github.com/brendanjerwin/simple_wiki/wikiidentifiers"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 	"github.com/jcelliott/lumber"
 	. "github.com/onsi/ginkgo/v2"
@@ -181,8 +182,11 @@ var _ = Describe("Site", func() {
 
 		BeforeEach(func() {
 			pageIdentifier = "test-page"
-			// The PageReaderMutator implementation reads from base32 encoded filenames
-			pagePath = filepath.Join(s.PathToData, base32tools.EncodeToBase32(strings.ToLower(string(pageIdentifier)))+".md")
+			// The PageReaderMutator implementation reads and writes via the munged
+			// identifier (hyphens → underscores), so use the munged form here.
+			munged, mungeErr := wikiidentifiers.MungeIdentifier(string(pageIdentifier))
+			Expect(mungeErr).NotTo(HaveOccurred())
+			pagePath = filepath.Join(s.PathToData, base32tools.EncodeToBase32(strings.ToLower(munged))+".md")
 		})
 
 		Describe("ReadFrontMatter", func() {
@@ -643,9 +647,13 @@ test content to be soft deleted`
 							timestamp, parseErr = strconv.ParseInt(timestampDir.Name(), 10, 64)
 							Expect(parseErr).NotTo(HaveOccurred())
 
-							// Read the moved file
+							// Read the moved file — the deleted file uses the munged
+							// identifier (hyphens → underscores) because SoftDeletePageBy
+							// reads from and renames the munged path.
+							mungedID, mungeErr := wikiidentifiers.MungeIdentifier(string(pageIdentifier))
+							Expect(mungeErr).NotTo(HaveOccurred())
 							timestampPath = filepath.Join(deletedDir, timestampDir.Name())
-							deletedMdPath = filepath.Join(timestampPath, base32tools.EncodeToBase32(strings.ToLower(string(pageIdentifier)))+".md")
+							deletedMdPath = filepath.Join(timestampPath, base32tools.EncodeToBase32(strings.ToLower(mungedID))+".md")
 							var readErr error
 							deletedMdContent, readErr = os.ReadFile(deletedMdPath)
 							Expect(readErr).NotTo(HaveOccurred())
