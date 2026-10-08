@@ -173,6 +173,50 @@ var _ = Describe("Site Page Operations", func() {
 		})
 	})
 
+	Describe("UpdatePageContent render error handling", func() {
+		When("the new content contains a broken template macro", func() {
+			var (
+				p         *wikipage.Page
+				updateErr error
+			)
+
+			BeforeEach(func() {
+				req, _ := http.NewRequest("GET", "/", nil)
+				var err error
+				p, err = s.readOrInitPage("update_render_error_page", req)
+				Expect(err).ToNot(HaveOccurred())
+
+				// Content with an unknown template function forces a render failure
+				brokenContent := "# Title\n{{ UnknownMacroThatDoesNotExist \"arg\" }}\n"
+				updateErr = s.UpdatePageContent(wikipage.PageIdentifier(p.Identifier), brokenContent)
+			})
+
+			It("should not return an error to the caller", func() {
+				Expect(updateErr).NotTo(HaveOccurred())
+			})
+
+			It("should persist the page text despite the render failure", func() {
+				savedPage, readErr := s.ReadPage(wikipage.PageIdentifier(p.Identifier))
+				Expect(readErr).NotTo(HaveOccurred())
+				Expect(savedPage.Text).To(ContainSubstring("UnknownMacroThatDoesNotExist"))
+			})
+
+			It("should serve a render-error block when the page is subsequently loaded", func() {
+				req, _ := http.NewRequest("GET", "/update_render_error_page", nil)
+				loadedPage, loadErr := s.readOrInitPage(p.Identifier, req)
+				Expect(loadErr).NotTo(HaveOccurred())
+				Expect(string(loadedPage.RenderedPage)).To(ContainSubstring("render-error"))
+			})
+
+			It("should include the page identifier in the render-error block", func() {
+				req, _ := http.NewRequest("GET", "/update_render_error_page", nil)
+				loadedPage, loadErr := s.readOrInitPage(p.Identifier, req)
+				Expect(loadErr).NotTo(HaveOccurred())
+				Expect(string(loadedPage.RenderedPage)).To(ContainSubstring("update_render_error_page"))
+			})
+		})
+	})
+
 	// Site.Open migration integration tests previously injected a mock
 	// MigrationApplicator into Site to verify the save-on-read chain
 	// triggered the mock and persisted the modified content. Phase 5 deleted

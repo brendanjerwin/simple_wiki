@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"html"
 	"io"
 	"net/http"
 	"os"
@@ -550,6 +551,16 @@ func (s *Site) ReadPage(requestedIdentifier wikipage.PageIdentifier) (*wikipage.
 	return p, nil
 }
 
+// buildRenderErrorHTML produces a visible HTML error block so that users see
+// a clear error message instead of a blank page when rendering fails.
+func buildRenderErrorHTML(identifier string, err error) []byte {
+	return []byte(fmt.Sprintf(
+		`<div class="render-error"><p><strong>Rendering failed for page %q:</strong> %s</p></div>`,
+		html.EscapeString(identifier),
+		html.EscapeString(err.Error()),
+	))
+}
+
 // readOrInitPage opens a page or initializes a new one if it doesn't exist.
 // Returns an error if page initialization fails to save.
 func (s *Site) readOrInitPage(requestedIdentifier string, req *http.Request) (*wikipage.Page, error) {
@@ -565,7 +576,8 @@ func (s *Site) readOrInitPage(requestedIdentifier string, req *http.Request) (*w
 	}
 
 	if renderErr := p.Render(s, s.MarkdownRenderer, TemplateExecutor{}, s.FrontmatterIndexQueryer); renderErr != nil {
-		s.Logger.Error("Error rendering page: %v", renderErr)
+		s.Logger.Error("Error rendering page '%s' (%d bytes): %v", p.Identifier, len(p.Text), renderErr)
+		p.RenderedPage = buildRenderErrorHTML(p.Identifier, renderErr)
 	}
 	return p, nil
 }
@@ -591,7 +603,8 @@ func (s *Site) initNewPage(p *wikipage.Page, req *http.Request) error {
 
 	p.Text = initialText
 	if renderErr := p.Render(s, s.MarkdownRenderer, TemplateExecutor{}, s.FrontmatterIndexQueryer); renderErr != nil {
-		s.Logger.Error("Error rendering new page: %v", renderErr)
+		s.Logger.Error("Error rendering page '%s' (%d bytes): %v", p.Identifier, len(p.Text), renderErr)
+		p.RenderedPage = buildRenderErrorHTML(p.Identifier, renderErr)
 	}
 	if err := s.savePageAndIndex(p); err != nil {
 		s.Logger.Error("Failed to save new page '%s': %v", p.Identifier, err)
@@ -984,7 +997,8 @@ func (s *Site) UpdatePageContent(identifier wikipage.PageIdentifier, newText str
 
 	// Render the new page
 	if renderErr := p.Render(s, s.MarkdownRenderer, TemplateExecutor{}, s.FrontmatterIndexQueryer); renderErr != nil {
-		s.Logger.Error("Error rendering page: %v", renderErr)
+		s.Logger.Error("Error rendering page '%s' (%d bytes): %v", p.Identifier, len(p.Text), renderErr)
+		p.RenderedPage = buildRenderErrorHTML(p.Identifier, renderErr)
 	}
 
 	// Save to disk; the store canonicalizes on the write path.
