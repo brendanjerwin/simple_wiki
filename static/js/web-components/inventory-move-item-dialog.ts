@@ -486,9 +486,7 @@ export class InventoryMoveItemDialog extends LitElement {
     // Wait for DOM update, then expand the scanner
     void this.updateComplete.then(() => {
       const scanner = this.shadowRoot?.querySelector<InventoryQrScanner>('inventory-qr-scanner');
-      if (scanner) {
-        return scanner.expand();
-      }
+      return scanner?.expand();
     });
   };
 
