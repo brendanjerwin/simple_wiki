@@ -354,4 +354,133 @@ describe('AutomagicIdentifierInput', () => {
       expect(element.automagicError?.failedGoalDescription).to.equal('generating identifier');
     });
   });
+
+  describe('when generateIdentifier rejects (throws)', () => {
+    let clock: SinonFakeTimers;
+
+    beforeEach(async () => {
+      clock = useFakeTimers();
+      generateIdentifierStub.rejects(new Error('RPC unavailable'));
+
+      element = await fixture(html`
+        <automagic-identifier-input
+          .generateIdentifier=${generateIdentifierStub}
+        ></automagic-identifier-input>
+      `);
+
+      const titleInput = element.shadowRoot?.querySelector<TitleInput>('title-input');
+      if (titleInput) {
+        titleInput.value = 'My Page';
+        titleInput.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+      }
+
+      await clock.tickAsync(300);
+      await element.updateComplete;
+    });
+
+    afterEach(() => {
+      clock.restore();
+    });
+
+    it('should set the automagicError property', () => {
+      expect(element.automagicError).to.exist;
+    });
+
+    it('should preserve the thrown error message', () => {
+      expect(element.automagicError?.message).to.equal('RPC unavailable');
+    });
+
+    it('should set the failed goal description', () => {
+      expect(element.automagicError?.failedGoalDescription).to.equal('generating identifier');
+    });
+
+    it('should display an error message', () => {
+      const errorDisplay = element.shadowRoot?.querySelector('error-display');
+      expect(errorDisplay).to.exist;
+    });
+  });
+
+  describe('when in manual mode and checkIdentifierAvailability rejects (throws)', () => {
+    let clock: SinonFakeTimers;
+
+    beforeEach(async () => {
+      clock = useFakeTimers();
+      generateIdentifierStub.rejects(new Error('Availability check failed'));
+
+      element = await fixture(html`
+        <automagic-identifier-input
+          .generateIdentifier=${generateIdentifierStub}
+          .automagicMode=${false}
+        ></automagic-identifier-input>
+      `);
+
+      const identifierInput = element.shadowRoot?.querySelector<HTMLInputElement>('input[name="identifier"]');
+      if (identifierInput) {
+        identifierInput.value = 'custom_id';
+        identifierInput.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+
+      await clock.tickAsync(300);
+      await element.updateComplete;
+    });
+
+    afterEach(() => {
+      clock.restore();
+    });
+
+    it('should set the automagicError property', () => {
+      expect(element.automagicError).to.exist;
+    });
+
+    it('should preserve the thrown error message', () => {
+      expect(element.automagicError?.message).to.equal('Availability check failed');
+    });
+
+    it('should set the failed goal description', () => {
+      expect(element.automagicError?.failedGoalDescription).to.equal('checking identifier availability');
+    });
+  });
+
+  describe('when in manual mode and checkIdentifierAvailability returns an error result', () => {
+    let clock: SinonFakeTimers;
+
+    beforeEach(async () => {
+      clock = useFakeTimers();
+      generateIdentifierStub.resolves({
+        error: new Error('Identifier check error'),
+      });
+
+      element = await fixture(html`
+        <automagic-identifier-input
+          .generateIdentifier=${generateIdentifierStub}
+          .automagicMode=${false}
+        ></automagic-identifier-input>
+      `);
+
+      const identifierInput = element.shadowRoot?.querySelector<HTMLInputElement>('input[name="identifier"]');
+      if (identifierInput) {
+        identifierInput.value = 'custom_id';
+        identifierInput.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+
+      await clock.tickAsync(300);
+      await element.updateComplete;
+    });
+
+    afterEach(() => {
+      clock.restore();
+    });
+
+    it('should set the automagicError property', () => {
+      expect(element.automagicError).to.exist;
+    });
+
+    it('should preserve the error message', () => {
+      expect(element.automagicError?.message).to.equal('Identifier check error');
+    });
+
+    it('should set the failed goal description', () => {
+      expect(element.automagicError?.failedGoalDescription).to.equal('checking identifier availability');
+    });
+  });
 });

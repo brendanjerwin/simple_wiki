@@ -111,6 +111,28 @@ describe('handleWikiUrlDetected (via message listener)', () => {
     resetStorageMocks();
   });
 
+  describe('when storage throws during URL persistence', () => {
+    beforeEach(async () => {
+      mockBrowser.storage.local.get.mockRejectedValue(new Error('Storage unavailable'));
+      messageListener(
+        { type: 'WIKI_URL_DETECTED', wikiUrl: 'https://wiki.local:8050' },
+        {},
+        vi.fn()
+      );
+      await vi.waitFor(() => {
+        expect(mockBrowser.browserAction.setBadgeText).toHaveBeenCalled();
+      });
+    });
+
+    it('should set badge text to ! to signal the error', () => {
+      expect(mockBrowser.browserAction.setBadgeText).toHaveBeenCalledWith({ text: '!' });
+    });
+
+    it('should set badge background color to red', () => {
+      expect(mockBrowser.browserAction.setBadgeBackgroundColor).toHaveBeenCalledWith({ color: '#c62828' });
+    });
+  });
+
   describe('when no URL is stored', () => {
     beforeEach(async () => {
       messageListener(

@@ -256,22 +256,29 @@ export class AutomagicIdentifierInput extends LitElement {
 
     // Generate identifier if in automagic mode
     if (this.automagicMode) {
-      const result = await this.generateIdentifier(title);
-      if (result.error) {
+      try {
+        const result = await this.generateIdentifier(title);
+        if (result.error) {
+          this.automagicError = AugmentErrorService.augmentError(
+            result.error,
+            'generating identifier'
+          );
+        } else {
+          this.automagicError = null;
+          this.identifier = result.identifier;
+          this.isUnique = result.isUnique;
+          if (result.existingPage) {
+            this.existingPage = result.existingPage;
+          } else {
+            delete this.existingPage;
+          }
+          this._dispatchIdentifierChange();
+        }
+      } catch (err) {
         this.automagicError = AugmentErrorService.augmentError(
-          result.error,
+          err instanceof Error ? err : new Error(String(err)),
           'generating identifier'
         );
-      } else {
-        this.automagicError = null;
-        this.identifier = result.identifier;
-        this.isUnique = result.isUnique;
-        if (result.existingPage) {
-          this.existingPage = result.existingPage;
-        } else {
-          delete this.existingPage;
-        }
-        this._dispatchIdentifierChange();
       }
     }
   }
@@ -308,15 +315,27 @@ export class AutomagicIdentifierInput extends LitElement {
     }
 
     // Call generateIdentifier just to check availability
-    const result = await this.generateIdentifier(identifier);
-    if (!result.error) {
-      this.isUnique = result.isUnique;
-      if (result.existingPage) {
-        this.existingPage = result.existingPage;
+    try {
+      const result = await this.generateIdentifier(identifier);
+      if (result.error) {
+        this.automagicError = AugmentErrorService.augmentError(
+          result.error,
+          'checking identifier availability'
+        );
       } else {
-        delete this.existingPage;
+        this.isUnique = result.isUnique;
+        if (result.existingPage) {
+          this.existingPage = result.existingPage;
+        } else {
+          delete this.existingPage;
+        }
+        this._dispatchIdentifierChange();
       }
-      this._dispatchIdentifierChange();
+    } catch (err) {
+      this.automagicError = AugmentErrorService.augmentError(
+        err instanceof Error ? err : new Error(String(err)),
+        'checking identifier availability'
+      );
     }
   }
 

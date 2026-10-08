@@ -139,7 +139,10 @@ browser.runtime.onMessage.addListener((
       return undefined;
 
     case 'WIKI_URL_DETECTED':
-      void handleWikiUrlDetected(msg.wikiUrl);
+      handleWikiUrlDetected(msg.wikiUrl).catch(() => {
+        void browser.browserAction.setBadgeText({ text: '!' });
+        void browser.browserAction.setBadgeBackgroundColor({ color: '#c62828' });
+      });
       return undefined;
 
     default:

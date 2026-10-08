@@ -7,7 +7,7 @@ describe('content-wiki-detect', () => {
 
   beforeEach(() => {
     vi.resetModules();
-    sendMessageMock = vi.fn();
+    sendMessageMock = vi.fn().mockResolvedValue(undefined);
     debugMock = vi.fn();
 
     (globalThis as Record<string, unknown>)['browser'] = {
@@ -46,6 +46,28 @@ describe('content-wiki-detect', () => {
         '[Simple Wiki Companion] Wiki URL detected:',
         'https://wiki.local:8050'
       );
+    });
+  });
+
+  describe('when meta tag exists and sendMessage rejects', () => {
+    beforeEach(async () => {
+      sendMessageMock.mockRejectedValue(new Error('Extension context invalidated'));
+
+      const dom = new JSDOM(
+        '<!DOCTYPE html><html><head><meta name="simple-wiki-url" content="https://wiki.local:8050"></head><body></body></html>'
+      );
+
+      (globalThis as Record<string, unknown>)['document'] = dom.window.document;
+
+      // @ts-expect-error TS2306: side-effect-only module has no exports
+      await import('./content-wiki-detect.js');
+      // Allow the promise to settle
+      await new Promise<void>(resolve => { setTimeout(resolve, 0); });
+    });
+
+    it('should not throw an unhandled rejection', () => {
+      // The promise rejection is handled — test passes if no unhandled rejection occurs
+      expect(sendMessageMock).toHaveBeenCalled();
     });
   });
 

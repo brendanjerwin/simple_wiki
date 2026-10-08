@@ -109,6 +109,31 @@ describe('SettingsPanel', () => {
 
   describe('_loadSettings', () => {
 
+    describe('when storage throws', () => {
+
+      beforeEach(async () => {
+        vi.clearAllMocks();
+        mockGet.mockRejectedValue(new Error('Storage unavailable'));
+        el = createSettingsPanel();
+        await el.updateComplete;
+        await vi.waitFor(() => {
+          expect(el.loadError).to.not.be.null;
+        });
+        await el.updateComplete;
+      });
+
+      it('should set loadError', () => {
+        expect(el.loadError).to.not.be.null;
+        expect(el.loadError!.message).to.equal('Storage unavailable');
+      });
+
+      it('should render the error status message', () => {
+        const errorMsg = el.shadowRoot!.querySelector('.status-msg.error');
+        expect(errorMsg).to.not.be.null;
+        expect(errorMsg!.textContent).to.contain('Settings unavailable');
+      });
+    });
+
     describe('when storage has a wikiUrl and wikiUrlManuallySet', () => {
 
       beforeEach(async () => {
