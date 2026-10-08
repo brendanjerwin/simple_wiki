@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"os"
 	"path"
+	"path/filepath"
 	"strings"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -13,7 +14,7 @@ import (
 	"github.com/jcelliott/lumber"
 	"github.com/pelletier/go-toml/v2"
 
-		"github.com/brendanjerwin/simple_wiki/utils/base32tools"
+	"github.com/brendanjerwin/simple_wiki/utils/base32tools"
 	"github.com/brendanjerwin/simple_wiki/utils/goldmarkrenderer"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 )
@@ -214,6 +215,66 @@ var _ = Describe("Site.ReadOrInit with URL parameters", func() {
 			tags, ok := parsed["tags"].([]any)
 			Expect(ok).To(BeTrue())
 			Expect(tags).To(HaveLen(3))
+		})
+	})
+})
+
+var _ = Describe("Site.readOrInitPage render error handling", func() {
+	var (
+		s      *Site
+		tmpDir string
+	)
+
+	BeforeEach(func() {
+		var err error
+		tmpDir, err = os.MkdirTemp("", "site-render-error-test")
+		Expect(err).NotTo(HaveOccurred())
+
+		s = &Site{
+			PathToData:              tmpDir,
+			Logger:                  lumber.NewConsoleLogger(lumber.INFO),
+			MarkdownRenderer:        &goldmarkrenderer.GoldmarkRenderer{},
+			FrontmatterIndexQueryer: &mockFrontmatterIndexQueryer{},
+		}
+	})
+
+	AfterEach(func() {
+		_ = os.RemoveAll(tmpDir)
+	})
+
+	Describe("when an existing page has a broken template macro", func() {
+		var (
+			p   *wikipage.Page
+			err error
+		)
+
+		BeforeEach(func() {
+			// Write a page directly to disk with content that calls an unknown template function.
+			// This triggers a template parse failure when readOrInitPage renders the page.
+			content := "# Test\n{{ UnknownMacroThatDoesNotExist \"arg\" }}\n"
+			pageID := "render_error_page"
+			fp := filepath.Join(tmpDir, base32tools.EncodeToBase32(strings.ToLower(pageID))+".md")
+			Expect(os.WriteFile(fp, []byte(content), 0644)).To(Succeed())
+
+			req := &http.Request{URL: &url.URL{Path: "/" + pageID}}
+			p, err = s.readOrInitPage(pageID, req)
+		})
+
+		It("should not return an error to the caller", func() {
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should return a page with non-empty RenderedPage", func() {
+			Expect(p).NotTo(BeNil())
+			Expect(string(p.RenderedPage)).NotTo(BeEmpty())
+		})
+
+		It("should show a render-error block instead of blank content", func() {
+			Expect(string(p.RenderedPage)).To(ContainSubstring("render-error"))
+		})
+
+		It("should include the page identifier in the error message", func() {
+			Expect(string(p.RenderedPage)).To(ContainSubstring("render_error_page"))
 		})
 	})
 })
