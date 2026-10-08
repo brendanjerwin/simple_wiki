@@ -187,7 +187,7 @@ export class FrontmatterEditorDialog extends NativeDialogMixin(LitElement) {
   public openDialog(page: string): void {
     this.page = page;
     this.open = true;
-    this.loadFrontmatter();
+    void this.loadFrontmatter();
   }
 
   public close(): void {

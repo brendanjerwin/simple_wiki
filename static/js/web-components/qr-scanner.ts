@@ -534,7 +534,7 @@ export class QrScanner extends LitElement {
     this.dispatchEvent(event);
 
     // Auto-collapse after successful scan
-    this.collapse();
+    void this.collapse();
   }
 
   private _describeUnknownObject(err: object): string {
@@ -619,7 +619,7 @@ export class QrScanner extends LitElement {
   }
 
   private _handleStopClick(): void {
-    this.collapse();
+    void this.collapse();
   }
 
   override render() {
@@ -665,7 +665,7 @@ export class QrScanner extends LitElement {
         ${this.error
           ? html`<error-display
               .augmentedError=${this.error}
-              .action=${{ label: 'Try Again', onClick: () => { this.error = undefined; this.expand(); } }}
+              .action=${{ label: 'Try Again', onClick: () => { this.error = undefined; void this.expand(); } }}
             ></error-display>`
           : nothing}
 

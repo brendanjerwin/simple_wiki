@@ -62,4 +62,6 @@ document.addEventListener('orders-dismissed', async () => {
   setStatus('Dismissed', '');
 });
 
-loadPendingOrders();
+loadPendingOrders().catch(err => {
+  setStatus(err instanceof Error ? err.message : String(err), 'error');
+});

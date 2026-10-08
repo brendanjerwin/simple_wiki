@@ -107,8 +107,8 @@ browser.runtime.onMessage.addListener((
     case 'ORDERS_DETECTED':
       console.debug('[Simple Wiki Companion] Orders detected:', msg.orders.length);
       pendingOrders = msg.orders;
-      browser.browserAction.setBadgeText({ text: String(pendingOrders.length) });
-      browser.browserAction.setBadgeBackgroundColor({ color: '#43a047' });
+      void browser.browserAction.setBadgeText({ text: String(pendingOrders.length) });
+      void browser.browserAction.setBadgeBackgroundColor({ color: '#43a047' });
       return undefined;
 
     case 'GET_PENDING':
@@ -135,11 +135,14 @@ browser.runtime.onMessage.addListener((
     case 'DISMISS':
       console.debug('[Simple Wiki Companion] Dismissed pending orders');
       pendingOrders = [];
-      browser.browserAction.setBadgeText({ text: '' });
+      void browser.browserAction.setBadgeText({ text: '' });
       return undefined;
 
     case 'WIKI_URL_DETECTED':
-      handleWikiUrlDetected(msg.wikiUrl);
+      handleWikiUrlDetected(msg.wikiUrl).catch(() => {
+        void browser.browserAction.setBadgeText({ text: '!' });
+        void browser.browserAction.setBadgeBackgroundColor({ color: '#c62828' });
+      });
       return undefined;
 
     default:

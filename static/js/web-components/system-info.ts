@@ -177,7 +177,7 @@ export class SystemInfo extends DrawerMixin(LitElement) implements AmbientCTA {
   override connectedCallback(): void {
     super.connectedCallback();
     this._ambientCTACleanup = registerAmbientCTA(this);
-    this.loadSystemInfo();
+    void this.loadSystemInfo();
     document.addEventListener('click', this._handleClickOutside);
     document.addEventListener('page-status-changed', this._handlePageStatusChanged);
   }
@@ -274,9 +274,9 @@ export class SystemInfo extends DrawerMixin(LitElement) implements AmbientCTA {
     this.debounceTimer = setTimeout(() => {
       // If we're streaming, just reload version info, otherwise reload everything
       if (this.streamSubscription) {
-        this.reloadVersionOnly();
+        void this.reloadVersionOnly();
       } else {
-        this.loadSystemInfo();
+        void this.loadSystemInfo();
       }
     }, SystemInfo.DEBOUNCE_DELAY);
   }
@@ -301,7 +301,7 @@ export class SystemInfo extends DrawerMixin(LitElement) implements AmbientCTA {
       SystemInfo.IDLE_REFRESH_INTERVAL;
     
     this.refreshTimer = setInterval(() => {
-      this.loadSystemInfo();
+      void this.loadSystemInfo();
     }, interval);
   }
 
@@ -325,7 +325,7 @@ export class SystemInfo extends DrawerMixin(LitElement) implements AmbientCTA {
       // Use streaming if any jobs are active, otherwise use polling
       const hasActiveJobs = this.jobStatus.jobQueues.some(queue => queue.isActive);
       if (hasActiveJobs) {
-        this.startJobStream();
+        void this.startJobStream();
       } else {
         this.startAutoRefresh();
       }

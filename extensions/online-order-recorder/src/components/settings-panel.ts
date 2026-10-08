@@ -55,6 +55,10 @@ export class SettingsPanel extends LitElement {
       color: #1565c0;
     }
 
+    .status-msg.error {
+      color: #c62828;
+    }
+
     .reset-link {
       font-size: 11px;
       color: #1565c0;
@@ -79,6 +83,9 @@ export class SettingsPanel extends LitElement {
   @state()
   declare showAutoDetected: boolean;
 
+  @state()
+  declare loadError: Error | null;
+
   private readonly _storageListener = this._handleStorageChanged.bind(this);
 
   constructor() {
@@ -87,11 +94,14 @@ export class SettingsPanel extends LitElement {
     this.showSaved = false;
     this.isManuallySet = false;
     this.showAutoDetected = false;
+    this.loadError = null;
   }
 
   override connectedCallback(): void {
     super.connectedCallback();
-    this._loadSettings();
+    this._loadSettings().catch(err => {
+      this.loadError = err instanceof Error ? err : new Error(String(err));
+    });
     browser.storage.onChanged.addListener(this._storageListener);
   }
 
@@ -154,6 +164,7 @@ export class SettingsPanel extends LitElement {
       </div>
       ${this.showSaved ? html`<div class="status-msg saved">Saved (manual)</div>` : nothing}
       ${this.showAutoDetected ? html`<div class="status-msg auto-detected">Auto-detected from wiki</div>` : nothing}
+      ${this.loadError ? html`<div class="status-msg error">Settings unavailable: ${this.loadError.message}</div>` : nothing}
       ${this.isManuallySet ? html`<button class="reset-link" @click=${this._handleResetToAutoDetect}>Reset to auto-detect</button>` : nothing}
     `;
   }

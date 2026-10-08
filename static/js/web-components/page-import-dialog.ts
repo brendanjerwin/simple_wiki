@@ -643,7 +643,7 @@ export class PageImportDialog extends NativeDialogMixin(LitElement) {
     this.error = null;
 
     // Automatically trigger parsing
-    this._handleParse();
+    void this._handleParse();
   }
 
   private readonly _handleSelectFileClick = (): void => {
@@ -705,7 +705,7 @@ export class PageImportDialog extends NativeDialogMixin(LitElement) {
       this.importedCount = response.recordCount;
 
       // Start streaming job status for the UI - fire and forget
-      this._streamJobStatus();
+      void this._streamJobStatus();
     } catch (err) {
       this.error = AugmentErrorService.augmentError(err, 'importing pages');
       this.dialogState = 'preview';

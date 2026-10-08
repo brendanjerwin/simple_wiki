@@ -86,6 +86,22 @@ describe('popup', () => {
 
   describe('loadPendingOrders', () => {
 
+    describe('when sendMessage rejects on load', () => {
+      beforeEach(async () => {
+        sendMessage.mockRejectedValue(new Error('Extension context unavailable'));
+
+        await importPopup();
+      });
+
+      it('should display error in status element', () => {
+        expect(statusEl.textContent).to.equal('Extension context unavailable');
+      });
+
+      it('should set status className to error', () => {
+        expect(statusEl.className).to.equal('error');
+      });
+    });
+
     describe('when module loads with pending orders', () => {
       beforeEach(async () => {
         const testOrders = [makeOrder()];

@@ -228,7 +228,7 @@ export class InventoryAddItemDialog extends LitElement {
     this.open = true;
 
     // Reset and focus the automagic identifier input after render
-    this.updateComplete.then(() => {
+    void this.updateComplete.then(() => {
       const identifierInput = this.shadowRoot?.querySelector<AutomagicIdentifierInput>('automagic-identifier-input');
       identifierInput?.reset();
       identifierInput?.focusTitleInput();
@@ -282,7 +282,7 @@ export class InventoryAddItemDialog extends LitElement {
     }
 
     this._searchDebounceTimer = setTimeout(() => {
-      this._performSearch(title);
+      void this._performSearch(title);
     }, this._debounceTimeoutMs);
   };
 
