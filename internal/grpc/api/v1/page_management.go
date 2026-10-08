@@ -653,6 +653,13 @@ func (s *Server) CreatePage(ctx context.Context, req *apiv1.CreatePageRequest) (
 		return nil, status.Errorf(codes.Internal, failedToWriteMarkdownErrFmt, err)
 	}
 
+	// Invariant check: read back the stored content to verify the write was not silently dropped.
+	// If the stored content is empty after a successful write, attempt a best-effort re-write and
+	// surface the error so the caller can retry rather than believing the page was created with content.
+	if _, verifyErr := s.verifyStoredContent(ctx, wikipage.PageIdentifier(identifier), wikipage.Markdown(markdown)); verifyErr != nil {
+		return nil, verifyErr
+	}
+
 	return &apiv1.CreatePageResponse{
 		Success: true,
 	}, nil
