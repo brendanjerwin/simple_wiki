@@ -233,6 +233,9 @@ func (m *MockPageReaderMutator) ReadMarkdown(identifier wikipage.PageIdentifier)
 		if m.PostWriteMarkdown != nil {
 			return identifier, *m.PostWriteMarkdown, nil
 		}
+		// No post-write overrides: return the content that was written.
+		// Once a write has occurred, the page "exists" regardless of m.Err.
+		return identifier, m.Markdown, nil
 	}
 	if m.Err != nil {
 		return "", "", m.Err
@@ -5973,6 +5976,39 @@ var _ = Describe("Server", func() {
 
 			It("should not write any frontmatter", func() {
 				Expect(mockPageReaderMutator.WrittenFrontmatter).To(BeNil())
+			})
+		})
+
+		When("the post-write read-back shows empty content (invariant violation)", func() {
+			BeforeEach(func() {
+				mockPageReaderMutator.Err = os.ErrNotExist
+				req.ContentMarkdown = "# Custom Content\n\nThis is my page."
+				empty := wikipage.Markdown("")
+				mockPageReaderMutator.PostWriteMarkdown = &empty
+			})
+
+			It("should return an internal gRPC error", func() {
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.Internal, "invariant violation"))
+			})
+
+			It("should return no response", func() {
+				Expect(resp).To(BeNil())
+			})
+		})
+
+		When("the post-write read-back fails with an error", func() {
+			BeforeEach(func() {
+				mockPageReaderMutator.Err = os.ErrNotExist
+				req.ContentMarkdown = "# Custom Content\n\nThis is my page."
+				mockPageReaderMutator.PostWriteMarkdownReadErr = errors.New("storage failure")
+			})
+
+			It("should return an internal gRPC error", func() {
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.Internal, "failed to verify stored content after write"))
+			})
+
+			It("should return no response", func() {
+				Expect(resp).To(BeNil())
 			})
 		})
 	})
