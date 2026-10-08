@@ -159,13 +159,19 @@ func (s *Store) readRawTextLocked(identifier string) (string, error) {
 // canonicalizer (Phase 3 default), input is unchanged; with the format
 // canonicalizer (Phase 4 wiring), YAML→TOML conversion etc. happens here.
 // A canonicalizer error fails the write — it's never silently dropped.
+//
+// The write path mirrors the read path: getFilePaths munges the identifier
+// so that slug forms (e.g. "slop-bowls") and identifier forms (e.g.
+// "slop_bowls") resolve to the same on-disk file. Without this, a write
+// with the slug form would silently create a new orphan file and leave the
+// existing page unchanged.
 func (s *Store) writeRawTextLocked(identifier, text string) error {
 	canonical, err := s.canonicalizer.Canonicalize([]byte(text))
 	if err != nil {
 		return fmt.Errorf("canonicalize page %s before write: %w", identifier, err)
 	}
-	filePath := path.Join(s.pathToData, base32tools.EncodeToBase32(strings.ToLower(identifier))+".md")
-	if err := os.WriteFile(filePath, canonical, 0o644); err != nil {
+	mungedPath, _, _ := s.getFilePaths(identifier, mdExtension)
+	if err := os.WriteFile(mungedPath, canonical, 0o644); err != nil {
 		return fmt.Errorf("failed to save page %s: %w", identifier, err)
 	}
 	return nil

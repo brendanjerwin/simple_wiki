@@ -16,6 +16,7 @@ import (
 		"github.com/brendanjerwin/simple_wiki/pkg/jobs"
 	"github.com/brendanjerwin/simple_wiki/utils/base32tools"
 	"github.com/brendanjerwin/simple_wiki/utils/goldmarkrenderer"
+	"github.com/brendanjerwin/simple_wiki/wikiidentifiers"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 	"github.com/jcelliott/lumber"
 	. "github.com/onsi/ginkgo/v2"
@@ -240,7 +241,11 @@ test content`
 			})
 
 			It("should write the page to disk", func() {
-				pagePath := filepath.Join(tempDir, base32tools.EncodeToBase32(strings.ToLower(page.Identifier))+".md")
+				// Use the munged identifier to find the file — writeRawTextLocked now
+				// normalises slugs (hyphens) to identifiers (underscores) before writing.
+				munged, mungeErr := wikiidentifiers.MungeIdentifier(page.Identifier)
+				Expect(mungeErr).NotTo(HaveOccurred())
+				pagePath := filepath.Join(tempDir, base32tools.EncodeToBase32(strings.ToLower(munged))+".md")
 				content, readErr := os.ReadFile(pagePath)
 				Expect(readErr).NotTo(HaveOccurred())
 				Expect(string(content)).To(Equal(page.Text))

@@ -83,6 +83,100 @@ var _ = Describe("Store", func() {
 		})
 	})
 
+	Describe("slug-form writes (hyphen vs underscore normalization)", func() {
+		// Regression for issue #1155: writeRawTextLocked used the raw identifier
+		// for the file path, so writing with a slug form (hyphens) created an
+		// orphan file instead of updating the canonical page (underscores).
+		// The fix uses getFilePaths (which munges) for writes, mirroring reads.
+
+		When("a page is created via the identifier form and then written via the slug form", func() {
+			var (
+				readMarkdown wikipage.Markdown
+				readErr      error
+			)
+
+			BeforeEach(func() {
+				// Create the page under the canonical identifier form.
+				Expect(store.WriteMarkdown("slop_bowls", "original body\n", wikipage.AnonymousIdentity)).To(Succeed())
+
+				// Update the page via the slug form (hyphen). Before the fix this
+				// silently created an orphan file instead of updating slop_bowls.
+				Expect(store.WriteMarkdown("slop-bowls", "updated body\n", wikipage.AnonymousIdentity)).To(Succeed())
+
+				// Read back via the canonical identifier form.
+				var page *wikipage.Page
+				page, readErr = store.ReadPage("slop_bowls")
+				Expect(readErr).NotTo(HaveOccurred())
+				readMarkdown, readErr = page.GetMarkdown()
+			})
+
+			It("should not return an error on read-back", func() {
+				Expect(readErr).NotTo(HaveOccurred())
+			})
+
+			It("should reflect the updated content on the canonical identifier", func() {
+				Expect(string(readMarkdown)).To(Equal("updated body\n"))
+			})
+		})
+
+		When("a page is created via the slug form", func() {
+			var (
+				readMarkdown wikipage.Markdown
+				readErr      error
+			)
+
+			BeforeEach(func() {
+				// Write using the slug form only.
+				Expect(store.WriteMarkdown("my-page", "slug body\n", wikipage.AnonymousIdentity)).To(Succeed())
+
+				// Read back via the munged identifier form.
+				var page *wikipage.Page
+				page, readErr = store.ReadPage("my_page")
+				Expect(readErr).NotTo(HaveOccurred())
+				readMarkdown, readErr = page.GetMarkdown()
+			})
+
+			It("should not return an error on read-back", func() {
+				Expect(readErr).NotTo(HaveOccurred())
+			})
+
+			It("should be readable via the identifier form", func() {
+				Expect(string(readMarkdown)).To(Equal("slug body\n"))
+			})
+		})
+
+		When("the slug form is used to modify a page that was created under the identifier form", func() {
+			var (
+				readMarkdown wikipage.Markdown
+				readErr      error
+			)
+
+			BeforeEach(func() {
+				// Create page under identifier form.
+				Expect(store.WriteMarkdown("wiki_page", "v1\n", wikipage.AnonymousIdentity)).To(Succeed())
+
+				// Modify via ModifyMarkdown with the slug form.
+				modErr := store.ModifyMarkdown("wiki-page", func(md wikipage.Markdown) (wikipage.Markdown, error) {
+					return "v2\n", nil
+				}, wikipage.AnonymousIdentity)
+				Expect(modErr).NotTo(HaveOccurred())
+
+				var page *wikipage.Page
+				page, readErr = store.ReadPage("wiki_page")
+				Expect(readErr).NotTo(HaveOccurred())
+				readMarkdown, readErr = page.GetMarkdown()
+			})
+
+			It("should not return an error on read-back", func() {
+				Expect(readErr).NotTo(HaveOccurred())
+			})
+
+			It("should reflect the modification on the canonical identifier", func() {
+				Expect(string(readMarkdown)).To(Equal("v2\n"))
+			})
+		})
+	})
+
 	Describe("WriteFrontMatter + ReadFrontMatter round trip", func() {
 		var roundTripped wikipage.FrontMatter
 

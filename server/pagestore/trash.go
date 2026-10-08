@@ -187,13 +187,27 @@ func (s *Store) SoftDeletePageBy(id wikipage.PageIdentifier, deletedBy string, i
 	defer unlock()
 
 	now := time.Now().UTC()
-	mdPath := filepath.Join(s.pathToData, base32tools.EncodeToBase32(strings.ToLower(identifier))+".md")
-	rawText, readErr := os.ReadFile(mdPath)
+
+	// Resolve the actual on-disk path: try the canonical munged path first,
+	// then fall back to the raw-identifier path for legacy pre-munge files.
+	// This mirrors the read path in readRawTextLocked so that delete works
+	// regardless of which spelling was used when the page was created.
+	mungedPath, originalPath, _ := s.getFilePaths(identifier, mdExtension)
+	mdPath := mungedPath
+	rawText, readErr := os.ReadFile(mungedPath)
 	if readErr != nil {
-		if os.IsNotExist(readErr) {
-			return os.ErrNotExist
+		if !os.IsNotExist(readErr) {
+			return fmt.Errorf("failed to read Markdown file for page %s before trashing: %w", identifier, readErr)
 		}
-		return fmt.Errorf("failed to read Markdown file for page %s before trashing: %w", identifier, readErr)
+		// Fall back to the original (non-munged) path for legacy files.
+		rawText, readErr = os.ReadFile(originalPath)
+		if readErr != nil {
+			if os.IsNotExist(readErr) {
+				return os.ErrNotExist
+			}
+			return fmt.Errorf("failed to read Markdown file for page %s before trashing: %w", identifier, readErr)
+		}
+		mdPath = originalPath
 	}
 
 	// History capture failure must not block the delete.
