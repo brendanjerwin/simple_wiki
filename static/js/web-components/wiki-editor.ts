@@ -309,7 +309,7 @@ export class WikiEditor extends LitElement {
         const request = create(UpdateWholePageRequestSchema, {
           page: this.page,
           newWholeMarkdown: content,
-          expectedVersionHash: this.versionHash || undefined,
+          ...(this.versionHash ? { expectedVersionHash: this.versionHash } : {}),
         });
         const response = await this.client.updateWholePage(request);
 
