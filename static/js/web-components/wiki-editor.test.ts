@@ -54,13 +54,14 @@ function stubReadPage(
 function stubUpdateWholePage(
   target: WikiEditor,
   success = true,
-  error = ''
+  error = '',
+  versionHash = 'new-hash'
 ): SinonStub {
   const internal = target as unknown as WikiEditorInternal;
   return sinon
     .stub(internal.client, 'updateWholePage')
     .resolves(
-      create(UpdateWholePageResponseSchema, { success, error })
+      create(UpdateWholePageResponseSchema, { success, error, versionHash })
     );
 }
 
@@ -356,7 +357,67 @@ describe('WikiEditor', () => {
         it('should show Saved in the status bar', () => {
           expect(statusIndicator?.textContent?.trim()).to.contain('Saved');
         });
+
+        it('should pass the stored version hash in the request', () => {
+          const callArgs = updateStub.firstCall.args[0] as {
+            expectedVersionHash: string | undefined;
+          };
+          expect(callArgs.expectedVersionHash).to.equal('hash1');
+        });
+
+        it('should update the stored version hash from the response', () => {
+          expect((el as unknown as WikiEditorInternal).versionHash).to.equal('new-hash');
+        });
       });
+    });
+  });
+
+  describe('when two saves are chained (second save uses hash from first response)', () => {
+    let clock: SinonFakeTimers;
+    let updateStub: SinonStub;
+
+    beforeEach(async () => {
+      clock = sinon.useFakeTimers({
+        shouldAdvanceTime: true,
+        shouldClearNativeTimers: true,
+      });
+      el = buildElement();
+      stubReadPage(el, '# Hello', '', 'initial-hash');
+      updateStub = stubUpdateWholePage(el, true, '', 'second-hash');
+      document.body.appendChild(el);
+      await waitUntil(
+        () => !(el as unknown as WikiEditorInternal).loading,
+        'should finish loading',
+        { timeout: 5000 }
+      );
+      await el.updateComplete;
+
+      // First save
+      const textarea = el.shadowRoot!.querySelector('textarea')!;
+      textarea.value = '# First Edit';
+      textarea.dispatchEvent(new Event('input', { bubbles: true }));
+      await clock.tickAsync(500);
+      await el.updateComplete;
+
+      // Second save
+      textarea.value = '# Second Edit';
+      textarea.dispatchEvent(new Event('input', { bubbles: true }));
+      await clock.tickAsync(500);
+      await el.updateComplete;
+    });
+
+    afterEach(() => {
+      clock.restore();
+    });
+
+    it('should send the initial hash on the first save', () => {
+      const firstArgs = updateStub.firstCall.args[0] as { expectedVersionHash: string | undefined };
+      expect(firstArgs.expectedVersionHash).to.equal('initial-hash');
+    });
+
+    it('should send the hash from the first response on the second save', () => {
+      const secondArgs = updateStub.secondCall.args[0] as { expectedVersionHash: string | undefined };
+      expect(secondArgs.expectedVersionHash).to.equal('second-hash');
     });
   });
 

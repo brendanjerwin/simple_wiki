@@ -331,7 +331,14 @@ func (m *MockPageReaderMutator) ModifyFrontMatterAndMarkdown(identifier wikipage
 		}
 	}
 
-	newFM, newMD, err := modifier(currentFM, m.Markdown)
+	// Allow tests to simulate a concurrent modification that happened between ReadMarkdown
+	// and ModifyFrontMatterAndMarkdown — the same TOCTOU simulation as ModifyMarkdown.
+	currentMD := m.Markdown
+	if m.ConcurrentModificationMarkdown != nil {
+		currentMD = *m.ConcurrentModificationMarkdown
+	}
+
+	newFM, newMD, err := modifier(currentFM, currentMD)
 	if err != nil {
 		return err
 	}
@@ -2959,7 +2966,7 @@ var _ = Describe("Server", func() {
 			})
 
 			It("should return an internal error and no response", func() {
-				Expect(err).To(HaveGrpcStatusWithSubstr(codes.Internal, "failed to write frontmatter"))
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.Internal, "failed to write page"))
 				Expect(resp).To(BeNil())
 			})
 		})
@@ -2970,7 +2977,7 @@ var _ = Describe("Server", func() {
 			})
 
 			It("should return an internal error and no response", func() {
-				Expect(err).To(HaveGrpcStatusWithSubstr(codes.Internal, "failed to write markdown"))
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.Internal, "failed to write page"))
 				Expect(resp).To(BeNil())
 			})
 		})
@@ -2986,6 +2993,11 @@ var _ = Describe("Server", func() {
 				Expect(resp.Error).To(BeEmpty())
 			})
 
+			It("should return the version_hash of the written markdown", func() {
+				expectedHash := fmt.Sprintf("%x", sha256.Sum256([]byte("# New Content")))
+				Expect(resp.VersionHash).To(Equal(expectedHash))
+			})
+
 			It("should write frontmatter with identifier preserved", func() {
 				Expect(mockPageReaderMutator.WrittenFrontmatter).To(HaveKeyWithValue("title", "New Title"))
 				Expect(mockPageReaderMutator.WrittenFrontmatter).To(HaveKeyWithValue("identifier", "test-page"))
@@ -2993,6 +3005,76 @@ var _ = Describe("Server", func() {
 
 			It("should write the markdown content", func() {
 				Expect(mockPageReaderMutator.WrittenMarkdown).To(Equal(wikipage.Markdown("# New Content")))
+			})
+		})
+
+		// Issue #1134: version hash validation prevents silent data loss on concurrent edits.
+		When("a correct expected_version_hash is supplied", func() {
+			BeforeEach(func() {
+				existingContent := wikipage.Markdown("# Old Content")
+				mockPageReaderMutator.Markdown = existingContent
+				existingHash := fmt.Sprintf("%x", sha256.Sum256([]byte(existingContent)))
+				req.ExpectedVersionHash = &existingHash
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should return a success response", func() {
+				Expect(resp).NotTo(BeNil())
+				Expect(resp.Success).To(BeTrue())
+			})
+
+			It("should write the new markdown content", func() {
+				Expect(mockPageReaderMutator.WrittenMarkdown).To(Equal(wikipage.Markdown("# New Content")))
+			})
+		})
+
+		When("an incorrect expected_version_hash is supplied", func() {
+			BeforeEach(func() {
+				mockPageReaderMutator.Markdown = wikipage.Markdown("# Old Content")
+				staleHash := fmt.Sprintf("%x", sha256.Sum256([]byte("# Stale Content")))
+				req.ExpectedVersionHash = &staleHash
+			})
+
+			It("should return an Aborted error", func() {
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.Aborted, "content version mismatch"))
+			})
+
+			It("should not return a response", func() {
+				Expect(resp).To(BeNil())
+			})
+
+			It("should not write any content", func() {
+				Expect(mockPageReaderMutator.WrittenMarkdown).To(BeEmpty())
+			})
+		})
+
+		// TOCTOU fix verification: the hash check is inside ModifyMarkdown (atomic with the write),
+		// so a concurrent modification between the wipe-guard read and the write is detected.
+		When("the page is concurrently modified between the wipe-guard read and the atomic write", func() {
+			BeforeEach(func() {
+				originalContent := wikipage.Markdown("# Original Content")
+				mockPageReaderMutator.Markdown = originalContent
+				originalHash := fmt.Sprintf("%x", sha256.Sum256([]byte(originalContent)))
+				req.ExpectedVersionHash = &originalHash
+
+				// Simulate a concurrent write: ModifyMarkdown sees different content under the lock.
+				concurrentContent := wikipage.Markdown("# Concurrently Modified Content")
+				mockPageReaderMutator.ConcurrentModificationMarkdown = &concurrentContent
+			})
+
+			It("should detect the version mismatch and return Aborted", func() {
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.Aborted, "content version mismatch"))
+			})
+
+			It("should not return a response", func() {
+				Expect(resp).To(BeNil())
+			})
+
+			It("should not write any content", func() {
+				Expect(mockPageReaderMutator.WrittenMarkdown).To(BeEmpty())
 			})
 		})
 

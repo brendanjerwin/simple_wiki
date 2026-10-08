@@ -30,8 +30,9 @@ service PageManagementService {
     option (api.v1.description) =
         "Read a page's raw markdown, TOML frontmatter, and template-expanded "
         "markdown. Returns a version_hash usable as expected_version_hash on "
-        "subsequent UpdatePageContent calls. HTML is not included in the "
-        "response; use RenderPage to obtain rendered HTML when needed.";
+        "subsequent UpdatePageContent or UpdateWholePage calls. HTML is not "
+        "included in the response; use RenderPage to obtain rendered HTML "
+        "when needed.";
     option (api.v1.read_only) = true;
   }
 
@@ -72,7 +73,10 @@ service PageManagementService {
         "LAST RESORT: replace a page using a single markdown document that "
         "includes its frontmatter delimiters (+++...+++). Frontmatter and "
         "body are split on the server. Avoid this on large pages — it "
-        "re-sends the entire document and risks clobbering concurrent edits. "
+        "re-sends the entire document. Pass the version_hash from a prior "
+        "ReadPage call as expected_version_hash to detect concurrent edits; "
+        "the server returns ABORTED on a version conflict. Omit "
+        "expected_version_hash to skip version checking (not recommended). "
         "Prefer UpdatePageContent for body-only edits or UpdatePage when you "
         "must change both frontmatter and body.";
   }
@@ -280,11 +284,18 @@ message ClearPageContentResponse {
 message UpdateWholePageRequest {
   string page = 1;
   string new_whole_markdown = 2; // Markdown including front matter
+  // expected_version_hash is the version_hash from a previous ReadPage call.
+  // If provided, the write will fail with ABORTED if the content has changed since the read.
+  // Omit to skip version checking (not recommended for concurrent access scenarios).
+  optional string expected_version_hash = 3;
 }
 
 message UpdateWholePageResponse {
   bool success = 1;
   string error = 2;
+  // version_hash is the SHA256 hash of the newly written markdown content.
+  // Use this as expected_version_hash in the next UpdateWholePageRequest.
+  string version_hash = 3;
 }
 
 // Delete Page

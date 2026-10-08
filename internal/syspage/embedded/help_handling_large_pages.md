@@ -33,9 +33,11 @@ Use `api_v1_PageManagementService_ReadPage` only when you truly need the whole m
 
 When editing one section, prefer `api_v1_PageManagementService_UpdatePageContent` with `old_content_markdown`, `new_content_markdown`, and `expected_version_hash`. The `old_content_markdown` should come from `ReadPageSection` when possible. That keeps the edit small and avoids rewriting unrelated content.
 
-## UpdateWholePage circuit breaker
+## UpdateWholePage circuit breaker and version safety
 
-`api_v1_PageManagementService_UpdateWholePage` replaces the entire page (frontmatter + markdown). It now rejects writes where the new content is less than 50% of the existing page size, returning `FailedPrecondition` with the sizes and a pointer to safer tools. This prevents accidental page wipes when a partial payload is sent (e.g., just the header).
+`api_v1_PageManagementService_UpdateWholePage` replaces the entire page (frontmatter + markdown). It rejects writes where the new content is less than 10% of the existing page size (and the page is at least 1 KB), returning `FailedPrecondition` with the sizes and a pointer to safer tools. This prevents accidental page wipes when a partial payload is sent (e.g., just the header).
+
+**Version hash (concurrent-edit protection)**: Pass the `version_hash` from a prior `ReadPage` call as `expected_version_hash` in the request. If the page has been modified since that read, the server returns `ABORTED` instead of silently overwriting. Omitting `expected_version_hash` skips the check (not recommended when another agent or user may be editing). The response always includes the new `version_hash` after a successful write, so callers can chain successive edits safely.
 
 For partial edits, use `UpdatePageContent` with `expected_version_hash`. For frontmatter-only changes, use `MergeFrontmatter` or `RemoveKeyAtPath`. To clear the body explicitly, use `ClearPageContent` with `confirm_clear=true`. Reserve `UpdateWholePage` for genuine full rewrites — and when you do, send the complete content.
 
