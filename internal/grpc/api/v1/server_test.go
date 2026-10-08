@@ -328,7 +328,14 @@ func (m *MockPageReaderMutator) ModifyFrontMatterAndMarkdown(identifier wikipage
 		}
 	}
 
-	newFM, newMD, err := modifier(currentFM, m.Markdown)
+	// Allow tests to simulate a concurrent modification that happened between ReadMarkdown
+	// and ModifyFrontMatterAndMarkdown — the same TOCTOU simulation as ModifyMarkdown.
+	currentMD := m.Markdown
+	if m.ConcurrentModificationMarkdown != nil {
+		currentMD = *m.ConcurrentModificationMarkdown
+	}
+
+	newFM, newMD, err := modifier(currentFM, currentMD)
 	if err != nil {
 		return err
 	}
@@ -2956,7 +2963,7 @@ var _ = Describe("Server", func() {
 			})
 
 			It("should return an internal error and no response", func() {
-				Expect(err).To(HaveGrpcStatusWithSubstr(codes.Internal, "failed to write frontmatter"))
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.Internal, "failed to write page"))
 				Expect(resp).To(BeNil())
 			})
 		})
@@ -2967,7 +2974,7 @@ var _ = Describe("Server", func() {
 			})
 
 			It("should return an internal error and no response", func() {
-				Expect(err).To(HaveGrpcStatusWithSubstr(codes.Internal, "failed to write markdown"))
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.Internal, "failed to write page"))
 				Expect(resp).To(BeNil())
 			})
 		})

@@ -309,6 +309,7 @@ export class WikiEditor extends LitElement {
         const request = create(UpdateWholePageRequestSchema, {
           page: this.page,
           newWholeMarkdown: content,
+          expectedVersionHash: this.versionHash || undefined,
         });
         const response = await this.client.updateWholePage(request);
 
@@ -318,6 +319,7 @@ export class WikiEditor extends LitElement {
             error: new Error(response.error || 'Save failed'),
           };
         }
+        this.versionHash = response.versionHash;
         return { success: true };
       },
       (status, err) => {

@@ -771,6 +771,20 @@ func (s *Server) ClearPageContent(ctx context.Context, req *apiv1.ClearPageConte
 	return &apiv1.ClearPageContentResponse{Success: true}, nil
 }
 
+// pageAtomicModifier supports atomic replacement of both frontmatter and markdown in a
+// single write operation, preventing TOCTOU races between concurrent writers.
+type pageAtomicModifier interface {
+	ModifyFrontMatterAndMarkdown(identifier wikipage.PageIdentifier, modifier func(wikipage.FrontMatter, wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error), identity wikipage.Identity) error
+}
+
+func requirePageAtomicModifier(prm wikipage.PageReaderMutator) (pageAtomicModifier, error) {
+	am, ok := prm.(pageAtomicModifier)
+	if !ok {
+		return nil, status.Error(codes.Internal, "atomic page modification not supported by store")
+	}
+	return am, nil
+}
+
 // UpdateWholePage implements the UpdateWholePage RPC.
 // Replaces the full content of an existing page, including its frontmatter.
 // The new_whole_markdown field must contain the complete page text (frontmatter + markdown).
@@ -800,7 +814,6 @@ func (s *Server) UpdateWholePage(ctx context.Context, req *apiv1.UpdateWholePage
 		return nil, guardErr
 	}
 
-	// Parse frontmatter and markdown from the combined content
 	page := &wikipage.Page{
 		Identifier: req.Page,
 		Text:       req.NewWholeMarkdown,
@@ -826,13 +839,18 @@ func (s *Server) UpdateWholePage(ctx context.Context, req *apiv1.UpdateWholePage
 	}
 	fm[identifierKey] = req.Page
 
-	modifyErr := s.pageReaderMutator.ModifyMarkdown(
+	atomicMod, amErr := requirePageAtomicModifier(s.pageReaderMutator)
+	if amErr != nil {
+		return nil, amErr
+	}
+
+	modifyErr := atomicMod.ModifyFrontMatterAndMarkdown(
 		wikipage.PageIdentifier(req.Page),
-		func(currentMarkdown wikipage.Markdown) (wikipage.Markdown, error) {
+		func(_ wikipage.FrontMatter, currentMarkdown wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error) {
 			if err := checkContentVersionHash(currentMarkdown, req.ExpectedVersionHash); err != nil {
-				return "", err
+				return nil, "", err
 			}
-			return md, nil
+			return fm, md, nil
 		},
 		tailscale.IdentityFromContext(ctx),
 	)
@@ -840,11 +858,7 @@ func (s *Server) UpdateWholePage(ctx context.Context, req *apiv1.UpdateWholePage
 		if _, ok := status.FromError(modifyErr); ok {
 			return nil, modifyErr
 		}
-		return nil, status.Errorf(codes.Internal, failedToWriteMarkdownErrFmt, modifyErr)
-	}
-
-	if err := s.pageReaderMutator.WriteFrontMatter(wikipage.PageIdentifier(req.Page), wikipage.FrontMatter(fm), tailscale.IdentityFromContext(ctx)); err != nil {
-		return nil, status.Errorf(codes.Internal, failedToWriteFrontmatterErrFmt, err)
+		return nil, status.Errorf(codes.Internal, "failed to write page: %v", modifyErr)
 	}
 
 	return &apiv1.UpdateWholePageResponse{
