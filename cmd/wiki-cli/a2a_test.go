@@ -1128,8 +1128,8 @@ var _ = Describe("a2aServer progress mirroring", func() {
 		close(sink)
 		Eventually(done, time.Second).Should(BeClosed())
 		srv.mu.Lock()
-		// Sinks carry the ACCUMULATED turn text, so the final mirror is
-		// everything the agent streamed so far — not only the last chunk.
+		// For short turns (under a2aProgressMaxRunes), the sink carries the
+		// full turn text — not only the last chunk.
 		Expect(t.ProgressText).To(Equal("first second"))
 		srv.mu.Unlock()
 		Expect(client.finalText()).To(Equal("first second"))
@@ -1141,6 +1141,53 @@ var _ = Describe("a2aServer progress mirroring", func() {
 		Expect(tr).To(HaveSuffix("TAIL"))
 		Expect(len([]rune(tr))).To(Equal(a2aProgressMaxRunes)) // tail window only
 		Expect(truncateProgress("short")).To(Equal("short"))
+	})
+
+	When("chunks exceed a2aProgressMaxRunes in total", func() {
+		var client *a2aTaskClient
+		var allSinkValues []string
+		var numChunks int
+
+		BeforeEach(func() {
+			const chunkRunes = 50
+			numChunks = (a2aProgressMaxRunes / chunkRunes) + 5 // clearly exceeds the limit
+			sink := make(chan string, numChunks)                // buffered to capture every value
+			client = &a2aTaskClient{task: &a2aTask{}, progressSink: sink}
+			chunkText := strings.Repeat("x", chunkRunes)
+
+			chunkNotif := func(s string) acp.SessionNotification {
+				return acp.SessionNotification{Update: acp.SessionUpdate{AgentMessageChunk: &acp.SessionUpdateAgentMessageChunk{
+					Content: acp.ContentBlock{Text: &acp.ContentBlockText{Text: s, Type: "text"}},
+				}}}
+			}
+			for i := 0; i < numChunks; i++ {
+				Expect(client.SessionUpdate(context.Background(), chunkNotif(chunkText))).To(Succeed())
+			}
+			close(sink)
+
+			allSinkValues = nil
+			for v := range sink {
+				allSinkValues = append(allSinkValues, v)
+			}
+		})
+
+		It("should have received a sink value for every chunk", func() {
+			Expect(allSinkValues).To(HaveLen(numChunks))
+		})
+
+		It("limits every sink payload to a2aProgressMaxRunes runes", func() {
+			for _, v := range allSinkValues {
+				Expect(len([]rune(v))).To(BeNumerically("<=", a2aProgressMaxRunes))
+			}
+		})
+
+		It("prefixes the last tail value with an ellipsis indicating clipping", func() {
+			Expect(allSinkValues[len(allSinkValues)-1]).To(HavePrefix("…"))
+		})
+
+		It("preserves the full accumulated text in finalText", func() {
+			Expect(client.finalText()).To(HaveLen(numChunks * 50))
+		})
 	})
 })
 
