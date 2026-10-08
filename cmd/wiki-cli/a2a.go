@@ -314,6 +314,8 @@ const (
 func (sess *a2aSession) beginTurn() func() string {
 	sess.client.mu.Lock()
 	sess.client.text.Reset()
+	sess.client.rawProgressTail = ""
+	sess.client.progressTruncated = false
 	sess.client.mu.Unlock()
 	return sess.client.finalText
 }
@@ -1113,7 +1115,7 @@ func (s *a2aServer) installProgressSink(client *a2aTaskClient, task *a2aTask) fu
 		defer close(drainDone)
 		for text := range sink {
 			s.mu.Lock()
-			task.ProgressText = truncateProgress(text)
+			task.ProgressText = text // already bounded by appendProgressTail
 			s.mu.Unlock()
 		}
 	}()
@@ -1394,19 +1396,53 @@ func (*a2aServer) writeError(w http.ResponseWriter, id json.RawMessage, code int
 type a2aTaskClient struct {
 	task *a2aTask
 
-	// progressSink, when non-nil, receives the accumulated text after
-	// each chunk append (buffered chan, 1-deep, non-blocking) so the
-	// server can mirror in-flight output onto the task record for
+	// progressSink, when non-nil, receives the bounded tail of accumulated
+	// text after each chunk append (buffered chan, 1-deep, non-blocking) so
+	// the server can mirror in-flight output onto the task record for
 	// tasks/get progress. Drained by a server-side goroutine per task.
 	progressSink chan<- string
 
 	mu   sync.Mutex
 	text strings.Builder
+
+	// rawProgressTail is the raw (no "…" prefix) tail of the last
+	// a2aProgressMaxRunes-1 runes sent to progressSink. progressTruncated
+	// is set once the full turn text exceeds a2aProgressMaxRunes runes, at
+	// which point the sink payload gains a leading "…". Both are reset at
+	// beginTurn and updated under mu. This avoids O(n²) copies of the full
+	// accumulated text on every chunk.
+	rawProgressTail   string
+	progressTruncated bool
+}
+
+// appendProgressTail appends newText to the bounded rolling tail, capping it
+// at a2aProgressMaxRunes-1 raw runes. Must be called with c.mu held.
+func (c *a2aTaskClient) appendProgressTail(newText string) {
+	combined := c.rawProgressTail + newText
+	runes := []rune(combined)
+	const maxRaw = a2aProgressMaxRunes - 1
+	if len(runes) > maxRaw {
+		c.progressTruncated = true
+		c.rawProgressTail = string(runes[len(runes)-maxRaw:])
+	} else {
+		c.rawProgressTail = combined
+	}
+}
+
+// progressSinkValue returns the current bounded tail for progressSink:
+// "…"+rawTail when the full turn text was clipped, rawTail otherwise.
+// Must be called with c.mu held.
+func (c *a2aTaskClient) progressSinkValue() string {
+	if c.progressTruncated {
+		return "…" + c.rawProgressTail
+	}
+	return c.rawProgressTail
 }
 
 // SessionUpdate implements acp.Client. It accumulates agent message chunks;
 // the accumulated text becomes the task's final result. Chunks also feed
-// progressSink (non-blocking) for live progress mirroring.
+// progressSink (non-blocking) for live progress mirroring via a bounded
+// rolling tail, avoiding O(n²) allocations on long turns.
 func (c *a2aTaskClient) SessionUpdate(_ context.Context, n acp.SessionNotification) error {
 	if n.Update.AgentMessageChunk == nil {
 		return nil
@@ -1417,10 +1453,12 @@ func (c *a2aTaskClient) SessionUpdate(_ context.Context, n acp.SessionNotificati
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.text.WriteString(chunk.Content.Text.Text)
+	text := chunk.Content.Text.Text
+	c.text.WriteString(text)
 	if c.progressSink != nil {
+		c.appendProgressTail(text)
 		select {
-		case c.progressSink <- c.text.String():
+		case c.progressSink <- c.progressSinkValue():
 		default: // server-side mirror goroutine is behind; it will catch up
 		}
 	}
