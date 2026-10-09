@@ -102,11 +102,11 @@ func (s *fakeStore) WriteMarkdown(id wikipage.PageIdentifier, md wikipage.Markdo
 
 func (*fakeStore) DeletePage(_ wikipage.PageIdentifier) error { return nil }
 
-func (s *fakeStore) ModifyMarkdown(id wikipage.PageIdentifier, fn func(wikipage.Markdown) (wikipage.Markdown, error), _ wikipage.Identity) error {
+func (s *fakeStore) ModifyMarkdown(id wikipage.PageIdentifier, fn func(wikipage.FrontMatter, wikipage.Markdown) (wikipage.Markdown, error), _ wikipage.Identity) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	current := s.markdown[string(id)]
-	next, err := fn(current)
+	next, err := fn(nil, current)
 	if err != nil {
 		return err
 	}

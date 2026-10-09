@@ -17,6 +17,7 @@ The wiki needs a robust backend that captures every mutation as an immutable ver
 History is captured inside `Store.ModifyOrCreatePage` — the single function through which all write paths flow. While holding the page lock, the **outgoing** content (the state being replaced) is written as a version snapshot **before** the new content overwrites it.
 
 Key invariants:
+
 - The current live file is always the latest version. No version entry duplicates live content.
 - Every version entry represents a state that was *replaced*.
 - No-op writes (identical content) skip capture, avoiding history spam from migration re-saves.
@@ -27,7 +28,7 @@ This trades disk space for robustness and simplicity. Pages are small (KB scale)
 
 ### Storage Layout
 
-```
+```text
 data/__history__/<mungedPageId>/
   <ulid>.md            # full content snapshot
   <ulid>.meta.json     # {version_id, page_identifier, created_at, author, is_agent, source, sha256, byte_size}
@@ -44,6 +45,7 @@ This follows the existing pattern from `checklistmutator` and `mapmutator`, whic
 ### gRPC API
 
 A new `PageHistoryService` exposes:
+
 - `ListPageVersions` — list metadata, newest-first
 - `ReadPageVersion` — read full content of a version
 - `RestorePageVersion` — restore historical content as live (captures current as new version first)
@@ -56,12 +58,14 @@ All read RPCs are marked `read_only`. No manual purge RPCs — decimation is aut
 ### Search Architecture
 
 Two tiers:
+
 1. **Per-page** (`SearchPageHistory`): on-demand scan of the page's `__history__/<id>/` directory. No persistent index needed.
 2. **Global** (`SearchHistory`): persistent Bleve index over all version metadata + bodies, maintained via the existing `IndexCoordinator` job-queue pattern. The index is secondary — history is fully functional without it; it rebuilds from `__history__/` directories.
 
 ### Automatic Decimation
 
 A `HistoryDecimationJob` (cron daily) walks `__history__/` and thins old versions per a GFS retention schedule:
+
 - Keep **all** versions from the last 7 days
 - Keep **1/week** (newest in each ISO week) for the last 26 weeks
 - Keep **1/month** (newest in each calendar month) for the last 5 years

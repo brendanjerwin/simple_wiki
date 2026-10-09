@@ -68,9 +68,9 @@ func (f *fakeStore) DeletePage(id wikipage.PageIdentifier) error {
 	return nil
 }
 
-func (f *fakeStore) ModifyMarkdown(id wikipage.PageIdentifier, modifier func(wikipage.Markdown) (wikipage.Markdown, error), _ wikipage.Identity) error {
+func (f *fakeStore) ModifyMarkdown(id wikipage.PageIdentifier, modifier func(wikipage.FrontMatter, wikipage.Markdown) (wikipage.Markdown, error), _ wikipage.Identity) error {
 	current := f.markdown[id]
-	next, err := modifier(current)
+	next, err := modifier(nil, current)
 	if err != nil {
 		return err
 	}
@@ -390,6 +390,6 @@ func (*explodingStore) WriteMarkdown(_ wikipage.PageIdentifier, _ wikipage.Markd
 
 func (*explodingStore) DeletePage(_ wikipage.PageIdentifier) error { return nil }
 
-func (*explodingStore) ModifyMarkdown(_ wikipage.PageIdentifier, _ func(wikipage.Markdown) (wikipage.Markdown, error), _ wikipage.Identity) error {
+func (*explodingStore) ModifyMarkdown(_ wikipage.PageIdentifier,  _ func(wikipage.FrontMatter, wikipage.Markdown) (wikipage.Markdown, error), _ wikipage.Identity) error {
 	return nil
 }

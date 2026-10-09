@@ -289,7 +289,7 @@ var _ = Describe("Site Page Operations", func() {
 			)
 
 			BeforeEach(func() {
-				modifyErr = s.ModifyMarkdown("some-modify-page", func(_ wikipage.Markdown) (wikipage.Markdown, error) {
+				modifyErr = s.ModifyMarkdown("some-modify-page", func(_ wikipage.FrontMatter, _ wikipage.Markdown) (wikipage.Markdown, error) {
 					return "", modifierErr
 				}, wikipage.AnonymousIdentity)
 			})
@@ -314,14 +314,14 @@ var _ = Describe("Site Page Operations", func() {
 				filePath := filepath.Join(pathToData, base32tools.EncodeToBase32(strings.ToLower(pageIdentifier))+".md")
 				Expect(os.WriteFile(filePath, []byte(malformedContent), 0644)).To(Succeed())
 
-				err = s.ModifyMarkdown(wikipage.PageIdentifier(pageIdentifier), func(md wikipage.Markdown) (wikipage.Markdown, error) {
+				err = s.ModifyMarkdown(wikipage.PageIdentifier(pageIdentifier), func(_ wikipage.FrontMatter, md wikipage.Markdown) (wikipage.Markdown, error) {
 					return md + " extra", nil
 				}, wikipage.AnonymousIdentity)
 			})
 
 			It("should return a parse error", func() {
 				Expect(err).To(HaveOccurred())
-				Expect(err.Error()).To(ContainSubstring("failed to parse markdown for modification"))
+				Expect(err.Error()).To(ContainSubstring("failed to parse frontmatter for markdown modification"))
 			})
 		})
 
@@ -329,7 +329,7 @@ var _ = Describe("Site Page Operations", func() {
 			var err error
 
 			BeforeEach(func() {
-				err = s.ModifyMarkdown("nonexistent-modify-page", func(_ wikipage.Markdown) (wikipage.Markdown, error) {
+				err = s.ModifyMarkdown("nonexistent-modify-page", func(_ wikipage.FrontMatter, _ wikipage.Markdown) (wikipage.Markdown, error) {
 					return "# New Content", nil
 				}, wikipage.AnonymousIdentity)
 			})

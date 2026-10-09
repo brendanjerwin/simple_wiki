@@ -105,7 +105,7 @@ var _ = Describe("pagestore history", func() {
 		When("ModifyMarkdown is used", func() {
 			BeforeEach(func() {
 				Expect(store.WriteMarkdown("test-page", "# Body", wikipage.AnonymousIdentity)).To(Succeed())
-				Expect(store.ModifyMarkdown("test-page", func(md wikipage.Markdown) (wikipage.Markdown, error) {
+				Expect(store.ModifyMarkdown("test-page", func(_ wikipage.FrontMatter, md wikipage.Markdown) (wikipage.Markdown, error) {
 					return md + " modified", nil
 				}, wikipage.AnonymousIdentity)).To(Succeed())
 			})
