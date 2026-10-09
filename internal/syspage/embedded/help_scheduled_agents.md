@@ -104,7 +104,7 @@ Scheduled agents are encouraged to call `api_v1_AgentMetadataService_AppendBackg
 }
 ```
 
-The summary attaches to the newest matching `RUNNING` entry in the log. When the turn reaches a terminal status (`OK`, `ERROR`, `TIMEOUT`, `MAX_TURNS`, or `WARN`), the wiki updates that same entry with the final status and completion timestamp. If the turn reports `OK` without a summary, the wiki records `WARN` instead so operators can see that the audit trail is incomplete.
+The summary attaches to the newest matching `RUNNING` entry in the log. If the scheduler has already transitioned the entry to a terminal status before the summary arrives (e.g. the 10-minute hard timeout fired mid-turn), the wiki falls back to the newest entry for the same `schedule_id` whose summary is still empty — by construction the agent's own just-terminated entry — and attaches the summary there. `NOT_FOUND` is still returned when no such entry exists (before the schedule has fired, after the entry rolled out of the 50-entry ring, or for tasks with no wiki-native schedule). When the turn reaches a terminal status (`OK`, `ERROR`, `TIMEOUT`, `MAX_TURNS`, or `WARN`), the wiki updates that same entry with the final status and completion timestamp. If the turn reports `OK` without a summary, the wiki records `WARN` instead so operators can see that the audit trail is incomplete; a late-attached summary does **not** rewrite a terminal status — `WARN` is left as recorded because it is also emitted for background-task drain timeouts and the entry does not record which cause applied.
 
 The response includes the updated entry so callers can verify the audit write landed:
 

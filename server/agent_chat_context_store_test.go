@@ -467,7 +467,37 @@ var _ = Describe("AgentChatContextStore", func() {
 			})
 		})
 
-		Describe("when only completed entries match the schedule_id", func() {
+		Describe("when only completed entries match the schedule_id and have no summary", func() {
+			var (
+				entry *apiv1.BackgroundActivityEntry
+				err   error
+			)
+
+			BeforeEach(func() {
+				Expect(store.AppendBackgroundActivityAutomatic("p", &apiv1.BackgroundActivityEntry{
+					Timestamp:  timestamppb.New(time.Now()),
+					ScheduleId: "alpha",
+					Status:     apiv1.ScheduleStatus_SCHEDULE_STATUS_OK,
+				})).To(Succeed())
+				entry, err = store.AppendBackgroundActivitySummary("p", "alpha", "late summary")
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should attach the summary to the completed entry", func() {
+				ctx, _ := store.Read("p")
+				Expect(ctx.GetBackgroundActivity()[0].GetSummary()).To(Equal("late summary"))
+			})
+
+			It("should return the updated entry", func() {
+				Expect(entry.GetScheduleId()).To(Equal("alpha"))
+				Expect(entry.GetSummary()).To(Equal("late summary"))
+			})
+		})
+
+		Describe("when the only matching entry already has a summary", func() {
 			var err error
 
 			BeforeEach(func() {
@@ -475,6 +505,7 @@ var _ = Describe("AgentChatContextStore", func() {
 					Timestamp:  timestamppb.New(time.Now()),
 					ScheduleId: "alpha",
 					Status:     apiv1.ScheduleStatus_SCHEDULE_STATUS_OK,
+					Summary:    "already done",
 				})).To(Succeed())
 				_, err = store.AppendBackgroundActivitySummary("p", "alpha", "late summary")
 			})
@@ -484,9 +515,84 @@ var _ = Describe("AgentChatContextStore", func() {
 				Expect(errors.As(err, &typed)).To(BeTrue())
 			})
 
-			It("should leave the completed entry unchanged", func() {
+			It("should leave the existing summary unchanged", func() {
 				ctx, _ := store.Read("p")
-				Expect(ctx.GetBackgroundActivity()[0].GetSummary()).To(Equal(""))
+				Expect(ctx.GetBackgroundActivity()[0].GetSummary()).To(Equal("already done"))
+			})
+		})
+
+		// Reproducer for issue #1172: the 10-min scheduler timeout re-stamps the
+		// RUNNING entry terminal before the agent calls AppendBackgroundActivitySummary.
+		// The fallback lookup must find the entry by schedule_id + empty summary.
+		Describe("when a RUNNING entry is completed by the scheduler before the summary is attached (issue #1172)", func() {
+			var (
+				entry *apiv1.BackgroundActivityEntry
+				err   error
+			)
+
+			BeforeEach(func() {
+				Expect(store.AppendBackgroundActivityAutomatic("p", &apiv1.BackgroundActivityEntry{
+					Timestamp:  timestamppb.New(time.Now()),
+					ScheduleId: "overseer",
+					Status:     apiv1.ScheduleStatus_SCHEDULE_STATUS_RUNNING,
+				})).To(Succeed())
+
+				_, completeErr := store.CompleteBackgroundActivity("p", "overseer", apiv1.ScheduleStatus_SCHEDULE_STATUS_TIMEOUT)
+				Expect(completeErr).NotTo(HaveOccurred())
+
+				entry, err = store.AppendBackgroundActivitySummary("p", "overseer", "completed the work")
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should attach the summary to the terminal entry", func() {
+				ctx, _ := store.Read("p")
+				Expect(ctx.GetBackgroundActivity()[0].GetSummary()).To(Equal("completed the work"))
+			})
+
+			It("should return the updated entry", func() {
+				Expect(entry.GetScheduleId()).To(Equal("overseer"))
+				Expect(entry.GetSummary()).To(Equal("completed the work"))
+			})
+		})
+
+		Describe("when a WARN entry (OK run without summary) receives a late summary", func() {
+			var (
+				entry *apiv1.BackgroundActivityEntry
+				err   error
+			)
+
+			BeforeEach(func() {
+				Expect(store.AppendBackgroundActivityAutomatic("p", &apiv1.BackgroundActivityEntry{
+					Timestamp:  timestamppb.New(time.Now()),
+					ScheduleId: "daily",
+					Status:     apiv1.ScheduleStatus_SCHEDULE_STATUS_RUNNING,
+				})).To(Succeed())
+
+				_, completeErr := store.CompleteBackgroundActivity("p", "daily", apiv1.ScheduleStatus_SCHEDULE_STATUS_OK)
+				Expect(completeErr).NotTo(HaveOccurred())
+
+				entry, err = store.AppendBackgroundActivitySummary("p", "daily", "daily work done")
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should attach the summary", func() {
+				ctx, _ := store.Read("p")
+				Expect(ctx.GetBackgroundActivity()[0].GetSummary()).To(Equal("daily work done"))
+			})
+
+			It("should leave the WARN status untouched (no provenance to prove it is safe to upgrade)", func() {
+				ctx, _ := store.Read("p")
+				Expect(ctx.GetBackgroundActivity()[0].GetStatus()).To(Equal(apiv1.ScheduleStatus_SCHEDULE_STATUS_WARN))
+			})
+
+			It("should return the updated entry with WARN status", func() {
+				Expect(entry.GetStatus()).To(Equal(apiv1.ScheduleStatus_SCHEDULE_STATUS_WARN))
 			})
 		})
 

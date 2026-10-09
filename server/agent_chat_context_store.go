@@ -160,10 +160,24 @@ func (s *AgentChatContextStore) AppendBackgroundActivitySummary(page, scheduleID
 
 	target := findNewestRunningBackgroundActivity(existing.BackgroundActivity, scheduleID)
 	if target == -1 {
+		// Fallback: the scheduler may have already transitioned the entry to a
+		// terminal status (e.g. TIMEOUT from the 10-min cap) before the agent
+		// called AppendBackgroundActivitySummary. Accept the newest entry for
+		// this schedule_id whose summary is still empty — by construction that
+		// is the agent's own just-terminated entry.
+		target = findNewestBackgroundActivityWithEmptySummary(existing.BackgroundActivity, scheduleID)
+	}
+	if target == -1 {
 		return nil, &SummaryTargetNotFoundError{Page: page, ScheduleID: scheduleID}
 	}
 
 	existing.BackgroundActivity[target].Summary = summary
+	// NOTE: deliberately NOT rewriting a terminal WARN here. WARN has more
+	// than one provenance — synthesized from an OK run missing its summary
+	// (CompleteBackgroundActivity) and emitted for a background-task drain
+	// timeout (cmd/wiki-cli/scheduled_turn.go) — and the stored entry carries
+	// no field to tell them apart. Overwriting would silently erase a real
+	// drain warning, so the recorded status is left untouched.
 	if err := writeChatContext(fm, existing); err != nil {
 		return nil, err
 	}
@@ -264,6 +278,19 @@ func findNewestRunningBackgroundActivity(entries []*apiv1.BackgroundActivityEntr
 func findNewestBackgroundActivityWithStatus(entries []*apiv1.BackgroundActivityEntry, scheduleID string, status apiv1.ScheduleStatus) int {
 	for i := len(entries) - 1; i >= 0; i-- {
 		if entries[i].GetScheduleId() == scheduleID && entries[i].GetStatus() == status {
+			return i
+		}
+	}
+	return -1
+}
+
+// findNewestBackgroundActivityWithEmptySummary returns the index of the most
+// recent entry whose schedule_id matches and whose summary is still empty.
+// Used as a fallback in AppendBackgroundActivitySummary when the entry has
+// already been transitioned to a terminal status by the scheduler.
+func findNewestBackgroundActivityWithEmptySummary(entries []*apiv1.BackgroundActivityEntry, scheduleID string) int {
+	for i := len(entries) - 1; i >= 0; i-- {
+		if entries[i].GetScheduleId() == scheduleID && entries[i].GetSummary() == "" {
 			return i
 		}
 	}
