@@ -172,11 +172,12 @@ func (s *AgentChatContextStore) AppendBackgroundActivitySummary(page, scheduleID
 	}
 
 	existing.BackgroundActivity[target].Summary = summary
-	// Upgrade WARN→OK when a late summary is attached. WARN means "completed
-	// without a summary"; retroactively attaching one restores the clean trail.
-	if existing.BackgroundActivity[target].GetStatus() == apiv1.ScheduleStatus_SCHEDULE_STATUS_WARN {
-		existing.BackgroundActivity[target].Status = apiv1.ScheduleStatus_SCHEDULE_STATUS_OK
-	}
+	// NOTE: deliberately NOT rewriting a terminal WARN here. WARN has more
+	// than one provenance — synthesized from an OK run missing its summary
+	// (CompleteBackgroundActivity) and emitted for a background-task drain
+	// timeout (cmd/wiki-cli/scheduled_turn.go) — and the stored entry carries
+	// no field to tell them apart. Overwriting would silently erase a real
+	// drain warning, so the recorded status is left untouched.
 	if err := writeChatContext(fm, existing); err != nil {
 		return nil, err
 	}

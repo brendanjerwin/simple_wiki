@@ -586,13 +586,13 @@ var _ = Describe("AgentChatContextStore", func() {
 				Expect(ctx.GetBackgroundActivity()[0].GetSummary()).To(Equal("daily work done"))
 			})
 
-			It("should upgrade the status from WARN to OK", func() {
+			It("should leave the WARN status untouched (no provenance to prove it is safe to upgrade)", func() {
 				ctx, _ := store.Read("p")
-				Expect(ctx.GetBackgroundActivity()[0].GetStatus()).To(Equal(apiv1.ScheduleStatus_SCHEDULE_STATUS_OK))
+				Expect(ctx.GetBackgroundActivity()[0].GetStatus()).To(Equal(apiv1.ScheduleStatus_SCHEDULE_STATUS_WARN))
 			})
 
-			It("should return the updated entry with OK status", func() {
-				Expect(entry.GetStatus()).To(Equal(apiv1.ScheduleStatus_SCHEDULE_STATUS_OK))
+			It("should return the updated entry with WARN status", func() {
+				Expect(entry.GetStatus()).To(Equal(apiv1.ScheduleStatus_SCHEDULE_STATUS_WARN))
 			})
 		})
 
