@@ -12,6 +12,22 @@ import (
 	mcpserver "github.com/mark3labs/mcp-go/server"
 )
 
+// Options configures NewStreamableHTTPHandler.
+type Options struct {
+	// BehindLoopbackProxy reports that requests reach this handler through a
+	// same-host reverse proxy (e.g. Tailscale Serve) that forwards the
+	// connection over loopback while preserving the original Host header.
+	// When true, mcp-go's DNS-rebinding localhost guard is disabled: that
+	// guard rejects loopback connections carrying a non-loopback Host with
+	// 403 "invalid Host header", which would reject 100% of legitimate
+	// traffic in this topology (see issue #1199). Rebinding over HTTPS is
+	// not a concern in this mode because only *.monster-orfe.ts.net
+	// certificates are presented — a rebound hostname fails TLS first.
+	// Leave false for direct-serving modes (plain HTTP, full TLS) so the
+	// guard keeps protecting a loopback-reachable server.
+	BehindLoopbackProxy bool
+}
+
 // NewStreamableHTTPHandler creates an MCP Streamable HTTP handler that wires MCP tool
 // invocations directly to the gRPC API server in-process. The returned
 // ServiceDescription slice is the curated per-service catalog (sourced from
@@ -22,7 +38,7 @@ import (
 // and observability). This means MCP callers have no user identity injected into context,
 // MCP calls are not visible in gRPC request logs, and are not counted in request metrics.
 // When the MCP server runtime adds middleware support, these should be added.
-func NewStreamableHTTPHandler(apiServer *grpcapi.Server, version string) (http.Handler, []mcpdocs.ServiceDescription, error) {
+func NewStreamableHTTPHandler(apiServer *grpcapi.Server, version string, opts Options) (http.Handler, []mcpdocs.ServiceDescription, error) {
 	s := mcpserver.NewMCPServer(
 		"simple-wiki",
 		version,
@@ -62,7 +78,19 @@ func NewStreamableHTTPHandler(apiServer *grpcapi.Server, version string) (http.H
 	// descriptions. Must run AFTER the Register*Handler calls above.
 	serviceDescriptions := mcpdocs.Decorate(s)
 
-	return mcpserver.NewStreamableHTTPServer(s), serviceDescriptions, nil
+	var streamableOpts []mcpserver.StreamableHTTPOption
+	if opts.BehindLoopbackProxy {
+		// The reverse proxy on this host forwards over loopback while
+		// preserving the original Host header, so mcp-go's DNS-rebinding
+		// guard (vendor/.../server/http_localhost.go) would reject every
+		// legitimate request with 403 "invalid Host header". The guard
+		// cannot protect this topology: rebinding over HTTPS fails at TLS
+		// (only *.monster-orfe.ts.net certs are presented), and identity is
+		// enforced by the Tailscale identity middleware wrapping this
+		// handler. See https://github.com/brendanjerwin/simple_wiki/issues/1199.
+		streamableOpts = append(streamableOpts, mcpserver.WithDisableLocalhostProtection(true))
+	}
+	return mcpserver.NewStreamableHTTPServer(s, streamableOpts...), serviceDescriptions, nil
 }
 
 // NewServiceCatalogHandler returns an HTTP handler that serves the curated
