@@ -160,10 +160,23 @@ func (s *AgentChatContextStore) AppendBackgroundActivitySummary(page, scheduleID
 
 	target := findNewestRunningBackgroundActivity(existing.BackgroundActivity, scheduleID)
 	if target == -1 {
+		// Fallback: the scheduler may have already transitioned the entry to a
+		// terminal status (e.g. TIMEOUT from the 10-min cap) before the agent
+		// called AppendBackgroundActivitySummary. Accept the newest entry for
+		// this schedule_id whose summary is still empty — by construction that
+		// is the agent's own just-terminated entry.
+		target = findNewestBackgroundActivityWithEmptySummary(existing.BackgroundActivity, scheduleID)
+	}
+	if target == -1 {
 		return nil, &SummaryTargetNotFoundError{Page: page, ScheduleID: scheduleID}
 	}
 
 	existing.BackgroundActivity[target].Summary = summary
+	// Upgrade WARN→OK when a late summary is attached. WARN means "completed
+	// without a summary"; retroactively attaching one restores the clean trail.
+	if existing.BackgroundActivity[target].GetStatus() == apiv1.ScheduleStatus_SCHEDULE_STATUS_WARN {
+		existing.BackgroundActivity[target].Status = apiv1.ScheduleStatus_SCHEDULE_STATUS_OK
+	}
 	if err := writeChatContext(fm, existing); err != nil {
 		return nil, err
 	}
@@ -264,6 +277,19 @@ func findNewestRunningBackgroundActivity(entries []*apiv1.BackgroundActivityEntr
 func findNewestBackgroundActivityWithStatus(entries []*apiv1.BackgroundActivityEntry, scheduleID string, status apiv1.ScheduleStatus) int {
 	for i := len(entries) - 1; i >= 0; i-- {
 		if entries[i].GetScheduleId() == scheduleID && entries[i].GetStatus() == status {
+			return i
+		}
+	}
+	return -1
+}
+
+// findNewestBackgroundActivityWithEmptySummary returns the index of the most
+// recent entry whose schedule_id matches and whose summary is still empty.
+// Used as a fallback in AppendBackgroundActivitySummary when the entry has
+// already been transitioned to a terminal status by the scheduler.
+func findNewestBackgroundActivityWithEmptySummary(entries []*apiv1.BackgroundActivityEntry, scheduleID string) int {
+	for i := len(entries) - 1; i >= 0; i-- {
+		if entries[i].GetScheduleId() == scheduleID && entries[i].GetSummary() == "" {
 			return i
 		}
 	}
