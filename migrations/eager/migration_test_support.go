@@ -135,13 +135,18 @@ func (m *MockMigrationDeps) UpdatePageContent(identifier wikipage.PageIdentifier
 	return nil
 }
 
-func (m *MockMigrationDeps) ModifyMarkdown(identifier wikipage.PageIdentifier, modifier func(wikipage.Markdown) (wikipage.Markdown, error), _ wikipage.Identity) error {
+func (m *MockMigrationDeps) ModifyMarkdown(identifier wikipage.PageIdentifier, modifier func(wikipage.FrontMatter, wikipage.Markdown) (wikipage.Markdown, error), _ wikipage.Identity) error {
+	_, currentFM, err := m.ReadFrontMatter(identifier)
+	if err != nil && !os.IsNotExist(err) {
+		return err
+	}
+
 	_, currentMD, err := m.ReadMarkdown(identifier)
 	if err != nil {
 		return err
 	}
 
-	newMD, err := modifier(currentMD)
+	newMD, err := modifier(currentFM, currentMD)
 	if err != nil {
 		return err
 	}

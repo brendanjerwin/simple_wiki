@@ -24,7 +24,7 @@ type Writer interface {
 	// and writes the result back while preserving the existing frontmatter.
 	// The full read-modify-write is held under the page's lock.
 	// The identity parameter is used for history attribution.
-	ModifyMarkdown(id wikipage.PageIdentifier, fn func(wikipage.Markdown) (wikipage.Markdown, error), identity wikipage.Identity) error
+	ModifyMarkdown(id wikipage.PageIdentifier, fn func(wikipage.FrontMatter, wikipage.Markdown) (wikipage.Markdown, error), identity wikipage.Identity) error
 
 	// SoftDeletePage moves the page's .md file to trash.
 	// Returns os.ErrNotExist if the file did not exist.

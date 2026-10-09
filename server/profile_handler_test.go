@@ -85,7 +85,7 @@ func (f *fakeProfileMutator) WriteMarkdown(id wikipage.PageIdentifier, md wikipa
 
 func (*fakeProfileMutator) DeletePage(_ wikipage.PageIdentifier) error { return nil }
 
-func (*fakeProfileMutator) ModifyMarkdown(_ wikipage.PageIdentifier, _ func(wikipage.Markdown) (wikipage.Markdown, error), _ wikipage.Identity) error {
+func (*fakeProfileMutator) ModifyMarkdown(_ wikipage.PageIdentifier,  _ func(wikipage.FrontMatter, wikipage.Markdown) (wikipage.Markdown, error), _ wikipage.Identity) error {
 	return nil
 }
 
@@ -404,6 +404,6 @@ func (*readErrorMutator) WriteMarkdown(_ wikipage.PageIdentifier, _ wikipage.Mar
 
 func (*readErrorMutator) DeletePage(_ wikipage.PageIdentifier) error { return nil }
 
-func (*readErrorMutator) ModifyMarkdown(_ wikipage.PageIdentifier, _ func(wikipage.Markdown) (wikipage.Markdown, error), _ wikipage.Identity) error {
+func (*readErrorMutator) ModifyMarkdown(_ wikipage.PageIdentifier,  _ func(wikipage.FrontMatter, wikipage.Markdown) (wikipage.Markdown, error), _ wikipage.Identity) error {
 	return nil
 }

@@ -156,7 +156,7 @@ var _ = Describe("Store", func() {
 				Expect(store.WriteMarkdown("wiki_page", "v1\n", wikipage.AnonymousIdentity)).To(Succeed())
 
 				// Modify via ModifyMarkdown with the slug form.
-				modErr := store.ModifyMarkdown("wiki-page", func(md wikipage.Markdown) (wikipage.Markdown, error) {
+				modErr := store.ModifyMarkdown("wiki-page", func(_ wikipage.FrontMatter, md wikipage.Markdown) (wikipage.Markdown, error) {
 					return "v2\n", nil
 				}, wikipage.AnonymousIdentity)
 				Expect(modErr).NotTo(HaveOccurred())

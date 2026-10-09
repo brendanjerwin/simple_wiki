@@ -63,8 +63,8 @@ func (*fakeStore) DeletePage(wikipage.PageIdentifier) error {
 	return nil
 }
 
-func (*fakeStore) ModifyMarkdown(_ wikipage.PageIdentifier, modifier func(wikipage.Markdown) (wikipage.Markdown, error), _ wikipage.Identity) error {
-	_, err := modifier("")
+func (*fakeStore) ModifyMarkdown(_ wikipage.PageIdentifier, modifier func(wikipage.FrontMatter, wikipage.Markdown) (wikipage.Markdown, error), _ wikipage.Identity) error {
+	_, err := modifier(nil, "")
 	return err
 }
 

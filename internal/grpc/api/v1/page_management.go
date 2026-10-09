@@ -27,21 +27,33 @@ import (
 
 const trashEntryNotFoundErrFmt = "trash entry not found: %s"
 
-// computeContentHash computes a SHA256 hash of the given markdown content,
+// computePageHash computes a SHA256 hash covering both frontmatter and markdown,
 // returned as a lowercase hex string. Used for optimistic concurrency control.
-func computeContentHash(markdown wikipage.Markdown) string {
-	h := sha256.Sum256([]byte(markdown))
-	return hex.EncodeToString(h[:])
+// Including frontmatter ensures that frontmatter-only edits are visible to
+// callers holding an expected_version_hash, preventing silent data loss.
+// Nil or empty frontmatter contributes zero bytes, so pages with no frontmatter
+// yield the same hash as before (hash of markdown only).
+func computePageHash(frontmatter wikipage.FrontMatter, markdown wikipage.Markdown) string {
+	h := sha256.New()
+	if len(frontmatter) > 0 {
+		fmBytes, err := toml.Marshal(frontmatter)
+		if err == nil {
+			_, _ = h.Write(fmBytes)
+		}
+	}
+	_, _ = h.Write([]byte(markdown))
+	return hex.EncodeToString(h.Sum(nil))
 }
 
-// checkContentVersionHash verifies that the current page content matches the expected version hash.
+// checkContentVersionHash verifies that the current full page state (frontmatter + markdown)
+// matches the expected version hash.
 // Returns an error if there is a version mismatch; returns nil if expectedHash is nil (no check requested).
-func checkContentVersionHash(currentMarkdown wikipage.Markdown, expectedHash *string) error {
+func checkContentVersionHash(currentFrontMatter wikipage.FrontMatter, currentMarkdown wikipage.Markdown, expectedHash *string) error {
 	if expectedHash == nil {
 		return nil
 	}
 
-	currentHash := computeContentHash(currentMarkdown)
+	currentHash := computePageHash(currentFrontMatter, currentMarkdown)
 	return checkContentVersionHashString(currentHash, expectedHash)
 }
 
@@ -227,7 +239,7 @@ func (s *Server) sendPageUpdateIfChanged(stream apiv1.PageManagementService_Watc
 	return currentHash, nil
 }
 
-// readPageHashAndModTime reads a page's content hash and file modification time.
+// readPageHashAndModTime reads a page's whole-page hash (frontmatter + markdown) and file modification time.
 func (s *Server) readPageHashAndModTime(pageID wikipage.PageIdentifier) (string, time.Time, error) {
 	page, err := s.pageOpener.ReadPage(pageID)
 	if err != nil {
@@ -240,7 +252,11 @@ func (s *Server) readPageHashAndModTime(pageID wikipage.PageIdentifier) (string,
 	if err != nil {
 		return "", time.Time{}, err
 	}
-	return computeContentHash(wikipage.Markdown(markdown)), page.ModTime, nil
+	frontmatter, err := page.GetFrontMatter()
+	if err != nil {
+		return "", time.Time{}, err
+	}
+	return computePageHash(frontmatter, markdown), page.ModTime, nil
 }
 
 // DeletePage implements the DeletePage RPC.
@@ -515,7 +531,7 @@ func (s *Server) ReadPage(ctx context.Context, req *apiv1.ReadPageRequest) (*api
 		ContentMarkdown:         string(markdown),
 		FrontMatterToml:         string(frontmatterToml),
 		RenderedContentMarkdown: "",
-		VersionHash:             computeContentHash(markdown),
+		VersionHash:             computePageHash(frontmatter, markdown),
 	}, nil
 }
 
@@ -704,11 +720,17 @@ func (s *Server) UpdatePageContent(ctx context.Context, req *apiv1.UpdatePageCon
 
 	// ModifyMarkdown holds the write lock for the entire hash-check + write cycle,
 	// eliminating the TOCTOU race that existed when these were separate operations.
+	// The modifier receives the current frontmatter so the version hash covers the
+	// full page state — catching frontmatter-only concurrent edits as well.
+	var capturedFM wikipage.FrontMatter
 	modifyErr := s.pageReaderMutator.ModifyMarkdown(
 		wikipage.PageIdentifier(req.Page),
-		func(currentMarkdown wikipage.Markdown) (wikipage.Markdown, error) {
+		func(currentFM wikipage.FrontMatter, currentMarkdown wikipage.Markdown) (wikipage.Markdown, error) {
+			capturedFM = currentFM
 			// Version hash check is now atomic with the write — no TOCTOU window.
-			if err := checkContentVersionHash(currentMarkdown, req.ExpectedVersionHash); err != nil {
+			// Hash covers both frontmatter and markdown so frontmatter-only edits
+			// are also detected (issue #1197).
+			if err := checkContentVersionHash(currentFM, currentMarkdown, req.ExpectedVersionHash); err != nil {
 				return "", err
 			}
 
@@ -739,7 +761,7 @@ func (s *Server) UpdatePageContent(ctx context.Context, req *apiv1.UpdatePageCon
 
 	return &apiv1.UpdatePageContentResponse{
 		Success:     true,
-		VersionHash: computeContentHash(storedMarkdown),
+		VersionHash: computePageHash(capturedFM, storedMarkdown),
 	}, nil
 }
 
@@ -839,8 +861,6 @@ func (s *Server) UpdateWholePage(ctx context.Context, req *apiv1.UpdateWholePage
 	if err := templating.ValidateTemplate(string(md)); err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, invalidTemplateErrFmt, err)
 	}
-
-	// Preserve the page identifier in frontmatter
 	if fm == nil {
 		fm = make(map[string]any)
 	}
@@ -853,8 +873,10 @@ func (s *Server) UpdateWholePage(ctx context.Context, req *apiv1.UpdateWholePage
 
 	modifyErr := atomicMod.ModifyFrontMatterAndMarkdown(
 		wikipage.PageIdentifier(req.Page),
-		func(_ wikipage.FrontMatter, currentMarkdown wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error) {
-			if err := checkContentVersionHash(currentMarkdown, req.ExpectedVersionHash); err != nil {
+		func(currentFM wikipage.FrontMatter, currentMarkdown wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error) {
+			// Hash covers both frontmatter and markdown so frontmatter-only concurrent edits
+			// are detected (issue #1197).
+			if err := checkContentVersionHash(currentFM, currentMarkdown, req.ExpectedVersionHash); err != nil {
 				return nil, "", err
 			}
 			return fm, md, nil
@@ -870,7 +892,7 @@ func (s *Server) UpdateWholePage(ctx context.Context, req *apiv1.UpdateWholePage
 
 	return &apiv1.UpdateWholePageResponse{
 		Success:     true,
-		VersionHash: computeContentHash(md),
+		VersionHash: computePageHash(fm, md),
 	}, nil
 }
 
@@ -1024,10 +1046,15 @@ func (s *Server) ReadPageOutline(ctx context.Context, req *apiv1.ReadPageOutline
 		return nil, status.Errorf(codes.Internal, failedToReadPageErrFmt, err)
 	}
 
+	_, frontmatter, fmErr := s.pageReaderMutator.ReadFrontMatter(wikipage.PageIdentifier(req.Page))
+	if fmErr != nil && !os.IsNotExist(fmErr) {
+		return nil, status.Errorf(codes.Internal, failedToReadFrontmatterErrFmt, fmErr)
+	}
+
 	return &apiv1.ReadPageOutlineResponse{
 		Headings:    parseHeadings(string(markdown)),
 		TotalBytes:  int64(len(markdown)),
-		VersionHash: computeContentHash(markdown),
+		VersionHash: computePageHash(frontmatter, markdown),
 	}, nil
 }
 
@@ -1057,7 +1084,12 @@ func (s *Server) ReadPageSection(ctx context.Context, req *apiv1.ReadPageSection
 		return nil, status.Errorf(codes.Internal, failedToReadPageErrFmt, err)
 	}
 
-	versionHash := computeContentHash(markdown)
+	_, frontmatter, fmErr := s.pageReaderMutator.ReadFrontMatter(wikipage.PageIdentifier(req.Page))
+	if fmErr != nil && !os.IsNotExist(fmErr) {
+		return nil, status.Errorf(codes.Internal, failedToReadFrontmatterErrFmt, fmErr)
+	}
+
+	versionHash := computePageHash(frontmatter, markdown)
 	if err := checkContentVersionHashString(versionHash, req.ExpectedVersionHash); err != nil {
 		return nil, err
 	}

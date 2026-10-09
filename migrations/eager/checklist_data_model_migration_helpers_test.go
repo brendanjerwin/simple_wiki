@@ -34,7 +34,7 @@ func (*scanFakeReaderMutator) WriteMarkdown(_ wikipage.PageIdentifier, _ wikipag
 
 func (*scanFakeReaderMutator) DeletePage(_ wikipage.PageIdentifier) error { return nil }
 
-func (*scanFakeReaderMutator) ModifyMarkdown(_ wikipage.PageIdentifier, _ func(wikipage.Markdown) (wikipage.Markdown, error), _ wikipage.Identity) error {
+func (*scanFakeReaderMutator) ModifyMarkdown(_ wikipage.PageIdentifier,  _ func(wikipage.FrontMatter, wikipage.Markdown) (wikipage.Markdown, error), _ wikipage.Identity) error {
 	return nil
 }
 

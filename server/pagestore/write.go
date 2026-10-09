@@ -36,27 +36,29 @@ func (s *Store) WriteMarkdown(id wikipage.PageIdentifier, md wikipage.Markdown, 
 	})
 }
 
-// ModifyMarkdown atomically reads the markdown section, calls fn, and
-// writes the result back while preserving the existing frontmatter.
-// The full read-modify-write is held under the page's lock.
+// ModifyMarkdown atomically reads both the frontmatter and markdown sections,
+// calls fn with them, and writes the returned markdown back while preserving
+// the existing frontmatter. The full read-modify-write is held under the page's
+// lock. Frontmatter is passed to fn so callers can compute a whole-page hash
+// covering both sections for optimistic concurrency control.
 // The identity parameter is used for history attribution.
-func (s *Store) ModifyMarkdown(id wikipage.PageIdentifier, fn func(wikipage.Markdown) (wikipage.Markdown, error), identity wikipage.Identity) error {
+func (s *Store) ModifyMarkdown(id wikipage.PageIdentifier, fn func(wikipage.FrontMatter, wikipage.Markdown) (wikipage.Markdown, error), identity wikipage.Identity) error {
 	return s.ModifyOrCreatePage(string(id), identity, "modify_markdown", func(currentText string) (string, error) {
 		p := &wikipage.Page{Text: currentText}
+
+		currentFM, err := p.GetFrontMatter()
+		if err != nil {
+			return "", fmt.Errorf("failed to parse frontmatter for markdown modification: %w", err)
+		}
 
 		currentMD, err := p.GetMarkdown()
 		if err != nil {
 			return "", fmt.Errorf("failed to parse markdown for modification: %w", err)
 		}
 
-		newMD, err := fn(currentMD)
+		newMD, err := fn(currentFM, currentMD)
 		if err != nil {
 			return "", err
-		}
-
-		currentFM, err := p.GetFrontMatter()
-		if err != nil {
-			return "", fmt.Errorf("failed to parse frontmatter during markdown modification: %w", err)
 		}
 
 		return wikipage.CombineFrontMatterAndMarkdown(currentFM, newMD)

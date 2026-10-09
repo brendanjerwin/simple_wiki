@@ -132,12 +132,12 @@ func (m *mockPageReaderMutator) DeletePage(id wikipage.PageIdentifier) error {
 	return nil
 }
 
-func (m *mockPageReaderMutator) ModifyMarkdown(id wikipage.PageIdentifier, modifier func(wikipage.Markdown) (wikipage.Markdown, error), _ wikipage.Identity) error { var currentMD wikipage.Markdown
+func (m *mockPageReaderMutator) ModifyMarkdown(id wikipage.PageIdentifier, modifier func(wikipage.FrontMatter, wikipage.Markdown) (wikipage.Markdown, error), _ wikipage.Identity) error { var currentMD wikipage.Markdown
 	if page, ok := m.pages[string(id)]; ok {
 		currentMD = wikipage.Markdown(page.markdown)
 	}
 
-	newMD, err := modifier(currentMD)
+	newMD, err := modifier(nil, currentMD)
 	if err != nil {
 		return err
 	}
