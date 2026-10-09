@@ -148,7 +148,7 @@ func SetupPlainHTTP(
 	}
 
 	handler, metricsCleanup, err := createMultiplexedHandler(
-		site, logger, commit, buildTime, nil,
+		site, logger, commit, buildTime, ModePlainHTTP, nil,
 		identityMetadataOptions{TrustMetadata: options.TrustTestIdentityHeaders},
 	)
 	if err != nil {
@@ -186,7 +186,7 @@ func SetupTailscaleServe(
 
 	identityResolver := tailscale.NewIdentityResolver(agentTags)
 	handler, metricsCleanup, err := createMultiplexedHandler(
-		site, logger, commit, buildTime, identityResolver, identityMetadataOptions{},
+		site, logger, commit, buildTime, ModeTailscaleServe, identityResolver, identityMetadataOptions{},
 	)
 	if err != nil {
 		return nil, fmt.Errorf(errCreateHandlerFmt, err)
@@ -230,7 +230,7 @@ func SetupFullTLS(
 
 	identityResolver := tailscale.NewIdentityResolver(agentTags)
 	handler, metricsCleanup, err := createMultiplexedHandler(
-		site, logger, commit, buildTime, identityResolver, identityMetadataOptions{},
+		site, logger, commit, buildTime, ModeFullTLS, identityResolver, identityMetadataOptions{},
 	)
 	if err != nil {
 		return nil, fmt.Errorf(errCreateHandlerFmt, err)
@@ -349,6 +349,7 @@ func createMultiplexedHandler(
 	logger *lumber.ConsoleLogger,
 	commit string,
 	buildTime time.Time,
+	mode ServerMode,
 	identityResolver tailscale.IdentityResolver,
 	identityOptions identityMetadataOptions,
 ) (http.Handler, func(), error) {
@@ -383,7 +384,13 @@ func createMultiplexedHandler(
 		return nil, nil, fmt.Errorf("failed to create vanguard transcoder: %w", err)
 	}
 
-	mcpHandler, serviceDescriptions, err := wikimcp.NewStreamableHTTPHandler(grpcAPIServer, commit)
+	// Only Tailscale Serve proxies /mcp over loopback while preserving the
+	// original Host header; mcp-go's DNS-rebinding guard would 403 every
+	// such request (#1199). Plain HTTP and full TLS serve directly, so the
+	// guard stays enabled there where it still has value.
+	mcpHandler, serviceDescriptions, err := wikimcp.NewStreamableHTTPHandler(grpcAPIServer, commit, wikimcp.Options{
+		BehindLoopbackProxy: mode == ModeTailscaleServe,
+	})
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create MCP handler: %w", err)
 	}

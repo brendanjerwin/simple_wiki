@@ -225,7 +225,7 @@ var _ = Describe("NewStreamableHTTPHandler", func() {
 	})
 
 	It("returns a non-nil handler without error", func() {
-		handler, _, err := wikimcp.NewStreamableHTTPHandler(apiServer, "test-version")
+		handler, _, err := wikimcp.NewStreamableHTTPHandler(apiServer, "test-version", wikimcp.Options{})
 
 		Expect(err).NotTo(HaveOccurred())
 		Expect(handler).NotTo(BeNil())
@@ -236,7 +236,7 @@ var _ = Describe("NewStreamableHTTPHandler", func() {
 
 		BeforeEach(func() {
 			var err error
-			handler, _, err = wikimcp.NewStreamableHTTPHandler(apiServer, "test-version")
+			handler, _, err = wikimcp.NewStreamableHTTPHandler(apiServer, "test-version", wikimcp.Options{})
 			Expect(err).NotTo(HaveOccurred())
 		})
 
@@ -267,29 +267,54 @@ var _ = Describe("NewStreamableHTTPHandler", func() {
 
 		// Regression test for #1199: Tailscale Serve proxies every request
 		// over loopback while preserving the original Host header. mcp-go's
-		// DNS-rebinding guard rejected that (loopback local addr + non-loopback
-		// Host) with 403 "invalid Host header", breaking all production /mcp
+		// DNS-rebinding guard rejects that (loopback local addr + non-loopback
+		// Host) with 403 "invalid Host header", which broke all production /mcp
 		// traffic after the mcp-go 0.56.0 bump (#1139).
+		//
+		// Both paths are covered: the Tailscale Serve mode (guard disabled)
+		// must accept the proxied request, and the direct-serving modes
+		// (plain HTTP / full TLS, guard enabled) must keep rejecting it so
+		// the upstream DNS-rebinding protection is not lost.
 		When("receiving an MCP initialize request via a loopback proxy with the original Host header", func() {
 			var resp *httptest.ResponseRecorder
 
-			BeforeEach(func() {
+			loopbackInit := func(opts wikimcp.Options) *httptest.ResponseRecorder {
+				h, _, err := wikimcp.NewStreamableHTTPHandler(apiServer, "test-version", opts)
+				Expect(err).NotTo(HaveOccurred())
 				body := `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"0.0.1"}}}`
 				req := httptest.NewRequest(http.MethodPost, "https://wiki.monster-orfe.ts.net/mcp", strings.NewReader(body))
 				req.Header.Set("Content-Type", "application/json")
 				// Simulate the loopback connection made by Tailscale Serve.
 				loopback := &net.TCPAddr{IP: net.ParseIP("127.0.0.1"), Port: 443}
 				req = req.WithContext(context.WithValue(req.Context(), http.LocalAddrContextKey, loopback))
-				resp = httptest.NewRecorder()
-				handler.ServeHTTP(resp, req)
+				rec := httptest.NewRecorder()
+				h.ServeHTTP(rec, req)
+				return rec
+			}
+
+			When("the handler is configured BehindLoopbackProxy (Tailscale Serve mode)", func() {
+				BeforeEach(func() {
+					resp = loopbackInit(wikimcp.Options{BehindLoopbackProxy: true})
+				})
+
+				It("does not reject the request with 403", func() {
+					Expect(resp.Code).NotTo(Equal(http.StatusForbidden))
+				})
+
+				It("returns HTTP 200", func() {
+					Expect(resp.Code).To(Equal(http.StatusOK))
+				})
 			})
 
-			It("does not reject the request with 403", func() {
-				Expect(resp.Code).NotTo(Equal(http.StatusForbidden))
-			})
+			When("the handler serves directly (plain HTTP or full TLS mode)", func() {
+				BeforeEach(func() {
+					resp = loopbackInit(wikimcp.Options{})
+				})
 
-			It("returns HTTP 200", func() {
-				Expect(resp.Code).To(Equal(http.StatusOK))
+				It("still rejects the non-loopback Host with 403 (DNS-rebinding guard retained)", func() {
+					Expect(resp.Code).To(Equal(http.StatusForbidden))
+					Expect(resp.Body.String()).To(ContainSubstring("invalid Host header"))
+				})
 			})
 		})
 
@@ -669,7 +694,7 @@ var _ = Describe("NewStreamableHTTPHandler", func() {
 			var catalog []map[string]any
 
 			BeforeEach(func() {
-				_, descs, err := wikimcp.NewStreamableHTTPHandler(apiServer, "test-version")
+				_, descs, err := wikimcp.NewStreamableHTTPHandler(apiServer, "test-version", wikimcp.Options{})
 				Expect(err).NotTo(HaveOccurred())
 				catalogHandler := wikimcp.NewServiceCatalogHandler(descs)
 				catalogReq := httptest.NewRequest(http.MethodGet, "/mcp/catalog", nil)
