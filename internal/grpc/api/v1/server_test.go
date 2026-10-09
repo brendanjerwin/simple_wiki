@@ -26,12 +26,28 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/types"
+	toml "github.com/pelletier/go-toml/v2"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/structpb"
 )
+
+// computeExpectedPageHash mirrors the computePageHash function in page_management.go.
+// It computes a SHA256 hash covering both frontmatter (serialized as TOML) and markdown,
+// so tests can compute the expected version hash the same way the server does.
+func computeExpectedPageHash(fm wikipage.FrontMatter, md string) string {
+	h := sha256.New()
+	if len(fm) > 0 {
+		fmBytes, err := toml.Marshal(fm)
+		if err == nil {
+			_, _ = h.Write(fmBytes)
+		}
+	}
+	_, _ = h.Write([]byte(md))
+	return hex.EncodeToString(h.Sum(nil))
+}
 
 // gRPCStatusMatcher is a Gomega matcher for checking gRPC status errors.
 type gRPCStatusMatcher struct {
@@ -166,6 +182,11 @@ type MockPageReaderMutator struct {
 	// happens between ReadMarkdown and ModifyMarkdown, verifying that the atomic hash check inside
 	// ModifyMarkdown detects the TOCTOU race.
 	ConcurrentModificationMarkdown *wikipage.Markdown
+	// ConcurrentModificationFrontMatter, when non-nil, is what ModifyMarkdown and
+	// ModifyFrontMatterAndMarkdown present to their modifiers as the current frontmatter —
+	// overriding m.Frontmatter. Use this to simulate a concurrent frontmatter-only edit that
+	// happens between ReadFrontMatter and the atomic write, verifying the TOCTOU fix (issue #1197).
+	ConcurrentModificationFrontMatter *wikipage.FrontMatter
 	// markdownWritten tracks whether WriteMarkdown has been called successfully.
 	markdownWritten bool
 }
@@ -275,12 +296,14 @@ func (m *MockPageReaderMutator) EmptyTrash() (int, error) {
 	return m.EmptyTrashCount, m.EmptyTrashErr
 }
 
-// ModifyMarkdown atomically reads the markdown, calls modifier, and writes the result.
+// ModifyMarkdown atomically reads the frontmatter and markdown, calls modifier, and writes the result.
 // Simulates the read-error, modifier, and write-error fields in sequence.
-// If ConcurrentModificationMarkdown is set, the modifier sees that content instead of
-// m.Markdown — simulating a concurrent write that happened between ReadMarkdown and the
-// atomic write, so the hash check inside the modifier can detect the TOCTOU race.
-func (m *MockPageReaderMutator) ModifyMarkdown(identifier wikipage.PageIdentifier, modifier func(wikipage.Markdown) (wikipage.Markdown, error), _ wikipage.Identity) error {
+// If ConcurrentModificationMarkdown is set, the modifier sees that content instead of m.Markdown.
+// If ConcurrentModificationFrontMatter is set, the modifier sees that frontmatter instead of m.Frontmatter.
+// Both fields together allow simulating a concurrent edit (markdown-only, frontmatter-only, or both)
+// that happens between the pre-read and the atomic write, so the hash check inside the modifier
+// can detect the TOCTOU race (issue #1197).
+func (m *MockPageReaderMutator) ModifyMarkdown(identifier wikipage.PageIdentifier, modifier func(wikipage.FrontMatter, wikipage.Markdown) (wikipage.Markdown, error), _ wikipage.Identity) error {
 	if m.MarkdownReadErr != nil {
 		return m.MarkdownReadErr
 	}
@@ -288,14 +311,17 @@ func (m *MockPageReaderMutator) ModifyMarkdown(identifier wikipage.PageIdentifie
 		return m.Err
 	}
 
-	// Allow tests to simulate a concurrent modification that happened between ReadMarkdown
-	// and ModifyMarkdown.
 	currentMD := m.Markdown
 	if m.ConcurrentModificationMarkdown != nil {
 		currentMD = *m.ConcurrentModificationMarkdown
 	}
 
-	newMD, err := modifier(currentMD)
+	currentFM := m.Frontmatter
+	if m.ConcurrentModificationFrontMatter != nil {
+		currentFM = *m.ConcurrentModificationFrontMatter
+	}
+
+	newMD, err := modifier(currentFM, currentMD)
 	if err != nil {
 		return err
 	}
@@ -336,6 +362,10 @@ func (m *MockPageReaderMutator) ModifyFrontMatterAndMarkdown(identifier wikipage
 	currentMD := m.Markdown
 	if m.ConcurrentModificationMarkdown != nil {
 		currentMD = *m.ConcurrentModificationMarkdown
+	}
+
+	if m.ConcurrentModificationFrontMatter != nil {
+		currentFM = *m.ConcurrentModificationFrontMatter
 	}
 
 	newFM, newMD, err := modifier(currentFM, currentMD)
@@ -700,8 +730,8 @@ func (noOpPageReaderMutator) WriteMarkdown(wikipage.PageIdentifier, wikipage.Mar
 	return nil
 }
 func (noOpPageReaderMutator) DeletePage(wikipage.PageIdentifier) error { return nil }
-func (noOpPageReaderMutator) ModifyMarkdown(_ wikipage.PageIdentifier, modifier func(wikipage.Markdown) (wikipage.Markdown, error), _ wikipage.Identity) error {
-	_, err := modifier("")
+func (noOpPageReaderMutator) ModifyMarkdown(_ wikipage.PageIdentifier, modifier func(wikipage.FrontMatter, wikipage.Markdown) (wikipage.Markdown, error), _ wikipage.Identity) error {
+	_, err := modifier(nil, "")
 	return err
 }
 
@@ -2509,9 +2539,12 @@ var _ = Describe("Server", func() {
 				Expect(resp.Error).To(BeEmpty())
 			})
 
-			It("should return the version_hash of the stored content", func() {
-				h := sha256.Sum256([]byte("# New Content"))
-				Expect(resp.VersionHash).To(Equal(hex.EncodeToString(h[:])))
+			It("should return the version_hash of the stored content covering frontmatter+markdown", func() {
+				expectedHash := computeExpectedPageHash(
+					wikipage.FrontMatter{"identifier": "test-page"},
+					"# New Content",
+				)
+				Expect(resp.VersionHash).To(Equal(expectedHash))
 			})
 
 			It("should write to the correct page", func() {
@@ -2551,11 +2584,14 @@ var _ = Describe("Server", func() {
 			})
 		})
 
-		When("expected_version_hash matches current content hash", func() {
+		When("expected_version_hash matches current full-page hash", func() {
 			BeforeEach(func() {
 				mockPageReaderMutator.Markdown = "# Old Content"
-				// SHA256 of "# Old Content"
-				expectedHash := fmt.Sprintf("%x", sha256.Sum256([]byte("# Old Content")))
+				// Hash covers frontmatter + markdown (issue #1197)
+				expectedHash := computeExpectedPageHash(
+					wikipage.FrontMatter{"identifier": "test-page"},
+					"# Old Content",
+				)
 				req.ExpectedVersionHash = &expectedHash
 			})
 
@@ -2694,9 +2730,12 @@ var _ = Describe("Server", func() {
 				Expect(mockPageReaderMutator.WrittenMarkdown).To(Equal(wikipage.Markdown(expectedContent)))
 			})
 
-			It("should return the version_hash of the stored content", func() {
-				h := sha256.Sum256([]byte(expectedContent))
-				Expect(resp.VersionHash).To(Equal(hex.EncodeToString(h[:])))
+			It("should return the version_hash covering frontmatter+markdown of stored content", func() {
+				expectedHash := computeExpectedPageHash(
+					wikipage.FrontMatter{"identifier": "test-page"},
+					expectedContent,
+				)
+				Expect(resp.VersionHash).To(Equal(expectedHash))
 			})
 		})
 
@@ -2760,7 +2799,11 @@ var _ = Describe("Server", func() {
 				concurrentContent := wikipage.Markdown("# Concurrently Modified Content")
 
 				mockPageReaderMutator.Markdown = originalContent
-				originalHash := fmt.Sprintf("%x", sha256.Sum256([]byte(originalContent)))
+				// Hash covers frontmatter + markdown so both types of concurrent edits are detected
+				originalHash := computeExpectedPageHash(
+					wikipage.FrontMatter{"identifier": "test-page"},
+					string(originalContent),
+				)
 				req.ExpectedVersionHash = &originalHash
 				req.NewContentMarkdown = "# My New Content"
 
@@ -2771,6 +2814,41 @@ var _ = Describe("Server", func() {
 			})
 
 			It("should detect the version mismatch and return Aborted", func() {
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.Aborted, "content version mismatch"))
+			})
+
+			It("should not return a response", func() {
+				Expect(resp).To(BeNil())
+			})
+
+			It("should not overwrite the concurrently modified content", func() {
+				Expect(mockPageReaderMutator.WrittenMarkdown).To(BeEmpty())
+			})
+		})
+
+		// Issue #1197: version hash now covers frontmatter+markdown so frontmatter-only
+		// concurrent edits are also detected, not just markdown changes.
+		When("the page's frontmatter is concurrently changed between the pre-read and the atomic write", func() {
+			BeforeEach(func() {
+				originalFM := wikipage.FrontMatter{"identifier": "test-page"}
+				originalMD := wikipage.Markdown("# Content")
+
+				mockPageReaderMutator.Frontmatter = originalFM
+				mockPageReaderMutator.Markdown = originalMD
+
+				// This is the hash the caller would have received from ReadPage before
+				// the concurrent frontmatter edit.
+				originalHash := computeExpectedPageHash(originalFM, string(originalMD))
+				req.ExpectedVersionHash = &originalHash
+				req.NewContentMarkdown = "# My New Content"
+
+				// Simulate a concurrent frontmatter-only edit: ModifyMarkdown atomically
+				// sees new frontmatter but the same markdown.
+				concurrentFM := wikipage.FrontMatter{"identifier": "test-page", "new_key": "added_concurrently"}
+				mockPageReaderMutator.ConcurrentModificationFrontMatter = &concurrentFM
+			})
+
+			It("should detect the frontmatter version mismatch and return Aborted", func() {
 				Expect(err).To(HaveGrpcStatusWithSubstr(codes.Aborted, "content version mismatch"))
 			})
 
@@ -2993,8 +3071,12 @@ var _ = Describe("Server", func() {
 				Expect(resp.Error).To(BeEmpty())
 			})
 
-			It("should return the version_hash of the written markdown", func() {
-				expectedHash := fmt.Sprintf("%x", sha256.Sum256([]byte("# New Content")))
+			It("should return the version_hash covering frontmatter+markdown of written content", func() {
+				// Hash reflects new FM (parsed from new_whole_markdown) + new MD
+				expectedHash := computeExpectedPageHash(
+					wikipage.FrontMatter{"identifier": "test-page", "title": "New Title"},
+					"# New Content",
+				)
 				Expect(resp.VersionHash).To(Equal(expectedHash))
 			})
 
@@ -3013,7 +3095,11 @@ var _ = Describe("Server", func() {
 			BeforeEach(func() {
 				existingContent := wikipage.Markdown("# Old Content")
 				mockPageReaderMutator.Markdown = existingContent
-				existingHash := fmt.Sprintf("%x", sha256.Sum256([]byte(existingContent)))
+				// Hash covers frontmatter + markdown (issue #1197)
+				existingHash := computeExpectedPageHash(
+					wikipage.FrontMatter{"identifier": "test-page", "title": "Old Title"},
+					string(existingContent),
+				)
 				req.ExpectedVersionHash = &existingHash
 			})
 
@@ -3057,7 +3143,11 @@ var _ = Describe("Server", func() {
 			BeforeEach(func() {
 				originalContent := wikipage.Markdown("# Original Content")
 				mockPageReaderMutator.Markdown = originalContent
-				originalHash := fmt.Sprintf("%x", sha256.Sum256([]byte(originalContent)))
+				// Hash covers frontmatter + markdown (issue #1197)
+				originalHash := computeExpectedPageHash(
+					wikipage.FrontMatter{"identifier": "test-page", "title": "Old Title"},
+					string(originalContent),
+				)
 				req.ExpectedVersionHash = &originalHash
 
 				// Simulate a concurrent write: ModifyMarkdown sees different content under the lock.
@@ -3074,6 +3164,39 @@ var _ = Describe("Server", func() {
 			})
 
 			It("should not write any content", func() {
+				Expect(mockPageReaderMutator.WrittenMarkdown).To(BeEmpty())
+			})
+		})
+
+		// Issue #1197: version hash now covers frontmatter+markdown so frontmatter-only
+		// concurrent edits are detected by UpdateWholePage, not just markdown changes.
+		When("the page's frontmatter is concurrently changed between the wipe-guard read and the atomic write", func() {
+			BeforeEach(func() {
+				originalFM := wikipage.FrontMatter{"identifier": "test-page", "title": "Old Title"}
+				originalMD := wikipage.Markdown("# Original Content")
+
+				mockPageReaderMutator.Frontmatter = originalFM
+				mockPageReaderMutator.Markdown = originalMD
+
+				// Hash the caller would have received from ReadPage before the concurrent FM edit.
+				originalHash := computeExpectedPageHash(originalFM, string(originalMD))
+				req.ExpectedVersionHash = &originalHash
+
+				// Simulate a concurrent frontmatter-only change: ModifyFrontMatterAndMarkdown
+				// atomically sees new frontmatter but the same markdown.
+				concurrentFM := wikipage.FrontMatter{"identifier": "test-page", "title": "Concurrently Changed Title"}
+				mockPageReaderMutator.ConcurrentModificationFrontMatter = &concurrentFM
+			})
+
+			It("should detect the frontmatter version mismatch and return Aborted", func() {
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.Aborted, "content version mismatch"))
+			})
+
+			It("should not return a response", func() {
+				Expect(resp).To(BeNil())
+			})
+
+			It("should not overwrite the concurrently changed frontmatter", func() {
 				Expect(mockPageReaderMutator.WrittenMarkdown).To(BeEmpty())
 			})
 		})
@@ -4613,9 +4736,12 @@ var _ = Describe("Server", func() {
 				Expect(resp.VersionHash).NotTo(BeEmpty())
 			})
 
-			It("should return a consistent version_hash for the same content", func() {
-				// Recompute the expected hash for "# Test Page\n\nThis is test content."
-				expectedHash := fmt.Sprintf("%x", sha256.Sum256([]byte("# Test Page\n\nThis is test content.")))
+			It("should return a consistent version_hash covering frontmatter+markdown", func() {
+				// Hash covers both frontmatter and markdown (issue #1197)
+				expectedHash := computeExpectedPageHash(
+					wikipage.FrontMatter{"title": "Test Page", "tags": []any{"test"}},
+					"# Test Page\n\nThis is test content.",
+				)
 				Expect(resp.VersionHash).To(Equal(expectedHash))
 			})
 		})
@@ -7583,8 +7709,8 @@ func (*callbackObservingMutator) DeletePage(_ wikipage.PageIdentifier) error {
 	return nil
 }
 
-func (*callbackObservingMutator) ModifyMarkdown(_ wikipage.PageIdentifier, modifier func(wikipage.Markdown) (wikipage.Markdown, error), _ wikipage.Identity) error {
-	_, err := modifier("")
+func (*callbackObservingMutator) ModifyMarkdown(_ wikipage.PageIdentifier, modifier func(wikipage.FrontMatter, wikipage.Markdown) (wikipage.Markdown, error), _ wikipage.Identity) error {
+	_, err := modifier(nil, "")
 	return err
 }
 

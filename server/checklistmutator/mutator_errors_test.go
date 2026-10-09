@@ -40,7 +40,7 @@ func (*errorStore) WriteMarkdown(_ wikipage.PageIdentifier, _ wikipage.Markdown,
 	return nil
 }
 func (*errorStore) DeletePage(_ wikipage.PageIdentifier) error { return nil }
-func (*errorStore) ModifyMarkdown(_ wikipage.PageIdentifier, _ func(wikipage.Markdown) (wikipage.Markdown, error), _ wikipage.Identity) error {
+func (*errorStore) ModifyMarkdown(_ wikipage.PageIdentifier,  _ func(wikipage.FrontMatter, wikipage.Markdown) (wikipage.Markdown, error), _ wikipage.Identity) error {
 	return nil
 }
 

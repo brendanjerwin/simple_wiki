@@ -796,23 +796,23 @@ func (s *Site) modifyOrCreatePage(identifierStr string, identity wikipage.Identi
 // ModifyMarkdown atomically reads the markdown section, calls modifier, and writes the result
 // back while preserving the existing frontmatter. The entire cycle is held under the write lock.
 // The identity parameter is used for history attribution.
-func (s *Site) ModifyMarkdown(identifier wikipage.PageIdentifier, modifier func(wikipage.Markdown) (wikipage.Markdown, error), identity wikipage.Identity) error {
+func (s *Site) ModifyMarkdown(identifier wikipage.PageIdentifier, modifier func(wikipage.FrontMatter, wikipage.Markdown) (wikipage.Markdown, error), identity wikipage.Identity) error {
 	return s.modifyOrCreatePage(string(identifier), identity, "modify_markdown", func(currentText string) (string, error) {
 		p := &wikipage.Page{Text: currentText}
+
+		currentFM, err := p.GetFrontMatter()
+		if err != nil {
+			return "", fmt.Errorf("failed to parse frontmatter for markdown modification: %w", err)
+		}
 
 		currentMD, err := p.GetMarkdown()
 		if err != nil {
 			return "", fmt.Errorf("failed to parse markdown for modification: %w", err)
 		}
 
-		newMD, err := modifier(currentMD)
+		newMD, err := modifier(currentFM, currentMD)
 		if err != nil {
 			return "", err
-		}
-
-		currentFM, err := p.GetFrontMatter()
-		if err != nil {
-			return "", fmt.Errorf("failed to parse frontmatter during markdown modification: %w", err)
 		}
 
 		return wikipage.CombineFrontMatterAndMarkdown(currentFM, newMD)
@@ -863,7 +863,7 @@ func (s *Site) WriteFrontMatter(identifier wikipage.PageIdentifier, fm wikipage.
 // and writes the result — all under a single write lock to prevent concurrent write races.
 // The identity parameter is used for history attribution.
 func (s *Site) WriteMarkdown(identifier wikipage.PageIdentifier, md wikipage.Markdown, identity wikipage.Identity) error {
-	return s.ModifyMarkdown(identifier, func(_ wikipage.Markdown) (wikipage.Markdown, error) {
+	return s.ModifyMarkdown(identifier, func(_ wikipage.FrontMatter, _ wikipage.Markdown) (wikipage.Markdown, error) {
 		return md, nil
 	}, identity)
 }

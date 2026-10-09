@@ -86,12 +86,15 @@ type PageOpener interface {
 // Implementations must hold a write lock for the duration of the modifier call
 // to prevent TOCTOU races between concurrent writers.
 type PageModifier interface {
-	// ModifyMarkdown atomically reads the markdown section, calls modifier with it,
-	// and writes the result back (preserving the existing frontmatter).
-	// The entire read-modify-write cycle is held under a write lock.
+	// ModifyMarkdown atomically reads both the frontmatter and markdown sections,
+	// calls modifier with them, and writes the returned markdown back (preserving
+	// the existing frontmatter). The entire read-modify-write cycle is held under
+	// a write lock. Passing frontmatter to the modifier enables callers to compute
+	// a whole-page version hash (covering both frontmatter and markdown) for
+	// optimistic concurrency checks.
 	// If modifier returns an error, the page is not written.
 	// The identity parameter is used for history attribution.
-	ModifyMarkdown(identifier PageIdentifier, modifier func(Markdown) (Markdown, error), identity Identity) error
+	ModifyMarkdown(identifier PageIdentifier, modifier func(FrontMatter, Markdown) (Markdown, error), identity Identity) error
 }
 
 // PageReaderMutator is an interface that combines PageReader, PageWriter, PageDeleter, and PageModifier.

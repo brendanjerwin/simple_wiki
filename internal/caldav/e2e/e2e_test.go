@@ -79,7 +79,7 @@ func (*stubStore) WriteMarkdown(_ wikipage.PageIdentifier, _ wikipage.Markdown, 
 
 func (*stubStore) DeletePage(_ wikipage.PageIdentifier) error { return nil }
 
-func (*stubStore) ModifyMarkdown(_ wikipage.PageIdentifier, _ func(wikipage.Markdown) (wikipage.Markdown, error), _ wikipage.Identity) error {
+func (*stubStore) ModifyMarkdown(_ wikipage.PageIdentifier,  _ func(wikipage.FrontMatter, wikipage.Markdown) (wikipage.Markdown, error), _ wikipage.Identity) error {
 	return nil
 }
 

@@ -67,7 +67,7 @@ func (*fakeReaderMutator) WriteMarkdown(_ wikipage.PageIdentifier, _ wikipage.Ma
 	return nil
 }
 func (*fakeReaderMutator) DeletePage(_ wikipage.PageIdentifier) error { return nil }
-func (*fakeReaderMutator) ModifyMarkdown(_ wikipage.PageIdentifier, _ func(wikipage.Markdown) (wikipage.Markdown, error), _ wikipage.Identity) error {
+func (*fakeReaderMutator) ModifyMarkdown(_ wikipage.PageIdentifier,  _ func(wikipage.FrontMatter, wikipage.Markdown) (wikipage.Markdown, error), _ wikipage.Identity) error {
 	return nil
 }
 

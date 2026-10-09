@@ -58,9 +58,9 @@ func (f *fakeMutator) DeletePage(id wikipage.PageIdentifier) error {
 	return nil
 }
 
-func (f *fakeMutator) ModifyMarkdown(id wikipage.PageIdentifier, modifier func(wikipage.Markdown) (wikipage.Markdown, error), _ wikipage.Identity) error {
+func (f *fakeMutator) ModifyMarkdown(id wikipage.PageIdentifier, modifier func(wikipage.FrontMatter, wikipage.Markdown) (wikipage.Markdown, error), _ wikipage.Identity) error {
 	current := f.markdown[id]
-	next, err := modifier(current)
+	next, err := modifier(nil, current)
 	if err != nil {
 		return err
 	}
