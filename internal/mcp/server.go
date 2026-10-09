@@ -62,7 +62,21 @@ func NewStreamableHTTPHandler(apiServer *grpcapi.Server, version string) (http.H
 	// descriptions. Must run AFTER the Register*Handler calls above.
 	serviceDescriptions := mcpdocs.Decorate(s)
 
-	return mcpserver.NewStreamableHTTPServer(s), serviceDescriptions, nil
+	// DisableLocalhostProtection: the wiki is fronted by Tailscale Serve on
+	// the same host, which proxies every request over loopback while
+	// preserving the original Host header. mcp-go's DNS-rebinding guard
+	// (vendor/.../server/http_localhost.go) rejects loopback connections
+	// carrying a non-loopback Host with 403 "invalid Host header", which
+	// breaks 100% of legitimate /mcp traffic in this topology.
+	//
+	// The guard cannot protect us here: (1) DNS rebinding over HTTPS is
+	// impossible because Tailscale Serve only presents a cert for
+	// *.monster-orfe.ts.net — a rebound hostname fails TLS first; (2) the
+	// localhost-rebinding threat targets a browser on this host itself, and
+	// the wiki host is headless; (3) identity is enforced by the Tailscale
+	// identity middleware wrapping this handler, not by the Host check.
+	// See https://github.com/brendanjerwin/simple_wiki/issues/1199.
+	return mcpserver.NewStreamableHTTPServer(s, mcpserver.WithDisableLocalhostProtection(true)), serviceDescriptions, nil
 }
 
 // NewServiceCatalogHandler returns an HTTP handler that serves the curated

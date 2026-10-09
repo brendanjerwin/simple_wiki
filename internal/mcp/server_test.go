@@ -4,6 +4,7 @@ package mcp_test
 import (
 	"context"
 	"encoding/json"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -261,6 +262,34 @@ var _ = Describe("NewStreamableHTTPHandler", func() {
 				resultMap, ok := result["result"].(map[string]any)
 				Expect(ok).To(BeTrue())
 				Expect(resultMap).To(HaveKey("serverInfo"))
+			})
+		})
+
+		// Regression test for #1199: Tailscale Serve proxies every request
+		// over loopback while preserving the original Host header. mcp-go's
+		// DNS-rebinding guard rejected that (loopback local addr + non-loopback
+		// Host) with 403 "invalid Host header", breaking all production /mcp
+		// traffic after the mcp-go 0.56.0 bump (#1139).
+		When("receiving an MCP initialize request via a loopback proxy with the original Host header", func() {
+			var resp *httptest.ResponseRecorder
+
+			BeforeEach(func() {
+				body := `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"0.0.1"}}}`
+				req := httptest.NewRequest(http.MethodPost, "https://wiki.monster-orfe.ts.net/mcp", strings.NewReader(body))
+				req.Header.Set("Content-Type", "application/json")
+				// Simulate the loopback connection made by Tailscale Serve.
+				loopback := &net.TCPAddr{IP: net.ParseIP("127.0.0.1"), Port: 443}
+				req = req.WithContext(context.WithValue(req.Context(), http.LocalAddrContextKey, loopback))
+				resp = httptest.NewRecorder()
+				handler.ServeHTTP(resp, req)
+			})
+
+			It("does not reject the request with 403", func() {
+				Expect(resp.Code).NotTo(Equal(http.StatusForbidden))
+			})
+
+			It("returns HTTP 200", func() {
+				Expect(resp.Code).To(Equal(http.StatusOK))
 			})
 		})
 
