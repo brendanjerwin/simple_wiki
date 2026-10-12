@@ -110,7 +110,7 @@ func newGoldmark() goldmark.Markdown {
 				util.Prioritized(NewCollapsibleSectionRenderer(html.WithUnsafe()), collapsibleSectionRendererPriority),
 				util.Prioritized(NewAlertRenderer(html.WithUnsafe()), alertRendererPriority),
 				util.Prioritized(NewHashtagRenderer(html.WithUnsafe()), hashtagRendererPriority),
-			util.Prioritized(NewExternalLinkRenderer(html.WithUnsafe()), externalLinkRendererPriority),
+				util.Prioritized(NewExternalLinkRenderer(html.WithUnsafe()), externalLinkRendererPriority),
 			),
 		),
 	)

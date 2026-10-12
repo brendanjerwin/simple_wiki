@@ -165,6 +165,60 @@ var _ = Describe("GoldmarkRenderer", func() {
 			})
 		})
 
+		When("rendering markdown with an external link with a title attribute", func() {
+			BeforeEach(func() {
+				source = []byte(`[Google](https://example.com "Visit Google")`)
+			})
+
+			It("should not return an error", func() {
+				Expect(err).ToNot(HaveOccurred())
+			})
+
+			It("should include the title attribute", func() {
+				Expect(string(output)).To(ContainSubstring(`title="Visit Google"`))
+			})
+
+			It("should append the external link indicator", func() {
+				Expect(string(output)).To(ContainSubstring(`<span aria-hidden="true">↗</span>`))
+			})
+		})
+
+		When("rendering markdown with a link to a dangerous destination", func() {
+			BeforeEach(func() {
+				source = []byte("[Click](javascript:alert(1))")
+			})
+
+			It("should not return an error", func() {
+				Expect(err).ToNot(HaveOccurred())
+			})
+
+			It("should not append the external link indicator", func() {
+				Expect(string(output)).NotTo(ContainSubstring(`<span aria-hidden="true">↗</span>`))
+			})
+
+			It("should strip the dangerous href via sanitization", func() {
+				Expect(string(output)).NotTo(ContainSubstring(`href="javascript:`))
+			})
+		})
+
+		When("rendering markdown with an email autolink", func() {
+			BeforeEach(func() {
+				source = []byte("<user@example.com>")
+			})
+
+			It("should not return an error", func() {
+				Expect(err).ToNot(HaveOccurred())
+			})
+
+			It("should prepend the mailto: scheme", func() {
+				Expect(string(output)).To(ContainSubstring(`href="mailto:user@example.com"`))
+			})
+
+			It("should not append the external link indicator", func() {
+				Expect(string(output)).NotTo(ContainSubstring(`<span aria-hidden="true">↗</span>`))
+			})
+		})
+
 		When("rendering markdown with a relative link", func() {
 			BeforeEach(func() {
 				source = []byte("[Local](/local_page/view)")

@@ -116,28 +116,11 @@ func (r *externalLinkRenderer) renderAutoLink(w util.BufWriter, source []byte, n
 	if _, err := w.WriteString(`<a href="`); err != nil {
 		return ast.WalkStop, err
 	}
-	if n.AutoLinkType == ast.AutoLinkEmail && !bytes.HasPrefix(bytes.ToLower(escapedURL), []byte("mailto:")) {
-		if _, err := w.WriteString("mailto:"); err != nil {
-			return ast.WalkStop, err
-		}
+	if err := r.writeAutoLinkScheme(w, n, escapedURL); err != nil {
+		return ast.WalkStop, err
 	}
-	if r.Unsafe || !html.IsDangerousURL(escapedURL) {
-		if _, err := w.Write(util.EscapeHTML(escapedURL)); err != nil {
-			return ast.WalkStop, err
-		}
-	}
-	if n.Attributes() != nil {
-		if err := w.WriteByte('"'); err != nil {
-			return ast.WalkStop, err
-		}
-		html.RenderAttributes(w, n, html.LinkAttributeFilter)
-		if err := w.WriteByte('>'); err != nil {
-			return ast.WalkStop, err
-		}
-	} else {
-		if _, err := w.WriteString(`">`); err != nil {
-			return ast.WalkStop, err
-		}
+	if err := writeAutoLinkHrefClose(w, n); err != nil {
+		return ast.WalkStop, err
 	}
 	if _, err := w.Write(util.EscapeHTML(label)); err != nil {
 		return ast.WalkStop, err
@@ -151,4 +134,36 @@ func (r *externalLinkRenderer) renderAutoLink(w util.BufWriter, source []byte, n
 		return ast.WalkStop, err
 	}
 	return ast.WalkContinue, nil
+}
+
+// writeAutoLinkScheme writes the href value (scheme + escaped URL) into w.
+// For email autolinks that don't already carry a mailto: prefix, the prefix
+// is prepended. Dangerous URLs are omitted unless the renderer is in unsafe mode.
+func (r *externalLinkRenderer) writeAutoLinkScheme(w util.BufWriter, n *ast.AutoLink, escapedURL []byte) error {
+	if n.AutoLinkType == ast.AutoLinkEmail && !bytes.HasPrefix(bytes.ToLower(escapedURL), []byte("mailto:")) {
+		if _, err := w.WriteString("mailto:"); err != nil {
+			return err
+		}
+	}
+	if r.Unsafe || !html.IsDangerousURL(escapedURL) {
+		if _, err := w.Write(util.EscapeHTML(escapedURL)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// writeAutoLinkHrefClose closes the href attribute quote and opens the anchor
+// tag body. When the node carries additional attributes they are rendered
+// between the closing quote and the '>'; otherwise the compact `">` form is used.
+func writeAutoLinkHrefClose(w util.BufWriter, n *ast.AutoLink) error {
+	if n.Attributes() == nil {
+		_, err := w.WriteString(`">`)
+		return err
+	}
+	if err := w.WriteByte('"'); err != nil {
+		return err
+	}
+	html.RenderAttributes(w, n, html.LinkAttributeFilter)
+	return w.WriteByte('>')
 }
