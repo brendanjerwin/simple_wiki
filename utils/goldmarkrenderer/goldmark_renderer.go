@@ -58,6 +58,10 @@ const hashtagInlineParserPriority = 999
 // hashtagRendererPriority for the custom hashtag node renderer.
 const hashtagRendererPriority = 500
 
+// externalLinkRendererPriority must be lower than the default HTML renderer (1000)
+// so it is registered after (and therefore overrides) the default link rendering.
+const externalLinkRendererPriority = 100
+
 type GoldmarkRenderer struct{}
 
 // Render renders the input markdown to HTML.
@@ -106,6 +110,7 @@ func newGoldmark() goldmark.Markdown {
 				util.Prioritized(NewCollapsibleSectionRenderer(html.WithUnsafe()), collapsibleSectionRendererPriority),
 				util.Prioritized(NewAlertRenderer(html.WithUnsafe()), alertRendererPriority),
 				util.Prioritized(NewHashtagRenderer(html.WithUnsafe()), hashtagRendererPriority),
+				util.Prioritized(NewExternalLinkRenderer(html.WithUnsafe()), externalLinkRendererPriority),
 			),
 		),
 	)

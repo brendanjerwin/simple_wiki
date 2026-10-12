@@ -13,7 +13,7 @@ Click the `Edit` button to edit. The pages are in [Markdown](https://www.markdow
 
 ## Links
 
-Use normal Markdown links like `[Open route](https://maps.app.goo.gl/wo54t5YMTyhz6rqH7)`. Fully qualified external links open in a new browser tab with `noopener noreferrer` protections. Internal wiki links like `[[help-search]]` and relative links stay in the current tab.
+Use normal Markdown links like `[Open route](https://maps.app.goo.gl/wo54t5YMTyhz6rqH7)`. Fully qualified external links open in a new browser tab with `noopener noreferrer` protections and are automatically decorated with a ↗ indicator so you can tell at a glance which links leave the wiki. Internal wiki links like `[[help-search]]`, relative links, and anchors stay in the current tab and have no indicator.
 
 ## Frontmatter
 
