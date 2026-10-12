@@ -203,10 +203,53 @@ func (noOpChatBufferManager) RespondToPermission(string, string) {
 	// no-op: satisfies interface; this implementation ignores permission responses
 }
 
+// contentStubPageReaderMutator returns fixed markdown content for any page read.
+// Used by MCP E2E tests that need the page to exist with actual bytes.
+type contentStubPageReaderMutator struct {
+	content string
+}
+
+func (contentStubPageReaderMutator) ReadFrontMatter(id wikipage.PageIdentifier) (wikipage.PageIdentifier, wikipage.FrontMatter, error) {
+	return id, wikipage.FrontMatter{}, nil
+}
+
+func (contentStubPageReaderMutator) WriteFrontMatter(wikipage.PageIdentifier, wikipage.FrontMatter, wikipage.Identity) error {
+	return nil
+}
+
+func (s contentStubPageReaderMutator) ReadMarkdown(id wikipage.PageIdentifier) (wikipage.PageIdentifier, wikipage.Markdown, error) {
+	return id, wikipage.Markdown(s.content), nil
+}
+
+func (contentStubPageReaderMutator) WriteMarkdown(wikipage.PageIdentifier, wikipage.Markdown, wikipage.Identity) error {
+	return nil
+}
+
+func (contentStubPageReaderMutator) DeletePage(wikipage.PageIdentifier) error { return nil }
+
+func (contentStubPageReaderMutator) ModifyMarkdown(_ wikipage.PageIdentifier, modifier func(wikipage.FrontMatter, wikipage.Markdown) (wikipage.Markdown, error), _ wikipage.Identity) error {
+	_, err := modifier(nil, "")
+	return err
+}
+
 func mustNewAPIServer() *grpcapi.Server {
 	srv, err := grpcapi.NewServer(
 		grpcapi.BuildInfo{Commit: "test-commit", BuildTime: time.Now()},
 		noOpPageReaderMutator{},
+		noOpBleveIndexQueryer{},
+		noOpFrontmatterIndexQueryer{},
+		lumber.NewConsoleLogger(lumber.WARN),
+		noOpChatBufferManager{},
+		noOpPageOpener{},
+	)
+	ExpectWithOffset(1, err).NotTo(HaveOccurred())
+	return srv
+}
+
+func mustNewAPIServerWithContent(content string) *grpcapi.Server {
+	srv, err := grpcapi.NewServer(
+		grpcapi.BuildInfo{Commit: "test-commit", BuildTime: time.Now()},
+		contentStubPageReaderMutator{content: content},
 		noOpBleveIndexQueryer{},
 		noOpFrontmatterIndexQueryer{},
 		lumber.NewConsoleLogger(lumber.WARN),
@@ -532,6 +575,57 @@ var _ = Describe("NewStreamableHTTPHandler", func() {
 				resultMap, ok := callResult["result"].(map[string]any)
 				Expect(ok).To(BeTrue(), "result should be a map, got: %T", callResult["result"])
 				Expect(resultMap["isError"]).To(Equal(true), "tool should return isError=true (page not found), not silent empty content; content: %v", resultMap["content"])
+			})
+		})
+
+		// Regression test for issue #1203: ReadPageSection returned an empty success
+		// (content_markdown: "", byte_offset: 0, byte_length: 0) when byte_offset/byte_length
+		// were omitted and the page had content. Agents interpreted this as an empty section
+		// rather than a parameter error, leading to false "does not exist" conclusions.
+		When("invoking api_v1_PageManagementService_ReadPageSection without byte_offset/byte_length on a page with content", func() {
+			var callResp *httptest.ResponseRecorder
+			var callResult map[string]any
+
+			BeforeEach(func() {
+				localAPIServer := mustNewAPIServerWithContent("# Section\n\nsome body text here\n")
+				localHandler, _, err := wikimcp.NewStreamableHTTPHandler(localAPIServer, "test-version", wikimcp.Options{})
+				Expect(err).NotTo(HaveOccurred())
+
+				initBody := `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"0.0.1"}}}`
+				initReq := httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(initBody))
+				initReq.Header.Set("Content-Type", "application/json")
+				initResp := httptest.NewRecorder()
+				localHandler.ServeHTTP(initResp, initReq)
+				sessionID := initResp.Header().Get("Mcp-Session-Id")
+
+				callBody := `{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"api_v1_PageManagementService_ReadPageSection","arguments":{"page":"test-page"}}}`
+				callReq := httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(callBody))
+				callReq.Header.Set("Content-Type", "application/json")
+				if sessionID != "" {
+					callReq.Header.Set("Mcp-Session-Id", sessionID)
+				}
+				callResp = httptest.NewRecorder()
+				localHandler.ServeHTTP(callResp, callReq)
+
+				Expect(json.Unmarshal(callResp.Body.Bytes(), &callResult)).To(Succeed())
+			})
+
+			It("returns HTTP 200", func() {
+				Expect(callResp.Code).To(Equal(http.StatusOK))
+			})
+
+			It("returns a JSON-RPC result (not a JSON-RPC protocol error)", func() {
+				Expect(callResult).NotTo(HaveKey("error"), "unexpected JSON-RPC protocol error: %v", callResult["error"])
+				Expect(callResult).To(HaveKey("result"))
+			})
+
+			It("returns isError=true instead of a silent empty-content success", func() {
+				resultMap, ok := callResult["result"].(map[string]any)
+				Expect(ok).To(BeTrue(), "result should be a map, got: %T", callResult["result"])
+				Expect(resultMap["isError"]).To(Equal(true),
+					"tool must return isError=true when byte_length is omitted on a non-empty page; "+
+						"silent empty-content success is indistinguishable from a genuinely empty section; "+
+						"content: %v", resultMap["content"])
 			})
 		})
 

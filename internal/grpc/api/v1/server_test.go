@@ -6567,6 +6567,21 @@ var _ = Describe("Server", func() {
 			})
 		})
 
+		When("both byte_offset and byte_length are zero (omitted) while the page has content", func() {
+			BeforeEach(func() {
+				req.ByteOffset = 0
+				req.ByteLength = 0
+			})
+
+			It("should return an invalid argument error naming the missing param", func() {
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.InvalidArgument, "byte_length is required"))
+			})
+
+			It("should return no response", func() {
+				Expect(resp).To(BeNil())
+			})
+		})
+
 		When("the byte range exceeds the page length", func() {
 			BeforeEach(func() {
 				req.ByteOffset = int64(len(mockPageReaderMutator.Markdown))
