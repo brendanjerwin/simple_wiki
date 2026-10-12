@@ -184,6 +184,10 @@ body.EditPage {
 }
 
 
+div#rendered {
+  padding-bottom: 1em;
+}
+
 div#rendered ul,
 div#rendered ol {
   padding-left: 2em;
