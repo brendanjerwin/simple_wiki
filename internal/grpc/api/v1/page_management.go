@@ -1095,6 +1095,13 @@ func (s *Server) ReadPageSection(ctx context.Context, req *apiv1.ReadPageSection
 	}
 
 	totalBytes := int64(len(markdown))
+
+	if req.ByteLength == 0 && totalBytes > 0 {
+		return nil, status.Errorf(codes.InvalidArgument,
+			"byte_length is required: page has %d bytes; use ReadPageOutline to get valid byte_offset and byte_length values for a specific section",
+			totalBytes)
+	}
+
 	if req.ByteOffset > totalBytes || req.ByteLength > totalBytes-req.ByteOffset {
 		return nil, status.Errorf(codes.InvalidArgument, "byte range exceeds page length: offset %d length %d total %d", req.ByteOffset, req.ByteLength, totalBytes)
 	}
