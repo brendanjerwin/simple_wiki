@@ -113,8 +113,8 @@ var _ = Describe("GoldmarkRenderer", func() {
 				Expect(err).ToNot(HaveOccurred())
 			})
 
-			It("should render an <a> tag", func() {
-				expected := "<p><a href=\"https://www.google.com\" rel=\"nofollow noreferrer noopener\" target=\"_blank\">https://www.google.com</a></p>\n"
+			It("should render an <a> tag with external link indicator", func() {
+				expected := "<p><a href=\"https://www.google.com\" rel=\"nofollow noreferrer noopener\" target=\"_blank\">https://www.google.com<span aria-hidden=\"true\">↗</span></a></p>\n"
 				Expect(string(output)).To(Equal(expected))
 			})
 		})
@@ -135,6 +135,34 @@ var _ = Describe("GoldmarkRenderer", func() {
 			It("should add no-referrer protections", func() {
 				Expect(string(output)).To(ContainSubstring(`rel="nofollow noreferrer noopener"`))
 			})
+
+			It("should append the external link indicator", func() {
+				Expect(string(output)).To(ContainSubstring(`<span aria-hidden="true">↗</span>`))
+			})
+		})
+
+		When("rendering markdown with an http (non-https) external link", func() {
+			BeforeEach(func() {
+				source = []byte("[Old Site](http://example.com)")
+			})
+
+			It("should not return an error", func() {
+				Expect(err).ToNot(HaveOccurred())
+			})
+
+			It("should append the external link indicator", func() {
+				Expect(string(output)).To(ContainSubstring(`<span aria-hidden="true">↗</span>`))
+			})
+		})
+
+		When("rendering markdown with an external link (accessibility check)", func() {
+			BeforeEach(func() {
+				source = []byte("[Visit](https://example.com)")
+			})
+
+			It("should render the indicator span with aria-hidden to suppress screen-reader announcement", func() {
+				Expect(string(output)).To(ContainSubstring(`aria-hidden="true"`))
+			})
 		})
 
 		When("rendering markdown with a relative link", func() {
@@ -148,6 +176,24 @@ var _ = Describe("GoldmarkRenderer", func() {
 
 			It("should keep the link in the current tab", func() {
 				Expect(string(output)).NotTo(ContainSubstring(`target="_blank"`))
+			})
+
+			It("should not append the external link indicator", func() {
+				Expect(string(output)).NotTo(ContainSubstring(`<span aria-hidden="true">↗</span>`))
+			})
+		})
+
+		When("rendering markdown with an anchor link", func() {
+			BeforeEach(func() {
+				source = []byte("[Jump](#section-one)")
+			})
+
+			It("should not return an error", func() {
+				Expect(err).ToNot(HaveOccurred())
+			})
+
+			It("should not append the external link indicator", func() {
+				Expect(string(output)).NotTo(ContainSubstring(`<span aria-hidden="true">↗</span>`))
 			})
 		})
 
@@ -331,6 +377,10 @@ var _ = Describe("GoldmarkRenderer", func() {
 
 			It("should keep the wikilink in the current tab", func() {
 				Expect(string(output)).NotTo(ContainSubstring(`target="_blank"`))
+			})
+
+			It("should not append the external link indicator", func() {
+				Expect(string(output)).NotTo(ContainSubstring(`<span aria-hidden="true">↗</span>`))
 			})
 		})
 
