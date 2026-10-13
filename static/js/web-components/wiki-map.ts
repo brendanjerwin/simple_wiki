@@ -198,7 +198,14 @@ export class LeafletWikiMapRenderer implements WikiMapRenderer {
     mapName: string,
     isIntersected: boolean
   ): void {
+    // Preserve tag filter state so user selections survive re-renders (e.g. tileset changes).
+    const savedCheckedTags = new Set(this.checkedTags);
+    const savedAllKnownTags = new Set(this.allKnownTags);
+    const savedTagsInitialized = this.tagsInitialized;
     this.destroy();
+    this.checkedTags = savedCheckedTags;
+    this.allKnownTags = savedAllKnownTags;
+    this.tagsInitialized = savedTagsInitialized;
     this.mapMessage = mapMessage;
     this.map = L.map(container, {
       dragging: true,
@@ -311,32 +318,14 @@ export class LeafletWikiMapRenderer implements WikiMapRenderer {
   private collectTagsFromMapMessage(mapMessage: WikiMapMessage): { currentTags: Set<string>; hasUntagged: boolean } {
     const currentTags = new Set<string>();
     let hasUntagged = false;
-    for (const marker of mapMessage.markers ?? []) {
-      if (marker.tags && marker.tags.length > 0) {
-        for (const tag of marker.tags) currentTags.add(tag);
-      } else {
-        hasUntagged = true;
-      }
-    }
-    for (const polygon of mapMessage.polygons ?? []) {
-      if (polygon.tags && polygon.tags.length > 0) {
-        for (const tag of polygon.tags) currentTags.add(tag);
-      } else {
-        hasUntagged = true;
-      }
-    }
-    for (const circle of mapMessage.circles ?? []) {
-      if (circle.tags && circle.tags.length > 0) {
-        for (const tag of circle.tags) currentTags.add(tag);
-      } else {
-        hasUntagged = true;
-      }
-    }
-    for (const track of mapMessage.tracks ?? []) {
-      if (track.tags && track.tags.length > 0) {
-        for (const tag of track.tags) currentTags.add(tag);
-      } else {
-        hasUntagged = true;
+    const collections = [mapMessage.markers ?? [], mapMessage.polygons ?? [], mapMessage.circles ?? [], mapMessage.tracks ?? []];
+    for (const collection of collections) {
+      for (const item of collection) {
+        if (item.tags?.length) {
+          for (const tag of item.tags) currentTags.add(tag);
+        } else {
+          hasUntagged = true;
+        }
       }
     }
     return { currentTags, hasUntagged };
