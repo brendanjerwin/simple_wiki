@@ -474,7 +474,7 @@ func (d *poolDaemon) spawnEphemeralForScheduledTurn(ctx context.Context, page, r
 	client := newScheduledTurnClient(page, maxTurns, allowedTools, cancelTurn)
 	agent, spawnErr := d.spawnEphemeralAgent(ctx, client, scheduledTurnUnitPrefix, page+"-"+shortIDForUnit(requestID))
 	if spawnErr != nil {
-		return nil, func() {}, spawnErr
+		return nil, func() { /* no cleanup needed on spawn error path */ }, spawnErr
 	}
 	return &scheduledEphemeralConnection{
 		connection: agent.conn,

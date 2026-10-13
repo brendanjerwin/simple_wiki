@@ -1,5 +1,21 @@
 package eval
 
+// Tag constants eliminate duplicated string literals flagged by static analysis.
+const (
+	tagHappyPath             = "happy-path"
+	tagCrossServiceConfusion = "cross-service-confusion"
+)
+
+// Context fixture constants for pages that appear in many test cases.
+const (
+	ctxNoCurrentPage = "No current page context; the user is asking a global wiki operation question."
+	ctxGardenPlan    = `Page: garden_plan. Frontmatter: title = "Garden Plan", tags = ["home", "garden"]. Body: garden layout notes, planting schedule, watering section. Map: "yard" with markers for beds, shed, compost, a polygon for fence_area, a circle for sprinkler zone, and a track called walking path.`
+	ctxMeetingNotes  = `Page: meeting_notes. Frontmatter: title = "Meeting Notes", tags = ["work"]. Body: weekly team notes with sections: Budget, Action Items, Decisions.`
+	ctxRoadmap       = `Page: roadmap. Frontmatter: title = "Roadmap", status = "draft". Body: multi-section project plan including 'Q3 Milestones' and 'Budget'.`
+	ctxOldDrafts     = `Page: old_drafts. Frontmatter: title = "Old Drafts". Body: archived notes. Currently in the trash.`
+	ctxOldNotes      = `Page: old_notes. Frontmatter: title = "Old Notes", tags = ["archive"]. Body: old markdown.`
+)
+
 // Case is one evaluation scenario: a natural-language user request and the
 // expected tool selection. See eval/RUBRIC.md for the scenario rubric.
 type Case struct {
@@ -38,11 +54,11 @@ var Cases = []Case{
 	{
 		ID:           "pm-create-page",
 		UserSays:     "I'd like to start a new page for tracking my garden. Can you set it up as garden_plan with the title Garden Plan?",
-		Context:      "No current page context; the user is asking a global wiki operation question.",
+		Context:      ctxNoCurrentPage,
 		ExpectedTool: "api_v1_PageManagementService_CreatePage",
 		ExpectedArgs: map[string]any{"identifier": "garden_plan"},
 		Services:     []string{"PageManagementService"},
-		Tags:         []string{"page", "create", "happy-path", "easy"},
+		Tags:         []string{"page", "create", tagHappyPath, "easy"},
 	},
 	{
 		ID:           "pm-read-page",
@@ -51,12 +67,12 @@ var Cases = []Case{
 		ExpectedTool: "api_v1_PageManagementService_ReadPage",
 		ExpectedArgs: map[string]any{"identifier": "weekly_menu"},
 		Services:     []string{"PageManagementService"},
-		Tags:         []string{"page", "read", "happy-path", "easy"},
+		Tags:         []string{"page", "read", tagHappyPath, "easy"},
 	},
 	{
 		ID:           "pm-read-outline",
 		UserSays:     "The meeting_notes page is huge — can you just show me the headings so I know where to look?",
-		Context:      "Page: meeting_notes. Frontmatter: title = \"Meeting Notes\", tags = [\"work\"]. Body: weekly team notes with sections: Budget, Action Items, Decisions.",
+		Context:      ctxMeetingNotes,
 		ExpectedTool: "api_v1_PageManagementService_ReadPageOutline",
 		Services:     []string{"PageManagementService"},
 		Tags:         []string{"page", "read", "large-pages", "easy"},
@@ -64,15 +80,15 @@ var Cases = []Case{
 	{
 		ID:           "pm-delete-page",
 		UserSays:     "I don't need the old_drafts page anymore. Can you move it to trash?",
-		Context:      "Page: old_drafts. Frontmatter: title = \"Old Drafts\". Body: archived notes. Currently in the trash.",
+		Context:      ctxOldDrafts,
 		ExpectedTool: "api_v1_PageManagementService_DeletePage",
 		Services:     []string{"PageManagementService"},
-		Tags:         []string{"page", "delete", "happy-path", "easy"},
+		Tags:         []string{"page", "delete", tagHappyPath, "easy"},
 	},
 	{
 		ID:           "pm-render-markdown",
 		UserSays:     "Could you turn this markdown snippet into HTML for me? I don't want to save it anywhere, just preview how it renders.",
-		Context:      "No current page context; the user is asking a global wiki operation question.",
+		Context:      ctxNoCurrentPage,
 		ExpectedTool: "api_v1_PageManagementService_RenderMarkdown",
 		Services:     []string{"PageManagementService"},
 		Tags:         []string{"page", "render", "disambiguation", "medium"},
@@ -80,10 +96,10 @@ var Cases = []Case{
 	{
 		ID:           "pm-generate-identifier",
 		UserSays:     "If I name a page 'My New Recipe Page', what would its wiki identifier become?",
-		Context:      "No current page context; the user is asking a global wiki operation question.",
+		Context:      ctxNoCurrentPage,
 		ExpectedTool: "api_v1_PageManagementService_GenerateIdentifier",
 		Services:     []string{"PageManagementService"},
-		Tags:         []string{"page", "identifier", "happy-path", "easy"},
+		Tags:         []string{"page", "identifier", tagHappyPath, "easy"},
 	},
 
 	// --- Frontmatter ---
@@ -94,7 +110,7 @@ var Cases = []Case{
 		ExpectedTool: "api_v1_Frontmatter_GetFrontmatter",
 		ExpectedArgs: map[string]any{"page": "project_roadmap"},
 		Services:     []string{"Frontmatter"},
-		Tags:         []string{"easy", "frontmatter", "read", "happy-path"},
+		Tags:         []string{"easy", "frontmatter", "read", tagHappyPath},
 	},
 	{
 		ID:           "fm-merge",
@@ -102,7 +118,7 @@ var Cases = []Case{
 		Context:      `blog_post_42: blog post draft. Frontmatter: title untitled, status='draft'.`,
 		ExpectedTool: "api_v1_Frontmatter_MergeFrontmatter",
 		Services:     []string{"Frontmatter"},
-		Tags:         []string{"medium", "frontmatter", "write", "happy-path"},
+		Tags:         []string{"medium", "frontmatter", "write", tagHappyPath},
 	},
 	{
 		ID:           "fm-replace",
@@ -118,7 +134,7 @@ var Cases = []Case{
 		Context:      `config_page: configuration notes page. Frontmatter includes deprecated_field=true.`,
 		ExpectedTool: "api_v1_Frontmatter_RemoveKeyAtPath",
 		Services:     []string{"Frontmatter"},
-		Tags:         []string{"easy", "frontmatter", "write", "happy-path"},
+		Tags:         []string{"easy", "frontmatter", "write", tagHappyPath},
 	},
 
 	// --- SearchService ---
@@ -128,7 +144,7 @@ var Cases = []Case{
 		Context:      "The user is chatting on the 'garden_plan' page, which has notes about garden layout, planting schedule, and watering. There is no checklist or map active in this conversation.",
 		ExpectedTool: "api_v1_SearchService_SearchContent",
 		Services:     []string{"SearchService"},
-		Tags:         []string{"search", "happy-path", "easy"},
+		Tags:         []string{"search", tagHappyPath, "easy"},
 	},
 	{
 		ID:           "search-by-frontmatter",
@@ -146,7 +162,7 @@ var Cases = []Case{
 		Context:      `meeting_notes: weekly team meeting notes, sections Budget/Action Items/Decisions. Frontmatter: title='Meeting Notes', tags=['work'].`,
 		ExpectedTool: "api_v1_PageHistoryService_ListPageVersions",
 		Services:     []string{"PageHistoryService"},
-		Tags:         []string{"easy", "history", "read", "happy-path"},
+		Tags:         []string{"easy", "history", "read", tagHappyPath},
 	},
 	{
 		ID:           "history-read-version",
@@ -180,7 +196,7 @@ var Cases = []Case{
 		Context:      "Page 'grocery_planning' holds meal planning notes. It has a checklist 'grocery_list' with items like bread and eggs.",
 		ExpectedTool: "api_v1_ChecklistService_AddItem",
 		Services:     []string{"ChecklistService"},
-		Tags:         []string{"checklist", "write", "happy-path", "naming", "easy"},
+		Tags:         []string{"checklist", "write", tagHappyPath, "naming", "easy"},
 	},
 	{
 		ID:           "checklist-toggle-item",
@@ -188,7 +204,7 @@ var Cases = []Case{
 		Context:      "Page 'project_page' tracks project work. It has a checklist 'todo' with several unfinished tasks.",
 		ExpectedTool: "api_v1_ChecklistService_ToggleItem",
 		Services:     []string{"ChecklistService"},
-		Tags:         []string{"checklist", "write", "happy-path", "easy"},
+		Tags:         []string{"checklist", "write", tagHappyPath, "easy"},
 	},
 	{
 		ID:           "checklist-list-items",
@@ -196,7 +212,7 @@ var Cases = []Case{
 		Context:      "Page 'grocery_planning' holds meal planning notes. It has a checklist 'this_week' with grocery items.",
 		ExpectedTool: "api_v1_ChecklistService_ListItems",
 		Services:     []string{"ChecklistService"},
-		Tags:         []string{"checklist", "read", "happy-path", "easy"},
+		Tags:         []string{"checklist", "read", tagHappyPath, "easy"},
 	},
 	{
 		ID:           "checklist-deduplicate",
@@ -211,15 +227,15 @@ var Cases = []Case{
 	{
 		ID:           "map-add-marker",
 		UserSays:     "Can you drop a pin on the yard map right around 41.1, -72.2?",
-		Context:      "Page: garden_plan. Frontmatter: title = \"Garden Plan\", tags = [\"home\", \"garden\"]. Body: garden layout notes, planting schedule, watering section. Map: \"yard\" with markers for beds, shed, compost, a polygon for fence_area, a circle for sprinkler zone, and a track called walking path.",
+		Context:      ctxGardenPlan,
 		ExpectedTool: "api_v1_MapService_AddMarker",
 		Services:     []string{"MapService"},
-		Tags:         []string{"map", "write", "happy-path", "easy"},
+		Tags:         []string{"map", "write", tagHappyPath, "easy"},
 	},
 	{
 		ID:           "map-move-marker",
 		UserSays:     "The garden bed marker on the yard map looks a bit off. Can you shift it about 10 feet north?",
-		Context:      "Page: garden_plan. Frontmatter: title = \"Garden Plan\", tags = [\"home\", \"garden\"]. Body: garden layout notes, planting schedule, watering section. Map: \"yard\" with markers for beds, shed, compost, a polygon for fence_area, a circle for sprinkler zone, and a track called walking path.",
+		Context:      ctxGardenPlan,
 		ExpectedTool: "api_v1_MapService_MoveMarker",
 		Services:     []string{"MapService"},
 		Tags:         []string{"map", "write", "disambiguation", "medium"},
@@ -227,10 +243,10 @@ var Cases = []Case{
 	{
 		ID:           "map-delete-polygon",
 		UserSays:     "Can you remove the fenced area from the yard map? I don't need that outline anymore.",
-		Context:      "Page: garden_plan. Frontmatter: title = \"Garden Plan\", tags = [\"home\", \"garden\"]. Body: garden layout notes, planting schedule, watering section. Map: \"yard\" with markers for beds, shed, compost, a polygon for fence_area, a circle for sprinkler zone, and a track called walking path.",
+		Context:      ctxGardenPlan,
 		ExpectedTool: "api_v1_MapService_DeletePolygon",
 		Services:     []string{"MapService"},
-		Tags:         []string{"map", "write", "happy-path", "easy"},
+		Tags:         []string{"map", "write", tagHappyPath, "easy"},
 	},
 
 	// --- SurveyService ---
@@ -240,7 +256,7 @@ var Cases = []Case{
 		Context:      `product_page: product landing page. Frontmatter: title='Our Product'. Contains a 'feedback' survey with rating and comment fields.`,
 		ExpectedTool: "api_v1_SurveyService_GetSurvey",
 		Services:     []string{"SurveyService"},
-		Tags:         []string{"easy", "survey", "read", "happy-path", "naming"},
+		Tags:         []string{"easy", "survey", "read", tagHappyPath, "naming"},
 	},
 	{
 		ID:           "survey-upsert",
@@ -257,7 +273,7 @@ var Cases = []Case{
 		ExpectedTool: "api_v1_SurveyService_SubmitResponse",
 		ExpectedArgs: map[string]any{"name": "feedback_form"},
 		Services:     []string{"SurveyService"},
-		Tags:         []string{"easy", "survey", "write", "happy-path", "naming"},
+		Tags:         []string{"easy", "survey", "write", tagHappyPath, "naming"},
 	},
 	{
 		ID:           "survey-add-field",
@@ -273,7 +289,7 @@ var Cases = []Case{
 		Context:      `product_page: product landing page. Frontmatter: title='Our Product'. Contains a 'feedback' survey with rating and comment fields.`,
 		ExpectedTool: "api_v1_SurveyService_ListResponses",
 		Services:     []string{"SurveyService"},
-		Tags:         []string{"easy", "survey", "read", "happy-path", "naming"},
+		Tags:         []string{"easy", "survey", "read", tagHappyPath, "naming"},
 	},
 
 	// --- AgentMetadataService ---
@@ -283,7 +299,7 @@ var Cases = []Case{
 		Context:      `pastry_project: sourdough bakery project tracking page. Frontmatter: title='Pastry Project', agent namespace with schedules and chat context memories. Has a 'friday_draft' schedule that drafts weekend orders.`,
 		ExpectedTool: "api_v1_AgentMetadataService_ListSchedules",
 		Services:     []string{"AgentMetadataService"},
-		Tags:         []string{"easy", "agent", "read", "happy-path"},
+		Tags:         []string{"easy", "agent", "read", tagHappyPath},
 	},
 	{
 		ID:           "agent-upsert-schedule",
@@ -291,7 +307,7 @@ var Cases = []Case{
 		Context:      `pastry_project: sourdough bakery project tracking page. Frontmatter: title='Pastry Project', agent namespace with schedules and chat context memories. Has a 'friday_draft' schedule that drafts weekend orders.`,
 		ExpectedTool: "api_v1_AgentMetadataService_UpsertSchedule",
 		Services:     []string{"AgentMetadataService"},
-		Tags:         []string{"medium", "agent", "write", "happy-path"},
+		Tags:         []string{"medium", "agent", "write", tagHappyPath},
 	},
 	{
 		ID:           "agent-get-chat-context",
@@ -299,7 +315,7 @@ var Cases = []Case{
 		Context:      `pastry_project: sourdough bakery project tracking page. Frontmatter: title='Pastry Project', agent namespace with schedules and chat context memories. Has a 'friday_draft' schedule that drafts weekend orders.`,
 		ExpectedTool: "api_v1_AgentMetadataService_GetChatContext",
 		Services:     []string{"AgentMetadataService"},
-		Tags:         []string{"easy", "agent", "read", "happy-path"},
+		Tags:         []string{"easy", "agent", "read", tagHappyPath},
 	},
 	{
 		ID:           "agent-update-chat-context",
@@ -307,7 +323,7 @@ var Cases = []Case{
 		Context:      `pastry_project: sourdough bakery project tracking page. Frontmatter: title='Pastry Project', agent namespace with schedules and chat context memories. Has a 'friday_draft' schedule that drafts weekend orders.`,
 		ExpectedTool: "api_v1_AgentMetadataService_UpdateChatContext",
 		Services:     []string{"AgentMetadataService"},
-		Tags:         []string{"medium", "agent", "write", "happy-path"},
+		Tags:         []string{"medium", "agent", "write", tagHappyPath},
 	},
 
 	// --- ConnectorService ---
@@ -317,7 +333,7 @@ var Cases = []Case{
 		Context:      "Page 'grocery_planning' holds meal planning notes and a checklist 'grocery_list'. The user has previously set up external-service connections.",
 		ExpectedTool: "api_v1_ConnectorService_GetState",
 		Services:     []string{"ConnectorService"},
-		Tags:         []string{"connector", "read", "happy-path", "easy"},
+		Tags:         []string{"connector", "read", tagHappyPath, "easy"},
 	},
 	{
 		ID:           "connector-bind",
@@ -325,7 +341,7 @@ var Cases = []Case{
 		Context:      "Page 'grocery_planning' holds meal planning notes. It has a checklist 'grocery_list' with grocery items. Google Keep is available as an external service.",
 		ExpectedTool: "api_v1_ConnectorService_Bind",
 		Services:     []string{"ConnectorService"},
-		Tags:         []string{"connector", "write", "happy-path", "easy"},
+		Tags:         []string{"connector", "write", tagHappyPath, "easy"},
 	},
 	{
 		ID:           "connector-sync-now",
@@ -343,7 +359,7 @@ var Cases = []Case{
 		Context:      "The user is on the 'meeting_notes' page. They have a PDF file ready to attach from the chat client.",
 		ExpectedTool: "api_v1_FileStorageService_UploadFile",
 		Services:     []string{"FileStorageService"},
-		Tags:         []string{"file", "write", "happy-path", "easy"},
+		Tags:         []string{"file", "write", tagHappyPath, "easy"},
 	},
 	{
 		ID:           "file-get-info",
@@ -351,7 +367,7 @@ var Cases = []Case{
 		Context:      "The user is on the 'garden_plan' page. A PDF was uploaded previously and is referenced on the page.",
 		ExpectedTool: "api_v1_FileStorageService_GetFileInfo",
 		Services:     []string{"FileStorageService"},
-		Tags:         []string{"file", "read", "happy-path", "easy"},
+		Tags:         []string{"file", "read", tagHappyPath, "easy"},
 	},
 
 	// --- InventoryManagementService ---
@@ -361,7 +377,7 @@ var Cases = []Case{
 		Context:      "The user is on the 'workshop' page, which tracks tools and supplies. The page has inventory containers 'toolbox_red' and 'shelf_workshop'.",
 		ExpectedTool: "api_v1_InventoryManagementService_CreateInventoryItem",
 		Services:     []string{"InventoryManagementService"},
-		Tags:         []string{"inventory", "write", "happy-path", "easy"},
+		Tags:         []string{"inventory", "write", tagHappyPath, "easy"},
 	},
 	{
 		ID:           "inv-move-item",
@@ -369,7 +385,7 @@ var Cases = []Case{
 		Context:      "The user is on the 'workshop' page. The inventory shows a cordless drill currently located in 'shelf_workshop'. There is also a 'garage_shelf' container.",
 		ExpectedTool: "api_v1_InventoryManagementService_MoveInventoryItem",
 		Services:     []string{"InventoryManagementService"},
-		Tags:         []string{"inventory", "write", "cross-service-confusion", "medium"},
+		Tags:         []string{"inventory", "write", tagCrossServiceConfusion, "medium"},
 	},
 	{
 		ID:           "inv-find-location",
@@ -377,7 +393,7 @@ var Cases = []Case{
 		Context:      "The user is on the 'workshop' page. The inventory tracks tools across containers 'toolbox_red', 'shelf_workshop', and 'garage_shelf'.",
 		ExpectedTool: "api_v1_InventoryManagementService_FindItemLocation",
 		Services:     []string{"InventoryManagementService"},
-		Tags:         []string{"inventory", "read", "happy-path", "easy"},
+		Tags:         []string{"inventory", "read", tagHappyPath, "easy"},
 	},
 	{
 		ID:           "inv-list-contents",
@@ -385,7 +401,7 @@ var Cases = []Case{
 		Context:      "The user is on the 'workshop' page. The inventory has a container 'garage_shelf' that holds smaller boxes and tools.",
 		ExpectedTool: "api_v1_InventoryManagementService_ListContainerContents",
 		Services:     []string{"InventoryManagementService"},
-		Tags:         []string{"inventory", "read", "happy-path", "easy"},
+		Tags:         []string{"inventory", "read", tagHappyPath, "easy"},
 	},
 
 	// --- PageImportService ---
@@ -403,7 +419,7 @@ var Cases = []Case{
 		Context:      "The user is on the 'recipe_index' page. They shared a CSV in the chat and have reviewed a preview of the pages it would create.",
 		ExpectedTool: "api_v1_PageImportService_StartPageImportJob",
 		Services:     []string{"PageImportService"},
-		Tags:         []string{"import", "write", "happy-path", "easy"},
+		Tags:         []string{"import", "write", tagHappyPath, "easy"},
 	},
 
 	// --- SystemInfoService ---
@@ -413,7 +429,7 @@ var Cases = []Case{
 		Context:      "The user is chatting on the 'garden_plan' page. They want to know the wiki server version they are connected to.",
 		ExpectedTool: "api_v1_SystemInfoService_GetVersion",
 		Services:     []string{"SystemInfoService"},
-		Tags:         []string{"sysinfo", "read", "happy-path", "easy"},
+		Tags:         []string{"sysinfo", "read", tagHappyPath, "easy"},
 	},
 	{
 		ID:           "sysinfo-get-job-status",
@@ -421,7 +437,7 @@ var Cases = []Case{
 		Context:      "The user is on the 'garden_plan' page. They want a quick health check of the wiki's background job queues.",
 		ExpectedTool: "api_v1_SystemInfoService_GetJobStatus",
 		Services:     []string{"SystemInfoService"},
-		Tags:         []string{"sysinfo", "read", "happy-path", "easy"},
+		Tags:         []string{"sysinfo", "read", tagHappyPath, "easy"},
 	},
 
 	// --- ChatService (exclusion cases) ---
@@ -431,7 +447,7 @@ var Cases = []Case{
 		Context:      "Page 'home' is the active chat page. The chat panel is open and shows recent messages between the user and the agent.",
 		ExpectedTool: "api_v1_ChatService_SendMessage",
 		Services:     []string{"ChatService"},
-		Tags:         []string{"chat", "write", "happy-path", "easy"},
+		Tags:         []string{"chat", "write", tagHappyPath, "easy"},
 	},
 	{
 		ID:           "chat-get-status",
@@ -439,7 +455,7 @@ var Cases = []Case{
 		Context:      "Page 'home' is the active chat page. The user wants to know whether an agent is connected before sending a message.",
 		ExpectedTool: "api_v1_ChatService_GetChatStatus",
 		Services:     []string{"ChatService"},
-		Tags:         []string{"chat", "read", "happy-path", "easy"},
+		Tags:         []string{"chat", "read", tagHappyPath, "easy"},
 	},
 	{
 		ID:       "chat-exclude-reply",
@@ -470,7 +486,7 @@ var Cases = []Case{
 		Context:      "The user is on the 'workshop' page. The page has an inventory with a 'shelf_workshop' container holding a cordless drill, and a 'yard' map with a shed marker. There is also a 'garage_shelf' container.",
 		ExpectedTool: "api_v1_InventoryManagementService_MoveInventoryItem",
 		Services:     []string{"InventoryManagementService", "MapService"},
-		Tags:         []string{"cross-service-confusion", "inventory", "map", "medium"},
+		Tags:         []string{tagCrossServiceConfusion, "inventory", "map", "medium"},
 	},
 	{
 		ID:           "confusion-history-not-delete",
@@ -478,7 +494,7 @@ var Cases = []Case{
 		Context:      `roadmap: project roadmap page, large, multiple sections. Frontmatter: title='Roadmap', status='draft'. Page was updated several times this week; history has versions from last week.`,
 		ExpectedTool: "api_v1_PageHistoryService_ListPageVersions",
 		Services:     []string{"PageHistoryService", "PageManagementService"},
-		Tags:         []string{"hard", "cross-service-confusion", "history", "page"},
+		Tags:         []string{"hard", tagCrossServiceConfusion, "history", "page"},
 	},
 	{
 		ID:           "confusion-search-not-frontmatter",
@@ -486,7 +502,7 @@ var Cases = []Case{
 		Context:      "The user is chatting on the 'garden_plan' page. Some pages are tagged 'solar' in their metadata, but the user is looking for the word appearing in page text.",
 		ExpectedTool: "api_v1_SearchService_SearchContent",
 		Services:     []string{"SearchService", "Frontmatter"},
-		Tags:         []string{"cross-service-confusion", "search", "frontmatter", "medium"},
+		Tags:         []string{tagCrossServiceConfusion, "search", "frontmatter", "medium"},
 	},
 
 	// --- HARD: Same-service disambiguation (description quality matters) ---
@@ -541,7 +557,7 @@ var Cases = []Case{
 	{
 		ID:           "hard-page-update-content-vs-update-page",
 		UserSays:     "Can you rewrite just the body of meeting_notes with the new notes I sent? I don't want to change the title or tags.",
-		Context:      "Page: meeting_notes. Frontmatter: title = \"Meeting Notes\", tags = [\"work\"]. Body: weekly team notes with sections: Budget, Action Items, Decisions.",
+		Context:      ctxMeetingNotes,
 		ExpectedTool: "api_v1_PageManagementService_UpdatePageContent",
 		Services:     []string{"PageManagementService"},
 		Tags:         []string{"page", "disambiguation", "hard"},
@@ -549,7 +565,7 @@ var Cases = []Case{
 	{
 		ID:           "hard-page-update-whole-vs-content",
 		UserSays:     "I have a complete markdown file with frontmatter for meeting_notes. Can you replace the whole thing in one shot?",
-		Context:      "Page: meeting_notes. Frontmatter: title = \"Meeting Notes\", tags = [\"work\"]. Body: weekly team notes with sections: Budget, Action Items, Decisions.",
+		Context:      ctxMeetingNotes,
 		ExpectedTool: "api_v1_PageManagementService_UpdateWholePage",
 		Services:     []string{"PageManagementService"},
 		Tags:         []string{"page", "disambiguation", "hard"},
@@ -573,7 +589,7 @@ var Cases = []Case{
 	{
 		ID:           "hard-map-add-circle-vs-add-polygon",
 		UserSays:     "On the yard map, can you draw a 50-meter radius around the mailbox?",
-		Context:      "Page: garden_plan. Frontmatter: title = \"Garden Plan\", tags = [\"home\", \"garden\"]. Body: garden layout notes, planting schedule, watering section. Map: \"yard\" with markers for beds, shed, compost, a polygon for fence_area, a circle for sprinkler zone, and a track called walking path.",
+		Context:      ctxGardenPlan,
 		ExpectedTool: "api_v1_MapService_AddCircle",
 		Services:     []string{"MapService"},
 		Tags:         []string{"map", "disambiguation", "hard"},
@@ -581,7 +597,7 @@ var Cases = []Case{
 	{
 		ID:           "hard-map-add-track-vs-add-marker",
 		UserSays:     "Can you trace the walking path from the shed to the garden beds on the yard map?",
-		Context:      "Page: garden_plan. Frontmatter: title = \"Garden Plan\", tags = [\"home\", \"garden\"]. Body: garden layout notes, planting schedule, watering section. Map: \"yard\" with markers for beds, shed, compost, a polygon for fence_area, a circle for sprinkler zone, and a track called walking path.",
+		Context:      ctxGardenPlan,
 		ExpectedTool: "api_v1_MapService_AddTrack",
 		Services:     []string{"MapService"},
 		Tags:         []string{"map", "disambiguation", "hard"},
@@ -623,7 +639,7 @@ var Cases = []Case{
 	{
 		ID:           "hard-vague-create-page",
 		UserSays:     "I want to start a page about growing tomatoes in my backyard.",
-		Context:      "No current page context; the user is asking a global wiki operation question.",
+		Context:      ctxNoCurrentPage,
 		ExpectedTool: "api_v1_PageManagementService_CreatePage",
 		Services:     []string{"PageManagementService"},
 		Tags:         []string{"page", "vague", "hard"},
@@ -720,10 +736,10 @@ var Cases = []Case{
 	{
 		ID:           "hard-confusion-map-move-vs-inventory-move",
 		UserSays:     "Can you move the shed marker 20 feet east on the yard map?",
-		Context:      "Page: garden_plan. Frontmatter: title = \"Garden Plan\", tags = [\"home\", \"garden\"]. Body: garden layout notes, planting schedule, watering section. Map: \"yard\" with markers for beds, shed, compost, a polygon for fence_area, a circle for sprinkler zone, and a track called walking path.",
+		Context:      ctxGardenPlan,
 		ExpectedTool: "api_v1_MapService_MoveMarker",
 		Services:     []string{"MapService", "InventoryManagementService"},
-		Tags:         []string{"cross-service-confusion", "map", "inventory", "medium"},
+		Tags:         []string{tagCrossServiceConfusion, "map", "inventory", "medium"},
 	},
 	{
 		ID:           "hard-confusion-agent-vs-frontmatter",
@@ -731,23 +747,23 @@ var Cases = []Case{
 		Context:      `pastry_project: sourdough bakery project tracking page. Frontmatter: title='Pastry Project', agent namespace with schedules and chat context memories. Has a 'friday_draft' schedule that drafts weekend orders.`,
 		ExpectedTool: "api_v1_AgentMetadataService_UpdateChatContext",
 		Services:     []string{"AgentMetadataService", "Frontmatter"},
-		Tags:         []string{"hard", "cross-service-confusion", "agent", "frontmatter"},
+		Tags:         []string{"hard", tagCrossServiceConfusion, "agent", "frontmatter"},
 	},
 	{
 		ID:           "hard-confusion-read-page-vs-read-outline",
 		UserSays:     "I just need a quick overview of the headings on meeting_notes — I don't want to read the whole page.",
-		Context:      "Page: meeting_notes. Frontmatter: title = \"Meeting Notes\", tags = [\"work\"]. Body: weekly team notes with sections: Budget, Action Items, Decisions.",
+		Context:      ctxMeetingNotes,
 		ExpectedTool: "api_v1_PageManagementService_ReadPageOutline",
 		Services:     []string{"PageManagementService"},
-		Tags:         []string{"cross-service-confusion", "page", "medium"},
+		Tags:         []string{tagCrossServiceConfusion, "page", "medium"},
 	},
 	{
 		ID:           "hard-confusion-read-section-vs-read-page",
 		UserSays:     "Show me just the Budget section of the roadmap page, not the entire thing.",
-		Context:      "Page: roadmap. Frontmatter: title = \"Roadmap\", status = \"draft\". Body: multi-section project plan including 'Q3 Milestones' and 'Budget'.",
+		Context:      ctxRoadmap,
 		ExpectedTool: "api_v1_PageManagementService_ReadPageSection",
 		Services:     []string{"PageManagementService"},
-		Tags:         []string{"cross-service-confusion", "page", "medium"},
+		Tags:         []string{tagCrossServiceConfusion, "page", "medium"},
 	},
 	{
 		ID:           "hard-confusion-list-trash-vs-search",
@@ -755,7 +771,7 @@ var Cases = []Case{
 		Context:      "Wiki trash contains several deleted pages including old_drafts.",
 		ExpectedTool: "api_v1_PageManagementService_ListTrash",
 		Services:     []string{"PageManagementService", "SearchService"},
-		Tags:         []string{"cross-service-confusion", "page", "search", "medium"},
+		Tags:         []string{tagCrossServiceConfusion, "page", "search", "medium"},
 	},
 
 	// --- HARD: Exclusion (expanded — pre-PR must fail these) ---
@@ -928,7 +944,7 @@ var Cases = []Case{
 	{
 		ID:           "cov-map-add-polygon",
 		UserSays:     "Can you shade a rectangular garden bed area on the yard map using the four corner coordinates I sent?",
-		Context:      "Page: garden_plan. Frontmatter: title = \"Garden Plan\", tags = [\"home\", \"garden\"]. Body: garden layout notes, planting schedule, watering section. Map: \"yard\" with markers for beds, shed, compost, a polygon for fence_area, a circle for sprinkler zone, and a track called walking path.",
+		Context:      ctxGardenPlan,
 		ExpectedTool: "api_v1_MapService_AddPolygon",
 		Services:     []string{"MapService"},
 		Tags:         []string{"map", "coverage", "easy"},
@@ -936,7 +952,7 @@ var Cases = []Case{
 	{
 		ID:           "cov-map-update-marker",
 		UserSays:     "Can you change the label and color of the garden bed marker on the yard map?",
-		Context:      "Page: garden_plan. Frontmatter: title = \"Garden Plan\", tags = [\"home\", \"garden\"]. Body: garden layout notes, planting schedule, watering section. Map: \"yard\" with markers for beds, shed, compost, a polygon for fence_area, a circle for sprinkler zone, and a track called walking path.",
+		Context:      ctxGardenPlan,
 		ExpectedTool: "api_v1_MapService_UpdateMarker",
 		Services:     []string{"MapService"},
 		Tags:         []string{"map", "coverage", "disambiguation", "medium"},
@@ -944,7 +960,7 @@ var Cases = []Case{
 	{
 		ID:           "cov-map-update-circle",
 		UserSays:     "The sprinkler zone circle on the yard map should be 50 meters instead of 30. Can you update it?",
-		Context:      "Page: garden_plan. Frontmatter: title = \"Garden Plan\", tags = [\"home\", \"garden\"]. Body: garden layout notes, planting schedule, watering section. Map: \"yard\" with markers for beds, shed, compost, a polygon for fence_area, a circle for sprinkler zone, and a track called walking path.",
+		Context:      ctxGardenPlan,
 		ExpectedTool: "api_v1_MapService_UpdateCircle",
 		Services:     []string{"MapService"},
 		Tags:         []string{"map", "coverage", "easy"},
@@ -952,7 +968,7 @@ var Cases = []Case{
 	{
 		ID:           "cov-map-update-polygon",
 		UserSays:     "I need to adjust the corners of the fence area polygon on the yard map.",
-		Context:      "Page: garden_plan. Frontmatter: title = \"Garden Plan\", tags = [\"home\", \"garden\"]. Body: garden layout notes, planting schedule, watering section. Map: \"yard\" with markers for beds, shed, compost, a polygon for fence_area, a circle for sprinkler zone, and a track called walking path.",
+		Context:      ctxGardenPlan,
 		ExpectedTool: "api_v1_MapService_UpdatePolygon",
 		Services:     []string{"MapService"},
 		Tags:         []string{"map", "coverage", "easy"},
@@ -960,7 +976,7 @@ var Cases = []Case{
 	{
 		ID:           "cov-map-update-track",
 		UserSays:     "Can you rename the walking path and change its color on the yard map?",
-		Context:      "Page: garden_plan. Frontmatter: title = \"Garden Plan\", tags = [\"home\", \"garden\"]. Body: garden layout notes, planting schedule, watering section. Map: \"yard\" with markers for beds, shed, compost, a polygon for fence_area, a circle for sprinkler zone, and a track called walking path.",
+		Context:      ctxGardenPlan,
 		ExpectedTool: "api_v1_MapService_UpdateTrack",
 		Services:     []string{"MapService"},
 		Tags:         []string{"map", "coverage", "easy"},
@@ -968,7 +984,7 @@ var Cases = []Case{
 	{
 		ID:           "cov-map-delete-marker",
 		UserSays:     "Can you remove the old shed marker from the yard map?",
-		Context:      "Page: garden_plan. Frontmatter: title = \"Garden Plan\", tags = [\"home\", \"garden\"]. Body: garden layout notes, planting schedule, watering section. Map: \"yard\" with markers for beds, shed, compost, a polygon for fence_area, a circle for sprinkler zone, and a track called walking path.",
+		Context:      ctxGardenPlan,
 		ExpectedTool: "api_v1_MapService_DeleteMarker",
 		Services:     []string{"MapService"},
 		Tags:         []string{"map", "coverage", "easy"},
@@ -976,7 +992,7 @@ var Cases = []Case{
 	{
 		ID:           "cov-map-delete-circle",
 		UserSays:     "Can you delete the sprinkler zone circle from the yard map?",
-		Context:      "Page: garden_plan. Frontmatter: title = \"Garden Plan\", tags = [\"home\", \"garden\"]. Body: garden layout notes, planting schedule, watering section. Map: \"yard\" with markers for beds, shed, compost, a polygon for fence_area, a circle for sprinkler zone, and a track called walking path.",
+		Context:      ctxGardenPlan,
 		ExpectedTool: "api_v1_MapService_DeleteCircle",
 		Services:     []string{"MapService"},
 		Tags:         []string{"map", "coverage", "easy"},
@@ -984,7 +1000,7 @@ var Cases = []Case{
 	{
 		ID:           "cov-map-delete-track",
 		UserSays:     "Can you delete the walking path track from the yard map?",
-		Context:      "Page: garden_plan. Frontmatter: title = \"Garden Plan\", tags = [\"home\", \"garden\"]. Body: garden layout notes, planting schedule, watering section. Map: \"yard\" with markers for beds, shed, compost, a polygon for fence_area, a circle for sprinkler zone, and a track called walking path.",
+		Context:      ctxGardenPlan,
 		ExpectedTool: "api_v1_MapService_DeleteTrack",
 		Services:     []string{"MapService"},
 		Tags:         []string{"map", "coverage", "easy"},
@@ -992,7 +1008,7 @@ var Cases = []Case{
 	{
 		ID:           "cov-map-delete-map",
 		UserSays:     "Can you delete the whole yard map and everything on it from garden_plan?",
-		Context:      "Page: garden_plan. Frontmatter: title = \"Garden Plan\", tags = [\"home\", \"garden\"]. Body: garden layout notes, planting schedule, watering section. Map: \"yard\" with markers for beds, shed, compost, a polygon for fence_area, a circle for sprinkler zone, and a track called walking path.",
+		Context:      ctxGardenPlan,
 		ExpectedTool: "api_v1_MapService_DeleteMap",
 		Services:     []string{"MapService"},
 		Tags:         []string{"map", "coverage", "disambiguation", "medium"},
@@ -1000,7 +1016,7 @@ var Cases = []Case{
 	{
 		ID:           "cov-map-find-markers",
 		UserSays:     "Can you find all markers within 100 meters of 41.1, -72.2 on the yard map?",
-		Context:      "Page: garden_plan. Frontmatter: title = \"Garden Plan\", tags = [\"home\", \"garden\"]. Body: garden layout notes, planting schedule, watering section. Map: \"yard\" with markers for beds, shed, compost, a polygon for fence_area, a circle for sprinkler zone, and a track called walking path.",
+		Context:      ctxGardenPlan,
 		ExpectedTool: "api_v1_MapService_FindMarkers",
 		Services:     []string{"MapService"},
 		Tags:         []string{"map", "coverage", "easy"},
@@ -1008,7 +1024,7 @@ var Cases = []Case{
 	{
 		ID:           "cov-map-get-element",
 		UserSays:     "Can you show me the full details of map element 01HXABC on the yard map?",
-		Context:      "Page: garden_plan. Frontmatter: title = \"Garden Plan\", tags = [\"home\", \"garden\"]. Body: garden layout notes, planting schedule, watering section. Map: \"yard\" with markers for beds, shed, compost, a polygon for fence_area, a circle for sprinkler zone, and a track called walking path.",
+		Context:      ctxGardenPlan,
 		ExpectedTool: "api_v1_MapService_GetElement",
 		Services:     []string{"MapService"},
 		Tags:         []string{"map", "coverage", "easy"},
@@ -1016,7 +1032,7 @@ var Cases = []Case{
 	{
 		ID:           "cov-map-get-map",
 		UserSays:     "Can you show me the full yard map on garden_plan with all its elements?",
-		Context:      "Page: garden_plan. Frontmatter: title = \"Garden Plan\", tags = [\"home\", \"garden\"]. Body: garden layout notes, planting schedule, watering section. Map: \"yard\" with markers for beds, shed, compost, a polygon for fence_area, a circle for sprinkler zone, and a track called walking path.",
+		Context:      ctxGardenPlan,
 		ExpectedTool: "api_v1_MapService_GetMap",
 		Services:     []string{"MapService"},
 		Tags:         []string{"map", "coverage", "disambiguation", "medium"},
@@ -1024,7 +1040,7 @@ var Cases = []Case{
 	{
 		ID:           "cov-map-get-track-geometry",
 		UserSays:     "Can you show me the computed geometry segments for the walking path track on the yard map?",
-		Context:      "Page: garden_plan. Frontmatter: title = \"Garden Plan\", tags = [\"home\", \"garden\"]. Body: garden layout notes, planting schedule, watering section. Map: \"yard\" with markers for beds, shed, compost, a polygon for fence_area, a circle for sprinkler zone, and a track called walking path.",
+		Context:      ctxGardenPlan,
 		ExpectedTool: "api_v1_MapService_GetTrackGeometry",
 		Services:     []string{"MapService"},
 		Tags:         []string{"map", "coverage", "easy"},
@@ -1032,7 +1048,7 @@ var Cases = []Case{
 	{
 		ID:           "cov-map-list-elements",
 		UserSays:     "Can you list everything on the yard map — markers, polygons, circles, tracks?",
-		Context:      "Page: garden_plan. Frontmatter: title = \"Garden Plan\", tags = [\"home\", \"garden\"]. Body: garden layout notes, planting schedule, watering section. Map: \"yard\" with markers for beds, shed, compost, a polygon for fence_area, a circle for sprinkler zone, and a track called walking path.",
+		Context:      ctxGardenPlan,
 		ExpectedTool: "api_v1_MapService_ListMapElements",
 		Services:     []string{"MapService"},
 		Tags:         []string{"map", "coverage", "easy"},
@@ -1040,7 +1056,7 @@ var Cases = []Case{
 	{
 		ID:           "cov-map-list-maps",
 		UserSays:     "What maps are defined on the garden_plan page?",
-		Context:      "Page: garden_plan. Frontmatter: title = \"Garden Plan\", tags = [\"home\", \"garden\"]. Body: garden layout notes, planting schedule, watering section. Map: \"yard\" with markers for beds, shed, compost, a polygon for fence_area, a circle for sprinkler zone, and a track called walking path.",
+		Context:      ctxGardenPlan,
 		ExpectedTool: "api_v1_MapService_ListMaps",
 		Services:     []string{"MapService"},
 		Tags:         []string{"map", "coverage", "easy"},
@@ -1048,7 +1064,7 @@ var Cases = []Case{
 	{
 		ID:           "cov-map-reorder",
 		UserSays:     "Can you make the garden bed marker render on top of the fence area polygon on the yard map?",
-		Context:      "Page: garden_plan. Frontmatter: title = \"Garden Plan\", tags = [\"home\", \"garden\"]. Body: garden layout notes, planting schedule, watering section. Map: \"yard\" with markers for beds, shed, compost, a polygon for fence_area, a circle for sprinkler zone, and a track called walking path.",
+		Context:      ctxGardenPlan,
 		ExpectedTool: "api_v1_MapService_ReorderElement",
 		Services:     []string{"MapService"},
 		Tags:         []string{"map", "coverage", "easy"},
@@ -1056,7 +1072,7 @@ var Cases = []Case{
 	{
 		ID:           "cov-map-replace-markers",
 		UserSays:     "Can you replace all the markers on the yard map with this new set of three pins I have?",
-		Context:      "Page: garden_plan. Frontmatter: title = \"Garden Plan\", tags = [\"home\", \"garden\"]. Body: garden layout notes, planting schedule, watering section. Map: \"yard\" with markers for beds, shed, compost, a polygon for fence_area, a circle for sprinkler zone, and a track called walking path.",
+		Context:      ctxGardenPlan,
 		ExpectedTool: "api_v1_MapService_ReplaceMarkers",
 		Services:     []string{"MapService"},
 		Tags:         []string{"map", "coverage", "disambiguation", "medium"},
@@ -1064,7 +1080,7 @@ var Cases = []Case{
 	{
 		ID:           "cov-map-set-style",
 		UserSays:     "Can you set the yard map to use OpenStreetMap as the tile layer?",
-		Context:      "Page: garden_plan. Frontmatter: title = \"Garden Plan\", tags = [\"home\", \"garden\"]. Body: garden layout notes, planting schedule, watering section. Map: \"yard\" with markers for beds, shed, compost, a polygon for fence_area, a circle for sprinkler zone, and a track called walking path.",
+		Context:      ctxGardenPlan,
 		ExpectedTool: "api_v1_MapService_SetMapStyle",
 		Services:     []string{"MapService"},
 		Tags:         []string{"map", "coverage", "easy"},
@@ -1072,7 +1088,7 @@ var Cases = []Case{
 	{
 		ID:           "cov-map-set-view",
 		UserSays:     "Can you set the yard map to open centered on 41.1, -72.2 at zoom 17?",
-		Context:      "Page: garden_plan. Frontmatter: title = \"Garden Plan\", tags = [\"home\", \"garden\"]. Body: garden layout notes, planting schedule, watering section. Map: \"yard\" with markers for beds, shed, compost, a polygon for fence_area, a circle for sprinkler zone, and a track called walking path.",
+		Context:      ctxGardenPlan,
 		ExpectedTool: "api_v1_MapService_SetMapView",
 		Services:     []string{"MapService"},
 		Tags:         []string{"map", "coverage", "easy"},
@@ -1082,7 +1098,7 @@ var Cases = []Case{
 	{
 		ID:           "cov-page-clear-content",
 		UserSays:     "Can you wipe the body of old_notes but keep its title and tags in place?",
-		Context:      "Page: old_notes. Frontmatter: title = \"Old Notes\", tags = [\"archive\"]. Body: old markdown.",
+		Context:      ctxOldNotes,
 		ExpectedTool: "api_v1_PageManagementService_ClearPageContent",
 		Services:     []string{"PageManagementService"},
 		Tags:         []string{"page", "coverage", "disambiguation", "medium"},
@@ -1098,7 +1114,7 @@ var Cases = []Case{
 	{
 		ID:           "cov-page-list-templates",
 		UserSays:     "What page templates do I have available when I create a new page?",
-		Context:      "No current page context; the user is asking a global wiki operation question.",
+		Context:      ctxNoCurrentPage,
 		ExpectedTool: "api_v1_PageManagementService_ListTemplates",
 		Services:     []string{"PageManagementService"},
 		Tags:         []string{"page", "coverage", "easy"},
@@ -1106,7 +1122,7 @@ var Cases = []Case{
 	{
 		ID:           "cov-page-purge",
 		UserSays:     "The old_drafts page is already in trash. Can you destroy it permanently?",
-		Context:      "Page: old_drafts. Frontmatter: title = \"Old Drafts\". Body: archived notes. Currently in the trash.",
+		Context:      ctxOldDrafts,
 		ExpectedTool: "api_v1_PageManagementService_PurgePage",
 		Services:     []string{"PageManagementService"},
 		Tags:         []string{"page", "coverage", "disambiguation", "medium"},
@@ -1114,7 +1130,7 @@ var Cases = []Case{
 	{
 		ID:           "cov-page-render",
 		UserSays:     "Can you render meeting_notes as HTML so I can see how it looks with all the macros expanded?",
-		Context:      "Page: meeting_notes. Frontmatter: title = \"Meeting Notes\", tags = [\"work\"]. Body: weekly team notes with sections: Budget, Action Items, Decisions.",
+		Context:      ctxMeetingNotes,
 		ExpectedTool: "api_v1_PageManagementService_RenderPage",
 		Services:     []string{"PageManagementService"},
 		Tags:         []string{"page", "coverage", "disambiguation", "medium"},
@@ -1122,7 +1138,7 @@ var Cases = []Case{
 	{
 		ID:           "cov-page-restore",
 		UserSays:     "Can you bring back the old_drafts page from the trash to where it was?",
-		Context:      "Page: old_drafts. Frontmatter: title = \"Old Drafts\". Body: archived notes. Currently in the trash.",
+		Context:      ctxOldDrafts,
 		ExpectedTool: "api_v1_PageManagementService_RestorePage",
 		Services:     []string{"PageManagementService"},
 		Tags:         []string{"page", "coverage", "easy"},
@@ -1130,7 +1146,7 @@ var Cases = []Case{
 	{
 		ID:           "cov-page-update",
 		UserSays:     "I need to update both the frontmatter and the body of meeting_notes at the same time.",
-		Context:      "Page: meeting_notes. Frontmatter: title = \"Meeting Notes\", tags = [\"work\"]. Body: weekly team notes with sections: Budget, Action Items, Decisions.",
+		Context:      ctxMeetingNotes,
 		ExpectedTool: "api_v1_PageManagementService_UpdatePage",
 		// UpdateWholePage is also acceptable — the separate-fields vs combined-doc
 		// distinction is invisible at tool-selection time.
@@ -1167,7 +1183,7 @@ var Cases = []Case{
 	{
 		ID:           "cov2-pagemanagement-deletepage",
 		UserSays:     "Move the old_drafts wiki page to the trash so I can restore it later if needed.",
-		Context:      "Page: old_drafts. Frontmatter: title = \"Old Drafts\". Body: archived notes. Currently in the trash.",
+		Context:      ctxOldDrafts,
 		ExpectedTool: "api_v1_PageManagementService_DeletePage",
 		Services:     []string{"PageManagementService"},
 		Tags:         []string{"page", "coverage", "easy"},
@@ -1175,7 +1191,7 @@ var Cases = []Case{
 	{
 		ID:           "cov2-pagemanagement-rendermarkdown",
 		UserSays:     "Turn this markdown text into HTML without storing it as a page.",
-		Context:      "No current page context; the user is asking a global wiki operation question.",
+		Context:      ctxNoCurrentPage,
 		ExpectedTool: "api_v1_PageManagementService_RenderMarkdown",
 		Services:     []string{"PageManagementService"},
 		Tags:         []string{"page", "coverage", "medium"},
@@ -1183,7 +1199,7 @@ var Cases = []Case{
 	{
 		ID:           "cov2-pagemanagement-generateidentifier",
 		UserSays:     "What wiki identifier would the title 'My New Recipe Page' normalize to?",
-		Context:      "No current page context; the user is asking a global wiki operation question.",
+		Context:      ctxNoCurrentPage,
 		ExpectedTool: "api_v1_PageManagementService_GenerateIdentifier",
 		Services:     []string{"PageManagementService"},
 		Tags:         []string{"page", "coverage", "easy"},
@@ -1191,7 +1207,7 @@ var Cases = []Case{
 	{
 		ID:           "cov2-pagemanagement-updatepagecontent",
 		UserSays:     "Rewrite only the markdown body of meeting_notes, leaving its frontmatter untouched.",
-		Context:      "Page: meeting_notes. Frontmatter: title = \"Meeting Notes\", tags = [\"work\"]. Body: weekly team notes with sections: Budget, Action Items, Decisions.",
+		Context:      ctxMeetingNotes,
 		ExpectedTool: "api_v1_PageManagementService_UpdatePageContent",
 		Services:     []string{"PageManagementService"},
 		Tags:         []string{"page", "coverage", "hard"},
@@ -1199,7 +1215,7 @@ var Cases = []Case{
 	{
 		ID:           "cov2-pagemanagement-updatewholepage",
 		UserSays:     "Replace meeting_notes with a complete markdown document that includes its own frontmatter block.",
-		Context:      "Page: meeting_notes. Frontmatter: title = \"Meeting Notes\", tags = [\"work\"]. Body: weekly team notes with sections: Budget, Action Items, Decisions.",
+		Context:      ctxMeetingNotes,
 		ExpectedTool: "api_v1_PageManagementService_UpdateWholePage",
 		Services:     []string{"PageManagementService"},
 		Tags:         []string{"page", "coverage", "hard"},
@@ -1207,7 +1223,7 @@ var Cases = []Case{
 	{
 		ID:           "cov2-pagemanagement-readpagesection",
 		UserSays:     "Fetch the markdown body of the Budget section from roadmap.",
-		Context:      "Page: roadmap. Frontmatter: title = \"Roadmap\", status = \"draft\". Body: multi-section project plan including 'Q3 Milestones' and 'Budget'.",
+		Context:      ctxRoadmap,
 		ExpectedTool: "api_v1_PageManagementService_ReadPageSection",
 		Services:     []string{"PageManagementService"},
 		Tags:         []string{"page", "coverage", "medium"},
@@ -1223,7 +1239,7 @@ var Cases = []Case{
 	{
 		ID:           "cov2-pagemanagement-clearpagecontent",
 		UserSays:     "Wipe the body of old_notes but keep its metadata intact.",
-		Context:      "Page: old_notes. Frontmatter: title = \"Old Notes\", tags = [\"archive\"]. Body: old markdown.",
+		Context:      ctxOldNotes,
 		ExpectedTool: "api_v1_PageManagementService_ClearPageContent",
 		Services:     []string{"PageManagementService"},
 		Tags:         []string{"page", "coverage", "medium"},
@@ -1239,7 +1255,7 @@ var Cases = []Case{
 	{
 		ID:           "cov2-pagemanagement-listtemplates",
 		UserSays:     "Show the identifiers and titles of all pages flagged as templates.",
-		Context:      "No current page context; the user is asking a global wiki operation question.",
+		Context:      ctxNoCurrentPage,
 		ExpectedTool: "api_v1_PageManagementService_ListTemplates",
 		Services:     []string{"PageManagementService"},
 		Tags:         []string{"page", "coverage", "easy"},
@@ -1247,7 +1263,7 @@ var Cases = []Case{
 	{
 		ID:           "cov2-pagemanagement-purgepage",
 		UserSays:     "Forever remove the old_drafts entry that is currently in the trash.",
-		Context:      "Page: old_drafts. Frontmatter: title = \"Old Drafts\". Body: archived notes. Currently in the trash.",
+		Context:      ctxOldDrafts,
 		ExpectedTool: "api_v1_PageManagementService_PurgePage",
 		Services:     []string{"PageManagementService"},
 		Tags:         []string{"page", "coverage", "medium"},
@@ -1255,7 +1271,7 @@ var Cases = []Case{
 	{
 		ID:           "cov2-pagemanagement-renderpage",
 		UserSays:     "Give me the rendered HTML of meeting_notes with all macros executed.",
-		Context:      "Page: meeting_notes. Frontmatter: title = \"Meeting Notes\", tags = [\"work\"]. Body: weekly team notes with sections: Budget, Action Items, Decisions.",
+		Context:      ctxMeetingNotes,
 		ExpectedTool: "api_v1_PageManagementService_RenderPage",
 		Services:     []string{"PageManagementService"},
 		Tags:         []string{"page", "coverage", "medium"},
@@ -1263,7 +1279,7 @@ var Cases = []Case{
 	{
 		ID:           "cov2-pagemanagement-restorepage",
 		UserSays:     "Bring the old_drafts page back from the trash to its original identifier.",
-		Context:      "Page: old_drafts. Frontmatter: title = \"Old Drafts\". Body: archived notes. Currently in the trash.",
+		Context:      ctxOldDrafts,
 		ExpectedTool: "api_v1_PageManagementService_RestorePage",
 		Services:     []string{"PageManagementService"},
 		Tags:         []string{"page", "coverage", "easy"},
@@ -1271,7 +1287,7 @@ var Cases = []Case{
 	{
 		ID:           "cov2-pagemanagement-updatepage",
 		UserSays:     "Overwrite both the frontmatter and body of meeting_notes in one call.",
-		Context:      "Page: meeting_notes. Frontmatter: title = \"Meeting Notes\", tags = [\"work\"]. Body: weekly team notes with sections: Budget, Action Items, Decisions.",
+		Context:      ctxMeetingNotes,
 		ExpectedTool: "api_v1_PageManagementService_UpdatePage",
 		// UpdateWholePage is also acceptable — the separate-fields vs combined-doc
 		// distinction is invisible at tool-selection time.
@@ -1386,7 +1402,7 @@ var Cases = []Case{
 	{
 		ID:           "cov2-map-addmarker",
 		UserSays:     "Drop a pin at 41.1, -72.2 on the yard map attached to garden_plan.",
-		Context:      "Page: garden_plan. Frontmatter: title = \"Garden Plan\", tags = [\"home\", \"garden\"]. Body: garden layout notes, planting schedule, watering section. Map: \"yard\" with markers for beds, shed, compost, a polygon for fence_area, a circle for sprinkler zone, and a track called walking path.",
+		Context:      ctxGardenPlan,
 		ExpectedTool: "api_v1_MapService_AddMarker",
 		Services:     []string{"MapService"},
 		Tags:         []string{"map", "coverage", "easy"},
@@ -1394,7 +1410,7 @@ var Cases = []Case{
 	{
 		ID:           "cov2-map-deletepolygon",
 		UserSays:     "Remove the fence_area polygon from the yard map on garden_plan.",
-		Context:      "Page: garden_plan. Frontmatter: title = \"Garden Plan\", tags = [\"home\", \"garden\"]. Body: garden layout notes, planting schedule, watering section. Map: \"yard\" with markers for beds, shed, compost, a polygon for fence_area, a circle for sprinkler zone, and a track called walking path.",
+		Context:      ctxGardenPlan,
 		ExpectedTool: "api_v1_MapService_DeletePolygon",
 		Services:     []string{"MapService"},
 		Tags:         []string{"map", "coverage", "easy"},
@@ -1402,7 +1418,7 @@ var Cases = []Case{
 	{
 		ID:           "cov2-map-addcircle",
 		UserSays:     "Sketch a 50-meter radius circle around the mailbox on the yard map.",
-		Context:      "Page: garden_plan. Frontmatter: title = \"Garden Plan\", tags = [\"home\", \"garden\"]. Body: garden layout notes, planting schedule, watering section. Map: \"yard\" with markers for beds, shed, compost, a polygon for fence_area, a circle for sprinkler zone, and a track called walking path.",
+		Context:      ctxGardenPlan,
 		ExpectedTool: "api_v1_MapService_AddCircle",
 		Services:     []string{"MapService"},
 		Tags:         []string{"map", "coverage", "easy"},
@@ -1410,7 +1426,7 @@ var Cases = []Case{
 	{
 		ID:           "cov2-map-addtrack",
 		UserSays:     "Record the walking path from the shed to the garden beds on the yard map.",
-		Context:      "Page: garden_plan. Frontmatter: title = \"Garden Plan\", tags = [\"home\", \"garden\"]. Body: garden layout notes, planting schedule, watering section. Map: \"yard\" with markers for beds, shed, compost, a polygon for fence_area, a circle for sprinkler zone, and a track called walking path.",
+		Context:      ctxGardenPlan,
 		ExpectedTool: "api_v1_MapService_AddTrack",
 		Services:     []string{"MapService"},
 		Tags:         []string{"map", "coverage", "easy"},
@@ -1418,7 +1434,7 @@ var Cases = []Case{
 	{
 		ID:           "cov2-map-updatemarker",
 		UserSays:     "Modify the label and color of the garden bed marker on the yard map.",
-		Context:      "Page: garden_plan. Frontmatter: title = \"Garden Plan\", tags = [\"home\", \"garden\"]. Body: garden layout notes, planting schedule, watering section. Map: \"yard\" with markers for beds, shed, compost, a polygon for fence_area, a circle for sprinkler zone, and a track called walking path.",
+		Context:      ctxGardenPlan,
 		ExpectedTool: "api_v1_MapService_UpdateMarker",
 		Services:     []string{"MapService"},
 		Tags:         []string{"map", "coverage", "easy"},
@@ -1426,7 +1442,7 @@ var Cases = []Case{
 	{
 		ID:           "cov2-map-updatecircle",
 		UserSays:     "Adjust the sprinkler zone circle radius from 30 to 50 meters on the yard map.",
-		Context:      "Page: garden_plan. Frontmatter: title = \"Garden Plan\", tags = [\"home\", \"garden\"]. Body: garden layout notes, planting schedule, watering section. Map: \"yard\" with markers for beds, shed, compost, a polygon for fence_area, a circle for sprinkler zone, and a track called walking path.",
+		Context:      ctxGardenPlan,
 		ExpectedTool: "api_v1_MapService_UpdateCircle",
 		Services:     []string{"MapService"},
 		Tags:         []string{"map", "coverage", "easy"},
@@ -1434,7 +1450,7 @@ var Cases = []Case{
 	{
 		ID:           "cov2-map-updatepolygon",
 		UserSays:     "Tweak the corner points of the fence area polygon on the yard map.",
-		Context:      "Page: garden_plan. Frontmatter: title = \"Garden Plan\", tags = [\"home\", \"garden\"]. Body: garden layout notes, planting schedule, watering section. Map: \"yard\" with markers for beds, shed, compost, a polygon for fence_area, a circle for sprinkler zone, and a track called walking path.",
+		Context:      ctxGardenPlan,
 		ExpectedTool: "api_v1_MapService_UpdatePolygon",
 		Services:     []string{"MapService"},
 		Tags:         []string{"map", "coverage", "easy"},
@@ -1442,7 +1458,7 @@ var Cases = []Case{
 	{
 		ID:           "cov2-map-updatetrack",
 		UserSays:     "Rename and recolor the walking path track on the yard map.",
-		Context:      "Page: garden_plan. Frontmatter: title = \"Garden Plan\", tags = [\"home\", \"garden\"]. Body: garden layout notes, planting schedule, watering section. Map: \"yard\" with markers for beds, shed, compost, a polygon for fence_area, a circle for sprinkler zone, and a track called walking path.",
+		Context:      ctxGardenPlan,
 		ExpectedTool: "api_v1_MapService_UpdateTrack",
 		Services:     []string{"MapService"},
 		Tags:         []string{"map", "coverage", "easy"},
@@ -1450,7 +1466,7 @@ var Cases = []Case{
 	{
 		ID:           "cov2-map-deletemarker",
 		UserSays:     "Erase the old shed marker from the yard map on garden_plan.",
-		Context:      "Page: garden_plan. Frontmatter: title = \"Garden Plan\", tags = [\"home\", \"garden\"]. Body: garden layout notes, planting schedule, watering section. Map: \"yard\" with markers for beds, shed, compost, a polygon for fence_area, a circle for sprinkler zone, and a track called walking path.",
+		Context:      ctxGardenPlan,
 		ExpectedTool: "api_v1_MapService_DeleteMarker",
 		Services:     []string{"MapService"},
 		Tags:         []string{"map", "coverage", "easy"},
@@ -1458,7 +1474,7 @@ var Cases = []Case{
 	{
 		ID:           "cov2-map-deletecircle",
 		UserSays:     "Erase the sprinkler zone circle from the yard map on garden_plan.",
-		Context:      "Page: garden_plan. Frontmatter: title = \"Garden Plan\", tags = [\"home\", \"garden\"]. Body: garden layout notes, planting schedule, watering section. Map: \"yard\" with markers for beds, shed, compost, a polygon for fence_area, a circle for sprinkler zone, and a track called walking path.",
+		Context:      ctxGardenPlan,
 		ExpectedTool: "api_v1_MapService_DeleteCircle",
 		Services:     []string{"MapService"},
 		Tags:         []string{"map", "coverage", "easy"},
@@ -1466,7 +1482,7 @@ var Cases = []Case{
 	{
 		ID:           "cov2-map-deletetrack",
 		UserSays:     "Erase the walking path track from the yard map on garden_plan.",
-		Context:      "Page: garden_plan. Frontmatter: title = \"Garden Plan\", tags = [\"home\", \"garden\"]. Body: garden layout notes, planting schedule, watering section. Map: \"yard\" with markers for beds, shed, compost, a polygon for fence_area, a circle for sprinkler zone, and a track called walking path.",
+		Context:      ctxGardenPlan,
 		ExpectedTool: "api_v1_MapService_DeleteTrack",
 		Services:     []string{"MapService"},
 		Tags:         []string{"map", "coverage", "easy"},
@@ -1474,7 +1490,7 @@ var Cases = []Case{
 	{
 		ID:           "cov2-map-deletemap",
 		UserSays:     "Wipe the entire yard map off garden_plan including all elements.",
-		Context:      "Page: garden_plan. Frontmatter: title = \"Garden Plan\", tags = [\"home\", \"garden\"]. Body: garden layout notes, planting schedule, watering section. Map: \"yard\" with markers for beds, shed, compost, a polygon for fence_area, a circle for sprinkler zone, and a track called walking path.",
+		Context:      ctxGardenPlan,
 		ExpectedTool: "api_v1_MapService_DeleteMap",
 		Services:     []string{"MapService"},
 		Tags:         []string{"map", "coverage", "easy"},
@@ -1482,7 +1498,7 @@ var Cases = []Case{
 	{
 		ID:           "cov2-map-findmarkers",
 		UserSays:     "Search for markers near 41.1, -72.2 within 100 meters on the yard map.",
-		Context:      "Page: garden_plan. Frontmatter: title = \"Garden Plan\", tags = [\"home\", \"garden\"]. Body: garden layout notes, planting schedule, watering section. Map: \"yard\" with markers for beds, shed, compost, a polygon for fence_area, a circle for sprinkler zone, and a track called walking path.",
+		Context:      ctxGardenPlan,
 		ExpectedTool: "api_v1_MapService_FindMarkers",
 		Services:     []string{"MapService"},
 		Tags:         []string{"map", "coverage", "easy"},
@@ -1490,7 +1506,7 @@ var Cases = []Case{
 	{
 		ID:           "cov2-map-getelement",
 		UserSays:     "Fetch the full record for map element 01HXABC on the yard map.",
-		Context:      "Page: garden_plan. Frontmatter: title = \"Garden Plan\", tags = [\"home\", \"garden\"]. Body: garden layout notes, planting schedule, watering section. Map: \"yard\" with markers for beds, shed, compost, a polygon for fence_area, a circle for sprinkler zone, and a track called walking path.",
+		Context:      ctxGardenPlan,
 		ExpectedTool: "api_v1_MapService_GetElement",
 		Services:     []string{"MapService"},
 		Tags:         []string{"map", "coverage", "easy"},
@@ -1498,7 +1514,7 @@ var Cases = []Case{
 	{
 		ID:           "cov2-map-getmap",
 		UserSays:     "Return the complete yard map on garden_plan with all element types included.",
-		Context:      "Page: garden_plan. Frontmatter: title = \"Garden Plan\", tags = [\"home\", \"garden\"]. Body: garden layout notes, planting schedule, watering section. Map: \"yard\" with markers for beds, shed, compost, a polygon for fence_area, a circle for sprinkler zone, and a track called walking path.",
+		Context:      ctxGardenPlan,
 		ExpectedTool: "api_v1_MapService_GetMap",
 		Services:     []string{"MapService"},
 		Tags:         []string{"map", "coverage", "easy"},
@@ -1506,7 +1522,7 @@ var Cases = []Case{
 	{
 		ID:           "cov2-map-gettrackgeometry",
 		UserSays:     "Compute and return the geometry segments for the walking path track.",
-		Context:      "Page: garden_plan. Frontmatter: title = \"Garden Plan\", tags = [\"home\", \"garden\"]. Body: garden layout notes, planting schedule, watering section. Map: \"yard\" with markers for beds, shed, compost, a polygon for fence_area, a circle for sprinkler zone, and a track called walking path.",
+		Context:      ctxGardenPlan,
 		ExpectedTool: "api_v1_MapService_GetTrackGeometry",
 		Services:     []string{"MapService"},
 		Tags:         []string{"map", "coverage", "easy"},
@@ -1514,7 +1530,7 @@ var Cases = []Case{
 	{
 		ID:           "cov2-map-listmapelements",
 		UserSays:     "Get a compact list of every element on the yard map.",
-		Context:      "Page: garden_plan. Frontmatter: title = \"Garden Plan\", tags = [\"home\", \"garden\"]. Body: garden layout notes, planting schedule, watering section. Map: \"yard\" with markers for beds, shed, compost, a polygon for fence_area, a circle for sprinkler zone, and a track called walking path.",
+		Context:      ctxGardenPlan,
 		ExpectedTool: "api_v1_MapService_ListMapElements",
 		Services:     []string{"MapService"},
 		Tags:         []string{"map", "coverage", "easy"},
@@ -1522,7 +1538,7 @@ var Cases = []Case{
 	{
 		ID:           "cov2-map-listmaps",
 		UserSays:     "What named maps are defined on the garden_plan page?",
-		Context:      "Page: garden_plan. Frontmatter: title = \"Garden Plan\", tags = [\"home\", \"garden\"]. Body: garden layout notes, planting schedule, watering section. Map: \"yard\" with markers for beds, shed, compost, a polygon for fence_area, a circle for sprinkler zone, and a track called walking path.",
+		Context:      ctxGardenPlan,
 		ExpectedTool: "api_v1_MapService_ListMaps",
 		Services:     []string{"MapService"},
 		Tags:         []string{"map", "coverage", "easy"},
@@ -1530,7 +1546,7 @@ var Cases = []Case{
 	{
 		ID:           "cov2-map-reorderelement",
 		UserSays:     "Raise the garden bed marker above the fence area polygon on the yard map.",
-		Context:      "Page: garden_plan. Frontmatter: title = \"Garden Plan\", tags = [\"home\", \"garden\"]. Body: garden layout notes, planting schedule, watering section. Map: \"yard\" with markers for beds, shed, compost, a polygon for fence_area, a circle for sprinkler zone, and a track called walking path.",
+		Context:      ctxGardenPlan,
 		ExpectedTool: "api_v1_MapService_ReorderElement",
 		Services:     []string{"MapService"},
 		Tags:         []string{"map", "coverage", "easy"},
@@ -1538,7 +1554,7 @@ var Cases = []Case{
 	{
 		ID:           "cov2-map-replacemarkers",
 		UserSays:     "Swap all markers on the yard map with this new set of three pins.",
-		Context:      "Page: garden_plan. Frontmatter: title = \"Garden Plan\", tags = [\"home\", \"garden\"]. Body: garden layout notes, planting schedule, watering section. Map: \"yard\" with markers for beds, shed, compost, a polygon for fence_area, a circle for sprinkler zone, and a track called walking path.",
+		Context:      ctxGardenPlan,
 		ExpectedTool: "api_v1_MapService_ReplaceMarkers",
 		Services:     []string{"MapService"},
 		Tags:         []string{"map", "coverage", "easy"},
@@ -1546,7 +1562,7 @@ var Cases = []Case{
 	{
 		ID:           "cov2-map-setmapstyle",
 		UserSays:     "Configure the yard map tile layer to use OpenStreetMap on garden_plan.",
-		Context:      "Page: garden_plan. Frontmatter: title = \"Garden Plan\", tags = [\"home\", \"garden\"]. Body: garden layout notes, planting schedule, watering section. Map: \"yard\" with markers for beds, shed, compost, a polygon for fence_area, a circle for sprinkler zone, and a track called walking path.",
+		Context:      ctxGardenPlan,
 		ExpectedTool: "api_v1_MapService_SetMapStyle",
 		Services:     []string{"MapService"},
 		Tags:         []string{"map", "coverage", "easy"},
@@ -1554,7 +1570,7 @@ var Cases = []Case{
 	{
 		ID:           "cov2-map-setmapview",
 		UserSays:     "Set the yard map default view to center at 41.1, -72.2 with zoom 17.",
-		Context:      "Page: garden_plan. Frontmatter: title = \"Garden Plan\", tags = [\"home\", \"garden\"]. Body: garden layout notes, planting schedule, watering section. Map: \"yard\" with markers for beds, shed, compost, a polygon for fence_area, a circle for sprinkler zone, and a track called walking path.",
+		Context:      ctxGardenPlan,
 		ExpectedTool: "api_v1_MapService_SetMapView",
 		Services:     []string{"MapService"},
 		Tags:         []string{"map", "coverage", "easy"},
@@ -1858,7 +1874,7 @@ var Cases = []Case{
 	{
 		ID:           "cov2-map-addpolygon",
 		UserSays:     "Shade a rectangular garden bed area on the yard map using its four corner coordinates.",
-		Context:      "Page: garden_plan. Frontmatter: title = \"Garden Plan\", tags = [\"home\", \"garden\"]. Body: garden layout notes, planting schedule, watering section. Map: \"yard\" with markers for beds, shed, compost, a polygon for fence_area, a circle for sprinkler zone, and a track called walking path.",
+		Context:      ctxGardenPlan,
 		ExpectedTool: "api_v1_MapService_AddPolygon",
 		Services:     []string{"MapService"},
 		Tags:         []string{"map", "coverage", "easy"},
@@ -1927,7 +1943,7 @@ var Cases = []Case{
 	{
 		ID:           "surgical-fix-typo",
 		UserSays:     "There's a typo in the Budget section of roadmap — it says 'budgit' instead of 'budget'. Can you fix it?",
-		Context:      "Page: roadmap. Frontmatter: title = \"Roadmap\", status = \"draft\". Body: multi-section project plan including 'Q3 Milestones' and 'Budget'.",
+		Context:      ctxRoadmap,
 		ExpectedTool: "api_v1_PageManagementService_UpdatePageContent",
 		Services:     []string{"PageManagementService"},
 		Tags:         []string{"surgical", "page", "large-pages", "hard"},
@@ -1935,7 +1951,7 @@ var Cases = []Case{
 	{
 		ID:           "surgical-add-paragraph",
 		UserSays:     "Can you add a short paragraph at the end of meeting_notes with this week's action items? I don't want to change anything else.",
-		Context:      "Page: meeting_notes. Frontmatter: title = \"Meeting Notes\", tags = [\"work\"]. Body: weekly team notes with sections: Budget, Action Items, Decisions.",
+		Context:      ctxMeetingNotes,
 		ExpectedTool: "api_v1_PageManagementService_UpdatePageContent",
 		Services:     []string{"PageManagementService"},
 		Tags:         []string{"surgical", "page", "hard"},
@@ -1943,7 +1959,7 @@ var Cases = []Case{
 	{
 		ID:           "surgical-find-replace",
 		UserSays:     "Everywhere in roadmap where it says ProjectX, can you change it to ProjectAlpha? Just in the page body.",
-		Context:      "Page: roadmap. Frontmatter: title = \"Roadmap\", status = \"draft\". Body: multi-section project plan including 'Q3 Milestones' and 'Budget'.",
+		Context:      ctxRoadmap,
 		ExpectedTool: "api_v1_PageManagementService_UpdatePageContent",
 		Services:     []string{"PageManagementService"},
 		Tags:         []string{"surgical", "page", "hard"},
@@ -1951,7 +1967,7 @@ var Cases = []Case{
 	{
 		ID:           "surgical-read-section-then-edit",
 		UserSays:     "Before I edit, can I see just the Q3 Milestones section of roadmap?",
-		Context:      "Page: roadmap. Frontmatter: title = \"Roadmap\", status = \"draft\". Body: multi-section project plan including 'Q3 Milestones' and 'Budget'.",
+		Context:      ctxRoadmap,
 		ExpectedTool: "api_v1_PageManagementService_ReadPageSection",
 		Services:     []string{"PageManagementService"},
 		Tags:         []string{"surgical", "page", "large-pages", "hard"},
@@ -1959,7 +1975,7 @@ var Cases = []Case{
 	{
 		ID:           "surgical-read-outline-first",
 		UserSays:     "roadmap is really long — can you give me just the table of contents? I don't want to load the whole page.",
-		Context:      "Page: roadmap. Frontmatter: title = \"Roadmap\", status = \"draft\". Body: multi-section project plan including 'Q3 Milestones' and 'Budget'.",
+		Context:      ctxRoadmap,
 		ExpectedTool: "api_v1_PageManagementService_ReadPageOutline",
 		Services:     []string{"PageManagementService"},
 		Tags:         []string{"surgical", "page", "large-pages", "hard"},
@@ -1975,7 +1991,7 @@ var Cases = []Case{
 	{
 		ID:           "surgical-both-fm-and-body",
 		UserSays:     "I have the new frontmatter and the new body as separate pieces. Can you update roadmap with both in one atomic write?",
-		Context:      "Page: roadmap. Frontmatter: title = \"Roadmap\", status = \"draft\". Body: multi-section project plan including 'Q3 Milestones' and 'Budget'.",
+		Context:      ctxRoadmap,
 		ExpectedTool: "api_v1_PageManagementService_UpdatePage",
 		// UpdateWholePage is also acceptable — the distinction between
 		// UpdatePage (separate fields) and UpdateWholePage (combined doc)
@@ -1987,7 +2003,7 @@ var Cases = []Case{
 	{
 		ID:           "surgical-avoid-wholepage-body-only",
 		UserSays:     "Can you rewrite the entire body of roadmap but keep all the frontmatter exactly as it is?",
-		Context:      "Page: roadmap. Frontmatter: title = \"Roadmap\", status = \"draft\". Body: multi-section project plan including 'Q3 Milestones' and 'Budget'.",
+		Context:      ctxRoadmap,
 		ExpectedTool: "api_v1_PageManagementService_UpdatePageContent",
 		Services:     []string{"PageManagementService"},
 		Tags:         []string{"surgical", "page", "disambiguation", "hard"},
@@ -1995,7 +2011,7 @@ var Cases = []Case{
 	{
 		ID:           "surgical-clear-body-keep-fm",
 		UserSays:     "Wipe the markdown body of old_notes clean but preserve its frontmatter tags and identifier.",
-		Context:      "Page: old_notes. Frontmatter: title = \"Old Notes\", tags = [\"archive\"]. Body: old markdown.",
+		Context:      ctxOldNotes,
 		ExpectedTool: "api_v1_PageManagementService_ClearPageContent",
 		Services:     []string{"PageManagementService"},
 		Tags:         []string{"surgical", "page", "disambiguation", "hard"},

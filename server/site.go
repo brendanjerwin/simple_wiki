@@ -187,6 +187,7 @@ const (
 	mdExtension            = "md"
 	newline                = "\n"
 	failedToOpenPageErrFmt = "failed to open page %s: %w"
+	errRenderPageFmt       = "Error rendering page '%s' (%d bytes): %v"
 )
 
 func (s *Site) sniffContentType(name string) (string, error) {
@@ -576,7 +577,7 @@ func (s *Site) readOrInitPage(requestedIdentifier string, req *http.Request) (*w
 	}
 
 	if renderErr := p.Render(s, s.MarkdownRenderer, TemplateExecutor{}, s.FrontmatterIndexQueryer); renderErr != nil {
-		s.Logger.Error("Error rendering page '%s' (%d bytes): %v", p.Identifier, len(p.Text), renderErr)
+		s.Logger.Error(errRenderPageFmt, p.Identifier, len(p.Text), renderErr)
 		p.RenderedPage = buildRenderErrorHTML(p.Identifier, renderErr)
 	}
 	return p, nil
@@ -603,7 +604,7 @@ func (s *Site) initNewPage(p *wikipage.Page, req *http.Request) error {
 
 	p.Text = initialText
 	if renderErr := p.Render(s, s.MarkdownRenderer, TemplateExecutor{}, s.FrontmatterIndexQueryer); renderErr != nil {
-		s.Logger.Error("Error rendering page '%s' (%d bytes): %v", p.Identifier, len(p.Text), renderErr)
+		s.Logger.Error(errRenderPageFmt, p.Identifier, len(p.Text), renderErr)
 		p.RenderedPage = buildRenderErrorHTML(p.Identifier, renderErr)
 	}
 	if err := s.savePageAndIndex(p); err != nil {
@@ -997,7 +998,7 @@ func (s *Site) UpdatePageContent(identifier wikipage.PageIdentifier, newText str
 
 	// Render the new page
 	if renderErr := p.Render(s, s.MarkdownRenderer, TemplateExecutor{}, s.FrontmatterIndexQueryer); renderErr != nil {
-		s.Logger.Error("Error rendering page '%s' (%d bytes): %v", p.Identifier, len(p.Text), renderErr)
+		s.Logger.Error(errRenderPageFmt, p.Identifier, len(p.Text), renderErr)
 		p.RenderedPage = buildRenderErrorHTML(p.Identifier, renderErr)
 	}
 

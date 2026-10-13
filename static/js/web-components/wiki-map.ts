@@ -228,70 +228,12 @@ export class LeafletWikiMapRenderer implements WikiMapRenderer {
 
     this.overlays = [];
 
-    const currentTags = new Set<string>();
-    let hasUntagged = false;
-    for (const marker of mapMessage.markers ?? []) {
-      if (marker.tags && marker.tags.length > 0) {
-        for (const tag of marker.tags) currentTags.add(tag);
-      } else {
-        hasUntagged = true;
-      }
-    }
-    for (const polygon of mapMessage.polygons ?? []) {
-      if (polygon.tags && polygon.tags.length > 0) {
-        for (const tag of polygon.tags) currentTags.add(tag);
-      } else {
-        hasUntagged = true;
-      }
-    }
-    for (const circle of mapMessage.circles ?? []) {
-      if (circle.tags && circle.tags.length > 0) {
-        for (const tag of circle.tags) currentTags.add(tag);
-      } else {
-        hasUntagged = true;
-      }
-    }
-    for (const track of mapMessage.tracks ?? []) {
-      if (track.tags && track.tags.length > 0) {
-        for (const tag of track.tags) currentTags.add(tag);
-      } else {
-        hasUntagged = true;
-      }
-    }
-
-    const oldCheckedTags = new Set(this.checkedTags);
-    const newCheckedTags = new Set<string>();
-
-    if (!this.tagsInitialized) {
-      for (const tag of currentTags) {
-        newCheckedTags.add(tag);
-      }
-      if (hasUntagged) {
-        newCheckedTags.add('untagged');
-      }
-      this.tagsInitialized = true;
-    } else {
-      for (const tag of currentTags) {
-        if (!this.allKnownTags.has(tag)) {
-          newCheckedTags.add(tag);
-        } else if (oldCheckedTags.has(tag)) {
-          newCheckedTags.add(tag);
-        }
-      }
-      if (hasUntagged) {
-        if (!this.allKnownTags.has('untagged')) {
-          newCheckedTags.add('untagged');
-        } else if (oldCheckedTags.has('untagged')) {
-          newCheckedTags.add('untagged');
-        }
-      }
-    }
-
+    const { currentTags, hasUntagged } = this.collectTagsFromMapMessage(mapMessage);
+    this.checkedTags = this.computeCheckedTags(currentTags, hasUntagged);
     this.allKnownTags = new Set(currentTags);
     if (hasUntagged) {
       this.allKnownTags.add('untagged');
     }
-    this.checkedTags = newCheckedTags;
 
     for (const marker of mapMessage.markers) {
       this.renderMarker(marker, popupRenderer);
@@ -364,6 +306,66 @@ export class LeafletWikiMapRenderer implements WikiMapRenderer {
     this.popupRenderer = null;
     this.tracksToLoad = [];
     this.tracksLoaded = false;
+  }
+
+  private collectTagsFromMapMessage(mapMessage: WikiMapMessage): { currentTags: Set<string>; hasUntagged: boolean } {
+    const currentTags = new Set<string>();
+    let hasUntagged = false;
+    for (const marker of mapMessage.markers ?? []) {
+      if (marker.tags && marker.tags.length > 0) {
+        for (const tag of marker.tags) currentTags.add(tag);
+      } else {
+        hasUntagged = true;
+      }
+    }
+    for (const polygon of mapMessage.polygons ?? []) {
+      if (polygon.tags && polygon.tags.length > 0) {
+        for (const tag of polygon.tags) currentTags.add(tag);
+      } else {
+        hasUntagged = true;
+      }
+    }
+    for (const circle of mapMessage.circles ?? []) {
+      if (circle.tags && circle.tags.length > 0) {
+        for (const tag of circle.tags) currentTags.add(tag);
+      } else {
+        hasUntagged = true;
+      }
+    }
+    for (const track of mapMessage.tracks ?? []) {
+      if (track.tags && track.tags.length > 0) {
+        for (const tag of track.tags) currentTags.add(tag);
+      } else {
+        hasUntagged = true;
+      }
+    }
+    return { currentTags, hasUntagged };
+  }
+
+  private computeCheckedTags(currentTags: Set<string>, hasUntagged: boolean): Set<string> {
+    const oldCheckedTags = new Set(this.checkedTags);
+    const newCheckedTags = new Set<string>();
+
+    if (!this.tagsInitialized) {
+      for (const tag of currentTags) {
+        newCheckedTags.add(tag);
+      }
+      if (hasUntagged) {
+        newCheckedTags.add('untagged');
+      }
+      this.tagsInitialized = true;
+    } else {
+      for (const tag of currentTags) {
+        if (!this.allKnownTags.has(tag) || oldCheckedTags.has(tag)) {
+          newCheckedTags.add(tag);
+        }
+      }
+      if (hasUntagged && (!this.allKnownTags.has('untagged') || oldCheckedTags.has('untagged'))) {
+        newCheckedTags.add('untagged');
+      }
+    }
+
+    return newCheckedTags;
   }
 
   private renderMarker(marker: MapMarker, popupRenderer: PopupRenderer): void {

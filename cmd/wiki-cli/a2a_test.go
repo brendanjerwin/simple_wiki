@@ -119,6 +119,21 @@ func dispatchNotification(ts *httptest.Server, headers map[string]string, body a
 	return resp.StatusCode, responseBody
 }
 
+// extractA2AResultText extracts the text of the first part of the first
+// artifact from a tasks/get result object. Returns "" when absent.
+func extractA2AResultText(result map[string]any) string {
+	artifacts, ok := result["artifacts"].([]any)
+	if !ok || len(artifacts) == 0 {
+		return ""
+	}
+	art := a2aMapAny(artifacts[0])
+	parts, ok := art["parts"].([]any)
+	if !ok || len(parts) == 0 {
+		return ""
+	}
+	return a2aStr(a2aMapAny(parts[0])["text"])
+}
+
 // pollTaskUntil polls tasks/get until the task leaves non-terminal state or
 // the deadline passes; returns (state, finalText).
 func pollTaskUntil(ts *httptest.Server, token, taskID string, timeout time.Duration) (finalState string, resultText string) {
@@ -131,14 +146,7 @@ func pollTaskUntil(ts *httptest.Server, token, taskID string, timeout time.Durat
 		if result != nil {
 			state, _ := a2aMap(result, "status")["state"].(string)
 			if state != "working" {
-				text := ""
-				if artifacts, ok := result["artifacts"].([]any); ok && len(artifacts) > 0 {
-					art := a2aMapAny(artifacts[0])
-					if parts, ok := art["parts"].([]any); ok && len(parts) > 0 {
-						text = a2aStr(a2aMapAny(parts[0])["text"])
-					}
-				}
-				return state, text
+				return state, extractA2AResultText(result)
 			}
 		}
 		if time.Now().After(deadline) {
