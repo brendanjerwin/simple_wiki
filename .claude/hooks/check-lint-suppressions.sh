@@ -25,27 +25,27 @@ patterns=(
   '#\s*type:\s*ignore'
 )
 
-if [ -z "${CLAUDE_FILE_PATHS:-}" ]; then
+if [[ -z "${CLAUDE_FILE_PATHS:-}" ]]; then
   exit 0
 fi
 
 found_any=0
 findings=""
 while IFS= read -r path; do
-  [ -z "$path" ] && continue
-  [ -f "$path" ] || continue
+  [[ -z "$path" ]] && continue
+  [[ -f "$path" ]] || continue
   for pat in "${patterns[@]}"; do
     matches=$(grep -nE "$pat" "$path" 2>/dev/null || true)
-    [ -z "$matches" ] && continue
+    [[ -z "$matches" ]] && continue
     while IFS= read -r line; do
-      [ -z "$line" ] && continue
+      [[ -z "$line" ]] && continue
       findings+="  $path:$line"$'\n'
       found_any=1
     done <<< "$matches"
   done
 done <<< "$CLAUDE_FILE_PATHS"
 
-if [ "$found_any" -eq 0 ]; then
+if [[ "$found_any" -eq 0 ]]; then
   exit 0
 fi
 
