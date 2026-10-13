@@ -4,7 +4,7 @@ go 1.26.4
 
 require (
 	connectrpc.com/connect v1.20.0
-	connectrpc.com/grpcreflect v1.3.0
+	connectrpc.com/grpcreflect v1.3.1
 	connectrpc.com/vanguard v0.4.0
 	github.com/adrg/frontmatter v0.2.0
 	github.com/blevesearch/bleve v1.0.14
