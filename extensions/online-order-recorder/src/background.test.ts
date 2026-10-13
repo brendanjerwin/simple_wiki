@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, vi, type Mock } from 'vitest';
 
 // Mock wiki-client module (hoisted by vitest before any imports)
 const mockReadPage = vi.fn();
@@ -117,7 +117,7 @@ describe('handleWikiUrlDetected (via message listener)', () => {
       messageListener(
         { type: 'WIKI_URL_DETECTED', wikiUrl: 'https://wiki.local:8050' },
         {},
-        vi.fn()
+        vi.fn<(response: unknown) => void>()
       );
       await vi.waitFor(() => {
         expect(mockBrowser.browserAction.setBadgeText).toHaveBeenCalled();
@@ -138,7 +138,7 @@ describe('handleWikiUrlDetected (via message listener)', () => {
       messageListener(
         { type: 'WIKI_URL_DETECTED', wikiUrl: 'https://wiki.local:8050' },
         {},
-        vi.fn()
+        vi.fn<(response: unknown) => void>()
       );
       await vi.waitFor(() => {
         expect(mockBrowser.storage.local.set).toHaveBeenCalled();
@@ -156,7 +156,7 @@ describe('handleWikiUrlDetected (via message listener)', () => {
       messageListener(
         { type: 'WIKI_URL_DETECTED', wikiUrl: 'https://wiki.local:8050' },
         {},
-        vi.fn()
+        vi.fn<(response: unknown) => void>()
       );
       await new Promise(resolve => setTimeout(resolve, 50));
     });
@@ -172,7 +172,7 @@ describe('handleWikiUrlDetected (via message listener)', () => {
       messageListener(
         { type: 'WIKI_URL_DETECTED', wikiUrl: 'https://new-wiki:8050' },
         {},
-        vi.fn()
+        vi.fn<(response: unknown) => void>()
       );
       await vi.waitFor(() => {
         expect(mockBrowser.storage.local.set).toHaveBeenCalled();
@@ -190,7 +190,7 @@ describe('handleWikiUrlDetected (via message listener)', () => {
       messageListener(
         { type: 'WIKI_URL_DETECTED', wikiUrl: 'https://auto-wiki:8050' },
         {},
-        vi.fn()
+        vi.fn<(response: unknown) => void>()
       );
       await new Promise(resolve => setTimeout(resolve, 50));
     });
@@ -217,7 +217,7 @@ describe('ORDERS_DETECTED handler', () => {
       messageListener(
         { type: 'ORDERS_DETECTED', orders: sampleOrders },
         {},
-        vi.fn()
+        vi.fn<(response: unknown) => void>()
       );
     });
 
@@ -239,19 +239,19 @@ describe('GET_PENDING handler', () => {
   });
 
   describe('when orders were previously detected', () => {
-    let sendResponse: ReturnType<typeof vi.fn>;
+    let sendResponse: Mock<(response: unknown) => void>;
 
     beforeEach(() => {
       // First detect orders
       messageListener(
         { type: 'ORDERS_DETECTED', orders: sampleOrders },
         {},
-        vi.fn()
+        vi.fn<(response: unknown) => void>()
       );
       vi.clearAllMocks();
 
       // Then request pending
-      sendResponse = vi.fn();
+      sendResponse = vi.fn<(response: unknown) => void>();
       messageListener({ type: 'GET_PENDING' }, {}, sendResponse);
     });
 
@@ -261,14 +261,14 @@ describe('GET_PENDING handler', () => {
   });
 
   describe('when no orders were detected', () => {
-    let sendResponse: ReturnType<typeof vi.fn>;
+    let sendResponse: Mock<(response: unknown) => void>;
 
     beforeEach(() => {
       // Dismiss any existing orders first
-      messageListener({ type: 'DISMISS' }, {}, vi.fn());
+      messageListener({ type: 'DISMISS' }, {}, vi.fn<(response: unknown) => void>());
       vi.clearAllMocks();
 
-      sendResponse = vi.fn();
+      sendResponse = vi.fn<(response: unknown) => void>();
       messageListener({ type: 'GET_PENDING' }, {}, sendResponse);
     });
 
@@ -291,12 +291,12 @@ describe('DISMISS handler', () => {
       messageListener(
         { type: 'ORDERS_DETECTED', orders: sampleOrders },
         {},
-        vi.fn()
+        vi.fn<(response: unknown) => void>()
       );
       vi.clearAllMocks();
 
       // Then dismiss
-      messageListener({ type: 'DISMISS' }, {}, vi.fn());
+      messageListener({ type: 'DISMISS' }, {}, vi.fn<(response: unknown) => void>());
     });
 
     it('should clear badge text', () => {
@@ -304,7 +304,7 @@ describe('DISMISS handler', () => {
     });
 
     it('should clear pending orders', () => {
-      const sendResponse = vi.fn();
+      const sendResponse = vi.fn<(response: unknown) => void>();
       messageListener({ type: 'GET_PENDING' }, {}, sendResponse);
       expect(sendResponse).toHaveBeenCalledWith({ orders: [] });
     });
@@ -319,13 +319,13 @@ describe('SAVE_ORDERS handler', () => {
   });
 
   describe('when saving to a new page (page does not exist)', () => {
-    let sendResponse: ReturnType<typeof vi.fn>;
+    let sendResponse: Mock<(response: unknown) => void>;
 
     beforeEach(async () => {
       mockReadPage.mockRejectedValue(new Error('not found'));
       mockCreatePage.mockResolvedValue({});
 
-      sendResponse = vi.fn();
+      sendResponse = vi.fn<(response: unknown) => void>();
       messageListener(
         { type: 'SAVE_ORDERS', orders: sampleOrders },
         {},
@@ -365,7 +365,7 @@ describe('SAVE_ORDERS handler', () => {
   });
 
   describe('when saving to an existing page', () => {
-    let sendResponse: ReturnType<typeof vi.fn>;
+    let sendResponse: Mock<(response: unknown) => void>;
 
     beforeEach(async () => {
       mockReadPage.mockResolvedValue({
@@ -374,7 +374,7 @@ describe('SAVE_ORDERS handler', () => {
       });
       mockUpdatePageContent.mockResolvedValue({});
 
-      sendResponse = vi.fn();
+      sendResponse = vi.fn<(response: unknown) => void>();
       messageListener(
         { type: 'SAVE_ORDERS', orders: sampleOrders },
         {},
@@ -411,7 +411,7 @@ describe('SAVE_ORDERS handler', () => {
   });
 
   describe('when all orders are duplicates', () => {
-    let sendResponse: ReturnType<typeof vi.fn>;
+    let sendResponse: Mock<(response: unknown) => void>;
 
     beforeEach(async () => {
       mockReadPage.mockResolvedValue({
@@ -419,7 +419,7 @@ describe('SAVE_ORDERS handler', () => {
         versionHash: 'hash456',
       });
 
-      sendResponse = vi.fn();
+      sendResponse = vi.fn<(response: unknown) => void>();
       messageListener(
         { type: 'SAVE_ORDERS', orders: sampleOrders },
         {},
@@ -459,7 +459,7 @@ describe('SAVE_ORDERS handler', () => {
   });
 
   describe('when some orders are duplicates', () => {
-    let sendResponse: ReturnType<typeof vi.fn>;
+    let sendResponse: Mock<(response: unknown) => void>;
 
     beforeEach(async () => {
       mockReadPage.mockResolvedValue({
@@ -468,7 +468,7 @@ describe('SAVE_ORDERS handler', () => {
       });
       mockUpdatePageContent.mockResolvedValue({});
 
-      sendResponse = vi.fn();
+      sendResponse = vi.fn<(response: unknown) => void>();
       messageListener(
         { type: 'SAVE_ORDERS', orders: sampleOrders },
         {},
@@ -494,7 +494,7 @@ describe('SAVE_ORDERS handler', () => {
   });
 
   describe('when wiki client throws during save', () => {
-    let sendResponse: ReturnType<typeof vi.fn>;
+    let sendResponse: Mock<(response: unknown) => void>;
 
     beforeEach(async () => {
       mockReadPage.mockResolvedValue({
@@ -503,7 +503,7 @@ describe('SAVE_ORDERS handler', () => {
       });
       mockUpdatePageContent.mockRejectedValue(new Error('version mismatch'));
 
-      sendResponse = vi.fn();
+      sendResponse = vi.fn<(response: unknown) => void>();
       messageListener(
         { type: 'SAVE_ORDERS', orders: sampleOrders },
         {},
@@ -529,14 +529,14 @@ describe('SAVE_ORDERS handler', () => {
   });
 
   describe('when wiki URL is not configured', () => {
-    let sendResponse: ReturnType<typeof vi.fn>;
+    let sendResponse: Mock<(response: unknown) => void>;
 
     beforeEach(async () => {
       storageData = {};
       mockReadPage.mockRejectedValue(new Error('not found'));
       mockCreatePage.mockResolvedValue({});
 
-      sendResponse = vi.fn();
+      sendResponse = vi.fn<(response: unknown) => void>();
       messageListener(
         { type: 'SAVE_ORDERS', orders: sampleOrders },
         {},
