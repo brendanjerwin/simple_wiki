@@ -82,6 +82,12 @@ const (
 	itemMappingFieldClientID    = "client_id"
 )
 
+// keepTimestampFormat is Keep's wire format for timestamps — RFC3339
+// with microsecond precision and a literal Z suffix. Matches the
+// gateway package's rfc3339Micros; kept package-local here to avoid
+// cross-package coupling.
+const keepTimestampFormat = "2006-01-02T15:04:05.000000Z"
+
 // MasterTokenBundle is the gpsoauth credential trio the KeepAdapter
 // hands to the gateway: a long-lived master token, the user's email
 // (Stage 2 needs both), and the persisted Android device id (so
@@ -238,7 +244,7 @@ func (a *KeepAdapter) PullRemote(ctx context.Context, binding connectors.Binding
 	resp, err := client.Changes(ctx, gateway.ChangesRequest{
 		TargetVersion:   cursor,
 		SessionID:       fmt.Sprintf("s--%d--pull", now.UnixMilli()),
-		ClientTimestamp: now.Format("2006-01-02T15:04:05.000000Z"),
+		ClientTimestamp: now.Format(keepTimestampFormat),
 	})
 	if err != nil {
 		return connectors.RemotePullResult{}, err
@@ -396,7 +402,7 @@ func (a *KeepAdapter) InsertRemote(ctx context.Context, binding connectors.Bindi
 		Nodes:           []gateway.Node{node},
 		TargetVersion:   readKeepCursor(binding.AdapterState),
 		SessionID:       fmt.Sprintf("s--%d--insert", now.UnixMilli()),
-		ClientTimestamp: now.Format("2006-01-02T15:04:05.000000Z"),
+		ClientTimestamp: now.Format(keepTimestampFormat),
 	})
 	if err != nil {
 		return "", err
@@ -436,7 +442,7 @@ func (a *KeepAdapter) PatchRemote(ctx context.Context, binding connectors.Bindin
 		Nodes:           []gateway.Node{node},
 		TargetVersion:   readKeepCursor(binding.AdapterState),
 		SessionID:       fmt.Sprintf("s--%d--patch", now.UnixMilli()),
-		ClientTimestamp: now.Format("2006-01-02T15:04:05.000000Z"),
+		ClientTimestamp: now.Format(keepTimestampFormat),
 	})
 	if err != nil {
 		return "", err
@@ -495,7 +501,7 @@ func (a *KeepAdapter) DeleteRemote(ctx context.Context, binding connectors.Bindi
 		Nodes:           []gateway.Node{node},
 		TargetVersion:   readKeepCursor(binding.AdapterState),
 		SessionID:       fmt.Sprintf("s--%d--delete", now.UnixMilli()),
-		ClientTimestamp: now.Format("2006-01-02T15:04:05.000000Z"),
+		ClientTimestamp: now.Format(keepTimestampFormat),
 	})
 	if err != nil {
 		return err
@@ -635,7 +641,7 @@ func (a *KeepAdapter) SyncCollectionState(ctx context.Context, binding connector
 		Labels:          labelPush,
 		TargetVersion:   readKeepCursor(binding.AdapterState),
 		SessionID:       fmt.Sprintf("s--%d--labels", now.UnixMilli()),
-		ClientTimestamp: now.Format("2006-01-02T15:04:05.000000Z"),
+		ClientTimestamp: now.Format(keepTimestampFormat),
 	})
 	if changesErr != nil {
 		return binding, changesErr
@@ -817,7 +823,7 @@ func (a *KeepAdapter) SeedBindingState(ctx context.Context, profileID wikipage.P
 	now := a.clock.Now().UTC()
 	pull, err := client.Changes(ctx, gateway.ChangesRequest{
 		SessionID:       fmt.Sprintf("s--%d--bindseed-%s", now.UnixMilli(), remoteHandle),
-		ClientTimestamp: now.Format("2006-01-02T15:04:05.000000Z"),
+		ClientTimestamp: now.Format(keepTimestampFormat),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("seed bind: pull keep state for %s: %w", remoteHandle, err)
@@ -918,7 +924,7 @@ func (a *KeepAdapter) ValidateRemoteBinding(ctx context.Context, profileID wikip
 	now := a.clock.Now().UTC()
 	pull, err := client.Changes(ctx, gateway.ChangesRequest{
 		SessionID:       fmt.Sprintf("s--%d--validate-%s", now.UnixMilli(), remoteHandle),
-		ClientTimestamp: now.Format("2006-01-02T15:04:05.000000Z"),
+		ClientTimestamp: now.Format(keepTimestampFormat),
 	})
 	if err != nil {
 		return fmt.Errorf("validate: pull keep state for %s: %w", remoteHandle, err)
@@ -1029,7 +1035,7 @@ func (a *KeepAdapter) FetchRemoteListTitle(ctx context.Context, profileID wikipa
 	now := a.clock.Now().UTC()
 	pull, err := client.Changes(ctx, gateway.ChangesRequest{
 		SessionID:       fmt.Sprintf("s--%d--title-%s", now.UnixMilli(), remoteHandle),
-		ClientTimestamp: now.Format("2006-01-02T15:04:05.000000Z"),
+		ClientTimestamp: now.Format(keepTimestampFormat),
 	})
 	if err != nil {
 		return "", false, nil
@@ -1057,7 +1063,7 @@ func (a *KeepAdapter) ListRemoteCollections(ctx context.Context, profileID wikip
 	now := a.clock.Now().UTC()
 	pull, err := client.Changes(ctx, gateway.ChangesRequest{
 		SessionID:       fmt.Sprintf("s--%d--listnotes", now.UnixMilli()),
-		ClientTimestamp: now.Format("2006-01-02T15:04:05.000000Z"),
+		ClientTimestamp: now.Format(keepTimestampFormat),
 	})
 	if err != nil {
 		return nil, err
@@ -1137,7 +1143,7 @@ func (a *KeepAdapter) ReadRemoteByRef(ctx context.Context, binding connectors.Bi
 	now := a.clock.Now().UTC()
 	pull, err := client.Changes(ctx, gateway.ChangesRequest{
 		SessionID:       fmt.Sprintf("s--%d--readref", now.UnixMilli()),
-		ClientTimestamp: now.Format("2006-01-02T15:04:05.000000Z"),
+		ClientTimestamp: now.Format(keepTimestampFormat),
 	})
 	if err != nil {
 		if errors.Is(err, gateway.ErrBoundNoteDeleted) {

@@ -76,6 +76,11 @@ const (
 
 	errCreateHandlerFmt  = "failed to create handler: %w"
 	errCreateListenerFmt = "failed to create HTTP listener: %w"
+
+	// googleTasksRefreshTokenFrontmatterKey is the frontmatter key used
+	// to probe whether a profile has Google Tasks connected. Extracted
+	// to avoid the "string literal appears N times" linter finding.
+	googleTasksRefreshTokenFrontmatterKey = "wiki.connectors.google_tasks.refresh_token"
 )
 
 // ServerResult holds the created server and listener.
@@ -1077,7 +1082,7 @@ func setupGoogleTasks(
 		// Email may be absent on profiles connected via the OAuth
 		// callback — refresh_token is set on every connect and cleared
 		// by Disconnect.
-		for _, p := range site.FrontmatterIndexQueryer.QueryKeyExistence("wiki.connectors.google_tasks.refresh_token") {
+		for _, p := range site.FrontmatterIndexQueryer.QueryKeyExistence(googleTasksRefreshTokenFrontmatterKey) {
 			bindings, err := bindingStore.LoadBindings(p, connectors.ConnectorKindGoogleTasks)
 			if err != nil {
 				continue
@@ -1317,7 +1322,7 @@ func rebuildLeaseTableTasksFromBindings(
 	// probing would skip them on boot rebuild and break cross-
 	// connector LookupOwner until process restart re-ran with email
 	// present.
-	for _, profileID := range site.FrontmatterIndexQueryer.QueryKeyExistence("wiki.connectors.google_tasks.refresh_token") {
+	for _, profileID := range site.FrontmatterIndexQueryer.QueryKeyExistence(googleTasksRefreshTokenFrontmatterKey) {
 		profileBindings, err := bindings.LoadBindings(profileID, connectors.ConnectorKindGoogleTasks)
 		if err != nil {
 			return count, fmt.Errorf("decode Tasks bindings for %s: %w", profileID, err)
@@ -1363,7 +1368,7 @@ type frontmatterKeyQueryer interface {
 // IsAnyChecklistBindingPaused fans out the per-profile pause
 // check.
 func (c *tasksFannedOutPausedChecker) IsAnyChecklistBindingPaused(page, listName string) bool {
-	for _, profileID := range c.index.QueryKeyExistence("wiki.connectors.google_tasks.refresh_token") {
+	for _, profileID := range c.index.QueryKeyExistence(googleTasksRefreshTokenFrontmatterKey) {
 		bindings, err := c.bindings.LoadBindings(profileID, connectors.ConnectorKindGoogleTasks)
 		if err != nil {
 			continue

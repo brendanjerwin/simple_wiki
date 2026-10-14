@@ -66,6 +66,12 @@ const errUIDRequiredMsg = "uid is required"
 
 const doubleQuoteString = `"`
 
+// errListNameRequired is the InvalidArgument message returned when a
+// mutator method is called with an empty list_name. Pulled out so the
+// repeated literal doesn't trip the "string literal appears N times"
+// linter and so the wording stays consistent.
+const errListNameRequired = "list_name is required"
+
 // Subscriber receives a notification after every successful checklist
 // mutation. Optional — set via Mutator.SetSubscriber. The Keep bridge's
 // SyncDebouncer is the production subscriber; tests typically leave it
@@ -285,7 +291,7 @@ func (m *Mutator) AddItem(ctx context.Context, page, listName string, args AddIt
 func (m *Mutator) addItemImpl(_ context.Context, page, listName string, args AddItemArgs, identity tailscale.IdentityValue, source Source) (*apiv1.ChecklistItem, *apiv1.Checklist, error) {
 	listName = wikipage.NormalizeListName(listName)
 	if listName == "" {
-		return nil, nil, status.Error(codes.InvalidArgument, "list_name is required")
+		return nil, nil, status.Error(codes.InvalidArgument, errListNameRequired)
 	}
 	if strings.TrimSpace(args.Text) == "" {
 		return nil, nil, status.Error(codes.InvalidArgument, "text is required")
@@ -557,7 +563,7 @@ func (m *Mutator) DeleteItem(ctx context.Context, page, listName, uid string, ex
 func (m *Mutator) deleteItemImpl(_ context.Context, page, listName, uid string, expectedUpdatedAt *time.Time, identity tailscale.IdentityValue, source Source) (*apiv1.Checklist, error) {
 	listName = wikipage.NormalizeListName(listName)
 	if listName == "" {
-		return nil, status.Error(codes.InvalidArgument, "list_name is required")
+		return nil, status.Error(codes.InvalidArgument, errListNameRequired)
 	}
 	if uid == "" {
 		return nil, status.Error(codes.InvalidArgument, errUIDRequiredMsg)
@@ -602,7 +608,7 @@ func (m *Mutator) deleteItemImpl(_ context.Context, page, listName, uid string, 
 func (m *Mutator) DeduplicateItems(_ context.Context, page, listName string, scope DeduplicateScope, expectedUpdatedAt *time.Time, identity tailscale.IdentityValue) (int, *apiv1.Checklist, error) {
 	listName = wikipage.NormalizeListName(listName)
 	if listName == "" {
-		return 0, nil, status.Error(codes.InvalidArgument, "list_name is required")
+		return 0, nil, status.Error(codes.InvalidArgument, errListNameRequired)
 	}
 
 	unlock := m.lockPage(page)

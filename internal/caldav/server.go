@@ -415,12 +415,12 @@ func (s *Server) serveGET(w http.ResponseWriter, r *http.Request) {
 		case errors.Is(err, ErrItemNotFound), errors.Is(err, ErrItemDeleted):
 			http.NotFound(w, r)
 		default:
-			http.Error(w, "internal error", http.StatusInternalServerError)
+			http.Error(w, errInternalError, http.StatusInternalServerError)
 		}
 		return
 	}
 	h := w.Header()
-	h.Set("Content-Type", iCalendarContentType)
+	h.Set(headerContentType, iCalendarContentType)
 	if item.ETag != "" {
 		h.Set("ETag", item.ETag)
 	}
@@ -453,7 +453,7 @@ const anonymousRejectionBody = "tailscale identity required\n"
 func (*Server) requireIdentity(w http.ResponseWriter, r *http.Request) (tailscale.IdentityValue, bool) {
 	identity := tailscale.IdentityFromContext(r.Context())
 	if identity.IsAnonymous() {
-		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		w.Header().Set(headerContentType, "text/plain; charset=utf-8")
 		w.WriteHeader(http.StatusForbidden)
 		_, _ = w.Write([]byte(anonymousRejectionBody))
 		return tailscale.Anonymous, false
@@ -483,7 +483,7 @@ const iCalContentTypePrefix = "text/calendar"
 func parseItemPath(w http.ResponseWriter, r *http.Request) (page, list, uid string, ok bool) {
 	page, list, uid, err := parsePath(r.URL.Path)
 	if err != nil || uid == "" {
-		http.Error(w, "bad request", http.StatusBadRequest)
+		http.Error(w, errBadRequest, http.StatusBadRequest)
 		return "", "", "", false
 	}
 	return page, list, uid, true
@@ -517,13 +517,13 @@ func (s *Server) servePUT(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if !isCalendarContentType(r.Header.Get("Content-Type")) {
+	if !isCalendarContentType(r.Header.Get(headerContentType)) {
 		http.Error(w, "unsupported media type", http.StatusUnsupportedMediaType)
 		return
 	}
 	body, tooLarge, err := readCappedBody(r.Body, maxPUTBodyBytes)
 	if err != nil {
-		http.Error(w, "bad request", http.StatusBadRequest)
+		http.Error(w, errBadRequest, http.StatusBadRequest)
 		return
 	}
 	if tooLarge {
@@ -649,11 +649,11 @@ func writePUTErrorStatus(w http.ResponseWriter, err error) {
 	case errors.Is(err, ErrPreconditionFailed):
 		http.Error(w, "precondition failed", http.StatusPreconditionFailed)
 	case errors.Is(err, ErrInvalidBody), errors.Is(err, ErrUIDMismatch):
-		http.Error(w, "bad request", http.StatusBadRequest)
+		http.Error(w, errBadRequest, http.StatusBadRequest)
 	case errors.Is(err, ErrDescriptionTooLarge):
 		http.Error(w, "payload too large", http.StatusRequestEntityTooLarge)
 	default:
-		http.Error(w, "internal error", http.StatusInternalServerError)
+		http.Error(w, errInternalError, http.StatusInternalServerError)
 	}
 }
 
@@ -666,7 +666,7 @@ func writeDELETEErrorStatus(w http.ResponseWriter, err error) {
 	case errors.Is(err, ErrPreconditionFailed):
 		http.Error(w, "precondition failed", http.StatusPreconditionFailed)
 	default:
-		http.Error(w, "internal error", http.StatusInternalServerError)
+		http.Error(w, errInternalError, http.StatusInternalServerError)
 	}
 }
 
@@ -684,6 +684,16 @@ const (
 	// audit signal).
 	auditActionPut    = "put"
 	auditActionDelete = "delete"
+)
+
+// HTTP response body strings and header keys used across the caldav
+// package. Extracted to avoid the "string literal appears N times"
+// linter finding; values must remain byte-identical to what clients
+// expect.
+const (
+	errBadRequest     = "bad request"
+	errInternalError  = "internal error"
+	headerContentType = "Content-Type"
 )
 
 // bindAuditWrite returns a closure that fills in the per-write fields

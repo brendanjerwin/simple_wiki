@@ -22,6 +22,11 @@ const DefaultKeepBaseURL = "https://www.googleapis.com/notes/v1/"
 // microsecond precision and the literal Z suffix.
 const rfc3339Micros = "2006-01-02T15:04:05.000000Z"
 
+// kindNotesNode is the Kind field value for every Keep node sent to or
+// received from the API. Extracted to avoid the "string literal appears
+// N times" linter finding.
+const kindNotesNode = "notes#node"
+
 // KeepClient performs Keep API calls authenticated with a short-lived
 // bearer obtained from Authenticator.ExchangeMasterTokenForBearer. The
 // caller refreshes the bearer on ErrAuthRevoked and retries.
@@ -98,7 +103,7 @@ func (c *KeepClient) CreateListWithItems(ctx context.Context, title string, item
 
 	nodes := make([]Node, 0, 1+len(items))
 	nodes = append(nodes, Node{
-		Kind:  "notes#node",
+		Kind:  kindNotesNode,
 		ID:    listClientID,
 		Type:  NodeTypeList,
 		Title: title,
@@ -120,7 +125,7 @@ func (c *KeepClient) CreateListWithItems(ctx context.Context, title string, item
 		}
 		itemClientIDs[i] = itemClientID
 		nodes = append(nodes, Node{
-			Kind:      "notes#node",
+			Kind:      kindNotesNode,
 			ID:        itemClientID,
 			Type:      NodeTypeListItem,
 			ParentID:  listClientID,
@@ -675,7 +680,7 @@ func rfcOrEmpty(t time.Time) string {
 
 func encodeNode(n Node) wireNode {
 	out := wireNode{
-		Kind:           firstNonEmpty(n.Kind, "notes#node"),
+		Kind:           firstNonEmpty(n.Kind, kindNotesNode),
 		ID:             n.ID,
 		ServerID:       n.ServerID,
 		ParentID:       n.ParentID,
