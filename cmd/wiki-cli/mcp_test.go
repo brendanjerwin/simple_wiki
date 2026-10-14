@@ -207,6 +207,10 @@ var _ = Describe("createAPIClients", func() {
 		It("should have a non-nil systemInfo client", func() {
 			Expect(clients.systemInfo).NotTo(BeNil())
 		})
+
+		It("should have a non-nil survey client", func() {
+			Expect(clients.survey).NotTo(BeNil())
+		})
 	})
 })
 
