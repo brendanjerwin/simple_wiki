@@ -629,6 +629,42 @@ var _ = Describe("NewStreamableHTTPHandler", func() {
 			})
 		})
 
+		When("invoking the api_v1_ConnectorService_GetChecklistBindingState tool", func() {
+			var callResp *httptest.ResponseRecorder
+			var callResult map[string]any
+
+			BeforeEach(func() {
+				// Initialize to get a session
+				initBody := `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"0.0.1"}}}`
+				initReq := httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(initBody))
+				initReq.Header.Set("Content-Type", "application/json")
+				initResp := httptest.NewRecorder()
+				handler.ServeHTTP(initResp, initReq)
+				sessionID := initResp.Header().Get("Mcp-Session-Id")
+
+				// Call GetChecklistBindingState for a non-existent binding
+				callBody := `{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"api_v1_ConnectorService_GetChecklistBindingState","arguments":{"page":"test-page","list_name":"test-list"}}}`
+				callReq := httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(callBody))
+				callReq.Header.Set("Content-Type", "application/json")
+				if sessionID != "" {
+					callReq.Header.Set("Mcp-Session-Id", sessionID)
+				}
+				callResp = httptest.NewRecorder()
+				handler.ServeHTTP(callResp, callReq)
+
+				Expect(json.Unmarshal(callResp.Body.Bytes(), &callResult)).To(Succeed())
+			})
+
+			It("returns HTTP 200", func() {
+				Expect(callResp.Code).To(Equal(http.StatusOK))
+			})
+
+			It("returns a JSON-RPC result (not a JSON-RPC protocol error)", func() {
+				Expect(callResult).NotTo(HaveKey("error"), "unexpected JSON-RPC protocol error: %v", callResult["error"])
+				Expect(callResult).To(HaveKey("result"))
+			})
+		})
+
 		When("invoking the api_v1_SurveyService_GetSurvey tool", func() {
 			var callResp *httptest.ResponseRecorder
 			var callResult map[string]any
@@ -735,6 +771,18 @@ var _ = Describe("NewStreamableHTTPHandler", func() {
 					"api_v1_SurveyService_SubmitResponse",
 					"api_v1_SurveyService_ListResponses",
 					"api_v1_SurveyService_DeleteResponse",
+					"api_v1_ConnectorService_BeginAuth",
+					"api_v1_ConnectorService_CompleteAuth",
+					"api_v1_ConnectorService_Disconnect",
+					"api_v1_ConnectorService_GetState",
+					"api_v1_ConnectorService_ListRemoteLists",
+					"api_v1_ConnectorService_ListMyBindings",
+					"api_v1_ConnectorService_Bind",
+					"api_v1_ConnectorService_Unbind",
+					"api_v1_ConnectorService_SyncNow",
+					"api_v1_ConnectorService_GetChecklistBindingState",
+					"api_v1_ConnectorService_ListDeadLetters",
+					"api_v1_ConnectorService_ClearDeadLetter",
 				))
 			})
 		})
