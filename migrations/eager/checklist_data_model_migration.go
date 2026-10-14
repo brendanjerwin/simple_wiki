@@ -463,6 +463,17 @@ func promoteAndJoinItem(itemMap map[string]any, oldDraftMeta map[string]any, idx
 	}
 
 	// Carry user-mutable optional fields if present in the legacy item.
+	applyOptionalLegacyItemFields(out, itemMap)
+
+	// Pull per-item metadata from the old-draft split (if any).
+	applyDraftMetadataTimestamps(out, oldDraftMeta, uid, now)
+	return out
+}
+
+// applyOptionalLegacyItemFields copies description, due, and tags from itemMap
+// into out when present. These are the user-mutable optional fields a legacy
+// item may carry.
+func applyOptionalLegacyItemFields(out, itemMap map[string]any) {
 	if v := stringFromMap(itemMap, descriptionFMKey); v != "" {
 		out[descriptionFMKey] = v
 	}
@@ -472,8 +483,12 @@ func promoteAndJoinItem(itemMap map[string]any, oldDraftMeta map[string]any, idx
 	if tags, ok := itemMap[tagsFMKey].([]any); ok && len(tags) > 0 {
 		out[tagsFMKey] = tags
 	}
+}
 
-	// Pull per-item metadata from the old-draft split (if any).
+// applyDraftMetadataTimestamps fills created_at, updated_at, completed_at,
+// completed_by, and automated into out from the old-draft metadata for uid.
+// Falls back to now when no draft metadata is present for the uid.
+func applyDraftMetadataTimestamps(out, oldDraftMeta map[string]any, uid, now string) {
 	createdAt := now
 	updatedAt := now
 	if meta, ok := oldDraftMeta[uid].(map[string]any); ok {
@@ -495,7 +510,6 @@ func promoteAndJoinItem(itemMap map[string]any, oldDraftMeta map[string]any, idx
 	}
 	out[createdAtFMKey] = createdAt
 	out[updatedAtFMKey] = updatedAt
-	return out
 }
 
 // readNestedMap walks fm[k1][k2][...] returning the deepest map or nil.

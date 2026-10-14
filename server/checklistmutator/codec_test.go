@@ -1432,4 +1432,149 @@ var _ = Describe("encodeChecklist", func() {
 			Expect(list).NotTo(HaveKey("tombstones"))
 		})
 	})
+
+var _ = Describe("populateFromWikiList", func() {
+	When("the wiki list has a sync token and items", func() {
+		var out *apiv1.Checklist
+
+		BeforeEach(func() {
+			out = &apiv1.Checklist{Name: "list"}
+			wikiList := map[string]any{
+				syncTokenKey: int64(5),
+				itemsKey: []any{
+					map[string]any{uidKey: "uid-1", textKey: "task", checkedKey: false, sortOrderKey: int64(1000)},
+				},
+			}
+			populateFromWikiList(out, wikiList, codecNow)
+		})
+
+		It("should populate the sync token", func() {
+			Expect(out.SyncToken).To(Equal(int64(5)))
+		})
+
+		It("should populate items", func() {
+			Expect(out.Items).To(HaveLen(1))
+			Expect(out.Items[0].Uid).To(Equal("uid-1"))
+		})
+	})
+
+	When("the wiki list has no items key", func() {
+		var out *apiv1.Checklist
+
+		BeforeEach(func() {
+			out = &apiv1.Checklist{Name: "list"}
+			populateFromWikiList(out, map[string]any{syncTokenKey: int64(1)}, codecNow)
+		})
+
+		It("should leave items empty", func() {
+			Expect(out.Items).To(BeEmpty())
+		})
+	})
+})
+
+var _ = Describe("populateFromLegacyList", func() {
+	When("the page has a legacy list with items", func() {
+		var out *apiv1.Checklist
+
+		BeforeEach(func() {
+			out = &apiv1.Checklist{Name: "groceries"}
+			fm := wikipage.FrontMatter{
+				checklistsKey: map[string]any{
+					"groceries": map[string]any{
+						itemsKey: []any{
+							map[string]any{textKey: "milk", checkedKey: false},
+						},
+					},
+				},
+			}
+			populateFromLegacyList(out, fm, "groceries", codecNow)
+		})
+
+		It("should populate items from the legacy subtree", func() {
+			Expect(out.Items).To(HaveLen(1))
+			Expect(out.Items[0].Text).To(Equal("milk"))
+		})
+	})
+
+	When("the list does not exist in legacy data", func() {
+		var out *apiv1.Checklist
+
+		BeforeEach(func() {
+			out = &apiv1.Checklist{Name: "missing"}
+			populateFromLegacyList(out, wikipage.FrontMatter{}, "missing", codecNow)
+		})
+
+		It("should leave items empty", func() {
+			Expect(out.Items).To(BeEmpty())
+		})
+	})
+})
+
+var _ = Describe("decodeEventOptionalFields", func() {
+	When("all optional fields are present", func() {
+		var ev *apiv1.ChecklistEvent
+
+		BeforeEach(func() {
+			ev = &apiv1.ChecklistEvent{}
+			m := map[string]any{
+				checkedKey:     true,
+				textKey:        "new text",
+				descriptionKey: "desc",
+				tagsKey:        []any{"tagA"},
+				eventTagsSetKey: true,
+				sortOrderKey:   int64(42),
+			}
+			decodeEventOptionalFields(m, ev)
+		})
+
+		It("should set Checked", func() {
+			Expect(ev.Checked).NotTo(BeNil())
+			Expect(*ev.Checked).To(BeTrue())
+		})
+
+		It("should set Text", func() {
+			Expect(ev.Text).NotTo(BeNil())
+			Expect(*ev.Text).To(Equal("new text"))
+		})
+
+		It("should set Description", func() {
+			Expect(ev.Description).NotTo(BeNil())
+			Expect(*ev.Description).To(Equal("desc"))
+		})
+
+		It("should set Tags", func() {
+			Expect(ev.Tags).To(ConsistOf("tagA"))
+		})
+
+		It("should set TagsSet", func() {
+			Expect(ev.TagsSet).To(BeTrue())
+		})
+
+		It("should set SortOrder", func() {
+			Expect(ev.SortOrder).NotTo(BeNil())
+			Expect(*ev.SortOrder).To(Equal(int64(42)))
+		})
+	})
+
+	When("no optional fields are present", func() {
+		var ev *apiv1.ChecklistEvent
+
+		BeforeEach(func() {
+			ev = &apiv1.ChecklistEvent{}
+			decodeEventOptionalFields(map[string]any{}, ev)
+		})
+
+		It("should leave Checked nil", func() {
+			Expect(ev.Checked).To(BeNil())
+		})
+
+		It("should leave Text nil", func() {
+			Expect(ev.Text).To(BeNil())
+		})
+
+		It("should leave SortOrder nil", func() {
+			Expect(ev.SortOrder).To(BeNil())
+		})
+	})
+})
 })

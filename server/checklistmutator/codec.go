@@ -72,43 +72,54 @@ func decodeChecklist(fm wikipage.FrontMatter, listName string, clock Clock) *api
 	wikiList = readMap(wikiList, listName)
 
 	if wikiList != nil {
-		if syncToken, ok := readInt64(wikiList, syncTokenKey); ok {
-			out.SyncToken = syncToken
-		}
-		if t, ok := readTimestamp(wikiList, updatedAtKey); ok {
-			out.UpdatedAt = t
-		}
-		out.Tombstones = decodeTombstones(readSlice(wikiList, tombstonesKey))
-		out.Events = decodeEvents(readSlice(wikiList, eventsKey))
-		if maxSeq, ok := readInt64(wikiList, maxSeqKey); ok {
-			out.MaxSeq = maxSeq
-		}
-		for _, raw := range readSlice(wikiList, itemsKey) {
-			itemMap, ok := raw.(map[string]any)
-			if !ok {
-				continue
-			}
-			out.Items = append(out.Items, decodeItem(itemMap, now))
-		}
+		populateFromWikiList(out, wikiList, now)
 	}
 
 	if len(out.Items) == 0 {
 		// Fall-through: page hasn't been migrated yet. Legacy items live
 		// at checklists.<list>.items[] without uids. Surface them so
 		// reads work; the next mutation will move + persist.
-		legacyList := readMap(readMap(fm, checklistsKey), listName)
-		for _, raw := range readSlice(legacyList, itemsKey) {
-			itemMap, ok := raw.(map[string]any)
-			if !ok {
-				continue
-			}
-			out.Items = append(out.Items, decodeLegacyItem(itemMap, now))
-		}
+		populateFromLegacyList(out, fm, listName, now)
 	}
 
 	sortItems(out.Items)
 	backfillBaselineEvents(out, now)
 	return out
+}
+
+// populateFromWikiList reads all fields from the wiki-managed subtree into out.
+func populateFromWikiList(out *apiv1.Checklist, wikiList map[string]any, now time.Time) {
+	if syncToken, ok := readInt64(wikiList, syncTokenKey); ok {
+		out.SyncToken = syncToken
+	}
+	if t, ok := readTimestamp(wikiList, updatedAtKey); ok {
+		out.UpdatedAt = t
+	}
+	out.Tombstones = decodeTombstones(readSlice(wikiList, tombstonesKey))
+	out.Events = decodeEvents(readSlice(wikiList, eventsKey))
+	if maxSeq, ok := readInt64(wikiList, maxSeqKey); ok {
+		out.MaxSeq = maxSeq
+	}
+	for _, raw := range readSlice(wikiList, itemsKey) {
+		itemMap, ok := raw.(map[string]any)
+		if !ok {
+			continue
+		}
+		out.Items = append(out.Items, decodeItem(itemMap, now))
+	}
+}
+
+// populateFromLegacyList reads legacy items at checklists.<listName>.items[]
+// as fallback for un-migrated pages.
+func populateFromLegacyList(out *apiv1.Checklist, fm wikipage.FrontMatter, listName string, now time.Time) {
+	legacyList := readMap(readMap(fm, checklistsKey), listName)
+	for _, raw := range readSlice(legacyList, itemsKey) {
+		itemMap, ok := raw.(map[string]any)
+		if !ok {
+			continue
+		}
+		out.Items = append(out.Items, decodeLegacyItem(itemMap, now))
+	}
 }
 
 // backfillBaselineEvents synthesizes a baseline event per item when
@@ -255,34 +266,39 @@ func decodeEvents(raw []any) []*apiv1.ChecklistEvent {
 		if ts, ok := readTimestamp(m, eventTimestampKey); ok {
 			ev.Ts = ts
 		}
-		// Optional field deltas: only present if the op mutated them.
-		if v, ok := m[checkedKey]; ok {
-			if b, isBool := v.(bool); isBool {
-				ev.Checked = &b
-			}
-		}
-		if v := stringValue(m, textKey); v != "" {
-			vCopy := v
-			ev.Text = &vCopy
-		}
-		if ts, ok := readTimestamp(m, dueKey); ok {
-			ev.Due = ts
-		}
-		if v := stringValue(m, descriptionKey); v != "" {
-			vCopy := v
-			ev.Description = &vCopy
-		}
-		if tags := stringSlice(m, tagsKey); tags != nil {
-			ev.Tags = tags
-		}
-		ev.TagsSet = boolValue(m, eventTagsSetKey)
-		if so, ok := readInt64(m, sortOrderKey); ok {
-			soCopy := so
-			ev.SortOrder = &soCopy
-		}
+		decodeEventOptionalFields(m, ev)
 		out = append(out, ev)
 	}
 	return out
+}
+
+// decodeEventOptionalFields reads the optional field deltas from m into ev.
+// These fields are only present on the event when the op mutated them.
+func decodeEventOptionalFields(m map[string]any, ev *apiv1.ChecklistEvent) {
+	if v, ok := m[checkedKey]; ok {
+		if b, isBool := v.(bool); isBool {
+			ev.Checked = &b
+		}
+	}
+	if v := stringValue(m, textKey); v != "" {
+		vCopy := v
+		ev.Text = &vCopy
+	}
+	if ts, ok := readTimestamp(m, dueKey); ok {
+		ev.Due = ts
+	}
+	if v := stringValue(m, descriptionKey); v != "" {
+		vCopy := v
+		ev.Description = &vCopy
+	}
+	if tags := stringSlice(m, tagsKey); tags != nil {
+		ev.Tags = tags
+	}
+	ev.TagsSet = boolValue(m, eventTagsSetKey)
+	if so, ok := readInt64(m, sortOrderKey); ok {
+		soCopy := so
+		ev.SortOrder = &soCopy
+	}
 }
 
 // appendEvent adds one event to the checklist's log under the next

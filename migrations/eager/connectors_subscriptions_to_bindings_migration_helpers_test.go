@@ -246,3 +246,81 @@ var _ = Describe("ConnectorsSubscriptionsToBindingsMigrationJob.GetName", func()
 		Expect(j.GetName()).To(Equal("ConnectorsSubscriptionsToBindingsMigrationJob-alpha"))
 	})
 })
+
+var _ = Describe("rewriteConnectorKind", func() {
+	When("the kind has a legacy subscriptions[] and no bindings[]", func() {
+		var kindMap map[string]any
+		var result bool
+
+		BeforeEach(func() {
+			kindMap = map[string]any{
+				connectorsKeySubscriptions: []any{
+					map[string]any{connectorsKeyPage: "p1", connectorsKeyListName: "l1"},
+				},
+			}
+			result = rewriteConnectorKind("google_tasks", kindMap)
+		})
+
+		It("should return true", func() {
+			Expect(result).To(BeTrue())
+		})
+
+		It("should delete the legacy subscriptions key", func() {
+			Expect(kindMap).NotTo(HaveKey(connectorsKeySubscriptions))
+		})
+
+		It("should produce a bindings[] entry", func() {
+			Expect(kindMap).To(HaveKey(connectorsKeyBindings))
+		})
+	})
+
+	When("the kind has BOTH shapes — new wins, legacy dropped", func() {
+		var kindMap map[string]any
+		var result bool
+
+		BeforeEach(func() {
+			kindMap = map[string]any{
+				connectorsKeyBindings: []any{
+					map[string]any{connectorsKeyPage: "existing"},
+				},
+				connectorsKeySubscriptions: []any{
+					map[string]any{connectorsKeyPage: "legacy"},
+				},
+			}
+			result = rewriteConnectorKind("google_tasks", kindMap)
+		})
+
+		It("should return true", func() {
+			Expect(result).To(BeTrue())
+		})
+
+		It("should remove the legacy subscriptions key", func() {
+			Expect(kindMap).NotTo(HaveKey(connectorsKeySubscriptions))
+		})
+
+		It("should preserve the existing bindings", func() {
+			bindings, ok := kindMap[connectorsKeyBindings].([]any)
+			Expect(ok).To(BeTrue())
+			Expect(bindings).To(HaveLen(1))
+			Expect(bindings[0].(map[string]any)[connectorsKeyPage]).To(Equal("existing"))
+		})
+	})
+
+	When("the kind already has only bindings[] with no legacy keys", func() {
+		var kindMap map[string]any
+		var result bool
+
+		BeforeEach(func() {
+			kindMap = map[string]any{
+				connectorsKeyBindings: []any{
+					map[string]any{connectorsKeyPage: "p1"},
+				},
+			}
+			result = rewriteConnectorKind("google_tasks", kindMap)
+		})
+
+		It("should return false", func() {
+			Expect(result).To(BeFalse())
+		})
+	})
+})

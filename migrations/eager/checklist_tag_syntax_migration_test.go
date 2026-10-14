@@ -360,3 +360,124 @@ var _ = Describe("ChecklistTagSyntaxMigrationJob", func() {
 		})
 	})
 })
+
+var _ = Describe("checklistItemsHaveLegacyTags", func() {
+	When("items contain a legacy :tag pattern", func() {
+		It("should return true", func() {
+			listMap := map[string]any{
+				"items": []any{
+					map[string]any{"text": "buy milk :urgent", "checked": false},
+				},
+			}
+			Expect(checklistItemsHaveLegacyTags(listMap)).To(BeTrue())
+		})
+	})
+
+	When("items use the canonical #tag syntax", func() {
+		It("should return false", func() {
+			listMap := map[string]any{
+				"items": []any{
+					map[string]any{"text": "buy milk #urgent", "checked": false},
+				},
+			}
+			Expect(checklistItemsHaveLegacyTags(listMap)).To(BeFalse())
+		})
+	})
+
+	When("the items key is missing", func() {
+		It("should return false", func() {
+			Expect(checklistItemsHaveLegacyTags(map[string]any{})).To(BeFalse())
+		})
+	})
+
+	When("items contains a non-map entry", func() {
+		It("should skip it and return false", func() {
+			listMap := map[string]any{
+				"items": []any{"not a map"},
+			}
+			Expect(checklistItemsHaveLegacyTags(listMap)).To(BeFalse())
+		})
+	})
+})
+
+var _ = Describe("rewriteItemsLegacyTags", func() {
+	When("an item text contains a legacy :tag", func() {
+		var items []any
+
+		BeforeEach(func() {
+			items = []any{
+				map[string]any{"text": "milk :urgent", "checked": false},
+			}
+			rewriteItemsLegacyTags(items)
+		})
+
+		It("should rewrite the text to #tag syntax", func() {
+			Expect(items[0].(map[string]any)["text"]).To(Equal("milk #urgent"))
+		})
+	})
+
+	When("no items contain a legacy :tag", func() {
+		var result bool
+
+		BeforeEach(func() {
+			items := []any{
+				map[string]any{"text": "no tags here", "checked": false},
+			}
+			result = rewriteItemsLegacyTags(items)
+		})
+
+		It("should return false", func() {
+			Expect(result).To(BeFalse())
+		})
+	})
+})
+
+var _ = Describe("rewriteOneChecklistList", func() {
+	When("items contain a legacy :tag pattern", func() {
+		var listMap map[string]any
+		var result bool
+
+		BeforeEach(func() {
+			listMap = map[string]any{
+				"items": []any{
+					map[string]any{"text": "task :low", "checked": false},
+				},
+			}
+			result = rewriteOneChecklistList(listMap)
+		})
+
+		It("should return true", func() {
+			Expect(result).To(BeTrue())
+		})
+
+		It("should stamp the migrated flag", func() {
+			Expect(listMap[migratedFlagKey]).To(BeTrue())
+		})
+
+		It("should rewrite the item text", func() {
+			Expect(listMap["items"].([]any)[0].(map[string]any)["text"]).To(Equal("task #low"))
+		})
+	})
+
+	When("items have no legacy tags", func() {
+		var listMap map[string]any
+		var result bool
+
+		BeforeEach(func() {
+			listMap = map[string]any{
+				"items": []any{
+					map[string]any{"text": "clean task", "checked": false},
+				},
+			}
+			result = rewriteOneChecklistList(listMap)
+		})
+
+		It("should return false", func() {
+			Expect(result).To(BeFalse())
+		})
+
+		It("should still stamp the migrated flag", func() {
+			Expect(listMap[migratedFlagKey]).To(BeTrue())
+		})
+	})
+})
