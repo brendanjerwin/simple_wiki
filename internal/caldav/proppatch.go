@@ -48,17 +48,17 @@ func (s *Server) servePROPPATCH(w http.ResponseWriter, r *http.Request) {
 	}
 	page, list, uid, err := parsePath(r.URL.Path)
 	if err != nil {
-		http.Error(w, "bad request", http.StatusBadRequest)
+		http.Error(w, errBadRequest, http.StatusBadRequest)
 		return
 	}
 	if uid != "" || list == "" || page == "" {
-		http.Error(w, "bad request", http.StatusBadRequest)
+		http.Error(w, errBadRequest, http.StatusBadRequest)
 		return
 	}
 
 	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, proppatchBodyMaxBytes))
 	if err != nil {
-		http.Error(w, "bad request", http.StatusBadRequest)
+		http.Error(w, errBadRequest, http.StatusBadRequest)
 		return
 	}
 
@@ -258,7 +258,7 @@ func writeProppatchMultistatus(w http.ResponseWriter, body proppatchMultistatus)
 		http.Error(w, internalErrorMessage, http.StatusInternalServerError)
 		return
 	}
-	w.Header().Set("Content-Type", xmlContentType)
+	w.Header().Set(headerContentType, xmlContentType)
 	w.WriteHeader(http.StatusMultiStatus)
 	_, _ = w.Write([]byte(xmlDecl))
 	_, _ = w.Write(out)

@@ -31,6 +31,11 @@ const errEmptyTasklistID = "tasks: tasklistID must not be empty"
 // responses: sentinel + HTTP status + truncated body.
 const httpStatusErrorFmt = "%w: HTTP %d: %s"
 
+// listsPathPrefix is the URL path segment that prefixes all task-list
+// sub-resources in the Tasks REST v1 API. Extracted to avoid the
+// "string literal appears N times" linter finding.
+const listsPathPrefix = "lists/"
+
 // TokenSource is the contract the TasksClient uses to obtain a fresh
 // bearer access token on each request. The RefreshClient implements
 // this; tests inject a static stub.
@@ -178,7 +183,7 @@ func (c *TasksClient) ListTasks(ctx context.Context, tasklistID string, updatedM
 	if pageToken != "" {
 		q.Set("pageToken", pageToken)
 	}
-	body, err := c.do(ctx, http.MethodGet, "lists/"+url.PathEscape(tasklistID)+"/tasks", q, nil, "")
+	body, err := c.do(ctx, http.MethodGet, listsPathPrefix+url.PathEscape(tasklistID)+"/tasks", q, nil, "")
 	if err != nil {
 		return TasksPage{}, err
 	}
@@ -230,7 +235,7 @@ func (c *TasksClient) InsertTask(ctx context.Context, tasklistID, title, notes s
 	if err != nil {
 		return Task{}, fmt.Errorf("encode task: %w", err)
 	}
-	respBody, err := c.do(ctx, http.MethodPost, "lists/"+url.PathEscape(tasklistID)+"/tasks", q, reqBody, "")
+	respBody, err := c.do(ctx, http.MethodPost, listsPathPrefix+url.PathEscape(tasklistID)+"/tasks", q, reqBody, "")
 	if err != nil {
 		return Task{}, err
 	}
@@ -255,7 +260,7 @@ func (c *TasksClient) PatchTask(ctx context.Context, tasklistID, taskID string, 
 	if err != nil {
 		return Task{}, err
 	}
-	respBody, err := c.do(ctx, http.MethodPatch, "lists/"+url.PathEscape(tasklistID)+"/tasks/"+url.PathEscape(taskID), nil, body, etag)
+	respBody, err := c.do(ctx, http.MethodPatch, listsPathPrefix+url.PathEscape(tasklistID)+"/tasks/"+url.PathEscape(taskID), nil, body, etag)
 	if err != nil {
 		return Task{}, err
 	}
@@ -276,7 +281,7 @@ func (c *TasksClient) DeleteTask(ctx context.Context, tasklistID, taskID string)
 	if taskID == "" {
 		return errors.New("tasks: taskID must not be empty")
 	}
-	_, err := c.do(ctx, http.MethodDelete, "lists/"+url.PathEscape(tasklistID)+"/tasks/"+url.PathEscape(taskID), nil, nil, "")
+	_, err := c.do(ctx, http.MethodDelete, listsPathPrefix+url.PathEscape(tasklistID)+"/tasks/"+url.PathEscape(taskID), nil, nil, "")
 	if errors.Is(err, ErrNotFound) {
 		return nil
 	}
