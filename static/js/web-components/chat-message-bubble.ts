@@ -523,31 +523,8 @@ export class ChatMessageBubble extends LitElement {
 
  private _renderToolCall(tc: ToolCallState) {
   const isLive = tc.status === 'pending' || tc.status === 'in_progress';
-
   if (isLive) {
-   // startedAtMs is absent for historical tool calls (not replayed with a
-   // timestamp); only show elapsed when we have a sane, finite value so we
-   // never render "NaNs".
-   const elapsedMs = this._nowMs - tc.startedAtMs;
-   const showElapsed = Number.isFinite(elapsedMs) && elapsedMs >= 0;
-   const kindGlyph = this._kindGlyph(tc.kind);
-   const longRunning = this._isLongRunning(tc);
-   const liveClass = longRunning ? 'tool-call-live long-running' : 'tool-call-live';
-   return html`
-        <div class="${liveClass}">
-          <div class="tool-call-live-header">
-            <span class="status-icon">${this._toolCallStatusIcon(tc.status)}</span>
-            ${kindGlyph ? html`<span class="kind-glyph">${kindGlyph}</span>` : nothing}
-            <span class="tool-call-live-title">${tc.title}</span>
-            ${showElapsed
-     ? html`<span class="tool-call-elapsed">${this._formatElapsedMs(elapsedMs)}</span>`
-     : nothing}
-          </div>
-          ${tc.detail
-     ? html`<div class="tool-call-detail">${tc.detail}</div>`
-     : nothing}
-        </div>
-      `;
+   return this._renderLiveToolCall(tc);
   }
 
   // Completed or failed: if the task was long-running, show an expanded
@@ -560,33 +537,67 @@ export class ChatMessageBubble extends LitElement {
   const endTime = tc.completedAtMs ?? this._nowMs;
   const durationMs = tc.startedAtMs > 0 ? endTime - tc.startedAtMs : 0;
   if (Number.isFinite(durationMs) && durationMs >= this._longRunningThresholdMs) {
-   const resultClass = tc.status === 'failed' ? 'tool-call-result failed' : 'tool-call-result';
-   const kindGlyph = this._kindGlyph(tc.kind);
-   return html`
-        <div class="${resultClass}">
-          <div class="tool-call-result-header">
-            <span class="status-icon">${this._toolCallStatusIcon(tc.status)}</span>
-            ${kindGlyph ? html`<span class="kind-glyph">${kindGlyph}</span>` : nothing}
-            <span class="tool-call-result-title">${tc.title}</span>
-            <span class="tool-call-result-elapsed">${this._formatElapsedMs(durationMs)}</span>
-          </div>
-          ${tc.detail
-     ? html`<div class="tool-call-result-detail">${tc.detail}</div>`
-     : nothing}
-        </div>
-      `;
+   return this._renderLongRunningCompletedToolCall(tc, durationMs);
   }
 
+  return this._renderPillToolCall(tc);
+ }
+
+ private _renderLiveToolCall(tc: ToolCallState) {
+  // startedAtMs is absent for historical tool calls (not replayed with a
+  // timestamp); only show elapsed when we have a sane, finite value so we
+  // never render "NaNs".
+  const elapsedMs = this._nowMs - tc.startedAtMs;
+  const showElapsed = Number.isFinite(elapsedMs) && elapsedMs >= 0;
+  const kindGlyph = this._kindGlyph(tc.kind);
+  const longRunning = this._isLongRunning(tc);
+  const liveClass = longRunning ? 'tool-call-live long-running' : 'tool-call-live';
+  return html`
+       <div class="${liveClass}">
+         <div class="tool-call-live-header">
+           <span class="status-icon">${this._toolCallStatusIcon(tc.status)}</span>
+           ${kindGlyph ? html`<span class="kind-glyph">${kindGlyph}</span>` : nothing}
+           <span class="tool-call-live-title">${tc.title}</span>
+           ${showElapsed
+    ? html`<span class="tool-call-elapsed">${this._formatElapsedMs(elapsedMs)}</span>`
+    : nothing}
+         </div>
+         ${tc.detail
+    ? html`<div class="tool-call-detail">${tc.detail}</div>`
+    : nothing}
+       </div>
+     `;
+ }
+
+ private _renderLongRunningCompletedToolCall(tc: ToolCallState, durationMs: number) {
+  const resultClass = tc.status === 'failed' ? 'tool-call-result failed' : 'tool-call-result';
+  const kindGlyph = this._kindGlyph(tc.kind);
+  return html`
+       <div class="${resultClass}">
+         <div class="tool-call-result-header">
+           <span class="status-icon">${this._toolCallStatusIcon(tc.status)}</span>
+           ${kindGlyph ? html`<span class="kind-glyph">${kindGlyph}</span>` : nothing}
+           <span class="tool-call-result-title">${tc.title}</span>
+           <span class="tool-call-result-elapsed">${this._formatElapsedMs(durationMs)}</span>
+         </div>
+         ${tc.detail
+    ? html`<div class="tool-call-result-detail">${tc.detail}</div>`
+    : nothing}
+       </div>
+     `;
+ }
+
+ private _renderPillToolCall(tc: ToolCallState) {
   // Short completed/failed: collapse to icons to save space — the tool kind glyph
   // as the primary mark with the status as small subtext. The full label (tool
   // name + args) is preserved in the title attribute so it shows on hover.
   const label = tc.detail ? `${tc.title}: ${tc.detail}` : tc.title;
   return html`
-      <span class="tool-call-pill" title="${label}">
-        <span class="kind-glyph">${this._kindGlyph(tc.kind)}</span>
-        <span class="status-icon">${this._toolCallStatusIcon(tc.status)}</span>
-      </span>
-    `;
+     <span class="tool-call-pill" title="${label}">
+       <span class="kind-glyph">${this._kindGlyph(tc.kind)}</span>
+       <span class="status-icon">${this._toolCallStatusIcon(tc.status)}</span>
+     </span>
+   `;
  }
 
 

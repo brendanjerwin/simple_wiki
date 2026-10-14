@@ -17,6 +17,8 @@ import (
 
 var errSurveyMutatorNotConfigured = status.Error(codes.FailedPrecondition, "survey mutator not configured on server")
 
+const errFieldNameRequired = "field_name is required"
+
 // GetSurvey implements the GetSurvey RPC.
 func (s *Server) GetSurvey(ctx context.Context, req *apiv1.GetSurveyRequest) (*apiv1.GetSurveyResponse, error) {
 	if s.surveyMutator == nil {
@@ -78,7 +80,7 @@ func (s *Server) UpdateField(ctx context.Context, req *apiv1.UpdateSurveyFieldRe
 		return nil, err
 	}
 	if req.GetFieldName() == "" {
-		return nil, status.Error(codes.InvalidArgument, "field_name is required")
+		return nil, status.Error(codes.InvalidArgument, errFieldNameRequired)
 	}
 	survey, err := s.surveyMutator.UpdateField(ctx, req.GetPage(), req.GetName(), req.GetFieldName(), req.GetField(), timestampPtr(req.ExpectedUpdatedAt))
 	if err != nil {
@@ -96,7 +98,7 @@ func (s *Server) RemoveField(ctx context.Context, req *apiv1.RemoveSurveyFieldRe
 		return nil, err
 	}
 	if req.GetFieldName() == "" {
-		return nil, status.Error(codes.InvalidArgument, "field_name is required")
+		return nil, status.Error(codes.InvalidArgument, errFieldNameRequired)
 	}
 	survey, err := s.surveyMutator.RemoveField(ctx, req.GetPage(), req.GetName(), req.GetFieldName(), timestampPtr(req.ExpectedUpdatedAt))
 	if err != nil {
@@ -114,7 +116,7 @@ func (s *Server) ReorderField(ctx context.Context, req *apiv1.ReorderSurveyField
 		return nil, err
 	}
 	if req.GetFieldName() == "" {
-		return nil, status.Error(codes.InvalidArgument, "field_name is required")
+		return nil, status.Error(codes.InvalidArgument, errFieldNameRequired)
 	}
 	survey, err := s.surveyMutator.ReorderField(ctx, req.GetPage(), req.GetName(), req.GetFieldName(), int(req.GetNewIndex()), timestampPtr(req.ExpectedUpdatedAt))
 	if err != nil {
