@@ -629,6 +629,42 @@ var _ = Describe("NewStreamableHTTPHandler", func() {
 			})
 		})
 
+		When("invoking the api_v1_SurveyService_GetSurvey tool", func() {
+			var callResp *httptest.ResponseRecorder
+			var callResult map[string]any
+
+			BeforeEach(func() {
+				// Initialize to get a session
+				initBody := `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"0.0.1"}}}`
+				initReq := httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(initBody))
+				initReq.Header.Set("Content-Type", "application/json")
+				initResp := httptest.NewRecorder()
+				handler.ServeHTTP(initResp, initReq)
+				sessionID := initResp.Header().Get("Mcp-Session-Id")
+
+				// Call GetSurvey for a non-existent survey
+				callBody := `{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"api_v1_SurveyService_GetSurvey","arguments":{"page":"test-page","name":"test-survey"}}}`
+				callReq := httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(callBody))
+				callReq.Header.Set("Content-Type", "application/json")
+				if sessionID != "" {
+					callReq.Header.Set("Mcp-Session-Id", sessionID)
+				}
+				callResp = httptest.NewRecorder()
+				handler.ServeHTTP(callResp, callReq)
+
+				Expect(json.Unmarshal(callResp.Body.Bytes(), &callResult)).To(Succeed())
+			})
+
+			It("returns HTTP 200", func() {
+				Expect(callResp.Code).To(Equal(http.StatusOK))
+			})
+
+			It("returns a JSON-RPC result (not a JSON-RPC protocol error)", func() {
+				Expect(callResult).NotTo(HaveKey("error"), "unexpected JSON-RPC protocol error: %v", callResult["error"])
+				Expect(callResult).To(HaveKey("result"))
+			})
+		})
+
 		When("receiving an MCP tools/list request", func() {
 			var toolNames []string
 
@@ -690,6 +726,15 @@ var _ = Describe("NewStreamableHTTPHandler", func() {
 					"api_v1_SearchService_SearchContent",
 					"api_v1_SystemInfoService_GetVersion",
 					"api_v1_SystemInfoService_GetJobStatus",
+					"api_v1_SurveyService_GetSurvey",
+					"api_v1_SurveyService_UpsertSurvey",
+					"api_v1_SurveyService_AddField",
+					"api_v1_SurveyService_UpdateField",
+					"api_v1_SurveyService_RemoveField",
+					"api_v1_SurveyService_ReorderField",
+					"api_v1_SurveyService_SubmitResponse",
+					"api_v1_SurveyService_ListResponses",
+					"api_v1_SurveyService_DeleteResponse",
 				))
 			})
 		})
