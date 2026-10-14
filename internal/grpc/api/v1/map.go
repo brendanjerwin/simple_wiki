@@ -31,6 +31,20 @@ func requireMapRequest[T any](req *T) error {
 	return nil
 }
 
+type mapElementWithUID interface {
+	GetMetadata() *apiv1.MapElementMetadata
+}
+
+func findByUID[T mapElementWithUID](elements []T, uid string) (T, bool) {
+	for _, el := range elements {
+		if el.GetMetadata().GetUid() == uid {
+			return el, true
+		}
+	}
+	var zero T
+	return zero, false
+}
+
 type mapElementIncludes struct {
 	markers  bool
 	polygons bool
@@ -539,30 +553,23 @@ func (s *Server) GetElement(ctx context.Context, req *apiv1.GetElementRequest) (
 	if err != nil {
 		return nil, err
 	}
+	uid := req.GetUid()
 	switch req.GetType() {
 	case apiv1.MapElementType_MAP_ELEMENT_TYPE_MARKER:
-		for _, marker := range mapState.GetMarkers() {
-			if marker.GetMetadata().GetUid() == req.GetUid() {
-				return &apiv1.GetElementResponse{Marker: marker}, nil
-			}
+		if marker, ok := findByUID(mapState.GetMarkers(), uid); ok {
+			return &apiv1.GetElementResponse{Marker: marker}, nil
 		}
 	case apiv1.MapElementType_MAP_ELEMENT_TYPE_POLYGON:
-		for _, polygon := range mapState.GetPolygons() {
-			if polygon.GetMetadata().GetUid() == req.GetUid() {
-				return &apiv1.GetElementResponse{Polygon: polygon}, nil
-			}
+		if polygon, ok := findByUID(mapState.GetPolygons(), uid); ok {
+			return &apiv1.GetElementResponse{Polygon: polygon}, nil
 		}
 	case apiv1.MapElementType_MAP_ELEMENT_TYPE_CIRCLE:
-		for _, circle := range mapState.GetCircles() {
-			if circle.GetMetadata().GetUid() == req.GetUid() {
-				return &apiv1.GetElementResponse{Circle: circle}, nil
-			}
+		if circle, ok := findByUID(mapState.GetCircles(), uid); ok {
+			return &apiv1.GetElementResponse{Circle: circle}, nil
 		}
 	case apiv1.MapElementType_MAP_ELEMENT_TYPE_TRACK:
-		for _, track := range mapState.GetTracks() {
-			if track.GetMetadata().GetUid() == req.GetUid() {
-				return &apiv1.GetElementResponse{Track: track}, nil
-			}
+		if track, ok := findByUID(mapState.GetTracks(), uid); ok {
+			return &apiv1.GetElementResponse{Track: track}, nil
 		}
 	default:
 		return nil, status.Error(codes.InvalidArgument, "type is required")

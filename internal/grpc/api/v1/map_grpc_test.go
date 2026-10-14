@@ -557,6 +557,43 @@ var _ = Describe("MapService handlers", func() {
 	})
 })
 
+var _ = Describe("GetElement with unrecognized element type", func() {
+	var (
+		ctx    context.Context
+		server *v1.Server
+		store  *MockPageReaderMutator
+		err    error
+	)
+
+	BeforeEach(func() {
+		ctx = context.Background()
+		store = &MockPageReaderMutator{}
+		server = mustNewServer(store, nil, nil).
+			WithMapMutator(mapmutator.New(store, mapSteadyClock{}, ulid.NewSequenceGenerator(
+				"01JMAPINVALIDTYPE000000001",
+			)))
+
+		// Create the map so readAuthorizedMap succeeds before reaching the switch.
+		_, err = server.AddMarker(ctx, &apiv1.AddMarkerRequest{
+			Page:    "test_page",
+			MapName: "test_map",
+			Marker:  &apiv1.MapMarker{Label: "seed", Position: &apiv1.GeoPoint{Lat: 0, Lon: 0}},
+		})
+		Expect(err).NotTo(HaveOccurred())
+
+		_, err = server.GetElement(ctx, &apiv1.GetElementRequest{
+			Page:    "test_page",
+			MapName: "test_map",
+			Type:    apiv1.MapElementType_MAP_ELEMENT_TYPE_UNSPECIFIED,
+			Uid:     "any-uid",
+		})
+	})
+
+	It("should return InvalidArgument", func() {
+		Expect(err).To(HaveGrpcStatusWithSubstr(codes.InvalidArgument, "type is required"))
+	})
+})
+
 var _ = Describe("MapService handlers - map mutator not configured", func() {
 	Describe("AddMarker", func() {
 		var err error
