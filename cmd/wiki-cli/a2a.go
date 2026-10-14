@@ -417,7 +417,9 @@ func (s *a2aServer) loadPersistedTasks() error {
 				logKeyTaskID, task.ID,
 				logKeyAction, "a2a_task_swept")
 		}
-		task.cancel = func() {} // terminal; cancel is a no-op
+		task.cancel = func() {
+			// terminal task; no-op cancel
+		}
 		s.tasks[task.ID] = task
 	}
 	slog.Info("a2a loaded persisted task records",

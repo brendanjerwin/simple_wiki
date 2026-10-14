@@ -745,6 +745,137 @@ describe('WikiMap', () => {
       });
     });
 
+    describe('LeafletWikiMapRenderer computeCheckedTags and collectTagsFromMapMessage', () => {
+      let mapContainer: HTMLElement;
+      let leafletRenderer: LeafletWikiMapRenderer;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- test stub for MapService client
+      let mockClient: any;
+
+      beforeEach(() => {
+        stubLeaflet();
+        mapContainer = document.createElement('div');
+        document.body.appendChild(mapContainer);
+        leafletRenderer = new LeafletWikiMapRenderer();
+        mockClient = { getTrackGeometry: sinon.stub().resolves({ segments: [] }) };
+      });
+
+      afterEach(() => {
+        sinon.restore();
+        resetLeafletOverrides();
+        leafletRenderer.destroy();
+        mapContainer.remove();
+      });
+
+      describe('when first rendered with tagged and untagged markers', () => {
+        let mapMsg: WikiMapMessage;
+
+        beforeEach(() => {
+          mapMsg = sampleMap();
+          mapMsg.markers = [
+            create(MapMarkerSchema, {
+              label: 'Tagged',
+              position: create(GeoPointSchema, { lat: 41.1, lon: -72.2 }),
+              tags: ['hiking'],
+            }),
+            create(MapMarkerSchema, {
+              label: 'Untagged',
+              position: create(GeoPointSchema, { lat: 41.2, lon: -72.3 }),
+            }),
+          ];
+          leafletRenderer.render(mapContainer, mapMsg, { render: sinon.stub().resolves('') }, mockClient, 'garden_plan', 'yard', false);
+        });
+
+        it('should enable all known tags by default', () => {
+          expect(leafletRenderer.checkedTags.has('hiking')).to.equal(true);
+        });
+
+        it('should enable the untagged virtual tag by default', () => {
+          expect(leafletRenderer.checkedTags.has('untagged')).to.equal(true);
+        });
+
+        describe('when rendered again after unchecking a tag', () => {
+          beforeEach(() => {
+            leafletRenderer.checkedTags.delete('hiking');
+            leafletRenderer.render(mapContainer, mapMsg, { render: sinon.stub().resolves('') }, mockClient, 'garden_plan', 'yard', false);
+          });
+
+          it('should preserve the unchecked state across re-renders', () => {
+            expect(leafletRenderer.checkedTags.has('hiking')).to.equal(false);
+          });
+
+          it('should keep untagged checked since it was not toggled', () => {
+            expect(leafletRenderer.checkedTags.has('untagged')).to.equal(true);
+          });
+        });
+
+        describe('when rendered again with a new tag added', () => {
+          beforeEach(() => {
+            mapMsg.markers = [
+              create(MapMarkerSchema, {
+                label: 'Tagged',
+                position: create(GeoPointSchema, { lat: 41.1, lon: -72.2 }),
+                tags: ['hiking'],
+              }),
+              create(MapMarkerSchema, {
+                label: 'New Tag',
+                position: create(GeoPointSchema, { lat: 41.3, lon: -72.4 }),
+                tags: ['scenic'],
+              }),
+            ];
+            leafletRenderer.render(mapContainer, mapMsg, { render: sinon.stub().resolves('') }, mockClient, 'garden_plan', 'yard', false);
+          });
+
+          it('should adopt the new tag as checked by default', () => {
+            expect(leafletRenderer.checkedTags.has('scenic')).to.equal(true);
+          });
+
+          it('should keep the existing checked tag enabled', () => {
+            expect(leafletRenderer.checkedTags.has('hiking')).to.equal(true);
+          });
+        });
+
+        describe('when rendered again after unchecking untagged and removing untagged items', () => {
+          beforeEach(() => {
+            leafletRenderer.checkedTags.delete('untagged');
+            mapMsg.markers = [
+              create(MapMarkerSchema, {
+                label: 'Tagged',
+                position: create(GeoPointSchema, { lat: 41.1, lon: -72.2 }),
+                tags: ['hiking'],
+              }),
+            ];
+            leafletRenderer.render(mapContainer, mapMsg, { render: sinon.stub().resolves('') }, mockClient, 'garden_plan', 'yard', false);
+          });
+
+          it('should not re-add untagged to checkedTags when there are no untagged items', () => {
+            expect(leafletRenderer.checkedTags.has('untagged')).to.equal(false);
+          });
+        });
+      });
+
+      describe('when first rendered with only tagged markers', () => {
+        beforeEach(() => {
+          const mapMsg = sampleMap();
+          mapMsg.markers = [
+            create(MapMarkerSchema, {
+              label: 'Tagged',
+              position: create(GeoPointSchema, { lat: 41.1, lon: -72.2 }),
+              tags: ['hiking'],
+            }),
+          ];
+          leafletRenderer.render(mapContainer, mapMsg, { render: sinon.stub().resolves('') }, mockClient, 'garden_plan', 'yard', false);
+        });
+
+        it('should not add untagged to checkedTags on first render', () => {
+          expect(leafletRenderer.checkedTags.has('untagged')).to.equal(false);
+        });
+
+        it('should enable the existing tags', () => {
+          expect(leafletRenderer.checkedTags.has('hiking')).to.equal(true);
+        });
+      });
+    });
+
     describe('WikiMap add-track button tap-reveal affordance', () => {
       let el: WikiMap;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any -- test stub for MapService client

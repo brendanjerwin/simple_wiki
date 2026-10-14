@@ -80,6 +80,38 @@ func assertTrustedProxyIdentity(r *http.Request, metrics MetricsRecorder) (Ident
 	return identity, true
 }
 
+// resolveIdentity applies the three-method identity resolution chain to the
+// given request and returns the resolved identity (Anonymous if none matched).
+// Method 0: trusted proxy headers; Method 1: Tailscale headers from localhost;
+// Method 2: WhoIs lookup (skipped when resolver is nil).
+func resolveIdentity(r *http.Request, resolver IdentityResolver, metrics MetricsRecorder, logger *lumber.ConsoleLogger) IdentityValue {
+	// Method 0: trusted proxy.
+	if id, ok := assertTrustedProxyIdentity(r, metrics); ok {
+		return id
+	}
+
+	// Method 1: Tailscale headers (only trusted from localhost).
+	if loginName := r.Header.Get("Tailscale-User-Login"); loginName != "" && isFromLocalhost(r.RemoteAddr) {
+		metrics.RecordHeaderExtraction()
+		return NewIdentity(loginName, r.Header.Get("Tailscale-User-Name"), "")
+	}
+
+	// Method 2: WhoIs lookup.
+	if resolver == nil {
+		return Anonymous
+	}
+	identity, err := resolver.WhoIs(r.Context(), r.RemoteAddr)
+	if err != nil {
+		metrics.RecordTailscaleLookup(observability.ResultFailure)
+		logger.Debug("WhoIs lookup failed: %v", err)
+	} else if identity.IsAnonymous() {
+		metrics.RecordTailscaleLookup(observability.ResultNotTailnet)
+	} else {
+		metrics.RecordTailscaleLookup(observability.ResultSuccess)
+	}
+	return identity
+}
+
 // IdentityMiddlewareWithMetrics creates Gin middleware that extracts identity.
 // Identity is resolved via: Method 0 (trusted proxy headers, when the
 // operator-configured secret matches), Method 1 (Tailscale headers set by
@@ -103,47 +135,9 @@ func IdentityMiddlewareWithMetrics(resolver IdentityResolver, logger *lumber.Con
 	}
 
 	return func(c *gin.Context) {
-		ctx := c.Request.Context()
-		identity := Anonymous
-
-		// Method 0: trusted proxy. A co-located reverse proxy knowing the
-		// operator-configured secret may assert the end-user identity.
-		if id, ok := assertTrustedProxyIdentity(c.Request, metrics); ok {
-			identity = id
-		}
-
-		// Method 1: Check Tailscale headers (set by Tailscale Serve/Funnel)
-		// Only trust these headers from localhost (where tailscaled runs)
-		// This prevents external attackers from spoofing user identity
-		//
-		// Note: Tailscale Serve only provides Tailscale-User-Login and Tailscale-User-Name headers.
-		// The node name is not available when using Tailscale Serve; NodeName will be empty.
-		// To get the node name, the WhoIs fallback must be used (direct tailnet access).
-		if identity.IsAnonymous() {
-			if loginName := c.Request.Header.Get("Tailscale-User-Login"); loginName != "" && isFromLocalhost(c.Request.RemoteAddr) {
-				identity = NewIdentity(loginName, c.Request.Header.Get("Tailscale-User-Name"), "")
-				metrics.RecordHeaderExtraction()
-			}
-		}
-
-		// Method 2: Try WhoIs lookup (works for direct tailnet connections)
-		if identity.IsAnonymous() && resolver != nil {
-			var err error
-			identity, err = resolver.WhoIs(ctx, c.Request.RemoteAddr)
-			if err != nil {
-				metrics.RecordTailscaleLookup(observability.ResultFailure)
-				logger.Debug("WhoIs lookup failed: %v", err)
-			} else if identity.IsAnonymous() {
-				metrics.RecordTailscaleLookup(observability.ResultNotTailnet)
-			} else {
-				metrics.RecordTailscaleLookup(observability.ResultSuccess)
-			}
-		}
-
-		// Always store identity in context (Anonymous is valid)
-		ctx = ContextWithIdentity(ctx, identity)
+		identity := resolveIdentity(c.Request, resolver, metrics, logger)
+		ctx := ContextWithIdentity(c.Request.Context(), identity)
 		c.Request = c.Request.WithContext(ctx)
-
 		c.Next()
 	}, nil
 }
@@ -171,41 +165,8 @@ func IdentityHTTPMiddlewareWithMetrics(resolver IdentityResolver, logger *lumber
 	}
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ctx := r.Context()
-		identity := Anonymous
-
-		// Method 0: trusted proxy. A co-located reverse proxy knowing the
-		// operator-configured secret may assert the end-user identity.
-		if id, ok := assertTrustedProxyIdentity(r, metrics); ok {
-			identity = id
-		}
-
-		// Method 1: Check Tailscale headers (set by Tailscale Serve/Funnel)
-		// Only trust these headers from localhost (where tailscaled runs)
-		// This prevents external attackers from spoofing user identity
-		if identity.IsAnonymous() {
-			if loginName := r.Header.Get("Tailscale-User-Login"); loginName != "" && isFromLocalhost(r.RemoteAddr) {
-				identity = NewIdentity(loginName, r.Header.Get("Tailscale-User-Name"), "")
-				metrics.RecordHeaderExtraction()
-			}
-		}
-
-		// Method 2: Try WhoIs lookup (works for direct tailnet connections)
-		if identity.IsAnonymous() && resolver != nil {
-			var err error
-			identity, err = resolver.WhoIs(ctx, r.RemoteAddr)
-			if err != nil {
-				metrics.RecordTailscaleLookup(observability.ResultFailure)
-				logger.Debug("WhoIs lookup failed: %v", err)
-			} else if identity.IsAnonymous() {
-				metrics.RecordTailscaleLookup(observability.ResultNotTailnet)
-			} else {
-				metrics.RecordTailscaleLookup(observability.ResultSuccess)
-			}
-		}
-
-		// Always store identity in context (Anonymous is valid)
-		ctx = ContextWithIdentity(ctx, identity)
+		identity := resolveIdentity(r, resolver, metrics, logger)
+		ctx := ContextWithIdentity(r.Context(), identity)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	}), nil
 }
