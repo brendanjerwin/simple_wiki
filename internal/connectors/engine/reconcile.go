@@ -428,15 +428,6 @@ func (e *Engine) indexWikiItemsByText(ctx context.Context, binding connectors.Bi
 // ADR-0015 4-cell rule. Extracted from applyInbound to keep the outer
 // function under revive's function-length cap; the per-branch logic is
 // the same case table the caller's docstring enumerates.
-//
-// Function-length suppression: this function IS the per-uid case
-// table from ADR-0015's 4-cell merge plus the 2026-05-08 sticky-
-// user-wins-on-Deleted carve-out (Lamport §10.13) and the
-// 2026-05-08 dedup-by-text branch. Splitting branches out into
-// helpers obscures the case-by-case rule that matches the ADR; the
-// shape here mirrors the documented contract directly.
-//
-//revive:disable-next-line:function-length
 func (e *Engine) applyInboundOneItem(
 	ctx context.Context,
 	binding connectors.Binding,
@@ -447,32 +438,7 @@ func (e *Engine) applyInboundOneItem(
 	wikiByText map[string]string,
 ) error {
 	if remoteItem.Deleted {
-		uid, hasUID := refToUID[string(remoteItem.Ref)]
-		if !hasUID {
-			return nil
-		}
-		// Sticky user-wins for the Deleted cell (panel round 3,
-		// Lamport §10.13). If a user click is uncovered for this
-		// uid, do NOT mirror the remote delete to the wiki — the
-		// user's intent at the wiki replica is privileged. Clear
-		// idMap so the next pushOutbound INSERTs a fresh remote ref
-		// carrying the wiki state, rather than PATCHing a deleted
-		// remote and falling into precondition_recovery's wipe-wiki
-		// branch.
-		if cls, has := classification[uid]; has && cls.UncoveredUserEvent {
-			e.logger.Info("connectors/engine: user_wins_skipped_inbound_delete kind=%s profile=%s page=%s list=%s uid=%s ref=%s",
-				e.adapter.Kind(), string(binding.ProfileID), binding.Page, binding.ListName, uid, string(remoteItem.Ref))
-			delete(idMap, uid)
-			delete(refToUID, string(remoteItem.Ref))
-			return nil
-		}
-		if delErr := e.mutator.DeleteItemForSync(ctx, binding.Page, binding.ListName, "", uid); delErr != nil {
-			return fmt.Errorf("delete wiki item %s on profile %s: %w",
-				uid, binding.ProfileID, delErr)
-		}
-		delete(idMap, uid)
-		delete(refToUID, string(remoteItem.Ref))
-		return nil
+		return e.handleInboundDelete(ctx, binding, remoteItem, classification, idMap, refToUID)
 	}
 
 	wikiItem, txErr := e.adapter.RemoteToWiki(remoteItem)
@@ -487,43 +453,8 @@ func (e *Engine) applyInboundOneItem(
 	}
 
 	if uid != "" {
-		if cls, has := classification[uid]; has && cls.WikiDiverged && !remoteItem.RemoteDiverged {
-			// ADR-0015 4-cell merge: wd ∧ ¬rd → push-wiki.
-			// The wiki has local edits but the remote item is unchanged
-			// (stale re-delivery via cursor safety buffer). Preserve the
-			// wiki edit; the outbound push will carry it to remote.
-			e.logger.Info("connectors/engine: wiki_diverged_skipped_inbound kind=%s profile=%s page=%s list=%s uid=%s ref=%s latest_src=%s",
-				e.adapter.Kind(), string(binding.ProfileID), binding.Page, binding.ListName, uid, string(remoteItem.Ref), cls.LatestEventSource)
+		if e.shouldSkipInboundApply(binding, uid, remoteItem, classification) {
 			return nil
-		}
-		if cls, has := classification[uid]; has && cls.WikiDiverged && remoteItem.RemoteDiverged && cls.UncoveredUserEvent {
-			// 4-cell merge refinement (sticky user-wins, panel review v2):
-			// wd ∧ rd where ANY uncovered user event exists for this uid
-			// — wiki-wins. The user click expresses ground-truth operator
-			// intent at the wiki replica; the remote's RemoteDiverged
-			// signal is etag-based and may be a non-content bump. Skip
-			// inbound apply; pushOutbound carries the wiki edit.
-			//
-			// Sticky-user (vs. v1's latest-event-only check) closes the
-			// "sandwich" hole: op-log [connector:OTHER:apply, user:bren,
-			// connector:OTHER:apply] — under v1 the engine would treat
-			// the trailing cross-connector event as authoritative and
-			// revert the user's click; under v2 the user click prevents
-			// the apply.
-			//
-			// Cross-connector divergence (no user event in the uncovered
-			// window) still follows ADR-0015's conflict-remote-wins below.
-			e.logger.Info("connectors/engine: user_wins_skipped_inbound kind=%s profile=%s page=%s list=%s uid=%s ref=%s latest_src=%s",
-				e.adapter.Kind(), string(binding.ProfileID), binding.Page, binding.ListName, uid, string(remoteItem.Ref), cls.LatestEventSource)
-			return nil
-		}
-		if cls, has := classification[uid]; has && cls.WikiDiverged && remoteItem.RemoteDiverged {
-			// ADR-0015 4-cell merge: wd ∧ rd ∧ ¬user → conflict-remote-wins.
-			// The wiki's recent change came from a cross-connector apply;
-			// the remote's fresh state is the authoritative recent write
-			// from this side.
-			e.logger.Info("connectors/engine: conflict_remote_wins kind=%s profile=%s page=%s list=%s uid=%s ref=%s latest_src=%s",
-				e.adapter.Kind(), string(binding.ProfileID), binding.Page, binding.ListName, uid, string(remoteItem.Ref), cls.LatestEventSource)
 		}
 		if updErr := e.mutator.UpdateItemForSync(ctx, binding.Page, binding.ListName, "", uid,
 			wikiItem.Text, wikiItem.Checked, wikiItem.Tags, wikiItem.Description, dueFromWikiItem(wikiItem)); updErr != nil {
@@ -563,6 +494,109 @@ func (e *Engine) applyInboundOneItem(
 		refToUID[string(remoteItem.Ref)] = newUID
 	}
 	return nil
+}
+
+// handleInboundDelete applies a remote-side delete to the wiki. It
+// implements the sticky user-wins carve-out (Lamport §10.13): when an
+// uncovered user event exists for the uid, the remote delete is
+// suppressed and the idMap is cleared so pushOutbound re-inserts the
+// wiki state on the same tick.
+func (e *Engine) handleInboundDelete(
+	ctx context.Context,
+	binding connectors.Binding,
+	remoteItem connectors.RemoteItem,
+	classification map[string]EventClassification,
+	idMap map[string]string,
+	refToUID map[string]string,
+) error {
+	uid, hasUID := refToUID[string(remoteItem.Ref)]
+	if !hasUID {
+		return nil
+	}
+	// Sticky user-wins for the Deleted cell (panel round 3,
+	// Lamport §10.13). If a user click is uncovered for this
+	// uid, do NOT mirror the remote delete to the wiki — the
+	// user's intent at the wiki replica is privileged. Clear
+	// idMap so the next pushOutbound INSERTs a fresh remote ref
+	// carrying the wiki state, rather than PATCHing a deleted
+	// remote and falling into precondition_recovery's wipe-wiki
+	// branch.
+	if cls, has := classification[uid]; has && cls.UncoveredUserEvent {
+		e.logger.Info("connectors/engine: user_wins_skipped_inbound_delete kind=%s profile=%s page=%s list=%s uid=%s ref=%s",
+			e.adapter.Kind(), string(binding.ProfileID), binding.Page, binding.ListName, uid, string(remoteItem.Ref))
+		delete(idMap, uid)
+		delete(refToUID, string(remoteItem.Ref))
+		return nil
+	}
+	if delErr := e.mutator.DeleteItemForSync(ctx, binding.Page, binding.ListName, "", uid); delErr != nil {
+		return fmt.Errorf("delete wiki item %s on profile %s: %w",
+			uid, binding.ProfileID, delErr)
+	}
+	delete(idMap, uid)
+	delete(refToUID, string(remoteItem.Ref))
+	return nil
+}
+
+// shouldSkipInboundApply checks the ADR-0015 4-cell merge classification
+// for a known uid and returns true when the inbound apply should be
+// suppressed. It also logs the appropriate conflict-resolution decision
+// (wiki_diverged_skipped, user_wins_skipped, conflict_remote_wins) before
+// returning.
+//
+// Classification cells (wiki-diverged ∧ remote-diverged ∧ uncovered-user):
+//   - wd ∧ ¬rd → skip (push-wiki wins; outbound push carries the edit)
+//   - wd ∧ rd ∧ user → skip (sticky user-wins closes the "sandwich" hole)
+//   - wd ∧ rd ∧ ¬user → proceed (conflict-remote-wins; log only)
+//   - ¬wd → proceed (no divergence; apply normally)
+func (e *Engine) shouldSkipInboundApply(
+	binding connectors.Binding,
+	uid string,
+	remoteItem connectors.RemoteItem,
+	classification map[string]EventClassification,
+) bool {
+	cls, has := classification[uid]
+	if !has {
+		return false
+	}
+	if cls.WikiDiverged && !remoteItem.RemoteDiverged {
+		// ADR-0015 4-cell merge: wd ∧ ¬rd → push-wiki.
+		// The wiki has local edits but the remote item is unchanged
+		// (stale re-delivery via cursor safety buffer). Preserve the
+		// wiki edit; the outbound push will carry it to remote.
+		e.logger.Info("connectors/engine: wiki_diverged_skipped_inbound kind=%s profile=%s page=%s list=%s uid=%s ref=%s latest_src=%s",
+			e.adapter.Kind(), string(binding.ProfileID), binding.Page, binding.ListName, uid, string(remoteItem.Ref), cls.LatestEventSource)
+		return true
+	}
+	if cls.WikiDiverged && remoteItem.RemoteDiverged && cls.UncoveredUserEvent {
+		// 4-cell merge refinement (sticky user-wins, panel review v2):
+		// wd ∧ rd where ANY uncovered user event exists for this uid
+		// — wiki-wins. The user click expresses ground-truth operator
+		// intent at the wiki replica; the remote's RemoteDiverged
+		// signal is etag-based and may be a non-content bump. Skip
+		// inbound apply; pushOutbound carries the wiki edit.
+		//
+		// Sticky-user (vs. v1's latest-event-only check) closes the
+		// "sandwich" hole: op-log [connector:OTHER:apply, user:bren,
+		// connector:OTHER:apply] — under v1 the engine would treat
+		// the trailing cross-connector event as authoritative and
+		// revert the user's click; under v2 the user click prevents
+		// the apply.
+		//
+		// Cross-connector divergence (no user event in the uncovered
+		// window) still follows ADR-0015's conflict-remote-wins below.
+		e.logger.Info("connectors/engine: user_wins_skipped_inbound kind=%s profile=%s page=%s list=%s uid=%s ref=%s latest_src=%s",
+			e.adapter.Kind(), string(binding.ProfileID), binding.Page, binding.ListName, uid, string(remoteItem.Ref), cls.LatestEventSource)
+		return true
+	}
+	if cls.WikiDiverged && remoteItem.RemoteDiverged {
+		// ADR-0015 4-cell merge: wd ∧ rd ∧ ¬user → conflict-remote-wins.
+		// The wiki's recent change came from a cross-connector apply;
+		// the remote's fresh state is the authoritative recent write
+		// from this side.
+		e.logger.Info("connectors/engine: conflict_remote_wins kind=%s profile=%s page=%s list=%s uid=%s ref=%s latest_src=%s",
+			e.adapter.Kind(), string(binding.ProfileID), binding.Page, binding.ListName, uid, string(remoteItem.Ref), cls.LatestEventSource)
+	}
+	return false
 }
 
 // applyInboundDedupByText handles the text-match dedup table for an
@@ -659,12 +693,9 @@ func (e *Engine) applyInboundDedupByText(
 // branches are dead-letter-skip → recordPushSuccess-on-success →
 // auth-failed-abort → precondition-recovery → retryable-record →
 // unrecoverable-return — exactly the disposition table from MATRIX
-// row 1 + row 7. Splitting into helpers fragments that table across
-// files. The branches inside are minimal; the function-length score
-// is dominated by the diff loop's case enumeration, which IS the
-// engine's contract here.
-//
-//revive:disable-next-line:cyclomatic,cognitive-complexity,function-length
+// row 1 + row 7. Decomposed into well-named per-operation helpers
+// (pushOneInsert, pushOnePatch, pushOneDelete, syncCollectionState)
+// to keep each function within the cognitive-complexity budget.
 func (e *Engine) pushOutbound(
 	ctx context.Context,
 	binding connectors.Binding,
@@ -682,25 +713,86 @@ func (e *Engine) pushOutbound(
 			binding.Page, binding.ListName, readErr)
 	}
 
-	currentUIDs := map[string]*apiv1.ChecklistItem{}
-	if cl != nil {
-		for _, it := range cl.GetItems() {
-			if it.GetUid() != "" {
-				currentUIDs[it.GetUid()] = it
-			}
+	currentUIDs := buildCurrentUIDs(cl)
+
+	// Per-item fingerprints from the last successful Insert/Patch. Used
+	// to detect a wiki-side change that the op-log's WikiDiverged signal
+	// missed (items whose user-event seq fell below LastSyncedSeq).
+	// Stored back into AdapterState as the same map reference so every
+	// mutation in the loop below is visible to the caller even on the
+	// partial-progress error path (mirrors how idMap progress survives).
+	if binding.AdapterState == nil {
+		binding.AdapterState = connectors.AdapterState{}
+	}
+	fingerprints := readItemFingerprints(binding.AdapterState)
+	binding.AdapterState[adapterStateItemFingerprintsKey] = fingerprints
+
+	// Bound-text index: text → bound uid. Used to dedup OUTBOUND inserts
+	// the same way wikiByText dedups inbound applies.
+	boundUIDByText := buildBoundUIDByText(idMap, currentUIDs)
+
+	// Inserts / patches.
+	for uid, item := range currentUIDs {
+		updated, bail, authFailed, err := e.pushOutboundOneItem(ctx, binding, uid, item, idMap, fingerprints, boundUIDByText, classification)
+		binding = updated
+		if authFailed {
+			return binding, true, nil
+		}
+		if err != nil {
+			return binding, false, err
+		}
+		if bail {
+			return binding, false, nil
 		}
 	}
 
-	// Bound-text index: text → bound uid. Used to dedup OUTBOUND inserts
-	// the same way wikiByText dedups inbound applies. If the wiki has a
-	// bound item with text "X" and a SECOND wiki item with text "X" is
-	// not yet bound, the second is a wiki-side duplicate (typically
-	// created by an earlier remote-duplicate apply hazard) — pushing it
-	// to the remote would create a remote-side duplicate. Skip the
-	// insert; operator cleans the wiki-side duplicate. Intentional
-	// duplicates the user adds via wiki UI in the same tick will be
-	// dropped here too — by design; one remote ref per text is the safe
-	// floor for the current data model.
+	// Deletes: for every uid in idMap that is no longer in currentUIDs.
+	for uid, ref := range idMap {
+		updated, authFailed, err := e.pushOneDelete(ctx, binding, uid, ref, currentUIDs, idMap, fingerprints)
+		binding = updated
+		if authFailed {
+			return binding, true, nil
+		}
+		if err != nil {
+			return binding, false, err
+		}
+	}
+
+	// Per-binding collection-level sync (Keep: hashtag → label CRUD;
+	// Tasks: no-op). Called once per tick after per-item ops so the
+	// label set reflects the post-tick wiki state. Errors are logged
+	// and do NOT abort the tick — the per-item progress is already
+	// persisted via recordPushSuccess.
+	binding = e.syncCollectionState(ctx, binding, currentUIDs)
+
+	return binding, false, nil
+}
+
+// buildCurrentUIDs returns a uid → ChecklistItem map from the checklist.
+// Items without a uid are excluded.
+func buildCurrentUIDs(cl *apiv1.Checklist) map[string]*apiv1.ChecklistItem {
+	currentUIDs := map[string]*apiv1.ChecklistItem{}
+	if cl == nil {
+		return currentUIDs
+	}
+	for _, it := range cl.GetItems() {
+		if it.GetUid() != "" {
+			currentUIDs[it.GetUid()] = it
+		}
+	}
+	return currentUIDs
+}
+
+// buildBoundUIDByText builds a text → bound-uid index for items in idMap
+// that are present in currentUIDs. Used to skip outbound inserts whose
+// text is already claimed by a bound item — pushing a second item with
+// the same text would create a remote-side duplicate.
+// If the wiki has a bound item with text "X" and a SECOND wiki item with
+// text "X" is not yet bound, the second is a wiki-side duplicate (typically
+// created by an earlier remote-duplicate apply hazard). Skip the insert;
+// operator cleans the wiki-side duplicate. First-write-wins on duplicate
+// text within the bound set.
+func buildBoundUIDByText(idMap map[string]string, currentUIDs map[string]*apiv1.ChecklistItem) map[string]string {
 	boundUIDByText := map[string]string{}
 	for boundUID := range idMap {
 		item, present := currentUIDs[boundUID]
@@ -716,224 +808,278 @@ func (e *Engine) pushOutbound(
 		}
 		boundUIDByText[text] = boundUID
 	}
+	return boundUIDByText
+}
 
-	// Per-item fingerprints from the last successful Insert/Patch. Used
-	// to detect a wiki-side change that the op-log's WikiDiverged signal
-	// missed (items whose user-event seq fell below LastSyncedSeq).
-	// Stored back into AdapterState as the same map reference so every
-	// mutation in the loop below is visible to the caller even on the
-	// partial-progress error path (mirrors how idMap progress survives).
-	if binding.AdapterState == nil {
-		binding.AdapterState = connectors.AdapterState{}
+// pushOutboundOneItem handles the insert-or-patch decision for a single
+// wiki item. Returns (binding, bail, authFailed, err):
+//   - bail=true, err=nil: insert precondition recovery succeeded; caller
+//     should return binding from pushOutbound (no error).
+//   - bail=true, err!=nil: recovery failed; caller should return error.
+//   - authFailed=true: auth failure; caller should return auth-failed.
+//   - otherwise: item was processed (skipped or pushed); continue loop.
+func (e *Engine) pushOutboundOneItem(
+	ctx context.Context,
+	binding connectors.Binding,
+	uid string,
+	item *apiv1.ChecklistItem,
+	idMap map[string]string,
+	fingerprints map[string]string,
+	boundUIDByText map[string]string,
+	classification map[string]EventClassification,
+) (updated connectors.Binding, bail bool, authFailed bool, err error) {
+	wikiItem := connectors.WikiItem{
+		UID:         uid,
+		Text:        item.GetText(),
+		Checked:     item.GetChecked(),
+		Tags:        item.GetTags(),
+		Description: item.GetDescription(),
+		Due:         timestampToTime(item.GetDue()),
+		SortOrder:   item.GetSortOrder(),
 	}
-	fingerprints := readItemFingerprints(binding.AdapterState)
-	binding.AdapterState[adapterStateItemFingerprintsKey] = fingerprints
+	if _, txErr := e.adapter.WikiToRemote(wikiItem); txErr != nil {
+		return binding, false, false, fmt.Errorf("translate wiki item %s for profile %s: %w",
+			uid, binding.ProfileID, txErr)
+	}
 
-	// Inserts / patches.
-	for uid, item := range currentUIDs {
-		wikiItem := connectors.WikiItem{
-			UID:         uid,
-			Text:        item.GetText(),
-			Checked:     item.GetChecked(),
-			Tags:        item.GetTags(),
-			Description: item.GetDescription(),
-			Due:         timestampToTime(item.GetDue()),
-			SortOrder:   item.GetSortOrder(),
+	ref, alreadyBound := idMap[uid]
+	if !alreadyBound {
+		insUpdated, insBail, insAuth, insErr := e.pushOneInsert(ctx, binding, uid, wikiItem, idMap, fingerprints, boundUIDByText)
+		if insAuth {
+			return insUpdated, false, true, nil
 		}
-		_, txErr := e.adapter.WikiToRemote(wikiItem)
-		if txErr != nil {
-			return binding, false, fmt.Errorf("translate wiki item %s for profile %s: %w",
-				uid, binding.ProfileID, txErr)
-		}
+		return insUpdated, insBail, false, insErr
+	}
+	patchUpdated, patchAuth, patchErr := e.pushOnePatch(ctx, binding, uid, ref, wikiItem, idMap, fingerprints, classification)
+	return patchUpdated, false, patchAuth, patchErr
+}
 
-		ref, alreadyBound := idMap[uid]
-		if !alreadyBound {
-			if skip, reason := e.shouldSkipPush(binding, uid); skip {
-				e.logger.Info("connectors/engine: outbound_push_skipped kind=%s profile=%s page=%s list=%s uid=%s op=outbound_inserted reason=%s",
-					e.adapter.Kind(), string(binding.ProfileID), binding.Page, binding.ListName, uid, reason)
-				continue
+// pushOneInsert attempts to insert a new item into the remote backend.
+// Returns (binding, bail, authFailed, err):
+//   - bail=true: insert precondition recovery; caller returns from pushOutbound.
+//   - authFailed=true: auth failure.
+//   - otherwise: item skipped or inserted successfully; continue loop.
+func (e *Engine) pushOneInsert(
+	ctx context.Context,
+	binding connectors.Binding,
+	uid string,
+	wikiItem connectors.WikiItem,
+	idMap map[string]string,
+	fingerprints map[string]string,
+	boundUIDByText map[string]string,
+) (updated connectors.Binding, bail bool, authFailed bool, err error) {
+	if skip, reason := e.shouldSkipPush(binding, uid); skip {
+		e.logger.Info("connectors/engine: outbound_push_skipped kind=%s profile=%s page=%s list=%s uid=%s op=outbound_inserted reason=%s",
+			e.adapter.Kind(), string(binding.ProfileID), binding.Page, binding.ListName, uid, reason)
+		return binding, false, false, nil
+	}
+	if dupTextOwner, dup := boundUIDByText[wikiItem.Text]; dup && dupTextOwner != uid {
+		e.logger.Info("connectors/engine: outbound_push_skipped kind=%s profile=%s page=%s list=%s uid=%s op=outbound_inserted reason=wiki_text_duplicate_of=%s text=%q",
+			e.adapter.Kind(), string(binding.ProfileID), binding.Page, binding.ListName, uid, dupTextOwner, wikiItem.Text)
+		return binding, false, false, nil
+	}
+	insCtx, insCancel := e.withRPCDeadline(ctx)
+	newRef, insErr := e.adapter.InsertRemote(insCtx, binding, wikiItem)
+	insCancel()
+	if insErr != nil {
+		switch e.adapter.ClassifyError(insErr) {
+		case connectors.ErrorClassAuthFailed:
+			return binding, false, true, nil
+		case connectors.ErrorClassRetryable:
+			return e.recordPushFailure(binding, uid, "outbound_inserted", insErr), false, false, nil
+		case connectors.ErrorClassPreconditionFailed:
+			// Insert-recovery: a precondition failure on Insert
+			// (e.g., Keep stage3-500 from a stale cursor or a
+			// duplicate ServerID) means the local view diverged
+			// from the remote. Rebuild AdapterState from a fresh
+			// full pull so the next tick sees existing remote
+			// items and Patches them via the rebuilt mapping
+			// instead of re-attempting Insert. Bails out of the
+			// outbound loop cleanly so the caller persists the
+			// rebuilt state.
+			recovered, recErr := e.runInsertRecovery(ctx, binding, uid, idMap)
+			if recErr != nil {
+				return binding, true, false, recErr
 			}
-			if dupTextOwner, dup := boundUIDByText[wikiItem.Text]; dup && dupTextOwner != uid {
-				e.logger.Info("connectors/engine: outbound_push_skipped kind=%s profile=%s page=%s list=%s uid=%s op=outbound_inserted reason=wiki_text_duplicate_of=%s text=%q",
-					e.adapter.Kind(), string(binding.ProfileID), binding.Page, binding.ListName, uid, dupTextOwner, wikiItem.Text)
-				continue
-			}
-			insCtx, insCancel := e.withRPCDeadline(ctx)
-			newRef, insErr := e.adapter.InsertRemote(insCtx, binding, wikiItem)
-			insCancel()
-			if insErr != nil {
-				switch e.adapter.ClassifyError(insErr) {
-				case connectors.ErrorClassAuthFailed:
-					return binding, true, nil
-				case connectors.ErrorClassRetryable:
-					binding = e.recordPushFailure(binding, uid, "outbound_inserted", insErr)
-					continue
-				case connectors.ErrorClassPreconditionFailed:
-					// Insert-recovery: a precondition failure on Insert
-					// (e.g., Keep stage3-500 from a stale cursor or a
-					// duplicate ServerID) means the local view diverged
-					// from the remote. Rebuild AdapterState from a fresh
-					// full pull so the next tick sees existing remote
-					// items and Patches them via the rebuilt mapping
-					// instead of re-attempting Insert. Bails out of the
-					// outbound loop cleanly so the caller persists the
-					// rebuilt state.
-					recovered, recErr := e.runInsertRecovery(ctx, binding, uid, idMap)
-					if recErr != nil {
-						return binding, false, recErr
-					}
-					return recovered, false, nil
-				case connectors.ErrorClassNone, connectors.ErrorClassTransient,
-					connectors.ErrorClassFatal,
-					connectors.ErrorClassRateLimited, connectors.ErrorClassNotFound:
-					fallthrough
-				default:
-					return binding, false, fmt.Errorf("insert remote item %s for profile %s: %w",
-						uid, binding.ProfileID, insErr)
-				}
-			}
-			idMap[uid] = string(newRef)
-			fingerprints[uid] = wikiItemFingerprint(wikiItem)
-			binding = e.recordPushSuccess(binding, uid)
-			binding = writeItemIDMap(binding, idMap)
-			if saveErr := e.saveOutboundInsertProgress(binding); saveErr != nil {
-				return binding, false, saveErr
-			}
-			if appendErr := e.mutator.AppendSyncEvent(ctx, binding.Page, binding.ListName, uid, "outbound_inserted"); appendErr != nil {
-				e.logger.Info("connectors/engine: append_sync_event_failed page=%s list=%s uid=%s op=outbound_inserted err=%v",
-					binding.Page, binding.ListName, uid, appendErr)
-			}
-			continue
+			return recovered, true, false, nil
+		case connectors.ErrorClassNone, connectors.ErrorClassTransient,
+			connectors.ErrorClassFatal,
+			connectors.ErrorClassRateLimited, connectors.ErrorClassNotFound:
+			fallthrough
+		default:
+			return binding, false, false, fmt.Errorf("insert remote item %s for profile %s: %w",
+				uid, binding.ProfileID, insErr)
 		}
+	}
+	idMap[uid] = string(newRef)
+	fingerprints[uid] = wikiItemFingerprint(wikiItem)
+	binding = e.recordPushSuccess(binding, uid)
+	binding = writeItemIDMap(binding, idMap)
+	if saveErr := e.saveOutboundInsertProgress(binding); saveErr != nil {
+		return binding, false, false, saveErr
+	}
+	if appendErr := e.mutator.AppendSyncEvent(ctx, binding.Page, binding.ListName, uid, "outbound_inserted"); appendErr != nil {
+		e.logger.Info("connectors/engine: append_sync_event_failed page=%s list=%s uid=%s op=outbound_inserted err=%v",
+			binding.Page, binding.ListName, uid, appendErr)
+	}
+	return binding, false, false, nil
+}
 
-		// ADR-0015 Fix #2 + fingerprint divergence: skip Patch only when
-		// BOTH gates agree the wiki hasn't changed since the last push.
-		// WikiDiverged catches items with fresh user events above the
-		// cursor (cheap, op-log-driven); the fingerprint comparison
-		// catches items whose wiki state diverges from what we last
-		// pushed but whose op-log events fell below LastSyncedSeq —
-		// the case where pre-existing items silently lose field changes
-		// (Due regression). A missing stored fingerprint (e.g., legacy
-		// items from before this code shipped, or anything not yet
-		// successfully Patched) compares unequal to the current
-		// fingerprint and triggers a Patch on the next reconcile.
-		currentFP := wikiItemFingerprint(wikiItem)
-		fingerprintDiverged := currentFP != fingerprints[uid]
-		if cls := classification[uid]; !cls.WikiDiverged && !fingerprintDiverged {
-			continue
+// pushOnePatch attempts to patch an existing remote item when the wiki has
+// diverged. Returns (binding, authFailed, err). A nil error with
+// authFailed=false means the item was processed (skipped or patched
+// successfully); continue to the next item.
+func (e *Engine) pushOnePatch(
+	ctx context.Context,
+	binding connectors.Binding,
+	uid string,
+	ref string,
+	wikiItem connectors.WikiItem,
+	idMap map[string]string,
+	fingerprints map[string]string,
+	classification map[string]EventClassification,
+) (connectors.Binding, bool, error) {
+	// ADR-0015 Fix #2 + fingerprint divergence: skip Patch only when
+	// BOTH gates agree the wiki hasn't changed since the last push.
+	// WikiDiverged catches items with fresh user events above the
+	// cursor (cheap, op-log-driven); the fingerprint comparison
+	// catches items whose wiki state diverges from what we last
+	// pushed but whose op-log events fell below LastSyncedSeq —
+	// the case where pre-existing items silently lose field changes
+	// (Due regression). A missing stored fingerprint (e.g., legacy
+	// items from before this code shipped, or anything not yet
+	// successfully Patched) compares unequal to the current
+	// fingerprint and triggers a Patch on the next reconcile.
+	currentFP := wikiItemFingerprint(wikiItem)
+	fingerprintDiverged := currentFP != fingerprints[uid]
+	if cls := classification[uid]; !cls.WikiDiverged && !fingerprintDiverged {
+		return binding, false, nil
+	}
+	if skip, reason := e.shouldSkipPush(binding, uid); skip {
+		e.logger.Info("connectors/engine: outbound_push_skipped kind=%s profile=%s page=%s list=%s uid=%s op=outbound_patched reason=%s",
+			e.adapter.Kind(), string(binding.ProfileID), binding.Page, binding.ListName, uid, reason)
+		return binding, false, nil
+	}
+	patchCtx, patchCancel := e.withRPCDeadline(ctx)
+	_, patchErr := e.adapter.PatchRemote(patchCtx, binding, connectors.RemoteRef(ref), wikiItem)
+	patchCancel()
+	if patchErr != nil {
+		switch e.adapter.ClassifyError(patchErr) {
+		case connectors.ErrorClassAuthFailed:
+			return binding, true, nil
+		case connectors.ErrorClassPreconditionFailed:
+			if recErr := e.runPreconditionRecovery(ctx, binding, connectors.RemoteRef(ref), uid, wikiItem, idMap, patchErr); recErr != nil {
+				return binding, false, recErr
+			}
+			// Recovery either re-PATCHed (uid still bound),
+			// applied remote authoritatively (uid still bound,
+			// wiki changed via mutator so wikiItem here is
+			// stale), or marked the remote deleted (uid removed
+			// from idMap). Clear the fingerprint for this uid in
+			// every branch so the next reconcile recomputes
+			// against the actual post-recovery wiki state. If
+			// uid was removed, this also prevents an orphaned
+			// fingerprint from growing the map unbounded.
+			delete(fingerprints, uid)
+			return binding, false, nil
+		case connectors.ErrorClassRetryable:
+			return e.recordPushFailure(binding, uid, "outbound_patched", patchErr), false, nil
+		case connectors.ErrorClassNone, connectors.ErrorClassTransient,
+			connectors.ErrorClassFatal, connectors.ErrorClassRateLimited,
+			connectors.ErrorClassNotFound:
+			fallthrough
+		default:
+			return binding, false, fmt.Errorf("patch remote item %s for profile %s: %w",
+				uid, binding.ProfileID, patchErr)
 		}
+	}
+	fingerprints[uid] = currentFP
+	binding = e.recordPushSuccess(binding, uid)
+	if appendErr := e.mutator.AppendSyncEvent(ctx, binding.Page, binding.ListName, uid, "outbound_patched"); appendErr != nil {
+		e.logger.Info("connectors/engine: append_sync_event_failed page=%s list=%s uid=%s op=outbound_patched err=%v",
+			binding.Page, binding.ListName, uid, appendErr)
+	}
+	return binding, false, nil
+}
 
-		if skip, reason := e.shouldSkipPush(binding, uid); skip {
-			e.logger.Info("connectors/engine: outbound_push_skipped kind=%s profile=%s page=%s list=%s uid=%s op=outbound_patched reason=%s",
-				e.adapter.Kind(), string(binding.ProfileID), binding.Page, binding.ListName, uid, reason)
-			continue
-		}
-		patchCtx, patchCancel := e.withRPCDeadline(ctx)
-		_, patchErr := e.adapter.PatchRemote(patchCtx, binding, connectors.RemoteRef(ref), wikiItem)
-		patchCancel()
-		if patchErr != nil {
-			switch e.adapter.ClassifyError(patchErr) {
-			case connectors.ErrorClassAuthFailed:
-				return binding, true, nil
-			case connectors.ErrorClassPreconditionFailed:
-				if recErr := e.runPreconditionRecovery(ctx, binding, connectors.RemoteRef(ref), uid, wikiItem, idMap, patchErr); recErr != nil {
-					return binding, false, recErr
-				}
-				// Recovery either re-PATCHed (uid still bound),
-				// applied remote authoritatively (uid still bound,
-				// wiki changed via mutator so wikiItem here is
-				// stale), or marked the remote deleted (uid removed
-				// from idMap). Clear the fingerprint for this uid in
-				// every branch so the next reconcile recomputes
-				// against the actual post-recovery wiki state. If
-				// uid was removed, this also prevents an orphaned
-				// fingerprint from growing the map unbounded.
+// pushOneDelete attempts to delete a remote item that has been removed from
+// the wiki (present in idMap but absent from currentUIDs). Returns
+// (binding, authFailed, err). A nil error with authFailed=false means the
+// item was processed (skipped or deleted); continue to the next item.
+func (e *Engine) pushOneDelete(
+	ctx context.Context,
+	binding connectors.Binding,
+	uid string,
+	ref string,
+	currentUIDs map[string]*apiv1.ChecklistItem,
+	idMap map[string]string,
+	fingerprints map[string]string,
+) (connectors.Binding, bool, error) {
+	if _, stillThere := currentUIDs[uid]; stillThere {
+		return binding, false, nil
+	}
+	if skip, reason := e.shouldSkipPush(binding, uid); skip {
+		e.logger.Info("connectors/engine: outbound_push_skipped kind=%s profile=%s page=%s list=%s uid=%s op=outbound_deleted reason=%s",
+			e.adapter.Kind(), string(binding.ProfileID), binding.Page, binding.ListName, uid, reason)
+		return binding, false, nil
+	}
+	delCtx, delCancel := e.withRPCDeadline(ctx)
+	delErr := e.adapter.DeleteRemote(delCtx, binding, connectors.RemoteRef(ref))
+	delCancel()
+	if delErr != nil {
+		switch e.adapter.ClassifyError(delErr) {
+		case connectors.ErrorClassAuthFailed:
+			return binding, true, nil
+		case connectors.ErrorClassPreconditionFailed:
+			// Production regression 2026-05-08: previously this fell
+			// into `default:` and aborted the tick. Stage3 HTTP 500
+			// from Keep classifies as PreconditionFailed and would
+			// crash every retry, blocking other items in the binding.
+			// Recovery mirrors PATCH's: read remote, idempotent
+			// success on NotFound/Deleted, refresh + Retryable
+			// backoff otherwise.
+			recovered, recErr := e.runDeletePreconditionRecovery(ctx, binding, connectors.RemoteRef(ref), uid, idMap, delErr)
+			if recErr != nil {
+				return binding, false, recErr
+			}
+			// If recovery treated NotFound/Deleted as idempotent
+			// success and removed the uid from idMap, drop its
+			// fingerprint too — otherwise the entry grows the
+			// map unbounded over the lifetime of the binding.
+			if _, stillBound := idMap[uid]; !stillBound {
 				delete(fingerprints, uid)
-				continue
-			case connectors.ErrorClassRetryable:
-				binding = e.recordPushFailure(binding, uid, "outbound_patched", patchErr)
-				continue
-			case connectors.ErrorClassNone, connectors.ErrorClassTransient,
-				connectors.ErrorClassFatal, connectors.ErrorClassRateLimited,
-				connectors.ErrorClassNotFound:
-				fallthrough
-			default:
-				return binding, false, fmt.Errorf("patch remote item %s for profile %s: %w",
-					uid, binding.ProfileID, patchErr)
 			}
-		}
-		fingerprints[uid] = currentFP
-		binding = e.recordPushSuccess(binding, uid)
-		if appendErr := e.mutator.AppendSyncEvent(ctx, binding.Page, binding.ListName, uid, "outbound_patched"); appendErr != nil {
-			e.logger.Info("connectors/engine: append_sync_event_failed page=%s list=%s uid=%s op=outbound_patched err=%v",
-				binding.Page, binding.ListName, uid, appendErr)
+			return recovered, false, nil
+		case connectors.ErrorClassRetryable:
+			return e.recordPushFailure(binding, uid, "outbound_deleted", delErr), false, nil
+		case connectors.ErrorClassNone, connectors.ErrorClassTransient,
+			connectors.ErrorClassFatal,
+			connectors.ErrorClassRateLimited, connectors.ErrorClassNotFound:
+			fallthrough
+		default:
+			return binding, false, fmt.Errorf("delete remote item %s for profile %s: %w",
+				uid, binding.ProfileID, delErr)
 		}
 	}
-
-	// Deletes: for every uid in idMap that is no longer in currentUIDs.
-	for uid, ref := range idMap {
-		if _, stillThere := currentUIDs[uid]; stillThere {
-			continue
-		}
-		if skip, reason := e.shouldSkipPush(binding, uid); skip {
-			e.logger.Info("connectors/engine: outbound_push_skipped kind=%s profile=%s page=%s list=%s uid=%s op=outbound_deleted reason=%s",
-				e.adapter.Kind(), string(binding.ProfileID), binding.Page, binding.ListName, uid, reason)
-			continue
-		}
-		delCtx, delCancel := e.withRPCDeadline(ctx)
-		delErr := e.adapter.DeleteRemote(delCtx, binding, connectors.RemoteRef(ref))
-		delCancel()
-		if delErr != nil {
-			switch e.adapter.ClassifyError(delErr) {
-			case connectors.ErrorClassAuthFailed:
-				return binding, true, nil
-			case connectors.ErrorClassPreconditionFailed:
-				// Production regression 2026-05-08: previously this fell
-				// into `default:` and aborted the tick. Stage3 HTTP 500
-				// from Keep classifies as PreconditionFailed and would
-				// crash every retry, blocking other items in the binding.
-				// Recovery mirrors PATCH's: read remote, idempotent
-				// success on NotFound/Deleted, refresh + Retryable
-				// backoff otherwise.
-				recovered, recErr := e.runDeletePreconditionRecovery(ctx, binding, connectors.RemoteRef(ref), uid, idMap, delErr)
-				if recErr != nil {
-					return binding, false, recErr
-				}
-				binding = recovered
-				// If recovery treated NotFound/Deleted as idempotent
-				// success and removed the uid from idMap, drop its
-				// fingerprint too — otherwise the entry grows the
-				// map unbounded over the lifetime of the binding.
-				if _, stillBound := idMap[uid]; !stillBound {
-					delete(fingerprints, uid)
-				}
-				continue
-			case connectors.ErrorClassRetryable:
-				binding = e.recordPushFailure(binding, uid, "outbound_deleted", delErr)
-				continue
-			case connectors.ErrorClassNone, connectors.ErrorClassTransient,
-				connectors.ErrorClassFatal,
-				connectors.ErrorClassRateLimited, connectors.ErrorClassNotFound:
-				fallthrough
-			default:
-				return binding, false, fmt.Errorf("delete remote item %s for profile %s: %w",
-					uid, binding.ProfileID, delErr)
-			}
-		}
-		delete(idMap, uid)
-		delete(fingerprints, uid)
-		binding = e.recordPushSuccess(binding, uid)
-		if appendErr := e.mutator.AppendSyncEvent(ctx, binding.Page, binding.ListName, uid, "outbound_deleted"); appendErr != nil {
-			e.logger.Info("connectors/engine: append_sync_event_failed page=%s list=%s uid=%s op=outbound_deleted err=%v",
-				binding.Page, binding.ListName, uid, appendErr)
-		}
+	delete(idMap, uid)
+	delete(fingerprints, uid)
+	binding = e.recordPushSuccess(binding, uid)
+	if appendErr := e.mutator.AppendSyncEvent(ctx, binding.Page, binding.ListName, uid, "outbound_deleted"); appendErr != nil {
+		e.logger.Info("connectors/engine: append_sync_event_failed page=%s list=%s uid=%s op=outbound_deleted err=%v",
+			binding.Page, binding.ListName, uid, appendErr)
 	}
+	return binding, false, nil
+}
 
-	// Per-binding collection-level sync (Keep: hashtag → label CRUD;
-	// Tasks: no-op). Called once per tick after per-item ops so the
-	// label set reflects the post-tick wiki state. Errors are logged
-	// and do NOT abort the tick — the per-item progress is already
-	// persisted via recordPushSuccess.
+// syncCollectionState runs the per-binding collection-level sync
+// (Keep: hashtag → label CRUD; Tasks: no-op). Errors are logged
+// and do NOT abort the tick — the per-item progress is already
+// persisted via recordPushSuccess.
+func (e *Engine) syncCollectionState(
+	ctx context.Context,
+	binding connectors.Binding,
+	currentUIDs map[string]*apiv1.ChecklistItem,
+) connectors.Binding {
 	wikiItemsForCollection := make([]connectors.WikiItem, 0, len(currentUIDs))
 	for uid, item := range currentUIDs {
 		wikiItemsForCollection = append(wikiItemsForCollection, connectors.WikiItem{
@@ -952,11 +1098,9 @@ func (e *Engine) pushOutbound(
 	if syncErr != nil {
 		e.logger.Info("connectors/engine: sync_collection_state_failed kind=%s profile=%s page=%s list=%s err=%v",
 			e.adapter.Kind(), string(binding.ProfileID), binding.Page, binding.ListName, syncErr)
-	} else {
-		binding = updated
+		return binding
 	}
-
-	return binding, false, nil
+	return updated
 }
 
 func (e *Engine) saveOutboundInsertProgress(binding connectors.Binding) error {

@@ -28,6 +28,11 @@ disabled = true
 [rule.argument-limit]
 disabled = true
 
+[rule.function-result-limit]
+# pushOneInsert and pushOutboundOneItem legitimately return (binding, bail, authFailed, error)
+# — four distinct values each with unique meaning. Named returns make the intent clear.
+arguments = [4]
+
 [rule.add-constant]
 arguments = [
   { maxLitCount = "3", allowStrs = "\"\"", allowInts = "0,1,2", allowFloats = "0.0,0.,1.0,1.,2.0,2.", ignoreFuncs = "os\\.*,fmt\\.Println,make" },
