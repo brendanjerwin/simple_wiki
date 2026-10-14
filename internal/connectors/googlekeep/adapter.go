@@ -253,43 +253,9 @@ func (a *KeepAdapter) PullRemote(ctx context.Context, binding connectors.Binding
 	knownRefs := readItemIDMapServerIDSet(binding.AdapterState)
 	items := make([]connectors.RemoteItem, 0)
 	for _, n := range resp.Nodes {
-		// Production fix 2026-05-08: a tombstone for a known item must
-		// be accepted regardless of node Type and parent linkage. Keep
-		// strips both fields when a user deletes the item via the app
-		// — the only stable identity left is ServerID, and we recognize
-		// it as ours via item_id_map. This check has to run BEFORE the
-		// type filter; the legacy ordering (type filter first) dropped
-		// typeless tombstones silently. (User-reported 2026-05-08:
-		// "deletes from keep side didn't sync"; logs showed barebones
-		// tombstones with no Type, no parent, just id+serverId+deleted
-		// timestamp.)
-		isTombstone := !n.Timestamps.Trashed.IsZero() || !n.Timestamps.Deleted.IsZero()
-		_, knownRef := knownRefs[n.ServerID]
-		isKnownTombstone := isTombstone && knownRef
-
-		if !isKnownTombstone {
-			// Non-tombstone (or tombstone we don't know about): apply
-			// the standard structural filters. Items must be of type
-			// LIST_ITEM and parented to our LIST node.
-			if n.Type != gateway.NodeTypeListItem {
-				continue
-			}
-			inOurList := n.ParentID == binding.RemoteHandle || n.ParentServerID == binding.RemoteHandle
-			if !inOurList {
-				continue
-			}
-		}
-		item := listItemNodeToRemoteItem(n)
-		// ADR-0015 Fix #1: populate RemoteDiverged by comparing the
-		// incoming node's BaseVersion against the stored BaseVersion in
-		// AdapterState. Keep's cursor is server-issued (not safety-
-		// buffered), so items only appear when they genuinely changed —
-		// but we still compare to maintain correctness if the cursor
-		// rewinds (e.g., after a ForceFullResync).
-		// An absent stored BaseVersion means we have no baseline → not
-		// diverged (the first inbound apply should proceed normally).
-		if stored := readItemMapping(binding.AdapterState, n.ServerID).BaseVersion; stored != "" && stored != n.BaseVersion {
-			item.RemoteDiverged = true
+		item, include := classifyPullNode(n, binding, knownRefs)
+		if !include {
+			continue
 		}
 		items = append(items, item)
 	}
@@ -333,6 +299,45 @@ func (a *KeepAdapter) PullRemote(ctx context.Context, binding connectors.Binding
 		NewCursor: resp.ToVersion,
 		Truncated: truncated,
 	}, nil
+}
+
+// classifyPullNode processes a single node from a Changes response,
+// returning the corresponding RemoteItem and whether it should be
+// included in the pull results.
+//
+// Known tombstones (trashed/deleted nodes whose ServerID is in the
+// caller's item_id_map) are passed through regardless of their Type
+// and parent fields — Keep strips both when a user deletes an item
+// via the app. Unknown tombstones and non-LIST_ITEM nodes are
+// excluded. RemoteDiverged is populated by comparing against the
+// stored BaseVersion in AdapterState.
+func classifyPullNode(n gateway.Node, binding connectors.Binding, knownRefs map[string]struct{}) (connectors.RemoteItem, bool) {
+	isTombstone := !n.Timestamps.Trashed.IsZero() || !n.Timestamps.Deleted.IsZero()
+	_, knownRef := knownRefs[n.ServerID]
+	isKnownTombstone := isTombstone && knownRef
+
+	if !isKnownTombstone && !isStructuredListItemForParent(n, binding.RemoteHandle) {
+		return connectors.RemoteItem{}, false
+	}
+	item := listItemNodeToRemoteItem(n)
+	// ADR-0015 Fix #1: populate RemoteDiverged by comparing the
+	// incoming node's BaseVersion against the stored BaseVersion.
+	// An absent stored BaseVersion means no baseline → not diverged.
+	if stored := readItemMapping(binding.AdapterState, n.ServerID).BaseVersion; stored != "" && stored != n.BaseVersion {
+		item.RemoteDiverged = true
+	}
+	return item, true
+}
+
+// isStructuredListItemForParent reports whether node n is a LIST_ITEM
+// structurally belonging to parentID (via ParentID or ParentServerID).
+// Does not check trashed/deleted state — callers handle tombstone logic
+// separately.
+func isStructuredListItemForParent(n gateway.Node, parentID string) bool {
+	if n.Type != gateway.NodeTypeListItem {
+		return false
+	}
+	return n.ParentID == parentID || n.ParentServerID == parentID
 }
 
 // readItemIDMapServerIDSet returns the set of ServerIDs (values) in
@@ -813,8 +818,6 @@ func (*KeepAdapter) AdvanceCursor(binding connectors.Binding, result connectors.
 // match wikiItems into item_id_map → index labels → capture LIST
 // client_id). The sequence is one atomic operational unit and
 // matches MATRIX row 2.
-//
-//revive:disable-next-line:function-length
 func (a *KeepAdapter) SeedBindingState(ctx context.Context, profileID wikipage.PageIdentifier, remoteHandle string, wikiItems []connectors.WikiItem) (connectors.AdapterState, error) {
 	client, err := a.buildClientForProfile(ctx, profileID)
 	if err != nil {
@@ -828,22 +831,45 @@ func (a *KeepAdapter) SeedBindingState(ctx context.Context, profileID wikipage.P
 	if err != nil {
 		return nil, fmt.Errorf("seed bind: pull keep state for %s: %w", remoteHandle, err)
 	}
-	itemMapping := map[string]any{}
+
 	// Build a per-server-id mapping from the live LIST_ITEMs under
 	// our list AND a text → server-id index for the bind-time
 	// alignment pass below.
+	itemMapping, textToServerID := buildItemMappingAndTextIndex(pull.Nodes, remoteHandle)
+
+	// Bind-time alignment (architectural fix 2026-05-08): Keep has
+	// no native wiki-uid marker (unlike Tasks's `wiki:<uid>` Notes),
+	// so item_id_map cannot be derived from the pull alone. Match
+	// wiki items against the pulled set by text (the same canonical
+	// form WikiToRemote produces), pre-populating item_id_map at
+	// the seed step so the first reconcile after Bind doesn't
+	// duplicate.
+	itemIDMap := a.buildItemIDMapFromAlignment(wikiItems, textToServerID)
+
+	labelIDs := map[string]any{}
+	for k, v := range translator.IndexLabelsByName(pull.Labels) {
+		labelIDs[k] = v
+	}
+	keepNoteClientID := translator.FindListClientID(pull.Nodes, remoteHandle)
+	return connectors.AdapterState{
+		AdapterStateKeyItemMapping:      itemMapping,
+		AdapterStateKeyKeepCursor:       pull.ToVersion,
+		AdapterStateKeyLabelIDs:         labelIDs,
+		AdapterStateKeyKeepNoteClientID: keepNoteClientID,
+		AdapterStateKeyItemIDMap:        itemIDMap,
+	}, nil
+}
+
+// buildItemMappingAndTextIndex walks the pull's node list and returns:
+//   - itemMapping: server-id → encoded mapping fields for live LIST_ITEMs
+//     under remoteHandle
+//   - textToServerID: text → server-id index for bind-time alignment;
+//     first-write-wins on duplicate text
+func buildItemMappingAndTextIndex(nodes []gateway.Node, remoteHandle string) (map[string]any, map[string]string) {
+	itemMapping := map[string]any{}
 	textToServerID := map[string]string{}
-	for _, n := range pull.Nodes {
-		if n.Type != gateway.NodeTypeListItem {
-			continue
-		}
-		if n.ParentID != remoteHandle && n.ParentServerID != remoteHandle {
-			continue
-		}
-		if !n.Timestamps.Trashed.IsZero() || !n.Timestamps.Deleted.IsZero() {
-			continue
-		}
-		if n.ServerID == "" {
+	for _, n := range nodes {
+		if !isLiveListItemForParent(n, remoteHandle) {
 			continue
 		}
 		itemMapping[n.ServerID] = encodeItemMappingFields(n.ServerID, n.BaseVersion, n.ID)
@@ -859,18 +885,32 @@ func (a *KeepAdapter) SeedBindingState(ctx context.Context, profileID wikipage.P
 			}
 		}
 	}
+	return itemMapping, textToServerID
+}
 
-	// Bind-time alignment (architectural fix 2026-05-08): Keep has
-	// no native wiki-uid marker (unlike Tasks's `wiki:<uid>` Notes),
-	// so item_id_map cannot be derived from the pull alone. Match
-	// wiki items against the pulled set by text (the same canonical
-	// form WikiToRemote produces), pre-populating item_id_map at
-	// the seed step so the first reconcile after Bind doesn't
-	// duplicate. Without this, the first applyInbound saw every
-	// Keep item as "unknown" (RemoteToWiki returns wikiItem.UID="")
-	// and either took AddItemForSync (creating wiki duplicates) or
-	// — with the dedup pass also added today — at least did the
-	// matching there. Doing it at seed is earlier and authoritative.
+// isLiveListItemForParent reports whether node n is a live (non-trashed,
+// non-deleted) LIST_ITEM with a non-empty ServerID whose parent matches
+// parentID. Used at bind-time seed (SeedBindingState) to filter the pull
+// to relevant items.
+func isLiveListItemForParent(n gateway.Node, parentID string) bool {
+	if n.Type != gateway.NodeTypeListItem {
+		return false
+	}
+	if n.ParentID != parentID && n.ParentServerID != parentID {
+		return false
+	}
+	if !n.Timestamps.Trashed.IsZero() || !n.Timestamps.Deleted.IsZero() {
+		return false
+	}
+	return n.ServerID != ""
+}
+
+// buildItemIDMapFromAlignment matches wiki items against textToServerID
+// using the adapter's WikiToRemote canonicalization, populating and
+// returning a uid → server-id map. Mutates textToServerID to prevent
+// re-matching (first-wiki-wins semantics). Wiki items with empty UID or
+// translation errors are skipped.
+func (a *KeepAdapter) buildItemIDMapFromAlignment(wikiItems []connectors.WikiItem, textToServerID map[string]string) map[string]any {
 	itemIDMap := map[string]any{}
 	for _, w := range wikiItems {
 		if w.UID == "" {
@@ -888,19 +928,7 @@ func (a *KeepAdapter) SeedBindingState(ctx context.Context, profileID wikipage.P
 			delete(textToServerID, remoteForm.Title)
 		}
 	}
-
-	labelIDs := map[string]any{}
-	for k, v := range translator.IndexLabelsByName(pull.Labels) {
-		labelIDs[k] = v
-	}
-	keepNoteClientID := translator.FindListClientID(pull.Nodes, remoteHandle)
-	return connectors.AdapterState{
-		AdapterStateKeyItemMapping:      itemMapping,
-		AdapterStateKeyKeepCursor:       pull.ToVersion,
-		AdapterStateKeyLabelIDs:         labelIDs,
-		AdapterStateKeyKeepNoteClientID: keepNoteClientID,
-		AdapterStateKeyItemIDMap:        itemIDMap,
-	}, nil
+	return itemIDMap
 }
 
 // ValidateRemoteBinding checks per-adapter pre-conditions before the
@@ -996,27 +1024,33 @@ func preserveItemIDMap(prevState, rebuiltState connectors.AdapterState) map[stri
 	if !ok {
 		return out
 	}
-	switch m := rawIDMap.(type) {
-	case map[string]string:
-		for uid, ref := range m {
-			if _, exists := mapping[ref]; exists {
-				out[uid] = ref
-			}
+	for uid, ref := range flattenRawIDMap(rawIDMap) {
+		if _, exists := mapping[ref]; exists {
+			out[uid] = ref
 		}
-	case map[string]any:
-		for uid, refRaw := range m {
-			ref, isStr := refRaw.(string)
-			if !isStr {
-				continue
-			}
-			if _, exists := mapping[ref]; exists {
-				out[uid] = ref
-			}
-		}
-	default:
-		// Unknown shape — silently skip; matches readItemIDMap semantics.
 	}
 	return out
+}
+
+// flattenRawIDMap coerces a raw AdapterState item_id_map value into a
+// map[string]string. Handles both encoding variants the engine persists:
+// map[string]string from older code paths, map[string]any from JSON
+// round-trips. Unknown shapes return nil.
+func flattenRawIDMap(raw any) map[string]string {
+	switch m := raw.(type) {
+	case map[string]string:
+		return m
+	case map[string]any:
+		out := make(map[string]string, len(m))
+		for uid, v := range m {
+			if ref, ok := v.(string); ok {
+				out[uid] = ref
+			}
+		}
+		return out
+	default:
+		return nil
+	}
 }
 
 // FetchRemoteListTitle returns the friendly title of the bound LIST

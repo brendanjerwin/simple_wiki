@@ -1726,6 +1726,149 @@ var _ = Describe("Engine.reconcile", func() {
 		})
 	})
 
+	When("DeleteRemote returns auth_failed", func() {
+		const knownUID = "uid-delete-auth-1"
+		var (
+			syncErr      error
+			savedBinding connectors.Binding
+		)
+
+		BeforeEach(func() {
+			fbs.SeedBinding(connectors.Binding{
+				ProfileID: profileID, Page: page, ListName: listName,
+				RemoteHandle:         "tasklist-1",
+				State:                connectors.BindingStateActive,
+				LastSuccessfulSyncAt: reconcilePastChokePausedAt,
+				AdapterState: connectors.AdapterState{
+					"item_id_map": map[string]string{knownUID: "ref-auth-1"},
+				},
+			}, ownerKind)
+
+			fa.SetPullRemoteResponse(connectors.RemotePullResult{}, nil)
+			fa.SetDeleteRemoteResponse(errReconcileProgrammed)
+			fa.SetClassifyErrorResponse(connectors.ErrorClassAuthFailed)
+			// Wiki has no items — uid is a pending DELETE.
+			reader.checklist = &apiv1.Checklist{}
+
+			syncErr = eng.Sync(ctx, key)
+			if len(fbs.RecordedSaveBinding) > 0 {
+				savedBinding = fbs.RecordedSaveBinding[len(fbs.RecordedSaveBinding)-1].Binding
+			}
+		})
+
+		It("should not return an error (paused is steady-state)", func() {
+			Expect(syncErr).NotTo(HaveOccurred())
+		})
+
+		It("should transition the binding to paused", func() {
+			Expect(savedBinding.State).To(Equal(connectors.BindingStatePaused))
+		})
+
+		It("should set PausedReason=auth_failed", func() {
+			Expect(savedBinding.PausedReason).To(Equal("auth_failed"))
+		})
+	})
+
+	When("DeleteRemote returns a retryable error", func() {
+		const knownUID = "uid-delete-retryable-1"
+		var syncErr error
+
+		BeforeEach(func() {
+			fbs.SeedBinding(connectors.Binding{
+				ProfileID: profileID, Page: page, ListName: listName,
+				RemoteHandle:         "tasklist-1",
+				State:                connectors.BindingStateActive,
+				LastSuccessfulSyncAt: reconcilePastChokePausedAt,
+				AdapterState: connectors.AdapterState{
+					"item_id_map": map[string]string{knownUID: "ref-retryable-1"},
+				},
+			}, ownerKind)
+
+			fa.SetPullRemoteResponse(connectors.RemotePullResult{}, nil)
+			fa.SetDeleteRemoteResponse(errReconcileProgrammed)
+			fa.SetClassifyErrorResponse(connectors.ErrorClassRetryable)
+			// Wiki has no items — uid is a pending DELETE.
+			reader.checklist = &apiv1.Checklist{}
+
+			syncErr = eng.Sync(ctx, key)
+		})
+
+		It("should not abort the whole sync (retryable continues)", func() {
+			Expect(syncErr).NotTo(HaveOccurred())
+		})
+	})
+
+	When("DeleteRemote returns a fatal error", func() {
+		const knownUID = "uid-delete-fatal-1"
+		var syncErr error
+
+		BeforeEach(func() {
+			fbs.SeedBinding(connectors.Binding{
+				ProfileID: profileID, Page: page, ListName: listName,
+				RemoteHandle:         "tasklist-1",
+				State:                connectors.BindingStateActive,
+				LastSuccessfulSyncAt: reconcilePastChokePausedAt,
+				AdapterState: connectors.AdapterState{
+					"item_id_map": map[string]string{knownUID: "ref-fatal-1"},
+				},
+			}, ownerKind)
+
+			fa.SetPullRemoteResponse(connectors.RemotePullResult{}, nil)
+			fa.SetDeleteRemoteResponse(errReconcileProgrammed)
+			fa.SetClassifyErrorResponse(connectors.ErrorClassFatal)
+			// Wiki has no items — uid is a pending DELETE.
+			reader.checklist = &apiv1.Checklist{}
+
+			syncErr = eng.Sync(ctx, key)
+		})
+
+		It("should propagate the error", func() {
+			Expect(syncErr).To(MatchError(ContainSubstring("delete remote item")))
+		})
+	})
+
+	When("a deleted wiki item is dead-lettered (shouldSkipPush blocks delete)", func() {
+		const knownUID = "uid-delete-skip-1"
+		var savedBinding connectors.Binding
+
+		BeforeEach(func() {
+			// Seed binding with the uid at the dead-letter threshold.
+			failureRecord := map[string]any{
+				"count": engine.DeadLetterThresholdForTest,
+				"next":  reconcileFixedNow.Add(time.Hour).Format(time.RFC3339Nano),
+			}
+			fbs.SeedBinding(connectors.Binding{
+				ProfileID: profileID, Page: page, ListName: listName,
+				RemoteHandle:         "tasklist-1",
+				State:                connectors.BindingStateActive,
+				LastSuccessfulSyncAt: reconcilePastChokePausedAt,
+				AdapterState: connectors.AdapterState{
+					"item_id_map":   map[string]string{knownUID: "ref-skip-1"},
+					"push_failures": map[string]any{knownUID: failureRecord},
+					"item_fps":      map[string]string{},
+				},
+			}, ownerKind)
+
+			fa.SetPullRemoteResponse(connectors.RemotePullResult{}, nil)
+			// Wiki has no items — uid is a pending DELETE; but shouldSkipPush must gate it.
+			reader.checklist = &apiv1.Checklist{}
+
+			Expect(eng.Sync(ctx, key)).To(Succeed())
+			if len(fbs.RecordedSaveBinding) > 0 {
+				savedBinding = fbs.RecordedSaveBinding[len(fbs.RecordedSaveBinding)-1].Binding
+			}
+		})
+
+		It("should NOT call DeleteRemote (gated by shouldSkipPush)", func() {
+			Expect(fa.RecordedDeleteRemote).To(BeEmpty())
+		})
+
+		It("should leave the item in idMap (not deleted)", func() {
+			idMap, _ := savedBinding.AdapterState["item_id_map"].(map[string]string)
+			Expect(idMap).To(HaveKey(knownUID))
+		})
+	})
+
 	When("InsertRemote returns a retryable error", func() {
 		const newUID = "uid-retryable-1"
 		var syncErr error

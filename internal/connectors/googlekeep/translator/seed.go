@@ -73,10 +73,15 @@ func MatchWikiItemsToKeepNodes(nodes []gateway.Node, listServerID string, wikiIt
 	if listServerID == "" {
 		return map[string]SeedMatch{}
 	}
-	// Build base-text → Keep node index for live LIST_ITEMs whose
-	// parent matches our bound list. Retain the full node so the
-	// caller can capture BaseVersion and ClientID — both required by
-	// Keep's outbound push protocol on subsequent syncs.
+	keepByBase := buildKeepNodeTextIndex(nodes, listServerID)
+	return matchWikiItemsToIndex(wikiItems, keepByBase)
+}
+
+// buildKeepNodeTextIndex builds a normalized-base-text → gateway.Node
+// index for live LIST_ITEMs whose parent matches listServerID. Retains
+// the full node so callers can capture BaseVersion and ClientID.
+// First-write-wins on duplicate base text.
+func buildKeepNodeTextIndex(nodes []gateway.Node, listServerID string) map[string]gateway.Node {
 	keepByBase := make(map[string]gateway.Node, len(nodes))
 	for _, n := range nodes {
 		if n.Type != gateway.NodeTypeListItem {
@@ -100,6 +105,13 @@ func MatchWikiItemsToKeepNodes(nodes []gateway.Node, listServerID string, wikiIt
 		}
 		keepByBase[base] = n
 	}
+	return keepByBase
+}
+
+// matchWikiItemsToIndex walks wikiItems and looks each up by normalized
+// base text in the pre-built keepByBase index, returning a per-uid
+// SeedMatch map.
+func matchWikiItemsToIndex(wikiItems []SeedWikiItem, keepByBase map[string]gateway.Node) map[string]SeedMatch {
 	matches := make(map[string]SeedMatch, len(wikiItems))
 	for _, w := range wikiItems {
 		if w.UID == "" {
