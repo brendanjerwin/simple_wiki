@@ -92,9 +92,14 @@ var _ = Describe("per-mode Setup functions (#1199 mcp localhost-guard wiring)", 
 
 		BeforeEach(func() {
 			var err error
-			result, err = SetupTailscaleServe(
-				"127.0.0.1:0", "wiki.test.ts.net", false, site, logger, testCommit, time.Now(), nil,
-			)
+			result, err = SetupTailscaleServe(TailscaleHTTPConfig{
+				HTTPAddr:  "127.0.0.1:0",
+				TSDNSName: "wiki.test.ts.net",
+				Site:      site,
+				Logger:    logger,
+				Commit:    testCommit,
+				BuildTime: time.Now(),
+			})
 			Expect(err).NotTo(HaveOccurred())
 		})
 
@@ -110,6 +115,91 @@ var _ = Describe("per-mode Setup functions (#1199 mcp localhost-guard wiring)", 
 		})
 	})
 
+	When("SetupTailscaleServe is invoked with ForceRedirectToHTTPS enabled", func() {
+		var result *ServerResult
+
+		BeforeEach(func() {
+			var err error
+			result, err = SetupTailscaleServe(TailscaleHTTPConfig{
+				HTTPAddr:             "127.0.0.1:0",
+				TSDNSName:            "wiki.test.ts.net",
+				ForceRedirectToHTTPS: true,
+				Site:                 site,
+				Logger:               logger,
+				Commit:               testCommit,
+				BuildTime:            time.Now(),
+			})
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		AfterEach(func() { closeResult(result) })
+
+		It("returns a server result with the HTTPS-redirecting handler installed", func() {
+			Expect(result).NotTo(BeNil())
+			Expect(result.MainServer).NotTo(BeNil())
+			Expect(result.MainListener).NotTo(BeNil())
+			Expect(result.MainServer.Handler).NotTo(BeNil())
+		})
+
+		It("returns a non-nil cleanup function", func() {
+			Expect(result.Cleanup).NotTo(BeNil())
+		})
+	})
+
+	When("SetupTailscaleServe is invoked with ForceRedirectToHTTPS true and empty TSDNSName", func() {
+		var result *ServerResult
+		var setupErr error
+
+		BeforeEach(func() {
+			result, setupErr = SetupTailscaleServe(TailscaleHTTPConfig{
+				HTTPAddr:             "127.0.0.1:0",
+				TSDNSName:            "",
+				ForceRedirectToHTTPS: true,
+				Site:                 site,
+				Logger:               logger,
+				Commit:               testCommit,
+				BuildTime:            time.Now(),
+			})
+		})
+
+		AfterEach(func() { closeResult(result) })
+
+		It("returns an error wrapping the redirector failure", func() {
+			Expect(setupErr).To(MatchError(ContainSubstring("failed to create tailnet redirector")))
+		})
+
+		It("returns a nil server result", func() {
+			Expect(result).To(BeNil())
+		})
+	})
+
+	When("SetupFullTLS is invoked with empty TSDNSName", func() {
+		var result *ServerResult
+		var setupErr error
+
+		BeforeEach(func() {
+			result, setupErr = SetupFullTLS(TailscaleHTTPConfig{
+				HTTPAddr:  "127.0.0.1:0",
+				TLSPort:   44445,
+				TSDNSName: "",
+				Site:      site,
+				Logger:    logger,
+				Commit:    testCommit,
+				BuildTime: time.Now(),
+			})
+		})
+
+		AfterEach(func() { closeResult(result) })
+
+		It("returns an error wrapping the redirector failure", func() {
+			Expect(setupErr).To(MatchError(ContainSubstring("failed to create tailnet redirector")))
+		})
+
+		It("returns a nil server result", func() {
+			Expect(result).To(BeNil())
+		})
+	})
+
 	When("SetupFullTLS is invoked on loopback", func() {
 		var result *ServerResult
 
@@ -118,9 +208,15 @@ var _ = Describe("per-mode Setup functions (#1199 mcp localhost-guard wiring)", 
 			// Fixed high port: tlsPort 0 is rejected (must be 1-65535) and
 			// unprivileged ports >1024 need no root. Collision risk is nil
 			// for a short-lived test listener.
-			result, err = SetupFullTLS(
-				"127.0.0.1:0", 44443, "wiki.test.ts.net", site, logger, testCommit, time.Now(), nil,
-			)
+			result, err = SetupFullTLS(TailscaleHTTPConfig{
+				HTTPAddr:  "127.0.0.1:0",
+				TLSPort:   44443,
+				TSDNSName: "wiki.test.ts.net",
+				Site:      site,
+				Logger:    logger,
+				Commit:    testCommit,
+				BuildTime: time.Now(),
+			})
 			Expect(err).NotTo(HaveOccurred())
 		})
 
@@ -132,6 +228,10 @@ var _ = Describe("per-mode Setup functions (#1199 mcp localhost-guard wiring)", 
 			Expect(result.MainListener).NotTo(BeNil())
 			Expect(result.RedirectServer).NotTo(BeNil())
 			Expect(result.MainServer.Handler).NotTo(BeNil())
+		})
+
+		It("wires the redirect server address to HTTPAddr", func() {
+			Expect(result.RedirectServer.Addr).To(Equal("127.0.0.1:0"))
 		})
 	})
 })

@@ -167,6 +167,11 @@ func detectTailscale(ctx context.Context) *tailscale.Status {
 	return tsStatus
 }
 
+// detectTailscaleFn is the function used by setupServer to probe Tailscale.
+// Replaced in tests to exercise the Tailscale-aware code paths without a
+// real Tailscale daemon.
+var detectTailscaleFn = detectTailscale
+
 func initializeTelemetry(actualCommit string) func() {
 	var err error
 	telemetry, err = observability.Initialize(context.Background(), actualCommit)
@@ -209,7 +214,7 @@ func setupServer(c *cli.Context) (*bootstrap.ServerResult, func(), error) {
 		tlsPort = port + 1 // Default to adjacent port
 	}
 
-	tsStatus := detectTailscale(context.Background())
+	tsStatus := detectTailscaleFn(context.Background())
 	mode := bootstrap.DetermineServerMode(tsStatus, c.GlobalBool("tailscale-serve"))
 
 	logger.Info("Running simple_wiki server (commit %s)", actualCommit)
@@ -231,15 +236,27 @@ func setupServer(c *cli.Context) (*bootstrap.ServerResult, func(), error) {
 			},
 		)
 	case bootstrap.ModeTailscaleServe:
-		result, err = bootstrap.SetupTailscaleServe(
-			httpAddr, tsStatus.DNSName, c.GlobalBool("force-redirect-tailnet-https"),
-			site, logger, actualCommit, buildTime, agentTags,
-		)
+		result, err = bootstrap.SetupTailscaleServe(bootstrap.TailscaleHTTPConfig{
+			HTTPAddr:             httpAddr,
+			TSDNSName:            tsStatus.DNSName,
+			ForceRedirectToHTTPS: c.GlobalBool("force-redirect-tailnet-https"),
+			Site:                 site,
+			Logger:               logger,
+			Commit:               actualCommit,
+			BuildTime:            buildTime,
+			AgentTags:            agentTags,
+		})
 	case bootstrap.ModeFullTLS:
-		result, err = bootstrap.SetupFullTLS(
-			httpAddr, tlsPort, tsStatus.DNSName,
-			site, logger, actualCommit, buildTime, agentTags,
-		)
+		result, err = bootstrap.SetupFullTLS(bootstrap.TailscaleHTTPConfig{
+			HTTPAddr:  httpAddr,
+			TLSPort:   tlsPort,
+			TSDNSName: tsStatus.DNSName,
+			Site:      site,
+			Logger:    logger,
+			Commit:    actualCommit,
+			BuildTime: buildTime,
+			AgentTags: agentTags,
+		})
 	default:
 		err = fmt.Errorf("unknown server mode: %v", mode)
 	}

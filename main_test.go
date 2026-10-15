@@ -3,6 +3,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"crypto/rand"
 	"errors"
 	"flag"
@@ -11,7 +12,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/brendanjerwin/simple_wiki/internal/bootstrap"
 	wikiserver "github.com/brendanjerwin/simple_wiki/server"
+	"github.com/brendanjerwin/simple_wiki/tailscale"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	cli "gopkg.in/urfave/cli.v1"
@@ -276,6 +279,119 @@ var _ = Describe("getCommitHash", func() {
 
 		It("should return the trimmed output from git", func() {
 			Expect(getCommitHash()).To(Equal("abcdef1234567890abcdef1234567890abcdef12"))
+		})
+	})
+})
+
+var _ = Describe("setupServer", func() {
+	var tmpDir string
+	var origDetectFn func(context.Context) *tailscale.Status
+
+	BeforeEach(func() {
+		var err error
+		tmpDir, err = os.MkdirTemp("", "simple_wiki_setupserver_test")
+		Expect(err).NotTo(HaveOccurred())
+		origDetectFn = detectTailscaleFn
+	})
+
+	AfterEach(func() {
+		detectTailscaleFn = origDetectFn
+		_ = os.RemoveAll(tmpDir)
+	})
+
+	// newSetupServerContext builds a cli.Context with all flags that setupServer
+	// and createSite access.  tailscaleServe selects ModeTailscaleServe vs
+	// ModeFullTLS; tlsPort is only meaningful for ModeFullTLS.
+	newSetupServerContext := func(tailscaleServe bool, tlsPort int) *cli.Context {
+		flagSet := flag.NewFlagSet("test", flag.ContinueOnError)
+		// createSite flags
+		flagSet.String("data", tmpDir, "")
+		flagSet.String("cookie-secret", "test-secret", "")
+		flagSet.String("css", "", "")
+		flagSet.String("default-page", "home", "")
+		flagSet.Int("debounce", 0, "")
+		flagSet.Bool("debug", false, "")
+		flagSet.Bool("block-file-uploads", false, "")
+		flagSet.Uint("max-upload-mb", 10, "")
+		flagSet.Uint("max-document-length", 10000, "")
+		flagSet.Duration("agent-turn-hard-timeout", 25*time.Minute, "")
+		flagSet.Int("agent-schedule-concurrency", 2, "")
+		flagSet.Int("agent-schedule-queue-capacity", 256, "")
+		flagSet.String("chat-persona", "Assistant", "")
+		// setupServer-specific flags
+		flagSet.String("host", "127.0.0.1", "")
+		flagSet.Int("port", 0, "")
+		flagSet.Int("tls-port", tlsPort, "")
+		flagSet.Bool("tailscale-serve", tailscaleServe, "")
+		flagSet.Bool("force-redirect-tailnet-https", false, "")
+		flagSet.Var(&cli.StringSlice{}, "agent-tag", "")
+		return cli.NewContext(nil, flagSet, nil)
+	}
+
+	closeTailscaleResult := func(result *bootstrap.ServerResult, telemetryCleanup func()) {
+		if telemetryCleanup != nil {
+			telemetryCleanup()
+		}
+		if result == nil {
+			return
+		}
+		if result.Cleanup != nil {
+			result.Cleanup()
+		}
+		if result.RedirectServer != nil {
+			_ = result.RedirectServer.Close()
+		}
+		if result.MainListener != nil {
+			_ = result.MainListener.Close()
+		}
+	}
+
+	When("Tailscale is available and tailscale-serve=true (ModeTailscaleServe)", func() {
+		var result *bootstrap.ServerResult
+		var telemetryCleanup func()
+
+		BeforeEach(func() {
+			detectTailscaleFn = func(_ context.Context) *tailscale.Status {
+				return &tailscale.Status{Available: true, DNSName: "wiki.fake.ts.net"}
+			}
+			var err error
+			result, telemetryCleanup, err = setupServer(newSetupServerContext(true, 0))
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		AfterEach(func() { closeTailscaleResult(result, telemetryCleanup) })
+
+		It("returns a non-nil ServerResult", func() {
+			Expect(result).NotTo(BeNil())
+		})
+
+		It("returns a non-nil MainListener", func() {
+			Expect(result.MainListener).NotTo(BeNil())
+		})
+	})
+
+	When("Tailscale is available and tailscale-serve=false (ModeFullTLS)", func() {
+		var result *bootstrap.ServerResult
+		var telemetryCleanup func()
+
+		BeforeEach(func() {
+			detectTailscaleFn = func(_ context.Context) *tailscale.Status {
+				return &tailscale.Status{Available: true, DNSName: "wiki.fake.ts.net"}
+			}
+			var err error
+			result, telemetryCleanup, err = setupServer(newSetupServerContext(false, 44444))
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		AfterEach(func() { closeTailscaleResult(result, telemetryCleanup) })
+
+		It("returns a non-nil ServerResult with a redirect server", func() {
+			Expect(result).NotTo(BeNil())
+			Expect(result.RedirectServer).NotTo(BeNil())
+		})
+
+		It("returns a non-nil MainListener", func() {
+			Expect(result.MainListener).NotTo(BeNil())
 		})
 	})
 })
