@@ -423,7 +423,7 @@ func applyUserMutableFields(item *apiv1.ChecklistItem, args UpdateItemArgs) bool
 
 // UpdateItem mutates user-mutable fields of an existing item. Wiki-managed
 // fields on the request are ignored; updated_at is server-stamped.
-func (m *Mutator) UpdateItem(ctx context.Context, page, listName, uid string, args UpdateItemArgs, expectedUpdatedAt *time.Time, identity tailscale.IdentityValue) (*apiv1.ChecklistItem, *apiv1.Checklist, error) {
+func (m *Mutator) UpdateItem(_ context.Context, page, listName, uid string, args UpdateItemArgs, expectedUpdatedAt *time.Time, identity tailscale.IdentityValue) (*apiv1.ChecklistItem, *apiv1.Checklist, error) {
 	return m.updateItemImpl(page, listName, uid, args, expectedUpdatedAt, identity, UserSource(identity.LoginName()))
 }
 
