@@ -81,7 +81,7 @@ type Engine struct {
 //
 // Every parameter is required; a nil collaborator is a wiring bug at
 // startup and returns an error rather than crashing later.
-func NewEngine(
+func NewEngine( // NOSONAR go:S107
 	adapter connectors.BackendAdapter,
 	lease *connectors.LeaseTable,
 	checklist ChecklistReader,

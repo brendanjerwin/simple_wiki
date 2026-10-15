@@ -733,7 +733,15 @@ func (e *Engine) pushOutbound(
 
 	// Inserts / patches.
 	for uid, item := range currentUIDs {
-		updated, bail, authFailed, err := e.pushOutboundOneItem(ctx, binding, uid, item, idMap, fingerprints, boundUIDByText, classification)
+		updated, bail, authFailed, err := e.pushOutboundOneItem(ctx, pushOutboundOneItemOpts{
+			binding:        binding,
+			uid:            uid,
+			item:           item,
+			idMap:          idMap,
+			fingerprints:   fingerprints,
+			boundUIDByText: boundUIDByText,
+			classification: classification,
+		})
 		binding = updated
 		if authFailed {
 			return binding, true, nil
@@ -811,6 +819,17 @@ func buildBoundUIDByText(idMap map[string]string, currentUIDs map[string]*apiv1.
 	return boundUIDByText
 }
 
+// pushOutboundOneItemOpts bundles the per-item context for pushOutboundOneItem.
+type pushOutboundOneItemOpts struct {
+	binding        connectors.Binding
+	uid            string
+	item           *apiv1.ChecklistItem
+	idMap          map[string]string
+	fingerprints   map[string]string
+	boundUIDByText map[string]string
+	classification map[string]EventClassification
+}
+
 // pushOutboundOneItem handles the insert-or-patch decision for a single
 // wiki item. Returns (binding, bail, authFailed, err):
 //   - bail=true, err=nil: insert precondition recovery succeeded; caller
@@ -818,39 +837,38 @@ func buildBoundUIDByText(idMap map[string]string, currentUIDs map[string]*apiv1.
 //   - bail=true, err!=nil: recovery failed; caller should return error.
 //   - authFailed=true: auth failure; caller should return auth-failed.
 //   - otherwise: item was processed (skipped or pushed); continue loop.
-func (e *Engine) pushOutboundOneItem(
-	ctx context.Context,
-	binding connectors.Binding,
-	uid string,
-	item *apiv1.ChecklistItem,
-	idMap map[string]string,
-	fingerprints map[string]string,
-	boundUIDByText map[string]string,
-	classification map[string]EventClassification,
-) (updated connectors.Binding, bail bool, authFailed bool, err error) {
+func (e *Engine) pushOutboundOneItem(ctx context.Context, opts pushOutboundOneItemOpts) (updated connectors.Binding, bail bool, authFailed bool, err error) {
 	wikiItem := connectors.WikiItem{
-		UID:         uid,
-		Text:        item.GetText(),
-		Checked:     item.GetChecked(),
-		Tags:        item.GetTags(),
-		Description: item.GetDescription(),
-		Due:         timestampToTime(item.GetDue()),
-		SortOrder:   item.GetSortOrder(),
+		UID:         opts.uid,
+		Text:        opts.item.GetText(),
+		Checked:     opts.item.GetChecked(),
+		Tags:        opts.item.GetTags(),
+		Description: opts.item.GetDescription(),
+		Due:         timestampToTime(opts.item.GetDue()),
+		SortOrder:   opts.item.GetSortOrder(),
 	}
 	if _, txErr := e.adapter.WikiToRemote(wikiItem); txErr != nil {
-		return binding, false, false, fmt.Errorf("translate wiki item %s for profile %s: %w",
-			uid, binding.ProfileID, txErr)
+		return opts.binding, false, false, fmt.Errorf("translate wiki item %s for profile %s: %w",
+			opts.uid, opts.binding.ProfileID, txErr)
 	}
 
-	ref, alreadyBound := idMap[uid]
+	ref, alreadyBound := opts.idMap[opts.uid]
 	if !alreadyBound {
-		insUpdated, insBail, insAuth, insErr := e.pushOneInsert(ctx, binding, uid, wikiItem, idMap, fingerprints, boundUIDByText)
+		insUpdated, insBail, insAuth, insErr := e.pushOneInsert(ctx, opts.binding, opts.uid, wikiItem, opts.idMap, opts.fingerprints, opts.boundUIDByText)
 		if insAuth {
 			return insUpdated, false, true, nil
 		}
 		return insUpdated, insBail, false, insErr
 	}
-	patchUpdated, patchAuth, patchErr := e.pushOnePatch(ctx, binding, uid, ref, wikiItem, idMap, fingerprints, classification)
+	patchUpdated, patchAuth, patchErr := e.pushOnePatch(ctx, pushOnePatchOpts{
+		binding:        opts.binding,
+		uid:            opts.uid,
+		ref:            ref,
+		wikiItem:       wikiItem,
+		idMap:          opts.idMap,
+		fingerprints:   opts.fingerprints,
+		classification: opts.classification,
+	})
 	return patchUpdated, false, patchAuth, patchErr
 }
 
@@ -925,20 +943,29 @@ func (e *Engine) pushOneInsert(
 	return binding, false, false, nil
 }
 
+// pushOnePatchOpts bundles the per-item context for pushOnePatch.
+type pushOnePatchOpts struct {
+	binding        connectors.Binding
+	uid            string
+	ref            string
+	wikiItem       connectors.WikiItem
+	idMap          map[string]string
+	fingerprints   map[string]string
+	classification map[string]EventClassification
+}
+
 // pushOnePatch attempts to patch an existing remote item when the wiki has
 // diverged. Returns (binding, authFailed, err). A nil error with
 // authFailed=false means the item was processed (skipped or patched
 // successfully); continue to the next item.
-func (e *Engine) pushOnePatch(
-	ctx context.Context,
-	binding connectors.Binding,
-	uid string,
-	ref string,
-	wikiItem connectors.WikiItem,
-	idMap map[string]string,
-	fingerprints map[string]string,
-	classification map[string]EventClassification,
-) (connectors.Binding, bool, error) {
+func (e *Engine) pushOnePatch(ctx context.Context, opts pushOnePatchOpts) (connectors.Binding, bool, error) {
+	binding := opts.binding
+	uid := opts.uid
+	ref := opts.ref
+	wikiItem := opts.wikiItem
+	idMap := opts.idMap
+	fingerprints := opts.fingerprints
+	classification := opts.classification
 	// ADR-0015 Fix #2 + fingerprint divergence: skip Patch only when
 	// BOTH gates agree the wiki hasn't changed since the last push.
 	// WikiDiverged catches items with fresh user events above the
