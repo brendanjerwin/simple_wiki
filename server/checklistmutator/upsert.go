@@ -61,7 +61,7 @@ const IfNoneMatchAny = "*"
 //   - ifNoneMatch == "":     no precondition.
 //   - ifNoneMatch == "*":    the item must NOT exist. If it does, returns
 //                            FailedPrecondition. (Create-only PUT.)
-func (m *Mutator) UpsertFromCalDAV(
+func (m *Mutator) UpsertFromCalDAV( // NOSONAR go:S107
 	_ context.Context,
 	page, listName, uid string,
 	args UpsertFromCalDAVArgs,
@@ -90,10 +90,11 @@ func (m *Mutator) UpsertFromCalDAV(
 	now := m.clock.Now()
 
 	if item != nil {
-		updatedItem, err := m.upsertExistingItem(page, listName, checklist, idx, item, args, ifMatch, ifNoneMatch, identity, now)
+		updatedItem, err := m.upsertExistingItem(checklist, idx, item, args, ifMatch, ifNoneMatch, identity)
 		if err != nil {
 			return nil, nil, err
 		}
+		m.pruneTombstones(page, listName, checklist, now)
 		if err := m.persist(page, fm, listName, checklist); err != nil {
 			return nil, nil, err
 		}
@@ -112,16 +113,15 @@ func (m *Mutator) UpsertFromCalDAV(
 
 // upsertExistingItem handles the update branch of UpsertFromCalDAV.
 // Returns the (possibly mutated) item or an error mapped from a failed
-// precondition. The caller is responsible for persisting the checklist.
+// precondition. The caller is responsible for pruning tombstones and
+// persisting the checklist.
 func (m *Mutator) upsertExistingItem(
-	page, listName string,
 	checklist *apiv1.Checklist,
 	idx int,
 	item *apiv1.ChecklistItem,
 	args UpsertFromCalDAVArgs,
 	ifMatch, ifNoneMatch string,
 	identity tailscale.IdentityValue,
-	now time.Time,
 ) (*apiv1.ChecklistItem, error) {
 	if ifNoneMatch == IfNoneMatchAny {
 		return nil, status.Errorf(codes.FailedPrecondition, "If-None-Match: * but uid %s already exists", item.Uid)
@@ -133,6 +133,7 @@ func (m *Mutator) upsertExistingItem(
 		}
 	}
 
+	now := m.clock.Now()
 	userChanged := applyUserMutableFields(item, asUpdateItemArgs(args))
 	checkedChanged := applyCheckedTransition(item, args, identity, now)
 	sortOrderChanged := false
@@ -153,7 +154,6 @@ func (m *Mutator) upsertExistingItem(
 		densifyAroundSortOrder(checklist.Items, idx)
 		sortItems(checklist.Items)
 	}
-	m.pruneTombstones(page, listName, checklist, now)
 	if !sortOrderChanged {
 		checklist.Items[idx] = item
 	}
