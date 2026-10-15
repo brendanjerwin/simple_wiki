@@ -231,15 +231,27 @@ func setupServer(c *cli.Context) (*bootstrap.ServerResult, func(), error) {
 			},
 		)
 	case bootstrap.ModeTailscaleServe:
-		result, err = bootstrap.SetupTailscaleServe(
-			httpAddr, tsStatus.DNSName, c.GlobalBool("force-redirect-tailnet-https"),
-			site, logger, actualCommit, buildTime, agentTags,
-		)
+		result, err = bootstrap.SetupTailscaleServe(bootstrap.TailscaleHTTPConfig{
+			HTTPAddr:             httpAddr,
+			TSDNSName:            tsStatus.DNSName,
+			ForceRedirectToHTTPS: c.GlobalBool("force-redirect-tailnet-https"),
+			Site:                 site,
+			Logger:               logger,
+			Commit:               actualCommit,
+			BuildTime:            buildTime,
+			AgentTags:            agentTags,
+		})
 	case bootstrap.ModeFullTLS:
-		result, err = bootstrap.SetupFullTLS(
-			httpAddr, tlsPort, tsStatus.DNSName,
-			site, logger, actualCommit, buildTime, agentTags,
-		)
+		result, err = bootstrap.SetupFullTLS(bootstrap.TailscaleHTTPConfig{
+			HTTPAddr:  httpAddr,
+			TLSPort:   tlsPort,
+			TSDNSName: tsStatus.DNSName,
+			Site:      site,
+			Logger:    logger,
+			Commit:    actualCommit,
+			BuildTime: buildTime,
+			AgentTags: agentTags,
+		})
 	default:
 		err = fmt.Errorf("unknown server mode: %v", mode)
 	}

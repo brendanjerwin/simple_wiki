@@ -95,6 +95,24 @@ type PlainHTTPOptions struct {
 	TrustTestIdentityHeaders bool
 }
 
+// TailscaleHTTPConfig holds the shared configuration for Tailscale-aware HTTP
+// setup functions (SetupTailscaleServe and SetupFullTLS).
+type TailscaleHTTPConfig struct {
+	HTTPAddr string
+	TSDNSName string
+	// ForceRedirectToHTTPS redirects tailnet clients from HTTP to HTTPS.
+	// Used by SetupTailscaleServe; ignored by SetupFullTLS.
+	ForceRedirectToHTTPS bool
+	// TLSPort is the HTTPS port for the TLS listener.
+	// Used by SetupFullTLS; ignored by SetupTailscaleServe.
+	TLSPort   int
+	Site      *server.Site
+	Logger    *lumber.ConsoleLogger
+	Commit    string
+	BuildTime time.Time
+	AgentTags []string
+}
+
 type identityMetadataOptions struct {
 	TrustMetadata bool
 }
@@ -174,38 +192,27 @@ func SetupPlainHTTP(
 
 // SetupTailscaleServe creates an HTTP server with Tailscale identity support.
 // Used when Tailscale Serve handles TLS termination externally.
-//
-//revive:disable-next-line:flag-parameter forceRedirectToHTTPS is a CLI configuration flag
-func SetupTailscaleServe(
-	httpAddr string,
-	tsDNSName string,
-	forceRedirectToHTTPS bool,
-	site *server.Site,
-	logger *lumber.ConsoleLogger,
-	commit string,
-	buildTime time.Time,
-	agentTags []string,
-) (*ServerResult, error) {
-	logger.Info("Tailscale detected: %s", tsDNSName)
-	logger.Info("Tailscale Serve mode. Running HTTP on %s with identity support", httpAddr)
+func SetupTailscaleServe(cfg TailscaleHTTPConfig) (*ServerResult, error) {
+	cfg.Logger.Info("Tailscale detected: %s", cfg.TSDNSName)
+	cfg.Logger.Info("Tailscale Serve mode. Running HTTP on %s with identity support", cfg.HTTPAddr)
 
-	identityResolver := tailscale.NewIdentityResolver(agentTags)
+	identityResolver := tailscale.NewIdentityResolver(cfg.AgentTags)
 	handler, metricsCleanup, err := createMultiplexedHandler(
-		site, logger, commit, buildTime, ModeTailscaleServe, identityResolver, identityMetadataOptions{},
+		cfg.Site, cfg.Logger, cfg.Commit, cfg.BuildTime, ModeTailscaleServe, identityResolver, identityMetadataOptions{},
 	)
 	if err != nil {
 		return nil, fmt.Errorf(errCreateHandlerFmt, err)
 	}
 
-	httpListener, err := net.Listen(networkTCP, httpAddr)
+	httpListener, err := net.Listen(networkTCP, cfg.HTTPAddr)
 	if err != nil {
 		return nil, fmt.Errorf(errCreateListenerFmt, err)
 	}
 
 	finalHandler := handler
-	if forceRedirectToHTTPS {
-		logger.Info("Tailnet clients will be redirected to HTTPS")
-		redirector, err := tailscale.NewTailnetRedirector(tsDNSName, tailscale.DefaultHTTPSPort, identityResolver, finalHandler, true, logger)
+	if cfg.ForceRedirectToHTTPS {
+		cfg.Logger.Info("Tailnet clients will be redirected to HTTPS")
+		redirector, err := tailscale.NewTailnetRedirector(cfg.TSDNSName, tailscale.DefaultHTTPSPort, identityResolver, finalHandler, true, cfg.Logger)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create tailnet redirector: %w", err)
 		}
@@ -215,87 +222,78 @@ func SetupTailscaleServe(
 	return &ServerResult{
 		MainServer:   newCleartextHTTP2Server(finalHandler),
 		MainListener: httpListener,
-		Cleanup:      composeCleanup(metricsCleanup, stopSiteCron(site)),
+		Cleanup:      composeCleanup(metricsCleanup, stopSiteCron(cfg.Site)),
 	}, nil
 }
 
 // SetupFullTLS creates both HTTPS and HTTP servers using Tailscale certificates.
 // The HTTP server redirects tailnet clients to HTTPS.
-func SetupFullTLS(
-	httpAddr string,
-	tlsPort int,
-	tsDNSName string,
-	site *server.Site,
-	logger *lumber.ConsoleLogger,
-	commit string,
-	buildTime time.Time,
-	agentTags []string,
-) (*ServerResult, error) {
-	logger.Info("Tailscale detected: %s", tsDNSName)
+func SetupFullTLS(cfg TailscaleHTTPConfig) (*ServerResult, error) {
+	cfg.Logger.Info("Tailscale detected: %s", cfg.TSDNSName)
 
-	identityResolver := tailscale.NewIdentityResolver(agentTags)
+	identityResolver := tailscale.NewIdentityResolver(cfg.AgentTags)
 	handler, metricsCleanup, err := createMultiplexedHandler(
-		site, logger, commit, buildTime, ModeFullTLS, identityResolver, identityMetadataOptions{},
+		cfg.Site, cfg.Logger, cfg.Commit, cfg.BuildTime, ModeFullTLS, identityResolver, identityMetadataOptions{},
 	)
 	if err != nil {
 		return nil, fmt.Errorf(errCreateHandlerFmt, err)
 	}
 
-	// Parse host from httpAddr
+	// Parse host from cfg.HTTPAddr
 	host := ""
-	if idx := strings.LastIndex(httpAddr, ":"); idx != -1 {
-		host = httpAddr[:idx]
+	if idx := strings.LastIndex(cfg.HTTPAddr, ":"); idx != -1 {
+		host = cfg.HTTPAddr[:idx]
 	}
 
 	tlsProvider := tailscale.NewTLSProvider()
 	tlsConfig := tlsProvider.GetTLSConfig()
-	httpsAddr := fmt.Sprintf("%s:%d", host, tlsPort)
+	httpsAddr := fmt.Sprintf("%s:%d", host, cfg.TLSPort)
 
 	tlsListener, err := tls.Listen(networkTCP, httpsAddr, tlsConfig)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create TLS listener: %w", err)
 	}
 
-	logger.Info("HTTPS server listening on %s", httpsAddr)
+	cfg.Logger.Info("HTTPS server listening on %s", httpsAddr)
 
 	// Create HTTP redirect server. The fallback handler is the bare app
 	// handler; the redirect server itself enables cleartext HTTP/2 via
 	// http.Server.Protocols below so non-tailnet HTTP callers that speak
 	// h2c still get HTTP/2 service (replaces the deprecated h2c.NewHandler
 	// wrap).
-	redirector, err := tailscale.NewTailnetRedirector(tsDNSName, tlsPort, identityResolver, handler, false, logger)
+	redirector, err := tailscale.NewTailnetRedirector(cfg.TSDNSName, cfg.TLSPort, identityResolver, handler, false, cfg.Logger)
 	if err != nil {
 		if closeErr := tlsListener.Close(); closeErr != nil {
-			logger.Error("failed to close TLS listener: %v", closeErr)
+			cfg.Logger.Error("failed to close TLS listener: %v", closeErr)
 		}
 		return nil, fmt.Errorf("failed to create tailnet redirector: %w", err)
 	}
-	httpListener, err := net.Listen(networkTCP, httpAddr)
+	httpListener, err := net.Listen(networkTCP, cfg.HTTPAddr)
 	if err != nil {
 		if closeErr := tlsListener.Close(); closeErr != nil {
-			logger.Error("failed to close TLS listener: %v", closeErr)
+			cfg.Logger.Error("failed to close TLS listener: %v", closeErr)
 		}
 		return nil, fmt.Errorf(errCreateListenerFmt, err)
 	}
 
-	logger.Info("HTTP server listening on %s (redirects tailnet, serves others)", httpAddr)
+	cfg.Logger.Info("HTTP server listening on %s (redirects tailnet, serves others)", cfg.HTTPAddr)
 
 	redirectServer := newCleartextHTTP2Server(redirector)
-	redirectServer.Addr = httpAddr
+	redirectServer.Addr = cfg.HTTPAddr
 
 	result := &ServerResult{
 		MainServer: &http.Server{
 			Handler: handler,
 		},
 		MainListener:   tlsListener,
-		Cleanup:        composeCleanup(metricsCleanup, stopSiteCron(site)),
+		Cleanup:        composeCleanup(metricsCleanup, stopSiteCron(cfg.Site)),
 		RedirectServer: redirectServer,
 	}
 
 	// Start redirect server in background
 	go func() {
 		if err := result.RedirectServer.Serve(httpListener); err != nil && err != http.ErrServerClosed {
-			logger.Error("HTTP redirect server error: %v", err)
+			cfg.Logger.Error("HTTP redirect server error: %v", err)
 		}
 	}()
 

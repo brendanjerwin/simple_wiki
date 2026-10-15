@@ -92,9 +92,14 @@ var _ = Describe("per-mode Setup functions (#1199 mcp localhost-guard wiring)", 
 
 		BeforeEach(func() {
 			var err error
-			result, err = SetupTailscaleServe(
-				"127.0.0.1:0", "wiki.test.ts.net", false, site, logger, testCommit, time.Now(), nil,
-			)
+			result, err = SetupTailscaleServe(TailscaleHTTPConfig{
+				HTTPAddr:  "127.0.0.1:0",
+				TSDNSName: "wiki.test.ts.net",
+				Site:      site,
+				Logger:    logger,
+				Commit:    testCommit,
+				BuildTime: time.Now(),
+			})
 			Expect(err).NotTo(HaveOccurred())
 		})
 
@@ -118,9 +123,15 @@ var _ = Describe("per-mode Setup functions (#1199 mcp localhost-guard wiring)", 
 			// Fixed high port: tlsPort 0 is rejected (must be 1-65535) and
 			// unprivileged ports >1024 need no root. Collision risk is nil
 			// for a short-lived test listener.
-			result, err = SetupFullTLS(
-				"127.0.0.1:0", 44443, "wiki.test.ts.net", site, logger, testCommit, time.Now(), nil,
-			)
+			result, err = SetupFullTLS(TailscaleHTTPConfig{
+				HTTPAddr:  "127.0.0.1:0",
+				TLSPort:   44443,
+				TSDNSName: "wiki.test.ts.net",
+				Site:      site,
+				Logger:    logger,
+				Commit:    testCommit,
+				BuildTime: time.Now(),
+			})
 			Expect(err).NotTo(HaveOccurred())
 		})
 
