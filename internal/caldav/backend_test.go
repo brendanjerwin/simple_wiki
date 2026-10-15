@@ -33,8 +33,20 @@ func TestBackend(t *testing.T) {
 // arguments and return canned responses.
 type fakeMutator struct {
 	pages    map[string][]*apiv1.Checklist
-	upsertFn func(ctx context.Context, page, listName, uid string, args checklistmutator.UpsertFromCalDAVArgs, ifMatch, ifNoneMatch string, identity tailscale.IdentityValue) (*apiv1.ChecklistItem, *apiv1.Checklist, error)
+	upsertFn func(ctx context.Context, opts upsertCallOpts) (*apiv1.ChecklistItem, *apiv1.Checklist, error)
 	deleteFn func(ctx context.Context, page, listName, uid string, expectedUpdatedAt *time.Time, identity tailscale.IdentityValue) (*apiv1.Checklist, error)
+}
+
+// upsertCallOpts groups the non-context parameters of MutatorBackend.UpsertFromCalDAV
+// so that upsertFn test stubs stay within the 7-parameter limit.
+type upsertCallOpts struct {
+	page        string
+	listName    string
+	uid         string
+	args        checklistmutator.UpsertFromCalDAVArgs
+	ifMatch     string
+	ifNoneMatch string
+	identity    tailscale.IdentityValue
 }
 
 func (f *fakeMutator) GetChecklists(_ context.Context, page string) ([]*apiv1.Checklist, error) {
@@ -60,9 +72,9 @@ func (f *fakeMutator) ListItems(_ context.Context, page, listName string) (*apiv
 	return &apiv1.Checklist{Name: listName}, nil
 }
 
-func (f *fakeMutator) UpsertFromCalDAV(ctx context.Context, page, listName, uid string, args checklistmutator.UpsertFromCalDAVArgs, ifMatch, ifNoneMatch string, identity tailscale.IdentityValue) (*apiv1.ChecklistItem, *apiv1.Checklist, error) {
+func (f *fakeMutator) UpsertFromCalDAV(ctx context.Context, page, listName, uid string, args checklistmutator.UpsertFromCalDAVArgs, ifMatch, ifNoneMatch string, identity tailscale.IdentityValue) (*apiv1.ChecklistItem, *apiv1.Checklist, error) { // NOSONAR go:S107
 	if f.upsertFn != nil {
-		return f.upsertFn(ctx, page, listName, uid, args, ifMatch, ifNoneMatch, identity)
+		return f.upsertFn(ctx, upsertCallOpts{page: page, listName: listName, uid: uid, args: args, ifMatch: ifMatch, ifNoneMatch: ifNoneMatch, identity: identity})
 	}
 	return nil, nil, errors.New("fakeMutator.UpsertFromCalDAV not used in these tests")
 }
@@ -884,16 +896,16 @@ var _ = Describe("defaultBackend.PutItem", func() {
 				UpdatedAt: timestamppb.New(now.Add(-time.Hour)),
 				SyncToken: 5,
 			}}
-			fake.upsertFn = func(_ context.Context, page, listName, uid string, args checklistmutator.UpsertFromCalDAVArgs, ifMatch, ifNoneMatch string, _ tailscale.IdentityValue) (*apiv1.ChecklistItem, *apiv1.Checklist, error) {
-				capturedPage = page
-				capturedList = listName
-				capturedUID = uid
-				capturedArgs = args
-				capturedIfMatch = ifMatch
-				capturedINM = ifNoneMatch
+			fake.upsertFn = func(_ context.Context, opts upsertCallOpts) (*apiv1.ChecklistItem, *apiv1.Checklist, error) {
+				capturedPage = opts.page
+				capturedList = opts.listName
+				capturedUID = opts.uid
+				capturedArgs = opts.args
+				capturedIfMatch = opts.ifMatch
+				capturedINM = opts.ifNoneMatch
 				return &apiv1.ChecklistItem{
-					Uid:       uid,
-					Text:      args.Text,
+					Uid:       opts.uid,
+					Text:      opts.args.Text,
 					UpdatedAt: timestamppb.New(itemUpdated),
 				}, nil, nil
 			}
@@ -959,10 +971,10 @@ var _ = Describe("defaultBackend.PutItem", func() {
 				SyncToken: 5,
 				Items:     []*apiv1.ChecklistItem{existing},
 			}}
-			fake.upsertFn = func(_ context.Context, _, _, uid string, args checklistmutator.UpsertFromCalDAVArgs, _, _ string, _ tailscale.IdentityValue) (*apiv1.ChecklistItem, *apiv1.Checklist, error) {
+			fake.upsertFn = func(_ context.Context, opts upsertCallOpts) (*apiv1.ChecklistItem, *apiv1.Checklist, error) {
 				return &apiv1.ChecklistItem{
-					Uid:       uid,
-					Text:      args.Text,
+					Uid:       opts.uid,
+					Text:      opts.args.Text,
 					UpdatedAt: timestamppb.New(itemUpdated),
 				}, nil, nil
 			}
@@ -1060,7 +1072,7 @@ var _ = Describe("defaultBackend.PutItem", func() {
 		var err error
 
 		BeforeEach(func() {
-			fake.upsertFn = func(_ context.Context, _, _, _ string, _ checklistmutator.UpsertFromCalDAVArgs, _, _ string, _ tailscale.IdentityValue) (*apiv1.ChecklistItem, *apiv1.Checklist, error) {
+			fake.upsertFn = func(_ context.Context, _ upsertCallOpts) (*apiv1.ChecklistItem, *apiv1.Checklist, error) {
 				return nil, nil, status.Error(codes.FailedPrecondition, "stale")
 			}
 			body := buildVTODOBody("01HXAAAAAAAAAAAAAAAAAAAAAA", "Buy milk")
@@ -1086,7 +1098,7 @@ var _ = Describe("defaultBackend.PutItem", func() {
 					UpdatedAt: timestamppb.New(now.Add(-time.Hour)),
 				}},
 			}}
-			fake.upsertFn = func(_ context.Context, _, _, _ string, _ checklistmutator.UpsertFromCalDAVArgs, _, _ string, _ tailscale.IdentityValue) (*apiv1.ChecklistItem, *apiv1.Checklist, error) {
+			fake.upsertFn = func(_ context.Context, _ upsertCallOpts) (*apiv1.ChecklistItem, *apiv1.Checklist, error) {
 				return nil, nil, status.Error(codes.FailedPrecondition, "exists")
 			}
 			body := buildVTODOBody("01HXAAAAAAAAAAAAAAAAAAAAAA", "Buy milk")

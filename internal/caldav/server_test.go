@@ -28,8 +28,20 @@ import (
 //revive:disable:exported Internal test helper.
 type fakeServerBackend struct {
 	getItemFn    func(ctx context.Context, page, list, uid string) (caldav.CalendarItem, error)
-	putItemFn    func(ctx context.Context, page, list, uid string, body []byte, ifMatch, ifNoneMatch string, identity tailscale.IdentityValue) (string, bool, error)
+	putItemFn    func(ctx context.Context, opts putItemCallOpts) (string, bool, error)
 	deleteItemFn func(ctx context.Context, page, list, uid, ifMatch string, identity tailscale.IdentityValue) error
+}
+
+// putItemCallOpts groups the non-context parameters of CalendarBackend.PutItem
+// so that putItemFn test stubs stay within the 7-parameter limit.
+type putItemCallOpts struct {
+	page        string
+	list        string
+	uid         string
+	body        []byte
+	ifMatch     string
+	ifNoneMatch string
+	identity    tailscale.IdentityValue
 }
 
 func (*fakeServerBackend) ListCollections(_ context.Context, _ string) ([]caldav.CalendarCollection, error) {
@@ -51,9 +63,9 @@ func (f *fakeServerBackend) GetItem(ctx context.Context, page, list, uid string)
 	return caldav.CalendarItem{}, caldav.ErrItemNotFound
 }
 
-func (f *fakeServerBackend) PutItem(ctx context.Context, page, list, uid string, body []byte, ifMatch, ifNoneMatch string, identity tailscale.IdentityValue) (string, bool, error) {
+func (f *fakeServerBackend) PutItem(ctx context.Context, page, list, uid string, body []byte, ifMatch, ifNoneMatch string, identity tailscale.IdentityValue) (string, bool, error) { // NOSONAR go:S107
 	if f.putItemFn != nil {
-		return f.putItemFn(ctx, page, list, uid, body, ifMatch, ifNoneMatch, identity)
+		return f.putItemFn(ctx, putItemCallOpts{page: page, list: list, uid: uid, body: body, ifMatch: ifMatch, ifNoneMatch: ifNoneMatch, identity: identity})
 	}
 	return "", false, errors.New("PutItem not staged in this test")
 }
@@ -913,7 +925,7 @@ var _ = Describe("Server.servePUT", func() {
 
 		BeforeEach(func() {
 			backend := &fakeServerBackend{
-				putItemFn: func(_ context.Context, _, _, _ string, _ []byte, _, _ string, _ tailscale.IdentityValue) (string, bool, error) {
+				putItemFn: func(_ context.Context, _ putItemCallOpts) (string, bool, error) {
 					backendCalled = true
 					return "", false, nil
 				},
@@ -989,7 +1001,7 @@ var _ = Describe("Server.servePUT", func() {
 
 		BeforeEach(func() {
 			backend := &fakeServerBackend{
-				putItemFn: func(_ context.Context, _, _, _ string, _ []byte, _, _ string, _ tailscale.IdentityValue) (string, bool, error) {
+				putItemFn: func(_ context.Context, _ putItemCallOpts) (string, bool, error) {
 					backendCalled = true
 					return okETag, true, nil
 				},
@@ -1016,7 +1028,7 @@ var _ = Describe("Server.servePUT", func() {
 
 		BeforeEach(func() {
 			backend := &fakeServerBackend{
-				putItemFn: func(_ context.Context, _, _, _ string, _ []byte, _, _ string, _ tailscale.IdentityValue) (string, bool, error) {
+				putItemFn: func(_ context.Context, _ putItemCallOpts) (string, bool, error) {
 					return okETag, true, nil
 				},
 			}
@@ -1040,7 +1052,7 @@ var _ = Describe("Server.servePUT", func() {
 
 		BeforeEach(func() {
 			backend := &fakeServerBackend{
-				putItemFn: func(_ context.Context, _, _, _ string, _ []byte, _, _ string, _ tailscale.IdentityValue) (string, bool, error) {
+				putItemFn: func(_ context.Context, _ putItemCallOpts) (string, bool, error) {
 					return okETag, false, nil
 				},
 			}
@@ -1064,7 +1076,7 @@ var _ = Describe("Server.servePUT", func() {
 
 		BeforeEach(func() {
 			backend := &fakeServerBackend{
-				putItemFn: func(_ context.Context, _, _, _ string, _ []byte, _, _ string, _ tailscale.IdentityValue) (string, bool, error) {
+				putItemFn: func(_ context.Context, _ putItemCallOpts) (string, bool, error) {
 					return "", false, caldav.ErrPreconditionFailed
 				},
 			}
@@ -1084,7 +1096,7 @@ var _ = Describe("Server.servePUT", func() {
 
 		BeforeEach(func() {
 			backend := &fakeServerBackend{
-				putItemFn: func(_ context.Context, _, _, _ string, _ []byte, _, _ string, _ tailscale.IdentityValue) (string, bool, error) {
+				putItemFn: func(_ context.Context, _ putItemCallOpts) (string, bool, error) {
 					return "", false, caldav.ErrInvalidBody
 				},
 			}
@@ -1104,7 +1116,7 @@ var _ = Describe("Server.servePUT", func() {
 
 		BeforeEach(func() {
 			backend := &fakeServerBackend{
-				putItemFn: func(_ context.Context, _, _, _ string, _ []byte, _, _ string, _ tailscale.IdentityValue) (string, bool, error) {
+				putItemFn: func(_ context.Context, _ putItemCallOpts) (string, bool, error) {
 					return "", false, caldav.ErrUIDMismatch
 				},
 			}
@@ -1124,7 +1136,7 @@ var _ = Describe("Server.servePUT", func() {
 
 		BeforeEach(func() {
 			backend := &fakeServerBackend{
-				putItemFn: func(_ context.Context, _, _, _ string, _ []byte, _, _ string, _ tailscale.IdentityValue) (string, bool, error) {
+				putItemFn: func(_ context.Context, _ putItemCallOpts) (string, bool, error) {
 					return "", false, caldav.ErrDescriptionTooLarge
 				},
 			}
@@ -1144,7 +1156,7 @@ var _ = Describe("Server.servePUT", func() {
 
 		BeforeEach(func() {
 			backend := &fakeServerBackend{
-				putItemFn: func(_ context.Context, _, _, _ string, _ []byte, _, _ string, _ tailscale.IdentityValue) (string, bool, error) {
+				putItemFn: func(_ context.Context, _ putItemCallOpts) (string, bool, error) {
 					return "", false, errors.New("disk on fire")
 				},
 			}
@@ -1165,9 +1177,9 @@ var _ = Describe("Server.servePUT", func() {
 
 		BeforeEach(func() {
 			backend := &fakeServerBackend{
-				putItemFn: func(_ context.Context, _, _, _ string, _ []byte, ifMatch, ifNoneMatch string, _ tailscale.IdentityValue) (string, bool, error) {
-					capturedIfMatch = ifMatch
-					capturedIfNoneMatch = ifNoneMatch
+				putItemFn: func(_ context.Context, opts putItemCallOpts) (string, bool, error) {
+					capturedIfMatch = opts.ifMatch
+					capturedIfNoneMatch = opts.ifNoneMatch
 					return okETag, false, nil
 				},
 			}
@@ -1193,9 +1205,9 @@ var _ = Describe("Server.servePUT", func() {
 
 		BeforeEach(func() {
 			backend := &fakeServerBackend{
-				putItemFn: func(_ context.Context, _, _, _ string, _ []byte, ifMatch, ifNoneMatch string, _ tailscale.IdentityValue) (string, bool, error) {
-					capturedIfMatch = ifMatch
-					capturedIfNoneMatch = ifNoneMatch
+				putItemFn: func(_ context.Context, opts putItemCallOpts) (string, bool, error) {
+					capturedIfMatch = opts.ifMatch
+					capturedIfNoneMatch = opts.ifNoneMatch
 					return okETag, true, nil
 				},
 			}
@@ -1220,8 +1232,8 @@ var _ = Describe("Server.servePUT", func() {
 
 		BeforeEach(func() {
 			backend := &fakeServerBackend{
-				putItemFn: func(_ context.Context, _, _, _ string, body []byte, _, _ string, _ tailscale.IdentityValue) (string, bool, error) {
-					capturedBody = body
+				putItemFn: func(_ context.Context, opts putItemCallOpts) (string, bool, error) {
+					capturedBody = opts.body
 					return okETag, true, nil
 				},
 			}
@@ -1241,8 +1253,8 @@ var _ = Describe("Server.servePUT", func() {
 
 		BeforeEach(func() {
 			backend := &fakeServerBackend{
-				putItemFn: func(_ context.Context, _, _, _ string, _ []byte, _, _ string, identity tailscale.IdentityValue) (string, bool, error) {
-					capturedIdentity = identity
+				putItemFn: func(_ context.Context, opts putItemCallOpts) (string, bool, error) {
+					capturedIdentity = opts.identity
 					return okETag, true, nil
 				},
 			}
@@ -1262,10 +1274,10 @@ var _ = Describe("Server.servePUT", func() {
 
 		BeforeEach(func() {
 			backend := &fakeServerBackend{
-				putItemFn: func(_ context.Context, page, list, uid string, _ []byte, _, _ string, _ tailscale.IdentityValue) (string, bool, error) {
-					capturedPage = page
-					capturedList = list
-					capturedUID = uid
+				putItemFn: func(_ context.Context, opts putItemCallOpts) (string, bool, error) {
+					capturedPage = opts.page
+					capturedList = opts.list
+					capturedUID = opts.uid
 					return okETag, true, nil
 				},
 			}
@@ -1788,7 +1800,7 @@ var _ = Describe("audit logging on PUT", func() {
 		BeforeEach(func() {
 			buf = &bytes.Buffer{}
 			backend := &fakeServerBackend{
-				putItemFn: func(_ context.Context, _, _, _ string, _ []byte, _, _ string, _ tailscale.IdentityValue) (string, bool, error) {
+				putItemFn: func(_ context.Context, _ putItemCallOpts) (string, bool, error) {
 					return okETag, true, nil
 				},
 			}
@@ -1813,7 +1825,7 @@ var _ = Describe("audit logging on PUT", func() {
 		BeforeEach(func() {
 			buf = &bytes.Buffer{}
 			backend := &fakeServerBackend{
-				putItemFn: func(_ context.Context, _, _, _ string, _ []byte, _, _ string, _ tailscale.IdentityValue) (string, bool, error) {
+				putItemFn: func(_ context.Context, _ putItemCallOpts) (string, bool, error) {
 					return okETag, false, nil
 				},
 			}
@@ -1834,7 +1846,7 @@ var _ = Describe("audit logging on PUT", func() {
 		BeforeEach(func() {
 			buf = &bytes.Buffer{}
 			backend := &fakeServerBackend{
-				putItemFn: func(_ context.Context, _, _, _ string, _ []byte, _, _ string, _ tailscale.IdentityValue) (string, bool, error) {
+				putItemFn: func(_ context.Context, _ putItemCallOpts) (string, bool, error) {
 					return "", false, caldav.ErrPreconditionFailed
 				},
 			}
@@ -1855,7 +1867,7 @@ var _ = Describe("audit logging on PUT", func() {
 		BeforeEach(func() {
 			buf = &bytes.Buffer{}
 			backend := &fakeServerBackend{
-				putItemFn: func(_ context.Context, _, _, _ string, _ []byte, _, _ string, _ tailscale.IdentityValue) (string, bool, error) {
+				putItemFn: func(_ context.Context, _ putItemCallOpts) (string, bool, error) {
 					return "", false, errors.New("disk on fire")
 				},
 			}
