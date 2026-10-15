@@ -32,12 +32,12 @@ func (stubChecklistReader) ListItems(_ context.Context, _, _ string) (*apiv1.Che
 // use. Unbind must not mutate the wiki checklist; any call fails the test.
 type stubChecklistMutator struct{}
 
-func (stubChecklistMutator) AddItemForSync(_ context.Context, _, _, _, _ string, _ bool, _ []string, _, _ string, _ *time.Time) (string, error) {
+func (stubChecklistMutator) AddItemForSync(_ context.Context, _, _, _, _ string, _ bool, _ []string, _, _ string, _ *time.Time) (string, error) { // NOSONAR go:S107
 	Fail("Unbind must not call ChecklistMutator.AddItemForSync")
 	return "", nil
 }
 
-func (stubChecklistMutator) UpdateItemForSync(_ context.Context, _, _, _, _, _ string, _ bool, _ []string, _ string, _ *time.Time) error {
+func (stubChecklistMutator) UpdateItemForSync(_ context.Context, _, _, _, _, _ string, _ bool, _ []string, _ string, _ *time.Time) error { // NOSONAR go:S107
 	Fail("Unbind must not call ChecklistMutator.UpdateItemForSync")
 	return nil
 }

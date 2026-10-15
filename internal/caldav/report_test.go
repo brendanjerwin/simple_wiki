@@ -48,7 +48,7 @@ func (r *reportBackend) GetItem(ctx context.Context, page, list, uid string) (ca
 	return caldav.CalendarItem{}, caldav.ErrItemNotFound
 }
 
-func (*reportBackend) PutItem(_ context.Context, _, _, _ string, _ []byte, _, _ string, _ tailscale.IdentityValue) (string, bool, error) {
+func (*reportBackend) PutItem(_ context.Context, _, _, _ string, _ []byte, _, _ string, _ tailscale.IdentityValue) (string, bool, error) { // NOSONAR go:S107
 	return "", false, errors.New("PutItem not used in report tests")
 }
 

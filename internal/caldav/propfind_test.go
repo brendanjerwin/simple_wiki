@@ -54,7 +54,7 @@ func (p *propfindBackend) GetItem(ctx context.Context, page, list, uid string) (
 	return caldav.CalendarItem{}, caldav.ErrItemNotFound
 }
 
-func (*propfindBackend) PutItem(_ context.Context, _, _, _ string, _ []byte, _, _ string, _ tailscale.IdentityValue) (string, bool, error) {
+func (*propfindBackend) PutItem(_ context.Context, _, _, _ string, _ []byte, _, _ string, _ tailscale.IdentityValue) (string, bool, error) { // NOSONAR go:S107
 	return "", false, nil
 }
 
