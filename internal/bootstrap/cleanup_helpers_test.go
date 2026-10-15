@@ -2,6 +2,7 @@
 package bootstrap
 
 import (
+	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
 	"github.com/brendanjerwin/simple_wiki/pkg/jobs"
 	"github.com/brendanjerwin/simple_wiki/server"
 	"github.com/jcelliott/lumber"
@@ -124,6 +125,85 @@ var _ = Describe("stopSiteCron", func() {
 
 		It("should call Stop without panicking", func() {
 			Expect(cleanup).NotTo(Panic())
+		})
+	})
+})
+
+var _ = Describe("drainScheduledTurns", func() {
+	When("site is nil", func() {
+		var cleanup func()
+
+		BeforeEach(func() {
+			cleanup = drainScheduledTurns(nil)
+		})
+
+		It("should be callable without panicking", func() {
+			Expect(cleanup).NotTo(Panic())
+		})
+	})
+
+	When("site has a nil ScheduledTurnDispatcher", func() {
+		var cleanup func()
+
+		BeforeEach(func() {
+			site := &server.Site{}
+			cleanup = drainScheduledTurns(site)
+		})
+
+		It("should be callable without panicking", func() {
+			Expect(cleanup).NotTo(Panic())
+		})
+	})
+
+	When("the dispatcher has no pending turns", func() {
+		var cleanup func()
+
+		BeforeEach(func() {
+			logger := lumber.NewConsoleLogger(lumber.WARN)
+			site := &server.Site{
+				ScheduledTurnDispatcher: server.NewScheduledTurnDispatcher(),
+				Logger:                  logger,
+			}
+			cleanup = drainScheduledTurns(site)
+		})
+
+		It("should be callable without panicking", func() {
+			Expect(cleanup).NotTo(Panic())
+		})
+	})
+
+	When("the dispatcher has pending turns", func() {
+		var drainedOutcome *server.ScheduledTurnOutcome
+
+		BeforeEach(func() {
+			logger := lumber.NewConsoleLogger(lumber.WARN)
+			dispatcher := server.NewScheduledTurnDispatcher()
+
+			_, unsubscribe := dispatcher.Subscribe()
+			DeferCleanup(unsubscribe)
+
+			completion, err := dispatcher.Dispatch(&apiv1.ScheduledTurnRequest{
+				RequestId: "test-drain-request",
+				Page:      "test-page",
+				Prompt:    "do something",
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			site := &server.Site{
+				ScheduledTurnDispatcher: dispatcher,
+				Logger:                  logger,
+			}
+			drainScheduledTurns(site)()
+
+			drainedOutcome = <-completion
+		})
+
+		It("should signal ERROR terminal status to the completion channel", func() {
+			Expect(drainedOutcome.TerminalStatus).To(Equal(apiv1.ScheduleStatus_SCHEDULE_STATUS_ERROR))
+		})
+
+		It("should include the shutdown reason in the error message", func() {
+			Expect(drainedOutcome.ErrorMessage).To(ContainSubstring("process shutdown"))
 		})
 	})
 })
