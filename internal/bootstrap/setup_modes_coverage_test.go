@@ -173,6 +173,33 @@ var _ = Describe("per-mode Setup functions (#1199 mcp localhost-guard wiring)", 
 		})
 	})
 
+	When("SetupFullTLS is invoked with empty TSDNSName", func() {
+		var result *ServerResult
+		var setupErr error
+
+		BeforeEach(func() {
+			result, setupErr = SetupFullTLS(TailscaleHTTPConfig{
+				HTTPAddr:  "127.0.0.1:0",
+				TLSPort:   44445,
+				TSDNSName: "",
+				Site:      site,
+				Logger:    logger,
+				Commit:    testCommit,
+				BuildTime: time.Now(),
+			})
+		})
+
+		AfterEach(func() { closeResult(result) })
+
+		It("returns an error wrapping the redirector failure", func() {
+			Expect(setupErr).To(MatchError(ContainSubstring("failed to create tailnet redirector")))
+		})
+
+		It("returns a nil server result", func() {
+			Expect(result).To(BeNil())
+		})
+	})
+
 	When("SetupFullTLS is invoked on loopback", func() {
 		var result *ServerResult
 
