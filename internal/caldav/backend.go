@@ -307,7 +307,7 @@ func (b *defaultBackend) GetItem(ctx context.Context, page, listName, uid string
 // the funnel does the OCC and attribution work atomically. Returns
 // the new per-item ETag and whether the resource was created (HTTP 201
 // vs 204) for the HTTP layer to translate into the response.
-func (b *defaultBackend) PutItem(ctx context.Context, page, listName, uid string, body []byte, ifMatch, ifNoneMatch string, identity tailscale.IdentityValue) (string, bool, error) {
+func (b *defaultBackend) PutItem(ctx context.Context, page, listName, uid string, body []byte, ifMatch, ifNoneMatch string, identity tailscale.IdentityValue) (string, bool, error) { // NOSONAR go:S107
 	parsed, err := icalcodec.ParseVTODO(body)
 	if err != nil {
 		if errors.Is(err, icalcodec.ErrDescriptionTooLarge) {
