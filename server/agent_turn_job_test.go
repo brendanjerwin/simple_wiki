@@ -2,8 +2,10 @@
 package server_test
 
 import (
+	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"sync"
 	"time"
 
@@ -14,6 +16,51 @@ import (
 	"github.com/brendanjerwin/simple_wiki/server"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 )
+
+// captureLogHandler is a slog.Handler that records log entries for assertions.
+type captureLogHandler struct {
+	mu      sync.Mutex
+	records []capturedLogRecord
+}
+
+type capturedLogRecord struct {
+	Level   slog.Level
+	Message string
+	Attrs   map[string]any
+}
+
+func (*captureLogHandler) Enabled(_ context.Context, _ slog.Level) bool { return true }
+
+func (h *captureLogHandler) Handle(_ context.Context, r slog.Record) error {
+	rec := capturedLogRecord{
+		Level:   r.Level,
+		Message: r.Message,
+		Attrs:   map[string]any{},
+	}
+	r.Attrs(func(a slog.Attr) bool {
+		rec.Attrs[a.Key] = a.Value.Any()
+		return true
+	})
+	h.mu.Lock()
+	h.records = append(h.records, rec)
+	h.mu.Unlock()
+	return nil
+}
+
+func (h *captureLogHandler) WithAttrs(_ []slog.Attr) slog.Handler { return h }
+func (h *captureLogHandler) WithGroup(_ string) slog.Handler      { return h }
+
+func (h *captureLogHandler) errorsAt(level slog.Level) []capturedLogRecord {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	var out []capturedLogRecord
+	for _, r := range h.records {
+		if r.Level == level {
+			out = append(out, r)
+		}
+	}
+	return out
+}
 
 // seedRunningWithAge drives the schedule identified by (page, scheduleID) into
 // RUNNING status and then backdates its last_run by the given age. This
@@ -209,6 +256,49 @@ var _ = Describe("AgentTurnJob", func() {
 		It("should include the dispatch failure in last_error_message", func() {
 			schedules, _ := store.List("p")
 			Expect(schedules[0].GetLastErrorMessage()).To(ContainSubstring("subscribers"))
+		})
+	})
+
+	Describe("Execute when Dispatch fails — dispatch failure logging", func() {
+		var logCapture *captureLogHandler
+
+		BeforeEach(func() {
+			logCapture = &captureLogHandler{}
+			originalLogger := slog.Default()
+			DeferCleanup(func() { slog.SetDefault(originalLogger) })
+			slog.SetDefault(slog.New(logCapture))
+
+			dispatcher.dispatchErr = errors.New("no pool connected")
+			job = server.NewAgentTurnJob(store, dispatcher, "p", "s1", 5*time.Second)
+			Expect(job.Execute()).To(Succeed())
+		})
+
+		It("should emit an ERROR-level log record", func() {
+			Expect(logCapture.errorsAt(slog.LevelError)).NotTo(BeEmpty())
+		})
+
+		It("should include 'dispatch failed' in the log message", func() {
+			errs := logCapture.errorsAt(slog.LevelError)
+			Expect(errs).NotTo(BeEmpty())
+			Expect(errs[0].Message).To(ContainSubstring("dispatch failed"))
+		})
+
+		It("should include the page in the log attrs", func() {
+			errs := logCapture.errorsAt(slog.LevelError)
+			Expect(errs).NotTo(BeEmpty())
+			Expect(fmt.Sprintf("%v", errs[0].Attrs["page"])).To(Equal("p"))
+		})
+
+		It("should include the schedule_id in the log attrs", func() {
+			errs := logCapture.errorsAt(slog.LevelError)
+			Expect(errs).NotTo(BeEmpty())
+			Expect(fmt.Sprintf("%v", errs[0].Attrs["schedule_id"])).To(Equal("s1"))
+		})
+
+		It("should include a non-empty request_id in the log attrs", func() {
+			errs := logCapture.errorsAt(slog.LevelError)
+			Expect(errs).NotTo(BeEmpty())
+			Expect(fmt.Sprintf("%v", errs[0].Attrs["request_id"])).NotTo(BeEmpty())
 		})
 	})
 

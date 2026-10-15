@@ -299,6 +299,15 @@ func main() {
 			logger.Info("Received signal %v, shutting down gracefully...", sig)
 		}
 
+		// Always run cleanup on exit, regardless of whether Shutdown times out.
+		// Previously the cleanup was skipped when MainServer.Shutdown returned
+		// context.DeadlineExceeded (the 30-second graceful-shutdown window),
+		// which meant DrainPending never fired and scheduled-turn pending records
+		// were lost on binary-swap restarts.
+		if config.Cleanup != nil {
+			defer config.Cleanup()
+		}
+
 		// Graceful shutdown with timeout
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
@@ -314,11 +323,6 @@ func main() {
 		if err := config.MainServer.Shutdown(ctx); err != nil {
 			logger.Error("Error shutting down main server: %v", err)
 			return err
-		}
-
-		// Run cleanup (e.g., persist final wiki metrics)
-		if config.Cleanup != nil {
-			config.Cleanup()
 		}
 
 		logger.Info("Server shutdown complete")

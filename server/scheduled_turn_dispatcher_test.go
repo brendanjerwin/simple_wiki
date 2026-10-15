@@ -223,4 +223,119 @@ var _ = Describe("ScheduledTurnDispatcher", func() {
 			})
 		})
 	})
+
+	Describe("DrainPending", func() {
+		Describe("when there are no pending turns", func() {
+			var drained int
+
+			BeforeEach(func() {
+				_, unsubscribe := dispatcher.Subscribe()
+				DeferCleanup(unsubscribe)
+				drained = dispatcher.DrainPending("test shutdown")
+			})
+
+			It("should return 0", func() {
+				Expect(drained).To(Equal(0))
+			})
+		})
+
+		Describe("when there is one pending turn", func() {
+			var completion <-chan *server.ScheduledTurnOutcome
+			var drained int
+
+			BeforeEach(func() {
+				_, unsubscribe := dispatcher.Subscribe()
+				DeferCleanup(unsubscribe)
+
+				var err error
+				completion, err = dispatcher.Dispatch(&apiv1.ScheduledTurnRequest{
+					RequestId: "r-drain-1", Page: "p1", Prompt: "do",
+				})
+				Expect(err).NotTo(HaveOccurred())
+
+				drained = dispatcher.DrainPending("process shutting down")
+			})
+
+			It("should return 1", func() {
+				Expect(drained).To(Equal(1))
+			})
+
+			It("should deliver an ERROR outcome to the completion channel", func() {
+				var outcome *server.ScheduledTurnOutcome
+				Eventually(completion, 2*time.Second).Should(Receive(&outcome))
+				Expect(outcome).NotTo(BeNil())
+				Expect(outcome.TerminalStatus).To(Equal(apiv1.ScheduleStatus_SCHEDULE_STATUS_ERROR))
+			})
+
+			It("should include the drain reason in the error message", func() {
+				var outcome *server.ScheduledTurnOutcome
+				Eventually(completion, 2*time.Second).Should(Receive(&outcome))
+				Expect(outcome.ErrorMessage).To(ContainSubstring("process shutting down"))
+			})
+		})
+
+		Describe("when there are two pending turns", func() {
+			var completion1, completion2 <-chan *server.ScheduledTurnOutcome
+			var drained int
+
+			BeforeEach(func() {
+				_, unsubscribe := dispatcher.Subscribe()
+				DeferCleanup(unsubscribe)
+
+				var err error
+				completion1, err = dispatcher.Dispatch(&apiv1.ScheduledTurnRequest{
+					RequestId: "r-drain-a", Page: "p1", Prompt: "do a",
+				})
+				Expect(err).NotTo(HaveOccurred())
+
+				completion2, err = dispatcher.Dispatch(&apiv1.ScheduledTurnRequest{
+					RequestId: "r-drain-b", Page: "p2", Prompt: "do b",
+				})
+				Expect(err).NotTo(HaveOccurred())
+
+				drained = dispatcher.DrainPending("shutdown for test")
+			})
+
+			It("should return 2", func() {
+				Expect(drained).To(Equal(2))
+			})
+
+			It("should deliver an outcome to the first completion channel", func() {
+				Eventually(completion1, 2*time.Second).Should(Receive())
+			})
+
+			It("should deliver an outcome to the second completion channel", func() {
+				Eventually(completion2, 2*time.Second).Should(Receive())
+			})
+		})
+
+		Describe("when DrainPending is called and then Dispatch is called again", func() {
+			var unsubscribe func()
+			var secondCompletion <-chan *server.ScheduledTurnOutcome
+
+			BeforeEach(func() {
+				_, unsubscribe = dispatcher.Subscribe()
+				DeferCleanup(unsubscribe)
+
+				firstCompletion, err := dispatcher.Dispatch(&apiv1.ScheduledTurnRequest{
+					RequestId: "r-before-drain", Page: "p", Prompt: "first",
+				})
+				Expect(err).NotTo(HaveOccurred())
+
+				dispatcher.DrainPending("test drain")
+				// Drain the first completion so it doesn't block
+				Eventually(firstCompletion, 2*time.Second).Should(Receive())
+
+				// A new dispatch after drain should work normally
+				secondCompletion, err = dispatcher.Dispatch(&apiv1.ScheduledTurnRequest{
+					RequestId: "r-after-drain", Page: "p", Prompt: "second",
+				})
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should succeed for the new dispatch (pending map is clean after drain)", func() {
+				Expect(secondCompletion).NotTo(BeNil())
+			})
+		})
+	})
 })
