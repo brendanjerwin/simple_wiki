@@ -65,6 +65,65 @@ func (s *Server) CallAuditWriteForTest(action, principal, page, list, uid, outco
 // export_test.go (compiled only with `go test`) means the public API
 // surface stays minimal.
 
+// ParseMultigetSlotsForTest is the test-only re-export of parseMultigetSlots.
+func ParseMultigetSlotsForTest(hrefs []HrefElementForTest) ([]MultigetSlotForTest, map[MultigetCollectionKeyForTest][]int) {
+	wired := make([]hrefElement, len(hrefs))
+	for i, h := range hrefs {
+		wired[i] = hrefElement{Path: h.Path}
+	}
+	slots, groups := parseMultigetSlots(wired)
+	out := make([]MultigetSlotForTest, len(slots))
+	for i, s := range slots {
+		out[i] = MultigetSlotForTest{HrefPath: s.hrefPath, Page: s.page, List: s.list, UID: s.uid, NotFound: s.notFound}
+	}
+	outGroups := make(map[MultigetCollectionKeyForTest][]int, len(groups))
+	for k, v := range groups {
+		outGroups[MultigetCollectionKeyForTest{Page: k.page, List: k.list}] = v
+	}
+	return out, outGroups
+}
+
+// BuildMultigetResponsesForTest is the test-only re-export of
+// buildMultigetResponses. It returns a count of notFound vs found responses
+// so tests can assert on the split without needing the full multistatus shape.
+func BuildMultigetResponsesForTest(slots []MultigetSlotForTest) (notFoundCount, foundCount int) {
+	wired := make([]multigetSlot, len(slots))
+	for i, s := range slots {
+		wired[i] = multigetSlot{
+			hrefPath: s.HrefPath,
+			page:     s.Page,
+			list:     s.List,
+			uid:      s.UID,
+			notFound: s.NotFound,
+		}
+	}
+	resps := buildMultigetResponses(wired)
+	for _, r := range resps {
+		isNotFound := len(r.Propstat) > 0 && r.Propstat[0].Status == statusNotFound
+		if isNotFound {
+			notFoundCount++
+		} else {
+			foundCount++
+		}
+	}
+	return notFoundCount, foundCount
+}
+
+// HrefElementForTest is the test-visible shape of hrefElement.
+type HrefElementForTest struct{ Path string }
+
+// MultigetSlotForTest is the test-visible shape of multigetSlot.
+type MultigetSlotForTest struct {
+	HrefPath string
+	Page     string
+	List     string
+	UID      string
+	NotFound bool
+}
+
+// MultigetCollectionKeyForTest is the test-visible shape of multigetCollectionKey.
+type MultigetCollectionKeyForTest struct{ Page, List string }
+
 // SanitizePathComponentForTest is the test-only re-export of
 // sanitizePathComponent.
 func SanitizePathComponentForTest(s string) (string, error) {

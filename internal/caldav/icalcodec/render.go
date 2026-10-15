@@ -150,6 +150,47 @@ const (
 	percentCompletePending = "0"
 )
 
+// setTodoCheckStatusProps sets the STATUS, PERCENT-COMPLETE, and (when
+// present) COMPLETED properties on the VTODO based on item.Checked.
+func setTodoCheckStatusProps(todo *ical.Component, item *apiv1.ChecklistItem) {
+	if item.Checked {
+		todo.Props.SetText(ical.PropStatus, statusValueCompleted)
+		setRawValue(todo, ical.PropPercentComplete, percentCompleteDone)
+		if item.CompletedAt != nil {
+			todo.Props.SetDateTime(ical.PropCompleted, item.CompletedAt.AsTime())
+		}
+	} else {
+		todo.Props.SetText(ical.PropStatus, statusValueNeedsAction)
+		setRawValue(todo, ical.PropPercentComplete, percentCompletePending)
+	}
+}
+
+// setTodoTimestampProps sets the optional CREATED, LAST-MODIFIED, and
+// mandatory DTSTAMP properties on the VTODO. CREATED and LAST-MODIFIED are
+// only emitted when the item carries a non-nil timestamp.
+func setTodoTimestampProps(todo *ical.Component, item *apiv1.ChecklistItem, now time.Time) {
+	if item.CreatedAt != nil {
+		todo.Props.SetDateTime(ical.PropCreated, item.CreatedAt.AsTime())
+	}
+	if item.UpdatedAt != nil {
+		todo.Props.SetDateTime(ical.PropLastModified, item.UpdatedAt.AsTime())
+	}
+	todo.Props.SetDateTime(ical.PropDateTimeStamp, now)
+}
+
+// appendTodoAlarmIfPresent attaches a VALARM child component to the VTODO
+// when the item carries a non-empty alarm payload. Render errors and nil
+// alarms are silently skipped — a missing alarm is better than a broken ICS.
+func appendTodoAlarmIfPresent(todo *ical.Component, item *apiv1.ChecklistItem) {
+	if item.AlarmPayload == nil || *item.AlarmPayload == "" {
+		return
+	}
+	alarm, err := RenderAlarm(*item.AlarmPayload, item.Text)
+	if err == nil && alarm != nil {
+		todo.Children = append(todo.Children, alarm)
+	}
+}
+
 // renderToCalendar builds the VCALENDAR/VTODO tree but does not encode
 // it. Split out of RenderItem so future callers (e.g., the multiget
 // REPORT handler that wants a *ical.Calendar to merge) can reuse the
@@ -168,16 +209,7 @@ func renderToCalendar(item *apiv1.ChecklistItem, page string, listName string, b
 	}
 	todo.Props.SetText(ical.PropSummary, summary)
 
-	if item.Checked {
-		todo.Props.SetText(ical.PropStatus, statusValueCompleted)
-		setRawValue(todo, ical.PropPercentComplete, percentCompleteDone)
-		if item.CompletedAt != nil {
-			todo.Props.SetDateTime(ical.PropCompleted, item.CompletedAt.AsTime())
-		}
-	} else {
-		todo.Props.SetText(ical.PropStatus, statusValueNeedsAction)
-		setRawValue(todo, ical.PropPercentComplete, percentCompletePending)
-	}
+	setTodoCheckStatusProps(todo, item)
 
 	if len(item.Tags) > 0 {
 		categories := ical.NewProp(ical.PropCategories)
@@ -200,20 +232,8 @@ func renderToCalendar(item *apiv1.ChecklistItem, page string, listName string, b
 		todo.Props.SetDateTime(ical.PropDue, item.Due.AsTime())
 	}
 
-	if item.CreatedAt != nil {
-		todo.Props.SetDateTime(ical.PropCreated, item.CreatedAt.AsTime())
-	}
-	if item.UpdatedAt != nil {
-		todo.Props.SetDateTime(ical.PropLastModified, item.UpdatedAt.AsTime())
-	}
-	todo.Props.SetDateTime(ical.PropDateTimeStamp, now)
-
-	if item.AlarmPayload != nil && *item.AlarmPayload != "" {
-		alarm, err := RenderAlarm(*item.AlarmPayload, item.Text)
-		if err == nil && alarm != nil {
-			todo.Children = append(todo.Children, alarm)
-		}
-	}
+	setTodoTimestampProps(todo, item, now)
+	appendTodoAlarmIfPresent(todo, item)
 
 	cal := ical.NewCalendar()
 	cal.Props.SetText(ical.PropVersion, "2.0")

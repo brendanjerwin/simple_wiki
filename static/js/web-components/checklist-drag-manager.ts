@@ -46,6 +46,52 @@ export function reorderItems<T>(
   return result;
 }
 
+// adjustedInsertTarget returns the target slot index in the `without` list
+// (items with movedUid removed) given the original toInsertIndex in the full
+// list. If the moved item sat before toInsertIndex, the splice-style index is
+// one too high in the without-list, so it's decremented. The result is
+// clamped to [0, without.length].
+function adjustedInsertTarget(
+  items: readonly { uid: string; sortOrder: bigint }[],
+  toInsertIndex: number,
+  movedUid: string,
+  without: readonly { uid: string; sortOrder: bigint }[],
+): number {
+  let target = toInsertIndex;
+  // If the original move passed an index that referenced a position past the
+  // moved item, the splice-style index is one too high in the without-list.
+  const originalIndex = items.findIndex(i => i.uid === movedUid);
+  if (originalIndex !== -1 && originalIndex < toInsertIndex) {
+    target -= 1;
+  }
+  if (target < 0) target = 0;
+  if (target > without.length) target = without.length;
+  return target;
+}
+
+// sortOrderFromNeighbors computes the new sort_order value from the items
+// that will immediately precede and follow the insertion slot:
+//   - No neighbors: 1000.
+//   - Only after: after.sortOrder - 1000 (or 0 when after ≤ 1000).
+//   - Only before: before.sortOrder + 1000.
+//   - Both: floor-midpoint, falling back to before + 1000 on collision.
+function sortOrderFromNeighbors(
+  before: { sortOrder: bigint } | undefined,
+  after: { sortOrder: bigint } | undefined,
+): bigint {
+  if (!before && !after) return 1000n;
+  if (!before && after) {
+    return after.sortOrder > 1000n ? after.sortOrder - 1000n : 0n;
+  }
+  if (before && !after) return before.sortOrder + 1000n;
+  // Both neighbors present.
+  const mid = (before!.sortOrder + after!.sortOrder) / 2n;
+  if (mid === before!.sortOrder || mid === after!.sortOrder) {
+    return before!.sortOrder + 1000n;
+  }
+  return mid;
+}
+
 /**
  * Compute the new sort_order value for an item being inserted between
  * neighbors. The conventions used by the wiki are:
@@ -70,34 +116,10 @@ export function computeSortOrder(
 ): bigint {
   // Build the list as it will appear AFTER the move (without movedUid).
   const without = items.filter(i => i.uid !== movedUid);
-  // Clamp toInsertIndex against the post-removal list.
-  let target = toInsertIndex;
-  // If the original move passed an index that referenced a position past the
-  // moved item, the splice-style index is one too high in the without-list.
-  const originalIndex = items.findIndex(i => i.uid === movedUid);
-  if (originalIndex !== -1 && originalIndex < toInsertIndex) {
-    target -= 1;
-  }
-  if (target < 0) target = 0;
-  if (target > without.length) target = without.length;
-
+  const target = adjustedInsertTarget(items, toInsertIndex, movedUid, without);
   const before = target > 0 ? without[target - 1] : undefined;
   const after = target < without.length ? without[target] : undefined;
-
-  if (!before && !after) return 1000n;
-  if (!before && after) {
-    return after.sortOrder > 1000n ? after.sortOrder - 1000n : 0n;
-  }
-  if (before && !after) return before.sortOrder + 1000n;
-  if (before && after) {
-    const mid = (before.sortOrder + after.sortOrder) / 2n;
-    if (mid === before.sortOrder || mid === after.sortOrder) {
-      return before.sortOrder + 1000n;
-    }
-    return mid;
-  }
-  // Unreachable, but TS demands it.
-  return 1000n;
+  return sortOrderFromNeighbors(before, after);
 }
 
 export class ChecklistDragManager {

@@ -297,6 +297,26 @@ export class WikiChecklist extends LitElement implements DragReorderHandler {
     this._dragManager.cleanup();
   }
 
+  // _handleWatchEvent processes a single event from the WatchList stream.
+  // When the sync_token advances past the last seen value, a fresh fetchData
+  // is triggered so the local item list stays current.
+  private _handleWatchEvent(evt: { syncToken: bigint }): void {
+    if (this._lastSeenSyncToken !== null && evt.syncToken !== this._lastSeenSyncToken) {
+      void this.fetchData();
+    }
+    this._lastSeenSyncToken = evt.syncToken;
+  }
+
+  // _isStreamTerminalError returns true when the WatchList stream error
+  // indicates the component has been torn down (signal aborted or AbortError
+  // from the connect client), meaning the reconnect loop should exit cleanly
+  // rather than backing off and retrying.
+  private _isStreamTerminalError(signal: AbortSignal, err: unknown): boolean {
+    if (signal.aborted) return true;
+    if (err instanceof Error && err.name === 'AbortError') return true;
+    return false;
+  }
+
   /**
    * Subscribe to ChecklistService.WatchList for the current
    * (page, listName). Each event carries the current sync_token; we
@@ -317,16 +337,12 @@ export class WikiChecklist extends LitElement implements DragReorderHandler {
           listName: this.listName,
         });
         for await (const evt of this.client.watchList(request, { signal })) {
-          if (this._lastSeenSyncToken !== null && evt.syncToken !== this._lastSeenSyncToken) {
-            void this.fetchData();
-          }
-          this._lastSeenSyncToken = evt.syncToken;
+          this._handleWatchEvent(evt);
         }
         // Stream ended cleanly — server closed without error.
         break;
       } catch (err) {
-        if (signal.aborted) break;
-        if (err instanceof Error && err.name === 'AbortError') break;
+        if (this._isStreamTerminalError(signal, err)) break;
         // Transient drop — back off briefly and reconnect. Fall back
         // to a fresh fetchData so we don't sit on stale data while
         // the stream is down.
