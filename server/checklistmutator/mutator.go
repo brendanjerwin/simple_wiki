@@ -424,11 +424,11 @@ func applyUserMutableFields(item *apiv1.ChecklistItem, args UpdateItemArgs) bool
 // UpdateItem mutates user-mutable fields of an existing item. Wiki-managed
 // fields on the request are ignored; updated_at is server-stamped.
 func (m *Mutator) UpdateItem(ctx context.Context, page, listName, uid string, args UpdateItemArgs, expectedUpdatedAt *time.Time, identity tailscale.IdentityValue) (*apiv1.ChecklistItem, *apiv1.Checklist, error) {
-	return m.updateItemImpl(ctx, page, listName, uid, args, expectedUpdatedAt, identity, UserSource(identity.LoginName()))
+	return m.updateItemImpl(page, listName, uid, args, expectedUpdatedAt, identity, UserSource(identity.LoginName()))
 }
 
 // updateItemImpl is the source-aware internal entry point.
-func (m *Mutator) updateItemImpl(_ context.Context, page, listName, uid string, args UpdateItemArgs, expectedUpdatedAt *time.Time, identity tailscale.IdentityValue, source Source) (*apiv1.ChecklistItem, *apiv1.Checklist, error) {
+func (m *Mutator) updateItemImpl(page, listName, uid string, args UpdateItemArgs, expectedUpdatedAt *time.Time, identity tailscale.IdentityValue, source Source) (*apiv1.ChecklistItem, *apiv1.Checklist, error) {
 	listName = wikipage.NormalizeListName(listName)
 	if uid == "" {
 		return nil, nil, status.Error(codes.InvalidArgument, errUIDRequiredMsg)

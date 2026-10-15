@@ -70,7 +70,7 @@ func resolveSyncSource(ctx context.Context) Source {
 // cleared" are indistinguishable.
 //
 //revive:disable-next-line:flag-parameter
-func (m *Mutator) AddItemForSync(ctx context.Context, page, listName, ownerEmail, text string, checked bool, tags []string, description, sortValueHint string, due *time.Time) (string, error) {
+func (m *Mutator) AddItemForSync(ctx context.Context, page, listName, ownerEmail, text string, checked bool, tags []string, description, sortValueHint string, due *time.Time) (string, error) { // NOSONAR go:S107
 	args := AddItemArgs{
 		Text: text,
 		Tags: tags,
@@ -122,7 +122,7 @@ func (m *Mutator) AddItemForSync(ctx context.Context, page, listName, ownerEmail
 // all" (e.g., Keep — leaves the wiki value alone).
 //
 //revive:disable-next-line:flag-parameter
-func (m *Mutator) UpdateItemForSync(ctx context.Context, page, listName, ownerEmail, uid, text string, checked bool, tags []string, description string, due *time.Time) error {
+func (m *Mutator) UpdateItemForSync(ctx context.Context, page, listName, ownerEmail, uid, text string, checked bool, tags []string, description string, due *time.Time) error { // NOSONAR go:S107
 	args := UpdateItemArgs{
 		Text:           &text,
 		Tags:           tags,
@@ -145,7 +145,7 @@ func (m *Mutator) UpdateItemForSync(ctx context.Context, page, listName, ownerEm
 	}
 	identity := syncIdentityFor(ownerEmail)
 	source := resolveSyncSource(ctx)
-	current, _, err := m.updateItemImpl(ctx, page, listName, uid, args, nil, identity, source)
+	current, _, err := m.updateItemImpl(page, listName, uid, args, nil, identity, source)
 	if err != nil {
 		return err
 	}
