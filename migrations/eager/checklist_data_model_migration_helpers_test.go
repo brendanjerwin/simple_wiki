@@ -481,3 +481,113 @@ var _ = Describe("int64Fallback", func() {
 		})
 	})
 })
+
+var _ = Describe("applyOptionalLegacyItemFields", func() {
+	When("description, due, and tags are present in the source", func() {
+		var out map[string]any
+
+		BeforeEach(func() {
+			out = map[string]any{}
+			src := map[string]any{
+				descriptionFMKey: "a description",
+				dueFMKey:         "2026-01-01T00:00:00Z",
+				tagsFMKey:        []any{"tagA", "tagB"},
+			}
+			applyOptionalLegacyItemFields(out, src)
+		})
+
+		It("should copy description", func() {
+			Expect(out[descriptionFMKey]).To(Equal("a description"))
+		})
+
+		It("should copy due", func() {
+			Expect(out[dueFMKey]).To(Equal("2026-01-01T00:00:00Z"))
+		})
+
+		It("should copy tags", func() {
+			Expect(out[tagsFMKey]).To(Equal([]any{"tagA", "tagB"}))
+		})
+	})
+
+	When("optional fields are absent", func() {
+		var out map[string]any
+
+		BeforeEach(func() {
+			out = map[string]any{}
+			applyOptionalLegacyItemFields(out, map[string]any{})
+		})
+
+		It("should not add description", func() {
+			Expect(out).NotTo(HaveKey(descriptionFMKey))
+		})
+
+		It("should not add due", func() {
+			Expect(out).NotTo(HaveKey(dueFMKey))
+		})
+
+		It("should not add tags", func() {
+			Expect(out).NotTo(HaveKey(tagsFMKey))
+		})
+	})
+})
+
+var _ = Describe("applyDraftMetadataTimestamps", func() {
+	When("draft metadata exists for the uid", func() {
+		var out map[string]any
+
+		BeforeEach(func() {
+			out = map[string]any{automatedFMKey: false}
+			draft := map[string]any{
+				"uid-1": map[string]any{
+					createdAtFMKey:   "2025-01-01T00:00:00Z",
+					updatedAtFMKey:   "2025-06-01T00:00:00Z",
+					completedAtFMKey: "2025-06-02T00:00:00Z",
+					completedByFMKey: "alice",
+					automatedFMKey:   true,
+				},
+			}
+			applyDraftMetadataTimestamps(out, draft, "uid-1", "2026-01-01T00:00:00Z")
+		})
+
+		It("should use created_at from draft", func() {
+			Expect(out[createdAtFMKey]).To(Equal("2025-01-01T00:00:00Z"))
+		})
+
+		It("should use updated_at from draft", func() {
+			Expect(out[updatedAtFMKey]).To(Equal("2025-06-01T00:00:00Z"))
+		})
+
+		It("should set completed_at from draft", func() {
+			Expect(out[completedAtFMKey]).To(Equal("2025-06-02T00:00:00Z"))
+		})
+
+		It("should set completed_by from draft", func() {
+			Expect(out[completedByFMKey]).To(Equal("alice"))
+		})
+
+		It("should set automated from draft", func() {
+			Expect(out[automatedFMKey]).To(BeTrue())
+		})
+	})
+
+	When("no draft metadata exists for the uid", func() {
+		var out map[string]any
+
+		BeforeEach(func() {
+			out = map[string]any{}
+			applyDraftMetadataTimestamps(out, map[string]any{}, "uid-missing", "2026-01-01T00:00:00Z")
+		})
+
+		It("should use the now fallback for created_at", func() {
+			Expect(out[createdAtFMKey]).To(Equal("2026-01-01T00:00:00Z"))
+		})
+
+		It("should use the now fallback for updated_at", func() {
+			Expect(out[updatedAtFMKey]).To(Equal("2026-01-01T00:00:00Z"))
+		})
+
+		It("should not set completed_at", func() {
+			Expect(out).NotTo(HaveKey(completedAtFMKey))
+		})
+	})
+})

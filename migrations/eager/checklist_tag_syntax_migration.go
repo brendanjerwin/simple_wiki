@@ -149,22 +149,31 @@ func pageNeedsChecklistMigration(fm map[string]any) bool {
 		if flag, isBool := listMap[migratedFlagKey].(bool); isBool && flag {
 			continue
 		}
-		items, ok := listMap["items"].([]any)
+		if checklistItemsHaveLegacyTags(listMap) {
+			return true
+		}
+	}
+	return false
+}
+
+// checklistItemsHaveLegacyTags reports whether any item in the list map
+// contains text matching the legacy `:tag` grammar.
+func checklistItemsHaveLegacyTags(listMap map[string]any) bool {
+	items, ok := listMap["items"].([]any)
+	if !ok {
+		return false
+	}
+	for _, item := range items {
+		itemMap, ok := item.(map[string]any)
 		if !ok {
 			continue
 		}
-		for _, item := range items {
-			itemMap, ok := item.(map[string]any)
-			if !ok {
-				continue
-			}
-			text, isString := itemMap["text"].(string)
-			if !isString {
-				continue
-			}
-			if legacyTagPattern.MatchString(text) {
-				return true
-			}
+		text, isString := itemMap["text"].(string)
+		if !isString {
+			continue
+		}
+		if legacyTagPattern.MatchString(text) {
+			return true
 		}
 	}
 	return false
@@ -229,38 +238,48 @@ func rewriteChecklistTags(fm map[string]any) bool {
 		if flag, isBool := listMap[migratedFlagKey].(bool); isBool && flag {
 			continue
 		}
-
-		listChanged := false
-		items, ok := listMap["items"].([]any)
-		if ok {
-			for _, item := range items {
-				itemMap, ok := item.(map[string]any)
-				if !ok {
-					continue
-				}
-				text, isString := itemMap["text"].(string)
-				if !isString {
-					continue
-				}
-				if rewritten := legacyTagPattern.ReplaceAllString(text, "$1#$2"); rewritten != text {
-					itemMap["text"] = rewritten
-					listChanged = true
-				}
-			}
-		}
-
-		// Always stamp migrated even if no items needed rewriting — the flag
-		// means "we've already considered this subtree under the new grammar"
-		// so future scans can skip it.
-		listMap[migratedFlagKey] = true
-		checklists[name] = listMap
-		if listChanged {
+		if rewriteOneChecklistList(listMap) {
+			checklists[name] = listMap
 			changed = true
 		}
 	}
 
 	if changed {
 		fm["checklists"] = checklists
+	}
+	return changed
+}
+
+// rewriteOneChecklistList rewrites `:tag` to `#tag` in every item's text and
+// stamps the migrated flag. Returns true if any item text was changed.
+//
+// Always stamps migrated even if no items needed rewriting — the flag means
+// "we've already considered this subtree under the new grammar" so future
+// scans can skip it.
+func rewriteOneChecklistList(listMap map[string]any) bool {
+	items, ok := listMap["items"].([]any)
+	listChanged := ok && rewriteItemsLegacyTags(items)
+	listMap[migratedFlagKey] = true
+	return listChanged
+}
+
+// rewriteItemsLegacyTags rewrites `:tag` to `#tag` in every item's text field.
+// Returns true if any item was changed.
+func rewriteItemsLegacyTags(items []any) bool {
+	changed := false
+	for _, item := range items {
+		itemMap, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		text, isString := itemMap["text"].(string)
+		if !isString {
+			continue
+		}
+		if rewritten := legacyTagPattern.ReplaceAllString(text, "$1#$2"); rewritten != text {
+			itemMap["text"] = rewritten
+			changed = true
+		}
 	}
 	return changed
 }

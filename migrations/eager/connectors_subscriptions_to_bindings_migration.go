@@ -420,35 +420,46 @@ func rewriteConnectorsSubscriptions(fm map[string]any) bool {
 		if !ok {
 			continue
 		}
-
-		if legacyRaw, hasLegacy := kindMap[connectorsKeySubscriptions]; hasLegacy {
-			// New-shape data wins on conflict; legacy is dropped without
-			// being translated.
-			if _, hasNew := kindMap[connectorsKeyBindings]; !hasNew {
-				translated := translateLegacyEntries(kindName, legacyRaw)
-				// Empty legacy array → no bindings[] written at all (the
-				// connector subtree is left without either key, which is
-				// the same shape a never-bound profile carries).
-				if len(translated) > 0 {
-					kindMap[connectorsKeyBindings] = translated
-				}
-			}
-			delete(kindMap, connectorsKeySubscriptions)
-			changed = true
-		}
-
-		// Repair pass for already-migrated profiles in the stuck state.
-		if repairStuckBindings(kindMap[connectorsKeyBindings]) {
-			changed = true
-		}
-
-		// Repair pass: drop legacy adapter_state bloat from
-		// already-migrated bindings (Phase 7 plan said drop, but the
-		// pre-fix migration carried it through verbatim).
-		if dropLegacyAdapterStateBloat(kindName, kindMap[connectorsKeyBindings]) {
+		if rewriteConnectorKind(kindName, kindMap) {
 			changed = true
 		}
 	}
+	return changed
+}
+
+// rewriteConnectorKind rewrites one connector kind's subscriptions[] into
+// bindings[] and applies repair passes. Returns true if any change was made.
+func rewriteConnectorKind(kindName string, kindMap map[string]any) bool {
+	changed := false
+
+	if legacyRaw, hasLegacy := kindMap[connectorsKeySubscriptions]; hasLegacy {
+		// New-shape data wins on conflict; legacy is dropped without
+		// being translated.
+		if _, hasNew := kindMap[connectorsKeyBindings]; !hasNew {
+			translated := translateLegacyEntries(kindName, legacyRaw)
+			// Empty legacy array → no bindings[] written at all (the
+			// connector subtree is left without either key, which is
+			// the same shape a never-bound profile carries).
+			if len(translated) > 0 {
+				kindMap[connectorsKeyBindings] = translated
+			}
+		}
+		delete(kindMap, connectorsKeySubscriptions)
+		changed = true
+	}
+
+	// Repair pass for already-migrated profiles in the stuck state.
+	if repairStuckBindings(kindMap[connectorsKeyBindings]) {
+		changed = true
+	}
+
+	// Repair pass: drop legacy adapter_state bloat from
+	// already-migrated bindings (Phase 7 plan said drop, but the
+	// pre-fix migration carried it through verbatim).
+	if dropLegacyAdapterStateBloat(kindName, kindMap[connectorsKeyBindings]) {
+		changed = true
+	}
+
 	return changed
 }
 
