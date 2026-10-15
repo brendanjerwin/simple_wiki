@@ -106,7 +106,7 @@ type appendCall struct {
 	Page, ListName, UID, Op string
 }
 
-func (m *recordingChecklistMutator) AddItemForSync(_ context.Context, page, listName, ownerEmail, text string, checked bool, tags []string, description, position string, due *time.Time) (string, error) {
+func (m *recordingChecklistMutator) AddItemForSync(_ context.Context, page, listName, ownerEmail, text string, checked bool, tags []string, description, position string, due *time.Time) (string, error) { // NOSONAR go:S107
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.addCalls = append(m.addCalls, addCall{Page: page, ListName: listName, OwnerEmail: ownerEmail, Text: text, Checked: checked, Tags: tags, Description: description, Position: position, Due: due})
@@ -114,7 +114,7 @@ func (m *recordingChecklistMutator) AddItemForSync(_ context.Context, page, list
 	return m.addUIDToReturn, m.addErr
 }
 
-func (m *recordingChecklistMutator) UpdateItemForSync(_ context.Context, page, listName, ownerEmail, uid, text string, checked bool, tags []string, description string, due *time.Time) error {
+func (m *recordingChecklistMutator) UpdateItemForSync(_ context.Context, page, listName, ownerEmail, uid, text string, checked bool, tags []string, description string, due *time.Time) error { // NOSONAR go:S107
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.updateCalls = append(m.updateCalls, updateCall{Page: page, ListName: listName, OwnerEmail: ownerEmail, UID: uid, Text: text, Checked: checked, Tags: tags, Description: description, Due: due})
@@ -202,14 +202,14 @@ type trackingChecklistMutator struct {
 	tracker *orderTracker
 }
 
-func (m *trackingChecklistMutator) AddItemForSync(ctx context.Context, page, listName, ownerEmail, text string, checked bool, tags []string, description, position string, due *time.Time) (string, error) {
+func (m *trackingChecklistMutator) AddItemForSync(ctx context.Context, page, listName, ownerEmail, text string, checked bool, tags []string, description, position string, due *time.Time) (string, error) { // NOSONAR go:S107
 	if m.tracker != nil {
 		m.tracker.record("Mutator.Add")
 	}
 	return m.recordingChecklistMutator.AddItemForSync(ctx, page, listName, ownerEmail, text, checked, tags, description, position, due)
 }
 
-func (m *trackingChecklistMutator) UpdateItemForSync(ctx context.Context, page, listName, ownerEmail, uid, text string, checked bool, tags []string, description string, due *time.Time) error {
+func (m *trackingChecklistMutator) UpdateItemForSync(ctx context.Context, page, listName, ownerEmail, uid, text string, checked bool, tags []string, description string, due *time.Time) error { // NOSONAR go:S107
 	if m.tracker != nil {
 		m.tracker.record("Mutator.Update")
 	}
