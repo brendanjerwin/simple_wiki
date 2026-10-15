@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	ical "github.com/emersion/go-ical"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -287,6 +288,133 @@ var _ = Describe("RenderItem", func() {
 		It("should NOT append #urgent to SUMMARY (DAVx5 path uses CATEGORIES alone)", func() {
 			Expect(body).To(MatchRegexp(`(?m)^SUMMARY:Buy milk\b`))
 			Expect(body).NotTo(ContainSubstring("#urgent"))
+		})
+	})
+})
+
+var _ = Describe("setTodoCheckStatusProps", func() {
+	var todo *ical.Component
+	var item *apiv1.ChecklistItem
+
+	BeforeEach(func() {
+		todo = ical.NewComponent(ical.CompToDo)
+		item = &apiv1.ChecklistItem{Text: "Test item"}
+	})
+
+	When("item is not checked", func() {
+		BeforeEach(func() {
+			item.Checked = false
+			icalcodec.SetTodoCheckStatusPropsForTest(todo, item)
+		})
+
+		It("should set STATUS to NEEDS-ACTION", func() {
+			Expect(todo.Props.Get(ical.PropStatus).Value).To(Equal("NEEDS-ACTION"))
+		})
+
+		It("should set PERCENT-COMPLETE to 0", func() {
+			Expect(todo.Props.Get(ical.PropPercentComplete).Value).To(Equal("0"))
+		})
+
+		It("should not set COMPLETED", func() {
+			Expect(todo.Props.Get(ical.PropCompleted)).To(BeNil())
+		})
+	})
+
+	When("item is checked without a completedAt timestamp", func() {
+		BeforeEach(func() {
+			item.Checked = true
+			item.CompletedAt = nil
+			icalcodec.SetTodoCheckStatusPropsForTest(todo, item)
+		})
+
+		It("should set STATUS to COMPLETED", func() {
+			Expect(todo.Props.Get(ical.PropStatus).Value).To(Equal("COMPLETED"))
+		})
+
+		It("should set PERCENT-COMPLETE to 100", func() {
+			Expect(todo.Props.Get(ical.PropPercentComplete).Value).To(Equal("100"))
+		})
+
+		It("should not set COMPLETED timestamp", func() {
+			Expect(todo.Props.Get(ical.PropCompleted)).To(BeNil())
+		})
+	})
+})
+
+var _ = Describe("setTodoTimestampProps", func() {
+	var todo *ical.Component
+	var item *apiv1.ChecklistItem
+	var now time.Time
+
+	BeforeEach(func() {
+		todo = ical.NewComponent(ical.CompToDo)
+		now = time.Date(2026, 4, 25, 13, 0, 0, 0, time.UTC)
+		item = &apiv1.ChecklistItem{}
+	})
+
+	When("createdAt and updatedAt are nil", func() {
+		BeforeEach(func() {
+			item.CreatedAt = nil
+			item.UpdatedAt = nil
+			icalcodec.SetTodoTimestampPropsForTest(todo, item, now)
+		})
+
+		It("should not set CREATED", func() {
+			Expect(todo.Props.Get(ical.PropCreated)).To(BeNil())
+		})
+
+		It("should not set LAST-MODIFIED", func() {
+			Expect(todo.Props.Get(ical.PropLastModified)).To(BeNil())
+		})
+
+		It("should still set DTSTAMP", func() {
+			Expect(todo.Props.Get(ical.PropDateTimeStamp)).NotTo(BeNil())
+		})
+	})
+})
+
+var _ = Describe("appendTodoAlarmIfPresent", func() {
+	var todo *ical.Component
+	var item *apiv1.ChecklistItem
+
+	BeforeEach(func() {
+		todo = ical.NewComponent(ical.CompToDo)
+		item = &apiv1.ChecklistItem{Text: "Test item"}
+	})
+
+	When("alarm_payload is nil", func() {
+		BeforeEach(func() {
+			item.AlarmPayload = nil
+			icalcodec.AppendTodoAlarmIfPresentForTest(todo, item)
+		})
+
+		It("should not add any children", func() {
+			Expect(todo.Children).To(BeEmpty())
+		})
+	})
+
+	When("alarm_payload is empty string", func() {
+		BeforeEach(func() {
+			alarm := ""
+			item.AlarmPayload = &alarm
+			icalcodec.AppendTodoAlarmIfPresentForTest(todo, item)
+		})
+
+		It("should not add any children", func() {
+			Expect(todo.Children).To(BeEmpty())
+		})
+	})
+
+	When("alarm_payload is valid JSON", func() {
+		BeforeEach(func() {
+			alarm := `{"trigger":"-PT15M"}`
+			item.AlarmPayload = &alarm
+			icalcodec.AppendTodoAlarmIfPresentForTest(todo, item)
+		})
+
+		It("should append a VALARM child", func() {
+			Expect(todo.Children).To(HaveLen(1))
+			Expect(todo.Children[0].Name).To(Equal(ical.CompAlarm))
 		})
 	})
 })

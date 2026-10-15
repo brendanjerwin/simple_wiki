@@ -128,6 +128,90 @@ func hrefToPath(href string) string {
 	return u.Path
 }
 
+// multigetSlot holds per-href state for the three passes of reportMultiget.
+type multigetSlot struct {
+	hrefPath string
+	page     string
+	list     string
+	uid      string
+	item     CalendarItem
+	notFound bool
+}
+
+// multigetCollectionKey groups hrefs by their (page, list) pair so
+// reportMultiget can batch ListItems calls per collection.
+type multigetCollectionKey struct{ page, list string }
+
+// parseMultigetSlots is pass 1 of reportMultiget: parse every href into a
+// (page, list, uid) slot — or mark the slot as a per-href 404. Preserve
+// request order so the response's <response> children line up with the
+// request's <href> children.
+func parseMultigetSlots(hrefs []hrefElement) ([]multigetSlot, map[multigetCollectionKey][]int) {
+	slots := make([]multigetSlot, 0, len(hrefs))
+	groups := make(map[multigetCollectionKey][]int)
+	for _, h := range hrefs {
+		hrefPath := hrefToPath(h.Path)
+		page, list, uid, parseErr := parsePath(hrefPath)
+		if parseErr != nil || uid == "" {
+			slots = append(slots, multigetSlot{hrefPath: hrefPath, notFound: true})
+			continue
+		}
+		idx := len(slots)
+		slots = append(slots, multigetSlot{hrefPath: hrefPath, page: page, list: list, uid: uid})
+		key := multigetCollectionKey{page: page, list: list}
+		groups[key] = append(groups[key], idx)
+	}
+	return slots, groups
+}
+
+// resolveMultigetSlots is pass 2 of reportMultiget: per (page, list) group,
+// ListItems once and resolve each uid against an in-memory map.
+// ErrCollectionNotFound on the group fans out to per-href 404s rather than
+// failing the whole report. Returns false and writes an HTTP 500 if any
+// ListItems call returns an unexpected error.
+func (s *Server) resolveMultigetSlots(r *http.Request, groups map[multigetCollectionKey][]int, slots []multigetSlot, w http.ResponseWriter) bool {
+	for key, indices := range groups {
+		_, items, err := s.Backend.ListItems(r.Context(), key.page, key.list)
+		if err != nil {
+			if errors.Is(err, ErrCollectionNotFound) {
+				for _, idx := range indices {
+					slots[idx].notFound = true
+				}
+				continue
+			}
+			http.Error(w, "internal error", http.StatusInternalServerError)
+			return false
+		}
+		byUID := make(map[string]CalendarItem, len(items))
+		for _, item := range items {
+			byUID[item.UID] = item
+		}
+		for _, idx := range indices {
+			item, ok := byUID[slots[idx].uid]
+			if !ok {
+				slots[idx].notFound = true
+				continue
+			}
+			slots[idx].item = item
+		}
+	}
+	return true
+}
+
+// buildMultigetResponses is pass 3 of reportMultiget: emit responses in
+// original request order using the items already loaded in pass 2.
+func buildMultigetResponses(slots []multigetSlot) []multistatusResponse {
+	resps := make([]multistatusResponse, 0, len(slots))
+	for _, sl := range slots {
+		if sl.notFound {
+			resps = append(resps, notFoundResponse(sl.hrefPath))
+			continue
+		}
+		resps = append(resps, itemResponse(sl.page, sl.list, sl.item))
+	}
+	return resps
+}
+
 // reportMultiget handles the calendar-multiget REPORT body. Each href
 // resolves through parsePath; per-href resolution errors surface as a
 // 404 inside the multistatus response so a single bad href doesn't
@@ -147,75 +231,11 @@ func (s *Server) reportMultiget(w http.ResponseWriter, r *http.Request, body []b
 		http.Error(w, "malformed calendar-multiget body", http.StatusBadRequest)
 		return
 	}
-
-	type multigetSlot struct {
-		hrefPath string
-		page     string
-		list     string
-		uid      string
-		item     CalendarItem
-		notFound bool
+	slots, groups := parseMultigetSlots(req.Hrefs)
+	if !s.resolveMultigetSlots(r, groups, slots, w) {
+		return
 	}
-	type collectionKey struct{ page, list string }
-
-	// Pass 1: parse every href into (page, list, uid) — or mark the
-	// slot as a per-href 404. Preserve request order so the response's
-	// <response> children line up with the request's <href> children.
-	slots := make([]multigetSlot, 0, len(req.Hrefs))
-	groups := make(map[collectionKey][]int)
-	for _, h := range req.Hrefs {
-		hrefPath := hrefToPath(h.Path)
-		page, list, uid, parseErr := parsePath(hrefPath)
-		if parseErr != nil || uid == "" {
-			slots = append(slots, multigetSlot{hrefPath: hrefPath, notFound: true})
-			continue
-		}
-		idx := len(slots)
-		slots = append(slots, multigetSlot{hrefPath: hrefPath, page: page, list: list, uid: uid})
-		key := collectionKey{page: page, list: list}
-		groups[key] = append(groups[key], idx)
-	}
-
-	// Pass 2: per (page, list) group, ListItems once and resolve each
-	// uid against an in-memory map. ErrCollectionNotFound on the group
-	// fans out to per-href 404s rather than failing the whole report.
-	for key, indices := range groups {
-		_, items, err := s.Backend.ListItems(r.Context(), key.page, key.list)
-		if err != nil {
-			if errors.Is(err, ErrCollectionNotFound) {
-				for _, idx := range indices {
-					slots[idx].notFound = true
-				}
-				continue
-			}
-			http.Error(w, "internal error", http.StatusInternalServerError)
-			return
-		}
-		byUID := make(map[string]CalendarItem, len(items))
-		for _, item := range items {
-			byUID[item.UID] = item
-		}
-		for _, idx := range indices {
-			item, ok := byUID[slots[idx].uid]
-			if !ok {
-				slots[idx].notFound = true
-				continue
-			}
-			slots[idx].item = item
-		}
-	}
-
-	// Pass 3: emit responses in original request order using the
-	// items already loaded in pass 2.
-	resps := make([]multistatusResponse, 0, len(slots))
-	for _, sl := range slots {
-		if sl.notFound {
-			resps = append(resps, notFoundResponse(sl.hrefPath))
-			continue
-		}
-		resps = append(resps, itemResponse(sl.page, sl.list, sl.item))
-	}
-	writeMultistatus(w, resps)
+	writeMultistatus(w, buildMultigetResponses(slots))
 }
 
 // reportCalendarQuery handles the calendar-query REPORT body. Phase 1

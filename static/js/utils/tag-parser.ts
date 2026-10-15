@@ -36,6 +36,60 @@ function isTagChar(ch: string): boolean {
   return TAG_CHAR_RE.test(ch);
 }
 
+// CodeStateAdvance captures the outcome of advanceCodeState for a single
+// character position: whether the character was consumed by a code-span or
+// fence transition, how many extra positions to skip (FENCE_MARKER is 3
+// chars; we skip 2 extra), and the updated parser state.
+interface CodeStateAdvance {
+  consumed: boolean;
+  extraI: number;
+  newPrev: string;
+  newInFence: boolean;
+  newInInlineCode: boolean;
+}
+
+// advanceCodeState handles fence-marker and inline-code transitions at
+// position i. Returns a CodeStateAdvance; when consumed is true, the caller
+// should apply extraI, newPrev, newInFence, newInInlineCode and `continue`
+// the outer loop without further processing of this character.
+function advanceCodeState(
+  chars: string[],
+  i: number,
+  prev: string,
+  inFence: boolean,
+  inInlineCode: boolean,
+): CodeStateAdvance {
+  const ch = chars[i] ?? '';
+
+  if (!inInlineCode && atFenceMarker(chars, i, prev)) {
+    return { consumed: true, extraI: FENCE_MARKER.length - 1, newPrev: '`', newInFence: !inFence, newInInlineCode: inInlineCode };
+  }
+  if (inFence) {
+    return { consumed: true, extraI: 0, newPrev: ch, newInFence: inFence, newInInlineCode: inInlineCode };
+  }
+  if (ch === '`') {
+    return { consumed: true, extraI: 0, newPrev: ch, newInFence: inFence, newInInlineCode: !inInlineCode };
+  }
+  if (inInlineCode) {
+    return { consumed: true, extraI: 0, newPrev: ch, newInFence: inFence, newInInlineCode: inInlineCode };
+  }
+  return { consumed: false, extraI: 0, newPrev: ch, newInFence: inFence, newInInlineCode: inInlineCode };
+}
+
+// tryAddHashtag reads a tag starting at chars[start], normalizes it, and
+// appends it to result if it hasn't been seen yet. Returns the number of
+// characters consumed (0 when no tag was added so the caller can skip the
+// advance).
+function tryAddHashtag(chars: string[], start: number, seen: Set<string>, result: string[]): number {
+  const { tag, consumed } = readTag(chars, start);
+  if (tag === '') return 0;
+  const normalized = normalizeHashtag(tag);
+  if (normalized === '' || seen.has(normalized)) return consumed;
+  seen.add(normalized);
+  result.push(normalized);
+  return consumed;
+}
+
 /**
  * Extract the unique set of normalized hashtags from `body`, preserving
  * first-occurrence order.
@@ -53,26 +107,12 @@ export function extractHashtags(body: string): string[] {
   for (let i = 0; i < chars.length; i++) {
     const ch = chars[i] ?? '';
 
-    if (!inInlineCode && atFenceMarker(chars, i, prev)) {
-      inFence = !inFence;
-      i += FENCE_MARKER.length - 1;
-      prev = '`';
-      continue;
-    }
-
-    if (inFence) {
-      prev = ch;
-      continue;
-    }
-
-    if (ch === '`') {
-      inInlineCode = !inInlineCode;
-      prev = ch;
-      continue;
-    }
-
-    if (inInlineCode) {
-      prev = ch;
+    const cs = advanceCodeState(chars, i, prev, inFence, inInlineCode);
+    if (cs.consumed) {
+      i += cs.extraI;
+      prev = cs.newPrev;
+      inFence = cs.newInFence;
+      inInlineCode = cs.newInInlineCode;
       continue;
     }
 
@@ -83,14 +123,9 @@ export function extractHashtags(body: string): string[] {
     }
 
     if (ch === '#' && isTagBoundary(prev)) {
-      const { tag, consumed } = readTag(chars, i + 1);
-      if (tag !== '') {
-        const normalized = normalizeHashtag(tag);
-        if (normalized !== '' && !seen.has(normalized)) {
-          seen.add(normalized);
-          result.push(normalized);
-        }
-        i += consumed;
+      const advance = tryAddHashtag(chars, i + 1, seen, result);
+      if (advance > 0) {
+        i += advance;
         prev = chars[i] ?? '';
         continue;
       }

@@ -156,6 +156,28 @@ const localCSS = css`
   }
 `;
 
+// classifyPausedBindings partitions the bindings that are currently paused
+// into two buckets:
+//   - bindingBroken: paused_reason="remote_handle_empty" (legacy migration gap;
+//     rules §11.1). Auth reconnect won't help — user must unbind + rebind.
+//   - authPaused: paused_reason="auth_failed" or empty/unknown. Recovery =
+//     reconnect OAuth (Tasks) or paste-token (Keep). Unknown reasons default
+//     conservatively to auth-recoverable.
+// Bindings that are not paused are silently skipped.
+function classifyPausedBindings(bindings: BindingState[]): { authPaused: BindingState[]; bindingBroken: BindingState[] } {
+  const authPaused: BindingState[] = [];
+  const bindingBroken: BindingState[] = [];
+  for (const s of bindings) {
+    if (!s.paused) continue;
+    if (s.pausedReason === PAUSED_REASON_REMOTE_HANDLE_EMPTY) {
+      bindingBroken.push(s);
+    } else {
+      authPaused.push(s);
+    }
+  }
+  return { authPaused, bindingBroken };
+}
+
 export class ProfilePausedBanner extends LitElement {
   static override styles = [foundationCSS, localCSS];
 
@@ -238,20 +260,7 @@ export class ProfilePausedBanner extends LitElement {
       if (!row) continue;
       const result = responses[i];
       if (!result || result.status !== 'fulfilled') continue;
-      const subscriptions = result.value.state?.bindings ?? [];
-      const authPaused: BindingState[] = [];
-      const bindingBroken: BindingState[] = [];
-      for (const s of subscriptions) {
-        if (!s.paused) continue;
-        if (s.pausedReason === PAUSED_REASON_REMOTE_HANDLE_EMPTY) {
-          bindingBroken.push(s);
-        } else {
-          // auth_failed OR empty/unknown reason — both route to the
-          // reconnect UX. An unknown reason defaults conservatively
-          // to auth-recoverable.
-          authPaused.push(s);
-        }
-      }
+      const { authPaused, bindingBroken } = classifyPausedBindings(result.value.state?.bindings ?? []);
       if (authPaused.length === 0 && bindingBroken.length === 0) continue;
       next.push({
         kind: row.kind,

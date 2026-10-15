@@ -875,3 +875,105 @@ var _ = Describe("Server.serveREPORT sync-collection", func() {
 		})
 	})
 })
+
+var _ = Describe("parseMultigetSlots", func() {
+	When("all hrefs are valid item paths", func() {
+		var slots []caldav.MultigetSlotForTest
+		var groups map[caldav.MultigetCollectionKeyForTest][]int
+
+		BeforeEach(func() {
+			slots, groups = caldav.ParseMultigetSlotsForTest([]caldav.HrefElementForTest{
+				{Path: "/shopping/this-week/01HZ8K7Q9X1V2N3R4T5Y6Z7B8C.ics"},
+				{Path: "/shopping/this-week/01HZ8K7Q9X1V2N3R4T5Y6Z7B8D.ics"},
+			})
+		})
+
+		It("should produce two slots", func() {
+			Expect(slots).To(HaveLen(2))
+		})
+
+		It("should mark no slot as notFound", func() {
+			for _, s := range slots {
+				Expect(s.NotFound).To(BeFalse())
+			}
+		})
+
+		It("should group both indices under the same collection key", func() {
+			key := caldav.MultigetCollectionKeyForTest{Page: "shopping", List: "this-week"}
+			Expect(groups[key]).To(ConsistOf(0, 1))
+		})
+	})
+
+	When("an href is malformed (no uid segment)", func() {
+		var slots []caldav.MultigetSlotForTest
+
+		BeforeEach(func() {
+			slots, _ = caldav.ParseMultigetSlotsForTest([]caldav.HrefElementForTest{
+				{Path: "/shopping/this-week/"},
+			})
+		})
+
+		It("should produce one slot", func() {
+			Expect(slots).To(HaveLen(1))
+		})
+
+		It("should mark the slot as notFound", func() {
+			Expect(slots[0].NotFound).To(BeTrue())
+		})
+	})
+
+	When("hrefs span two different collections", func() {
+		var groups map[caldav.MultigetCollectionKeyForTest][]int
+
+		BeforeEach(func() {
+			_, groups = caldav.ParseMultigetSlotsForTest([]caldav.HrefElementForTest{
+				{Path: "/shopping/this-week/01HZ8K7Q9X1V2N3R4T5Y6Z7B8C.ics"},
+				{Path: "/garage/projects/01HZ8K7Q9X1V2N3R4T5Y6Z7B8D.ics"},
+			})
+		})
+
+		It("should produce two distinct collection groups", func() {
+			Expect(groups).To(HaveLen(2))
+		})
+	})
+})
+
+var _ = Describe("buildMultigetResponses", func() {
+	When("all slots are found", func() {
+		var notFound, found int
+
+		BeforeEach(func() {
+			notFound, found = caldav.BuildMultigetResponsesForTest([]caldav.MultigetSlotForTest{
+				{HrefPath: "/shopping/this-week/01HZ.ics", Page: "shopping", List: "this-week", UID: "01HZ", NotFound: false},
+				{HrefPath: "/shopping/this-week/02HZ.ics", Page: "shopping", List: "this-week", UID: "02HZ", NotFound: false},
+			})
+		})
+
+		It("should produce zero notFound responses", func() {
+			Expect(notFound).To(Equal(0))
+		})
+
+		It("should produce two found responses", func() {
+			Expect(found).To(Equal(2))
+		})
+	})
+
+	When("some slots are notFound", func() {
+		var notFound, found int
+
+		BeforeEach(func() {
+			notFound, found = caldav.BuildMultigetResponsesForTest([]caldav.MultigetSlotForTest{
+				{HrefPath: "/shopping/this-week/01HZ.ics", NotFound: true},
+				{HrefPath: "/shopping/this-week/02HZ.ics", Page: "shopping", List: "this-week", UID: "02HZ", NotFound: false},
+			})
+		})
+
+		It("should produce one notFound response", func() {
+			Expect(notFound).To(Equal(1))
+		})
+
+		It("should produce one found response", func() {
+			Expect(found).To(Equal(1))
+		})
+	})
+})
