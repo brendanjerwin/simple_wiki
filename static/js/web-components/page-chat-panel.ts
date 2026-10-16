@@ -592,6 +592,12 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
     const notConnectedText = this.persona ? this.persona + ' is not connected' : 'Not connected';
     const inputEnabled = this._chatAvailable;
     const placeholder = inputEnabled ? 'Type a message...' : notConnectedText;
+    const thinkingContent = this.waitingForAssistant
+      ? html`<span class="thinking-dots">
+                  <span></span><span></span><span></span>
+                </span>
+                ${this._thinkingText}`
+      : html`<span class="working-label">Working…</span>`;
     return html`
       ${sharedStyles}
       ${this._renderFab()}
@@ -651,12 +657,7 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
         </div>
         ${this.turnActive
         ? html`<div class="thinking-indicator">
-              ${this.waitingForAssistant
-            ? html`<span class="thinking-dots">
-                      <span></span><span></span><span></span>
-                    </span>
-                    ${this._thinkingText}`
-            : html`<span class="working-label">Working…</span>`}
+              ${thinkingContent}
               <button class="stop-button" @click=${this._handleStopClick} aria-label="Stop">
                 Stop
               </button>

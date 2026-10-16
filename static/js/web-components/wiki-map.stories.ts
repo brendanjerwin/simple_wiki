@@ -121,7 +121,10 @@ function renderWithClient(response: Promise<unknown>) {
           value: { getMap: () => response },
           configurable: true,
         });
-        mapElement.rendererFactory = () => new StoryRenderer();
+        Object.defineProperty(mapElement, 'rendererFactory', {
+          value: () => new StoryRenderer(),
+          configurable: true,
+        });
       })}
     ></wiki-map>
   `;
