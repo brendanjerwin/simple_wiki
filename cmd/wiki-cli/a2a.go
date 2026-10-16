@@ -508,7 +508,7 @@ func (s *a2aServer) serve(ctx context.Context) error {
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		_ = srv.Shutdown(shutdownCtx)
-		_ = <-errCh // goroutine error intentionally discarded during ctx-cancelled shutdown
+		<-errCh
 		return nil
 	}
 }
