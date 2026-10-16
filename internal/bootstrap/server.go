@@ -142,6 +142,26 @@ func composeCleanup(first, second func()) func() {
 	}
 }
 
+// drainScheduledTurns returns a cleanup function that drains all in-flight
+// scheduled turns before the process exits. Each pending AgentTurnJob receives
+// an ERROR outcome so it can write a terminal status to the schedule's
+// frontmatter. Without this, a binary-swap restart loses the pending-turn
+// records and the next cron tick stamps SCHEDULE_STATUS_ERROR with no log trace.
+//
+// Must run BEFORE stopSiteCron so the cron job workers are still alive to
+// process the terminal outcomes delivered to the completion channels.
+func drainScheduledTurns(site *server.Site) func() {
+	return func() {
+		if site == nil || site.ScheduledTurnDispatcher == nil {
+			return
+		}
+		n := site.ScheduledTurnDispatcher.DrainPending("process shutdown")
+		if n > 0 {
+			site.Logger.Info("Drained %d in-flight scheduled turn(s) on shutdown", n)
+		}
+	}
+}
+
 // stopSiteCron returns a cleanup function that stops the site's cron scheduler
 // (waiting for in-flight jobs) so scheduled-agent turns terminate cleanly on
 // shutdown. Returns a no-op when the scheduler is nil (defensive — can happen
@@ -186,7 +206,7 @@ func SetupPlainHTTP(
 	return &ServerResult{
 		MainServer:   newCleartextHTTP2Server(handler),
 		MainListener: httpListener,
-		Cleanup:      composeCleanup(metricsCleanup, stopSiteCron(site)),
+		Cleanup:      composeCleanup(metricsCleanup, composeCleanup(drainScheduledTurns(site), stopSiteCron(site))),
 	}, nil
 }
 
@@ -222,7 +242,7 @@ func SetupTailscaleServe(cfg TailscaleHTTPConfig) (*ServerResult, error) {
 	return &ServerResult{
 		MainServer:   newCleartextHTTP2Server(finalHandler),
 		MainListener: httpListener,
-		Cleanup:      composeCleanup(metricsCleanup, stopSiteCron(cfg.Site)),
+		Cleanup:      composeCleanup(metricsCleanup, composeCleanup(drainScheduledTurns(cfg.Site), stopSiteCron(cfg.Site))),
 	}, nil
 }
 
@@ -286,7 +306,7 @@ func SetupFullTLS(cfg TailscaleHTTPConfig) (*ServerResult, error) {
 			Handler: handler,
 		},
 		MainListener:   tlsListener,
-		Cleanup:        composeCleanup(metricsCleanup, stopSiteCron(cfg.Site)),
+		Cleanup:        composeCleanup(metricsCleanup, composeCleanup(drainScheduledTurns(cfg.Site), stopSiteCron(cfg.Site))),
 		RedirectServer: redirectServer,
 	}
 

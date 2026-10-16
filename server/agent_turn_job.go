@@ -23,6 +23,7 @@ const (
 	logKeyError      = "error"
 	logKeyPage       = "page"
 	logKeyScheduleID = "schedule_id"
+	logKeyRequestID  = "request_id"
 )
 
 // agentTurnDispatcher captures the subset of the ScheduledTurnDispatcher API
@@ -121,7 +122,7 @@ func (j *AgentTurnJob) Execute() error {
 		// terminal one, ERROR is reachable via the pseudo-fire that didn't
 		// actually run. Mirror that: synthesize a RUNNING transition first if
 		// needed so the state machine remains coherent.
-		j.recordDispatchFailure(dispatchErr)
+		j.recordDispatchFailure(requestID, dispatchErr)
 		return nil
 	}
 
@@ -222,7 +223,17 @@ func timeoutDurationSeconds(duration time.Duration) int32 {
 // allows it. If even RUNNING is illegal (e.g. the prior status is already
 // RUNNING from a stuck previous fire), we log and bail rather than corrupting
 // the on-disk record.
-func (j *AgentTurnJob) recordDispatchFailure(dispatchErr error) {
+func (j *AgentTurnJob) recordDispatchFailure(requestID string, dispatchErr error) {
+	// Log the failure immediately so server-side journals record the cause.
+	// Previously this ERROR existed only in frontmatter (last_error_message),
+	// making dispatch failures undiagnosable from the server journal alone.
+	slog.Error("agent turn: dispatch failed",
+		logKeyPage, j.page,
+		logKeyScheduleID, j.scheduleID,
+		logKeyRequestID, requestID,
+		logKeyError, dispatchErr,
+	)
+
 	msg := fmt.Sprintf("dispatch failed: %v", dispatchErr)
 
 	if err := j.store.TransitionStatus(j.page, j.scheduleID, apiv1.ScheduleStatus_SCHEDULE_STATUS_RUNNING, "", 0); err != nil {
