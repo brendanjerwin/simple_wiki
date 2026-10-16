@@ -251,8 +251,9 @@ test.describe('InsertNewPageDialog E2E Tests', () => {
     const dialog = page.locator('insert-new-page-dialog');
     await expect(dialog.locator('dialog')).toBeVisible({ timeout: DIALOG_TIMEOUT_MS });
 
-    // Wait for the template-loading async operation to complete
-    await page.waitForTimeout(2000);
+    // Wait for the template-loading async operation to complete:
+    // network idle ensures all in-flight gRPC calls (including template loading) have resolved
+    await page.waitForLoadState('networkidle');
 
     // No unhandled promise rejections should have occurred
     expect(unhandledRejections).toHaveLength(0);

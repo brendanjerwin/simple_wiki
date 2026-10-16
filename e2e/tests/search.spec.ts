@@ -221,8 +221,8 @@ identifier = "${TEST_PAGE_2.toLowerCase()}"
     // Results should not appear for empty search
     const resultsComponent = searchComponent.locator('wiki-search-results');
 
-    // Wait a moment to ensure nothing happens
-    await page.waitForTimeout(1000);
+    // Wait for network idle to confirm no search request was triggered by the empty submission
+    await page.waitForLoadState('networkidle');
 
     // Results component should not be open
     await expect(resultsComponent).not.toHaveAttribute('open');

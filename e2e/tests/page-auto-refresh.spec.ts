@@ -185,10 +185,12 @@ test.describe('Page auto-refresh and system-info page status', () => {
     });
     expect(updateResp.ok()).toBeTruthy();
 
-    // Wait to confirm the editor is not disrupted by any unexpected navigation,
-    // re-render, or auto-refresh behavior. This intentional pause lets us assert that nothing
-    // changes while the user is actively editing in a mode where auto-refresh is disabled.
-    await page.waitForTimeout(EDIT_STABILITY_WAIT_MS);
+    // Deliberate stability pause — NOSONAR (S2925): this test asserts the ABSENCE of
+    // auto-refresh interference across multiple poll cycles (the component polls every 1s).
+    // There is no observable condition to synchronize on because we are asserting that
+    // nothing changes, not that something specific happens. A fixed wait spanning several
+    // poll cycles is the only way to confirm the editor is not overwritten.
+    await page.waitForTimeout(EDIT_STABILITY_WAIT_MS); // NOSONAR
 
     // The editor must retain the user's unsaved content, not the external update
     const editorContent = await textarea.inputValue();
