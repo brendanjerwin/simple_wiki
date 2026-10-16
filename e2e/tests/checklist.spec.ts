@@ -206,11 +206,14 @@ identifier = "${TEST_PAGE_NAME.toLowerCase()}"
       if ((await tagPill.count()) > 0) {
         await tagPill.click();
 
-        // Filtering is client-side Lit reactivity; read count after click settles
-        const filteredItems = await checklist.locator('.item-row').count();
+        // Wait for Lit re-render: tag pill gets aria-pressed="true" once filterTags state
+        // has been updated and the shadow DOM has been re-rendered. Asserting on this
+        // attribute synchronizes on actual render completion before counting items.
+        await expect(tagPill).toHaveAttribute('aria-pressed', 'true', { timeout: SAVE_TIMEOUT_MS });
 
         // With filtering active, we should have fewer items visible
         // or at least the same if all items have the tag
+        const filteredItems = await checklist.locator('.item-row').count();
         expect(filteredItems).toBeLessThanOrEqual(totalItems);
       }
     }

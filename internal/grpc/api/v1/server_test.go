@@ -3683,7 +3683,7 @@ var _ = Describe("Server", func() {
 
 				// Cancel and collect
 				cancellableStream.Cancel()
-				<-watchDone
+				_ = <-watchDone // test helper waits for goroutine exit; value unused by design
 			})
 
 			It("should still only have the initial message (transient error doesn't crash)", func() {

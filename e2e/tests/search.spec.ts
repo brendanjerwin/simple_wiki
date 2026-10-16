@@ -221,8 +221,13 @@ identifier = "${TEST_PAGE_2.toLowerCase()}"
     // Results should not appear for empty search
     const resultsComponent = searchComponent.locator('wiki-search-results');
 
-    // Wait for network idle to confirm no search request was triggered by the empty submission
-    await page.waitForLoadState('networkidle');
+    // Bounded negative-wait: race a short window for any search request. The wiki app has
+    // continuous background network activity (polling, live streams), so networkidle is
+    // never reachable. Instead we verify no search request fires within 1.5 s.
+    const searchRequest = await page
+      .waitForRequest((req) => req.url().includes('Search'), { timeout: 1500 })
+      .catch(() => null);
+    expect(searchRequest).toBeNull();
 
     // Results component should not be open
     await expect(resultsComponent).not.toHaveAttribute('open');
