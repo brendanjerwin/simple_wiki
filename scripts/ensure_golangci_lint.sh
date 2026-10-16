@@ -4,6 +4,15 @@
 # This avoids version mismatch errors when golangci-lint was pre-built with an older Go.
 # Same pattern as ensure_staticcheck.sh.
 
+# Pinned toolchain version. Do NOT use @latest here: a golangci-lint release
+# moved errcheck to v1.30.0, which newly flags bare `<-errCh` channel
+# receives that had passed lint for weeks. Because every CI run rebuilds
+# this binary from source (no cross-run gobin cache), @latest flipped lint
+# verdicts between runs on byte-identical code (simple_wiki #1243) and
+# made the next main push deterministically red. Bump this pin deliberately
+# and re-run lint before merging.
+GOLANGCI_LINT_PIN="v2.14.0"
+
 set -e
 
 # Use .devbox/gobin as the cache directory for Go binaries built from source
@@ -23,17 +32,17 @@ if [ ! -x "$GOLANGCI_LINT_BIN" ]; then
 elif [ ! -f "$GOLANGCI_LINT_VERSION_FILE" ]; then
     echo "golangci-lint version file not found, rebuilding..."
     NEED_REBUILD=true
-elif [ "$(cat "$GOLANGCI_LINT_VERSION_FILE")" != "$GO_VERSION" ]; then
-    echo "golangci-lint was built with $(cat "$GOLANGCI_LINT_VERSION_FILE") but current Go is $GO_VERSION, rebuilding..."
+elif [ "$(cat "$GOLANGCI_LINT_VERSION_FILE")" != "$GO_VERSION $GOLANGCI_LINT_PIN" ]; then
+    echo "golangci-lint was built with $(cat "$GOLANGCI_LINT_VERSION_FILE") but current Go/pin is $GO_VERSION $GOLANGCI_LINT_PIN, rebuilding..."
     NEED_REBUILD=true
 fi
 
 if [ "$NEED_REBUILD" = true ]; then
     mkdir -p "$GOBIN_DIR"
-    echo "Building golangci-lint with $GO_VERSION..."
-    GOBIN="$GOBIN_DIR" go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest
-    echo "$GO_VERSION" > "$GOLANGCI_LINT_VERSION_FILE"
-    echo "golangci-lint built and cached in $GOBIN_DIR"
+    echo "Building golangci-lint $GOLANGCI_LINT_PIN with $GO_VERSION..."
+    GOBIN="$GOBIN_DIR" go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@"$GOLANGCI_LINT_PIN"
+    echo "$GO_VERSION $GOLANGCI_LINT_PIN" > "$GOLANGCI_LINT_VERSION_FILE"
+    echo "golangci-lint $GOLANGCI_LINT_PIN built and cached in $GOBIN_DIR"
 fi
 
 # Ensure GOBIN_DIR is in PATH (for use in current script context)
