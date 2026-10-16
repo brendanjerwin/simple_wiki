@@ -8,7 +8,6 @@ const TEST_LIST_NAME = 'e2e_test_list';
 const SAVE_TIMEOUT_MS = 10000;
 const COMPONENT_LOAD_TIMEOUT_MS = 15000;
 const PAGE_LOAD_TIMEOUT_MS = 15000;
-const POLL_WAIT_MS = 4000; // Checklist polls every 3s, wait 4s to ensure it completes
 
 test.describe('Checklist E2E Tests', () => {
   test.describe.configure({ mode: 'serial' });
@@ -103,12 +102,9 @@ identifier = "${TEST_PAGE_NAME.toLowerCase()}"
     await addInput.fill('Test item 1');
     await addButton.click();
 
-    // Wait for save to complete and item to appear
-    await page.waitForTimeout(POLL_WAIT_MS);
-
-    // Verify the item appears in the list
+    // Wait for save to complete and item to appear in the list
     const items = checklist.locator('.item-row');
-    await expect(items).toHaveCount(1);
+    await expect(items).toHaveCount(1, { timeout: SAVE_TIMEOUT_MS });
     await expect(items.first().locator('.item-display-text')).toContainText('Test item 1');
   });
 
@@ -132,20 +128,14 @@ identifier = "${TEST_PAGE_NAME.toLowerCase()}"
     // Check the item
     await checkbox.check();
 
-    // Wait for save
-    await page.waitForTimeout(POLL_WAIT_MS);
-
-    // Verify it's checked
-    await expect(checkbox).toBeChecked();
+    // Wait for save to persist server-side (component polls every 3s; checked state must survive next poll)
+    await expect(checkbox).toBeChecked({ timeout: SAVE_TIMEOUT_MS });
 
     // Uncheck the item
     await checkbox.uncheck();
 
-    // Wait for save
-    await page.waitForTimeout(POLL_WAIT_MS);
-
-    // Verify it's unchecked
-    await expect(checkbox).not.toBeChecked();
+    // Wait for save to persist server-side
+    await expect(checkbox).not.toBeChecked({ timeout: SAVE_TIMEOUT_MS });
   });
 
   test('should add tagged items and display tags', async ({ page }) => {
@@ -165,8 +155,8 @@ identifier = "${TEST_PAGE_NAME.toLowerCase()}"
     await addInput.fill('Buy milk #dairy #grocery');
     await addButton.click();
 
-    // Wait for save and poll
-    await page.waitForTimeout(POLL_WAIT_MS);
+    // Wait for the tagged item to appear after save
+    await expect(checklist.locator('.item-row').filter({ hasText: 'Buy milk' })).toBeVisible({ timeout: SAVE_TIMEOUT_MS });
 
     // Find the newly added item (should be last)
     const items = checklist.locator('.item-row');
@@ -201,7 +191,9 @@ identifier = "${TEST_PAGE_NAME.toLowerCase()}"
 
     await addInput.fill('Clean room :chores');
     await addButton.click();
-    await page.waitForTimeout(POLL_WAIT_MS);
+
+    // Wait for the new item to appear after save
+    await expect(checklist.locator('.item-row').filter({ hasText: 'Clean room' })).toBeVisible({ timeout: SAVE_TIMEOUT_MS });
 
     // Count total items before filtering
     const totalItems = await checklist.locator('.item-row').count();
@@ -214,14 +206,14 @@ identifier = "${TEST_PAGE_NAME.toLowerCase()}"
       if ((await tagPill.count()) > 0) {
         await tagPill.click();
 
-        // Wait for filter to apply
-        await page.waitForTimeout(1000);
-
-        // Verify filtering occurred (some items should be filtered out)
-        const filteredItems = await checklist.locator('.item-row').count();
+        // Wait for Lit re-render: tag pill gets aria-pressed="true" once filterTags state
+        // has been updated and the shadow DOM has been re-rendered. Asserting on this
+        // attribute synchronizes on actual render completion before counting items.
+        await expect(tagPill).toHaveAttribute('aria-pressed', 'true', { timeout: SAVE_TIMEOUT_MS });
 
         // With filtering active, we should have fewer items visible
         // or at least the same if all items have the tag
+        const filteredItems = await checklist.locator('.item-row').count();
         expect(filteredItems).toBeLessThanOrEqual(totalItems);
       }
     }
@@ -291,8 +283,8 @@ identifier = "${TEST_PAGE_NAME.toLowerCase()}"
 
       await removeButton.click();
 
-      // Wait for save and poll
-      await page.waitForTimeout(POLL_WAIT_MS);
+      // Wait for item to be removed from the list after save
+      await expect(checklist.locator('.item-row')).toHaveCount(itemCountBefore - 1, { timeout: SAVE_TIMEOUT_MS });
 
       // Verify item count decreased
       const itemCountAfter = await checklist.locator('.item-row').count();

@@ -140,8 +140,9 @@ This page is used by E2E tests for the inventory menu.`);
     test('should not show inventory submenu on a non-inventory page', async ({ page }) => {
       await page.goto('/home/view');
       await expect(page.locator('#rendered')).toBeAttached({ timeout: COMPONENT_LOAD_TIMEOUT_MS });
-      // Give the async menu init time to complete
-      await page.waitForTimeout(1000);
+      // Wait for async menu init to complete: page-import-trigger is always injected by the
+      // same menu setup sequence, so its presence signals that init has finished.
+      await expect(page.locator('#page-import-trigger')).toBeAttached({ timeout: MENU_APPEAR_TIMEOUT_MS });
 
       await expect(page.locator('#inventory-submenu')).not.toBeAttached();
     });
