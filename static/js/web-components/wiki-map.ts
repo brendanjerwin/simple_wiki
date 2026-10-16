@@ -70,7 +70,7 @@ function getLeafletTagControlCtor(): (new (renderer: LeafletWikiMapRenderer, opt
   if (LeafletTagControlCtor !== null) return LeafletTagControlCtor;
   LeafletTagControlCtor = class LeafletTagControl extends L.Control {
     private _listSection: HTMLElement | null = null;
-    private _renderer: LeafletWikiMapRenderer;
+    private readonly _renderer: LeafletWikiMapRenderer;
 
     constructor(renderer: LeafletWikiMapRenderer, options?: L.ControlOptions) {
       super(options || { position: 'bottomright' });
@@ -218,11 +218,8 @@ export class LeafletWikiMapRenderer implements WikiMapRenderer {
     const view = mapMessage.view;
     const markerPoints = mapMessage.markers.map(marker => marker.position).filter(point => point != null);
     const firstPoint = markerPoints[0];
-    const center: L.LatLngExpression = view?.center
-      ? [view.center.lat, view.center.lon]
-      : firstPoint
-        ? [firstPoint.lat, firstPoint.lon]
-        : [0, 0];
+    const defaultCenter: L.LatLngExpression = firstPoint ? [firstPoint.lat, firstPoint.lon] : [0, 0];
+    const center: L.LatLngExpression = view?.center ? [view.center.lat, view.center.lon] : defaultCenter;
     this.map.setView(center, view?.zoom ?? 2);
 
     const tileLayer = selectedTileLayer(mapMessage.style?.availableTileLayers ?? [], mapMessage.style?.tileLayerId);
@@ -526,10 +523,8 @@ export class LeafletWikiMapRenderer implements WikiMapRenderer {
         if (!this.map.hasLayer(overlay.layer)) {
           overlay.layer.addTo(this.map);
         }
-      } else {
-        if (this.map.hasLayer(overlay.layer)) {
-          overlay.layer.remove();
-        }
+      } else if (this.map.hasLayer(overlay.layer)) {
+        overlay.layer.remove();
       }
     }
   }
@@ -1078,10 +1073,10 @@ export class WikiMap extends LitElement {
   readonly fileClient = createClient(FileStorageService, getGrpcWebTransport());
   
   private readonly popupMarkdownRenderer = new ChatMarkdownRenderer();
-  markdownRenderer: PopupRenderer = {
+  readonly markdownRenderer: PopupRenderer = {
     render: (markdown: string) => this.popupMarkdownRenderer.renderMarkdown(markdown, this.page),
   };
-  rendererFactory: WikiMapRendererFactory = () => new LeafletWikiMapRenderer();
+  readonly rendererFactory: WikiMapRendererFactory = () => new LeafletWikiMapRenderer();
   private renderer: WikiMapRenderer | null = null;
   private scrollHintTimeoutId: number | undefined;
 

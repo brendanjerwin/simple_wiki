@@ -2,7 +2,7 @@ import { expect, waitUntil } from '@open-wc/testing';
 import { create } from '@bufbuild/protobuf';
 import sinon, { type SinonStub } from 'sinon';
 import './wiki-map.js';
-import { LeafletWikiMapRenderer, type PopupRenderer, type WikiMap, type WikiMapRenderer } from './wiki-map.js';
+import { LeafletWikiMapRenderer, type PopupRenderer, type WikiMap, type WikiMapRenderer, type WikiMapRendererFactory } from './wiki-map.js';
 import { setLeafletOverride, resetLeafletOverrides } from './leaflet-accessor.js';
 import {
   GeoPointSchema,
@@ -90,6 +90,14 @@ function setClient(el: WikiMap, client: StubMapClient): void {
   Object.defineProperty(el, 'client', { value: client });
 }
 
+function setRendererFactory(el: WikiMap, factory: WikiMapRendererFactory): void {
+  Object.defineProperty(el, 'rendererFactory', { value: factory, configurable: true });
+}
+
+function setMarkdownRenderer(el: WikiMap, renderer: PopupRenderer): void {
+  Object.defineProperty(el, 'markdownRenderer', { value: renderer, configurable: true });
+}
+
 function sampleMap(): WikiMapMessage {
   return create(MapSchema, {
     page: 'garden_plan',
@@ -148,8 +156,8 @@ describe('WikiMap', () => {
       el.page = 'garden_plan';
       el.name = 'yard';
       setClient(el, client);
-      el.rendererFactory = () => renderer;
-      el.markdownRenderer = { render: sinon.stub().resolves('<a href="/shed">Shed</a>') };
+      setRendererFactory(el, () => renderer);
+      setMarkdownRenderer(el, { render: sinon.stub().resolves('<a href="/shed">Shed</a>') });
       document.body.appendChild(el);
       await el.updateComplete;
       await waitUntil(() => renderer.renderStub.calledOnce);
@@ -259,8 +267,8 @@ describe('WikiMap', () => {
       el.page = 'garden_plan';
       el.name = 'yard';
       setClient(el, client);
-      el.markdownRenderer = { render: sinon.stub().resolves('<a href="/shed">Shed</a>') };
-      el.rendererFactory = () => new StylingProbeRenderer();
+      setMarkdownRenderer(el, { render: sinon.stub().resolves('<a href="/shed">Shed</a>') });
+      setRendererFactory(el, () => new StylingProbeRenderer());
       document.body.appendChild(el);
       await el.updateComplete;
       await waitUntil(() => el.shadowRoot?.querySelector('.wiki-map-marker') !== null);
@@ -294,7 +302,7 @@ describe('WikiMap', () => {
       el.page = 'garden_plan';
       el.name = 'yard';
       setClient(el, client);
-      el.rendererFactory = () => renderer;
+      setRendererFactory(el, () => renderer);
       document.body.appendChild(el);
       await waitUntil(() => renderer.renderStub.calledOnce);
 
@@ -328,7 +336,7 @@ describe('WikiMap', () => {
       el.page = 'garden_plan';
       el.name = 'yard';
       setClient(el, client);
-      el.rendererFactory = () => renderer;
+      setRendererFactory(el, () => renderer);
       document.body.appendChild(el);
       await waitUntil(() => client.getMap.calledOnce);
 
@@ -358,7 +366,7 @@ describe('WikiMap', () => {
       el.page = 'garden_plan';
       el.name = 'yard';
       setClient(el, client);
-      el.rendererFactory = () => renderer;
+      setRendererFactory(el, () => renderer);
       document.body.appendChild(el);
       await waitUntil(() => el.shadowRoot?.querySelector('error-display') !== null);
     });

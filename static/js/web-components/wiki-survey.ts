@@ -36,12 +36,14 @@ function timestampToIso(timestamp: Timestamp | undefined): string {
 
 function surveyMessageFieldToData(field: SurveyMessage['fields'][number]): SurveyField {
   const rawType = field.type;
-  const type: SurveyField['type'] =
-    rawType === 'number' || rawType === 'text' || rawType === 'choice' || rawType === 'boolean'
-      ? rawType
-      : rawType === 'select'
-        ? 'choice'
-        : 'text';
+  let type: SurveyField['type'];
+  if (rawType === 'number' || rawType === 'text' || rawType === 'choice' || rawType === 'boolean') {
+    type = rawType;
+  } else if (rawType === 'select') {
+    type = 'choice';
+  } else {
+    type = 'text';
+  }
 
   const dataField: SurveyField = { name: field.name, type };
   if (field.label?.trim()) dataField.label = field.label.trim();

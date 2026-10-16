@@ -39,15 +39,14 @@ function parseSurveyField(raw: unknown): SurveyField | null {
   const name = typeof r["name"] === "string" ? r["name"] : "";
   if (!name) return null;
   const rawType = typeof r["type"] === "string" ? r["type"] : "text";
-  const type: SurveyField["type"] =
-    rawType === "number" ||
-    rawType === "text" ||
-    rawType === "choice" ||
-    rawType === "boolean"
-      ? rawType
-      : rawType === "select"
-        ? "choice"
-        : "text";
+  let type: SurveyField["type"];
+  if (rawType === "number" || rawType === "text" || rawType === "choice" || rawType === "boolean") {
+    type = rawType;
+  } else if (rawType === "select") {
+    type = "choice";
+  } else {
+    type = "text";
+  }
   const field: SurveyField = { name, type };
   if (typeof r["label"] === "string") {
     const trimmedLabel = r["label"].trim();
