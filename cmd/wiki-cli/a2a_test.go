@@ -448,6 +448,55 @@ var _ = Describe("a2aServer task execution via taskRunner seam", func() {
 	})
 })
 
+var _ = Describe("a2aServer runTaskInSession error stop reason", func() {
+	var ts *httptest.Server
+
+	AfterEach(func() {
+		ts.Close()
+	})
+
+	Describe("when the agent Prompt returns stop reason 'error' with no text", func() {
+		var (
+			taskID string
+			state  string
+			text   string
+		)
+
+		BeforeEach(func() {
+			const tok = "tok-error-stop"
+			srv, localTS := newA2ATestServer(tok, "", 9*time.Minute, 128, nil)
+			ts = localTS
+
+			srv.daemon.a2aEphemeralSpawner = func(_ context.Context, _ acp.Client, _, _ string) (*ephemeralAgent, error) {
+				fc := newFakeScheduledConn()
+				fc.promptResp = acp.PromptResponse{StopReason: "error"}
+				close(fc.doneCh)
+				return &ephemeralAgent{
+					conn:      fc,
+					sessionID: "error-stop-sess",
+					cleanup:   func() {},
+				}, nil
+			}
+
+			_, resp := dispatchA2A(ts, bearerHeaders(tok), a2aSendBody("call me back"))
+			taskID = a2aStr(a2aMap(resp, "result")["id"])
+			state, text = pollTaskUntil(ts, tok, taskID, 2*time.Second)
+		})
+
+		It("should surface the task as failed", func() {
+			Expect(state).To(Equal("failed"))
+		})
+
+		It("should include the stop reason in the failure text", func() {
+			Expect(text).To(ContainSubstring(`"error"`))
+		})
+
+		It("should have a non-empty task ID", func() {
+			Expect(taskID).NotTo(BeEmpty())
+		})
+	})
+})
+
 var _ = Describe("a2aServer tasks/cancel and tasks/list", func() {
 	var (
 		ts      *httptest.Server

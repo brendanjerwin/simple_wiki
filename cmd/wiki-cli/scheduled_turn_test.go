@@ -840,12 +840,13 @@ var _ = Describe("poolDaemon scheduled turn shutdown drain", func() {
 	})
 })
 
-// fakeScheduledConn is a test double for acpScheduledConn that lets tests
+// fakeScheduledConn is a test double for acpEphemeralConn that lets tests
 // control the Prompt return values and expose a Done channel they close
 // themselves.
 type fakeScheduledConn struct {
-	promptErr error
-	doneCh    chan struct{}
+	promptResp acp.PromptResponse
+	promptErr  error
+	doneCh     chan struct{}
 }
 
 func newFakeScheduledConn() *fakeScheduledConn {
@@ -853,7 +854,7 @@ func newFakeScheduledConn() *fakeScheduledConn {
 }
 
 func (f *fakeScheduledConn) Prompt(_ context.Context, _ acp.PromptRequest) (acp.PromptResponse, error) {
-	return acp.PromptResponse{}, f.promptErr
+	return f.promptResp, f.promptErr
 }
 
 func (f *fakeScheduledConn) Done() <-chan struct{} { return f.doneCh }
@@ -1133,6 +1134,37 @@ var _ = Describe("poolDaemon executeScheduledTurn", func() {
 
 		It("should mention max_turns in the message", func() {
 			Expect(msg).To(ContainSubstring("max_turns"))
+		})
+	})
+
+	Describe("when the agent turn ends with an error stop reason", func() {
+		var (
+			status apiv1.ScheduleStatus
+			msg    string
+		)
+
+		BeforeEach(func() {
+			fakeConn := newFakeScheduledConn()
+			fakeConn.promptResp = acp.PromptResponse{StopReason: "error"}
+			close(fakeConn.doneCh)
+
+			var innerCalls int32
+			daemon := &poolDaemon{
+				scheduledTurnSpawnFn: fakeScheduledConnSpawn(fakeConn, &innerCalls),
+			}
+			status, msg = daemon.executeScheduledTurn(context.Background(), &apiv1.ScheduledTurnRequest{
+				RequestId: "req-error-stop",
+				Page:      "test-page",
+				Prompt:    "do something",
+			})
+		})
+
+		It("should return SCHEDULE_STATUS_ERROR", func() {
+			Expect(status).To(Equal(apiv1.ScheduleStatus_SCHEDULE_STATUS_ERROR))
+		})
+
+		It("should include the stop reason in the message", func() {
+			Expect(msg).To(ContainSubstring(`"error"`))
 		})
 	})
 })

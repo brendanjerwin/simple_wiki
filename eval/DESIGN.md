@@ -17,6 +17,7 @@ to the correct MCP tool, given the wiki's `tools/list` surface. Use this to:
 the selector pick the correct MCP tool from the `tools/list` catalog?
 
 Secondary metrics:
+
 - **Argument construction**: given the correct tool, does the selector emit
   valid arguments (right field names, right types)?
 - **Exclusion precision**: does the selector correctly avoid excluded/pool-only
@@ -162,12 +163,14 @@ The LLM call goes through the eval kernel's `completion` tool, which supports
 ### Scoring
 
 For each case:
+
 - **Tool match** (binary): selected tool == expected tool (1/0)
 - **Args match** (partial): fraction of expected arg keys present and correct
 - **Exclusion precision** (binary): for exclusion cases, did the selector
   avoid the excluded tool?
 
 Aggregate metrics per (surface, model, prompt) configuration:
+
 - **Precision@1** — fraction of cases where the top pick is correct
 - **Per-service breakdown** — accuracy by service to surface weak spots
 - **Delta** — the headline number when comparing two configurations

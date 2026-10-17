@@ -1087,7 +1087,7 @@ func (s *a2aServer) runTaskInSession(ctx context.Context, task *a2aTask, caller 
 		// user text bare so the agent treats it as the next conversation turn.
 		promptText = task.UserText
 	}
-	_, promptErr := agent.conn.Prompt(ctx, acp.PromptRequest{
+	promptResp, promptErr := agent.conn.Prompt(ctx, acp.PromptRequest{
 		SessionId: agent.sessionID,
 		Prompt:    []acp.ContentBlock{acp.TextBlock(promptText)},
 	})
@@ -1101,7 +1101,12 @@ func (s *a2aServer) runTaskInSession(ctx context.Context, task *a2aTask, caller 
 		}
 		return "", promptErr
 	}
-	return sess.client.finalText(), nil
+	text := sess.client.finalText()
+	if text == "" && isAgentErrorStop(promptResp.StopReason) {
+		s.dropSession(task.ContextID)
+		return "", fmt.Errorf("agent turn ended with stop reason %q", promptResp.StopReason)
+	}
+	return text, nil
 }
 
 // installProgressSink attaches a per-turn live-progress mirror: the
