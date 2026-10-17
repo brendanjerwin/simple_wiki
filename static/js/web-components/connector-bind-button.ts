@@ -241,7 +241,7 @@ export class ConnectorBindButton extends LitElement {
   @state() declare private error: AugmentedError | null;
   @state() declare private syncing: boolean;
 
-  private client = createClient(ConnectorService, getGrpcWebTransport());
+  private readonly client = createClient(ConnectorService, getGrpcWebTransport());
 
   constructor() {
     super();
