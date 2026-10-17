@@ -335,7 +335,7 @@ func (d *poolDaemon) executeScheduledTurn(ctx context.Context, req *apiv1.Schedu
 	defer cleanup()
 
 	promptText := fmt.Sprintf(scheduledTurnPreamble, req.GetPage(), req.GetPrompt())
-	_, promptErr := conn.connection.Prompt(turnCtx, acp.PromptRequest{
+	promptResp, promptErr := conn.connection.Prompt(turnCtx, acp.PromptRequest{
 		SessionId: conn.sessionID,
 		Prompt:    []acp.ContentBlock{acp.TextBlock(promptText)},
 	})
@@ -350,6 +350,9 @@ func (d *poolDaemon) executeScheduledTurn(ctx context.Context, req *apiv1.Schedu
 			return apiv1.ScheduleStatus_SCHEDULE_STATUS_ERROR, "shutting down before turn completed"
 		}
 		return apiv1.ScheduleStatus_SCHEDULE_STATUS_ERROR, fmt.Sprintf("prompt failed: %v", promptErr)
+	}
+	if isAgentErrorStop(promptResp.StopReason) {
+		return apiv1.ScheduleStatus_SCHEDULE_STATUS_ERROR, fmt.Sprintf("agent turn ended with stop reason %q", promptResp.StopReason)
 	}
 
 	// Foreground turn completed. Close stdin to signal the agent we are done
@@ -370,7 +373,7 @@ func (d *poolDaemon) executeScheduledTurn(ctx context.Context, req *apiv1.Schedu
 // ephemeral instance: the ACP connection, the session id, and the
 // scheduledTurnClient (for HitLimit inspection after the prompt returns).
 type scheduledEphemeralConnection struct {
-	connection acpScheduledConn
+	connection acpEphemeralConn
 	sessionID  acp.SessionId
 	client     *scheduledTurnClient
 }
@@ -379,7 +382,7 @@ type scheduledEphemeralConnection struct {
 // instance spawned outside the per-page pool: the connection, the session id,
 // and a cleanup function that tears the process down.
 type ephemeralAgent struct {
-	conn      *acp.ClientSideConnection
+	conn      acpEphemeralConn
 	sessionID acp.SessionId
 	cleanup   func()
 }

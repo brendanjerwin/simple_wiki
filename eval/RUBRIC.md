@@ -9,29 +9,34 @@ A rubric for writing realistic evaluation scenarios that test **tool discovery**
 ### 1. Query realism
 
 **No tool/service keywords.** The query must NOT contain:
+
 - Tool names or method names (no "ChecklistService", "AddItem", "UpsertSurvey")
 - Proto field names (no "survey_name", "list_name", "connector_kind", "page_name")
 - API jargon (no "RPC call", "frontmatter delimiters", "optimistic concurrency")
 - Service-internal concepts the user wouldn't know (no "sync token", "dead-letter queue", "tombstone")
 
 **User-known identifiers only.** The query may include:
+
 - Page names/identifiers the user would realistically know (their own pages: "meeting_notes", "garden_plan")
 - Names of things they created (checklist names, survey names, map names) — but using natural language ("my grocery list", "the feedback form"), not proto field names
 - Content they want to write ("add a section about watering schedules")
 
 **Conversational tone.** Queries should read like actual chat messages:
+
 - Casual, not imperative-technical ("can you add milk to my list?" not "Append item 'Buy milk' to checklist 'grocery_list' on page 'grocery_planning'")
 - Sometimes incomplete ("fix the typo in the budget section")
 - Sometimes ambiguous ("where did I put the pipe wrench?")
 - May include context the user assumes the agent knows ("you know that survey I made? someone just filled it out")
 
 **Include content context.** When the scenario involves writing, the query should include the actual content, not just the intent:
+
 - "add a note that the tomatoes need staking by July 15th" (not "add an item to a checklist")
 - "change the survey question to 'How was your experience?'" (not "update the survey")
 
 ### 2. Scenario structure
 
 **Grounded in page context.** Each case has a `Context` field describing the page state:
+
 - What page(s) are involved and their identifiers
 - What frontmatter exists (keys, not values unless relevant)
 - What content is on the page (brief summary, not full markdown)
@@ -40,10 +45,12 @@ A rubric for writing realistic evaluation scenarios that test **tool discovery**
 The context is provided to the LLM as part of the prompt, simulating what the agent would know from reading the page. It is NOT a hint about which tool to use — it's the world the user lives in.
 
 **Separate UserSays field.** Each case has a `UserSays` field (the raw chat message) separate from any structured query. This lets us:
+
 - Test with varying levels of context (UserSays alone vs. UserSays + page context)
 - Compare how different models handle the same natural language
 
 **Difficulty levels.** Each case is tagged with difficulty:
+
 - `easy`: clear intent, one obvious tool, user names the thing they want to change
 - `medium`: some ambiguity — the user describes the outcome but not the mechanism, or two tools could plausibly fit
 - `hard`: genuinely ambiguous — multiple tools could accomplish the task, or the user's request is vague enough that the agent must reason about what they mean
@@ -55,12 +62,14 @@ The context is provided to the LLM as part of the prompt, simulating what the ag
 **Tool selection** (primary): did the agent pick the right tool?
 
 **Surgical preference**: when multiple tools could accomplish the task, did the agent pick the most surgical one?
+
 - Body-only edit → `UpdatePageContent` (not `UpdatePage` or `UpdateWholePage`)
 - Frontmatter-only change → `Frontmatter.MergeFrontmatter` (not `UpdatePage`)
 - Section read → `ReadPageSection` (not `ReadPage`)
 - Single item toggle → `ChecklistService.ToggleItem` (not `UpdateItem`)
 
 **Decline/clarify behavior**: when no tool fits or the request is too ambiguous, did the agent decline or ask a clarifying question instead of guessing wrong? Scored as:
+
 - Correct decline: agent returns `{"tool": null}` → hit
 - Correct clarification: agent asks a question instead of selecting a tool → hit
 - Wrong guess: agent picks a tool that doesn't fit → miss
@@ -105,6 +114,7 @@ type Case struct {
 ```
 
 The LLM prompt is assembled as:
+
 ```
 <system_prompt>
 

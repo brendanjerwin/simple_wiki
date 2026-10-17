@@ -4997,3 +4997,41 @@ var _ = Describe("handlePlan (mock-based)", func() {
 		})
 	})
 })
+
+var _ = Describe("isAgentErrorStop", func() {
+	Describe("known success stop reasons", func() {
+		It("should return false for end_turn", func() {
+			Expect(isAgentErrorStop(acp.StopReasonEndTurn)).To(BeFalse())
+		})
+
+		It("should return false for max_tokens", func() {
+			Expect(isAgentErrorStop(acp.StopReasonMaxTokens)).To(BeFalse())
+		})
+
+		It("should return false for max_turn_requests", func() {
+			Expect(isAgentErrorStop(acp.StopReasonMaxTurnRequests)).To(BeFalse())
+		})
+
+		It("should return false for refusal", func() {
+			Expect(isAgentErrorStop(acp.StopReasonRefusal)).To(BeFalse())
+		})
+
+		It("should return false for cancelled", func() {
+			Expect(isAgentErrorStop(acp.StopReasonCancelled)).To(BeFalse())
+		})
+
+		It("should return false for empty string (agent omitted the field)", func() {
+			Expect(isAgentErrorStop("")).To(BeFalse())
+		})
+	})
+
+	Describe("error stop reasons", func() {
+		It("should return true for 'error'", func() {
+			Expect(isAgentErrorStop("error")).To(BeTrue())
+		})
+
+		It("should return true for unknown stop reasons", func() {
+			Expect(isAgentErrorStop("unknown_future_reason")).To(BeTrue())
+		})
+	})
+})

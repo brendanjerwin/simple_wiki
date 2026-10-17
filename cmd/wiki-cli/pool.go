@@ -629,12 +629,26 @@ type acpAgent interface {
 	Prompt(context.Context, acp.PromptRequest) (acp.PromptResponse, error)
 }
 
-// acpScheduledConn is the minimal ACP connection surface needed by
-// executeScheduledTurn. Defining it as an interface lets tests inject a
-// lightweight fake without standing up a real agent process.
-type acpScheduledConn interface {
+// acpEphemeralConn is the minimal ACP connection surface needed by ephemeral
+// agent paths (A2A one-shot tasks and scheduled turns). Defining it as an
+// interface lets tests inject a lightweight fake without standing up a real
+// agent process.
+type acpEphemeralConn interface {
 	Prompt(context.Context, acp.PromptRequest) (acp.PromptResponse, error)
 	Done() <-chan struct{}
+}
+
+// isAgentErrorStop reports whether the ACP stop reason indicates a model-side
+// failure rather than a normal turn completion. The empty string is treated as
+// success to remain compatible with agents that omit the field.
+func isAgentErrorStop(r acp.StopReason) bool {
+	switch r {
+	case acp.StopReasonEndTurn, acp.StopReasonMaxTokens, acp.StopReasonMaxTurnRequests,
+		acp.StopReasonRefusal, acp.StopReasonCancelled, "":
+		return false
+	default:
+		return true
+	}
 }
 
 // wikiChatClient implements acp.Client — handles ACP callbacks from the agent.
