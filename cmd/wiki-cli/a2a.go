@@ -286,9 +286,10 @@ type a2aSession struct {
 	// (concurrent message/send on one contextId must not race the conn).
 	promptMu sync.Mutex
 
-	// sessionCtx owns the agent process lifetime — derived from the server,
-	// NOT the task's timeout context, so the agent survives between turns.
-	sessionCtx    context.Context
+	// sessionCancel tears down the agent process lifetime context, which is
+	// derived from the server's context (NOT the task's timeout context) so
+	// the agent survives between turns. The reaper and dropSession call this
+	// on eviction.
 	sessionCancel context.CancelFunc
 }
 
@@ -505,7 +506,7 @@ func (s *a2aServer) serve(ctx context.Context) error {
 		}
 		return fmt.Errorf("a2a: server error: %w", err)
 	case <-ctx.Done():
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		shutdownCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
 		defer cancel()
 		_ = srv.Shutdown(shutdownCtx)
 		<-errCh
@@ -1179,9 +1180,10 @@ func (s *a2aServer) acquireSession(ctx context.Context, task *a2aTask) (*a2aSess
 	s.sessions[task.ContextID] = spawningSession
 	s.mu.Unlock()
 
-	// The session outlives this task's timeout context: bind it to a fresh
-	// context; the reaper and dropSession call sessionCancel on eviction.
-	sessionCtx, sessionCancel := context.WithCancel(context.Background())
+	// The session outlives this task's timeout context: detach from ctx's
+	// cancellation (WithoutCancel) but preserve its values (trace spans etc.);
+	// the reaper and dropSession call sessionCancel on eviction.
+	sessionCtx, sessionCancel := context.WithCancel(context.WithoutCancel(ctx))
 
 	client := &a2aTaskClient{task: task}
 	agent, spawnErr := s.daemon.spawnEphemeralAgent(sessionCtx, client, a2aUnitPrefix, a2aTaskIDPrefix+shortIDForUnit(task.ID[len(a2aTaskIDPrefix):]))
@@ -1202,7 +1204,6 @@ func (s *a2aServer) acquireSession(ctx context.Context, task *a2aTask) (*a2aSess
 		createdAt:     time.Now(),
 		lastUsed:      time.Now(),
 		turnCount:     1,
-		sessionCtx:    sessionCtx,
 		sessionCancel: sessionCancel,
 	}
 
