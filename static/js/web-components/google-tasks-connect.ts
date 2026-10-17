@@ -124,7 +124,7 @@ export class GoogleTasksConnect extends LitElement {
   @state() declare private state: ConnectorState | null;
   @state() declare private error: AugmentedError | null;
 
-  private client = createClient(ConnectorService, getGrpcWebTransport());
+  private readonly client = createClient(ConnectorService, getGrpcWebTransport());
 
   // redirect is the navigation seam used by handleConnect to send the
   // browser to Google's authorization endpoint. Real builds use

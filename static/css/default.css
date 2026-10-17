@@ -135,11 +135,13 @@
     --shadow-medium: 0 4px 12px rgba(0, 0, 0, 0.5);
   }
 
-  /* Override PureCSS hardcoded #eee hover — keeps text readable in dark mode */
-  .pure-menu-active > .pure-menu-link,
-  .pure-menu-link:focus,
-  .pure-menu-link:hover {
-    background-color: var(--color-action-secondary-hover-bg) !important;
+  /* Override PureCSS hardcoded #eee hover — keeps text readable in dark mode.
+     Specificity raised above PureCSS (.pure-menu-link:hover = 0,2,0) by adding
+     the .pure-menu ancestor (0,3,0), removing the need for !important. */
+  .pure-menu .pure-menu-active > .pure-menu-link,
+  .pure-menu .pure-menu-link:focus,
+  .pure-menu .pure-menu-link:hover {
+    background-color: var(--color-action-secondary-hover-bg);
   }
 }
 
@@ -206,8 +208,10 @@ li.pure-menu-selected {
   border-bottom: 2px solid var(--color-action-primary);
 }
 
-.pure-menu-link {
-  color: var(--color-text-primary) !important;
+/* Specificity raised to (0,1,1) via element qualifier, matching .pure-menu a
+   (0,1,1) and winning by cascade order, removing the need for !important. */
+a.pure-menu-link {
+  color: var(--color-text-primary);
 }
 
 div.pure-menu-horizontal {

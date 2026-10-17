@@ -97,23 +97,23 @@ module.exports = {
         }
       },
     };
-
-    function findEnclosingClass(node) {
-      let n = node.parent;
-      while (n) {
-        if (n.type === 'ClassDeclaration' || n.type === 'ClassExpression') {
-          return n;
-        }
-        n = n.parent;
-      }
-      return null;
-    }
-
-    function propertyName(key) {
-      if (!key) return null;
-      if (key.type === 'Identifier') return key.name;
-      if (key.type === 'Literal') return String(key.value);
-      return null;
-    }
   },
 };
+
+function findEnclosingClass(node) {
+  let n = node.parent;
+  while (n) {
+    if (n.type === 'ClassDeclaration' || n.type === 'ClassExpression') {
+      return n;
+    }
+    n = n.parent;
+  }
+  return null;
+}
+
+function propertyName(key) {
+  if (!key) return null;
+  if (key.type === 'Identifier') return key.name;
+  if (key.type === 'Literal') return String(key.value);
+  return null;
+}
