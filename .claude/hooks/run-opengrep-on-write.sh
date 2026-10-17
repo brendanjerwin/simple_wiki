@@ -23,7 +23,7 @@ set -e
 
 # No file paths passed in -> nothing to do. We deliberately do NOT scan the
 # whole repo (would be slow and noisy on every keystroke).
-if [ -z "${CLAUDE_FILE_PATHS:-}" ]; then
+if [[ -z "${CLAUDE_FILE_PATHS:-}" ]]; then
     exit 0
 fi
 
@@ -42,12 +42,12 @@ cd "$REPO_ROOT"
 # filtering (rule `paths:` blocks) decide which rules apply per file.
 FILES_TO_SCAN=()
 for f in $CLAUDE_FILE_PATHS; do
-    if [ -f "$f" ]; then
+    if [[ -f "$f" ]]; then
         FILES_TO_SCAN+=("$f")
     fi
 done
 
-if [ ${#FILES_TO_SCAN[@]} -eq 0 ]; then
+if [[ ${#FILES_TO_SCAN[@]} -eq 0 ]]; then
     exit 0
 fi
 

@@ -64,7 +64,7 @@ export class KeepConnect extends LitElement {
   @state() declare private formOAuthToken: string;
   @state() declare private error: AugmentedError | null;
 
-  private client = createClient(ConnectorService, getGrpcWebTransport());
+  private readonly client = createClient(ConnectorService, getGrpcWebTransport());
 
   constructor() {
     super();
