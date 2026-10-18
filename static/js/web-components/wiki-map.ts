@@ -1247,7 +1247,7 @@ export class WikiMap extends LitElement {
     }
   }
 
-  private handleMapClick = (_event: Event): void => {
+  private readonly handleMapClick = (_event: Event): void => {
     this.toolsOpen = true;
   };
 
