@@ -1,7 +1,6 @@
 import { html, LitElement, nothing } from 'lit';
 import { property, state } from 'lit/decorators.js';
-import { createClient } from '@connectrpc/connect';
-import { ConnectError, Code } from '@connectrpc/connect';
+import { createClient, ConnectError, Code } from '@connectrpc/connect';
 import { create } from '@bufbuild/protobuf';
 import { timestampDate } from '@bufbuild/protobuf/wkt';
 import { getGrpcWebTransport } from './grpc-transport.js';
@@ -844,7 +843,7 @@ export class WikiChecklist extends LitElement implements DragReorderHandler {
   }
 
   private _renderDescription(item: ChecklistItem) {
-    if (!item.description || !item.description.trim()) return nothing;
+    if (!item.description?.trim()) return nothing;
     return html`
       <div class="item-description">${item.description}</div>
     `;

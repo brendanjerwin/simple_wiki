@@ -184,7 +184,7 @@ function buildCopyableDetails(error: AugmentedError): string {
 
 function fallback(value: string | undefined): string {
   const trimmed = value?.trim();
-  return trimmed ? trimmed : '(none)';
+  return trimmed || '(none)';
 }
 
 function formatErrorChain(error: Error): string {

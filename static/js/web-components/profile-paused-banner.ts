@@ -259,7 +259,7 @@ export class ProfilePausedBanner extends LitElement {
       const row = kinds[i];
       if (!row) continue;
       const result = responses[i];
-      if (!result || result.status !== 'fulfilled') continue;
+      if (result?.status !== 'fulfilled') continue;
       const { authPaused, bindingBroken } = classifyPausedBindings(result.value.state?.bindings ?? []);
       if (authPaused.length === 0 && bindingBroken.length === 0) continue;
       next.push({

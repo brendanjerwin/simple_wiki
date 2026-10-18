@@ -200,6 +200,7 @@ test.describe('Page auto-refresh and system-info page status', () => {
 
   // Cleanup
   test('should clean up test page', async ({ request }) => {
-    await callPageAPI(request, 'DeletePage', { page: TEST_PAGE });
+    const deleteResp = await callPageAPI(request, 'DeletePage', { page: TEST_PAGE });
+    expect(deleteResp.ok()).toBeTruthy();
   });
 });

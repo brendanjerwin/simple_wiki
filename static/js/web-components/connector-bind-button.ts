@@ -212,19 +212,17 @@ const REMOTE_LIST_NOUN: Record<ConnectorKind, string> = {
 // kindToSlug converts a ConnectorKind enum to the wire-level slug used by
 // the paused-badge component (which is connector-shape-agnostic).
 function kindToSlug(kind: ConnectorKind): 'google_keep' | 'google_tasks' {
-  switch (kind) {
-    case ConnectorKind.GOOGLE_TASKS:
-      return 'google_tasks';
-    default:
-      // GOOGLE_KEEP and any unexpected value default to keep — the badge
-      // listener will route accordingly. Defensive default rather than
-      // throwing, since the badge is purely informational.
-      return 'google_keep';
+  if (kind === ConnectorKind.GOOGLE_TASKS) {
+    return 'google_tasks';
   }
+  // GOOGLE_KEEP and any unexpected value default to keep — the badge
+  // listener will route accordingly. Defensive default rather than
+  // throwing, since the badge is purely informational.
+  return 'google_keep';
 }
 
 export class ConnectorBindButton extends LitElement {
-  static override styles = [foundationCSS, buttonCSS, inputCSS, pillCSS, localCSS];
+  static override readonly styles = [foundationCSS, buttonCSS, inputCSS, pillCSS, localCSS];
 
   @property({ type: String, attribute: 'page' })
   declare page: string;

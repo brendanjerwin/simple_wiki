@@ -56,7 +56,7 @@ import './confirmation-interlock-button.js';
 type Phase = 'loading' | 'disconnected' | 'connecting' | 'connected';
 
 export class KeepConnect extends LitElement {
-  static override styles = [foundationCSS, buttonCSS, inputCSS, pillCSS];
+  static override readonly styles = [foundationCSS, buttonCSS, inputCSS, pillCSS];
 
   @state() declare private phase: Phase;
   @state() declare private state: ConnectorState | null;

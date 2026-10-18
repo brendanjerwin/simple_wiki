@@ -564,8 +564,7 @@ func (s *Site) handlePageRequest(c *gin.Context) {
 			c.String(http.StatusInternalServerError, "Failed to read page frontmatter")
 			return
 		}
-		identity := tailscale.IdentityFromContext(c.Request.Context())
-		if authErr := wikipage.Authorize(identity, fm); authErr != nil {
+		if authErr := wikipage.Authorize(tailscale.IdentityFromContext(c.Request.Context()), fm); authErr != nil {
 			c.String(http.StatusForbidden, "access denied by wiki.authorization rules")
 			return
 		}
@@ -789,8 +788,7 @@ func (s *Site) handlePageUpdate(c *gin.Context) {
 			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "Failed to read page frontmatter"})
 			return
 		}
-		identity := tailscale.IdentityFromContext(c.Request.Context())
-		if authErr := wikipage.Authorize(identity, fm); authErr != nil {
+		if authErr := wikipage.Authorize(tailscale.IdentityFromContext(c.Request.Context()), fm); authErr != nil {
 			c.JSON(http.StatusForbidden, gin.H{"success": false, "message": "access denied by wiki.authorization rules"})
 			return
 		}
