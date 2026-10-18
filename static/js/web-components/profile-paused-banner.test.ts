@@ -167,7 +167,7 @@ describe('ProfilePausedBanner', () => {
 
     it('should render exactly one banner', () => {
       const banners = el.shadowRoot?.querySelectorAll('.banner');
-      expect(banners?.length).to.equal(1);
+      expect(banners).to.have.lengthOf(1);
     });
 
     it('should render the Google Keep banner', () => {
@@ -203,7 +203,7 @@ describe('ProfilePausedBanner', () => {
 
     it('should render exactly one banner', () => {
       const banners = el.shadowRoot?.querySelectorAll('.banner');
-      expect(banners?.length).to.equal(1);
+      expect(banners).to.have.lengthOf(1);
     });
 
     it('should render the Google Tasks banner', () => {
@@ -234,7 +234,7 @@ describe('ProfilePausedBanner', () => {
 
     it('should render two banners stacked', () => {
       const banners = el.shadowRoot?.querySelectorAll('.banner');
-      expect(banners?.length).to.equal(2);
+      expect(banners).to.have.lengthOf(2);
     });
 
     it('should render one banner per connector kind', () => {
@@ -265,7 +265,7 @@ describe('ProfilePausedBanner', () => {
 
     it('should render only one banner for that connector', () => {
       const banners = el.shadowRoot?.querySelectorAll('.banner');
-      expect(banners?.length).to.equal(1);
+      expect(banners).to.have.lengthOf(1);
     });
   });
 
@@ -286,7 +286,7 @@ describe('ProfilePausedBanner', () => {
 
     it('should render only the connector that is paused', () => {
       const banners = el.shadowRoot?.querySelectorAll('.banner');
-      expect(banners?.length).to.equal(1);
+      expect(banners).to.have.lengthOf(1);
       expect(banners?.[0]?.getAttribute('data-connector-kind')).to.equal('google_tasks');
     });
   });
@@ -320,7 +320,7 @@ describe('ProfilePausedBanner', () => {
 
     it('should still render the Tasks banner', () => {
       const banners = el.shadowRoot?.querySelectorAll('.banner');
-      expect(banners?.length).to.equal(1);
+      expect(banners).to.have.lengthOf(1);
       expect(banners?.[0]?.getAttribute('data-connector-kind')).to.equal('google_tasks');
     });
   });
@@ -552,13 +552,13 @@ describe('ProfilePausedBanner', () => {
 
     it('should render the auth banner with the existing reconnect copy', () => {
       const banner = el.shadowRoot?.querySelector('[data-banner="auth"]');
-      expect(banner, 'auth banner present').to.not.equal(null);
+      expect(banner, 'auth banner present').to.not.be.null;
       expect(banner?.textContent ?? '').to.contain('needs reconnection');
     });
 
     it('should NOT render the broken banner', () => {
       const broken = el.shadowRoot?.querySelector('[data-banner="broken"]');
-      expect(broken).to.equal(null);
+      expect(broken).to.be.null;
     });
   });
 
@@ -579,12 +579,12 @@ describe('ProfilePausedBanner', () => {
 
     it('should NOT render the misleading "needs reconnection" banner', () => {
       const auth = el.shadowRoot?.querySelector('[data-banner="auth"]');
-      expect(auth).to.equal(null);
+      expect(auth).to.be.null;
     });
 
     it('should render the broken-binding banner', () => {
       const broken = el.shadowRoot?.querySelector('[data-banner="broken"]');
-      expect(broken, 'broken banner present').to.not.equal(null);
+      expect(broken, 'broken banner present').to.not.be.null;
     });
 
     it('should describe the broken state and direct the user to unbind/rebind', () => {
@@ -602,7 +602,7 @@ describe('ProfilePausedBanner', () => {
 
     it('should NOT render a Reconnect button (reconnecting OAuth would not help)', () => {
       const buttons = el.shadowRoot?.querySelectorAll('[data-banner="broken"] button') ?? [];
-      expect(buttons.length).to.equal(0);
+      expect(buttons).to.have.lengthOf(0);
     });
   });
 
@@ -625,8 +625,8 @@ describe('ProfilePausedBanner', () => {
     it('should render BOTH banners', () => {
       const auth = el.shadowRoot?.querySelector('[data-banner="auth"]');
       const broken = el.shadowRoot?.querySelector('[data-banner="broken"]');
-      expect(auth, 'auth banner present').to.not.equal(null);
-      expect(broken, 'broken banner present').to.not.equal(null);
+      expect(auth, 'auth banner present').to.not.be.null;
+      expect(broken, 'broken banner present').to.not.be.null;
     });
   });
 });

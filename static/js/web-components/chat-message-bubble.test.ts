@@ -115,12 +115,12 @@ describe('ChatMessageBubble', () => {
 
     it('should render reaction chips', () => {
       const chips = el.shadowRoot!.querySelectorAll('.reaction-chip');
-      expect(chips.length).to.equal(2);
+      expect(chips).to.have.lengthOf(2);
     });
 
     it('should show count badge for reactions with count > 1', () => {
       const counts = el.shadowRoot!.querySelectorAll('.reaction-count');
-      expect(counts.length).to.equal(1);
+      expect(counts).to.have.lengthOf(1);
       expect(counts[0]!.textContent).to.equal('2');
     });
   });
@@ -463,12 +463,12 @@ describe('ChatMessageBubble', () => {
 
       it('should render one pill for the completed tool call', () => {
         const pills = el.shadowRoot!.querySelectorAll('.tool-call-pill');
-        expect(pills.length).to.equal(2);
+        expect(pills).to.have.lengthOf(2);
       });
 
       it('should render one live row for the in_progress tool call', () => {
         const liveRows = el.shadowRoot!.querySelectorAll('.tool-call-live');
-        expect(liveRows.length).to.equal(1);
+        expect(liveRows).to.have.lengthOf(1);
       });
     });
 
@@ -718,7 +718,7 @@ describe('ChatMessageBubble', () => {
 
         it('should render the short-completed task as a compact pill', () => {
           const pills = el.shadowRoot!.querySelectorAll('.tool-call-pill');
-          expect(pills.length).to.equal(1);
+          expect(pills).to.have.lengthOf(1);
         });
 
         it('should still render the live tool call as a live row', () => {
@@ -935,7 +935,7 @@ describe('ChatMessageBubble', () => {
 
       it('should render three plan entries', () => {
         const entries = el.shadowRoot!.querySelectorAll('.plan-entry');
-        expect(entries.length).to.equal(3);
+        expect(entries).to.have.lengthOf(3);
       });
 
       it('should show the check glyph for completed entries', () => {

@@ -197,7 +197,7 @@ describe('FileDropZone', () => {
     it('should project the slotted content', () => {
       const slot = el.shadowRoot?.querySelector('slot') as HTMLSlotElement;
       const assigned = slot.assignedElements();
-      expect(assigned.length).to.equal(1);
+      expect(assigned).to.have.lengthOf(1);
       expect(assigned[0]?.tagName).to.equal('TEXTAREA');
     });
   });

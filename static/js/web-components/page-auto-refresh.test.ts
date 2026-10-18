@@ -131,7 +131,7 @@ describe('PageAutoRefresh', () => {
       });
 
       it('should dispatch page-watch-error event', () => {
-        expect(errorEvents.length).to.equal(1);
+        expect(errorEvents).to.have.lengthOf(1);
       });
 
       it('should include error message in event detail', () => {
@@ -269,7 +269,7 @@ describe('PageAutoRefresh', () => {
       });
 
       it('should not dispatch page-status-changed', () => {
-        expect(statusEvents.length).to.equal(0);
+        expect(statusEvents).to.have.lengthOf(0);
       });
     });
   });
@@ -560,7 +560,7 @@ describe('PageAutoRefresh', () => {
       });
 
       it('should not dispatch page-status-changed event', () => {
-        expect(statusEvents.length).to.equal(0);
+        expect(statusEvents).to.have.lengthOf(0);
       });
     });
   });
@@ -591,7 +591,7 @@ describe('PageAutoRefresh', () => {
     });
 
     it('should dispatch page-watch-error event', () => {
-      expect(errorEvents.length).to.equal(1);
+      expect(errorEvents).to.have.lengthOf(1);
     });
 
     it('should include the error in event detail', () => {

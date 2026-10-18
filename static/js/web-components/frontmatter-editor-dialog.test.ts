@@ -207,7 +207,7 @@ describe('FrontmatterEditorDialog', () => {
 
       it('should render the loading indicator', () => {
         const loadingEl = el.shadowRoot?.querySelector('.loading');
-        expect(loadingEl).to.not.equal(null);
+        expect(loadingEl).to.not.be.null;
       });
 
       it('should show loading text', () => {
@@ -238,7 +238,7 @@ describe('FrontmatterEditorDialog', () => {
 
       it('should render error-display component', () => {
         const errorDisplay = el.shadowRoot?.querySelector('error-display');
-        expect(errorDisplay).to.not.equal(null);
+        expect(errorDisplay).to.not.be.null;
       });
 
       it('should not render loading indicator', () => {
@@ -267,7 +267,7 @@ describe('FrontmatterEditorDialog', () => {
 
       it('should render the frontmatter editor', () => {
         const editor = el.shadowRoot?.querySelector('frontmatter-value-section');
-        expect(editor).to.not.equal(null);
+        expect(editor).to.not.be.null;
       });
 
       it('should not render loading indicator', () => {

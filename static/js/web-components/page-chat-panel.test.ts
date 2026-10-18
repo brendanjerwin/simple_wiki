@@ -518,12 +518,12 @@ describe('PageChatPanel', () => {
 
       it('should not show the thinking indicator', () => {
         const indicator = el.shadowRoot!.querySelector('.thinking-indicator');
-        expect(indicator).to.equal(null);
+        expect(indicator).to.be.null;
       });
 
       it('should not show the Stop button', () => {
         const stop = el.shadowRoot!.querySelector('.stop-button');
-        expect(stop).to.equal(null);
+        expect(stop).to.be.null;
       });
     });
   });
@@ -646,7 +646,7 @@ describe('PageChatPanel', () => {
       it('should add a new reaction group', () => {
         const msg = el.messages[0]!;
         const group = msg.reactions.find((r) => r.emoji === '❤️');
-        expect(group).to.not.equal(undefined);
+        expect(group).to.not.be.undefined;
         expect(group!.count).to.equal(1);
         expect(group!.reactors).to.include('bob');
       });
@@ -654,7 +654,7 @@ describe('PageChatPanel', () => {
       it('should preserve the existing reaction group', () => {
         const msg = el.messages[0]!;
         const group = msg.reactions.find((r) => r.emoji === '👍');
-        expect(group).to.not.equal(undefined);
+        expect(group).to.not.be.undefined;
       });
     });
 
@@ -717,7 +717,7 @@ describe('PageChatPanel', () => {
 
       it('should store the message in messagesById', () => {
         const stored = (el as unknown as { messagesById: Map<string, ChatMessageState> }).messagesById.get('msg-1');
-        expect(stored).to.not.equal(undefined);
+        expect(stored).to.not.be.undefined;
       });
     });
 
@@ -872,11 +872,11 @@ describe('PageChatPanel', () => {
 
       it('should not show the error banner', () => {
         const banner = el.shadowRoot!.querySelector('.status-banner.disconnected');
-        expect(banner).to.equal(null);
+        expect(banner).to.be.null;
       });
 
       it('should have null error state', () => {
-        expect(el.error).to.equal(null);
+        expect(el.error).to.be.null;
       });
     });
   });
@@ -998,7 +998,7 @@ describe('PageChatPanel', () => {
 
       it('should not render the permission prompt', () => {
         const prompt = el.shadowRoot!.querySelector('.permission-prompt');
-        expect(prompt).to.equal(null);
+        expect(prompt).to.be.null;
       });
     });
 
@@ -1037,7 +1037,7 @@ describe('PageChatPanel', () => {
 
       it('should render option buttons', () => {
         const buttons = el.shadowRoot!.querySelectorAll('.permission-btn:not(.cancel)');
-        expect(buttons.length).to.equal(2);
+        expect(buttons).to.have.lengthOf(2);
         expect(buttons[0]!.textContent).to.contain('Allow');
         expect(buttons[1]!.textContent).to.contain('Allow All');
       });
@@ -1086,12 +1086,12 @@ describe('PageChatPanel', () => {
       });
 
       it('should clear pendingPermission', () => {
-        expect(el.pendingPermission).to.equal(null);
+        expect(el.pendingPermission).to.be.null;
       });
 
       it('should remove the permission prompt from the DOM', () => {
         const prompt = el.shadowRoot!.querySelector('.permission-prompt');
-        expect(prompt).to.equal(null);
+        expect(prompt).to.be.null;
       });
     });
 
@@ -1172,7 +1172,7 @@ describe('PageChatPanel', () => {
       });
 
       it('should have cleared pendingPermission after the second response', () => {
-        expect(el.pendingPermission).to.equal(null);
+        expect(el.pendingPermission).to.be.null;
       });
     });
 
@@ -1205,7 +1205,7 @@ describe('PageChatPanel', () => {
       });
 
       it('should clear pendingPermission', () => {
-        expect(el.pendingPermission).to.equal(null);
+        expect(el.pendingPermission).to.be.null;
       });
     });
   });
@@ -1801,7 +1801,7 @@ describe('PageChatPanel stream methods', () => {
       });
 
       it('should clear the error', () => {
-        expect(el.error).to.equal(null);
+        expect(el.error).to.be.null;
       });
 
       it('should call onResetDelay for each event', () => {
@@ -1830,7 +1830,7 @@ describe('PageChatPanel stream methods', () => {
       });
 
       it('should clear the error', () => {
-        expect(el.error).to.equal(null);
+        expect(el.error).to.be.null;
       });
     });
   });
@@ -2070,7 +2070,7 @@ describe('PageChatPanel stream methods', () => {
 
       it('should clear streamSubscription', () => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any -- accessing private field for testing
-        expect((el as any).streamSubscription).to.equal(undefined);
+        expect((el as any).streamSubscription).to.be.undefined;
       });
     });
 
@@ -2212,7 +2212,7 @@ describe('PageChatPanel stream methods', () => {
       });
 
       it('should set pendingPermission', () => {
-        expect(el.pendingPermission).to.not.equal(null);
+        expect(el.pendingPermission).to.not.be.null;
         expect(el.pendingPermission!.requestId).to.equal('perm-1');
       });
 
@@ -2278,7 +2278,7 @@ describe('PageChatPanel stream methods', () => {
       });
 
       it('should clear pending permission', () => {
-        expect(el.pendingPermission).to.equal(null);
+        expect(el.pendingPermission).to.be.null;
       });
     });
 

@@ -99,7 +99,7 @@ describe('AgentDetailsDialog', () => {
     });
 
     it('should have no error by default', () => {
-      expect(el.augmentedError).to.equal(null);
+      expect(el.augmentedError).to.be.null;
     });
 
     it('should have empty schedules by default', () => {
@@ -107,7 +107,7 @@ describe('AgentDetailsDialog', () => {
     });
 
     it('should have null chat context by default', () => {
-      expect(el.chatContext).to.equal(null);
+      expect(el.chatContext).to.be.null;
     });
 
     it('should render a native dialog element', () => {
@@ -229,7 +229,7 @@ describe('AgentDetailsDialog', () => {
 
     it('should render one row per schedule', () => {
       const rows = el.shadowRoot?.querySelectorAll('.schedule-row');
-      expect(rows?.length).to.equal(2);
+      expect(rows).to.have.lengthOf(2);
     });
 
     it('should render the schedule id for each row', () => {
@@ -246,7 +246,7 @@ describe('AgentDetailsDialog', () => {
 
     it('should render a status badge for each row', () => {
       const badges = el.shadowRoot?.querySelectorAll('.schedule-row .status-badge');
-      expect(badges?.length).to.equal(2);
+      expect(badges).to.have.lengthOf(2);
     });
 
     it('should mark the OK schedule with the status-ok class', () => {
@@ -396,7 +396,7 @@ describe('AgentDetailsDialog', () => {
 
     it('should render each user goal as a list item', () => {
       const items = el.shadowRoot?.querySelectorAll('.goal-list .chat-list-item');
-      expect(items?.length).to.equal(2);
+      expect(items).to.have.lengthOf(2);
     });
 
     it('should include the user goal text', () => {
@@ -407,7 +407,7 @@ describe('AgentDetailsDialog', () => {
 
     it('should render each pending item as a list item', () => {
       const items = el.shadowRoot?.querySelectorAll('.pending-list .chat-list-item');
-      expect(items?.length).to.equal(2);
+      expect(items).to.have.lengthOf(2);
     });
 
     it('should include the pending item text', () => {
@@ -418,12 +418,12 @@ describe('AgentDetailsDialog', () => {
 
     it('should render a leading checkbox glyph for each pending item', () => {
       const glyphs = el.shadowRoot?.querySelectorAll('.pending-list .chat-list-item .fa-square');
-      expect(glyphs?.length).to.equal(2);
+      expect(glyphs).to.have.lengthOf(2);
     });
 
     it('should not render a checkbox glyph on user goals', () => {
       const glyphs = el.shadowRoot?.querySelectorAll('.goal-list .chat-list-item .fa-square');
-      expect(glyphs?.length).to.equal(0);
+      expect(glyphs).to.have.lengthOf(0);
     });
 
     it('should render the key context', () => {
@@ -485,7 +485,7 @@ describe('AgentDetailsDialog', () => {
 
     it('should render one row per activity entry', () => {
       const rows = el.shadowRoot?.querySelectorAll('.activity-row');
-      expect(rows?.length).to.equal(2);
+      expect(rows).to.have.lengthOf(2);
     });
 
     it('should render the newest entry first', () => {
@@ -502,7 +502,7 @@ describe('AgentDetailsDialog', () => {
 
     it('should include a status badge for each entry', () => {
       const badges = el.shadowRoot?.querySelectorAll('.activity-row .status-badge');
-      expect(badges?.length).to.equal(2);
+      expect(badges).to.have.lengthOf(2);
     });
 
     it('should include the summary text for each entry', () => {
@@ -605,7 +605,7 @@ describe('AgentDetailsDialog', () => {
 
     it('should not render the schedules list', () => {
       const list = el.shadowRoot?.querySelector('.schedule-list');
-      expect(list).to.equal(null);
+      expect(list).to.be.null;
     });
   });
 
@@ -667,12 +667,12 @@ describe('AgentDetailsDialog', () => {
 
     it('should not render the schedules list', () => {
       const list = el.shadowRoot?.querySelector('.schedule-list');
-      expect(list).to.equal(null);
+      expect(list).to.be.null;
     });
 
     it('should not render the error-display', () => {
       const errorDisplay = el.shadowRoot?.querySelector('error-display');
-      expect(errorDisplay).to.equal(null);
+      expect(errorDisplay).to.be.null;
     });
   });
 
@@ -801,7 +801,7 @@ describe('AgentDetailsDialog', () => {
 
     it('should no longer render the deleted schedule row', () => {
       const deletedRow = el.shadowRoot?.querySelector('[data-schedule-id="delete-me"]');
-      expect(deletedRow).to.equal(null);
+      expect(deletedRow).to.be.null;
     });
 
     it('should keep the remaining schedule row visible', () => {
@@ -810,7 +810,7 @@ describe('AgentDetailsDialog', () => {
     });
 
     it('should clear the armed confirmation state', () => {
-      expect(el.confirmingDeleteId).to.equal(null);
+      expect(el.confirmingDeleteId).to.be.null;
     });
   });
 
@@ -963,7 +963,7 @@ describe('AgentDetailsDialog', () => {
     });
 
     it('should clear the armed confirmation state', () => {
-      expect(el.confirmingDeleteId).to.equal(null);
+      expect(el.confirmingDeleteId).to.be.null;
     });
 
     it('should not call deleteSchedule', () => {
@@ -1010,7 +1010,7 @@ describe('AgentDetailsDialog', () => {
     });
 
     it('should clear the armed confirmation state', () => {
-      expect(el.confirmingDeleteId).to.equal(null);
+      expect(el.confirmingDeleteId).to.be.null;
     });
 
     it('should not call deleteSchedule', () => {
@@ -1065,7 +1065,7 @@ describe('AgentDetailsDialog', () => {
     });
 
     it('should clear the armed confirmation state', () => {
-      expect(el.confirmingDeleteId).to.equal(null);
+      expect(el.confirmingDeleteId).to.be.null;
     });
 
     it('should not call deleteSchedule', () => {
@@ -1169,7 +1169,7 @@ describe('AgentDetailsDialog', () => {
     });
 
     it('should reset chat context', () => {
-      expect(el.chatContext).to.equal(null);
+      expect(el.chatContext).to.be.null;
     });
   });
 

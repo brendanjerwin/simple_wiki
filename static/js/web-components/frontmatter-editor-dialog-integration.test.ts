@@ -153,7 +153,7 @@ describe('FrontmatterEditorDialog - Component Integration', () => {
 
       it('should preserve remaining fields', () => {
         const keys = Object.keys(el.workingFrontmatter ?? {});
-        expect(keys.length).to.equal(2);
+        expect(keys).to.have.lengthOf(2);
         keys.forEach(key => {
           expect(['field1', 'field2', 'field3']).to.include(key);
         });

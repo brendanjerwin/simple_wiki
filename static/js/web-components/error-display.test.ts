@@ -235,12 +235,12 @@ describe('ErrorDisplay', () => {
 
       it('should not display expand button', () => {
         const expandButton = el.shadowRoot?.querySelector('.expand-button');
-        expect(expandButton).to.equal(null);
+        expect(expandButton).to.be.null;
       });
 
       it('should not display details section', () => {
         const detailsSection = el.shadowRoot?.querySelector('.error-details');
-        expect(detailsSection).to.equal(null);
+        expect(detailsSection).to.be.null;
       });
     });
 
@@ -258,7 +258,7 @@ describe('ErrorDisplay', () => {
 
       it('should display expand button', () => {
         const expandButton = el.shadowRoot?.querySelector('.expand-button');
-        expect(expandButton).to.not.equal(null);
+        expect(expandButton).to.not.be.null;
       });
 
       it('should show "Show details" label initially', () => {
@@ -555,7 +555,7 @@ describe('ErrorDisplay', () => {
 
       it('should render the fallback textarea', () => {
         const textarea = el.shadowRoot?.querySelector<HTMLTextAreaElement>('.copy-details-fallback');
-        expect(textarea).not.to.equal(null);
+        expect(textarea).not.to.be.null;
         expect(textarea?.value).to.include('Clipboard unavailable');
       });
 

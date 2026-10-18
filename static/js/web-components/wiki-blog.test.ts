@@ -221,7 +221,7 @@ describe('WikiBlog', () => {
     });
 
     it('should have no child nodes in light DOM', () => {
-      expect(el.childNodes.length).to.equal(0);
+      expect(el.childNodes).to.have.lengthOf(0);
     });
   });
 
