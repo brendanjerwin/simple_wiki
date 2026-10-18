@@ -165,7 +165,7 @@ describe('ConnectorPausedBadge', () => {
     });
 
     it('should dispatch a request-reconnect event', () => {
-      expect(dispatched).to.not.equal(null);
+      expect(dispatched).to.not.be.null;
     });
 
     it('should include the connectorKind in the event detail', () => {
@@ -260,11 +260,11 @@ describe('ConnectorPausedBadge', () => {
     });
 
     it('should NOT navigate (the bind-button renders the recovery affordance instead)', () => {
-      expect(navigatedTo).to.equal(null);
+      expect(navigatedTo).to.be.null;
     });
 
     it('should NOT dispatch request-reconnect (reconnecting OAuth would not help)', () => {
-      expect(dispatched).to.equal(null);
+      expect(dispatched).to.be.null;
     });
   });
 
@@ -294,7 +294,7 @@ describe('ConnectorPausedBadge', () => {
     });
 
     it('should NOT navigate (the in-page listener handled it)', () => {
-      expect(navigatedTo).to.equal(null);
+      expect(navigatedTo).to.be.null;
     });
   });
 });

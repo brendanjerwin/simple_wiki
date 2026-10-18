@@ -118,7 +118,7 @@ describe('WikiHashtag', () => {
 
     it('should render a list of result links', () => {
       const links = el.shadowRoot.querySelectorAll('.bubble-list a');
-      expect(links.length).to.equal(1);
+      expect(links).to.have.lengthOf(1);
       expect(links[0]?.getAttribute('href')).to.equal('/tagged-page');
       expect(links[0]?.textContent?.trim()).to.equal('Tagged Page');
     });
@@ -141,7 +141,7 @@ describe('WikiHashtag', () => {
 
     it('should humanize the identifier instead of showing the raw form', () => {
       const links = el.shadowRoot.querySelectorAll('.bubble-list a');
-      expect(links.length).to.equal(2);
+      expect(links).to.have.lengthOf(2);
       expect(links[0]?.textContent?.trim()).to.equal('Home Lab');
       expect(links[1]?.textContent?.trim()).to.equal('Engineering Blog');
     });

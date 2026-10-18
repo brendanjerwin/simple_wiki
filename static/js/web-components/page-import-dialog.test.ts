@@ -857,7 +857,7 @@ describe('PageImportDialog', () => {
 
       it('should show validation errors section', () => {
         const errorItems = el.shadowRoot?.querySelectorAll('.validation-error-item');
-        expect(errorItems?.length).to.equal(2);
+        expect(errorItems).to.have.lengthOf(2);
       });
     });
 
@@ -1172,7 +1172,7 @@ describe('PageImportDialog', () => {
 
       it('should set records from response', () => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        expect((el as any).records.length).to.equal(1);
+        expect((el as any).records).to.have.lengthOf(1);
       });
 
       it('should set stats from response', () => {

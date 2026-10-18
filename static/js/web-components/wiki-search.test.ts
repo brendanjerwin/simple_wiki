@@ -379,7 +379,7 @@ describe('WikiSearch', () => {
       });
 
       it('should populate results', () => {
-        expect(el.results.length).to.equal(1);
+        expect(el.results).to.have.lengthOf(1);
         expect(el.results[0]?.identifier).to.equal('test');
       });
 

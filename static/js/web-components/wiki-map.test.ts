@@ -184,7 +184,7 @@ describe('WikiMap', () => {
 
     it('should render a tileset selector', () => {
       const selector = el.shadowRoot?.querySelector<HTMLSelectElement>('select[aria-label="Tileset"]');
-      expect(selector).not.to.equal(null);
+      expect(selector).not.to.be.null;
     });
 
     it('should select the default tileset from map style', () => {
@@ -372,7 +372,7 @@ describe('WikiMap', () => {
     });
 
     it('should render an error state', () => {
-      expect(el.shadowRoot?.querySelector('error-display')).not.to.equal(null);
+      expect(el.shadowRoot?.querySelector('error-display')).not.to.be.null;
     });
 
     it('should not render Leaflet', () => {
@@ -535,7 +535,7 @@ describe('WikiMap', () => {
 
         it('should remove the Leaflet map', () => {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any -- accessing private map for test verification
-          expect((leafletRenderer as unknown as { map: unknown }).map).to.equal(null);
+          expect((leafletRenderer as unknown as { map: unknown }).map).to.be.null;
         });
       });
 
@@ -660,7 +660,7 @@ describe('WikiMap', () => {
             const taggedMarkerOverlay = leafletRenderer.overlays.find(
               o => o.tags.includes('hiking') && !o.tags.includes('scenic')
             );
-            expect(taggedMarkerOverlay).to.not.equal(undefined);
+            expect(taggedMarkerOverlay).to.not.be.undefined;
             // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- verifying stub layer removal
             const layer = taggedMarkerOverlay!.layer as unknown as { remove: sinon.SinonStub };
             expect(layer.remove.called).to.equal(true);
@@ -670,7 +670,7 @@ describe('WikiMap', () => {
             const trackOverlay = leafletRenderer.overlays.find(
               o => o.tags.includes('hiking') && o.tags.includes('scenic')
             );
-            expect(trackOverlay).to.not.equal(undefined);
+            expect(trackOverlay).to.not.be.undefined;
             // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- verifying stub layer not removed
             const layer = trackOverlay!.layer as unknown as { remove: sinon.SinonStub };
             expect(layer.remove.called).to.equal(false);
@@ -685,7 +685,7 @@ describe('WikiMap', () => {
 
           it('should hide overlays with no real tags', () => {
             const plainOverlay = leafletRenderer.overlays.find(o => o.tags.length === 0);
-            expect(plainOverlay).to.not.equal(undefined);
+            expect(plainOverlay).to.not.be.undefined;
             // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- verifying stub layer removal
             const layer = plainOverlay!.layer as unknown as { remove: sinon.SinonStub };
             expect(layer.remove.called).to.equal(true);
@@ -693,7 +693,7 @@ describe('WikiMap', () => {
 
           it('should keep tagged overlays visible', () => {
             const taggedOverlay = leafletRenderer.overlays.find(o => o.tags.length > 0);
-            expect(taggedOverlay).to.not.equal(undefined);
+            expect(taggedOverlay).to.not.be.undefined;
             // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- verifying stub layer not removed
             const layer = taggedOverlay!.layer as unknown as { remove: sinon.SinonStub };
             expect(layer.remove.called).to.equal(false);
@@ -722,7 +722,7 @@ describe('WikiMap', () => {
 
         it('should add the track as an overlay (polyline)', () => {
           const trackOverlay = leafletRenderer.overlays.find(o => o.tags.includes('hiking') && o.tags.includes('scenic'));
-          expect(trackOverlay).to.not.equal(undefined);
+          expect(trackOverlay).to.not.be.undefined;
         });
       });
 
@@ -748,7 +748,7 @@ describe('WikiMap', () => {
 
         it('should not crash the renderer (map still present)', () => {
           // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- verifying private map state
-          expect((leafletRenderer as unknown as { map: unknown }).map).to.not.equal(null);
+          expect((leafletRenderer as unknown as { map: unknown }).map).to.not.be.null;
         });
       });
     });
@@ -910,7 +910,7 @@ describe('WikiMap', () => {
       });
 
       it('should not show the add-track button at rest', () => {
-        expect(el.shadowRoot?.querySelector('.add-track-button')).to.equal(null);
+        expect(el.shadowRoot?.querySelector('.add-track-button')).to.be.null;
       });
 
       describe('when the map is clicked', () => {
@@ -922,7 +922,7 @@ describe('WikiMap', () => {
         });
         it('should reveal the add-track button', () => {
           const addTrackButton = el.shadowRoot?.querySelector('.add-track-button');
-          expect(addTrackButton).to.not.equal(null);
+          expect(addTrackButton).to.not.be.null;
         });
       });
     });
@@ -972,7 +972,7 @@ describe('WikiMap', () => {
 
         it('should provide a comma-separated tags input field', () => {
           const tagsInput = el.shadowRoot?.querySelector('.upload-popover input[name="tags"]') as HTMLInputElement | null;
-          expect(tagsInput).to.not.equal(null);
+          expect(tagsInput).to.not.be.null;
         });
 
         it('should provide a download attribute on the track popup link via the renderer', () => {
@@ -981,7 +981,7 @@ describe('WikiMap', () => {
           // /uploads/<hash>?filename=<filename>.
           // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private state for test setup
           const fileClient = (el as unknown as { fileClient: unknown }).fileClient;
-          expect(fileClient).to.not.equal(undefined);
+          expect(fileClient).to.not.be.undefined;
         });
       });
     });
@@ -1039,7 +1039,7 @@ describe('WikiMap', () => {
         });
 
         it('should display the upload popover', () => {
-          expect(uploadEl.shadowRoot?.querySelector('.upload-popover')).not.to.equal(null);
+          expect(uploadEl.shadowRoot?.querySelector('.upload-popover')).not.to.be.null;
         });
 
         describe('when the upload form is submitted and fails', () => {
@@ -1050,7 +1050,7 @@ describe('WikiMap', () => {
           });
 
           it('should keep the upload popover visible', () => {
-            expect(uploadEl.shadowRoot?.querySelector('.upload-popover')).not.to.equal(null);
+            expect(uploadEl.shadowRoot?.querySelector('.upload-popover')).not.to.be.null;
           });
 
           it('should display the upload error message on the popover', () => {
@@ -1058,7 +1058,7 @@ describe('WikiMap', () => {
           });
 
           it('should not set a global map error or crash the map component', () => {
-            expect(uploadEl.error).to.equal(null);
+            expect(uploadEl.error).to.be.null;
           });
         });
       });

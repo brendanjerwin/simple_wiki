@@ -196,7 +196,7 @@ describe('EditorUploadService', () => {
       });
 
       it('should return undefined', () => {
-        expect(result).to.equal(undefined);
+        expect(result).to.be.undefined;
       });
     });
 
@@ -212,7 +212,7 @@ describe('EditorUploadService', () => {
       });
 
       it('should return undefined', () => {
-        expect(result).to.equal(undefined);
+        expect(result).to.be.undefined;
       });
     });
   });

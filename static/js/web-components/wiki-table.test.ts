@@ -128,12 +128,12 @@ describe('WikiTable', () => {
 
       it('should not show row count as filtered', () => {
         const filtered = el.shadowRoot?.querySelector('.row-count-filtered');
-        expect(filtered).to.equal(null);
+        expect(filtered).to.be.null;
       });
 
       it('should not show clear all button', () => {
         const clearAll = el.shadowRoot?.querySelector('[aria-label="Clear all filters"]');
-        expect(clearAll).to.equal(null);
+        expect(clearAll).to.be.null;
       });
 
       it('should show the view toggle', () => {
@@ -245,7 +245,7 @@ describe('WikiTable', () => {
         el.cardViewActive = false;
         await el.updateComplete;
         const sortFilterPill = el.shadowRoot?.querySelector('[aria-label="Sort and filter"]');
-        expect(sortFilterPill).to.equal(null);
+        expect(sortFilterPill).to.be.null;
       });
     });
 
@@ -525,7 +525,7 @@ describe('WikiTable', () => {
       });
 
       it('should reset sort column index', () => {
-        expect(el.sortColumnIndex).to.equal(null);
+        expect(el.sortColumnIndex).to.be.null;
       });
     });
   });
@@ -571,7 +571,7 @@ describe('WikiTable', () => {
       });
 
       it('should close the popover', () => {
-        expect(el.popoverColumnIndex).to.equal(null);
+        expect(el.popoverColumnIndex).to.be.null;
       });
     });
 
@@ -589,7 +589,7 @@ describe('WikiTable', () => {
       });
 
       it('should close the popover', () => {
-        expect(el.popoverColumnIndex).to.equal(null);
+        expect(el.popoverColumnIndex).to.be.null;
       });
     });
   });
@@ -730,7 +730,7 @@ describe('WikiTable', () => {
 
       it('should not render a table element', () => {
         const table = el.shadowRoot?.querySelector('table');
-        expect(table).to.equal(null);
+        expect(table).to.be.null;
       });
     });
   });
@@ -832,7 +832,7 @@ describe('WikiTable', () => {
     });
 
     it('should not extract data', () => {
-      expect(el.extractedData).to.equal(null);
+      expect(el.extractedData).to.be.null;
     });
 
     it('should render a slot for the content', () => {
@@ -1415,12 +1415,12 @@ describe('WikiTable', () => {
 
       it('should strip script tags from rendered output', () => {
         const cells = el.shadowRoot?.querySelectorAll('tbody td');
-        expect(cells?.[0]?.querySelector('script')).to.equal(null);
+        expect(cells?.[0]?.querySelector('script')).to.be.null;
       });
 
       it('should not execute injected scripts', () => {
         // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- intentional cast for XSS test verification
-        expect((window as unknown as Record<string, unknown>)['__xss_executed']).to.equal(undefined);
+        expect((window as unknown as Record<string, unknown>)['__xss_executed']).to.be.undefined;
       });
 
     });
@@ -1449,12 +1449,12 @@ describe('WikiTable', () => {
 
       it('should strip onerror event handler attributes', () => {
         const spans = el.shadowRoot?.querySelectorAll('tbody td span');
-        expect(spans?.[0]?.getAttribute('onerror')).to.equal(null);
+        expect(spans?.[0]?.getAttribute('onerror')).to.be.null;
       });
 
       it('should strip onclick event handler attributes', () => {
         const spans = el.shadowRoot?.querySelectorAll('tbody td span');
-        expect(spans?.[0]?.getAttribute('onclick')).to.equal(null);
+        expect(spans?.[0]?.getAttribute('onclick')).to.be.null;
       });
 
     });
@@ -1566,12 +1566,12 @@ describe('WikiTable', () => {
 
       it('should strip script tags from card view rendered output', () => {
         const cardValues = el.shadowRoot?.querySelectorAll('.card-value');
-        expect(cardValues?.[0]?.querySelector('script')).to.equal(null);
+        expect(cardValues?.[0]?.querySelector('script')).to.be.null;
       });
 
       it('should not execute injected scripts in card view', () => {
         // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- intentional cast for XSS test verification
-        expect((window as unknown as Record<string, unknown>)['__card_xss']).to.equal(undefined);
+        expect((window as unknown as Record<string, unknown>)['__card_xss']).to.be.undefined;
       });
 
     });

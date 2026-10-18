@@ -132,7 +132,7 @@ describe('WikiChecklist', () => {
     });
 
     it('should have no child nodes in light DOM', () => {
-      expect(el.childNodes.length).to.equal(0);
+      expect(el.childNodes).to.have.lengthOf(0);
     });
   });
 
@@ -454,7 +454,7 @@ describe('WikiChecklist', () => {
       });
 
       it('should render a tag badge for each tag', () => {
-        expect(tagBadges!.length).to.equal(2);
+        expect(tagBadges!).to.have.lengthOf(2);
       });
     });
 
@@ -505,7 +505,7 @@ describe('WikiChecklist', () => {
 
         it('should hide tag badges while editing', () => {
           const badges = el.shadowRoot?.querySelectorAll('.item-tag-badge');
-          expect(badges?.length).to.equal(0);
+          expect(badges).to.have.lengthOf(0);
         });
 
         it('should hide the display span while editing', () => {
@@ -638,7 +638,7 @@ describe('WikiChecklist', () => {
         });
 
         it('should render a pill for each unique tag', () => {
-          expect(pills!.length).to.equal(2);
+          expect(pills!).to.have.lengthOf(2);
         });
       });
 
@@ -681,7 +681,7 @@ describe('WikiChecklist', () => {
         });
 
         it('should only render items matching the filter', () => {
-          expect(renderedItems!.length).to.equal(2);
+          expect(renderedItems!).to.have.lengthOf(2);
         });
       });
 
@@ -710,7 +710,7 @@ describe('WikiChecklist', () => {
         });
 
         it('should filter displayed items', () => {
-          expect(renderedItems!.length).to.equal(2);
+          expect(renderedItems!).to.have.lengthOf(2);
         });
       });
 
@@ -738,7 +738,7 @@ describe('WikiChecklist', () => {
         });
 
         it('should show all items', () => {
-          expect(renderedItems!.length).to.equal(2);
+          expect(renderedItems!).to.have.lengthOf(2);
         });
       });
 
@@ -786,7 +786,7 @@ describe('WikiChecklist', () => {
         });
 
         it('should show all items', () => {
-          expect(renderedItems!.length).to.equal(2);
+          expect(renderedItems!).to.have.lengthOf(2);
         });
       });
 
@@ -1717,7 +1717,7 @@ describe('WikiChecklist', () => {
       });
 
       it('should render a drag handle on each item', () => {
-        expect(handles?.length).to.equal(3);
+        expect(handles).to.have.lengthOf(3);
       });
 
       it('should render the first item with data-index 0', () => {
