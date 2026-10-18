@@ -179,7 +179,7 @@ function classifyPausedBindings(bindings: BindingState[]): { authPaused: Binding
 }
 
 export class ProfilePausedBanner extends LitElement {
-  static override styles = [foundationCSS, localCSS];
+  static override readonly styles = [foundationCSS, localCSS];
 
   // pausedKinds is the rendered set: one entry per connector kind that
   // has at least one paused subscription. Empty array → component
@@ -188,7 +188,7 @@ export class ProfilePausedBanner extends LitElement {
   @state() declare private pausedKinds: PausedKindRow[];
   @state() declare private loading: boolean;
 
-  private client = createClient(ConnectorService, getGrpcWebTransport());
+  private readonly client = createClient(ConnectorService, getGrpcWebTransport());
 
   // navigate is the seam tests stub to assert routing behaviour without
   // actually navigating the test runner away from the harness page.
@@ -200,7 +200,7 @@ export class ProfilePausedBanner extends LitElement {
   // boundReconnectListener keeps the bound function reference stable
   // across connectedCallback / disconnectedCallback so removeEventListener
   // can find and remove the same listener (anonymous bind would leak).
-  private boundReconnectListener = (e: Event) => this.handleRequestReconnect(e);
+  private readonly boundReconnectListener = (e: Event) => this.handleRequestReconnect(e);
 
   constructor() {
     super();
