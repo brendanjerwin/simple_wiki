@@ -492,8 +492,8 @@ github.com/teambition/rrule-go
 # github.com/tinylib/msgp v1.1.0
 ## explicit
 github.com/tinylib/msgp/msgp
-# github.com/tkrajina/gpxgo v1.4.0
-## explicit; go 1.16
+# github.com/tkrajina/gpxgo v1.5.1
+## explicit; go 1.25.0
 github.com/tkrajina/gpxgo/gpx
 # github.com/twitchyliquid64/golang-asm v0.15.1
 ## explicit; go 1.13
