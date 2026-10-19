@@ -86,7 +86,7 @@ module.exports = {
         if (!name) return;
         if (!/error/i.test(name)) return;
 
-        const ann = node.typeAnnotation && node.typeAnnotation.typeAnnotation;
+        const ann = node.typeAnnotation?.typeAnnotation;
         if (!ann) return;
         if (ann.type === 'TSStringKeyword') {
           context.report({

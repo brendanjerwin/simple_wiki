@@ -71,7 +71,7 @@ const localCSS = css`
 `;
 
 export class ConnectorPausedBadge extends LitElement {
-  static override styles = [foundationCSS, localCSS];
+  static override readonly styles = [foundationCSS, localCSS];
 
   /**
    * Which connector this paused subscription belongs to. Used to populate

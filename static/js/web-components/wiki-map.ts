@@ -216,8 +216,7 @@ export class LeafletWikiMapRenderer implements WikiMapRenderer {
     });
 
     const view = mapMessage.view;
-    const markerPoints = mapMessage.markers.map(marker => marker.position).filter(point => point != null);
-    const firstPoint = markerPoints[0];
+    const firstPoint = mapMessage.markers.map(marker => marker.position).find(point => point != null);
     const defaultCenter: L.LatLngExpression = firstPoint ? [firstPoint.lat, firstPoint.lon] : [0, 0];
     const center: L.LatLngExpression = view?.center ? [view.center.lat, view.center.lon] : defaultCenter;
     this.map.setView(center, view?.zoom ?? 2);
@@ -1378,7 +1377,6 @@ export class WikiMap extends LitElement {
     if (file.size > MAX_SIZE) {
       this.uploadError = 'File exceeds the maximum size of 10MB.';
       this.isFileInvalid = true;
-      return;
     }
   }
 
@@ -1404,7 +1402,6 @@ export class WikiMap extends LitElement {
     if (file.size > MAX_SIZE) {
       this.uploadError = 'File exceeds the maximum size of 10MB.';
       this.isFileInvalid = true;
-      return;
     }
   }
 
@@ -1517,7 +1514,7 @@ customElements.define('wiki-map', WikiMap);
 
 function aspectRatioCssValue(value: string | undefined): string {
   if (!value) return '16 / 9';
-  const match = /^([1-9][0-9]{0,2}):([1-9][0-9]{0,2})$/.exec(value);
+  const match = /^([1-9]\d{0,2}):([1-9]\d{0,2})$/.exec(value);
   if (!match) return '16 / 9';
   return `${match[1]} / ${match[2]}`;
 }

@@ -28,8 +28,7 @@
 
 import { css, html, LitElement, nothing } from 'lit';
 import { state } from 'lit/decorators.js';
-import { createClient } from '@connectrpc/connect';
-import { ConnectError, Code } from '@connectrpc/connect';
+import { createClient, ConnectError, Code } from '@connectrpc/connect';
 import { create } from '@bufbuild/protobuf';
 import { getGrpcWebTransport } from './grpc-transport.js';
 import {
@@ -118,7 +117,7 @@ const reconnectBannerCSS = css`
 `;
 
 export class GoogleTasksConnect extends LitElement {
-  static override styles = [foundationCSS, buttonCSS, inputCSS, pillCSS, reconnectBannerCSS];
+  static override readonly styles = [foundationCSS, buttonCSS, inputCSS, pillCSS, reconnectBannerCSS];
 
   @state() declare private phase: Phase;
   @state() declare private state: ConnectorState | null;

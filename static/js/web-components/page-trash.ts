@@ -31,7 +31,7 @@ function formatTimestamp(timestamp: Timestamp | undefined): string {
 }
 
 export class PageTrash extends LitElement {
-  static override styles = [
+  static override readonly styles = [
     foundationCSS,
     buttonCSS,
     css`
