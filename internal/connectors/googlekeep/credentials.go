@@ -16,9 +16,9 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"os"
 	"time"
 
+	"github.com/brendanjerwin/simple_wiki/internal/connectors/frontmattercreds"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 )
 
@@ -47,58 +47,77 @@ type CredentialBundle struct {
 // Empty master_token = "not connected" (or Disconnect was called).
 func (b CredentialBundle) IsConfigured() bool { return b.MasterToken != "" }
 
-// Frontmatter leaf names. Mirrors the legacy package's same-named
-// constants; kept here so the credential store doesn't depend on the
-// engine package and the legacy package can be deleted.
+// Frontmatter leaf names for the connector-specific fields.
 const (
-	credentialKeyEmail          = "email"
-	credentialKeyMasterToken    = "master_token"
-	credentialKeyAndroidID      = "android_id"
-	credentialKeyConnectedAt    = "connected_at"
-	credentialKeyLastVerifiedAt = "last_verified_at"
-
-	// Path to the connector subtree. Matches engine.FrontmatterBindingStore's
-	// same constants (intentionally duplicated so the engine package isn't
-	// imported here).
-	credentialKeyWiki       = "wiki"
-	credentialKeyConnectors = "connectors"
-	credentialKeyKeep       = "google_keep"
+	credentialKeyEmail       = "email"
+	credentialKeyMasterToken = "master_token"
+	credentialKeyAndroidID   = "android_id"
 )
 
 // PausedReasonAuthFailed is the canonical reason string written into
 // a binding's PausedReason when Disconnect is invoked or when the
-// gpsoauth bearer is rejected by Keep. Mirrors the Tasks package's
-// constant for parity at the gRPC boundary.
-const PausedReasonAuthFailed = "auth_failed"
+// gpsoauth bearer is rejected by Keep.
+const PausedReasonAuthFailed = frontmattercreds.PausedReasonAuthFailed
 
 // PauseAllBindingsHook is the engine-side hook ClearCredentials calls
-// when Disconnect runs: every active binding for this profile must
-// be transitioned to paused (PausedReason=auth_failed) so the
-// scheduler stops driving Sync against an empty master token. The
-// bootstrap-supplied closure walks BindingStore.LoadBindings and
-// calls Engine.TransitionToPaused on each.
-//
-// A nil hook means "skip pause fan-out" — used by tests; the next
-// scheduler tick still pauses bindings naturally via the adapter's
-// ErrCredentialMissing → ErrorClassAuthFailed mapping.
-type PauseAllBindingsHook func(ctx context.Context, profileID wikipage.PageIdentifier, reason string) error
+// when Disconnect runs.
+type PauseAllBindingsHook = frontmattercreds.PauseAllBindingsHook
 
 // ResumeAllBindingsHook is the engine-side hook PersistMasterToken
-// calls after a successful reconnect. The bootstrap-supplied closure
-// walks BindingStore.LoadBindings and calls Engine.Resume on each.
-// engine.Resume is idempotent on active bindings and routes paused
-// bindings >= 7d to ForceFullResync, so a blanket walk is safe.
-//
-// A nil hook means "skip resume fan-out" — used by tests; the next
-// scheduler tick re-evaluates pause-state naturally.
-type ResumeAllBindingsHook func(ctx context.Context, profileID wikipage.PageIdentifier) error
+// calls after a successful reconnect.
+type ResumeAllBindingsHook = frontmattercreds.ResumeAllBindingsHook
 
-// FrontmatterReadWriter is the wiki-side seam this file uses. Mirrors
-// engine.FrontmatterReadWriter; declared here so the credentials code
-// doesn't import the engine package.
-type FrontmatterReadWriter interface {
-	ReadFrontMatter(identifier wikipage.PageIdentifier) (wikipage.PageIdentifier, wikipage.FrontMatter, error)
-	WriteFrontMatter(identifier wikipage.PageIdentifier, fm wikipage.FrontMatter, identity wikipage.Identity) error
+// FrontmatterReadWriter is the wiki-side seam this file uses.
+type FrontmatterReadWriter = frontmattercreds.FrontmatterReadWriter
+
+// keepBundleCodec implements frontmattercreds.BundleCodec[CredentialBundle].
+// It maps the Keep-specific fields (master_token, android_id) to/from
+// the frontmatter sub-map, while the shared Store handles timestamps and
+// the read-modify-write plumbing.
+type keepBundleCodec struct{}
+
+func (keepBundleCodec) ConnectorKey() string { return "google_keep" }
+func (keepBundleCodec) ErrorPrefix() string  { return "google_keep" }
+
+func (keepBundleCodec) AssembleBundle(m map[string]any, connectedAt, lastVerifiedAt time.Time) CredentialBundle {
+	return CredentialBundle{
+		Email:          frontmattercreds.GetStringFromMap(m, credentialKeyEmail),
+		MasterToken:    frontmattercreds.GetStringFromMap(m, credentialKeyMasterToken),
+		AndroidID:      frontmattercreds.GetStringFromMap(m, credentialKeyAndroidID),
+		ConnectedAt:    connectedAt,
+		LastVerifiedAt: lastVerifiedAt,
+	}
+}
+
+func (keepBundleCodec) WriteTokenFields(b CredentialBundle, m map[string]any) {
+	if b.Email != "" {
+		m[credentialKeyEmail] = b.Email
+	} else {
+		delete(m, credentialKeyEmail)
+	}
+
+	if b.MasterToken != "" {
+		m[credentialKeyMasterToken] = b.MasterToken
+	} else {
+		delete(m, credentialKeyMasterToken)
+	}
+
+	if b.AndroidID != "" {
+		m[credentialKeyAndroidID] = b.AndroidID
+	} else {
+		delete(m, credentialKeyAndroidID)
+	}
+}
+
+func (keepBundleCodec) Timestamps(b CredentialBundle) (connectedAt, lastVerifiedAt time.Time) {
+	return b.ConnectedAt, b.LastVerifiedAt
+}
+
+func (keepBundleCodec) IsConfigured(b CredentialBundle) bool { return b.MasterToken != "" }
+
+func (keepBundleCodec) ClearForDisconnect(b *CredentialBundle) {
+	b.MasterToken = ""
+	b.LastVerifiedAt = time.Time{}
 }
 
 // FrontmatterCredentialStore reads and writes the per-profile Keep
@@ -112,11 +131,7 @@ type FrontmatterReadWriter interface {
 // read-only path. If a future concern surfaces, a sync.Map of
 // per-profile mutexes lands here.
 type FrontmatterCredentialStore struct {
-	pages     FrontmatterReadWriter
-	clock     Clock
-	logger    Logger
-	pauseAll  PauseAllBindingsHook
-	resumeAll ResumeAllBindingsHook
+	core *frontmattercreds.Store[CredentialBundle]
 }
 
 // NewFrontmatterCredentialStore wires the production credential store.
@@ -130,54 +145,18 @@ func NewFrontmatterCredentialStore(
 	pauseAll PauseAllBindingsHook,
 	resumeAll ResumeAllBindingsHook,
 ) (*FrontmatterCredentialStore, error) {
-	if pages == nil {
-		return nil, errors.New("google_keep: pages must not be nil")
+	core, err := frontmattercreds.NewStore(pages, clock, logger, pauseAll, resumeAll, keepBundleCodec{})
+	if err != nil {
+		return nil, err
 	}
-	if clock == nil {
-		return nil, errors.New("google_keep: clock must not be nil")
-	}
-	if logger == nil {
-		return nil, errors.New("google_keep: logger must not be nil")
-	}
-	return &FrontmatterCredentialStore{
-		pages:     pages,
-		clock:     clock,
-		logger:    logger,
-		pauseAll:  pauseAll,
-		resumeAll: resumeAll,
-	}, nil
+	return &FrontmatterCredentialStore{core: core}, nil
 }
 
 // LoadCredentials reads the per-profile credential bundle. A missing
 // page or absent connector subtree returns a zero CredentialBundle
 // with no error — callers branch on IsConfigured().
-func (s *FrontmatterCredentialStore) LoadCredentials(_ context.Context, profileID wikipage.PageIdentifier) (CredentialBundle, error) {
-	_, fm, err := s.pages.ReadFrontMatter(profileID)
-	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return CredentialBundle{}, nil
-		}
-		return CredentialBundle{}, fmt.Errorf("google_keep: read frontmatter for %s: %w", profileID, err)
-	}
-	connector := readKeepCredentialMap(fm)
-	if connector == nil {
-		return CredentialBundle{}, nil
-	}
-	connectedAt, err := parseRFC3339(getStringFromMap(connector, credentialKeyConnectedAt))
-	if err != nil {
-		return CredentialBundle{}, fmt.Errorf("wiki.connectors.google_keep.connected_at: %w", err)
-	}
-	lastVerifiedAt, err := parseRFC3339(getStringFromMap(connector, credentialKeyLastVerifiedAt))
-	if err != nil {
-		return CredentialBundle{}, fmt.Errorf("wiki.connectors.google_keep.last_verified_at: %w", err)
-	}
-	return CredentialBundle{
-		Email:          getStringFromMap(connector, credentialKeyEmail),
-		MasterToken:    getStringFromMap(connector, credentialKeyMasterToken),
-		AndroidID:      getStringFromMap(connector, credentialKeyAndroidID),
-		ConnectedAt:    connectedAt,
-		LastVerifiedAt: lastVerifiedAt,
-	}, nil
+func (s *FrontmatterCredentialStore) LoadCredentials(ctx context.Context, profileID wikipage.PageIdentifier) (CredentialBundle, error) {
+	return s.core.LoadCredentials(ctx, profileID)
 }
 
 // LoadMasterToken implements CredentialReader (used by KeepAdapter).
@@ -222,11 +201,11 @@ func (s *FrontmatterCredentialStore) PersistMasterToken(ctx context.Context, pro
 		return errors.New("google_keep: master_token is required")
 	}
 
-	bundle, err := s.LoadCredentials(ctx, profileID)
+	bundle, err := s.core.LoadCredentials(ctx, profileID)
 	if err != nil {
 		return fmt.Errorf("load credentials for %s: %w", profileID, err)
 	}
-	now := s.clock.Now().UTC()
+	now := s.core.Clock().Now().UTC()
 	if email != "" {
 		bundle.Email = email
 	}
@@ -242,18 +221,13 @@ func (s *FrontmatterCredentialStore) PersistMasterToken(ctx context.Context, pro
 	}
 	bundle.LastVerifiedAt = now
 
-	if err := s.writeCredentials(profileID, bundle); err != nil {
+	if err := s.core.WriteCredentials(profileID, bundle); err != nil {
 		return fmt.Errorf("persist credentials for %s: %w", profileID, err)
 	}
 
 	// Auto-resume paused bindings via the engine hook. Best-effort —
 	// the next scheduler tick re-attempts naturally on failure.
-	if s.resumeAll != nil {
-		if resumeErr := s.resumeAll(ctx, profileID); resumeErr != nil {
-			s.logger.Error("google_keep: auto-resume after reconnect failed for profile=%s: %v",
-				profileID, resumeErr)
-		}
-	}
+	s.core.ResumeBindings(ctx, profileID)
 	return nil
 }
 
@@ -269,123 +243,7 @@ func (s *FrontmatterCredentialStore) PersistMasterToken(ctx context.Context, pro
 // Returns the post-clear CredentialBundle (master_token == "") so
 // the gRPC handler can render a "not configured" state response.
 func (s *FrontmatterCredentialStore) ClearCredentials(ctx context.Context, profileID wikipage.PageIdentifier) (CredentialBundle, error) {
-	bundle, err := s.LoadCredentials(ctx, profileID)
-	if err != nil {
-		return CredentialBundle{}, err
-	}
-	bundle.MasterToken = ""
-	bundle.LastVerifiedAt = time.Time{}
-	if err := s.writeCredentials(profileID, bundle); err != nil {
-		return CredentialBundle{}, fmt.Errorf("clear credentials for %s: %w", profileID, err)
-	}
-	if s.pauseAll != nil {
-		if pauseErr := s.pauseAll(ctx, profileID, PausedReasonAuthFailed); pauseErr != nil {
-			s.logger.Error("google_keep: pause-all-bindings after Disconnect failed for profile=%s: %v",
-				profileID, pauseErr)
-		}
-	}
-	return bundle, nil
-}
-
-// writeCredentials does the read-modify-write on the profile's
-// frontmatter so unrelated fields under wiki.connectors.* (Tasks,
-// bindings, etc.) are preserved untouched.
-func (s *FrontmatterCredentialStore) writeCredentials(profileID wikipage.PageIdentifier, bundle CredentialBundle) error {
-	_, fm, err := s.pages.ReadFrontMatter(profileID)
-	if err != nil && !errors.Is(err, os.ErrNotExist) {
-		return fmt.Errorf("read frontmatter: %w", err)
-	}
-	if fm == nil {
-		fm = make(wikipage.FrontMatter)
-	}
-	connector := ensureKeepCredentialMap(fm)
-	if bundle.Email != "" {
-		connector[credentialKeyEmail] = bundle.Email
-	} else {
-		delete(connector, credentialKeyEmail)
-	}
-	if bundle.MasterToken != "" {
-		connector[credentialKeyMasterToken] = bundle.MasterToken
-	} else {
-		delete(connector, credentialKeyMasterToken)
-	}
-	if bundle.AndroidID != "" {
-		connector[credentialKeyAndroidID] = bundle.AndroidID
-	} else {
-		delete(connector, credentialKeyAndroidID)
-	}
-	if !bundle.ConnectedAt.IsZero() {
-		connector[credentialKeyConnectedAt] = bundle.ConnectedAt.UTC().Format(time.RFC3339)
-	} else {
-		delete(connector, credentialKeyConnectedAt)
-	}
-	if !bundle.LastVerifiedAt.IsZero() {
-		connector[credentialKeyLastVerifiedAt] = bundle.LastVerifiedAt.UTC().Format(time.RFC3339)
-	} else {
-		delete(connector, credentialKeyLastVerifiedAt)
-	}
-	if err := s.pages.WriteFrontMatter(profileID, fm, wikipage.AnonymousIdentity); err != nil {
-		return fmt.Errorf("write frontmatter: %w", err)
-	}
-	return nil
-}
-
-// readKeepCredentialMap returns wiki.connectors.google_keep
-// (read-only), or nil when any segment is missing or wrong-typed.
-func readKeepCredentialMap(fm wikipage.FrontMatter) map[string]any {
-	wiki, ok := fm[credentialKeyWiki].(map[string]any)
-	if !ok {
-		return nil
-	}
-	conns, ok := wiki[credentialKeyConnectors].(map[string]any)
-	if !ok {
-		return nil
-	}
-	gk, ok := conns[credentialKeyKeep].(map[string]any)
-	if !ok {
-		return nil
-	}
-	return gk
-}
-
-// ensureKeepCredentialMap returns wiki.connectors.google_keep,
-// creating any missing intermediate maps. Used by writeCredentials so
-// a fresh profile (no prior frontmatter) gets a proper subtree.
-func ensureKeepCredentialMap(fm wikipage.FrontMatter) map[string]any {
-	wiki, ok := fm[credentialKeyWiki].(map[string]any)
-	if !ok {
-		wiki = make(map[string]any)
-		fm[credentialKeyWiki] = wiki
-	}
-	conns, ok := wiki[credentialKeyConnectors].(map[string]any)
-	if !ok {
-		conns = make(map[string]any)
-		wiki[credentialKeyConnectors] = conns
-	}
-	gk, ok := conns[credentialKeyKeep].(map[string]any)
-	if !ok {
-		gk = make(map[string]any)
-		conns[credentialKeyKeep] = gk
-	}
-	return gk
-}
-
-func getStringFromMap(m map[string]any, key string) string {
-	if v, ok := m[key].(string); ok {
-		return v
-	}
-	return ""
-}
-
-func parseRFC3339(s string) (time.Time, error) {
-	if s == "" {
-		return time.Time{}, nil
-	}
-	t, err := time.Parse(time.RFC3339, s)
-	if err != nil {
-		return time.Time{}, fmt.Errorf("not a valid RFC3339 timestamp: %w", err)
-	}
-	return t.UTC(), nil
+	return s.core.ClearCredentials(ctx, profileID)
 }
 
 // deriveDeviceID returns a stable 16-hex-char device id derived from
