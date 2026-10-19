@@ -106,7 +106,7 @@ func renderOAuthErrorPage(w http.ResponseWriter, status int, heading, message, d
 		http.Error(w, fmt.Sprintf("%s: %s", heading, message), status)
 	} else {
 		var buf bytes.Buffer
-		if execErr := tmpl.Execute(&buf, page); execErr != nil {
+		if tmpl.Execute(&buf, page) != nil {
 			http.Error(w, fmt.Sprintf("%s: %s", heading, message), status)
 			return
 		}
