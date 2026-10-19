@@ -90,8 +90,8 @@ type FrontmatterReadWriter interface {
 	WriteFrontMatter(identifier wikipage.PageIdentifier, fm wikipage.FrontMatter, identity wikipage.Identity) error
 }
 
-// Clocker is the testable wall-clock seam.
-type Clocker interface {
+// Clock is the testable wall-clock seam.
+type Clock interface {
 	Now() time.Time
 }
 
@@ -114,7 +114,7 @@ func (SystemClock) Now() time.Time { return time.Now() }
 // per-profile mutexes lands here.
 type FrontmatterCredentialStore struct {
 	pages     FrontmatterReadWriter
-	clock     Clocker
+	clock     Clock
 	logger    Logger
 	pauseAll  PauseAllBindingsHook
 	resumeAll ResumeAllBindingsHook
@@ -126,7 +126,7 @@ type FrontmatterCredentialStore struct {
 // engine fan-out (the next scheduler tick reconciles state naturally).
 func NewFrontmatterCredentialStore(
 	pages FrontmatterReadWriter,
-	clock Clocker,
+	clock Clock,
 	logger Logger,
 	pauseAll PauseAllBindingsHook,
 	resumeAll ResumeAllBindingsHook,

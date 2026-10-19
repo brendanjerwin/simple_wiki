@@ -113,7 +113,7 @@ type FrontmatterReadWriter interface {
 // per-profile mutexes lands here.
 type FrontmatterCredentialStore struct {
 	pages     FrontmatterReadWriter
-	clock     Clocker
+	clock     Clock
 	logger    Logger
 	pauseAll  PauseAllBindingsHook
 	resumeAll ResumeAllBindingsHook
@@ -125,7 +125,7 @@ type FrontmatterCredentialStore struct {
 // engine fan-out (the next scheduler tick reconciles state naturally).
 func NewFrontmatterCredentialStore(
 	pages FrontmatterReadWriter,
-	clock Clocker,
+	clock Clock,
 	logger Logger,
 	pauseAll PauseAllBindingsHook,
 	resumeAll ResumeAllBindingsHook,
