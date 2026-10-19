@@ -140,7 +140,7 @@ type FrontmatterCredentialStore struct {
 // engine fan-out (the next scheduler tick reconciles state naturally).
 func NewFrontmatterCredentialStore(
 	pages FrontmatterReadWriter,
-	clock Clock,
+	clock Clocker,
 	logger Logger,
 	pauseAll PauseAllBindingsHook,
 	resumeAll ResumeAllBindingsHook,
