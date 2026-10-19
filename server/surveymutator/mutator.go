@@ -21,9 +21,9 @@ import (
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 )
 
-// Clock returns the current time. Production uses SystemClock; tests inject a
+// Clocker returns the current time. Production uses SystemClock; tests inject a
 // deterministic clock.
-type Clock interface {
+type Clocker interface {
 	Now() time.Time
 }
 
@@ -36,7 +36,7 @@ func (SystemClock) Now() time.Time { return time.Now() }
 // Mutator is the single funnel for survey configuration and response writes.
 type Mutator struct {
 	pages wikipage.PageReaderMutator
-	clock Clock
+	clock Clocker
 
 	pageMu sync.Map
 }
@@ -51,7 +51,7 @@ var (
 )
 
 // New constructs a survey mutator.
-func New(pages wikipage.PageReaderMutator, clock Clock) *Mutator {
+func New(pages wikipage.PageReaderMutator, clock Clocker) *Mutator {
 	return &Mutator{pages: pages, clock: clock}
 }
 

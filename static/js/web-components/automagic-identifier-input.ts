@@ -178,7 +178,7 @@ export class AutomagicIdentifierInput extends LitElement {
     this.titlePlaceholder = 'Enter a title';
     this.titleHelpText = '';
     this.automagicError = null;
-    this.generateIdentifier = async () => ({ identifier: '', isUnique: true });
+    this.generateIdentifier = () => Promise.resolve({ identifier: '', isUnique: true });
   }
 
   override disconnectedCallback(): void {
