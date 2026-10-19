@@ -91,7 +91,7 @@ type Timer interface {
 // the debouncer's own AfterFunc-driven goroutine, and the engine's
 // post-sync NoteSyncSucceeded calls.
 type SyncDebouncer struct {
-	clock     Clock
+	clock     Clocker
 	scheduler TimerScheduler
 	syncFn    SyncFunc
 	logger    Logger
@@ -109,7 +109,7 @@ type SyncDebouncer struct {
 // Returns an error if any collaborator is nil — a missing dependency
 // is a wiring bug at startup, not a runtime concern.
 func NewSyncDebouncer(
-	clock Clock,
+	clock Clocker,
 	scheduler TimerScheduler,
 	syncFn SyncFunc,
 	logger Logger,

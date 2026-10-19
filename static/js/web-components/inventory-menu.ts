@@ -141,6 +141,32 @@ function buildInventoryMenu(currentPage: string, frontmatter: unknown): void {
   }
 }
 
+async function loadInventoryMenu(currentPage: string): Promise<void> {
+  const listResponse = await fetch('/api/find_by_key_existence?k=inventory');
+  if (!listResponse.ok) {
+    throw new Error(`Failed to check inventory: ${listResponse.status}`);
+  }
+  const data = await listResponse.json() as unknown;
+  if (!validateInventoryResponse(data)) {
+    return;
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- validateInventoryResponse confirms ids is an array
+  const { ids } = data as { ids: unknown[] };
+  if (!findPageInInventoryList(ids, currentPage)) {
+    return;
+  }
+
+  let frontmatter: unknown;
+  try {
+    const fmResponse = await fetch(`/${encodeURIComponent(currentPage)}/frontmatter`);
+    frontmatter = fmResponse.ok ? await fmResponse.json() as unknown : {};
+  } catch {
+    frontmatter = {};
+  }
+  buildInventoryMenu(currentPage, frontmatter);
+}
+
 export function initInventoryMenu(): void {
   const utilitySection = document.getElementById('utilityMenuSection');
   if (!utilitySection) {
@@ -152,39 +178,7 @@ export function initInventoryMenu(): void {
     return;
   }
 
-  fetch('/api/find_by_key_existence?k=inventory')
-    .then(response => {
-      if (!response.ok) {
-        throw new Error(`Failed to check inventory: ${response.status}`);
-      }
-      return response.json() as Promise<unknown>;
-    })
-    .then(data => {
-      if (!validateInventoryResponse(data)) {
-        return;
-      }
-
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- validateInventoryResponse confirms ids is an array
-      const { ids } = data as { ids: unknown[] };
-      if (!findPageInInventoryList(ids, currentPage)) {
-        return;
-      }
-
-      return fetch(`/${encodeURIComponent(currentPage)}/frontmatter`)
-        .then(response => {
-          if (!response.ok) {
-            return {} as unknown;
-          }
-          return response.json() as Promise<unknown>;
-        })
-        .then(frontmatter => {
-          buildInventoryMenu(currentPage, frontmatter);
-        })
-        .catch(() => {
-          buildInventoryMenu(currentPage, {});
-        });
-    })
-    .catch(() => {
-      // Silently ignore: inventory menu is non-critical, failure just means no inventory options shown
-    });
+  loadInventoryMenu(currentPage).catch(() => {
+    // Silently ignore: inventory menu is non-critical, failure just means no inventory options shown
+  });
 }

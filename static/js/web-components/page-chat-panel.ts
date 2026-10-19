@@ -999,7 +999,7 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
         break; // Stream ended cleanly
       } catch (err) {
         if (isAbortError(err) || signal.aborted) break;
-        reconnectDelayMs = await this.prepareStreamReconnect(err, signal, reconnectDelayMs);
+        reconnectDelayMs = await this.prepareStreamReconnect(err, signal, reconnectDelayMs); // NOSONAR — intentional sequential back-off delay; parallelising would race reconnect attempts
       }
     }
 

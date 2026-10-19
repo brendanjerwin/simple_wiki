@@ -1400,7 +1400,7 @@ func (c *tasksFannedOutPausedChecker) IsAnyChecklistBindingPaused(page, listName
 	return false
 }
 
-// systemWallClock implements engine.Clock against time.Now. Production
+// systemWallClock implements engine.Clocker against time.Now. Production
 // wiring; tests substitute their own clocks.
 type systemWallClock struct{}
 
