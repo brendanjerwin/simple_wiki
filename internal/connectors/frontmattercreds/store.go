@@ -46,8 +46,8 @@ type FrontmatterReadWriter interface {
 	WriteFrontMatter(identifier wikipage.PageIdentifier, fm wikipage.FrontMatter, identity wikipage.Identity) error
 }
 
-// Clock is the testable wall-clock seam.
-type Clock interface {
+// Clocker is the testable wall-clock seam.
+type Clocker interface {
 	Now() time.Time
 }
 
@@ -111,7 +111,7 @@ type BundleCodec[B any] interface {
 // read-only path.
 type Store[B any] struct {
 	pages     FrontmatterReadWriter
-	clock     Clock
+	clock     Clocker
 	logger    Logger
 	pauseAll  PauseAllBindingsHook
 	resumeAll ResumeAllBindingsHook
@@ -122,7 +122,7 @@ type Store[B any] struct {
 // the pause/resume hooks may be nil for tests.
 func NewStore[B any](
 	pages FrontmatterReadWriter,
-	clock Clock,
+	clock Clocker,
 	logger Logger,
 	pauseAll PauseAllBindingsHook,
 	resumeAll ResumeAllBindingsHook,
@@ -149,7 +149,7 @@ func NewStore[B any](
 
 // Clock returns the injected clock. Connector wrappers use this for
 // timestamping in their custom Persist* methods.
-func (s *Store[B]) Clock() Clock { return s.clock }
+func (s *Store[B]) Clock() Clocker { return s.clock }
 
 // LoadCredentials reads the per-profile credential bundle. A missing
 // page or absent connector subtree returns a zero B with no error —

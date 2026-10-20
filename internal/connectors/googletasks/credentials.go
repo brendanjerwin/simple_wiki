@@ -61,7 +61,7 @@ type ResumeAllBindingsHook = frontmattercreds.ResumeAllBindingsHook
 type FrontmatterReadWriter = frontmattercreds.FrontmatterReadWriter
 
 // Clock is the testable wall-clock seam.
-type Clock = frontmattercreds.Clock
+type Clock = frontmattercreds.Clocker
 
 // SystemClock returns time.Now(). The production wiring uses this;
 // tests inject a deterministic stub.
