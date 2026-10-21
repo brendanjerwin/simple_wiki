@@ -651,6 +651,101 @@ var _ = Describe("AgentChatContextStore", func() {
 		})
 	})
 
+	// Issue #1268: systemd one-shot tasks have no wiki-native schedule entry.
+	// A schedule_id with the "systemd:" prefix must create a new activity entry
+	// and attach the summary in a single call instead of returning NOT_FOUND.
+	Describe("AppendBackgroundActivitySummary with systemd: prefix", func() {
+		Describe("when the schedule_id starts with systemd:", func() {
+			var (
+				entry *apiv1.BackgroundActivityEntry
+				err   error
+			)
+
+			BeforeEach(func() {
+				entry, err = store.AppendBackgroundActivitySummary("p", "systemd:my-task-light-monitor", "processed 5 light readings")
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should create a new background activity entry", func() {
+				ctx, _ := store.Read("p")
+				Expect(ctx.GetBackgroundActivity()).To(HaveLen(1))
+			})
+
+			It("should set the schedule_id on the new entry", func() {
+				ctx, _ := store.Read("p")
+				Expect(ctx.GetBackgroundActivity()[0].GetScheduleId()).To(Equal("systemd:my-task-light-monitor"))
+			})
+
+			It("should attach the summary to the new entry", func() {
+				ctx, _ := store.Read("p")
+				Expect(ctx.GetBackgroundActivity()[0].GetSummary()).To(Equal("processed 5 light readings"))
+			})
+
+			It("should record status OK", func() {
+				ctx, _ := store.Read("p")
+				Expect(ctx.GetBackgroundActivity()[0].GetStatus()).To(Equal(apiv1.ScheduleStatus_SCHEDULE_STATUS_OK))
+			})
+
+			It("should return the new entry", func() {
+				Expect(entry.GetScheduleId()).To(Equal("systemd:my-task-light-monitor"))
+				Expect(entry.GetSummary()).To(Equal("processed 5 light readings"))
+			})
+
+			It("should server-stamp a timestamp on the new entry", func() {
+				Expect(entry.GetTimestamp()).NotTo(BeNil())
+				Expect(time.Since(entry.GetTimestamp().AsTime())).To(BeNumerically("<", 5*time.Second))
+			})
+		})
+
+		Describe("when systemd: prefix is used and the cap is already reached", func() {
+			BeforeEach(func() {
+				for i := 0; i < server.BackgroundActivityMax; i++ {
+					Expect(store.AppendBackgroundActivityAutomatic("p", &apiv1.BackgroundActivityEntry{
+						Timestamp:  timestamppb.New(time.Now()),
+						ScheduleId: "old",
+						Status:     apiv1.ScheduleStatus_SCHEDULE_STATUS_OK,
+						Summary:    "old run",
+					})).To(Succeed())
+				}
+				_, err := store.AppendBackgroundActivitySummary("p", "systemd:daily-deals-scan", "scanned 12 deals")
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should keep the ring buffer capped at BackgroundActivityMax", func() {
+				ctx, _ := store.Read("p")
+				Expect(ctx.GetBackgroundActivity()).To(HaveLen(server.BackgroundActivityMax))
+			})
+
+			It("should retain the new systemd entry as the last entry", func() {
+				ctx, _ := store.Read("p")
+				last := ctx.GetBackgroundActivity()[len(ctx.GetBackgroundActivity())-1]
+				Expect(last.GetScheduleId()).To(Equal("systemd:daily-deals-scan"))
+				Expect(last.GetSummary()).To(Equal("scanned 12 deals"))
+			})
+		})
+
+		Describe("when WriteFrontMatter returns an error for a systemd: entry", func() {
+			var err error
+
+			BeforeEach(func() {
+				errStore := &errorPageStore{writeErr: errors.New("disk full")}
+				bad := server.NewAgentChatContextStore(errStore)
+				_, err = bad.AppendBackgroundActivitySummary("p", "systemd:failing-task", "summary")
+			})
+
+			It("should return an error", func() {
+				Expect(err).To(HaveOccurred())
+			})
+
+			It("should wrap the error with write frontmatter context", func() {
+				Expect(err.Error()).To(ContainSubstring("write frontmatter"))
+			})
+		})
+	})
+
 	Describe("CompleteBackgroundActivity", func() {
 		Describe("when an OK run has a summary", func() {
 			var finalStatus apiv1.ScheduleStatus

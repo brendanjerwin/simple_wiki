@@ -3,6 +3,7 @@ package server
 import (
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -20,6 +21,13 @@ import (
 const BackgroundActivityMax = 50
 
 const agentChatContextKey = "chat_context"
+
+// SystemdScheduleIDPrefix is the prefix that marks a schedule_id as belonging
+// to a systemd one-shot task rather than a wiki-native cron schedule.
+// Callers using this prefix bypass the existing-entry lookup and create a new
+// activity entry directly, since systemd tasks have no wiki-managed RUNNING
+// transition to seed an entry beforehand.
+const SystemdScheduleIDPrefix = "systemd:"
 
 // SummaryTargetNotFoundError is returned by AppendBackgroundActivitySummary
 // when no recent background-activity entry matches the supplied schedule_id.
@@ -145,6 +153,11 @@ func (s *AgentChatContextStore) AppendBackgroundActivityAutomatic(page string, e
 // SummaryTargetNotFoundError when no running entry exists (e.g. the agent
 // called the summary tool out of order or after the entry rolled out of the
 // ring buffer).
+//
+// Special case: when scheduleID starts with SystemdScheduleIDPrefix ("systemd:")
+// there is no wiki-native schedule that seeds a RUNNING entry beforehand. In
+// that case a new activity entry is created directly with status OK and the
+// supplied summary, reusing the same ring-buffer path.
 func (s *AgentChatContextStore) AppendBackgroundActivitySummary(page, scheduleID, summary string) (*apiv1.BackgroundActivityEntry, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -156,6 +169,29 @@ func (s *AgentChatContextStore) AppendBackgroundActivitySummary(page, scheduleID
 	existing, err := decodeChatContext(fm)
 	if err != nil {
 		return nil, err
+	}
+
+	// systemd one-shot tasks have no wiki-native schedule entry to attach to.
+	// Create a new activity entry with the summary directly.
+	if strings.HasPrefix(scheduleID, SystemdScheduleIDPrefix) {
+		entry := &apiv1.BackgroundActivityEntry{
+			Timestamp:  timestamppb.New(time.Now().UTC()),
+			ScheduleId: scheduleID,
+			Status:     apiv1.ScheduleStatus_SCHEDULE_STATUS_OK,
+			Summary:    summary,
+		}
+		existing.BackgroundActivity = append(existing.BackgroundActivity, entry)
+		if len(existing.BackgroundActivity) > BackgroundActivityMax {
+			drop := len(existing.BackgroundActivity) - BackgroundActivityMax
+			existing.BackgroundActivity = existing.BackgroundActivity[drop:]
+		}
+		if err := writeChatContext(fm, existing); err != nil {
+			return nil, err
+		}
+		if err := s.pages.WriteFrontMatter(id, fm, wikipage.AnonymousIdentity); err != nil {
+			return nil, fmt.Errorf(errWriteFrontmatterFmt, page, err)
+		}
+		return proto.CloneOf(entry), nil
 	}
 
 	target := findNewestRunningBackgroundActivity(existing.BackgroundActivity, scheduleID)
