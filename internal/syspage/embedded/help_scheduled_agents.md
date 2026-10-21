@@ -104,7 +104,21 @@ Scheduled agents are encouraged to call `api_v1_AgentMetadataService_AppendBackg
 }
 ```
 
-The summary attaches to the newest matching `RUNNING` entry in the log. If the scheduler has already transitioned the entry to a terminal status before the summary arrives (e.g. the 10-minute hard timeout fired mid-turn), the wiki falls back to the newest entry for the same `schedule_id` whose summary is still empty — by construction the agent's own just-terminated entry — and attaches the summary there. `NOT_FOUND` is still returned when no such entry exists (before the schedule has fired, after the entry rolled out of the 50-entry ring, or for tasks with no wiki-native schedule). When the turn reaches a terminal status (`OK`, `ERROR`, `TIMEOUT`, `MAX_TURNS`, or `WARN`), the wiki updates that same entry with the final status and completion timestamp. If the turn reports `OK` without a summary, the wiki records `WARN` instead so operators can see that the audit trail is incomplete; a late-attached summary does **not** rewrite a terminal status — `WARN` is left as recorded because it is also emitted for background-task drain timeouts and the entry does not record which cause applied.
+The summary attaches to the newest matching `RUNNING` entry in the log. If the scheduler has already transitioned the entry to a terminal status before the summary arrives (e.g. the 10-minute hard timeout fired mid-turn), the wiki falls back to the newest entry for the same `schedule_id` whose summary is still empty — by construction the agent's own just-terminated entry — and attaches the summary there. `NOT_FOUND` is returned when no such entry exists for a wiki-native schedule (before the schedule has fired, or after the entry rolled out of the 50-entry ring). When the turn reaches a terminal status (`OK`, `ERROR`, `TIMEOUT`, `MAX_TURNS`, or `WARN`), the wiki updates that same entry with the final status and completion timestamp. If the turn reports `OK` without a summary, the wiki records `WARN` instead so operators can see that the audit trail is incomplete; a late-attached summary does **not** rewrite a terminal status — `WARN` is left as recorded because it is also emitted for background-task drain timeouts and the entry does not record which cause applied.
+
+### Systemd / one-shot tasks
+
+Tasks that run **outside** a wiki-native schedule (e.g. systemd one-shot units) have no cron entry to seed a `RUNNING` record. Use the `systemd:` prefix on the `schedule_id` to bypass the existing-entry lookup and create a new activity entry directly:
+
+```json
+{
+  "page": "my_project",
+  "schedule_id": "systemd:my-task-light-monitor",
+  "summary": "Processed 5 light readings; all within threshold."
+}
+```
+
+When `schedule_id` starts with `systemd:`, the wiki creates a new `OK` entry with the summary attached in a single call — no prior `RUNNING` transition is required. The entry is appended to the same 50-entry ring buffer as wiki-native schedule entries and appears in the background activity log seen by interactive chat. The `schedule_id` value is stored verbatim (including the `systemd:` prefix) so it is distinguishable from wiki-native schedule entries in the log.
 
 The response includes the updated entry so callers can verify the audit write landed:
 
