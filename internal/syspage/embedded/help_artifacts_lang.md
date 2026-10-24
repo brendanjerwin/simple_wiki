@@ -1,6 +1,8 @@
 +++
-title = "Artifacts: Agent-Authored Apps (OpenUI Lang)"
 identifier = "help-artifacts-lang"
+title = "Artifacts: Agent-Authored Apps (OpenUI Lang)"
+
+[wiki]
 system = true
 +++
 
