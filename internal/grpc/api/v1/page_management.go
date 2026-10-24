@@ -33,10 +33,18 @@ const trashEntryNotFoundErrFmt = "trash entry not found: %s"
 // callers holding an expected_version_hash, preventing silent data loss.
 // Nil or empty frontmatter contributes zero bytes, so pages with no frontmatter
 // yield the same hash as before (hash of markdown only).
+//
+// The wiki.artifact_state subtree is EXCLUDED (every caller, uniformly —
+// watch hashes and OCC handles must agree or a state flush invalidates the
+// next human edit's OCC write): artifact state writes flow through
+// ArtifactStateService with their own namespace-scoped
+// state_expected_version_hash, and their presence in the page hash would
+// make every state flush abort an unrelated page write and remount the
+// composed view (issue #1272). The wiki.artifact subtree STAYS in the hash.
 func computePageHash(frontmatter wikipage.FrontMatter, markdown wikipage.Markdown) string {
 	h := sha256.New()
 	if len(frontmatter) > 0 {
-		fmBytes, err := toml.Marshal(frontmatter)
+		fmBytes, err := toml.Marshal(fmWithoutArtifactState(frontmatter))
 		if err == nil {
 			_, _ = h.Write(fmBytes)
 		}
@@ -240,6 +248,8 @@ func (s *Server) sendPageUpdateIfChanged(stream apiv1.PageManagementService_Watc
 }
 
 // readPageHashAndModTime reads a page's whole-page hash (frontmatter + markdown) and file modification time.
+// The hash uniformly excludes the wiki.artifact_state subtree (see
+// computePageHash) so artifact state flushes never remount #rendered.
 func (s *Server) readPageHashAndModTime(pageID wikipage.PageIdentifier) (string, time.Time, error) {
 	page, err := s.pageOpener.ReadPage(pageID)
 	if err != nil {
@@ -257,6 +267,35 @@ func (s *Server) readPageHashAndModTime(pageID wikipage.PageIdentifier) (string,
 		return "", time.Time{}, err
 	}
 	return computePageHash(frontmatter, markdown), page.ModTime, nil
+}
+
+// fmWithoutArtifactState returns a shallow copy of fm without the
+// wiki.artifact_state subtree (present → copy; absent → fm unchanged).
+func fmWithoutArtifactState(fm wikipage.FrontMatter) wikipage.FrontMatter {
+	wiki, ok := fm["wiki"].(map[string]any)
+	if !ok {
+		return fm
+	}
+	if _, hasState := wiki["artifact_state"]; !hasState {
+		return fm
+	}
+	cp := make(wikipage.FrontMatter, len(fm))
+	for k, v := range fm {
+		cp[k] = v
+	}
+	wikiCp := make(map[string]any, len(wiki))
+	for k, v := range wiki {
+		if k == "artifact_state" {
+			continue
+		}
+		wikiCp[k] = v
+	}
+	if len(wikiCp) == 0 {
+		delete(cp, "wiki")
+	} else {
+		cp["wiki"] = wikiCp
+	}
+	return cp
 }
 
 // DeletePage implements the DeletePage RPC.
@@ -738,7 +777,7 @@ func (s *Server) UpdatePageContent(ctx context.Context, req *apiv1.UpdatePageCon
 	// handles it (validation + placement guard + version restamp), so the
 	// wiki.artifact frontmatter stays in sync with the body.
 	var capturedFM wikipage.FrontMatter
-	modifyErr := s.modifyMarkdownWithArtifactFunnel(
+	funnelFM, modifyErr := s.modifyMarkdownWithArtifactFunnel(
 		wikipage.PageIdentifier(req.Page),
 		nil,
 		func(currentFM wikipage.FrontMatter, currentMarkdown wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error) {
@@ -776,6 +815,12 @@ func (s *Server) UpdatePageContent(ctx context.Context, req *apiv1.UpdatePageCon
 	storedMarkdown, err := s.verifyStoredContent(ctx, wikipage.PageIdentifier(req.Page), originalMarkdown)
 	if err != nil {
 		return nil, err
+	}
+
+	// Response hash derives from the frontmatter the funnel actually wrote
+	// (post artifact restamp), so the returned OCC handle matches disk.
+	if funnelFM != nil {
+		capturedFM = funnelFM
 	}
 
 	return &apiv1.UpdatePageContentResponse{
@@ -898,7 +943,7 @@ func (s *Server) UpdateWholePage(ctx context.Context, req *apiv1.UpdateWholePage
 		return nil, amErr
 	}
 
-	modifyErr := s.modifyMarkdownWithArtifactFunnel(
+	funnelFM, modifyErr := s.modifyMarkdownWithArtifactFunnel(
 		wikipage.PageIdentifier(req.Page),
 		nil,
 		func(currentFM wikipage.FrontMatter, currentMarkdown wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error) {
@@ -930,6 +975,12 @@ func (s *Server) UpdateWholePage(ctx context.Context, req *apiv1.UpdateWholePage
 			return nil, modifyErr
 		}
 		return nil, status.Errorf(codes.Internal, "failed to write page: %v", modifyErr)
+	}
+
+	// Hash what the funnel actually wrote (post artifact restamp), so the
+	// returned OCC handle matches disk.
+	if funnelFM != nil {
+		fm = funnelFM
 	}
 
 	return &apiv1.UpdateWholePageResponse{

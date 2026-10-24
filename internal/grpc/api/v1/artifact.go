@@ -1018,28 +1018,25 @@ func stripArtifactFences(body string) string {
 // ---------------------------------------------------------------------------
 // edit-path funnel
 
-// modifyMarkdownWithArtifactFunnel runs an atomic frontmatter+markdown
-// write whose candidate body the base modifier produces, then applies the
-// artifact funnel to any *changed* fence in that candidate: conservative
-// validation, placement guard, and version restamp — all in the same
-// locked write, so wiki.artifact stamps can never drift from the body.
-// Used by UpdatePageContent and UpdateWholePage; CreatePage validates via
-// validateChangedArtifactFence (no prior state to restamp against).
+// modifyMarkdownWithArtifactFunnel returns the final frontmatter the
+// funnel wrote (post-restamp), so callers can derive response version
+// hashes from what is actually on disk.
 func (s *Server) modifyMarkdownWithArtifactFunnel(
 	page wikipage.PageIdentifier,
 	_ *apiv1.SetArtifactRequest,
 	baseModifier func(wikipage.FrontMatter, wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error),
-) error {
+) (wikipage.FrontMatter, error) {
 	mut, err := s.getArtifactMutator()
 	if err != nil {
-		return err
+		return nil, err
 	}
 	identity := tailscale.IdentityFromContext(context.Background())
 
 	mut.mu.Lock()
 	defer mut.mu.Unlock()
 
-	return mutatePageMarkdown(mut.pages, page, func(currentFM wikipage.FrontMatter, currentMarkdown wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error) {
+	var finalFM wikipage.FrontMatter
+	modErr := mutatePageMarkdown(mut.pages, page, func(currentFM wikipage.FrontMatter, currentMarkdown wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error) {
 		newFM, newMD, err := baseModifier(currentFM, currentMarkdown)
 		if err != nil {
 			return nil, "", err
@@ -1051,11 +1048,13 @@ func (s *Server) modifyMarkdownWithArtifactFunnel(
 		// No fence in the candidate: nothing artifact-shaped to funnel.
 		// An existing artifact is untouched (its stamps stay valid).
 		if !newFound {
+			finalFM = newFM
 			return newFM, newMD, nil
 		}
 
 		// Unchanged program: ordinary prose edit; stamps stay valid.
 		if oldFound && oldSource == newSource {
+			finalFM = newFM
 			return newFM, newMD, nil
 		}
 
@@ -1083,6 +1082,11 @@ func (s *Server) modifyMarkdownWithArtifactFunnel(
 		stamps["library"] = ArtifactLibrary
 		stamps["updated_at"] = time.Now().UTC()
 
-		return setWikiSubtree(newFM, "artifact", stamps), newMD, nil
+		finalFM = setWikiSubtree(newFM, "artifact", stamps)
+		return finalFM, newMD, nil
 	})
+	if modErr != nil {
+		return nil, modErr
+	}
+	return finalFM, nil
 }
