@@ -65,8 +65,8 @@ import './error-display.js';
 import {
  PAGE_APP_ACTION_EVENT,
  type PageAppActionEventDetail,
- type PlanStep,
 } from '../openui-lang/library.js';
+import type { PlanStep } from '../openui-lang/narrow.js';
 import {
  generateWikiPageAppRenderer,
  type WikiPageAppRuntime,
@@ -677,7 +677,7 @@ export class WikiPageAppHost extends LitElement {
     }
     globalThis.open(parsed.toString(), '_blank', 'noopener');
    },
-   rerun: (_statementIds?: string[]) => {
+   rerun: () => {
     this.renderTick += 1;
    },
   };

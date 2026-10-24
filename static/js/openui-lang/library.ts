@@ -19,13 +19,7 @@ import {
  type Library,
  type ToolDescriptor,
 } from '@openuidev/lang-core';
-import {
- asPlan,
- type PlanLike,
- type PlanStep,
-} from './narrow.js';
-
-export type { PlanStep };
+import { asPlan, type PlanLike } from './narrow.js';
 
 /** The id type of `window.setInterval` handles (`number` in the browser; node typings widen it). */
 type IntervalId = ReturnType<typeof window.setInterval>;
