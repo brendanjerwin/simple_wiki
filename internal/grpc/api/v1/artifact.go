@@ -278,7 +278,7 @@ func validateChangedArtifactFence(currentFM wikipage.FrontMatter, currentMarkdow
 }
 
 // GetArtifact implements GetArtifact.
-func (s *Server) GetArtifact(_ context.Context, req *apiv1.GetArtifactRequest) (*apiv1.GetArtifactResponse, error) {
+func (s *Server) GetArtifact(ctx context.Context, req *apiv1.GetArtifactRequest) (*apiv1.GetArtifactResponse, error) {
 	if req.GetPage() == "" {
 		return nil, status.Error(codes.InvalidArgument, "page is required")
 	}
@@ -288,7 +288,7 @@ func (s *Server) GetArtifact(_ context.Context, req *apiv1.GetArtifactRequest) (
 	}
 
 	page := wikipage.PageIdentifier(req.GetPage())
-	if err := mut.requireArtifactAccess(context.Background(), page); err != nil {
+	if err := mut.requireArtifactAccess(ctx, page); err != nil {
 		return nil, err
 	}
 
@@ -395,7 +395,7 @@ func (s *Server) SetArtifact(ctx context.Context, req *apiv1.SetArtifactRequest)
 
 	var result *apiv1.SetArtifactResponse
 	var publishEvent *apiv1.WatchArtifactResponse
-	modifyErr := mutatePageMarkdown(mut.pages, page, func(currentFM wikipage.FrontMatter, currentMarkdown wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error) {
+	modifyErr := mutatePageMarkdown(mut.pages, page, tailscale.IdentityFromContext(ctx), func(currentFM wikipage.FrontMatter, currentMarkdown wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error) {
 		_, _, existingFound := splitArtifactBody(string(currentMarkdown))
 		stamps, stampsFound := getArtifactStamps(currentFM)
 		if !stampsFound {
@@ -497,7 +497,7 @@ func (s *Server) ClearArtifact(ctx context.Context, req *apiv1.ClearArtifactRequ
 	defer mut.mu.Unlock()
 
 	var publishEvent *apiv1.WatchArtifactResponse
-	modifyErr := mutatePageMarkdown(mut.pages, page, func(currentFM wikipage.FrontMatter, currentMarkdown wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error) {
+	modifyErr := mutatePageMarkdown(mut.pages, page, tailscale.IdentityFromContext(ctx), func(currentFM wikipage.FrontMatter, currentMarkdown wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error) {
 		_, _, existingFound := splitArtifactBody(string(currentMarkdown))
 		if !existingFound {
 			return nil, "", status.Errorf(codes.NotFound, "page %q has no artifact", req.GetPage())
@@ -539,7 +539,7 @@ func (s *Server) WatchArtifact(req *apiv1.WatchArtifactRequest, stream apiv1.Art
 		return mutErr
 	}
 
-	if err := mut.requireArtifactAccess(context.Background(), page); err != nil {
+	if err := mut.requireArtifactAccess(stream.Context(), page); err != nil {
 		return err
 	}
 
@@ -594,13 +594,15 @@ func (s *Server) WatchArtifact(req *apiv1.WatchArtifactRequest, stream apiv1.Art
 
 // mutatePageMarkdown runs fn atomically against a page's frontmatter +
 // markdown via the same pageAtomicModifier the page-management service
-// uses; the page-store write lock covers the read-modify-write.
-func mutatePageMarkdown(pages wikipage.PageReaderMutator, page wikipage.PageIdentifier, fn func(wikipage.FrontMatter, wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error)) error {
+// uses; the page-store write lock covers the read-modify-write. The
+// identity parameter drives ADR-0016 history attribution (author,
+// is_agent) — artifact writes must record who wrote them.
+func mutatePageMarkdown(pages wikipage.PageReaderMutator, page wikipage.PageIdentifier, identity wikipage.Identity, fn func(wikipage.FrontMatter, wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error)) error {
 	atomicMod, amErr := requirePageAtomicModifier(pages)
 	if amErr != nil {
 		return amErr
 	}
-	return atomicMod.ModifyFrontMatterAndMarkdown(page, fn, wikipage.AnonymousIdentity)
+	return atomicMod.ModifyFrontMatterAndMarkdown(page, fn, identity)
 }
 
 // currentProgramHash computes the OCC handle for the artifact as it
@@ -759,7 +761,7 @@ func unionStringishArrays(base, patch []any) []any {
 }
 
 // GetArtifactState implements GetArtifactState.
-func (s *Server) GetArtifactState(_ context.Context, req *apiv1.GetArtifactStateRequest) (*apiv1.GetArtifactStateResponse, error) {
+func (s *Server) GetArtifactState(ctx context.Context, req *apiv1.GetArtifactStateRequest) (*apiv1.GetArtifactStateResponse, error) {
 	if req.GetPage() == "" {
 		return nil, status.Error(codes.InvalidArgument, "page is required")
 	}
@@ -769,7 +771,7 @@ func (s *Server) GetArtifactState(_ context.Context, req *apiv1.GetArtifactState
 	}
 
 	page := wikipage.PageIdentifier(req.GetPage())
-	if err := mut.requireArtifactAccess(context.Background(), page); err != nil {
+	if err := mut.requireArtifactAccess(ctx, page); err != nil {
 		return nil, err
 	}
 
@@ -819,7 +821,7 @@ func (s *Server) MergeArtifactState(ctx context.Context, req *apiv1.MergeArtifac
 		outState *structpb.Struct
 		outHash  string
 	)
-	modifyErr := mutatePageMarkdown(mut.pages, page, func(currentFM wikipage.FrontMatter, currentMarkdown wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error) {
+	modifyErr := mutatePageMarkdown(mut.pages, page, tailscale.IdentityFromContext(ctx), func(currentFM wikipage.FrontMatter, currentMarkdown wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error) {
 		raw := getStateSubtree(currentFM)
 		currentHash := artifactStateHash(raw)
 		if req.GetStateExpectedVersionHash() != "" && req.GetStateExpectedVersionHash() != currentHash {
@@ -867,7 +869,7 @@ func (s *Server) DeleteArtifactState(ctx context.Context, req *apiv1.DeleteArtif
 	mut.mu.Lock()
 	defer mut.mu.Unlock()
 
-	modifyErr := mutatePageMarkdown(mut.pages, page, func(currentFM wikipage.FrontMatter, currentMarkdown wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error) {
+	modifyErr := mutatePageMarkdown(mut.pages, page, tailscale.IdentityFromContext(ctx), func(currentFM wikipage.FrontMatter, currentMarkdown wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error) {
 		raw := getStateSubtree(currentFM)
 		currentHash := artifactStateHash(raw)
 		if req.GetStateExpectedVersionHash() != "" && req.GetStateExpectedVersionHash() != currentHash {
@@ -899,7 +901,7 @@ func (s *Server) WatchArtifactState(req *apiv1.WatchArtifactStateRequest, stream
 	}
 
 	page := wikipage.PageIdentifier(req.GetPage())
-	if err := mut.requireArtifactAccess(context.Background(), page); err != nil {
+	if err := mut.requireArtifactAccess(stream.Context(), page); err != nil {
 		return err
 	}
 
@@ -1039,25 +1041,27 @@ func stripArtifactFences(body string) string {
 // ---------------------------------------------------------------------------
 // edit-path funnel
 
-// modifyMarkdownWithArtifactFunnel returns the final frontmatter the
-// funnel wrote (post-restamp), so callers can derive response version
-// hashes from what is actually on disk.
-func (s *Server) modifyMarkdownWithArtifactFunnel(
+// modifyMarkdownWithArtifactFunnelCtx is the ctx-threaded funnel: the
+// caller's identity (from ctx) is recorded on any restamp this funnel
+// performs, so /edit saves attribute correctly. It returns the final
+// frontmatter the funnel wrote (post-restamp), so callers can derive
+// response version hashes from what is actually on disk.
+func (s *Server) modifyMarkdownWithArtifactFunnelCtx(
+	ctx context.Context,
 	page wikipage.PageIdentifier,
-	_ *apiv1.SetArtifactRequest,
 	baseModifier func(wikipage.FrontMatter, wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error),
 ) (wikipage.FrontMatter, error) {
 	mut, err := s.getArtifactMutator()
 	if err != nil {
 		return nil, err
 	}
-	identity := tailscale.IdentityFromContext(context.Background())
+	identity := tailscale.IdentityFromContext(ctx)
 
 	mut.mu.Lock()
 	defer mut.mu.Unlock()
 
 	var finalFM wikipage.FrontMatter
-	modErr := mutatePageMarkdown(mut.pages, page, func(currentFM wikipage.FrontMatter, currentMarkdown wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error) {
+	modErr := mutatePageMarkdown(mut.pages, page, identity, func(currentFM wikipage.FrontMatter, currentMarkdown wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error) {
 		newFM, newMD, err := baseModifier(currentFM, currentMarkdown)
 		if err != nil {
 			return nil, "", err

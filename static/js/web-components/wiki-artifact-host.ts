@@ -485,8 +485,8 @@ export class WikiArtifactHost extends LitElement {
   for (const step of plan?.steps ?? []) {
    switch (step.type) {
     case 'set': {
-     const value = readStepValue(step.valueAST, store);
-     if (value !== undefined) {
+     const value = this.runtime.evaluateStepValue(step.valueAST);
+     if (value !== undefined && value !== null) {
       store.set(step.target, value);
      }
      break;
@@ -579,15 +579,6 @@ export class WikiArtifactHost extends LitElement {
       ${this.lastErrors.map((err) => html`<div>${err.message}</div>`)}
     </div>`;
  }
-}
-
-function readStepValue(valueAst: unknown, store: { get(name: string): unknown }): unknown {
- if (valueAst == null || typeof valueAst !== 'object') return valueAst ?? undefined;
- if (!('k' in valueAst)) return valueAst;
- const ast = valueAst as { k: string; n?: string; v?: unknown };
- if (ast.k === 'StateRef' && typeof ast.n === 'string') return store.get(ast.n);
- if (ast.k === 'Str' || ast.k === 'Num' || ast.k === 'Bool') return ast.v;
- return null;
 }
 
 /** Convert a plain Record to a strict JsonObject, recursively (keeps

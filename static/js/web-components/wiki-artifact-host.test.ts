@@ -91,6 +91,42 @@ async function stubbedHost(programSource = 'root = Card("Hello", [t])\nt = Text(
  return { el, getArtifact, getArtifactState, mergeArtifactState, clearArtifact };
 }
 
+describe('WikiArtifactHost @ToAssistant channel', () => {
+ let sendMessage: SinonStub;
+ let stubs: StubbedHost;
+
+ beforeEach(async () => {
+  stubs = await stubbedHost();
+  // Swap in a chat client stub; @ToAssistant fires ChatService SendMessage.
+  sendMessage = stub().resolves({});
+  const clients = stubs.el as unknown as { chatClient: Record<string, SinonStub> };
+  clients.chatClient['sendMessage'] = sendMessage;
+  await stubs.el.updateComplete;
+ });
+
+ it('delivers a chat message on the artifact page', () => {
+  stubs.el.dispatchEvent(new CustomEvent('wiki-artifact-action', {
+   detail: { plan: { steps: [{ type: 'continue_conversation' as never, message: 'increment completed sessions' }] } },
+   bubbles: true,
+   composed: true,
+  }));
+  expect(sendMessage).to.have.been.calledOnce;
+  const request = sendMessage.firstCall.args[0];
+  expect(request.page).to.equal('stub-page');
+  expect(request.content).to.equal('increment completed sessions');
+ });
+
+ it('a button with no action sends its label (auto-ToAssistant)', () => {
+  stubs.el.dispatchEvent(new CustomEvent('wiki-artifact-action', {
+   detail: { plan: { steps: [{ type: 'continue_conversation' as never, message: 'session done' }] } },
+   bubbles: true,
+   composed: true,
+  }));
+  expect(sendMessage).to.have.been.calledOnce;
+  expect(sendMessage.firstCall.args[0].content).to.equal('session done');
+ });
+});
+
 describe('WikiArtifactHost', () => {
  describe('when the page has an artifact', () => {
   let stubs: StubbedHost;

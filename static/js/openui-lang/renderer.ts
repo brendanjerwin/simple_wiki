@@ -70,6 +70,8 @@ export interface WikiArtifactRuntime {
  render(source: string, persistedState: Record<string, unknown>): RenderedArtifact;
  store: Store;
  queryManager: QueryManager;
+ /** Evaluate a raw AST node (a @Set step's valueAST) against the live store. */
+ evaluateStepValue(ast: unknown, extraScope?: Record<string, unknown>): unknown;
  refetch(statementIds?: string[]): void;
 }
 
@@ -164,6 +166,20 @@ export function generateWikiRenderer(
   render,
   store,
   queryManager,
+  /**
+   * Evaluate a raw AST node (e.g. a @Set step's valueAST — may be a
+   * BinOp like `$n + 1`) against the live store; the host's hand-rolled
+   * readStepValue can't do arithmetic.
+   */
+  evaluateStepValue: (ast: unknown, extraScope?: Record<string, unknown>): unknown => {
+   if (ast == null || typeof ast !== 'object') return undefined;
+   const evaluationContext: EvaluationContext = {
+    getState: (name) => store.get(name),
+    resolveRef: (name) => store.get(name),
+    ...(extraScope !== undefined ? { extraScope } : {}),
+   };
+   return evaluate(ast as ASTNode, evaluationContext);
+  },
   refetch: (statementIds?: string[]) => {
    queryManager.invalidate(statementIds);
    actionContext.rerun(statementIds);

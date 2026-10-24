@@ -777,9 +777,9 @@ func (s *Server) UpdatePageContent(ctx context.Context, req *apiv1.UpdatePageCon
 	// handles it (validation + placement guard + version restamp), so the
 	// wiki.artifact frontmatter stays in sync with the body.
 	var capturedFM wikipage.FrontMatter
-	funnelFM, modifyErr := s.modifyMarkdownWithArtifactFunnel(
+	funnelFM, modifyErr := s.modifyMarkdownWithArtifactFunnelCtx(
+		ctx,
 		wikipage.PageIdentifier(req.Page),
-		nil,
 		func(currentFM wikipage.FrontMatter, currentMarkdown wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error) {
 			capturedFM = currentFM
 			// Version hash check is now atomic with the write — no TOCTOU window.
@@ -943,9 +943,9 @@ func (s *Server) UpdateWholePage(ctx context.Context, req *apiv1.UpdateWholePage
 		return nil, amErr
 	}
 
-	funnelFM, modifyErr := s.modifyMarkdownWithArtifactFunnel(
+	funnelFM, modifyErr := s.modifyMarkdownWithArtifactFunnelCtx(
+		ctx,
 		wikipage.PageIdentifier(req.Page),
-		nil,
 		func(currentFM wikipage.FrontMatter, currentMarkdown wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error) {
 			// Hash covers both frontmatter and markdown so frontmatter-only concurrent edits
 			// are detected (issue #1197) — checked atomically inside the funnel's write.
