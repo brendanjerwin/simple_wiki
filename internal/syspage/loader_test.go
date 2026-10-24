@@ -38,6 +38,22 @@ func newFakeStore() *fakeStore {
 func (f *fakeStore) ReadFrontMatter(id wikipage.PageIdentifier) (wikipage.PageIdentifier, wikipage.FrontMatter, error) {
 	fm, ok := f.frontmatter[id]
 	if !ok {
+		// Mirror the real store: reads resolve the munged request back to
+		// the raw-keyed entry when present.
+		if munged, mungeErr := wikiidentifiers.MungeIdentifier(string(id)); mungeErr == nil {
+			if munged != string(id) {
+				if m2, ok2 := f.frontmatter[wikipage.PageIdentifier(munged)]; ok2 {
+					return wikipage.PageIdentifier(munged), m2, nil
+				}
+			}
+			// Reverse: requested munged, stored raw.
+			for rawID, m2 := range f.frontmatter {
+				m3, err3 := wikiidentifiers.MungeIdentifier(string(rawID))
+				if err3 == nil && m3 == string(id) {
+					return rawID, m2, nil
+				}
+			}
+		}
 		return id, nil, os.ErrNotExist
 	}
 	return id, fm, nil
@@ -64,12 +80,26 @@ func (f *fakeStore) WriteMarkdown(id wikipage.PageIdentifier, md wikipage.Markdo
 }
 
 func (f *fakeStore) DeletePage(id wikipage.PageIdentifier) error {
+	// Mirror the real store: delete resolves the munged request to the
+	// raw-keyed entry.
+	munged, err := wikiidentifiers.MungeIdentifier(string(id))
+	if err == nil {
+		for rawID := range f.frontmatter {
+			if m2, err2 := wikiidentifiers.MungeIdentifier(string(rawID)); err2 == nil && m2 == munged {
+				id = rawID
+				break
+			}
+		}
+	}
 	delete(f.frontmatter, id)
 	delete(f.markdown, id)
 	return nil
 }
 
-// ListAllPageIdentifiers enumerates the union of pages the fake knows about.
+// ListAllPageIdentifiers enumerates the union of pages the fake knows about,
+// returned as the MUNGED identifier (mirrors the real store listing by
+// munged filename). Storing a page called "help-page-apps" therefore lists
+// back as "help_page_apps" — exactly the rename-trap this file guards.
 func (f *fakeStore) ListAllPageIdentifiers() ([]wikipage.PageIdentifier, error) {
 	seen := map[wikipage.PageIdentifier]struct{}{}
 	for id := range f.frontmatter {
@@ -80,7 +110,13 @@ func (f *fakeStore) ListAllPageIdentifiers() ([]wikipage.PageIdentifier, error) 
 	}
 	ids := make([]wikipage.PageIdentifier, 0, len(seen))
 	for id := range seen {
-		ids = append(ids, id)
+		munged, err := wikiidentifiers.MungeIdentifier(string(id))
+		if err != nil {
+			// Fall back to the raw id if munging fails, as the real store
+			// falls back to a legacy unmunged path.
+			munged = string(id)
+		}
+		ids = append(ids, wikipage.PageIdentifier(munged))
 	}
 	return ids, nil
 }
@@ -417,14 +453,9 @@ var _ = Describe("Sync", func() {
 				}
 				munged, err := wikiidentifiers.MungeIdentifier(p.Identifier)
 				Expect(err).NotTo(HaveOccurred())
-
-				keptRaw := true
-				if _, _, readErr := store.ReadFrontMatter(wikipage.PageIdentifier(p.Identifier)); readErr != nil {
-					keptRaw = false
-				}
-				_, mungedOK := store.frontmatter[wikipage.PageIdentifier(munged)]
-				Expect(keptRaw || mungedOK).To(BeTrue(),
-					fmt.Sprintf("hyphenated embedded page %q (munged as %q) must not be pruned", p.Identifier, munged))
+				_, _, readErr := store.ReadFrontMatter(wikipage.PageIdentifier(munged))
+				Expect(readErr).NotTo(HaveOccurred(),
+					fmt.Sprintf("hyphenated embedded page %q (listed as munged %q) must not be pruned", p.Identifier, munged))
 			}
 		})
 

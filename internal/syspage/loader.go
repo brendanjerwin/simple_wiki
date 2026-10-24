@@ -138,9 +138,7 @@ func pageIdentifiers(pages []Page) map[wikipage.PageIdentifier]struct{} {
 	identifiers := make(map[wikipage.PageIdentifier]struct{}, len(pages)*2)
 	for _, p := range pages {
 		identifiers[wikipage.PageIdentifier(p.Identifier)] = struct{}{}
-		if munged, err := wikiidentifiers.MungeIdentifier(p.Identifier); err == nil {
-			identifiers[wikipage.PageIdentifier(munged)] = struct{}{}
-		}
+
 	}
 	return identifiers
 }
@@ -162,7 +160,19 @@ func pruneRetiredSystemPages(rw wikipage.PageReaderMutator, embedded map[wikipag
 		return fmt.Errorf("list pages for pruning: %w", err)
 	}
 	for _, id := range all {
-		if _, embeddedPresent := embedded[id]; embeddedPresent {
+		// Compare in the munged space: the store lists by munged filename,
+		// and the embedded keep-set contains both raw and munged forms.
+		munged, mungeErr := wikiidentifiers.MungeIdentifier(string(id))
+		var lookup wikipage.PageIdentifier
+		if mungeErr == nil {
+			lookup = wikipage.PageIdentifier(munged)
+		} else {
+			lookup = id
+		}
+		if _, embeddedPresent := embedded[lookup]; embeddedPresent {
+			continue
+		}
+		if _, rawPresent := embedded[id]; rawPresent {
 			continue
 		}
 		_, fm, readErr := rw.ReadFrontMatter(id)
