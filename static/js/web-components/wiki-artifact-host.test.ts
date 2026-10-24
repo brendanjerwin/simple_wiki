@@ -52,6 +52,7 @@ type StubbedHost = {
  getArtifactState: SinonStub;
  mergeArtifactState: SinonStub;
  clearArtifact: SinonStub;
+ watchArtifact: SinonStub;
 };
 
 /**
@@ -88,7 +89,7 @@ async function stubbedHost(programSource = 'root = Card("Hello", [t])\nt = Text(
 
  document.body.appendChild(el);
  await el.updateComplete;
- return { el, getArtifact, getArtifactState, mergeArtifactState, clearArtifact };
+ return { el, getArtifact, getArtifactState, mergeArtifactState, clearArtifact, watchArtifact };
 }
 
 describe('WikiArtifactHost @ToAssistant channel', () => {
@@ -198,5 +199,82 @@ describe('WikiArtifactHost', () => {
   it('should render an empty shell', () => {
    expect(stubs.el.shadowRoot?.innerHTML ?? '').to.not.include('Remove the app');
   });
+ });
+});
+
+// Suspension/reconnect recovery (issue #1272 user feedback): a killed
+// watch stream — exactly what happens when a browser suspends the tab —
+// must show a non-blocking "reconnecting" banner and recover WITHOUT a
+// manual refresh.
+describe('WikiArtifactHost suspension recovery', () => {
+ // Deterministic backoff: the full-jitter ladder is randomized, so pin
+ // the timer machinery by replacing Math.random during these tests.
+ let randomStub: SinonStub;
+
+ beforeEach(() => {
+  randomStub = stub(Math, 'random').returns(0.999);
+ });
+
+ afterEach(() => {
+  randomStub.restore();
+ });
+
+ it('shows the reconnecting banner and recovers the app without refresh', async () => {
+  const program = 'root = Card("Hello", [t])\nt = Text("world")';
+  const getArtifact = stub().resolves(artifactResponse(program));
+  const getArtifactState = stub().resolves(stateResponse({}, 'state-hash-1'));
+  const mergeArtifactState = stub().resolves(
+   create(MergeArtifactStateResponseSchema, { state: {} as never, stateVersionHash: 'state-hash-2' }),
+  );
+  const clearArtifact = stub().resolves({});
+
+  // First watch call: yields INITIAL then dies (suspension). Second
+  // call (retry): healthy open stream.
+  let callCount = 0;
+  const watchArtifact = stub().callsFake(() => {
+   callCount += 1;
+   if (callCount === 1) {
+    return (async function*() {
+     yield create(WatchArtifactResponseSchema, {
+      kind: WatchArtifactResponse_Kind.INITIAL,
+      source: program,
+     });
+     // Simulate the suspension: stream tears down with a network error.
+     throw new Error('network connection lost');
+    })();
+   }
+   return openWatchStream({ kind: WatchArtifactResponse_Kind.INITIAL, source: program });
+  });
+
+  const el = document.createElement('wiki-artifact-host') as WikiArtifactHost;
+  el.page = 'stub-page';
+  const clients = el as unknown as Record<string, Record<string, unknown>>;
+  clients['artifactClient'] = { getArtifact, clearArtifact, watchArtifact };
+  clients['stateClient'] = { getArtifactState, mergeArtifactState };
+  document.body.appendChild(el);
+  await el.updateComplete;
+
+  // Initial render happened before the stream died.
+  const textAfterFirst = () => el.shadowRoot?.textContent ?? '';
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  expect(textAfterFirst()).to.include('Hello');
+
+  // Suspended: stream dies → reconnecting banner (NOT the error screen).
+  await new Promise((resolve) => setTimeout(resolve, 30));
+  expect(el.shadowRoot?.querySelector('.reconnecting-note')).to.exist;
+  expect(el.shadowRoot?.querySelector('error-display')).to.not.exist;
+
+  // Recovery ladder fires (first backoff = min(cap, 1000 * 2^0) with
+  // jitter 0.999 → ~1s). Wait for the retried load.
+  await new Promise((resolve) => setTimeout(resolve, 1300));
+  await el.updateComplete;
+
+  // Watch was called twice: original + recovery attempt.
+  expect(callCount).to.equal(2);
+  // App recovered: hydrated again, banner gone, no error screen.
+  expect(el.shadowRoot?.textContent ?? '').to.include('Hello');
+  expect(el.shadowRoot?.querySelector('.reconnecting-note')).to.not.exist;
+  expect(el.shadowRoot?.querySelector('error-display')).to.not.exist;
+  el.remove();
  });
 });

@@ -139,6 +139,22 @@ export class WikiArtifactHost extends LitElement {
         font-size: 12px;
         color: var(--color-warning, #ca8a04);
       }
+      .reconnecting-note {
+        margin: 8px 0 0;
+        padding: 6px 10px;
+        font-size: 0.8rem;
+        color: var(--color-text-muted, #71717a);
+        background: var(--color-surface-sunken, #f8f9fa);
+        border-radius: 6px;
+        animation: artifact-reconnect-pulse 1.5s ease-in-out infinite;
+      }
+      .wiki-artifact-reconnecting .reconnecting-note {
+        margin: 0;
+      }
+      @keyframes artifact-reconnect-pulse {
+        0%, 100% { opacity: 0.6; }
+        50% { opacity: 1; }
+      }
     `,
  ];
 
@@ -184,6 +200,12 @@ export class WikiArtifactHost extends LitElement {
  private stopWatch: (() => void) | null = null;
  private unsubs: (() => void)[] = [];
  private runtime: WikiArtifactRuntime | null = null;
+ /** Exponential-backoff retry machinery for transient load/watch failures. */
+ private retryTimer: number | null = null;
+ private retryAttempt = 0;
+ /** True while a reconnect is pending — renders "reconnecting" instead of an error. */
+ @state()
+ declare private reconnecting: boolean;
 
  constructor() {
   super();
@@ -246,6 +268,83 @@ export class WikiArtifactHost extends LitElement {
   this.stopWatch = null;
   for (const unsub of this.unsubs) unsub();
   this.unsubs = [];
+  this.cancelRetry();
+ }
+
+ // ---------------------------------------------------------------------------
+ // transient-failure recovery
+ //
+ // Browser suspension (tab park, laptop sleep) kills the WatchArtifact
+ // stream and can fail the initial/hydrate RPCs. Those failures are
+ // transient: retry with exponential backoff + jitter instead of parking
+ // the app behind a manual-refresh error screen. NotFound is terminal —
+ // the page genuinely has no artifact.
+
+ /** Terminal ConnectError codes that must NOT be retried. */
+ private static isTerminal(err: unknown): boolean {
+  if (err instanceof ConnectError) {
+   return err.code === Code.NotFound
+    || err.code === Code.InvalidArgument
+    || err.code === Code.PermissionDenied
+    || err.code === Code.Unauthenticated
+    || err.code === Code.FailedPrecondition;
+  }
+  return false;
+ }
+
+ private static RETRY_MAX_ATTEMPTS = 6;
+ private static RETRY_BASE_MS = 1000;
+ private static RETRY_MAX_MS = 30_000;
+
+ /**
+  * Compute the next backoff delay: exponential base with full jitter
+  * (random between 0 and min(cap, base*2^attempt)) — full jitter avoids
+  * synchronized retry storms across many tabs.
+  */
+ private static backoffDelayMs(attempt: number): number {
+  const exp = WikiArtifactHost.RETRY_BASE_MS * 2 ** attempt;
+  const bounded = Math.min(exp, WikiArtifactHost.RETRY_MAX_MS);
+  return Math.floor(Math.random() * bounded);
+ }
+
+ private cancelRetry(): void {
+  if (this.retryTimer !== null) {
+   clearTimeout(this.retryTimer);
+   this.retryTimer = null;
+  }
+ }
+
+ /**
+  * Schedule the next recovery attempt for a transient failure. Shows the
+  * reconnecting banner (clearing any prior error display) while waiting.
+  * Gives up after RETRY_MAX_ATTEMPTS consecutive failures and surfaces
+  * the last error.
+  */
+ private scheduleRetry(stage: 'load' | 'watch', lastError: unknown): void {
+  // Post-disconnect failures must never resurrect the ladder — Lit
+  // flips isConnected when the element leaves the DOM.
+  if (!this.isConnected) return;
+  if (this.retryAttempt >= WikiArtifactHost.RETRY_MAX_ATTEMPTS) {
+   this.retryAttempt = 0;
+   this.reconnecting = false;
+   this.loadError = AugmentErrorService.augmentError(lastError, `artifact app ${stage} failed after ${WikiArtifactHost.RETRY_MAX_ATTEMPTS} retries — refresh to retry again`);
+   this.renderTick += 1;
+   return;
+  }
+  const delay = WikiArtifactHost.backoffDelayMs(this.retryAttempt);
+  this.retryAttempt += 1;
+  this.loadError = null;
+  this.reconnecting = true;
+  this.renderTick += 1;
+  this.retryTimer = window.setTimeout(() => {
+   this.retryTimer = null;
+   if (!this.isConnected) return;
+   if (stage === 'watch') {
+    this.subscribeWatch();
+   } else {
+    void this.load();
+   }
+  }, delay);
  }
 
  private async load(): Promise<void> {
@@ -253,11 +352,16 @@ export class WikiArtifactHost extends LitElement {
    this.loadError = new Error('wiki-artifact-host requires a page attribute');
    return;
   }
+  this.cancelRetry();
   try {
    const response = await this.artifactClient.getArtifact(
     create(GetArtifactRequestSchema, { page: this.page }),
    );
    if (response.source === '') {
+    // Full success path (no artifact): clear the ladder only here.
+    this.retryAttempt = 0;
+    this.reconnecting = false;
+    this.loadError = null;
     this.artifact = null;
     this.programSource = '';
    } else {
@@ -265,12 +369,26 @@ export class WikiArtifactHost extends LitElement {
     this.programSource = response.source;
     this.hydrated = true;
     await this.hydrateState();
+    if (this.loadError != null) {
+     // hydrateState hit a transient failure it couldn't retry inline —
+     // it has already scheduled the retry ladder. The ladder reset
+     // happens on the retry's success, NOT here, so consecutive hydrate
+     // failures still escalate to the cap.
+     return;
+    }
+    // Fully recovered (GetArtifact + hydrate + rewatch): only now reset
+    // the ladder. Stale unsubs from the pre-suspension runtime are torn
+    // down before re-subscribing (they'd double-fire notifications).
+    this.retryAttempt = 0;
+    this.reconnecting = false;
+    this.loadError = null;
     this.subscribeWatch();
     // Query results ($queries) resolve asynchronously; without these
     // subscriptions the rendered table never repaints after its RPC
     // completes. Store subscription covers @Set/@Reset repaints too.
     const runtime = this.runtime;
     if (runtime != null) {
+     for (const unsub of this.unsubs) unsub();
      this.unsubs = [
       runtime.queryManager.subscribe(() => { this.renderTick += 1; }),
       runtime.store.subscribe(() => { this.renderTick += 1; }),
@@ -279,10 +397,14 @@ export class WikiArtifactHost extends LitElement {
    }
    this.renderTick += 1;
   } catch (err) {
-   const error = AugmentErrorService.augmentError(err, 'loading artifact app');
-   if (!(err instanceof Error && err.message.includes('NotFound'))) {
-    this.loadError = error;
+   if (err instanceof Error && err.message.includes('NotFound')) {
+    // Terminal: this page genuinely has no artifact.
+    this.reconnecting = false;
+    this.renderTick += 1;
+    return;
    }
+   if (!this.isConnected) return;
+   this.scheduleRetry('load', err);
   }
  }
 
@@ -303,10 +425,14 @@ export class WikiArtifactHost extends LitElement {
     this.runtime.store.initialize({}, persistedState);
    }
   } catch (err) {
-   // No persisted state yet is fine; a merge will mint the first hash.
-   if (!AugmentErrorService.augmentError(err).message.includes('NotFound')) {
-    this.loadError = AugmentErrorService.augmentError(err, 'reading artifact app state');
+   if (WikiArtifactHost.isTerminal(err)) {
+    // No persisted state yet is fine; a merge will mint the first hash.
+    return;
    }
+   if (!this.isConnected) return;
+   // Transient (suspension-wake network hiccup): retry the WHOLE load
+   // with backoff — the ladder re-runs GetArtifact + hydrate together.
+   this.scheduleRetry('load', err);
   }
  }
 
@@ -316,15 +442,29 @@ export class WikiArtifactHost extends LitElement {
   const signal = abort.signal;
   this.stopWatch = () => abort.abort();
   void (async () => {
+   let watchError: unknown = null;
    try {
     const request = create(WatchArtifactRequestSchema, { page: this.page });
     for await (const evt of this.artifactClient.watchArtifact(request, { signal })) {
+     watchError = null;
      this.handleWatchEvent(evt.kind, evt.source);
     }
    } catch (err) {
-    if (signal.aborted) return;
-    this.loadError = AugmentErrorService.augmentError(err, 'watching artifact app');
+    watchError = err;
    }
+   if (signal.aborted) return;
+   // The stream died (suspension, network flap, server restart).
+   // A graceful end-of-stream also lands here; the recovery ladder
+   // re-runs the full load (GetArtifact → hydrate → watch), which gets
+   // the current program + a fresh stream either way.
+   this.stopWatch = null;
+   if (watchError !== null && WikiArtifactHost.isTerminal(watchError)) {
+    this.loadError = AugmentErrorService.augmentError(watchError, 'watching artifact app');
+    this.renderTick += 1;
+    return;
+   }
+   if (!this.isConnected) return;
+   this.scheduleRetry('load', watchError ?? new Error('artifact watch stream ended unexpectedly'));
   })();
  }
 
@@ -567,6 +707,21 @@ export class WikiArtifactHost extends LitElement {
   if (this.removed) {
    return html`<p class="plain-markdown-note">Artifact removed — reload to return to plain markdown.</p>`;
   }
+  // Reconnecting (transient failure during retry ladder): show a
+  // non-blocking banner INSTEAD of the error screen — the app comes
+  // back on its own when the connection re-establishes.
+  if (this.reconnecting) {
+   if (!this.hydrated) {
+    return html`<div class="wiki-artifact-app wiki-artifact-reconnecting" aria-busy="true">
+        <p class="reconnecting-note">Reconnecting to artifact app…</p>
+      </div>`;
+   }
+   // Hydrated: keep rendering the current app, banner inline below it.
+   return html`<div class="wiki-artifact-app">
+      ${this.renderAppBody()}
+      <p class="reconnecting-note" role="status">Connection interrupted — reconnecting…</p>
+    </div>`;
+  }
   if (this.loadError != null) {
    return html`<error-display .augmentedError=${this.loadError}></error-display>`;
   }
@@ -576,18 +731,23 @@ export class WikiArtifactHost extends LitElement {
   if (!this.hydrated || this.programSource === '' || this.runtime == null) {
    return html`<div class="wiki-artifact-app" aria-busy="true"></div>`;
   }
+  return html`<div class="wiki-artifact-app">
+      ${this.renderAppBody()}
+    </div>`;
+ }
+
+ /** The rendered app tree: remove button, program body, parse errors. */
+ private renderAppBody(): TemplateResult {
   // The live store is the in-session truth: hydration from
   // GetArtifactState happened once in hydrateState(); re-renders pass an
   // empty persisted map, so a RESET key re-marked pristine keeps its
   // declared default instead of being re-imported from the old snapshot.
-  const rendered = this.runtime.render(this.programSource, {});
+  const rendered = this.runtime!.render(this.programSource, {});
   this.lastErrors = rendered.errors;
   this.lastDeclarations = rendered.stateDeclarations;
-  return html`<div class="wiki-artifact-app">
-      <button class="wiki-artifact-remove" @click=${() => void this.removeApp()}>Remove the app</button>
+  return html`<button class="wiki-artifact-remove" @click=${() => void this.removeApp()}>Remove the app</button>
       <div class="wiki-artifact-body">${rendered.template}</div>
-      ${this.renderParseErrors()}
-    </div>`;
+      ${this.renderParseErrors()}`;
  }
 
  private renderParseErrors(): TemplateResult | typeof nothing {
