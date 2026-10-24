@@ -74,11 +74,11 @@ func validateArtifactSource(source string) error {
 
 	if !artifactLangRootRe.MatchString(source) {
 		return status.Errorf(codes.InvalidArgument,
-			"artifact source has no `root =` entry-point statement; every OpenUI Lang program must define root (e.g. `root = Card(...)`) — see the help/artifacts-lang page")
+			"artifact source has no `root =` entry-point statement; every OpenUI Lang program must define root (e.g. `root = Card(...)`) — see the page help-artifacts-lang (api_v1_PageManagementService_ReadPage)")
 	}
 	if !artifactLangAssignRe.MatchString(source) {
 		return status.Errorf(codes.InvalidArgument,
-			"artifact source has no `identifier =` statements; OpenUI Lang programs are lists of assignments — see the help/artifacts-lang page")
+			"artifact source has no `identifier =` statements; OpenUI Lang programs are lists of assignments — see the page help-artifacts-lang (api_v1_PageManagementService_ReadPage)")
 	}
 
 	// A program containing its own ``` terminator would corrupt the
