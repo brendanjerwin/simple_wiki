@@ -8,8 +8,7 @@
  * @ToAssistant, @OpenUrl, @Run) are surfaced through a `wiki-page-app-action`
  * event so the host executes them against the wiki.
  */
-import { nothing } from 'lit';
-import type { TemplateResult } from 'lit';
+import { nothing, type TemplateResult } from 'lit';
 import {
  createParser,
  createQueryManager,
@@ -84,12 +83,22 @@ export function mergePageAppPatch(existing: string, patch: string, rootId?: stri
  return mergeStatements(existing, patch, rootId);
 }
 
+function isTemplate(value: unknown): TemplateResult | typeof nothing {
+ if (value != null && typeof value === 'object' && '_$litType$' in value) {
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- _$litType$ is lit's runtime template discriminator
+  return value as TemplateResult;
+ }
+ return nothing;
+}
+
 function isElementNode(value: unknown): value is ElementNode {
  return (
   typeof value === 'object'
   && value !== null
-  && (value as ElementNode).type === 'element'
-  && typeof (value as ElementNode).typeName === 'string'
+  && 'type' in value
+  && value.type === 'element'
+  && 'typeName' in value
+  && typeof value.typeName === 'string'
  );
 }
 
@@ -126,7 +135,7 @@ export function generateWikiPageAppRenderer(
   };
   const evaluatedRoot = evaluateRoot(lastResult, evalContext);
   return {
-   template: evaluatedRoot === null ? nothing : (renderTree(evaluatedRoot, evaluationContext) as TemplateResult),
+   template: evaluatedRoot === null ? nothing : isTemplate(renderTree(evaluatedRoot, evaluationContext)),
    errors: lastErrors,
    stateDeclarations: lastDeclarations,
   };
@@ -179,6 +188,11 @@ export function generateWikiPageAppRenderer(
     resolveRef: (name) => store.get(name),
     ...(extraScope !== undefined ? { extraScope } : {}),
    };
+   // Parsed AST nodes carry no runtime discriminator beyond object-ness;
+   // this value came from the parser, so the structural cast is the typed
+   // boundary. eslint@typescript-eslint/no-unsafe-type-assertion is disabled
+   // for this single parser-output trust point.
+   // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- parser-produced AST node; no runtime discriminator exists
    return evaluate(ast as ASTNode, evaluationContext);
   },
   refetch: (statementIds?: string[]) => {
@@ -234,8 +248,10 @@ export function renderTree(node: unknown, evaluationContext?: EvaluationContext)
  if (node == null) return nothing;
  if (Array.isArray(node)) return node.map((child) => renderTree(child, evaluationContext));
  if (!isElementNode(node)) return node;
- const renderer = wikiLibrary.components[node.typeName]?.component as WikiRenderer | null | undefined;
- if (!renderer) return nothing;
+ const defined = wikiLibrary.components[node.typeName]?.component;
+ if (defined == null || typeof defined !== 'function') return nothing;
+ // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- library values are all WikiRenderer functions by construction
+ const renderer = defined as WikiRenderer;
  const renderProps: Record<string, unknown> = {};
  for (const [key, value] of Object.entries(node.props)) {
   renderProps[key] = renderPropValue(value, evaluationContext ?? { getState: () => undefined, resolveRef: () => undefined });

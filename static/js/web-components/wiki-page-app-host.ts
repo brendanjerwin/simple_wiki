@@ -269,6 +269,7 @@ export class WikiPageAppHost extends LitElement {
   // Execute page app action events from the rendered tree.
   this.addEventListener(PAGE_APP_ACTION_EVENT, (event) => {
    event.stopPropagation();
+   // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- addEventListener can't type a string-const event name
    this.handlePageAppAction(event as CustomEvent<PageAppActionEventDetail>);
   });
   void this.load();
@@ -527,7 +528,13 @@ export class WikiPageAppHost extends LitElement {
      return this.stateClient.mergePageAppState(
       create(MergePageAppStateRequestSchema, {
        page,
-       state: (args['state'] as JsonObject | undefined) ?? {},
+       state: (() => {
+        const raw = args['state'];
+        return raw != null && typeof raw === 'object' && !Array.isArray(raw)
+         ? // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- jsonValueToPlain guarantees an object result for object input
+           jsonValueToPlain(raw, new Set()) as JsonObject
+         : {};
+       })(),
        stateExpectedVersionHash: argString(args, 'stateExpectedVersionHash'),
       }),
      );
@@ -680,7 +687,7 @@ export class WikiPageAppHost extends LitElement {
       $value: event.detail.value,
      });
      if (value !== undefined && value !== null) {
-      store.set(step.target, value);
+      if (step.target != null) store.set(step.target, value);
      }
      break;
     }
@@ -689,7 +696,7 @@ export class WikiPageAppHost extends LitElement {
      // pristine, so the next render's initialize() restores the default
      // instead of the pre-reset persisted value.
      if (this.lastDeclarations == null) break;
-     for (const target of step.targets) {
+     for (const target of step.targets ?? []) {
       if (target in this.lastDeclarations) {
        store.set(target, (this.lastDeclarations as Record<string, unknown>)[target], { pristine: true });
       }
@@ -697,13 +704,13 @@ export class WikiPageAppHost extends LitElement {
      break;
     }
     case 'continue_conversation':
-     this.actionContext().toAssistant(step.message);
+     if (step.message != null) this.actionContext().toAssistant(step.message);
      break;
     case 'open_url':
-     this.actionContext().openUrl(step.url);
+     if (step.url != null) this.actionContext().openUrl(step.url);
      break;
     case 'run':
-     this.runtime.refetch([step.statementId]);
+     if (step.statementId != null) this.runtime.refetch([step.statementId]);
      break;
     case 'custom_action':
      break;
@@ -797,7 +804,12 @@ export class WikiPageAppHost extends LitElement {
 /** Convert a plain Record to a strict JsonObject, recursively (keeps
  * nested objects/arrays — the state service deep-merges both). */
 function plainToJsonObject(value: Record<string, unknown>): JsonObject {
- return jsonValueToPlain(value, new Set()) as JsonObject;
+ const out = jsonValueToPlain(value, new Set());
+ if (out != null && typeof out === 'object' && !Array.isArray(out)) {
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- jsonValueToPlain guarantees an object result for object input
+  return out as JsonObject;
+ }
+ return {};
 }
 
 const MAX_JSON_DEPTH = 16;
@@ -814,7 +826,8 @@ function jsonValueToPlain(value: unknown, seen: Set<object>): unknown {
   if (seen.has(value) || seen.size >= MAX_JSON_DEPTH) return null;
   seen.add(value);
   const out: Record<string, unknown> = {};
-  for (const [key, entry] of Object.entries(value as Record<string, unknown>)) {
+  if (value === null || typeof value !== 'object') return null;
+  for (const [key, entry] of Object.entries(value)) {
    out[key] = jsonValueToPlain(entry, seen);
   }
   return out;

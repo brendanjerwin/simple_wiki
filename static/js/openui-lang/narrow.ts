@@ -11,6 +11,10 @@ export function asString(v: unknown, fallback = ''): string {
  return typeof v === 'string' ? v : fallback;
 }
 
+export function asStringOrUndefined(v: unknown): string | undefined {
+ return typeof v === 'string' ? v : undefined;
+}
+
 export function asStringArray(v: unknown): string[] {
  return Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : [];
 }
@@ -23,18 +27,52 @@ export function asArray(v: unknown): unknown[] {
  return Array.isArray(v) ? v : [];
 }
 
-export function asNumber(v: unknown, fallback = 0): number {
- return typeof v === 'number' ? v : fallback;
+/** A validated action step used by the host's plan executor. */
+export interface PlanStep {
+ type: string;
+ target?: string;
+ targets?: string[];
+ valueAST?: unknown;
+ message?: string;
+ url?: string;
+ statementId?: string;
+ refType?: 'query' | 'mutation';
+ [key: string]: unknown;
 }
 
-export function asPlan(v: unknown): PlanLike | undefined {
- if (v != null && typeof v === 'object' && 'steps' in (v as Record<string, unknown>)) {
-  return v as PlanLike;
+/** Validate one raw step object into a PlanStep, or undefined when malformed. */
+export function toPlanStep(raw: unknown): PlanStep | undefined {
+ if (raw === null || typeof raw !== 'object' || !('type' in raw) || typeof raw.type !== 'string') {
+  return undefined;
  }
- return undefined;
+ const step: PlanStep = { type: raw.type };
+ if ('target' in raw && typeof raw.target === 'string') step.target = raw.target;
+ if ('targets' in raw && Array.isArray(raw.targets)) {
+  step.targets = raw.targets.filter((t): t is string => typeof t === 'string');
+ }
+ if ('valueAST' in raw) step.valueAST = raw.valueAST;
+ if ('message' in raw && typeof raw.message === 'string') step.message = raw.message;
+ if ('url' in raw && typeof raw.url === 'string') step.url = raw.url;
+ if ('statementId' in raw && typeof raw.statementId === 'string') step.statementId = raw.statementId;
+ if ('refType' in raw && (raw.refType === 'query' || raw.refType === 'mutation')) step.refType = raw.refType;
+ return step;
 }
 
 /** Minimal structural shape the host needs from an action plan. */
 export interface PlanLike {
- steps: unknown[];
+ steps: PlanStep[];
+}
+
+export function asPlan(v: unknown): PlanLike | undefined {
+ if (v == null || typeof v !== 'object' || !('steps' in v) || !Array.isArray(v.steps)) {
+  return undefined;
+ }
+ const steps: PlanStep[] = [];
+ for (const raw of v.steps) {
+  const step = toPlanStep(raw);
+  if (step !== undefined) {
+   steps.push(step);
+  }
+ }
+ return { steps };
 }

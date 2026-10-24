@@ -15,10 +15,10 @@ import {
  defineComponent,
  generateSystemPrompt,
  markReactive,
- type ActionPlan,
  type Library,
  type ToolDescriptor,
 } from '@openuidev/lang-core';
+import { asPlan, type PlanLike } from './narrow.js';
 
 /**
  * The wiki library version stamped on page app programs.
@@ -40,20 +40,23 @@ export const PAGE_APP_ACTION_EVENT = 'wiki-page-app-action';
 /** Detail carried on `wiki-page-app-action` events. */
 export interface PageAppActionEventDetail {
  /** The evaluated action plan (set/reset/run/continue_conversation/open_url steps). */
- plan: ActionPlan | undefined;
+ plan: PlanLike | undefined;
  /** The current input/select value when the source was a form control. */
  value?: unknown;
 }
 
 /** Dispatch a page app action from an interactive control. */
 export function dispatchArtifactAction(source: Event, detail: PageAppActionEventDetail): void {
- (source.currentTarget as HTMLElement).dispatchEvent(
-  new CustomEvent<PageAppActionEventDetail>(PAGE_APP_ACTION_EVENT, {
-   detail,
-   bubbles: true,
-   composed: true,
-  }),
- );
+ const target = source.currentTarget;
+ if (target instanceof HTMLElement) {
+  target.dispatchEvent(
+   new CustomEvent<PageAppActionEventDetail>(PAGE_APP_ACTION_EVENT, {
+    detail,
+    bubbles: true,
+    composed: true,
+   }),
+  );
+ }
 }
 
 /**
@@ -81,8 +84,8 @@ function buildLibrary(): Library {
   }),
   description: 'A data table. `columns` are the header labels, `rows` are arrays of cell values.',
   component: (({ columns, rows }) => {
-   const headers = (columns as string[]) ?? [];
-   const body = (rows as unknown[][] | undefined) ?? [];
+   const headers = Array.isArray(columns) ? columns.filter((h): h is string => typeof h === 'string') : [];
+   const body = Array.isArray(rows) ? rows.filter((r0): r0 is unknown[] => Array.isArray(r0)) : [];
    return html`<div class="wiki-page-app-table-wrap">
         <table class="wiki-page-app-table">
           <thead><tr>${headers.map((h) => html`<th>${h}</th>`)}</tr></thead>
@@ -102,15 +105,15 @@ function buildLibrary(): Library {
   }),
   description: 'A bar, line, or pie chart drawn from `labels`/`values` pairs.',
   component: (({ type, title, labels, values }) => {
-   const labelsList = (labels as string[] | undefined) ?? [];
-   const valuesList = (values as number[] | undefined) ?? [];
+   const labelsList = Array.isArray(labels) ? labels.filter((x): x is string => typeof x === 'string') : [];
+   const valuesList = Array.isArray(values) ? values.filter((x): x is number => typeof x === 'number') : [];
    const max = Math.max(1e-9, ...valuesList.map((v) => (typeof v === 'number' ? Math.abs(v) : 0)));
-   return html`<figure class="wiki-page-app-chart" data-chart-type="${(type as string) ?? 'bar'}">
-        ${(title as string | undefined) != null ? html`<figcaption>${title}</figcaption>` : nothing}
+   return html`<figure class="wiki-page-app-chart" data-chart-type="${typeof type === 'string' ? type : 'bar'}">
+        ${typeof title === 'string' ? html`<figcaption>${title}</figcaption>` : nothing}
         <div class="wiki-page-app-chart-plot">
           ${labelsList.map((label, i) => {
     const value = valuesList[i] ?? 0;
-    if ((type as string) === 'pie') {
+    if (type === 'pie') {
      return html`<span class="wiki-page-app-chart-slice" title="${label}: ${value}">${label}</span>`;
     }
     const pct = Math.round((Math.abs(value) / max) * 100);
@@ -140,16 +143,16 @@ function buildLibrary(): Library {
   component: (({ label, placeholder, value, onChange }) => {
    const fire = (event: Event) => {
     dispatchArtifactAction(event, {
-     plan: onChange as ActionPlan | undefined,
-     value: (event.currentTarget as HTMLInputElement).value,
+     plan: asPlan(onChange),
+     value: event.currentTarget instanceof HTMLInputElement ? event.currentTarget.value : undefined,
     });
    };
    return html`<label class="wiki-page-app-field">
-        ${(label as string | undefined) != null ? html`<span class="wiki-page-app-field-label">${label}</span>` : nothing}
+        ${typeof label === 'string' ? html`<span class="wiki-page-app-field-label">${label}</span>` : nothing}
         <input
           class="wiki-page-app-input"
-          placeholder="${(placeholder as string | undefined) ?? ''}"
-          .value="${(value as string | undefined) ?? ''}"
+          placeholder="${typeof placeholder === 'string' ? placeholder : ''}"
+          .value="${typeof value === 'string' ? value : ''}"
           @change=${fire}
         />
       </label>`;
@@ -170,13 +173,13 @@ function buildLibrary(): Library {
   component: (({ label, options, value, onChange }) => {
    const fire = (event: Event) => {
     dispatchArtifactAction(event, {
-     plan: onChange as ActionPlan | undefined,
-     value: (event.currentTarget as HTMLSelectElement).value,
+     plan: asPlan(onChange),
+     value: event.currentTarget instanceof HTMLSelectElement ? event.currentTarget.value : undefined,
     });
    };
-   const choices = (options as (string | number)[]) ?? [];
+   const choices = Array.isArray(options) ? options.filter((o): o is string | number => typeof o === 'string' || typeof o === 'number') : [];
    return html`<label class="wiki-page-app-field">
-        ${(label as string | undefined) != null ? html`<span class="wiki-page-app-field-label">${label}</span>` : nothing}
+        ${typeof label === 'string' ? html`<span class="wiki-page-app-field-label">${label}</span>` : nothing}
         <select class="wiki-page-app-select" @change=${fire}>
           ${choices.map(
     (option) =>
@@ -198,7 +201,7 @@ function buildLibrary(): Library {
   component: (({ label, action: plan }) => {
    const fire = (event: Event) => {
     dispatchArtifactAction(event, {
-     plan: (plan as ActionPlan | undefined) ?? { steps: [{ type: 'continue_conversation', message: label as string }] },
+     plan: (asPlan(plan) ?? { steps: [{ type: 'continue_conversation', message: typeof label === 'string' ? label : '' }] }),
     });
    };
    return html`<button class="wiki-page-app-button" @click=${fire}>${label}</button>`;
@@ -215,7 +218,7 @@ function buildLibrary(): Library {
   description:
    "A wiki checklist embedded in the page app, rendered from the page app page's checklist named `name`.",
   component: (({ name, page }) =>
-   html`<wiki-checklist list-name="${name}" page="${(page as string | undefined) ?? ''}"></wiki-checklist>`) as WikiRenderer,
+   html`<wiki-checklist list-name="${name}" page="${typeof page === 'string' ? page : ''}"></wiki-checklist>`) as WikiRenderer,
  });
 
  const Map = defineComponent({
@@ -226,7 +229,7 @@ function buildLibrary(): Library {
   }),
   description: "A wiki map embedded in the page app, rendered from the page app page's map named `name`.",
   component: (({ name, page }) =>
-   html`<wiki-map name="${name}" page="${(page as string | undefined) ?? ''}"></wiki-map>`) as WikiRenderer,
+   html`<wiki-map name="${name}" page="${typeof page === 'string' ? page : ''}"></wiki-map>`) as WikiRenderer,
  });
 
  const Survey = defineComponent({
@@ -238,15 +241,15 @@ function buildLibrary(): Library {
   }),
   description: "A wiki survey embedded in the page app, rendered from the page app page's survey named `name`.",
   component: (({ name, page }) =>
-   html`<wiki-survey name="${name}" page="${(page as string | undefined) ?? ''}"></wiki-survey>`) as WikiRenderer,
+   html`<wiki-survey name="${name}" page="${typeof page === 'string' ? page : ''}"></wiki-survey>`) as WikiRenderer,
  });
 
  /**
   * The children union closes over every component, filled in once all refs
   * exist; schemas hold a `z.lazy` placeholder until then.
   */
- let childrenUnion: z.ZodType | undefined;
- const childrenSlot = (): z.ZodType => z.lazy(() => childrenUnion as z.ZodType);
+ const childrenUnion: { current?: z.ZodType } = {};
+ const childrenSlot = (): z.ZodType => z.lazy(() => { if (childrenUnion.current == null) { throw new Error('children union not yet built'); } return childrenUnion.current; });
 
  const Stack = defineComponent({
   name: 'Stack',
@@ -260,12 +263,12 @@ function buildLibrary(): Library {
    html`<div
         class="wiki-page-app-stack"
         data-direction=${direction === 'horizontal' ? 'horizontal' : 'vertical'}
-        style=${gap != null
-     ? `gap:${gap as string}`
+        style=${typeof gap === 'string'
+     ? `gap:${gap}`
      : nothing
     }
       >
-        ${(children as unknown[] | undefined) ?? []}
+        ${Array.isArray(children) ? children : []}
       </div>`) as WikiRenderer,
  });
 
@@ -279,16 +282,16 @@ function buildLibrary(): Library {
    'A card with an optional title and content — a plain string or the card\'s children. The program entry is `root = Card(...)` with children as the second positional argument.',
   component: (({ title, children }) =>
    html`<div class="wiki-page-app-card">
-        ${(title as string | undefined) != null
+        ${typeof title === 'string'
      ? html`<h3 class="wiki-page-app-card-title">${title}</h3>`
      : nothing}
         <div class="wiki-page-app-card-body">
-          ${(children as unknown) != null ? (children as unknown) : nothing}
+          ${children != null ? children : nothing}
         </div>
       </div>`) as WikiRenderer,
  });
 
- childrenUnion = z.union([
+ childrenUnion.current = z.union([
   Text.ref,
   Button.ref,
   Stack.ref,
