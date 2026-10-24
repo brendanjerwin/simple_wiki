@@ -260,7 +260,7 @@ var _ = Describe("ArtifactStateService", func() {
 			)
 
 			BeforeEach(func() {
-				server.SetArtifact(ctx, &apiv1.SetArtifactRequest{Page: "app-page", Source: artifactCounterProgram})
+				_, _ = server.SetArtifact(ctx, &apiv1.SetArtifactRequest{Page: "app-page", Source: artifactCounterProgram})
 				resp, err = server.MergeArtifactState(ctx, &apiv1.MergeArtifactStateRequest{
 					Page:  "app-page",
 					State: mustStruct(map[string]any{"count": float64(3), "tags": []any{"a"}}),

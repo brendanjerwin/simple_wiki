@@ -22,12 +22,6 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-// artifact-related reserved frontmatter paths.
-const (
-	wikiArtifactSTPrefix      = "wiki.artifact"
-	wikiArtifactStateSTPrefix = "wiki.artifact_state"
-)
-
 // artifact source constants.
 const (
 	// ArtifactLangOpenuiLang is the only artifact language in this scope.
@@ -35,6 +29,13 @@ const (
 	// ArtifactLibrary is the wiki component library version the shipped
 	// help page teaches.
 	ArtifactLibrary = "wiki-core@1"
+)
+
+const (
+	artifactErrPageRequired = "page is required"
+	artifactHundredPercent  = 100
+	artifactWikiRootKey     = "wiki"
+	mdNewline               = "\n"
 )
 
 // artifact program limits. The Go validator's floor: reject gross
@@ -175,13 +176,13 @@ type artifactMutator struct {
 
 // splitArtifactBody returns (artifactSource, proseRemainder, found) for
 // a page's markdown.
-func splitArtifactBody(markdown string) (string, string, bool) {
+func splitArtifactBody(markdown string) (source string, prose string, found bool) {
 	return wikipage.SplitArtifactFences(markdown)
 }
 
 // getArtifactStamps reads the wiki.artifact frontmatter subtree.
 func getArtifactStamps(fm wikipage.FrontMatter) (map[string]any, bool) {
-	wiki, ok := fm["wiki"].(map[string]any)
+	wiki, ok := fm[artifactWikiRootKey].(map[string]any)
 	if !ok {
 		return nil, false
 	}
@@ -252,7 +253,7 @@ func (s *Server) getArtifactMutator() (*artifactMutator, error) {
 // SetArtifact, so no route can land an unvalidated fence. An unchanged
 // fence (ordinary prose edit on an artifact page) skips re-validation —
 // the program was validated when written.
-func validateChangedArtifactFence(currentFM wikipage.FrontMatter, currentMarkdown wikipage.Markdown, newWholeMarkdown string) error {
+func validateChangedArtifactFence(_ wikipage.FrontMatter, currentMarkdown wikipage.Markdown, newWholeMarkdown string) error {
 	oldSource, _, oldFound := splitArtifactBody(string(currentMarkdown))
 	newSource, _, newFound := splitArtifactBody(newWholeMarkdown)
 
@@ -274,13 +275,13 @@ func validateChangedArtifactFence(currentFM wikipage.FrontMatter, currentMarkdow
 	// the whole markdown): the guard compares current prose vs resulting
 	// prose after fence removal. Edit-path writes have no confirm field;
 	// the error names SetArtifact (which has one).
-	return checkArtifactProseGuard(string(currentMarkdown), newWholeMarkdown, false)
+	return checkArtifactProseGuard(string(currentMarkdown), newWholeMarkdown)
 }
 
 // GetArtifact implements GetArtifact.
 func (s *Server) GetArtifact(ctx context.Context, req *apiv1.GetArtifactRequest) (*apiv1.GetArtifactResponse, error) {
 	if req.GetPage() == "" {
-		return nil, status.Error(codes.InvalidArgument, "page is required")
+		return nil, status.Error(codes.InvalidArgument, artifactErrPageRequired)
 	}
 	mut, err := s.getArtifactMutator()
 	if err != nil {
@@ -369,7 +370,7 @@ func stampInt(stamps map[string]any, key string, fallback int64) int64 {
 // stamp, persist, publish.
 func (s *Server) SetArtifact(ctx context.Context, req *apiv1.SetArtifactRequest) (*apiv1.SetArtifactResponse, error) {
 	if req.GetPage() == "" {
-		return nil, status.Error(codes.InvalidArgument, "page is required")
+		return nil, status.Error(codes.InvalidArgument, artifactErrPageRequired)
 	}
 	mut, err := s.getArtifactMutator()
 	if err != nil {
@@ -394,93 +395,103 @@ func (s *Server) SetArtifact(ctx context.Context, req *apiv1.SetArtifactRequest)
 	identity := tailscale.IdentityFromContext(ctx)
 
 	var result *apiv1.SetArtifactResponse
-	var publishEvent *apiv1.WatchArtifactResponse
-	modifyErr := mutatePageMarkdown(mut.pages, page, tailscale.IdentityFromContext(ctx), func(currentFM wikipage.FrontMatter, currentMarkdown wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error) {
-		_, _, existingFound := splitArtifactBody(string(currentMarkdown))
-		stamps, stampsFound := getArtifactStamps(currentFM)
-		if !stampsFound {
-			stamps = map[string]any{}
+	modifyErr := mutatePageMarkdown(mut.pages, page, identity, func(currentFM wikipage.FrontMatter, currentMarkdown wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error) {
+		newFM, newMD, rpcResponse, err := applySetArtifact(currentFM, currentMarkdown, req, identity)
+		if err != nil {
+			return nil, "", err
 		}
-
-		// OCC: on first write an empty expected hash is accepted; on
-		// replacement, the caller must hold the current program's hash
-		// (the hash of the fence content).
-		if existingFound {
-			fenceContent, _, _ := splitArtifactBody(string(currentMarkdown))
-			currentHash := artifactVersionHash(fenceContent)
-			if req.GetExpectedVersionHash() != "" && req.GetExpectedVersionHash() != currentHash {
-				return nil, "", status.Errorf(codes.Aborted,
-					"artifact version mismatch: page %q's artifact was modified since last read; re-run GetArtifact and retry", req.GetPage())
-			}
-		} else if req.GetExpectedVersionHash() != "" {
-			return nil, "", status.Errorf(codes.Aborted,
-				"artifact version mismatch: page %q has no artifact but expected_version_hash was set; retry without it", req.GetPage())
-		}
-
-		storedSource := strings.TrimSuffix(req.GetSource(), "\n")
-
-		// The exact body this write will produce. Default: composition
-		// (fence installed above the preserved prose). With
-		// confirm_replace_content=true: the app-standalone conversion —
-		// the prose is deliberately cleared. The placement guard enforces
-		// the second only with the flag.
-		var candidateBody string
-		if req.GetConfirmReplaceContent() {
-			candidateBody = replaceArtifactFence("", storedSource)
-		} else {
-			candidateBody = replaceArtifactFence(string(currentMarkdown), storedSource)
-		}
-		if guardErr := checkArtifactProseGuard(string(currentMarkdown), candidateBody, req.GetConfirmReplaceContent()); guardErr != nil {
-			return nil, "", guardErr
-		}
-
-		nextVersion := stampInt(stamps, "version", 0) + 1
-		newHash := artifactVersionHash(storedSource)
-		now := time.Now().UTC()
-
-		stamps["lang"] = ArtifactLangOpenuiLang
-		stamps["version"] = nextVersion
-		stamps["version_hash"] = newHash
-		stamps["library"] = ArtifactLibrary
-		// RFC3339 string, not time.Time: the frontmatter indexer rejects
-		// non-scalar values and a time.Time would leave the whole page
-		// unindexed (observed live in e2e: FrontmatterIndex job failure).
-		stamps["updated_at"] = now.Format(time.RFC3339)
-		if identity != nil && !identity.IsAnonymous() {
-			stamps["updated_by"] = identity.LoginName()
-			stamps["automated"] = identity.IsAgent()
-		}
-
-		newFM := setWikiSubtree(currentFM, "artifact", stamps)
-		newMD := wikipage.Markdown(candidateBody)
-
-		result = &apiv1.SetArtifactResponse{
-			Version:     nextVersion,
-			VersionHash: newHash,
-			Library:     ArtifactLibrary,
-		}
-		publishEvent = &apiv1.WatchArtifactResponse{
-			Kind:        apiv1.WatchArtifactResponse_UPDATED,
-			Source:      req.GetSource(),
-			Version:     nextVersion,
-			VersionHash: newHash,
-		}
-		return newFM, wikipage.Markdown(newMD), nil
+		result = rpcResponse
+		return newFM, newMD, nil
 	})
-
 	if modifyErr != nil {
 		return nil, modifyErr
 	}
-
-	s.artifactMutator.progWatch.publish(page, publishEvent)
+	// The UPDATED watch event is fully derivable from the RPC response.
+	if result != nil {
+		s.artifactMutator.progWatch.publish(page, &apiv1.WatchArtifactResponse{
+			Kind:        apiv1.WatchArtifactResponse_UPDATED,
+			Source:      req.GetSource(),
+			Version:     result.GetVersion(),
+			VersionHash: result.GetVersionHash(),
+		})
+	}
 	return result, nil
+}
+
+// applySetArtifact is SetArtifact's mutation body: OCC check, placement
+// guard, stamping, fence rewrite. Reads only its arguments so the atomic
+// modifier drives it. (Plain function — no receiver state involved.)
+func applySetArtifact(
+	currentFM wikipage.FrontMatter,
+	currentMarkdown wikipage.Markdown,
+	req *apiv1.SetArtifactRequest,
+	identity tailscale.IdentityValue,
+) (wikipage.FrontMatter, wikipage.Markdown, *apiv1.SetArtifactResponse, error) {
+	_, _, existingFound := splitArtifactBody(string(currentMarkdown))
+	stamps, stampsFound := getArtifactStamps(currentFM)
+	if !stampsFound {
+		stamps = map[string]any{}
+	}
+
+	// OCC: on first write an empty expected hash is accepted; on
+	// replacement, the caller must hold the current program's hash.
+	if existingFound {
+		fenceContent, _, _ := splitArtifactBody(string(currentMarkdown))
+		currentHash := artifactVersionHash(fenceContent)
+		if req.GetExpectedVersionHash() != "" && req.GetExpectedVersionHash() != currentHash {
+			return nil, "", nil, status.Errorf(codes.Aborted,
+				"artifact version mismatch: page %q's artifact was modified since last read; re-run GetArtifact and retry", req.GetPage())
+		}
+	} else if req.GetExpectedVersionHash() != "" {
+		return nil, "", nil, status.Errorf(codes.Aborted,
+			"artifact version mismatch: page %q has no artifact but expected_version_hash was set; retry without it", req.GetPage())
+	}
+
+	storedSource := strings.TrimSuffix(req.GetSource(), mdNewline)
+
+	// The exact body this write will produce. Default: composition
+	// (fence installed above the preserved prose). With
+	// confirm_replace_content=true: the app-standalone conversion.
+	var candidateBody string
+	if req.GetConfirmReplaceContent() {
+		candidateBody = replaceArtifactFence("", storedSource)
+	} else {
+		candidateBody = replaceArtifactFence(string(currentMarkdown), storedSource)
+	}
+	if guardErr := artifactProseGuard(req.GetConfirmReplaceContent())(string(currentMarkdown), candidateBody); guardErr != nil {
+		return nil, "", nil, guardErr
+	}
+
+	nextVersion := stampInt(stamps, "version", 0) + 1
+	newHash := artifactVersionHash(storedSource)
+
+	stamps["lang"] = ArtifactLangOpenuiLang
+	stamps["version"] = nextVersion
+	stamps["version_hash"] = newHash
+	stamps["library"] = ArtifactLibrary
+	// RFC3339 string, not time.Time: the frontmatter indexer rejects
+	// non-scalar values (a time.Time left whole pages unindexed — see e2e).
+	stamps["updated_at"] = time.Now().UTC().Format(time.RFC3339)
+	if identity != nil && !identity.IsAnonymous() {
+		stamps["updated_by"] = identity.LoginName()
+		stamps["automated"] = identity.IsAgent()
+	}
+
+	return setWikiSubtree(currentFM, "artifact", stamps),
+		wikipage.Markdown(candidateBody),
+		&apiv1.SetArtifactResponse{
+			Version:     nextVersion,
+			VersionHash: newHash,
+			Library:     ArtifactLibrary,
+		},
+		nil
 }
 
 // ClearArtifact removes the fence and wiki.artifact subtree; prose is
 // untouched.
 func (s *Server) ClearArtifact(ctx context.Context, req *apiv1.ClearArtifactRequest) (*apiv1.ClearArtifactResponse, error) {
 	if req.GetPage() == "" {
-		return nil, status.Error(codes.InvalidArgument, "page is required")
+		return nil, status.Error(codes.InvalidArgument, artifactErrPageRequired)
 	}
 
 	page := wikipage.PageIdentifier(req.GetPage())
@@ -530,7 +541,7 @@ func (s *Server) ClearArtifact(ctx context.Context, req *apiv1.ClearArtifactRequ
 // WatchArtifact implements the server-streaming hot-swap driver.
 func (s *Server) WatchArtifact(req *apiv1.WatchArtifactRequest, stream apiv1.ArtifactService_WatchArtifactServer) error {
 	if req.GetPage() == "" {
-		return status.Error(codes.InvalidArgument, "page is required")
+		return status.Error(codes.InvalidArgument, artifactErrPageRequired)
 	}
 
 	page := wikipage.PageIdentifier(req.GetPage())
@@ -605,17 +616,6 @@ func mutatePageMarkdown(pages wikipage.PageReaderMutator, page wikipage.PageIden
 	return atomicMod.ModifyFrontMatterAndMarkdown(page, fn, identity)
 }
 
-// currentProgramHash computes the OCC handle for the artifact as it
-// exists on disk: the hash of the fence content ("" when the page has no
-// artifact).
-func currentProgramHash(_ wikipage.FrontMatter, markdown string) string {
-	source, _, found := splitArtifactBody(markdown)
-	if !found {
-		return ""
-	}
-	return artifactVersionHash(source)
-}
-
 // checkArtifactProseGuard is the placement guard (mechanical backstop for
 // the composition model): a write that drops more than 10% of the page's
 // substantial prose (existing non-fence body ≥1KB) requires explicit
@@ -625,7 +625,28 @@ func currentProgramHash(_ wikipage.FrontMatter, markdown string) string {
 // UpdateWholePage / CreatePage) have no confirm field, so a
 // changed-fence write that clears substantial prose fails with
 // FailedPrecondition naming the alternatives.
-func checkArtifactProseGuard(existingMarkdown, newMarkdown string, confirmed bool) error {
+// guardAllowsClear is the confirmed-write guard: the caller has already
+// checked confirm_replace_content, so this yields unconditionally (the
+// deliberate app-standalone conversion).
+func guardAllowsClear(_, _ string) error {
+	return nil
+}
+
+// artifactProseGuard returns the guard variant for a SetArtifact write.
+// Confirmed writes may clear prose; unconfirmed ones cannot. (The two
+// variants exist so no function carries a control-flag parameter.)
+// revive:disable-next-line:flag-parameter -- the bool IS the confirm_replace_content
+// request field; selection is the whole point of this function.
+func artifactProseGuard(confirmed bool) func(string, string) error {
+	if confirmed {
+		return guardAllowsClear
+	}
+	return checkArtifactProseGuard
+}
+
+// checkArtifactProseGuard blocks prose-clearing writes outright
+// (edit path — no confirm field exists there).
+func checkArtifactProseGuard(existingMarkdown, newMarkdown string) error {
 	const (
 		minExistingSizeBytes = 1024
 		wipeThresholdPercent = 10
@@ -640,14 +661,11 @@ func checkArtifactProseGuard(existingMarkdown, newMarkdown string, confirmed boo
 	after := len(strings.TrimSpace(proseAfter))
 
 	// An ordinary edit keeps ≥90% of the substantial prose.
-	if after*100 >= before*(100-wipeThresholdPercent) {
-		return nil
-	}
-	if confirmed {
+	if after*artifactHundredPercent >= before*(artifactHundredPercent-wipeThresholdPercent) {
 		return nil
 	}
 
-	droppedPercent := 100 - float64(after)/float64(before)*100
+	droppedPercent := float64(artifactHundredPercent) - float64(after)/float64(before)*float64(artifactHundredPercent)
 	return status.Errorf(codes.FailedPrecondition,
 		"this write would drop %.0f%% of the page's prose (%d bytes kept of %d); the app composes ABOVE existing prose by default, so prose rarely needs removing. "+
 			"Alternatives: (1) keep the prose — resent via SetArtifact, the app renders above it; (2) create a standalone artifact page and link to it from here; "+
@@ -763,7 +781,7 @@ func unionStringishArrays(base, patch []any) []any {
 // GetArtifactState implements GetArtifactState.
 func (s *Server) GetArtifactState(ctx context.Context, req *apiv1.GetArtifactStateRequest) (*apiv1.GetArtifactStateResponse, error) {
 	if req.GetPage() == "" {
-		return nil, status.Error(codes.InvalidArgument, "page is required")
+		return nil, status.Error(codes.InvalidArgument, artifactErrPageRequired)
 	}
 	mut, err := s.getArtifactMutator()
 	if err != nil {
@@ -797,7 +815,7 @@ func (s *Server) GetArtifactState(ctx context.Context, req *apiv1.GetArtifactSta
 // MergeArtifactState implements MergeArtifactState (deep-merge + CAS).
 func (s *Server) MergeArtifactState(ctx context.Context, req *apiv1.MergeArtifactStateRequest) (*apiv1.MergeArtifactStateResponse, error) {
 	if req.GetPage() == "" {
-		return nil, status.Error(codes.InvalidArgument, "page is required")
+		return nil, status.Error(codes.InvalidArgument, artifactErrPageRequired)
 	}
 	if req.GetState() == nil {
 		return nil, status.Error(codes.InvalidArgument, "state is required")
@@ -854,7 +872,7 @@ func (s *Server) MergeArtifactState(ctx context.Context, req *apiv1.MergeArtifac
 // DeleteArtifactState implements DeleteArtifactState.
 func (s *Server) DeleteArtifactState(ctx context.Context, req *apiv1.DeleteArtifactStateRequest) (*apiv1.DeleteArtifactStateResponse, error) {
 	if req.GetPage() == "" {
-		return nil, status.Error(codes.InvalidArgument, "page is required")
+		return nil, status.Error(codes.InvalidArgument, artifactErrPageRequired)
 	}
 	mut, err := s.getArtifactMutator()
 	if err != nil {
@@ -893,7 +911,7 @@ func (s *Server) DeleteArtifactState(ctx context.Context, req *apiv1.DeleteArtif
 // WatchArtifactState implements the server-streaming state watcher.
 func (s *Server) WatchArtifactState(req *apiv1.WatchArtifactStateRequest, stream apiv1.ArtifactStateService_WatchArtifactStateServer) error {
 	if req.GetPage() == "" {
-		return status.Error(codes.InvalidArgument, "page is required")
+		return status.Error(codes.InvalidArgument, artifactErrPageRequired)
 	}
 	mut, err := s.getArtifactMutator()
 	if err != nil {
@@ -950,9 +968,9 @@ func (s *Server) WatchArtifactState(req *apiv1.WatchArtifactStateRequest, stream
 // ---------------------------------------------------------------------------
 // frontmatter wiki.* subtree helpers
 
-// getWikiSubtree reads fm["wiki"][subtreeKey] as a map.
+// getWikiSubtree reads fm[artifactWikiRootKey][subtreeKey] as a map.
 func getWikiSubtree(fm wikipage.FrontMatter, subtreeKey string) (map[string]any, bool) {
-	wiki, ok := fm["wiki"].(map[string]any)
+	wiki, ok := fm[artifactWikiRootKey].(map[string]any)
 	if !ok {
 		return nil, false
 	}
@@ -963,14 +981,14 @@ func getWikiSubtree(fm wikipage.FrontMatter, subtreeKey string) (map[string]any,
 	return sub, true
 }
 
-// setWikiSubtree returns a copy of fm with fm["wiki"][subtreeKey] set,
+// setWikiSubtree returns a copy of fm with fm[artifactWikiRootKey][subtreeKey] set,
 // preserving all other keys (including other wiki.* subtrees).
 func setWikiSubtree(fm wikipage.FrontMatter, subtreeKey string, value map[string]any) wikipage.FrontMatter {
 	out := make(wikipage.FrontMatter, len(fm)+1)
 	for k, v := range fm {
 		out[k] = v
 	}
-	wikiRaw, ok := fm["wiki"].(map[string]any)
+	wikiRaw, ok := fm[artifactWikiRootKey].(map[string]any)
 	wiki := make(map[string]any, len(wikiRaw)+1)
 	if ok {
 		for k, v := range wikiRaw {
@@ -982,14 +1000,14 @@ func setWikiSubtree(fm wikipage.FrontMatter, subtreeKey string, value map[string
 	return out
 }
 
-// removeWikiSubtree returns a copy of fm without fm["wiki"][subtreeKey].
+// removeWikiSubtree returns a copy of fm without fm[artifactWikiRootKey][subtreeKey].
 // The wiki key itself is removed when no other subtrees remain.
 func removeWikiSubtree(fm wikipage.FrontMatter, subtreeKey string) wikipage.FrontMatter {
 	out := make(wikipage.FrontMatter, len(fm))
 	for k, v := range fm {
 		out[k] = v
 	}
-	wikiRaw, ok := fm["wiki"].(map[string]any)
+	wikiRaw, ok := fm[artifactWikiRootKey].(map[string]any)
 	if !ok {
 		return out
 	}
@@ -1017,18 +1035,18 @@ func removeWikiSubtree(fm wikipage.FrontMatter, subtreeKey string) wikipage.Fron
 // (composition: app renders above prose; prose is never dropped).
 func replaceArtifactFence(body string, source string) string {
 	_, prose, found := splitArtifactBody(body)
-	fence := wikipage.ArtifactFenceOpen + "\n" + strings.TrimSuffix(source, "\n") + "\n```"
+	fence := wikipage.ArtifactFenceOpen + mdNewline + strings.TrimSuffix(source, mdNewline) + mdNewline + "```"
 	if !found {
 		if strings.TrimSpace(prose) == "" {
-			return fence + "\n"
+			return fence + mdNewline
 		}
-		return strings.TrimRight(prose, "\n") + "\n\n" + fence + "\n"
+		return strings.TrimRight(prose, mdNewline) + "\n\n" + fence + mdNewline
 	}
-	trimmedProse := strings.Trim(prose, "\n")
+	trimmedProse := strings.Trim(prose, mdNewline)
 	if trimmedProse == "" {
-		return fence + "\n"
+		return fence + mdNewline
 	}
-	return trimmedProse + "\n\n" + fence + "\n"
+	return trimmedProse + "\n\n" + fence + mdNewline
 }
 
 // stripArtifactFences returns the body with all artifact fences removed
@@ -1089,7 +1107,7 @@ func (s *Server) modifyMarkdownWithArtifactFunnelCtx(
 			return nil, "", err
 		}
 		simulated := replaceArtifactFence(string(currentMarkdown), newSource)
-		if guardErr := checkArtifactProseGuard(string(currentMarkdown), simulated, false); guardErr != nil {
+		if guardErr := checkArtifactProseGuard(string(currentMarkdown), simulated); guardErr != nil {
 			return nil, "", guardErr
 		}
 
