@@ -7,17 +7,21 @@ import (
 	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
 )
 
+// aguiAgentEntry is one entry of the server's static AG-UI agent
+// configuration file (issue #1276 design).
+type aguiAgentEntry struct {
+	ID          string `json:"id"`
+	DisplayName string `json:"display_name"`
+	Protocol    string `json:"protocol"`
+	Description string `json:"description"`
+	Endpoint    string `json:"endpoint"`
+}
+
 // aguiAgentsConfig is the on-disk shape of the server's static AG-UI agent
-// configuration (issue #1276 design). Missing file or malformed content yields
-// no entries — the inventory simply starts empty of configured agents.
+// configuration. Missing file or malformed content yields no entries — the
+// inventory simply starts empty of configured agents.
 type aguiAgentsConfig struct {
-	Agents []struct {
-		ID          string `json:"id"`
-		DisplayName string `json:"display_name"`
-		Protocol    string `json:"protocol"`
-		Description string `json:"description"`
-		Endpoint    string `json:"endpoint"`
-	} `json:"agents"`
+	Agents []aguiAgentEntry `json:"agents"`
 }
 
 // LoadConfiguredAGUIAgents reads AG-UI remote agent entries from the given

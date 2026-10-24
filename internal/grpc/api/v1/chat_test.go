@@ -189,11 +189,13 @@ func (m *mockChatBufferManager) AddAssistantMessage(page, content, replyToID, ag
 	return messageID, nil
 }
 
-func (m *mockChatBufferManager) NotifyAgentChanged(_, _, _, _ string) {}
+func (*mockChatBufferManager) NotifyAgentChanged(_, _, _, _ string) {}
 
-func (m *mockChatBufferManager) NotifyAgentAttached(_, _, _ string) {}
+func (*mockChatBufferManager) NotifyAgentAttached(_, _, _ string) {}
 
-func (m *mockChatBufferManager) EffectiveAgent(string) (string, string) { return "", "" }
+func (*mockChatBufferManager) EffectiveAgent(string) (agentID string, displayName string) {
+	return "", ""
+}
 
 func (m *mockChatBufferManager) EditMessage(messageID, newContent string, _ bool) error {
 	if m.editMessageError != nil {

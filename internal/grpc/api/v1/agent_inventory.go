@@ -99,12 +99,14 @@ func (s *Server) GetPageAgent(_ context.Context, req *apiv1.GetPageAgentRequest)
 				Available:   false,
 			},
 			ExplicitlySet: true,
+			UpdatedAt:     binding.UpdatedAt,
 		}, nil
 	}
 
 	return &apiv1.GetPageAgentResponse{
 		Agent:         agent,
 		ExplicitlySet: true,
+		UpdatedAt:     binding.UpdatedAt,
 	}, nil
 }
 
@@ -128,7 +130,7 @@ func (s *Server) SetPageAgent(ctx context.Context, req *apiv1.SetPageAgentReques
 		return nil, status.Errorf(codes.NotFound, "agent %q not found in inventory", req.GetAgentId())
 	}
 
-	if req.GetExpectedUpdatedAt() != "" && !server.IsValidRFC3339(req.GetExpectedUpdatedAt()) {
+	if req.GetExpectedUpdatedAt() != "" && !server.IsValidRFC3339String(req.GetExpectedUpdatedAt()) {
 		return nil, status.Error(codes.InvalidArgument, "expected_updated_at must be an RFC3339 timestamp")
 	}
 

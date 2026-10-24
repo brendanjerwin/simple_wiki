@@ -397,7 +397,7 @@ func agentChangedEventToProto(ac *chatbuffer.AgentChangedEvent) *apiv1.ChatEvent
 
 // identityName extracts the caller's stable identity name from auth context
 // (Tailscale LoginName, falling back to DisplayName; empty when anonymous).
-func (s *Server) identityName(ctx context.Context) string {
+func (*Server) identityName(ctx context.Context) string {
 	identity := tailscale.IdentityFromContext(ctx)
 	if identity == nil {
 		return ""
@@ -616,20 +616,20 @@ func (s *Server) GetChatMessages(_ context.Context, req *apiv1.GetChatMessagesRe
 
 	all := s.chatBufferManager.GetMessages(req.Page)
 	// Filter synthetics; they are transcript events for humans, not agent context.
-	real := make([]*chatbuffer.Message, 0, len(all))
+	realMessages := make([]*chatbuffer.Message, 0, len(all))
 	for _, msg := range all {
 		if msg.Sender == chatbuffer.SenderAgentChanged {
 			continue
 		}
-		real = append(real, msg)
+		realMessages = append(realMessages, msg)
 	}
 
-	if req.Limit > 0 && len(real) > int(req.Limit) {
-		real = real[len(real)-int(req.Limit):]
+	if req.Limit > 0 && len(realMessages) > int(req.Limit) {
+		realMessages = realMessages[len(realMessages)-int(req.Limit):]
 	}
 
-	out := make([]*apiv1.ChatMessage, len(real))
-	for i, msg := range real {
+	out := make([]*apiv1.ChatMessage, len(realMessages))
+	for i, msg := range realMessages {
 		out[i] = bufferMessageToProto(msg)
 	}
 	return &apiv1.GetChatMessagesResponse{Messages: out}, nil

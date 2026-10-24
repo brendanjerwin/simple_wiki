@@ -40,7 +40,7 @@ func newFakeAgentInventory() *fakeAgentInventory {
 
 func (f *fakeAgentInventory) List() []*apiv1.AgentInfo { return f.agents }
 func (f *fakeAgentInventory) DefaultAgentID() string   { return f.defaultAgent }
-func (f *fakeAgentInventory) RegisterPoolAgent(_ *apiv1.RegisterPoolAgentRequest) error {
+func (*fakeAgentInventory) RegisterPoolAgent(_ *apiv1.RegisterPoolAgentRequest) error {
 	return nil
 }
 

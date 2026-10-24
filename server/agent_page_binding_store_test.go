@@ -105,7 +105,7 @@ var _ = Describe("AgentPageBindingStore", func() {
 
 			It("should stamp a non-empty RFC3339 updated_at", func() {
 				Expect(updated.updatedAt).NotTo(BeEmpty())
-				Expect(server.IsValidRFC3339(updated.updatedAt)).To(BeTrue())
+				Expect(server.IsValidRFC3339String(updated.updatedAt)).To(BeTrue())
 			})
 		})
 
@@ -205,5 +205,4 @@ var _ = Describe("AgentPageBindingStore", func() {
 
 type bindingWriteResult struct {
 	updatedAt string
-	_         struct{}
 }

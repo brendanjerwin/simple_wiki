@@ -104,7 +104,9 @@ func (noOpChatBufferManager) NotifyAgentChanged(string, string, string, string) 
 
 func (noOpChatBufferManager) NotifyAgentAttached(string, string, string) {}
 
-func (noOpChatBufferManager) EffectiveAgent(string) (string, string) { return "", "" }
+func (noOpChatBufferManager) EffectiveAgent(string) (agentID string, displayName string) {
+	return "", ""
+}
 
 func (noOpChatBufferManager) EditMessage(string, string, bool) error {
 	return nil

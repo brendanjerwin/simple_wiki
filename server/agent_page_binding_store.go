@@ -17,9 +17,10 @@ const (
 	bindingUpdatedAtKey   = "updated_at"
 )
 
-// IsValidRFC3339 reports whether s parses as an RFC3339 timestamp. Exported
-// for OCC validation at the API edge.
-func IsValidRFC3339(s string) bool {
+// IsValidRFC3339String reports whether s parses as an RFC3339 timestamp.
+// Exported (distinct from the any-typed isValidRFC3339 scrubber) for OCC
+// validation at the API edge.
+func IsValidRFC3339String(s string) bool {
 	_, err := time.Parse(time.RFC3339, s)
 	return err == nil
 }

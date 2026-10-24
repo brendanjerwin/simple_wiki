@@ -99,7 +99,10 @@ func (r *AgentRegistry) SetConfiguredAgents(agents []*apiv1.AgentInfo) {
 		if a == nil || a.GetId() == "" || a.GetId() == LocalACPAgentID {
 			continue
 		}
-		entry := proto.Clone(a).(*apiv1.AgentInfo)
+		entry, ok := proto.Clone(a).(*apiv1.AgentInfo)
+		if !ok {
+			continue
+		}
 		if entry.GetProtocol() == apiv1.AgentProtocol_ACP_LOCAL {
 			continue // config never declares local-protocol entries
 		}
@@ -116,10 +119,16 @@ func (r *AgentRegistry) List() []*apiv1.AgentInfo {
 
 	out := make([]*apiv1.AgentInfo, 0, 1+len(r.configuredAgents))
 	if r.poolAgent != nil {
-		out = append(out, proto.Clone(r.poolAgent).(*apiv1.AgentInfo))
+		clone, ok := proto.Clone(r.poolAgent).(*apiv1.AgentInfo)
+		if ok {
+			out = append(out, clone)
+		}
 	}
 	for _, a := range r.configuredAgents {
-		out = append(out, proto.Clone(a).(*apiv1.AgentInfo))
+		clone, ok := proto.Clone(a).(*apiv1.AgentInfo)
+		if ok {
+			out = append(out, clone)
+		}
 	}
 	return out
 }
@@ -130,10 +139,16 @@ func (r *AgentRegistry) FindByID(id string) *apiv1.AgentInfo {
 	defer r.mu.RUnlock()
 
 	if r.poolAgent != nil && r.poolAgent.GetId() == id {
-		return proto.Clone(r.poolAgent).(*apiv1.AgentInfo)
+		if clone, ok := proto.Clone(r.poolAgent).(*apiv1.AgentInfo); ok {
+			return clone
+		}
+		return nil
 	}
 	if a, ok := r.configuredAgents[id]; ok {
-		return proto.Clone(a).(*apiv1.AgentInfo)
+		if clone, ok := proto.Clone(a).(*apiv1.AgentInfo); ok {
+			return clone
+		}
+		return nil
 	}
 	return nil
 }
