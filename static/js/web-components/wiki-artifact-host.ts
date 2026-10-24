@@ -168,6 +168,7 @@ export class WikiArtifactHost extends LitElement {
  private surveyClient: Client<typeof SurveyService>;
 
  private stopWatch: (() => void) | null = null;
+ private unsubs: (() => void)[] = [];
  private runtime: WikiArtifactRuntime | null = null;
 
  constructor() {
@@ -226,6 +227,8 @@ export class WikiArtifactHost extends LitElement {
   super.disconnectedCallback();
   this.stopWatch?.();
   this.stopWatch = null;
+  for (const unsub of this.unsubs) unsub();
+  this.unsubs = [];
  }
 
  private async load(): Promise<void> {
@@ -246,6 +249,16 @@ export class WikiArtifactHost extends LitElement {
     this.hydrated = true;
     await this.hydrateState();
     this.subscribeWatch();
+    // Query results ($queries) resolve asynchronously; without these
+    // subscriptions the rendered table never repaints after its RPC
+    // completes. Store subscription covers @Set/@Reset repaints too.
+    const runtime = this.runtime;
+    if (runtime != null) {
+     this.unsubs = [
+      runtime.queryManager.subscribe(() => { this.renderTick += 1; }),
+      runtime.store.subscribe(() => { this.renderTick += 1; }),
+     ];
+    }
    }
    this.renderTick += 1;
   } catch (err) {

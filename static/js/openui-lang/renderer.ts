@@ -63,11 +63,13 @@ export interface RenderedArtifact {
 /**
  * Renderer handle: `render(source, persistedState)` renders one program;
  * `store` is the live lang-core store (source of truth for flushes);
+ * `queryManager` tracks Query()/Mutation() results (subscribe for repaints);
  * `refetch` invalidates queries.
  */
 export interface WikiArtifactRuntime {
  render(source: string, persistedState: Record<string, unknown>): RenderedArtifact;
  store: Store;
+ queryManager: QueryManager;
  refetch(statementIds?: string[]): void;
 }
 
@@ -99,9 +101,47 @@ export function generateWikiRenderer(
  const queryManager = createQueryManager(toolProvider);
  const store = createStore();
 
+ let lastParsedSource: string | null = null;
+ let lastResult: ParseResult | null = null;
+ let lastErrors: RenderedArtifact['errors'] = [];
+ let lastDeclarations: Record<string, unknown> = {};
+
+ // evaluate+render phase shared by render/repaint: no re-parse, no
+ // re-fire of Query RPCs (evaluateQueries happens only in render()).
+ const evaluateAndRender = (): RenderedArtifact => {
+  if (lastResult == null) {
+   return { template: nothing, errors: [], stateDeclarations: {} };
+  }
+  const evaluationContext: EvaluationContext = {
+   getState: (name) => store.get(name),
+   resolveRef: (name) => store.get(name),
+  };
+  const evalContext: EvalContext = {
+   ctx: { ...evaluationContext, extraScope: queryManager.getSnapshot() },
+   library: wikiLibrary,
+   store,
+  };
+  const evaluatedRoot = evaluateRoot(lastResult, evalContext);
+  return {
+   template: evaluatedRoot === null ? nothing : (renderTree(evaluatedRoot) as TemplateResult),
+   errors: lastErrors,
+   stateDeclarations: lastDeclarations,
+  };
+ };
+
  const render = (source: string, persistedState: Record<string, unknown>): RenderedArtifact => {
+  if (source === lastParsedSource && lastResult != null) {
+   // Same program: re-evaluate against current snapshots (no re-parse,
+   // no Query refires). Hydration state updates still apply.
+   store.initialize(lastDeclarations, persistedState ?? {});
+   return evaluateAndRender();
+  }
+
   const result = parser.parse(source);
+  lastParsedSource = source;
+  lastResult = result;
   store.initialize(result.stateDeclarations, persistedState ?? {});
+  lastDeclarations = result.stateDeclarations;
 
   const evaluationContext: EvaluationContext = {
    getState: (name) => store.get(name),
@@ -110,29 +150,20 @@ export function generateWikiRenderer(
 
   hydrateQueriesAndMutations(result, { queryManager, evaluationContext });
 
-  const runtimeErrors = result.meta.errors.map((err) => ({
+  lastErrors = result.meta.errors.map((err) => ({
    code: err.code,
    message: err.message,
    component: err.component,
    statementId: err.statementId ?? '',
   }));
 
-  const evalContext: EvalContext = {
-   ctx: { ...evaluationContext, extraScope: queryManager.getSnapshot() },
-   library: wikiLibrary,
-   store,
-  };
-  const evaluatedRoot = evaluateRoot(result, evalContext);
-  return {
-   template: evaluatedRoot === null ? nothing : (renderTree(evaluatedRoot) as TemplateResult),
-   errors: runtimeErrors,
-   stateDeclarations: result.stateDeclarations,
-  };
+  return evaluateAndRender();
  };
 
  return {
   render,
   store,
+  queryManager,
   refetch: (statementIds?: string[]) => {
    queryManager.invalidate(statementIds);
    actionContext.rerun(statementIds);
