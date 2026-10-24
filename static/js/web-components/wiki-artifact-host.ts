@@ -71,6 +71,9 @@ import {
  type WikiArtifactRuntime,
 } from '../openui-lang/renderer.js';
 import { createToolProvider } from '../openui-lang/toolProvider.js';
+import {
+ wikiArtifactDesignSystem,
+} from '../openui-lang/design-system.js';
 
 /** Read the page name from a tool args record, defaulting to this page. */
 function argPage(args: Record<string, unknown>, fallbackPage: string): string {
@@ -96,15 +99,26 @@ function argString(args: Record<string, unknown>, camel: string, snake?: string)
  */
 export class WikiArtifactHost extends LitElement {
  static override readonly styles: CSSResultArray = [
+  wikiArtifactDesignSystem,
   css`
       :host {
         display: block;
       }
       .wiki-artifact-app {
         position: relative;
-        padding: 12px;
+        box-sizing: border-box;
+        width: 100%;
+        padding: clamp(10px, 2.5vw, 18px);
         border: 1px solid var(--color-border-subtle, #d4d4d8);
-        border-radius: 8px;
+        border-radius: 12px;
+        background: var(--color-surface-sunken, #f8f9fa);
+        overflow: hidden;
+      }
+      .wiki-artifact-body {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        min-width: 0;
       }
       .wiki-artifact-remove {
         position: absolute;
@@ -211,6 +225,9 @@ export class WikiArtifactHost extends LitElement {
 
  override connectedCallback(): void {
   super.connectedCallback();
+  // Library templates render into this host's shadow DOM via
+  // .wiki-artifact-body; the design system is included in static styles
+  // below so theme variables + responsive rules apply to them.
   this.runtime = generateWikiRenderer(
    this.toolProvider(),
    this.actionContext(),

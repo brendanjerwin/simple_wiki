@@ -114,7 +114,17 @@ root = Card("Pomodoro", Stack([
 
 - **Single write door**: only `SetArtifact` writes the program. The `/edit` markdown editor also works for humans — the fence is visible in the body, and the same validation+guard funnel applies there. The frontmatter editor dialog is disabled on artifact pages (its save would race the artifact services).
 - **Composition model**: the app renders **above** the prose; the prose is never hidden and never duplicated. Clear prose only for a deliberate app-standalone page (`confirm_replace_content: true`).
-- **Styling**: comes from the wiki component library — you cannot add per-artifact CSS in this mode. Colors/fonts follow the wiki theme.
+- **Styling**: comes from the wiki component library — all components carry a full
+  responsive design system automatically (theme vars, dark mode, mobile breakpoints).
+  You cannot add per-artifact CSS in this mode.
+  **Responsive rules that come free**: `Stack` wraps on narrow screens (horizontal
+  stacks become vertical below 520px); `Table` scrolls horizontally inside the card
+  rather than overflowing the page; `Card` caps at 720px and centers on wide screens;
+  buttons/inputs use the theme's action colors. **Design guidance**: prefer one outer
+  `Card` per app; use `Stack` (vertical) for form-like flows and horizontal `Stack` for
+  button rows; use `Chart` for any numeric comparison (labels+values arrays) and
+  `Table` for tabular data — both are styled automatically; keep text in `Text`, never
+  embed raw formatting.
 - **No external resources**: programs must be self-contained; external CDN fetches are not loadable from the artifact runtime. Media/images go through the wiki's existing upload surface if genuinely needed.
 - **History**: every program write snapshots the page (ADR-0016). "Revert to an hour ago" = the page-history tooling; there is no separate artifact history.
 

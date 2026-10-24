@@ -83,10 +83,12 @@ function buildLibrary(): Library {
   component: (({ columns, rows }) => {
    const headers = (columns as string[]) ?? [];
    const body = (rows as unknown[][] | undefined) ?? [];
-   return html`<table class="wiki-artifact-table">
-        <thead><tr>${headers.map((h) => html`<th>${h}</th>`)}</tr></thead>
-        <tbody>${body.map((row) => html`<tr>${row.map((cell) => html`<td>${cell}</td>`)}</tr>`)}</tbody>
-      </table>`;
+   return html`<div class="wiki-artifact-table-wrap">
+        <table class="wiki-artifact-table">
+          <thead><tr>${headers.map((h) => html`<th>${h}</th>`)}</tr></thead>
+          <tbody>${body.map((row) => html`<tr>${row.map((cell) => html`<td>${cell}</td>`)}</tr>`)}</tbody>
+        </table>
+      </div>`;
   }) as WikiRenderer,
  });
 
@@ -257,7 +259,11 @@ function buildLibrary(): Library {
   component: (({ direction, gap, children }) =>
    html`<div
         class="wiki-artifact-stack"
-        style="display:flex;flex-direction:${direction === 'horizontal' ? 'row' : 'column'};gap:${(gap as string) ?? '8px'}"
+        data-direction=${direction === 'horizontal' ? 'horizontal' : 'vertical'}
+        style=${gap != null
+     ? `gap:${gap as string}`
+     : nothing
+    }
       >
         ${(children as unknown[] | undefined) ?? []}
       </div>`) as WikiRenderer,
