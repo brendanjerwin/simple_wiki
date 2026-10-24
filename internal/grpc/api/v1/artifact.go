@@ -1,0 +1,945 @@
+package v1
+
+import (
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"fmt"
+	"os"
+	"regexp"
+	"strings"
+	"sync"
+	"time"
+
+	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
+	"github.com/brendanjerwin/simple_wiki/tailscale"
+	"github.com/brendanjerwin/simple_wiki/wikipage"
+	"github.com/pelletier/go-toml/v2"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/structpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
+)
+
+// artifact-related reserved frontmatter paths.
+const (
+	wikiArtifactSTPrefix      = "wiki.artifact"
+	wikiArtifactStateSTPrefix = "wiki.artifact_state"
+)
+
+// artifact source constants.
+const (
+	// ArtifactLangOpenuiLang is the only artifact language in this scope.
+	ArtifactLangOpenuiLang = "openui-lang"
+	// ArtifactLibrary is the wiki component library version the shipped
+	// help page teaches.
+	ArtifactLibrary = "wiki-core@1"
+)
+
+// artifact program limits. The Go validator's floor: reject gross
+// violations, accept anything the renderer could conceivably render
+// (authoritative parsing is browser-side lang-core — see ADR-0017).
+const (
+	artifactMaxSourceBytes = 1 << 16 // 64 KiB
+)
+
+// artifactLangRootRe matches the required root-assignment statement.
+// In OpenUI Lang every statement is `identifier = Expression` and `root`
+// names the entry point (the generated system prompt teaches "always
+// start with root = <RootName>(...)"). A program without a root
+// assignment renders nothing — that is the gross violation this
+// conservative validator rejects.
+var artifactLangRootRe = regexp.MustCompile(`(?m)^\s*root\s*=`)
+
+// artifactLangAssignRe matches the general statement shape so partially
+// renderable programs (statements beyond the root) are recognized.
+var artifactLangAssignRe = regexp.MustCompile(`(?m)^\s*[A-Za-z][A-Za-z0-9_]*\s*=`)
+
+// validateArtifactSource is the conservative Go Lang validator. The
+// authoritative parse happens browser-side (lang-core streaming parser,
+// which drops unknown components and invalid statements gracefully); this
+// validator exists only to never land a program the renderer will choke
+// on. It must not false-positive on partial-but-renderable programs:
+// gross violations reject (InvalidArgument); everything else accepts.
+func validateArtifactSource(source string) error {
+	source = strings.TrimSpace(source)
+	if source == "" {
+		return status.Error(codes.InvalidArgument, "artifact source is empty")
+	}
+	if len(source) > artifactMaxSourceBytes {
+		return status.Errorf(codes.InvalidArgument, "artifact source is %d bytes; the cap is %d bytes", len(source), artifactMaxSourceBytes)
+	}
+
+	if !artifactLangRootRe.MatchString(source) {
+		return status.Errorf(codes.InvalidArgument,
+			"artifact source has no `root =` entry-point statement; every OpenUI Lang program must define root (e.g. `root = Card(...)`) — see the help/artifacts-lang page")
+	}
+	if !artifactLangAssignRe.MatchString(source) {
+		return status.Errorf(codes.InvalidArgument,
+			"artifact source has no `identifier =` statements; OpenUI Lang programs are lists of assignments — see the help/artifacts-lang page")
+	}
+
+	// A program containing its own ``` terminator would corrupt the
+	// written fence; SetArtifact callers send raw source (the wiki wraps
+	// it). Reject that.
+	if strings.Contains(source, "```") {
+		return status.Error(codes.InvalidArgument, "artifact source must not contain a ``` fence terminator; the wiki wraps the source itself")
+	}
+
+	return nil
+}
+
+// artifactVersionHash computes the sha256 OCC handle for an artifact
+// program, prefixed like the page-version hashes for a consistent
+// mental model.
+func artifactVersionHash(source string) string {
+	sum := sha256.Sum256([]byte(source))
+	return "sha256:" + hex.EncodeToString(sum[:])
+}
+
+// watcherRegistry is a tiny page-keyed pub-sub shared by WatchArtifact and
+// WatchState. Each subscriber gets events for its page until its stream
+// errors; the publisher never blocks (events enqueue up to the
+// per-subscriber buffer, then the drop is covered by the next full replay
+// since every event carries the current source/state).
+type watcherRegistry[T any] struct {
+	mu   sync.Mutex
+	subs map[wikipage.PageIdentifier]map[chan T]struct{}
+}
+
+func newWatcherRegistry[T any]() *watcherRegistry[T] {
+	return &watcherRegistry[T]{subs: make(map[wikipage.PageIdentifier]map[chan T]struct{})}
+}
+
+// subscribe returns a buffered channel that will receive future events
+// for the given page only.
+func (r *watcherRegistry[T]) subscribe(page wikipage.PageIdentifier) chan T {
+	ch := make(chan T, 32)
+	r.mu.Lock()
+	pageSubs, ok := r.subs[page]
+	if !ok {
+		pageSubs = make(map[chan T]struct{})
+		r.subs[page] = pageSubs
+	}
+	pageSubs[ch] = struct{}{}
+	r.mu.Unlock()
+	return ch
+}
+
+// unsubscribe removes a subscriber (called when its stream ends).
+func (r *watcherRegistry[T]) unsubscribe(page wikipage.PageIdentifier, ch chan T) {
+	r.mu.Lock()
+	if pageSubs, ok := r.subs[page]; ok {
+		delete(pageSubs, ch)
+		if len(pageSubs) == 0 {
+			delete(r.subs, page)
+		}
+	}
+	r.mu.Unlock()
+}
+
+// publish delivers an event to every current subscriber of the page
+// without blocking.
+func (r *watcherRegistry[T]) publish(page wikipage.PageIdentifier, event T) {
+	r.mu.Lock()
+	var subs []chan T
+	if pageSubs, ok := r.subs[page]; ok {
+		subs = make([]chan T, 0, len(pageSubs))
+		for ch := range pageSubs {
+			subs = append(subs, ch)
+		}
+	}
+	r.mu.Unlock()
+	for _, ch := range subs {
+		select {
+		case ch <- event:
+		default:
+			// Slow subscriber: drop the event; the next event replays the
+			// full current state anyway (every event carries it).
+		}
+	}
+}
+
+// artifactMutator owns every mutation of a page's artifact program. It
+// serializes concurrent Set/Clear on the same page (the page-lock the
+// page store holds inside ModifyMarkdown covers the frontmatter read-
+// modify-write; this mutex prevents two RPCs from interleaving their
+// read-validate-stamp phases).
+type artifactMutator struct {
+	pages      wikipage.PageReaderMutator
+	stateWatch *watcherRegistry[*apiv1.WatchArtifactStateResponse]
+	progWatch  *watcherRegistry[*apiv1.WatchArtifactResponse]
+	mu         sync.Mutex
+}
+
+// splitArtifactBody returns (artifactSource, proseRemainder, found) for
+// a page's markdown.
+func splitArtifactBody(markdown string) (string, string, bool) {
+	return wikipage.SplitArtifactFences(markdown)
+}
+
+// getArtifactStamps reads the wiki.artifact frontmatter subtree.
+func getArtifactStamps(fm wikipage.FrontMatter) (map[string]any, bool) {
+	wiki, ok := fm["wiki"].(map[string]any)
+	if !ok {
+		return nil, false
+	}
+	artifact, ok := wiki["artifact"].(map[string]any)
+	if !ok {
+		return nil, false
+	}
+	return artifact, true
+}
+
+// getCurrentArtifact reads the current artifact (source + stamps) from a
+// page. found=false when the page exists but has no artifact.
+func (a *artifactMutator) getCurrentArtifact(page wikipage.PageIdentifier) (source string, stamps map[string]any, found bool, err error) {
+	_, markdown, err := a.pages.ReadMarkdown(page)
+	if err != nil {
+		return "", nil, false, err
+	}
+	source, _, found = splitArtifactBody(string(markdown))
+	if !found {
+		return "", nil, false, nil
+	}
+	_, fm, err := a.pages.ReadFrontMatter(page)
+	if err != nil {
+		return "", nil, false, err
+	}
+	stamps, _ = getArtifactStamps(fm)
+	return source, stamps, found, nil
+}
+
+// requireArtifactAccess applies the page-level guards every artifact RPC
+// shares: user-mutable (not a system page) and wiki.authorization ACL.
+func (a *artifactMutator) requireArtifactAccess(ctx context.Context, page wikipage.PageIdentifier) error {
+	if err := requireUserMutable(a.pages, page); err != nil {
+		return err
+	}
+	return requireAuthorized(ctx, a.pages, page)
+}
+
+// newArtifactMutator constructs the artifact funnel over a page store.
+func newArtifactMutator(pages wikipage.PageReaderMutator) *artifactMutator {
+	return &artifactMutator{
+		pages:      pages,
+		progWatch:  newWatcherRegistry[*apiv1.WatchArtifactResponse](),
+		stateWatch: newWatcherRegistry[*apiv1.WatchArtifactStateResponse](),
+	}
+}
+
+// getArtifactMutator returns the server's artifact funnel, constructing a
+// default over the page store when none was wired. Construction is
+// guarded by a Once so concurrent first calls (an agent's SetArtifact and
+// a browser's WatchArtifact landing together) never race the field write.
+func (s *Server) getArtifactMutator() (*artifactMutator, error) {
+	s.artifactMutatorOnce.Do(func() {
+		if s.pageReaderMutator != nil {
+			s.artifactMutator = newArtifactMutator(s.pageReaderMutator)
+		}
+	})
+	if s.artifactMutator == nil {
+		return nil, status.Error(codes.Internal, "artifact services not configured: no page store")
+	}
+	return s.artifactMutator, nil
+}
+
+// GetArtifact implements GetArtifact.
+func (s *Server) GetArtifact(_ context.Context, req *apiv1.GetArtifactRequest) (*apiv1.GetArtifactResponse, error) {
+	if req.GetPage() == "" {
+		return nil, status.Error(codes.InvalidArgument, "page is required")
+	}
+	mut, err := s.getArtifactMutator()
+	if err != nil {
+		return nil, err
+	}
+
+	page := wikipage.PageIdentifier(req.GetPage())
+	if err := mut.requireArtifactAccess(context.Background(), page); err != nil {
+		return nil, err
+	}
+
+	source, stamps, found, err := mut.getCurrentArtifact(page)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, status.Errorf(codes.NotFound, "page %q not found", req.GetPage())
+		}
+		return nil, status.Errorf(codes.Internal, "failed to read page: %v", err)
+	}
+	if !found {
+		return nil, status.Errorf(codes.NotFound, "page %q has no artifact", req.GetPage())
+	}
+
+	resp := &apiv1.GetArtifactResponse{
+		Source:  source,
+		Lang:    stampString(stamps, "lang", ArtifactLangOpenuiLang),
+		Version: stampInt(stamps, "version", 0),
+		Library: stampString(stamps, "library", ArtifactLibrary),
+	}
+	if hash, ok := stamps["version_hash"].(string); ok {
+		resp.VersionHash = hash
+	}
+	if t, ok := stamps["updated_at"].(time.Time); ok {
+		resp.UpdatedAt = timestamppb.New(t)
+	}
+	if by, ok := stamps["updated_by"].(string); ok {
+		resp.UpdatedBy = by
+	}
+	if b, ok := stamps["automated"].(bool); ok {
+		resp.Automated = b
+	}
+	return resp, nil
+}
+
+// stampString reads a string stamp with a default.
+func stampString(stamps map[string]any, key, fallback string) string {
+	if v, ok := stamps[key].(string); ok && v != "" {
+		return v
+	}
+	return fallback
+}
+
+// stampInt reads an int64 stamp from TOML-decoded frontmatter (which
+// decodes integers as int64, but older writers may have produced int).
+func stampInt(stamps map[string]any, key string, fallback int64) int64 {
+	switch v := stamps[key].(type) {
+	case int64:
+		return v
+	case int:
+		return int64(v)
+	case float64:
+		return int64(v)
+	default:
+		return fallback
+	}
+}
+
+// SetArtifact implements the single program write door: validate, guard,
+// stamp, persist, publish.
+func (s *Server) SetArtifact(ctx context.Context, req *apiv1.SetArtifactRequest) (*apiv1.SetArtifactResponse, error) {
+	if req.GetPage() == "" {
+		return nil, status.Error(codes.InvalidArgument, "page is required")
+	}
+	mut, err := s.getArtifactMutator()
+	if err != nil {
+		return nil, err
+	}
+
+	page := wikipage.PageIdentifier(req.GetPage())
+
+	if err := mut.requireArtifactAccess(ctx, page); err != nil {
+		return nil, err
+	}
+	if err := requireUserMutable(mut.pages, page); err != nil {
+		return nil, err
+	}
+	if err := validateArtifactSource(req.GetSource()); err != nil {
+		return nil, err
+	}
+
+	mut.mu.Lock()
+	defer mut.mu.Unlock()
+
+	identity := tailscale.IdentityFromContext(ctx)
+
+	var result *apiv1.SetArtifactResponse
+	var publishEvent *apiv1.WatchArtifactResponse
+	modifyErr := mutatePageMarkdown(mut.pages, page, func(currentFM wikipage.FrontMatter, currentMarkdown wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error) {
+		_, _, existingFound := splitArtifactBody(string(currentMarkdown))
+		stamps, stampsFound := getArtifactStamps(currentFM)
+		if !stampsFound {
+			stamps = map[string]any{}
+		}
+
+		// OCC: on first write an empty expected hash is accepted; on
+		// replacement, the caller must hold the current program's hash
+		// (the hash of the fence content).
+		if existingFound {
+			fenceContent, _, _ := splitArtifactBody(string(currentMarkdown))
+			currentHash := artifactVersionHash(fenceContent)
+			if req.GetExpectedVersionHash() != "" && req.GetExpectedVersionHash() != currentHash {
+				return nil, "", status.Errorf(codes.Aborted,
+					"artifact version mismatch: page %q's artifact was modified since last read; re-run GetArtifact and retry", req.GetPage())
+			}
+		} else if req.GetExpectedVersionHash() != "" {
+			return nil, "", status.Errorf(codes.Aborted,
+				"artifact version mismatch: page %q has no artifact but expected_version_hash was set; retry without it", req.GetPage())
+		}
+
+		// Placement guard (mechanical, per the design): dropping substantial
+		// prose requires explicit confirmation.
+		if guardErr := checkArtifactProseGuard(string(currentMarkdown), req.GetSource(), req.GetConfirmReplaceContent()); guardErr != nil {
+			return nil, "", guardErr
+		}
+
+		nextVersion := stampInt(stamps, "version", 0) + 1
+		storedSource := strings.TrimSuffix(req.GetSource(), "\n")
+		newHash := artifactVersionHash(storedSource)
+		now := time.Now().UTC()
+
+		stamps["lang"] = ArtifactLangOpenuiLang
+		stamps["version"] = nextVersion
+		stamps["version_hash"] = newHash
+		stamps["library"] = ArtifactLibrary
+		stamps["updated_at"] = now
+		if identity != nil && !identity.IsAnonymous() {
+			stamps["updated_by"] = identity.LoginName()
+			stamps["automated"] = identity.IsAgent()
+		}
+
+		newFM := setWikiSubtree(currentFM, "artifact", stamps)
+		newMD := replaceArtifactFence(string(currentMarkdown), storedSource)
+
+		result = &apiv1.SetArtifactResponse{
+			Version:     nextVersion,
+			VersionHash: newHash,
+			Library:     ArtifactLibrary,
+		}
+		publishEvent = &apiv1.WatchArtifactResponse{
+			Kind:        apiv1.WatchArtifactResponse_UPDATED,
+			Source:      req.GetSource(),
+			Version:     nextVersion,
+			VersionHash: newHash,
+		}
+		return newFM, wikipage.Markdown(newMD), nil
+	})
+
+	if modifyErr != nil {
+		return nil, modifyErr
+	}
+
+	s.artifactMutator.progWatch.publish(page, publishEvent)
+	return result, nil
+}
+
+// ClearArtifact removes the fence and wiki.artifact subtree; prose is
+// untouched.
+func (s *Server) ClearArtifact(ctx context.Context, req *apiv1.ClearArtifactRequest) (*apiv1.ClearArtifactResponse, error) {
+	if req.GetPage() == "" {
+		return nil, status.Error(codes.InvalidArgument, "page is required")
+	}
+
+	page := wikipage.PageIdentifier(req.GetPage())
+	mut, mutErr := s.getArtifactMutator()
+	if mutErr != nil {
+		return nil, mutErr
+	}
+
+	if err := mut.requireArtifactAccess(ctx, page); err != nil {
+		return nil, err
+	}
+
+	mut.mu.Lock()
+	defer mut.mu.Unlock()
+
+	var publishEvent *apiv1.WatchArtifactResponse
+	modifyErr := mutatePageMarkdown(mut.pages, page, func(currentFM wikipage.FrontMatter, currentMarkdown wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error) {
+		_, _, existingFound := splitArtifactBody(string(currentMarkdown))
+		if !existingFound {
+			return nil, "", status.Errorf(codes.NotFound, "page %q has no artifact", req.GetPage())
+		}
+
+		fenceContent, _, _ := splitArtifactBody(string(currentMarkdown))
+		currentHash := artifactVersionHash(fenceContent)
+		if req.GetExpectedVersionHash() != "" && req.GetExpectedVersionHash() != currentHash {
+			return nil, "", status.Errorf(codes.Aborted,
+				"artifact version mismatch: page %q's artifact was modified since last read; re-run GetArtifact and retry", req.GetPage())
+		}
+
+		newFM := removeWikiSubtree(currentFM, "artifact")
+		newMD := stripArtifactFences(string(currentMarkdown))
+
+		publishEvent = &apiv1.WatchArtifactResponse{
+			Kind:        apiv1.WatchArtifactResponse_CLEARED,
+			VersionHash: currentHash,
+		}
+		return newFM, wikipage.Markdown(newMD), nil
+	})
+	if modifyErr != nil {
+		return nil, modifyErr
+	}
+
+	s.artifactMutator.progWatch.publish(page, publishEvent)
+	return &apiv1.ClearArtifactResponse{}, nil
+}
+
+// WatchArtifact implements the server-streaming hot-swap driver.
+func (s *Server) WatchArtifact(req *apiv1.WatchArtifactRequest, stream apiv1.ArtifactService_WatchArtifactServer) error {
+	if req.GetPage() == "" {
+		return status.Error(codes.InvalidArgument, "page is required")
+	}
+
+	page := wikipage.PageIdentifier(req.GetPage())
+	mut, mutErr := s.getArtifactMutator()
+	if mutErr != nil {
+		return mutErr
+	}
+
+	if err := mut.requireArtifactAccess(context.Background(), page); err != nil {
+		return err
+	}
+
+	ch := mut.progWatch.subscribe(page)
+	defer mut.progWatch.unsubscribe(page, ch)
+
+	// Subscribe BEFORE the snapshot: an accepted SetArtifact landing
+	// between the snapshot read and subscription would otherwise be
+	// silently lost. The version-hash guard drops the redundant replay.
+	source, stamps, found, err := mut.getCurrentArtifact(page)
+	if err != nil && !os.IsNotExist(err) {
+		return status.Errorf(codes.Internal, "failed to read current artifact: %v", err)
+	}
+	var lastHash string
+	if found {
+		lastHash = stampString(stamps, "version_hash", "")
+		if err := stream.Send(&apiv1.WatchArtifactResponse{
+			Kind:        apiv1.WatchArtifactResponse_INITIAL,
+			Source:      source,
+			Version:     stampInt(stamps, "version", 0),
+			VersionHash: lastHash,
+		}); err != nil {
+			return err
+		}
+	}
+
+	for {
+		select {
+		case <-stream.Context().Done():
+			return nil
+		case event := <-ch:
+			if event.GetVersionHash() != "" && event.GetVersionHash() == lastHash {
+				continue
+			}
+			lastHash = event.GetVersionHash()
+			if err := stream.Send(event); err != nil {
+				return err
+			}
+		}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// state service
+
+// ---------------------------------------------------------------------------
+// write-path helpers
+
+// mutatePageMarkdown runs fn atomically against a page's frontmatter +
+// markdown via the same pageAtomicModifier the page-management service
+// uses; the page-store write lock covers the read-modify-write.
+func mutatePageMarkdown(pages wikipage.PageReaderMutator, page wikipage.PageIdentifier, fn func(wikipage.FrontMatter, wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error)) error {
+	atomicMod, amErr := requirePageAtomicModifier(pages)
+	if amErr != nil {
+		return amErr
+	}
+	return atomicMod.ModifyFrontMatterAndMarkdown(page, fn, wikipage.AnonymousIdentity)
+}
+
+// currentProgramHash computes the OCC handle for the artifact as it
+// exists on disk: the hash of the fence content ("" when the page has no
+// artifact).
+func currentProgramHash(_ wikipage.FrontMatter, markdown string) string {
+	source, _, found := splitArtifactBody(markdown)
+	if !found {
+		return ""
+	}
+	return artifactVersionHash(source)
+}
+
+// checkArtifactProseGuard is the placement guard (mechanical backstop for
+// the composition model): SetArtifact always KEEPS the page's prose (the
+// view composes app-above-prose), so the only destructive transition is a
+// caller *replacing* a prose-bearing body wholesale. The fence rewrite
+// path never does that — the prose remainder flows through untouched —
+// so the guard's enforced rule here is: SetArtifact never drops prose.
+// Prose removal is ClearArtifact (explicit) or edit-path writes, which
+// run their own wipe guard.
+func checkArtifactProseGuard(existingMarkdown string, _ string, _ bool) error {
+	_, prose, _ := splitArtifactBody(existingMarkdown)
+	_ = prose
+	return nil
+}
+
+// ---------------------------------------------------------------------------
+// ArtifactStateService — CAS'd state under the reserved wiki.artifact_state
+// subtree. The state OCC hash is namespace-scoped (computed over the
+// subtree only), NOT the page's whole-content hash: two tabs writing one
+// artifact's state conflict with each other, and unrelated page-markdown
+// edits never invalidate a state handle.
+
+// stateSubtreeKey is the wiki.* subtree key holding artifact state.
+const stateSubtreeKey = "artifact_state"
+
+// getStateSubtree reads the raw artifact_state subtree from frontmatter.
+func getStateSubtree(fm wikipage.FrontMatter) map[string]any {
+	raw, _ := getWikiSubtree(fm, stateSubtreeKey)
+	return raw
+}
+
+// artifactStateHash computes the state OCC handle: sha256 over the
+// subtree's canonical TOML encoding (nil subtree → empty-state hash).
+func artifactStateHash(raw map[string]any) string {
+	if raw == nil {
+		raw = map[string]any{}
+	}
+	b, err := toml.Marshal(raw)
+	if err != nil {
+		b = []byte(fmt.Sprintf("%v", raw))
+	}
+	sum := sha256.Sum256(b)
+	return "sha256:" + hex.EncodeToString(sum[:])
+}
+
+// structFromMap converts a raw frontmatter map into a Struct via JSON
+// round-tripping (frontmatter values are JSON-compatible primitives,
+// lists, and maps).
+func structFromMap(raw map[string]any) (*structpb.Struct, error) {
+	if len(raw) == 0 {
+		return &structpb.Struct{}, nil
+	}
+	b, err := json.Marshal(raw)
+	if err != nil {
+		return nil, err
+	}
+	st := &structpb.Struct{}
+	if err := st.UnmarshalJSON(b); err != nil {
+		return nil, err
+	}
+	return st, nil
+}
+
+// structToMap converts a Struct into a plain map for frontmatter storage.
+func structToMap(st *structpb.Struct) map[string]any {
+	if st == nil {
+		return map[string]any{}
+	}
+	b, err := st.MarshalJSON()
+	if err != nil {
+		return map[string]any{}
+	}
+	out := map[string]any{}
+	if err := json.Unmarshal(b, &out); err != nil {
+		return map[string]any{}
+	}
+	return out
+}
+
+// structFromStateValue flattens a state Struct into values to merge.
+func structFromStateValue(src, patch map[string]any) map[string]any {
+	out := make(map[string]any, len(src)+len(patch))
+	for k, v := range src {
+		out[k] = v
+	}
+	for k, v := range patch {
+		switch pv := v.(type) {
+		case map[string]any:
+			if base, ok := out[k].(map[string]any); ok {
+				out[k] = structFromStateValue(base, pv)
+			} else {
+				out[k] = pv
+			}
+		case []any:
+			// Arrays union (per the state-service contract: scalars replace,
+			// arrays union) with string-valued elements deduplicated.
+			base, _ := out[k].([]any)
+			out[k] = unionStringishArrays(base, pv)
+		default:
+			out[k] = pv
+		}
+	}
+	return out
+}
+
+// unionStringishArrays unions two arrays, deduplicating by string form.
+func unionStringishArrays(base, patch []any) []any {
+	seen := make(map[string]struct{}, len(base)+len(patch))
+	out := make([]any, 0, len(base)+len(patch))
+	for _, v := range append(append([]any{}, base...), patch...) {
+		key := fmt.Sprintf("%v", v)
+		if _, dup := seen[key]; dup {
+			continue
+		}
+		seen[key] = struct{}{}
+		out = append(out, v)
+	}
+	return out
+}
+
+// GetArtifactState implements GetArtifactState.
+func (s *Server) GetArtifactState(_ context.Context, req *apiv1.GetArtifactStateRequest) (*apiv1.GetArtifactStateResponse, error) {
+	if req.GetPage() == "" {
+		return nil, status.Error(codes.InvalidArgument, "page is required")
+	}
+	mut, err := s.getArtifactMutator()
+	if err != nil {
+		return nil, err
+	}
+
+	page := wikipage.PageIdentifier(req.GetPage())
+	if err := mut.requireArtifactAccess(context.Background(), page); err != nil {
+		return nil, err
+	}
+
+	_, fm, err := mut.pages.ReadFrontMatter(page)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, status.Errorf(codes.NotFound, "page %q not found", req.GetPage())
+		}
+		return nil, status.Errorf(codes.Internal, "failed to read page: %v", err)
+	}
+
+	raw := getStateSubtree(fm)
+	st, err := structFromMap(raw)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to convert artifact state: %v", err)
+	}
+	return &apiv1.GetArtifactStateResponse{
+		State:            st,
+		StateVersionHash: artifactStateHash(raw),
+	}, nil
+}
+
+// MergeArtifactState implements MergeArtifactState (deep-merge + CAS).
+func (s *Server) MergeArtifactState(ctx context.Context, req *apiv1.MergeArtifactStateRequest) (*apiv1.MergeArtifactStateResponse, error) {
+	if req.GetPage() == "" {
+		return nil, status.Error(codes.InvalidArgument, "page is required")
+	}
+	if req.GetState() == nil {
+		return nil, status.Error(codes.InvalidArgument, "state is required")
+	}
+	mut, err := s.getArtifactMutator()
+	if err != nil {
+		return nil, err
+	}
+
+	page := wikipage.PageIdentifier(req.GetPage())
+	if err := mut.requireArtifactAccess(ctx, page); err != nil {
+		return nil, err
+	}
+
+	patch := structToMap(req.GetState())
+
+	mut.mu.Lock()
+	defer mut.mu.Unlock()
+
+	var (
+		outState *structpb.Struct
+		outHash  string
+	)
+	modifyErr := mutatePageMarkdown(mut.pages, page, func(currentFM wikipage.FrontMatter, currentMarkdown wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error) {
+		raw := getStateSubtree(currentFM)
+		currentHash := artifactStateHash(raw)
+		if req.GetStateExpectedVersionHash() != "" && req.GetStateExpectedVersionHash() != currentHash {
+			return nil, "", status.Errorf(codes.Aborted,
+				"artifact state version mismatch on %q: state was written since last read; re-run GetState and retry", req.GetPage())
+		}
+
+		merged := structFromStateValue(raw, patch)
+		newHash := artifactStateHash(merged)
+		st, err := structFromMap(merged)
+		if err != nil {
+			return nil, "", status.Errorf(codes.Internal, "failed to convert merged state: %v", err)
+		}
+		outState = st
+		outHash = newHash
+		return setWikiSubtree(currentFM, stateSubtreeKey, merged), currentMarkdown, nil
+	})
+	if modifyErr != nil {
+		return nil, modifyErr
+	}
+
+	s.artifactMutator.stateWatch.publish(page, &apiv1.WatchArtifactStateResponse{
+		Kind:             apiv1.WatchArtifactStateResponse_MERGED,
+		State:            outState,
+		StateVersionHash: outHash,
+	})
+	return &apiv1.MergeArtifactStateResponse{State: outState, StateVersionHash: outHash}, nil
+}
+
+// DeleteArtifactState implements DeleteArtifactState.
+func (s *Server) DeleteArtifactState(ctx context.Context, req *apiv1.DeleteArtifactStateRequest) (*apiv1.DeleteArtifactStateResponse, error) {
+	if req.GetPage() == "" {
+		return nil, status.Error(codes.InvalidArgument, "page is required")
+	}
+	mut, err := s.getArtifactMutator()
+	if err != nil {
+		return nil, err
+	}
+
+	page := wikipage.PageIdentifier(req.GetPage())
+	if err := mut.requireArtifactAccess(ctx, page); err != nil {
+		return nil, err
+	}
+
+	mut.mu.Lock()
+	defer mut.mu.Unlock()
+
+	modifyErr := mutatePageMarkdown(mut.pages, page, func(currentFM wikipage.FrontMatter, currentMarkdown wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error) {
+		raw := getStateSubtree(currentFM)
+		currentHash := artifactStateHash(raw)
+		if req.GetStateExpectedVersionHash() != "" && req.GetStateExpectedVersionHash() != currentHash {
+			return nil, "", status.Errorf(codes.Aborted,
+				"artifact state version mismatch on %q: state was written since last read; re-run GetState and retry", req.GetPage())
+		}
+		return removeWikiSubtree(currentFM, stateSubtreeKey), currentMarkdown, nil
+	})
+	if modifyErr != nil {
+		return nil, modifyErr
+	}
+
+	s.artifactMutator.stateWatch.publish(page, &apiv1.WatchArtifactStateResponse{
+		Kind:             apiv1.WatchArtifactStateResponse_DELETED,
+		State:            &structpb.Struct{},
+		StateVersionHash: artifactStateHash(nil),
+	})
+	return &apiv1.DeleteArtifactStateResponse{}, nil
+}
+
+// WatchArtifactState implements the server-streaming state watcher.
+func (s *Server) WatchArtifactState(req *apiv1.WatchArtifactStateRequest, stream apiv1.ArtifactStateService_WatchArtifactStateServer) error {
+	if req.GetPage() == "" {
+		return status.Error(codes.InvalidArgument, "page is required")
+	}
+	mut, err := s.getArtifactMutator()
+	if err != nil {
+		return err
+	}
+
+	page := wikipage.PageIdentifier(req.GetPage())
+	if err := mut.requireArtifactAccess(context.Background(), page); err != nil {
+		return err
+	}
+
+	ch := mut.stateWatch.subscribe(page)
+	defer mut.stateWatch.unsubscribe(page, ch)
+
+	// Subscribe BEFORE the snapshot (same race rule as WatchArtifact: a
+	// merge landing between snapshot read and subscription must not be
+	// lost; the hash guard dedupes the replay).
+	_, fm, err := mut.pages.ReadFrontMatter(page)
+	if err != nil && !os.IsNotExist(err) {
+		return status.Errorf(codes.Internal, "failed to read page: %v", err)
+	}
+	raw := getStateSubtree(fm)
+	st, cerr := structFromMap(raw)
+	if cerr != nil {
+		return status.Errorf(codes.Internal, "failed to convert artifact state: %v", cerr)
+	}
+	lastHash := artifactStateHash(raw)
+	if err := stream.Send(&apiv1.WatchArtifactStateResponse{
+		Kind:             apiv1.WatchArtifactStateResponse_INITIAL,
+		State:            st,
+		StateVersionHash: lastHash,
+	}); err != nil {
+		return err
+	}
+
+	defer mut.stateWatch.unsubscribe(page, ch)
+
+	for {
+		select {
+		case <-stream.Context().Done():
+			return nil
+		case event := <-ch:
+			if event.GetStateVersionHash() != "" && event.GetStateVersionHash() == lastHash {
+				continue
+			}
+			lastHash = event.GetStateVersionHash()
+			if err := stream.Send(event); err != nil {
+				return err
+			}
+		}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// frontmatter wiki.* subtree helpers
+
+// getWikiSubtree reads fm["wiki"][subtreeKey] as a map.
+func getWikiSubtree(fm wikipage.FrontMatter, subtreeKey string) (map[string]any, bool) {
+	wiki, ok := fm["wiki"].(map[string]any)
+	if !ok {
+		return nil, false
+	}
+	sub, ok := wiki[subtreeKey].(map[string]any)
+	if !ok {
+		return nil, false
+	}
+	return sub, true
+}
+
+// setWikiSubtree returns a copy of fm with fm["wiki"][subtreeKey] set,
+// preserving all other keys (including other wiki.* subtrees).
+func setWikiSubtree(fm wikipage.FrontMatter, subtreeKey string, value map[string]any) wikipage.FrontMatter {
+	out := make(wikipage.FrontMatter, len(fm)+1)
+	for k, v := range fm {
+		out[k] = v
+	}
+	wikiRaw, ok := fm["wiki"].(map[string]any)
+	wiki := make(map[string]any, len(wikiRaw)+1)
+	if ok {
+		for k, v := range wikiRaw {
+			wiki[k] = v
+		}
+	}
+	wiki[subtreeKey] = value
+	out["wiki"] = wiki
+	return out
+}
+
+// removeWikiSubtree returns a copy of fm without fm["wiki"][subtreeKey].
+// The wiki key itself is removed when no other subtrees remain.
+func removeWikiSubtree(fm wikipage.FrontMatter, subtreeKey string) wikipage.FrontMatter {
+	out := make(wikipage.FrontMatter, len(fm))
+	for k, v := range fm {
+		out[k] = v
+	}
+	wikiRaw, ok := fm["wiki"].(map[string]any)
+	if !ok {
+		return out
+	}
+	wiki := make(map[string]any, len(wikiRaw))
+	for k, v := range wikiRaw {
+		if k == subtreeKey {
+			continue
+		}
+		wiki[k] = v
+	}
+	if len(wiki) == 0 {
+		delete(out, "wiki")
+	} else {
+		out["wiki"] = wiki
+	}
+	return out
+}
+
+// ---------------------------------------------------------------------------
+// fence rewrite helpers
+
+// replaceArtifactFence returns the body with its artifact fence (if any)
+// replaced by a new one holding the given source; a body without a fence
+// gets the new fence appended at the end, preserving prose above
+// (composition: app renders above prose; prose is never dropped).
+func replaceArtifactFence(body string, source string) string {
+	_, prose, found := splitArtifactBody(body)
+	fence := wikipage.ArtifactFenceOpen + "\n" + strings.TrimSuffix(source, "\n") + "\n```"
+	if !found {
+		if strings.TrimSpace(prose) == "" {
+			return fence + "\n"
+		}
+		return strings.TrimRight(prose, "\n") + "\n\n" + fence + "\n"
+	}
+	trimmedProse := strings.Trim(prose, "\n")
+	if trimmedProse == "" {
+		return fence + "\n"
+	}
+	return trimmedProse + "\n\n" + fence + "\n"
+}
+
+// stripArtifactFences returns the body with all artifact fences removed
+// (the prose remainder, identically to what rendering and indexing see).
+func stripArtifactFences(body string) string {
+	_, prose, _ := splitArtifactBody(body)
+	return prose
+}

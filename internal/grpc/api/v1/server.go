@@ -4,6 +4,7 @@ package v1
 import (
 	"context"
 	"errors"
+	"sync"
 	"time"
 
 	"github.com/brendanjerwin/simple_wiki/filestore"
@@ -115,6 +116,8 @@ type Server struct {
 	apiv1.UnimplementedSurveyServiceServer
 	apiv1.UnimplementedConnectorServiceServer
 	apiv1.UnimplementedPageHistoryServiceServer
+	apiv1.UnimplementedArtifactServiceServer
+	apiv1.UnimplementedArtifactStateServiceServer
 	commit                  string
 	buildTime               time.Time
 	pageReaderMutator       wikipage.PageReaderMutator
@@ -134,6 +137,8 @@ type Server struct {
 	checklistMutator        *checklistmutator.Mutator
 	mapMutator              *mapmutator.Mutator
 	surveyMutator           *surveymutator.Mutator
+	artifactMutator         *artifactMutator
+	artifactMutatorOnce     sync.Once
 
 	// Connector runtimes contain the polymorphic engine-path wiring
 	// used by ConnectorService. Per-kind auth collaborators remain
@@ -255,6 +260,15 @@ func (s *Server) WithSurveyMutator(m *surveymutator.Mutator) *Server {
 	return s
 }
 
+// WithArtifactMutator wires the artifact mutation funnel into the server.
+// Required for ArtifactService and ArtifactStateService handlers to
+// function. When unset but pageReaderMutator is present, the artifact
+// handlers construct a default funnel over the page store.
+func (s *Server) WithArtifactMutator(a *artifactMutator) *Server {
+	s.artifactMutator = a
+	return s
+}
+
 // WithKeepAuthVerifier wires the gpsoauth verifier used by
 // CompleteAuth(GOOGLE_KEEP) to exchange the captured oauth_token for
 // a master token + verify against the Keep API. Optional — without
@@ -364,6 +378,8 @@ func (s *Server) RegisterWithServer(grpcServer *grpc.Server) {
 	apiv1.RegisterSurveyServiceServer(grpcServer, s)
 	apiv1.RegisterConnectorServiceServer(grpcServer, s)
 	apiv1.RegisterPageHistoryServiceServer(grpcServer, s)
+	apiv1.RegisterArtifactServiceServer(grpcServer, s)
+	apiv1.RegisterArtifactStateServiceServer(grpcServer, s)
 }
 
 // LoggingInterceptor returns a gRPC unary interceptor for logging method calls.

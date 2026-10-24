@@ -360,7 +360,8 @@ func buildExistingPageLink(resolvedIdentifier string, frontmatter wikipage.Front
 func BuildChecklist(templateContext TemplateContext) func(string) string {
 	return func(listName string) string {
 		fallback := renderChecklistFallback(templateContext.Map, listName)
-		return fmt.Sprintf(`<wiki-checklist list-name="%s" page="%s">%s</wiki-checklist>`,
+		return fmt.Sprintf(
+			`<wiki-checklist list-name="%s" page="%s">%s</wiki-checklist>`,
 			html.EscapeString(listName),
 			html.EscapeString(templateContext.Identifier),
 			fallback,
@@ -483,7 +484,8 @@ func BuildGoogleMapsEmbed(_ TemplateContext) func(string) string {
 // BuildMap returns a template function that renders a wiki-map custom element.
 func BuildMap(templateContext TemplateContext) func(string) string {
 	return func(mapName string) string {
-		return fmt.Sprintf(`<wiki-map name="%s" page="%s"></wiki-map>`,
+		return fmt.Sprintf(
+			`<wiki-map name="%s" page="%s"></wiki-map>`,
 			html.EscapeString(mapName),
 			html.EscapeString(templateContext.Identifier),
 		)
@@ -495,7 +497,8 @@ func BuildMap(templateContext TemplateContext) func(string) string {
 func BuildSurvey(templateContext TemplateContext) func(string) string {
 	return func(surveyName string) string {
 		fallback := renderSurveyFallback(templateContext.Map, surveyName)
-		return fmt.Sprintf(`<wiki-survey name="%s" page="%s">%s</wiki-survey>`,
+		return fmt.Sprintf(
+			`<wiki-survey name="%s" page="%s">%s</wiki-survey>`,
 			html.EscapeString(surveyName),
 			html.EscapeString(templateContext.Identifier),
 			fallback,
@@ -619,7 +622,8 @@ func BuildBlog(templateContext TemplateContext, query wikipage.IQueryFrontmatter
 			}
 		}
 
-		return fmt.Sprintf(`<wiki-blog blog-id="%s" max-articles="%d" page="%s"%s>%s</wiki-blog>`,
+		return fmt.Sprintf(
+			`<wiki-blog blog-id="%s" max-articles="%d" page="%s"%s>%s</wiki-blog>`,
 			html.EscapeString(blogIdentifier),
 			maxArticles,
 			html.EscapeString(templateContext.Identifier),
@@ -792,6 +796,12 @@ func ExecuteTemplate(templateString string, fm wikipage.FrontMatter, site wikipa
 	ctx, cancel := context.WithTimeout(context.Background(), templateExecutionTimeout)
 	defer cancel()
 
+	// Artifact choke point: strip ```wiki-artifact fences before Go template
+	// parsing/execution. The program never reaches the template engine and
+	// never renders as prose (removal semantics — see wikipage.SplitArtifactFences).
+	_, prose, _ := wikipage.SplitArtifactFences(templateString)
+	templateString = prose
+
 	// Create a new visited map for this template execution to prevent circular references
 	return executeTemplateWorker(ctx, templateString, fm, site, query, make(map[string]bool))
 }
@@ -919,6 +929,12 @@ var templatePositionRe = regexp.MustCompile(`^template:\s+[^:]+:(\d+)(?::(\d+))?
 //   - a "Did you mean …?" suggestion for common misspellings (e.g. wrong case)
 //   - the full list of available macros
 func ValidateTemplate(markdown string) error {
+	// Artifact choke point: strip ```wiki-artifact fences before Go template
+	// parsing. The program is data for the artifact runtime, never a Go
+	// template (removal semantics — see wikipage.SplitArtifactFences).
+	_, prose, _ := wikipage.SplitArtifactFences(markdown)
+	markdown = prose
+
 	_, err := template.New("page").Funcs(validationFuncMap()).Parse(markdown)
 	if err == nil {
 		return nil

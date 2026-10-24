@@ -58,6 +58,8 @@ func NewStreamableHTTPHandler(apiServer *grpcapi.Server, version string, opts Op
 	// causing protojson to fail with: "proto: syntax error (line 1:16): unexpected token".
 	apiv1mcp.RegisterFrontmatterHandler(s, apiServer)
 	apiv1mcp.RegisterAgentMetadataServiceHandler(s, apiServer)
+	apiv1mcp.RegisterArtifactServiceHandler(s, apiServer)
+	apiv1mcp.RegisterArtifactStateServiceHandler(s, apiServer)
 	apiv1mcp.RegisterChecklistServiceHandler(s, apiServer)
 	apiv1mcp.RegisterChatServiceHandler(s, apiServer)
 	apiv1mcp.RegisterConnectorServiceHandler(s, apiServer)
