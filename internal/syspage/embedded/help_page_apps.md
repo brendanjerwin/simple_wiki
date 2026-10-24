@@ -161,17 +161,15 @@ root = Card("Count", Stack([
 ]))
 ```
 
-**Text input bound to state** — `Input.onChange` flows typed text back into a `$variable`, which triggers a live re-render. Inside an `onChange` step the typed value is referenced as **`$value`**:
+**Text input bound to state** — an `Input` bound to a `$variable` hydrates from state and re-renders the app live. Inside an `onChange` step the typed value is referenced as **`$value`** (the control fires `@change` — commit/blur, not every keystroke):
 
 ```
 $name = ""
 root = Card("Greeter", Stack([
-  Input("your name", $name),
+  Input("your name", $name, @Set($name, $value)),
   Text("hi " + $name),
 ]))
 ```
-
-With a step: `Input("your name", $name, @Set($name, $value))` — `onChange` fires on every keystroke, `@Set($name, $value)` stores what was typed, and the binding keeps the field in sync.
 
 **API/data lookup** — a `Query(...)` assignment calls a read-only tool at render time; `@Run(queryName)` re-fires it (e.g. after a `Button`):
 
@@ -187,10 +185,11 @@ root = Card("Todo", Stack([refresh, Table(["text"], rows.items)]))
 - Anything touching **other pages or other data** is excluded on purpose. Use `@ToAssistant` to hand the request to the agent, which has confirmed/attributed mutation tools:
 
 ```
+$note = ""
 root = Card("Notes", Stack([
   Text("current: " + $note),
-  Input("new value", $note),
-  Button("save", @ToAssistant("update the note to: " + $note)),
+  Input("new value", $note, @Set($note, $value)),
+  Button("save elsewhere", @ToAssistant("update the note to: " + $note)),
 ]))
 ```
 
