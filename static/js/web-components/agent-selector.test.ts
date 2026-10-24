@@ -68,7 +68,7 @@ describe('AgentSelector', () => {
     });
 
     it('should exist', () => {
-      expect(el).to.exist;
+      expect(el).not.to.equal(null);
     });
 
     it('should be an instance of AgentSelector', () => {
@@ -85,17 +85,17 @@ describe('AgentSelector', () => {
 
     it('should render a current-agent button', () => {
       const btn = el.shadowRoot?.querySelector('.current-agent');
-      expect(btn).to.exist;
+      expect(btn).not.to.equal(null);
     });
 
     it('should render a dropdown', () => {
       const dropdown = el.shadowRoot?.querySelector('.dropdown');
-      expect(dropdown).to.exist;
+      expect(dropdown).not.to.equal(null);
     });
 
     it('should have the dropdown hidden by default', () => {
       const dropdown = el.shadowRoot?.querySelector('.dropdown');
-      expect(dropdown?.hasAttribute('hidden')).to.be.true;
+      expect(dropdown?.hasAttribute('hidden')).to.equal(true);
     });
   });
 
@@ -124,7 +124,7 @@ describe('AgentSelector', () => {
     });
 
     it('should call listAgents', () => {
-      expect(fakeClient.listAgents).to.have.been.called;
+      expect(fakeClient.listAgents.calledOnce).to.equal(true);
     });
 
     it('should call getPageAgent with the page', () => {
@@ -139,7 +139,7 @@ describe('AgentSelector', () => {
 
     it('should show an available dot for an available agent', () => {
       const dot = el.shadowRoot?.querySelector('.current-agent .availability-dot');
-      expect(dot?.classList.contains('available')).to.be.true;
+      expect(dot?.classList.contains('available')).to.equal(true);
     });
   });
 
@@ -170,7 +170,7 @@ describe('AgentSelector', () => {
 
     it('should not show the switching hint', () => {
       const hint = el.shadowRoot?.querySelector('.switching-hint');
-      expect(hint).to.be.null;
+      expect(hint === null).to.equal(true);
     });
   });
 
@@ -202,7 +202,7 @@ describe('AgentSelector', () => {
 
     it('should show the switching hint', () => {
       const hint = el.shadowRoot?.querySelector('.switching-hint');
-      expect(hint).to.not.be.null;
+      expect(hint).to.not.equal(null);
       expect(hint?.textContent).to.include('switching…');
     });
 
@@ -211,7 +211,7 @@ describe('AgentSelector', () => {
       await el.updateComplete;
 
       const hint = el.shadowRoot?.querySelector('.switching-hint');
-      expect(hint).to.be.null;
+      expect(hint === null).to.equal(true);
     });
   });
 
@@ -242,7 +242,7 @@ describe('AgentSelector', () => {
 
     it('should not show the switching hint', () => {
       const hint = el.shadowRoot?.querySelector('.switching-hint');
-      expect(hint).to.be.null;
+      expect(hint === null).to.equal(true);
     });
   });
 
@@ -277,7 +277,7 @@ describe('AgentSelector', () => {
 
     it('should show the unavailable hint under the trigger', () => {
       const hint = el.shadowRoot?.querySelector('.desired-unavailable-hint');
-      expect(hint).to.not.be.null;
+      expect(hint).to.not.equal(null);
       expect(hint?.textContent).to.include('bound agent unavailable');
     });
   });
@@ -308,7 +308,7 @@ describe('AgentSelector', () => {
 
     it('should not show the unavailable hint', () => {
       const hint = el.shadowRoot?.querySelector('.desired-unavailable-hint');
-      expect(hint).to.be.null;
+      expect(hint === null).to.equal(true);
     });
 
     describe('when refresh() is called', () => {
@@ -545,7 +545,7 @@ describe('AgentSelector', () => {
 
       it('should show the dropdown', () => {
         const dropdown = el.shadowRoot?.querySelector('.dropdown');
-        expect(dropdown?.hasAttribute('hidden')).to.be.false;
+        expect(dropdown?.hasAttribute('hidden')).to.equal(false);
       });
 
       it('should render agent options in the dropdown', () => {
@@ -567,7 +567,7 @@ describe('AgentSelector', () => {
 
         it('should hide the dropdown', () => {
           const dropdown = el.shadowRoot?.querySelector('.dropdown');
-          expect(dropdown?.hasAttribute('hidden')).to.be.true;
+          expect(dropdown?.hasAttribute('hidden')).to.equal(true);
         });
       });
     });
@@ -624,7 +624,7 @@ describe('AgentSelector', () => {
 
     it('should close the dropdown after selection', () => {
       const dropdown = el.shadowRoot?.querySelector('.dropdown');
-      expect(dropdown?.hasAttribute('hidden')).to.be.true;
+      expect(dropdown?.hasAttribute('hidden')).to.equal(true);
     });
 
     it('should update the current agent id to the selected agent', () => {
@@ -667,12 +667,12 @@ describe('AgentSelector', () => {
     });
 
     it('should not call setPageAgent', () => {
-      expect(fakeClient.setPageAgent).not.to.have.been.called;
+      expect(fakeClient.setPageAgent.callCount).to.equal(0);
     });
 
     it('should close the dropdown', () => {
       const dropdown = el.shadowRoot?.querySelector('.dropdown');
-      expect(dropdown?.hasAttribute('hidden')).to.be.true;
+      expect(dropdown?.hasAttribute('hidden')).to.equal(true);
     });
   });
 

@@ -21,7 +21,7 @@ describe('ChatMessageBubble', () => {
 
     it('should render with user class', () => {
       const bubble = el.shadowRoot!.querySelector('.bubble');
-      expect(bubble!.classList.contains('user')).to.be.true;
+      expect(bubble!.classList.contains('user')).to.equal(true);
     });
 
     it('should display the content as text', () => {
@@ -45,7 +45,7 @@ describe('ChatMessageBubble', () => {
 
     it('should render with assistant class', () => {
       const bubble = el.shadowRoot!.querySelector('.bubble');
-      expect(bubble!.classList.contains('assistant')).to.be.true;
+      expect(bubble!.classList.contains('assistant')).to.equal(true);
     });
 
     it('should render HTML content', () => {
@@ -91,7 +91,7 @@ describe('ChatMessageBubble', () => {
 
     it('should not show the edited indicator', () => {
       const edited = el.shadowRoot!.querySelector('.edited-indicator');
-      expect(edited).to.be.null;
+      expect(edited).to.equal(null);
     });
   });
 
@@ -140,7 +140,7 @@ describe('ChatMessageBubble', () => {
 
     it('should not render the reactions container', () => {
       const reactions = el.shadowRoot!.querySelector('.reactions');
-      expect(reactions).to.be.null;
+      expect(reactions).to.equal(null);
     });
   });
 
@@ -199,7 +199,7 @@ describe('ChatMessageBubble', () => {
 
     it('should not render the reply link', () => {
       const replyLink = el.shadowRoot!.querySelector('.reply-link');
-      expect(replyLink).to.be.null;
+      expect(replyLink).to.equal(null);
     });
   });
 
@@ -241,7 +241,7 @@ describe('ChatMessageBubble', () => {
 
     it('should render the agent label', () => {
       const label = el.shadowRoot!.querySelector('.agent-label');
-      expect(label).to.not.be.null;
+      expect(label).to.not.equal(null);
       expect(label!.textContent).to.include('via Helper Agent');
     });
   });
@@ -261,7 +261,7 @@ describe('ChatMessageBubble', () => {
 
     it('should not render the agent label', () => {
       const label = el.shadowRoot!.querySelector('.agent-label');
-      expect(label).to.be.null;
+      expect(label).to.equal(null);
     });
   });
 
@@ -281,13 +281,13 @@ describe('ChatMessageBubble', () => {
 
     it('should render with the system-event class', () => {
       const bubble = el.shadowRoot!.querySelector('.bubble');
-      expect(bubble!.classList.contains('system-event')).to.be.true;
+      expect(bubble!.classList.contains('system-event')).to.equal(true);
     });
 
     it('should not render as user or assistant bubbles', () => {
       const bubble = el.shadowRoot!.querySelector('.bubble');
-      expect(bubble!.classList.contains('user')).to.be.false;
-      expect(bubble!.classList.contains('assistant')).to.be.false;
+      expect(bubble!.classList.contains('user')).to.equal(false);
+      expect(bubble!.classList.contains('assistant')).to.equal(false);
     });
 
     it('should display the event text', () => {
@@ -314,7 +314,7 @@ describe('ChatMessageBubble', () => {
 
       it('should not render the tool-calls container', () => {
         const toolCalls = el.shadowRoot!.querySelector('.tool-calls');
-        expect(toolCalls).to.be.null;
+        expect(toolCalls).to.equal(null);
       });
     });
 
@@ -371,7 +371,7 @@ describe('ChatMessageBubble', () => {
 
       it('should NOT render as a compact pill', () => {
         const pill = el.shadowRoot!.querySelector('.tool-call-pill');
-        expect(pill).to.be.null;
+        expect(pill).to.equal(null);
       });
     });
 
@@ -462,12 +462,12 @@ describe('ChatMessageBubble', () => {
 
       it('should NOT render the expanded live row', () => {
         const live = el.shadowRoot!.querySelector('.tool-call-live');
-        expect(live).to.be.null;
+        expect(live).to.equal(null);
       });
 
       it('should NOT render the detail element', () => {
         const detail = el.shadowRoot!.querySelector('.tool-call-detail');
-        expect(detail).to.be.null;
+        expect(detail).to.equal(null);
       });
     });
 
@@ -505,7 +505,7 @@ describe('ChatMessageBubble', () => {
 
       it('should NOT render the expanded live row', () => {
         const live = el.shadowRoot!.querySelector('.tool-call-live');
-        expect(live).to.be.null;
+        expect(live).to.equal(null);
       });
     });
 
@@ -618,7 +618,7 @@ describe('ChatMessageBubble', () => {
 
       it('should NOT render as a compact pill', () => {
         const pill = el.shadowRoot!.querySelector('.tool-call-pill');
-        expect(pill).to.be.null;
+        expect(pill).to.equal(null);
       });
     });
 
@@ -652,7 +652,7 @@ describe('ChatMessageBubble', () => {
 
       it('should NOT render as a compact pill', () => {
         const pill = el.shadowRoot!.querySelector('.tool-call-pill');
-        expect(pill).to.be.null;
+        expect(pill).to.equal(null);
       });
 
       it('should display the tool call title in the result card', () => {
@@ -785,7 +785,7 @@ describe('ChatMessageBubble', () => {
 
         it('should NOT render an expanded result card for the short-completed task', () => {
           const result = el.shadowRoot!.querySelector('.tool-call-result');
-          expect(result).to.be.null;
+          expect(result).to.equal(null);
         });
 
         it('should render the short-completed task as a compact pill', () => {
@@ -806,7 +806,7 @@ describe('ChatMessageBubble', () => {
 
       it('should NOT render an expanded result card', () => {
         const result = el.shadowRoot!.querySelector('.tool-call-result');
-        expect(result).to.be.null;
+        expect(result).to.equal(null);
       });
     });
   });
@@ -868,7 +868,7 @@ describe('ChatMessageBubble', () => {
 
         it('should not render the live row anymore', () => {
           const live = el.shadowRoot!.querySelector('.tool-call-live');
-          expect(live).to.be.null;
+          expect(live).to.equal(null);
         });
       });
     });
@@ -901,7 +901,7 @@ describe('ChatMessageBubble', () => {
       });
 
       it('should not render an elapsed indicator (avoids "NaNs")', () => {
-        expect(el.shadowRoot!.querySelector('.tool-call-elapsed')).to.be.null;
+        expect(el.shadowRoot!.querySelector('.tool-call-elapsed')).to.equal(null);
       });
     });
 
@@ -930,7 +930,7 @@ describe('ChatMessageBubble', () => {
 
       it('should not show a live row', () => {
         const live = el.shadowRoot!.querySelector('.tool-call-live');
-        expect(live).to.be.null;
+        expect(live).to.equal(null);
       });
     });
   });
@@ -953,7 +953,7 @@ describe('ChatMessageBubble', () => {
 
       it('should not render the plan block', () => {
         const planBlock = el.shadowRoot!.querySelector('.plan-block');
-        expect(planBlock).to.be.null;
+        expect(planBlock).to.equal(null);
       });
     });
 
@@ -972,12 +972,12 @@ describe('ChatMessageBubble', () => {
       });
 
       it('should render without throwing', () => {
-        expect(el).to.exist;
+        expect(el).to.not.equal(null);
       });
 
       it('should not render the plan block', () => {
         const planBlock = el.shadowRoot!.querySelector('.plan-block');
-        expect(planBlock).to.be.null;
+        expect(planBlock).to.equal(null);
       });
     });
 
