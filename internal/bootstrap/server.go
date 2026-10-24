@@ -491,6 +491,7 @@ func BuildVanguardTranscoder(grpcServer *grpc.Server, ginRouter http.Handler) (h
 
 	// Single source of truth for service names to avoid drift between Vanguard and reflection.
 	serviceNames := []string{
+		"api.v1.AgentInventoryService",
 		"api.v1.AgentMetadataService",
 		"api.v1.PageAppService",
 		"api.v1.PageAppStateService",
@@ -787,6 +788,11 @@ func setupGRPCServer(
 	caldavServer := &caldav.Server{Backend: caldavBackend}
 	site.SetCalDAVServer(caldavServer)
 
+	// The AgentRegistry needs the chatBufferMgr so it can report live pool
+	// availability. It is created here (after chatBufferMgr is initialised)
+	// and stored on site so the HTTP handler layer can read it later if needed.
+	site.AgentRegistry = server.NewAgentRegistry(chatBufferMgr)
+
 	grpcAPIServer = grpcAPIServer.
 		WithJobQueueCoordinator(site.GetJobQueueCoordinator()).
 		WithMarkdownRenderer(site.MarkdownRenderer).
@@ -795,6 +801,8 @@ func setupGRPCServer(
 		WithScheduledTurnDispatcher(site.ScheduledTurnDispatcher).
 		WithAgentScheduleStore(site.AgentScheduleStore).
 		WithAgentChatContextStore(site.AgentChatContextStore).
+		WithAgentInventory(site.AgentRegistry).
+		WithAgentPageBindingStore(site.AgentPageBindingStore).
 		WithChecklistMutator(checklistMutator).
 		WithMapMutator(mapMutator).
 		WithSurveyMutator(surveyMutator)

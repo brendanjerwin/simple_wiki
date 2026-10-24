@@ -1,0 +1,108 @@
+syntax = "proto3";
+
+package api.v1;
+
+import "api/v1/mcp_options.proto";
+
+option go_package = "github.com/brendanjerwin/simple_wiki/gen/go/api/v1;apiv1";
+
+// AgentInventoryService provides an inventory of available agents and manages
+// the per-page agent binding. Selection is persistent to the page — stored in
+// the agent.selected_agent_id frontmatter field — and survives session
+// close/reopen and pool restarts. Any participant switching the agent changes
+// it for all participants on that page.
+//
+// Only the local ACP agent is registered initially; AG-UI remote endpoints can
+// be registered later without protocol changes.
+service AgentInventoryService {
+  // ListAgents returns all agents currently registered in the inventory,
+  // including their protocol, description, and live availability status.
+  rpc ListAgents(ListAgentsRequest) returns (ListAgentsResponse) {
+    option (api.v1.read_only) = true;
+    option (api.v1.description) =
+        "List all agents registered in the inventory, with protocol and "
+        "availability status. Used by the agent selector UI to populate the "
+        "available-agents list.";
+  }
+
+  // GetPageAgent returns the agent currently bound to a page, or the default
+  // agent if no binding has been set yet.
+  rpc GetPageAgent(GetPageAgentRequest) returns (GetPageAgentResponse) {
+    option (api.v1.read_only) = true;
+    option (api.v1.description) =
+        "Return the agent currently bound to a page. Falls back to the "
+        "default agent if no per-page binding exists.";
+  }
+
+  // SetPageAgent binds an agent to a page. The binding is written into the
+  // agent.selected_agent_id frontmatter field and survives pool restarts.
+  // All participants on the page immediately route to the new agent.
+  rpc SetPageAgent(SetPageAgentRequest) returns (SetPageAgentResponse) {
+    option (api.v1.description) =
+        "Bind an agent to a page. The binding persists in page frontmatter "
+        "and applies to all participants. Switching mid-session does not "
+        "preserve conversation context — the new agent starts fresh.";
+  }
+}
+
+// AgentProtocol identifies the transport protocol used to reach an agent.
+enum AgentProtocol {
+  AGENT_PROTOCOL_UNSPECIFIED = 0;
+  // ACP_LOCAL is the local ACP agent pool managed by this wiki instance.
+  ACP_LOCAL = 1;
+  // AG_UI_REMOTE is a remote agent reachable via the AG-UI protocol.
+  // Reserved for future use — not yet implemented.
+  AG_UI_REMOTE = 2;
+}
+
+// AgentInfo describes one entry in the available-agents inventory.
+message AgentInfo {
+  // Stable identifier used for the page binding. Never changes for a given agent.
+  string id = 1;
+  // Human-readable name shown in the agent selector.
+  string display_name = 2;
+  // Transport protocol.
+  AgentProtocol protocol = 3;
+  // Short description of the agent's capabilities, shown in the selector.
+  string description = 4;
+  // Whether the agent is reachable right now (pool connected / endpoint alive).
+  bool available = 5;
+}
+
+// ListAgentsRequest is the request for ListAgents.
+message ListAgentsRequest {}
+
+// ListAgentsResponse is the response for ListAgents.
+message ListAgentsResponse {
+  repeated AgentInfo agents = 1;
+}
+
+// GetPageAgentRequest is the request for GetPageAgent.
+message GetPageAgentRequest {
+  // Page to look up the agent binding for.
+  string page = 1;
+}
+
+// GetPageAgentResponse is the response for GetPageAgent.
+message GetPageAgentResponse {
+  // The agent currently bound to the page (may be the default if not
+  // explicitly set).
+  AgentInfo agent = 1;
+  // True when the binding came from a persisted frontmatter value, false when
+  // falling back to the default.
+  bool explicitly_set = 2;
+}
+
+// SetPageAgentRequest is the request for SetPageAgent.
+message SetPageAgentRequest {
+  // Page to update the agent binding for.
+  string page = 1;
+  // ID of the agent to bind. Must match an entry returned by ListAgents.
+  string agent_id = 2;
+}
+
+// SetPageAgentResponse is the response for SetPageAgent.
+message SetPageAgentResponse {
+  // The agent now bound to the page.
+  AgentInfo agent = 1;
+}

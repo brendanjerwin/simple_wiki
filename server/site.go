@@ -82,6 +82,8 @@ type Site struct {
 	HistoryIndexQueryer      bleve.BleveIndexQueryer
 	AgentScheduleStore       *AgentScheduleStore
 	AgentChatContextStore    *AgentChatContextStore
+	AgentRegistry            *AgentRegistry
+	AgentPageBindingStore    *AgentPageBindingStore
 	AgentScheduler           *AgentScheduler
 	ScheduledTurnDispatcher  *ScheduledTurnDispatcher
 	AgentScheduleConcurrency int
@@ -415,6 +417,7 @@ func (s *Site) initIndexesAndCoordinators() error {
 	s.AgentScheduleStore = NewAgentScheduleStore(s)
 	s.AgentChatContextStore = NewAgentChatContextStore(s)
 	s.AgentScheduleStore.SetBackgroundActivitySink(s.AgentChatContextStore)
+	s.AgentPageBindingStore = NewAgentPageBindingStore(s)
 	return nil
 }
 
