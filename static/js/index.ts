@@ -58,13 +58,13 @@ erasePageEl?.addEventListener('click', (e) => {
 // Handle frontmatter editing
 const editFrontmatterEl = document.getElementById('editFrontmatter');
 editFrontmatterEl?.addEventListener('click', (e) => {
-  // Artifact pages: the dialog's load path strips reserved wiki.* subtrees
-  // (it cannot show wiki.artifact metadata) and its save (ReplaceFrontmatter,
+  // Page app pages: the dialog's load path strips reserved wiki.* subtrees
+  // (it cannot show wiki.page_app metadata) and its save (ReplaceFrontmatter,
   // no version hash) races the page app services — so it is disabled on
   // page app pages (issue #1272).
   if (simple_wiki?.hasPageApp) {
     e.preventDefault();
-    editFrontmatterEl.setAttribute('title', 'Frontmatter editing is disabled on page app pages: wiki.artifact metadata is service-managed');
+    editFrontmatterEl.setAttribute('title', 'Frontmatter editing is disabled on page app pages: wiki.page_app metadata is service-managed');
     return;
   }
   e.preventDefault();
