@@ -2264,4 +2264,18 @@ var Cases = []Case{
 		Services: []string{"PageManagementService", "ArtifactService"},
 		Tags:     []string{"hard", "artifact", "placement", "guard"},
 	},
+
+	// Guard-API row (Add. 15): when the user EXPLICITLY asks for the
+	// app-alone conversion, the agent's tool is SetArtifact with the
+	// confirm flag — never ClearPageContent (which wipes prose without
+	// the artifact stamp path) and never the generic page editors.
+	{
+		ID:           "artifact-guard-api-confirm",
+		UserSays:     "Just make this page the timer itself — I don't need the notes here anymore.",
+		Context:      "Page: scratch_notes has some old notes (substantial prose) and no artifact yet. The user explicitly wants the page to BE the app; the prose should be cleared deliberately.",
+		ExpectedTool: "api_v1_ArtifactService_SetArtifact",
+		ExcludedTool: "api_v1_PageManagementService_ClearPageContent",
+		Services:     []string{"ArtifactService"},
+		Tags:         []string{"medium", "artifact", "placement", "guard", "confusion"},
+	},
 }

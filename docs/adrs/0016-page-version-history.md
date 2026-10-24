@@ -4,6 +4,13 @@
 
 Accepted
 
+> **Artifact pages (issue #1272, ADR-0017):** artifact programs live in a
+> ` ```wiki-artifact ` fence in the page body, so program and prose writes both
+> snapshot through this machinery — one history, no separate artifact history
+> RPCs. Note: the page OCC hash excludes the `wiki.artifact_state` subtree, but
+> history capture still snapshots any state flush alongside program writes;
+> restore/diff/decimation apply to the fence identically to prose.
+
 ## Context
 
 The wiki has no edit history. Pages mutate via `WriteFrontMatter`, `WriteMarkdown`, `ModifyMarkdown`, `ModifyFrontMatterAndMarkdown`, and soft-delete. The existing `__deleted__/` trash system handles deletion restore, but not edit history. Once a page is overwritten, the prior content is gone. Users cannot view, diff, search, or restore prior versions of a page.

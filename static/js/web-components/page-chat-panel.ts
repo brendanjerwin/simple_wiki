@@ -4,18 +4,18 @@ import { createClient, ConnectError, Code, type Client } from '@connectrpc/conne
 import { create } from '@bufbuild/protobuf';
 import { getGrpcWebTransport } from './grpc-transport.js';
 import {
-  ChatService,
-  ClearChatRequestSchema,
-  GetChatStatusRequestSchema,
-  SendChatMessageRequestSchema,
-  SubscribeChatRequestSchema,
-  CancelAgentPromptRequestSchema,
-  RespondToPermissionRequestSchema,
-  Sender,
-  type ChatMessage,
-  type ChatEvent,
-  type ChatPermissionRequest,
-  type Reaction,
+ ChatService,
+ ClearChatRequestSchema,
+ GetChatStatusRequestSchema,
+ SendChatMessageRequestSchema,
+ SubscribeChatRequestSchema,
+ CancelAgentPromptRequestSchema,
+ RespondToPermissionRequestSchema,
+ Sender,
+ type ChatMessage,
+ type ChatEvent,
+ type ChatPermissionRequest,
+ type Reaction,
 } from '../gen/api/v1/chat_pb.js';
 import { ChatMarkdownRenderer } from './chat-markdown-renderer.js';
 import { sharedStyles, colorCSS, typographyCSS, zIndexCSS, forceDarkTokensCSS } from './shared-styles.js';
@@ -32,67 +32,67 @@ const STATUS_POLL_INTERVAL_MS = 15000;
 const STATUS_POLL_STARTING_MS = 3000;
 
 export interface ToolCallState {
-  toolCallId: string;
-  title: string;
-  status: string;
-  kind: string;
-  detail: string;
-  startedAtMs: number;
-  completedAtMs: number | null;
+ toolCallId: string;
+ title: string;
+ status: string;
+ kind: string;
+ detail: string;
+ startedAtMs: number;
+ completedAtMs: number | null;
 }
 
 export interface BackgroundTaskState {
-  toolCallId: string;
-  title: string;
-  status: string;
-  detail: string;
-  startedAtMs: number;
+ toolCallId: string;
+ title: string;
+ status: string;
+ detail: string;
+ startedAtMs: number;
 }
 
 export interface PlanEntryState {
-  content: string;
-  status: string;
-  priority: string;
+ content: string;
+ status: string;
+ priority: string;
 }
 
 export interface PermissionRequestState {
-  requestId: string;
-  title: string;
-  description: string;
-  options: { optionId: string; label: string; description: string }[];
+ requestId: string;
+ title: string;
+ description: string;
+ options: { optionId: string; label: string; description: string }[];
 }
 
 export interface ChatMessageState {
-  id: string;
-  sender: Sender;
-  content: string;
-  timestamp: Date;
-  renderedHtml: string;
-  backgroundTask?: BackgroundTaskState | null;
-  senderName: string;
-  replyToId: string;
-  reactions: ReactionGroup[];
-  edited: boolean;
-  sequence: bigint;
-  toolCalls: ToolCallState[];
-  plan: PlanEntryState[];
+ id: string;
+ sender: Sender;
+ content: string;
+ timestamp: Date;
+ renderedHtml: string;
+ backgroundTask?: BackgroundTaskState | null;
+ senderName: string;
+ replyToId: string;
+ reactions: ReactionGroup[];
+ edited: boolean;
+ sequence: bigint;
+ toolCalls: ToolCallState[];
+ plan: PlanEntryState[];
 }
 
 declare global {
-  interface HTMLElementTagNameMap {
-    'page-chat-panel': PageChatPanel;
-  }
+ interface HTMLElementTagNameMap {
+  'page-chat-panel': PageChatPanel;
+ }
 }
 
 export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA {
-  override readonly drawerId = 'page-chat';
+ override readonly drawerId = 'page-chat';
 
-  static override readonly styles = [
-    colorCSS,
-    typographyCSS,
-    zIndexCSS,
-    forceDarkTokensCSS,
-    css`
+ static override readonly styles = [
+  colorCSS,
+  typographyCSS,
+  zIndexCSS,
+  forceDarkTokensCSS,
+  css`
       :host {
         display: block;
       }
@@ -327,12 +327,29 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
       .empty-state {
         flex: 1;
         display: flex;
+        flex-direction: column;
         align-items: center;
         justify-content: center;
+        gap: 12px;
         color: var(--color-text-muted);
         font-size: 0.85rem;
         text-align: center;
         padding: 24px;
+      }
+
+      .suggestion-chip {
+        border: 1px solid var(--color-text-muted);
+        border-radius: 16px;
+        background: transparent;
+        color: var(--color-text-muted);
+        font-size: 0.8rem;
+        padding: 6px 14px;
+        cursor: pointer;
+      }
+
+      .suggestion-chip:hover {
+        color: var(--color-text);
+        border-color: var(--color-text);
       }
 
       .permission-prompt {
@@ -406,158 +423,158 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
         }
       }
     `,
-  ];
+ ];
 
-  @property({ type: String })
-  declare page: string;
+ @property({ type: String })
+ declare page: string;
 
-  @property({ type: String })
-  declare persona: string;
+ @property({ type: String })
+ declare persona: string;
 
-  @state()
-  declare _fabVisible: boolean;
+ @state()
+ declare _fabVisible: boolean;
 
-  @state()
-  declare messages: ChatMessageState[];
+ @state()
+ declare messages: ChatMessageState[];
 
-  @state()
-  declare streamState: 'connected' | 'reconnecting' | 'disconnected';
+ @state()
+ declare streamState: 'connected' | 'reconnecting' | 'disconnected';
 
-  @state()
-  declare waitingForAssistant: boolean;
+ @state()
+ declare waitingForAssistant: boolean;
 
-  // True for the whole active turn (prompt start until completion), driven by the
-  // backend turn-status event. Gates the Stop button so it stays available during
-  // thinking and tool use, not just while awaiting the first token.
-  @state()
-  declare turnActive: boolean;
+ // True for the whole active turn (prompt start until completion), driven by the
+ // backend turn-status event. Gates the Stop button so it stays available during
+ // thinking and tool use, not just while awaiting the first token.
+ @state()
+ declare turnActive: boolean;
 
-  @state()
-  declare error: Error | null;
+ @state()
+ declare error: Error | null;
 
-  @state()
-  declare agentConnected: boolean;
+ @state()
+ declare agentConnected: boolean;
 
-  @state()
-  declare poolConnected: boolean;
+ @state()
+ declare poolConnected: boolean;
 
-  @state()
-  declare agentStarting: boolean;
+ @state()
+ declare agentStarting: boolean;
 
-  @state()
-  declare pendingPermission: PermissionRequestState | null;
+ @state()
+ declare pendingPermission: PermissionRequestState | null;
 
-  private pendingMessage: string | null = null;
-  private readonly messagesById = new Map<string, ChatMessageState>();
-  private streamSubscription: AbortController | undefined;
-  private statusPollTimer: ReturnType<typeof setInterval> | undefined;
-  private readonly chatClient: Client<typeof ChatService>;
-  private readonly markdownRenderer: ChatMarkdownRenderer;
-  private readonly _handleVisibilityChange: () => void;
-  private readonly _handleViewportResize: () => void;
-  private readonly _handleGlobalKeydown: (e: KeyboardEvent) => void;
-  private userHasScrolled = false;
+ private pendingMessage: string | null = null;
+ private readonly messagesById = new Map<string, ChatMessageState>();
+ private streamSubscription: AbortController | undefined;
+ private statusPollTimer: ReturnType<typeof setInterval> | undefined;
+ private readonly chatClient: Client<typeof ChatService>;
+ private readonly markdownRenderer: ChatMarkdownRenderer;
+ private readonly _handleVisibilityChange: () => void;
+ private readonly _handleViewportResize: () => void;
+ private readonly _handleGlobalKeydown: (e: KeyboardEvent) => void;
+ private userHasScrolled = false;
 
-  private _restoreOpen = false;
-  private _panelEverOpened = false;
+ private _restoreOpen = false;
+ private _panelEverOpened = false;
 
-  constructor() {
-    super();
-    this.page = '';
-    this.persona = '';
-    this._fabVisible = true;
-    this.messages = [];
-    this.streamState = 'disconnected';
-    this.waitingForAssistant = false;
-    this.turnActive = false;
-    this.error = null;
-    this.agentConnected = false;
-    this.poolConnected = false;
-    this.agentStarting = false;
-    this.pendingPermission = null;
-    this.chatClient = createClient(ChatService, getGrpcWebTransport());
-    this.markdownRenderer = new ChatMarkdownRenderer();
-    this._handleVisibilityChange = this.handleVisibilityChange.bind(this);
-    this._handleViewportResize = this.handleViewportResize.bind(this);
-    this._handleGlobalKeydown = this.handleGlobalKeydown.bind(this);
+ constructor() {
+  super();
+  this.page = '';
+  this.persona = '';
+  this._fabVisible = true;
+  this.messages = [];
+  this.streamState = 'disconnected';
+  this.waitingForAssistant = false;
+  this.turnActive = false;
+  this.error = null;
+  this.agentConnected = false;
+  this.poolConnected = false;
+  this.agentStarting = false;
+  this.pendingPermission = null;
+  this.chatClient = createClient(ChatService, getGrpcWebTransport());
+  this.markdownRenderer = new ChatMarkdownRenderer();
+  this._handleVisibilityChange = this.handleVisibilityChange.bind(this);
+  this._handleViewportResize = this.handleViewportResize.bind(this);
+  this._handleGlobalKeydown = this.handleGlobalKeydown.bind(this);
 
-    // Read localStorage flag; actual open deferred to connectedCallback
-    try {
-      this._restoreOpen = localStorage.getItem(STORAGE_KEY) === 'true';
-    } catch {
-      // localStorage unavailable
-    }
+  // Read localStorage flag; actual open deferred to connectedCallback
+  try {
+   this._restoreOpen = localStorage.getItem(STORAGE_KEY) === 'true';
+  } catch {
+   // localStorage unavailable
   }
+ }
 
-  private _ctaCleanup: (() => void) | undefined;
+ private _ctaCleanup: (() => void) | undefined;
 
-  override connectedCallback() {
-    super.connectedCallback();
-    this._ctaCleanup = registerAmbientCTA(this);
-    document.addEventListener('visibilitychange', this._handleVisibilityChange);
-    document.addEventListener('keydown', this._handleGlobalKeydown);
-    window.visualViewport?.addEventListener('resize', this._handleViewportResize);
-    if (this._restoreOpen) {
-      this.openDrawer();
-      this._restoreOpen = false;
-    }
-    void this.pollChatStatus();
-    this.statusPollTimer = setInterval(() => this.pollChatStatus(), STATUS_POLL_INTERVAL_MS);
+ override connectedCallback() {
+  super.connectedCallback();
+  this._ctaCleanup = registerAmbientCTA(this);
+  document.addEventListener('visibilitychange', this._handleVisibilityChange);
+  document.addEventListener('keydown', this._handleGlobalKeydown);
+  window.visualViewport?.addEventListener('resize', this._handleViewportResize);
+  if (this._restoreOpen) {
+   this.openDrawer();
+   this._restoreOpen = false;
   }
+  void this.pollChatStatus();
+  this.statusPollTimer = setInterval(() => this.pollChatStatus(), STATUS_POLL_INTERVAL_MS);
+ }
 
-  override disconnectedCallback() {
-    super.disconnectedCallback();
-    this._ctaCleanup?.();
-    this._ctaCleanup = undefined;
-    document.removeEventListener('visibilitychange', this._handleVisibilityChange);
-    document.removeEventListener('keydown', this._handleGlobalKeydown);
-    window.visualViewport?.removeEventListener('resize', this._handleViewportResize);
+ override disconnectedCallback() {
+  super.disconnectedCallback();
+  this._ctaCleanup?.();
+  this._ctaCleanup = undefined;
+  document.removeEventListener('visibilitychange', this._handleVisibilityChange);
+  document.removeEventListener('keydown', this._handleGlobalKeydown);
+  window.visualViewport?.removeEventListener('resize', this._handleViewportResize);
+  this.stopStream();
+  if (this.statusPollTimer) {
+   clearInterval(this.statusPollTimer);
+   this.statusPollTimer = undefined;
+  }
+ }
+
+ override updated(changedProperties: Map<string, unknown>) {
+  super.updated(changedProperties);
+
+  if (changedProperties.has('page')) {
+   const oldPage = changedProperties.get('page');
+   if (oldPage !== undefined && oldPage !== this.page) {
+    // Navigating between pages or setting the page after initial render:
+    // reset messages and restart the stream if the panel has ever been opened.
+    // On true initial render (oldPage === undefined), openDrawer() handles starting
+    // the stream when the panel is restored open; otherwise the stream starts the
+    // first time the panel is opened.
     this.stopStream();
-    if (this.statusPollTimer) {
-      clearInterval(this.statusPollTimer);
-      this.statusPollTimer = undefined;
+    this.messages = [];
+    this.messagesById.clear();
+    if (this.page && this._panelEverOpened) {
+     void this.startStream();
     }
+   }
   }
+ }
 
-  override updated(changedProperties: Map<string, unknown>) {
-    super.updated(changedProperties);
+ private get _emptyStateMessage(): string {
+  return this.persona
+   ? 'Send a message to start chatting with ' + this.persona + ' about this page.'
+   : 'Send a message to start chatting about this page.';
+ }
 
-    if (changedProperties.has('page')) {
-      const oldPage = changedProperties.get('page');
-      if (oldPage !== undefined && oldPage !== this.page) {
-        // Navigating between pages or setting the page after initial render:
-        // reset messages and restart the stream if the panel has ever been opened.
-        // On true initial render (oldPage === undefined), openDrawer() handles starting
-        // the stream when the panel is restored open; otherwise the stream starts the
-        // first time the panel is opened.
-        this.stopStream();
-        this.messages = [];
-        this.messagesById.clear();
-        if (this.page && this._panelEverOpened) {
-          void this.startStream();
-        }
-      }
-    }
-  }
+ private get _thinkingText(): string {
+  return this.persona ? this.persona + ' is thinking' : 'Thinking...';
+ }
 
-  private get _emptyStateMessage(): string {
-    return this.persona
-      ? 'Send a message to start chatting with ' + this.persona + ' about this page.'
-      : 'Send a message to start chatting about this page.';
-  }
+ private get _chatAvailable(): boolean {
+  return this.poolConnected || this.agentConnected;
+ }
 
-  private get _thinkingText(): string {
-    return this.persona ? this.persona + ' is thinking' : 'Thinking...';
-  }
-
-  private get _chatAvailable(): boolean {
-    return this.poolConnected || this.agentConnected;
-  }
-
-  private _renderFab() {
-    const fabClass = this._chatAvailable ? 'fab' : 'fab disabled';
-    const fabHidden = !this._fabVisible || this.drawerOpen;
-    return html`
+ private _renderFab() {
+  const fabClass = this._chatAvailable ? 'fab' : 'fab disabled';
+  const fabHidden = !this._fabVisible || this.drawerOpen;
+  return html`
       <button
         class="${fabClass}"
         ?hidden=${fabHidden}
@@ -569,36 +586,36 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
         <i class="fa-solid fa-robot"></i>
       </button>
     `;
-  }
+ }
 
-  private _renderDisconnectedBanner() {
-    if (this.agentStarting) {
-      return html`<div class="status-banner reconnecting">Starting assistant...</div>`;
-    }
-    if (!this._chatAvailable) {
-      const disconnectedText = this.persona ? this.persona + ' is not connected' : 'Not connected';
-      return html`<div class="status-banner disconnected">${disconnectedText}</div>`;
-    }
-    if (this.poolConnected && !this.agentConnected && !this.agentStarting) {
-      return html`<div class="status-banner">Send a message to start</div>`;
-    }
-    if (this.streamState === 'disconnected' && this.error) {
-      return html`<div class="status-banner disconnected">${this.error.message}</div>`;
-    }
-    return nothing;
+ private _renderDisconnectedBanner() {
+  if (this.agentStarting) {
+   return html`<div class="status-banner reconnecting">Starting assistant...</div>`;
   }
+  if (!this._chatAvailable) {
+   const disconnectedText = this.persona ? this.persona + ' is not connected' : 'Not connected';
+   return html`<div class="status-banner disconnected">${disconnectedText}</div>`;
+  }
+  if (this.poolConnected && !this.agentConnected && !this.agentStarting) {
+   return html`<div class="status-banner">Send a message to start</div>`;
+  }
+  if (this.streamState === 'disconnected' && this.error) {
+   return html`<div class="status-banner disconnected">${this.error.message}</div>`;
+  }
+  return nothing;
+ }
 
-  override render() {
-    const notConnectedText = this.persona ? this.persona + ' is not connected' : 'Not connected';
-    const inputEnabled = this._chatAvailable;
-    const placeholder = inputEnabled ? 'Type a message...' : notConnectedText;
-    const thinkingContent = this.waitingForAssistant
-      ? html`<span class="thinking-dots">
+ override render() {
+  const notConnectedText = this.persona ? this.persona + ' is not connected' : 'Not connected';
+  const inputEnabled = this._chatAvailable;
+  const placeholder = inputEnabled ? 'Type a message...' : notConnectedText;
+  const thinkingContent = this.waitingForAssistant
+   ? html`<span class="thinking-dots">
                   <span></span><span></span><span></span>
                 </span>
                 ${this._thinkingText}`
-      : html`<span class="working-label">Working…</span>`;
-    return html`
+   : html`<span class="working-label">Working…</span>`;
+  return html`
       ${sharedStyles}
       ${this._renderFab()}
 
@@ -621,8 +638,8 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
         </div>
 
         ${this.streamState === 'reconnecting'
-        ? html`<div class="status-banner reconnecting">Reconnecting...</div>`
-        : nothing}
+    ? html`<div class="status-banner reconnecting">Reconnecting...</div>`
+    : nothing}
         ${this._renderDisconnectedBanner()}
 
         <div
@@ -633,11 +650,18 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
           @scroll=${this._handleScroll}
         >
           ${this.messages.length === 0
-        ? html`<div class="empty-state">
-                ${this._emptyStateMessage}
+    ? html`<div class="empty-state">
+                <span>${this._emptyStateMessage}</span>
+                <button
+                  class="suggestion-chip"
+                  @click=${this._handleMakeAppSuggestion}
+                  title="Creates a new artifact app page and links to it from here — your current page content stays untouched"
+                >
+                  Make an app with this
+                </button>
               </div>`
-        : this.messages.map(
-          (msg) => html`
+    : this.messages.map(
+     (msg) => html`
                   <chat-message-bubble
                     message-id=${msg.id}
                     .sender=${msg.sender}
@@ -653,16 +677,16 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
                     @scroll-to-message=${this._handleScrollToMessage}
                   ></chat-message-bubble>
                 `,
-        )}
+    )}
         </div>
         ${this.turnActive
-        ? html`<div class="thinking-indicator">
+    ? html`<div class="thinking-indicator">
               ${thinkingContent}
               <button class="stop-button" @click=${this._handleStopClick} aria-label="Stop">
                 Stop
               </button>
             </div>`
-        : nothing}
+    : nothing}
 
         ${this._renderPermissionPrompt()}
 
@@ -686,107 +710,120 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
         </div>
       </div>
     `;
-  }
+ }
 
-  override openDrawer(): void {
-    super.openDrawer();
-    this.resizePanel();
-    try { localStorage.setItem(STORAGE_KEY, 'true'); } catch { /* */ }
-    if (!this._panelEverOpened) {
-      this._panelEverOpened = true;
-      if (this.page) {
-        void this.startStream();
-      }
-    }
-    void this.updateComplete.then(() => {
-      this.scrollToBottom();
-      this.focusInput();
-    });
+ override openDrawer(): void {
+  super.openDrawer();
+  this.resizePanel();
+  try { localStorage.setItem(STORAGE_KEY, 'true'); } catch { /* */ }
+  if (!this._panelEverOpened) {
+   this._panelEverOpened = true;
+   if (this.page) {
+    void this.startStream();
+   }
   }
+  void this.updateComplete.then(() => {
+   this.scrollToBottom();
+   this.focusInput();
+  });
+ }
 
-  override closeDrawer(): void {
-    super.closeDrawer();
-    try { localStorage.setItem(STORAGE_KEY, 'false'); } catch { /* */ }
-    void this.updateComplete.then(() => {
-      const fab = this.shadowRoot?.querySelector<HTMLElement>('.fab');
-      if (fab && !fab.hidden) {
-        fab.focus();
-      }
-    });
+ override closeDrawer(): void {
+  super.closeDrawer();
+  try { localStorage.setItem(STORAGE_KEY, 'false'); } catch { /* */ }
+  void this.updateComplete.then(() => {
+   const fab = this.shadowRoot?.querySelector<HTMLElement>('.fab');
+   if (fab && !fab.hidden) {
+    fab.focus();
+   }
+  });
+ }
+
+ setAmbientVisible(visible: boolean): void {
+  this._fabVisible = visible;
+ }
+
+ private _handleKeydown(e: KeyboardEvent) {
+  if (e.key === 'Enter' && !e.shiftKey) {
+   e.preventDefault();
+   void this.sendMessage();
   }
+ }
 
-  setAmbientVisible(visible: boolean): void {
-    this._fabVisible = visible;
+ private _focusTextarea(e: Event) {
+  if (e.target instanceof HTMLButtonElement) return; // Don't steal focus from send button
+  this.focusInput();
+ }
+
+ private _handleSendClick() {
+  void this.sendMessage();
+ }
+
+ /**
+  * "Make an app with this" — pre-fills the input with the artifact-app
+  * request and sends it. The chatPreamble + help-artifacts-lang teach
+  * the placement default (new page + wikilink; the current page's
+  * prose stays untouched), so the raw ask is enough (issue #1272).
+  */
+ private _handleMakeAppSuggestion() {
+  const textarea = this.shadowRoot?.querySelector('textarea');
+  if (!textarea) return;
+  textarea.value = 'Make an app with this';
+  void this.sendMessage();
+ }
+
+ private async _handleStopClick() {
+  try {
+   const request = create(CancelAgentPromptRequestSchema, {
+    page: this.page,
+   });
+   await this.chatClient.cancelAgentPrompt(request);
+   this.waitingForAssistant = false;
+   this.turnActive = false;
+  } catch (err) {
+   this.error = err instanceof Error ? err : new Error(String(err));
   }
+ }
 
-  private _handleKeydown(e: KeyboardEvent) {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      void this.sendMessage();
-    }
+ private async _handleClearClick() {
+  try {
+   const request = create(ClearChatRequestSchema, {
+    page: this.page,
+   });
+   await this.chatClient.clearChat(request);
+   this.clearVisibleChat();
+  } catch (err) {
+   this.error = err instanceof Error ? err : new Error(String(err));
   }
+ }
 
-  private _focusTextarea(e: Event) {
-    if (e.target instanceof HTMLButtonElement) return; // Don't steal focus from send button
-    this.focusInput();
+ private _handleScroll(e: Event) {
+  if (!(e.target instanceof HTMLElement)) return;
+  const container = e.target;
+  const threshold = 50;
+  this.userHasScrolled =
+   container.scrollTop + container.clientHeight < container.scrollHeight - threshold;
+ }
+
+ private _handleScrollToMessage(e: CustomEvent<ScrollToMessageEventDetail>) {
+  const target = this.shadowRoot?.querySelector(
+   `chat-message-bubble[message-id="${CSS.escape(e.detail.messageId)}"]`,
+  );
+  if (target) {
+   target.scrollIntoView({ behavior: 'smooth', block: 'center' });
   }
+ }
 
-  private _handleSendClick() {
-    void this.sendMessage();
-  }
-
-  private async _handleStopClick() {
-    try {
-      const request = create(CancelAgentPromptRequestSchema, {
-        page: this.page,
-      });
-      await this.chatClient.cancelAgentPrompt(request);
-      this.waitingForAssistant = false;
-      this.turnActive = false;
-    } catch (err) {
-      this.error = err instanceof Error ? err : new Error(String(err));
-    }
-  }
-
-  private async _handleClearClick() {
-    try {
-      const request = create(ClearChatRequestSchema, {
-        page: this.page,
-      });
-      await this.chatClient.clearChat(request);
-      this.clearVisibleChat();
-    } catch (err) {
-      this.error = err instanceof Error ? err : new Error(String(err));
-    }
-  }
-
-  private _handleScroll(e: Event) {
-    if (!(e.target instanceof HTMLElement)) return;
-    const container = e.target;
-    const threshold = 50;
-    this.userHasScrolled =
-      container.scrollTop + container.clientHeight < container.scrollHeight - threshold;
-  }
-
-  private _handleScrollToMessage(e: CustomEvent<ScrollToMessageEventDetail>) {
-    const target = this.shadowRoot?.querySelector(
-      `chat-message-bubble[message-id="${CSS.escape(e.detail.messageId)}"]`,
-    );
-    if (target) {
-      target.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    }
-  }
-
-  private _renderPermissionPrompt() {
-    if (!this.pendingPermission) return nothing;
-    const { title, description, options } = this.pendingPermission;
-    return html`
+ private _renderPermissionPrompt() {
+  if (!this.pendingPermission) return nothing;
+  const { title, description, options } = this.pendingPermission;
+  return html`
       <div class="permission-prompt">
         <div class="permission-title">🔐 Permission requested</div>
         <div class="permission-description">${title}: ${description}</div>
         <div class="permission-options">
           ${options.map(
-      (opt) => html`
+   (opt) => html`
               <button
                 class="permission-btn"
                 @click=${() => this._respondToPermission(opt.optionId)}
@@ -795,496 +832,496 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
                 ${opt.label}
               </button>
             `,
-    )}
+  )}
           <button class="permission-btn cancel" @click=${() => this._respondToPermission('')}>
             Deny
           </button>
         </div>
       </div>
     `;
+ }
+
+ private setPermissionRequest(request: ChatPermissionRequest): void {
+  this.pendingPermission = {
+   requestId: request.requestId,
+   title: request.title,
+   description: request.description,
+   options: request.options.map((opt) => ({
+    optionId: opt.optionId,
+    label: opt.label,
+    description: opt.description,
+   })),
+  };
+ }
+
+ private async _respondToPermission(optionId: string): Promise<void> {
+  if (!this.pendingPermission) return;
+  const requestId = this.pendingPermission.requestId;
+  this.pendingPermission = null;
+
+  try {
+   const request = create(RespondToPermissionRequestSchema, {
+    requestId,
+    selectedOptionId: optionId,
+   });
+   await this.chatClient.respondToPermission(request);
+  } catch (err) {
+   this.error = err instanceof Error ? err : new Error(String(err));
+  }
+ }
+
+ private async sendMessage() {
+  const textarea = this.shadowRoot?.querySelector('textarea');
+  if (!textarea) return;
+
+  const content = textarea.value.trim();
+  if (!content) return;
+
+  textarea.value = '';
+  this.waitingForAssistant = true;
+  this.turnActive = true;
+
+  try {
+   const request = create(SendChatMessageRequestSchema, {
+    page: this.page,
+    content,
+   });
+   await this.chatClient.sendMessage(request);
+   this.pendingMessage = null;
+  } catch (err) {
+   if (err instanceof ConnectError && err.code === Code.Unavailable) {
+    // Instance may be starting — queue message for auto-retry
+    this.pendingMessage = content;
+    this.error = null;
+   } else {
+    this.error = err instanceof Error ? err : new Error(String(err));
+   }
+   this.waitingForAssistant = false;
+   this.turnActive = false;
   }
 
-  private setPermissionRequest(request: ChatPermissionRequest): void {
-    this.pendingPermission = {
-      requestId: request.requestId,
-      title: request.title,
-      description: request.description,
-      options: request.options.map((opt) => ({
-        optionId: opt.optionId,
-        label: opt.label,
-        description: opt.description,
-      })),
-    };
+  this.focusInput();
+ }
+
+ private handleGlobalKeydown(e: KeyboardEvent): void {
+  if (e.ctrlKey && e.code === 'Space') {
+   e.preventDefault();
+   this.toggleDrawer();
   }
+ }
 
-  private async _respondToPermission(optionId: string): Promise<void> {
-    if (!this.pendingPermission) return;
-    const requestId = this.pendingPermission.requestId;
-    this.pendingPermission = null;
+ private async pollChatStatus(): Promise<void> {
+  try {
+   const request = create(GetChatStatusRequestSchema, {
+    page: this.page,
+   });
+   const response = await this.chatClient.getChatStatus(request);
+   const wasConnected = this.agentConnected;
+   const wasStarting = this.agentStarting;
+   this.agentConnected = response.connected;
+   this.poolConnected = response.poolConnected;
+   this.agentStarting = response.starting;
 
-    try {
-      const request = create(RespondToPermissionRequestSchema, {
-        requestId,
-        selectedOptionId: optionId,
-      });
-      await this.chatClient.respondToPermission(request);
-    } catch (err) {
-      this.error = err instanceof Error ? err : new Error(String(err));
-    }
-  }
+   // Adjust poll rate based on state
+   this.adjustPollRate();
 
-  private async sendMessage() {
-    const textarea = this.shadowRoot?.querySelector('textarea');
-    if (!textarea) return;
-
-    const content = textarea.value.trim();
-    if (!content) return;
-
-    textarea.value = '';
+   // If agent just connected and we have a pending message, auto-send it
+   if (!wasConnected && response.connected && this.pendingMessage) {
+    const content = this.pendingMessage;
+    this.pendingMessage = null;
     this.waitingForAssistant = true;
     this.turnActive = true;
-
     try {
-      const request = create(SendChatMessageRequestSchema, {
-        page: this.page,
-        content,
-      });
-      await this.chatClient.sendMessage(request);
-      this.pendingMessage = null;
+     const sendRequest = create(SendChatMessageRequestSchema, {
+      page: this.page,
+      content,
+     });
+     await this.chatClient.sendMessage(sendRequest);
     } catch (err) {
-      if (err instanceof ConnectError && err.code === Code.Unavailable) {
-        // Instance may be starting — queue message for auto-retry
-        this.pendingMessage = content;
-        this.error = null;
-      } else {
-        this.error = err instanceof Error ? err : new Error(String(err));
-      }
-      this.waitingForAssistant = false;
-      this.turnActive = false;
+     this.pendingMessage = content;
+     this.error = err instanceof Error ? err : new Error(String(err));
+     this.waitingForAssistant = false;
+     this.turnActive = false;
     }
+   }
 
+   // If agent just connected and panel was open, re-focus input
+   if (!wasConnected && response.connected && this.drawerOpen) {
     this.focusInput();
-  }
+   }
 
-  private handleGlobalKeydown(e: KeyboardEvent): void {
-    if (e.ctrlKey && e.code === 'Space') {
-      e.preventDefault();
-      this.toggleDrawer();
-    }
-  }
-
-  private async pollChatStatus(): Promise<void> {
-    try {
-      const request = create(GetChatStatusRequestSchema, {
-        page: this.page,
-      });
-      const response = await this.chatClient.getChatStatus(request);
-      const wasConnected = this.agentConnected;
-      const wasStarting = this.agentStarting;
-      this.agentConnected = response.connected;
-      this.poolConnected = response.poolConnected;
-      this.agentStarting = response.starting;
-
-      // Adjust poll rate based on state
-      this.adjustPollRate();
-
-      // If agent just connected and we have a pending message, auto-send it
-      if (!wasConnected && response.connected && this.pendingMessage) {
-        const content = this.pendingMessage;
-        this.pendingMessage = null;
-        this.waitingForAssistant = true;
-        this.turnActive = true;
-        try {
-          const sendRequest = create(SendChatMessageRequestSchema, {
-            page: this.page,
-            content,
-          });
-          await this.chatClient.sendMessage(sendRequest);
-        } catch (err) {
-          this.pendingMessage = content;
-          this.error = err instanceof Error ? err : new Error(String(err));
-          this.waitingForAssistant = false;
-          this.turnActive = false;
-        }
-      }
-
-      // If agent just connected and panel was open, re-focus input
-      if (!wasConnected && response.connected && this.drawerOpen) {
-        this.focusInput();
-      }
-
-      // Clear starting state message when no longer starting
-      if (wasStarting && !response.starting) {
-        this.error = null;
-      }
-    } catch {
-      this.agentConnected = false;
-      this.poolConnected = false;
-      this.agentStarting = false;
-    }
-  }
-
-  private adjustPollRate(): void {
-    const desiredIntervalMs = this.agentStarting ? STATUS_POLL_STARTING_MS : STATUS_POLL_INTERVAL_MS;
-
-    // Only restart the timer if the interval needs to change
-    if (this.statusPollTimer) {
-      clearInterval(this.statusPollTimer);
-    }
-    this.statusPollTimer = setInterval(() => this.pollChatStatus(), desiredIntervalMs);
-  }
-
-  private resizePanel(): void {
-    const panel = this.shadowRoot?.querySelector<HTMLElement>('.panel');
-    if (!panel) return;
-
-    const viewport = window.visualViewport;
-    if (!viewport) return;
-
-    // Only apply inline sizing when the visual viewport differs from the window
-    // (e.g., mobile keyboard is open). On desktop, let CSS handle layout.
-    const keyboardOpen = viewport.height < window.innerHeight * 0.85;
-    if (keyboardOpen) {
-      panel.style.height = `${viewport.height}px`;
-      if (viewport.offsetTop > 0) {
-        panel.style.top = `${viewport.offsetTop}px`;
-      }
-    } else {
-      panel.style.removeProperty('height');
-      panel.style.removeProperty('top');
-    }
-  }
-
-  private handleViewportResize(): void {
-    if (!window.visualViewport) return;
-    this.resizePanel();
-  }
-
-  private handleVisibilityChange(): void {
-    if (document.visibilityState !== 'visible') return;
-
-    if (this.drawerOpen && !this.userHasScrolled) {
-      void this.updateComplete.then(() => this.scrollToBottom());
-    }
-
-    if (this.page && this._panelEverOpened && this.streamState !== 'connected') {
-      void this.startStream();
-    }
-  }
-
-  private async waitForReconnectDelay(signal: AbortSignal, delayMs: number): Promise<void> {
-    if (signal.aborted) return;
-    await new Promise<void>((resolve) => {
-      const timer = setTimeout(resolve, delayMs);
-      signal.addEventListener(
-        'abort',
-        () => {
-          clearTimeout(timer);
-          resolve();
-        },
-        { once: true },
-      );
-    });
-  }
-
-  private async startStream(): Promise<void> {
-    this.stopStream();
-    this.streamSubscription = new AbortController();
-    const signal = this.streamSubscription.signal;
-    let reconnectDelayMs = INITIAL_RECONNECT_DELAY_MS;
-
-    while (!signal.aborted) {
-      try {
-        await this.runStreamIteration(signal, () => { reconnectDelayMs = INITIAL_RECONNECT_DELAY_MS; });
-        break; // Stream ended cleanly
-      } catch (err) {
-        if (isAbortError(err) || signal.aborted) break;
-        reconnectDelayMs = await this.prepareStreamReconnect(err, signal, reconnectDelayMs); // NOSONAR — intentional sequential back-off delay; parallelising would race reconnect attempts
-      }
-    }
-
-    if (this.streamState !== 'disconnected') {
-      this.streamState = 'disconnected';
-    }
-  }
-
-  private async runStreamIteration(
-    signal: AbortSignal,
-    onResetDelay: () => void,
-  ): Promise<void> {
-    const request = create(SubscribeChatRequestSchema, { page: this.page });
-    this.streamState = 'connected';
+   // Clear starting state message when no longer starting
+   if (wasStarting && !response.starting) {
     this.error = null;
+   }
+  } catch {
+   this.agentConnected = false;
+   this.poolConnected = false;
+   this.agentStarting = false;
+  }
+ }
 
-    for await (const event of this.chatClient.subscribeChat(request, { signal })) {
-      await this.handleChatEvent(event);
-      onResetDelay();
-    }
+ private adjustPollRate(): void {
+  const desiredIntervalMs = this.agentStarting ? STATUS_POLL_STARTING_MS : STATUS_POLL_INTERVAL_MS;
+
+  // Only restart the timer if the interval needs to change
+  if (this.statusPollTimer) {
+   clearInterval(this.statusPollTimer);
+  }
+  this.statusPollTimer = setInterval(() => this.pollChatStatus(), desiredIntervalMs);
+ }
+
+ private resizePanel(): void {
+  const panel = this.shadowRoot?.querySelector<HTMLElement>('.panel');
+  if (!panel) return;
+
+  const viewport = window.visualViewport;
+  if (!viewport) return;
+
+  // Only apply inline sizing when the visual viewport differs from the window
+  // (e.g., mobile keyboard is open). On desktop, let CSS handle layout.
+  const keyboardOpen = viewport.height < window.innerHeight * 0.85;
+  if (keyboardOpen) {
+   panel.style.height = `${viewport.height}px`;
+   if (viewport.offsetTop > 0) {
+    panel.style.top = `${viewport.offsetTop}px`;
+   }
+  } else {
+   panel.style.removeProperty('height');
+   panel.style.removeProperty('top');
+  }
+ }
+
+ private handleViewportResize(): void {
+  if (!window.visualViewport) return;
+  this.resizePanel();
+ }
+
+ private handleVisibilityChange(): void {
+  if (document.visibilityState !== 'visible') return;
+
+  if (this.drawerOpen && !this.userHasScrolled) {
+   void this.updateComplete.then(() => this.scrollToBottom());
   }
 
-  private async prepareStreamReconnect(
-    err: unknown,
-    signal: AbortSignal,
-    reconnectDelayMs: number,
-  ): Promise<number> {
-    this.streamState = 'reconnecting';
-    this.error = err instanceof Error ? err : new Error(String(err));
-    await this.waitForReconnectDelay(signal, reconnectDelayMs);
-    return Math.min(reconnectDelayMs * 2, MAX_RECONNECT_DELAY_MS);
+  if (this.page && this._panelEverOpened && this.streamState !== 'connected') {
+   void this.startStream();
+  }
+ }
+
+ private async waitForReconnectDelay(signal: AbortSignal, delayMs: number): Promise<void> {
+  if (signal.aborted) return;
+  await new Promise<void>((resolve) => {
+   const timer = setTimeout(resolve, delayMs);
+   signal.addEventListener(
+    'abort',
+    () => {
+     clearTimeout(timer);
+     resolve();
+    },
+    { once: true },
+   );
+  });
+ }
+
+ private async startStream(): Promise<void> {
+  this.stopStream();
+  this.streamSubscription = new AbortController();
+  const signal = this.streamSubscription.signal;
+  let reconnectDelayMs = INITIAL_RECONNECT_DELAY_MS;
+
+  while (!signal.aborted) {
+   try {
+    await this.runStreamIteration(signal, () => { reconnectDelayMs = INITIAL_RECONNECT_DELAY_MS; });
+    break; // Stream ended cleanly
+   } catch (err) {
+    if (isAbortError(err) || signal.aborted) break;
+    reconnectDelayMs = await this.prepareStreamReconnect(err, signal, reconnectDelayMs); // NOSONAR — intentional sequential back-off delay; parallelising would race reconnect attempts
+   }
   }
 
-  private stopStream(): void {
-    if (this.streamSubscription) {
-      this.streamSubscription.abort();
-      this.streamSubscription = undefined;
-      this.streamState = 'disconnected';
+  if (this.streamState !== 'disconnected') {
+   this.streamState = 'disconnected';
+  }
+ }
+
+ private async runStreamIteration(
+  signal: AbortSignal,
+  onResetDelay: () => void,
+ ): Promise<void> {
+  const request = create(SubscribeChatRequestSchema, { page: this.page });
+  this.streamState = 'connected';
+  this.error = null;
+
+  for await (const event of this.chatClient.subscribeChat(request, { signal })) {
+   await this.handleChatEvent(event);
+   onResetDelay();
+  }
+ }
+
+ private async prepareStreamReconnect(
+  err: unknown,
+  signal: AbortSignal,
+  reconnectDelayMs: number,
+ ): Promise<number> {
+  this.streamState = 'reconnecting';
+  this.error = err instanceof Error ? err : new Error(String(err));
+  await this.waitForReconnectDelay(signal, reconnectDelayMs);
+  return Math.min(reconnectDelayMs * 2, MAX_RECONNECT_DELAY_MS);
+ }
+
+ private stopStream(): void {
+  if (this.streamSubscription) {
+   this.streamSubscription.abort();
+   this.streamSubscription = undefined;
+   this.streamState = 'disconnected';
+  }
+ }
+
+ private async handleChatEvent(event: ChatEvent): Promise<void> {
+  switch (event.event.case) {
+   case 'newMessage':
+    await this.addMessage(event.event.value);
+    break;
+   case 'edit':
+    await this.editMessage(event.event.value.messageId, event.event.value.newContent, event.event.value.streaming);
+    break;
+   case 'toolCall':
+    await this.updateToolCall(
+     event.event.value.messageId,
+     event.event.value.toolCallId,
+     event.event.value.title,
+     event.event.value.status,
+     event.event.value.kind,
+     event.event.value.detail,
+    );
+    break;
+   case 'plan':
+    this.updatePlan(
+     event.event.value.messageId,
+     event.event.value.entries.map((e) => ({
+      content: e.content,
+      status: e.status,
+      priority: e.priority,
+     })),
+    );
+    break;
+   case 'backgroundTask':
+    this.updateBackgroundTask(
+     event.event.value.messageId,
+     event.event.value.toolCallId,
+     event.event.value.title,
+     event.event.value.status,
+     event.event.value.detail,
+     Number(event.event.value.startedAtMs),
+    );
+    break;
+   case 'reaction':
+    this.addReaction(
+     event.event.value.messageId,
+     event.event.value.emoji,
+     event.event.value.reactor,
+    );
+    break;
+   case 'permissionRequest':
+    this.setPermissionRequest(event.event.value);
+    break;
+   case 'turnStatus':
+    this.turnActive = event.event.value.active;
+    if (!event.event.value.active) {
+     // Turn finished: also clear the first-token "thinking" indicator.
+     this.waitingForAssistant = false;
     }
+    break;
+   case 'chatCleared':
+    this.clearVisibleChat();
+    break;
+  }
+ }
+
+ private clearVisibleChat(): void {
+  this.messages = [];
+  this.messagesById.clear();
+  this.waitingForAssistant = false;
+  this.turnActive = false;
+  this.pendingPermission = null;
+  this.pendingMessage = null;
+ }
+
+ private async addMessage(msg: ChatMessage): Promise<void> {
+  let renderedHtml = '';
+  if (msg.sender === Sender.ASSISTANT) {
+   try {
+    renderedHtml = await this.markdownRenderer.renderMarkdown(msg.content, this.page);
+   } catch {
+    // Fall back to raw content on render failure
+   }
+   this.waitingForAssistant = false;
   }
 
-  private async handleChatEvent(event: ChatEvent): Promise<void> {
-    switch (event.event.case) {
-      case 'newMessage':
-        await this.addMessage(event.event.value);
-        break;
-      case 'edit':
-        await this.editMessage(event.event.value.messageId, event.event.value.newContent, event.event.value.streaming);
-        break;
-      case 'toolCall':
-        await this.updateToolCall(
-          event.event.value.messageId,
-          event.event.value.toolCallId,
-          event.event.value.title,
-          event.event.value.status,
-          event.event.value.kind,
-          event.event.value.detail,
-        );
-        break;
-      case 'plan':
-        this.updatePlan(
-          event.event.value.messageId,
-          event.event.value.entries.map((e) => ({
-            content: e.content,
-            status: e.status,
-            priority: e.priority,
-          })),
-        );
-        break;
-      case 'backgroundTask':
-        this.updateBackgroundTask(
-          event.event.value.messageId,
-          event.event.value.toolCallId,
-          event.event.value.title,
-          event.event.value.status,
-          event.event.value.detail,
-          Number(event.event.value.startedAtMs),
-        );
-        break;
-      case 'reaction':
-        this.addReaction(
-          event.event.value.messageId,
-          event.event.value.emoji,
-          event.event.value.reactor,
-        );
-        break;
-      case 'permissionRequest':
-        this.setPermissionRequest(event.event.value);
-        break;
-      case 'turnStatus':
-        this.turnActive = event.event.value.active;
-        if (!event.event.value.active) {
-          // Turn finished: also clear the first-token "thinking" indicator.
-          this.waitingForAssistant = false;
-        }
-        break;
-      case 'chatCleared':
-        this.clearVisibleChat();
-        break;
-    }
+  const timestamp = msg.timestamp ? new Date(Number(msg.timestamp.seconds) * 1000) : new Date();
+  const fallbackSenderName = msg.sender === Sender.ASSISTANT ? this.persona : '';
+  const senderName = msg.senderName || fallbackSenderName;
+
+  const msgState: ChatMessageState = {
+   id: msg.id,
+   sender: msg.sender,
+   content: msg.content,
+   renderedHtml,
+   timestamp,
+   senderName,
+   replyToId: msg.replyToId,
+   backgroundTask: null,
+   reactions: groupReactions(msg.reactions),
+   edited: false,
+   sequence: msg.sequence,
+   toolCalls: [],
+   plan: [],
+  };
+
+  const existing = this.messagesById.get(msg.id);
+  if (existing) {
+   // Update in-place for duplicate (replay) messages
+   Object.assign(existing, msgState);
+   this.messages = [...this.messages]; // trigger re-render
+  } else {
+   this.messagesById.set(msg.id, msgState);
+   this.messages = [...this.messages, msgState];
   }
 
-  private clearVisibleChat(): void {
-    this.messages = [];
-    this.messagesById.clear();
-    this.waitingForAssistant = false;
-    this.turnActive = false;
-    this.pendingPermission = null;
-    this.pendingMessage = null;
+  await this.updateComplete;
+  if (!this.userHasScrolled) {
+   this.scrollToBottom();
+  }
+ }
+
+ private async editMessage(messageId: string, newContent: string, streaming = false): Promise<void> {
+  const msg = this.messagesById.get(messageId);
+  if (!msg) return;
+
+  let renderedHtml = '';
+  if (msg.sender === Sender.ASSISTANT) {
+   try {
+    renderedHtml = await this.markdownRenderer.renderMarkdown(newContent, this.page);
+   } catch {
+    // Fall back to raw content
+   }
   }
 
-  private async addMessage(msg: ChatMessage): Promise<void> {
-    let renderedHtml = '';
-    if (msg.sender === Sender.ASSISTANT) {
-      try {
-        renderedHtml = await this.markdownRenderer.renderMarkdown(msg.content, this.page);
-      } catch {
-        // Fall back to raw content on render failure
-      }
-      this.waitingForAssistant = false;
-    }
-
-    const timestamp = msg.timestamp ? new Date(Number(msg.timestamp.seconds) * 1000) : new Date();
-    const fallbackSenderName = msg.sender === Sender.ASSISTANT ? this.persona : '';
-    const senderName = msg.senderName || fallbackSenderName;
-
-    const msgState: ChatMessageState = {
-      id: msg.id,
-      sender: msg.sender,
-      content: msg.content,
-      renderedHtml,
-      timestamp,
-      senderName,
-      replyToId: msg.replyToId,
-      backgroundTask: null,
-      reactions: groupReactions(msg.reactions),
-      edited: false,
-      sequence: msg.sequence,
-      toolCalls: [],
-      plan: [],
-    };
-
-    const existing = this.messagesById.get(msg.id);
-    if (existing) {
-      // Update in-place for duplicate (replay) messages
-      Object.assign(existing, msgState);
-      this.messages = [...this.messages]; // trigger re-render
-    } else {
-      this.messagesById.set(msg.id, msgState);
-      this.messages = [...this.messages, msgState];
-    }
-
-    await this.updateComplete;
-    if (!this.userHasScrolled) {
-      this.scrollToBottom();
-    }
+  // Update both content and renderedHtml before triggering re-render
+  // to avoid a race where the template shows raw content (with escaped HTML)
+  // before renderedHtml is ready.
+  msg.content = newContent;
+  msg.renderedHtml = renderedHtml;
+  if (!streaming) {
+   msg.edited = true;
   }
+  this.messages = [...this.messages]; // trigger re-render
 
-  private async editMessage(messageId: string, newContent: string, streaming = false): Promise<void> {
-    const msg = this.messagesById.get(messageId);
-    if (!msg) return;
-
-    let renderedHtml = '';
-    if (msg.sender === Sender.ASSISTANT) {
-      try {
-        renderedHtml = await this.markdownRenderer.renderMarkdown(newContent, this.page);
-      } catch {
-        // Fall back to raw content
-      }
-    }
-
-    // Update both content and renderedHtml before triggering re-render
-    // to avoid a race where the template shows raw content (with escaped HTML)
-    // before renderedHtml is ready.
-    msg.content = newContent;
-    msg.renderedHtml = renderedHtml;
-    if (!streaming) {
-      msg.edited = true;
-    }
-    this.messages = [...this.messages]; // trigger re-render
-
-    // Auto-scroll during streaming if user hasn't scrolled up
-    if (streaming && !this.userHasScrolled) {
-      await this.updateComplete;
-      this.scrollToBottom();
-    }
+  // Auto-scroll during streaming if user hasn't scrolled up
+  if (streaming && !this.userHasScrolled) {
+   await this.updateComplete;
+   this.scrollToBottom();
   }
+ }
 
-  private async updateToolCall(messageId: string, toolCallId: string, title: string, status: string, kind = '', detail = ''): Promise<void> {
-    const msg = this.messagesById.get(messageId);
-    if (!msg) return;
+ private async updateToolCall(messageId: string, toolCallId: string, title: string, status: string, kind = '', detail = ''): Promise<void> {
+  const msg = this.messagesById.get(messageId);
+  if (!msg) return;
 
-    const isTerminal = status === 'completed' || status === 'failed';
-    const existing = msg.toolCalls.find((tc) => tc.toolCallId === toolCallId);
-    if (existing) {
-      // ACP tool-call updates are partial: a status-only update carries empty
-      // title/kind/detail. Preserve the last non-empty values so the detail the
-      // initial notification provided doesn't vanish when the call completes.
-      existing.title = title || existing.title;
-      existing.status = status || existing.status;
-      existing.kind = kind || existing.kind;
-      existing.detail = detail || existing.detail;
-      // Preserve the original startedAtMs — do not overwrite it
-      // Record completion time when the task reaches a terminal state
-      if (isTerminal && existing.completedAtMs === null) {
-        existing.completedAtMs = Date.now();
-      }
-      msg.toolCalls = [...msg.toolCalls];
-    } else {
-      msg.toolCalls = [...msg.toolCalls, {
-        toolCallId, title, status, kind, detail,
-        startedAtMs: Date.now(),
-        completedAtMs: isTerminal ? Date.now() : null,
-      }];
-    }
-    this.messages = [...this.messages];
-
-    if (!this.userHasScrolled) {
-      await this.updateComplete;
-      this.scrollToBottom();
-    }
+  const isTerminal = status === 'completed' || status === 'failed';
+  const existing = msg.toolCalls.find((tc) => tc.toolCallId === toolCallId);
+  if (existing) {
+   // ACP tool-call updates are partial: a status-only update carries empty
+   // title/kind/detail. Preserve the last non-empty values so the detail the
+   // initial notification provided doesn't vanish when the call completes.
+   existing.title = title || existing.title;
+   existing.status = status || existing.status;
+   existing.kind = kind || existing.kind;
+   existing.detail = detail || existing.detail;
+   // Preserve the original startedAtMs — do not overwrite it
+   // Record completion time when the task reaches a terminal state
+   if (isTerminal && existing.completedAtMs === null) {
+    existing.completedAtMs = Date.now();
+   }
+   msg.toolCalls = [...msg.toolCalls];
+  } else {
+   msg.toolCalls = [...msg.toolCalls, {
+    toolCallId, title, status, kind, detail,
+    startedAtMs: Date.now(),
+    completedAtMs: isTerminal ? Date.now() : null,
+   }];
   }
+  this.messages = [...this.messages];
 
-  private updateBackgroundTask(messageId: string, toolCallId: string, title: string, status: string, detail: string, startedAtMs: number): void {
-    const msg = this.messagesById.get(messageId);
-    if (!msg) return;
-
-    msg.backgroundTask = { toolCallId, title, status, detail, startedAtMs };
-    this.messages = [...this.messages];
+  if (!this.userHasScrolled) {
+   await this.updateComplete;
+   this.scrollToBottom();
   }
+ }
 
-  private updatePlan(messageId: string, entries: PlanEntryState[]): void {
-    const msg = this.messagesById.get(messageId);
-    if (!msg) return;
-    msg.plan = entries;
-    this.messages = [...this.messages];
+ private updateBackgroundTask(messageId: string, toolCallId: string, title: string, status: string, detail: string, startedAtMs: number): void {
+  const msg = this.messagesById.get(messageId);
+  if (!msg) return;
+
+  msg.backgroundTask = { toolCallId, title, status, detail, startedAtMs };
+  this.messages = [...this.messages];
+ }
+
+ private updatePlan(messageId: string, entries: PlanEntryState[]): void {
+  const msg = this.messagesById.get(messageId);
+  if (!msg) return;
+  msg.plan = entries;
+  this.messages = [...this.messages];
+ }
+
+ private addReaction(messageId: string, emoji: string, reactor: string): void {
+  const msg = this.messagesById.get(messageId);
+  if (!msg) return;
+
+  const existing = msg.reactions.find((r) => r.emoji === emoji);
+  if (existing) {
+   existing.reactors.push(reactor);
+   existing.count = existing.reactors.length;
+   msg.reactions = [...msg.reactions]; // new reference so Lit detects the change
+  } else {
+   msg.reactions = [...msg.reactions, { emoji, reactors: [reactor], count: 1 }];
   }
+  this.messages = [...this.messages]; // trigger re-render
+ }
 
-  private addReaction(messageId: string, emoji: string, reactor: string): void {
-    const msg = this.messagesById.get(messageId);
-    if (!msg) return;
-
-    const existing = msg.reactions.find((r) => r.emoji === emoji);
-    if (existing) {
-      existing.reactors.push(reactor);
-      existing.count = existing.reactors.length;
-      msg.reactions = [...msg.reactions]; // new reference so Lit detects the change
-    } else {
-      msg.reactions = [...msg.reactions, { emoji, reactors: [reactor], count: 1 }];
-    }
-    this.messages = [...this.messages]; // trigger re-render
+ private scrollToBottom(): void {
+  const container = this.shadowRoot?.querySelector('.messages-container');
+  if (container) {
+   container.scrollTop = container.scrollHeight;
   }
+ }
 
-  private scrollToBottom(): void {
-    const container = this.shadowRoot?.querySelector('.messages-container');
-    if (container) {
-      container.scrollTop = container.scrollHeight;
-    }
-  }
-
-  private focusInput(): void {
-    const textarea = this.shadowRoot?.querySelector('textarea');
-    textarea?.focus();
-  }
+ private focusInput(): void {
+  const textarea = this.shadowRoot?.querySelector('textarea');
+  textarea?.focus();
+ }
 }
 
 function isAbortError(err: unknown): boolean {
-  return err instanceof Error && err.name === 'AbortError';
+ return err instanceof Error && err.name === 'AbortError';
 }
 
 function groupReactions(reactions: Reaction[]): ReactionGroup[] {
-  const groups = new Map<string, string[]>();
-  for (const r of reactions) {
-    const existing = groups.get(r.emoji);
-    if (existing) {
-      existing.push(r.reactor);
-    } else {
-      groups.set(r.emoji, [r.reactor]);
-    }
+ const groups = new Map<string, string[]>();
+ for (const r of reactions) {
+  const existing = groups.get(r.emoji);
+  if (existing) {
+   existing.push(r.reactor);
+  } else {
+   groups.set(r.emoji, [r.reactor]);
   }
-  return Array.from(groups.entries()).map(([emoji, reactors]) => ({
-    emoji,
-    reactors,
-    count: reactors.length,
-  }));
+ }
+ return Array.from(groups.entries()).map(([emoji, reactors]) => ({
+  emoji,
+  reactors,
+  count: reactors.length,
+ }));
 }
 
 customElements.define('page-chat-panel', PageChatPanel);

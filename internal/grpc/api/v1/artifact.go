@@ -382,9 +382,6 @@ func (s *Server) SetArtifact(ctx context.Context, req *apiv1.SetArtifactRequest)
 	if err := mut.requireArtifactAccess(ctx, page); err != nil {
 		return nil, err
 	}
-	if err := requireUserMutable(mut.pages, page); err != nil {
-		return nil, err
-	}
 	if err := validateArtifactSource(req.GetSource()); err != nil {
 		return nil, err
 	}
@@ -433,8 +430,10 @@ func applySetArtifact(
 		stamps = map[string]any{}
 	}
 
-	// OCC: on first write an empty expected hash is accepted; on
-	// replacement, the caller must hold the current program's hash.
+	// OCC: enforced when expected_version_hash is non-empty. On first
+	// write an empty hash is accepted; on replacement an omitted hash is
+	// last-writer-wins (the help page + proto doc teach supplying the
+	// hash from GetArtifact so conflicts surface instead of overwriting).
 	if existingFound {
 		fenceContent, _, _ := splitArtifactBody(string(currentMarkdown))
 		currentHash := artifactVersionHash(fenceContent)
@@ -947,8 +946,6 @@ func (s *Server) WatchArtifactState(req *apiv1.WatchArtifactStateRequest, stream
 		return err
 	}
 
-	defer mut.stateWatch.unsubscribe(page, ch)
-
 	for {
 		select {
 		case <-stream.Context().Done():
@@ -1088,8 +1085,21 @@ func (s *Server) modifyMarkdownWithArtifactFunnelCtx(
 		oldSource, _, oldFound := splitArtifactBody(string(currentMarkdown))
 		newSource, _, newFound := splitArtifactBody(string(newMD))
 
-		// No fence in the candidate: nothing artifact-shaped to funnel.
-		// An existing artifact is untouched (its stamps stay valid).
+		// Placement guard FIRST, on the real resulting body, whenever the
+		// write touches the artifact shape at all — a candidate that clears
+		// substantial prose (even with an unchanged program) must fail here.
+		// Vacuous when prose is preserved, so ordinary prose edits pass.
+		if newFound || oldFound {
+			if guardErr := checkArtifactProseGuard(string(currentMarkdown), string(newMD)); guardErr != nil {
+				return nil, "", guardErr
+			}
+		}
+
+		// No fence in the candidate: nothing artifact-shaped left to
+		// funnel (the guard above already vetted the prose removal). An
+		// existing artifact whose fence the write removed keeps its stamps
+		// (they describe the last written program; ClearArtifact is the
+		// explicit removal path that also drops them).
 		if !newFound {
 			finalFM = newFM
 			return newFM, newMD, nil
@@ -1101,14 +1111,11 @@ func (s *Server) modifyMarkdownWithArtifactFunnelCtx(
 			return newFM, newMD, nil
 		}
 
-		// Changed or new fence: run the funnel — validation + placement
-		// guard + restamp, atomically with the body write.
+		// Changed or new fence: run the funnel — validation + restamp,
+		// atomically with the body write (the placement guard already ran
+		// above, on the real body).
 		if err := validateArtifactSource(newSource); err != nil {
 			return nil, "", err
-		}
-		simulated := replaceArtifactFence(string(currentMarkdown), newSource)
-		if guardErr := checkArtifactProseGuard(string(currentMarkdown), simulated); guardErr != nil {
-			return nil, "", guardErr
 		}
 
 		stamps, _ := getArtifactStamps(currentFM)

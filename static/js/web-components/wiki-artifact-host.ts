@@ -358,7 +358,7 @@ export class WikiArtifactHost extends LitElement {
      return this.searchClient.searchContent(
       create(SearchContentRequestSchema, { query: argString(args, 'query') }),
      );
-    case 'api_v1_PageManagementService_GetPageOutline':
+    case 'api_v1_PageManagementService_ReadPageOutline':
      return this.pageManagementClient.readPageOutline(
       create(ReadPageOutlineRequestSchema, { page }),
      );

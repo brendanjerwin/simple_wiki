@@ -124,12 +124,12 @@ describe('wiki library prompt', () => {
   expect(prompt).to.include('Query(');
   expect(prompt).to.include('Mutation(');
   expect(prompt).to.include('@ToAssistant');
-  expect(prompt).to.include('GetPageOutline');
+  expect(prompt).to.include('ReadPageOutline');
  });
 
  it('should derive its tools from a pinned allowlist', () => {
   expect(WIKI_TOOLS.length).to.equal(11);
-  expect(WIKI_TOOLS).to.include('api_v1_PageManagementService_GetPageOutline');
+  expect(WIKI_TOOLS).to.include('api_v1_PageManagementService_ReadPageOutline');
   expect(WIKI_TOOLS).to.include('api_v1_ArtifactStateService_MergeArtifactState');
  });
 });

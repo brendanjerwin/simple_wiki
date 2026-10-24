@@ -109,7 +109,7 @@ root = Card("Pomodoro", Stack([
 Apps can call only these tools from the rendered program — **fully-qualified ids, camelCase args** (short bare names like `GetArtifact` also resolve, but write the qualified form):
 
 - **All `ArtifactStateService` methods**: `api_v1_ArtifactStateService_GetArtifactState`, `MergeArtifactState`, `DeleteArtifactState`
-- **Read-only discovery**: `api_v1_ArtifactService_GetArtifact`, `api_v1_PageHistoryService_ListPageVersions`, `api_v1_SearchService_SearchContent`, `api_v1_PageManagementService_GetPageOutline`, `api_v1_Frontmatter_GetFrontmatter`, `api_v1_MapService_ListMapElements`, `api_v1_ChecklistService_ListItems`, `api_v1_SurveyService_GetSurvey`
+- **Read-only discovery**: `api_v1_ArtifactService_GetArtifact`, `api_v1_PageHistoryService_ListPageVersions`, `api_v1_SearchService_SearchContent`, `api_v1_PageManagementService_ReadPageOutline`, `api_v1_Frontmatter_GetFrontmatter`, `api_v1_MapService_ListMapElements`, `api_v1_ChecklistService_ListItems`, `api_v1_SurveyService_GetSurvey`
 
 Everything else — any page mutation, checklist/map/survey/connector mutation — is **excluded**: a program literally cannot mutate another page or user data; a non-allowlisted call fails with `tool-not-found` and the rest of the program still renders.
 

@@ -364,7 +364,6 @@ var _ = Describe("artifact placement guard", func() {
 		}
 		server = mustNewServer(mock, nil, nil)
 	})
-
 	Describe("SetArtifact default path", func() {
 		It("should compose (keep prose) without any confirmation flag", func() {
 			_, err := server.SetArtifact(ctx, &apiv1.SetArtifactRequest{
@@ -377,8 +376,21 @@ var _ = Describe("artifact placement guard", func() {
 		})
 	})
 
+	Describe("UpdatePageContent fence-only candidate", func() {
+		It("rejects the prose-clear (edit path has no confirm field)", func() {
+			_, err := server.UpdatePageContent(ctx, &apiv1.UpdatePageContentRequest{
+				Page:               "roadmap",
+				NewContentMarkdown: "```wiki-artifact\n$n = 0\nroot = Card(\"Lone\", [])\n```\n",
+			})
+			Expect(err).To(MatchError(ContainSubstring("FailedPrecondition")))
+			Expect(err.Error()).To(ContainSubstring("drop 100% of the page's prose"))
+			// Unchanged: the prose survives.
+			Expect(string(mock.Markdown)).To(ContainSubstring("Substantial roadmap prose."))
+		})
+	})
+
 	Describe("SetArtifact confirm_replace_content path", func() {
-		It("should clear the prose only when the flag is set", func() {
+		It("clears the prose when the flag is set (app-standalone conversion)", func() {
 			_, err := server.SetArtifact(ctx, &apiv1.SetArtifactRequest{
 				Page:                  "roadmap",
 				Source:                "root = Stack([Text(\"dashboard\")])\n",

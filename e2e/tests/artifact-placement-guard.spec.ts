@@ -93,6 +93,60 @@ test.describe.serial('Artifact placement guard', () => {
    expect(pageContent(readResp.json)).toContain('placement guard');
   });
  });
+
+ test.describe('when UpdatePageContent clears the prose around the artifact', () => {
+  test('a fence-only body with a CHANGED program is rejected', async ({ request }) => {
+   // First attach an artifact so the page is artifact-shaped.
+   const setResp = await callAPI(request, 'ArtifactService', 'SetArtifact', {
+    page: TEST_PAGE,
+    source: GOOD_PROGRAM,
+   });
+   expect(setResp.status).toBe(200);
+
+   // Candidate body: fence only, program text changed.
+   const changedProgram = counterProgram('Counter v2', '$n');
+   const fenceOnly = `\`\`\`wiki-artifact\n${changedProgram}\n\`\`\`\n`;
+   const resp = await callAPI(request, 'PageManagementService', 'UpdatePageContent', {
+    page: TEST_PAGE,
+    newContentMarkdown: fenceOnly,
+   });
+   expect(resp.status).toBeGreaterThanOrEqual(400);
+   expect(resp.status).toBeLessThan(500);
+   expect(resp.text).toContain('failed_precondition');
+
+   // Prose intact, program unchanged.
+   const readResp = await callAPI(request, 'PageManagementService', 'ReadPage', {
+    page: TEST_PAGE,
+   });
+   expect(pageContent(readResp.json)).toContain('placement guard');
+   const artifact = await getArtifact(request, TEST_PAGE);
+   expect(artifactSource(artifact.json)).toContain('root = Card("Counter"');
+  });
+
+  test('a prose-clearing body with an UNCHANGED program is rejected', async ({ request }) => {
+   const setResp = await callAPI(request, 'ArtifactService', 'SetArtifact', {
+    page: TEST_PAGE,
+    source: GOOD_PROGRAM,
+   });
+   expect(setResp.status).toBe(200);
+
+   // Candidate body: fence only, program text identical (unchanged-source
+   // path — previously guard-skipping).
+   const fenceOnly = `\`\`\`wiki-artifact\n${GOOD_PROGRAM}\n\`\`\`\n`;
+   const resp = await callAPI(request, 'PageManagementService', 'UpdatePageContent', {
+    page: TEST_PAGE,
+    newContentMarkdown: fenceOnly,
+   });
+   expect(resp.status).toBeGreaterThanOrEqual(400);
+   expect(resp.status).toBeLessThan(500);
+   expect(resp.text).toContain('failed_precondition');
+
+   const readResp = await callAPI(request, 'PageManagementService', 'ReadPage', {
+    page: TEST_PAGE,
+   });
+   expect(pageContent(readResp.json)).toContain('placement guard');
+  });
+ });
 });
 
 /** Read `contentMarkdown` from a ReadPage payload. */

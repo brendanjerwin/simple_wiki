@@ -339,7 +339,7 @@ export const WIKI_TOOLS: ToolDescriptor[] = [
  'api_v1_ArtifactService_GetArtifact',
  'api_v1_PageHistoryService_ListPageVersions',
  'api_v1_SearchService_SearchContent',
- 'api_v1_PageManagementService_GetPageOutline',
+ 'api_v1_PageManagementService_ReadPageOutline',
  'api_v1_Frontmatter_GetFrontmatter',
  'api_v1_MapService_ListMapElements',
  'api_v1_ChecklistService_ListItems',

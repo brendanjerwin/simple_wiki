@@ -21,7 +21,7 @@ describe('WIKI_TOOL_ALLOWLIST', () => {
    'api_v1_ArtifactService_GetArtifact',
    'api_v1_PageHistoryService_ListPageVersions',
    'api_v1_SearchService_SearchContent',
-   'api_v1_PageManagementService_GetPageOutline',
+   'api_v1_PageManagementService_ReadPageOutline',
    'api_v1_Frontmatter_GetFrontmatter',
    'api_v1_MapService_ListMapElements',
    'api_v1_ChecklistService_ListItems',
@@ -37,7 +37,7 @@ describe('WIKI_TOOL_ALLOWLIST', () => {
 
 describe('qualifyToolName', () => {
  it('should map short names to qualified ids', () => {
-  expect(qualifyToolName('GetPageOutline')).to.equal('api_v1_PageManagementService_GetPageOutline');
+  expect(qualifyToolName('ReadPageOutline')).to.equal('api_v1_PageManagementService_ReadPageOutline');
   expect(qualifyToolName('ListItems')).to.equal('api_v1_ChecklistService_ListItems');
  });
 
@@ -53,7 +53,7 @@ describe('isToolAllowed', () => {
    expect(isToolAllowed(name), name).to.equal(true);
   }
   expect(isToolAllowed('SearchContent')).to.equal(true);
-  expect(isToolAllowed('GetPageOutline')).to.equal(true);
+  expect(isToolAllowed('ReadPageOutline')).to.equal(true);
  });
 
  it('should block mutating wiki RPCs and unknown names', () => {
@@ -82,9 +82,9 @@ describe('createToolProvider', () => {
    return { echo: qualifiedId };
   });
 
-  const result = await provider.callTool('GetPageOutline', { page: 'home' });
-  expect(result).to.deep.equal({ echo: 'api_v1_PageManagementService_GetPageOutline' });
-  expect(forwarded).to.deep.equal([['api_v1_PageManagementService_GetPageOutline', { page: 'home' }]]);
+  const result = await provider.callTool('ReadPageOutline', { page: 'home' });
+  expect(result).to.deep.equal({ echo: 'api_v1_PageManagementService_ReadPageOutline' });
+  expect(forwarded).to.deep.equal([['api_v1_PageManagementService_ReadPageOutline', { page: 'home' }]]);
  });
 
  it('should reject blocked tools with lang-core ToolNotFoundError', async () => {

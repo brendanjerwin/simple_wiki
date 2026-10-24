@@ -124,6 +124,41 @@ test.describe.serial('Artifact page render', () => {
    expect(artifactText(artifact.json)).toContain('root = Card("Counter"');
   });
  });
+
+ test.describe('when the page carries a fence but no prose', () => {
+  test('SetArtifact with confirm renders the app alone', async ({ request, page }) => {
+   // The designed path for app-alone conversion: SetArtifact with
+   // confirm_replace_content=true (the edit path correctly REJECTS a
+   // prose-clear — no confirm field exists there; the probe is pinned in
+   // artifact_test.go).
+   const clearResp = await callAPI(request, 'ArtifactService', 'ClearArtifact', {
+    page: TEST_PAGE,
+   });
+   expect(clearResp.status).toBe(200);
+
+   const setResp = await callAPI(request, 'ArtifactService', 'SetArtifact', {
+    page: TEST_PAGE,
+    source: counterProgram('Lone Counter', '$n'),
+    confirm_replace_content: true,
+   });
+   expect(setResp.status).toBe(200);
+
+   // Body is fence-only now.
+   const readResp = await callAPI(request, 'PageManagementService', 'ReadPage', {
+    page: TEST_PAGE,
+   });
+   expect(readResp.status).toBe(200);
+   const content = (readResp.json as { contentMarkdown?: string } | null)?.contentMarkdown ?? '';
+   expect(content).toContain('```wiki-artifact');
+   expect(content).not.toContain('Intro prose');
+
+   await page.goto(`/${TEST_PAGE}/view`);
+   await expectHostRendering(page, 'Lone Counter');
+
+   // No prose paragraph remains: the app stands alone (Addendum 22).
+   await expect(page.getByText('This paragraph is plain markdown prose')).toHaveCount(0);
+  });
+ });
 });
 
 /** Read `source` from a GetArtifact response payload. */
