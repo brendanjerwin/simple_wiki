@@ -399,8 +399,9 @@ export class WikiPageAppHost extends LitElement {
    await this.applyLoadedProgram(response);
    this.renderTick += 1;
   } catch (err) {
-   if (err instanceof Error && err.message.includes('NotFound')) {
-    // Terminal: this page genuinely has no page app.
+   if (WikiPageAppHost.isTerminal(err)) {
+    // Terminal: this page genuinely has no page app (NotFound), or the
+    // request itself is invalid — retrying won't help either way.
     this.reconnecting = false;
     this.renderTick += 1;
     return;

@@ -8,6 +8,7 @@
 import { expect } from '@open-wc/testing';
 import { stub, type SinonStub } from 'sinon';
 import { create } from '@bufbuild/protobuf';
+import { ConnectError, Code } from '@connectrpc/connect';
 import {
  GetPageAppResponseSchema,
  GetPageAppStateResponseSchema,
@@ -426,5 +427,58 @@ describe('WikiPageAppHost suspension recovery', () => {
   HostClass.RETRY_BASE_MS = saved.BASE;
   HostClass.RETRY_MAX_ATTEMPTS = saved.MAX;
   HostClass.RETRY_MAX_MS = saved.CAP;
+ });
+});
+// Issue #1283 bug 1 regression: load() detected the terminal NotFound case
+// by matching the error *message* for the substring 'NotFound'. connect-web
+// formats Go codes.NotFound as '[not_found] …' (lowercase), so the branch
+// never matched: a page with no page app walked the whole retry ladder and
+// surfaced a bogus 'failed after N retries' error. Terminal detection must
+// use the shared isTerminal() helper (code-based), exactly like
+// hydrateState and watch.
+describe('WikiPageAppHost terminal NotFound on load', () => {
+ it('should not schedule a retry when GetPageApp rejects with NotFound', async () => {
+  const notFound = new ConnectError('no page app: stub-page', Code.NotFound);
+  const getArtifact = stub().rejects(notFound);
+  const el = document.createElement('wiki-page-app-host') as WikiPageAppHost;
+  el.page = 'stub-page';
+  const clients = el as unknown as Record<string, Record<string, unknown>>;
+  clients['pageAppClient'] = { getPageApp: getArtifact, clearPageApp: stub(), watchPageApp: stub() };
+  clients['stateClient'] = { getPageAppState: stub().resolves(stateResponse({}, 'state-hash-1')), mergePageAppState: stub() };
+  // Replace the retry ladder with a counting spy: no timers are armed, so
+  // the test needs no real-time waits — a buggy scheduleRetry call is
+  // synchronously observable through the async load() catch path.
+  let ladderRuns = 0;
+  (el as unknown as { scheduleRetry: () => void }).scheduleRetry = () => { ladderRuns += 1; };
+  document.body.appendChild(el);
+  // Double updateComplete: one settle for the initial render; the second
+  // pumps the async load() catch path so a buggy scheduleRetry call has
+  // already happened before the assertion.
+  await el.updateComplete;
+  await el.updateComplete;
+
+  expect(getArtifact.callCount).to.equal(1);
+  expect(ladderRuns).to.equal(0);
+  el.remove();
+ });
+
+ it('should still schedule a retry on a transient non-connect error', async () => {
+  // Control guarding the terminal branch against over-matching: plain
+  // Errors (not ConnectErrors) must still enter the retry ladder.
+  const getArtifact = stub().rejects(new Error('network connection lost'));
+  const el = document.createElement('wiki-page-app-host') as WikiPageAppHost;
+  el.page = 'stub-page';
+  const clients = el as unknown as Record<string, Record<string, unknown>>;
+  clients['pageAppClient'] = { getPageApp: getArtifact, clearPageApp: stub(), watchPageApp: stub() };
+  clients['stateClient'] = { getPageAppState: stub().resolves(stateResponse({}, 'h')), mergePageAppState: stub() };
+  let ladderRuns = 0;
+  (el as unknown as { scheduleRetry: () => void }).scheduleRetry = () => { ladderRuns += 1; };
+  document.body.appendChild(el);
+  await el.updateComplete;
+  await el.updateComplete;
+
+  expect(getArtifact.callCount).to.equal(1);
+  expect(ladderRuns).to.equal(1);
+  el.remove();
  });
 });
