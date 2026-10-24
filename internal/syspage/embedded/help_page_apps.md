@@ -208,7 +208,7 @@ refresh = Button("refresh", @Run(rows))
 root = Card("Todo", Stack([refresh, Table(["text"], rows.items)]))
 ```
 
-**Editing wiki data (write flows through the agent or `Mutation`)** — a program *can* write its own page app state via the allowlisted `PageAppStateService_*`, but note these two write paths:
+**Editing wiki data (write flows through the agent or `Mutation`)** — a program *can* write its own page app state via the allowlisted `PageAppStateService_*` — these calls always address the page the app is rendered on; a `page` argument in the tool call is ignored — but note these two write paths:
 
 - `@Set`/`@Reset` on `$variables` → host auto-flushes the state store silently (fast, no agent involved).
 - Anything touching **other pages or other data** is excluded on purpose. Use `@ToAssistant` to hand the request to the agent, which has confirmed/attributed mutation tools:
