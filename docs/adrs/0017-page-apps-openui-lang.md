@@ -6,7 +6,7 @@ Accepted (supersedes the v1 arbitrary-HTML design discussed for issue #1272; Lan
 
 ## Context
 
-The wiki hosts interactive views only via purpose-built macros (checklist, map, survey — each a reserved namespace plus a dedicated service). Arbitrary small apps have no authoring path. Issue #1272 asked for "artifact pages": pages whose default view renders an agent-authored app *composed above* the page's markdown content, with persistent state.
+The wiki hosts interactive views only via purpose-built macros (checklist, map, survey — each a reserved namespace plus a dedicated service). Arbitrary small apps have no authoring path. Issue #1272 asked for "page apps": pages whose default view renders an agent-authored app *composed above* the page's markdown content, with persistent state.
 
 Two candidate authoring languages were evaluated:
 
@@ -17,7 +17,7 @@ The decisive factors for Lang-primary: (a) **no arbitrary HTML executes anywhere
 
 ## Decision
 
-### The artifact model
+### The page app model
 
 A page whose markdown body carries a ` ```wiki-page-app ` fenced block holding the Lang program; `wiki.page_app` frontmatter stamps it:
 
@@ -43,9 +43,9 @@ updated_at / updated_by / automated   # identity-derived stamps, never client-wr
 
 The Go server has no JS runtime, so **the server never merges programs**. Iteration is agent-side: the agent reads the program (`GetPageApp`), composes the full updated program text, and submits it via `SetPageApp` with the base version hash; the server validates, stamps, and lets `WatchPageApp` fire — OCC aborts surface to the agent directly, refetch→re-apply→retry. (`mergeStatements` from vendored lang-core is available host-side as `mergeArtifactPatch` in `static/js/openui-lang/renderer.ts` for a future patch-delivery channel, but v1 has no UI that streams patches — there is no `MergeArtifactPatch` RPC.) There are no `CommitArtifact`/`GetPageAppLog` RPCs — ADR-0016 page snapshots (the fence lives in the body) are the *only* history; restore rides `PageHistoryService`.
 
-### The wiki component library (the teaching artifact)
+### The wiki component library (the teaching page app spec)
 
-`createLibrary`/`defineComponent`/`defineAction` over the wiki's own primitives, rendered as Lit components in the host: `Card`, `Stack`, `Text`, `Table`, `Chart`, `Input`, `Select`, `Button`, plus wiki-native renders (`Checklist`, `Map`, `Survey` as Lang components binding the existing custom elements — `<wiki-checklist>`, `<wiki-map>`, `<wiki-survey>`). Versioned `wiki-core@1` and pinned in `wiki.page_app.library`; the library spec + `generateSystemPrompt` output ship as `help_artifacts_lang` — the agent skill page.
+`createLibrary`/`defineComponent`/`defineAction` over the wiki's own primitives, rendered as Lit components in the host: `Card`, `Stack`, `Text`, `Table`, `Chart`, `Input`, `Select`, `Button`, plus wiki-native renders (`Checklist`, `Map`, `Survey` as Lang components binding the existing custom elements — `<wiki-checklist>`, `<wiki-map>`, `<wiki-survey>`). Versioned `wiki-core@1` and pinned in `wiki.page_app.library`; the library spec + `generateSystemPrompt` output ship as `help-page-apps` — the agent skill page.
 
 **Renderer path (spike result, recorded per criterion 14): Path A chosen** — the wiki binds its own Lit components via lang-core's framework-free parser + runtime (`createParser(library.toJSONSchema())`, `createStore`/`initialize` for `$variables`, `evaluateRoot`/`evaluateElementProps` for prop evaluation, `createQueryManager(toolProvider)` for Query/Mutation, `mergeStatements` for patches). No Angular bridge, no React, no iframe: the host element (`<wiki-page-app-host>`), the library (`static/js/openui-lang/library.ts`), and the renderer (`static/js/openui-lang/renderer.ts`) are all Lit/TS in the standard frontend bundle. Verified behaviors pinned in unit tests: positional args map by zod key order (`Card("t", [children])`), `$var` declarations hydrate from `GetPageAppState` (persisted wins; pristine keys restore declared defaults), unknown components drop with structured `meta.errors` (never fatal), `@ToAssistant`/`@Set`/`@Reset`/`@OpenUrl` surface as action events the host executes.
 
@@ -55,11 +55,11 @@ The composition model (above) reconciles Addendum 15 with Addendum 22: an unconf
 
 ### toolProvider is an allowlist
 
-The host's `toolProvider` bridge is a hard-coded, test-pinned allowlist (not derived from tool discovery): all of `PageAppStateService` (the artifact's own state, CAS'd), read-only discovery (`GetPageApp`, `ListPageVersions`, `SearchContent`, `GetPageOutline`, `GetFrontmatter`, `ListMapElements`, `ListItems`, `GetSurvey`). **Every** PageManagement/Checklist/Map/Survey/Connector mutation is excluded. A program calling a non-allowlisted tool gets `tool-not-found`; the parser renders the rest. A stored program can never touch another page's content or another user's data. Destructive intent routes through the chat door (`@ToAssistant`), where a human and full permissions already sit.
+The host's `toolProvider` bridge is a hard-coded, test-pinned allowlist (not derived from tool discovery): all of `PageAppStateService` (the page app's own state, CAS'd), read-only discovery (`GetPageApp`, `ListPageVersions`, `SearchContent`, `GetPageOutline`, `GetFrontmatter`, `ListMapElements`, `ListItems`, `GetSurvey`). **Every** PageManagement/Checklist/Map/Survey/Connector mutation is excluded. A program calling a non-allowlisted tool gets `tool-not-found`; the parser renders the rest. A stored program can never touch another page's content or another user's data. Destructive intent routes through the chat door (`@ToAssistant`), where a human and full permissions already sit.
 
 ### Validation funnel (conservative floor)
 
-The server has no Lang parser, so the Go validator (in `internal/grpc/api/v1/artifact.go`) is **structural only** — gross violations reject as `InvalidArgument`; partial-but-renderable programs accept, because the authoritative parse is browser-side lang-core and Lang's own runtime drops invalid statements gracefully. **Every write path flows through this funnel** — `SetPageApp` natively, and `/edit` → `UpdatePageContent`/`UpdateWholePage`/`CreatePage` via changed-fence detection at the write choke point — so no route can land an unvalidated (or un-stamped, or un-guarded) fence.
+The server has no Lang parser, so the Go validator (in `internal/grpc/api/v1/page_app.go`) is **structural only** — gross violations reject as `InvalidArgument`; partial-but-renderable programs accept, because the authoritative parse is browser-side lang-core and Lang's own runtime drops invalid statements gracefully. **Every write path flows through this funnel** — `SetPageApp` natively, and `/edit` → `UpdatePageContent`/`UpdateWholePage`/`CreatePage` via changed-fence detection at the write choke point — so no route can land an unvalidated (or un-stamped, or un-guarded) fence.
 
 ### Templating choke-point bypass
 
@@ -87,7 +87,7 @@ No iframes, no `/artifact/` asset route, no per-artifact directories, no CSP/nos
 ### Neutral
 
 - History/lifecycle/ACL come free from the page machinery (ADR-0016 snapshots; page ACL enforced on view; rename/trash/purge semantics unchanged).
-- The frontmatter editor dialog is disabled on artifact pages (its load path strips reserved subtrees; its save path races `SetPageApp`); humans edit the full body via the normal `/edit` markdown editor, which routes fence changes through the same funnel.
+- The frontmatter editor dialog is disabled on page app pages (its load path strips reserved subtrees; its save path races `SetPageApp`); humans edit the full body via the normal `/edit` markdown editor, which routes fence changes through the same funnel.
 
 ## References
 

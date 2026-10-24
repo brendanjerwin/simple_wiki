@@ -4,7 +4,7 @@
 
 Accepted
 
-> **Artifact pages (issue #1272, ADR-0017):** artifact programs live in a
+> **Page apps (issue #1272, ADR-0017):** page app programs live in a
 > ` ```wiki-page-app ` fence in the page body, so program and prose writes both
 > snapshot through this machinery — one history, no separate artifact history
 > RPCs. Note: the page OCC hash excludes the `wiki.page_app_state` subtree, but
