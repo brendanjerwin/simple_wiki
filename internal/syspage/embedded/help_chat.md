@@ -25,7 +25,7 @@ flight are never mislabeled.
 Only agents registered in the server's inventory appear in the list; each entry
 shows its availability (green dot = reachable, grey = not connected). The local
 agent appears when the pool daemon has registered itself with the server; remote
-agents (AG-UI endpoints, see [[help-agent-inventory]]) appear as configured by
+agents (AG-UI endpoints, see [[help_agent_inventory]]) appear as configured by
 the server operator, marked unavailable until their routing is brought online.
 You can bind an agent that is currently unavailable — the binding sticks, and
 routing starts when the agent becomes reachable.

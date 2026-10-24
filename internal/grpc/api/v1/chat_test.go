@@ -2975,6 +2975,62 @@ var _ = Describe("ChatService", func() {
 	})
 })
 
+// disconnectableInventory is a minimal fake AgentInventory (see
+// agent_inventory_test.go for the full one) that records PoolDisconnected
+// calls for the stream-exit hook.
+type disconnectableInventory struct {
+	disconnected bool
+}
+
+func (*disconnectableInventory) List() []*apiv1.AgentInfo         { return nil }
+func (*disconnectableInventory) FindByID(string) *apiv1.AgentInfo { return nil }
+func (*disconnectableInventory) DefaultAgentID() string           { return "local-acp" }
+func (*disconnectableInventory) RegisterPoolAgent(_ *apiv1.RegisterPoolAgentRequest) error {
+	return nil
+}
+
+func (d *disconnectableInventory) PoolDisconnected() { d.disconnected = true }
+
+var _ = Describe("SubscribeInstanceRequests inventory hook", func() {
+	When("the instance request stream ends", func() {
+		var (
+			inv     *disconnectableInventory
+			testSrv *v1.Server
+		)
+
+		BeforeEach(func() {
+			var err error
+			inv = &disconnectableInventory{}
+			testSrv, err = v1.NewServer(
+				v1.BuildInfo{Commit: "test-commit", BuildTime: time.Now()},
+				noOpPageReaderMutator{},
+				noOpBleveIndexQueryer{},
+				noOpFrontmatterIndexQueryer{},
+				lumber.NewConsoleLogger(lumber.WARN),
+				newMockChatBufferManager(),
+				noOpPageOpener{},
+			)
+			Expect(err).NotTo(HaveOccurred())
+			testSrv = testSrv.WithAgentInventory(inv)
+
+			streamServer := &mockInstanceRequestStreamServer{contextDone: true}
+			doneCh := make(chan struct{})
+			go func() {
+				defer close(doneCh)
+				_ = testSrv.SubscribeInstanceRequests(
+					&apiv1.SubscribeInstanceRequestsRequest{},
+					streamServer,
+				)
+			}()
+			Eventually(doneCh, "1s", "10ms").Should(BeClosed())
+		})
+
+		It("should mark pool agents unavailable in the inventory", func() {
+			Expect(inv.disconnected).To(BeTrue())
+		})
+	})
+})
+
 var _ = Describe("ToolCallPromotion", func() {
 	var (
 		promoter    *v1.ToolCallPromotion

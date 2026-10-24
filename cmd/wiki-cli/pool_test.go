@@ -5272,6 +5272,67 @@ var _ = Describe("resolvePageAgent", func() {
 	})
 })
 
+var _ = Describe("checkBindingDrift", func() {
+	Describe("when the desired agent still matches the attached agent", func() {
+		It("should report no drift", func() {
+			daemon := &poolDaemon{
+				inventoryClient: &fakeAgentInventoryClient{
+					pageAgentRes: &apiv1.GetPageAgentResponse{
+						Agent: &apiv1.AgentInfo{
+							Id:          defaultPoolAgentID,
+							DisplayName: "Assistant",
+							Protocol:    apiv1.AgentProtocol_ACP_LOCAL,
+						},
+					},
+				},
+				poolAgentID: defaultPoolAgentID,
+			}
+			entry := &instanceEntry{page: "test-page", agentID: defaultPoolAgentID}
+			Expect(daemon.checkBindingDrift(context.Background(), entry)).NotTo(HaveOccurred())
+		})
+	})
+
+	Describe("when the desired agent no longer matches (mid-session switch)", func() {
+		It("should report the drift", func() {
+			daemon := &poolDaemon{
+				inventoryClient: &fakeAgentInventoryClient{
+					pageAgentRes: &apiv1.GetPageAgentResponse{
+						Agent: &apiv1.AgentInfo{
+							Id:          "new-agent",
+							DisplayName: "New Agent",
+							Protocol:    apiv1.AgentProtocol_ACP_LOCAL,
+						},
+					},
+				},
+				poolAgentID: defaultPoolAgentID,
+			}
+			entry := &instanceEntry{page: "test-page", agentID: defaultPoolAgentID}
+			err := daemon.checkBindingDrift(context.Background(), entry)
+			Expect(err).To(MatchError(ContainSubstring("differs from attached")))
+			Expect(err).To(MatchError(ContainSubstring("new-agent")))
+		})
+	})
+
+	Describe("when the binding became unroutable (switch to AG_UI_REMOTE)", func() {
+		It("should report the drift as an error", func() {
+			daemon := &poolDaemon{
+				inventoryClient: &fakeAgentInventoryClient{
+					pageAgentRes: &apiv1.GetPageAgentResponse{
+						Agent: &apiv1.AgentInfo{
+							Id:          "remote-ui-agent",
+							DisplayName: "Remote",
+							Protocol:    apiv1.AgentProtocol_AG_UI_REMOTE,
+						},
+					},
+				},
+				poolAgentID: defaultPoolAgentID,
+			}
+			entry := &instanceEntry{page: "test-page", agentID: defaultPoolAgentID}
+			Expect(daemon.checkBindingDrift(context.Background(), entry)).To(HaveOccurred())
+		})
+	})
+})
+
 var _ = Describe("reportAttached and detach", func() {
 	Describe("when the pool attaches an agent", func() {
 		var attachment *fakeAgentAttachmentClient
