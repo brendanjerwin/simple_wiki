@@ -7,9 +7,9 @@
  * cards have a content-based max-width, and tables/charts scroll inside
  * the card instead of overflowing the page.
  *
- * These are injected into the light DOM via `<wiki-artifact-host>`'s
- * shared style (adoptedStyleSheets) so Lit templates in library.ts can
- * reference the classes without per-component style blocks.
+ * These rules are included in `<wiki-artifact-host>`'s `static styles`, so they
+ * apply inside the host's shadow root where the library's Lit templates
+ * render (via `.wiki-artifact-body`).
  */
 import { css } from 'lit';
 
@@ -102,6 +102,19 @@ export const wikiArtifactDesignSystem = css`
     box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-border-focus, #4a90d9) 33%, transparent);
   }
 
+  .wiki-artifact-field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+    max-width: 360px;
+  }
+  .wiki-artifact-field-label {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--color-text-muted, #999999);
+  }
+
   .wiki-artifact-table {
     width: 100%;
     border-collapse: collapse;
@@ -136,14 +149,14 @@ export const wikiArtifactDesignSystem = css`
     gap: 6px;
   }
   .wiki-artifact-chart-row {
-    display: flex;
+    display: grid;
+    grid-template-columns: minmax(72px, max-content) minmax(0, 1fr) minmax(32px, max-content);
     align-items: center;
     gap: 8px;
     font-size: 0.82rem;
     color: var(--color-text-secondary, #666666);
   }
   .wiki-artifact-chart-label {
-    min-width: 72px;
     overflow-wrap: anywhere;
   }
   .wiki-artifact-chart-bar {
@@ -152,9 +165,6 @@ export const wikiArtifactDesignSystem = css`
     background: var(--color-action-confirm, #007bff);
     min-width: 2px;
     transition: width 300ms ease;
-  }
-  .wiki-artifact-chart-value {
-    min-width: 32px;
   }
   .wiki-artifact-chart-slice {
     padding: 4px 10px;
