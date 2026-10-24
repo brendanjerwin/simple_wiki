@@ -18,8 +18,8 @@ export default {
   reporters: [summaryReporter()],
   browsers: [
     chromeLauncher({
-      executablePath: chromiumPath,
       launchOptions: {
+        executablePath: chromiumPath,
         args: ['--no-sandbox', '--disable-dev-shm-usage'],
       },
     }),

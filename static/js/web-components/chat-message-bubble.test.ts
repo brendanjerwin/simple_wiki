@@ -224,6 +224,78 @@ describe('ChatMessageBubble', () => {
     });
   });
 
+  describe('when an assistant message has agent-display-name', () => {
+    let el: ChatMessageBubble;
+
+    beforeEach(async () => {
+      el = await fixture(html`
+        <chat-message-bubble
+          message-id="msg-agent-1"
+          .sender=${Sender.ASSISTANT}
+          .senderName=${'TestPersona'}
+          agent-display-name="Helper Agent"
+          content="Here is your answer"
+        ></chat-message-bubble>
+      `);
+    });
+
+    it('should render the agent label', () => {
+      const label = el.shadowRoot!.querySelector('.agent-label');
+      expect(label).to.not.be.null;
+      expect(label!.textContent).to.include('via Helper Agent');
+    });
+  });
+
+  describe('when an assistant message has no agent-display-name (legacy)', () => {
+    let el: ChatMessageBubble;
+
+    beforeEach(async () => {
+      el = await fixture(html`
+        <chat-message-bubble
+          message-id="msg-agent-2"
+          .sender=${Sender.ASSISTANT}
+          content="Legacy answer"
+        ></chat-message-bubble>
+      `);
+    });
+
+    it('should not render the agent label', () => {
+      const label = el.shadowRoot!.querySelector('.agent-label');
+      expect(label).to.be.null;
+    });
+  });
+
+  describe('when the message is a system event', () => {
+    let el: ChatMessageBubble;
+
+    beforeEach(async () => {
+      el = await fixture(html`
+        <chat-message-bubble
+          message-id="agent-change-1"
+          .sender=${Sender.SENDER_UNSPECIFIED}
+          .systemEvent=${true}
+          content="Brendan switched the agent to Helper Agent"
+        ></chat-message-bubble>
+      `);
+    });
+
+    it('should render with the system-event class', () => {
+      const bubble = el.shadowRoot!.querySelector('.bubble');
+      expect(bubble!.classList.contains('system-event')).to.be.true;
+    });
+
+    it('should not render as user or assistant bubbles', () => {
+      const bubble = el.shadowRoot!.querySelector('.bubble');
+      expect(bubble!.classList.contains('user')).to.be.false;
+      expect(bubble!.classList.contains('assistant')).to.be.false;
+    });
+
+    it('should display the event text', () => {
+      const content = el.shadowRoot!.querySelector('.content');
+      expect(content!.textContent!.trim()).to.equal('Brendan switched the agent to Helper Agent');
+    });
+  });
+
   describe('tool call rendering', () => {
 
     describe('when toolCalls is empty', () => {

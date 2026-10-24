@@ -116,6 +116,10 @@ message GetPageAgentResponse {
   // True when the binding came from a persisted frontmatter value, false
   // when falling back to the default (or when the bound ID no longer exists).
   bool explicitly_set = 2;
+  // Server-stamped RFC3339 updated_at of the agent.chat_agent subtree as
+  // read. Returned so clients can pass it back as the OCC guard
+  // (expected_updated_at) on SetPageAgent.
+  string updated_at = 3;
 }
 
 // SetPageAgentRequest is the request for SetPageAgent.

@@ -14,6 +14,7 @@ import {
  Sender,
  type ChatMessage,
  type ChatEvent,
+ type ChatAgentChanged,
  type ChatPermissionRequest,
  type Reaction,
 } from '../gen/api/v1/chat_pb.js';
@@ -24,6 +25,7 @@ import { registerAmbientCTA, type AmbientCTA } from './drawer-coordinator.js';
 import type { ReactionGroup, ScrollToMessageEventDetail } from './chat-message-bubble.js';
 import './chat-message-bubble.js';
 import './agent-selector.js';
+import type { AgentSelector } from './agent-selector.js';
 
 const STORAGE_KEY = 'chat-panel-open';
 const MAX_INPUT_LENGTH = 2000;
@@ -71,6 +73,10 @@ export interface ChatMessageState {
  renderedHtml: string;
  backgroundTask?: BackgroundTaskState | null;
  senderName: string;
+ /** Display name of the agent that produced this message (assistant only). */
+ agentDisplayName: string;
+ /** True for synthetic system event rows (e.g. agent switches). */
+ systemEvent: boolean;
  replyToId: string;
  reactions: ReactionGroup[];
  edited: boolean;
@@ -463,6 +469,12 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
  declare agentStarting: boolean;
 
  @state()
+ declare effectiveAgentId: string;
+
+ @state()
+ declare effectiveAgentDisplayName: string;
+
+ @state()
  declare pendingPermission: PermissionRequestState | null;
 
  private pendingMessage: string | null = null;
@@ -492,6 +504,8 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
   this.agentConnected = false;
   this.poolConnected = false;
   this.agentStarting = false;
+  this.effectiveAgentId = '';
+  this.effectiveAgentDisplayName = '';
   this.pendingPermission = null;
   this.chatClient = createClient(ChatService, getGrpcWebTransport());
   this.markdownRenderer = new ChatMarkdownRenderer();
@@ -622,7 +636,11 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
 
       <div id="chat-panel" class="panel force-dark ${this.drawerOpen ? 'open' : ''}" ?inert=${!this.drawerOpen}>
         <div class="panel-header">
-          <agent-selector .page=${this.page}></agent-selector>
+          <agent-selector
+            .page=${this.page}
+            .effectiveAgentId=${this.effectiveAgentId}
+            .effectiveAgentDisplayName=${this.effectiveAgentDisplayName}
+          ></agent-selector>
           <div class="panel-actions">
             <button
               class="clear-button"
@@ -667,6 +685,8 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
                     message-id=${msg.id}
                     .sender=${msg.sender}
                     .senderName=${msg.senderName}
+                    .systemEvent=${msg.systemEvent}
+                    .agentDisplayName=${msg.agentDisplayName}
                     .content=${msg.content}
                     .renderedHtml=${msg.renderedHtml}
                     ?edited=${msg.edited}
@@ -924,6 +944,8 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
    this.agentConnected = response.connected;
    this.poolConnected = response.poolConnected;
    this.agentStarting = response.starting;
+   this.effectiveAgentId = response.effectiveAgentId;
+   this.effectiveAgentDisplayName = response.effectiveAgentDisplayName;
 
    // Adjust poll rate based on state
    this.adjustPollRate();
@@ -961,6 +983,8 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
    this.agentConnected = false;
    this.poolConnected = false;
    this.agentStarting = false;
+   this.effectiveAgentId = '';
+   this.effectiveAgentDisplayName = '';
   }
  }
 
@@ -1139,7 +1163,44 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
    case 'chatCleared':
     this.clearVisibleChat();
     break;
+   case 'agentChanged':
+    this.handleAgentChanged(event.event.value);
+    break;
   }
+ }
+
+ private handleAgentChanged(changed: ChatAgentChanged): void {
+  const text = changed.switchedBy
+   ? `${changed.switchedBy} switched the agent to ${changed.agentDisplayName || changed.agentId}`
+   : `Agent switched to ${changed.agentDisplayName || changed.agentId}`;
+  this.messages = [
+   ...this.messages,
+   {
+    id: `agent-change-${crypto.randomUUID()}`,
+    sender: Sender.SENDER_UNSPECIFIED,
+    content: text,
+    renderedHtml: '',
+    timestamp: new Date(),
+    senderName: '',
+    agentDisplayName: '',
+    systemEvent: true,
+    replyToId: '',
+    reactions: [],
+    edited: false,
+    sequence: BigInt(this.messages.length),
+    toolCalls: [],
+    plan: [],
+   },
+  ];
+  // Track the new effective agent immediately (the poll will confirm later).
+  this.effectiveAgentId = changed.agentId;
+  this.effectiveAgentDisplayName = changed.agentDisplayName;
+  this.refreshAgentSelector();
+ }
+
+ private refreshAgentSelector(): void {
+  const selector = this.shadowRoot?.querySelector<AgentSelector>('agent-selector');
+  selector?.refresh();
  }
 
  private clearVisibleChat(): void {
@@ -1173,6 +1234,8 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
    renderedHtml,
    timestamp,
    senderName,
+   agentDisplayName: msg.agentDisplayName,
+   systemEvent: false,
    replyToId: msg.replyToId,
    backgroundTask: null,
    reactions: groupReactions(msg.reactions),

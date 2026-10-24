@@ -3,7 +3,8 @@ import { stub, spy, useFakeTimers, type SinonStub, type SinonSpy, type SinonFake
 import { ConnectError, Code } from '@connectrpc/connect';
 import { PageChatPanel } from './page-chat-panel.js';
 import type { ChatMessageState } from './page-chat-panel.js';
-import { Sender } from '../gen/api/v1/chat_pb.js';
+import { Sender, ChatAgentChangedSchema } from '../gen/api/v1/chat_pb.js';
+import { create } from '@bufbuild/protobuf';
 import { resetForTesting } from './drawer-coordinator.js';
 
 // Stub localStorage before tests
@@ -179,6 +180,8 @@ describe('PageChatPanel', () => {
         renderedHtml: '',
         timestamp: new Date(),
         senderName: 'User',
+        agentDisplayName: '',
+        systemEvent: false,
         replyToId: '',
         reactions: [],
         edited: false,
@@ -625,6 +628,8 @@ describe('PageChatPanel', () => {
         renderedHtml: '',
         timestamp: new Date(),
         senderName: 'User',
+        agentDisplayName: '',
+        systemEvent: false,
         replyToId: '',
         reactions: [{ emoji: '👍', reactors: ['alice'], count: 1 }],
         edited: false,
@@ -811,6 +816,8 @@ describe('PageChatPanel', () => {
         renderedHtml: '',
         timestamp: new Date(),
         senderName: 'User',
+        agentDisplayName: '',
+        systemEvent: false,
         replyToId: '',
         reactions: [],
         edited: false,
@@ -1224,6 +1231,8 @@ describe('PageChatPanel', () => {
         renderedHtml: '',
         timestamp: new Date(),
         senderName: 'TestPersona',
+        agentDisplayName: '',
+        systemEvent: false,
         replyToId: '',
         reactions: [],
         edited: false,
@@ -1439,6 +1448,8 @@ describe('PageChatPanel', () => {
         renderedHtml: '',
         timestamp: new Date(),
         senderName: 'TestPersona',
+        agentDisplayName: '',
+        systemEvent: false,
         replyToId: '',
         reactions: [],
         edited: false,
@@ -1476,6 +1487,8 @@ describe('PageChatPanel', () => {
         renderedHtml: '',
         timestamp: new Date(),
         senderName: 'TestPersona',
+        agentDisplayName: '',
+        systemEvent: false,
         replyToId: '',
         reactions: [],
         edited: false,
@@ -2123,6 +2136,8 @@ describe('PageChatPanel stream methods', () => {
           renderedHtml: '',
           timestamp: new Date(),
           senderName: 'User',
+          agentDisplayName: '',
+          systemEvent: false,
           replyToId: '',
           reactions: [],
           edited: false,
@@ -2163,6 +2178,8 @@ describe('PageChatPanel stream methods', () => {
           renderedHtml: '',
           timestamp: new Date(),
           senderName: 'User',
+          agentDisplayName: '',
+          systemEvent: false,
           replyToId: '',
           reactions: [],
           edited: false,
@@ -2236,6 +2253,8 @@ describe('PageChatPanel stream methods', () => {
           renderedHtml: '',
           timestamp: new Date(),
           senderName: 'User',
+          agentDisplayName: '',
+          systemEvent: false,
           replyToId: '',
           reactions: [],
           edited: false,
@@ -2292,6 +2311,8 @@ describe('PageChatPanel stream methods', () => {
           renderedHtml: '',
           timestamp: new Date(),
           senderName: 'TestPersona',
+          agentDisplayName: '',
+          systemEvent: false,
           replyToId: '',
           reactions: [],
           edited: false,
@@ -2347,6 +2368,8 @@ describe('PageChatPanel stream methods', () => {
           renderedHtml: '',
           timestamp: new Date(),
           senderName: 'TestPersona',
+          agentDisplayName: '',
+          systemEvent: false,
           replyToId: '',
           reactions: [],
           edited: false,
@@ -2406,6 +2429,64 @@ describe('PageChatPanel stream methods', () => {
           threw = true;
         }
         expect(threw).to.equal(false);
+      });
+    });
+
+    describe('when event is agentChanged with a switcher', () => {
+      beforeEach(async () => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- calling private method for testing
+        await (el as any).handleChatEvent({
+          event: {
+            case: 'agentChanged',
+            value: create(ChatAgentChangedSchema, {
+              page: 'test-page',
+              agentId: 'helper-agent',
+              agentDisplayName: 'Helper Agent',
+              switchedBy: 'Brendan',
+            }),
+          },
+        });
+        await el.updateComplete;
+      });
+
+      it('should append a system event message', () => {
+        expect(el.messages).to.have.length(1);
+      });
+
+      it('should include switcher and agent display name in the message', () => {
+        expect(el.messages[0]!.content).to.equal('Brendan switched the agent to Helper Agent');
+      });
+
+      it('should mark the message as a system event', () => {
+        expect(el.messages[0]!.systemEvent).to.be.true;
+      });
+
+      it('should record the effective agent from the event', () => {
+        expect(el.effectiveAgentId).to.equal('helper-agent');
+        expect(el.effectiveAgentDisplayName).to.equal('Helper Agent');
+      });
+    });
+
+    describe('when event is agentChanged without a switcher', () => {
+      beforeEach(async () => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- calling private method for testing
+        await (el as any).handleChatEvent({
+          event: {
+            case: 'agentChanged',
+            value: create(ChatAgentChangedSchema, {
+              page: 'test-page',
+              agentId: 'helper-agent',
+              agentDisplayName: 'Helper Agent',
+              switchedBy: '',
+            }),
+          },
+        });
+        await el.updateComplete;
+      });
+
+      it('should append a system event message without switcher attribution', () => {
+        expect(el.messages).to.have.length(1);
+        expect(el.messages[0]!.content).to.equal('Agent switched to Helper Agent');
       });
     });
   });
@@ -2626,7 +2707,11 @@ describe('PageChatPanel pollChatStatus and sendMessage', () => {
       beforeEach(async () => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any -- replacing private chatClient for testing
         (el as any).chatClient = {
-          getChatStatus: stub().resolves({ connected: true }),
+          getChatStatus: stub().resolves({
+            connected: true,
+            effectiveAgentId: 'helper-agent',
+            effectiveAgentDisplayName: 'Helper Agent',
+          }),
         };
         // eslint-disable-next-line @typescript-eslint/no-explicit-any -- calling private method for testing
         await (el as any).pollChatStatus();
@@ -2635,6 +2720,14 @@ describe('PageChatPanel pollChatStatus and sendMessage', () => {
 
       it('should set agentConnected to true', () => {
         expect(el.agentConnected).to.equal(true);
+      });
+
+      it('should store the effective agent id', () => {
+        expect(el.effectiveAgentId).to.equal('helper-agent');
+      });
+
+      it('should store the effective agent display name', () => {
+        expect(el.effectiveAgentDisplayName).to.equal('Helper Agent');
       });
     });
 

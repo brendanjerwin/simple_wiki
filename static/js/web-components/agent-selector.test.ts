@@ -1,6 +1,7 @@
 import { html, fixture, expect, waitUntil } from '@open-wc/testing';
 import sinon from 'sinon';
 import { create } from '@bufbuild/protobuf';
+import { ConnectError, Code } from '@connectrpc/connect';
 import { AgentSelector } from './agent-selector.js';
 import {
   AgentInfoSchema,
@@ -139,6 +140,315 @@ describe('AgentSelector', () => {
     it('should show an available dot for an available agent', () => {
       const dot = el.shadowRoot?.querySelector('.current-agent .availability-dot');
       expect(dot?.classList.contains('available')).to.be.true;
+    });
+  });
+
+  describe('when effective agent matches the desired agent', () => {
+    let fakeClient: FakeInventoryClient;
+
+    beforeEach(async () => {
+      el = await Promise.race([
+        fixture<AgentSelector>(html`<agent-selector></agent-selector>`),
+        timeout(5000, 'Component fixture timed out'),
+      ]);
+
+      fakeClient = buildFakeClient();
+      fakeClient.listAgents.resolves(
+        create(ListAgentsResponseSchema, { agents: [makeAgent()] })
+      );
+      fakeClient.getPageAgent.resolves(
+        create(GetPageAgentResponseSchema, { agent: makeAgent(), explicitlySet: true })
+      );
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- injecting fake client for tests
+      el.client = fakeClient as unknown as AgentSelector['client'];
+
+      el.page = 'test-page';
+      el.effectiveAgentId = 'local-acp';
+      await waitUntil(() => !el['_loading'], 'still loading', { timeout: 1000 });
+      await el.updateComplete;
+    });
+
+    it('should not show the switching hint', () => {
+      const hint = el.shadowRoot?.querySelector('.switching-hint');
+      expect(hint).to.be.null;
+    });
+  });
+
+  describe('when effective agent diverges from the desired agent', () => {
+    let fakeClient: FakeInventoryClient;
+
+    beforeEach(async () => {
+      el = await Promise.race([
+        fixture<AgentSelector>(html`<agent-selector></agent-selector>`),
+        timeout(5000, 'Component fixture timed out'),
+      ]);
+
+      fakeClient = buildFakeClient();
+      fakeClient.listAgents.resolves(
+        create(ListAgentsResponseSchema, { agents: [makeAgent()] })
+      );
+      fakeClient.getPageAgent.resolves(
+        create(GetPageAgentResponseSchema, { agent: makeAgent(), explicitlySet: true })
+      );
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- injecting fake client for tests
+      el.client = fakeClient as unknown as AgentSelector['client'];
+
+      el.page = 'test-page';
+      el.effectiveAgentId = 'other-agent';
+      el.effectiveAgentDisplayName = 'Other Agent';
+      await waitUntil(() => !el['_loading'], 'still loading', { timeout: 1000 });
+      await el.updateComplete;
+    });
+
+    it('should show the switching hint', () => {
+      const hint = el.shadowRoot?.querySelector('.switching-hint');
+      expect(hint).to.not.be.null;
+      expect(hint?.textContent).to.include('switching…');
+    });
+
+    it('should clear the hint when the effective agent catches up', async () => {
+      el.effectiveAgentId = 'local-acp';
+      await el.updateComplete;
+
+      const hint = el.shadowRoot?.querySelector('.switching-hint');
+      expect(hint).to.be.null;
+    });
+  });
+
+  describe('when effective agent is empty', () => {
+    let fakeClient: FakeInventoryClient;
+
+    beforeEach(async () => {
+      el = await Promise.race([
+        fixture<AgentSelector>(html`<agent-selector></agent-selector>`),
+        timeout(5000, 'Component fixture timed out'),
+      ]);
+
+      fakeClient = buildFakeClient();
+      fakeClient.listAgents.resolves(
+        create(ListAgentsResponseSchema, { agents: [makeAgent()] })
+      );
+      fakeClient.getPageAgent.resolves(
+        create(GetPageAgentResponseSchema, { agent: makeAgent(), explicitlySet: false })
+      );
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- injecting fake client for tests
+      el.client = fakeClient as unknown as AgentSelector['client'];
+
+      el.page = 'test-page';
+      el.effectiveAgentId = '';
+      await waitUntil(() => !el['_loading'], 'still loading', { timeout: 1000 });
+      await el.updateComplete;
+    });
+
+    it('should not show the switching hint', () => {
+      const hint = el.shadowRoot?.querySelector('.switching-hint');
+      expect(hint).to.be.null;
+    });
+  });
+
+  describe('when the desired agent is unavailable', () => {
+    let fakeClient: FakeInventoryClient;
+
+    beforeEach(async () => {
+      el = await Promise.race([
+        fixture<AgentSelector>(html`<agent-selector></agent-selector>`),
+        timeout(5000, 'Component fixture timed out'),
+      ]);
+
+      fakeClient = buildFakeClient();
+      fakeClient.listAgents.resolves(
+        create(ListAgentsResponseSchema, {
+          agents: [makeAgent({ available: false, displayName: 'Offline Agent' })],
+        })
+      );
+      fakeClient.getPageAgent.resolves(
+        create(GetPageAgentResponseSchema, {
+          agent: makeAgent({ available: false, displayName: 'Offline Agent' }),
+          explicitlySet: true,
+        })
+      );
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- injecting fake client for tests
+      el.client = fakeClient as unknown as AgentSelector['client'];
+
+      el.page = 'test-page';
+      await waitUntil(() => !el['_loading'], 'still loading', { timeout: 1000 });
+      await el.updateComplete;
+    });
+
+    it('should show the unavailable hint under the trigger', () => {
+      const hint = el.shadowRoot?.querySelector('.desired-unavailable-hint');
+      expect(hint).to.not.be.null;
+      expect(hint?.textContent).to.include('bound agent unavailable');
+    });
+  });
+
+  describe('when the desired agent is available', () => {
+    let fakeClient: FakeInventoryClient;
+
+    beforeEach(async () => {
+      el = await Promise.race([
+        fixture<AgentSelector>(html`<agent-selector></agent-selector>`),
+        timeout(5000, 'Component fixture timed out'),
+      ]);
+
+      fakeClient = buildFakeClient();
+      fakeClient.listAgents.resolves(
+        create(ListAgentsResponseSchema, { agents: [makeAgent()] })
+      );
+      fakeClient.getPageAgent.resolves(
+        create(GetPageAgentResponseSchema, { agent: makeAgent() })
+      );
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- injecting fake client for tests
+      el.client = fakeClient as unknown as AgentSelector['client'];
+
+      el.page = 'test-page';
+      await waitUntil(() => !el['_loading'], 'still loading', { timeout: 1000 });
+      await el.updateComplete;
+    });
+
+    it('should not show the unavailable hint', () => {
+      const hint = el.shadowRoot?.querySelector('.desired-unavailable-hint');
+      expect(hint).to.be.null;
+    });
+
+    describe('when refresh() is called', () => {
+      let listAgentsCallCount: number;
+
+      beforeEach(async () => {
+        listAgentsCallCount = fakeClient.listAgents.callCount;
+        el.refresh();
+        await waitUntil(
+          () => fakeClient.listAgents.callCount > listAgentsCallCount,
+          'listAgents not re-called',
+          { timeout: 1000 },
+        );
+      });
+
+      it('should refetch the agent inventory', () => {
+        expect(fakeClient.listAgents.callCount).to.equal(listAgentsCallCount + 1);
+      });
+
+      it('should refetch the page binding', () => {
+        expect(fakeClient.getPageAgent.callCount).to.equal(listAgentsCallCount + 1);
+      });
+    });
+  });
+
+  describe('when setPageAgent fails with FailedPrecondition', () => {
+    let fakeClient: FakeInventoryClient;
+    const conflict = new ConnectError('binding was updated concurrently', Code.FailedPrecondition);
+
+    beforeEach(async () => {
+      el = await Promise.race([
+        fixture<AgentSelector>(html`<agent-selector></agent-selector>`),
+        timeout(5000, 'Component fixture timed out'),
+      ]);
+
+      fakeClient = buildFakeClient();
+      fakeClient.listAgents.resolves(
+        create(ListAgentsResponseSchema, {
+          agents: [
+            makeAgent(),
+            makeAgent({ id: 'agent-2', displayName: 'Second Agent', available: false }),
+          ],
+        })
+      );
+      fakeClient.getPageAgent
+        .resolves(
+          create(GetPageAgentResponseSchema, {
+            agent: makeAgent(),
+            explicitlySet: true,
+            updatedAt: '2026-10-01T00:00:00Z',
+          }),
+        )
+        .onSecondCall()
+        .resolves(
+          create(GetPageAgentResponseSchema, {
+            agent: makeAgent(),
+            explicitlySet: true,
+            updatedAt: '2026-10-03T00:00:00Z',
+          }),
+        );
+      fakeClient.setPageAgent.rejects(conflict);
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- injecting fake client for tests
+      el.client = fakeClient as unknown as AgentSelector['client'];
+
+      el.page = 'test-page';
+      await waitUntil(() => !el['_loading'], 'still loading', { timeout: 1000 });
+      await el.updateComplete;
+
+      // open dropdown and click the (different) second agent
+      const btn = el.shadowRoot?.querySelector<HTMLButtonElement>('.current-agent');
+      btn?.click();
+      await el.updateComplete;
+
+      const options = el.shadowRoot?.querySelectorAll<HTMLButtonElement>('.agent-option');
+      options?.[1]?.click();
+      await waitUntil(() => fakeClient.setPageAgent.called, 'setPageAgent not called', { timeout: 1000 });
+      await waitUntil(() => !!el['_error'], 'error not set', { timeout: 2000 });
+      await el.updateComplete;
+    });
+
+    it('should refuse to overwrite and surface the conflict error', () => {
+      // The last client state is the refetched binding, not the selected agent.
+      expect(el['_currentAgentId']).to.equal('local-acp');
+      expect(el['_error']?.message).to.include('binding changed');
+      expect(el['_currentAgentUpdatedAt']).to.equal('2026-10-03T00:00:00Z');
+    });
+  });
+
+  describe('when setPageAgent succeeds with OCC and updatedAt', () => {
+    let fakeClient: FakeInventoryClient;
+
+    beforeEach(async () => {
+      el = await Promise.race([
+        fixture<AgentSelector>(html`<agent-selector></agent-selector>`),
+        timeout(5000, 'Component fixture timed out'),
+      ]);
+
+      fakeClient = buildFakeClient();
+      fakeClient.listAgents.resolves(
+        create(ListAgentsResponseSchema, {
+          agents: [makeAgent(), makeAgent({ id: 'agent-2', displayName: 'Second Agent' })],
+        })
+      );
+      fakeClient.getPageAgent.resolves(
+        create(GetPageAgentResponseSchema, {
+          agent: makeAgent(),
+          explicitlySet: true,
+          updatedAt: '2026-10-01T00:00:00Z',
+        })
+      );
+      fakeClient.setPageAgent.resolves(
+        create(SetPageAgentResponseSchema, {
+          agent: makeAgent({ id: 'agent-2', displayName: 'Second Agent' }),
+          updatedAt: '2026-10-02T00:00:00Z',
+        }),
+      );
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- injecting fake client for tests
+      el.client = fakeClient as unknown as AgentSelector['client'];
+
+      el.page = 'test-page';
+      await waitUntil(() => !el['_loading'], 'still loading', { timeout: 1000 });
+      await el.updateComplete;
+
+      const btn = el.shadowRoot?.querySelector<HTMLButtonElement>('.current-agent');
+      btn?.click();
+      await el.updateComplete;
+
+      const options = el.shadowRoot?.querySelectorAll<HTMLButtonElement>('.agent-option');
+      options?.[1]?.click();
+      await waitUntil(() => fakeClient.setPageAgent.called, 'setPageAgent not called', { timeout: 1000 });
+      await el.updateComplete;
+    });
+
+    it('should send the expectedUpdatedAt OCC guard', () => {
+      const callArgs = fakeClient.setPageAgent.getCall(0).args[0];
+      expect(callArgs.expectedUpdatedAt).to.equal('2026-10-01T00:00:00Z');
+    });
+
+    it('should record the new updatedAt', () => {
+      expect(el['_currentAgentUpdatedAt']).to.equal('2026-10-02T00:00:00Z');
     });
   });
 
