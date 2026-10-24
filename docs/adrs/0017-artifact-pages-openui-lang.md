@@ -45,7 +45,9 @@ The Go server has no JS runtime, so **`mergeStatements` never runs server-side**
 
 ### The wiki component library (the teaching artifact)
 
-`createLibrary`/`defineComponent`/`defineAction` over the wiki's own primitives, rendered as Lit components in the host: `Card`, `Stack`, `Text`, `Table`, `Chart`, `Input`, `Select`, `Button`, plus wiki-native renders (`Checklist`, `Map`, `Survey` as Lang components binding the existing custom elements). Versioned `wiki-core@1` and pinned in `wiki.artifact.library`; the library spec + `generateSystemPrompt` output ship as `help_artifacts_lang` — the agent skill page.
+`createLibrary`/`defineComponent`/`defineAction` over the wiki's own primitives, rendered as Lit components in the host: `Card`, `Stack`, `Text`, `Table`, `Chart`, `Input`, `Select`, `Button`, plus wiki-native renders (`Checklist`, `Map`, `Survey` as Lang components binding the existing custom elements — `<wiki-checklist>`, `<wiki-map>`, `<wiki-survey>`). Versioned `wiki-core@1` and pinned in `wiki.artifact.library`; the library spec + `generateSystemPrompt` output ship as `help_artifacts_lang` — the agent skill page.
+
+**Renderer path (spike result, recorded per criterion 14): Path A chosen** — the wiki binds its own Lit components via lang-core's framework-free parser + runtime (`createParser(library.toJSONSchema())`, `createStore`/`initialize` for `$variables`, `evaluateRoot`/`evaluateElementProps` for prop evaluation, `createQueryManager(toolProvider)` for Query/Mutation, `mergeStatements` for patches). No Angular bridge, no React, no iframe: the host element (`<wiki-artifact-host>`), the library (`static/js/openui-lang/library.ts`), and the renderer (`static/js/openui-lang/renderer.ts`) are all Lit/TS in the standard frontend bundle. Verified behaviors pinned in unit tests: positional args map by zod key order (`Card("t", [children])`), `$var` declarations hydrate from `GetArtifactState` (persisted wins; pristine keys restore declared defaults), unknown components drop with structured `meta.errors` (never fatal), `@ToAssistant`/`@Set`/`@Reset`/`@OpenUrl` surface as action events the host executes.
 
 ### toolProvider is an allowlist
 
