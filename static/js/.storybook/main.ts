@@ -2,7 +2,8 @@ import type { StorybookConfig } from '@storybook/web-components-vite';
 
 const config: StorybookConfig = {
   "stories": [
-    "../web-components/**/*.stories.@(js|jsx|mjs|ts|tsx)"
+    "../web-components/**/*.stories.@(js|jsx|mjs|ts|tsx)",
+    "../openui-lang/**/*.stories.@(js|jsx|mjs|ts|tsx)"
   ],
   "addons": ["@storybook/addon-docs"],
   "framework": {

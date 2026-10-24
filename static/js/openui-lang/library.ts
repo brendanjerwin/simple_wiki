@@ -7,7 +7,8 @@
  * elements; interactive components dispatch `wiki-page-app-action`
  * CustomEvents that the page app host executes (state sets, chat, URLs).
  */
-import { html, nothing, type TemplateResult } from 'lit';
+import { css, html, LitElement, nothing, type TemplateResult } from 'lit';
+import { property } from 'lit/decorators.js';
 import { z } from 'zod/v4';
 import {
  action,
@@ -19,6 +20,9 @@ import {
  type ToolDescriptor,
 } from '@openuidev/lang-core';
 import { asPlan, type PlanLike } from './narrow.js';
+
+/** The id type of `window.setInterval` handles (`number` in the browser; node typings widen it). */
+type IntervalId = ReturnType<typeof window.setInterval>;
 
 /**
  * The wiki library version stamped on page app programs.
@@ -58,6 +62,217 @@ export function dispatchArtifactAction(source: Event, detail: PageAppActionEvent
   );
  }
 }
+
+/** Format a remaining seconds count as `m:ss` (`h:mm:ss` past an hour). */
+export function formatRemaining(secondsLeft: number): string {
+ const total = Math.max(0, Math.floor(secondsLeft));
+ const hours = Math.floor(total / 3600);
+ const minutes = Math.floor((total % 3600) / 60);
+ const seconds = total % 60;
+ const two = (n: number): string => (n < 10 ? `0${n}` : String(n));
+ return hours > 0
+  ? `${hours}:${two(minutes)}:${two(seconds)}`
+  : `${minutes}:${two(seconds)}`;
+}
+
+/**
+ * `wiki-page-app-countdown` — the ticking element behind the `Countdown`
+ * component. Owns one countdown run: ticks once per second, renders the
+ * remaining time, and when it reaches zero fires `onComplete` (if provided)
+ * as a `wiki-page-app-action` CustomEvent, executed by `wiki-page-app-host`
+ * just like a Button action. A new `seconds` value restarts the run;
+ * re-renders with the same `seconds` do not.
+ */
+export class WikiPageAppCountdown extends LitElement {
+ static override readonly styles = css`
+   :host {
+     display: flex;
+     flex-direction: column;
+     gap: 2px;
+     align-items: flex-start;
+   }
+   .wiki-page-app-countdown-label {
+     font-size: 0.8rem;
+     font-weight: 600;
+     color: var(--color-text-muted, #999999);
+   }
+   .wiki-page-app-countdown-readout {
+     font-size: 2rem;
+     font-weight: 650;
+     font-variant-numeric: tabular-nums;
+     line-height: 1.2;
+     color: var(--color-text-primary, #333333);
+     letter-spacing: 0.02em;
+   }
+   .wiki-page-app-countdown-readout[data-finished='true'] {
+     color: var(--color-action-confirm, #007bff);
+   }
+   /* Announces completion to screen readers only (role=status); hidden visually. */
+   .wiki-page-app-countdown-done {
+     position: absolute;
+     width: 1px;
+     height: 1px;
+     margin: -1px;
+     padding: 0;
+     overflow: hidden;
+     clip: rect(0 0 0 0);
+     white-space: nowrap;
+     border: 0;
+   }
+ `;
+
+ /** Duration in seconds; a change refills the remaining time without starting. */
+ @property({ type: Number })
+ declare seconds: number;
+
+ /** Optional label shown above the ticking readout. */
+ @property({ type: String })
+ declare label: string;
+
+ /**
+  * Reactive run gate: false→true starts (or restarts after finish),
+  * true→false pauses. Default false — page load must not start timers.
+  */
+ @property({ type: Boolean })
+ declare running: boolean;
+
+ /** Evaluated action plan to dispatch when the countdown hits zero. */
+ @property({ attribute: false })
+ declare onComplete: unknown;
+
+ @property({ type: Number, state: true })
+ declare remainingSeconds: number;
+
+ @property({ type: Boolean, state: true })
+ declare finished: boolean;
+
+ /** Recurring tick handle (`number` in the browser; `undefined` = not ticking). */
+ private tickIntervalId: IntervalId | undefined = undefined;
+ /** Wall-clock deadline (ms epoch) the current run ends at; drives drift-free ticks. */
+ private endsAtMs = 0;
+
+ constructor() {
+  super();
+  this.seconds = 0;
+  this.label = '';
+  this.running = false;
+  this.onComplete = undefined;
+  this.remainingSeconds = 0;
+  this.finished = false;
+ }
+
+ static get is(): string {
+  return 'wiki-page-app-countdown';
+ }
+
+ protected override willUpdate(changed: Map<string, unknown>): void {
+  if (changed.has('seconds') && typeof this.seconds === 'number' && Number.isFinite(this.seconds)) {
+   this.refill(this.seconds);
+  }
+  if (changed.has('running')) {
+   if (this.running) {
+    this.beginRun();
+   } else {
+    this.pauseRun();
+   }
+  }
+ }
+
+ override disconnectedCallback(): void {
+  this.stopTicking();
+  super.disconnectedCallback();
+ }
+
+ /** Put the full duration back on the clock; only begins ticking when running. */
+ private refill(seconds: number): void {
+  this.stopTicking();
+  this.remainingSeconds = Math.floor(seconds);
+  this.finished = false;
+  if (this.running && seconds > 0) {
+   this.startTicking();
+  }
+ }
+
+ /**
+  * running flipped on: a finished run restarts from full duration, a
+  * paused run resumes where it froze.
+  */
+ private beginRun(): void {
+  if (this.finished) {
+   this.finished = false;
+   this.remainingSeconds = Math.floor(this.seconds);
+  }
+  if (this.seconds <= 0 || this.remainingSeconds <= 0) {
+   return;
+  }
+  this.startTicking();
+ }
+
+ /** running flipped off: freeze the clock where it stands. */
+ private pauseRun(): void {
+  this.stopTicking();
+ }
+
+ /**
+  * Tick against a wall-clock deadline instead of decrementing a counter:
+  * browsers throttle setInterval in background tabs, so counted-down
+  * seconds silently stall. A deadline self-corrects on every fire and the
+  * readout jumps to the true remaining time after throttling.
+  */
+ private startTicking(): void {
+  this.stopTicking();
+  this.endsAtMs = Date.now() + this.remainingSeconds * 1000;
+  this.tickIntervalId = setInterval(() => this.tick(), 250);
+ }
+
+ private stopTicking(): void {
+  if (this.tickIntervalId !== undefined) {
+   clearInterval(this.tickIntervalId);
+   this.tickIntervalId = undefined;
+  }
+ }
+
+ private tick(): void {
+  const secondsLeft = Math.ceil((this.endsAtMs - Date.now()) / 1000);
+  this.remainingSeconds = Math.max(0, secondsLeft);
+  if (secondsLeft > 0) return;
+  this.stopTicking();
+  this.finished = true;
+  this.dispatchComplete();
+ }
+
+ private completePlan(): PlanLike | undefined {
+  return asPlan(this.onComplete);
+ }
+
+ private dispatchComplete(): void {
+  const plan = this.completePlan();
+  if (plan === undefined) return;
+  this.dispatchEvent(
+   new CustomEvent<PageAppActionEventDetail>(PAGE_APP_ACTION_EVENT, {
+    detail: { plan },
+    bubbles: true,
+    composed: true,
+   }),
+  );
+ }
+
+ protected override render(): TemplateResult {
+  const readout = formatRemaining(this.remainingSeconds);
+  return html`${typeof this.label === 'string' && this.label !== ''
+   ? html`<span class="wiki-page-app-countdown-label">${this.label}</span>`
+   : nothing}<span
+      class="wiki-page-app-countdown-readout"
+      data-finished=${this.finished ? 'true' : 'false'}
+      role="timer"
+      >${readout}</span
+    >${this.finished
+    ? html`<span class="wiki-page-app-countdown-done" role="status">${typeof this.label === 'string' && this.label !== '' ? `${this.label} complete` : 'Countdown complete'}</span>`
+    : nothing}`;
+ }
+}
+
+customElements.define(WikiPageAppCountdown.is, WikiPageAppCountdown);
 
 /**
  * Build the wiki library. Slot unions need every component's `.ref`, and
@@ -208,6 +423,35 @@ function buildLibrary(): Library {
   }) as WikiRenderer,
  });
 
+ /**
+  * Countdown ticks down `seconds` and renders the remaining time; when it
+  * hits zero it fires `onComplete` (e.g. @Set($step, $step + 1)). `seconds`
+  * is reactive so a persisted/reassigned duration restarts the run.
+  */
+ const CountdownSchema = z.object({
+  seconds: z.number(),
+  label: z.string().optional(),
+  onComplete: action().optional(),
+  // Keep last so the natural positional forms Countdown(30),
+  // Countdown(30, "label"), Countdown(30, "label", @action) bind correctly;
+  // $binding flows by name in authored programs.
+  running: z.boolean().optional(),
+ });
+ markReactive(CountdownSchema.shape.seconds);
+ markReactive(CountdownSchema.shape.running);
+ const Countdown = defineComponent({
+  name: 'Countdown',
+  props: CountdownSchema,
+  description:
+   'A live countdown from `seconds` down to 0, rendered as m:ss (h:mm:ss past an hour). It is IDLE until `running` is true — bind a $variable and start with @Set($running, true), e.g. Button("start", @Set($running, true)). running=false pauses; a fresh running=true after a finish restarts from full duration. When it reaches zero onComplete runs — pair the tally with @Set($running, false) there (Action([@Set($holds, $holds + 1), @Set($running, false)])) so the next start is a real false→true edge. The clock keeps ticking across seconds changes while running.',
+  component: (({ seconds, label, running, onComplete }) => html`<wiki-page-app-countdown
+        .seconds=${typeof seconds === 'number' ? seconds : 0}
+        .label=${typeof label === 'string' ? label : ''}
+        .running=${running === true}
+        .onComplete=${onComplete}
+      ></wiki-page-app-countdown>`) as WikiRenderer,
+ });
+
  const Checklist = defineComponent({
   name: 'Checklist',
   props: z.object({
@@ -303,6 +547,7 @@ function buildLibrary(): Library {
   Checklist.ref,
   MapComponent.ref,
   Survey.ref,
+  Countdown.ref,
  ]);
 
  return createLibrary({
@@ -318,6 +563,7 @@ function buildLibrary(): Library {
    Checklist,
    MapComponent,
    Survey,
+   Countdown,
   ],
   root: WIKI_ROOT_COMPONENT,
   id: WIKI_LIBRARY_VERSION,

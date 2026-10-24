@@ -17,6 +17,7 @@ import {
  wikiLibrary,
  WIKI_ROOT_COMPONENT,
 } from './library.js';
+import type { WikiPageAppCountdown } from './library.js';
 import type { ToolProvider } from '@openuidev/lang-core';
 
 describe('generateWikiPageAppRenderer', () => {
@@ -117,6 +118,45 @@ describe('renderer component output', () => {
   const rendered = runtime.render('root = Card("T", [s])\ns = Survey("poll", "my-page")', {});
   const el = await fixture<HTMLElement>(rendered.template as never);
   expect(el.querySelector('wiki-survey[name="poll"]')).to.exist;
+ });
+
+ it('should render Countdown programs into the ticking element with the full duration', async () => {
+  const rendered = runtime.render('root = Card("T", [c])\nc = Countdown(90, "rest")', {});
+  const el = await fixture<HTMLElement>(rendered.template as never);
+  const cd = el.querySelector('wiki-page-app-countdown') as WikiPageAppCountdown;
+  expect(cd).to.exist;
+  expect(cd.label).to.equal('rest');
+  const readout = cd.shadowRoot?.querySelector('.wiki-page-app-countdown-readout');
+  expect(readout?.textContent).to.equal('1:30');
+ });
+
+ it('should render Countdown without a label when none is given', async () => {
+  const rendered = runtime.render('root = Card("T", [c])\nc = Countdown(45)', {});
+  const el = await fixture<HTMLElement>(rendered.template as never);
+  const cd = el.querySelector('wiki-page-app-countdown');
+  expect(cd).to.exist;
+  expect(cd?.hasAttribute('label')).to.be.false;
+ });
+
+ it('should hydrate a reactive $running binding as the run gate', async () => {
+  const rendered = runtime.render(
+   'root = Card("T", [c])\nc = Countdown(45, "hold", undefined, $running)\n$running = true',
+   {},
+  );
+  const el = await fixture<HTMLElement>(rendered.template as never);
+  const cd = el.querySelector('wiki-page-app-countdown') as WikiPageAppCountdown;
+  expect(cd).to.exist;
+  expect(cd.running).to.be.true;
+ });
+
+ it('should render an idle (not running) countdown at full duration by default', async () => {
+  const rendered = runtime.render('root = Card("T", [c])\nc = Countdown(60)', {});
+  const el = await fixture<HTMLElement>(rendered.template as never);
+  const cd = el.querySelector('wiki-page-app-countdown') as WikiPageAppCountdown;
+  expect(cd).to.exist;
+  expect(cd.running).to.be.false;
+  const readout = cd.shadowRoot?.querySelector('.wiki-page-app-countdown-readout');
+  expect(readout?.textContent).to.equal('1:00');
  });
 
  it('should render Input and Select programs into form controls', async () => {

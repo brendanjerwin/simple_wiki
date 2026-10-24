@@ -21,6 +21,35 @@ Use `PageAppService` and `PageAppStateService` for authoring and state. Both are
 - **Unknown components and invalid statements are dropped, never fatal** — the rest renders. Errors come back structured (`{code, component, statementId, message}`) so you can self-correct.
 - **Missing a component?** If an app needs a component that isn't in `wiki-core@1` (no `Slider`, `Tabs`, `Progress`, etc.), do **not** fake it with nested `Stack` hacks or drop the feature silently. Build the best program you can **without** the component, tell the user which component is missing and what app it blocked, and **open a feature-request issue on the SimpleWiki GitHub project** (`github.com/brendanjerwin/simple_wiki/issues`) naming the component and the real app it would enable — components get built based on demand from actual apps, so a concrete request with a real use case is the fastest path to getting it.
 
+## Time-based apps: `Countdown`
+
+`Countdown(seconds, label?, onComplete?, running?)` renders a live countdown that ticks down once per second and shows the remaining time as `m:ss` (`h:mm:ss` past an hour). It is **idle until `running` is true** — page load never starts a timer by itself. `running=false` pauses where the clock stands; a fresh `running=true` after a finish restarts from the full duration. When it reaches zero, `onComplete` runs (any action) and the clock stops.
+
+**The run gate is program-owned.** Bind `running` to a `$variable`, start it with `@Set`, and **pair the stop with the tally inside `onComplete`** — `Action([@Set($holds, $holds + 1), @Set($running, false)])`. That false→true↔true→false cycle is what makes the next start a *real edge* the timer can see; a program that leaves `$running = true` forever cannot restart its timer. For chained/looping timers (Pomodoro phases), `@Set` the next timer's `seconds` (and `running` edges) from `onComplete`. Countdowns are **not persisted timing** — reloading a page mid-count starts the clock over at full duration, which is the expected behavior for hold/interval timing.
+
+**Stretch-timer hold** — a timer per leg, each armed by its own start button:
+
+```
+$leftRunning = false
+$rightRunning = false
+$holds = 0
+root = Card("Hamstring routine", Stack([
+  Text("holds completed: " + $holds),
+  Button("start left-leg hold", @Set($leftRunning, true)),
+  Countdown(30, "left leg hold", Action([
+    @Set($holds, $holds + 1),
+    @Set($leftRunning, false),
+  ]), $leftRunning),
+  Button("start right-leg hold", @Set($rightRunning, true)),
+  Countdown(30, "right leg hold", Action([
+    @Set($holds, $holds + 1),
+    @Set($rightRunning, false),
+  ]), $rightRunning),
+]))
+```
+
+Each timer's fourth positional argument binds its `$running` gate. Completing a hold tallies and sets the gate false, so the next `@Set(..., true)` is a genuine false→true edge and the timer restarts from 30 — press the next button when you're actually ready for that hold.
+
 ## For Agents
 
 ### Quick start (the whole authoring flow in one block)
