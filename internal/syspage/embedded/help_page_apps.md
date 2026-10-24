@@ -19,6 +19,7 @@ Use `PageAppService` and `PageAppStateService` for authoring and state. Both are
 - **Children are an array argument**: `Stack([Text("hello"), Button("press")])`.
 - **Reactive state is a `$name` declaration**: `$completed = 0`. References interpolate by **string concatenation** — `"sessions: " + $completed` (there is no `{expr}` string interpolation).
 - **Unknown components and invalid statements are dropped, never fatal** — the rest renders. Errors come back structured (`{code, component, statementId, message}`) so you can self-correct.
+- **Missing a component?** If an app needs a component that isn't in `wiki-core@1` (no `Slider`, `Tabs`, `Progress`, etc.), do **not** fake it with nested `Stack` hacks or drop the feature silently. Build the best program you can **without** the component, tell the user which component is missing and what app it blocked, and **open a feature-request issue on the SimpleWiki GitHub project** (`github.com/brendanjerwin/simple_wiki/issues`) naming the component and the real app it would enable — components get built based on demand from actual apps, so a concrete request with a real use case is the fastest path to getting it.
 
 ## For Agents
 
