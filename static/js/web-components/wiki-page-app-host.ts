@@ -534,12 +534,18 @@ export class WikiPageAppHost extends LitElement {
    switch (qualifiedToolId) {
     case 'api_v1_PageAppService_GetPageApp':
      return this.pageAppClient.getPageApp(create(GetPageAppRequestSchema, { page }));
+
+    // INVARIANT: page app state is own-page-only. A Lang program must not
+    // address another page's state, so all three PageAppStateService RPCs
+    // pin `page` to this host's page and ignore args.page entirely.
     case 'api_v1_PageAppStateService_GetPageAppState':
-     return this.stateClient.getPageAppState(create(GetPageAppStateRequestSchema, { page }));
+     return this.stateClient.getPageAppState(
+      create(GetPageAppStateRequestSchema, { page: this.page }),
+     );
     case 'api_v1_PageAppStateService_MergePageAppState':
      return this.stateClient.mergePageAppState(
       create(MergePageAppStateRequestSchema, {
-       page,
+       page: this.page,
        state: (() => {
         const raw = args['state'];
         return raw != null && typeof raw === 'object' && !Array.isArray(raw)
@@ -553,7 +559,7 @@ export class WikiPageAppHost extends LitElement {
     case 'api_v1_PageAppStateService_DeletePageAppState':
      return this.stateClient.deletePageAppState(
       create(DeletePageAppStateRequestSchema, {
-       page,
+       page: this.page,
        stateExpectedVersionHash: argString(args, 'stateExpectedVersionHash'),
       }),
      );

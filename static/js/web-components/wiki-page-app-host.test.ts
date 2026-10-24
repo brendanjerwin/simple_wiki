@@ -482,3 +482,66 @@ describe('WikiPageAppHost terminal NotFound on load', () => {
   el.remove();
  });
 });
+
+// Issue #1283 bug 2 regression: toolProvider() resolved `page` from the
+// program-supplied args (argPage(args, this.page)) for EVERY allowed RPC,
+// including the three PageAppStateService methods. A Lang program could
+// declare Mutation("MergePageAppState", { page: "other-page", … }) and
+// read/merge/delete ANOTHER page's app state. Page app state is
+// own-page-only: the host must pin all three state RPCs to its own page
+// and ignore args.page entirely.
+describe('WikiPageAppHost toolProvider state page pinning', () => {
+ // toolProvider() is private on the host; the test seam is an unchecked
+ // cast to a named local shape (same pattern as the client swaps in
+ // stubbedHost above).
+ type ToolProviderHost = { toolProvider(): { callTool(t: string, a: Record<string, unknown>): Promise<unknown> } };
+ type StateClient = Record<string, SinonStub>;
+
+ function hostWithStateClient(stateClient: StateClient, page = 'my-page'): { provider: ToolProviderHost; el: WikiPageAppHost } {
+  const el = document.createElement('wiki-page-app-host') as WikiPageAppHost;
+  el.page = page;
+  const clients = el as unknown as Record<string, Record<string, unknown>>;
+  clients['pageAppClient'] = { getPageApp: stub(), clearPageApp: stub(), watchPageApp: stub() };
+  clients['stateClient'] = stateClient;
+  // No connection needed: toolProvider() is a plain method over the
+  // swapped-in client stubs.
+  return { provider: el as unknown as ToolProviderHost, el };
+ }
+
+ let stateClient: StateClient;
+
+ beforeEach(() => {
+  stateClient = {
+   getPageAppState: stub().resolves(stateResponse({}, 'hash-a')),
+   mergePageAppState: stub().resolves(create(MergePageAppStateResponseSchema, { state: {} as never, stateVersionHash: 'hash-b' })),
+  };
+ });
+
+ it('pins GetPageAppState to the host page even when args name another page', async () => {
+  const { provider, el } = hostWithStateClient(stateClient);
+  const { callTool } = provider.toolProvider();
+  await callTool('GetPageAppState', { page: 'other-page' });
+  expect(stateClient['getPageAppState']?.callCount).to.equal(1);
+  expect((stateClient['getPageAppState']?.firstCall.args[0] as { page: string } | undefined)?.page).to.equal('my-page');
+  el.remove();
+ });
+
+ it('pins MergePageAppState to the host page even when args name another page', async () => {
+  const { provider, el } = hostWithStateClient(stateClient);
+  const { callTool } = provider.toolProvider();
+  await callTool('MergePageAppState', { page: 'other-page', state: { counter: 1 } });
+  expect(stateClient['mergePageAppState']?.callCount).to.equal(1);
+  expect((stateClient['mergePageAppState']?.firstCall.args[0] as { page: string } | undefined)?.page).to.equal('my-page');
+  el.remove();
+ });
+
+ it('pins DeletePageAppState to the host page even when args name another page', async () => {
+  stateClient['deletePageAppState'] = stub().resolves({});
+  const { provider, el } = hostWithStateClient(stateClient);
+  const { callTool } = provider.toolProvider();
+  await callTool('DeletePageAppState', { page: 'other-page', stateExpectedVersionHash: 'h' });
+  expect(stateClient['deletePageAppState']?.callCount).to.equal(1);
+  expect((stateClient['deletePageAppState']?.firstCall.args[0] as { page: string } | undefined)?.page).to.equal('my-page');
+  el.remove();
+ });
+});
