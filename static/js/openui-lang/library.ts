@@ -259,16 +259,21 @@ export class WikiPageAppCountdown extends LitElement {
 
  protected override render(): TemplateResult {
   const readout = formatRemaining(this.remainingSeconds);
-  return html`${typeof this.label === 'string' && this.label !== ''
+  const hasLabel = typeof this.label === 'string' && this.label !== '';
+  const labelPart = hasLabel
    ? html`<span class="wiki-page-app-countdown-label">${this.label}</span>`
-   : nothing}<span
+   : nothing;
+  const doneText = hasLabel ? `${this.label} complete` : 'Countdown complete';
+  const donePart = this.finished
+   ? html`<span class="wiki-page-app-countdown-done" role="status">${doneText}</span>`
+   : nothing;
+  const readoutPart = html`<span
       class="wiki-page-app-countdown-readout"
       data-finished=${this.finished ? 'true' : 'false'}
       role="timer"
       >${readout}</span
-    >${this.finished
-    ? html`<span class="wiki-page-app-countdown-done" role="status">${typeof this.label === 'string' && this.label !== '' ? `${this.label} complete` : 'Countdown complete'}</span>`
-    : nothing}`;
+    >`;
+  return html`${labelPart}${readoutPart}${donePart}`;
  }
 }
 
@@ -301,10 +306,15 @@ function buildLibrary(): Library {
   component: (({ columns, rows }) => {
    const headers = Array.isArray(columns) ? columns.filter((h): h is string => typeof h === 'string') : [];
    const body = Array.isArray(rows) ? rows.filter((r0): r0 is unknown[] => Array.isArray(r0)) : [];
+   const headerCells = headers.map((h) => html`<th>${h}</th>`);
+   const bodyRows = body.map((row) => {
+    const rowCells = row.map((cell) => html`<td>${cell}</td>`);
+    return html`<tr>${rowCells}</tr>`;
+   });
    return html`<div class="wiki-page-app-table-wrap">
         <table class="wiki-page-app-table">
-          <thead><tr>${headers.map((h) => html`<th>${h}</th>`)}</tr></thead>
-          <tbody>${body.map((row) => html`<tr>${row.map((cell) => html`<td>${cell}</td>`)}</tr>`)}</tbody>
+          <thead><tr>${headerCells}</tr></thead>
+          <tbody>${bodyRows}</tbody>
         </table>
       </div>`;
   }) as WikiRenderer,

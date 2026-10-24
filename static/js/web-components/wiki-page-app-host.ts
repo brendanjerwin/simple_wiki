@@ -66,6 +66,7 @@ import {
  PAGE_APP_ACTION_EVENT,
  type PageAppActionEventDetail,
 } from '../openui-lang/library.js';
+import type { PlanStep } from '../openui-lang/narrow.js';
 import {
  generateWikiPageAppRenderer,
  type WikiPageAppRuntime,
@@ -186,16 +187,16 @@ export class WikiPageAppHost extends LitElement {
  @state()
  declare private hydrated: boolean;
 
- private pageAppClient: Client<typeof PageAppService>;
- private stateClient: Client<typeof PageAppStateService>;
- private chatClient: Client<typeof ChatService>;
- private historyClient: Client<typeof PageHistoryService>;
- private searchClient: Client<typeof SearchService>;
- private pageManagementClient: Client<typeof PageManagementService>;
- private frontmatterClient: Client<typeof FrontmatterService>;
- private mapClient: Client<typeof MapService>;
- private checklistClient: Client<typeof ChecklistService>;
- private surveyClient: Client<typeof SurveyService>;
+ private readonly pageAppClient: Client<typeof PageAppService>;
+ private readonly stateClient: Client<typeof PageAppStateService>;
+ private readonly chatClient: Client<typeof ChatService>;
+ private readonly historyClient: Client<typeof PageHistoryService>;
+ private readonly searchClient: Client<typeof SearchService>;
+ private readonly pageManagementClient: Client<typeof PageManagementService>;
+ private readonly frontmatterClient: Client<typeof FrontmatterService>;
+ private readonly mapClient: Client<typeof MapService>;
+ private readonly checklistClient: Client<typeof ChecklistService>;
+ private readonly surveyClient: Client<typeof SurveyService>;
 
  private stopWatch: (() => void) | null = null;
  private unsubs: (() => void)[] = [];
@@ -207,8 +208,8 @@ export class WikiPageAppHost extends LitElement {
  @state()
  declare private reconnecting: boolean;
  /** Window/document wake triggers, bound once and removed on disconnect. */
- private wakeOnline = (): void => { this.recoverIfDegraded(); };
- private wakeVisible = (): void => {
+ private readonly wakeOnline = (): void => { this.recoverIfDegraded(); };
+ private readonly wakeVisible = (): void => {
   if (document.visibilityState === 'visible') this.recoverIfDegraded();
  };
 
@@ -307,9 +308,9 @@ export class WikiPageAppHost extends LitElement {
   return false;
  }
 
- private static RETRY_MAX_ATTEMPTS = 6;
- private static RETRY_BASE_MS = 1000;
- private static RETRY_MAX_MS = 30_000;
+ private static readonly RETRY_MAX_ATTEMPTS = 6;
+ private static readonly RETRY_BASE_MS = 1000;
+ private static readonly RETRY_MAX_MS = 30_000;
 
  /**
   * Compute the next backoff delay: exponential base with full jitter
@@ -379,6 +380,12 @@ export class WikiPageAppHost extends LitElement {
   }, delay);
  }
 
+ /**
+  * One recovery attempt of the full ladder: GetPageApp → hydrate →
+  * rewatch. Resets the ladder (retryAttempt, reconnecting, loadError) only
+  * on a fully recovered GetPageApp + hydrate + rewatch — consecutive
+  * hydrate failures still escalate to the cap.
+  */
  private async load(): Promise<void> {
   if (!this.page) {
    this.loadError = new Error('wiki-page-app-host requires a page attribute');
@@ -389,44 +396,7 @@ export class WikiPageAppHost extends LitElement {
    const response = await this.pageAppClient.getPageApp(
     create(GetPageAppRequestSchema, { page: this.page }),
    );
-   if (response.source === '') {
-    // Full success path (no page app): clear the ladder only here.
-    this.retryAttempt = 0;
-    this.reconnecting = false;
-    this.loadError = null;
-    this.pageApp = null;
-    this.programSource = '';
-   } else {
-    this.pageApp = response;
-    this.programSource = response.source;
-    this.hydrated = true;
-    await this.hydrateState();
-    if (this.loadError != null) {
-     // hydrateState hit a transient failure it couldn't retry inline —
-     // it has already scheduled the retry ladder. The ladder reset
-     // happens on the retry's success, NOT here, so consecutive hydrate
-     // failures still escalate to the cap.
-     return;
-    }
-    // Fully recovered (GetPageApp + hydrate + rewatch): only now reset
-    // the ladder. Stale unsubs from the pre-suspension runtime are torn
-    // down before re-subscribing (they'd double-fire notifications).
-    this.retryAttempt = 0;
-    this.reconnecting = false;
-    this.loadError = null;
-    this.subscribeWatch();
-    // Query results ($queries) resolve asynchronously; without these
-    // subscriptions the rendered table never repaints after its RPC
-    // completes. Store subscription covers @Set/@Reset repaints too.
-    const runtime = this.runtime;
-    if (runtime != null) {
-     for (const unsub of this.unsubs) unsub();
-     this.unsubs = [
-      runtime.queryManager.subscribe(() => { this.renderTick += 1; }),
-      runtime.store.subscribe(() => { this.renderTick += 1; }),
-     ];
-    }
-   }
+   await this.applyLoadedProgram(response);
    this.renderTick += 1;
   } catch (err) {
    if (err instanceof Error && err.message.includes('NotFound')) {
@@ -438,6 +408,48 @@ export class WikiPageAppHost extends LitElement {
    if (!this.isConnected) return;
    this.scheduleRetry('load', err);
   }
+ }
+
+ private async applyLoadedProgram(response: GetPageAppResponse): Promise<void> {
+  if (response.source === '') {
+   // Full success path (no page app): clear the ladder only here.
+   this.retryAttempt = 0;
+   this.reconnecting = false;
+   this.loadError = null;
+   this.pageApp = null;
+   this.programSource = '';
+  } else {
+   this.pageApp = response;
+   this.programSource = response.source;
+   this.hydrated = true;
+   await this.hydrateState();
+   if (this.loadError != null) {
+    // hydrateState hit a transient failure it couldn't retry inline —
+    // it has already scheduled the retry ladder. The ladder reset
+    // happens on the retry's success, NOT here, so consecutive hydrate
+    // failures still escalate to the cap.
+    return;
+   }
+   // Fully recovered (GetPageApp + hydrate + rewatch): only now reset
+   // the ladder. Stale unsubs from the pre-suspension runtime are torn
+   // down before re-subscribing (they'd double-fire notifications).
+   this.retryAttempt = 0;
+   this.reconnecting = false;
+   this.loadError = null;
+   this.subscribeWatch();
+   // Query results ($queries) resolve asynchronously; without these
+   // subscriptions the rendered table never repaints after its RPC
+   // completes. Store subscription covers @Set/@Reset repaints too.
+   const runtime = this.runtime;
+   if (runtime != null) {
+    for (const unsub of this.unsubs) unsub();
+    this.unsubs = [
+     runtime.queryManager.subscribe(() => { this.renderTick += 1; }),
+     runtime.store.subscribe(() => { this.renderTick += 1; }),
+    ];
+   }
+  }
+  this.renderTick += 1;
  }
 
  private async hydrateState(): Promise<void> {
@@ -478,7 +490,6 @@ export class WikiPageAppHost extends LitElement {
    try {
     const request = create(WatchPageAppRequestSchema, { page: this.page });
     for await (const evt of this.pageAppClient.watchPageApp(request, { signal })) {
-     watchError = null;
      this.handleWatchEvent(evt.kind, evt.source);
     }
    } catch (err) {
@@ -532,7 +543,7 @@ export class WikiPageAppHost extends LitElement {
         const raw = args['state'];
         return raw != null && typeof raw === 'object' && !Array.isArray(raw)
          ? // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- jsonValueToPlain guarantees an object result for object input
-           jsonValueToPlain(raw, new Set()) as JsonObject
+         jsonValueToPlain(raw, new Set()) as JsonObject
          : {};
        })(),
        stateExpectedVersionHash: argString(args, 'stateExpectedVersionHash'),
@@ -666,59 +677,80 @@ export class WikiPageAppHost extends LitElement {
     }
     globalThis.open(parsed.toString(), '_blank', 'noopener');
    },
-   rerun: (statementIds?: string[]) => {
-    void statementIds;
+   rerun: () => {
     this.renderTick += 1;
    },
   };
  }
 
+ /** Restore one reset target to its DECLARED default and re-mark it
+  * pristine, so the next render's initialize() restores the default
+  * instead of the pre-reset persisted value. */
+ private applyResetStep(step: PlanStep): void {
+  const runtime = this.runtime;
+  if (runtime == null || this.lastDeclarations == null) return;
+  const declarations = this.lastDeclarations as Record<string, unknown>;
+  for (const target of step.targets ?? []) {
+   if (target in declarations) {
+    runtime.store.set(target, declarations[target], { pristine: true });
+   }
+  }
+ }
+
+ /** Apply one @Set step: form controls dispatch actions with the current
+  * control value (`detail.value`); lang-core's onChange steps reference it
+  * as `$value` — e.g. Button/Input with @Set($var, $value). */
+ private applySetStep(step: PlanStep, inputValue: unknown): void {
+  const runtime = this.runtime;
+  if (runtime == null) return;
+  const value = runtime.evaluateStepValue(step.valueAST, { $value: inputValue });
+  if ((value === undefined || value === null) || step.target == null) return;
+  runtime.store.set(step.target, value);
+ }
+
+ private runToAssistantStep(step: PlanStep): void {
+  if (step.message != null) this.actionContext().toAssistant(step.message);
+ }
+
+ private runOpenUrlStep(step: PlanStep): void {
+  if (step.url != null) this.actionContext().openUrl(step.url);
+ }
+
+ private runRefetchStep(step: PlanStep): void {
+  const runtime = this.runtime;
+  if (runtime != null && step.statementId != null) runtime.refetch([step.statementId]);
+ }
+
+ /** Execute one action-plan step against the live runtime. Store
+  * mutations go through apply*Step; side-effect steps route through
+  * actionContext instead. */
+ private executePlanStep(step: PlanStep, inputValue: unknown): void {
+  const mutators: Record<string, (step: PlanStep, value: unknown) => void> = {
+   set: (st, value) => this.applySetStep(st, value),
+   reset: (st) => this.applyResetStep(st),
+  };
+  const sideEffects: Record<string, (step: PlanStep) => void> = {
+   continue_conversation: (st) => this.runToAssistantStep(st),
+   open_url: (st) => this.runOpenUrlStep(st),
+   run: (st) => this.runRefetchStep(st),
+  };
+  // Unknown step types (incl. custom_action) are inert by design.
+  const mutator = mutators[step.type];
+  if (mutator != null) mutator(step, inputValue);
+  sideEffects[step.type]?.(step);
+ }
+
  private handlePageAppAction(event: CustomEvent<PageAppActionEventDetail>): void {
   const plan = event.detail.plan;
   if (this.runtime == null) return;
-  const store = this.runtime.store;
   for (const step of plan?.steps ?? []) {
-   switch (step.type) {
-    case 'set': {
-     // Form controls dispatch actions with the current control value
-     // (`detail.value`); lang-core's onChange steps reference it as
-     // `$value` — e.g. Button/Input with @Set($var, $value).
-     const value = this.runtime.evaluateStepValue(step.valueAST, {
-      $value: event.detail.value,
-     });
-     if (value !== undefined && value !== null) {
-      if (step.target != null) store.set(step.target, value);
-     }
-     break;
-    }
-    case 'reset': {
-     // Restore each target to its DECLARED default and re-mark it
-     // pristine, so the next render's initialize() restores the default
-     // instead of the pre-reset persisted value.
-     if (this.lastDeclarations == null) break;
-     for (const target of step.targets ?? []) {
-      if (target in this.lastDeclarations) {
-       store.set(target, (this.lastDeclarations as Record<string, unknown>)[target], { pristine: true });
-      }
-     }
-     break;
-    }
-    case 'continue_conversation':
-     if (step.message != null) this.actionContext().toAssistant(step.message);
-     break;
-    case 'open_url':
-     if (step.url != null) this.actionContext().openUrl(step.url);
-     break;
-    case 'run':
-     if (step.statementId != null) this.runtime.refetch([step.statementId]);
-     break;
-    case 'custom_action':
-     break;
-    default:
-     break;
-   }
+   this.executePlanStep(step, event.detail.value);
   }
-  this.actionContext().setState(store.getSnapshot());
+  // Flush once per event (not per step): the plan may batch several @Set
+  // steps and each merge is a separate CAS'd RPC. Every action event
+  // flushes — matching the pre-refactor behavior — even when no step
+  // mutated the store.
+  this.actionContext().setState(this.runtime.store.getSnapshot());
  }
 
  private async removeApp(): Promise<void> {
