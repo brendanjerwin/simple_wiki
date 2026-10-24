@@ -310,7 +310,7 @@ func main() {
 		}
 
 		// Graceful shutdown with timeout
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), gracefulShutdownTimeout)
 		defer cancel()
 
 		// Shutdown redirect server first if it exists
@@ -348,6 +348,9 @@ const (
 	defaultMaxDocumentLength          = 100000000
 	defaultAgentScheduleConcurrency   = 2
 	defaultAgentScheduleQueueCapacity = 256
+
+	// gracefulShutdownTimeout bounds the HTTP server's drains on shutdown.
+	gracefulShutdownTimeout = 30 * time.Second
 )
 
 func getFlags() []cli.Flag {

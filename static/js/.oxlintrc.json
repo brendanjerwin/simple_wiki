@@ -1,0 +1,16 @@
+{
+  "rules": {
+    "no-unused-expressions": "error"
+  },
+  "overrides": [
+    {
+      "files": [
+        "**/*.test.ts",
+        "**/*.stories.ts"
+      ],
+      "rules": {
+        "no-unused-expressions": "off"
+      }
+    }
+  ]
+}

@@ -383,13 +383,16 @@ func (d *poolDaemon) reportAttached(ctx context.Context, page, agentID, displayN
 	}
 }
 
+// detachReportTimeout bounds the background effective-agent clear report.
+const detachReportTimeout = 10 * time.Second
+
 // detachAsync reports an empty attachment for a page in the background so the
 // server's effective-agent record clears when the instance stops. Safe to
 // call with d.mu held (which stopInstanceLocked does); the HTTP call must not
 // block the state machine, so it runs on its own goroutine.
 func (d *poolDaemon) detachAsync(page, _, _ string) {
 	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), detachReportTimeout)
 		defer cancel()
 		d.reportAttached(ctx, page, "", "")
 	}()
