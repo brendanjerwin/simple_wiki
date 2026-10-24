@@ -138,7 +138,9 @@ func pageIdentifiers(pages []Page) map[wikipage.PageIdentifier]struct{} {
 	identifiers := make(map[wikipage.PageIdentifier]struct{}, len(pages)*2)
 	for _, p := range pages {
 		identifiers[wikipage.PageIdentifier(p.Identifier)] = struct{}{}
-
+		if munged, err := wikiidentifiers.MungeIdentifier(p.Identifier); err == nil {
+			identifiers[wikipage.PageIdentifier(munged)] = struct{}{}
+		}
 	}
 	return identifiers
 }
