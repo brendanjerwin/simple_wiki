@@ -11,7 +11,7 @@ import { callAPI, setupPage } from './page-app-helpers.js';
 // page-app-render-lang's hot-swap test; this spec pins the chat DOOR
 // end-to-end through the real transport.
 
-const TEST_PAGE = 'e2e_page app_toassistant';
+const TEST_PAGE = 'e2e_page_app_toassistant';
 
 const PROGRAM = [
  '$n = 0',

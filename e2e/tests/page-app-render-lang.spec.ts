@@ -8,7 +8,7 @@
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
 import { callAPI, counterProgram, getPageApp, setupPage } from './page-app-helpers';
 
-const TEST_PAGE = 'e2e_page app_render';
+const TEST_PAGE = 'e2e_page_app_render';
 
 const PAGE_LOAD_TIMEOUT_MS = 15000;
 
@@ -119,9 +119,9 @@ test.describe.serial('Artifact page render', () => {
    expect(resp.status).toBeGreaterThanOrEqual(400);
    expect(resp.text, 'rejected write must mention root').toContain('root');
 
-   const page app = await getPageApp(request, TEST_PAGE);
-   expect(page app.status).toBe(200);
-   expect(page appText(page app.json)).toContain('root = Card("Counter"');
+   const pageApp = await getPageApp(request, TEST_PAGE);
+   expect(pageApp.status).toBe(200);
+   expect(pageAppText(pageApp.json)).toContain('root = Card("Counter"');
   });
  });
 
@@ -130,7 +130,7 @@ test.describe.serial('Artifact page render', () => {
    // The designed path for app-alone conversion: SetPageApp with
    // confirm_replace_content=true (the edit path correctly REJECTS a
    // prose-clear — no confirm field exists there; the probe is pinned in
-   // page app_test.go).
+   // pageApp_test.go).
    const clearResp = await callAPI(request, 'PageAppService', 'ClearPageApp', {
     page: TEST_PAGE,
    });
@@ -162,7 +162,7 @@ test.describe.serial('Artifact page render', () => {
 });
 
 /** Read `source` from a GetPageApp response payload. */
-function page appText(payload: unknown): string {
+function pageAppText(payload: unknown): string {
  if (typeof payload === 'object' && payload !== null && 'source' in payload) {
   const value = (payload as Record<string, unknown>).source;
   return typeof value === 'string' ? value : '';

@@ -7,7 +7,7 @@
 import { expect, test, type APIRequestContext } from '@playwright/test';
 import { callAPI, counterProgram, getPageApp, setupPage } from './page-app-helpers';
 
-const TEST_PAGE = 'e2e_page app_clear';
+const TEST_PAGE = 'e2e_page_app_clear';
 
 const PAGE_LOAD_TIMEOUT_MS = 15000;
 
@@ -28,7 +28,7 @@ test.describe.serial('Artifact clear', () => {
   await callAPI(request, 'PageManagementService', 'DeletePage', { page: TEST_PAGE });
  });
 
- test.describe('when ClearPageApp is called on a page with prose and an page app', () => {
+ test.describe('when ClearPageApp is called on a page with prose and a page app', () => {
   test('prose stays, the host is gone, and GetPageApp is NotFound', async ({ page, request }) => {
    // Sanity: page app present before the clear.
    const before = await getPageApp(request, TEST_PAGE);

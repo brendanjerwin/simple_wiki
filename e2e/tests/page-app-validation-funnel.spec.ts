@@ -8,7 +8,7 @@
 import { expect, test, type APIRequestContext } from '@playwright/test';
 import { callAPI, counterProgram, getPageApp, setupPage } from './page-app-helpers';
 
-const TEST_PAGE = 'e2e_page app_validation';
+const TEST_PAGE = 'e2e_page_app_validation';
 
 const GOOD_PROGRAM = counterProgram('Counter', '$n');
 
@@ -55,15 +55,15 @@ test.describe.serial('Artifact validation funnel', () => {
 
  test.describe('after the rejected writes', () => {
   test('the original page app is unchanged', async ({ request }) => {
-   const page app = await getPageApp(request, TEST_PAGE);
-   expect(page app.status).toBe(200);
-   expect(page appSource(page app.json)).toContain('root = Card("Counter"');
+   const pageApp = await getPageApp(request, TEST_PAGE);
+   expect(pageApp.status).toBe(200);
+   expect(pageAppSource(pageApp.json)).toContain('root = Card("Counter"');
   });
  });
 });
 
 /** Read `source` from a GetPageApp response payload. */
-function page appSource(payload: unknown): string {
+function pageAppSource(payload: unknown): string {
  if (typeof payload === 'object' && payload !== null && 'source' in payload) {
   const value = (payload as Record<string, unknown>).source;
   return typeof value === 'string' ? value : '';

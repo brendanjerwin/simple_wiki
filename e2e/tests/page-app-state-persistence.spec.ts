@@ -1,14 +1,14 @@
 /**
  * E2E workflow tests for page app state persistence (issue #1272).
  *
- * Artifact state lives server-side under wiki.page app_state; MergePageAppState
+ * Artifact state lives server-side under wiki.pageApp_state; MergePageAppState
  * CAS's it via state_expected_version_hash. The app hydrates from persisted
  * state on page load.
  */
 import { expect, test } from '@playwright/test';
 import { callAPI, counterProgram, setupPage } from './page-app-helpers';
 
-const TEST_PAGE = 'e2e_page app_state';
+const TEST_PAGE = 'e2e_page_app_state';
 
 const PAGE_LOAD_TIMEOUT_MS = 15000;
 

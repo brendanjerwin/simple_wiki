@@ -9,7 +9,7 @@
 import { expect, test, type APIRequestContext } from '@playwright/test';
 import { callAPI, counterProgram, getPageApp, setupPage } from './page-app-helpers';
 
-const TEST_PAGE = 'e2e_page app_placement';
+const TEST_PAGE = 'e2e_page_app_placement';
 
 const PAGE_LOAD_TIMEOUT_MS = 15000;
 
@@ -47,9 +47,9 @@ test.describe.serial('Page app placement guard', () => {
    });
    expect(setResp.status).toBe(200);
 
-   const page app = await getPageApp(request, TEST_PAGE);
-   expect(page app.status).toBe(200);
-   expect(page appSource(page app.json)).toContain('root = Card');
+   const pageApp = await getPageApp(request, TEST_PAGE);
+   expect(pageApp.status).toBe(200);
+   expect(pageAppSource(pageApp.json)).toContain('root = Card');
 
    // Page body still contains the prose.
    const readResp = await callAPI(request, 'PageManagementService', 'ReadPage', {
@@ -96,7 +96,7 @@ test.describe.serial('Page app placement guard', () => {
 
  test.describe('when UpdatePageContent clears the prose around the page app', () => {
   test('a fence-only body with a CHANGED program is rejected', async ({ request }) => {
-   // First attach an page app so the page is page app-shaped.
+   // First attach a page app so the page is page app-shaped.
    const setResp = await callAPI(request, 'PageAppService', 'SetPageApp', {
     page: TEST_PAGE,
     source: GOOD_PROGRAM,
@@ -119,8 +119,8 @@ test.describe.serial('Page app placement guard', () => {
     page: TEST_PAGE,
    });
    expect(pageContent(readResp.json)).toContain('placement guard');
-   const page app = await getPageApp(request, TEST_PAGE);
-   expect(page appSource(page app.json)).toContain('root = Card("Counter"');
+   const pageApp = await getPageApp(request, TEST_PAGE);
+   expect(pageAppSource(pageApp.json)).toContain('root = Card("Counter"');
   });
 
   test('a prose-clearing body with an UNCHANGED program is rejected', async ({ request }) => {
@@ -159,7 +159,7 @@ function pageContent(payload: unknown): string {
 }
 
 /** Read `source` from a GetPageApp response payload. */
-function page appSource(payload: unknown): string {
+function pageAppSource(payload: unknown): string {
  if (typeof payload === 'object' && payload !== null && 'source' in payload) {
   const value = (payload as Record<string, unknown>).source;
   return typeof value === 'string' ? value : '';
