@@ -2838,14 +2838,15 @@ describe('PageChatPanel make-app suggestion chip', () => {
       expect(chip.textContent!.trim()).to.equal('Make an app out of this page');
     });
 
-    it('should send the artifact-app ask naming this page via the normal send path', () => {
+    it('should send the attached-app ask naming this page via the normal send path', () => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any -- reading private chatClient for assertion
       const client = (el as any).chatClient;
       expect(client.sendMessage.callCount).to.equal(1);
       const request = client.sendMessage.firstCall.args[0];
       expect(request.page).to.equal('test-page');
-      expect(request.content).to.contain('Make an app out of this page');
+      expect(request.content).to.contain('Make an app for this page');
       expect(request.content).to.contain('test-page');
+      expect(request.content).to.contain('attach');
     });
   });
 });

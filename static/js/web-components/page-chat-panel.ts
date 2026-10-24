@@ -761,15 +761,16 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
 
  /**
   * "Make an app out of this page" — pre-fills the input with an
-  * unambiguous artifact-app ask (naming THIS page) and sends it. The
-  * chatPreamble + help-artifacts-lang teach the placement default
-  * (usually a new page + wikilink so this page's content stays intact;
-  * attached/app-alone only on explicit request).
+  * unambiguous artifact-app ask: the app is FOR this page's content and
+  * should render attached above the existing prose (composition keeps
+  * the content; nothing is deleted). The chatPreamble +
+  * help-artifacts-lang teach the placement rules for less specific asks
+  * ("make me a pomodoro" → new page + link).
   */
  private _handleMakeAppSuggestion() {
   const textarea = this.shadowRoot?.querySelector('textarea');
   if (!textarea) return;
-  textarea.value = `Make an app out of this page ("${this.page || 'this page'}")`;
+  textarea.value = `Make an app for this page ("${this.page || 'this page'}") — attach it above this page's existing content; keep the page's prose.`;
   void this.sendMessage();
  }
 
