@@ -32,7 +32,7 @@ test.describe.serial('artifact-lang-toassistant', () => {
  });
 
  test.afterEach(async ({ request }) => {
-  await callAPI(request, 'ArtifactService/ClearArtifact', { page: TEST_PAGE }).catch(() => { });
+  await callAPI(request, 'ArtifactService', 'ClearArtifact', { page: TEST_PAGE }).catch(() => { });
  });
 
  test('a ToAssistant button press issues ChatService SendMessage on the page', async ({ page }) => {
@@ -64,8 +64,10 @@ test.describe.serial('artifact-lang-toassistant', () => {
    btn?.click();
   });
   const sent = await sentPromise;
-  const body = sent.postDataJSON() as { page?: string; content?: string };
-  expect(body.page).toBe(TEST_PAGE);
-  expect(body.content).toBe('please bump the counter');
+  // Connect-JSON POST bodies may be framed streaming (length-prefixed);
+  // assert containment rather than postDataJSON().
+  const raw = sent.postData() ?? '';
+  expect(raw).toContain(TEST_PAGE);
+  expect(raw).toContain('please bump the counter');
  });
 });
