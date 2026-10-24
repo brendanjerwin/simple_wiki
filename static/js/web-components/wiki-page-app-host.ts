@@ -746,13 +746,14 @@ export class WikiPageAppHost extends LitElement {
  private handlePageAppAction(event: CustomEvent<PageAppActionEventDetail>): void {
   const plan = event.detail.plan;
   if (this.runtime == null) return;
-  let storeMutated = false;
   for (const step of plan?.steps ?? []) {
-   storeMutated = this.executePlanStep(step, event.detail.value) || storeMutated;
+   this.executePlanStep(step, event.detail.value);
   }
   // Flush once per event (not per step): the plan may batch several @Set
-  // steps and each merge is a separate CAS'd RPC.
-  if (storeMutated) this.actionContext().setState(this.runtime.store.getSnapshot());
+  // steps and each merge is a separate CAS'd RPC. Every action event
+  // flushes — matching the pre-refactor behavior — even when no step
+  // mutated the store.
+  this.actionContext().setState(this.runtime.store.getSnapshot());
  }
 
  private async removeApp(): Promise<void> {
