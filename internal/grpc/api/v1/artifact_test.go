@@ -347,3 +347,46 @@ var _ = Describe("ArtifactStateService", func() {
 		})
 	})
 })
+
+var _ = Describe("artifact placement guard", func() {
+	var (
+		ctx    context.Context
+		mock   *MockPageReaderMutator
+		server *v1.Server
+	)
+
+	BeforeEach(func() {
+		ctx = context.Background()
+		prose := "# Notes\n\n" + strings.Repeat("Substantial roadmap prose. ", 60) + "\n" // >1KB
+		mock = &MockPageReaderMutator{
+			Frontmatter: wikipage.FrontMatter{"identifier": "roadmap"},
+			Markdown:    wikipage.Markdown(prose),
+		}
+		server = mustNewServer(mock, nil, nil)
+	})
+
+	Describe("SetArtifact default path", func() {
+		It("should compose (keep prose) without any confirmation flag", func() {
+			_, err := server.SetArtifact(ctx, &apiv1.SetArtifactRequest{
+				Page:   "roadmap",
+				Source: "root = Stack([Text(\"roadmap dashboard\")])\n",
+			})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(string(mock.Markdown)).To(ContainSubstring("Substantial roadmap prose."))
+			Expect(string(mock.Markdown)).To(ContainSubstring("root = Stack(["))
+		})
+	})
+
+	Describe("SetArtifact confirm_replace_content path", func() {
+		It("should clear the prose only when the flag is set", func() {
+			_, err := server.SetArtifact(ctx, &apiv1.SetArtifactRequest{
+				Page:                  "roadmap",
+				Source:                "root = Stack([Text(\"dashboard\")])\n",
+				ConfirmReplaceContent: true,
+			})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(string(mock.Markdown)).NotTo(ContainSubstring("Substantial roadmap prose."))
+			Expect(string(mock.Markdown)).To(ContainSubstring("root = Stack(["))
+		})
+	})
+})

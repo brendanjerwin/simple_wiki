@@ -661,6 +661,17 @@ func (s *Server) CreatePage(ctx context.Context, req *apiv1.CreatePageRequest) (
 		}, nil
 	}
 
+	// Artifact funnel (criterion 6): a page created with a wiki-artifact
+	// fence validates before the write lands. There is no prior body, so
+	// this is pure validation (no prose to guard).
+	fmAny := wikipage.FrontMatter(fm)
+	if err := validateChangedArtifactFence(fmAny, "", string(markdown)); err != nil {
+		return &apiv1.CreatePageResponse{
+			Success: false,
+			Error:   err.Error(),
+		}, nil
+	}
+
 	if err := s.pageReaderMutator.WriteFrontMatter(wikipage.PageIdentifier(identifier), wikipage.FrontMatter(fm), tailscale.IdentityFromContext(ctx)); err != nil {
 		return nil, status.Errorf(codes.Internal, failedToWriteFrontmatterErrFmt, err)
 	}
@@ -722,27 +733,35 @@ func (s *Server) UpdatePageContent(ctx context.Context, req *apiv1.UpdatePageCon
 	// eliminating the TOCTOU race that existed when these were separate operations.
 	// The modifier receives the current frontmatter so the version hash covers the
 	// full page state — catching frontmatter-only concurrent edits as well.
+	//
+	// When the write changes the page's artifact fence, the atomic modifier
+	// handles it (validation + placement guard + version restamp), so the
+	// wiki.artifact frontmatter stays in sync with the body.
 	var capturedFM wikipage.FrontMatter
-	modifyErr := s.pageReaderMutator.ModifyMarkdown(
+	modifyErr := s.modifyMarkdownWithArtifactFunnel(
 		wikipage.PageIdentifier(req.Page),
-		func(currentFM wikipage.FrontMatter, currentMarkdown wikipage.Markdown) (wikipage.Markdown, error) {
+		nil,
+		func(currentFM wikipage.FrontMatter, currentMarkdown wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error) {
 			capturedFM = currentFM
 			// Version hash check is now atomic with the write — no TOCTOU window.
 			// Hash covers both frontmatter and markdown so frontmatter-only edits
 			// are also detected (issue #1197).
 			if err := checkContentVersionHash(currentFM, currentMarkdown, req.ExpectedVersionHash); err != nil {
-				return "", err
+				return nil, "", err
 			}
 
 			if err := templating.ValidateTemplate(req.NewContentMarkdown); err != nil {
-				return "", status.Errorf(codes.InvalidArgument, invalidTemplateErrFmt, err)
+				return nil, "", status.Errorf(codes.InvalidArgument, invalidTemplateErrFmt, err)
 			}
 
 			// Compute the markdown to write: find-and-replace when old_content_markdown is set,
 			// otherwise replace the entire page content.
-			return resolveMarkdownContent(currentMarkdown, req.OldContentMarkdown, req.NewContentMarkdown)
+			candidate, err := resolveMarkdownContent(currentMarkdown, req.OldContentMarkdown, req.NewContentMarkdown)
+			if err != nil {
+				return nil, "", err
+			}
+			return currentFM, candidate, nil
 		},
-		tailscale.IdentityFromContext(ctx),
 	)
 	if modifyErr != nil {
 		if _, ok := status.FromError(modifyErr); ok {
@@ -861,27 +880,50 @@ func (s *Server) UpdateWholePage(ctx context.Context, req *apiv1.UpdateWholePage
 	if err := templating.ValidateTemplate(string(md)); err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, invalidTemplateErrFmt, err)
 	}
+
+	// Artifact funnel (criterion 6): a changed wiki-artifact fence in the
+	// new content validates before the write lands.
+	if _, currentMD, readErr := s.pageReaderMutator.ReadMarkdown(wikipage.PageIdentifier(req.Page)); readErr == nil {
+		if err := validateChangedArtifactFence(fm, currentMD, req.NewWholeMarkdown); err != nil {
+			return nil, err
+		}
+	}
+
 	if fm == nil {
 		fm = make(map[string]any)
 	}
 	fm[identifierKey] = req.Page
 
-	atomicMod, amErr := requirePageAtomicModifier(s.pageReaderMutator)
-	if amErr != nil {
+	if _, amErr := requirePageAtomicModifier(s.pageReaderMutator); amErr != nil {
 		return nil, amErr
 	}
 
-	modifyErr := atomicMod.ModifyFrontMatterAndMarkdown(
+	modifyErr := s.modifyMarkdownWithArtifactFunnel(
 		wikipage.PageIdentifier(req.Page),
+		nil,
 		func(currentFM wikipage.FrontMatter, currentMarkdown wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error) {
 			// Hash covers both frontmatter and markdown so frontmatter-only concurrent edits
-			// are detected (issue #1197).
+			// are detected (issue #1197) — checked atomically inside the funnel's write.
 			if err := checkContentVersionHash(currentFM, currentMarkdown, req.ExpectedVersionHash); err != nil {
 				return nil, "", err
 			}
-			return fm, md, nil
+			// The client's fm replaces user keys wholesale, but reserved
+			// wiki.* subtrees the client didn't send (artifact_state,
+			// checklists, …) must survive a whole-page save (ADR-0010's
+			// preserve rule). preserveReservedSubtrees copies reserved keys
+			// from currentFM into fm in place.
+			fmForWrite := make(wikipage.FrontMatter, len(fm)+1)
+			for k, v := range currentFM {
+				fmForWrite[k] = v
+			}
+			for k, v := range fm {
+				if !wikipage.IsReservedTopLevelKey(k) {
+					fmForWrite[k] = v
+				}
+			}
+			preserveReservedSubtrees(fmForWrite, fm)
+			return fmForWrite, md, nil
 		},
-		tailscale.IdentityFromContext(ctx),
 	)
 	if modifyErr != nil {
 		if _, ok := status.FromError(modifyErr); ok {
