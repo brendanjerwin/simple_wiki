@@ -400,9 +400,19 @@ export class WikiPageAppHost extends LitElement {
    this.renderTick += 1;
   } catch (err) {
    if (WikiPageAppHost.isTerminal(err)) {
-    // Terminal: this page genuinely has no page app (NotFound), or the
-    // request itself is invalid — retrying won't help either way.
+    if (err instanceof ConnectError && err.code === Code.NotFound) {
+     // Terminal NotFound: this page genuinely has no page app — not an
+     // error; render whatever the page has instead. Retrying can't help.
+     this.reconnecting = false;
+     this.renderTick += 1;
+     return;
+    }
+    // Other terminal codes (InvalidArgument, PermissionDenied, …):
+    // retrying won't help either way — surface the actual error instead
+    // of parking the app behind a busy placeholder.
+    if (!this.isConnected) return;
     this.reconnecting = false;
+    this.loadError = AugmentErrorService.augmentError(err, 'loading page app');
     this.renderTick += 1;
     return;
    }

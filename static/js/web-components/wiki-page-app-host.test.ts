@@ -470,6 +470,31 @@ describe('WikiPageAppHost terminal NotFound on load', () => {
   el.remove();
  });
 
+ it('should surface non-NotFound terminal errors instead of retrying or parking on the busy shell', async () => {
+  // Control for the terminal branch's other codes: a PermissionDenied
+  // can't be fixed by retrying — it must show the actual error, not the
+  // reconnecting banner or an indefinite busy placeholder.
+  const denied = new ConnectError('not allowed', Code.PermissionDenied);
+  const getArtifact = stub().rejects(denied);
+  const el = document.createElement('wiki-page-app-host') as WikiPageAppHost;
+  el.page = 'stub-page';
+  const clients = el as unknown as Record<string, Record<string, unknown>>;
+  clients['pageAppClient'] = { getPageApp: getArtifact, clearPageApp: stub(), watchPageApp: stub() };
+  clients['stateClient'] = { getPageAppState: stub().resolves(stateResponse({}, 'h')), mergePageAppState: stub() };
+  let ladderRuns = 0;
+  (el as unknown as { scheduleRetry: () => void }).scheduleRetry = () => { ladderRuns += 1; };
+  document.body.appendChild(el);
+  await el.updateComplete;
+  await el.updateComplete;
+
+  expect(getArtifact.callCount).to.equal(1);
+  expect(ladderRuns).to.equal(0);
+  const shadow = el.shadowRoot;
+  expect(shadow?.querySelector('.reconnecting-note') == null).to.equal(true);
+  expect(shadow?.querySelector('error-display') != null).to.equal(true);
+  el.remove();
+ });
+
  it('should still schedule a retry on a transient non-connect error', async () => {
   // Control guarding the terminal branch against over-matching: plain
   // Errors (not ConnectErrors) must still enter the retry ladder.
