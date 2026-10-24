@@ -118,10 +118,16 @@
                     {{ end }}
 
                     {{ if .ViewPage }}
+                        {{ if .HasArtifact }}
+                            <wiki-artifact-host page="{{ .Page }}"></wiki-artifact-host>
+                        {{ end }}
                         {{ .RenderedPage }}
                     {{ end }}
 
                     {{ if .ReadPage }}
+                        {{ if .HasArtifact }}
+                            <wiki-artifact-host page="{{ .Page }}"></wiki-artifact-host>
+                        {{ end }}
                         {{ .RenderedPage }}
                     {{ end }}
 

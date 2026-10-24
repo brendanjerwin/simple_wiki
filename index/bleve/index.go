@@ -122,7 +122,10 @@ func (b *Index) AddPageToIndex(requestedIdentifier wikipage.PageIdentifier) erro
 	}
 
 	pageFrontmatter["content"] = content
-	pageFrontmatter[tagsField] = hashtags.Extract(string(markdown))
+	// Hashtags come from the prose remainder (fence removed) — program
+	// bytes never contribute tags (criterion 11: index == rendered prose).
+	_, proseMD, _ := wikipage.SplitArtifactFences(string(markdown))
+	pageFrontmatter[tagsField] = hashtags.Extract(proseMD)
 	// Overwrite the identifier field with the canonical munged form so that
 	// pages whose stored frontmatter lacks an explicit identifier key are
 	// still findable by identifier search.
@@ -201,7 +204,7 @@ func (b *Index) extractFragmentFromLocations(contentText string, locations searc
 
 	// Find the best fragment window around the matches
 	fragmentStart, fragmentEnd := b.calculateFragmentWindow(contentText, allLocations)
-	
+
 	// Extract the fragment text
 	fragment := contentText[fragmentStart:fragmentEnd]
 
@@ -209,7 +212,7 @@ func (b *Index) extractFragmentFromLocations(contentText string, locations searc
 	if !utf8.ValidString(fragment) {
 		fragment = strings.ToValidUTF8(fragment, "")
 	}
-	
+
 	// Convert absolute byte positions to relative positions within the fragment
 	var highlights []HighlightSpan
 	for _, location := range allLocations {
@@ -220,7 +223,7 @@ func (b *Index) extractFragmentFromLocations(contentText string, locations searc
 			})
 		}
 	}
-	
+
 	return fragment, highlights
 }
 
@@ -242,10 +245,10 @@ func (*Index) calculateFragmentWindow(contentText string, locations []*search.Lo
 
 	if totalNeeded <= maxFragmentLength {
 		// All matches fit with context, center them
-		center := int(firstMatch + lastMatch) / 2
+		center := int(firstMatch+lastMatch) / 2
 		fragmentStart = max(0, center-maxFragmentLength/2)
 		fragmentEnd = min(len(contentText), fragmentStart+maxFragmentLength)
-		
+
 		// Adjust start if we hit the end
 		if fragmentEnd-fragmentStart < maxFragmentLength {
 			fragmentStart = max(0, fragmentEnd-maxFragmentLength)
