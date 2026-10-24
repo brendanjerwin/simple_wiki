@@ -148,6 +148,52 @@ root = Card("Groceries", Stack([refresh, Table(["item"], rows.items)]))
 
 If an app needs a destructive action, the channel is the conversation (`@ToAssistant`), where confirmation and permissions live — not the program.
 
+### Common patterns (all parse-verified — copy and adapt)
+
+**Counter with reset** — pure client-side state. Every `@Set` writes the live store snapshot to `PageAppStateService` automatically (CAS'd, conflict-safe), so the count survives reloads and other devices. **No agent round-trip is needed for simple state.**
+
+```
+$count = 0
+root = Card("Count", Stack([
+  Text("count: " + $count),
+  Button("add", @Set($count, $count + 1)),
+  Button("reset", @Reset($count)),
+]))
+```
+
+**Text input bound to state** — `Input.onChange` flows typed text back into a `$variable`, which triggers a live re-render:
+
+```
+$name = ""
+root = Card("Greeter", Stack([
+  Input("your name", $name),
+  Text("hi " + $name),
+]))
+```
+
+**API/data lookup** — a `Query(...)` assignment calls a read-only tool at render time; `@Run(queryName)` re-fires it (e.g. after a `Button`):
+
+```
+rows = Query("api_v1_ChecklistService_ListItems", { listName: "todo" })
+refresh = Button("refresh", @Run(rows))
+root = Card("Todo", Stack([refresh, Table(["text"], rows.items)]))
+```
+
+**Editing wiki data (write flows through the agent or `Mutation`)** — a program *can* write its own page app state via the allowlisted `PageAppStateService_*`, but note these two write paths:
+
+- `@Set`/`@Reset` on `$variables` → host auto-flushes the state store silently (fast, no agent involved).
+- Anything touching **other pages or other data** is excluded on purpose. Use `@ToAssistant` to hand the request to the agent, which has confirmed/attributed mutation tools:
+
+```
+root = Card("Notes", Stack([
+  Text("current: " + $note),
+  Input("new value", $note),
+  Button("save", @ToAssistant("update the note to: " + $note)),
+]))
+```
+
+**Component request when nothing fits** — if the app you're writing genuinely needs a component `wiki-core@1` doesn't have (slider, tab pane, progress bar, date picker, …), don't degrade it into a confusing `Stack`-of-buttons. Tell the user what's missing, ship the best app you can **without** it, then **open a feature-request issue on this project** so the component eventually gets built: `Button("request a slider", @OpenUrl("https://github.com/brendanjerwin/simple_wiki/issues"))` renders the one-tap link for the user; you create the issue text in the same turn.
+
 ## See Also
 
 - [[help]] — full help index
