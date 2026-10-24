@@ -1,5 +1,8 @@
 import type { Meta, StoryObj } from '@storybook/web-components-vite';
 import { html } from 'lit';
+// Side-effect import: registers wiki-page-app-countdown (customElements.define
+// lives in library.ts; the type-only import below is erased at runtime).
+import '../openui-lang/library.js';
 import type { WikiPageAppCountdown } from '../openui-lang/library.js';
 
 const meta: Meta = {
