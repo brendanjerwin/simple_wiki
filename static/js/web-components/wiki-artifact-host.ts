@@ -206,6 +206,11 @@ export class WikiArtifactHost extends LitElement {
  /** True while a reconnect is pending — renders "reconnecting" instead of an error. */
  @state()
  declare private reconnecting: boolean;
+ /** Window/document wake triggers, bound once and removed on disconnect. */
+ private wakeOnline = (): void => { this.recoverIfDegraded(); };
+ private wakeVisible = (): void => {
+  if (document.visibilityState === 'visible') this.recoverIfDegraded();
+ };
 
  constructor() {
   super();
@@ -247,6 +252,13 @@ export class WikiArtifactHost extends LitElement {
 
  override connectedCallback(): void {
   super.connectedCallback();
+  // Wake triggers: on network return or tab re-visible, attempt an
+  // immediate recovery if the ladder is degraded. These make reconnects
+  // happen at the MOMENT connectivity returns rather than waiting out
+  // the backoff clock (critical when WiFi reassociates slower than the
+  // 5 remaining retries).
+  window.addEventListener('online', this.wakeOnline);
+  document.addEventListener('visibilitychange', this.wakeVisible);
   // Library templates render into this host's shadow DOM via
   // .wiki-artifact-body; the design system is included in static styles
   // below so theme variables + responsive rules apply to them.
@@ -264,6 +276,8 @@ export class WikiArtifactHost extends LitElement {
 
  override disconnectedCallback(): void {
   super.disconnectedCallback();
+  window.removeEventListener('online', this.wakeOnline);
+  document.removeEventListener('visibilitychange', this.wakeVisible);
   this.stopWatch?.();
   this.stopWatch = null;
   for (const unsub of this.unsubs) unsub();
@@ -311,6 +325,23 @@ export class WikiArtifactHost extends LitElement {
   if (this.retryTimer !== null) {
    clearTimeout(this.retryTimer);
    this.retryTimer = null;
+  }
+ }
+
+ /**
+  * Wake trigger (window online / tab re-visible): if the host is
+  * degraded — ladder running, exhausted, or errored — attempt an
+  * immediate full recovery instead of waiting out the remaining backoff
+  * (or sitting parked after the ladder gave up). The ladder reset here
+  * is deliberate: connectivity returning is exactly the condition that
+  * makes retries viable again.
+  */
+ private recoverIfDegraded(): void {
+  if (!this.isConnected) return;
+  if (this.reconnecting || this.loadError != null || this.retryAttempt > 0) {
+   this.cancelRetry();
+   this.retryAttempt = 0;
+   void this.load();
   }
  }
 

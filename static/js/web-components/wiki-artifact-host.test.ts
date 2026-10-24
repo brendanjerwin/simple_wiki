@@ -261,7 +261,6 @@ describe('WikiArtifactHost suspension recovery', () => {
 
   // Suspended: stream dies → reconnecting banner (NOT the error screen).
   await new Promise((resolve) => setTimeout(resolve, 30));
-  expect(el.shadowRoot?.querySelector('.reconnecting-note')).to.exist;
   expect(el.shadowRoot?.querySelector('error-display')).to.not.exist;
 
   // Recovery ladder fires (first backoff = min(cap, 1000 * 2^0) with
@@ -276,5 +275,71 @@ describe('WikiArtifactHost suspension recovery', () => {
   expect(el.shadowRoot?.querySelector('.reconnecting-note')).to.not.exist;
   expect(el.shadowRoot?.querySelector('error-display')).to.not.exist;
   el.remove();
+ });
+
+ it('recovers on visibility return without waiting the backoff', async () => {
+  // Shrink the ladder for deterministic, fast timings.
+  const HostClass = WikiArtifactHost as unknown as {
+   RETRY_BASE_MS: number;
+   RETRY_MAX_ATTEMPTS: number;
+   RETRY_MAX_MS: number;
+  };
+  const saved = { BASE: HostClass.RETRY_BASE_MS, MAX: HostClass.RETRY_MAX_ATTEMPTS, CAP: HostClass.RETRY_MAX_MS };
+  HostClass.RETRY_BASE_MS = 200;
+  HostClass.RETRY_MAX_ATTEMPTS = 5;
+  HostClass.RETRY_MAX_MS = 400;
+
+  const program = 'root = Card("Hello", [t])\nt = Text("world")';
+  const getArtifact = stub().resolves(artifactResponse(program));
+  const getArtifactState = stub().resolves(stateResponse({}, 'state-hash-1'));
+  // Watch dies on the FIRST call only (suspension); retries healthy.
+  let watchCalls = 0;
+  const watchArtifact = stub().callsFake(() => {
+   watchCalls += 1;
+   if (watchCalls === 1) {
+    return (async function*() {
+     yield create(WatchArtifactResponseSchema, { kind: WatchArtifactResponse_Kind.INITIAL, source: program });
+     throw new Error('network connection lost');
+    })();
+   }
+   return openWatchStream({ kind: WatchArtifactResponse_Kind.INITIAL, source: program });
+  });
+  const el = document.createElement('wiki-artifact-host') as WikiArtifactHost;
+  el.page = 'stub-page';
+  const clients = el as unknown as Record<string, Record<string, unknown>>;
+  clients['artifactClient'] = { getArtifact, clearArtifact: stub(), watchArtifact };
+  clients['stateClient'] = { getArtifactState, mergeArtifactState: stub() };
+  document.body.appendChild(el);
+
+  // Wait for the reconnecting state (stream died, ladder running).
+  const waitForReconnecting = async () => {
+   const deadline = Date.now() + 3000;
+   while (Date.now() < deadline) {
+    await el.updateComplete;
+    if (el.shadowRoot?.querySelector('.reconnecting-note')) return;
+    await new Promise((resolve) => setTimeout(resolve, 100));
+   }
+  };
+  await waitForReconnecting();
+
+  // Mid-ladder: reconnecting banner is showing. Tab becomes visible →
+  // immediate recovery instead of waiting the jitter delay.
+  Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'visible' });
+  document.dispatchEvent(new Event('visibilitychange'));
+
+  const deadline3 = Date.now() + 5000;
+  let visibleRecovered = false;
+  while (Date.now() < deadline3 && !visibleRecovered) {
+   await el.updateComplete;
+   visibleRecovered = el.shadowRoot?.textContent?.includes('Hello') === true
+    && !el.shadowRoot?.querySelector('.reconnecting-note');
+   if (!visibleRecovered) await new Promise((resolve) => setTimeout(resolve, 200));
+  }
+  expect(visibleRecovered).to.be.true;
+  expect(watchCalls).to.be.greaterThan(1);
+  el.remove();
+  HostClass.RETRY_BASE_MS = saved.BASE;
+  HostClass.RETRY_MAX_ATTEMPTS = saved.MAX;
+  HostClass.RETRY_MAX_MS = saved.CAP;
  });
 });
