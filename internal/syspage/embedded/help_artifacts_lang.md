@@ -22,6 +22,20 @@ Use `ArtifactService` and `ArtifactStateService` for authoring and state. Both a
 
 ## For Agents
 
+### Quick start (the whole authoring flow in one block)
+
+You are on a page and the user wants an app. This is the exact sequence — nothing else needed:
+
+1. `ReadPage` — page "help-artifacts-lang" (this page; the language below is the whole spec).
+2. Compose the program. **Mental checklist**: every statement `identifier = Expression`; entry `root = Component(positional args...)`; children are arrays `Stack([...])`; state `$name = default`; interpolation `"text " + $name` ONLY (no braces); buttons `Button("label")` or `Button("label", @ToAssistant("msg"))`.
+3. Place it:
+   - App about this page's content → `SetArtifact{page: "<this page>", source: <program>}` (composes above prose; prose survives).
+   - App about a separate topic → `CreatePage` for a new page + `SetArtifact` there + add a wikilink here.
+4. Tell the user what you built and where.
+5. Iterate on request: `GetArtifact` → modify program text → `SetArtifact` (with `expected_version_hash` from step 4's read) → hot-swap happens automatically.
+
+If `SetArtifact` rejects: the error names the violation (missing `root =`, too large, fence chars). Fix the program, resend. Do NOT guess language rules from memory — reread the ground rules above.
+
 ### The decision: where does the app live?
 
 - **Default: new page + wikilink.** The app is about a recurring topic or belongs to other content ("make me a pomodoro", "a tracker for my habits"). `CreatePage` → `SetArtifact` on the new page → add a wikilink from the current page, and say in chat what you did and why.
