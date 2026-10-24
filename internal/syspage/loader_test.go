@@ -356,7 +356,6 @@ var _ = Describe("Sync", func() {
 			Expect(err.Error()).To(ContainSubstring("disk on fire"))
 		})
 	})
-
 })
 
 func totalWrites(s *fakeStore) int {
