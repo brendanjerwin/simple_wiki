@@ -11,7 +11,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file api/v1/agent_inventory.proto.
  */
 export const file_api_v1_agent_inventory: GenFile = /*@__PURE__*/
-  fileDesc("ChxhcGkvdjEvYWdlbnRfaW52ZW50b3J5LnByb3RvEgZhcGkudjEifgoJQWdlbnRJbmZvEgoKAmlkGAEgASgJEhQKDGRpc3BsYXlfbmFtZRgCIAEoCRInCghwcm90b2NvbBgDIAEoDjIVLmFwaS52MS5BZ2VudFByb3RvY29sEhMKC2Rlc2NyaXB0aW9uGAQgASgJEhEKCWF2YWlsYWJsZRgFIAEoCCITChFMaXN0QWdlbnRzUmVxdWVzdCI3ChJMaXN0QWdlbnRzUmVzcG9uc2USIQoGYWdlbnRzGAEgAygLMhEuYXBpLnYxLkFnZW50SW5mbyIjChNHZXRQYWdlQWdlbnRSZXF1ZXN0EgwKBHBhZ2UYASABKAkiUAoUR2V0UGFnZUFnZW50UmVzcG9uc2USIAoFYWdlbnQYASABKAsyES5hcGkudjEuQWdlbnRJbmZvEhYKDmV4cGxpY2l0bHlfc2V0GAIgASgIIjUKE1NldFBhZ2VBZ2VudFJlcXVlc3QSDAoEcGFnZRgBIAEoCRIQCghhZ2VudF9pZBgCIAEoCSI4ChRTZXRQYWdlQWdlbnRSZXNwb25zZRIgCgVhZ2VudBgBIAEoCzIRLmFwaS52MS5BZ2VudEluZm8qUAoNQWdlbnRQcm90b2NvbBIeChpBR0VOVF9QUk9UT0NPTF9VTlNQRUNJRklFRBAAEg0KCUFDUF9MT0NBTBABEhAKDEFHX1VJX1JFTU9URRACMtQFChVBZ2VudEludmVudG9yeVNlcnZpY2US5wEKCkxpc3RBZ2VudHMSGS5hcGkudjEuTGlzdEFnZW50c1JlcXVlc3QaGi5hcGkudjEuTGlzdEFnZW50c1Jlc3BvbnNlIqEBirUYmAFMaXN0IGFsbCBhZ2VudHMgcmVnaXN0ZXJlZCBpbiB0aGUgaW52ZW50b3J5LCB3aXRoIHByb3RvY29sIGFuZCBhdmFpbGFiaWxpdHkgc3RhdHVzLiBVc2VkIGJ5IHRoZSBhZ2VudCBzZWxlY3RvciBVSSB0byBwb3B1bGF0ZSB0aGUgYXZhaWxhYmxlLWFnZW50cyBsaXN0Lpi1GAESvQEKDEdldFBhZ2VBZ2VudBIbLmFwaS52MS5HZXRQYWdlQWdlbnRSZXF1ZXN0GhwuYXBpLnYxLkdldFBhZ2VBZ2VudFJlc3BvbnNlInKKtRhqUmV0dXJuIHRoZSBhZ2VudCBjdXJyZW50bHkgYm91bmQgdG8gYSBwYWdlLiBGYWxscyBiYWNrIHRvIHRoZSBkZWZhdWx0IGFnZW50IGlmIG5vIHBlci1wYWdlIGJpbmRpbmcgZXhpc3RzLpi1GAESkAIKDFNldFBhZ2VBZ2VudBIbLmFwaS52MS5TZXRQYWdlQWdlbnRSZXF1ZXN0GhwuYXBpLnYxLlNldFBhZ2VBZ2VudFJlc3BvbnNlIsQBirUYvwFCaW5kIGFuIGFnZW50IHRvIGEgcGFnZS4gVGhlIGJpbmRpbmcgcGVyc2lzdHMgaW4gcGFnZSBmcm9udG1hdHRlciBhbmQgYXBwbGllcyB0byBhbGwgcGFydGljaXBhbnRzLiBTd2l0Y2hpbmcgbWlkLXNlc3Npb24gZG9lcyBub3QgcHJlc2VydmUgY29udmVyc2F0aW9uIGNvbnRleHQg4oCUIHRoZSBuZXcgYWdlbnQgc3RhcnRzIGZyZXNoLkI6WjhnaXRodWIuY29tL2JyZW5kYW5qZXJ3aW4vc2ltcGxlX3dpa2kvZ2VuL2dvL2FwaS92MTthcGl2MWIGcHJvdG8z", [file_api_v1_mcp_options]);
+  fileDesc("ChxhcGkvdjEvYWdlbnRfaW52ZW50b3J5LnByb3RvEgZhcGkudjEijQEKCUFnZW50SW5mbxIKCgJpZBgBIAEoCRIUCgxkaXNwbGF5X25hbWUYAiABKAkSJwoIcHJvdG9jb2wYAyABKA4yFS5hcGkudjEuQWdlbnRQcm90b2NvbBITCgtkZXNjcmlwdGlvbhgEIAEoCRIRCglhdmFpbGFibGUYBSABKAgSDQoFcm91dGUYBiABKAkiEwoRTGlzdEFnZW50c1JlcXVlc3QiNwoSTGlzdEFnZW50c1Jlc3BvbnNlEiEKBmFnZW50cxgBIAMoCzIRLmFwaS52MS5BZ2VudEluZm8iIwoTR2V0UGFnZUFnZW50UmVxdWVzdBIMCgRwYWdlGAEgASgJIlAKFEdldFBhZ2VBZ2VudFJlc3BvbnNlEiAKBWFnZW50GAEgASgLMhEuYXBpLnYxLkFnZW50SW5mbxIWCg5leHBsaWNpdGx5X3NldBgCIAEoCCJSChNTZXRQYWdlQWdlbnRSZXF1ZXN0EgwKBHBhZ2UYASABKAkSEAoIYWdlbnRfaWQYAiABKAkSGwoTZXhwZWN0ZWRfdXBkYXRlZF9hdBgDIAEoCSJMChRTZXRQYWdlQWdlbnRSZXNwb25zZRIgCgVhZ2VudBgBIAEoCzIRLmFwaS52MS5BZ2VudEluZm8SEgoKdXBkYXRlZF9hdBgCIAEoCSKjAQoYUmVnaXN0ZXJQb29sQWdlbnRSZXF1ZXN0EgoKAmlkGAEgASgJEhQKDGRpc3BsYXlfbmFtZRgCIAEoCRITCgtkZXNjcmlwdGlvbhgDIAEoCRInCghwcm90b2NvbBgEIAEoDjIVLmFwaS52MS5BZ2VudFByb3RvY29sEg0KBXJvdXRlGAUgASgJEhgKEHBvb2xfaW5zdGFuY2VfaWQYBiABKAkiGwoZUmVnaXN0ZXJQb29sQWdlbnRSZXNwb25zZSpQCg1BZ2VudFByb3RvY29sEh4KGkFHRU5UX1BST1RPQ09MX1VOU1BFQ0lGSUVEEAASDQoJQUNQX0xPQ0FMEAESEAoMQUdfVUlfUkVNT1RFEAIy5AcKFUFnZW50SW52ZW50b3J5U2VydmljZRLnAQoKTGlzdEFnZW50cxIZLmFwaS52MS5MaXN0QWdlbnRzUmVxdWVzdBoaLmFwaS52MS5MaXN0QWdlbnRzUmVzcG9uc2UioQGKtRiYAUxpc3QgYWxsIGFnZW50cyByZWdpc3RlcmVkIGluIHRoZSBpbnZlbnRvcnksIHdpdGggcHJvdG9jb2wgYW5kIGF2YWlsYWJpbGl0eSBzdGF0dXMuIFVzZWQgYnkgdGhlIGFnZW50IHNlbGVjdG9yIFVJIHRvIHBvcHVsYXRlIHRoZSBhdmFpbGFibGUtYWdlbnRzIGxpc3QumLUYARKyAgoMR2V0UGFnZUFnZW50EhsuYXBpLnYxLkdldFBhZ2VBZ2VudFJlcXVlc3QaHC5hcGkudjEuR2V0UGFnZUFnZW50UmVzcG9uc2Ui5gGKtRjdAVJldHVybiB0aGUgYWdlbnQgY3VycmVudGx5IGJvdW5kIHRvIGEgcGFnZSAodGhlIERFU0lSRUQgYWdlbnQpLiBGYWxscyBiYWNrIHRvIHRoZSBkZWZhdWx0IGFnZW50IGlmIG5vIHBlci1wYWdlIGJpbmRpbmcgZXhpc3RzLiBDb21wYXJlIHdpdGggQ2hhdFNlcnZpY2UuR2V0Q2hhdFN0YXR1cyBmb3IgdGhlIGVmZmVjdGl2ZSBhZ2VudCB0aGUgcG9vbCBhY3R1YWxseSBoYXMgYXR0YWNoZWQumLUYARLLAgoMU2V0UGFnZUFnZW50EhsuYXBpLnYxLlNldFBhZ2VBZ2VudFJlcXVlc3QaHC5hcGkudjEuU2V0UGFnZUFnZW50UmVzcG9uc2Ui/wGKtRj6AUJpbmQgYW4gYWdlbnQgdG8gYSBwYWdlLiBQZXJzaXN0ZW50IHRvIHRoZSBwYWdlOyBhbGwgcGFydGljaXBhbnRzIHJvdXRlIHRvIHRoZSBuZXcgYWdlbnQuIEFjY2VwdHMgYWdlbnRzIHRoYXQgYXJlIGN1cnJlbnRseSB1bmF2YWlsYWJsZS4gU3dpdGNoaW5nIHJlLXNwYXducyB0aGUgYWdlbnQgb24gdGhlIG5leHQgbWVzc2FnZTsgdGhlIHBhZ2UgdHJhbnNjcmlwdCBpcyBoYW5kZWQgb2ZmIHRvIHRoZSBuZXcgYWdlbnQgYXMgY29udGV4dC4SXgoRUmVnaXN0ZXJQb29sQWdlbnQSIC5hcGkudjEuUmVnaXN0ZXJQb29sQWdlbnRSZXF1ZXN0GiEuYXBpLnYxLlJlZ2lzdGVyUG9vbEFnZW50UmVzcG9uc2UiBLC1GAFCOlo4Z2l0aHViLmNvbS9icmVuZGFuamVyd2luL3NpbXBsZV93aWtpL2dlbi9nby9hcGkvdjE7YXBpdjFiBnByb3RvMw", [file_api_v1_mcp_options]);
 
 /**
  * AgentInfo describes one entry in the available-agents inventory.
@@ -20,7 +20,9 @@ export const file_api_v1_agent_inventory: GenFile = /*@__PURE__*/
  */
 export type AgentInfo = Message<"api.v1.AgentInfo"> & {
   /**
-   * Stable identifier used for the page binding. Never changes for a given agent.
+   * Stable identifier used for the page binding. Never changes for a given
+   * agent. Bindings to IDs removed from the inventory surface as
+   * unavailable rather than erroring.
    *
    * @generated from field: string id = 1;
    */
@@ -48,11 +50,21 @@ export type AgentInfo = Message<"api.v1.AgentInfo"> & {
   description: string;
 
   /**
-   * Whether the agent is reachable right now (pool connected / endpoint alive).
+   * Whether the agent is reachable right now (pool registered/connected for
+   * ACP_LOCAL; endpoint alive for AG_UI_REMOTE once routing exists).
    *
    * @generated from field: bool available = 5;
    */
   available: boolean;
+
+  /**
+   * Route reference: for ACP_LOCAL, the pool's agent identity; for
+   * AG_UI_REMOTE, the configured endpoint. Not needed by the UI; surfaced
+   * for diagnosability.
+   *
+   * @generated from field: string route = 6;
+   */
+  route: string;
 };
 
 /**
@@ -124,16 +136,16 @@ export const GetPageAgentRequestSchema: GenMessage<GetPageAgentRequest> = /*@__P
  */
 export type GetPageAgentResponse = Message<"api.v1.GetPageAgentResponse"> & {
   /**
-   * The agent currently bound to the page (may be the default if not
-   * explicitly set).
+   * The agent currently bound to the page (the default if not explicitly
+   * set).
    *
    * @generated from field: api.v1.AgentInfo agent = 1;
    */
   agent?: AgentInfo;
 
   /**
-   * True when the binding came from a persisted frontmatter value, false when
-   * falling back to the default.
+   * True when the binding came from a persisted frontmatter value, false
+   * when falling back to the default (or when the bound ID no longer exists).
    *
    * @generated from field: bool explicitly_set = 2;
    */
@@ -166,6 +178,14 @@ export type SetPageAgentRequest = Message<"api.v1.SetPageAgentRequest"> & {
    * @generated from field: string agent_id = 2;
    */
   agentId: string;
+
+  /**
+   * Optional OCC guard: RFC3339 updated_at of the agent.chat_agent subtree
+   * as last read. Mismatch returns FailedPrecondition.
+   *
+   * @generated from field: string expected_updated_at = 3;
+   */
+  expectedUpdatedAt: string;
 };
 
 /**
@@ -187,6 +207,13 @@ export type SetPageAgentResponse = Message<"api.v1.SetPageAgentResponse"> & {
    * @generated from field: api.v1.AgentInfo agent = 1;
    */
   agent?: AgentInfo;
+
+  /**
+   * Server-stamped RFC3339 updated_at of the new binding.
+   *
+   * @generated from field: string updated_at = 2;
+   */
+  updatedAt: string;
 };
 
 /**
@@ -195,6 +222,80 @@ export type SetPageAgentResponse = Message<"api.v1.SetPageAgentResponse"> & {
  */
 export const SetPageAgentResponseSchema: GenMessage<SetPageAgentResponse> = /*@__PURE__*/
   messageDesc(file_api_v1_agent_inventory, 6);
+
+/**
+ * RegisterPoolAgentRequest is the request for RegisterPoolAgent. Sent by the
+ * pool daemon so the server's registry knows which local agents exist.
+ *
+ * @generated from message api.v1.RegisterPoolAgentRequest
+ */
+export type RegisterPoolAgentRequest = Message<"api.v1.RegisterPoolAgentRequest"> & {
+  /**
+   * Stable identifier for the agent (e.g. "local-acp").
+   *
+   * @generated from field: string id = 1;
+   */
+  id: string;
+
+  /**
+   * Human-readable display name.
+   *
+   * @generated from field: string display_name = 2;
+   */
+  displayName: string;
+
+  /**
+   * Short description.
+   *
+   * @generated from field: string description = 3;
+   */
+  description: string;
+
+  /**
+   * Protocol; must be ACP_LOCAL.
+   *
+   * @generated from field: api.v1.AgentProtocol protocol = 4;
+   */
+  protocol: AgentProtocol;
+
+  /**
+   * Route reference (e.g. the pool's agent binary path or persona name).
+   *
+   * @generated from field: string route = 5;
+   */
+  route: string;
+
+  /**
+   * Instance identity of the registering pool connection; a fresh
+   * registration replaces the descriptor registered under the same
+   * connection identity.
+   *
+   * @generated from field: string pool_instance_id = 6;
+   */
+  poolInstanceId: string;
+};
+
+/**
+ * Describes the message api.v1.RegisterPoolAgentRequest.
+ * Use `create(RegisterPoolAgentRequestSchema)` to create a new message.
+ */
+export const RegisterPoolAgentRequestSchema: GenMessage<RegisterPoolAgentRequest> = /*@__PURE__*/
+  messageDesc(file_api_v1_agent_inventory, 7);
+
+/**
+ * RegisterPoolAgentResponse is the response for RegisterPoolAgent.
+ *
+ * @generated from message api.v1.RegisterPoolAgentResponse
+ */
+export type RegisterPoolAgentResponse = Message<"api.v1.RegisterPoolAgentResponse"> & {
+};
+
+/**
+ * Describes the message api.v1.RegisterPoolAgentResponse.
+ * Use `create(RegisterPoolAgentResponseSchema)` to create a new message.
+ */
+export const RegisterPoolAgentResponseSchema: GenMessage<RegisterPoolAgentResponse> = /*@__PURE__*/
+  messageDesc(file_api_v1_agent_inventory, 8);
 
 /**
  * AgentProtocol identifies the transport protocol used to reach an agent.
@@ -208,7 +309,7 @@ export enum AgentProtocol {
   AGENT_PROTOCOL_UNSPECIFIED = 0,
 
   /**
-   * ACP_LOCAL is the local ACP agent pool managed by this wiki instance.
+   * ACP_LOCAL is a local ACP agent spawned and managed by the pool daemon.
    *
    * @generated from enum value: ACP_LOCAL = 1;
    */
@@ -216,7 +317,7 @@ export enum AgentProtocol {
 
   /**
    * AG_UI_REMOTE is a remote agent reachable via the AG-UI protocol.
-   * Reserved for future use — not yet implemented.
+   * Reserved: not routed until #1275 adds the AG-UI pool backend.
    *
    * @generated from enum value: AG_UI_REMOTE = 2;
    */
@@ -230,21 +331,28 @@ export const AgentProtocolSchema: GenEnum<AgentProtocol> = /*@__PURE__*/
   enumDesc(file_api_v1_agent_inventory, 0);
 
 /**
- * AgentInventoryService provides an inventory of available agents and manages
- * the per-page agent binding. Selection is persistent to the page — stored in
- * the agent.selected_agent_id frontmatter field — and survives session
- * close/reopen and pool restarts. Any participant switching the agent changes
- * it for all participants on that page.
+ * AgentInventoryService maintains the inventory of every agent page chat can
+ * route to, and the per-page agent binding.
  *
- * Only the local ACP agent is registered initially; AG-UI remote endpoints can
- * be registered later without protocol changes.
+ * Inventory comes from two sources (issue #1276, design comment 2026-10-24):
+ *   - The pool daemon registers its local ACP agent descriptor(s) at startup
+ *     and on every reconnect (RegisterPoolAgent); server-side availability for
+ *     ACP_LOCAL falls out of pool connectivity.
+ *   - The wiki server loads AG-UI remote endpoints from its own static
+ *     configuration; they advertise as unavailable until #1275 adds the
+ *     AG-UI pool backend.
+ *
+ * The per-page binding is a property of the page itself (recorded decision):
+ * stored in the agent.chat_agent frontmatter subtree, written only through
+ * this service (reserved agent.* namespace, ADR-0009). Any participant's
+ * switch applies to everyone on the page and survives session close/reopen
+ * and pool restarts until someone switches again.
  *
  * @generated from service api.v1.AgentInventoryService
  */
 export const AgentInventoryService: GenService<{
   /**
-   * ListAgents returns all agents currently registered in the inventory,
-   * including their protocol, description, and live availability status.
+   * ListAgents returns all registered agents with live availability.
    *
    * @generated from rpc api.v1.AgentInventoryService.ListAgents
    */
@@ -266,8 +374,10 @@ export const AgentInventoryService: GenService<{
   },
   /**
    * SetPageAgent binds an agent to a page. The binding is written into the
-   * agent.selected_agent_id frontmatter field and survives pool restarts.
-   * All participants on the page immediately route to the new agent.
+   * agent.chat_agent frontmatter subtree (with attribution), survives pool
+   * restarts, applies to all participants, and emits a ChatAgentChanged chat
+   * event. Bindings to currently-unavailable agents are accepted (desired
+   * state); only unknown agent IDs are rejected.
    *
    * @generated from rpc api.v1.AgentInventoryService.SetPageAgent
    */
@@ -275,6 +385,17 @@ export const AgentInventoryService: GenService<{
     methodKind: "unary";
     input: typeof SetPageAgentRequestSchema;
     output: typeof SetPageAgentResponseSchema;
+  },
+  /**
+   * RegisterPoolAgent registers a pool daemon's local agent descriptor.
+   * Called by the pool at startup and on every reconnect; idempotent upsert.
+   *
+   * @generated from rpc api.v1.AgentInventoryService.RegisterPoolAgent
+   */
+  registerPoolAgent: {
+    methodKind: "unary";
+    input: typeof RegisterPoolAgentRequestSchema;
+    output: typeof RegisterPoolAgentResponseSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_api_v1_agent_inventory, 0);

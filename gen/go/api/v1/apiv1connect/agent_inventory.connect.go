@@ -42,28 +42,36 @@ const (
 	// AgentInventoryServiceSetPageAgentProcedure is the fully-qualified name of the
 	// AgentInventoryService's SetPageAgent RPC.
 	AgentInventoryServiceSetPageAgentProcedure = "/api.v1.AgentInventoryService/SetPageAgent"
+	// AgentInventoryServiceRegisterPoolAgentProcedure is the fully-qualified name of the
+	// AgentInventoryService's RegisterPoolAgent RPC.
+	AgentInventoryServiceRegisterPoolAgentProcedure = "/api.v1.AgentInventoryService/RegisterPoolAgent"
 )
 
 // These variables are the protoreflect.Descriptor objects for the RPCs defined in this package.
 var (
-	agentInventoryServiceServiceDescriptor            = v1.File_api_v1_agent_inventory_proto.Services().ByName("AgentInventoryService")
-	agentInventoryServiceListAgentsMethodDescriptor   = agentInventoryServiceServiceDescriptor.Methods().ByName("ListAgents")
-	agentInventoryServiceGetPageAgentMethodDescriptor = agentInventoryServiceServiceDescriptor.Methods().ByName("GetPageAgent")
-	agentInventoryServiceSetPageAgentMethodDescriptor = agentInventoryServiceServiceDescriptor.Methods().ByName("SetPageAgent")
+	agentInventoryServiceServiceDescriptor                 = v1.File_api_v1_agent_inventory_proto.Services().ByName("AgentInventoryService")
+	agentInventoryServiceListAgentsMethodDescriptor        = agentInventoryServiceServiceDescriptor.Methods().ByName("ListAgents")
+	agentInventoryServiceGetPageAgentMethodDescriptor      = agentInventoryServiceServiceDescriptor.Methods().ByName("GetPageAgent")
+	agentInventoryServiceSetPageAgentMethodDescriptor      = agentInventoryServiceServiceDescriptor.Methods().ByName("SetPageAgent")
+	agentInventoryServiceRegisterPoolAgentMethodDescriptor = agentInventoryServiceServiceDescriptor.Methods().ByName("RegisterPoolAgent")
 )
 
 // AgentInventoryServiceClient is a client for the api.v1.AgentInventoryService service.
 type AgentInventoryServiceClient interface {
-	// ListAgents returns all agents currently registered in the inventory,
-	// including their protocol, description, and live availability status.
+	// ListAgents returns all registered agents with live availability.
 	ListAgents(context.Context, *connect.Request[v1.ListAgentsRequest]) (*connect.Response[v1.ListAgentsResponse], error)
 	// GetPageAgent returns the agent currently bound to a page, or the default
 	// agent if no binding has been set yet.
 	GetPageAgent(context.Context, *connect.Request[v1.GetPageAgentRequest]) (*connect.Response[v1.GetPageAgentResponse], error)
 	// SetPageAgent binds an agent to a page. The binding is written into the
-	// agent.selected_agent_id frontmatter field and survives pool restarts.
-	// All participants on the page immediately route to the new agent.
+	// agent.chat_agent frontmatter subtree (with attribution), survives pool
+	// restarts, applies to all participants, and emits a ChatAgentChanged chat
+	// event. Bindings to currently-unavailable agents are accepted (desired
+	// state); only unknown agent IDs are rejected.
 	SetPageAgent(context.Context, *connect.Request[v1.SetPageAgentRequest]) (*connect.Response[v1.SetPageAgentResponse], error)
+	// RegisterPoolAgent registers a pool daemon's local agent descriptor.
+	// Called by the pool at startup and on every reconnect; idempotent upsert.
+	RegisterPoolAgent(context.Context, *connect.Request[v1.RegisterPoolAgentRequest]) (*connect.Response[v1.RegisterPoolAgentResponse], error)
 }
 
 // NewAgentInventoryServiceClient constructs a client for the api.v1.AgentInventoryService service.
@@ -94,14 +102,21 @@ func NewAgentInventoryServiceClient(httpClient connect.HTTPClient, baseURL strin
 			connect.WithSchema(agentInventoryServiceSetPageAgentMethodDescriptor),
 			connect.WithClientOptions(opts...),
 		),
+		registerPoolAgent: connect.NewClient[v1.RegisterPoolAgentRequest, v1.RegisterPoolAgentResponse](
+			httpClient,
+			baseURL+AgentInventoryServiceRegisterPoolAgentProcedure,
+			connect.WithSchema(agentInventoryServiceRegisterPoolAgentMethodDescriptor),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // agentInventoryServiceClient implements AgentInventoryServiceClient.
 type agentInventoryServiceClient struct {
-	listAgents   *connect.Client[v1.ListAgentsRequest, v1.ListAgentsResponse]
-	getPageAgent *connect.Client[v1.GetPageAgentRequest, v1.GetPageAgentResponse]
-	setPageAgent *connect.Client[v1.SetPageAgentRequest, v1.SetPageAgentResponse]
+	listAgents        *connect.Client[v1.ListAgentsRequest, v1.ListAgentsResponse]
+	getPageAgent      *connect.Client[v1.GetPageAgentRequest, v1.GetPageAgentResponse]
+	setPageAgent      *connect.Client[v1.SetPageAgentRequest, v1.SetPageAgentResponse]
+	registerPoolAgent *connect.Client[v1.RegisterPoolAgentRequest, v1.RegisterPoolAgentResponse]
 }
 
 // ListAgents calls api.v1.AgentInventoryService.ListAgents.
@@ -119,18 +134,27 @@ func (c *agentInventoryServiceClient) SetPageAgent(ctx context.Context, req *con
 	return c.setPageAgent.CallUnary(ctx, req)
 }
 
+// RegisterPoolAgent calls api.v1.AgentInventoryService.RegisterPoolAgent.
+func (c *agentInventoryServiceClient) RegisterPoolAgent(ctx context.Context, req *connect.Request[v1.RegisterPoolAgentRequest]) (*connect.Response[v1.RegisterPoolAgentResponse], error) {
+	return c.registerPoolAgent.CallUnary(ctx, req)
+}
+
 // AgentInventoryServiceHandler is an implementation of the api.v1.AgentInventoryService service.
 type AgentInventoryServiceHandler interface {
-	// ListAgents returns all agents currently registered in the inventory,
-	// including their protocol, description, and live availability status.
+	// ListAgents returns all registered agents with live availability.
 	ListAgents(context.Context, *connect.Request[v1.ListAgentsRequest]) (*connect.Response[v1.ListAgentsResponse], error)
 	// GetPageAgent returns the agent currently bound to a page, or the default
 	// agent if no binding has been set yet.
 	GetPageAgent(context.Context, *connect.Request[v1.GetPageAgentRequest]) (*connect.Response[v1.GetPageAgentResponse], error)
 	// SetPageAgent binds an agent to a page. The binding is written into the
-	// agent.selected_agent_id frontmatter field and survives pool restarts.
-	// All participants on the page immediately route to the new agent.
+	// agent.chat_agent frontmatter subtree (with attribution), survives pool
+	// restarts, applies to all participants, and emits a ChatAgentChanged chat
+	// event. Bindings to currently-unavailable agents are accepted (desired
+	// state); only unknown agent IDs are rejected.
 	SetPageAgent(context.Context, *connect.Request[v1.SetPageAgentRequest]) (*connect.Response[v1.SetPageAgentResponse], error)
+	// RegisterPoolAgent registers a pool daemon's local agent descriptor.
+	// Called by the pool at startup and on every reconnect; idempotent upsert.
+	RegisterPoolAgent(context.Context, *connect.Request[v1.RegisterPoolAgentRequest]) (*connect.Response[v1.RegisterPoolAgentResponse], error)
 }
 
 // NewAgentInventoryServiceHandler builds an HTTP handler from the service implementation. It
@@ -157,6 +181,12 @@ func NewAgentInventoryServiceHandler(svc AgentInventoryServiceHandler, opts ...c
 		connect.WithSchema(agentInventoryServiceSetPageAgentMethodDescriptor),
 		connect.WithHandlerOptions(opts...),
 	)
+	agentInventoryServiceRegisterPoolAgentHandler := connect.NewUnaryHandler(
+		AgentInventoryServiceRegisterPoolAgentProcedure,
+		svc.RegisterPoolAgent,
+		connect.WithSchema(agentInventoryServiceRegisterPoolAgentMethodDescriptor),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/api.v1.AgentInventoryService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case AgentInventoryServiceListAgentsProcedure:
@@ -165,6 +195,8 @@ func NewAgentInventoryServiceHandler(svc AgentInventoryServiceHandler, opts ...c
 			agentInventoryServiceGetPageAgentHandler.ServeHTTP(w, r)
 		case AgentInventoryServiceSetPageAgentProcedure:
 			agentInventoryServiceSetPageAgentHandler.ServeHTTP(w, r)
+		case AgentInventoryServiceRegisterPoolAgentProcedure:
+			agentInventoryServiceRegisterPoolAgentHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -184,4 +216,8 @@ func (UnimplementedAgentInventoryServiceHandler) GetPageAgent(context.Context, *
 
 func (UnimplementedAgentInventoryServiceHandler) SetPageAgent(context.Context, *connect.Request[v1.SetPageAgentRequest]) (*connect.Response[v1.SetPageAgentResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("api.v1.AgentInventoryService.SetPageAgent is not implemented"))
+}
+
+func (UnimplementedAgentInventoryServiceHandler) RegisterPoolAgent(context.Context, *connect.Request[v1.RegisterPoolAgentRequest]) (*connect.Response[v1.RegisterPoolAgentResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("api.v1.AgentInventoryService.RegisterPoolAgent is not implemented"))
 }

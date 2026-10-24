@@ -788,10 +788,14 @@ func setupGRPCServer(
 	caldavServer := &caldav.Server{Backend: caldavBackend}
 	site.SetCalDAVServer(caldavServer)
 
-	// The AgentRegistry needs the chatBufferMgr so it can report live pool
-	// availability. It is created here (after chatBufferMgr is initialised)
-	// and stored on site so the HTTP handler layer can read it later if needed.
-	site.AgentRegistry = server.NewAgentRegistry(chatBufferMgr)
+	// The AgentRegistry is created empty: the pool daemon registers its
+	// local agent descriptor at startup/reconnect (RegisterPoolAgent), and
+	// AG-UI entries load from server config (SetConfiguredAgents). Stored on
+	// site so the HTTP handler layer can read it later if needed.
+	site.AgentRegistry = server.NewAgentRegistry()
+	if configuredAgents := server.LoadConfiguredAGUIAgents(site.AgentConfigPath); len(configuredAgents) > 0 {
+		site.AgentRegistry.SetConfiguredAgents(configuredAgents)
+	}
 
 	grpcAPIServer = grpcAPIServer.
 		WithJobQueueCoordinator(site.GetJobQueueCoordinator()).
@@ -803,6 +807,7 @@ func setupGRPCServer(
 		WithAgentChatContextStore(site.AgentChatContextStore).
 		WithAgentInventory(site.AgentRegistry).
 		WithAgentPageBindingStore(site.AgentPageBindingStore).
+		WithChatAgentChangeNotifier(chatBufferMgr).
 		WithChecklistMutator(checklistMutator).
 		WithMapMutator(mapMutator).
 		WithSurveyMutator(surveyMutator)

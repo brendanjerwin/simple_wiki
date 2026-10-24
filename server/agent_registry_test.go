@@ -9,71 +9,231 @@ import (
 	"github.com/brendanjerwin/simple_wiki/server"
 )
 
-// fakeAvailChecker is a stub AgentAvailabilityChecker for registry tests.
-type fakeAvailChecker struct {
-	poolConnected bool
-}
-
-func (f *fakeAvailChecker) HasInstanceRequestSubscribers() bool {
-	return f.poolConnected
-}
-
 var _ = Describe("AgentRegistry", func() {
-	Describe("NewAgentRegistry", func() {
-		It("should pre-register the local ACP agent", func() {
-			reg := server.NewAgentRegistry(&fakeAvailChecker{})
-			agents := reg.List()
-			Expect(agents).To(HaveLen(1))
-			Expect(agents[0].GetId()).To(Equal(server.LocalACPAgentID))
+	Describe("DefaultAgentID", func() {
+		It("should return the local ACP agent id", func() {
+			reg := server.NewAgentRegistry()
+			Expect(reg.DefaultAgentID()).To(Equal(server.LocalACPAgentID))
+		})
+	})
+
+	Describe("when freshly constructed", func() {
+		var agents []*apiv1.AgentInfo
+
+		BeforeEach(func() {
+			agents = server.NewAgentRegistry().List()
+		})
+
+		It("should list no agents until one registers", func() {
+			Expect(agents).To(BeEmpty())
+		})
+	})
+
+	Describe("RegisterPoolAgent", func() {
+		Describe("when the pool registers the local ACP agent", func() {
+			var agents []*apiv1.AgentInfo
+
+			BeforeEach(func() {
+				reg := server.NewAgentRegistry()
+				err := reg.RegisterPoolAgent(&apiv1.RegisterPoolAgentRequest{
+					Id:          server.LocalACPAgentID,
+					DisplayName: "Local Agent",
+					Description: "The bundled ACP agent.",
+					Protocol:    apiv1.AgentProtocol_ACP_LOCAL,
+					Route:       "pi-acp",
+				})
+				Expect(err).NotTo(HaveOccurred())
+				agents = reg.List()
+			})
+
+			It("should have registered the descriptor", func() {
+				Expect(agents[0].GetId()).To(Equal(server.LocalACPAgentID))
+			})
+
+			It("should mark the agent available after registration", func() {
+				Expect(agents[0].GetAvailable()).To(BeTrue())
+			})
+
+			It("should carry the route reference", func() {
+				Expect(agents[0].GetRoute()).To(Equal("pi-acp"))
+			})
+		})
+
+		Describe("when the pool re-registers after reconnect", func() {
+			var agents []*apiv1.AgentInfo
+
+			BeforeEach(func() {
+				reg := server.NewAgentRegistry()
+				err := reg.RegisterPoolAgent(&apiv1.RegisterPoolAgentRequest{
+					Id:          server.LocalACPAgentID,
+					DisplayName: "Local Agent",
+					Protocol:    apiv1.AgentProtocol_ACP_LOCAL,
+				})
+				Expect(err).NotTo(HaveOccurred())
+				err = reg.RegisterPoolAgent(&apiv1.RegisterPoolAgentRequest{
+					Id:          server.LocalACPAgentID,
+					DisplayName: "Local Agent (renamed)",
+					Protocol:    apiv1.AgentProtocol_ACP_LOCAL,
+				})
+				Expect(err).NotTo(HaveOccurred())
+				agents = reg.List()
+			})
+
+			It("should be an idempotent upsert with fresh fields", func() {
+				Expect(agents).To(HaveLen(1))
+				Expect(agents[0].GetDisplayName()).To(Equal("Local Agent (renamed)"))
+				Expect(agents[0].GetAvailable()).To(BeTrue())
+			})
+		})
+
+		Describe("when a non-ACP protocol is registered", func() {
+			var err error
+
+			BeforeEach(func() {
+				err = server.NewAgentRegistry().RegisterPoolAgent(&apiv1.RegisterPoolAgentRequest{
+					Id:       "agui-x",
+					Protocol: apiv1.AgentProtocol_AG_UI_REMOTE,
+				})
+			})
+
+			It("should reject it — AG-UI entries come from server config", func() {
+				Expect(err).To(MatchError(ContainSubstring("ACP_LOCAL")))
+			})
+		})
+
+		Describe("when the id differs from the local ACP id", func() {
+			var err error
+
+			BeforeEach(func() {
+				err = server.NewAgentRegistry().RegisterPoolAgent(&apiv1.RegisterPoolAgentRequest{
+					Id:       "not-local-acp",
+					Protocol: apiv1.AgentProtocol_ACP_LOCAL,
+				})
+			})
+
+			It("should reject it — only the bundled pool id may register", func() {
+				Expect(err).To(MatchError(ContainSubstring("not-local-acp")))
+			})
+		})
+	})
+
+	Describe("PoolDisconnected", func() {
+		Describe("when the registered pool connection drops", func() {
+			var agents []*apiv1.AgentInfo
+
+			BeforeEach(func() {
+				reg := server.NewAgentRegistry()
+				Expect(reg.RegisterPoolAgent(&apiv1.RegisterPoolAgentRequest{
+					Id:       server.LocalACPAgentID,
+					Protocol: apiv1.AgentProtocol_ACP_LOCAL,
+				})).NotTo(HaveOccurred())
+				reg.PoolDisconnected()
+				agents = reg.List()
+			})
+
+			It("should mark the ACP agent unavailable", func() {
+				Expect(agents[0].GetAvailable()).To(BeFalse())
+			})
+
+			It("should keep the entry listed", func() {
+				Expect(agents).To(HaveLen(1))
+				Expect(agents[0].GetId()).To(Equal(server.LocalACPAgentID))
+			})
+		})
+	})
+
+	Describe("SetConfiguredAgents", func() {
+		Describe("when AG-UI entries load from server config", func() {
+			var agents []*apiv1.AgentInfo
+
+			BeforeEach(func() {
+				reg := server.NewAgentRegistry()
+				Expect(reg.RegisterPoolAgent(&apiv1.RegisterPoolAgentRequest{
+					Id:       server.LocalACPAgentID,
+					Protocol: apiv1.AgentProtocol_ACP_LOCAL,
+				})).NotTo(HaveOccurred())
+				reg.SetConfiguredAgents([]*apiv1.AgentInfo{
+					{
+						Id:          "agui-helper",
+						DisplayName: "Helper",
+						Protocol:    apiv1.AgentProtocol_AG_UI_REMOTE,
+						Route:       "https://agentos.example/agent/helper",
+					},
+				})
+				agents = reg.List()
+			})
+
+			It("should list both the pool agent and the configured entry", func() {
+				Expect(agents).To(HaveLen(2))
+			})
+
+			It("should advertise the AG-UI entry as unavailable (no backend yet)", func() {
+				var agui *apiv1.AgentInfo
+				for _, a := range agents {
+					if a.GetId() == "agui-helper" {
+						agui = a
+					}
+				}
+				Expect(agui).NotTo(BeNil())
+				Expect(agui.GetAvailable()).To(BeFalse())
+				Expect(agui.GetProtocol()).To(Equal(apiv1.AgentProtocol_AG_UI_REMOTE))
+			})
+
+			It("should keep the registered pool agent available", func() {
+				Expect(agents[0].GetAvailable()).To(BeTrue())
+			})
+		})
+
+		Describe("when reloaded config no longer includes a previous AG-UI entry", func() {
+			var removed *apiv1.AgentInfo
+
+			BeforeEach(func() {
+				reg := server.NewAgentRegistry()
+				reg.SetConfiguredAgents([]*apiv1.AgentInfo{
+					{Id: "agui-helper", Protocol: apiv1.AgentProtocol_AG_UI_REMOTE},
+					{Id: "agui-old", Protocol: apiv1.AgentProtocol_AG_UI_REMOTE},
+				})
+				reg.SetConfiguredAgents([]*apiv1.AgentInfo{
+					{Id: "agui-helper", Protocol: apiv1.AgentProtocol_AG_UI_REMOTE},
+				})
+				_, removed = reg.FindByID("agui-old"), reg.FindByID("agui-old")
+			})
+
+			It("should drop the removed entry", func() {
+				Expect(removed).To(BeNil())
+			})
+		})
+
+		Describe("when config tries to overwrite the pool agent", func() {
+			var agents []*apiv1.AgentInfo
+
+			BeforeEach(func() {
+				reg := server.NewAgentRegistry()
+				Expect(reg.RegisterPoolAgent(&apiv1.RegisterPoolAgentRequest{
+					Id:          server.LocalACPAgentID,
+					DisplayName: "Pool Authority",
+					Protocol:    apiv1.AgentProtocol_ACP_LOCAL,
+				})).NotTo(HaveOccurred())
+				reg.SetConfiguredAgents([]*apiv1.AgentInfo{
+					{Id: server.LocalACPAgentID, DisplayName: "Config Impostor", Protocol: apiv1.AgentProtocol_ACP_LOCAL},
+				})
+				agents = reg.List()
+			})
+
+			It("should keep the pool-registered descriptor", func() {
+				Expect(agents[0].GetDisplayName()).To(Equal("Pool Authority"))
+			})
 		})
 	})
 
 	Describe("List", func() {
-		Describe("when the pool is connected", func() {
-			var agents []*apiv1.AgentInfo
-
-			BeforeEach(func() {
-				reg := server.NewAgentRegistry(&fakeAvailChecker{poolConnected: true})
-				agents = reg.List()
-			})
-
-			It("should report the local ACP agent as available", func() {
-				Expect(agents[0].GetAvailable()).To(BeTrue())
-			})
-
-			It("should return an ACP_LOCAL protocol", func() {
-				Expect(agents[0].GetProtocol()).To(Equal(apiv1.AgentProtocol_ACP_LOCAL))
-			})
-		})
-
-		Describe("when the pool is not connected", func() {
-			var agents []*apiv1.AgentInfo
-
-			BeforeEach(func() {
-				reg := server.NewAgentRegistry(&fakeAvailChecker{poolConnected: false})
-				agents = reg.List()
-			})
-
-			It("should report the local ACP agent as unavailable", func() {
-				Expect(agents[0].GetAvailable()).To(BeFalse())
-			})
-		})
-
-		Describe("when the availability checker is nil", func() {
-			var agents []*apiv1.AgentInfo
-
-			BeforeEach(func() {
-				reg := server.NewAgentRegistry(nil)
-				agents = reg.List()
-			})
-
-			It("should report the local ACP agent as unavailable without panicking", func() {
-				Expect(agents[0].GetAvailable()).To(BeFalse())
-			})
-		})
-
 		It("should return copies so mutations do not affect the registry", func() {
-			reg := server.NewAgentRegistry(&fakeAvailChecker{})
+			reg := server.NewAgentRegistry()
+			Expect(reg.RegisterPoolAgent(&apiv1.RegisterPoolAgentRequest{
+				Id:          server.LocalACPAgentID,
+				DisplayName: "Local Agent",
+				Protocol:    apiv1.AgentProtocol_ACP_LOCAL,
+			})).NotTo(HaveOccurred())
 			agents := reg.List()
 			agents[0].DisplayName = "mutated"
 			freshList := reg.List()
@@ -86,7 +246,11 @@ var _ = Describe("AgentRegistry", func() {
 			var found *apiv1.AgentInfo
 
 			BeforeEach(func() {
-				reg := server.NewAgentRegistry(&fakeAvailChecker{})
+				reg := server.NewAgentRegistry()
+				Expect(reg.RegisterPoolAgent(&apiv1.RegisterPoolAgentRequest{
+					Id:       server.LocalACPAgentID,
+					Protocol: apiv1.AgentProtocol_ACP_LOCAL,
+				})).NotTo(HaveOccurred())
 				found = reg.FindByID(server.LocalACPAgentID)
 			})
 
@@ -100,20 +264,12 @@ var _ = Describe("AgentRegistry", func() {
 			var found *apiv1.AgentInfo
 
 			BeforeEach(func() {
-				reg := server.NewAgentRegistry(&fakeAvailChecker{})
-				found = reg.FindByID("nonexistent-agent")
+				found = server.NewAgentRegistry().FindByID("nonexistent-agent")
 			})
 
 			It("should return nil", func() {
 				Expect(found).To(BeNil())
 			})
-		})
-	})
-
-	Describe("DefaultAgentID", func() {
-		It("should return the local ACP agent ID", func() {
-			reg := server.NewAgentRegistry(&fakeAvailChecker{})
-			Expect(reg.DefaultAgentID()).To(Equal(server.LocalACPAgentID))
 		})
 	})
 })

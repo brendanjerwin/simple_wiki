@@ -42,7 +42,10 @@ const (
 // ChatBufferManager defines the interface for managing chat message buffers.
 type ChatBufferManager interface {
 	AddUserMessage(page, content, senderName string) (string, error)
-	AddAssistantMessage(page, content, replyToID string) (string, error)
+	AddAssistantMessage(page, content, replyToID, agentID, agentDisplayName string) (string, error)
+	NotifyAgentChanged(page, agentID, agentDisplayName, switchedBy string)
+	NotifyAgentAttached(page, agentID, agentDisplayName string)
+	EffectiveAgent(page string) (agentID, agentDisplayName string)
 	EditMessage(messageID, newContent string, streaming bool) error
 	AddReaction(messageID, emoji, reactor string) error
 	ClearPage(page string)
@@ -138,20 +141,21 @@ type Server struct {
 	checklistMutator        *checklistmutator.Mutator
 	mapMutator              *mapmutator.Mutator
 	surveyMutator           *surveymutator.Mutator
-	pageAppMutator         *pageAppMutator
-	pageAppMutatorOnce     sync.Once
+	pageAppMutator          *pageAppMutator
+	pageAppMutatorOnce      sync.Once
 
 	// Connector runtimes contain the polymorphic engine-path wiring
 	// used by ConnectorService. Per-kind auth collaborators remain
 	// separate because the auth flows have different shapes.
-	keepConnector       *connectorRuntime
-	keepAuthVerifier    googlekeep.AuthVerifier
-	tasksConnector      *connectorRuntime
-	tasksAuthURLBuilder TasksAuthURLBuilder
-	historyReader          PageHistoryReader
-	historySearcher        HistorySearcher
-	agentInventory         AgentInventory
-	agentPageBindingStore  AgentPageBindingStore
+	keepConnector           *connectorRuntime
+	keepAuthVerifier        googlekeep.AuthVerifier
+	tasksConnector          *connectorRuntime
+	tasksAuthURLBuilder     TasksAuthURLBuilder
+	historyReader           PageHistoryReader
+	historySearcher         HistorySearcher
+	agentInventory          AgentInventory
+	agentPageBindingStore   AgentPageBindingStore
+	chatAgentChangeNotifier ChatAgentChangeNotifier
 }
 
 // NewServer creates a new gRPC server with the given dependencies.
@@ -254,6 +258,13 @@ func (s *Server) WithAgentInventory(inv AgentInventory) *Server {
 // AgentInventoryService.{GetPageAgent, SetPageAgent} to work.
 func (s *Server) WithAgentPageBindingStore(store AgentPageBindingStore) *Server {
 	s.agentPageBindingStore = store
+	return s
+}
+
+// WithChatAgentChangeNotifier sets the sink that records agent-binding
+// switches into the page's chat buffer (ChatAgentChanged events).
+func (s *Server) WithChatAgentChangeNotifier(notifier ChatAgentChangeNotifier) *Server {
+	s.chatAgentChangeNotifier = notifier
 	return s
 }
 

@@ -22,67 +22,47 @@ var _ = Describe("AgentPageBindingStore", func() {
 		store = server.NewAgentPageBindingStore(pages)
 	})
 
-	Describe("GetSelectedAgentID", func() {
+	Describe("GetBinding", func() {
 		Describe("when the page has no agent namespace", func() {
-			var agentID string
+			var binding *server.PageAgentBinding
 			var err error
 
 			BeforeEach(func() {
-				agentID, err = store.GetSelectedAgentID("p")
+				binding, err = store.GetBinding("p")
 			})
 
 			It("should not return an error", func() {
 				Expect(err).NotTo(HaveOccurred())
 			})
 
-			It("should return an empty agent ID", func() {
-				Expect(agentID).To(BeEmpty())
+			It("should return nil", func() {
+				Expect(binding).To(BeNil())
 			})
 		})
 
-		Describe("when the page has an agent namespace but no selected_agent_id", func() {
-			var agentID string
-			var err error
+		Describe("when the page has a binding", func() {
+			var binding *server.PageAgentBinding
 
 			BeforeEach(func() {
 				_ = pages.WriteFrontMatter("p", wikipage.FrontMatter{
 					"agent": map[string]any{
-						"schedules": []any{},
+						"chat_agent": map[string]any{
+							"agent_id":     "local-acp",
+							"display_name": "Local Agent",
+							"updated_by":   "alice",
+							"updated_at":   "2026-10-24T17:00:00Z",
+						},
 					},
 				}, wikipage.AnonymousIdentity)
 
-				agentID, err = store.GetSelectedAgentID("p")
+				binding, _ = store.GetBinding("p")
 			})
 
-			It("should not return an error", func() {
-				Expect(err).NotTo(HaveOccurred())
-			})
-
-			It("should return an empty agent ID", func() {
-				Expect(agentID).To(BeEmpty())
-			})
-		})
-
-		Describe("when the page has a selected_agent_id", func() {
-			var agentID string
-			var err error
-
-			BeforeEach(func() {
-				_ = pages.WriteFrontMatter("p", wikipage.FrontMatter{
-					"agent": map[string]any{
-						"selected_agent_id": "local-acp",
-					},
-				}, wikipage.AnonymousIdentity)
-
-				agentID, err = store.GetSelectedAgentID("p")
-			})
-
-			It("should not return an error", func() {
-				Expect(err).NotTo(HaveOccurred())
-			})
-
-			It("should return the stored agent ID", func() {
-				Expect(agentID).To(Equal("local-acp"))
+			It("should decode all fields", func() {
+				Expect(binding.AgentID).To(Equal("local-acp"))
+				Expect(binding.DisplayName).To(Equal("Local Agent"))
+				Expect(binding.UpdatedBy).To(Equal("alice"))
+				Expect(binding.UpdatedAt).To(Equal("2026-10-24T17:00:00Z"))
 			})
 		})
 
@@ -92,7 +72,7 @@ var _ = Describe("AgentPageBindingStore", func() {
 			BeforeEach(func() {
 				errStore := &errorPageStore{readErr: errors.New("disk failure")}
 				badStore := server.NewAgentPageBindingStore(errStore)
-				_, err = badStore.GetSelectedAgentID("p")
+				_, err = badStore.GetBinding("p")
 			})
 
 			It("should wrap and return the error", func() {
@@ -101,73 +81,53 @@ var _ = Describe("AgentPageBindingStore", func() {
 		})
 	})
 
-	Describe("SetSelectedAgentID", func() {
-		Describe("when setting an agent ID on a page with no prior agent namespace", func() {
-			var err error
+	Describe("SetBinding", func() {
+		Describe("when setting a binding on a page with no prior agent namespace", func() {
+			var updated bindingWriteResult
 
 			BeforeEach(func() {
-				err = store.SetSelectedAgentID("p", "local-acp")
-			})
-
-			It("should not return an error", func() {
+				var err error
+				updated.updatedAt, err = store.SetBinding("p", &server.AgentBindingInput{
+					AgentID:     "local-acp",
+					DisplayName: "Local Agent",
+					UpdatedBy:   "alice",
+				})
 				Expect(err).NotTo(HaveOccurred())
 			})
 
-			It("should persist the agent ID in agent.selected_agent_id", func() {
-				agentID, readErr := store.GetSelectedAgentID("p")
+			It("should persist the binding fields", func() {
+				binding, readErr := store.GetBinding("p")
 				Expect(readErr).NotTo(HaveOccurred())
-				Expect(agentID).To(Equal("local-acp"))
+				Expect(binding.AgentID).To(Equal("local-acp"))
+				Expect(binding.DisplayName).To(Equal("Local Agent"))
+				Expect(binding.UpdatedBy).To(Equal("alice"))
+			})
+
+			It("should stamp a non-empty RFC3339 updated_at", func() {
+				Expect(updated.updatedAt).NotTo(BeEmpty())
+				Expect(server.IsValidRFC3339(updated.updatedAt)).To(BeTrue())
 			})
 		})
 
-		Describe("when setting an agent ID preserves existing frontmatter keys", func() {
-			var err error
-
+		Describe("when setting a binding preserves existing frontmatter", func() {
 			BeforeEach(func() {
 				_ = pages.WriteFrontMatter("q", wikipage.FrontMatter{
 					"title": "My Page",
-				}, wikipage.AnonymousIdentity)
-				err = store.SetSelectedAgentID("q", "local-acp")
-			})
-
-			It("should not return an error", func() {
-				Expect(err).NotTo(HaveOccurred())
-			})
-
-			It("should preserve pre-existing top-level frontmatter keys", func() {
-				_, fm, readErr := pages.ReadFrontMatter("q")
-				Expect(readErr).NotTo(HaveOccurred())
-				Expect(fm["title"]).To(Equal("My Page"))
-			})
-		})
-
-		Describe("when setting an agent ID on a page that already has an agent namespace", func() {
-			var err error
-
-			BeforeEach(func() {
-				_ = pages.WriteFrontMatter("p", wikipage.FrontMatter{
 					"agent": map[string]any{
 						"chat_context": map[string]any{"last_conversation_summary": "hello"},
 					},
 				}, wikipage.AnonymousIdentity)
-
-				err = store.SetSelectedAgentID("p", "local-acp")
 			})
 
-			It("should not return an error", func() {
+			It("should preserve chat_context and title on write", func() {
+				_, err := store.SetBinding("q", &server.AgentBindingInput{
+					AgentID: "local-acp", UpdatedBy: "alice",
+				})
 				Expect(err).NotTo(HaveOccurred())
-			})
 
-			It("should persist the agent ID", func() {
-				agentID, readErr := store.GetSelectedAgentID("p")
+				_, fm, readErr := pages.ReadFrontMatter("q")
 				Expect(readErr).NotTo(HaveOccurred())
-				Expect(agentID).To(Equal("local-acp"))
-			})
-
-			It("should preserve the existing agent namespace contents", func() {
-				_, fm, readErr := pages.ReadFrontMatter("p")
-				Expect(readErr).NotTo(HaveOccurred())
-
+				Expect(fm["title"]).To(Equal("My Page"))
 				agentNS, ok := fm["agent"].(map[string]any)
 				Expect(ok).To(BeTrue())
 				_, hasChatCtx := agentNS["chat_context"]
@@ -175,27 +135,41 @@ var _ = Describe("AgentPageBindingStore", func() {
 			})
 		})
 
-		Describe("when clearing the agent ID by passing empty string", func() {
+		Describe("with an OCC mismatch", func() {
 			var err error
 
 			BeforeEach(func() {
-				_ = pages.WriteFrontMatter("p", wikipage.FrontMatter{
-					"agent": map[string]any{
-						"selected_agent_id": "local-acp",
-					},
-				}, wikipage.AnonymousIdentity)
-
-				err = store.SetSelectedAgentID("p", "")
+				_, _ = store.SetBinding("p", &server.AgentBindingInput{
+					AgentID: "local-acp", UpdatedBy: "alice",
+				})
+				_, err = store.SetBinding("p", &server.AgentBindingInput{
+					AgentID: "other-acp", UpdatedBy: "bob",
+					ExpectedUpdatedAt: "2001-01-01T00:00:00Z",
+				})
 			})
 
-			It("should not return an error", func() {
+			It("should return a sentinel mismatch error", func() {
+				Expect(err).To(MatchError(server.ErrBindingConflict))
+			})
+		})
+
+		Describe("with a matching OCC timestamp", func() {
+			var err error
+
+			BeforeEach(func() {
+				firstUpdated, _ := store.SetBinding("p", &server.AgentBindingInput{
+					AgentID: "local-acp", UpdatedBy: "alice",
+				})
+				_, err = store.SetBinding("p", &server.AgentBindingInput{
+					AgentID: "other-acp", UpdatedBy: "bob",
+					ExpectedUpdatedAt: firstUpdated,
+				})
+			})
+
+			It("should apply the write", func() {
 				Expect(err).NotTo(HaveOccurred())
-			})
-
-			It("should remove the agent ID from frontmatter", func() {
-				agentID, readErr := store.GetSelectedAgentID("p")
-				Expect(readErr).NotTo(HaveOccurred())
-				Expect(agentID).To(BeEmpty())
+				binding, _ := store.GetBinding("p")
+				Expect(binding.AgentID).To(Equal("other-acp"))
 			})
 		})
 
@@ -205,7 +179,7 @@ var _ = Describe("AgentPageBindingStore", func() {
 			BeforeEach(func() {
 				errStore := &errorPageStore{readErr: errors.New("disk failure")}
 				badStore := server.NewAgentPageBindingStore(errStore)
-				err = badStore.SetSelectedAgentID("p", "local-acp")
+				_, err = badStore.SetBinding("p", &server.AgentBindingInput{AgentID: "local-acp"})
 			})
 
 			It("should wrap and return the error", func() {
@@ -219,7 +193,7 @@ var _ = Describe("AgentPageBindingStore", func() {
 			BeforeEach(func() {
 				errStore := &errorPageStore{writeErr: errors.New("write failure")}
 				badStore := server.NewAgentPageBindingStore(errStore)
-				err = badStore.SetSelectedAgentID("p", "local-acp")
+				_, err = badStore.SetBinding("p", &server.AgentBindingInput{AgentID: "local-acp"})
 			})
 
 			It("should wrap and return the error", func() {
@@ -228,3 +202,8 @@ var _ = Describe("AgentPageBindingStore", func() {
 		})
 	})
 })
+
+type bindingWriteResult struct {
+	updatedAt string
+	_         struct{}
+}

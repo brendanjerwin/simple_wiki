@@ -40,6 +40,10 @@ func newFakeAgentInventory() *fakeAgentInventory {
 
 func (f *fakeAgentInventory) List() []*apiv1.AgentInfo { return f.agents }
 func (f *fakeAgentInventory) DefaultAgentID() string   { return f.defaultAgent }
+func (f *fakeAgentInventory) RegisterPoolAgent(_ *apiv1.RegisterPoolAgentRequest) error {
+	return nil
+}
+
 func (f *fakeAgentInventory) FindByID(id string) *apiv1.AgentInfo {
 	for _, a := range f.agents {
 		if a.Id == id {
@@ -51,28 +55,34 @@ func (f *fakeAgentInventory) FindByID(id string) *apiv1.AgentInfo {
 
 // fakeAgentPageBindingStore is a stub v1.AgentPageBindingStore for handler tests.
 type fakeAgentPageBindingStore struct {
-	bindings map[string]string
+	bindings map[string]*server.PageAgentBinding
 	readErr  error
 	writeErr error
 }
 
 func newFakeAgentPageBindingStore() *fakeAgentPageBindingStore {
-	return &fakeAgentPageBindingStore{bindings: map[string]string{}}
+	return &fakeAgentPageBindingStore{bindings: map[string]*server.PageAgentBinding{}}
 }
 
-func (f *fakeAgentPageBindingStore) GetSelectedAgentID(page string) (string, error) {
+func (f *fakeAgentPageBindingStore) GetBinding(page string) (*server.PageAgentBinding, error) {
 	if f.readErr != nil {
-		return "", f.readErr
+		return nil, f.readErr
 	}
 	return f.bindings[page], nil
 }
 
-func (f *fakeAgentPageBindingStore) SetSelectedAgentID(page, agentID string) error {
+func (f *fakeAgentPageBindingStore) SetBinding(page string, input *server.AgentBindingInput) (string, error) {
 	if f.writeErr != nil {
-		return f.writeErr
+		return "", f.writeErr
 	}
-	f.bindings[page] = agentID
-	return nil
+	updatedAt := "2026-10-24T18:00:00Z"
+	f.bindings[page] = &server.PageAgentBinding{
+		AgentID:     input.AgentID,
+		DisplayName: input.DisplayName,
+		UpdatedBy:   input.UpdatedBy,
+		UpdatedAt:   updatedAt,
+	}
+	return updatedAt, nil
 }
 
 // newAgentInventoryServer wires a Server with minimal dependencies for inventory tests.
@@ -159,7 +169,10 @@ var _ = Describe("AgentInventoryService handlers", func() {
 			var err error
 
 			BeforeEach(func() {
-				binding.bindings["test-page"] = server.LocalACPAgentID
+				binding.bindings["test-page"] = &server.PageAgentBinding{
+					AgentID:     server.LocalACPAgentID,
+					DisplayName: "Local Agent",
+				}
 				resp, err = srv.GetPageAgent(ctx, &apiv1.GetPageAgentRequest{Page: "test-page"})
 			})
 
@@ -181,7 +194,10 @@ var _ = Describe("AgentInventoryService handlers", func() {
 			var err error
 
 			BeforeEach(func() {
-				binding.bindings["test-page"] = "removed-agent"
+				binding.bindings["test-page"] = &server.PageAgentBinding{
+					AgentID:     "removed-agent",
+					DisplayName: "Removed Agent",
+				}
 				resp, err = srv.GetPageAgent(ctx, &apiv1.GetPageAgentRequest{Page: "test-page"})
 			})
 
@@ -189,12 +205,13 @@ var _ = Describe("AgentInventoryService handlers", func() {
 				Expect(err).NotTo(HaveOccurred())
 			})
 
-			It("should fall back to the default agent", func() {
-				Expect(resp.GetAgent().GetId()).To(Equal(server.LocalACPAgentID))
+			It("should surface the orphaned binding as unavailable, not fall back", func() {
+				Expect(resp.GetAgent().GetId()).To(Equal("removed-agent"))
+				Expect(resp.GetAgent().GetAvailable()).To(BeFalse())
 			})
 
-			It("should report not explicitly set after fallback", func() {
-				Expect(resp.GetExplicitlySet()).To(BeFalse())
+			It("should report explicitly set", func() {
+				Expect(resp.GetExplicitlySet()).To(BeTrue())
 			})
 		})
 
@@ -264,7 +281,7 @@ var _ = Describe("AgentInventoryService handlers", func() {
 			})
 
 			It("should persist the binding", func() {
-				Expect(binding.bindings["test-page"]).To(Equal(server.LocalACPAgentID))
+				Expect(binding.bindings["test-page"].AgentID).To(Equal(server.LocalACPAgentID))
 			})
 		})
 

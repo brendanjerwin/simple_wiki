@@ -2,8 +2,10 @@ package v1
 
 import (
 	"context"
+	"errors"
 
 	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
+	"github.com/brendanjerwin/simple_wiki/server"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -15,14 +17,24 @@ type AgentInventory interface {
 	List() []*apiv1.AgentInfo
 	FindByID(id string) *apiv1.AgentInfo
 	DefaultAgentID() string
+
+	// RegisterPoolAgent idempotently upserts the pool's local agent descriptor
+	// and marks it available. Only ACP_LOCAL agents register here.
+	RegisterPoolAgent(req *apiv1.RegisterPoolAgentRequest) error
 }
 
 // AgentPageBindingStore is the contract for reading and writing the per-page
-// agent binding stored in agent.selected_agent_id frontmatter. The concrete
-// implementation lives in the server package (AgentPageBindingStore).
+// agent binding stored in the agent.chat_agent frontmatter subtree. The
+// concrete implementation lives in the server package (AgentPageBindingStore).
 type AgentPageBindingStore interface {
-	GetSelectedAgentID(page string) (string, error)
-	SetSelectedAgentID(page, agentID string) error
+	GetBinding(page string) (*server.PageAgentBinding, error)
+	SetBinding(page string, input *server.AgentBindingInput) (updatedAt string, err error)
+}
+
+// ChatAgentChangeNotifier is the contract for recording a binding switch into
+// the page's chat buffer (replayed to all participants).
+type ChatAgentChangeNotifier interface {
+	NotifyAgentChanged(page, agentID, agentDisplayName, switchedBy string)
 }
 
 // errAgentInventoryNotConfigured is returned when an AgentInventoryService RPC
@@ -45,8 +57,7 @@ func (s *Server) ListAgents(_ context.Context, _ *apiv1.ListAgentsRequest) (*api
 	if s.agentInventory == nil {
 		return nil, errAgentInventoryNotConfigured
 	}
-	agents := s.agentInventory.List()
-	return &apiv1.ListAgentsResponse{Agents: agents}, nil
+	return &apiv1.ListAgentsResponse{Agents: s.agentInventory.List()}, nil
 }
 
 // GetPageAgent implements AgentInventoryService.GetPageAgent.
@@ -61,36 +72,44 @@ func (s *Server) GetPageAgent(_ context.Context, req *apiv1.GetPageAgentRequest)
 		return nil, errAgentPageBindingStoreNotConfigured
 	}
 
-	selectedID, err := s.agentPageBindingStore.GetSelectedAgentID(req.GetPage())
+	binding, err := s.agentPageBindingStore.GetBinding(req.GetPage())
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "get page agent: %v", err)
 	}
 
-	explicitlySet := selectedID != ""
-	agentID := selectedID
-	if agentID == "" {
-		agentID = s.agentInventory.DefaultAgentID()
+	if binding == nil {
+		agent := s.agentInventory.FindByID(s.agentInventory.DefaultAgentID())
+		if agent == nil {
+			return nil, status.Error(codes.Internal, "no default agent configured")
+		}
+		return &apiv1.GetPageAgentResponse{
+			Agent:         agent,
+			ExplicitlySet: false,
+		}, nil
 	}
 
-	agent := s.agentInventory.FindByID(agentID)
+	agent := s.agentInventory.FindByID(binding.AgentID)
 	if agent == nil {
-		// The stored ID no longer exists — fall back to default.
-		agentID = s.agentInventory.DefaultAgentID()
-		agent = s.agentInventory.FindByID(agentID)
-		explicitlySet = false
-	}
-	if agent == nil {
-		return nil, status.Error(codes.Internal, "no default agent configured")
+		// Orphaned binding: report the desired agent as unavailable instead of
+		// silently falling back — the persisted intent stays visible.
+		return &apiv1.GetPageAgentResponse{
+			Agent: &apiv1.AgentInfo{
+				Id:          binding.AgentID,
+				DisplayName: binding.DisplayName,
+				Available:   false,
+			},
+			ExplicitlySet: true,
+		}, nil
 	}
 
 	return &apiv1.GetPageAgentResponse{
-		Agent:        agent,
-		ExplicitlySet: explicitlySet,
+		Agent:         agent,
+		ExplicitlySet: true,
 	}, nil
 }
 
 // SetPageAgent implements AgentInventoryService.SetPageAgent.
-func (s *Server) SetPageAgent(_ context.Context, req *apiv1.SetPageAgentRequest) (*apiv1.SetPageAgentResponse, error) {
+func (s *Server) SetPageAgent(ctx context.Context, req *apiv1.SetPageAgentRequest) (*apiv1.SetPageAgentResponse, error) {
 	if req.GetPage() == "" {
 		return nil, status.Error(codes.InvalidArgument, errPageRequired)
 	}
@@ -109,9 +128,54 @@ func (s *Server) SetPageAgent(_ context.Context, req *apiv1.SetPageAgentRequest)
 		return nil, status.Errorf(codes.NotFound, "agent %q not found in inventory", req.GetAgentId())
 	}
 
-	if err := s.agentPageBindingStore.SetSelectedAgentID(req.GetPage(), req.GetAgentId()); err != nil {
+	if req.GetExpectedUpdatedAt() != "" && !server.IsValidRFC3339(req.GetExpectedUpdatedAt()) {
+		return nil, status.Error(codes.InvalidArgument, "expected_updated_at must be an RFC3339 timestamp")
+	}
+
+	updatedAt, err := s.agentPageBindingStore.SetBinding(req.GetPage(), &server.AgentBindingInput{
+		AgentID:           req.GetAgentId(),
+		DisplayName:       agent.GetDisplayName(),
+		UpdatedBy:         s.identityName(ctx),
+		ExpectedUpdatedAt: req.GetExpectedUpdatedAt(),
+	})
+	if err != nil {
+		if errors.Is(err, server.ErrBindingConflict) {
+			return nil, status.Error(codes.FailedPrecondition, "agent binding changed concurrently; refetch and retry")
+		}
 		return nil, status.Errorf(codes.Internal, "set page agent: %v", err)
 	}
 
-	return &apiv1.SetPageAgentResponse{Agent: agent}, nil
+	if s.chatAgentChangeNotifier != nil {
+		s.chatAgentChangeNotifier.NotifyAgentChanged(req.GetPage(), agent.GetId(), agent.GetDisplayName(), s.identityName(ctx))
+	}
+
+	return &apiv1.SetPageAgentResponse{
+		Agent:     agent,
+		UpdatedAt: updatedAt,
+	}, nil
+}
+
+// RegisterPoolAgent implements AgentInventoryService.RegisterPoolAgent.
+// Called by the pool daemon at startup and on every reconnect.
+func (s *Server) RegisterPoolAgent(_ context.Context, req *apiv1.RegisterPoolAgentRequest) (*apiv1.RegisterPoolAgentResponse, error) {
+	if s.agentInventory == nil {
+		return nil, errAgentInventoryNotConfigured
+	}
+	if err := s.agentInventory.RegisterPoolAgent(req); err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "register pool agent: %v", err)
+	}
+	return &apiv1.RegisterPoolAgentResponse{}, nil
+}
+
+// NotifyAgentAttached implements ChatService.NotifyAgentAttached: the pool's
+// report of which agent is EFFECTIVELY attached to a page.
+func (s *Server) NotifyAgentAttached(_ context.Context, req *apiv1.NotifyAgentAttachedRequest) (*apiv1.NotifyAgentAttachedResponse, error) {
+	if req.GetPage() == "" {
+		return nil, status.Error(codes.InvalidArgument, errPageRequired)
+	}
+	if s.chatBufferManager == nil {
+		return nil, status.Error(codes.FailedPrecondition, "chat buffer manager not configured on server")
+	}
+	s.chatBufferManager.NotifyAgentAttached(req.GetPage(), req.GetAgentId(), req.GetAgentDisplayName())
+	return &apiv1.NotifyAgentAttachedResponse{}, nil
 }

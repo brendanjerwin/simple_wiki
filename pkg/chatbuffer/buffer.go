@@ -16,6 +16,10 @@ const (
 
 	// BufferInactivityTimeout is the duration after which an inactive buffer is reclaimed.
 	BufferInactivityTimeout = 24 * time.Hour
+
+	// SenderAgentChanged marks a synthetic buffer message recording a
+	// page's agent-binding change (replayed as a ChatAgentChanged event).
+	SenderAgentChanged = "agent_changed"
 )
 
 var (
@@ -37,6 +41,10 @@ type Message struct {
 	SenderName string
 	ReplyToID  string
 	Reactions  []Reaction
+	// Agent identity, set on assistant messages: the inventory id and display
+	// name of the agent that produced the message. Empty for user messages.
+	AgentID          string
+	AgentDisplayName string
 }
 
 // Reaction represents an emoji reaction on a message.
@@ -79,6 +87,17 @@ type Event struct {
 	Plan              *PlanEvent
 	TurnStatus        *TurnStatusEvent
 	BackgroundTask    *BackgroundTaskEvent
+	AgentChanged      *AgentChangedEvent
+}
+
+// AgentChangedEvent represents a change of the page's bound agent. Emitted by
+// the binding write and replayed on subscribe, so all participants and late
+// joiners see who the page is talking to.
+type AgentChangedEvent struct {
+	Page             string
+	AgentID          string
+	AgentDisplayName string
+	SwitchedBy       string
 }
 
 // EventType identifies the type of chat event.
@@ -94,6 +113,10 @@ const (
 	EventTypePlan
 	EventTypeTurnStatus
 	EventTypeBackgroundTask
+	// EventTypeAgentChanged signals the page's bound agent changed. Stored in
+	// the ring buffer and replayed on subscribe so late joiners see the
+	// switch in context.
+	EventTypeAgentChanged
 )
 
 // EditEvent represents a message edit.
@@ -185,6 +208,10 @@ type Manager struct {
 	pendingPermissions   map[string]*pendingPermissionEntry // request_id → pending entry
 	pendingPermissionsMu sync.Mutex
 
+	effectiveAgentID          map[string]string // page → effective (attached) agent id
+	effectiveAgentDisplayName map[string]string // page → effective agent display name
+	effectiveMu               sync.RWMutex
+
 	done chan struct{}
 }
 
@@ -197,7 +224,11 @@ func NewManager() *Manager {
 		instanceRequestChans:   make([]chan string, 0),
 		cancelFuncs:            make(map[string][]chan struct{}),
 		pendingPermissions:     make(map[string]*pendingPermissionEntry),
-		done:                   make(chan struct{}),
+
+		effectiveAgentID:          make(map[string]string),
+		effectiveAgentDisplayName: make(map[string]string),
+
+		done: make(chan struct{}),
 	}
 
 	// Start background goroutine to reclaim stale buffers
@@ -335,7 +366,9 @@ func (m *Manager) AddUserMessage(page, content, senderName string) (string, erro
 }
 
 // AddAssistantMessage adds an assistant message to the buffer and notifies page subscribers.
-func (m *Manager) AddAssistantMessage(page, content, replyToID string) (string, error) {
+// agentID/agentDisplayName stamp the producing agent's inventory identity onto
+// the buffered message (empty allowed for tests/legacy callers).
+func (m *Manager) AddAssistantMessage(page, content, replyToID, agentID, agentDisplayName string) (string, error) {
 	buf := m.getOrCreateBuffer(page)
 	buf.mu.Lock()
 
@@ -353,6 +386,9 @@ func (m *Manager) AddAssistantMessage(page, content, replyToID string) (string, 
 		SenderName: "",
 		ReplyToID:  replyToID,
 		Reactions:  make([]Reaction, 0),
+
+		AgentID:          agentID,
+		AgentDisplayName: agentDisplayName,
 	}
 
 	buf.appendToRingBuffer(msg)
@@ -367,6 +403,67 @@ func (m *Manager) AddAssistantMessage(page, content, replyToID string) (string, 
 	})
 
 	return messageID, nil
+}
+
+// NotifyAgentChanged records and streams an agent-binding change for a page.
+// Unlike the other Notify* events this one IS stored in the ring buffer and
+// replayed on subscribe (as a synthetic message with Sender "agent_changed"),
+// so late joiners see the switch in transcript context.
+func (m *Manager) NotifyAgentChanged(page, agentID, agentDisplayName, switchedBy string) {
+	buf := m.getOrCreateBuffer(page)
+	buf.mu.Lock()
+
+	sequence := buf.nextSequence
+	buf.nextSequence++
+
+	synthetic := &Message{
+		ID:        uuid.New().String(),
+		Sender:    "agent_changed",
+		Content:   agentID,
+		Timestamp: time.Now(),
+		Page:      page,
+		Sequence:  sequence,
+		Reactions: make([]Reaction, 0),
+
+		AgentID:          agentID,
+		AgentDisplayName: agentDisplayName,
+		SenderName:       switchedBy,
+	}
+	buf.appendToRingBuffer(synthetic)
+
+	buf.unlockAndNotify(Event{
+		Type: EventTypeAgentChanged,
+		AgentChanged: &AgentChangedEvent{
+			Page:             page,
+			AgentID:          agentID,
+			AgentDisplayName: agentDisplayName,
+			SwitchedBy:       switchedBy,
+		},
+	})
+}
+
+// EffectiveAgent reports the agent the pool actually has attached to the page
+// (empty when none is attached). The pool reports attachment via
+// NotifyAgentAttached; this is the EFFECTIVE agent, distinct from the desired
+// per-page binding held in frontmatter.
+func (m *Manager) EffectiveAgent(page string) (agentID, agentDisplayName string) {
+	m.effectiveMu.RLock()
+	defer m.effectiveMu.RUnlock()
+	return m.effectiveAgentID[page], m.effectiveAgentDisplayName[page]
+}
+
+// NotifyAgentAttached records the pool's report of which agent is actually
+// attached to a page. Called by the pool after a successful attach; an empty
+// agentID clears the record (detach).
+func (m *Manager) NotifyAgentAttached(page, agentID, agentDisplayName string) {
+	m.effectiveMu.Lock()
+	defer m.effectiveMu.Unlock()
+	if m.effectiveAgentID == nil {
+		m.effectiveAgentID = map[string]string{}
+		m.effectiveAgentDisplayName = map[string]string{}
+	}
+	m.effectiveAgentID[page] = agentID
+	m.effectiveAgentDisplayName[page] = agentDisplayName
 }
 
 // ClearPage clears the visible chat history for a page and notifies subscribers.

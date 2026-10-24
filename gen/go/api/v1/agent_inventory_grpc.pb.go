@@ -19,34 +19,47 @@ import (
 const _ = grpc.SupportPackageIsVersion8
 
 const (
-	AgentInventoryService_ListAgents_FullMethodName   = "/api.v1.AgentInventoryService/ListAgents"
-	AgentInventoryService_GetPageAgent_FullMethodName = "/api.v1.AgentInventoryService/GetPageAgent"
-	AgentInventoryService_SetPageAgent_FullMethodName = "/api.v1.AgentInventoryService/SetPageAgent"
+	AgentInventoryService_ListAgents_FullMethodName        = "/api.v1.AgentInventoryService/ListAgents"
+	AgentInventoryService_GetPageAgent_FullMethodName      = "/api.v1.AgentInventoryService/GetPageAgent"
+	AgentInventoryService_SetPageAgent_FullMethodName      = "/api.v1.AgentInventoryService/SetPageAgent"
+	AgentInventoryService_RegisterPoolAgent_FullMethodName = "/api.v1.AgentInventoryService/RegisterPoolAgent"
 )
 
 // AgentInventoryServiceClient is the client API for AgentInventoryService service.
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 //
-// AgentInventoryService provides an inventory of available agents and manages
-// the per-page agent binding. Selection is persistent to the page — stored in
-// the agent.selected_agent_id frontmatter field — and survives session
-// close/reopen and pool restarts. Any participant switching the agent changes
-// it for all participants on that page.
+// AgentInventoryService maintains the inventory of every agent page chat can
+// route to, and the per-page agent binding.
 //
-// Only the local ACP agent is registered initially; AG-UI remote endpoints can
-// be registered later without protocol changes.
+// Inventory comes from two sources (issue #1276, design comment 2026-10-24):
+//   - The pool daemon registers its local ACP agent descriptor(s) at startup
+//     and on every reconnect (RegisterPoolAgent); server-side availability for
+//     ACP_LOCAL falls out of pool connectivity.
+//   - The wiki server loads AG-UI remote endpoints from its own static
+//     configuration; they advertise as unavailable until #1275 adds the
+//     AG-UI pool backend.
+//
+// The per-page binding is a property of the page itself (recorded decision):
+// stored in the agent.chat_agent frontmatter subtree, written only through
+// this service (reserved agent.* namespace, ADR-0009). Any participant's
+// switch applies to everyone on the page and survives session close/reopen
+// and pool restarts until someone switches again.
 type AgentInventoryServiceClient interface {
-	// ListAgents returns all agents currently registered in the inventory,
-	// including their protocol, description, and live availability status.
+	// ListAgents returns all registered agents with live availability.
 	ListAgents(ctx context.Context, in *ListAgentsRequest, opts ...grpc.CallOption) (*ListAgentsResponse, error)
 	// GetPageAgent returns the agent currently bound to a page, or the default
 	// agent if no binding has been set yet.
 	GetPageAgent(ctx context.Context, in *GetPageAgentRequest, opts ...grpc.CallOption) (*GetPageAgentResponse, error)
 	// SetPageAgent binds an agent to a page. The binding is written into the
-	// agent.selected_agent_id frontmatter field and survives pool restarts.
-	// All participants on the page immediately route to the new agent.
+	// agent.chat_agent frontmatter subtree (with attribution), survives pool
+	// restarts, applies to all participants, and emits a ChatAgentChanged chat
+	// event. Bindings to currently-unavailable agents are accepted (desired
+	// state); only unknown agent IDs are rejected.
 	SetPageAgent(ctx context.Context, in *SetPageAgentRequest, opts ...grpc.CallOption) (*SetPageAgentResponse, error)
+	// RegisterPoolAgent registers a pool daemon's local agent descriptor.
+	// Called by the pool at startup and on every reconnect; idempotent upsert.
+	RegisterPoolAgent(ctx context.Context, in *RegisterPoolAgentRequest, opts ...grpc.CallOption) (*RegisterPoolAgentResponse, error)
 }
 
 type agentInventoryServiceClient struct {
@@ -87,29 +100,51 @@ func (c *agentInventoryServiceClient) SetPageAgent(ctx context.Context, in *SetP
 	return out, nil
 }
 
+func (c *agentInventoryServiceClient) RegisterPoolAgent(ctx context.Context, in *RegisterPoolAgentRequest, opts ...grpc.CallOption) (*RegisterPoolAgentResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RegisterPoolAgentResponse)
+	err := c.cc.Invoke(ctx, AgentInventoryService_RegisterPoolAgent_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // AgentInventoryServiceServer is the server API for AgentInventoryService service.
 // All implementations must embed UnimplementedAgentInventoryServiceServer
 // for forward compatibility
 //
-// AgentInventoryService provides an inventory of available agents and manages
-// the per-page agent binding. Selection is persistent to the page — stored in
-// the agent.selected_agent_id frontmatter field — and survives session
-// close/reopen and pool restarts. Any participant switching the agent changes
-// it for all participants on that page.
+// AgentInventoryService maintains the inventory of every agent page chat can
+// route to, and the per-page agent binding.
 //
-// Only the local ACP agent is registered initially; AG-UI remote endpoints can
-// be registered later without protocol changes.
+// Inventory comes from two sources (issue #1276, design comment 2026-10-24):
+//   - The pool daemon registers its local ACP agent descriptor(s) at startup
+//     and on every reconnect (RegisterPoolAgent); server-side availability for
+//     ACP_LOCAL falls out of pool connectivity.
+//   - The wiki server loads AG-UI remote endpoints from its own static
+//     configuration; they advertise as unavailable until #1275 adds the
+//     AG-UI pool backend.
+//
+// The per-page binding is a property of the page itself (recorded decision):
+// stored in the agent.chat_agent frontmatter subtree, written only through
+// this service (reserved agent.* namespace, ADR-0009). Any participant's
+// switch applies to everyone on the page and survives session close/reopen
+// and pool restarts until someone switches again.
 type AgentInventoryServiceServer interface {
-	// ListAgents returns all agents currently registered in the inventory,
-	// including their protocol, description, and live availability status.
+	// ListAgents returns all registered agents with live availability.
 	ListAgents(context.Context, *ListAgentsRequest) (*ListAgentsResponse, error)
 	// GetPageAgent returns the agent currently bound to a page, or the default
 	// agent if no binding has been set yet.
 	GetPageAgent(context.Context, *GetPageAgentRequest) (*GetPageAgentResponse, error)
 	// SetPageAgent binds an agent to a page. The binding is written into the
-	// agent.selected_agent_id frontmatter field and survives pool restarts.
-	// All participants on the page immediately route to the new agent.
+	// agent.chat_agent frontmatter subtree (with attribution), survives pool
+	// restarts, applies to all participants, and emits a ChatAgentChanged chat
+	// event. Bindings to currently-unavailable agents are accepted (desired
+	// state); only unknown agent IDs are rejected.
 	SetPageAgent(context.Context, *SetPageAgentRequest) (*SetPageAgentResponse, error)
+	// RegisterPoolAgent registers a pool daemon's local agent descriptor.
+	// Called by the pool at startup and on every reconnect; idempotent upsert.
+	RegisterPoolAgent(context.Context, *RegisterPoolAgentRequest) (*RegisterPoolAgentResponse, error)
 	mustEmbedUnimplementedAgentInventoryServiceServer()
 }
 
@@ -125,6 +160,9 @@ func (UnimplementedAgentInventoryServiceServer) GetPageAgent(context.Context, *G
 }
 func (UnimplementedAgentInventoryServiceServer) SetPageAgent(context.Context, *SetPageAgentRequest) (*SetPageAgentResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method SetPageAgent not implemented")
+}
+func (UnimplementedAgentInventoryServiceServer) RegisterPoolAgent(context.Context, *RegisterPoolAgentRequest) (*RegisterPoolAgentResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method RegisterPoolAgent not implemented")
 }
 func (UnimplementedAgentInventoryServiceServer) mustEmbedUnimplementedAgentInventoryServiceServer() {}
 
@@ -193,6 +231,24 @@ func _AgentInventoryService_SetPageAgent_Handler(srv interface{}, ctx context.Co
 	return interceptor(ctx, in, info, handler)
 }
 
+func _AgentInventoryService_RegisterPoolAgent_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RegisterPoolAgentRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AgentInventoryServiceServer).RegisterPoolAgent(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AgentInventoryService_RegisterPoolAgent_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AgentInventoryServiceServer).RegisterPoolAgent(ctx, req.(*RegisterPoolAgentRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // AgentInventoryService_ServiceDesc is the grpc.ServiceDesc for AgentInventoryService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -211,6 +267,10 @@ var AgentInventoryService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "SetPageAgent",
 			Handler:    _AgentInventoryService_SetPageAgent_Handler,
+		},
+		{
+			MethodName: "RegisterPoolAgent",
+			Handler:    _AgentInventoryService_RegisterPoolAgent_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
