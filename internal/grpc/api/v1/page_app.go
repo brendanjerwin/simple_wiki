@@ -33,6 +33,7 @@ const (
 
 const (
 	pageAppErrPageRequired = "page is required"
+	pageAppErrReadFailed   = "failed to read page: %v"
 	pageAppHundredPercent  = 100
 	pageAppWikiRootKey     = "wiki"
 	mdNewline               = "\n"
@@ -298,7 +299,7 @@ func (s *Server) GetPageApp(ctx context.Context, req *apiv1.GetPageAppRequest) (
 		if os.IsNotExist(err) {
 			return nil, status.Errorf(codes.NotFound, "page %q not found", req.GetPage())
 		}
-		return nil, status.Errorf(codes.Internal, "failed to read page: %v", err)
+		return nil, status.Errorf(codes.Internal, pageAppErrReadFailed, err)
 	}
 	if !found {
 		return nil, status.Errorf(codes.NotFound, "page %q has no page app", req.GetPage())
@@ -797,7 +798,7 @@ func (s *Server) GetPageAppState(ctx context.Context, req *apiv1.GetPageAppState
 		if os.IsNotExist(err) {
 			return nil, status.Errorf(codes.NotFound, "page %q not found", req.GetPage())
 		}
-		return nil, status.Errorf(codes.Internal, "failed to read page: %v", err)
+		return nil, status.Errorf(codes.Internal, pageAppErrReadFailed, err)
 	}
 
 	raw := getStateSubtree(fm)
@@ -930,7 +931,7 @@ func (s *Server) WatchPageAppState(req *apiv1.WatchPageAppStateRequest, stream a
 	// lost; the hash guard dedupes the replay).
 	_, fm, err := mut.pages.ReadFrontMatter(page)
 	if err != nil && !os.IsNotExist(err) {
-		return status.Errorf(codes.Internal, "failed to read page: %v", err)
+		return status.Errorf(codes.Internal, pageAppErrReadFailed, err)
 	}
 	raw := getStateSubtree(fm)
 	st, cerr := structFromMap(raw)

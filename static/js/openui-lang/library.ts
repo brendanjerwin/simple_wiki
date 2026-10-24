@@ -221,7 +221,7 @@ function buildLibrary(): Library {
    html`<wiki-checklist list-name="${name}" page="${typeof page === 'string' ? page : ''}"></wiki-checklist>`) as WikiRenderer,
  });
 
- const Map = defineComponent({
+ const MapComponent = defineComponent({
   name: 'Map',
   props: z.object({
    name: z.string(),
@@ -301,7 +301,7 @@ function buildLibrary(): Library {
   Input.ref,
   Select.ref,
   Checklist.ref,
-  Map.ref,
+  MapComponent.ref,
   Survey.ref,
  ]);
 
@@ -316,7 +316,7 @@ function buildLibrary(): Library {
    Input,
    Select,
    Checklist,
-   Map,
+   MapComponent,
    Survey,
   ],
   root: WIKI_ROOT_COMPONENT,
