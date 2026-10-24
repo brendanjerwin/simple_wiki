@@ -13,7 +13,7 @@
  */
 import { html, css, LitElement, nothing, type CSSResultArray, type TemplateResult } from 'lit';
 import { property, state } from 'lit/decorators.js';
-import { createClient, type Client } from '@connectrpc/connect';
+import { createClient, ConnectError, Code, type Client } from '@connectrpc/connect';
 import { create, type JsonObject } from '@bufbuild/protobuf';
 import {
  ArtifactService,
@@ -78,10 +78,17 @@ function argPage(args: Record<string, unknown>, fallbackPage: string): string {
  return typeof page === 'string' && page !== '' ? page : fallbackPage;
 }
 
-/** Read a required string tool arg. */
-function argString(args: Record<string, unknown>, key: string): string {
- const value = args[key];
- return typeof value === 'string' ? value : '';
+/** Read a required string tool arg. Programs follow the taught contract
+ * (camelCase, matching the proto JSON names); snake_case is accepted as a
+ * fallback since it appears in Go-side docs. */
+function argString(args: Record<string, unknown>, camel: string, snake?: string): string {
+ const direct = args[camel];
+ if (typeof direct === 'string' && direct !== '') return direct;
+ if (snake !== undefined) {
+  const alt = args[snake];
+  if (typeof alt === 'string' && alt !== '') return alt;
+ }
+ return '';
 }
 
 /**
@@ -255,6 +262,16 @@ export class WikiArtifactHost extends LitElement {
     create(GetArtifactStateRequestSchema, { page: this.page }),
    );
    this.stateVersionHash = response.stateVersionHash;
+   // Seed the live store with the persisted state (cross-device truth).
+   // The program's declarations are merged over these in render() as
+   // initialize(defaults, persisted) — persisted wins, pristine keys
+   // restore defaults, which is the designed hydrate rule.
+   // response.state is already a JsonObject in protobuf-es v2 — use it
+   // directly; the outbound direction needs plainToJsonObject.
+   const persistedState = (response.state ?? {}) as Record<string, unknown>;
+   if (this.runtime != null && Object.keys(persistedState).length > 0) {
+    this.runtime.store.initialize({}, persistedState);
+   }
   } catch (err) {
    // No persisted state yet is fine; a merge will mint the first hash.
    if (!AugmentErrorService.augmentError(err).message.includes('NotFound')) {
@@ -338,13 +355,13 @@ export class WikiArtifactHost extends LitElement {
      );
     case 'api_v1_MapService_ListMapElements':
      return this.mapClient.listMapElements(
-      create(ListMapElementsRequestSchema, { page, mapName: argString(args, 'map_name') }),
+      create(ListMapElementsRequestSchema, { page, mapName: argString(args, 'mapName', 'map_name') }),
      );
     case 'api_v1_ChecklistService_ListItems':
      return this.checklistClient.listItems(
       create(ListItemsRequestSchema, {
        page,
-       listName: argString(args, 'list_name'),
+       listName: argString(args, 'listName', 'list_name'),
       }),
      );
     case 'api_v1_SurveyService_GetSurvey':
@@ -357,6 +374,45 @@ export class WikiArtifactHost extends LitElement {
   });
  }
 
+ /**
+  * CAS'd state flush: merge the LIVE store snapshot, and on an OCC
+  * Aborted conflict refetch ONLY the fresh state hash (never re-seed the
+  * store — that would revert the in-memory $vars mid-flush) and re-merge
+  * from the live snapshot. Exactly one retry; a second conflict
+  * surfaces as an action error.
+  */
+ private async mergeStateWithRetry(snapshot: Record<string, unknown>): Promise<void> {
+  const attempt = async (): Promise<void> => {
+   const response = await this.stateClient.mergeArtifactState(
+    create(MergeArtifactStateRequestSchema, {
+     page: this.page,
+     state: plainToJsonObject(snapshot),
+     stateExpectedVersionHash: this.stateVersionHash,
+    }),
+   );
+   this.stateVersionHash = response.stateVersionHash;
+   this.renderTick += 1;
+  };
+  try {
+   await attempt();
+  } catch (err) {
+   if (err instanceof ConnectError && err.code === Code.Aborted) {
+    // Conflict: refetch the hash only, then re-merge the live snapshot.
+    const fresh = await this.stateClient.getArtifactState(
+     create(GetArtifactStateRequestSchema, { page: this.page }),
+    );
+    this.stateVersionHash = fresh.stateVersionHash;
+    try {
+     await attempt();
+    } catch (retryErr) {
+     this.actionError = AugmentErrorService.augmentError(retryErr, 'saving artifact app state');
+    }
+    return;
+   }
+   throw err;
+  }
+ }
+
  private actionContext() {
   return {
    // Flush the LIVE store snapshot with the CAS hash. Per server
@@ -364,39 +420,12 @@ export class WikiArtifactHost extends LitElement {
    // refetch is needed after a successful merge.
    setState: (snapshot: Record<string, unknown>) => {
     void (async () => {
-     const state = plainToJsonObject(snapshot);
      try {
-      const response = await this.stateClient.mergeArtifactState(
-       create(MergeArtifactStateRequestSchema, {
-        page: this.page,
-        state,
-        stateExpectedVersionHash: this.stateVersionHash,
-       }),
-      );
-      this.stateVersionHash = response.stateVersionHash;
-      this.renderTick += 1;
+      await this.mergeStateWithRetry(snapshot);
      } catch (err) {
-      const error = AugmentErrorService.augmentError(err, 'saving artifact app state');
-      if (error.originalError instanceof Error
-       && (error.originalError as { code?: unknown }).code === 10) {
-       // Aborted: refetch the fresh hash and remerge once.
-       await this.hydrateState();
-       try {
-        const retry = await this.stateClient.mergeArtifactState(
-         create(MergeArtifactStateRequestSchema, {
-          page: this.page,
-          state,
-          stateExpectedVersionHash: this.stateVersionHash,
-         }),
-        );
-        this.stateVersionHash = retry.stateVersionHash;
-        this.renderTick += 1;
-       } catch (retryErr) {
-        this.actionError = AugmentErrorService.augmentError(retryErr, 'saving artifact app state');
-       }
-      } else {
-       this.actionError = error;
-      }
+      // mergeStateWithRetry surfaces its own terminal error; anything
+      // thrown before that (arg building) is a programming error.
+      this.actionError = AugmentErrorService.augmentError(err, 'saving artifact app state');
      }
     })();
    },
@@ -412,7 +441,22 @@ export class WikiArtifactHost extends LitElement {
     })();
    },
    openUrl: (url: string) => {
-    globalThis.open(url, '_blank', 'noopener');
+    // Scheme guard: an agent-written program is data, but @OpenUrl is a
+    // viewer-side side effect — javascript:/data: executes in this
+    // origin. Only http(s) opens; anything else surfaces as an
+    // action error.
+    let parsed: URL;
+    try {
+     parsed = new URL(url, globalThis.location.origin);
+    } catch {
+     this.actionError = new Error(`@OpenUrl: invalid URL ${JSON.stringify(url)}`);
+     return;
+    }
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+     this.actionError = new Error(`@OpenUrl: only http(s) URLs can be opened, got ${parsed.protocol}`);
+     return;
+    }
+    globalThis.open(parsed.toString(), '_blank', 'noopener');
    },
    rerun: (statementIds?: string[]) => {
     void statementIds;
@@ -435,8 +479,14 @@ export class WikiArtifactHost extends LitElement {
      break;
     }
     case 'reset': {
+     // Restore each target to its DECLARED default and re-mark it
+     // pristine, so the next render's initialize() restores the default
+     // instead of the pre-reset persisted value.
+     if (this.lastDeclarations == null) break;
      for (const target of step.targets) {
-      store.set(target, store.get(target) ?? null);
+      if (target in this.lastDeclarations) {
+       store.set(target, (this.lastDeclarations as Record<string, unknown>)[target], { pristine: true });
+      }
      }
      break;
     }
@@ -480,6 +530,8 @@ export class WikiArtifactHost extends LitElement {
  }
 
  private lastErrors: { code: string; message: string }[] = [];
+ /** The current program's $variable declarations — @Reset's defaults. */
+ private lastDeclarations: Record<string, unknown> | null = null;
 
  override render(): TemplateResult {
   if (this.removed) {
@@ -494,11 +546,13 @@ export class WikiArtifactHost extends LitElement {
   if (!this.hydrated || this.programSource === '' || this.runtime == null) {
    return html`<div class="wiki-artifact-app" aria-busy="true"></div>`;
   }
-  // Hydrate with the live store snapshot so re-renders keep prior state.
-  const startState = this.runtime.store.getSnapshot();
-  const persisted = Object.keys(startState).length > 0 ? startState : {};
-  const rendered = this.runtime.render(this.programSource, persisted);
+  // The live store is the in-session truth: hydration from
+  // GetArtifactState happened once in hydrateState(); re-renders pass an
+  // empty persisted map, so a RESET key re-marked pristine keeps its
+  // declared default instead of being re-imported from the old snapshot.
+  const rendered = this.runtime.render(this.programSource, {});
   this.lastErrors = rendered.errors;
+  this.lastDeclarations = rendered.stateDeclarations;
   return html`<div class="wiki-artifact-app">
       <button class="wiki-artifact-remove" @click=${() => void this.removeApp()}>Remove the app</button>
       <div class="wiki-artifact-body">${rendered.template}</div>
@@ -523,16 +577,33 @@ function readStepValue(valueAst: unknown, store: { get(name: string): unknown })
  return null;
 }
 
-/** Convert a plain Record to a strict JsonObject (drops non-JSON values). */
+/** Convert a plain Record to a strict JsonObject, recursively (keeps
+ * nested objects/arrays — the state service deep-merges both). */
 function plainToJsonObject(value: Record<string, unknown>): JsonObject {
- const out: JsonObject = {};
- for (const [key, entry] of Object.entries(value)) {
-  if (entry === null || typeof entry === 'string' || typeof entry === 'boolean'
-   || (typeof entry === 'number' && Number.isFinite(entry))) {
-   out[key] = entry;
-  }
+ return jsonValueToPlain(value, new Set()) as JsonObject;
+}
+
+const MAX_JSON_DEPTH = 16;
+
+function jsonValueToPlain(value: unknown, seen: Set<object>): unknown {
+ if (value === null || typeof value === 'string' || typeof value === 'boolean') return value;
+ if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+ if (Array.isArray(value)) {
+  if (seen.has(value) || seen.size >= MAX_JSON_DEPTH) return null;
+  seen.add(value);
+  return value.map((v) => jsonValueToPlain(v, seen));
  }
- return out;
+ if (typeof value === 'object') {
+  if (seen.has(value) || seen.size >= MAX_JSON_DEPTH) return null;
+  seen.add(value);
+  const out: Record<string, unknown> = {};
+  for (const [key, entry] of Object.entries(value as Record<string, unknown>)) {
+   out[key] = jsonValueToPlain(entry, seen);
+  }
+  return out;
+ }
+ // Functions, symbols, undefined: not JSON — drop.
+ return null;
 }
 
 customElements.define('wiki-artifact-host', WikiArtifactHost);

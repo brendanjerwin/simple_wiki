@@ -60,10 +60,12 @@ Deep-merge partial state (scalars replace, arrays union, nested structs merge). 
 ```json
 {
   "page": "pomodoro",
-  "state": {"completed_sessions": 3, "weekly": {"2026-W43": 2}},
+  "state": {"$completed": 3, "weekly": {"2026-W43": 2}},
   "state_expected_version_hash": "sha256:…"
 }
 ```
+
+**State keys are the program's `$`-prefixed variable names** — a `$completed` declaration persists as the key `"$completed"`. A merge key the program doesn't declare is orphaned: nothing reads it back.
 
 - Seed/derive state for charts here. `GetArtifactState` reads it; `DeleteArtifactState` resets it.
 - Conflict (`Aborted`): another writer (another tab, the running app) moved first. `GetArtifactState` → re-apply → retry.
@@ -88,7 +90,7 @@ root = Card("Pomodoro", Stack([
 ]))
 ```
 
-3. `SetArtifact(page="pomodoro", source=…)` → the page renders the app above any prose; state hydrates from `GetArtifactState`; the button's `@ToAssistant` lands a chat message on the page and you react (e.g. `MergeArtifactState` bumping `completed_sessions`, then a new `SetArtifact`).
+3. `SetArtifact(page="pomodoro", source=…)` → the page renders the app above any prose; state hydrates from `GetArtifactState`; the button's `@ToAssistant` lands a chat message on the page and you react (e.g. `MergeArtifactState` with `{"$completed": 1}`, then a new `SetArtifact`).
 4. User: "add a weekly chart" → you read the program (`GetArtifact`), compose the updated program text (positional args!), `SetArtifact` with the hash → `WatchArtifact` hot-swaps the renderer **without a page reload**.
 5. "What's saved?" → `GetArtifactState`. "Seed 3 sessions" → `MergeArtifactState`. "Turn it back into notes" → `ClearArtifact` (removes only the fence + stamps; prose and history are untouched).
 
