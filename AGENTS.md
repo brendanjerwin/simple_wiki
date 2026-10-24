@@ -296,6 +296,47 @@ Do not run them directly with `npx`, `npm`, `bun`, `bunx`, `go test`, etc. Use t
   devbox run go:test
   ```
 
+- **End-to-End (Playwright) Tests**:
+
+  The full e2e suite takes ~8 minutes on CI. It is also the CI job most likely
+  to fail on a push that would otherwise pass, so run it before pushing —
+  scoped to the specs your change can affect:
+
+  ```bash
+  # Tests whose UI behavior your change touches (required before push):
+  devbox run e2e:test -- tests/page-chat-panel.spec.ts
+  # Grep for specs touching a component:
+  grep -rl 'wiki-checklist' e2e/tests/*.spec.ts
+  # Full suite (rarely; CI runs it anyway):
+  devbox run e2e:test
+  ```
+
+  **Pre-push gate.** Before every `git push`, all of the following must be
+  green locally in this order:
+
+  1. `devbox run go:test` (when Go files changed)
+  2. `devbox run fe:test -- <touched .test.ts files>` (when frontend changed)
+  3. `devbox run fe:lint` + `devbox run fe:typecheck` (when frontend changed)
+  4. `devbox run e2e:test -- <touched spec files>` (when component/interaction
+     code changed — anything under `static/js/web-components/` or
+     `static/templates/`)
+  5. `devbox run lint:everything` (last full check before push)
+
+  Or run the automated scoped checker, which picks exactly these steps from
+  the diff:
+
+  ```bash
+  ./scripts/verify_before_push.sh [base_ref]
+  ```
+
+  If a spec you did not touch fails, rerun it alone before assuming your
+  change is to blame. Never push with a failing touched spec — fix it or mark
+  the skip with a tracking issue number in the commit message.
+
+  E2E specs live in `e2e/tests/*.spec.ts` (55 files). Component behavior rules
+  (serial beforeAll, seeding, focus restore) are documented in the specs
+  themselves; read the spec before changing a component it tests.
+
 ### Robust Asynchronous Testing in JavaScript
 
 Hanging or flaky async tests are common. The key is to ensure every asynchronous operation either resolves or rejects within a reasonable time. While a global test timeout is a good safety net, the following patterns help create more robust and predictable async tests.

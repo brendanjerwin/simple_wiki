@@ -47,7 +47,16 @@ title = "Checklist A11y Test Page"
     const addInput = checklist.locator('.add-text-input');
     const addButton = checklist.locator('.add-btn');
 
+    // Idempotent seed: CI retries re-run beforeAll against a server whose
+    // test data persists (serial mode + beforeAll re-run), so re-adding
+    // unconditionally creates duplicate rows that shift .first() and break
+    // the keyboard tests. Seed only items not already present.
     for (const itemText of ['First item #alpha', 'Second item #beta', 'Third item #alpha']) {
+      const bareText = itemText.replace(/ #[a-z]+$/, '');
+      const existing = checklist
+        .locator('.item-row .item-display-text')
+        .filter({ hasText: bareText });
+      if ((await existing.count()) > 0) continue;
       await addInput.fill(itemText);
       await addButton.click();
       await expect(checklist.locator('.saving-indicator')).not.toBeVisible({
@@ -67,7 +76,7 @@ title = "Checklist A11y Test Page"
       const textarea = page.locator('wiki-editor textarea');
       await expect(textarea).toBeVisible({ timeout: COMPONENT_LOAD_TIMEOUT_MS });
 
-      await textarea.fill(`+++\nidentifier = "${TEST_PAGE_NAME}"\n+++`);
+      await textarea.fill(`+++\nidentifier = "${TEST_PAGE_NAME}"\n+++\n# Checklist A11y Test Page\n<wiki-checklist list-name="${TEST_LIST_NAME}" page="${TEST_PAGE_NAME}"></wiki-checklist>`);
       await textarea.press('Space');
       await expect(page.locator('wiki-editor .status-indicator')).toContainText('Saved', {
         timeout: SAVE_TIMEOUT_MS,
@@ -227,6 +236,12 @@ title = "Checklist A11y Test Page"
       // window hits a disabled control and produces no change event. Wait
       // out the save before (and after) pressing, or the press is a no-op.
       await firstCheckbox.press('Space');
+      // The 2s server poll can briefly render the pre-toggle list after the
+      // optimistic check; poll until the server-confirmed state settles.
+      await expect(firstCheckbox).toBeChecked();
+      await expect(checklist.locator('.saving-indicator')).not.toBeVisible({
+        timeout: SAVE_TIMEOUT_MS,
+      });
       await expect(firstCheckbox).toBeChecked();
       await expect(checklist.locator('.saving-indicator')).toHaveCount(0, {
         timeout: SAVE_TIMEOUT_MS,
@@ -234,6 +249,9 @@ title = "Checklist A11y Test Page"
 
       // Restore state — uncheck
       await firstCheckbox.press('Space');
+      await expect(checklist.locator('.saving-indicator')).not.toBeVisible({
+        timeout: SAVE_TIMEOUT_MS,
+      });
       await expect(firstCheckbox).not.toBeChecked();
       await expect(checklist.locator('.saving-indicator')).toHaveCount(0, {
         timeout: SAVE_TIMEOUT_MS,
