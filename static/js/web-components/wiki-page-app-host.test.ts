@@ -19,6 +19,7 @@ import {
 import {
  WikiPageAppHost,
 } from './wiki-page-app-host.js';
+import type { PageAppActionEventDetail } from '../openui-lang/library.js';
 
 function pageAppResponse(source: string): GetPageAppResponse {
  return create(GetPageAppResponseSchema, {
@@ -196,6 +197,50 @@ describe('WikiPageAppHost', () => {
 
   it('should flush the merged snapshot to PageAppStateService', () => {
    expect(mergeCalls).to.have.lengthOf(1);
+  });
+ });
+
+ describe('when a rendered Countdown completes', () => {
+  let stubs: StubbedHost;
+  let mergeCalls: Record<string, unknown>[];
+
+  beforeEach(async () => {
+   // Program exactly as authored (the @Set refers to $holds; the element's
+   // completion dispatch must land $holds + 1 in the host store).
+   stubs = await stubbedHost(
+    '$holds = 0\nroot = Card("T", [c])\nc = Countdown(30, "hold", @Set($holds, $holds + 1))',
+   );
+   mergeCalls = [];
+   const clients = stubs.el as unknown as { stateClient: Record<string, unknown> };
+   clients.stateClient['mergePageAppState'] = stub().callsFake((req: { state: Record<string, unknown> }) => {
+    mergeCalls.push({ ...req.state });
+    return Promise.resolve(
+     create(MergePageAppStateResponseSchema, { state: {} as never, stateVersionHash: 'state-hash-2' }),
+    );
+   });
+   await stubs.el.updateComplete;
+   await new Promise((resolve) => setTimeout(resolve, 20));
+   await stubs.el.updateComplete;
+  });
+
+  it('should execute the completed plan against the host store and flush it', async () => {
+   // Find the countdown rendered INSIDE the host's shadow root and fire
+   // its completion dispatch — composed so it crosses the shadow
+   // boundary to the host listener, exactly like a real tick.
+   const countdown = stubs.el.shadowRoot?.querySelector('wiki-page-app-countdown');
+   expect(countdown, 'program must render a Countdown in the host shadow root').to.exist;
+
+   const completedDetail: PageAppActionEventDetail | undefined = { plan: { steps: [{ type: 'set' as never, target: '$holds', valueAST: { k: 'BinOp', op: '+', left: { k: 'StateRef', n: '$holds' }, right: { k: 'Num', v: 1 } } }] } };
+   countdown?.dispatchEvent(new CustomEvent('wiki-page-app-action', {
+    detail: completedDetail satisfies PageAppActionEventDetail,
+    bubbles: true,
+    composed: true,
+   }));
+   await stubs.el.updateComplete;
+   await new Promise((resolve) => setTimeout(resolve, 10));
+
+   expect(mergeCalls).to.have.lengthOf(1, 'completed countdown must flush the store snapshot');
+   expect(mergeCalls[0]?.['$holds']).to.equal(1, '@Set($holds, $holds + 1) must land in the flushed snapshot');
   });
  });
 
