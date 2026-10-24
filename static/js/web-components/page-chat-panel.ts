@@ -636,6 +636,7 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
 
       <div id="chat-panel" class="panel force-dark ${this.drawerOpen ? 'open' : ''}" ?inert=${!this.drawerOpen}>
         <div class="panel-header">
+          <span class="panel-title">${this.persona}</span>
           <agent-selector
             .page=${this.page}
             .effectiveAgentId=${this.effectiveAgentId}
