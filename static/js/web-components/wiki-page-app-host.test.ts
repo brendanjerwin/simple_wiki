@@ -459,6 +459,14 @@ describe('WikiPageAppHost terminal NotFound on load', () => {
 
   expect(getArtifact.callCount).to.equal(1);
   expect(ladderRuns).to.equal(0);
+  // Terminal NotFound renders the app-less state, not a reconnecting
+  // banner or a retry-ladder error screen. Boolean-shaped so the
+  // assertion message stays a primitive (WTR serializes failures with
+  // structuredClone — a sinon stub in `actual` hangs the session).
+  const shadow = el.shadowRoot;
+  expect(shadow?.querySelector('.reconnecting-note') == null).to.equal(true);
+  expect(shadow?.querySelector('error-display') == null).to.equal(true);
+  expect((shadow?.textContent ?? '').includes('retries')).to.equal(false);
   el.remove();
  });
 
