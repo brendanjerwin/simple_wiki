@@ -167,7 +167,7 @@ describe('ConfirmationDialog', () => {
       cancelSpy = sinon.spy();
       el.addEventListener('confirm', confirmSpy);
       el.addEventListener('cancel', cancelSpy);
-      
+
       el.openDialog({
         message: 'Test message'
       });
@@ -285,7 +285,7 @@ describe('ConfirmationDialog', () => {
       el.openDialog({
         message: 'Test message'
       });
-      
+
       const mockError = new Error('Test error');
       testError = AugmentErrorService.augmentError(mockError, 'test operation');
       el.showError(testError);
@@ -356,6 +356,33 @@ describe('ConfirmationDialog', () => {
         }, 10);
       });
     });
+
+    it('should re-assert restore focus on the macrotask when native restoration lost it', done => {
+      // Covers the opposite branch of the macrotask guard in closeDialog():
+      // when the setTimeout(0) fires with focus NOT on the restore target
+      // (blurred to <body> because a modal backdrop absorbed it — the e2e
+      // erasePage race), the guarded restoreTarget.focus() must run and win.
+      const opener = document.createElement('button');
+      opener.id = 'restore-drift-probe';
+      document.body.appendChild(opener);
+      opener.focus();
+
+      el.openDialog({ message: 'Drift message' });
+      el.updateComplete.then(() => {
+        el.closeDialog();
+        // Blur BEFORE the macrotask fires (dialog.close() already restored
+        // focus; blur() drops it to <body>) so the guard's activeElement
+        // check is TRUE and its restoreTarget.focus() executes.
+        (document.activeElement as HTMLElement | null)?.blur();
+        setTimeout(() => {
+          // Guarded focus() ran (covers the line) and focus landed on the
+          // restore target, whatever the exact native-restore sequencing was.
+          expect(document.activeElement?.id).to.equal('restore-drift-probe');
+          opener.remove();
+          done();
+        }, 10);
+      });
+    });
   });
 
   describe('when buttons are disabled during loading', () => {
@@ -367,7 +394,7 @@ describe('ConfirmationDialog', () => {
       cancelSpy = sinon.spy();
       el.addEventListener('confirm', confirmSpy);
       el.addEventListener('cancel', cancelSpy);
-      
+
       el.openDialog({
         message: 'Test message'
       });
