@@ -129,6 +129,19 @@ describe('renderer component output', () => {
   expect(el.querySelector('select.wiki-page-app-select')).to.exist;
  });
 
+ it('should hydrate Input and Select values from persisted state (no [object Object])', async () => {
+  const rendered = runtime.render(
+   'root = Card("T", [i, sel])\ni = Input("num", $q)\n$q = "42"\nsel = Select("pick", $p, undefined, ["a", "b"])\n$p = "b"',
+   { '$q': '42', '$p': 'b' },
+  );
+  const el = await fixture<HTMLElement>(rendered.template as never);
+  const input = el.querySelector('input.wiki-page-app-input') as HTMLInputElement;
+  const select = el.querySelector('select.wiki-page-app-select') as HTMLSelectElement;
+  expect(input.value).to.equal('42', 'Input must render the hydrated $variable value, not a reactive marker');
+  expect(select.value).to.equal('b', 'Select must render the hydrated $variable value');
+  expect(el.innerHTML).to.not.include('[object Object]');
+ });
+
  it('should render Table and Chart programs', async () => {
   const rendered = runtime.render(
    'root = Card("T", [tb, c])\ntb = Table(["a", "b"], [[1, 2], [3, 4]])\nc = Chart("bar", "T", ["a", "b"], [1, 2])',

@@ -18,6 +18,7 @@ import {
  evaluateRoot,
  mergeStatements,
  isReactiveAssign,
+ stripReactiveAssign,
  type ASTNode,
  type ElementNode,
  type EvaluationContext,
@@ -125,7 +126,7 @@ export function generateWikiPageAppRenderer(
   };
   const evaluatedRoot = evaluateRoot(lastResult, evalContext);
   return {
-   template: evaluatedRoot === null ? nothing : (renderTree(evaluatedRoot) as TemplateResult),
+   template: evaluatedRoot === null ? nothing : (renderTree(evaluatedRoot, evaluationContext) as TemplateResult),
    errors: lastErrors,
    stateDeclarations: lastDeclarations,
   };
@@ -229,23 +230,24 @@ function hydrateQueriesAndMutations(
  * Render the evaluated root tree into a Lit template. Unknown components
  * (dropped by the parser; see `RenderedPageApp.errors`) render as nothing.
  */
-export function renderTree(node: unknown): unknown {
+export function renderTree(node: unknown, evaluationContext?: EvaluationContext): unknown {
  if (node == null) return nothing;
- if (Array.isArray(node)) return node.map((child) => renderTree(child));
+ if (Array.isArray(node)) return node.map((child) => renderTree(child, evaluationContext));
  if (!isElementNode(node)) return node;
  const renderer = wikiLibrary.components[node.typeName]?.component as WikiRenderer | null | undefined;
  if (!renderer) return nothing;
  const renderProps: Record<string, unknown> = {};
  for (const [key, value] of Object.entries(node.props)) {
-  renderProps[key] = renderPropValue(value);
+  renderProps[key] = renderPropValue(value, evaluationContext ?? { getState: () => undefined, resolveRef: () => undefined });
  }
  return renderer(renderProps);
 }
 
-function renderPropValue(value: unknown): unknown {
+function renderPropValue(value: unknown, evaluationContext: EvaluationContext): unknown {
  if (value == null) return nothing;
- if (Array.isArray(value)) return value.map((v) => renderTree(v));
- if (isElementNode(value)) return renderTree(value);
+ if (Array.isArray(value)) return value.map((v) => renderPropValue(v, evaluationContext));
+ if (isElementNode(value)) return renderTree(value, evaluationContext);
+ if (isReactiveAssign(value)) return stripReactiveAssign(value, evaluationContext);
  return value;
 }
 
