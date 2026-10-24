@@ -2,10 +2,14 @@
  * Renderer for parsed OpenUI Lang artifact programs over the wiki library.
  *
  * Renders `ParseResult` trees: parses a program source string (or a merged
- * patch), evaluates `$variables` and Query()/Mutation() statements, and maps
- * `ElementNode.typeName` to the wiki library's component render functions.
+ * patch), evaluates `$variables` and Query()/Mutation() statements through a
+ * lang-core `ToolProvider`, and maps `ElementNode.typeName` to the wiki
+ * library's component render functions. Action plans (from @Set, @Reset,
+ * @ToAssistant, @OpenUrl, @Run) are surfaced through a `wiki-artifact-action`
+ * event so the host executes them against the wiki.
  */
-import { html, nothing } from 'lit';
+import { nothing } from 'lit';
+import type { TemplateResult } from 'lit';
 import {
  createParser,
  createQueryManager,
@@ -13,6 +17,7 @@ import {
  evaluate,
  evaluateRoot,
  mergeStatements,
+ isReactiveAssign,
  type ASTNode,
  type ElementNode,
  type EvaluationContext,
@@ -20,29 +25,50 @@ import {
  type ParseResult,
  type QueryManager,
  type Store,
+ type ToolNotFoundError,
+ type ToolProvider,
 } from '@openuidev/lang-core';
-import type { ToolProvider } from '@openuidev/lang-core';
 import {
  WIKI_ROOT_COMPONENT,
+ ARTIFACT_ACTION_EVENT,
  wikiLibrary,
  type WikiRenderer,
 } from './library.js';
 
-/** A tool provider: tool name and args in, result promise out. */
-export type ToolCaller = (toolName: string, args: Record<string, unknown>) => Promise<unknown>;
-
-/** Context handed to interactive components when they fire actions. */
+/**
+ * Host-side executor for artifact action plans. The host subscribes to
+ * `onStateChange` so every @Set/@Reset flushes the LIVE lang-core store
+ * snapshot rather than a stale persisted copy.
+ */
 export interface ArtifactActionContext {
- /** Execute a `set` step's value and persist it through the host. */
- setState(values: Record<string, unknown>): void;
- /** Clear the declared defaults for `targets` back to their initial values. */
- resetState(targets: string[]): void;
+ /** Flush the live store snapshot (all $variable values). */
+ setState(snapshot: Record<string, unknown>): void;
  /** Send the user's message to the assistant chat for the page. */
  toAssistant(message: string): void;
  /** Open a URL in a new tab. */
  openUrl(url: string): void;
- /** Refire the Query()/Mutation() named by the statement. */
- rerun(statementId: string): void;
+ /** Invalidate and refire query results. */
+ rerun(statementIds?: string[]): void;
+}
+
+/** A template plus the parse diagnostics for the rendered program. */
+export interface RenderedArtifact {
+ template: TemplateResult | typeof nothing;
+ /** Parse/runtime errors for the program (unknown components, etc.). */
+ errors: { code: string; message: string; component?: string; statementId?: string }[];
+ /** $variable declarations materialized by parsing the program. */
+ stateDeclarations: Record<string, unknown>;
+}
+
+/**
+ * Renderer handle: `render(source, persistedState)` renders one program;
+ * `store` is the live lang-core store (source of truth for flushes);
+ * `refetch` invalidates queries.
+ */
+export interface WikiArtifactRuntime {
+ render(source: string, persistedState: Record<string, unknown>): RenderedArtifact;
+ store: Store;
+ refetch(statementIds?: string[]): void;
 }
 
 /**
@@ -63,22 +89,17 @@ function isElementNode(value: unknown): value is ElementNode {
 }
 
 /**
- * Build the artifact renderer. Each call of the returned render function
- * parses the program, hydrates persisted `$variable` state, executes
- * Query()/Mutation() statements through the tool provider, and returns a
- * Lit template for the evaluated tree.
+ * Build an artifact renderer over the wiki library.
  */
 export function generateWikiRenderer(
- callTool: ToolCaller | null,
+ toolProvider: ToolProvider | null,
  actionContext: ArtifactActionContext,
-): WikiArtefactRenderFn {
+): WikiArtifactRuntime {
  const parser = createParser(wikiLibrary.toJSONSchema(), WIKI_ROOT_COMPONENT);
- const queryManager = createQueryManager(
-  callTool === null ? null : { callTool } satisfies ToolProvider,
- );
+ const queryManager = createQueryManager(toolProvider);
  const store = createStore();
 
- const render: WikiArtefactRenderFn = (source: string, persistedState: Record<string, unknown>) => {
+ const render = (source: string, persistedState: Record<string, unknown>): RenderedArtifact => {
   const result = parser.parse(source);
   store.initialize(result.stateDeclarations, persistedState ?? {});
 
@@ -87,7 +108,14 @@ export function generateWikiRenderer(
    resolveRef: (name) => store.get(name),
   };
 
-  hydrateQueriesAndMutations(result, { store, queryManager, evaluationContext });
+  hydrateQueriesAndMutations(result, { queryManager, evaluationContext });
+
+  const runtimeErrors = result.meta.errors.map((err) => ({
+   code: err.code,
+   message: err.message,
+   component: err.component,
+   statementId: err.statementId ?? '',
+  }));
 
   const evalContext: EvalContext = {
    ctx: { ...evaluationContext, extraScope: queryManager.getSnapshot() },
@@ -95,22 +123,26 @@ export function generateWikiRenderer(
    store,
   };
   const evaluatedRoot = evaluateRoot(result, evalContext);
-  return renderNode(evaluatedRoot);
+  return {
+   template: evaluatedRoot === null ? nothing : (renderTree(evaluatedRoot) as TemplateResult),
+   errors: runtimeErrors,
+   stateDeclarations: result.stateDeclarations,
+  };
  };
 
- void actionContext;
- return render;
+ return {
+  render,
+  store,
+  refetch: (statementIds?: string[]) => {
+   queryManager.invalidate(statementIds);
+   actionContext.rerun(statementIds);
+  },
+ };
 }
-
-/** A render entry: program source + persisted state in, Lit template out. */
-export type WikiArtefactRenderFn = (
- source: string,
- persistedState: Record<string, unknown>,
-) => TemplateResult | typeof nothing;
 
 function hydrateQueriesAndMutations(
  result: ParseResult,
- runtime: { store: Store; queryManager: QueryManager; evaluationContext: EvaluationContext },
+ runtime: { queryManager: QueryManager; evaluationContext: EvaluationContext },
 ): void {
  const { queryManager, evaluationContext } = runtime;
 
@@ -148,42 +180,32 @@ function hydrateQueriesAndMutations(
 
 /**
  * Render the evaluated root tree into a Lit template. Unknown components
- * (dropped by the parser; errors land in `parseResult.meta.errors`) render
- * as nothing.
+ * (dropped by the parser; see `RenderedArtifact.errors`) render as nothing.
  */
-export function renderNode(node: unknown): TemplateResult | unknown {
+export function renderTree(node: unknown): unknown {
  if (node == null) return nothing;
- if (Array.isArray(node)) {
-  return node.map((child) => renderNode(child));
- }
+ if (Array.isArray(node)) return node.map((child) => renderTree(child));
  if (!isElementNode(node)) return node;
  const renderer = wikiLibrary.components[node.typeName]?.component as WikiRenderer | null | undefined;
  if (!renderer) return nothing;
  const renderProps: Record<string, unknown> = {};
  for (const [key, value] of Object.entries(node.props)) {
-  renderProps[key] = isReactiveAssignMarker(value) ? value : renderPropValue(value);
+  renderProps[key] = renderPropValue(value);
  }
  return renderer(renderProps);
 }
 
-/** lang-core's reactive-assign marker for $variable-bound props. */
-interface ReactiveAssignMarker {
- __reactive: 'assign';
- target: string;
- expr: unknown;
-}
-
-function isReactiveAssignMarker(value: unknown): value is ReactiveAssignMarker {
- return (
-  typeof value === 'object'
-  && value !== null
-  && (value as ReactiveAssignMarker).__reactive === 'assign'
- );
-}
-
 function renderPropValue(value: unknown): unknown {
  if (value == null) return nothing;
- if (Array.isArray(value)) return value.map((v) => renderNode(v));
- if (isElementNode(value)) return renderNode(value);
+ if (Array.isArray(value)) return value.map((v) => renderTree(v));
+ if (isElementNode(value)) return renderTree(value);
  return value;
 }
+
+/** Convenience single-tree render for tests and static programs. */
+export function renderNode(node: unknown): unknown {
+ return renderTree(node);
+}
+
+export { isReactiveAssign, ARTIFACT_ACTION_EVENT };
+export type { ToolNotFoundError };

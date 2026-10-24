@@ -2,6 +2,7 @@
 import './web-components/wiki-search.js';
 import './web-components/wiki-hashtag.js';
 import './web-components/system-info.js';
+import './web-components/wiki-artifact-host.js';
 import './web-components/frontmatter-editor-dialog.js';
 import './web-components/agent-details-dialog.js';
 import './web-components/confirmation-dialog.js';
@@ -26,6 +27,7 @@ import './web-components/wiki-table.js';
 import './web-components/collapsible-heading.js';
 import './web-components/page-auto-refresh.js';
 import './web-components/page-chat-panel.js';
+import './web-components/wiki-artifact-host.js';
 import './web-components/page-trash.js';
 import { showStoredToast } from './web-components/toast-message.js';
 import { setupGlobalErrorHandler } from './web-components/global-error-handler.js';
