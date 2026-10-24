@@ -682,6 +682,7 @@ func (s *Site) buildTemplateData(page, command string, listing DirectoryListing,
 		"WikiBaseURL":      requestBaseURL(c),
 		"Username":         identity.LoginName(),
 		"IsSystemPage":     s.isSystemPage(page),
+		"HasArtifact":      wikipage.SplitArtifactFences(rawText).HasFence,
 	}
 }
 

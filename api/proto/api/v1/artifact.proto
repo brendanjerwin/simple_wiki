@@ -1,0 +1,285 @@
+syntax = "proto3";
+
+package api.v1;
+
+import "api/v1/mcp_options.proto";
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/brendanjerwin/simple_wiki/gen/go/api/v1;apiv1";
+
+// ArtifactService manages agent-authored OpenUI Lang programs embedded in wiki
+// pages. The program source lives in a ```wiki-artifact fenced block in the
+// page body; metadata lives in the wiki.artifact frontmatter subtree.
+//
+// SetArtifact is the single write door for the program; all other write paths
+// (UpdatePageContent, CreatePage) route changed fences through the same
+// validation + stamp + placement-guard funnel.
+//
+// The wiki.* frontmatter namespace is reserved wholesale. Generic Frontmatter
+// writes targeting wiki.artifact.* are rejected — use ArtifactService.
+service ArtifactService {
+  option (api.v1.service_description) =
+      "Agent-authored OpenUI Lang programs embedded in wiki pages. "
+      "SetArtifact is the single write door: it validates the OpenUI Lang "
+      "source, stamps wiki.artifact metadata (version, version_hash, "
+      "library, updated_at/by, automated), and enforces the placement guard "
+      "(prose-clear of substantial existing content requires "
+      "confirm_replace_content=true). WatchArtifact drives hot-swap in the "
+      "browser artifact host without a page reload. ClearArtifact removes "
+      "the fence and wiki.artifact subtree, reverting the page to plain "
+      "markdown. v1: OpenUI Lang is the only supported mode.";
+
+  // GetArtifact — see (api.v1.description).
+  rpc GetArtifact(GetArtifactRequest) returns (GetArtifactResponse) {
+    option (api.v1.description) =
+        "Read the artifact source and metadata for a page. Returns "
+        "NotFound when the page has no artifact fence. Source is the raw "
+        "OpenUI Lang program text inside the ```wiki-artifact block.";
+    option (api.v1.read_only) = true;
+    option (api.v1.example_request) = "{\"page\": \"my_tracker\"}";
+  }
+
+  // SetArtifact — see (api.v1.description).
+  rpc SetArtifact(SetArtifactRequest) returns (SetArtifactResponse) {
+    option (api.v1.description) =
+        "Write (create or replace) the artifact program on a page. "
+        "Validates the OpenUI Lang source conservatively (gross structural "
+        "violations are rejected; partial programs that the renderer can "
+        "handle are accepted). Server stamps version, version_hash, "
+        "library, updated_at, updated_by, and automated — these fields on "
+        "the request are ignored. Pass expected_version_hash from a prior "
+        "GetArtifact for optimistic concurrency (omit for unconditional "
+        "write on a new page). Placement guard: if the page has substantial "
+        "non-artifact prose (>= 1 KB) and the new source would clear it, "
+        "set confirm_replace_content=true or the call returns "
+        "FailedPrecondition naming the safer alternatives.";
+    option (api.v1.example_request) =
+        "{\"page\": \"my_tracker\", \"source\": \"Button(\\\"Reset\\\") { "
+        "@click: mergeState({count: 0}) }\", "
+        "\"expected_version_hash\": \"sha256:abc123\"}";
+  }
+
+  // ClearArtifact — see (api.v1.description).
+  rpc ClearArtifact(ClearArtifactRequest) returns (ClearArtifactResponse) {
+    option (api.v1.description) =
+        "Remove the artifact fence and wiki.artifact subtree from a page. "
+        "The page reverts to plain markdown; any prose is unaffected. Pass "
+        "expected_version_hash from a prior GetArtifact for optimistic "
+        "concurrency (omit to clear unconditionally).";
+    option (api.v1.example_request) =
+        "{\"page\": \"my_tracker\"}";
+  }
+
+  // WatchArtifact — see (api.v1.description).
+  rpc WatchArtifact(WatchArtifactRequest) returns (stream WatchArtifactResponse) {
+    option (api.v1.description) =
+        "Server-streaming watch on a page's artifact. Sends an event "
+        "every time the artifact version_hash changes — i.e., on every "
+        "successful SetArtifact or ClearArtifact. The browser artifact "
+        "host subscribes to drive hot-swap without a page reload. The "
+        "first event fires immediately with the current state so the "
+        "client does not need a separate GetArtifact before subscribing.";
+    option (api.v1.read_only) = true;
+  }
+}
+
+// ArtifactStateService stores and watches per-page artifact state. State is
+// CAS'd (compare-and-swap via expected_state_version_hash), cross-device,
+// and independent of the artifact program source. The wiki.artifact_state.*
+// frontmatter namespace is reserved; generic Frontmatter writes targeting it
+// are rejected — use ArtifactStateService.
+service ArtifactStateService {
+  option (api.v1.service_description) =
+      "CAS'd per-page artifact state. Backs OpenUI Lang reactive state "
+      "($variables, form state) in the artifact host. State is "
+      "cross-device and persists across reloads. Concurrent writers "
+      "surface OCC conflicts via expected_state_version_hash — never "
+      "silent loss. browser localStorage is NOT a supported state path; "
+      "use this service instead.";
+
+  // GetArtifactState — see (api.v1.description).
+  rpc GetArtifactState(GetArtifactStateRequest) returns (GetArtifactStateResponse) {
+    option (api.v1.description) =
+        "Read the current artifact state for a page. Returns an empty "
+        "state map when no state has been written yet (not an error). "
+        "state_version_hash in the response should be passed as "
+        "expected_state_version_hash on the next MergeArtifactState call.";
+    option (api.v1.read_only) = true;
+    option (api.v1.example_request) = "{\"page\": \"my_tracker\"}";
+  }
+
+  // MergeArtifactState — see (api.v1.description).
+  rpc MergeArtifactState(MergeArtifactStateRequest) returns (MergeArtifactStateResponse) {
+    option (api.v1.description) =
+        "Merge (shallow-patch) artifact state for a page. Keys in the "
+        "patch map overwrite existing keys; keys absent from the patch "
+        "are untouched. Pass expected_state_version_hash from a prior "
+        "GetArtifactState for optimistic concurrency — mismatch returns "
+        "Aborted. Omit expected_state_version_hash for unconditional "
+        "merge (only safe when concurrent writes are impossible).";
+    option (api.v1.example_request) =
+        "{\"page\": \"my_tracker\", \"patch\": {\"count\": \"5\"}, "
+        "\"expected_state_version_hash\": \"sha256:def456\"}";
+  }
+
+  // DeleteArtifactState — see (api.v1.description).
+  rpc DeleteArtifactState(DeleteArtifactStateRequest) returns (DeleteArtifactStateResponse) {
+    option (api.v1.description) =
+        "Delete all artifact state for a page. Called when ClearArtifact "
+        "is used to remove the artifact entirely, or to reset an app's "
+        "state to its initial condition.";
+    option (api.v1.example_request) =
+        "{\"page\": \"my_tracker\"}";
+  }
+
+  // WatchArtifactState — see (api.v1.description).
+  rpc WatchArtifactState(WatchArtifactStateRequest) returns (stream WatchArtifactStateResponse) {
+    option (api.v1.description) =
+        "Server-streaming watch on artifact state. Sends an event every "
+        "time the state_version_hash changes — i.e., on every successful "
+        "MergeArtifactState or DeleteArtifactState. The first event fires "
+        "immediately with the current state.";
+    option (api.v1.read_only) = true;
+  }
+}
+
+// ArtifactMetadata holds server-stamped metadata for an artifact. All fields
+// are wiki-managed and read-only on input.
+message ArtifactMetadata {
+  // Monotonically-incrementing revision counter, stamped by the server.
+  int64 version = 1;
+  // SHA-256 hash of the program source. Used as the OCC handle on
+  // SetArtifact. Format: "sha256:<hex>".
+  string version_hash = 2;
+  // Component library version the program targets. v1: always "wiki-core@1".
+  string library = 3;
+  // Server-stamped time of last SetArtifact write.
+  google.protobuf.Timestamp updated_at = 4;
+  // Principal name of the caller that wrote this artifact.
+  string updated_by = 5;
+  // True when the write was performed by an automated caller (agent/tag).
+  bool automated = 6;
+}
+
+// GetArtifact
+
+message GetArtifactRequest {
+  string page = 1;
+}
+
+message GetArtifactResponse {
+  // Raw OpenUI Lang program source (content inside the ```wiki-artifact fence).
+  string source = 1;
+  // Server-stamped metadata.
+  ArtifactMetadata metadata = 2;
+}
+
+// SetArtifact
+
+message SetArtifactRequest {
+  string page = 1;
+  // OpenUI Lang program source to write. v1: must be a valid (or
+  // conservatively-parseable) OpenUI Lang program.
+  string source = 2;
+  // OCC handle from a prior GetArtifact. Omit for unconditional write on a
+  // new page. Mismatch returns Aborted.
+  optional string expected_version_hash = 3;
+  // Required when the write would clear substantial existing prose (>= 1 KB
+  // non-artifact body). Without this flag, the call returns FailedPrecondition
+  // naming safer alternatives (new page + link, or app-above-prose).
+  bool confirm_replace_content = 4;
+}
+
+message SetArtifactResponse {
+  // Updated metadata, including the new version and version_hash.
+  ArtifactMetadata metadata = 1;
+}
+
+// ClearArtifact
+
+message ClearArtifactRequest {
+  string page = 1;
+  // OCC handle from a prior GetArtifact. Omit to clear unconditionally.
+  optional string expected_version_hash = 2;
+}
+
+message ClearArtifactResponse {
+  bool success = 1;
+}
+
+// WatchArtifact
+
+message WatchArtifactRequest {
+  string page = 1;
+  // Server-side poll cadence in milliseconds. Clamped to [100ms, 60s].
+  // Omit / 0 to use the server default (~1s).
+  optional int64 check_interval_ms = 2;
+}
+
+message WatchArtifactResponse {
+  // Current version_hash. Monotonically advances on every SetArtifact.
+  // Empty string means the artifact was cleared (ClearArtifact was called).
+  string version_hash = 1;
+  // Current version counter.
+  int64 version = 2;
+  // The current source, included on every event so the host can hot-swap
+  // without a separate GetArtifact round-trip.
+  string source = 3;
+  // True when the artifact was cleared; source will be empty.
+  bool cleared = 4;
+}
+
+// GetArtifactState
+
+message GetArtifactStateRequest {
+  string page = 1;
+}
+
+message GetArtifactStateResponse {
+  // Artifact state as a key→value map.
+  map<string, string> state = 1;
+  // SHA-256 hash of the current state. Use as expected_state_version_hash
+  // on MergeArtifactState. Format: "sha256:<hex>". Empty when no state exists.
+  string state_version_hash = 2;
+}
+
+// MergeArtifactState
+
+message MergeArtifactStateRequest {
+  string page = 1;
+  // Shallow patch: keys to set/update.
+  map<string, string> patch = 2;
+  // OCC handle from GetArtifactState. Mismatch returns Aborted.
+  optional string expected_state_version_hash = 3;
+}
+
+message MergeArtifactStateResponse {
+  // Updated state after the merge.
+  map<string, string> state = 1;
+  // New state_version_hash after the merge.
+  string state_version_hash = 2;
+}
+
+// DeleteArtifactState
+
+message DeleteArtifactStateRequest {
+  string page = 1;
+}
+
+message DeleteArtifactStateResponse {
+  bool success = 1;
+}
+
+// WatchArtifactState
+
+message WatchArtifactStateRequest {
+  string page = 1;
+  optional int64 check_interval_ms = 2;
+}
+
+message WatchArtifactStateResponse {
+  // Current state_version_hash. Empty when no state exists or after delete.
+  string state_version_hash = 1;
+  // The current state, included on every event.
+  map<string, string> state = 2;
+}

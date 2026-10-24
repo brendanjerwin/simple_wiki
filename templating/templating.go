@@ -21,6 +21,18 @@ import (
 	"golang.org/x/text/language"
 )
 
+// stripArtifactFences removes ```wiki-artifact fenced blocks from markdown
+// before template execution. This is necessary because:
+//  1. OpenUI Lang programs may contain {{ }} which would trip Go template parsing.
+//  2. The fence should never appear as rendered prose or in the search index.
+//
+// This is called at both choke points (ExecuteTemplate + ValidateTemplate) so
+// every current and future caller inherits the bypass automatically.
+func stripArtifactFences(markdown string) string {
+	result := wikipage.SplitArtifactFences(markdown)
+	return result.ProseRemainder
+}
+
 const singleSpace = " "
 
 type InventoryFrontmatter struct {
@@ -787,7 +799,14 @@ func buildChatTemplateWithFunctions(ctx context.Context, templateString string, 
 
 // ExecuteTemplate executes a template string with the given frontmatter and site context.
 // Includes timeout protection to prevent infinite hangs.
+// Artifact fences (```wiki-artifact blocks) are stripped before execution so
+// OpenUI Lang programs with {{ }} do not trip Go template parsing, and so
+// the fence never appears as rendered prose or in the search index.
 func ExecuteTemplate(templateString string, fm wikipage.FrontMatter, site wikipage.PageReader, query wikipage.IQueryFrontmatterIndex) ([]byte, error) {
+	// Strip artifact fences before any template execution. This is the
+	// authoritative choke point — callers must not strip fences themselves.
+	templateString = stripArtifactFences(templateString)
+
 	// Set a reasonable timeout for template execution to prevent hangs
 	ctx, cancel := context.WithTimeout(context.Background(), templateExecutionTimeout)
 	defer cancel()
@@ -918,7 +937,15 @@ var templatePositionRe = regexp.MustCompile(`^template:\s+[^:]+:(\d+)(?::(\d+))?
 //   - its line (and column) position in the source
 //   - a "Did you mean …?" suggestion for common misspellings (e.g. wrong case)
 //   - the full list of available macros
+//
+// Artifact fences (```wiki-artifact blocks) are stripped before validation
+// so OpenUI Lang programs with {{ }} do not produce false validation errors.
 func ValidateTemplate(markdown string) error {
+	// Strip artifact fences at the authoritative validation choke point.
+	// This ensures write paths (CreatePage, UpdatePageContent, UpdateWholePage)
+	// accept pages whose bodies contain artifact programs with {{ }}.
+	markdown = stripArtifactFences(markdown)
+
 	_, err := template.New("page").Funcs(validationFuncMap()).Parse(markdown)
 	if err == nil {
 		return nil

@@ -115,6 +115,8 @@ type Server struct {
 	apiv1.UnimplementedSurveyServiceServer
 	apiv1.UnimplementedConnectorServiceServer
 	apiv1.UnimplementedPageHistoryServiceServer
+	apiv1.UnimplementedArtifactServiceServer
+	apiv1.UnimplementedArtifactStateServiceServer
 	commit                  string
 	buildTime               time.Time
 	pageReaderMutator       wikipage.PageReaderMutator
@@ -364,6 +366,8 @@ func (s *Server) RegisterWithServer(grpcServer *grpc.Server) {
 	apiv1.RegisterSurveyServiceServer(grpcServer, s)
 	apiv1.RegisterConnectorServiceServer(grpcServer, s)
 	apiv1.RegisterPageHistoryServiceServer(grpcServer, s)
+	apiv1.RegisterArtifactServiceServer(grpcServer, s)
+	apiv1.RegisterArtifactStateServiceServer(grpcServer, s)
 }
 
 // LoggingInterceptor returns a gRPC unary interceptor for logging method calls.

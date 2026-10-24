@@ -23,7 +23,7 @@ var reservedNamespaceMessages = map[string]string{
 	"agent":   "the 'agent' top-level frontmatter namespace is reserved; use the appropriate dedicated service (see ADR-0009)",
 	"maps":    "the 'maps' top-level frontmatter namespace is reserved; use MapService instead of generic Frontmatter writes",
 	"surveys": "the 'surveys' top-level frontmatter namespace is reserved; use SurveyService instead of generic Frontmatter writes",
-	"wiki":    "the 'wiki' top-level frontmatter namespace is reserved; use the appropriate dedicated service (see ADR-0009 and ADR-0010)",
+	"wiki":    "the 'wiki' top-level frontmatter namespace is reserved; use ArtifactService for wiki.artifact.* and ArtifactStateService for wiki.artifact_state.* (see ADR-0009 and ADR-0010)",
 }
 
 func init() {

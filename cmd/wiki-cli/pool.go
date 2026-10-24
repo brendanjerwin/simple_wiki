@@ -1739,6 +1739,15 @@ collapsible headers, checklists, blog macros, or any other wiki-specific feature
 Do NOT search the codebase for this. The wiki's own help pages contain accurate,
 user-facing documentation for all wiki-specific syntax and features.
 
+## Artifact Apps (OpenUI Lang)
+
+To build an interactive app (tracker, form, dashboard) on a wiki page, use
+api_v1_ArtifactService_SetArtifact — it writes an OpenUI Lang program into the
+page's artifact fence and stamps wiki.artifact metadata. Prefer a dedicated new
+page for apps; avoid placing an artifact on a page with substantial prose unless
+the user explicitly confirms. For syntax, component names, and examples, read
+the help-artifacts-lang page (search "help artifact").
+
 `
 
 // fetchPageContext retrieves the page's agent.chat_context (including the
