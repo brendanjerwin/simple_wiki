@@ -111,14 +111,12 @@ Apps can call only these tools from the rendered program — **fully-qualified i
 
 Everything else — any page mutation, checklist/map/survey/connector mutation — is **excluded**: a program literally cannot mutate another page or user data; a non-allowlisted call fails with `tool-not-found` and the rest of the program still renders.
 
-Read data via `Query(...)`, then trigger a refetch with `@Run`:
+Read data via a `Query(...)` assignment, then trigger a refetch with `@Run` — actions are a positional argument on the component, and every statement must be assigned (a bare statement is unreachable and silently dropped):
 
 ```
 rows = Query("api_v1_ChecklistService_ListItems", { listName: "groceries" })
-root = Card("Groceries", Table(["item"], [rows.items]))
-Button("refresh") [
-  @Run(rows)
-]
+refresh = Button("refresh", @Run(rows))
+root = Card("Groceries", Stack([refresh, Table(["item"], rows.items)]))
 ```
 
 If an app needs a destructive action, the channel is the conversation (`@ToAssistant`), where confirmation and permissions live — not the program.

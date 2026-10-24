@@ -41,7 +41,7 @@ updated_at / updated_by / automated   # identity-derived stamps, never client-wr
 
 ### Server as validator+stamper
 
-The Go server has no JS runtime, so **`mergeStatements` never runs server-side**. The agent emits a patch; the **host** merges (vendored lang-core) and submits the merged program via `SetArtifact` with the base version hash; the server validates, stamps, and lets `WatchArtifact` fire. There is no `MergeArtifactPatch` RPC. There are no `CommitArtifact`/`GetArtifactLog` RPCs — ADR-0016 page snapshots (the fence lives in the body) are the *only* history; restore rides `PageHistoryService`.
+The Go server has no JS runtime, so **the server never merges programs**. Iteration is agent-side: the agent reads the program (`GetArtifact`), composes the full updated program text, and submits it via `SetArtifact` with the base version hash; the server validates, stamps, and lets `WatchArtifact` fire — OCC aborts surface to the agent directly, refetch→re-apply→retry. (`mergeStatements` from vendored lang-core is available host-side as `mergeArtifactPatch` in `static/js/openui-lang/renderer.ts` for a future patch-delivery channel, but v1 has no UI that streams patches — there is no `MergeArtifactPatch` RPC.) There are no `CommitArtifact`/`GetArtifactLog` RPCs — ADR-0016 page snapshots (the fence lives in the body) are the *only* history; restore rides `PageHistoryService`.
 
 ### The wiki component library (the teaching artifact)
 
