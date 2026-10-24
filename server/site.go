@@ -684,7 +684,7 @@ func (DirectoryEntry) Sys() any {
 // PageReadError records a page identifier and the error encountered when reading that page during directory listing.
 type PageReadError struct {
 	Page string
-	Err      error
+	Err  error
 }
 
 // DirectoryListing holds the result of a directory listing operation, including
@@ -732,6 +732,23 @@ func (s *Site) DirectoryList() (DirectoryListing, error) {
 	}
 	sort.Slice(entries, func(i, j int) bool { return entries[i].ModTime().Before(entries[j].ModTime()) })
 	return DirectoryListing{Entries: entries, ReadErrors: readErrors}, nil
+}
+
+// ListAllPageIdentifiers enumerates every live page identifier in the data
+// directory. Lightweight counterpart of DirectoryList for maintenance jobs
+// that only need the identifier set, not read errors or mod times.
+func (s *Site) ListAllPageIdentifiers() ([]wikipage.PageIdentifier, error) {
+	files, err := os.ReadDir(s.PathToData)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read data directory: %w", err)
+	}
+	identifiers := make([]wikipage.PageIdentifier, 0, len(files))
+	for _, f := range files {
+		if strings.HasSuffix(f.Name(), ".md") {
+			identifiers = append(identifiers, wikipage.PageIdentifier(decodeFileName(f.Name())))
+		}
+	}
+	return identifiers, nil
 }
 
 // UploadEntry represents an uploaded file entry.

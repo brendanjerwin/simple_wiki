@@ -82,6 +82,13 @@ type PageOpener interface {
 	ReadPage(identifier PageIdentifier) (*Page, error)
 }
 
+// PageLister enumerates every live page identifier in the store. Used by
+// maintenance jobs (e.g. system-page pruning) that must survey the whole
+// store rather than touch one known page.
+type PageLister interface {
+	ListAllPageIdentifiers() ([]PageIdentifier, error)
+}
+
 // PageModifier provides atomic read-modify-write semantics for page content.
 // Implementations must hold a write lock for the duration of the modifier call
 // to prevent TOCTOU races between concurrent writers.

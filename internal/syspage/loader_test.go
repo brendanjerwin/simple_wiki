@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/brendanjerwin/simple_wiki/templating"
+	"github.com/brendanjerwin/simple_wiki/wikiidentifiers"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -66,6 +67,22 @@ func (f *fakeStore) DeletePage(id wikipage.PageIdentifier) error {
 	delete(f.frontmatter, id)
 	delete(f.markdown, id)
 	return nil
+}
+
+// ListAllPageIdentifiers enumerates the union of pages the fake knows about.
+func (f *fakeStore) ListAllPageIdentifiers() ([]wikipage.PageIdentifier, error) {
+	seen := map[wikipage.PageIdentifier]struct{}{}
+	for id := range f.frontmatter {
+		seen[id] = struct{}{}
+	}
+	for id := range f.markdown {
+		seen[id] = struct{}{}
+	}
+	ids := make([]wikipage.PageIdentifier, 0, len(seen))
+	for id := range seen {
+		ids = append(ids, id)
+	}
+	return ids, nil
 }
 
 func (f *fakeStore) ModifyMarkdown(id wikipage.PageIdentifier, modifier func(wikipage.FrontMatter, wikipage.Markdown) (wikipage.Markdown, error), _ wikipage.Identity) error {
@@ -356,6 +373,76 @@ var _ = Describe("Sync", func() {
 			Expect(err.Error()).To(ContainSubstring("disk on fire"))
 		})
 	})
+
+	Describe("when a system page on disk is no longer in the embedded corpus", func() {
+		var store *fakeStore
+
+		BeforeEach(func() {
+			store = newFakeStore()
+			Expect(Sync(store, nullLogger{})).To(Succeed())
+
+			// Simulate the retired help-artifacts-lang page: shipped by an
+			// older binary, renamed since. The sync must remove it so agents
+			// cannot find stale instructions naming dead tools.
+			staleID := wikipage.PageIdentifier("help-artifacts-lang")
+			store.frontmatter[staleID] = wikipage.FrontMatter{
+				"identifier": "help-artifacts-lang",
+				"wiki":       map[string]any{"system": true},
+			}
+			store.markdown[staleID] = wikipage.Markdown("stale help text")
+
+			// A user page with no system flag must survive.
+			userID := wikipage.PageIdentifier("regular_user_page")
+			store.frontmatter[userID] = wikipage.FrontMatter{"identifier": "regular_user_page"}
+			store.markdown[userID] = wikipage.Markdown("user content")
+
+			Expect(Sync(store, nullLogger{})).To(Succeed())
+		})
+
+		It("should delete the retired system page", func() {
+			_, _, err := store.ReadFrontMatter(wikipage.PageIdentifier("help-artifacts-lang"))
+			Expect(err).To(MatchError(os.ErrNotExist))
+		})
+
+		It("should not prune hyphenated embedded pages (munged keep-set)", func() {
+			// Regression: the store enumerates by munged filename and
+			// MungeIdentifier snake-cases hyphens, so `help-page-apps` is
+			// listed as `help_page_apps`. The keep-set must contain the
+			// munged form or the prune step deletes the page the sync just
+			// wrote.
+			pages, _ := LoadEmbedded()
+			for _, p := range pages {
+				if !strings.Contains(p.Identifier, "-") {
+					continue
+				}
+				munged, err := wikiidentifiers.MungeIdentifier(p.Identifier)
+				Expect(err).NotTo(HaveOccurred())
+
+				keptRaw := true
+				if _, _, readErr := store.ReadFrontMatter(wikipage.PageIdentifier(p.Identifier)); readErr != nil {
+					keptRaw = false
+				}
+				_, mungedOK := store.frontmatter[wikipage.PageIdentifier(munged)]
+				Expect(keptRaw || mungedOK).To(BeTrue(),
+					fmt.Sprintf("hyphenated embedded page %q (munged as %q) must not be pruned", p.Identifier, munged))
+			}
+		})
+
+		It("should not delete user pages", func() {
+			_, _, err := store.ReadFrontMatter(wikipage.PageIdentifier("regular_user_page"))
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should leave all embedded pages intact", func() {
+			pages, loadErr := LoadEmbedded()
+			Expect(loadErr).NotTo(HaveOccurred())
+			for _, p := range pages {
+				_, _, readErr := store.ReadFrontMatter(wikipage.PageIdentifier(p.Identifier))
+				Expect(readErr).NotTo(HaveOccurred(),
+					fmt.Sprintf("embedded page %q must not be pruned", p.Identifier))
+			}
+		})
+	})
 })
 
 func totalWrites(s *fakeStore) int {
@@ -390,6 +477,6 @@ func (*explodingStore) WriteMarkdown(_ wikipage.PageIdentifier, _ wikipage.Markd
 
 func (*explodingStore) DeletePage(_ wikipage.PageIdentifier) error { return nil }
 
-func (*explodingStore) ModifyMarkdown(_ wikipage.PageIdentifier,  _ func(wikipage.FrontMatter, wikipage.Markdown) (wikipage.Markdown, error), _ wikipage.Identity) error {
+func (*explodingStore) ModifyMarkdown(_ wikipage.PageIdentifier, _ func(wikipage.FrontMatter, wikipage.Markdown) (wikipage.Markdown, error), _ wikipage.Identity) error {
 	return nil
 }

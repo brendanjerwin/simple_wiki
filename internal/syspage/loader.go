@@ -14,6 +14,7 @@ import (
 	"reflect"
 	"strings"
 
+	"github.com/brendanjerwin/simple_wiki/wikiidentifiers"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 )
 
@@ -121,6 +122,67 @@ func Sync(rw wikipage.PageReaderMutator, log Logger) error {
 		log.Info("System page synced (%s): %s", reason, p.Identifier)
 	}
 
+	if err := pruneRetiredSystemPages(rw, pageIdentifiers(pages), log); err != nil {
+		return fmt.Errorf("prune retired system pages: %w", err)
+	}
+
+	return nil
+}
+
+// pageIdentifiers extracts the identifiers from embedded pages, keyed by
+// both the raw identifier and its munged form. The store enumerates pages
+// by munged filename (MungeIdentifier snake-cases hyphens), so the keep-set
+// must contain both or hyphenated identifiers would be pruned right after
+// being synced.
+func pageIdentifiers(pages []Page) map[wikipage.PageIdentifier]struct{} {
+	identifiers := make(map[wikipage.PageIdentifier]struct{}, len(pages)*2)
+	for _, p := range pages {
+		identifiers[wikipage.PageIdentifier(p.Identifier)] = struct{}{}
+		if munged, err := wikiidentifiers.MungeIdentifier(p.Identifier); err == nil {
+			identifiers[wikipage.PageIdentifier(munged)] = struct{}{}
+		}
+	}
+	return identifiers
+}
+
+// pruneRetiredSystemPages deletes system pages that exist in the store but are
+// no longer part of the embedded corpus (e.g. a help page renamed since an
+// older binary shipped it). Only pages flagged wiki.system = true are removed
+// — user pages are never touched even if their identifier collides with a
+// retired embedded identifier.
+func pruneRetiredSystemPages(rw wikipage.PageReaderMutator, embedded map[wikipage.PageIdentifier]struct{}, log Logger) error {
+	lister, ok := rw.(wikipage.PageLister)
+	if !ok {
+		// Store cannot enumerate pages; pruning is impossible, which is a
+		// wiring bug rather than an expected state.
+		return fmt.Errorf("store does not implement wikipage.PageLister")
+	}
+	all, err := lister.ListAllPageIdentifiers()
+	if err != nil {
+		return fmt.Errorf("list pages for pruning: %w", err)
+	}
+	for _, id := range all {
+		if _, embeddedPresent := embedded[id]; embeddedPresent {
+			continue
+		}
+		_, fm, readErr := rw.ReadFrontMatter(id)
+		if readErr != nil {
+			if os.IsNotExist(readErr) {
+				continue
+			}
+			// Index of the store may contain stale entries; skip unreadable
+			// pages rather than failing the entire sync.
+			log.Debug("Skipping unreadable page %s during system-page prune: %v", id, readErr)
+			continue
+		}
+		if !wikipage.IsSystemPage(fm) {
+			continue // user page; never touch
+		}
+		if err := rw.DeletePage(id); err != nil {
+			return fmt.Errorf("delete retired system page %s: %w", id, err)
+		}
+		log.Info("Retired system page pruned: %s", id)
+	}
 	return nil
 }
 
