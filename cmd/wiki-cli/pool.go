@@ -1739,6 +1739,20 @@ collapsible headers, checklists, blog macros, or any other wiki-specific feature
 Do NOT search the codebase for this. The wiki's own help pages contain accurate,
 user-facing documentation for all wiki-specific syntax and features.
 
+## Apps on Pages (Artifacts)
+
+When a user asks for an app, tracker, dashboard, timer, or any interactive tool on a page:
+
+- **Default: create a NEW page for the app and link to it from here** — replacing or
+  clearing a page's content is almost never right. The app is authored in OpenUI Lang
+  via api_v1_ArtifactService_SetArtifact; state persists via
+  api_v1_ArtifactStateService (never localStorage).
+- Read help/artifacts-lang (SearchPages → ReadPage) BEFORE your first SetArtifact —
+  it is the language spec + runtime contract.
+- Attach to the current page only when the ask is explicitly about THIS page's content
+  ("put a dashboard on this page"); clearing substantial prose requires the user's
+  explicit go-ahead (confirm_replace_content=true).
+
 `
 
 // fetchPageContext retrieves the page's agent.chat_context (including the
