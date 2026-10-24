@@ -208,8 +208,8 @@ export class WikiPageAppHost extends LitElement {
  @state()
  declare private reconnecting: boolean;
  /** Window/document wake triggers, bound once and removed on disconnect. */
- private wakeOnline = (): void => { this.recoverIfDegraded(); };
- private wakeVisible = (): void => {
+ private readonly wakeOnline = (): void => { this.recoverIfDegraded(); };
+ private readonly wakeVisible = (): void => {
   if (document.visibilityState === 'visible') this.recoverIfDegraded();
  };
 
@@ -308,9 +308,9 @@ export class WikiPageAppHost extends LitElement {
   return false;
  }
 
- private static RETRY_MAX_ATTEMPTS = 6;
- private static RETRY_BASE_MS = 1000;
- private static RETRY_MAX_MS = 30_000;
+ private static readonly RETRY_MAX_ATTEMPTS = 6;
+ private static readonly RETRY_BASE_MS = 1000;
+ private static readonly RETRY_MAX_MS = 30_000;
 
  /**
   * Compute the next backoff delay: exponential base with full jitter
