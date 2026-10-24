@@ -161,7 +161,7 @@ root = Card("Count", Stack([
 ]))
 ```
 
-**Text input bound to state** — `Input.onChange` flows typed text back into a `$variable`, which triggers a live re-render:
+**Text input bound to state** — `Input.onChange` flows typed text back into a `$variable`, which triggers a live re-render. Inside an `onChange` step the typed value is referenced as **`$value`**:
 
 ```
 $name = ""
@@ -170,6 +170,8 @@ root = Card("Greeter", Stack([
   Text("hi " + $name),
 ]))
 ```
+
+With a step: `Input("your name", $name, @Set($name, $value))` — `onChange` fires on every keystroke, `@Set($name, $value)` stores what was typed, and the binding keeps the field in sync.
 
 **API/data lookup** — a `Query(...)` assignment calls a read-only tool at render time; `@Run(queryName)` re-fires it (e.g. after a `Button`):
 

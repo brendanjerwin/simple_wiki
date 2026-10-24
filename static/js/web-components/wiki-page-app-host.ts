@@ -673,7 +673,12 @@ export class WikiPageAppHost extends LitElement {
   for (const step of plan?.steps ?? []) {
    switch (step.type) {
     case 'set': {
-     const value = this.runtime.evaluateStepValue(step.valueAST);
+     // Form controls dispatch actions with the current control value
+     // (`detail.value`); lang-core's onChange steps reference it as
+     // `$value` — e.g. Button/Input with @Set($var, $value).
+     const value = this.runtime.evaluateStepValue(step.valueAST, {
+      $value: event.detail.value,
+     });
      if (value !== undefined && value !== null) {
       store.set(step.target, value);
      }

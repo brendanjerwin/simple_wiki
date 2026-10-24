@@ -159,6 +159,46 @@ describe('WikiPageAppHost', () => {
   });
  });
 
+ describe('when an Input onChange @Set fires', () => {
+  let stubs: StubbedHost;
+  let mergeCalls: Record<string, unknown>[];
+
+  beforeEach(async () => {
+   stubs = await stubbedHost(
+    '$name = ""\nroot = Card("T", [Input("your name", $name), Text("hi " + $name)])',
+   );
+   mergeCalls = [];
+   const clients = stubs.el as unknown as { stateClient: Record<string, unknown> };
+   clients.stateClient['mergePageAppState'] = stub().callsFake((req: { state: Record<string, unknown> }) => {
+    mergeCalls.push({ ...req.state });
+    return Promise.resolve(
+     create(MergePageAppStateResponseSchema, { state: {} as never, stateVersionHash: 'state-hash-2' }),
+    );
+   });
+
+   // Simulate typing: the Input control dispatches the onChange plan with
+   // the control's value as detail.value.
+   stubs.el.dispatchEvent(new CustomEvent('wiki-page-app-action', {
+    detail: {
+     plan: { steps: [{ type: 'set' as never, target: '$name', valueAST: { k: 'StateRef', n: '$value' } }] },
+     value: 'Ada',
+    },
+    bubbles: true,
+    composed: true,
+   }));
+   await stubs.el.updateComplete;
+   await new Promise((resolve) => setTimeout(resolve, 10));
+  });
+
+  it('should write the typed value into the store as the target variable', () => {
+   expect(mergeCalls[0]?.['$name']).to.equal('Ada');
+  });
+
+  it('should flush the merged snapshot to PageAppStateService', () => {
+   expect(mergeCalls).to.have.lengthOf(1);
+  });
+ });
+
  describe('when the remove button is clicked', () => {
   let stubs: StubbedHost | null = null;
   let removedEvent: Event | null = null;
