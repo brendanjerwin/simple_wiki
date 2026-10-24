@@ -223,12 +223,21 @@ title = "Checklist A11y Test Page"
       await firstCheckbox.focus();
       await expect(firstCheckbox).not.toBeChecked();
 
+      // The checkbox is ?disabled while saving; a Space press during that
+      // window hits a disabled control and produces no change event. Wait
+      // out the save before (and after) pressing, or the press is a no-op.
       await firstCheckbox.press('Space');
       await expect(firstCheckbox).toBeChecked();
+      await expect(checklist.locator('.saving-indicator')).toHaveCount(0, {
+        timeout: SAVE_TIMEOUT_MS,
+      });
 
       // Restore state — uncheck
       await firstCheckbox.press('Space');
       await expect(firstCheckbox).not.toBeChecked();
+      await expect(checklist.locator('.saving-indicator')).toHaveCount(0, {
+        timeout: SAVE_TIMEOUT_MS,
+      });
     });
 
     test('should move an item down via ArrowDown on its drag handle', async ({ page }) => {
