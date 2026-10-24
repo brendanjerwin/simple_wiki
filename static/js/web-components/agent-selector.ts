@@ -271,7 +271,8 @@ export class AgentSelector extends LitElement {
 
   private _onGlobalClick(e: MouseEvent): void {
     if (!this._open) return;
-    if (!this.shadowRoot?.contains(e.composedPath()[0] as Node)) {
+    const composedTarget = e.composedPath()[0];
+    if (!(composedTarget instanceof Node) || !this.shadowRoot?.contains(composedTarget)) {
       this._open = false;
     }
   }

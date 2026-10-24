@@ -95,18 +95,17 @@ test.describe('Chat Panel', () => {
     });
   });
 
-  test.describe('Persona name display', () => {
+  test.describe('Agent selector display', () => {
     test.beforeEach(async ({ page }) => {
       await navigateAndWait(page);
     });
 
-    test('should show empty panel title when no persona is configured', async ({ page }) => {
+    test('should show agent selector in panel header', async ({ page }) => {
       await openChatPanel(page);
 
-      // Panel title should be empty (no persona configured)
-      const panelTitle = page.locator('page-chat-panel .panel-title');
-      await expect(panelTitle).toBeAttached({ timeout: PANEL_INTERACTION_TIMEOUT_MS });
-      await expect(panelTitle).toHaveText(/^\s*$/);
+      // Agent selector replaces the static panel title — it is the "who am I talking to" surface
+      const agentSelector = page.locator('page-chat-panel agent-selector');
+      await expect(agentSelector).toBeAttached({ timeout: PANEL_INTERACTION_TIMEOUT_MS });
     });
 
     test('should show "Open chat" aria-label when no persona is configured', async ({ page }) => {
@@ -115,14 +114,12 @@ test.describe('Chat Panel', () => {
       await expect(fab).toHaveAttribute('aria-label', 'Open chat');
     });
 
-    test('should display persona name in panel title when persona is configured', async ({ page }) => {
-      await setChatPanelProperty(page, 'persona', 'Aria');
-
+    test('should display current agent button in panel header', async ({ page }) => {
       await openChatPanel(page);
 
-      // Panel title should show the persona name
-      const panelTitle = page.locator('page-chat-panel .panel-title');
-      await expect(panelTitle).toHaveText('Aria', { timeout: PANEL_INTERACTION_TIMEOUT_MS });
+      // The agent-selector's current-agent button is the "who am I talking to" surface
+      const currentAgentBtn = page.locator('page-chat-panel').locator('agent-selector').locator('.current-agent');
+      await expect(currentAgentBtn).toBeAttached({ timeout: PANEL_INTERACTION_TIMEOUT_MS });
     });
 
     test('should include persona name in FAB aria-label when persona is configured', async ({ page }) => {
