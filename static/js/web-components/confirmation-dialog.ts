@@ -312,6 +312,15 @@ export class ConfirmationDialog extends LitElement {
     // land on the wrong element.
     const restoreTarget = findRestoreFocusTarget(this._previouslyFocusedElement);
     const dialog = this.shadowRoot?.querySelector('dialog');
+    // Defocus the opener before closing so Chrome's native dialog.close()
+    // focus restoration has nothing to target.  Native restoration targets
+    // the element focused before showModal(); with the pointer resting on a
+    // hover menu, backdrop teardown can make the hidden menu item
+    // (#erasePage) focusable and it wins the race, leaving focus inside the
+    // reopened menu.  Blur first (native restore then falls back to <body>),
+    // close, and re-assert our restore target on a macrotask.
+    const active = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    active?.blur();
     if (dialog?.open) {
       dialog.close();
     }
@@ -321,12 +330,12 @@ export class ConfirmationDialog extends LitElement {
     this.augmentedError = undefined;
     this.config = null;
     this._previouslyFocusedElement = null;
-    // Defer focus restoration via queueMicrotask so it runs after any
-    // browser-native focus management triggered by dialog.close().  Chrome
-    // may schedule its own focus restoration (e.g. to the dialog opener) as a
-    // microtask; queuing ours afterward ensures we win the race.
     if (restoreTarget) {
-      queueMicrotask(() => restoreTarget.focus());
+      setTimeout(() => {
+        if (this.isConnected && document.activeElement !== restoreTarget) {
+          restoreTarget.focus();
+        }
+      }, 0);
     }
   }
 

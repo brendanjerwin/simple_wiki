@@ -331,6 +331,33 @@ describe('ConfirmationDialog', () => {
     });
   });
 
+  describe('when focus restore wins over native dialog.close() restoration', () => {
+    // Regression for the E2E confirmation-dialog flake: with the pointer
+    // resting on a hover menu, Chrome's native close() restoration can beat
+    // a microtask restore and land focus on a hidden menu item. closeDialog()
+    // now blurs the opener first and re-asserts its restore target on a
+    // macrotask.
+    it('should restore focus to the pre-dialog element after close', done => {
+      const opener = document.createElement('button');
+      opener.id = 'restore-probe';
+      document.body.appendChild(opener);
+      opener.focus();
+
+      el.openDialog({ message: 'Second message' });
+      expect(document.activeElement).to.equal(opener);
+      // closeDialog() blurs the opener (native restore target becomes <body>)
+      // then re-asserts its captured restore target on a macrotask.
+      el.updateComplete.then(() => {
+        el.closeDialog();
+        setTimeout(() => {
+          expect(document.activeElement?.id).to.equal('restore-probe');
+          opener.remove();
+          done();
+        }, 10);
+      });
+    });
+  });
+
   describe('when buttons are disabled during loading', () => {
     let confirmSpy: sinon.SinonSpy;
     let cancelSpy: sinon.SinonSpy;
