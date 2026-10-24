@@ -686,28 +686,26 @@ export class WikiPageAppHost extends LitElement {
  /** Restore one reset target to its DECLARED default and re-mark it
   * pristine, so the next render's initialize() restores the default
   * instead of the pre-reset persisted value. */
- private applyResetStep(step: PlanStep): boolean {
+ private applyResetStep(step: PlanStep): void {
   const runtime = this.runtime;
-  if (runtime == null || this.lastDeclarations == null) return false;
+  if (runtime == null || this.lastDeclarations == null) return;
   const declarations = this.lastDeclarations as Record<string, unknown>;
   for (const target of step.targets ?? []) {
    if (target in declarations) {
     runtime.store.set(target, declarations[target], { pristine: true });
    }
   }
-  return true;
  }
 
  /** Apply one @Set step: form controls dispatch actions with the current
   * control value (`detail.value`); lang-core's onChange steps reference it
   * as `$value` — e.g. Button/Input with @Set($var, $value). */
- private applySetStep(step: PlanStep, inputValue: unknown): boolean {
+ private applySetStep(step: PlanStep, inputValue: unknown): void {
   const runtime = this.runtime;
-  if (runtime == null) return false;
+  if (runtime == null) return;
   const value = runtime.evaluateStepValue(step.valueAST, { $value: inputValue });
-  if ((value === undefined || value === null) || step.target == null) return false;
+  if ((value === undefined || value === null) || step.target == null) return;
   runtime.store.set(step.target, value);
-  return true;
  }
 
  private runToAssistantStep(step: PlanStep): void {
@@ -723,11 +721,11 @@ export class WikiPageAppHost extends LitElement {
   if (runtime != null && step.statementId != null) runtime.refetch([step.statementId]);
  }
 
- /** Execute one action-plan step against the live runtime. Returns
-  * true when the step mutated the store (so the caller knows a flush is
-  * needed); side-effect steps route through actionContext instead. */
- private executePlanStep(step: PlanStep, inputValue: unknown): boolean {
-  const mutators: Record<string, (step: PlanStep, value: unknown) => boolean> = {
+ /** Execute one action-plan step against the live runtime. Store
+  * mutations go through apply*Step; side-effect steps route through
+  * actionContext instead. */
+ private executePlanStep(step: PlanStep, inputValue: unknown): void {
+  const mutators: Record<string, (step: PlanStep, value: unknown) => void> = {
    set: (st, value) => this.applySetStep(st, value),
    reset: (st) => this.applyResetStep(st),
   };
@@ -738,9 +736,8 @@ export class WikiPageAppHost extends LitElement {
   };
   // Unknown step types (incl. custom_action) are inert by design.
   const mutator = mutators[step.type];
-  if (mutator != null) return mutator(step, inputValue);
+  if (mutator != null) mutator(step, inputValue);
   sideEffects[step.type]?.(step);
-  return false;
  }
 
  private handlePageAppAction(event: CustomEvent<PageAppActionEventDetail>): void {
