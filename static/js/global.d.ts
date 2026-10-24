@@ -5,6 +5,7 @@ interface Window {
     debounceMS?: number;
     lastFetch?: number;
     username?: string;
+    hasArtifact?: boolean;
   };
 }
 
@@ -12,9 +13,10 @@ interface Window {
 // eslint-disable-next-line no-var
 declare var simple_wiki:
   | {
-      pageName?: string;
-      debounceMS?: number;
-      lastFetch?: number;
-      username?: string;
-    }
+    pageName?: string;
+    debounceMS?: number;
+    lastFetch?: number;
+    username?: string;
+    hasArtifact?: boolean;
+  }
   | undefined;

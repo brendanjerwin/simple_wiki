@@ -57,6 +57,15 @@ erasePageEl?.addEventListener('click', (e) => {
 // Handle frontmatter editing
 const editFrontmatterEl = document.getElementById('editFrontmatter');
 editFrontmatterEl?.addEventListener('click', (e) => {
+  // Artifact pages: the dialog's load path strips reserved wiki.* subtrees
+  // (it cannot show wiki.artifact metadata) and its save (ReplaceFrontmatter,
+  // no version hash) races the artifact services — so it is disabled on
+  // artifact pages (issue #1272).
+  if (simple_wiki?.hasArtifact) {
+    e.preventDefault();
+    editFrontmatterEl.setAttribute('title', 'Frontmatter editing is disabled on artifact pages: wiki.artifact metadata is service-managed');
+    return;
+  }
   e.preventDefault();
   // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- frontmatter-editor-dialog is registered in HTMLElementTagNameMap
   const dialog = document.getElementById('frontmatter-dialog') as FrontmatterEditorDialog | null;
