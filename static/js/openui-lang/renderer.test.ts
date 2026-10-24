@@ -11,17 +11,17 @@ import {
  generateWikiPageAppRenderer,
  renderNode,
  mergePageAppPatch,
- type ToolCaller,
+ type PageAppActionContext,
 } from './renderer.js';
 import {
  wikiLibrary,
  WIKI_ROOT_COMPONENT,
- type PageAppActionContext,
 } from './library.js';
+import type { ToolProvider } from '@openuidev/lang-core';
 
 describe('generateWikiPageAppRenderer', () => {
  let toolCalls: Array<[string, Record<string, unknown>]>;
- let callTool: ToolCaller;
+ let callTool: ToolProvider['callTool'];
 
  beforeEach(() => {
   toolCalls = [];
@@ -64,7 +64,7 @@ describe('generateWikiPageAppRenderer', () => {
    {},
   );
   await new Promise((resolve) => setTimeout(resolve, 20));
-  expect(toolCalls).to.deep.include.ordered.deep.members([['ListItems', { page: 'p' }]]);
+  expect(toolCalls).to.deep.equal([['ListItems', { page: 'p' }]]);
   const el = await fixture<HTMLElement>(rendered.template as never);
   expect(el.innerHTML).to.include('pending');
  });

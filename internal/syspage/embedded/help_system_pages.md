@@ -72,7 +72,6 @@ On startup (after the indexes are open and before HTTP serving begins) the wiki:
 2. For each embedded page, reads the existing on-disk page (if any).
 3. Compares the embedded markdown + frontmatter to what's stored.
 4. **Only writes when they differ.** No-op startups produce no log noise and don't churn version hashes.
-5. **Prunes retired pages.** System pages still on disk that are no longer part of the embedded corpus (e.g. a help page renamed between versions) are deleted at startup. Only pages flagged `wiki.system = true` are removed — user pages are never pruned, even if their identifier matches a retired system page. Deleted pages ride the normal trash machinery, so they can be restored if needed.
 
 Writes go through the same page-write API that user edits use, so indexes (bleve, frontmatter), hash recomputation, and any other downstream hooks all run normally. The "system page" guard lives at the gRPC layer and rejects external mutations only — internal startup writes flow through the lower-level page mutator and are not affected.
 

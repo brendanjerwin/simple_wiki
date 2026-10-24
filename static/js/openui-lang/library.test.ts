@@ -21,12 +21,6 @@ import {
 } from './library.js';
 
 describe('wikiLibrary', () => {
- let parser: Parser;
-
- beforeEach(() => {
-  parser = createParser(wikiLibrary.toJSONSchema(), WIKI_ROOT_COMPONENT);
- });
-
  it('should export the wiki-core@1 version id', () => {
   expect(WIKI_LIBRARY_VERSION).to.equal('wiki-core@1');
   expect(wikiLibrary.id).to.equal(WIKI_LIBRARY_VERSION);
@@ -55,8 +49,8 @@ describe('wikiLibrary', () => {
  it('should describe child slots as arrays accepting sub-components', () => {
   const schema: LibraryJSONSchema = wikiLibrary.toJSONSchema();
   const defs = schema.$defs ?? {};
-  const stack = defs.Stack ?? {};
-  const properties = stack.properties ?? {};
+  const stack = defs['Stack'] ?? {};
+  const properties = stack['properties'] ?? {} as Record<string, unknown> | undefined;
   expect(properties).to.have.property('children');
  });
 });
@@ -88,8 +82,8 @@ describe('wiki library parsing', () => {
 
  it('should map positional props to schema keys in key order', () => {
   const result = parser.parse('root = Card("hi", [t])\nt = Text("bye")');
-  expect(result.root?.props.title as string).to.equal('hi');
-  const text = (result.root?.props.children as ElementNode[])[0] as ElementNode;
+  expect(result.root?.props['title'] as string).to.equal('hi');
+  const text = (result.root?.props['children'] as ElementNode[])[0] as ElementNode;
   expect(text.typeName).to.equal('Text');
  });
 
@@ -105,10 +99,10 @@ describe('wiki library parsing', () => {
    library: wikiLibrary,
    store,
   });
-  const text = ((evaluated?.props.children) as ElementNode[])[0] as ElementNode;
+  const text = ((evaluated?.props['children']) as ElementNode[])[0] as ElementNode;
   expect(text.typeName).to.equal('Text');
   expect(text.partial).to.equal(false);
-  expect(text.props.content).to.equal('sessions: 5');
+  expect(text.props['content']).to.equal('sessions: 5');
  });
 
  it('should drop unknown components into meta.errors instead of throwing', () => {

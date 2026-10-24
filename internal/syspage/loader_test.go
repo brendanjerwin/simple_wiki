@@ -9,7 +9,6 @@ import (
 	"testing"
 
 	"github.com/brendanjerwin/simple_wiki/templating"
-	"github.com/brendanjerwin/simple_wiki/wikiidentifiers"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -38,22 +37,6 @@ func newFakeStore() *fakeStore {
 func (f *fakeStore) ReadFrontMatter(id wikipage.PageIdentifier) (wikipage.PageIdentifier, wikipage.FrontMatter, error) {
 	fm, ok := f.frontmatter[id]
 	if !ok {
-		// Mirror the real store: reads resolve the munged request back to
-		// the raw-keyed entry when present.
-		if munged, mungeErr := wikiidentifiers.MungeIdentifier(string(id)); mungeErr == nil {
-			if munged != string(id) {
-				if m2, ok2 := f.frontmatter[wikipage.PageIdentifier(munged)]; ok2 {
-					return wikipage.PageIdentifier(munged), m2, nil
-				}
-			}
-			// Reverse: requested munged, stored raw.
-			for rawID, m2 := range f.frontmatter {
-				m3, err3 := wikiidentifiers.MungeIdentifier(string(rawID))
-				if err3 == nil && m3 == string(id) {
-					return rawID, m2, nil
-				}
-			}
-		}
 		return id, nil, os.ErrNotExist
 	}
 	return id, fm, nil
@@ -80,45 +63,9 @@ func (f *fakeStore) WriteMarkdown(id wikipage.PageIdentifier, md wikipage.Markdo
 }
 
 func (f *fakeStore) DeletePage(id wikipage.PageIdentifier) error {
-	// Mirror the real store: delete resolves the munged request to the
-	// raw-keyed entry.
-	munged, err := wikiidentifiers.MungeIdentifier(string(id))
-	if err == nil {
-		for rawID := range f.frontmatter {
-			if m2, err2 := wikiidentifiers.MungeIdentifier(string(rawID)); err2 == nil && m2 == munged {
-				id = rawID
-				break
-			}
-		}
-	}
 	delete(f.frontmatter, id)
 	delete(f.markdown, id)
 	return nil
-}
-
-// ListAllPageIdentifiers enumerates the union of pages the fake knows about,
-// returned as the MUNGED identifier (mirrors the real store listing by
-// munged filename). Storing a page called "help-page-apps" therefore lists
-// back as "help_page_apps" — exactly the rename-trap this file guards.
-func (f *fakeStore) ListAllPageIdentifiers() ([]wikipage.PageIdentifier, error) {
-	seen := map[wikipage.PageIdentifier]struct{}{}
-	for id := range f.frontmatter {
-		seen[id] = struct{}{}
-	}
-	for id := range f.markdown {
-		seen[id] = struct{}{}
-	}
-	ids := make([]wikipage.PageIdentifier, 0, len(seen))
-	for id := range seen {
-		munged, err := wikiidentifiers.MungeIdentifier(string(id))
-		if err != nil {
-			// Fall back to the raw id if munging fails, as the real store
-			// falls back to a legacy unmunged path.
-			munged = string(id)
-		}
-		ids = append(ids, wikipage.PageIdentifier(munged))
-	}
-	return ids, nil
 }
 
 func (f *fakeStore) ModifyMarkdown(id wikipage.PageIdentifier, modifier func(wikipage.FrontMatter, wikipage.Markdown) (wikipage.Markdown, error), _ wikipage.Identity) error {
@@ -410,70 +357,6 @@ var _ = Describe("Sync", func() {
 		})
 	})
 
-	Describe("when a system page on disk is no longer in the embedded corpus", func() {
-		var store *fakeStore
-
-		BeforeEach(func() {
-			store = newFakeStore()
-			Expect(Sync(store, nullLogger{})).To(Succeed())
-
-			// Simulate the retired help-artifacts-lang page: shipped by an
-			// older binary, renamed since. The sync must remove it so agents
-			// cannot find stale instructions naming dead tools.
-			staleID := wikipage.PageIdentifier("help-artifacts-lang")
-			store.frontmatter[staleID] = wikipage.FrontMatter{
-				"identifier": "help-artifacts-lang",
-				"wiki":       map[string]any{"system": true},
-			}
-			store.markdown[staleID] = wikipage.Markdown("stale help text")
-
-			// A user page with no system flag must survive.
-			userID := wikipage.PageIdentifier("regular_user_page")
-			store.frontmatter[userID] = wikipage.FrontMatter{"identifier": "regular_user_page"}
-			store.markdown[userID] = wikipage.Markdown("user content")
-
-			Expect(Sync(store, nullLogger{})).To(Succeed())
-		})
-
-		It("should delete the retired system page", func() {
-			_, _, err := store.ReadFrontMatter(wikipage.PageIdentifier("help-artifacts-lang"))
-			Expect(err).To(MatchError(os.ErrNotExist))
-		})
-
-		It("should not prune hyphenated embedded pages (munged keep-set)", func() {
-			// Regression: the store enumerates by munged filename and
-			// MungeIdentifier snake-cases hyphens, so `help-page-apps` is
-			// listed as `help_page_apps`. The keep-set must contain the
-			// munged form or the prune step deletes the page the sync just
-			// wrote.
-			pages, _ := LoadEmbedded()
-			for _, p := range pages {
-				if !strings.Contains(p.Identifier, "-") {
-					continue
-				}
-				munged, err := wikiidentifiers.MungeIdentifier(p.Identifier)
-				Expect(err).NotTo(HaveOccurred())
-				_, _, readErr := store.ReadFrontMatter(wikipage.PageIdentifier(munged))
-				Expect(readErr).NotTo(HaveOccurred(),
-					fmt.Sprintf("hyphenated embedded page %q (listed as munged %q) must not be pruned", p.Identifier, munged))
-			}
-		})
-
-		It("should not delete user pages", func() {
-			_, _, err := store.ReadFrontMatter(wikipage.PageIdentifier("regular_user_page"))
-			Expect(err).NotTo(HaveOccurred())
-		})
-
-		It("should leave all embedded pages intact", func() {
-			pages, loadErr := LoadEmbedded()
-			Expect(loadErr).NotTo(HaveOccurred())
-			for _, p := range pages {
-				_, _, readErr := store.ReadFrontMatter(wikipage.PageIdentifier(p.Identifier))
-				Expect(readErr).NotTo(HaveOccurred(),
-					fmt.Sprintf("embedded page %q must not be pruned", p.Identifier))
-			}
-		})
-	})
 })
 
 func totalWrites(s *fakeStore) int {

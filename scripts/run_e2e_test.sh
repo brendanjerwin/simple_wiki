@@ -13,7 +13,11 @@ echo "Logging to: $LOG_FILE"
 
 {
   devbox run build
-  export CHROMIUM_BIN=$(which chromium)
+  # Prefer the caller-provided puppeteer chrome (Nix chromium crashes: missing
+  # GLIBC_2.43/2.44 on this host — see repo rules).
+  if [ -z "${CHROMIUM_BIN:-}" ]; then
+    export CHROMIUM_BIN=$(which chromium)
+  fi
   cd e2e || exit 1
   bun install || exit 1
   bunx playwright test "$@"

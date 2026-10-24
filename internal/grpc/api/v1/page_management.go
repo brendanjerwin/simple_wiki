@@ -983,20 +983,23 @@ func (s *Server) UpdateWholePage(ctx context.Context, req *apiv1.UpdateWholePage
 				return nil, "", err
 			}
 			// The client's fm replaces user keys wholesale, but reserved
-			// wiki.* subtrees the client didn't send (page_app_state,
+			// top-level subtrees the client did NOT send (page_app_state,
 			// checklists, …) must survive a whole-page save (ADR-0010's
-			// preserve rule). preserveReservedSubtrees copies reserved keys
-			// from currentFM into fm in place.
+			// preserve rule) — AND reserved subtrees the client DID send
+			// (a new [maps.yard] the user just wrote via the editor) must
+			// be written, not silently dropped because they're reserved.
 			fmForWrite := make(wikipage.FrontMatter, len(fm)+1)
-			for k, v := range currentFM {
+			for k, v := range fm {
 				fmForWrite[k] = v
 			}
-			for k, v := range fm {
-				if !wikipage.IsReservedTopLevelKey(k) {
-					fmForWrite[k] = v
+			for _, k := range wikipage.ReservedTopLevelKeys() {
+				if v, ok := currentFM[k]; ok {
+					// Client omitted this reserved key: preserve current.
+					if _, sent := fm[k]; !sent {
+						fmForWrite[k] = v
+					}
 				}
 			}
-			preserveReservedSubtrees(fmForWrite, fm)
 			return fmForWrite, md, nil
 		},
 	)

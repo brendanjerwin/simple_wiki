@@ -734,23 +734,6 @@ func (s *Site) DirectoryList() (DirectoryListing, error) {
 	return DirectoryListing{Entries: entries, ReadErrors: readErrors}, nil
 }
 
-// ListAllPageIdentifiers enumerates every live page identifier in the data
-// directory. Lightweight counterpart of DirectoryList for maintenance jobs
-// that only need the identifier set, not read errors or mod times.
-func (s *Site) ListAllPageIdentifiers() ([]wikipage.PageIdentifier, error) {
-	files, err := os.ReadDir(s.PathToData)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read data directory: %w", err)
-	}
-	identifiers := make([]wikipage.PageIdentifier, 0, len(files))
-	for _, f := range files {
-		if strings.HasSuffix(f.Name(), ".md") {
-			identifiers = append(identifiers, wikipage.PageIdentifier(decodeFileName(f.Name())))
-		}
-	}
-	return identifiers, nil
-}
-
 // UploadEntry represents an uploaded file entry.
 type UploadEntry struct {
 	os.FileInfo
