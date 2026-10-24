@@ -5,7 +5,7 @@
  * CAS's it via state_expected_version_hash. The app hydrates from persisted
  * state on page load.
  */
-import { expect, test, type APIRequestContext } from '@playwright/test';
+import { expect, test } from '@playwright/test';
 import { callAPI, counterProgram, setupPage } from './artifact-helpers';
 
 const TEST_PAGE = 'e2e_artifact_state';
@@ -18,22 +18,21 @@ function pageBody(program: string): string {
 
 test.describe.serial('Artifact state persistence', () => {
  test.setTimeout(90000);
- let requestContext: APIRequestContext;
 
- test.beforeAll(async ({ request }) => {
-  requestContext = request;
-  await callAPI(request, 'ArtifactService', 'ClearArtifact', { page: TEST_PAGE });
+ test.beforeEach(async ({ request }) => {
+  // Each test starts from a clean page with the Counter artifact.
+  await callAPI(request, 'PageManagementService', 'DeletePage', { page: TEST_PAGE });
   await setupPage(request, TEST_PAGE, pageBody(counterProgram('Counter', '$n')));
  });
 
- test.afterAll(async () => {
-  await callAPI(requestContext, 'ArtifactService', 'ClearArtifact', { page: TEST_PAGE });
-  await callAPI(requestContext, 'PageManagementService', 'DeletePage', { page: TEST_PAGE });
+ test.afterAll(async ({ request }) => {
+  await callAPI(request, 'ArtifactService', 'ClearArtifact', { page: TEST_PAGE });
+  await callAPI(request, 'PageManagementService', 'DeletePage', { page: TEST_PAGE });
  });
 
  test.describe('when persisted state is merged', () => {
-  test('the app hydrates from server state on reload', async ({ page }) => {
-   const mergeResp = await callAPI(requestContext, 'ArtifactStateService', 'MergeArtifactState', {
+  test('the app hydrates from server state on reload', async ({ page, request }) => {
+   const mergeResp = await callAPI(request, 'ArtifactStateService', 'MergeArtifactState', {
     page: TEST_PAGE,
     state: { $n: 5 },
    });
@@ -49,18 +48,17 @@ test.describe.serial('Artifact state persistence', () => {
  });
 
  test.describe('when a merge races on a stale version hash', () => {
-  test('the write is rejected as Aborted', async () => {
+  test('the write is rejected as Aborted', async ({ request }) => {
    // First merge succeeds and advances the state version.
-   const first = await callAPI(requestContext, 'ArtifactStateService', 'MergeArtifactState', {
+   const first = await callAPI(request, 'ArtifactStateService', 'MergeArtifactState', {
     page: TEST_PAGE,
     state: { $n: 6 },
    });
    expect(first.status).toBe(200);
 
-   // Second merge reuses the FIRST merge's precondition hash — which the
-   // first write already consumed; the server must reject the stale CAS.
+   // Second merge with a bogus precondition hash must be rejected.
    const second = await callAPI(
-    requestContext,
+    request,
     'ArtifactStateService',
     'MergeArtifactState',
     {

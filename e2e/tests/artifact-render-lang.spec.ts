@@ -35,17 +35,17 @@ async function expectHostRendering(page: Page, version: string) {
 
 test.describe.serial('Artifact page render', () => {
  test.setTimeout(90000);
- let requestContext: APIRequestContext;
 
- test.beforeAll(async ({ request }) => {
-  requestContext = request;
-  await callAPI(request, 'ArtifactService', 'ClearArtifact', { page: TEST_PAGE });
+ test.beforeEach(async ({ request }) => {
+  // Ensure each test starts from a clean slate: delete a stale page, then
+  // recreate it with the Counter program fenced into the body.
+  await callAPI(request, 'PageManagementService', 'DeletePage', { page: TEST_PAGE });
   await setupPage(request, TEST_PAGE, pageBody(counterProgram('Counter', '$n')));
  });
 
- test.afterAll(async () => {
-  await callAPI(requestContext, 'ArtifactService', 'ClearArtifact', { page: TEST_PAGE });
-  await callAPI(requestContext, 'PageManagementService', 'DeletePage', { page: TEST_PAGE });
+ test.afterAll(async ({ request }) => {
+  await callAPI(request, 'ArtifactService', 'ClearArtifact', { page: TEST_PAGE });
+  await callAPI(request, 'PageManagementService', 'DeletePage', { page: TEST_PAGE });
  });
 
  test.describe('when a page contains a wiki-artifact fence', () => {
@@ -66,12 +66,18 @@ test.describe.serial('Artifact page render', () => {
  });
 
  test.describe('when the page program is updated while the view is open', () => {
-  test('hot-swaps the program without a page reload', async ({ page }) => {
+  test('hot-swaps the program without a page reload', async ({ page, request }) => {
+   const created = await callAPI(request, 'PageManagementService', 'CreatePage', {
+    page: TEST_PAGE,
+    contentMarkdown: pageBody(counterProgram('Counter', '$n')),
+   });
+   expect(created.status).toBe(200);
+
    await page.goto(`/${TEST_PAGE}/view`);
    await expectHostRendering(page, 'Counter');
 
    const updateResp = await callAPI(
-    requestContext,
+    request,
     'PageManagementService',
     'UpdatePageContent',
     { page: TEST_PAGE, newContentMarkdown: pageBody(counterProgram('Counter v2', '$n')) },
@@ -104,18 +110,18 @@ test.describe.serial('Artifact page render', () => {
  });
 
  test.describe('when a page-content write omits the root statement', () => {
-  test('rejects the write and preserves the original artifact', async () => {
+  test('rejects the write and preserves the original artifact', async ({ request }) => {
    const badBody = pageBody('$n = 0\nCard("no root")');
-   const resp = await callAPI(requestContext, 'PageManagementService', 'UpdatePageContent', {
+   const resp = await callAPI(request, 'PageManagementService', 'UpdatePageContent', {
     page: TEST_PAGE,
     newContentMarkdown: badBody,
    });
    expect(resp.status).toBeGreaterThanOrEqual(400);
    expect(resp.text, 'rejected write must mention root').toContain('root');
 
-   const artifact = await getArtifact(requestContext, TEST_PAGE);
+   const artifact = await getArtifact(request, TEST_PAGE);
    expect(artifact.status).toBe(200);
-   expect(artifactText(artifact.json)).toContain('root = Card("Counter v2"');
+   expect(artifactText(artifact.json)).toContain('root = Card("Counter"');
   });
  });
 });

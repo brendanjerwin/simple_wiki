@@ -312,7 +312,7 @@ func (s *Server) GetArtifact(_ context.Context, req *apiv1.GetArtifactRequest) (
 	if hash, ok := stamps["version_hash"].(string); ok {
 		resp.VersionHash = hash
 	}
-	if t, ok := stamps["updated_at"].(time.Time); ok {
+	if t, ok := readStampTime(stamps, "updated_at"); ok {
 		resp.UpdatedAt = timestamppb.New(t)
 	}
 	if by, ok := stamps["updated_by"].(string); ok {
@@ -322,6 +322,24 @@ func (s *Server) GetArtifact(_ context.Context, req *apiv1.GetArtifactRequest) (
 		resp.Automated = b
 	}
 	return resp, nil
+}
+
+// readStampTime reads an updated_at stamp: RFC3339 string (current
+// encoding) or a legacy time.Time (pages written before the string
+// encoding).
+func readStampTime(stamps map[string]any, key string) (time.Time, bool) {
+	switch v := stamps[key].(type) {
+	case string:
+		t, err := time.Parse(time.RFC3339, v)
+		if err != nil {
+			return time.Time{}, false
+		}
+		return t, true
+	case time.Time:
+		return v, true
+	default:
+		return time.Time{}, false
+	}
 }
 
 // stampString reads a string stamp with a default.
@@ -424,7 +442,10 @@ func (s *Server) SetArtifact(ctx context.Context, req *apiv1.SetArtifactRequest)
 		stamps["version"] = nextVersion
 		stamps["version_hash"] = newHash
 		stamps["library"] = ArtifactLibrary
-		stamps["updated_at"] = now
+		// RFC3339 string, not time.Time: the frontmatter indexer rejects
+		// non-scalar values and a time.Time would leave the whole page
+		// unindexed (observed live in e2e: FrontmatterIndex job failure).
+		stamps["updated_at"] = now.Format(time.RFC3339)
 		if identity != nil && !identity.IsAnonymous() {
 			stamps["updated_by"] = identity.LoginName()
 			stamps["automated"] = identity.IsAgent()
@@ -1080,7 +1101,8 @@ func (s *Server) modifyMarkdownWithArtifactFunnel(
 		stamps["version"] = stampInt(stamps, "version", 0) + 1
 		stamps["version_hash"] = artifactVersionHash(newSource)
 		stamps["library"] = ArtifactLibrary
-		stamps["updated_at"] = time.Now().UTC()
+		// RFC3339 string (see SetArtifact's stamp write for the indexer rationale).
+		stamps["updated_at"] = time.Now().UTC().Format(time.RFC3339)
 
 		finalFM = setWikiSubtree(newFM, "artifact", stamps)
 		return finalFM, newMD, nil

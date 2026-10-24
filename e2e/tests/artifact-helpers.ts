@@ -53,7 +53,8 @@ export async function setupPage(
   page,
   contentMarkdown: markdown,
  });
- if (createResp.status === 200) return;
+ const created = createResp.json as { success?: boolean; error?: string } | null;
+ if (createResp.status === 200 && created?.success === true) return;
 
  const resetResp = await callAPI(request, 'PageManagementService', 'UpdatePageContent', {
   page,
