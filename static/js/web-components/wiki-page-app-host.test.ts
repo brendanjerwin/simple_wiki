@@ -8,6 +8,7 @@
 import { expect } from '@open-wc/testing';
 import { stub, type SinonStub } from 'sinon';
 import { create } from '@bufbuild/protobuf';
+import { ConnectError, Code } from '@connectrpc/connect';
 import {
  GetPageAppResponseSchema,
  GetPageAppStateResponseSchema,
@@ -426,5 +427,154 @@ describe('WikiPageAppHost suspension recovery', () => {
   HostClass.RETRY_BASE_MS = saved.BASE;
   HostClass.RETRY_MAX_ATTEMPTS = saved.MAX;
   HostClass.RETRY_MAX_MS = saved.CAP;
+ });
+});
+// Issue #1283 bug 1 regression: load() detected the terminal NotFound case
+// by matching the error *message* for the substring 'NotFound'. connect-web
+// formats Go codes.NotFound as '[not_found] …' (lowercase), so the branch
+// never matched: a page with no page app walked the whole retry ladder and
+// surfaced a bogus 'failed after N retries' error. Terminal detection must
+// use the shared isTerminal() helper (code-based), exactly like
+// hydrateState and watch.
+describe('WikiPageAppHost terminal NotFound on load', () => {
+ it('should not schedule a retry when GetPageApp rejects with NotFound', async () => {
+  const notFound = new ConnectError('no page app: stub-page', Code.NotFound);
+  const getArtifact = stub().rejects(notFound);
+  const el = document.createElement('wiki-page-app-host') as WikiPageAppHost;
+  el.page = 'stub-page';
+  const clients = el as unknown as Record<string, Record<string, unknown>>;
+  clients['pageAppClient'] = { getPageApp: getArtifact, clearPageApp: stub(), watchPageApp: stub() };
+  clients['stateClient'] = { getPageAppState: stub().resolves(stateResponse({}, 'state-hash-1')), mergePageAppState: stub() };
+  // Replace the retry ladder with a counting spy: no timers are armed, so
+  // the test needs no real-time waits — a buggy scheduleRetry call is
+  // synchronously observable through the async load() catch path.
+  let ladderRuns = 0;
+  (el as unknown as { scheduleRetry: () => void }).scheduleRetry = () => { ladderRuns += 1; };
+  document.body.appendChild(el);
+  // Double updateComplete: one settle for the initial render; the second
+  // pumps the async load() catch path so a buggy scheduleRetry call has
+  // already happened before the assertion.
+  await el.updateComplete;
+  await el.updateComplete;
+
+  expect(getArtifact.callCount).to.equal(1);
+  expect(ladderRuns).to.equal(0);
+  // Terminal NotFound renders the app-less state, not a reconnecting
+  // banner or a retry-ladder error screen. Boolean-shaped so the
+  // assertion message stays a primitive (WTR serializes failures with
+  // structuredClone — a sinon stub in `actual` hangs the session).
+  const shadow = el.shadowRoot;
+  expect(shadow?.querySelector('.reconnecting-note') == null).to.equal(true);
+  expect(shadow?.querySelector('error-display') == null).to.equal(true);
+  expect((shadow?.textContent ?? '').includes('retries')).to.equal(false);
+  el.remove();
+ });
+
+ it('should surface non-NotFound terminal errors instead of retrying or parking on the busy shell', async () => {
+  // Control for the terminal branch's other codes: a PermissionDenied
+  // can't be fixed by retrying — it must show the actual error, not the
+  // reconnecting banner or an indefinite busy placeholder.
+  const denied = new ConnectError('not allowed', Code.PermissionDenied);
+  const getArtifact = stub().rejects(denied);
+  const el = document.createElement('wiki-page-app-host') as WikiPageAppHost;
+  el.page = 'stub-page';
+  const clients = el as unknown as Record<string, Record<string, unknown>>;
+  clients['pageAppClient'] = { getPageApp: getArtifact, clearPageApp: stub(), watchPageApp: stub() };
+  clients['stateClient'] = { getPageAppState: stub().resolves(stateResponse({}, 'h')), mergePageAppState: stub() };
+  let ladderRuns = 0;
+  (el as unknown as { scheduleRetry: () => void }).scheduleRetry = () => { ladderRuns += 1; };
+  document.body.appendChild(el);
+  await el.updateComplete;
+  await el.updateComplete;
+
+  expect(getArtifact.callCount).to.equal(1);
+  expect(ladderRuns).to.equal(0);
+  const shadow = el.shadowRoot;
+  expect(shadow?.querySelector('.reconnecting-note') == null).to.equal(true);
+  expect(shadow?.querySelector('error-display') != null).to.equal(true);
+  el.remove();
+ });
+
+ it('should still schedule a retry on a transient non-connect error', async () => {
+  // Control guarding the terminal branch against over-matching: plain
+  // Errors (not ConnectErrors) must still enter the retry ladder.
+  const getArtifact = stub().rejects(new Error('network connection lost'));
+  const el = document.createElement('wiki-page-app-host') as WikiPageAppHost;
+  el.page = 'stub-page';
+  const clients = el as unknown as Record<string, Record<string, unknown>>;
+  clients['pageAppClient'] = { getPageApp: getArtifact, clearPageApp: stub(), watchPageApp: stub() };
+  clients['stateClient'] = { getPageAppState: stub().resolves(stateResponse({}, 'h')), mergePageAppState: stub() };
+  let ladderRuns = 0;
+  (el as unknown as { scheduleRetry: () => void }).scheduleRetry = () => { ladderRuns += 1; };
+  document.body.appendChild(el);
+  await el.updateComplete;
+  await el.updateComplete;
+
+  expect(getArtifact.callCount).to.equal(1);
+  expect(ladderRuns).to.equal(1);
+  el.remove();
+ });
+});
+
+// Issue #1283 bug 2 regression: toolProvider() resolved `page` from the
+// program-supplied args (argPage(args, this.page)) for EVERY allowed RPC,
+// including the three PageAppStateService methods. A Lang program could
+// declare Mutation("MergePageAppState", { page: "other-page", … }) and
+// read/merge/delete ANOTHER page's app state. Page app state is
+// own-page-only: the host must pin all three state RPCs to its own page
+// and ignore args.page entirely.
+describe('WikiPageAppHost toolProvider state page pinning', () => {
+ // toolProvider() is private on the host; the test seam is an unchecked
+ // cast to a named local shape (same pattern as the client swaps in
+ // stubbedHost above).
+ type ToolProviderHost = { toolProvider(): { callTool(t: string, a: Record<string, unknown>): Promise<unknown> } };
+ type StateClient = Record<string, SinonStub>;
+
+ function hostWithStateClient(stateClient: StateClient, page = 'my-page'): { provider: ToolProviderHost; el: WikiPageAppHost } {
+  const el = document.createElement('wiki-page-app-host') as WikiPageAppHost;
+  el.page = page;
+  const clients = el as unknown as Record<string, Record<string, unknown>>;
+  clients['pageAppClient'] = { getPageApp: stub(), clearPageApp: stub(), watchPageApp: stub() };
+  clients['stateClient'] = stateClient;
+  // No connection needed: toolProvider() is a plain method over the
+  // swapped-in client stubs.
+  return { provider: el as unknown as ToolProviderHost, el };
+ }
+
+ let stateClient: StateClient;
+
+ beforeEach(() => {
+  stateClient = {
+   getPageAppState: stub().resolves(stateResponse({}, 'hash-a')),
+   mergePageAppState: stub().resolves(create(MergePageAppStateResponseSchema, { state: {} as never, stateVersionHash: 'hash-b' })),
+  };
+ });
+
+ it('pins GetPageAppState to the host page even when args name another page', async () => {
+  const { provider, el } = hostWithStateClient(stateClient);
+  const { callTool } = provider.toolProvider();
+  await callTool('GetPageAppState', { page: 'other-page' });
+  expect(stateClient['getPageAppState']?.callCount).to.equal(1);
+  expect((stateClient['getPageAppState']?.firstCall.args[0] as { page: string } | undefined)?.page).to.equal('my-page');
+  el.remove();
+ });
+
+ it('pins MergePageAppState to the host page even when args name another page', async () => {
+  const { provider, el } = hostWithStateClient(stateClient);
+  const { callTool } = provider.toolProvider();
+  await callTool('MergePageAppState', { page: 'other-page', state: { counter: 1 } });
+  expect(stateClient['mergePageAppState']?.callCount).to.equal(1);
+  expect((stateClient['mergePageAppState']?.firstCall.args[0] as { page: string } | undefined)?.page).to.equal('my-page');
+  el.remove();
+ });
+
+ it('pins DeletePageAppState to the host page even when args name another page', async () => {
+  stateClient['deletePageAppState'] = stub().resolves({});
+  const { provider, el } = hostWithStateClient(stateClient);
+  const { callTool } = provider.toolProvider();
+  await callTool('DeletePageAppState', { page: 'other-page', stateExpectedVersionHash: 'h' });
+  expect(stateClient['deletePageAppState']?.callCount).to.equal(1);
+  expect((stateClient['deletePageAppState']?.firstCall.args[0] as { page: string } | undefined)?.page).to.equal('my-page');
+  el.remove();
  });
 });

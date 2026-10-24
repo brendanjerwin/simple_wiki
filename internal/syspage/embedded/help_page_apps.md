@@ -162,10 +162,10 @@ root = Card("Pomodoro", Stack([
 
 Apps can call only these tools from the rendered program — **fully-qualified ids, camelCase args** (short bare names like `GetPageApp` also resolve, but write the qualified form):
 
-- **All `PageAppStateService` methods**: `api_v1_PageAppStateService_GetPageAppState`, `MergePageAppState`, `DeletePageAppState`
+- **All `PageAppStateService` methods**: `api_v1_PageAppStateService_GetPageAppState`, `MergePageAppState`, `DeletePageAppState` — these are **pinned to the app's own page**: any `page` in the call args is ignored, and a state call always acts on the page hosting the app.
 - **Read-only discovery**: `api_v1_PageAppService_GetPageApp`, `api_v1_PageHistoryService_ListPageVersions`, `api_v1_SearchService_SearchContent`, `api_v1_PageManagementService_ReadPageOutline`, `api_v1_Frontmatter_GetFrontmatter`, `api_v1_MapService_ListMapElements`, `api_v1_ChecklistService_ListItems`, `api_v1_SurveyService_GetSurvey`
 
-Everything else — any page mutation, checklist/map/survey/connector mutation — is **excluded**: a program literally cannot mutate another page or user data; a non-allowlisted call fails with `tool-not-found` and the rest of the program still renders.
+Everything else — any page mutation, checklist/map/survey/connector mutation — is **excluded**: a program literally cannot mutate another page or user data (page app state is likewise pinned to the app's own page); a non-allowlisted call fails with `tool-not-found` and the rest of the program still renders.
 
 Read data via a `Query(...)` assignment, then trigger a refetch with `@Run` — actions are a positional argument on the component, and every statement must be assigned (a bare statement is unreachable and silently dropped):
 
@@ -208,7 +208,7 @@ refresh = Button("refresh", @Run(rows))
 root = Card("Todo", Stack([refresh, Table(["text"], rows.items)]))
 ```
 
-**Editing wiki data (write flows through the agent or `Mutation`)** — a program *can* write its own page app state via the allowlisted `PageAppStateService_*`, but note these two write paths:
+**Editing wiki data (write flows through the agent or `Mutation`)** — a program *can* write its own page app state via the allowlisted `PageAppStateService_*` — these calls always address the page the app is rendered on; a `page` argument in the tool call is ignored — but note these two write paths:
 
 - `@Set`/`@Reset` on `$variables` → host auto-flushes the state store silently (fast, no agent involved).
 - Anything touching **other pages or other data** is excluded on purpose. Use `@ToAssistant` to hand the request to the agent, which has confirmed/attributed mutation tools:
