@@ -1749,9 +1749,11 @@ When a user asks for an app, tracker, dashboard, timer, or any interactive tool 
   api_v1_ArtifactStateService (never localStorage).
 - Read help/artifacts-lang (SearchPages → ReadPage) BEFORE your first SetArtifact —
   it is the language spec + runtime contract.
-- Attach to the current page only when the ask is explicitly about THIS page's content
-  ("put a dashboard on this page"); clearing substantial prose requires the user's
-  explicit go-ahead (confirm_replace_content=true).
+- Attach to the current page only when the ask is explicitly about THIS page; clearing
+  substantial prose requires the user's explicit go-ahead (confirm_replace_content=true).
+- When the user clicks "Make an app out of this page" in the chat panel, the ask names
+  that page explicitly — still apply the placement rule: default to a new artifact page
+  + wikilink from that page, unless the user explicitly asked for attached or app-alone.
 
 `
 

@@ -2808,9 +2808,9 @@ describe('PageChatPanel pollChatStatus and sendMessage', () => {
   });
 });
 
-// "Make an app with this" suggestion chip (issue #1272 criterion 7's UI
-// nudge): clicking the chip sends the artifact-app ask through the same
-// send path the textarea uses.
+// "Make an app out of this page" suggestion chip (issue #1272 criterion 7's UI
+// nudge): clicking the chip sends an unambiguous artifact-app ask — naming THIS
+// page — through the same send path the textarea uses.
 describe('PageChatPanel make-app suggestion chip', () => {
   let el: PageChatPanel;
 
@@ -2833,13 +2833,19 @@ describe('PageChatPanel make-app suggestion chip', () => {
       await new Promise((resolve) => setTimeout(resolve, 10));
     });
 
-    it('should send the artifact-app ask via the normal send path', () => {
+    it('should render the clarified label', () => {
+      const chip = el.shadowRoot!.querySelector('.suggestion-chip') as HTMLElement;
+      expect(chip.textContent!.trim()).to.equal('Make an app out of this page');
+    });
+
+    it('should send the artifact-app ask naming this page via the normal send path', () => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any -- reading private chatClient for assertion
       const client = (el as any).chatClient;
       expect(client.sendMessage.callCount).to.equal(1);
       const request = client.sendMessage.firstCall.args[0];
       expect(request.page).to.equal('test-page');
-      expect(request.content).to.equal('Make an app with this');
+      expect(request.content).to.contain('Make an app out of this page');
+      expect(request.content).to.contain('test-page');
     });
   });
 });

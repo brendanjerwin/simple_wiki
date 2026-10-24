@@ -655,9 +655,9 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
                 <button
                   class="suggestion-chip"
                   @click=${this._handleMakeAppSuggestion}
-                  title="Creates a new artifact app page and links to it from here — your current page content stays untouched"
+                  title="Asks the agent to convert this page into an artifact app (it will create a new page for the app and link to it, leaving this page's content alone)"
                 >
-                  Make an app with this
+                  Make an app out of this page
                 </button>
               </div>`
     : this.messages.map(
@@ -760,15 +760,16 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
  }
 
  /**
-  * "Make an app with this" — pre-fills the input with the artifact-app
-  * request and sends it. The chatPreamble + help-artifacts-lang teach
-  * the placement default (new page + wikilink; the current page's
-  * prose stays untouched), so the raw ask is enough (issue #1272).
+  * "Make an app out of this page" — pre-fills the input with an
+  * unambiguous artifact-app ask (naming THIS page) and sends it. The
+  * chatPreamble + help-artifacts-lang teach the placement default
+  * (usually a new page + wikilink so this page's content stays intact;
+  * attached/app-alone only on explicit request).
   */
  private _handleMakeAppSuggestion() {
   const textarea = this.shadowRoot?.querySelector('textarea');
   if (!textarea) return;
-  textarea.value = 'Make an app with this';
+  textarea.value = `Make an app out of this page ("${this.page || 'this page'}")`;
   void this.sendMessage();
  }
 
