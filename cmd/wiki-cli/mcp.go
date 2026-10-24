@@ -126,8 +126,8 @@ func normalizeBaseURL(baseURL string) (string, error) {
 // apiClients holds Connect protocol clients for all wiki services.
 type apiClients struct {
 	agentMetadata  apiv1connect.AgentMetadataServiceClient
-	artifact       apiv1connect.ArtifactServiceClient
-	artifactState  apiv1connect.ArtifactStateServiceClient
+	artifact       apiv1connect.PageAppServiceClient
+	artifactState  apiv1connect.PageAppStateServiceClient
 	chat           apiv1connect.ChatServiceClient
 	checklist      apiv1connect.ChecklistServiceClient
 	connector      apiv1connect.ConnectorServiceClient
@@ -147,8 +147,8 @@ type apiClients struct {
 func createAPIClients(httpClient connect.HTTPClient, baseURL string) *apiClients {
 	return &apiClients{
 		agentMetadata:  apiv1connect.NewAgentMetadataServiceClient(httpClient, baseURL),
-		artifact:       apiv1connect.NewArtifactServiceClient(httpClient, baseURL),
-		artifactState:  apiv1connect.NewArtifactStateServiceClient(httpClient, baseURL),
+		artifact:       apiv1connect.NewPageAppServiceClient(httpClient, baseURL),
+		artifactState:  apiv1connect.NewPageAppStateServiceClient(httpClient, baseURL),
 		chat:           apiv1connect.NewChatServiceClient(httpClient, baseURL),
 		checklist:      apiv1connect.NewChecklistServiceClient(httpClient, baseURL),
 		connector:      apiv1connect.NewConnectorServiceClient(httpClient, baseURL),
@@ -168,8 +168,8 @@ func createAPIClients(httpClient connect.HTTPClient, baseURL string) *apiClients
 // registerToolHandlers registers all wiki API tools as MCP handlers using Connect protocol.
 func registerToolHandlers(s *mcpserver.MCPServer, clients *apiClients) {
 	apiv1mcp.ForwardToConnectAgentMetadataServiceClient(s, clients.agentMetadata)
-	apiv1mcp.ForwardToConnectArtifactServiceClient(s, clients.artifact)
-	apiv1mcp.ForwardToConnectArtifactStateServiceClient(s, clients.artifactState)
+	apiv1mcp.ForwardToConnectPageAppServiceClient(s, clients.artifact)
+	apiv1mcp.ForwardToConnectPageAppStateServiceClient(s, clients.artifactState)
 	apiv1mcp.ForwardToConnectChatServiceClient(s, clients.chat)
 	apiv1mcp.ForwardToConnectChecklistServiceClient(s, clients.checklist)
 	apiv1mcp.ForwardToConnectConnectorServiceClient(s, clients.connector)

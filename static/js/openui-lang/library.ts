@@ -1,11 +1,11 @@
 /**
- * Wiki component library for OpenUI Lang artifact pages.
+ * Wiki component library for OpenUI Lang page app pages.
  *
  * Defines the wiki's OpenUI Lang component vocabulary (`wiki-core@1`) over
  * `@openuidev/lang-core` and renders with Lit templates. Wiki-native
  * components (Checklist, Map, Survey) render the existing wiki custom
- * elements; interactive components dispatch `wiki-artifact-action`
- * CustomEvents that the artifact host executes (state sets, chat, URLs).
+ * elements; interactive components dispatch `wiki-page-app-action`
+ * CustomEvents that the page app host executes (state sets, chat, URLs).
  */
 import { html, nothing, type TemplateResult } from 'lit';
 import { z } from 'zod/v4';
@@ -21,7 +21,7 @@ import {
 } from '@openuidev/lang-core';
 
 /**
- * The wiki library version stamped on artifact programs.
+ * The wiki library version stamped on page app programs.
  */
 export const WIKI_LIBRARY_VERSION = 'wiki-core@1';
 
@@ -33,22 +33,22 @@ export const WIKI_ROOT_COMPONENT = 'Card' as const;
 
 /**
  * DOM event the interactive components dispatch. Bubbles and crosses shadow
- * boundaries so the host can listen from outside the artifact subtree.
+ * boundaries so the host can listen from outside the page app subtree.
  */
-export const ARTIFACT_ACTION_EVENT = 'wiki-artifact-action';
+export const PAGE_APP_ACTION_EVENT = 'wiki-page-app-action';
 
-/** Detail carried on `wiki-artifact-action` events. */
-export interface ArtifactActionEventDetail {
+/** Detail carried on `wiki-page-app-action` events. */
+export interface PageAppActionEventDetail {
  /** The evaluated action plan (set/reset/run/continue_conversation/open_url steps). */
  plan: ActionPlan | undefined;
  /** The current input/select value when the source was a form control. */
  value?: unknown;
 }
 
-/** Dispatch an artifact action from an interactive control. */
-export function dispatchArtifactAction(source: Event, detail: ArtifactActionEventDetail): void {
+/** Dispatch a page app action from an interactive control. */
+export function dispatchArtifactAction(source: Event, detail: PageAppActionEventDetail): void {
  (source.currentTarget as HTMLElement).dispatchEvent(
-  new CustomEvent<ArtifactActionEventDetail>(ARTIFACT_ACTION_EVENT, {
+  new CustomEvent<PageAppActionEventDetail>(PAGE_APP_ACTION_EVENT, {
    detail,
    bubbles: true,
    composed: true,
@@ -70,7 +70,7 @@ function buildLibrary(): Library {
   }),
   description: 'A block of text rendered as a paragraph.',
   component: (({ content }) =>
-   html`<p class="wiki-artifact-text">${typeof content === 'string' ? content : ''}</p>`) as WikiRenderer,
+   html`<p class="wiki-page-app-text">${typeof content === 'string' ? content : ''}</p>`) as WikiRenderer,
  });
 
  const Table = defineComponent({
@@ -83,8 +83,8 @@ function buildLibrary(): Library {
   component: (({ columns, rows }) => {
    const headers = (columns as string[]) ?? [];
    const body = (rows as unknown[][] | undefined) ?? [];
-   return html`<div class="wiki-artifact-table-wrap">
-        <table class="wiki-artifact-table">
+   return html`<div class="wiki-page-app-table-wrap">
+        <table class="wiki-page-app-table">
           <thead><tr>${headers.map((h) => html`<th>${h}</th>`)}</tr></thead>
           <tbody>${body.map((row) => html`<tr>${row.map((cell) => html`<td>${cell}</td>`)}</tr>`)}</tbody>
         </table>
@@ -105,19 +105,19 @@ function buildLibrary(): Library {
    const labelsList = (labels as string[] | undefined) ?? [];
    const valuesList = (values as number[] | undefined) ?? [];
    const max = Math.max(1e-9, ...valuesList.map((v) => (typeof v === 'number' ? Math.abs(v) : 0)));
-   return html`<figure class="wiki-artifact-chart" data-chart-type="${(type as string) ?? 'bar'}">
+   return html`<figure class="wiki-page-app-chart" data-chart-type="${(type as string) ?? 'bar'}">
         ${(title as string | undefined) != null ? html`<figcaption>${title}</figcaption>` : nothing}
-        <div class="wiki-artifact-chart-plot">
+        <div class="wiki-page-app-chart-plot">
           ${labelsList.map((label, i) => {
     const value = valuesList[i] ?? 0;
     if ((type as string) === 'pie') {
-     return html`<span class="wiki-artifact-chart-slice" title="${label}: ${value}">${label}</span>`;
+     return html`<span class="wiki-page-app-chart-slice" title="${label}: ${value}">${label}</span>`;
     }
     const pct = Math.round((Math.abs(value) / max) * 100);
-    return html`<span class="wiki-artifact-chart-row" title="${label}: ${value}">
-              <span class="wiki-artifact-chart-label">${label}</span>
-              <span class="wiki-artifact-chart-bar" style="width:${pct}%"></span>
-              <span class="wiki-artifact-chart-value">${value}</span>
+    return html`<span class="wiki-page-app-chart-row" title="${label}: ${value}">
+              <span class="wiki-page-app-chart-label">${label}</span>
+              <span class="wiki-page-app-chart-bar" style="width:${pct}%"></span>
+              <span class="wiki-page-app-chart-value">${value}</span>
             </span>`;
    })}
         </div>
@@ -144,10 +144,10 @@ function buildLibrary(): Library {
      value: (event.currentTarget as HTMLInputElement).value,
     });
    };
-   return html`<label class="wiki-artifact-field">
-        ${(label as string | undefined) != null ? html`<span class="wiki-artifact-field-label">${label}</span>` : nothing}
+   return html`<label class="wiki-page-app-field">
+        ${(label as string | undefined) != null ? html`<span class="wiki-page-app-field-label">${label}</span>` : nothing}
         <input
-          class="wiki-artifact-input"
+          class="wiki-page-app-input"
           placeholder="${(placeholder as string | undefined) ?? ''}"
           .value="${(value as string | undefined) ?? ''}"
           @change=${fire}
@@ -175,9 +175,9 @@ function buildLibrary(): Library {
     });
    };
    const choices = (options as (string | number)[]) ?? [];
-   return html`<label class="wiki-artifact-field">
-        ${(label as string | undefined) != null ? html`<span class="wiki-artifact-field-label">${label}</span>` : nothing}
-        <select class="wiki-artifact-select" @change=${fire}>
+   return html`<label class="wiki-page-app-field">
+        ${(label as string | undefined) != null ? html`<span class="wiki-page-app-field-label">${label}</span>` : nothing}
+        <select class="wiki-page-app-select" @change=${fire}>
           ${choices.map(
     (option) =>
      html`<option value="${option}" ?selected=${String(option) === String(value ?? '')}>${option}</option>`,
@@ -201,7 +201,7 @@ function buildLibrary(): Library {
      plan: (plan as ActionPlan | undefined) ?? { steps: [{ type: 'continue_conversation', message: label as string }] },
     });
    };
-   return html`<button class="wiki-artifact-button" @click=${fire}>${label}</button>`;
+   return html`<button class="wiki-page-app-button" @click=${fire}>${label}</button>`;
   }) as WikiRenderer,
  });
 
@@ -213,7 +213,7 @@ function buildLibrary(): Library {
    title: z.string().optional(),
   }),
   description:
-   "A wiki checklist embedded in the artifact, rendered from the artifact page's checklist named `name`.",
+   "A wiki checklist embedded in the page app, rendered from the page app page's checklist named `name`.",
   component: (({ name, page }) =>
    html`<wiki-checklist list-name="${name}" page="${(page as string | undefined) ?? ''}"></wiki-checklist>`) as WikiRenderer,
  });
@@ -224,7 +224,7 @@ function buildLibrary(): Library {
    name: z.string(),
    page: z.string().optional(),
   }),
-  description: "A wiki map embedded in the artifact, rendered from the artifact page's map named `name`.",
+  description: "A wiki map embedded in the page app, rendered from the page app page's map named `name`.",
   component: (({ name, page }) =>
    html`<wiki-map name="${name}" page="${(page as string | undefined) ?? ''}"></wiki-map>`) as WikiRenderer,
  });
@@ -236,7 +236,7 @@ function buildLibrary(): Library {
    page: z.string().optional(),
    title: z.string().optional(),
   }),
-  description: "A wiki survey embedded in the artifact, rendered from the artifact page's survey named `name`.",
+  description: "A wiki survey embedded in the page app, rendered from the page app page's survey named `name`.",
   component: (({ name, page }) =>
    html`<wiki-survey name="${name}" page="${(page as string | undefined) ?? ''}"></wiki-survey>`) as WikiRenderer,
  });
@@ -258,7 +258,7 @@ function buildLibrary(): Library {
   description: 'A flex container laying out children in one direction (default vertical).',
   component: (({ direction, gap, children }) =>
    html`<div
-        class="wiki-artifact-stack"
+        class="wiki-page-app-stack"
         data-direction=${direction === 'horizontal' ? 'horizontal' : 'vertical'}
         style=${gap != null
      ? `gap:${gap as string}`
@@ -278,11 +278,11 @@ function buildLibrary(): Library {
   description:
    'A card with an optional title and content — a plain string or the card\'s children. The program entry is `root = Card(...)` with children as the second positional argument.',
   component: (({ title, children }) =>
-   html`<div class="wiki-artifact-card">
+   html`<div class="wiki-page-app-card">
         ${(title as string | undefined) != null
-     ? html`<h3 class="wiki-artifact-card-title">${title}</h3>`
+     ? html`<h3 class="wiki-page-app-card-title">${title}</h3>`
      : nothing}
-        <div class="wiki-artifact-card-body">
+        <div class="wiki-page-app-card-body">
           ${(children as unknown) != null ? (children as unknown) : nothing}
         </div>
       </div>`) as WikiRenderer,
@@ -334,15 +334,15 @@ export function createLibraryDefinition(): Library {
 }
 
 /**
- * Tools the artifact runtime exposes to programs via Query()/Mutation().
+ * Tools the page app runtime exposes to programs via Query()/Mutation().
  * Qualified ids as in the wiki MCP catalog; mirrors the allowlist in
  * `openui-lang/toolProvider.ts` (pinned by tests).
  */
 export const WIKI_TOOLS: ToolDescriptor[] = [
- 'api_v1_ArtifactStateService_GetArtifactState',
- 'api_v1_ArtifactStateService_MergeArtifactState',
- 'api_v1_ArtifactStateService_DeleteArtifactState',
- 'api_v1_ArtifactService_GetArtifact',
+ 'api_v1_PageAppStateService_GetPageAppState',
+ 'api_v1_PageAppStateService_MergePageAppState',
+ 'api_v1_PageAppStateService_DeletePageAppState',
+ 'api_v1_PageAppService_GetPageApp',
  'api_v1_PageHistoryService_ListPageVersions',
  'api_v1_SearchService_SearchContent',
  'api_v1_PageManagementService_ReadPageOutline',

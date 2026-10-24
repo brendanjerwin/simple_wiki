@@ -1,5 +1,5 @@
 /**
- * Tests for wiki-artifact-host with fully stubbed Connect clients.
+ * Tests for wiki-page-app-host with fully stubbed Connect clients.
  *
  * Element instances are created manually (document.createElement) so the
  * tests can replace the private Connect client objects BEFORE
@@ -9,19 +9,19 @@ import { expect } from '@open-wc/testing';
 import { stub, type SinonStub } from 'sinon';
 import { create } from '@bufbuild/protobuf';
 import {
- GetArtifactResponseSchema,
- GetArtifactStateResponseSchema,
- MergeArtifactStateResponseSchema,
- WatchArtifactResponseSchema,
- WatchArtifactResponse_Kind,
- type GetArtifactResponse,
-} from '../gen/api/v1/artifact_pb.js';
+ GetPageAppResponseSchema,
+ GetPageAppStateResponseSchema,
+ MergePageAppStateResponseSchema,
+ WatchPageAppResponseSchema,
+ WatchPageAppResponse_Kind,
+ type GetPageAppResponse,
+} from '../gen/api/v1/page_app_pb.js';
 import {
- WikiArtifactHost,
-} from './wiki-artifact-host.js';
+ WikiPageAppHost,
+} from './wiki-page-app-host.js';
 
-function artifactResponse(source: string): GetArtifactResponse {
- return create(GetArtifactResponseSchema, {
+function pageAppResponse(source: string): GetPageAppResponse {
+ return create(GetPageAppResponseSchema, {
   source,
   lang: 'openui-lang',
   version: BigInt(1),
@@ -33,7 +33,7 @@ function artifactResponse(source: string): GetArtifactResponse {
 }
 
 function stateResponse(state: Record<string, unknown>, hash: string) {
- return create(GetArtifactStateResponseSchema, {
+ return create(GetPageAppStateResponseSchema, {
   state: state as never,
   stateVersionHash: hash,
  });
@@ -41,16 +41,16 @@ function stateResponse(state: Record<string, unknown>, hash: string) {
 
 /** A watch stream that yields the initial snapshot and then blocks open. */
 // eslint-disable-next-line require-yield
-async function* openWatchStream(initial: { kind: WatchArtifactResponse_Kind; source: string }) {
- yield create(WatchArtifactResponseSchema, initial);
+async function* openWatchStream(initial: { kind: WatchPageAppResponse_Kind; source: string }) {
+ yield create(WatchPageAppResponseSchema, initial);
  await new Promise(() => { }); // keep connected until aborted
 }
 
 type StubbedHost = {
- el: WikiArtifactHost;
+ el: WikiPageAppHost;
  getArtifact: SinonStub;
- getArtifactState: SinonStub;
- mergeArtifactState: SinonStub;
+ getPageAppState: SinonStub;
+ mergePageAppState: SinonStub;
  clearArtifact: SinonStub;
  watchArtifact: SinonStub;
 };
@@ -60,39 +60,39 @@ type StubbedHost = {
  * element is connected, so load()/watch() run against the stubs only.
  */
 async function stubbedHost(programSource = 'root = Card("Hello", [t])\nt = Text("world")'): Promise<StubbedHost> {
- const getArtifact = stub().resolves(artifactResponse(programSource));
- const getArtifactState = stub().resolves(stateResponse({}, 'state-hash-1'));
- const mergeArtifactState = stub().resolves(
-  create(MergeArtifactStateResponseSchema, { state: {} as never, stateVersionHash: 'state-hash-2' }),
+ const getArtifact = stub().resolves(pageAppResponse(programSource));
+ const getPageAppState = stub().resolves(stateResponse({}, 'state-hash-1'));
+ const mergePageAppState = stub().resolves(
+  create(MergePageAppStateResponseSchema, { state: {} as never, stateVersionHash: 'state-hash-2' }),
  );
  const clearArtifact = stub().resolves({});
  const watchArtifact = stub().returns(openWatchStream({
-  kind: WatchArtifactResponse_Kind.INITIAL,
+  kind: WatchPageAppResponse_Kind.INITIAL,
   source: programSource,
  }));
 
- const el = document.createElement('wiki-artifact-host') as WikiArtifactHost;
- await customElements.whenDefined('wiki-artifact-host');
- if (!(el instanceof WikiArtifactHost)) {
-  throw new Error('wiki-artifact-host did not upgrade — is the custom element registered?');
+ const el = document.createElement('wiki-page-app-host') as WikiPageAppHost;
+ await customElements.whenDefined('wiki-page-app-host');
+ if (!(el instanceof WikiPageAppHost)) {
+  throw new Error('wiki-page-app-host did not upgrade — is the custom element registered?');
  }
  el.page = 'stub-page';
  const clients = el as unknown as {
-  artifactClient: Record<string, unknown>;
+  pageAppClient: Record<string, unknown>;
   stateClient: Record<string, unknown>;
  };
- clients.artifactClient['getArtifact'] = getArtifact;
- clients.artifactClient['clearArtifact'] = clearArtifact;
- clients.artifactClient['watchArtifact'] = watchArtifact;
- clients.stateClient['getArtifactState'] = getArtifactState;
- clients.stateClient['mergeArtifactState'] = mergeArtifactState;
+ clients.pageAppClient['getPageApp'] = getArtifact;
+ clients.pageAppClient['clearPageApp'] = clearArtifact;
+ clients.pageAppClient['watchPageApp'] = watchArtifact;
+ clients.stateClient['getPageAppState'] = getPageAppState;
+ clients.stateClient['mergePageAppState'] = mergePageAppState;
 
  document.body.appendChild(el);
  await el.updateComplete;
- return { el, getArtifact, getArtifactState, mergeArtifactState, clearArtifact, watchArtifact };
+ return { el, getArtifact, getPageAppState, mergePageAppState, clearArtifact, watchArtifact };
 }
 
-describe('WikiArtifactHost @ToAssistant channel', () => {
+describe('WikiPageAppHost @ToAssistant channel', () => {
  let sendMessage: SinonStub;
  let stubs: StubbedHost;
 
@@ -105,8 +105,8 @@ describe('WikiArtifactHost @ToAssistant channel', () => {
   await stubs.el.updateComplete;
  });
 
- it('delivers a chat message on the artifact page', () => {
-  stubs.el.dispatchEvent(new CustomEvent('wiki-artifact-action', {
+ it('delivers a chat message on the page app page', () => {
+  stubs.el.dispatchEvent(new CustomEvent('wiki-page-app-action', {
    detail: { plan: { steps: [{ type: 'continue_conversation' as never, message: 'increment completed sessions' }] } },
    bubbles: true,
    composed: true,
@@ -118,7 +118,7 @@ describe('WikiArtifactHost @ToAssistant channel', () => {
  });
 
  it('a button with no action sends its label (auto-ToAssistant)', () => {
-  stubs.el.dispatchEvent(new CustomEvent('wiki-artifact-action', {
+  stubs.el.dispatchEvent(new CustomEvent('wiki-page-app-action', {
    detail: { plan: { steps: [{ type: 'continue_conversation' as never, message: 'session done' }] } },
    bubbles: true,
    composed: true,
@@ -128,8 +128,8 @@ describe('WikiArtifactHost @ToAssistant channel', () => {
  });
 });
 
-describe('WikiArtifactHost', () => {
- describe('when the page has an artifact', () => {
+describe('WikiPageAppHost', () => {
+ describe('when the page has a page app', () => {
   let stubs: StubbedHost;
 
   beforeEach(async () => {
@@ -140,7 +140,7 @@ describe('WikiArtifactHost', () => {
    stubs.el.remove();
   });
 
-  it('should fetch the artifact with the page attribute', () => {
+  it('should fetch the page app with the page attribute', () => {
    expect(stubs.getArtifact).to.have.been.calledOnce;
    const request = stubs.getArtifact.firstCall.args[0];
    expect(request.page).to.equal('stub-page');
@@ -165,30 +165,30 @@ describe('WikiArtifactHost', () => {
 
   beforeEach(async () => {
    stubs = await stubbedHost();
-   stubs?.el.addEventListener('wiki-artifact-removed', (event) => {
+   stubs?.el.addEventListener('wiki-page-app-removed', (event) => {
     removedEvent = event;
    });
    await stubs.el.updateComplete;
-   const removeButton = stubs.el.shadowRoot?.querySelector<HTMLButtonElement>('.wiki-artifact-remove');
+   const removeButton = stubs.el.shadowRoot?.querySelector<HTMLButtonElement>('.wiki-page-app-remove');
    expect(removeButton).to.exist;
    removeButton?.click();
    await stubs.el.updateComplete;
    await new Promise((resolve) => setTimeout(resolve, 10));
   });
 
-  it('should call ClearArtifact with the artifact version hash', async () => {
+  it('should call ClearPageApp with the page app version hash', async () => {
    expect(stubs?.clearArtifact).to.have.been.calledOnce;
    const request = stubs?.clearArtifact.firstCall.args[0];
    expect(request?.page).to.equal('stub-page');
    expect(request?.expectedVersionHash).to.equal('hash-1');
   });
 
-  it('should dispatch wiki-artifact-removed for the shell to reload plain markdown', () => {
+  it('should dispatch wiki-page-app-removed for the shell to reload plain markdown', () => {
    expect(removedEvent).to.exist;
   });
  });
 
- describe('when the page lacks an artifact', () => {
+ describe('when the page lacks a page app', () => {
   let stubs: StubbedHost;
 
   beforeEach(async () => {
@@ -206,7 +206,7 @@ describe('WikiArtifactHost', () => {
 // watch stream — exactly what happens when a browser suspends the tab —
 // must show a non-blocking "reconnecting" banner and recover WITHOUT a
 // manual refresh.
-describe('WikiArtifactHost suspension recovery', () => {
+describe('WikiPageAppHost suspension recovery', () => {
  // Deterministic backoff: the full-jitter ladder is randomized, so pin
  // the timer machinery by replacing Math.random during these tests.
  let randomStub: SinonStub;
@@ -221,10 +221,10 @@ describe('WikiArtifactHost suspension recovery', () => {
 
  it('shows the reconnecting banner and recovers the app without refresh', async () => {
   const program = 'root = Card("Hello", [t])\nt = Text("world")';
-  const getArtifact = stub().resolves(artifactResponse(program));
-  const getArtifactState = stub().resolves(stateResponse({}, 'state-hash-1'));
-  const mergeArtifactState = stub().resolves(
-   create(MergeArtifactStateResponseSchema, { state: {} as never, stateVersionHash: 'state-hash-2' }),
+  const getArtifact = stub().resolves(pageAppResponse(program));
+  const getPageAppState = stub().resolves(stateResponse({}, 'state-hash-1'));
+  const mergePageAppState = stub().resolves(
+   create(MergePageAppStateResponseSchema, { state: {} as never, stateVersionHash: 'state-hash-2' }),
   );
   const clearArtifact = stub().resolves({});
 
@@ -235,22 +235,22 @@ describe('WikiArtifactHost suspension recovery', () => {
    callCount += 1;
    if (callCount === 1) {
     return (async function*() {
-     yield create(WatchArtifactResponseSchema, {
-      kind: WatchArtifactResponse_Kind.INITIAL,
+     yield create(WatchPageAppResponseSchema, {
+      kind: WatchPageAppResponse_Kind.INITIAL,
       source: program,
      });
      // Simulate the suspension: stream tears down with a network error.
      throw new Error('network connection lost');
     })();
    }
-   return openWatchStream({ kind: WatchArtifactResponse_Kind.INITIAL, source: program });
+   return openWatchStream({ kind: WatchPageAppResponse_Kind.INITIAL, source: program });
   });
 
-  const el = document.createElement('wiki-artifact-host') as WikiArtifactHost;
+  const el = document.createElement('wiki-page-app-host') as WikiPageAppHost;
   el.page = 'stub-page';
   const clients = el as unknown as Record<string, Record<string, unknown>>;
-  clients['artifactClient'] = { getArtifact, clearArtifact, watchArtifact };
-  clients['stateClient'] = { getArtifactState, mergeArtifactState };
+  clients['pageAppClient'] = { getPageApp: getArtifact, clearPageApp: clearArtifact, watchPageApp: watchArtifact };
+  clients['stateClient'] = { getPageAppState, mergePageAppState };
   document.body.appendChild(el);
   await el.updateComplete;
 
@@ -279,7 +279,7 @@ describe('WikiArtifactHost suspension recovery', () => {
 
  it('recovers on visibility return without waiting the backoff', async () => {
   // Shrink the ladder for deterministic, fast timings.
-  const HostClass = WikiArtifactHost as unknown as {
+  const HostClass = WikiPageAppHost as unknown as {
    RETRY_BASE_MS: number;
    RETRY_MAX_ATTEMPTS: number;
    RETRY_MAX_MS: number;
@@ -290,25 +290,25 @@ describe('WikiArtifactHost suspension recovery', () => {
   HostClass.RETRY_MAX_MS = 400;
 
   const program = 'root = Card("Hello", [t])\nt = Text("world")';
-  const getArtifact = stub().resolves(artifactResponse(program));
-  const getArtifactState = stub().resolves(stateResponse({}, 'state-hash-1'));
+  const getArtifact = stub().resolves(pageAppResponse(program));
+  const getPageAppState = stub().resolves(stateResponse({}, 'state-hash-1'));
   // Watch dies on the FIRST call only (suspension); retries healthy.
   let watchCalls = 0;
   const watchArtifact = stub().callsFake(() => {
    watchCalls += 1;
    if (watchCalls === 1) {
     return (async function*() {
-     yield create(WatchArtifactResponseSchema, { kind: WatchArtifactResponse_Kind.INITIAL, source: program });
+     yield create(WatchPageAppResponseSchema, { kind: WatchPageAppResponse_Kind.INITIAL, source: program });
      throw new Error('network connection lost');
     })();
    }
-   return openWatchStream({ kind: WatchArtifactResponse_Kind.INITIAL, source: program });
+   return openWatchStream({ kind: WatchPageAppResponse_Kind.INITIAL, source: program });
   });
-  const el = document.createElement('wiki-artifact-host') as WikiArtifactHost;
+  const el = document.createElement('wiki-page-app-host') as WikiPageAppHost;
   el.page = 'stub-page';
   const clients = el as unknown as Record<string, Record<string, unknown>>;
-  clients['artifactClient'] = { getArtifact, clearArtifact: stub(), watchArtifact };
-  clients['stateClient'] = { getArtifactState, mergeArtifactState: stub() };
+  clients['pageAppClient'] = { getPageApp: getArtifact, clearPageApp: stub(), watchPageApp: watchArtifact };
+  clients['stateClient'] = { getPageAppState, mergePageAppState: stub() };
   document.body.appendChild(el);
 
   // Wait for the reconnecting state (stream died, ladder running).

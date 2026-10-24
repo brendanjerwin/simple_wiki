@@ -1,5 +1,5 @@
 /**
- * Tests for the artifact tool allowlist bridge.
+ * Tests for the page app tool allowlist bridge.
  */
 import { expect } from '@open-wc/testing';
 import { ToolNotFoundError } from '@openuidev/lang-core';
@@ -13,12 +13,12 @@ import {
 describe('WIKI_TOOL_ALLOWLIST', () => {
  it('should pin the allowlist to the qualified state + read-only ids', () => {
   expect([...WIKI_TOOL_ALLOWLIST]).to.deep.equal([
-   // ArtifactStateService — all unary methods
-   'api_v1_ArtifactStateService_GetArtifactState',
-   'api_v1_ArtifactStateService_MergeArtifactState',
-   'api_v1_ArtifactStateService_DeleteArtifactState',
-   // Read-only artifact/page reads
-   'api_v1_ArtifactService_GetArtifact',
+   // PageAppStateService — all unary methods
+   'api_v1_PageAppStateService_GetPageAppState',
+   'api_v1_PageAppStateService_MergePageAppState',
+   'api_v1_PageAppStateService_DeletePageAppState',
+   // Read-only page app/page reads
+   'api_v1_PageAppService_GetPageApp',
    'api_v1_PageHistoryService_ListPageVersions',
    'api_v1_SearchService_SearchContent',
    'api_v1_PageManagementService_ReadPageOutline',
@@ -30,7 +30,7 @@ describe('WIKI_TOOL_ALLOWLIST', () => {
  });
 
  it('should not include streaming watch surfaces', () => {
-  expect([...WIKI_TOOL_ALLOWLIST]).to.not.include('WatchArtifactState');
+  expect([...WIKI_TOOL_ALLOWLIST]).to.not.include('WatchPageAppState');
   expect([...WIKI_TOOL_ALLOWLIST]).to.not.include('WatchArtifact');
  });
 });
@@ -58,13 +58,13 @@ describe('isToolAllowed', () => {
 
  it('should block mutating wiki RPCs and unknown names', () => {
   for (const name of [
-   'SetArtifact',
-   'ClearArtifact',
+   'SetPageApp',
+   'ClearPageApp',
    'UpdatePageContent',
    'DeleteItem',
    'SubmitResponse',
    'DeletePage',
-   'WatchArtifactState',
+   'WatchPageAppState',
    'WatchArtifact',
    '',
    'Nonexistent',
@@ -104,7 +104,7 @@ describe('createToolProvider', () => {
   const provider = createToolProvider(async (name) => ({ echo: name }));
   let rejected: unknown;
   try {
-   await provider.callTool('WatchArtifactState', {});
+   await provider.callTool('WatchPageAppState', {});
   } catch (err) {
    rejected = err;
   }

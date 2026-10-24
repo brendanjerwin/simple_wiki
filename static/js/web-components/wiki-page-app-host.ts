@@ -1,32 +1,32 @@
 /**
- * WikiArtifactHost — renders an OpenUI Lang artifact program for a page.
+ * WikiPageAppHost — renders an OpenUI Lang page app program for a page.
  *
- * Lifecycle: GetArtifact → parse → render; GetArtifactState hydrates
- * persisted $variables; MergeArtifactState flushes the LIVE lang-core store
+ * Lifecycle: GetPageApp → parse → render; GetPageAppState hydrates
+ * persisted $variables; MergePageAppState flushes the LIVE lang-core store
  * snapshot with state_version_hash CAS (refetch + remerge once on Aborted;
- * per the server contract the page OCC hash excludes wiki.artifact_state,
+ * per the server contract the page OCC hash excludes wiki.page_app_state,
  * so a successful flush never invalidates the program). WatchArtifact
  * (Connect server streaming) hot-swaps the program without a page reload.
- * Interactive components dispatch `wiki-artifact-action` events, which the
+ * Interactive components dispatch `wiki-page-app-action` events, which the
  * host executes (state sets, chat messages, URL opens, query reruns).
- * "Remove the app" clears the artifact and reloads plain markdown.
+ * "Remove the app" clears the page app and reloads plain markdown.
  */
 import { html, css, LitElement, nothing, type CSSResultArray, type TemplateResult } from 'lit';
 import { property, state } from 'lit/decorators.js';
 import { createClient, ConnectError, Code, type Client } from '@connectrpc/connect';
 import { create, type JsonObject } from '@bufbuild/protobuf';
 import {
- ArtifactService,
- ArtifactStateService,
- ClearArtifactRequestSchema,
- DeleteArtifactStateRequestSchema,
- GetArtifactRequestSchema,
- GetArtifactStateRequestSchema,
- MergeArtifactStateRequestSchema,
- WatchArtifactRequestSchema,
- WatchArtifactResponse_Kind,
- type GetArtifactResponse,
-} from '../gen/api/v1/artifact_pb.js';
+ PageAppService,
+ PageAppStateService,
+ ClearPageAppRequestSchema,
+ DeletePageAppStateRequestSchema,
+ GetPageAppRequestSchema,
+ GetPageAppStateRequestSchema,
+ MergePageAppStateRequestSchema,
+ WatchPageAppRequestSchema,
+ WatchPageAppResponse_Kind,
+ type GetPageAppResponse,
+} from '../gen/api/v1/page_app_pb.js';
 import {
  ChatService,
  SendChatMessageRequestSchema,
@@ -63,17 +63,17 @@ import { getGrpcWebTransport } from './grpc-transport.js';
 import { AugmentErrorService } from './augment-error-service.js';
 import './error-display.js';
 import {
- ARTIFACT_ACTION_EVENT,
- type ArtifactActionEventDetail,
+ PAGE_APP_ACTION_EVENT,
+ type PageAppActionEventDetail,
 } from '../openui-lang/library.js';
 import {
- generateWikiRenderer,
- type WikiArtifactRuntime,
+ generateWikiPageAppRenderer,
+ type WikiPageAppRuntime,
 } from '../openui-lang/renderer.js';
 import { createToolProvider } from '../openui-lang/toolProvider.js';
 import {
- wikiArtifactDesignSystem,
-} from '../openui-lang/design-system.js';
+ wikiPageAppDesignSystem,
+} from '../openui-lang/page-app-design-system.js';
 
 /** Read the page name from a tool args record, defaulting to this page. */
 function argPage(args: Record<string, unknown>, fallbackPage: string): string {
@@ -95,16 +95,16 @@ function argString(args: Record<string, unknown>, camel: string, snake?: string)
 }
 
 /**
- * An artifact app rendered from the page's OpenUI Lang program.
+ * An page app rendered from the page's OpenUI Lang program.
  */
-export class WikiArtifactHost extends LitElement {
+export class WikiPageAppHost extends LitElement {
  static override readonly styles: CSSResultArray = [
-  wikiArtifactDesignSystem,
+  wikiPageAppDesignSystem,
   css`
       :host {
         display: block;
       }
-      .wiki-artifact-app {
+      .wiki-page-app-app {
         position: relative;
         box-sizing: border-box;
         width: 100%;
@@ -114,13 +114,13 @@ export class WikiArtifactHost extends LitElement {
         background: var(--color-surface-sunken, #f8f9fa);
         overflow: hidden;
       }
-      .wiki-artifact-body {
+      .wiki-page-app-body {
         display: flex;
         flex-direction: column;
         gap: 10px;
         min-width: 0;
       }
-      .wiki-artifact-remove {
+      .wiki-page-app-remove {
         position: absolute;
         top: 8px;
         right: 8px;
@@ -130,10 +130,10 @@ export class WikiArtifactHost extends LitElement {
         cursor: pointer;
         font-size: 12px;
       }
-      .wiki-artifact-remove:hover {
+      .wiki-page-app-remove:hover {
         color: var(--color-danger, #ef4444);
       }
-      .wiki-artifact-parse-errors {
+      .wiki-page-app-parse-errors {
         margin-top: 8px;
         padding: 8px;
         font-size: 12px;
@@ -146,19 +146,19 @@ export class WikiArtifactHost extends LitElement {
         color: var(--color-text-muted, #71717a);
         background: var(--color-surface-sunken, #f8f9fa);
         border-radius: 6px;
-        animation: artifact-reconnect-pulse 1.5s ease-in-out infinite;
+        animation: page-app-reconnect-pulse 1.5s ease-in-out infinite;
       }
-      .wiki-artifact-reconnecting .reconnecting-note {
+      .wiki-page-app-reconnecting .reconnecting-note {
         margin: 0;
       }
-      @keyframes artifact-reconnect-pulse {
+      @keyframes page-app-reconnect-pulse {
         0%, 100% { opacity: 0.6; }
         50% { opacity: 1; }
       }
     `,
  ];
 
- /** The artifact's page identifier. */
+ /** The page app's page identifier. */
  @property({ type: String })
  declare page: string;
 
@@ -166,7 +166,7 @@ export class WikiArtifactHost extends LitElement {
  declare private programSource: string;
 
  @state()
- declare private artifact: GetArtifactResponse | null;
+ declare private pageApp: GetPageAppResponse | null;
 
  @state()
  declare private stateVersionHash: string;
@@ -186,8 +186,8 @@ export class WikiArtifactHost extends LitElement {
  @state()
  declare private hydrated: boolean;
 
- private artifactClient: Client<typeof ArtifactService>;
- private stateClient: Client<typeof ArtifactStateService>;
+ private pageAppClient: Client<typeof PageAppService>;
+ private stateClient: Client<typeof PageAppStateService>;
  private chatClient: Client<typeof ChatService>;
  private historyClient: Client<typeof PageHistoryService>;
  private searchClient: Client<typeof SearchService>;
@@ -199,7 +199,7 @@ export class WikiArtifactHost extends LitElement {
 
  private stopWatch: (() => void) | null = null;
  private unsubs: (() => void)[] = [];
- private runtime: WikiArtifactRuntime | null = null;
+ private runtime: WikiPageAppRuntime | null = null;
  /** Exponential-backoff retry machinery for transient load/watch failures. */
  private retryTimer: number | null = null;
  private retryAttempt = 0;
@@ -216,7 +216,7 @@ export class WikiArtifactHost extends LitElement {
   super();
   this.page = '';
   this.programSource = '';
-  this.artifact = null;
+  this.pageApp = null;
   this.stateVersionHash = '';
   this.loadError = null;
   this.actionError = null;
@@ -224,8 +224,8 @@ export class WikiArtifactHost extends LitElement {
   this.renderTick = 0;
   this.hydrated = false;
   const transport = getGrpcWebTransport();
-  this.artifactClient = createClient(this.createArtifactService(), transport);
-  this.stateClient = createClient(this.createArtifactStateService(), transport);
+  this.pageAppClient = createClient(this.createPageAppService(), transport);
+  this.stateClient = createClient(this.createPageAppStateService(), transport);
   this.chatClient = createClient(ChatService, transport);
   this.historyClient = createClient(PageHistoryService, transport);
   this.searchClient = createClient(SearchService, transport);
@@ -237,17 +237,17 @@ export class WikiArtifactHost extends LitElement {
  }
 
  /** Test seam: which service descriptors the clients use. */
- protected createArtifactService() {
-  return ArtifactService;
+ protected createPageAppService() {
+  return PageAppService;
  }
 
  /** Test seam: which service descriptors the clients use. */
- protected createArtifactStateService() {
-  return ArtifactStateService;
+ protected createPageAppStateService() {
+  return PageAppStateService;
  }
 
  static get is(): string {
-  return 'wiki-artifact-host';
+  return 'wiki-page-app-host';
  }
 
  override connectedCallback(): void {
@@ -260,16 +260,16 @@ export class WikiArtifactHost extends LitElement {
   window.addEventListener('online', this.wakeOnline);
   document.addEventListener('visibilitychange', this.wakeVisible);
   // Library templates render into this host's shadow DOM via
-  // .wiki-artifact-body; the design system is included in static styles
+  // .wiki-page-app-body; the design system is included in static styles
   // below so theme variables + responsive rules apply to them.
-  this.runtime = generateWikiRenderer(
+  this.runtime = generateWikiPageAppRenderer(
    this.toolProvider(),
    this.actionContext(),
   );
-  // Execute artifact action events from the rendered tree.
-  this.addEventListener(ARTIFACT_ACTION_EVENT, (event) => {
+  // Execute page app action events from the rendered tree.
+  this.addEventListener(PAGE_APP_ACTION_EVENT, (event) => {
    event.stopPropagation();
-   this.handleArtifactAction(event as CustomEvent<ArtifactActionEventDetail>);
+   this.handlePageAppAction(event as CustomEvent<PageAppActionEventDetail>);
   });
   void this.load();
  }
@@ -292,7 +292,7 @@ export class WikiArtifactHost extends LitElement {
  // stream and can fail the initial/hydrate RPCs. Those failures are
  // transient: retry with exponential backoff + jitter instead of parking
  // the app behind a manual-refresh error screen. NotFound is terminal —
- // the page genuinely has no artifact.
+ // the page genuinely has no page app.
 
  /** Terminal ConnectError codes that must NOT be retried. */
  private static isTerminal(err: unknown): boolean {
@@ -316,8 +316,8 @@ export class WikiArtifactHost extends LitElement {
   * synchronized retry storms across many tabs.
   */
  private static backoffDelayMs(attempt: number): number {
-  const exp = WikiArtifactHost.RETRY_BASE_MS * 2 ** attempt;
-  const bounded = Math.min(exp, WikiArtifactHost.RETRY_MAX_MS);
+  const exp = WikiPageAppHost.RETRY_BASE_MS * 2 ** attempt;
+  const bounded = Math.min(exp, WikiPageAppHost.RETRY_MAX_MS);
   return Math.floor(Math.random() * bounded);
  }
 
@@ -355,14 +355,14 @@ export class WikiArtifactHost extends LitElement {
   // Post-disconnect failures must never resurrect the ladder — Lit
   // flips isConnected when the element leaves the DOM.
   if (!this.isConnected) return;
-  if (this.retryAttempt >= WikiArtifactHost.RETRY_MAX_ATTEMPTS) {
+  if (this.retryAttempt >= WikiPageAppHost.RETRY_MAX_ATTEMPTS) {
    this.retryAttempt = 0;
    this.reconnecting = false;
-   this.loadError = AugmentErrorService.augmentError(lastError, `artifact app ${stage} failed after ${WikiArtifactHost.RETRY_MAX_ATTEMPTS} retries — refresh to retry again`);
+   this.loadError = AugmentErrorService.augmentError(lastError, `page app ${stage} failed after ${WikiPageAppHost.RETRY_MAX_ATTEMPTS} retries — refresh to retry again`);
    this.renderTick += 1;
    return;
   }
-  const delay = WikiArtifactHost.backoffDelayMs(this.retryAttempt);
+  const delay = WikiPageAppHost.backoffDelayMs(this.retryAttempt);
   this.retryAttempt += 1;
   this.loadError = null;
   this.reconnecting = true;
@@ -380,23 +380,23 @@ export class WikiArtifactHost extends LitElement {
 
  private async load(): Promise<void> {
   if (!this.page) {
-   this.loadError = new Error('wiki-artifact-host requires a page attribute');
+   this.loadError = new Error('wiki-page-app-host requires a page attribute');
    return;
   }
   this.cancelRetry();
   try {
-   const response = await this.artifactClient.getArtifact(
-    create(GetArtifactRequestSchema, { page: this.page }),
+   const response = await this.pageAppClient.getPageApp(
+    create(GetPageAppRequestSchema, { page: this.page }),
    );
    if (response.source === '') {
-    // Full success path (no artifact): clear the ladder only here.
+    // Full success path (no page app): clear the ladder only here.
     this.retryAttempt = 0;
     this.reconnecting = false;
     this.loadError = null;
-    this.artifact = null;
+    this.pageApp = null;
     this.programSource = '';
    } else {
-    this.artifact = response;
+    this.pageApp = response;
     this.programSource = response.source;
     this.hydrated = true;
     await this.hydrateState();
@@ -407,7 +407,7 @@ export class WikiArtifactHost extends LitElement {
      // failures still escalate to the cap.
      return;
     }
-    // Fully recovered (GetArtifact + hydrate + rewatch): only now reset
+    // Fully recovered (GetPageApp + hydrate + rewatch): only now reset
     // the ladder. Stale unsubs from the pre-suspension runtime are torn
     // down before re-subscribing (they'd double-fire notifications).
     this.retryAttempt = 0;
@@ -429,7 +429,7 @@ export class WikiArtifactHost extends LitElement {
    this.renderTick += 1;
   } catch (err) {
    if (err instanceof Error && err.message.includes('NotFound')) {
-    // Terminal: this page genuinely has no artifact.
+    // Terminal: this page genuinely has no page app.
     this.reconnecting = false;
     this.renderTick += 1;
     return;
@@ -441,8 +441,8 @@ export class WikiArtifactHost extends LitElement {
 
  private async hydrateState(): Promise<void> {
   try {
-   const response = await this.stateClient.getArtifactState(
-    create(GetArtifactStateRequestSchema, { page: this.page }),
+   const response = await this.stateClient.getPageAppState(
+    create(GetPageAppStateRequestSchema, { page: this.page }),
    );
    this.stateVersionHash = response.stateVersionHash;
    // Seed the live store with the persisted state (cross-device truth).
@@ -456,13 +456,13 @@ export class WikiArtifactHost extends LitElement {
     this.runtime.store.initialize({}, persistedState);
    }
   } catch (err) {
-   if (WikiArtifactHost.isTerminal(err)) {
+   if (WikiPageAppHost.isTerminal(err)) {
     // No persisted state yet is fine; a merge will mint the first hash.
     return;
    }
    if (!this.isConnected) return;
    // Transient (suspension-wake network hiccup): retry the WHOLE load
-   // with backoff — the ladder re-runs GetArtifact + hydrate together.
+   // with backoff — the ladder re-runs GetPageApp + hydrate together.
    this.scheduleRetry('load', err);
   }
  }
@@ -475,8 +475,8 @@ export class WikiArtifactHost extends LitElement {
   void (async () => {
    let watchError: unknown = null;
    try {
-    const request = create(WatchArtifactRequestSchema, { page: this.page });
-    for await (const evt of this.artifactClient.watchArtifact(request, { signal })) {
+    const request = create(WatchPageAppRequestSchema, { page: this.page });
+    for await (const evt of this.pageAppClient.watchPageApp(request, { signal })) {
      watchError = null;
      this.handleWatchEvent(evt.kind, evt.source);
     }
@@ -486,26 +486,26 @@ export class WikiArtifactHost extends LitElement {
    if (signal.aborted) return;
    // The stream died (suspension, network flap, server restart).
    // A graceful end-of-stream also lands here; the recovery ladder
-   // re-runs the full load (GetArtifact → hydrate → watch), which gets
+   // re-runs the full load (GetPageApp → hydrate → watch), which gets
    // the current program + a fresh stream either way.
    this.stopWatch = null;
-   if (watchError !== null && WikiArtifactHost.isTerminal(watchError)) {
-    this.loadError = AugmentErrorService.augmentError(watchError, 'watching artifact app');
+   if (watchError !== null && WikiPageAppHost.isTerminal(watchError)) {
+    this.loadError = AugmentErrorService.augmentError(watchError, 'watching page app');
     this.renderTick += 1;
     return;
    }
    if (!this.isConnected) return;
-   this.scheduleRetry('load', watchError ?? new Error('artifact watch stream ended unexpectedly'));
+   this.scheduleRetry('load', watchError ?? new Error('page app watch stream ended unexpectedly'));
   })();
  }
 
- private handleWatchEvent(kind: WatchArtifactResponse_Kind, source: string): void {
+ private handleWatchEvent(kind: WatchPageAppResponse_Kind, source: string): void {
   switch (kind) {
-   case WatchArtifactResponse_Kind.INITIAL:
-   case WatchArtifactResponse_Kind.UPDATED:
+   case WatchPageAppResponse_Kind.INITIAL:
+   case WatchPageAppResponse_Kind.UPDATED:
     this.programSource = source;
     break;
-   case WatchArtifactResponse_Kind.CLEARED:
+   case WatchPageAppResponse_Kind.CLEARED:
     this.removed = true;
     this.programSource = '';
     break;
@@ -519,21 +519,21 @@ export class WikiArtifactHost extends LitElement {
   return createToolProvider(async (qualifiedToolId, args) => {
    const page = argPage(args, this.page);
    switch (qualifiedToolId) {
-    case 'api_v1_ArtifactService_GetArtifact':
-     return this.artifactClient.getArtifact(create(GetArtifactRequestSchema, { page }));
-    case 'api_v1_ArtifactStateService_GetArtifactState':
-     return this.stateClient.getArtifactState(create(GetArtifactStateRequestSchema, { page }));
-    case 'api_v1_ArtifactStateService_MergeArtifactState':
-     return this.stateClient.mergeArtifactState(
-      create(MergeArtifactStateRequestSchema, {
+    case 'api_v1_PageAppService_GetPageApp':
+     return this.pageAppClient.getPageApp(create(GetPageAppRequestSchema, { page }));
+    case 'api_v1_PageAppStateService_GetPageAppState':
+     return this.stateClient.getPageAppState(create(GetPageAppStateRequestSchema, { page }));
+    case 'api_v1_PageAppStateService_MergePageAppState':
+     return this.stateClient.mergePageAppState(
+      create(MergePageAppStateRequestSchema, {
        page,
        state: (args['state'] as JsonObject | undefined) ?? {},
        stateExpectedVersionHash: argString(args, 'stateExpectedVersionHash'),
       }),
      );
-    case 'api_v1_ArtifactStateService_DeleteArtifactState':
-     return this.stateClient.deleteArtifactState(
-      create(DeleteArtifactStateRequestSchema, {
+    case 'api_v1_PageAppStateService_DeletePageAppState':
+     return this.stateClient.deletePageAppState(
+      create(DeletePageAppStateRequestSchema, {
        page,
        stateExpectedVersionHash: argString(args, 'stateExpectedVersionHash'),
       }),
@@ -584,8 +584,8 @@ export class WikiArtifactHost extends LitElement {
   */
  private async mergeStateWithRetry(snapshot: Record<string, unknown>): Promise<void> {
   const attempt = async (): Promise<void> => {
-   const response = await this.stateClient.mergeArtifactState(
-    create(MergeArtifactStateRequestSchema, {
+   const response = await this.stateClient.mergePageAppState(
+    create(MergePageAppStateRequestSchema, {
      page: this.page,
      state: plainToJsonObject(snapshot),
      stateExpectedVersionHash: this.stateVersionHash,
@@ -599,14 +599,14 @@ export class WikiArtifactHost extends LitElement {
   } catch (err) {
    if (err instanceof ConnectError && err.code === Code.Aborted) {
     // Conflict: refetch the hash only, then re-merge the live snapshot.
-    const fresh = await this.stateClient.getArtifactState(
-     create(GetArtifactStateRequestSchema, { page: this.page }),
+    const fresh = await this.stateClient.getPageAppState(
+     create(GetPageAppStateRequestSchema, { page: this.page }),
     );
     this.stateVersionHash = fresh.stateVersionHash;
     try {
      await attempt();
     } catch (retryErr) {
-     this.actionError = AugmentErrorService.augmentError(retryErr, 'saving artifact app state');
+     this.actionError = AugmentErrorService.augmentError(retryErr, 'saving page app state');
     }
     return;
    }
@@ -617,7 +617,7 @@ export class WikiArtifactHost extends LitElement {
  private actionContext() {
   return {
    // Flush the LIVE store snapshot with the CAS hash. Per server
-   // semantics the page hash excludes artifact_state so no program
+   // semantics the page hash excludes page app_state so no program
    // refetch is needed after a successful merge.
    setState: (snapshot: Record<string, unknown>) => {
     void (async () => {
@@ -626,7 +626,7 @@ export class WikiArtifactHost extends LitElement {
      } catch (err) {
       // mergeStateWithRetry surfaces its own terminal error; anything
       // thrown before that (arg building) is a programming error.
-      this.actionError = AugmentErrorService.augmentError(err, 'saving artifact app state');
+      this.actionError = AugmentErrorService.augmentError(err, 'saving page app state');
      }
     })();
    },
@@ -637,7 +637,7 @@ export class WikiArtifactHost extends LitElement {
        create(SendChatMessageRequestSchema, { page: this.page, content: message }),
       );
      } catch (err) {
-      this.actionError = AugmentErrorService.augmentError(err, 'sending artifact message');
+      this.actionError = AugmentErrorService.augmentError(err, 'sending page app message');
      }
     })();
    },
@@ -666,7 +666,7 @@ export class WikiArtifactHost extends LitElement {
   };
  }
 
- private handleArtifactAction(event: CustomEvent<ArtifactActionEventDetail>): void {
+ private handlePageAppAction(event: CustomEvent<PageAppActionEventDetail>): void {
   const plan = event.detail.plan;
   if (this.runtime == null) return;
   const store = this.runtime.store;
@@ -711,22 +711,22 @@ export class WikiArtifactHost extends LitElement {
 
  private async removeApp(): Promise<void> {
   try {
-   await this.artifactClient.clearArtifact(
-    create(ClearArtifactRequestSchema, {
+   await this.pageAppClient.clearPageApp(
+    create(ClearPageAppRequestSchema, {
      page: this.page,
-     expectedVersionHash: this.artifact?.versionHash ?? '',
+     expectedVersionHash: this.pageApp?.versionHash ?? '',
     }),
    );
    this.removed = true;
-   // The artifact is gone: the page shell reloads plain markdown. The
+   // The page app is gone: the page shell reloads plain markdown. The
    // host never reloads itself (a reload inside WTR/preview kills the
    // surrounding page's state); listeners decide what to do.
    this.dispatchEvent(
-    new CustomEvent('wiki-artifact-removed', { bubbles: true, composed: true }),
+    new CustomEvent('wiki-page-app-removed', { bubbles: true, composed: true }),
    );
    this.requestUpdate();
   } catch (err) {
-   this.actionError = AugmentErrorService.augmentError(err, 'removing artifact app');
+   this.actionError = AugmentErrorService.augmentError(err, 'removing page app');
   }
  }
 
@@ -743,12 +743,12 @@ export class WikiArtifactHost extends LitElement {
   // back on its own when the connection re-establishes.
   if (this.reconnecting) {
    if (!this.hydrated) {
-    return html`<div class="wiki-artifact-app wiki-artifact-reconnecting" aria-busy="true">
-        <p class="reconnecting-note">Reconnecting to artifact app…</p>
+    return html`<div class="wiki-page-app-app wiki-page-app-reconnecting" aria-busy="true">
+        <p class="reconnecting-note">Reconnecting to page app…</p>
       </div>`;
    }
    // Hydrated: keep rendering the current app, banner inline below it.
-   return html`<div class="wiki-artifact-app">
+   return html`<div class="wiki-page-app-app">
       ${this.renderAppBody()}
       <p class="reconnecting-note" role="status">Connection interrupted — reconnecting…</p>
     </div>`;
@@ -760,9 +760,9 @@ export class WikiArtifactHost extends LitElement {
    return html`<error-display .augmentedError=${this.actionError}></error-display>`;
   }
   if (!this.hydrated || this.programSource === '' || this.runtime == null) {
-   return html`<div class="wiki-artifact-app" aria-busy="true"></div>`;
+   return html`<div class="wiki-page-app-app" aria-busy="true"></div>`;
   }
-  return html`<div class="wiki-artifact-app">
+  return html`<div class="wiki-page-app-app">
       ${this.renderAppBody()}
     </div>`;
  }
@@ -770,20 +770,20 @@ export class WikiArtifactHost extends LitElement {
  /** The rendered app tree: remove button, program body, parse errors. */
  private renderAppBody(): TemplateResult {
   // The live store is the in-session truth: hydration from
-  // GetArtifactState happened once in hydrateState(); re-renders pass an
+  // GetPageAppState happened once in hydrateState(); re-renders pass an
   // empty persisted map, so a RESET key re-marked pristine keeps its
   // declared default instead of being re-imported from the old snapshot.
   const rendered = this.runtime!.render(this.programSource, {});
   this.lastErrors = rendered.errors;
   this.lastDeclarations = rendered.stateDeclarations;
-  return html`<button class="wiki-artifact-remove" @click=${() => void this.removeApp()}>Remove the app</button>
-      <div class="wiki-artifact-body">${rendered.template}</div>
+  return html`<button class="wiki-page-app-remove" @click=${() => void this.removeApp()}>Remove the app</button>
+      <div class="wiki-page-app-body">${rendered.template}</div>
       ${this.renderParseErrors()}`;
  }
 
  private renderParseErrors(): TemplateResult | typeof nothing {
   if (this.lastErrors.length === 0) return nothing;
-  return html`<div class="wiki-artifact-parse-errors">
+  return html`<div class="wiki-page-app-parse-errors">
       ${this.lastErrors.map((err) => html`<div>${err.message}</div>`)}
     </div>`;
  }
@@ -818,10 +818,10 @@ function jsonValueToPlain(value: unknown, seen: Set<object>): unknown {
  return null;
 }
 
-customElements.define('wiki-artifact-host', WikiArtifactHost);
+customElements.define('wiki-page-app-host', WikiPageAppHost);
 
 declare global {
  interface HTMLElementTagNameMap {
-  'wiki-artifact-host': WikiArtifactHost;
+  'wiki-page-app-host': WikiPageAppHost;
  }
 }

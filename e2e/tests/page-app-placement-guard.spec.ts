@@ -1,15 +1,15 @@
 /**
- * E2E workflow tests for the artifact placement guard (issue #1272).
+ * E2E workflow tests for the page app placement guard (issue #1272).
  *
  * The guard blocks only writes that would CLEAR substantial prose
  * (>1KB). Composition of a fence with existing prose succeeds; a
- * UpdateWholePage that replaces the whole body with just the artifact fence
+ * UpdateWholePage that replaces the whole body with just the page app fence
  * must fail with a FailedPrecondition mentioning prose.
  */
 import { expect, test, type APIRequestContext } from '@playwright/test';
-import { callAPI, counterProgram, getArtifact, setupPage } from './artifact-helpers';
+import { callAPI, counterProgram, getPageApp, setupPage } from './page-app-helpers';
 
-const TEST_PAGE = 'e2e_artifact_placement';
+const TEST_PAGE = 'e2e_page app_placement';
 
 const PAGE_LOAD_TIMEOUT_MS = 15000;
 
@@ -23,10 +23,10 @@ function proseBody(): string {
 }
 
 function bodyWithFence(body: string, program: string): string {
- return `${body}\n\`\`\`wiki-artifact\n${program}\n\`\`\`\n`;
+ return `${body}\n\`\`\`wiki-page-app\n${program}\n\`\`\`\n`;
 }
 
-test.describe.serial('Artifact placement guard', () => {
+test.describe.serial('Page app placement guard', () => {
  test.setTimeout(90000);
 
  test.beforeEach(async ({ request }) => {
@@ -35,21 +35,21 @@ test.describe.serial('Artifact placement guard', () => {
  });
 
  test.afterAll(async ({ request }) => {
-  await callAPI(request, 'ArtifactService', 'ClearArtifact', { page: TEST_PAGE });
+  await callAPI(request, 'PageAppService', 'ClearPageApp', { page: TEST_PAGE });
   await callAPI(request, 'PageManagementService', 'DeletePage', { page: TEST_PAGE });
  });
 
- test.describe('when SetArtifact is called on a page with substantial prose', () => {
+ test.describe('when SetPageApp is called on a page with substantial prose', () => {
   test('composition succeeds and the prose survives', async ({ page, request }) => {
-   const setResp = await callAPI(request, 'ArtifactService', 'SetArtifact', {
+   const setResp = await callAPI(request, 'PageAppService', 'SetPageApp', {
     page: TEST_PAGE,
     source: GOOD_PROGRAM,
    });
    expect(setResp.status).toBe(200);
 
-   const artifact = await getArtifact(request, TEST_PAGE);
-   expect(artifact.status).toBe(200);
-   expect(artifactSource(artifact.json)).toContain('root = Card');
+   const page app = await getPageApp(request, TEST_PAGE);
+   expect(page app.status).toBe(200);
+   expect(page appSource(page app.json)).toContain('root = Card');
 
    // Page body still contains the prose.
    const readResp = await callAPI(request, 'PageManagementService', 'ReadPage', {
@@ -59,22 +59,22 @@ test.describe.serial('Artifact placement guard', () => {
    const content = pageContent(readResp.json);
    expect(content).toContain('placement guard');
 
-   // Rendered view: prose AND artifact app.
+   // Rendered view: prose AND page app.
    await page.goto(`/${TEST_PAGE}/view`);
    await expect(page.getByText('placement guard').first()).toBeVisible({
     timeout: PAGE_LOAD_TIMEOUT_MS,
    });
-   const host = page.locator('wiki-artifact-host');
+   const host = page.locator('wiki-page-app-host');
    await expect(host).toHaveCount(1, { timeout: PAGE_LOAD_TIMEOUT_MS });
    await expect(
-    host.locator('.wiki-artifact-card-title', { hasText: 'Counter' }),
+    host.locator('.wiki-page-app-card-title', { hasText: 'Counter' }),
    ).toBeVisible();
   });
  });
 
  test.describe('when UpdateWholePage replaces the body with only the fence', () => {
   test('the prose-clearing write is rejected', async ({ request }) => {
-   const fenceOnly = `\`\`\`wiki-artifact\n${GOOD_PROGRAM}\n\`\`\`\n`;
+   const fenceOnly = `\`\`\`wiki-page-app\n${GOOD_PROGRAM}\n\`\`\`\n`;
    const resp = await callAPI(request, 'PageManagementService', 'UpdateWholePage', {
     page: TEST_PAGE,
     new_whole_markdown: fenceOnly,
@@ -94,10 +94,10 @@ test.describe.serial('Artifact placement guard', () => {
   });
  });
 
- test.describe('when UpdatePageContent clears the prose around the artifact', () => {
+ test.describe('when UpdatePageContent clears the prose around the page app', () => {
   test('a fence-only body with a CHANGED program is rejected', async ({ request }) => {
-   // First attach an artifact so the page is artifact-shaped.
-   const setResp = await callAPI(request, 'ArtifactService', 'SetArtifact', {
+   // First attach an page app so the page is page app-shaped.
+   const setResp = await callAPI(request, 'PageAppService', 'SetPageApp', {
     page: TEST_PAGE,
     source: GOOD_PROGRAM,
    });
@@ -105,7 +105,7 @@ test.describe.serial('Artifact placement guard', () => {
 
    // Candidate body: fence only, program text changed.
    const changedProgram = counterProgram('Counter v2', '$n');
-   const fenceOnly = `\`\`\`wiki-artifact\n${changedProgram}\n\`\`\`\n`;
+   const fenceOnly = `\`\`\`wiki-page-app\n${changedProgram}\n\`\`\`\n`;
    const resp = await callAPI(request, 'PageManagementService', 'UpdatePageContent', {
     page: TEST_PAGE,
     newContentMarkdown: fenceOnly,
@@ -119,12 +119,12 @@ test.describe.serial('Artifact placement guard', () => {
     page: TEST_PAGE,
    });
    expect(pageContent(readResp.json)).toContain('placement guard');
-   const artifact = await getArtifact(request, TEST_PAGE);
-   expect(artifactSource(artifact.json)).toContain('root = Card("Counter"');
+   const page app = await getPageApp(request, TEST_PAGE);
+   expect(page appSource(page app.json)).toContain('root = Card("Counter"');
   });
 
   test('a prose-clearing body with an UNCHANGED program is rejected', async ({ request }) => {
-   const setResp = await callAPI(request, 'ArtifactService', 'SetArtifact', {
+   const setResp = await callAPI(request, 'PageAppService', 'SetPageApp', {
     page: TEST_PAGE,
     source: GOOD_PROGRAM,
    });
@@ -132,7 +132,7 @@ test.describe.serial('Artifact placement guard', () => {
 
    // Candidate body: fence only, program text identical (unchanged-source
    // path — previously guard-skipping).
-   const fenceOnly = `\`\`\`wiki-artifact\n${GOOD_PROGRAM}\n\`\`\`\n`;
+   const fenceOnly = `\`\`\`wiki-page-app\n${GOOD_PROGRAM}\n\`\`\`\n`;
    const resp = await callAPI(request, 'PageManagementService', 'UpdatePageContent', {
     page: TEST_PAGE,
     newContentMarkdown: fenceOnly,
@@ -158,8 +158,8 @@ function pageContent(payload: unknown): string {
  return '';
 }
 
-/** Read `source` from a GetArtifact response payload. */
-function artifactSource(payload: unknown): string {
+/** Read `source` from a GetPageApp response payload. */
+function page appSource(payload: unknown): string {
  if (typeof payload === 'object' && payload !== null && 'source' in payload) {
   const value = (payload as Record<string, unknown>).source;
   return typeof value === 'string' ? value : '';

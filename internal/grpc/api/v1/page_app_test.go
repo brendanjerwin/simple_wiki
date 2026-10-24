@@ -23,17 +23,17 @@ func mustStruct(m map[string]any) *structpb.Struct {
 	return st
 }
 
-const artifactCounterProgram = "counter = State(0)\nroot = Stack([\n  Text(\"count: {counter}\"),\n])\n"
+const pageAppCounterProgram = "$counter = 0\nroot = Card(\"Counter\", Stack([\n  Text(\"count: \" + $counter),\n]))\n"
 
-func artifactStampsFromFM(fm wikipage.FrontMatter) map[string]any {
+func pageAppStampsFromFM(fm wikipage.FrontMatter) map[string]any {
 	wiki, ok := fm["wiki"].(map[string]any)
 	ExpectWithOffset(1, ok).To(BeTrue())
-	artifact, ok := wiki["artifact"].(map[string]any)
+	pageApp, ok := wiki["page_app"].(map[string]any)
 	ExpectWithOffset(1, ok).To(BeTrue())
-	return artifact
+	return pageApp
 }
 
-var _ = Describe("ArtifactService", func() {
+var _ = Describe("PageAppService", func() {
 	var (
 		ctx    context.Context
 		mock   *MockPageReaderMutator
@@ -49,12 +49,12 @@ var _ = Describe("ArtifactService", func() {
 		server = mustNewServer(mock, nil, nil)
 	})
 
-	Describe("GetArtifact", func() {
-		When("the page has no artifact", func() {
+	Describe("GetPageApp", func() {
+		When("the page has no page app", func() {
 			var err error
 
 			BeforeEach(func() {
-				_, err = server.GetArtifact(ctx, &apiv1.GetArtifactRequest{Page: "app-page"})
+				_, err = server.GetPageApp(ctx, &apiv1.GetPageAppRequest{Page: "app-page"})
 			})
 
 			It("should return NotFound", func() {
@@ -66,7 +66,7 @@ var _ = Describe("ArtifactService", func() {
 			var err error
 
 			BeforeEach(func() {
-				_, err = server.GetArtifact(ctx, &apiv1.GetArtifactRequest{})
+				_, err = server.GetPageApp(ctx, &apiv1.GetPageAppRequest{})
 			})
 
 			It("should return InvalidArgument", func() {
@@ -75,17 +75,17 @@ var _ = Describe("ArtifactService", func() {
 		})
 	})
 
-	Describe("SetArtifact", func() {
+	Describe("SetPageApp", func() {
 		When("writing a valid program to a page without one", func() {
 			var (
-				resp *apiv1.SetArtifactResponse
+				resp *apiv1.SetPageAppResponse
 				err  error
 			)
 
 			BeforeEach(func() {
-				resp, err = server.SetArtifact(ctx, &apiv1.SetArtifactRequest{
+				resp, err = server.SetPageApp(ctx, &apiv1.SetPageAppRequest{
 					Page:   "app-page",
-					Source: artifactCounterProgram,
+					Source: pageAppCounterProgram,
 				})
 			})
 
@@ -100,14 +100,14 @@ var _ = Describe("ArtifactService", func() {
 			})
 
 			It("should write the fence into the markdown body, preserving prose", func() {
-				Expect(string(mock.Markdown)).To(ContainSubstring("root = Stack(["))
-				Expect(string(mock.Markdown)).To(ContainSubstring("```" + "wiki-artifact"))
+				Expect(string(mock.Markdown)).To(ContainSubstring(wikipage.PageAppFenceOpen))
+				Expect(string(mock.Markdown)).To(ContainSubstring("```" + "wiki-page-app"))
 				Expect(string(mock.Markdown)).To(ContainSubstring("# My notes"))
 				Expect(string(mock.Markdown)).To(ContainSubstring("Body prose."))
 			})
 
-			It("should stamp wiki.artifact frontmatter", func() {
-				stamps := artifactStampsFromFM(mock.Frontmatter)
+			It("should stamp wiki.page_app frontmatter", func() {
+				stamps := pageAppStampsFromFM(mock.Frontmatter)
 				Expect(stamps["lang"]).To(Equal("openui-lang"))
 				Expect(stamps["version"]).To(Equal(int64(1)))
 				Expect(stamps["library"]).To(Equal("wiki-core@1"))
@@ -119,7 +119,7 @@ var _ = Describe("ArtifactService", func() {
 			var err error
 
 			BeforeEach(func() {
-				_, err = server.SetArtifact(ctx, &apiv1.SetArtifactRequest{
+				_, err = server.SetPageApp(ctx, &apiv1.SetPageAppRequest{
 					Page:   "app-page",
 					Source: "root = Text(\"{{ .Identifier }}\")\n",
 				})
@@ -132,12 +132,12 @@ var _ = Describe("ArtifactService", func() {
 
 		When("the program is a gross violation", func() {
 			It("should reject an empty source", func() {
-				_, err := server.SetArtifact(ctx, &apiv1.SetArtifactRequest{Page: "app-page", Source: "  \n"})
+				_, err := server.SetPageApp(ctx, &apiv1.SetPageAppRequest{Page: "app-page", Source: "  \n"})
 				Expect(err).To(HaveGrpcStatusWithSubstr(codes.InvalidArgument, ""))
 			})
 
 			It("should reject a program without a root statement", func() {
-				_, err := server.SetArtifact(ctx, &apiv1.SetArtifactRequest{
+				_, err := server.SetPageApp(ctx, &apiv1.SetPageAppRequest{
 					Page:   "app-page",
 					Source: "label = Text(\"no root here\")\n",
 				})
@@ -146,12 +146,12 @@ var _ = Describe("ArtifactService", func() {
 
 			It("should reject an oversized program", func() {
 				big := "root = Text(\"" + strings.Repeat("x", 1<<17) + "\")\n"
-				_, err := server.SetArtifact(ctx, &apiv1.SetArtifactRequest{Page: "app-page", Source: big})
+				_, err := server.SetPageApp(ctx, &apiv1.SetPageAppRequest{Page: "app-page", Source: big})
 				Expect(err).To(HaveGrpcStatusWithSubstr(codes.InvalidArgument, ""))
 			})
 
 			It("should reject a program containing its own fence terminator", func() {
-				_, err := server.SetArtifact(ctx, &apiv1.SetArtifactRequest{
+				_, err := server.SetPageApp(ctx, &apiv1.SetPageAppRequest{
 					Page:   "app-page",
 					Source: "root = Text(\"```\")\n",
 				})
@@ -163,13 +163,13 @@ var _ = Describe("ArtifactService", func() {
 			var firstHash string
 
 			BeforeEach(func() {
-				resp, err := server.SetArtifact(ctx, &apiv1.SetArtifactRequest{Page: "app-page", Source: artifactCounterProgram})
+				resp, err := server.SetPageApp(ctx, &apiv1.SetPageAppRequest{Page: "app-page", Source: pageAppCounterProgram})
 				Expect(err).NotTo(HaveOccurred())
 				firstHash = resp.GetVersionHash()
 			})
 
 			It("should reject a stale expected hash with Aborted", func() {
-				_, err := server.SetArtifact(ctx, &apiv1.SetArtifactRequest{
+				_, err := server.SetPageApp(ctx, &apiv1.SetPageAppRequest{
 					Page:                "app-page",
 					Source:              "root = Text(\"v2\")\n",
 					ExpectedVersionHash: "sha256:stale",
@@ -178,7 +178,7 @@ var _ = Describe("ArtifactService", func() {
 			})
 
 			It("should accept the current hash and bump the version", func() {
-				resp, err := server.SetArtifact(ctx, &apiv1.SetArtifactRequest{
+				resp, err := server.SetPageApp(ctx, &apiv1.SetPageAppRequest{
 					Page:                "app-page",
 					Source:              "root = Text(\"v2\")\n",
 					ExpectedVersionHash: firstHash,
@@ -189,27 +189,27 @@ var _ = Describe("ArtifactService", func() {
 		})
 	})
 
-	Describe("ClearArtifact", func() {
-		When("the page has an artifact", func() {
+	Describe("ClearPageApp", func() {
+		When("the page has a page app", func() {
 			BeforeEach(func() {
-				_, err := server.SetArtifact(ctx, &apiv1.SetArtifactRequest{Page: "app-page", Source: artifactCounterProgram})
+				_, err := server.SetPageApp(ctx, &apiv1.SetPageAppRequest{Page: "app-page", Source: pageAppCounterProgram})
 				Expect(err).NotTo(HaveOccurred())
 			})
 
 			It("should remove the fence and stamps, keeping prose", func() {
-				_, err := server.ClearArtifact(ctx, &apiv1.ClearArtifactRequest{Page: "app-page"})
+				_, err := server.ClearPageApp(ctx, &apiv1.ClearPageAppRequest{Page: "app-page"})
 				Expect(err).NotTo(HaveOccurred())
-				Expect(string(mock.Markdown)).NotTo(ContainSubstring("wiki-artifact"))
+				Expect(string(mock.Markdown)).NotTo(ContainSubstring("wiki-page-app"))
 				Expect(mock.Frontmatter).NotTo(HaveKey("wiki"))
 				Expect(string(mock.Markdown)).To(ContainSubstring("# My notes"))
 			})
 
 			It("should return NotFound when there is nothing to clear", func() {
-				// First clear within THIS It: the BeforeEach artifact exists,
+				// First clear within THIS It: the BeforeEach page app exists,
 				// so the first call succeeds — the second must be NotFound.
-				_, firstErr := server.ClearArtifact(ctx, &apiv1.ClearArtifactRequest{Page: "app-page"})
+				_, firstErr := server.ClearPageApp(ctx, &apiv1.ClearPageAppRequest{Page: "app-page"})
 				Expect(firstErr).NotTo(HaveOccurred())
-				_, secondErr := server.ClearArtifact(ctx, &apiv1.ClearArtifactRequest{Page: "app-page"})
+				_, secondErr := server.ClearPageApp(ctx, &apiv1.ClearPageAppRequest{Page: "app-page"})
 				Expect(secondErr).To(HaveOccurred())
 				Expect(secondErr).To(HaveGrpcStatusWithSubstr(codes.NotFound, ""))
 			})
@@ -217,7 +217,7 @@ var _ = Describe("ArtifactService", func() {
 	})
 })
 
-var _ = Describe("ArtifactStateService", func() {
+var _ = Describe("PageAppStateService", func() {
 	var (
 		ctx    context.Context
 		mock   *MockPageReaderMutator
@@ -233,15 +233,15 @@ var _ = Describe("ArtifactStateService", func() {
 		server = mustNewServer(mock, nil, nil)
 	})
 
-	Describe("GetArtifactState", func() {
+	Describe("GetPageAppState", func() {
 		When("no state has ever been persisted", func() {
 			var (
-				resp *apiv1.GetArtifactStateResponse
+				resp *apiv1.GetPageAppStateResponse
 				err  error
 			)
 
 			BeforeEach(func() {
-				resp, err = server.GetArtifactState(ctx, &apiv1.GetArtifactStateRequest{Page: "app-page"})
+				resp, err = server.GetPageAppState(ctx, &apiv1.GetPageAppStateRequest{Page: "app-page"})
 			})
 
 			It("should return an empty state and a hash", func() {
@@ -252,16 +252,16 @@ var _ = Describe("ArtifactStateService", func() {
 		})
 	})
 
-	Describe("MergeArtifactState", func() {
+	Describe("MergePageAppState", func() {
 		When("merging into fresh state", func() {
 			var (
-				resp *apiv1.MergeArtifactStateResponse
+				resp *apiv1.MergePageAppStateResponse
 				err  error
 			)
 
 			BeforeEach(func() {
-				_, _ = server.SetArtifact(ctx, &apiv1.SetArtifactRequest{Page: "app-page", Source: artifactCounterProgram})
-				resp, err = server.MergeArtifactState(ctx, &apiv1.MergeArtifactStateRequest{
+				_, _ = server.SetPageApp(ctx, &apiv1.SetPageAppRequest{Page: "app-page", Source: pageAppCounterProgram})
+				resp, err = server.MergePageAppState(ctx, &apiv1.MergePageAppStateRequest{
 					Page:  "app-page",
 					State: mustStruct(map[string]any{"count": float64(3), "tags": []any{"a"}}),
 				})
@@ -273,7 +273,7 @@ var _ = Describe("ArtifactStateService", func() {
 			})
 
 			It("must NOT destroy the page body (the counter-delete regression)", func() {
-				Expect(string(mock.Markdown)).To(ContainSubstring("root = Stack(["))
+				Expect(string(mock.Markdown)).To(ContainSubstring(wikipage.PageAppFenceOpen))
 				Expect(string(mock.Markdown)).To(ContainSubstring("Body prose."))
 			})
 		})
@@ -282,7 +282,7 @@ var _ = Describe("ArtifactStateService", func() {
 			var firstStateHash string
 
 			BeforeEach(func() {
-				resp, err := server.MergeArtifactState(ctx, &apiv1.MergeArtifactStateRequest{
+				resp, err := server.MergePageAppState(ctx, &apiv1.MergePageAppStateRequest{
 					Page:  "app-page",
 					State: mustStruct(map[string]any{"count": float64(1)}),
 				})
@@ -291,7 +291,7 @@ var _ = Describe("ArtifactStateService", func() {
 			})
 
 			It("should reject a stale state hash with Aborted", func() {
-				_, err := server.MergeArtifactState(ctx, &apiv1.MergeArtifactStateRequest{
+				_, err := server.MergePageAppState(ctx, &apiv1.MergePageAppStateRequest{
 					Page:                     "app-page",
 					State:                    mustStruct(map[string]any{"count": float64(2)}),
 					StateExpectedVersionHash: "sha256:stale",
@@ -300,7 +300,7 @@ var _ = Describe("ArtifactStateService", func() {
 			})
 
 			It("should accept the current hash", func() {
-				resp, err := server.MergeArtifactState(ctx, &apiv1.MergeArtifactStateRequest{
+				resp, err := server.MergePageAppState(ctx, &apiv1.MergePageAppStateRequest{
 					Page:                     "app-page",
 					State:                    mustStruct(map[string]any{"count": float64(2)}),
 					StateExpectedVersionHash: firstStateHash,
@@ -312,7 +312,7 @@ var _ = Describe("ArtifactStateService", func() {
 
 		When("a state hash is independent of page-markdown edits", func() {
 			It("should not be invalidated by an unrelated page edit", func() {
-				resp, err := server.MergeArtifactState(ctx, &apiv1.MergeArtifactStateRequest{
+				resp, err := server.MergePageAppState(ctx, &apiv1.MergePageAppStateRequest{
 					Page:  "app-page",
 					State: mustStruct(map[string]any{"count": float64(1)}),
 				})
@@ -321,7 +321,7 @@ var _ = Describe("ArtifactStateService", func() {
 				// An unrelated page-markdown edit does not change the state hash
 				// (namespace-scoped OCC — the two-streams rule).
 				mock.Markdown = wikipage.Markdown("# Unrelated edit\n")
-				subsequent, err := server.MergeArtifactState(ctx, &apiv1.MergeArtifactStateRequest{
+				subsequent, err := server.MergePageAppState(ctx, &apiv1.MergePageAppStateRequest{
 					Page:                     "app-page",
 					State:                    mustStruct(map[string]any{"count": float64(2)}),
 					StateExpectedVersionHash: resp.GetStateVersionHash(),
@@ -332,23 +332,23 @@ var _ = Describe("ArtifactStateService", func() {
 		})
 	})
 
-	Describe("DeleteArtifactState", func() {
+	Describe("DeletePageAppState", func() {
 		It("should remove the subtree and keep the page body", func() {
-			_, mErr := server.SetArtifact(ctx, &apiv1.SetArtifactRequest{Page: "app-page", Source: artifactCounterProgram})
+			_, mErr := server.SetPageApp(ctx, &apiv1.SetPageAppRequest{Page: "app-page", Source: pageAppCounterProgram})
 			Expect(mErr).NotTo(HaveOccurred())
-			_, err := server.GetArtifactState(ctx, &apiv1.GetArtifactStateRequest{Page: "app-page"})
+			_, err := server.GetPageAppState(ctx, &apiv1.GetPageAppStateRequest{Page: "app-page"})
 			Expect(err).NotTo(HaveOccurred())
-			_, dErr := server.DeleteArtifactState(ctx, &apiv1.DeleteArtifactStateRequest{Page: "app-page"})
+			_, dErr := server.DeletePageAppState(ctx, &apiv1.DeletePageAppStateRequest{Page: "app-page"})
 			Expect(dErr).NotTo(HaveOccurred())
-			Expect(string(mock.Markdown)).To(ContainSubstring("root = Stack(["))
-			resp, gErr := server.GetArtifactState(ctx, &apiv1.GetArtifactStateRequest{Page: "app-page"})
+			Expect(string(mock.Markdown)).To(ContainSubstring(wikipage.PageAppFenceOpen))
+			resp, gErr := server.GetPageAppState(ctx, &apiv1.GetPageAppStateRequest{Page: "app-page"})
 			Expect(gErr).NotTo(HaveOccurred())
 			Expect(resp.GetState().AsMap()).To(BeEmpty())
 		})
 	})
 })
 
-var _ = Describe("artifact placement guard", func() {
+var _ = Describe("page app placement guard", func() {
 	var (
 		ctx    context.Context
 		mock   *MockPageReaderMutator
@@ -364,15 +364,15 @@ var _ = Describe("artifact placement guard", func() {
 		}
 		server = mustNewServer(mock, nil, nil)
 	})
-	Describe("SetArtifact default path", func() {
+	Describe("SetPageApp default path", func() {
 		It("should compose (keep prose) without any confirmation flag", func() {
-			_, err := server.SetArtifact(ctx, &apiv1.SetArtifactRequest{
+			_, err := server.SetPageApp(ctx, &apiv1.SetPageAppRequest{
 				Page:   "roadmap",
 				Source: "root = Stack([Text(\"roadmap dashboard\")])\n",
 			})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(string(mock.Markdown)).To(ContainSubstring("Substantial roadmap prose."))
-			Expect(string(mock.Markdown)).To(ContainSubstring("root = Stack(["))
+			Expect(string(mock.Markdown)).To(ContainSubstring(wikipage.PageAppFenceOpen))
 		})
 	})
 
@@ -380,7 +380,7 @@ var _ = Describe("artifact placement guard", func() {
 		It("rejects the prose-clear (edit path has no confirm field)", func() {
 			_, err := server.UpdatePageContent(ctx, &apiv1.UpdatePageContentRequest{
 				Page:               "roadmap",
-				NewContentMarkdown: "```wiki-artifact\n$n = 0\nroot = Card(\"Lone\", [])\n```\n",
+				NewContentMarkdown: "```wiki-page-app\n$n = 0\nroot = Card(\"Lone\", [])\n```\n",
 			})
 			Expect(err).To(MatchError(ContainSubstring("FailedPrecondition")))
 			Expect(err.Error()).To(ContainSubstring("drop 100% of the page's prose"))
@@ -389,16 +389,16 @@ var _ = Describe("artifact placement guard", func() {
 		})
 	})
 
-	Describe("SetArtifact confirm_replace_content path", func() {
+	Describe("SetPageApp confirm_replace_content path", func() {
 		It("clears the prose when the flag is set (app-standalone conversion)", func() {
-			_, err := server.SetArtifact(ctx, &apiv1.SetArtifactRequest{
+			_, err := server.SetPageApp(ctx, &apiv1.SetPageAppRequest{
 				Page:                  "roadmap",
 				Source:                "root = Stack([Text(\"dashboard\")])\n",
 				ConfirmReplaceContent: true,
 			})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(string(mock.Markdown)).NotTo(ContainSubstring("Substantial roadmap prose."))
-			Expect(string(mock.Markdown)).To(ContainSubstring("root = Stack(["))
+			Expect(string(mock.Markdown)).To(ContainSubstring(wikipage.PageAppFenceOpen))
 		})
 	})
 })

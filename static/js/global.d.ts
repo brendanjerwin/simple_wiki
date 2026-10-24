@@ -5,7 +5,7 @@ interface Window {
     debounceMS?: number;
     lastFetch?: number;
     username?: string;
-    hasArtifact?: boolean;
+    hasPageApp?: boolean;
   };
 }
 
@@ -17,6 +17,6 @@ declare var simple_wiki:
     debounceMS?: number;
     lastFetch?: number;
     username?: string;
-    hasArtifact?: boolean;
+    hasPageApp?: boolean;
   }
   | undefined;

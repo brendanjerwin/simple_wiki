@@ -1745,11 +1745,11 @@ user-facing documentation for all wiki-specific syntax and features.
 
 When a user asks for an app, tracker, dashboard, timer, or any interactive tool on a page:
 
-- **STOP and Read help-artifacts-lang FIRST (ReadPage "help-artifacts-lang") before doing anything else** — do not use memory search, do not search for examples. It is the complete language spec + runtime contract + worked examples for authoring artifact apps. Authoring without reading it wastes turns guessing at syntax.
+- **STOP and Read help-page-apps FIRST (ReadPage "help-page-apps") before doing anything else** — do not use memory search, do not search for examples. It is the complete language spec + runtime contract + worked examples for authoring page apps. Authoring without reading it wastes turns guessing at syntax.
 - **Default placement: create a NEW page for the app and link to it from here** — replacing or
   clearing a page's content is almost never right. The app is authored in OpenUI Lang
-  via api_v1_ArtifactService_SetArtifact; state persists via
-  api_v1_ArtifactStateService (never localStorage).
+  via api_v1_PageAppService_SetPageApp; state persists via
+  api_v1_PageAppStateService (never localStorage).
 - Attach to the current page only when the ask is explicitly about THIS page; clearing
   substantial prose requires the user's explicit go-ahead (confirm_replace_content=true).
 - When the user clicks "Make an app out of this page" in the chat panel, the sent
@@ -1757,10 +1757,10 @@ When a user asks for an app, tracker, dashboard, timer, or any interactive tool 
   for that page's content, rendered above the existing prose (composition keeps the
   content). Do not create a separate page or clear prose for these asks: the
   confirm_replace_content path exists only when the user asks for an app-ALONE page.
-- **Authoring pattern (works first try)**: ReadPage help-artifacts-lang → compose the
+- **Authoring pattern (works first try)**: ReadPage help-page-apps → compose the
   program (every statement: identifier = Expression; entry: root = Component(...); args
-  POSITIONAL; string interpolation via "text " + var concat ONLY) → SetArtifact{page,
-  source} → tell the user what you built. If SetArtifact returns InvalidArgument, read
+  POSITIONAL; string interpolation via "text " + var concat ONLY) → SetPageApp{page,
+  source} → tell the user what you built. If SetPageApp returns InvalidArgument, read
   the error's hint and fix the program; never re-write from memory.
 
 `

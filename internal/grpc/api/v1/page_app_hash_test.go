@@ -12,11 +12,11 @@ import (
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 )
 
-var _ = Describe("artifact hash exclusions", func() {
-	// The self-erasing-counter regression (issue #1272): an artifact state
+var _ = Describe("page app hash exclusions", func() {
+	// The self-erasing-counter regression (issue #1272): a page app state
 	// flush must not change the page version hash used by OCC/hashes; a
 	// program write must (restamp). Both directions pinned through the
-	// UpdatePageContent + SetArtifact/MergeArtifactState round-trips on
+	// UpdatePageContent + SetPageApp/MergePageAppState round-trips on
 	// one page.
 
 	var (
@@ -34,9 +34,9 @@ var _ = Describe("artifact hash exclusions", func() {
 		server = mustNewServer(mock, nil, nil)
 	})
 
-	When("artifact state is merged", func() {
+	When("page app state is merged", func() {
 		It("the page version hash reported by a later prose edit is stable across the state flush", func() {
-			// Pre-state hash (no artifact yet): compute via UpdatePageContent's
+			// Pre-state hash (no page app yet): compute via UpdatePageContent's
 			// returned VersionHash on the same content.
 			first, err := server.UpdatePageContent(ctx, &apiv1.UpdatePageContentRequest{
 				Page:               "app-page",
@@ -44,8 +44,8 @@ var _ = Describe("artifact hash exclusions", func() {
 			})
 			Expect(err).NotTo(HaveOccurred())
 
-			// Flush state (writes wiki.artifact_state).
-			_, mErr := server.MergeArtifactState(ctx, &apiv1.MergeArtifactStateRequest{
+			// Flush state (writes wiki.page_app_state).
+			_, mErr := server.MergePageAppState(ctx, &apiv1.MergePageAppStateRequest{
 				Page:  "app-page",
 				State: mustStruct(map[string]any{"count": float64(1)}),
 			})
@@ -68,7 +68,7 @@ var _ = Describe("artifact hash exclusions", func() {
 		It("the returned hash reflects the fence change (restamped, not excluded)", func() {
 			first, err := server.UpdatePageContent(ctx, &apiv1.UpdatePageContentRequest{
 				Page:               "app-page",
-				NewContentMarkdown: "# Notes\n\n```wiki-artifact\nroot = Card(\"a\")\n```\n",
+				NewContentMarkdown: "# Notes\n\n```wiki-page-app\nroot = Card(\"a\")\n```\n",
 			})
 			Expect(err).NotTo(HaveOccurred())
 
@@ -77,12 +77,12 @@ var _ = Describe("artifact hash exclusions", func() {
 			// and the stamps stay consistent).
 			second, err := server.UpdatePageContent(ctx, &apiv1.UpdatePageContentRequest{
 				Page:                "app-page",
-				NewContentMarkdown:  "# Notes\n\n```wiki-artifact\nroot = Card(\"b\")\n```\n",
+				NewContentMarkdown:  "# Notes\n\n```wiki-page-app\nroot = Card(\"b\")\n```\n",
 				ExpectedVersionHash: &first.VersionHash,
 			})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(second.GetSuccess()).To(BeTrue())
-			// The restamped wiki.artifact frontmatter must match the new program.
+			// The restamped wiki.page_app frontmatter must match the new program.
 			Expect(string(mock.Markdown)).To(ContainSubstring("root = Card(\"b\")"))
 		})
 	})

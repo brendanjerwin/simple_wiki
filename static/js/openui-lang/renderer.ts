@@ -1,11 +1,11 @@
 /**
- * Renderer for parsed OpenUI Lang artifact programs over the wiki library.
+ * Renderer for parsed OpenUI Lang page app programs over the wiki library.
  *
  * Renders `ParseResult` trees: parses a program source string (or a merged
  * patch), evaluates `$variables` and Query()/Mutation() statements through a
  * lang-core `ToolProvider`, and maps `ElementNode.typeName` to the wiki
  * library's component render functions. Action plans (from @Set, @Reset,
- * @ToAssistant, @OpenUrl, @Run) are surfaced through a `wiki-artifact-action`
+ * @ToAssistant, @OpenUrl, @Run) are surfaced through a `wiki-page-app-action`
  * event so the host executes them against the wiki.
  */
 import { nothing } from 'lit';
@@ -30,17 +30,17 @@ import {
 } from '@openuidev/lang-core';
 import {
  WIKI_ROOT_COMPONENT,
- ARTIFACT_ACTION_EVENT,
+ PAGE_APP_ACTION_EVENT,
  wikiLibrary,
  type WikiRenderer,
 } from './library.js';
 
 /**
- * Host-side executor for artifact action plans. The host subscribes to
+ * Host-side executor for page app action plans. The host subscribes to
  * `onStateChange` so every @Set/@Reset flushes the LIVE lang-core store
  * snapshot rather than a stale persisted copy.
  */
-export interface ArtifactActionContext {
+export interface PageAppActionContext {
  /** Flush the live store snapshot (all $variable values). */
  setState(snapshot: Record<string, unknown>): void;
  /** Send the user's message to the assistant chat for the page. */
@@ -52,7 +52,7 @@ export interface ArtifactActionContext {
 }
 
 /** A template plus the parse diagnostics for the rendered program. */
-export interface RenderedArtifact {
+export interface RenderedPageApp {
  template: TemplateResult | typeof nothing;
  /** Parse/runtime errors for the program (unknown components, etc.). */
  errors: { code: string; message: string; component?: string; statementId?: string }[];
@@ -66,8 +66,8 @@ export interface RenderedArtifact {
  * `queryManager` tracks Query()/Mutation() results (subscribe for repaints);
  * `refetch` invalidates queries.
  */
-export interface WikiArtifactRuntime {
- render(source: string, persistedState: Record<string, unknown>): RenderedArtifact;
+export interface WikiPageAppRuntime {
+ render(source: string, persistedState: Record<string, unknown>): RenderedPageApp;
  store: Store;
  queryManager: QueryManager;
  /** Evaluate a raw AST node (a @Set step's valueAST) against the live store. */
@@ -76,10 +76,10 @@ export interface WikiArtifactRuntime {
 }
 
 /**
- * Merge a full artifact program with a patch program. Delegates to
+ * Merge a full page app program with a patch program. Delegates to
  * lang-core's `mergeStatements`.
  */
-export function mergeArtifactPatch(existing: string, patch: string, rootId?: string): string {
+export function mergePageAppPatch(existing: string, patch: string, rootId?: string): string {
  return mergeStatements(existing, patch, rootId);
 }
 
@@ -93,24 +93,24 @@ function isElementNode(value: unknown): value is ElementNode {
 }
 
 /**
- * Build an artifact renderer over the wiki library.
+ * Build a page app renderer over the wiki library.
  */
-export function generateWikiRenderer(
+export function generateWikiPageAppRenderer(
  toolProvider: ToolProvider | null,
- actionContext: ArtifactActionContext,
-): WikiArtifactRuntime {
+ actionContext: PageAppActionContext,
+): WikiPageAppRuntime {
  const parser = createParser(wikiLibrary.toJSONSchema(), WIKI_ROOT_COMPONENT);
  const queryManager = createQueryManager(toolProvider);
  const store = createStore();
 
  let lastParsedSource: string | null = null;
  let lastResult: ParseResult | null = null;
- let lastErrors: RenderedArtifact['errors'] = [];
+ let lastErrors: RenderedPageApp['errors'] = [];
  let lastDeclarations: Record<string, unknown> = {};
 
  // evaluate+render phase shared by render/repaint: no re-parse, no
  // re-fire of Query RPCs (evaluateQueries happens only in render()).
- const evaluateAndRender = (): RenderedArtifact => {
+ const evaluateAndRender = (): RenderedPageApp => {
   if (lastResult == null) {
    return { template: nothing, errors: [], stateDeclarations: {} };
   }
@@ -131,7 +131,7 @@ export function generateWikiRenderer(
   };
  };
 
- const render = (source: string, persistedState: Record<string, unknown>): RenderedArtifact => {
+ const render = (source: string, persistedState: Record<string, unknown>): RenderedPageApp => {
   if (source === lastParsedSource && lastResult != null) {
    // Same program: re-evaluate against current snapshots (no re-parse,
    // no Query refires). Hydration state updates still apply.
@@ -227,7 +227,7 @@ function hydrateQueriesAndMutations(
 
 /**
  * Render the evaluated root tree into a Lit template. Unknown components
- * (dropped by the parser; see `RenderedArtifact.errors`) render as nothing.
+ * (dropped by the parser; see `RenderedPageApp.errors`) render as nothing.
  */
 export function renderTree(node: unknown): unknown {
  if (node == null) return nothing;
@@ -254,5 +254,5 @@ export function renderNode(node: unknown): unknown {
  return renderTree(node);
 }
 
-export { isReactiveAssign, ARTIFACT_ACTION_EVENT };
+export { isReactiveAssign, PAGE_APP_ACTION_EVENT };
 export type { ToolNotFoundError };

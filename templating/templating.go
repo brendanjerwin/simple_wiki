@@ -796,10 +796,10 @@ func ExecuteTemplate(templateString string, fm wikipage.FrontMatter, site wikipa
 	ctx, cancel := context.WithTimeout(context.Background(), templateExecutionTimeout)
 	defer cancel()
 
-	// Artifact choke point: strip ```wiki-artifact fences before Go template
+	// Artifact choke point: strip ```wiki-page-app fences before Go template
 	// parsing/execution. The program never reaches the template engine and
-	// never renders as prose (removal semantics — see wikipage.SplitArtifactFences).
-	_, prose, _ := wikipage.SplitArtifactFences(templateString)
+	// never renders as prose (removal semantics — see wikipage.SplitPageAppFences).
+	_, prose, _ := wikipage.SplitPageAppFences(templateString)
 	templateString = prose
 
 	// Create a new visited map for this template execution to prevent circular references
@@ -929,10 +929,10 @@ var templatePositionRe = regexp.MustCompile(`^template:\s+[^:]+:(\d+)(?::(\d+))?
 //   - a "Did you mean …?" suggestion for common misspellings (e.g. wrong case)
 //   - the full list of available macros
 func ValidateTemplate(markdown string) error {
-	// Artifact choke point: strip ```wiki-artifact fences before Go template
-	// parsing. The program is data for the artifact runtime, never a Go
-	// template (removal semantics — see wikipage.SplitArtifactFences).
-	_, prose, _ := wikipage.SplitArtifactFences(markdown)
+	// Artifact choke point: strip ```wiki-page-app fences before Go template
+	// parsing. The program is data for the page app runtime, never a Go
+	// template (removal semantics — see wikipage.SplitPageAppFences).
+	_, prose, _ := wikipage.SplitPageAppFences(markdown)
 	markdown = prose
 
 	_, err := template.New("page").Funcs(validationFuncMap()).Parse(markdown)

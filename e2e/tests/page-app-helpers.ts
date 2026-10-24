@@ -1,5 +1,5 @@
 /**
- * Shared helpers for the artifact e2e specs.
+ * Shared helpers for the page app e2e specs.
  */
 import { expect, type APIRequestContext } from '@playwright/test';
 
@@ -35,7 +35,7 @@ export function connectCode(payload: unknown): string | undefined {
  return err?.code;
 }
 
-/** A minimal valid wiki-artifact program. */
+/** A minimal valid wiki-page-app program. */
 export function counterProgram(version: string, expr: string): string {
  return [
   `$n = 0`,
@@ -63,7 +63,7 @@ export async function setupPage(
  expect(resetResp.status, `reset ${page}: ${resetResp.text}`).toBe(200);
 }
 
-/** Fetch the artifact program for a page; 404 when it has none. */
-export async function getArtifact(request: APIRequestContext, page: string) {
- return callAPI(request, 'ArtifactService', 'GetArtifact', { page });
+/** Fetch the page app program for a page; 404 when it has none. */
+export async function getPageApp(request: APIRequestContext, page: string) {
+ return callAPI(request, 'PageAppService', 'GetPageApp', { page });
 }

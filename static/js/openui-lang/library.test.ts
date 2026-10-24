@@ -130,7 +130,7 @@ describe('wiki library prompt', () => {
  it('should derive its tools from a pinned allowlist', () => {
   expect(WIKI_TOOLS.length).to.equal(11);
   expect(WIKI_TOOLS).to.include('api_v1_PageManagementService_ReadPageOutline');
-  expect(WIKI_TOOLS).to.include('api_v1_ArtifactStateService_MergeArtifactState');
+  expect(WIKI_TOOLS).to.include('api_v1_PageAppStateService_MergePageAppState');
  });
 });
 

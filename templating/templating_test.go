@@ -2112,9 +2112,9 @@ var _ = Describe("BuildGoogleMapsEmbed", func() {
 
 var _ = Describe(" templating artifact-fence choke points", func() {
 	// Lang programs may contain {{ }} — both choke points must strip the
-	// ```wiki-artifact fence BEFORE template parsing/execution, and the
+	// ```wiki-page-app fence BEFORE template parsing/execution, and the
 	// program must never appear in rendered output (removal, not bypass).
-	const artifactFence = "```wiki-artifact\n@Card {\n  Text [\"{{ .Identifier }}\"]\n}\n```"
+	const artifactFence = "```wiki-page-app\n@Card {\n  Text [\"{{ .Identifier }}\"]\n}\n```"
 
 	Describe("when ValidateTemplate sees a page with an artifact fence", func() {
 		It("should accept a fence whose program contains Go-template-breaking syntax", func() {
@@ -2123,7 +2123,7 @@ var _ = Describe(" templating artifact-fence choke points", func() {
 		})
 
 		It("should still reject template errors in the prose remainder", func() {
-			md := "```wiki-artifact\n@Card {}\n```\n\n{{ UnknownMacro }}\n"
+			md := "```wiki-page-app\n@Card {}\n```\n\n{{ UnknownMacro }}\n"
 			err := templating.ValidateTemplate(md)
 			Expect(err).NotTo(BeNil())
 			Expect(err.Error()).To(ContainSubstring("UnknownMacro"))
@@ -2152,7 +2152,7 @@ var _ = Describe(" templating artifact-fence choke points", func() {
 			Expect(outStr).To(ContainSubstring("Before test_page."))
 			Expect(outStr).To(ContainSubstring("After."))
 			// Removal, not bypass: the program never renders as prose.
-			Expect(outStr).NotTo(ContainSubstring("wiki-artifact"))
+			Expect(outStr).NotTo(ContainSubstring("wiki-page-app"))
 			Expect(outStr).NotTo(ContainSubstring("@Card"))
 		})
 

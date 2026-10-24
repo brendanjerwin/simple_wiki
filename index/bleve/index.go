@@ -124,7 +124,7 @@ func (b *Index) AddPageToIndex(requestedIdentifier wikipage.PageIdentifier) erro
 	pageFrontmatter["content"] = content
 	// Hashtags come from the prose remainder (fence removed) — program
 	// bytes never contribute tags (criterion 11: index == rendered prose).
-	_, proseMD, _ := wikipage.SplitArtifactFences(string(markdown))
+	_, proseMD, _ := wikipage.SplitPageAppFences(string(markdown))
 	pageFrontmatter[tagsField] = hashtags.Extract(proseMD)
 	// Overwrite the identifier field with the canonical munged form so that
 	// pages whose stored frontmatter lacks an explicit identifier key are

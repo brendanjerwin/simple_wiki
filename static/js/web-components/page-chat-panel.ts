@@ -655,7 +655,7 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
                 <button
                   class="suggestion-chip"
                   @click=${this._handleMakeAppSuggestion}
-                  title="Asks the agent to convert this page into an artifact app (it will create a new page for the app and link to it, leaving this page's content alone)"
+                  title="Asks the agent to convert this page into an page app (it will create a new page for the app and link to it, leaving this page's content alone)"
                 >
                   Make an app out of this page
                 </button>
@@ -761,10 +761,10 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
 
  /**
   * "Make an app out of this page" — pre-fills the input with an
-  * unambiguous artifact-app ask: the app is FOR this page's content and
+  * unambiguous page app-app ask: the app is FOR this page's content and
   * should render attached above the existing prose (composition keeps
   * the content; nothing is deleted). The chatPreamble +
-  * help-artifacts-lang teach the placement rules for less specific asks
+  * help-page apps-lang teach the placement rules for less specific asks
   * ("make me a pomodoro" → new page + link).
   */
  private _handleMakeAppSuggestion() {

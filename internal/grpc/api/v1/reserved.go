@@ -23,7 +23,7 @@ var reservedNamespaceMessages = map[string]string{
 	"agent":   "the 'agent' top-level frontmatter namespace is reserved; use the appropriate dedicated service (see ADR-0009)",
 	"maps":    "the 'maps' top-level frontmatter namespace is reserved; use MapService instead of generic Frontmatter writes",
 	"surveys": "the 'surveys' top-level frontmatter namespace is reserved; use SurveyService instead of generic Frontmatter writes",
-	"wiki":    "the 'wiki' top-level frontmatter namespace is reserved; use the dedicated service for the subtree you targeted — ArtifactService (wiki.artifact* program stamps), ArtifactStateService (wiki.artifact_state), ChecklistService (wiki.checklists), MapService (wiki.maps), SurveyService (wiki.surveys), or the profile/agent services (see ADR-0009 and ADR-0010)",
+	"wiki":    "the 'wiki' top-level frontmatter namespace is reserved; use the dedicated service for the subtree you targeted — PageAppService (wiki.page_app* program stamps), PageAppStateService (wiki.page_app_state), ChecklistService (wiki.checklists), MapService (wiki.maps), SurveyService (wiki.surveys), or the profile/agent services (see ADR-0009 and ADR-0010)",
 }
 
 func init() {

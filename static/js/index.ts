@@ -2,7 +2,7 @@
 import './web-components/wiki-search.js';
 import './web-components/wiki-hashtag.js';
 import './web-components/system-info.js';
-import './web-components/wiki-artifact-host.js';
+import './web-components/wiki-page-app-host.js';
 import './web-components/frontmatter-editor-dialog.js';
 import './web-components/agent-details-dialog.js';
 import './web-components/confirmation-dialog.js';
@@ -60,11 +60,11 @@ const editFrontmatterEl = document.getElementById('editFrontmatter');
 editFrontmatterEl?.addEventListener('click', (e) => {
   // Artifact pages: the dialog's load path strips reserved wiki.* subtrees
   // (it cannot show wiki.artifact metadata) and its save (ReplaceFrontmatter,
-  // no version hash) races the artifact services — so it is disabled on
-  // artifact pages (issue #1272).
-  if (simple_wiki?.hasArtifact) {
+  // no version hash) races the page app services — so it is disabled on
+  // page app pages (issue #1272).
+  if (simple_wiki?.hasPageApp) {
     e.preventDefault();
-    editFrontmatterEl.setAttribute('title', 'Frontmatter editing is disabled on artifact pages: wiki.artifact metadata is service-managed');
+    editFrontmatterEl.setAttribute('title', 'Frontmatter editing is disabled on page app pages: wiki.artifact metadata is service-managed');
     return;
   }
   e.preventDefault();

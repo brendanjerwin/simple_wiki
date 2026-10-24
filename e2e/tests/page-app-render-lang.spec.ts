@@ -1,35 +1,35 @@
 /**
- * E2E workflow tests for artifact page rendering (issue #1272).
+ * E2E workflow tests for page app page rendering (issue #1272).
  *
- * A page containing a ```wiki-artifact fence renders a Lang-program UI via
- * <wiki-artifact-host>; the prose around the fence stays as markdown. The
+ * A page containing a ```wiki-page-app fence renders a Lang-program UI via
+ * <wiki-page-app-host>; the prose around the fence stays as markdown. The
  * host hot-swaps programs via WatchArtifact without a page reload.
  */
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
-import { callAPI, counterProgram, getArtifact, setupPage } from './artifact-helpers';
+import { callAPI, counterProgram, getPageApp, setupPage } from './page-app-helpers';
 
-const TEST_PAGE = 'e2e_artifact_render';
+const TEST_PAGE = 'e2e_page app_render';
 
 const PAGE_LOAD_TIMEOUT_MS = 15000;
 
 const PROSE = `## Intro prose
 
-This paragraph is plain markdown prose that must survive artifact rendering.
+This paragraph is plain markdown prose that must survive page app rendering.
 `;
 
 function pageBody(program: string): string {
- return `${PROSE}\n\`\`\`wiki-artifact\n${program}\n\`\`\`\n`;
+ return `${PROSE}\n\`\`\`wiki-page-app\n${program}\n\`\`\`\n`;
 }
 
-/** The wiki-artifact-host renders its app card; waits for load. */
+/** The wiki-page-app-host renders its app card; waits for load. */
 async function expectHostRendering(page: Page, version: string) {
- const host = page.locator('wiki-artifact-host');
+ const host = page.locator('wiki-page-app-host');
  await expect(host).toHaveCount(1, { timeout: PAGE_LOAD_TIMEOUT_MS });
  await expect(
-  host.locator('.wiki-artifact-card-title', { hasText: version }),
+  host.locator('.wiki-page-app-card-title', { hasText: version }),
  ).toBeVisible({ timeout: PAGE_LOAD_TIMEOUT_MS });
  await expect(
-  host.locator('button.wiki-artifact-button', { hasText: 'inc' }),
+  host.locator('button.wiki-page-app-button', { hasText: 'inc' }),
  ).toBeVisible();
 }
 
@@ -44,17 +44,17 @@ test.describe.serial('Artifact page render', () => {
  });
 
  test.afterAll(async ({ request }) => {
-  await callAPI(request, 'ArtifactService', 'ClearArtifact', { page: TEST_PAGE });
+  await callAPI(request, 'PageAppService', 'ClearPageApp', { page: TEST_PAGE });
   await callAPI(request, 'PageManagementService', 'DeletePage', { page: TEST_PAGE });
  });
 
- test.describe('when a page contains a wiki-artifact fence', () => {
-  test('renders the artifact app and surrounding prose on <page>/view', async ({ page }) => {
+ test.describe('when a page contains a wiki-page-app fence', () => {
+  test('renders the page app and surrounding prose on <page>/view', async ({ page }) => {
    await page.goto(`/${TEST_PAGE}/view`);
 
    await expectHostRendering(page, 'Counter');
 
-   // Prose survives outside the artifact.
+   // Prose survives outside the page app.
    await expect(page.getByText('This paragraph is plain markdown prose')).toBeVisible();
 
    // The program source must NOT leak into the rendered prose section.
@@ -90,7 +90,7 @@ test.describe.serial('Artifact page render', () => {
     .poll(
      async () =>
       page.evaluate(() => {
-       const el = document.querySelector('wiki-artifact-host');
+       const el = document.querySelector('wiki-page-app-host');
        if (!el || !el.shadowRoot) return null;
        return el.shadowRoot.textContent?.includes('Counter v2') === true
         ? 'swapped'
@@ -102,7 +102,7 @@ test.describe.serial('Artifact page render', () => {
 
    // Same node still present, never detached/recreated.
    const sameNode = await page.evaluate(() => {
-    const el = document.querySelector('wiki-artifact-host');
+    const el = document.querySelector('wiki-page-app-host');
     return el instanceof HTMLElement && el.isConnected;
    });
    expect(sameNode).toBe(true);
@@ -110,7 +110,7 @@ test.describe.serial('Artifact page render', () => {
  });
 
  test.describe('when a page-content write omits the root statement', () => {
-  test('rejects the write and preserves the original artifact', async ({ request }) => {
+  test('rejects the write and preserves the original page app', async ({ request }) => {
    const badBody = pageBody('$n = 0\nCard("no root")');
    const resp = await callAPI(request, 'PageManagementService', 'UpdatePageContent', {
     page: TEST_PAGE,
@@ -119,24 +119,24 @@ test.describe.serial('Artifact page render', () => {
    expect(resp.status).toBeGreaterThanOrEqual(400);
    expect(resp.text, 'rejected write must mention root').toContain('root');
 
-   const artifact = await getArtifact(request, TEST_PAGE);
-   expect(artifact.status).toBe(200);
-   expect(artifactText(artifact.json)).toContain('root = Card("Counter"');
+   const page app = await getPageApp(request, TEST_PAGE);
+   expect(page app.status).toBe(200);
+   expect(page appText(page app.json)).toContain('root = Card("Counter"');
   });
  });
 
  test.describe('when the page carries a fence but no prose', () => {
-  test('SetArtifact with confirm renders the app alone', async ({ request, page }) => {
-   // The designed path for app-alone conversion: SetArtifact with
+  test('SetPageApp with confirm renders the app alone', async ({ request, page }) => {
+   // The designed path for app-alone conversion: SetPageApp with
    // confirm_replace_content=true (the edit path correctly REJECTS a
    // prose-clear — no confirm field exists there; the probe is pinned in
-   // artifact_test.go).
-   const clearResp = await callAPI(request, 'ArtifactService', 'ClearArtifact', {
+   // page app_test.go).
+   const clearResp = await callAPI(request, 'PageAppService', 'ClearPageApp', {
     page: TEST_PAGE,
    });
    expect(clearResp.status).toBe(200);
 
-   const setResp = await callAPI(request, 'ArtifactService', 'SetArtifact', {
+   const setResp = await callAPI(request, 'PageAppService', 'SetPageApp', {
     page: TEST_PAGE,
     source: counterProgram('Lone Counter', '$n'),
     confirm_replace_content: true,
@@ -149,7 +149,7 @@ test.describe.serial('Artifact page render', () => {
    });
    expect(readResp.status).toBe(200);
    const content = (readResp.json as { contentMarkdown?: string } | null)?.contentMarkdown ?? '';
-   expect(content).toContain('```wiki-artifact');
+   expect(content).toContain('```wiki-page-app');
    expect(content).not.toContain('Intro prose');
 
    await page.goto(`/${TEST_PAGE}/view`);
@@ -161,8 +161,8 @@ test.describe.serial('Artifact page render', () => {
  });
 });
 
-/** Read `source` from a GetArtifact response payload. */
-function artifactText(payload: unknown): string {
+/** Read `source` from a GetPageApp response payload. */
+function page appText(payload: unknown): string {
  if (typeof payload === 'object' && payload !== null && 'source' in payload) {
   const value = (payload as Record<string, unknown>).source;
   return typeof value === 'string' ? value : '';

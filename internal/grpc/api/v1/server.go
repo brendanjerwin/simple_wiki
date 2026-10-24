@@ -116,8 +116,8 @@ type Server struct {
 	apiv1.UnimplementedSurveyServiceServer
 	apiv1.UnimplementedConnectorServiceServer
 	apiv1.UnimplementedPageHistoryServiceServer
-	apiv1.UnimplementedArtifactServiceServer
-	apiv1.UnimplementedArtifactStateServiceServer
+	apiv1.UnimplementedPageAppServiceServer
+	apiv1.UnimplementedPageAppStateServiceServer
 	commit                  string
 	buildTime               time.Time
 	pageReaderMutator       wikipage.PageReaderMutator
@@ -137,8 +137,8 @@ type Server struct {
 	checklistMutator        *checklistmutator.Mutator
 	mapMutator              *mapmutator.Mutator
 	surveyMutator           *surveymutator.Mutator
-	artifactMutator         *artifactMutator
-	artifactMutatorOnce     sync.Once
+	pageAppMutator         *pageAppMutator
+	pageAppMutatorOnce     sync.Once
 
 	// Connector runtimes contain the polymorphic engine-path wiring
 	// used by ConnectorService. Per-kind auth collaborators remain
@@ -261,11 +261,11 @@ func (s *Server) WithSurveyMutator(m *surveymutator.Mutator) *Server {
 }
 
 // WithArtifactMutator wires the artifact mutation funnel into the server.
-// Required for ArtifactService and ArtifactStateService handlers to
+// Required for PageAppService and PageAppStateService handlers to
 // function. When unset but pageReaderMutator is present, the artifact
 // handlers construct a default funnel over the page store.
-func (s *Server) WithArtifactMutator(a *artifactMutator) *Server {
-	s.artifactMutator = a
+func (s *Server) WithArtifactMutator(a *pageAppMutator) *Server {
+	s.pageAppMutator = a
 	return s
 }
 
@@ -378,8 +378,8 @@ func (s *Server) RegisterWithServer(grpcServer *grpc.Server) {
 	apiv1.RegisterSurveyServiceServer(grpcServer, s)
 	apiv1.RegisterConnectorServiceServer(grpcServer, s)
 	apiv1.RegisterPageHistoryServiceServer(grpcServer, s)
-	apiv1.RegisterArtifactServiceServer(grpcServer, s)
-	apiv1.RegisterArtifactStateServiceServer(grpcServer, s)
+	apiv1.RegisterPageAppServiceServer(grpcServer, s)
+	apiv1.RegisterPageAppStateServiceServer(grpcServer, s)
 }
 
 // LoggingInterceptor returns a gRPC unary interceptor for logging method calls.

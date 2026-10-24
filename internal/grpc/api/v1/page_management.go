@@ -34,13 +34,13 @@ const trashEntryNotFoundErrFmt = "trash entry not found: %s"
 // Nil or empty frontmatter contributes zero bytes, so pages with no frontmatter
 // yield the same hash as before (hash of markdown only).
 //
-// The wiki.artifact_state subtree is EXCLUDED (every caller, uniformly —
+// The wiki.page_app_state subtree is EXCLUDED (every caller, uniformly —
 // watch hashes and OCC handles must agree or a state flush invalidates the
 // next human edit's OCC write): artifact state writes flow through
-// ArtifactStateService with their own namespace-scoped
+// PageAppStateService with their own namespace-scoped
 // state_expected_version_hash, and their presence in the page hash would
 // make every state flush abort an unrelated page write and remount the
-// composed view (issue #1272). The wiki.artifact subtree STAYS in the hash.
+// composed view (issue #1272). The wiki.page_app subtree STAYS in the hash.
 func computePageHash(frontmatter wikipage.FrontMatter, markdown wikipage.Markdown) string {
 	h := sha256.New()
 	if len(frontmatter) > 0 {
@@ -248,7 +248,7 @@ func (s *Server) sendPageUpdateIfChanged(stream apiv1.PageManagementService_Watc
 }
 
 // readPageHashAndModTime reads a page's whole-page hash (frontmatter + markdown) and file modification time.
-// The hash uniformly excludes the wiki.artifact_state subtree (see
+// The hash uniformly excludes the wiki.page_app_state subtree (see
 // computePageHash) so artifact state flushes never remount #rendered.
 func (s *Server) readPageHashAndModTime(pageID wikipage.PageIdentifier) (string, time.Time, error) {
 	page, err := s.pageOpener.ReadPage(pageID)
@@ -270,13 +270,13 @@ func (s *Server) readPageHashAndModTime(pageID wikipage.PageIdentifier) (string,
 }
 
 // fmWithoutArtifactState returns a shallow copy of fm without the
-// wiki.artifact_state subtree (present → copy; absent → fm unchanged).
+// wiki.page_app_state subtree (present → copy; absent → fm unchanged).
 func fmWithoutArtifactState(fm wikipage.FrontMatter) wikipage.FrontMatter {
 	wiki, ok := fm["wiki"].(map[string]any)
 	if !ok {
 		return fm
 	}
-	if _, hasState := wiki["artifact_state"]; !hasState {
+	if _, hasState := wiki["page_app_state"]; !hasState {
 		return fm
 	}
 	cp := make(wikipage.FrontMatter, len(fm))
@@ -285,7 +285,7 @@ func fmWithoutArtifactState(fm wikipage.FrontMatter) wikipage.FrontMatter {
 	}
 	wikiCp := make(map[string]any, len(wiki))
 	for k, v := range wiki {
-		if k == "artifact_state" {
+		if k == "page_app_state" {
 			continue
 		}
 		wikiCp[k] = v
@@ -700,11 +700,11 @@ func (s *Server) CreatePage(ctx context.Context, req *apiv1.CreatePageRequest) (
 		}, nil
 	}
 
-	// Artifact funnel (criterion 6): a page created with a wiki-artifact
+	// Artifact funnel (criterion 6): a page created with a wiki-page-app
 	// fence validates before the write lands. There is no prior body, so
 	// this is pure validation (no prose to guard).
 	fmAny := wikipage.FrontMatter(fm)
-	if err := validateChangedArtifactFence(fmAny, "", string(markdown)); err != nil {
+	if err := validateChangedPageAppFence(fmAny, "", string(markdown)); err != nil {
 		return &apiv1.CreatePageResponse{
 			Success: false,
 			Error:   err.Error(),
@@ -755,9 +755,9 @@ func (s *Server) UpdatePageContent(ctx context.Context, req *apiv1.UpdatePageCon
 	//
 	// When the write changes the page's artifact fence, the atomic modifier
 	// handles it (validation + placement guard + version restamp), so the
-	// wiki.artifact frontmatter stays in sync with the body.
+	// wiki.page_app frontmatter stays in sync with the body.
 	var capturedFM wikipage.FrontMatter
-	funnelFM, modifyErr := s.modifyMarkdownWithArtifactFunnelCtx(
+	funnelFM, modifyErr := s.modifyMarkdownWithPageAppFunnelCtx(
 		ctx,
 		wikipage.PageIdentifier(req.Page),
 		func(currentFM wikipage.FrontMatter, currentMarkdown wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error) {
@@ -933,10 +933,10 @@ func (s *Server) validateUpdateWholePagePrequest(ctx context.Context, req *apiv1
 		return nil, "", status.Errorf(codes.InvalidArgument, invalidTemplateErrFmt, err)
 	}
 
-	// Artifact funnel (criterion 6): a changed wiki-artifact fence in the
+	// Artifact funnel (criterion 6): a changed wiki-page-app fence in the
 	// new content validates before the write lands.
 	if _, currentMD, readErr := s.pageReaderMutator.ReadMarkdown(wikipage.PageIdentifier(req.Page)); readErr == nil {
-		if err := validateChangedArtifactFence(fm, currentMD, req.NewWholeMarkdown); err != nil {
+		if err := validateChangedPageAppFence(fm, currentMD, req.NewWholeMarkdown); err != nil {
 			return nil, "", err
 		}
 	}
@@ -973,7 +973,7 @@ func (s *Server) UpdateWholePage(ctx context.Context, req *apiv1.UpdateWholePage
 		return nil, preErr
 	}
 
-	funnelFM, modifyErr := s.modifyMarkdownWithArtifactFunnelCtx(
+	funnelFM, modifyErr := s.modifyMarkdownWithPageAppFunnelCtx(
 		ctx,
 		wikipage.PageIdentifier(req.Page),
 		func(currentFM wikipage.FrontMatter, currentMarkdown wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error) {
@@ -983,7 +983,7 @@ func (s *Server) UpdateWholePage(ctx context.Context, req *apiv1.UpdateWholePage
 				return nil, "", err
 			}
 			// The client's fm replaces user keys wholesale, but reserved
-			// wiki.* subtrees the client didn't send (artifact_state,
+			// wiki.* subtrees the client didn't send (page_app_state,
 			// checklists, …) must survive a whole-page save (ADR-0010's
 			// preserve rule). preserveReservedSubtrees copies reserved keys
 			// from currentFM into fm in place.

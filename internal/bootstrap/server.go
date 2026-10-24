@@ -492,8 +492,8 @@ func BuildVanguardTranscoder(grpcServer *grpc.Server, ginRouter http.Handler) (h
 	// Single source of truth for service names to avoid drift between Vanguard and reflection.
 	serviceNames := []string{
 		"api.v1.AgentMetadataService",
-		"api.v1.ArtifactService",
-		"api.v1.ArtifactStateService",
+		"api.v1.PageAppService",
+		"api.v1.PageAppStateService",
 		"api.v1.ChatService",
 		"api.v1.ChecklistService",
 		"api.v1.ConnectorService",

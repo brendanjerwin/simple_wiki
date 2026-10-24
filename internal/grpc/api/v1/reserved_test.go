@@ -146,9 +146,9 @@ var _ = Describe("reserved namespace registry", func() {
 			// Pinned per issue #1272 criterion 8: the sharpened message must
 			// name the dedicated services for artifact-prefixed paths so a
 			// redirected caller knows exactly where to go.
-			It("should name ArtifactService and ArtifactStateService", func() {
-				Expect(err.Error()).To(ContainSubstring("ArtifactService"))
-				Expect(err.Error()).To(ContainSubstring("ArtifactStateService"))
+			It("should name PageAppService and PageAppStateService", func() {
+				Expect(err.Error()).To(ContainSubstring("PageAppService"))
+				Expect(err.Error()).To(ContainSubstring("PageAppStateService"))
 			})
 
 			It("should name the other wiki.* subtree services", func() {

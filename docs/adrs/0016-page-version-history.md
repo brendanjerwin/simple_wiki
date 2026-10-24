@@ -5,9 +5,9 @@
 Accepted
 
 > **Artifact pages (issue #1272, ADR-0017):** artifact programs live in a
-> ` ```wiki-artifact ` fence in the page body, so program and prose writes both
+> ` ```wiki-page-app ` fence in the page body, so program and prose writes both
 > snapshot through this machinery — one history, no separate artifact history
-> RPCs. Note: the page OCC hash excludes the `wiki.artifact_state` subtree, but
+> RPCs. Note: the page OCC hash excludes the `wiki.page_app_state` subtree, but
 > history capture still snapshots any state flush alongside program writes;
 > restore/diff/decimation apply to the fence identically to prose.
 

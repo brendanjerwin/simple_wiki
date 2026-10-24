@@ -1,19 +1,19 @@
 /**
- * E2E workflow tests for the artifact validation funnel (issue #1272).
+ * E2E workflow tests for the page app validation funnel (issue #1272).
  *
- * Both write doors (SetArtifact and UpdatePageContent-with-fence) must reject
+ * Both write doors (SetPageApp and UpdatePageContent-with-fence) must reject
  * programs lacking a root statement, and rejected writes must leave the
- * page's original artifact intact.
+ * page's original page app intact.
  */
 import { expect, test, type APIRequestContext } from '@playwright/test';
-import { callAPI, counterProgram, getArtifact, setupPage } from './artifact-helpers';
+import { callAPI, counterProgram, getPageApp, setupPage } from './page-app-helpers';
 
-const TEST_PAGE = 'e2e_artifact_validation';
+const TEST_PAGE = 'e2e_page app_validation';
 
 const GOOD_PROGRAM = counterProgram('Counter', '$n');
 
 function pageBody(program: string): string {
- return `Prose.\n\n\`\`\`wiki-artifact\n${program}\n\`\`\`\n`;
+ return `Prose.\n\n\`\`\`wiki-page-app\n${program}\n\`\`\`\n`;
 }
 
 test.describe.serial('Artifact validation funnel', () => {
@@ -25,13 +25,13 @@ test.describe.serial('Artifact validation funnel', () => {
  });
 
  test.afterAll(async ({ request }) => {
-  await callAPI(request, 'ArtifactService', 'ClearArtifact', { page: TEST_PAGE });
+  await callAPI(request, 'PageAppService', 'ClearPageApp', { page: TEST_PAGE });
   await callAPI(request, 'PageManagementService', 'DeletePage', { page: TEST_PAGE });
  });
 
- test.describe('when SetArtifact is called with a rootless program', () => {
+ test.describe('when SetPageApp is called with a rootless program', () => {
   test('the RPC is rejected mentioning root', async ({ request }) => {
-   const resp = await callAPI(request, 'ArtifactService', 'SetArtifact', {
+   const resp = await callAPI(request, 'PageAppService', 'SetPageApp', {
     page: TEST_PAGE,
     source: 'no root statement here',
    });
@@ -54,16 +54,16 @@ test.describe.serial('Artifact validation funnel', () => {
  });
 
  test.describe('after the rejected writes', () => {
-  test('the original artifact is unchanged', async ({ request }) => {
-   const artifact = await getArtifact(request, TEST_PAGE);
-   expect(artifact.status).toBe(200);
-   expect(artifactSource(artifact.json)).toContain('root = Card("Counter"');
+  test('the original page app is unchanged', async ({ request }) => {
+   const page app = await getPageApp(request, TEST_PAGE);
+   expect(page app.status).toBe(200);
+   expect(page appSource(page app.json)).toContain('root = Card("Counter"');
   });
  });
 });
 
-/** Read `source` from a GetArtifact response payload. */
-function artifactSource(payload: unknown): string {
+/** Read `source` from a GetPageApp response payload. */
+function page appSource(payload: unknown): string {
  if (typeof payload === 'object' && payload !== null && 'source' in payload) {
   const value = (payload as Record<string, unknown>).source;
   return typeof value === 'string' ? value : '';

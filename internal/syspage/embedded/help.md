@@ -63,7 +63,7 @@ See [[help-hashtags]] and [[help-search]] for the full grammar.
 - [[help-macro-checklist]] — Checklist macro for interactive task lists
 - [[help-macro-map]] — First-class wiki maps backed by MapService
 - [[help-macro-survey]] — Survey macro for collecting per-user responses
-- [[help-artifacts-lang]] — Agent-authored interactive apps (OpenUI Lang) composed above page content, with persistent state
+- [[help-page-apps]] — Agent-authored OpenUI Lang page apps, composed above page content, with persistent state
 - [[help-mcp]] — MCP tool surface catalog: services, transports, and what is not exposed
 - [[help-page-history]] — Version history for every page: list, read, restore, diff, and search past versions
 - [[help-page-import]] — Bulk-import wiki pages from CSV

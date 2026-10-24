@@ -8,18 +8,18 @@ import {
  type Parser,
 } from '@openuidev/lang-core';
 import {
- generateWikiRenderer,
+ generateWikiPageAppRenderer,
  renderNode,
- mergeArtifactPatch,
+ mergePageAppPatch,
  type ToolCaller,
 } from './renderer.js';
 import {
  wikiLibrary,
  WIKI_ROOT_COMPONENT,
- type ArtifactActionContext,
+ type PageAppActionContext,
 } from './library.js';
 
-describe('generateWikiRenderer', () => {
+describe('generateWikiPageAppRenderer', () => {
  let toolCalls: Array<[string, Record<string, unknown>]>;
  let callTool: ToolCaller;
 
@@ -31,7 +31,7 @@ describe('generateWikiRenderer', () => {
   };
  });
 
- const noopActions: ArtifactActionContext = {
+ const noopActions: PageAppActionContext = {
   setState() { },
   toAssistant() { },
   openUrl() { },
@@ -39,7 +39,7 @@ describe('generateWikiRenderer', () => {
  };
 
  it('should render a static program into DOM', async () => {
-  const runtime = generateWikiRenderer({ callTool }, noopActions);
+  const runtime = generateWikiPageAppRenderer({ callTool }, noopActions);
   const rendered = runtime.render('root = Card("Hello", [t])\nt = Text("world")', {});
   expect(rendered.errors).to.deep.equal([]);
   const el = await fixture<HTMLElement>(rendered.template as never);
@@ -48,7 +48,7 @@ describe('generateWikiRenderer', () => {
  });
 
  it('should hydrate persisted $variable state over declared defaults', async () => {
-  const runtime = generateWikiRenderer({ callTool }, noopActions);
+  const runtime = generateWikiPageAppRenderer({ callTool }, noopActions);
   const rendered = runtime.render(
    'root = Card("x", [t])\nt = Text("n = " + $completed)\n$completed = 0',
    { $completed: 9 },
@@ -58,7 +58,7 @@ describe('generateWikiRenderer', () => {
  });
 
  it('should run Query() calls through the tool provider', async () => {
-  const runtime = generateWikiRenderer({ callTool: callTool }, noopActions);
+  const runtime = generateWikiPageAppRenderer({ callTool: callTool }, noopActions);
   const rendered = runtime.render(
    'root = Card("x", [t])\n$rows = Query("ListItems", { page: "p" }, "pending")\nt = Text("rows: " + $rows)',
    {},
@@ -70,7 +70,7 @@ describe('generateWikiRenderer', () => {
  });
 
  it('should report unknown components as render errors, not throws', async () => {
-  const runtime = generateWikiRenderer({ callTool }, noopActions);
+  const runtime = generateWikiPageAppRenderer({ callTool }, noopActions);
   const rendered = runtime.render('root = Card("x", [w])\nw = Widget("y")', {});
   const codes = rendered.errors.map((err) => err.code);
   expect(codes).to.include('unknown-component');
@@ -78,22 +78,22 @@ describe('generateWikiRenderer', () => {
 });
 
 describe('renderer component output', () => {
- const noopActions: ArtifactActionContext = {
+ const noopActions: PageAppActionContext = {
   setState() { },
   toAssistant() { },
   openUrl() { },
   rerun() { },
  };
- let runtime: ReturnType<typeof generateWikiRenderer>;
+ let runtime: ReturnType<typeof generateWikiPageAppRenderer>;
 
  beforeEach(() => {
-  runtime = generateWikiRenderer(null, noopActions);
+  runtime = generateWikiPageAppRenderer(null, noopActions);
  });
 
  it('should render Button programs into an actual <button>', async () => {
   const rendered = runtime.render('root = Card("T", [b])\nb = Button("Ask", @ToAssistant("tell me more"))', {});
   const el = await fixture<HTMLElement>(rendered.template as never);
-  const button = el.querySelector('button.wiki-artifact-button');
+  const button = el.querySelector('button.wiki-page-app-button');
   expect(button).to.exist;
   expect(button?.textContent).to.equal('Ask');
  });
@@ -125,8 +125,8 @@ describe('renderer component output', () => {
    {},
   );
   const el = await fixture<HTMLElement>(rendered.template as never);
-  expect(el.querySelector('input.wiki-artifact-input')).to.exist;
-  expect(el.querySelector('select.wiki-artifact-select')).to.exist;
+  expect(el.querySelector('input.wiki-page-app-input')).to.exist;
+  expect(el.querySelector('select.wiki-page-app-select')).to.exist;
  });
 
  it('should render Table and Chart programs', async () => {
@@ -135,15 +135,15 @@ describe('renderer component output', () => {
    {},
   );
   const el = await fixture<HTMLElement>(rendered.template as never);
-  expect(el.querySelector('table.wiki-artifact-table')).to.exist;
-  expect(el.querySelector('figure.wiki-artifact-chart')).to.exist;
+  expect(el.querySelector('table.wiki-page-app-table')).to.exist;
+  expect(el.querySelector('figure.wiki-page-app-chart')).to.exist;
  });
 });
 
 describe('live store flush loop', () => {
  it('should expose the live store so a @Set followed by re-render from the snapshot increments', async () => {
   const sets: Record<string, unknown>[] = [];
-  const runtime = generateWikiRenderer(null, {
+  const runtime = generateWikiPageAppRenderer(null, {
    setState: (snapshot) => sets.push({ ...snapshot }),
    toAssistant() { },
    openUrl() { },
@@ -178,9 +178,9 @@ describe('renderNode', () => {
  });
 });
 
-describe('mergeArtifactPatch', () => {
+describe('mergePageAppPatch', () => {
  it('should keep unpatched statements and apply the patch', () => {
-  const merged = mergeArtifactPatch(
+  const merged = mergePageAppPatch(
    'root = Card([h, t2])\nh = Text("keep")\nt2 = Text("old")',
    'root = Card([h, t3])\nt3 = Text("new")',
   );

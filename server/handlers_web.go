@@ -608,8 +608,8 @@ func (s *Site) renderPageContent(c *gin.Context, page, command string, p *wikipa
 	// Composition (Addendum 22): the fence lives in the page body; the
 	// rendered contentHTML is the prose remainder (the template choke
 	// points stripped the fence). The host element is prepended in the
-	// template when HasArtifact is set — app above prose, never XOR.
-	_, _, hasArtifact := wikipage.SplitArtifactFences(rawText)
+	// template when HasPageApp is set — app above prose, never XOR.
+	_, _, hasPageApp := wikipage.SplitPageAppFences(rawText)
 	contentHTML = fmt.Appendf(nil, "<article class='content' id='%s'>%s</article>", page, string(contentHTML))
 
 	if s.handleRawContent(c, command, p, rawText) {
@@ -628,7 +628,7 @@ func (s *Site) renderPageContent(c *gin.Context, page, command string, p *wikipa
 		return
 	}
 
-	templateData := s.buildTemplateData(page, command, directoryListing, contentHTML, rawText, c, hasArtifact)
+	templateData := s.buildTemplateData(page, command, directoryListing, contentHTML, rawText, c, hasPageApp)
 	c.HTML(http.StatusOK, indexTemplateName, templateData)
 }
 
@@ -659,7 +659,7 @@ func (s *Site) getDirectoryEntries(page, command string) (DirectoryListing, stri
 	return listing, command, nil
 }
 
-func (s *Site) buildTemplateData(page, command string, listing DirectoryListing, contentHTML []byte, rawText string, c *gin.Context, hasArtifact bool) gin.H {
+func (s *Site) buildTemplateData(page, command string, listing DirectoryListing, contentHTML []byte, rawText string, c *gin.Context, hasPageApp bool) gin.H {
 	identity := tailscale.IdentityFromContext(c.Request.Context())
 	return gin.H{
 		"EditPage": command[0:2] == "/e", // /edit
@@ -689,7 +689,7 @@ func (s *Site) buildTemplateData(page, command string, listing DirectoryListing,
 		"WikiBaseURL":      requestBaseURL(c),
 		"Username":         identity.LoginName(),
 		"IsSystemPage":     s.isSystemPage(page),
-		"HasArtifact":      hasArtifact,
+		"HasPageApp":      hasPageApp,
 	}
 }
 
