@@ -132,6 +132,32 @@ var _ = Describe("reserved namespace registry", func() {
 			})
 		})
 
+		When("called with the registered 'wiki' key", func() {
+			var err error
+
+			BeforeEach(func() {
+				err = reservedNamespaceError("wiki")
+			})
+
+			It("should return InvalidArgument", func() {
+				Expect(status.Code(err)).To(Equal(codes.InvalidArgument))
+			})
+
+			// Pinned per issue #1272 criterion 8: the sharpened message must
+			// name the dedicated services for artifact-prefixed paths so a
+			// redirected caller knows exactly where to go.
+			It("should name PageAppService and PageAppStateService", func() {
+				Expect(err.Error()).To(ContainSubstring("PageAppService"))
+				Expect(err.Error()).To(ContainSubstring("PageAppStateService"))
+			})
+
+			It("should name the other wiki.* subtree services", func() {
+				Expect(err.Error()).To(ContainSubstring("ChecklistService"))
+				Expect(err.Error()).To(ContainSubstring("MapService"))
+				Expect(err.Error()).To(ContainSubstring("SurveyService"))
+			})
+		})
+
 		When("called with an unregistered key", func() {
 			var err error
 

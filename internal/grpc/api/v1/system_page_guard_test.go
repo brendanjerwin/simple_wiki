@@ -35,13 +35,12 @@ var _ = Describe("system page guard", func() {
 		}
 		server = mustNewServer(mock, nil, nil)
 	})
-
 	Describe("UpdatePageContent on a system page", func() {
 		var err error
 
 		BeforeEach(func() {
 			_, err = server.UpdatePageContent(ctx, &apiv1.UpdatePageContentRequest{
-				Page:           "help",
+				Page:               "help",
 				NewContentMarkdown: "# Hijack",
 			})
 		})
@@ -60,7 +59,7 @@ var _ = Describe("system page guard", func() {
 
 		BeforeEach(func() {
 			_, err = server.UpdateWholePage(ctx, &apiv1.UpdateWholePageRequest{
-				Page:         "help",
+				Page:             "help",
 				NewWholeMarkdown: "+++\ntitle = \"Hijack\"\n+++\nbody",
 			})
 		})
@@ -75,7 +74,7 @@ var _ = Describe("system page guard", func() {
 
 		BeforeEach(func() {
 			_, err = server.ClearPageContent(ctx, &apiv1.ClearPageContentRequest{
-				Page:     "help",
+				Page:         "help",
 				ConfirmClear: true,
 			})
 		})

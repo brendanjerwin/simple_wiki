@@ -19,8 +19,9 @@ done
 
 PROJECT_ROOT="$(pwd)"
 
-# Navigate to the frontend directory
-export CHROMIUM_BIN=$(which chromium)
+# Respect a caller-provided browser binary; fall back to chromium on PATH.
+CHROMIUM_BIN="${CHROMIUM_BIN:-$(which chromium)}"
+export CHROMIUM_BIN
 cd static/js || exit 1
 
 echo "Installing dependencies..." | tee -a "$LOG_FILE"

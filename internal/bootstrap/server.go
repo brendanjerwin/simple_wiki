@@ -98,7 +98,7 @@ type PlainHTTPOptions struct {
 // TailscaleHTTPConfig holds the shared configuration for Tailscale-aware HTTP
 // setup functions (SetupTailscaleServe and SetupFullTLS).
 type TailscaleHTTPConfig struct {
-	HTTPAddr string
+	HTTPAddr  string
 	TSDNSName string
 	// ForceRedirectToHTTPS redirects tailnet clients from HTTP to HTTPS.
 	// Used by SetupTailscaleServe; ignored by SetupFullTLS.
@@ -492,6 +492,8 @@ func BuildVanguardTranscoder(grpcServer *grpc.Server, ginRouter http.Handler) (h
 	// Single source of truth for service names to avoid drift between Vanguard and reflection.
 	serviceNames := []string{
 		"api.v1.AgentMetadataService",
+		"api.v1.PageAppService",
+		"api.v1.PageAppStateService",
 		"api.v1.ChatService",
 		"api.v1.ChecklistService",
 		"api.v1.ConnectorService",
@@ -657,11 +659,11 @@ func (a *historySearcherAdapter) SearchPageHistory(identifier wikipage.PageIdent
 
 func (a *historySearcherAdapter) SearchHistory(filter grpcapi.HistorySearchFilter) ([]grpcapi.HistorySearchResult, error) {
 	results, err := a.index.SearchHistory(historyindex.HistorySearchFilter{
-		Query:          filter.Query,
-		PageFilter: filter.PageFilter,
-		AuthorFilter:   filter.AuthorFilter,
-		From:           filter.From,
-		To:             filter.To,
+		Query:        filter.Query,
+		PageFilter:   filter.PageFilter,
+		AuthorFilter: filter.AuthorFilter,
+		From:         filter.From,
+		To:           filter.To,
 	})
 	if err != nil {
 		return nil, err

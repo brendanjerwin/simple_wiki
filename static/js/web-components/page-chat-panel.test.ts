@@ -2807,3 +2807,46 @@ describe('PageChatPanel pollChatStatus and sendMessage', () => {
     });
   });
 });
+
+// "Make an app out of this page" suggestion chip (issue #1272 criterion 7's UI
+// nudge): clicking the chip sends an unambiguous artifact-app ask — naming THIS
+// page — through the same send path the textarea uses.
+describe('PageChatPanel make-app suggestion chip', () => {
+  let el: PageChatPanel;
+
+  beforeEach(async () => {
+    el = await fixture(html`<page-chat-panel page="test-page" persona="TestPersona"></page-chat-panel>`);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- replacing private chatClient for testing
+    (el as any).chatClient = {
+      sendMessage: stub().resolves(),
+      getChatStatus: stub().resolves({ connected: true }),
+      subscribeChat: async function*() { /* empty */ },
+    };
+    await el.updateComplete;
+  });
+
+  describe('when the chip is clicked', () => {
+    beforeEach(async () => {
+      const chip = el.shadowRoot!.querySelector('.suggestion-chip') as HTMLElement;
+      chip.click();
+      await el.updateComplete;
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    });
+
+    it('should render the clarified label', () => {
+      const chip = el.shadowRoot!.querySelector('.suggestion-chip') as HTMLElement;
+      expect(chip.textContent!.trim()).to.equal('Make an app out of this page');
+    });
+
+    it('should send the attached-app ask naming this page via the normal send path', () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- reading private chatClient for assertion
+      const client = (el as any).chatClient;
+      expect(client.sendMessage.callCount).to.equal(1);
+      const request = client.sendMessage.firstCall.args[0];
+      expect(request.page).to.equal('test-page');
+      expect(request.content).to.contain('Make an app for this page');
+      expect(request.content).to.contain('test-page');
+      expect(request.content).to.contain('attach');
+    });
+  });
+});

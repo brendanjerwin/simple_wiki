@@ -56,6 +56,8 @@ var _ = Describe("BuildVanguardTranscoder service coverage", func() {
 		// be added here AND to v1.Server.RegisterWithServer; the parity
 		// test below catches that drift.
 		apiv1.RegisterAgentMetadataServiceServer(grpcServer, apiv1.UnimplementedAgentMetadataServiceServer{})
+		apiv1.RegisterPageAppServiceServer(grpcServer, apiv1.UnimplementedPageAppServiceServer{})
+		apiv1.RegisterPageAppStateServiceServer(grpcServer, apiv1.UnimplementedPageAppStateServiceServer{})
 		apiv1.RegisterChatServiceServer(grpcServer, apiv1.UnimplementedChatServiceServer{})
 		apiv1.RegisterChecklistServiceServer(grpcServer, apiv1.UnimplementedChecklistServiceServer{})
 		apiv1.RegisterConnectorServiceServer(grpcServer, apiv1.UnimplementedConnectorServiceServer{})

@@ -41,6 +41,7 @@
                 lastFetch: {{ .UnixTime }},
                 pageName: "{{ .Page }}",
                 username: "{{ .Username }}",
+                hasPageApp: {{ .HasPageApp }},
             }
         </script>
     </head>
@@ -118,10 +119,16 @@
                     {{ end }}
 
                     {{ if .ViewPage }}
+                        {{ if .HasPageApp }}
+                            <wiki-page-app-host page="{{ .Page }}"></wiki-page-app-host>
+                        {{ end }}
                         {{ .RenderedPage }}
                     {{ end }}
 
                     {{ if .ReadPage }}
+                        {{ if .HasPageApp }}
+                            <wiki-page-app-host page="{{ .Page }}"></wiki-page-app-host>
+                        {{ end }}
                         {{ .RenderedPage }}
                     {{ end }}
 

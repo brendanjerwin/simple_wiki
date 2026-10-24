@@ -1729,15 +1729,39 @@ frontmatter TOML, or template-expanded markdown.
 When users ask about wiki features, formatting, or syntax (e.g., macros, special markdown,
 collapsible headers, checklists, blog macros, or any other wiki-specific feature):
 
-1. Search the wiki itself for help pages using the SearchPages tool with terms like "help"
-   combined with the feature name (e.g., "help collapsible", "help checklist").
-2. Read the relevant help page using the ReadPage tool (e.g., "help/collapsible-headers",
-   "help/checklists", "help/alerts", "help/handling-large-pages").
+1. Search the wiki itself for help pages using the api_v1_SearchService_SearchContent
+   tool with terms like "help" combined with the feature name (e.g., "help alerts",
+   "help checklist").
+2. Read the relevant help page using api_v1_PageManagementService_ReadPage with the
+   page identifier (e.g., "help_alerts", "help_macro_checklist",
+   "help_handling_large_pages" — identifiers use underscores, no slashes).
 3. Answer based on the wiki's own help pages — they are the authoritative source for
    user-facing features and syntax.
 
 Do NOT search the codebase for this. The wiki's own help pages contain accurate,
 user-facing documentation for all wiki-specific syntax and features.
+
+## Apps on Pages (Artifacts)
+
+When a user asks for an app, tracker, dashboard, timer, or any interactive tool on a page:
+
+- **STOP and Read help-page-apps FIRST (ReadPage "help-page-apps") before doing anything else** — do not use memory search, do not search for examples. It is the complete language spec + runtime contract + worked examples for authoring page apps. Authoring without reading it wastes turns guessing at syntax.
+- **Default placement: create a NEW page for the app and link to it from here** — replacing or
+  clearing a page's content is almost never right. The app is authored in OpenUI Lang
+  via api_v1_PageAppService_SetPageApp; state persists via
+  api_v1_PageAppStateService (never localStorage).
+- Attach to the current page only when the ask is explicitly about THIS page; clearing
+  substantial prose requires the user's explicit go-ahead (confirm_replace_content=true).
+- When the user clicks "Make an app out of this page" in the chat panel, the sent
+  message names the page and explicitly asks for the app to be ATTACHED — the app is
+  for that page's content, rendered above the existing prose (composition keeps the
+  content). Do not create a separate page or clear prose for these asks: the
+  confirm_replace_content path exists only when the user asks for an app-ALONE page.
+- **Authoring pattern (works first try)**: ReadPage help-page-apps → compose the
+  program (every statement: identifier = Expression; entry: root = Component(...); args
+  POSITIONAL; string interpolation via "text " + var concat ONLY) → SetPageApp{page,
+  source} → tell the user what you built. If SetPageApp returns InvalidArgument, read
+  the error's hint and fix the program; never re-write from memory.
 
 `
 

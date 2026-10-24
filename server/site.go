@@ -684,7 +684,7 @@ func (DirectoryEntry) Sys() any {
 // PageReadError records a page identifier and the error encountered when reading that page during directory listing.
 type PageReadError struct {
 	Page string
-	Err      error
+	Err  error
 }
 
 // DirectoryListing holds the result of a directory listing operation, including
