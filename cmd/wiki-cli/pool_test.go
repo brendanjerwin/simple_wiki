@@ -4286,6 +4286,90 @@ var _ = Describe("bridgeMessages non-user message path", func() {
 	})
 })
 
+// fakeInventoryConnectHandler adapts fakeAgentInventoryClient into a Connect
+// handler for bridgeMessages drift tests: only GetPageAgent matters there.
+type fakeInventoryConnectHandler struct {
+	apiv1connect.UnimplementedAgentInventoryServiceHandler
+	client *fakeAgentInventoryClient
+}
+
+func (h *fakeInventoryConnectHandler) GetPageAgent(ctx context.Context, r *connect.Request[apiv1.GetPageAgentRequest]) (*connect.Response[apiv1.GetPageAgentResponse], error) {
+	return h.client.GetPageAgent(ctx, r)
+}
+
+var _ = Describe("bridgeMessages binding drift path", func() {
+	When("the desired agent no longer matches the attached agent (mid-session switch)", func() {
+		var (
+			result   error
+			inventor *fakeAgentInventoryClient
+			replier  *mockChatReplier
+		)
+
+		BeforeEach(func() {
+			handler := &chatMessageStreamer{
+				messages: []*apiv1.ChatMessage{
+					{
+						Id:         "msg-1",
+						Sender:     apiv1.Sender_USER,
+						Content:    "hello",
+						SenderName: "alice",
+					},
+				},
+			}
+			// Inventory resolves a DIFFERENT agent than the one attached.
+			inventor = &fakeAgentInventoryClient{
+				pageAgentRes: &apiv1.GetPageAgentResponse{
+					Agent: &apiv1.AgentInfo{
+						Id:          "new-agent",
+						DisplayName: "New Agent",
+						Protocol:    apiv1.AgentProtocol_ACP_LOCAL,
+					},
+				},
+			}
+			mux := http.NewServeMux()
+			chatPath, chatH := apiv1connect.NewChatServiceHandler(handler)
+			mux.Handle(chatPath, chatH)
+			invHandler := &fakeInventoryConnectHandler{client: inventor}
+			invPath, invH := apiv1connect.NewAgentInventoryServiceHandler(invHandler)
+			mux.Handle(invPath, invH)
+			httpSrv := httptest.NewServer(mux)
+			DeferCleanup(httpSrv.Close)
+
+			httpClient := &http.Client{}
+			wikiClient := apiv1connect.NewChatServiceClient(httpClient, httpSrv.URL)
+
+			replier = &mockChatReplier{}
+			entry := &instanceEntry{
+				page:           "test-page",
+				agentID:        defaultPoolAgentID,
+				state:          StateIdle,
+				lastActive:     time.Now(),
+				stateChangedAt: time.Now(),
+				cancel:         func() {},
+			}
+			chatClient := &wikiChatClient{
+				page:       "test-page",
+				chatClient: replier,
+			}
+
+			daemon := &poolDaemon{
+				inventoryClient:  inventor,
+				attachmentClient: &fakeAgentAttachmentClient{},
+				instances:        map[string]*instanceEntry{"test-page": entry},
+			}
+			result = daemon.bridgeMessages(context.Background(), entry, wikiClient, chatClient)
+		})
+
+		It("should return cleanly after requesting the stop", func() {
+			Expect(result).NotTo(HaveOccurred())
+		})
+
+		It("should NOT forward the drifted message to the old agent", func() {
+			Expect(replier.sendReplyCalled).To(BeFalse())
+		})
+	})
+})
+
 var _ = Describe("subscribeCancellations error path", func() {
 	When("SubscribePageCancellations returns an error", func() {
 		var cancelChan <-chan struct{}

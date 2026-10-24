@@ -10,6 +10,7 @@ import (
 	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
 	"github.com/brendanjerwin/simple_wiki/internal/grpc/api/v1"
 	"github.com/brendanjerwin/simple_wiki/pkg/chatbuffer"
+	wikiserver "github.com/brendanjerwin/simple_wiki/server"
 	"github.com/brendanjerwin/simple_wiki/tailscale"
 	"github.com/jcelliott/lumber"
 	. "github.com/onsi/ginkgo/v2"
@@ -3027,6 +3028,220 @@ var _ = Describe("SubscribeInstanceRequests inventory hook", func() {
 
 		It("should mark pool agents unavailable in the inventory", func() {
 			Expect(inv.disconnected).To(BeTrue())
+		})
+	})
+})
+
+var _ = Describe("GetChatMessages", func() {
+	var testCtx context.Context
+
+	When("the page has messages including synthetic agent_changed records", func() {
+		var (
+			testSrv *v1.Server
+			resp    *apiv1.GetChatMessagesResponse
+			err     error
+		)
+
+		BeforeEach(func() {
+			testCtx = context.Background()
+			mgr := chatbuffer.NewManager()
+			DeferCleanup(mgr.Close)
+			testSrv, err = v1.NewServer(
+				v1.BuildInfo{Commit: "test-commit", BuildTime: time.Now()},
+				noOpPageReaderMutator{},
+				noOpBleveIndexQueryer{},
+				noOpFrontmatterIndexQueryer{},
+				lumber.NewConsoleLogger(lumber.WARN),
+				mgr,
+				noOpPageOpener{},
+			)
+			Expect(err).NotTo(HaveOccurred())
+			// oldest → newest: assistant, synthetic, assistant
+			_, _ = mgr.AddAssistantMessage("test-page", "hello", "", "local-acp", "Assistant")
+			mgr.NotifyAgentChanged("test-page", "new-agent", "New Agent", "alice")
+			_, _ = mgr.AddAssistantMessage("test-page", "hi", "", "local-acp", "Assistant")
+
+			resp, err = testSrv.GetChatMessages(testCtx, &apiv1.GetChatMessagesRequest{Page: "test-page"})
+		})
+
+		It("should not error", func() {
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should return only real messages, oldest first", func() {
+			Expect(resp.GetMessages()).To(HaveLen(2))
+			Expect(resp.GetMessages()[0].GetContent()).To(Equal("hello"))
+			Expect(resp.GetMessages()[1].GetContent()).To(Equal("hi"))
+		})
+	})
+
+	When("a limit is set", func() {
+		var resp *apiv1.GetChatMessagesResponse
+
+		BeforeEach(func() {
+			mgr := chatbuffer.NewManager()
+			DeferCleanup(mgr.Close)
+			testSrv2, errSrv := v1.NewServer(
+				v1.BuildInfo{Commit: "test-commit", BuildTime: time.Now()},
+				noOpPageReaderMutator{},
+				noOpBleveIndexQueryer{},
+				noOpFrontmatterIndexQueryer{},
+				lumber.NewConsoleLogger(lumber.WARN),
+				mgr,
+				noOpPageOpener{},
+			)
+			Expect(errSrv).NotTo(HaveOccurred())
+			for _, c := range []string{"one", "two", "three"} {
+				_, _ = mgr.AddAssistantMessage("test-page", c, "", "local-acp", "Assistant")
+			}
+			resp, _ = testSrv2.GetChatMessages(testCtx, &apiv1.GetChatMessagesRequest{Page: "test-page", Limit: 2})
+		})
+
+		It("should return only the newest messages within the limit", func() {
+			contents := []string{}
+			for _, m := range resp.GetMessages() {
+				contents = append(contents, m.GetContent())
+			}
+			Expect(contents).To(Equal([]string{"two", "three"}))
+		})
+	})
+
+	When("page is empty", func() {
+		It("should return InvalidArgument", func() {
+			emptyPageSrv, errSrv := v1.NewServer(
+				v1.BuildInfo{Commit: "c", BuildTime: time.Now()},
+				noOpPageReaderMutator{},
+				noOpBleveIndexQueryer{},
+				noOpFrontmatterIndexQueryer{},
+				lumber.NewConsoleLogger(lumber.WARN),
+				newMockChatBufferManager(),
+				noOpPageOpener{},
+			)
+			Expect(errSrv).NotTo(HaveOccurred())
+			_, err := emptyPageSrv.GetChatMessages(context.Background(), &apiv1.GetChatMessagesRequest{Page: ""})
+			st, ok := status.FromError(err)
+			Expect(ok).To(BeTrue())
+			Expect(st.Code()).To(Equal(codes.InvalidArgument))
+		})
+	})
+})
+
+var _ = Describe("AgentInventoryService pool-facing RPCs", func() {
+	Describe("RegisterPoolAgent", func() {
+		Describe("when the descriptor is valid", func() {
+			var (
+				regInv      *disconnectableInventory
+				regSrv      *v1.Server
+				registerErr error
+			)
+
+			BeforeEach(func() {
+				regInv = &disconnectableInventory{}
+				var err error
+				regSrv, err = v1.NewServer(
+					v1.BuildInfo{Commit: "c", BuildTime: time.Now()},
+					noOpPageReaderMutator{},
+					noOpBleveIndexQueryer{},
+					noOpFrontmatterIndexQueryer{},
+					lumber.NewConsoleLogger(lumber.WARN),
+					newMockChatBufferManager(),
+					noOpPageOpener{},
+				)
+				Expect(err).NotTo(HaveOccurred())
+				regSrv = regSrv.WithAgentInventory(regInv)
+				_, registerErr = regSrv.RegisterPoolAgent(context.Background(), &apiv1.RegisterPoolAgentRequest{
+					Id:       "local-acp",
+					Protocol: apiv1.AgentProtocol_ACP_LOCAL,
+				})
+			})
+
+			It("should not error", func() {
+				Expect(registerErr).NotTo(HaveOccurred())
+			})
+		})
+
+		Describe("when the inventory is not configured", func() {
+			It("should return FailedPrecondition", func() {
+				noInvSrv, errSrv := v1.NewServer(
+					v1.BuildInfo{Commit: "c", BuildTime: time.Now()},
+					noOpPageReaderMutator{},
+					noOpBleveIndexQueryer{},
+					noOpFrontmatterIndexQueryer{},
+					lumber.NewConsoleLogger(lumber.WARN),
+					newMockChatBufferManager(),
+					noOpPageOpener{},
+				)
+				Expect(errSrv).NotTo(HaveOccurred())
+				_, err := noInvSrv.RegisterPoolAgent(context.Background(), &apiv1.RegisterPoolAgentRequest{})
+				st, ok := status.FromError(err)
+				Expect(ok).To(BeTrue())
+				Expect(st.Code()).To(Equal(codes.FailedPrecondition))
+			})
+		})
+
+		Describe("when the registry rejects the descriptor", func() {
+			It("should return InvalidArgument", func() {
+				rejSrv, rejErr := v1.NewServer(
+					v1.BuildInfo{Commit: "c", BuildTime: time.Now()},
+					noOpPageReaderMutator{},
+					noOpBleveIndexQueryer{},
+					noOpFrontmatterIndexQueryer{},
+					lumber.NewConsoleLogger(lumber.WARN),
+					newMockChatBufferManager(),
+					noOpPageOpener{},
+				)
+				Expect(rejErr).NotTo(HaveOccurred())
+				rejSrv = rejSrv.WithAgentInventory(wikiserver.NewAgentRegistry())
+				_, err := rejSrv.RegisterPoolAgent(context.Background(), &apiv1.RegisterPoolAgentRequest{
+					Id:       "agui-x",
+					Protocol: apiv1.AgentProtocol_AG_UI_REMOTE,
+				})
+				st, ok := status.FromError(err)
+				Expect(ok).To(BeTrue())
+				Expect(st.Code()).To(Equal(codes.InvalidArgument))
+			})
+		})
+	})
+
+	Describe("NotifyAgentAttached", func() {
+		Describe("when the pool reports an attachment", func() {
+			It("should not error and record the effective agent", func() {
+				mgr := newMockChatBufferManager()
+				attachSrv, errSrv := v1.NewServer(
+					v1.BuildInfo{Commit: "test-commit", BuildTime: time.Now()},
+					noOpPageReaderMutator{},
+					noOpBleveIndexQueryer{},
+					noOpFrontmatterIndexQueryer{},
+					lumber.NewConsoleLogger(lumber.WARN),
+					mgr,
+					noOpPageOpener{},
+				)
+				Expect(errSrv).NotTo(HaveOccurred())
+				_, err := attachSrv.NotifyAgentAttached(context.Background(), &apiv1.NotifyAgentAttachedRequest{
+					Page:    "test-page",
+					AgentId: "local-acp",
+				})
+				Expect(err).NotTo(HaveOccurred())
+			})
+		})
+
+		Describe("when page is empty", func() {
+			It("should return InvalidArgument", func() {
+				emptySrv, errSrv := v1.NewServer(
+					v1.BuildInfo{Commit: "c", BuildTime: time.Now()},
+					noOpPageReaderMutator{},
+					noOpBleveIndexQueryer{},
+					noOpFrontmatterIndexQueryer{},
+					lumber.NewConsoleLogger(lumber.WARN),
+					newMockChatBufferManager(),
+					noOpPageOpener{},
+				)
+				Expect(errSrv).NotTo(HaveOccurred())
+				_, err := emptySrv.NotifyAgentAttached(context.Background(), &apiv1.NotifyAgentAttachedRequest{Page: ""})
+				st, ok := status.FromError(err)
+				Expect(ok).To(BeTrue())
+				Expect(st.Code()).To(Equal(codes.InvalidArgument))
+			})
 		})
 	})
 })
