@@ -6,6 +6,7 @@ import (
 
 	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
 	"github.com/brendanjerwin/simple_wiki/server"
+	"github.com/brendanjerwin/simple_wiki/wikipage"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -61,6 +62,9 @@ func (s *Server) ListAgents(_ context.Context, _ *apiv1.ListAgentsRequest) (*api
 }
 
 // GetPageAgent implements AgentInventoryService.GetPageAgent.
+// Read-side protection (who may read which pages) is enforced by middleware;
+// this RPC intentionally has no page guard so the chat panel can display the
+// agent binding on any page it can already view.
 func (s *Server) GetPageAgent(_ context.Context, req *apiv1.GetPageAgentRequest) (*apiv1.GetPageAgentResponse, error) {
 	if req.GetPage() == "" {
 		return nil, status.Error(codes.InvalidArgument, errPageRequired)
@@ -117,6 +121,12 @@ func (s *Server) SetPageAgent(ctx context.Context, req *apiv1.SetPageAgentReques
 	}
 	if req.GetAgentId() == "" {
 		return nil, status.Error(codes.InvalidArgument, "agent_id is required")
+	}
+	// Guard runs before the store-not-configured check so a request against a
+	// system page reports the actionable "system page" error instead of the
+	// internal-wiring error (same ordering as AgentMetadataService mutations).
+	if guardErr := requireUserMutable(s.pageReaderMutator, wikipage.PageIdentifier(req.GetPage())); guardErr != nil {
+		return nil, guardErr
 	}
 	if s.agentInventory == nil {
 		return nil, errAgentInventoryNotConfigured
