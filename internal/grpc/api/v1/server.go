@@ -118,6 +118,7 @@ type Server struct {
 	apiv1.UnimplementedPageHistoryServiceServer
 	apiv1.UnimplementedPageAppServiceServer
 	apiv1.UnimplementedPageAppStateServiceServer
+	apiv1.UnimplementedAgentInventoryServiceServer
 	commit                  string
 	buildTime               time.Time
 	pageReaderMutator       wikipage.PageReaderMutator
@@ -147,8 +148,10 @@ type Server struct {
 	keepAuthVerifier    googlekeep.AuthVerifier
 	tasksConnector      *connectorRuntime
 	tasksAuthURLBuilder TasksAuthURLBuilder
-	historyReader       PageHistoryReader
-	historySearcher     HistorySearcher
+	historyReader          PageHistoryReader
+	historySearcher        HistorySearcher
+	agentInventory         AgentInventory
+	agentPageBindingStore  AgentPageBindingStore
 }
 
 // NewServer creates a new gRPC server with the given dependencies.
@@ -236,6 +239,21 @@ func (s *Server) WithAgentScheduleStore(store AgentScheduleStore) *Server {
 // AppendBackgroundActivitySummary} to work.
 func (s *Server) WithAgentChatContextStore(store AgentChatContextStore) *Server {
 	s.agentChatContextStore = store
+	return s
+}
+
+// WithAgentInventory sets the agent inventory. Required for
+// AgentInventoryService.ListAgents and the default-agent resolution in
+// GetPageAgent/SetPageAgent.
+func (s *Server) WithAgentInventory(inv AgentInventory) *Server {
+	s.agentInventory = inv
+	return s
+}
+
+// WithAgentPageBindingStore sets the per-page agent binding store. Required for
+// AgentInventoryService.{GetPageAgent, SetPageAgent} to work.
+func (s *Server) WithAgentPageBindingStore(store AgentPageBindingStore) *Server {
+	s.agentPageBindingStore = store
 	return s
 }
 
@@ -380,6 +398,7 @@ func (s *Server) RegisterWithServer(grpcServer *grpc.Server) {
 	apiv1.RegisterPageHistoryServiceServer(grpcServer, s)
 	apiv1.RegisterPageAppServiceServer(grpcServer, s)
 	apiv1.RegisterPageAppStateServiceServer(grpcServer, s)
+	apiv1.RegisterAgentInventoryServiceServer(grpcServer, s)
 }
 
 // LoggingInterceptor returns a gRPC unary interceptor for logging method calls.

@@ -23,6 +23,7 @@ import { DrawerMixin } from './drawer-mixin.js';
 import { registerAmbientCTA, type AmbientCTA } from './drawer-coordinator.js';
 import type { ReactionGroup, ScrollToMessageEventDetail } from './chat-message-bubble.js';
 import './chat-message-bubble.js';
+import './agent-selector.js';
 
 const STORAGE_KEY = 'chat-panel-open';
 const MAX_INPUT_LENGTH = 2000;
@@ -621,7 +622,7 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
 
       <div id="chat-panel" class="panel force-dark ${this.drawerOpen ? 'open' : ''}" ?inert=${!this.drawerOpen}>
         <div class="panel-header">
-          <span class="panel-title">${this.persona}</span>
+          <agent-selector .page=${this.page}></agent-selector>
           <div class="panel-actions">
             <button
               class="clear-button"
