@@ -150,7 +150,7 @@ func (m *mockChatBufferManager) AddUserMessage(page, content, senderName string)
 	return messageID, nil
 }
 
-func (m *mockChatBufferManager) AddAssistantMessage(page, content, replyToID string) (string, error) {
+func (m *mockChatBufferManager) AddAssistantMessage(page, content, replyToID, agentID, agentDisplayName string) (string, error) {
 	if m.addAssistantError != nil {
 		return "", m.addAssistantError
 	}
@@ -167,6 +167,9 @@ func (m *mockChatBufferManager) AddAssistantMessage(page, content, replyToID str
 		SenderName: "Claude",
 		ReplyToID:  replyToID,
 		Reactions:  []chatbuffer.Reaction{},
+
+		AgentID:          agentID,
+		AgentDisplayName: agentDisplayName,
 	}
 
 	m.messages[page] = append(m.messages[page], msg)
@@ -184,6 +187,14 @@ func (m *mockChatBufferManager) AddAssistantMessage(page, content, replyToID str
 	}
 
 	return messageID, nil
+}
+
+func (*mockChatBufferManager) NotifyAgentChanged(_, _, _, _ string) {}
+
+func (*mockChatBufferManager) NotifyAgentAttached(_, _, _ string) {}
+
+func (*mockChatBufferManager) EffectiveAgent(string) (agentID string, displayName string) {
+	return "", ""
 }
 
 func (m *mockChatBufferManager) EditMessage(messageID, newContent string, _ bool) error {

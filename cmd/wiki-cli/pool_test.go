@@ -2867,9 +2867,7 @@ var _ = Describe("handleThought (mock-based)", func() {
 
 var _ = Describe("handleToolCall (mock-based)", func() {
 	When("a current message exists", func() {
-		var (
-			mock *mockChatReplier
-		)
+		var mock *mockChatReplier
 
 		BeforeEach(func() {
 			mock = &mockChatReplier{}
@@ -3451,9 +3449,7 @@ var _ = Describe("forwardUserMessage (mock-based)", func() {
 	})
 
 	When("page context is available for the first message", func() {
-		var (
-			mockAgent *mockACPAgent
-		)
+		var mockAgent *mockACPAgent
 
 		BeforeEach(func() {
 			mockAgent = &mockACPAgent{}
@@ -3497,11 +3493,11 @@ var _ = Describe("forwardUserMessage (mock-based)", func() {
 
 var _ = Describe("interface compliance", func() {
 	It("should satisfy chatReplier with the connect ChatServiceClient", func() {
-		var _ chatReplier = (apiv1connect.ChatServiceClient)(nil)
+		var _ chatReplier = apiv1connect.ChatServiceClient(nil)
 	})
 
 	It("should satisfy pageMessageSource with the connect ChatServiceClient", func() {
-		var _ pageMessageSource = (apiv1connect.ChatServiceClient)(nil)
+		var _ pageMessageSource = apiv1connect.ChatServiceClient(nil)
 	})
 
 	It("should satisfy acpAgent with *acp.ClientSideConnection", func() {
@@ -5033,5 +5029,442 @@ var _ = Describe("isAgentErrorStop", func() {
 		It("should return true for unknown stop reasons", func() {
 			Expect(isAgentErrorStop("unknown_future_reason")).To(BeTrue())
 		})
+	})
+})
+
+// fakeAgentInventoryClient is a fake agentInventoryClient recording calls.
+type fakeAgentInventoryClient struct {
+	registerReq  *apiv1.RegisterPoolAgentRequest
+	registerErr  error
+	pageAgentRes *apiv1.GetPageAgentResponse
+	pageAgentErr error
+
+	pageAgentCalls []string
+}
+
+func (f *fakeAgentInventoryClient) RegisterPoolAgent(_ context.Context, req *connect.Request[apiv1.RegisterPoolAgentRequest]) (*connect.Response[apiv1.RegisterPoolAgentResponse], error) {
+	f.registerReq = req.Msg
+	if f.registerErr != nil {
+		return nil, f.registerErr
+	}
+	return connect.NewResponse(&apiv1.RegisterPoolAgentResponse{}), nil
+}
+
+func (f *fakeAgentInventoryClient) GetPageAgent(_ context.Context, req *connect.Request[apiv1.GetPageAgentRequest]) (*connect.Response[apiv1.GetPageAgentResponse], error) {
+	f.pageAgentCalls = append(f.pageAgentCalls, req.Msg.Page)
+	if f.pageAgentErr != nil {
+		return nil, f.pageAgentErr
+	}
+	resp := f.pageAgentRes
+	if resp == nil {
+		resp = &apiv1.GetPageAgentResponse{}
+	}
+	return connect.NewResponse(resp), nil
+}
+
+// fakeAgentAttachmentClient is a fake agentAttachmentClient recording calls.
+type fakeAgentAttachmentClient struct {
+	notifyReqs   []*apiv1.NotifyAgentAttachedRequest
+	notifyErr    error
+	messagesRes  *apiv1.GetChatMessagesResponse
+	messagesErr  error
+	messagesReqs []*apiv1.GetChatMessagesRequest
+}
+
+func (f *fakeAgentAttachmentClient) NotifyAgentAttached(_ context.Context, req *connect.Request[apiv1.NotifyAgentAttachedRequest]) (*connect.Response[apiv1.NotifyAgentAttachedResponse], error) {
+	f.notifyReqs = append(f.notifyReqs, req.Msg)
+	if f.notifyErr != nil {
+		return nil, f.notifyErr
+	}
+	return connect.NewResponse(&apiv1.NotifyAgentAttachedResponse{}), nil
+}
+
+func (f *fakeAgentAttachmentClient) GetChatMessages(_ context.Context, req *connect.Request[apiv1.GetChatMessagesRequest]) (*connect.Response[apiv1.GetChatMessagesResponse], error) {
+	f.messagesReqs = append(f.messagesReqs, req.Msg)
+	if f.messagesErr != nil {
+		return nil, f.messagesErr
+	}
+	resp := f.messagesRes
+	if resp == nil {
+		resp = &apiv1.GetChatMessagesResponse{}
+	}
+	return connect.NewResponse(resp), nil
+}
+
+var _ = Describe("registerPoolAgent", func() {
+	Describe("when the inventory accepts the descriptor", func() {
+		var (
+			inventory *fakeAgentInventoryClient
+			daemon    *poolDaemon
+		)
+
+		BeforeEach(func() {
+			inventory = &fakeAgentInventoryClient{}
+			daemon = &poolDaemon{
+				inventoryClient:      inventory,
+				poolAgentID:          defaultPoolAgentID,
+				poolAgentDisplayName: "Test Assistant",
+				poolAgentRoute:       "wiki-agent",
+				poolInstanceID:       "instance-1",
+			}
+			daemon.registerPoolAgent(context.Background())
+		})
+
+		It("should send ACP_LOCAL descriptor with id, display name, route, and instance id", func() {
+			Expect(inventory.registerReq).NotTo(BeNil())
+			Expect(inventory.registerReq.GetId()).To(Equal(defaultPoolAgentID))
+			Expect(inventory.registerReq.GetDisplayName()).To(Equal("Test Assistant"))
+			Expect(inventory.registerReq.GetProtocol()).To(Equal(apiv1.AgentProtocol_ACP_LOCAL))
+			Expect(inventory.registerReq.GetRoute()).To(Equal("wiki-agent"))
+			Expect(inventory.registerReq.GetPoolInstanceId()).To(Equal("instance-1"))
+		})
+
+		It("should include a non-empty description", func() {
+			Expect(inventory.registerReq.GetDescription()).NotTo(BeEmpty())
+		})
+	})
+
+	Describe("when the inventory client errors", func() {
+		var inventory *fakeAgentInventoryClient
+
+		BeforeEach(func() {
+			inventory = &fakeAgentInventoryClient{registerErr: errors.New("server down")}
+			daemon := &poolDaemon{
+				inventoryClient:      inventory,
+				poolAgentID:          defaultPoolAgentID,
+				poolAgentDisplayName: "Test Assistant",
+			}
+			// Best-effort: must not panic or propagate.
+			daemon.registerPoolAgent(context.Background())
+		})
+
+		It("should still be best-effort (no panic and calls recorded)", func() {
+			Expect(inventory.registerReq).NotTo(BeNil())
+		})
+	})
+})
+
+var _ = Describe("resolvePageAgent", func() {
+	Describe("when the page is unbound (server returns the default agent)", func() {
+		var (
+			daemon   *poolDaemon
+			inventor *fakeAgentInventoryClient
+			agentID  string
+			name     string
+			err      error
+		)
+
+		BeforeEach(func() {
+			inventor = &fakeAgentInventoryClient{
+				pageAgentRes: &apiv1.GetPageAgentResponse{
+					Agent: &apiv1.AgentInfo{
+						Id:          defaultPoolAgentID,
+						DisplayName: "Assistant",
+						Protocol:    apiv1.AgentProtocol_ACP_LOCAL,
+					},
+					ExplicitlySet: false,
+				},
+			}
+			daemon = &poolDaemon{inventoryClient: inventor, poolAgentID: defaultPoolAgentID, poolAgentDisplayName: "Assistant"}
+			agentID, name, err = daemon.resolvePageAgent(context.Background(), "test-page")
+		})
+
+		It("should resolve to the default pool agent id", func() {
+			Expect(err).NotTo(HaveOccurred())
+			Expect(agentID).To(Equal(defaultPoolAgentID))
+			Expect(name).To(Equal("Assistant"))
+		})
+
+		It("should query the correct page", func() {
+			Expect(inventor.pageAgentCalls).To(Equal([]string{"test-page"}))
+		})
+	})
+
+	Describe("when the page is bound to another ACP_LOCAL pool agent", func() {
+		var agentID string
+
+		BeforeEach(func() {
+			daemon := &poolDaemon{
+				inventoryClient: &fakeAgentInventoryClient{
+					pageAgentRes: &apiv1.GetPageAgentResponse{
+						Agent: &apiv1.AgentInfo{
+							Id:          "helper-agent",
+							DisplayName: "Helper",
+							Protocol:    apiv1.AgentProtocol_ACP_LOCAL,
+						},
+						ExplicitlySet: true,
+					},
+				},
+				poolAgentID: defaultPoolAgentID,
+			}
+			agentID, _, _ = daemon.resolvePageAgent(context.Background(), "test-page")
+		})
+
+		It("should resolve to the bound agent id", func() {
+			Expect(agentID).To(Equal("helper-agent"))
+		})
+	})
+
+	Describe("when the page is bound to an AG_UI_REMOTE agent", func() {
+		var err error
+
+		BeforeEach(func() {
+			daemon := &poolDaemon{
+				inventoryClient: &fakeAgentInventoryClient{
+					pageAgentRes: &apiv1.GetPageAgentResponse{
+						Agent: &apiv1.AgentInfo{
+							Id:          "remote-ui-agent",
+							DisplayName: "Remote",
+							Protocol:    apiv1.AgentProtocol_AG_UI_REMOTE,
+						},
+						ExplicitlySet: true,
+					},
+				},
+				poolAgentID: defaultPoolAgentID,
+			}
+			_, _, err = daemon.resolvePageAgent(context.Background(), "test-page")
+		})
+
+		It("should return an error (no silent fallback to local ACP)", func() {
+			Expect(err).To(MatchError(ContainSubstring("cannot route")))
+		})
+	})
+
+	Describe("when the bound agent id is unknown (orphaned binding)", func() {
+		var err error
+
+		BeforeEach(func() {
+			daemon := &poolDaemon{
+				inventoryClient: &fakeAgentInventoryClient{
+					pageAgentRes: &apiv1.GetPageAgentResponse{
+						Agent: &apiv1.AgentInfo{
+							Id:          "vanished-agent",
+							DisplayName: "Gone",
+						},
+						ExplicitlySet: true,
+					},
+				},
+				poolAgentID: defaultPoolAgentID,
+			}
+			_, _, err = daemon.resolvePageAgent(context.Background(), "test-page")
+		})
+
+		It("should return an error rather than falling back", func() {
+			Expect(err).To(MatchError(ContainSubstring("cannot route")))
+		})
+	})
+
+	Describe("when the inventory RPC fails", func() {
+		var agentID string
+
+		BeforeEach(func() {
+			daemon := &poolDaemon{
+				inventoryClient:      &fakeAgentInventoryClient{pageAgentErr: errors.New("connect refused")},
+				poolAgentID:          defaultPoolAgentID,
+				poolAgentDisplayName: "Assistant",
+			}
+			agentID, _, _ = daemon.resolvePageAgent(context.Background(), "test-page")
+		})
+
+		It("should degrade to the default pool agent id", func() {
+			Expect(agentID).To(Equal(defaultPoolAgentID))
+		})
+	})
+})
+
+var _ = Describe("reportAttached and detach", func() {
+	Describe("when the pool attaches an agent", func() {
+		var attachment *fakeAgentAttachmentClient
+
+		BeforeEach(func() {
+			attachment = &fakeAgentAttachmentClient{}
+			daemon := &poolDaemon{attachmentClient: attachment}
+			daemon.reportAttached(context.Background(), "test-page", "local-acp", "Assistant")
+		})
+
+		It("should notify the server with the agent id and display name", func() {
+			Expect(attachment.notifyReqs).To(HaveLen(1))
+			Expect(attachment.notifyReqs[0].GetPage()).To(Equal("test-page"))
+			Expect(attachment.notifyReqs[0].GetAgentId()).To(Equal("local-acp"))
+			Expect(attachment.notifyReqs[0].GetAgentDisplayName()).To(Equal("Assistant"))
+		})
+
+		It("should record the attached agent for hand-off decisions", func() {
+			Expect(attachment.notifyReqs).NotTo(BeEmpty())
+		})
+	})
+
+	Describe("when the pool detaches (empty agent id)", func() {
+		var attachment *fakeAgentAttachmentClient
+
+		BeforeEach(func() {
+			attachment = &fakeAgentAttachmentClient{}
+			daemon := &poolDaemon{attachmentClient: attachment}
+			daemon.reportAttached(context.Background(), "test-page", "local-acp", "Assistant")
+			daemon.reportAttached(context.Background(), "test-page", "", "")
+		})
+
+		It("should send the empty attach notification last", func() {
+			Expect(attachment.notifyReqs).To(HaveLen(2))
+			Expect(attachment.notifyReqs[1].GetAgentId()).To(Equal(""))
+		})
+	})
+})
+
+var _ = Describe("fetchTranscriptHandoff", func() {
+	Describe("when the page transcript has user and assistant messages", func() {
+		var transcript string
+
+		BeforeEach(func() {
+			daemon := &poolDaemon{
+				attachmentClient: &fakeAgentAttachmentClient{
+					messagesRes: &apiv1.GetChatMessagesResponse{
+						Messages: []*apiv1.ChatMessage{
+							{Sender: apiv1.Sender_USER, SenderName: "Brendan", Content: "First question"},
+							{Sender: apiv1.Sender_ASSISTANT, AgentId: "old-agent", AgentDisplayName: "Old Agent", Content: "First answer"},
+						},
+					},
+				},
+			}
+			transcript = daemon.fetchTranscriptHandoff(context.Background(), "test-page")
+		})
+
+		It("should render compact sender: content lines oldest first", func() {
+			Expect(transcript).To(ContainSubstring("Brendan: First question"))
+			Expect(transcript).To(ContainSubstring("Old Agent: First answer"))
+			Expect(strings.Index(transcript, "Brendan: First question")).To(BeNumerically("<", strings.Index(transcript, "Old Agent: First answer")))
+		})
+
+		It("should request a bounded page of messages", func() {
+			Expect(strings.Count(transcript, "\n")).To(BeNumerically(">=", 1))
+		})
+	})
+
+	Describe("when the transcript is empty", func() {
+		var transcript string
+
+		BeforeEach(func() {
+			daemon := &poolDaemon{
+				attachmentClient: &fakeAgentAttachmentClient{
+					messagesRes: &apiv1.GetChatMessagesResponse{},
+				},
+			}
+			transcript = daemon.fetchTranscriptHandoff(context.Background(), "test-page")
+		})
+
+		It("should return the empty string", func() {
+			Expect(transcript).To(Equal(""))
+		})
+	})
+})
+
+var _ = Describe("isAgentSwitch", func() {
+	Describe("when the page was last attached to a different agent", func() {
+		var isSwitch bool
+
+		BeforeEach(func() {
+			daemon := &poolDaemon{attachedAgents: map[string]string{"test-page": "old-agent"}}
+			isSwitch = daemon.isAgentSwitch("test-page", "new-agent")
+		})
+
+		It("should report a switch", func() {
+			Expect(isSwitch).To(BeTrue())
+		})
+	})
+
+	Describe("when the page was last attached to the same agent", func() {
+		var isSwitch bool
+
+		BeforeEach(func() {
+			daemon := &poolDaemon{attachedAgents: map[string]string{"test-page": "old-agent"}}
+			isSwitch = daemon.isAgentSwitch("test-page", "old-agent")
+		})
+
+		It("should not report a switch", func() {
+			Expect(isSwitch).To(BeFalse())
+		})
+	})
+
+	Describe("when the page was never attached", func() {
+		var isSwitch bool
+
+		BeforeEach(func() {
+			daemon := &poolDaemon{
+				attachedAgents: map[string]string{"other-page": "old-agent"},
+			}
+			isSwitch = daemon.isAgentSwitch("test-page", "new-agent")
+		})
+
+		It("should not report a switch", func() {
+			Expect(isSwitch).To(BeFalse())
+		})
+	})
+})
+
+var _ = Describe("buildPromptText with handoff transcript", func() {
+	Describe("when both a handoff transcript and page context are set", func() {
+		var result string
+
+		BeforeEach(func() {
+			client := &wikiChatClient{
+				pageContext:       "You are the assistant for page X.",
+				handoffTranscript: "Brendan: First question\nOld Agent: First answer",
+			}
+			result = buildPromptText(client, "Brendan", "Follow-up question")
+		})
+
+		It("should include the handoff transcript header and lines", func() {
+			Expect(result).To(ContainSubstring("Recent chat transcript"))
+			Expect(result).To(ContainSubstring("Brendan: First question"))
+			Expect(result).To(ContainSubstring("Old Agent: First answer"))
+		})
+
+		It("should still include the page context and the user message", func() {
+			Expect(result).To(ContainSubstring("You are the assistant for page X."))
+			Expect(result).To(ContainSubstring("User message: [Brendan]: Follow-up question"))
+		})
+	})
+
+	Describe("when only the handoff transcript is set", func() {
+		var result string
+
+		BeforeEach(func() {
+			client := &wikiChatClient{
+				handoffTranscript: "Brendan: First question",
+			}
+			result = buildPromptText(client, "", "Next question")
+		})
+
+		It("should include the transcript and the user message without page context header duplication", func() {
+			Expect(result).To(ContainSubstring("Brendan: First question"))
+			Expect(result).To(ContainSubstring("User message: Next question"))
+			Expect(result).NotTo(ContainSubstring("You are the assistant"))
+		})
+	})
+
+	Describe("when neither is set", func() {
+		var result string
+
+		BeforeEach(func() {
+			client := &wikiChatClient{}
+			result = buildPromptText(client, "", "Just a message")
+		})
+
+		It("should return the bare message", func() {
+			Expect(result).To(Equal("Just a message"))
+		})
+	})
+})
+
+var _ = Describe("newPoolInstanceID", func() {
+	It("should produce non-empty unique hex ids", func() {
+		first, err := newPoolInstanceID()
+		Expect(err).NotTo(HaveOccurred())
+		Expect(first).NotTo(BeEmpty())
+
+		second, err := newPoolInstanceID()
+		Expect(err).NotTo(HaveOccurred())
+		Expect(second).NotTo(Equal(first))
+		Expect(second).To(MatchRegexp("^[0-9a-f]{32}$"))
 	})
 })

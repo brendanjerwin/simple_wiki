@@ -5,6 +5,8 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -937,9 +939,9 @@ var _ = Describe("poolDaemon executeScheduledTurn", func() {
 
 	Describe("when spawn and prompt succeed and the done channel closes before the drain window", func() {
 		var (
-			status      apiv1.ScheduleStatus
-			msg         string
-			innerCalls  int32
+			status        apiv1.ScheduleStatus
+			msg           string
+			innerCalls    int32
 			drainerCalled bool
 		)
 
@@ -1205,20 +1207,28 @@ func (h *scheduledTurnStreamer) CompleteScheduledTurn(_ context.Context, req *co
 var _ = Describe("spawnEphemeralAgent when the binary exits before the ACP handshake", func() {
 	Describe("when useSystemd is false and the binary exits immediately", func() {
 		var (
-			spawnErr error
+			spawnErr    error
+			trueCmdPath string
 		)
 
 		BeforeEach(func() {
-			// /bin/true exits with status 0 immediately. The ACP
+			// Write a script that exits with status 0 immediately (the
+			// environment-neutrality point: /bin/true is absent on some
+			// NixOS systems, but /bin/sh exists on Linux). The ACP
 			// Initialize call will see EOF on stdout and return an error,
 			// causing spawnEphemeralAgent to call cleanup() — which
 			// exercises the sync.Once-wrapped cleanupOnce.Do block.
+			dir := GinkgoT().TempDir()
+			trueCmdPath = filepath.Join(dir, "exit-now")
+			script := "#!/bin/sh\nexit 0\n"
+			Expect(os.WriteFile(trueCmdPath, []byte(script), 0o755)).NotTo(HaveOccurred())
+
 			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 			defer cancel()
 
 			client := newScheduledTurnClient("test-page", 3, nil, func() {})
 			daemon := &poolDaemon{
-				agentPath:  "/bin/true",
+				agentPath:  trueCmdPath,
 				useSystemd: false,
 			}
 			_, spawnErr = daemon.spawnEphemeralAgent(ctx, client, "test-unit-", "cleanuponce-test")

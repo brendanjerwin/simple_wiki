@@ -9,7 +9,28 @@ system = true
 
 # Chat & Live Activity
 
-Every page has an AI assistant chat panel. While the assistant works a turn, the
+Every page has an AI assistant chat panel. The panel header shows an **agent
+selector** — a compact control that displays the agent currently bound to the
+page and lets any participant switch to a different one. The binding is durable:
+it persists in page frontmatter under the `agent.chat_agent` subtree (managed
+exclusively by `AgentInventoryService`), survives session close/reopen and pool
+restarts, and applies to **all** participants viewing the page. A switch is a
+visible chat event everyone shares; when it takes effect, the new agent is
+introduced to the conversation with the recent transcript as context, so
+continuity is preserved even though the underlying agent process is new. The
+header shows who you are *talking to*; each assistant reply is additionally
+labeled with the agent that produced it, so replies made while a switch is in
+flight are never mislabeled.
+
+Only agents registered in the server's inventory appear in the list; each entry
+shows its availability (green dot = reachable, grey = not connected). The local
+agent appears when the pool daemon has registered itself with the server; remote
+agents (AG-UI endpoints, see [[help-agent-inventory]]) appear as configured by
+the server operator, marked unavailable until their routing is brought online.
+You can bind an agent that is currently unavailable — the binding sticks, and
+routing starts when the agent becomes reachable.
+
+While the assistant works a turn, the
 panel shows **live activity** so you can see what it is actually doing instead of
 staring at a blank "thinking" state — which matters most during long-running turns
 like a daily reflection or a dinner plan.
@@ -37,6 +58,25 @@ When the assistant reports an execution plan, the panel renders it as a live
 checklist that updates in place as the work proceeds: `☐` pending, `🔄` in
 progress, `☑` completed. This is the at-a-glance "what is it doing right now"
 indicator for multi-step turns.
+
+## Agent Selector gRPC Tools
+
+The agent selector is backed by gRPC methods on the `AgentInventoryService`:
+
+| Method | Description |
+|--------|-------------|
+| `ListAgents` | Returns every agent registered in the inventory with availability status. |
+| `GetPageAgent` | Returns the agent currently bound to a page (the *desired* agent), falling back to the default if none is set. |
+| `SetPageAgent` | Binds an agent to a page. Persists immediately; affects all participants. Accepts currently-unavailable agents; only unknown agent IDs are rejected. |
+
+The pool-only methods (`RegisterPoolAgent`, and the ChatService helpers
+`GetChatMessages` / `NotifyAgentAttached`) are how the pool daemon keeps the
+inventory and the *effective* (currently attached) agent honest; they are not
+exposed as agent tools.
+
+An agent can call `SetPageAgent` to hand off to a different agent. The next
+message on that page routes to the newly bound agent, with the transcript
+carried over.
 
 ## For Agents
 

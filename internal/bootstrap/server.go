@@ -491,6 +491,7 @@ func BuildVanguardTranscoder(grpcServer *grpc.Server, ginRouter http.Handler) (h
 
 	// Single source of truth for service names to avoid drift between Vanguard and reflection.
 	serviceNames := []string{
+		"api.v1.AgentInventoryService",
 		"api.v1.AgentMetadataService",
 		"api.v1.PageAppService",
 		"api.v1.PageAppStateService",
@@ -787,6 +788,15 @@ func setupGRPCServer(
 	caldavServer := &caldav.Server{Backend: caldavBackend}
 	site.SetCalDAVServer(caldavServer)
 
+	// The AgentRegistry is created empty: the pool daemon registers its
+	// local agent descriptor at startup/reconnect (RegisterPoolAgent), and
+	// AG-UI entries load from server config (SetConfiguredAgents). Stored on
+	// site so the HTTP handler layer can read it later if needed.
+	site.AgentRegistry = server.NewAgentRegistry()
+	if configuredAgents := server.LoadConfiguredAGUIAgents(site.AgentConfigPath); len(configuredAgents) > 0 {
+		site.AgentRegistry.SetConfiguredAgents(configuredAgents)
+	}
+
 	grpcAPIServer = grpcAPIServer.
 		WithJobQueueCoordinator(site.GetJobQueueCoordinator()).
 		WithMarkdownRenderer(site.MarkdownRenderer).
@@ -795,6 +805,9 @@ func setupGRPCServer(
 		WithScheduledTurnDispatcher(site.ScheduledTurnDispatcher).
 		WithAgentScheduleStore(site.AgentScheduleStore).
 		WithAgentChatContextStore(site.AgentChatContextStore).
+		WithAgentInventory(site.AgentRegistry).
+		WithAgentPageBindingStore(site.AgentPageBindingStore).
+		WithChatAgentChangeNotifier(chatBufferMgr).
 		WithChecklistMutator(checklistMutator).
 		WithMapMutator(mapMutator).
 		WithSurveyMutator(surveyMutator)

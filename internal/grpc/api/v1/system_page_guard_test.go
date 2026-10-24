@@ -242,5 +242,30 @@ var _ = Describe("system page guard", func() {
 				Expect(err).To(HaveGrpcStatusWithSubstr(codes.FailedPrecondition, "system page"))
 			})
 		})
+
+		// AgentInventoryService.SetPageAgent shares the guard: an agent
+		// binding must never be writable on a system/help page (it lives in
+		// the same reserved agent.* namespace as schedules and chat memory).
+		Describe("SetPageAgent on a system page", func() {
+			var err error
+
+			BeforeEach(func() {
+				pages := newInMemoryPageStore()
+				bindings := wikiserver.NewAgentPageBindingStore(pages)
+				inventory := wikiserver.NewAgentRegistry()
+				server = mustNewServer(mock, nil, nil).
+					WithAgentInventory(inventory).
+					WithAgentPageBindingStore(bindings)
+
+				_, err = server.SetPageAgent(ctx, &apiv1.SetPageAgentRequest{
+					Page:    "help",
+					AgentId: wikiserver.LocalACPAgentID,
+				})
+			})
+
+			It("should reject with FailedPrecondition", func() {
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.FailedPrecondition, "system page"))
+			})
+		})
 	})
 })

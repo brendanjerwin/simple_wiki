@@ -3,6 +3,8 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -11,6 +13,7 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"sync"
@@ -103,15 +106,17 @@ var validTransitions = map[InstanceState][]InstanceState{
 
 // instanceEntry tracks a running agent instance for a page.
 type instanceEntry struct {
-	page           string
-	conn           acpAgent
-	sessionID      acp.SessionId
-	cancel         context.CancelFunc
-	lastActive     time.Time
-	createdAt      time.Time
-	stateChangedAt time.Time
-	state          InstanceState
-	mu             sync.Mutex
+	page             string
+	agentID          string // agent inventory id this instance was spawned for
+	agentDisplayName string // display name of the attached agent
+	conn             acpAgent
+	sessionID        acp.SessionId
+	cancel           context.CancelFunc
+	lastActive       time.Time
+	createdAt        time.Time
+	stateChangedAt   time.Time
+	state            InstanceState
+	mu               sync.Mutex
 }
 
 func (e *instanceEntry) touch() {
@@ -220,6 +225,240 @@ type poolDaemon struct {
 	// scheduledTurnSpawnFn is the injectable seam for spawnEphemeralForScheduledTurn.
 	// nil = call the real spawnEphemeralForScheduledTurn.
 	scheduledTurnSpawnFn func(ctx context.Context, page, requestID string, maxTurns int32, allowedTools []string, cancelTurn context.CancelFunc) (*scheduledEphemeralConnection, func(), error)
+
+	// inventoryClient resolves per-page agent bindings and registers this
+	// pool's descriptor with the server's agent inventory (issue #1276).
+	// nil = real Connect client against d.wikiURL; tests inject fakes.
+	inventoryClient agentInventoryClient
+
+	// attachmentClient reports effective agent attachment and fetches recent
+	// transcripts for hand-off to the server's chat buffer. nil = real Connect
+	// client against d.wikiURL; tests inject fakes.
+	attachmentClient agentAttachmentClient
+
+	// poolAgentID is this pool's agent inventory id (server.LocalACPAgentID).
+	poolAgentID string
+	// poolAgentDisplayName is the persona display name advertised in the
+	// inventory (persona flag value, defaulting to "Assistant").
+	poolAgentDisplayName string
+	// poolAgentRoute is the route reference for the registered agent
+	// (the --agent-path value's binary name).
+	poolAgentRoute string
+	// poolInstanceID uniquely identifies this pool process so the server can
+	// replace the descriptor registered by a previous pool run.
+	poolInstanceID string
+
+	// attachedAgents remembers the agent id the pool last successfully
+	// attached per page, so a spawn can decide whether the transcript needs
+	// hand-off to a different agent. Guarded by attachedMu.
+	attachedMu     sync.Mutex
+	attachedAgents map[string]string
+}
+
+// defaultPoolAgentID mirrors server.LocalACPAgentID (the pool cannot import
+// the server package).
+const defaultPoolAgentID = "local-acp"
+
+// defaultPoolAgentDisplayName is the display name used when no persona is
+// configured for the pool.
+const defaultPoolAgentDisplayName = "Assistant"
+
+// agentInventoryClient is the pool-facing slice of
+// AgentInventoryService, extracted from
+// apiv1connect.AgentInventoryServiceClient for testability.
+type agentInventoryClient interface {
+	RegisterPoolAgent(ctx context.Context, req *connect.Request[apiv1.RegisterPoolAgentRequest]) (*connect.Response[apiv1.RegisterPoolAgentResponse], error)
+	GetPageAgent(ctx context.Context, req *connect.Request[apiv1.GetPageAgentRequest]) (*connect.Response[apiv1.GetPageAgentResponse], error)
+}
+
+// agentAttachmentClient is the pool-facing slice of ChatService used for
+// effective-agent attachment reporting and transcript hand-off, extracted
+// from apiv1connect.ChatServiceClient for testability.
+type agentAttachmentClient interface {
+	NotifyAgentAttached(ctx context.Context, req *connect.Request[apiv1.NotifyAgentAttachedRequest]) (*connect.Response[apiv1.NotifyAgentAttachedResponse], error)
+	GetChatMessages(ctx context.Context, req *connect.Request[apiv1.GetChatMessagesRequest]) (*connect.Response[apiv1.GetChatMessagesResponse], error)
+}
+
+// inventoryFor resolves the injectable seam, constructing the real Connect
+// clients when the pool has no injected fakes.
+func (d *poolDaemon) inventoryFor() agentInventoryClient {
+	if d.inventoryClient != nil {
+		return d.inventoryClient
+	}
+	httpClient := &http.Client{}
+	return apiv1connect.NewAgentInventoryServiceClient(httpClient, d.wikiURL)
+}
+
+// attachmentFor resolves the injectable seam, constructing the real Connect
+// client when the pool has no injected fake.
+func (d *poolDaemon) attachmentFor() agentAttachmentClient {
+	if d.attachmentClient != nil {
+		return d.attachmentClient
+	}
+	httpClient := &http.Client{}
+	return apiv1connect.NewChatServiceClient(httpClient, d.wikiURL)
+}
+
+// registerPoolAgent registers this pool's local ACP agent descriptor with the
+// server's agent inventory (idempotent upsert). Called at pool startup and on
+// every successful reconnect so availability tracks pool connectivity.
+// Best-effort: failures are logged so the daemon still serves pages once the
+// stream is up; the next reconnect re-registers.
+func (d *poolDaemon) registerPoolAgent(ctx context.Context) {
+	resp, err := d.inventoryFor().RegisterPoolAgent(ctx, connect.NewRequest(&apiv1.RegisterPoolAgentRequest{
+		Id:             d.poolAgentID,
+		DisplayName:    d.poolAgentDisplayName,
+		Description:    "Local ACP agent spawned on demand by the wiki chat pool daemon",
+		Protocol:       apiv1.AgentProtocol_ACP_LOCAL,
+		Route:          d.poolAgentRoute,
+		PoolInstanceId: d.poolInstanceID,
+	}))
+	if err != nil {
+		slog.Warn("failed to register pool agent with inventory", logKeyError, err, logKeyAction, "pool_register")
+		return
+	}
+	slog.Info("pool agent registered with inventory",
+		"agent_id", d.poolAgentID,
+		"display_name", d.poolAgentDisplayName,
+		"route", d.poolAgentRoute,
+		logKeyAction, "pool_register")
+	_ = resp
+}
+
+// resolvePageAgent returns the agent the pool should spawn for a page. An
+// unbound page (server default) resolves to the local ACP pool agent. A page
+// bound to a non-ACP_LOCAL or unavailable agent is NOT routable by the pool
+// today: this returns an error instead of silently falling back.
+func (d *poolDaemon) resolvePageAgent(ctx context.Context, page string) (agentID, displayName string, err error) {
+	client := d.inventoryFor()
+
+	resp, err := client.GetPageAgent(ctx, connect.NewRequest(&apiv1.GetPageAgentRequest{Page: page}))
+	if err != nil {
+		// Resolution is best-effort: if the inventory is unreachable, spawn
+		// the default local ACP agent (unchanged legacy behavior) but say so.
+		if ctx.Err() == nil {
+			slog.Warn("failed to resolve page agent binding; using default local ACP agent",
+				logKeyPage, page, logKeyError, err, logKeyAction, "agent_resolve")
+		}
+		return d.poolAgentID, d.poolAgentDisplayName, nil
+	}
+
+	agent := resp.Msg.GetAgent()
+	if agent.GetId() == "" || agent.GetId() == d.poolAgentID {
+		return d.poolAgentID, d.poolAgentDisplayName, nil
+	}
+
+	if agent.GetProtocol() != apiv1.AgentProtocol_ACP_LOCAL {
+		return "", "", fmt.Errorf("page %q is bound to agent %q (protocol %s), which this pool cannot route; the page will show the desired agent as unavailable rather than falling back to the local agent", page, agent.GetId(), agent.GetProtocol())
+	}
+
+	return agent.GetId(), agent.GetDisplayName(), nil
+}
+
+// reportAttached records the effective agent attachment for a page with the
+// server and updates the pool's attachedAgents bookkeeping (used to decide
+// when a transcript hand-off is needed). Empty agentID detaches. Best-effort:
+// failures are logged. Safe to call with d.mu held — it does not take d.mu.
+func (d *poolDaemon) reportAttached(ctx context.Context, page, agentID, displayName string) {
+	d.attachedMu.Lock()
+	if d.attachedAgents == nil {
+		d.attachedAgents = make(map[string]string)
+	}
+	previous := d.attachedAgents[page]
+	if agentID == "" {
+		delete(d.attachedAgents, page)
+	} else {
+		d.attachedAgents[page] = agentID
+	}
+	d.attachedMu.Unlock()
+	_ = previous
+
+	_, err := d.attachmentFor().NotifyAgentAttached(ctx, connect.NewRequest(&apiv1.NotifyAgentAttachedRequest{
+		Page:             page,
+		AgentId:          agentID,
+		AgentDisplayName: displayName,
+	}))
+	if err != nil {
+		slog.Warn("failed to report agent attachment", logKeyPage, page, logKeyError, err, logKeyAction, "agent_attach")
+	}
+}
+
+// detachReportTimeout bounds the background effective-agent clear report.
+const detachReportTimeout = 10 * time.Second
+
+// detachAsync reports an empty attachment for a page in the background so the
+// server's effective-agent record clears when the instance stops. Safe to
+// call with d.mu held (which stopInstanceLocked does); the HTTP call must not
+// block the state machine, so it runs on its own goroutine.
+func (d *poolDaemon) detachAsync(page, _, _ string) {
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), detachReportTimeout)
+		defer cancel()
+		d.reportAttached(ctx, page, "", "")
+	}()
+}
+
+// newline is the single-line separator used when rendering compact transcript
+// lines and preamble sections (named for revive's repeated-literal rule).
+const newline = "\n"
+
+// handoffTranscriptLimit is how many recent chat messages the pool fetches for
+// transcript hand-off to a newly-bound agent.
+const handoffTranscriptLimit = 40
+
+// fetchTranscriptHandoff renders the page's recent chat transcript as compact
+// "sender: content" lines for hand-off to a newly-bound agent. Returns the
+// empty string when there is no transcript or the fetch fails (hand-off is
+// best-effort; the new agent still starts with the persisted chat memory).
+func (d *poolDaemon) fetchTranscriptHandoff(ctx context.Context, page string) string {
+	resp, err := d.attachmentFor().GetChatMessages(ctx, connect.NewRequest(&apiv1.GetChatMessagesRequest{
+		Page:  page,
+		Limit: handoffTranscriptLimit,
+	}))
+	if err != nil {
+		slog.Warn("failed to fetch transcript for agent hand-off", logKeyPage, page, logKeyError, err, logKeyAction, "agent_handoff")
+		return ""
+	}
+
+	var lines []string
+	for _, msg := range resp.Msg.GetMessages() {
+		content := strings.TrimSpace(msg.GetContent())
+		if content == "" {
+			continue
+		}
+		who := msg.GetSenderName()
+		switch msg.GetSender() {
+		case apiv1.Sender_USER:
+			if who == "" {
+				who = "user"
+			}
+		case apiv1.Sender_ASSISTANT:
+			if who == "" {
+				who = msg.GetAgentDisplayName()
+			}
+			if who == "" {
+				who = "assistant"
+			}
+		default:
+			continue
+		}
+		lines = append(lines, who+": "+content)
+	}
+	if len(lines) == 0 {
+		return ""
+	}
+	return strings.Join(lines, newline)
+}
+
+// newPoolInstanceID generates a fresh pool instance identity for one pool
+// process lifetime so a re-registration replaces the previous pool's
+// descriptor server-side.
+func newPoolInstanceID() (string, error) {
+	buf := make([]byte, 16)
+	if _, err := rand.Read(buf); err != nil {
+		return "", fmt.Errorf("reading random pool instance id: %w", err)
+	}
+	return hex.EncodeToString(buf), nil
 }
 
 // sanitizeUnitName converts a page identifier into a valid systemd unit name suffix.
@@ -348,6 +587,33 @@ The daemon should be run in a directory containing your agent configuration
 	}
 }
 
+// initPoolAgentDescriptor populates the pool's agent-inventory descriptor
+// from the CLI flags and environment: display name comes from the A2A persona
+// flag (falling back to the WIKI_CHAT_PERSONA env var, then "Assistant"); the
+// route is the configured agent binary's file name; a fresh instance id is
+// generated per pool process.
+func (d *poolDaemon) initPoolAgentDescriptor(c *cli.Context) error {
+	displayName := c.String("a2a-agent-name")
+	if displayName == "" {
+		displayName = os.Getenv("WIKI_CHAT_PERSONA")
+	}
+	if displayName == "" {
+		displayName = defaultPoolAgentDisplayName
+	}
+
+	instanceID, err := newPoolInstanceID()
+	if err != nil {
+		return fmt.Errorf("generate pool instance id: %w", err)
+	}
+
+	d.poolAgentID = defaultPoolAgentID
+	d.poolAgentDisplayName = displayName
+	d.poolAgentRoute = filepath.Base(d.agentPath)
+	d.poolInstanceID = instanceID
+	d.attachedAgents = make(map[string]string)
+	return nil
+}
+
 func runPoolAction(c *cli.Context) error {
 	normalizedURL, err := normalizeBaseURL(c.String("url"))
 	if err != nil {
@@ -376,6 +642,12 @@ func runPoolAction(c *cli.Context) error {
 		permissionPendingTimeout: c.Duration("permission-pending-timeout"),
 		instances:                make(map[string]*instanceEntry),
 		versionCheckInterval:     defaultVersionCheckIntervalMinutes * time.Minute,
+	}
+
+	// Agent inventory descriptor (issue #1276): the pool is the authority for
+	// the local ACP agent's availability.
+	if err := d.initPoolAgentDescriptor(c); err != nil {
+		return err
 	}
 
 	if port := c.Int("a2a-port"); port > 0 {
@@ -526,6 +798,11 @@ func (d *poolDaemon) subscribeAndHandle(ctx context.Context) error {
 	httpClient := &http.Client{}
 	client := apiv1connect.NewChatServiceClient(httpClient, d.wikiURL)
 
+	// Register (idempotent upsert) this pool's agent descriptor with the
+	// server inventory on every successful connect so availability tracks
+	// pool connectivity. Best-effort: failures are logged inside.
+	d.registerPoolAgent(ctx)
+
 	stream, err := client.SubscribeInstanceRequests(ctx, connect.NewRequest(&apiv1.SubscribeInstanceRequestsRequest{}))
 	if err != nil {
 		if ctx.Err() != nil {
@@ -568,19 +845,44 @@ func (d *poolDaemon) ensureInstance(ctx context.Context, page string) {
 		return
 	}
 
+	// Resolve the page's agent binding (desired agent). Binding read happens
+	// at spawn time only — a live agent with an old binding finishes its
+	// in-flight prompt and is reaped normally; the next message re-spawns.
+	agentID, agentDisplayName, err := d.resolvePageAgent(ctx, page)
+	if err != nil {
+		// Unroutable binding (e.g. AG_UI_REMOTE, or an unknown/unavailable
+		// id): do NOT fall back to the local ACP agent. Report an empty
+		// attachment so the server reflects desired-vs-effective divergence,
+		// and log honestly.
+		slog.Warn("page agent binding is not routable by this pool; not spawning",
+			logKeyPage, page, logKeyError, err, logKeyAction, "spawn_unroutable")
+		d.reportAttached(ctx, page, "", "")
+		return
+	}
+
 	// Spawn new instance first, then evict if needed.
-	entry, err := d.spawnInstance(ctx, page)
+	entry, err := d.spawnInstance(ctx, page, agentID, agentDisplayName)
 	if err != nil {
 		slog.Error("failed to spawn instance", logKeyPage, page, logKeyError, err, logKeyAction, "spawn")
 		return
 	}
+
+	entry.mu.Lock()
+	agentID = entry.agentID
+	agentDisplayName = entry.agentDisplayName
+	entry.mu.Unlock()
 
 	if len(d.instances) >= d.maxInstances {
 		d.evictLeastActive()
 	}
 
 	d.instances[page] = entry
-	slog.Info("instance spawned", logKeyPage, page, "instance_count", len(d.instances), "max_instances", d.maxInstances, logKeyAction, "created")
+
+	// Report the effective attachment; on failure the UI shows divergence.
+	// reportAttached does not take d.mu, so this is deadlock-free while
+	// still holding the instances lock.
+	d.reportAttached(ctx, page, agentID, agentDisplayName)
+	slog.Info("instance spawned", logKeyPage, page, "instance_count", len(d.instances), "max_instances", d.maxInstances, "agent_id", agentID, logKeyAction, "created")
 }
 
 // evictLeastActive finds and stops the least recently active instance.
@@ -656,17 +958,20 @@ func isAgentErrorStop(r acp.StopReason) bool {
 // creates a new chat reply, subsequent chunks edit it in place. Tool calls
 // are shown as emoji reactions on the message.
 type wikiChatClient struct {
-	page            string
-	wikiURL         string
-	mu              sync.Mutex
-	textBuf         strings.Builder
-	thoughtBuf      strings.Builder
-	permissionNotes strings.Builder
-	replyToID       string // set before each prompt to thread responses
-	currentMsg      string // message ID of the in-progress streaming reply
-	pageContext     string // context to prepend to the first user message
-	chatClient      chatReplier
-	entry           *instanceEntry // back-reference for state transitions
+	page              string
+	wikiURL           string
+	mu                sync.Mutex
+	textBuf           strings.Builder
+	thoughtBuf        strings.Builder
+	permissionNotes   strings.Builder
+	replyToID         string // set before each prompt to thread responses
+	currentMsg        string // message ID of the in-progress streaming reply
+	pageContext       string // context to prepend to the first user message
+	agentID           string // agent inventory id stamped on replies (issue #1276)
+	agentDisplayName  string
+	handoffTranscript string // recent "sender: content" lines from the previous agent, prepended once
+	chatClient        chatReplier
+	entry             *instanceEntry // back-reference for state transitions
 
 	// toolDetails remembers the best input-derived detail (tool name + args, or
 	// file location) per tool-call id. pi-acp drops rawInput on the completion
@@ -726,9 +1031,11 @@ func (c *wikiChatClient) handleAgentMessage(chunk *acp.SessionUpdateAgentMessage
 
 	if msgID == "" {
 		resp, err := c.chatClient.SendChatReply(context.Background(), connect.NewRequest(&apiv1.SendChatReplyRequest{
-			Page:      c.page,
-			Content:   fullText,
-			ReplyToId: replyTo,
+			Page:             c.page,
+			Content:          fullText,
+			ReplyToId:        replyTo,
+			AgentId:          c.agentID,
+			AgentDisplayName: c.agentDisplayName,
 		}))
 		// Streaming reply is best-effort — we'd rather drop one chunk than tear down the agent session.
 		// nosemgrep: go.handler-returns-nil-after-error-logged
@@ -1029,9 +1336,11 @@ func (c *wikiChatClient) handlePlan(plan *acp.SessionUpdatePlan) {
 func (c *wikiChatClient) streamOrCreateReply(msgID, replyTo, text string) {
 	if msgID == "" {
 		resp, err := c.chatClient.SendChatReply(context.Background(), connect.NewRequest(&apiv1.SendChatReplyRequest{
-			Page:      c.page,
-			Content:   text,
-			ReplyToId: replyTo,
+			Page:             c.page,
+			Content:          text,
+			ReplyToId:        replyTo,
+			AgentId:          c.agentID,
+			AgentDisplayName: c.agentDisplayName,
 		}))
 		if err != nil {
 			slog.Error("failed to create streaming reply", logKeyPage, c.page, logKeyError, err)
@@ -1277,7 +1586,7 @@ func (*wikiChatClient) WaitForTerminalExit(_ context.Context, _ acp.WaitForTermi
 // spawnInstance starts an ACP agent process for a page, performs the handshake,
 // creates a session with wiki MCP tools, and starts the message bridge.
 // Must be called with d.mu held.
-func (d *poolDaemon) spawnInstance(ctx context.Context, page string) (*instanceEntry, error) {
+func (d *poolDaemon) spawnInstance(ctx context.Context, page, agentID, agentDisplayName string) (*instanceEntry, error) {
 	ctx, cancel := context.WithCancel(ctx)
 
 	conn, chatClient, err := d.startAgentProcess(ctx, page)
@@ -1294,21 +1603,45 @@ func (d *poolDaemon) spawnInstance(ctx context.Context, page string) (*instanceE
 
 	now := time.Now()
 	entry := &instanceEntry{
-		page:           page,
-		conn:           conn,
-		sessionID:      sess.SessionId,
-		cancel:         cancel,
-		lastActive:     now,
-		createdAt:      now,
-		stateChangedAt: now,
-		state:          StateInitializing,
+		page:             page,
+		agentID:          agentID,
+		agentDisplayName: agentDisplayName,
+		conn:             conn,
+		sessionID:        sess.SessionId,
+		cancel:           cancel,
+		lastActive:       now,
+		createdAt:        now,
+		stateChangedAt:   now,
+		state:            StateInitializing,
 	}
 	slog.Info("state transition", logKeyPage, page, "from_state", "Spawning", "to_state", "Initializing", logKeyAction, "state_change")
 
 	chatClient.entry = entry
+	// Transcript hand-off (issue #1276): when the page was last served by a
+	// different agent, prepend the recent transcript to the new agent's first
+	// prompt so the conversation carries over.
+	handoffTranscript := ""
+	if d.isAgentSwitch(page, agentID) {
+		handoffTranscript = d.fetchTranscriptHandoff(ctx, page)
+	}
+	chatClient.mu.Lock()
+	chatClient.agentID = agentID
+	chatClient.agentDisplayName = agentDisplayName
+	chatClient.handoffTranscript = handoffTranscript
+	chatClient.mu.Unlock()
+
 	go d.runMessageBridge(ctx, entry, chatClient)
 
 	return entry, nil
+}
+
+// isAgentSwitch reports whether the given agent id differs from the agent the
+// pool last attached for this page — meaning a transcript hand-off is needed.
+func (d *poolDaemon) isAgentSwitch(page, agentID string) bool {
+	d.attachedMu.Lock()
+	defer d.attachedMu.Unlock()
+	previous, ok := d.attachedAgents[page]
+	return ok && previous != "" && previous != agentID
 }
 
 // startAgentProcess spawns the ACP agent binary (optionally via systemd), performs
@@ -1601,13 +1934,17 @@ func listenForCancelSignal(ctx context.Context, cancel context.CancelFunc, cance
 	}
 }
 
-// buildPromptText prepends page context to the user message content if available,
-// consuming the context so it is only prepended once. If senderName is non-empty,
-// the message is prefixed with "[senderName]: " to identify the speaker in group chats.
+// buildPromptText prepends page context (and, on an agent switch, the recent
+// transcript handed off from the previous agent) to the user message content
+// if available, consuming both so they are only prepended once. If senderName
+// is non-empty, the message is prefixed with "[senderName]: " to identify the
+// speaker in group chats.
 func buildPromptText(chatClient *wikiChatClient, senderName string, messageContent string) string {
 	chatClient.mu.Lock()
 	pageContext := chatClient.pageContext
 	chatClient.pageContext = "" // only prepend once
+	handoff := chatClient.handoffTranscript
+	chatClient.handoffTranscript = "" // only prepend once
 	chatClient.mu.Unlock()
 
 	formattedMessage := messageContent
@@ -1615,11 +1952,19 @@ func buildPromptText(chatClient *wikiChatClient, senderName string, messageConte
 		formattedMessage = fmt.Sprintf("[%s]: %s", senderName, messageContent)
 	}
 
-	if pageContext == "" {
+	precede := ""
+	if handoff != "" {
+		precede += "## Recent chat transcript (handed off from the previous agent on this page)\n\n" + handoff + newline
+	}
+	if pageContext != "" {
+		precede += pageContext + newline
+	}
+
+	if precede == "" {
 		return formattedMessage
 	}
 
-	return pageContext + "\n\n---\n\nUser message: " + formattedMessage
+	return precede + "\n---\n\nUser message: " + formattedMessage
 }
 
 // chatPreamble is prepended to the first prompt to establish the interactive chat context.
@@ -1861,6 +2206,12 @@ func (d *poolDaemon) stopInstanceLocked(page string) {
 		return
 	}
 
+	// Capture the attached identity for the detach report, then stop the
+	// instance and clear the server-side effective-agent record (detached,
+	// async so the state machine never blocks on HTTP).
+	agentID := entry.agentID
+	agentName := entry.agentDisplayName
+
 	entry.mu.Lock()
 	if err := entry.setStateLocked(StateStopping); err != nil {
 		slog.Warn(logMsgStateTransitionError, logKeyPage, page, logKeyError, err)
@@ -1876,6 +2227,8 @@ func (d *poolDaemon) stopInstanceLocked(page string) {
 	entry.mu.Unlock()
 
 	delete(d.instances, page)
+
+	d.detachAsync(page, agentID, agentName)
 }
 
 // markInstanceDead transitions an instance to Dead and removes it from the pool.
@@ -1896,8 +2249,13 @@ func (d *poolDaemon) markInstanceDead(page string) {
 		slog.Warn(logMsgStateTransitionError, logKeyPage, page, logKeyError, err)
 	}
 
+	agentID := entry.agentID
+	agentName := entry.agentDisplayName
+
 	delete(d.instances, page)
 	slog.Info("instance removed from pool after process exit", logKeyPage, page, logKeyAction, "reaped")
+
+	d.detachAsync(page, agentID, agentName)
 }
 
 // stopAll stops all running instances.
