@@ -28,7 +28,7 @@ const (
 	PageAppLangOpenuiLang = "openui-lang"
 	// PageAppLibrary is the wiki component library version the shipped
 	// help page teaches.
-	PageAppLibrary = "wiki-core@2"
+	PageAppLibrary = "wiki-core@3"
 )
 
 const (
@@ -36,7 +36,7 @@ const (
 	pageAppErrReadFailed   = "failed to read page: %v"
 	pageAppHundredPercent  = 100
 	pageAppWikiRootKey     = "wiki"
-	mdNewline               = "\n"
+	mdNewline              = "\n"
 )
 
 // page app program limits. The Go validator's floor: reject gross

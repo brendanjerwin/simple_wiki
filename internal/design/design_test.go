@@ -159,3 +159,29 @@ var _ = Describe("muted text token AA contrast", func() {
 		}
 	})
 })
+
+// The accent pair (PR #1302 P1: Card "accent" variant) must clear AA in both
+// modes, mirroring the muted-token guard above. The pair completes the existing
+// opaque semantic family (success/error/warning bg+text).
+var _ = Describe("accent token AA contrast", func() {
+	It("should have exactly one light-mode and one dark-mode definition", func() {
+		Expect(tokenValues(relativeTokenCSS(), "--color-accent-bg")).To(HaveLen(2))
+		Expect(tokenValues(relativeTokenCSS(), "--color-accent-text")).To(HaveLen(2))
+	})
+
+	It("should clear 4.5:1 for accent text on accent bg in light mode", func() {
+		css := relativeTokenCSS()
+		accentBg := tokenValues(css, "--color-accent-bg")[0]
+		accentText := tokenValues(css, "--color-accent-text")[0]
+		Expect(contrastRatio(accentText, accentBg)).To(BeNumerically(">=", 4.5),
+			"light accent pair (%s on %s) must meet WCAG AA (≥4.5:1)", accentText, accentBg)
+	})
+
+	It("should clear 4.5:1 for accent text on accent bg in dark mode", func() {
+		css := relativeTokenCSS()
+		accentBg := tokenValues(css, "--color-accent-bg")[1]
+		accentText := tokenValues(css, "--color-accent-text")[1]
+		Expect(contrastRatio(accentText, accentBg)).To(BeNumerically(">=", 4.5),
+			"dark accent pair (%s on %s) must meet WCAG AA (≥4.5:1)", accentText, accentBg)
+	})
+})

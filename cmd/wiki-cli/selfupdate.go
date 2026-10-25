@@ -22,14 +22,18 @@ const selfUpdateTimeout = 120 * time.Second
 // cliBinaryName returns the platform-specific binary name served by the wiki.
 func cliBinaryName() string {
 	osName := strings.ToLower(runtime.GOOS)
-	arch := runtime.GOARCH
-	switch arch {
+	if osName == "windows" {
+		// No windows build of wiki-cli is produced (windows release support
+		// is dropped); there is no server asset to self-update from.
+		panic("self-update: no windows build of wiki-cli is produced")
+	}
+	switch runtime.GOARCH {
 	case "amd64", "arm64":
 		// Supported; name matches the server's asset layout as-is.
 	default:
-		panic(fmt.Sprintf("self-update: unsupported GOARCH %s", arch))
+		panic(fmt.Sprintf("self-update: unsupported GOARCH %s", runtime.GOARCH))
 	}
-	return fmt.Sprintf("wiki-cli-%s-%s", osName, arch)
+	return fmt.Sprintf("wiki-cli-%s-%s", osName, runtime.GOARCH)
 }
 
 // downloadMatchingBinary fetches the /cli/ binary matching the running wiki

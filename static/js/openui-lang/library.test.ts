@@ -28,8 +28,8 @@ import type {
 } from './library.js';
 
 describe('wikiLibrary', () => {
- it('should export the wiki-core@2 version id', () => {
-  expect(WIKI_LIBRARY_VERSION).to.equal('wiki-core@2');
+ it('should export the wiki-core@3 version id', () => {
+  expect(WIKI_LIBRARY_VERSION).to.equal('wiki-core@3');
   expect(wikiLibrary.id).to.equal(WIKI_LIBRARY_VERSION);
  });
 
@@ -183,6 +183,145 @@ describe('component variants and tokens', () => {
   });
  });
 });
+
+
+describe('when parsing Grid and Span', () => {
+ let parser: Parser;
+
+ beforeEach(() => {
+  parser = createParser(wikiLibrary.toJSONSchema(), WIKI_ROOT_COMPONENT);
+ });
+
+ it('should parse Grid with children first, then cols, then gap token', () => {
+  const result = parser.parse(
+   'root = Card("t", [g])\ng = Grid([s], 2, "lg")\ns = Text("cell")',
+  );
+  expect(result.meta.errors).to.deep.equal([]);
+  const grid = (result.root?.props['children'] as ElementNode[])[0] as ElementNode;
+  expect(grid.typeName).to.equal('Grid');
+  const { cols, gap, children } = grid.props;
+  expect(cols).to.equal(2);
+  expect(gap).to.equal('lg');
+  expect((children as ElementNode[]).length).to.equal(1);
+ });
+
+ it('should parse Grid without gap binding cleanly (children-first safety)', () => {
+  const result = parser.parse('root = Card("t", [g])\ng = Grid([s], 2)\ns = Text("cell")');
+  expect(result.meta.errors).to.deep.equal([]);
+  const grid = (result.root?.props['children'] as ElementNode[])[0] as ElementNode;
+  expect(grid.props['cols']).to.equal(2);
+  expect(grid.props['gap']).to.equal(undefined);
+ });
+
+ it('should parse the sidebar preset', () => {
+  const result = parser.parse('root = Card("t", [g])\ng = Grid([s], "sidebar")\ns = Text("cell")');
+  expect(result.meta.errors).to.deep.equal([]);
+  const grid = (result.root?.props['children'] as ElementNode[])[0] as ElementNode;
+  expect(grid.props['cols']).to.equal('sidebar');
+ });
+
+ it('should reject Grid cols outside the vocabulary (enum leaf validated by lang-core)', () => {
+  // cols: z.literal([2, 3, 'sidebar']) renders a JSON-schema enum leaf, which
+  // lang-core validates (unlike anyOf unions) — 7 is a parse-time type-mismatch.
+  const result = parser.parse('root = Card("t", [g])\ng = Grid([s], 7)\ns = Text("cell")');
+  expect(result.meta.errors.length).to.be.greaterThan(0);
+ });
+
+ it('should parse Span count-first inside Grid children', () => {
+  const result = parser.parse(
+   'root = Card("t", [g])\ng = Grid([sp], 2)\nsp = Span(2, [s])\ns = Text("wide")',
+  );
+  expect(result.meta.errors).to.deep.equal([]);
+  const grid = (result.root?.props['children'] as ElementNode[])[0] as ElementNode;
+  const span = (grid.props['children'] as ElementNode[])[0] as ElementNode;
+  expect(span.typeName).to.equal('Span');
+  expect(span.props['n']).to.equal(2);
+ });
+
+ it('should not silently mis-bind a reversed Span([children], 2) call', () => {
+  // With n enum-validated (z.literal([1,2,3])), an array in the n edge is
+  // pruned with the n edge invalid — the component renders as an unspanned
+  // block rather than binding [children] into n. Pinned so a future schema
+  // change that makes the reversed call bind silently fails loudly here.
+  const result = parser.parse(
+   'root = Card("t", [g])\ng = Grid([sp], 2)\nsp = Span([s], 2)\ns = Text("cell")',
+  );
+  const grid = (result.root?.props['children'] as ElementNode[])[0] as ElementNode;
+  const span = (grid.props['children'] as ElementNode[])[0] as ElementNode;
+  // Either the span errors out or its n is NOT the array — never a silent bind.
+  if (result.meta.errors.length === 0) {
+   expect(span.props['n']).to.not.deep.equal(['cell']);
+  }
+ });
+
+ it('should reject Span n outside 1..3 (enum-validated, mirroring Grid cols)', () => {
+  const result = parser.parse(
+   'root = Card("t", [g])\ng = Grid([sp], 2)\nsp = Span(5, [s])\ns = Text("cell")',
+  );
+  expect(result.meta.errors.length).to.be.greaterThan(0);
+  expect(result.meta.errors[0]?.code).to.equal('type-mismatch');
+ });
+});
+
+describe('when parsing Divider and SectionHeader', () => {
+ let parser: Parser;
+
+ beforeEach(() => {
+  parser = createParser(wikiLibrary.toJSONSchema(), WIKI_ROOT_COMPONENT);
+ });
+
+ it('should parse Divider with no args', () => {
+  const result = parser.parse('root = Card("t", [d])\nd = Divider()');
+  expect(result.meta.errors).to.deep.equal([]);
+  const divider = (result.root?.props['children'] as ElementNode[])[0] as ElementNode;
+  expect(divider.typeName).to.equal('Divider');
+ });
+
+ it('should parse SectionHeader with title and optional trailing child', () => {
+  const result = parser.parse(
+   'root = Card("t", [h])\nh = SectionHeader("Workout", [x])\nx = Text("4 sets")',
+  );
+  expect(result.meta.errors).to.deep.equal([]);
+  const header = (result.root?.props['children'] as ElementNode[])[0] as ElementNode;
+  expect(header.typeName).to.equal('SectionHeader');
+  expect(header.props['title']).to.equal('Workout');
+  expect(((header.props['trailing'] as ElementNode[])[0] as ElementNode).typeName).to.equal('Text');
+ });
+
+ it('should parse SectionHeader with title only', () => {
+  const result = parser.parse('root = Card("t", [h])\nh = SectionHeader("Cooldown")');
+  expect(result.meta.errors).to.deep.equal([]);
+ });
+});
+
+describe('when parsing Card variants', () => {
+ let parser: Parser;
+
+ beforeEach(() => {
+  parser = createParser(wikiLibrary.toJSONSchema(), WIKI_ROOT_COMPONENT);
+ });
+
+ it('should parse Card variant as the third positional arg', () => {
+  for (const variant of ['elevated', 'outlined', 'filled', 'accent']) {
+   const result = parser.parse(`root = Card("t", [x], "${variant}")\nx = Text("hi")`);
+   expect(result.meta.errors, variant).to.deep.equal([]);
+   expect(result.root?.props['variant']).to.equal(variant);
+  }
+ });
+
+ it('should keep positional Card("title", children) binding unchanged', () => {
+  const result = parser.parse('root = Card("t", [x])\nx = Text("hi")');
+  expect(result.meta.errors).to.deep.equal([]);
+  expect(result.root?.props['title']).to.equal('t');
+  expect(result.root?.props['variant']).to.equal(undefined);
+ });
+
+ it('should reject unknown Card variants', () => {
+  const result = parser.parse('root = Card("t", [x], "glowing")\nx = Text("hi")');
+  expect(result.meta.errors.length).to.be.greaterThan(0);
+ });
+});
+
 
 describe('wiki library parsing', () => {
  let parser: Parser;

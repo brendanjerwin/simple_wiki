@@ -1,5 +1,5 @@
 /**
- * Design-system styles for `wiki-core@2` page app components.
+ * Design-system styles for `wiki-core@3` page app components.
  *
  * Every rule consumes the wiki theme's CSS custom properties (from
  * `static/css/default.css`, light + dark) so apps inherit the user's
@@ -30,19 +30,38 @@ export const wikiPageAppDesignSystem = css`
     font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
   }
 
-  .wiki-page-app-card-title {
-    margin: 0;
-    font-size: 1.05rem;
-    font-weight: 650;
-    color: var(--color-text-primary, #333333);
-  }
+ .wiki-page-app-card-title {
+   margin: 0;
+   font-size: 1.05rem;
+   font-weight: 650;
+   color: var(--color-text-primary, #333333);
+ }
 
-  .wiki-page-app-card-body {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-    min-width: 0;
-  }
+ .wiki-page-app-card-body {
+   display: flex;
+   flex-direction: column;
+   gap: 12px;
+   min-width: 0;
+ }
+
+ .wiki-page-app-card[data-variant='elevated'] {
+   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+   border-color: transparent;
+ }
+ .wiki-page-app-card[data-variant='outlined'] {
+   box-shadow: none;
+   border: 1px solid var(--color-border-strong, #cccccc);
+   background: var(--color-surface-primary, #ffffff);
+ }
+ .wiki-page-app-card[data-variant='filled'] {
+   box-shadow: none;
+   background: var(--color-surface-sunken, #f8f9fa);
+   border-color: transparent;
+ }
+ .wiki-page-app-card[data-variant='accent'] {
+   border: none;
+   background: linear-gradient(135deg, var(--color-accent-bg, #e9f2ff), transparent 60%), var(--color-surface-elevated, #ffffff);
+ }
 
   .wiki-page-app-stack {
     display: flex;
@@ -257,14 +276,64 @@ export const wikiPageAppDesignSystem = css`
     color: var(--color-text-primary, #333333);
   }
 
-  @media (max-width: 520px) {
-    .wiki-page-app-card {
-      padding: 12px;
-      border-radius: 8px;
+  .wiki-page-app-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 12px;
+    min-width: 0;
+  }
+  .wiki-page-app-grid[data-cols='2'] {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .wiki-page-app-grid[data-cols='3'] {
+    grid-template-columns: repeat(3, 1fr);
+  }
+  .wiki-page-app-grid[data-cols='sidebar'] {
+    grid-template-columns: 240px 1fr;
+  }
+  .wiki-page-app-grid > .wiki-page-app-card {
+    max-width: none;
+  }
+  .wiki-page-app-divider {
+    border: none;
+    border-top: 1px solid var(--color-border-subtle, #e0e0e0);
+    margin: 12px 0;
+  }
+  .wiki-page-app-section-header {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    min-width: 0;
+  }
+  .wiki-page-app-section-header-title {
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 650;
+    color: var(--color-text-primary, #333333);
+  }
+  .wiki-page-app-section-header-rule {
+    flex: 1;
+    border-top: 1px solid var(--color-border-subtle, #e0e0e0);
+  }
+
+   @media (max-width: 520px) {
+     .wiki-page-app-card {
+       padding: 12px;
+       border-radius: 8px;
+     }
+    /* Grids and spans collapse to one column on narrow screens. */
+    .wiki-page-app-grid[data-cols],
+    .wiki-page-app-grid {
+      grid-template-columns: 1fr;
     }
-    .wiki-page-app-stack[data-direction='horizontal'] {
-      flex-direction: column;
-      align-items: stretch;
+    /* !important required: beats the inline grid-column: span n the Span
+       component emits (inline style wins over normal author rules). */
+    .wiki-page-app-span {
+      grid-column: auto !important;
     }
+     .wiki-page-app-stack[data-direction='horizontal'] {
+       flex-direction: column;
+       align-items: stretch;
+     }
   }
 `;

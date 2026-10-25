@@ -50,14 +50,13 @@ jobs:
     # Run builds even if signing was skipped (push/PR) or failed
     if: always() && !cancelled()
     strategy:
+      fail-fast: false
       matrix:
         include:
           - goos: linux
             goarch: amd64
           - goos: linux
             goarch: arm64
-          - goos: windows
-            goarch: amd64
           - goos: darwin
             goarch: amd64
           - goos: darwin
@@ -95,14 +94,14 @@ jobs:
       - name: Upload Action Artifact
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: simple_wiki-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.goos == 'windows' && '.exe' || '' }}
-          path: ./simple_wiki-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.goos == 'windows' && '.exe' || '' }}
+          name: simple_wiki-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: ./simple_wiki-${{ matrix.goos }}-${{ matrix.goarch }}
 
       - name: Upload Release Asset
         if: github.event_name == 'release'
         uses: AButler/upload-release-assets@3d6774fae0ed91407dc5ae29d576b166536d1777 # v3.0
         with:
-          files: "./simple_wiki-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.goos == 'windows' && '.exe' || '' }}"
+          files: "./simple_wiki-${{ matrix.goos }}-${{ matrix.goarch }}"
           repo-token: ${{ secrets.GITHUB_TOKEN }}
 
   deploy:

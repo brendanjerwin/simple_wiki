@@ -12,7 +12,6 @@
 # Examples:
 #   devbox run build                          # Build for current platform
 #   devbox run build linux amd64             # Build for linux/amd64
-#   devbox run build windows amd64 true      # Build for windows/amd64, skip generation
 
 set -e
 
@@ -118,9 +117,6 @@ fi
 
 # Binary name with platform suffix
 BINARY_NAME="simple_wiki-${TARGET_OS}-${TARGET_ARCH}"
-if [[ "$TARGET_OS" = "windows" ]]; then
-    BINARY_NAME="${BINARY_NAME}.exe"
-fi
 
 echo "Building simple_wiki for ${TARGET_OS}/${TARGET_ARCH}"
 echo "Output: ${BINARY_NAME}"
