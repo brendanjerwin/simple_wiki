@@ -78,6 +78,15 @@ An agent can call `SetPageAgent` to hand off to a different agent. The next
 message on that page routes to the newly bound agent, with the transcript
 carried over.
 
+## Agent selector menu
+
+The agent selector's menu always stays within the browser window. It opens
+below the selector by default and flips above the trigger when there isn't
+room; near the window's right edge it grows leftward. Long agent lists scroll
+inside the menu rather than spilling past the window, and the menu repositions
+itself while it is open as the page scrolls or the window resizes. The same
+behavior backs the editor toolbar's upload menu and hashtag popovers.
+
 ## For Agents
 
 These indicators are bound to the [Agent Client Protocol
