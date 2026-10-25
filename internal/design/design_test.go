@@ -43,20 +43,40 @@ func tokenValues(css, prop string) []string {
 	return values
 }
 
+// WCAG 2.2 relative luminance constants.
+// https://www.w3.org/TR/WCAG22/#dfn-relative-luminance
+const (
+	hexBase               = 16
+	hexBitSize            = 64
+	hexRedChannelOffset   = 0
+	hexGreenChannelOffset = 2
+	hexBlueChannelOffset  = 4
+	wcagChannelMax        = 255.0
+	wcagDarkThreshold     = 0.04045
+	wcagDarkDivisor       = 12.92
+	wcagGammaShift        = 0.055
+	wcagGammaDivisor      = 1.055
+	wcagGammaExponent     = 2.4
+	wcagRedWeight         = 0.2126
+	wcagGreenWeight       = 0.7152
+	wcagBlueWeight        = 0.0722
+	wcagContrastOffset    = 0.05
+)
+
 // relativeLuminance converts a color to its WCAG relative luminance.
 // https://www.w3.org/TR/WCAG22/#dfn-relative-luminance
 func relativeLuminance(hex string) float64 {
 	Expect(hex).To(MatchRegexp(`^#[0-9a-f]{6}$`), "expected a 6-digit hex color")
 	channel := func(offset int) float64 {
-		channelValue, err := strconv.ParseInt(hex[1+offset:3+offset], 16, 64)
+		channelValue, err := strconv.ParseInt(hex[1+offset:3+offset], hexBase, hexBitSize)
 		Expect(err).NotTo(HaveOccurred())
-		normalized := float64(channelValue) / 255
-		if normalized <= 0.04045 {
-			return normalized / 12.92
+		normalized := float64(channelValue) / wcagChannelMax
+		if normalized <= wcagDarkThreshold {
+			return normalized / wcagDarkDivisor
 		}
-		return math.Pow((normalized+0.055)/1.055, 2.4)
+		return math.Pow((normalized+wcagGammaShift)/wcagGammaDivisor, wcagGammaExponent)
 	}
-	return 0.2126*channel(0) + 0.7152*channel(2) + 0.0722*channel(4)
+	return wcagRedWeight*channel(hexRedChannelOffset) + wcagGreenWeight*channel(hexGreenChannelOffset) + wcagBlueWeight*channel(hexBlueChannelOffset)
 }
 
 // contrastRatio computes the WCAG 2.2 contrast ratio between two colors.
@@ -67,7 +87,7 @@ func contrastRatio(foreground, background string) float64 {
 	if lightFg < lightBg {
 		lightFg, lightBg = lightBg, lightFg
 	}
-	return (lightFg + 0.05) / (lightBg + 0.05)
+	return (lightFg + wcagContrastOffset) / (lightBg + wcagContrastOffset)
 }
 
 // lightMutedOnSurfaces asserts the light-mode --color-text-muted token clears
