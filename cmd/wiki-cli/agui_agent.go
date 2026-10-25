@@ -433,9 +433,6 @@ func (a *agUIAgent) consumeSSEStream(ctx context.Context, body io.Reader) (*agUI
 // Returns a non-nil outcome on terminal events (RUN_FINISHED, RUN_ERROR).
 func (a *agUIAgent) dispatchSSEEvent(state *sseStreamState, eventType string, raw map[string]json.RawMessage) (*agUIRunOutcome, error) {
 	switch eventType {
-	case agUITypeRunStarted:
-		// No-op: turn status already sent by forwardUserMessage before Prompt.
-
 	case agUITypeTextMessageStart, agUITypeTextMessageContent,
 		agUITypeTextMessageEnd, agUITypeTextMessageChunk:
 		a.handleSSETextEvent(state, eventType, raw)
@@ -456,8 +453,10 @@ func (a *agUIAgent) dispatchSSEEvent(state *sseStreamState, eventType string, ra
 			Code:    jsonString(raw, sseKeyCode),
 		}
 
-	// Gracefully ignore events not handled in P2.
-	case agUITypeStepStarted, agUITypeStepFinished,
+	// Gracefully ignore events not surfaced in P2 (RUN_STARTED, step lifecycle,
+	// reasoning start/end markers, state snapshots).
+	case agUITypeRunStarted,
+		agUITypeStepStarted, agUITypeStepFinished,
 		agUITypeReasoningStart, agUITypeReasoningEnd,
 		agUITypeMsgReasoningStart, agUITypeMsgReasoningEnd,
 		agUITypeStateSnapshot, agUITypeStateDelta,
@@ -496,22 +495,28 @@ func (a *agUIAgent) handleSSETextEvent(state *sseStreamState, eventType string, 
 		delete(state.openMessages, jsonString(raw, sseKeyMessageID))
 
 	case agUITypeTextMessageChunk:
-		msgID := jsonString(raw, sseKeyMessageID)
-		if msgID == "" {
-			return
-		}
-		if _, already := state.openMessages[msgID]; !already {
-			state.openMessages[msgID] = &sseOpenMsg{role: "assistant"}
-		}
-		if delta := jsonString(raw, sseKeyDelta); delta != "" {
-			state.openMessages[msgID].buf.WriteString(delta)
-			a.streamTextDelta(delta)
-		}
-		delete(state.openMessages, msgID)
+		a.handleSSETextMessageChunk(state, raw)
 
 	default:
 		// Unknown TEXT_MESSAGE_* subtype — no-op.
 	}
+}
+
+// handleSSETextMessageChunk processes a TEXT_MESSAGE_CHUNK shorthand event,
+// which opens, populates, and immediately closes a message in one shot.
+func (a *agUIAgent) handleSSETextMessageChunk(state *sseStreamState, raw map[string]json.RawMessage) {
+	msgID := jsonString(raw, sseKeyMessageID)
+	if msgID == "" {
+		return
+	}
+	if _, already := state.openMessages[msgID]; !already {
+		state.openMessages[msgID] = &sseOpenMsg{role: "assistant"}
+	}
+	if delta := jsonString(raw, sseKeyDelta); delta != "" {
+		state.openMessages[msgID].buf.WriteString(delta)
+		a.streamTextDelta(delta)
+	}
+	delete(state.openMessages, msgID)
 }
 
 // handleSSEToolEvent processes TOOL_CALL_* events.
@@ -530,9 +535,6 @@ func (a *agUIAgent) handleSSEToolEvent(state *sseStreamState, eventType string, 
 			Title:      toolCallName,
 			Status:     status,
 		})
-
-	case agUITypeToolCallArgs:
-		// Args delta — not surfaced separately in P2.
 
 	case agUITypeToolCallEnd:
 		toolCallID := jsonString(raw, sseKeyToolCallID)
@@ -565,7 +567,7 @@ func (a *agUIAgent) handleSSEToolEvent(state *sseStreamState, eventType string, 
 		}
 
 	default:
-		// Unknown TOOL_CALL_* subtype — no-op.
+		// TOOL_CALL_ARGS and unknown subtypes — not surfaced in P2.
 	}
 }
 

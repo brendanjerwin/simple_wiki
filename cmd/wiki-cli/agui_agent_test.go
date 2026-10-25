@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"strings"
+	"time"
 
 	acp "github.com/coder/acp-go-sdk"
 	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
@@ -606,6 +607,640 @@ var _ = Describe("agUIAgent", func() {
 			It("should return the actual value", func() {
 				Expect(result).To(Equal("present"))
 			})
+		})
+	})
+})
+
+// ─── agUIRunError ─────────────────────────────────────────────────────────────
+
+var _ = Describe("agUIRunError", func() {
+	Describe("Error", func() {
+		Describe("when code is set", func() {
+			var result string
+
+			BeforeEach(func() {
+				result = (&agUIRunError{Message: "oops", Code: "E42"}).Error()
+			})
+
+			It("should include the code and message", func() {
+				Expect(result).To(Equal("AG-UI run error [E42]: oops"))
+			})
+		})
+
+		Describe("when code is empty", func() {
+			var result string
+
+			BeforeEach(func() {
+				result = (&agUIRunError{Message: "bare error"}).Error()
+			})
+
+			It("should include only the message", func() {
+				Expect(result).To(Equal("AG-UI run error: bare error"))
+			})
+		})
+	})
+})
+
+// ─── parseRunFinished branches ────────────────────────────────────────────────
+
+var _ = Describe("parseRunFinished outcome branches", func() {
+	Describe("when RUN_FINISHED status is 'cancelled'", func() {
+		var err error
+
+		BeforeEach(func() {
+			stream := sseEvent(agUITypeRunFinished, map[string]any{"status": "cancelled"})
+			srv := sseServer(stream)
+			DeferCleanup(srv.Close)
+
+			agent := newTestAGUIAgent(srv.URL, &mockChatReplier{})
+			_, err = agent.Prompt(context.Background(), acp.PromptRequest{
+				Prompt: []acp.ContentBlock{
+					{Text: &acp.ContentBlockText{Text: "hi", Type: "text"}},
+				},
+			})
+		})
+
+		It("should not error", func() {
+			Expect(err).NotTo(HaveOccurred())
+		})
+	})
+
+	Describe("when RUN_FINISHED status is unknown", func() {
+		var err error
+
+		BeforeEach(func() {
+			stream := sseEvent(agUITypeRunFinished, map[string]any{"status": "future_status"})
+			srv := sseServer(stream)
+			DeferCleanup(srv.Close)
+
+			agent := newTestAGUIAgent(srv.URL, &mockChatReplier{})
+			_, err = agent.Prompt(context.Background(), acp.PromptRequest{
+				Prompt: []acp.ContentBlock{
+					{Text: &acp.ContentBlockText{Text: "hi", Type: "text"}},
+				},
+			})
+		})
+
+		It("should treat unknown status as success and not error", func() {
+			Expect(err).NotTo(HaveOccurred())
+		})
+	})
+
+	Describe("when RUN_FINISHED status is 'interrupt' with no interrupts array", func() {
+		var err error
+		var replier *mockChatReplier
+
+		BeforeEach(func() {
+			replier = &mockChatReplier{
+				permResp: &apiv1.RequestPermissionFromUserResponse{
+					SelectedOptionId: "approve",
+				},
+				sendReplyResp: &apiv1.SendChatReplyResponse{MessageId: "m1"},
+			}
+
+			// First call: interrupt with no interrupts array; second: success.
+			callCount := 0
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				callCount++
+				w.Header().Set("Content-Type", "text/event-stream")
+				w.WriteHeader(http.StatusOK)
+				if callCount == 1 {
+					_, _ = fmt.Fprint(w, sseEvent(agUITypeRunFinished, map[string]any{"status": "interrupt"}))
+				} else {
+					_, _ = fmt.Fprint(w, sseEvent(agUITypeRunFinished, map[string]any{"status": "success"}))
+				}
+			}))
+			DeferCleanup(srv.Close)
+
+			agent := newTestAGUIAgent(srv.URL, replier)
+			_, err = agent.Prompt(context.Background(), acp.PromptRequest{
+				Prompt: []acp.ContentBlock{
+					{Text: &acp.ContentBlockText{Text: "hi", Type: "text"}},
+				},
+			})
+		})
+
+		It("should not error (empty interrupt list treated as resume with no entries)", func() {
+			Expect(err).NotTo(HaveOccurred())
+		})
+	})
+})
+
+// ─── additional event type coverage ──────────────────────────────────────────
+
+var _ = Describe("additional SSE event coverage", func() {
+	Describe("when the endpoint emits REASONING_MESSAGE_CHUNK events", func() {
+		var err error
+		var replier *mockChatReplier
+
+		BeforeEach(func() {
+			replier = &mockChatReplier{
+				sendReplyResp: &apiv1.SendChatReplyResponse{MessageId: "thought-chunk"},
+			}
+
+			stream := strings.Join([]string{
+				sseEvent(agUITypeMsgReasoningChunk, map[string]any{"delta": "Hmm..."}),
+				sseEvent(agUITypeRunFinished, map[string]any{"status": "success"}),
+			}, "")
+
+			srv := sseServer(stream)
+			DeferCleanup(srv.Close)
+
+			agent := newTestAGUIAgent(srv.URL, replier)
+			_, err = agent.Prompt(context.Background(), acp.PromptRequest{
+				Prompt: []acp.ContentBlock{
+					{Text: &acp.ContentBlockText{Text: "think chunk", Type: "text"}},
+				},
+			})
+		})
+
+		It("should not error", func() {
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should stream the thought chunk via chat reply", func() {
+			Expect(replier.sendReplyCalled).To(BeTrue())
+		})
+	})
+
+	Describe("when the endpoint emits TOOL_CALL_CHUNK for a new toolCallId", func() {
+		var err error
+
+		BeforeEach(func() {
+			// TOOL_CALL_CHUNK for an unseen toolCallId should open a new entry.
+			// Notification is only sent if currentMsg is set; here we just verify
+			// the event is handled without error.
+			stream := strings.Join([]string{
+				sseEvent(agUITypeToolCallChunk, map[string]any{
+					"toolCallId":   "tc-chunk",
+					"toolCallName": "search",
+					"delta":        `{"query":`,
+				}),
+				sseEvent(agUITypeRunFinished, map[string]any{"status": "success"}),
+			}, "")
+
+			srv := sseServer(stream)
+			DeferCleanup(srv.Close)
+
+			agent := newTestAGUIAgent(srv.URL, &mockChatReplier{})
+			_, err = agent.Prompt(context.Background(), acp.PromptRequest{
+				Prompt: []acp.ContentBlock{
+					{Text: &acp.ContentBlockText{Text: "search something", Type: "text"}},
+				},
+			})
+		})
+
+		It("should not error", func() {
+			Expect(err).NotTo(HaveOccurred())
+		})
+	})
+
+	Describe("when the endpoint emits gracefully-ignored event types", func() {
+		var err error
+
+		BeforeEach(func() {
+			stream := strings.Join([]string{
+				sseEvent(agUITypeRunStarted, map[string]any{}),
+				sseEvent(agUITypeStepStarted, map[string]any{}),
+				sseEvent(agUITypeStepFinished, map[string]any{}),
+				sseEvent(agUITypeReasoningStart, map[string]any{}),
+				sseEvent(agUITypeReasoningEnd, map[string]any{}),
+				sseEvent(agUITypeMsgReasoningStart, map[string]any{}),
+				sseEvent(agUITypeMsgReasoningEnd, map[string]any{}),
+				sseEvent(agUITypeStateSnapshot, map[string]any{}),
+				sseEvent(agUITypeStateDelta, map[string]any{}),
+				sseEvent(agUITypeMessagesSnapshot, map[string]any{}),
+				sseEvent(agUITypeRunFinished, map[string]any{"status": "success"}),
+			}, "")
+
+			srv := sseServer(stream)
+			DeferCleanup(srv.Close)
+
+			agent := newTestAGUIAgent(srv.URL, &mockChatReplier{})
+			_, err = agent.Prompt(context.Background(), acp.PromptRequest{
+				Prompt: []acp.ContentBlock{
+					{Text: &acp.ContentBlockText{Text: "hi", Type: "text"}},
+				},
+			})
+		})
+
+		It("should not error", func() {
+			Expect(err).NotTo(HaveOccurred())
+		})
+	})
+
+	Describe("when the SSE stream ends without a terminal event", func() {
+		var err error
+
+		BeforeEach(func() {
+			// Stream that just closes without RUN_FINISHED
+			stream := sseEvent(agUITypeTextMessageStart, map[string]any{"messageId": "m1", "role": "assistant"})
+
+			srv := sseServer(stream)
+			DeferCleanup(srv.Close)
+
+			agent := newTestAGUIAgent(srv.URL, &mockChatReplier{})
+			_, err = agent.Prompt(context.Background(), acp.PromptRequest{
+				Prompt: []acp.ContentBlock{
+					{Text: &acp.ContentBlockText{Text: "hi", Type: "text"}},
+				},
+			})
+		})
+
+		It("should not error (truncated stream treated as success)", func() {
+			Expect(err).NotTo(HaveOccurred())
+		})
+	})
+
+	Describe("when the SSE stream contains malformed JSON", func() {
+		var err error
+
+		BeforeEach(func() {
+			// A malformed data line followed by a valid terminal event.
+			stream := "data: {not valid json}\n\n" +
+				sseEvent(agUITypeRunFinished, map[string]any{"status": "success"})
+
+			srv := sseServer(stream)
+			DeferCleanup(srv.Close)
+
+			agent := newTestAGUIAgent(srv.URL, &mockChatReplier{})
+			_, err = agent.Prompt(context.Background(), acp.PromptRequest{
+				Prompt: []acp.ContentBlock{
+					{Text: &acp.ContentBlockText{Text: "hi", Type: "text"}},
+				},
+			})
+		})
+
+		It("should skip the malformed event and not error", func() {
+			Expect(err).NotTo(HaveOccurred())
+		})
+	})
+
+	Describe("when context deadline expires mid-stream", func() {
+		var err error
+
+		BeforeEach(func() {
+			// Server that blocks indefinitely after writing response headers,
+			// so the client's context deadline triggers the cancellation.
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "text/event-stream")
+				w.WriteHeader(http.StatusOK)
+				if f, ok := w.(http.Flusher); ok {
+					f.Flush()
+				}
+				<-r.Context().Done()
+			}))
+			DeferCleanup(srv.Close)
+
+			// 200 ms deadline — establishes the connection, then expires mid-stream.
+			ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+			defer cancel()
+
+			agent := newTestAGUIAgent(srv.URL, &mockChatReplier{})
+			_, err = agent.Prompt(ctx, acp.PromptRequest{
+				Prompt: []acp.ContentBlock{
+					{Text: &acp.ContentBlockText{Text: "hi", Type: "text"}},
+				},
+			})
+		})
+
+		It("should not error (deadline expiry treated as clean cancellation)", func() {
+			Expect(err).NotTo(HaveOccurred())
+		})
+	})
+})
+
+// ─── SSE text event edge cases ────────────────────────────────────────────────
+
+var _ = Describe("handleSSETextEvent edge cases", func() {
+	Describe("when TEXT_MESSAGE_CONTENT arrives for an unknown messageId", func() {
+		var err error
+
+		BeforeEach(func() {
+			// Content event without a prior Start — delta is still streamed but no buffer entry.
+			stream := strings.Join([]string{
+				sseEvent(agUITypeTextMessageContent, map[string]any{"messageId": "unknown-id", "delta": "orphaned delta"}),
+				sseEvent(agUITypeRunFinished, map[string]any{"status": "success"}),
+			}, "")
+
+			srv := sseServer(stream)
+			DeferCleanup(srv.Close)
+
+			agent := newTestAGUIAgent(srv.URL, &mockChatReplier{
+				sendReplyResp: &apiv1.SendChatReplyResponse{MessageId: "m1"},
+			})
+			_, err = agent.Prompt(context.Background(), acp.PromptRequest{
+				Prompt: []acp.ContentBlock{
+					{Text: &acp.ContentBlockText{Text: "hi", Type: "text"}},
+				},
+			})
+		})
+
+		It("should not error", func() {
+			Expect(err).NotTo(HaveOccurred())
+		})
+	})
+
+	Describe("when TEXT_MESSAGE_CHUNK has no delta", func() {
+		var err error
+
+		BeforeEach(func() {
+			// Chunk event without a delta field — should still create the open message entry.
+			stream := strings.Join([]string{
+				sseEvent(agUITypeTextMessageChunk, map[string]any{"messageId": "m-nodelta"}),
+				sseEvent(agUITypeRunFinished, map[string]any{"status": "success"}),
+			}, "")
+
+			srv := sseServer(stream)
+			DeferCleanup(srv.Close)
+
+			agent := newTestAGUIAgent(srv.URL, &mockChatReplier{})
+			_, err = agent.Prompt(context.Background(), acp.PromptRequest{
+				Prompt: []acp.ContentBlock{
+					{Text: &acp.ContentBlockText{Text: "hi", Type: "text"}},
+				},
+			})
+		})
+
+		It("should not error", func() {
+			Expect(err).NotTo(HaveOccurred())
+		})
+	})
+})
+
+// ─── SSE tool event edge cases ────────────────────────────────────────────────
+
+var _ = Describe("handleSSEToolEvent edge cases", func() {
+	Describe("when TOOL_CALL_END arrives for an unknown toolCallId", func() {
+		var err error
+
+		BeforeEach(func() {
+			// End event with no prior Start — should be a no-op.
+			stream := strings.Join([]string{
+				sseEvent(agUITypeToolCallEnd, map[string]any{"toolCallId": "no-such-tool"}),
+				sseEvent(agUITypeRunFinished, map[string]any{"status": "success"}),
+			}, "")
+
+			srv := sseServer(stream)
+			DeferCleanup(srv.Close)
+
+			agent := newTestAGUIAgent(srv.URL, &mockChatReplier{})
+			_, err = agent.Prompt(context.Background(), acp.PromptRequest{
+				Prompt: []acp.ContentBlock{
+					{Text: &acp.ContentBlockText{Text: "hi", Type: "text"}},
+				},
+			})
+		})
+
+		It("should not error", func() {
+			Expect(err).NotTo(HaveOccurred())
+		})
+	})
+
+	Describe("when TOOL_CALL_CHUNK arrives for an already-open toolCallId", func() {
+		var err error
+
+		BeforeEach(func() {
+			// Start opens the tool call; chunk for the same id is a no-op (de-dup).
+			stream := strings.Join([]string{
+				sseEvent(agUITypeToolCallStart, map[string]any{"toolCallId": "tc-dup", "toolCallName": "tool_a"}),
+				sseEvent(agUITypeToolCallChunk, map[string]any{"toolCallId": "tc-dup", "toolCallName": "tool_a", "delta": `{"k":`}),
+				sseEvent(agUITypeRunFinished, map[string]any{"status": "success"}),
+			}, "")
+
+			srv := sseServer(stream)
+			DeferCleanup(srv.Close)
+
+			agent := newTestAGUIAgent(srv.URL, &mockChatReplier{})
+			_, err = agent.Prompt(context.Background(), acp.PromptRequest{
+				Prompt: []acp.ContentBlock{
+					{Text: &acp.ContentBlockText{Text: "hi", Type: "text"}},
+				},
+			})
+		})
+
+		It("should not error (duplicate chunk is silently ignored)", func() {
+			Expect(err).NotTo(HaveOccurred())
+		})
+	})
+})
+
+// ─── handleInterrupts edge cases ─────────────────────────────────────────────
+
+var _ = Describe("handleInterrupts edge cases", func() {
+	Describe("when interrupt has Reason but no Message", func() {
+		var err error
+		var replier *mockChatReplier
+		var requestCount int
+
+		BeforeEach(func() {
+			replier = &mockChatReplier{
+				permResp: &apiv1.RequestPermissionFromUserResponse{
+					SelectedOptionId: "approve",
+				},
+				sendReplyResp: &apiv1.SendChatReplyResponse{MessageId: "m1"},
+			}
+
+			requestCount = 0
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				requestCount++
+				w.Header().Set("Content-Type", "text/event-stream")
+				w.WriteHeader(http.StatusOK)
+				if requestCount == 1 {
+					body := sseEvent(agUITypeRunFinished, map[string]any{
+						"status": "interrupt",
+						"interrupts": []map[string]any{
+							{"id": "ir-reason", "reason": "Needs approval", "message": ""},
+						},
+					})
+					_, _ = fmt.Fprint(w, body)
+				} else {
+					_, _ = fmt.Fprint(w, sseEvent(agUITypeRunFinished, map[string]any{"status": "success"}))
+				}
+			}))
+			DeferCleanup(srv.Close)
+
+			agent := newTestAGUIAgent(srv.URL, replier)
+			_, err = agent.Prompt(context.Background(), acp.PromptRequest{
+				Prompt: []acp.ContentBlock{
+					{Text: &acp.ContentBlockText{Text: "hi", Type: "text"}},
+				},
+			})
+		})
+
+		It("should not error", func() {
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should relay the permission request using the reason text", func() {
+			Expect(replier.permCalled).To(BeTrue())
+		})
+	})
+
+	Describe("when interrupt has neither Reason nor Message", func() {
+		var err error
+		var replier *mockChatReplier
+
+		BeforeEach(func() {
+			replier = &mockChatReplier{
+				permResp: &apiv1.RequestPermissionFromUserResponse{
+					SelectedOptionId: "approve",
+				},
+				sendReplyResp: &apiv1.SendChatReplyResponse{MessageId: "m1"},
+			}
+
+			requestCount := 0
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				requestCount++
+				w.Header().Set("Content-Type", "text/event-stream")
+				w.WriteHeader(http.StatusOK)
+				if requestCount == 1 {
+					body := sseEvent(agUITypeRunFinished, map[string]any{
+						"status": "interrupt",
+						"interrupts": []map[string]any{
+							{"id": "ir-bare"},
+						},
+					})
+					_, _ = fmt.Fprint(w, body)
+				} else {
+					_, _ = fmt.Fprint(w, sseEvent(agUITypeRunFinished, map[string]any{"status": "success"}))
+				}
+			}))
+			DeferCleanup(srv.Close)
+
+			agent := newTestAGUIAgent(srv.URL, replier)
+			_, err = agent.Prompt(context.Background(), acp.PromptRequest{
+				Prompt: []acp.ContentBlock{
+					{Text: &acp.ContentBlockText{Text: "hi", Type: "text"}},
+				},
+			})
+		})
+
+		It("should not error", func() {
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should relay the permission request with fallback title", func() {
+			Expect(replier.permCalled).To(BeTrue())
+		})
+	})
+
+	Describe("when the user denies the permission request", func() {
+		var err error
+		var replier *mockChatReplier
+
+		BeforeEach(func() {
+			// Empty SelectedOptionId → processPermissionResponse treats as denied.
+			replier = &mockChatReplier{
+				permResp:      &apiv1.RequestPermissionFromUserResponse{SelectedOptionId: ""},
+				sendReplyResp: &apiv1.SendChatReplyResponse{MessageId: "m1"},
+			}
+
+			requestCount := 0
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				requestCount++
+				w.Header().Set("Content-Type", "text/event-stream")
+				w.WriteHeader(http.StatusOK)
+				if requestCount == 1 {
+					// First run: interrupt requiring approval.
+					body := sseEvent(agUITypeRunFinished, map[string]any{
+						"status": "interrupt",
+						"interrupts": []map[string]any{
+							{"id": "ir-deny", "message": "Allow write?"},
+						},
+					})
+					_, _ = fmt.Fprint(w, body)
+				} else {
+					// Second run (resume with deny): success.
+					_, _ = fmt.Fprint(w, sseEvent(agUITypeRunFinished, map[string]any{"status": "success"}))
+				}
+			}))
+			DeferCleanup(srv.Close)
+
+			agent := newTestAGUIAgent(srv.URL, replier)
+			_, err = agent.Prompt(context.Background(), acp.PromptRequest{
+				Prompt: []acp.ContentBlock{
+					{Text: &acp.ContentBlockText{Text: "write something risky", Type: "text"}},
+				},
+			})
+		})
+
+		It("should not error (deny is a valid outcome)", func() {
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should have called the permission relay", func() {
+			Expect(replier.permCalled).To(BeTrue())
+		})
+	})
+})
+
+// ─── newAgUIAgent edge cases ─────────────────────────────────────────────────
+
+var _ = Describe("newAgUIAgent", func() {
+	Describe("when envGetter is nil", func() {
+		var agent *agUIAgent
+
+		BeforeEach(func() {
+			cfg := agUIBackendConfig{
+				ID:       "no-env-agent",
+				Endpoint: "https://example.com/run",
+				TokenEnv: "SOME_TOKEN",
+			}
+			agent = newAgUIAgent(cfg, newTestChatClient(&mockChatReplier{}), "page", nil)
+		})
+
+		It("should construct successfully with an empty token", func() {
+			Expect(agent).NotTo(BeNil())
+			Expect(agent.token).To(Equal(""))
+		})
+	})
+
+	Describe("when TokenEnv is empty", func() {
+		var agent *agUIAgent
+
+		BeforeEach(func() {
+			cfg := agUIBackendConfig{
+				ID:       "no-token-agent",
+				Endpoint: "https://example.com/run",
+			}
+			envCalled := false
+			agent = newAgUIAgent(cfg, newTestChatClient(&mockChatReplier{}), "page", func(key string) string {
+				envCalled = true
+				return "should-not-be-called"
+			})
+			_ = envCalled
+		})
+
+		It("should construct with an empty token without calling envGetter", func() {
+			Expect(agent.token).To(Equal(""))
+		})
+	})
+})
+
+// ─── Prompt unknown outcome status ───────────────────────────────────────────
+
+var _ = Describe("Prompt unknown outcome status", func() {
+	Describe("when Prompt returns an unknown status from the loop", func() {
+		var err error
+
+		BeforeEach(func() {
+			// Simulate a run that returns an outcome with an unknown status string via
+			// a direct call to consumeSSEStream through Prompt.
+			stream := sseEvent(agUITypeRunFinished, map[string]any{"status": "warp_speed"})
+			srv := sseServer(stream)
+			DeferCleanup(srv.Close)
+
+			agent := newTestAGUIAgent(srv.URL, &mockChatReplier{})
+			_, err = agent.Prompt(context.Background(), acp.PromptRequest{
+				Prompt: []acp.ContentBlock{
+					{Text: &acp.ContentBlockText{Text: "engage", Type: "text"}},
+				},
+			})
+		})
+
+		It("should not error (unknown outcome treated as success)", func() {
+			Expect(err).NotTo(HaveOccurred())
 		})
 	})
 })

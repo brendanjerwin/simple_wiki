@@ -5228,6 +5228,79 @@ var _ = Describe("registerPoolAgent", func() {
 	})
 })
 
+var _ = Describe("registerAGUIAgentsWithInventory", func() {
+	Describe("when the inventory accepts the AG-UI descriptor", func() {
+		var inventory *fakeAgentInventoryClient
+
+		BeforeEach(func() {
+			inventory = &fakeAgentInventoryClient{}
+			daemon := &poolDaemon{
+				inventoryClient: inventory,
+				poolInstanceID:  "inst-1",
+				agUIBackends: map[string]agUIBackendConfig{
+					"agent-x": {
+						ID:          "agent-x",
+						DisplayName: "Agent X",
+						Description: "Does X things",
+						Endpoint:    "https://x.example/run",
+					},
+				},
+			}
+			daemon.registerAGUIAgentsWithInventory(context.Background())
+		})
+
+		It("should send AG_UI_REMOTE descriptor with id, display name, endpoint, and instance id", func() {
+			Expect(inventory.registerReq).NotTo(BeNil())
+			Expect(inventory.registerReq.GetId()).To(Equal("agent-x"))
+			Expect(inventory.registerReq.GetDisplayName()).To(Equal("Agent X"))
+			Expect(inventory.registerReq.GetProtocol()).To(Equal(apiv1.AgentProtocol_AG_UI_REMOTE))
+			Expect(inventory.registerReq.GetRoute()).To(Equal("https://x.example/run"))
+			Expect(inventory.registerReq.GetPoolInstanceId()).To(Equal("inst-1"))
+		})
+	})
+
+	Describe("when the inventory client errors for an AG-UI agent", func() {
+		var inventory *fakeAgentInventoryClient
+
+		BeforeEach(func() {
+			inventory = &fakeAgentInventoryClient{registerErr: errors.New("registry offline")}
+			daemon := &poolDaemon{
+				inventoryClient: inventory,
+				poolInstanceID:  "inst-1",
+				agUIBackends: map[string]agUIBackendConfig{
+					"agent-y": {
+						ID:       "agent-y",
+						Endpoint: "https://y.example/run",
+					},
+				},
+			}
+			// Best-effort: must not panic.
+			daemon.registerAGUIAgentsWithInventory(context.Background())
+		})
+
+		It("should still be best-effort (no panic and a registration attempt was made)", func() {
+			Expect(inventory.registerReq).NotTo(BeNil())
+		})
+	})
+
+	Describe("when there are no AG-UI backends configured", func() {
+		var inventory *fakeAgentInventoryClient
+
+		BeforeEach(func() {
+			inventory = &fakeAgentInventoryClient{}
+			daemon := &poolDaemon{
+				inventoryClient: inventory,
+				agUIBackends:    nil,
+			}
+			daemon.registerAGUIAgentsWithInventory(context.Background())
+		})
+
+		It("should not call RegisterPoolAgent", func() {
+			Expect(inventory.registerReq).To(BeNil())
+		})
+	})
+})
+
 var _ = Describe("resolvePageAgent", func() {
 	Describe("when the page is unbound (server returns the default agent)", func() {
 		var (
