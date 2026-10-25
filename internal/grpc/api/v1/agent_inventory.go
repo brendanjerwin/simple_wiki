@@ -3,6 +3,7 @@ package v1
 import (
 	"context"
 	"errors"
+	"os"
 
 	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
 	"github.com/brendanjerwin/simple_wiki/server"
@@ -78,6 +79,9 @@ func (s *Server) GetPageAgent(_ context.Context, req *apiv1.GetPageAgentRequest)
 
 	binding, err := s.agentPageBindingStore.GetBinding(req.GetPage())
 	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, status.Errorf(codes.NotFound, pageNotFoundErrFmt, req.GetPage())
+		}
 		return nil, status.Errorf(codes.Internal, "get page agent: %v", err)
 	}
 
