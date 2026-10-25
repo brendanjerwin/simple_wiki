@@ -378,6 +378,8 @@ var _ = Describe("page app placement guard", func() {
 
 	Describe("UpdatePageContent fence-only candidate", func() {
 		It("rejects the prose-clear (edit path has no confirm field)", func() {
+			// The page-app prose guard owns this failure mode; the generic shrink
+			// breaker yields on page-app-shaped writes so its message surfaces.
 			_, err := server.UpdatePageContent(ctx, &apiv1.UpdatePageContentRequest{
 				Page:               "roadmap",
 				NewContentMarkdown: "```wiki-page-app\n$n = 0\nroot = Card(\"Lone\", [])\n```\n",

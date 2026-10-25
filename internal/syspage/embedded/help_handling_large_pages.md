@@ -33,13 +33,22 @@ Use `api_v1_PageManagementService_ReadPage` only when you truly need the whole m
 
 When editing one section, prefer `api_v1_PageManagementService_UpdatePageContent` with `old_content_markdown`, `new_content_markdown`, and `expected_version_hash`. The `old_content_markdown` should come from `ReadPageSection` when possible. That keeps the edit small and avoids rewriting unrelated content.
 
-## UpdateWholePage circuit breaker and version safety
+## Shrink circuit breakers on full-content writes
 
-`api_v1_PageManagementService_UpdateWholePage` replaces the entire page (frontmatter + markdown). It rejects writes where the new content is less than 10% of the existing page size (and the page is at least 1 KB), returning `FailedPrecondition` with the sizes and a pointer to safer tools. This prevents accidental page wipes when a partial payload is sent (e.g., just the header).
+Both full-content write paths carry a server-side **shrink circuit breaker** (issue #1299): a write whose resulting page would be under **10% of the current page size** (current page at least 1 KB) is rejected with `FailedPrecondition`, stating both sizes and how to override. This covers the incident class where an agent reconstructs a whole page from a context-clipped read and silently drops 99% of it.
+
+- `api_v1_PageManagementService_UpdateWholePage`: breaker compares the new whole markdown against the current page.
+- `api_v1_PageManagementService_UpdatePageContent`: same check on the *resulting* page — both for full body replacement (when `old_content_markdown` is omitted) and for find-and-replace (net page size after the replacement).
+
+**Overriding**: if the drastic shrink is intended, re-send with `allow_shrink=true`. The editor surfaces the breaker as a confirmation dialog with the same choice. The breaker runs atomically with the write, so it always evaluates against the true current content — even if another writer changed the page since your read.
+
+**Self-check**: successful writes return `page_byte_size` — compare it to what you intended to write. If it is far smaller than expected, your payload was clipped; restore via `api_v1_PageHistoryService_RestorePageVersion` before continuing.
+
+**Concurrent-edit protection**: pass the `version_hash` from a prior read as `expected_version_hash`; the server returns `ABORTED` on any full-page change made since that read (the hash covers the whole page — frontmatter + markdown — even when you only read a section). Successful responses echo the new `version_hash` so successive edits can chain safely.
 
 **Version hash (concurrent-edit protection)**: Pass the `version_hash` from a prior `ReadPage` call as `expected_version_hash` in the request. If the page has been modified since that read, the server returns `ABORTED` instead of silently overwriting. Omitting `expected_version_hash` skips the check (not recommended when another agent or user may be editing). The response always includes the new `version_hash` after a successful write, so callers can chain successive edits safely.
 
-For partial edits, use `UpdatePageContent` with `expected_version_hash`. For frontmatter-only changes, use `MergeFrontmatter` or `RemoveKeyAtPath`. To clear the body explicitly, use `ClearPageContent` with `confirm_clear=true`. Reserve `UpdateWholePage` for genuine full rewrites — and when you do, send the complete content.
+For partial edits, use `UpdatePageContent` with `expected_version_hash`. For frontmatter-only changes, use `MergeFrontmatter` or `RemoveKeyAtPath`. To clear the body explicitly, use `ClearPageContent` with `confirm_clear=true`. Reserve `UpdateWholePage` for genuine full rewrites — and when you do, send the complete content. Re-read the full page (not just a section) before any whole-page save: a partial read plus a whole-page write is exactly the failure the breaker exists to catch.
 
 ## If the Tools Are Missing
 
