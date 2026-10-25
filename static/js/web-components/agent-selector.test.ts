@@ -715,6 +715,128 @@ describe('AgentSelector', () => {
     });
   });
 
+  describe('viewport-aware positioning', () => {
+    let fakeClient: FakeInventoryClient;
+
+    /**
+     * Creates a component with an open dropdown, stubs `_getMeasurements` with
+     * the supplied values, and directly calls `_repositionDropdown()` so the
+     * tests are not sensitive to the exact call-timing inside `updated()`.
+     */
+    async function buildRepositioned(
+      triggerRect: DOMRect,
+      viewport: { vpW: number; vpH: number },
+    ): Promise<{ el: AgentSelector; dropdown: HTMLElement }> {
+      const element = await Promise.race([
+        fixture<AgentSelector>(html`<agent-selector></agent-selector>`),
+        timeout(5000, 'Component fixture timed out'),
+      ]);
+
+      fakeClient = buildFakeClient();
+      fakeClient.listAgents.resolves(
+        create(ListAgentsResponseSchema, { agents: [makeAgent()] })
+      );
+      fakeClient.getPageAgent.resolves(
+        create(GetPageAgentResponseSchema, { agent: makeAgent() })
+      );
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- injecting fake client for tests
+      element.client = fakeClient as unknown as AgentSelector['client'];
+
+      element.page = 'test-page';
+      await waitUntil(() => !element['_loading'], 'still loading', { timeout: 1000 });
+      await element.updateComplete;
+
+      // Open the dropdown so the element is visible in the shadow DOM
+      element.shadowRoot!.querySelector<HTMLButtonElement>('.current-agent')!.click();
+      await element.updateComplete;
+
+      // Stub the measurement seam and invoke positioning directly so we test
+      // the logic independently of Lit's updated() call timing.
+      sinon.stub(element, '_getMeasurements').returns({ rect: triggerRect, ...viewport });
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- calling private method under test
+      (element as unknown as { _repositionDropdown(): void })._repositionDropdown();
+
+      const dropdown = element.shadowRoot!.querySelector<HTMLElement>('.dropdown')!;
+      return { el: element, dropdown };
+    }
+
+    afterEach(() => {
+      sinon.restore();
+    });
+
+    describe('when trigger has sufficient space below in the viewport', () => {
+      let dropdown: HTMLElement;
+
+      beforeEach(async () => {
+        // trigger at top of page: bottom=80, vpH=800 → spaceBelow=712 ≥ 120
+        const result = await buildRepositioned(
+          { top: 50, bottom: 80, left: 100, right: 220, width: 120, height: 30, x: 100, y: 50, toJSON: () => ({}) } as DOMRect,
+          { vpW: 1200, vpH: 800 },
+        );
+        el = result.el;
+        dropdown = result.dropdown;
+      });
+
+      it('should position the dropdown below the trigger', () => {
+        const top = parseFloat(dropdown.style.top);
+        // top should be rect.bottom (80) + gapPx (4) = 84
+        expect(top).to.be.greaterThan(80);
+      });
+
+      it('should left-align the dropdown to the trigger', () => {
+        const left = parseFloat(dropdown.style.left);
+        // left edge aligns with rect.left (100), no clamping needed
+        expect(left).to.equal(100);
+      });
+
+      it('should set a max-height on the dropdown', () => {
+        expect(dropdown.style.maxHeight).to.not.equal('');
+      });
+    });
+
+    describe('when trigger is near the bottom of the viewport', () => {
+      let dropdown: HTMLElement;
+
+      beforeEach(async () => {
+        // trigger near bottom: top=720, bottom=750, vpH=800
+        // spaceBelow = 800 - 750 - 8 = 42 < 120
+        // spaceAbove = 720 - 8 = 712 > 42 → flip above
+        const result = await buildRepositioned(
+          { top: 720, bottom: 750, left: 100, right: 220, width: 120, height: 30, x: 100, y: 720, toJSON: () => ({}) } as DOMRect,
+          { vpW: 1200, vpH: 800 },
+        );
+        el = result.el;
+        dropdown = result.dropdown;
+      });
+
+      it('should position the dropdown above the trigger', () => {
+        const top = parseFloat(dropdown.style.top);
+        expect(top).to.be.lessThan(720);
+      });
+    });
+
+    describe('when trigger is near the right edge of the viewport', () => {
+      let dropdown: HTMLElement;
+
+      beforeEach(async () => {
+        // trigger left=1050, vpW=1200 → 1050+220=1270 > 1192 → clamp
+        // expected left = max(8, 1200 - 220 - 8) = 972
+        const result = await buildRepositioned(
+          { top: 50, bottom: 80, left: 1050, right: 1170, width: 120, height: 30, x: 1050, y: 50, toJSON: () => ({}) } as DOMRect,
+          { vpW: 1200, vpH: 800 },
+        );
+        el = result.el;
+        dropdown = result.dropdown;
+      });
+
+      it('should clamp the dropdown within the right viewport edge', () => {
+        const left = parseFloat(dropdown.style.left);
+        expect(left + 220).to.be.at.most(1200 - 8);
+      });
+    });
+
+  });
+
   describe('event listener wiring', () => {
     describe('when connected to DOM', () => {
       let addEventListenerSpy: sinon.SinonSpy;

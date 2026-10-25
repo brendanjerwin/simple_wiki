@@ -103,18 +103,27 @@ export class AgentSelector extends LitElement {
       }
 
       .dropdown {
-        position: absolute;
-        /* Anchored to the wrapper (which includes the trigger row and any
-           hint line), so the dropdown opens below all of it. */
-        top: calc(100% + 4px);
+        position: fixed;
+        /* top / left are set at runtime by _repositionDropdown().
+           max-height is also set at runtime; 320px is the fallback. */
+        top: 0;
         left: 0;
         min-width: 220px;
+        max-height: 320px;
         background: var(--color-editor-surface);
         border: 1px solid var(--color-editor-border);
         border-radius: 6px;
         box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
         z-index: 200;
+        display: flex;
+        flex-direction: column;
         overflow: hidden;
+      }
+
+      .dropdown-body {
+        overflow-y: auto;
+        flex: 1;
+        min-height: 0;
       }
 
       .dropdown[hidden] {
@@ -238,6 +247,7 @@ export class AgentSelector extends LitElement {
  client: Client<typeof AgentInventoryService>;
 
  private readonly _handleGlobalClick: (e: MouseEvent) => void;
+ private readonly _handleViewportChange: () => void;
 
  constructor() {
   super();
@@ -253,6 +263,7 @@ export class AgentSelector extends LitElement {
   this._error = null;
   this.client = createClient(AgentInventoryService, getGrpcWebTransport());
   this._handleGlobalClick = this._onGlobalClick.bind(this);
+  this._handleViewportChange = this._repositionDropdown.bind(this);
  }
 
  override connectedCallback(): void {
@@ -264,12 +275,24 @@ export class AgentSelector extends LitElement {
  override disconnectedCallback(): void {
   super.disconnectedCallback();
   document.removeEventListener('click', this._handleGlobalClick);
+  window.removeEventListener('resize', this._handleViewportChange);
+  window.removeEventListener('scroll', this._handleViewportChange, true);
  }
 
  override updated(changed: Map<string, unknown>): void {
   super.updated(changed);
   if (changed.has('page') && this.page) {
    void this._loadData();
+  }
+  if (changed.has('_open')) {
+   if (this._open) {
+    this._repositionDropdown();
+    window.addEventListener('resize', this._handleViewportChange);
+    window.addEventListener('scroll', this._handleViewportChange, true);
+   } else {
+    window.removeEventListener('resize', this._handleViewportChange);
+    window.removeEventListener('scroll', this._handleViewportChange, true);
+   }
   }
  }
 
@@ -362,6 +385,63 @@ export class AgentSelector extends LitElement {
   return Boolean(this._currentAgent && !this._currentAgent.available);
  }
 
+ /**
+  * Test seam: returns the trigger's bounding rect and the available viewport
+  * dimensions. Stub this single method in tests to drive positioning logic
+  * without relying on actual browser layout or viewport size.
+  */
+ _getMeasurements(): { rect: DOMRect; vpW: number; vpH: number } {
+  const wrapper = this.shadowRoot?.querySelector<HTMLElement>('.selector-wrapper');
+  return {
+   rect: wrapper?.getBoundingClientRect() ?? new DOMRect(),
+   vpW: window.innerWidth,
+   vpH: window.innerHeight,
+  };
+ }
+
+ /**
+  * Computes and applies viewport-aware positioning to the dropdown panel.
+  * Opens below the trigger by default; flips above when there is insufficient
+  * space below. Clamps the left edge so the panel never overflows the right
+  * edge of the viewport. Sets max-height so long lists scroll internally
+  * rather than extending off-screen.
+  */
+ private _repositionDropdown(): void {
+  const dropdown = this.shadowRoot?.querySelector<HTMLElement>('.dropdown');
+  if (!dropdown) return;
+
+  const { rect, vpW, vpH } = this._getMeasurements();
+  const minWidthPx = 220;
+  const edgePaddingPx = 8;
+  const gapPx = 4;
+
+  const spaceBelow = vpH - rect.bottom - edgePaddingPx;
+  const spaceAbove = rect.top - edgePaddingPx;
+
+  let topPx: number;
+  let maxHeightPx: number;
+
+  if (spaceBelow >= 120 || spaceBelow >= spaceAbove) {
+   // Enough room below (or more than above) — open downward
+   topPx = rect.bottom + gapPx;
+   maxHeightPx = Math.max(80, spaceBelow - gapPx);
+  } else {
+   // Flip upward
+   maxHeightPx = Math.max(80, spaceAbove - gapPx);
+   topPx = rect.top - gapPx - maxHeightPx;
+  }
+
+  // Horizontal: left-align to trigger, clamp so panel stays in viewport
+  let leftPx = rect.left;
+  if (leftPx + minWidthPx > vpW - edgePaddingPx) {
+   leftPx = Math.max(edgePaddingPx, vpW - minWidthPx - edgePaddingPx);
+  }
+
+  dropdown.style.top = `${topPx}px`;
+  dropdown.style.left = `${leftPx}px`;
+  dropdown.style.maxHeight = `${maxHeightPx}px`;
+ }
+
  private _renderCurrentLabel(): string {
   if (this._loading) return 'Loading…';
   const agent = this._currentAgent;
@@ -400,7 +480,9 @@ export class AgentSelector extends LitElement {
 
         <div class="dropdown" ?hidden=${!this._open} role="listbox">
           <div class="dropdown-header">Chat agent</div>
-          ${this._renderDropdownContent()}
+          <div class="dropdown-body">
+            ${this._renderDropdownContent()}
+          </div>
         </div>
       </div>
     `;
