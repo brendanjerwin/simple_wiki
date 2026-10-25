@@ -525,6 +525,90 @@ describe('wikiBeepAction', () => {
 });
 
 
+describe('when parsing Tabs', () => {
+ let parser: Parser;
+
+ beforeEach(() => {
+  parser = createParser(wikiLibrary.toJSONSchema(), WIKI_ROOT_COMPONENT);
+ });
+
+ it('should parse Tabs with labels first and children second', () => {
+  const result = parser.parse(
+   'root = Card("t", [tabs])\na = Text("panel a")\nb = Text("panel b")\ntabs = Tabs(["A", "B"], [a, b])',
+  );
+  expect(result.meta.errors).to.deep.equal([]);
+  const tabs = (result.root?.props['children'] as ElementNode[])[0] as ElementNode;
+  expect(tabs.typeName).to.equal('Tabs');
+  expect(tabs.props['labels']).to.deep.equal(['A', 'B']);
+ });
+
+ it('should parse Tabs with an active index bound to a $variable', () => {
+  const result = parser.parse(
+   '$tab = 0\na = Text("panel a")\nb = Text("panel b")\ntabs = Tabs(["A", "B"], [a, b], $tab, @Set($tab, $value))\nroot = Card("t", [tabs])',
+  );
+  expect(result.meta.errors).to.deep.equal([]);
+  const tabs = (result.root?.props['children'] as ElementNode[])[0] as ElementNode;
+  expect(tabs.typeName).to.equal('Tabs');
+  expect(tabs.props['active']).to.deep.include({ k: 'StateRef', n: '$tab' });
+ });
+
+ it('should keep Tabs reactive when active comes from a $variable', () => {
+  const result = parser.parse(
+   '$tab = 0\na = Text("panel a")\ntabs = Tabs(["A"], [a], $tab)\nroot = Card("t", [tabs])',
+  );
+  expect(result.meta.errors).to.deep.equal([]);
+  const tabs = (result.root?.props['children'] as ElementNode[])[0] as ElementNode;
+  expect(tabs.partial).to.equal(false);
+ });
+
+ it('should parse Tabs with no active binding (defaults to first tab)', () => {
+  const result = parser.parse(
+   'a = Text("panel a")\nb = Text("panel b")\ntabs = Tabs(["A", "B"], [a, b])\nroot = Card("t", [tabs])',
+  );
+  expect(result.meta.errors).to.deep.equal([]);
+  const tabs = (result.root?.props['children'] as ElementNode[])[0] as ElementNode;
+  expect(tabs.props['active']).to.be.undefined;
+  expect(tabs.props['onTabChange']).to.be.undefined;
+ });
+
+ it('should include Tabs in the library component list', () => {
+  expect(Object.keys(wikiLibrary.components)).to.include('Tabs');
+ });
+});
+
+describe('when parsing Accordion', () => {
+ let parser: Parser;
+
+ beforeEach(() => {
+  parser = createParser(wikiLibrary.toJSONSchema(), WIKI_ROOT_COMPONENT);
+ });
+
+ it('should parse Accordion with a title and children', () => {
+  const result = parser.parse(
+   'content = Text("body text")\nacc = Accordion("Section", [content])\nroot = Card("t", [acc])',
+  );
+  expect(result.meta.errors).to.deep.equal([]);
+  const accordion = (result.root?.props['children'] as ElementNode[])[0] as ElementNode;
+  expect(accordion.typeName).to.equal('Accordion');
+  expect(accordion.props['title']).to.equal('Section');
+ });
+
+ it('should parse multiple Accordion items in a Stack', () => {
+  const result = parser.parse([
+   'a = Text("body a")',
+   'b = Text("body b")',
+   'acc1 = Accordion("Section 1", [a])',
+   'acc2 = Accordion("Section 2", [b])',
+   'root = Card("App", Stack([acc1, acc2]))',
+  ].join('\n'));
+  expect(result.meta.errors).to.deep.equal([]);
+ });
+
+ it('should include Accordion in the library component list', () => {
+  expect(Object.keys(wikiLibrary.components)).to.include('Accordion');
+ });
+});
+
 describe('createLibraryDefinition', () => {
  it('should return the wiki library with the version id', () => {
   const lib: Library = createLibraryDefinition();

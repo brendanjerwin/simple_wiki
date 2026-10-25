@@ -726,6 +726,74 @@ const SectionHeader = defineComponent({
     </div>`) as WikiRenderer,
 });
 
+/**
+ * Tabs renders a tab bar that shows one panel at a time. `labels` is the
+ * array of tab headers (positional first), `children` the matching array of
+ * content panels. Bind `$tab = 0` to persist the active tab across reloads:
+ *   Tabs(["A","B"], [contentA, contentB], $tab, @Set($tab, $value))
+ * Without `active`/`onTabChange` the first tab shows by default.
+ */
+const TabsSchema = z.object({
+ labels: z.array(z.string()),
+ children: childrenSlot(),
+ active: z.number().optional(),
+ onTabChange: action().optional(),
+});
+markReactive(TabsSchema.shape.active);
+const Tabs = defineComponent({
+ name: 'Tabs',
+ props: TabsSchema,
+ description:
+  'A tab bar showing one panel at a time. `labels` first (array of tab header strings), `children` second (array of matching content panels). Bind `$tab = 0` → `Tabs(["A","B"], [contentA, contentB], $tab, @Set($tab, $value))` to make tab-switching persistent across reloads. Without binding, clicking tabs has no visible effect.',
+ component: (({ labels, children, active, onTabChange }) => {
+  const labelList = Array.isArray(labels) ? labels.filter((l): l is string => typeof l === 'string') : [];
+  const childList = Array.isArray(children) ? children : [];
+  const activeIdx = typeof active === 'number'
+   ? Math.max(0, Math.min(Math.floor(active), labelList.length - 1))
+   : 0;
+  const tabButtons = labelList.map((label, i) => {
+   const fire = (event: Event) => {
+    dispatchArtifactAction(event, { plan: asPlan(onTabChange), value: i });
+   };
+   return html`<button
+       class="wiki-page-app-tabs-tab"
+       data-active=${i === activeIdx ? 'true' : 'false'}
+       role="tab"
+       aria-selected=${i === activeIdx ? 'true' : 'false'}
+       @click=${fire}
+     >${label}</button>`;
+  });
+  return html`<div class="wiki-page-app-tabs">
+     <div class="wiki-page-app-tabs-list" role="tablist">${tabButtons}</div>
+     <div class="wiki-page-app-tabs-panel" role="tabpanel">
+       ${childList[activeIdx] ?? nothing}
+     </div>
+   </div>`;
+ }) as WikiRenderer,
+});
+
+/**
+ * Accordion renders a collapsible section via the native <details>/<summary>
+ * elements. The browser manages open/close state natively — no $variable needed.
+ * Stack multiple Accordion components to form an accordion group.
+ */
+const Accordion = defineComponent({
+ name: 'Accordion',
+ props: z.object({
+  title: z.string(),
+  children: childrenSlot(),
+ }),
+ description:
+  'A collapsible section with a clickable header. `title` is the header label (positional first); `children` the collapsed content. The browser manages expanded state natively — no $variable needed. Stack multiple Accordions to form a group.',
+ component: (({ title, children }) =>
+  html`<details class="wiki-page-app-accordion">
+     <summary class="wiki-page-app-accordion-summary">${typeof title === 'string' ? title : ''}</summary>
+     <div class="wiki-page-app-accordion-content">
+       ${Array.isArray(children) ? children : []}
+     </div>
+   </details>`) as WikiRenderer,
+});
+
 childrenUnion.current = z.union([
  Text.ref,
  Button.ref,
@@ -745,6 +813,8 @@ childrenUnion.current = z.union([
  Countdown.ref,
  Progress.ref,
  Steps.ref,
+ Tabs.ref,
+ Accordion.ref,
 ]);
 
 /**
@@ -782,6 +852,8 @@ return createLibrary({
   Countdown,
   Progress,
   Steps,
+  Tabs,
+  Accordion,
  ],
  actions: [Beep],
  root: WIKI_ROOT_COMPONENT,

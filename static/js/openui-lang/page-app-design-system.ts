@@ -316,6 +316,85 @@ export const wikiPageAppDesignSystem = css`
     border-top: 1px solid var(--color-border-subtle, #e0e0e0);
   }
 
+  .wiki-page-app-tabs {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+  .wiki-page-app-tabs-list {
+    display: flex;
+    flex-direction: row;
+    gap: 2px;
+    border-bottom: 2px solid var(--color-border-subtle, #e0e0e0);
+    flex-wrap: wrap;
+  }
+  .wiki-page-app-tabs-tab {
+    padding: 8px 16px;
+    border: none;
+    border-radius: 6px 6px 0 0;
+    background: transparent;
+    color: var(--color-text-secondary, #666666);
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 120ms ease, color 120ms ease;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -2px;
+  }
+  .wiki-page-app-tabs-tab:hover {
+    background: var(--color-hover-overlay, rgba(0, 0, 0, 0.05));
+    color: var(--color-text-primary, #333333);
+  }
+  .wiki-page-app-tabs-tab[data-active='true'] {
+    color: var(--color-action-confirm, #007bff);
+    border-bottom-color: var(--color-action-confirm, #007bff);
+  }
+  .wiki-page-app-tabs-panel {
+    padding-top: 16px;
+    min-width: 0;
+  }
+
+  .wiki-page-app-accordion {
+    border: 1px solid var(--color-border-subtle, #e0e0e0);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  .wiki-page-app-accordion-summary {
+    padding: 10px 14px;
+    cursor: pointer;
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--color-text-primary, #333333);
+    background: var(--color-surface-sunken, #f8f9fa);
+    list-style: none;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    user-select: none;
+  }
+  .wiki-page-app-accordion-summary::-webkit-details-marker {
+    display: none;
+  }
+  .wiki-page-app-accordion-summary::before {
+    content: '▶';
+    font-size: 0.6rem;
+    color: var(--color-text-muted, #707070);
+    transition: transform 200ms ease;
+    flex-shrink: 0;
+  }
+  .wiki-page-app-accordion[open] > .wiki-page-app-accordion-summary::before {
+    transform: rotate(90deg);
+  }
+  .wiki-page-app-accordion-summary:hover {
+    background: var(--color-hover-overlay, rgba(0, 0, 0, 0.05));
+  }
+  .wiki-page-app-accordion-content {
+    padding: 12px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
    @media (max-width: 520px) {
      .wiki-page-app-card {
        padding: 12px;
