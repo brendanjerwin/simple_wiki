@@ -300,9 +300,11 @@ var cliBinaryStartTime = time.Now().UTC().Truncate(time.Second)
 // wiki-cli binary. Hashing a ~45 MB binary takes a noticeable fraction of a
 // second; doing it once per binary on first request (rather than for every
 // caller) keeps conditional GETs cheap.
-var cliBinaryETagCache sync.Map // map[string]string
-var cliBinaryETagMu sync.Mutex
-var cliBinaryOpenFile = static.StaticContent.Open
+var (
+	cliBinaryETagCache sync.Map // map[string]string
+	cliBinaryETagMu    sync.Mutex
+	cliBinaryOpenFile  = static.StaticContent.Open
+)
 
 // SetCLIBinaryOpenFileForTesting swaps the embedded CLI binary opener and
 // returns a restore function. It lets handler tests cover validator behavior
@@ -575,7 +577,7 @@ func (s *Site) handlePageRequest(c *gin.Context) {
 }
 
 func (s *Site) handleTrashPage(c *gin.Context) {
-	templateData := s.buildTemplateData("trash", "/view", DirectoryListing{}, nil, "", c)
+	templateData := s.buildTemplateData("trash", "/view", DirectoryListing{}, nil, "", c, false)
 	templateData["TrashPage"] = true
 	templateData["ViewPage"] = false
 	templateData["IsSystemPage"] = true
@@ -603,6 +605,11 @@ func (s *Site) handleSpecialPages(c *gin.Context, page, command string) bool {
 // renderPageContent handles the final page content rendering
 func (s *Site) renderPageContent(c *gin.Context, page, command string, p *wikipage.Page) {
 	rawText, contentHTML := s.getPageContent(p)
+	// Composition (Addendum 22): the fence lives in the page body; the
+	// rendered contentHTML is the prose remainder (the template choke
+	// points stripped the fence). The host element is prepended in the
+	// template when HasPageApp is set — app above prose, never XOR.
+	_, _, hasPageApp := wikipage.SplitPageAppFences(rawText)
 	contentHTML = fmt.Appendf(nil, "<article class='content' id='%s'>%s</article>", page, string(contentHTML))
 
 	if s.handleRawContent(c, command, p, rawText) {
@@ -621,7 +628,7 @@ func (s *Site) renderPageContent(c *gin.Context, page, command string, p *wikipa
 		return
 	}
 
-	templateData := s.buildTemplateData(page, command, directoryListing, contentHTML, rawText, c)
+	templateData := s.buildTemplateData(page, command, directoryListing, contentHTML, rawText, c, hasPageApp)
 	c.HTML(http.StatusOK, indexTemplateName, templateData)
 }
 
@@ -652,7 +659,7 @@ func (s *Site) getDirectoryEntries(page, command string) (DirectoryListing, stri
 	return listing, command, nil
 }
 
-func (s *Site) buildTemplateData(page, command string, listing DirectoryListing, contentHTML []byte, rawText string, c *gin.Context) gin.H {
+func (s *Site) buildTemplateData(page, command string, listing DirectoryListing, contentHTML []byte, rawText string, c *gin.Context, hasPageApp bool) gin.H {
 	identity := tailscale.IdentityFromContext(c.Request.Context())
 	return gin.H{
 		"EditPage": command[0:2] == "/e", // /edit
@@ -682,6 +689,7 @@ func (s *Site) buildTemplateData(page, command string, listing DirectoryListing,
 		"WikiBaseURL":      requestBaseURL(c),
 		"Username":         identity.LoginName(),
 		"IsSystemPage":     s.isSystemPage(page),
+		"HasPageApp":      hasPageApp,
 	}
 }
 

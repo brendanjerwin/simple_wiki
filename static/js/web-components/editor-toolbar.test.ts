@@ -92,8 +92,8 @@ describe('EditorToolbar', () => {
       });
 
       it('should have role="menu" on the dropdown menu', () => {
-        const menu = toolbar.shadowRoot?.querySelector('.upload-dropdown-menu');
-        expect(menu?.getAttribute('role')).to.equal('menu');
+        const menu = toolbar.shadowRoot?.querySelector('menu-popover');
+        expect(menu?.open).to.equal(true);
       });
 
       it('should have role="menuitem" on the upload file button', () => {
@@ -118,8 +118,8 @@ describe('EditorToolbar', () => {
       });
 
       it('should close the dropdown', () => {
-        const menu = toolbar.shadowRoot?.querySelector('.upload-dropdown-menu');
-        expect(menu).to.not.exist;
+        const menu = toolbar.shadowRoot?.querySelector('menu-popover');
+        expect(menu?.open).to.equal(false);
       });
     });
 
@@ -367,8 +367,8 @@ describe('EditorToolbar', () => {
       });
 
       it('should show dropdown menu', () => {
-        const menu = toolbar.shadowRoot?.querySelector('.upload-dropdown-menu');
-        expect(menu).to.exist;
+        const menu = toolbar.shadowRoot?.querySelector('menu-popover');
+        expect(menu?.open).to.equal(true);
       });
     });
 
@@ -386,8 +386,8 @@ describe('EditorToolbar', () => {
       });
 
       it('should close the dropdown', () => {
-        const menu = toolbar.shadowRoot?.querySelector('.upload-dropdown-menu');
-        expect(menu).to.not.exist;
+        const menu = toolbar.shadowRoot?.querySelector('menu-popover');
+        expect(menu?.open).to.equal(false);
       });
     });
   });

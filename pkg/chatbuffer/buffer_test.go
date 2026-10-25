@@ -165,7 +165,7 @@ var _ = Describe("Manager", func() {
 			)
 
 			BeforeEach(func() {
-				messageID, err = manager.AddAssistantMessage("test-page", "Hi there!", "")
+				messageID, err = manager.AddAssistantMessage("test-page", "Hi there!", "", "", "")
 			})
 
 			It("should not error", func() {
@@ -199,7 +199,7 @@ var _ = Describe("Manager", func() {
 				replyToID, _ = manager.AddUserMessage("test-page", "Question?", "user")
 
 				// Add assistant reply
-				replyID, _ = manager.AddAssistantMessage("test-page", "Answer!", replyToID)
+				replyID, _ = manager.AddAssistantMessage("test-page", "Answer!", replyToID, "", "")
 			})
 
 			It("should link to parent message", func() {
@@ -223,7 +223,7 @@ var _ = Describe("Manager", func() {
 				eventChan, unsub = manager.SubscribeToPage("test-page")
 				DeferCleanup(unsub)
 
-				_, _ = manager.AddAssistantMessage("test-page", "Response", "")
+				_, _ = manager.AddAssistantMessage("test-page", "Response", "", "", "")
 			})
 
 			It("should notify page subscribers", func() {
@@ -327,7 +327,7 @@ var _ = Describe("Manager", func() {
 				DeferCleanup(unsub1)
 
 				messageID, _ = manager.AddUserMessage("page1", "Message", "user")
-				_, _ = manager.AddAssistantMessage("page2", "Other", "")
+				_, _ = manager.AddAssistantMessage("page2", "Other", "", "", "")
 
 				err = manager.EditMessage(messageID, "Updated", false)
 			})
@@ -444,6 +444,107 @@ var _ = Describe("Manager", func() {
 		})
 	})
 
+	Describe("AddAssistantMessage", func() {
+		When("adding an assistant message with agent identity", func() {
+			var (
+				messageID string
+				err       error
+			)
+
+			BeforeEach(func() {
+				messageID, err = manager.AddAssistantMessage("test-page", "Hi there!", "", "local-acp", "Local Agent")
+			})
+
+			It("should not error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should stamp the agent identity on the stored message", func() {
+				messages := manager.GetMessages("test-page")
+				Expect(messages).To(HaveLen(1))
+				Expect(messages[0].AgentID).To(Equal("local-acp"))
+				Expect(messages[0].AgentDisplayName).To(Equal("Local Agent"))
+			})
+
+			It("should return the message ID", func() {
+				Expect(messageID).NotTo(BeEmpty())
+			})
+		})
+	})
+
+	Describe("NotifyAgentChanged", func() {
+		When("an agent binding changes", func() {
+			var eventChan <-chan chatbuffer.Event
+
+			BeforeEach(func() {
+				eventChan, _ = manager.SubscribeToPage("test-page")
+				manager.NotifyAgentChanged("test-page", "agui-helper", "Helper Agent", "alice")
+			})
+
+			It("should stream an EventTypeAgentChanged event to subscribers", func() {
+				var event chatbuffer.Event
+				Eventually(eventChan).Should(Receive(&event))
+				Expect(event.Type).To(Equal(chatbuffer.EventTypeAgentChanged))
+				Expect(event.AgentChanged.Page).To(Equal("test-page"))
+				Expect(event.AgentChanged.AgentID).To(Equal("agui-helper"))
+				Expect(event.AgentChanged.AgentDisplayName).To(Equal("Helper Agent"))
+				Expect(event.AgentChanged.SwitchedBy).To(Equal("alice"))
+			})
+
+			It("should store the synthetic record in the buffer", func() {
+				messages := manager.GetMessages("test-page")
+				Expect(messages).To(HaveLen(1))
+				Expect(messages[0].Sender).To(Equal(chatbuffer.SenderAgentChanged))
+				Expect(messages[0].AgentID).To(Equal("agui-helper"))
+				Expect(messages[0].AgentDisplayName).To(Equal("Helper Agent"))
+				Expect(messages[0].SenderName).To(Equal("alice"))
+			})
+		})
+
+		When("subscribing with replay after a change", func() {
+			var replayed []*chatbuffer.Message
+
+			BeforeEach(func() {
+				manager.NotifyAgentChanged("test-page", "agui-helper", "Helper Agent", "alice")
+				replayed, _, _ = manager.SubscribeToPageWithReplay("test-page")
+			})
+
+			It("should include the synthetic record in the replay", func() {
+				Expect(replayed).To(HaveLen(1))
+				Expect(replayed[0].Sender).To(Equal(chatbuffer.SenderAgentChanged))
+			})
+		})
+	})
+
+	Describe("EffectiveAgent", func() {
+		Describe("when nothing is attached", func() {
+			It("should return empty strings", func() {
+				id, name := manager.EffectiveAgent("test-page")
+				Expect(id).To(BeEmpty())
+				Expect(name).To(BeEmpty())
+			})
+		})
+
+		Describe("after NotifyAgentAttached", func() {
+			var (
+				effID   string
+				effName string
+			)
+
+			BeforeEach(func() {
+				manager = chatbuffer.NewManager()
+				DeferCleanup(manager.Close)
+				manager.NotifyAgentAttached("test-page", "local-acp", "Local Agent")
+				effID, effName = manager.EffectiveAgent("test-page")
+			})
+
+			It("should return the effective agent identity", func() {
+				Expect(effID).To(Equal("local-acp"))
+				Expect(effName).To(Equal("Local Agent"))
+			})
+		})
+	})
+
 	Describe("ClearPage", func() {
 		When("the page has buffered messages", func() {
 			var (
@@ -456,7 +557,7 @@ var _ = Describe("Manager", func() {
 				DeferCleanup(unsubChannel)
 
 				_, _ = manager.AddUserMessage("test-page", "First", "user")
-				_, _ = manager.AddAssistantMessage("test-page", "Second", "")
+				_, _ = manager.AddAssistantMessage("test-page", "Second", "", "", "")
 
 				var unsubscribe func()
 				eventChan, unsubscribe = manager.SubscribeToPage("test-page")
@@ -482,7 +583,7 @@ var _ = Describe("Manager", func() {
 			var replayedMessages []*chatbuffer.Message
 
 			BeforeEach(func() {
-				_, _ = manager.AddAssistantMessage("test-page", "Old message", "")
+				_, _ = manager.AddAssistantMessage("test-page", "Old message", "", "", "")
 				manager.ClearPage("test-page")
 
 				var unsubscribe func()
@@ -499,9 +600,9 @@ var _ = Describe("Manager", func() {
 			var messages []*chatbuffer.Message
 
 			BeforeEach(func() {
-				_, _ = manager.AddAssistantMessage("test-page", "Old message", "")
+				_, _ = manager.AddAssistantMessage("test-page", "Old message", "", "", "")
 				manager.ClearPage("test-page")
-				_, _ = manager.AddAssistantMessage("test-page", "New message", "")
+				_, _ = manager.AddAssistantMessage("test-page", "New message", "", "", "")
 				messages = manager.GetMessages("test-page")
 			})
 
@@ -618,9 +719,9 @@ var _ = Describe("Manager", func() {
 				_, unsub := manager.SubscribeToPageChannel("page2")
 				DeferCleanup(unsub)
 
-				_, _ = manager.AddAssistantMessage("page1", "Message 1", "")
+				_, _ = manager.AddAssistantMessage("page1", "Message 1", "", "", "")
 				messageID, _ = manager.AddUserMessage("page2", "Message 2", "user")
-				_, _ = manager.AddAssistantMessage("page3", "Message 3", "")
+				_, _ = manager.AddAssistantMessage("page3", "Message 3", "", "", "")
 
 				msg, _ = manager.GetMessageByID(messageID)
 			})
@@ -698,7 +799,7 @@ var _ = Describe("Manager", func() {
 				DeferCleanup(unsub)
 
 				_, _ = manager.AddUserMessage("test-page", "First", "user")
-				_, _ = manager.AddAssistantMessage("test-page", "Second", "")
+				_, _ = manager.AddAssistantMessage("test-page", "Second", "", "", "")
 				_, _ = manager.AddUserMessage("test-page", "Third", "user")
 
 				messages = manager.GetMessages("test-page")
@@ -763,8 +864,8 @@ var _ = Describe("Manager", func() {
 			)
 
 			BeforeEach(func() {
-				_, _ = manager.AddAssistantMessage("test-page", "First message", "")
-				_, _ = manager.AddAssistantMessage("test-page", "Second message", "")
+				_, _ = manager.AddAssistantMessage("test-page", "First message", "", "", "")
+				_, _ = manager.AddAssistantMessage("test-page", "Second message", "", "", "")
 
 				var unsub func()
 				replayMessages, eventChan, unsub = manager.SubscribeToPageWithReplay("test-page")
@@ -804,7 +905,7 @@ var _ = Describe("Manager", func() {
 				_, eventChan, unsub = manager.SubscribeToPageWithReplay("test-page")
 				DeferCleanup(unsub)
 
-				_, _ = manager.AddAssistantMessage("test-page", "New message", "")
+				_, _ = manager.AddAssistantMessage("test-page", "New message", "", "", "")
 			})
 
 			It("should deliver new message events on the channel", func() {
@@ -1157,9 +1258,7 @@ var _ = Describe("Manager", func() {
 		})
 
 		When("subscribers exist on different pages", func() {
-			var (
-				otherChan <-chan chatbuffer.Event
-			)
+			var otherChan <-chan chatbuffer.Event
 
 			BeforeEach(func() {
 				var unsub func()
@@ -1649,8 +1748,8 @@ var _ = Describe("Manager", func() {
 
 			BeforeEach(func() {
 				// Add messages before subscribing
-				_, _ = manager.AddAssistantMessage("test-page", "First message", "")
-				_, _ = manager.AddAssistantMessage("test-page", "Second message", "")
+				_, _ = manager.AddAssistantMessage("test-page", "First message", "", "", "")
+				_, _ = manager.AddAssistantMessage("test-page", "Second message", "", "", "")
 
 				var unsub func()
 				replayMessages, msgChan, unsub = manager.SubscribeToPageChannelWithReplay("test-page")

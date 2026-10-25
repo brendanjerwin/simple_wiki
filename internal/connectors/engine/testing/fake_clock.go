@@ -8,7 +8,7 @@ import (
 	"github.com/brendanjerwin/simple_wiki/internal/connectors/engine"
 )
 
-// FakeClock is a programmable engine.Clock + engine.TimerScheduler for
+// FakeClock is a programmable engine.Clocker + engine.TimerScheduler for
 // unit tests. The engine's Bind ceremony stamps Binding.BoundAt with
 // clock.Now(); tests assert that value equals the configured Now to
 // verify the engine consults the clock seam (rather than calling
@@ -182,4 +182,4 @@ func (h fakeTimerHandle) Stop() bool {
 // Compile-time check: *FakeClock satisfies engine.TimerScheduler.
 var _ engine.TimerScheduler = (*FakeClock)(nil)
 var _ engine.Timer = fakeTimerHandle{}
-var _ engine.Clock = (*FakeClock)(nil)
+var _ engine.Clocker = (*FakeClock)(nil)

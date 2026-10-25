@@ -2162,4 +2162,120 @@ var Cases = []Case{
 		Services:     []string{"AgentMetadataService"},
 		Tags:         []string{"hard", "agent", "production", "write"},
 	},
+
+	// --- PageAppService / PageAppStateService (issue #1272) ---
+	{
+		ID:           "page app-create-fence",
+		UserSays:     "Turn this page into a small habit tracker with a reset button, and have it remember what I check off.",
+		Context:      "Page: habit_notes (mostly empty, a scratch page). Frontmatter: title = \"Habit Notes\".",
+		ExpectedTool: "api_v1_PageAppService_SetPageApp",
+		Services:     []string{"PageAppService"},
+		Tags:         []string{"medium", "page_app_x", "write", "create"},
+	},
+	{
+		ID:           "page app-iterate",
+		UserSays:     "The timer works — make the reset button undo just the last session.",
+		Context:      "Page: pomodoro hosts an existing OpenUI Lang timer app (a wiki-page-app fence in the body). The user is iterating on the running app.",
+		ExpectedTool: "api_v1_PageAppService_SetPageApp",
+		AcceptableTools: []string{
+			"api_v1_PageAppService_GetPageApp", // read-before-write is part of the loop
+		},
+		Services: []string{"PageAppService"},
+		Tags:     []string{"medium", "page_app_x", "write", "iterate"},
+	},
+	{
+		ID:           "page app-read-source",
+		UserSays:     "Can you look at the timer's current code before you change anything?",
+		Context:      "Page: pomodoro hosts an existing OpenUI Lang timer app. The user wants inspection, not a change yet.",
+		ExpectedTool: "api_v1_PageAppService_GetPageApp",
+		Services:     []string{"PageAppService"},
+		Tags:         []string{"easy", "page_app_x", "read"},
+	},
+	{
+		ID:           "page app-state-read",
+		UserSays:     "What's currently saved in the tracker's state?",
+		Context:      "Page: pomodoro hosts a tracker app that persists completed sessions via the page app state service.",
+		ExpectedTool: "api_v1_PageAppStateService_GetPageAppState",
+		Services:     []string{"PageAppStateService"},
+		Tags:         []string{"easy", "page_app_x", "read", "state"},
+	},
+	{
+		ID:           "page app-state-merge",
+		UserSays:     "Seed the tracker with a couple of completed sessions for this week so the chart has data.",
+		Context:      "Page: pomodoro hosts a tracker app with a weekly chart. The state service currently has an empty or sparse state.",
+		ExpectedTool: "api_v1_PageAppStateService_MergePageAppState",
+		Services:     []string{"PageAppStateService"},
+		Tags:         []string{"easy", "page_app_x", "state", "write"},
+	},
+	{
+		ID:           "page app-clear",
+		UserSays:     "The tracker was a fun experiment — turn the page back into regular notes.",
+		Context:      "Page: pomodoro hosts an app the user wants removed; the page's original prose should stay untouched.",
+		ExpectedTool: "api_v1_PageAppService_ClearPageApp",
+		Services:     []string{"PageAppService"},
+		Tags:         []string{"easy", "page_app_x", "delete"},
+	},
+
+	// Cross-service confusion rows (the hard cases).
+	{
+		ID:           "confusion-page app-not-frontmatter",
+		UserSays:     "Change the tracker's stored state so it starts with five sessions.",
+		Context:      "Page: pomodoro hosts a tracker app; its state lives in the wiki.page_app_state reserved subtree managed by the state service (generic frontmatter tools reject wiki.*).",
+		ExpectedTool: "api_v1_PageAppStateService_MergePageAppState",
+		ExcludedTool: "api_v1_Frontmatter_MergeFrontmatter",
+		Services:     []string{"PageAppStateService"},
+		Tags:         []string{"hard", "page_app_x", "state", "confusion", "write"},
+	},
+	{
+		ID:           "confusion-page app-not-page-edit",
+		UserSays:     "Replace the tracker's app entirely with a new countdown-style layout.",
+		Context:      "Page: pomodoro hosts an existing app. Replacement is a page app operation, not a page-content edit (the generic page tools must not touch the app fence).",
+		ExpectedTool: "api_v1_PageAppService_SetPageApp",
+		ExcludedTool: "api_v1_PageManagementService_UpdatePageContent",
+		Services:     []string{"PageAppService"},
+		Tags:         []string{"hard", "page_app_x", "confusion", "write"},
+	},
+
+	// Placement decision rows.
+	{
+		ID:           "page app-placement-new-page",
+		UserSays:     "Make me a pomodoro timer I can use while I work.",
+		Context:      "Current page: weekly_plan (real planning prose the user did not ask to replace). The timer is about a recurring activity, not this page's content.",
+		ExpectedTool: "api_v1_PageManagementService_CreatePage",
+		Services:     []string{"PageManagementService", "PageAppService"},
+		Tags:         []string{"medium", "page_app_x", "placement", "create"},
+	},
+	{
+		ID:           "page app-placement-attached-current-page",
+		UserSays:     "Put a compact dashboard for these numbers right on this page.",
+		Context:      "Page: server_stats has monitoring notes; the user explicitly wants the app attached to this page. Prose stays; the app renders above it.",
+		ExpectedTool: "api_v1_PageAppService_SetPageApp",
+		Services:     []string{"PageAppService"},
+		Tags:         []string{"medium", "page_app_x", "placement", "write"},
+	},
+	{
+		ID:           "page app-placement-guard-prose-clear",
+		UserSays:     "Turn this roadmap into a dashboard app.",
+		Context:      "Page: product_roadmap contains 9KB of roadmap prose the user did not ask to clear. The correct behavior is a new page app page + link (or SetPageApp with confirm_replace_content only after confirming with the user).",
+		ExpectedTool: "api_v1_PageManagementService_CreatePage",
+		AcceptableTools: []string{
+			"api_v1_PageAppService_SetPageApp", // with confirm_replace_content after explicit user confirmation
+		},
+		Services: []string{"PageManagementService", "PageAppService"},
+		Tags:     []string{"hard", "page_app_x", "placement", "guard"},
+	},
+
+	// Guard-API row (Add. 15): when the user EXPLICITLY asks for the
+	// app-alone conversion, the agent's tool is SetPageApp with the
+	// confirm flag — never ClearPageContent (which wipes prose without
+	// the page app stamp path) and never the generic page editors.
+	{
+		ID:           "page app-guard-api-confirm",
+		UserSays:     "Just make this page the timer itself — I don't need the notes here anymore.",
+		Context:      "Page: scratch_notes has some old notes (substantial prose) and no page app yet. The user explicitly wants the page to BE the app; the prose should be cleared deliberately.",
+		ExpectedTool: "api_v1_PageAppService_SetPageApp",
+		ExcludedTool: "api_v1_PageManagementService_ClearPageContent",
+		Services:     []string{"PageAppService"},
+		Tags:         []string{"medium", "page_app_x", "placement", "guard", "confusion"},
+	},
 }

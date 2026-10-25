@@ -2,6 +2,7 @@
 import './web-components/wiki-search.js';
 import './web-components/wiki-hashtag.js';
 import './web-components/system-info.js';
+import './web-components/wiki-page-app-host.js';
 import './web-components/frontmatter-editor-dialog.js';
 import './web-components/agent-details-dialog.js';
 import './web-components/confirmation-dialog.js';
@@ -57,6 +58,15 @@ erasePageEl?.addEventListener('click', (e) => {
 // Handle frontmatter editing
 const editFrontmatterEl = document.getElementById('editFrontmatter');
 editFrontmatterEl?.addEventListener('click', (e) => {
+  // Page app pages: the dialog's load path strips reserved wiki.* subtrees
+  // (it cannot show wiki.page_app metadata) and its save (ReplaceFrontmatter,
+  // no version hash) races the page app services — so it is disabled on
+  // page app pages (issue #1272).
+  if (simple_wiki?.hasPageApp) {
+    e.preventDefault();
+    editFrontmatterEl.setAttribute('title', 'Frontmatter editing is disabled on page app pages: wiki.page_app metadata is service-managed');
+    return;
+  }
   e.preventDefault();
   // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- frontmatter-editor-dialog is registered in HTMLElementTagNameMap
   const dialog = document.getElementById('frontmatter-dialog') as FrontmatterEditorDialog | null;
