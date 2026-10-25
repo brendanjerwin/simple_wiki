@@ -366,6 +366,10 @@ export class WikiEditor extends LitElement {
   /** Pending shrink-breaker retry, awaiting user confirmation. */
   private _pendingShrinkRetryContent: string | null = null;
 
+  /** Whether the shrink-breaker confirmation dialog is being shown. */
+  @state()
+  declare private _shrinkDialogActive: boolean;
+
   /**
    * Performs one save attempt. Detects the shrink circuit breaker
    * (issue #1299): on a FailedPrecondition naming the breaker, the
@@ -411,22 +415,26 @@ export class WikiEditor extends LitElement {
   }
 
   private requestConfirmation(description: string): void {
-    const dialog = this.shadowRoot?.querySelector('confirmation-dialog');
-    if (!dialog) return;
-    const config: ConfirmationConfig = {
-      message: 'This save would drastically shrink the page.',
-      description,
-      confirmText: 'Shrink anyway',
-      cancelText: 'Keep the page',
-      confirmVariant: 'warning',
-      icon: 'warning',
-    };
-    dialog.openDialog(config);
+    this._shrinkDialogActive = true;
+    void this.updateComplete.then(() => {
+      const dialog = this.shadowRoot?.querySelector('confirmation-dialog');
+      if (!dialog) return;
+      const config: ConfirmationConfig = {
+        message: 'This save would drastically shrink the page.',
+        description,
+        confirmText: 'Shrink anyway',
+        cancelText: 'Keep the page',
+        confirmVariant: 'warning',
+        icon: 'warning',
+      };
+      dialog.openDialog(config);
+    });
   }
 
   private _onShrinkConfirm(): void {
     const dialog = this.shadowRoot?.querySelector('confirmation-dialog');
     dialog?.closeDialog();
+    this._shrinkDialogActive = false;
     const content = this._pendingShrinkRetryContent;
     this._pendingShrinkRetryContent = null;
     if (content === null) return;
@@ -449,6 +457,7 @@ export class WikiEditor extends LitElement {
   private _onShrinkCancel(): void {
     const dialog = this.shadowRoot?.querySelector('confirmation-dialog');
     dialog?.closeDialog();
+    this._shrinkDialogActive = false;
     this._pendingShrinkRetryContent = null;
     this.saveStatus = 'idle';
   }
@@ -596,7 +605,9 @@ export class WikiEditor extends LitElement {
             ></error-display>
           `
           : nothing}
-        <confirmation-dialog @confirm=${this._onShrinkConfirm} @cancel=${this._onShrinkCancel}></confirmation-dialog>
+        ${this._shrinkDialogActive
+          ? html`<confirmation-dialog @confirm=${this._onShrinkConfirm} @cancel=${this._onShrinkCancel}></confirmation-dialog>`
+          : nothing}
         <div class="editor-area">
           <file-drop-zone
             ?allow-uploads=${this.allowUploads}
