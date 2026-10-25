@@ -72,6 +72,7 @@ import {
  type WikiPageAppRuntime,
 } from '../openui-lang/renderer.js';
 import { createToolProvider } from '../openui-lang/toolProvider.js';
+import { ensureAudioUnlocked, playBeepSound } from '../openui-lang/audio.js';
 import {
  wikiPageAppDesignSystem,
 } from '../openui-lang/page-app-design-system.js';
@@ -93,67 +94,6 @@ function argString(args: Record<string, unknown>, camel: string, snake?: string)
   if (typeof alt === 'string' && alt !== '') return alt;
  }
  return '';
-}
-
-/** One shared AudioContext across all @Beep steps. Autoplay policy: the
- * context is created (and `resume()`d) inside `ensureAudioUnlocked()`,
- * which runs at the TOP of `handlePageAppAction` — inside the browser's
- * user-gesture call stack for button clicks, and for Countdown completions
- * of runs the user themselves started with a click. Ticking later and
- * calling @Beep from `onComplete` then schedules tones on an
- * already-running context: no gesture needed at beep time. */
-let sharedAudioContext: AudioContext | undefined;
-
-/**
- * Create and unlock the shared AudioContext if needed. Called on every
- * user-initiated action event (button clicks, timer starts) while the
- * gesture is on the stack. No-ops where there is no Web Audio API.
- */
-function ensureAudioUnlocked(): void {
- try {
-  const AudioContextCtor = globalThis.AudioContext;
-  if (AudioContextCtor == null) return;
-  if (sharedAudioContext == null) {
-   sharedAudioContext = new AudioContextCtor();
-  }
-  if (sharedAudioContext.state === 'suspended') {
-   void sharedAudioContext.resume().catch(() => { });
-  }
- } catch {
-  // Unlock is best-effort; a blocked Web Audio API never blocks the plan.
- }
-}
-
-/**
- * Play a short synthesized tone with the Web Audio API — no external
- * assets (acceptance: no CDN/audio file). `double` plays two quick beeps,
- * `low` a lower single tone, `beep` (default) one 880 Hz tone. If the
- * context is still suspended (no prior gesture), the tone is silently
- * skipped: audio is best-effort feedback, never control flow.
- */
-export function playBeepSound(kind: string = 'beep'): void {
- try {
-  if (sharedAudioContext == null) return;
-  const audio = sharedAudioContext;
-  if (audio.state !== 'running') return;
-  const toneCount = kind === 'double' ? 2 : 1;
-  const frequencyHz = kind === 'low' ? 440 : 880;
-  for (let toneIndex = 0; toneIndex < toneCount; toneIndex++) {
-   const startAt = audio.currentTime + toneIndex * 0.2;
-   const oscillator = audio.createOscillator();
-   const gain = audio.createGain();
-   oscillator.type = 'sine';
-   oscillator.frequency.value = frequencyHz;
-   gain.gain.setValueAtTime(0.0001, startAt);
-   gain.gain.exponentialRampToValueAtTime(0.25, startAt + 0.01);
-   gain.gain.exponentialRampToValueAtTime(0.0001, startAt + 0.15);
-   oscillator.connect(gain).connect(audio.destination);
-   oscillator.start(startAt);
-   oscillator.stop(startAt + 0.16);
-  }
- } catch {
-  // A missing/blocked Web Audio API never blocks the action plan's other steps.
- }
 }
 
 

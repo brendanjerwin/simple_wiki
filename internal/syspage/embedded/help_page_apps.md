@@ -56,8 +56,7 @@ Each timer's fourth positional argument binds its `$running` gate. Completing a 
 
 `@Beep(kind?)` is an **action step** (usable anywhere an action runs: a `Button`'s action or a `Countdown`'s `onComplete`; compose with `Action([...])`). It plays a short synthesized tone — no external audio files, no agent round-trip. Kinds: `@Beep()` (single 880 Hz tone), `@Beep("double")` (two quick beeps), `@Beep("low")` (a lower-pitched 440 Hz tone). Use it for eyes-free timing apps — a stretch routine's `onComplete` beeps so you can hold a pose looking away from the screen.
 
-Autoplay policy: the wiki unlocks its audio context on every action event (a button click, a timer start), so a `@Beep` in a `Countdown`'s `onComplete` — of a run the user themselves started — sounds through that unlock. A `@Beep` that somehow fires without any prior gesture is silently skipped: audio is feedback, never control flow.
-
+Autoplay policy: the user's first interaction with the page (e.g. pressing the start button) unlocks audio; a `Countdown` the user themselves started with that click then beeps on completion, playing through that unlock. A timer that starts without any prior interaction (e.g. a persisted `$running = true` re-armed by a reload) stays silent — audio is feedback, never control flow.
 
 ## For Agents
 

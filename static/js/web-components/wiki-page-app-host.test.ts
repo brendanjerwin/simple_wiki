@@ -21,6 +21,7 @@ import {
  WikiPageAppHost,
 } from './wiki-page-app-host.js';
 import type { PageAppActionEventDetail } from '../openui-lang/library.js';
+import { resetAudioContextForTest } from '../openui-lang/audio.js';
 
 function pageAppResponse(source: string): GetPageAppResponse {
  return create(GetPageAppResponseSchema, {
@@ -178,6 +179,144 @@ describe('WikiPageAppHost @Beep custom action', () => {
   }));
   await stubs.el.updateComplete;
   expect(stubs.el.shadowRoot?.querySelector('error-display')).to.exist;
+ });
+});
+
+describe('when a Beep plan plays audio', () => {
+ // The audio module caches one AudioContext at module scope, and earlier
+ // tests in this file construct a REAL one via the host's unlock call —
+ // reset before and after so tests see only their own fake.
+ beforeEach(() => {
+  resetAudioContextForTest();
+ });
+ let oscillatorCtorCalls: number;
+ let nextFakeState: 'running' | 'suspended' = 'running';
+
+ /** Minimal Web Audio fake covering exactly the members playBeepSound
+  * touches; a class so installing it needs no type assertions. `connect`
+  * returns the node it was given, mirroring the real AudioNode chain the
+  * playback code composes. */
+ class FakeAudioContext {
+  state: 'running' | 'suspended' = nextFakeState;
+  currentTime = 0;
+  readonly destination = {};
+
+  resume(): Promise<void> {
+   return Promise.resolve();
+  }
+
+  createGain(): {
+   gain: {
+    setValueAtTime: (value: number, time: number) => void;
+    exponentialRampToValueAtTime: (value: number, time: number) => void;
+   };
+   connect: (destination: unknown) => unknown;
+  } {
+   return {
+    gain: {
+     setValueAtTime: () => { },
+     exponentialRampToValueAtTime: () => { },
+    },
+    connect: (destination: unknown) => destination,
+   };
+  }
+
+  createOscillator(): {
+   type: string;
+   frequency: { value: number };
+   connect: (destination: unknown) => unknown;
+   start: (when: number) => void;
+   stop: (when: number) => void;
+  } {
+   oscillatorCtorCalls += 1;
+   return {
+    type: 'sine',
+    frequency: { value: 0 },
+    connect: (destination: unknown) => destination,
+    start: () => { },
+    stop: () => { },
+   };
+  }
+ }
+
+ function installFakeAudioContext(state: 'running' | 'suspended'): void {
+  nextFakeState = state;
+  oscillatorCtorCalls = 0;
+  Object.defineProperty(globalThis, 'AudioContext', {
+   configurable: true,
+   value: FakeAudioContext,
+  });
+ }
+
+ // The host module caches one AudioContext at module scope: dropping the
+ // fake property after every test gives each test a fresh construction
+ // reading its own nextFakeState.
+ afterEach(() => {
+  Reflect.deleteProperty(globalThis, 'AudioContext');
+ });
+
+ describe('when the context is running (unlocked by a prior gesture)', () => {
+  let el: WikiPageAppHost;
+
+  beforeEach(async () => {
+   installFakeAudioContext('running');
+   const stubs = await stubbedHost('$holds = 0\nroot = Card("T", [b])\nb = Button("done", @Beep())');
+   el = stubs.el;
+  });
+
+  afterEach(() => {
+   el.remove();
+  });
+
+  it('schedules exactly one oscillator for @Beep()', () => {
+   el.dispatchEvent(new CustomEvent('wiki-page-app-action', {
+    detail: { plan: { steps: [{ type: 'custom_action' as never, name: 'Beep', params: {} }] } },
+    bubbles: true,
+    composed: true,
+   }));
+   expect(oscillatorCtorCalls).to.equal(1, 'a running context schedules exactly one tone for @Beep()');
+  });
+
+  it('schedules nothing for an unknown action name', () => {
+   el.dispatchEvent(new CustomEvent('wiki-page-app-action', {
+    detail: { plan: { steps: [{ type: 'custom_action' as never, name: 'NotARealmAction', params: {} }] } },
+    bubbles: true,
+    composed: true,
+   }));
+   expect(oscillatorCtorCalls).to.equal(0, 'unknown custom actions must not schedule a tone');
+  });
+
+  it('schedules two oscillators for @Beep("double")', () => {
+   el.dispatchEvent(new CustomEvent('wiki-page-app-action', {
+    detail: { plan: { steps: [{ type: 'custom_action' as never, name: 'Beep', params: { kind: 'double' } }] } },
+    bubbles: true,
+    composed: true,
+   }));
+   expect(oscillatorCtorCalls).to.equal(2, 'the double kind schedules two tones');
+  });
+ });
+
+ describe('when the context is suspended (no successful unlock)', () => {
+  let el: WikiPageAppHost;
+
+  beforeEach(async () => {
+   installFakeAudioContext('suspended');
+   const stubs = await stubbedHost('$holds = 0\nroot = Card("T", [b])\nb = Button("done", @Beep())');
+   el = stubs.el;
+  });
+
+  afterEach(() => {
+   el.remove();
+  });
+
+  it('stays silent (autoplay policy) even for a @Beep step', () => {
+   el.dispatchEvent(new CustomEvent('wiki-page-app-action', {
+    detail: { plan: { steps: [{ type: 'custom_action' as never, name: 'Beep', params: {} }] } },
+    bubbles: true,
+    composed: true,
+   }));
+   expect(oscillatorCtorCalls).to.equal(0, 'a suspended context stays silent');
+  });
  });
 });
 
