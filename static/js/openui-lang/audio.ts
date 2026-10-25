@@ -15,6 +15,7 @@
  */
 
 /** One shared AudioContext across all @Beep steps. */
+let sharedAudioContext: AudioContext | undefined;
 
 /**
  * Create (and unlock) the shared AudioContext if needed. Call while a
