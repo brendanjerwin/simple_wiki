@@ -1,0 +1,75 @@
+name: Dependabot Auto-Merge
+
+# Arms GitHub's auto-merge on Dependabot PRs whose full check suite is green.
+#
+# Intentionally scoped: only PRs authored by dependabot[bot] on dependabot/*
+# branches. The scan step in sonarcloud.yml is author-gated to skip on
+# dependabot PRs (issue #1189), so "SonarCloud Code Analysis" — emitted by
+# the SonarCloud app only when a scan runs — never reports here; the
+# 'main' ruleset bypasses dependabot authored pushes for exactly that
+# reason. This workflow is therefore the de facto merge gate: it must
+# assert the required checks itself before arming auto-merge, never
+# relying on the ruleset (which enforces nothing for this actor).
+
+on:
+ pull_request_target:
+  types: [opened, synchronize]
+
+permissions:
+ contents: write
+ pull-requests: write
+
+jobs:
+ automerge:
+  runs-on: ubuntu-latest
+  if: github.event.pull_request.user.login == 'dependabot[bot]' && startsWith(github.event.pull_request.head.ref, 'dependabot/')
+  steps:
+   - name: Fetch Dependabot metadata
+     id: metadata
+     uses: dependabot/fetch-metadata@d7267f607e9d3fb96fc2fbe83e0af444713e90b7 # v2
+     with:
+      github-token: "${{ secrets.GITHUB_TOKEN }}"
+
+   # Only go-module dependency bumps — not github-actions or version
+   # updates outside go.mod (the repo's dependabot.yml only configures
+   # gomod, but this is an explicit safety check).
+   - name: Restrict to go.mod bumps
+     run: |
+      set -euo pipefail
+      case "${{ steps.metadata.outputs.package-ecosystem }}" in
+        gomod) echo "eligible: gomod bump";;
+        *) echo "::error::Not a gomod bump (ecosystem: '${{ steps.metadata.outputs.package-ecosystem }}') — not arming auto-merge."; exit 1;;
+      esac
+
+   - name: Wait for all checks to settle
+     timeout-minutes: 45
+     run: |
+      timeout 40m gh pr checks "${{ github.event.pull_request.html_url }}" --watch --interval 60 --fail-fast
+      echo "All reported checks green."
+
+   - name: Assert required gate suite on final head
+     timeout-minutes: 5
+     run: |
+      set -euo pipefail
+      sha="${{ github.event.pull_request.head.sha }}"
+      gates=(sonarcloud lint test build-tests generate-matrix opengrep e2e CodeQL \
+             "Build and Release Go Binary (darwin, amd64)" \
+             "Build and Release Go Binary (darwin, arm64)" \
+             "Build and Release Go Binary (linux, amd64)" \
+             "Build and Release Go Binary (linux, arm64)" \
+             "Build and Release Go Binary (windows, amd64)")
+      for gate in "${gates[@]}"; do
+        # Every attempt for this gate name on this exact head must be success.
+        bad=$(gh api "repos/${{ github.repository }}/commits/${sha}/check-runs" --paginate \
+          --jq "[.check_runs[] | select(.name == \"${gate}\" and .conclusion != \"success\")] | length")
+        if [ "${bad}" != "0" ]; then
+          echo "::error::Gate '${gate}' on ${sha} has ${bad} non-success run(s) — not arming auto-merge."
+          exit 1
+        fi
+      done
+      echo "All ${#gates[@]} gates green on ${sha}."
+
+   - name: Arm auto-merge
+     run: gh pr merge --auto --squash "${{ github.event.pull_request.html_url }}"
+     env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
