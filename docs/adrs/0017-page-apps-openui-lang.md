@@ -26,7 +26,7 @@ A page whose markdown body carries a ` ```wiki-page-app ` fenced block holding t
 lang = "openui-lang"        # only mode in this scope
 version = 5                 # server-stamped per accepted write
 version_hash = "sha256:…"   # hash of the program; OCC handle
-library = "wiki-core@2"     # which wiki component library version the program targets
+library = "wiki-core@3"     # which wiki component library version the program targets
 updated_at / updated_by / automated   # identity-derived stamps, never client-writable
 ```
 
@@ -45,7 +45,7 @@ The Go server has no JS runtime, so **the server never merges programs**. Iterat
 
 ### The wiki component library (the teaching page app spec)
 
-`createLibrary`/`defineComponent`/`defineAction` over the wiki's own primitives, rendered as Lit components in the host: `Card`, `Stack`, `Text`, `Table`, `Chart`, `Input`, `Select`, `Button`, plus wiki-native renders (`Checklist`, `Map`, `Survey` as Lang components binding the existing custom elements — `<wiki-checklist>`, `<wiki-map>`, `<wiki-survey>`). Versioned and pinned in `wiki.page_app.library` (`wiki-core@2` added `Progress`/`Steps`, Button/Text `variant`s, and 4pt `Stack` gap tokens — apps written against `wiki-core@1` keep rendering, old stamps upgrade on next `SetPageApp`); the library spec + `generateSystemPrompt` output ship as `help-page-apps` — the agent skill page.
+`createLibrary`/`defineComponent`/`defineAction` over the wiki's own primitives, rendered as Lit components in the host: `Card`, `Stack`, `Text`, `Table`, `Chart`, `Input`, `Select`, `Button`, plus wiki-native renders (`Checklist`, `Map`, `Survey` as Lang components binding the existing custom elements — `<wiki-checklist>`, `<wiki-map>`, `<wiki-survey>`). Versioned and pinned in `wiki.page_app.library` (`wiki-core@3` added `Progress`/`Steps`, Button/Text `variant`s, and 4pt `Stack` gap tokens; `wiki-core@3` adds the P1 layout vocabulary — `Grid`/`Span`, `Divider`, `SectionHeader`, and Card `variant`s with an opaque accent token pair — apps written against `wiki-core@1` keep rendering, old stamps upgrade on next `SetPageApp`); the library spec + `generateSystemPrompt` output ship as `help-page-apps` — the agent skill page.
 
 **Renderer path (spike result, recorded per criterion 14): Path A chosen** — the wiki binds its own Lit components via lang-core's framework-free parser + runtime (`createParser(library.toJSONSchema())`, `createStore`/`initialize` for `$variables`, `evaluateRoot`/`evaluateElementProps` for prop evaluation, `createQueryManager(toolProvider)` for Query/Mutation, `mergeStatements` for patches). No Angular bridge, no React, no iframe: the host element (`<wiki-page-app-host>`), the library (`static/js/openui-lang/library.ts`), and the renderer (`static/js/openui-lang/renderer.ts`) are all Lit/TS in the standard frontend bundle. Verified behaviors pinned in unit tests: positional args map by zod key order (`Card("t", [children])`), `$var` declarations hydrate from `GetPageAppState` (persisted wins; pristine keys restore declared defaults), unknown components drop with structured `meta.errors` (never fatal), `@ToAssistant`/`@Set`/`@Reset`/`@OpenUrl` surface as action events the host executes.
 
@@ -80,8 +80,8 @@ No iframes, no `/artifact/` asset route, no per-artifact directories, no CSP/nos
 
 ### Negative
 
-- Expressiveness is capped at the wiki component library this scope ships (wiki-core@2 primitives + wiki-native renders). Apps outside that vocabulary wait for library growth or a future html mode.
-- One vendor dependency (`@openuidev/lang-core`, MIT) bundled into the frontend; upstream vocabulary changes must be tracked against the `wiki-core@2` spec pin.
+- Expressiveness is capped at the wiki component library this scope ships (wiki-core@3 primitives + wiki-native renders). Apps outside that vocabulary wait for library growth or a future html mode.
+- One vendor dependency (`@openuidev/lang-core`, MIT) bundled into the frontend; upstream vocabulary changes must be tracked against the `wiki-core@3` spec pin.
 - A conservative Go validator exists only to *never accept what the renderer chokes on*; it cannot be authoritative — the browser is.
 
 ### Neutral

@@ -1,6 +1,7 @@
 import { expect, waitUntil } from '@open-wc/testing';
 import sinon, { type SinonStub, type SinonFakeTimers, type SinonSpy } from 'sinon';
 import { create } from '@bufbuild/protobuf';
+import { ConnectError, Code } from '@connectrpc/connect';
 import {
   ReadPageResponseSchema,
   UpdateWholePageResponseSchema,
@@ -535,6 +536,105 @@ describe('WikiEditor', () => {
       await el.updateComplete;
       expect((el as unknown as WikiEditorInternal).error).to.be.null;
       expect((el as unknown as WikiEditorInternal).saveStatus).to.equal('idle');
+    });
+  });
+
+  describe('when the shrink circuit breaker rejects the save', () => {
+    let clock: SinonFakeTimers;
+
+    function stubShrinkRejection(target: WikiEditor): void {
+      const internal = target as unknown as WikiEditorInternal;
+      sinon.stub(internal.client, 'updateWholePage').callsFake(async (req: unknown) => {
+        const allowShrink = (req as { allowShrink?: boolean }).allowShrink === true;
+        if (!allowShrink) {
+          throw new ConnectError(
+            'shrink circuit breaker: new content (11 bytes) is only 0.1% of current page size (10260 bytes); re-send with allow_shrink=true',
+            Code.FailedPrecondition
+          );
+        }
+        return create(UpdateWholePageResponseSchema, {
+          success: true,
+          versionHash: 'new-hash',
+          pageByteSize: 11n,
+        });
+      });
+    }
+
+    beforeEach(async () => {
+      clock = sinon.useFakeTimers({
+        shouldAdvanceTime: true,
+        shouldClearNativeTimers: true,
+      });
+      el = buildElement();
+      stubReadPage(el, '# Hello', '', 'hash1');
+      stubShrinkRejection(el);
+      document.body.appendChild(el);
+      await waitUntil(
+        () => !(el as unknown as WikiEditorInternal).loading,
+        'should finish loading',
+        { timeout: 5000 }
+      );
+      await el.updateComplete;
+
+      const textarea = el.shadowRoot!.querySelector('textarea')!;
+      textarea.value = '# Truncated';
+      textarea.dispatchEvent(new Event('input', { bubbles: true }));
+      await clock.tickAsync(500);
+      await el.updateComplete;
+    });
+
+    afterEach(() => {
+      clock.restore();
+    });
+
+    it('should open the confirmation dialog', () => {
+      const dialog = el.shadowRoot?.querySelector('confirmation-dialog');
+      expect(dialog?.hasAttribute('open')).to.be.true;
+    });
+
+    it('should not show a hard error state', () => {
+      expect((el as unknown as WikiEditorInternal).saveStatus).to.not.equal('error');
+    });
+
+    describe('when the user confirms the shrink', () => {
+      beforeEach(async () => {
+        const dialog = el.shadowRoot?.querySelector('confirmation-dialog') as HTMLElement & {
+          dispatchEvent: (e: Event) => boolean;
+        };
+        dialog.dispatchEvent(new CustomEvent('confirm', { bubbles: true, composed: true }));
+        await clock.tickAsync(500);
+        await el.updateComplete;
+      });
+
+      it('should retry the save with allowShrink=true', () => {
+        const internal = el as unknown as WikiEditorInternal;
+        const stub = internal.client.updateWholePage;
+        expect(stub.lastCall?.args?.[0]?.allowShrink).to.equal(true);
+      });
+
+      it('should reach the saved state', () => {
+        expect((el as unknown as WikiEditorInternal).saveStatus).to.equal('saved');
+      });
+    });
+
+    describe('when the user cancels', () => {
+      beforeEach(async () => {
+        const dialog = el.shadowRoot?.querySelector('confirmation-dialog') as HTMLElement & {
+          dispatchEvent: (e: Event) => boolean;
+        };
+        dialog.dispatchEvent(new CustomEvent('cancel', { bubbles: true, composed: true }));
+        await el.updateComplete;
+      });
+
+      it('should not retry the save', () => {
+        const internal = el as unknown as WikiEditorInternal;
+        expect(internal.client.updateWholePage.callCount).to.equal(1);
+      });
+
+      it('should stay in idle without an error', () => {
+        expect((el as unknown as WikiEditorInternal).saveStatus).to.equal('idle');
+        expect((el as unknown as WikiEditorInternal).error).to.be.null;
+      });
     });
   });
 
