@@ -727,6 +727,45 @@ const SectionHeader = defineComponent({
 });
 
 /**
+ * Switch renders a boolean toggle control bound to a $variable. Unlike
+ * restyled Buttons, Switch communicates a binary on/off state visually.
+ * Positional order: label, checked, onChange — mirrors Input/Select.
+ */
+const SwitchSchema = z.object({
+ label: z.string().optional(),
+ checked: z.boolean().optional(),
+ onChange: action().optional(),
+});
+markReactive(SwitchSchema.shape.checked);
+const Switch = defineComponent({
+ name: 'Switch',
+ props: SwitchSchema,
+ description:
+  'A toggle switch bound to a boolean $variable. `label` is the display label; `checked` the boolean state (bind a $variable); `onChange` the action that runs when the toggle fires — use @Set($var, $value) where $value is the new boolean. Example: `Switch("Struggled", $struggled, @Set($struggled, $value))`.',
+ component: (({ label, checked, onChange }) => {
+  const isChecked = checked === true;
+  const fire = (event: Event) => {
+   dispatchArtifactAction(event, {
+    plan: asPlan(onChange),
+    value: event.currentTarget instanceof HTMLInputElement ? event.currentTarget.checked : !isChecked,
+   });
+  };
+  return html`<label class="wiki-page-app-switch-field">
+     <span class="wiki-page-app-switch-track" aria-hidden="true">
+       <input
+         class="wiki-page-app-switch-input"
+         type="checkbox"
+         .checked=${isChecked}
+         @change=${fire}
+       />
+       <span class="wiki-page-app-switch-thumb"></span>
+     </span>
+     ${typeof label === 'string' && label !== '' ? html`<span class="wiki-page-app-switch-label">${label}</span>` : nothing}
+   </label>`;
+ }) as WikiRenderer,
+});
+
+/**
  * Tabs renders a tab bar that shows one panel at a time. `labels` is the
  * array of tab headers (positional first), `children` the matching array of
  * content panels. Bind `$tab = 0` to persist the active tab across reloads:
@@ -807,6 +846,7 @@ childrenUnion.current = z.union([
  Chart.ref,
  Input.ref,
  Select.ref,
+ Switch.ref,
  Checklist.ref,
  MapComponent.ref,
  Survey.ref,
@@ -846,6 +886,7 @@ return createLibrary({
   Chart,
   Input,
   Select,
+  Switch,
   Checklist,
   MapComponent,
   Survey,

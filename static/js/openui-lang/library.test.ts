@@ -525,6 +525,48 @@ describe('wikiBeepAction', () => {
 });
 
 
+describe('when parsing Switch', () => {
+ let parser: Parser;
+
+ beforeEach(() => {
+  parser = createParser(wikiLibrary.toJSONSchema(), WIKI_ROOT_COMPONENT);
+ });
+
+ it('should parse Switch with label, checked, and onChange', () => {
+  const result = parser.parse(
+   '$on = false\nsw = Switch("Enable", $on, @Set($on, $value))\nroot = Card("t", [sw])',
+  );
+  expect(result.meta.errors).to.deep.equal([]);
+  const sw = (result.root?.props['children'] as ElementNode[])[0] as ElementNode;
+  expect(sw.typeName).to.equal('Switch');
+  expect(sw.props['label']).to.equal('Enable');
+  expect(sw.props['checked']).to.deep.include({ k: 'StateRef', n: '$on' });
+ });
+
+ it('should keep Switch reactive when checked comes from a $variable', () => {
+  const result = parser.parse(
+   '$on = true\nsw = Switch("flag", $on)\nroot = Card("t", [sw])',
+  );
+  expect(result.meta.errors).to.deep.equal([]);
+  const sw = (result.root?.props['children'] as ElementNode[])[0] as ElementNode;
+  expect(sw.partial).to.equal(false);
+ });
+
+ it('should parse Switch without a label (undefined positional arg parses cleanly)', () => {
+  const result = parser.parse(
+   '$on = false\nsw = Switch(undefined, $on, @Set($on, $value))\nroot = Card("t", [sw])',
+  );
+  expect(result.meta.errors).to.deep.equal([]);
+  const sw = (result.root?.props['children'] as ElementNode[])[0] as ElementNode;
+  // The parser maps the `undefined` literal to null/undefined; either is valid (no label string).
+  expect(typeof sw.props['label'] === 'string' && sw.props['label'] !== '').to.equal(false);
+ });
+
+ it('should include Switch in the library component list', () => {
+  expect(Object.keys(wikiLibrary.components)).to.include('Switch');
+ });
+});
+
 describe('when parsing Tabs', () => {
  let parser: Parser;
 

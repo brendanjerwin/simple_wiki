@@ -19,7 +19,7 @@ Use `PageAppService` and `PageAppStateService` for authoring and state. Both are
 - **Children are an array argument**: `Stack([Text("hello"), Button("press")])`.
 - **Reactive state is a `$name` declaration**: `$completed = 0`. References interpolate by **string concatenation** — `"sessions: " + $completed` (there is no `{expr}` string interpolation).
 - **Unknown components and invalid statements are dropped, never fatal** — the rest renders. Errors come back structured (`{code, component, statementId, message}`) so you can self-correct.
-- **Missing a component?** If an app needs a component that isn't in `wiki-core@3` (no `Slider`, `DatePicker`, etc.), do **not** fake it with nested `Stack` hacks or drop the feature silently. Build the best program you can **without** the component, tell the user which component is missing and what app it blocked, and **open a feature-request issue on the SimpleWiki GitHub project** (`github.com/brendanjerwin/simple_wiki/issues`) naming the component and the real app it would enable — components get built based on demand from actual apps, so a concrete request with a real use case is the fastest path to getting it. (`Grid`, `Card` variants, `Divider`, `SectionHeader`, `Tabs`, and `Accordion` exist as of `wiki-core@3`; `Slider`, `Dialog`, and the `Image` component are still future.)
+- **Missing a component?** If an app needs a component that isn't in `wiki-core@3` (no `Slider`, `DatePicker`, etc.), do **not** fake it with nested `Stack` hacks or drop the feature silently. Build the best program you can **without** the component, tell the user which component is missing and what app it blocked, and **open a feature-request issue on the SimpleWiki GitHub project** (`github.com/brendanjerwin/simple_wiki/issues`) naming the component and the real app it would enable — components get built based on demand from actual apps, so a concrete request with a real use case is the fastest path to getting it. (`Grid`, `Card` variants, `Divider`, `SectionHeader`, `Tabs`, `Accordion`, `Switch`, and `Select` exist as of `wiki-core@3`; `Slider`, `Dialog`, and the `Image` component are still future.)
 
 ## Time-based apps: `Countdown`
 
@@ -75,6 +75,30 @@ $i = 1
 root = Card("Wizard", Stack([
   Steps($i, 5, @Set($i, $i - 1), @Set($i, $i + 1), "setup wizard"),
   Text("on step " + $i, "caption"),
+]))
+```
+
+## Form controls: `Switch`, `Select`
+
+**Switch**(label?, checked, onChange) renders a boolean toggle — the right choice for "Struggled / Completed" toggles and any on/off state, replacing restyled Buttons. Bind a boolean `$variable` and update it with `@Set($var, $value)` (where `$value` is the new checked boolean):
+
+```
+$struggled = false
+sw = Switch("Struggled", $struggled, @Set($struggled, $value))
+root = Card("Leg hold", Stack([
+  sw,
+  Text("status: " + $struggled),
+]))
+```
+
+**Select**(label?, value, onChange, options) renders a dropdown that lets the user pick one item from an `options` list. Bind a `$variable` to persist the selection and react to changes with `@Set($var, $value)`:
+
+```
+$routine = "strength"
+picker = Select("Routine type", $routine, @Set($routine, $value), ["strength", "mobility", "cardio"])
+root = Card("Workout Picker", Stack([
+  picker,
+  Text("selected: " + $routine),
 ]))
 ```
 
@@ -296,7 +320,7 @@ root = Card("Notes", Stack([
 ]))
 ```
 
-**Component request when nothing fits** — if the app you're writing genuinely needs a component `wiki-core@3` doesn't have (slider, date picker, …), don't degrade it into a confusing `Stack`-of-buttons. Tell the user what's missing, ship the best app you can **without** it, then **open a feature-request issue on this project** so the component eventually gets built: `Button("request a slider", @OpenUrl("https://github.com/brendanjerwin/simple_wiki/issues"))` renders the one-tap link for the user; you create the issue text in the same turn. (`wiki-core@3` now includes `Grid`/`Span`, `Divider`, `SectionHeader`, Card `variant`s, `Tabs`, and `Accordion`.)
+**Component request when nothing fits** — if the app you're writing genuinely needs a component `wiki-core@3` doesn't have (slider, date picker, …), don't degrade it into a confusing `Stack`-of-buttons. Tell the user what's missing, ship the best app you can **without** it, then **open a feature-request issue on this project** so the component eventually gets built: `Button("request a slider", @OpenUrl("https://github.com/brendanjerwin/simple_wiki/issues"))` renders the one-tap link for the user; you create the issue text in the same turn. (`wiki-core@3` now includes `Grid`/`Span`, `Divider`, `SectionHeader`, Card `variant`s, `Tabs`, `Accordion`, `Switch`, and `Select`.)
 
 ## See Also
 

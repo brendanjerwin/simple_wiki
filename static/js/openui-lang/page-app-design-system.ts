@@ -316,6 +316,55 @@ export const wikiPageAppDesignSystem = css`
     border-top: 1px solid var(--color-border-subtle, #e0e0e0);
   }
 
+  .wiki-page-app-switch-field {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    cursor: pointer;
+    user-select: none;
+  }
+  .wiki-page-app-switch-track {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    width: 44px;
+    height: 24px;
+    border-radius: 12px;
+    background: var(--color-border-default, #dddddd);
+    transition: background 160ms ease;
+    flex-shrink: 0;
+  }
+  .wiki-page-app-switch-input {
+    position: absolute;
+    opacity: 0;
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    cursor: pointer;
+    z-index: 1;
+  }
+  .wiki-page-app-switch-thumb {
+    position: absolute;
+    left: 2px;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: #ffffff;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+    transition: left 160ms ease;
+    pointer-events: none;
+  }
+  .wiki-page-app-switch-input:checked ~ .wiki-page-app-switch-thumb {
+    left: 22px;
+  }
+  .wiki-page-app-switch-field:has(.wiki-page-app-switch-input:checked) .wiki-page-app-switch-track {
+    background: var(--color-action-confirm, #007bff);
+  }
+  .wiki-page-app-switch-label {
+    font-size: 0.9rem;
+    color: var(--color-text-primary, #333333);
+  }
+
   .wiki-page-app-tabs {
     display: flex;
     flex-direction: column;
