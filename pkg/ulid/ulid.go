@@ -8,7 +8,6 @@ package ulid
 
 import (
 	cryptorand "crypto/rand"
-	"io"
 	"sync"
 	"time"
 
@@ -76,13 +75,4 @@ func (g *SequenceGenerator) NewULID() string {
 	v := g.values[g.idx%len(g.values)]
 	g.idx++
 	return v
-}
-
-// NewWithEntropy constructs a Generator that draws entropy from the supplied
-// io.Reader. Useful for benchmarks and for callers that want to share a
-// single entropy source.
-func NewWithEntropy(r io.Reader) Generator {
-	return &SystemGenerator{
-		entropy: ulid.Monotonic(r, 0),
-	}
 }
