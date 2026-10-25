@@ -3179,7 +3179,7 @@ var _ = Describe("AgentInventoryService pool-facing RPCs", func() {
 			})
 		})
 
-		Describe("when the registry rejects the descriptor", func() {
+		Describe("when the registry rejects the descriptor (unsupported protocol)", func() {
 			It("should return InvalidArgument", func() {
 				rejSrv, rejErr := v1.NewServer(
 					v1.BuildInfo{Commit: "c", BuildTime: time.Now()},
@@ -3193,8 +3193,8 @@ var _ = Describe("AgentInventoryService pool-facing RPCs", func() {
 				Expect(rejErr).NotTo(HaveOccurred())
 				rejSrv = rejSrv.WithAgentInventory(wikiserver.NewAgentRegistry())
 				_, err := rejSrv.RegisterPoolAgent(context.Background(), &apiv1.RegisterPoolAgentRequest{
-					Id:       "agui-x",
-					Protocol: apiv1.AgentProtocol_AG_UI_REMOTE,
+					Id:       "unknown-agent",
+					Protocol: apiv1.AgentProtocol_AGENT_PROTOCOL_UNSPECIFIED,
 				})
 				st, ok := status.FromError(err)
 				Expect(ok).To(BeTrue())

@@ -5233,8 +5233,7 @@ var _ = Describe("resolvePageAgent", func() {
 		var (
 			daemon   *poolDaemon
 			inventor *fakeAgentInventoryClient
-			agentID  string
-			name     string
+			resolved *resolvedAgent
 			err      error
 		)
 
@@ -5250,13 +5249,13 @@ var _ = Describe("resolvePageAgent", func() {
 				},
 			}
 			daemon = &poolDaemon{inventoryClient: inventor, poolAgentID: defaultPoolAgentID, poolAgentDisplayName: "Assistant"}
-			agentID, name, err = daemon.resolvePageAgent(context.Background(), "test-page")
+			resolved, err = daemon.resolvePageAgent(context.Background(), "test-page")
 		})
 
 		It("should resolve to the default pool agent id", func() {
 			Expect(err).NotTo(HaveOccurred())
-			Expect(agentID).To(Equal(defaultPoolAgentID))
-			Expect(name).To(Equal("Assistant"))
+			Expect(resolved.id).To(Equal(defaultPoolAgentID))
+			Expect(resolved.displayName).To(Equal("Assistant"))
 		})
 
 		It("should query the correct page", func() {
@@ -5265,7 +5264,7 @@ var _ = Describe("resolvePageAgent", func() {
 	})
 
 	Describe("when the page is bound to another ACP_LOCAL pool agent", func() {
-		var agentID string
+		var resolved *resolvedAgent
 
 		BeforeEach(func() {
 			daemon := &poolDaemon{
@@ -5281,15 +5280,15 @@ var _ = Describe("resolvePageAgent", func() {
 				},
 				poolAgentID: defaultPoolAgentID,
 			}
-			agentID, _, _ = daemon.resolvePageAgent(context.Background(), "test-page")
+			resolved, _ = daemon.resolvePageAgent(context.Background(), "test-page")
 		})
 
 		It("should resolve to the bound agent id", func() {
-			Expect(agentID).To(Equal("helper-agent"))
+			Expect(resolved.id).To(Equal("helper-agent"))
 		})
 	})
 
-	Describe("when the page is bound to an AG_UI_REMOTE agent", func() {
+	Describe("when the page is bound to an AG_UI_REMOTE agent without pool-side config", func() {
 		var err error
 
 		BeforeEach(func() {
@@ -5305,12 +5304,58 @@ var _ = Describe("resolvePageAgent", func() {
 					},
 				},
 				poolAgentID: defaultPoolAgentID,
+				// agUIBackends is nil — no config loaded
 			}
-			_, _, err = daemon.resolvePageAgent(context.Background(), "test-page")
+			_, err = daemon.resolvePageAgent(context.Background(), "test-page")
 		})
 
-		It("should return an error (no silent fallback to local ACP)", func() {
-			Expect(err).To(MatchError(ContainSubstring("cannot route")))
+		It("should return an error (no pool-side config, no silent fallback)", func() {
+			Expect(err).To(MatchError(ContainSubstring("no pool-side config exists")))
+		})
+	})
+
+	Describe("when the page is bound to an AG_UI_REMOTE agent with pool-side config", func() {
+		var resolved *resolvedAgent
+		var err error
+
+		BeforeEach(func() {
+			daemon := &poolDaemon{
+				inventoryClient: &fakeAgentInventoryClient{
+					pageAgentRes: &apiv1.GetPageAgentResponse{
+						Agent: &apiv1.AgentInfo{
+							Id:          "remote-ui-agent",
+							DisplayName: "Remote",
+							Protocol:    apiv1.AgentProtocol_AG_UI_REMOTE,
+						},
+						ExplicitlySet: true,
+					},
+				},
+				poolAgentID: defaultPoolAgentID,
+				agUIBackends: map[string]agUIBackendConfig{
+					"remote-ui-agent": {
+						ID:       "remote-ui-agent",
+						Endpoint: "https://example.com/run",
+					},
+				},
+			}
+			resolved, err = daemon.resolvePageAgent(context.Background(), "test-page")
+		})
+
+		It("should not error", func() {
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should resolve to the AG_UI_REMOTE agent id", func() {
+			Expect(resolved.id).To(Equal("remote-ui-agent"))
+		})
+
+		It("should set the protocol to AG_UI_REMOTE", func() {
+			Expect(resolved.protocol).To(Equal(apiv1.AgentProtocol_AG_UI_REMOTE))
+		})
+
+		It("should include the backend config", func() {
+			Expect(resolved.agUICfg).NotTo(BeNil())
+			Expect(resolved.agUICfg.Endpoint).To(Equal("https://example.com/run"))
 		})
 	})
 
@@ -5330,7 +5375,7 @@ var _ = Describe("resolvePageAgent", func() {
 				},
 				poolAgentID: defaultPoolAgentID,
 			}
-			_, _, err = daemon.resolvePageAgent(context.Background(), "test-page")
+			_, err = daemon.resolvePageAgent(context.Background(), "test-page")
 		})
 
 		It("should return an error rather than falling back", func() {
@@ -5339,7 +5384,7 @@ var _ = Describe("resolvePageAgent", func() {
 	})
 
 	Describe("when the inventory RPC fails", func() {
-		var agentID string
+		var resolved *resolvedAgent
 
 		BeforeEach(func() {
 			daemon := &poolDaemon{
@@ -5347,11 +5392,11 @@ var _ = Describe("resolvePageAgent", func() {
 				poolAgentID:          defaultPoolAgentID,
 				poolAgentDisplayName: "Assistant",
 			}
-			agentID, _, _ = daemon.resolvePageAgent(context.Background(), "test-page")
+			resolved, _ = daemon.resolvePageAgent(context.Background(), "test-page")
 		})
 
 		It("should degrade to the default pool agent id", func() {
-			Expect(agentID).To(Equal(defaultPoolAgentID))
+			Expect(resolved.id).To(Equal(defaultPoolAgentID))
 		})
 	})
 })

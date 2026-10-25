@@ -248,6 +248,10 @@ type poolDaemon struct {
 	// replace the descriptor registered by a previous pool run.
 	poolInstanceID string
 
+	// agUIBackends holds pool-side AG-UI backend configs keyed by agent id.
+	// Populated from --agui-agents-config at startup.
+	agUIBackends map[string]agUIBackendConfig
+
 	// attachedAgents remembers the agent id the pool last successfully
 	// attached per page, so a spawn can decide whether the transcript needs
 	// hand-off to a different agent. Guarded by attachedMu.
@@ -325,11 +329,20 @@ func (d *poolDaemon) registerPoolAgent(ctx context.Context) {
 	_ = resp
 }
 
+// resolvedAgent carries everything ensureInstance needs to dispatch to the
+// right backend for a page's desired agent.
+type resolvedAgent struct {
+	id          string
+	displayName string
+	protocol    apiv1.AgentProtocol
+	agUICfg     *agUIBackendConfig // non-nil only for AG_UI_REMOTE
+}
+
 // resolvePageAgent returns the agent the pool should spawn for a page. An
-// unbound page (server default) resolves to the local ACP pool agent. A page
-// bound to a non-ACP_LOCAL or unavailable agent is NOT routable by the pool
-// today: this returns an error instead of silently falling back.
-func (d *poolDaemon) resolvePageAgent(ctx context.Context, page string) (agentID, displayName string, err error) {
+// unbound page (server default) resolves to the local ACP pool agent.
+// AG_UI_REMOTE agents are now routable when their backend config is present
+// in d.agUIBackends; unknown or missing backends return an error.
+func (d *poolDaemon) resolvePageAgent(ctx context.Context, page string) (*resolvedAgent, error) {
 	client := d.inventoryFor()
 
 	resp, err := client.GetPageAgent(ctx, connect.NewRequest(&apiv1.GetPageAgentRequest{Page: page}))
@@ -340,19 +353,45 @@ func (d *poolDaemon) resolvePageAgent(ctx context.Context, page string) (agentID
 			slog.Warn("failed to resolve page agent binding; using default local ACP agent",
 				logKeyPage, page, logKeyError, err, logKeyAction, "agent_resolve")
 		}
-		return d.poolAgentID, d.poolAgentDisplayName, nil
+		return &resolvedAgent{
+			id:          d.poolAgentID,
+			displayName: d.poolAgentDisplayName,
+			protocol:    apiv1.AgentProtocol_ACP_LOCAL,
+		}, nil
 	}
 
 	agent := resp.Msg.GetAgent()
 	if agent.GetId() == "" || agent.GetId() == d.poolAgentID {
-		return d.poolAgentID, d.poolAgentDisplayName, nil
+		return &resolvedAgent{
+			id:          d.poolAgentID,
+			displayName: d.poolAgentDisplayName,
+			protocol:    apiv1.AgentProtocol_ACP_LOCAL,
+		}, nil
 	}
 
-	if agent.GetProtocol() != apiv1.AgentProtocol_ACP_LOCAL {
-		return "", "", fmt.Errorf("page %q is bound to agent %q (protocol %s), which this pool cannot route; the page will show the desired agent as unavailable rather than falling back to the local agent", page, agent.GetId(), agent.GetProtocol())
-	}
+	switch agent.GetProtocol() {
+	case apiv1.AgentProtocol_ACP_LOCAL:
+		return &resolvedAgent{
+			id:          agent.GetId(),
+			displayName: agent.GetDisplayName(),
+			protocol:    apiv1.AgentProtocol_ACP_LOCAL,
+		}, nil
 
-	return agent.GetId(), agent.GetDisplayName(), nil
+	case apiv1.AgentProtocol_AG_UI_REMOTE:
+		cfg, ok := d.agUIBackends[agent.GetId()]
+		if !ok {
+			return nil, fmt.Errorf("page %q is bound to AG-UI agent %q but no pool-side config exists for it; start the pool with --agui-agents-config to enable routing", page, agent.GetId())
+		}
+		return &resolvedAgent{
+			id:          agent.GetId(),
+			displayName: agent.GetDisplayName(),
+			protocol:    apiv1.AgentProtocol_AG_UI_REMOTE,
+			agUICfg:     &cfg,
+		}, nil
+
+	default:
+		return nil, fmt.Errorf("page %q is bound to agent %q (protocol %s), which this pool cannot route", page, agent.GetId(), agent.GetProtocol())
+	}
 }
 
 // reportAttached records the effective agent attachment for a page with the
@@ -576,6 +615,10 @@ The daemon should be run in a directory containing your agent configuration
 				Name:  "agent-path",
 				Usage: "Path to ACP-compatible agent binary (required)",
 			},
+			cli.StringFlag{
+				Name:  "agui-agents-config",
+				Usage: "Path to JSON file listing remote AG-UI agent backends (optional)",
+			},
 			cli.BoolFlag{
 				Name:  "no-systemd",
 				Usage: "Disable systemd integration even when available",
@@ -632,6 +675,14 @@ func runPoolAction(c *cli.Context) error {
 		return errors.New("--agent-path is required: provide the path to an ACP-compatible agent binary")
 	}
 
+	// Load AG-UI backend configs (optional; missing file → no AG-UI agents).
+	aguiBackends := make(map[string]agUIBackendConfig)
+	if cfgPath := c.String("agui-agents-config"); cfgPath != "" {
+		for _, cfg := range loadAGUIBackendConfigs(cfgPath) {
+			aguiBackends[cfg.ID] = cfg
+		}
+	}
+
 	d := &poolDaemon{
 		wikiURL:                  normalizedURL,
 		agentPath:                agentPath,
@@ -642,6 +693,7 @@ func runPoolAction(c *cli.Context) error {
 		permissionPendingTimeout: c.Duration("permission-pending-timeout"),
 		instances:                make(map[string]*instanceEntry),
 		versionCheckInterval:     defaultVersionCheckIntervalMinutes * time.Minute,
+		agUIBackends:             aguiBackends,
 	}
 
 	// Agent inventory descriptor (issue #1276): the pool is the authority for
@@ -802,6 +854,7 @@ func (d *poolDaemon) subscribeAndHandle(ctx context.Context) error {
 	// server inventory on every successful connect so availability tracks
 	// pool connectivity. Best-effort: failures are logged inside.
 	d.registerPoolAgent(ctx)
+	d.registerAGUIAgentsWithInventory(ctx)
 
 	stream, err := client.SubscribeInstanceRequests(ctx, connect.NewRequest(&apiv1.SubscribeInstanceRequestsRequest{}))
 	if err != nil {
@@ -848,28 +901,33 @@ func (d *poolDaemon) ensureInstance(ctx context.Context, page string) {
 	// Resolve the page's agent binding (desired agent). Binding read happens
 	// at spawn time only — a live agent with an old binding finishes its
 	// in-flight prompt and is reaped normally; the next message re-spawns.
-	agentID, agentDisplayName, err := d.resolvePageAgent(ctx, page)
+	resolved, err := d.resolvePageAgent(ctx, page)
 	if err != nil {
-		// Unroutable binding (e.g. AG_UI_REMOTE, or an unknown/unavailable
-		// id): do NOT fall back to the local ACP agent. Report an empty
-		// attachment so the server reflects desired-vs-effective divergence,
-		// and log honestly.
+		// Unroutable binding — do NOT fall back to the local ACP agent. Report
+		// an empty attachment so the server reflects desired-vs-effective
+		// divergence, and log honestly.
 		slog.Warn("page agent binding is not routable by this pool; not spawning",
 			logKeyPage, page, logKeyError, err, logKeyAction, "spawn_unroutable")
 		d.reportAttached(ctx, page, "", "")
 		return
 	}
 
-	// Spawn new instance first, then evict if needed.
-	entry, err := d.spawnInstance(ctx, page, agentID, agentDisplayName)
+	// Dispatch to the correct backend based on protocol.
+	var entry *instanceEntry
+	switch resolved.protocol {
+	case apiv1.AgentProtocol_AG_UI_REMOTE:
+		entry, err = d.spawnAGUIInstance(ctx, page, resolved)
+	default:
+		entry, err = d.spawnInstance(ctx, page, resolved.id, resolved.displayName)
+	}
 	if err != nil {
 		slog.Error("failed to spawn instance", logKeyPage, page, logKeyError, err, logKeyAction, "spawn")
 		return
 	}
 
 	entry.mu.Lock()
-	agentID = entry.agentID
-	agentDisplayName = entry.agentDisplayName
+	agentID := entry.agentID
+	agentDisplayName := entry.agentDisplayName
 	entry.mu.Unlock()
 
 	if len(d.instances) >= d.maxInstances {
@@ -1635,6 +1693,60 @@ func (d *poolDaemon) spawnInstance(ctx context.Context, page, agentID, agentDisp
 	return entry, nil
 }
 
+// spawnAGUIInstance starts an AG-UI backed instance for a page. The agUIAgent
+// implements the acpAgent interface so it slots into instanceEntry.conn without
+// any changes to the ACP path. Must be called with d.mu held.
+func (d *poolDaemon) spawnAGUIInstance(ctx context.Context, page string, resolved *resolvedAgent) (*instanceEntry, error) {
+	ctx, cancel := context.WithCancel(ctx)
+
+	chatClient := newWikiChatClient(page, d.wikiURL)
+	agent := newAgUIAgent(*resolved.agUICfg, chatClient, page, os.Getenv)
+
+	// Initialize and NewSession are no-ops for AG-UI but we call them so the
+	// instanceEntry's sessionID is populated (used for logging).
+	if _, err := agent.Initialize(ctx, acp.InitializeRequest{}); err != nil {
+		cancel()
+		return nil, fmt.Errorf("agui: initialize for page %q: %w", page, err)
+	}
+
+	sess, err := agent.NewSession(ctx, acp.NewSessionRequest{})
+	if err != nil {
+		cancel()
+		return nil, fmt.Errorf("agui: new session for page %q: %w", page, err)
+	}
+
+	now := time.Now()
+	entry := &instanceEntry{
+		page:             page,
+		agentID:          resolved.id,
+		agentDisplayName: resolved.displayName,
+		conn:             agent,
+		sessionID:        sess.SessionId,
+		cancel:           cancel,
+		lastActive:       now,
+		createdAt:        now,
+		stateChangedAt:   now,
+		state:            StateInitializing,
+	}
+	slog.Info("state transition", logKeyPage, page, "from_state", "Spawning", "to_state", "Initializing", logKeyAction, "state_change")
+
+	chatClient.entry = entry
+
+	handoffTranscript := ""
+	if d.isAgentSwitch(page, resolved.id) {
+		handoffTranscript = d.fetchTranscriptHandoff(ctx, page)
+	}
+	chatClient.mu.Lock()
+	chatClient.agentID = resolved.id
+	chatClient.agentDisplayName = resolved.displayName
+	chatClient.handoffTranscript = handoffTranscript
+	chatClient.mu.Unlock()
+
+	go d.runMessageBridge(ctx, entry, chatClient)
+
+	return entry, nil
+}
+
 // isAgentSwitch reports whether the given agent id differs from the agent the
 // pool last attached for this page — meaning a transcript hand-off is needed.
 func (d *poolDaemon) isAgentSwitch(page, agentID string) bool {
@@ -2218,14 +2330,14 @@ func isChatContextEmpty(c *apiv1.ChatContext) bool {
 // binding changed (or became unroutable) — the caller must stop the instance
 // so the next message spawns the freshly-resolved agent.
 func (d *poolDaemon) checkBindingDrift(ctx context.Context, entry *instanceEntry) error {
-	agentID, _, err := d.resolvePageAgent(ctx, entry.page)
+	resolved, err := d.resolvePageAgent(ctx, entry.page)
 	if err != nil {
 		// The binding now points somewhere unroutable by this pool; stopping
 		// lets the spawn path surface honest unavailability.
 		return fmt.Errorf("resolve desired agent: %w", err)
 	}
-	if agentID != entry.agentID {
-		return fmt.Errorf("desired agent %q differs from attached %q", agentID, entry.agentID)
+	if resolved.id != entry.agentID {
+		return fmt.Errorf("desired agent %q differs from attached %q", resolved.id, entry.agentID)
 	}
 	return nil
 }
