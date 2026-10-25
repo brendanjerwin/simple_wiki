@@ -54,7 +54,9 @@ jobs:
    # vacuous pass); a stale superseded attempt is ignored because only
    # the latest attempt per name is consulted.
    - name: Require curated gate suite green on head
-     timeout-minutes: 45
+     timeout-minutes: 30
+     env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
      run: |
       set -euo pipefail
       sha="${{ github.event.pull_request.head.sha }}"
@@ -64,10 +66,12 @@ jobs:
              "Build and Release Go Binary (linux, amd64)" \
              "Build and Release Go Binary (linux, arm64)" \
              "Build and Release Go Binary (windows, amd64)")
-      deadline=$(( $(date +%s) + 2400 ))
+      deadline=$(( $(date +%s) + 1500 ))
       while true; do
+        # No error masking: a token/API failure must fail the step loudly,
+        # not look like all gates are missing.
         results=$(gh api "repos/${{ github.repository }}/commits/${sha}/check-runs?per_page=100" \
-          --jq '[.check_runs[]] | group_by(.name) | map(max_by(.started_at) | {name, status, conclusion})' || echo '[]')
+          --jq '[.check_runs[]] | group_by(.name) | map(max_by(.started_at) | {name, status, conclusion})')
         pending=$(echo "$results" | jq '[.[] | select(.status != "COMPLETED")] | length')
         missing=""
         failed=""
