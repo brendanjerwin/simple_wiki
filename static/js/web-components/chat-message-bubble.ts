@@ -447,7 +447,12 @@ export class ChatMessageBubble extends LitElement {
 
  override render() {
   const isUser = this.sender === Sender.USER;
-  const bubbleClass = this.systemEvent ? 'system-event' : (isUser ? 'user' : 'assistant');
+  let bubbleClass: string;
+  if (this.systemEvent) {
+    bubbleClass = 'system-event';
+  } else {
+    bubbleClass = isUser ? 'user' : 'assistant';
+  }
 
   return html`
       ${this.replyToId

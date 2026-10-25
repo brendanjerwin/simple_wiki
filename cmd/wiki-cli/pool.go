@@ -29,6 +29,10 @@ import (
 	cli "gopkg.in/urfave/cli.v1"
 )
 
+// flagA2AAgentName is the CLI flag name for the A2A agent display name,
+// shared by the flag registration and all lookup sites.
+const flagA2AAgentName = "a2a-agent-name"
+
 const (
 	defaultMaxInstances                    = 5
 	defaultIdleTimeoutMinutes              = 30
@@ -531,7 +535,7 @@ func buildA2AFlags() []cli.Flag {
 			Usage: "Public A2A URL advertised in the agent card (e.g. gateway route URL)",
 		},
 		cli.StringFlag{
-			Name:  "a2a-agent-name",
+			Name:  flagA2AAgentName,
 			Usage: "Agent name for the A2A card and skill ids (deployment config; never hard-code a personal assistant's name in code)",
 		},
 		cli.StringFlag{
@@ -636,7 +640,7 @@ The daemon should be run in a directory containing your agent configuration
 // route is the configured agent binary's file name; a fresh instance id is
 // generated per pool process.
 func (d *poolDaemon) initPoolAgentDescriptor(c *cli.Context) error {
-	displayName := c.String("a2a-agent-name")
+	displayName := c.String(flagA2AAgentName)
 	if displayName == "" {
 		displayName = os.Getenv("WIKI_CHAT_PERSONA")
 	}
@@ -707,7 +711,7 @@ func runPoolAction(c *cli.Context) error {
 			Port:           port,
 			Bind:           c.String("a2a-bind"),
 			PublicURL:      c.String("a2a-public-url"),
-			AgentName:      c.String("a2a-agent-name"),
+			AgentName:      c.String(flagA2AAgentName),
 			ChatPersona:    os.Getenv("WIKI_CHAT_PERSONA"),
 			BearerToken:    os.Getenv("WIKI_CLI_A2A_BEARER_TOKEN"),
 			ProxySecret:    os.Getenv("WIKI_CLI_A2A_TRUSTED_PROXY_SECRET"),
