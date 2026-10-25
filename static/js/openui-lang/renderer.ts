@@ -35,6 +35,19 @@ import {
  type WikiRenderer,
 } from './library.js';
 
+/** JSON-schema shape of a registered library action (mirrors lang-core's internal FunctionSchema). */
+interface LibraryActionSchema {
+ description?: string;
+ params: Record<string, unknown>;
+}
+/**
+ * Library actions (`@Beep`, …) as JSON schemas, threaded into evaluation
+ * contexts so `@Name(...)` action-call ASTs evaluate to `custom_action`
+ * steps (lang-core drops unregistered action names instead of planning
+ * them). The schema is stable, so cache it once at module scope.
+ */
+const libraryActions: Record<string, LibraryActionSchema> = wikiLibrary.toJSONSchema().actions ?? {};
+
 /**
  * Host-side executor for page app action plans. The host subscribes to
  * `onStateChange` so every @Set/@Reset flushes the LIVE lang-core store
@@ -127,6 +140,7 @@ export function generateWikiPageAppRenderer(
   const evaluationContext: EvaluationContext = {
    getState: (name) => store.get(name),
    resolveRef: (name) => store.get(name),
+   actions: libraryActions,
   };
   const evalContext: EvalContext = {
    ctx: { ...evaluationContext, extraScope: queryManager.getSnapshot() },
@@ -158,6 +172,7 @@ export function generateWikiPageAppRenderer(
   const evaluationContext: EvaluationContext = {
    getState: (name) => store.get(name),
    resolveRef: (name) => store.get(name),
+   actions: libraryActions,
   };
 
   hydrateQueriesAndMutations(result, { queryManager, evaluationContext });
@@ -186,6 +201,7 @@ export function generateWikiPageAppRenderer(
    const evaluationContext: EvaluationContext = {
     getState: (name) => store.get(name),
     resolveRef: (name) => store.get(name),
+    actions: libraryActions,
     ...(extraScope !== undefined ? { extraScope } : {}),
    };
    // Parsed AST nodes carry no runtime discriminator beyond object-ness;

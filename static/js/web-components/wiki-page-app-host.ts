@@ -72,6 +72,7 @@ import {
  type WikiPageAppRuntime,
 } from '../openui-lang/renderer.js';
 import { createToolProvider } from '../openui-lang/toolProvider.js';
+import { ensureAudioUnlocked, playBeepSound } from '../openui-lang/audio.js';
 import {
  wikiPageAppDesignSystem,
 } from '../openui-lang/page-app-design-system.js';
@@ -94,6 +95,7 @@ function argString(args: Record<string, unknown>, camel: string, snake?: string)
  }
  return '';
 }
+
 
 /**
  * An page app rendered from the page's OpenUI Lang program.
@@ -733,6 +735,15 @@ export class WikiPageAppHost extends LitElement {
   if (step.url != null) this.actionContext().openUrl(step.url);
  }
 
+ /** Library action steps: play @Beep; anything else is an unknown action. */
+ private runCustomActionStep(step: PlanStep): void {
+  if (step.name !== 'Beep') {
+   this.actionError = new Error(`Unknown page app action: ${step.name ?? '(unnamed)'}`);
+   return;
+  }
+  playBeepSound(typeof step.params?.['kind'] === 'string' ? step.params['kind'] : 'beep');
+ }
+
  private runRefetchStep(step: PlanStep): void {
   const runtime = this.runtime;
   if (runtime != null && step.statementId != null) runtime.refetch([step.statementId]);
@@ -750,14 +761,20 @@ export class WikiPageAppHost extends LitElement {
    continue_conversation: (st) => this.runToAssistantStep(st),
    open_url: (st) => this.runOpenUrlStep(st),
    run: (st) => this.runRefetchStep(st),
+   custom_action: (st) => this.runCustomActionStep(st),
   };
-  // Unknown step types (incl. custom_action) are inert by design.
+  // Unknown step types are inert by design; registered library actions
+  // (custom_action) route by name.
   const mutator = mutators[step.type];
   if (mutator != null) mutator(step, inputValue);
   sideEffects[step.type]?.(step);
  }
 
  private handlePageAppAction(event: CustomEvent<PageAppActionEventDetail>): void {
+  // Unlock the shared AudioContext while this (typically gesture-driven)
+  // event's call stack is live, so later @Beep steps — including ones
+  // fired from a Countdown tick — schedule tones on a running context.
+  ensureAudioUnlocked();
   const plan = event.detail.plan;
   if (this.runtime == null) return;
   for (const step of plan?.steps ?? []) {

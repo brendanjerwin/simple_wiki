@@ -13,6 +13,7 @@ import { z } from 'zod/v4';
 import {
  action,
  createLibrary,
+ defineAction,
  defineComponent,
  generateSystemPrompt,
  markReactive,
@@ -641,6 +642,22 @@ function buildLibrary(): Library {
   Progress.ref,
   Steps.ref,
  ]);
+
+ /**
+  * `@Beep([kind])` — a library action step that plays a short synthesized
+  * tone. Fires wherever an action plan runs: Button clicks and Countdown
+  * `onComplete`. Rendered with the Web Audio API (no external assets);
+  * the browser's autoplay policy gates it, so it only sounds on runs the
+  * user started (e.g. a Button that @Set($running, true)).
+  */
+ const Beep = defineAction({
+  name: 'Beep',
+  description: 'Play a short synthesized tone for audio feedback, e.g. when a Countdown completes. No external assets.',
+  params: z.object({
+   kind: z.enum(['beep', 'double', 'low']).optional(),
+  }),
+ });
+
  return createLibrary({
   components: [
    Text,
@@ -658,6 +675,7 @@ function buildLibrary(): Library {
    Progress,
    Steps,
   ],
+  actions: [Beep],
   root: WIKI_ROOT_COMPONENT,
   id: WIKI_LIBRARY_VERSION,
  });
@@ -694,6 +712,37 @@ export const WIKI_TOOLS: ToolDescriptor[] = [
  'api_v1_SurveyService_GetSurvey',
 ];
 
+/**
+ * JSON-schema shape of a library action's params, wide enough for the
+ * signature builder (lang-core's action params are JSON schemas whose
+ * property order is the positional order in programs).
+ */
+interface LibraryActionDef {
+ description?: string;
+ params?: {
+  properties?: Record<string, { type?: string }>;
+  required?: string[];
+ };
+}
+
+/**
+ * Build the `Name(param?, ...)` prompt signature for a library action
+ * from its JSON-schema params (property order is positional order).
+ * lang-core's `lib.toSpec()` would do the same via the schema registry;
+ * the spec handed to generateSystemPrompt here is hand-built, so actions
+ * need their signatures inlined the same way components get `${name}`.
+ */
+function buildSignatureFromAction(name: string, def: LibraryActionDef): string {
+ const props = def.params?.properties ?? {};
+ const required: string[] = Array.isArray(def.params?.required) ? def.params.required : [];
+ const args = Object.entries(props).map(([param, schema]) => {
+  const optional = required.includes(param) ? '' : '?';
+  const kind = schema.type === 'number' ? 'number' : 'string';
+  return `${param}${optional}: ${kind}`;
+ });
+ return args.length > 0 ? `${name}(${args.join(', ')})` : `${name}()`;
+}
+
 let cachedPrompt: string | undefined;
 
 export function generateWikiSystemPrompt(): string {
@@ -705,6 +754,12 @@ export function generateWikiSystemPrompt(): string {
     Object.entries(wikiLibrary.components).map(([name, component]) => [
      name,
      { signature: `${name}`, description: component.description },
+    ]),
+   ),
+   actions: Object.fromEntries(
+    Object.entries(wikiLibrary.actions ?? {}).map(([name, def]) => [
+     name,
+     { signature: buildSignatureFromAction(name, def), description: def.description },
     ]),
    ),
    schema: wikiLibrary.toJSONSchema(),

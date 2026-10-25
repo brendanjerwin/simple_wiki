@@ -37,6 +37,9 @@ export interface PlanStep {
  url?: string;
  statementId?: string;
  refType?: 'query' | 'mutation';
+ /** Library action steps (custom_action): the action name and its params. */
+ name?: string;
+ params?: Record<string, unknown>;
  [key: string]: unknown;
 }
 
@@ -55,6 +58,12 @@ export function toPlanStep(raw: unknown): PlanStep | undefined {
  if ('url' in raw && typeof raw.url === 'string') step.url = raw.url;
  if ('statementId' in raw && typeof raw.statementId === 'string') step.statementId = raw.statementId;
  if ('refType' in raw && (raw.refType === 'query' || raw.refType === 'mutation')) step.refType = raw.refType;
+ if ('name' in raw && typeof raw.name === 'string') step.name = raw.name;
+ if ('params' in raw && raw.params != null && typeof raw.params === 'object' && !Array.isArray(raw.params)) {
+  const params: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(raw.params)) params[key] = value;
+  step.params = params;
+ }
  return step;
 }
 
