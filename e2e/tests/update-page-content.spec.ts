@@ -39,6 +39,7 @@ async function setupTestPage(request: APIRequestContext, markdown: string): Prom
   const resetResp = await callPageAPI(request, 'UpdatePageContent', {
     page: TEST_PAGE,
     newContentMarkdown: markdown,
+    allowShrink: true,
   });
   expect(resetResp.ok()).toBeTruthy();
 }
@@ -198,5 +199,34 @@ test.describe('UpdatePageContent find-and-replace behavior', () => {
     const { contentMarkdown } = await readTestPage(request);
     expect(contentMarkdown).toContain('Fully replaced with correct hash.');
     expect(contentMarkdown).not.toContain('Section One');
+  });
+
+  test('shrink breaker: rejects full replacement under 10% of current size', async ({ request }) => {
+    // Seed a ~9KB page, then attempt a tiny full replacement.
+    await setupTestPage(request, '# Section One\n\n' + 'This is a line of meaningful content.\n'.repeat(250));
+    const resp = await callPageAPI(request, 'UpdatePageContent', {
+      page: TEST_PAGE,
+      newContentMarkdown: '# Truncated',
+    });
+    expect(resp.status()).toBe(400); // Connect maps FailedPrecondition to HTTP 400
+    const body = await resp.json() as { message?: string };
+    expect(body.message ?? '').toContain('shrink circuit breaker');
+    expect(body.message ?? '').toContain('allow_shrink=true');
+  });
+
+  test('shrink breaker: allows full replacement with allow_shrink=true', async ({ request }) => {
+    await setupTestPage(request, '# Section One\n\n' + 'This is a line of meaningful content.\n'.repeat(250));
+    const resp = await callPageAPI(request, 'UpdatePageContent', {
+      page: TEST_PAGE,
+      newContentMarkdown: '# Intentional rewrite',
+      allowShrink: true,
+    });
+    expect(resp.ok()).toBeTruthy();
+    const body = await resp.json() as { pageByteSize?: string | number };
+    // Connect JSON encodes int64 as string or number depending on runtime.
+    expect(Number(body.pageByteSize)).toBeGreaterThanOrEqual(20);
+
+    const after = await readTestPage(request);
+    expect(after.contentMarkdown).toBe('# Intentional rewrite');
   });
 });

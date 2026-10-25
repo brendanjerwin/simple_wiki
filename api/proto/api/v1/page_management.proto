@@ -64,7 +64,12 @@ service PageManagementService {
         "find-and-replace semantics via old_content_markdown (only the first "
         "occurrence is replaced; missing matches return NOT_FOUND). For "
         "reading a specific section before editing, use ReadPageOutline + "
-        "ReadPageSection to avoid loading the full page body.";
+        "ReadPageSection to avoid loading the full page body. "
+        "SHRINK BREAKER: a write whose resulting page is under 10% of the "
+        "current page size (current >= 1 KB) is rejected with "
+        "FAILED_PRECONDITION naming both sizes; set allow_shrink=true to "
+        "override. A successful write returns page_byte_size so you can "
+        "verify the result matched your intent.";
   }
 
   // UpdateWholePage — see (api.v1.description).
@@ -78,7 +83,12 @@ service PageManagementService {
         "the server returns ABORTED on a version conflict. Omit "
         "expected_version_hash to skip version checking (not recommended). "
         "Prefer UpdatePageContent for body-only edits or UpdatePage when you "
-        "must change both frontmatter and body.";
+        "must change both frontmatter and body. "
+        "SHRINK BREAKER: a write whose content is under 10% of the current "
+        "page size (current >= 1 KB) is rejected with FAILED_PRECONDITION "
+        "naming both sizes; set allow_shrink=true to override. A successful "
+        "write returns page_byte_size so you can verify the result matched "
+        "your intent.";
   }
 
   // DeletePage — see (api.v1.description).
@@ -258,6 +268,10 @@ message UpdatePageContentRequest {
   // If old_content_markdown is not found in the current content, the RPC returns a NOT_FOUND error.
   // When omitted, new_content_markdown replaces the entire page content (full replacement).
   optional string old_content_markdown = 4;
+  // allow_shrink overrides the shrink circuit breaker: when true, a write
+  // that would reduce the page to under 10% of its current size (current
+  // at least 1 KB) is permitted. Use only when the drastic shrink is intended.
+  optional bool allow_shrink = 5;
 }
 
 message UpdatePageContentResponse {
@@ -266,6 +280,9 @@ message UpdatePageContentResponse {
   // version_hash is the SHA256 hash of the newly written content.
   // Use this as expected_version_hash in the next UpdatePageContentRequest.
   string version_hash = 3;
+  // page_byte_size is the byte size of the page after a successful write.
+  // Use it to verify the write produced the result you intended.
+  int64 page_byte_size = 4;
 }
 
 // Clear Page Content
@@ -288,6 +305,10 @@ message UpdateWholePageRequest {
   // If provided, the write will fail with ABORTED if the content has changed since the read.
   // Omit to skip version checking (not recommended for concurrent access scenarios).
   optional string expected_version_hash = 3;
+  // allow_shrink overrides the shrink circuit breaker: when true, a write
+  // that would set the page to under 10% of its current size (current
+  // at least 1 KB) is permitted. Use only when the drastic rewrite is intended.
+  optional bool allow_shrink = 4;
 }
 
 message UpdateWholePageResponse {
@@ -296,6 +317,9 @@ message UpdateWholePageResponse {
   // version_hash is the SHA256 hash of the newly written markdown content.
   // Use this as expected_version_hash in the next UpdateWholePageRequest.
   string version_hash = 3;
+  // page_byte_size is the byte size of the page after a successful write.
+  // Use it to verify the write produced the result you intended.
+  int64 page_byte_size = 4;
 }
 
 // Delete Page

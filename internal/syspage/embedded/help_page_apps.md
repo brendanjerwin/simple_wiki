@@ -8,7 +8,7 @@ system = true
 
 # Page Apps: Agent-Authored OpenUI Lang Apps
 
-A **page app page** renders an app the agent wrote, composed **above** the page's markdown content. The agent writes **OpenUI Lang** (against the wiki's own component library, `wiki-core@2`); the wiki parses and renders it in-page with its own Lit components — **no arbitrary HTML/JS executes anywhere**. State persists server-side via `PageAppStateService`, so it survives reloads, devices, and other users.
+A **page app page** renders an app the agent wrote, composed **above** the page's markdown content. The agent writes **OpenUI Lang** (against the wiki's own component library, `wiki-core@3`); the wiki parses and renders it in-page with its own Lit components — **no arbitrary HTML/JS executes anywhere**. State persists server-side via `PageAppStateService`, so it survives reloads, devices, and other users.
 
 Use `PageAppService` and `PageAppStateService` for authoring and state. Both are exposed as gRPC and MCP tools (auto-generated from the proto).
 
@@ -19,7 +19,7 @@ Use `PageAppService` and `PageAppStateService` for authoring and state. Both are
 - **Children are an array argument**: `Stack([Text("hello"), Button("press")])`.
 - **Reactive state is a `$name` declaration**: `$completed = 0`. References interpolate by **string concatenation** — `"sessions: " + $completed` (there is no `{expr}` string interpolation).
 - **Unknown components and invalid statements are dropped, never fatal** — the rest renders. Errors come back structured (`{code, component, statementId, message}`) so you can self-correct.
-- **Missing a component?** If an app needs a component that isn't in `wiki-core@2` (no `Slider`, `Tabs`, `DatePicker`, etc.), do **not** fake it with nested `Stack` hacks or drop the feature silently. Build the best program you can **without** the component, tell the user which component is missing and what app it blocked, and **open a feature-request issue on the SimpleWiki GitHub project** (`github.com/brendanjerwin/simple_wiki/issues`) naming the component and the real app it would enable — components get built based on demand from actual apps, so a concrete request with a real use case is the fastest path to getting it.
+- **Missing a component?** If an app needs a component that isn't in `wiki-core@3` (no `Slider`, `Tabs`, `DatePicker`, etc.), do **not** fake it with nested `Stack` hacks or drop the feature silently. Build the best program you can **without** the component, tell the user which component is missing and what app it blocked, and **open a feature-request issue on the SimpleWiki GitHub project** (`github.com/brendanjerwin/simple_wiki/issues`) naming the component and the real app it would enable — components get built based on demand from actual apps, so a concrete request with a real use case is the fastest path to getting it. (`Grid`, `Card` variants, `Divider`, and `SectionHeader` exist as of `wiki-core@3`; `Slider`, `Tabs`, `Dialog`, and the `Image` component are still future.)
 
 ## Time-based apps: `Countdown`
 
@@ -78,6 +78,26 @@ root = Card("Wizard", Stack([
 ]))
 ```
 
+## Layout: `Grid`, `Span`, `Divider`, `SectionHeader`
+
+**Grid**(children, cols?, gap?) — children FIRST, then columns: `Grid([a, b, c, d], 2, "lg")` lays four children into a 2-column grid. `cols` accepts `2`, `3`, or the `"sidebar"` preset (240px main column + flexible rest). `gap` takes the same 4pt tokens as Stack. Grids collapse to one column below 520px — author as if each cell may stack vertically.
+
+**Span**(n, children) — makes its children span `n` grid columns *inside a Grid*: `Grid([Span(2, [Text("wide")]), Text("narrow")], 2)`. `n` accepts 1, 2, or 3 — anything else is rejected at parse time. Rendered as inline `grid-column: span n`. Note the opposite argument order from Grid (count first here — `n` is a required number, so a reversed call fails loudly rather than silently mis-binding).
+
+**Divider**() — a horizontal rule. **SectionHeader**(title, trailing?) — a titled section row with a hairline rule and optional trailing content: `SectionHeader("Workout", [Text("4 sets", "caption")])`.
+
+```
+root = Card("Routine", Stack([
+  SectionHeader("Warm-up", [Text("5 min", "caption")]),
+  Grid([Text("arm circles"), Text("leg swings")], 2, "md"),
+  Divider(),
+  SectionHeader("Workout", [Text("4 sets", "caption")]),
+  Grid([Progress(3, 1, "set 1"), Progress(3, 2, "set 2")], 2),
+]))
+```
+
+**Card variants** (third positional prop): `Card("title", children, variant)` — `elevated` (stronger shadow, no border) for hero content, `outlined` (flat, thin border) for quiet panels, `filled` (sunken background) for grouped secondary content, `accent` (accent-tinted wash) for highlight cards. The default card stays as before. (Background-image hero cards are coming later; request via issue if blocked on them today.)
+
 ## For Agents
 
 ### Quick start (the whole authoring flow in one block)
@@ -117,7 +137,7 @@ The single write door. Program source goes in `source`; OCC via `expected_versio
 - Iterating: **send the full updated program** via `SetPageApp` with the hash you read (`GetPageApp`/`WatchPageApp`). (The browser host merges streamed patches itself; your reliable agent loop is read→modify→write with OCC.)
 - Conflict (`Aborted`): the page app changed since you read it. Re-run `GetPageApp`, re-apply your change, retry.
 - Server validation is **conservative** (structural: non-empty, has `root =`, size cap 64 KiB, must not contain a ``` fence terminator — the wiki wraps the source itself). It cannot fully parse the language — that happens in the browser. Gross violations reject with `InvalidArgument`; partial-but-renderable programs accept.
-- **Stamps are server-managed**: `lang = "openui-lang"`, `version`, `version_hash`, `library = "wiki-core@2"`, `updated_at`/`updated_by`/`automated`. Never hand-write them via frontmatter tools — the `wiki.*` namespace rejects generic frontmatter writes and names the right service.
+- **Stamps are server-managed**: `lang = "openui-lang"`, `version`, `version_hash`, `library = "wiki-core@3"`, `updated_at`/`updated_by`/`automated`. Never hand-write them via frontmatter tools — the `wiki.*` namespace rejects generic frontmatter writes and names the right service.
 
 ### Reading the current app: `api_v1_PageAppService_GetPageApp`
 
@@ -252,7 +272,7 @@ root = Card("Notes", Stack([
 ]))
 ```
 
-**Component request when nothing fits** — if the app you're writing genuinely needs a component `wiki-core@2` doesn't have (slider, tab pane, date picker, …), don't degrade it into a confusing `Stack`-of-buttons. Tell the user what's missing, ship the best app you can **without** it, then **open a feature-request issue on this project** so the component eventually gets built: `Button("request a slider", @OpenUrl("https://github.com/brendanjerwin/simple_wiki/issues"))` renders the one-tap link for the user; you create the issue text in the same turn.
+**Component request when nothing fits** — if the app you're writing genuinely needs a component `wiki-core@3` doesn't have (slider, tab pane, date picker, …), don't degrade it into a confusing `Stack`-of-buttons. Tell the user what's missing, ship the best app you can **without** it, then **open a feature-request issue on this project** so the component eventually gets built: `Button("request a slider", @OpenUrl("https://github.com/brendanjerwin/simple_wiki/issues"))` renders the one-tap link for the user; you create the issue text in the same turn. (`wiki-core@3` added the layout batch — `Grid`/`Span`, `Divider`, `SectionHeader`, Card `variant`s.)
 
 ## See Also
 
