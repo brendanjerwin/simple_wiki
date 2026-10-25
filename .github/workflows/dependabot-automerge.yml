@@ -71,7 +71,7 @@ jobs:
         # not look like all gates are missing.
         results=$(gh api "repos/${{ github.repository }}/commits/${sha}/check-runs?per_page=100" \
           --jq '[.check_runs[]] | group_by(.name) | map(max_by(.started_at) | {name, status, conclusion})')
-        pending=$(echo "$results" | jq '[.[] | select(.status != "COMPLETED")] | length')
+        pending=$(echo "$results" | jq '[.[] | select(.status | ascii_downcase != "completed")] | length')
         missing=""
         failed=""
         for gate in "${gates[@]}"; do
