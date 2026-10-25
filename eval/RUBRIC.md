@@ -115,7 +115,7 @@ type Case struct {
 
 The LLM prompt is assembled as:
 
-```
+```text
 <system_prompt>
 
 You are the assistant for the following wiki page:
