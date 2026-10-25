@@ -1,7 +1,7 @@
 /**
  * Wiki component library for OpenUI Lang page app pages.
  *
- * Defines the wiki's OpenUI Lang component vocabulary (`wiki-core@2`) over
+ * Defines the wiki's OpenUI Lang component vocabulary (`wiki-core@3`) over
  * `@openuidev/lang-core` and renders with Lit templates. Wiki-native
  * components (Checklist, Map, Survey) render the existing wiki custom
  * elements; interactive components dispatch `wiki-page-app-action`
@@ -28,7 +28,7 @@ type IntervalId = ReturnType<typeof window.setInterval>;
 /**
  * The wiki library version stamped on page app programs.
  */
-export const WIKI_LIBRARY_VERSION = 'wiki-core@2';
+export const WIKI_LIBRARY_VERSION = 'wiki-core@3';
 
 /** Renderer contract: evaluated props in, Lit template out. */
 export type WikiRenderer = (props: Record<string, unknown>) => TemplateResult;
@@ -607,78 +607,186 @@ function buildLibrary(): Library {
   }) as WikiRenderer,
  });
 
+ const CardSchema = z.object({
+  title: z.string().optional(),
+  children: z.union([z.string(), childrenSlot()]),
+  // Variant LAST in key order so positional Card("title", [...]) is untouched.
+  // Image/hero props land in PR6 (imagery) with sanitized URL handling.
+  variant: z.enum(['default', 'elevated', 'outlined', 'filled', 'accent']).optional(),
+ });
  const Card = defineComponent({
   name: 'Card',
-  props: z.object({
-   title: z.string().optional(),
-   children: z.union([z.string(), childrenSlot()]),
-  }),
+  props: CardSchema,
   description:
-   'A card with an optional title and content — a plain string or the card\'s children. The program entry is `root = Card(...)` with children as the second positional argument.',
-  component: (({ title, children }) =>
-   html`<div class="wiki-page-app-card">
-        ${typeof title === 'string'
-     ? html`<h3 class="wiki-page-app-card-title">${title}</h3>`
-     : nothing}
-        <div class="wiki-page-app-card-body">
-          ${children != null ? children : nothing}
-        </div>
-      </div>`) as WikiRenderer,
+   'A card with an optional title and content — a plain string or the card\'s children. The program entry is `root = Card(...)` with children as the second positional argument. Optional third positional `variant`: "elevated" (stronger shadow), "outlined" (flat border), "filled" (sunken bg), or "accent" (accent-tinted wash).',
+  component: (({ title, children, variant }) =>
+   html`<div
+      class="wiki-page-app-card"
+      data-variant=${typeof variant === 'string' ? variant : nothing}
+    >
+      ${typeof title === 'string'
+   ? html`<h3 class="wiki-page-app-card-title">${title}</h3>`
+   : nothing}
+      <div class="wiki-page-app-card-body">
+        ${children != null ? children : nothing}
+      </div>
+    </div>`) as WikiRenderer,
  });
 
- childrenUnion.current = z.union([
-  Text.ref,
-  Button.ref,
-  Stack.ref,
-  Card.ref,
-  Table.ref,
-  Chart.ref,
-  Input.ref,
-  Select.ref,
-  Checklist.ref,
-  MapComponent.ref,
-  Survey.ref,
-  Countdown.ref,
-  Progress.ref,
-  Steps.ref,
- ]);
 
  /**
-  * `@Beep([kind])` — a library action step that plays a short synthesized
-  * tone. Fires wherever an action plan runs: Button clicks and Countdown
-  * `onComplete`. Rendered with the Web Audio API (no external assets);
-  * the browser's autoplay policy gates it, so it only sounds on runs the
-  * user started (e.g. a Button that @Set($running, true)).
+  * Grid lays out children in a multi-column grid: `Grid([...], 2, "lg")` or the
+  * `Grid([...], "sidebar")` preset (240px + rest). Children first, matching every
+  * other container in the library; `cols` accepts 2, 3, or "sidebar"; `gap` reuses
+  * the Stack spacing tokens. Grids collapse to a single column below 520px.
   */
- const Beep = defineAction({
-  name: 'Beep',
-  description: 'Play a short synthesized tone for audio feedback, e.g. when a Countdown completes. No external assets.',
-  params: z.object({
-   kind: z.enum(['beep', 'double', 'low']).optional(),
+ const Grid = defineComponent({
+  name: 'Grid',
+  props: z.object({
+   children: childrenSlot(),
+   // zod v4 renders multi-value z.literal as a JSON-schema enum leaf, which
+   // lang-core DOES validate (composite anyOf slots are skipped, enum leaves are
+   // not) — out-of-vocabulary cols is rejected at parse time with type-mismatch.
+   cols: z.literal([2, 3, 'sidebar']).optional(),
+   gap: z.union([z.string(), z.enum(['sm', 'md', 'lg', 'xl'])]).optional(),
   }),
+  description:
+   'A grid container with 2 or 3 columns (children span one column each) or the "sidebar" preset (240px main column + flexible rest). Children FIRST, then cols (2, 3, or "sidebar"), then optional gap ("sm"=4, "md"=8, "lg"=16, "xl"=24 on the 4pt grid). Wrap children in Span(n, [...]) to span n columns. Collapses to one column on small screens.',
+  component: (({ cols, gap, children }) => {
+   const gapPx = typeof gap === 'string' ? (GAP_TOKEN_PX[gap] ?? gap) : undefined;
+   const colsAttr = cols === 2 || cols === 3 || cols === 'sidebar' ? cols : nothing;
+   return html`<div
+      class="wiki-page-app-grid"
+      data-cols=${colsAttr}
+      style=${gapPx != null ? `gap:${gapPx}` : nothing}
+    >
+      ${Array.isArray(children) ? children : []}
+    </div>`;
+  }) as WikiRenderer,
  });
 
- return createLibrary({
-  components: [
-   Text,
-   Button,
-   Stack,
-   Card,
-   Table,
-   Chart,
-   Input,
-   Select,
-   Checklist,
-   MapComponent,
-   Survey,
-   Countdown,
-   Progress,
-   Steps,
-  ],
-  actions: [Beep],
-  root: WIKI_ROOT_COMPONENT,
-  id: WIKI_LIBRARY_VERSION,
- });
+/**
+ * Span(n, [...]) wraps Grid children that should span n columns. Count FIRST
+ * (deliberately unlike Grid): `n` is a mandatory typed integer, so a reversed
+ * `Span([children], 2)` call fails validation instead of silently mis-binding.
+ * Outside a Grid it renders as a plain block.
+ */
+const Span = defineComponent({
+ name: 'Span',
+ props: z.object({
+  // z.literal([1,2,3]) renders a JSON-schema enum leaf — lang-core DOES validate
+  // those (composite anyOf slots are skipped): Span(5) is a parse-time type-mismatch,
+  // matching Grid's cols enforcement. Renderer emits grid-column: span n inline.
+  n: z.literal([1, 2, 3]),
+  children: childrenSlot(),
+ }),
+ description:
+  'A wrapper making its children span n grid columns inside a Grid (count FIRST: Span(2, [children])). n accepts 1, 2, or 3 — out-of-range values are rejected at parse time. Rendered as grid-column: span n inline (a span wider than the grid\'s columns creates implicit CSS-grid columns — prefer spans ≤ the grid\'s cols); collapses on small screens; outside a Grid it renders as a plain block.',
+ component: (({ n, children }) => {
+  // lang-core's enum check skips non-scalars, so a reversed Span([children], n)
+  // can slip an array into n — guard here: non-numeric n renders a plain block.
+  const isNum = typeof n === 'number';
+  return html`<div
+      class="wiki-page-app-span"
+      data-span=${isNum ? n : nothing}
+      style=${isNum ? `grid-column: span ${n}` : nothing}
+    >
+      ${Array.isArray(children) ? children : []}
+    </div>`;
+ }) as WikiRenderer,
+});
+
+/**
+ * Divider renders a horizontal rule separating content blocks.
+ */
+const Divider = defineComponent({
+ name: 'Divider',
+ props: z.object({}),
+ description: 'A horizontal rule separating content blocks.',
+ component: (() => html`<hr class="wiki-page-app-divider">`) as WikiRenderer,
+});
+
+/**
+ * SectionHeader renders a titled section divider: title, hairline rule, optional
+ * trailing content (a Badge, a count Text). Positional: title, trailing?
+ */
+const SectionHeader = defineComponent({
+ name: 'SectionHeader',
+ props: z.object({
+  title: z.string(),
+  trailing: childrenSlot().optional(),
+ }),
+ description:
+  'A section header row: the `title` on the left, a hairline rule, then optional trailing content (e.g. a Badge). SectionHeader("Workout", [Badge("4 sets")]).',
+ component: (({ title, trailing }) =>
+  html`<div class="wiki-page-app-section-header">
+      <h4 class="wiki-page-app-section-header-title">${typeof title === 'string' ? title : ''}</h4>
+      <span class="wiki-page-app-section-header-rule"></span>
+      ${Array.isArray(trailing) ? trailing : nothing}
+    </div>`) as WikiRenderer,
+});
+
+childrenUnion.current = z.union([
+ Text.ref,
+ Button.ref,
+ Stack.ref,
+ Card.ref,
+ Grid.ref,
+ Span.ref,
+ Divider.ref,
+ SectionHeader.ref,
+ Table.ref,
+ Chart.ref,
+ Input.ref,
+ Select.ref,
+ Checklist.ref,
+ MapComponent.ref,
+ Survey.ref,
+ Countdown.ref,
+ Progress.ref,
+ Steps.ref,
+]);
+
+/**
+ * `@Beep([kind])` — a library action step that plays a short synthesized
+ * tone. Fires wherever an action plan runs: Button clicks and Countdown
+ * `onComplete`. Rendered with the Web Audio API (no external assets);
+ * the browser's autoplay policy gates it, so it only sounds on runs the
+ * user started (e.g. a Button that @Set($running, true)).
+ */
+const Beep = defineAction({
+ name: 'Beep',
+ description: 'Play a short synthesized tone for audio feedback, e.g. when a Countdown completes. No external assets.',
+ params: z.object({
+  kind: z.enum(['beep', 'double', 'low']).optional(),
+ }),
+});
+
+return createLibrary({
+ components: [
+  Text,
+  Button,
+  Stack,
+  Card,
+  Grid,
+  Span,
+  Divider,
+  SectionHeader,
+  Table,
+  Chart,
+  Input,
+  Select,
+  Checklist,
+  MapComponent,
+  Survey,
+  Countdown,
+  Progress,
+  Steps,
+ ],
+ actions: [Beep],
+ root: WIKI_ROOT_COMPONENT,
+ id: WIKI_LIBRARY_VERSION,
+});
 }
 
 /**

@@ -96,7 +96,7 @@ var _ = Describe("PageAppService", func() {
 			It("should stamp version 1 and a hash", func() {
 				Expect(resp.GetVersion()).To(Equal(int64(1)))
 				Expect(resp.GetVersionHash()).To(HavePrefix("sha256:"))
-				Expect(resp.GetLibrary()).To(Equal("wiki-core@2"))
+				Expect(resp.GetLibrary()).To(Equal("wiki-core@3"))
 			})
 
 			It("should write the fence into the markdown body, preserving prose", func() {
@@ -110,7 +110,7 @@ var _ = Describe("PageAppService", func() {
 				stamps := pageAppStampsFromFM(mock.Frontmatter)
 				Expect(stamps["lang"]).To(Equal("openui-lang"))
 				Expect(stamps["version"]).To(Equal(int64(1)))
-				Expect(stamps["library"]).To(Equal("wiki-core@2"))
+				Expect(stamps["library"]).To(Equal("wiki-core@3"))
 				Expect(stamps["version_hash"]).To(Equal(resp.GetVersionHash()))
 			})
 		})
