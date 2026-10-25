@@ -2,6 +2,13 @@ name: Dependabot Auto-Merge
 
 # Arms GitHub's auto-merge on Dependabot PRs whose full check suite is green.
 #
+# NOTE on post-merge Sonar runs on main: arming the merge (as github-actions
+# bot) means the resulting main push does NOT trigger workflows (GITHUB_TOKEN
+# merges suppress push events). Sonar analysis for these bumps still runs
+# at PR time (gated on `sonarcloud` success above); a manual update-branch
+# re-run by a human on any dependabot branch restores a human-actor run on
+# main if deeper main-side coverage of a specific bump is ever wanted.
+
 # Intentionally scoped: only PRs authored by dependabot[bot] on dependabot/*
 # branches. The scan step in sonarcloud.yml is author-gated to skip on
 # dependabot PRs (issue #1189), so "SonarCloud Code Analysis" — emitted by
@@ -59,7 +66,7 @@ jobs:
       deadline=$(( $(date +%s) + 2400 ))
       while true; do
         results=$(gh api "repos/${{ github.repository }}/commits/${sha}/check-runs?per_page=100" \
-          --paginate --jq '[.check_runs[]] | group_by(.name) | map(max_by(.started_at) | {name, status, conclusion})' || echo '[]')
+          --jq '[.check_runs[]] | group_by(.name) | map(max_by(.started_at) | {name, status, conclusion})' || echo '[]')
         pending=$(echo "$results" | jq '[.[] | select(.status != "COMPLETED")] | length')
         missing=""
         failed=""
