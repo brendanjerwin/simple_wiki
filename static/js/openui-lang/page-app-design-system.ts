@@ -75,7 +75,7 @@ export const wikiPageAppDesignSystem = css`
   .wiki-page-app-text[data-variant='caption'] {
     font-size: 0.8rem;
     line-height: 1.4;
-    color: var(--color-text-muted, #737373);
+    color: var(--color-text-muted, #707070);
   }
 
   .wiki-page-app-button {
@@ -148,7 +148,7 @@ export const wikiPageAppDesignSystem = css`
   .wiki-page-app-field-label {
     font-size: 0.8rem;
     font-weight: 600;
-    color: var(--color-text-muted, #737373);
+    color: var(--color-text-muted, #707070);
   }
 
   .wiki-page-app-progress {
