@@ -43,27 +43,60 @@ export interface PlanStep {
  [key: string]: unknown;
 }
 
+/** Runtime check for a string-keyed plain record. */
+function isPlainRecord(v: unknown): v is Record<string, unknown> {
+ return v != null && typeof v === 'object' && !Array.isArray(v);
+}
+
+/** Copy `raw[key]` into the step when the raw value satisfies `pred`. */
+function pickOptional(step: PlanStep, raw: Record<string, unknown>, key: string, pred: (v: unknown) => boolean): void {
+ const value = raw[key];
+ if (value !== undefined && pred(value)) step[key] = value;
+}
+
+function pickTargets(step: PlanStep, raw: Record<string, unknown>): void {
+ const targets = raw['targets'];
+ if (Array.isArray(targets)) {
+  step.targets = targets.filter((t): t is string => typeof t === 'string');
+ }
+}
+
+function pickRefType(step: PlanStep, raw: Record<string, unknown>): void {
+ const refType = raw['refType'];
+ if (refType === 'query' || refType === 'mutation') {
+  step.refType = refType;
+ }
+}
+
+function pickParams(step: PlanStep, raw: Record<string, unknown>): void {
+ const params = raw['params'];
+ if (isPlainRecord(params)) {
+  step.params = { ...params };
+ }
+}
+
+/** Runtime check for a step-shaped raw value: plain object with a string `type`. */
+function isStepRaw(v: unknown): v is Record<string, unknown> & { type: string } {
+ return isPlainRecord(v) && typeof v['type'] === 'string';
+}
+
 /** Validate one raw step object into a PlanStep, or undefined when malformed. */
 export function toPlanStep(raw: unknown): PlanStep | undefined {
- if (raw === null || typeof raw !== 'object' || !('type' in raw) || typeof raw.type !== 'string') {
-  return undefined;
- }
- const step: PlanStep = { type: raw.type };
- if ('target' in raw && typeof raw.target === 'string') step.target = raw.target;
- if ('targets' in raw && Array.isArray(raw.targets)) {
-  step.targets = raw.targets.filter((t): t is string => typeof t === 'string');
- }
- if ('valueAST' in raw) step.valueAST = raw.valueAST;
- if ('message' in raw && typeof raw.message === 'string') step.message = raw.message;
- if ('url' in raw && typeof raw.url === 'string') step.url = raw.url;
- if ('statementId' in raw && typeof raw.statementId === 'string') step.statementId = raw.statementId;
- if ('refType' in raw && (raw.refType === 'query' || raw.refType === 'mutation')) step.refType = raw.refType;
- if ('name' in raw && typeof raw.name === 'string') step.name = raw.name;
- if ('params' in raw && raw.params != null && typeof raw.params === 'object' && !Array.isArray(raw.params)) {
-  const params: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(raw.params)) params[key] = value;
-  step.params = params;
- }
+ if (!isStepRaw(raw)) return undefined;
+ const step: PlanStep = { type: raw['type'] };
+ // Shared predicate: one string guard feeds five pickOptional calls, so
+ // behavior stays in lockstep and each call site stays a flat pick.
+ const isString = (v: unknown): boolean => typeof v === 'string';
+
+ pickOptional(step, raw, 'target', isString);
+ pickOptional(step, raw, 'message', isString);
+ pickOptional(step, raw, 'url', isString);
+ pickOptional(step, raw, 'statementId', isString);
+ pickOptional(step, raw, 'name', isString);
+ pickTargets(step, raw);
+ pickRefType(step, raw);
+ pickParams(step, raw);
+ if ('valueAST' in raw) step.valueAST = raw['valueAST'];
  return step;
 }
 
