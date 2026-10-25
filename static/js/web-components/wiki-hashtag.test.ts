@@ -79,8 +79,8 @@ describe('WikiHashtag', () => {
     });
 
     it('should not render the bubble while closed', () => {
-      const bubble = el.shadowRoot.querySelector('.bubble');
-      expect(bubble).to.be.null;
+      const popover = el.shadowRoot.querySelector('menu-popover');
+      expect(popover?.open).to.equal(false);
     });
   });
 
@@ -112,8 +112,8 @@ describe('WikiHashtag', () => {
     });
 
     it('should open the popover bubble', () => {
-      const bubble = el.shadowRoot.querySelector('.bubble');
-      expect(bubble).to.exist;
+      const popover = el.shadowRoot.querySelector('menu-popover');
+      expect(popover?.open).to.equal(true);
     });
 
     it('should render a list of result links', () => {
@@ -157,7 +157,7 @@ describe('WikiHashtag', () => {
         new MouseEvent('click', { bubbles: true, cancelable: true, composed: true }),
       );
       await waitUntil(
-        () => el.shadowRoot.querySelector('.bubble') !== null,
+        () => el.shadowRoot.querySelector('menu-popover')?.open === true,
         'Bubble should be open after first click',
       );
 
@@ -168,8 +168,8 @@ describe('WikiHashtag', () => {
     });
 
     it('should close the popover', () => {
-      const bubble = el.shadowRoot.querySelector('.bubble');
-      expect(bubble).to.be.null;
+      const popover = el.shadowRoot.querySelector('menu-popover');
+      expect(popover?.open).to.equal(false);
     });
   });
 
@@ -271,7 +271,7 @@ describe('WikiHashtag', () => {
         new MouseEvent('click', { bubbles: true, cancelable: true, composed: true }),
       );
       await waitUntil(
-        () => el.shadowRoot.querySelector('.bubble') !== null,
+        () => el.shadowRoot.querySelector('menu-popover')?.open === true,
         'Bubble should be open',
       );
 
@@ -288,8 +288,8 @@ describe('WikiHashtag', () => {
     });
 
     it('should close the popover', () => {
-      const bubble = el.shadowRoot.querySelector('.bubble');
-      expect(bubble).to.be.null;
+      const popover = el.shadowRoot.querySelector('menu-popover');
+      expect(popover?.open).to.equal(false);
     });
   });
 
@@ -303,7 +303,7 @@ describe('WikiHashtag', () => {
         new MouseEvent('click', { bubbles: true, cancelable: true, composed: true }),
       );
       await waitUntil(
-        () => el.shadowRoot.querySelector('.bubble') !== null,
+        () => el.shadowRoot.querySelector('menu-popover')?.open === true,
         'Bubble should be open',
       );
 
@@ -318,8 +318,8 @@ describe('WikiHashtag', () => {
     });
 
     it('should close the popover', () => {
-      const bubble = el.shadowRoot.querySelector('.bubble');
-      expect(bubble).to.be.null;
+      const popover = el.shadowRoot.querySelector('menu-popover');
+      expect(popover?.open).to.equal(false);
     });
   });
 
@@ -342,7 +342,7 @@ describe('WikiHashtag', () => {
       });
       anchor.dispatchEvent(clickEvent);
       await waitUntil(
-        () => el.shadowRoot.querySelector('.bubble') !== null,
+        () => el.shadowRoot.querySelector('menu-popover')?.open === true,
         'Popover should still open on ctrl-click',
       );
     });
@@ -402,7 +402,7 @@ describe('WikiHashtag', () => {
           new MouseEvent('click', { bubbles: true, cancelable: true, composed: true }),
         );
         await waitUntil(
-          () => el.shadowRoot.querySelector('.bubble') !== null,
+          () => el.shadowRoot.querySelector('menu-popover')?.open === true,
           'Bubble should open',
         );
       });
@@ -438,7 +438,7 @@ describe('WikiHashtag', () => {
         new MouseEvent('click', { bubbles: true, cancelable: true, composed: true }),
       );
       await waitUntil(
-        () => firstEl.shadowRoot.querySelector('.bubble') !== null,
+        () => firstEl.shadowRoot.querySelector('menu-popover')?.open === true,
         'First popover should open',
       );
 
@@ -448,17 +448,17 @@ describe('WikiHashtag', () => {
         new MouseEvent('click', { bubbles: true, cancelable: true, composed: true }),
       );
       await waitUntil(
-        () => secondEl.shadowRoot.querySelector('.bubble') !== null,
+        () => secondEl.shadowRoot.querySelector('menu-popover')?.open === true,
         'Second popover should open',
       );
     });
 
     it('should close the first popover', () => {
-      expect(firstEl.shadowRoot.querySelector('.bubble')).to.be.null;
+      expect(firstEl.shadowRoot.querySelector('menu-popover')?.open).to.equal(false);
     });
 
     it('should keep the second popover open', () => {
-      expect(secondEl.shadowRoot.querySelector('.bubble')).to.exist;
+      expect(secondEl.shadowRoot.querySelector('menu-popover')?.open).to.equal(true);
     });
   });
 });

@@ -69,9 +69,9 @@ type Logger interface {
 	Error(format string, args ...any)
 }
 
-// Clock is the testable wall-clock seam. Production: time.Now-backed.
+// Clocker is the testable wall-clock seam. Production: time.Now-backed.
 // Tests: sinon-style fake clock with Tick/AdvanceTo controls.
-type Clock interface {
+type Clocker interface {
 	Now() time.Time
 }
 

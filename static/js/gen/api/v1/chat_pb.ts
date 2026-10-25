@@ -13,7 +13,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file api/v1/chat.proto.
  */
 export const file_api_v1_chat: GenFile = /*@__PURE__*/
-  fileDesc("ChFhcGkvdjEvY2hhdC5wcm90bxIGYXBpLnYxIugBCgtDaGF0TWVzc2FnZRIKCgJpZBgBIAEoCRIeCgZzZW5kZXIYAiABKA4yDi5hcGkudjEuU2VuZGVyEg8KB2NvbnRlbnQYAyABKAkSLQoJdGltZXN0YW1wGAQgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIMCgRwYWdlGAUgASgJEhAKCHNlcXVlbmNlGAYgASgDEhMKC3NlbmRlcl9uYW1lGAcgASgJEhMKC3JlcGx5X3RvX2lkGAggASgJEiMKCXJlYWN0aW9ucxgJIAMoCzIQLmFwaS52MS5SZWFjdGlvbiIqCghSZWFjdGlvbhINCgVlbW9qaRgBIAEoCRIPCgdyZWFjdG9yGAIgASgJIrADCglDaGF0RXZlbnQSKgoLbmV3X21lc3NhZ2UYASABKAsyEy5hcGkudjEuQ2hhdE1lc3NhZ2VIABInCgRlZGl0GAIgASgLMhcuYXBpLnYxLkNoYXRNZXNzYWdlRWRpdEgAEigKCHJlYWN0aW9uGAMgASgLMhQuYXBpLnYxLkNoYXRSZWFjdGlvbkgAEikKCXRvb2xfY2FsbBgEIAEoCzIULmFwaS52MS5DaGF0VG9vbENhbGxIABI7ChJwZXJtaXNzaW9uX3JlcXVlc3QYBSABKAsyHS5hcGkudjEuQ2hhdFBlcm1pc3Npb25SZXF1ZXN0SAASKwoMY2hhdF9jbGVhcmVkGAYgASgLMhMuYXBpLnYxLkNoYXRDbGVhcmVkSAASIAoEcGxhbhgHIAEoCzIQLmFwaS52MS5DaGF0UGxhbkgAEi0KC3R1cm5fc3RhdHVzGAggASgLMhYuYXBpLnYxLkNoYXRUdXJuU3RhdHVzSAASNQoPYmFja2dyb3VuZF90YXNrGAkgASgLMhouYXBpLnYxLkNoYXRCYWNrZ3JvdW5kVGFza0gAQgcKBWV2ZW50IhsKC0NoYXRDbGVhcmVkEgwKBHBhZ2UYASABKAkijAEKFUNoYXRQZXJtaXNzaW9uUmVxdWVzdBISCgpyZXF1ZXN0X2lkGAEgASgJEgwKBHBhZ2UYAiABKAkSDQoFdGl0bGUYAyABKAkSEwoLZGVzY3JpcHRpb24YBCABKAkSLQoHb3B0aW9ucxgFIAMoCzIcLmFwaS52MS5DaGF0UGVybWlzc2lvbk9wdGlvbiJNChRDaGF0UGVybWlzc2lvbk9wdGlvbhIRCglvcHRpb25faWQYASABKAkSDQoFbGFiZWwYAiABKAkSEwoLZGVzY3JpcHRpb24YAyABKAkidQoMQ2hhdFRvb2xDYWxsEhIKCm1lc3NhZ2VfaWQYASABKAkSFAoMdG9vbF9jYWxsX2lkGAIgASgJEg0KBXRpdGxlGAMgASgJEg4KBnN0YXR1cxgEIAEoCRIMCgRraW5kGAUgASgJEg4KBmRldGFpbBgGIAEoCSKEAQoSQ2hhdEJhY2tncm91bmRUYXNrEhIKCm1lc3NhZ2VfaWQYASABKAkSFAoMdG9vbF9jYWxsX2lkGAIgASgJEg0KBXRpdGxlGAMgASgJEg4KBnN0YXR1cxgEIAEoCRIOCgZkZXRhaWwYBSABKAkSFQoNc3RhcnRlZF9hdF9tcxgGIAEoAyJCCg1DaGF0UGxhbkVudHJ5Eg8KB2NvbnRlbnQYASABKAkSDgoGc3RhdHVzGAIgASgJEhAKCHByaW9yaXR5GAMgASgJIkYKCENoYXRQbGFuEhIKCm1lc3NhZ2VfaWQYASABKAkSJgoHZW50cmllcxgCIAMoCzIVLmFwaS52MS5DaGF0UGxhbkVudHJ5Ii4KDkNoYXRUdXJuU3RhdHVzEgwKBHBhZ2UYASABKAkSDgoGYWN0aXZlGAIgASgIInwKD0NoYXRNZXNzYWdlRWRpdBISCgptZXNzYWdlX2lkGAEgASgJEhMKC25ld19jb250ZW50GAIgASgJEi0KCXRpbWVzdGFtcBgDIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASEQoJc3RyZWFtaW5nGAQgASgIIkIKDENoYXRSZWFjdGlvbhISCgptZXNzYWdlX2lkGAEgASgJEg0KBWVtb2ppGAIgASgJEg8KB3JlYWN0b3IYAyABKAkiNwoWU2VuZENoYXRNZXNzYWdlUmVxdWVzdBIMCgRwYWdlGAEgASgJEg8KB2NvbnRlbnQYAiABKAkiLQoXU2VuZENoYXRNZXNzYWdlUmVzcG9uc2USEgoKbWVzc2FnZV9pZBgBIAEoCSIkChRTdWJzY3JpYmVDaGF0UmVxdWVzdBIMCgRwYWdlGAEgASgJIkoKFFNlbmRDaGF0UmVwbHlSZXF1ZXN0EgwKBHBhZ2UYASABKAkSDwoHY29udGVudBgCIAEoCRITCgtyZXBseV90b19pZBgDIAEoCSIrChVTZW5kQ2hhdFJlcGx5UmVzcG9uc2USEgoKbWVzc2FnZV9pZBgBIAEoCSJUChZFZGl0Q2hhdE1lc3NhZ2VSZXF1ZXN0EhIKCm1lc3NhZ2VfaWQYASABKAkSEwoLbmV3X2NvbnRlbnQYAiABKAkSEQoJc3RyZWFtaW5nGAMgASgIIhkKF0VkaXRDaGF0TWVzc2FnZVJlc3BvbnNlIjoKFVJlYWN0VG9NZXNzYWdlUmVxdWVzdBISCgptZXNzYWdlX2lkGAEgASgJEg0KBWVtb2ppGAIgASgJIhgKFlJlYWN0VG9NZXNzYWdlUmVzcG9uc2UiIAoQQ2xlYXJDaGF0UmVxdWVzdBIMCgRwYWdlGAEgASgJIhMKEUNsZWFyQ2hhdFJlc3BvbnNlIiQKFEdldENoYXRTdGF0dXNSZXF1ZXN0EgwKBHBhZ2UYASABKAkiVAoVR2V0Q2hhdFN0YXR1c1Jlc3BvbnNlEhEKCWNvbm5lY3RlZBgBIAEoCBIQCghzdGFydGluZxgCIAEoCBIWCg5wb29sX2Nvbm5lY3RlZBgDIAEoCCIwCiBTdWJzY3JpYmVQYWdlQ2hhdE1lc3NhZ2VzUmVxdWVzdBIMCgRwYWdlGAEgASgJIiIKIFN1YnNjcmliZUluc3RhbmNlUmVxdWVzdHNSZXF1ZXN0Ih8KD0luc3RhbmNlUmVxdWVzdBIMCgRwYWdlGAEgASgJIpYBCh9TZW5kVG9vbENhbGxOb3RpZmljYXRpb25SZXF1ZXN0EgwKBHBhZ2UYASABKAkSEgoKbWVzc2FnZV9pZBgCIAEoCRIUCgx0b29sX2NhbGxfaWQYAyABKAkSDQoFdGl0bGUYBCABKAkSDgoGc3RhdHVzGAUgASgJEgwKBGtpbmQYBiABKAkSDgoGZGV0YWlsGAcgASgJIiIKIFNlbmRUb29sQ2FsbE5vdGlmaWNhdGlvblJlc3BvbnNlImcKG1NlbmRQbGFuTm90aWZpY2F0aW9uUmVxdWVzdBIMCgRwYWdlGAEgASgJEhIKCm1lc3NhZ2VfaWQYAiABKAkSJgoHZW50cmllcxgDIAMoCzIVLmFwaS52MS5DaGF0UGxhbkVudHJ5Ih4KHFNlbmRQbGFuTm90aWZpY2F0aW9uUmVzcG9uc2UiNQoVU2VuZFR1cm5TdGF0dXNSZXF1ZXN0EgwKBHBhZ2UYASABKAkSDgoGYWN0aXZlGAIgASgIIhgKFlNlbmRUdXJuU3RhdHVzUmVzcG9uc2UiKAoYQ2FuY2VsQWdlbnRQcm9tcHRSZXF1ZXN0EgwKBHBhZ2UYASABKAkiGwoZQ2FuY2VsQWdlbnRQcm9tcHRSZXNwb25zZSIxCiFTdWJzY3JpYmVQYWdlQ2FuY2VsbGF0aW9uc1JlcXVlc3QSDAoEcGFnZRgBIAEoCSISChBQYWdlQ2FuY2VsbGF0aW9uIkwKGlJlc3BvbmRUb1Blcm1pc3Npb25SZXF1ZXN0EhIKCnJlcXVlc3RfaWQYASABKAkSGgoSc2VsZWN0ZWRfb3B0aW9uX2lkGAIgASgJIh0KG1Jlc3BvbmRUb1Blcm1pc3Npb25SZXNwb25zZSKXAQogUmVxdWVzdFBlcm1pc3Npb25Gcm9tVXNlclJlcXVlc3QSDAoEcGFnZRgBIAEoCRISCgpyZXF1ZXN0X2lkGAIgASgJEg0KBXRpdGxlGAMgASgJEhMKC2Rlc2NyaXB0aW9uGAQgASgJEi0KB29wdGlvbnMYBSADKAsyHC5hcGkudjEuQ2hhdFBlcm1pc3Npb25PcHRpb24iPwohUmVxdWVzdFBlcm1pc3Npb25Gcm9tVXNlclJlc3BvbnNlEhoKEnNlbGVjdGVkX29wdGlvbl9pZBgBIAEoCSo5CgZTZW5kZXISFgoSU0VOREVSX1VOU1BFQ0lGSUVEEAASCAoEVVNFUhABEg0KCUFTU0lTVEFOVBACMtQLCgtDaGF0U2VydmljZRJQCgtTZW5kTWVzc2FnZRIeLmFwaS52MS5TZW5kQ2hhdE1lc3NhZ2VSZXF1ZXN0Gh8uYXBpLnYxLlNlbmRDaGF0TWVzc2FnZVJlc3BvbnNlIgASRAoNU3Vic2NyaWJlQ2hhdBIcLmFwaS52MS5TdWJzY3JpYmVDaGF0UmVxdWVzdBoRLmFwaS52MS5DaGF0RXZlbnQiADABElIKDVNlbmRDaGF0UmVwbHkSHC5hcGkudjEuU2VuZENoYXRSZXBseVJlcXVlc3QaHS5hcGkudjEuU2VuZENoYXRSZXBseVJlc3BvbnNlIgSwtRgBElgKD0VkaXRDaGF0TWVzc2FnZRIeLmFwaS52MS5FZGl0Q2hhdE1lc3NhZ2VSZXF1ZXN0Gh8uYXBpLnYxLkVkaXRDaGF0TWVzc2FnZVJlc3BvbnNlIgSwtRgBElUKDlJlYWN0VG9NZXNzYWdlEh0uYXBpLnYxLlJlYWN0VG9NZXNzYWdlUmVxdWVzdBoeLmFwaS52MS5SZWFjdFRvTWVzc2FnZVJlc3BvbnNlIgSwtRgBEkIKCUNsZWFyQ2hhdBIYLmFwaS52MS5DbGVhckNoYXRSZXF1ZXN0GhkuYXBpLnYxLkNsZWFyQ2hhdFJlc3BvbnNlIgASTgoNR2V0Q2hhdFN0YXR1cxIcLmFwaS52MS5HZXRDaGF0U3RhdHVzUmVxdWVzdBodLmFwaS52MS5HZXRDaGF0U3RhdHVzUmVzcG9uc2UiABJeChlTdWJzY3JpYmVQYWdlQ2hhdE1lc3NhZ2VzEiguYXBpLnYxLlN1YnNjcmliZVBhZ2VDaGF0TWVzc2FnZXNSZXF1ZXN0GhMuYXBpLnYxLkNoYXRNZXNzYWdlIgAwARJiChlTdWJzY3JpYmVJbnN0YW5jZVJlcXVlc3RzEiguYXBpLnYxLlN1YnNjcmliZUluc3RhbmNlUmVxdWVzdHNSZXF1ZXN0GhcuYXBpLnYxLkluc3RhbmNlUmVxdWVzdCIAMAEScwoYU2VuZFRvb2xDYWxsTm90aWZpY2F0aW9uEicuYXBpLnYxLlNlbmRUb29sQ2FsbE5vdGlmaWNhdGlvblJlcXVlc3QaKC5hcGkudjEuU2VuZFRvb2xDYWxsTm90aWZpY2F0aW9uUmVzcG9uc2UiBLC1GAESZwoUU2VuZFBsYW5Ob3RpZmljYXRpb24SIy5hcGkudjEuU2VuZFBsYW5Ob3RpZmljYXRpb25SZXF1ZXN0GiQuYXBpLnYxLlNlbmRQbGFuTm90aWZpY2F0aW9uUmVzcG9uc2UiBLC1GAESVQoOU2VuZFR1cm5TdGF0dXMSHS5hcGkudjEuU2VuZFR1cm5TdGF0dXNSZXF1ZXN0Gh4uYXBpLnYxLlNlbmRUdXJuU3RhdHVzUmVzcG9uc2UiBLC1GAESWgoRQ2FuY2VsQWdlbnRQcm9tcHQSIC5hcGkudjEuQ2FuY2VsQWdlbnRQcm9tcHRSZXF1ZXN0GiEuYXBpLnYxLkNhbmNlbEFnZW50UHJvbXB0UmVzcG9uc2UiABJlChpTdWJzY3JpYmVQYWdlQ2FuY2VsbGF0aW9ucxIpLmFwaS52MS5TdWJzY3JpYmVQYWdlQ2FuY2VsbGF0aW9uc1JlcXVlc3QaGC5hcGkudjEuUGFnZUNhbmNlbGxhdGlvbiIAMAESZAoTUmVzcG9uZFRvUGVybWlzc2lvbhIiLmFwaS52MS5SZXNwb25kVG9QZXJtaXNzaW9uUmVxdWVzdBojLmFwaS52MS5SZXNwb25kVG9QZXJtaXNzaW9uUmVzcG9uc2UiBLC1GAEScgoZUmVxdWVzdFBlcm1pc3Npb25Gcm9tVXNlchIoLmFwaS52MS5SZXF1ZXN0UGVybWlzc2lvbkZyb21Vc2VyUmVxdWVzdBopLmFwaS52MS5SZXF1ZXN0UGVybWlzc2lvbkZyb21Vc2VyUmVzcG9uc2UiAEI6WjhnaXRodWIuY29tL2JyZW5kYW5qZXJ3aW4vc2ltcGxlX3dpa2kvZ2VuL2dvL2FwaS92MTthcGl2MWIGcHJvdG8z", [file_api_v1_mcp_options, file_google_protobuf_timestamp]);
+  fileDesc("ChFhcGkvdjEvY2hhdC5wcm90bxIGYXBpLnYxIpYCCgtDaGF0TWVzc2FnZRIKCgJpZBgBIAEoCRIeCgZzZW5kZXIYAiABKA4yDi5hcGkudjEuU2VuZGVyEg8KB2NvbnRlbnQYAyABKAkSLQoJdGltZXN0YW1wGAQgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIMCgRwYWdlGAUgASgJEhAKCHNlcXVlbmNlGAYgASgDEhMKC3NlbmRlcl9uYW1lGAcgASgJEhMKC3JlcGx5X3RvX2lkGAggASgJEiMKCXJlYWN0aW9ucxgJIAMoCzIQLmFwaS52MS5SZWFjdGlvbhIQCghhZ2VudF9pZBgKIAEoCRIaChJhZ2VudF9kaXNwbGF5X25hbWUYCyABKAkiKgoIUmVhY3Rpb24SDQoFZW1vamkYASABKAkSDwoHcmVhY3RvchgCIAEoCSLjAwoJQ2hhdEV2ZW50EioKC25ld19tZXNzYWdlGAEgASgLMhMuYXBpLnYxLkNoYXRNZXNzYWdlSAASJwoEZWRpdBgCIAEoCzIXLmFwaS52MS5DaGF0TWVzc2FnZUVkaXRIABIoCghyZWFjdGlvbhgDIAEoCzIULmFwaS52MS5DaGF0UmVhY3Rpb25IABIpCgl0b29sX2NhbGwYBCABKAsyFC5hcGkudjEuQ2hhdFRvb2xDYWxsSAASOwoScGVybWlzc2lvbl9yZXF1ZXN0GAUgASgLMh0uYXBpLnYxLkNoYXRQZXJtaXNzaW9uUmVxdWVzdEgAEisKDGNoYXRfY2xlYXJlZBgGIAEoCzITLmFwaS52MS5DaGF0Q2xlYXJlZEgAEiAKBHBsYW4YByABKAsyEC5hcGkudjEuQ2hhdFBsYW5IABItCgt0dXJuX3N0YXR1cxgIIAEoCzIWLmFwaS52MS5DaGF0VHVyblN0YXR1c0gAEjUKD2JhY2tncm91bmRfdGFzaxgJIAEoCzIaLmFwaS52MS5DaGF0QmFja2dyb3VuZFRhc2tIABIxCg1hZ2VudF9jaGFuZ2VkGAogASgLMhguYXBpLnYxLkNoYXRBZ2VudENoYW5nZWRIAEIHCgVldmVudCJjChBDaGF0QWdlbnRDaGFuZ2VkEgwKBHBhZ2UYASABKAkSEAoIYWdlbnRfaWQYAiABKAkSGgoSYWdlbnRfZGlzcGxheV9uYW1lGAMgASgJEhMKC3N3aXRjaGVkX2J5GAQgASgJIhsKC0NoYXRDbGVhcmVkEgwKBHBhZ2UYASABKAkijAEKFUNoYXRQZXJtaXNzaW9uUmVxdWVzdBISCgpyZXF1ZXN0X2lkGAEgASgJEgwKBHBhZ2UYAiABKAkSDQoFdGl0bGUYAyABKAkSEwoLZGVzY3JpcHRpb24YBCABKAkSLQoHb3B0aW9ucxgFIAMoCzIcLmFwaS52MS5DaGF0UGVybWlzc2lvbk9wdGlvbiJNChRDaGF0UGVybWlzc2lvbk9wdGlvbhIRCglvcHRpb25faWQYASABKAkSDQoFbGFiZWwYAiABKAkSEwoLZGVzY3JpcHRpb24YAyABKAkidQoMQ2hhdFRvb2xDYWxsEhIKCm1lc3NhZ2VfaWQYASABKAkSFAoMdG9vbF9jYWxsX2lkGAIgASgJEg0KBXRpdGxlGAMgASgJEg4KBnN0YXR1cxgEIAEoCRIMCgRraW5kGAUgASgJEg4KBmRldGFpbBgGIAEoCSKEAQoSQ2hhdEJhY2tncm91bmRUYXNrEhIKCm1lc3NhZ2VfaWQYASABKAkSFAoMdG9vbF9jYWxsX2lkGAIgASgJEg0KBXRpdGxlGAMgASgJEg4KBnN0YXR1cxgEIAEoCRIOCgZkZXRhaWwYBSABKAkSFQoNc3RhcnRlZF9hdF9tcxgGIAEoAyJCCg1DaGF0UGxhbkVudHJ5Eg8KB2NvbnRlbnQYASABKAkSDgoGc3RhdHVzGAIgASgJEhAKCHByaW9yaXR5GAMgASgJIkYKCENoYXRQbGFuEhIKCm1lc3NhZ2VfaWQYASABKAkSJgoHZW50cmllcxgCIAMoCzIVLmFwaS52MS5DaGF0UGxhbkVudHJ5Ii4KDkNoYXRUdXJuU3RhdHVzEgwKBHBhZ2UYASABKAkSDgoGYWN0aXZlGAIgASgIInwKD0NoYXRNZXNzYWdlRWRpdBISCgptZXNzYWdlX2lkGAEgASgJEhMKC25ld19jb250ZW50GAIgASgJEi0KCXRpbWVzdGFtcBgDIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASEQoJc3RyZWFtaW5nGAQgASgIIkIKDENoYXRSZWFjdGlvbhISCgptZXNzYWdlX2lkGAEgASgJEg0KBWVtb2ppGAIgASgJEg8KB3JlYWN0b3IYAyABKAkiNwoWU2VuZENoYXRNZXNzYWdlUmVxdWVzdBIMCgRwYWdlGAEgASgJEg8KB2NvbnRlbnQYAiABKAkiLQoXU2VuZENoYXRNZXNzYWdlUmVzcG9uc2USEgoKbWVzc2FnZV9pZBgBIAEoCSIkChRTdWJzY3JpYmVDaGF0UmVxdWVzdBIMCgRwYWdlGAEgASgJIngKFFNlbmRDaGF0UmVwbHlSZXF1ZXN0EgwKBHBhZ2UYASABKAkSDwoHY29udGVudBgCIAEoCRITCgtyZXBseV90b19pZBgDIAEoCRIQCghhZ2VudF9pZBgEIAEoCRIaChJhZ2VudF9kaXNwbGF5X25hbWUYBSABKAkiKwoVU2VuZENoYXRSZXBseVJlc3BvbnNlEhIKCm1lc3NhZ2VfaWQYASABKAkiVAoWRWRpdENoYXRNZXNzYWdlUmVxdWVzdBISCgptZXNzYWdlX2lkGAEgASgJEhMKC25ld19jb250ZW50GAIgASgJEhEKCXN0cmVhbWluZxgDIAEoCCIZChdFZGl0Q2hhdE1lc3NhZ2VSZXNwb25zZSI6ChVSZWFjdFRvTWVzc2FnZVJlcXVlc3QSEgoKbWVzc2FnZV9pZBgBIAEoCRINCgVlbW9qaRgCIAEoCSIYChZSZWFjdFRvTWVzc2FnZVJlc3BvbnNlIiAKEENsZWFyQ2hhdFJlcXVlc3QSDAoEcGFnZRgBIAEoCSITChFDbGVhckNoYXRSZXNwb25zZSIkChRHZXRDaGF0U3RhdHVzUmVxdWVzdBIMCgRwYWdlGAEgASgJIpYBChVHZXRDaGF0U3RhdHVzUmVzcG9uc2USEQoJY29ubmVjdGVkGAEgASgIEhAKCHN0YXJ0aW5nGAIgASgIEhYKDnBvb2xfY29ubmVjdGVkGAMgASgIEhoKEmVmZmVjdGl2ZV9hZ2VudF9pZBgEIAEoCRIkChxlZmZlY3RpdmVfYWdlbnRfZGlzcGxheV9uYW1lGAUgASgJIjAKIFN1YnNjcmliZVBhZ2VDaGF0TWVzc2FnZXNSZXF1ZXN0EgwKBHBhZ2UYASABKAkiIgogU3Vic2NyaWJlSW5zdGFuY2VSZXF1ZXN0c1JlcXVlc3QiHwoPSW5zdGFuY2VSZXF1ZXN0EgwKBHBhZ2UYASABKAkilgEKH1NlbmRUb29sQ2FsbE5vdGlmaWNhdGlvblJlcXVlc3QSDAoEcGFnZRgBIAEoCRISCgptZXNzYWdlX2lkGAIgASgJEhQKDHRvb2xfY2FsbF9pZBgDIAEoCRINCgV0aXRsZRgEIAEoCRIOCgZzdGF0dXMYBSABKAkSDAoEa2luZBgGIAEoCRIOCgZkZXRhaWwYByABKAkiIgogU2VuZFRvb2xDYWxsTm90aWZpY2F0aW9uUmVzcG9uc2UiZwobU2VuZFBsYW5Ob3RpZmljYXRpb25SZXF1ZXN0EgwKBHBhZ2UYASABKAkSEgoKbWVzc2FnZV9pZBgCIAEoCRImCgdlbnRyaWVzGAMgAygLMhUuYXBpLnYxLkNoYXRQbGFuRW50cnkiHgocU2VuZFBsYW5Ob3RpZmljYXRpb25SZXNwb25zZSI1ChVTZW5kVHVyblN0YXR1c1JlcXVlc3QSDAoEcGFnZRgBIAEoCRIOCgZhY3RpdmUYAiABKAgiGAoWU2VuZFR1cm5TdGF0dXNSZXNwb25zZSIoChhDYW5jZWxBZ2VudFByb21wdFJlcXVlc3QSDAoEcGFnZRgBIAEoCSIbChlDYW5jZWxBZ2VudFByb21wdFJlc3BvbnNlIjEKIVN1YnNjcmliZVBhZ2VDYW5jZWxsYXRpb25zUmVxdWVzdBIMCgRwYWdlGAEgASgJIhIKEFBhZ2VDYW5jZWxsYXRpb24iTAoaUmVzcG9uZFRvUGVybWlzc2lvblJlcXVlc3QSEgoKcmVxdWVzdF9pZBgBIAEoCRIaChJzZWxlY3RlZF9vcHRpb25faWQYAiABKAkiHQobUmVzcG9uZFRvUGVybWlzc2lvblJlc3BvbnNlIpcBCiBSZXF1ZXN0UGVybWlzc2lvbkZyb21Vc2VyUmVxdWVzdBIMCgRwYWdlGAEgASgJEhIKCnJlcXVlc3RfaWQYAiABKAkSDQoFdGl0bGUYAyABKAkSEwoLZGVzY3JpcHRpb24YBCABKAkSLQoHb3B0aW9ucxgFIAMoCzIcLmFwaS52MS5DaGF0UGVybWlzc2lvbk9wdGlvbiI/CiFSZXF1ZXN0UGVybWlzc2lvbkZyb21Vc2VyUmVzcG9uc2USGgoSc2VsZWN0ZWRfb3B0aW9uX2lkGAEgASgJIjUKFkdldENoYXRNZXNzYWdlc1JlcXVlc3QSDAoEcGFnZRgBIAEoCRINCgVsaW1pdBgCIAEoBSJAChdHZXRDaGF0TWVzc2FnZXNSZXNwb25zZRIlCghtZXNzYWdlcxgBIAMoCzITLmFwaS52MS5DaGF0TWVzc2FnZSJYChpOb3RpZnlBZ2VudEF0dGFjaGVkUmVxdWVzdBIMCgRwYWdlGAEgASgJEhAKCGFnZW50X2lkGAIgASgJEhoKEmFnZW50X2Rpc3BsYXlfbmFtZRgDIAEoCSIdChtOb3RpZnlBZ2VudEF0dGFjaGVkUmVzcG9uc2UqOQoGU2VuZGVyEhYKElNFTkRFUl9VTlNQRUNJRklFRBAAEggKBFVTRVIQARINCglBU1NJU1RBTlQQAjKUDQoLQ2hhdFNlcnZpY2USUAoLU2VuZE1lc3NhZ2USHi5hcGkudjEuU2VuZENoYXRNZXNzYWdlUmVxdWVzdBofLmFwaS52MS5TZW5kQ2hhdE1lc3NhZ2VSZXNwb25zZSIAEkQKDVN1YnNjcmliZUNoYXQSHC5hcGkudjEuU3Vic2NyaWJlQ2hhdFJlcXVlc3QaES5hcGkudjEuQ2hhdEV2ZW50IgAwARJSCg1TZW5kQ2hhdFJlcGx5EhwuYXBpLnYxLlNlbmRDaGF0UmVwbHlSZXF1ZXN0Gh0uYXBpLnYxLlNlbmRDaGF0UmVwbHlSZXNwb25zZSIEsLUYARJYCg9FZGl0Q2hhdE1lc3NhZ2USHi5hcGkudjEuRWRpdENoYXRNZXNzYWdlUmVxdWVzdBofLmFwaS52MS5FZGl0Q2hhdE1lc3NhZ2VSZXNwb25zZSIEsLUYARJVCg5SZWFjdFRvTWVzc2FnZRIdLmFwaS52MS5SZWFjdFRvTWVzc2FnZVJlcXVlc3QaHi5hcGkudjEuUmVhY3RUb01lc3NhZ2VSZXNwb25zZSIEsLUYARJCCglDbGVhckNoYXQSGC5hcGkudjEuQ2xlYXJDaGF0UmVxdWVzdBoZLmFwaS52MS5DbGVhckNoYXRSZXNwb25zZSIAEk4KDUdldENoYXRTdGF0dXMSHC5hcGkudjEuR2V0Q2hhdFN0YXR1c1JlcXVlc3QaHS5hcGkudjEuR2V0Q2hhdFN0YXR1c1Jlc3BvbnNlIgASXgoZU3Vic2NyaWJlUGFnZUNoYXRNZXNzYWdlcxIoLmFwaS52MS5TdWJzY3JpYmVQYWdlQ2hhdE1lc3NhZ2VzUmVxdWVzdBoTLmFwaS52MS5DaGF0TWVzc2FnZSIAMAESYgoZU3Vic2NyaWJlSW5zdGFuY2VSZXF1ZXN0cxIoLmFwaS52MS5TdWJzY3JpYmVJbnN0YW5jZVJlcXVlc3RzUmVxdWVzdBoXLmFwaS52MS5JbnN0YW5jZVJlcXVlc3QiADABEnMKGFNlbmRUb29sQ2FsbE5vdGlmaWNhdGlvbhInLmFwaS52MS5TZW5kVG9vbENhbGxOb3RpZmljYXRpb25SZXF1ZXN0GiguYXBpLnYxLlNlbmRUb29sQ2FsbE5vdGlmaWNhdGlvblJlc3BvbnNlIgSwtRgBEmcKFFNlbmRQbGFuTm90aWZpY2F0aW9uEiMuYXBpLnYxLlNlbmRQbGFuTm90aWZpY2F0aW9uUmVxdWVzdBokLmFwaS52MS5TZW5kUGxhbk5vdGlmaWNhdGlvblJlc3BvbnNlIgSwtRgBElUKDlNlbmRUdXJuU3RhdHVzEh0uYXBpLnYxLlNlbmRUdXJuU3RhdHVzUmVxdWVzdBoeLmFwaS52MS5TZW5kVHVyblN0YXR1c1Jlc3BvbnNlIgSwtRgBEloKEUNhbmNlbEFnZW50UHJvbXB0EiAuYXBpLnYxLkNhbmNlbEFnZW50UHJvbXB0UmVxdWVzdBohLmFwaS52MS5DYW5jZWxBZ2VudFByb21wdFJlc3BvbnNlIgASZQoaU3Vic2NyaWJlUGFnZUNhbmNlbGxhdGlvbnMSKS5hcGkudjEuU3Vic2NyaWJlUGFnZUNhbmNlbGxhdGlvbnNSZXF1ZXN0GhguYXBpLnYxLlBhZ2VDYW5jZWxsYXRpb24iADABEmQKE1Jlc3BvbmRUb1Blcm1pc3Npb24SIi5hcGkudjEuUmVzcG9uZFRvUGVybWlzc2lvblJlcXVlc3QaIy5hcGkudjEuUmVzcG9uZFRvUGVybWlzc2lvblJlc3BvbnNlIgSwtRgBEnIKGVJlcXVlc3RQZXJtaXNzaW9uRnJvbVVzZXISKC5hcGkudjEuUmVxdWVzdFBlcm1pc3Npb25Gcm9tVXNlclJlcXVlc3QaKS5hcGkudjEuUmVxdWVzdFBlcm1pc3Npb25Gcm9tVXNlclJlc3BvbnNlIgASWAoPR2V0Q2hhdE1lc3NhZ2VzEh4uYXBpLnYxLkdldENoYXRNZXNzYWdlc1JlcXVlc3QaHy5hcGkudjEuR2V0Q2hhdE1lc3NhZ2VzUmVzcG9uc2UiBLC1GAESZAoTTm90aWZ5QWdlbnRBdHRhY2hlZBIiLmFwaS52MS5Ob3RpZnlBZ2VudEF0dGFjaGVkUmVxdWVzdBojLmFwaS52MS5Ob3RpZnlBZ2VudEF0dGFjaGVkUmVzcG9uc2UiBLC1GAFCOlo4Z2l0aHViLmNvbS9icmVuZGFuamVyd2luL3NpbXBsZV93aWtpL2dlbi9nby9hcGkvdjE7YXBpdjFiBnByb3RvMw", [file_api_v1_mcp_options, file_google_protobuf_timestamp]);
 
 /**
  * ChatMessage represents a single chat message.
@@ -81,6 +81,21 @@ export type ChatMessage = Message<"api.v1.ChatMessage"> & {
    * @generated from field: repeated api.v1.Reaction reactions = 9;
    */
   reactions: Reaction[];
+
+  /**
+   * Agent identity fields, set on ASSISTANT messages by the pool daemon.
+   * Stable inventory id (e.g. "local-acp") and display name of the agent that
+   * produced this message — so replies made during a switch window are
+   * attributed to the agent that actually produced them.
+   *
+   * @generated from field: string agent_id = 10;
+   */
+  agentId: string;
+
+  /**
+   * @generated from field: string agent_display_name = 11;
+   */
+  agentDisplayName: string;
 };
 
 /**
@@ -179,6 +194,15 @@ export type ChatEvent = Message<"api.v1.ChatEvent"> & {
      */
     value: ChatBackgroundTask;
     case: "backgroundTask";
+  } | {
+    /**
+     * Emitted whenever a page's agent binding changes (SetPageAgent), and
+     * replayed on SubscribeChat connect so late joiners see the switch.
+     *
+     * @generated from field: api.v1.ChatAgentChanged agent_changed = 10;
+     */
+    value: ChatAgentChanged;
+    case: "agentChanged";
   } | { case: undefined; value?: undefined };
 };
 
@@ -188,6 +212,50 @@ export type ChatEvent = Message<"api.v1.ChatEvent"> & {
  */
 export const ChatEventSchema: GenMessage<ChatEvent> = /*@__PURE__*/
   messageDesc(file_api_v1_chat, 2);
+
+/**
+ * ChatAgentChanged is streamed when a page's bound agent changes. Emitted by
+ * the binding write itself and replayed on SubscribeChat connect so all
+ * participants (and late joiners) see who the page is talking to.
+ *
+ * @generated from message api.v1.ChatAgentChanged
+ */
+export type ChatAgentChanged = Message<"api.v1.ChatAgentChanged"> & {
+  /**
+   * page whose binding changed
+   *
+   * @generated from field: string page = 1;
+   */
+  page: string;
+
+  /**
+   * newly bound agent's inventory id
+   *
+   * @generated from field: string agent_id = 2;
+   */
+  agentId: string;
+
+  /**
+   * newly bound agent's display name
+   *
+   * @generated from field: string agent_display_name = 3;
+   */
+  agentDisplayName: string;
+
+  /**
+   * Tailscale identity of the switcher
+   *
+   * @generated from field: string switched_by = 4;
+   */
+  switchedBy: string;
+};
+
+/**
+ * Describes the message api.v1.ChatAgentChanged.
+ * Use `create(ChatAgentChangedSchema)` to create a new message.
+ */
+export const ChatAgentChangedSchema: GenMessage<ChatAgentChanged> = /*@__PURE__*/
+  messageDesc(file_api_v1_chat, 3);
 
 /**
  * ChatCleared is streamed when a page's visible chat history is cleared.
@@ -206,7 +274,7 @@ export type ChatCleared = Message<"api.v1.ChatCleared"> & {
  * Use `create(ChatClearedSchema)` to create a new message.
  */
 export const ChatClearedSchema: GenMessage<ChatCleared> = /*@__PURE__*/
-  messageDesc(file_api_v1_chat, 3);
+  messageDesc(file_api_v1_chat, 4);
 
 /**
  * ChatPermissionRequest is sent to the browser when the agent needs user authorization.
@@ -253,7 +321,7 @@ export type ChatPermissionRequest = Message<"api.v1.ChatPermissionRequest"> & {
  * Use `create(ChatPermissionRequestSchema)` to create a new message.
  */
 export const ChatPermissionRequestSchema: GenMessage<ChatPermissionRequest> = /*@__PURE__*/
-  messageDesc(file_api_v1_chat, 4);
+  messageDesc(file_api_v1_chat, 5);
 
 /**
  * ChatPermissionOption is a choice the user can select.
@@ -282,7 +350,7 @@ export type ChatPermissionOption = Message<"api.v1.ChatPermissionOption"> & {
  * Use `create(ChatPermissionOptionSchema)` to create a new message.
  */
 export const ChatPermissionOptionSchema: GenMessage<ChatPermissionOption> = /*@__PURE__*/
-  messageDesc(file_api_v1_chat, 5);
+  messageDesc(file_api_v1_chat, 6);
 
 /**
  * ChatToolCall represents a tool invocation by the assistant. Fields mirror the
@@ -339,7 +407,7 @@ export type ChatToolCall = Message<"api.v1.ChatToolCall"> & {
  * Use `create(ChatToolCallSchema)` to create a new message.
  */
 export const ChatToolCallSchema: GenMessage<ChatToolCall> = /*@__PURE__*/
-  messageDesc(file_api_v1_chat, 6);
+  messageDesc(file_api_v1_chat, 7);
 
 /**
  * ChatBackgroundTask is broadcast when a tool call is promoted to a background
@@ -401,7 +469,7 @@ export type ChatBackgroundTask = Message<"api.v1.ChatBackgroundTask"> & {
  * Use `create(ChatBackgroundTaskSchema)` to create a new message.
  */
 export const ChatBackgroundTaskSchema: GenMessage<ChatBackgroundTask> = /*@__PURE__*/
-  messageDesc(file_api_v1_chat, 7);
+  messageDesc(file_api_v1_chat, 8);
 
 /**
  * ChatPlanEntry is one item in the agent's execution plan, mirroring an ACP
@@ -437,7 +505,7 @@ export type ChatPlanEntry = Message<"api.v1.ChatPlanEntry"> & {
  * Use `create(ChatPlanEntrySchema)` to create a new message.
  */
 export const ChatPlanEntrySchema: GenMessage<ChatPlanEntry> = /*@__PURE__*/
-  messageDesc(file_api_v1_chat, 8);
+  messageDesc(file_api_v1_chat, 9);
 
 /**
  * ChatPlan is the agent's current execution plan for a turn, streamed live as it
@@ -466,7 +534,7 @@ export type ChatPlan = Message<"api.v1.ChatPlan"> & {
  * Use `create(ChatPlanSchema)` to create a new message.
  */
 export const ChatPlanSchema: GenMessage<ChatPlan> = /*@__PURE__*/
-  messageDesc(file_api_v1_chat, 9);
+  messageDesc(file_api_v1_chat, 10);
 
 /**
  * ChatTurnStatus reports whether the agent is actively working a turn on a page
@@ -493,7 +561,7 @@ export type ChatTurnStatus = Message<"api.v1.ChatTurnStatus"> & {
  * Use `create(ChatTurnStatusSchema)` to create a new message.
  */
 export const ChatTurnStatusSchema: GenMessage<ChatTurnStatus> = /*@__PURE__*/
-  messageDesc(file_api_v1_chat, 10);
+  messageDesc(file_api_v1_chat, 11);
 
 /**
  * ChatMessageEdit represents an edit to an existing message.
@@ -530,7 +598,7 @@ export type ChatMessageEdit = Message<"api.v1.ChatMessageEdit"> & {
  * Use `create(ChatMessageEditSchema)` to create a new message.
  */
 export const ChatMessageEditSchema: GenMessage<ChatMessageEdit> = /*@__PURE__*/
-  messageDesc(file_api_v1_chat, 11);
+  messageDesc(file_api_v1_chat, 12);
 
 /**
  * ChatReaction represents a reaction added to a message.
@@ -559,7 +627,7 @@ export type ChatReaction = Message<"api.v1.ChatReaction"> & {
  * Use `create(ChatReactionSchema)` to create a new message.
  */
 export const ChatReactionSchema: GenMessage<ChatReaction> = /*@__PURE__*/
-  messageDesc(file_api_v1_chat, 12);
+  messageDesc(file_api_v1_chat, 13);
 
 /**
  * SendChatMessageRequest is the request for SendMessage.
@@ -587,7 +655,7 @@ export type SendChatMessageRequest = Message<"api.v1.SendChatMessageRequest"> & 
  * Use `create(SendChatMessageRequestSchema)` to create a new message.
  */
 export const SendChatMessageRequestSchema: GenMessage<SendChatMessageRequest> = /*@__PURE__*/
-  messageDesc(file_api_v1_chat, 13);
+  messageDesc(file_api_v1_chat, 14);
 
 /**
  * SendChatMessageResponse is the response for SendMessage.
@@ -608,7 +676,7 @@ export type SendChatMessageResponse = Message<"api.v1.SendChatMessageResponse"> 
  * Use `create(SendChatMessageResponseSchema)` to create a new message.
  */
 export const SendChatMessageResponseSchema: GenMessage<SendChatMessageResponse> = /*@__PURE__*/
-  messageDesc(file_api_v1_chat, 14);
+  messageDesc(file_api_v1_chat, 15);
 
 /**
  * SubscribeChatRequest is the request for SubscribeChat.
@@ -629,7 +697,7 @@ export type SubscribeChatRequest = Message<"api.v1.SubscribeChatRequest"> & {
  * Use `create(SubscribeChatRequestSchema)` to create a new message.
  */
 export const SubscribeChatRequestSchema: GenMessage<SubscribeChatRequest> = /*@__PURE__*/
-  messageDesc(file_api_v1_chat, 15);
+  messageDesc(file_api_v1_chat, 16);
 
 /**
  * SendChatReplyRequest is the request for SendChatReply.
@@ -657,6 +725,20 @@ export type SendChatReplyRequest = Message<"api.v1.SendChatReplyRequest"> & {
    * @generated from field: string reply_to_id = 3;
    */
   replyToId: string;
+
+  /**
+   * Inventory id (and display name) of the agent producing this reply. The
+   * server stamps both onto the buffered message so every participant sees
+   * which agent produced it.
+   *
+   * @generated from field: string agent_id = 4;
+   */
+  agentId: string;
+
+  /**
+   * @generated from field: string agent_display_name = 5;
+   */
+  agentDisplayName: string;
 };
 
 /**
@@ -664,7 +746,7 @@ export type SendChatReplyRequest = Message<"api.v1.SendChatReplyRequest"> & {
  * Use `create(SendChatReplyRequestSchema)` to create a new message.
  */
 export const SendChatReplyRequestSchema: GenMessage<SendChatReplyRequest> = /*@__PURE__*/
-  messageDesc(file_api_v1_chat, 16);
+  messageDesc(file_api_v1_chat, 17);
 
 /**
  * SendChatReplyResponse is the response for SendChatReply.
@@ -685,7 +767,7 @@ export type SendChatReplyResponse = Message<"api.v1.SendChatReplyResponse"> & {
  * Use `create(SendChatReplyResponseSchema)` to create a new message.
  */
 export const SendChatReplyResponseSchema: GenMessage<SendChatReplyResponse> = /*@__PURE__*/
-  messageDesc(file_api_v1_chat, 17);
+  messageDesc(file_api_v1_chat, 18);
 
 /**
  * EditChatMessageRequest is the request for EditChatMessage.
@@ -721,7 +803,7 @@ export type EditChatMessageRequest = Message<"api.v1.EditChatMessageRequest"> & 
  * Use `create(EditChatMessageRequestSchema)` to create a new message.
  */
 export const EditChatMessageRequestSchema: GenMessage<EditChatMessageRequest> = /*@__PURE__*/
-  messageDesc(file_api_v1_chat, 18);
+  messageDesc(file_api_v1_chat, 19);
 
 /**
  * EditChatMessageResponse is the response for EditChatMessage.
@@ -736,7 +818,7 @@ export type EditChatMessageResponse = Message<"api.v1.EditChatMessageResponse"> 
  * Use `create(EditChatMessageResponseSchema)` to create a new message.
  */
 export const EditChatMessageResponseSchema: GenMessage<EditChatMessageResponse> = /*@__PURE__*/
-  messageDesc(file_api_v1_chat, 19);
+  messageDesc(file_api_v1_chat, 20);
 
 /**
  * ReactToMessageRequest is the request for ReactToMessage.
@@ -764,7 +846,7 @@ export type ReactToMessageRequest = Message<"api.v1.ReactToMessageRequest"> & {
  * Use `create(ReactToMessageRequestSchema)` to create a new message.
  */
 export const ReactToMessageRequestSchema: GenMessage<ReactToMessageRequest> = /*@__PURE__*/
-  messageDesc(file_api_v1_chat, 20);
+  messageDesc(file_api_v1_chat, 21);
 
 /**
  * ReactToMessageResponse is the response for ReactToMessage.
@@ -779,7 +861,7 @@ export type ReactToMessageResponse = Message<"api.v1.ReactToMessageResponse"> & 
  * Use `create(ReactToMessageResponseSchema)` to create a new message.
  */
 export const ReactToMessageResponseSchema: GenMessage<ReactToMessageResponse> = /*@__PURE__*/
-  messageDesc(file_api_v1_chat, 21);
+  messageDesc(file_api_v1_chat, 22);
 
 /**
  * ClearChatRequest is the request for ClearChat.
@@ -800,7 +882,7 @@ export type ClearChatRequest = Message<"api.v1.ClearChatRequest"> & {
  * Use `create(ClearChatRequestSchema)` to create a new message.
  */
 export const ClearChatRequestSchema: GenMessage<ClearChatRequest> = /*@__PURE__*/
-  messageDesc(file_api_v1_chat, 22);
+  messageDesc(file_api_v1_chat, 23);
 
 /**
  * ClearChatResponse is the response for ClearChat.
@@ -815,7 +897,7 @@ export type ClearChatResponse = Message<"api.v1.ClearChatResponse"> & {
  * Use `create(ClearChatResponseSchema)` to create a new message.
  */
 export const ClearChatResponseSchema: GenMessage<ClearChatResponse> = /*@__PURE__*/
-  messageDesc(file_api_v1_chat, 23);
+  messageDesc(file_api_v1_chat, 24);
 
 /**
  * GetChatStatusRequest is the request for GetChatStatus.
@@ -836,7 +918,7 @@ export type GetChatStatusRequest = Message<"api.v1.GetChatStatusRequest"> & {
  * Use `create(GetChatStatusRequestSchema)` to create a new message.
  */
 export const GetChatStatusRequestSchema: GenMessage<GetChatStatusRequest> = /*@__PURE__*/
-  messageDesc(file_api_v1_chat, 24);
+  messageDesc(file_api_v1_chat, 25);
 
 /**
  * GetChatStatusResponse is the response for GetChatStatus.
@@ -864,6 +946,22 @@ export type GetChatStatusResponse = Message<"api.v1.GetChatStatusResponse"> & {
    * @generated from field: bool pool_connected = 3;
    */
   poolConnected: boolean;
+
+  /**
+   * The EFFECTIVE agent for the page: the agent actually attached in the
+   * pool right now (empty unless an instance is attached; equals the desired
+   * binding once a switch has taken effect). Lets the UI surface
+   * desired-vs-effective divergence during a switch instead of mislabeling
+   * the old agent's replies.
+   *
+   * @generated from field: string effective_agent_id = 4;
+   */
+  effectiveAgentId: string;
+
+  /**
+   * @generated from field: string effective_agent_display_name = 5;
+   */
+  effectiveAgentDisplayName: string;
 };
 
 /**
@@ -871,7 +969,7 @@ export type GetChatStatusResponse = Message<"api.v1.GetChatStatusResponse"> & {
  * Use `create(GetChatStatusResponseSchema)` to create a new message.
  */
 export const GetChatStatusResponseSchema: GenMessage<GetChatStatusResponse> = /*@__PURE__*/
-  messageDesc(file_api_v1_chat, 25);
+  messageDesc(file_api_v1_chat, 26);
 
 /**
  * SubscribePageChatMessagesRequest is the request for SubscribePageChatMessages.
@@ -892,7 +990,7 @@ export type SubscribePageChatMessagesRequest = Message<"api.v1.SubscribePageChat
  * Use `create(SubscribePageChatMessagesRequestSchema)` to create a new message.
  */
 export const SubscribePageChatMessagesRequestSchema: GenMessage<SubscribePageChatMessagesRequest> = /*@__PURE__*/
-  messageDesc(file_api_v1_chat, 26);
+  messageDesc(file_api_v1_chat, 27);
 
 /**
  * SubscribeInstanceRequestsRequest is the request for SubscribeInstanceRequests.
@@ -907,7 +1005,7 @@ export type SubscribeInstanceRequestsRequest = Message<"api.v1.SubscribeInstance
  * Use `create(SubscribeInstanceRequestsRequestSchema)` to create a new message.
  */
 export const SubscribeInstanceRequestsRequestSchema: GenMessage<SubscribeInstanceRequestsRequest> = /*@__PURE__*/
-  messageDesc(file_api_v1_chat, 27);
+  messageDesc(file_api_v1_chat, 28);
 
 /**
  * InstanceRequest is streamed by SubscribeInstanceRequests when a page needs an agent instance.
@@ -928,7 +1026,7 @@ export type InstanceRequest = Message<"api.v1.InstanceRequest"> & {
  * Use `create(InstanceRequestSchema)` to create a new message.
  */
 export const InstanceRequestSchema: GenMessage<InstanceRequest> = /*@__PURE__*/
-  messageDesc(file_api_v1_chat, 28);
+  messageDesc(file_api_v1_chat, 29);
 
 /**
  * SendToolCallNotificationRequest is the request for SendToolCallNotification.
@@ -991,7 +1089,7 @@ export type SendToolCallNotificationRequest = Message<"api.v1.SendToolCallNotifi
  * Use `create(SendToolCallNotificationRequestSchema)` to create a new message.
  */
 export const SendToolCallNotificationRequestSchema: GenMessage<SendToolCallNotificationRequest> = /*@__PURE__*/
-  messageDesc(file_api_v1_chat, 29);
+  messageDesc(file_api_v1_chat, 30);
 
 /**
  * SendToolCallNotificationResponse is the response for SendToolCallNotification.
@@ -1006,7 +1104,7 @@ export type SendToolCallNotificationResponse = Message<"api.v1.SendToolCallNotif
  * Use `create(SendToolCallNotificationResponseSchema)` to create a new message.
  */
 export const SendToolCallNotificationResponseSchema: GenMessage<SendToolCallNotificationResponse> = /*@__PURE__*/
-  messageDesc(file_api_v1_chat, 30);
+  messageDesc(file_api_v1_chat, 31);
 
 /**
  * SendPlanNotificationRequest is the request for SendPlanNotification.
@@ -1041,7 +1139,7 @@ export type SendPlanNotificationRequest = Message<"api.v1.SendPlanNotificationRe
  * Use `create(SendPlanNotificationRequestSchema)` to create a new message.
  */
 export const SendPlanNotificationRequestSchema: GenMessage<SendPlanNotificationRequest> = /*@__PURE__*/
-  messageDesc(file_api_v1_chat, 31);
+  messageDesc(file_api_v1_chat, 32);
 
 /**
  * SendPlanNotificationResponse is the response for SendPlanNotification.
@@ -1056,7 +1154,7 @@ export type SendPlanNotificationResponse = Message<"api.v1.SendPlanNotificationR
  * Use `create(SendPlanNotificationResponseSchema)` to create a new message.
  */
 export const SendPlanNotificationResponseSchema: GenMessage<SendPlanNotificationResponse> = /*@__PURE__*/
-  messageDesc(file_api_v1_chat, 32);
+  messageDesc(file_api_v1_chat, 33);
 
 /**
  * SendTurnStatusRequest is the request for SendTurnStatus.
@@ -1082,7 +1180,7 @@ export type SendTurnStatusRequest = Message<"api.v1.SendTurnStatusRequest"> & {
  * Use `create(SendTurnStatusRequestSchema)` to create a new message.
  */
 export const SendTurnStatusRequestSchema: GenMessage<SendTurnStatusRequest> = /*@__PURE__*/
-  messageDesc(file_api_v1_chat, 33);
+  messageDesc(file_api_v1_chat, 34);
 
 /**
  * SendTurnStatusResponse is the response for SendTurnStatus.
@@ -1097,7 +1195,7 @@ export type SendTurnStatusResponse = Message<"api.v1.SendTurnStatusResponse"> & 
  * Use `create(SendTurnStatusResponseSchema)` to create a new message.
  */
 export const SendTurnStatusResponseSchema: GenMessage<SendTurnStatusResponse> = /*@__PURE__*/
-  messageDesc(file_api_v1_chat, 34);
+  messageDesc(file_api_v1_chat, 35);
 
 /**
  * CancelAgentPromptRequest is the request for CancelAgentPrompt.
@@ -1118,7 +1216,7 @@ export type CancelAgentPromptRequest = Message<"api.v1.CancelAgentPromptRequest"
  * Use `create(CancelAgentPromptRequestSchema)` to create a new message.
  */
 export const CancelAgentPromptRequestSchema: GenMessage<CancelAgentPromptRequest> = /*@__PURE__*/
-  messageDesc(file_api_v1_chat, 35);
+  messageDesc(file_api_v1_chat, 36);
 
 /**
  * CancelAgentPromptResponse is the response for CancelAgentPrompt.
@@ -1133,7 +1231,7 @@ export type CancelAgentPromptResponse = Message<"api.v1.CancelAgentPromptRespons
  * Use `create(CancelAgentPromptResponseSchema)` to create a new message.
  */
 export const CancelAgentPromptResponseSchema: GenMessage<CancelAgentPromptResponse> = /*@__PURE__*/
-  messageDesc(file_api_v1_chat, 36);
+  messageDesc(file_api_v1_chat, 37);
 
 /**
  * SubscribePageCancellationsRequest is the request for SubscribePageCancellations.
@@ -1154,7 +1252,7 @@ export type SubscribePageCancellationsRequest = Message<"api.v1.SubscribePageCan
  * Use `create(SubscribePageCancellationsRequestSchema)` to create a new message.
  */
 export const SubscribePageCancellationsRequestSchema: GenMessage<SubscribePageCancellationsRequest> = /*@__PURE__*/
-  messageDesc(file_api_v1_chat, 37);
+  messageDesc(file_api_v1_chat, 38);
 
 /**
  * PageCancellation is streamed when CancelAgentPrompt is called for a page.
@@ -1169,7 +1267,7 @@ export type PageCancellation = Message<"api.v1.PageCancellation"> & {
  * Use `create(PageCancellationSchema)` to create a new message.
  */
 export const PageCancellationSchema: GenMessage<PageCancellation> = /*@__PURE__*/
-  messageDesc(file_api_v1_chat, 38);
+  messageDesc(file_api_v1_chat, 39);
 
 /**
  * RespondToPermissionRequest is the request for RespondToPermission.
@@ -1197,7 +1295,7 @@ export type RespondToPermissionRequest = Message<"api.v1.RespondToPermissionRequ
  * Use `create(RespondToPermissionRequestSchema)` to create a new message.
  */
 export const RespondToPermissionRequestSchema: GenMessage<RespondToPermissionRequest> = /*@__PURE__*/
-  messageDesc(file_api_v1_chat, 39);
+  messageDesc(file_api_v1_chat, 40);
 
 /**
  * RespondToPermissionResponse is the response for RespondToPermission.
@@ -1212,7 +1310,7 @@ export type RespondToPermissionResponse = Message<"api.v1.RespondToPermissionRes
  * Use `create(RespondToPermissionResponseSchema)` to create a new message.
  */
 export const RespondToPermissionResponseSchema: GenMessage<RespondToPermissionResponse> = /*@__PURE__*/
-  messageDesc(file_api_v1_chat, 40);
+  messageDesc(file_api_v1_chat, 41);
 
 /**
  * RequestPermissionFromUserRequest is sent by the pool daemon to ask the user.
@@ -1251,7 +1349,7 @@ export type RequestPermissionFromUserRequest = Message<"api.v1.RequestPermission
  * Use `create(RequestPermissionFromUserRequestSchema)` to create a new message.
  */
 export const RequestPermissionFromUserRequestSchema: GenMessage<RequestPermissionFromUserRequest> = /*@__PURE__*/
-  messageDesc(file_api_v1_chat, 41);
+  messageDesc(file_api_v1_chat, 42);
 
 /**
  * RequestPermissionFromUserResponse returns the user's choice.
@@ -1272,7 +1370,104 @@ export type RequestPermissionFromUserResponse = Message<"api.v1.RequestPermissio
  * Use `create(RequestPermissionFromUserResponseSchema)` to create a new message.
  */
 export const RequestPermissionFromUserResponseSchema: GenMessage<RequestPermissionFromUserResponse> = /*@__PURE__*/
-  messageDesc(file_api_v1_chat, 42);
+  messageDesc(file_api_v1_chat, 43);
+
+/**
+ * GetChatMessagesRequest is the request for GetChatMessages.
+ *
+ * @generated from message api.v1.GetChatMessagesRequest
+ */
+export type GetChatMessagesRequest = Message<"api.v1.GetChatMessagesRequest"> & {
+  /**
+   * page identifier whose buffer to read
+   *
+   * @generated from field: string page = 1;
+   */
+  page: string;
+
+  /**
+   * Maximum number of recent messages to return (oldest first). 0 = all.
+   *
+   * @generated from field: int32 limit = 2;
+   */
+  limit: number;
+};
+
+/**
+ * Describes the message api.v1.GetChatMessagesRequest.
+ * Use `create(GetChatMessagesRequestSchema)` to create a new message.
+ */
+export const GetChatMessagesRequestSchema: GenMessage<GetChatMessagesRequest> = /*@__PURE__*/
+  messageDesc(file_api_v1_chat, 44);
+
+/**
+ * GetChatMessagesResponse is the response for GetChatMessages.
+ *
+ * @generated from message api.v1.GetChatMessagesResponse
+ */
+export type GetChatMessagesResponse = Message<"api.v1.GetChatMessagesResponse"> & {
+  /**
+   * oldest first
+   *
+   * @generated from field: repeated api.v1.ChatMessage messages = 1;
+   */
+  messages: ChatMessage[];
+};
+
+/**
+ * Describes the message api.v1.GetChatMessagesResponse.
+ * Use `create(GetChatMessagesResponseSchema)` to create a new message.
+ */
+export const GetChatMessagesResponseSchema: GenMessage<GetChatMessagesResponse> = /*@__PURE__*/
+  messageDesc(file_api_v1_chat, 45);
+
+/**
+ * NotifyAgentAttachedRequest is the request for NotifyAgentAttached.
+ *
+ * @generated from message api.v1.NotifyAgentAttachedRequest
+ */
+export type NotifyAgentAttachedRequest = Message<"api.v1.NotifyAgentAttachedRequest"> & {
+  /**
+   * page the agent is attached to
+   *
+   * @generated from field: string page = 1;
+   */
+  page: string;
+
+  /**
+   * inventory id of the attached agent; empty = detach
+   *
+   * @generated from field: string agent_id = 2;
+   */
+  agentId: string;
+
+  /**
+   * @generated from field: string agent_display_name = 3;
+   */
+  agentDisplayName: string;
+};
+
+/**
+ * Describes the message api.v1.NotifyAgentAttachedRequest.
+ * Use `create(NotifyAgentAttachedRequestSchema)` to create a new message.
+ */
+export const NotifyAgentAttachedRequestSchema: GenMessage<NotifyAgentAttachedRequest> = /*@__PURE__*/
+  messageDesc(file_api_v1_chat, 46);
+
+/**
+ * NotifyAgentAttachedResponse is the response for NotifyAgentAttached.
+ *
+ * @generated from message api.v1.NotifyAgentAttachedResponse
+ */
+export type NotifyAgentAttachedResponse = Message<"api.v1.NotifyAgentAttachedResponse"> & {
+};
+
+/**
+ * Describes the message api.v1.NotifyAgentAttachedResponse.
+ * Use `create(NotifyAgentAttachedResponseSchema)` to create a new message.
+ */
+export const NotifyAgentAttachedResponseSchema: GenMessage<NotifyAgentAttachedResponse> = /*@__PURE__*/
+  messageDesc(file_api_v1_chat, 47);
 
 /**
  * Sender identifies who sent a chat message.
@@ -1483,6 +1678,34 @@ export const ChatService: GenService<{
     methodKind: "unary";
     input: typeof RequestPermissionFromUserRequestSchema;
     output: typeof RequestPermissionFromUserResponseSchema;
+  },
+  /**
+   * GetChatMessages returns recent messages from a page's chat buffer, oldest
+   * first. Called by the pool daemon at instance-spawn for transcript
+   * hand-off: when the page's bound agent differs from the reaped agent, the
+   * recent transcript is prepended as context text on the new agent's first
+   * forwarded prompt. Additive; SubscribePageChatMessages' replay-one-user-
+   * message semantics are unchanged.
+   *
+   * @generated from rpc api.v1.ChatService.GetChatMessages
+   */
+  getChatMessages: {
+    methodKind: "unary";
+    input: typeof GetChatMessagesRequestSchema;
+    output: typeof GetChatMessagesResponseSchema;
+  },
+  /**
+   * NotifyAgentAttached is called by the pool daemon after it successfully
+   * attaches an agent to a page (and with an empty agent_id on detach).
+   * Feeds the EFFECTIVE agent reported by GetChatStatus so the UI can
+   * surface desired-vs-effective divergence during a switch.
+   *
+   * @generated from rpc api.v1.ChatService.NotifyAgentAttached
+   */
+  notifyAgentAttached: {
+    methodKind: "unary";
+    input: typeof NotifyAgentAttachedRequestSchema;
+    output: typeof NotifyAgentAttachedResponseSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_api_v1_chat, 0);

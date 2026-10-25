@@ -41,7 +41,7 @@ type AlarmPayload struct {
 // text. Returns nil and an error when the payload is malformed; the
 // caller should treat that as "drop the alarm" rather than failing
 // the whole item render.
-func RenderAlarm(payload string, fallbackDescription string) (*ical.Component, error) {
+func RenderAlarm(payload, fallbackDescription string) (*ical.Component, error) {
 	if strings.TrimSpace(payload) == "" {
 		return nil, errEmptyAlarmPayload
 	}

@@ -3,6 +3,7 @@ package server
 import (
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -20,6 +21,13 @@ import (
 const BackgroundActivityMax = 50
 
 const agentChatContextKey = "chat_context"
+
+// SystemdScheduleIDPrefix is the prefix that marks a schedule_id as belonging
+// to a systemd one-shot task rather than a wiki-native cron schedule.
+// Callers using this prefix bypass the existing-entry lookup and create a new
+// activity entry directly, since systemd tasks have no wiki-managed RUNNING
+// transition to seed an entry beforehand.
+const SystemdScheduleIDPrefix = "systemd:"
 
 // SummaryTargetNotFoundError is returned by AppendBackgroundActivitySummary
 // when no recent background-activity entry matches the supplied schedule_id.
@@ -145,6 +153,11 @@ func (s *AgentChatContextStore) AppendBackgroundActivityAutomatic(page string, e
 // SummaryTargetNotFoundError when no running entry exists (e.g. the agent
 // called the summary tool out of order or after the entry rolled out of the
 // ring buffer).
+//
+// Special case: when scheduleID starts with SystemdScheduleIDPrefix ("systemd:")
+// there is no wiki-native schedule that seeds a RUNNING entry beforehand. In
+// that case a new activity entry is created directly with status OK and the
+// supplied summary, reusing the same ring-buffer path.
 func (s *AgentChatContextStore) AppendBackgroundActivitySummary(page, scheduleID, summary string) (*apiv1.BackgroundActivityEntry, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -158,14 +171,41 @@ func (s *AgentChatContextStore) AppendBackgroundActivitySummary(page, scheduleID
 		return nil, err
 	}
 
+	// systemd one-shot tasks have no wiki-native schedule entry to attach to.
+	// Create a new activity entry with the summary directly.
+	if strings.HasPrefix(scheduleID, SystemdScheduleIDPrefix) {
+		entry := &apiv1.BackgroundActivityEntry{
+			Timestamp:  timestamppb.New(time.Now().UTC()),
+			ScheduleId: scheduleID,
+			Status:     apiv1.ScheduleStatus_SCHEDULE_STATUS_OK,
+			Summary:    summary,
+		}
+		existing.BackgroundActivity = append(existing.BackgroundActivity, entry)
+		if len(existing.BackgroundActivity) > BackgroundActivityMax {
+			drop := len(existing.BackgroundActivity) - BackgroundActivityMax
+			existing.BackgroundActivity = existing.BackgroundActivity[drop:]
+		}
+		if err := writeChatContext(fm, existing); err != nil {
+			return nil, err
+		}
+		if err := s.pages.WriteFrontMatter(id, fm, wikipage.AnonymousIdentity); err != nil {
+			return nil, fmt.Errorf(errWriteFrontmatterFmt, page, err)
+		}
+		return proto.CloneOf(entry), nil
+	}
+
 	target := findNewestRunningBackgroundActivity(existing.BackgroundActivity, scheduleID)
 	if target == -1 {
-		// Fallback: the scheduler may have already transitioned the entry to a
-		// terminal status (e.g. TIMEOUT from the 10-min cap) before the agent
-		// called AppendBackgroundActivitySummary. Accept the newest entry for
-		// this schedule_id whose summary is still empty — by construction that
-		// is the agent's own just-terminated entry.
-		target = findNewestBackgroundActivityWithEmptySummary(existing.BackgroundActivity, scheduleID)
+		// Fallback: accept the most recent entry for this schedule_id within
+		// summaryRecencyWindow, regardless of its current status or whether it
+		// already carries a summary. This covers two cases:
+		//   • #1172: scheduler transitioned the entry terminal (TIMEOUT/etc.)
+		//     before the agent attached its first summary.
+		//   • #1270: a close-out (second) append for the same run — the entry
+		//     already has an early-receipt summary; upsert semantics apply
+		//     rather than falling through to a stale historical entry.
+		// Entries older than summaryRecencyWindow are never write targets.
+		target = findNewestBackgroundActivityInWindow(existing.BackgroundActivity, scheduleID, summaryRecencyWindow)
 	}
 	if target == -1 {
 		return nil, &SummaryTargetNotFoundError{Page: page, ScheduleID: scheduleID}
@@ -284,15 +324,30 @@ func findNewestBackgroundActivityWithStatus(entries []*apiv1.BackgroundActivityE
 	return -1
 }
 
-// findNewestBackgroundActivityWithEmptySummary returns the index of the most
-// recent entry whose schedule_id matches and whose summary is still empty.
-// Used as a fallback in AppendBackgroundActivitySummary when the entry has
-// already been transitioned to a terminal status by the scheduler.
-func findNewestBackgroundActivityWithEmptySummary(entries []*apiv1.BackgroundActivityEntry, scheduleID string) int {
+// summaryRecencyWindow caps how far back AppendBackgroundActivitySummary will
+// scan when falling back to a non-RUNNING entry. Entries whose timestamp is
+// older than this are never write targets, preventing a close-out append from
+// landing on a stale historical record (issue #1270).
+const summaryRecencyWindow = 60 * time.Minute
+
+// findNewestBackgroundActivityInWindow returns the index of the most recent
+// entry whose schedule_id matches and whose timestamp falls within window of
+// time.Now(). Entries with a nil timestamp are treated as outside the window.
+// Used as the fallback in AppendBackgroundActivitySummary after no RUNNING
+// entry is found; accepts entries regardless of status or existing summary so
+// that a second append within the same run applies upsert semantics.
+func findNewestBackgroundActivityInWindow(entries []*apiv1.BackgroundActivityEntry, scheduleID string, window time.Duration) int {
+	cutoff := time.Now().UTC().Add(-window)
 	for i := len(entries) - 1; i >= 0; i-- {
-		if entries[i].GetScheduleId() == scheduleID && entries[i].GetSummary() == "" {
-			return i
+		entry := entries[i]
+		if entry.GetScheduleId() != scheduleID {
+			continue
 		}
+		ts := entry.GetTimestamp()
+		if ts == nil || ts.AsTime().Before(cutoff) {
+			continue
+		}
+		return i
 	}
 	return -1
 }

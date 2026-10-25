@@ -98,7 +98,7 @@ type PlainHTTPOptions struct {
 // TailscaleHTTPConfig holds the shared configuration for Tailscale-aware HTTP
 // setup functions (SetupTailscaleServe and SetupFullTLS).
 type TailscaleHTTPConfig struct {
-	HTTPAddr string
+	HTTPAddr  string
 	TSDNSName string
 	// ForceRedirectToHTTPS redirects tailnet clients from HTTP to HTTPS.
 	// Used by SetupTailscaleServe; ignored by SetupFullTLS.
@@ -491,7 +491,10 @@ func BuildVanguardTranscoder(grpcServer *grpc.Server, ginRouter http.Handler) (h
 
 	// Single source of truth for service names to avoid drift between Vanguard and reflection.
 	serviceNames := []string{
+		"api.v1.AgentInventoryService",
 		"api.v1.AgentMetadataService",
+		"api.v1.PageAppService",
+		"api.v1.PageAppStateService",
 		"api.v1.ChatService",
 		"api.v1.ChecklistService",
 		"api.v1.ConnectorService",
@@ -657,11 +660,11 @@ func (a *historySearcherAdapter) SearchPageHistory(identifier wikipage.PageIdent
 
 func (a *historySearcherAdapter) SearchHistory(filter grpcapi.HistorySearchFilter) ([]grpcapi.HistorySearchResult, error) {
 	results, err := a.index.SearchHistory(historyindex.HistorySearchFilter{
-		Query:          filter.Query,
-		PageFilter: filter.PageFilter,
-		AuthorFilter:   filter.AuthorFilter,
-		From:           filter.From,
-		To:             filter.To,
+		Query:        filter.Query,
+		PageFilter:   filter.PageFilter,
+		AuthorFilter: filter.AuthorFilter,
+		From:         filter.From,
+		To:           filter.To,
 	})
 	if err != nil {
 		return nil, err
@@ -785,6 +788,15 @@ func setupGRPCServer(
 	caldavServer := &caldav.Server{Backend: caldavBackend}
 	site.SetCalDAVServer(caldavServer)
 
+	// The AgentRegistry is created empty: the pool daemon registers its
+	// local agent descriptor at startup/reconnect (RegisterPoolAgent), and
+	// AG-UI entries load from server config (SetConfiguredAgents). Stored on
+	// site so the HTTP handler layer can read it later if needed.
+	site.AgentRegistry = server.NewAgentRegistry()
+	if configuredAgents := server.LoadConfiguredAGUIAgents(site.AgentConfigPath); len(configuredAgents) > 0 {
+		site.AgentRegistry.SetConfiguredAgents(configuredAgents)
+	}
+
 	grpcAPIServer = grpcAPIServer.
 		WithJobQueueCoordinator(site.GetJobQueueCoordinator()).
 		WithMarkdownRenderer(site.MarkdownRenderer).
@@ -793,6 +805,9 @@ func setupGRPCServer(
 		WithScheduledTurnDispatcher(site.ScheduledTurnDispatcher).
 		WithAgentScheduleStore(site.AgentScheduleStore).
 		WithAgentChatContextStore(site.AgentChatContextStore).
+		WithAgentInventory(site.AgentRegistry).
+		WithAgentPageBindingStore(site.AgentPageBindingStore).
+		WithChatAgentChangeNotifier(chatBufferMgr).
 		WithChecklistMutator(checklistMutator).
 		WithMapMutator(mapMutator).
 		WithSurveyMutator(surveyMutator)
@@ -1400,7 +1415,7 @@ func (c *tasksFannedOutPausedChecker) IsAnyChecklistBindingPaused(page, listName
 	return false
 }
 
-// systemWallClock implements engine.Clock against time.Now. Production
+// systemWallClock implements engine.Clocker against time.Now. Production
 // wiring; tests substitute their own clocks.
 type systemWallClock struct{}
 

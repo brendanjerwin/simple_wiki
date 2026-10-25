@@ -35,13 +35,12 @@ var _ = Describe("system page guard", func() {
 		}
 		server = mustNewServer(mock, nil, nil)
 	})
-
 	Describe("UpdatePageContent on a system page", func() {
 		var err error
 
 		BeforeEach(func() {
 			_, err = server.UpdatePageContent(ctx, &apiv1.UpdatePageContentRequest{
-				Page:           "help",
+				Page:               "help",
 				NewContentMarkdown: "# Hijack",
 			})
 		})
@@ -60,7 +59,7 @@ var _ = Describe("system page guard", func() {
 
 		BeforeEach(func() {
 			_, err = server.UpdateWholePage(ctx, &apiv1.UpdateWholePageRequest{
-				Page:         "help",
+				Page:             "help",
 				NewWholeMarkdown: "+++\ntitle = \"Hijack\"\n+++\nbody",
 			})
 		})
@@ -75,7 +74,7 @@ var _ = Describe("system page guard", func() {
 
 		BeforeEach(func() {
 			_, err = server.ClearPageContent(ctx, &apiv1.ClearPageContentRequest{
-				Page:     "help",
+				Page:         "help",
 				ConfirmClear: true,
 			})
 		})
@@ -236,6 +235,31 @@ var _ = Describe("system page guard", func() {
 					Page:       "help",
 					ScheduleId: "weekly",
 					Summary:    "should not land",
+				})
+			})
+
+			It("should reject with FailedPrecondition", func() {
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.FailedPrecondition, "system page"))
+			})
+		})
+
+		// AgentInventoryService.SetPageAgent shares the guard: an agent
+		// binding must never be writable on a system/help page (it lives in
+		// the same reserved agent.* namespace as schedules and chat memory).
+		Describe("SetPageAgent on a system page", func() {
+			var err error
+
+			BeforeEach(func() {
+				pages := newInMemoryPageStore()
+				bindings := wikiserver.NewAgentPageBindingStore(pages)
+				inventory := wikiserver.NewAgentRegistry()
+				server = mustNewServer(mock, nil, nil).
+					WithAgentInventory(inventory).
+					WithAgentPageBindingStore(bindings)
+
+				_, err = server.SetPageAgent(ctx, &apiv1.SetPageAgentRequest{
+					Page:    "help",
+					AgentId: wikiserver.LocalACPAgentID,
 				})
 			})
 

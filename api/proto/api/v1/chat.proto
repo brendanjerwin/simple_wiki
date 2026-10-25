@@ -85,6 +85,24 @@ service ChatService {
   // RequestPermissionFromUser is called by the pool daemon to forward a permission request
   // to the user via chat and block until the user responds.
   rpc RequestPermissionFromUser(RequestPermissionFromUserRequest) returns (RequestPermissionFromUserResponse) {}
+
+  // GetChatMessages returns recent messages from a page's chat buffer, oldest
+  // first. Called by the pool daemon at instance-spawn for transcript
+  // hand-off: when the page's bound agent differs from the reaped agent, the
+  // recent transcript is prepended as context text on the new agent's first
+  // forwarded prompt. Additive; SubscribePageChatMessages' replay-one-user-
+  // message semantics are unchanged.
+  rpc GetChatMessages(GetChatMessagesRequest) returns (GetChatMessagesResponse) {
+    option (api.v1.exclude_from_mcp) = true; // pool-daemon-only
+  }
+
+  // NotifyAgentAttached is called by the pool daemon after it successfully
+  // attaches an agent to a page (and with an empty agent_id on detach).
+  // Feeds the EFFECTIVE agent reported by GetChatStatus so the UI can
+  // surface desired-vs-effective divergence during a switch.
+  rpc NotifyAgentAttached(NotifyAgentAttachedRequest) returns (NotifyAgentAttachedResponse) {
+    option (api.v1.exclude_from_mcp) = true; // pool-daemon-only
+  }
 }
 
 // Sender identifies who sent a chat message.
@@ -105,6 +123,12 @@ message ChatMessage {
   string sender_name = 7;                 // optional, Tailscale identity
   string reply_to_id = 8;                 // optional, parent message for threading
   repeated Reaction reactions = 9;        // emoji reactions on this message
+  // Agent identity fields, set on ASSISTANT messages by the pool daemon.
+  // Stable inventory id (e.g. "local-acp") and display name of the agent that
+  // produced this message — so replies made during a switch window are
+  // attributed to the agent that actually produced them.
+  string agent_id = 10;
+  string agent_display_name = 11;
 }
 
 // Reaction represents an emoji reaction on a message.
@@ -125,7 +149,20 @@ message ChatEvent {
     ChatPlan plan = 7;
     ChatTurnStatus turn_status = 8;
     ChatBackgroundTask background_task = 9;
+    // Emitted whenever a page's agent binding changes (SetPageAgent), and
+    // replayed on SubscribeChat connect so late joiners see the switch.
+    ChatAgentChanged agent_changed = 10;
   }
+}
+
+// ChatAgentChanged is streamed when a page's bound agent changes. Emitted by
+// the binding write itself and replayed on SubscribeChat connect so all
+// participants (and late joiners) see who the page is talking to.
+message ChatAgentChanged {
+  string page = 1;               // page whose binding changed
+  string agent_id = 2;           // newly bound agent's inventory id
+  string agent_display_name = 3; // newly bound agent's display name
+  string switched_by = 4;        // Tailscale identity of the switcher
 }
 
 // ChatCleared is streamed when a page's visible chat history is cleared.
@@ -238,6 +275,11 @@ message SendChatReplyRequest {
   string page = 1;          // page identifier
   string content = 2;       // markdown content
   string reply_to_id = 3;   // optional, parent message ID for threading
+  // Inventory id (and display name) of the agent producing this reply. The
+  // server stamps both onto the buffered message so every participant sees
+  // which agent produced it.
+  string agent_id = 4;
+  string agent_display_name = 5;
 }
 
 // SendChatReplyResponse is the response for SendChatReply.
@@ -288,6 +330,13 @@ message GetChatStatusResponse {
   bool starting = 2;
   // Whether a pool daemon is connected and able to spawn instances on demand.
   bool pool_connected = 3;
+  // The EFFECTIVE agent for the page: the agent actually attached in the
+  // pool right now (empty unless an instance is attached; equals the desired
+  // binding once a switch has taken effect). Lets the UI surface
+  // desired-vs-effective divergence during a switch instead of mislabeling
+  // the old agent's replies.
+  string effective_agent_id = 4;
+  string effective_agent_display_name = 5;
 }
 
 // SubscribePageChatMessagesRequest is the request for SubscribePageChatMessages.
@@ -374,3 +423,25 @@ message RequestPermissionFromUserRequest {
 message RequestPermissionFromUserResponse {
   string selected_option_id = 1;  // empty = cancelled/denied
 }
+
+// GetChatMessagesRequest is the request for GetChatMessages.
+message GetChatMessagesRequest {
+  string page = 1;  // page identifier whose buffer to read
+  // Maximum number of recent messages to return (oldest first). 0 = all.
+  int32 limit = 2;
+}
+
+// GetChatMessagesResponse is the response for GetChatMessages.
+message GetChatMessagesResponse {
+  repeated ChatMessage messages = 1;  // oldest first
+}
+
+// NotifyAgentAttachedRequest is the request for NotifyAgentAttached.
+message NotifyAgentAttachedRequest {
+  string page = 1;   // page the agent is attached to
+  string agent_id = 2;   // inventory id of the attached agent; empty = detach
+  string agent_display_name = 3;
+}
+
+// NotifyAgentAttachedResponse is the response for NotifyAgentAttached.
+message NotifyAgentAttachedResponse {}
