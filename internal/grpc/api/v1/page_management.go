@@ -760,27 +760,7 @@ func (s *Server) UpdatePageContent(ctx context.Context, req *apiv1.UpdatePageCon
 	funnelFM, modifyErr := s.modifyMarkdownWithPageAppFunnelCtx(
 		ctx,
 		wikipage.PageIdentifier(req.Page),
-		func(currentFM wikipage.FrontMatter, currentMarkdown wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error) {
-			capturedFM = currentFM
-			// Version hash check is now atomic with the write — no TOCTOU window.
-			// Hash covers both frontmatter and markdown so frontmatter-only edits
-			// are also detected (issue #1197).
-			if err := checkContentVersionHash(currentFM, currentMarkdown, req.ExpectedVersionHash); err != nil {
-				return nil, "", err
-			}
-
-			if err := templating.ValidateTemplate(req.NewContentMarkdown); err != nil {
-				return nil, "", status.Errorf(codes.InvalidArgument, invalidTemplateErrFmt, err)
-			}
-
-			// Compute the markdown to write: find-and-replace when old_content_markdown is set,
-			// otherwise replace the entire page content.
-			candidate, err := resolveMarkdownContent(currentMarkdown, req.OldContentMarkdown, req.NewContentMarkdown)
-			if err != nil {
-				return nil, "", err
-			}
-			return currentFM, candidate, nil
-		},
+		updatePageContentModifier(req, &capturedFM),
 	)
 	if modifyErr != nil {
 		if _, ok := status.FromError(modifyErr); ok {
@@ -803,10 +783,54 @@ func (s *Server) UpdatePageContent(ctx context.Context, req *apiv1.UpdatePageCon
 		capturedFM = funnelFM
 	}
 
+	// page_byte_size mirrors the history service's ByteSize unit: the whole
+	// page text (frontmatter + markdown) as combined on disk, so agents can
+	// compare a write's outcome directly against PageHistoryService entries.
+	wholeText, wholeTextErr := wikipage.CombineFrontMatterAndMarkdown(capturedFM, storedMarkdown)
+	if wholeTextErr != nil {
+		return nil, status.Errorf(codes.Internal, "failed to compute page byte size: %v", wholeTextErr)
+	}
 	return &apiv1.UpdatePageContentResponse{
-		Success:     true,
-		VersionHash: computePageHash(capturedFM, storedMarkdown),
+		Success:      true,
+		VersionHash:  computePageHash(capturedFM, storedMarkdown),
+		PageByteSize: int64(len(wholeText)),
 	}, nil
+}
+
+// updatePageContentModifier builds the atomic modifier for UpdatePageContent:
+// version-hash check, template validation, candidate resolution with
+// find-and-replace, and the shrink circuit breaker (issue #1299) — all under
+// the funnel's write lock. The capturedFM pointer receives the current
+// frontmatter for the response hash.
+func updatePageContentModifier(req *apiv1.UpdatePageContentRequest, capturedFM *wikipage.FrontMatter) func(wikipage.FrontMatter, wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error) {
+	return func(currentFM wikipage.FrontMatter, currentMarkdown wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error) {
+		*capturedFM = currentFM
+		// Version hash check is now atomic with the write — no TOCTOU window.
+		// Hash covers both frontmatter and markdown so frontmatter-only edits
+		// are also detected (issue #1197).
+		if err := checkContentVersionHash(currentFM, currentMarkdown, req.ExpectedVersionHash); err != nil {
+			return nil, "", err
+		}
+
+		if err := templating.ValidateTemplate(req.NewContentMarkdown); err != nil {
+			return nil, "", status.Errorf(codes.InvalidArgument, invalidTemplateErrFmt, err)
+		}
+
+		// Compute the markdown to write: find-and-replace when old_content_markdown is set,
+		// otherwise replace the entire page content.
+		candidate, err := resolveMarkdownContent(currentMarkdown, req.OldContentMarkdown, req.NewContentMarkdown)
+		if err != nil {
+			return nil, "", err
+		}
+
+		// Shrink circuit breaker (issue #1299): atomic with the write, so it
+		// always evaluates against the funnel's current content — including a
+		// concurrent edit that shrank the page after the caller's read.
+		if err := checkShrinkBreaker(currentMarkdown, candidate, req.GetAllowShrink()); err != nil {
+			return nil, "", err
+		}
+		return currentFM, candidate, nil
+	}
 }
 
 // validateUpdatePageContentPrequest runs UpdatePageContent's pre-write
@@ -910,10 +934,6 @@ func (s *Server) validateUpdateWholePagePrequest(ctx context.Context, req *apiv1
 		return nil, "", status.Errorf(codes.Internal, failedToReadFrontmatterErrFmt, err)
 	}
 
-	if guardErr := s.checkWholePageWipeGuard(wikipage.PageIdentifier(req.Page), req.NewWholeMarkdown); guardErr != nil {
-		return nil, "", guardErr
-	}
-
 	page := &wikipage.Page{
 		Identifier: req.Page,
 		Text:       req.NewWholeMarkdown,
@@ -956,6 +976,8 @@ func (s *Server) validateUpdateWholePagePrequest(ctx context.Context, req *apiv1
 // Replaces the full content of an existing page, including its frontmatter.
 // The new_whole_markdown field must contain the complete page text (frontmatter + markdown).
 // If expected_version_hash is provided, the write is rejected with ABORTED on a version conflict.
+// A shrink circuit breaker rejects whole-page writes that would reduce the page below
+// 10% of its current size (current ≥ 1 KB) unless allow_shrink is set (issue #1299).
 func (s *Server) UpdateWholePage(ctx context.Context, req *apiv1.UpdateWholePageRequest) (*apiv1.UpdateWholePageResponse, error) {
 	if req.Page == "" {
 		return nil, status.Error(codes.InvalidArgument, pageNameRequiredErr)
@@ -980,6 +1002,13 @@ func (s *Server) UpdateWholePage(ctx context.Context, req *apiv1.UpdateWholePage
 			// Hash covers both frontmatter and markdown so frontmatter-only concurrent edits
 			// are detected (issue #1197) — checked atomically inside the funnel's write.
 			if err := checkContentVersionHash(currentFM, currentMarkdown, req.ExpectedVersionHash); err != nil {
+				return nil, "", err
+			}
+
+			// Shrink circuit breaker (issue #1299): atomic with the write, so it
+			// always evaluates against the funnel's current content. Supersedes the
+			// #1126 pre-request wipe guard, which raced between its read and the write.
+			if err := checkShrinkBreaker(currentMarkdown, md, req.GetAllowShrink()); err != nil {
 				return nil, "", err
 			}
 			// The client's fm replaces user keys wholesale, but reserved
@@ -1009,49 +1038,74 @@ func (s *Server) UpdateWholePage(ctx context.Context, req *apiv1.UpdateWholePage
 		}
 		return nil, status.Errorf(codes.Internal, "failed to write page: %v", modifyErr)
 	}
-
-	// Hash what the funnel actually wrote (post artifact restamp), so the
-	// returned OCC handle matches disk.
 	if funnelFM != nil {
 		fm = funnelFM
 	}
+	resp, respErr := updateWholePageResponse(fm, md)
+	if respErr != nil {
+		return nil, respErr
+	}
+	return resp, nil
+}
 
+// updateWholePageResponse builds the success response for UpdateWholePage.
+// page_byte_size mirrors the history service's ByteSize unit: the whole page
+// text (frontmatter + markdown) as combined on disk, so agents can compare a
+// write's outcome directly against PageHistoryService entries.
+func updateWholePageResponse(fm wikipage.FrontMatter, md wikipage.Markdown) (*apiv1.UpdateWholePageResponse, error) {
+	wholeText, err := wikipage.CombineFrontMatterAndMarkdown(fm, md)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to compute page byte size: %v", err)
+	}
 	return &apiv1.UpdateWholePageResponse{
-		Success:     true,
-		VersionHash: computePageHash(fm, md),
+		Success:      true,
+		VersionHash:  computePageHash(fm, md),
+		PageByteSize: int64(len(wholeText)),
 	}, nil
 }
 
-// checkWholePageWipeGuard prevents accidental page wipes from partial payloads.
-// If the new content is less than 10% of the existing page size AND the existing
-// page is at least 1KB, it returns a FailedPrecondition error naming safer tools.
-// The 1KB floor avoids blocking legitimate small-page deletions and editor saves
-// on short pages; the 10% threshold catches the dangerous case (e.g., a 50-byte
-// header wiping a 9KB page). See issue #1126.
-func (s *Server) checkWholePageWipeGuard(pageID wikipage.PageIdentifier, newContent string) error {
+// checkShrinkBreaker is the shrink circuit breaker (issue #1299): it rejects a
+// write whose candidate markdown would leave the page under 10% of its current
+// size (current ≥ minExistingSizeBytes), returning FailedPrecondition naming
+// both sizes, the override flag, and safer alternatives. The 1KB floor avoids
+// blocking legitimate edits on short pages. allowShrink bypasses the check for
+// callers that intend the drastic shrink. Runs inside the atomic write funnel
+// so it always sees the funnel's current content; supersedes the #1126
+// pre-request wipe guard, which raced between its read and the write.
+//
+// Writes that touch the page-app shape are skipped: the page-app prose guard
+// owns that failure mode with a more specific message, and a breaker trip here
+// would shadow it.
+// The bool IS the caller's allow_shrink request field; bypass-vs-guard is the
+// whole point of this function.
+// revive:disable-next-line:flag-parameter
+func checkShrinkBreaker(currentContent, candidateContent wikipage.Markdown, allowShrink bool) error {
 	const (
 		minExistingSizeBytes = 1024
-		wipeThresholdPercent = 10
+		shrinkThreshold      = 10
 	)
 
-	_, existingMarkdown, readErr := s.pageReaderMutator.ReadMarkdown(pageID)
-	if readErr != nil {
-		return status.Errorf(codes.Internal, "failed to read existing page content: %v", readErr)
+	_, _, oldFound := splitPageAppBody(string(currentContent))
+	_, _, newFound := splitPageAppBody(string(candidateContent))
+	if oldFound || newFound {
+		return nil
 	}
 
-	existingSize := len(existingMarkdown)
-	newSize := len(newContent)
-	if existingSize >= minExistingSizeBytes && newSize > 0 && newSize*wipeThresholdPercent < existingSize {
+	if allowShrink || len(currentContent) < minExistingSizeBytes {
+		return nil
+	}
+	newSize := len(candidateContent)
+	currentSize := len(currentContent)
+	if newSize > 0 && newSize*shrinkThreshold < currentSize {
 		return status.Errorf(codes.FailedPrecondition,
-			"new content (%d bytes) is only %.1f%% of current page size (%d bytes); "+
-				"this would silently wipe most of the page. "+
+			"shrink circuit breaker: new content (%d bytes) is only %.1f%% of current page size (%d bytes); "+
+				"this would silently drop most of the page. "+
 				"For partial edits, use UpdatePageContent (surgical body patches with version hash), "+
 				"MergeFrontmatter (merge specific frontmatter keys), or "+
 				"ClearPageContent (explicit body clear with confirm_clear). "+
-				"For a full page rewrite, re-send with the complete content.",
-			newSize, float64(newSize)/float64(existingSize)*100, existingSize)
+				"If the drastic shrink is intended, re-send with allow_shrink=true.",
+			newSize, float64(newSize)/float64(currentSize)*100, currentSize)
 	}
-
 	return nil
 }
 

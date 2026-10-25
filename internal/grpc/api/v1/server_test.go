@@ -2447,6 +2447,208 @@ var _ = Describe("Server", func() {
 			})
 		})
 	})
+	Describe("UpdatePageContent shrink breaker", func() {
+		var (
+			req                   *apiv1.UpdatePageContentRequest
+			resp                  *apiv1.UpdatePageContentResponse
+			err                   error
+			mockPageReaderMutator *MockPageReaderMutator
+		)
+
+		BeforeEach(func() {
+			// Existing page is ~9KB of content — well above the 1KB floor.
+			large := strings.Repeat("This is a line of meaningful content.\n", 270)
+			mockPageReaderMutator = &MockPageReaderMutator{
+				Frontmatter: wikipage.FrontMatter{"identifier": "test-page"},
+				Markdown:    wikipage.Markdown(large),
+			}
+			req = &apiv1.UpdatePageContentRequest{
+				Page:               "test-page",
+				NewContentMarkdown: "# Truncated",
+			}
+		})
+
+		JustBeforeEach(func() {
+			server = mustNewServer(mockPageReaderMutator, nil, nil)
+			resp, err = server.UpdatePageContent(ctx, req)
+		})
+
+		When("full replacement shrinks the page under 10% of current size", func() {
+			It("should return a failed precondition error", func() {
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.FailedPrecondition, "shrink circuit breaker"))
+			})
+
+			It("should state both sizes in the error", func() {
+				// 10260 bytes current, 11 bytes new; error shows both raw sizes.
+				Expect(err.Error()).To(ContainSubstring("10260"))
+				Expect(err.Error()).To(ContainSubstring("11 bytes"))
+			})
+
+			It("should name the allow_shrink override in the error", func() {
+				Expect(err.Error()).To(ContainSubstring("allow_shrink"))
+			})
+
+			It("should name safer alternatives in the error", func() {
+				Expect(err.Error()).To(ContainSubstring("UpdatePageContent"))
+				Expect(err.Error()).To(ContainSubstring("MergeFrontmatter"))
+			})
+
+			It("should not return a response", func() {
+				Expect(resp).To(BeNil())
+			})
+
+			It("should not write any content", func() {
+				Expect(mockPageReaderMutator.WrittenMarkdown).To(BeEmpty())
+			})
+		})
+
+		When("full replacement shrinks the page with allow_shrink set", func() {
+			BeforeEach(func() {
+				allow := true
+				req.AllowShrink = &allow
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should write the new content", func() {
+				Expect(mockPageReaderMutator.WrittenMarkdown).To(Equal(wikipage.Markdown("# Truncated")))
+			})
+
+			It("should report the resulting whole page byte size (fm + markdown)", func() {
+				// page_byte_size uses the same unit as the history ByteSize: the
+				// whole page text (combined frontmatter + markdown).
+				wholeText, combineErr := wikipage.CombineFrontMatterAndMarkdown(
+					wikipage.FrontMatter{"identifier": "test-page"}, "# Truncated",
+				)
+				Expect(combineErr).NotTo(HaveOccurred())
+				Expect(resp.PageByteSize).To(BeEquivalentTo(len(wholeText)))
+			})
+		})
+
+		When("full replacement exceeds 10% of current size", func() {
+			BeforeEach(func() {
+				req.NewContentMarkdown = strings.Repeat("New meaningful content.\n", 100)
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+		})
+
+		When("the existing page is under the 1KB floor", func() {
+			BeforeEach(func() {
+				mockPageReaderMutator.Markdown = wikipage.Markdown(strings.Repeat("Old line.\n", 10))
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+		})
+
+		When("a snippet replacement nets a large shrink", func() {
+			BeforeEach(func() {
+				// Replace nearly the whole page (only the tail kept): ~9728 bytes
+				// gone, replaced by a tiny receipt — net well under 10%.
+				oldSnippet := strings.Repeat("This is a line of meaningful content.\n", 256)
+				req.OldContentMarkdown = &oldSnippet
+				req.NewContentMarkdown = "- tiny receipt\n"
+			})
+
+			It("should return a failed precondition error", func() {
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.FailedPrecondition, "shrink circuit breaker"))
+			})
+
+			It("should not write any content", func() {
+				Expect(mockPageReaderMutator.WrittenMarkdown).To(BeEmpty())
+			})
+		})
+
+		When("a snippet replacement keeps most of the page", func() {
+			BeforeEach(func() {
+				oldSnippet := strings.Repeat("This is a line of meaningful content.\n", 100)
+				req.OldContentMarkdown = &oldSnippet
+				req.NewContentMarkdown = strings.Repeat("Replaced meaningful content.\n", 100)
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+		})
+	})
+
+	Describe("UpdateWholePage shrink breaker", func() {
+		var (
+			req                   *apiv1.UpdateWholePageRequest
+			resp                  *apiv1.UpdateWholePageResponse
+			err                   error
+			mockPageReaderMutator *MockPageReaderMutator
+		)
+
+		BeforeEach(func() {
+			large := strings.Repeat("This is a line of meaningful content.\n", 270)
+			mockPageReaderMutator = &MockPageReaderMutator{
+				Frontmatter: wikipage.FrontMatter{"identifier": "test-page"},
+				Markdown:    wikipage.Markdown(large),
+			}
+			req = &apiv1.UpdateWholePageRequest{
+				Page:             "test-page",
+				NewWholeMarkdown: "# Truncated",
+			}
+		})
+
+		JustBeforeEach(func() {
+			server = mustNewServer(mockPageReaderMutator, nil, nil)
+			resp, err = server.UpdateWholePage(ctx, req)
+		})
+
+		When("new content is under 10% of current page size", func() {
+			It("should return a failed precondition error", func() {
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.FailedPrecondition, "shrink circuit breaker"))
+			})
+
+			It("should not write any content", func() {
+				Expect(mockPageReaderMutator.WrittenMarkdown).To(BeEmpty())
+			})
+		})
+
+		When("new content is under 10% with allow_shrink set", func() {
+			BeforeEach(func() {
+				allow := true
+				req.AllowShrink = &allow
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should write the new content", func() {
+				Expect(mockPageReaderMutator.WrittenMarkdown).To(ContainSubstring("# Truncated"))
+			})
+
+			It("should report the resulting whole page byte size (fm + markdown)", func() {
+				wholeText, combineErr := wikipage.CombineFrontMatterAndMarkdown(
+					wikipage.FrontMatter{"identifier": "test-page"}, "# Truncated",
+				)
+				Expect(combineErr).NotTo(HaveOccurred())
+				Expect(resp.PageByteSize).To(BeEquivalentTo(len(wholeText)))
+			})
+		})
+
+		When("the breaker sees the funnel's current markdown after a concurrent edit", func() {
+			BeforeEach(func() {
+				// Concurrent edit shrinks the page below the pre-read size; the
+				// breaker must evaluate against the funnel view (the shrunk one).
+				concurrent := wikipage.Markdown(strings.Repeat("Concurrent line.\n", 400))
+				mockPageReaderMutator.ConcurrentModificationMarkdown = &concurrent
+			})
+
+			It("should still trip when the candidate is under 10% of the concurrent size", func() {
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.FailedPrecondition, "shrink circuit breaker"))
+			})
+		})
+	})
 
 	Describe("UpdatePageContent", func() {
 		var (
@@ -3319,7 +3521,7 @@ var _ = Describe("Server", func() {
 			})
 
 			It("should return a failed precondition error", func() {
-				Expect(err).To(HaveGrpcStatusWithSubstr(codes.FailedPrecondition, "would silently wipe"))
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.FailedPrecondition, "shrink circuit breaker"))
 			})
 
 			It("should name the safer alternative tools in the error", func() {
@@ -3385,8 +3587,10 @@ var _ = Describe("Server", func() {
 				mockPageReaderMutator.MarkdownReadErr = errors.New("disk read failure")
 			})
 
+			// The breaker runs inside the atomic write funnel, so a read failure
+			// now surfaces through the funnel write path instead of a pre-check.
 			It("should return an internal error", func() {
-				Expect(err).To(HaveGrpcStatusWithSubstr(codes.Internal, "failed to read existing page"))
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.Internal, "failed to write page"))
 			})
 		})
 	})

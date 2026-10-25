@@ -18,15 +18,11 @@ platforms=(
   "linux/arm64"
   "darwin/amd64"
   "darwin/arm64"
-  "windows/amd64"
 )
 
 for platform in "${platforms[@]}"; do
   IFS='/' read -r goos goarch <<< "$platform"
   binary="wiki-cli-${goos}-${goarch}"
-  if [[ "$goos" = "windows" ]]; then
-    binary="${binary}.exe"
-  fi
   echo "Building ${binary} (commit: ${COMMIT})..."
   CGO_ENABLED=0 GOOS="$goos" GOARCH="$goarch" go build -ldflags "${LDFLAGS}" -o "${OUT}/${binary}" .
 done
