@@ -58,7 +58,8 @@ routes to the new one with the conversation transcript carried over.
 - `AgentInventoryService.ListAgents` — inventory entries with `id`,
   `display_name`, `protocol` (`ACP_LOCAL` / `AG_UI_REMOTE`), `description`,
   `route`, and live `available`.
-- `AgentInventoryService.GetPageAgent` — the page's *desired* agent.
+- `AgentInventoryService.GetPageAgent` — the page's *desired* agent. A
+  nonexistent page returns `NotFound` (not the default-agent fallback).
 - `AgentInventoryService.SetPageAgent` — bind an agent (optionally with
   `expected_updated_at` OCC guard; a concurrent switch returns
   `FailedPrecondition`).

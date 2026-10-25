@@ -4,6 +4,8 @@ package v1_test
 import (
 	"context"
 	"errors"
+	"fmt"
+	"os"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -256,6 +258,21 @@ var _ = Describe("AgentInventoryService handlers", func() {
 				st, ok := status.FromError(err)
 				Expect(ok).To(BeTrue())
 				Expect(st.Code()).To(Equal(codes.Internal))
+			})
+		})
+
+		Describe("when the binding store reports the page does not exist", func() {
+			var err error
+
+			BeforeEach(func() {
+				binding.readErr = fmt.Errorf("read frontmatter for %q: %w", "test-page", os.ErrNotExist)
+				_, err = srv.GetPageAgent(ctx, &apiv1.GetPageAgentRequest{Page: "test-page"})
+			})
+
+			It("should return NotFound", func() {
+				st, ok := status.FromError(err)
+				Expect(ok).To(BeTrue())
+				Expect(st.Code()).To(Equal(codes.NotFound))
 			})
 		})
 	})
