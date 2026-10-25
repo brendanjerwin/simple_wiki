@@ -39,13 +39,14 @@ jobs:
 
    # Only go-module dependency bumps — an explicit safety check (the
    # repo's dependabot.yml only configures gomod today, but this holds
-   # even if other ecosystems are added later).
+   # even if other ecosystems are added later). fetch-metadata names
+   # the ecosystem after the branch token: go_modules.
    - name: Restrict to go.mod bumps
      run: |
       set -euo pipefail
       case "${{ steps.metadata.outputs.package-ecosystem }}" in
-        gomod) echo "eligible: gomod bump";;
-        *) echo "::error::Not a gomod bump (ecosystem: '${{ steps.metadata.outputs.package-ecosystem }}') — not arming auto-merge."; exit 1;;
+        go_modules) echo "eligible: go.mod bump";;
+        *) echo "::error::Not a go.mod bump (ecosystem: '${{ steps.metadata.outputs.package-ecosystem }}') — not arming auto-merge."; exit 1;;
       esac
 
    # Per gate name, take the LATEST check-run on the head SHA and
