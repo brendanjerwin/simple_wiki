@@ -8,7 +8,7 @@ console.log('WTR Config - CHROMIUM_BIN:', chromiumPath);
 console.log('WTR Config - Coverage enabled:', ciCoverage);
 
 export default {
-  files: ['./{web-components,services}/**/*.test.ts'],
+  files: ['./{web-components,services,openui-lang}/**/*.test.ts'],
   // Run test files sequentially: editor-toolbar-coordinator.test.ts calls openDialog()
   // which makes real gRPC network requests that interfere with concurrently running
   // Chrome test pages, causing flaky failures.
@@ -18,8 +18,8 @@ export default {
   reporters: [summaryReporter()],
   browsers: [
     chromeLauncher({
-      executablePath: chromiumPath,
       launchOptions: {
+        executablePath: chromiumPath,
         args: ['--no-sandbox', '--disable-dev-shm-usage'],
       },
     }),

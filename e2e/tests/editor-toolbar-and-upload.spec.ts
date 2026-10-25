@@ -183,7 +183,7 @@ test.describe('editor-toolbar', () => {
 
       test('upload dropdown menu is visible', async ({ page }) => {
         await expect(
-          page.locator('wiki-editor editor-toolbar .upload-dropdown-menu'),
+          page.locator('wiki-editor editor-toolbar menu-popover').locator('.menu-surface'),
         ).toBeVisible();
       });
 
@@ -202,15 +202,15 @@ test.describe('editor-toolbar', () => {
         await toggle.click();
         // Wait for menu to appear before clicking again
         await expect(
-          page.locator('wiki-editor editor-toolbar .upload-dropdown-menu'),
+          page.locator('wiki-editor editor-toolbar menu-popover').locator('.menu-surface'),
         ).toBeVisible();
         await toggle.click();
       });
 
       test('upload dropdown menu is dismissed', async ({ page }) => {
         await expect(
-          page.locator('wiki-editor editor-toolbar .upload-dropdown-menu'),
-        ).not.toBeAttached();
+          page.locator('wiki-editor editor-toolbar menu-popover').locator('.menu-surface'),
+        ).not.toBeVisible();
       });
     });
 
@@ -220,7 +220,7 @@ test.describe('editor-toolbar', () => {
           .locator('wiki-editor editor-toolbar [title="More upload options"]')
           .click();
         await expect(
-          page.locator('wiki-editor editor-toolbar .upload-dropdown-menu'),
+          page.locator('wiki-editor editor-toolbar menu-popover').locator('.menu-surface'),
         ).toBeVisible();
         // Click outside the toolbar — use the textarea which is always below the toolbar
         await page.locator('wiki-editor textarea').click();
@@ -228,8 +228,8 @@ test.describe('editor-toolbar', () => {
 
       test('upload dropdown menu is closed', async ({ page }) => {
         await expect(
-          page.locator('wiki-editor editor-toolbar .upload-dropdown-menu'),
-        ).not.toBeAttached();
+          page.locator('wiki-editor editor-toolbar menu-popover').locator('.menu-surface'),
+        ).not.toBeVisible();
       });
     });
   });
@@ -305,10 +305,10 @@ test.describe('file-drop-zone', () => {
           const wikiEditor = document.querySelector('wiki-editor');
           const fileDropZone = wikiEditor?.shadowRoot?.querySelector('file-drop-zone') as
             | (HTMLElement & {
-                allowUploads: boolean;
-                maxUploadMb: number;
-                _uploadFile: (file: File) => Promise<void>;
-              })
+              allowUploads: boolean;
+              maxUploadMb: number;
+              _uploadFile: (file: File) => Promise<void>;
+            })
             | null;
           if (!fileDropZone) return;
 
@@ -336,10 +336,10 @@ test.describe('file-drop-zone', () => {
           const wikiEditor = document.querySelector('wiki-editor');
           const fileDropZone = wikiEditor?.shadowRoot?.querySelector('file-drop-zone') as
             | (HTMLElement & {
-                allowUploads: boolean;
-                maxUploadMb: number;
-                _uploadFile: (file: File) => Promise<void>;
-              })
+              allowUploads: boolean;
+              maxUploadMb: number;
+              _uploadFile: (file: File) => Promise<void>;
+            })
             | null;
           if (!fileDropZone) return;
 

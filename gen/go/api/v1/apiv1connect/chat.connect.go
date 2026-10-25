@@ -79,6 +79,12 @@ const (
 	// ChatServiceRequestPermissionFromUserProcedure is the fully-qualified name of the ChatService's
 	// RequestPermissionFromUser RPC.
 	ChatServiceRequestPermissionFromUserProcedure = "/api.v1.ChatService/RequestPermissionFromUser"
+	// ChatServiceGetChatMessagesProcedure is the fully-qualified name of the ChatService's
+	// GetChatMessages RPC.
+	ChatServiceGetChatMessagesProcedure = "/api.v1.ChatService/GetChatMessages"
+	// ChatServiceNotifyAgentAttachedProcedure is the fully-qualified name of the ChatService's
+	// NotifyAgentAttached RPC.
+	ChatServiceNotifyAgentAttachedProcedure = "/api.v1.ChatService/NotifyAgentAttached"
 )
 
 // These variables are the protoreflect.Descriptor objects for the RPCs defined in this package.
@@ -100,6 +106,8 @@ var (
 	chatServiceSubscribePageCancellationsMethodDescriptor = chatServiceServiceDescriptor.Methods().ByName("SubscribePageCancellations")
 	chatServiceRespondToPermissionMethodDescriptor        = chatServiceServiceDescriptor.Methods().ByName("RespondToPermission")
 	chatServiceRequestPermissionFromUserMethodDescriptor  = chatServiceServiceDescriptor.Methods().ByName("RequestPermissionFromUser")
+	chatServiceGetChatMessagesMethodDescriptor            = chatServiceServiceDescriptor.Methods().ByName("GetChatMessages")
+	chatServiceNotifyAgentAttachedMethodDescriptor        = chatServiceServiceDescriptor.Methods().ByName("NotifyAgentAttached")
 )
 
 // ChatServiceClient is a client for the api.v1.ChatService service.
@@ -150,6 +158,18 @@ type ChatServiceClient interface {
 	// RequestPermissionFromUser is called by the pool daemon to forward a permission request
 	// to the user via chat and block until the user responds.
 	RequestPermissionFromUser(context.Context, *connect.Request[v1.RequestPermissionFromUserRequest]) (*connect.Response[v1.RequestPermissionFromUserResponse], error)
+	// GetChatMessages returns recent messages from a page's chat buffer, oldest
+	// first. Called by the pool daemon at instance-spawn for transcript
+	// hand-off: when the page's bound agent differs from the reaped agent, the
+	// recent transcript is prepended as context text on the new agent's first
+	// forwarded prompt. Additive; SubscribePageChatMessages' replay-one-user-
+	// message semantics are unchanged.
+	GetChatMessages(context.Context, *connect.Request[v1.GetChatMessagesRequest]) (*connect.Response[v1.GetChatMessagesResponse], error)
+	// NotifyAgentAttached is called by the pool daemon after it successfully
+	// attaches an agent to a page (and with an empty agent_id on detach).
+	// Feeds the EFFECTIVE agent reported by GetChatStatus so the UI can
+	// surface desired-vs-effective divergence during a switch.
+	NotifyAgentAttached(context.Context, *connect.Request[v1.NotifyAgentAttachedRequest]) (*connect.Response[v1.NotifyAgentAttachedResponse], error)
 }
 
 // NewChatServiceClient constructs a client for the api.v1.ChatService service. By default, it uses
@@ -258,6 +278,18 @@ func NewChatServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 			connect.WithSchema(chatServiceRequestPermissionFromUserMethodDescriptor),
 			connect.WithClientOptions(opts...),
 		),
+		getChatMessages: connect.NewClient[v1.GetChatMessagesRequest, v1.GetChatMessagesResponse](
+			httpClient,
+			baseURL+ChatServiceGetChatMessagesProcedure,
+			connect.WithSchema(chatServiceGetChatMessagesMethodDescriptor),
+			connect.WithClientOptions(opts...),
+		),
+		notifyAgentAttached: connect.NewClient[v1.NotifyAgentAttachedRequest, v1.NotifyAgentAttachedResponse](
+			httpClient,
+			baseURL+ChatServiceNotifyAgentAttachedProcedure,
+			connect.WithSchema(chatServiceNotifyAgentAttachedMethodDescriptor),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -279,6 +311,8 @@ type chatServiceClient struct {
 	subscribePageCancellations *connect.Client[v1.SubscribePageCancellationsRequest, v1.PageCancellation]
 	respondToPermission        *connect.Client[v1.RespondToPermissionRequest, v1.RespondToPermissionResponse]
 	requestPermissionFromUser  *connect.Client[v1.RequestPermissionFromUserRequest, v1.RequestPermissionFromUserResponse]
+	getChatMessages            *connect.Client[v1.GetChatMessagesRequest, v1.GetChatMessagesResponse]
+	notifyAgentAttached        *connect.Client[v1.NotifyAgentAttachedRequest, v1.NotifyAgentAttachedResponse]
 }
 
 // SendMessage calls api.v1.ChatService.SendMessage.
@@ -361,6 +395,16 @@ func (c *chatServiceClient) RequestPermissionFromUser(ctx context.Context, req *
 	return c.requestPermissionFromUser.CallUnary(ctx, req)
 }
 
+// GetChatMessages calls api.v1.ChatService.GetChatMessages.
+func (c *chatServiceClient) GetChatMessages(ctx context.Context, req *connect.Request[v1.GetChatMessagesRequest]) (*connect.Response[v1.GetChatMessagesResponse], error) {
+	return c.getChatMessages.CallUnary(ctx, req)
+}
+
+// NotifyAgentAttached calls api.v1.ChatService.NotifyAgentAttached.
+func (c *chatServiceClient) NotifyAgentAttached(ctx context.Context, req *connect.Request[v1.NotifyAgentAttachedRequest]) (*connect.Response[v1.NotifyAgentAttachedResponse], error) {
+	return c.notifyAgentAttached.CallUnary(ctx, req)
+}
+
 // ChatServiceHandler is an implementation of the api.v1.ChatService service.
 type ChatServiceHandler interface {
 	// SendMessage sends a user chat message in the context of a page.
@@ -409,6 +453,18 @@ type ChatServiceHandler interface {
 	// RequestPermissionFromUser is called by the pool daemon to forward a permission request
 	// to the user via chat and block until the user responds.
 	RequestPermissionFromUser(context.Context, *connect.Request[v1.RequestPermissionFromUserRequest]) (*connect.Response[v1.RequestPermissionFromUserResponse], error)
+	// GetChatMessages returns recent messages from a page's chat buffer, oldest
+	// first. Called by the pool daemon at instance-spawn for transcript
+	// hand-off: when the page's bound agent differs from the reaped agent, the
+	// recent transcript is prepended as context text on the new agent's first
+	// forwarded prompt. Additive; SubscribePageChatMessages' replay-one-user-
+	// message semantics are unchanged.
+	GetChatMessages(context.Context, *connect.Request[v1.GetChatMessagesRequest]) (*connect.Response[v1.GetChatMessagesResponse], error)
+	// NotifyAgentAttached is called by the pool daemon after it successfully
+	// attaches an agent to a page (and with an empty agent_id on detach).
+	// Feeds the EFFECTIVE agent reported by GetChatStatus so the UI can
+	// surface desired-vs-effective divergence during a switch.
+	NotifyAgentAttached(context.Context, *connect.Request[v1.NotifyAgentAttachedRequest]) (*connect.Response[v1.NotifyAgentAttachedResponse], error)
 }
 
 // NewChatServiceHandler builds an HTTP handler from the service implementation. It returns the path
@@ -513,6 +569,18 @@ func NewChatServiceHandler(svc ChatServiceHandler, opts ...connect.HandlerOption
 		connect.WithSchema(chatServiceRequestPermissionFromUserMethodDescriptor),
 		connect.WithHandlerOptions(opts...),
 	)
+	chatServiceGetChatMessagesHandler := connect.NewUnaryHandler(
+		ChatServiceGetChatMessagesProcedure,
+		svc.GetChatMessages,
+		connect.WithSchema(chatServiceGetChatMessagesMethodDescriptor),
+		connect.WithHandlerOptions(opts...),
+	)
+	chatServiceNotifyAgentAttachedHandler := connect.NewUnaryHandler(
+		ChatServiceNotifyAgentAttachedProcedure,
+		svc.NotifyAgentAttached,
+		connect.WithSchema(chatServiceNotifyAgentAttachedMethodDescriptor),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/api.v1.ChatService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case ChatServiceSendMessageProcedure:
@@ -547,6 +615,10 @@ func NewChatServiceHandler(svc ChatServiceHandler, opts ...connect.HandlerOption
 			chatServiceRespondToPermissionHandler.ServeHTTP(w, r)
 		case ChatServiceRequestPermissionFromUserProcedure:
 			chatServiceRequestPermissionFromUserHandler.ServeHTTP(w, r)
+		case ChatServiceGetChatMessagesProcedure:
+			chatServiceGetChatMessagesHandler.ServeHTTP(w, r)
+		case ChatServiceNotifyAgentAttachedProcedure:
+			chatServiceNotifyAgentAttachedHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -618,4 +690,12 @@ func (UnimplementedChatServiceHandler) RespondToPermission(context.Context, *con
 
 func (UnimplementedChatServiceHandler) RequestPermissionFromUser(context.Context, *connect.Request[v1.RequestPermissionFromUserRequest]) (*connect.Response[v1.RequestPermissionFromUserResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("api.v1.ChatService.RequestPermissionFromUser is not implemented"))
+}
+
+func (UnimplementedChatServiceHandler) GetChatMessages(context.Context, *connect.Request[v1.GetChatMessagesRequest]) (*connect.Response[v1.GetChatMessagesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("api.v1.ChatService.GetChatMessages is not implemented"))
+}
+
+func (UnimplementedChatServiceHandler) NotifyAgentAttached(context.Context, *connect.Request[v1.NotifyAgentAttachedRequest]) (*connect.Response[v1.NotifyAgentAttachedResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("api.v1.ChatService.NotifyAgentAttached is not implemented"))
 }

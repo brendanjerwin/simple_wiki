@@ -53,7 +53,7 @@ export const forceDarkTokensCSS = css`
     /* Text */
     --color-text-primary: #e9ecef;
     --color-text-secondary: #adb5bd;
-    --color-text-muted: #8b949e;
+    --color-text-muted: #999b9e;
     --color-text-inverse: #1e1e1e;
     --color-text-link: #6ea8fe;
 
@@ -885,5 +885,5 @@ export const nativeDialogCSS = css`
  * ```
  */
 export function dialogStyles(...componentStyles: CSSResult[]): CSSResult[] {
-  return [foundationCSS, colorCSS, zIndexCSS, dialogCSS, buttonCSS, animationCSS, nativeDialogCSS, ...componentStyles, responsiveCSS];
+ return [foundationCSS, colorCSS, zIndexCSS, dialogCSS, buttonCSS, animationCSS, nativeDialogCSS, ...componentStyles, responsiveCSS];
 }

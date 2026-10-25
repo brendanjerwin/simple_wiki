@@ -99,24 +99,22 @@ func renderOAuthErrorPage(w http.ResponseWriter, status int, heading, message, d
 		CancelURL: cancelURL,
 	}
 
-	tmpl, err := template.New("oauth-error").Parse(oauthErrorTemplate)
-	if err != nil {
+	if tmpl, err := template.New("oauth-error").Parse(oauthErrorTemplate); err != nil {
 		// Should never happen — the template is a constant. Fall
 		// back to plain text rather than panic so the user sees
 		// *something* and the wiki doesn't 500-by-panic.
 		http.Error(w, fmt.Sprintf("%s: %s", heading, message), status)
-		return
-	}
+	} else {
+		var buf bytes.Buffer
+		if tmpl.Execute(&buf, page) != nil {
+			http.Error(w, fmt.Sprintf("%s: %s", heading, message), status)
+			return
+		}
 
-	var buf bytes.Buffer
-	if execErr := tmpl.Execute(&buf, page); execErr != nil {
-		http.Error(w, fmt.Sprintf("%s: %s", heading, message), status)
-		return
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.WriteHeader(status)
+		_, _ = w.Write(buf.Bytes())
 	}
-
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.WriteHeader(status)
-	_, _ = w.Write(buf.Bytes())
 }
 
 // renderOAuthSuccess redirects to the post-success destination. The

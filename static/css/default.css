@@ -16,7 +16,7 @@
   /* Text */
   --color-text-primary: #333333;
   --color-text-secondary: #666666;
-  --color-text-muted: #999999;
+  --color-text-muted: #707070;
   --color-text-inverse: #ffffff;
   --color-text-link: #4078c0;
 
@@ -85,7 +85,7 @@
     /* Text */
     --color-text-primary: #e9ecef;
     --color-text-secondary: #adb5bd;
-    --color-text-muted: #8b949e;
+    --color-text-muted: #999b9e;
     --color-text-inverse: #1e1e1e;
     --color-text-link: #6ea8fe;
 

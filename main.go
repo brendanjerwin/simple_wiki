@@ -98,7 +98,7 @@ func resolveCookieSecret(provided string) (secret string, generated bool, err er
 
 func createSite(c *cli.Context) (*server.Site, error) {
 	pathToData := c.GlobalString("data")
-	if err := os.MkdirAll(pathToData, 0755); err != nil {
+	if err := os.MkdirAll(pathToData, 0o755); err != nil {
 		return nil, err
 	}
 
@@ -137,6 +137,7 @@ func createSite(c *cli.Context) (*server.Site, error) {
 	site.MaxUploadSize = c.GlobalUint("max-upload-mb")
 	site.MaxDocumentSize = c.GlobalUint("max-document-length")
 	site.ChatPersona = c.GlobalString("chat-persona")
+	site.AgentConfigPath = c.GlobalString("agent-config")
 	site.AgentScheduleConcurrency = c.GlobalInt("agent-schedule-concurrency")
 	site.AgentScheduleQueueCap = c.GlobalInt("agent-schedule-queue-capacity")
 	site.AgentTurnHardTimeout = c.GlobalDuration("agent-turn-hard-timeout")
@@ -309,7 +310,7 @@ func main() {
 		}
 
 		// Graceful shutdown with timeout
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), gracefulShutdownTimeout)
 		defer cancel()
 
 		// Shutdown redirect server first if it exists
@@ -347,6 +348,9 @@ const (
 	defaultMaxDocumentLength          = 100000000
 	defaultAgentScheduleConcurrency   = 2
 	defaultAgentScheduleQueueCapacity = 256
+
+	// gracefulShutdownTimeout bounds the HTTP server's drains on shutdown.
+	gracefulShutdownTimeout = 30 * time.Second
 )
 
 func getFlags() []cli.Flag {
@@ -399,6 +403,12 @@ func getFlags() []cli.Flag {
 			EnvVar: "WIKI_CHAT_PERSONA",
 			Value:  "Assistant",
 			Usage:  "display name for the chat AI persona (deployment config; instance-specific names come from env, not code)",
+		},
+		cli.StringFlag{
+			Name:   "agent-config",
+			EnvVar: "WIKI_AGENT_CONFIG",
+			Value:  "",
+			Usage:  "path to a JSON file listing AG-UI remote agents for the available-agents inventory (see issue #1276); missing file yields an inventory without remote agents",
 		},
 		cli.BoolFlag{
 			Name:  "debug, d",

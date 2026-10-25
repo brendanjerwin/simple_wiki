@@ -415,6 +415,35 @@ var _ = Describe("AgentMetadataService handlers", func() {
 				Expect(errors.As(err, &typed)).To(BeFalse(), "gRPC status wrapping is the contract; inner type isn't preserved across the boundary")
 			})
 		})
+
+		// Issue #1268: systemd one-shot tasks have no wiki-native schedule entry.
+		Describe("when the schedule_id has a systemd: prefix", func() {
+			var (
+				resp *apiv1.AppendBackgroundActivitySummaryResponse
+				err  error
+			)
+
+			BeforeEach(func() {
+				resp, err = srv.AppendBackgroundActivitySummary(ctx, &apiv1.AppendBackgroundActivitySummaryRequest{
+					Page:       "p",
+					ScheduleId: "systemd:my-task-light-monitor",
+					Summary:    "processed 5 light readings",
+				})
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should return the new background activity entry with the summary", func() {
+				Expect(resp.GetBackgroundActivity().GetScheduleId()).To(Equal("systemd:my-task-light-monitor"))
+				Expect(resp.GetBackgroundActivity().GetSummary()).To(Equal("processed 5 light readings"))
+			})
+
+			It("should record status OK on the new entry", func() {
+				Expect(resp.GetBackgroundActivity().GetStatus()).To(Equal(apiv1.ScheduleStatus_SCHEDULE_STATUS_OK))
+			})
+		})
 	})
 })
 

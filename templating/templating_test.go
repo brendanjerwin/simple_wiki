@@ -420,7 +420,8 @@ var _ = Describe("BuildShowInventoryContentsOf", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			templateContext, err = templating.ConstructTemplateContextFromFrontmatterWithVisited(
-				containerFrontmatter, mockIndex, make(map[string]bool))
+				containerFrontmatter, mockIndex, make(map[string]bool),
+			)
 			Expect(err).NotTo(HaveOccurred())
 
 			// Use a simplified template string (without ShowInventoryContentsOf for now)
@@ -492,7 +493,8 @@ var _ = Describe("BuildShowInventoryContentsOf", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			templateContext, err := templating.ConstructTemplateContextFromFrontmatterWithVisited(
-				containerFrontmatter, mockIndex, make(map[string]bool))
+				containerFrontmatter, mockIndex, make(map[string]bool),
+			)
 			Expect(err).NotTo(HaveOccurred())
 
 			// Use the exact same template string from BuildShowInventoryContentsOfWithLimit
@@ -564,7 +566,8 @@ var _ = Describe("BuildShowInventoryContentsOf", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			templateContext, err := templating.ConstructTemplateContextFromFrontmatterWithVisited(
-				containerFrontmatter, mockIndex, make(map[string]bool))
+				containerFrontmatter, mockIndex, make(map[string]bool),
+			)
 			Expect(err).NotTo(HaveOccurred())
 
 			// Use the EXACT template and functions from BuildShowInventoryContentsOfWithLimit
@@ -698,7 +701,8 @@ var _ = Describe("ConstructTemplateContextFromFrontmatterWithVisited", func() {
 
 			// Act
 			_, err = templating.ConstructTemplateContextFromFrontmatterWithVisited(
-				frontmatter, mockIndex, make(map[string]bool))
+				frontmatter, mockIndex, make(map[string]bool),
+			)
 		})
 
 		It("should return an error", func() {
@@ -745,7 +749,8 @@ var _ = Describe("ConstructTemplateContextFromFrontmatterWithVisited", func() {
 
 			// Act
 			templateContext, err = templating.ConstructTemplateContextFromFrontmatterWithVisited(
-				frontmatter, mockIndex, make(map[string]bool))
+				frontmatter, mockIndex, make(map[string]bool),
+			)
 		})
 
 		It("should not return an error", func() {
@@ -786,7 +791,8 @@ var _ = Describe("ConstructTemplateContextFromFrontmatterWithVisited", func() {
 				values: map[string]map[string]string{},
 			}
 			templateContext, err = templating.ConstructTemplateContextFromFrontmatterWithVisited(
-				frontmatter, mockIndex, make(map[string]bool))
+				frontmatter, mockIndex, make(map[string]bool),
+			)
 		})
 
 		It("should not return an error", func() {
@@ -819,7 +825,8 @@ var _ = Describe("ConstructTemplateContextFromFrontmatterWithVisited", func() {
 				values: map[string]map[string]string{},
 			}
 			templateContext, err = templating.ConstructTemplateContextFromFrontmatterWithVisited(
-				frontmatter, mockIndex, make(map[string]bool))
+				frontmatter, mockIndex, make(map[string]bool),
+			)
 		})
 
 		It("should not return an error", func() {
@@ -852,7 +859,8 @@ var _ = Describe("ConstructTemplateContextFromFrontmatterWithVisited", func() {
 				values: map[string]map[string]string{},
 			}
 			templateContext, err = templating.ConstructTemplateContextFromFrontmatterWithVisited(
-				frontmatter, mockIndex, make(map[string]bool))
+				frontmatter, mockIndex, make(map[string]bool),
+			)
 		})
 
 		It("should not return an error", func() {
@@ -897,7 +905,8 @@ var _ = Describe("ConstructTemplateContextFromFrontmatterWithVisited with circul
 
 		// Act - this should handle circular reference gracefully
 		templateContext, err = templating.ConstructTemplateContextFromFrontmatterWithVisited(
-			frontmatter, mockIndex, visited)
+			frontmatter, mockIndex, visited,
+		)
 	})
 
 	It("should not return an error", func() {
@@ -2097,6 +2106,62 @@ var _ = Describe("BuildGoogleMapsEmbed", func() {
 			rendered := fn("https://www.google.com/maps/embed?pb=abc&zoom=12")
 			Expect(rendered).To(ContainSubstring("<iframe"))
 			Expect(rendered).To(ContainSubstring("https://www.google.com/maps/embed"))
+		})
+	})
+})
+
+var _ = Describe(" templating artifact-fence choke points", func() {
+	// Lang programs may contain {{ }} — both choke points must strip the
+	// ```wiki-page-app fence BEFORE template parsing/execution, and the
+	// program must never appear in rendered output (removal, not bypass).
+	const artifactFence = "```wiki-page-app\n@Card {\n  Text [\"{{ .Identifier }}\"]\n}\n```"
+
+	Describe("when ValidateTemplate sees a page with an artifact fence", func() {
+		It("should accept a fence whose program contains Go-template-breaking syntax", func() {
+			md := "# Page\n\n" + artifactFence + "\n\nSome prose.\n"
+			Expect(templating.ValidateTemplate(md)).To(BeNil())
+		})
+
+		It("should still reject template errors in the prose remainder", func() {
+			md := "```wiki-page-app\n@Card {}\n```\n\n{{ UnknownMacro }}\n"
+			err := templating.ValidateTemplate(md)
+			Expect(err).NotTo(BeNil())
+			Expect(err.Error()).To(ContainSubstring("UnknownMacro"))
+		})
+	})
+
+	Describe("when ExecuteTemplate sees a page with an artifact fence", func() {
+		var (
+			mockSite  *mockPageReader
+			mockIndex *mockFrontmatterIndex
+		)
+
+		BeforeEach(func() {
+			mockSite = &mockPageReader{pages: map[string]wikipage.FrontMatter{}}
+			mockIndex = &mockFrontmatterIndex{
+				index:  map[string]map[string][]wikipage.PageIdentifier{},
+				values: map[string]map[string]string{},
+			}
+		})
+
+		It("should execute prose around the fence and never emit the program", func() {
+			md := "Before {{ .Identifier }}.\n\n" + artifactFence + "\n\nAfter.\n"
+			out, err := templating.ExecuteTemplate(md, wikipage.FrontMatter{"identifier": "test_page"}, mockSite, mockIndex)
+			Expect(err).To(BeNil())
+			outStr := string(out)
+			Expect(outStr).To(ContainSubstring("Before test_page."))
+			Expect(outStr).To(ContainSubstring("After."))
+			// Removal, not bypass: the program never renders as prose.
+			Expect(outStr).NotTo(ContainSubstring("wiki-page-app"))
+			Expect(outStr).NotTo(ContainSubstring("@Card"))
+		})
+
+		It("should keep ordinary fenced code blocks in execution", func() {
+			md := "```go\nfmt.Println()\n```\n\nplain prose with {{ .Identifier }}\n"
+			out, err := templating.ExecuteTemplate(md, wikipage.FrontMatter{"identifier": "p"}, mockSite, mockIndex)
+			Expect(err).To(BeNil())
+			Expect(string(out)).To(ContainSubstring("fmt.Println()"))
+			Expect(string(out)).To(ContainSubstring("plain prose with p"))
 		})
 	})
 })

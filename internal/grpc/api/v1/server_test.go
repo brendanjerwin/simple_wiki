@@ -604,8 +604,16 @@ func (noOpChatBufferManager) AddUserMessage(string, string, string) (string, err
 	return "", nil
 }
 
-func (noOpChatBufferManager) AddAssistantMessage(string, string, string) (string, error) {
+func (noOpChatBufferManager) AddAssistantMessage(string, string, string, string, string) (string, error) {
 	return "", nil
+}
+
+func (noOpChatBufferManager) NotifyAgentChanged(string, string, string, string) {}
+
+func (noOpChatBufferManager) NotifyAgentAttached(string, string, string) {}
+
+func (noOpChatBufferManager) EffectiveAgent(string) (agentID string, displayName string) {
+	return "", ""
 }
 
 func (noOpChatBufferManager) EditMessage(string, string, bool) error {
@@ -3087,6 +3095,48 @@ var _ = Describe("Server", func() {
 
 			It("should write the markdown content", func() {
 				Expect(mockPageReaderMutator.WrittenMarkdown).To(Equal(wikipage.Markdown("# New Content")))
+			})
+		})
+
+		// e2e regression (map/survey not_found after editor save): a reserved
+		// subtree the user JUST WROTE in the editor body ([maps.x], [surveys.x])
+		// must be persisted, not dropped because it's reserved. Only reserved
+		// keys the client OMITTED are preserved from the current frontmatter.
+		When("the new content contains a reserved subtree that was not there before", func() {
+			BeforeEach(func() {
+				mockPageReaderMutator.Frontmatter = wikipage.FrontMatter{
+					"identifier": "test-page",
+					"title":      "Old Title",
+				}
+				req.NewWholeMarkdown = "+++\nidentifier = \"test-page\"\ntitle = \"Map Test\"\n\n[maps.yard]\nlat = 41.1\nlon = -72.2\nzoom = 16\n+++\n\n# Map page\n\n{{ Map \"yard\" }}"
+			})
+
+			It("should persist the new reserved subtree", func() {
+				Expect(err).NotTo(HaveOccurred())
+				maps, ok := mockPageReaderMutator.WrittenFrontmatter["maps"].(map[string]any)
+				Expect(ok).To(BeTrue(), "maps subtree must be written")
+				Expect(maps).To(HaveKey("yard"))
+			})
+
+			It("should capture the written frontmatter containing the maps key", func() {
+				Expect(mockPageReaderMutator.WrittenFrontmatter).To(HaveKey("maps"))
+			})
+		})
+
+		When("a reserved subtree exists on the page but the client omits it", func() {
+			BeforeEach(func() {
+				mockPageReaderMutator.Frontmatter = wikipage.FrontMatter{
+					"identifier": "test-page",
+					"maps":       map[string]any{"yard": map[string]any{"lat": 41.1}},
+				}
+				// Client body omits [maps.yard]
+				req.NewWholeMarkdown = "+++\nidentifier = \"test-page\"\ntitle = \"No maps\"\n+++\n# Body"
+			})
+
+			It("should preserve the existing reserved subtree", func() {
+				Expect(err).NotTo(HaveOccurred())
+				Expect(mockPageReaderMutator.WrittenFrontmatter).To(HaveKey("maps"),
+					"existing maps subtree must be preserved when the client omits it")
 			})
 		})
 
