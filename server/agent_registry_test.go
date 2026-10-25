@@ -86,18 +86,90 @@ var _ = Describe("AgentRegistry", func() {
 			})
 		})
 
-		Describe("when a non-ACP protocol is registered", func() {
+		Describe("when a non-ACP and non-AG_UI_REMOTE protocol is registered", func() {
 			var err error
 
 			BeforeEach(func() {
 				err = server.NewAgentRegistry().RegisterPoolAgent(&apiv1.RegisterPoolAgentRequest{
-					Id:       "agui-x",
+					Id:       "unknown-agent",
+					Protocol: apiv1.AgentProtocol_AGENT_PROTOCOL_UNSPECIFIED,
+				})
+			})
+
+			It("should reject unsupported protocols", func() {
+				Expect(err).To(MatchError(ContainSubstring("unsupported protocol")))
+			})
+		})
+
+		Describe("when the pool registers an AG_UI_REMOTE agent not in server config", func() {
+			var agents []*apiv1.AgentInfo
+			var err error
+
+			BeforeEach(func() {
+				reg := server.NewAgentRegistry()
+				err = reg.RegisterPoolAgent(&apiv1.RegisterPoolAgentRequest{
+					Id:          "agentos:agent-zero",
+					DisplayName: "Agent Zero",
+					Description: "Platform-hosted agent",
+					Protocol:    apiv1.AgentProtocol_AG_UI_REMOTE,
+					Route:       "https://agentos.example/runs",
+				})
+				agents = reg.List()
+			})
+
+			It("should succeed", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should add the entry as available", func() {
+				Expect(agents).To(HaveLen(1))
+				Expect(agents[0].GetId()).To(Equal("agentos:agent-zero"))
+				Expect(agents[0].GetAvailable()).To(BeTrue())
+				Expect(agents[0].GetProtocol()).To(Equal(apiv1.AgentProtocol_AG_UI_REMOTE))
+				Expect(agents[0].GetRoute()).To(Equal("https://agentos.example/runs"))
+			})
+		})
+
+		Describe("when the pool registers an AG_UI_REMOTE agent already in server config", func() {
+			var agents []*apiv1.AgentInfo
+
+			BeforeEach(func() {
+				reg := server.NewAgentRegistry()
+				reg.SetConfiguredAgents([]*apiv1.AgentInfo{
+					{
+						Id:          "agentos:agent-zero",
+						DisplayName: "Agent Zero (Config)",
+						Protocol:    apiv1.AgentProtocol_AG_UI_REMOTE,
+						Route:       "https://agentos.example/runs",
+					},
+				})
+				Expect(reg.RegisterPoolAgent(&apiv1.RegisterPoolAgentRequest{
+					Id:       "agentos:agent-zero",
+					Protocol: apiv1.AgentProtocol_AG_UI_REMOTE,
+					Route:    "https://agentos.example/runs",
+				})).NotTo(HaveOccurred())
+				agents = reg.List()
+			})
+
+			It("should mark the configured entry available", func() {
+				Expect(agents).To(HaveLen(1))
+				Expect(agents[0].GetId()).To(Equal("agentos:agent-zero"))
+				Expect(agents[0].GetAvailable()).To(BeTrue())
+			})
+		})
+
+		Describe("when an AG_UI_REMOTE registration is missing an id", func() {
+			var err error
+
+			BeforeEach(func() {
+				err = server.NewAgentRegistry().RegisterPoolAgent(&apiv1.RegisterPoolAgentRequest{
 					Protocol: apiv1.AgentProtocol_AG_UI_REMOTE,
 				})
 			})
 
-			It("should reject it — AG-UI entries come from server config", func() {
-				Expect(err).To(MatchError(ContainSubstring("ACP_LOCAL")))
+			It("should reject it", func() {
+				Expect(err).To(HaveOccurred())
+				Expect(err).To(MatchError(ContainSubstring("id is required")))
 			})
 		})
 
@@ -138,6 +210,45 @@ var _ = Describe("AgentRegistry", func() {
 			It("should keep the entry listed", func() {
 				Expect(agents).To(HaveLen(1))
 				Expect(agents[0].GetId()).To(Equal(server.LocalACPAgentID))
+			})
+		})
+
+		Describe("when pool-registered AG-UI agents exist and the pool disconnects", func() {
+			var agents []*apiv1.AgentInfo
+
+			BeforeEach(func() {
+				reg := server.NewAgentRegistry()
+				Expect(reg.RegisterPoolAgent(&apiv1.RegisterPoolAgentRequest{
+					Id:       server.LocalACPAgentID,
+					Protocol: apiv1.AgentProtocol_ACP_LOCAL,
+				})).NotTo(HaveOccurred())
+				Expect(reg.RegisterPoolAgent(&apiv1.RegisterPoolAgentRequest{
+					Id:       "agentos:agent-zero",
+					Protocol: apiv1.AgentProtocol_AG_UI_REMOTE,
+				})).NotTo(HaveOccurred())
+				reg.PoolDisconnected()
+				agents = reg.List()
+			})
+
+			It("should mark the AG-UI agent unavailable", func() {
+				var agui *apiv1.AgentInfo
+				for _, a := range agents {
+					if a.GetId() == "agentos:agent-zero" {
+						agui = a
+					}
+				}
+				Expect(agui).NotTo(BeNil())
+				Expect(agui.GetAvailable()).To(BeFalse())
+			})
+
+			It("should keep the AG-UI entry listed", func() {
+				found := false
+				for _, a := range agents {
+					if a.GetId() == "agentos:agent-zero" {
+						found = true
+					}
+				}
+				Expect(found).To(BeTrue())
 			})
 		})
 	})

@@ -19,8 +19,8 @@ type AgentInventory interface {
 	FindByID(id string) *apiv1.AgentInfo
 	DefaultAgentID() string
 
-	// RegisterPoolAgent idempotently upserts the pool's local agent descriptor
-	// and marks it available. Only ACP_LOCAL agents register here.
+	// RegisterPoolAgent idempotently upserts a pool-managed agent descriptor
+	// and marks it available. Accepts ACP_LOCAL and AG_UI_REMOTE protocols.
 	RegisterPoolAgent(req *apiv1.RegisterPoolAgentRequest) error
 }
 
