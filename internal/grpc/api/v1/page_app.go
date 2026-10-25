@@ -28,7 +28,7 @@ const (
 	PageAppLangOpenuiLang = "openui-lang"
 	// PageAppLibrary is the wiki component library version the shipped
 	// help page teaches.
-	PageAppLibrary = "wiki-core@1"
+	PageAppLibrary = "wiki-core@2"
 )
 
 const (

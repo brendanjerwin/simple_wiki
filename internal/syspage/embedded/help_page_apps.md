@@ -8,18 +8,18 @@ system = true
 
 # Page Apps: Agent-Authored OpenUI Lang Apps
 
-A **page app page** renders an app the agent wrote, composed **above** the page's markdown content. The agent writes **OpenUI Lang** (against the wiki's own component library, `wiki-core@1`); the wiki parses and renders it in-page with its own Lit components — **no arbitrary HTML/JS executes anywhere**. State persists server-side via `PageAppStateService`, so it survives reloads, devices, and other users.
+A **page app page** renders an app the agent wrote, composed **above** the page's markdown content. The agent writes **OpenUI Lang** (against the wiki's own component library, `wiki-core@2`); the wiki parses and renders it in-page with its own Lit components — **no arbitrary HTML/JS executes anywhere**. State persists server-side via `PageAppStateService`, so it survives reloads, devices, and other users.
 
 Use `PageAppService` and `PageAppStateService` for authoring and state. Both are exposed as gRPC and MCP tools (auto-generated from the proto).
 
 ## The language (ground rules — verified against the parser)
 
 - **Every statement is an assignment**: `identifier = Expression`. The **entry point is always `root = <Component>(...)`** — a program without `root =` is rejected at write time.
-- **Component calls are positional**: args map onto the component's props in its declared order — `Card("Pomodoro", "body text")` sets `title` then `content`. Named syntax (`title: "x"`) is NOT valid; a mismatched arg is dropped with `excess-args`.
+- **Component calls are positional**: args map onto the component's props in its declared order — `Card("Pomodoro", "body text")` sets `title` then `content`. Named syntax (`title: "x"`) is NOT valid; a mismatched arg is dropped with `excess-args`. Optional trailing props (variants, labels, actions) pass `undefined` to skip: `Button("cancel", undefined, "secondary")`.
 - **Children are an array argument**: `Stack([Text("hello"), Button("press")])`.
 - **Reactive state is a `$name` declaration**: `$completed = 0`. References interpolate by **string concatenation** — `"sessions: " + $completed` (there is no `{expr}` string interpolation).
 - **Unknown components and invalid statements are dropped, never fatal** — the rest renders. Errors come back structured (`{code, component, statementId, message}`) so you can self-correct.
-- **Missing a component?** If an app needs a component that isn't in `wiki-core@1` (no `Slider`, `Tabs`, `Progress`, etc.), do **not** fake it with nested `Stack` hacks or drop the feature silently. Build the best program you can **without** the component, tell the user which component is missing and what app it blocked, and **open a feature-request issue on the SimpleWiki GitHub project** (`github.com/brendanjerwin/simple_wiki/issues`) naming the component and the real app it would enable — components get built based on demand from actual apps, so a concrete request with a real use case is the fastest path to getting it.
+- **Missing a component?** If an app needs a component that isn't in `wiki-core@2` (no `Slider`, `Tabs`, `DatePicker`, etc.), do **not** fake it with nested `Stack` hacks or drop the feature silently. Build the best program you can **without** the component, tell the user which component is missing and what app it blocked, and **open a feature-request issue on the SimpleWiki GitHub project** (`github.com/brendanjerwin/simple_wiki/issues`) naming the component and the real app it would enable — components get built based on demand from actual apps, so a concrete request with a real use case is the fastest path to getting it.
 
 ## Time-based apps: `Countdown`
 
@@ -57,6 +57,26 @@ Each timer's fourth positional argument binds its `$running` gate. Completing a 
 `@Beep(kind?)` is an **action step** (usable anywhere an action runs: a `Button`'s action or a `Countdown`'s `onComplete`; compose with `Action([...])`). It plays a short synthesized tone — no external audio files, no agent round-trip. Kinds: `@Beep()` (single 880 Hz tone), `@Beep("double")` (two quick beeps), `@Beep("low")` (a lower-pitched 440 Hz tone). Use it for eyes-free timing apps — a stretch routine's `onComplete` beeps so you can hold a pose looking away from the screen.
 
 Autoplay policy: the user's first interaction with the page (e.g. pressing the start button) unlocks audio; a `Countdown` the user themselves started with that click then beeps on completion, playing through that unlock. A timer that starts without any prior interaction (e.g. a persisted `$running = true` re-armed by a reload) stays silent — audio is feedback, never control flow.
+
+## Variants, spacing, and progress
+
+**Button variants** (last positional prop): `Button("label", @action, variant)`. `primary` is the saturated blue CTA (default), `secondary` is the muted bordered button for tertiary actions, `ghost` is the transparent tertiary text button, `danger` is red for destructive actions. Use one `primary` per the visual emphasis you want; destructive actions get `danger`, everything else stays `secondary`/`ghost`.
+
+**Text size variants** (second positional prop): `Text("content", variant)` — `title` (large heading-style, use inside apps instead of faking headers with bold), `body` (default), `caption` (small secondary text for hints and asides).
+
+**Spacing tokens**: `Stack([children], direction?, gap?)` `gap` accepts 4pt-grid tokens — `"sm"`=4px, `"md"`=8px, `"lg"`=16px, `"xl"`=24px — or a raw CSS gap value when you genuinely need one. Cards and stacks default to a 12px rhythm; prefer the tokens so multi-card layouts stay on the grid.
+
+**Progress**(total, current?, label?) renders "N of M" with a fill bar; `current` is reactive — `Progress($total, $done, "label?")` and `@Set($done, $done + 1)` advance it live. Good for tallies that aren't a countdown.
+
+**Steps**(current, total, onBack?, onNext?, label?) renders "step N of M" with back/next buttons when you wire actions: `Steps($i, 5, @Set($i, $i - 1), @Set($i, $i + 1), "wizard")`. A button renders only when its action is provided; clamp `$i` to the range yourself (e.g. `Action([@Set($i, min($i + 1, 5))])`).
+
+```
+$i = 1
+root = Card("Wizard", Stack([
+  Steps($i, 5, @Set($i, $i - 1), @Set($i, $i + 1), "setup wizard"),
+  Text("on step " + $i, "caption"),
+]))
+```
 
 ## For Agents
 
@@ -97,7 +117,7 @@ The single write door. Program source goes in `source`; OCC via `expected_versio
 - Iterating: **send the full updated program** via `SetPageApp` with the hash you read (`GetPageApp`/`WatchPageApp`). (The browser host merges streamed patches itself; your reliable agent loop is read→modify→write with OCC.)
 - Conflict (`Aborted`): the page app changed since you read it. Re-run `GetPageApp`, re-apply your change, retry.
 - Server validation is **conservative** (structural: non-empty, has `root =`, size cap 64 KiB, must not contain a ``` fence terminator — the wiki wraps the source itself). It cannot fully parse the language — that happens in the browser. Gross violations reject with `InvalidArgument`; partial-but-renderable programs accept.
-- **Stamps are server-managed**: `lang = "openui-lang"`, `version`, `version_hash`, `library = "wiki-core@1"`, `updated_at`/`updated_by`/`automated`. Never hand-write them via frontmatter tools — the `wiki.*` namespace rejects generic frontmatter writes and names the right service.
+- **Stamps are server-managed**: `lang = "openui-lang"`, `version`, `version_hash`, `library = "wiki-core@2"`, `updated_at`/`updated_by`/`automated`. Never hand-write them via frontmatter tools — the `wiki.*` namespace rejects generic frontmatter writes and names the right service.
 
 ### Reading the current app: `api_v1_PageAppService_GetPageApp`
 
@@ -162,7 +182,9 @@ root = Card("Pomodoro", Stack([
   `Card` per app; use `Stack` (vertical) for form-like flows and horizontal `Stack` for
   button rows; use `Chart` for any numeric comparison (labels+values arrays) and
   `Table` for tabular data — both are styled automatically; keep text in `Text`, never
-  embed raw formatting.
+  embed raw formatting. Control emphasis with button `variant`s (`primary`/`secondary`/
+  `ghost`/`danger`) and text size with `Text` `variant`s (`title`/`body`/`caption`);
+  keep spacing on the 4pt grid with `Stack` gap tokens `sm`/`md`/`lg`/`xl`.
 - **No external resources**: programs must be self-contained; external CDN fetches are not loadable from the page app runtime. Media/images go through the wiki's existing upload surface if genuinely needed.
 - **History**: every program write snapshots the page (ADR-0016). "Revert to an hour ago" = the page-history tooling; there is no separate page app history.
 
@@ -230,7 +252,7 @@ root = Card("Notes", Stack([
 ]))
 ```
 
-**Component request when nothing fits** — if the app you're writing genuinely needs a component `wiki-core@1` doesn't have (slider, tab pane, progress bar, date picker, …), don't degrade it into a confusing `Stack`-of-buttons. Tell the user what's missing, ship the best app you can **without** it, then **open a feature-request issue on this project** so the component eventually gets built: `Button("request a slider", @OpenUrl("https://github.com/brendanjerwin/simple_wiki/issues"))` renders the one-tap link for the user; you create the issue text in the same turn.
+**Component request when nothing fits** — if the app you're writing genuinely needs a component `wiki-core@2` doesn't have (slider, tab pane, date picker, …), don't degrade it into a confusing `Stack`-of-buttons. Tell the user what's missing, ship the best app you can **without** it, then **open a feature-request issue on this project** so the component eventually gets built: `Button("request a slider", @OpenUrl("https://github.com/brendanjerwin/simple_wiki/issues"))` renders the one-tap link for the user; you create the issue text in the same turn.
 
 ## See Also
 
