@@ -30,14 +30,21 @@ jobs:
       - name: Install Devbox
         uses: jetify-com/devbox-install-action@a0d2d53632934ae004f878c840055956d9f741b0 # v0.14.0
         with:
-          enable-cache: 'true'
+          enable-cache: "true"
 
       - name: Run frontend tests with coverage
         run: devbox run fe:test
         env:
-          CI_COVERAGE: 'true'
+          CI_COVERAGE: "true"
 
       - name: SonarCloud Scan
+        # Dependabot-actor runs never see the Actions SONAR_TOKEN (Dependabot
+        # secret store is empty), so the analysis would fail with "Set the
+        # SONAR_TOKEN env variable". Skip the analysis but still report the
+        # check so the required status goes green and dependabot PRs can
+        # merge (issue #1189). NOTE: the secrets context is unavailable in
+        # `if`, so we guard on actor rather than token presence.
+        if: github.actor != 'dependabot[bot]'
         uses: SonarSource/sonarcloud-github-action@383f7e52eae3ab0510c3cb0e7d9d150bbaeab838 # v3
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
