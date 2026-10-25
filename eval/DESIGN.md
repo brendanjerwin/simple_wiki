@@ -27,7 +27,7 @@ Secondary metrics:
 
 The eval is a function of three variables. Each can be swept independently:
 
-```
+```text
 accuracy = f(surface, model, system_prompt)
 ```
 
@@ -70,7 +70,7 @@ model + prompt + surface in every result file for provenance.
 
 ## Architecture
 
-```
+```text
 eval/
   toolsurface.go      — ToolSurface type (list of ToolDef), live fetcher, pre-PR transformer
   toolsurface_test.go
@@ -146,7 +146,7 @@ Target: ~60-80 cases covering all 14 exposed services.
 The harness presents the ToolSurface to an LLM and asks it to select a tool.
 The prompt is assembled as:
 
-```
+```text
 <system_prompt>
 
 Tool catalog:

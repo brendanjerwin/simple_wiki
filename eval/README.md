@@ -57,7 +57,7 @@ cross-service-confusion) for filtering.
 
 ## Architecture
 
-```
+```text
 eval/
   DESIGN.md          — full design document
   toolsurface.go     — ToolSurface type + live fetcher from /mcp
