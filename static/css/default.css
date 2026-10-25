@@ -55,6 +55,8 @@
   --color-warning: #ffc107;
   --color-warning-bg: #fff3cd;
   --color-warning-text: #856404;
+  --color-accent-bg: #e9f2ff;
+  --color-accent-text: #0d5dd7;
   --color-info: #6c757d;
 
   /* Chat */
@@ -120,6 +122,8 @@
     --color-warning: #d29922;
     --color-warning-bg: #2d2000;
     --color-warning-text: #ffda6a;
+    --color-accent-bg: #16273d;
+    --color-accent-text: #6ea8fe;
     --color-info: #8b949e;
 
     /* Highlight */

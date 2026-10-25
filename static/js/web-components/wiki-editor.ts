@@ -1,7 +1,7 @@
 import { html, css, LitElement, nothing, type PropertyValues } from 'lit';
 import { live } from 'lit/directives/live.js';
 import { property, state } from 'lit/decorators.js';
-import { createClient } from '@connectrpc/connect';
+import { createClient, ConnectError, Code } from '@connectrpc/connect';
 import { create } from '@bufbuild/protobuf';
 import { getGrpcWebTransport } from './grpc-transport.js';
 import {
@@ -13,6 +13,7 @@ import { AugmentErrorService, type AugmentedError } from './augment-error-servic
 import { reconstructWholePageText } from '../services/page-content-reconstructor.js';
 import {
   EditorSaveQueue,
+  type SaveResult,
   type SaveStatus,
 } from '../services/editor-save-queue.js';
 import { EditorToolbarCoordinator } from '../services/editor-toolbar-coordinator.js';
@@ -20,6 +21,32 @@ import type { EditorToolbar } from './editor-toolbar.js';
 import './editor-toolbar.js';
 import { foundationCSS, colorCSS, sharedStyles } from './shared-styles.js';
 import './error-display.js';
+import './confirmation-dialog.js';
+import { type ConfirmationConfig } from './confirmation-dialog.js';
+
+/**
+ * Result of one save attempt: either a completed save result to hand back to
+ * the save queue, or a parked attempt awaiting the shrink-breaker dialog.
+ */
+interface SaveAttemptResult {
+  successResult?: SaveResult;
+  parked?: boolean;
+  thrown?: Error;
+}
+
+/** Parking sentinel: the shrink breaker tripped and the retry needs a dialog. */
+const SHRINK_PARKED = 'shrink-parked';
+
+function toSaveResult(result: SaveAttemptResult): SaveResult {
+  if (result.parked) {
+    // A quiet failure the queue records as finished; the dialog drives retry.
+    const quiet = new Error(SHRINK_PARKED);
+    quiet.name = SHRINK_PARKED;
+    return { success: false, error: quiet };
+  }
+  if (result.thrown) return { success: false, error: result.thrown };
+  return result.successResult ?? { success: false, error: new Error('Save failed') };
+}
 
 interface FileUploadedDetail {
   uploadUrl: string;
@@ -305,24 +332,15 @@ export class WikiEditor extends LitElement {
   private setupSaveQueue(): void {
     this.saveQueue = new EditorSaveQueue(
       this.debounceMs,
-      async (content: string) => {
-        const request = create(UpdateWholePageRequestSchema, {
-          page: this.page,
-          newWholeMarkdown: content,
-          ...(this.versionHash ? { expectedVersionHash: this.versionHash } : {}),
-        });
-        const response = await this.client.updateWholePage(request);
-
-        if (!response.success) {
-          return {
-            success: false,
-            error: new Error(response.error || 'Save failed'),
-          };
-        }
-        this.versionHash = response.versionHash;
-        return { success: true };
+      async (content: string): Promise<SaveResult> => {
+        const result = await this.attemptSave(content, false);
+        return toSaveResult(result);
       },
       (status, err) => {
+        if (err instanceof Error && err.name === SHRINK_PARKED) {
+          // Shrink breaker tripped: dialog drives the retry; no error surface.
+          return;
+        }
         if (this.savedTimerId !== null) {
           clearTimeout(this.savedTimerId);
           this.savedTimerId = null;
@@ -343,6 +361,105 @@ export class WikiEditor extends LitElement {
         }
       }
     );
+  }
+
+  /** Pending shrink-breaker retry, awaiting user confirmation. */
+  private _pendingShrinkRetryContent: string | null = null;
+
+  /** Whether the shrink-breaker confirmation dialog is being shown. */
+  @state()
+  declare private _shrinkDialogActive: boolean;
+
+  /**
+   * Performs one save attempt. Detects the shrink circuit breaker
+   * (issue #1299): on a FailedPrecondition naming the breaker, the
+   * pending content is parked and a confirmation dialog is surfaced;
+   * a confirmed retry re-sends with allowShrink=true.
+   */
+  private async attemptSave(content: string, allowShrink: boolean): Promise<SaveAttemptResult> {
+    const request = create(UpdateWholePageRequestSchema, {
+      page: this.page,
+      newWholeMarkdown: content,
+      allowShrink,
+      ...(this.versionHash ? { expectedVersionHash: this.versionHash } : {}),
+    });
+    try {
+      const response = await this.client.updateWholePage(request);
+      if (!response.success) {
+        return { successResult: { success: false, error: new Error(response.error || 'Save failed') } };
+      }
+      this.versionHash = response.versionHash;
+      return { successResult: { success: true } };
+    } catch (err) {
+      if (this.isShrinkBreakerError(err) && !allowShrink) {
+        this._pendingShrinkRetryContent = content;
+        this.requestConfirmation(this.describeShrinkRejection(err));
+        return { parked: true };
+      }
+      return { thrown: err instanceof Error ? err : new Error(String(err)) };
+    }
+  }
+
+  private isShrinkBreakerError(err: unknown): boolean {
+    return err instanceof ConnectError
+      && err.code === Code.FailedPrecondition
+      && err.message.includes('shrink circuit breaker');
+  }
+
+  /** Extracts the server's breaker message (sizes + alternatives) for the dialog. */
+  private describeShrinkRejection(err: unknown): string {
+    if (!(err instanceof ConnectError)) return 'The save was rejected.';
+    const raw = err.message;
+    const breakerIdx = raw.indexOf('shrink circuit breaker');
+    return breakerIdx >= 0 ? raw.slice(breakerIdx) : raw;
+  }
+
+  private requestConfirmation(description: string): void {
+    this._shrinkDialogActive = true;
+    void this.updateComplete.then(() => {
+      const dialog = this.shadowRoot?.querySelector('confirmation-dialog');
+      if (!dialog) return;
+      const config: ConfirmationConfig = {
+        message: 'This save would drastically shrink the page.',
+        description,
+        confirmText: 'Shrink anyway',
+        cancelText: 'Keep the page',
+        confirmVariant: 'warning',
+        icon: 'warning',
+      };
+      dialog.openDialog(config);
+    });
+  }
+
+  private _onShrinkConfirm(): void {
+    const dialog = this.shadowRoot?.querySelector('confirmation-dialog');
+    dialog?.closeDialog();
+    this._shrinkDialogActive = false;
+    const content = this._pendingShrinkRetryContent;
+    this._pendingShrinkRetryContent = null;
+    if (content === null) return;
+    this.attemptSave(content, true)
+      .then((result) => {
+        if (result.successResult?.success) {
+          this.saveStatus = 'saved';
+          this.savedTimerId = setTimeout(() => {
+            this.saveStatus = 'idle';
+            this.savedTimerId = null;
+          }, 2000);
+        }
+      })
+      .catch((err) => {
+        this.error = AugmentErrorService.augmentError(err instanceof Error ? err : new Error(String(err)), 'save page');
+        this.saveStatus = 'error';
+      });
+  }
+
+  private _onShrinkCancel(): void {
+    const dialog = this.shadowRoot?.querySelector('confirmation-dialog');
+    dialog?.closeDialog();
+    this._shrinkDialogActive = false;
+    this._pendingShrinkRetryContent = null;
+    this.saveStatus = 'idle';
   }
 
   private focusTextarea(): void {
@@ -487,6 +604,9 @@ export class WikiEditor extends LitElement {
               .action=${{ label: 'Dismiss', onClick: () => this._dismissSaveError() }}
             ></error-display>
           `
+          : nothing}
+        ${this._shrinkDialogActive
+          ? html`<confirmation-dialog @confirm=${this._onShrinkConfirm} @cancel=${this._onShrinkCancel}></confirmation-dialog>`
           : nothing}
         <div class="editor-area">
           <file-drop-zone

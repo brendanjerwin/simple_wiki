@@ -29,7 +29,7 @@ function pageAppResponse(source: string): GetPageAppResponse {
   lang: 'openui-lang',
   version: BigInt(1),
   versionHash: 'hash-1',
-  library: 'wiki-core@2',
+  library: 'wiki-core@3',
   updatedBy: 'test',
   automated: false,
  });

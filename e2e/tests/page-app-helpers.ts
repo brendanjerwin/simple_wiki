@@ -59,6 +59,7 @@ export async function setupPage(
  const resetResp = await callAPI(request, 'PageManagementService', 'UpdatePageContent', {
   page,
   newContentMarkdown: markdown,
+  allowShrink: true,
  });
  expect(resetResp.status, `reset ${page}: ${resetResp.text}`).toBe(200);
 }
