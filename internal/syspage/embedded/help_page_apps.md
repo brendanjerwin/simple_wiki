@@ -19,7 +19,7 @@ Use `PageAppService` and `PageAppStateService` for authoring and state. Both are
 - **Children are an array argument**: `Stack([Text("hello"), Button("press")])`.
 - **Reactive state is a `$name` declaration**: `$completed = 0`. References interpolate by **string concatenation** — `"sessions: " + $completed` (there is no `{expr}` string interpolation).
 - **Unknown components and invalid statements are dropped, never fatal** — the rest renders. Errors come back structured (`{code, component, statementId, message}`) so you can self-correct.
-- **Missing a component?** If an app needs a component that isn't in `wiki-core@3` (no `Slider`, `DatePicker`, etc.), do **not** fake it with nested `Stack` hacks or drop the feature silently. Build the best program you can **without** the component, tell the user which component is missing and what app it blocked, and **open a feature-request issue on the SimpleWiki GitHub project** (`github.com/brendanjerwin/simple_wiki/issues`) naming the component and the real app it would enable — components get built based on demand from actual apps, so a concrete request with a real use case is the fastest path to getting it. (`Grid`, `Card` variants, `Divider`, `SectionHeader`, `Tabs`, `Accordion`, `Switch`, and `Select` exist as of `wiki-core@3`; `Slider`, `Dialog`, and the `Image` component are still future.)
+- **Missing a component?** If an app needs a component that isn't in `wiki-core@3` (no `Slider`, `DatePicker`, etc.), do **not** fake it with nested `Stack` hacks or drop the feature silently. Build the best program you can **without** the component, tell the user which component is missing and what app it blocked, and **open a feature-request issue on the SimpleWiki GitHub project** (`github.com/brendanjerwin/simple_wiki/issues`) naming the component and the real app it would enable — components get built based on demand from actual apps, so a concrete request with a real use case is the fastest path to getting it. (`Grid`, `Card` variants, `Divider`, `SectionHeader`, `Tabs`, `Accordion`, `Switch`, `Select`, `Dialog`, `Toast`, and `Drawer` exist as of `wiki-core@3`; `Slider` and the `Image` component are still future.)
 
 ## Time-based apps: `Countdown`
 
@@ -75,6 +75,48 @@ $i = 1
 root = Card("Wizard", Stack([
   Steps($i, 5, @Set($i, $i - 1), @Set($i, $i + 1), "setup wizard"),
   Text("on step " + $i, "caption"),
+]))
+```
+
+## Overlays: `Dialog`, `Toast`, `Drawer`
+
+**Drawer**(open, placement?, children, onClose?) renders a slide-in panel from one edge of the viewport when `open` is true. Clicking the backdrop dispatches `onClose`. `placement` sets the edge: `"right"` (default), `"left"`, or `"bottom"`. Use for detail panels and settings without a full-screen modal.
+
+```
+$drawerOpen = false
+details = Stack([Text("Exercise details", "title"), Text("3 sets of 12 reps"), Button("Close", @Set($drawerOpen, false), "secondary")])
+drawer = Drawer($drawerOpen, "right", [details], @Set($drawerOpen, false))
+root = Card("Routine", Stack([Button("View details", @Set($drawerOpen, true)), drawer]))
+```
+
+## Overlays: `Dialog`, `Toast`
+
+**Dialog**(title?, open, children, onClose?) renders a modal overlay when `open` is true. Bind `$open = false` and use @Set to open/close. Clicking the backdrop or the × button dispatches `onClose`. Use this for confirmation flows that previously routed through @ToAssistant.
+
+```
+$open = false
+body = Stack([
+  Text("This will clear all progress. Continue?"),
+  Stack([
+    Button("Clear", @ToAssistant("clear my progress"), "danger"),
+    Button("Cancel", @Set($open, false), "secondary"),
+  ], "horizontal", "md"),
+])
+dlg = Dialog("Confirm Reset", $open, [body], @Set($open, false))
+root = Card("Hamstring Routine", Stack([
+  Button("Reset", @Set($open, true), "danger"),
+  dlg,
+]))
+```
+
+**Toast**(message, visible, kind?, onDismiss?) renders a brief notification fixed at the bottom-right of the viewport when `visible` is true. Kinds: `"info"` (default, blue), `"success"` (green), `"warning"` (amber), `"error"` (red). The × button dispatches `onDismiss` — use @Set($visible, false). Toast does not auto-dismiss; pair with a timer if needed.
+
+```
+$toastVisible = false
+toast = Toast("Session saved!", $toastVisible, "success", @Set($toastVisible, false))
+root = Card("App", Stack([
+  Button("Save", @Set($toastVisible, true)),
+  toast,
 ]))
 ```
 
@@ -320,7 +362,7 @@ root = Card("Notes", Stack([
 ]))
 ```
 
-**Component request when nothing fits** — if the app you're writing genuinely needs a component `wiki-core@3` doesn't have (slider, date picker, …), don't degrade it into a confusing `Stack`-of-buttons. Tell the user what's missing, ship the best app you can **without** it, then **open a feature-request issue on this project** so the component eventually gets built: `Button("request a slider", @OpenUrl("https://github.com/brendanjerwin/simple_wiki/issues"))` renders the one-tap link for the user; you create the issue text in the same turn. (`wiki-core@3` now includes `Grid`/`Span`, `Divider`, `SectionHeader`, Card `variant`s, `Tabs`, `Accordion`, `Switch`, and `Select`.)
+**Component request when nothing fits** — if the app you're writing genuinely needs a component `wiki-core@3` doesn't have (slider, date picker, …), don't degrade it into a confusing `Stack`-of-buttons. Tell the user what's missing, ship the best app you can **without** it, then **open a feature-request issue on this project** so the component eventually gets built: `Button("request a slider", @OpenUrl("https://github.com/brendanjerwin/simple_wiki/issues"))` renders the one-tap link for the user; you create the issue text in the same turn. (`wiki-core@3` now includes `Grid`/`Span`, `Divider`, `SectionHeader`, Card `variant`s, `Tabs`, `Accordion`, `Switch`, `Select`, `Dialog`, `Toast`, and `Drawer`.)
 
 ## See Also
 

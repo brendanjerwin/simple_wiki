@@ -525,6 +525,136 @@ describe('wikiBeepAction', () => {
 });
 
 
+describe('when parsing Drawer', () => {
+ let parser: Parser;
+
+ beforeEach(() => {
+  parser = createParser(wikiLibrary.toJSONSchema(), WIKI_ROOT_COMPONENT);
+ });
+
+ it('should parse Drawer with open, placement, children, and onClose', () => {
+  const result = parser.parse(
+   '$open = false\ncontent = Text("drawer content")\ndr = Drawer($open, "right", [content], @Set($open, false))\nroot = Card("t", [dr])',
+  );
+  expect(result.meta.errors).to.deep.equal([]);
+  const drawer = (result.root?.props['children'] as ElementNode[])[0] as ElementNode;
+  expect(drawer.typeName).to.equal('Drawer');
+  expect(drawer.props['open']).to.deep.include({ k: 'StateRef', n: '$open' });
+  expect(drawer.props['placement']).to.equal('right');
+ });
+
+ it('should keep Drawer reactive when open comes from a $variable', () => {
+  const result = parser.parse(
+   '$open = false\ncontent = Text("content")\ndr = Drawer($open, undefined, [content])\nroot = Card("t", [dr])',
+  );
+  expect(result.meta.errors).to.deep.equal([]);
+  const drawer = (result.root?.props['children'] as ElementNode[])[0] as ElementNode;
+  expect(drawer.partial).to.equal(false);
+ });
+
+ it('should accept left, right, and bottom placements', () => {
+  for (const placement of ['left', 'right', 'bottom']) {
+   const result = parser.parse(
+    `$open = false\ncontent = Text("c")\ndr = Drawer($open, "${placement}", [content])\nroot = Card("t", [dr])`,
+   );
+   expect(result.meta.errors, placement).to.deep.equal([]);
+   const drawer = (result.root?.props['children'] as ElementNode[])[0] as ElementNode;
+   expect(drawer.props['placement']).to.equal(placement);
+  }
+ });
+
+ it('should reject unknown placement values', () => {
+  const result = parser.parse(
+   '$open = false\ncontent = Text("c")\ndr = Drawer($open, "top", [content])\nroot = Card("t", [dr])',
+  );
+  expect(result.meta.errors.length).to.be.greaterThan(0);
+ });
+
+ it('should include Drawer in the library component list', () => {
+  expect(Object.keys(wikiLibrary.components)).to.include('Drawer');
+ });
+});
+
+describe('when parsing Dialog', () => {
+ let parser: Parser;
+
+ beforeEach(() => {
+  parser = createParser(wikiLibrary.toJSONSchema(), WIKI_ROOT_COMPONENT);
+ });
+
+ it('should parse Dialog with title, open, children, and onClose', () => {
+  const result = parser.parse(
+   '$open = false\ncontent = Text("Are you sure?")\ndlg = Dialog("Confirm", $open, [content], @Set($open, false))\nroot = Card("t", [dlg])',
+  );
+  expect(result.meta.errors).to.deep.equal([]);
+  const dlg = (result.root?.props['children'] as ElementNode[])[0] as ElementNode;
+  expect(dlg.typeName).to.equal('Dialog');
+  expect(dlg.props['title']).to.equal('Confirm');
+  expect(dlg.props['open']).to.deep.include({ k: 'StateRef', n: '$open' });
+ });
+
+ it('should keep Dialog reactive when open comes from a $variable', () => {
+  const result = parser.parse(
+   '$open = false\ncontent = Text("body")\ndlg = Dialog("title", $open, [content])\nroot = Card("t", [dlg])',
+  );
+  expect(result.meta.errors).to.deep.equal([]);
+  const dlg = (result.root?.props['children'] as ElementNode[])[0] as ElementNode;
+  expect(dlg.partial).to.equal(false);
+ });
+
+ it('should parse Dialog without a title', () => {
+  const result = parser.parse(
+   '$open = true\ncontent = Text("body")\ndlg = Dialog(undefined, $open, [content])\nroot = Card("t", [dlg])',
+  );
+  expect(result.meta.errors).to.deep.equal([]);
+ });
+
+ it('should include Dialog in the library component list', () => {
+  expect(Object.keys(wikiLibrary.components)).to.include('Dialog');
+ });
+});
+
+describe('when parsing Toast', () => {
+ let parser: Parser;
+
+ beforeEach(() => {
+  parser = createParser(wikiLibrary.toJSONSchema(), WIKI_ROOT_COMPONENT);
+ });
+
+ it('should parse Toast with message and visible binding', () => {
+  const result = parser.parse(
+   '$visible = false\nt = Toast("Saved!", $visible, "success", @Set($visible, false))\nroot = Card("app", [t])',
+  );
+  expect(result.meta.errors).to.deep.equal([]);
+  const toast = (result.root?.props['children'] as ElementNode[])[0] as ElementNode;
+  expect(toast.typeName).to.equal('Toast');
+  expect(toast.props['message']).to.equal('Saved!');
+  expect(toast.props['visible']).to.deep.include({ k: 'StateRef', n: '$visible' });
+  expect(toast.props['kind']).to.equal('success');
+ });
+
+ it('should keep Toast reactive when visible comes from a $variable', () => {
+  const result = parser.parse(
+   '$visible = true\nt = Toast("msg", $visible)\nroot = Card("app", [t])',
+  );
+  expect(result.meta.errors).to.deep.equal([]);
+  const toast = (result.root?.props['children'] as ElementNode[])[0] as ElementNode;
+  expect(toast.partial).to.equal(false);
+ });
+
+ it('should reject unknown Toast kind values', () => {
+  const result = parser.parse(
+   '$v = true\nt = Toast("msg", $v, "sparkle")\nroot = Card("app", [t])',
+  );
+  const codes = result.meta.errors.map((e) => e.code);
+  expect(codes).to.include('type-mismatch');
+ });
+
+ it('should include Toast in the library component list', () => {
+  expect(Object.keys(wikiLibrary.components)).to.include('Toast');
+ });
+});
+
 describe('when parsing Switch', () => {
  let parser: Parser;
 
