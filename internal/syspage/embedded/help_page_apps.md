@@ -38,17 +38,26 @@ root = Card("Hamstring routine", Stack([
   Button("start left-leg hold", @Set($leftRunning, true)),
   Countdown(30, "left leg hold", Action([
     @Set($holds, $holds + 1),
+    @Beep(),
     @Set($leftRunning, false),
   ]), $leftRunning),
   Button("start right-leg hold", @Set($rightRunning, true)),
   Countdown(30, "right leg hold", Action([
     @Set($holds, $holds + 1),
+    @Beep(),
     @Set($rightRunning, false),
   ]), $rightRunning),
 ]))
 ```
 
-Each timer's fourth positional argument binds its `$running` gate. Completing a hold tallies and sets the gate false, so the next `@Set(..., true)` is a genuine false→true edge and the timer restarts from 30 — press the next button when you're actually ready for that hold.
+Each timer's fourth positional argument binds its `$running` gate. Completing a hold tallies, beeps, and sets the gate false, so the next `@Set(..., true)` is a genuine false→true edge and the timer restarts from 30 — press the next button when you're actually ready for that hold.
+
+### Audio feedback: `@Beep`
+
+`@Beep(kind?)` is an **action step** (usable anywhere an action runs: a `Button`'s action or a `Countdown`'s `onComplete`; compose with `Action([...])`). It plays a short synthesized tone — no external audio files, no agent round-trip. Kinds: `@Beep()` (single 880 Hz tone), `@Beep("double")` (two quick beeps), `@Beep("low")` (a lower-pitched 440 Hz tone). Use it for eyes-free timing apps — a stretch routine's `onComplete` beeps so you can hold a pose looking away from the screen.
+
+Autoplay policy: the wiki unlocks its audio context on every action event (a button click, a timer start), so a `@Beep` in a `Countdown`'s `onComplete` — of a run the user themselves started — sounds through that unlock. A `@Beep` that somehow fires without any prior gesture is silently skipped: audio is feedback, never control flow.
+
 
 ## For Agents
 

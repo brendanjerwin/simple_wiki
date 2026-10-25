@@ -183,6 +183,87 @@ describe('wiki library prompt', () => {
  });
 });
 
+describe('wikiBeepAction', () => {
+ let parser: Parser;
+
+ beforeEach(() => {
+  parser = createParser(wikiLibrary.toJSONSchema(), WIKI_ROOT_COMPONENT);
+ });
+
+ it('should parse @Beep() inside an Action plan with zero errors', () => {
+  const result = parser.parse(
+   '$holds = 0\nroot = Card("t", [b])\nb = Button("go", Action([@Set($holds, $holds + 1), @Beep()]))',
+  );
+  expect(result.meta.errors).to.deep.equal([]);
+ });
+
+ it('should parse a bare @Beep() as its own action plan with zero errors', () => {
+  const result = parser.parse('root = Card("t", [b])\nb = Button("go", @Beep())');
+  expect(result.meta.errors).to.deep.equal([]);
+ });
+
+ it('should parse an optional kind argument', () => {
+  const result = parser.parse('root = Card("t", [b])\nb = Button("go", @Beep("double"))');
+  expect(result.meta.errors).to.deep.equal([]);
+ });
+
+ it('should reject an unknown kind value', () => {
+  const result = parser.parse('root = Card("t", [b])\nb = Button("go", @Beep("clang"))');
+  const codes = result.meta.errors.map((e) => e.code);
+  expect(codes).to.not.be.empty;
+ });
+
+ it('should evaluate @Beep() to a custom_action step carrying the name and params', () => {
+  const result = parser.parse(
+   '$kind = "low"\nroot = Card("t", [b])\nb = Button("go", Action([@Set($holds, 1), @Beep($kind)]))',
+  );
+  const store = createStore();
+  store.initialize(result.stateDeclarations, {});
+  const evaluated = evaluateRoot(result, {
+   ctx: {
+    getState: (name) => store.get(name),
+    resolveRef: (name) => store.get(name),
+    actions: wikiLibrary.toJSONSchema().actions ?? {},
+   },
+   library: wikiLibrary,
+   store,
+  });
+  const button = (evaluated?.props['children'] as ElementNode[])[0] as ElementNode;
+  const plan = button.props['action'] as { steps: { type: string; name?: string; params?: Record<string, unknown> }[] };
+  const steps = plan.steps;
+  expect(steps).to.have.length(2);
+  expect(steps[1]?.type).to.equal('custom_action');
+  expect(steps[1]?.name).to.equal('Beep');
+  expect(steps[1]?.params).to.deep.equal({ kind: 'low' });
+ });
+
+ it('should evaluate a bare @Beep() to an empty-params custom_action step', () => {
+  const result = parser.parse('root = Card("t", [b])\nb = Button("go", @Beep())');
+  const store = createStore();
+  store.initialize(result.stateDeclarations, {});
+  const evaluated = evaluateRoot(result, {
+   ctx: {
+    getState: (name) => store.get(name),
+    resolveRef: (name) => store.get(name),
+    actions: wikiLibrary.toJSONSchema().actions ?? {},
+   },
+   library: wikiLibrary,
+   store,
+  });
+  const button = (evaluated?.props['children'] as ElementNode[])[0] as ElementNode;
+  const plan = button.props['action'] as { steps: { type: string; name?: string; params?: Record<string, unknown> }[] };
+  expect(plan.steps[0]?.type).to.equal('custom_action');
+  expect(plan.steps[0]?.name).to.equal('Beep');
+  expect(plan.steps[0]?.params).to.deep.equal({});
+ });
+
+ it('should list @Beep in the generated system prompt', () => {
+  const prompt = generateWikiSystemPrompt();
+  expect(prompt).to.include('@Beep');
+ });
+});
+
+
 describe('createLibraryDefinition', () => {
  it('should return the wiki library with the version id', () => {
   const lib: Library = createLibraryDefinition();

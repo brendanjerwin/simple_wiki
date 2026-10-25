@@ -130,6 +130,58 @@ describe('WikiPageAppHost @ToAssistant channel', () => {
  });
 });
 
+describe('WikiPageAppHost @Beep custom action', () => {
+ let mergeCalls: Record<string, unknown>[];
+ let stubs: StubbedHost;
+
+ beforeEach(async () => {
+  stubs = await stubbedHost('$holds = 0\nroot = Card("T", [b])\nb = Button("done", @Beep())');
+  mergeCalls = [];
+  const clients = stubs.el as unknown as { stateClient: Record<string, unknown> };
+  clients.stateClient['mergePageAppState'] = stub().callsFake((req: { state: Record<string, unknown> }) => {
+   mergeCalls.push({ ...req.state });
+   return Promise.resolve(
+    create(MergePageAppStateResponseSchema, { state: {} as never, stateVersionHash: 'state-hash-2' }),
+   );
+  });
+  await stubs.el.updateComplete;
+ });
+
+ afterEach(() => {
+  stubs.el.remove();
+ });
+
+ it('executes a custom_action Beep plan and still flushes the store', () => {
+  stubs.el.dispatchEvent(new CustomEvent('wiki-page-app-action', {
+   detail: { plan: { steps: [{ type: 'custom_action' as never, name: 'Beep', params: {} }] } },
+   bubbles: true,
+   composed: true,
+  }));
+  expect(mergeCalls).to.have.lengthOf(1, 'a Beep-only plan still flushes the snapshot');
+ });
+
+ it('does not surface an action error for a known Beep step', async () => {
+  stubs.el.dispatchEvent(new CustomEvent('wiki-page-app-action', {
+   detail: { plan: { steps: [{ type: 'custom_action' as never, name: 'Beep', params: { kind: 'double' } }] } },
+   bubbles: true,
+   composed: true,
+  }));
+  await stubs.el.updateComplete;
+  expect(stubs.el.shadowRoot?.querySelector('error-display')).to.not.exist;
+ });
+
+ it('surfaces an error for an unknown library action name', async () => {
+  stubs.el.dispatchEvent(new CustomEvent('wiki-page-app-action', {
+   detail: { plan: { steps: [{ type: 'custom_action' as never, name: 'NotARealmAction', params: {} }] } },
+   bubbles: true,
+   composed: true,
+  }));
+  await stubs.el.updateComplete;
+  expect(stubs.el.shadowRoot?.querySelector('error-display')).to.exist;
+ });
+});
+
+
 describe('WikiPageAppHost', () => {
  describe('when the page has a page app', () => {
   let stubs: StubbedHost;
