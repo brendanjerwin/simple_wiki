@@ -4,6 +4,7 @@ package v1_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -264,7 +265,7 @@ var _ = Describe("AgentInventoryService handlers", func() {
 			var err error
 
 			BeforeEach(func() {
-				binding.readErr = os.ErrNotExist
+				binding.readErr = fmt.Errorf("read frontmatter for %q: %w", "test-page", os.ErrNotExist)
 				_, err = srv.GetPageAgent(ctx, &apiv1.GetPageAgentRequest{Page: "test-page"})
 			})
 

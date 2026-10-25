@@ -66,7 +66,7 @@ The agent selector is backed by gRPC methods on the `AgentInventoryService`:
 | Method | Description |
 |--------|-------------|
 | `ListAgents` | Returns every agent registered in the inventory with availability status. |
-| `GetPageAgent` | Returns the agent currently bound to a page (the *desired* agent), falling back to the default if none is set. |
+| `GetPageAgent` | Returns the agent currently bound to a page (the *desired* agent), falling back to the default if none is set. A nonexistent page returns `NotFound` (not the default-agent fallback). |
 | `SetPageAgent` | Binds an agent to a page. Persists immediately; affects all participants. Accepts currently-unavailable agents; only unknown agent IDs are rejected. |
 
 The pool-only methods (`RegisterPoolAgent`, and the ChatService helpers
