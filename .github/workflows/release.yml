@@ -50,6 +50,7 @@ jobs:
     # Run builds even if signing was skipped (push/PR) or failed
     if: always() && !cancelled()
     strategy:
+      fail-fast: false
       matrix:
         include:
           - goos: linux
