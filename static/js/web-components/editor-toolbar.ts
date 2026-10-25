@@ -1,6 +1,7 @@
 import { html, css, LitElement, nothing } from 'lit';
 import { property, state } from 'lit/decorators.js';
 import { buttonCSS, colorCSS, foundationCSS } from './shared-styles.js';
+import './menu-popover.js';
 
 /**
  * EditorToolbar provides a horizontal toolbar for mobile editing.
@@ -20,11 +21,16 @@ export class EditorToolbar extends LitElement {
   @state()
   declare _uploadMenuOpen: boolean;
 
+  /** Toggle button captured after first render; menu-popover's anchor. */
+  @state()
+  declare _uploadToggle: HTMLButtonElement | null;
+
   constructor() {
     super();
     this.hasSelection = false;
     this.hideExit = false;
     this._uploadMenuOpen = false;
+    this._uploadToggle = null;
   }
 
   static override readonly styles = [
@@ -165,17 +171,12 @@ export class EditorToolbar extends LitElement {
         transform: rotate(180deg);
       }
 
-      .upload-dropdown-menu {
-        position: absolute;
-        top: 100%;
-        left: 0;
-        margin-top: 4px;
+      menu-popover::part(surface) {
+        min-width: 140px;
         background: var(--color-editor-surface-elevated);
         border: 1px solid var(--color-editor-border);
         border-radius: 4px;
         box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-        z-index: 1000;
-        min-width: 140px;
       }
 
       .upload-dropdown-item {
@@ -209,20 +210,11 @@ export class EditorToolbar extends LitElement {
 
   override connectedCallback(): void {
     super.connectedCallback();
-    document.addEventListener('click', this._handleDocumentClick);
   }
 
   override disconnectedCallback(): void {
     super.disconnectedCallback();
-    document.removeEventListener('click', this._handleDocumentClick);
   }
-
-  private readonly _handleDocumentClick = (event: Event): void => {
-    // Close dropdown if clicking outside (composedPath handles shadow DOM)
-    if (this._uploadMenuOpen && !event.composedPath().includes(this)) {
-      this._uploadMenuOpen = false;
-    }
-  };
 
   private _handleArrowNavigation(event: KeyboardEvent): void {
     event.preventDefault();
@@ -248,7 +240,7 @@ export class EditorToolbar extends LitElement {
     if (event.key === 'Escape' && this._uploadMenuOpen) {
       event.preventDefault();
       this._uploadMenuOpen = false;
-      this.shadowRoot?.querySelector<HTMLButtonElement>('.upload-btn-toggle')?.focus();
+      this._uploadToggle?.focus();
       return;
     }
 
@@ -297,6 +289,11 @@ export class EditorToolbar extends LitElement {
   private readonly _handleExit = (): void => {
     this._dispatchEvent('exit-requested');
   };
+
+  override updated(changed: Map<string, unknown>): void {
+    super.updated(changed);
+    this._uploadToggle = this.shadowRoot?.querySelector<HTMLButtonElement>('.upload-btn-toggle') ?? null;
+  }
 
   override render() {
     return html`
@@ -362,18 +359,20 @@ export class EditorToolbar extends LitElement {
               <span class="dropdown-arrow ${this._uploadMenuOpen ? 'open' : ''}">&#9660;</span>
             </button>
           </div>
-          ${this._uploadMenuOpen ? html`
-            <div class="upload-dropdown-menu" role="menu" aria-label="Upload options">
-              <button
-                class="upload-dropdown-item"
-                data-action="upload-file"
-                @click="${this._handleUploadFile}"
-                role="menuitem"
-              >
-                <span>&#128196;</span> Upload File
-              </button>
-            </div>
-          ` : nothing}
+          <menu-popover
+            .anchor=${this._uploadToggle}
+            .open=${this._uploadMenuOpen}
+            @menu-popover-close-request=${() => (this._uploadMenuOpen = false)}
+          >
+            <button
+              class="upload-dropdown-item"
+              data-action="upload-file"
+              @click="${this._handleUploadFile}"
+              role="menuitem"
+            >
+              <span>&#128196;</span> Upload File
+            </button>
+          </menu-popover>
         </div>
 
         <button

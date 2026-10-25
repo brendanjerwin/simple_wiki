@@ -79,9 +79,14 @@ type Site struct {
 	// index that will be implemented in index/history/. It is intentionally
 	// nil until that subagent lands; the gRPC handlers treat a nil history
 	// searcher as "not configured" and return Unavailable.
-	HistoryIndexQueryer      bleve.BleveIndexQueryer
-	AgentScheduleStore       *AgentScheduleStore
-	AgentChatContextStore    *AgentChatContextStore
+	HistoryIndexQueryer   bleve.BleveIndexQueryer
+	AgentScheduleStore    *AgentScheduleStore
+	AgentChatContextStore *AgentChatContextStore
+	AgentRegistry         *AgentRegistry
+	AgentPageBindingStore *AgentPageBindingStore
+	// AgentConfigPath is the optional path to the JSON config listing AG-UI
+	// remote agents; loaded by bootstrap into AgentRegistry (issue #1276).
+	AgentConfigPath          string
 	AgentScheduler           *AgentScheduler
 	ScheduledTurnDispatcher  *ScheduledTurnDispatcher
 	AgentScheduleConcurrency int
@@ -415,6 +420,7 @@ func (s *Site) initIndexesAndCoordinators() error {
 	s.AgentScheduleStore = NewAgentScheduleStore(s)
 	s.AgentChatContextStore = NewAgentChatContextStore(s)
 	s.AgentScheduleStore.SetBackgroundActivitySink(s.AgentChatContextStore)
+	s.AgentPageBindingStore = NewAgentPageBindingStore(s)
 	return nil
 }
 
@@ -684,7 +690,7 @@ func (DirectoryEntry) Sys() any {
 // PageReadError records a page identifier and the error encountered when reading that page during directory listing.
 type PageReadError struct {
 	Page string
-	Err      error
+	Err  error
 }
 
 // DirectoryListing holds the result of a directory listing operation, including

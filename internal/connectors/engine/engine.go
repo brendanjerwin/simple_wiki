@@ -64,7 +64,7 @@ type Engine struct {
 	mutator   ChecklistMutator
 	suppressor SyncSuppressor
 	logger    Logger
-	clock     Clock
+	clock     Clocker
 	store     BindingStore
 
 	// adaptiveTicker, when set, drives activity-driven follow-up syncs
@@ -88,7 +88,7 @@ func NewEngine( // NOSONAR go:S107
 	mutator ChecklistMutator,
 	suppressor SyncSuppressor,
 	logger Logger,
-	clock Clock,
+	clock Clocker,
 	store BindingStore,
 ) (*Engine, error) {
 	if adapter == nil {

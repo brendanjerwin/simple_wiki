@@ -158,8 +158,8 @@ type Logger interface {
 	Error(format string, args ...any)
 }
 
-// Clock is the testable wall-clock seam.
-type Clock interface {
+// Clocker is the testable wall-clock seam.
+type Clocker interface {
 	Now() time.Time
 }
 
@@ -178,12 +178,12 @@ func (SystemClock) Now() time.Time { return time.Now() }
 type KeepAdapter struct {
 	credentials   CredentialReader
 	clientFactory KeepClientFactory
-	clock         Clock
+	clock         Clocker
 	logger        Logger
 }
 
 // NewKeepAdapter wires a KeepAdapter. Every dependency is required.
-func NewKeepAdapter(credentials CredentialReader, clientFactory KeepClientFactory, clock Clock, logger Logger) (*KeepAdapter, error) {
+func NewKeepAdapter(credentials CredentialReader, clientFactory KeepClientFactory, clock Clocker, logger Logger) (*KeepAdapter, error) {
 	if credentials == nil {
 		return nil, errors.New("google_keep: credentials must not be nil")
 	}

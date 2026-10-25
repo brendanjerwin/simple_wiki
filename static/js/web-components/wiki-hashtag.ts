@@ -1,4 +1,4 @@
-import { html, css, LitElement, nothing } from 'lit';
+import { html, css, LitElement } from 'lit';
 import { property, state } from 'lit/decorators.js';
 import { createClient, type Client } from '@connectrpc/connect';
 import { create } from '@bufbuild/protobuf';
@@ -7,6 +7,7 @@ import type { SearchResult } from '../gen/api/v1/search_pb.js';
 import { AugmentErrorService, type AugmentedError } from './augment-error-service.js';
 import { getGrpcWebTransport } from './grpc-transport.js';
 import './error-display.js';
+import './menu-popover.js';
 
 /**
  * `<wiki-hashtag>` wraps a rendered `#tag` pill in page bodies, search results,
@@ -28,6 +29,17 @@ export class WikiHashtag extends LitElement {
     :host {
       display: inline;
       position: relative;
+    }
+
+    menu-popover::part(surface) {
+      min-width: 220px;
+      max-width: 320px;
+      background: var(--color-surface-primary, #fff);
+      border: 1px solid var(--color-border-default, #d0d0d0);
+      border-radius: 6px;
+      box-shadow: var(--shadow-medium, 0 4px 12px rgba(0, 0, 0, 0.15));
+      padding: 6px 0;
+      font-size: 0.9em;
     }
 
     /*
@@ -56,34 +68,6 @@ export class WikiHashtag extends LitElement {
       background: var(--color-text-link, #4078c0);
       color: var(--color-text-inverse, #fff);
       border-color: var(--color-text-link, #4078c0);
-    }
-
-    .bubble {
-      position: absolute;
-      top: 100%;
-      left: 0;
-      margin-top: 4px;
-      min-width: 220px;
-      max-width: 320px;
-      max-height: 320px;
-      overflow-y: auto;
-      background: var(--color-surface-primary, #fff);
-      border: 1px solid var(--color-border-default, #d0d0d0);
-      border-radius: 6px;
-      box-shadow: var(--shadow-medium, 0 4px 12px rgba(0, 0, 0, 0.15));
-      z-index: 300;
-      padding: 6px 0;
-      font-size: 0.9em;
-    }
-
-    /*
-     * If the bubble would clip the right edge of the viewport, set
-     * data-align="right" on .bubble to anchor it to the right side of
-     * the pill instead.
-     */
-    .bubble[data-align="right"] {
-      left: auto;
-      right: 0;
     }
 
     .bubble-header {
@@ -160,6 +144,10 @@ export class WikiHashtag extends LitElement {
   @state()
   declare private _open: boolean;
 
+  /** The pill anchor element for the popover; captured after first render. */
+  @state()
+  declare private _pillAnchor: HTMLElement | null;
+
   @state()
   declare private _loading: boolean;
 
@@ -173,21 +161,6 @@ export class WikiHashtag extends LitElement {
   declare private _hasSearched: boolean;
 
   private client: Client<typeof SearchService> | null = null;
-
-  // Bound handlers so add/remove pairs reference the same function.
-  private readonly _onDocumentClick = (event: Event): void => {
-    const path = event.composedPath();
-    if (!path.includes(this)) {
-      this._close();
-    }
-  };
-
-  private readonly _onDocumentKeydown = (event: KeyboardEvent): void => {
-    if (event.key === 'Escape' && this._open) {
-      event.preventDefault();
-      this._close();
-    }
-  };
 
   // Mutual exclusion: when any wiki-hashtag opens its popover, every other
   // instance hears a `wiki-hashtag-open` event and closes itself. Without
@@ -214,12 +187,12 @@ export class WikiHashtag extends LitElement {
     document.addEventListener('wiki-hashtag-open', this._onAnotherHashtagOpen);
   }
 
+  protected override firstUpdated(): void {
+    this._pillAnchor ??= this.shadowRoot?.querySelector<HTMLElement>('.hashtag-pill') ?? null;
+  }
+
   override disconnectedCallback(): void {
     super.disconnectedCallback();
-    // Defensive: tear down any stray document listeners if we were closed
-    // while still open.
-    document.removeEventListener('click', this._onDocumentClick);
-    document.removeEventListener('keydown', this._onDocumentKeydown);
     document.removeEventListener('wiki-hashtag-open', this._onAnotherHashtagOpen);
   }
 
@@ -252,8 +225,6 @@ export class WikiHashtag extends LitElement {
     );
 
     this._open = true;
-    document.addEventListener('click', this._onDocumentClick);
-    document.addEventListener('keydown', this._onDocumentKeydown);
 
     // Lazily fetch on first open. Cached results stay until the component
     // unmounts; this is fine for a transient pill popover.
@@ -278,8 +249,6 @@ export class WikiHashtag extends LitElement {
   private _close(): void {
     if (!this._open) return;
     this._open = false;
-    document.removeEventListener('click', this._onDocumentClick);
-    document.removeEventListener('keydown', this._onDocumentKeydown);
   }
 
   private async _toggle(): Promise<void> {
@@ -326,17 +295,9 @@ export class WikiHashtag extends LitElement {
   }
 
   private renderBubble() {
-    if (!this._open) return nothing;
-
     return html`
-      <div
-        class="bubble"
-        role="dialog"
-        aria-label="Pages tagged #${this.tag}"
-      >
-        <div class="bubble-header">Pages tagged #${this.tag}</div>
-        ${this.renderBubbleContent()}
-      </div>
+      <div class="bubble-header">Pages tagged #${this.tag}</div>
+      ${this.renderBubbleContent()}
     `;
   }
 
@@ -347,7 +308,16 @@ export class WikiHashtag extends LitElement {
         aria-haspopup="dialog"
         aria-expanded="${this._open}"
         @click="${this.handleClick}"
-      ><slot></slot></a>${this.renderBubble()}`;
+      ><slot></slot></a>
+      <menu-popover
+        .anchor=${this._pillAnchor}
+        .open=${this._open}
+        surfaceRole="dialog"
+        surfaceAriaLabel=${`Pages tagged #${this.tag}`}
+        @menu-popover-close-request=${() => this._close()}
+      >
+        ${this.renderBubble()}
+      </menu-popover>`;
   }
 }
 

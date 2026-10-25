@@ -13,7 +13,11 @@ echo "Logging to: $LOG_FILE"
 
 {
   devbox run build
-  export CHROMIUM_BIN=$(which chromium)
+  # Prefer the caller-provided browser binary; default to a working one —
+  # the devbox/Nix chromium crashes on GLIBC_2.43/2.44 on this host (#1282).
+  if [[ -z "${CHROMIUM_BIN:-}" ]]; then
+    export CHROMIUM_BIN="$(./scripts/resolve_chromium.sh)"
+  fi
   cd e2e || exit 1
   bun install || exit 1
   bunx playwright test "$@"

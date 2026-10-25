@@ -31,11 +31,11 @@ func requireMapRequest[T any](req *T) error {
 	return nil
 }
 
-type mapElementWithUID interface {
+type mapMetadataGetter interface {
 	GetMetadata() *apiv1.MapElementMetadata
 }
 
-func findByUID[T mapElementWithUID](elements []T, uid string) (T, bool) {
+func findByUID[T mapMetadataGetter](elements []T, uid string) (T, bool) {
 	for _, el := range elements {
 		if el.GetMetadata().GetUid() == uid {
 			return el, true

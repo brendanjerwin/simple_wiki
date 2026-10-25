@@ -109,6 +109,10 @@ type RenderingResult struct {
 	HTML             []byte
 	RenderedMarkdown []byte
 	FrontmatterJSON  []byte
+	// HasPageApp is true when the page body carried a ```wiki-page-app
+	// fence; the composed view then renders <wiki-page-app-host> above the
+	// prose (Addendum 22 of issue #1272 — composition, never XOR).
+	HasPageApp bool
 }
 
 // ParseFrontmatterAndMarkdown parses a page's content string into frontmatter and markdown.
@@ -213,6 +217,10 @@ func RenderPageWithTemplates(content string, pageIdentifier string, reader PageR
 	if err != nil {
 		return result, err
 	}
+
+	// The fence's presence stamps the composed-view flag regardless of
+	// prose state (app-above-prose, or app-alone when prose is empty).
+	_, _, result.HasPageApp = SplitPageAppFences(string(markdownBytes))
 
 	// Capture the template-expanded markdown before HTML conversion
 	result.RenderedMarkdown = expandedMarkdown

@@ -34,7 +34,10 @@ echo "Logging to: $LOG_FILE"
   go run golang.org/x/tools/cmd/deadcode@latest . || true
   markdownlint --fix '**/*.md' --ignore vendor
 
-  export CHROMIUM_BIN=$(which chromium)
+  # Prefer caller-provided binary; default to a working one (#1282).
+  if [[ -z "${CHROMIUM_BIN:-}" ]]; then
+    export CHROMIUM_BIN="$(./scripts/resolve_chromium.sh)"
+  fi
   cd static/js
   bun install
   bun run build

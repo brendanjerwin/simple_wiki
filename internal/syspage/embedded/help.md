@@ -52,6 +52,7 @@ See [[help-hashtags]] and [[help-search]] for the full grammar.
 - [[help-alerts]] — Styled callout boxes (note, tip, warning, caution)
 - [[help-caldav]] — Bidirectional checklist sync with native task apps (Apple Reminders, DAVx5)
 - [[help-chat]] — AI assistant chat panel with live tool-use and plan progress
+- [[help_agent_inventory]] — The available-agents inventory and per-page "who am I talking to" binding
 - [[help-connectors]] — Checklist connectors: Google Keep, Google Tasks, and CalDAV bridges
 - [[help-file-storage]] — Upload, query, and delete attached files
 - [[help-frontmatter]] — Structured page metadata and the `Frontmatter` MCP tools
@@ -63,6 +64,7 @@ See [[help-hashtags]] and [[help-search]] for the full grammar.
 - [[help-macro-checklist]] — Checklist macro for interactive task lists
 - [[help-macro-map]] — First-class wiki maps backed by MapService
 - [[help-macro-survey]] — Survey macro for collecting per-user responses
+- [[help-page-apps]] — Agent-authored OpenUI Lang page apps, composed above page content, with persistent state
 - [[help-mcp]] — MCP tool surface catalog: services, transports, and what is not exposed
 - [[help-page-history]] — Version history for every page: list, read, restore, diff, and search past versions
 - [[help-page-import]] — Bulk-import wiki pages from CSV

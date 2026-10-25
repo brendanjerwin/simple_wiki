@@ -35,6 +35,8 @@ const (
 	ChatService_SubscribePageCancellations_FullMethodName = "/api.v1.ChatService/SubscribePageCancellations"
 	ChatService_RespondToPermission_FullMethodName        = "/api.v1.ChatService/RespondToPermission"
 	ChatService_RequestPermissionFromUser_FullMethodName  = "/api.v1.ChatService/RequestPermissionFromUser"
+	ChatService_GetChatMessages_FullMethodName            = "/api.v1.ChatService/GetChatMessages"
+	ChatService_NotifyAgentAttached_FullMethodName        = "/api.v1.ChatService/NotifyAgentAttached"
 )
 
 // ChatServiceClient is the client API for ChatService service.
@@ -91,6 +93,18 @@ type ChatServiceClient interface {
 	// RequestPermissionFromUser is called by the pool daemon to forward a permission request
 	// to the user via chat and block until the user responds.
 	RequestPermissionFromUser(ctx context.Context, in *RequestPermissionFromUserRequest, opts ...grpc.CallOption) (*RequestPermissionFromUserResponse, error)
+	// GetChatMessages returns recent messages from a page's chat buffer, oldest
+	// first. Called by the pool daemon at instance-spawn for transcript
+	// hand-off: when the page's bound agent differs from the reaped agent, the
+	// recent transcript is prepended as context text on the new agent's first
+	// forwarded prompt. Additive; SubscribePageChatMessages' replay-one-user-
+	// message semantics are unchanged.
+	GetChatMessages(ctx context.Context, in *GetChatMessagesRequest, opts ...grpc.CallOption) (*GetChatMessagesResponse, error)
+	// NotifyAgentAttached is called by the pool daemon after it successfully
+	// attaches an agent to a page (and with an empty agent_id on detach).
+	// Feeds the EFFECTIVE agent reported by GetChatStatus so the UI can
+	// surface desired-vs-effective divergence during a switch.
+	NotifyAgentAttached(ctx context.Context, in *NotifyAgentAttachedRequest, opts ...grpc.CallOption) (*NotifyAgentAttachedResponse, error)
 }
 
 type chatServiceClient struct {
@@ -353,6 +367,26 @@ func (c *chatServiceClient) RequestPermissionFromUser(ctx context.Context, in *R
 	return out, nil
 }
 
+func (c *chatServiceClient) GetChatMessages(ctx context.Context, in *GetChatMessagesRequest, opts ...grpc.CallOption) (*GetChatMessagesResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetChatMessagesResponse)
+	err := c.cc.Invoke(ctx, ChatService_GetChatMessages_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *chatServiceClient) NotifyAgentAttached(ctx context.Context, in *NotifyAgentAttachedRequest, opts ...grpc.CallOption) (*NotifyAgentAttachedResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(NotifyAgentAttachedResponse)
+	err := c.cc.Invoke(ctx, ChatService_NotifyAgentAttached_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // ChatServiceServer is the server API for ChatService service.
 // All implementations must embed UnimplementedChatServiceServer
 // for forward compatibility
@@ -407,6 +441,18 @@ type ChatServiceServer interface {
 	// RequestPermissionFromUser is called by the pool daemon to forward a permission request
 	// to the user via chat and block until the user responds.
 	RequestPermissionFromUser(context.Context, *RequestPermissionFromUserRequest) (*RequestPermissionFromUserResponse, error)
+	// GetChatMessages returns recent messages from a page's chat buffer, oldest
+	// first. Called by the pool daemon at instance-spawn for transcript
+	// hand-off: when the page's bound agent differs from the reaped agent, the
+	// recent transcript is prepended as context text on the new agent's first
+	// forwarded prompt. Additive; SubscribePageChatMessages' replay-one-user-
+	// message semantics are unchanged.
+	GetChatMessages(context.Context, *GetChatMessagesRequest) (*GetChatMessagesResponse, error)
+	// NotifyAgentAttached is called by the pool daemon after it successfully
+	// attaches an agent to a page (and with an empty agent_id on detach).
+	// Feeds the EFFECTIVE agent reported by GetChatStatus so the UI can
+	// surface desired-vs-effective divergence during a switch.
+	NotifyAgentAttached(context.Context, *NotifyAgentAttachedRequest) (*NotifyAgentAttachedResponse, error)
 	mustEmbedUnimplementedChatServiceServer()
 }
 
@@ -461,6 +507,12 @@ func (UnimplementedChatServiceServer) RespondToPermission(context.Context, *Resp
 }
 func (UnimplementedChatServiceServer) RequestPermissionFromUser(context.Context, *RequestPermissionFromUserRequest) (*RequestPermissionFromUserResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RequestPermissionFromUser not implemented")
+}
+func (UnimplementedChatServiceServer) GetChatMessages(context.Context, *GetChatMessagesRequest) (*GetChatMessagesResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetChatMessages not implemented")
+}
+func (UnimplementedChatServiceServer) NotifyAgentAttached(context.Context, *NotifyAgentAttachedRequest) (*NotifyAgentAttachedResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method NotifyAgentAttached not implemented")
 }
 func (UnimplementedChatServiceServer) mustEmbedUnimplementedChatServiceServer() {}
 
@@ -775,6 +827,42 @@ func _ChatService_RequestPermissionFromUser_Handler(srv interface{}, ctx context
 	return interceptor(ctx, in, info, handler)
 }
 
+func _ChatService_GetChatMessages_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetChatMessagesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ChatServiceServer).GetChatMessages(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ChatService_GetChatMessages_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ChatServiceServer).GetChatMessages(ctx, req.(*GetChatMessagesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _ChatService_NotifyAgentAttached_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(NotifyAgentAttachedRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ChatServiceServer).NotifyAgentAttached(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ChatService_NotifyAgentAttached_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ChatServiceServer).NotifyAgentAttached(ctx, req.(*NotifyAgentAttachedRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // ChatService_ServiceDesc is the grpc.ServiceDesc for ChatService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -829,6 +917,14 @@ var ChatService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "RequestPermissionFromUser",
 			Handler:    _ChatService_RequestPermissionFromUser_Handler,
+		},
+		{
+			MethodName: "GetChatMessages",
+			Handler:    _ChatService_GetChatMessages_Handler,
+		},
+		{
+			MethodName: "NotifyAgentAttached",
+			Handler:    _ChatService_NotifyAgentAttached_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

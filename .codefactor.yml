@@ -1,22 +1,19 @@
 # CodeFactor configuration.
 #
-# Mirrors the project's existing local lint configuration where
-# CodeFactor's bundled tool config doesn't honor the project's
-# overrides:
+# CodeFactor's bundled eslint does not honor the project's
+# static/js/.eslintrc.js overrides (the test-file block that turns off
+# '@typescript-eslint/no-unused-expressions' because chai's
+# expect(x).to.be.true idiom is an expression, not a mistake). Reported
+# false positives on PR #1284/#1286 were exclusively that rule in
+# *.test.ts files, so the exclusion lives here.
 #
-# - eslint(no-unused-expressions) for *.test.ts / *.stories.ts: the
-#   project's static/js/.eslintrc.js disables this rule for test
-#   files (chai's expect(x).to.exist; idiom triggers it). CodeFactor
-#   doesn't pick up the override, so we exclude tests from this rule
-#   here.
+# NOTE: top-level exclude_patterns only (per CodeFactor docs); the
+# invalid `tools[].excluded_paths` key previously written here was
+# ignored by the analyzer, which is why the 23/1 findings still fired.
 
 exclude_patterns:
   - "static/js/gen/**"
   - "gen/**"
   - "vendor/**"
-
-tools:
-  - name: eslint
-    excluded_paths:
-      - "static/js/**/*.test.ts"
-      - "static/js/**/*.stories.ts"
+  - "static/js/**/*.test.ts"
+  - "static/js/**/*.stories.ts"

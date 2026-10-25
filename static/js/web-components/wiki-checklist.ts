@@ -346,7 +346,7 @@ export class WikiChecklist extends LitElement implements DragReorderHandler {
         // to a fresh fetchData so we don't sit on stale data while
         // the stream is down.
         void this.fetchData();
-        await new Promise<void>(resolve => setTimeout(resolve, RECONNECT_DELAY_MS));
+        await new Promise<void>(resolve => setTimeout(resolve, RECONNECT_DELAY_MS)); // NOSONAR — intentional sequential back-off delay between stream reconnect attempts
       }
     }
   }

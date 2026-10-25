@@ -8,10 +8,12 @@
         "@bufbuild/protobuf": "^2.10.2",
         "@connectrpc/connect": "^2.1.0",
         "@connectrpc/connect-web": "^2.1.0",
+        "@openuidev/lang-core": "^1.0.1",
         "dompurify": "^3.3.3",
         "leaflet": "^1.9.4",
         "lit": "^3.3.1",
         "qr-scanner": "^1.4.2",
+        "zod": "^3.25.76",
       },
       "devDependencies": {
         "@open-wc/testing": "^4.0.0",
@@ -152,6 +154,8 @@
     "@open-wc/testing": ["@open-wc/testing@4.0.0", "", { "dependencies": { "@esm-bundle/chai": "^4.3.4-fix.0", "@open-wc/semantic-dom-diff": "^0.20.0", "@open-wc/testing-helpers": "^3.0.0", "@types/chai-dom": "^1.11.0", "@types/sinon-chai": "^3.2.3", "chai-a11y-axe": "^1.5.0" } }, "sha512-KI70O0CJEpBWs3jrTju4BFCy7V/d4tFfYWkg8pMzncsDhD7TYNHLw5cy+s1FHXIgVFetnMDhPpwlKIPvtTQW7w=="],
 
     "@open-wc/testing-helpers": ["@open-wc/testing-helpers@3.0.1", "", { "dependencies": { "@open-wc/scoped-elements": "^3.0.2", "lit": "^2.0.0 || ^3.0.0", "lit-html": "^2.0.0 || ^3.0.0" } }, "sha512-hyNysSatbgT2FNxHJsS3rGKcLEo6+HwDFu1UQL6jcSQUabp/tj3PyX7UnXL3H5YGv0lJArdYLSnvjLnjn3O2fw=="],
+
+    "@openuidev/lang-core": ["@openuidev/lang-core@1.0.1", "", { "dependencies": { "ci-info": "^4.4.0" }, "peerDependencies": { "@modelcontextprotocol/sdk": ">=1.0.0", "zod": "^3.25.0 || ^4.0.0" }, "optionalPeers": ["@modelcontextprotocol/sdk"] }, "sha512-4vBa7FRM6C4v4aCvBAmAtTgFWiEQiNTazG9h4Xy9fC6P/p6+9kZu4RdTyLToBEvdxrYn/gDy/PakEH8PU3lUcw=="],
 
     "@puppeteer/browsers": ["@puppeteer/browsers@2.10.5", "", { "dependencies": { "debug": "^4.4.1", "extract-zip": "^2.0.1", "progress": "^2.0.3", "proxy-agent": "^6.5.0", "semver": "^7.7.2", "tar-fs": "^3.0.8", "yargs": "^17.7.2" }, "bin": { "browsers": "lib/cjs/main-cli.js" } }, "sha512-eifa0o+i8dERnngJwKrfp3dEq7ia5XFyoqB17S4gK8GhsQE4/P8nxOfQSE0zQHxzzLo/cmF+7+ywEQ7wK7Fb+w=="],
 
@@ -464,6 +468,8 @@
     "chrome-launcher": ["chrome-launcher@0.15.2", "", { "dependencies": { "@types/node": "*", "escape-string-regexp": "^4.0.0", "is-wsl": "^2.2.0", "lighthouse-logger": "^1.0.0" }, "bin": { "print-chrome-path": "bin/print-chrome-path.js" } }, "sha512-zdLEwNo3aUVzIhKhTtXfxhdvZhUghrnmkvcAq2NoDd+LeOHKf03H5jwZ8T/STsAlzyALkBVK552iaG1fGf1xVQ=="],
 
     "chromium-bidi": ["chromium-bidi@5.1.0", "", { "dependencies": { "mitt": "^3.0.1", "zod": "^3.24.1" }, "peerDependencies": { "devtools-protocol": "*" } }, "sha512-9MSRhWRVoRPDG0TgzkHrshFSJJNZzfY5UFqUMuksg7zL1yoZIZ3jLB0YAgHclbiAxPI86pBnwDX1tbzoiV8aFw=="],
+
+    "ci-info": ["ci-info@4.4.0", "", {}, "sha512-77PSwercCZU2Fc4sX94eF8k8Pxte6JAwL4/ICZLFjJLqegs7kCuAsqqj/70NQF6TvDpgFjkubQB2FW2ZZddvQg=="],
 
     "cli-cursor": ["cli-cursor@3.1.0", "", { "dependencies": { "restore-cursor": "^3.1.0" } }, "sha512-I/zHAwsKf9FqGoXM4WWRACob9+SNukZTd94DWF57E4toouRulbCxcUh6RKUEOQlYTHJnzkPMySvPNaaSLNfLZw=="],
 
