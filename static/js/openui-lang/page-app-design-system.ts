@@ -1,5 +1,5 @@
 /**
- * Design-system styles for `wiki-core@1` page app components.
+ * Design-system styles for `wiki-core@2` page app components.
  *
  * Every rule consumes the wiki theme's CSS custom properties (from
  * `static/css/default.css`, light + dark) so apps inherit the user's
@@ -17,11 +17,11 @@ export const wikiPageAppDesignSystem = css`
   .wiki-page-app-card {
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: 12px;
     box-sizing: border-box;
     width: 100%;
     max-width: 720px;
-    padding: 16px 18px;
+    padding: 16px;
     background: var(--color-surface-elevated, #ffffff);
     color: var(--color-text-primary, #333333);
     border: 1px solid var(--color-border-subtle, #e0e0e0);
@@ -40,14 +40,14 @@ export const wikiPageAppDesignSystem = css`
   .wiki-page-app-card-body {
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: 12px;
     min-width: 0;
   }
 
   .wiki-page-app-stack {
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: 12px;
     min-width: 0;
   }
   .wiki-page-app-stack[data-direction='horizontal'] {
@@ -62,6 +62,20 @@ export const wikiPageAppDesignSystem = css`
     line-height: 1.5;
     color: var(--color-text-secondary, #666666);
     overflow-wrap: anywhere;
+  }
+  .wiki-page-app-text[data-variant='title'] {
+    font-size: 1.25rem;
+    font-weight: 650;
+    line-height: 1.3;
+    color: var(--color-text-primary, #333333);
+  }
+  .wiki-page-app-text[data-variant='body'] {
+    font-size: 0.95rem;
+  }
+  .wiki-page-app-text[data-variant='caption'] {
+    font-size: 0.8rem;
+    line-height: 1.4;
+    color: var(--color-text-muted, #737373);
   }
 
   .wiki-page-app-button {
@@ -81,6 +95,28 @@ export const wikiPageAppDesignSystem = css`
   }
   .wiki-page-app-button:active {
     transform: translateY(1px);
+  }
+
+  .wiki-page-app-button[data-variant='secondary'] {
+    background: var(--color-action-secondary-bg, #ffffff);
+    color: var(--color-text-secondary, #666666);
+    border: 1px solid var(--color-border-default, #dddddd);
+  }
+  .wiki-page-app-button[data-variant='secondary']:hover {
+    background: var(--color-action-secondary-hover-bg, #f8f9fa);
+  }
+  .wiki-page-app-button[data-variant='ghost'] {
+    background: transparent;
+    color: var(--color-action-confirm, #007bff);
+  }
+  .wiki-page-app-button[data-variant='ghost']:hover {
+    background: var(--color-hover-overlay, rgba(0, 0, 0, 0.05));
+  }
+  .wiki-page-app-button[data-variant='danger'] {
+    background: var(--color-action-danger, #dc3545);
+  }
+  .wiki-page-app-button[data-variant='danger']:hover {
+    background: var(--color-action-danger-hover, #c82333);
   }
 
   .wiki-page-app-input,
@@ -112,7 +148,48 @@ export const wikiPageAppDesignSystem = css`
   .wiki-page-app-field-label {
     font-size: 0.8rem;
     font-weight: 600;
-    color: var(--color-text-muted, #999999);
+    color: var(--color-text-muted, #737373);
+  }
+
+  .wiki-page-app-progress {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+  }
+  .wiki-page-app-progress-label {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--color-text-primary, #333333);
+  }
+  .wiki-page-app-progress-bar {
+    height: 8px;
+    border-radius: 4px;
+    background: var(--color-surface-sunken, #f8f9fa);
+    border: 1px solid var(--color-border-subtle, #e0e0e0);
+    overflow: hidden;
+  }
+  .wiki-page-app-progress-fill {
+    height: 100%;
+    border-radius: 4px;
+    background: var(--color-action-confirm, #007bff);
+    transition: width 300ms ease;
+  }
+
+  .wiki-page-app-steps {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+  }
+  .wiki-page-app-steps-label {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--color-text-primary, #333333);
+  }
+  .wiki-page-app-steps-indicator {
+    font-size: 0.85rem;
+    color: var(--color-text-secondary, #666666);
   }
 
   .wiki-page-app-table {

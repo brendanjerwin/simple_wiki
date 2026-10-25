@@ -9,6 +9,7 @@ import {
 } from '@openuidev/lang-core';
 import {
  generateWikiPageAppRenderer,
+ PAGE_APP_ACTION_EVENT,
  renderNode,
  mergePageAppPatch,
  type PageAppActionContext,
@@ -17,7 +18,7 @@ import {
  wikiLibrary,
  WIKI_ROOT_COMPONENT,
 } from './library.js';
-import type { WikiPageAppCountdown } from './library.js';
+import type { WikiPageAppCountdown, PageAppActionEventDetail } from './library.js';
 import type { ToolProvider } from '@openuidev/lang-core';
 
 describe('generateWikiPageAppRenderer', () => {
@@ -190,6 +191,81 @@ describe('renderer component output', () => {
   const el = await fixture<HTMLElement>(rendered.template as never);
   expect(el.querySelector('table.wiki-page-app-table')).to.exist;
   expect(el.querySelector('figure.wiki-page-app-chart')).to.exist;
+ });
+
+ it('should render Button with data-variant and Text with data-variant', async () => {
+  const rendered = runtime.render(
+   'root = Card("T", [b, t])\nb = Button("delete", @Set($x, 1), "danger")\nt = Text("hello", "title")',
+   {},
+  );
+  const el = await fixture<HTMLElement>(rendered.template as never);
+  const button = el.querySelector('button.wiki-page-app-button[data-variant="danger"]');
+  expect(button).to.exist;
+  const title = el.querySelector('p.wiki-page-app-text[data-variant="title"]');
+  expect(title).to.exist;
+  expect(title?.textContent).to.equal('hello');
+ });
+
+ it('should render Progress with aria values and label', async () => {
+  const rendered = runtime.render('root = Card("T", [p])\np = Progress(5, 2, "steps")', {});
+  const el = await fixture<HTMLElement>(rendered.template as never);
+  const progress = el.querySelector('.wiki-page-app-progress');
+  expect(progress).to.exist;
+  expect(progress?.getAttribute('aria-valuemax')).to.equal('5');
+  expect(progress?.getAttribute('aria-valuenow')).to.equal('2');
+  expect(progress?.querySelector('.wiki-page-app-progress-label')?.textContent).to.equal('steps: 2 of 5');
+  const fill = progress?.querySelector('.wiki-page-app-progress-fill') as HTMLElement;
+  expect(fill.style.width).to.equal('40%');
+ });
+
+ it('should render Steps with indicator and back/next buttons dispatching actions', async () => {
+  const rendered = runtime.render(
+   'root = Card("T", [s])\ns = Steps($i, 3, @Set($i, $i - 1), @Set($i, $i + 1), "wizard")\n$i = 1',
+   {},
+  );
+  const el = await fixture<HTMLElement>(rendered.template as never);
+  const steps = el.querySelector('.wiki-page-app-steps');
+  expect(steps).to.exist;
+  expect(steps?.querySelector('.wiki-page-app-steps-indicator')?.textContent).to.equal('step 1 of 3');
+  const buttons = steps?.querySelectorAll('button.wiki-page-app-button');
+  expect(buttons?.length).to.equal(2);
+ });
+
+ it('should render Steps without buttons when actions are absent', async () => {
+  const rendered = runtime.render('root = Card("T", [s])\ns = Steps($i, 5)\n$i = 2', {});
+  const el = await fixture<HTMLElement>(rendered.template as never);
+  const buttons = el.querySelectorAll('.wiki-page-app-steps button.wiki-page-app-button');
+  expect(buttons.length).to.equal(0);
+ });
+
+ it('should dispatch a defined plan when a Steps next button is clicked', async () => {
+  const dispatched: unknown[] = [];
+  const rendered = runtime.render(
+   'root = Card("T", [s])\ns = Steps($i, 3, @Set($i, $i - 1), @Set($i, $i + 1))\n$i = 1',
+   {},
+  );
+  const el = await fixture<HTMLElement>(rendered.template as never);
+  el.addEventListener(PAGE_APP_ACTION_EVENT, (event) => {
+   dispatched.push((event as CustomEvent).detail);
+  });
+  const next = el.querySelector<HTMLButtonElement>('.wiki-page-app-steps button.wiki-page-app-button[data-variant="primary"]');
+  next?.click();
+  expect(dispatched.length).to.equal(1);
+  const detail = dispatched[0] as PageAppActionEventDetail;
+  expect(detail.plan, 'Steps must dispatch an executable plan, not fallback chat').to.exist;
+  expect(detail.plan?.steps.length).to.equal(1);
+ });
+
+ it('should render Stack gap tokens as px values on the 4pt grid', async () => {
+  const rendered = runtime.render(
+   'root = Card("T", [s1, s2])\ns1 = Stack([t], undefined, "lg")\ns2 = Stack([t2], undefined, "xl")\nt = Text("a")\nt2 = Text("b")',
+   {},
+  );
+  const el = await fixture<HTMLElement>(rendered.template as never);
+  const stacks = el.querySelectorAll<HTMLElement>('.wiki-page-app-stack');
+  expect(stacks.length).to.equal(2);
+  expect(stacks[0]?.style.gap).to.equal('16px');
+  expect(stacks[1]?.style.gap).to.equal('24px');
  });
 });
 

@@ -1,7 +1,7 @@
 /**
  * Wiki component library for OpenUI Lang page app pages.
  *
- * Defines the wiki's OpenUI Lang component vocabulary (`wiki-core@1`) over
+ * Defines the wiki's OpenUI Lang component vocabulary (`wiki-core@2`) over
  * `@openuidev/lang-core` and renders with Lit templates. Wiki-native
  * components (Checklist, Map, Survey) render the existing wiki custom
  * elements; interactive components dispatch `wiki-page-app-action`
@@ -27,7 +27,7 @@ type IntervalId = ReturnType<typeof window.setInterval>;
 /**
  * The wiki library version stamped on page app programs.
  */
-export const WIKI_LIBRARY_VERSION = 'wiki-core@1';
+export const WIKI_LIBRARY_VERSION = 'wiki-core@2';
 
 /** Renderer contract: evaluated props in, Lit template out. */
 export type WikiRenderer = (props: Record<string, unknown>) => TemplateResult;
@@ -290,10 +290,12 @@ function buildLibrary(): Library {
   name: 'Text',
   props: z.object({
    content: z.string(),
+   variant: z.enum(['title', 'body', 'caption']).optional(),
   }),
-  description: 'A block of text rendered as a paragraph.',
-  component: (({ content }) =>
-   html`<p class="wiki-page-app-text">${typeof content === 'string' ? content : ''}</p>`) as WikiRenderer,
+  description:
+   'A block of text rendered as a paragraph. Optional `variant` sets the size tier: `title` (large heading-style), `body` (default), or `caption` (small secondary).',
+  component: (({ content, variant }) =>
+   html`<p class="wiki-page-app-text" data-variant=${typeof variant === 'string' ? variant : nothing}>${typeof content === 'string' ? content : ''}</p>`) as WikiRenderer,
  });
 
  const Table = defineComponent({
@@ -420,16 +422,17 @@ function buildLibrary(): Library {
   props: z.object({
    label: z.string(),
    action: action().optional(),
+   variant: z.enum(['primary', 'secondary', 'ghost', 'danger']).optional(),
   }),
   description:
-   'A button that runs an action: @Set, @Reset, @Run, @ToAssistant, @OpenUrl, or Action([...]). A button with no action sends its label to the assistant.',
-  component: (({ label, action: plan }) => {
+   'A button that runs an action: @Set, @Reset, @Run, @ToAssistant, @OpenUrl, or Action([...]). A button with no action sends its label to the assistant. `variant` sets emphasis: `primary` (default), `secondary` (muted emphasis), `ghost` (tertiary), or `danger` (destructive).',
+  component: (({ label, action: plan, variant }) => {
    const fire = (event: Event) => {
     dispatchArtifactAction(event, {
      plan: (asPlan(plan) ?? { steps: [{ type: 'continue_conversation', message: typeof label === 'string' ? label : '' }] }),
     });
    };
-   return html`<button class="wiki-page-app-button" @click=${fire}>${label}</button>`;
+   return html`<button class="wiki-page-app-button" data-variant=${typeof variant === 'string' ? variant : nothing} @click=${fire}>${label}</button>`;
   }) as WikiRenderer,
  });
 
@@ -499,31 +502,108 @@ function buildLibrary(): Library {
  });
 
  /**
+  * Progress renders "N of M" with a progress bar. `current` is reactive so a
+  * @Set to the bound $variable re-renders the bar live. Positional order
+  * `total, current, label` matches the common call Progress($total, $done).
+  */
+ const ProgressSchema = z.object({
+  total: z.number(),
+  current: z.number().optional(),
+  label: z.string().optional(),
+ });
+ markReactive(ProgressSchema.shape.current);
+ const Progress = defineComponent({
+  name: 'Progress',
+  props: ProgressSchema,
+  description:
+   'A progress readout: "current of total" with a fill bar. Bind $variables — Progress($total, $done) — and @Set them to advance.',
+  component: (({ total, current, label }) => {
+   const totalNum = typeof total === 'number' ? total : 0;
+   const currentNum = typeof current === 'number' ? current : 0;
+   const pct = totalNum > 0 ? Math.min(100, Math.round((currentNum / totalNum) * 100)) : 0;
+   return html`<div
+       class="wiki-page-app-progress"
+       role="progressbar"
+       aria-valuemin="0"
+       aria-valuemax="${totalNum}"
+       aria-valuenow="${currentNum}"
+     >
+       <span class="wiki-page-app-progress-label">${typeof label === 'string' ? `${label}: ` : ''}${currentNum} of ${totalNum}</span>
+       <div class="wiki-page-app-progress-bar"><div class="wiki-page-app-progress-fill" style="width:${pct}%"></div></div>
+     </div>`;
+  }) as WikiRenderer,
+ });
+
+ /**
+  * Steps renders "step N of M" with optional back/next buttons wired to
+  * actions. Positional order matches Steps($i, 3, @Set($i, $i - 1), @Set($i, $i + 1)).
+  */
+ const StepsSchema = z.object({
+  current: z.number(),
+  total: z.number(),
+  onBack: action().optional(),
+  onNext: action().optional(),
+  label: z.string().optional(),
+ });
+ markReactive(StepsSchema.shape.current);
+ markReactive(StepsSchema.shape.total);
+ const Steps = defineComponent({
+  name: 'Steps',
+  props: StepsSchema,
+  description:
+   'A "step N of M" indicator for wizard-style apps with optional back/next buttons: Steps($i, 5, @Set($i, $i - 1), @Set($i, $i + 1), "label?"). A button renders only when its action is provided.',
+  component: (({ current, total, onBack, onNext, label }) => {
+   const currentNum = typeof current === 'number' ? current : 0;
+   const totalNum = typeof total === 'number' ? total : 0;
+   const back = onBack
+    ? html`<button class="wiki-page-app-button" data-variant="secondary" @click=${(event: Event) => dispatchArtifactAction(event, { plan: asPlan(onBack) })}>back</button>`
+    : nothing;
+   const next = onNext
+    ? html`<button class="wiki-page-app-button" data-variant="primary" @click=${(event: Event) => dispatchArtifactAction(event, { plan: asPlan(onNext) })}>next</button>`
+    : nothing;
+   return html`<div class="wiki-page-app-steps">
+       ${typeof label === 'string' ? html`<span class="wiki-page-app-steps-label">${label}</span>` : nothing}
+       <span class="wiki-page-app-steps-indicator">step ${currentNum} of ${totalNum}</span>
+       ${back}${next}
+     </div>`;
+  }) as WikiRenderer,
+ });
+
+ /**
   * The children union closes over every component, filled in once all refs
   * exist; schemas hold a `z.lazy` placeholder until then.
   */
  const childrenUnion: { current?: z.ZodType } = {};
  const childrenSlot = (): z.ZodType => z.lazy(() => { if (childrenUnion.current == null) { throw new Error('children union not yet built'); } return childrenUnion.current; });
 
+ /**
+  * Gap tokens on the 4pt grid: sm=4px, md=8px, lg=16px, xl=24px.
+  * A free-form CSS gap string is still accepted for off-rhythm exceptions.
+  */
+ const GAP_TOKEN_PX: Record<string, string> = { sm: '4px', md: '8px', lg: '16px', xl: '24px' };
+
  const Stack = defineComponent({
   name: 'Stack',
   props: z.object({
    children: childrenSlot(),
    direction: z.enum(['vertical', 'horizontal']).optional(),
-   gap: z.string().optional(),
+   gap: z.union([z.string(), z.enum(['sm', 'md', 'lg', 'xl'])]).optional(),
   }),
-  description: 'A flex container laying out children in one direction (default vertical).',
-  component: (({ direction, gap, children }) =>
-   html`<div
-        class="wiki-page-app-stack"
-        data-direction=${direction === 'horizontal' ? 'horizontal' : 'vertical'}
-        style=${typeof gap === 'string'
-     ? `gap:${gap}`
+  description:
+   'A flex container laying out children in one direction (default vertical). `gap` accepts spacing tokens on the 4pt grid ("sm"=4, "md"=8, "lg"=16, "xl"=24) or a raw CSS gap value.',
+  component: (({ direction, gap, children }) => {
+   const gapPx = typeof gap === 'string' ? (GAP_TOKEN_PX[gap] ?? gap) : undefined;
+   return html`<div
+       class="wiki-page-app-stack"
+       data-direction=${direction === 'horizontal' ? 'horizontal' : 'vertical'}
+       style=${gapPx != null
+     ? `gap:${gapPx}`
      : nothing
     }
-      >
-        ${Array.isArray(children) ? children : []}
-      </div>`) as WikiRenderer,
+     >
+       ${Array.isArray(children) ? children : []}
+     </div>`;
+  }) as WikiRenderer,
  });
 
  const Card = defineComponent({
@@ -558,8 +638,9 @@ function buildLibrary(): Library {
   MapComponent.ref,
   Survey.ref,
   Countdown.ref,
+  Progress.ref,
+  Steps.ref,
  ]);
-
  return createLibrary({
   components: [
    Text,
@@ -574,6 +655,8 @@ function buildLibrary(): Library {
    MapComponent,
    Survey,
    Countdown,
+   Progress,
+   Steps,
   ],
   root: WIKI_ROOT_COMPONENT,
   id: WIKI_LIBRARY_VERSION,

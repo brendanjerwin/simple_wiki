@@ -196,7 +196,7 @@ type GetPageAppResponse struct {
 	Version int64 `protobuf:"varint,3,opt,name=version,proto3" json:"version,omitempty"`
 	// Hash of the program; the OCC handle for SetPageApp/ClearPageApp.
 	VersionHash string `protobuf:"bytes,4,opt,name=version_hash,json=versionHash,proto3" json:"version_hash,omitempty"`
-	// The wiki component library version the program targets (e.g. "wiki-core@1").
+	// The wiki component library version the program targets (e.g. "wiki-core@2").
 	Library string `protobuf:"bytes,5,opt,name=library,proto3" json:"library,omitempty"`
 	// When the page app was last written.
 	UpdatedAt *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`

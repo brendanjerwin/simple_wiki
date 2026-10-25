@@ -137,7 +137,7 @@ message GetPageAppResponse {
   int64 version = 3;
   // Hash of the program; the OCC handle for SetPageApp/ClearPageApp.
   string version_hash = 4;
-  // The wiki component library version the program targets (e.g. "wiki-core@1").
+  // The wiki component library version the program targets (e.g. "wiki-core@2").
   string library = 5;
   // When the page app was last written.
   google.protobuf.Timestamp updated_at = 6;
