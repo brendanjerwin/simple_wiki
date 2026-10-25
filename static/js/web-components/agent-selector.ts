@@ -11,6 +11,7 @@ import {
  type AgentInfo,
 } from '../gen/api/v1/agent_inventory_pb.js';
 import { colorCSS, typographyCSS } from './shared-styles.js';
+import './menu-popover.js';
 
 declare global {
  interface HTMLElementTagNameMap {
@@ -102,23 +103,12 @@ export class AgentSelector extends LitElement {
         background: var(--color-text-muted);
       }
 
-      .dropdown {
-        position: absolute;
-        /* Anchored to the wrapper (which includes the trigger row and any
-           hint line), so the dropdown opens below all of it. */
-        top: calc(100% + 4px);
-        left: 0;
+      menu-popover::part(surface) {
         min-width: 220px;
         background: var(--color-editor-surface);
         border: 1px solid var(--color-editor-border);
         border-radius: 6px;
         box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-        z-index: 200;
-        overflow: hidden;
-      }
-
-      .dropdown[hidden] {
-        display: none;
       }
 
       .dropdown-header {
@@ -225,6 +215,13 @@ export class AgentSelector extends LitElement {
  @state()
  declare _open: boolean;
 
+ /**
+  * The trigger button, captured once first rendered. menu-popover needs it
+  * as its anchor for viewport-aware placement.
+  */
+ @state()
+ declare _triggerButton: HTMLButtonElement | null;
+
  @state()
  declare _loading: boolean;
 
@@ -236,8 +233,6 @@ export class AgentSelector extends LitElement {
   * replace this property with a fake client to avoid real network calls.
   */
  client: Client<typeof AgentInventoryService>;
-
- private readonly _handleGlobalClick: (e: MouseEvent) => void;
 
  constructor() {
   super();
@@ -251,23 +246,22 @@ export class AgentSelector extends LitElement {
   this._open = false;
   this._loading = false;
   this._error = null;
+ this._triggerButton = null;
   this.client = createClient(AgentInventoryService, getGrpcWebTransport());
-  this._handleGlobalClick = this._onGlobalClick.bind(this);
  }
 
  override connectedCallback(): void {
   super.connectedCallback();
-  document.addEventListener('click', this._handleGlobalClick);
   void this._loadData();
  }
 
  override disconnectedCallback(): void {
   super.disconnectedCallback();
-  document.removeEventListener('click', this._handleGlobalClick);
  }
 
  override updated(changed: Map<string, unknown>): void {
   super.updated(changed);
+  this._triggerButton ??= this.shadowRoot?.querySelector<HTMLButtonElement>('.current-agent') ?? null;
   if (changed.has('page') && this.page) {
    void this._loadData();
   }
@@ -342,13 +336,6 @@ export class AgentSelector extends LitElement {
   this._open = !this._open;
  }
 
- private _onGlobalClick(e: MouseEvent): void {
-  if (!this._open) return;
-  const target = e.composedPath()[0];
-  if (target instanceof Node && !this.shadowRoot?.contains(target)) {
-   this._open = false;
-  }
- }
 
  private get _currentAgent(): AgentInfo | undefined {
   return this._agents.find((a) => a.id === this._currentAgentId);
@@ -398,10 +385,16 @@ export class AgentSelector extends LitElement {
     ? html`<div class="desired-unavailable-hint">bound agent unavailable</div>`
     : nothing}
 
-        <div class="dropdown" ?hidden=${!this._open} role="listbox">
+        <menu-popover
+          .anchor=${this._triggerButton}
+          .open=${this._open}
+          surfaceRole="listbox"
+          surfaceAriaLabel="Chat agent"
+          @menu-popover-close-request=${() => (this._open = false)}
+        >
           <div class="dropdown-header">Chat agent</div>
           ${this._renderDropdownContent()}
-        </div>
+        </menu-popover>
       </div>
     `;
  }

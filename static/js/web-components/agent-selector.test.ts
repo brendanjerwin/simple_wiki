@@ -89,13 +89,13 @@ describe('AgentSelector', () => {
     });
 
     it('should render a dropdown', () => {
-      const dropdown = el.shadowRoot?.querySelector('.dropdown');
+      const dropdown = el.shadowRoot?.querySelector('menu-popover');
       expect(dropdown).not.to.equal(null);
     });
 
     it('should have the dropdown hidden by default', () => {
-      const dropdown = el.shadowRoot?.querySelector('.dropdown');
-      expect(dropdown?.hasAttribute('hidden')).to.equal(true);
+      const dropdown = el.shadowRoot?.querySelector('menu-popover');
+      expect(dropdown?.open).to.equal(false);
     });
   });
 
@@ -477,7 +477,7 @@ describe('AgentSelector', () => {
       btn?.click();
       await el.updateComplete;
 
-      const dropdown = el.shadowRoot?.querySelector('.dropdown');
+      const dropdown = el.shadowRoot?.querySelector('menu-popover');
       expect(dropdown?.textContent).to.include('No agents available');
     });
   });
@@ -507,7 +507,7 @@ describe('AgentSelector', () => {
       btn?.click();
       await el.updateComplete;
 
-      const dropdown = el.shadowRoot?.querySelector('.dropdown');
+      const dropdown = el.shadowRoot?.querySelector('menu-popover');
       expect(dropdown?.textContent).to.include('network failure');
     });
   });
@@ -544,8 +544,8 @@ describe('AgentSelector', () => {
       });
 
       it('should show the dropdown', () => {
-        const dropdown = el.shadowRoot?.querySelector('.dropdown');
-        expect(dropdown?.hasAttribute('hidden')).to.equal(false);
+        const dropdown = el.shadowRoot?.querySelector('menu-popover');
+        expect(dropdown?.open).to.equal(true);
       });
 
       it('should render agent options in the dropdown', () => {
@@ -566,8 +566,8 @@ describe('AgentSelector', () => {
         });
 
         it('should hide the dropdown', () => {
-          const dropdown = el.shadowRoot?.querySelector('.dropdown');
-          expect(dropdown?.hasAttribute('hidden')).to.equal(true);
+          const dropdown = el.shadowRoot?.querySelector('menu-popover');
+          expect(dropdown?.open).to.equal(false);
         });
       });
     });
@@ -623,8 +623,8 @@ describe('AgentSelector', () => {
     });
 
     it('should close the dropdown after selection', () => {
-      const dropdown = el.shadowRoot?.querySelector('.dropdown');
-      expect(dropdown?.hasAttribute('hidden')).to.equal(true);
+      const dropdown = el.shadowRoot?.querySelector('menu-popover');
+      expect(dropdown?.open).to.equal(false);
     });
 
     it('should update the current agent id to the selected agent', () => {
@@ -671,8 +671,8 @@ describe('AgentSelector', () => {
     });
 
     it('should close the dropdown', () => {
-      const dropdown = el.shadowRoot?.querySelector('.dropdown');
-      expect(dropdown?.hasAttribute('hidden')).to.equal(true);
+      const dropdown = el.shadowRoot?.querySelector('menu-popover');
+      expect(dropdown?.open).to.equal(false);
     });
   });
 
@@ -715,41 +715,5 @@ describe('AgentSelector', () => {
     });
   });
 
-  describe('event listener wiring', () => {
-    describe('when connected to DOM', () => {
-      let addEventListenerSpy: sinon.SinonSpy;
 
-      beforeEach(async () => {
-        addEventListenerSpy = sinon.spy(document, 'addEventListener');
-        el = await Promise.race([
-          fixture<AgentSelector>(html`<agent-selector></agent-selector>`),
-          timeout(5000, 'Component fixture timed out'),
-        ]);
-        await el.updateComplete;
-      });
-
-      it('should add click event listener to document', () => {
-        expect(addEventListenerSpy).to.have.been.calledWith('click', el['_handleGlobalClick']);
-      });
-    });
-
-    describe('when disconnected from DOM', () => {
-      let removeEventListenerSpy: sinon.SinonSpy;
-
-      beforeEach(async () => {
-        el = await Promise.race([
-          fixture<AgentSelector>(html`<agent-selector></agent-selector>`),
-          timeout(5000, 'Component fixture timed out'),
-        ]);
-        await el.updateComplete;
-
-        removeEventListenerSpy = sinon.spy(document, 'removeEventListener');
-        el.remove();
-      });
-
-      it('should remove the click event listener from document', () => {
-        expect(removeEventListenerSpy).to.have.been.calledWith('click', el['_handleGlobalClick']);
-      });
-    });
-  });
 });
