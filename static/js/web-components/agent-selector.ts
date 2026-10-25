@@ -359,6 +359,7 @@ export class AgentSelector extends LitElement {
  override render() {
   const current = this._currentAgent;
   const available = current?.available ?? false;
+  const switchingTitle = `Effective agent: ${this.effectiveAgentDisplayName || this.effectiveAgentId}`;
 
   return html`
       <div class="selector-wrapper">
@@ -376,7 +377,7 @@ export class AgentSelector extends LitElement {
             <i class="fa-solid fa-chevron-down" style="font-size:0.65rem"></i>
           </button>
           ${this._isSwitching
-    ? html`<span class="switching-hint" title=${`Effective agent: ${this.effectiveAgentDisplayName || this.effectiveAgentId}`}>
+    ? html`<span class="switching-hint" title=${switchingTitle}>
                 switching…
               </span>`
     : nothing}
