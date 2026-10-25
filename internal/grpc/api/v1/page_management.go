@@ -1038,19 +1038,24 @@ func (s *Server) UpdateWholePage(ctx context.Context, req *apiv1.UpdateWholePage
 		}
 		return nil, status.Errorf(codes.Internal, "failed to write page: %v", modifyErr)
 	}
-
-	// Hash what the funnel actually wrote (post artifact restamp), so the
-	// returned OCC handle matches disk.
 	if funnelFM != nil {
 		fm = funnelFM
 	}
+	resp, respErr := updateWholePageResponse(fm, md)
+	if respErr != nil {
+		return nil, respErr
+	}
+	return resp, nil
+}
 
-	// page_byte_size mirrors the history service's ByteSize unit: the whole
-	// page text (frontmatter + markdown) as combined on disk, so agents can
-	// compare a write's outcome directly against PageHistoryService entries.
-	wholeText, wholeTextErr := wikipage.CombineFrontMatterAndMarkdown(fm, md)
-	if wholeTextErr != nil {
-		return nil, status.Errorf(codes.Internal, "failed to compute page byte size: %v", wholeTextErr)
+// updateWholePageResponse builds the success response for UpdateWholePage.
+// page_byte_size mirrors the history service's ByteSize unit: the whole page
+// text (frontmatter + markdown) as combined on disk, so agents can compare a
+// write's outcome directly against PageHistoryService entries.
+func updateWholePageResponse(fm wikipage.FrontMatter, md wikipage.Markdown) (*apiv1.UpdateWholePageResponse, error) {
+	wholeText, err := wikipage.CombineFrontMatterAndMarkdown(fm, md)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to compute page byte size: %v", err)
 	}
 	return &apiv1.UpdateWholePageResponse{
 		Success:      true,
