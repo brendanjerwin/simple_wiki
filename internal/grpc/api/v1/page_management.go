@@ -783,10 +783,17 @@ func (s *Server) UpdatePageContent(ctx context.Context, req *apiv1.UpdatePageCon
 		capturedFM = funnelFM
 	}
 
+	// page_byte_size mirrors the history service's ByteSize unit: the whole
+	// page text (frontmatter + markdown) as combined on disk, so agents can
+	// compare a write's outcome directly against PageHistoryService entries.
+	wholeText, wholeTextErr := wikipage.CombineFrontMatterAndMarkdown(capturedFM, storedMarkdown)
+	if wholeTextErr != nil {
+		return nil, status.Errorf(codes.Internal, "failed to compute page byte size: %v", wholeTextErr)
+	}
 	return &apiv1.UpdatePageContentResponse{
 		Success:      true,
 		VersionHash:  computePageHash(capturedFM, storedMarkdown),
-		PageByteSize: int64(len(storedMarkdown)),
+		PageByteSize: int64(len(wholeText)),
 	}, nil
 }
 
@@ -1038,10 +1045,17 @@ func (s *Server) UpdateWholePage(ctx context.Context, req *apiv1.UpdateWholePage
 		fm = funnelFM
 	}
 
+	// page_byte_size mirrors the history service's ByteSize unit: the whole
+	// page text (frontmatter + markdown) as combined on disk, so agents can
+	// compare a write's outcome directly against PageHistoryService entries.
+	wholeText, wholeTextErr := wikipage.CombineFrontMatterAndMarkdown(fm, md)
+	if wholeTextErr != nil {
+		return nil, status.Errorf(codes.Internal, "failed to compute page byte size: %v", wholeTextErr)
+	}
 	return &apiv1.UpdateWholePageResponse{
 		Success:      true,
 		VersionHash:  computePageHash(fm, md),
-		PageByteSize: int64(len(md)),
+		PageByteSize: int64(len(wholeText)),
 	}, nil
 }
 

@@ -2516,8 +2516,14 @@ var _ = Describe("Server", func() {
 				Expect(mockPageReaderMutator.WrittenMarkdown).To(Equal(wikipage.Markdown("# Truncated")))
 			})
 
-			It("should report the resulting page byte size", func() {
-				Expect(resp.PageByteSize).To(BeEquivalentTo(len("# Truncated")))
+			It("should report the resulting whole page byte size (fm + markdown)", func() {
+				// page_byte_size uses the same unit as the history ByteSize: the
+				// whole page text (combined frontmatter + markdown).
+				wholeText, combineErr := wikipage.CombineFrontMatterAndMarkdown(
+					wikipage.FrontMatter{"identifier": "test-page"}, "# Truncated",
+				)
+				Expect(combineErr).NotTo(HaveOccurred())
+				Expect(resp.PageByteSize).To(BeEquivalentTo(len(wholeText)))
 			})
 		})
 
@@ -2621,8 +2627,12 @@ var _ = Describe("Server", func() {
 				Expect(mockPageReaderMutator.WrittenMarkdown).To(ContainSubstring("# Truncated"))
 			})
 
-			It("should report the resulting page byte size", func() {
-				Expect(resp.PageByteSize).To(BeEquivalentTo(len(req.NewWholeMarkdown)))
+			It("should report the resulting whole page byte size (fm + markdown)", func() {
+				wholeText, combineErr := wikipage.CombineFrontMatterAndMarkdown(
+					wikipage.FrontMatter{"identifier": "test-page"}, "# Truncated",
+				)
+				Expect(combineErr).NotTo(HaveOccurred())
+				Expect(resp.PageByteSize).To(BeEquivalentTo(len(wholeText)))
 			})
 		})
 

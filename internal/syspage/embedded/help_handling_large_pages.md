@@ -42,7 +42,7 @@ Both full-content write paths carry a server-side **shrink circuit breaker** (is
 
 **Overriding**: if the drastic shrink is intended, re-send with `allow_shrink=true`. The editor surfaces the breaker as a confirmation dialog with the same choice. The breaker runs atomically with the write, so it always evaluates against the true current content — even if another writer changed the page since your read.
 
-**Self-check**: successful writes return `page_byte_size` — compare it to what you intended to write. If it is far smaller than expected, your payload was clipped; restore via `api_v1_PageHistoryService_RestorePageVersion` before continuing.
+**Self-check**: successful writes return `page_byte_size` (whole page: frontmatter + markdown, the same unit PageHistoryService reports) — compare it to what you intended to write. If it is far smaller than expected, your payload was clipped; restore via `api_v1_PageHistoryService_RestorePageVersion` before continuing.
 
 **Concurrent-edit protection**: pass the `version_hash` from a prior read as `expected_version_hash`; the server returns `ABORTED` on any full-page change made since that read (the hash covers the whole page — frontmatter + markdown — even when you only read a section). Successful responses echo the new `version_hash` so successive edits can chain safely.
 

@@ -124,7 +124,13 @@ override flag and size attestation in responses.
 - `devbox run go:test` (full)
 - `devbox run fe:test -- <touched tests>`; `devbox run fe:lint`; `devbox run fe:typecheck`
 - `devbox run lint:everything`
-- Smoke: `devbox services` + throwaway script hitting the gRPC surface: create 2KB page,
+- [Substituted during execution] The live smoke did NOT run: `devbox services` could not bind a
+  reachable server in this sandbox (repeated starts returned 000 on :8050). In its place, scoped
+  e2e runs exercise the breaker over the real Connect transport. This covers `UpdatePageContent`
+  fully (both modes); the `UpdateWholePage` live path was NOT exercised against a running process
+  end-to-end — its breaker is covered by Go handler tests only, and the wire-level e2e
+  `page_byte_size` assertion covers the UpdatePageContent path, not UpdateWholePage.
+- Original step (not executed): throwaway script hitting the gRPC surface: create 2KB page,
   attempted 100-byte `UpdateWholePage` → expect FailedPrecondition; with
   `allow_shrink` → success; assert `page_byte_size` in responses.
 
