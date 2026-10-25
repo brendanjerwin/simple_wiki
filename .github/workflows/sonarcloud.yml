@@ -38,13 +38,15 @@ jobs:
           CI_COVERAGE: "true"
 
       - name: SonarCloud Scan
-        # Dependabot-actor runs never see the Actions SONAR_TOKEN (Dependabot
+        # Dependabot-PR runs never see the Actions SONAR_TOKEN (Dependabot
         # secret store is empty), so the analysis would fail with "Set the
         # SONAR_TOKEN env variable". Skip the analysis but still report the
         # check so the required status goes green and dependabot PRs can
         # merge (issue #1189). NOTE: the secrets context is unavailable in
-        # `if`, so we guard on actor rather than token presence.
-        if: github.actor != 'dependabot[bot]'
+        # `if`, so we guard on the PR author rather than token presence.
+        # Push events have no pull_request payload, so main pushes keep
+        # full analysis.
+        if: github.event.pull_request.user.login != 'dependabot[bot]'
         uses: SonarSource/sonarcloud-github-action@383f7e52eae3ab0510c3cb0e7d9d150bbaeab838 # v3
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
