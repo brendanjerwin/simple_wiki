@@ -96,8 +96,16 @@ func (noOpChatBufferManager) AddUserMessage(string, string, string) (string, err
 	return "", nil
 }
 
-func (noOpChatBufferManager) AddAssistantMessage(string, string, string) (string, error) {
+func (noOpChatBufferManager) AddAssistantMessage(string, string, string, string, string) (string, error) {
 	return "", nil
+}
+
+func (noOpChatBufferManager) NotifyAgentChanged(string, string, string, string) {}
+
+func (noOpChatBufferManager) NotifyAgentAttached(string, string, string) {}
+
+func (noOpChatBufferManager) EffectiveAgent(string) (agentID string, displayName string) {
+	return "", ""
 }
 
 func (noOpChatBufferManager) EditMessage(string, string, bool) error {

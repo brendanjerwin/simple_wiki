@@ -109,7 +109,7 @@ export class PageAutoRefresh extends LitElement {
 
         // Stream dropped unexpectedly — reconnect with exponential backoff
         this._dispatchWatchError(err);
-        await this._waitForReconnect(signal, reconnectDelayMs);
+        await this._waitForReconnect(signal, reconnectDelayMs); // NOSONAR — intentional sequential back-off delay between stream reconnect attempts
         reconnectDelayMs = Math.min(reconnectDelayMs * 2, MAX_RECONNECT_DELAY_MS);
       }
     }

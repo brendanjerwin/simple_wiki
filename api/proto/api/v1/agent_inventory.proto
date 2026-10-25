@@ -1,0 +1,164 @@
+syntax = "proto3";
+
+package api.v1;
+
+import "api/v1/mcp_options.proto";
+
+option go_package = "github.com/brendanjerwin/simple_wiki/gen/go/api/v1;apiv1";
+
+// AgentInventoryService maintains the inventory of every agent page chat can
+// route to, and the per-page agent binding.
+//
+// Inventory comes from two sources (issue #1276, design comment 2026-10-24):
+//   - The pool daemon registers its local ACP agent descriptor(s) at startup
+//     and on every reconnect (RegisterPoolAgent); server-side availability for
+//     ACP_LOCAL falls out of pool connectivity.
+//   - The wiki server loads AG-UI remote endpoints from its own static
+//     configuration; they advertise as unavailable until #1275 adds the
+//     AG-UI pool backend.
+//
+// The per-page binding is a property of the page itself (recorded decision):
+// stored in the agent.chat_agent frontmatter subtree, written only through
+// this service (reserved agent.* namespace, ADR-0009). Any participant's
+// switch applies to everyone on the page and survives session close/reopen
+// and pool restarts until someone switches again.
+service AgentInventoryService {
+  // ListAgents returns all registered agents with live availability.
+  rpc ListAgents(ListAgentsRequest) returns (ListAgentsResponse) {
+    option (api.v1.read_only) = true;
+    option (api.v1.description) =
+        "List all agents registered in the inventory, with protocol and "
+        "availability status. Used by the agent selector UI to populate the "
+        "available-agents list.";
+  }
+
+  // GetPageAgent returns the agent currently bound to a page, or the default
+  // agent if no binding has been set yet.
+  rpc GetPageAgent(GetPageAgentRequest) returns (GetPageAgentResponse) {
+    option (api.v1.read_only) = true;
+    option (api.v1.description) =
+        "Return the agent currently bound to a page (the DESIRED agent). "
+        "Falls back to the default agent if no per-page binding exists. "
+        "Compare with ChatService.GetChatStatus for the effective agent the "
+        "pool actually has attached.";
+  }
+
+  // SetPageAgent binds an agent to a page. The binding is written into the
+  // agent.chat_agent frontmatter subtree (with attribution), survives pool
+  // restarts, applies to all participants, and emits a ChatAgentChanged chat
+  // event. Bindings to currently-unavailable agents are accepted (desired
+  // state); only unknown agent IDs are rejected.
+  rpc SetPageAgent(SetPageAgentRequest) returns (SetPageAgentResponse) {
+    option (api.v1.description) =
+        "Bind an agent to a page. Persistent to the page; all participants "
+        "route to the new agent. Accepts agents that are currently "
+        "unavailable. Switching re-spawns the agent on the next message; the "
+        "page transcript is handed off to the new agent as context.";
+  }
+
+  // RegisterPoolAgent registers a pool daemon's local agent descriptor.
+  // Called by the pool at startup and on every reconnect; idempotent upsert.
+  rpc RegisterPoolAgent(RegisterPoolAgentRequest) returns (RegisterPoolAgentResponse) {
+    option (api.v1.exclude_from_mcp) = true; // pool-daemon-only
+  }
+}
+
+// AgentProtocol identifies the transport protocol used to reach an agent.
+enum AgentProtocol {
+  AGENT_PROTOCOL_UNSPECIFIED = 0;
+  // ACP_LOCAL is a local ACP agent spawned and managed by the pool daemon.
+  ACP_LOCAL = 1;
+  // AG_UI_REMOTE is a remote agent reachable via the AG-UI protocol.
+  // Reserved: not routed until #1275 adds the AG-UI pool backend.
+  AG_UI_REMOTE = 2;
+}
+
+// AgentInfo describes one entry in the available-agents inventory.
+message AgentInfo {
+  // Stable identifier used for the page binding. Never changes for a given
+  // agent. Bindings to IDs removed from the inventory surface as
+  // unavailable rather than erroring.
+  string id = 1;
+  // Human-readable name shown in the agent selector.
+  string display_name = 2;
+  // Transport protocol.
+  AgentProtocol protocol = 3;
+  // Short description of the agent's capabilities, shown in the selector.
+  string description = 4;
+  // Whether the agent is reachable right now (pool registered/connected for
+  // ACP_LOCAL; endpoint alive for AG_UI_REMOTE once routing exists).
+  bool available = 5;
+  // Route reference: for ACP_LOCAL, the pool's agent identity; for
+  // AG_UI_REMOTE, the configured endpoint. Not needed by the UI; surfaced
+  // for diagnosability.
+  string route = 6;
+}
+
+// ListAgentsRequest is the request for ListAgents.
+message ListAgentsRequest {}
+
+// ListAgentsResponse is the response for ListAgents.
+message ListAgentsResponse {
+  repeated AgentInfo agents = 1;
+}
+
+// GetPageAgentRequest is the request for GetPageAgent.
+message GetPageAgentRequest {
+  // Page to look up the agent binding for.
+  string page = 1;
+}
+
+// GetPageAgentResponse is the response for GetPageAgent.
+message GetPageAgentResponse {
+  // The agent currently bound to the page (the default if not explicitly
+  // set).
+  AgentInfo agent = 1;
+  // True when the binding came from a persisted frontmatter value, false
+  // when falling back to the default (or when the bound ID no longer exists).
+  bool explicitly_set = 2;
+  // Server-stamped RFC3339 updated_at of the agent.chat_agent subtree as
+  // read. Returned so clients can pass it back as the OCC guard
+  // (expected_updated_at) on SetPageAgent.
+  string updated_at = 3;
+}
+
+// SetPageAgentRequest is the request for SetPageAgent.
+message SetPageAgentRequest {
+  // Page to update the agent binding for.
+  string page = 1;
+  // ID of the agent to bind. Must match an entry returned by ListAgents.
+  string agent_id = 2;
+  // Optional OCC guard: RFC3339 updated_at of the agent.chat_agent subtree
+  // as last read. Mismatch returns FailedPrecondition.
+  string expected_updated_at = 3;
+}
+
+// SetPageAgentResponse is the response for SetPageAgent.
+message SetPageAgentResponse {
+  // The agent now bound to the page.
+  AgentInfo agent = 1;
+  // Server-stamped RFC3339 updated_at of the new binding.
+  string updated_at = 2;
+}
+
+// RegisterPoolAgentRequest is the request for RegisterPoolAgent. Sent by the
+// pool daemon so the server's registry knows which local agents exist.
+message RegisterPoolAgentRequest {
+  // Stable identifier for the agent (e.g. "local-acp").
+  string id = 1;
+  // Human-readable display name.
+  string display_name = 2;
+  // Short description.
+  string description = 3;
+  // Protocol; must be ACP_LOCAL.
+  AgentProtocol protocol = 4;
+  // Route reference (e.g. the pool's agent binary path or persona name).
+  string route = 5;
+  // Instance identity of the registering pool connection; a fresh
+  // registration replaces the descriptor registered under the same
+  // connection identity.
+  string pool_instance_id = 6;
+}
+
+// RegisterPoolAgentResponse is the response for RegisterPoolAgent.
+message RegisterPoolAgentResponse {}

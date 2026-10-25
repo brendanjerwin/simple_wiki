@@ -22,9 +22,9 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-// Clock returns the current time. Production uses SystemClock; tests inject a
+// Clocker returns the current time. Production uses SystemClock; tests inject a
 // deterministic clock.
-type Clock interface {
+type Clocker interface {
 	Now() time.Time
 }
 
@@ -61,14 +61,14 @@ var (
 // Mutator is the single funnel for map mutations.
 type Mutator struct {
 	pages wikipage.PageReaderMutator
-	clock Clock
+	clock Clocker
 	ulids ulid.Generator
 
 	pageMu sync.Map
 }
 
 // New constructs a map mutator.
-func New(pages wikipage.PageReaderMutator, clock Clock, ulids ulid.Generator) *Mutator {
+func New(pages wikipage.PageReaderMutator, clock Clocker, ulids ulid.Generator) *Mutator {
 	return &Mutator{pages: pages, clock: clock, ulids: ulids}
 }
 

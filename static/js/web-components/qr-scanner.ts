@@ -97,12 +97,13 @@ class QrScannerCameraProvider implements CameraProvider {
     await this.scanner.start();
   }
 
-  async stop(): Promise<void> {
+  stop(): Promise<void> {
     if (this.scanner) {
       this.scanner.stop();
       this.scanner.destroy();
       this.scanner = null;
     }
+    return Promise.resolve();
   }
 
   isScanning(): boolean {

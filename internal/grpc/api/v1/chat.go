@@ -137,16 +137,7 @@ func (s *Server) SendMessage(ctx context.Context, req *apiv1.SendChatMessageRequ
 	}
 
 	// Get sender name from Tailscale identity
-	identity := tailscale.IdentityFromContext(ctx)
-	senderName := ""
-	if identity != nil {
-		// Use LoginName() for stable identity, fallback to DisplayName()
-		if name := identity.LoginName(); name != "" {
-			senderName = name
-		} else if name := identity.DisplayName(); name != "" {
-			senderName = name
-		}
-	}
+	senderName := s.identityName(ctx)
 
 	// Add message to buffer and notify subscribers
 	messageID, err := s.chatBufferManager.AddUserMessage(req.Page, req.Content, senderName)
@@ -213,8 +204,26 @@ func (s *Server) SubscribeChat(req *apiv1.SubscribeChatRequest, stream apiv1.Cha
 }
 
 // replayExistingMessages sends all buffered messages to the stream as NewMessage events.
+// Synthetic agent_changed messages replay as ChatAgentChanged events instead,
+// so late joiners see the binding history as switch events.
 func replayExistingMessages(messages []*chatbuffer.Message, stream apiv1.ChatService_SubscribeChatServer) error {
 	for _, msg := range messages {
+		if msg.Sender == chatbuffer.SenderAgentChanged {
+			event := &apiv1.ChatEvent{
+				Event: &apiv1.ChatEvent_AgentChanged{
+					AgentChanged: &apiv1.ChatAgentChanged{
+						Page:             msg.Page,
+						AgentId:          msg.AgentID,
+						AgentDisplayName: msg.AgentDisplayName,
+						SwitchedBy:       msg.SenderName,
+					},
+				},
+			}
+			if err := stream.Send(event); err != nil {
+				return err
+			}
+			continue
+		}
 		event := &apiv1.ChatEvent{
 			Event: &apiv1.ChatEvent_NewMessage{
 				NewMessage: bufferMessageToProto(msg),
@@ -254,7 +263,7 @@ func (s *Server) SendChatReply(_ context.Context, req *apiv1.SendChatReplyReques
 		return nil, status.Error(codes.InvalidArgument, "content is required")
 	}
 
-	messageID, err := s.chatBufferManager.AddAssistantMessage(req.Page, req.Content, req.ReplyToId)
+	messageID, err := s.chatBufferManager.AddAssistantMessage(req.Page, req.Content, req.ReplyToId, req.AgentId, req.AgentDisplayName)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to add reply: %v", err)
 	}
@@ -361,9 +370,42 @@ func bufferEventToProto(event chatbuffer.Event) *apiv1.ChatEvent {
 		return clearedEventToProto(event.Cleared)
 	case chatbuffer.EventTypeBackgroundTask:
 		return backgroundTaskEventToProto(event.BackgroundTask)
+	case chatbuffer.EventTypeAgentChanged:
+		return agentChangedEventToProto(event.AgentChanged)
 	default:
 		return nil
 	}
+}
+
+// agentChangedEventToProto converts a chatbuffer agent-change event to a
+// ChatEvent carrying ChatAgentChanged.
+func agentChangedEventToProto(ac *chatbuffer.AgentChangedEvent) *apiv1.ChatEvent {
+	if ac == nil {
+		return nil
+	}
+	return &apiv1.ChatEvent{
+		Event: &apiv1.ChatEvent_AgentChanged{
+			AgentChanged: &apiv1.ChatAgentChanged{
+				Page:             ac.Page,
+				AgentId:          ac.AgentID,
+				AgentDisplayName: ac.AgentDisplayName,
+				SwitchedBy:       ac.SwitchedBy,
+			},
+		},
+	}
+}
+
+// identityName extracts the caller's stable identity name from auth context
+// (Tailscale LoginName, falling back to DisplayName; empty when anonymous).
+func (*Server) identityName(ctx context.Context) string {
+	identity := tailscale.IdentityFromContext(ctx)
+	if identity == nil {
+		return ""
+	}
+	if name := identity.LoginName(); name != "" {
+		return name
+	}
+	return identity.DisplayName()
 }
 
 func toolCallEventToProto(tc *chatbuffer.ToolCallEvent) *apiv1.ChatEvent {
@@ -493,6 +535,9 @@ func bufferMessageToProto(msg *chatbuffer.Message) *apiv1.ChatMessage {
 		SenderName: msg.SenderName,
 		ReplyToId:  msg.ReplyToID,
 		Reactions:  reactions,
+
+		AgentId:          msg.AgentID,
+		AgentDisplayName: msg.AgentDisplayName,
 	}
 }
 
@@ -508,6 +553,9 @@ func (s *Server) GetChatStatus(_ context.Context, req *apiv1.GetChatStatusReques
 	if req.Page != "" {
 		resp.Connected = s.chatBufferManager.HasPageChannelSubscriber(req.Page)
 		resp.Starting = resp.PoolConnected && s.chatBufferManager.IsInstanceRequested(req.Page)
+		effectiveID, effectiveName := s.chatBufferManager.EffectiveAgent(req.Page)
+		resp.EffectiveAgentId = effectiveID
+		resp.EffectiveAgentDisplayName = effectiveName
 	}
 
 	return resp, nil
@@ -557,11 +605,46 @@ func (s *Server) SubscribePageChatMessages(req *apiv1.SubscribePageChatMessagesR
 	}
 }
 
+// GetChatMessages implements the GetChatMessages RPC.
+// Returns recent messages from a page's chat buffer, oldest first, skipping
+// synthetic agent_changed records. Called by the pool daemon at
+// instance-spawn for transcript hand-off to a newly-bound agent.
+func (s *Server) GetChatMessages(_ context.Context, req *apiv1.GetChatMessagesRequest) (*apiv1.GetChatMessagesResponse, error) {
+	if req.Page == "" {
+		return nil, status.Error(codes.InvalidArgument, errPageRequired)
+	}
+
+	all := s.chatBufferManager.GetMessages(req.Page)
+	// Filter synthetics; they are transcript events for humans, not agent context.
+	realMessages := make([]*chatbuffer.Message, 0, len(all))
+	for _, msg := range all {
+		if msg.Sender == chatbuffer.SenderAgentChanged {
+			continue
+		}
+		realMessages = append(realMessages, msg)
+	}
+
+	if req.Limit > 0 && len(realMessages) > int(req.Limit) {
+		realMessages = realMessages[len(realMessages)-int(req.Limit):]
+	}
+
+	out := make([]*apiv1.ChatMessage, len(realMessages))
+	for i, msg := range realMessages {
+		out[i] = bufferMessageToProto(msg)
+	}
+	return &apiv1.GetChatMessagesResponse{Messages: out}, nil
+}
+
 // SubscribeInstanceRequests implements the SubscribeInstanceRequests RPC.
 // Streams page names that need a Claude instance spawned. Used by the pool daemon.
+// When the stream ends in any way, the pool-registered agents are marked
+// unavailable in the inventory: a dead pool connection must grey the ACP
+// entries (registration-driven availability, issue #1276 design), exactly as
+// the pool re-registers on every reconnect.
 func (s *Server) SubscribeInstanceRequests(_ *apiv1.SubscribeInstanceRequestsRequest, stream apiv1.ChatService_SubscribeInstanceRequestsServer) error {
 	pageChan, unsubscribe := s.chatBufferManager.SubscribeToInstanceRequests()
 	defer unsubscribe()
+	defer s.agentInventoryPoolDisconnected()
 
 	for {
 		select {
@@ -577,6 +660,15 @@ func (s *Server) SubscribeInstanceRequests(_ *apiv1.SubscribeInstanceRequestsReq
 		case <-stream.Context().Done():
 			return stream.Context().Err()
 		}
+	}
+}
+
+// agentInventoryPoolDisconnected reports the pool disconnection to the
+// agent inventory when one is wired. Best-effort: an unwired inventory
+// (tests, minimal builds) contributes no availability state.
+func (s *Server) agentInventoryPoolDisconnected() {
+	if reg, ok := s.agentInventory.(interface{ PoolDisconnected() }); ok {
+		reg.PoolDisconnected()
 	}
 }
 

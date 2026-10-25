@@ -303,6 +303,14 @@ func (*noopChatServer) GetChatStatus(_ context.Context, _ *connect.Request[apiv1
 	return nil, errChatNoop
 }
 
+func (*noopChatServer) GetChatMessages(_ context.Context, _ *connect.Request[apiv1.GetChatMessagesRequest]) (*connect.Response[apiv1.GetChatMessagesResponse], error) {
+	return nil, errChatNoop
+}
+
+func (*noopChatServer) NotifyAgentAttached(_ context.Context, _ *connect.Request[apiv1.NotifyAgentAttachedRequest]) (*connect.Response[apiv1.NotifyAgentAttachedResponse], error) {
+	return nil, errChatNoop
+}
+
 func (*noopChatServer) ReactToMessage(_ context.Context, _ *connect.Request[apiv1.ReactToMessageRequest]) (*connect.Response[apiv1.ReactToMessageResponse], error) {
 	return nil, errChatNoop
 }

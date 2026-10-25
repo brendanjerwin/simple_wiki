@@ -58,6 +58,27 @@ export class ChatMessageBubble extends LitElement {
         margin-bottom: 2px;
       }
 
+      .agent-label {
+        font-size: 0.7rem;
+        color: var(--color-text-muted);
+        margin-top: 2px;
+      }
+
+      /* Synthetic system event rows (e.g. "Brendan switched the agent to X") */
+      .bubble.system-event {
+        background: transparent;
+        border: none;
+        max-width: 100%;
+        text-align: center;
+        padding: 2px 12px;
+      }
+
+      .bubble.system-event .content {
+        font-size: 0.75rem;
+        font-style: italic;
+        color: var(--color-text-muted);
+      }
+
       .content {
         font-size: 0.875rem;
         line-height: 1.4;
@@ -322,6 +343,17 @@ export class ChatMessageBubble extends LitElement {
  @property({ type: String, attribute: 'sender-name' })
  declare senderName: string;
 
+ /**
+  * Display name of the agent that produced this message. Rendered as a small
+  * muted label next to the sender name; empty on legacy messages.
+  */
+ @property({ type: String, attribute: 'agent-display-name' })
+ declare agentDisplayName: string;
+
+ /** True for synthetic system event rows (e.g. agent switch notices). */
+ @property({ type: Boolean })
+ declare systemEvent: boolean;
+
  @property({ type: String, attribute: 'rendered-html' })
  declare renderedHtml: string;
 
@@ -355,6 +387,8 @@ export class ChatMessageBubble extends LitElement {
   this.messageId = '';
   this.sender = Sender.SENDER_UNSPECIFIED;
   this.senderName = '';
+  this.agentDisplayName = '';
+  this.systemEvent = false;
   this.renderedHtml = '';
   this.content = '';
   this.edited = false;
@@ -413,7 +447,12 @@ export class ChatMessageBubble extends LitElement {
 
  override render() {
   const isUser = this.sender === Sender.USER;
-  const bubbleClass = isUser ? 'user' : 'assistant';
+  let bubbleClass: string;
+  if (this.systemEvent) {
+    bubbleClass = 'system-event';
+  } else {
+    bubbleClass = isUser ? 'user' : 'assistant';
+  }
 
   return html`
       ${this.replyToId
@@ -436,6 +475,7 @@ export class ChatMessageBubble extends LitElement {
     ? unsafeHTML(this.renderedHtml)
     : html`${this.content}`}
         </div>
+        ${this._renderAgentLabel()}
         ${this._renderToolCalls()}
         ${this._renderBackgroundTask()}
         ${this._renderPlan()}
@@ -458,6 +498,13 @@ export class ChatMessageBubble extends LitElement {
           </div>`
     : nothing}
     `;
+ }
+
+ private _renderAgentLabel() {
+  // Legacy messages carry no agent fields; render nothing rather than a
+  // misleading label.
+  if (!this.agentDisplayName) return nothing;
+  return html`<div class="agent-label">via ${this.agentDisplayName}</div>`;
  }
 
  private _toolCallStatusIcon(status: string): string {

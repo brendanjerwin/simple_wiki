@@ -34,13 +34,13 @@ import (
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 )
 
-// Clock returns the current time. Production uses time.Now via SystemClock;
+// Clocker returns the current time. Production uses time.Now via SystemClock;
 // tests inject a deterministic clock for predictable timestamps.
-type Clock interface {
+type Clocker interface {
 	Now() time.Time
 }
 
-// SystemClock returns time.Now wrapped in a Clock.
+// SystemClock returns time.Now wrapped in a Clocker.
 type SystemClock struct{}
 
 // Now returns the current wall-clock time.
@@ -111,7 +111,7 @@ type PausedChecker interface {
 // process via New; share across handlers.
 type Mutator struct {
 	pages wikipage.PageReaderMutator
-	clock Clock
+	clock Clocker
 	ulids ulid.Generator
 
 	// pageMu is a sync.Map keyed by page identifier whose values are
@@ -202,7 +202,7 @@ func (m *Mutator) notify(page, listName string, identity tailscale.IdentityValue
 // clock: SystemClock in production; a fake in tests.
 // ulids: ulid.NewSystemGenerator() in production; a SequenceGenerator/
 // FixedGenerator in tests.
-func New(pages wikipage.PageReaderMutator, clock Clock, ulids ulid.Generator) *Mutator {
+func New(pages wikipage.PageReaderMutator, clock Clocker, ulids ulid.Generator) *Mutator {
 	return &Mutator{
 		pages: pages,
 		clock: clock,

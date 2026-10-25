@@ -19,8 +19,10 @@ done
 
 PROJECT_ROOT="$(pwd)"
 
-# Navigate to the frontend directory
-export CHROMIUM_BIN=$(which chromium)
+# Respect a caller-provided browser binary. Default to a working one — the
+# devbox/Nix chromium crashes on GLIBC_2.43/2.44 on this host (#1282).
+CHROMIUM_BIN="${CHROMIUM_BIN:-$(PROJECT_ROOT="$PROJECT_ROOT" "$PROJECT_ROOT/scripts/resolve_chromium.sh")}"
+export CHROMIUM_BIN
 cd static/js || exit 1
 
 echo "Installing dependencies..." | tee -a "$LOG_FILE"

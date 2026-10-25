@@ -497,8 +497,15 @@ var _ = Describe("AgentChatContextStore", func() {
 			})
 		})
 
-		Describe("when the only matching entry already has a summary", func() {
-			var err error
+		// Issue #1270: a second (close-out) append within the same run should
+		// update the current run's entry even when it already carries an early
+		// receipt summary. The entry is recent (within summaryRecencyWindow), so
+		// upsert semantics apply.
+		Describe("when a recent matching entry already has a summary (upsert)", func() {
+			var (
+				entry *apiv1.BackgroundActivityEntry
+				err   error
+			)
 
 			BeforeEach(func() {
 				Expect(store.AppendBackgroundActivityAutomatic("p", &apiv1.BackgroundActivityEntry{
@@ -507,17 +514,122 @@ var _ = Describe("AgentChatContextStore", func() {
 					Status:     apiv1.ScheduleStatus_SCHEDULE_STATUS_OK,
 					Summary:    "already done",
 				})).To(Succeed())
-				_, err = store.AppendBackgroundActivitySummary("p", "alpha", "late summary")
+
+				entry, err = store.AppendBackgroundActivitySummary("p", "alpha", "close-out summary")
 			})
 
-			It("should return a SummaryTargetNotFoundError", func() {
+			It("should not return an error (upsert succeeds)", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should update the summary with the close-out text", func() {
+				ctx, _ := store.Read("p")
+				Expect(ctx.GetBackgroundActivity()[0].GetSummary()).To(Equal("close-out summary"))
+			})
+
+			It("should return the updated entry", func() {
+				Expect(entry.GetScheduleId()).To(Equal("alpha"))
+				Expect(entry.GetSummary()).To(Equal("close-out summary"))
+			})
+		})
+
+		// Issue #1270: a second append within the same run must land on the current
+		// run's own entry, not on an unrelated stale historical entry.
+		Describe("when a second AppendBackgroundActivitySummary is called for the same run (issue #1270)", func() {
+			var (
+				entry *apiv1.BackgroundActivityEntry
+				err   error
+			)
+
+			BeforeEach(func() {
+				// Step 1: schedule fires → RUNNING entry seeded.
+				Expect(store.AppendBackgroundActivityAutomatic("p", &apiv1.BackgroundActivityEntry{
+					Timestamp:  timestamppb.New(time.Now()),
+					ScheduleId: "overseer",
+					Status:     apiv1.ScheduleStatus_SCHEDULE_STATUS_RUNNING,
+				})).To(Succeed())
+
+				// Step 2: agent attaches an early receipt.
+				_, firstErr := store.AppendBackgroundActivitySummary("p", "overseer", "early receipt")
+				Expect(firstErr).NotTo(HaveOccurred())
+
+				// Step 3: scheduler times out the entry before the agent finishes.
+				_, completeErr := store.CompleteBackgroundActivity("p", "overseer", apiv1.ScheduleStatus_SCHEDULE_STATUS_TIMEOUT)
+				Expect(completeErr).NotTo(HaveOccurred())
+
+				// Step 4: agent appends a close-out (second) summary.
+				entry, err = store.AppendBackgroundActivitySummary("p", "overseer", "final close-out")
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should update the current run's entry, not create a new one", func() {
+				ctx, _ := store.Read("p")
+				Expect(ctx.GetBackgroundActivity()).To(HaveLen(1))
+			})
+
+			It("should replace the summary with the close-out text", func() {
+				ctx, _ := store.Read("p")
+				Expect(ctx.GetBackgroundActivity()[0].GetSummary()).To(Equal("final close-out"))
+			})
+
+			It("should return the updated entry", func() {
+				Expect(entry.GetScheduleId()).To(Equal("overseer"))
+				Expect(entry.GetSummary()).To(Equal("final close-out"))
+			})
+		})
+
+		// Issue #1270: entries older than the recency window must never be written to,
+		// even if they have an empty summary matching the schedule_id.
+		Describe("when the only matching entry is stale (older than recency window) with empty summary", func() {
+			var err error
+
+			BeforeEach(func() {
+				Expect(store.AppendBackgroundActivityAutomatic("p", &apiv1.BackgroundActivityEntry{
+					Timestamp:  timestamppb.New(time.Now().Add(-90 * time.Minute)),
+					ScheduleId: "overseer",
+					Status:     apiv1.ScheduleStatus_SCHEDULE_STATUS_WARN,
+				})).To(Succeed())
+
+				_, err = store.AppendBackgroundActivitySummary("p", "overseer", "late close-out")
+			})
+
+			It("should return a SummaryTargetNotFoundError (never write to stale entries)", func() {
 				var typed *server.SummaryTargetNotFoundError
 				Expect(errors.As(err, &typed)).To(BeTrue())
 			})
 
-			It("should leave the existing summary unchanged", func() {
+			It("should leave the stale entry's summary unchanged (empty)", func() {
 				ctx, _ := store.Read("p")
-				Expect(ctx.GetBackgroundActivity()[0].GetSummary()).To(Equal("already done"))
+				Expect(ctx.GetBackgroundActivity()[0].GetSummary()).To(Equal(""))
+			})
+		})
+
+		// Issue #1270: a stale entry with an existing summary must also be protected.
+		Describe("when the only matching entry is stale and already has a summary", func() {
+			var err error
+
+			BeforeEach(func() {
+				Expect(store.AppendBackgroundActivityAutomatic("p", &apiv1.BackgroundActivityEntry{
+					Timestamp:  timestamppb.New(time.Now().Add(-90 * time.Minute)),
+					ScheduleId: "overseer",
+					Status:     apiv1.ScheduleStatus_SCHEDULE_STATUS_OK,
+					Summary:    "already written",
+				})).To(Succeed())
+
+				_, err = store.AppendBackgroundActivitySummary("p", "overseer", "late close-out")
+			})
+
+			It("should return a SummaryTargetNotFoundError (never overwrite stale entries)", func() {
+				var typed *server.SummaryTargetNotFoundError
+				Expect(errors.As(err, &typed)).To(BeTrue())
+			})
+
+			It("should leave the stale entry's existing summary unchanged", func() {
+				ctx, _ := store.Read("p")
+				Expect(ctx.GetBackgroundActivity()[0].GetSummary()).To(Equal("already written"))
 			})
 		})
 
@@ -647,6 +759,101 @@ var _ = Describe("AgentChatContextStore", func() {
 						Expect(entry.GetSummary()).To(Equal(""))
 					}
 				}
+			})
+		})
+	})
+
+	// Issue #1268: systemd one-shot tasks have no wiki-native schedule entry.
+	// A schedule_id with the "systemd:" prefix must create a new activity entry
+	// and attach the summary in a single call instead of returning NOT_FOUND.
+	Describe("AppendBackgroundActivitySummary with systemd: prefix", func() {
+		Describe("when the schedule_id starts with systemd:", func() {
+			var (
+				entry *apiv1.BackgroundActivityEntry
+				err   error
+			)
+
+			BeforeEach(func() {
+				entry, err = store.AppendBackgroundActivitySummary("p", "systemd:my-task-light-monitor", "processed 5 light readings")
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should create a new background activity entry", func() {
+				ctx, _ := store.Read("p")
+				Expect(ctx.GetBackgroundActivity()).To(HaveLen(1))
+			})
+
+			It("should set the schedule_id on the new entry", func() {
+				ctx, _ := store.Read("p")
+				Expect(ctx.GetBackgroundActivity()[0].GetScheduleId()).To(Equal("systemd:my-task-light-monitor"))
+			})
+
+			It("should attach the summary to the new entry", func() {
+				ctx, _ := store.Read("p")
+				Expect(ctx.GetBackgroundActivity()[0].GetSummary()).To(Equal("processed 5 light readings"))
+			})
+
+			It("should record status OK", func() {
+				ctx, _ := store.Read("p")
+				Expect(ctx.GetBackgroundActivity()[0].GetStatus()).To(Equal(apiv1.ScheduleStatus_SCHEDULE_STATUS_OK))
+			})
+
+			It("should return the new entry", func() {
+				Expect(entry.GetScheduleId()).To(Equal("systemd:my-task-light-monitor"))
+				Expect(entry.GetSummary()).To(Equal("processed 5 light readings"))
+			})
+
+			It("should server-stamp a timestamp on the new entry", func() {
+				Expect(entry.GetTimestamp()).NotTo(BeNil())
+				Expect(time.Since(entry.GetTimestamp().AsTime())).To(BeNumerically("<", 5*time.Second))
+			})
+		})
+
+		Describe("when systemd: prefix is used and the cap is already reached", func() {
+			BeforeEach(func() {
+				for i := 0; i < server.BackgroundActivityMax; i++ {
+					Expect(store.AppendBackgroundActivityAutomatic("p", &apiv1.BackgroundActivityEntry{
+						Timestamp:  timestamppb.New(time.Now()),
+						ScheduleId: "old",
+						Status:     apiv1.ScheduleStatus_SCHEDULE_STATUS_OK,
+						Summary:    "old run",
+					})).To(Succeed())
+				}
+				_, err := store.AppendBackgroundActivitySummary("p", "systemd:daily-deals-scan", "scanned 12 deals")
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should keep the ring buffer capped at BackgroundActivityMax", func() {
+				ctx, _ := store.Read("p")
+				Expect(ctx.GetBackgroundActivity()).To(HaveLen(server.BackgroundActivityMax))
+			})
+
+			It("should retain the new systemd entry as the last entry", func() {
+				ctx, _ := store.Read("p")
+				last := ctx.GetBackgroundActivity()[len(ctx.GetBackgroundActivity())-1]
+				Expect(last.GetScheduleId()).To(Equal("systemd:daily-deals-scan"))
+				Expect(last.GetSummary()).To(Equal("scanned 12 deals"))
+			})
+		})
+
+		Describe("when WriteFrontMatter returns an error for a systemd: entry", func() {
+			var err error
+
+			BeforeEach(func() {
+				errStore := &errorPageStore{writeErr: errors.New("disk full")}
+				bad := server.NewAgentChatContextStore(errStore)
+				_, err = bad.AppendBackgroundActivitySummary("p", "systemd:failing-task", "summary")
+			})
+
+			It("should return an error", func() {
+				Expect(err).To(HaveOccurred())
+			})
+
+			It("should wrap the error with write frontmatter context", func() {
+				Expect(err.Error()).To(ContainSubstring("write frontmatter"))
 			})
 		})
 	})

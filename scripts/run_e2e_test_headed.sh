@@ -13,7 +13,10 @@ echo "Logging to: $LOG_FILE"
 
 {
   devbox run build
-  export CHROMIUM_BIN=$(which chromium)
+  # Prefer caller-provided binary; default to a working one (#1282).
+  if [[ -z "${CHROMIUM_BIN:-}" ]]; then
+    export CHROMIUM_BIN="$(./scripts/resolve_chromium.sh)"
+  fi
   cd e2e || exit 1
   bun install || exit 1
   bun run test:headed

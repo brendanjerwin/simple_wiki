@@ -64,7 +64,7 @@ const (
 // items[] when the wiki-managed subtree is empty (un-migrated page).
 // Items missing a uid get an empty Uid string in the response — the
 // mutator's readChecklistForMutation promotes them on next mutation.
-func decodeChecklist(fm wikipage.FrontMatter, listName string, clock Clock) *apiv1.Checklist {
+func decodeChecklist(fm wikipage.FrontMatter, listName string, clock Clocker) *apiv1.Checklist {
 	out := &apiv1.Checklist{Name: listName}
 	now := clock.Now()
 

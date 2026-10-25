@@ -13,10 +13,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"time"
 
 	"github.com/brendanjerwin/simple_wiki/internal/connectors"
+	"github.com/brendanjerwin/simple_wiki/internal/connectors/frontmattercreds"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 )
 
@@ -38,69 +38,77 @@ type CredentialBundle struct {
 // Empty refresh_token = "not connected" (or Disconnect was called).
 func (b CredentialBundle) IsConfigured() bool { return b.RefreshToken != "" }
 
-// Frontmatter leaf names. Mirrors the legacy package's same-named
-// constants; kept here so the credential store doesn't depend on the
-// engine package and the legacy package can be deleted.
+// Frontmatter leaf names for the connector-specific fields.
 const (
-	credentialKeyEmail          = "email"
-	credentialKeyRefreshToken   = "refresh_token"
-	credentialKeyConnectedAt    = "connected_at"
-	credentialKeyLastVerifiedAt = "last_verified_at"
-
-	// Path to the connector subtree. Matches engine.FrontmatterBindingStore's
-	// same constants (intentionally duplicated so the engine package isn't
-	// imported here).
-	credentialKeyWiki       = "wiki"
-	credentialKeyConnectors = "connectors"
-	credentialKeyTasks      = "google_tasks"
+	credentialKeyEmail        = "email"
+	credentialKeyRefreshToken = "refresh_token"
 )
 
 // PausedReasonAuthFailed is the canonical reason string written into
 // a binding's PausedReason when invalid_grant retry-once exhausts or
-// when Disconnect is invoked. Mirrors the legacy package's constant.
-const PausedReasonAuthFailed = "auth_failed"
+// when Disconnect is invoked.
+const PausedReasonAuthFailed = frontmattercreds.PausedReasonAuthFailed
 
 // PauseAllBindingsHook is the engine-side hook ClearCredentials calls
-// when Disconnect runs: every active binding for this profile must
-// be transitioned to paused (PausedReason=auth_failed) so the
-// scheduler stops driving Sync against an empty refresh token. The
-// bootstrap-supplied closure walks BindingStore.LoadBindings and
-// calls Engine.TransitionToPaused on each.
-//
-// A nil hook means "skip pause fan-out" — used by tests; the next
-// scheduler tick still pauses bindings naturally via the adapter's
-// ErrCredentialMissing → ErrorClassAuthFailed mapping.
-type PauseAllBindingsHook func(ctx context.Context, profileID wikipage.PageIdentifier, reason string) error
+// when Disconnect runs.
+type PauseAllBindingsHook = frontmattercreds.PauseAllBindingsHook
 
 // ResumeAllBindingsHook is the engine-side hook PersistRefreshToken
-// calls after a successful reconnect. The bootstrap-supplied closure
-// walks BindingStore.LoadBindings and calls Engine.Resume on each.
-// engine.Resume is idempotent on active bindings and routes paused
-// bindings >= 7d to ForceFullResync, so a blanket walk is safe.
-//
-// A nil hook means "skip resume fan-out" — used by tests; the next
-// scheduler tick re-evaluates pause-state naturally.
-type ResumeAllBindingsHook func(ctx context.Context, profileID wikipage.PageIdentifier) error
+// calls after a successful reconnect.
+type ResumeAllBindingsHook = frontmattercreds.ResumeAllBindingsHook
 
-// FrontmatterReadWriter is the wiki-side seam this file uses. Mirrors
-// engine.FrontmatterReadWriter; declared here so the credentials code
-// doesn't import the engine package.
-type FrontmatterReadWriter interface {
-	ReadFrontMatter(identifier wikipage.PageIdentifier) (wikipage.PageIdentifier, wikipage.FrontMatter, error)
-	WriteFrontMatter(identifier wikipage.PageIdentifier, fm wikipage.FrontMatter, identity wikipage.Identity) error
-}
+// FrontmatterReadWriter is the wiki-side seam this file uses.
+type FrontmatterReadWriter = frontmattercreds.FrontmatterReadWriter
 
 // Clock is the testable wall-clock seam.
-type Clock interface {
-	Now() time.Time
-}
+type Clock = frontmattercreds.Clocker
 
 // SystemClock returns time.Now(). The production wiring uses this;
 // tests inject a deterministic stub.
-type SystemClock struct{}
+type SystemClock = frontmattercreds.SystemClock
 
-// Now returns the current wall-clock time.
-func (SystemClock) Now() time.Time { return time.Now() }
+// tasksBundleCodec implements frontmattercreds.BundleCodec[CredentialBundle].
+// It maps the Tasks-specific field (refresh_token) to/from the
+// frontmatter sub-map, while the shared Store handles timestamps and
+// the read-modify-write plumbing.
+type tasksBundleCodec struct{}
+
+func (tasksBundleCodec) ConnectorKey() string { return "google_tasks" }
+func (tasksBundleCodec) ErrorPrefix() string  { return "google_tasks" }
+
+func (tasksBundleCodec) AssembleBundle(m map[string]any, connectedAt, lastVerifiedAt time.Time) CredentialBundle {
+	return CredentialBundle{
+		Email:          frontmattercreds.GetStringFromMap(m, credentialKeyEmail),
+		RefreshToken:   frontmattercreds.GetStringFromMap(m, credentialKeyRefreshToken),
+		ConnectedAt:    connectedAt,
+		LastVerifiedAt: lastVerifiedAt,
+	}
+}
+
+func (tasksBundleCodec) WriteTokenFields(b CredentialBundle, m map[string]any) {
+	if b.Email != "" {
+		m[credentialKeyEmail] = b.Email
+	} else {
+		delete(m, credentialKeyEmail)
+	}
+
+	if b.RefreshToken != "" {
+		m[credentialKeyRefreshToken] = b.RefreshToken
+	} else {
+		delete(m, credentialKeyRefreshToken)
+	}
+}
+
+func (tasksBundleCodec) Timestamps(b CredentialBundle) (connectedAt, lastVerifiedAt time.Time) {
+	return b.ConnectedAt, b.LastVerifiedAt
+}
+
+func (tasksBundleCodec) IsConfigured(b CredentialBundle) bool { return b.RefreshToken != "" }
+
+func (tasksBundleCodec) ClearForDisconnect(b *CredentialBundle) {
+	b.RefreshToken = ""
+	b.LastVerifiedAt = time.Time{}
+}
 
 // FrontmatterCredentialStore reads and writes the per-profile Tasks
 // credential bundle on the wiki's frontmatter. It also drives the
@@ -113,11 +121,7 @@ func (SystemClock) Now() time.Time { return time.Now() }
 // read-only path. If a future concern surfaces, a sync.Map of
 // per-profile mutexes lands here.
 type FrontmatterCredentialStore struct {
-	pages     FrontmatterReadWriter
-	clock     Clock
-	logger    Logger
-	pauseAll  PauseAllBindingsHook
-	resumeAll ResumeAllBindingsHook
+	core *frontmattercreds.Store[CredentialBundle]
 }
 
 // NewFrontmatterCredentialStore wires the production credential store.
@@ -131,53 +135,18 @@ func NewFrontmatterCredentialStore(
 	pauseAll PauseAllBindingsHook,
 	resumeAll ResumeAllBindingsHook,
 ) (*FrontmatterCredentialStore, error) {
-	if pages == nil {
-		return nil, errors.New("google_tasks: pages must not be nil")
+	core, err := frontmattercreds.NewStore(pages, clock, logger, pauseAll, resumeAll, tasksBundleCodec{})
+	if err != nil {
+		return nil, err
 	}
-	if clock == nil {
-		return nil, errors.New("google_tasks: clock must not be nil")
-	}
-	if logger == nil {
-		return nil, errors.New("google_tasks: logger must not be nil")
-	}
-	return &FrontmatterCredentialStore{
-		pages:     pages,
-		clock:     clock,
-		logger:    logger,
-		pauseAll:  pauseAll,
-		resumeAll: resumeAll,
-	}, nil
+	return &FrontmatterCredentialStore{core: core}, nil
 }
 
 // LoadCredentials reads the per-profile credential bundle. A missing
 // page or absent connector subtree returns a zero CredentialBundle
 // with no error — callers branch on IsConfigured().
-func (s *FrontmatterCredentialStore) LoadCredentials(_ context.Context, profileID wikipage.PageIdentifier) (CredentialBundle, error) {
-	_, fm, err := s.pages.ReadFrontMatter(profileID)
-	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return CredentialBundle{}, nil
-		}
-		return CredentialBundle{}, fmt.Errorf("google_tasks: read frontmatter for %s: %w", profileID, err)
-	}
-	connector := readCredentialMap(fm)
-	if connector == nil {
-		return CredentialBundle{}, nil
-	}
-	connectedAt, err := parseRFC3339(getStringFromMap(connector, credentialKeyConnectedAt))
-	if err != nil {
-		return CredentialBundle{}, fmt.Errorf("wiki.connectors.google_tasks.connected_at: %w", err)
-	}
-	lastVerifiedAt, err := parseRFC3339(getStringFromMap(connector, credentialKeyLastVerifiedAt))
-	if err != nil {
-		return CredentialBundle{}, fmt.Errorf("wiki.connectors.google_tasks.last_verified_at: %w", err)
-	}
-	return CredentialBundle{
-		Email:          getStringFromMap(connector, credentialKeyEmail),
-		RefreshToken:   getStringFromMap(connector, credentialKeyRefreshToken),
-		ConnectedAt:    connectedAt,
-		LastVerifiedAt: lastVerifiedAt,
-	}, nil
+func (s *FrontmatterCredentialStore) LoadCredentials(ctx context.Context, profileID wikipage.PageIdentifier) (CredentialBundle, error) {
+	return s.core.LoadCredentials(ctx, profileID)
 }
 
 // LoadRefreshToken implements CredentialReader (used by TasksAdapter).
@@ -214,11 +183,11 @@ func (s *FrontmatterCredentialStore) PersistRefreshToken(ctx context.Context, pr
 	}
 	pid := wikipage.PageIdentifier(profileID)
 
-	bundle, err := s.LoadCredentials(ctx, pid)
+	bundle, err := s.core.LoadCredentials(ctx, pid)
 	if err != nil {
 		return fmt.Errorf("load credentials for %s: %w", pid, err)
 	}
-	now := s.clock.Now().UTC()
+	now := s.core.Clock().Now().UTC()
 	if accountEmail != "" {
 		bundle.Email = accountEmail
 	}
@@ -228,18 +197,13 @@ func (s *FrontmatterCredentialStore) PersistRefreshToken(ctx context.Context, pr
 	}
 	bundle.LastVerifiedAt = now
 
-	if err := s.writeCredentials(pid, bundle); err != nil {
+	if err := s.core.WriteCredentials(pid, bundle); err != nil {
 		return fmt.Errorf("persist credentials for %s: %w", pid, err)
 	}
 
 	// Auto-resume paused bindings via the engine hook. Best-effort —
 	// the next scheduler tick re-attempts naturally on failure.
-	if s.resumeAll != nil {
-		if resumeErr := s.resumeAll(ctx, pid); resumeErr != nil {
-			s.logger.Error("google_tasks: auto-resume after reconnect failed for profile=%s: %v",
-				pid, resumeErr)
-		}
-	}
+	s.core.ResumeBindings(ctx, pid)
 	return nil
 }
 
@@ -251,60 +215,7 @@ func (s *FrontmatterCredentialStore) PersistRefreshToken(ctx context.Context, pr
 // Returns the post-clear CredentialBundle (refresh_token == "") so
 // the gRPC handler can render a "not configured" state response.
 func (s *FrontmatterCredentialStore) ClearCredentials(ctx context.Context, profileID wikipage.PageIdentifier) (CredentialBundle, error) {
-	bundle, err := s.LoadCredentials(ctx, profileID)
-	if err != nil {
-		return CredentialBundle{}, err
-	}
-	bundle.RefreshToken = ""
-	bundle.LastVerifiedAt = time.Time{}
-	if err := s.writeCredentials(profileID, bundle); err != nil {
-		return CredentialBundle{}, fmt.Errorf("clear credentials for %s: %w", profileID, err)
-	}
-	if s.pauseAll != nil {
-		if pauseErr := s.pauseAll(ctx, profileID, PausedReasonAuthFailed); pauseErr != nil {
-			s.logger.Error("google_tasks: pause-all-bindings after Disconnect failed for profile=%s: %v",
-				profileID, pauseErr)
-		}
-	}
-	return bundle, nil
-}
-
-// writeCredentials does the read-modify-write on the profile's
-// frontmatter so unrelated fields under wiki.connectors.* (Keep,
-// bindings, etc.) are preserved untouched.
-func (s *FrontmatterCredentialStore) writeCredentials(profileID wikipage.PageIdentifier, bundle CredentialBundle) error {
-	_, fm, err := s.pages.ReadFrontMatter(profileID)
-	if err != nil && !errors.Is(err, os.ErrNotExist) {
-		return fmt.Errorf("read frontmatter: %w", err)
-	}
-	if fm == nil {
-		fm = make(wikipage.FrontMatter)
-	}
-	connector := ensureCredentialMap(fm)
-	if bundle.Email != "" {
-		connector[credentialKeyEmail] = bundle.Email
-	} else {
-		delete(connector, credentialKeyEmail)
-	}
-	if bundle.RefreshToken != "" {
-		connector[credentialKeyRefreshToken] = bundle.RefreshToken
-	} else {
-		delete(connector, credentialKeyRefreshToken)
-	}
-	if !bundle.ConnectedAt.IsZero() {
-		connector[credentialKeyConnectedAt] = bundle.ConnectedAt.UTC().Format(time.RFC3339)
-	} else {
-		delete(connector, credentialKeyConnectedAt)
-	}
-	if !bundle.LastVerifiedAt.IsZero() {
-		connector[credentialKeyLastVerifiedAt] = bundle.LastVerifiedAt.UTC().Format(time.RFC3339)
-	} else {
-		delete(connector, credentialKeyLastVerifiedAt)
-	}
-	if err := s.pages.WriteFrontMatter(profileID, fm, wikipage.AnonymousIdentity); err != nil {
-		return fmt.Errorf("write frontmatter: %w", err)
-	}
-	return nil
+	return s.core.ClearCredentials(ctx, profileID)
 }
 
 // CreateRemoteCollection creates a fresh Google Tasks tasklist named
@@ -332,64 +243,6 @@ func (a *TasksAdapter) CreateRemoteCollection(ctx context.Context, profileID wik
 		return "", "", fmt.Errorf("create remote tasklist %q for profile %s: %w", listName, profileID, err)
 	}
 	return created.ID, created.Title, nil
-}
-
-// readCredentialMap returns wiki.connectors.google_tasks (read-only),
-// or nil when any segment is missing or the wrong type.
-func readCredentialMap(fm wikipage.FrontMatter) map[string]any {
-	wiki, ok := fm[credentialKeyWiki].(map[string]any)
-	if !ok {
-		return nil
-	}
-	conns, ok := wiki[credentialKeyConnectors].(map[string]any)
-	if !ok {
-		return nil
-	}
-	gt, ok := conns[credentialKeyTasks].(map[string]any)
-	if !ok {
-		return nil
-	}
-	return gt
-}
-
-// ensureCredentialMap returns wiki.connectors.google_tasks, creating
-// any missing intermediate maps. Used by writeCredentials so a fresh
-// profile (no prior frontmatter) gets a proper subtree.
-func ensureCredentialMap(fm wikipage.FrontMatter) map[string]any {
-	wiki, ok := fm[credentialKeyWiki].(map[string]any)
-	if !ok {
-		wiki = make(map[string]any)
-		fm[credentialKeyWiki] = wiki
-	}
-	conns, ok := wiki[credentialKeyConnectors].(map[string]any)
-	if !ok {
-		conns = make(map[string]any)
-		wiki[credentialKeyConnectors] = conns
-	}
-	gt, ok := conns[credentialKeyTasks].(map[string]any)
-	if !ok {
-		gt = make(map[string]any)
-		conns[credentialKeyTasks] = gt
-	}
-	return gt
-}
-
-func getStringFromMap(m map[string]any, key string) string {
-	if v, ok := m[key].(string); ok {
-		return v
-	}
-	return ""
-}
-
-func parseRFC3339(s string) (time.Time, error) {
-	if s == "" {
-		return time.Time{}, nil
-	}
-	t, err := time.Parse(time.RFC3339, s)
-	if err != nil {
-		return time.Time{}, fmt.Errorf("not a valid RFC3339 timestamp: %w", err)
-	}
-	return t.UTC(), nil
 }
 
 // Compile-time check: FrontmatterCredentialStore satisfies the

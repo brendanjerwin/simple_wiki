@@ -33,10 +33,18 @@ const trashEntryNotFoundErrFmt = "trash entry not found: %s"
 // callers holding an expected_version_hash, preventing silent data loss.
 // Nil or empty frontmatter contributes zero bytes, so pages with no frontmatter
 // yield the same hash as before (hash of markdown only).
+//
+// The wiki.page_app_state subtree is EXCLUDED (every caller, uniformly —
+// watch hashes and OCC handles must agree or a state flush invalidates the
+// next human edit's OCC write): artifact state writes flow through
+// PageAppStateService with their own namespace-scoped
+// state_expected_version_hash, and their presence in the page hash would
+// make every state flush abort an unrelated page write and remount the
+// composed view (issue #1272). The wiki.page_app subtree STAYS in the hash.
 func computePageHash(frontmatter wikipage.FrontMatter, markdown wikipage.Markdown) string {
 	h := sha256.New()
 	if len(frontmatter) > 0 {
-		fmBytes, err := toml.Marshal(frontmatter)
+		fmBytes, err := toml.Marshal(fmWithoutArtifactState(frontmatter))
 		if err == nil {
 			_, _ = h.Write(fmBytes)
 		}
@@ -240,6 +248,8 @@ func (s *Server) sendPageUpdateIfChanged(stream apiv1.PageManagementService_Watc
 }
 
 // readPageHashAndModTime reads a page's whole-page hash (frontmatter + markdown) and file modification time.
+// The hash uniformly excludes the wiki.page_app_state subtree (see
+// computePageHash) so artifact state flushes never remount #rendered.
 func (s *Server) readPageHashAndModTime(pageID wikipage.PageIdentifier) (string, time.Time, error) {
 	page, err := s.pageOpener.ReadPage(pageID)
 	if err != nil {
@@ -257,6 +267,35 @@ func (s *Server) readPageHashAndModTime(pageID wikipage.PageIdentifier) (string,
 		return "", time.Time{}, err
 	}
 	return computePageHash(frontmatter, markdown), page.ModTime, nil
+}
+
+// fmWithoutArtifactState returns a shallow copy of fm without the
+// wiki.page_app_state subtree (present → copy; absent → fm unchanged).
+func fmWithoutArtifactState(fm wikipage.FrontMatter) wikipage.FrontMatter {
+	wiki, ok := fm["wiki"].(map[string]any)
+	if !ok {
+		return fm
+	}
+	if _, hasState := wiki["page_app_state"]; !hasState {
+		return fm
+	}
+	cp := make(wikipage.FrontMatter, len(fm))
+	for k, v := range fm {
+		cp[k] = v
+	}
+	wikiCp := make(map[string]any, len(wiki))
+	for k, v := range wiki {
+		if k == "page_app_state" {
+			continue
+		}
+		wikiCp[k] = v
+	}
+	if len(wikiCp) == 0 {
+		delete(cp, "wiki")
+	} else {
+		cp["wiki"] = wikiCp
+	}
+	return cp
 }
 
 // DeletePage implements the DeletePage RPC.
@@ -661,6 +700,17 @@ func (s *Server) CreatePage(ctx context.Context, req *apiv1.CreatePageRequest) (
 		}, nil
 	}
 
+	// Artifact funnel (criterion 6): a page created with a wiki-page-app
+	// fence validates before the write lands. There is no prior body, so
+	// this is pure validation (no prose to guard).
+	fmAny := wikipage.FrontMatter(fm)
+	if err := validateChangedPageAppFence(fmAny, "", string(markdown)); err != nil {
+		return &apiv1.CreatePageResponse{
+			Success: false,
+			Error:   err.Error(),
+		}, nil
+	}
+
 	if err := s.pageReaderMutator.WriteFrontMatter(wikipage.PageIdentifier(identifier), wikipage.FrontMatter(fm), tailscale.IdentityFromContext(ctx)); err != nil {
 		return nil, status.Errorf(codes.Internal, failedToWriteFrontmatterErrFmt, err)
 	}
@@ -693,56 +743,44 @@ func (s *Server) UpdatePageContent(ctx context.Context, req *apiv1.UpdatePageCon
 		return nil, status.Error(codes.InvalidArgument, pageNameRequiredErr)
 	}
 
-	if strings.TrimSpace(req.NewContentMarkdown) == "" {
-		return nil, status.Error(codes.InvalidArgument, "new_content_markdown cannot be empty; use ClearPageContent to explicitly clear page content")
-	}
-
-	if req.OldContentMarkdown != nil && strings.TrimSpace(*req.OldContentMarkdown) == "" {
-		return nil, status.Error(codes.InvalidArgument, "old_content_markdown cannot be empty when provided")
-	}
-
-	if guardErr := requireUserMutable(s.pageReaderMutator, wikipage.PageIdentifier(req.Page)); guardErr != nil {
-		return nil, guardErr
-	}
-	if authErr := requireAuthorized(ctx, s.pageReaderMutator, wikipage.PageIdentifier(req.Page)); authErr != nil {
-		return nil, authErr
-	}
-
-	// Read current content for: (1) page existence check, and (2) rollback data if the
-	// post-write invariant check fails.
-	_, originalMarkdown, err := s.pageReaderMutator.ReadMarkdown(wikipage.PageIdentifier(req.Page))
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, status.Errorf(codes.NotFound, pageNotFoundErrFmt, req.Page)
-		}
-		return nil, status.Errorf(codes.Internal, "failed to read current content: %v", err)
+	originalMarkdown, preErr := s.validateUpdatePageContentPrequest(ctx, req)
+	if preErr != nil {
+		return nil, preErr
 	}
 
 	// ModifyMarkdown holds the write lock for the entire hash-check + write cycle,
 	// eliminating the TOCTOU race that existed when these were separate operations.
 	// The modifier receives the current frontmatter so the version hash covers the
 	// full page state — catching frontmatter-only concurrent edits as well.
+	//
+	// When the write changes the page's artifact fence, the atomic modifier
+	// handles it (validation + placement guard + version restamp), so the
+	// wiki.page_app frontmatter stays in sync with the body.
 	var capturedFM wikipage.FrontMatter
-	modifyErr := s.pageReaderMutator.ModifyMarkdown(
+	funnelFM, modifyErr := s.modifyMarkdownWithPageAppFunnelCtx(
+		ctx,
 		wikipage.PageIdentifier(req.Page),
-		func(currentFM wikipage.FrontMatter, currentMarkdown wikipage.Markdown) (wikipage.Markdown, error) {
+		func(currentFM wikipage.FrontMatter, currentMarkdown wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error) {
 			capturedFM = currentFM
 			// Version hash check is now atomic with the write — no TOCTOU window.
 			// Hash covers both frontmatter and markdown so frontmatter-only edits
 			// are also detected (issue #1197).
 			if err := checkContentVersionHash(currentFM, currentMarkdown, req.ExpectedVersionHash); err != nil {
-				return "", err
+				return nil, "", err
 			}
 
 			if err := templating.ValidateTemplate(req.NewContentMarkdown); err != nil {
-				return "", status.Errorf(codes.InvalidArgument, invalidTemplateErrFmt, err)
+				return nil, "", status.Errorf(codes.InvalidArgument, invalidTemplateErrFmt, err)
 			}
 
 			// Compute the markdown to write: find-and-replace when old_content_markdown is set,
 			// otherwise replace the entire page content.
-			return resolveMarkdownContent(currentMarkdown, req.OldContentMarkdown, req.NewContentMarkdown)
+			candidate, err := resolveMarkdownContent(currentMarkdown, req.OldContentMarkdown, req.NewContentMarkdown)
+			if err != nil {
+				return nil, "", err
+			}
+			return currentFM, candidate, nil
 		},
-		tailscale.IdentityFromContext(ctx),
 	)
 	if modifyErr != nil {
 		if _, ok := status.FromError(modifyErr); ok {
@@ -759,10 +797,47 @@ func (s *Server) UpdatePageContent(ctx context.Context, req *apiv1.UpdatePageCon
 		return nil, err
 	}
 
+	// Response hash derives from the frontmatter the funnel actually wrote
+	// (post artifact restamp), so the returned OCC handle matches disk.
+	if funnelFM != nil {
+		capturedFM = funnelFM
+	}
+
 	return &apiv1.UpdatePageContentResponse{
 		Success:     true,
 		VersionHash: computePageHash(capturedFM, storedMarkdown),
 	}, nil
+}
+
+// validateUpdatePageContentPrequest runs UpdatePageContent's pre-write
+// checks (input sanity, system-page guard, ACL, page existence) and
+// returns the current markdown for rollback data.
+func (s *Server) validateUpdatePageContentPrequest(ctx context.Context, req *apiv1.UpdatePageContentRequest) (wikipage.Markdown, error) {
+	if strings.TrimSpace(req.NewContentMarkdown) == "" {
+		return "", status.Error(codes.InvalidArgument, "new_content_markdown cannot be empty; use ClearPageContent to explicitly clear page content")
+	}
+
+	if req.OldContentMarkdown != nil && strings.TrimSpace(*req.OldContentMarkdown) == "" {
+		return "", status.Error(codes.InvalidArgument, "old_content_markdown cannot be empty when provided")
+	}
+
+	if guardErr := requireUserMutable(s.pageReaderMutator, wikipage.PageIdentifier(req.Page)); guardErr != nil {
+		return "", guardErr
+	}
+	if authErr := requireAuthorized(ctx, s.pageReaderMutator, wikipage.PageIdentifier(req.Page)); authErr != nil {
+		return "", authErr
+	}
+
+	// Read current content for: (1) page existence check, and (2) rollback data if the
+	// post-write invariant check fails.
+	_, originalMarkdown, err := s.pageReaderMutator.ReadMarkdown(wikipage.PageIdentifier(req.Page))
+	if err != nil {
+		if os.IsNotExist(err) {
+			return "", status.Errorf(codes.NotFound, pageNotFoundErrFmt, req.Page)
+		}
+		return "", status.Errorf(codes.Internal, "failed to read current content: %v", err)
+	}
+	return originalMarkdown, nil
 }
 
 // ClearPageContent implements the ClearPageContent RPC.
@@ -814,6 +889,69 @@ func requirePageAtomicModifier(prm wikipage.PageReaderMutator) (pageAtomicModifi
 	return am, nil
 }
 
+// validateUpdateWholePagePrequest runs UpdateWholePage's pre-write
+// checks (guards, wipe guard, template validation, artifact fence
+// validation) and returns the parsed new frontmatter/markdown with the
+// identifier stamped.
+func (s *Server) validateUpdateWholePagePrequest(ctx context.Context, req *apiv1.UpdateWholePageRequest) (wikipage.FrontMatter, wikipage.Markdown, error) {
+	if guardErr := requireUserMutable(s.pageReaderMutator, wikipage.PageIdentifier(req.Page)); guardErr != nil {
+		return nil, "", guardErr
+	}
+	if authErr := requireAuthorized(ctx, s.pageReaderMutator, wikipage.PageIdentifier(req.Page)); authErr != nil {
+		return nil, "", authErr
+	}
+
+	// Verify the page exists
+	_, _, err := s.pageReaderMutator.ReadFrontMatter(wikipage.PageIdentifier(req.Page))
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, "", status.Errorf(codes.NotFound, pageNotFoundErrFmt, req.Page)
+		}
+		return nil, "", status.Errorf(codes.Internal, failedToReadFrontmatterErrFmt, err)
+	}
+
+	if guardErr := s.checkWholePageWipeGuard(wikipage.PageIdentifier(req.Page), req.NewWholeMarkdown); guardErr != nil {
+		return nil, "", guardErr
+	}
+
+	page := &wikipage.Page{
+		Identifier: req.Page,
+		Text:       req.NewWholeMarkdown,
+	}
+
+	fm, err := page.GetFrontMatter()
+	if err != nil {
+		return nil, "", status.Errorf(codes.InvalidArgument, "failed to parse frontmatter: %v", err)
+	}
+
+	md, err := page.GetMarkdown()
+	if err != nil {
+		return nil, "", status.Errorf(codes.InvalidArgument, "failed to parse markdown: %v", err)
+	}
+
+	if err := templating.ValidateTemplate(string(md)); err != nil {
+		return nil, "", status.Errorf(codes.InvalidArgument, invalidTemplateErrFmt, err)
+	}
+
+	// Artifact funnel (criterion 6): a changed wiki-page-app fence in the
+	// new content validates before the write lands.
+	if _, currentMD, readErr := s.pageReaderMutator.ReadMarkdown(wikipage.PageIdentifier(req.Page)); readErr == nil {
+		if err := validateChangedPageAppFence(fm, currentMD, req.NewWholeMarkdown); err != nil {
+			return nil, "", err
+		}
+	}
+
+	if fm == nil {
+		fm = make(map[string]any)
+	}
+	fm[identifierKey] = req.Page
+
+	if _, amErr := requirePageAtomicModifier(s.pageReaderMutator); amErr != nil {
+		return nil, "", amErr
+	}
+	return fm, md, nil
+}
+
 // UpdateWholePage implements the UpdateWholePage RPC.
 // Replaces the full content of an existing page, including its frontmatter.
 // The new_whole_markdown field must contain the complete page text (frontmatter + markdown).
@@ -830,64 +968,52 @@ func (s *Server) UpdateWholePage(ctx context.Context, req *apiv1.UpdateWholePage
 		return nil, authErr
 	}
 
-	// Verify the page exists
-	_, _, err := s.pageReaderMutator.ReadFrontMatter(wikipage.PageIdentifier(req.Page))
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, status.Errorf(codes.NotFound, pageNotFoundErrFmt, req.Page)
-		}
-		return nil, status.Errorf(codes.Internal, failedToReadFrontmatterErrFmt, err)
+	fm, md, preErr := s.validateUpdateWholePagePrequest(ctx, req)
+	if preErr != nil {
+		return nil, preErr
 	}
 
-	if guardErr := s.checkWholePageWipeGuard(wikipage.PageIdentifier(req.Page), req.NewWholeMarkdown); guardErr != nil {
-		return nil, guardErr
-	}
-
-	page := &wikipage.Page{
-		Identifier: req.Page,
-		Text:       req.NewWholeMarkdown,
-	}
-
-	fm, err := page.GetFrontMatter()
-	if err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, "failed to parse frontmatter: %v", err)
-	}
-
-	md, err := page.GetMarkdown()
-	if err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, "failed to parse markdown: %v", err)
-	}
-
-	if err := templating.ValidateTemplate(string(md)); err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, invalidTemplateErrFmt, err)
-	}
-	if fm == nil {
-		fm = make(map[string]any)
-	}
-	fm[identifierKey] = req.Page
-
-	atomicMod, amErr := requirePageAtomicModifier(s.pageReaderMutator)
-	if amErr != nil {
-		return nil, amErr
-	}
-
-	modifyErr := atomicMod.ModifyFrontMatterAndMarkdown(
+	funnelFM, modifyErr := s.modifyMarkdownWithPageAppFunnelCtx(
+		ctx,
 		wikipage.PageIdentifier(req.Page),
 		func(currentFM wikipage.FrontMatter, currentMarkdown wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error) {
 			// Hash covers both frontmatter and markdown so frontmatter-only concurrent edits
-			// are detected (issue #1197).
+			// are detected (issue #1197) — checked atomically inside the funnel's write.
 			if err := checkContentVersionHash(currentFM, currentMarkdown, req.ExpectedVersionHash); err != nil {
 				return nil, "", err
 			}
-			return fm, md, nil
+			// The client's fm replaces user keys wholesale, but reserved
+			// top-level subtrees the client did NOT send (page_app_state,
+			// checklists, …) must survive a whole-page save (ADR-0010's
+			// preserve rule) — AND reserved subtrees the client DID send
+			// (a new [maps.yard] the user just wrote via the editor) must
+			// be written, not silently dropped because they're reserved.
+			fmForWrite := make(wikipage.FrontMatter, len(fm)+1)
+			for k, v := range fm {
+				fmForWrite[k] = v
+			}
+			for _, k := range wikipage.ReservedTopLevelKeys() {
+				if v, ok := currentFM[k]; ok {
+					// Client omitted this reserved key: preserve current.
+					if _, sent := fm[k]; !sent {
+						fmForWrite[k] = v
+					}
+				}
+			}
+			return fmForWrite, md, nil
 		},
-		tailscale.IdentityFromContext(ctx),
 	)
 	if modifyErr != nil {
 		if _, ok := status.FromError(modifyErr); ok {
 			return nil, modifyErr
 		}
 		return nil, status.Errorf(codes.Internal, "failed to write page: %v", modifyErr)
+	}
+
+	// Hash what the funnel actually wrote (post artifact restamp), so the
+	// returned OCC handle matches disk.
+	if funnelFM != nil {
+		fm = funnelFM
 	}
 
 	return &apiv1.UpdateWholePageResponse{
