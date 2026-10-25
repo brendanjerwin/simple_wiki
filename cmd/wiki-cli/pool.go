@@ -1790,7 +1790,7 @@ func (d *poolDaemon) runMessageBridge(ctx context.Context, entry *instanceEntry,
 // bridgeMessages subscribes to page chat messages and forwards them as ACP prompts.
 // It also subscribes to cancellation signals so the frontend "Stop" button can
 // cancel an in-progress prompt.
-func (*poolDaemon) bridgeMessages(ctx context.Context, entry *instanceEntry, wikiClient pageMessageSource, chatClient *wikiChatClient) error {
+func (d *poolDaemon) bridgeMessages(ctx context.Context, entry *instanceEntry, wikiClient pageMessageSource, chatClient *wikiChatClient) error {
 	stream, err := wikiClient.SubscribePageChatMessages(ctx, connect.NewRequest(&apiv1.SubscribePageChatMessagesRequest{
 		Page: entry.page,
 	}))
@@ -1819,6 +1819,19 @@ func (*poolDaemon) bridgeMessages(ctx context.Context, entry *instanceEntry, wik
 		if msg.Sender != apiv1.Sender_USER {
 			slog.Info("bridge: skipping non-user message", logKeyPage, entry.page, "sender", msg.Sender.String())
 			continue
+		}
+
+		// Binding drift check (issue #1276): resolve the page's desired agent
+		// before forwarding. When it no longer matches this instance's agent,
+		// stop the instance — the next message spawns the newly-bound agent
+		// (with transcript hand-off). In-flight prompts are NOT interrupted:
+		// the previous prompt has already returned by the time the next user
+		// message arrives (turns are serialized per page).
+		if err := d.checkBindingDrift(ctx, entry); err != nil {
+			slog.Info("bridge: agent binding changed, stopping instance so the next message routes to the new agent",
+				logKeyPage, entry.page, "old_agent", entry.agentID, logKeyError, err, logKeyAction, "agent_switch")
+			d.requestStop(entry.page)
+			return nil
 		}
 
 		forwardUserMessage(ctx, entry, chatClient, cancelChan, msg)
@@ -2197,6 +2210,34 @@ func isChatContextEmpty(c *apiv1.ChatContext) bool {
 		len(c.GetUserGoals()) == 0 &&
 		len(c.GetPendingItems()) == 0 &&
 		c.GetKeyContext() == ""
+}
+
+// checkBindingDrift resolves the page's desired agent and reports whether
+// this instance's agent no longer matches it. A nil return means no drift:
+// forward the message to the current agent. An error return means the
+// binding changed (or became unroutable) — the caller must stop the instance
+// so the next message spawns the freshly-resolved agent.
+func (d *poolDaemon) checkBindingDrift(ctx context.Context, entry *instanceEntry) error {
+	agentID, _, err := d.resolvePageAgent(ctx, entry.page)
+	if err != nil {
+		// The binding now points somewhere unroutable by this pool; stopping
+		// lets the spawn path surface honest unavailability.
+		return fmt.Errorf("resolve desired agent: %w", err)
+	}
+	if agentID != entry.agentID {
+		return fmt.Errorf("desired agent %q differs from attached %q", agentID, entry.agentID)
+	}
+	return nil
+}
+
+// requestStop stops the page's instance asynchronously (safe to call from
+// the bridge goroutine without holding d.mu).
+func (d *poolDaemon) requestStop(page string) {
+	go func() {
+		d.mu.Lock()
+		defer d.mu.Unlock()
+		d.stopInstanceLocked(page)
+	}()
 }
 
 // stopInstanceLocked stops an instance. Must be called with d.mu held.

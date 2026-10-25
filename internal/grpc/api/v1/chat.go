@@ -637,9 +637,14 @@ func (s *Server) GetChatMessages(_ context.Context, req *apiv1.GetChatMessagesRe
 
 // SubscribeInstanceRequests implements the SubscribeInstanceRequests RPC.
 // Streams page names that need a Claude instance spawned. Used by the pool daemon.
+// When the stream ends in any way, the pool-registered agents are marked
+// unavailable in the inventory: a dead pool connection must grey the ACP
+// entries (registration-driven availability, issue #1276 design), exactly as
+// the pool re-registers on every reconnect.
 func (s *Server) SubscribeInstanceRequests(_ *apiv1.SubscribeInstanceRequestsRequest, stream apiv1.ChatService_SubscribeInstanceRequestsServer) error {
 	pageChan, unsubscribe := s.chatBufferManager.SubscribeToInstanceRequests()
 	defer unsubscribe()
+	defer s.agentInventoryPoolDisconnected()
 
 	for {
 		select {
@@ -655,6 +660,15 @@ func (s *Server) SubscribeInstanceRequests(_ *apiv1.SubscribeInstanceRequestsReq
 		case <-stream.Context().Done():
 			return stream.Context().Err()
 		}
+	}
+}
+
+// agentInventoryPoolDisconnected reports the pool disconnection to the
+// agent inventory when one is wired. Best-effort: an unwired inventory
+// (tests, minimal builds) contributes no availability state.
+func (s *Server) agentInventoryPoolDisconnected() {
+	if reg, ok := s.agentInventory.(interface{ PoolDisconnected() }); ok {
+		reg.PoolDisconnected()
 	}
 }
 
