@@ -13,6 +13,7 @@ import {
  renderNode,
  mergePageAppPatch,
  type PageAppActionContext,
+ type WikiPageAppRuntime,
 } from './renderer.js';
 import {
  wikiLibrary,
@@ -86,7 +87,7 @@ describe('renderer component output', () => {
   openUrl() { },
   rerun() { },
  };
- let runtime: ReturnType<typeof generateWikiPageAppRenderer>;
+ let runtime: WikiPageAppRuntime;
 
  beforeEach(() => {
   runtime = generateWikiPageAppRenderer(null, noopActions);
@@ -266,6 +267,92 @@ describe('renderer component output', () => {
   expect(stacks.length).to.equal(2);
   expect(stacks[0]?.style.gap).to.equal('16px');
   expect(stacks[1]?.style.gap).to.equal('24px');
+ });
+});
+
+describe('renderer layout components', () => {
+ const noopActions: PageAppActionContext = {
+  setState() { },
+  toAssistant() { },
+  openUrl() { },
+  rerun() { },
+ };
+ let runtime: WikiPageAppRuntime;
+
+ beforeEach(() => {
+  runtime = generateWikiPageAppRenderer(null, noopActions);
+ });
+
+ it('should render Grid with data-cols and grid children', async () => {
+  const rendered = runtime.render(
+   'root = Card("T", [g])\ng = Grid([a, b], 2)\na = Text("left")\nb = Text("right")',
+   {},
+  );
+  expect(rendered.errors).to.deep.equal([]);
+  const el = await fixture<HTMLElement>(rendered.template as never);
+  const grid = el.querySelector('.wiki-page-app-grid');
+  expect(grid).not.to.equal(null);
+  expect(grid?.getAttribute('data-cols')).to.equal('2');
+  expect(el.textContent).to.include('left');
+  expect(el.textContent).to.include('right');
+ });
+
+ it('should render Span with inline grid-column inside Grid', async () => {
+  const rendered = runtime.render(
+   'root = Card("T", [g])\ng = Grid([sp], 2)\nsp = Span(2, [a])\na = Text("wide")',
+   {},
+  );
+  expect(rendered.errors).to.deep.equal([]);
+  const el = await fixture<HTMLElement>(rendered.template as never);
+  const span = el.querySelector('.wiki-page-app-grid > .wiki-page-app-span');
+  expect(span).not.to.equal(null);
+  expect(span?.getAttribute('style')).to.include('grid-column: span 2');
+  expect(el.textContent).to.include('wide');
+ });
+
+ it('should render a Span outside a Grid as a plain block', async () => {
+  const rendered = runtime.render(
+   'root = Card("T", [sp])\nsp = Span(2, [a])\na = Text("outside")',
+   {},
+  );
+  expect(rendered.errors).to.deep.equal([]);
+  const el = await fixture<HTMLElement>(rendered.template as never);
+  const span = el.querySelector('.wiki-page-app-span');
+  expect(span).not.to.equal(null);
+  expect(el.textContent).to.include('outside');
+ });
+
+ it('should render Divider as an hr', async () => {
+  const rendered = runtime.render('root = Card("T", [d])\nd = Divider()', {});
+  expect(rendered.errors).to.deep.equal([]);
+  const el = await fixture<HTMLElement>(rendered.template as never);
+  expect(el.querySelector('hr.wiki-page-app-divider')).not.to.equal(null);
+ });
+
+ it('should render SectionHeader with title and trailing slot', async () => {
+  const rendered = runtime.render(
+   'root = Card("T", [h])\nh = SectionHeader("Workout", [x])\nx = Text("4 sets")',
+   {},
+  );
+  expect(rendered.errors).to.deep.equal([]);
+  const el = await fixture<HTMLElement>(rendered.template as never);
+  const header = el.querySelector('.wiki-page-app-section-header');
+  expect(header).not.to.equal(null);
+  expect(header?.textContent).to.include('Workout');
+  expect(header?.textContent).to.include('4 sets');
+ });
+
+ it('should render Card with each variant as data-variant', async () => {
+  for (const variant of ['default', 'elevated', 'outlined', 'filled', 'accent']) {
+   const program = `root = Card("T", [x], "${variant}")\nx = Text("hi")`;
+   const rendered = runtime.render(program, {});
+   expect(rendered.errors, variant).to.deep.equal([]);
+   // Card is the program ROOT: fixture returns the card element itself, and
+   // querySelector does not match self — assert on the root directly.
+   const el = await fixture<HTMLElement>(rendered.template as never);
+   expect(el.classList.contains('wiki-page-app-card'), variant).to.equal(true);
+   expect(el.getAttribute('data-variant'), variant).to.equal(variant);
+  }
  });
 });
 
