@@ -226,17 +226,13 @@ export class MenuPopover extends LitElement {
   // minimum AND the other side has more room (Floating UI flip semantics).
   const spaceBelowPx = viewportHeightPx - anchorRect.bottom - VIEWPORT_MARGIN_PX;
   const spaceAbovePx = anchorRect.top - VIEWPORT_MARGIN_PX;
-  const placeBelow = side === 'bottom'
-   ? !(spaceBelowPx < MIN_FLIP_SPACE_PX && spaceAbovePx > spaceBelowPx)
-   : spaceAbovePx < MIN_FLIP_SPACE_PX && spaceBelowPx > spaceAbovePx;
+  const placeBelow = shouldPlaceBelow(side, spaceAbovePx, spaceBelowPx);
 
   // Horizontal: 'start' aligns the menu's near edge with the anchor's near
   // edge; flip to the far edge when the near side cannot fit the surface.
   const spaceRightPx = viewportWidthPx - anchorRect.left - VIEWPORT_MARGIN_PX;
   const spaceLeftPx = anchorRect.right - VIEWPORT_MARGIN_PX;
-  const alignEnd = align === 'end'
-   ? !(spaceLeftPx < surfaceWidthPx && spaceRightPx > spaceLeftPx)
-   : spaceRightPx < surfaceWidthPx && spaceLeftPx > spaceRightPx;
+  const alignEnd = shouldAlignEnd(align, spaceLeftPx, spaceRightPx, surfaceWidthPx);
 
   surface.style.maxHeight = `${Math.max(0, placeBelow ? spaceBelowPx : spaceAbovePx)}px`;
   surface.style.top = '';
@@ -249,17 +245,11 @@ export class MenuPopover extends LitElement {
    // Absolute `bottom` measures up from the host's padding-box bottom.
    surface.style.bottom = `${hostRect.bottom - anchorRect.top + GAP_PX}px`;
   }
-  // Desired horizontal position in viewport space.
-  const desiredLeftPx = alignEnd
-   ? anchorRect.right - surfaceWidthPx
-   : anchorRect.left;
-  // Clamp into the viewport last: when the surface is wider than the space
-  // on either side of the anchor, the menu still hugs the nearer edge
-  // instead of overflowing the window.
-  const clampedLeftPx = Math.min(
-   Math.max(VIEWPORT_MARGIN_PX, desiredLeftPx),
-   Math.max(VIEWPORT_MARGIN_PX, viewportWidthPx - VIEWPORT_MARGIN_PX - surfaceWidthPx),
-  );
+  // Desired horizontal position in viewport space, then clamped into the
+  // viewport: when the surface is wider than the space on either side of
+  // the anchor, the menu still hugs the nearer edge instead of overflowing.
+  const desiredLeftPx = alignEnd ? anchorRect.right - surfaceWidthPx : anchorRect.left;
+  const clampedLeftPx = clampToViewport(desiredLeftPx, surfaceWidthPx, viewportWidthPx);
   surface.style.left = `${clampedLeftPx - hostRect.left}px`;
 
   this._placed = true;
@@ -296,4 +286,29 @@ export class MenuPopover extends LitElement {
  }
 }
 
+/**
+ * Floating UI flip semantics for the vertical axis: keep the requested side
+ * unless it is tighter than the flip minimum AND the other side has more room.
+ */
+function shouldPlaceBelow(side: 'bottom' | 'top', spaceAbovePx: number, spaceBelowPx: number): boolean {
+ if (side === 'bottom') return !(spaceBelowPx < MIN_FLIP_SPACE_PX && spaceAbovePx > spaceBelowPx);
+ return spaceAbovePx < MIN_FLIP_SPACE_PX && spaceBelowPx > spaceAbovePx;
+}
+
+/**
+ * Horizontal flip: 'start' aligns the menu's near edge with the anchor's near
+ * edge; flip to the far edge when the near side cannot fit the surface.
+ */
+function shouldAlignEnd(align: 'start' | 'end', spaceLeftPx: number, spaceRightPx: number, surfaceWidthPx: number): boolean {
+ if (align === 'end') return !(spaceLeftPx < surfaceWidthPx && spaceRightPx > spaceLeftPx);
+ return spaceRightPx < surfaceWidthPx && spaceLeftPx > spaceRightPx;
+}
+
+/** Clamp a desired left offset so the surface stays inside the viewport. */
+function clampToViewport(desiredLeftPx: number, surfaceWidthPx: number, viewportWidthPx: number): number {
+ const maxLeftPx = Math.max(VIEWPORT_MARGIN_PX, viewportWidthPx - VIEWPORT_MARGIN_PX - surfaceWidthPx);
+ return Math.min(Math.max(VIEWPORT_MARGIN_PX, desiredLeftPx), maxLeftPx);
+}
+
 customElements.define('menu-popover', MenuPopover);
+
