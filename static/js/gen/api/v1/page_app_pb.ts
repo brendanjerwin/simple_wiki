@@ -71,7 +71,7 @@ export type GetPageAppResponse = Message<"api.v1.GetPageAppResponse"> & {
   versionHash: string;
 
   /**
-   * The wiki component library version the program targets (e.g. "wiki-core@1").
+   * The wiki component library version the program targets (e.g. "wiki-core@2").
    *
    * @generated from field: string library = 5;
    */

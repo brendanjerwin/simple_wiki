@@ -28,8 +28,8 @@ import type {
 } from './library.js';
 
 describe('wikiLibrary', () => {
- it('should export the wiki-core@1 version id', () => {
-  expect(WIKI_LIBRARY_VERSION).to.equal('wiki-core@1');
+ it('should export the wiki-core@2 version id', () => {
+  expect(WIKI_LIBRARY_VERSION).to.equal('wiki-core@2');
   expect(wikiLibrary.id).to.equal(WIKI_LIBRARY_VERSION);
  });
 
@@ -40,7 +40,7 @@ describe('wikiLibrary', () => {
 
  it('should expose the built-in and wiki-native components', () => {
   const names = Object.keys(wikiLibrary.components);
-  for (const name of ['Card', 'Stack', 'Text', 'Table', 'Chart', 'Input', 'Select', 'Button', 'Checklist', 'Map', 'Survey', 'Countdown']) {
+  for (const name of ['Card', 'Stack', 'Text', 'Table', 'Chart', 'Input', 'Select', 'Button', 'Checklist', 'Map', 'Survey', 'Countdown', 'Progress', 'Steps']) {
    expect(names, name).to.include(name);
   }
  });
@@ -48,7 +48,7 @@ describe('wikiLibrary', () => {
  it('should produce a JSON schema whose properties name every composable component', () => {
   const schema: LibraryJSONSchema = wikiLibrary.toJSONSchema();
   const props = schema.properties ?? {};
-  for (const name of ['Card', 'Stack', 'Text', 'Table', 'Chart', 'Input', 'Select', 'Button', 'Checklist', 'Map', 'Survey', 'Countdown']) {
+  for (const name of ['Card', 'Stack', 'Text', 'Table', 'Chart', 'Input', 'Select', 'Button', 'Checklist', 'Map', 'Survey', 'Countdown', 'Progress', 'Steps']) {
    expect(Object.keys(props), name).to.include(name);
   }
  });
@@ -59,6 +59,128 @@ describe('wikiLibrary', () => {
   const stack = defs['Stack'] ?? {};
   const properties = stack['properties'] ?? {} as Record<string, unknown> | undefined;
   expect(properties).to.have.property('children');
+ });
+});
+describe('component variants and tokens', () => {
+ let parser: Parser;
+
+ beforeEach(() => {
+  parser = createParser(wikiLibrary.toJSONSchema(), WIKI_ROOT_COMPONENT);
+ });
+
+ describe('when parsing Button variants', () => {
+  it('should parse Button with a variant prop in key order after action', () => {
+   const result = parser.parse(
+    'root = Card("t", [b])\nb = Button("delete", @Set($x, 1), "danger")',
+   );
+   expect(result.meta.errors).to.deep.equal([]);
+   const button = (result.root?.props['children'] as ElementNode[])[0] as ElementNode;
+   expect(button.typeName).to.equal('Button');
+   expect(button.props['label']).to.equal('delete');
+   expect(button.props['variant']).to.equal('danger');
+  });
+
+  it('should bind variant without an action prop', () => {
+   const result = parser.parse('root = Card("t", [b])\nb = Button("cancel", undefined, "secondary")');
+   expect(result.meta.errors).to.deep.equal([]);
+   const button = (result.root?.props['children'] as ElementNode[])[0] as ElementNode;
+   expect(button.typeName).to.equal('Button');
+   expect(button.props['variant']).to.equal('secondary');
+  });
+
+  it('should reject an unknown variant', () => {
+   const result = parser.parse('root = Card("t", [b])\nb = Button("go", undefined, "sparkly")');
+   const codes = result.meta.errors.map((e) => e.code);
+   expect(codes).to.include('type-mismatch');
+  });
+ });
+
+ describe('when parsing Text variants', () => {
+  it('should parse Text with a title variant as the second positional arg', () => {
+   const result = parser.parse('root = Card("t", [x])\nx = Text("hello", "title")');
+   expect(result.meta.errors).to.deep.equal([]);
+   const text = (result.root?.props['children'] as ElementNode[])[0] as ElementNode;
+   expect(text.typeName).to.equal('Text');
+   expect(text.props['content']).to.equal('hello');
+   expect(text.props['variant']).to.equal('title');
+  });
+
+  it('should parse Text with caption variant and keep plain Text untouched', () => {
+   const result = parser.parse('root = Card("t", [x])\nx = Text("note", "caption")');
+   expect(result.meta.errors).to.deep.equal([]);
+   const text = (result.root?.props['children'] as ElementNode[])[0] as ElementNode;
+   expect(text.props['variant']).to.equal('caption');
+  });
+
+  it('should reject an unknown Text variant', () => {
+   const result = parser.parse('root = Card("t", [x])\nx = Text("hi", "banner")');
+   const codes = result.meta.errors.map((e) => e.code);
+   expect(codes).to.include('type-mismatch');
+  });
+ });
+
+ describe('when parsing Stack gap tokens', () => {
+  it('should accept sm/md/lg/xl gap tokens', () => {
+   for (const token of ['sm', 'md', 'lg', 'xl']) {
+    const result = parser.parse(`root = Card("t", [s])\ns = Stack([b], undefined, "${token}")`);
+    expect(result.meta.errors, token).to.deep.equal([]);
+    const stack = (result.root?.props['children'] as ElementNode[])[0] as ElementNode;
+    expect(stack.typeName).to.equal('Stack');
+    expect(stack.props['gap']).to.equal(token);
+   }
+  });
+
+  it('should still accept a free-form css gap string', () => {
+   const result = parser.parse('root = Card("t", [s])\ns = Stack([b], undefined, "0.5rem")');
+   expect(result.meta.errors).to.deep.equal([]);
+   const stack = (result.root?.props['children'] as ElementNode[])[0] as ElementNode;
+   expect(stack.props['gap']).to.equal('0.5rem');
+  });
+ });
+
+ describe('when parsing Progress', () => {
+  it('should map positional args to total, current, label in key order', () => {
+   const result = parser.parse('root = Card("t", [p])\np = Progress(5, 2, "steps")');
+   expect(result.meta.errors).to.deep.equal([]);
+   const progress = (result.root?.props['children'] as ElementNode[])[0] as ElementNode;
+   expect(progress.typeName).to.equal('Progress');
+   expect(progress.props['total']).to.equal(5);
+   expect(progress.props['current']).to.equal(2);
+   expect(progress.props['label']).to.equal('steps');
+  });
+
+  it('should keep Progress reactive when current comes from a $variable', () => {
+   const result = parser.parse('$done = 2\nroot = Card("t", [p])\np = Progress(5, $done)');
+   expect(result.meta.errors).to.deep.equal([]);
+   const progress = (result.root?.props['children'] as ElementNode[])[0] as ElementNode;
+   expect(progress.partial).to.equal(false);
+  });
+ });
+
+ describe('when parsing Steps', () => {
+  it('should map positional args to current, total, onBack, onNext, label in key order', () => {
+   const result = parser.parse(
+    '$i = 1\nroot = Card("t", [s])\ns = Steps($i, 3, @Set($i, $i - 1), @Set($i, $i + 1), "wizard")',
+   );
+   expect(result.meta.errors).to.deep.equal([]);
+   const steps = (result.root?.props['children'] as ElementNode[])[0] as ElementNode;
+   expect(steps.typeName).to.equal('Steps');
+   expect(steps.props['current']).to.deep.include({ k: 'StateRef', n: '$i' });
+   expect(steps.props['total']).to.equal(3);
+   expect((steps.props['onBack'] as { name: string }).name).to.equal('Set');
+   expect((steps.props['onNext'] as { name: string }).name).to.equal('Set');
+   expect(steps.props['label']).to.equal('wizard');
+  });
+
+  it('should parse Steps with only current and total (no affordances)', () => {
+   const result = parser.parse('$i = 2\nroot = Card("t", [s])\ns = Steps($i, 5)');
+   expect(result.meta.errors).to.deep.equal([]);
+   const steps = (result.root?.props['children'] as ElementNode[])[0] as ElementNode;
+   expect(steps.typeName).to.equal('Steps');
+   expect(steps.props['total']).to.equal(5);
+   expect(steps.props['onBack']).to.be.undefined;
+   expect(steps.props['onNext']).to.be.undefined;
+  });
  });
 });
 

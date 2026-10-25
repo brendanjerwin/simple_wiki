@@ -377,6 +377,7 @@ Do not run them directly with `npx`, `npm`, `bun`, `bunx`, `go test`, etc. Use t
   ```bash
   devbox run go:test
   ```
+
 - **End-to-End (Playwright) Tests**:
 
   The full e2e suite takes ~8 minutes on CI. It is also the CI job most likely
