@@ -6,10 +6,10 @@ name: Dependabot Auto-Merge
 # branches. The scan step in sonarcloud.yml is author-gated to skip on
 # dependabot PRs (issue #1189), so "SonarCloud Code Analysis" — emitted by
 # the SonarCloud app only when a scan runs — never reports here; the
-# 'main' ruleset bypasses dependabot authored pushes for exactly that
-# reason. This workflow is therefore the de facto merge gate: it must
-# assert the required checks itself before arming auto-merge, never
-# relying on the ruleset (which enforces nothing for this actor).
+# 'main' ruleset bypasses dependabot-authored pushes for exactly that
+# reason. This workflow is therefore the de facto merge gate: it asserts
+# the required checks itself before arming auto-merge, never relying on
+# the ruleset (which enforces nothing for this actor).
 
 on:
  pull_request_target:
@@ -30,9 +30,9 @@ jobs:
      with:
       github-token: "${{ secrets.GITHUB_TOKEN }}"
 
-   # Only go-module dependency bumps — not github-actions or version
-   # updates outside go.mod (the repo's dependabot.yml only configures
-   # gomod, but this is an explicit safety check).
+   # Only go-module dependency bumps — an explicit safety check (the
+   # repo's dependabot.yml only configures gomod today, but this holds
+   # even if other ecosystems are added later).
    - name: Restrict to go.mod bumps
      run: |
       set -euo pipefail
@@ -41,14 +41,12 @@ jobs:
         *) echo "::error::Not a gomod bump (ecosystem: '${{ steps.metadata.outputs.package-ecosystem }}') — not arming auto-merge."; exit 1;;
       esac
 
-   - name: Wait for all checks to settle
+   # Per gate name, take the LATEST check-run on the head SHA and
+   # require it to exist AND be success. A missing gate fails (no
+   # vacuous pass); a stale superseded attempt is ignored because only
+   # the latest attempt per name is consulted.
+   - name: Require curated gate suite green on head
      timeout-minutes: 45
-     run: |
-      timeout 40m gh pr checks "${{ github.event.pull_request.html_url }}" --watch --interval 60 --fail-fast
-      echo "All reported checks green."
-
-   - name: Assert required gate suite on final head
-     timeout-minutes: 5
      run: |
       set -euo pipefail
       sha="${{ github.event.pull_request.head.sha }}"
@@ -58,16 +56,32 @@ jobs:
              "Build and Release Go Binary (linux, amd64)" \
              "Build and Release Go Binary (linux, arm64)" \
              "Build and Release Go Binary (windows, amd64)")
-      for gate in "${gates[@]}"; do
-        # Every attempt for this gate name on this exact head must be success.
-        bad=$(gh api "repos/${{ github.repository }}/commits/${sha}/check-runs" --paginate \
-          --jq "[.check_runs[] | select(.name == \"${gate}\" and .conclusion != \"success\")] | length")
-        if [ "${bad}" != "0" ]; then
-          echo "::error::Gate '${gate}' on ${sha} has ${bad} non-success run(s) — not arming auto-merge."
+      deadline=$(( $(date +%s) + 2400 ))
+      while true; do
+        results=$(gh api "repos/${{ github.repository }}/commits/${sha}/check-runs?per_page=100" \
+          --paginate --jq '[.check_runs[]] | group_by(.name) | map(max_by(.started_at) | {name, status, conclusion})' || echo '[]')
+        pending=$(echo "$results" | jq '[.[] | select(.status != "COMPLETED")] | length')
+        missing=""
+        failed=""
+        for gate in "${gates[@]}"; do
+          latest=$(echo "$results" | jq -r --arg g "$gate" '[.[] | select(.name == $g)][0] | .status // "missing"' 2>/dev/null)
+          if [ "$latest" = "missing" ]; then missing="$missing $gate"; continue; fi
+          conc=$(echo "$results" | jq -r --arg g "$gate" '[.[] | select(.name == $g)][0] | .conclusion // "none"' 2>/dev/null)
+          if [ "$conc" != "success" ]; then failed="$failed $gate($conc)"; fi
+        done
+        if [ -z "$missing" ] && [ -z "$failed" ] && { [ -z "$pending" ] || [ "$pending" = "0" ]; }; then
+          echo "All ${#gates[@]} gates green on ${sha}."
+          break
+        fi
+        [ -n "$missing" ] && echo "Waiting for (absent):$missing"
+        [ -n "$failed" ] && echo "Non-success (latest attempt):$failed"
+        echo "Pending check-runs: ${pending}"
+        if [ "$(date +%s)" -ge "$deadline" ]; then
+          echo "::error::Timed out after 40m waiting for gates. missing:[$missing] failed:[$failed]"
           exit 1
         fi
+        sleep 60
       done
-      echo "All ${#gates[@]} gates green on ${sha}."
 
    - name: Arm auto-merge
      run: gh pr merge --auto --squash "${{ github.event.pull_request.html_url }}"
