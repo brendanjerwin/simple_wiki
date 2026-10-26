@@ -614,6 +614,7 @@ export const wikiPageAppDesignSystem = css`
   .wiki-page-app-tooltip-wrap {
     position: relative;
     display: inline-block;
+    align-self: flex-start;
   }
   .wiki-page-app-tooltip-wrap::after {
     content: attr(data-tooltip);
