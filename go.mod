@@ -12,7 +12,7 @@ require (
 	github.com/emersion/go-ical v0.0.0-20250609112844-439c63cef608
 	github.com/gabriel-vasile/mimetype v1.4.16
 	github.com/gin-contrib/multitemplate v1.1.4
-	github.com/gin-contrib/sessions v1.1.0
+	github.com/gin-contrib/sessions v1.1.2
 	github.com/gin-gonic/gin v1.12.0
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/sessions v1.4.0
