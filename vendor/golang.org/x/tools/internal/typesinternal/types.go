@@ -280,11 +280,3 @@ func TupleOf(elems ...types.Type) *types.Tuple {
 	}
 	return types.NewTuple(params...)
 }
-
-func TupleOf(elems ...types.Type) *types.Tuple {
-	params := make([]*types.Var, len(elems))
-	for i, elem := range elems {
-		params[i] = types.NewParam(token.NoPos, nil, "", elem)
-	}
-	return types.NewTuple(params...)
-}

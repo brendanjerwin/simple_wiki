@@ -200,8 +200,8 @@ github.com/gabriel-vasile/mimetype/internal/scan
 # github.com/gin-contrib/multitemplate v1.1.4
 ## explicit; go 1.26.0
 github.com/gin-contrib/multitemplate
-# github.com/gin-contrib/sessions v1.1.0
-## explicit; go 1.25.0
+# github.com/gin-contrib/sessions v1.1.2
+## explicit; go 1.26.0
 github.com/gin-contrib/sessions
 github.com/gin-contrib/sessions/cookie
 # github.com/gin-contrib/sse v1.1.1
