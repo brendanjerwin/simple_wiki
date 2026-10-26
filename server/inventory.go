@@ -11,7 +11,6 @@ import (
 	"golang.org/x/text/language"
 )
 
-
 // InventoryItemParams contains the parameters for creating an inventory item page.
 type InventoryItemParams struct {
 	Identifier string

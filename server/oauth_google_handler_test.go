@@ -880,4 +880,3 @@ var _ = Describe("emailFromIDToken", func() {
 func encodeJWTSegment(s string) string {
 	return base64.RawURLEncoding.EncodeToString([]byte(s))
 }
-

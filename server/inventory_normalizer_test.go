@@ -460,7 +460,7 @@ var _ = Describe("InventoryNormalizer", func() {
 			BeforeEach(func() {
 				deps.setPage("container", map[string]any{
 					"inventory": map[string]any{
-						"items": []any{"///"},  // This will fail MungeIdentifier
+						"items": []any{"///"}, // This will fail MungeIdentifier
 					},
 				}, "")
 				_, err = normalizer.GetContainerItems("container")
