@@ -29,8 +29,8 @@ import (
 
 var _ = Describe("Site.ReadPage characterization", func() {
 	var (
-		s        *Site
-		tempDir  string
+		s             *Site
+		tempDir       string
 		writePageFile func(id, contents string)
 		readPage      func(id string) *wikipage.Page
 	)

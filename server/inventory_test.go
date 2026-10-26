@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 
 	"github.com/brendanjerwin/simple_wiki/inventory"
-		"github.com/brendanjerwin/simple_wiki/utils/goldmarkrenderer"
+	"github.com/brendanjerwin/simple_wiki/utils/goldmarkrenderer"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 	"github.com/jcelliott/lumber"
 	. "github.com/onsi/ginkgo/v2"
@@ -25,9 +25,9 @@ var _ = Describe("inventory.go", func() {
 			err := os.MkdirAll(pathToData, 0755)
 			Expect(err).NotTo(HaveOccurred())
 			s = &Site{
-				PathToData:          pathToData,
-				MarkdownRenderer:    &goldmarkrenderer.GoldmarkRenderer{},
-				Logger:              lumber.NewConsoleLogger(lumber.WARN),
+				PathToData:       pathToData,
+				MarkdownRenderer: &goldmarkrenderer.GoldmarkRenderer{},
+				Logger:           lumber.NewConsoleLogger(lumber.WARN),
 			}
 			err = s.InitializeIndexing()
 			Expect(err).NotTo(HaveOccurred())

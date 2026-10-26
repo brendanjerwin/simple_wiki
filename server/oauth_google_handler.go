@@ -119,18 +119,18 @@ type ProfileIdentityResolver interface {
 // struct because they have unrelated owners (per CLAUDE.md "Avoid
 // Parameter Objects and Config Structs").
 type OAuthGoogleHandler struct {
-	StateStore        OAuthStateStore
-	TokenPersister    RefreshTokenPersister
-	IdentityResolver  ProfileIdentityResolver
-	AuthURLIssuer     AuthRedirectIssuer
-	HTTPClient        HTTPDoer
-	ClientID          string
-	ClientSecret      string
-	RedirectURI       string
-	IssuerExpected    string
-	TokenEndpoint     string
-	RequiredScope     string
-	Logger            *log.Logger
+	StateStore       OAuthStateStore
+	TokenPersister   RefreshTokenPersister
+	IdentityResolver ProfileIdentityResolver
+	AuthURLIssuer    AuthRedirectIssuer
+	HTTPClient       HTTPDoer
+	ClientID         string
+	ClientSecret     string
+	RedirectURI      string
+	IssuerExpected   string
+	TokenEndpoint    string
+	RequiredScope    string
+	Logger           *log.Logger
 }
 
 // NewOAuthGoogleHandler reads the OAuth client config from the

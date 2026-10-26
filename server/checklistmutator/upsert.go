@@ -56,11 +56,11 @@ const IfNoneMatchAny = "*"
 // Preconditions follow RFC 7232 / RFC 4918 semantics:
 //   - ifMatch == "":         no precondition.
 //   - ifMatch != "":         the existing item's ETag (rfc3339nano of
-//                            updated_at) must equal ifMatch. If the item
-//                            does not exist, returns FailedPrecondition.
+//     updated_at) must equal ifMatch. If the item
+//     does not exist, returns FailedPrecondition.
 //   - ifNoneMatch == "":     no precondition.
 //   - ifNoneMatch == "*":    the item must NOT exist. If it does, returns
-//                            FailedPrecondition. (Create-only PUT.)
+//     FailedPrecondition. (Create-only PUT.)
 func (m *Mutator) UpsertFromCalDAV( // NOSONAR go:S107
 	_ context.Context,
 	page, listName, uid string,

@@ -13,7 +13,7 @@ import (
 
 	"github.com/brendanjerwin/simple_wiki/index"
 	"github.com/brendanjerwin/simple_wiki/index/frontmatter"
-		"github.com/brendanjerwin/simple_wiki/pkg/jobs"
+	"github.com/brendanjerwin/simple_wiki/pkg/jobs"
 	"github.com/brendanjerwin/simple_wiki/utils/base32tools"
 	"github.com/brendanjerwin/simple_wiki/utils/goldmarkrenderer"
 	"github.com/brendanjerwin/simple_wiki/wikiidentifiers"
@@ -34,10 +34,10 @@ func (*logWriteCloser) Close() error {
 
 var _ = Describe("Site error handling", func() {
 	var (
-		s           *Site
-		tempDir     string
-		logBuffer   *bytes.Buffer
-		testLogger  *lumber.ConsoleLogger
+		s          *Site
+		tempDir    string
+		logBuffer  *bytes.Buffer
+		testLogger *lumber.ConsoleLogger
 	)
 
 	BeforeEach(func() {
@@ -49,9 +49,9 @@ var _ = Describe("Site error handling", func() {
 		testLogger = lumber.NewBasicLogger(&logWriteCloser{logBuffer}, lumber.TRACE)
 
 		s = &Site{
-			Logger:              testLogger,
-			PathToData:          tempDir,
-			MarkdownRenderer:    &goldmarkrenderer.GoldmarkRenderer{},
+			Logger:           testLogger,
+			PathToData:       tempDir,
+			MarkdownRenderer: &goldmarkrenderer.GoldmarkRenderer{},
 		}
 	})
 

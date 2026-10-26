@@ -37,9 +37,10 @@ var _ = Describe("Site Page Operations", func() {
 	BeforeEach(func() {
 		pathToData = GinkgoT().TempDir()
 		s = &Site{
-			PathToData:       pathToData,
-			MarkdownRenderer: &goldmarkrenderer.GoldmarkRenderer{},
-			Logger:           lumber.NewConsoleLogger(lumber.INFO),
+			PathToData:         pathToData,
+			SkipBackgroundJobs: true,
+			MarkdownRenderer:   &goldmarkrenderer.GoldmarkRenderer{},
+			Logger:             lumber.NewConsoleLogger(lumber.INFO),
 		}
 		err := s.InitializeIndexing()
 		Expect(err).NotTo(HaveOccurred())
@@ -269,7 +270,7 @@ var _ = Describe("Site Page Operations", func() {
 				// 'title = [invalid' is an unclosed array — invalid for both TOML and YAML.
 				malformedContent := "+++\ntitle = [invalid\n+++\n# Content"
 				filePath := filepath.Join(pathToData, base32tools.EncodeToBase32(strings.ToLower(pageIdentifier))+".md")
-				Expect(os.WriteFile(filePath, []byte(malformedContent), 0644)).To(Succeed())
+				Expect(os.WriteFile(filePath, []byte(malformedContent), 0o644)).To(Succeed())
 
 				err = s.WriteFrontMatter(wikipage.PageIdentifier(pageIdentifier), wikipage.FrontMatter{"title": "new title"}, wikipage.AnonymousIdentity)
 			})
@@ -312,7 +313,7 @@ var _ = Describe("Site Page Operations", func() {
 				pageIdentifier := "malformed-fm-modify"
 				malformedContent := "+++\ntitle = [invalid\n+++\n# Content"
 				filePath := filepath.Join(pathToData, base32tools.EncodeToBase32(strings.ToLower(pageIdentifier))+".md")
-				Expect(os.WriteFile(filePath, []byte(malformedContent), 0644)).To(Succeed())
+				Expect(os.WriteFile(filePath, []byte(malformedContent), 0o644)).To(Succeed())
 
 				err = s.ModifyMarkdown(wikipage.PageIdentifier(pageIdentifier), func(_ wikipage.FrontMatter, md wikipage.Markdown) (wikipage.Markdown, error) {
 					return md + " extra", nil
@@ -368,9 +369,9 @@ var _ = Describe("Site Page Operations", func() {
 				Expect(s.WriteFrontMatter("modify-both-page", wikipage.FrontMatter{"title": "Old"}, wikipage.AnonymousIdentity)).To(Succeed())
 
 				modifyErr = s.ModifyFrontMatterAndMarkdown("modify-both-page", func(fm wikipage.FrontMatter, md wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error) {
-						fm["title"] = "New"
-						return fm, md + "new body\n", nil
-					}, wikipage.AnonymousIdentity)
+					fm["title"] = "New"
+					return fm, md + "new body\n", nil
+				}, wikipage.AnonymousIdentity)
 				var readErr error
 				page, readErr = s.ReadPage("modify-both-page")
 				Expect(readErr).NotTo(HaveOccurred())
@@ -397,8 +398,8 @@ var _ = Describe("Site Page Operations", func() {
 
 			BeforeEach(func() {
 				modifyErr = s.ModifyFrontMatterAndMarkdown("modify-both-error-page", func(wikipage.FrontMatter, wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error) {
-						return nil, "", modifierErr
-					}, wikipage.AnonymousIdentity)
+					return nil, "", modifierErr
+				}, wikipage.AnonymousIdentity)
 			})
 
 			It("should propagate the modifier error", func() {
@@ -419,11 +420,11 @@ var _ = Describe("Site Page Operations", func() {
 				pageIdentifier := "malformed-fm-modify-both"
 				malformedContent := "+++\ntitle = [invalid\n+++\n# Content"
 				filePath := filepath.Join(pathToData, base32tools.EncodeToBase32(strings.ToLower(pageIdentifier))+".md")
-				Expect(os.WriteFile(filePath, []byte(malformedContent), 0644)).To(Succeed())
+				Expect(os.WriteFile(filePath, []byte(malformedContent), 0o644)).To(Succeed())
 
 				modifyErr = s.ModifyFrontMatterAndMarkdown(wikipage.PageIdentifier(pageIdentifier), func(fm wikipage.FrontMatter, md wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error) {
-						return fm, md, nil
-					}, wikipage.AnonymousIdentity)
+					return fm, md, nil
+				}, wikipage.AnonymousIdentity)
 			})
 
 			It("should return a parse error", func() {
