@@ -609,6 +609,51 @@ export const wikiPageAppDesignSystem = css`
     gap: 12px;
   }
 
+  /* ── Tooltip ──────────────────────────────────────────────────────────── */
+  /* Pure CSS tooltip via ::after + attr(data-tooltip). No per-element IDs. */
+  .wiki-page-app-tooltip-wrap {
+    position: relative;
+    display: inline-block;
+  }
+  .wiki-page-app-tooltip-wrap::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    bottom: calc(100% + 8px);
+    left: 50%;
+    transform: translateX(-50%);
+    max-width: 220px;
+    padding: 5px 9px;
+    background: var(--color-surface-tooltip, #1a1a1a);
+    color: var(--color-text-on-tooltip, #ffffff);
+    border-radius: 6px;
+    font-size: 0.78rem;
+    line-height: 1.4;
+    white-space: normal;
+    text-align: center;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 150ms ease;
+    z-index: 100;
+  }
+  /* Caret pointing down toward the trigger */
+  .wiki-page-app-tooltip-wrap::before {
+    content: '';
+    position: absolute;
+    bottom: calc(100% + 3px);
+    left: 50%;
+    transform: translateX(-50%);
+    border: 5px solid transparent;
+    border-top-color: var(--color-surface-tooltip, #1a1a1a);
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 150ms ease;
+    z-index: 101;
+  }
+  .wiki-page-app-tooltip-wrap:hover::after,
+  .wiki-page-app-tooltip-wrap:hover::before {
+    opacity: 1;
+  }
+
    @media (max-width: 520px) {
      .wiki-page-app-card {
        padding: 12px;
