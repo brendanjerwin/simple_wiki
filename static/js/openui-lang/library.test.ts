@@ -40,7 +40,7 @@ describe('wikiLibrary', () => {
 
  it('should expose the built-in and wiki-native components', () => {
   const names = Object.keys(wikiLibrary.components);
-  for (const name of ['Card', 'Stack', 'Text', 'Table', 'Chart', 'Input', 'Select', 'Button', 'Checklist', 'Map', 'Survey', 'Countdown', 'Progress', 'Steps']) {
+  for (const name of ['Card', 'Stack', 'Text', 'Table', 'Chart', 'Input', 'Select', 'Button', 'Checklist', 'Map', 'Survey', 'Countdown', 'Progress', 'Steps', 'Tooltip']) {
    expect(names, name).to.include(name);
   }
  });
@@ -48,7 +48,7 @@ describe('wikiLibrary', () => {
  it('should produce a JSON schema whose properties name every composable component', () => {
   const schema: LibraryJSONSchema = wikiLibrary.toJSONSchema();
   const props = schema.properties ?? {};
-  for (const name of ['Card', 'Stack', 'Text', 'Table', 'Chart', 'Input', 'Select', 'Button', 'Checklist', 'Map', 'Survey', 'Countdown', 'Progress', 'Steps']) {
+  for (const name of ['Card', 'Stack', 'Text', 'Table', 'Chart', 'Input', 'Select', 'Button', 'Checklist', 'Map', 'Survey', 'Countdown', 'Progress', 'Steps', 'Tooltip']) {
    expect(Object.keys(props), name).to.include(name);
   }
  });
@@ -778,6 +778,52 @@ describe('when parsing Accordion', () => {
 
  it('should include Accordion in the library component list', () => {
   expect(Object.keys(wikiLibrary.components)).to.include('Accordion');
+ });
+});
+
+describe('Tooltip component', () => {
+ let parser: Parser;
+
+ beforeEach(() => {
+  parser = createParser(wikiLibrary.toJSONSchema(), WIKI_ROOT_COMPONENT);
+ });
+
+ describe('when parsing a Tooltip wrapping a Button', () => {
+  let tooltipNode: ElementNode;
+  let parseErrors: unknown[];
+
+  beforeEach(() => {
+   const result = parser.parse(
+    'tip = Tooltip("Hold for 30 s", [Button("start")])\nroot = Card("t", [tip])',
+   );
+   parseErrors = result.meta.errors;
+   tooltipNode = (result.root?.props['children'] as ElementNode[])[0] as ElementNode;
+  });
+
+  it('should parse without errors', () => {
+   expect(parseErrors).to.deep.equal([]);
+  });
+
+  it('should bind the text prop', () => {
+   expect(tooltipNode.props['text']).to.equal('Hold for 30 s');
+  });
+
+  it('should bind children as an array', () => {
+   expect(Array.isArray(tooltipNode.props['children'])).to.equal(true);
+  });
+ });
+
+ describe('when parsing a Tooltip with no children', () => {
+  let parseErrors: unknown[];
+
+  beforeEach(() => {
+   const result = parser.parse('tip = Tooltip("tip text")\nroot = Card("t", [tip])');
+   parseErrors = result.meta.errors;
+  });
+
+  it('should parse without errors', () => {
+   expect(parseErrors).to.deep.equal([]);
+  });
  });
 });
 
