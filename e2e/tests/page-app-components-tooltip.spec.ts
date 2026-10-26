@@ -90,5 +90,31 @@ test.describe.serial('Tooltip component', () => {
    });
    expect(titleAttr).toBe('Hold for 30 seconds');
   });
+
+  test('keeps the tooltip wrapper shrink-wrapped to its child inside the Stack flex column', async ({ page }) => {
+   await page.goto(`/${TEST_PAGE}/view`);
+
+   const host = page.locator('wiki-page-app-host');
+   await expect(host).toHaveCount(1, { timeout: PAGE_LOAD_TIMEOUT_MS });
+   await expect(host.locator('.wiki-page-app-card-title')).toBeVisible({
+    timeout: PAGE_LOAD_TIMEOUT_MS,
+   });
+
+   // align-self: flex-start must shrink-wrap the wrap to the Button's
+   // width; left: 50% on the ::after bubble then centers over the
+   // trigger rather than over the full card width.
+   const widths = await page.evaluate(() => {
+    const host = document.querySelector('wiki-page-app-host');
+    const wrap = host?.shadowRoot?.querySelector('.wiki-page-app-tooltip-wrap');
+    const button = wrap?.querySelector('button.wiki-page-app-button');
+    if (!wrap || !button) return null;
+    return {
+     wrapWidthPx: wrap.getBoundingClientRect().width,
+     buttonWidthPx: button.getBoundingClientRect().width,
+    };
+   });
+   expect(widths).not.toBeNull();
+   expect(widths!.wrapWidthPx).toBeCloseTo(widths!.buttonWidthPx, 0);
+  });
  });
 });
