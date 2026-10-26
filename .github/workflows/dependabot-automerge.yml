@@ -68,9 +68,11 @@ jobs:
       deadline=$(( $(date +%s) + 2100 ))
       while true; do
         # No error masking: a token/API failure must fail the step loudly,
-        # not look like all gates are missing.
+        # not look like all gates are missing. Exclude our own job's
+        # check-run ("automerge") from the query — it is in_progress for
+        # the entire loop, so counting it deadlocks the wait on itself.
         results=$(gh api "repos/${{ github.repository }}/commits/${sha}/check-runs?per_page=100" \
-          --jq '[.check_runs[]] | group_by(.name) | map(max_by(.started_at) | {name, status, conclusion})')
+          --jq '[.check_runs[] | select(.name != "automerge")] | group_by(.name) | map(max_by(.started_at) | {name, status, conclusion})')
         pending=$(echo "$results" | jq '[.[] | select(.status | ascii_downcase != "completed")] | length')
         missing=""
         failed=""
