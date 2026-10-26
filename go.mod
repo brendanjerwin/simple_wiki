@@ -32,7 +32,7 @@ require (
 	github.com/stoewer/go-strcase v1.3.1
 	github.com/tailscale/tscert v0.0.0-20251216020129-aea342f6d747
 	github.com/tkrajina/gpxgo v1.5.1
-	github.com/yuin/goldmark v1.8.2
+	github.com/yuin/goldmark v1.8.6
 	github.com/yuin/goldmark-emoji v1.0.6
 	go.abhg.dev/goldmark/mermaid v0.6.0
 	go.abhg.dev/goldmark/wikilink v0.6.0
