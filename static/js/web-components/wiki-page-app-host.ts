@@ -122,6 +122,7 @@ export class WikiPageAppHost extends LitElement {
         flex-direction: column;
         gap: 10px;
         min-width: 0;
+        padding-top: 32px;
       }
       .wiki-page-app-remove {
         position: absolute;
