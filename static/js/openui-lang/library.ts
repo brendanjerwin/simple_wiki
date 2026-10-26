@@ -727,6 +727,30 @@ const SectionHeader = defineComponent({
 });
 
 /**
+ * Tooltip wraps any children with a hover tooltip showing `text`.
+ * Uses a CSS ::after pseudo-element driven by data-tooltip — no per-element
+ * IDs, no JS, no popover API. Works in any slot; composable with Button,
+ * Text, SectionHeader, etc.
+ */
+const Tooltip = defineComponent({
+ name: 'Tooltip',
+ props: z.object({
+  text: z.string(),
+  children: childrenSlot().optional(),
+ }),
+ description:
+  'Wraps children with a hover tooltip that shows `text`. CSS-only — no IDs needed. Tooltip("More info", [Button("?")]). Composes with any child: Button, Text, SectionHeader, etc.',
+ component: (({ text, children }) =>
+  html`<div
+     class="wiki-page-app-tooltip-wrap"
+     data-tooltip=${typeof text === 'string' ? text : ''}
+     title=${typeof text === 'string' ? text : ''}
+   >
+     ${Array.isArray(children) ? children : nothing}
+   </div>`) as WikiRenderer,
+});
+
+/**
  * Drawer renders a slide-in panel from one side of the viewport when `open`
  * is true. Clicking the backdrop dispatches `onClose`. Default placement is
  * right (most common for detail panels); "left", "bottom" are supported too.
@@ -969,6 +993,7 @@ childrenUnion.current = z.union([
  Steps.ref,
  Tabs.ref,
  Accordion.ref,
+ Tooltip.ref,
 ]);
 
 /**
@@ -1012,6 +1037,7 @@ return createLibrary({
   Steps,
   Tabs,
   Accordion,
+  Tooltip,
  ],
  actions: [Beep],
  root: WIKI_ROOT_COMPONENT,
