@@ -914,7 +914,7 @@ func (s *Site) handlePWAManifest(c *gin.Context) {
 		"short_name":       name,
 		"description":      "Page app: " + name,
 		"start_url":        "/" + page + "/bare",
-		"scope":            "/",
+		"scope":            "/" + page + "/bare/", // page-path scope: the installed app covers only its own app surface
 		"display":          "standalone",
 		"background_color": "#ffffff",
 		"theme_color":      "#ffffff",

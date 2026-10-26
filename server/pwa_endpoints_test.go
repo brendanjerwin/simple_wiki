@@ -55,8 +55,8 @@ var _ = Describe("PWAEndpoints", func() {
 			Expect(manifest["display"]).To(Equal("standalone"))
 		})
 
-		It("should scope to the site root", func() {
-			Expect(manifest["scope"]).To(Equal("/"))
+		It("should scope to the page's own bare path", func() {
+			Expect(manifest["scope"]).To(Equal("/has-app/bare/"))
 		})
 
 		It("should include the site icons", func() {
