@@ -159,12 +159,39 @@ export class WikiPageAppHost extends LitElement {
         0%, 100% { opacity: 0.6; }
         50% { opacity: 1; }
       }
+
+      /* Bare mode: full-viewport, no card chrome, no remove button */
+      :host([bare]) {
+        height: 100%;
+        overflow: auto;
+      }
+      :host([bare]) .wiki-page-app-app {
+        border: none;
+        border-radius: 0;
+        background: transparent;
+        padding: clamp(8px, 2vw, 16px);
+        min-height: 100%;
+      }
+      :host([bare]) .wiki-page-app-body {
+        padding-top: 0;
+      }
+      :host([bare]) .wiki-page-app-remove {
+        display: none;
+      }
     `,
  ];
 
  /** The page app's page identifier. */
  @property({ type: String })
  declare page: string;
+
+ /**
+  * Bare mode: renders without wiki-chrome card styling and hides the
+  * "Remove the app" button. Set automatically by the bare-app URL template
+  * (`/:page/app`) for a full-viewport standalone experience.
+  */
+ @property({ type: Boolean, reflect: true })
+ declare bare: boolean;
 
  @state()
  declare private programSource: string;
@@ -219,6 +246,7 @@ export class WikiPageAppHost extends LitElement {
  constructor() {
   super();
   this.page = '';
+  this.bare = false;
   this.programSource = '';
   this.pageApp = null;
   this.stateVersionHash = '';
@@ -846,7 +874,7 @@ export class WikiPageAppHost extends LitElement {
     </div>`;
  }
 
- /** The rendered app tree: remove button, program body, parse errors. */
+ /** The rendered app tree: remove button (hidden in bare mode), program body, parse errors. */
  private renderAppBody(): TemplateResult {
   // The live store is the in-session truth: hydration from
   // GetPageAppState happened once in hydrateState(); re-renders pass an
@@ -855,7 +883,7 @@ export class WikiPageAppHost extends LitElement {
   const rendered = this.runtime!.render(this.programSource, {});
   this.lastErrors = rendered.errors;
   this.lastDeclarations = rendered.stateDeclarations;
-  return html`<button class="wiki-page-app-remove" @click=${() => void this.removeApp()}>Remove the app</button>
+  return html`${this.bare ? nothing : html`<button class="wiki-page-app-remove" @click=${() => void this.removeApp()}>Remove the app</button>`}
       <div class="wiki-page-app-body">${rendered.template}</div>
       ${this.renderParseErrors()}`;
  }

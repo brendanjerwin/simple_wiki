@@ -769,3 +769,45 @@ describe('WikiPageAppHost toolProvider state page pinning', () => {
   el.remove();
  });
 });
+
+describe('WikiPageAppHost bare mode', () => {
+ let stubs: StubbedHost;
+
+ beforeEach(async () => {
+  stubs = await stubbedHost();
+ });
+
+ afterEach(() => {
+  stubs.el.remove();
+ });
+
+ describe('when bare is false (default)', () => {
+  it('should have bare defaulting to false', () => {
+   expect(stubs.el.bare).to.be.false;
+  });
+
+  it('should render the remove button', async () => {
+   await stubs.el.updateComplete;
+   expect(stubs.el.shadowRoot?.querySelector('.wiki-page-app-remove')).to.exist;
+  });
+
+  it('should not reflect the bare attribute', () => {
+   expect(stubs.el.hasAttribute('bare')).to.be.false;
+  });
+ });
+
+ describe('when bare is set to true', () => {
+  beforeEach(async () => {
+   stubs.el.bare = true;
+   await stubs.el.updateComplete;
+  });
+
+  it('should reflect the bare attribute on the host element', () => {
+   expect(stubs.el.hasAttribute('bare')).to.be.true;
+  });
+
+  it('should not render the remove button', () => {
+   expect(stubs.el.shadowRoot?.querySelector('.wiki-page-app-remove')).to.not.exist;
+  });
+ });
+});

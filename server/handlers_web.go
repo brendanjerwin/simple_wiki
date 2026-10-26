@@ -46,6 +46,7 @@ const (
 	mimeTextPlain            = "text/plain"
 	contentDispositionHeader = "Content-Disposition"
 	indexTemplateName        = "index.tmpl"
+	bareAppTemplateName      = "bare-app.tmpl"
 )
 
 var (
@@ -498,8 +499,13 @@ func (s *Site) loadTemplate() multitemplate.Render {
 	if err != nil {
 		panic(err)
 	}
-
 	r.Add(indexTemplateName, tmplMessage)
+
+	bareAppTmpl, err := template.New(bareAppTemplateName).Parse(string(static.BareAppTemplate))
+	if err != nil {
+		panic(err)
+	}
+	r.Add(bareAppTemplateName, bareAppTmpl)
 
 	return r
 }
@@ -602,6 +608,16 @@ func (s *Site) handleSpecialPages(c *gin.Context, page, command string) bool {
 	}
 }
 
+// renderBareApp renders the page app in bare mode (no wiki chrome, full viewport).
+func renderBareApp(c *gin.Context, page string) {
+	identity := tailscale.IdentityFromContext(c.Request.Context())
+	c.HTML(http.StatusOK, bareAppTemplateName, gin.H{
+		"Page":        page,
+		"WikiBaseURL": requestBaseURL(c),
+		"Username":    identity.LoginName(),
+	})
+}
+
 // renderPageContent handles the final page content rendering
 func (s *Site) renderPageContent(c *gin.Context, page, command string, p *wikipage.Page) {
 	rawText, contentHTML := s.getPageContent(p)
@@ -610,6 +626,16 @@ func (s *Site) renderPageContent(c *gin.Context, page, command string, p *wikipa
 	// points stripped the fence). The host element is prepended in the
 	// template when HasPageApp is set — app above prose, never XOR.
 	_, _, hasPageApp := wikipage.SplitPageAppFences(rawText)
+
+	if command == "/app" {
+		if hasPageApp {
+			renderBareApp(c, page)
+		} else {
+			c.Redirect(httpStatusFound, path.Join(rootPath, url.PathEscape(page), "view"))
+		}
+		return
+	}
+
 	contentHTML = fmt.Appendf(nil, "<article class='content' id='%s'>%s</article>", page, string(contentHTML))
 
 	if s.handleRawContent(c, command, p, rawText) {

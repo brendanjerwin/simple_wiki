@@ -364,6 +364,19 @@ root = Card("Notes", Stack([
 
 **Component request when nothing fits** — if the app you're writing genuinely needs a component `wiki-core@3` doesn't have (slider, date picker, …), don't degrade it into a confusing `Stack`-of-buttons. Tell the user what's missing, ship the best app you can **without** it, then **open a feature-request issue on this project** so the component eventually gets built: `Button("request a slider", @OpenUrl("https://github.com/brendanjerwin/simple_wiki/issues"))` renders the one-tap link for the user; you create the issue text in the same turn. (`wiki-core@3` now includes `Grid`/`Span`, `Divider`, `SectionHeader`, Card `variant`s, `Tabs`, `Accordion`, `Switch`, `Select`, `Dialog`, `Toast`, and `Drawer`.)
 
+## Bare-app URL mode
+
+Any page app can be opened in a full-screen, chrome-free view by navigating to `/<page>/app`. This URL renders **only** the page app — no wiki sidebar, no page prose, no chat panel, no "Remove the app" button. It is optimized for mobile viewports (`viewport-fit=cover`, `height: 100dvh`).
+
+Use cases:
+- Add to phone/tablet home screen (via the browser's "Add to Home Screen" / "Install App" menu) for a personal standalone-app experience.
+- Sharing a direct link to just the interactive app, without wiki context.
+- Embedding the app in other contexts via `<iframe src="/<page>/app">`.
+
+Auth and state persistence work exactly as in the normal wiki view: the same session cookie is used, and `PageAppStateService` reads/writes the same server-side state.
+
+If a page has no page app, `/<page>/app` redirects to `/<page>/view`.
+
 ## See Also
 
 - [[help]] — full help index
