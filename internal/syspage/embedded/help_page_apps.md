@@ -19,7 +19,7 @@ Use `PageAppService` and `PageAppStateService` for authoring and state. Both are
 - **Children are an array argument**: `Stack([Text("hello"), Button("press")])`.
 - **Reactive state is a `$name` declaration**: `$completed = 0`. References interpolate by **string concatenation** — `"sessions: " + $completed` (there is no `{expr}` string interpolation).
 - **Unknown components and invalid statements are dropped, never fatal** — the rest renders. Errors come back structured (`{code, component, statementId, message}`) so you can self-correct.
-- **Missing a component?** If an app needs a component that isn't in `wiki-core@3` (no `Slider`, `Tabs`, `DatePicker`, etc.), do **not** fake it with nested `Stack` hacks or drop the feature silently. Build the best program you can **without** the component, tell the user which component is missing and what app it blocked, and **open a feature-request issue on the SimpleWiki GitHub project** (`github.com/brendanjerwin/simple_wiki/issues`) naming the component and the real app it would enable — components get built based on demand from actual apps, so a concrete request with a real use case is the fastest path to getting it. (`Grid`, `Card` variants, `Divider`, and `SectionHeader` exist as of `wiki-core@3`; `Slider`, `Tabs`, `Dialog`, and the `Image` component are still future.)
+- **Missing a component?** If an app needs a component that isn't in `wiki-core@3` (no `Slider`, `DatePicker`, etc.), do **not** fake it with nested `Stack` hacks or drop the feature silently. Build the best program you can **without** the component, tell the user which component is missing and what app it blocked, and **open a feature-request issue on the SimpleWiki GitHub project** (`github.com/brendanjerwin/simple_wiki/issues`) naming the component and the real app it would enable — components get built based on demand from actual apps, so a concrete request with a real use case is the fastest path to getting it. (`Grid`, `Card` variants, `Divider`, `SectionHeader`, `Tooltip`, `Tabs`, `Accordion`, `Switch`, `Select`, `Dialog`, `Toast`, and `Drawer` exist as of `wiki-core@3`; `Slider` and the `Image` component are still future.)
 
 ## Time-based apps: `Countdown`
 
@@ -78,6 +78,96 @@ root = Card("Wizard", Stack([
 ]))
 ```
 
+## Overlays: `Dialog`, `Toast`, `Drawer`
+
+**Drawer**(open, placement?, children, onClose?) renders a slide-in panel from one edge of the viewport when `open` is true. Clicking the backdrop dispatches `onClose`. `placement` sets the edge: `"right"` (default), `"left"`, or `"bottom"`. Use for detail panels and settings without a full-screen modal.
+
+```
+$drawerOpen = false
+details = Stack([Text("Exercise details", "title"), Text("3 sets of 12 reps"), Button("Close", @Set($drawerOpen, false), "secondary")])
+drawer = Drawer($drawerOpen, "right", [details], @Set($drawerOpen, false))
+root = Card("Routine", Stack([Button("View details", @Set($drawerOpen, true)), drawer]))
+```
+
+## Overlays: `Dialog`, `Toast`
+
+**Dialog**(title?, open, children, onClose?) renders a modal overlay when `open` is true. Bind `$open = false` and use @Set to open/close. Clicking the backdrop or the × button dispatches `onClose`. Use this for confirmation flows that previously routed through @ToAssistant.
+
+```
+$open = false
+body = Stack([
+  Text("This will clear all progress. Continue?"),
+  Stack([
+    Button("Clear", @ToAssistant("clear my progress"), "danger"),
+    Button("Cancel", @Set($open, false), "secondary"),
+  ], "horizontal", "md"),
+])
+dlg = Dialog("Confirm Reset", $open, [body], @Set($open, false))
+root = Card("Hamstring Routine", Stack([
+  Button("Reset", @Set($open, true), "danger"),
+  dlg,
+]))
+```
+
+**Toast**(message, visible, kind?, onDismiss?) renders a brief notification fixed at the bottom-right of the viewport when `visible` is true. Kinds: `"info"` (default, blue), `"success"` (green), `"warning"` (amber), `"error"` (red). The × button dispatches `onDismiss` — use @Set($visible, false). Toast does not auto-dismiss; pair with a timer if needed.
+
+```
+$toastVisible = false
+toast = Toast("Session saved!", $toastVisible, "success", @Set($toastVisible, false))
+root = Card("App", Stack([
+  Button("Save", @Set($toastVisible, true)),
+  toast,
+]))
+```
+
+## Form controls: `Switch`, `Select`
+
+**Switch**(label?, checked, onChange) renders a boolean toggle — the right choice for "Struggled / Completed" toggles and any on/off state, replacing restyled Buttons. Bind a boolean `$variable` and update it with `@Set($var, $value)` (where `$value` is the new checked boolean):
+
+```
+$struggled = false
+sw = Switch("Struggled", $struggled, @Set($struggled, $value))
+root = Card("Leg hold", Stack([
+  sw,
+  Text("status: " + $struggled),
+]))
+```
+
+**Select**(label?, value, onChange, options) renders a dropdown that lets the user pick one item from an `options` list. Bind a `$variable` to persist the selection and react to changes with `@Set($var, $value)`:
+
+```
+$routine = "strength"
+picker = Select("Routine type", $routine, @Set($routine, $value), ["strength", "mobility", "cardio"])
+root = Card("Workout Picker", Stack([
+  picker,
+  Text("selected: " + $routine),
+]))
+```
+
+## Navigation: `Tabs`, `Accordion`
+
+**Tabs**(labels, children, active?, onTabChange?) renders a tab bar that shows one panel at a time — the direct replacement for Steps-hack multi-section layouts. `labels` is the array of tab header strings (positional first); `children` the matching array of content panels. Bind a `$variable` to persist which tab is active across reloads:
+
+```
+$tab = 0
+panelA = Stack([Text("Overview content")])
+panelB = Stack([Text("Details content")])
+root = Card("Hamstring Routine", Tabs(["Overview", "Details"], [panelA, panelB], $tab, @Set($tab, $value)))
+```
+
+Without `active`/`onTabChange` the first panel shows by default (clicking tabs has no visible effect — always bind `$tab = 0` for interactive use).
+
+**Accordion**(title, children) renders a collapsible section using the browser's native `<details>`/`<summary>` elements — no `$variable` needed; the browser manages expanded state. Stack multiple Accordions to form an accordion group:
+
+```
+warmup = Stack([Text("arm circles"), Text("leg swings")])
+workout = Stack([Text("squats 3×12"), Text("lunges 3×10")])
+root = Card("Routine", Stack([
+  Accordion("Warm-up", [warmup]),
+  Accordion("Workout", [workout]),
+]))
+```
+
 ## Layout: `Grid`, `Span`, `Divider`, `SectionHeader`
 
 **Grid**(children, cols?, gap?) — children FIRST, then columns: `Grid([a, b, c, d], 2, "lg")` lays four children into a 2-column grid. `cols` accepts `2`, `3`, or the `"sidebar"` preset (240px main column + flexible rest). `gap` takes the same 4pt tokens as Stack. Grids collapse to one column below 520px — author as if each cell may stack vertically.
@@ -95,6 +185,26 @@ root = Card("Routine", Stack([
   Grid([Progress(3, 1, "set 1"), Progress(3, 2, "set 2")], 2),
 ]))
 ```
+
+## Tooltips: `Tooltip`
+
+`Tooltip(text, children?)` wraps any children with a hover tooltip that shows `text`. Pure CSS — no per-element IDs, no JavaScript. Works anywhere a child is accepted.
+
+```
+tip = Tooltip("Hold for 30 s", [Button("start")])
+root = Card("Hamstring routine", Stack([tip]))
+```
+
+**Composes with anything**: wrap a `Button`, `Text`, `SectionHeader`, or any other component:
+
+```
+root = Card("Routine", Stack([
+  Tooltip("Complete one set before continuing", [SectionHeader("Exercise 1")]),
+  Tooltip("Tap to mark done", [Button("mark done", @Set($done, $done + 1))]),
+]))
+```
+
+**Accessibility**: the `title` attribute is also set, so keyboard users and screen readers get the tooltip text natively. The CSS bubble appears on mouse hover; `title` covers the keyboard/touch path.
 
 **Card variants** (third positional prop): `Card("title", children, variant)` — `elevated` (stronger shadow, no border) for hero content, `outlined` (flat, thin border) for quiet panels, `filled` (sunken background) for grouped secondary content, `accent` (accent-tinted wash) for highlight cards. The default card stays as before. (Background-image hero cards are coming later; request via issue if blocked on them today.)
 
@@ -278,7 +388,7 @@ root = Card("Notes", Stack([
 ]))
 ```
 
-**Component request when nothing fits** — if the app you're writing genuinely needs a component `wiki-core@3` doesn't have (slider, tab pane, date picker, …), don't degrade it into a confusing `Stack`-of-buttons. Tell the user what's missing, ship the best app you can **without** it, then **open a feature-request issue on this project** so the component eventually gets built: `Button("request a slider", @OpenUrl("https://github.com/brendanjerwin/simple_wiki/issues"))` renders the one-tap link for the user; you create the issue text in the same turn. (`wiki-core@3` added the layout batch — `Grid`/`Span`, `Divider`, `SectionHeader`, Card `variant`s.)
+**Component request when nothing fits** — if the app you're writing genuinely needs a component `wiki-core@3` doesn't have (slider, date picker, …), don't degrade it into a confusing `Stack`-of-buttons. Tell the user what's missing, ship the best app you can **without** it, then **open a feature-request issue on this project** so the component eventually gets built: `Button("request a slider", @OpenUrl("https://github.com/brendanjerwin/simple_wiki/issues"))` renders the one-tap link for the user; you create the issue text in the same turn. (`wiki-core@3` now includes `Grid`/`Span`, `Divider`, `SectionHeader`, Card `variant`s, `Tooltip`, `Tabs`, `Accordion`, `Switch`, `Select`, `Dialog`, `Toast`, and `Drawer`.)
 
 ## See Also
 

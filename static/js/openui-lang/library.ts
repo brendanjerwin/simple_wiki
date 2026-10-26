@@ -726,6 +726,248 @@ const SectionHeader = defineComponent({
     </div>`) as WikiRenderer,
 });
 
+/**
+ * Tooltip wraps any children with a hover tooltip showing `text`.
+ * Uses a CSS ::after pseudo-element driven by data-tooltip — no per-element
+ * IDs, no JS, no popover API. Works in any slot; composable with Button,
+ * Text, SectionHeader, etc.
+ */
+const Tooltip = defineComponent({
+ name: 'Tooltip',
+ props: z.object({
+  text: z.string(),
+  children: childrenSlot().optional(),
+ }),
+ description:
+  'Wraps children with a hover tooltip that shows `text`. CSS-only — no IDs needed. Tooltip("More info", [Button("?")]). Composes with any child: Button, Text, SectionHeader, etc.',
+ component: (({ text, children }) =>
+  html`<div
+     class="wiki-page-app-tooltip-wrap"
+     data-tooltip=${typeof text === 'string' ? text : ''}
+     title=${typeof text === 'string' ? text : ''}
+   >
+     ${Array.isArray(children) ? children : nothing}
+   </div>`) as WikiRenderer,
+});
+
+/**
+ * Drawer renders a slide-in panel from one side of the viewport when `open`
+ * is true. Clicking the backdrop dispatches `onClose`. Default placement is
+ * right (most common for detail panels); "left", "bottom" are supported too.
+ */
+const DrawerSchema = z.object({
+ open: z.boolean().optional(),
+ placement: z.enum(['left', 'right', 'bottom']).optional(),
+ children: childrenSlot(),
+ onClose: action().optional(),
+});
+markReactive(DrawerSchema.shape.open);
+const Drawer = defineComponent({
+ name: 'Drawer',
+ props: DrawerSchema,
+ description:
+  'A slide-in panel from one edge of the viewport when `open` is true. Bind `$open = false` and use @Set to open/close; clicking the backdrop dispatches `onClose` — use @Set($open, false). `placement` sets the edge: "right" (default), "left", or "bottom".',
+ component: (({ open, placement, children, onClose }) => {
+  if (open !== true) return html`${nothing}`;
+  const close = (event: Event) => {
+   dispatchArtifactAction(event, { plan: asPlan(onClose) });
+  };
+  const stopProp = (event: Event) => { event.stopPropagation(); };
+  const side = typeof placement === 'string' ? placement : 'right';
+  return html`<div class="wiki-page-app-drawer-backdrop" @click=${close}>
+     <div
+       class="wiki-page-app-drawer"
+       data-placement=${side}
+       role="dialog"
+       aria-modal="true"
+       @click=${stopProp}
+     >
+       <div class="wiki-page-app-drawer-body">
+         ${Array.isArray(children) ? children : []}
+       </div>
+     </div>
+   </div>`;
+ }) as WikiRenderer,
+});
+
+/**
+ * Dialog renders a modal overlay when `open` is true. It uses CSS
+ * position:fixed so it escapes normal page flow and overlays the viewport.
+ * Bind `$open = false` and use @Set($open, true/false) to open/close.
+ * Clicking the backdrop or the × button dispatches `onClose`.
+ */
+const DialogSchema = z.object({
+ title: z.string().optional(),
+ open: z.boolean().optional(),
+ children: childrenSlot(),
+ onClose: action().optional(),
+});
+markReactive(DialogSchema.shape.open);
+const Dialog = defineComponent({
+ name: 'Dialog',
+ props: DialogSchema,
+ description:
+  'A modal overlay shown when `open` is true. Bind `$open = false` and open with @Set($open, true); close (backdrop click or × button) dispatches `onClose` — use @Set($open, false) there. `title` is the dialog header; `children` the content. Example: Dialog("Confirm", $open, Stack([Text("Sure?"), Button("yes"), Button("cancel", @Set($open, false), "secondary")]), @Set($open, false))',
+ component: (({ title, open, children, onClose }) => {
+  if (open !== true) return html`${nothing}`;
+  const close = (event: Event) => {
+   dispatchArtifactAction(event, { plan: asPlan(onClose) });
+  };
+  const stopProp = (event: Event) => { event.stopPropagation(); };
+  return html`<div class="wiki-page-app-dialog-backdrop" @click=${close}>
+     <div class="wiki-page-app-dialog" role="dialog" aria-modal="true" @click=${stopProp}>
+       <div class="wiki-page-app-dialog-header">
+         ${typeof title === 'string' ? html`<h3 class="wiki-page-app-dialog-title">${title}</h3>` : nothing}
+         <button class="wiki-page-app-dialog-close" aria-label="Close" @click=${close}>×</button>
+       </div>
+       <div class="wiki-page-app-dialog-body">
+         ${Array.isArray(children) ? children : []}
+       </div>
+     </div>
+   </div>`;
+ }) as WikiRenderer,
+});
+
+/**
+ * Toast renders a transient notification anchored to the bottom-right of the
+ * viewport when `visible` is true. Clicking the × button dispatches `onDismiss`.
+ * Positional order: message, visible, kind?, onDismiss?
+ */
+const ToastSchema = z.object({
+ message: z.string(),
+ visible: z.boolean().optional(),
+ kind: z.enum(['info', 'success', 'warning', 'error']).optional(),
+ onDismiss: action().optional(),
+});
+markReactive(ToastSchema.shape.visible);
+const Toast = defineComponent({
+ name: 'Toast',
+ props: ToastSchema,
+ description:
+  'A transient notification fixed at the bottom-right of the viewport when `visible` is true. `message` first; bind `$visible = false` and set to true to show it; `kind` tints: "info" (default), "success" (green), "warning" (amber), "error" (red). `onDismiss` fires when the × is clicked — use @Set($visible, false).',
+ component: (({ message, visible, kind, onDismiss }) => {
+  if (visible !== true) return html`${nothing}`;
+  const dismiss = (event: Event) => {
+   dispatchArtifactAction(event, { plan: asPlan(onDismiss) });
+  };
+  return html`<div
+     class="wiki-page-app-toast"
+     data-kind=${typeof kind === 'string' ? kind : 'info'}
+     role="status"
+   >
+     <span class="wiki-page-app-toast-message">${typeof message === 'string' ? message : ''}</span>
+     <button class="wiki-page-app-toast-dismiss" aria-label="Dismiss" @click=${dismiss}>×</button>
+   </div>`;
+ }) as WikiRenderer,
+});
+
+/**
+ * Switch renders a boolean toggle control bound to a $variable. Unlike
+ * restyled Buttons, Switch communicates a binary on/off state visually.
+ * Positional order: label, checked, onChange — mirrors Input/Select.
+ */
+const SwitchSchema = z.object({
+ label: z.string().optional(),
+ checked: z.boolean().optional(),
+ onChange: action().optional(),
+});
+markReactive(SwitchSchema.shape.checked);
+const Switch = defineComponent({
+ name: 'Switch',
+ props: SwitchSchema,
+ description:
+  'A toggle switch bound to a boolean $variable. `label` is the display label; `checked` the boolean state (bind a $variable); `onChange` the action that runs when the toggle fires — use @Set($var, $value) where $value is the new boolean. Example: `Switch("Struggled", $struggled, @Set($struggled, $value))`.',
+ component: (({ label, checked, onChange }) => {
+  const isChecked = checked === true;
+  const fire = (event: Event) => {
+   dispatchArtifactAction(event, {
+    plan: asPlan(onChange),
+    value: event.currentTarget instanceof HTMLInputElement ? event.currentTarget.checked : !isChecked,
+   });
+  };
+  return html`<label class="wiki-page-app-switch-field">
+     <span class="wiki-page-app-switch-track" aria-hidden="true">
+       <input
+         class="wiki-page-app-switch-input"
+         type="checkbox"
+         .checked=${isChecked}
+         @change=${fire}
+       />
+       <span class="wiki-page-app-switch-thumb"></span>
+     </span>
+     ${typeof label === 'string' && label !== '' ? html`<span class="wiki-page-app-switch-label">${label}</span>` : nothing}
+   </label>`;
+ }) as WikiRenderer,
+});
+
+/**
+ * Tabs renders a tab bar that shows one panel at a time. `labels` is the
+ * array of tab headers (positional first), `children` the matching array of
+ * content panels. Bind `$tab = 0` to persist the active tab across reloads:
+ *   Tabs(["A","B"], [contentA, contentB], $tab, @Set($tab, $value))
+ * Without `active`/`onTabChange` the first tab shows by default.
+ */
+const TabsSchema = z.object({
+ labels: z.array(z.string()),
+ children: childrenSlot(),
+ active: z.number().optional(),
+ onTabChange: action().optional(),
+});
+markReactive(TabsSchema.shape.active);
+const Tabs = defineComponent({
+ name: 'Tabs',
+ props: TabsSchema,
+ description:
+  'A tab bar showing one panel at a time. `labels` first (array of tab header strings), `children` second (array of matching content panels). Bind `$tab = 0` → `Tabs(["A","B"], [contentA, contentB], $tab, @Set($tab, $value))` to make tab-switching persistent across reloads. Without binding, clicking tabs has no visible effect.',
+ component: (({ labels, children, active, onTabChange }) => {
+  const labelList = Array.isArray(labels) ? labels.filter((l): l is string => typeof l === 'string') : [];
+  const childList = Array.isArray(children) ? children : [];
+  const activeIdx = typeof active === 'number'
+   ? Math.max(0, Math.min(Math.floor(active), labelList.length - 1))
+   : 0;
+  const tabButtons = labelList.map((label, i) => {
+   const fire = (event: Event) => {
+    dispatchArtifactAction(event, { plan: asPlan(onTabChange), value: i });
+   };
+   return html`<button
+       class="wiki-page-app-tabs-tab"
+       data-active=${i === activeIdx ? 'true' : 'false'}
+       role="tab"
+       aria-selected=${i === activeIdx ? 'true' : 'false'}
+       @click=${fire}
+     >${label}</button>`;
+  });
+  return html`<div class="wiki-page-app-tabs">
+     <div class="wiki-page-app-tabs-list" role="tablist">${tabButtons}</div>
+     <div class="wiki-page-app-tabs-panel" role="tabpanel">
+       ${childList[activeIdx] ?? nothing}
+     </div>
+   </div>`;
+ }) as WikiRenderer,
+});
+
+/**
+ * Accordion renders a collapsible section via the native <details>/<summary>
+ * elements. The browser manages open/close state natively — no $variable needed.
+ * Stack multiple Accordion components to form an accordion group.
+ */
+const Accordion = defineComponent({
+ name: 'Accordion',
+ props: z.object({
+  title: z.string(),
+  children: childrenSlot(),
+ }),
+ description:
+  'A collapsible section with a clickable header. `title` is the header label (positional first); `children` the collapsed content. The browser manages expanded state natively — no $variable needed. Stack multiple Accordions to form a group.',
+ component: (({ title, children }) =>
+  html`<details class="wiki-page-app-accordion">
+     <summary class="wiki-page-app-accordion-summary">${typeof title === 'string' ? title : ''}</summary>
+     <div class="wiki-page-app-accordion-content">
+       ${Array.isArray(children) ? children : []}
+     </div>
+   </details>`) as WikiRenderer,
+});
+
 childrenUnion.current = z.union([
  Text.ref,
  Button.ref,
@@ -739,12 +981,19 @@ childrenUnion.current = z.union([
  Chart.ref,
  Input.ref,
  Select.ref,
+ Switch.ref,
+ Drawer.ref,
+ Dialog.ref,
+ Toast.ref,
  Checklist.ref,
  MapComponent.ref,
  Survey.ref,
  Countdown.ref,
  Progress.ref,
  Steps.ref,
+ Tabs.ref,
+ Accordion.ref,
+ Tooltip.ref,
 ]);
 
 /**
@@ -776,12 +1025,19 @@ return createLibrary({
   Chart,
   Input,
   Select,
+  Switch,
+  Drawer,
+  Dialog,
+  Toast,
   Checklist,
   MapComponent,
   Survey,
   Countdown,
   Progress,
   Steps,
+  Tabs,
+  Accordion,
+  Tooltip,
  ],
  actions: [Beep],
  root: WIKI_ROOT_COMPONENT,
