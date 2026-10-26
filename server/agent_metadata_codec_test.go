@@ -125,7 +125,7 @@ var _ = Describe("mapToJSONBytes", func() {
 
 		Describe("when the encoded bytes are decoded again via jsonBytesToMap", func() {
 			var (
-				roundTrip   map[string]any
+				roundTrip    map[string]any
 				roundTripErr error
 			)
 

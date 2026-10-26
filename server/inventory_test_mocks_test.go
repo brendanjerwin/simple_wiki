@@ -14,10 +14,10 @@ type mockPageReaderMutator struct {
 	pages map[string]*mockPage
 
 	// Call tracking
-	readFrontMatterCalls []string
+	readFrontMatterCalls  []string
 	writeFrontMatterCalls []string
-	writeMarkdownCalls   []string
-	deletedPages         []string
+	writeMarkdownCalls    []string
+	deletedPages          []string
 
 	// Injectable errors (override per-page errors)
 	readFrontMatterErr  error
@@ -95,7 +95,8 @@ func (m *mockPageReaderMutator) ReadMarkdown(id wikipage.PageIdentifier) (wikipa
 	return id, wikipage.Markdown(page.markdown), nil
 }
 
-func (m *mockPageReaderMutator) WriteFrontMatter(id wikipage.PageIdentifier, fm wikipage.FrontMatter, _ wikipage.Identity) error { m.writeFrontMatterCalls = append(m.writeFrontMatterCalls, string(id))
+func (m *mockPageReaderMutator) WriteFrontMatter(id wikipage.PageIdentifier, fm wikipage.FrontMatter, _ wikipage.Identity) error {
+	m.writeFrontMatterCalls = append(m.writeFrontMatterCalls, string(id))
 
 	if m.writeFrontMatterErr != nil {
 		return m.writeFrontMatterErr
@@ -106,9 +107,10 @@ func (m *mockPageReaderMutator) WriteFrontMatter(id wikipage.PageIdentifier, fm 
 	}
 	m.pages[string(id)].frontmatter = fm
 	return nil
- }
+}
 
-func (m *mockPageReaderMutator) WriteMarkdown(id wikipage.PageIdentifier, md wikipage.Markdown, _ wikipage.Identity) error { m.writeMarkdownCalls = append(m.writeMarkdownCalls, string(id))
+func (m *mockPageReaderMutator) WriteMarkdown(id wikipage.PageIdentifier, md wikipage.Markdown, _ wikipage.Identity) error {
+	m.writeMarkdownCalls = append(m.writeMarkdownCalls, string(id))
 
 	if m.writeMarkdownErr != nil {
 		return m.writeMarkdownErr
@@ -119,7 +121,7 @@ func (m *mockPageReaderMutator) WriteMarkdown(id wikipage.PageIdentifier, md wik
 	}
 	m.pages[string(id)].markdown = string(md)
 	return nil
- }
+}
 
 func (m *mockPageReaderMutator) DeletePage(id wikipage.PageIdentifier) error {
 	m.deletedPages = append(m.deletedPages, string(id))
@@ -132,7 +134,8 @@ func (m *mockPageReaderMutator) DeletePage(id wikipage.PageIdentifier) error {
 	return nil
 }
 
-func (m *mockPageReaderMutator) ModifyMarkdown(id wikipage.PageIdentifier, modifier func(wikipage.FrontMatter, wikipage.Markdown) (wikipage.Markdown, error), _ wikipage.Identity) error { var currentMD wikipage.Markdown
+func (m *mockPageReaderMutator) ModifyMarkdown(id wikipage.PageIdentifier, modifier func(wikipage.FrontMatter, wikipage.Markdown) (wikipage.Markdown, error), _ wikipage.Identity) error {
+	var currentMD wikipage.Markdown
 	if page, ok := m.pages[string(id)]; ok {
 		currentMD = wikipage.Markdown(page.markdown)
 	}
@@ -151,7 +154,7 @@ func (m *mockPageReaderMutator) ModifyMarkdown(id wikipage.PageIdentifier, modif
 	}
 	m.pages[string(id)].markdown = string(newMD)
 	return nil
- }
+}
 
 // getFrontmatter returns the frontmatter for a page (for test assertions).
 func (m *mockPageReaderMutator) getFrontmatter(id string) map[string]any {
@@ -160,7 +163,6 @@ func (m *mockPageReaderMutator) getFrontmatter(id string) map[string]any {
 	}
 	return nil
 }
-
 
 // hasPage returns true if a page exists in the mock.
 func (m *mockPageReaderMutator) hasPage(id string) bool {

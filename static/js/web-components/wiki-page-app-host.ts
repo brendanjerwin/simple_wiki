@@ -855,7 +855,8 @@ export class WikiPageAppHost extends LitElement {
   const rendered = this.runtime!.render(this.programSource, {});
   this.lastErrors = rendered.errors;
   this.lastDeclarations = rendered.stateDeclarations;
-  return html`<button class="wiki-page-app-remove" @click=${() => void this.removeApp()}>Remove the app</button>
+  return html`<wiki-pwa-install page="${this.page}"></wiki-pwa-install>
+      <button class="wiki-page-app-remove" @click=${() => void this.removeApp()}>Remove the app</button>
       <div class="wiki-page-app-body">${rendered.template}</div>
       ${this.renderParseErrors()}`;
  }

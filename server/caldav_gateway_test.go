@@ -238,15 +238,15 @@ var _ = Describe("caldavGateway middleware", func() {
 			// Stamp an owner-only page on disk so the gateway has
 			// frontmatter to authorize against.
 			Expect(site.WriteFrontMatter("shopping", wikipage.FrontMatter{
-					"identifier": "shopping",
-					"wiki": map[string]any{
-						"authorization": map[string]any{
-							"acl": map[string]any{
-								"owner": "alice@example.com",
-							},
+				"identifier": "shopping",
+				"wiki": map[string]any{
+					"authorization": map[string]any{
+						"acl": map[string]any{
+							"owner": "alice@example.com",
 						},
 					},
-				}, wikipage.AnonymousIdentity)).To(Succeed())
+				},
+			}, wikipage.AnonymousIdentity)).To(Succeed())
 			Expect(site.WriteMarkdown("shopping", "# body", wikipage.AnonymousIdentity)).To(Succeed())
 		})
 
