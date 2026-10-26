@@ -107,4 +107,3 @@ func (s *Site) createPageReferences(ids []wikipage.PageIdentifier) []PageReferen
 	}
 	return results
 }
-

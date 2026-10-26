@@ -196,4 +196,3 @@ func isValidCron(expr string) bool {
 	_, err := parser.Parse(expr)
 	return err == nil
 }
-

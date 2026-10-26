@@ -78,11 +78,11 @@ func setFlatValue(frontmatter map[string]any, key string, value any) error {
 func setNestedValue(m map[string]any, dottedKey string, value any) error {
 	parts := strings.Split(dottedKey, ".")
 	current := m
-	
+
 	// Navigate/create the nested structure
 	for i := 0; i < len(parts)-1; i++ {
 		part := parts[i]
-		
+
 		if existing, exists := current[part]; exists {
 			// If it exists and is a map, use it
 			nestedMap, ok := existing.(map[string]any)
@@ -99,7 +99,7 @@ func setNestedValue(m map[string]any, dottedKey string, value any) error {
 			current = newMap
 		}
 	}
-	
+
 	// Set the final value
 	finalKey := parts[len(parts)-1]
 	current[finalKey] = value
