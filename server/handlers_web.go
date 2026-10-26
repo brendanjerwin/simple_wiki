@@ -40,14 +40,15 @@ const (
 	maxContentLength  = 3
 
 	// String constants
-	rootPath                 = "/"
-	uploadFailureMessage     = "Failed to upload: %s"
-	uploadsPage              = "uploads"
-	mimeTextPlain            = "text/plain"
-	contentDispositionHeader = "Content-Disposition"
-	cacheControlHeader       = "Cache-Control"
-	bareTemplateName         = "bare.tmpl"
-	indexTemplateName        = "index.tmpl"
+	rootPath                  = "/"
+	uploadFailureMessage      = "Failed to upload: %s"
+	uploadsPage               = "uploads"
+	mimeTextPlain             = "text/plain"
+	contentDispositionHeader  = "Content-Disposition"
+	cacheControlHeader        = "Cache-Control"
+	headerCacheControlNoStore = "no-store"
+	bareTemplateName          = "bare.tmpl"
+	indexTemplateName         = "index.tmpl"
 )
 
 var (
@@ -626,13 +627,13 @@ func (s *Site) handleSpecialPages(c *gin.Context, page, command string) bool {
 func (s *Site) renderBareApp(c *gin.Context, page string, p *wikipage.Page) {
 	_, _, hasPageApp := wikipage.SplitPageAppFences(p.Text)
 	if !hasPageApp {
-		c.Header(cacheControlHeader, "no-store")
+		c.Header(cacheControlHeader, headerCacheControlNoStore)
 		c.String(http.StatusNotFound, "Page %s has no page app to show in bare mode.", page)
 		return
 	}
 
 	identity := tailscale.IdentityFromContext(c.Request.Context())
-	c.Header(cacheControlHeader, "no-store")
+	c.Header(cacheControlHeader, headerCacheControlNoStore)
 	// Manifest-only PWA install (docs/proj-pwa.md): the bare shell links a
 	// per-page manifest whose start_url is this page's bare URL.
 	c.HTML(http.StatusOK, bareTemplateName, gin.H{
@@ -908,7 +909,7 @@ func (s *Site) handlePWAManifest(c *gin.Context) {
 	}
 
 	name := s.pageAppName(wikipage.PageIdentifier(page))
-	c.Header(cacheControlHeader, "no-store")
+	c.Header(cacheControlHeader, headerCacheControlNoStore)
 	c.JSON(http.StatusOK, gin.H{
 		"name":             name,
 		"short_name":       name,
