@@ -1,6 +1,7 @@
-//revive:disable:dot-imports
 // Internal tests for applyUserMutableFields. Lives in package
 // checklistmutator (not _test) so it can exercise the unexported helper.
+//
+//revive:disable:dot-imports
 package checklistmutator
 
 import (

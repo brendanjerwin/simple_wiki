@@ -117,6 +117,21 @@ Modern browsers support PWA installation without a service worker when:
 
 Users install via browser menu (⋮ → "Install app") instead of a custom prompt banner.
 
+## Per-Page-App Installs (#1324, shipped 2026-10-26)
+
+Page apps (OpenUI Lang artifact pages) get first-class install support, **still manifest-only**:
+
+- `GET /<page>/bare` — bare-app URL mode: renders only the page app, no wiki chrome. 404 for pages without a page-app fence. `Cache-Control: no-store` (same staleness posture as wiki pages).
+- `GET /manifest.json?page=<identifier>` — per-app manifest: name from the page title (identifier as fallback), `start_url` = `/<page>/bare`, `scope: /<page>/`, `display: standalone`, the shared site icons. Page path scope keeps the installed app scoped to its own app surface rather than the whole wiki.
+- `<wiki-pwa-install>` (Lit) — Install button wired to `beforeinstallprompt`/`appinstalled`, per-platform "Add to Home Screen" instructions fallback, plus an "Open App" link to the bare URL on wiki pages. No service worker registration anywhere.
+
+**Decision:** the service worker the issue text mentions was NOT built. Manifest-only installability covers Chrome 93+/Safari 16.4+ and preserves the Zero Caching rule above; offline support remains a Future-Enhancement gate.
+
+
+## Future Enhancements (Implement Only On User Request)
+
+### Update Notification Features
+
 ## Implementation Plan
 
 ### Phase 1: Manifest and Icons (Ship This)
@@ -244,7 +259,7 @@ These features are explicitly **not** part of Phase 1. Only implement if users e
 1. **Offline notification** - If users report confusion when network fails, consider adding clear offline status indicator. But validate that existing error messages aren't sufficient first.
 2. **Offline content caching** - Only if users demonstrate actual need to access wiki without network. Requires service worker + complex sync strategy.
 
-### Update Notification Features  
+### Update Notification Features
 
 1. **Auto-update detection** - If users request proactive update notifications, consider:
    - **Option A**: Check version on page navigation (zero polling cost)

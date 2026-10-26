@@ -27,9 +27,10 @@ import './web-components/wiki-table.js';
 import './web-components/collapsible-heading.js';
 import './web-components/page-auto-refresh.js';
 import './web-components/page-chat-panel.js';
+import './web-components/wiki-pwa-install.js';
 import './web-components/page-trash.js';
-import { showStoredToast } from './web-components/toast-message.js';
 import { setupGlobalErrorHandler } from './web-components/global-error-handler.js';
+import { showStoredToast } from './web-components/toast-message.js';
 import { pageDeleteService } from './web-components/page-deletion-service.js';
 import { initInventoryMenu } from './web-components/inventory-menu.js';
 import { initPrintMenu } from './web-components/print-label.js';
@@ -40,10 +41,10 @@ import type { AgentDetailsDialog } from './web-components/agent-details-dialog.j
 // Set up global error handling to catch unhandled errors
 setupGlobalErrorHandler();
 
-// Show any stored toast messages after page load.
 // This module script is loaded with type="module" which defers execution until after
 // the DOM is parsed, so no DOMContentLoaded listener is needed.
 showStoredToast();
+
 
 // Handle page deletion
 const erasePageEl = document.getElementById('erasePage');
