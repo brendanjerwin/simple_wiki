@@ -22,7 +22,7 @@ require (
 	github.com/mark3labs/mcp-go v0.56.0
 	github.com/mborders/artifex v0.5.1
 	github.com/microcosm-cc/bluemonday v1.0.27
-	github.com/oklog/ulid/v2 v2.1.1
+	github.com/oklog/ulid/v2 v2.1.2
 	github.com/onsi/ginkgo/v2 v2.32.0
 	github.com/onsi/gomega v1.44.0
 	github.com/paulmach/orb v0.13.0
