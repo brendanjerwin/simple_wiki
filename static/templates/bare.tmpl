@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta http-equiv="content-type" content="text/html; charset=UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+        <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+        <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+        <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+
+        <link rel="stylesheet" href="/static/vendor/css/base-min.css">
+
+        <meta name="color-scheme" content="light dark">
+        <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+        <meta name="theme-color" content="#1e1e1e" media="(prefers-color-scheme: dark)">
+        <meta name="simple-wiki-url" content="{{ .WikiBaseURL }}">
+
+        {{ if and .CustomCSS .ViewPage }}
+            <link rel="stylesheet" type="text/css" href="/static/css/custom.css">
+        {{ else }}
+            <link rel="stylesheet" type="text/css" href="/static/css/default.css">
+        {{ end }}
+
+        <script type="module" src="/static/js/dist/web-components.js"></script>
+
+        <title>{{ .Page }}</title>
+
+        <script type='text/javascript'>
+            window.simple_wiki = {
+                pageName: "{{ .Page }}",
+                username: "{{ .Username }}",
+                hasPageApp: true,
+            }
+        </script>
+
+        <link rel="manifest" href="/manifest.json?page={{ .Page }}">
+    </head>
+    <body id="pad" class="ViewPage BareAppMode">
+        <div id="rendered" aria-live="polite" aria-label="Page app">
+            <wiki-page-app-host page="{{ .Page }}"></wiki-page-app-host>
+            <wiki-pwa-install bare page="{{ .Page }}"></wiki-pwa-install>
+        </div>
+    </body>
+</html>

@@ -90,8 +90,16 @@ type Site struct {
 	AgentScheduler           *AgentScheduler
 	ScheduledTurnDispatcher  *ScheduledTurnDispatcher
 	AgentScheduleConcurrency int
-	AgentScheduleQueueCap    int
-	AgentTurnHardTimeout     time.Duration
+
+	// SkipBackgroundJobs, when true, prevents InitializeIndexing from
+	// registering any cron-scheduled background jobs. Production sites
+	// always leave this false so hourly maintenance (inventory
+	// normalization, history decimation) runs; tests set it to keep
+	// background jobs from writing into a spec's data directory
+	// mid-test (e.g. the audit report page racing a DirectoryList).
+	SkipBackgroundJobs    bool
+	AgentScheduleQueueCap int
+	AgentTurnHardTimeout  time.Duration
 	// caldavServer dispatches CalDAV-shaped HTTP traffic. The
 	// caldavGateway middleware (registered before route matching)
 	// forwards qualifying requests here; everything else falls through
@@ -381,7 +389,9 @@ func (s *Site) InitializeIndexing() error {
 	if err := s.initIndexesAndCoordinators(); err != nil {
 		return err
 	}
-	s.scheduleBackgroundJobs()
+	if !s.SkipBackgroundJobs {
+		s.scheduleBackgroundJobs()
+	}
 	s.startMigrationJobs()
 	return s.startInitialIndexing()
 }

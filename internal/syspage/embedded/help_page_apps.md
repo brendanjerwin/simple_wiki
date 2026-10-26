@@ -98,6 +98,12 @@ root = Card("Routine", Stack([
 
 **Card variants** (third positional prop): `Card("title", children, variant)` — `elevated` (stronger shadow, no border) for hero content, `outlined` (flat, thin border) for quiet panels, `filled` (sunken background) for grouped secondary content, `accent` (accent-tinted wash) for highlight cards. The default card stays as before. (Background-image hero cards are coming later; request via issue if blocked on them today.)
 
+## Standalone app mode & install (PWA)
+
+Any page with a page app can be opened as a **standalone app** at `/<page>/bare` — the app fills the viewport with **no wiki chrome**: no menus, no prose, no chat panel. It uses the same wiki session/auth, and app state works exactly as on the wiki page.
+
+That bare URL is also the **installable** surface: the shell links a per-app web app manifest (`/manifest.json?page=<page>`, standalone display, its own start URL), so modern browsers (Chrome 93+, Safari 16.4+; **no service worker needed** — see the wiki's zero-caching PWA decision) offer **Install app** from the address bar. On the bare page a small `<wiki-pwa-install>` control in the corner triggers the native install prompt where available and falls back to per-platform **Add to Home Screen** instructions otherwise. On the wiki page the same control next to "Remove the app" renders an **Open App** link to the bare URL. Pages without a page app return 404 for `/bare` — there is nothing to install.
+
 ## For Agents
 
 ### Quick start (the whole authoring flow in one block)

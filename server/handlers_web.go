@@ -45,6 +45,8 @@ const (
 	uploadsPage              = "uploads"
 	mimeTextPlain            = "text/plain"
 	contentDispositionHeader = "Content-Disposition"
+	cacheControlHeader       = "Cache-Control"
+	bareTemplateName         = "bare.tmpl"
 	indexTemplateName        = "index.tmpl"
 )
 
@@ -271,6 +273,7 @@ func (s *Site) registerRoutes(router *gin.Engine) {
 	router.GET("/cli/:binary", serveCLIBinary)
 	router.HEAD("/cli/:binary", serveCLIBinary)
 	router.GET("/extensions/:file", serveExtensionFile)
+	router.GET("/manifest.json", s.handlePWAManifest)
 	router.GET("/oauth/google/callback", s.handleOAuthGoogleCallback)
 
 	router.GET("/:page", func(c *gin.Context) {
@@ -501,6 +504,15 @@ func (s *Site) loadTemplate() multitemplate.Render {
 
 	r.Add(indexTemplateName, tmplMessage)
 
+	tmplBare, err := template.New(bareTemplateName).Funcs(template.FuncMap{
+		"sniffContentType": s.sniffContentType,
+	}).Parse(string(static.BareTemplate))
+	if err != nil {
+		panic(err)
+	}
+
+	r.Add(bareTemplateName, tmplBare)
+
 	return r
 }
 
@@ -572,6 +584,11 @@ func (s *Site) handlePageRequest(c *gin.Context) {
 		}
 	}
 
+	if command == "/bare" {
+		s.renderBareApp(c, page, p)
+		return
+	}
+
 	// Render the page content
 	s.renderPageContent(c, page, command, p)
 }
@@ -602,6 +619,30 @@ func (s *Site) handleSpecialPages(c *gin.Context, page, command string) bool {
 	}
 }
 
+// renderBareApp serves the bare app-mode shell: only the page app, no wiki
+// chrome, no prose. It 404s when the page has no wiki-page-app fence — the
+// bare URL is meaningless for a plain page. Responses are no-store so page
+// edits surface immediately in an installed (standalone) instance.
+func (s *Site) renderBareApp(c *gin.Context, page string, p *wikipage.Page) {
+	_, _, hasPageApp := wikipage.SplitPageAppFences(p.Text)
+	if !hasPageApp {
+		c.Header(cacheControlHeader, "no-store")
+		c.String(http.StatusNotFound, "Page %s has no page app to show in bare mode.", page)
+		return
+	}
+
+	identity := tailscale.IdentityFromContext(c.Request.Context())
+	c.Header(cacheControlHeader, "no-store")
+	// Manifest-only PWA install (docs/proj-pwa.md): the bare shell links a
+	// per-page manifest whose start_url is this page's bare URL.
+	c.HTML(http.StatusOK, bareTemplateName, gin.H{
+		"Page":        page,
+		"Username":    identity.LoginName(),
+		"CustomCSS":   len(s.CSS) > 0,
+		"WikiBaseURL": requestBaseURL(c),
+	})
+}
+
 // renderPageContent handles the final page content rendering
 func (s *Site) renderPageContent(c *gin.Context, page, command string, p *wikipage.Page) {
 	rawText, contentHTML := s.getPageContent(p)
@@ -611,7 +652,6 @@ func (s *Site) renderPageContent(c *gin.Context, page, command string, p *wikipa
 	// template when HasPageApp is set — app above prose, never XOR.
 	_, _, hasPageApp := wikipage.SplitPageAppFences(rawText)
 	contentHTML = fmt.Appendf(nil, "<article class='content' id='%s'>%s</article>", page, string(contentHTML))
-
 	if s.handleRawContent(c, command, p, rawText) {
 		return
 	}
@@ -689,7 +729,7 @@ func (s *Site) buildTemplateData(page, command string, listing DirectoryListing,
 		"WikiBaseURL":      requestBaseURL(c),
 		"Username":         identity.LoginName(),
 		"IsSystemPage":     s.isSystemPage(page),
-		"HasPageApp":      hasPageApp,
+		"HasPageApp":       hasPageApp,
 	}
 }
 
@@ -855,6 +895,50 @@ func (*Site) handleFavicon(c *gin.Context) {
 	c.Data(http.StatusOK, contentTypeFromName("img/favicon/favicon.ico"), data)
 }
 
+// handlePWAManifest serves a per-page-app web app manifest so a bare-mode
+// page app installs as a standalone app (start_url is the app's own bare
+// URL). Manifest-only by project decision — no service worker
+// (docs/proj-pwa.md). Requires ?page=<identifier>; anything else is a
+// bad request rather than a guessed site-wide manifest.
+func (s *Site) handlePWAManifest(c *gin.Context) {
+	page := c.Query("page")
+	if page == "" {
+		c.String(http.StatusBadRequest, "manifest.json requires ?page=<identifier>")
+		return
+	}
+
+	name := s.pageAppName(wikipage.PageIdentifier(page))
+	c.Header(cacheControlHeader, "no-store")
+	c.JSON(http.StatusOK, gin.H{
+		"name":             name,
+		"short_name":       name,
+		"description":      "Page app: " + name,
+		"start_url":        "/" + page + "/bare",
+		"scope":            "/",
+		"display":          "standalone",
+		"background_color": "#ffffff",
+		"theme_color":      "#ffffff",
+		"icons": []gin.H{
+			{"src": "/static/img/pwa/icon-192.png", "sizes": "192x192", "type": "image/png"},
+			{"src": "/static/img/pwa/icon-512.png", "sizes": "512x512", "type": "image/png"},
+		},
+	})
+}
+
+// pageAppName resolves a page app's manifest display name: the page title
+// from frontmatter when set, otherwise the raw page identifier. No
+// invented fallbacks — the identifier is the honest default.
+func (s *Site) pageAppName(identifier wikipage.PageIdentifier) string {
+	_, fm, err := s.ReadFrontMatter(identifier)
+	if err != nil {
+		return string(identifier)
+	}
+	if title, ok := fm["title"].(string); ok && title != "" {
+		return title
+	}
+	return string(identifier)
+}
+
 func (s *Site) handleStatic(c *gin.Context, command string) {
 	filename := strings.TrimPrefix(command, "/")
 	var data []byte
@@ -871,7 +955,7 @@ func (s *Site) handleStatic(c *gin.Context, command string) {
 	// JS modules are cached aggressively by browsers; bust the cache so new
 	// builds load on refresh instead of serving a stale bundle.
 	if strings.HasSuffix(filename, ".js") {
-		c.Header("Cache-Control", "no-cache, must-revalidate")
+		c.Header(cacheControlHeader, "no-cache, must-revalidate")
 	}
 	c.Data(http.StatusOK, contentTypeFromName(filename), data)
 }
