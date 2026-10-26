@@ -35,7 +35,9 @@ export function connectCode(payload: unknown): string | undefined {
  return err?.code;
 }
 
-/** A minimal valid wiki-page-app program. */
+/** A minimal valid wiki-page-app program. No trailing newline: callers
+ * embedding it in a ```wiki-page-app fence must put the closing fence
+ * on its own line (see the pageBody() helpers in the specs). */
 export function counterProgram(version: string, expr: string): string {
  return [
   `$n = 0`,
@@ -54,14 +56,30 @@ export async function setupPage(
   contentMarkdown: markdown,
  });
  const created = createResp.json as { success?: boolean; error?: string } | null;
- if (createResp.status === 200 && created?.success === true) return;
+ if (createResp.status !== 200 || created?.success !== true) {
+  // The server reports "page already exists" as HTTP 200 + success:false.
+  // Any other failure (e.g. the page-app fence validation) is a broken
+  // fixture; fail fast with the actual server error instead of silently
+  // falling through to the reset path below.
+  if (!created?.error?.startsWith('page already exists')) {
+   throw new Error(`CreatePage ${page} failed: ${createResp.text}`);
+  }
+ }
 
- const resetResp = await callAPI(request, 'PageManagementService', 'UpdatePageContent', {
-  page,
-  newContentMarkdown: markdown,
-  allowShrink: true,
- });
- expect(resetResp.status, `reset ${page}: ${resetResp.text}`).toBe(200);
+ // Bounded retry on 404 guards against any read-after-create visibility
+ // lag on the reset path.
+ const UPDATE_404_RETRIES = 5;
+ let resetResp: { status: number; json: unknown; text: string } | undefined;
+ for (let attempt = 0; attempt <= UPDATE_404_RETRIES; attempt++) {
+  resetResp = await callAPI(request, 'PageManagementService', 'UpdatePageContent', {
+   page,
+   newContentMarkdown: markdown,
+   allowShrink: true,
+  });
+  if (resetResp.status !== 404) break;
+  await new Promise((resolve) => setTimeout(resolve, attempt * 100));
+ }
+ expect(resetResp!.status, `reset ${page}: ${resetResp!.text}`).toBe(200);
 }
 
 /** Fetch the page app program for a page; 404 when it has none. */

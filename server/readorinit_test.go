@@ -9,9 +9,9 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/jcelliott/lumber"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"github.com/jcelliott/lumber"
 	"github.com/pelletier/go-toml/v2"
 
 	"github.com/brendanjerwin/simple_wiki/utils/base32tools"
@@ -21,18 +21,17 @@ import (
 
 var _ = Describe("Site.ReadOrInit with URL parameters", func() {
 	var (
-		s         *Site
-		req       *http.Request
-		p         *wikipage.Page
-		err       error
-		tmpDir    string
-		reqURL    *url.URL
+		s      *Site
+		req    *http.Request
+		p      *wikipage.Page
+		err    error
+		tmpDir string
+		reqURL *url.URL
 	)
 
 	BeforeEach(func() {
 		tmpDir, err = os.MkdirTemp("", "site-readorinit-test")
 		Expect(err).NotTo(HaveOccurred())
-
 
 		// Set up empty migration applicator for unit testing
 		s = &Site{
@@ -56,12 +55,12 @@ var _ = Describe("Site.ReadOrInit with URL parameters", func() {
 
 	Describe("when creating a new page with dotted URL parameters", func() {
 		var (
-			content           string
-			frontmatterTOML   string
-			parsed            map[string]any
-			parseErr          error
-			expectedPath      string
-			pathStatErr       error
+			content         string
+			frontmatterTOML string
+			parsed          map[string]any
+			parseErr        error
+			expectedPath    string
+			pathStatErr     error
 		)
 
 		BeforeEach(func() {
@@ -75,11 +74,11 @@ var _ = Describe("Site.ReadOrInit with URL parameters", func() {
 
 			// Act
 			p, err = s.readOrInitPage("kinect_to_windows_adapter", req)
-			
+
 			// Capture test data after action
 			if p != nil {
 				content = p.Text
-				
+
 				// Extract frontmatter between +++ delimiters
 				if strings.Contains(content, "+++") {
 					startIdx := 4 // After first "+++\n"
@@ -91,11 +90,11 @@ var _ = Describe("Site.ReadOrInit with URL parameters", func() {
 						}
 					}
 					frontmatterTOML = content[startIdx:endIdx]
-					
+
 					// Parse the TOML
 					parseErr = toml.Unmarshal([]byte(frontmatterTOML), &parsed)
 				}
-				
+
 				// Check if page was saved to disk
 				identifier := p.Identifier
 				expectedPath = path.Join(tmpDir, base32tools.EncodeToBase32(strings.ToLower(identifier))+".md")
@@ -177,11 +176,11 @@ var _ = Describe("Site.ReadOrInit with URL parameters", func() {
 
 			// Act
 			p, err = s.readOrInitPage("test_page_arrays", req)
-			
+
 			// Capture test data after action
 			if p != nil {
 				content = p.Text
-				
+
 				// Extract and parse frontmatter
 				if strings.Contains(content, "+++") {
 					startIdx := 4

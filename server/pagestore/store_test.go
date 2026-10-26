@@ -206,9 +206,9 @@ var _ = Describe("Store", func() {
 				Expect(store.WriteFrontMatter("modify-both", wikipage.FrontMatter{"title": "Old"}, wikipage.AnonymousIdentity)).To(Succeed())
 
 				modifyErr = store.ModifyFrontMatterAndMarkdown("modify-both", func(fm wikipage.FrontMatter, md wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error) {
-						fm["title"] = "New"
-						return fm, md + "new body\n", nil
-					}, wikipage.AnonymousIdentity)
+					fm["title"] = "New"
+					return fm, md + "new body\n", nil
+				}, wikipage.AnonymousIdentity)
 				var readErr error
 				page, readErr = store.ReadPage("modify-both")
 				Expect(readErr).NotTo(HaveOccurred())
@@ -239,8 +239,8 @@ var _ = Describe("Store", func() {
 				Expect(store.WriteFrontMatter("modify-both-error", wikipage.FrontMatter{"title": "Old"}, wikipage.AnonymousIdentity)).To(Succeed())
 
 				modifyErr = store.ModifyFrontMatterAndMarkdown("modify-both-error", func(wikipage.FrontMatter, wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error) {
-						return nil, "", modifierErr
-					}, wikipage.AnonymousIdentity)
+					return nil, "", modifierErr
+				}, wikipage.AnonymousIdentity)
 				var readErr error
 				page, readErr = store.ReadPage("modify-both-error")
 				Expect(readErr).NotTo(HaveOccurred())
@@ -263,8 +263,8 @@ var _ = Describe("Store", func() {
 				fp := filepath.Join(tempDir, base32tools.EncodeToBase32("broken-fm")+".md")
 				Expect(os.WriteFile(fp, []byte("+++\ntitle = [invalid\n+++\nbody\n"), 0644)).To(Succeed())
 				modifyErr = store.ModifyFrontMatterAndMarkdown("broken-fm", func(fm wikipage.FrontMatter, md wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error) {
-						return fm, md, nil
-					}, wikipage.AnonymousIdentity)
+					return fm, md, nil
+				}, wikipage.AnonymousIdentity)
 			})
 
 			It("should return a frontmatter parse error", func() {
