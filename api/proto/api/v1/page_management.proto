@@ -62,8 +62,20 @@ service PageManagementService {
         "large pages — it avoids re-sending the entire page and supports "
         "optimistic concurrency via expected_version_hash. Also supports "
         "find-and-replace semantics via old_content_markdown (only the first "
-        "occurrence is replaced; missing matches return NOT_FOUND). For "
-        "reading a specific section before editing, use ReadPageOutline + "
+        "occurrence is replaced; missing matches return NOT_FOUND). "
+        "CRITICAL: when using find-and-replace (old_content_markdown set), "
+        "new_content_markdown must be ONLY the replacement snippet — never "
+        "the full page body. Example: old='short phrase', new='replacement "
+        "phrase'. Two server-side guards enforce this: (1) CONTAINMENT GUARD: "
+        "if new_content_markdown contains old_content_markdown verbatim, the "
+        "call is rejected with INVALID_ARGUMENT — this catches the common "
+        "mistake of passing the whole page body as new_content_markdown; "
+        "(2) SIZE-RATIO GUARD: if new_content_markdown is more than 3x the "
+        "length of old_content_markdown, the call is rejected — the "
+        "replacement must be a focused snippet, not a whole-page rewrite. "
+        "For full-page rewrites, use UpdateWholePage with "
+        "expected_version_hash instead. "
+        "For reading a specific section before editing, use ReadPageOutline + "
         "ReadPageSection to avoid loading the full page body. "
         "SHRINK BREAKER: a write whose resulting page is under 10% of the "
         "current page size (current >= 1 KB) is rejected with "
@@ -267,6 +279,13 @@ message UpdatePageContentRequest {
   // consider using expected_version_hash to guard against concurrent edits.
   // If old_content_markdown is not found in the current content, the RPC returns a NOT_FOUND error.
   // When omitted, new_content_markdown replaces the entire page content (full replacement).
+  //
+  // IMPORTANT: new_content_markdown must be ONLY the replacement snippet — never the full page body.
+  // Example correct usage: old_content_markdown="short phrase", new_content_markdown="replacement phrase".
+  // Two server-side guards protect against the common agent mistake of passing the full page body:
+  //   - CONTAINMENT GUARD: rejected if new_content_markdown contains old_content_markdown verbatim.
+  //   - SIZE-RATIO GUARD: rejected if new_content_markdown is more than 3x the length of old_content_markdown.
+  // For full-page rewrites, use UpdateWholePage with expected_version_hash instead.
   optional string old_content_markdown = 4;
   // allow_shrink overrides the shrink circuit breaker: when true, a write
   // that would reduce the page to under 10% of its current size (current

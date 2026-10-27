@@ -3000,6 +3000,89 @@ var _ = Describe("Server", func() {
 			})
 		})
 
+		// Snippet replacement guards (issue #1339): protect against the common agent mistake
+		// of passing the entire page body as new_content_markdown in a find-and-replace call,
+		// which silently splices a full page copy into the match point.
+		When("old_content_markdown is provided and new_content_markdown contains old_content_markdown verbatim", func() {
+			BeforeEach(func() {
+				mockPageReaderMutator.Markdown = "# Page Title\n\nThis is the intro sentence.\n\nMore content follows."
+				oldSnippet := "This is the intro sentence."
+				req.OldContentMarkdown = &oldSnippet
+				// Simulates an agent passing the full intended page body (which still contains the old snippet)
+				// instead of just the replacement snippet.
+				req.NewContentMarkdown = "# Page Title\n\nThis is the intro sentence.\n\nUpdated content here.\n\nMore content follows."
+			})
+
+			It("should return an invalid argument error", func() {
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.InvalidArgument, "snippet replacement guard"))
+			})
+
+			It("should mention that new_content_markdown contains old_content_markdown", func() {
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.InvalidArgument, "new_content_markdown contains old_content_markdown"))
+			})
+
+			It("should suggest using UpdateWholePage", func() {
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.InvalidArgument, "UpdateWholePage"))
+			})
+
+			It("should not return a response", func() {
+				Expect(resp).To(BeNil())
+			})
+
+			It("should not write any content", func() {
+				Expect(mockPageReaderMutator.WrittenMarkdown).To(BeEmpty())
+			})
+		})
+
+		When("old_content_markdown is provided and new_content_markdown is more than 3x the size of old_content_markdown", func() {
+			BeforeEach(func() {
+				mockPageReaderMutator.Markdown = "# Page\n\nShort phrase to replace.\n\nRest of page."
+				oldSnippet := "Short phrase to replace."
+				req.OldContentMarkdown = &oldSnippet
+				// new_content is 4x old_content length — far too large for a snippet replacement
+				req.NewContentMarkdown = "# Page\n\nHere is a much longer replacement that is clearly too large for a snippet edit and should be rejected by the size-ratio guard because it exceeds the allowed multiplier by a significant margin indeed."
+			})
+
+			It("should return an invalid argument error", func() {
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.InvalidArgument, "snippet replacement guard"))
+			})
+
+			It("should mention size ratio in the error message", func() {
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.InvalidArgument, "new_content_markdown"))
+			})
+
+			It("should suggest using UpdateWholePage", func() {
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.InvalidArgument, "UpdateWholePage"))
+			})
+
+			It("should not return a response", func() {
+				Expect(resp).To(BeNil())
+			})
+
+			It("should not write any content", func() {
+				Expect(mockPageReaderMutator.WrittenMarkdown).To(BeEmpty())
+			})
+		})
+
+		When("old_content_markdown is provided and new_content_markdown is exactly 3x the size of old_content_markdown", func() {
+			BeforeEach(func() {
+				mockPageReaderMutator.Markdown = "# Page\n\nFIND.\n\nRest."
+				oldSnippet := "FIND."
+				req.OldContentMarkdown = &oldSnippet
+				// Exactly 3x: "FIND." is 5 bytes, so replacement of 15 bytes is at the boundary.
+				// Must not contain the old snippet (would trigger containment guard).
+				req.NewContentMarkdown = "REPLACE_WORD_OK"
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should return a response", func() {
+				Expect(resp).NotTo(BeNil())
+			})
+		})
+
 		// TOCTOU fix verification: the hash check is now inside ModifyMarkdown (atomic with the
 		// write), so a concurrent modification that happens between the pre-read and the write is
 		// detected — rather than silently overwriting the concurrent writer's changes.

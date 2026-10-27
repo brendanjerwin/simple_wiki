@@ -77,9 +77,24 @@ func checkContentVersionHashString(currentHash string, expectedHash *string) err
 	return nil
 }
 
+// snippetReplacementMaxRatio is the maximum allowed ratio of new_content_markdown
+// to old_content_markdown in find-and-replace mode. A replacement more than
+// this many times the size of the matched snippet almost certainly means the
+// caller passed a whole-page body instead of just the replacement snippet.
+const snippetReplacementMaxRatio = 3
+
 // resolveMarkdownContent computes the markdown to write.
 // When oldContentMarkdown is provided, performs a find-and-replace within originalMarkdown.
 // Otherwise returns newContentMarkdown as the full replacement.
+//
+// Snippet replacement guards (issue #1339): when old_content_markdown is set, two checks
+// reject writes that look like accidental full-page submissions:
+//  1. Containment guard: if new_content_markdown contains old_content_markdown verbatim,
+//     the replacement already includes the snippet it was supposed to replace — a strong
+//     signal the caller passed the full page body. Rejected with InvalidArgument.
+//  2. Size-ratio guard: if new_content_markdown is more than snippetReplacementMaxRatio×
+//     the length of old_content_markdown, the replacement is far too large for a snippet
+//     edit. Rejected with InvalidArgument.
 func resolveMarkdownContent(originalMarkdown wikipage.Markdown, oldContentMarkdown *string, newContentMarkdown string) (wikipage.Markdown, error) {
 	if oldContentMarkdown == nil {
 		return wikipage.Markdown(newContentMarkdown), nil
@@ -87,6 +102,28 @@ func resolveMarkdownContent(originalMarkdown wikipage.Markdown, oldContentMarkdo
 
 	if !strings.Contains(string(originalMarkdown), *oldContentMarkdown) {
 		return "", status.Error(codes.NotFound, "old_content_markdown not found in current page content")
+	}
+
+	// Containment guard: if the replacement already contains the matched snippet, the caller
+	// almost certainly passed the full page body instead of just the replacement text.
+	if strings.Contains(newContentMarkdown, *oldContentMarkdown) {
+		return "", status.Errorf(codes.InvalidArgument,
+			"snippet replacement guard: new_content_markdown contains old_content_markdown verbatim — "+
+				"this usually means the entire page body was passed as the replacement instead of just the snippet. "+
+				"new_content_markdown must be ONLY the replacement for the matched snippet. "+
+				"For full-page rewrites, use UpdateWholePage with expected_version_hash.")
+	}
+
+	// Size-ratio guard: a replacement far larger than the matched snippet is a strong
+	// signal the caller sent a whole-page body instead of a focused snippet.
+	oldLen := len(*oldContentMarkdown)
+	newLen := len(newContentMarkdown)
+	if oldLen > 0 && newLen > snippetReplacementMaxRatio*oldLen {
+		return "", status.Errorf(codes.InvalidArgument,
+			"snippet replacement guard: new_content_markdown (%d bytes) is more than %dx the size of "+
+				"old_content_markdown (%d bytes) — new_content_markdown must be ONLY the replacement for the matched snippet, "+
+				"not a full page body. For full-page rewrites, use UpdateWholePage with expected_version_hash.",
+			newLen, snippetReplacementMaxRatio, oldLen)
 	}
 
 	return wikipage.Markdown(strings.Replace(string(originalMarkdown), *oldContentMarkdown, newContentMarkdown, 1)), nil

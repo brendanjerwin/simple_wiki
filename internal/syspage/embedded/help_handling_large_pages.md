@@ -33,6 +33,19 @@ Use `api_v1_PageManagementService_ReadPage` only when you truly need the whole m
 
 When editing one section, prefer `api_v1_PageManagementService_UpdatePageContent` with `old_content_markdown`, `new_content_markdown`, and `expected_version_hash`. The `old_content_markdown` should come from `ReadPageSection` when possible. That keeps the edit small and avoids rewriting unrelated content.
 
+## Snippet replacement guards on find-and-replace writes
+
+When using `api_v1_PageManagementService_UpdatePageContent` with `old_content_markdown`, `new_content_markdown` must be **only the replacement snippet** — never the full page body. A common agent mistake is to pass the entire intended page body as `new_content_markdown`, which splices the full body into the match point and silently doubles the page content. Two server-side guards (issue #1339) reject this:
+
+- **Containment guard**: if `new_content_markdown` contains `old_content_markdown` verbatim, the call is rejected with `INVALID_ARGUMENT`. This catches the case where the agent passed the whole page (which still includes the old snippet) as the replacement.
+- **Size-ratio guard**: if `new_content_markdown` is more than 3× the byte length of `old_content_markdown`, the call is rejected with `INVALID_ARGUMENT`. A snippet replacement should be a focused, similarly-sized substitution.
+
+**Correct usage**: `old_content_markdown="short phrase"`, `new_content_markdown="replacement phrase"`.
+
+**Wrong usage** (will be rejected): `old_content_markdown="short phrase"`, `new_content_markdown=<entire page body>`.
+
+If you need to rewrite the whole page, use `api_v1_PageManagementService_UpdateWholePage` with `expected_version_hash` instead.
+
 ## Shrink circuit breakers on full-content writes
 
 Both full-content write paths carry a server-side **shrink circuit breaker** (issue #1299): a write whose resulting page would be under **10% of the current page size** (current page at least 1 KB) is rejected with `FailedPrecondition`, stating both sizes and how to override. This covers the incident class where an agent reconstructs a whole page from a context-clipped read and silently drops 99% of it.
