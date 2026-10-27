@@ -1255,11 +1255,12 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
   if (!textContent && attachments.length === 0) return;
 
   const attachmentMarkdown = buildAttachmentMarkdown(attachments);
-  const content = attachmentMarkdown
-   ? textContent
-    ? `${textContent}\n\n${attachmentMarkdown}`
-    : attachmentMarkdown
-   : textContent;
+  let content: string;
+  if (attachmentMarkdown) {
+    content = textContent ? `${textContent}\n\n${attachmentMarkdown}` : attachmentMarkdown;
+  } else {
+    content = textContent;
+  }
 
   if (!content) return;
 
