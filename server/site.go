@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/brendanjerwin/simple_wiki/filestore"
+	"github.com/brendanjerwin/simple_wiki/pkg/chatattachment"
 	"github.com/brendanjerwin/simple_wiki/index"
 	"github.com/brendanjerwin/simple_wiki/index/bleve"
 	"github.com/brendanjerwin/simple_wiki/index/frontmatter"
@@ -68,6 +69,7 @@ type Site struct {
 	MaxUploadSize           uint
 	MaxDocumentSize         uint // in runes; about a 10mb limit by default
 	FileStorer              filestore.FileStorer
+	ChatAttachmentStore     chatattachment.AttachmentStore
 	Logger                  *lumber.ConsoleLogger
 	MarkdownRenderer        MarkdownToHTMLRenderer
 	IndexCoordinator        *index.IndexCoordinator
@@ -190,6 +192,8 @@ func NewSite(
 		return nil, fmt.Errorf("failed to create file storer: %w", err)
 	}
 	site.FileStorer = fileStorer
+
+	site.ChatAttachmentStore = chatattachment.NewMemoryAttachmentStore(chatattachment.DefaultTTL)
 
 	logger.Info("Site initialization complete")
 	return site, nil

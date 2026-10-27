@@ -268,6 +268,8 @@ func (s *Site) registerRoutes(router *gin.Engine) {
 	router.GET("/trash", s.handleTrashPage)
 
 	router.POST("/uploads", s.handleUpload)
+	router.POST("/api/chat-attachments", s.handleChatAttachmentUpload)
+	router.GET("/api/chat-attachments/:id", s.handleChatAttachmentServe)
 	// Register GET and HEAD so conditional GETs (If-Modified-Since /
 	// If-None-Match) and cheap HEAD probes both work — see
 	// serveCLIBinary for the validator logic.
