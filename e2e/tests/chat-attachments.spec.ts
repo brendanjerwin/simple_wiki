@@ -1,9 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
 import { COMPONENT_LOAD_TIMEOUT_MS } from './constants.js';
-import path from 'path';
-import { fileURLToPath } from 'url';
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const PANEL_INTERACTION_TIMEOUT_MS = 5000;
 

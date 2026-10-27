@@ -2943,3 +2943,313 @@ describe('PageChatPanel make-app suggestion chip', () => {
     });
   });
 });
+
+describe('PageChatPanel attachment handling', () => {
+  let el: PageChatPanel;
+  let fetchStubAttach: SinonStub;
+  let startStreamStubAttach: SinonStub;
+  let pollChatStatusStubAttach: SinonStub;
+  let createObjectURLStub: SinonStub;
+  let revokeObjectURLStub: SinonStub;
+
+  beforeEach(async () => {
+    fetchStubAttach = stub(window, 'fetch');
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- stubbing private methods for testing
+    startStreamStubAttach = stub(PageChatPanel.prototype as any, 'startStream').resolves();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- stubbing private methods for testing
+    pollChatStatusStubAttach = stub(PageChatPanel.prototype as any, 'pollChatStatus').resolves();
+    createObjectURLStub = stub(URL, 'createObjectURL').returns('blob:fake-preview');
+    revokeObjectURLStub = stub(URL, 'revokeObjectURL');
+
+    el = await fixture(html`<page-chat-panel page="test-page" persona="TestPersona"></page-chat-panel>`);
+    el.agentConnected = true;
+    el.drawerOpen = true;
+    await el.updateComplete;
+  });
+
+  afterEach(() => {
+    fetchStubAttach.restore();
+    startStreamStubAttach.restore();
+    pollChatStatusStubAttach.restore();
+    createObjectURLStub.restore();
+    revokeObjectURLStub.restore();
+    resetForTesting();
+  });
+
+  describe('when the attach (+) button is clicked', () => {
+    beforeEach(async () => {
+      const attachButton = el.shadowRoot!.querySelector('.attach-button') as HTMLElement;
+      attachButton.click();
+      await el.updateComplete;
+    });
+
+    it('should open the attach menu', () => {
+      const menu = el.shadowRoot!.querySelector('.attach-menu');
+      expect(menu).to.not.equal(null);
+    });
+
+    describe('when clicked again', () => {
+      beforeEach(async () => {
+        const attachButton = el.shadowRoot!.querySelector('.attach-button') as HTMLElement;
+        attachButton.click();
+        await el.updateComplete;
+      });
+
+      it('should close the attach menu', () => {
+        const menu = el.shadowRoot!.querySelector('.attach-menu');
+        expect(menu).to.equal(null);
+      });
+    });
+  });
+
+  describe('when _closeAttachMenu is called while menu is open', () => {
+    beforeEach(async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- accessing private state for test setup
+      (el as any)._attachMenuOpen = true;
+      await el.updateComplete;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- calling private method for testing
+      (el as any)._closeAttachMenu();
+      await el.updateComplete;
+    });
+
+    it('should close the menu', () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- accessing private state for assertion
+      expect((el as any)._attachMenuOpen).to.equal(false);
+    });
+
+    it('should remove the attach-menu element from DOM', () => {
+      const menu = el.shadowRoot!.querySelector('.attach-menu');
+      expect(menu).to.equal(null);
+    });
+  });
+
+  describe('when a file is dragged over the input area', () => {
+    beforeEach(async () => {
+      const inputArea = el.shadowRoot!.querySelector('.input-area')!;
+      const event = new DragEvent('dragover', { bubbles: true, cancelable: true });
+      inputArea.dispatchEvent(event);
+      await el.updateComplete;
+    });
+
+    it('should apply drag-over class to input area', () => {
+      const inputArea = el.shadowRoot!.querySelector('.input-area')!;
+      expect(inputArea.classList.contains('drag-over')).to.equal(true);
+    });
+  });
+
+  describe('when dragleave fires from outside the input area', () => {
+    beforeEach(async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- accessing private state for test setup
+      (el as any)._dragOver = true;
+      await el.updateComplete;
+      const inputArea = el.shadowRoot!.querySelector('.input-area')!;
+      // relatedTarget=null means leaving the component entirely
+      const event = new DragEvent('dragleave', { bubbles: true, cancelable: true });
+      inputArea.dispatchEvent(event);
+      await el.updateComplete;
+    });
+
+    it('should remove drag-over class', () => {
+      const inputArea = el.shadowRoot!.querySelector('.input-area')!;
+      expect(inputArea.classList.contains('drag-over')).to.equal(false);
+    });
+  });
+
+  describe('when _uploadFiles succeeds', () => {
+    beforeEach(async () => {
+      fetchStubAttach.resolves(
+        new Response(
+          JSON.stringify({
+            id: 'attach-1',
+            url: '/api/chat-attachments/attach-1',
+            filename: 'photo.png',
+            mimeType: 'image/png',
+          }),
+          { status: 201, headers: { 'Content-Type': 'application/json' } },
+        ),
+      );
+      const file = new File(['data'], 'photo.png', { type: 'image/png' });
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- calling private method for testing
+      await (el as any)._uploadFiles([file]);
+      await el.updateComplete;
+    });
+
+    it('should add the attachment to _pendingAttachments', () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- accessing private state for assertion
+      expect((el as any)._pendingAttachments).to.have.length(1);
+    });
+
+    it('should store the correct filename', () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- accessing private state for assertion
+      expect((el as any)._pendingAttachments[0].filename).to.equal('photo.png');
+    });
+
+    it('should clear _attachUploadError', () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- accessing private state for assertion
+      expect((el as any)._attachUploadError).to.equal(null);
+    });
+
+    it('should render an attachment chip', async () => {
+      const chip = el.shadowRoot!.querySelector('.attachment-chip');
+      expect(chip).to.not.equal(null);
+    });
+  });
+
+  describe('when _uploadFiles encounters an error', () => {
+    beforeEach(async () => {
+      fetchStubAttach.resolves(new Response('', { status: 500, statusText: 'Internal Server Error' }));
+      const file = new File(['data'], 'bad.png', { type: 'image/png' });
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- calling private method for testing
+      await (el as any)._uploadFiles([file]);
+      await el.updateComplete;
+    });
+
+    it('should set _attachUploadError', () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- accessing private state for assertion
+      expect((el as any)._attachUploadError).to.not.equal(null);
+    });
+
+    it('should not add any attachments', () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- accessing private state for assertion
+      expect((el as any)._pendingAttachments).to.have.length(0);
+    });
+  });
+
+  describe('when _removeAttachment is called', () => {
+    beforeEach(async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- accessing private state for test setup
+      (el as any)._pendingAttachments = [
+        { id: '1', url: '/api/chat-attachments/1', filename: 'a.png', mimeType: 'image/png', previewUrl: 'blob:1' },
+        { id: '2', url: '/api/chat-attachments/2', filename: 'b.png', mimeType: 'image/png', previewUrl: 'blob:2' },
+      ];
+      await el.updateComplete;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- calling private method for testing
+      (el as any)._removeAttachment(0);
+      await el.updateComplete;
+    });
+
+    it('should remove the attachment at the given index', () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- accessing private state for assertion
+      const remaining = (el as any)._pendingAttachments as Array<{ id: string }>;
+      expect(remaining).to.have.length(1);
+      expect(remaining[0]!.id).to.equal('2');
+    });
+
+    it('should revoke the preview URL of the removed attachment', () => {
+      expect(revokeObjectURLStub.calledWith('blob:1')).to.equal(true);
+    });
+  });
+
+  describe('when a paste event with a file is dispatched on the textarea', () => {
+    let uploadFilesStub: SinonStub;
+
+    beforeEach(async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- stubbing private method for testing
+      uploadFilesStub = stub(el as any, '_uploadFiles').resolves();
+      const mockEvent = {
+        clipboardData: {
+          items: [
+            { kind: 'file', getAsFile: () => new File(['data'], 'pasted.png', { type: 'image/png' }) },
+          ],
+        },
+        preventDefault: stub(),
+      };
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- calling private method for testing
+      (el as any)._handlePaste(mockEvent);
+      await el.updateComplete;
+    });
+
+    afterEach(() => {
+      uploadFilesStub.restore();
+    });
+
+    it('should call _uploadFiles with the pasted file', () => {
+      expect(uploadFilesStub.calledOnce).to.equal(true);
+    });
+  });
+
+  describe('when a paste event without files is dispatched', () => {
+    let uploadFilesStub: SinonStub;
+
+    beforeEach(async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- stubbing private method for testing
+      uploadFilesStub = stub(el as any, '_uploadFiles').resolves();
+      const mockEvent = {
+        clipboardData: {
+          items: [{ kind: 'string', getAsFile: () => null }],
+        },
+        preventDefault: stub(),
+      };
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- calling private method for testing
+      (el as any)._handlePaste(mockEvent);
+      await el.updateComplete;
+    });
+
+    afterEach(() => {
+      uploadFilesStub.restore();
+    });
+
+    it('should not call _uploadFiles', () => {
+      expect(uploadFilesStub.called).to.equal(false);
+    });
+  });
+
+  describe('when a drop event with files is dispatched', () => {
+    let uploadFilesStub: SinonStub;
+
+    beforeEach(async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- stubbing private method for testing
+      uploadFilesStub = stub(el as any, '_uploadFiles').resolves();
+      const file = new File(['data'], 'dropped.png', { type: 'image/png' });
+      const dt = new DataTransfer();
+      dt.items.add(file);
+      const inputArea = el.shadowRoot!.querySelector('.input-area')!;
+      const event = new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: dt });
+      inputArea.dispatchEvent(event);
+      await el.updateComplete;
+    });
+
+    afterEach(() => {
+      uploadFilesStub.restore();
+    });
+
+    it('should call _uploadFiles', () => {
+      expect(uploadFilesStub.calledOnce).to.equal(true);
+    });
+
+    it('should clear _dragOver state', () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- accessing private state for assertion
+      expect((el as any)._dragOver).to.equal(false);
+    });
+  });
+
+  describe('when sendMessage is called with pending attachments', () => {
+    let sendMessageStub: SinonStub;
+
+    beforeEach(async () => {
+      sendMessageStub = stub().resolves();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- replacing private chatClient for testing
+      (el as any).chatClient = { sendMessage: sendMessageStub };
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- accessing private state for test setup
+      (el as any)._pendingAttachments = [
+        { id: '1', url: '/api/chat-attachments/1', filename: 'photo.png', mimeType: 'image/png', previewUrl: 'blob:1' },
+      ];
+      const textarea = el.shadowRoot!.querySelector('textarea')!;
+      textarea.value = 'Here is a file';
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- calling private method for testing
+      await (el as any).sendMessage();
+      await el.updateComplete;
+    });
+
+    it('should include the attachment markdown in the message content', () => {
+      expect(sendMessageStub.calledOnce).to.equal(true);
+      const request = sendMessageStub.firstCall.args[0] as { content: string };
+      expect(request.content).to.contain('![photo.png](/api/chat-attachments/1)');
+    });
+
+    it('should clear _pendingAttachments after send', () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- accessing private state for assertion
+      expect((el as any)._pendingAttachments).to.have.length(0);
+    });
+  });
+});
