@@ -9,6 +9,31 @@ async function navigateAndWait(page: Page): Promise<void> {
   await expect(page.locator('#rendered')).toBeAttached({ timeout: COMPONENT_LOAD_TIMEOUT_MS });
 }
 
+/** Set a property on page-chat-panel, waiting for the element to be upgraded first. */
+async function setChatPanelProperty(page: Page, prop: string, value: unknown): Promise<void> {
+  await page.evaluate(
+    ([p, v]) => {
+      return customElements.whenDefined('page-chat-panel').then(() => {
+        const el = document.querySelector('page-chat-panel');
+        if (el) (el as HTMLElement & Record<string, unknown>)[p] = v;
+      });
+    },
+    [prop, value] as [string, unknown],
+  );
+}
+
+/** Wait for Lit to complete its update cycle on page-chat-panel. */
+async function waitForUpdate(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    return customElements.whenDefined('page-chat-panel').then(() => {
+      const el = document.querySelector('page-chat-panel');
+      if (el && 'updateComplete' in el) {
+        return (el as HTMLElement & { updateComplete: Promise<boolean> }).updateComplete;
+      }
+    });
+  });
+}
+
 /** Open the chat panel by clicking the FAB. */
 async function openChatPanel(page: Page) {
   const fab = page.locator('page-chat-panel .fab');
@@ -50,6 +75,10 @@ test.describe('Chat Attachments', () => {
   test.describe('+ button and attach menu', () => {
     test.beforeEach(async ({ page }) => {
       await navigateAndWait(page);
+      // poolConnected must be true so the attach button is enabled (not disabled).
+      // Without this, ?disabled=${!inputEnabled} prevents the click from firing.
+      await setChatPanelProperty(page, 'poolConnected', true);
+      await waitForUpdate(page);
       await openChatPanel(page);
     });
 
