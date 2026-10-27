@@ -29,9 +29,9 @@ async function setupTestPage(request: APIRequestContext, markdown: string): Prom
     if (body.success) return;
   }
 
-  const resetResp = await callPageAPI(request, 'UpdatePageContent', {
+  const resetResp = await callPageAPI(request, 'UpdateWholePage', {
     page: TEST_PAGE,
-    newContentMarkdown: markdown,
+    newWholeMarkdown: markdown,
     allowShrink: true,
   });
   expect(resetResp.ok()).toBeTruthy();
@@ -83,9 +83,9 @@ test.describe('Page auto-refresh and system-info page status', () => {
     await waitForStreamEstablished(page);
 
     // Update the page content via the API (simulating another user/session)
-    const updateResp = await callPageAPI(request, 'UpdatePageContent', {
+    const updateResp = await callPageAPI(request, 'UpdateWholePage', {
       page: TEST_PAGE,
-      newContentMarkdown: '# Auto Refresh Test\n\nContent was updated by another session!',
+      newWholeMarkdown: '# Auto Refresh Test\n\nContent was updated by another session!',
     });
     expect(updateResp.ok()).toBeTruthy();
 
@@ -102,9 +102,9 @@ test.describe('Page auto-refresh and system-info page status', () => {
     await waitForStreamEstablished(page);
 
     // Trigger a content change so lastRefreshTime gets set
-    const updateResp = await callPageAPI(request, 'UpdatePageContent', {
+    const updateResp = await callPageAPI(request, 'UpdateWholePage', {
       page: TEST_PAGE,
-      newContentMarkdown: '# Auto Refresh Test\n\nUpdated for system-info check.',
+      newWholeMarkdown: '# Auto Refresh Test\n\nUpdated for system-info check.',
     });
     expect(updateResp.ok()).toBeTruthy();
 
@@ -141,9 +141,9 @@ test.describe('Page auto-refresh and system-info page status', () => {
 
     // Update content via API
     const updatedContent = longContent.replace('Section 1', 'Updated Section 1');
-    await callPageAPI(request, 'UpdatePageContent', {
+    await callPageAPI(request, 'UpdateWholePage', {
       page: TEST_PAGE,
-      newContentMarkdown: updatedContent,
+      newWholeMarkdown: updatedContent,
     });
 
     // Wait for the auto-refresh to pick up the change
@@ -180,9 +180,9 @@ test.describe('Page auto-refresh and system-info page status', () => {
 
     // Immediately simulate an external change via API while the editor is dirty
     const externalContent = '# External Update\n\nThis content was changed externally while editing was active.';
-    const updateResp = await callPageAPI(request, 'UpdatePageContent', {
+    const updateResp = await callPageAPI(request, 'UpdateWholePage', {
       page: TEST_PAGE,
-      newContentMarkdown: externalContent,
+      newWholeMarkdown: externalContent,
     });
     expect(updateResp.ok()).toBeTruthy();
 

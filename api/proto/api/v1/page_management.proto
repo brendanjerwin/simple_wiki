@@ -81,7 +81,12 @@ service PageManagementService {
         "current page size (current >= 1 KB) is rejected with "
         "FAILED_PRECONDITION naming both sizes; set allow_shrink=true to "
         "override. A successful write returns page_byte_size so you can "
-        "verify the result matched your intent.";
+        "verify the result matched your intent. "
+        "FULL-PAGE HASH BINDING: when old_content_markdown is omitted (full-page "
+        "replacement), expected_version_hash is REQUIRED. Omitting it is rejected "
+        "with FAILED_PRECONDITION — a full-page write without a version hash risks "
+        "silently overwriting concurrent edits. Pass the version_hash from a prior "
+        "ReadPage or ReadPageOutline call.";
   }
 
   // UpdateWholePage — see (api.v1.description).
@@ -262,6 +267,12 @@ message UpdatePageRequest {
 message UpdatePageResponse {
   bool success = 1;
   string error = 2;
+  // version_hash is the SHA256 hash of the newly written content (frontmatter + markdown).
+  // Use this as expected_version_hash in the next UpdatePageContentRequest.
+  string version_hash = 3;
+  // page_byte_size is the byte size of the page after a successful write.
+  // Use it to verify the write produced the result you intended.
+  int64 page_byte_size = 4;
 }
 
 // Update Page Content

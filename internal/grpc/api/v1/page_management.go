@@ -823,14 +823,14 @@ func (s *Server) UpdatePageContent(ctx context.Context, req *apiv1.UpdatePageCon
 	// page_byte_size mirrors the history service's ByteSize unit: the whole
 	// page text (frontmatter + markdown) as combined on disk, so agents can
 	// compare a write's outcome directly against PageHistoryService entries.
-	wholeText, wholeTextErr := wikipage.CombineFrontMatterAndMarkdown(capturedFM, storedMarkdown)
-	if wholeTextErr != nil {
-		return nil, status.Errorf(codes.Internal, "failed to compute page byte size: %v", wholeTextErr)
+	versionHash, pageByteSize, sizeErr := computePageSizeAndHash(capturedFM, storedMarkdown)
+	if sizeErr != nil {
+		return nil, sizeErr
 	}
 	return &apiv1.UpdatePageContentResponse{
 		Success:      true,
-		VersionHash:  computePageHash(capturedFM, storedMarkdown),
-		PageByteSize: int64(len(wholeText)),
+		VersionHash:  versionHash,
+		PageByteSize: pageByteSize,
 	}, nil
 }
 
@@ -842,6 +842,20 @@ func (s *Server) UpdatePageContent(ctx context.Context, req *apiv1.UpdatePageCon
 func updatePageContentModifier(req *apiv1.UpdatePageContentRequest, capturedFM *wikipage.FrontMatter) func(wikipage.FrontMatter, wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error) {
 	return func(currentFM wikipage.FrontMatter, currentMarkdown wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error) {
 		*capturedFM = currentFM
+
+		// Full-page hash binding (issue #1342): when old_content_markdown is
+		// absent the caller is replacing the entire body. Require
+		// expected_version_hash so a stale whole-page replacement is rejected
+		// instead of silently landing — the same guarantee UpdateWholePage
+		// already provides.
+		if req.OldContentMarkdown == nil && req.ExpectedVersionHash == nil {
+			return nil, "", status.Error(codes.FailedPrecondition,
+				"expected_version_hash is required for full-page writes (old_content_markdown not set); "+
+					"pass the version_hash from a prior ReadPage or ReadPageOutline call to prevent "+
+					"silently overwriting concurrent edits. "+
+					"To force a full-page write without a version check, use UpdateWholePage.")
+		}
+
 		// Version hash check is now atomic with the write — no TOCTOU window.
 		// Hash covers both frontmatter and markdown so frontmatter-only edits
 		// are also detected (issue #1197).
@@ -913,20 +927,8 @@ func (s *Server) ClearPageContent(ctx context.Context, req *apiv1.ClearPageConte
 		return nil, status.Error(codes.InvalidArgument, "confirm_clear must be true to clear page content")
 	}
 
-	if guardErr := requireUserMutable(s.pageReaderMutator, wikipage.PageIdentifier(req.Page)); guardErr != nil {
-		return nil, guardErr
-	}
-	if authErr := requireAuthorized(ctx, s.pageReaderMutator, wikipage.PageIdentifier(req.Page)); authErr != nil {
-		return nil, authErr
-	}
-
-	// Verify the page exists
-	_, _, err := s.pageReaderMutator.ReadFrontMatter(wikipage.PageIdentifier(req.Page))
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, status.Errorf(codes.NotFound, pageNotFoundErrFmt, req.Page)
-		}
-		return nil, status.Errorf(codes.Internal, failedToReadFrontmatterErrFmt, err)
+	if err := s.guardAndVerifyPageExists(ctx, wikipage.PageIdentifier(req.Page)); err != nil {
+		return nil, err
 	}
 
 	if err := s.pageReaderMutator.WriteMarkdown(wikipage.PageIdentifier(req.Page), wikipage.Markdown(""), tailscale.IdentityFromContext(ctx)); err != nil {
@@ -934,6 +936,64 @@ func (s *Server) ClearPageContent(ctx context.Context, req *apiv1.ClearPageConte
 	}
 
 	return &apiv1.ClearPageContentResponse{Success: true}, nil
+}
+
+// UpdatePage implements the UpdatePage RPC.
+// Updates both frontmatter AND body together using separate fields.
+// Writes frontmatter from new_front_matter_toml and body from new_content_markdown.
+// Returns page_byte_size and version_hash so callers can immediately verify
+// the write result.
+func (s *Server) UpdatePage(ctx context.Context, req *apiv1.UpdatePageRequest) (*apiv1.UpdatePageResponse, error) {
+	if req.Page == "" {
+		return nil, status.Error(codes.InvalidArgument, pageNameRequiredErr)
+	}
+
+	if guardErr := requireUserMutable(s.pageReaderMutator, wikipage.PageIdentifier(req.Page)); guardErr != nil {
+		return nil, guardErr
+	}
+	if authErr := requireAuthorized(ctx, s.pageReaderMutator, wikipage.PageIdentifier(req.Page)); authErr != nil {
+		return nil, authErr
+	}
+
+	if err := s.guardAndVerifyPageExists(ctx, wikipage.PageIdentifier(req.Page)); err != nil {
+		return nil, err
+	}
+
+	identity := tailscale.IdentityFromContext(ctx)
+	md := wikipage.Markdown(req.NewContentMarkdown)
+
+	// Parse frontmatter from the provided TOML.
+	var fm wikipage.FrontMatter
+	if req.NewFrontMatterToml != "" {
+		if err := toml.Unmarshal([]byte(req.NewFrontMatterToml), &fm); err != nil {
+			return nil, status.Errorf(codes.InvalidArgument, "failed to parse new_front_matter_toml: %v", err)
+		}
+	}
+	if fm == nil {
+		fm = make(wikipage.FrontMatter)
+	}
+	fm[identifierKey] = req.Page
+
+	if err := s.pageReaderMutator.WriteFrontMatter(wikipage.PageIdentifier(req.Page), fm, identity); err != nil {
+		return nil, status.Errorf(codes.Internal, failedToWriteFrontmatterErrFmt, err)
+	}
+
+	if err := s.pageReaderMutator.WriteMarkdown(wikipage.PageIdentifier(req.Page), md, identity); err != nil {
+		return nil, status.Errorf(codes.Internal, failedToWriteMarkdownErrFmt, err)
+	}
+
+	versionHash, pageByteSize, sizeErr := computePageSizeAndHash(fm, md)
+	if sizeErr != nil {
+		return nil, sizeErr
+	}
+
+	s.logger.Info("[AUDIT] update-page | page: %q | user: %q", req.Page, identity.ForLog())
+
+	return &apiv1.UpdatePageResponse{
+		Success:      true,
+		VersionHash:  versionHash,
+		PageByteSize: pageByteSize,
+	}, nil
 }
 
 // pageAtomicModifier supports atomic replacement of both frontmatter and markdown in a
@@ -950,25 +1010,40 @@ func requirePageAtomicModifier(prm wikipage.PageReaderMutator) (pageAtomicModifi
 	return am, nil
 }
 
+// guardAndVerifyPageExists runs the common write-path guards (user-mutable,
+// authorized) and verifies the page exists via ReadFrontMatter, mapping
+// not-found to the standard NotFound response.
+func (s *Server) guardAndVerifyPageExists(ctx context.Context, identifier wikipage.PageIdentifier) error {
+	if guardErr := requireUserMutable(s.pageReaderMutator, identifier); guardErr != nil {
+		return guardErr
+	}
+	if authErr := requireAuthorized(ctx, s.pageReaderMutator, identifier); authErr != nil {
+		return authErr
+	}
+	// Verify the page exists
+	_, _, err := s.pageReaderMutator.ReadFrontMatter(identifier)
+	return readFrontMatterErr(err, string(identifier))
+}
+
+// readFrontMatterErr maps a ReadFrontMatter error to the standard gRPC response
+// for write paths: NotFound for missing pages, Internal otherwise.
+func readFrontMatterErr(err error, page string) error {
+	if err == nil {
+		return nil
+	}
+	if os.IsNotExist(err) {
+		return status.Errorf(codes.NotFound, pageNotFoundErrFmt, page)
+	}
+	return status.Errorf(codes.Internal, failedToReadFrontmatterErrFmt, err)
+}
+
 // validateUpdateWholePagePrequest runs UpdateWholePage's pre-write
 // checks (guards, wipe guard, template validation, artifact fence
 // validation) and returns the parsed new frontmatter/markdown with the
 // identifier stamped.
 func (s *Server) validateUpdateWholePagePrequest(ctx context.Context, req *apiv1.UpdateWholePageRequest) (wikipage.FrontMatter, wikipage.Markdown, error) {
-	if guardErr := requireUserMutable(s.pageReaderMutator, wikipage.PageIdentifier(req.Page)); guardErr != nil {
-		return nil, "", guardErr
-	}
-	if authErr := requireAuthorized(ctx, s.pageReaderMutator, wikipage.PageIdentifier(req.Page)); authErr != nil {
-		return nil, "", authErr
-	}
-
-	// Verify the page exists
-	_, _, err := s.pageReaderMutator.ReadFrontMatter(wikipage.PageIdentifier(req.Page))
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, "", status.Errorf(codes.NotFound, pageNotFoundErrFmt, req.Page)
-		}
-		return nil, "", status.Errorf(codes.Internal, failedToReadFrontmatterErrFmt, err)
+	if err := s.guardAndVerifyPageExists(ctx, wikipage.PageIdentifier(req.Page)); err != nil {
+		return nil, "", err
 	}
 
 	page := &wikipage.Page{
@@ -1032,41 +1107,17 @@ func (s *Server) UpdateWholePage(ctx context.Context, req *apiv1.UpdateWholePage
 		return nil, preErr
 	}
 
+	// The funnel callback is thin on purpose: the nested hash/shrink checks and
+	// the reserved-subtree merge live in helpers below, keeping this method's
+	// cognitive complexity within SonarCloud's limit.
 	funnelFM, modifyErr := s.modifyMarkdownWithPageAppFunnelCtx(
 		ctx,
 		wikipage.PageIdentifier(req.Page),
 		func(currentFM wikipage.FrontMatter, currentMarkdown wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error) {
-			// Hash covers both frontmatter and markdown so frontmatter-only concurrent edits
-			// are detected (issue #1197) — checked atomically inside the funnel's write.
-			if err := checkContentVersionHash(currentFM, currentMarkdown, req.ExpectedVersionHash); err != nil {
+			if err := checkUpdateWholePageGuards(currentFM, currentMarkdown, md, req.ExpectedVersionHash, req.GetAllowShrink()); err != nil {
 				return nil, "", err
 			}
-
-			// Shrink circuit breaker (issue #1299): atomic with the write, so it
-			// always evaluates against the funnel's current content. Supersedes the
-			// #1126 pre-request wipe guard, which raced between its read and the write.
-			if err := checkShrinkBreaker(currentMarkdown, md, req.GetAllowShrink()); err != nil {
-				return nil, "", err
-			}
-			// The client's fm replaces user keys wholesale, but reserved
-			// top-level subtrees the client did NOT send (page_app_state,
-			// checklists, …) must survive a whole-page save (ADR-0010's
-			// preserve rule) — AND reserved subtrees the client DID send
-			// (a new [maps.yard] the user just wrote via the editor) must
-			// be written, not silently dropped because they're reserved.
-			fmForWrite := make(wikipage.FrontMatter, len(fm)+1)
-			for k, v := range fm {
-				fmForWrite[k] = v
-			}
-			for _, k := range wikipage.ReservedTopLevelKeys() {
-				if v, ok := currentFM[k]; ok {
-					// Client omitted this reserved key: preserve current.
-					if _, sent := fm[k]; !sent {
-						fmForWrite[k] = v
-					}
-				}
-			}
-			return fmForWrite, md, nil
+			return mergeReservedSubtrees(fm, currentFM), md, nil
 		},
 	)
 	if modifyErr != nil {
@@ -1085,19 +1136,66 @@ func (s *Server) UpdateWholePage(ctx context.Context, req *apiv1.UpdateWholePage
 	return resp, nil
 }
 
-// updateWholePageResponse builds the success response for UpdateWholePage.
+// checkUpdateWholePageGuards runs the two atomic-write guards for UpdateWholePage:
+// version-hash binding (issue #1197, frontmatter + markdown together) and the
+// shrink circuit breaker (issue #1299). Both must stay inside the funnel callback
+// so they evaluate against the write's current content.
+func checkUpdateWholePageGuards(currentFM wikipage.FrontMatter, currentMarkdown wikipage.Markdown, md wikipage.Markdown, expectedHash *string, allowShrink bool) error {
+	// Hash covers both frontmatter and markdown so frontmatter-only concurrent
+	// edits are detected (issue #1197) — checked atomically inside the funnel's write.
+	if err := checkContentVersionHash(currentFM, currentMarkdown, expectedHash); err != nil {
+		return err
+	}
+	// Shrink circuit breaker (issue #1299): atomic with the write, so it always
+	// evaluates against the funnel's current content. Supersedes the #1126
+	// pre-request wipe guard, which raced between its read and the write.
+	return checkShrinkBreaker(currentMarkdown, md, allowShrink)
+}
+
+// mergeReservedSubtrees builds the fm to write for a whole-page save. The
+// client's fm replaces user keys wholesale, but reserved top-level subtrees the
+// client did NOT send (page_app_state, checklists, …) must survive (ADR-0010's
+// preserve rule) — AND reserved subtrees the client DID send (a new [maps.yard]
+// the user just wrote via the editor) must be written, not silently dropped
+// because they're reserved.
+func mergeReservedSubtrees(fm, currentFM wikipage.FrontMatter) wikipage.FrontMatter {
+	fmForWrite := make(wikipage.FrontMatter, len(fm)+1)
+	for k, v := range fm {
+		fmForWrite[k] = v
+	}
+	for _, k := range wikipage.ReservedTopLevelKeys() {
+		if v, ok := currentFM[k]; ok {
+			// Client omitted this reserved key: preserve current.
+			if _, sent := fm[k]; !sent {
+				fmForWrite[k] = v
+			}
+		}
+	}
+	return fmForWrite
+}
+
+// computePageSizeAndHash returns the whole-page byte size and version hash.
 // page_byte_size mirrors the history service's ByteSize unit: the whole page
 // text (frontmatter + markdown) as combined on disk, so agents can compare a
 // write's outcome directly against PageHistoryService entries.
-func updateWholePageResponse(fm wikipage.FrontMatter, md wikipage.Markdown) (*apiv1.UpdateWholePageResponse, error) {
+func computePageSizeAndHash(fm wikipage.FrontMatter, md wikipage.Markdown) (string, int64, error) {
 	wholeText, err := wikipage.CombineFrontMatterAndMarkdown(fm, md)
 	if err != nil {
-		return nil, status.Errorf(codes.Internal, "failed to compute page byte size: %v", err)
+		return "", 0, status.Errorf(codes.Internal, "failed to compute page byte size: %v", err)
+	}
+	return computePageHash(fm, md), int64(len(wholeText)), nil
+}
+
+// updateWholePageResponse builds the success response for UpdateWholePage.
+func updateWholePageResponse(fm wikipage.FrontMatter, md wikipage.Markdown) (*apiv1.UpdateWholePageResponse, error) {
+	versionHash, pageByteSize, err := computePageSizeAndHash(fm, md)
+	if err != nil {
+		return nil, err
 	}
 	return &apiv1.UpdateWholePageResponse{
 		Success:      true,
-		VersionHash:  computePageHash(fm, md),
-		PageByteSize: int64(len(wholeText)),
+		VersionHash:  versionHash,
+		PageByteSize: pageByteSize,
 	}, nil
 }
 
@@ -1255,17 +1353,9 @@ func (s *Server) ReadPageOutline(ctx context.Context, req *apiv1.ReadPageOutline
 		return nil, authErr
 	}
 
-	_, markdown, err := s.pageReaderMutator.ReadMarkdown(wikipage.PageIdentifier(req.Page))
+	markdown, frontmatter, err := s.readMarkdownAndFrontMatter(string(req.Page))
 	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, status.Errorf(codes.NotFound, pageNotFoundErrFmt, req.Page)
-		}
-		return nil, status.Errorf(codes.Internal, failedToReadPageErrFmt, err)
-	}
-
-	_, frontmatter, fmErr := s.pageReaderMutator.ReadFrontMatter(wikipage.PageIdentifier(req.Page))
-	if fmErr != nil && !os.IsNotExist(fmErr) {
-		return nil, status.Errorf(codes.Internal, failedToReadFrontmatterErrFmt, fmErr)
+		return nil, err
 	}
 
 	return &apiv1.ReadPageOutlineResponse{
@@ -1275,35 +1365,39 @@ func (s *Server) ReadPageOutline(ctx context.Context, req *apiv1.ReadPageOutline
 	}, nil
 }
 
+// readMarkdownAndFrontMatter reads both artifacts for the read-path RPCs
+// (outline, section): markdown with not-found mapped to the standard NotFound
+// response and other failures to Internal, frontmatter tolerating NotExist
+// (no frontmatter file = zero fm), and any other frontmatter read failure
+// mapped to Internal.
+func (s *Server) readMarkdownAndFrontMatter(page string) (wikipage.Markdown, wikipage.FrontMatter, error) {
+	_, markdown, err := s.pageReaderMutator.ReadMarkdown(wikipage.PageIdentifier(page))
+	if err != nil {
+		if os.IsNotExist(err) {
+			return "", nil, status.Errorf(codes.NotFound, pageNotFoundErrFmt, page)
+		}
+		return "", nil, status.Errorf(codes.Internal, failedToReadPageErrFmt, err)
+	}
+	_, frontmatter, fmErr := s.pageReaderMutator.ReadFrontMatter(wikipage.PageIdentifier(page))
+	if fmErr != nil && !os.IsNotExist(fmErr) {
+		return "", nil, status.Errorf(codes.Internal, failedToReadFrontmatterErrFmt, fmErr)
+	}
+	return markdown, frontmatter, nil
+}
+
 // ReadPageSection implements the ReadPageSection RPC.
 func (s *Server) ReadPageSection(ctx context.Context, req *apiv1.ReadPageSectionRequest) (*apiv1.ReadPageSectionResponse, error) {
 	if req.Page == "" {
 		return nil, status.Error(codes.InvalidArgument, "page is required")
 	}
 
-	if req.ByteOffset < 0 {
-		return nil, status.Error(codes.InvalidArgument, "byte_offset must be non-negative")
-	}
-
-	if req.ByteLength < 0 {
-		return nil, status.Error(codes.InvalidArgument, "byte_length must be non-negative")
-	}
-
 	if authErr := requireAuthorized(ctx, s.pageReaderMutator, wikipage.PageIdentifier(req.Page)); authErr != nil {
 		return nil, authErr
 	}
 
-	_, markdown, err := s.pageReaderMutator.ReadMarkdown(wikipage.PageIdentifier(req.Page))
+	markdown, frontmatter, err := s.readMarkdownAndFrontMatter(string(req.Page))
 	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, status.Errorf(codes.NotFound, pageNotFoundErrFmt, req.Page)
-		}
-		return nil, status.Errorf(codes.Internal, failedToReadPageErrFmt, err)
-	}
-
-	_, frontmatter, fmErr := s.pageReaderMutator.ReadFrontMatter(wikipage.PageIdentifier(req.Page))
-	if fmErr != nil && !os.IsNotExist(fmErr) {
-		return nil, status.Errorf(codes.Internal, failedToReadFrontmatterErrFmt, fmErr)
+		return nil, err
 	}
 
 	versionHash := computePageHash(frontmatter, markdown)
@@ -1312,26 +1406,9 @@ func (s *Server) ReadPageSection(ctx context.Context, req *apiv1.ReadPageSection
 	}
 
 	totalBytes := int64(len(markdown))
-
-	if req.ByteLength == 0 && totalBytes > 0 {
-		return nil, status.Errorf(codes.InvalidArgument,
-			"byte_length is required: page has %d bytes; use ReadPageOutline to get valid byte_offset and byte_length values for a specific section",
-			totalBytes)
-	}
-
-	if req.ByteOffset > totalBytes || req.ByteLength > totalBytes-req.ByteOffset {
-		return nil, status.Errorf(codes.InvalidArgument, "byte range exceeds page length: offset %d length %d total %d", req.ByteOffset, req.ByteLength, totalBytes)
-	}
-
-	start := int(req.ByteOffset)
-	end := int(req.ByteOffset + req.ByteLength)
-	if !isUTF8Boundary(string(markdown), start) || !isUTF8Boundary(string(markdown), end) {
-		return nil, status.Error(codes.InvalidArgument, "byte range must align to UTF-8 character boundaries")
-	}
-
-	section := string(markdown)[start:end]
-	if !utf8.ValidString(section) {
-		return nil, status.Error(codes.Internal, "page section is not valid UTF-8")
+	section, err := slicePageSection(string(markdown), req.ByteOffset, req.ByteLength, totalBytes)
+	if err != nil {
+		return nil, err
 	}
 
 	return &apiv1.ReadPageSectionResponse{
@@ -1341,6 +1418,39 @@ func (s *Server) ReadPageSection(ctx context.Context, req *apiv1.ReadPageSection
 		TotalBytes:      totalBytes,
 		VersionHash:     versionHash,
 	}, nil
+}
+
+// slicePageSection validates a byte-range request against the page's total size,
+// then slices the requested section at UTF-8 boundaries. All InvalidArgument /
+// Internal responses for ReadPageSection's range logic originate here, keeping
+// the RPC handler free of nested range validations.
+func slicePageSection(markdown string, byteOffsetBytes, byteLengthBytes, totalBytes int64) (string, error) {
+	if byteOffsetBytes < 0 {
+		return "", status.Error(codes.InvalidArgument, "byte_offset must be non-negative")
+	}
+	if byteLengthBytes < 0 {
+		return "", status.Error(codes.InvalidArgument, "byte_length must be non-negative")
+	}
+	if byteLengthBytes == 0 && totalBytes > 0 {
+		return "", status.Errorf(codes.InvalidArgument,
+			"byte_length is required: page has %d bytes; use ReadPageOutline to get valid byte_offset and byte_length values for a specific section",
+			totalBytes)
+	}
+	if byteOffsetBytes > totalBytes || byteLengthBytes > totalBytes-byteOffsetBytes {
+		return "", status.Errorf(codes.InvalidArgument, "byte range exceeds page length: offset %d length %d total %d", byteOffsetBytes, byteLengthBytes, totalBytes)
+	}
+
+	start := int(byteOffsetBytes)
+	end := int(byteOffsetBytes + byteLengthBytes)
+	if !isUTF8Boundary(markdown, start) || !isUTF8Boundary(markdown, end) {
+		return "", status.Error(codes.InvalidArgument, "byte range must align to UTF-8 character boundaries")
+	}
+
+	section := markdown[start:end]
+	if !utf8.ValidString(section) {
+		return "", status.Error(codes.Internal, "page section is not valid UTF-8")
+	}
+	return section, nil
 }
 
 func isUTF8Boundary(content string, index int) bool {

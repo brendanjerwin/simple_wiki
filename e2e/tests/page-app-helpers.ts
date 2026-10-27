@@ -71,9 +71,9 @@ export async function setupPage(
  const UPDATE_404_RETRIES = 5;
  let resetResp: { status: number; json: unknown; text: string } | undefined;
  for (let attempt = 0; attempt <= UPDATE_404_RETRIES; attempt++) {
-  resetResp = await callAPI(request, 'PageManagementService', 'UpdatePageContent', {
+  resetResp = await callAPI(request, 'PageManagementService', 'UpdateWholePage', {
    page,
-   newContentMarkdown: markdown,
+   newWholeMarkdown: markdown,
    allowShrink: true,
   });
   if (resetResp.status !== 404) break;

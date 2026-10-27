@@ -59,8 +59,8 @@ test.describe.serial('Artifact clear', () => {
    const setupResp = await callAPI(
     request,
     'PageManagementService',
-    'UpdatePageContent',
-    { page: TEST_PAGE, newContentMarkdown: pageBody(counterProgram('Counter', '$n')) },
+    'UpdateWholePage',
+    { page: TEST_PAGE, newWholeMarkdown: pageBody(counterProgram('Counter', '$n')) },
    );
    expect(setupResp.status).toBe(200);
 

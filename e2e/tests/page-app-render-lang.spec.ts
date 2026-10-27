@@ -79,8 +79,8 @@ test.describe.serial('Artifact page render', () => {
    const updateResp = await callAPI(
     request,
     'PageManagementService',
-    'UpdatePageContent',
-    { page: TEST_PAGE, newContentMarkdown: pageBody(counterProgram('Counter v2', '$n')) },
+    'UpdateWholePage',
+    { page: TEST_PAGE, newWholeMarkdown: pageBody(counterProgram('Counter v2', '$n')) },
    );
    expect(updateResp.status).toBe(200);
 
@@ -111,9 +111,13 @@ test.describe.serial('Artifact page render', () => {
 
  test.describe('when a page-content write omits the root statement', () => {
   test('rejects the write and preserves the original page app', async ({ request }) => {
+   // Read the current hash so the full-page write reaches the validation layer.
+   const readResp = await callAPI(request, 'PageManagementService', 'ReadPage', { page: TEST_PAGE });
+   const currentHash = (readResp.json as { versionHash?: string } | null)?.versionHash ?? '';
    const badBody = pageBody('$n = 0\nCard("no root")');
    const resp = await callAPI(request, 'PageManagementService', 'UpdatePageContent', {
     page: TEST_PAGE,
+    expectedVersionHash: currentHash,
     newContentMarkdown: badBody,
    });
    expect(resp.status).toBeGreaterThanOrEqual(400);

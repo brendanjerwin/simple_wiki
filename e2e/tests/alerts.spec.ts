@@ -31,9 +31,9 @@ async function setupTestPage(request: APIRequestContext, markdown: string): Prom
     if (body.success) return;
   }
 
-  const resetResp = await callPageAPI(request, 'UpdatePageContent', {
+  const resetResp = await callPageAPI(request, 'UpdateWholePage', {
     page: TEST_PAGE,
-    newContentMarkdown: markdown,
+    newWholeMarkdown: markdown,
     allowShrink: true,
   });
   expect(resetResp.ok()).toBeTruthy();
