@@ -1109,41 +1109,17 @@ func (s *Server) UpdateWholePage(ctx context.Context, req *apiv1.UpdateWholePage
 		return nil, preErr
 	}
 
+	// The funnel callback is thin on purpose: the nested hash/shrink checks and
+	// the reserved-subtree merge live in helpers below, keeping this method's
+	// cognitive complexity within SonarCloud's limit.
 	funnelFM, modifyErr := s.modifyMarkdownWithPageAppFunnelCtx(
 		ctx,
 		wikipage.PageIdentifier(req.Page),
 		func(currentFM wikipage.FrontMatter, currentMarkdown wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error) {
-			// Hash covers both frontmatter and markdown so frontmatter-only concurrent edits
-			// are detected (issue #1197) — checked atomically inside the funnel's write.
-			if err := checkContentVersionHash(currentFM, currentMarkdown, req.ExpectedVersionHash); err != nil {
+			if err := checkUpdateWholePageGuards(currentFM, currentMarkdown, md, req.ExpectedVersionHash, req.GetAllowShrink()); err != nil {
 				return nil, "", err
 			}
-
-			// Shrink circuit breaker (issue #1299): atomic with the write, so it
-			// always evaluates against the funnel's current content. Supersedes the
-			// #1126 pre-request wipe guard, which raced between its read and the write.
-			if err := checkShrinkBreaker(currentMarkdown, md, req.GetAllowShrink()); err != nil {
-				return nil, "", err
-			}
-			// The client's fm replaces user keys wholesale, but reserved
-			// top-level subtrees the client did NOT send (page_app_state,
-			// checklists, …) must survive a whole-page save (ADR-0010's
-			// preserve rule) — AND reserved subtrees the client DID send
-			// (a new [maps.yard] the user just wrote via the editor) must
-			// be written, not silently dropped because they're reserved.
-			fmForWrite := make(wikipage.FrontMatter, len(fm)+1)
-			for k, v := range fm {
-				fmForWrite[k] = v
-			}
-			for _, k := range wikipage.ReservedTopLevelKeys() {
-				if v, ok := currentFM[k]; ok {
-					// Client omitted this reserved key: preserve current.
-					if _, sent := fm[k]; !sent {
-						fmForWrite[k] = v
-					}
-				}
-			}
-			return fmForWrite, md, nil
+			return mergeReservedSubtrees(fm, currentFM), md, nil
 		},
 	)
 	if modifyErr != nil {
@@ -1160,6 +1136,44 @@ func (s *Server) UpdateWholePage(ctx context.Context, req *apiv1.UpdateWholePage
 		return nil, respErr
 	}
 	return resp, nil
+}
+
+// checkUpdateWholePageGuards runs the two atomic-write guards for UpdateWholePage:
+// version-hash binding (issue #1197, frontmatter + markdown together) and the
+// shrink circuit breaker (issue #1299). Both must stay inside the funnel callback
+// so they evaluate against the write's current content.
+func checkUpdateWholePageGuards(currentFM wikipage.FrontMatter, currentMarkdown wikipage.Markdown, md wikipage.Markdown, expectedHash *string, allowShrink bool) error {
+	// Hash covers both frontmatter and markdown so frontmatter-only concurrent
+	// edits are detected (issue #1197) — checked atomically inside the funnel's write.
+	if err := checkContentVersionHash(currentFM, currentMarkdown, expectedHash); err != nil {
+		return err
+	}
+	// Shrink circuit breaker (issue #1299): atomic with the write, so it always
+	// evaluates against the funnel's current content. Supersedes the #1126
+	// pre-request wipe guard, which raced between its read and the write.
+	return checkShrinkBreaker(currentMarkdown, md, allowShrink)
+}
+
+// mergeReservedSubtrees builds the fm to write for a whole-page save. The
+// client's fm replaces user keys wholesale, but reserved top-level subtrees the
+// client did NOT send (page_app_state, checklists, …) must survive (ADR-0010's
+// preserve rule) — AND reserved subtrees the client DID send (a new [maps.yard]
+// the user just wrote via the editor) must be written, not silently dropped
+// because they're reserved.
+func mergeReservedSubtrees(fm, currentFM wikipage.FrontMatter) wikipage.FrontMatter {
+	fmForWrite := make(wikipage.FrontMatter, len(fm)+1)
+	for k, v := range fm {
+		fmForWrite[k] = v
+	}
+	for _, k := range wikipage.ReservedTopLevelKeys() {
+		if v, ok := currentFM[k]; ok {
+			// Client omitted this reserved key: preserve current.
+			if _, sent := fm[k]; !sent {
+				fmForWrite[k] = v
+			}
+		}
+	}
+	return fmForWrite
 }
 
 // computePageSizeAndHash returns the whole-page byte size and version hash.
@@ -1367,14 +1381,6 @@ func (s *Server) ReadPageSection(ctx context.Context, req *apiv1.ReadPageSection
 		return nil, status.Error(codes.InvalidArgument, "page is required")
 	}
 
-	if req.ByteOffset < 0 {
-		return nil, status.Error(codes.InvalidArgument, "byte_offset must be non-negative")
-	}
-
-	if req.ByteLength < 0 {
-		return nil, status.Error(codes.InvalidArgument, "byte_length must be non-negative")
-	}
-
 	if authErr := requireAuthorized(ctx, s.pageReaderMutator, wikipage.PageIdentifier(req.Page)); authErr != nil {
 		return nil, authErr
 	}
@@ -1398,26 +1404,9 @@ func (s *Server) ReadPageSection(ctx context.Context, req *apiv1.ReadPageSection
 	}
 
 	totalBytes := int64(len(markdown))
-
-	if req.ByteLength == 0 && totalBytes > 0 {
-		return nil, status.Errorf(codes.InvalidArgument,
-			"byte_length is required: page has %d bytes; use ReadPageOutline to get valid byte_offset and byte_length values for a specific section",
-			totalBytes)
-	}
-
-	if req.ByteOffset > totalBytes || req.ByteLength > totalBytes-req.ByteOffset {
-		return nil, status.Errorf(codes.InvalidArgument, "byte range exceeds page length: offset %d length %d total %d", req.ByteOffset, req.ByteLength, totalBytes)
-	}
-
-	start := int(req.ByteOffset)
-	end := int(req.ByteOffset + req.ByteLength)
-	if !isUTF8Boundary(string(markdown), start) || !isUTF8Boundary(string(markdown), end) {
-		return nil, status.Error(codes.InvalidArgument, "byte range must align to UTF-8 character boundaries")
-	}
-
-	section := string(markdown)[start:end]
-	if !utf8.ValidString(section) {
-		return nil, status.Error(codes.Internal, "page section is not valid UTF-8")
+	section, err := slicePageSection(string(markdown), req.ByteOffset, req.ByteLength, totalBytes)
+	if err != nil {
+		return nil, err
 	}
 
 	return &apiv1.ReadPageSectionResponse{
@@ -1427,6 +1416,39 @@ func (s *Server) ReadPageSection(ctx context.Context, req *apiv1.ReadPageSection
 		TotalBytes:      totalBytes,
 		VersionHash:     versionHash,
 	}, nil
+}
+
+// slicePageSection validates a byte-range request against the page's total size,
+// then slices the requested section at UTF-8 boundaries. All InvalidArgument /
+// Internal responses for ReadPageSection's range logic originate here, keeping
+// the RPC handler free of nested range validations.
+func slicePageSection(markdown string, byteOffsetBytes, byteLengthBytes, totalBytes int64) (string, error) {
+	if byteOffsetBytes < 0 {
+		return "", status.Error(codes.InvalidArgument, "byte_offset must be non-negative")
+	}
+	if byteLengthBytes < 0 {
+		return "", status.Error(codes.InvalidArgument, "byte_length must be non-negative")
+	}
+	if byteLengthBytes == 0 && totalBytes > 0 {
+		return "", status.Errorf(codes.InvalidArgument,
+			"byte_length is required: page has %d bytes; use ReadPageOutline to get valid byte_offset and byte_length values for a specific section",
+			totalBytes)
+	}
+	if byteOffsetBytes > totalBytes || byteLengthBytes > totalBytes-byteOffsetBytes {
+		return "", status.Errorf(codes.InvalidArgument, "byte range exceeds page length: offset %d length %d total %d", byteOffsetBytes, byteLengthBytes, totalBytes)
+	}
+
+	start := int(byteOffsetBytes)
+	end := int(byteOffsetBytes + byteLengthBytes)
+	if !isUTF8Boundary(markdown, start) || !isUTF8Boundary(markdown, end) {
+		return "", status.Error(codes.InvalidArgument, "byte range must align to UTF-8 character boundaries")
+	}
+
+	section := markdown[start:end]
+	if !utf8.ValidString(section) {
+		return "", status.Error(codes.Internal, "page section is not valid UTF-8")
+	}
+	return section, nil
 }
 
 func isUTF8Boundary(content string, index int) bool {
