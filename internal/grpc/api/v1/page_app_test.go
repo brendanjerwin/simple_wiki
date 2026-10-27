@@ -380,9 +380,13 @@ var _ = Describe("page app placement guard", func() {
 		It("rejects the prose-clear (edit path has no confirm field)", func() {
 			// The page-app prose guard owns this failure mode; the generic shrink
 			// breaker yields on page-app-shaped writes so its message surfaces.
+			// Supply expected_version_hash to pass the full-page hash binding check
+			// so the prose guard (not the hash check) surfaces the error.
+			versionHash := computeExpectedPageHash(mock.Frontmatter, string(mock.Markdown))
 			_, err := server.UpdatePageContent(ctx, &apiv1.UpdatePageContentRequest{
-				Page:               "roadmap",
-				NewContentMarkdown: "```wiki-page-app\n$n = 0\nroot = Card(\"Lone\", [])\n```\n",
+				Page:                "roadmap",
+				NewContentMarkdown:  "```wiki-page-app\n$n = 0\nroot = Card(\"Lone\", [])\n```\n",
+				ExpectedVersionHash: &versionHash,
 			})
 			Expect(err).To(MatchError(ContainSubstring("FailedPrecondition")))
 			Expect(err.Error()).To(ContainSubstring("drop 100% of the page's prose"))

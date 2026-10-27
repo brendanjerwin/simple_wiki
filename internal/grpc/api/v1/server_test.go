@@ -2447,6 +2447,129 @@ var _ = Describe("Server", func() {
 			})
 		})
 	})
+	Describe("UpdatePage", func() {
+		var (
+			req                   *apiv1.UpdatePageRequest
+			resp                  *apiv1.UpdatePageResponse
+			err                   error
+			mockPageReaderMutator *MockPageReaderMutator
+		)
+
+		BeforeEach(func() {
+			mockPageReaderMutator = &MockPageReaderMutator{
+				Frontmatter: wikipage.FrontMatter{"identifier": "test-page"},
+				Markdown:    "# Original content",
+			}
+			req = &apiv1.UpdatePageRequest{
+				Page:               "test-page",
+				NewContentMarkdown: "# Updated content",
+				NewFrontMatterToml: "title = \"Test Page\"\n",
+			}
+		})
+
+		JustBeforeEach(func() {
+			server = mustNewServer(mockPageReaderMutator, nil, nil)
+			resp, err = server.UpdatePage(ctx, req)
+		})
+
+		When("page is empty", func() {
+			BeforeEach(func() {
+				req.Page = ""
+			})
+
+			It("should return an invalid argument error", func() {
+				Expect(err).To(HaveGrpcStatus(codes.InvalidArgument, "page is required"))
+			})
+
+			It("should not return a response", func() {
+				Expect(resp).To(BeNil())
+			})
+		})
+
+		When("the page does not exist", func() {
+			BeforeEach(func() {
+				mockPageReaderMutator.Err = os.ErrNotExist
+			})
+
+			It("should return a not found error", func() {
+				Expect(err).To(HaveGrpcStatus(codes.NotFound, "page not found: test-page"))
+			})
+
+			It("should not return a response", func() {
+				Expect(resp).To(BeNil())
+			})
+		})
+
+		When("the update is successful", func() {
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should return a response", func() {
+				Expect(resp).NotTo(BeNil())
+			})
+
+			It("should indicate success", func() {
+				Expect(resp.Success).To(BeTrue())
+			})
+
+			It("should return a version_hash", func() {
+				Expect(resp.VersionHash).NotTo(BeEmpty())
+			})
+
+			It("should return page_byte_size greater than zero", func() {
+				Expect(resp.PageByteSize).To(BeNumerically(">", 0))
+			})
+
+			It("should return page_byte_size matching the combined frontmatter+markdown", func() {
+				// ParsedFM from TOML "title = \"Test Page\"\n" plus identifier stamp.
+				expectedFM := wikipage.FrontMatter{
+					"identifier": "test-page",
+					"title":      "Test Page",
+				}
+				wholeText, combineErr := wikipage.CombineFrontMatterAndMarkdown(
+					expectedFM, "# Updated content",
+				)
+				Expect(combineErr).NotTo(HaveOccurred())
+				Expect(resp.PageByteSize).To(BeEquivalentTo(len(wholeText)))
+			})
+
+			It("should write the markdown to the correct page", func() {
+				Expect(mockPageReaderMutator.WrittenIdentifier).To(Equal(wikipage.PageIdentifier("test-page")))
+				Expect(mockPageReaderMutator.WrittenMarkdown).To(Equal(wikipage.Markdown("# Updated content")))
+			})
+		})
+
+		When("new_front_matter_toml is invalid TOML", func() {
+			BeforeEach(func() {
+				req.NewFrontMatterToml = "not valid toml = = ="
+			})
+
+			It("should return an invalid argument error", func() {
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.InvalidArgument, "failed to parse new_front_matter_toml"))
+			})
+
+			It("should not return a response", func() {
+				Expect(resp).To(BeNil())
+			})
+		})
+
+		When("new_front_matter_toml is empty", func() {
+			BeforeEach(func() {
+				req.NewFrontMatterToml = ""
+			})
+
+			It("should succeed with just the identifier stamp in frontmatter", func() {
+				Expect(err).NotTo(HaveOccurred())
+				Expect(resp.Success).To(BeTrue())
+			})
+
+			It("should return page_byte_size greater than zero", func() {
+				Expect(resp.PageByteSize).To(BeNumerically(">", 0))
+			})
+		})
+	})
+
 	Describe("UpdatePageContent shrink breaker", func() {
 		var (
 			req                   *apiv1.UpdatePageContentRequest
@@ -2465,6 +2588,17 @@ var _ = Describe("Server", func() {
 			req = &apiv1.UpdatePageContentRequest{
 				Page:               "test-page",
 				NewContentMarkdown: "# Truncated",
+			}
+		})
+
+		// Auto-supply expected_version_hash for full-page writes so individual
+		// test cases that aren't specifically testing hash behaviour don't need
+		// boilerplate. Find-and-replace tests (OldContentMarkdown set) skip this.
+		// Concurrent-edit tests supply the hash of the concurrent content explicitly.
+		JustBeforeEach(func() {
+			if req.OldContentMarkdown == nil && req.ExpectedVersionHash == nil {
+				h := computeExpectedPageHash(mockPageReaderMutator.Frontmatter, string(mockPageReaderMutator.Markdown))
+				req.ExpectedVersionHash = &h
 			}
 		})
 
@@ -2642,6 +2776,14 @@ var _ = Describe("Server", func() {
 				// breaker must evaluate against the funnel view (the shrunk one).
 				concurrent := wikipage.Markdown(strings.Repeat("Concurrent line.\n", 400))
 				mockPageReaderMutator.ConcurrentModificationMarkdown = &concurrent
+
+				// The caller supplies the hash of the concurrent content to pass the
+				// full-page hash binding check, so the shrink breaker (not the hash
+				// check) decides the outcome.
+				concurrentHash := computeExpectedPageHash(
+					mockPageReaderMutator.Frontmatter, string(concurrent),
+				)
+				req.ExpectedVersionHash = &concurrentHash
 			})
 
 			It("should still trip when the candidate is under 10% of the concurrent size", func() {
@@ -2656,15 +2798,33 @@ var _ = Describe("Server", func() {
 			resp                  *apiv1.UpdatePageContentResponse
 			err                   error
 			mockPageReaderMutator *MockPageReaderMutator
+			// skipAutoHash prevents the JustBeforeEach from supplying a
+			// default expected_version_hash. Set to true in a BeforeEach to
+			// test the behaviour when no hash is provided.
+			skipAutoHash bool
 		)
 
 		BeforeEach(func() {
+			skipAutoHash = false
 			req = &apiv1.UpdatePageContentRequest{
 				Page:               "test-page",
 				NewContentMarkdown: "# New Content",
 			}
 			mockPageReaderMutator = &MockPageReaderMutator{
 				Frontmatter: wikipage.FrontMatter{"identifier": "test-page"},
+			}
+		})
+
+		// Auto-supply expected_version_hash for full-page writes so individual
+		// test cases that aren't specifically testing hash behaviour don't need
+		// boilerplate. Tests that set their own ExpectedVersionHash (stale-hash,
+		// matching-hash scenarios) override this in their own BeforeEach. Tests
+		// that set OldContentMarkdown (find-and-replace mode) skip hash binding.
+		// Tests that want to assert the no-hash rejection path set skipAutoHash.
+		JustBeforeEach(func() {
+			if !skipAutoHash && req.OldContentMarkdown == nil && req.ExpectedVersionHash == nil {
+				h := computeExpectedPageHash(mockPageReaderMutator.Frontmatter, string(mockPageReaderMutator.Markdown))
+				req.ExpectedVersionHash = &h
 			}
 		})
 
@@ -2831,6 +2991,50 @@ var _ = Describe("Server", func() {
 
 			It("should not return a response", func() {
 				Expect(resp).To(BeNil())
+			})
+		})
+
+		// Full-page hash binding (issue #1342): full-page writes (no old_content_markdown)
+		// require expected_version_hash to prevent silent overwrite of concurrent edits.
+		When("full-page write is attempted without expected_version_hash", func() {
+			BeforeEach(func() {
+				// Prevent the JustBeforeEach from auto-supplying the hash so we
+				// can test what happens when no hash is provided.
+				skipAutoHash = true
+			})
+
+			It("should return a failed precondition error", func() {
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.FailedPrecondition, "expected_version_hash is required for full-page writes"))
+			})
+
+			It("should not return a response", func() {
+				Expect(resp).To(BeNil())
+			})
+
+			It("should not write any content", func() {
+				Expect(mockPageReaderMutator.WrittenMarkdown).To(BeEmpty())
+			})
+
+			It("should suggest using UpdateWholePage as the unchecked alternative", func() {
+				Expect(err.Error()).To(ContainSubstring("UpdateWholePage"))
+			})
+		})
+
+		When("find-and-replace write is attempted without expected_version_hash", func() {
+			BeforeEach(func() {
+				mockPageReaderMutator.Markdown = "existing body with a snippet to replace"
+				snippet := "snippet to replace"
+				req.OldContentMarkdown = &snippet
+				req.NewContentMarkdown = "new snippet"
+				req.ExpectedVersionHash = nil
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should succeed (find-and-replace does not require expected_version_hash)", func() {
+				Expect(resp.Success).To(BeTrue())
 			})
 		})
 

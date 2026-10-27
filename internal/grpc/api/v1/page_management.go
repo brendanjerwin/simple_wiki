@@ -842,6 +842,20 @@ func (s *Server) UpdatePageContent(ctx context.Context, req *apiv1.UpdatePageCon
 func updatePageContentModifier(req *apiv1.UpdatePageContentRequest, capturedFM *wikipage.FrontMatter) func(wikipage.FrontMatter, wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error) {
 	return func(currentFM wikipage.FrontMatter, currentMarkdown wikipage.Markdown) (wikipage.FrontMatter, wikipage.Markdown, error) {
 		*capturedFM = currentFM
+
+		// Full-page hash binding (issue #1342): when old_content_markdown is
+		// absent the caller is replacing the entire body. Require
+		// expected_version_hash so a stale whole-page replacement is rejected
+		// instead of silently landing — the same guarantee UpdateWholePage
+		// already provides.
+		if req.OldContentMarkdown == nil && req.ExpectedVersionHash == nil {
+			return nil, "", status.Error(codes.FailedPrecondition,
+				"expected_version_hash is required for full-page writes (old_content_markdown not set); "+
+					"pass the version_hash from a prior ReadPage or ReadPageOutline call to prevent "+
+					"silently overwriting concurrent edits. "+
+					"To force a full-page write without a version check, use UpdateWholePage.")
+		}
+
 		// Version hash check is now atomic with the write — no TOCTOU window.
 		// Hash covers both frontmatter and markdown so frontmatter-only edits
 		// are also detected (issue #1197).
@@ -934,6 +948,69 @@ func (s *Server) ClearPageContent(ctx context.Context, req *apiv1.ClearPageConte
 	}
 
 	return &apiv1.ClearPageContentResponse{Success: true}, nil
+}
+
+// UpdatePage implements the UpdatePage RPC.
+// Updates both frontmatter AND body together using separate fields.
+// Writes frontmatter from new_front_matter_toml and body from new_content_markdown.
+// Returns page_byte_size and version_hash so callers can immediately verify
+// the write result.
+func (s *Server) UpdatePage(ctx context.Context, req *apiv1.UpdatePageRequest) (*apiv1.UpdatePageResponse, error) {
+	if req.Page == "" {
+		return nil, status.Error(codes.InvalidArgument, pageNameRequiredErr)
+	}
+
+	if guardErr := requireUserMutable(s.pageReaderMutator, wikipage.PageIdentifier(req.Page)); guardErr != nil {
+		return nil, guardErr
+	}
+	if authErr := requireAuthorized(ctx, s.pageReaderMutator, wikipage.PageIdentifier(req.Page)); authErr != nil {
+		return nil, authErr
+	}
+
+	// Verify page exists.
+	_, _, err := s.pageReaderMutator.ReadFrontMatter(wikipage.PageIdentifier(req.Page))
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, status.Errorf(codes.NotFound, pageNotFoundErrFmt, req.Page)
+		}
+		return nil, status.Errorf(codes.Internal, failedToReadFrontmatterErrFmt, err)
+	}
+
+	identity := tailscale.IdentityFromContext(ctx)
+	md := wikipage.Markdown(req.NewContentMarkdown)
+
+	// Parse frontmatter from the provided TOML.
+	var fm wikipage.FrontMatter
+	if req.NewFrontMatterToml != "" {
+		if err := toml.Unmarshal([]byte(req.NewFrontMatterToml), &fm); err != nil {
+			return nil, status.Errorf(codes.InvalidArgument, "failed to parse new_front_matter_toml: %v", err)
+		}
+	}
+	if fm == nil {
+		fm = make(wikipage.FrontMatter)
+	}
+	fm[identifierKey] = req.Page
+
+	if err := s.pageReaderMutator.WriteFrontMatter(wikipage.PageIdentifier(req.Page), fm, identity); err != nil {
+		return nil, status.Errorf(codes.Internal, failedToWriteFrontmatterErrFmt, err)
+	}
+
+	if err := s.pageReaderMutator.WriteMarkdown(wikipage.PageIdentifier(req.Page), md, identity); err != nil {
+		return nil, status.Errorf(codes.Internal, failedToWriteMarkdownErrFmt, err)
+	}
+
+	wholeText, wholeTextErr := wikipage.CombineFrontMatterAndMarkdown(fm, md)
+	if wholeTextErr != nil {
+		return nil, status.Errorf(codes.Internal, "failed to compute page byte size: %v", wholeTextErr)
+	}
+
+	s.logger.Info("[AUDIT] update-page | page: %q | user: %q", req.Page, identity.ForLog())
+
+	return &apiv1.UpdatePageResponse{
+		Success:      true,
+		VersionHash:  computePageHash(fm, md),
+		PageByteSize: int64(len(wholeText)),
+	}, nil
 }
 
 // pageAtomicModifier supports atomic replacement of both frontmatter and markdown in a

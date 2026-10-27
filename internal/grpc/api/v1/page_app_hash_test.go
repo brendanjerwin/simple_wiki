@@ -38,9 +38,11 @@ var _ = Describe("page app hash exclusions", func() {
 		It("the page version hash reported by a later prose edit is stable across the state flush", func() {
 			// Pre-state hash (no page app yet): compute via UpdatePageContent's
 			// returned VersionHash on the same content.
+			initialHash := computeExpectedPageHash(mock.Frontmatter, string(mock.Markdown))
 			first, err := server.UpdatePageContent(ctx, &apiv1.UpdatePageContentRequest{
-				Page:               "app-page",
-				NewContentMarkdown: "# Notes\n\nprose body\n",
+				Page:                "app-page",
+				NewContentMarkdown:  "# Notes\n\nprose body\n",
+				ExpectedVersionHash: &initialHash,
 			})
 			Expect(err).NotTo(HaveOccurred())
 
@@ -66,9 +68,11 @@ var _ = Describe("page app hash exclusions", func() {
 
 	When("the program changes via the edit path", func() {
 		It("the returned hash reflects the fence change (restamped, not excluded)", func() {
+			initialHash := computeExpectedPageHash(mock.Frontmatter, string(mock.Markdown))
 			first, err := server.UpdatePageContent(ctx, &apiv1.UpdatePageContentRequest{
-				Page:               "app-page",
-				NewContentMarkdown: "# Notes\n\n```wiki-page-app\nroot = Card(\"a\")\n```\n",
+				Page:                "app-page",
+				NewContentMarkdown:  "# Notes\n\n```wiki-page-app\nroot = Card(\"a\")\n```\n",
+				ExpectedVersionHash: &initialHash,
 			})
 			Expect(err).NotTo(HaveOccurred())
 
