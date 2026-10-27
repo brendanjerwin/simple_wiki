@@ -927,20 +927,8 @@ func (s *Server) ClearPageContent(ctx context.Context, req *apiv1.ClearPageConte
 		return nil, status.Error(codes.InvalidArgument, "confirm_clear must be true to clear page content")
 	}
 
-	if guardErr := requireUserMutable(s.pageReaderMutator, wikipage.PageIdentifier(req.Page)); guardErr != nil {
-		return nil, guardErr
-	}
-	if authErr := requireAuthorized(ctx, s.pageReaderMutator, wikipage.PageIdentifier(req.Page)); authErr != nil {
-		return nil, authErr
-	}
-
-	// Verify the page exists
-	_, _, err := s.pageReaderMutator.ReadFrontMatter(wikipage.PageIdentifier(req.Page))
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, status.Errorf(codes.NotFound, pageNotFoundErrFmt, req.Page)
-		}
-		return nil, status.Errorf(codes.Internal, failedToReadFrontmatterErrFmt, err)
+	if err := s.guardAndVerifyPageExists(ctx, wikipage.PageIdentifier(req.Page)); err != nil {
+		return nil, err
 	}
 
 	if err := s.pageReaderMutator.WriteMarkdown(wikipage.PageIdentifier(req.Page), wikipage.Markdown(""), tailscale.IdentityFromContext(ctx)); err != nil {
@@ -967,13 +955,8 @@ func (s *Server) UpdatePage(ctx context.Context, req *apiv1.UpdatePageRequest) (
 		return nil, authErr
 	}
 
-	// Verify page exists.
-	_, _, err := s.pageReaderMutator.ReadFrontMatter(wikipage.PageIdentifier(req.Page))
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, status.Errorf(codes.NotFound, pageNotFoundErrFmt, req.Page)
-		}
-		return nil, status.Errorf(codes.Internal, failedToReadFrontmatterErrFmt, err)
+	if err := s.guardAndVerifyPageExists(ctx, wikipage.PageIdentifier(req.Page)); err != nil {
+		return nil, err
 	}
 
 	identity := tailscale.IdentityFromContext(ctx)
@@ -1027,25 +1010,40 @@ func requirePageAtomicModifier(prm wikipage.PageReaderMutator) (pageAtomicModifi
 	return am, nil
 }
 
+// guardAndVerifyPageExists runs the common write-path guards (user-mutable,
+// authorized) and verifies the page exists via ReadFrontMatter, mapping
+// not-found to the standard NotFound response.
+func (s *Server) guardAndVerifyPageExists(ctx context.Context, identifier wikipage.PageIdentifier) error {
+	if guardErr := requireUserMutable(s.pageReaderMutator, identifier); guardErr != nil {
+		return guardErr
+	}
+	if authErr := requireAuthorized(ctx, s.pageReaderMutator, identifier); authErr != nil {
+		return authErr
+	}
+	// Verify the page exists
+	_, _, err := s.pageReaderMutator.ReadFrontMatter(identifier)
+	return readFrontMatterErr(err, string(identifier))
+}
+
+// readFrontMatterErr maps a ReadFrontMatter error to the standard gRPC response
+// for write paths: NotFound for missing pages, Internal otherwise.
+func readFrontMatterErr(err error, page string) error {
+	if err == nil {
+		return nil
+	}
+	if os.IsNotExist(err) {
+		return status.Errorf(codes.NotFound, pageNotFoundErrFmt, page)
+	}
+	return status.Errorf(codes.Internal, failedToReadFrontmatterErrFmt, err)
+}
+
 // validateUpdateWholePagePrequest runs UpdateWholePage's pre-write
 // checks (guards, wipe guard, template validation, artifact fence
 // validation) and returns the parsed new frontmatter/markdown with the
 // identifier stamped.
 func (s *Server) validateUpdateWholePagePrequest(ctx context.Context, req *apiv1.UpdateWholePageRequest) (wikipage.FrontMatter, wikipage.Markdown, error) {
-	if guardErr := requireUserMutable(s.pageReaderMutator, wikipage.PageIdentifier(req.Page)); guardErr != nil {
-		return nil, "", guardErr
-	}
-	if authErr := requireAuthorized(ctx, s.pageReaderMutator, wikipage.PageIdentifier(req.Page)); authErr != nil {
-		return nil, "", authErr
-	}
-
-	// Verify the page exists
-	_, _, err := s.pageReaderMutator.ReadFrontMatter(wikipage.PageIdentifier(req.Page))
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, "", status.Errorf(codes.NotFound, pageNotFoundErrFmt, req.Page)
-		}
-		return nil, "", status.Errorf(codes.Internal, failedToReadFrontmatterErrFmt, err)
+	if err := s.guardAndVerifyPageExists(ctx, wikipage.PageIdentifier(req.Page)); err != nil {
+		return nil, "", err
 	}
 
 	page := &wikipage.Page{
@@ -1355,17 +1353,9 @@ func (s *Server) ReadPageOutline(ctx context.Context, req *apiv1.ReadPageOutline
 		return nil, authErr
 	}
 
-	_, markdown, err := s.pageReaderMutator.ReadMarkdown(wikipage.PageIdentifier(req.Page))
+	markdown, frontmatter, err := s.readMarkdownAndFrontMatter(string(req.Page))
 	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, status.Errorf(codes.NotFound, pageNotFoundErrFmt, req.Page)
-		}
-		return nil, status.Errorf(codes.Internal, failedToReadPageErrFmt, err)
-	}
-
-	_, frontmatter, fmErr := s.pageReaderMutator.ReadFrontMatter(wikipage.PageIdentifier(req.Page))
-	if fmErr != nil && !os.IsNotExist(fmErr) {
-		return nil, status.Errorf(codes.Internal, failedToReadFrontmatterErrFmt, fmErr)
+		return nil, err
 	}
 
 	return &apiv1.ReadPageOutlineResponse{
@@ -1373,6 +1363,26 @@ func (s *Server) ReadPageOutline(ctx context.Context, req *apiv1.ReadPageOutline
 		TotalBytes:  int64(len(markdown)),
 		VersionHash: computePageHash(frontmatter, markdown),
 	}, nil
+}
+
+// readMarkdownAndFrontMatter reads both artifacts for the read-path RPCs
+// (outline, section): markdown with not-found mapped to the standard NotFound
+// response and other failures to Internal, frontmatter tolerating NotExist
+// (no frontmatter file = zero fm), and any other frontmatter read failure
+// mapped to Internal.
+func (s *Server) readMarkdownAndFrontMatter(page string) (wikipage.Markdown, wikipage.FrontMatter, error) {
+	_, markdown, err := s.pageReaderMutator.ReadMarkdown(wikipage.PageIdentifier(page))
+	if err != nil {
+		if os.IsNotExist(err) {
+			return "", nil, status.Errorf(codes.NotFound, pageNotFoundErrFmt, page)
+		}
+		return "", nil, status.Errorf(codes.Internal, failedToReadPageErrFmt, err)
+	}
+	_, frontmatter, fmErr := s.pageReaderMutator.ReadFrontMatter(wikipage.PageIdentifier(page))
+	if fmErr != nil && !os.IsNotExist(fmErr) {
+		return "", nil, status.Errorf(codes.Internal, failedToReadFrontmatterErrFmt, fmErr)
+	}
+	return markdown, frontmatter, nil
 }
 
 // ReadPageSection implements the ReadPageSection RPC.
@@ -1385,17 +1395,9 @@ func (s *Server) ReadPageSection(ctx context.Context, req *apiv1.ReadPageSection
 		return nil, authErr
 	}
 
-	_, markdown, err := s.pageReaderMutator.ReadMarkdown(wikipage.PageIdentifier(req.Page))
+	markdown, frontmatter, err := s.readMarkdownAndFrontMatter(string(req.Page))
 	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, status.Errorf(codes.NotFound, pageNotFoundErrFmt, req.Page)
-		}
-		return nil, status.Errorf(codes.Internal, failedToReadPageErrFmt, err)
-	}
-
-	_, frontmatter, fmErr := s.pageReaderMutator.ReadFrontMatter(wikipage.PageIdentifier(req.Page))
-	if fmErr != nil && !os.IsNotExist(fmErr) {
-		return nil, status.Errorf(codes.Internal, failedToReadFrontmatterErrFmt, fmErr)
+		return nil, err
 	}
 
 	versionHash := computePageHash(frontmatter, markdown)
