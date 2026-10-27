@@ -26,6 +26,12 @@ import type { ReactionGroup, ScrollToMessageEventDetail } from './chat-message-b
 import './chat-message-bubble.js';
 import './agent-selector.js';
 import type { AgentSelector } from './agent-selector.js';
+import {
+  uploadChatAttachment,
+  buildAttachmentMarkdown,
+  revokePreviews,
+  type ChatAttachment,
+} from '../services/chat-attachment-service.js';
 
 const STORAGE_KEY = 'chat-panel-open';
 const MAX_INPUT_LENGTH = 2000;
@@ -281,9 +287,128 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
         padding: 8px 12px;
         border-top: 1px solid var(--color-editor-border);
         display: flex;
+        flex-direction: column;
+        gap: 6px;
+        flex-shrink: 0;
+      }
+
+      .input-area.drag-over {
+        background: rgba(255, 255, 255, 0.05);
+        border-top-color: var(--color-text-muted);
+      }
+
+      .attachment-chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        padding: 0;
+      }
+
+      .attachment-chip {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        background: rgba(255, 255, 255, 0.1);
+        border: 1px solid var(--color-editor-border);
+        border-radius: 4px;
+        padding: 3px 6px;
+        font-size: 0.75rem;
+        color: var(--color-text-primary);
+        max-width: 160px;
+      }
+
+      .attachment-chip img {
+        width: 20px;
+        height: 20px;
+        object-fit: cover;
+        border-radius: 2px;
+        flex-shrink: 0;
+      }
+
+      .attachment-chip .chip-name {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        flex: 1;
+        min-width: 0;
+      }
+
+      .attachment-chip .chip-remove {
+        background: none;
+        border: none;
+        color: var(--color-text-muted);
+        cursor: pointer;
+        font-size: 0.8rem;
+        padding: 0 2px;
+        line-height: 1;
+        flex-shrink: 0;
+      }
+
+      .attachment-chip .chip-remove:hover {
+        color: var(--color-error);
+      }
+
+      .input-row {
+        display: flex;
         gap: 8px;
         align-items: flex-end;
+      }
+
+      .attach-button {
+        background: none;
+        border: 1px solid var(--color-editor-border);
+        border-radius: 6px;
+        color: var(--color-text-muted);
+        cursor: pointer;
+        font-size: 1rem;
+        padding: 8px 10px;
         flex-shrink: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        position: relative;
+      }
+
+      .attach-button:hover:not(:disabled) {
+        color: var(--color-text-primary);
+        border-color: var(--color-text-muted);
+      }
+
+      .attach-button:disabled {
+        opacity: 0.4;
+        cursor: not-allowed;
+      }
+
+      .attach-menu {
+        position: absolute;
+        bottom: calc(100% + 4px);
+        left: 0;
+        background: var(--color-editor-surface);
+        border: 1px solid var(--color-editor-border);
+        border-radius: 6px;
+        padding: 4px 0;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+        min-width: 160px;
+        z-index: 10;
+      }
+
+      .attach-menu-item {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        background: none;
+        border: none;
+        color: var(--color-text-primary);
+        cursor: pointer;
+        font-size: 0.85rem;
+        padding: 8px 14px;
+        width: 100%;
+        text-align: left;
+        white-space: nowrap;
+      }
+
+      .attach-menu-item:hover {
+        background: rgba(255, 255, 255, 0.08);
       }
 
       .input-area textarea {
@@ -477,6 +602,18 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
  @state()
  declare pendingPermission: PermissionRequestState | null;
 
+ @state()
+ declare _pendingAttachments: ChatAttachment[];
+
+ @state()
+ declare _attachMenuOpen: boolean;
+
+ @state()
+ declare _attachUploadError: string | null;
+
+ @state()
+ declare _dragOver: boolean;
+
  private pendingMessage: string | null = null;
  private readonly messagesById = new Map<string, ChatMessageState>();
  private streamSubscription: AbortController | undefined;
@@ -486,6 +623,7 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
  private readonly _handleVisibilityChange: () => void;
  private readonly _handleViewportResize: () => void;
  private readonly _handleGlobalKeydown: (e: KeyboardEvent) => void;
+ private readonly _handleGlobalClick: () => void;
  private userHasScrolled = false;
 
  private _restoreOpen = false;
@@ -507,11 +645,16 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
   this.effectiveAgentId = '';
   this.effectiveAgentDisplayName = '';
   this.pendingPermission = null;
+  this._pendingAttachments = [];
+  this._attachMenuOpen = false;
+  this._attachUploadError = null;
+  this._dragOver = false;
   this.chatClient = createClient(ChatService, getGrpcWebTransport());
   this.markdownRenderer = new ChatMarkdownRenderer();
   this._handleVisibilityChange = this.handleVisibilityChange.bind(this);
   this._handleViewportResize = this.handleViewportResize.bind(this);
   this._handleGlobalKeydown = this.handleGlobalKeydown.bind(this);
+  this._handleGlobalClick = this._closeAttachMenu.bind(this);
 
   // Read localStorage flag; actual open deferred to connectedCallback
   try {
@@ -528,6 +671,7 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
   this._ctaCleanup = registerAmbientCTA(this);
   document.addEventListener('visibilitychange', this._handleVisibilityChange);
   document.addEventListener('keydown', this._handleGlobalKeydown);
+  document.addEventListener('click', this._handleGlobalClick);
   window.visualViewport?.addEventListener('resize', this._handleViewportResize);
   if (this._restoreOpen) {
    this.openDrawer();
@@ -543,7 +687,9 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
   this._ctaCleanup = undefined;
   document.removeEventListener('visibilitychange', this._handleVisibilityChange);
   document.removeEventListener('keydown', this._handleGlobalKeydown);
+  document.removeEventListener('click', this._handleGlobalClick);
   window.visualViewport?.removeEventListener('resize', this._handleViewportResize);
+  revokePreviews(this._pendingAttachments);
   this.stopStream();
   if (this.statusPollTimer) {
    clearInterval(this.statusPollTimer);
@@ -712,23 +858,113 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
 
         ${this._renderPermissionPrompt()}
 
-        <div class="input-area" @click=${this._focusTextarea}>
-          <textarea
-            placeholder="${placeholder}"
-            maxlength="${MAX_INPUT_LENGTH}"
-            rows="2"
-            enterkeyhint="send"
-            ?disabled=${!inputEnabled}
-            @keydown=${this._handleKeydown}
-          ></textarea>
-          <button
-            class="send-button"
-            @click=${this._handleSendClick}
-            ?disabled=${!inputEnabled}
-            aria-label="Send message"
-          >
-            Send
-          </button>
+        <div
+          class="input-area ${this._dragOver ? 'drag-over' : ''}"
+          @dragover=${this._handleDragOver}
+          @dragleave=${this._handleDragLeave}
+          @drop=${this._handleDrop}
+        >
+          ${this._pendingAttachments.length > 0
+    ? html`<div class="attachment-chips" role="list" aria-label="Pending attachments">
+                ${this._pendingAttachments.map(
+      (a, i) => html`
+                  <div class="attachment-chip" role="listitem" aria-label="${a.filename}">
+                    ${a.mimeType.startsWith('image/')
+      ? html`<img src=${a.previewUrl} alt=${a.filename} />`
+      : html`<i class="fa-solid fa-paperclip" aria-hidden="true"></i>`}
+                    <span class="chip-name" title=${a.filename}>${a.filename}</span>
+                    <button
+                      class="chip-remove"
+                      @click=${() => this._removeAttachment(i)}
+                      aria-label="Remove ${a.filename}"
+                      title="Remove"
+                    >×</button>
+                  </div>
+                `,
+    )}
+              </div>`
+    : nothing}
+          ${this._attachUploadError
+    ? html`<div class="status-banner disconnected" role="alert">${this._attachUploadError}</div>`
+    : nothing}
+          <div class="input-row" @click=${this._focusTextarea}>
+            <!-- Hidden file inputs for the attach menu actions -->
+            <input
+              type="file"
+              class="attach-input-file"
+              accept="*/*"
+              style="display:none"
+              @change=${this._handleFileInputChange}
+            />
+            <input
+              type="file"
+              class="attach-input-image"
+              accept="image/*"
+              style="display:none"
+              @change=${this._handleFileInputChange}
+            />
+            <input
+              type="file"
+              class="attach-input-camera"
+              accept="image/*"
+              capture="environment"
+              style="display:none"
+              @change=${this._handleFileInputChange}
+            />
+            <button
+              class="attach-button"
+              ?disabled=${!inputEnabled}
+              @click=${this._toggleAttachMenu}
+              aria-label="Attach file"
+              aria-expanded=${this._attachMenuOpen ? 'true' : 'false'}
+              aria-haspopup="menu"
+              title="Attach file"
+            >
+              <i class="fa-solid fa-plus" aria-hidden="true"></i>
+              ${this._attachMenuOpen
+    ? html`<div class="attach-menu" role="menu" @click=${(e: Event) => e.stopPropagation()}>
+                    <button
+                      class="attach-menu-item"
+                      role="menuitem"
+                      @click=${this._handleMenuUploadFile}
+                    >
+                      <i class="fa-solid fa-folder-open" aria-hidden="true"></i> Upload file
+                    </button>
+                    <button
+                      class="attach-menu-item"
+                      role="menuitem"
+                      @click=${this._handleMenuUploadImage}
+                    >
+                      <i class="fa-solid fa-image" aria-hidden="true"></i> Photo library
+                    </button>
+                    <button
+                      class="attach-menu-item"
+                      role="menuitem"
+                      @click=${this._handleMenuCamera}
+                    >
+                      <i class="fa-solid fa-camera" aria-hidden="true"></i> Camera
+                    </button>
+                  </div>`
+    : nothing}
+            </button>
+            <textarea
+              placeholder="${placeholder}"
+              maxlength="${MAX_INPUT_LENGTH}"
+              rows="2"
+              enterkeyhint="send"
+              ?disabled=${!inputEnabled}
+              @keydown=${this._handleKeydown}
+              @paste=${this._handlePaste}
+            ></textarea>
+            <button
+              class="send-button"
+              @click=${this._handleSendClick}
+              ?disabled=${!inputEnabled}
+              aria-label="Send message"
+            >
+              Send
+            </button>
+          </div>
         </div>
       </div>
     `;
@@ -774,6 +1010,7 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
 
  private _focusTextarea(e: Event) {
   if (e.target instanceof HTMLButtonElement) return; // Don't steal focus from send button
+  if (e.target instanceof HTMLInputElement) return; // Don't steal focus from file inputs
   this.focusInput();
  }
 
@@ -894,14 +1131,142 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
   }
  }
 
+ // ─────────────────────────────── Attachment handling ───────────────────────
+
+ private _toggleAttachMenu(e: Event) {
+  e.stopPropagation();
+  this._attachMenuOpen = !this._attachMenuOpen;
+ }
+
+ private _closeAttachMenu() {
+  this._attachMenuOpen = false;
+ }
+
+ private _handleMenuUploadFile(e: Event) {
+  e.stopPropagation();
+  this._closeAttachMenu();
+  const input = this.shadowRoot?.querySelector<HTMLInputElement>('.attach-input-file');
+  input?.click();
+ }
+
+ private _handleMenuUploadImage(e: Event) {
+  e.stopPropagation();
+  this._closeAttachMenu();
+  const input = this.shadowRoot?.querySelector<HTMLInputElement>('.attach-input-image');
+  input?.click();
+ }
+
+ private _handleMenuCamera(e: Event) {
+  e.stopPropagation();
+  this._closeAttachMenu();
+  const input = this.shadowRoot?.querySelector<HTMLInputElement>('.attach-input-camera');
+  input?.click();
+ }
+
+ private _handleFileInputChange(e: Event) {
+  if (!(e.target instanceof HTMLInputElement)) return;
+  const files = e.target.files;
+  if (!files || files.length === 0) return;
+  void this._uploadFiles(Array.from(files));
+  // Reset so the same file can be re-selected if removed
+  e.target.value = '';
+ }
+
+ private _handlePaste(e: ClipboardEvent) {
+  const items = e.clipboardData?.items;
+  if (!items) return;
+
+  const files: File[] = [];
+  for (const item of items) {
+   if (item.kind === 'file') {
+    const file = item.getAsFile();
+    if (file) {
+     files.push(file);
+    }
+   }
+  }
+
+  if (files.length > 0) {
+   e.preventDefault();
+   void this._uploadFiles(files);
+  }
+ }
+
+ private _handleDragOver(e: DragEvent) {
+  e.preventDefault();
+  if (!this._dragOver) {
+   this._dragOver = true;
+  }
+ }
+
+ private _handleDragLeave(e: DragEvent) {
+  // Only clear drag-over when leaving the input-area entirely (not a child)
+  const related = e.relatedTarget;
+  const inputArea = this.shadowRoot?.querySelector('.input-area');
+  if (inputArea && related instanceof Node && inputArea.contains(related)) return;
+  this._dragOver = false;
+ }
+
+ private _handleDrop(e: DragEvent) {
+  e.preventDefault();
+  this._dragOver = false;
+
+  const files = e.dataTransfer?.files;
+  if (!files || files.length === 0) return;
+  void this._uploadFiles(Array.from(files));
+ }
+
+ private async _uploadFiles(files: File[]) {
+  this._attachUploadError = null;
+  const results: ChatAttachment[] = [];
+
+  for (const file of files) {
+   try {
+    const attachment = await uploadChatAttachment(file);
+    results.push(attachment);
+   } catch (err) {
+    this._attachUploadError = err instanceof Error ? err.message : 'Upload failed';
+    // Continue with successfully uploaded files
+   }
+  }
+
+  if (results.length > 0) {
+   this._pendingAttachments = [...this._pendingAttachments, ...results];
+  }
+ }
+
+ private _removeAttachment(index: number) {
+  const removed = this._pendingAttachments[index];
+  if (removed) {
+   revokePreviews([removed]);
+  }
+  this._pendingAttachments = this._pendingAttachments.filter((_, i) => i !== index);
+ }
+
+ // ──────────────────────────────── Send message ──────────────────────────────
+
  private async sendMessage() {
   const textarea = this.shadowRoot?.querySelector('textarea');
   if (!textarea) return;
 
-  const content = textarea.value.trim();
+  const textContent = textarea.value.trim();
+  const attachments = this._pendingAttachments;
+
+  if (!textContent && attachments.length === 0) return;
+
+  const attachmentMarkdown = buildAttachmentMarkdown(attachments);
+  const content = attachmentMarkdown
+   ? textContent
+    ? `${textContent}\n\n${attachmentMarkdown}`
+    : attachmentMarkdown
+   : textContent;
+
   if (!content) return;
 
   textarea.value = '';
+  const sentAttachments = this._pendingAttachments;
+  this._pendingAttachments = [];
+  this._attachUploadError = null;
   this.waitingForAssistant = true;
   this.turnActive = true;
 
@@ -911,14 +1276,19 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
     content,
    });
    await this.chatClient.sendMessage(request);
+   revokePreviews(sentAttachments);
    this.pendingMessage = null;
   } catch (err) {
    if (err instanceof ConnectError && err.code === Code.Unavailable) {
     // Instance may be starting — queue message for auto-retry
     this.pendingMessage = content;
+    // Restore attachments so the user can retry
+    this._pendingAttachments = sentAttachments;
     this.error = null;
    } else {
     this.error = err instanceof Error ? err : new Error(String(err));
+    // Restore attachments so the user can retry
+    this._pendingAttachments = sentAttachments;
    }
    this.waitingForAssistant = false;
    this.turnActive = false;

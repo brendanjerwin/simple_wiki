@@ -11,7 +11,32 @@ system = true
 
 Every page has an AI assistant chat panel. The panel header shows an **agent
 selector** — a compact control that displays the agent currently bound to the
-page and lets any participant switch to a different one. The binding is durable:
+page and lets any participant switch to a different one.
+
+## Attaching files and images
+
+You can hand the agent screenshots, photos, PDFs, or any other file directly
+from the chat input:
+
+- **"+" button** — opens a small menu with three choices: *Upload file* (any
+  type), *Photo library* (images), and *Camera* (capture a photo on mobile).
+- **Paste** — paste an image or file directly from the clipboard (works on
+  desktop and on iOS/Android after copying a screenshot).
+- **Drag-and-drop** — drag a file onto the chat input area from your file
+  manager or another browser tab (desktop).
+
+After attaching, each item appears as a **chip** inside the draft input with a
+**×** to remove it before sending. Images show a small thumbnail; other files
+show a paper-clip icon. You can attach multiple items in one message.
+
+On send, all attachments are uploaded and embedded in the message as markdown
+image links (`![filename](url)`) or file links (`[filename](url)`). The agent
+receives the message content including these URLs and can read the files via
+its normal vision/fetch capabilities.
+
+**Storage**: Attachments are transient — stored in memory for the duration of
+the session (up to 24 hours) and never written to the wiki, exported, or
+included in logs or backups. Nothing outlives the server process. The binding is durable:
 it persists in page frontmatter under the `agent.chat_agent` subtree (managed
 exclusively by `AgentInventoryService`), survives session close/reopen and pool
 restarts, and applies to **all** participants viewing the page. A switch is a
