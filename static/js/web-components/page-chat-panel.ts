@@ -1245,6 +1245,14 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
 
  // ──────────────────────────────── Send message ──────────────────────────────
 
+ private _buildMessageContent(textContent: string, attachments: ChatAttachment[]): string {
+  const attachmentMarkdown = buildAttachmentMarkdown(attachments);
+  if (attachmentMarkdown) {
+   return textContent ? `${textContent}\n\n${attachmentMarkdown}` : attachmentMarkdown;
+  }
+  return textContent;
+ }
+
  private async sendMessage() {
   const textarea = this.shadowRoot?.querySelector('textarea');
   if (!textarea) return;
@@ -1254,13 +1262,7 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
 
   if (!textContent && attachments.length === 0) return;
 
-  const attachmentMarkdown = buildAttachmentMarkdown(attachments);
-  let content: string;
-  if (attachmentMarkdown) {
-    content = textContent ? `${textContent}\n\n${attachmentMarkdown}` : attachmentMarkdown;
-  } else {
-    content = textContent;
-  }
+  const content = this._buildMessageContent(textContent, attachments);
 
   if (!content) return;
 
