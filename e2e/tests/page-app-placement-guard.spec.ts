@@ -103,11 +103,16 @@ test.describe.serial('Page app placement guard', () => {
    });
    expect(setResp.status).toBe(200);
 
+   // Read the current hash so the write reaches the placement guard validation.
+   const hashResp = await callAPI(request, 'PageManagementService', 'ReadPage', { page: TEST_PAGE });
+   const currentHash = (hashResp.json as { versionHash?: string } | null)?.versionHash ?? '';
+
    // Candidate body: fence only, program text changed.
    const changedProgram = counterProgram('Counter v2', '$n');
    const fenceOnly = `\`\`\`wiki-page-app\n${changedProgram}\n\`\`\`\n`;
    const resp = await callAPI(request, 'PageManagementService', 'UpdatePageContent', {
     page: TEST_PAGE,
+    expectedVersionHash: currentHash,
     newContentMarkdown: fenceOnly,
    });
    expect(resp.status).toBeGreaterThanOrEqual(400);
@@ -130,11 +135,16 @@ test.describe.serial('Page app placement guard', () => {
    });
    expect(setResp.status).toBe(200);
 
+   // Read the current hash so the write reaches the placement guard validation.
+   const hashResp = await callAPI(request, 'PageManagementService', 'ReadPage', { page: TEST_PAGE });
+   const currentHash = (hashResp.json as { versionHash?: string } | null)?.versionHash ?? '';
+
    // Candidate body: fence only, program text identical (unchanged-source
    // path — previously guard-skipping).
    const fenceOnly = `\`\`\`wiki-page-app\n${GOOD_PROGRAM}\n\`\`\`\n`;
    const resp = await callAPI(request, 'PageManagementService', 'UpdatePageContent', {
     page: TEST_PAGE,
+    expectedVersionHash: currentHash,
     newContentMarkdown: fenceOnly,
    });
    expect(resp.status).toBeGreaterThanOrEqual(400);

@@ -43,8 +43,12 @@ test.describe.serial('Artifact validation funnel', () => {
 
  test.describe('when UpdatePageContent carries a rootless fence program', () => {
   test('the write is rejected mentioning root', async ({ request }) => {
+   // Read the current hash so the full-page write reaches the validation layer.
+   const readResp = await callAPI(request, 'PageManagementService', 'ReadPage', { page: TEST_PAGE });
+   const currentHash = (readResp.json as { versionHash?: string } | null)?.versionHash ?? '';
    const resp = await callAPI(request, 'PageManagementService', 'UpdatePageContent', {
     page: TEST_PAGE,
+    expectedVersionHash: currentHash,
     newContentMarkdown: pageBody('$n = 0\nStack([Text("orphan")])'),
    });
    expect(resp.status).toBeGreaterThanOrEqual(400);

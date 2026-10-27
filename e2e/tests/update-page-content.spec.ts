@@ -35,10 +35,10 @@ async function setupTestPage(request: APIRequestContext, markdown: string): Prom
   }
 
   // Page already exists (CreatePage returns HTTP 200 with success=false for existing pages)
-  // or the HTTP request itself failed — reset body with full-replacement UpdatePageContent.
-  const resetResp = await callPageAPI(request, 'UpdatePageContent', {
+  // or the HTTP request itself failed — reset body via UpdateWholePage (unchecked write path).
+  const resetResp = await callPageAPI(request, 'UpdateWholePage', {
     page: TEST_PAGE,
-    newContentMarkdown: markdown,
+    newWholeMarkdown: markdown,
     allowShrink: true,
   });
   expect(resetResp.ok()).toBeTruthy();
@@ -136,8 +136,10 @@ test.describe('UpdatePageContent find-and-replace behavior', () => {
     const { versionHash } = await readTestPage(request);
 
     // Advance the page with a full-replacement so the captured hash is now stale.
+    // Supply the current hash so the write succeeds (full-page writes require expected_version_hash).
     const advanceResp = await callPageAPI(request, 'UpdatePageContent', {
       page: TEST_PAGE,
+      expectedVersionHash: versionHash,
       newContentMarkdown: '# Intermediate Full Replacement\n\nThis makes the original hash stale.',
     });
     expect(advanceResp.ok()).toBeTruthy();
@@ -204,8 +206,11 @@ test.describe('UpdatePageContent find-and-replace behavior', () => {
   test('shrink breaker: rejects full replacement under 10% of current size', async ({ request }) => {
     // Seed a ~9KB page, then attempt a tiny full replacement.
     await setupTestPage(request, '# Section One\n\n' + 'This is a line of meaningful content.\n'.repeat(250));
+    // Read the current hash so the full-page write reaches the shrink check.
+    const { versionHash: currentHash } = await readTestPage(request);
     const resp = await callPageAPI(request, 'UpdatePageContent', {
       page: TEST_PAGE,
+      expectedVersionHash: currentHash,
       newContentMarkdown: '# Truncated',
     });
     expect(resp.status()).toBe(400); // Connect maps FailedPrecondition to HTTP 400
@@ -216,8 +221,11 @@ test.describe('UpdatePageContent find-and-replace behavior', () => {
 
   test('shrink breaker: allows full replacement with allow_shrink=true', async ({ request }) => {
     await setupTestPage(request, '# Section One\n\n' + 'This is a line of meaningful content.\n'.repeat(250));
+    // Read the current hash so the full-page write reaches the shrink check.
+    const { versionHash: currentHash } = await readTestPage(request);
     const resp = await callPageAPI(request, 'UpdatePageContent', {
       page: TEST_PAGE,
+      expectedVersionHash: currentHash,
       newContentMarkdown: '# Intentional rewrite',
       allowShrink: true,
     });

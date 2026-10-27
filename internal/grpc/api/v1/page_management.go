@@ -823,14 +823,14 @@ func (s *Server) UpdatePageContent(ctx context.Context, req *apiv1.UpdatePageCon
 	// page_byte_size mirrors the history service's ByteSize unit: the whole
 	// page text (frontmatter + markdown) as combined on disk, so agents can
 	// compare a write's outcome directly against PageHistoryService entries.
-	wholeText, wholeTextErr := wikipage.CombineFrontMatterAndMarkdown(capturedFM, storedMarkdown)
-	if wholeTextErr != nil {
-		return nil, status.Errorf(codes.Internal, "failed to compute page byte size: %v", wholeTextErr)
+	versionHash, pageByteSize, sizeErr := computePageSizeAndHash(capturedFM, storedMarkdown)
+	if sizeErr != nil {
+		return nil, sizeErr
 	}
 	return &apiv1.UpdatePageContentResponse{
 		Success:      true,
-		VersionHash:  computePageHash(capturedFM, storedMarkdown),
-		PageByteSize: int64(len(wholeText)),
+		VersionHash:  versionHash,
+		PageByteSize: pageByteSize,
 	}, nil
 }
 
@@ -999,17 +999,17 @@ func (s *Server) UpdatePage(ctx context.Context, req *apiv1.UpdatePageRequest) (
 		return nil, status.Errorf(codes.Internal, failedToWriteMarkdownErrFmt, err)
 	}
 
-	wholeText, wholeTextErr := wikipage.CombineFrontMatterAndMarkdown(fm, md)
-	if wholeTextErr != nil {
-		return nil, status.Errorf(codes.Internal, "failed to compute page byte size: %v", wholeTextErr)
+	versionHash, pageByteSize, sizeErr := computePageSizeAndHash(fm, md)
+	if sizeErr != nil {
+		return nil, sizeErr
 	}
 
 	s.logger.Info("[AUDIT] update-page | page: %q | user: %q", req.Page, identity.ForLog())
 
 	return &apiv1.UpdatePageResponse{
 		Success:      true,
-		VersionHash:  computePageHash(fm, md),
-		PageByteSize: int64(len(wholeText)),
+		VersionHash:  versionHash,
+		PageByteSize: pageByteSize,
 	}, nil
 }
 
@@ -1162,19 +1162,28 @@ func (s *Server) UpdateWholePage(ctx context.Context, req *apiv1.UpdateWholePage
 	return resp, nil
 }
 
-// updateWholePageResponse builds the success response for UpdateWholePage.
+// computePageSizeAndHash returns the whole-page byte size and version hash.
 // page_byte_size mirrors the history service's ByteSize unit: the whole page
 // text (frontmatter + markdown) as combined on disk, so agents can compare a
 // write's outcome directly against PageHistoryService entries.
-func updateWholePageResponse(fm wikipage.FrontMatter, md wikipage.Markdown) (*apiv1.UpdateWholePageResponse, error) {
+func computePageSizeAndHash(fm wikipage.FrontMatter, md wikipage.Markdown) (string, int64, error) {
 	wholeText, err := wikipage.CombineFrontMatterAndMarkdown(fm, md)
 	if err != nil {
-		return nil, status.Errorf(codes.Internal, "failed to compute page byte size: %v", err)
+		return "", 0, status.Errorf(codes.Internal, "failed to compute page byte size: %v", err)
+	}
+	return computePageHash(fm, md), int64(len(wholeText)), nil
+}
+
+// updateWholePageResponse builds the success response for UpdateWholePage.
+func updateWholePageResponse(fm wikipage.FrontMatter, md wikipage.Markdown) (*apiv1.UpdateWholePageResponse, error) {
+	versionHash, pageByteSize, err := computePageSizeAndHash(fm, md)
+	if err != nil {
+		return nil, err
 	}
 	return &apiv1.UpdateWholePageResponse{
 		Success:      true,
-		VersionHash:  computePageHash(fm, md),
-		PageByteSize: int64(len(wholeText)),
+		VersionHash:  versionHash,
+		PageByteSize: pageByteSize,
 	}, nil
 }
 

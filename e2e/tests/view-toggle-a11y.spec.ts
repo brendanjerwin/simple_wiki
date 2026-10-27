@@ -46,9 +46,9 @@ title = "E2E View Toggle A11y Test"
     if (body.success) return;
   }
 
-  const resetResp = await callPageAPI(request, 'UpdatePageContent', {
+  const resetResp = await callPageAPI(request, 'UpdateWholePage', {
     page: TEST_PAGE,
-    newContentMarkdown: markdown,
+    newWholeMarkdown: markdown,
     allowShrink: true,
   });
   expect(resetResp.ok()).toBeTruthy();

@@ -38,9 +38,9 @@ title = "Frontmatter Dialog Accessibility"
     if (body.success) return;
   }
 
-  const resetResp = await callPageAPI(request, 'UpdatePageContent', {
+  const resetResp = await callPageAPI(request, 'UpdateWholePage', {
     page: TEST_PAGE_IDENTIFIER,
-    newContentMarkdown: contentMarkdown,
+    newWholeMarkdown: contentMarkdown,
     allowShrink: true,
   });
   expect(resetResp.ok()).toBeTruthy();

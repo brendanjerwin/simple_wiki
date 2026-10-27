@@ -39,9 +39,9 @@ async function createTestPage(request: APIRequestContext): Promise<void> {
     if (body.success) return;
   }
 
-  const updateResp = await callPageAPI(request, 'UpdatePageContent', {
+  const updateResp = await callPageAPI(request, 'UpdateWholePage', {
     page: TEST_PAGE,
-    newContentMarkdown: TEST_MARKDOWN,
+    newWholeMarkdown: TEST_MARKDOWN,
   });
   expect(updateResp.ok()).toBeTruthy();
 }
