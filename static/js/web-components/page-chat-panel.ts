@@ -27,10 +27,10 @@ import './chat-message-bubble.js';
 import './agent-selector.js';
 import type { AgentSelector } from './agent-selector.js';
 import {
-  uploadChatAttachment,
-  buildAttachmentMarkdown,
-  revokePreviews,
-  type ChatAttachment,
+ uploadChatAttachment,
+ buildAttachmentMarkdown,
+ revokePreviews,
+ type ChatAttachment,
 } from '../services/chat-attachment-service.js';
 
 const STORAGE_KEY = 'chat-panel-open';
@@ -283,18 +283,20 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
         }
       }
 
-      .input-area {
-        padding: 8px 12px;
-        border-top: 1px solid var(--color-editor-border);
+      .composer {
+        margin: 0 12px 8px;
+        padding: 4px 8px;
+        border: 1px solid var(--color-editor-border);
+        border-radius: 12px;
         display: flex;
         flex-direction: column;
         gap: 6px;
         flex-shrink: 0;
       }
 
-      .input-area.drag-over {
+      .composer.drag-over {
         background: rgba(255, 255, 255, 0.05);
-        border-top-color: var(--color-text-muted);
+        border-color: var(--color-text-muted);
       }
 
       .attachment-chips {
@@ -356,12 +358,11 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
 
       .attach-button {
         background: none;
-        border: 1px solid var(--color-editor-border);
-        border-radius: 6px;
+        border: none;
         color: var(--color-text-muted);
         cursor: pointer;
         font-size: 1rem;
-        padding: 8px 10px;
+        padding: 8px;
         flex-shrink: 0;
         display: flex;
         align-items: center;
@@ -371,7 +372,6 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
 
       .attach-button:hover:not(:disabled) {
         color: var(--color-text-primary);
-        border-color: var(--color-text-muted);
       }
 
       .attach-button:disabled {
@@ -411,7 +411,7 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
         background: rgba(255, 255, 255, 0.08);
       }
 
-      .input-area textarea {
+      .composer textarea {
         flex: 1;
         min-width: 0;
         width: 100%;
@@ -432,19 +432,24 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
         touch-action: manipulation;
       }
 
-      .input-area textarea:focus {
+      .composer textarea:focus {
         border-color: var(--color-text-muted);
       }
 
       .send-button {
         background: var(--color-chat-user-bg);
         border: none;
-        border-radius: 6px;
+        border-radius: 50%;
         color: var(--color-chat-user-text);
-        padding: 8px 12px;
+        padding: 8px;
         cursor: pointer;
         font-size: 0.85rem;
         flex-shrink: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 34px;
+        height: 34px;
       }
 
       .send-button:hover:not(:disabled) {
@@ -606,6 +611,9 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
  declare _pendingAttachments: ChatAttachment[];
 
  @state()
+ declare _hasDraftText: boolean;
+
+ @state()
  declare _attachMenuOpen: boolean;
 
  @state()
@@ -649,6 +657,7 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
   this._attachMenuOpen = false;
   this._attachUploadError = null;
   this._dragOver = false;
+  this._hasDraftText = false;
   this.chatClient = createClient(ChatService, getGrpcWebTransport());
   this.markdownRenderer = new ChatMarkdownRenderer();
   this._handleVisibilityChange = this.handleVisibilityChange.bind(this);
@@ -859,7 +868,7 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
         ${this._renderPermissionPrompt()}
 
         <div
-          class="input-area ${this._dragOver ? 'drag-over' : ''}"
+          class="composer ${this._dragOver ? 'drag-over' : ''}"
           @dragover=${this._handleDragOver}
           @dragleave=${this._handleDragLeave}
           @drop=${this._handleDrop}
@@ -867,11 +876,11 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
           ${this._pendingAttachments.length > 0
     ? html`<div class="attachment-chips" role="list" aria-label="Pending attachments">
                 ${this._pendingAttachments.map(
-      (a, i) => html`
+     (a, i) => html`
                   <div class="attachment-chip" role="listitem" aria-label="${a.filename}">
                     ${a.mimeType.startsWith('image/')
-      ? html`<img src=${a.previewUrl} alt=${a.filename} />`
-      : html`<i class="fa-solid fa-paperclip" aria-hidden="true"></i>`}
+       ? html`<img src=${a.previewUrl} alt=${a.filename} />`
+       : html`<i class="fa-solid fa-paperclip" aria-hidden="true"></i>`}
                     <span class="chip-name" title=${a.filename}>${a.filename}</span>
                     <button
                       class="chip-remove"
@@ -955,15 +964,18 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
               ?disabled=${!inputEnabled}
               @keydown=${this._handleKeydown}
               @paste=${this._handlePaste}
+              @input=${this._handleComposerInput}
             ></textarea>
-            <button
-              class="send-button"
-              @click=${this._handleSendClick}
-              ?disabled=${!inputEnabled}
-              aria-label="Send message"
-            >
-              Send
-            </button>
+           ${this._hasDraftText || this._pendingAttachments.length > 0
+    ? html`<button
+            class="send-button"
+            @click=${this._handleSendClick}
+            ?disabled=${!inputEnabled}
+            aria-label="Send message"
+          >
+            <i class="fa-solid fa-arrow-up" aria-hidden="true"></i>
+          </button>`
+    : nothing}
           </div>
         </div>
       </div>
@@ -1006,6 +1018,10 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
    e.preventDefault();
    void this.sendMessage();
   }
+ }
+
+ private _handleComposerInput(e: Event) {
+  this._hasDraftText = e.target instanceof HTMLTextAreaElement && e.target.value.trim() !== '';
  }
 
  private _focusTextarea(e: Event) {
@@ -1200,10 +1216,10 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
  }
 
  private _handleDragLeave(e: DragEvent) {
-  // Only clear drag-over when leaving the input-area entirely (not a child)
+  // Only clear drag-over when leaving the composer entirely (not a child)
   const related = e.relatedTarget;
-  const inputArea = this.shadowRoot?.querySelector('.input-area');
-  if (inputArea && related instanceof Node && inputArea.contains(related)) return;
+  const composer = this.shadowRoot?.querySelector('.composer');
+  if (composer && related instanceof Node && composer.contains(related)) return;
   this._dragOver = false;
  }
 
@@ -1267,6 +1283,7 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
   if (!content) return;
 
   textarea.value = '';
+  this._hasDraftText = false;
   const sentAttachments = this._pendingAttachments;
   this._pendingAttachments = [];
   this._attachUploadError = null;
