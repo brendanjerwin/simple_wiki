@@ -119,8 +119,7 @@ root = Card("App", Stack([
   toast,
 ]))
 ```
-
-## Form controls: `Switch`, `Select`
+## Form controls: `Switch`, `Checkbox`, `Select`
 
 **Switch**(label?, checked, onChange) renders a boolean toggle — the right choice for "Struggled / Completed" toggles and any on/off state, replacing restyled Buttons. Bind a boolean `$variable` and update it with `@Set($var, $value)` (where `$value` is the new checked boolean):
 
@@ -130,6 +129,17 @@ sw = Switch("Struggled", $struggled, @Set($struggled, $value))
 root = Card("Leg hold", Stack([
   sw,
   Text("status: " + $struggled),
+]))
+```
+
+**Checkbox**(label?, checked, onChange) renders a native square checkbox — the standard checkmark control for boolean states like task completion, opt-ins, and "done" flags. Like Switch it binds a boolean `$variable` and updates it with `@Set($var, $value)`:
+
+```
+$done = false
+cb = Checkbox("Done", $done, @Set($done, $value))
+root = Card("Task", Stack([
+  cb,
+  Text("status: " + $done),
 ]))
 ```
 

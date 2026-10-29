@@ -530,6 +530,25 @@ export const wikiPageAppDesignSystem = css`
     color: var(--color-text-primary, #333333);
   }
 
+  .wiki-page-app-checkbox-field {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    user-select: none;
+  }
+  .wiki-page-app-checkbox-input {
+    width: 16px;
+    height: 16px;
+    margin: 0;
+    cursor: pointer;
+    accent-color: var(--color-action-confirm, #007bff);
+  }
+  .wiki-page-app-checkbox-label {
+    font-size: 0.9rem;
+    color: var(--color-text-primary, #333333);
+  }
+
   .wiki-page-app-tabs {
     display: flex;
     flex-direction: column;

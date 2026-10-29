@@ -901,6 +901,44 @@ const Switch = defineComponent({
 });
 
 /**
+ * Checkbox renders a native boolean checkbox bound to a $variable. Unlike
+ * the Switch's on/off visual metaphor, Checkbox is the standard square
+ * checkmark control for boolean states like item completion or opt-ins.
+ * Positional order: label, checked, onChange — mirrors Switch.
+ */
+const CheckboxSchema = z.object({
+ label: z.string().optional(),
+ checked: z.boolean().optional(),
+ onChange: action().optional(),
+});
+markReactive(CheckboxSchema.shape.checked);
+const Checkbox = defineComponent({
+ name: 'Checkbox',
+ props: CheckboxSchema,
+ description:
+  'A checkbox bound to a boolean $variable. `label` is the display label; `checked` the boolean state (bind a $variable); `onChange` the action that runs when the checkbox toggles — use @Set($var, $value) where $value is the new boolean. Example: `Checkbox("Done", $done, @Set($done, $value))`.',
+ component: (({ label, checked, onChange }) => {
+  const isChecked = checked === true;
+  const fire = (event: Event) => {
+   dispatchArtifactAction(event, {
+    plan: asPlan(onChange),
+    value: event.currentTarget instanceof HTMLInputElement ? event.currentTarget.checked : !isChecked,
+   });
+  };
+  return html`<label class="wiki-page-app-checkbox-field">
+     <input
+       class="wiki-page-app-checkbox-input"
+       type="checkbox"
+       .checked=${isChecked}
+       @change=${fire}
+     />
+     ${typeof label === 'string' && label !== '' ? html`<span class="wiki-page-app-checkbox-label">${label}</span>` : nothing}
+   </label>`;
+ }) as WikiRenderer,
+});
+
+
+/**
  * Tabs renders a tab bar that shows one panel at a time. `labels` is the
  * array of tab headers (positional first), `children` the matching array of
  * content panels. Bind `$tab = 0` to persist the active tab across reloads:
@@ -982,6 +1020,7 @@ childrenUnion.current = z.union([
  Input.ref,
  Select.ref,
  Switch.ref,
+ Checkbox.ref,
  Drawer.ref,
  Dialog.ref,
  Toast.ref,
@@ -1026,6 +1065,7 @@ return createLibrary({
   Input,
   Select,
   Switch,
+  Checkbox,
   Drawer,
   Dialog,
   Toast,
