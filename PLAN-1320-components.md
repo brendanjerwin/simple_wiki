@@ -52,6 +52,22 @@ validation checks (test/lint/typecheck/e2e) are independent, so they fan out in 
 - D1 Canvas2D/SVG declarative primitives: scope-gated to what the validation funnel safely renders.
 - D2 Lottie/regl: deferred unless D1 reveals a clean path; document as deferred.
 
+### Validation checks (each its own task, parallel)
+After all component PRs merge, one task per check — these are independent and fan out in parallel:
+
+- **fe:test** — `devbox run fe:test`, full suite, report pass/fail counts.
+- **fe:lint** — `devbox run fe:lint`, report violations with file:line.
+- **fe:typecheck** — `devbox run fe:typecheck`, clean or error output.
+- **opengrep:lint** — `devbox run opengrep:lint`, convention checks with rule ids.
+- **e2e:scoped** — `devbox run e2e:test -- <page-app component specs>`, per-spec pass/fail.
+- **lint:everything** — `devbox run lint:everything`, last gate before push.
+
+### Screenshot + PR body
+Capture one screenshot per component (Checkbox, Radio, Slider, NumberInput, Textarea, DatePicker,
+Badge, Icon, Avatar, Skeleton, List, Image, Sketch) against the running server or Storybook, then
+assemble the final PR description with an embedded screenshot per component. Required by the user;
+rides the consolidation PR.
+
 ### Pre-ship gate
 
 - All component PRs merged, then final PR Closes #1320:
