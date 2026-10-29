@@ -79,8 +79,9 @@ test.describe.serial('NumberInput component', () => {
    const num = host.locator('input.wiki-page-app-number-input');
    await expect(num).toHaveValue('10');
 
-   // input[type=number] with fill() dispatches a change event on commit.
+   // Blur the input to commit the edited number and dispatch change.
    await num.fill('42');
+   await num.press('Tab');
 
    await expect(host.locator('.wiki-page-app-text', { hasText: 'logged: 42' })).toBeVisible({
     timeout: PAGE_LOAD_TIMEOUT_MS,
