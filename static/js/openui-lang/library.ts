@@ -984,39 +984,39 @@ function buildLibrary(): Library {
 
 
 
-/**
- * Slider renders a numeric range control bound to a $variable. The value
- * stays on the bound $variable — @Set($var, $value) with the new numeric
- * value flows out on change so state survives reloads. `value` is reactive
- * so moves via @Set/@Reset flow back into the slider position.
- * Positional order: label, min, max, step, value, onChange — mirrors Input.
- */
-const SliderSchema = z.object({
- label: z.string().optional(),
- min: z.number().optional(),
- max: z.number().optional(),
- step: z.number().optional(),
- value: z.number().optional(),
- onChange: action().optional(),
-});
-markReactive(SliderSchema.shape.value);
-const Slider = defineComponent({
- name: 'Slider',
- props: SliderSchema,
- description:
-  'A numeric range slider bound to a $variable. `label` is the display label; `min` the lowest allowed value (default 0); `max` the highest (default 100); `step` the granularity (default 1); `value` the current number (bind a $variable); `onChange` the action that runs when the slider changes — use @Set($var, $value) where $value is the new number. Example: `Slider("Hold seconds", 5, 120, 5, $holdSeconds, @Set($holdSeconds, $value))`.',
- component: (({ label, min, max, step, value, onChange }) => {
-  const minNum = typeof min === 'number' ? min : 0;
-  const maxNum = typeof max === 'number' ? max : 100;
-  const stepNum = typeof step === 'number' && step > 0 ? step : 1;
-  const valueNum = typeof value === 'number' ? value : minNum;
-  const fire = (event: Event) => {
-   dispatchArtifactAction(event, {
-    plan: asPlan(onChange),
-    value: event.currentTarget instanceof HTMLInputElement ? Number(event.currentTarget.value) : undefined,
-   });
-  };
-  return html`<label class="wiki-page-app-field wiki-page-app-slider-field">
+ /**
+  * Slider renders a numeric range control bound to a $variable. The value
+  * stays on the bound $variable — @Set($var, $value) with the new numeric
+  * value flows out on change so state survives reloads. `value` is reactive
+  * so moves via @Set/@Reset flow back into the slider position.
+  * Positional order: label, min, max, step, value, onChange — mirrors Input.
+  */
+ const SliderSchema = z.object({
+  label: z.string().optional(),
+  min: z.number().optional(),
+  max: z.number().optional(),
+  step: z.number().optional(),
+  value: z.number().optional(),
+  onChange: action().optional(),
+ });
+ markReactive(SliderSchema.shape.value);
+ const Slider = defineComponent({
+  name: 'Slider',
+  props: SliderSchema,
+  description:
+   'A numeric range slider bound to a $variable. `label` is the display label; `min` the lowest allowed value (default 0); `max` the highest (default 100); `step` the granularity (default 1); `value` the current number (bind a $variable); `onChange` the action that runs when the slider changes — use @Set($var, $value) where $value is the new number. Example: `Slider("Hold seconds", 5, 120, 5, $holdSeconds, @Set($holdSeconds, $value))`.',
+  component: (({ label, min, max, step, value, onChange }) => {
+   const minNum = typeof min === 'number' ? min : 0;
+   const maxNum = typeof max === 'number' ? max : 100;
+   const stepNum = typeof step === 'number' && step > 0 ? step : 1;
+   const valueNum = typeof value === 'number' ? value : minNum;
+   const fire = (event: Event) => {
+    dispatchArtifactAction(event, {
+     plan: asPlan(onChange),
+     value: event.currentTarget instanceof HTMLInputElement ? Number(event.currentTarget.value) : undefined,
+    });
+   };
+   return html`<label class="wiki-page-app-field wiki-page-app-slider-field">
         ${typeof label === 'string' && label !== '' ? html`<span class="wiki-page-app-field-label">${label}</span>` : nothing}
         <input
           class="wiki-page-app-slider"
@@ -1029,8 +1029,64 @@ const Slider = defineComponent({
         />
         <span class="wiki-page-app-slider-value">${valueNum}</span>
       </label>`;
- }) as WikiRenderer,
-});
+  }) as WikiRenderer,
+ });
+
+ /**
+  * NumberInput renders a numeric text field bound to a $variable. The value
+  * stays on the bound $variable — @Set($var, $value) with the new numeric
+  * value flows out on commit (the `change` event, not per keystroke) so state
+  * survives reloads. `value` is reactive so @Set/@Reset flows back into the
+  * field. Non-numeric input is rejected: the commit is ignored and the field
+  * re-renders from the bound $variable. Positional order: label, min, max,
+  * step, value, onChange — mirrors Slider/Input.
+  */
+ const NumberInputSchema = z.object({
+  label: z.string().optional(),
+  min: z.number().optional(),
+  max: z.number().optional(),
+  step: z.number().optional(),
+  value: z.number().optional(),
+  onChange: action().optional(),
+ });
+ markReactive(NumberInputSchema.shape.value);
+ const NumberInput = defineComponent({
+  name: 'NumberInput',
+  props: NumberInputSchema,
+  description:
+   'A numeric input field bound to a $variable, committing on change (not per keystroke). `label` is the display label; `min` and `max` bound the allowed range when set; `step` is the increment granularity (default 1); `value` the current number (bind a $variable); `onChange` the action that runs when the value is committed — use @Set($var, $value) where $value is the new number. Non-numeric input is rejected. Example: `NumberInput("Reps", 1, 100, 1, $reps, @Set($reps, $value))`.',
+  component: (({ label, min, max, step, value, onChange }) => {
+   const valueNum = typeof value === 'number' ? value : undefined;
+   const fire = (event: Event) => {
+    const input = event.currentTarget instanceof HTMLInputElement ? event.currentTarget : null;
+    if (!input) return;
+    if (input.value === '') {
+     // Preserve-empty: no dispatch. The re-render from the reactive
+     // $variable restores the committed value.
+     return;
+    }
+    const parsed = Number(input.value);
+    if (Number.isNaN(parsed)) {
+     // Reject non-numeric input: do not dispatch. The re-render from the
+     // reactive $variable restores the committed value.
+     return;
+    }
+    dispatchArtifactAction(event, { plan: asPlan(onChange), value: parsed });
+   };
+   return html`<label class="wiki-page-app-field wiki-page-app-number-field">
+        ${typeof label === 'string' && label !== '' ? html`<span class="wiki-page-app-field-label">${label}</span>` : nothing}
+        <input
+          class="wiki-page-app-number-input"
+          type="number"
+          min="${typeof min === 'number' ? min : ''}"
+          max="${typeof max === 'number' ? max : ''}"
+          step="${typeof step === 'number' && step > 0 ? step : 1}"
+          .value="${valueNum ?? ''}"
+          @change=${fire}
+        />
+      </label>`;
+  }) as WikiRenderer,
+ });
 
 
  /**
@@ -1118,6 +1174,7 @@ const Slider = defineComponent({
   Checkbox.ref,
   Radio.ref,
   Slider.ref,
+  NumberInput.ref,
   Drawer.ref,
   Dialog.ref,
   Toast.ref,
@@ -1165,6 +1222,7 @@ const Slider = defineComponent({
    Checkbox,
    Radio,
    Slider,
+   NumberInput,
    Drawer,
    Dialog,
    Toast,

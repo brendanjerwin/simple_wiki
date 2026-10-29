@@ -301,6 +301,72 @@ describe('renderer component output', () => {
   expect(readout?.textContent).to.equal('30');
  });
 
+ it('should render NumberInput programs into a native number input with aria mapping', async () => {
+  const rendered = runtime.render(
+   'root = Card("T", [n])\nn = NumberInput("Reps", 1, 100, 5, $reps)\n$reps = 10',
+   {},
+  );
+  expect(rendered.errors).to.deep.equal([]);
+  const el = await fixture<HTMLElement>(rendered.template as never);
+  const num = el.querySelector('input.wiki-page-app-number-input') as HTMLInputElement;
+  expect(num).to.exist;
+  expect(num.type).to.equal('number');
+  expect(num.min).to.equal('1');
+  expect(num.max).to.equal('100');
+  expect(num.step).to.equal('5');
+  expect(num.value).to.equal('10', 'NumberInput must render the hydrated $variable value, not a reactive marker');
+ });
+
+ it('should dispatch the coerced numeric value when NumberInput commits', async () => {
+  const dispatched: PageAppActionEventDetail[] = [];
+  const rendered = runtime.render(
+   'root = Card("T", [n])\nn = NumberInput("Reps", undefined, undefined, undefined, $reps, @Set($reps, $value))\n$reps = 10',
+   {},
+  );
+  const el = await fixture<HTMLElement>(rendered.template as never);
+  el.addEventListener(PAGE_APP_ACTION_EVENT, (event) => {
+   dispatched.push((event as CustomEvent).detail);
+  });
+  const num = el.querySelector('input.wiki-page-app-number-input') as HTMLInputElement;
+  num.value = '42';
+  num.dispatchEvent(new Event('change'));
+  expect(dispatched.length).to.equal(1);
+  const detail = dispatched[0] as PageAppActionEventDetail;
+  expect(detail.value, 'NumberInput must dispatch the coerced numeric value').to.equal(42);
+ });
+
+ it('should reject a non-numeric commit without dispatching', async () => {
+  const dispatched: PageAppActionEventDetail[] = [];
+  const rendered = runtime.render(
+   'root = Card("T", [n])\nn = NumberInput("Reps", undefined, undefined, undefined, $reps, @Set($reps, $value))\n$reps = 10',
+   {},
+  );
+  const el = await fixture<HTMLElement>(rendered.template as never);
+  el.addEventListener(PAGE_APP_ACTION_EVENT, (event) => {
+   dispatched.push((event as CustomEvent).detail);
+  });
+  const num = el.querySelector('input.wiki-page-app-number-input') as HTMLInputElement;
+  // A native type=number input sanitizes a non-numeric value to the empty
+  // string; the guard must reject both the raw non-numeric string and the
+  // sanitized empty commit without dispatching.
+  Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(num, 'abc');
+  expect(num.value).to.equal('');
+  num.dispatchEvent(new Event('change'));
+  expect(dispatched.length, 'non-numeric commit must not dispatch').to.equal(0);
+ });
+
+ it('should default step to 1 and leave min/max unrestricted when omitted', async () => {
+  const rendered = runtime.render(
+   'root = Card("T", [n])\nn = NumberInput("Reps", undefined, undefined, undefined, $reps)\n$reps = 10',
+   {},
+  );
+  const el = await fixture<HTMLElement>(rendered.template as never);
+  const num = el.querySelector('input.wiki-page-app-number-input') as HTMLInputElement;
+  expect(num.step).to.equal('1');
+  expect(num.min).to.equal('');
+  expect(num.max).to.equal('');
+ });
+
 
 });
 

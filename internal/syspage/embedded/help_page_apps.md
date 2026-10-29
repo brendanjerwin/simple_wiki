@@ -118,7 +118,7 @@ root = Card("App", Stack([
 ]))
 ```
 
-## Form controls: `Switch`, `Checkbox`, `Radio`, `Select`, `Slider`
+## Form controls: `Switch`, `Checkbox`, `Radio`, `Select`, `Slider`, `NumberInput`
 
 **Switch**(label?, checked, onChange) renders a boolean toggle — the right choice for "Struggled / Completed" toggles and any on/off state, replacing restyled Buttons. Bind a boolean `$variable` and update it with `@Set($var, $value)` (where `$value` is the new checked boolean):
 
@@ -172,6 +172,17 @@ sl = Slider("Hold seconds", 5, 120, 5, $holdSeconds, @Set($holdSeconds, $value))
 root = Card("Leg Hold Timer", Stack([
   sl,
   Text("configured: " + $holdSeconds + "s"),
+]))
+```
+
+**NumberInput**(label?, min, max, step, value, onChange) renders a numeric text field for typing an exact value — the complement to Slider, which picks within bounds by dragging. It commits on change (when you leave or press Enter, not per keystroke), and binds a numeric `$variable` updated with `@Set($var, $value)`. Defaults when omitted: `step` 1; `min`/`max` unrestricted. Non-numeric input is rejected:
+
+```
+$reps = 10
+num = NumberInput("Reps", 1, 100, 1, $reps, @Set($reps, $value))
+root = Card("Strength Log", Stack([
+  num,
+  Text("logged: " + $reps + " reps"),
 ]))
 ```
 
@@ -421,7 +432,7 @@ root = Card("Notes", Stack([
 ]))
 ```
 
-**Component request when nothing fits** — if the app you're writing genuinely needs a component `wiki-core@3` doesn't have (date picker, …), don't degrade it into a confusing `Stack`-of-buttons. Tell the user what's missing, ship the best app you can **without** it, then **open a feature-request issue on this project** so the component eventually gets built: `Button("request a date picker", @OpenUrl("https://github.com/brendanjerwin/simple_wiki/issues"))` renders the one-tap link for the user; you create the issue text in the same turn. (`wiki-core@3` now includes `Grid`/`Span`, `Divider`, `SectionHeader`, Card `variant`s, `Tooltip`, `Tabs`, `Accordion`, `Switch`, `Checkbox`, `Radio`, `Select`, `Slider`, `Dialog`, `Toast`, and `Drawer`.)
+**Component request when nothing fits** — if the app you're writing genuinely needs a component `wiki-core@3` doesn't have (date picker, …), don't degrade it into a confusing `Stack`-of-buttons. Tell the user what's missing, ship the best app you can **without** it, then **open a feature-request issue on this project** so the component eventually gets built: `Button("request a date picker", @OpenUrl("https://github.com/brendanjerwin/simple_wiki/issues"))` renders the one-tap link for the user; you create the issue text in the same turn. (`wiki-core@3` now includes `Grid`/`Span`, `Divider`, `SectionHeader`, Card `variant`s, `Tooltip`, `Tabs`, `Accordion`, `Switch`, `Checkbox`, `Radio`, `Select`, `Slider`, `NumberInput`, `Dialog`, `Toast`, and `Drawer`.)
 
 ## See Also
 

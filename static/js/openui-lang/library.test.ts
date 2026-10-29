@@ -825,6 +825,50 @@ describe('when parsing Slider', () => {
  });
 });
 
+describe('when parsing NumberInput', () => {
+ let parser: Parser;
+
+ beforeEach(() => {
+  parser = createParser(wikiLibrary.toJSONSchema(), WIKI_ROOT_COMPONENT);
+ });
+
+ it('should parse NumberInput with label, min, max, step, value, and onChange', () => {
+  const result = parser.parse(
+   '$reps = 10\nnum = NumberInput("Reps", 1, 100, 1, $reps, @Set($reps, $value))\nroot = Card("t", [num])',
+  );
+  expect(result.meta.errors).to.deep.equal([]);
+  const num = (result.root?.props['children'] as ElementNode[])[0] as ElementNode;
+  expect(num.typeName).to.equal('NumberInput');
+  expect(num.props['label']).to.equal('Reps');
+  expect(num.props['min']).to.equal(1);
+  expect(num.props['max']).to.equal(100);
+  expect(num.props['step']).to.equal(1);
+  expect(num.props['value']).to.deep.include({ k: 'StateRef', n: '$reps' });
+ });
+
+ it('should keep NumberInput reactive when value comes from a $variable', () => {
+  const result = parser.parse(
+   '$reps = 10\nnum = NumberInput("Reps", 1, 100, 1, $reps)\nroot = Card("t", [num])',
+  );
+  expect(result.meta.errors).to.deep.equal([]);
+  const num = (result.root?.props['children'] as ElementNode[])[0] as ElementNode;
+  expect(num.partial).to.equal(false);
+ });
+
+ it('should parse NumberInput without a label (undefined positional arg parses cleanly)', () => {
+  const result = parser.parse(
+   '$reps = 10\nnum = NumberInput(undefined, 1, 100, 1, $reps, @Set($reps, $value))\nroot = Card("t", [num])',
+  );
+  expect(result.meta.errors).to.deep.equal([]);
+  const num = (result.root?.props['children'] as ElementNode[])[0] as ElementNode;
+  expect(typeof num.props['label'] === 'string' && num.props['label'] !== '').to.equal(false);
+ });
+
+ it('should include NumberInput in the library component list', () => {
+  expect(Object.keys(wikiLibrary.components)).to.include('NumberInput');
+ });
+});
+
 describe('when parsing Tabs', () => {
  let parser: Parser;
 
