@@ -34,6 +34,9 @@ image links (`![filename](url)`) or file links (`[filename](url)`). The agent
 receives the message content including these URLs and can read the files via
 its normal vision/fetch capabilities.
 
+The **"+"** opens the attach menu from the same composer. The **Send**
+control appears only once your draft has text or pending attachments.
+
 **Storage**: Attachments are transient — stored in memory for the duration of
 the session (up to 24 hours) and never written to the wiki, exported, or
 included in logs or backups. Nothing outlives the server process. The binding is durable:
