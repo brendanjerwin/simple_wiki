@@ -19,7 +19,7 @@ Use `PageAppService` and `PageAppStateService` for authoring and state. Both are
 - **Children are an array argument**: `Stack([Text("hello"), Button("press")])`.
 - **Reactive state is a `$name` declaration**: `$completed = 0`. References interpolate by **string concatenation** — `"sessions: " + $completed` (there is no `{expr}` string interpolation).
 - **Unknown components and invalid statements are dropped, never fatal** — the rest renders. Errors come back structured (`{code, component, statementId, message}`) so you can self-correct.
-- **Missing a component?** If an app needs a component that isn't in `wiki-core@3` (no `DatePicker`, etc.), do **not** fake it with nested `Stack` hacks or drop the feature silently. Build the best program you can **without** the component, tell the user which component is missing and what app it blocked, and **open a feature-request issue on the SimpleWiki GitHub project** (`github.com/brendanjerwin/simple_wiki/issues`) naming the component and the real app it would enable — components get built based on demand from actual apps, so a concrete request with a real use case is the fastest path to getting it. (`Grid`, `Card` variants, `Divider`, `SectionHeader`, `Tooltip`, `Tabs`, `Accordion`, `Switch`, `Select`, `Dialog`, `Toast`, and `Drawer` exist as of `wiki-core@3`; the `Image` component is still future.)
+- **Missing a component?** If an app needs a component that isn't in `wiki-core@3` (no `DatePicker`, etc.), do **not** fake it with nested `Stack` hacks or drop the feature silently. Build the best program you can **without** the component, tell the user which component is missing and what app it blocked, and **open a feature-request issue on the SimpleWiki GitHub project** (`github.com/brendanjerwin/simple_wiki/issues`) naming the component and the real app it would enable — components get built based on demand from actual apps, so a concrete request with a real use case is the fastest path to getting it. (`Grid`, `Card` variants, `Divider`, `SectionHeader`, `Tooltip`, `Tabs`, `Accordion`, `Switch`, `Checkbox`, `Radio`, `Select`, `Slider`, `Dialog`, `Toast`, and `Drawer` exist as of `wiki-core@3`; the `Image` component is still future.)
 
 ## Time-based apps: `Countdown`
 
@@ -89,8 +89,6 @@ drawer = Drawer($drawerOpen, "right", [details], @Set($drawerOpen, false))
 root = Card("Routine", Stack([Button("View details", @Set($drawerOpen, true)), drawer]))
 ```
 
-## Overlays: `Dialog`, `Toast`
-
 **Dialog**(title?, open, children, onClose?) renders a modal overlay when `open` is true. Bind `$open = false` and use @Set to open/close. Clicking the backdrop or the × button dispatches `onClose`. Use this for confirmation flows that previously routed through @ToAssistant.
 
 ```
@@ -119,6 +117,7 @@ root = Card("App", Stack([
   toast,
 ]))
 ```
+
 ## Form controls: `Switch`, `Checkbox`, `Radio`, `Select`, `Slider`
 
 **Switch**(label?, checked, onChange) renders a boolean toggle — the right choice for "Struggled / Completed" toggles and any on/off state, replacing restyled Buttons. Bind a boolean `$variable` and update it with `@Set($var, $value)` (where `$value` is the new checked boolean):
