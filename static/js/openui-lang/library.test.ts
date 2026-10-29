@@ -697,6 +697,90 @@ describe('when parsing Switch', () => {
  });
 });
 
+describe('when parsing Checkbox', () => {
+ let parser: Parser;
+
+ beforeEach(() => {
+  parser = createParser(wikiLibrary.toJSONSchema(), WIKI_ROOT_COMPONENT);
+ });
+
+ it('should parse Checkbox with label, checked, and onChange', () => {
+  const result = parser.parse(
+   '$done = false\ncb = Checkbox("Done", $done, @Set($done, $value))\nroot = Card("t", [cb])',
+  );
+  expect(result.meta.errors).to.deep.equal([]);
+  const cb = (result.root?.props['children'] as ElementNode[])[0] as ElementNode;
+  expect(cb.typeName).to.equal('Checkbox');
+  expect(cb.props['label']).to.equal('Done');
+  expect(cb.props['checked']).to.deep.include({ k: 'StateRef', n: '$done' });
+ });
+
+ it('should keep Checkbox reactive when checked comes from a $variable', () => {
+  const result = parser.parse(
+   '$done = true\ncb = Checkbox("flag", $done)\nroot = Card("t", [cb])',
+  );
+  expect(result.meta.errors).to.deep.equal([]);
+  const cb = (result.root?.props['children'] as ElementNode[])[0] as ElementNode;
+  expect(cb.partial).to.equal(false);
+ });
+
+ it('should parse Checkbox without a label (undefined positional arg parses cleanly)', () => {
+  const result = parser.parse(
+   '$done = false\ncb = Checkbox(undefined, $done, @Set($done, $value))\nroot = Card("t", [cb])',
+  );
+  expect(result.meta.errors).to.deep.equal([]);
+  const cb = (result.root?.props['children'] as ElementNode[])[0] as ElementNode;
+  expect(typeof cb.props['label'] === 'string' && cb.props['label'] !== '').to.equal(false);
+ });
+
+ it('should include Checkbox in the library component list', () => {
+  expect(Object.keys(wikiLibrary.components)).to.include('Checkbox');
+ });
+});
+
+describe('when parsing Radio', () => {
+ let parser: Parser;
+
+ beforeEach(() => {
+  parser = createParser(wikiLibrary.toJSONSchema(), WIKI_ROOT_COMPONENT);
+ });
+
+ it('should parse Radio with label, options, selected, and onSelect', () => {
+  const result = parser.parse(
+   '$pick = "a"\nr = Radio("Choose", ["a", "b"], $pick, @Set($pick, $value))\nroot = Card("t", [r])',
+  );
+  expect(result.meta.errors).to.deep.equal([]);
+  const r = (result.root?.props['children'] as ElementNode[])[0] as ElementNode;
+  expect(r.typeName).to.equal('Radio');
+  expect(r.props['label']).to.equal('Choose');
+  expect(r.props['options']).to.deep.equal(['a', 'b']);
+  expect(r.props['selected']).to.deep.include({ k: 'StateRef', n: '$pick' });
+ });
+
+ it('should keep Radio reactive when selected comes from a $variable', () => {
+  const result = parser.parse(
+   '$pick = "a"\nr = Radio("flag", ["a", "b"], $pick)\nroot = Card("t", [r])',
+  );
+  expect(result.meta.errors).to.deep.equal([]);
+  const r = (result.root?.props['children'] as ElementNode[])[0] as ElementNode;
+  expect(r.partial).to.equal(false);
+ });
+
+ it('should parse Radio without a label (undefined positional arg parses cleanly)', () => {
+  const result = parser.parse(
+   '$pick = "a"\nr = Radio(undefined, ["a", "b"], $pick, @Set($pick, $value))\nroot = Card("t", [r])',
+  );
+  expect(result.meta.errors).to.deep.equal([]);
+  const r = (result.root?.props['children'] as ElementNode[])[0] as ElementNode;
+  // The parser maps the `undefined` literal to null/undefined; either is valid (no label string).
+  expect(typeof r.props['label'] === 'string' && r.props['label'] !== '').to.equal(false);
+ });
+
+ it('should include Radio in the library component list', () => {
+  expect(Object.keys(wikiLibrary.components)).to.include('Radio');
+ });
+});
+
 describe('when parsing Tabs', () => {
  let parser: Parser;
 
