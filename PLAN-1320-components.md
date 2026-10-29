@@ -68,6 +68,17 @@ Badge, Icon, Avatar, Skeleton, List, Image, Sketch) against the running server o
 assemble the final PR description with an embedded screenshot per component. Required by the user;
 rides the consolidation PR.
 
+**Capture path** (per component-pr-screenshots skill): Storybook iframe screenshots via
+puppeteer chrome (`~/.omp/puppeteer/chrome/...`), URL `/iframe.html?id=<story-id>&viewMode=story`,
+clipped to the element rect. Host PNGs IN-REPO at `docs/screenshots/<component>/N-<state>.png`
+(GitHub raw URLs — wiki uploads fail GitHub camo). PR body via `gh api ... --input body.json`;
+verify each raw URL 200s.
+
+**Prerequisite: stories must exist first.** Only `countdown.stories.ts` and `layout.stories.ts`
+exist today. Task `task_c92305c31524` creates stories for all 13 new components (one story per
+major visual state, following layout.stories.ts patterns) BEFORE the screenshot task runs.
+Wire: stories task → screenshot task → consolidation PR.
+
 ### Pre-ship gate
 
 - All component PRs merged, then final PR Closes #1320:
